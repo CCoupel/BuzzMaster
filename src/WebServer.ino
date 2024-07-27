@@ -6,6 +6,7 @@ void mergeJson(JsonObject& dest, const JsonObject& src) {
   }
 }
 
+
 void w_handleRoot(AsyncWebServerRequest *request) {
   Serial.println("WWW: ROOT");
   digitalWrite(led, 1);
@@ -23,12 +24,12 @@ void w_handle_bumpers(AsyncWebServerRequest *request) {
 
 void w_handlePOST_bumpers(AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total) {
   // Parse le JSON reçu
-  JsonDocument receivedData;
+  JsonObject receivedData;
   deserializeJson(receivedData, data);
 
   // Fusionne le JSON reçu avec 'teams'
   mergeJson(bumpers, receivedData);
-
+  
   // Envoie une réponse au client
   String response;
   serializeJson(bumpers, response);
@@ -44,12 +45,12 @@ void w_handle_teams(AsyncWebServerRequest *request) {
 
 void w_handlePOST_teams(AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total) {
   // Parse le JSON reçu
-  JsonDocument receivedData;
+  JsonObject receivedData;
   deserializeJson(receivedData, data);
 
   // Fusionne le JSON reçu avec 'teams'
   mergeJson(teams, receivedData);
-
+  
   // Envoie une réponse au client
   String response;
   serializeJson(teams, response);
@@ -90,6 +91,10 @@ void startWebServer() {
   server.on("/", HTTP_GET, w_handleRoot);
   server.on("/inline", HTTP_GET, w_inline);
   server.onNotFound(w_handleNotFound);
+  ws.onEvent(onWsEvent);
+
+  server.addHandler(&ws);
+
   server.begin();
   Serial.println("HTTP server started");
 }

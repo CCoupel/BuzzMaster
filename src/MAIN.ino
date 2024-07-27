@@ -18,6 +18,8 @@ unsigned int localUdpPort = 1234;  // Port d'écoute local
 unsigned int localWWWpPort = 80;  // Port d'écoute local
 
 AsyncWebServer  server(localWWWpPort);
+AsyncWebSocket ws("/ws");
+
 WiFiUDP ntpUDP;
 NTPClient timeClient(ntpUDP, "pool.ntp.org");
 
