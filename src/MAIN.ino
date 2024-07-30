@@ -7,6 +7,7 @@
 #include <ESPAsyncUDP.h>
 #include <ESPAsyncTCP.h>
 #include <ESPAsyncWebServer.h>
+#include <LittleFS.h>
 
 #include <ArduinoJson.h>
 
@@ -52,10 +53,19 @@ void wifiConnect()
   Serial.println(WiFi.macAddress());
 }
 
+void listLittleFSFiles() {
+    Serial.println("Listing files in LittleFS:");
+    Dir dir = LittleFS.openDir("/");
+    while (dir.next()) {
+        String fileName = dir.fileName();
+        size_t fileSize = dir.fileSize();
+        Serial.printf("FILE: %s, SIZE: %d bytes\n", fileName.c_str(), fileSize);
+    }
+}
 
 void setup(void)
 {
-  Serial.begin(9600);
+  Serial.begin(115200);
 
   pinMode(led, OUTPUT);
   digitalWrite(led, 0);
@@ -70,6 +80,14 @@ void setup(void)
   if (MDNS.begin("esp8266")) {
     Serial.println("MDNS responder started");
   }
+
+  if (!LittleFS.begin()) {
+        Serial.println("Erreur de montage LittleFS");
+        return;
+    }
+
+  listLittleFSFiles();
+
 
   startWebServer();
   startBumperServer();

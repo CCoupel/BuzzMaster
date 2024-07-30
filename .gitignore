@@ -1,1 +1,42 @@
 .pio
+
+# Fichiers et dossiers générés par PlatformIO
+/.pio
+/.vscode/c_cpp_properties.json
+/.vscode/ipch
+/.vscode/launch.json
+/.vscode/PlatformIO
+/.vscode/tasks.json
+/.vscode/*.code-workspace
+/.vscode/.browse.VC.db*
+
+# Configuration utilisateur de l'IDE
+/.idea
+*.code-workspace
+
+# Fichiers générés par le compilateur
+*.elf
+*.bin
+*.hex
+*.map
+
+# Fichiers de logs
+*.log
+
+# Extensions spécifiques aux IDE
+*.iml
+
+# Fichiers de dépendances
+lib_deps
+.DS_Store
+
+# Dossiers pour les fichiers téléchargés
+/data
+
+# Espressif-generated build files
+.build/
+
+# NodeMCU-specific files
+*.pyc
+*.pyo
+__pycache__/
