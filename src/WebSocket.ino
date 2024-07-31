@@ -35,7 +35,8 @@ void mergeJson(JsonObject& destObj, const JsonObject& srcObj) {
         if (destObj.containsKey(kvp.key()) && destObj[kvp.key()].is<JsonObject>()) {
                 nestedDestObj = destObj[kvp.key()].as<JsonObject>();
             } else {
-                nestedDestObj = destObj.createNestedObject(kvp.key());
+                //nestedDestObj = destObj.createNestedObject(kvp.key());
+                nestedDestObj = destObj[kvp.key()].to<JsonObject>();
             }
 
         //JsonObject dst = destObj[kvp.key()].as<JsonObject>();

@@ -5,9 +5,9 @@
 
 void w_handleRoot(AsyncWebServerRequest *request) {
   Serial.println("WWW: ROOT");
-  digitalWrite(led, 1);
+  digitalWrite(ledPin, HIGH);
   request->send(200, "text/plain", "hello from esp8266!");
-  digitalWrite(led, 0);
+  digitalWrite(ledPin, LOW);
 }
 
 
@@ -33,7 +33,7 @@ void w_inline(AsyncWebServerRequest *request) {
 
 void w_handleNotFound(AsyncWebServerRequest *request) {
   Serial.println("WWW: not found");
-  digitalWrite(led, 1);
+  digitalWrite(ledPin, HIGH);
   String message = "File Not Found\n\n";
   message += "URI: ";
   message += request->url();
@@ -46,7 +46,7 @@ void w_handleNotFound(AsyncWebServerRequest *request) {
     message += " " + request->argName(i) + ": " + request->arg(i) + "\n";
   }
   request->send(404, "text/plain", message);
-  digitalWrite(led, 0);
+  digitalWrite(ledPin, LOW);
 }
 
 void startWebServer() {
