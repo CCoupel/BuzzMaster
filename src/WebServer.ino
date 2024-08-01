@@ -50,13 +50,13 @@ void w_handleNotFound(AsyncWebServerRequest *request) {
 }
 
 void startWebServer() {
-  server.serveStatic("/fs", LittleFS, "/").setDefaultFile("index.html");
+  server.serveStatic("/", LittleFS, "/").setDefaultFile("index.html");
 
   server.on("/bumpers", HTTP_GET, w_handle_bumpers);
 
   server.on("/teams", HTTP_GET, w_handle_teams);
 
-  server.on("/", HTTP_GET, w_handleRoot);
+  //server.on("/", HTTP_GET, w_handleRoot);
   server.onNotFound(w_handleNotFound);
   
   ws.onEvent(onWsEvent);

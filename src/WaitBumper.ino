@@ -1,6 +1,6 @@
 
 
-void handleUDPPacket(AsyncUDPPacket incomingPacket)
+/*void handleUDPPacket(AsyncUDPPacket incomingPacket)
 {
     String output;
 
@@ -20,10 +20,7 @@ void handleUDPPacket(AsyncUDPPacket incomingPacket)
 
         incomingPacket.println(replyMsg.c_str());
         Serial.printf("Response: %s\n", replyMsg.c_str());
-/*
-        bumpers[identifier]["IP"]=(incomingPacket.remoteIP().toString());
-        serializeJson(bumpers, output);
-*/
+
         Serial.printf("Bumpers: %s\n", output.c_str());
     }
 }
@@ -37,3 +34,4 @@ void waitNewBumper()
     Udp.onPacket( handleUDPPacket);
   }
 }
+*/

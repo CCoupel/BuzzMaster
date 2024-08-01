@@ -127,12 +127,15 @@ void setup(void)
   wifiConnect();
   timeClient.update();
 
-  waitNewBumper();
+  //waitNewBumper();
 
 
-  if (MDNS.begin("buzzcontrol.local")) {
+  if (MDNS.begin("buzzcontrol")) {
     Serial.println("MDNS responder started");
   }
+  MDNS.addService("buzzcontrol", "tcp", localWWWpPort);
+  MDNS.addService("http", "tcp", localWWWpPort);
+  MDNS.addService("sock", "tcp", localUdpPort);
 
   if (!LittleFS.begin()) {
         Serial.println("Erreur de montage LittleFS");
@@ -151,4 +154,5 @@ void setup(void)
 void loop(void)
 {
 //  server.handleClient(); // Gestion des requêtes clients
+  MDNS.update();
 }
