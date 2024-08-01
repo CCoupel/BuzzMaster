@@ -9,18 +9,19 @@ AsyncServer* bumperServer;
 std::vector<AsyncClient*> bumperClients;
 
 
+
 void startGame(){
   resetBumpersTime();
   GameStarted=true;
-  digitalWrite(ledPin, HIGH);
-  sendMessageToAllClients("STOP");
+  digitalWrite(ledPin, LOW);
+  sendMessageToAllClients("START");
   notifyAll();
 }
 
 void stopGame(){
   GameStarted=false;
-  digitalWrite(ledPin, LOW);
-  sendMessageToAllClients("START");
+  digitalWrite(ledPin, HIGH);
+  sendMessageToAllClients("STOP");
   notifyAll();
 }
 
@@ -70,9 +71,25 @@ void b_handleData(void* arg, AsyncClient* c, void *data, size_t len) {
   if (action ==  "BUTTON") {
     if ( !bumpers[bumperID].containsKey(bumperID) ) {
       if ( bumpers[bumperID]["IP"] == c->remoteIP().toString()) {
-        if ( bumpers[bumperID]["TEAM"] != 0 ) {
-          bumpers[bumperID]["TIME"]=MSG["time"];
-          bumpers[bumperID]["BUTTON"]=MSG["button"];
+        int b_team=bumpers[bumperID]["TEAM"];
+        int b_time=MSG["time"];
+        int b_button=MSG["button"];
+        if ( b_team != 0 ) {
+          
+          if (timeRef==0) {
+            timeRef=b_time;
+          }
+          int b_delay=b_time-timeRef;
+
+         if (timeRefTeam[b_team]==0) {
+            timeRefTeam[b_team]=b_time;
+          }
+
+          int b_delayTeam=b_time-timeRefTeam[b_team];
+          bumpers[bumperID]["TIME"]=b_time;
+          bumpers[bumperID]["BUTTON"]=b_button;
+          bumpers[bumperID]["DELAY"]=b_delay;
+          bumpers[bumperID]["DELAY_TEAM"]=b_delayTeam;
       //update("new", subObj);
           notifyAll();
           stopGameClient(c);
@@ -110,6 +127,8 @@ void startBumperServer()
 
 void sendMessageToClient(const String& message, AsyncClient* client) {
 Serial.println("BUMPER: send to "+client->remoteIP().toString());
+Serial.println("BUMPER: message "+message);
+
     if (client && client->connected()) {
       client->write(message.c_str(), message.length()); // Envoie le message au client connecté
     }

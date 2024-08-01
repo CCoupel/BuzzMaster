@@ -25,6 +25,8 @@ ButtonInfo buttonsInfo[] = {
 };
 
 volatile bool GameStarted=false;
+int timeRef=0;
+int timeRefTeam[10];
 
 unsigned int localUdpPort = 1234;  // Port d'écoute local
 unsigned int localWWWpPort = 80;  // Port d'écoute local
@@ -84,6 +86,7 @@ void resetBumpersTime() {
             Serial.println("Error: Bumper entry is not a JsonObject");
         }
   }
+  timeRef=0;
 }
 
 static void IRAM_ATTR buttonHandler(void *arg)
