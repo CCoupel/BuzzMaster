@@ -30,8 +30,6 @@
 lib_deps
 .DS_Store
 
-# Dossiers pour les fichiers téléchargés
-/data
 
 # Espressif-generated build files
 .build/

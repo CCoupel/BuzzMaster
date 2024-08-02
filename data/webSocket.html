@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Test WebSocket</title>
+</head>
+<body>
+    <script>
+        // Connectez-vous au serveur WebSocket
+        const loc = window.location;
+        const wsProtocol = loc.protocol === 'https:' ? 'wss:' : 'ws:'; // Utilisez 'wss' si la page est chargée via HTTPS
+        const wsUrl = `${wsProtocol}//${loc.host}/ws`; // Utilise le même hôte et protocole que la page
+
+        // Initialiser l'objet WebSocket
+        const ws = new WebSocket(wsUrl);
+
+        // Écouter les messages du serveur
+        ws.onmessage = function(event) {
+            console.log('Message du serveur:', event.data);
+        };
+
+        // Envoyer un message au serveur
+        ws.onopen = function() {
+            console.log('Connecté au serveur WebSocket');
+            ws.send('Salut, serveur WebSocket !');
+        };
+
+        // Événement de fermeture de la connexion
+        ws.onclose = function() {
+            console.log('Connexion fermée');
+        };
+    </script>
+</body>
+</html>
