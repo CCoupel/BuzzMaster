@@ -1,0 +1,34 @@
+
+
+.navbar {
+    display: flex;
+    justify-content: space-evenly;
+    font-size: 1.5rem;
+    border: 1px solid black;
+    padding: 2vh;
+}
+
+.main-config-container {
+    display: flex;
+}
+
+.buzzer-container {
+    border: 1px solid black;
+    width: 30%;
+    height: 100vh;
+}
+
+.team-container {
+    border: 1px solid black;
+    width: 70%;
+    height: 100vh;
+    text-align: center;
+}
+
+.buzzer {
+    display: flex;
+}
+
+#addDivButton {
+    margin-inline: 0 auto;
+}
