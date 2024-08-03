@@ -70,5 +70,6 @@ void update(String action, JsonObject& obj) {
 void notifyAll() {
   String output;
   serializeJson(teamsAndBumpers, output);
+  Serial.printf("SOCK: send to all %s\n", output.c_str());
   ws.textAll(output.c_str());
 }
