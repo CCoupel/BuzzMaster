@@ -4,7 +4,7 @@
     display: flex;
     justify-content: space-evenly;
     font-size: 1.5rem;
-    border: 1px solid black;
+    outline: 1px solid black;
     padding: 2vh;
 }
 
@@ -13,22 +13,45 @@
 }
 
 .buzzer-container {
-    border: 1px solid black;
+    outline: 1px solid black;
     width: 30%;
     height: 100vh;
 }
 
 .team-container {
-    border: 1px solid black;
+    outline: 1px solid black;
     width: 70%;
     height: 100vh;
     text-align: center;
 }
 
-.buzzer {
-    display: flex;
-}
-
 #addDivButton {
     margin-inline: 0 auto;
+    margin: 1rem 0 ;
+}
+.dynamic-div {
+    outline: 1px solid black;
+    margin: 3rem;
+}
+
+.team-name {
+    font-size: 2rem;
+    padding: 0.5rem;
+}
+
+.team-member-p {
+    padding-bottom: 0.8rem;
+}
+
+.dropzone {
+    outline: 1px solid black;
+    min-height: 100px;
+}
+
+.buzzer {
+    outline: 1px black solid;
+    margin: 1rem 0;
+    margin-inline: auto;
+    padding: 0.5rem;
+    width: 60%;
 }
