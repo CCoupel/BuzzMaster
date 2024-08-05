@@ -24,9 +24,9 @@
 
   function createBuzzerDiv(buzzerData) {
     // Récupérer le conteneur principal
-    console.log(buzzerData)
+    console.log(buzzerData);
     const container = document.querySelector('.buzzer-container');
-    
+
     // Nettoyer le conteneur avant d'ajouter les nouvelles divs
     container.innerHTML = '';
 
@@ -42,35 +42,127 @@
         idElement.className = 'buzzer-id';
         idElement.textContent = `ID: ${id}`;
 
-        // Créer le formulaire de texte
-        const form = document.createElement('form');
-        form.className = 'buzzer-form';
-
-        // Créer le champ de texte avec un label pour l'accessibilité
-        const label = document.createElement('label');
-        label.textContent = 'Nom du joueur';
-        label.htmlFor = `buzzer-text-${id}`;
-        
-        const input = document.createElement('input');
-        input.type = 'text';
-        input.name = 'buzzer-text';
-        input.id = `buzzer-text-${id}`;
-        input.placeholder = 'Nom du joueur';
-        input.value = data.NAME; // Pré-remplir le champ avec le nom existant, s'il y en a un
-
-        // Ajouter le label et le champ de texte au formulaire
-        form.appendChild(label);
-        form.appendChild(input);
-
-        // Empêcher la soumission du formulaire de recharger la page
-        form.addEventListener('submit', (e) => {
-            e.preventDefault();
-            // Vous pouvez ajouter une logique ici pour traiter les données de soumission
-        });
-
-        // Ajouter l'élément ID, le formulaire et le nom à la div du buzzer
+        // Ajouter l'élément ID à la div du buzzer
         buzzerDiv.appendChild(idElement);
-        buzzerDiv.appendChild(form);
+
+        // Vérifier si le buzzer a déjà un nom non vide
+        if (data.NAME) {
+            // Afficher le nom du joueur
+            const nameElement = document.createElement('p');
+            nameElement.className = 'buzzer-name';
+            nameElement.textContent = `Nom: ${data.NAME}`;
+
+            // Ajouter un bouton pour supprimer le nom
+            const deleteButton = document.createElement('button');
+            deleteButton.textContent = 'Supprimer le nom';
+            deleteButton.addEventListener('click', () => {
+                // Construire le message JSON pour supprimer le nom
+                const message = {
+                    "bumpers": {
+                        [id]: {
+                            "NAME": "",
+                            "TEAM": data.TEAM,
+                            "IP": data.IP,
+                            "TIME": data.TIME,
+                            "BUTTON": data.BUTTON
+                        }
+                    }
+                };
+
+                // Envoyer les données sous forme de JSON via WebSocket
+                ws.send(JSON.stringify(message));
+
+                // Mettre à jour l'interface utilisateur pour afficher le formulaire à la place du nom
+                buzzerDiv.removeChild(nameElement);
+                buzzerDiv.removeChild(deleteButton);
+                buzzerDiv.appendChild(form);
+            });
+
+            // Ajouter le nom et le bouton de suppression à la div du buzzer
+            buzzerDiv.appendChild(nameElement);
+            buzzerDiv.appendChild(deleteButton);
+        } else {
+            // Créer le formulaire de texte
+            const form = document.createElement('form');
+            form.className = 'buzzer-form';
+
+            // Créer le champ de texte avec un label pour l'accessibilité
+            const label = document.createElement('label');
+            label.textContent = 'Nom du joueur';
+            label.htmlFor = `buzzer-text-${id}`;
+
+            const input = document.createElement('input');
+            input.type = 'text';
+            input.name = 'buzzer-text';
+            input.id = `buzzer-text-${id}`;
+            input.placeholder = 'Nom du joueur';
+            input.value = data.NAME || ''; // Pré-remplir le champ avec le nom existant, s'il y en a un
+
+            // Ajouter le label et le champ de texte au formulaire
+            form.appendChild(label);
+            form.appendChild(input);
+
+            // Empêcher la soumission du formulaire de recharger la page et envoyer les données via WebSocket
+            form.addEventListener('submit', (e) => {
+                e.preventDefault();
+
+                // Récupérer la valeur du champ de texte
+                const playerName = input.value;
+
+                // Construire le message JSON conforme
+                const message = {
+                    "bumpers": {
+                        [id]: {
+                            "NAME": playerName,
+                            "TEAM": data.TEAM,
+                            "IP": data.IP,
+                            "TIME": data.TIME,
+                            "BUTTON": data.BUTTON
+                        }
+                    }
+                };
+
+                // Envoyer les données sous forme de JSON via WebSocket
+                ws.send(JSON.stringify(message));
+
+                // Mettre à jour l'interface utilisateur pour afficher le nom au lieu du formulaire
+                const nameElement = document.createElement('p');
+                nameElement.className = 'buzzer-name';
+                nameElement.textContent = `Nom: ${playerName}`;
+
+                // Ajouter un bouton pour supprimer le nom
+                const deleteButton = document.createElement('button');
+                deleteButton.textContent = 'Supprimer le nom';
+                deleteButton.addEventListener('click', () => {
+                    // Construire le message JSON pour supprimer le nom
+                    const deleteMessage = {
+                        "bumpers": {
+                            [id]: {
+                                "NAME": "",
+                                "TEAM": data.TEAM,
+                                "IP": data.IP,
+                                "TIME": data.TIME,
+                                "BUTTON": data.BUTTON
+                            }
+                        }
+                    };
+
+                    // Envoyer les données sous forme de JSON via WebSocket
+                    ws.send(JSON.stringify(deleteMessage));
+
+                    // Mettre à jour l'interface utilisateur pour afficher le formulaire à la place du nom
+                    buzzerDiv.removeChild(nameElement);
+                    buzzerDiv.removeChild(deleteButton);
+                    buzzerDiv.appendChild(form);
+                });
+
+                buzzerDiv.replaceChild(nameElement, form);
+                buzzerDiv.appendChild(deleteButton);
+            });
+
+            // Ajouter le formulaire à la div du buzzer
+            buzzerDiv.appendChild(form);
+        }
 
         // Ajouter la div du buzzer au conteneur principal
         container.appendChild(buzzerDiv);
