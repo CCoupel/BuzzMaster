@@ -52,9 +52,7 @@ export function createTeamDiv(teams) {
         });
         newDiv.appendChild(colorSelect);
 
-        const sendButton = document.createElement('button');
-        sendButton.textContent = 'Envoyer la couleur';
-        sendButton.addEventListener('click', () => {
+        colorSelect.addEventListener('change', () => {
             const selectedColorName = colorSelect.value;
             const selectedColor = colors.find(color => color.name === selectedColorName);
 
@@ -70,7 +68,6 @@ export function createTeamDiv(teams) {
 
             console.log(`Couleur envoyée pour l'équipe ${id}: ${selectedColor.rgb}`);
         });
-        newDiv.appendChild(sendButton);
 
         container.appendChild(newDiv);
     }
