@@ -1,6 +1,6 @@
 /*
 { "bumpers: { <id>: { "NAME": <name>, "TEAM": <team_id>, IP: <IP>}},
-  "teams": { <id>: { "NAME": <name>, "COLOR": <color>}}
+  "teams": { <name>: { "COLOR": <color>}}
   }*/
 
 

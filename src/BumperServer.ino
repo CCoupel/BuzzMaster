@@ -14,19 +14,19 @@ void startGame(){
   resetBumpersTime();
   GameStarted=true;
   digitalWrite(ledPin, LOW);
-  sendMessageToAllClients("START");
+  sendMessageToAllClients("START","");
   notifyAll();
 }
 
 void stopGame(){
   GameStarted=false;
   digitalWrite(ledPin, HIGH);
-  sendMessageToAllClients("STOP");
+  sendMessageToAllClients("STOP","");
   notifyAll();
 }
 
 void stopGameClient(AsyncClient* client) {
-    sendMessageToClient("STOP", client);
+    sendMessageToClient("PAUSE", "", client);
 }
 
 
@@ -125,20 +125,22 @@ void startBumperServer()
 
 }
 
-void sendMessageToClient(const String& message, AsyncClient* client) {
+void sendMessageToClient(const String& action, const String& msg, AsyncClient* client) {
 Serial.println("BUMPER: send to "+client->remoteIP().toString());
-Serial.println("BUMPER: message "+message);
+Serial.println("BUMPER: action "+action);
+Serial.println("BUMPER: message "+msg);
+String message="{ ACTION: '" + action + "', MSG: '" + msg + "'}";
 
     if (client && client->connected()) {
       client->write(message.c_str(), message.length()); // Envoie le message au client connecté
     }
 }
 
-void sendMessageToAllClients(const String& message) {
+void sendMessageToAllClients(const String& action, const String& msg ) {
   // Parcourez tous les clients connectés
   Serial.println("BUMPER: send to all");
   for (AsyncClient* client : bumperClients) {
-    sendMessageToClient(message, client);
+    sendMessageToClient(action, msg, client);
   }
 }
 
