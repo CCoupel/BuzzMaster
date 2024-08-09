@@ -68,6 +68,59 @@ void update(String action, JsonObject& obj) {
 void notifyAll() {
   String output;
   serializeJson(teamsAndBumpers, output);
+  saveJson();
   Serial.printf("SOCK: send to all %s\n", output.c_str());
   ws.textAll(output.c_str());
 }
+
+void loadJson() {
+  String output;
+  // Ouvrir le fichier en lecture
+  File file = LittleFS.open("/game.json", "r");
+  if (!file) {
+    Serial.println("Failed to open file for reading. Initializing with default values.");
+    // Initialiser avec les valeurs par défaut en cas d'échec d'ouverture du fichier
+    teamsAndBumpers["bumpers"] = JsonObject();
+    teamsAndBumpers["teams"] = JsonObject();
+    return;
+  }
+
+  // Désérialiser le contenu du fichier dans le JsonDocument
+  DeserializationError error = deserializeJson(teamsAndBumpers, file);
+  if (error) {
+    Serial.print("deserializeJson() failed: ");
+    Serial.println(error.f_str());
+    // Initialiser avec les valeurs par défaut en cas d'erreur de désérialisation
+    teamsAndBumpers["bumpers"] = JsonObject();
+    teamsAndBumpers["teams"] = JsonObject();
+  } else {
+    Serial.println("JSON loaded successfully");
+  }
+
+  // Fermer le fichier après utilisation
+  file.close();
+  serializeJson(teamsAndBumpers, output);
+  Serial.printf("JSON: loaded %s\n", output.c_str());
+}
+
+
+
+void saveJson() {
+  // Ouvrir le fichier en écriture
+  File file = LittleFS.open("/game.json", "w");
+  if (!file) {
+    Serial.println("Failed to open file for writing");
+    return;
+  }
+
+  // Sérialiser le JsonDocument dans le fichier
+  if (serializeJson(teamsAndBumpers, file) == 0) {
+    Serial.println("Failed to write to file");
+  }
+
+  // Fermez le fichier après utilisation
+  file.close();
+
+  Serial.println("JSON saved successfully");
+}
+

@@ -41,9 +41,9 @@ NTPClient timeClient(ntpUDP, "pool.ntp.org");
 AsyncUDP Udp;
 
 JsonDocument teamsAndBumpers;
-JsonObject bumpers=teamsAndBumpers["bumpers"].to<JsonObject>();
-JsonObject teams=teamsAndBumpers["teams"].to<JsonObject>();
-;
+//JsonObject bumpers=teamsAndBumpers["bumpers"].to<JsonObject>();
+//JsonObject teams=teamsAndBumpers["teams"].to<JsonObject>();
+
 
 void wifiConnect()
 {
@@ -78,6 +78,8 @@ void listLittleFSFiles() {
 }
 
 void resetBumpersTime() {
+  JsonObject bumpers=teamsAndBumpers["bumpers"];
+  JsonObject teams=teamsAndBumpers["teams"];
   for (JsonPair kvp : bumpers) {
     if (kvp.value().is<JsonObject>()) {
             JsonObject bumper = kvp.value().as<JsonObject>();
@@ -149,6 +151,7 @@ void setup(void)
   listLittleFSFiles();
 
   attachButtons();
+  loadJson();
 
   startWebServer();
   startBumperServer();

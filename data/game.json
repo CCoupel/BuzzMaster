@@ -1,0 +1,17 @@
+{
+    "teams": {
+        "test team": {
+            "NAME": ""
+        }
+    },
+    "bumpers": {
+        "0": {
+            "NAME": "test",
+            "TEAM": "test team",
+            "IP": "0.0.0.0",
+            "TIME":"",
+            "DELAY": "",
+            "DELAY_TEAM": ""
+        }
+    }
+}

@@ -32,11 +32,13 @@ void stopGameClient(AsyncClient* client) {
 
 void b_handleData(void* arg, AsyncClient* c, void *data, size_t len) {
   JsonDocument receivedData;
-  JsonDocument obj;
+//  JsonDocument obj;
   String s_data=String((char*)data).substring(0, len);
   String action;
   String bumperID;
   JsonObject MSG;
+  JsonObject bumpers=teamsAndBumpers["bumpers"];
+  JsonObject teams=teamsAndBumpers["teams"];
 
   Serial.print("BUZZER: Data received: ");
   Serial.println(s_data);
@@ -50,15 +52,15 @@ void b_handleData(void* arg, AsyncClient* c, void *data, size_t len) {
 
   Serial.println("bumperID="+bumperID+" ACTION="+action);
 
-  JsonObject subObj=obj["root"].to<JsonObject>();
+//  JsonObject subObj=obj["root"].to<JsonObject>();
   
   if (action == "HELLO") {
-      subObj["bumpers"][bumperID]=MSG;
+      //subObj["bumpers"][bumperID]=MSG;
 //      if ( !bumpers.containsKey(bumperID) ) {
 //       bumpers[bumperID]=["bumpers"].to<JsonObject>();
 //      };
       if ( !bumpers[bumperID].containsKey("NAME") ) {
-        bumpers[bumperID]["NAME"]="";
+        bumpers[bumperID]["NAME"]=MSG["NAME"];
       };
       if ( !bumpers[bumperID].containsKey("TEAM") ) {
         bumpers[bumperID]["TEAM"]=1;
