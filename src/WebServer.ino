@@ -15,6 +15,8 @@ void w_handleRoot(AsyncWebServerRequest *request) {
 
 
 void w_handle_bumpers(AsyncWebServerRequest *request) {
+  JsonObject bumpers=teamsAndBumpers["bumpers"];
+  JsonObject teams=teamsAndBumpers["teams"];
   String output;
     serializeJson(bumpers, output);
   
@@ -22,6 +24,8 @@ void w_handle_bumpers(AsyncWebServerRequest *request) {
 }
 
 void w_handle_teams(AsyncWebServerRequest *request) {
+  JsonObject bumpers=teamsAndBumpers["bumpers"];
+  JsonObject teams=teamsAndBumpers["teams"];
   String output;
     serializeJson(teams, output);
   
