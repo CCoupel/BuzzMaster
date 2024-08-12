@@ -7,7 +7,7 @@
     "bumpers": {
         "0": {
             "NAME": "test",
-            "TEAM": "test team",
+            "TEAM": "",
             "IP": "0.0.0.0",
             "TIME":"",
             "DELAY": "",
