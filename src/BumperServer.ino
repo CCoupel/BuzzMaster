@@ -14,19 +14,19 @@ void startGame(){
   resetBumpersTime();
   GameStarted=true;
   digitalWrite(ledPin, LOW);
-  sendMessageToAllClients("START","");
+  sendMessageToAllClients("START","''");
   notifyAll();
 }
 
 void stopGame(){
   GameStarted=false;
   digitalWrite(ledPin, HIGH);
-  sendMessageToAllClients("STOP","");
+  sendMessageToAllClients("STOP","''");
   notifyAll();
 }
 
-void stopGameClient(AsyncClient* client) {
-    sendMessageToClient("PAUSE", "", client);
+void pauseGame(AsyncClient* client) {
+    sendMessageToClient("PAUSE", "''", client);
 }
 
 
@@ -63,20 +63,21 @@ void b_handleData(void* arg, AsyncClient* c, void *data, size_t len) {
         bumpers[bumperID]["NAME"]=MSG["NAME"];
       };
       if ( !bumpers[bumperID].containsKey("TEAM") ) {
-        bumpers[bumperID]["TEAM"]=1;
+        bumpers[bumperID]["TEAM"]="1";
       };
       bumpers[bumperID]["IP"]=MSG["IP"];
       
 //      update("new", subObj);
       notifyAll();
   };
-  if (action ==  "BUTTON") {
-    if ( !bumpers[bumperID].containsKey(bumperID) ) {
-      if ( bumpers[bumperID]["IP"] == c->remoteIP().toString()) {
-        int b_team=bumpers[bumperID]["TEAM"];
+  if (action == "BUTTON") {
+    if ( bumpers.containsKey(bumperID) ) {
+
+      if ( bumpers[bumperID].containsKey("IP") && bumpers[bumperID]["IP"] == c->remoteIP().toString()) {
+        const char * b_team=bumpers[bumperID]["TEAM"];
         int b_time=MSG["time"];
         int b_button=MSG["button"];
-        if ( b_team != 0 ) {
+        if ( b_team != nullptr ) {
           
           if (timeRef==0) {
             timeRef=b_time;
@@ -93,8 +94,8 @@ void b_handleData(void* arg, AsyncClient* c, void *data, size_t len) {
           bumpers[bumperID]["DELAY"]=b_delay;
           bumpers[bumperID]["DELAY_TEAM"]=b_delayTeam;
       //update("new", subObj);
-          notifyAll();
-          stopGameClient(c);
+          //notifyAll();
+          pauseGame(c);
         };
       };
     };
@@ -105,6 +106,7 @@ static void b_onClientDisconnect(void* arg, AsyncClient* client) {
   Serial.printf("Client disconnected\n");
   bumperClients.erase(std::remove(bumperClients.begin(), bumperClients.end(), client), bumperClients.end()); // Retirer le client de la liste
   delete client; // Nettoyer la mémoire
+  
 }
 
 
@@ -131,7 +133,7 @@ void sendMessageToClient(const String& action, const String& msg, AsyncClient* c
 Serial.println("BUMPER: send to "+client->remoteIP().toString());
 Serial.println("BUMPER: action "+action);
 Serial.println("BUMPER: message "+msg);
-String message="{ ACTION: '" + action + "', MSG: '" + msg + "'}";
+String message="{ ACTION: '" + action + "', MSG: " + msg + "}";
 
     if (client && client->connected()) {
       client->write(message.c_str(), message.length()); // Envoie le message au client connecté

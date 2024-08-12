@@ -27,7 +27,7 @@ ButtonInfo buttonsInfo[] = {
 volatile bool GameStarted=false;
 int timeRef=0;
 const int nbTeam=10;
-int timeRefTeam[nbTeam];
+std::map<std::string, int> timeRefTeam;
 
 unsigned int localUdpPort = 1234;  // Port d'écoute local
 unsigned int localWWWpPort = 80;  // Port d'écoute local
@@ -90,8 +90,8 @@ void resetBumpersTime() {
         }
   }
   timeRef=0;
-  for (int i=0; i<nbTeam; i++) {
-    timeRefTeam[i]=0;
+  for (const auto& pair : timeRefTeam) {
+    timeRefTeam[pair.first]=0;
   }
 }
 

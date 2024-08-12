@@ -71,6 +71,7 @@ void notifyAll() {
   saveJson();
   Serial.printf("SOCK: send to all %s\n", output.c_str());
   ws.textAll(output.c_str());
+  sendMessageToAllClients("UPDATE", output.c_str() );
 }
 
 void loadJson() {
