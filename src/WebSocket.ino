@@ -4,7 +4,7 @@ void onWsEvent(AsyncWebSocket *server, AsyncWebSocketClient *client, AwsEventTyp
     if (type == WS_EVT_CONNECT) {
         // Quand un client se connecte, envoyer un message
         Serial.printf("SOCK: Client %u connecté\n", client->id());
-        //notifyAll();
+        notifyAll();
         //client->text("Bienvenue sur le serveur WebSocket !");
     } else if (type == WS_EVT_DISCONNECT) {
         // Quand un client se déconnecte
@@ -74,16 +74,21 @@ void notifyAll() {
   sendMessageToAllClients("UPDATE", output.c_str() );
 }
 
-void loadJson() {
+void loadJson(String path) {
   String output;
   // Ouvrir le fichier en lecture
-  File file = LittleFS.open("/game.json", "r");
+  File file = LittleFS.open(path, "r");
   if (!file) {
     Serial.println("Failed to open file for reading. Initializing with default values.");
     // Initialiser avec les valeurs par défaut en cas d'échec d'ouverture du fichier
-    teamsAndBumpers["bumpers"] = JsonObject();
-    teamsAndBumpers["teams"] = JsonObject();
-    return;
+    File file = LittleFS.open(path+".save", "r");
+    if (!file) {
+      Serial.println("Failed to open file for reading. Initializing with default values.");
+      // Initialiser avec les valeurs par défaut en cas d'échec d'ouverture du fichier
+      teamsAndBumpers["bumpers"] = JsonObject();
+      teamsAndBumpers["teams"] = JsonObject();
+      return;
+    }
   }
 
   // Désérialiser le contenu du fichier dans le JsonDocument
@@ -108,7 +113,7 @@ void loadJson() {
 
 void saveJson() {
   // Ouvrir le fichier en écriture
-  File file = LittleFS.open("/game.json", "w");
+  File file = LittleFS.open("/game.json.save", "w");
   if (!file) {
     Serial.println("Failed to open file for writing");
     return;
