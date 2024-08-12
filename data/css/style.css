@@ -55,3 +55,7 @@
     padding: 0.5rem;
     width: 60%;
 }
+
+.dropzone {
+    padding: 1rem
+}

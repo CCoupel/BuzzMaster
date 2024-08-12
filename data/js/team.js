@@ -24,7 +24,43 @@ export function createTeamDiv(teams) {
 
         const dropzone = document.createElement('div');
         dropzone.className = 'dropzone';
+        dropzone.textContent = 'Glissez les membres de la team ici';
         newDiv.appendChild(dropzone);
+
+        // Ajoute des événements de drag-and-drop à la dropzone
+        dropzone.addEventListener('dragover', (e) => {
+            e.preventDefault(); // Nécessaire pour permettre le drop
+            dropzone.classList.add('dropzone-hover'); // Optionnel : pour ajouter un style lorsque la zone est survolée
+        });
+
+        dropzone.addEventListener('dragleave', () => {
+            dropzone.classList.remove('dropzone-hover'); // Optionnel : pour retirer le style lorsque la zone n'est plus survolée
+        });
+
+        dropzone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dropzone.classList.remove('dropzone-hover');
+
+            const draggedElementId = e.dataTransfer.getData('text');
+            const draggedElement = document.getElementById(draggedElementId);
+
+            if (draggedElement && draggedElement.classList.contains('buzzer')) {
+                dropzone.appendChild(draggedElement);
+
+                const updatedBuzzerMessage = {
+                    "bumpers": {
+                        [draggedElementId.replace('buzzer-', '')]: { // Remplace 'buzzer-' dans l'ID pour obtenir l'ID original du bumper
+                            "TEAM": id,
+                            // Vous pouvez inclure les autres propriétés de buzzer ici si nécessaire
+                        }
+                    }
+                };
+
+                ws.send(JSON.stringify(updatedBuzzerMessage));
+
+                console.log(`Élément ${draggedElementId} mis à jour avec la team ${id}`);
+            }
+        });
 
         const colorLabel = document.createElement('label');
         colorLabel.htmlFor = `color-select-${id}`;

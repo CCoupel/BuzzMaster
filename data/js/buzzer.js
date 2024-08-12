@@ -4,10 +4,17 @@ export function createBuzzerDiv(buzzerData) {
     const container = document.querySelector('.buzzer-container');
     container.innerHTML = '';
 
-    for (const [id, data] of Object.entries(buzzerData.bumpers)) {
+    // Fonction pour créer et configurer un buzzer
+    const createBuzzerElement = (id, data) => {
         const buzzerDiv = document.createElement('div');
         buzzerDiv.id = `buzzer-${id}`;
         buzzerDiv.className = 'buzzer';
+        buzzerDiv.draggable = true; // Rendre l'élément draggable
+
+        // Ajoute un événement pour gérer le début du drag
+        buzzerDiv.addEventListener('dragstart', (e) => {
+            e.dataTransfer.setData('text', e.target.id);
+        });
 
         const idElement = document.createElement('p');
         idElement.className = 'buzzer-id';
@@ -116,6 +123,25 @@ export function createBuzzerDiv(buzzerData) {
             createForm();
         }
 
-        container.appendChild(buzzerDiv);
+        return buzzerDiv;
+    };
+
+    // Création de chaque buzzer et ajout à la bonne team ou au conteneur principal
+    for (const [id, data] of Object.entries(buzzerData.bumpers)) {
+        // Vérifie si un élément avec cet ID existe déjà
+        if (document.getElementById(`buzzer-${id}`)) {
+            continue; // Passe au suivant si l'élément existe déjà
+        }
+
+        const buzzerDiv = createBuzzerElement(id, data);
+
+        if (data.TEAM && document.getElementById(data.TEAM)) {
+            // Si l'équipe existe, ajoute le buzzer à l'équipe correspondante
+            const teamDropzone = document.getElementById(data.TEAM).querySelector('.dropzone');
+            teamDropzone.appendChild(buzzerDiv);
+        } else {
+            // Sinon, ajoute le buzzer au conteneur principal
+            container.appendChild(buzzerDiv);
+        }
     }
 }
