@@ -1,10 +1,12 @@
 import { createBuzzerDiv } from './buzzer.js';
 import { createTeamDiv } from './team.js';
 import { ws } from './webSocket.js';
+import { initializeDropzones } from './dragAndDrop.js';
 
 document.addEventListener('DOMContentLoaded', () => {
     const button = document.getElementById('addDivButton');
-    const container = document.querySelector('.team-container');
+
+    initializeDropzones(ws);
 
     button.addEventListener('click', () => {
         const titleText = prompt('Nom de la team :', 'Team ');

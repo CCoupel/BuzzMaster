@@ -21,8 +21,8 @@ export function configureDropzone(dropzone, ws, id) {
 
             const updatedBuzzerMessage = {
                 "bumpers": {
-                    [draggedElementId.replace('buzzer-', '')]: { // Remplace 'buzzer-' dans l'ID pour obtenir l'ID original du bumper
-                        "TEAM": id,
+                    [draggedElementId.replace('buzzer-', '')]: { 
+                        "TEAM": id.toString(),
                     }
                 }
             };
@@ -40,4 +40,11 @@ export function configureDragElement(element) {
     element.addEventListener('dragstart', (e) => {
         e.dataTransfer.setData('text', e.target.id);
     });
+}
+
+// Fonction pour initialiser les dropzones
+export function initializeDropzones(ws) {
+    const buzzerContainer = document.querySelector('.buzzer-container');
+
+    configureDropzone(buzzerContainer, ws, '1');
 }
