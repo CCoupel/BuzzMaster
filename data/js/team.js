@@ -1,4 +1,5 @@
 import { ws } from './webSocket.js';
+import { configureDropzone } from './dragAndDrop.js'; 
 
 export function createTeamDiv(teams) {
     const container = document.querySelector('.team-container');
@@ -12,65 +13,41 @@ export function createTeamDiv(teams) {
         newDiv.className = 'dynamic-div';
         newDiv.id = id;
 
+        const colorDiv = document.createElement('div');
+        colorDiv.className = 'color-div';
+
+        if (teams[id] && teams[id].color) {
+            colorDiv.style.backgroundColor = `rgb(${teams[id].color.join(',')})`;
+        }
+
+        newDiv.appendChild(colorDiv);
+
+        const teamInfoDiv = document.createElement('div');
+        teamInfoDiv.className = 'team-info';
+        newDiv.appendChild(teamInfoDiv);
+
         const title = document.createElement('h2');
         title.className = 'team-name';
         title.textContent = id;
-        newDiv.appendChild(title);
-
-        const text = document.createElement('p');
-        text.className = 'team-member-p';
-        text.textContent = 'Membres de la team :';
-        newDiv.appendChild(text);
+        teamInfoDiv.appendChild(title);
 
         const dropzone = document.createElement('div');
         dropzone.className = 'dropzone';
         dropzone.textContent = 'Glissez les membres de la team ici';
-        newDiv.appendChild(dropzone);
+        teamInfoDiv.appendChild(dropzone);
 
-        // Ajoute des événements de drag-and-drop à la dropzone
-        dropzone.addEventListener('dragover', (e) => {
-            e.preventDefault(); // Nécessaire pour permettre le drop
-            dropzone.classList.add('dropzone-hover'); // Optionnel : pour ajouter un style lorsque la zone est survolée
-        });
-
-        dropzone.addEventListener('dragleave', () => {
-            dropzone.classList.remove('dropzone-hover'); // Optionnel : pour retirer le style lorsque la zone n'est plus survolée
-        });
-
-        dropzone.addEventListener('drop', (e) => {
-            e.preventDefault();
-            dropzone.classList.remove('dropzone-hover');
-
-            const draggedElementId = e.dataTransfer.getData('text');
-            const draggedElement = document.getElementById(draggedElementId);
-
-            if (draggedElement && draggedElement.classList.contains('buzzer')) {
-                dropzone.appendChild(draggedElement);
-
-                const updatedBuzzerMessage = {
-                    "bumpers": {
-                        [draggedElementId.replace('buzzer-', '')]: { // Remplace 'buzzer-' dans l'ID pour obtenir l'ID original du bumper
-                            "TEAM": id,
-                            // Vous pouvez inclure les autres propriétés de buzzer ici si nécessaire
-                        }
-                    }
-                };
-
-                ws.send(JSON.stringify(updatedBuzzerMessage));
-
-                console.log(`Élément ${draggedElementId} mis à jour avec la team ${id}`);
-            }
-        });
+        configureDropzone(dropzone, ws, id);
 
         const colorLabel = document.createElement('label');
         colorLabel.htmlFor = `color-select-${id}`;
         colorLabel.textContent = 'Choisir une couleur:';
-        newDiv.appendChild(colorLabel);
+        teamInfoDiv.appendChild(colorLabel);
 
         const colorSelect = document.createElement('select');
         colorSelect.id = `color-select-${id}`;
 
         const colors = [
+            { name: 'choisir une couleur', rgb: [255, 255, 255] },
             { name: 'bleu', rgb: [0, 0, 255] },
             { name: 'rouge', rgb: [255, 0, 0] },
             { name: 'jaune', rgb: [255, 255, 0] },
@@ -86,7 +63,18 @@ export function createTeamDiv(teams) {
             option.textContent = color.name.charAt(0).toUpperCase() + color.name.slice(1);
             colorSelect.appendChild(option);
         });
-        newDiv.appendChild(colorSelect);
+        teamInfoDiv.appendChild(colorSelect);
+
+        if (teams[id] && teams[id].color) {
+            const existingColor = colors.find(color => 
+                color.rgb[0] === teams[id].color[0] && 
+                color.rgb[1] === teams[id].color[1] && 
+                color.rgb[2] === teams[id].color[2]
+            );
+            if (existingColor) {
+                colorSelect.value = existingColor.name;
+            }
+        }
 
         colorSelect.addEventListener('change', () => {
             const selectedColorName = colorSelect.value;
@@ -101,6 +89,8 @@ export function createTeamDiv(teams) {
             };
 
             ws.send(JSON.stringify(message));
+
+            colorDiv.style.backgroundColor = `rgb(${selectedColor.rgb.join(',')})`;
 
             console.log(`Couleur envoyée pour l'équipe ${id}: ${selectedColor.rgb}`);
         });

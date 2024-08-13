@@ -29,9 +29,13 @@
     margin-inline: 0 auto;
     margin: 1rem 0 ;
 }
+
 .dynamic-div {
     outline: 1px solid black;
     margin: 3rem;
+    display: flex;
+    align-items: stretch; /* Assure que tous les enfants prennent la hauteur maximale disponible */
+    min-height: 100px; /* Optionnel : vous pouvez définir une hauteur minimale si nécessaire */
 }
 
 .team-name {
@@ -58,4 +62,14 @@
 
 .dropzone {
     padding: 1rem
+}
+
+.color-div {
+    width: 5%;
+    border-right: 1px  solid black;
+}
+
+.team-info {
+    flex-grow: 1; /* Le contenu de l'équipe occupera le reste de l'espace */
+    padding-left: 10px; /* Espace entre la color-div et le reste du contenu */
 }
