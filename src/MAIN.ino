@@ -151,7 +151,7 @@ void setup(void)
   listLittleFSFiles();
 
   attachButtons();
-  loadJson();
+  loadJson("/game.json");
 
   startWebServer();
   startBumperServer();
