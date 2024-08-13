@@ -11,6 +11,7 @@ std::vector<AsyncClient*> bumperClients;
 
 
 void startGame(){
+
   resetBumpersTime();
   GameStarted=true;
   digitalWrite(ledPin, LOW);
@@ -93,17 +94,44 @@ void b_handleData(void* arg, AsyncClient* c, void *data, size_t len) {
           bumpers[bumperID]["BUTTON"]=b_button;
           bumpers[bumperID]["DELAY"]=b_delay;
           bumpers[bumperID]["DELAY_TEAM"]=b_delayTeam;
+
+          teams[b_team]["TIME"]=b_time;
+          teams[b_team]["DELAY"]=b_delay;
+          teams[b_team]["STATUS"]="PAUSE";
+          teams[b_team]["BUMPER"]=bumperID;
+
       //update("new", subObj);
-          //notifyAll();
-          pauseGame(c);
+          notifyAll();
+          //pauseGame(c);
         };
       };
     };
-  }; 
+  };
+  if (action == "PONG") {
+    bumpers[bumperID]["lastPingTime"] = millis();  
+    //bumpers[bumperID]["STATUS"] = "online";  // Marquer le bumper comme "online" lors de la réception d'un PONG
+    if (bumpers[bumperID]["STATUS"] != "online") {
+      Serial.println("BUMPER: Bumper is going online");
+      bumpers[bumperID]["STATUS"] = "online";
+      notifyAll();
+    }
+  }
+
 };
 
 static void b_onClientDisconnect(void* arg, AsyncClient* client) {
+  JsonObject bumpers = teamsAndBumpers["bumpers"];
+
   Serial.printf("Client disconnected\n");
+  for (JsonPair bumperPair : bumpers) {
+    JsonObject bumper = bumperPair.value().as<JsonObject>();
+    if (bumper["IP"].as<String>() == client->remoteIP().toString()) {
+      bumper["STATUS"] = "offline";
+      notifyAll();
+      break;
+    }
+  }
+
   bumperClients.erase(std::remove(bumperClients.begin(), bumperClients.end(), client), bumperClients.end()); // Retirer le client de la liste
   delete client; // Nettoyer la mémoire
   
@@ -133,8 +161,7 @@ void sendMessageToClient(const String& action, const String& msg, AsyncClient* c
 Serial.println("BUMPER: send to "+client->remoteIP().toString());
 Serial.println("BUMPER: action "+action);
 Serial.println("BUMPER: message "+msg);
-String message="{ ACTION: '" + action + "', MSG: " + msg + "}";
-
+String message="{ \"ACTION\": \"" + action + "\", \"MSG\": " + msg + "}\n";
     if (client && client->connected()) {
       client->write(message.c_str(), message.length()); // Envoie le message au client connecté
     }
@@ -148,3 +175,21 @@ void sendMessageToAllClients(const String& action, const String& msg ) {
   }
 }
 
+void checkPingForAllClients() {
+  unsigned long currentTime = millis();
+
+  // Vérifier les bumpers non répondus
+  JsonObject bumpers = teamsAndBumpers["bumpers"];
+  for (JsonPair bumperPair : bumpers) {
+    JsonObject bumper = bumperPair.value().as<JsonObject>();
+    if (currentTime - bumper["lastPingTime"].as<unsigned long>() > 3000) {  // 2 secondes sans réponse
+      if (bumper["STATUS"] != "offline") {
+        Serial.print("BUMPER: Bumper ");
+        Serial.print(bumper["IP"].as<String>());
+        Serial.println(" is going offline");
+        bumper["STATUS"] = "offline";
+        notifyAll();
+      }
+    }
+  }
+}
