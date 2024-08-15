@@ -64,13 +64,13 @@ void b_handleData(void* arg, AsyncClient* c, void *data, size_t len) {
         bumpers[bumperID]["NAME"]=MSG["NAME"];
       };
       if ( !bumpers[bumperID].containsKey("TEAM") ) {
-        bumpers[bumperID]["TEAM"]="1";
+        bumpers[bumperID]["TEAM"]="";
       };
       bumpers[bumperID]["IP"]=MSG["IP"];
       
 //      update("new", subObj);
       notifyAll();
-  };
+  }
   if (action == "BUTTON") {
     if ( bumpers.containsKey(bumperID) ) {
 

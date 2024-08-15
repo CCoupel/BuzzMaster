@@ -85,4 +85,5 @@ document.addEventListener('DOMContentLoaded', () => {
     addButton.addEventListener('click', handleAddTeam);
 
     ws.onmessage = handleIncomingMessage;
+    ws.send('{ "ACTION": "HELLO", "MSG": "Salut, serveur WebSocket !"}');
 });
