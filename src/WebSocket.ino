@@ -13,13 +13,36 @@ void onWsEvent(AsyncWebSocket *server, AsyncWebSocketClient *client, AwsEventTyp
         
         // Quand un message est reçu, réagir
         Serial.printf("SOCK: Message reçu de client %u : %.*s\n", client->id(), len, data);
-        
-        deserializeJson(receivedData, data);
+        DeserializationError error = deserializeJson(receivedData, data);
+        if (error) {
+          Serial.print("Failed to parse JSON: ");
+          Serial.println(error.f_str());
+          return; // Sortie si une erreur survient
+      }
         //JsonObject jsonObj = teamsAndBumpers.as<JsonObject>();
-        JsonObject jsonObjData = receivedData.as<JsonObject>();
-        // Fusionne le JSON reçu avec 'teams'
-        update("ADD", jsonObjData);
+        //JsonObject jsonObjData = receivedData.as<JsonObject>();
+        const char* action = receivedData["ACTION"];
+        JsonObject message = receivedData["MSG"];
+        parseDataFromSocket(action, message);
     }
+}
+
+void parseDataFromSocket(const char* action, JsonObject message) {
+        // Fusionne le JSON reçu avec 'teams'
+        if (strcmp(action,  "FULL") == 0) {
+          JsonDocument& doc = teamsAndBumpers;
+          doc=message;
+        }
+        if (strcmp(action,  "UPDATE") == 0) {
+          update("UPDATE", message);
+        }
+        if (strcmp(action,  "DELETE") == 0) {
+          update("DELETE", message);
+        }
+        if (strcmp(action,  "RESET") == 0) {
+          Serial.printf("SOCK: Rebooting....");
+          ESP.restart();
+        }
 }
 
 // Fonction pour fusionner deux documents JSON

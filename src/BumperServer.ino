@@ -107,7 +107,7 @@ void b_handleData(void* arg, AsyncClient* c, void *data, size_t len) {
       };
     };
   };
-  if (action == "PONG") {
+  if (action == "PING") {
     bumpers[bumperID]["lastPingTime"] = millis();  
     //bumpers[bumperID]["STATUS"] = "online";  // Marquer le bumper comme "online" lors de la réception d'un PONG
     if (bumpers[bumperID]["STATUS"] != "online") {

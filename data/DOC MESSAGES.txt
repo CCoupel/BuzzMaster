@@ -1,0 +1,31 @@
+messages format:
+{
+    "teams": { <name>: {"COLOR": [R,G,B], "TIME":<T>, "DELAY": <D>, "STATUS": ""}},
+    "bumper": { <ID>: { "IP": <IP>, "TIME": <T>, "BUTTON": <B>, "DELAY": <D>, "DELAY_TEAM": <D> }}
+}
+from Buzzer:
+{ "ID": <ID>, "ACTION": <VERB>, "MSG": <msg>}
+
+{ "ID": "<MAC>", "ACTION": "PING", "MSG": ""}
+{ "ID": "<MAC>", "ACTION": "HELLO", "MSG": { "IP": "<ip>"}}
+{ "ID": "<MAC>", ACTION": "BUTTON", "MSG": { "button": "<id>", "time": "<epoch>"}}
+
+from WEB:
+{ "ACTION": <VERB>, "MSG": <msg>}
+
+{ "ACTION": "PING", "MSG": ""}
+{ "ACTION": "UPDATE", "MSG": <BUZZERandTEAM>}
+{ "ACTION": "FULL", "MSG": <BUZZERandTEAM>}
+{ "ACTION": "DELETE", "MSG": <BUZZERandTEAM>}
+{ "ACTION": "RESET", "MSG": ""}
+
+to Buzzer:
+{ "ACTION": <VERB>, "MSG": <msg>}
+
+{ "ACTION": "START", "MSG": <msg>}
+{ "ACTION": "STOP", "MSG": <msg>}
+{ "ACTION": "PAUSE", "MSG": <msg>}
+
+to WEB:
+#{ "ACTION": "UPDATE", "MSG": <BUZZERandTEAM>}
+<BUZZERandTEAM>
