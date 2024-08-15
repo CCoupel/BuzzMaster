@@ -20,7 +20,17 @@ void onWsEvent(AsyncWebSocket *server, AsyncWebSocketClient *client, AwsEventTyp
       }
         //JsonObject jsonObj = teamsAndBumpers.as<JsonObject>();
         //JsonObject jsonObjData = receivedData.as<JsonObject>();
+        if (!receivedData.containsKey("ACTION")) {
+            Serial.println("ERROR: 'ACTION' key is missing in the received JSON.");
+            return;  // Quitte la fonction si "ACTION" est manquant
+        }
+
         const char* action = receivedData["ACTION"];
+        if (!receivedData.containsKey("MSG")) {
+            Serial.println("ERROR: 'MSG' key is missing in the received JSON.");
+            return;  // Quitte la fonction si "MSG" est manquant
+        }
+
         JsonObject message = receivedData["MSG"];
         parseDataFromSocket(action, message);
     }
@@ -29,7 +39,8 @@ void onWsEvent(AsyncWebSocket *server, AsyncWebSocketClient *client, AwsEventTyp
 void parseDataFromSocket(const char* action, JsonObject message) {
         // Fusionne le JSON reçu avec 'teams'
         if (strcmp(action,  "HELLO") == 0) {
-                notifyAll();
+          delay(10);
+          notifyAll();
         }
         if (strcmp(action,  "FULL") == 0) {
           JsonDocument& doc = teamsAndBumpers;
