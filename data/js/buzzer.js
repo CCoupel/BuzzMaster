@@ -65,14 +65,14 @@ export function createBuzzerDiv(buzzerData) {
         buzzerDiv.appendChild(idElement);
 
         const updateView = (playerName) => {
-            buzzerDiv.innerHTML = ''; // Clear previous elements
+            buzzerDiv.innerHTML = '';
             if (playerName) {
                 const nameElement = createTextElement('buzzer-name', `Nom: ${playerName}`);
                 const deleteButton = document.createElement('button');
                 deleteButton.textContent = 'Supprimer le nom';
                 deleteButton.addEventListener('click', () => {
                     sendWebSocketMessage(id);
-                    updateView(""); // Recreate form
+                    updateView(""); 
                 });
                 buzzerDiv.appendChild(nameElement);
                 buzzerDiv.appendChild(deleteButton);
