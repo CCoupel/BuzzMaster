@@ -62,6 +62,8 @@ AsyncWebSocket ws("/ws");
 
 WiFiUDP ntpUDP;
 NTPClient timeClient(ntpUDP, "pool.ntp.org");
+const char* GameFile="/game.json";
+const char* saveGameFile="/game.json.save";
 
 //AsyncUDP Udp;
 
@@ -158,30 +160,34 @@ void listLittleFSFiles() {
 }
 
 void resetBumpersTime() {
+  std::vector<String> keysToRemove = {"STATUS", "BUTTON", "TIME", "DELAY", "DELAY_TEAM"};
+
   JsonObject bumpers=teamsAndBumpers["bumpers"];
   JsonObject teams=teamsAndBumpers["teams"];
   for (JsonPair kvp : bumpers) {
     if (kvp.value().is<JsonObject>()) {
-        JsonObject bumper = kvp.value().as<JsonObject>();
-        bumper["TIME"] = 0;
-        bumper["BUTTON"] = 0;
-        bumper["DELAY"] = 0;
-        bumper["DELAY_TEAM"] = 0;
+      JsonObject bumper = kvp.value().as<JsonObject>();
 
-        } else {
-            Serial.println("Error: Bumper entry is not a JsonObject");
-        }
+      for (String key : keysToRemove) {
+        if (bumper.containsKey(key)) {
+          bumper.remove(key);
+        }    
+      }
+    } else {
+        Serial.println("Error: Bumper entry is not a JsonObject");
+    }
   }
   for (JsonPair team : teams) {
-    JsonObject teamData = team.value().as<JsonObject>();
-// Supprimer 'STATUS' s'il existe
-    if (teamData.containsKey("STATUS")) {
-        teamData.remove("STATUS");
-    }
-    
-    // Supprimer 'BUMPER' s'il existe
-    if (teamData.containsKey("BUMPER")) {
-        teamData.remove("BUMPER");
+    if (team.value().is<JsonObject>()) {
+      JsonObject teamData = team.value().as<JsonObject>();
+
+      for (String key : keysToRemove) {
+        if (teamData.containsKey(key)) {
+          teamData.remove(key);
+        }    
+      }
+    } else {
+        Serial.println("Error: Team entry is not a JsonObject");
     }
   }
   timeRef=0;
@@ -264,7 +270,7 @@ void setup(void)
   listLittleFSFiles();
 
   attachButtons();
-  loadJson("/game.json");
+  loadJson(GameFile);
 
   startWebServer();
   startBumperServer();

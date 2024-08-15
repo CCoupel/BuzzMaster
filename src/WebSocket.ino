@@ -31,13 +31,15 @@ void onWsEvent(AsyncWebSocket *server, AsyncWebSocketClient *client, AwsEventTyp
             return;  // Quitte la fonction si "MSG" est manquant
         }
         JsonObject message = receivedData["MSG"];
-        
+
         parseDataFromSocket(action, message);
     }
 }
 
 void parseDataFromSocket(const char* action, JsonObject message) {
         // Fusionne le JSON reçu avec 'teams'
+        if (strcmp(action,  "PING") == 0) {
+        }
         if (strcmp(action,  "HELLO") == 0) {
           notifyAll();
         }
@@ -53,6 +55,14 @@ void parseDataFromSocket(const char* action, JsonObject message) {
         }
         else if (strcmp(action,  "RESET") == 0) {
           Serial.printf("SOCK: Rebooting....");
+          if (LittleFS.exists(saveGameFile)) {
+        // Supprimer le fichier
+            if (LittleFS.remove(saveGameFile)) {
+                Serial.println("Fichier supprimé avec succès");
+            } else {
+                Serial.println("Erreur : Impossible de supprimer le fichier");
+            }
+          } 
           ESP.restart();
         }
         else {
@@ -114,22 +124,24 @@ void notifyAll() {
 }
 
 void loadJson(String path) {
+  File file;
   String output;
   // Ouvrir le fichier en lecture
-  File file = LittleFS.open(path, "r");
+  Serial.print("Loading game file: ");
+  if (LittleFS.exists(saveGameFile)) {
+    Serial.println(saveGameFile);
+    file = LittleFS.open(saveGameFile, "r");
+  } else if (LittleFS.exists(GameFile)) {
+    Serial.println(GameFile);
+    file = LittleFS.open(GameFile, "r");
+  }
   if (!file) {
     Serial.println("Failed to open file for reading. Initializing with default values.");
     // Initialiser avec les valeurs par défaut en cas d'échec d'ouverture du fichier
-    File file = LittleFS.open(path+".save", "r");
-    if (!file) {
-      Serial.println("Failed to open file for reading. Initializing with default values.");
-      // Initialiser avec les valeurs par défaut en cas d'échec d'ouverture du fichier
-      teamsAndBumpers["bumpers"] = JsonObject();
-      teamsAndBumpers["teams"] = JsonObject();
-      return;
-    }
+    teamsAndBumpers["bumpers"] = JsonObject();
+    teamsAndBumpers["teams"] = JsonObject();
+    return;
   }
-
   // Désérialiser le contenu du fichier dans le JsonDocument
   DeserializationError error = deserializeJson(teamsAndBumpers, file);
   if (error) {
@@ -152,7 +164,7 @@ void loadJson(String path) {
 
 void saveJson() {
   // Ouvrir le fichier en écriture
-  File file = LittleFS.open("/game.json.save", "w");
+  File file = LittleFS.open(saveGameFile, "w");
   if (!file) {
     Serial.println("Failed to open file for writing");
     return;

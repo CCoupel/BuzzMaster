@@ -173,6 +173,7 @@ void sendMessageToAllClients(const String& action, const String& msg ) {
   for (AsyncClient* client : bumperClients) {
     sendMessageToClient(action, msg, client);
   }
+  Serial.println("BUMPER: all is sent");
 }
 
 void checkPingForAllClients() {
