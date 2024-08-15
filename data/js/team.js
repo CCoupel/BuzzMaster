@@ -14,8 +14,12 @@ const colors = [
 
 // Récupère les couleurs déjà utilisées par les équipes
 function getUsedColors(teams) {
-    return new Set(Object.values(teams).filter(team => team.color).map(team => team.color.join(',')));
+    return new Set(Object.values(teams)
+        .filter(team => team.COLOR)
+        .map(team => team.COLOR.join(','))
+    );
 }
+
 
 // Crée un élément HTML avec les attributs spécifiés
 function createElement(tag, className, attributes = {}) {
@@ -72,9 +76,11 @@ export function createTeamDiv(teams) {
 
         configureDropzone(dropzone, ws, id);
 
-        if (teamData?.color) {
-            colorDiv.style.backgroundColor = `rgb(${teamData.color.join(',')})`;
-            const existingColor = colors.find(color => color.rgb.every((value, index) => value === teamData.color[index]));
+        if (teamData?.COLOR) {
+            colorDiv.style.backgroundColor = `rgb(${teamData.COLOR.join(',')})`;
+            const existingColor = colors.find(color => 
+                color.rgb.every((value, index) => value === teamData.COLOR[index])
+            );
             if (existingColor) colorSelect.value = existingColor.name;
         }
 
@@ -89,13 +95,13 @@ export function createTeamDiv(teams) {
                     "ACTION": "UPDATE",
                     "MSG": {
                         "teams": {
-                            [id]: { color: selectedColor.rgb }
+                            [id]: { COLOR: selectedColor.rgb }
                         }
                     }
                 };
                 ws.send(JSON.stringify(updateMessage));
                 colorDiv.style.backgroundColor = `rgb(${selectedColor.rgb.join(',')})`;
-                updateColorSelectors(colorSelectors, { ...teams, [id]: { ...teamData, color: selectedColor.rgb } });
+                updateColorSelectors(colorSelectors, { ...teams, [id]: { ...teamData, COLOR: selectedColor.rgb } });
                 console.log(`Couleur envoyée pour l'équipe ${id}: ${selectedColor.rgb}`);
             } else {
                 alert('Cette couleur est déjà utilisée par une autre équipe.');

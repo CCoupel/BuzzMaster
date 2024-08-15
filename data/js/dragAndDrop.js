@@ -62,5 +62,5 @@ export function configureDragElement(element) {
 // Fonction pour initialiser les dropzones
 export function initializeDropzones(ws) {
     const buzzerContainer = document.querySelector('.buzzer-container');
-    configureDropzone(buzzerContainer, ws, '0');
+    configureDropzone(buzzerContainer, ws, '');
 }
