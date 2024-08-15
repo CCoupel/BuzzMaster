@@ -13,7 +13,7 @@
   // Envoyer un message au serveur
   ws.onopen = function() {
       console.log('Connecté au serveur WebSocket');
-      ws.send('Salut, serveur WebSocket !');
+      ws.send('{ "ACTION": "HELLO", "MSG": "Salut, serveur WebSocket !"}');
   };
 
   // Événement de fermeture de la connexion

@@ -13,6 +13,7 @@ from Buzzer:
 from WEB:
 { "ACTION": <VERB>, "MSG": <msg>}
 
+{ "ACTION": "HELLO", "MSG": "<RANDOM>"}
 { "ACTION": "PING", "MSG": ""}
 { "ACTION": "UPDATE", "MSG": <BUZZERandTEAM>}
 { "ACTION": "FULL", "MSG": <BUZZERandTEAM>}

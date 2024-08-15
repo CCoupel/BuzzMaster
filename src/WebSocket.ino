@@ -4,7 +4,6 @@ void onWsEvent(AsyncWebSocket *server, AsyncWebSocketClient *client, AwsEventTyp
     if (type == WS_EVT_CONNECT) {
         // Quand un client se connecte, envoyer un message
         Serial.printf("SOCK: Client %u connecté\n", client->id());
-        notifyAll();
         //client->text("Bienvenue sur le serveur WebSocket !");
     } else if (type == WS_EVT_DISCONNECT) {
         // Quand un client se déconnecte
@@ -29,6 +28,9 @@ void onWsEvent(AsyncWebSocket *server, AsyncWebSocketClient *client, AwsEventTyp
 
 void parseDataFromSocket(const char* action, JsonObject message) {
         // Fusionne le JSON reçu avec 'teams'
+        if (strcmp(action,  "HELLO") == 0) {
+                notifyAll();
+        }
         if (strcmp(action,  "FULL") == 0) {
           JsonDocument& doc = teamsAndBumpers;
           doc=message;
