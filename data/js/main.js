@@ -28,9 +28,6 @@ function connectWebSocket() {
 
         ws.send(JSON.stringify({ "ACTION": "HELLO", "MSG": "Salut, serveur WebSocket !" }));
         initializeDropzones(ws);
-
-        // Peut-être demander les données actuelles au serveur
-        ws.send(JSON.stringify({ "ACTION": "REQUEST_STATE", "MSG": "Demande de l'état actuel" }));
     };
 
     ws.onerror = (error) => console.error('WebSocket error:', error);
