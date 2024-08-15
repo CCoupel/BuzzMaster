@@ -11,9 +11,16 @@ function positionButtonAtBottom() {
     const container = document.querySelector('.team-container');
     
     if (container && button) {
-        container.appendChild(button); 
+        try {
+            container.appendChild(button); 
+        } catch (error) {
+            console.error('Erreur lors du positionnement du bouton:', error);
+        }
+    } else {
+        console.warn('Le bouton ou le conteneur n\'est pas disponible.');
     }
 }
+
 
 // Affiche une invite pour saisir le nom de la nouvelle équipe et vérifie sa validité
 function promptForTeamName() {
@@ -31,7 +38,7 @@ function sendTeamDataToServer(teamName) {
         "ACTION": "UPDATE", 
         "MSG": { 
             "teams": { 
-                [teamName]: { "COLOR": [255, 255, 255]}
+                [teamName]: { "color": [255, 255, 255]}
             }
         } 
     };
@@ -75,15 +82,20 @@ function handleIncomingMessage(event) {
     }
 }
 
+
 // Initialisation des événements et du WebSocket à la fin du chargement de la page
 document.addEventListener('DOMContentLoaded', () => {
-    const addButton = document.getElementById('addDivButton');
-    
-    initializeDropzones(ws);
-    positionButtonAtBottom();
+    try {
+        const addButton = document.getElementById('addDivButton');
+        if (!addButton) throw new Error('Le bouton d\'ajout est introuvable.');
+        
+        initializeDropzones(ws);
+        positionButtonAtBottom();
 
-    addButton.addEventListener('click', handleAddTeam);
+        addButton.addEventListener('click', handleAddTeam);
 
-    ws.onmessage = handleIncomingMessage;
-    ws.send('{ "ACTION": "HELLO", "MSG": "Salut, serveur WebSocket !"}');
+        ws.onmessage = handleIncomingMessage;
+    } catch (error) {
+        console.error('Erreur lors de l\'initialisation:', error);
+    }
 });

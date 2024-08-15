@@ -89,7 +89,7 @@ export function createTeamDiv(teams) {
                     "ACTION": "UPDATE",
                     "MSG": {
                         "teams": {
-                            [id]: { COLOR: selectedColor.rgb }
+                            [id]: { color: selectedColor.rgb }
                         }
                     }
                 };
