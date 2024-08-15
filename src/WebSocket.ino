@@ -24,14 +24,14 @@ void onWsEvent(AsyncWebSocket *server, AsyncWebSocketClient *client, AwsEventTyp
             Serial.println("ERROR: 'ACTION' key is missing in the received JSON.");
             return;  // Quitte la fonction si "ACTION" est manquant
         }
-
         const char* action = receivedData["ACTION"];
+
         if (!receivedData.containsKey("MSG")) {
             Serial.println("ERROR: 'MSG' key is missing in the received JSON.");
             return;  // Quitte la fonction si "MSG" est manquant
         }
-
         JsonObject message = receivedData["MSG"];
+        
         parseDataFromSocket(action, message);
     }
 }
@@ -39,23 +39,26 @@ void onWsEvent(AsyncWebSocket *server, AsyncWebSocketClient *client, AwsEventTyp
 void parseDataFromSocket(const char* action, JsonObject message) {
         // Fusionne le JSON reçu avec 'teams'
         if (strcmp(action,  "HELLO") == 0) {
-          delay(10);
           notifyAll();
         }
-        if (strcmp(action,  "FULL") == 0) {
+        else if (strcmp(action,  "FULL") == 0) {
           JsonDocument& doc = teamsAndBumpers;
           doc=message;
         }
-        if (strcmp(action,  "UPDATE") == 0) {
+        else if (strcmp(action,  "UPDATE") == 0) {
           update("UPDATE", message);
         }
-        if (strcmp(action,  "DELETE") == 0) {
+        else if (strcmp(action,  "DELETE") == 0) {
           update("DELETE", message);
         }
-        if (strcmp(action,  "RESET") == 0) {
+        else if (strcmp(action,  "RESET") == 0) {
           Serial.printf("SOCK: Rebooting....");
           ESP.restart();
         }
+        else {
+          Serial.printf("SOCK: Action not recognized %s\n", action);
+        }
+
 }
 
 // Fonction pour fusionner deux documents JSON
