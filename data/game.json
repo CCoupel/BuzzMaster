@@ -1,7 +1,8 @@
 {
     "teams": {
         "test team": {
-            "NAME": ""
+            "COLOR": [1,1,1],
+            "DELAY": ""
         }
     },
     "bumpers": {
@@ -11,7 +12,8 @@
             "IP": "0.0.0.0",
             "TIME":"",
             "DELAY": "",
-            "DELAY_TEAM": ""
+            "DELAY_TEAM": "",
+            "STATUS": "offline"
         }
     }
 }
