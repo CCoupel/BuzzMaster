@@ -16,23 +16,6 @@ import { initializeDropzones } from './dragAndDrop.js';
 
 let teams = {};
 
-// Positionne le bouton "Ajouter une équipe" en bas du conteneur des équipes
-function positionButtonAtBottom() {
-    const button = document.getElementById('addDivButton');
-    const container = document.querySelector('.team-container');
-    
-    if (container && button) {
-        try {
-            container.appendChild(button); 
-        } catch (error) {
-            console.error('Erreur lors du positionnement du bouton:', error);
-        }
-    } else {
-        console.warn('Le bouton ou le conteneur n\'est pas disponible.');
-    }
-}
-
-
 // Affiche une invite pour saisir le nom de la nouvelle équipe et vérifie sa validité
 function promptForTeamName() {
     const teamName = prompt('Nom de la team :', 'Team ');
@@ -79,7 +62,19 @@ function handleAddTeam() {
         teams[teamName] = {};
         trySendTeamData(teamName);
         createTeamDiv(teams);
-        positionButtonAtBottom();
+    }
+}
+
+function cleanBoard() {
+    const teamContainer = document.querySelector('.team-container');
+    const buzzerContainer = document.querySelector('.buzzer-container');
+    
+    if (teamContainer) {
+        teamContainer.innerHTML = '';
+    }
+
+    if (buzzerContainer) {
+        buzzerContainer.innerHTML = '';
     }
 }
 
@@ -88,11 +83,11 @@ function handleIncomingMessage(event) {
     try {
         console.log(event.data);
         const data = JSON.parse(event.data);
+        cleanBoard()
 
         if (data.teams) {
             Object.assign(teams, data.teams); 
             createTeamDiv(teams);
-            positionButtonAtBottom();
         }
         if (data.bumpers) {
             createBuzzerDiv(data);
@@ -120,7 +115,6 @@ document.addEventListener('DOMContentLoaded', () => {
         ws.onclose = () => console.log('WebSocket connection closed.');
 
         initializeDropzones(ws);
-        positionButtonAtBottom();
 
         addButton.addEventListener('click', handleAddTeam);
 
