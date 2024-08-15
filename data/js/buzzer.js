@@ -76,9 +76,12 @@ export function createBuzzerDiv(buzzerData) {
 
                     buzzerDiv.removeChild(nameElement);
                     buzzerDiv.removeChild(deleteButton);
+
+                    buzzerDiv.appendChild(idElement);
                     createForm();
                 });
 
+                buzzerDiv.removeChild(idElement);
                 buzzerDiv.replaceChild(nameElement, form);
                 buzzerDiv.appendChild(deleteButton);
             });
@@ -110,9 +113,12 @@ export function createBuzzerDiv(buzzerData) {
 
                 buzzerDiv.removeChild(nameElement);
                 buzzerDiv.removeChild(deleteButton);
+
+                buzzerDiv.appendChild(idElement);
                 createForm();
             });
 
+            buzzerDiv.removeChild(idElement); 
             buzzerDiv.appendChild(nameElement);
             buzzerDiv.appendChild(deleteButton);
         } else {
