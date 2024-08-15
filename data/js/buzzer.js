@@ -1,4 +1,4 @@
-import { ws } from './webSocket.js';
+import { ws } from './main.js';
 import { configureDragElement } from './dragAndDrop.js';
 
 // Fonction principale pour créer et afficher les éléments buzzer en fonction des données fournies

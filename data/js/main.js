@@ -1,7 +1,18 @@
 import { createBuzzerDiv } from './buzzer.js';
 import { createTeamDiv } from './team.js';
-import { ws } from './webSocket.js';
 import { initializeDropzones } from './dragAndDrop.js';
+
+// Connectez-vous au serveur WebSocket
+  //const loc = window.location;
+  const loc = "buzzcontrol.local";
+  //const wsProtocol = loc.protocol === 'https:' ? 'wss:' : 'ws:'; // Utilisez 'wss' si la page est chargée via HTTPS
+  const wsProtocol = "ws:"
+  //const wsUrl = `${wsProtocol}//${loc.host}/ws`; // Utilise le même hôte et protocole que la page
+  const wsUrl = `${wsProtocol}//${loc}/ws`; // Utilise le même hôte et protocole que la page
+
+  // Initialiser l'objet WebSocket
+  export const ws = new WebSocket(wsUrl);
+
 
 let teams = {};
 
@@ -51,15 +62,24 @@ function sendTeamDataToServer(teamName) {
     }
 }
 
+function trySendTeamData(teamName) {
+    if (ws.readyState === WebSocket.OPEN) {
+        sendTeamDataToServer(teamName);
+    } else {
+        console.log('WebSocket not ready. Retrying...');
+        setTimeout(() => trySendTeamData(teamName), 1000); // Réessaie après 1 seconde
+    }
+}
+
 
 // Gère l'ajout d'une nouvelle équipe après validation du nom
 function handleAddTeam() {
     const teamName = promptForTeamName();
     if (teamName) {
         teams[teamName] = {};
-        sendTeamDataToServer(teamName);
-        createTeamDiv(teams); 
-        positionButtonAtBottom(); 
+        trySendTeamData(teamName);
+        createTeamDiv(teams);
+        positionButtonAtBottom();
     }
 }
 
@@ -89,12 +109,23 @@ document.addEventListener('DOMContentLoaded', () => {
         const addButton = document.getElementById('addDivButton');
         if (!addButton) throw new Error('Le bouton d\'ajout est introuvable.');
         
+        // Configuration de WebSocket
+        ws.onopen = () => {
+            console.log('WebSocket connection opened.');
+            // Envoyez un message initial lorsque le WebSocket est ouvert
+            ws.send('{ "ACTION": "HELLO", "MSG": "Salut, serveur WebSocket !"}');
+        };
+
+        ws.onerror = (error) => console.error('WebSocket error:', error);
+        ws.onclose = () => console.log('WebSocket connection closed.');
+
         initializeDropzones(ws);
         positionButtonAtBottom();
 
         addButton.addEventListener('click', handleAddTeam);
 
         ws.onmessage = handleIncomingMessage;
+
     } catch (error) {
         console.error('Erreur lors de l\'initialisation:', error);
     }

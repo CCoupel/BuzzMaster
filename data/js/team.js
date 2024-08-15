@@ -1,4 +1,4 @@
-import { ws } from './webSocket.js';
+import { ws } from './main.js';
 import { configureDropzone } from './dragAndDrop.js'; 
 
 const colors = [
