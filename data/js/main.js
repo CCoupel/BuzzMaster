@@ -27,8 +27,15 @@ function promptForTeamName() {
 
 // Envoie les données de la nouvelle équipe au serveur via WebSocket
 function sendTeamDataToServer(teamName) {
-    const teamData = { teams: { [teamName]: {} } };
-    
+    const teamData = { 
+        "ACTION": "UPDATE", 
+        "MSG": { 
+            "teams": { 
+                [teamName]: { "COLOR": [255, 255, 255]}
+            }
+        } 
+    };
+
     if (ws.readyState === WebSocket.OPEN) {
         ws.send(JSON.stringify(teamData));
         console.log('Team data sent:', teamData);
@@ -36,6 +43,7 @@ function sendTeamDataToServer(teamName) {
         console.log('WebSocket is not open. Cannot send team data.');
     }
 }
+
 
 // Gère l'ajout d'une nouvelle équipe après validation du nom
 function handleAddTeam() {

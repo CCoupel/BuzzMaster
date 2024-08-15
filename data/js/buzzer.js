@@ -14,12 +14,15 @@ export function createBuzzerDiv(buzzerData) {
         return textElement;
     };
 
-    // Fonction pour envoyer un message WebSocket
-    const sendWebSocketMessage = (id, playerName = "") => {
+    // Fonction pour envoyer un message WebSocket avec une action spécifique
+    const sendWebSocketMessage = (action, id, playerName = "") => {
         const message = {
-            "bumpers": {
-                [id]: {
-                    "NAME": playerName,
+            "ACTION": action,
+            "MSG": {
+                "bumpers": {
+                    [id]: {
+                        "NAME": playerName,
+                    }
                 }
             }
         };
@@ -47,7 +50,7 @@ export function createBuzzerDiv(buzzerData) {
         form.addEventListener('submit', (e) => {
             e.preventDefault();
             const playerName = input.value;
-            sendWebSocketMessage(id, playerName);
+            sendWebSocketMessage("UPDATE", id, playerName);
             updateView(playerName);
         });
 
@@ -71,7 +74,7 @@ export function createBuzzerDiv(buzzerData) {
                 const deleteButton = document.createElement('button');
                 deleteButton.textContent = 'Supprimer le nom';
                 deleteButton.addEventListener('click', () => {
-                    sendWebSocketMessage(id);
+                    sendWebSocketMessage("UPDATE", id);
                     updateView(""); 
                 });
                 buzzerDiv.appendChild(nameElement);

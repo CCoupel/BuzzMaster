@@ -31,15 +31,18 @@ function handleDrop(e, dropzone, ws, id) {
     if (draggedElement && draggedElement.classList.contains('buzzer')) {
         dropzone.appendChild(draggedElement);
 
-        const updatedBuzzerMessage = {
-            "bumpers": {
-                [draggedElementId.replace('buzzer-', '')]: { 
-                    "TEAM": id.toString(),
+        const updatedBumperMessage = {
+            "ACTION": "UPDATE",
+            "MSG": {
+                "bumpers": {
+                    [draggedElementId.replace('buzzer-', '')]: { 
+                        "TEAM": id.toString(),
+                    }
                 }
             }
         };
 
-        ws.send(JSON.stringify(updatedBuzzerMessage));
+        ws.send(JSON.stringify(updatedBumperMessage));
         console.log(`Élément ${draggedElementId} mis à jour avec la team ${id}`);
     }
 }

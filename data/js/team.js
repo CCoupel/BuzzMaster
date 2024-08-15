@@ -85,7 +85,15 @@ export function createTeamDiv(teams) {
             const selectedColor = colors.find(color => color.name === colorSelect.value);
 
             if (selectedColor && !getUsedColors(teams).has(selectedColor.rgb.join(','))) {
-                ws.send(JSON.stringify({ teams: { [id]: { color: selectedColor.rgb } } }));
+                const updateMessage = {
+                    "ACTION": "UPDATE",
+                    "MSG": {
+                        "teams": {
+                            [id]: { color: selectedColor.rgb }
+                        }
+                    }
+                };
+                ws.send(JSON.stringify(updateMessage));
                 colorDiv.style.backgroundColor = `rgb(${selectedColor.rgb.join(',')})`;
                 updateColorSelectors(colorSelectors, { ...teams, [id]: { ...teamData, color: selectedColor.rgb } });
                 console.log(`Couleur envoyée pour l'équipe ${id}: ${selectedColor.rgb}`);
