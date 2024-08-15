@@ -1,137 +1,95 @@
 import { ws } from './webSocket.js';
-import { configureDragElement } from './dragAndDrop.js'; 
+import { configureDragElement } from './dragAndDrop.js';
 
+// Fonction principale pour créer et afficher les éléments buzzer en fonction des données fournies
 export function createBuzzerDiv(buzzerData) {
     const container = document.querySelector('.buzzer-container');
     container.innerHTML = '';
 
+    // Fonction pour créer un élément (paragraphe) avec un texte donné
+    const createTextElement = (className, text) => {
+        const textElement = document.createElement('p');
+        textElement.className = className;
+        textElement.textContent = text;
+        return textElement;
+    };
+
+    // Fonction pour envoyer un message WebSocket
+    const sendWebSocketMessage = (id, playerName = "") => {
+        const message = {
+            "bumpers": {
+                [id]: {
+                    "NAME": playerName,
+                }
+            }
+        };
+        ws.send(JSON.stringify(message));
+    };
+
+    // Fonction pour créer un formulaire de saisie de nom
+    const createForm = (id, buzzerDiv, updateView) => {
+        const form = document.createElement('form');
+        form.className = 'buzzer-form';
+
+        const label = document.createElement('label');
+        label.textContent = 'Nom du joueur';
+        label.htmlFor = `buzzer-text-${id}`;
+
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.name = 'buzzer-text';
+        input.id = `buzzer-text-${id}`;
+        input.placeholder = 'Nom du joueur';
+
+        form.appendChild(label);
+        form.appendChild(input);
+
+        form.addEventListener('submit', (e) => {
+            e.preventDefault();
+            const playerName = input.value;
+            sendWebSocketMessage(id, playerName);
+            updateView(playerName);
+        });
+
+        buzzerDiv.appendChild(form);
+    };
+
+    // Fonction pour créer un élément buzzer complet
     const createBuzzerElement = (id, data) => {
         const buzzerDiv = document.createElement('div');
         buzzerDiv.id = `buzzer-${id}`;
         buzzerDiv.className = 'buzzer';
-
         configureDragElement(buzzerDiv);
 
-        const idElement = document.createElement('p');
-        idElement.className = 'buzzer-id';
-        idElement.textContent = `ID: ${id}`;
+        const idElement = createTextElement('buzzer-id', `ID: ${id}`);
         buzzerDiv.appendChild(idElement);
 
-        const createForm = () => {
-            const form = document.createElement('form');
-            form.className = 'buzzer-form';
-
-            const label = document.createElement('label');
-            label.textContent = 'Nom du joueur';
-            label.htmlFor = `buzzer-text-${id}`;
-
-            const input = document.createElement('input');
-            input.type = 'text';
-            input.name = 'buzzer-text';
-            input.id = `buzzer-text-${id}`;
-            input.placeholder = 'Nom du joueur';
-            input.value = data.NAME || '';
-
-            form.appendChild(label);
-            form.appendChild(input);
-
-            form.addEventListener('submit', (e) => {
-                e.preventDefault();
-                const playerName = input.value;
-
-                const message = {
-                    "bumpers": {
-                        [id]: {
-                            "NAME": playerName,
-                            "TEAM": data.TEAM,
-                            "IP": data.IP,
-                            "TIME": data.TIME,
-                            "BUTTON": data.BUTTON
-                        }
-                    }
-                };
-
-                ws.send(JSON.stringify(message));
-
-                const nameElement = document.createElement('p');
-                nameElement.className = 'buzzer-name';
-                nameElement.textContent = `Nom: ${playerName}`;
-
+        const updateView = (playerName) => {
+            buzzerDiv.innerHTML = ''; // Clear previous elements
+            if (playerName) {
+                const nameElement = createTextElement('buzzer-name', `Nom: ${playerName}`);
                 const deleteButton = document.createElement('button');
                 deleteButton.textContent = 'Supprimer le nom';
                 deleteButton.addEventListener('click', () => {
-                    const deleteMessage = {
-                        "bumpers": {
-                            [id]: {
-                                "NAME": "",
-                                "TEAM": data.TEAM,
-                                "IP": data.IP,
-                                "TIME": data.TIME,
-                                "BUTTON": data.BUTTON
-                            }
-                        }
-                    };
-
-                    ws.send(JSON.stringify(deleteMessage));
-
-                    buzzerDiv.removeChild(nameElement);
-                    buzzerDiv.removeChild(deleteButton);
-
-                    buzzerDiv.appendChild(idElement);
-                    createForm();
+                    sendWebSocketMessage(id);
+                    updateView(""); // Recreate form
                 });
-
-                buzzerDiv.removeChild(idElement);
-                buzzerDiv.replaceChild(nameElement, form);
+                buzzerDiv.appendChild(nameElement);
                 buzzerDiv.appendChild(deleteButton);
-            });
-
-            buzzerDiv.appendChild(form);
+            } else {
+                buzzerDiv.appendChild(idElement);
+                createForm(id, buzzerDiv, updateView);
+            }
         };
 
-        if (data.NAME) {
-            const nameElement = document.createElement('p');
-            nameElement.className = 'buzzer-name';
-            nameElement.textContent = `Nom: ${data.NAME}`;
-
-            const deleteButton = document.createElement('button');
-            deleteButton.textContent = 'Supprimer le nom';
-            deleteButton.addEventListener('click', () => {
-                const message = {
-                    "bumpers": {
-                        [id]: {
-                            "NAME": "",
-                            "TEAM": data.TEAM,
-                            "IP": data.IP,
-                            "TIME": data.TIME,
-                            "BUTTON": data.BUTTON
-                        }
-                    }
-                };
-
-                ws.send(JSON.stringify(message));
-
-                buzzerDiv.removeChild(nameElement);
-                buzzerDiv.removeChild(deleteButton);
-
-                buzzerDiv.appendChild(idElement);
-                createForm();
-            });
-
-            buzzerDiv.removeChild(idElement); 
-            buzzerDiv.appendChild(nameElement);
-            buzzerDiv.appendChild(deleteButton);
-        } else {
-            createForm();
-        }
+        updateView(data.NAME || "");
 
         return buzzerDiv;
     };
 
+    // Boucle sur chaque buzzer pour les créer et les afficher
     for (const [id, data] of Object.entries(buzzerData.bumpers)) {
-        if (document.getElementById(`buzzer-${id}`)) {
-            continue;
-        }
+        if (document.getElementById(`buzzer-${id}`)) continue;
 
         const buzzerDiv = createBuzzerElement(id, data);
 

@@ -12,137 +12,93 @@ const colors = [
     { name: 'rose', rgb: [255, 192, 203] }
 ];
 
-function updateUsedColors(teams) {
-    const usedColors = new Set();
-    Object.values(teams).forEach(team => {
-        if (team.color) {
-            usedColors.add(team.color.join(','));
-        }
-    });
-    return usedColors;
+// Récupère les couleurs déjà utilisées par les équipes
+function getUsedColors(teams) {
+    return new Set(Object.values(teams).filter(team => team.color).map(team => team.color.join(',')));
 }
 
-function updateColorSelectOptions(colorSelect, usedColors) {
-    colorSelect.innerHTML = ''; // Clear existing options
+// Crée un élément HTML avec les attributs spécifiés
+function createElement(tag, className, attributes = {}) {
+    const element = document.createElement(tag);
+    if (className) element.className = className;
+    Object.entries(attributes).forEach(([key, value]) => element.setAttribute(key, value));
+    return element;
+}
+
+// Crée les options de couleur pour un élément <select> en excluant les couleurs déjà utilisées
+function createColorOptions(selectElement, usedColors) {
+    selectElement.innerHTML = '';
     colors.forEach(color => {
         if (!usedColors.has(color.rgb.join(','))) {
-            const option = document.createElement('option');
-            option.value = color.name;
+            const option = createElement('option', '', { value: color.name });
             option.textContent = color.name.charAt(0).toUpperCase() + color.name.slice(1);
-            colorSelect.appendChild(option);
+            selectElement.appendChild(option);
         }
     });
 
-    if (colorSelect.options.length === 0) {
-        const option = document.createElement('option');
-        option.value = '';
-        option.textContent = 'Aucune couleur disponible';
-        colorSelect.appendChild(option);
+    if (!selectElement.options.length) {
+        const noColorOption = createElement('option', '', { value: '' });
+        noColorOption.textContent = 'Aucune couleur disponible';
+        selectElement.appendChild(noColorOption);
     }
 }
 
-function updateAllColorSelectors(colorSelectors, teams) {
-    const usedColors = updateUsedColors(teams);
-    Object.values(colorSelectors).forEach(colorSelect => {
-        updateColorSelectOptions(colorSelect, usedColors);
-    });
+// Met à jour les options de couleur pour tous les sélecteurs de couleur
+function updateColorSelectors(colorSelectors, teams) {
+    const usedColors = getUsedColors(teams);
+    Object.values(colorSelectors).forEach(select => createColorOptions(select, usedColors));
 }
 
+// Crée les éléments HTML pour chaque équipe et les ajoute au conteneur
 export function createTeamDiv(teams) {
     const container = document.querySelector('.team-container');
-    const colorSelectors = {}; // Object to keep track of color select elements by ID
+    const colorSelectors = {};
 
+    // Ajoute un élément HTML pour une équipe spécifique
     function addTeam(id, teamData) {
-        if (document.getElementById(id)) {
-            return; // Skip if team already exists
-        }
+        if (document.getElementById(id)) return;
 
-        const newDiv = document.createElement('div');
-        newDiv.className = 'dynamic-div';
-        newDiv.id = id;
+        const teamDiv = createElement('div', 'dynamic-div', { id });
+        const colorDiv = createElement('div', 'color-div');
+        const teamInfoDiv = createElement('div', 'team-info');
+        const title = createElement('h2', 'team-name');
+        const dropzone = createElement('div', 'dropzone');
+        const colorLabel = createElement('label', '', { for: `color-select-${id}` });
+        const colorSelect = createElement('select', '', { id: `color-select-${id}` });
 
-        const colorDiv = document.createElement('div');
-        colorDiv.className = 'color-div';
-
-        if (teamData && teamData.color) {
-            colorDiv.style.backgroundColor = `rgb(${teamData.color.join(',')})`;
-        }
-
-        newDiv.appendChild(colorDiv);
-
-        const teamInfoDiv = document.createElement('div');
-        teamInfoDiv.className = 'team-info';
-        newDiv.appendChild(teamInfoDiv);
-
-        const title = document.createElement('h2');
-        title.className = 'team-name';
         title.textContent = id;
-        teamInfoDiv.appendChild(title);
-
-        const dropzone = document.createElement('div');
-        dropzone.className = 'dropzone';
         dropzone.textContent = 'Glissez les membres de la team ici';
-        teamInfoDiv.appendChild(dropzone);
+        colorLabel.textContent = 'Choisir une couleur:';
 
         configureDropzone(dropzone, ws, id);
 
-        const colorLabel = document.createElement('label');
-        colorLabel.htmlFor = `color-select-${id}`;
-        colorLabel.textContent = 'Choisir une couleur:';
-        teamInfoDiv.appendChild(colorLabel);
-
-        const colorSelect = document.createElement('select');
-        colorSelect.id = `color-select-${id}`;
-
-        // Store the color selector for later updates
-        colorSelectors[id] = colorSelect;
-
-        teamInfoDiv.appendChild(colorSelect);
-
-        // Initial color options setup
-        updateColorSelectOptions(colorSelect, updateUsedColors(teams));
-
-        if (teamData && teamData.color) {
-            const existingColor = colors.find(color => 
-                color.rgb[0] === teamData.color[0] && 
-                color.rgb[1] === teamData.color[1] && 
-                color.rgb[2] === teamData.color[2]
-            );
-            if (existingColor) {
-                colorSelect.value = existingColor.name;
-            }
+        if (teamData?.color) {
+            colorDiv.style.backgroundColor = `rgb(${teamData.color.join(',')})`;
+            const existingColor = colors.find(color => color.rgb.every((value, index) => value === teamData.color[index]));
+            if (existingColor) colorSelect.value = existingColor.name;
         }
 
+        createColorOptions(colorSelect, getUsedColors(teams));
+        colorSelectors[id] = colorSelect;
+
         colorSelect.addEventListener('change', () => {
-            const selectedColorName = colorSelect.value;
-            const selectedColor = colors.find(color => color.name === selectedColorName);
+            const selectedColor = colors.find(color => color.name === colorSelect.value);
 
-            if (selectedColor && !updateUsedColors(teams).has(selectedColor.rgb.join(','))) {
-                const message = {
-                    "teams": {
-                        [id]: {
-                            "color": selectedColor.rgb
-                        }
-                    }
-                };
-
-                ws.send(JSON.stringify(message));
-
+            if (selectedColor && !getUsedColors(teams).has(selectedColor.rgb.join(','))) {
+                ws.send(JSON.stringify({ teams: { [id]: { color: selectedColor.rgb } } }));
                 colorDiv.style.backgroundColor = `rgb(${selectedColor.rgb.join(',')})`;
-
-                // Update all color selectors
-                updateAllColorSelectors(colorSelectors, { ...teams, [id]: { ...teamData, color: selectedColor.rgb } });
-
+                updateColorSelectors(colorSelectors, { ...teams, [id]: { ...teamData, color: selectedColor.rgb } });
                 console.log(`Couleur envoyée pour l'équipe ${id}: ${selectedColor.rgb}`);
             } else {
                 alert('Cette couleur est déjà utilisée par une autre équipe.');
-                colorSelect.value = ''; // Reset the selection
+                colorSelect.value = '';
             }
         });
 
-        container.appendChild(newDiv);
+        teamInfoDiv.append(title, dropzone, colorLabel, colorSelect);
+        teamDiv.append(colorDiv, teamInfoDiv);
+        container.appendChild(teamDiv);
     }
 
-    // Add existing teams
     Object.keys(teams).forEach(id => addTeam(id, teams[id]));
 }
