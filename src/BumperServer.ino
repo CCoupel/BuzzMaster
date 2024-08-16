@@ -8,26 +8,60 @@
 AsyncServer* bumperServer;
 std::vector<AsyncClient*> bumperClients;
 
+void putMsgToQueue(const char* action=nullptr, const char* msg="", bool notify=false, AsyncClient* client=nullptr )
+{
+  messageQueue_t message;
+
+    message.action = action;
+    message.message = msg;
+    if (msg == "") { message.message="''"; }
+    
+    message.notifyAll = notify;
+    message.client = client;
+
+    xQueueSend(messageQueue, &message, portMAX_DELAY); // Utilisation en dehors de l'ISR
+}
+
 
 
 void startGame(){
-
+  
+  //Serial.println("BUZZCONTROL: Starting Game");
   resetBumpersTime();
   GameStarted=true;
-  digitalWrite(ledPin, LOW);
+  //digitalWrite(ledPin, LOW);
+  //setLedColor(255, 0, 0,true);
+  //setLedIntensity(255);
+  
+  putMsgToQueue("START","",true);
+  
+  /*
   sendMessageToAllClients("START","''");
   notifyAll();
+  */
 }
 
 void stopGame(){
+  //Serial.println("BUZZCONTROL: Stopping Game");
   GameStarted=false;
-  digitalWrite(ledPin, HIGH);
+  //digitalWrite(ledPin, HIGH);
+  //setLedColor(0, 255, 0,true);
+  //setLedIntensity(64);
+  
+  putMsgToQueue("STOP","",true);
+  /*/
   sendMessageToAllClients("STOP","''");
   notifyAll();
+  */
 }
 
 void pauseGame(AsyncClient* client) {
-    sendMessageToClient("PAUSE", "''", client);
+//  Serial.println("BUZZCONTROL: Pausing TEAM Game");
+  //setLedColor(255, 255, 0);
+  //setLedIntensity(64);
+
+  putMsgToQueue("PAUSE","",true, client);
+  //sendMessageToClient("PAUSE", "''", client);
 }
 
 
@@ -101,8 +135,8 @@ void b_handleData(void* arg, AsyncClient* c, void *data, size_t len) {
           teams[b_team]["BUMPER"]=bumperID;
 
       //update("new", subObj);
-          notifyAll();
-          //pauseGame(c);
+          //notifyAll();
+          pauseGame(c);
         };
       };
     };
@@ -193,4 +227,41 @@ void checkPingForAllClients() {
       }
     }
   }
+}
+
+void sendMessageTask(void *parameter) {
+    messageQueue_t receivedMessage;
+
+    while (1) {
+        // Attendre qu'un message soit disponible dans la file d'attente
+        if (xQueueReceive(messageQueue, &receivedMessage, portMAX_DELAY)) {
+          Serial.print("BUZZCONTROL: new message in queue: "); 
+          if (receivedMessage.action != nullptr) {
+            Serial.println(receivedMessage.action);
+            if (receivedMessage.action == "START") {
+              setLedColor(255, 0, 0);
+              setLedIntensity(255);
+            }
+            if (receivedMessage.action == "STOP") {
+              setLedColor(0, 255, 0);
+              setLedIntensity(255);
+            }
+            if (receivedMessage.action == "PAUSE") {
+              setLedColor(255, 255, 0);
+              setLedIntensity(64);
+            }
+            // Envoyer le message à travers la socket TCP
+            // Vous pouvez remplacer cette partie par votre code de socket
+            if (receivedMessage.client != nullptr) {
+              sendMessageToClient(receivedMessage.action, receivedMessage.message, receivedMessage.client);
+            }
+            else {
+              sendMessageToAllClients(receivedMessage.action, receivedMessage.message);
+            }
+          }
+          if (receivedMessage.notifyAll == true) {
+            notifyAll();
+          }
+        }
+    }
 }

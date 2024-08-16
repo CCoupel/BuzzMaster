@@ -22,6 +22,10 @@
 
 #include <ArduinoJson.h>
 #include <map>
+
+#include <freertos/FreeRTOS.h>
+#include <freertos/queue.h>
+
 const char* ssid     = "CC-Home";
 const char* password = "GenericPassword";
 
@@ -64,6 +68,15 @@ WiFiUDP ntpUDP;
 NTPClient timeClient(ntpUDP, "pool.ntp.org");
 const char* GameFile="/game.json";
 const char* saveGameFile="/game.json.save";
+
+typedef struct {
+    const char*   action;  // Type d'action
+    const char* message;  // Contenu du message
+    bool notifyAll;
+    AsyncClient* client;
+} messageQueue_t;
+
+QueueHandle_t messageQueue; // File d'attente pour les messages
 
 //AsyncUDP Udp;
 
@@ -200,7 +213,7 @@ static void IRAM_ATTR buttonHandler(void *arg)
 {
     ButtonInfo* buttonInfo = static_cast<ButtonInfo*>(arg);
 //    Serial.println("Button " + String(buttonInfo->pin) + " pressed");
-    digitalWrite(ledPin, LOW);
+    //digitalWrite(ledPin, LOW);
     switch(buttonInfo->pin) {
       case 0:
         if (GameStarted) {
@@ -263,9 +276,9 @@ void setup(void)
   MDNS.addService("sock", "tcp", localUdpPort);
 
   if (!LittleFS.begin()) {
-        Serial.println("Erreur de montage LittleFS");
-        return;
-    }
+    Serial.println("Erreur de montage LittleFS");
+    return;
+  }
 
   listLittleFSFiles();
 
@@ -276,6 +289,15 @@ void setup(void)
   startBumperServer();
   setLedColor(0, 255, 0);
   setLedIntensity(64);
+  messageQueue = xQueueCreate(10, sizeof(messageQueue_t));
+
+    if (messageQueue == NULL) {
+      Serial.println("Échec de la création de la file d'attente");
+      return;
+    }
+
+  xTaskCreate(sendMessageTask, "Send Message Task", 4096, NULL, 1, NULL);
+
 /*
 #if defined(ESP8266)
   timer1_attachInterrupt(onTimerISR);
