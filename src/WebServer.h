@@ -1,11 +1,3 @@
-/*
-{ "bumpers: { <id>: { "NAME": <name>, "TEAM": <team_id>, IP: <IP>}},
-  "teams": { <name>: { "COLOR": <color>}}
-  }*/
-
-
-
-
 void w_handleRoot(AsyncWebServerRequest *request) {
   Serial.println("WWW: ROOT");
   digitalWrite(ledPin, HIGH);
@@ -36,7 +28,6 @@ void w_inline(AsyncWebServerRequest *request) {
   Serial.println("WWW: inline");
   request->send(200, "text/plain", "this works as well");
 }
-
 
 void w_handleNotFound(AsyncWebServerRequest *request) {
   Serial.println("WWW: not found");

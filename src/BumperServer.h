@@ -1,5 +1,3 @@
-
-
 void putMsgToQueue(const char* action, const char* msg, bool notify, AsyncClient* client )
 {
   messageQueue_t message;
@@ -226,15 +224,15 @@ void sendMessageTask(void *parameter) {
           Serial.print("BUZZCONTROL: new message in queue: "); 
           if (receivedMessage.action != nullptr) {
             Serial.println(receivedMessage.action);
-            if (receivedMessage.action == "START") {
+            if (strcmp(receivedMessage.action, "START")) {
               setLedColor(255, 0, 0);
               setLedIntensity(255);
             }
-            if (receivedMessage.action == "STOP") {
+            if (strcmp(receivedMessage.action , "STOP")) {
               setLedColor(0, 255, 0);
               setLedIntensity(255);
             }
-            if (receivedMessage.action == "PAUSE") {
+            if (strcmp(receivedMessage.action , "PAUSE")) {
               setLedColor(255, 255, 0);
               setLedIntensity(64);
             }
