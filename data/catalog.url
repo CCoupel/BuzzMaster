@@ -2,7 +2,7 @@ base.url
 catalog.url
 html/config.html
 html/index.html
-html/teamConfig.html
+html/teamGame.html
 js/buzzer.js
 js/dragAndDrop.js
 js/main.js
