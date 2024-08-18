@@ -1,3 +1,25 @@
+void wifiConnect()
+{
+  Serial.println();
+  Serial.print("Connexion à ");
+  Serial.println(ssid);
+  
+  WiFi.begin(ssid, password);
+
+  while (WiFi.status() != WL_CONNECTED) 
+  {
+    delay(500);
+    Serial.print(".");
+  }
+
+  Serial.println("");
+  Serial.println("WiFi connecté.");
+  Serial.print("Adresse IP: ");
+  Serial.println(WiFi.localIP());
+  Serial.print("Adresse MAC: ");
+  Serial.println(WiFi.macAddress());
+}
+
 void w_handleRoot(AsyncWebServerRequest *request) {
   Serial.println("WWW: ROOT");
   digitalWrite(ledPin, HIGH);
@@ -5,7 +27,7 @@ void w_handleRoot(AsyncWebServerRequest *request) {
   digitalWrite(ledPin, LOW);
 }
 
-
+/*
 void w_handle_bumpers(AsyncWebServerRequest *request) {
   JsonObject bumpers=teamsAndBumpers["bumpers"];
   JsonObject teams=teamsAndBumpers["teams"];
@@ -28,6 +50,7 @@ void w_inline(AsyncWebServerRequest *request) {
   Serial.println("WWW: inline");
   request->send(200, "text/plain", "this works as well");
 }
+*/
 
 void w_handleNotFound(AsyncWebServerRequest *request) {
   Serial.println("WWW: not found");
@@ -50,9 +73,9 @@ void w_handleNotFound(AsyncWebServerRequest *request) {
 void startWebServer() {
   server.serveStatic("/", LittleFS, "/").setDefaultFile("index.html");
 
-  server.on("/bumpers", HTTP_GET, w_handle_bumpers);
+  //server.on("/bumpers", HTTP_GET, w_handle_bumpers);
 
-  server.on("/teams", HTTP_GET, w_handle_teams);
+  //server.on("/teams", HTTP_GET, w_handle_teams);
 
   //server.on("/", HTTP_GET, w_handleRoot);
   server.onNotFound(w_handleNotFound);

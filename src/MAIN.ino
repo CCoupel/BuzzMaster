@@ -1,7 +1,12 @@
 #include "includes.h"
+#include "SocketManager.h"
+#include "tcpManager.h"
+#include "buttonManager.h"
+#include "led.h"
+#include "fsManager.h"
+#include "messages.h"
 #include "BumperServer.h"
 #include "WebServer.h"
-#include "reloadFS.h"
 
 void setup(void)
 {

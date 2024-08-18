@@ -10,6 +10,98 @@ void downloadFiles();
 bool downloadFile(const String& url, const String& localPath);
 bool createDirectories(const String& path);
 
+void listLittleFSFiles() {
+    Serial.println("Listing files in LittleFS:");
+  #if defined(ESP8266)
+    Dir dir = LittleFS.openDir("/");
+    while (dir.next()) {
+        String fileName = dir.fileName();
+        size_t fileSize = dir.fileSize();
+        Serial.printf("FILE: %s, SIZE: %d bytes\n", fileName.c_str(), fileSize);
+    }
+  #elif defined(ESP32)
+    File root = LittleFS.open("/");
+    if (!root) {
+        Serial.println("- failed to open directory");
+        return;
+    }
+    if (!root.isDirectory()) {
+        Serial.println(" - not a directory");
+        return;
+    }
+
+    File file = root.openNextFile();
+    while (file) {
+        if (file.isDirectory()) {
+            Serial.print("DIR : ");
+            Serial.println(file.name());
+        } else {
+            Serial.print("FILE: ");
+            Serial.print(file.name());
+            Serial.print("\tSIZE: ");
+            Serial.println(file.size());
+        }
+        file = root.openNextFile();
+    }
+#endif
+}
+
+void loadJson(String path) {
+  File file;
+  String output;
+  // Ouvrir le fichier en lecture
+  Serial.print("Loading game file: ");
+  if (LittleFS.exists(saveGameFile)) {
+    Serial.println(saveGameFile);
+    file = LittleFS.open(saveGameFile, "r");
+  } else if (LittleFS.exists(GameFile)) {
+    Serial.println(GameFile);
+    file = LittleFS.open(GameFile, "r");
+  }
+  if (!file) {
+    Serial.println("Failed to open file for reading. Initializing with default values.");
+    // Initialiser avec les valeurs par défaut en cas d'échec d'ouverture du fichier
+    teamsAndBumpers["bumpers"] = JsonObject();
+    teamsAndBumpers["teams"] = JsonObject();
+    return;
+  }
+  // Désérialiser le contenu du fichier dans le JsonDocument
+  DeserializationError error = deserializeJson(teamsAndBumpers, file);
+  if (error) {
+    Serial.print("deserializeJson() failed: ");
+    Serial.println(error.f_str());
+    // Initialiser avec les valeurs par défaut en cas d'erreur de désérialisation
+    teamsAndBumpers["bumpers"] = JsonObject();
+    teamsAndBumpers["teams"] = JsonObject();
+  } else {
+    Serial.println("JSON loaded successfully");
+  }
+
+  // Fermer le fichier après utilisation
+  file.close();
+  serializeJson(teamsAndBumpers, output);
+  Serial.printf("JSON: loaded %s\n", output.c_str());
+}
+
+void saveJson() {
+  // Ouvrir le fichier en écriture
+  File file = LittleFS.open(saveGameFile, "w");
+  if (!file) {
+    Serial.println("Failed to open file for writing");
+    return;
+  }
+
+  // Sérialiser le JsonDocument dans le fichier
+  if (serializeJson(teamsAndBumpers, file) == 0) {
+    Serial.println("Failed to write to file");
+  }
+
+  // Fermez le fichier après utilisation
+  file.close();
+
+  Serial.println("JSON saved successfully");
+}
+
 void downloadFiles() {
 // Initialiser LittleFS
     if (!LittleFS.begin()) {
