@@ -1,3 +1,81 @@
+void parseJSON(const String& data, AsyncClient* c)
+{
+  String action;
+  String bumperID;
+
+  JsonDocument receivedData;
+  JsonObject MSG;
+  JsonObject bumpers=teamsAndBumpers["bumpers"];
+  JsonObject teams=teamsAndBumpers["teams"];
+
+  // Désérialisation du JSON
+  DeserializationError error = deserializeJson(receivedData, data);
+  if (error) {
+    Serial.print("Failed to parse JSON: ");
+    Serial.println(error.f_str());
+    return;
+  }
+  JsonObject jsonObjData = receivedData.as<JsonObject>();
+
+  bumperID=jsonObjData["ID"].as<String>();
+  action=jsonObjData["ACTION"].as<String>();
+  MSG=jsonObjData["MSG"];
+
+  Serial.println("bumperID="+bumperID+" ACTION="+action);
+  
+  if (action == "HELLO") {
+    if ( !bumpers[bumperID].containsKey("NAME") ) {
+      bumpers[bumperID]["NAME"]=MSG["NAME"];
+    };
+    if ( !bumpers[bumperID].containsKey("TEAM") ) {
+      bumpers[bumperID]["TEAM"]="";
+    };
+    bumpers[bumperID]["IP"]=MSG["IP"];
+    notifyAll();
+  }
+  if (action == "BUTTON") {
+    if ( bumpers.containsKey(bumperID) ) {
+
+      if ( bumpers[bumperID].containsKey("IP") && bumpers[bumperID]["IP"] == c->remoteIP().toString()) {
+        const char * b_team=bumpers[bumperID]["TEAM"];
+        int b_time=MSG["time"];
+        int b_button=MSG["button"];
+        if ( b_team != nullptr ) {
+          
+          if (timeRef==0) {
+            timeRef=b_time;
+          }
+          int b_delay=b_time-timeRef;
+
+         if (timeRefTeam[b_team]==0) {
+            timeRefTeam[b_team]=b_time;
+          }
+
+          int b_delayTeam=b_time-timeRefTeam[b_team];
+          bumpers[bumperID]["TIME"]=b_time;
+          bumpers[bumperID]["BUTTON"]=b_button;
+          bumpers[bumperID]["DELAY"]=b_delay;
+          bumpers[bumperID]["DELAY_TEAM"]=b_delayTeam;
+
+          teams[b_team]["TIME"]=b_time;
+          teams[b_team]["DELAY"]=b_delay;
+          teams[b_team]["STATUS"]="PAUSE";
+          teams[b_team]["BUMPER"]=bumperID;
+
+          pauseGame(c);
+        };
+      };
+    };
+  };
+  if (action == "PING") {
+    bumpers[bumperID]["lastPingTime"] = millis();  
+    if (bumpers[bumperID]["STATUS"] != "online") {
+      Serial.println("BUMPER: Bumper is going online");
+      bumpers[bumperID]["STATUS"] = "online";
+      notifyAll();
+    }
+  }
+}
 
 void resetBumpersTime() {
   std::vector<String> keysToRemove = {"STATUS", "BUTTON", "TIME", "DELAY", "DELAY_TEAM"};

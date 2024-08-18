@@ -67,6 +67,7 @@ unsigned int localWWWpPort = 80;  // Port d'écoute local
 
 AsyncWebServer  server(localWWWpPort);
 AsyncWebSocket ws("/ws");
+String jsonBuffer; // Tampon pour assembler les données JSON
 
 WiFiUDP ntpUDP;
 NTPClient timeClient(ntpUDP, "pool.ntp.org");
@@ -84,6 +85,8 @@ QueueHandle_t messageQueue; // File d'attente pour les messages
 
 JsonDocument teamsAndBumpers;
 
+// Map pour stocker les buffers par client (identifiés par IP)
+std::map<String, String> clientBuffers;
 
 
 /* **** TOOLS *** */
@@ -97,6 +100,8 @@ void sendMessageToAllClients(const String& action, const String& msg );
 void notifyAll();
 void loadJson(String path);
 void saveJson();
+void processClientBuffer(const String& clientID, AsyncClient* c);
+void parseJSON(const String& data, AsyncClient* c);
 
 void wifiConnect();
 void listLittleFSFiles();

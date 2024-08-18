@@ -10,88 +10,45 @@ void startBumperServer()
 }
 
 void b_handleData(void* arg, AsyncClient* c, void *data, size_t len) {
-  JsonDocument receivedData;
 //  JsonDocument obj;
   String s_data=String((char*)data).substring(0, len);
-  String action;
-  String bumperID;
-  JsonObject MSG;
-  JsonObject bumpers=teamsAndBumpers["bumpers"];
-  JsonObject teams=teamsAndBumpers["teams"];
-
-  Serial.print("BUZZER: Data received: ");
-  Serial.println(s_data);
-  deserializeJson(receivedData, data);
-        JsonObject jsonObjData = receivedData.as<JsonObject>();
-
-  bumperID=jsonObjData["ID"].as<String>();
-  action=jsonObjData["ACTION"].as<String>();
-  MSG=jsonObjData["MSG"];
-
-  Serial.println("bumperID="+bumperID+" ACTION="+action);
+  String clientID = c->remoteIP().toString();
   
-  if (action == "HELLO") {
-    if ( !bumpers[bumperID].containsKey("NAME") ) {
-      bumpers[bumperID]["NAME"]=MSG["NAME"];
-    };
-    if ( !bumpers[bumperID].containsKey("TEAM") ) {
-      bumpers[bumperID]["TEAM"]="";
-    };
-    bumpers[bumperID]["IP"]=MSG["IP"];
-    notifyAll();
-  }
-  if (action == "BUTTON") {
-    if ( bumpers.containsKey(bumperID) ) {
+  Serial.print("BUZZER: Data received: "+s_data);
 
-      if ( bumpers[bumperID].containsKey("IP") && bumpers[bumperID]["IP"] == c->remoteIP().toString()) {
-        const char * b_team=bumpers[bumperID]["TEAM"];
-        int b_time=MSG["time"];
-        int b_button=MSG["button"];
-        if ( b_team != nullptr ) {
-          
-          if (timeRef==0) {
-            timeRef=b_time;
-          }
-          int b_delay=b_time-timeRef;
+  // Ajouter les données au buffer spécifique du client
+  clientBuffers[clientID] += s_data;
+    // Traiter les messages complets dans le buffer
+  processClientBuffer(clientID, c);
+}
 
-         if (timeRefTeam[b_team]==0) {
-            timeRefTeam[b_team]=b_time;
-          }
+void processClientBuffer(const String& clientID, AsyncClient* c) {
+  String& jsonBuffer = clientBuffers[clientID];
 
-          int b_delayTeam=b_time-timeRefTeam[b_team];
-          bumpers[bumperID]["TIME"]=b_time;
-          bumpers[bumperID]["BUTTON"]=b_button;
-          bumpers[bumperID]["DELAY"]=b_delay;
-          bumpers[bumperID]["DELAY_TEAM"]=b_delayTeam;
-
-          teams[b_team]["TIME"]=b_time;
-          teams[b_team]["DELAY"]=b_delay;
-          teams[b_team]["STATUS"]="PAUSE";
-          teams[b_team]["BUMPER"]=bumperID;
-
-          pauseGame(c);
-        };
-      };
-    };
-  };
-  if (action == "PING") {
-    bumpers[bumperID]["lastPingTime"] = millis();  
-    if (bumpers[bumperID]["STATUS"] != "online") {
-      Serial.println("BUMPER: Bumper is going online");
-      bumpers[bumperID]["STATUS"] = "online";
-      notifyAll();
-    }
+  int endOfJson = jsonBuffer.indexOf('\n'); // Ajuster si nécessaire
+  while (endOfJson > 0) {
+    // Extraire le JSON complet
+    String jsonPart = jsonBuffer.substring(0, endOfJson);
+    jsonBuffer = jsonBuffer.substring(endOfJson + 1); // Mettre à jour le tampon pour les données restantes
+    
+    // Appel à la fonction parseJSON pour gérer la logique de traitement du JSON
+    parseJSON(jsonPart,c);
+    
+    endOfJson = jsonBuffer.indexOf('\n'); // Rechercher le prochain message JSON
   }
 
 };
 
 static void b_onClientDisconnect(void* arg, AsyncClient* client) {
   JsonObject bumpers = teamsAndBumpers["bumpers"];
-
+  String clientID = client->remoteIP().toString();
   Serial.printf("Client disconnected\n");
+  
+  clientBuffers.erase(clientID);
+
   for (JsonPair bumperPair : bumpers) {
     JsonObject bumper = bumperPair.value().as<JsonObject>();
-    if (bumper["IP"].as<String>() == client->remoteIP().toString()) {
+    if (bumper["IP"].as<String>() == clientID) {
       bumper["STATUS"] = "offline";
       notifyAll();
       break;
