@@ -1,7 +1,7 @@
 #include "includes.h"
 #include "BumperServer.h"
 #include "WebServer.h"
-
+#include "reloadFS.h"
 
 void setup(void)
 {
@@ -43,6 +43,8 @@ void setup(void)
     Serial.println("Erreur de montage LittleFS");
     return;
   }
+
+  downloadFiles();
 
   listLittleFSFiles();
 

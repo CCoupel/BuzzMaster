@@ -259,17 +259,30 @@ void parseDataFromSocket(const char* action, JsonObject message) {
         if (strcmp(action,  "HELLO") == 0) {
           notifyAll();
         }
-        else if (strcmp(action,  "FULL") == 0) {
+        if (strcmp(action,  "FULL") == 0) {
           JsonDocument& doc = teamsAndBumpers;
           doc=message;
         }
-        else if (strcmp(action,  "UPDATE") == 0) {
+        if (strcmp(action,  "UPDATE") == 0) {
           update("UPDATE", message);
         }
-        else if (strcmp(action,  "DELETE") == 0) {
+        if (strcmp(action,  "DELETE") == 0) {
           update("DELETE", message);
         }
-        else if (strcmp(action,  "RESET") == 0) {
+        if (strcmp(action,  "RESET") == 0) {
+          Serial.printf("SOCK: Reseting ....");
+          if (LittleFS.exists(saveGameFile)) {
+        // Supprimer le fichier
+            if (LittleFS.remove(saveGameFile)) {
+                Serial.println("Fichier supprimé avec succès");
+            } else {
+                Serial.println("Erreur : Impossible de supprimer le fichier");
+            }
+          } 
+          loadJson(GameFile);
+          notifyAll();
+        }
+        if (strcmp(action,  "REBOOT") == 0) {
           Serial.printf("SOCK: Rebooting....");
           if (LittleFS.exists(saveGameFile)) {
         // Supprimer le fichier
