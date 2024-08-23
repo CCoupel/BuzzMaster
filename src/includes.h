@@ -115,6 +115,8 @@ void checkPingForAllClients();
 void parseDataFromSocket(const char* action, JsonObject message);
 void mergeJson(JsonObject& destObj, const JsonObject& srcObj);
 void update(String action, JsonObject& obj);
+void resetServer();
+void rebootServer();
 
 /* **** INTERUPTIONS *** */
 static void IRAM_ATTR buttonHandler(void *arg);

@@ -70,12 +70,20 @@ void w_handleNotFound(AsyncWebServerRequest *request) {
   digitalWrite(ledPin, LOW);
 }
 
+void w_handleReboot(AsyncWebServerRequest *request) {
+  rebootServer();
+}
+
+void w_handleReset(AsyncWebServerRequest *request) {
+  resetServer();
+}
+
 void startWebServer() {
   server.serveStatic("/", LittleFS, "/").setDefaultFile("index.html");
 
-  //server.on("/bumpers", HTTP_GET, w_handle_bumpers);
+  server.on("/reset", HTTP_GET, w_handleReset);
 
-  //server.on("/teams", HTTP_GET, w_handle_teams);
+  server.on("/reboot", HTTP_GET, w_handleReboot);
 
   //server.on("/", HTTP_GET, w_handleRoot);
   server.onNotFound(w_handleNotFound);

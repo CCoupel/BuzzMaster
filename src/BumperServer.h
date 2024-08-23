@@ -67,13 +67,13 @@ void parseJSON(const String& data, AsyncClient* c)
       };
     };
   };
-  if (action == "PING") {
+  if (action == "PING") {/*
     bumpers[bumperID]["lastPingTime"] = millis();  
     if (bumpers[bumperID]["STATUS"] != "online") {
       Serial.println("BUMPER: Bumper is going online");
       bumpers[bumperID]["STATUS"] = "online";
       notifyAll();
-    }
+    }*/
   }
 }
 
@@ -167,4 +167,31 @@ void update(String action, JsonObject& obj) {
     Serial.printf("Update: complete %s\n", output.c_str());
     
     notifyAll();
+}
+
+void resetServer() {
+  Serial.printf("SOCK: Reseting ....");
+          if (LittleFS.exists(saveGameFile)) {
+        // Supprimer le fichier
+            if (LittleFS.remove(saveGameFile)) {
+                Serial.println("Fichier supprimé avec succès");
+            } else {
+                Serial.println("Erreur : Impossible de supprimer le fichier");
+            }
+          } 
+          loadJson(GameFile);
+          notifyAll();
+}
+
+void rebootServer() {
+  Serial.printf("SOCK: Rebooting....");
+          if (LittleFS.exists(saveGameFile)) {
+        // Supprimer le fichier
+            if (LittleFS.remove(saveGameFile)) {
+                Serial.println("Fichier supprimé avec succès");
+            } else {
+                Serial.println("Erreur : Impossible de supprimer le fichier");
+            }
+          } 
+          ESP.restart();
 }

@@ -52,32 +52,12 @@ void parseDataFromSocket(const char* action, JsonObject message) {
           update("DELETE", message);
         }
         else if (strcmp(action,  "RESET") == 0) {
-          Serial.printf("SOCK: Reseting ....");
-          if (LittleFS.exists(saveGameFile)) {
-        // Supprimer le fichier
-            if (LittleFS.remove(saveGameFile)) {
-                Serial.println("Fichier supprimé avec succès");
-            } else {
-                Serial.println("Erreur : Impossible de supprimer le fichier");
-            }
-          } 
-          loadJson(GameFile);
-          notifyAll();
+          resetServer();
         }
         else if (strcmp(action,  "REBOOT") == 0) {
-          Serial.printf("SOCK: Rebooting....");
-          if (LittleFS.exists(saveGameFile)) {
-        // Supprimer le fichier
-            if (LittleFS.remove(saveGameFile)) {
-                Serial.println("Fichier supprimé avec succès");
-            } else {
-                Serial.println("Erreur : Impossible de supprimer le fichier");
-            }
-          } 
-          ESP.restart();
+          rebootServer();
         }
         else {
           Serial.printf("SOCK: Action not recognized %s\n", action);
         }
-
 }
