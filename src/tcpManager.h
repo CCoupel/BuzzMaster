@@ -1,69 +1,62 @@
+#include <AsyncTCP.h>
+#include <ArduinoJson.h>
+#include <esp_log.h>
+
+const char* TCP_TAG = "TCP";
+
 void startBumperServer()
 {
   bumperServer = new AsyncServer(1234);
   bumperServer->onClient(&b_onCLientConnect, bumperServer);
   
   bumperServer->begin();
-    Serial.print("BUMPER server started on port ");
-  Serial.println(1234);
-
+  ESP_LOGI(TCP_TAG, "BUMPER server started on port 1234");
 }
 
 void b_handleData(void* arg, AsyncClient* c, void *data, size_t len) {
-//  JsonDocument obj;
-  String s_data=String((char*)data).substring(0, len);
-  String clientID = c->remoteIP().toString();
-  
-  Serial.print("BUZZER: Data received: "+s_data);
+    String clientID = c->remoteIP().toString();
+    String partial_data=String((char*)data, len);
+    ESP_LOGD(TCP_TAG, "Received data from %s: %s", clientID.c_str(), partial_data.c_str());
 
-  // Ajouter les données au buffer spécifique du client
-  clientBuffers[clientID] += s_data;
-    // Traiter les messages complets dans le buffer
-  processClientBuffer(clientID, c);
+    clientBuffers[clientID] += partial_data;
+    processClientBuffer(clientID, c);
 }
 
 void processClientBuffer(const String& clientID, AsyncClient* c) {
-  String& jsonBuffer = clientBuffers[clientID];
+    String& jsonBuffer = clientBuffers[clientID];
+    int endOfJson;
 
-  int endOfJson = jsonBuffer.indexOf('\n'); // Ajuster si nécessaire
-  while (endOfJson > 0) {
-    // Extraire le JSON complet
-    String jsonPart = jsonBuffer.substring(0, endOfJson);
-    jsonBuffer = jsonBuffer.substring(endOfJson + 1); // Mettre à jour le tampon pour les données restantes
-    
-    // Appel à la fonction parseJSON pour gérer la logique de traitement du JSON
-    parseJSON(jsonPart,c);
-    
-    endOfJson = jsonBuffer.indexOf('\n'); // Rechercher le prochain message JSON
-  }
-
-};
+    while ((endOfJson = jsonBuffer.indexOf('\n')) > 0) {
+        String jsonPart = jsonBuffer.substring(0, endOfJson);
+        jsonBuffer = jsonBuffer.substring(endOfJson + 1);
+        
+        parseJSON(jsonPart, c);
+    }
+}
 
 static void b_onClientDisconnect(void* arg, AsyncClient* client) {
-  JsonObject bumpers = teamsAndBumpers["bumpers"];
-  String clientID = client->remoteIP().toString();
-  Serial.printf("Client disconnected\n");
-  
-  clientBuffers.erase(clientID);
+    String clientID = client->remoteIP().toString();
+    ESP_LOGI(TCP_TAG, "Client %s disconnected", clientID.c_str());
 
-  for (JsonPair bumperPair : bumpers) {
-    JsonObject bumper = bumperPair.value().as<JsonObject>();
-    if (bumper["IP"].as<String>() == clientID) {
-      bumper["STATUS"] = "offline";
-      notifyAll();
-      break;
+    clientBuffers.erase(clientID);
+
+    JsonObject bumpers = teamsAndBumpers["bumpers"];
+    for (JsonPair bumperPair : bumpers) {
+        JsonObject bumper = bumperPair.value().as<JsonObject>();
+        if (bumper["IP"].as<String>() == clientID) {
+            bumper["STATUS"] = "offline";
+            notifyAll();
+            break;
+        }
     }
-  }
 
-  bumperClients.erase(std::remove(bumperClients.begin(), bumperClients.end(), client), bumperClients.end()); // Retirer le client de la liste
-  delete client; // Nettoyer la mémoire
-  
+    bumperClients.erase(std::remove(bumperClients.begin(), bumperClients.end(), client), bumperClients.end());
+    delete client;
 }
 
 static void b_onCLientConnect(void* arg, AsyncClient* client) {
-  Serial.println("Buzzer: New client connected");
-  client->onData(&b_handleData, NULL);
-  client->onDisconnect(&b_onClientDisconnect, NULL);
-  bumperClients.push_back(client);
-
+    ESP_LOGI(TCP_TAG, "New client connected: %s", client->remoteIP().toString().c_str());
+    client->onData(&b_handleData, NULL);
+    client->onDisconnect(&b_onClientDisconnect, NULL);
+    bumperClients.push_back(client);
 }

@@ -7,28 +7,19 @@
 #include "messages.h"
 #include "BumperServer.h"
 #include "WebServer.h"
+#include <esp_log.h>
+
+static const char* MAIN_TAG = "BUZZCONTROL";
 
 void setup(void)
 {
-  Serial.begin(115200);
+  Serial.begin(921600);
+  esp_log_level_set("*", ESP_LOG_INFO);
 
-#if defined(ESP32)
 
-#elif defined(ESP8266)
-  // Initialiser les broches comme sorties pour ESP8266
-  pinMode(LED_BUILTIN, OUTPUT);  
-#endif
-
-  #if defined(ESP32)
-    Serial.print("RGB pin:");
-    Serial.println(RGB_BUILTIN);
-  #endif
-  Serial.print("LED pin:");
-  Serial.println(LED_BUILTIN);
-  #if defined(ESP32)
-    Serial.print("NEO pin:");
-    Serial.println(PIN_NEOPIXEL);
-  #endif
+  ESP_LOGI(MAIN_TAG, "RGB pin: %d", RGB_BUILTIN);
+  ESP_LOGI(MAIN_TAG, "LED pin: %d",LED_BUILTIN);
+  ESP_LOGI(MAIN_TAG, "NEO pin: %d",PIN_NEOPIXEL);
 
   setLedColor(255, 0, 0);
   setLedIntensity(128);
@@ -38,14 +29,14 @@ void setup(void)
   timeClient.update();
 
   if (MDNS.begin("buzzcontrol")) {
-    Serial.println("MDNS responder started");
+    ESP_LOGI(MAIN_TAG, "MDNS responder started");
   }
   MDNS.addService("buzzcontrol", "tcp", localWWWpPort);
   MDNS.addService("http", "tcp", localWWWpPort);
   MDNS.addService("sock", "tcp", localUdpPort);
 
   if (!LittleFS.begin()) {
-    Serial.println("Erreur de montage LittleFS");
+    ESP_LOGE(MAIN_TAG, "Erreur de montage LittleFS");
     return;
   }
 
@@ -63,7 +54,7 @@ void setup(void)
   messageQueue = xQueueCreate(10, sizeof(messageQueue_t));
 
     if (messageQueue == NULL) {
-      Serial.println("Échec de la création de la file d'attente");
+      ESP_LOGE(MAIN_TAG, "Échec de la création de la file d'attente");
       return;
     }
 
@@ -72,8 +63,4 @@ void setup(void)
 
 void loop(void)
 {
-#if defined(ESP8266)
-//  server.handleClient(); // Gestion des requêtes clients
-  MDNS.update();
-#endif
 }

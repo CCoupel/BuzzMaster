@@ -1,23 +1,25 @@
+#include <esp_log.h>
+
+static const char* PING_TAG = "PING";
+
 void checkPingForAllClients() {
-  unsigned long currentTime = millis();
-
-  // Vérifier les bumpers non répondus
-  JsonObject bumpers = teamsAndBumpers["bumpers"];
-  for (JsonPair bumperPair : bumpers) {
-    JsonObject bumper = bumperPair.value().as<JsonObject>();
-    if (currentTime - bumper["lastPingTime"].as<unsigned long>() > 3000) {  // 2 secondes sans réponse
-      if (bumper["STATUS"] != "offline") {
-        Serial.print("BUMPER: Bumper ");
-        Serial.print(bumper["IP"].as<String>());
-        Serial.println(" is going offline");
-        bumper["STATUS"] = "offline";
-        notifyAll();
-      }
+    unsigned long currentTime = millis();
+    JsonObject bumpers = teamsAndBumpers["bumpers"];
+    
+    for (JsonPair bumperPair : bumpers) {
+        JsonObject bumper = bumperPair.value().as<JsonObject>();
+        if (currentTime - bumper["lastPingTime"].as<unsigned long>() > 3000) {
+            if (bumper["STATUS"] != "offline") {
+                ESP_LOGW(PING_TAG, "Bumper %s is going offline", bumper["IP"].as<String>().c_str());
+                bumper["STATUS"] = "offline";
+                notifyAll();
+            }
+        }
     }
-  }
 }
 
-void onTimerISR() {
-  sendMessageToAllClients("PING", "'Are you alive?'");  // Appelée toutes les secondes
-  checkPingForAllClients();
+void IRAM_ATTR onTimerISR() {
+    sendMessageToAllClients("PING", "'Are you alive?'");
+    checkPingForAllClients();
 }
+

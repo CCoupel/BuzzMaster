@@ -3,6 +3,7 @@ import { configureDropzone } from './dragAndDrop.js';
 
 const colors = [
     { name: 'choisir une couleur', rgb: [255, 255, 255] },
+    { name: 'blanc', rgb: [255, 255, 255] },
     { name: 'bleu', rgb: [0, 0, 255] },
     { name: 'rouge', rgb: [255, 0, 0] },
     { name: 'jaune', rgb: [255, 255, 0] },

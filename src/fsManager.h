@@ -2,6 +2,9 @@
 #include <LittleFS.h>
 #include <WiFi.h>
 #include <HTTPClient.h>
+#include <esp_log.h>
+
+static const char* FS_TAG = "FS_MANAGER";
 
 String baseURL="/base.url";
 String baseFILE="/catalog.url";
@@ -11,119 +14,97 @@ bool downloadFile(const String& url, const String& localPath);
 bool createDirectories(const String& path);
 
 void listLittleFSFiles() {
-    Serial.println("Listing files in LittleFS:");
-  #if defined(ESP8266)
-    Dir dir = LittleFS.openDir("/");
-    while (dir.next()) {
-        String fileName = dir.fileName();
-        size_t fileSize = dir.fileSize();
-        Serial.printf("FILE: %s, SIZE: %d bytes\n", fileName.c_str(), fileSize);
-    }
-  #elif defined(ESP32)
+    ESP_LOGI(FS_TAG, "Listing files in LittleFS:");
     File root = LittleFS.open("/");
     if (!root) {
-        Serial.println("- failed to open directory");
+        ESP_LOGE(FS_TAG, "Failed to open directory");
         return;
     }
     if (!root.isDirectory()) {
-        Serial.println(" - not a directory");
+        ESP_LOGE(FS_TAG, "Not a directory");
         return;
     }
 
     File file = root.openNextFile();
     while (file) {
         if (file.isDirectory()) {
-            Serial.print("DIR : ");
-            Serial.println(file.name());
+            ESP_LOGI(FS_TAG, "DIR : %s", file.name());
         } else {
-            Serial.print("FILE: ");
-            Serial.print(file.name());
-            Serial.print("\tSIZE: ");
-            Serial.println(file.size());
+            ESP_LOGI(FS_TAG, "FILE: %s\tSIZE: %d", file.name(), file.size());
         }
         file = root.openNextFile();
     }
-#endif
 }
 
-void loadJson(String path) {
-  File file;
-  String output;
-  // Ouvrir le fichier en lecture
-  Serial.print("Loading game file: ");
-  if (LittleFS.exists(saveGameFile)) {
-    Serial.println(saveGameFile);
-    file = LittleFS.open(saveGameFile, "r");
-  } else if (LittleFS.exists(GameFile)) {
-    Serial.println(GameFile);
-    file = LittleFS.open(GameFile, "r");
-  }
-  if (!file) {
-    Serial.println("Failed to open file for reading. Initializing with default values.");
-    // Initialiser avec les valeurs par défaut en cas d'échec d'ouverture du fichier
-    teamsAndBumpers["bumpers"] = JsonObject();
-    teamsAndBumpers["teams"] = JsonObject();
-    return;
-  }
-  // Désérialiser le contenu du fichier dans le JsonDocument
-  DeserializationError error = deserializeJson(teamsAndBumpers, file);
-  if (error) {
-    Serial.print("deserializeJson() failed: ");
-    Serial.println(error.f_str());
-    // Initialiser avec les valeurs par défaut en cas d'erreur de désérialisation
-    teamsAndBumpers["bumpers"] = JsonObject();
-    teamsAndBumpers["teams"] = JsonObject();
-  } else {
-    Serial.println("JSON loaded successfully");
-  }
 
-  // Fermer le fichier après utilisation
-  file.close();
-  serializeJson(teamsAndBumpers, output);
-  Serial.printf("JSON: loaded %s\n", output.c_str());
+void loadJson(String path) {
+    File file;
+    String output;
+    ESP_LOGI(FS_TAG, "Loading game file");
+    
+    if (LittleFS.exists(saveGameFile)) {
+        file = LittleFS.open(saveGameFile, "r");
+        ESP_LOGI(FS_TAG, "Loading from save file: %s", saveGameFile);
+    } else if (LittleFS.exists(GameFile)) {
+        file = LittleFS.open(GameFile, "r");
+        ESP_LOGI(FS_TAG, "Loading from game file: %s", GameFile);
+    }
+
+    if (!file) {
+        ESP_LOGE(FS_TAG, "Failed to open file for reading. Initializing with default values.");
+        teamsAndBumpers["bumpers"] = JsonObject();
+        teamsAndBumpers["teams"] = JsonObject();
+        return;
+    }
+
+    DeserializationError error = deserializeJson(teamsAndBumpers, file);
+    if (error) {
+        ESP_LOGE(FS_TAG, "deserializeJson() failed: %s", error.c_str());
+        teamsAndBumpers["bumpers"] = JsonObject();
+        teamsAndBumpers["teams"] = JsonObject();
+    } else {
+        ESP_LOGI(FS_TAG, "JSON loaded successfully");
+    }
+
+    file.close();
+    serializeJson(teamsAndBumpers, output);
+    ESP_LOGI(FS_TAG, "JSON loaded: %s", output.c_str());
 }
 
 void saveJson() {
-  // Ouvrir le fichier en écriture
-  File file = LittleFS.open(saveGameFile, "w");
-  if (!file) {
-    Serial.println("Failed to open file for writing");
-    return;
-  }
+    File file = LittleFS.open(saveGameFile, "w");
+    if (!file) {
+        ESP_LOGE(FS_TAG, "Failed to open file for writing");
+        return;
+    }
 
-  // Sérialiser le JsonDocument dans le fichier
-  if (serializeJson(teamsAndBumpers, file) == 0) {
-    Serial.println("Failed to write to file");
-  }
+    if (serializeJson(teamsAndBumpers, file) == 0) {
+        ESP_LOGE(FS_TAG, "Failed to write to file");
+    }
 
-  // Fermez le fichier après utilisation
-  file.close();
-
-  Serial.println("JSON saved successfully");
+    file.close();
+    ESP_LOGI(FS_TAG, "JSON saved successfully");
 }
 
 void downloadFiles() {
-// Initialiser LittleFS
     if (!LittleFS.begin()) {
-        Serial.println("Failed to mount LittleFS");
+        ESP_LOGE(FS_TAG, "Failed to mount LittleFS");
         return;
     }
 
-    // Lire le fichier base.url pour obtenir la base de l'URL
     File baseFile = LittleFS.open(baseURL, "r");
     if (!baseFile) {
-        Serial.println("Failed to open base.url");
+        ESP_LOGE(FS_TAG, "Failed to open base.url");
         return;
     }
 
-    String baseUrl = baseFile.readString();  // Lire la chaîne
-    baseUrl.trim();                          // Appliquer trim() sur la chaîne
+    String baseUrl = baseFile.readString();
+    baseUrl.trim();
     baseFile.close();
 
-    // Lire le fichier catalog.url pour obtenir la liste des fichiers à télécharger
     File catalogFile = LittleFS.open(baseFILE, "r");
     if (!catalogFile) {
-        Serial.println("Failed to open catalog.url");
+        ESP_LOGE(FS_TAG, "Failed to open catalog.url");
         return;
     }
 
@@ -132,16 +113,12 @@ void downloadFiles() {
         filePath.trim();
         if (filePath.length() == 0) continue;
 
-        // Construire l'URL complète
         String fileUrl = baseUrl + "/" + filePath;
 
-        // Télécharger le fichier et le sauvegarder localement dans le même chemin
         if (downloadFile(fileUrl, "/" + filePath)) {
-            Serial.print("Downloaded and saved ");
-            Serial.println(filePath);
+            ESP_LOGI(FS_TAG, "Downloaded and saved %s", filePath.c_str());
         } else {
-            Serial.print("Failed to download ");
-            Serial.println(fileUrl);
+            ESP_LOGE(FS_TAG, "Failed to download %s", fileUrl.c_str());
         }
     }
 
@@ -150,39 +127,36 @@ void downloadFiles() {
 
 bool downloadFile(const String& fileUrl, const String& localPath) {
     HTTPClient http;
-    http.begin(fileUrl); // Spécifie l'URL
-    int httpCode = http.GET(); // Envoie la requête HTTP GET
+    http.begin(fileUrl);
+    int httpCode = http.GET();
 
     if (httpCode == HTTP_CODE_OK) {
-        WiFiClient * stream = http.getStreamPtr(); // Obtient le flux de données
+        WiFiClient * stream = http.getStreamPtr();
 
-        File file = LittleFS.open(localPath, "w"); // Ouvre le fichier en mode écriture
+        File file = LittleFS.open(localPath, "w");
         if (!file) {
-            Serial.println("Failed to open file for writing");
+            ESP_LOGE(FS_TAG, "Failed to open file for writing");
             http.end();
             return false;
         }
 
-        // Crée un buffer pour lire les données en petites portions
-        const size_t bufferSize = 512; // Vous pouvez ajuster la taille du buffer
+        const size_t bufferSize = 512;
         uint8_t buffer[bufferSize];
 
-        // Lit le flux de données et écrit dans le fichier en morceaux
         int bytesRead;
         while ((bytesRead = stream->read(buffer, bufferSize)) > 0) {
-            file.write(buffer, bytesRead); // Écrit les données lues dans le fichier
+            file.write(buffer, bytesRead);
         }
 
-        file.close(); // Ferme le fichier après l'écriture
-        Serial.println("File downloaded successfully");
+        file.close();
+        ESP_LOGI(FS_TAG, "File downloaded successfully");
     } else {
-        Serial.print("HTTP GET failed with code ");
-        Serial.println(httpCode);
+        ESP_LOGE(FS_TAG, "HTTP GET failed with code %d", httpCode);
         http.end();
         return false;
     }
 
-    http.end(); // Termine la connexion HTTP
+    http.end();
     return true;
 }
 
@@ -203,8 +177,7 @@ bool createDirectories(const String& path) {
         if (path[i] == '/') {
             if (!LittleFS.exists(subPath)) {
                 if (!LittleFS.mkdir(subPath)) {
-                    Serial.print("Failed to create directory: ");
-                    Serial.println(subPath);
+                    ESP_LOGE(FS_TAG, "HTTP GET failed with code %s", subPath);
                     return false;
                 }
             }

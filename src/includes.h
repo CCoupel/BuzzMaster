@@ -1,17 +1,8 @@
-#if defined(ESP32)
-  #include <WiFi.h>
-  #include <AsyncTCP.h>
-  #include <ESPmDNS.h>
-  #include <esp_task_wdt.h>  // Pour gérer le watchdog timer si nécessaire
-  #include <Arduino.h>
-
-#elif defined(ESP8266)
-  #include <ESP8266WiFi.h>
-  #include <ESPAsyncTCP.h>
-  #include <ESPAsyncUDP.h>
-  #include <ESP8266mDNS.h>
-  #include <ESPAsyncWebServer.h>
-#endif
+#include <WiFi.h>
+#include <AsyncTCP.h>
+#include <ESPmDNS.h>
+#include <esp_task_wdt.h>  // Pour gérer le watchdog timer si nécessaire
+#include <Arduino.h>
 
 #include <ESPAsyncWebServer.h>
 
@@ -30,15 +21,10 @@
 const char* ssid     = "CC-Home";
 const char* password = "GenericPassword";
 
-#if defined(ESP32)
-  int ledPin = PIN_NEOPIXEL; // Vérifiez la documentation pour la broche LED intégrée sur votre carte ESP32-S3
-  int rgbPin = RGB_BUILTIN;
-  hw_timer_t * timer = NULL;
-  portMUX_TYPE timerMux = portMUX_INITIALIZER_UNLOCKED;
-
-#elif defined(ESP8266)
-  int ledPin = LED_BUILTIN; // Broche LED intégrée sur NodeMCU (ESP8266)
-#endif
+int ledPin = PIN_NEOPIXEL; // Vérifiez la documentation pour la broche LED intégrée sur votre carte ESP32-S3
+int rgbPin = RGB_BUILTIN;
+hw_timer_t * timer = NULL;
+portMUX_TYPE timerMux = portMUX_INITIALIZER_UNLOCKED;
 
 int currentRed = 0;
 int currentGreen = 0;
@@ -74,12 +60,14 @@ NTPClient timeClient(ntpUDP, "pool.ntp.org");
 const char* GameFile="/game.json";
 const char* saveGameFile="/game.json.save";
 
+/*
 typedef struct {
     const char*   action;  // Type d'action
     const char* message;  // Contenu du message
     bool notifyAll;
     AsyncClient* client;
 } messageQueue_t;
+*/
 
 QueueHandle_t messageQueue; // File d'attente pour les messages
 
@@ -112,7 +100,7 @@ void pauseGame(AsyncClient* client);
 void attachButtons();
 void startBumperServer();
 void checkPingForAllClients();
-void parseDataFromSocket(const char* action, JsonObject message);
+void parseDataFromSocket(const char* action, JsonObject& message);
 void mergeJson(JsonObject& destObj, const JsonObject& srcObj);
 void update(String action, JsonObject& obj);
 void resetServer();
@@ -128,3 +116,6 @@ void onWsEvent(AsyncWebSocket *server, AsyncWebSocketClient *client, AwsEventTyp
 void sendMessageTask(void *parameter);
 
 
+constexpr unsigned int hash(const char* str, int h = 0) {
+    return !str[h] ? 5381 : (hash(str, h+1) * 33) ^ str[h];
+}

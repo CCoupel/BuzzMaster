@@ -18,13 +18,6 @@ void applyLedColor() {
   int adjustedGreen = (currentGreen * currentIntensity) / 255;
   int adjustedBlue = (currentBlue * currentIntensity) / 255;
 
-#if defined(ESP32)
   neopixelWrite(rgbPin,adjustedRed,adjustedGreen,adjustedBlue);
-  int pwmValue = 255 - currentIntensity;
-  //analogWrite(LED_BUILTIN, pwmValue);
-  //delay(500);
-#elif defined(ESP8266)
-  int pwmValue = 255 - currentIntensity;
-  analogWrite(LED_BUILTIN, pwmValue);
-#endif
+
 }
