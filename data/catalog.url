@@ -1,6 +1,7 @@
 base.url
 catalog.url
 html/config.html
+html/score.html
 html/index.html
 html/teamGame.html
 js/buzzer.js
