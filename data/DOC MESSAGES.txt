@@ -1,7 +1,7 @@
 messages format:
 {
     "teams": { <name>: {"COLOR": [R,G,B], "TIME":<T>, "DELAY": <D>, "STATUS": ""}},
-    "bumper": { <ID>: { "IP": <IP>, "TIME": <T>, "BUTTON": <B>, "DELAY": <D>, "DELAY_TEAM": <D> }}
+    "bumper": { <ID>: { "IP": <IP>, "TIME": <T>, "BUTTON": <B>, "DELAY": <D>, "DELAY_TEAM": <D>, "SCORE": <S> }}
 }
 from Buzzer:
 { "ID": <ID>, "ACTION": <VERB>, "MSG": <msg>}
