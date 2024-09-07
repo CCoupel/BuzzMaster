@@ -80,6 +80,14 @@ void pauseGame(AsyncClient* client) {
   putMsgToQueue("PAUSE","",true, client);
 }
 
+void pauseAllGame(){
+  putMsgToQueue("PAUSE","",true);
+}
+
+void continueGame(){
+  putMsgToQueue("START","",true);
+}
+
 // Fonction pour fusionner deux documents JSON
 void mergeJson(JsonObject& destObj, const JsonObject& srcObj) {
   for (JsonPair kvp : srcObj) {

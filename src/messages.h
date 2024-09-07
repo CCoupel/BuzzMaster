@@ -21,7 +21,7 @@ void notifyAll() {
     if (serializeJson(teamsAndBumpers, output)) {
         saveJson();
         ESP_LOGI(TAG, "Sending update to all clients: %s", output.c_str());
-        ws.textAll(output.c_str());
+        //ws.textAll(output.c_str());
         sendMessageToAllClients("UPDATE", output.c_str());
     } else {
         ESP_LOGE(TAG, "Failed to serialize JSON");
@@ -32,7 +32,7 @@ void notifyAll() {
 void putMsgToQueue(const char* action, const char* msg, bool notify, AsyncClient* client) {
     messageQueue_t message;
     message.action = action;
-    strncpy(message.message, (msg && *msg) ? msg : "''", MAX_MESSAGE_LENGTH - 1);
+    strncpy(message.message, (msg && *msg) ? msg : "\"\"", MAX_MESSAGE_LENGTH - 1);
     message.message[MAX_MESSAGE_LENGTH - 1] = '\0';  // Ensure null-termination
     message.notifyAll = notify;
     message.client = client;
@@ -58,7 +58,10 @@ void sendMessageToAllClients(const String& action, const String& msg ) {
   for (AsyncClient* client : bumperClients) {
     sendMessageToClient(action, msg, client);
   }
-  ESP_LOGI(TAG, " all is sent");
+  String message = "{\"ACTION\":\"" + action + "\", \"MSG\":" + msg + "}\n";
+
+   ws.textAll(message.c_str());
+  ESP_LOGI(TAG, " sent to all: %s", message.c_str());
 }
 
 void sendMessageTask(void *parameter) {

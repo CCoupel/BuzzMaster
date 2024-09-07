@@ -51,6 +51,18 @@ void parseDataFromSocket(const char* action, JsonObject& message) {
     case hash("REBOOT"):
       rebootServer();
       break;
+    case hash("START"):
+      startGame();
+      break;
+    case hash("STOP"):
+      stopGame();
+      break;
+    case hash("PAUSE"):
+      pauseAllGame();
+      break;
+    case hash("CONTINUE"):
+      continueGame();
+      break;
     default:
       ESP_LOGW(SOCKET_TAG, "Unrecognized action: %s", action);
       break;

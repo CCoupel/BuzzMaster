@@ -3,15 +3,368 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <link rel="stylesheet" href="../css/reset.css" />
-    <link rel="stylesheet" href="../css/style.css" />
-    <title>Configuration des buzzers</title>
+    <title>Jeu en temps réel</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f0f0f0;
+        }
+        .game-container {
+            display: flex;
+            justify-content: space-around;
+            flex-wrap: wrap;
+            margin-top: 30px;
+        }
+        .team {
+            background-color: #fff;
+            border-radius: 8px;
+            padding: 15px;
+            margin: 10px;
+            width: 200px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            transition: all 0.3s ease;
+        }
+        .team.active {
+            opacity: 1;
+            transform: scale(1);
+            filter: none;
+            box-shadow: 0 0 15px rgba(255,215,0,0.7);
+        }
+        .team.start-phase {
+            opacity: 0.1;
+            transform: scale(0.95);
+            filter: grayscale(100%);
+            box-shadow: 0 0 10px rgba(0,0,0,0.2) inset;
+        }
+        .team-header {
+            display: flex;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+        .team-color {
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            margin-right: 10px;
+        }
+        .bumper {
+            margin: 5px 0;
+            padding: 5px;
+            background-color: #f9f9f9;
+            border-radius: 4px;
+            transition: all 0.3s ease;
+        }
+        .bumper.active {
+            opacity: 1;
+            background-color: #fffacd;
+        }
+        .bumper.start-phase {
+            opacity: 0.1;
+            background-color: #e0e0e0;
+        }
+        .footer {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background-color: #333;
+            color: white;
+            padding: 10px;
+            text-align: center;
+        }
+        .footer button {
+            margin: 0 10px;
+            padding: 5px 15px;
+            font-size: 16px;
+        }
+        .time-bar-container {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 30px;
+            background-color: #ddd;
+        }
+        #time-bar {
+            height: 100%;
+            background-color: #4CAF50;
+            transition: width 1s linear;
+        }
+        #timer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+            font-weight: bold;
+            color: #fff;
+            text-shadow: 1px 1px 2px rgba(0,0,0,0.5);
+        }
+        #game-time-input {
+            margin-right: 10px;
+            padding: 5px;
+            font-size: 16px;
+            width: 60px;
+        }
+        @keyframes blink {
+            0% { opacity: 1; }
+            50% { opacity: 0.5; }
+            100% { opacity: 1; }
+        }
+        .blink {
+            animation: blink 1s linear infinite;
+        }
+    </style>
 </head>
 <body>
-    <header>
-        <div class="navbar">
-            <a href="./index.html" class="navbar-item">Jeu Solo</a>
-            <a href="./teamGame.html" class="navbar-item">Jeu Team</a>
-            <a href="./config.html" class="navbar-item">Config</a>
-        </div>
-    </header>
+    <div class="time-bar-container">
+        <div id="time-bar"></div>
+        <div id="timer">00:00</div>
+    </div>
+    <div id="game-container" class="game-container">
+        <!-- Les équipes et les bumpers seront ajoutés ici dynamiquement -->
+    </div>
+    <div class="footer">
+        <input type="number" id="game-time-input" placeholder="Temps (s)" min="1">
+        <button onclick="sendAction('START')">START</button>
+        <button onclick="sendAction('STOP')">STOP</button>
+        <button onclick="sendAction('PAUSE')">PAUSE</button>
+        <button onclick="sendAction('CONTINUE')">CONTINUE</button>
+    </div>
+
+    <script>
+        let socket;
+        let gameState = {
+            teams: {},
+            bumpers: {},
+            timer: 0,
+            isRunning: false,
+            totalTime: 0,
+            gamePhase: 'STOP'
+        };
+        let localTimer;
+
+        function connectWebSocket() {
+            socket = new WebSocket('ws://buzzcontrol.local/ws');
+
+            socket.onopen = function(event) {
+                console.log('Connecté au serveur WebSocket');
+                sendAction('HELLO');
+            };
+
+            socket.onmessage = function(event) {
+                console.log('Message reçu du serveur:', event.data);
+                const data = JSON.parse(event.data);
+                if (data.ACTION) {
+                    handleServerAction(data.ACTION, data.MSG);
+                } else if (data.TIME !== undefined) {
+                    gameState.timer = data.TIME;
+                    updateTimer();
+                    updateTimeBar();
+                }
+            };
+
+            socket.onclose = function(event) {
+                console.log('Déconnecté du serveur WebSocket');
+                setTimeout(connectWebSocket, 5000);
+            };
+
+            socket.onerror = function(error) {
+                console.error('Erreur WebSocket:', error);
+            };
+        }
+
+        function handleServerAction(action, msg) {
+            console.log('Action reçue du serveur:', action);
+            switch (action) {
+                case 'START':
+                    gameState.gamePhase = 'START';
+                    startTimer();
+                    updateDisplay();
+                    break;
+                case 'STOP':
+                    gameState.gamePhase = 'STOP';
+                    stopTimer();
+                    updateDisplay();
+                    break;
+                case 'PAUSE':
+                    pauseTimer();
+                    break;
+                case 'CONTINUE':
+                    continueTimer();
+                    break;
+                case 'UPDATE':
+                    try {
+                        if (msg.teams && msg.bumpers) {
+                            gameState.teams = msg.teams;
+                            gameState.bumpers = msg.bumpers;
+                            updateDisplay();
+                        }
+                    } catch (error) {
+                        console.error("Erreur lors du parsing du MSG de l'UPDATE:", error);
+                    }
+                    break;
+                default:
+                    console.log('Action non reconnue:', action);
+            }
+        }
+
+        function sendAction(action) {
+            if (socket.readyState === WebSocket.OPEN) {
+                let msg = '';
+                if (action === 'START') {
+                    const gameTimeInput = document.getElementById('game-time-input');
+                    const gameTime = parseInt(gameTimeInput.value, 10);
+                    if (isNaN(gameTime) || gameTime <= 0) {
+                        alert('Veuillez entrer un temps de jeu valide.');
+                        return;
+                    }
+                    msg = gameTime.toString();
+                    gameState.totalTime = gameTime;
+                    gameState.timer = gameTime;
+                    console.log('Temps total du jeu défini à:', gameState.totalTime);
+                } else if (action === 'HELLO') {
+                    msg = "Salut, serveur WebSocket !";
+                }
+                const message = JSON.stringify({ ACTION: action, MSG: msg });
+                console.log('Envoi de l\'action au serveur:', message);
+                socket.send(message);
+            } else {
+                console.error("La connexion WebSocket n'est pas ouverte");
+            }
+        }
+
+        function startTimer() {
+            if (localTimer) clearInterval(localTimer);
+            gameState.isRunning = true;
+            localTimer = setInterval(() => {
+                if (gameState.timer > 0) {
+                    gameState.timer--;
+                    updateTimer();
+                    updateTimeBar();
+                    if (gameState.timer === 0) {
+                        sendAction('STOP');
+                    }
+                } else {
+                    stopTimer();
+                }
+            }, 1000);
+        }
+
+        function stopTimer() {
+            clearInterval(localTimer);
+            gameState.isRunning = false;
+            gameState.timer = 0;
+            updateTimer();
+            updateTimeBar();
+        }
+
+        function pauseTimer() {
+            clearInterval(localTimer);
+            gameState.isRunning = false;
+        }
+
+        function continueTimer() {
+            if (!gameState.isRunning) {
+                startTimer();
+            }
+        }
+
+        function updateDisplay() {
+            console.log('Mise à jour de l\'affichage avec l\'état du jeu:', gameState);
+            const container = document.getElementById('game-container');
+            container.innerHTML = '';
+
+            // Trier les équipes par DELAY
+            const sortedTeams = Object.entries(gameState.teams).sort((a, b) => {
+                const delayA = a[1].DELAY !== undefined ? a[1].DELAY : Infinity;
+                const delayB = b[1].DELAY !== undefined ? b[1].DELAY : Infinity;
+                return delayA - delayB;
+            });
+
+            sortedTeams.forEach(([teamName, teamData]) => {
+                const teamElement = document.createElement('div');
+                const isStartPhase = gameState.gamePhase === 'START';
+                const isTeamActive = teamData.DELAY !== undefined;
+                teamElement.className = `team ${isTeamActive ? 'active' : ''} ${isStartPhase && !isTeamActive ? 'start-phase' : ''}`;
+                
+                const teamHeader = document.createElement('div');
+                teamHeader.className = 'team-header';
+                
+                const teamColor = document.createElement('div');
+                teamColor.className = 'team-color';
+                teamColor.style.backgroundColor = `rgb(${teamData.COLOR.join(',')})`;
+                
+                const teamTitle = document.createElement('h2');
+                teamTitle.textContent = teamName;
+                
+                teamHeader.appendChild(teamColor);
+                teamHeader.appendChild(teamTitle);
+                teamElement.appendChild(teamHeader);
+
+                // Trier les bumpers par DELAY_TEAM
+                const teamBumpers = Object.entries(gameState.bumpers)
+                    .filter(([_, bumperData]) => bumperData.TEAM === teamName)
+                    .sort((a, b) => {
+                        const delayA = a[1].DELAY_TEAM !== undefined ? a[1].DELAY_TEAM : Infinity;
+                        const delayB = b[1].DELAY_TEAM !== undefined ? b[1].DELAY_TEAM : Infinity;
+                        return delayA - delayB;
+                    });
+
+                teamBumpers.forEach(([bumperMac, bumperData]) => {
+                    const bumperElement = document.createElement('div');
+                    const isBumperActive = bumperData.BUTTON !== undefined || bumperData.DELAY !== undefined;
+                    bumperElement.className = `bumper ${isBumperActive ? 'active' : ''} ${isStartPhase && !isBumperActive ? 'start-phase' : ''}`;
+                    bumperElement.textContent = bumperData.NAME;
+                    teamElement.appendChild(bumperElement);
+                });
+
+                container.appendChild(teamElement);
+            });
+        }
+
+        function updateTimer() {
+            console.log('Mise à jour du timer:', gameState.timer);
+            const timerElement = document.getElementById('timer');
+            const minutes = Math.floor(gameState.timer / 60);
+            const seconds = gameState.timer % 60;
+            timerElement.textContent = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+        }
+
+        function updateTimeBar() {
+            console.log('Mise à jour de la barre de temps');
+            const timeBar = document.getElementById('time-bar');
+            const percentageRemaining = (gameState.timer / gameState.totalTime) * 100;
+            timeBar.style.width = `${percentageRemaining}%`;
+
+            if (percentageRemaining > 50) {
+                timeBar.style.backgroundColor = '#4CAF50'; // Vert
+            } else if (percentageRemaining > 25) {
+                timeBar.style.backgroundColor = '#FFA500'; // Orange
+            } else {
+                timeBar.style.backgroundColor = '#FF0000'; // Rouge
+            }
+
+            if (gameState.timer <= 10) {
+                timeBar.classList.add('blink');
+            } else {
+                timeBar.classList.remove('blink');
+            }
+        }
+
+        // Initialisation de la connexion WebSocket
+        connectWebSocket();
+
+        // Mise à jour initiale
+        updateDisplay();
+        updateTimer();
+        updateTimeBar();
+    </script>
+</body>
+</html>

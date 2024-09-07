@@ -115,13 +115,15 @@ function handleIncomingMessage(event) {
     try {
         console.log(event.data);
         const data = JSON.parse(event.data);
-        cleanBoard();
-
-        if (data.teams) {
-            createTeamDiv(data.teams);
-        }
-        if (data.bumpers) {
-            createBuzzerDiv(data);
+        if (data.ACTION == "UPDATE") {
+            cleanBoard();
+            const msg=data.MSG;
+            if (msg.teams) {
+                createTeamDiv(msg.teams);
+            }
+            if (msg.bumpers) {
+                createBuzzerDiv(msg);
+            }
         }
     } catch (error) {
         console.error('Erreur lors du traitement des données JSON:', error);
