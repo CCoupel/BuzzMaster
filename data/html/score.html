@@ -116,10 +116,13 @@
 
         ws.onmessage = function(event) {
             log("Message reçu du serveur: " + event.data);
-            const receivedData = JSON.parse(event.data);
-            gameData.teams = receivedData.teams || {};
-            gameData.bumpers = receivedData.bumpers || {};
-            updateScoreboards();
+            const data = JSON.parse(event.data);
+            if (data.ACTION && data.MSG && data.ACTION == "UPDATE")
+            {
+                gameData.teams = data.MSG.teams || {};
+                gameData.bumpers = data.MSG.bumpers || {};
+                updateScoreboards();
+            }
         };
 
         ws.onerror = function(event) {

@@ -49,12 +49,24 @@
             border-radius: 50%;
             margin-right: 10px;
         }
+        @keyframes blinkFast {
+            0% { opacity: 1; }
+            50% { opacity: 0.3; }
+            100% { opacity: 1; }
+        }
+        #time-bar.pause-blink {
+            animation: blinkFast 0.5s linear infinite;
+        }
         .bumper {
             margin: 5px 0;
             padding: 5px;
             background-color: #f9f9f9;
             border-radius: 4px;
             transition: all 0.3s ease;
+            cursor: pointer;
+        }
+        .bumper:hover {
+            background-color: #e0e0e0;
         }
         .bumper.active {
             opacity: 1;
@@ -90,7 +102,8 @@
         #time-bar {
             height: 100%;
             background-color: #4CAF50;
-            transition: width 1s linear;
+            transition: width 0.2s linear, background-color 0.2s linear;
+
         }
         #timer {
             position: absolute;
@@ -131,7 +144,7 @@
         <!-- Les équipes et les bumpers seront ajoutés ici dynamiquement -->
     </div>
     <div class="footer">
-        <input type="number" id="game-time-input" placeholder="Temps (s)" min="1">
+        <input type="number" id="game-time-input" placeholder="Temps (s)" min="1" value="30">
         <button onclick="sendAction('START')">START</button>
         <button onclick="sendAction('STOP')">STOP</button>
         <button onclick="sendAction('PAUSE')">PAUSE</button>
@@ -143,9 +156,9 @@
         let gameState = {
             teams: {},
             bumpers: {},
-            timer: 0,
+            timer: 30,
             isRunning: false,
-            totalTime: 0,
+            totalTime: 30,
             gamePhase: 'STOP'
         };
         let localTimer;
@@ -185,19 +198,25 @@
             switch (action) {
                 case 'START':
                     gameState.gamePhase = 'START';
+                    updateTimeBar(true); // Mise à jour immédiate
                     startTimer();
                     updateDisplay();
                     break;
                 case 'STOP':
                     gameState.gamePhase = 'STOP';
+                    updateTimeBar(true); // Mise à jour immédiate
                     stopTimer();
                     updateDisplay();
                     break;
                 case 'PAUSE':
+                    gameState.gamePhase = 'PAUSE';
                     pauseTimer();
+                    updateTimeBar(true);
                     break;
                 case 'CONTINUE':
+                    gameState.gamePhase = 'START';
                     continueTimer();
+                    updateTimeBar(true);
                     break;
                 case 'UPDATE':
                     try {
@@ -215,24 +234,29 @@
             }
         }
 
-        function sendAction(action) {
+        function sendAction(action, msg = '') {
             if (socket.readyState === WebSocket.OPEN) {
-                let msg = '';
-                if (action === 'START') {
-                    const gameTimeInput = document.getElementById('game-time-input');
-                    const gameTime = parseInt(gameTimeInput.value, 10);
-                    if (isNaN(gameTime) || gameTime <= 0) {
-                        alert('Veuillez entrer un temps de jeu valide.');
-                        return;
-                    }
-                    msg = gameTime.toString();
-                    gameState.totalTime = gameTime;
-                    gameState.timer = gameTime;
-                    console.log('Temps total du jeu défini à:', gameState.totalTime);
-                } else if (action === 'HELLO') {
-                    msg = "Salut, serveur WebSocket !";
+                let message;
+                switch (action) {
+                    case 'START':
+                        const gameTimeInput = document.getElementById('game-time-input');
+                        const gameTime = parseInt(gameTimeInput.value, 10) || 30; // Utilise 30 si la valeur n'est pas valide
+                        gameState.totalTime = gameTime;
+                        gameState.timer = gameTime;
+                        console.log('Temps total du jeu défini à:', gameState.totalTime);
+                        updateTimeBar(true);
+                        message = JSON.stringify({ ACTION: action, MSG: gameTime.toString() });
+                        break;
+                    case 'UPDATE':
+                        message = JSON.stringify({ ACTION: action, MSG: msg });
+                        break;
+                    case 'HELLO':
+                        message = JSON.stringify({ ACTION: action, MSG: "Salut, serveur WebSocket !" });
+                        break;
+                    default:
+                        message = JSON.stringify({ ACTION: action, MSG: msg });
+                        break;
                 }
-                const message = JSON.stringify({ ACTION: action, MSG: msg });
                 console.log('Envoi de l\'action au serveur:', message);
                 socket.send(message);
             } else {
@@ -262,7 +286,7 @@
             gameState.isRunning = false;
             gameState.timer = 0;
             updateTimer();
-            updateTimeBar();
+            updateTimeBar(true);
         }
 
         function pauseTimer() {
@@ -322,7 +346,14 @@
                     const isBumperActive = bumperData.BUTTON !== undefined || bumperData.DELAY !== undefined;
                     bumperElement.className = `bumper ${isBumperActive ? 'active' : ''} ${isStartPhase && !isBumperActive ? 'start-phase' : ''}`;
                     bumperElement.textContent = bumperData.NAME;
+                    bumperElement.textContent = `${bumperData.NAME} (Score: ${bumperData.SCORE || 0})`;
+                    
+                    if  (gameState.gamePhase === 'STOP' && isBumperActive) {
+                        bumperElement.onclick = () => addPointToBumper(teamName, bumperMac);
+                    }
+                    
                     teamElement.appendChild(bumperElement);
+
                 });
 
                 container.appendChild(teamElement);
@@ -337,10 +368,27 @@
             timerElement.textContent = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
         }
 
-        function updateTimeBar() {
+        function addPointToBumper(teamName, bumperMac) {
+            if (gameState.gamePhase === 'STOP') {
+                if (gameState.bumpers[bumperMac]) {
+                    gameState.bumpers[bumperMac].SCORE  = (gameState.bumpers[bumperMac].SCORE  || 0) + 1;
+                    updateDisplay();
+                    // Envoyer la mise à jour au serveur
+                    sendAction('UPDATE', gameState);
+                }
+            }
+        }
+
+        function updateTimeBar(immediate = false) {
             console.log('Mise à jour de la barre de temps');
             const timeBar = document.getElementById('time-bar');
             const percentageRemaining = (gameState.timer / gameState.totalTime) * 100;
+            
+            if (immediate) {
+                timeBar.style.transition = 'none';
+                timeBar.offsetHeight; // Force a reflow
+            }
+            
             timeBar.style.width = `${percentageRemaining}%`;
 
             if (percentageRemaining > 50) {
@@ -351,12 +399,25 @@
                 timeBar.style.backgroundColor = '#FF0000'; // Rouge
             }
 
+            if (gameState.gamePhase === 'PAUSE') {
+                timeBar.classList.add('pause-blink');
+            } else {
+                timeBar.classList.remove('pause-blink');
+            }
+
             if (gameState.timer <= 10) {
                 timeBar.classList.add('blink');
             } else {
                 timeBar.classList.remove('blink');
             }
+
+            if (immediate) {
+                setTimeout(() => {
+                    timeBar.style.transition = 'width 0.2s linear, background-color 0.2s linear';
+                }, 50);
+            }
         }
+
 
         // Initialisation de la connexion WebSocket
         connectWebSocket();
