@@ -245,20 +245,20 @@
                         gameState.timer = gameTime;
                         console.log('Temps total du jeu défini à:', gameState.totalTime);
                         updateTimeBar(true);
-                        message = JSON.stringify({ ACTION: action, MSG: gameTime.toString() });
+                        message = { ACTION: action, MSG: gameTime.toString() };
                         break;
                     case 'UPDATE':
-                        message = JSON.stringify({ ACTION: action, MSG: msg });
+                        message = { ACTION: action, MSG: msg };
                         break;
                     case 'HELLO':
-                        message = JSON.stringify({ ACTION: action, MSG: "Salut, serveur WebSocket !" });
+                        message = { ACTION: action, MSG: "Salut, serveur WebSocket !" };
                         break;
                     default:
-                        message = JSON.stringify({ ACTION: action, MSG: msg });
+                        message = { ACTION: action, MSG: msg };
                         break;
                 }
                 console.log('Envoi de l\'action au serveur:', message);
-                socket.send(message);
+                socket.send(JSON.stringify(message));
             } else {
                 console.error("La connexion WebSocket n'est pas ouverte");
             }

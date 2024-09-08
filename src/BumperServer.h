@@ -5,17 +5,18 @@
 static const char* BUMPER_TAG = "BUMPER_SERVER";
 
 
-void processButtonPress(JsonObject& bumpers, JsonObject& teams, const String& bumperID, const char* b_team, int b_time, int b_button) {
+void processButtonPress(JsonObject& bumpers, JsonObject& teams, const String& bumperID, const char* b_team, int64_t b_time, int b_button) {
   if (timeRef == 0) {
     timeRef = b_time;
   }
-  int b_delay = b_time - timeRef;
+  int64_t b_delay = b_time - timeRef;
 
   if (timeRefTeam[b_team] == 0) {
     timeRefTeam[b_team] = b_time;
   }
 
-  int b_delayTeam = b_time - timeRefTeam[b_team];
+  int64_t b_delayTeam = b_time - timeRefTeam[b_team];
+  
   bumpers[bumperID]["TIME"] = b_time;
   bumpers[bumperID]["BUTTON"] = b_button;
   bumpers[bumperID]["DELAY"] = b_delay;
@@ -27,6 +28,7 @@ void processButtonPress(JsonObject& bumpers, JsonObject& teams, const String& bu
   teams[b_team]["STATUS"] = "PAUSE";
   teams[b_team]["BUMPER"] = bumperID;
 }
+
 
 void resetBumpersTime() {
   std::vector<String> keysToRemove = {"STATUS", "BUTTON", "TIME", "DELAY", "DELAY_TEAM"};
@@ -160,7 +162,7 @@ void handleButtonAction(JsonObject& bumpers, JsonObject& teams, const String& bu
   if (bumpers.containsKey(bumperID)) {
     if (bumpers[bumperID].containsKey("IP") && bumpers[bumperID]["IP"] == c->remoteIP().toString()) {
       const char* b_team = bumpers[bumperID]["TEAM"];
-      int b_time = MSG["time"];
+      int64_t b_time = MSG["time"].as<int64_t>();  // Changé en int64_t
       int b_button = MSG["button"];
       if (b_team != nullptr) {
         processButtonPress(bumpers, teams, bumperID, b_team, b_time, b_button);
@@ -169,6 +171,7 @@ void handleButtonAction(JsonObject& bumpers, JsonObject& teams, const String& bu
     }
   }
 }
+
 
 void parseJSON(const String& data, AsyncClient* c)
 {
