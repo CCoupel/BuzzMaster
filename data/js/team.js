@@ -1,5 +1,5 @@
 import { ws } from './main.js';
-import { configureDropzone } from './dragAndDrop.js'; 
+import { configureDropzone, configureDragElement } from './dragAndDrop.js'; 
 
 const colors = [
     { name: 'choisir une couleur', rgb: [255, 255, 255] },
@@ -94,6 +94,8 @@ export function createTeamDiv(teams) {
 
     function addTeam(id, teamData) {
         const teamDiv = createElement('div', 'dynamic-div', { id });
+        configureDragElement(teamDiv); // Rendre l'équipe draggable
+        
         const colorDiv = createElement('div', 'color-div');
         const teamInfoDiv = createElement('div', 'team-info');
         const title = createElement('h2', 'team-name');

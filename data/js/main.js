@@ -12,10 +12,27 @@ const wsUrl = `${wsProtocol}//${loc}/ws`; // Utilise le même hôte et protocole
 
 // Initialiser l'objet WebSocket
 export let ws; // Déclare et exporte ws comme une variable globale
-let teams = {};
 let reconnectInterval = 5000; // Intervalle en millisecondes pour tenter de se reconnecter
 
-// Fonction pour initialiser la connexion WebSocket
+let teams = {};
+let bumpers = {};
+
+export function getTeams() {
+    return teams;
+}
+
+export function getBumpers() {
+    return bumpers;
+}
+
+export function updateTeams(newTeams) {
+    teams = newTeams;
+}
+
+export function updateBumpers(newBumpers) {
+    bumpers = newBumpers;
+}
+
 // Fonction pour initialiser la connexion WebSocket
 function connectWebSocket() {
     ws = new WebSocket(wsUrl);

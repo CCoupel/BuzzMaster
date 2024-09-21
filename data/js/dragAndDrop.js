@@ -1,3 +1,5 @@
+import { getTeams, getBumpers, updateTeams, updateBumpers } from './main.js';
+
 function setupDraggableElement(element) {
     element.draggable = true;
     element.addEventListener('dragstart', handleDragStart);
@@ -23,28 +25,70 @@ function handleDrop(e, dropzone, ws, id, onDropCallback) {
     const draggedElementId = e.dataTransfer.getData('text');
     const draggedElement = document.getElementById(draggedElementId);
 
-    if (draggedElement && draggedElement.classList.contains('buzzer')) {
-        const bumperMac = draggedElementId.replace('buzzer-', '');
-        
-        if (onDropCallback) {
-            console.log("Appel du callback de drop avec:", bumperMac);
-            onDropCallback(bumperMac);
-        } else {
-            dropzone.appendChild(draggedElement);
+    if (draggedElement) {
+        if (draggedElement.classList.contains('buzzer')) {
+            const bumperMac = draggedElementId.replace('buzzer-', '');
+            
+            if (onDropCallback) {
+                console.log("Appel du callback de drop avec:", bumperMac);
+                onDropCallback(bumperMac);
+            } else {
+                dropzone.appendChild(draggedElement);
 
-            const updatedBumperMessage = {
-                "ACTION": "UPDATE",
-                "MSG": {
-                    "bumpers": {
-                        [bumperMac]: { 
-                            "TEAM": id,
-                        }
+                const currentBumpers = getBumpers();
+                const updatedBumpers = {
+                    ...currentBumpers,
+                    [bumperMac]: { ...currentBumpers[bumperMac], TEAM: id }
+                };
+
+                const updateMessage = {
+                    "ACTION": "FULL",
+                    "MSG": {
+                        "bumpers": updatedBumpers,
+                        "teams": getTeams()
                     }
+                };
+
+                ws.send(JSON.stringify(updateMessage));
+                updateBumpers(updatedBumpers);
+                console.log(`Élément ${draggedElementId} mis à jour avec la team ${id}`);
+            }
+        } else if (draggedElement.classList.contains('dynamic-div')) {
+            const teamId = draggedElementId;
+            const buzzers = Array.from(draggedElement.querySelectorAll('.buzzer'));
+            
+            const currentBumpers = getBumpers();
+            const updatedBumpers = { ...currentBumpers };
+            
+            buzzers.forEach(buzzer => {
+                dropzone.appendChild(buzzer);
+                const bumperMac = buzzer.id.replace('buzzer-', '');
+                updatedBumpers[bumperMac] = { ...updatedBumpers[bumperMac], TEAM: "" };
+            });
+
+            const currentTeams = getTeams();
+            const updatedTeams = Object.entries(currentTeams).reduce((acc, [key, value]) => {
+                if (key !== teamId) {
+                    acc[key] = value;
+                }
+                return acc;
+            }, {});
+
+            const updateMessage = {
+                "ACTION": "FULL",
+                "MSG": {
+                    "bumpers": updatedBumpers,
+                    "teams": updatedTeams
                 }
             };
+            ws.send(JSON.stringify(updateMessage));
 
-            ws.send(JSON.stringify(updatedBumperMessage));
-            console.log(`Élément ${draggedElementId} mis à jour avec la team ${id}`);
+            updateBumpers(updatedBumpers);
+            updateTeams(updatedTeams);
+
+            draggedElement.remove();
+
+            console.log(`Équipe ${teamId} supprimée et buzzers détachés`);
         }
     }
 }

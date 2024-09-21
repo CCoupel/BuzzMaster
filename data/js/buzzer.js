@@ -3,7 +3,6 @@ import { configureDragElement } from './dragAndDrop.js';
 
 export function createBuzzerDiv(buzzerData) {
     const container = document.querySelector('.buzzer-container');
-    container.innerHTML = '';
 
     const createTextElement = (className, text) => {
         const textElement = document.createElement('p');
@@ -84,9 +83,14 @@ export function createBuzzerDiv(buzzerData) {
     };
 
     for (const [id, data] of Object.entries(buzzerData.bumpers)) {
-        if (document.getElementById(`buzzer-${id}`)) continue;
-
-        const buzzerDiv = createBuzzerElement(id, data);
+        let buzzerDiv = document.getElementById(`buzzer-${id}`);
+        
+        if (!buzzerDiv) {
+            buzzerDiv = createBuzzerElement(id, data);
+        } else {
+            // Mettre à jour les informations du buzzer existant si nécessaire
+            updateBuzzerInfo(buzzerDiv, data);
+        }
 
         if (data.TEAM && document.getElementById(data.TEAM)) {
             const teamDropzone = document.getElementById(data.TEAM).querySelector('.dropzone');
@@ -94,5 +98,14 @@ export function createBuzzerDiv(buzzerData) {
         } else {
             container.appendChild(buzzerDiv);
         }
+    }
+}
+
+function updateBuzzerInfo(buzzerDiv, data) {
+    // Mettre à jour les informations du buzzer ici si nécessaire
+    // Par exemple, mettre à jour le nom si changé
+    const nameElement = buzzerDiv.querySelector('.buzzer-name');
+    if (nameElement && data.NAME) {
+        nameElement.textContent = `Nom: ${data.NAME}`;
     }
 }
