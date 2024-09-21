@@ -1,27 +1,22 @@
-// Fonction pour configurer un élément comme draggable
 function setupDraggableElement(element) {
     element.draggable = true;
     element.addEventListener('dragstart', handleDragStart);
 }
 
-// Fonction pour gérer le début du drag d'un élément
 function handleDragStart(e) {
     e.dataTransfer.setData('text', e.target.id);
 }
 
-// Fonction pour gérer l'événement 'dragover' sur une dropzone
 function handleDragOver(e, dropzone) {
     e.preventDefault(); 
     dropzone.classList.add('dropzone-hover');
 }
 
-// Fonction pour gérer l'événement 'dragleave' sur une dropzone
 function handleDragLeave(dropzone) {
     dropzone.classList.remove('dropzone-hover');
 }
 
-// Fonction pour gérer l'événement 'drop' sur une dropzone
-function handleDrop(e, dropzone, ws, id) {
+function handleDrop(e, dropzone, ws, id, onDropCallback) {
     e.preventDefault();
     dropzone.classList.remove('dropzone-hover');
 
@@ -29,37 +24,41 @@ function handleDrop(e, dropzone, ws, id) {
     const draggedElement = document.getElementById(draggedElementId);
 
     if (draggedElement && draggedElement.classList.contains('buzzer')) {
-        dropzone.appendChild(draggedElement);
+        const bumperMac = draggedElementId.replace('buzzer-', '');
+        
+        if (onDropCallback) {
+            console.log("Appel du callback de drop avec:", bumperMac);
+            onDropCallback(bumperMac);
+        } else {
+            dropzone.appendChild(draggedElement);
 
-        const updatedBumperMessage = {
-            "ACTION": "UPDATE",
-            "MSG": {
-                "bumpers": {
-                    [draggedElementId.replace('buzzer-', '')]: { 
-                        "TEAM": id.toString(),
+            const updatedBumperMessage = {
+                "ACTION": "UPDATE",
+                "MSG": {
+                    "bumpers": {
+                        [bumperMac]: { 
+                            "TEAM": id,
+                        }
                     }
                 }
-            }
-        };
+            };
 
-        ws.send(JSON.stringify(updatedBumperMessage));
-        console.log(`Élément ${draggedElementId} mis à jour avec la team ${id}`);
+            ws.send(JSON.stringify(updatedBumperMessage));
+            console.log(`Élément ${draggedElementId} mis à jour avec la team ${id}`);
+        }
     }
 }
 
-// Fonction pour configurer le drag and drop pour une dropzone
-export function configureDropzone(dropzone, ws, id) {
+export function configureDropzone(dropzone, ws, id, onDropCallback) {
     dropzone.addEventListener('dragover', (e) => handleDragOver(e, dropzone));
     dropzone.addEventListener('dragleave', () => handleDragLeave(dropzone));
-    dropzone.addEventListener('drop', (e) => handleDrop(e, dropzone, ws, id));
+    dropzone.addEventListener('drop', (e) => handleDrop(e, dropzone, ws, id, onDropCallback));
 }
 
-// Fonction pour configurer le drag sur un élément
 export function configureDragElement(element) {
     setupDraggableElement(element);
 }
 
-// Fonction pour initialiser les dropzones
 export function initializeDropzones(ws) {
     const buzzerContainer = document.querySelector('.buzzer-container');
     configureDropzone(buzzerContainer, ws, '');

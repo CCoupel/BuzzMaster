@@ -1,12 +1,10 @@
 import { ws } from './main.js';
 import { configureDragElement } from './dragAndDrop.js';
 
-// Fonction principale pour créer et afficher les éléments buzzer en fonction des données fournies
 export function createBuzzerDiv(buzzerData) {
     const container = document.querySelector('.buzzer-container');
     container.innerHTML = '';
 
-    // Fonction pour créer un élément (paragraphe) avec un texte donné
     const createTextElement = (className, text) => {
         const textElement = document.createElement('p');
         textElement.className = className;
@@ -14,7 +12,6 @@ export function createBuzzerDiv(buzzerData) {
         return textElement;
     };
 
-    // Fonction pour envoyer un message WebSocket avec une action spécifique
     const sendWebSocketMessage = (action, id, playerName = "") => {
         const message = {
             "ACTION": action,
@@ -29,14 +26,9 @@ export function createBuzzerDiv(buzzerData) {
         ws.send(JSON.stringify(message));
     };
 
-    // Fonction pour créer un formulaire de saisie de nom
     const createForm = (id, buzzerDiv, updateView) => {
         const form = document.createElement('form');
         form.className = 'buzzer-form';
-
-        const label = document.createElement('label');
-        label.textContent = 'Nom du joueur';
-        label.htmlFor = `buzzer-text-${id}`;
 
         const input = document.createElement('input');
         input.type = 'text';
@@ -44,20 +36,22 @@ export function createBuzzerDiv(buzzerData) {
         input.id = `buzzer-text-${id}`;
         input.placeholder = 'Nom du joueur';
 
-        form.appendChild(label);
-        form.appendChild(input);
-
-        form.addEventListener('submit', (e) => {
-            e.preventDefault();
-            const playerName = input.value;
-            sendWebSocketMessage("UPDATE", id, playerName);
-            updateView(playerName);
+        let timeoutId;
+        input.addEventListener('input', (e) => {
+            clearTimeout(timeoutId);
+            timeoutId = setTimeout(() => {
+                const playerName = e.target.value.trim();
+                if (playerName) {
+                    sendWebSocketMessage("UPDATE", id, playerName);
+                    updateView(playerName);
+                }
+            }, 500); // Délai de 500ms avant l'envoi
         });
 
+        form.appendChild(input);
         buzzerDiv.appendChild(form);
     };
 
-    // Fonction pour créer un élément buzzer complet
     const createBuzzerElement = (id, data) => {
         const buzzerDiv = document.createElement('div');
         buzzerDiv.id = `buzzer-${id}`;
@@ -65,20 +59,19 @@ export function createBuzzerDiv(buzzerData) {
         configureDragElement(buzzerDiv);
 
         const idElement = createTextElement('buzzer-id', `ID: ${id}`);
-        buzzerDiv.appendChild(idElement);
 
         const updateView = (playerName) => {
             buzzerDiv.innerHTML = '';
             if (playerName) {
                 const nameElement = createTextElement('buzzer-name', `Nom: ${playerName}`);
-                const deleteButton = document.createElement('button');
-                deleteButton.textContent = 'Supprimer le nom';
-                deleteButton.addEventListener('click', () => {
-                    sendWebSocketMessage("UPDATE", id);
-                    updateView(""); 
-                });
                 buzzerDiv.appendChild(nameElement);
-                buzzerDiv.appendChild(deleteButton);
+
+                const editButton = document.createElement('button');
+                editButton.textContent = 'Modifier';
+                editButton.addEventListener('click', () => {
+                    createForm(id, buzzerDiv, updateView);
+                });
+                buzzerDiv.appendChild(editButton);
             } else {
                 buzzerDiv.appendChild(idElement);
                 createForm(id, buzzerDiv, updateView);
@@ -90,7 +83,6 @@ export function createBuzzerDiv(buzzerData) {
         return buzzerDiv;
     };
 
-    // Boucle sur chaque buzzer pour les créer et les afficher
     for (const [id, data] of Object.entries(buzzerData.bumpers)) {
         if (document.getElementById(`buzzer-${id}`)) continue;
 
