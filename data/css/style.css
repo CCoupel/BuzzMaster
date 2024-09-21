@@ -1,94 +1,370 @@
-
-
-.navbar {
+:root {
+    --primary-color: #3498db;
+    --secondary-color: #2980b9;
+    --accent-color: #e74c3c;
+    --background-color: #ecf0f1;
+    --text-color: #2c3e50;
+    --border-color: #bdc3c7;
+    --hover-color: #2c3e50;
+    --shadow: 0 2px 5px rgba(0,0,0,0.1);
+    --border-radius: 5px;
+    --transition: all 0.3s ease;
+    --navbar-height: 60px;
+    --timer-height: 30px;
+  }
+  
+  body {
+    font-family: 'Arial', sans-serif;
+    background-color: var(--background-color);
+    color: var(--text-color);
+    line-height: 1.6;
+    min-height: 100vh;
     display: flex;
-    justify-content: space-evenly;
-    font-size: 1.5rem;
-    outline: 1px solid black;
-    padding: 2vh;
-}
-
-.main-config-container {
+    flex-direction: column;
+    margin: 0;
+    padding: 0;
+    padding-top: calc(var(--navbar-height) + var(--timer-height));
+  }
+  
+  /* Navbar styles */
+  .navbar {
+    background-color: var(--primary-color);
+    padding: 1rem;
+    box-shadow: var(--shadow);
     display: flex;
-    align-items:stretch;
-}
-
-.buzzer-container {
-    width: 30%;
-    min-height: 100px;
-    box-sizing: border-box;
-    border-bottom: 1px solid black;
-}
-
-.team-container {
-    border: 1px solid black;
-    width: 70%;
-    min-height: 100px; 
-    text-align: center;
-    box-sizing: border-box;
-}
-
-.button-container {
-    width: 100%;
-    display: flex;
-    justify-content: space-evenly;
+    flex-direction: row;
+    justify-content: space-around;
     align-items: center;
-    border: 1px solid black;
-    border-top: none;
-    box-sizing: border-box;
-}
-
-#addDivButton {
-    margin-inline: 0 auto;
-    margin: 1rem 0 ;
-}
-
-.dynamic-div {
-    outline: 1px solid black;
-    margin: 3rem;
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: var(--navbar-height);
+  }
+  
+  .navbar-item {
+    color: white;
+    text-decoration: none;
+    padding: 0.5rem 1rem;
+    border-radius: var(--border-radius);
+    transition: var(--transition);
+    font-size: 1.2rem;
+  }
+  
+  .navbar-item:hover {
+    background-color: var(--hover-color);
+  }
+  
+  /* Styles pour la barre de temps et le timer */
+  .time-bar-container {
+    left: 0;
+    width: 100%;
+    height: var(--timer-height);
+    background-color: #ddd;
+  }
+  
+  #time-bar {
+    height: 100%;
+    background-color: #4CAF50;
+    transition: width 0.2s linear, background-color 0.2s linear;
+  }
+  
+  #timer {
+    width: 100%;
+    height: 100%;
     display: flex;
-    align-items: stretch; /* Assure que tous les enfants prennent la hauteur maximale disponible */
-    min-height: 100px; /* Optionnel : vous pouvez définir une hauteur minimale si nécessaire */
-}
-
-.team-name {
-    font-size: 2rem;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
+    font-weight: bold;
+    color: #fff;
+    text-shadow: 1px 1px 2px rgba(0,0,0,0.5);
+  }
+  
+  /* Main container styles */
+  .main-container {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    padding: 2rem;
+    margin-top: calc(var(--navbar-height) + var(--timer-height));
+    margin-bottom: 60px;
+  }
+  
+  /* Button styles */
+  .button-container, .footer {
+    background-color: var(--secondary-color);
+    padding: 1rem;
+    display: flex;
+    justify-content: space-around;
+    align-items: center;
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    z-index: 998;
+  }
+  
+  button {
+    background-color: var(--accent-color);
+    color: white;
+    border: none;
+    padding: 0.5rem 1rem;
+    border-radius: var(--border-radius);
+    cursor: pointer;
+    transition: var(--transition);
+    font-size: 1rem;
+  }
+  
+  button:hover {
+    background-color: var(--hover-color);
+  }
+  
+  /* Styles spécifiques pour le jeu d'équipe */
+  .game-container {
+    display: flex;
+    justify-content: space-around;
+    flex-wrap: wrap;
+    padding-top: 10px;
+  }
+  
+  .team {
+    background-color: #fff;
+    border-radius: 8px;
+    padding: 15px;
+    margin: 10px;
+    width: 200px;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+    transition: all 0.3s ease;
+  }
+  
+  .team.active {
+    opacity: 1;
+    transform: scale(1);
+    filter: none;
+    box-shadow: 0 0 15px rgba(255,215,0,0.7);
+  }
+  
+  .team.start-phase {
+    opacity: 0.1;
+    transform: scale(0.95);
+    filter: grayscale(100%);
+    box-shadow: 0 0 10px rgba(0,0,0,0.2) inset;
+  }
+  
+  .team-header {
+    display: flex;
+    align-items: center;
+    margin-bottom: 10px;
+  }
+  
+  .team-color {
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    margin-right: 10px;
+  }
+  
+  .bumper {
+    margin: 5px 0;
+    padding: 5px;
+    background-color: #f9f9f9;
+    border-radius: 4px;
+    transition: all 0.3s ease;
+    cursor: pointer;
+  }
+  
+  .bumper:hover {
+    background-color: #e0e0e0;
+  }
+  
+  .bumper.active {
+    opacity: 1;
+    background-color: #fffacd;
+  }
+  
+  .bumper.active:hover {
+    background-color: #ffeb3b;
+    cursor: pointer;
+  }
+  
+  .bumper.start-phase {
+    opacity: 0.1;
+    background-color: #e0e0e0;
+  }
+  
+  @keyframes blinkFast {
+    0% { opacity: 1; }
+    50% { opacity: 0.3; }
+    100% { opacity: 1; }
+  }
+  
+  #time-bar.pause-blink {
+    animation: blinkFast 0.5s linear infinite;
+  }
+  
+  @keyframes blink {
+    0% { opacity: 1; }
+    50% { opacity: 0.5; }
+    100% { opacity: 1; }
+  }
+  
+  .blink {
+    animation: blink 1s linear infinite;
+  }
+  
+  /* Style pour l'input du temps de jeu */
+  #game-time-input {
+    margin-right: 10px;
+    padding: 5px;
+    font-size: 16px;
+    width: 60px;
+  }
+  
+  /* Styles pour la page de configuration */
+  .main-config-container {
+    display: flex;
+    flex: 1;
+    margin: 2rem;
+    background-color: white;
+    border-radius: var(--border-radius);
+    box-shadow: var(--shadow);
+    overflow: hidden;
+  }
+  
+  .buzzer-container, .team-container {
+    padding: 1rem;
+    overflow-y: auto;
+  }
+  
+  .buzzer-container {
+    width: 30%;
+    background-color: var(--background-color);
+    border-right: 1px solid var(--border-color);
+  }
+  
+  /* Styles spécifiques pour les bumpers dans le buzzer-container */
+  .buzzer-container .buzzer {
+    background-color: white;
+    border: 1px solid var(--border-color);
+    border-radius: var(--border-radius);
+    box-shadow: var(--shadow);
+    margin: 1rem auto;
     padding: 0.5rem;
-}
-
-.team-member-p {
-    padding-bottom: 0.8rem;
-}
-
-.dropzone {
-    outline: 1px solid black;
-    min-height: 100px;
-    transition: background-color 0.3s ease;
-}
-
-.dropzone-hover {
-    border: 2px dashed #333;
-    background-color: #f0f0f0;
-}
-
-.buzzer {
-    outline: 1px black solid;
+    width: 90%;
+    text-align: center;
+  }
+  
+  .buzzer-container .buzzer-id {
+    font-weight: bold;
+    margin-bottom: 0.5rem;
+  }
+  
+  .buzzer-container .buzzer-name {
+    font-style: italic;
+  }
+  
+  .buzzer-container .buzzer-form {
+    margin-top: 0.5rem;
+  }
+  
+  .buzzer-container .buzzer-form input {
+    width: 100%;
+    padding: 0.3rem;
+    margin-bottom: 0.5rem;
+  }
+  
+  .team-container {
+    width: 70%;
+  }
+  
+  .dynamic-div {
+    background-color: white;
+    border-radius: var(--border-radius);
+    box-shadow: var(--shadow);
+    overflow: hidden;
     margin: 1rem 0;
-    margin-inline: auto;
-    padding: 0.5rem;
-    width: 60%;
-}
-
-.dropzone {
-    padding: 1rem
-}
-
-.color-div {
+    display: flex;
+    align-items: stretch;
+  }
+  
+  .team-name {
+    background-color: var(--secondary-color);
+    color: white;
+    padding: 1rem;
+    font-size: 1.5rem;
+  }
+  
+  .dropzone {
+    background-color: var(--background-color);
+    border: 2px dashed var(--border-color);
+    border-radius: var(--border-radius);
+    transition: var(--transition);
+    min-height: 100px;
+    padding: 1rem;
+  }
+  
+  .dropzone-hover {
+    background-color: var(--hover-color);
+    border-color: var(--accent-color);
+  }
+  
+  .color-div {
     width: 5%;
-    border-right: 1px  solid black;
-}
-
-.team-info {
-    flex-grow: 1; /* Le contenu de l'équipe occupera le reste de l'espace */
-    padding-left: 10px; /* Espace entre la color-div et le reste du contenu */
-}
+    border-right: 1px solid var(--border-color);
+  }
+  
+  .team-info {
+    flex-grow: 1;
+    padding-left: 10px;
+  }
+  
+  /* Form element styles */
+  select, input {
+    border: 1px solid var(--border-color);
+    border-radius: var(--border-radius);
+    padding: 0.5rem;
+    margin: 0.5rem 0;
+    font-size: 1rem;
+  }
+  
+  select:focus, input:focus {
+    outline: none;
+    border-color: var(--accent-color);
+  }
+  
+  /* Scoreboard styles */
+  .scoreboard {
+    background-color: white;
+    border-radius: var(--border-radius);
+    box-shadow: var(--shadow);
+    margin-bottom: 2rem;
+    padding: 1rem;
+  }
+  
+  .scoreboard h2 {
+    color: var(--secondary-color);
+    border-bottom: 2px solid var(--border-color);
+    padding-bottom: 0.5rem;
+    margin-bottom: 1rem;
+  }
+  
+  .scoreboard table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+  
+  .scoreboard th, .scoreboard td {
+    text-align: left;
+    padding: 0.5rem;
+    border-bottom: 1px solid var(--border-color);
+  }
+  
+  .scoreboard th {
+    background-color: var(--background-color);
+    font-weight: bold;
+  }
+  
+  .scoreboard tr:last-child td {
+    border-bottom: none;
+  }

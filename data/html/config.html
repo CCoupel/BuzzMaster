@@ -3,32 +3,26 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <link rel="stylesheet" href="../css/reset.css" />
-    <link rel="stylesheet" href="../css/style.css" />
-    <title>Configuration des buzzers</title>
+    <title>BuzzControl - Configuration</title>
+    <link rel="stylesheet" href="../css/reset.css">
+    <link rel="stylesheet" href="../css/style.css">
+    <script src="../js/navbar.js"></script>
 </head>
 <body>
-    <header>
-        <div class="navbar">
-            <a href="./index.html" class="navbar-item">Jeu Solo</a>
-            <a href="./teamGame.html" class="navbar-item">Jeu Team</a>
-            <a href="./config.html" class="navbar-item">Config</a>
-            <a href="./score.html" class="navbar-item">Scores</a>
+    <div class="main-config-container">
+        <div class="buzzer-container">
+            <!-- Les buzzers seront ajoutés ici dynamiquement -->
         </div>
-    </header>
-    <main>
-        <div class="main-config-container">
-            <div class="buzzer-container"></div>
-            <div class="team-container">
-            </div>
+        <div class="team-container">
+            <!-- Les équipes seront ajoutées ici dynamiquement -->
         </div>
-        <div class="button-container">
-            <button id="resetButton">Réinitialiser</button>            
-            <button id="addDivButton">Ajouter une team</button>
-        </div>
-    </main>
-    <script type="module" src="../js/buzzer.js"></script>
-    <script type="module" src="../js/team.js"></script>
+    </div>
+
+    <div class="button-container">
+        <button id="resetButton">Réinitialiser</button>
+        <button id="addDivButton">Ajouter une team</button>
+    </div>
+
     <script type="module" src="../js/main.js"></script>
 </body>
 </html>

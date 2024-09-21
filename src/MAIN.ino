@@ -7,6 +7,7 @@
 #include "messages.h"
 #include "BumperServer.h"
 #include "WebServer.h"
+//#include "myNTPserver.h"
 #include <esp_log.h>
 
 static const char* MAIN_TAG = "BUZZCONTROL";
@@ -28,6 +29,8 @@ void setup(void)
   wifiConnect();
   timeClient.update();
 
+//  setupNTPserver();
+
   if (MDNS.begin("buzzcontrol")) {
     ESP_LOGI(MAIN_TAG, "MDNS responder started");
   }
@@ -40,7 +43,7 @@ void setup(void)
     return;
   }
 
-  downloadFiles();
+//  downloadFiles();
 
   listLittleFSFiles();
 
@@ -63,4 +66,5 @@ void setup(void)
 
 void loop(void)
 {
+//  handleNTPserver();
 }
