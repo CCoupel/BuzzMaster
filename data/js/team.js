@@ -1,4 +1,4 @@
-import { getTeams, setTeamColor, addNewTeam, addBumperToTeam } from './main.js';
+import { getTeams, setTeamColor, addNewTeam, addBumperToTeam, createElement } from './main.js';
 import { configureDropzone, configureDragElement } from './dragAndDrop.js'; 
 
 const colors = [
@@ -18,13 +18,6 @@ function getUsedColors(teams) {
         .filter(team => team.COLOR)
         .map(team => team.COLOR.join(','))
     );
-}
-
-function createElement(tag, className, attributes = {}) {
-    const element = document.createElement(tag);
-    if (className) element.className = className;
-    Object.entries(attributes).forEach(([key, value]) => element.setAttribute(key, value));
-    return element;
 }
 
 function createColorOptions(selectElement, usedColors) {
@@ -71,30 +64,10 @@ export function createTeamDiv(teams) {
     container.innerHTML = '';
 
     // Créer la nouvelle dropzone qui occupe toute la zone
-    const newTeamDropzone = document.createElement('div', 'new-team-dropzone');
-    newTeamDropzone.textContent = 'Déposez un joueur ici pour créer une nouvelle équipe';
-    container.appendChild(newTeamDropzone);
+    const dropzoneText = createElement('h2', 'dropzone-text');
+    dropzoneText.textContent = 'Déposez un joueur ici pour créer une nouvelle équipe';
+    container.appendChild(dropzoneText);
 
-    configureDropzone(newTeamDropzone, '', (playerId) => {
-        console.log("Création d'une nouvelle équipe pour le joueur:", playerId);
-        const playerElement = document.getElementById(`buzzer-${playerId}`);
-        const playerName = playerElement?.querySelector('.buzzer-name')?.textContent.split(': ')[1] || 'Nouvelle équipe';
-        const newTeamId = playerName.replace(/\s+/g, '_').toLowerCase();
-        const newTeamData = { COLOR: [255, 255, 255] }; // Couleur par défaut        
-
-        // Ajouter la nouvelle équipe localement
-        addNewTeam(newTeamId);
-        setTeamColor(newTeamId, [255, 255, 255]);
-        addBumperToTeam(playerId, newTeamId);
-        //teams[newTeamId] = newTeamData;
-        addTeam(newTeamId);
-
-        // Déplacer le joueur dans la nouvelle équipe
-        const teamDropzone = document.getElementById(newTeamId).querySelector('.dropzone');
-        if (playerElement && teamDropzone) {
-            teamDropzone.appendChild(playerElement);
-        }
-    });
 
     function addTeam(id, teamData) {
         const teamDiv = createElement('div', 'dynamic-div', { id });
@@ -108,7 +81,11 @@ export function createTeamDiv(teams) {
         const colorSelect = createElement('select', '', { id: `color-select-${id}` });
 
         title.textContent = id;
-        dropzone.textContent = 'Glissez les membres de la team ici';
+
+        const dropzoneText = createElement('p', 'dropzone-text');
+        dropzoneText.textContent = 'Glissez les membres de la team ici';
+        dropzone.appendChild(dropzoneText);
+
         colorLabel.textContent = 'Choisir une couleur:';
 
         configureDropzone(dropzone);

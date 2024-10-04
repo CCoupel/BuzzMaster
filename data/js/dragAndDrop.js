@@ -113,7 +113,7 @@ function buzzerDropInTeams(buzzerElement, teamsContainer) {
 
     const bumperMac = buzzerElement.id.replace('buzzer-', '');
     const playerName = buzzerElement.querySelector('.buzzer-name')?.textContent.split(': ')[1] || 'Nouvelle équipe';
-    const newTeamId = playerName.replace(/\s+/g, '_').toUpperCase();
+    const newTeamId = playerName.toUpperCase();
 
     console.log('Creating new team:', {
         bumperMac,
@@ -122,7 +122,6 @@ function buzzerDropInTeams(buzzerElement, teamsContainer) {
     });
 
     addNewTeam(newTeamId);
-    setTeamColor(newTeamId, [255, 255, 255]);
     addBumperToTeam(bumperMac, newTeamId);
 
     console.log('Team created and buzzer added:', {

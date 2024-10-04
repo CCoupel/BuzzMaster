@@ -1,4 +1,4 @@
-import { setBumperName, getBumpers} from './main.js';
+import { setBumperName, getBumpers, createElement} from './main.js';
 import { configureDragElement } from './dragAndDrop.js';
 
 export function createBuzzerDiv(buzzerData) {
@@ -9,9 +9,9 @@ export function createBuzzerDiv(buzzerData) {
     container.innerHTML = '';
 
     // Créer la nouvelle dropzone qui occupe toute la zone
-    const newBuzzerDropzone = document.createElement('div', 'new-buzzer-dropzone');
-    newBuzzerDropzone.textContent = 'Déposez un joueur  ou une équipe ici';
-    container.appendChild(newBuzzerDropzone);
+    const newBuzzerText = createElement('h2', 'dropzone-text');
+    newBuzzerText.textContent = 'Déposez un joueur  ou une équipe ici';
+    container.appendChild(newBuzzerText);
 
     const createTextElement = (className, text) => {
         const textElement = document.createElement('p');
@@ -37,7 +37,7 @@ export function createBuzzerDiv(buzzerData) {
                 const playerName = e.target.value.trim();
                 if (playerName) {
                     setBumperName(id,playerName )
-                    updateView(playerName);
+                    //updateView(playerName);
                 }
             }, 500); // Délai de 500ms avant l'envoi
         });
