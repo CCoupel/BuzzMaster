@@ -4,9 +4,14 @@ html/config.html
 html/score.html
 html/index.html
 html/teamGame.html
+html/navbar.html
 js/buzzer.js
+js/config.js
 js/dragAndDrop.js
 js/main.js
+js/navbar.js
+js/score.js
 js/team.js
+js/teamGame.js
 css/reset.css
 css/style.css

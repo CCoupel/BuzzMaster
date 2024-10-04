@@ -1,3 +1,6 @@
+# 1 "C:\\Users\\cyril\\AppData\\Local\\Temp\\tmp1sdu9tsa"
+#include <Arduino.h>
+# 1 "C:/Users/cyril/OneDrive/Documents/VScode/BuzzMaster/buzzcontrol/src/MAIN.ino"
 #include "includes.h"
 #include "CustomLogger.h"
 #include "teamsAndBumpers.h"
@@ -10,12 +13,14 @@
 #include "messages.h"
 #include "BumperServer.h"
 #include "WebServer.h"
-//#include "myNTPserver.h"
+
 #include <esp_log.h>
 
 static const char* MAIN_TAG = "BUZZCONTROL";
-const uint16_t logPort = 8888;  // Port UDP pour les logs
-
+const uint16_t logPort = 8888;
+void setup(void);
+void loop(void);
+#line 19 "C:/Users/cyril/OneDrive/Documents/VScode/BuzzMaster/buzzcontrol/src/MAIN.ino"
 void setup(void)
 {
   Serial.begin(921600);
@@ -35,7 +40,7 @@ void setup(void)
 
   timeClient.update();
 
-//  setupNTPserver();
+
 
   if (MDNS.begin("buzzcontrol")) {
     ESP_LOGI(MAIN_TAG, "MDNS responder started");
@@ -49,7 +54,7 @@ void setup(void)
     return;
   }
 
-  downloadFiles();
+
 
   listLittleFSFiles();
 
@@ -72,5 +77,5 @@ void setup(void)
 
 void loop(void)
 {
-//  handleNTPserver();
+
 }
