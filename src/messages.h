@@ -52,6 +52,29 @@ void sendMessageToClient(const String& action, const String& msg, AsyncClient* c
     }
 }
 
+void sendMessageToAllClients(const String& action, const String& msg) {
+  ESP_LOGI(TAG, "Sending broadcast message");
+  
+  // Créer le message JSON
+  String message = "{\"ACTION\":\"" + action + "\", \"MSG\":" + msg + "}\n";
+  
+  // Envoyer le message en broadcast à tous les clients WebSocket
+  ws.textAll(message.c_str());
+  
+  // Envoyer le message en broadcast à tous les clients TCP
+  WiFiUDP udp;
+  if (udp.beginPacket(IPAddress(255, 255, 255, 255), CONTROLER_PORT)) {
+    udp.write((const uint8_t*)message.c_str(), message.length());
+    udp.endPacket();
+    ESP_LOGI(TAG, "UDP broadcast message sent successfully");
+  } else {
+    ESP_LOGE(TAG, "Failed to send UDP broadcast message");
+  }
+  
+  ESP_LOGI(TAG, "Broadcast message sent: %s", message.c_str());
+}
+
+/*
 void sendMessageToAllClients(const String& action, const String& msg ) {
   // Parcourez tous les clients connectés
   ESP_LOGI(TAG, "send to all");
@@ -63,6 +86,7 @@ void sendMessageToAllClients(const String& action, const String& msg ) {
    ws.textAll(message.c_str());
   ESP_LOGI(TAG, " sent to all: %s", message.c_str());
 }
+*/
 
 void sendMessageTask(void *parameter) {
     messageQueue_t receivedMessage;

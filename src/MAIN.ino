@@ -27,13 +27,13 @@ void setup(void)
   ESP_LOGI(MAIN_TAG, "NEO pin: %d",PIN_NEOPIXEL);
 
   setLedColor(255, 0, 0);
-  setLedIntensity(128);
+  setLedIntensity(255);
 
-  delay(10);
   wifiConnect();
   CustomLogger::init(logPort);
+  setLedColor(255, 255, 0, true);
 
-  timeClient.update();
+//  timeClient.update();
 
 //  setupNTPserver();
 
@@ -42,7 +42,7 @@ void setup(void)
   }
   MDNS.addService("buzzcontrol", "tcp", localWWWpPort);
   MDNS.addService("http", "tcp", localWWWpPort);
-  MDNS.addService("sock", "tcp", localUdpPort);
+  MDNS.addService("sock", "tcp", CONTROLER_PORT);
 
   if (!LittleFS.begin()) {
     ESP_LOGE(MAIN_TAG, "Erreur de montage LittleFS");
@@ -52,14 +52,15 @@ void setup(void)
   downloadFiles();
 
   listLittleFSFiles();
+  setLedColor(128, 128, 0, true);
 
   attachButtons();
   loadJson(GameFile);
 
   startWebServer();
   startBumperServer();
-  setLedColor(0, 255, 0);
-  setLedIntensity(64);
+  setLedColor(0, 128, 0, true);
+
   messageQueue = xQueueCreate(10, sizeof(messageQueue_t));
 
     if (messageQueue == NULL) {
@@ -68,6 +69,7 @@ void setup(void)
     }
 
   xTaskCreate(sendMessageTask, "Send Message Task", 4096, NULL, 1, NULL);
+
 }
 
 void loop(void)
