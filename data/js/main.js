@@ -51,7 +51,7 @@ export function setBumperName(id, name) {
 
 export function setBumperPoint(id, inc=0) {
     const bumper=bumpers[id];
-    const team=bumper["TEAM"];
+    const team=teams[bumper["TEAM"]];
     if (!bumper["SCORE"]) { bumper["SCORE"]=0};
     console.log("MAIN: set bumper point id=%s score=%i",id,  bumper["SCORE"])
 

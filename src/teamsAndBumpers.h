@@ -192,6 +192,7 @@ void setTeamBumper(const char* teamID, const char* bumperID) {
     }
     String copy = String(bumperID);
     teamsAndBumpers["teams"][teamID]["BUMPER"] = copy;
+    teamsAndBumpers["teams"][teamID]["DELAY"]=micros();
     ESP_LOGI(TEAMs_TAG, "Team Bumper %s %s", teamID, copy);
 }
 
