@@ -48,7 +48,6 @@ int64_t  timeRef=0;
 const int nbTeam=10;
 std::map<std::string, int64_t > timeRefTeam;
 
-unsigned int localUdpPort = 1234;  // Port d'écoute local
 unsigned int localWWWpPort = 80;  // Port d'écoute local
 
 AsyncWebServer  server(localWWWpPort);

@@ -70,7 +70,6 @@ void resetBumpersTime() {
   }
 }
 
-
 void startGame(){
   resetBumpersTime();
   GameStarted=true;

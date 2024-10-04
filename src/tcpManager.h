@@ -3,14 +3,15 @@
 #include <esp_log.h>
 
 const char* TCP_TAG = "TCP";
+unsigned int CONTROLER_PORT = 1234;  // Port d'écoute local
 
 void startBumperServer()
 {
-  bumperServer = new AsyncServer(1234);
+  bumperServer = new AsyncServer(CONTROLER_PORT);
   bumperServer->onClient(&b_onCLientConnect, bumperServer);
   
   bumperServer->begin();
-  ESP_LOGI(TCP_TAG, "BUMPER server started on port 1234");
+  ESP_LOGI(TCP_TAG, "BUMPER server started on port %i", CONTROLER_PORT);
 }
 
 void b_handleData(void* arg, AsyncClient* c, void *data, size_t len) {
@@ -39,9 +40,12 @@ static void b_onClientDisconnect(void* arg, AsyncClient* client) {
     ESP_LOGI(TCP_TAG, "Client %s disconnected", clientID.c_str());
 
     clientBuffers.erase(clientID);
-
+ESP_LOGI(TCP_TAG, "    ClientBuffer erased");
     bumperClients.erase(std::remove(bumperClients.begin(), bumperClients.end(), client), bumperClients.end());
+ESP_LOGI(TCP_TAG, "    bumperClients erased");
     delete client;
+ESP_LOGI(TCP_TAG, "    client deleted");
+
 }
 
 static void b_onCLientConnect(void* arg, AsyncClient* client) {

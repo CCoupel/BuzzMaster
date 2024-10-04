@@ -3,7 +3,6 @@
 
 const char* SOCKET_TAG = "SOCKET";
 
-
 void handleWebSocketData(AsyncWebSocketClient *client, uint8_t *data, size_t len) {
   ESP_LOGI(SOCKET_TAG, "Received WebSocket data from client %u", client->id());
   
@@ -24,7 +23,6 @@ void handleWebSocketData(AsyncWebSocketClient *client, uint8_t *data, size_t len
 
   parseDataFromSocket(action, message);
 }
-
 
 void parseDataFromSocket(const char* action, JsonObject& message) {
   ESP_LOGI(SOCKET_TAG, "Parsing action: %s", action);
@@ -73,8 +71,6 @@ void parseDataFromSocket(const char* action, JsonObject& message) {
       break;
   }
 }
-
-
 
 void onWsEvent(AsyncWebSocket *server, AsyncWebSocketClient *client, AwsEventType type, void *arg, uint8_t *data, size_t len) {
   String output;
