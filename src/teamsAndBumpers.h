@@ -1,5 +1,5 @@
 #include <ArduinoJson.h>
-
+static const char* TEAMs_TAG = "Team And Bumper";
 JsonDocument teamsAndBumpers;
 
 JsonDocument& getTeamsAndBumpers() {
@@ -48,12 +48,12 @@ void setBumperIP(const char* bumperID, const char* IP) {
 
 void setBumperNAME(const char* bumperID, const char* NAME) {
     if (bumperID == nullptr || strlen(bumperID) == 0) {
-        ESP_LOGE("Teams&Bumpers", "Invalid bumperID provided: %s", bumperID);
+        ESP_LOGE(TEAMs_TAG, "Invalid bumperID provided: %s", bumperID);
     }
     if (NAME == nullptr || strlen(NAME) == 0) {
-        ESP_LOGE("Teams&Bumpers", "Invalid NAME provided: %s", NAME);
+        ESP_LOGE(TEAMs_TAG, "Invalid NAME provided: %s", NAME);
     }
-    ESP_LOGD("Teams&Bumpers","set NAME: %s:%s", bumperID, NAME);
+    ESP_LOGD(TEAMs_TAG,"set NAME: %s:%s", bumperID, NAME);
 
     if (teamsAndBumpers["bumpers"].isNull()) {
         teamsAndBumpers["bumpers"] = JsonObject();
@@ -64,6 +64,39 @@ void setBumperNAME(const char* bumperID, const char* NAME) {
     }
     String NAMECopy = String(NAME);
     teamsAndBumpers["bumpers"][bID]["NAME"] = NAMECopy;
+    ESP_LOGI(TEAMs_TAG, "Bumper NAME %s %s", bID, NAMECopy);
+}
+
+void setBumperButton(const char* bumperID, int button) {
+    if (bumperID == nullptr || strlen(bumperID) == 0) {
+        ESP_LOGE(TEAMs_TAG, "Invalid bumperID provided: %s", bumperID);
+    }
+    if (teamsAndBumpers["bumpers"].isNull()) {
+        teamsAndBumpers["bumpers"] = JsonObject();
+    }
+    String bID = String(bumperID);
+    if (teamsAndBumpers["bumpers"][bumperID].isNull()) {
+        teamsAndBumpers["bumpers"][bumperID]=JsonObject();
+    }
+    int copy = int(button);
+    teamsAndBumpers["bumpers"][bumperID]["BUTTON"] = copy;
+    ESP_LOGI(TEAMs_TAG, "Bumper Button %s %i", bumperID, copy);
+}
+
+void setBumperStatus(const char* bumperID, String status) {
+    if (bumperID == nullptr || strlen(bumperID) == 0) {
+        ESP_LOGE(TEAMs_TAG, "Invalid bumperID provided: %s", bumperID);
+    }
+    if (teamsAndBumpers["bumpers"].isNull()) {
+        teamsAndBumpers["bumpers"] = JsonObject();
+    }
+    String bID = String(bumperID);
+    if (teamsAndBumpers["bumpers"][bumperID].isNull()) {
+        teamsAndBumpers["bumpers"][bumperID]=JsonObject();
+    }
+    String copy = String(status);
+    teamsAndBumpers["bumpers"][bumperID]["STATUS"] = copy;
+    ESP_LOGI(TEAMs_TAG, "Bumper Status %s %s", bumperID, copy);
 }
 
 void  mergeJson(JsonObject& destObj, const JsonObject& srcObj) {
@@ -102,7 +135,6 @@ void updateBumpers(const JsonObject& bumpers) {
       }
 }
 
-
 String getBumperIDByIP(const char* clientIP) {
   JsonObject bumpers = getBumpers();
   for (JsonPair bumperPair : bumpers) {
@@ -129,6 +161,38 @@ void setTeams(const JsonObject& teams) {
 
 void setTeam(const char* teamID, const JsonObject& team){
   teamsAndBumpers["teams"][teamID] = team;
+}
+
+void setTeamStatus(const char* teamID, String status) {
+    if (teamID == nullptr || strlen(teamID) == 0) {
+        ESP_LOGE(TEAMs_TAG, "Invalid teamID provided: %s", teamID);
+    }
+    if (teamsAndBumpers["teams"].isNull()) {
+        teamsAndBumpers["teams"] = JsonObject();
+    }
+    String bID = String(teamID);
+    if (teamsAndBumpers["teams"][teamID].isNull()) {
+        teamsAndBumpers["teams"][teamID]=JsonObject();
+    }
+    String copy = String(status);
+    teamsAndBumpers["teams"][teamID]["STATUS"] = copy;
+    ESP_LOGI(TEAMs_TAG, "Team Status %s %s", teamID, copy);
+}
+
+void setTeamBumper(const char* teamID, const char* bumperID) {
+    if (teamID == nullptr || strlen(teamID) == 0) {
+        ESP_LOGE(TEAMs_TAG, "Invalid bumperID provided: %s", teamID);
+    }
+    if (teamsAndBumpers["teams"].isNull()) {
+        teamsAndBumpers["teams"] = JsonObject();
+    }
+    String bID = String(teamID);
+    if (teamsAndBumpers["teams"][teamID].isNull()) {
+        teamsAndBumpers["teams"][teamID]=JsonObject();
+    }
+    String copy = String(bumperID);
+    teamsAndBumpers["teams"][teamID]["BUMPER"] = copy;
+    ESP_LOGI(TEAMs_TAG, "Team Bumper %s %s", teamID, copy);
 }
 
 void updateTeam(const char* teamID, const JsonObject& new_team) {

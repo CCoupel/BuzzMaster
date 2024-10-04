@@ -6,6 +6,7 @@
 static const char* BUMPER_TAG = "BUMPER_SERVER";
 
 void processButtonPress(const String& bumperID, const char* b_team, int64_t b_time, int b_button) {
+  ESP_LOGI(BUMPER_TAG, "Button Pressed");
   /*static int64_t timeRef = 0;
   static std::unordered_map<String, int64_t> timeRefTeam;
 
@@ -20,20 +21,24 @@ void processButtonPress(const String& bumperID, const char* b_team, int64_t b_ti
 
   int64_t b_delayTeam = b_time - timeRefTeam[b_team];
   */
-  JsonObject b = getBumper(bumperID.c_str());
+  //JsonObject b = getBumper(bumperID.c_str());
   //b["TIME"] = b_time;
-  b["BUTTON"] = b_button;
+  //b["BUTTON"] = b_button;
+  setBumperButton(bumperID.c_str(), b_button);
   //b["DELAY"] = b_delay;
   //b["DELAY_TEAM"] = b_delayTeam;
-  b["STATUS"] = "PAUSE";
-  setBumper(bumperID.c_str(), b);
+  //b["STATUS"] = "PAUSE";
+  setBumperStatus(bumperID.c_str(), "PAUSE");
+  //setBumper(bumperID.c_str(), b);
 
-  JsonObject t = getTeam(b_team);
+  //JsonObject t = getTeam(b_team);
   //t["TIME"] = b_time;
   //t["DELAY"] = b_delay;
-  t["STATUS"] = "PAUSE";
-  t["BUMPER"] = bumperID;
-  setTeam(b_team, t);
+  //t["STATUS"] = "PAUSE";
+  setTeamStatus(b_team, "PAUSE");
+  //t["BUMPER"] = bumperID;
+  setTeamBumper(b_team,bumperID.c_str());
+  //setTeam(b_team, t);
 }
 
 void resetBumpersTime() {

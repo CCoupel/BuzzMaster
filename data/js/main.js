@@ -51,10 +51,13 @@ export function setBumperName(id, name) {
 
 export function setBumperPoint(id, inc=0) {
     const bumper=bumpers[id];
+    const team=bumper["TEAM"];
     if (!bumper["SCORE"]) { bumper["SCORE"]=0};
     console.log("MAIN: set bumper point id=%s score=%i",id,  bumper["SCORE"])
 
     bumper["SCORE"]=bumper["SCORE"]+inc;
+    if (!team["SCORE"]) { team["SCORE"]=0};
+    team["SCORE"]=team["SCORE"]+inc;
     sendTeamsAndBumpers();
 }
 
