@@ -72,7 +72,10 @@ export function createTeamDiv(teams) {
 
     // Créer la nouvelle dropzone qui occupe toute la zone
     const newTeamDropzone = document.createElement('div', 'new-team-dropzone');
-    newTeamDropzone.textContent = 'Déposez un joueur ici pour créer une nouvelle équipe';
+    const dropzoneText = document.createElement('p', 'team-dropzone-text');
+    dropzoneText.textContent = 'Déposez un joueur ici pour créer une nouvelle équipe';
+    newTeamDropzone.appendChild(dropzoneText);
+
     container.appendChild(newTeamDropzone);
 
     configureDropzone(newTeamDropzone, '', (playerId) => {
@@ -108,7 +111,11 @@ export function createTeamDiv(teams) {
         const colorSelect = createElement('select', '', { id: `color-select-${id}` });
 
         title.textContent = id;
-        dropzone.textContent = 'Glissez les membres de la team ici';
+
+        const dropzoneText = createElement('p', 'dropzone-text');
+        dropzoneText.textContent = 'Glissez les membres de la team ici';
+        dropzone.appendChild(dropzoneText);
+
         colorLabel.textContent = 'Choisir une couleur:';
 
         configureDropzone(dropzone);

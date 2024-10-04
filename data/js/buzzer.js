@@ -37,7 +37,7 @@ export function createBuzzerDiv(buzzerData) {
                 const playerName = e.target.value.trim();
                 if (playerName) {
                     setBumperName(id,playerName )
-                    updateView(playerName);
+                    //updateView(playerName);
                 }
             }, 500); // Délai de 500ms avant l'envoi
         });

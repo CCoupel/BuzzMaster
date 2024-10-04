@@ -32,6 +32,12 @@ export function updateBumpers(newBumpers) {
 }
 
 export function setBumperName(id, name) {
+    for (const bumperId in bumpers) {
+        if (bumpers[bumperId]["NAME"] === name && bumperId !== id) {
+            console.error(`Le nom "${name}" est déjà utilisé par l'ID ${bumperId}`);
+            return; // On stoppe la fonction pour éviter de définir un nom dupliqué
+        }
+    }
     bumpers[id]["NAME"]=name;
     sendTeamsAndBumpers();
 }

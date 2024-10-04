@@ -271,7 +271,7 @@
   }
   
   /* Styles spécifiques pour les bumpers dans le buzzer-container */
-  .buzzer-container .buzzer {
+  .buzzer {
     background-color: white;
     border: 1px solid var(--border-color);
     border-radius: var(--border-radius);
@@ -293,12 +293,15 @@
   
   .buzzer-container .buzzer-form {
     margin-top: 0.5rem;
+    width: 95%;
+    margin-inline: auto;
   }
   
   .buzzer-container .buzzer-form input {
-    width: 100%;
+    width: 50%;
     padding: 0.3rem;
     margin-bottom: 0.5rem;
+    text-align: center;
   }
   
   .team-container {
@@ -329,13 +332,21 @@
     transition: var(--transition);
     min-height: 100px;
     padding: 1rem;
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    grid-template-rows: 0.3fr 1fr; 
+    grid-column-gap: 0px;
+    grid-row-gap: 0px; 
   }
   
   .dropzone-hover {
     background-color: var(--hover-color);
     border-color: var(--accent-color);
   }
-  
+  .dropzone-text {
+    grid-area: 1 / 1 / 2 / 3;
+    text-align: center;
+  }
   .color-div {
     width: 5%;
     border-right: 1px solid var(--border-color);
