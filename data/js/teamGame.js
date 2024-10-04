@@ -138,11 +138,11 @@ function updateDisplay() {
         
         const teamHeader = document.createElement('div');
         teamHeader.className = 'team-header';
-        
         const teamColor = document.createElement('div');
         teamColor.className = 'team-color';
-        teamColor.style.backgroundColor = `rgb(${teamData.COLOR.join(',')})`;
-        
+        if (teamData.COLOR) {
+            teamColor.style.backgroundColor = `rgb(${teamData.COLOR.join(',')})`;
+        }       
         const teamTitle = document.createElement('h2');
         teamTitle.textContent = teamName;
         

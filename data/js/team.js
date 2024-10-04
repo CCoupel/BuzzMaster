@@ -1,4 +1,4 @@
-import { getTeams, setTeamColor, addNewTeam, addBumperToTeam, createElement } from './main.js';
+import { getTeams, setTeamColor, createElement } from './main.js';
 import { configureDropzone, configureDragElement } from './dragAndDrop.js'; 
 
 const colors = [
