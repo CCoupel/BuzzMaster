@@ -15,6 +15,13 @@ let reconnectInterval = 5000; // Intervalle en millisecondes pour tenter de se r
 let teams = {};
 let bumpers = {};
 
+export function createElement(tag, className, attributes = {}) {
+    const element = document.createElement(tag);
+    if (className) element.className = className;
+    Object.entries(attributes).forEach(([key, value]) => element.setAttribute(key, value));
+    return element;
+}
+
 export function getTeams() {
     return teams;
 }
