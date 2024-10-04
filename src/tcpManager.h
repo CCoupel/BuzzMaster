@@ -40,16 +40,6 @@ static void b_onClientDisconnect(void* arg, AsyncClient* client) {
 
     clientBuffers.erase(clientID);
 
-    JsonObject bumpers = teamsAndBumpers["bumpers"];
-    for (JsonPair bumperPair : bumpers) {
-        JsonObject bumper = bumperPair.value().as<JsonObject>();
-        if (bumper["IP"].as<String>() == clientID) {
-            bumper["STATUS"] = "offline";
-            notifyAll();
-            break;
-        }
-    }
-
     bumperClients.erase(std::remove(bumperClients.begin(), bumperClients.end(), client), bumperClients.end());
     delete client;
 }

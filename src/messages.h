@@ -15,10 +15,10 @@ typedef struct {
     AsyncClient* client;
 } messageQueue_t;
 
-
 void notifyAll() {
     String output;
-    if (serializeJson(teamsAndBumpers, output)) {
+    JsonDocument& tb=getTeamsAndBumpers();
+    if (serializeJson(tb, output)) {
         saveJson();
         ESP_LOGI(TAG, "Sending update to all clients: %s", output.c_str());
         //ws.textAll(output.c_str());

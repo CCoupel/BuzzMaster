@@ -2,6 +2,7 @@
     "files.associations": {
         "*.compose": "dockercompose",
         "*.py": "python",
-        "system_error": "cpp"
+        "system_error": "cpp",
+        "random": "cpp"
     }
 }

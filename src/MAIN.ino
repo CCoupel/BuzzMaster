@@ -1,4 +1,7 @@
 #include "includes.h"
+#include "CustomLogger.h"
+#include "teamsAndBumpers.h"
+
 #include "SocketManager.h"
 #include "tcpManager.h"
 #include "buttonManager.h"
@@ -11,6 +14,7 @@
 #include <esp_log.h>
 
 static const char* MAIN_TAG = "BUZZCONTROL";
+const uint16_t logPort = 8888;  // Port UDP pour les logs
 
 void setup(void)
 {
@@ -27,6 +31,8 @@ void setup(void)
 
   delay(10);
   wifiConnect();
+  CustomLogger::init(logPort);
+
   timeClient.update();
 
 //  setupNTPserver();

@@ -10,25 +10,11 @@
 </head>
 <body>
     <div class="main-container">
-        <div class="scoreboard">
-            <h2>Classement des Joueurs</h2>
-            <table>
-                <thead>
-                    <tr>
-                        <th>Rang</th>
-                        <th>Joueur</th>
-                        <th>Score</th>
-                    </tr>
-                </thead>
-                <tbody id="player-scores">
-                    <!-- Les scores des joueurs seront ajoutés ici dynamiquement -->
-                </tbody>
-            </table>
-        </div>
-
+        <h1>Scores</h1>
+        
         <div class="scoreboard">
             <h2>Classement des Équipes</h2>
-            <table>
+            <table id="team-scores">
                 <thead>
                     <tr>
                         <th>Rang</th>
@@ -36,13 +22,30 @@
                         <th>Score Total</th>
                     </tr>
                 </thead>
-                <tbody id="team-scores">
-                    <!-- Les scores des équipes seront ajoutés ici dynamiquement -->
+                <tbody>
+                    <!-- Le contenu sera ajouté dynamiquement par JavaScript -->
+                </tbody>
+            </table>
+        </div>
+
+        <div class="scoreboard">
+            <h2>Classement des Joueurs</h2>
+            <table id="player-scores">
+                <thead>
+                    <tr>
+                        <th>Rang</th>
+                        <th>Joueur</th>
+                        <th>Équipe</th>
+                        <th>Score</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <!-- Le contenu sera ajouté dynamiquement par JavaScript -->
                 </tbody>
             </table>
         </div>
     </div>
 
-    <script type="module" src="../js/main.js"></script>
+    <script type="module" src="../js/score.js"></script>
 </body>
 </html>

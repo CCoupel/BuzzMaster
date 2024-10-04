@@ -52,16 +52,16 @@ void loadJson(String path) {
 
     if (!file) {
         ESP_LOGE(FS_TAG, "Failed to open file for reading. Initializing with default values.");
-        teamsAndBumpers["bumpers"] = JsonObject();
-        teamsAndBumpers["teams"] = JsonObject();
+        setBumpers(JsonObject());
+        setTeams(JsonObject());
         return;
     }
 
     DeserializationError error = deserializeJson(teamsAndBumpers, file);
     if (error) {
         ESP_LOGE(FS_TAG, "deserializeJson() failed: %s", error.c_str());
-        teamsAndBumpers["bumpers"] = JsonObject();
-        teamsAndBumpers["teams"] = JsonObject();
+        setBumpers( JsonObject());
+        setTeams( JsonObject());
     } else {
         ESP_LOGI(FS_TAG, "JSON loaded successfully");
     }

@@ -28,7 +28,9 @@ void handleWebSocketData(AsyncWebSocketClient *client, uint8_t *data, size_t len
 
 void parseDataFromSocket(const char* action, JsonObject& message) {
   ESP_LOGI(SOCKET_TAG, "Parsing action: %s", action);
-
+  String output;
+  serializeJson(message, output);
+  ESP_LOGI(SOCKET_TAG, "Parsing message: %s", output.c_str());
   switch (hash(action)) {
     case hash("PING"):
       // Handle ping
@@ -37,13 +39,16 @@ void parseDataFromSocket(const char* action, JsonObject& message) {
       notifyAll();
       break;
     case hash("FULL"):
-      teamsAndBumpers = message;
+      setBumpers(message["bumpers"]);
+      setTeams(message["teams"]);
+      notifyAll();
       break;
     case hash("UPDATE"):
-      update("UPDATE", message);
+      updateTeams(message["teams"]);
+      updateBumpers(message["bumpers"]);
       break;
     case hash("DELETE"):
-      update("DELETE", message);
+      //update("DELETE", message);
       break;
     case hash("RESET"):
       resetServer();

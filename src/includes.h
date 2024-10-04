@@ -71,7 +71,6 @@ typedef struct {
 
 QueueHandle_t messageQueue; // File d'attente pour les messages
 
-JsonDocument teamsAndBumpers;
 
 // Map pour stocker les buffers par client (identifiés par IP)
 std::map<String, String> clientBuffers;
@@ -103,7 +102,7 @@ void attachButtons();
 void startBumperServer();
 void checkPingForAllClients();
 void parseDataFromSocket(const char* action, JsonObject& message);
-void mergeJson(JsonObject& destObj, const JsonObject& srcObj);
+//void mergeJson(JsonObject& destObj, const JsonObject& srcObj);
 void update(String action, JsonObject& obj);
 void resetServer();
 void rebootServer();

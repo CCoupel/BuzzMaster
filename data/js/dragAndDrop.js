@@ -1,7 +1,10 @@
-import { getTeams, getBumpers, updateTeams, updateBumpers } from './main.js';
+import { getTeams, getBumpers, addBumperToTeam, addNewTeam, setTeamColor, removeBumperFromTeam, deleteTeam } from './main.js';
+import { createTeamDiv } from './team.js';
+import { createBuzzerDiv } from './buzzer.js';
 
 function setupDraggableElement(element) {
     element.draggable = true;
+    element.stopPropagation;
     element.addEventListener('dragstart', handleDragStart);
 }
 
@@ -9,101 +12,219 @@ function handleDragStart(e) {
     e.dataTransfer.setData('text', e.target.id);
 }
 
-function handleDragOver(e, dropzone) {
-    e.preventDefault(); 
-    dropzone.classList.add('dropzone-hover');
-}
 
-function handleDragLeave(dropzone) {
-    dropzone.classList.remove('dropzone-hover');
-}
-
-function handleDrop(e, dropzone, ws, id, onDropCallback) {
+function handleDragOver(e) {
+    const dropzone = e.currentTarget;
     e.preventDefault();
-    dropzone.classList.remove('dropzone-hover');
+    e.stopPropagation();
+}
 
-    const draggedElementId = e.dataTransfer.getData('text');
-    const draggedElement = document.getElementById(draggedElementId);
+function handleDragEnter(e) {
+    const dropzone = e.currentTarget;
+    e.stopPropagation();
 
-    if (draggedElement) {
-        if (draggedElement.classList.contains('buzzer')) {
-            const bumperMac = draggedElementId.replace('buzzer-', '');
-            
-            if (onDropCallback) {
-                console.log("Appel du callback de drop avec:", bumperMac);
-                onDropCallback(bumperMac);
-            } else {
-                dropzone.appendChild(draggedElement);
+    // Désactiver toutes les zones de drop
+    document.querySelectorAll('.dropzone-hover').forEach(el => {
+        el.classList.remove('dropzone-hover');
+    });
+    
+    // Activer la zone actuelle
+    dropzone.classList.add('dropzone-hover');
 
-                const currentBumpers = getBumpers();
-                const updatedBumpers = {
-                    ...currentBumpers,
-                    [bumperMac]: { ...currentBumpers[bumperMac], TEAM: id }
-                };
-
-                const updateMessage = {
-                    "ACTION": "FULL",
-                    "MSG": {
-                        "bumpers": updatedBumpers,
-                        "teams": getTeams()
-                    }
-                };
-
-                ws.send(JSON.stringify(updateMessage));
-                updateBumpers(updatedBumpers);
-                console.log(`Élément ${draggedElementId} mis à jour avec la team ${id}`);
-            }
-        } else if (draggedElement.classList.contains('dynamic-div')) {
-            const teamId = draggedElementId;
-            const buzzers = Array.from(draggedElement.querySelectorAll('.buzzer'));
-            
-            const currentBumpers = getBumpers();
-            const updatedBumpers = { ...currentBumpers };
-            
-            buzzers.forEach(buzzer => {
-                dropzone.appendChild(buzzer);
-                const bumperMac = buzzer.id.replace('buzzer-', '');
-                updatedBumpers[bumperMac] = { ...updatedBumpers[bumperMac], TEAM: "" };
-            });
-
-            const currentTeams = getTeams();
-            const updatedTeams = Object.entries(currentTeams).reduce((acc, [key, value]) => {
-                if (key !== teamId) {
-                    acc[key] = value;
-                }
-                return acc;
-            }, {});
-
-            const updateMessage = {
-                "ACTION": "FULL",
-                "MSG": {
-                    "bumpers": updatedBumpers,
-                    "teams": updatedTeams
-                }
-            };
-            ws.send(JSON.stringify(updateMessage));
-
-            updateBumpers(updatedBumpers);
-            updateTeams(updatedTeams);
-
-            draggedElement.remove();
-
-            console.log(`Équipe ${teamId} supprimée et buzzers détachés`);
+    // Si c'est une équipe individuelle, désactiver la zone générale des teams
+    if (dropzone.closest('.dynamic-div')) {
+        const teamContainer = document.querySelector('.team-container');
+        if (teamContainer) {
+            teamContainer.classList.remove('dropzone-hover');
         }
     }
 }
 
-export function configureDropzone(dropzone, ws, id, onDropCallback) {
-    dropzone.addEventListener('dragover', (e) => handleDragOver(e, dropzone));
-    dropzone.addEventListener('dragleave', () => handleDragLeave(dropzone));
-    dropzone.addEventListener('drop', (e) => handleDrop(e, dropzone, ws, id, onDropCallback));
+function handleDragLeave(e) {
+    const dropzone = e.currentTarget;
+    const relatedTarget = e.relatedTarget;
+    
+    // Vérifier si on quitte réellement la zone de drop (et pas juste un enfant)
+    if (!dropzone.contains(relatedTarget)) {
+        dropzone.classList.remove('dropzone-hover');
+        
+        // Si on quitte une équipe individuelle, réactiver la zone générale des teams
+        if (dropzone.closest('.dynamic-div')) {
+            const teamContainer = document.querySelector('.team-container');
+            if (teamContainer && !teamContainer.contains(relatedTarget)) {
+                teamContainer.classList.add('dropzone-hover');
+            }
+        }
+    }
 }
+
+function handleDrop(e) {
+    e.preventDefault();
+    e.stopPropagation();
+
+    const draggedElementId = e.dataTransfer.getData('text');
+    const draggedElement = document.getElementById(draggedElementId);
+    const dropzone = e.currentTarget;
+
+    if (draggedElement.classList.contains('buzzer')) {
+        if (dropzone.classList.contains('dropzone') && dropzone.closest('.dynamic-div')) {
+            buzzerDropInTeam(draggedElement, dropzone);
+        } else if (dropzone.classList.contains('team-container')) {
+            buzzerDropInTeams(draggedElement, dropzone);
+        } else if (dropzone.classList.contains('buzzer-container')) {
+            buzzerDropInBuzzers(draggedElement, dropzone);
+        }
+    } else if (draggedElement.classList.contains('dynamic-div')) {
+        if (dropzone.classList.contains('buzzer-container')) {
+            teamDropInBuzzers(draggedElement, dropzone);
+        } else {
+            console.log('Dropping a team into another team is not allowed');
+            showInvalidDropFeedback(dropzone);
+        }
+    }
+
+    // Retirer toutes les classes actives après le drop
+    document.querySelectorAll('.dropzone-hover').forEach(el => {
+        el.classList.remove('dropzone-hover');
+    });
+}
+
+
+
+function showInvalidDropFeedback(element) {
+    element.classList.add('invalid-drop');
+    setTimeout(() => {
+        element.classList.remove('invalid-drop');
+    }, 500);
+}
+
+
+function removeAllDropzoneHoverClasses() {
+    document.querySelectorAll('.dropzone-hover').forEach(element => {
+        element.classList.remove('dropzone-hover');
+    });
+}
+
+function buzzerDropInTeams(buzzerElement, teamsContainer) {
+    console.log('buzzerDropInTeams called:', {
+        buzzerId: buzzerElement.id,
+        teamsContainerId: teamsContainer.id
+    });
+
+    const bumperMac = buzzerElement.id.replace('buzzer-', '');
+    const playerName = buzzerElement.querySelector('.buzzer-name')?.textContent.split(': ')[1] || 'Nouvelle équipe';
+    const newTeamId = playerName.replace(/\s+/g, '_').toUpperCase();
+
+    console.log('Creating new team:', {
+        bumperMac,
+        playerName,
+        newTeamId
+    });
+
+    addNewTeam(newTeamId);
+    setTeamColor(newTeamId, [255, 255, 255]);
+    addBumperToTeam(bumperMac, newTeamId);
+
+    console.log('Team created and buzzer added:', {
+        newTeamId,
+        bumperMac
+    });
+
+    createTeamDiv(getTeams());
+    createBuzzerDiv(getBumpers());
+}
+
+function buzzerDropInTeam(buzzerElement, teamDropzone) {
+    console.log('buzzerDropInTeam called:', {
+        buzzerId: buzzerElement.id,
+        teamDropzoneId: teamDropzone.id
+    });
+
+    const bumperMac = buzzerElement.id.replace('buzzer-', '');
+    const teamId = teamDropzone.closest('.dynamic-div').id;
+
+    console.log('Adding buzzer to team:', {
+        bumperMac,
+        teamId
+    });
+
+    addBumperToTeam(bumperMac, teamId);
+    teamDropzone.appendChild(buzzerElement);
+
+    console.log('Buzzer added to team');
+    
+    // Mettre à jour l'affichage
+    createTeamDiv(getTeams());
+    createBuzzerDiv(getBumpers());
+}
+
+function buzzerDropInBuzzers(buzzerElement, buzzerContainer) {
+    console.log('buzzerDropInBuzzers called:', {
+        buzzerId: buzzerElement.id,
+        buzzerContainerId: buzzerContainer.id
+    });
+
+    const bumperMac = buzzerElement.id.replace('buzzer-', '');
+
+    console.log('Removing buzzer from team:', bumperMac);
+
+    removeBumperFromTeam(bumperMac);
+    buzzerContainer.appendChild(buzzerElement);
+
+    console.log('Buzzer removed from team and added to buzzer container');
+}
+
+function teamDropInBuzzers(teamElement, buzzerContainer) {
+    console.log('teamDropInBuzzers called:', {
+        teamId: teamElement.id,
+        buzzerContainerId: buzzerContainer.id
+    });
+
+    const teamId = teamElement.id;
+    const buzzers = Array.from(teamElement.querySelectorAll('.buzzer'));
+
+    console.log('Removing buzzers from team:', {
+        teamId,
+        buzzerCount: buzzers.length
+    });
+
+    buzzers.forEach(buzzer => {
+        const bumperMac = buzzer.id.replace('buzzer-', '');
+        removeBumperFromTeam(bumperMac);
+        buzzerContainer.appendChild(buzzer);
+        console.log('Buzzer removed from team:', bumperMac);
+    });
+
+    deleteTeam(teamId);
+    teamElement.remove();
+
+    console.log('Team deleted:', teamId);
+
+    createTeamDiv(getTeams());
+    createBuzzerDiv(getBumpers());
+
+    console.log('Team and buzzer views updated');
+}
+
+export function configureDropzone(dropzone) {
+    dropzone.addEventListener('dragover', handleDragOver);
+    dropzone.addEventListener('dragenter', handleDragEnter);
+    dropzone.addEventListener('dragleave', handleDragLeave);
+    dropzone.addEventListener('drop', handleDrop);
+}
+
+
+
 
 export function configureDragElement(element) {
     setupDraggableElement(element);
 }
 
-export function initializeDropzones(ws) {
+export function initializeDropzones() {
     const buzzerContainer = document.querySelector('.buzzer-container');
-    configureDropzone(buzzerContainer, ws, '');
+    const teamContainer = document.querySelector('.team-container');
+    configureDropzone(buzzerContainer);
+    configureDropzone(teamContainer);
 }
+
+

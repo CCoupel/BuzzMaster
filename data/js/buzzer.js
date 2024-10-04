@@ -1,28 +1,23 @@
-import { ws } from './main.js';
+import { setBumperName, getBumpers} from './main.js';
 import { configureDragElement } from './dragAndDrop.js';
 
 export function createBuzzerDiv(buzzerData) {
     const container = document.querySelector('.buzzer-container');
+
+
+    // Vider le conteneur
+    container.innerHTML = '';
+
+    // Créer la nouvelle dropzone qui occupe toute la zone
+    const newBuzzerDropzone = document.createElement('div', 'new-buzzer-dropzone');
+    newBuzzerDropzone.textContent = 'Déposez un joueur  ou une équipe ici';
+    container.appendChild(newBuzzerDropzone);
 
     const createTextElement = (className, text) => {
         const textElement = document.createElement('p');
         textElement.className = className;
         textElement.textContent = text;
         return textElement;
-    };
-
-    const sendWebSocketMessage = (action, id, playerName = "") => {
-        const message = {
-            "ACTION": action,
-            "MSG": {
-                "bumpers": {
-                    [id]: {
-                        "NAME": playerName,
-                    }
-                }
-            }
-        };
-        ws.send(JSON.stringify(message));
     };
 
     const createForm = (id, buzzerDiv, updateView) => {
@@ -41,7 +36,7 @@ export function createBuzzerDiv(buzzerData) {
             timeoutId = setTimeout(() => {
                 const playerName = e.target.value.trim();
                 if (playerName) {
-                    sendWebSocketMessage("UPDATE", id, playerName);
+                    setBumperName(id,playerName )
                     updateView(playerName);
                 }
             }, 500); // Délai de 500ms avant l'envoi
@@ -82,13 +77,12 @@ export function createBuzzerDiv(buzzerData) {
         return buzzerDiv;
     };
 
-    for (const [id, data] of Object.entries(buzzerData.bumpers)) {
+    for (const [id, data] of Object.entries(getBumpers())) {
         let buzzerDiv = document.getElementById(`buzzer-${id}`);
         
         if (!buzzerDiv) {
             buzzerDiv = createBuzzerElement(id, data);
         } else {
-            // Mettre à jour les informations du buzzer existant si nécessaire
             updateBuzzerInfo(buzzerDiv, data);
         }
 
@@ -100,6 +94,7 @@ export function createBuzzerDiv(buzzerData) {
         }
     }
 }
+
 
 function updateBuzzerInfo(buzzerDiv, data) {
     // Mettre à jour les informations du buzzer ici si nécessaire

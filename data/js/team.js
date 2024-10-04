@@ -1,4 +1,4 @@
-import { ws } from './main.js';
+import { getTeams, setTeamColor, addNewTeam, addBumperToTeam } from './main.js';
 import { configureDropzone, configureDragElement } from './dragAndDrop.js'; 
 
 const colors = [
@@ -49,6 +49,20 @@ function updateColorSelectors(colorSelectors, teams) {
     Object.values(colorSelectors).forEach(select => createColorOptions(select, usedColors));
 }
 
+function handleColorChange(id, colorSelect, colorDiv, colorSelectors) {
+    return () => {
+        const selectedColor = colors.find(color => color.name === colorSelect.value);
+        if (selectedColor && !getUsedColors(getTeams()).has(selectedColor.rgb.join(','))) {
+            setTeamColor(id, selectedColor.rgb);
+            colorDiv.style.backgroundColor = `rgb(${selectedColor.rgb.join(',')})`;
+            updateColorSelectors(colorSelectors, getTeams());
+        } else {
+            alert('Cette couleur est déjà utilisée par une autre équipe.');
+            colorSelect.value = '';
+        }
+    };
+}
+
 export function createTeamDiv(teams) {
     const container = document.querySelector('.team-container');
     const colorSelectors = {};
@@ -57,33 +71,23 @@ export function createTeamDiv(teams) {
     container.innerHTML = '';
 
     // Créer la nouvelle dropzone qui occupe toute la zone
-    const newTeamDropzone = createElement('div', 'new-team-dropzone');
+    const newTeamDropzone = document.createElement('div', 'new-team-dropzone');
     newTeamDropzone.textContent = 'Déposez un joueur ici pour créer une nouvelle équipe';
     container.appendChild(newTeamDropzone);
 
-    configureDropzone(newTeamDropzone, ws, '', (playerId) => {
+    configureDropzone(newTeamDropzone, '', (playerId) => {
         console.log("Création d'une nouvelle équipe pour le joueur:", playerId);
         const playerElement = document.getElementById(`buzzer-${playerId}`);
         const playerName = playerElement?.querySelector('.buzzer-name')?.textContent.split(': ')[1] || 'Nouvelle équipe';
         const newTeamId = playerName.replace(/\s+/g, '_').toLowerCase();
-        const newTeamData = { COLOR: [255, 255, 255] }; // Couleur par défaut
-
-        const updateMessage = {
-            "ACTION": "UPDATE",
-            "MSG": {
-                "teams": {
-                    [newTeamId]: newTeamData
-                },
-                "bumpers": {
-                    [playerId]: { TEAM: newTeamId }
-                }
-            }
-        };
-        ws.send(JSON.stringify(updateMessage));
+        const newTeamData = { COLOR: [255, 255, 255] }; // Couleur par défaut        
 
         // Ajouter la nouvelle équipe localement
-        teams[newTeamId] = newTeamData;
-        addTeam(newTeamId, newTeamData);
+        addNewTeam(newTeamId);
+        setTeamColor(newTeamId, [255, 255, 255]);
+        addBumperToTeam(playerId, newTeamId);
+        //teams[newTeamId] = newTeamData;
+        addTeam(newTeamId);
 
         // Déplacer le joueur dans la nouvelle équipe
         const teamDropzone = document.getElementById(newTeamId).querySelector('.dropzone');
@@ -94,7 +98,7 @@ export function createTeamDiv(teams) {
 
     function addTeam(id, teamData) {
         const teamDiv = createElement('div', 'dynamic-div', { id });
-        configureDragElement(teamDiv); // Rendre l'équipe draggable
+        configureDragElement(teamDiv);
         
         const colorDiv = createElement('div', 'color-div');
         const teamInfoDiv = createElement('div', 'team-info');
@@ -107,7 +111,7 @@ export function createTeamDiv(teams) {
         dropzone.textContent = 'Glissez les membres de la team ici';
         colorLabel.textContent = 'Choisir une couleur:';
 
-        configureDropzone(dropzone, ws, id);
+        configureDropzone(dropzone);
 
         if (teamData?.COLOR) {
             colorDiv.style.backgroundColor = `rgb(${teamData.COLOR.join(',')})`;
@@ -117,29 +121,10 @@ export function createTeamDiv(teams) {
             if (existingColor) colorSelect.value = existingColor.name;
         }
 
-        createColorOptions(colorSelect, getUsedColors(teams));
+        createColorOptions(colorSelect, getUsedColors(getTeams()));
         colorSelectors[id] = colorSelect;
 
-        colorSelect.addEventListener('change', () => {
-            const selectedColor = colors.find(color => color.name === colorSelect.value);
-
-            if (selectedColor && !getUsedColors(teams).has(selectedColor.rgb.join(','))) {
-                const updateMessage = {
-                    "ACTION": "UPDATE",
-                    "MSG": {
-                        "teams": {
-                            [id]: { COLOR: selectedColor.rgb }
-                        }
-                    }
-                };
-                ws.send(JSON.stringify(updateMessage));
-                colorDiv.style.backgroundColor = `rgb(${selectedColor.rgb.join(',')})`;
-                updateColorSelectors(colorSelectors, { ...teams, [id]: { ...teamData, COLOR: selectedColor.rgb } });
-            } else {
-                alert('Cette couleur est déjà utilisée par une autre équipe.');
-                colorSelect.value = '';
-            }
-        });
+        colorSelect.addEventListener('change', handleColorChange(id, colorSelect, colorDiv, colorSelectors));
 
         teamInfoDiv.append(title, dropzone, colorLabel, colorSelect);
         teamDiv.append(colorDiv, teamInfoDiv);

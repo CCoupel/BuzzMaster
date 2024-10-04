@@ -1,7 +1,7 @@
+import { connectWebSocket, setBumperPoint, sendWebSocketMessage, updateTeams, updateBumpers, getBumpers, getTeams } from './main.js';
+
 let socket;
 let gameState = {
-    teams: {},
-    bumpers: {},
     timer: 30,
     isRunning: false,
     totalTime: 30,
@@ -9,16 +9,8 @@ let gameState = {
 };
 let localTimer;
 
-function connectWebSocket() {
-    socket = new WebSocket('ws://buzzcontrol.local/ws');
-
-    socket.onopen = function(event) {
-        console.log('Connecté au serveur WebSocket');
-        sendAction('HELLO');
-    };
-
-    socket.onmessage = function(event) {
-        console.log('Message reçu du serveur:', event.data);
+function handleConfigSocketMessage(event) {
+    console.log('Message reçu du serveur:', event.data);
         const data = JSON.parse(event.data);
         if (data.ACTION) {
             handleServerAction(data.ACTION, data.MSG);
@@ -27,16 +19,6 @@ function connectWebSocket() {
             updateTimer();
             updateTimeBar();
         }
-    };
-
-    socket.onclose = function(event) {
-        console.log('Déconnecté du serveur WebSocket');
-        setTimeout(connectWebSocket, 5000);
-    };
-
-    socket.onerror = function(error) {
-        console.error('Erreur WebSocket:', error);
-    };
 }
 
 function handleServerAction(action, msg) {
@@ -66,8 +48,8 @@ function handleServerAction(action, msg) {
             break;
         case 'UPDATE':
             if (msg.teams && msg.bumpers) {
-                gameState.teams = msg.teams;
-                gameState.bumpers = msg.bumpers;
+                updateTeams(msg.teams);
+                updateBumpers(msg.bumpers);
                 updateDisplay();
             }
             break;
@@ -77,7 +59,6 @@ function handleServerAction(action, msg) {
 }
 
 function sendAction(action, msg = '') {
-    if (socket.readyState === WebSocket.OPEN) {
         let message;
         switch (action) {
             case 'START':
@@ -86,24 +67,21 @@ function sendAction(action, msg = '') {
                 gameState.totalTime = gameTime;
                 gameState.timer = gameTime;
                 updateTimeBar(true);
-                message = { ACTION: action, MSG: gameTime.toString() };
+                sendWebSocketMessage( action, gameTime.toString());
                 break;
             case 'UPDATE':
-                message = { ACTION: action, MSG: msg };
+                sendWebSocketMessage( action, msg);
                 break;
             case 'HELLO':
-                message = { ACTION: action, MSG: "Salut, serveur WebSocket !" };
+                sendWebSocketMessage( action, "Salut, serveur WebSocket !" );
                 break;
             default:
-                message = { ACTION: action, MSG: msg };
+                sendWebSocketMessage( action, msg);
                 break;
         }
         console.log('Envoi de l\'action au serveur:', message);
-        socket.send(JSON.stringify(message));
-    } else {
-        console.error("La connexion WebSocket n'est pas ouverte");
     }
-}
+
 
 function startTimer() {
     if (localTimer) clearInterval(localTimer);
@@ -146,7 +124,7 @@ function updateDisplay() {
     const container = document.getElementById('game-container');
     container.innerHTML = '';
 
-    const sortedTeams = Object.entries(gameState.teams).sort((a, b) => {
+    const sortedTeams = Object.entries(getTeams()).sort((a, b) => {
         const delayA = a[1].DELAY !== undefined ? a[1].DELAY : Infinity;
         const delayB = b[1].DELAY !== undefined ? b[1].DELAY : Infinity;
         return delayA - delayB;
@@ -172,7 +150,7 @@ function updateDisplay() {
         teamHeader.appendChild(teamTitle);
         teamElement.appendChild(teamHeader);
 
-        const teamBumpers = Object.entries(gameState.bumpers)
+        const teamBumpers = Object.entries(getBumpers())
             .filter(([_, bumperData]) => bumperData.TEAM === teamName)
             .sort((a, b) => {
                 const delayA = a[1].DELAY_TEAM !== undefined ? a[1].DELAY_TEAM : Infinity;
@@ -208,11 +186,8 @@ function updateTimer() {
 
 function addPointToBumper(teamName, bumperMac) {
     if (gameState.gamePhase === 'STOP') {
-        if (gameState.bumpers[bumperMac]) {
-            gameState.bumpers[bumperMac].SCORE = (gameState.bumpers[bumperMac].SCORE || 0) + 1;
-            updateDisplay();
-            sendAction('UPDATE', { bumpers: gameState.bumpers });
-        }
+        setBumperPoint(bumperMac, 1);
+        updateDisplay();
     }
 }
 
@@ -256,7 +231,7 @@ function updateTimeBar(immediate = false) {
 }
 
 document.addEventListener('DOMContentLoaded', function() {
-    connectWebSocket();
+    connectWebSocket(handleConfigSocketMessage);
     updateDisplay();
     updateTimer();
     updateTimeBar();

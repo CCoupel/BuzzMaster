@@ -1,11 +1,14 @@
 #include <ArduinoJson.h>
 #include <AsyncTCP.h>
 #include <esp_log.h>
+#include <unordered_map>
 
 static const char* BUMPER_TAG = "BUMPER_SERVER";
 
+void processButtonPress(const String& bumperID, const char* b_team, int64_t b_time, int b_button) {
+  /*static int64_t timeRef = 0;
+  static std::unordered_map<String, int64_t> timeRefTeam;
 
-void processButtonPress(JsonObject& bumpers, JsonObject& teams, const String& bumperID, const char* b_team, int64_t b_time, int b_button) {
   if (timeRef == 0) {
     timeRef = b_time;
   }
@@ -16,19 +19,22 @@ void processButtonPress(JsonObject& bumpers, JsonObject& teams, const String& bu
   }
 
   int64_t b_delayTeam = b_time - timeRefTeam[b_team];
-  
-  bumpers[bumperID]["TIME"] = b_time;
-  bumpers[bumperID]["BUTTON"] = b_button;
-  bumpers[bumperID]["DELAY"] = b_delay;
-  bumpers[bumperID]["DELAY_TEAM"] = b_delayTeam;
-  bumpers[bumperID]["STATUS"] = "PAUSE";
+  */
+  JsonObject b = getBumper(bumperID.c_str());
+  //b["TIME"] = b_time;
+  b["BUTTON"] = b_button;
+  //b["DELAY"] = b_delay;
+  //b["DELAY_TEAM"] = b_delayTeam;
+  b["STATUS"] = "PAUSE";
+  setBumper(bumperID.c_str(), b);
 
-  teams[b_team]["TIME"] = b_time;
-  teams[b_team]["DELAY"] = b_delay;
-  teams[b_team]["STATUS"] = "PAUSE";
-  teams[b_team]["BUMPER"] = bumperID;
+  JsonObject t = getTeam(b_team);
+  //t["TIME"] = b_time;
+  //t["DELAY"] = b_delay;
+  t["STATUS"] = "PAUSE";
+  t["BUMPER"] = bumperID;
+  setTeam(b_team, t);
 }
-
 
 void resetBumpersTime() {
   std::vector<String> keysToRemove = {"STATUS", "BUTTON", "TIME", "DELAY", "DELAY_TEAM"};
@@ -90,8 +96,9 @@ void continueGame(){
   putMsgToQueue("START","",true);
 }
 
+/*
 // Fonction pour fusionner deux documents JSON
-void mergeJson(JsonObject& destObj, const JsonObject& srcObj) {
+void __mergeJson_old(JsonObject& destObj, const JsonObject& srcObj) {
   for (JsonPair kvp : srcObj) {
     if (kvp.value().is<JsonObject>()) {
       JsonObject nestedDestObj;
@@ -108,7 +115,7 @@ void mergeJson(JsonObject& destObj, const JsonObject& srcObj) {
   }
 }
 
-void update(String action, JsonObject& obj) {
+void __update_old(String action, JsonObject& obj) {
   JsonObject jsonObj = teamsAndBumpers.as<JsonObject>();
   String output;
   serializeJson(obj, output);
@@ -121,7 +128,7 @@ void update(String action, JsonObject& obj) {
   
   notifyAll();
 }
-
+*/
 void resetServer() {
   ESP_LOGI(BUMPER_TAG, "Resetting server");
   if (LittleFS.exists(saveGameFile)) {
@@ -146,8 +153,17 @@ void rebootServer() {
   } 
   ESP.restart();
 }
+/*
+void __handleHelloAction_old(JsonObject& bumpers, const String& bumperID, JsonObject& MSG) {
+  String output;
+  serializeJson(MSG, output);
+  ESP_LOGD(BUMPER_TAG, "Hello: %s: %s", bumperID.c_str(), output.c_str());
+  serializeJson(bumpers, output);
+    ESP_LOGD(BUMPER_TAG, "Hello in: %s: %s", bumperID.c_str(), output.c_str());
 
-void handleHelloAction(JsonObject& bumpers, const String& bumperID, JsonObject& MSG) {
+  if (!bumpers.containsKey(bumperID)) {
+    bumpers[bumperID]=MSG;
+  }
   if (!bumpers[bumperID].containsKey("NAME")) {
     bumpers[bumperID]["NAME"] = MSG["NAME"];
   }
@@ -155,10 +171,18 @@ void handleHelloAction(JsonObject& bumpers, const String& bumperID, JsonObject& 
     bumpers[bumperID]["TEAM"] = "";
   }
   bumpers[bumperID]["IP"] = MSG["IP"];
+  serializeJson(bumpers, output);
+    ESP_LOGD(BUMPER_TAG, "Hello out: %s: %s", bumperID.c_str(), output.c_str());
+
   notifyAll();
 }
-
-void handleButtonAction(JsonObject& bumpers, JsonObject& teams, const String& bumperID, JsonObject& MSG, AsyncClient* c) {
+*/
+void handleHelloAction(const char* bumperID, JsonObject& MSG) {
+  updateBumper(bumperID, MSG);
+  notifyAll();
+}
+/*
+void __handleButtonAction_old(JsonObject& bumpers, JsonObject& teams, const String& bumperID, JsonObject& MSG, AsyncClient* c) {
   if (bumpers.containsKey(bumperID)) {
     if (bumpers[bumperID].containsKey("IP") && bumpers[bumperID]["IP"] == c->remoteIP().toString()) {
       const char* b_team = bumpers[bumperID]["TEAM"];
@@ -171,7 +195,20 @@ void handleButtonAction(JsonObject& bumpers, JsonObject& teams, const String& bu
     }
   }
 }
-
+*/
+void handleButtonAction(const char* bumperID, JsonObject& MSG, AsyncClient* c) {
+  ESP_LOGE(BUMPER_TAG, "Button pressed: %s", bumperID);
+  JsonObject bumper=getBumper(bumperID);
+  //if(bumper["IP"]==c->remoteIP().toString()) {
+    const char* teamID=bumper["TEAM"];
+    int64_t b_time = MSG["time"].as<int64_t>();  // Changé en int64_t
+    int b_button = MSG["button"];
+    if (teamID != nullptr) {
+      processButtonPress(bumperID, teamID, b_time, b_button);
+      pauseGame(c);
+    }
+  //}
+}
 
 void parseJSON(const String& data, AsyncClient* c)
 {
@@ -198,10 +235,10 @@ void parseJSON(const String& data, AsyncClient* c)
     
   switch(hash(action.c_str())) {
     case hash("HELLO"):
-      handleHelloAction(bumpers, bumperID, MSG);
+      handleHelloAction(bumperID.c_str(), MSG);
       break;
     case hash("BUTTON"):
-      handleButtonAction(bumpers, teams, bumperID, MSG, c);
+      handleButtonAction(bumperID.c_str(), MSG, c);
       break;
     case hash("PING"):
       // Handle PING action if needed
