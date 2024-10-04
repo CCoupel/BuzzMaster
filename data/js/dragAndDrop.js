@@ -1,4 +1,4 @@
-import { getTeams, getBumpers, addBumperToTeam, addNewTeam, setTeamColor, removeBumperFromTeam, deleteTeam } from './main.js';
+import { getTeams, getBumpers, addBumperToTeam, addNewTeam, removeBumperFromTeam, deleteTeam } from './main.js';
 import { createTeamDiv } from './team.js';
 import { createBuzzerDiv } from './buzzer.js';
 

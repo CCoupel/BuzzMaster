@@ -20,7 +20,7 @@ export function createBuzzerDiv(buzzerData) {
         return textElement;
     };
 
-    const createForm = (id, buzzerDiv, updateView) => {
+    const createForm = (id, buzzerDiv) => {
         const form = document.createElement('form');
         form.className = 'buzzer-form';
 
@@ -37,7 +37,6 @@ export function createBuzzerDiv(buzzerData) {
                 const playerName = e.target.value.trim();
                 if (playerName) {
                     setBumperName(id,playerName )
-                    //updateView(playerName);
                 }
             }, 500); // Délai de 500ms avant l'envoi
         });
