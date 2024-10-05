@@ -145,9 +145,13 @@ function updateDisplay() {
         }       
         const teamTitle = document.createElement('h2');
         teamTitle.textContent = teamName;
+        const teamScore = document.createElement('p');
+        teamScore.className = 'team-score';
+        teamScore.textContent = `Score: ${teamData.SCORE ?? 0}`;
         
         teamHeader.appendChild(teamColor);
         teamHeader.appendChild(teamTitle);
+        teamHeader.appendChild(teamScore);
         teamElement.appendChild(teamHeader);
 
         const teamBumpers = Object.entries(getBumpers())
@@ -162,7 +166,8 @@ function updateDisplay() {
             const bumperElement = document.createElement('div');
             const isBumperActive = bumperData.BUTTON !== undefined || bumperData.DELAY !== undefined;
             bumperElement.className = `bumper ${isBumperActive ? 'active' : ''} ${isStartPhase && !isBumperActive ? 'start-phase' : ''}`;
-            bumperElement.textContent = `${bumperData.NAME} (Score: ${bumperData.SCORE || 0})`;
+            bumperElement.textContent = `${bumperData.NAME}`;
+            
             
             if (gameState.gamePhase === 'STOP' && isBumperActive) {
                 bumperElement.onclick = () => addPointToBumper(teamName, bumperMac);

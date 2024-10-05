@@ -4,11 +4,8 @@ import { configureDragElement } from './dragAndDrop.js';
 export function createBuzzerDiv(buzzerData) {
     const container = document.querySelector('.buzzer-container');
 
-
-    // Vider le conteneur
     container.innerHTML = '';
 
-    // Créer la nouvelle dropzone qui occupe toute la zone
     const newBuzzerText = createElement('h2', 'dropzone-text');
     newBuzzerText.textContent = 'Déposez un joueur  ou une équipe ici';
     container.appendChild(newBuzzerText);
@@ -20,25 +17,42 @@ export function createBuzzerDiv(buzzerData) {
         return textElement;
     };
 
-    const createForm = (id, buzzerDiv) => {
+    const createForm = (id, buzzerDiv, playerName = '') => {
         const form = document.createElement('form');
         form.className = 'buzzer-form';
-
+    
         const input = document.createElement('input');
         input.type = 'text';
         input.name = 'buzzer-text';
         input.id = `buzzer-text-${id}`;
         input.placeholder = 'Nom du joueur';
+        input.value = playerName;  
+
+        setTimeout(() => {
+            input.focus(); 
+        }, 0);
 
         let timeoutId;
         input.addEventListener('input', (e) => {
             clearTimeout(timeoutId);
             timeoutId = setTimeout(() => {
-                const playerName = e.target.value.trim();
-                if (playerName) {
-                    setBumperName(id,playerName )
+                const newPlayerName = e.target.value.trim();
+                if (newPlayerName) {
+                    setBumperName(id, newPlayerName);  
                 }
             }, 500); // Délai de 500ms avant l'envoi
+        });
+
+        input.addEventListener('blur', () => {
+            const currentPlayerName = input.value.trim() || playerName;  
+            buzzerDiv.innerHTML = ''; 
+            const nameElement = createTextElement('buzzer-name', `Nom: ${currentPlayerName}`);  
+            buzzerDiv.appendChild(nameElement);
+    
+            nameElement.addEventListener('click', () => {
+                buzzerDiv.innerHTML = '';
+                createForm(id, buzzerDiv, currentPlayerName);
+            });
         });
 
         form.appendChild(input);
@@ -59,12 +73,10 @@ export function createBuzzerDiv(buzzerData) {
                 const nameElement = createTextElement('buzzer-name', `Nom: ${playerName}`);
                 buzzerDiv.appendChild(nameElement);
 
-                const editButton = document.createElement('button');
-                editButton.textContent = 'Modifier';
-                editButton.addEventListener('click', () => {
-                    createForm(id, buzzerDiv, updateView);
+                nameElement.addEventListener('click', () => {
+                    buzzerDiv.innerHTML = '';  
+                    createForm(id, buzzerDiv, playerName);
                 });
-                buzzerDiv.appendChild(editButton);
             } else {
                 buzzerDiv.appendChild(idElement);
                 createForm(id, buzzerDiv, updateView);
@@ -96,8 +108,6 @@ export function createBuzzerDiv(buzzerData) {
 
 
 function updateBuzzerInfo(buzzerDiv, data) {
-    // Mettre à jour les informations du buzzer ici si nécessaire
-    // Par exemple, mettre à jour le nom si changé
     const nameElement = buzzerDiv.querySelector('.buzzer-name');
     if (nameElement && data.NAME) {
         nameElement.textContent = `Nom: ${data.NAME}`;

@@ -13,6 +13,7 @@ function renderTeamScores() {
 
     tbody.innerHTML = '';
     const teams = getTeams();
+    console.log(teams)
     const sortedTeams = Object.entries(teams).sort((a, b) => b[1].SCORE - a[1].SCORE);
 
     sortedTeams.forEach((team, index) => {
@@ -21,6 +22,8 @@ function renderTeamScores() {
         row.insertCell(0).textContent = index + 1;
         row.insertCell(1).textContent = teamName;
         row.insertCell(2).textContent = teamData.SCORE || 0;
+        console.log('team :', team)
+        console.log('teamdate:', teamData)
     });
 }
 
@@ -31,7 +34,11 @@ function renderPlayerScores() {
     tbody.innerHTML = '';
     const bumpers = getBumpers();
     const sortedPlayers = Object.entries(bumpers)
-        .map(([id, data]) => ({id, ...data}))
+        .map(([id, data]) => ({
+            id,
+            ...data,
+            SCORE: parseInt(data.SCORE) || 0
+        }))
         .sort((a, b) => b.SCORE - a.SCORE);
 
     sortedPlayers.forEach((player, index) => {

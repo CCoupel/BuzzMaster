@@ -154,6 +154,7 @@
   .team-header {
     display: flex;
     align-items: center;
+    justify-content: space-between;
     margin-bottom: 10px;
   }
   
@@ -163,6 +164,7 @@
     border-radius: 50%;
     margin-right: 10px;
   }
+
 
   .bumper {
     margin: 5px 0;
