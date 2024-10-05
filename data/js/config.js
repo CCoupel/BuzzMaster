@@ -1,7 +1,7 @@
 import { createTeamDiv } from './team.js';
 import { createBuzzerDiv } from './buzzer.js';
 import { initializeDropzones } from './dragAndDrop.js'
-import { trySendTeamData, sendWebSocketMessage, connectWebSocket, getTeams, getBumpers, updateTeams, updateBumpers, addNewTeam } from './main.js';
+import { sendWebSocketMessage, connectWebSocket, getTeams, getBumpers, updateTeams, updateBumpers, addNewTeam } from './main.js';
 
 
 function handleConfigSocketMessage(event) {
@@ -42,7 +42,7 @@ function handleAddTeam() {
     const teamName = promptForTeamName();
     if (teamName) {
         addNewTeam(teamName);
-        trySendTeamData(teamName);
+        //trySendTeamData(teamName);
         //createTeamDiv(teams);
     }
 }

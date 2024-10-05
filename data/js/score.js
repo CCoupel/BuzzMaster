@@ -46,7 +46,33 @@ function renderPlayerScores() {
         row.insertCell(0).textContent = index + 1;
         row.insertCell(1).textContent = player.NAME || `Joueur ${player.id}`;
         row.insertCell(2).textContent = player.TEAM || 'Sans équipe';
-        row.insertCell(3).textContent = player.SCORE || 0;
+        const scoreButtonCell = row.insertCell(3);
+
+        // Créer le bouton -
+        const buttonMinus = document.createElement('button');
+        buttonMinus.textContent = '-';
+        buttonMinus.style = "background-color: #2196F3; margin-right: 5px;"; // Ajouter un espacement
+        buttonMinus.onclick = () => {
+            console.log(`Bouton - cliqué pour le joueur : ${player.NAME || `Joueur ${player.id}`}`);
+        };
+    
+        // Ajouter le bouton - à la cellule
+        scoreButtonCell.appendChild(buttonMinus);
+    
+        // Ajouter le score à la même cellule
+        const scoreText = document.createTextNode(player.SCORE || 0);
+        scoreButtonCell.appendChild(scoreText);
+    
+        // Créer le bouton +
+        const buttonPlus = document.createElement('button');
+        buttonPlus.textContent = '+';
+        buttonPlus.style = "margin-left: 5px;"; // Ajouter un espacement
+        buttonPlus.onclick = () => {
+            console.log(`Bouton + cliqué pour le joueur : ${player.NAME || `Joueur ${player.id}`}`);
+        };
+    
+        // Ajouter le bouton + à la cellule
+        scoreButtonCell.appendChild(buttonPlus);
     });
 }
 

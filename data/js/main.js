@@ -112,7 +112,7 @@ export function connectWebSocket(onMessageCallback) {
         // Nettoyage du tableau lors de la reconnexion
         cleanBoard();
 
-        sendWebSocketMessage("HELLO", "Salut, serveur WebSocket !" );
+        sendWebSocketMessage("HELLO", {} );
     };
 
     ws.onerror = function(event) {
@@ -145,7 +145,7 @@ function promptForTeamName() {
 */
 
 // Fonction pour envoyer les données de la nouvelle équipe au serveur via WebSocket
-function sendTeamDataToServer(teamName) {
+/*function sendTeamDataToServer(teamName) {
     const teamData = { 
         "ACTION": "UPDATE", 
         "MSG": { 
@@ -161,17 +161,17 @@ function sendTeamDataToServer(teamName) {
     } else {
         console.log('WebSocket is not open. Cannot send team data.');
     }
-}
+}*/
 
 // Fonction pour réessayer d'envoyer les données de l'équipe si WebSocket n'est pas prêt
-export function trySendTeamData(teamName) {
+/*export function trySendTeamData(teamName) {
     if (ws.readyState === WebSocket.OPEN) {
         sendTeamDataToServer(teamName);
     } else {
         console.log('WebSocket not ready. Retrying...');
         setTimeout(() => trySendTeamData(teamName), 1000); // Réessaie après 1 seconde
     }
-}
+}*/
 
 /*
 // Gère l'ajout d'une nouvelle équipe après validation du nom
@@ -191,7 +191,7 @@ function handleReset() {
 }
 */
 
-export function sendWebSocketMessage (action, MSG= "")  {
+export function sendWebSocketMessage (action, MSG= "{}")  {
     const message = {
         "ACTION": action,
         "MSG": MSG

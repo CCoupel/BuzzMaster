@@ -67,16 +67,16 @@ function sendAction(action, msg = '') {
                 gameState.totalTime = gameTime;
                 gameState.timer = gameTime;
                 updateTimeBar(true);
-                sendWebSocketMessage( action, gameTime.toString());
+                message = {'DELAY':  gameTime.toString()};
+                sendWebSocketMessage( action, message);
                 break;
             case 'UPDATE':
-                sendWebSocketMessage( action, msg);
-                break;
-            case 'HELLO':
-                sendWebSocketMessage( action, "Salut, serveur WebSocket !" );
+                message = msg;
+                sendWebSocketMessage( action, message);
                 break;
             default:
-                sendWebSocketMessage( action, msg);
+                message = msg;
+                sendWebSocketMessage( action, message);
                 break;
         }
         console.log('Envoi de l\'action au serveur:', message);
