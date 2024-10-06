@@ -1,4 +1,4 @@
-import { connectWebSocket, getTeams, getBumpers, updateTeams, updateBumpers, setBumperPoint } from './main.js';
+import { connectWebSocket, getTeams, getBumpers, updateTeams, updateBumpers, setBumperPoint, sendWebSocketMessage} from './main.js';
 
 function updateScores(data) {
     if (data.teams) updateTeams(data.teams);
@@ -105,8 +105,18 @@ function handleScoreWebSocketMessage(event) {
     }
 }
 
+function handleResetScore() {
+    if (confirm('Êtes-vous sûr de vouloir réinitialiser les scores ?')) {
+        sendWebSocketMessage('RAZ', {});
+    }
+}
+
+
 document.addEventListener('DOMContentLoaded', () => {
     connectWebSocket(handleScoreWebSocketMessage);
     renderTeamScores();
     renderPlayerScores();
+
+    const resetButton = document.getElementById('reset-score');
+    if (resetButton) resetButton.addEventListener('click', handleResetScore);
 });

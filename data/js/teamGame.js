@@ -1,6 +1,5 @@
 import { connectWebSocket, setBumperPoint, sendWebSocketMessage, updateTeams, updateBumpers, getBumpers, getTeams } from './main.js';
 
-let socket;
 let gameState = {
     timer: 30,
     isRunning: false,
