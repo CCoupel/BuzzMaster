@@ -169,7 +169,7 @@ function updateDisplay() {
             
             
             if (gameState.gamePhase === 'STOP' && isBumperActive) {
-                bumperElement.onclick = () => addPointToBumper(teamName, bumperMac);
+                bumperElement.onclick = () => addPointToBumper(bumperMac);
                 bumperElement.style.cursor = 'pointer';
             }
             
