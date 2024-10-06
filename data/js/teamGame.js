@@ -58,7 +58,7 @@ function handleServerAction(action, msg) {
     }
 }
 
-function sendAction(action, msg = '') {
+function sendAction(action, msg = {}) {
         let message;
         switch (action) {
             case 'START':

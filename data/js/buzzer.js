@@ -79,10 +79,10 @@ export function createBuzzerDiv(buzzerData) {
                 });
             } else {
                 buzzerDiv.appendChild(idElement);
-                createForm(id, buzzerDiv, updateView);
+                createForm(id, buzzerDiv);
             }
         };
-
+        console.log(data);
         updateView(data.NAME || "");
 
         return buzzerDiv;

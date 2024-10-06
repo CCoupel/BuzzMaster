@@ -49,7 +49,7 @@ void setup(void)
     return;
   }
 
-  downloadFiles();
+//  downloadFiles();
 
   listLittleFSFiles();
   setLedColor(128, 128, 0, true);
@@ -68,7 +68,7 @@ void setup(void)
       return;
     }
 
-  xTaskCreate(sendMessageTask, "Send Message Task", 4096, NULL, 1, NULL);
+  xTaskCreate(sendMessageTask, "Send Message Task", 14096, NULL, 1, NULL);
 
 }
 

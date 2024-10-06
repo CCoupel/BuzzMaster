@@ -49,59 +49,47 @@ public:
         initialized = true;
         broadcastIP = IPAddress(255, 255, 255, 255);  // Adresse de broadcast
         configTime(0, 0, "pool.ntp.org");  // Configurez le fuseau horaire et le serveur NTP si nécessaire
-        esp_log_set_vprintf(customLogFunction);
+//        esp_log_set_vprintf(customLogFunction);
     }
 
-    static int customLogFunction(const char* format, va_list args) {
-        char buffer[256];
-        int ret = vsnprintf(buffer, sizeof(buffer), format, args);
-
+    static int customLogFunction(esp_log_level_t level, const char* tag, const char* format, va_list args)  {
         char timestampBuffer[20];
         getTimestamp(timestampBuffer, sizeof(timestampBuffer));
 
-        // Extrayez le niveau et le tag du message de log
-        esp_log_level_t level = ESP_LOG_INFO;  // Niveau par défaut
-        const char* tag = "CUSTOM";  // Tag par défaut
-        if (ret > 1 && buffer[0] == 'E' && buffer[1] == ' ') level = ESP_LOG_ERROR;
-        else if (ret > 1 && buffer[0] == 'W' && buffer[1] == ' ') level = ESP_LOG_WARN;
-        else if (ret > 1 && buffer[0] == 'I' && buffer[1] == ' ') level = ESP_LOG_INFO;
-        else if (ret > 1 && buffer[0] == 'D' && buffer[1] == ' ') level = ESP_LOG_DEBUG;
-        else if (ret > 1 && buffer[0] == 'V' && buffer[1] == ' ') level = ESP_LOG_VERBOSE;
+        char logBuffer[1024];
+        int prefixLen = snprintf(logBuffer, sizeof(logBuffer), 
+                                "%s%s \033[1;37m%s\033[0m %s(\033[1m%s\033[0m) ", 
+                                getLevelColor(level), getLevelString(level),
+                                timestampBuffer,
+                                getLevelColor(level), tag);
 
-        // Trouvez le tag (entre parenthèses)
-        char* start = strchr(buffer, '(');
-        char* end = strchr(buffer, ')');
-        if (start && end && start < end) {
-            *end = '\0';
-            tag = start + 1;
-            memmove(buffer, end + 1, strlen(end + 1) + 1);
-        }
+        // Formater le message de log
+        int messageLen = vsnprintf(logBuffer + prefixLen, sizeof(logBuffer) - prefixLen, format, args);
+        
+        // Ajouter le code de réinitialisation de couleur et le saut de ligne
+        strcat(logBuffer, "\033[0m\n");
+
+        // Calculer la longueur totale
+        int totalLen = prefixLen + messageLen + 5; // 5 pour "\033[0m\n"
 
         // Log to console
-        Serial.printf("%s%s \033[1;37m%s\033[0m %s(\033[1m%s\033[0m) %s\033[0m\n", 
-                      getLevelColor(level), getLevelString(level),
-                      timestampBuffer,
-                      getLevelColor(level), tag,
-                      buffer);
+        Serial.print(logBuffer);
 
         // Log to UDP broadcast
         if (initialized) {
             udp.beginPacket(broadcastIP, logPort);
-            udp.printf("%s%s \033[1;37m%s\033[0m %s(\033[1m%s\033[0m) %s\033[0m\n", 
-                       getLevelColor(level), getLevelString(level),
-                       timestampBuffer,
-                       getLevelColor(level), tag,
-                       buffer);
+            udp.write((const uint8_t*)logBuffer, totalLen);
             udp.endPacket();
         }
 
-        return ret;
+        return totalLen - 1; // -1 pour ne pas compter le '\n' final
+
     }
 
     static void log(esp_log_level_t level, const char* tag, const char* format, ...) {
         va_list args;
         va_start(args, format);
-        customLogFunction(format, args);
+        customLogFunction(level, tag, format, args);
         va_end(args);
     }
 };

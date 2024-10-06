@@ -21,8 +21,8 @@ void notifyAll() {
     if (serializeJson(tb, output)) {
         saveJson();
         ESP_LOGI(TAG, "Sending update to all clients: %s", output.c_str());
-        //ws.textAll(output.c_str());
-        sendMessageToAllClients("UPDATE", output.c_str());
+        ws.textAll(output.c_str());
+//        sendMessageToAllClients("UPDATE", output.c_str());
     } else {
         ESP_LOGE(TAG, "Failed to serialize JSON");
     }
@@ -57,7 +57,8 @@ void sendMessageToAllClients(const String& action, const String& msg) {
   
   // Créer le message JSON
   String message = "{\"ACTION\":\"" + action + "\", \"MSG\":" + msg + "}\n";
-  
+  ESP_LOGD(TAG, "Broadcasting message: %s", message.c_str());
+
   // Envoyer le message en broadcast à tous les clients WebSocket
   ws.textAll(message.c_str());
   
@@ -70,7 +71,7 @@ void sendMessageToAllClients(const String& action, const String& msg) {
   } else {
     ESP_LOGE(TAG, "Failed to send UDP broadcast message");
   }
-  
+
   ESP_LOGI(TAG, "Broadcast message sent: %s", message.c_str());
 }
 
@@ -91,6 +92,7 @@ void sendMessageToAllClients(const String& action, const String& msg ) {
 void sendMessageTask(void *parameter) {
     messageQueue_t receivedMessage;
     while (1) {
+        ESP_LOGD(TAG, "Low stack space in Send Message Task: %i", uxTaskGetStackHighWaterMark(NULL));
         if (xQueueReceive(messageQueue, &receivedMessage, portMAX_DELAY)) {
             ESP_LOGI(TAG, "New message in queue: %s", receivedMessage.action);
             
@@ -110,14 +112,18 @@ void sendMessageTask(void *parameter) {
             }
 
             if (receivedMessage.client != nullptr) {
+                ESP_LOGD(TAG, "client is not null");
                 sendMessageToClient(receivedMessage.action, receivedMessage.message, receivedMessage.client);
             } else {
+                ESP_LOGD(TAG, "client is null");
                 sendMessageToAllClients(receivedMessage.action, receivedMessage.message);
             }
 
             if (receivedMessage.notifyAll) {
+                ESP_LOGD(TAG, "notify all");
                 notifyAll();
             }
+            ESP_LOGD(TAG, "queue finished");
         }
     }
 }
