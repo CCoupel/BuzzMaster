@@ -189,7 +189,7 @@ function updateTimer() {
     timerElement.textContent = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
 }
 
-function addPointToBumper(teamName, bumperMac) {
+function addPointToBumper(bumperMac) {
     if (gameState.gamePhase === 'STOP') {
         setBumperPoint(bumperMac, 1);
         updateDisplay();

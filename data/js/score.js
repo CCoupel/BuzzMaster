@@ -1,4 +1,4 @@
-import { connectWebSocket, getTeams, getBumpers, updateTeams, updateBumpers } from './main.js';
+import { connectWebSocket, getTeams, getBumpers, updateTeams, updateBumpers, setBumperPoint } from './main.js';
 
 function updateScores(data) {
     if (data.teams) updateTeams(data.teams);
@@ -27,6 +27,8 @@ function renderTeamScores() {
     });
 }
 
+let previousPositions = {};
+
 function renderPlayerScores() {
     const tbody = document.querySelector('#player-scores tbody');
     if (!tbody) return;
@@ -42,6 +44,8 @@ function renderPlayerScores() {
         .sort((a, b) => b.SCORE - a.SCORE);
 
     sortedPlayers.forEach((player, index) => {
+        const previousPosition = previousPositions[player.id];
+        
         const row = tbody.insertRow();
         row.insertCell(0).textContent = index + 1;
         row.insertCell(1).textContent = player.NAME || `Joueur ${player.id}`;
@@ -50,10 +54,12 @@ function renderPlayerScores() {
 
         // Créer le bouton -
         const buttonMinus = document.createElement('button');
+        buttonMinus.className = "button-score";
         buttonMinus.textContent = '-';
         buttonMinus.style = "background-color: #2196F3; margin-right: 5px;"; // Ajouter un espacement
         buttonMinus.onclick = () => {
             console.log(`Bouton - cliqué pour le joueur : ${player.NAME || `Joueur ${player.id}`}`);
+            setBumperPoint(player.id, -1);
         };
     
         // Ajouter le bouton - à la cellule
@@ -65,15 +71,31 @@ function renderPlayerScores() {
     
         // Créer le bouton +
         const buttonPlus = document.createElement('button');
+        buttonPlus.className = "button-score";
         buttonPlus.textContent = '+';
-        buttonPlus.style = "margin-left: 5px;"; // Ajouter un espacement
+        buttonPlus.style = "margin-left: 5px;";
         buttonPlus.onclick = () => {
             console.log(`Bouton + cliqué pour le joueur : ${player.NAME || `Joueur ${player.id}`}`);
+            setBumperPoint(player.id, 1);
         };
     
         // Ajouter le bouton + à la cellule
         scoreButtonCell.appendChild(buttonPlus);
+    
+        // Vérification si le joueur a changé de position
+        if (previousPosition !== undefined && previousPosition !== index + 1) {
+            // Ajouter une classe d'animation si le joueur a changé de position
+            row.classList.add('highlight');
+        }
+
+        // Mettre à jour la position précédente du joueur
+        previousPositions[player.id] = index + 1;
     });
+
+    // Nettoyage de l'animation après un certain temps
+    setTimeout(() => {
+        document.querySelectorAll('.highlight').forEach(row => row.classList.remove('highlight'));
+    }, 1000);
 }
 
 function handleScoreWebSocketMessage(event) {

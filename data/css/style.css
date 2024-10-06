@@ -369,6 +369,14 @@
     margin-bottom: 1rem;
   }
   
+  .button-score {
+    width: 20px;
+    height: 20px;
+    padding: 0px;
+    padding-bottom: 1px;
+    opacity: 80%;
+  }
+
   .scoreboard table {
     width: 100%;
     border-collapse: collapse;
@@ -387,4 +395,13 @@
   
   .scoreboard tr:last-child td {
     border-bottom: none;
+  }
+
+  @keyframes highlightMoveUp {
+    0% { background-color: yellow; }
+    100% { background-color: transparent; }
+  }
+
+  .highlight {
+    animation: highlightMoveUp 1s ease-in-out;
   }

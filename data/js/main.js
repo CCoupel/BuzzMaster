@@ -56,9 +56,11 @@ export function setBumperPoint(id, inc=0) {
     console.log("MAIN: set bumper point id=%s score=%i",id,  bumper["SCORE"])
 
     bumper["SCORE"]=bumper["SCORE"]+inc;
-    if (!team["SCORE"]) { team["SCORE"]=0};
-    team["SCORE"]=team["SCORE"]+inc;
-    sendTeamsAndBumpers();
+    if (team) {
+      if (!team["SCORE"]) { team["SCORE"]=0};
+        team["SCORE"]=team["SCORE"]+inc;
+    }
+    sendTeamsAndBumpers(); 
 }
 
 
