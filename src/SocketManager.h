@@ -7,13 +7,12 @@ void parseDataFromSocket(const char* action, const JsonObject& message) {
   ESP_LOGI(SOCKET_TAG, "Parsing action: %s", action);
   String output="";
   serializeJson(message, output);
-  ESP_LOGI(SOCKET_TAG, "Parsing message: %i: %s", output.length(), output.c_str());
 
   if (output.length() > 0) {
     ESP_LOGI(SOCKET_TAG, "Parsing message: %i: %s", output.length(), output.c_str());
   } else {
     output="!! NULL !!";
-    ESP_LOGI(SOCKET_TAG, "Parsing message: %s", output.c_str());
+    ESP_LOGI(SOCKET_TAG, "Parsing null message: %s", output.c_str());
   }
   
 
