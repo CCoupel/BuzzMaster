@@ -360,7 +360,6 @@
   }
   
   /* Scoreboard styles */
-
   .scoreboard {
     background-color: white;
     border-radius: var(--border-radius);
@@ -391,10 +390,10 @@
   
   .scoreboard th, .scoreboard td {
     text-align: center;
-    padding: 0.5rem;
+    padding: 0.5%;
     border-bottom: 1px solid var(--border-color);
   }
-  
+
   .scoreboard th {
     background-color: var(--background-color);
     font-weight: bold;
@@ -404,10 +403,26 @@
     border-bottom: none;
   }
 
-  .color-cell{
+  .scoreboard tr {
+    height: 100%;
+  }
+
+  .scoreboard td {
+    height: 100%;
+  }
+
+  .color-cell {
     display: flex;
     justify-content: center;
+    align-items: center;
+    min-height: 100%;
   }
+
+  .color-cell .team-color   {
+    height: 15px;
+    width: 15px;
+  }
+
 
   @keyframes highlightMoveUp {
     0% { background-color: yellow; }

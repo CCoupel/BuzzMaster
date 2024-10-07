@@ -21,18 +21,20 @@ function renderTeamScores() {
         const row = tbody.insertRow();
         row.insertCell(0).textContent = index + 1;
         const teamNameCell = row.insertCell(1)
-        teamNameCell.className = 'color-cell';
+        const teamNameDiv = document.createElement('div')
+        teamNameDiv.className = 'color-cell';
+        teamNameCell.appendChild(teamNameDiv);
         
         if (teamData.COLOR) {
             const teamColor = document.createElement('div');
             teamColor.className = 'team-color';
             teamColor.style.backgroundColor = `rgb(${teamData.COLOR.join(',')})`;
-            teamNameCell.appendChild(teamColor);
+            teamNameDiv.appendChild(teamColor);
         }
 
         const teamNameP = document.createElement('p');
         teamNameP.textContent = teamName;
-        teamNameCell.appendChild(teamNameP);
+        teamNameDiv.appendChild(teamNameP);
 
         console.log(teamData.COLOR)
         row.insertCell(2).textContent = teamData.SCORE || 0;
