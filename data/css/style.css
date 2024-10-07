@@ -9,8 +9,8 @@
     --shadow: 0 2px 5px 4px rgba(0,0,0,0.3);
     --border-radius: 5px;
     --transition: all 0.3s ease;
-    --navbar-height: 60px;
-    --timer-height: 30px;
+    --navbar-height: 40px;
+    --timer-height: 50px;
   }
   
   body {
@@ -18,7 +18,6 @@
     background-color: var(--background-color);
     color: var(--text-color);
     line-height: 1.6;
-    min-height: 100vh;
     display: flex;
     flex-direction: column;
     margin: 0;
@@ -26,6 +25,11 @@
     padding-top: calc(var(--navbar-height) + var(--timer-height));
   }
   
+  header {
+    height: 107px;
+    position: fixed;
+    top: 0px;
+  }
   /* Navbar styles */
   .navbar {
     background-color: var(--primary-color);
@@ -56,7 +60,9 @@
   
   /* Styles pour la barre de temps et le timer */
   .time-bar-container {
+    position: fixed;
     left: 0;
+    top: 72px;
     width: 100%;
     height: var(--timer-height);
     background-color: #ddd;
@@ -86,7 +92,6 @@
     display: flex;
     flex-direction: column;
     padding: 2rem;
-    margin-top: calc(var(--navbar-height) + var(--timer-height));
     margin-bottom: 60px;
   }
   
@@ -102,9 +107,10 @@
     left: 0;
     right: 0;
     z-index: 998;
+    height: 40px;
   }
   
-  button {
+  button, .navbar-item {
     background-color: var(--accent-color);
     color: white;
     border: none;
@@ -125,6 +131,7 @@
     justify-content: space-around;
     flex-wrap: wrap;
     padding-top: 10px;
+    margin-top: calc(var(--navbar-height) + var(--timer-height));
   }
   
   .team {
@@ -395,6 +402,11 @@
   
   .scoreboard tr:last-child td {
     border-bottom: none;
+  }
+
+  .color-cell{
+    display: flex;
+    justify-content: center;
   }
 
   @keyframes highlightMoveUp {

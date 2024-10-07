@@ -10,20 +10,24 @@
     <link rel="shortcut icon" href="#" />
 </head>
 <body>
-    <div class="main-config-container">
-        <div class="buzzer-container">
-            <!-- Les buzzers seront ajoutés ici dynamiquement -->
+    <header></header>
+    <main>
+        <div class="main-config-container">
+            <div class="buzzer-container">
+                <!-- Les buzzers seront ajoutés ici dynamiquement -->
+            </div>
+            <div class="team-container">
+                <!-- Les équipes seront ajoutées ici dynamiquement -->
+            </div>
         </div>
-        <div class="team-container">
-            <!-- Les équipes seront ajoutées ici dynamiquement -->
+
+        <div class="button-container">
+            <button id="resetButton">Réinitialiser</button>
+            <button id="addDivButton">Ajouter une team</button>
         </div>
-    </div>
-
-    <div class="button-container">
-        <button id="resetButton">Réinitialiser</button>
-        <button id="addDivButton">Ajouter une team</button>
-    </div>
-
-    <script type="module" src="../js/config.js"></script>
+    </main>
+    <footer>
+        <script type="module" src="../js/config.js"></script> 
+    </footer>
 </body>
 </html>

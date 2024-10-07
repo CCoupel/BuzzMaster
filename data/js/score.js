@@ -20,10 +20,24 @@ function renderTeamScores() {
         const [teamName, teamData] = team;
         const row = tbody.insertRow();
         row.insertCell(0).textContent = index + 1;
-        row.insertCell(1).textContent = teamName;
+        const teamNameCell = row.insertCell(1)
+        teamNameCell.className = 'color-cell';
+        
+        if (teamData.COLOR) {
+            const teamColor = document.createElement('div');
+            teamColor.className = 'team-color';
+            teamColor.style.backgroundColor = `rgb(${teamData.COLOR.join(',')})`;
+            teamNameCell.appendChild(teamColor);
+        }
+
+        const teamNameP = document.createElement('p');
+        teamNameP.textContent = teamName;
+        teamNameCell.appendChild(teamNameP);
+
+        console.log(teamData.COLOR)
         row.insertCell(2).textContent = teamData.SCORE || 0;
         console.log('team :', team)
-        console.log('teamdate:', teamData)
+        console.log('teamdata:', teamData)
     });
 }
 

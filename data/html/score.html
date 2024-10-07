@@ -10,44 +10,50 @@
     <link rel="shortcut icon" href="#" />
 </head>
 <body>
-    <div class="main-container">
-        <h1>Scores</h1>
-        
-        <div class="scoreboard">
-            <h2>Classement des Équipes</h2>
-            <table id="team-scores">
-                <thead>
-                    <tr>
-                        <th>Rang</th>
-                        <th>Équipe</th>
-                        <th>Score Total</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <!-- Le contenu sera ajouté dynamiquement par JavaScript -->
-                </tbody>
-            </table>
-        </div>
+    <header></header>
+    <main>
+        <div class="main-container">
+            <h1>Scores</h1>
+            
+            <div class="scoreboard">
+                <h2>Classement des Équipes</h2>
+                <table id="team-scores">
+                    <thead>
+                        <tr>
+                            <th>Rang</th>
+                            <th>Équipe</th>
+                            <th>Score Total</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <!-- Le contenu sera ajouté dynamiquement par JavaScript -->
+                    </tbody>
+                </table>
+            </div>
 
-        <div class="scoreboard">
-            <h2>Classement des Joueurs</h2>
-            <table id="player-scores">
-                <thead>
-                    <tr>
-                        <th>Rang</th>
-                        <th>Joueur</th>
-                        <th>Équipe</th>
-                        <th>Score</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <!-- Le contenu sera ajouté dynamiquement par JavaScript -->
-                </tbody>
-            </table>
+            <div class="scoreboard">
+                <h2>Classement des Joueurs</h2>
+                <table id="player-scores">
+                    <thead>
+                        <tr>
+                            <th>Rang</th>
+                            <th>Joueur</th>
+                            <th>Équipe</th>
+                            <th>Score</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <!-- Le contenu sera ajouté dynamiquement par JavaScript -->
+                    </tbody>
+                </table>
+            </div>
+            <div class="footer">
+                <button id="reset-score"> Réinitialiser les scores</button>
+            </div>
         </div>
-        <button id="reset-score"> Réinitialiser les scores</button>
-    </div>
-
-    <script type="module" src="../js/score.js"></script>
+    </main>
+    <footer>
+        <script type="module" src="../js/score.js"></script>
+    </footer>
 </body>
 </html>

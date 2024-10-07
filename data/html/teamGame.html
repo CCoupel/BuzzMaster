@@ -10,22 +10,28 @@
     <link rel="shortcut icon" href="#" />
 </head>
 <body>
-    <div class="time-bar-container">
-        <div id="time-bar">
-            <p id="timer">00:00</p>
+    <header>
+        <div class="time-bar-container">
+            <div id="time-bar">
+                <p id="timer">00:00</p>
+            </div>
         </div>
-    </div>
-    <div id="game-container" class="game-container">
-        <!-- Les équipes et les bumpers seront ajoutés ici dynamiquement -->
-    </div>
-    <div class="footer">
-        <input type="number" id="game-time-input" placeholder="Temps (s)" min="1" value="30">
-        <button id="startButton">START</button>
-        <button id="stopButton">STOP</button>
-        <button id="pauseButton">PAUSE</button>
-        <button id="continueButton">CONTINUE</button>
-    </div>
+    </header>
+    <main>
 
-    <script type="module" src="../js/teamGame.js"></script>
+        <div id="game-container" class="game-container">
+            <!-- Les équipes et les bumpers seront ajoutés ici dynamiquement -->
+        </div>
+        <div class="footer">
+            <input type="number" id="game-time-input" placeholder="Temps (s)" min="1" value="30">
+            <button id="startButton">START</button>
+            <button id="stopButton">STOP</button>
+            <button id="pauseButton">PAUSE</button>
+            <button id="continueButton">CONTINUE</button>
+        </div>
+    </main>
+    <footer>
+        <script type="module" src="../js/teamGame.js"></script>
+    </footer>
 </body>
 </html>
