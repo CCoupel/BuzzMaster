@@ -1,6 +1,6 @@
-1
-base.url
-catalog.url
+config/base.url
+config/catalog.url
+config/version.txt
 html/config.html
 html/score.html
 html/index.html

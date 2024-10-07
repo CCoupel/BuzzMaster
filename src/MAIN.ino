@@ -49,7 +49,7 @@ void setup(void)
     return;
   }
 
-//  downloadFiles();
+  downloadFiles();
 
   listLittleFSFiles();
   setLedColor(128, 128, 0, true);

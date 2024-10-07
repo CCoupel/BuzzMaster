@@ -5,13 +5,198 @@
 #include <esp_log.h>
 
 static const char* FS_TAG = "FS_MANAGER";
+#define VERSION_FILE "/config/version.txt"
+#define TEMP_DIR "/temp_update"
+#define BACKUP_DIR "/backup"
 
-String baseURL="/base.url";
-String baseFILE="/catalog.url";
+String baseURL="/config/base.url";
+String baseFILE="/config/catalog.url";
 
 void downloadFiles();
 bool downloadFile(const String& url, const String& localPath);
 bool createDirectories(const String& path);
+void deleteDirectory(const char* dirPath);
+bool moveDirectory(const String& sourceDir, const String& destDir);
+
+
+bool compareVersions(const String& localVersion, const String& remoteVersion) {
+    // Implémentez ici la logique de comparaison des versions
+    // Retournez true si remoteVersion > localVersion
+    return remoteVersion.compareTo(localVersion) > 0;
+}
+
+String readFile(const String& path, const String& defaultValue = "") {
+    if (!LittleFS.begin()) {
+        ESP_LOGE(FS_TAG, "Échec du montage de LittleFS");
+        return defaultValue;
+    }
+
+    File file = LittleFS.open(path, "r");
+    if (!file) {
+        ESP_LOGE(FS_TAG, "Échec de l'ouverture du fichier %s", path.c_str());
+        return defaultValue;
+    }
+
+    String content = file.readString();
+    file.close();
+    content.trim();
+    return content;
+}
+void downloadFiles() {
+    // Lire l'URL de base
+    String baseUrl = readFile(baseURL);
+    if (baseUrl.isEmpty()) {
+        ESP_LOGE(FS_TAG, "Impossible de lire l'URL de base");
+        return;
+    }
+
+    // Lire la version locale
+    String localVersion = readFile(VERSION_FILE, "0");
+
+    // Télécharger et lire la version distante
+    String remoteVersionUrl = baseUrl + VERSION_FILE;
+    String tempVersionPath = String(TEMP_DIR) + VERSION_FILE;
+    if (!downloadFile(remoteVersionUrl, tempVersionPath)) {
+        ESP_LOGE(FS_TAG, "Échec du téléchargement du fichier version distant");
+        return;
+    }
+
+    String remoteVersion = readFile(tempVersionPath);
+    if (remoteVersion.isEmpty()) {
+        ESP_LOGE(FS_TAG, "Impossible de lire la version distante");
+        return;
+    }
+
+    // Comparer les versions
+    if (!compareVersions(localVersion, remoteVersion)) {
+        ESP_LOGI(FS_TAG, "La version locale est à jour");
+        LittleFS.remove(tempVersionPath);
+        return;
+    }
+    
+     // Télécharger le fichier catalogue distant
+    String remoteCatalogUrl = baseUrl + baseFILE;
+    String tempCatalogPath = String(TEMP_DIR) + baseFILE;
+    if (!downloadFile(remoteCatalogUrl, tempCatalogPath)) {
+        ESP_LOGE(FS_TAG, "Échec du téléchargement du fichier catalogue distant");
+        return;
+    }
+
+    String catalogContent = readFile(tempCatalogPath);
+    if (catalogContent.isEmpty()) {
+        ESP_LOGE(FS_TAG, "Impossible de lire le fichier catalogue");
+        return;
+    }
+
+    bool updateSuccess = true;
+    int pos = 0;
+    while (pos < catalogContent.length()) {
+        int endPos = catalogContent.indexOf('\n', pos);
+        if (endPos == -1) endPos = catalogContent.length();
+        
+        String filePath = catalogContent.substring(pos, endPos);
+        filePath.trim();
+        pos = endPos + 1;
+
+        if (filePath.length() == 0) continue;
+
+        String fileUrl = baseUrl + "/" + filePath;
+        String tempFilePath = String(TEMP_DIR) + "/" + filePath;
+
+        if (createDirectories(tempFilePath) && downloadFile(fileUrl, tempFilePath)) {
+            ESP_LOGI(FS_TAG, "Téléchargé et sauvegardé %s", filePath.c_str());
+        } else {
+            ESP_LOGE(FS_TAG, "Échec du téléchargement ou de la création du répertoire pour %s", fileUrl.c_str());
+            updateSuccess = false;
+            break;
+        }
+    }
+
+    if (updateSuccess) {
+        // Créer un répertoire de sauvegarde
+        if (!LittleFS.mkdir(BACKUP_DIR)) {
+            ESP_LOGE(FS_TAG, "Échec de la création du répertoire de sauvegarde");
+            updateSuccess = false;
+        } else {
+            // Déplacer les fichiers existants vers le répertoire de sauvegarde
+            if (moveDirectory("/", BACKUP_DIR)) {
+                // Déplacer les nouveaux fichiers du répertoire temporaire vers la racine
+                if (moveDirectory(TEMP_DIR, "/")) {
+                    // Mise à jour réussie, supprimer la sauvegarde
+                    deleteDirectory(BACKUP_DIR);
+                    ESP_LOGI(FS_TAG, "Mise à jour réussie vers la version %s", remoteVersion.c_str());
+                } else {
+                    // Échec du déplacement des nouveaux fichiers, restaurer la sauvegarde
+                    moveDirectory(BACKUP_DIR, "/");
+                    ESP_LOGE(FS_TAG, "Échec du déplacement des nouveaux fichiers, restauration de la sauvegarde");
+                    updateSuccess = false;
+                }
+            } else {
+                ESP_LOGE(FS_TAG, "Échec de la sauvegarde des fichiers existants");
+                updateSuccess = false;
+            }
+        }
+    }
+
+    if (!updateSuccess) {
+        // Nettoyer les fichiers téléchargés en cas d'échec
+        deleteDirectory(TEMP_DIR);
+        deleteDirectory(BACKUP_DIR);
+        ESP_LOGE(FS_TAG, "Échec de la mise à jour, retour à la version locale");
+    }
+}
+bool moveDirectory(const String& sourceDir, const String& destDir) {
+    File source = LittleFS.open(sourceDir);
+    if (!source || !source.isDirectory()) {
+        return false;
+    }
+
+    if (!LittleFS.exists(destDir)) {
+        if (!LittleFS.mkdir(destDir)) {
+            return false;
+        }
+    }
+
+    File file = source.openNextFile();
+    while (file) {
+        String sourceFilePath = String(sourceDir) + "/" + file.name();
+        String destFilePath = String(destDir) + "/" + file.name();
+
+        if (file.isDirectory()) {
+            if (!moveDirectory(sourceFilePath, destFilePath)) {
+                return false;
+            }
+        } else {
+            if (!LittleFS.rename(sourceFilePath, destFilePath)) {
+                return false;
+            }
+        }
+        file = source.openNextFile();
+    }
+
+    return LittleFS.rmdir(sourceDir);
+}
+
+void deleteDirectory(const char* dirPath) {
+    File dir = LittleFS.open(dirPath);
+    if (!dir || !dir.isDirectory()) {
+        return;
+    }
+
+    File file = dir.openNextFile();
+    while (file) {
+        if (file.isDirectory()) {
+            deleteDirectory(file.path());
+        } else {
+            LittleFS.remove(file.path());
+        }
+        file = dir.openNextFile();
+    }
+
+    LittleFS.rmdir(dirPath);
+}
+
+
 
 void listLittleFSFiles() {
     ESP_LOGI(FS_TAG, "Listing files in LittleFS:");
@@ -35,7 +220,6 @@ void listLittleFSFiles() {
         file = root.openNextFile();
     }
 }
-
 
 void loadJson(String path) {
     File file;
@@ -85,7 +269,7 @@ void saveJson() {
     file.close();
     ESP_LOGI(FS_TAG, "JSON saved successfully");
 }
-
+/*
 void downloadFiles() {
     if (!LittleFS.begin()) {
         ESP_LOGE(FS_TAG, "Failed to mount LittleFS");
@@ -124,7 +308,7 @@ void downloadFiles() {
 
     catalogFile.close();
 }
-
+*/
 bool downloadFile(const String& fileUrl, const String& localPath) {
     HTTPClient http;
     http.begin(fileUrl);
