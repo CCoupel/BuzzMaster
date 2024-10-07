@@ -75,6 +75,9 @@ QueueHandle_t messageQueue; // File d'attente pour les messages
 std::map<String, String> clientBuffers;
 
 
+/* teamsAndBumpers.h */
+void setGamePhase(String phase);
+
 /* **** TOOLS *** */
 
 void putMsgToQueue(const char* action=nullptr, const char* msg="", bool notify=false, AsyncClient* client=nullptr );
@@ -105,6 +108,7 @@ void checkPingForAllClients();
 void update(String action, JsonObject& obj);
 void resetServer();
 void rebootServer();
+void RAZscores();
 
 /* **** INTERUPTIONS *** */
 static void IRAM_ATTR buttonHandler(void *arg);

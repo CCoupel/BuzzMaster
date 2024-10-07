@@ -18,6 +18,7 @@ typedef struct {
 void notifyAll() {
     String output;
     JsonDocument& tb=getTeamsAndBumpers();
+    
     if (serializeJson(tb, output)) {
         saveJson();
         ESP_LOGI(TAG, "Sending update to all clients: %s", output.c_str());

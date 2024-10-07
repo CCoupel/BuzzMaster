@@ -5,7 +5,17 @@ JsonDocument teamsAndBumpers;
 JsonDocument& getTeamsAndBumpers() {
     return teamsAndBumpers;
 }
+// ### GAME ### */
+void setGamePhase(String phase) {
+    if (teamsAndBumpers["GAME"].isNull()) {
+        teamsAndBumpers["GAME"] = JsonObject();
+    }
+    teamsAndBumpers["GAME"]["PHASE"] = phase;
+    if ( phase == "STARTED") {
+        teamsAndBumpers["GAME"]["TIME"] = micros();
+    }
 
+}
 //### BUMPERS ###
 JsonObject getBumpers() {
     return teamsAndBumpers["bumpers"].as<JsonObject>();
@@ -99,6 +109,28 @@ void setBumperStatus(const char* bumperID, String status) {
     ESP_LOGI(TEAMs_TAG, "Bumper Status %s %s", bumperID, copy);
 }
 
+void setBumperScore(const char* bumperID, const int new_score) {
+    if (bumperID == nullptr || strlen(bumperID) == 0) {
+        ESP_LOGE(TEAMs_TAG, "Invalid bumperID provided: %s", bumperID);
+    }
+    if (teamsAndBumpers["bumpers"].isNull()) {
+        teamsAndBumpers["bumpers"] = JsonObject();
+    }
+    int copy = int(new_score);
+    teamsAndBumpers["bumpers"][bumperID]["SCORE"]=copy;
+}
+
+void setBumperDelay(const char* bumperID, const int new_delay) {
+    if (bumperID == nullptr || strlen(bumperID) == 0) {
+        ESP_LOGE(TEAMs_TAG, "Invalid bumperID provided: %s", bumperID);
+    }
+    if (teamsAndBumpers["bumpers"].isNull()) {
+        teamsAndBumpers["bumpers"] = JsonObject();
+    }
+    int copy = int(new_delay);
+    teamsAndBumpers["bumpers"][bumperID]["DELAY"]=copy;
+}
+
 void  mergeJson(JsonObject& destObj, const JsonObject& srcObj) {
   for (JsonPair kvp : srcObj) {
       ESP_LOGD("Teams&Bumpers","Merging: %s", kvp.key());
@@ -146,6 +178,7 @@ String getBumperIDByIP(const char* clientIP) {
   return String(); // Retourne une chaîne vide si aucune correspondance n'est trouvée
 }
 
+
 //#### TEAMS ###
 JsonObject getTeams() {
     return teamsAndBumpers["teams"].as<JsonObject>();
@@ -179,6 +212,22 @@ void setTeamStatus(const char* teamID, String status) {
     ESP_LOGI(TEAMs_TAG, "Team Status %s %s", teamID, copy);
 }
 
+void setTeamDelay(const char* teamID, const int new_delay) {
+    if (teamID == nullptr || strlen(teamID) == 0) {
+        ESP_LOGE(TEAMs_TAG, "Invalid bumperID provided: %s", teamID);
+    }
+    if (teamsAndBumpers["teams"].isNull()) {
+        teamsAndBumpers["teams"] = JsonObject();
+    }
+    
+    if (teamsAndBumpers["teams"][teamID].isNull()) {
+        teamsAndBumpers["teams"][teamID]=JsonObject();
+    }
+    int copy = int(new_delay);
+    teamsAndBumpers["teams"][teamID]["DELAY"]=copy;
+    ESP_LOGI(TEAMs_TAG, "Team Delay %s %i", teamID, copy);
+}
+
 void setTeamBumper(const char* teamID, const char* bumperID) {
     if (teamID == nullptr || strlen(teamID) == 0) {
         ESP_LOGE(TEAMs_TAG, "Invalid bumperID provided: %s", teamID);
@@ -192,8 +241,24 @@ void setTeamBumper(const char* teamID, const char* bumperID) {
     }
     String copy = String(bumperID);
     teamsAndBumpers["teams"][teamID]["BUMPER"] = copy;
-    teamsAndBumpers["teams"][teamID]["DELAY"]=micros();
+    setTeamDelay(teamID, micros());
     ESP_LOGI(TEAMs_TAG, "Team Bumper %s %s", teamID, copy);
+}
+
+void setTeamScore(const char* teamID, const int new_score) {
+    if (teamID == nullptr || strlen(teamID) == 0) {
+        ESP_LOGE(TEAMs_TAG, "Invalid bumperID provided: %s", teamID);
+    }
+    if (teamsAndBumpers["teams"].isNull()) {
+        teamsAndBumpers["teams"] = JsonObject();
+    }
+    
+    if (teamsAndBumpers["teams"][teamID].isNull()) {
+        teamsAndBumpers["teams"][teamID]=JsonObject();
+    }
+    int copy = int(new_score);
+    teamsAndBumpers["teams"][teamID]["SCORE"] = copy;
+    ESP_LOGI(TEAMs_TAG, "Team Score %s %i", teamID, copy);
 }
 
 void updateTeam(const char* teamID, const JsonObject& new_team) {

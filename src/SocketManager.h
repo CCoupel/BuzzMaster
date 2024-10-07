@@ -53,6 +53,9 @@ void parseDataFromSocket(const char* action, const JsonObject& message) {
     case hash("CONTINUE"):
       continueGame();
       break;
+    case hash("RAZ"):
+      RAZscores();
+      break;
     default:
       ESP_LOGW(SOCKET_TAG, "Unrecognized action: %s", action);
       break;

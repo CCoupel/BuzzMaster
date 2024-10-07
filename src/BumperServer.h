@@ -4,6 +4,8 @@
 #include <unordered_map>
 
 static const char* BUMPER_TAG = "BUMPER_SERVER";
+String gamePhase = "STOPPED"; /* STARTED PAUSED */
+int gameStartTimeStamp = 0;
 
 void processButtonPress(const String& bumperID, const char* b_team, int64_t b_time, int b_button) {
   ESP_LOGI(BUMPER_TAG, "Button Pressed %i", b_button);
@@ -78,26 +80,64 @@ void resetBumpersTime() {
 void startGame(){
   resetBumpersTime();
   GameStarted=true;
+  setGamePhase( "STARTED");
+
   putMsgToQueue("START","",true);
   
 }
 
 void stopGame(){
   GameStarted=false;
+  setGamePhase( "STOPPED" );
   putMsgToQueue("STOP","",true);
-
+  
 }
 
 void pauseGame(AsyncClient* client) {
+  setGamePhase( "PAUSED" );
   putMsgToQueue("PAUSE","",true, client);
 }
 
 void pauseAllGame(){
+  setGamePhase( "PAUSED" );
   putMsgToQueue("PAUSE","",true);
 }
 
 void continueGame(){
+  setGamePhase( "STARTED" );
   putMsgToQueue("START","",true);
+}
+
+void RAZscores() {
+  ESP_LOGI(BUMPER_TAG, "Resetting Bumpers Scores");
+  JsonObject bumpers=getBumpers();
+  if (!bumpers.isNull()) {
+        for (JsonPair kvp : bumpers) {
+            const char* key = kvp.key().c_str();
+            ESP_LOGI(BUMPER_TAG, "Resetting Score for %s", key);
+            setBumperScore(key, 0);
+            setBumperDelay(key, -1);
+        }
+    } else {
+        ESP_LOGW(TAG, "Bumpers object is null or invalid");
+    }
+  //notifyAll();
+  
+  ESP_LOGI(BUMPER_TAG, "Resetting Teams Scores");
+  JsonObject teams = getTeams();
+    if (!teams.isNull()) {
+        for (JsonPair kvp : teams) {
+            const char* key = kvp.key().c_str();
+            ESP_LOGI(BUMPER_TAG, "Resetting Score for %s", key);
+            setTeamScore(key, 0);
+//            setTeamDelay(key, -1);
+        }
+    } else {
+        ESP_LOGW(TAG, "Teams object is null or invalid");
+    }
+  ESP_LOGI(BUMPER_TAG, "Resetted Scores");
+  notifyAll();
+  
 }
 
 /*
