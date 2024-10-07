@@ -6,7 +6,7 @@
 static const char* BUMPER_TAG = "BUMPER_SERVER";
 
 void processButtonPress(const String& bumperID, const char* b_team, int64_t b_time, int b_button) {
-  ESP_LOGI(BUMPER_TAG, "Button Pressed");
+  ESP_LOGI(BUMPER_TAG, "Button Pressed %i", b_button);
   /*static int64_t timeRef = 0;
   static std::unordered_map<String, int64_t> timeRefTeam;
 

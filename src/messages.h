@@ -22,7 +22,7 @@ void notifyAll() {
         saveJson();
         ESP_LOGI(TAG, "Sending update to all clients: %s", output.c_str());
         ws.textAll(output.c_str());
-//        sendMessageToAllClients("UPDATE", output.c_str());
+        sendMessageToAllClients("UPDATE", output.c_str());
     } else {
         ESP_LOGE(TAG, "Failed to serialize JSON");
     }
