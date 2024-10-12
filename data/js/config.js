@@ -1,6 +1,7 @@
 import { createTeamDiv } from './team.js';
 import { createBuzzerDiv } from './buzzer.js';
 import { initializeDropzones } from './dragAndDrop.js'
+import { getVersion } from './version.js';
 import { sendWebSocketMessage, connectWebSocket, getTeams, getBumpers, updateTeams, updateBumpers, addNewTeam } from './main.js';
 
 
@@ -56,6 +57,7 @@ function handleReset() {
 document.addEventListener('DOMContentLoaded', () => {
     connectWebSocket(handleConfigSocketMessage);
     initializeDropzones();
+    getVersion();
 
     const addButton = document.getElementById('addDivButton');
     const resetButton = document.getElementById('resetButton');
