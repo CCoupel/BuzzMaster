@@ -14,5 +14,6 @@ js/navbar.js
 js/score.js
 js/team.js
 js/teamGame.js
+js/version.js
 css/reset.css
 css/style.css
