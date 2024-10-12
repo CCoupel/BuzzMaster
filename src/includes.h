@@ -17,6 +17,7 @@
 #include <freertos/FreeRTOS.h>
 #include <freertos/queue.h>
 
+#define _VERSION 0
 
 const char* ssid     = "CC-Home";
 const char* password = "GenericPassword";

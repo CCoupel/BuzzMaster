@@ -3,28 +3,21 @@
 #include <WiFi.h>
 #include <HTTPClient.h>
 #include <esp_log.h>
+#include "esp_littlefs.h"
+#include <LittleFS.h>
+
 
 static const char* FS_TAG = "FS_MANAGER";
-#define VERSION_FILE "/config/version.txt"
-#define TEMP_DIR "/temp_update"
-#define BACKUP_DIR "/backup"
+String VERSION_FILE="/config/version.txt";
+String TEMP_DIR="/temp_update";
+String BACKUP_DIR="/backup";
 
 String baseURL="/config/base.url";
 String baseFILE="/config/catalog.url";
 
-void downloadFiles();
-bool downloadFile(const String& url, const String& localPath);
 bool createDirectories(const String& path);
-void deleteDirectory(const char* dirPath);
-bool moveDirectory(const String& sourceDir, const String& destDir);
 
-
-bool compareVersions(const String& localVersion, const String& remoteVersion) {
-    // Implémentez ici la logique de comparaison des versions
-    // Retournez true si remoteVersion > localVersion
-    return remoteVersion.compareTo(localVersion) > 0;
-}
-
+/***** FILES ********/
 String readFile(const String& path, const String& defaultValue = "") {
     if (!LittleFS.begin()) {
         ESP_LOGE(FS_TAG, "Échec du montage de LittleFS");
@@ -42,183 +35,300 @@ String readFile(const String& path, const String& defaultValue = "") {
     content.trim();
     return content;
 }
-void downloadFiles() {
-    // Lire l'URL de base
-    String baseUrl = readFile(baseURL);
-    if (baseUrl.isEmpty()) {
-        ESP_LOGE(FS_TAG, "Impossible de lire l'URL de base");
-        return;
-    }
 
-    // Lire la version locale
-    String localVersion = readFile(VERSION_FILE, "0");
-
-    // Télécharger et lire la version distante
-    String remoteVersionUrl = baseUrl + VERSION_FILE;
-    String tempVersionPath = String(TEMP_DIR) + VERSION_FILE;
-    if (!downloadFile(remoteVersionUrl, tempVersionPath)) {
-        ESP_LOGE(FS_TAG, "Échec du téléchargement du fichier version distant");
-        return;
-    }
-
-    String remoteVersion = readFile(tempVersionPath);
-    if (remoteVersion.isEmpty()) {
-        ESP_LOGE(FS_TAG, "Impossible de lire la version distante");
-        return;
-    }
-
-    // Comparer les versions
-    if (!compareVersions(localVersion, remoteVersion)) {
-        ESP_LOGI(FS_TAG, "La version locale est à jour");
-        LittleFS.remove(tempVersionPath);
-        return;
+bool deleteFile(const char* filePath) {
+    if (!LittleFS.exists(filePath)) {
+        ESP_LOGW(FS_TAG, "File does not exist: %s", filePath);
+        return false;
     }
     
-     // Télécharger le fichier catalogue distant
-    String remoteCatalogUrl = baseUrl + baseFILE;
-    String tempCatalogPath = String(TEMP_DIR) + baseFILE;
-    if (!downloadFile(remoteCatalogUrl, tempCatalogPath)) {
-        ESP_LOGE(FS_TAG, "Échec du téléchargement du fichier catalogue distant");
-        return;
-    }
-
-    String catalogContent = readFile(tempCatalogPath);
-    if (catalogContent.isEmpty()) {
-        ESP_LOGE(FS_TAG, "Impossible de lire le fichier catalogue");
-        return;
-    }
-
-    bool updateSuccess = true;
-    int pos = 0;
-    while (pos < catalogContent.length()) {
-        int endPos = catalogContent.indexOf('\n', pos);
-        if (endPos == -1) endPos = catalogContent.length();
-        
-        String filePath = catalogContent.substring(pos, endPos);
-        filePath.trim();
-        pos = endPos + 1;
-
-        if (filePath.length() == 0) continue;
-
-        String fileUrl = baseUrl + "/" + filePath;
-        String tempFilePath = String(TEMP_DIR) + "/" + filePath;
-
-        if (createDirectories(tempFilePath) && downloadFile(fileUrl, tempFilePath)) {
-            ESP_LOGI(FS_TAG, "Téléchargé et sauvegardé %s", filePath.c_str());
-        } else {
-            ESP_LOGE(FS_TAG, "Échec du téléchargement ou de la création du répertoire pour %s", fileUrl.c_str());
-            updateSuccess = false;
-            break;
-        }
-    }
-
-    if (updateSuccess) {
-        // Créer un répertoire de sauvegarde
-        if (!LittleFS.mkdir(BACKUP_DIR)) {
-            ESP_LOGE(FS_TAG, "Échec de la création du répertoire de sauvegarde");
-            updateSuccess = false;
-        } else {
-            // Déplacer les fichiers existants vers le répertoire de sauvegarde
-            if (moveDirectory("/", BACKUP_DIR)) {
-                // Déplacer les nouveaux fichiers du répertoire temporaire vers la racine
-                if (moveDirectory(TEMP_DIR, "/")) {
-                    // Mise à jour réussie, supprimer la sauvegarde
-                    deleteDirectory(BACKUP_DIR);
-                    ESP_LOGI(FS_TAG, "Mise à jour réussie vers la version %s", remoteVersion.c_str());
-                } else {
-                    // Échec du déplacement des nouveaux fichiers, restaurer la sauvegarde
-                    moveDirectory(BACKUP_DIR, "/");
-                    ESP_LOGE(FS_TAG, "Échec du déplacement des nouveaux fichiers, restauration de la sauvegarde");
-                    updateSuccess = false;
-                }
-            } else {
-                ESP_LOGE(FS_TAG, "Échec de la sauvegarde des fichiers existants");
-                updateSuccess = false;
-            }
-        }
-    }
-
-    if (!updateSuccess) {
-        // Nettoyer les fichiers téléchargés en cas d'échec
-        deleteDirectory(TEMP_DIR);
-        deleteDirectory(BACKUP_DIR);
-        ESP_LOGE(FS_TAG, "Échec de la mise à jour, retour à la version locale");
+    if (LittleFS.remove(filePath)) {
+        ESP_LOGI(FS_TAG, "File deleted: %s", filePath);
+        return true;
+    } else {
+        ESP_LOGE(FS_TAG, "Failed to delete file: %s", filePath);
+        return false;
     }
 }
-bool moveDirectory(const String& sourceDir, const String& destDir) {
-    File source = LittleFS.open(sourceDir);
-    if (!source || !source.isDirectory()) {
+
+bool downloadFile(const String& fileUrl, const String& localPath) {
+    HTTPClient http;
+    http.begin(fileUrl);
+    int httpCode = http.GET();
+
+    createDirectories(localPath);
+
+    if (httpCode == HTTP_CODE_OK) {
+        WiFiClient * stream = http.getStreamPtr();
+
+        File file = LittleFS.open(localPath, "w");
+        if (!file) {
+            ESP_LOGE(FS_TAG, "Failed to open file for writing %s", localPath.c_str());
+            http.end();
+            return false;
+        }
+
+        const size_t bufferSize = 512;
+        uint8_t buffer[bufferSize];
+
+        int bytesRead;
+        while ((bytesRead = stream->read(buffer, bufferSize)) > 0) {
+            file.write(buffer, bytesRead);
+        }
+
+        file.close();
+        ESP_LOGI(FS_TAG, "File downloaded successfully %s to %s", fileUrl.c_str(), localPath.c_str());
+    } else {
+        ESP_LOGE(FS_TAG, "HTTP GET failed with code %d", httpCode);
+        http.end();
         return false;
     }
 
-    if (!LittleFS.exists(destDir)) {
-        if (!LittleFS.mkdir(destDir)) {
+    http.end();
+    return true;
+}
+
+bool copyFile(const char* sourcePath, const char* destPath) {
+    File sourceFile = LittleFS.open(sourcePath, "r");
+    if (!sourceFile) {
+        ESP_LOGE(FS_TAG, "Failed to open source file for reading %s", sourceFile);
+
+        return false;
+    }
+
+    File destFile = LittleFS.open(destPath, "w");
+    if (!destFile) {
+        ESP_LOGE(FS_TAG, "Failed to open destination file for writing %s", destPath);
+        sourceFile.close();
+        return false;
+    }
+
+    static uint8_t buf[512];
+    size_t len = 0;
+    while ((len = sourceFile.read(buf, sizeof(buf))) > 0) {
+        destFile.write(buf, len);
+    }
+
+    sourceFile.close();
+    destFile.close();
+    return true;
+}
+
+bool moveFile(const char* sourcePath, const char* destPath) {
+    if (!LittleFS.exists(sourcePath)) {
+        ESP_LOGE(FS_TAG, "Source file does not exist: %s", sourcePath);
+        return false;
+    }
+
+    if (LittleFS.exists(destPath)) {
+        ESP_LOGW(FS_TAG, "Destination file already exists, overwriting: %s", destPath);
+        if (!deleteFile(destPath)) {
+            ESP_LOGE(FS_TAG, "Failed to delete existing destination file: %s", destPath);
             return false;
         }
     }
 
-    File file = source.openNextFile();
-    while (file) {
-        String sourceFilePath = String(sourceDir) + "/" + file.name();
-        String destFilePath = String(destDir) + "/" + file.name();
-
-        if (file.isDirectory()) {
-            if (!moveDirectory(sourceFilePath, destFilePath)) {
-                return false;
-            }
-        } else {
-            if (!LittleFS.rename(sourceFilePath, destFilePath)) {
-                return false;
-            }
-        }
-        file = source.openNextFile();
+    if (!copyFile(sourcePath, destPath)) {
+        ESP_LOGE(FS_TAG, "Failed to copy file from %s to %s", sourcePath, destPath);
+        return false;
     }
 
-    return LittleFS.rmdir(sourceDir);
+    if (!deleteFile(sourcePath)) {
+        ESP_LOGE(FS_TAG, "Failed to delete source file after copy: %s", sourcePath);
+        // Consider if you want to delete the destination file here in case of failure
+        return false;
+    }
+
+    ESP_LOGI(FS_TAG, "File moved successfully from %s to %s", sourcePath, destPath);
+    return true;
 }
 
-void deleteDirectory(const char* dirPath) {
-    File dir = LittleFS.open(dirPath);
-    if (!dir || !dir.isDirectory()) {
+/***** DIR ********/
+
+bool ensureDirectoryExists(const String& path) {
+    if (LittleFS.exists(path)) {
+        return true;  // Le répertoire existe déjà
+    }
+    ESP_LOGD(FS_TAG, "Creating Directory %s", path.c_str());
+    return LittleFS.mkdir(path);
+}
+
+bool createDirectories(const String& path) {
+    // Extraire le chemin du répertoire
+    int lastSlash = path.lastIndexOf('/');
+    if (lastSlash == -1) return true; // Pas de répertoire à créer
+
+    String directoryPath = path.substring(0, lastSlash);
+    ensureDirectoryExists(directoryPath);
+    return true;
+}
+
+bool deleteDirectory(const char* dirPath) {
+    std::vector<String> dirStack;
+    dirStack.push_back(String(dirPath));
+
+    while (!dirStack.empty()) {
+        String currentPath = dirStack.back();
+        
+        File dir = LittleFS.open(currentPath.c_str());
+        if (!dir || !dir.isDirectory()) {
+            ESP_LOGE(FS_TAG, "Failed to open directory: %s", currentPath.c_str());
+            dirStack.pop_back();
+            continue;
+        }
+
+        File file = dir.openNextFile();
+        if (file) {
+            char filePath[64];
+            snprintf(filePath, sizeof(filePath), "%s/%s", currentPath.c_str(), file.name());
+
+            if (file.isDirectory()) {
+                dirStack.push_back(String(filePath));
+            } else {
+                file.close(); // Close the file before attempting to delete it
+                if (LittleFS.remove(filePath)) {
+                    ESP_LOGI(FS_TAG, "Deleted file: %s", filePath);
+                } else {
+                    ESP_LOGE(FS_TAG, "Failed to delete file: %s", filePath);
+                    // Additional diagnostics
+                    File testFile = LittleFS.open(filePath, "r");
+                    if (testFile) {
+                        ESP_LOGI(FS_TAG, "File can be opened for reading. Size: %d bytes", testFile.size());
+                        testFile.close();
+                    } else {
+                        ESP_LOGE(FS_TAG, "File cannot be opened for reading");
+                    }
+                }
+            }
+        } else {
+            dir.close();
+            if (LittleFS.rmdir(currentPath.c_str())) {
+                ESP_LOGI(FS_TAG, "Removed empty directory: %s", currentPath.c_str());
+            } else {
+                ESP_LOGE(FS_TAG, "Failed to remove directory: %s", currentPath.c_str());
+            }
+            dirStack.pop_back();
+        }
+
+        dir.close();
+    }
+
+    bool success = !LittleFS.exists(dirPath);
+    ESP_LOGI(FS_TAG, "Directory deletion %s: %s", success ? "succeeded" : "failed", dirPath);
+    return success;
+}
+
+bool moveDirectory(const char* sourceDir, const char* destDir) {
+    std::vector<std::pair<String, String>> dirStack;
+    dirStack.push_back({String(sourceDir), String(destDir)});
+
+    while (!dirStack.empty()) {
+        auto [currentSource, currentDest] = dirStack.back();
+        dirStack.pop_back();
+
+        if (!LittleFS.exists(currentSource.c_str())) {
+            ESP_LOGE(FS_TAG, "Source directory does not exist: %s", currentSource.c_str());
+            return false;
+        }
+
+        if (!ensureDirectoryExists(currentDest.c_str())) {
+            ESP_LOGE(FS_TAG, "Failed to create destination directory: %s", currentDest.c_str());
+            return false;
+        }
+
+        File source = LittleFS.open(currentSource.c_str());
+        if (!source || !source.isDirectory()) {
+            ESP_LOGE(FS_TAG, "Failed to open source directory: %s", currentSource.c_str());
+            return false;
+        }
+
+        File file = source.openNextFile();
+        while (file) {
+            String sourceFilePath = currentSource + "/" + file.name();
+            String destFilePath = currentDest + "/" + file.name();
+
+            if (file.isDirectory()) {
+                dirStack.push_back({sourceFilePath, destFilePath});
+            } else {
+                if (!copyFile(sourceFilePath.c_str(), destFilePath.c_str())) {
+                    ESP_LOGE(FS_TAG, "Failed to move file: %s to %s", sourceFilePath.c_str(), destFilePath.c_str());
+                    source.close();
+                    return false;
+                }
+            }
+            file = source.openNextFile();
+        }
+
+        source.close();
+    }
+
+    // Delete the original source directory
+    if (!deleteDirectory(sourceDir)) {
+        ESP_LOGE(FS_TAG, "Failed to remove source directory after move: %s", sourceDir);
+        return false;
+    }
+
+    ESP_LOGI(FS_TAG, "Directory moved successfully from %s to %s", sourceDir, destDir);
+    return true;
+}
+
+
+/******* TOOLS *******/
+
+void printLittleFSInfo() {
+    if (!LittleFS.begin(true)) {
+        ESP_LOGE(FS_TAG, "Failed to mount LittleFS");
         return;
     }
 
+    unsigned long totalBytes = LittleFS.totalBytes();
+    unsigned long usedBytes = LittleFS.usedBytes();
+    unsigned long freeBytes = totalBytes - usedBytes;
+
+    float usedPercentage = (float)usedBytes / totalBytes * 100;
+    float freePercentage = (float)freeBytes / totalBytes * 100;
+
+    ESP_LOGI(FS_TAG, "LittleFS Usage Information:");
+    ESP_LOGI(FS_TAG, "Total size: %lu bytes", totalBytes);
+    ESP_LOGI(FS_TAG, "Used space: %lu bytes (%.2f%%)", usedBytes, usedPercentage);
+    ESP_LOGI(FS_TAG, "Free space: %lu bytes (%.2f%%)", freeBytes, freePercentage);
+}
+
+void listLittleFSFilesRecursive(File &dir, const String &indent = "") {
     File file = dir.openNextFile();
     while (file) {
         if (file.isDirectory()) {
-            deleteDirectory(file.path());
+            ESP_LOGI(FS_TAG, "%s├── %s/", indent.c_str(), file.name());
+            listLittleFSFilesRecursive(file, indent + "    ");
         } else {
-            LittleFS.remove(file.path());
+            ESP_LOGI(FS_TAG, "%s├── %s (%d bytes)", indent.c_str(), file.name(), file.size());
         }
         file = dir.openNextFile();
     }
-
-    LittleFS.rmdir(dirPath);
 }
 
-
-
 void listLittleFSFiles() {
+
     ESP_LOGI(FS_TAG, "Listing files in LittleFS:");
+    if (!LittleFS.begin()) {
+        ESP_LOGE(FS_TAG, "Failed to mount LittleFS");
+        return;
+    }
+
     File root = LittleFS.open("/");
     if (!root) {
-        ESP_LOGE(FS_TAG, "Failed to open directory");
+        ESP_LOGE(FS_TAG, "Failed to open root directory");
         return;
     }
     if (!root.isDirectory()) {
-        ESP_LOGE(FS_TAG, "Not a directory");
+        ESP_LOGE(FS_TAG, "Root is not a directory");
         return;
     }
 
-    File file = root.openNextFile();
-    while (file) {
-        if (file.isDirectory()) {
-            ESP_LOGI(FS_TAG, "DIR : %s", file.name());
-        } else {
-            ESP_LOGI(FS_TAG, "FILE: %s\tSIZE: %d", file.name(), file.size());
-        }
-        file = root.openNextFile();
-    }
+    ESP_LOGI(FS_TAG, "/");
+    listLittleFSFilesRecursive(root);
+
+    printLittleFSInfo();
 }
 
 void loadJson(String path) {
@@ -269,106 +379,88 @@ void saveJson() {
     file.close();
     ESP_LOGI(FS_TAG, "JSON saved successfully");
 }
-/*
+
 void downloadFiles() {
-    if (!LittleFS.begin()) {
-        ESP_LOGE(FS_TAG, "Failed to mount LittleFS");
+    // Lire l'URL de base
+    String baseUrl = readFile(baseURL,"https://bitbucket.org/ccoupel/buzzcontrol/raw/main/data");
+    if (baseUrl.isEmpty()) {
+        ESP_LOGE(FS_TAG, "Impossible de lire l'URL de base");
         return;
     }
 
-    File baseFile = LittleFS.open(baseURL, "r");
-    if (!baseFile) {
-        ESP_LOGE(FS_TAG, "Failed to open base.url");
+    // Lire la version locale
+    int localVersion = atoi(readFile("/CURRENT"+VERSION_FILE,"-1").c_str());
+    ESP_LOGE(FS_TAG, "CURRENTVersion=%i", localVersion);
+    if (localVersion<0) {
+        localVersion = atoi(readFile(VERSION_FILE, "-1").c_str());
+        ESP_LOGE(FS_TAG, "Local Version=%i", localVersion);
+    }
+    
+
+    // Télécharger et lire la version distante
+    String remoteVersionUrl = baseUrl + VERSION_FILE;
+    String tempVersionPath = "/remote_version.txt";
+    deleteDirectory(TEMP_DIR.c_str());
+
+    ensureDirectoryExists(TEMP_DIR);
+    if (!downloadFile(remoteVersionUrl, tempVersionPath)) {
+        ESP_LOGE(FS_TAG, "Échec du téléchargement du fichier version distant");
         return;
     }
 
-    String baseUrl = baseFile.readString();
-    baseUrl.trim();
-    baseFile.close();
-
-    File catalogFile = LittleFS.open(baseFILE, "r");
-    if (!catalogFile) {
-        ESP_LOGE(FS_TAG, "Failed to open catalog.url");
+    int remoteVersion = atoi(readFile(tempVersionPath,"-1").c_str());
+    if (remoteVersion<0) {
+        ESP_LOGE(FS_TAG, "Impossible de lire la version distante");
         return;
     }
 
-    while (catalogFile.available()) {
-        String filePath = catalogFile.readStringUntil('\n');
+    // Comparer les versions
+    if (localVersion >= remoteVersion) {
+        ESP_LOGI(FS_TAG, "La version locale est à jour");
+        LittleFS.remove(tempVersionPath);
+        return;
+    }
+
+    ESP_LOGI(FS_TAG, "La version locale est a remplacer %i / %i", localVersion, remoteVersion);
+    
+    // Télécharger le fichier catalogue distant
+    String remoteCatalogUrl = baseUrl + baseFILE;
+    String tempCatalogPath = baseFILE+"_remote";
+    if (!downloadFile(remoteCatalogUrl, tempCatalogPath)) {
+        ESP_LOGE(FS_TAG, "Échec du téléchargement du fichier catalogue distant");
+        return;
+    }
+
+    String catalogContent = readFile(tempCatalogPath);
+    if (catalogContent.isEmpty()) {
+        ESP_LOGE(FS_TAG, "Impossible de lire le fichier catalogue");
+        return;
+    }
+
+    bool updateSuccess = true;
+    int pos = 0;
+    while (pos < catalogContent.length()) {
+        int endPos = catalogContent.indexOf('\n', pos);
+        if (endPos == -1) endPos = catalogContent.length();
+        
+        String filePath = catalogContent.substring(pos, endPos);
         filePath.trim();
+        pos = endPos + 1;
+
         if (filePath.length() == 0) continue;
 
         String fileUrl = baseUrl + "/" + filePath;
+        String tempFilePath = TEMP_DIR + "/" + filePath;
 
-        if (downloadFile(fileUrl, "/" + filePath)) {
-            ESP_LOGI(FS_TAG, "Downloaded and saved %s", filePath.c_str());
-        } else {
-            ESP_LOGE(FS_TAG, "Failed to download %s", fileUrl.c_str());
+        if (!downloadFile(fileUrl, tempFilePath)) {
+            ESP_LOGE(FS_TAG, "Échec du téléchargement ou de la création du répertoire pour %s", fileUrl.c_str());
+            updateSuccess = false;
+            break;
         }
     }
 
-    catalogFile.close();
+    if (updateSuccess) { 
+        deleteDirectory("/CURRENT");
+        moveDirectory(TEMP_DIR.c_str(),"/CURRENT" );
+    }
 }
-*/
-bool downloadFile(const String& fileUrl, const String& localPath) {
-    HTTPClient http;
-    http.begin(fileUrl);
-    int httpCode = http.GET();
-
-    if (httpCode == HTTP_CODE_OK) {
-        WiFiClient * stream = http.getStreamPtr();
-
-        File file = LittleFS.open(localPath, "w");
-        if (!file) {
-            ESP_LOGE(FS_TAG, "Failed to open file for writing");
-            http.end();
-            return false;
-        }
-
-        const size_t bufferSize = 512;
-        uint8_t buffer[bufferSize];
-
-        int bytesRead;
-        while ((bytesRead = stream->read(buffer, bufferSize)) > 0) {
-            file.write(buffer, bytesRead);
-        }
-
-        file.close();
-        ESP_LOGI(FS_TAG, "File downloaded successfully");
-    } else {
-        ESP_LOGE(FS_TAG, "HTTP GET failed with code %d", httpCode);
-        http.end();
-        return false;
-    }
-
-    http.end();
-    return true;
-}
-
-bool createDirectories(const String& path) {
-    // Extraire le chemin du répertoire
-    int lastSlash = path.lastIndexOf('/');
-    if (lastSlash == -1) return true; // Pas de répertoire à créer
-
-    String directoryPath = path.substring(0, lastSlash);
-    
-    // Si le répertoire existe déjà, rien à faire
-    if (LittleFS.exists(directoryPath)) {
-        return true;
-    }
-
-    String subPath = "";
-    for (int i = 1; i < lastSlash; i++) {
-        if (path[i] == '/') {
-            if (!LittleFS.exists(subPath)) {
-                if (!LittleFS.mkdir(subPath)) {
-                    ESP_LOGE(FS_TAG, "HTTP GET failed with code %s", subPath);
-                    return false;
-                }
-            }
-        }
-        subPath += path[i];
-    }
-
-    return true;
-}
-

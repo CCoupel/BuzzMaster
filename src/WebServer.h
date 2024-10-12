@@ -38,7 +38,6 @@ void w_handleNotFound(AsyncWebServerRequest *request) {
   request->send(404, "text/plain", message);
 }
 
-
 void w_handleReboot(AsyncWebServerRequest *request) {
     ESP_LOGI(WEB_TAG, "Handling reboot request");
     rebootServer();
@@ -49,9 +48,21 @@ void w_handleReset(AsyncWebServerRequest *request) {
     resetServer();
 }
 
-
 void startWebServer() {
-    server.serveStatic("/", LittleFS, "/").setDefaultFile("index.html");
+    String ROOT="/";
+    if (LittleFS.exists("/CURRENT")) {
+        ESP_LOGD(FS_TAG, "Directory /CURRENT Exists");
+        ROOT="/CURRENT";
+    }
+
+    server.serveStatic("/", LittleFS, ROOT.c_str());
+    server.on("/", HTTP_GET, [](AsyncWebServerRequest *request){
+        request->redirect("/html/config.html");
+    });
+
+    server.on("/index.html", HTTP_GET, [](AsyncWebServerRequest *request){
+        request->redirect("/html/config.html");
+    });
 
     server.on("/reset", HTTP_GET, w_handleReset);
     server.on("/reboot", HTTP_GET, w_handleReboot);
@@ -61,5 +72,5 @@ void startWebServer() {
     server.addHandler(&ws);
 
     server.begin();
-    ESP_LOGI(WEB_TAG, "HTTP server started");
+    ESP_LOGI(WEB_TAG, "HTTP server started on %s", ROOT);
 }

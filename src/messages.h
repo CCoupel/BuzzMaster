@@ -18,11 +18,12 @@ typedef struct {
 void notifyAll() {
     String output;
     JsonDocument& tb=getTeamsAndBumpers();
-    
+//    tb["VERSION"]=String(VERSION);
+
     if (serializeJson(tb, output)) {
         saveJson();
         ESP_LOGI(TAG, "Sending update to all clients: %s", output.c_str());
-        ws.textAll(output.c_str());
+ //       ws.textAll(output.c_str());
         sendMessageToAllClients("UPDATE", output.c_str());
     } else {
         ESP_LOGE(TAG, "Failed to serialize JSON");
@@ -43,9 +44,21 @@ void putMsgToQueue(const char* action, const char* msg, bool notify, AsyncClient
     }
 }
 
+String makeJsonMessage(const String& action, const String& msg) {
+    String message="{";
+    message += "\"ACTION\": \"" + action + "\"";
+    message += ", \"VERSION\": \"" + String(VERSION) + "\"";
+    message += ", \"MSG\":" + msg + "";
+    message += ", \"TIME1\":" + String(micros()) + "";
+    message += "}";
+
+    return message;
+}
+
 void sendMessageToClient(const String& action, const String& msg, AsyncClient* client) {
     if (client && client->connected()) {
-        String message = "{\"ACTION\":\"" + action + "\",\"MSG\":" + msg + "}\n";
+        //String message = "{\"ACTION\":\"" + action + "\", \"VERSION\": \"" + VERSION + "\",\"MSG\":" + msg + "}\n";
+        String message=makeJsonMessage(action, msg);
         client->write(message.c_str(), message.length());
         ESP_LOGI(TAG, "Sent to %s: %s", client->remoteIP().toString().c_str(), message.c_str());
     } else {
@@ -55,9 +68,10 @@ void sendMessageToClient(const String& action, const String& msg, AsyncClient* c
 
 void sendMessageToAllClients(const String& action, const String& msg) {
   ESP_LOGI(TAG, "Sending broadcast message");
-  
+  //String VERSION=String(__DATE__)+" "+String(__TIME__);
   // Créer le message JSON
-  String message = "{\"ACTION\":\"" + action + "\", \"MSG\":" + msg + "}\n";
+  //String message = "{\"ACTION\":\"" + action + "\", \"VERSION\": \"" + VERSION + "\", \"MSG\":" + msg + "}\n";
+  String message=makeJsonMessage(action, msg);
   ESP_LOGD(TAG, "Broadcasting message: %s", message.c_str());
 
   // Envoyer le message en broadcast à tous les clients WebSocket
