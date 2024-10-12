@@ -1,17 +1,19 @@
 import { createTeamDiv } from './team.js';
 import { createBuzzerDiv } from './buzzer.js';
 import { initializeDropzones } from './dragAndDrop.js'
+import { getWebVersion, getCoreVersion } from './version.js';
 import { sendWebSocketMessage, connectWebSocket, getTeams, getBumpers, updateTeams, updateBumpers, addNewTeam } from './main.js';
 
 
 function handleConfigSocketMessage(event) {
     const data = JSON.parse(event.data);
     if (data.ACTION === 'UPDATE' || data.ACTION === 'FULL') {
-        if (data.MSG.teams) updateTeams(data.MSG.teams);
         if (data.MSG.bumpers) updateBumpers(data.MSG.bumpers);
+        if (data.MSG.VERSION) getCoreVersion(data.MSG.VERSION);
         updateDisplay();
     }
-}
+        if (data.VERSION) getCoreVersion(data.VERSION);
+    }
 
 function updateDisplay() {
     createTeamDiv(getTeams());
@@ -56,6 +58,7 @@ function handleReset() {
 document.addEventListener('DOMContentLoaded', () => {
     connectWebSocket(handleConfigSocketMessage);
     initializeDropzones();
+    getWebVersion();
 
     const addButton = document.getElementById('addDivButton');
     const resetButton = document.getElementById('resetButton');

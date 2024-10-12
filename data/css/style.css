@@ -250,6 +250,11 @@
     background-color: var(--background-color);
     border-right: 1px solid var(--border-color);
   }
+
+  #version-container {
+    position: absolute;
+    right: 0;
+  }
   
   /* Styles spécifiques pour les bumpers dans le buzzer-container */
   .buzzer {
