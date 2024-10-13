@@ -6,10 +6,12 @@ import { sendWebSocketMessage, connectWebSocket, getTeams, getBumpers, updateTea
 
 
 function handleConfigSocketMessage(event) {
+    console.log('Message reçu du serveur:', event.data);
     const data = JSON.parse(event.data);
     if (data.ACTION === 'UPDATE' || data.ACTION === 'FULL') {
         if (data.MSG.bumpers) updateBumpers(data.MSG.bumpers);
-        if (data.MSG.VERSION) getCoreVersion(data.MSG.VERSION);
+        if (data.MSG.teams) updateTeams(data.MSG.teams);
+        //if (data.MSG.VERSION) getCoreVersion(data.MSG.VERSION);
         updateDisplay();
     }
         if (data.VERSION) getCoreVersion(data.VERSION);
