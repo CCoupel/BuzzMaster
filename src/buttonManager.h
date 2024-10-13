@@ -1,3 +1,5 @@
+#pragma once
+
 #include <esp_log.h>
 static const char* BUTTON_TAG = "BUTTON_MANAGER";
 

@@ -1,3 +1,5 @@
+#pragma once
+
 #include <ArduinoJson.h>
 static const char* TEAMs_TAG = "Team And Bumper";
 JsonDocument teamsAndBumpers;

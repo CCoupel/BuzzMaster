@@ -1,3 +1,5 @@
+#pragma once
+
 #include <WiFi.h>
 #include <AsyncTCP.h>
 #include <esp_task_wdt.h>  // Pour gérer le watchdog timer si nécessaire

@@ -1,3 +1,5 @@
+#pragma once
+
 #include <esp_log.h>
 
 static const char* PING_TAG = "PING";

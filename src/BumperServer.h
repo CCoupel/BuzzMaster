@@ -1,3 +1,5 @@
+#pragma once
+
 #include <ArduinoJson.h>
 #include <AsyncTCP.h>
 #include <esp_log.h>

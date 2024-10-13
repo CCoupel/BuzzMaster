@@ -10,8 +10,8 @@
             "includePath": [
                 "C:/Users/cyril/OneDrive/Documents/VScode/BuzzMaster/buzzcontrol/include",
                 "C:/Users/cyril/OneDrive/Documents/VScode/BuzzMaster/buzzcontrol/src",
-                "C:/Users/cyril/.platformio/packages/framework-arduinoespressif32/libraries/DNSServer/src",
                 "C:/Users/cyril/.platformio/packages/framework-arduinoespressif32/libraries/ESPmDNS/src",
+                "C:/Users/cyril/.platformio/packages/framework-arduinoespressif32/libraries/DNSServer/src",
                 "C:/Users/cyril/.platformio/packages/framework-arduinoespressif32/libraries/LittleFS/src",
                 "C:/Users/cyril/.platformio/packages/framework-arduinoespressif32/libraries/HTTPClient/src",
                 "C:/Users/cyril/.platformio/packages/framework-arduinoespressif32/libraries/WiFiClientSecure/src",
@@ -254,8 +254,8 @@
                 "path": [
                     "C:/Users/cyril/OneDrive/Documents/VScode/BuzzMaster/buzzcontrol/include",
                     "C:/Users/cyril/OneDrive/Documents/VScode/BuzzMaster/buzzcontrol/src",
-                    "C:/Users/cyril/.platformio/packages/framework-arduinoespressif32/libraries/DNSServer/src",
                     "C:/Users/cyril/.platformio/packages/framework-arduinoespressif32/libraries/ESPmDNS/src",
+                    "C:/Users/cyril/.platformio/packages/framework-arduinoespressif32/libraries/DNSServer/src",
                     "C:/Users/cyril/.platformio/packages/framework-arduinoespressif32/libraries/LittleFS/src",
                     "C:/Users/cyril/.platformio/packages/framework-arduinoespressif32/libraries/HTTPClient/src",
                     "C:/Users/cyril/.platformio/packages/framework-arduinoespressif32/libraries/WiFiClientSecure/src",
@@ -502,6 +502,7 @@
                 "ARDUINO_EVENT_RUNNING_CORE=1",
                 "CORE_DEBUG_LEVEL=4",
                 "VERSION=1.1",
+                "CONTROLER_PORT=1234",
                 "HAVE_CONFIG_H",
                 "MBEDTLS_CONFIG_FILE=\"mbedtls/esp_config.h\"",
                 "UNITY_INCLUDE_CONFIG_H",

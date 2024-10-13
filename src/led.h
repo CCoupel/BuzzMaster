@@ -1,3 +1,5 @@
+#pragma once
+
 void setLedColor(int red, int green, int blue, bool isApplyLedColor) {
 
   currentRed = red;

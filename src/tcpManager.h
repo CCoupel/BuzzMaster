@@ -1,9 +1,11 @@
+#pragma once
+
 #include <AsyncTCP.h>
 #include <ArduinoJson.h>
 #include <esp_log.h>
 
 const char* TCP_TAG = "TCP";
-unsigned int CONTROLER_PORT = 1234;  // Port d'écoute local
+
 
 void startBumperServer()
 {

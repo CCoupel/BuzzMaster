@@ -1,3 +1,5 @@
+#pragma once
+
 #include <ArduinoJson.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/queue.h>

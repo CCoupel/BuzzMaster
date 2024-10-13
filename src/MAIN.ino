@@ -2,6 +2,7 @@
 #include "CustomLogger.h"
 #include "teamsAndBumpers.h"
 
+#include "wifiManager.h"
 #include "SocketManager.h"
 #include "tcpManager.h"
 #include "buttonManager.h"

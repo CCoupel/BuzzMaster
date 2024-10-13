@@ -1,3 +1,5 @@
+#pragma once
+
 #include <FS.h>
 #include <LittleFS.h>
 #include <WiFi.h>

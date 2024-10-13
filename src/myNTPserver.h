@@ -1,3 +1,5 @@
+#pragma once
+
 #include <esp_wifi.h>
 #include <WiFi.h>
 #include <esp_now.h>
