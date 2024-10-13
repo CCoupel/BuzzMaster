@@ -21,28 +21,24 @@ void setup(void)
   Serial.begin(921600);
   esp_log_level_set("*", ESP_LOG_INFO);
 
-
-  ESP_LOGI(MAIN_TAG, "RGB pin: %d", RGB_BUILTIN);
-  ESP_LOGI(MAIN_TAG, "LED pin: %d",LED_BUILTIN);
-  ESP_LOGI(MAIN_TAG, "NEO pin: %d",PIN_NEOPIXEL);
-
   setLedColor(255, 0, 0);
   setLedIntensity(255);
 
   wifiConnect();
   CustomLogger::init(logPort);
   setLedColor(255, 255, 0, true);
+  ESP_LOGI(MAIN_TAG, "RGB pin: %d", RGB_BUILTIN);
+  ESP_LOGI(MAIN_TAG, "LED pin: %d",LED_BUILTIN);
+  ESP_LOGI(MAIN_TAG, "NEO pin: %d",PIN_NEOPIXEL);
 
 //  timeClient.update();
+  setLedIntensity(128);
+  setupAP();
+  setupDNSServer();
 
 //  setupNTPserver();
 
-  if (MDNS.begin("buzzcontrol")) {
-    ESP_LOGI(MAIN_TAG, "MDNS responder started");
-  }
-  MDNS.addService("buzzcontrol", "tcp", localWWWpPort);
-  MDNS.addService("http", "tcp", localWWWpPort);
-  MDNS.addService("sock", "tcp", CONTROLER_PORT);
+  
 
   if (!LittleFS.begin()) {
     ESP_LOGE(MAIN_TAG, "Erreur de montage LittleFS");
@@ -56,6 +52,8 @@ void setup(void)
 
   attachButtons();
   loadJson(GameFile);
+
+  
 
   startWebServer();
   startBumperServer();
@@ -75,4 +73,6 @@ void setup(void)
 void loop(void)
 {
 //  handleNTPserver();
+  dnsServer.processNextRequest();
+
 }

@@ -140,39 +140,6 @@ void RAZscores() {
   
 }
 
-/*
-// Fonction pour fusionner deux documents JSON
-void __mergeJson_old(JsonObject& destObj, const JsonObject& srcObj) {
-  for (JsonPair kvp : srcObj) {
-    if (kvp.value().is<JsonObject>()) {
-      JsonObject nestedDestObj;
-      if (destObj.containsKey(kvp.key()) && destObj[kvp.key()].is<JsonObject>()) {
-        nestedDestObj = destObj[kvp.key()].as<JsonObject>();
-      } else {
-        nestedDestObj = destObj[kvp.key()].to<JsonObject>();
-      }
-      JsonObject nestedSrcObj = kvp.value().as<JsonObject>();
-      mergeJson(nestedDestObj, nestedSrcObj);
-    } else {
-      destObj[kvp.key()] = kvp.value();
-    }
-  }
-}
-
-void __update_old(String action, JsonObject& obj) {
-  JsonObject jsonObj = teamsAndBumpers.as<JsonObject>();
-  String output;
-  serializeJson(obj, output);
-
-  ESP_LOGI(BUMPER_TAG, "Update: received %s", output.c_str());
-
-  mergeJson(jsonObj, obj);
-  serializeJson(jsonObj, output);
-  ESP_LOGI(BUMPER_TAG, "Update: complete %s", output.c_str());
-  
-  notifyAll();
-}
-*/
 void resetServer() {
   ESP_LOGI(BUMPER_TAG, "Resetting server");
   if (LittleFS.exists(saveGameFile)) {
@@ -197,49 +164,12 @@ void rebootServer() {
   } 
   ESP.restart();
 }
-/*
-void __handleHelloAction_old(JsonObject& bumpers, const String& bumperID, JsonObject& MSG) {
-  String output;
-  serializeJson(MSG, output);
-  ESP_LOGD(BUMPER_TAG, "Hello: %s: %s", bumperID.c_str(), output.c_str());
-  serializeJson(bumpers, output);
-    ESP_LOGD(BUMPER_TAG, "Hello in: %s: %s", bumperID.c_str(), output.c_str());
 
-  if (!bumpers.containsKey(bumperID)) {
-    bumpers[bumperID]=MSG;
-  }
-  if (!bumpers[bumperID].containsKey("NAME")) {
-    bumpers[bumperID]["NAME"] = MSG["NAME"];
-  }
-  if (!bumpers[bumperID].containsKey("TEAM")) {
-    bumpers[bumperID]["TEAM"] = "";
-  }
-  bumpers[bumperID]["IP"] = MSG["IP"];
-  serializeJson(bumpers, output);
-    ESP_LOGD(BUMPER_TAG, "Hello out: %s: %s", bumperID.c_str(), output.c_str());
-
-  notifyAll();
-}
-*/
 void handleHelloAction(const char* bumperID, JsonObject& MSG) {
   updateBumper(bumperID, MSG);
   notifyAll();
 }
-/*
-void __handleButtonAction_old(JsonObject& bumpers, JsonObject& teams, const String& bumperID, JsonObject& MSG, AsyncClient* c) {
-  if (bumpers.containsKey(bumperID)) {
-    if (bumpers[bumperID].containsKey("IP") && bumpers[bumperID]["IP"] == c->remoteIP().toString()) {
-      const char* b_team = bumpers[bumperID]["TEAM"];
-      int64_t b_time = MSG["time"].as<int64_t>();  // Changé en int64_t
-      int b_button = MSG["button"];
-      if (b_team != nullptr) {
-        processButtonPress(bumpers, teams, bumperID, b_team, b_time, b_button);
-        pauseGame(c);
-      }
-    }
-  }
-}
-*/
+
 void handleButtonAction(const char* bumperID, JsonObject& MSG, AsyncClient* c) {
   ESP_LOGE(BUMPER_TAG, "Button pressed: %s", bumperID);
   JsonObject bumper=getBumper(bumperID);
@@ -292,58 +222,4 @@ void parseJSON(const String& data, AsyncClient* c)
       break;
   }
 }
-/*
-  if (action == "HELLO") {
-    if ( !bumpers[bumperID].containsKey("NAME") ) {
-      bumpers[bumperID]["NAME"]=MSG["NAME"];
-    };
-    if ( !bumpers[bumperID].containsKey("TEAM") ) {
-      bumpers[bumperID]["TEAM"]="";
-    };
-    bumpers[bumperID]["IP"]=MSG["IP"];
-    notifyAll();
-  }
-  if (action == "BUTTON") {
-    if ( bumpers.containsKey(bumperID) ) {
-
-      if ( bumpers[bumperID].containsKey("IP") && bumpers[bumperID]["IP"] == c->remoteIP().toString()) {
-        const char * b_team=bumpers[bumperID]["TEAM"];
-        int b_time=MSG["time"];
-        int b_button=MSG["button"];
-        if ( b_team != nullptr ) {
-          
-          if (timeRef==0) {
-            timeRef=b_time;
-          }
-          int b_delay=b_time-timeRef;
-
-         if (timeRefTeam[b_team]==0) {
-            timeRefTeam[b_team]=b_time;
-          }
-
-          int b_delayTeam=b_time-timeRefTeam[b_team];
-          bumpers[bumperID]["TIME"]=b_time;
-          bumpers[bumperID]["BUTTON"]=b_button;
-          bumpers[bumperID]["DELAY"]=b_delay;
-          bumpers[bumperID]["DELAY_TEAM"]=b_delayTeam;
-
-          teams[b_team]["TIME"]=b_time;
-          teams[b_team]["DELAY"]=b_delay;
-          teams[b_team]["STATUS"]="PAUSE";
-          teams[b_team]["BUMPER"]=bumperID;
-
-          pauseGame(c);
-        };
-      };
-    };
-  };
-  if (action == "PING") {/*
-    bumpers[bumperID]["lastPingTime"] = millis();  
-    if (bumpers[bumperID]["STATUS"] != "online") {
-      Serial.println("BUMPER: Bumper is going online");
-      bumpers[bumperID]["STATUS"] = "online";
-      notifyAll();
-    }*/
-//  }
-//}
 

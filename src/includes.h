@@ -1,6 +1,5 @@
 #include <WiFi.h>
 #include <AsyncTCP.h>
-#include <ESPmDNS.h>
 #include <esp_task_wdt.h>  // Pour gérer le watchdog timer si nécessaire
 #include <Arduino.h>
 
@@ -19,8 +18,7 @@
 
 #define _VERSION 0
 
-const char* ssid     = "CC-Home";
-const char* password = "GenericPassword";
+
 
 int ledPin = PIN_NEOPIXEL; // Vérifiez la documentation pour la broche LED intégrée sur votre carte ESP32-S3
 int rgbPin = RGB_BUILTIN;
