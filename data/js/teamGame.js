@@ -240,8 +240,38 @@ document.addEventListener('DOMContentLoaded', function() {
     updateTimer();
     updateTimeBar();
 
-    document.getElementById('startButton').addEventListener('click', () => sendAction('START'));
-    document.getElementById('stopButton').addEventListener('click', () => sendAction('STOP'));
-    document.getElementById('pauseButton').addEventListener('click', () => sendAction('PAUSE'));
-    document.getElementById('continueButton').addEventListener('click', () => sendAction('CONTINUE'));
+    const startStopButton = document.getElementById('startStopButton');
+    let isGameRunning = false; // Etat du jeu
+
+    startStopButton.addEventListener('click', function() {
+        if (!isGameRunning) {
+            // Démarrer le jeu
+            sendAction('START');
+            startStopButton.textContent = "STOP"; // Modifier le texte à STOP
+            isGameRunning = true;
+        } else {
+            // Arrêter le jeu
+            sendAction('STOP');
+            startStopButton.textContent = "START"; // Modifier le texte à START
+            isGameRunning = false;
+        }
+    });
+
+    // Gestion du bouton Pause/Continue
+    const pauseContinueButton = document.getElementById('pauseContinueButton');
+    let isPaused = false; // Etat de pause
+
+    pauseContinueButton.addEventListener('click', function() {
+        if (!isPaused) {
+            // Mettre en pause
+            sendAction('PAUSE');
+            pauseContinueButton.textContent = "CONTINUE"; // Modifier le texte à CONTINUE
+            isPaused = true;
+        } else {
+            // Continuer le jeu
+            sendAction('CONTINUE');
+            pauseContinueButton.textContent = "PAUSE"; // Modifier le texte à PAUSE
+            isPaused = false;
+        }
+    });
 });

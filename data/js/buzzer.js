@@ -45,6 +45,10 @@ export function createBuzzerDiv(buzzerData) {
 
         input.addEventListener('blur', () => {
             const currentPlayerName = input.value.trim() || playerName;  
+            if (!currentPlayerName) {
+                input.focus();
+                return;
+            }
             buzzerDiv.innerHTML = ''; 
             const nameElement = createTextElement('buzzer-name', `Nom: ${currentPlayerName}`);  
             buzzerDiv.appendChild(nameElement);
@@ -65,7 +69,7 @@ export function createBuzzerDiv(buzzerData) {
         buzzerDiv.className = 'buzzer';
         configureDragElement(buzzerDiv);
 
-        const idElement = createTextElement('buzzer-id', `ID: ${id}`);
+        const idElement = createTextElement('buzzer-id', `ID: ${id} Version : ${data.VERSION}`);
 
         const updateView = (playerName) => {
             buzzerDiv.innerHTML = '';
