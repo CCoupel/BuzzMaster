@@ -1,7 +1,8 @@
 messages format:
 {
     "teams": { <name>: {"COLOR": [R,G,B], "TIME":<T>, "DELAY": <D>, "STATUS": ""}},
-    "bumper": { <ID>: { "IP": <IP>, "TIME": <T>, "BUTTON": <B>, "DELAY": <D>, "DELAY_TEAM": <D>, "SCORE": <S> }}
+    "bumper": { <ID>: { "IP": <IP>, "TIME": <T>, "BUTTON": <B>, "DELAY": <D>, "DELAY_TEAM": <D>, "SCORE": <S> }},
+    "game": { "PHASE": <START|STOP|PAUSE>, "TIME": <T>}
 }
 from Buzzer:
 { "ID": <ID>, "ACTION": <VERB>, "MSG": <msg>}
@@ -19,12 +20,13 @@ from WEB:
 { "ACTION": "FULL", "MSG": <BUZZERandTEAM>}
 { "ACTION": "DELETE", "MSG": <BUZZERandTEAM>}
 { "ACTION": "RESET", "MSG": ""}
+{ "ACTION": "FILE", "MSG": { "NAME": <background|Q1...>, "SIZE": <bytes>,  "CONTENT":[binFile]}}
 
 to Buzzer:
 { "ACTION": <VERB>, "MSG": <msg>}
 
-{ "ACTION": "START", "MSG": <msg>}
-{ "ACTION": "STOP", "MSG": <msg>}
+{ "ACTION": "START", "MSG": <msg>, "TIME":<T>}
+{ "ACTION": "STOP", "MSG": <msg>, "TIME":<T>}
 { "ACTION": "PAUSE", "MSG": <msg>}
 
 to WEB:

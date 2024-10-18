@@ -19,6 +19,8 @@ void parseDataFromSocket(const char* action, const JsonObject& message) {
   
 
   switch (hash(action)) {
+    case hash("FILE"):
+      handleFile(message["FILE"]);
     case hash("PING"):
       // Handle ping
       break;

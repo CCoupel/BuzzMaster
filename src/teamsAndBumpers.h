@@ -79,6 +79,29 @@ void setBumperNAME(const char* bumperID, const char* NAME) {
     ESP_LOGI(TEAMs_TAG, "Bumper NAME %s %s", bID, NAMECopy);
 }
 
+void setBumperVERSION(const char* bumperID, const char* version) {
+    if (bumperID == nullptr || strlen(bumperID) == 0) {
+        ESP_LOGE("Teams&Bumpers", "Invalid bumperID provided: %s", bumperID);
+    }
+    if (version == nullptr || strlen(version) == 0) {
+        ESP_LOGE("Teams&Bumpers", "Invalid IP address provided: %s", version);
+    }
+
+    ESP_LOGD("Teams&Bumpers","set IP: %s:%s", bumperID, version);
+
+    String bID = String(bumperID);
+    if (teamsAndBumpers["bumpers"].isNull()) {
+        teamsAndBumpers["bumpers"] = JsonObject();
+    }
+
+    if (teamsAndBumpers["bumpers"][bID].isNull()) {
+        teamsAndBumpers["bumpers"][bID]=JsonObject();
+    }
+    String ipCopy = String(version);
+    teamsAndBumpers["bumpers"][bID]["VERSION"] = ipCopy;
+
+}
+
 void setBumperButton(const char* bumperID, int button) {
     if (bumperID == nullptr || strlen(bumperID) == 0) {
         ESP_LOGE(TEAMs_TAG, "Invalid bumperID provided: %s", bumperID);
@@ -152,7 +175,8 @@ void updateBumper(const char* bumperID, const JsonObject& new_bumper) {
 
   } else {
       if (!new_bumper["IP"].isNull()) { setBumperIP(bumperID, new_bumper["IP"]); };
-      if (!new_bumper["NAME"].isNull()) { setBumperIP(bumperID, new_bumper["NAME"]); };
+      if (!new_bumper["NAME"].isNull()) { setBumperNAME(bumperID, new_bumper["NAME"]); };
+      if (!new_bumper["VERSION"].isNull()) { setBumperVERSION(bumperID, new_bumper["VERSION"]); };
   }
   bumper = getBumper(bumperID);
   serializeJson(bumper, output);

@@ -392,10 +392,10 @@ void downloadFiles() {
 
     // Lire la version locale
     int localVersion = atoi(readFile("/CURRENT"+VERSION_FILE,"-1").c_str());
-    ESP_LOGE(FS_TAG, "CURRENTVersion=%i", localVersion);
+    ESP_LOGI(FS_TAG, "CURRENT Version=%i", localVersion);
     if (localVersion<0) {
         localVersion = atoi(readFile(VERSION_FILE, "-1").c_str());
-        ESP_LOGE(FS_TAG, "Local Version=%i", localVersion);
+        ESP_LOGW(FS_TAG, "Local Version=%i", localVersion);
     }
     
 

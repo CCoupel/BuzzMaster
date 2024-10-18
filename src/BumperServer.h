@@ -186,10 +186,45 @@ void handleButtonAction(const char* bumperID, JsonObject& MSG, AsyncClient* c) {
   //}
 }
 
+void handleFile(JsonObject& MSG) {
+  String fName = MSG["NAME"].as<String>();
+  String question = MSG["QUESTION"].as<String>();
+  size_t fSize = MSG["SIZE"].as<size_t>();
+  JsonArray fContent = MSG["CONTENT"].as<JsonArray>();
+
+  if (!LittleFS.begin()) {
+    ESP_LOGE(BUMPER_TAG,"Erreur lors du montage de LittleFS");
+    return;
+  }
+
+  String filePath = "/files/" + fName;
+  File file = LittleFS.open(filePath, "w");
+  if (!file) {
+    ESP_LOGE(BUMPER_TAG,"Erreur lors de l'ouverture du fichier en écriture");
+    return;
+  }
+
+  for (JsonVariant v : fContent) {
+    uint8_t byte = v.as<uint8_t>();
+    file.write(byte);
+  }
+
+  file.close();
+
+  if (file.size() == fSize) {
+    ESP_LOGI(BUMPER_TAG,"Fichier sauvegardé avec succès : " + filePath);
+  } else {
+    ESP_LOGE(BUMPER_TAG,"Erreur : La taille du fichier sauvegardé ne correspond pas à la taille attendue");
+  }
+
+  LittleFS.end();
+}
+
 void parseJSON(const String& data, AsyncClient* c)
 {
   String action;
   String bumperID;
+  String versionBuzzer;
 
   JsonDocument receivedData;
   JsonObject MSG;
@@ -204,10 +239,11 @@ void parseJSON(const String& data, AsyncClient* c)
   JsonObject jsonObjData = receivedData.as<JsonObject>();
 
   bumperID = jsonObjData["ID"].as<String>();
+  versionBuzzer = jsonObjData["VERSION"].as<String>();
   action = jsonObjData["ACTION"].as<String>();
   MSG = jsonObjData["MSG"];
 
-  ESP_LOGD(BUMPER_TAG, "bumperID=%s ACTION=%s", bumperID.c_str(), action.c_str());
+  ESP_LOGD(BUMPER_TAG, "bumperID=%s version= %s ACTION=%s", bumperID.c_str(), versionBuzzer.c_str(), action.c_str());
     
   switch(hash(action.c_str())) {
     case hash("HELLO"):
