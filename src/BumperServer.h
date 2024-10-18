@@ -29,6 +29,9 @@ void processButtonPress(const String& bumperID, const char* b_team, int64_t b_ti
   //b["TIME"] = b_time;
   //b["BUTTON"] = b_button;
   setBumperButton(bumperID.c_str(), b_button);
+  setBumperTime(bumperID.c_str(), b_time);
+  setTeamBumper(b_team,bumperID.c_str());
+  setTeamTime(b_team, b_time);
   //b["DELAY"] = b_delay;
   //b["DELAY_TEAM"] = b_delayTeam;
   //b["STATUS"] = "PAUSE";
@@ -41,12 +44,12 @@ void processButtonPress(const String& bumperID, const char* b_team, int64_t b_ti
   //t["STATUS"] = "PAUSE";
   setTeamStatus(b_team, "PAUSE");
   //t["BUMPER"] = bumperID;
-  setTeamBumper(b_team,bumperID.c_str());
+  
   //setTeam(b_team, t);
 }
 
 void resetBumpersTime() {
-  std::vector<String> keysToRemove = {"STATUS", "BUTTON", "TIME", "DELAY", "DELAY_TEAM"};
+  std::vector<String> keysToRemove = {"STATUS", "BUTTON", "TIME", "TIMESTAMP", "BUMPER"};
 
   JsonObject bumpers = teamsAndBumpers["bumpers"];
   JsonObject teams = teamsAndBumpers["teams"];
@@ -118,7 +121,7 @@ void RAZscores() {
             const char* key = kvp.key().c_str();
             ESP_LOGI(BUMPER_TAG, "Resetting Score for %s", key);
             setBumperScore(key, 0);
-            setBumperDelay(key, -1);
+            setBumperTime(key, -1);
         }
     } else {
         ESP_LOGW(TAG, "Bumpers object is null or invalid");
@@ -132,7 +135,7 @@ void RAZscores() {
             const char* key = kvp.key().c_str();
             ESP_LOGI(BUMPER_TAG, "Resetting Score for %s", key);
             setTeamScore(key, 0);
-//            setTeamDelay(key, -1);
+            setTeamTime(key, -1);
         }
     } else {
         ESP_LOGW(TAG, "Teams object is null or invalid");
@@ -177,15 +180,16 @@ void handleButtonAction(const char* bumperID, JsonObject& MSG, AsyncClient* c) {
   JsonObject bumper=getBumper(bumperID);
   //if(bumper["IP"]==c->remoteIP().toString()) {
     const char* teamID=bumper["TEAM"];
-    int64_t b_time = MSG["time"].as<int64_t>();  // Changé en int64_t
+//    int64_t b_time = MSG["time"].as<int64_t>();  // Changé en int64_t
     int b_button = MSG["button"];
     if (teamID != nullptr) {
-      processButtonPress(bumperID, teamID, b_time, b_button);
+      processButtonPress(bumperID, teamID, micros(), b_button);
       pauseGame(c);
     }
   //}
 }
 
+/*
 void handleFile(JsonObject& MSG) {
   String fName = MSG["NAME"].as<String>();
   String question = MSG["QUESTION"].as<String>();
@@ -220,6 +224,7 @@ void handleFile(JsonObject& MSG) {
   LittleFS.end();
 }
 
+*/
 void parseJSON(const String& data, AsyncClient* c)
 {
   String action;

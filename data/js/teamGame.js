@@ -124,15 +124,21 @@ function updateDisplay() {
     container.innerHTML = '';
 
     const sortedTeams = Object.entries(getTeams()).sort((a, b) => {
-        const delayA = a[1].DELAY !== undefined ? a[1].DELAY : Infinity;
-        const delayB = b[1].DELAY !== undefined ? b[1].DELAY : Infinity;
+//        const delayA = a[1].DELAY !== undefined ? a[1].DELAY : Infinity;
+//        const delayB = b[1].DELAY !== undefined ? b[1].DELAY : Infinity;
+        const delayA = a[1].TIMESTAMP !== undefined ? a[1].TIMESTAMP : Infinity;
+        const delayB = b[1].TIMESTAMP !== undefined ? b[1].TIMESTAMP : Infinity;
+
         return delayA - delayB;
     });
 
     sortedTeams.forEach(([teamName, teamData]) => {
         const teamElement = document.createElement('div');
         const isStartPhase = gameState.gamePhase === 'START';
-        const isTeamActive = teamData.DELAY !== undefined;
+
+ //       const isTeamActive = teamData.DELAY !== undefined;
+        const isTeamActive = teamData.TIMESTAMP !== undefined;
+
         teamElement.className = `team ${isTeamActive ? 'active' : ''} ${isStartPhase && !isTeamActive ? 'start-phase' : ''}`;
         
         const teamHeader = document.createElement('div');
@@ -156,14 +162,18 @@ function updateDisplay() {
         const teamBumpers = Object.entries(getBumpers())
             .filter(([_, bumperData]) => bumperData.TEAM === teamName)
             .sort((a, b) => {
-                const delayA = a[1].DELAY_TEAM !== undefined ? a[1].DELAY_TEAM : Infinity;
-                const delayB = b[1].DELAY_TEAM !== undefined ? b[1].DELAY_TEAM : Infinity;
+//                const delayA = a[1].DELAY_TEAM !== undefined ? a[1].DELAY_TEAM : Infinity;
+//                const delayB = b[1].DELAY_TEAM !== undefined ? b[1].DELAY_TEAM : Infinity;
+                const delayA = a[1].TIMESTAMP !== undefined ? a[1].TIMESTAMP : Infinity;
+                const delayB = b[1].TIMESTAMP !== undefined ? b[1].TIMESTAMP : Infinity;
+
                 return delayA - delayB;
             });
 
         teamBumpers.forEach(([bumperMac, bumperData]) => {
             const bumperElement = document.createElement('div');
-            const isBumperActive = bumperData.BUTTON !== undefined || bumperData.DELAY !== undefined;
+ //           const isBumperActive = bumperData.BUTTON !== undefined || bumperData.DELAY !== undefined;
+            const isBumperActive = bumperData.BUTTON !== undefined || bumperData.TIMESTAMP !== undefined;
             bumperElement.className = `bumper ${isBumperActive ? 'active' : ''} ${isStartPhase && !isBumperActive ? 'start-phase' : ''}`;
             bumperElement.textContent = `${bumperData.NAME}`;
             

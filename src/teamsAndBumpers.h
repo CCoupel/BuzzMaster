@@ -145,7 +145,7 @@ void setBumperScore(const char* bumperID, const int new_score) {
     teamsAndBumpers["bumpers"][bumperID]["SCORE"]=copy;
 }
 
-void setBumperDelay(const char* bumperID, const int new_delay) {
+void setBumperTime(const char* bumperID, const int new_delay) {
     if (bumperID == nullptr || strlen(bumperID) == 0) {
         ESP_LOGE(TEAMs_TAG, "Invalid bumperID provided: %s", bumperID);
     }
@@ -153,7 +153,8 @@ void setBumperDelay(const char* bumperID, const int new_delay) {
         teamsAndBumpers["bumpers"] = JsonObject();
     }
     int copy = int(new_delay);
-    teamsAndBumpers["bumpers"][bumperID]["DELAY"]=copy;
+    teamsAndBumpers["bumpers"][bumperID]["TIMESTAMP"]=copy;
+    ESP_LOGI(TEAMs_TAG, "Team Delay %s %i", bumperID, copy);
 }
 
 void  mergeJson(JsonObject& destObj, const JsonObject& srcObj) {
@@ -238,9 +239,9 @@ void setTeamStatus(const char* teamID, String status) {
     ESP_LOGI(TEAMs_TAG, "Team Status %s %s", teamID, copy);
 }
 
-void setTeamDelay(const char* teamID, const int new_delay) {
+void setTeamTime(const char* teamID, const int new_delay) {
     if (teamID == nullptr || strlen(teamID) == 0) {
-        ESP_LOGE(TEAMs_TAG, "Invalid bumperID provided: %s", teamID);
+        ESP_LOGE(TEAMs_TAG, "Invalid teamID provided: %s", teamID);
     }
     if (teamsAndBumpers["teams"].isNull()) {
         teamsAndBumpers["teams"] = JsonObject();
@@ -250,7 +251,7 @@ void setTeamDelay(const char* teamID, const int new_delay) {
         teamsAndBumpers["teams"][teamID]=JsonObject();
     }
     int copy = int(new_delay);
-    teamsAndBumpers["teams"][teamID]["DELAY"]=copy;
+    teamsAndBumpers["teams"][teamID]["TIMESTAMP"]=copy;
     ESP_LOGI(TEAMs_TAG, "Team Delay %s %i", teamID, copy);
 }
 
@@ -267,8 +268,8 @@ void setTeamBumper(const char* teamID, const char* bumperID) {
     }
     String copy = String(bumperID);
     teamsAndBumpers["teams"][teamID]["BUMPER"] = copy;
-    setTeamDelay(teamID, micros());
-    ESP_LOGI(TEAMs_TAG, "Team Bumper %s %s", teamID, copy);
+//    setTeamTime(teamID, micros());
+    ESP_LOGI(TEAMs_TAG, "Team Bumper %s %s", teamID, copy.c_str());
 }
 
 void setTeamScore(const char* teamID, const int new_score) {

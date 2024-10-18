@@ -52,7 +52,7 @@ String makeJsonMessage(const String& action, const String& msg) {
     message += ", \"VERSION\": \"" + String(VERSION) + "\"";
     message += ", \"MSG\":" + msg + "";
     message += ", \"TIME1\":" + String(micros()) + "";
-    message += "}";
+    message += "} \n";
 
     return message;
 }
