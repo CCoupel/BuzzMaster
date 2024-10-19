@@ -6,17 +6,19 @@ let gameState = {
     totalTime: 30,
     gamePhase: 'STOP'
 };
+
 let localTimer;
+let gameTime;
 
 function handleConfigSocketMessage(event) {
     console.log('Message reçu du serveur:', event.data);
         const data = JSON.parse(event.data);
         if (data.ACTION) {
             handleServerAction(data.ACTION, data.MSG);
-        } else if (data.TIME !== undefined) {
-            gameState.timer = data.TIME;
-            updateTimer();
-            updateTimeBar();
+        } else if (data.MSG.GAME.TIME !== undefined) {
+            //gameState.timer = data.TIME;
+            //updateTimer();
+            //updateTimeBar();
         }
 }
 
@@ -28,6 +30,8 @@ function handleServerAction(action, msg) {
             updateTimeBar(true);
             startTimer();
             updateDisplay();
+            gameTime = msg.GAME.TIME;
+            console.log(msg);
             break;
         case 'STOP':
             gameState.gamePhase = 'STOP';
@@ -162,8 +166,6 @@ function updateDisplay() {
         const teamBumpers = Object.entries(getBumpers())
             .filter(([_, bumperData]) => bumperData.TEAM === teamName)
             .sort((a, b) => {
-//                const delayA = a[1].DELAY_TEAM !== undefined ? a[1].DELAY_TEAM : Infinity;
-//                const delayB = b[1].DELAY_TEAM !== undefined ? b[1].DELAY_TEAM : Infinity;
                 const delayA = a[1].TIMESTAMP !== undefined ? a[1].TIMESTAMP : Infinity;
                 const delayB = b[1].TIMESTAMP !== undefined ? b[1].TIMESTAMP : Infinity;
 
@@ -172,17 +174,21 @@ function updateDisplay() {
 
         teamBumpers.forEach(([bumperMac, bumperData]) => {
             const bumperElement = document.createElement('div');
- //           const isBumperActive = bumperData.BUTTON !== undefined || bumperData.DELAY !== undefined;
+            console.log(gameTime)
+            const bumperText = document.createElement ('p');
+            const bumperTime = document.createElement('p');
             const isBumperActive = bumperData.BUTTON !== undefined || bumperData.TIMESTAMP !== undefined;
             bumperElement.className = `bumper ${isBumperActive ? 'active' : ''} ${isStartPhase && !isBumperActive ? 'start-phase' : ''}`;
-            bumperElement.textContent = `${bumperData.NAME}`;
+            bumperText.textContent = `${bumperData.NAME}`;
+            bumperTime.textContent = `${bumperData.TIMESTAMP !== undefined ? ' Temps : ' + ((bumperData.TIMESTAMP - gameTime) / 1000000) + ' s' : ''}`;
             
             
             if (gameState.gamePhase === 'STOP' && isBumperActive) {
                 bumperElement.onclick = () => addPointToBumper(bumperMac);
                 bumperElement.style.cursor = 'pointer';
             }
-            
+            bumperElement.appendChild(bumperText)
+            bumperElement.appendChild(bumperTime)
             teamElement.appendChild(bumperElement);
         });
 
@@ -244,43 +250,63 @@ function updateTimeBar(immediate = false) {
     }
 }
 
+function handleButtonPress(state) {
+    const startStopButton = document.getElementById('startStopButton');
+    const pauseContinueButton = document.getElementById('pauseContinueButton');
+    switch (state) {
+        case 'START' :
+            startStopButton.textContent = "STOP";
+            pauseContinueButton.textContent = "PAUSE";
+            break;
+        case 'STOP' :
+            startStopButton.textContent = "START";
+            pauseContinueButton.textContent = "PAUSE";
+            break;
+        case 'PAUSE' :
+            pauseContinueButton.textContent = "CONTINUE";
+            startStopButton.textContent = "STOP";
+            break;
+        case 'CONTINUE' :
+            pauseContinueButton.textContent = "PAUSE";
+            startStopButton.textContent = "STOP";
+            break;
+    }
+}
 document.addEventListener('DOMContentLoaded', function() {
     connectWebSocket(handleConfigSocketMessage);
     updateDisplay();
     updateTimer();
     updateTimeBar();
 
-    const startStopButton = document.getElementById('startStopButton');
     let isGameRunning = false; // Etat du jeu
 
     startStopButton.addEventListener('click', function() {
         if (!isGameRunning) {
             // Démarrer le jeu
             sendAction('START');
-            startStopButton.textContent = "STOP"; // Modifier le texte à STOP
+            handleButtonPress ("START"); // Modifier le texte à STOP
             isGameRunning = true;
         } else {
             // Arrêter le jeu
             sendAction('STOP');
-            startStopButton.textContent = "START"; // Modifier le texte à START
+            handleButtonPress ("STOP"); // Modifier le texte à START
             isGameRunning = false;
         }
     });
 
     // Gestion du bouton Pause/Continue
-    const pauseContinueButton = document.getElementById('pauseContinueButton');
     let isPaused = false; // Etat de pause
 
     pauseContinueButton.addEventListener('click', function() {
         if (!isPaused) {
             // Mettre en pause
             sendAction('PAUSE');
-            pauseContinueButton.textContent = "CONTINUE"; // Modifier le texte à CONTINUE
+            handleButtonPress ("PAUSE"); // Modifier le texte à CONTINUE
             isPaused = true;
         } else {
             // Continuer le jeu
             sendAction('CONTINUE');
-            pauseContinueButton.textContent = "PAUSE"; // Modifier le texte à PAUSE
+            handleButtonPress ("CONTINUE"); // Modifier le texte à PAUSE
             isPaused = false;
         }
     });
