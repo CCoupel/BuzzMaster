@@ -18,6 +18,16 @@ void setGamePhase(String phase) {
     }
 
 }
+
+String getTeamsAndBumpers() {
+  String output;
+  JsonDocument& tb=getTeamsAndBumpers();
+  if (serializeJson(tb, output)) {
+
+  } else {
+    ESP_LOGE(TEAMs_TAG, "Failed to serialize JSON");
+  }
+}
 //### BUMPERS ###
 JsonObject getBumpers() {
     return teamsAndBumpers["bumpers"].as<JsonObject>();
@@ -145,7 +155,7 @@ void setBumperScore(const char* bumperID, const int new_score) {
     teamsAndBumpers["bumpers"][bumperID]["SCORE"]=copy;
 }
 
-void setBumperTime(const char* bumperID, const int new_delay) {
+void setBumperTime(const char* bumperID, const int64_t new_delay) {
     if (bumperID == nullptr || strlen(bumperID) == 0) {
         ESP_LOGE(TEAMs_TAG, "Invalid bumperID provided: %s", bumperID);
     }
@@ -239,7 +249,7 @@ void setTeamStatus(const char* teamID, String status) {
     ESP_LOGI(TEAMs_TAG, "Team Status %s %s", teamID, copy);
 }
 
-void setTeamTime(const char* teamID, const int new_delay) {
+void setTeamTime(const char* teamID, const int64_t new_delay) {
     if (teamID == nullptr || strlen(teamID) == 0) {
         ESP_LOGE(TEAMs_TAG, "Invalid teamID provided: %s", teamID);
     }

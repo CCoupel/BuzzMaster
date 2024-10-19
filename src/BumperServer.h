@@ -86,31 +86,51 @@ void startGame(){
   resetBumpersTime();
   GameStarted=true;
   setGamePhase( "STARTED");
-
-  putMsgToQueue("START","",true);
-  
+  String output;
+  JsonDocument& tb=getTeamsAndBumpers();
+    if (serializeJson(tb, output)) {
+      putMsgToQueue("START",output.c_str(),true);
+    } else {
+      ESP_LOGE(BUMPER_TAG, "Failed to serialize JSON");
+    }
 }
 
 void stopGame(){
   GameStarted=false;
   setGamePhase( "STOPPED" );
-  putMsgToQueue("STOP","",true);
-  
+  String output;
+  JsonDocument& tb=getTeamsAndBumpers();
+  if (serializeJson(tb, output)) {
+    putMsgToQueue("STOP",output.c_str(),true);
+  } else {
+     ESP_LOGE(BUMPER_TAG, "Failed to serialize JSON");
+  }
 }
 
 void pauseGame(AsyncClient* client) {
   setGamePhase( "PAUSED" );
-  putMsgToQueue("PAUSE","",true, client);
+  String output;
+  JsonDocument& tb=getTeamsAndBumpers();
+  if (serializeJson(tb, output)) {
+    putMsgToQueue("PAUSE",output.c_str(),true, client);
+  } else {
+     ESP_LOGE(BUMPER_TAG, "Failed to serialize JSON");
+  }
 }
 
 void pauseAllGame(){
   setGamePhase( "PAUSED" );
-  putMsgToQueue("PAUSE","",true);
+  String output;
+  JsonDocument& tb=getTeamsAndBumpers();
+  if (serializeJson(tb, output)) {
+    putMsgToQueue("PAUSE",output.c_str(),true);
+  } else {
+     ESP_LOGE(BUMPER_TAG, "Failed to serialize JSON");
+  }
 }
 
 void continueGame(){
-  setGamePhase( "STARTED" );
-  putMsgToQueue("START","",true);
+  startGame();
 }
 
 void RAZscores() {
