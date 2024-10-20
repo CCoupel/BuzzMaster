@@ -51,7 +51,7 @@ String makeJsonMessage(const String& action, const String& msg) {
     message += "\"ACTION\": \"" + action + "\"";
     message += ", \"VERSION\": \"" + String(VERSION) + "\"";
     message += ", \"MSG\":" + msg + "";
-    message += ", \"TIME1\":" + String(micros()) + "";
+    message += ", \"TIME_EVENT\":" + String(micros()) + "";
     message += "} \n";
 
     return message;
