@@ -9,6 +9,8 @@ let gameState = {
 
 let localTimer;
 let gameTime;
+let isGameRunning = false; // Etat du jeu
+let isPaused = false; // Etat de pause
 
 function handleConfigSocketMessage(event) {
     console.log('Message reçu du serveur:', event.data);
@@ -32,22 +34,30 @@ function handleServerAction(action, msg) {
             updateDisplay();
             gameTime = msg.GAME.TIME;
             console.log(msg);
+            handleButtonPress ("START");
+            isGameRunning = true;
             break;
         case 'STOP':
             gameState.gamePhase = 'STOP';
             updateTimeBar(true);
             stopTimer();
             updateDisplay();
+            handleButtonPress ("STOP");
+            isGameRunning = false;
             break;
         case 'PAUSE':
             gameState.gamePhase = 'PAUSE';
             pauseTimer();
             updateTimeBar(true);
+            handleButtonPress ("PAUSE");
+            isPaused = true;
             break;
         case 'CONTINUE':
             gameState.gamePhase = 'START';
             continueTimer();
             updateTimeBar(true);
+            handleButtonPress ("CONTINUE");
+            isPaused = false;
             break;
         case 'UPDATE':
             if (msg.teams && msg.bumpers) {
@@ -272,42 +282,39 @@ function handleButtonPress(state) {
             break;
     }
 }
+
 document.addEventListener('DOMContentLoaded', function() {
     connectWebSocket(handleConfigSocketMessage);
     updateDisplay();
     updateTimer();
     updateTimeBar();
 
-    let isGameRunning = false; // Etat du jeu
-
     startStopButton.addEventListener('click', function() {
         if (!isGameRunning) {
             // Démarrer le jeu
             sendAction('START');
-            handleButtonPress ("START"); // Modifier le texte à STOP
-            isGameRunning = true;
+            //handleButtonPress ("START"); // Modifier le texte à STOP
+            //isGameRunning = true;
         } else {
             // Arrêter le jeu
             sendAction('STOP');
-            handleButtonPress ("STOP"); // Modifier le texte à START
-            isGameRunning = false;
+            //handleButtonPress ("STOP"); // Modifier le texte à START
+            //isGameRunning = false;
         }
     });
 
     // Gestion du bouton Pause/Continue
-    let isPaused = false; // Etat de pause
-
     pauseContinueButton.addEventListener('click', function() {
         if (!isPaused) {
             // Mettre en pause
             sendAction('PAUSE');
-            handleButtonPress ("PAUSE"); // Modifier le texte à CONTINUE
-            isPaused = true;
+            //handleButtonPress ("PAUSE"); // Modifier le texte à CONTINUE
+            // isPaused = true;
         } else {
             // Continuer le jeu
             sendAction('CONTINUE');
-            handleButtonPress ("CONTINUE"); // Modifier le texte à PAUSE
-            isPaused = false;
+            //handleButtonPress ("CONTINUE"); // Modifier le texte à PAUSE
+            //isPaused = false;
         }
     });
 });
