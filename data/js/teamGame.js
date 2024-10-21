@@ -27,8 +27,11 @@ function handleConfigSocketMessage(event) {
 function handleServerAction(action, msg) {
     console.log('Action reçue du serveur:', action);
     switch (action) {
-        case 'START':
+        case 'START':          
+            const gameDelay = parseInt(msg.GAME.DELAY, 10) || 30;
             gameState.gamePhase = 'START';
+            gameState.totalTime = gameDelay;
+            gameState.timer = gameDelay;
             updateTimeBar(true);
             startTimer();
             updateDisplay();
@@ -77,9 +80,6 @@ function sendAction(action, msg = {}) {
             case 'START':
                 const gameTimeInput = document.getElementById('game-time-input');
                 const gameTime = parseInt(gameTimeInput.value, 10) || 30;
-                gameState.totalTime = gameTime;
-                gameState.timer = gameTime;
-                updateTimeBar(true);
                 message = {'DELAY':  gameTime.toString()};
                 sendWebSocketMessage( action, message);
                 break;
