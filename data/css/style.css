@@ -110,6 +110,21 @@
     height: 40px;
   }
   
+  .player-control{
+    width: 30%;
+    display: flex;
+    justify-content: space-around;
+    align-items: center;
+  }
+
+  .game-control{
+    width: 70%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 2%;
+  }
+  
   button, .navbar-item {
     background-color: var(--accent-color);
     color: white;

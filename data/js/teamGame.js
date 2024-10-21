@@ -37,7 +37,6 @@ function handleServerAction(action, msg) {
             updateDisplay();
             gameTime = msg.GAME.TIME;
             console.log(msg);
-            handleButtonPress ("START");
             isGameRunning = true;
             break;
         case 'STOP':
@@ -45,21 +44,18 @@ function handleServerAction(action, msg) {
             updateTimeBar(true);
             stopTimer();
             updateDisplay();
-            handleButtonPress ("STOP");
             isGameRunning = false;
             break;
         case 'PAUSE':
             gameState.gamePhase = 'PAUSE';
             pauseTimer();
             updateTimeBar(true);
-            handleButtonPress ("PAUSE");
             isPaused = true;
             break;
         case 'CONTINUE':
             gameState.gamePhase = 'START';
             continueTimer();
             updateTimeBar(true);
-            handleButtonPress ("CONTINUE");
             isPaused = false;
             break;
         case 'UPDATE':
@@ -67,9 +63,14 @@ function handleServerAction(action, msg) {
                 updateTeams(msg.teams);
                 updateBumpers(msg.bumpers);
                 gameTime = msg.GAME.TIME;
+                gameState.gamePhase = msg.GAME.PHASE;
+                gameState.timer = msg.GAME.CURRENT_TIME;
+                gameState.totalTime = msg.GAME.DELAY;
                 updateDisplay();
+                updateTimeBar(true);
+                updateTimer();
+                handlePhase(msg.GAME.PHASE);
             }
-            gameTime = msg.GAME.TIME;
             break;
         default:
             console.log('Action non reconnue:', action);
@@ -82,11 +83,15 @@ function sendAction(action, msg = {}) {
             case 'START':
                 const gameTimeInput = document.getElementById('game-time-input');
                 const gameTime = parseInt(gameTimeInput.value, 10) || 30;
-                message = {'DELAY':  gameTime.toString()};
+                message = {'DELAY':  gameTime};
                 sendWebSocketMessage( action, message);
                 break;
             case 'UPDATE':
                 message = msg;
+                sendWebSocketMessage( action, message);
+                break;
+            case 'PAUSE':
+                message =  {'CURRENT_TIME':  gameState.timer.toString()};
                 sendWebSocketMessage( action, message);
                 break;
             default:
@@ -209,7 +214,6 @@ function updateDisplay() {
 }
 
 function updateTimer() {
-    console.log('Mise à jour du timer:', gameState.timer);
     const timerElement = document.getElementById('timer');
     const minutes = Math.floor(gameState.timer / 60);
     const seconds = gameState.timer % 60;
@@ -224,7 +228,6 @@ function addPointToBumper(bumperMac) {
 }
 
 function updateTimeBar(immediate = false) {
-    console.log('Mise à jour de la barre de temps');
     const timeBar = document.getElementById('time-bar');
     const percentageRemaining = (gameState.timer / gameState.totalTime) * 100;
     
@@ -262,7 +265,7 @@ function updateTimeBar(immediate = false) {
     }
 }
 
-function handleButtonPress(state) {
+function handlePhase(state) {
     const startStopButton = document.getElementById('startStopButton');
     const pauseContinueButton = document.getElementById('pauseContinueButton');
     switch (state) {
@@ -290,33 +293,31 @@ document.addEventListener('DOMContentLoaded', function() {
     updateDisplay();
     updateTimer();
     updateTimeBar();
-
+    
     startStopButton.addEventListener('click', function() {
-        if (!isGameRunning) {
-            // Démarrer le jeu
+        if (gameState.gamePhase ==='STOP') {
             sendAction('START');
-            //handleButtonPress ("START"); // Modifier le texte à STOP
-            //isGameRunning = true;
         } else {
-            // Arrêter le jeu
+            startStopButton.textContent = "STOP";
             sendAction('STOP');
-            //handleButtonPress ("STOP"); // Modifier le texte à START
-            //isGameRunning = false;
         }
     });
 
     // Gestion du bouton Pause/Continue
     pauseContinueButton.addEventListener('click', function() {
-        if (!isPaused) {
-            // Mettre en pause
+        if (gameState.gamePhase !== 'PAUSE') {
             sendAction('PAUSE');
-            //handleButtonPress ("PAUSE"); // Modifier le texte à CONTINUE
-            // isPaused = true;
         } else {
-            // Continuer le jeu
+            console.log(gameState.gamePhase)
             sendAction('CONTINUE');
-            //handleButtonPress ("CONTINUE"); // Modifier le texte à PAUSE
-            //isPaused = false;
         }
+    });
+
+    playerGame.addEventListener('click', function() {
+        sendAction('REMOTE');
+    });
+
+    playerScores.addEventListener('click', function() {
+        sendAction('REMOTE');
     });
 });
