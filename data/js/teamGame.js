@@ -66,8 +66,10 @@ function handleServerAction(action, msg) {
             if (msg.teams && msg.bumpers) {
                 updateTeams(msg.teams);
                 updateBumpers(msg.bumpers);
+                gameTime = msg.GAME.TIME;
                 updateDisplay();
             }
+            gameTime = msg.GAME.TIME;
             break;
         default:
             console.log('Action non reconnue:', action);
