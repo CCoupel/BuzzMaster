@@ -68,7 +68,7 @@ void setup(void)
     }
 
   xTaskCreate(sendMessageTask, "Send Message Task", 14096, NULL, 1, NULL);
-
+  sendMessageToAllClients("HELLO", "{  }");
 }
 
 void loop(void)

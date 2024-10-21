@@ -391,11 +391,13 @@ void downloadFiles() {
     }
 
     // Lire la version locale
-    int localVersion = atoi(readFile("/CURRENT"+VERSION_FILE,"-1").c_str());
-    ESP_LOGI(FS_TAG, "CURRENT Version=%i", localVersion);
+//    float localVersion = atof(readFile("/CURRENT"+VERSION_FILE,"-1").c_str());
+    float localVersion =readFile("/CURRENT"+VERSION_FILE,"-1").toFloat();
+    ESP_LOGI(FS_TAG, "CURRENT Version=%f", localVersion);
     if (localVersion<0) {
-        localVersion = atoi(readFile(VERSION_FILE, "-1").c_str());
-        ESP_LOGW(FS_TAG, "Local Version=%i", localVersion);
+//        localVersion = atof(readFile(VERSION_FILE, "-1").c_str());
+        localVersion = readFile(VERSION_FILE, "-1").toFloat();
+        ESP_LOGW(FS_TAG, "Local Version=%f", localVersion);
     }
     
 
@@ -410,7 +412,7 @@ void downloadFiles() {
         return;
     }
 
-    int remoteVersion = atoi(readFile(tempVersionPath,"-1").c_str());
+    float remoteVersion = atof(readFile(tempVersionPath,"-1").c_str());
     if (remoteVersion<0) {
         ESP_LOGE(FS_TAG, "Impossible de lire la version distante");
         return;
@@ -423,7 +425,7 @@ void downloadFiles() {
         return;
     }
 
-    ESP_LOGI(FS_TAG, "La version locale est a remplacer %i / %i", localVersion, remoteVersion);
+    ESP_LOGI(FS_TAG, "La version locale est a remplacer %f / %f", localVersion, remoteVersion);
     
     // Télécharger le fichier catalogue distant
     String remoteCatalogUrl = baseUrl + baseFILE;
