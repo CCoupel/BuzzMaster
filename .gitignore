@@ -9,14 +9,15 @@ dist/
 .pio
 
 # Fichiers et dossiers générés par PlatformIO
-/.pio
-/.vscode/c_cpp_properties.json
-/.vscode/ipch
-/.vscode/launch.json
-/.vscode/PlatformIO
-/.vscode/tasks.json
-/.vscode/*.code-workspace
-/.vscode/.browse.VC.db*
+.pio
+.vscode
+.vscode/c_cpp_properties.json
+.vscode/ipch
+.vscode/launch.json
+.vscode/PlatformIO
+.vscode/tasks.json
+.vscode/*.code-workspace
+.vscode/.browse.VC.db*
 
 # Configuration utilisateur de l'IDE
 /.idea

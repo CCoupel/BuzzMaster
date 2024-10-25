@@ -12,6 +12,13 @@ void startBumperServer()
   bumperServer = new AsyncServer(CONTROLER_PORT);
   bumperServer->onClient(&b_onCLientConnect, bumperServer);
   
+    // Afficher les adresses IP des interfaces
+  IPAddress staIP = WiFi.localIP();
+  IPAddress apIP = WiFi.softAPIP();
+  
+  ESP_LOGI(TCP_TAG, "STA IP Address: %s", staIP.toString().c_str());
+  ESP_LOGI(TCP_TAG, "AP IP Address: %s", apIP.toString().c_str());
+  
   bumperServer->begin();
   ESP_LOGI(TCP_TAG, "BUMPER server started on port %i", CONTROLER_PORT);
 }

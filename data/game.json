@@ -4,5 +4,10 @@
     "bumpers": {
         "AAA":{"NAME": "FAKE 1"},
         "BBB":{"NAME": "FAKE 2"}
+    },
+    "GAME": {
+        "DELAY": 35,
+        "PHASE": "STOPPED",
+        "REMOTE": "jeu"
     }
 }

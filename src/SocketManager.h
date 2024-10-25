@@ -46,19 +46,25 @@ void parseDataFromSocket(const char* action, const JsonObject& message) {
       rebootServer();
       break;
     case hash("START"):
-      startGame();
+      if (message["DELAY"].isNull()) {
+          message["DELAY"]=0;
+      }
+      startGame(message["DELAY"]);
       break;
     case hash("STOP"):
       stopGame();
       break;
     case hash("PAUSE"):
-      pauseAllGame();
+      pauseAllGame(message["CURRENT_TIME"]);
       break;
     case hash("CONTINUE"):
       continueGame();
       break;
     case hash("RAZ"):
       RAZscores();
+      break;
+    case hash("REMOTE"):
+      setRemotePage(message["REMOTE"]);
       break;
     default:
       ESP_LOGW(SOCKET_TAG, "Unrecognized action: %s", action);

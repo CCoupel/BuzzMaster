@@ -6,46 +6,24 @@
 #include <unordered_map>
 
 static const char* BUMPER_TAG = "BUMPER_SERVER";
-String gamePhase = "STOPPED"; /* STARTED PAUSED */
+String gamePhase = "STOP"; /* STARTED PAUSED */
 int gameStartTimeStamp = 0;
 
 void processButtonPress(const String& bumperID, const char* b_team, int64_t b_time, int b_button) {
-  ESP_LOGI(BUMPER_TAG, "Button Pressed %i", b_button);
-  /*static int64_t timeRef = 0;
-  static std::unordered_map<String, int64_t> timeRefTeam;
+  ESP_LOGI(BUMPER_TAG, "Button Pressed %i at time %i", b_button, b_time);
 
-  if (timeRef == 0) {
-    timeRef = b_time;
-  }
-  int64_t b_delay = b_time - timeRef;
-
-  if (timeRefTeam[b_team] == 0) {
-    timeRefTeam[b_team] = b_time;
-  }
-
-  int64_t b_delayTeam = b_time - timeRefTeam[b_team];
-  */
-  //JsonObject b = getBumper(bumperID.c_str());
-  //b["TIME"] = b_time;
-  //b["BUTTON"] = b_button;
   setBumperButton(bumperID.c_str(), b_button);
   setBumperTime(bumperID.c_str(), b_time);
-  setTeamBumper(b_team,bumperID.c_str());
-  setTeamTime(b_team, b_time);
-  //b["DELAY"] = b_delay;
-  //b["DELAY_TEAM"] = b_delayTeam;
-  //b["STATUS"] = "PAUSE";
   setBumperStatus(bumperID.c_str(), "PAUSE");
-  //setBumper(bumperID.c_str(), b);
 
-  //JsonObject t = getTeam(b_team);
-  //t["TIME"] = b_time;
-  //t["DELAY"] = b_delay;
-  //t["STATUS"] = "PAUSE";
-  setTeamStatus(b_team, "PAUSE");
-  //t["BUMPER"] = bumperID;
+  int64_t teamTime=getTeamTime(b_team);
+  ESP_LOGD(BUMPER_TAG, "Actual Team Time %s:%i",b_team,teamTime);
+  if (teamTime == 0 or teamTime > b_time) {
+    setTeamBumper(b_team,bumperID.c_str());
+    setTeamTime(b_team, b_time);
+    setTeamStatus(b_team, "PAUSE");
+  }
   
-  //setTeam(b_team, t);
 }
 
 void resetBumpersTime() {
@@ -82,55 +60,66 @@ void resetBumpersTime() {
   }
 }
 
-void startGame(){
+void startGame(const int delay){
   resetBumpersTime();
+  setGameDelay(delay);
+  setGameCurrentTime(delay);
+  setGameTime();
   GameStarted=true;
-  setGamePhase( "STARTED");
-  String output;
-  JsonDocument& tb=getTeamsAndBumpers();
-    if (serializeJson(tb, output)) {
-      putMsgToQueue("START",output.c_str(),true);
-    } else {
-      ESP_LOGE(BUMPER_TAG, "Failed to serialize JSON");
-    }
+  setGamePhase( "START");
+ // String output;
+ // JsonDocument& tb=getTeamsAndBumpersString();
+ //   if (serializeJson(tb, output)) {
+      putMsgToQueue("START",getTeamsAndBumpersJSON().c_str(),true);
+ //   } else {
+ //     ESP_LOGE(BUMPER_TAG, "Failed to serialize JSON");
+ //   }
 }
 
 void stopGame(){
   GameStarted=false;
-  setGamePhase( "STOPPED" );
-  String output;
-  JsonDocument& tb=getTeamsAndBumpers();
-  if (serializeJson(tb, output)) {
-    putMsgToQueue("STOP",output.c_str(),true);
-  } else {
-     ESP_LOGE(BUMPER_TAG, "Failed to serialize JSON");
-  }
+  setGameCurrentTime(0);
+  setGamePhase( "STOP" );
+   // String output;
+ // JsonDocument& tb=getTeamsAndBumpersString();
+ //   if (serializeJson(tb, output)) {
+      putMsgToQueue("STOP",getTeamsAndBumpersJSON().c_str(),true);
+ //   } else {
+ //     ESP_LOGE(BUMPER_TAG, "Failed to serialize JSON");
+ //   }
+
 }
 
 void pauseGame(AsyncClient* client) {
-  setGamePhase( "PAUSED" );
-  String output;
-  JsonDocument& tb=getTeamsAndBumpers();
-  if (serializeJson(tb, output)) {
-    putMsgToQueue("PAUSE",output.c_str(),true, client);
-  } else {
-     ESP_LOGE(BUMPER_TAG, "Failed to serialize JSON");
-  }
+  setGamePhase( "PAUSE" );
+ // String output;
+ // JsonDocument& tb=getTeamsAndBumpersString();
+ //   if (serializeJson(tb, output)) {
+      putMsgToQueue("PAUSE",getTeamsAndBumpersJSON().c_str(),true, client);
+ //   } else {
+ //     ESP_LOGE(BUMPER_TAG, "Failed to serialize JSON");
+ //   }
 }
 
-void pauseAllGame(){
-  setGamePhase( "PAUSED" );
-  String output;
-  JsonDocument& tb=getTeamsAndBumpers();
-  if (serializeJson(tb, output)) {
-    putMsgToQueue("PAUSE",output.c_str(),true);
-  } else {
-     ESP_LOGE(BUMPER_TAG, "Failed to serialize JSON");
-  }
+void pauseAllGame(const int currentTime=0){
+  setGamePhase( "PAUSE" );
+  setGameCurrentTime(currentTime);
+ // String output;
+ // JsonDocument& tb=getTeamsAndBumpersString();
+ //   if (serializeJson(tb, output)) {
+      putMsgToQueue("PAUSE",getTeamsAndBumpersJSON().c_str(),true);
+ //   } else {
+ //     ESP_LOGE(BUMPER_TAG, "Failed to serialize JSON");
+ //   }
+
 }
 
 void continueGame(){
-  startGame();
+  GameStarted=true;
+  setGamePhase( "START");
+
+      putMsgToQueue("CONTINUE",getTeamsAndBumpersJSON().c_str(),true);
+
 }
 
 void RAZscores() {
@@ -180,15 +169,26 @@ void resetServer() {
 
 void rebootServer() {
   ESP_LOGI(BUMPER_TAG, "Rebooting server");
-  if (LittleFS.exists(saveGameFile)) {
+/*  if (LittleFS.exists(saveGameFile)) {
     if (LittleFS.remove(saveGameFile)) {
       ESP_LOGI(BUMPER_TAG, "Save file deleted successfully");
     } else {
       ESP_LOGE(BUMPER_TAG, "Error: Unable to delete save file");
     }
-  } 
+  }
+*/ 
   ESP.restart();
 }
+
+void setRemotePage(const String remotePage) {
+  if (remotePage==nullptr or remotePage.isEmpty() or remotePage == "null") {
+    setGamePage("jeu");
+  } else {
+    setGamePage(remotePage);
+  }
+  notifyAll();
+}
+
 
 void handleHelloAction(const char* bumperID, JsonObject& MSG) {
   updateBumper(bumperID, MSG);
