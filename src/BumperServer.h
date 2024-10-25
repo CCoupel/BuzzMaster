@@ -182,11 +182,11 @@ void rebootServer() {
 
 void setRemotePage(const String remotePage) {
   if (remotePage==nullptr or remotePage.isEmpty() or remotePage == "null") {
-    setGamePage("jeu");
+    setGamePage("GAME");
   } else {
     setGamePage(remotePage);
   }
-  notifyAll();
+  putMsgToQueue("REMOTE",getTeamsAndBumpersJSON().c_str());
 }
 
 

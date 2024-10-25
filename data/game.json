@@ -8,6 +8,6 @@
     "GAME": {
         "DELAY": 35,
         "PHASE": "STOPPED",
-        "REMOTE": "jeu"
+        "REMOTE": "GAME"
     }
 }
