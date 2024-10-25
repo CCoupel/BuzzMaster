@@ -49,9 +49,9 @@ int64_t  timeRef=0;
 const int nbTeam=10;
 std::map<std::string, int64_t > timeRefTeam;
 
-unsigned int localWWWpPort = 80;  // Port d'écoute local
+unsigned int localWWWPort = 80;  // Port d'écoute local
 
-AsyncWebServer  server(localWWWpPort);
+AsyncWebServer  server(localWWWPort);
 AsyncWebSocket ws("/ws");
 String jsonBuffer; // Tampon pour assembler les données JSON
 

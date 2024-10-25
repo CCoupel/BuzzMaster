@@ -1,3 +1,6 @@
+# 1 "C:\\Users\\cyril\\AppData\\Local\\Temp\\tmpaoxtu8bz"
+#include <Arduino.h>
+# 1 "C:/Users/cyril/OneDrive/Documents/VScode/BuzzMaster/buzzcontrol/src/MAIN.ino"
 #include "includes.h"
 #include "CustomLogger.h"
 #include "teamsAndBumpers.h"
@@ -11,17 +14,19 @@
 #include "messages.h"
 #include "BumperServer.h"
 #include "WebServer.h"
-//#include "myNTPserver.h"
+
 #include <esp_log.h>
 
 static const char* MAIN_TAG = "BUZZCONTROL";
-const uint16_t logPort = 8888;  // Port UDP pour les logs
-
+const uint16_t logPort = 8888;
+void setup(void);
+void loop(void);
+#line 20 "C:/Users/cyril/OneDrive/Documents/VScode/BuzzMaster/buzzcontrol/src/MAIN.ino"
 void setup(void)
 {
   setenv("TZ", "UTC-1", 1);
   tzset();
-  struct timeval tv = { .tv_sec = 1687300000 }; // Une date quelconque
+  struct timeval tv = { .tv_sec = 1687300000 };
   settimeofday(&tv, NULL);
 
   Serial.begin(921600);
@@ -37,14 +42,14 @@ void setup(void)
   ESP_LOGI(MAIN_TAG, "LED pin: %d",LED_BUILTIN);
   ESP_LOGI(MAIN_TAG, "NEO pin: %d",PIN_NEOPIXEL);
 
-//  timeClient.update();
+
   setLedIntensity(128);
   setupAP();
   setupDNSServer();
 
-//  setupNTPserver();
 
-  
+
+
 
   if (!LittleFS.begin()) {
     ESP_LOGE(MAIN_TAG, "Erreur de montage LittleFS");
@@ -59,7 +64,7 @@ void setup(void)
   attachButtons();
   loadJson(GameFile);
 
-  
+
 
   startWebServer();
   startBumperServer();
@@ -78,7 +83,7 @@ void setup(void)
 
 void loop(void)
 {
-//  handleNTPserver();
+
   dnsServer.processNextRequest();
 
 }

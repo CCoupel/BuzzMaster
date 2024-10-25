@@ -73,14 +73,22 @@ void setupAP() {
     ESP_LOGI(WIFI_TAG, "WiFi AP: %s started with IP: %s", apSSID, IP.toString().c_str());
 }
 
-void setupDNSServer() {
-  dnsServer.start(53, "*", apIP);
-  ESP_LOGI(WIFI_TAG,"Serveur DNS démarré");
 
-  if (MDNS.begin("buzzcontrol")) {
-    ESP_LOGI(WIFI_TAG, "MDNS responder started");
-  }
-  MDNS.addService("buzzcontrol", "tcp", localWWWpPort);
-  MDNS.addService("http", "tcp", localWWWpPort);
-  MDNS.addService("sock", "tcp", CONTROLER_PORT);
+void setupDNSServer() {
+    dnsServer.start(53, "*", apIP);
+    ESP_LOGI(WIFI_TAG, "Serveur DNS démarré");
+
+    // Configuration du mDNS
+    if(MDNS.begin("buzzcontrol")) {
+        ESP_LOGI(WIFI_TAG, "MDNS responder started");
+        
+        // Enregistrer les services
+        MDNS.addService("buzzcontrol", "tcp", localWWWPort);
+        MDNS.addService("http", "tcp", localWWWPort);
+        MDNS.addService("sock", "tcp", CONTROLER_PORT);
+        
+        // Afficher les IPs pour debug
+        ESP_LOGI(WIFI_TAG, "AP IP: %s", apIP.toString().c_str());
+        ESP_LOGI(WIFI_TAG, "STA IP: %s", WiFi.localIP().toString().c_str());
+    }
 }
