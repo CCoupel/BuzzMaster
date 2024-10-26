@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title> Jeu </title>
+    <link rel="stylesheet" href="../css/reset.css">
+    <link rel="stylesheet" href="../css/style.css">
+    <link rel="shortcut icon" href="#" />
+</head>
+<body>
+    <header>
+        <div class="time-bar-container-players">
+            <div id="time-bar">
+                <p id="timer-players">00:00</p>
+            </div>
+        </div>
+    </header>
+    <main>
+        <div id="game-container" class="game-container">
+
+        </div>
+        <div id="score-container" class="score-container hidden">
+            <h1>Scores</h1>
+            
+            <div class="scoreboard">
+                <h2>Classement des Équipes</h2>
+                <table id="team-scores">
+                    <thead>
+                        <tr>
+                            <th>Rang</th>
+                            <th>Équipe</th>
+                            <th>Score Total</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <!-- Le contenu sera ajouté dynamiquement par JavaScript -->
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="scoreboard">
+                <h2>Classement des Joueurs</h2>
+                <table id="player-scores">
+                    <thead>
+                        <tr>
+                            <th>Rang</th>
+                            <th>Joueur</th>
+                            <th>Équipe</th>
+                            <th>Score</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <!-- Le contenu sera ajouté dynamiquement par JavaScript -->
+                    </tbody>
+                </table>
+            </div>
+    </main>
+    <footer>
+        <script type="module" src="../js/players.js"></script>
+    </footer>
+    
+</body>
+</html>

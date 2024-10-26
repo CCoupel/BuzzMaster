@@ -1,5 +1,6 @@
 import { connectWebSocket, setBumperPoint, sendWebSocketMessage, updateTeams, updateBumpers, getBumpers, getTeams } from './main.js';
 
+
 let gameState = {
     timer: 30,
     isRunning: false,
@@ -17,7 +18,7 @@ function updateGameState (msg) {
 
 let localTimer;
 
-export function handleConfigSocketMessage(event) {
+function handleConfigSocketMessage(event) {
     console.log('Message reçu du serveur:', event.data);
         const data = JSON.parse(event.data);
         if (data.ACTION) {
@@ -27,11 +28,27 @@ export function handleConfigSocketMessage(event) {
         }
 }
 
+function toggleDisplay(target) {
+    // Cache l'un avant de montrer l'autre
+    const scoreDiv = document.getElementById("score-container")
+    const gameDiv = document.getElementById("game-container")
+
+    scoreDiv.classList.add("hidden");
+    gameDiv.classList.add("hidden");
+
+    setTimeout(() => {
+        if (target === 'SCORE') {
+            scoreDiv.classList.remove("hidden");
+        } else if (target === 'GAME') {
+            gameDiv.classList.remove("hidden");
+        }
+    }, 500); // Délai pour permettre au CSS de cacher les éléments
+}
+
 function handleServerAction(action, msg) {
     console.log('Action reçue du serveur:', action);
     switch (action) {
         case 'START':          
-            const gameDelay = parseInt(msg.GAME.DELAY, 10) || 30;
             updateGameState(msg.GAME);
             updateTimeBar(true);
             startTimer();
@@ -62,38 +79,19 @@ function handleServerAction(action, msg) {
                 updateDisplay();
                 updateTimeBar(true);
                 updateTimer();
-                handlePhase(msg.GAME.PHASE);
             }
+            break;
+        case 'REMOTE':
+            if (msg.GAME.REMOTE === 'SCORE') {
+                toggleDisplay('SCORE');
+            } else if (msg.GAME.REMOTE === 'GAME') {
+                toggleDisplay('GAME');
+            };
             break;
         default:
             console.log('Action non reconnue:', action);
     }
 }
-
-function sendAction(action, msg = {}) {
-        let message;
-        switch (action) {
-            case 'START':
-                const gameTimeInput = document.getElementById('game-time-input');
-                const gameTime = parseInt(gameTimeInput.value, 10) || 30;
-                message = {'DELAY':  gameTime};
-                sendWebSocketMessage( action, message);
-                break;
-            case 'UPDATE':
-                message = msg;
-                sendWebSocketMessage( action, message);
-                break;
-            case 'PAUSE':
-                message =  {'CURRENT_TIME':  gameState.timer.toString()};
-                sendWebSocketMessage( action, message);
-                break;
-            default:
-                message = msg;
-                sendWebSocketMessage( action, message);
-                break;
-        }
-        console.log('Envoi de l\'action au serveur:', action, "Message", message);
-    }
 
 
 function startTimer() {
@@ -104,9 +102,6 @@ function startTimer() {
             gameState.timer--;
             updateTimer();
             updateTimeBar();
-            if (gameState.timer === 0) {
-                sendAction('STOP');
-            }
         } else {
             stopTimer();
         }
@@ -138,8 +133,6 @@ function updateDisplay() {
     container.innerHTML = '';
 
     const sortedTeams = Object.entries(getTeams()).sort((a, b) => {
-//        const delayA = a[1].DELAY !== undefined ? a[1].DELAY : Infinity;
-//        const delayB = b[1].DELAY !== undefined ? b[1].DELAY : Infinity;
         const delayA = a[1].TIMESTAMP !== undefined ? a[1].TIMESTAMP : Infinity;
         const delayB = b[1].TIMESTAMP !== undefined ? b[1].TIMESTAMP : Infinity;
 
@@ -150,7 +143,6 @@ function updateDisplay() {
         const teamElement = document.createElement('div');
         const isStartPhase = gameState.gamePhase === 'START';
 
- //       const isTeamActive = teamData.DELAY !== undefined;
         const isTeamActive = teamData.TIMESTAMP !== undefined;
 
         teamElement.className = `team ${isTeamActive ? 'active' : ''} ${isStartPhase && !isTeamActive ? 'start-phase' : ''}`;
@@ -207,7 +199,7 @@ function updateDisplay() {
 }
 
 function updateTimer() {
-    const timerElement = document.getElementById('timer');
+    const timerElement = document.getElementById('timer-players');
     const minutes = Math.floor(gameState.timer / 60);
     const seconds = gameState.timer % 60;
     timerElement.textContent = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
@@ -244,7 +236,7 @@ function updateTimeBar(immediate = false) {
     } else {
         timeBar.classList.remove('pause-blink');
     }
-  
+
     if (gameState.timer <= 5) {
         timeBar.classList.remove('blink');
         timeBar.classList.add('blink-fast');
@@ -268,59 +260,10 @@ function updateTimeBar(immediate = false) {
     }
 }
 
-function handlePhase(state) {
-    const startStopButton = document.getElementById('startStopButton');
-    const pauseContinueButton = document.getElementById('pauseContinueButton');
-    switch (state) {
-        case 'START' :
-            startStopButton.textContent = "STOP";
-            pauseContinueButton.textContent = "PAUSE";
-            break;
-        case 'STOP' :
-            startStopButton.textContent = "START";
-            pauseContinueButton.textContent = "PAUSE";
-            break;
-        case 'PAUSE' :
-            pauseContinueButton.textContent = "CONTINUE";
-            startStopButton.textContent = "STOP";
-            break;
-        case 'CONTINUE' :
-            pauseContinueButton.textContent = "PAUSE";
-            startStopButton.textContent = "STOP";
-            break;
-    }
-}
-
 document.addEventListener('DOMContentLoaded', function() {
     connectWebSocket(handleConfigSocketMessage);
     updateDisplay();
     updateTimer();
     updateTimeBar();
 
-    startStopButton.addEventListener('click', function() {
-        if (gameState.gamePhase ==='STOP') {
-            sendAction('START');
-        } else {
-            startStopButton.textContent = "STOP";
-            sendAction('STOP');
-        }
-    });
-
-    // Gestion du bouton Pause/Continue
-    pauseContinueButton.addEventListener('click', function() {
-        if (gameState.gamePhase !== 'PAUSE') {
-            sendAction('PAUSE');
-        } else {
-            console.log(gameState.gamePhase)
-            sendAction('CONTINUE');
-        }
-    });
-
-    playerGame.addEventListener('click', function() {
-        sendAction('REMOTE', {'REMOTE': 'GAME'});
-    });
-
-    playerScores.addEventListener('click', function() {
-        sendAction('REMOTE', {'REMOTE' :'SCORE'});
-    });
 });
