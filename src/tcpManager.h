@@ -86,6 +86,7 @@ static void b_onCLientConnect(void* arg, AsyncClient* client) {
     listClients();
 }
 
+/*
 static void b_onClientDisconnect(void* arg, AsyncClient* client) {
     String clientID = client->remoteIP().toString();
     ESP_LOGI(TCP_TAG, "Client %s disconnected", clientID.c_str());
@@ -97,3 +98,4 @@ ESP_LOGI(TCP_TAG, "    ClientBuffer erased");
 ESP_LOGI(TCP_TAG, "    client deleted");
 
 }
+*/

@@ -91,7 +91,7 @@ void stopGame(){
 }
 
 void pauseGame(AsyncClient* client) {
-  setGamePhase( "PAUSE" );
+ // setGamePhase( "PAUSE" );
  // String output;
  // JsonDocument& tb=getTeamsAndBumpersString();
  //   if (serializeJson(tb, output)) {
