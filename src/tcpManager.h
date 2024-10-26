@@ -18,7 +18,7 @@ void startBumperServer()
   
   ESP_LOGI(TCP_TAG, "STA IP Address: %s", staIP.toString().c_str());
   ESP_LOGI(TCP_TAG, "AP IP Address: %s", apIP.toString().c_str());
-  
+
   bumperServer->begin();
   ESP_LOGI(TCP_TAG, "BUMPER server started on port %i", CONTROLER_PORT);
 }
@@ -44,22 +44,56 @@ void processClientBuffer(const String& clientID, AsyncClient* c) {
     }
 }
 
+
+
+static void listClients() {
+    Serial.printf("#####");
+    for(AsyncClient* client : bumperClients) {
+    Serial.printf("Client IP: %s\n", client->remoteIP().toString().c_str());
+    }
+}
+
+
+// Version qui supprime tous les clients d'une IP donnée
+static void removeClientsByIP(const IPAddress& ip) {
+    ESP_LOGI(TCP_TAG, "Removing all clients with IP: %s", ip.toString().c_str());
+    
+    for(auto it = bumperClients.begin(); it != bumperClients.end();) {
+        AsyncClient* existingClient = *it;
+        if(existingClient->remoteIP() == ip) {
+            ESP_LOGI(TCP_TAG, "Removing old connection from IP: %s", ip.toString().c_str());
+            existingClient->close(true);
+            delete existingClient;
+            it = bumperClients.erase(it);
+        } else {
+            ++it;
+        }
+    }
+}
+
+static void b_onCLientConnect(void* arg, AsyncClient* client) {
+    ESP_LOGI(TCP_TAG, "New client connected: %s", client->remoteIP().toString().c_str());
+    listClients();
+    // Supprimer les anciennes connexions de cette IP
+    removeClientsByIP(client->remoteIP());
+
+    client->onData(&b_handleData, NULL);
+//    client->onDisconnect(&b_onClientDisconnect, client);
+    bumperClients.push_back(client);
+    size_t nbClients = bumperClients.size();
+    ESP_LOGD(TCP_TAG, "Nb clients : %i", nbClients);
+
+    listClients();
+}
+
 static void b_onClientDisconnect(void* arg, AsyncClient* client) {
     String clientID = client->remoteIP().toString();
     ESP_LOGI(TCP_TAG, "Client %s disconnected", clientID.c_str());
 
     clientBuffers.erase(clientID);
 ESP_LOGI(TCP_TAG, "    ClientBuffer erased");
-    bumperClients.erase(std::remove(bumperClients.begin(), bumperClients.end(), client), bumperClients.end());
-ESP_LOGI(TCP_TAG, "    bumperClients erased");
-    delete client;
+// Supprimer les anciennes connexions de cette IP
+    removeClientsByIP(client->remoteIP());    delete client;
 ESP_LOGI(TCP_TAG, "    client deleted");
 
-}
-
-static void b_onCLientConnect(void* arg, AsyncClient* client) {
-    ESP_LOGI(TCP_TAG, "New client connected: %s", client->remoteIP().toString().c_str());
-    client->onData(&b_handleData, NULL);
-    client->onDisconnect(&b_onClientDisconnect, NULL);
-    bumperClients.push_back(client);
 }
