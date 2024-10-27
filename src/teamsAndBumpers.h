@@ -82,7 +82,7 @@ void setBumperIP(const char* bumperID, const char* IP) {
         ESP_LOGE("Teams&Bumpers", "Invalid IP address provided: %s", IP);
     }
 
-    ESP_LOGD("Teams&Bumpers","set IP: %s:%s", bumperID, IP);
+    ESP_LOGD("Teams&Bumpers","set IP: %s => %s", bumperID, IP);
 
     String bID = String(bumperID);
     if (teamsAndBumpers["bumpers"].isNull()) {
@@ -115,7 +115,7 @@ void setBumperNAME(const char* bumperID, const char* NAME) {
     }
     String NAMECopy = String(NAME);
     teamsAndBumpers["bumpers"][bID]["NAME"] = NAMECopy;
-    ESP_LOGI(TEAMs_TAG, "Bumper NAME %s %s", bID, NAMECopy);
+    ESP_LOGI(TEAMs_TAG, "Bumper NAME %s => %s", bID, NAMECopy);
 }
 
 void setBumperVERSION(const char* bumperID, const char* version) {
@@ -123,10 +123,10 @@ void setBumperVERSION(const char* bumperID, const char* version) {
         ESP_LOGE("Teams&Bumpers", "Invalid bumperID provided: %s", bumperID);
     }
     if (version == nullptr || strlen(version) == 0) {
-        ESP_LOGE("Teams&Bumpers", "Invalid IP address provided: %s", version);
+        ESP_LOGE("Teams&Bumpers", "Invalid VERSION address provided: %s", version);
     }
 
-    ESP_LOGD("Teams&Bumpers","set IP: %s:%s", bumperID, version);
+    ESP_LOGD("Teams&Bumpers","set VERSION: %s => %s", bumperID, version);
 
     String bID = String(bumperID);
     if (teamsAndBumpers["bumpers"].isNull()) {

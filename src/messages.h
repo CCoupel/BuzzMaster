@@ -57,6 +57,15 @@ String makeJsonMessage(const String& action, const String& msg) {
     return message;
 }
 
+// Fonction générique pour calculer l'adresse de broadcast
+IPAddress calculateBroadcast(const IPAddress& ip, const IPAddress& subnet) {
+    IPAddress broadcast;
+    for (int i = 0; i < 4; i++) {
+        broadcast[i] = ip[i] | ~subnet[i];
+    }
+    return broadcast;
+}
+
 void sendMessageToClient(const String& action, const String& msg, AsyncClient* client) {
     if (client && client->connected()) {
         //String message = "{\"ACTION\":\"" + action + "\", \"VERSION\": \"" + VERSION + "\",\"MSG\":" + msg + "}\n";
@@ -69,10 +78,50 @@ void sendMessageToClient(const String& action, const String& msg, AsyncClient* c
 }
 
 void sendMessageToAllClients(const String& action, const String& msg) {
+    ESP_LOGI(TAG, "Sending broadcast message");
+    String message = makeJsonMessage(action, msg);
+    ESP_LOGD(TAG, "Broadcasting message: %s", message.c_str());
+
+    // Envoyer le message en broadcast à tous les clients WebSocket
+    ws.textAll(message.c_str());
+    
+    WiFiUDP udp;
+    
+    // Broadcast sur le réseau STA si connecté
+    if(WiFi.status() == WL_CONNECTED) {
+        // Calculer l'adresse de broadcast du réseau STA
+        IPAddress staBroadcast = calculateBroadcast(WiFi.localIP(), WiFi.subnetMask());
+        
+        if (udp.beginPacket(staBroadcast, CONTROLER_PORT)) {
+            udp.write((const uint8_t*)message.c_str(), message.length());
+            udp.endPacket();
+            ESP_LOGI(TAG, "UDP broadcast sent on STA network to %s", staBroadcast.toString().c_str());
+        } else {
+            ESP_LOGE(TAG, "Failed to send UDP broadcast on STA network");
+        }
+    }
+
+    // Broadcast sur le réseau AP si actif
+    if(WiFi.softAPgetStationNum() > 0) {
+        // L'adresse de broadcast pour AP est généralement 192.168.4.255
+        // (si votre AP est configuré sur 192.168.4.1)
+        IPAddress apBroadcast = calculateBroadcast(WiFi.softAPIP(), IPAddress(255, 255, 255, 0));
+        
+        if (udp.beginPacket(apBroadcast, CONTROLER_PORT)) {
+            udp.write((const uint8_t*)message.c_str(), message.length());
+            udp.endPacket();
+            ESP_LOGI(TAG, "UDP broadcast sent on AP network to %s", apBroadcast.toString().c_str());
+        } else {
+            ESP_LOGE(TAG, "Failed to send UDP broadcast on AP network");
+        }
+    }
+
+    ESP_LOGI(TAG, "Broadcast messages sent: %s", message.c_str());
+}
+
+/*
+void sendMessageToAllClients_old(const String& action, const String& msg) {
   ESP_LOGI(TAG, "Sending broadcast message");
-  //String VERSION=String(__DATE__)+" "+String(__TIME__);
-  // Créer le message JSON
-  //String message = "{\"ACTION\":\"" + action + "\", \"VERSION\": \"" + VERSION + "\", \"MSG\":" + msg + "}\n";
   String message=makeJsonMessage(action, msg);
   ESP_LOGD(TAG, "Broadcasting message: %s", message.c_str());
 
@@ -91,7 +140,7 @@ void sendMessageToAllClients(const String& action, const String& msg) {
 
   ESP_LOGI(TAG, "Broadcast message sent: %s", message.c_str());
 }
-
+*/
 /*
 void sendMessageToAllClients(const String& action, const String& msg ) {
   // Parcourez tous les clients connectés
