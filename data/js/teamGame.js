@@ -9,14 +9,21 @@ let gameState = {
 };
 
 function updateGameState (msg) {
-    gameState.gameTime = msg.TIME;
-    gameState.gamePhase = msg.PHASE;
-    if (msg.CURRENT_TIME) {
+    console.log(msg)
+    if(msg.TIME){
+        gameState.gameTime = msg.TIME;
+    }
+    if(msg.PHASE){
+        gameState.gamePhase = msg.PHASE;
+    }
+    if (msg.CURRENT_TIME !== null) {
         gameState.timer = msg.CURRENT_TIME;
     } else {
         gameState.timer = msg.DELAY
     }
-    gameState.totalTime = msg.DELAY;
+    if(msg.DELAY){
+        gameState.totalTime = msg.DELAY;
+    }
 };
 
 let localTimer;
@@ -68,6 +75,9 @@ function handleServerAction(action, msg) {
                 updateTimer();
                 handlePhase(msg.GAME.PHASE);
             }
+            break;
+        case 'UPDATE_TIMER':
+            updateGameState(msg.GAME);
             break;
         default:
             console.log('Action non reconnue:', action);
@@ -215,6 +225,7 @@ function updateTimer() {
     const minutes = Math.floor(gameState.timer / 60);
     const seconds = gameState.timer % 60;
     timerElement.textContent = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+    sendAction('UPDATE_TIMER', {'CURRENT_TIME': gameState.timer.toString()});
 }
 
 function addPointToBumper(bumperMac) {
@@ -300,12 +311,13 @@ document.addEventListener('DOMContentLoaded', function() {
     updateDisplay();
     updateTimer();
     updateTimeBar();
+
     const playersButton = document.getElementById('players');
 
     playersButton.onclick = () => {
         window.open('http://buzzcontrol.local/html/players.html')
     }
-    
+
     startStopButton.addEventListener('click', function() {
         if (gameState.gamePhase ==='STOP') {
             sendAction('START');

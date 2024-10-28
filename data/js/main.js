@@ -119,7 +119,7 @@ export function connectWebSocket(onMessageCallback) {
     };
 
     ws.onerror = function(event) {
-        console.error('WebSocket error:', error);
+        console.error('WebSocket error:', event);
     }
 
     ws.onclose = function(event) {
@@ -135,72 +135,20 @@ export function connectWebSocket(onMessageCallback) {
 
 }
 
-/*
-// Fonction pour afficher une invite pour le nom de l'équipe et vérifier sa validité
-function promptForTeamName() {
-    const teamName = prompt('Nom de la team :', 'Team ');
-    if (teamName && teamName.trim() !== '' && !teams[teamName]) {
-        return teamName;
-    }
-    alert('Le titre ne peut pas être vide ou l\'équipe existe déjà.');
-    return null;
-}
-*/
-
-// Fonction pour envoyer les données de la nouvelle équipe au serveur via WebSocket
-/*function sendTeamDataToServer(teamName) {
-    const teamData = { 
-        "ACTION": "UPDATE", 
-        "MSG": { 
-            "teams": { 
-                [teamName]: { "COLOR": [255, 255, 255]}
-            }
-        } 
-    };
-
-    if (ws.readyState === WebSocket.OPEN) {
-        ws.send(JSON.stringify(teamData));
-        console.log('Team data sent:', teamData);
-    } else {
-        console.log('WebSocket is not open. Cannot send team data.');
-    }
-}*/
-
-// Fonction pour réessayer d'envoyer les données de l'équipe si WebSocket n'est pas prêt
-/*export function trySendTeamData(teamName) {
-    if (ws.readyState === WebSocket.OPEN) {
-        sendTeamDataToServer(teamName);
-    } else {
-        console.log('WebSocket not ready. Retrying...');
-        setTimeout(() => trySendTeamData(teamName), 1000); // Réessaie après 1 seconde
-    }
-}*/
-
-/*
-// Gère l'ajout d'une nouvelle équipe après validation du nom
-function handleAddTeam() {
-    const teamName = promptForTeamName();
-    if (teamName) {
-        teams[teamName] = {};
-        trySendTeamData(teamName);
-        createTeamDiv(teams);
-    }
-}
-*/
-/*
-// Gère la réinitialisation des équipes
-function handleReset() {
-    sendWebSocketMessage("RESET", "RESET")
-}
-*/
 
 export function sendWebSocketMessage (action, MSG= "{}")  {
-    const message = {
-        "ACTION": action,
-        "MSG": MSG
+    if (ws.readyState === WebSocket.OPEN) {
+        const message = {
+            "ACTION": action,
+            "MSG": MSG
+        };
+
+        ws.send(JSON.stringify(message));
+
+        } else {
+            console.error("WebSocket is not open. Current state: ", ws.readyState);
+        }
     };
-    ws.send(JSON.stringify(message));
-};
 
 
 // Nettoie les conteneurs d'équipes et de buzzers
@@ -216,25 +164,3 @@ function cleanBoard() {
         buzzerContainer.innerHTML = '';
     }
 }
-
-/*
-// Initialisation des événements et du WebSocket à la fin du chargement de la page
-document.addEventListener('DOMContentLoaded', () => {
-    try {
-        const addButton = document.getElementById('addDivButton');
-        if (!addButton) throw new Error('Le bouton d\'ajout est introuvable.');
-        
-        const resetButton = document.getElementById('resetButton');
-        if (!resetButton) throw new Error('Le bouton de reset est introuvable.');
-        
-        // Démarre la connexion WebSocket
-        connectWebSocket();
-
-        addButton.addEventListener('click', handleAddTeam);
-        resetButton.addEventListener('click', handleReset);
-        
-    } catch (error) {
-        console.error('Erreur lors de l\'initialisation:', error);
-    }
-});
-*/
