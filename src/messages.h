@@ -163,6 +163,9 @@ void sendMessageTask(void *parameter) {
             ESP_LOGI(TAG, "New message in queue: %s", receivedMessage.action);
             
             switch (hash(receivedMessage.action)) {
+                case hash("HELLO"):
+                    sendMessageToAllClients("HELLO", "{  }");
+                    break;
                 case hash("START"):
                     setLedColor(255, 0, 0);
                     setLedIntensity(255);

@@ -50,7 +50,9 @@ void setup(void)
     ESP_LOGE(MAIN_TAG, "Erreur de montage LittleFS");
     return;
   }
-
+  
+  yield();
+  sleep(2);
   downloadFiles();
 
   listLittleFSFiles();
@@ -73,7 +75,7 @@ void setup(void)
     }
 
   xTaskCreate(sendMessageTask, "Send Message Task", 14096, NULL, 1, NULL);
-  sendMessageToAllClients("HELLO", "{  }");
+  sendHelloToAll();
 }
 
 void loop(void)

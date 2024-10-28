@@ -154,6 +154,14 @@ void RAZscores() {
   
 }
 
+void sendHelloToAll() {
+  putMsgToQueue("HELLO", "{  }",true);
+}
+
+void sendResetToAll() {
+  putMsgToQueue("RESET", "{  }",true);
+}
+
 void resetServer() {
   ESP_LOGI(BUMPER_TAG, "Resetting server");
   if (LittleFS.exists(saveGameFile)) {
@@ -164,7 +172,10 @@ void resetServer() {
     }
   } 
   loadJson(GameFile);
-  notifyAll();
+  sendResetToAll();
+  sleep(2);
+  sendHelloToAll();
+  //notifyAll();
 }
 
 void rebootServer() {
