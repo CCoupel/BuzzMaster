@@ -52,38 +52,84 @@ public:
 //        esp_log_set_vprintf(customLogFunction);
     }
 
-    static int customLogFunction(esp_log_level_t level, const char* tag, const char* format, va_list args)  {
-        char timestampBuffer[20];
-        getTimestamp(timestampBuffer, sizeof(timestampBuffer));
-
-        char logBuffer[1024];
-        int prefixLen = snprintf(logBuffer, sizeof(logBuffer), 
-                                "%s%s \033[1;37m%s\033[0m %s(\033[1m%s\033[0m) ", 
-                                getLevelColor(level), getLevelString(level),
-                                timestampBuffer,
-                                getLevelColor(level), tag);
-
-        // Formater le message de log
-        int messageLen = vsnprintf(logBuffer + prefixLen, sizeof(logBuffer) - prefixLen, format, args);
+    static int customLogFunction(esp_log_level_t level, const char* tag, const char* format, va_list args) {
+        enum { BUFFER_SIZE = 2048 };
+        char* logBuffer = (char*)malloc(BUFFER_SIZE); // Allocation dynamique plus sûre
+        if (!logBuffer) return -1;
         
-        // Ajouter le code de réinitialisation de couleur et le saut de ligne
-        strcat(logBuffer, "\033[0m\n");
+        int totalLen = 0;
+        int written = 0;
+        size_t remainingSpace = BUFFER_SIZE;
 
-        // Calculer la longueur totale
-        int totalLen = prefixLen + messageLen + 5; // 5 pour "\033[0m\n"
-
-        // Log to console
-        Serial.print(logBuffer);
-
-        // Log to UDP broadcast
-        if (initialized) {
-            udp.beginPacket(broadcastIP, logPort);
-            udp.write((const uint8_t*)logBuffer, totalLen);
-            udp.endPacket();
+        // Préparer les composants du message
+        const char* levelColor = getLevelColor(level);
+        const char* levelStr = getLevelString(level);
+        unsigned long timestamp = millis();
+        
+        // Construire l'information IP de manière sécurisée
+        String ipInfo;
+        if (WiFi.getMode() & WIFI_AP) {
+            ipInfo = WiFi.softAPIP().toString();
+        }
+        if (WiFi.getMode() & WIFI_STA && WiFi.status() == WL_CONNECTED) {
+            if (ipInfo.length() > 0) {
+                ipInfo += "/";
+            }
+            ipInfo += WiFi.localIP().toString();
         }
 
-        return totalLen - 1; // -1 pour ne pas compter le '\n' final
+        // Écrire le préfixe
+        written = snprintf(logBuffer, remainingSpace,
+                        "%s%s \033[1;37m%lu\033[0m %.*s %s(\033[1m%s%s)\033[0m ",
+                        levelColor, levelStr,
+                        timestamp,
+                        std::min((int)ipInfo.length(), 45), // Limiter la longueur de l'IP
+                        ipInfo.c_str(),
+                        levelColor, tag, levelColor);
 
+        if (written < 0 || written >= remainingSpace) {
+            free(logBuffer);
+            return -1;
+        }
+
+        totalLen = written;
+        remainingSpace -= written;
+
+        // Écrire le message principal
+        va_list args_copy;
+        va_copy(args_copy, args);
+        written = vsnprintf(logBuffer + totalLen, remainingSpace, format, args_copy);
+        va_end(args_copy);
+
+        if (written < 0 || written >= remainingSpace) {
+            written = remainingSpace - 1;
+        }
+
+        totalLen += written;
+        remainingSpace -= written;
+
+        // Ajouter la séquence de fin
+        const char* suffix = "\033[0m\n";
+        size_t suffixLen = strlen(suffix);
+        
+        if (remainingSpace > suffixLen) {
+            memcpy(logBuffer + totalLen, suffix, suffixLen);
+            totalLen += suffixLen;
+        }
+
+        // Écrire vers la sortie
+        if (totalLen > 0) {
+            Serial.write(logBuffer, totalLen);
+            
+            if (initialized) {
+                udp.beginPacket(broadcastIP, logPort);
+                udp.write((const uint8_t*)logBuffer, totalLen);
+                udp.endPacket();
+            }
+        }
+
+        free(logBuffer);
+        return totalLen;
     }
 
     static void log(esp_log_level_t level, const char* tag, const char* format, ...) {

@@ -2,12 +2,11 @@
     "teams": {
     },
     "bumpers": {
-        "AAA":{"NAME": "FAKE 1"},
-        "BBB":{"NAME": "FAKE 2"}
+        "AAA":{"NAME": "FAKE 1"}
     },
     "GAME": {
         "DELAY": 35,
-        "PHASE": "STOPPED",
+        "PHASE": "STOP",
         "REMOTE": "GAME"
     }
 }
