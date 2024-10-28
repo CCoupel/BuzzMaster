@@ -31,7 +31,8 @@ void setGameCurrentTime(const int currentTime) {
     if (teamsAndBumpers["GAME"].isNull()) {
         teamsAndBumpers["GAME"] = JsonObject();
     }
-        teamsAndBumpers["GAME"]["CURRENT_TIME"] = currentTime;
+    teamsAndBumpers["GAME"]["CURRENT_TIME"] = currentTime;
+    
 }
 
 void setGameDelay(int delay=33) {
