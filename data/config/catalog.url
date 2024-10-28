@@ -6,11 +6,13 @@ html/score.html
 html/index.html
 html/teamGame.html
 html/navbar.html
+html/players.html
 js/buzzer.js
 js/config.js
 js/dragAndDrop.js
 js/main.js
 js/navbar.js
+js/players.js
 js/score.js
 js/team.js
 js/teamGame.js
