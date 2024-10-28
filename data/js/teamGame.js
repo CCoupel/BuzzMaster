@@ -11,7 +11,11 @@ let gameState = {
 function updateGameState (msg) {
     gameState.gameTime = msg.TIME;
     gameState.gamePhase = msg.PHASE;
-    gameState.timer = msg.CURRENT_TIME;
+    if (msg.CURRENT_TIME) {
+        gameState.timer = msg.CURRENT_TIME;
+    } else {
+        gameState.timer = msg.DELAY
+    }
     gameState.totalTime = msg.DELAY;
 };
 
@@ -296,7 +300,12 @@ document.addEventListener('DOMContentLoaded', function() {
     updateDisplay();
     updateTimer();
     updateTimeBar();
+    const playersButton = document.getElementById('players');
 
+    playersButton.onclick = () => {
+        window.open('http://buzzcontrol.local/html/players.html')
+    }
+    
     startStopButton.addEventListener('click', function() {
         if (gameState.gamePhase ==='STOP') {
             sendAction('START');

@@ -110,14 +110,14 @@
   }
   
   .player-control{
-    width: 30%;
+    width: 40%;
     display: flex;
     justify-content: space-around;
     align-items: center;
   }
 
   .game-control{
-    width: 70%;
+    width: 60%;
     display: flex;
     justify-content: center;
     align-items: center;
@@ -245,6 +245,7 @@
     padding: 5px;
     font-size: 16px;
     width: 60px;
+    place-self: flex-start;
   }
   
   /* Styles pour la page de configuration */

@@ -25,6 +25,7 @@ export function createBuzzerDiv(buzzerData) {
         input.type = 'text';
         input.name = 'buzzer-text';
         input.id = `buzzer-text-${id}`;
+        input.maxLength = '20'
         input.placeholder = 'Nom du joueur';
         input.value = playerName;  
 
