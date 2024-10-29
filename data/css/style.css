@@ -186,6 +186,15 @@
     margin-right: 10px;
   }
 
+  #websocket-tracker {
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    position: fixed;
+    top: 25px;
+    right: 20px;
+  }
+
 
   .bumper {
     margin: 5px 0;

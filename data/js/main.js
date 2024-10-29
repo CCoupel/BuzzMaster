@@ -100,6 +100,34 @@ export function sendTeamsAndBumpers() {
         setTimeout(() => sendTeamsAndBumpers(), 1000); // Réessaie après 1 seconde
     }
 }
+
+function webSocketColor() {
+    let webSocketColorDiv = document.getElementById('websocket-tracker');
+
+    // Vérifie si la div existe déjà
+    if (!webSocketColorDiv) {
+        webSocketColorDiv = document.createElement('div');
+        webSocketColorDiv.id = 'websocket-tracker';
+        document.body.appendChild(webSocketColorDiv);
+    }
+
+    function updateColor() {
+
+        const wstracker = document.getElementById('websocket-tracker')
+
+        if (ws.readyState === WebSocket.CONNECTING) {
+            wstracker.style.backgroundColor = "orange"; // Connecting
+        } else if (ws.readyState === WebSocket.OPEN) {
+            wstracker.style.backgroundColor = "green"; // Open
+        } else {
+            wstracker.style.backgroundColor = "red"; // Closed or other
+        }
+    }
+
+    updateColor();
+
+};
+
 // Fonction pour initialiser la connexion WebSocket
 export function connectWebSocket(onMessageCallback) {
     if (ws && ws.readyState === WebSocket.OPEN) {
@@ -107,6 +135,8 @@ export function connectWebSocket(onMessageCallback) {
     }
 
     ws = new WebSocket(wsUrl);
+
+    webSocketColor();
 
     ws.onopen = function(event) {
 
@@ -116,16 +146,22 @@ export function connectWebSocket(onMessageCallback) {
         cleanBoard();
 
         sendWebSocketMessage("HELLO", {} );
+
+        webSocketColor();
     };
 
     ws.onerror = function(event) {
         console.error('WebSocket error:', event);
+
+        webSocketColor();
     }
 
     ws.onclose = function(event) {
 
         console.log('WebSocket connection closed. Attempting to reconnect...');
         setTimeout(connectWebSocket, reconnectInterval); // Tente de se reconnecter après un délai
+
+        webSocketColor();
     };
 
     ws.onmessage = onMessageCallback || function(event) {
@@ -137,6 +173,9 @@ export function connectWebSocket(onMessageCallback) {
 
 
 export function sendWebSocketMessage (action, MSG= "{}")  {
+    
+    webSocketColor();
+
     if (ws.readyState === WebSocket.OPEN) {
         const message = {
             "ACTION": action,
