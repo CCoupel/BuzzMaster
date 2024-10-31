@@ -20,12 +20,10 @@ typedef struct {
 void notifyAll() {
     String output;
     JsonDocument& tb=getTeamsAndBumpers();
-//    tb["VERSION"]=String(VERSION);
 
     if (serializeJson(tb, output)) {
         saveJson();
         ESP_LOGI(TAG, "Sending update to all clients: %s", output.c_str());
- //       ws.textAll(output.c_str());
         sendMessageToAllClients("UPDATE", output.c_str());
     } else {
         ESP_LOGE(TAG, "Failed to serialize JSON");
@@ -68,7 +66,6 @@ IPAddress calculateBroadcast(const IPAddress& ip, const IPAddress& subnet) {
 
 void sendMessageToClient(const String& action, const String& msg, AsyncClient* client) {
     if (client && client->connected()) {
-        //String message = "{\"ACTION\":\"" + action + "\", \"VERSION\": \"" + VERSION + "\",\"MSG\":" + msg + "}\n";
         String message=makeJsonMessage(action, msg);
         client->write(message.c_str(), message.length());
         ESP_LOGI(TAG, "Sent to %s: %s", client->remoteIP().toString().c_str(), message.c_str());
@@ -118,42 +115,6 @@ void sendMessageToAllClients(const String& action, const String& msg) {
 
     ESP_LOGI(TAG, "Broadcast messages sent: %s", message.c_str());
 }
-
-/*
-void sendMessageToAllClients_old(const String& action, const String& msg) {
-  ESP_LOGI(TAG, "Sending broadcast message");
-  String message=makeJsonMessage(action, msg);
-  ESP_LOGD(TAG, "Broadcasting message: %s", message.c_str());
-
-  // Envoyer le message en broadcast à tous les clients WebSocket
-  ws.textAll(message.c_str());
-  
-  // Envoyer le message en broadcast à tous les clients TCP
-  WiFiUDP udp;
-  if (udp.beginPacket(IPAddress(255, 255, 255, 255), CONTROLER_PORT)) {
-    udp.write((const uint8_t*)message.c_str(), message.length());
-    udp.endPacket();
-    ESP_LOGI(TAG, "UDP broadcast message sent successfully");
-  } else {
-    ESP_LOGE(TAG, "Failed to send UDP broadcast message");
-  }
-
-  ESP_LOGI(TAG, "Broadcast message sent: %s", message.c_str());
-}
-*/
-/*
-void sendMessageToAllClients(const String& action, const String& msg ) {
-  // Parcourez tous les clients connectés
-  ESP_LOGI(TAG, "send to all");
-  for (AsyncClient* client : bumperClients) {
-    sendMessageToClient(action, msg, client);
-  }
-  String message = "{\"ACTION\":\"" + action + "\", \"MSG\":" + msg + "}\n";
-
-   ws.textAll(message.c_str());
-  ESP_LOGI(TAG, " sent to all: %s", message.c_str());
-}
-*/
 
 void sendMessageTask(void *parameter) {
     messageQueue_t receivedMessage;

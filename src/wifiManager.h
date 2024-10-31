@@ -13,10 +13,6 @@ const char* password = "GenericPassword";
 const char* apSSID = "buzzmaster";
 const char* apPASSWORD = "BuzzMaster";
 
-/*
-IPAddress apIP(192, 168, 10, 1);
-IPAddress gateway(192, 168, 10, 1);
-*/
 IPAddress apIP(8,8,8,8);
 IPAddress gateway(8,8,8,8);
 IPAddress subnet(255, 255, 255, 0);
@@ -62,7 +58,6 @@ void wifiConnect() {
 }
 
 void setupAP() {
-//    WiFi.mode(WIFI_AP_STA);
     WiFi.softAPConfig(apIP, gateway, subnet);
     WiFi.softAP(apSSID, apPASSWORD);
     

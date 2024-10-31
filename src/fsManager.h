@@ -274,7 +274,6 @@ bool moveDirectory(const char* sourceDir, const char* destDir) {
     return true;
 }
 
-
 /******* TOOLS *******/
 
 void printLittleFSInfo() {
@@ -391,11 +390,9 @@ void downloadFiles() {
     }
 
     // Lire la version locale
-//    float localVersion = atof(readFile("/CURRENT"+VERSION_FILE,"-1").c_str());
     float localVersion =readFile("/CURRENT"+VERSION_FILE,"-1").toFloat();
     ESP_LOGI(FS_TAG, "CURRENT Version=%f", localVersion);
     if (localVersion<0) {
-//        localVersion = atof(readFile(VERSION_FILE, "-1").c_str());
         localVersion = readFile(VERSION_FILE, "-1").toFloat();
         ESP_LOGW(FS_TAG, "Local Version=%f", localVersion);
     }

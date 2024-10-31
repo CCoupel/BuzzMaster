@@ -40,20 +40,6 @@ void w_handleRedirect(AsyncWebServerRequest *request) {
     request->redirect("http://buzzcontrol.local/html/config.html");
 }
 
-/*
-void handleCaptivePortal(AsyncWebServerRequest *request) {
-        ESP_LOGW(WEB_TAG, "Captive Redirect for: %s", request->url().c_str());
-
-    AsyncResponseStream *response = request->beginResponseStream("text/html");
-    response->print("<!DOCTYPE html><html><head><title>Redirection</title>");
-    response->print("<meta http-equiv=\"refresh\" content=\"0;url=http://");
-    response->print(apIP.toString());
-    response->print("/html/config.html\">");
-    response->print("</head><body>Redirection vers le portail captif...</body></html>");
-    request->send(response);
-}
-*/
-
 void startWebServer() {
     String ROOT="/";
     if (LittleFS.exists("/CURRENT")) {
@@ -62,7 +48,6 @@ void startWebServer() {
     }
 
     server.serveStatic("/", LittleFS, ROOT.c_str());
-    //server.on("/", HTTP_GET, handleCaptivePortal);
 
     server.on("/index.html", w_handleRedirect);
 
@@ -75,7 +60,6 @@ void startWebServer() {
 
     server.on("/reset", HTTP_GET, w_handleReset);
     server.on("/reboot", HTTP_GET, w_handleReboot);
-//    server.onNotFound(w_handleRedirect);
     
     ws.onEvent(onWsEvent);
     server.addHandler(&ws);
