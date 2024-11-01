@@ -145,7 +145,7 @@
     justify-content: space-around;
     flex-wrap: wrap;
     padding-top: 10px;
-    margin-top: calc(var(--navbar-height) + var(--timer-height));
+    margin-top: 3%
   }
   
   .team {
@@ -153,7 +153,8 @@
     border-radius: 8px;
     padding: 15px;
     margin: 10px;
-    width: 200px;
+    width: 13%;
+    min-height: 100px;
     box-shadow: 0 2px 5px rgba(0,0,0,0.1);
     transition: all 0.3s ease;
   }
