@@ -1,4 +1,6 @@
 #pragma once
+#include "Common/CustomLogger.h"
+#include "Common/led.h"
 
 #include <ArduinoJson.h>
 static const char* TEAMs_TAG = "Team And Bumper";

@@ -1,17 +1,14 @@
 #pragma once
+#include "Common/CustomLogger.h"
+#include "Common/led.h"
 
-#include <WiFiManager.h>
-#include <esp_log.h>
+#include <WiFi.h>
+//#include <esp_log.h>
 #include <DNSServer.h>
 #include <ESPmDNS.h>
 
 static const char* WIFI_TAG = "WIFI";
 
-const char* ssid     = "CC-Home";
-const char* password = "GenericPassword";
-
-const char* apSSID = "buzzmaster";
-const char* apPASSWORD = "BuzzMaster";
 
 IPAddress apIP(8,8,8,8);
 IPAddress gateway(8,8,8,8);

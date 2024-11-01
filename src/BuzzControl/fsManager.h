@@ -1,10 +1,12 @@
 #pragma once
+#include "Common/CustomLogger.h"
+#include "Common/led.h"
 
 #include <FS.h>
 #include <LittleFS.h>
 #include <WiFi.h>
 #include <HTTPClient.h>
-#include <esp_log.h>
+//#include <esp_log.h>
 #include "esp_littlefs.h"
 #include <LittleFS.h>
 

@@ -1,6 +1,8 @@
 #pragma once
 
-#include <esp_log.h>
+#include "Common/CustomLogger.h"
+#include "Common/led.h"
+
 static const char* BUTTON_TAG = "BUTTON_MANAGER";
 
 static void IRAM_ATTR buttonHandler(void *arg) {
