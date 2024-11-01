@@ -16,11 +16,8 @@ function updateGameState (msg) {
     if(msg.PHASE){
         gameState.gamePhase = msg.PHASE;
     }
-    if (msg.CURRENT_TIME !== null) {
-        gameState.timer = msg.CURRENT_TIME;
-    } else {
-        gameState.timer = msg.DELAY
-    }
+    gameState.timer = msg.CURRENT_TIME !== undefined ? msg.CURRENT_TIME : msg.DELAY;
+    
     if(msg.DELAY){
         gameState.totalTime = msg.DELAY;
     }
