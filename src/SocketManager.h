@@ -77,7 +77,11 @@ void parseDataFromSocket(const char* action, const JsonObject& message) {
 }
 
 void handleWebSocketData(AsyncWebSocketClient *client, uint8_t *data, size_t len) {
-  ESP_LOGI(SOCKET_TAG, "Received WebSocket data from client %u", client->id());
+  IPAddress clientIP = client->remoteIP();
+  String ipStr = clientIP.toString();
+
+  ESP_LOGI(SOCKET_TAG, "Received WebSocket data from client %u (IP: %s)", client->id(), ipStr.c_str());
+
   if (len > 0) {
     // Limiter la taille des données loguées pour éviter de surcharger les logs
     const size_t maxLogLength = 100;
@@ -89,7 +93,7 @@ void handleWebSocketData(AsyncWebSocketClient *client, uint8_t *data, size_t len
     logBuffer[logLength] = '\0';  // Ajouter un caractère nul à la fin
 
     // Logger les données en tant que chaîne de caractères
-    ESP_LOGD(SOCKET_TAG, "Received WebSocket data (first %u bytes): %s%s", 
+    ESP_LOGD(SOCKET_TAG, "Received WebSocket data from %s (first %u bytes): %s%s", ipStr.c_str(),
              logLength, logBuffer, len > maxLogLength ? "..." : "");
   } else {
     ESP_LOGD(SOCKET_TAG, "Received empty WebSocket data");
@@ -114,12 +118,14 @@ void handleWebSocketData(AsyncWebSocketClient *client, uint8_t *data, size_t len
 }
 
 void onWsEvent(AsyncWebSocket *server, AsyncWebSocketClient *client, AwsEventType type, void *arg, uint8_t *data, size_t len) {
+  IPAddress clientIP = client->remoteIP();
+  String ipStr = clientIP.toString();
   String output;
   JsonDocument receivedData;
   switch(type) {
     case WS_EVT_CONNECT:
       // Quand un client se connecte, envoyer un message
-      ESP_LOGI(SOCKET_TAG, "Client %u connecté\n", client->id());
+      ESP_LOGI(SOCKET_TAG, "Client %u IP: %S connecté\n", client->id(), ipStr.c_str());
       //client->text("Bienvenue sur le serveur WebSocket !");
       break;
     case WS_EVT_DISCONNECT:

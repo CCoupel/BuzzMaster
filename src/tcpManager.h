@@ -78,24 +78,9 @@ static void b_onCLientConnect(void* arg, AsyncClient* client) {
     removeClientsByIP(client->remoteIP());
 
     client->onData(&b_handleData, NULL);
-//    client->onDisconnect(&b_onClientDisconnect, client);
     bumperClients.push_back(client);
     size_t nbClients = bumperClients.size();
     ESP_LOGD(TCP_TAG, "Nb clients : %i", nbClients);
 
     listClients();
 }
-
-/*
-static void b_onClientDisconnect(void* arg, AsyncClient* client) {
-    String clientID = client->remoteIP().toString();
-    ESP_LOGI(TCP_TAG, "Client %s disconnected", clientID.c_str());
-
-    clientBuffers.erase(clientID);
-ESP_LOGI(TCP_TAG, "    ClientBuffer erased");
-// Supprimer les anciennes connexions de cette IP
-    removeClientsByIP(client->remoteIP());    delete client;
-ESP_LOGI(TCP_TAG, "    client deleted");
-
-}
-*/

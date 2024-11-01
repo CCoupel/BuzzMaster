@@ -67,59 +67,30 @@ void startGame(const int delay){
   setGameTime();
   GameStarted=true;
   setGamePhase( "START");
- // String output;
- // JsonDocument& tb=getTeamsAndBumpersString();
- //   if (serializeJson(tb, output)) {
-      putMsgToQueue("START",getTeamsAndBumpersJSON().c_str(),true);
- //   } else {
- //     ESP_LOGE(BUMPER_TAG, "Failed to serialize JSON");
- //   }
+    putMsgToQueue("START",getTeamsAndBumpersJSON().c_str(),true);
 }
 
 void stopGame(){
   GameStarted=false;
   setGameCurrentTime(0);
   setGamePhase( "STOP" );
-   // String output;
- // JsonDocument& tb=getTeamsAndBumpersString();
- //   if (serializeJson(tb, output)) {
-      putMsgToQueue("STOP",getTeamsAndBumpersJSON().c_str(),true);
- //   } else {
- //     ESP_LOGE(BUMPER_TAG, "Failed to serialize JSON");
- //   }
-
+    putMsgToQueue("STOP",getTeamsAndBumpersJSON().c_str(),true);
 }
 
 void pauseGame(AsyncClient* client) {
- // setGamePhase( "PAUSE" );
- // String output;
- // JsonDocument& tb=getTeamsAndBumpersString();
- //   if (serializeJson(tb, output)) {
-      putMsgToQueue("PAUSE",getTeamsAndBumpersJSON().c_str(),true, client);
- //   } else {
- //     ESP_LOGE(BUMPER_TAG, "Failed to serialize JSON");
- //   }
+  putMsgToQueue("PAUSE",getTeamsAndBumpersJSON().c_str(),true, client);
 }
 
 void pauseAllGame(const int currentTime=0){
   setGamePhase( "PAUSE" );
   setGameCurrentTime(currentTime);
- // String output;
- // JsonDocument& tb=getTeamsAndBumpersString();
- //   if (serializeJson(tb, output)) {
-      putMsgToQueue("PAUSE",getTeamsAndBumpersJSON().c_str(),true);
- //   } else {
- //     ESP_LOGE(BUMPER_TAG, "Failed to serialize JSON");
- //   }
-
+    putMsgToQueue("PAUSE",getTeamsAndBumpersJSON().c_str(),true);
 }
 
 void continueGame(){
   GameStarted=true;
   setGamePhase( "START");
-
       putMsgToQueue("CONTINUE",getTeamsAndBumpersJSON().c_str(),true);
-
 }
 
 void RAZscores() {
@@ -135,7 +106,6 @@ void RAZscores() {
     } else {
         ESP_LOGW(TAG, "Bumpers object is null or invalid");
     }
-  //notifyAll();
   
   ESP_LOGI(BUMPER_TAG, "Resetting Teams Scores");
   JsonObject teams = getTeams();
@@ -175,19 +145,10 @@ void resetServer() {
   sendResetToAll();
   sleep(2);
   sendHelloToAll();
-  //notifyAll();
 }
 
 void rebootServer() {
   ESP_LOGI(BUMPER_TAG, "Rebooting server");
-/*  if (LittleFS.exists(saveGameFile)) {
-    if (LittleFS.remove(saveGameFile)) {
-      ESP_LOGI(BUMPER_TAG, "Save file deleted successfully");
-    } else {
-      ESP_LOGE(BUMPER_TAG, "Error: Unable to delete save file");
-    }
-  }
-*/ 
   ESP.restart();
 }
 
@@ -209,53 +170,14 @@ void handleHelloAction(const char* bumperID, JsonObject& MSG) {
 void handleButtonAction(const char* bumperID, JsonObject& MSG, AsyncClient* c) {
   ESP_LOGE(BUMPER_TAG, "Button pressed: %s", bumperID);
   JsonObject bumper=getBumper(bumperID);
-  //if(bumper["IP"]==c->remoteIP().toString()) {
-    const char* teamID=bumper["TEAM"];
-//    int64_t b_time = MSG["time"].as<int64_t>();  // Changé en int64_t
-    int b_button = MSG["button"];
-    if (teamID != nullptr) {
-      processButtonPress(bumperID, teamID, micros(), b_button);
-      pauseGame(c);
-    }
-  //}
+  const char* teamID=bumper["TEAM"];
+  int b_button = MSG["button"];
+  if (teamID != nullptr) {
+    processButtonPress(bumperID, teamID, micros(), b_button);
+    pauseGame(c);
+  }
 }
 
-/*
-void handleFile(JsonObject& MSG) {
-  String fName = MSG["NAME"].as<String>();
-  String question = MSG["QUESTION"].as<String>();
-  size_t fSize = MSG["SIZE"].as<size_t>();
-  JsonArray fContent = MSG["CONTENT"].as<JsonArray>();
-
-  if (!LittleFS.begin()) {
-    ESP_LOGE(BUMPER_TAG,"Erreur lors du montage de LittleFS");
-    return;
-  }
-
-  String filePath = "/files/" + fName;
-  File file = LittleFS.open(filePath, "w");
-  if (!file) {
-    ESP_LOGE(BUMPER_TAG,"Erreur lors de l'ouverture du fichier en écriture");
-    return;
-  }
-
-  for (JsonVariant v : fContent) {
-    uint8_t byte = v.as<uint8_t>();
-    file.write(byte);
-  }
-
-  file.close();
-
-  if (file.size() == fSize) {
-    ESP_LOGI(BUMPER_TAG,"Fichier sauvegardé avec succès : " + filePath);
-  } else {
-    ESP_LOGE(BUMPER_TAG,"Erreur : La taille du fichier sauvegardé ne correspond pas à la taille attendue");
-  }
-
-  LittleFS.end();
-}
-
-*/
 void parseJSON(const String& data, AsyncClient* c)
 {
   String action;

@@ -60,15 +60,6 @@ NTPClient timeClient(ntpUDP, "pool.ntp.org");
 const char* GameFile="/game.json";
 const char* saveGameFile="/game.json.save";
 
-/*
-typedef struct {
-    const char*   action;  // Type d'action
-    const char* message;  // Contenu du message
-    bool notifyAll;
-    AsyncClient* client;
-} messageQueue_t;
-*/
-
 QueueHandle_t messageQueue; // File d'attente pour les messages
 
 
@@ -105,8 +96,6 @@ void setRemotePage(const String remotePage);
 void attachButtons();
 void startBumperServer();
 void checkPingForAllClients();
-//void parseDataFromSocket(const char* action, JsonObject& message);
-//void mergeJson(JsonObject& destObj, const JsonObject& srcObj);
 void update(String action, JsonObject& obj);
 void resetServer();
 void rebootServer();

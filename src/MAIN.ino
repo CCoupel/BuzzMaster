@@ -11,7 +11,7 @@
 #include "messages.h"
 #include "BumperServer.h"
 #include "WebServer.h"
-//#include "myNTPserver.h"
+
 #include <esp_log.h>
 
 static const char* MAIN_TAG = "BUZZCONTROL";
@@ -21,7 +21,7 @@ void setup(void)
 {
   setenv("TZ", "UTC-1", 1);
   tzset();
-  struct timeval tv = { .tv_sec = 1687300000 }; // Une date quelconque
+  struct timeval tv = { .tv_sec = 0 }; // Une date quelconque
   settimeofday(&tv, NULL);
 
   Serial.begin(921600);
@@ -37,14 +37,9 @@ void setup(void)
   ESP_LOGI(MAIN_TAG, "LED pin: %d",LED_BUILTIN);
   ESP_LOGI(MAIN_TAG, "NEO pin: %d",PIN_NEOPIXEL);
 
-//  timeClient.update();
   setLedIntensity(128);
   setupAP();
   setupDNSServer();
-
-//  setupNTPserver();
-
-  
 
   if (!LittleFS.begin()) {
     ESP_LOGE(MAIN_TAG, "Erreur de montage LittleFS");
@@ -69,10 +64,10 @@ void setup(void)
 
   messageQueue = xQueueCreate(10, sizeof(messageQueue_t));
 
-    if (messageQueue == NULL) {
-      ESP_LOGE(MAIN_TAG, "Échec de la création de la file d'attente");
-      return;
-    }
+  if (messageQueue == NULL) {
+    ESP_LOGE(MAIN_TAG, "Échec de la création de la file d'attente");
+    return;
+  }
 
   xTaskCreate(sendMessageTask, "Send Message Task", 14096, NULL, 1, NULL);
   sendHelloToAll();
@@ -80,7 +75,5 @@ void setup(void)
 
 void loop(void)
 {
-//  handleNTPserver();
   dnsServer.processNextRequest();
-
 }

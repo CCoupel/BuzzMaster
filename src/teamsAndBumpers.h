@@ -13,11 +13,6 @@ void setGamePhase(String phase) {
         teamsAndBumpers["GAME"] = JsonObject();
     }
     teamsAndBumpers["GAME"]["PHASE"] = phase;
-    /*
-    if ( phase == "STARTED") {
-        teamsAndBumpers["GAME"]["TIME"] = micros();
-    }
-    */
 }
 
 void setGameTime() {
@@ -32,7 +27,7 @@ void setGameCurrentTime(const int currentTime) {
         teamsAndBumpers["GAME"] = JsonObject();
     }
     teamsAndBumpers["GAME"]["CURRENT_TIME"] = currentTime;
-    
+
 }
 
 void setGameDelay(int delay=33) {
@@ -58,6 +53,7 @@ String getTeamsAndBumpersJSON() {
     ESP_LOGE(TEAMs_TAG, "Failed to serialize JSON");
   }
 }
+
 //### BUMPERS ###
 JsonObject getBumpers() {
     return teamsAndBumpers["bumpers"].as<JsonObject>();
@@ -75,16 +71,35 @@ void setBumper(const char* bumperID, const JsonObject& bumper){
   teamsAndBumpers["bumpers"][String(bumperID)] = bumper;
 }
 
+String  ensureBumperExists(const char* bumperID) {
+    if (bumperID == nullptr || strlen(bumperID) == 0) {
+        ESP_LOGE(TEAMs_TAG, "Invalid bumperID provided: %s", bumperID);
+    }
+    String bID = String(bumperID);
+    if (teamsAndBumpers["bumpers"].isNull()) {
+        teamsAndBumpers["bumpers"] = JsonObject();
+    }
+
+    if (teamsAndBumpers["bumpers"][bID].isNull()) {
+        teamsAndBumpers["bumpers"][bID]=JsonObject();
+    }
+    return bID;
+}
+
 void setBumperIP(const char* bumperID, const char* IP) {
+/*
     if (bumperID == nullptr || strlen(bumperID) == 0) {
         ESP_LOGE("Teams&Bumpers", "Invalid bumperID provided: %s", bumperID);
     }
+*/
     if (IP == nullptr || strlen(IP) == 0) {
         ESP_LOGE("Teams&Bumpers", "Invalid IP address provided: %s", IP);
     }
 
     ESP_LOGD("Teams&Bumpers","set IP: %s => %s", bumperID, IP);
 
+    String bID = ensureBumperExists(bumperID);
+/*
     String bID = String(bumperID);
     if (teamsAndBumpers["bumpers"].isNull()) {
         teamsAndBumpers["bumpers"] = JsonObject();
@@ -93,42 +108,53 @@ void setBumperIP(const char* bumperID, const char* IP) {
     if (teamsAndBumpers["bumpers"][bID].isNull()) {
         teamsAndBumpers["bumpers"][bID]=JsonObject();
     }
+*/
     String ipCopy = String(IP);
     teamsAndBumpers["bumpers"][bID]["IP"] = ipCopy;
 
 }
 
 void setBumperNAME(const char* bumperID, const char* NAME) {
+/*
     if (bumperID == nullptr || strlen(bumperID) == 0) {
         ESP_LOGE(TEAMs_TAG, "Invalid bumperID provided: %s", bumperID);
     }
+*/
     if (NAME == nullptr || strlen(NAME) == 0) {
         ESP_LOGE(TEAMs_TAG, "Invalid NAME provided: %s", NAME);
     }
     ESP_LOGD(TEAMs_TAG,"set NAME: %s:%s", bumperID, NAME);
 
+    String bID = ensureBumperExists(bumperID);
+/*    String bID = String(bumperID);
+
     if (teamsAndBumpers["bumpers"].isNull()) {
         teamsAndBumpers["bumpers"] = JsonObject();
     }
-    String bID = String(bumperID);
+    
     if (teamsAndBumpers["bumpers"][bID].isNull()) {
         teamsAndBumpers["bumpers"][bID]=JsonObject();
     }
+*/
     String NAMECopy = String(NAME);
     teamsAndBumpers["bumpers"][bID]["NAME"] = NAMECopy;
     ESP_LOGI(TEAMs_TAG, "Bumper NAME %s => %s", bID, NAMECopy);
 }
 
 void setBumperVERSION(const char* bumperID, const char* version) {
+/*
     if (bumperID == nullptr || strlen(bumperID) == 0) {
         ESP_LOGE("Teams&Bumpers", "Invalid bumperID provided: %s", bumperID);
     }
+*/
     if (version == nullptr || strlen(version) == 0) {
         ESP_LOGE("Teams&Bumpers", "Invalid VERSION address provided: %s", version);
     }
 
     ESP_LOGD("Teams&Bumpers","set VERSION: %s => %s", bumperID, version);
 
+    String bID = ensureBumperExists(bumperID);
+/*
     String bID = String(bumperID);
     if (teamsAndBumpers["bumpers"].isNull()) {
         teamsAndBumpers["bumpers"] = JsonObject();
@@ -137,15 +163,20 @@ void setBumperVERSION(const char* bumperID, const char* version) {
     if (teamsAndBumpers["bumpers"][bID].isNull()) {
         teamsAndBumpers["bumpers"][bID]=JsonObject();
     }
+*/
     String ipCopy = String(version);
     teamsAndBumpers["bumpers"][bID]["VERSION"] = ipCopy;
 
 }
 
 void setBumperButton(const char* bumperID, int button) {
+/*
     if (bumperID == nullptr || strlen(bumperID) == 0) {
         ESP_LOGE(TEAMs_TAG, "Invalid bumperID provided: %s", bumperID);
     }
+*/
+    String bID = ensureBumperExists(bumperID);
+/*
     if (teamsAndBumpers["bumpers"].isNull()) {
         teamsAndBumpers["bumpers"] = JsonObject();
     }
@@ -153,15 +184,20 @@ void setBumperButton(const char* bumperID, int button) {
     if (teamsAndBumpers["bumpers"][bumperID].isNull()) {
         teamsAndBumpers["bumpers"][bumperID]=JsonObject();
     }
+*/
     int copy = int(button);
-    teamsAndBumpers["bumpers"][bumperID]["BUTTON"] = copy;
-    ESP_LOGI(TEAMs_TAG, "Bumper Button %s %i", bumperID, copy);
+    teamsAndBumpers["bumpers"][bID]["BUTTON"] = copy;
+    ESP_LOGI(TEAMs_TAG, "Bumper Button %s %i", bID, copy);
 }
 
 void setBumperStatus(const char* bumperID, String status) {
+/*
     if (bumperID == nullptr || strlen(bumperID) == 0) {
         ESP_LOGE(TEAMs_TAG, "Invalid bumperID provided: %s", bumperID);
     }
+*/
+    String bID = ensureBumperExists(bumperID);
+/*
     if (teamsAndBumpers["bumpers"].isNull()) {
         teamsAndBumpers["bumpers"] = JsonObject();
     }
@@ -169,20 +205,26 @@ void setBumperStatus(const char* bumperID, String status) {
     if (teamsAndBumpers["bumpers"][bumperID].isNull()) {
         teamsAndBumpers["bumpers"][bumperID]=JsonObject();
     }
+*/
     String copy = String(status);
-    teamsAndBumpers["bumpers"][bumperID]["STATUS"] = copy;
-    ESP_LOGI(TEAMs_TAG, "Bumper Status %s %s", bumperID, copy);
+    teamsAndBumpers["bumpers"][bID]["STATUS"] = copy;
+    ESP_LOGI(TEAMs_TAG, "Bumper Status %s %s", bID, copy);
 }
 
 void setBumperScore(const char* bumperID, const int new_score) {
+/*
     if (bumperID == nullptr || strlen(bumperID) == 0) {
         ESP_LOGE(TEAMs_TAG, "Invalid bumperID provided: %s", bumperID);
     }
+*/
+    String bID = ensureBumperExists(bumperID);
+/*
     if (teamsAndBumpers["bumpers"].isNull()) {
         teamsAndBumpers["bumpers"] = JsonObject();
     }
+*/
     int copy = int(new_score);
-    teamsAndBumpers["bumpers"][bumperID]["SCORE"]=copy;
+    teamsAndBumpers["bumpers"][bID]["SCORE"]=copy;
 }
 
 const int64_t getBumperTime(const char* bumperID) {
@@ -190,15 +232,20 @@ const int64_t getBumperTime(const char* bumperID) {
 }
 
 void setBumperTime(const char* bumperID, const int64_t new_delay) {
+/*
     if (bumperID == nullptr || strlen(bumperID) == 0) {
         ESP_LOGE(TEAMs_TAG, "Invalid bumperID provided: %s", bumperID);
     }
+*/
+    String bID = ensureBumperExists(bumperID);
+/*
     if (teamsAndBumpers["bumpers"].isNull()) {
         teamsAndBumpers["bumpers"] = JsonObject();
     }
+*/
     int64_t copy = int64_t(new_delay);
-    teamsAndBumpers["bumpers"][bumperID]["TIMESTAMP"]=copy;
-    ESP_LOGI(TEAMs_TAG, "BumperID Delay %s %i", bumperID, copy);
+    teamsAndBumpers["bumpers"][bID]["TIMESTAMP"]=copy;
+    ESP_LOGI(TEAMs_TAG, "BumperID Delay %s %i", bID, copy);
 }
 
 void  mergeJson(JsonObject& destObj, const JsonObject& srcObj) {
@@ -267,7 +314,22 @@ void setTeam(const char* teamID, const JsonObject& team){
   teamsAndBumpers["teams"][teamID] = team;
 }
 
+String  ensureTeamExists(const char* teamID) {
+    if (teamID == nullptr || strlen(teamID) == 0) {
+        ESP_LOGE(TEAMs_TAG, "Invalid teamID provided: %s", teamID);
+    }
+    if (teamsAndBumpers["teams"].isNull()) {
+        teamsAndBumpers["teams"] = JsonObject();
+    }
+    String bID = String(teamID);
+    if (teamsAndBumpers["teams"][bID].isNull()) {
+        teamsAndBumpers["teams"][bID]=JsonObject();
+    }
+    return bID;
+}
+
 void setTeamStatus(const char* teamID, String status) {
+/*
     if (teamID == nullptr || strlen(teamID) == 0) {
         ESP_LOGE(TEAMs_TAG, "Invalid teamID provided: %s", teamID);
     }
@@ -278,9 +340,11 @@ void setTeamStatus(const char* teamID, String status) {
     if (teamsAndBumpers["teams"][teamID].isNull()) {
         teamsAndBumpers["teams"][teamID]=JsonObject();
     }
+*/
+    String bID = ensureTeamExists(teamID);
     String copy = String(status);
-    teamsAndBumpers["teams"][teamID]["STATUS"] = copy;
-    ESP_LOGI(TEAMs_TAG, "Team Status %s %s", teamID, copy);
+    teamsAndBumpers["teams"][bID]["STATUS"] = copy;
+    ESP_LOGI(TEAMs_TAG, "Team Status %s %s", bID, copy);
 }
 
 const int64_t getTeamTime(const char* teamID) {
@@ -288,6 +352,7 @@ const int64_t getTeamTime(const char* teamID) {
 }
 
 void setTeamTime(const char* teamID, const int64_t new_delay) {
+/*
     if (teamID == nullptr || strlen(teamID) == 0) {
         ESP_LOGE(TEAMs_TAG, "Invalid teamID provided: %s", teamID);
     }
@@ -298,12 +363,15 @@ void setTeamTime(const char* teamID, const int64_t new_delay) {
     if (teamsAndBumpers["teams"][teamID].isNull()) {
         teamsAndBumpers["teams"][teamID]=JsonObject();
     }
-        int64_t copy = int64_t(new_delay);
-        teamsAndBumpers["teams"][teamID]["TIMESTAMP"]=copy;
-        ESP_LOGI(TEAMs_TAG, "Team Delay %s %i", teamID, copy);
+*/
+    String bID = ensureTeamExists(teamID);
+    int64_t copy = int64_t(new_delay);
+    teamsAndBumpers["teams"][bID]["TIMESTAMP"]=copy;
+    ESP_LOGI(TEAMs_TAG, "Team Delay %s %i", bID, copy);
 }
 
 void setTeamBumper(const char* teamID, const char* bumperID) {
+/*
     if (teamID == nullptr || strlen(teamID) == 0) {
         ESP_LOGE(TEAMs_TAG, "Invalid bumperID provided: %s", teamID);
     }
@@ -314,13 +382,16 @@ void setTeamBumper(const char* teamID, const char* bumperID) {
     if (teamsAndBumpers["teams"][teamID].isNull()) {
         teamsAndBumpers["teams"][teamID]=JsonObject();
     }
+*/
+    String bID = ensureTeamExists(teamID);
     String copy = String(bumperID);
-    teamsAndBumpers["teams"][teamID]["BUMPER"] = copy;
+    teamsAndBumpers["teams"][bID]["BUMPER"] = copy;
 //    setTeamTime(teamID, micros());
     ESP_LOGI(TEAMs_TAG, "Team Bumper %s %s", teamID, copy.c_str());
 }
 
 void setTeamScore(const char* teamID, const int new_score) {
+/*
     if (teamID == nullptr || strlen(teamID) == 0) {
         ESP_LOGE(TEAMs_TAG, "Invalid bumperID provided: %s", teamID);
     }
@@ -331,9 +402,12 @@ void setTeamScore(const char* teamID, const int new_score) {
     if (teamsAndBumpers["teams"][teamID].isNull()) {
         teamsAndBumpers["teams"][teamID]=JsonObject();
     }
+
+ */
+    String bID = ensureTeamExists(teamID);
     int copy = int(new_score);
-    teamsAndBumpers["teams"][teamID]["SCORE"] = copy;
-    ESP_LOGI(TEAMs_TAG, "Team Score %s %i", teamID, copy);
+    teamsAndBumpers["teams"][bID]["SCORE"] = copy;
+    ESP_LOGI(TEAMs_TAG, "Team Score %s %i", bID, copy);
 }
 
 void updateTeam(const char* teamID, const JsonObject& new_team) {
