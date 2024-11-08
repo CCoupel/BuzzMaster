@@ -11,6 +11,8 @@ const wsUrl = `${wsProtocol}//${loc}/ws`; // Utilise le même hôte et protocole
 // Initialiser l'objet WebSocket
 export let ws; // Déclare et exporte ws comme une variable globale
 let reconnectInterval = 5000; // Intervalle en millisecondes pour tenter de se reconnecter
+let pingInterval = 100000000;
+let pingTimeout;
 
 let teams = {};
 let bumpers = {};
@@ -148,6 +150,8 @@ export function connectWebSocket(onMessageCallback) {
         sendWebSocketMessage("HELLO", {} );
 
         webSocketColor();
+
+        startPing();
     };
 
     ws.onerror = function(event) {
@@ -162,15 +166,38 @@ export function connectWebSocket(onMessageCallback) {
         setTimeout(connectWebSocket, reconnectInterval); // Tente de se reconnecter après un délai
 
         webSocketColor();
+
+        stopPing();
     };
 
     ws.onmessage = onMessageCallback || function(event) {
         console.log('Message reçu:', event.data);
+        resetPing();
     };
     return ws;
 
 }
 
+function startPing() {
+    stopPing();
+    pingTimeout = setInterval(() => {
+        if (ws.readyState === WebSocket.OPEN) {
+            sendWebSocketMessage("PING", {}); 
+            console.log('PING...')
+        }
+    }, pingInterval);
+}
+
+
+function resetPing() {
+    stopPing();
+    startPing(); 
+}
+
+
+function stopPing() {
+    if (pingTimeout) clearInterval(pingTimeout);
+}
 
 export function sendWebSocketMessage (action, MSG= "{}")  {
     

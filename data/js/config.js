@@ -22,18 +22,6 @@ function updateDisplay() {
     createBuzzerDiv(getBumpers());
 }
 
-/*
-function handleAddTeam() {
-    const teamName = prompt('Nom de la team :', 'Team ');
-    if (teamName && teamName.trim() !== '') {
-        const newTeam = { [teamName]: { COLOR: [255, 255, 255] } };
-        sendWebSocketMessage('UPDATE', JSON.stringify({ teams: newTeam }));
-    } else {
-        alert('Le nom de l\'équipe ne peut pas être vide.');
-    }
-}
-*/
-// Fonction pour afficher une invite pour le nom de l'équipe et vérifier sa validité
 function promptForTeamName() {
     const teamName = prompt('Nom de la team :', 'Team ');
     if (teamName && teamName.trim() !== '' && !getTeams()[teamName]) {
@@ -57,7 +45,38 @@ function handleReset() {
     }
 }
 
+async function sendFileForm(formId, actionUrl) {
+    const form = document.getElementById(formId);
+
+    form.addEventListener('submit', async function(event) {
+        event.preventDefault();
+
+        const formData = new FormData(form);
+
+        try {
+            const response = await fetch(actionUrl, {
+                method: 'POST',
+                body: formData 
+            });
+
+            if (!response.ok) {
+                throw new Error("Erreur du serveur: " + response.statusText);
+            }
+
+            const responseData = await response.text();
+
+            alert("Image envoyée avec succès !");
+            console.log("Réponse du serveur :", responseData);
+
+        } catch (error) {
+            console.error("Erreur lors de l'envoi:", error);
+            alert("Une erreur est survenue lors de l'envoi de l'image.");
+        }
+    });
+}
+
 document.addEventListener('DOMContentLoaded', () => {
+    sendFileForm('background-form', 'http://buzzcontrol.local/background');
     connectWebSocket(handleConfigSocketMessage);
     initializeDropzones();
     getWebVersion();

@@ -22,8 +22,19 @@
         </div>
 
         <div class="button-container">
-            <button id="resetButton">Réinitialiser</button>
-            <button id="addDivButton">Ajouter une team</button>
+            <div id="config-button-container">
+                <button id="resetButton">Réinitialiser</button>
+                <div id="background-form-container">
+                    <form method="post" enctype="multipart/form-data" id="background-form" action="http://buzzcontrol.local/background">
+                        <div>
+                            <label for="file">Image de fond :</label>
+                            <input type="file" id="background" name="background"/>
+                            <button type="submit">Envoyer</button>
+                        </div> 
+                    </form>
+                </div> 
+                <button id="addDivButton">Ajouter une team</button>
+            </div>
             <div id="version-container">
                 <pre id="web-version"></pre>
                 <pre id="core-version"></pre>

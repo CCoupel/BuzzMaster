@@ -12,10 +12,17 @@
     --navbar-height: 40px;
     --timer-height: 50px;
   }
-  
+
+  html {
+    height: 100%;
+  }
+
   body {
     font-family: 'Arial', sans-serif;
     background-color: var(--background-color);
+    background-image: linear-gradient(rgba(255, 255, 255, 0.5), rgba(255, 255, 255, 0.5)), url('http://buzzcontrol.local/files/background.jpg');
+    background-size: cover;
+    background-position: center;
     color: var(--text-color);
     line-height: 1.6;
     display: flex;
@@ -23,8 +30,10 @@
     margin: 0;
     padding: 0;
     padding-top: calc(var(--navbar-height) + var(--timer-height));
+    height: 100%;
   }
   
+
   header {
     height: 107px;
     position: fixed;
@@ -108,22 +117,34 @@
     z-index: 998;
     height: 40px;
   }
-  
+
+  #config-button-container{
+    width: 80%;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
   .player-control{
-    width: 40%;
+    width: 75%;
     display: flex;
     justify-content: space-around;
     align-items: center;
   }
 
   .game-control{
-    width: 60%;
+    width: 25%;
     display: flex;
     justify-content: center;
     align-items: center;
     gap: 2%;
   }
   
+  #background-form-container{
+    display: flex;
+    align-items: center;
+  }
+
   button, .navbar-item {
     background-color: var(--accent-color);
     color: white;
@@ -145,7 +166,7 @@
     justify-content: space-around;
     flex-wrap: wrap;
     padding-top: 10px;
-    margin-top: 3%
+    margin-top: 3%;
   }
   
   .team {
@@ -281,8 +302,7 @@
   }
 
   #version-container {
-    position: absolute;
-    right: 0;
+    width: 7%;
   }
   
   /* Styles spécifiques pour les bumpers dans le buzzer-container */
@@ -458,14 +478,39 @@
   }
 
 
-  @keyframes highlightMoveUp {
-    0% { background-color: yellow; }
-    100% { background-color: transparent; }
-  }
+  @keyframes rowMoveGreen {
+    0% {
+        background-color: yellow; /* Couleur d'origine */
+        transform: scale(1);
+    }
+    50% {
+        background-color: lightgreen; /* Couleur quand la ligne est en mouvement (avance) */
+        transform: scale(1.05);
+    }
+    100% {
+        background-color: white; /* Retour à la couleur normale */
+        transform: scale(1);
+    }
+}
 
-  .highlight {
-    animation: highlightMoveUp 1s ease-in-out;
+@keyframes rowMove {
+  0% {
+    background-color: yellow; /* Couleur d'origine */
+    transform: scale(1);
   }
+  50% {
+    background-color: lightgreen; /* Couleur quand la ligne est en mouvement */
+    transform: scale(1.05);
+  }
+  100% {
+    background-color: white; /* Retour à la couleur normale */
+    transform: scale(1);
+  }
+}
+
+.highlight {
+  animation: rowMove 0.5s ease-in-out;
+}
 
     /* Players styles */
     .time-bar-container-players {
