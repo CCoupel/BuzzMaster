@@ -1,18 +1,20 @@
 #include "includes.h"
-#include "CustomLogger.h"
+#include "WifiManager.h"
+
+#include "Common/CustomLogger.h"
+#include "Common/led.h"
+
 #include "teamsAndBumpers.h"
 
-#include "wifiManager.h"
 #include "SocketManager.h"
 #include "tcpManager.h"
 #include "buttonManager.h"
-#include "led.h"
 #include "fsManager.h"
 #include "messages.h"
 #include "BumperServer.h"
 #include "WebServer.h"
 
-#include <esp_log.h>
+//#include <esp_log.h>
 
 static const char* MAIN_TAG = "BUZZCONTROL";
 const uint16_t logPort = 8888;  // Port UDP pour les logs
@@ -26,16 +28,23 @@ void setup(void)
 
   Serial.begin(921600);
   esp_log_level_set("*", ESP_LOG_INFO);
+  ESP_LOGI(MAIN_TAG, "Starting up...");
+  
+  initLED();
+  ESP_LOGI(MAIN_TAG, "STARTING:");
 
   setLedColor(255, 0, 0);
   setLedIntensity(255);
 
   wifiConnect();
   CustomLogger::init(logPort);
+
   setLedColor(255, 255, 0, true);
+  ESP_LOGI(MAIN_TAG, "BOOTING Version: %s", String(VERSION));
+
   ESP_LOGI(MAIN_TAG, "RGB pin: %d", RGB_BUILTIN);
-  ESP_LOGI(MAIN_TAG, "LED pin: %d",LED_BUILTIN);
-  ESP_LOGI(MAIN_TAG, "NEO pin: %d",PIN_NEOPIXEL);
+  ESP_LOGI(MAIN_TAG, "LED pin: %d", LED_BUILTIN);
+  ESP_LOGI(MAIN_TAG, "NEO pin: %d", PIN_NEOPIXEL);
 
   setLedIntensity(128);
   setupAP();

@@ -1,4 +1,7 @@
 #pragma once
+#include "common/Constant.h"
+#include "Common/CustomLogger.h"
+#include "Common/led.h"
 
 #include <WiFi.h>
 #include <AsyncTCP.h>
@@ -7,7 +10,7 @@
 
 #include <ESPAsyncWebServer.h>
 
-#include <NTPClient.h>
+//#include <NTPClient.h>
 #include <WiFiClient.h>
 
 #include <LittleFS.h>
@@ -18,20 +21,14 @@
 #include <freertos/FreeRTOS.h>
 #include <freertos/queue.h>
 
-#define _VERSION 0
-
-
-
-int ledPin = PIN_NEOPIXEL; // Vérifiez la documentation pour la broche LED intégrée sur votre carte ESP32-S3
-int rgbPin = RGB_BUILTIN;
 hw_timer_t * timer = NULL;
 portMUX_TYPE timerMux = portMUX_INITIALIZER_UNLOCKED;
-
+/*
 int currentRed = 0;
 int currentGreen = 0;
 int currentBlue = 0;
 int currentIntensity = 255;
-
+*/
 struct ButtonInfo {
   int pin;
   String name;
@@ -56,7 +53,7 @@ AsyncWebSocket ws("/ws");
 String jsonBuffer; // Tampon pour assembler les données JSON
 
 WiFiUDP ntpUDP;
-NTPClient timeClient(ntpUDP, "pool.ntp.org");
+//NTPClient timeClient(ntpUDP, "pool.ntp.org");
 const char* GameFile="/game.json";
 const char* saveGameFile="/game.json.save";
 
@@ -73,9 +70,9 @@ void setGamePhase(String phase);
 /* **** TOOLS *** */
 
 void putMsgToQueue(const char* action=nullptr, const char* msg="", bool notify=false, AsyncClient* client=nullptr );
-void setLedColor(int red, int green, int blue, bool isApplyLedColor=false);
-void setLedIntensity(int intensity);
-void applyLedColor();
+//void setLedColor(int red, int green, int blue, bool isApplyLedColor=false);
+//void setLedIntensity(int intensity);
+//void applyLedColor();
 void sendMessageToClient(const String& action, const String& msg, AsyncClient* client);
 void sendMessageToAllClients(const String& action, const String& msg );
 void notifyAll();

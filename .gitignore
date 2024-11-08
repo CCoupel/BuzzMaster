@@ -10,7 +10,9 @@ dist/
 
 # Fichiers et dossiers générés par PlatformIO
 .pio
+.pio/*
 .vscode
+.vscode/*
 .vscode/c_cpp_properties.json
 .vscode/ipch
 .vscode/launch.json
