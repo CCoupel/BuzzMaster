@@ -135,6 +135,77 @@ void w_handleUploadFile(AsyncWebServerRequest *request, String filename, size_t 
     }
 }
 
+/***** QUESTIONS *******/
+void w_handleListQuestions(AsyncWebServerRequest *request) {
+    ESP_LOGI(WEB_TAG, "Handling question list  request");
+    struct DirectoryContent {
+        String path;
+        String questionJson;
+    };
+
+    String jsonOutput = "{";
+    
+    if(!LittleFS.begin(true)) {
+        ESP_LOGE(WEB_TAG,"{\"error\": \"Failed to mount LittleFS\"}");
+    }
+
+    File root = LittleFS.open("/files");
+    if(!root || !root.isDirectory()) {
+        ESP_LOGE(WEB_TAG, "{\"error\": \"Failed to open /files directory\"}");
+    }
+
+        // Première passe pour compter les répertoires
+    int dirCount = 0;
+    File countFile = root.openNextFile();
+    while(countFile) {
+        if(countFile.isDirectory()) {
+            dirCount++;
+        }
+        countFile = root.openNextFile();
+    }
+    root.close();
+
+    // Allouer le tableau avec la taille exacte
+    DirectoryContent* directories = new DirectoryContent[dirCount];
+    int currentIndex = 0;
+
+    // Seconde passe pour remplir le tableau
+    root = LittleFS.open("/files");
+    File file = root.openNextFile();
+    while(file && currentIndex < dirCount) {
+        if(file.isDirectory()) {
+            directories[currentIndex].path = file.path();
+            String questionPath = directories[currentIndex].path + "/question.json";
+            File questionFile = LittleFS.open(questionPath, "r");
+            
+            if(questionFile) {
+                directories[currentIndex].questionJson = questionFile.readString();
+                questionFile.close();
+                currentIndex++;
+            }
+        }
+        file = root.openNextFile();
+    }
+
+    // Construire le JSON
+    for(int i = 0; i < dirCount; i++) {
+        if(i > 0) jsonOutput += ",";
+        jsonOutput += "\"" + directories[i].path + "\":";
+        jsonOutput += directories[i].questionJson;
+    }
+    
+    jsonOutput += "}";
+    
+    // Libérer la mémoire
+    delete[] directories;
+    
+    ESP_LOGI(WEB_TAG, "Questions: %s", jsonOutput.c_str());
+
+    AsyncWebServerResponse *response = request->beginResponse(200, "text/json", jsonOutput);
+    addCorsHeaders(response);
+    request->send(response);
+
+}
 
 void w_handleUploadQuestionFile(AsyncWebServerRequest *request, String filename, size_t index, uint8_t *data, size_t len, bool final) {
     static File file;
@@ -207,7 +278,7 @@ void startWebServer() {
     server.on("/background", HTTP_POST, w_handleUploadComplete, w_handleUploadFile);
 
     server.on("/questions", HTTP_POST, w_handleUploadComplete, w_handleUploadQuestionFile);
- //   server.on("/questions", HTTP_GET, w_handleListQuestions);
+    server.on("/questions", HTTP_GET, w_handleListQuestions);
 
     ws.onEvent(onWsEvent);
     server.addHandler(&ws);
