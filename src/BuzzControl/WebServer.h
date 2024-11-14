@@ -1,6 +1,7 @@
 #pragma once
 #include "Common/CustomLogger.h"
 #include "Common/led.h"
+#include "fsManager.h"
 
 #include <ESPAsyncWebServer.h>
 
@@ -57,18 +58,62 @@ void w_handleRedirect(AsyncWebServerRequest *request) {
 }
 
 void w_handleUploadComplete(AsyncWebServerRequest *request) {
-    AsyncWebServerResponse *response = request->beginResponse(200, "text/plain", "Upload terminé");
-    addCorsHeaders(response);
+    static File file;
+    static size_t totalSize = 0;
+    static String currentDir;
+    static String questionText;
+    static String reponseText;
+    static String pointsText;
+    static String tempsText;
+    static bool hasFile = false;  // Pour suivre si un fichier est en cours d'upload
+    static String fullPath;
+    static String jsonString="Upload Terminé";
 
+    ESP_LOGI(WEB_TAG,"receive a question ?");
+    if(request->hasParam("number", true)) {
+        currentDir = request->getParam("number", true)->value();
+        questionText = request->hasParam("question", true) ? request->getParam("question", true)->value() : "";
+        reponseText = request->hasParam("answer", true) ? request->getParam("answer", true)->value() : "";
+        pointsText = request->hasParam("points", true) ? request->getParam("points", true)->value() : "0";
+        tempsText = request->hasParam("time", true) ? request->getParam("time", true)->value() : "0";
+        
+        // Créer le répertoire si nécessaire
+        fullPath = "/files/" + currentDir;
+        totalSize=0;
+        ensureDirectoryExists(fullPath);
+        // Créer le fichier JSON
+        jsonString = "{\n";
+            jsonString += "  \"ID\": \"" + currentDir + "\",\n";
+            jsonString += "  \"QUESTION\": \"" + questionText + "\",\n";
+            jsonString += "  \"ANSWER\": \"" + reponseText + "\",\n";
+            jsonString += "  \"POINTS\": " + pointsText + ",\n";
+            jsonString += "  \"TIME\": " + tempsText + "\n";
+            jsonString += "}";
+
+        ESP_LOGD(WEB_TAG, "Question received: %s", jsonString.c_str());
+    
+        File jsonFile = LittleFS.open(fullPath + "/question.json", "w");
+        if(jsonFile) {
+            if(jsonFile.print(jsonString)) {
+                ESP_LOGI(WEB_TAG, "Fichier JSON créé avec succès");
+            } else {
+                ESP_LOGE(WEB_TAG, "Erreur lors de l'écriture du JSON");
+            }
+            jsonFile.close();
+        }
+    }
+
+    AsyncWebServerResponse *response = request->beginResponse(200, "text/json", jsonString);
+    addCorsHeaders(response);
     request->send(response);
 }
-
 
 void w_handleUploadFile(AsyncWebServerRequest *request, String filename, size_t index, uint8_t *data, size_t len, bool final) {
     static File file;
     static size_t totalSize = 0;
+
     if(!index) { // Début de l'upload
-        ESP_LOGI(WEB_TAG,"Début de l'upload du Background");
+        ESP_LOGI(WEB_TAG,"Début de l'upload du Background %i %s (%i)", index, filename.c_str(), len);
         file = LittleFS.open("/files/background.jpg", "w");
         totalSize=0;
         if(!file) {
@@ -91,6 +136,51 @@ void w_handleUploadFile(AsyncWebServerRequest *request, String filename, size_t 
 }
 
 
+void w_handleUploadQuestionFile(AsyncWebServerRequest *request, String filename, size_t index, uint8_t *data, size_t len, bool final) {
+    static File file;
+    static size_t totalSize = 0;
+    static String currentDir;
+    static String questionText;
+    static String reponseText;
+    static String pointsText;
+    static String tempsText;
+    static bool hasFile = false;  // Pour suivre si un fichier est en cours d'upload
+    static String fullPath="/files";
+    static String jsonString;
+        
+    hasFile = (filename != "");  // Vérifie si un fichier est présent
+
+    if(!index) { // Début de l'upload
+        if(request->hasParam("number", true)) {
+            currentDir = request->getParam("number", true)->value();
+            ESP_LOGI(WEB_TAG,"Début de l'upload de l'image question id : %s", currentDir);
+            fullPath+="/"+currentDir;
+            ensureDirectoryExists(fullPath);
+            String filePath = fullPath + "/media.jpg";
+            ESP_LOGI(WEB_TAG, "Début de l'upload de l'image vers: %s", filePath.c_str());
+            
+            totalSize = 0;
+            file = LittleFS.open(filePath, "w");
+
+            if(!file) {
+                ESP_LOGI(WEB_TAG,"Échec de l'ouverture du fichier background en écriture");
+                return;
+            }
+        }
+    }    
+    if(hasFile && file && len) { // Écriture des données
+        file.write(data, len);
+        totalSize+=len;
+    }
+
+    if(final) { // Fin de l'upload
+        ESP_LOGD(WEB_TAG,"Upload media terminé: %i", totalSize);
+
+        if(file) {
+            file.close();
+        }
+    }
+}
 
 void startWebServer() {
     String ROOT="/";
@@ -115,6 +205,9 @@ void startWebServer() {
     server.on("/reboot", HTTP_GET, w_handleReboot);
     
     server.on("/background", HTTP_POST, w_handleUploadComplete, w_handleUploadFile);
+
+    server.on("/questions", HTTP_POST, w_handleUploadComplete, w_handleUploadQuestionFile);
+ //   server.on("/questions", HTTP_GET, w_handleListQuestions);
 
     ws.onEvent(onWsEvent);
     server.addHandler(&ws);
