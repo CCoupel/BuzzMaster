@@ -142,6 +142,14 @@ void resetServer() {
       ESP_LOGE(BUMPER_TAG, "Error: Unable to delete save file");
     }
   } 
+  String dirToRemove="/files";
+  deleteDirectory(dirToRemove.c_str());
+  ensureDirectoryExists(dirToRemove);
+
+  dirToRemove="/CURRENT";
+  deleteDirectory(dirToRemove.c_str());
+  ensureDirectoryExists(dirToRemove);
+
   loadJson(GameFile);
   sendResetToAll();
   sleep(2);

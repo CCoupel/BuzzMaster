@@ -22,7 +22,7 @@ String baseFILE="/config/catalog.url";
 bool createDirectories(const String& path);
 
 /***** FILES ********/
-String readFile(const String& path, const String& defaultValue = "") {
+String readFile(const String& path, const String& defaultValue) {
     if (!LittleFS.begin()) {
         ESP_LOGE(FS_TAG, "Échec du montage de LittleFS");
         return defaultValue;

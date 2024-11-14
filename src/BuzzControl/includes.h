@@ -76,6 +76,7 @@ void putMsgToQueue(const char* action=nullptr, const char* msg="", bool notify=f
 void sendMessageToClient(const String& action, const String& msg, AsyncClient* client);
 void sendMessageToAllClients(const String& action, const String& msg );
 void notifyAll();
+String readFile(const String& path, const String& defaultValue="");
 void loadJson(String path);
 void saveJson();
 void processClientBuffer(const String& clientID, AsyncClient* c);

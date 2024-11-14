@@ -3,6 +3,7 @@
 #include "Common/led.h"
 
 #include <ArduinoJson.h>
+
 static const char* TEAMs_TAG = "Team And Bumper";
 JsonDocument teamsAndBumpers;
 
@@ -44,6 +45,16 @@ void setGamePage(const String remotePage) {
         teamsAndBumpers["GAME"] = JsonObject();
     }
         teamsAndBumpers["GAME"]["REMOTE"] = remotePage;
+}
+
+void setQuestion(const String qID) {
+    String question="";
+    String qPath="/files/"+qID+"/question.json";
+    question=readFile(qPath);
+    if (teamsAndBumpers["GAME"].isNull()) {
+        teamsAndBumpers["GAME"] = JsonObject();
+    }
+    serializeJson(teamsAndBumpers["GAME"]["QUESTION"], question);
 }
 
 String getTeamsAndBumpersJSON() {
