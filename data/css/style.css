@@ -512,17 +512,16 @@
   animation: rowMove 0.5s ease-in-out;
 }
 
-    /* Players styles */
-    .time-bar-container-players {
+/* Players styles */
+.time-bar-container-players {
       position: fixed;
       left: 0;
       width: 100%;
       height: var(--timer-height);
       line-height: var(--timer-height);
       background-color: #ddd;
-    }
-
-    #timer-players {
+}
+#timer-players {
       width: 100%;
       height:var(--timer-height);
       font-size: 25px;
@@ -530,8 +529,35 @@
       color: #000;
       position: fixed;
       text-align: center;
-    }
+}
 
-    .hidden {
+.hidden {
       visibility: hidden;
+}
+
+/* Questions styles */
+
+.question-form-div {
+  width: 60%;
+  margin: auto;
+  form{
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    label{
+      width: 19%;
+      text-align: right;
+      margin-right: 1%;
     }
+    input[type="text"]{
+      width: 75%;
+    }
+    input[type="number"]{
+      width: 10%;
+    }
+    button {
+      width: 30%;
+      margin:auto
+    }
+  }
+}
