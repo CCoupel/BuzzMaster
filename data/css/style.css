@@ -572,5 +572,8 @@
   padding: 10px;
   margin: 10px 0;
   border-radius: 5px;
-  width: auto;
+  width: 18%;
+  strong{
+    font-weight: 600;
+  }
 }
