@@ -3,6 +3,7 @@
 #include "Common/led.h"
 
 #include <ArduinoJson.h>
+
 static const char* TEAMs_TAG = "Team And Bumper";
 JsonDocument teamsAndBumpers;
 
@@ -44,6 +45,51 @@ void setGamePage(const String remotePage) {
         teamsAndBumpers["GAME"] = JsonObject();
     }
         teamsAndBumpers["GAME"]["REMOTE"] = remotePage;
+}
+//##### QUESTION ######
+void setQuestion(const String qID) {
+    String question="";
+    String qPath="/files/"+qID+"/question.json";
+    question=readFile(qPath);
+    if (teamsAndBumpers["GAME"].isNull()) {
+        teamsAndBumpers["GAME"] = JsonObject();
+    }
+    serializeJson(teamsAndBumpers["GAME"]["QUESTION"], question);
+}
+
+String getQuestionElement(String Element) {
+    if (teamsAndBumpers["GAME"].isNull()) {
+        teamsAndBumpers["GAME"] = JsonObject();
+    }
+    return teamsAndBumpers["GAME"][Element];
+}
+
+String getQuestionTime() {
+    if (teamsAndBumpers["GAME"].isNull()) {
+        teamsAndBumpers["GAME"] = JsonObject();
+    }
+    return getQuestionElement("TIME");
+}
+
+String getQuestionPoints() {
+    if (teamsAndBumpers["GAME"].isNull()) {
+        teamsAndBumpers["GAME"] = JsonObject();
+    }
+    return getQuestionElement("POINTS");
+}
+
+String getQuestionQuestion() {
+    if (teamsAndBumpers["GAME"].isNull()) {
+        teamsAndBumpers["GAME"] = JsonObject();
+    }
+    return getQuestionElement("QUESTION");
+}
+
+String getQuestionResponse() {
+    if (teamsAndBumpers["GAME"].isNull()) {
+        teamsAndBumpers["GAME"] = JsonObject();
+    }
+    return getQuestionElement("ANSWER");
 }
 
 String getTeamsAndBumpersJSON() {

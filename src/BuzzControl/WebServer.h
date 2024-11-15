@@ -6,6 +6,7 @@
 #include <ESPAsyncWebServer.h>
 
 static const char* WEB_TAG = "WEBSERVER";
+static const String questionsPath="/files/questions";
 
 void addCorsHeaders(AsyncWebServerResponse* response) {
     response->addHeader("Access-Control-Allow-Origin", "*");
@@ -51,10 +52,19 @@ void w_handleReset(AsyncWebServerRequest *request) {
     resetServer();
 }
 
+void w_handleListFiles(AsyncWebServerRequest *request) {
+    String result;
+    result=listLittleFSFiles();
+    result+=printLittleFSInfo();
+    
+    AsyncWebServerResponse *response = request->beginResponse(200, "text/text", result);
+    addCorsHeaders(response);
+    request->send(response);
+}
 
 void w_handleRedirect(AsyncWebServerRequest *request) {
     ESP_LOGD(WEB_TAG, "REdirecting for: %s", request->url().c_str());
-    request->redirect("http://buzzcontrol.local/html/config.html");
+    request->redirect("http://buzzcontrol.local/config.html");
 }
 
 void w_handleUploadComplete(AsyncWebServerRequest *request) {
@@ -66,7 +76,7 @@ void w_handleUploadComplete(AsyncWebServerRequest *request) {
     static String pointsText;
     static String tempsText;
     static bool hasFile = false;  // Pour suivre si un fichier est en cours d'upload
-    static String fullPath;
+    static String fullPath=questionsPath;
     static String jsonString="Upload Terminé";
 
     ESP_LOGI(WEB_TAG,"receive a question ?");
@@ -78,7 +88,8 @@ void w_handleUploadComplete(AsyncWebServerRequest *request) {
         tempsText = request->hasParam("time", true) ? request->getParam("time", true)->value() : "0";
         
         // Créer le répertoire si nécessaire
-        fullPath = "/files/" + currentDir;
+        ensureDirectoryExists(fullPath);
+        fullPath += "/" + currentDir;
         totalSize=0;
         ensureDirectoryExists(fullPath);
         // Créer le fichier JSON
@@ -149,7 +160,7 @@ void w_handleListQuestions(AsyncWebServerRequest *request) {
         ESP_LOGE(WEB_TAG,"{\"error\": \"Failed to mount LittleFS\"}");
     }
 
-    File root = LittleFS.open("/files");
+    File root = LittleFS.open(questionsPath);
     if(!root || !root.isDirectory()) {
         ESP_LOGE(WEB_TAG, "{\"error\": \"Failed to open /files directory\"}");
     }
@@ -170,7 +181,7 @@ void w_handleListQuestions(AsyncWebServerRequest *request) {
     int currentIndex = 0;
 
     // Seconde passe pour remplir le tableau
-    root = LittleFS.open("/files");
+    root = LittleFS.open(questionsPath);
     File file = root.openNextFile();
     while(file && currentIndex < dirCount) {
         if(file.isDirectory()) {
@@ -216,13 +227,14 @@ void w_handleUploadQuestionFile(AsyncWebServerRequest *request, String filename,
     static String pointsText;
     static String tempsText;
     static bool hasFile = false;  // Pour suivre si un fichier est en cours d'upload
-    static String fullPath="/files";
+    static String fullPath=questionsPath;
     static String jsonString;
         
     hasFile = (filename != "");  // Vérifie si un fichier est présent
 
     if(!index) { // Début de l'upload
         if(request->hasParam("number", true)) {
+            ensureDirectoryExists(fullPath);
             currentDir = request->getParam("number", true)->value();
             ESP_LOGI(WEB_TAG,"Début de l'upload de l'image question id : %s", currentDir);
             fullPath+="/"+currentDir;
@@ -259,10 +271,22 @@ void startWebServer() {
         ESP_LOGD(FS_TAG, "Directory /CURRENT Exists");
         ROOT="/CURRENT";
     }
-
-    server.serveStatic("/", LittleFS, ROOT.c_str());
     server.onNotFound(w_handleNotFound);
 
+    server.serveStatic("/", LittleFS, (ROOT+"/html").c_str());
+    server.serveStatic("/js", LittleFS, (ROOT+"/js").c_str());
+    server.serveStatic("/css", LittleFS, (ROOT+"/css").c_str());
+
+    // Servir les fichiers du répertoire files pour /files/*
+    server.serveStatic("/files/", LittleFS, "/files/");
+    
+    // Servir les fichiers du répertoire files pour /files/*
+    server.serveStatic("/questions/", LittleFS, "/files/questions/");
+
+    // Route spécifique pour le background
+    server.serveStatic("/background", LittleFS, "/files/background.jpg");
+
+    server.on("/", HTTP_GET, w_handleRedirect);
     server.on("/index.html", w_handleRedirect);
 
     server.on("/generate_204", w_handleRedirect);  // Android captive portal
@@ -274,7 +298,8 @@ void startWebServer() {
 
     server.on("/reset", HTTP_GET, w_handleReset);
     server.on("/reboot", HTTP_GET, w_handleReboot);
-    
+    server.on("/listFiles",HTTP_GET, w_handleListFiles);
+
     server.on("/background", HTTP_POST, w_handleUploadComplete, w_handleUploadFile);
 
     server.on("/questions", HTTP_POST, w_handleUploadComplete, w_handleUploadQuestionFile);

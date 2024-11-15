@@ -94,6 +94,12 @@ void continueGame(){
       putMsgToQueue("CONTINUE",getTeamsAndBumpersJSON().c_str(),true);
 }
 
+void revealGame() {
+    if (GameStarted==false) {
+      putMsgToQueue("REVEAL",getQuestionResponse().c_str(),true);
+    }
+}
+
 void RAZscores() {
   ESP_LOGI(BUMPER_TAG, "Resetting Bumpers Scores");
   JsonObject bumpers=getBumpers();
@@ -142,6 +148,14 @@ void resetServer() {
       ESP_LOGE(BUMPER_TAG, "Error: Unable to delete save file");
     }
   } 
+  String dirToRemove="/files";
+  deleteDirectory(dirToRemove.c_str());
+  ensureDirectoryExists(dirToRemove);
+
+  dirToRemove="/CURRENT";
+  deleteDirectory(dirToRemove.c_str());
+  ensureDirectoryExists(dirToRemove);
+
   loadJson(GameFile);
   sendResetToAll();
   sleep(2);
