@@ -94,6 +94,12 @@ void continueGame(){
       putMsgToQueue("CONTINUE",getTeamsAndBumpersJSON().c_str(),true);
 }
 
+void revealGame() {
+    if (GameStarted==false) {
+      putMsgToQueue("REVEAL",getQuestionResponse().c_str(),true);
+    }
+}
+
 void RAZscores() {
   ESP_LOGI(BUMPER_TAG, "Resetting Bumpers Scores");
   JsonObject bumpers=getBumpers();

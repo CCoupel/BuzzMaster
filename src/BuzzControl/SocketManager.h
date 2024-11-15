@@ -47,6 +47,9 @@ void parseDataFromSocket(const char* action, const JsonObject& message) {
     case hash("REBOOT"):
       rebootServer();
       break;
+    case hash("REVEAL"):
+      revealGame();
+      break;
     case hash("START"):
       if (message["QUESTION"].isNull()) {
         if (message["DELAY"].isNull()) {

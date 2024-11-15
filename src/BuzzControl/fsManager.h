@@ -278,10 +278,13 @@ bool moveDirectory(const char* sourceDir, const char* destDir) {
 
 /******* TOOLS *******/
 
-void printLittleFSInfo() {
+String printLittleFSInfo() {
+    String result="";
+    String line="";
+
     if (!LittleFS.begin(true)) {
         ESP_LOGE(FS_TAG, "Failed to mount LittleFS");
-        return;
+        return result;
     }
 
     unsigned long totalBytes = LittleFS.totalBytes();
@@ -291,47 +294,73 @@ void printLittleFSInfo() {
     float usedPercentage = (float)usedBytes / totalBytes * 100;
     float freePercentage = (float)freeBytes / totalBytes * 100;
 
-    ESP_LOGI(FS_TAG, "LittleFS Usage Information:");
-    ESP_LOGI(FS_TAG, "Total size: %lu bytes", totalBytes);
-    ESP_LOGI(FS_TAG, "Used space: %lu bytes (%.2f%%)", usedBytes, usedPercentage);
-    ESP_LOGI(FS_TAG, "Free space: %lu bytes (%.2f%%)", freeBytes, freePercentage);
+    line="LittleFS Usage Information:";
+    result += line+"\n";
+    ESP_LOGI(FS_TAG, line.c_str());
+
+    line="Total size: "+String(totalBytes/1024)+" Kbytes";
+    result += line+"\n";
+    ESP_LOGI(FS_TAG, line.c_str());
+    //ESP_LOGI(FS_TAG, "Total size: %lu bytes", totalBytes);
+
+    line="Used space: "+String(usedBytes/1024)+" Kbytes ("+usedPercentage+")";
+    result += line+"\n";
+    ESP_LOGI(FS_TAG, line.c_str());
+    //ESP_LOGI(FS_TAG, "Used space: %lu bytes (%.2f%%)", usedBytes, usedPercentage);
+
+    line="Free space: "+String(freeBytes/1024)+" Kbytes ("+String(freePercentage)+")";
+    result += line+"\n";
+    ESP_LOGI(FS_TAG, line.c_str());
+    //ESP_LOGI(FS_TAG, "Free space: %lu bytes (%.2f%%)", freeBytes, freePercentage);
+
+    return result;
 }
 
-void listLittleFSFilesRecursive(File &dir, const String &indent = "") {
+String listLittleFSFilesRecursive(File &dir, const String &indent = "") {
+    String result="";
+    String line="";
     File file = dir.openNextFile();
     while (file) {
         if (file.isDirectory()) {
-            ESP_LOGI(FS_TAG, "%s├── %s/", indent.c_str(), file.name());
-            listLittleFSFilesRecursive(file, indent + "    ");
+            line=String(indent)+"L__"+String(file.name())+"/";
+            //ESP_LOGI(FS_TAG, "%s├── %s/", indent.c_str(), file.name());
+            ESP_LOGI(FS_TAG, line.c_str());
+            line+=listLittleFSFilesRecursive(file, indent + "    ");
         } else {
-            ESP_LOGI(FS_TAG, "%s├── %s (%d bytes)", indent.c_str(), file.name(), file.size());
+            line=String(indent)+"L__"+String(file.name())+" ("+String(file.size())+")";
+            ESP_LOGI(FS_TAG, line.c_str());
+            //ESP_LOGI(FS_TAG, "%s├── %s (%d bytes)", indent.c_str(), file.name(), file.size());
         }
+        
+        result+="\n"+line;
         file = dir.openNextFile();
     }
+    return result;
 }
 
-void listLittleFSFiles() {
-
+String listLittleFSFiles(String path) {
+    String result="";
     ESP_LOGI(FS_TAG, "Listing files in LittleFS:");
     if (!LittleFS.begin()) {
         ESP_LOGE(FS_TAG, "Failed to mount LittleFS");
-        return;
+        return result;
     }
 
-    File root = LittleFS.open("/");
+    File root = LittleFS.open(path);
     if (!root) {
         ESP_LOGE(FS_TAG, "Failed to open root directory");
-        return;
+        return result;
     }
     if (!root.isDirectory()) {
         ESP_LOGE(FS_TAG, "Root is not a directory");
-        return;
+        return result;
     }
 
-    ESP_LOGI(FS_TAG, "/");
-    listLittleFSFilesRecursive(root);
+    ESP_LOGI(FS_TAG, path.c_str());
+    result=listLittleFSFilesRecursive(root);
 
-    printLittleFSInfo();
+    result+=printLittleFSInfo();
+    return result;
 }
 
 void loadJson(String path) {
