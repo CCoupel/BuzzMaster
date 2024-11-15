@@ -86,8 +86,9 @@ function sendAction(action, msg = {}) {
         switch (action) {
             case 'START':
                 const gameTimeInput = document.getElementById('game-time-input');
+                const questionId = parseInt(sendQuestionId());
                 const gameTime = parseInt(gameTimeInput.value, 10) || 30;
-                message = {'DELAY':  gameTime};
+                message = {'DELAY':  gameTime, 'QUESTION': questionId};
                 sendWebSocketMessage( action, message);
                 break;
             case 'UPDATE':
@@ -227,7 +228,9 @@ function updateTimer() {
 
 function addPointToBumper(bumperMac) {
     if (gameState.gamePhase === 'STOP') {
-        setBumperPoint(bumperMac, 1);
+        const pointsInput = document.getElementById('game-points-input');
+        const pointsValue = parseInt(pointsInput.value, 10);
+        setBumperPoint(bumperMac, pointsValue || 1);
         updateDisplay();
     }
 }
@@ -303,13 +306,69 @@ function handlePhase(state) {
     }
 }
 
+async function questionsSelect() {
+    try {
+        const response = await fetch('http://buzzcontrol.local/questions');
+        
+        if (!response.ok) {
+            throw new Error('Erreur réseau : ' + response.statusText);
+        }
+        
+        const questions = await response.json();
+        
+        const container = document.getElementById('questions-select');
+        const timeInput = document.getElementById('game-time-input');
+        const pointsInput = document.getElementById('game-points-input');
+        
+        Object.keys(questions).forEach(key => {
+            const questionData = questions[key];
+            const questionOption = document.createElement('option');
+            questionOption.value=`${questionData.ID}`;
+            questionOption.innerHTML = `Question : ${questionData.ID}`;
+
+            questionOption.setAttribute('data-question', questionData.QUESTION);
+            questionOption.setAttribute('data-time', questionData.TIME);
+            questionOption.setAttribute('data-points', questionData.POINTS);
+            questionOption.setAttribute('data-answer', questionData.ANSWER);
+                 
+            container.appendChild(questionOption);
+        });
+
+        container.addEventListener('change', (event) => {
+            const selectedOption = event.target.selectedOptions[0];
+            
+            const question = selectedOption.getAttribute('data-question')
+            const time = selectedOption.getAttribute('data-time');
+            const points = selectedOption.getAttribute('data-points');
+            const answer = selectedOption.getAttribute('data-answer');
+            
+            console.log(`Temps : ${time}, Points : ${points},Question : ${question}, Réponse : ${answer}`);
+            
+            timeInput.value = time || '35';
+            pointsInput.value = points || '1';
+        });
+
+    } catch (error) {
+        console.error('Erreur lors de la récupération des questions :', error);
+    }
+}
+
+function sendQuestionId() {
+    const select = document.getElementById('questions-select');
+    const selectedOption = select.selectedOptions[0];
+    const questionId = selectedOption.value;
+    return questionId;
+}
+
 document.addEventListener('DOMContentLoaded', function() {
     connectWebSocket(handleConfigSocketMessage);
     updateDisplay();
     updateTimer();
     updateTimeBar();
+    questionsSelect();
 
     const playersButton = document.getElementById('players');
+    const questionSelector = document.getElementById('questions-select');
 
     playersButton.onclick = () => {
         window.open('http://buzzcontrol.local/html/players.html')

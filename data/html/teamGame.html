@@ -29,8 +29,13 @@
                 <button id="players">PAGE JOUEURS</button>
             </div>         
             <div class="game-control">
+                <select name="questions" id="questions-select">
+                    <option value="0">Question manuelle</option>
+                </select>
                 <label for="time">Temps :</label>
                 <input type="number" name="time" id="game-time-input" placeholder="Temps (s)" min="1" value="35">
+                <label for="points">Points :</label>
+                <input type="number" name="points" id="game-points-input" placeholder="Points" min="1" value="1">
                 <button id="startStopButton">START</button>
                 <button id="pauseContinueButton">PAUSE</button>
             </div>

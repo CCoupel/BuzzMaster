@@ -126,14 +126,14 @@
   }
 
   .player-control{
-    width: 75%;
+    width: 35%;
     display: flex;
     justify-content: space-around;
     align-items: center;
   }
 
   .game-control{
-    width: 25%;
+    width: 65%;
     display: flex;
     justify-content: center;
     align-items: center;
@@ -276,7 +276,13 @@
     padding: 5px;
     font-size: 16px;
     width: 60px;
-    place-self: flex-start;
+  }
+
+  #game-points-input {
+    margin-right: 10px;
+    padding: 5px;
+    font-size: 16px;
+    width: 60px;
   }
   
   /* Styles pour la page de configuration */
