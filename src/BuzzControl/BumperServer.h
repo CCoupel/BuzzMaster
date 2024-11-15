@@ -61,10 +61,19 @@ void resetBumpersTime() {
   }
 }
 
-void startGame(const int delay){
+void startGame(const int delay, const String question){
+  ESP_LOGD(BUMPER_TAG, "STARTING GAME: %i (%s)",delay, question);
+  int newDelay=delay;
+  if (question.toInt()>0) {
+    setQuestion(question);
+    newDelay=getQuestionTime().toInt();
+  } else {
+    setQuestion("");
+  }
+
   resetBumpersTime();
-  setGameDelay(delay);
-  setGameCurrentTime(delay);
+  setGameDelay(newDelay);
+  setGameCurrentTime(newDelay);
   setGameTime();
   GameStarted=true;
   setGamePhase( "START");

@@ -60,6 +60,8 @@ void setup(void)
   downloadFiles();
 
   listLittleFSFiles();
+  printLittleFSInfo();
+  
   setLedColor(128, 128, 0, true);
 
   attachButtons();

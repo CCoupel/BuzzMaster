@@ -49,46 +49,47 @@ void setGamePage(const String remotePage) {
 //##### QUESTION ######
 void setQuestion(const String qID) {
     String question="";
-    String qPath="/files/"+qID+"/question.json";
+    String qPath=questionsPath+"/"+qID+"/question.json";
+
     question=readFile(qPath);
+
     if (teamsAndBumpers["GAME"].isNull()) {
         teamsAndBumpers["GAME"] = JsonObject();
     }
-    serializeJson(teamsAndBumpers["GAME"]["QUESTION"], question);
+    
+    ESP_LOGD(TEAMs_TAG, "Set Question %s: %s", qID, question.c_str());
+    
+    DeserializationError error = deserializeJson(teamsAndBumpers["GAME"]["QUESTION"], question);
+    if (error) {
+        ESP_LOGE(TEAMs_TAG, "deserializeJson() failed: %s", error.c_str());
+        teamsAndBumpers["GAME"].remove("QUESTION");
+    } 
+    
 }
 
 String getQuestionElement(String Element) {
     if (teamsAndBumpers["GAME"].isNull()) {
         teamsAndBumpers["GAME"] = JsonObject();
     }
-    return teamsAndBumpers["GAME"][Element];
+    if (teamsAndBumpers["GAME"]["QUESTION"].isNull()) {
+        teamsAndBumpers["GAME"]["QUESTION"] = JsonObject();
+    }
+    return teamsAndBumpers["GAME"]["QUESTION"][Element];
 }
 
 String getQuestionTime() {
-    if (teamsAndBumpers["GAME"].isNull()) {
-        teamsAndBumpers["GAME"] = JsonObject();
-    }
     return getQuestionElement("TIME");
 }
 
 String getQuestionPoints() {
-    if (teamsAndBumpers["GAME"].isNull()) {
-        teamsAndBumpers["GAME"] = JsonObject();
-    }
     return getQuestionElement("POINTS");
 }
 
 String getQuestionQuestion() {
-    if (teamsAndBumpers["GAME"].isNull()) {
-        teamsAndBumpers["GAME"] = JsonObject();
-    }
     return getQuestionElement("QUESTION");
 }
 
 String getQuestionResponse() {
-    if (teamsAndBumpers["GAME"].isNull()) {
-        teamsAndBumpers["GAME"] = JsonObject();
-    }
     return getQuestionElement("ANSWER");
 }
 

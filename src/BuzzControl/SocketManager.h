@@ -51,15 +51,7 @@ void parseDataFromSocket(const char* action, const JsonObject& message) {
       revealGame();
       break;
     case hash("START"):
-      if (message["QUESTION"].isNull()) {
-        if (message["DELAY"].isNull()) {
-            message["DELAY"]=0;
-        }
-        startGame(message["DELAY"]);
-      } else {
-        setQuestion(message["QUESTION"]);
-        startGame(0);
-      }
+      startGame(message["DELAY"], message["QUESTION"]);
       break;
     case hash("STOP"):
       stopGame();

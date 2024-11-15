@@ -6,7 +6,6 @@
 #include <ESPAsyncWebServer.h>
 
 static const char* WEB_TAG = "WEBSERVER";
-static const String questionsPath="/files/questions";
 
 void addCorsHeaders(AsyncWebServerResponse* response) {
     response->addHeader("Access-Control-Allow-Origin", "*");
@@ -42,6 +41,7 @@ void w_handleNotFound(AsyncWebServerRequest *request) {
   request->send(response);
 }
 
+//####### TOOLING ######
 void w_handleReboot(AsyncWebServerRequest *request) {
     ESP_LOGI(WEB_TAG, "Handling reboot request");
     rebootServer();
@@ -50,12 +50,22 @@ void w_handleReboot(AsyncWebServerRequest *request) {
 void w_handleReset(AsyncWebServerRequest *request) {
     ESP_LOGI(WEB_TAG, "Handling reset request");
     resetServer();
+    rebootServer();
 }
 
 void w_handleListFiles(AsyncWebServerRequest *request) {
     String result;
     result=listLittleFSFiles();
     result+=printLittleFSInfo();
+    
+    AsyncWebServerResponse *response = request->beginResponse(200, "text/text", result);
+    addCorsHeaders(response);
+    request->send(response);
+}
+
+void w_handleListGame(AsyncWebServerRequest *request) {
+    String result;
+    result=getTeamsAndBumpersJSON();
     
     AsyncWebServerResponse *response = request->beginResponse(200, "text/text", result);
     addCorsHeaders(response);
@@ -76,7 +86,7 @@ void w_handleUploadComplete(AsyncWebServerRequest *request) {
     static String pointsText;
     static String tempsText;
     static bool hasFile = false;  // Pour suivre si un fichier est en cours d'upload
-    static String fullPath=questionsPath;
+    String fullPath=questionsPath;
     static String jsonString="Upload Terminé";
 
     ESP_LOGI(WEB_TAG,"receive a question ?");
@@ -106,7 +116,7 @@ void w_handleUploadComplete(AsyncWebServerRequest *request) {
         File jsonFile = LittleFS.open(fullPath + "/question.json", "w");
         if(jsonFile) {
             if(jsonFile.print(jsonString)) {
-                ESP_LOGI(WEB_TAG, "Fichier JSON créé avec succès");
+                ESP_LOGI(WEB_TAG, "Fichier JSON créé avec succèsi dans %s", fullPath.c_str());
             } else {
                 ESP_LOGE(WEB_TAG, "Erreur lors de l'écriture du JSON");
             }
@@ -227,7 +237,7 @@ void w_handleUploadQuestionFile(AsyncWebServerRequest *request, String filename,
     static String pointsText;
     static String tempsText;
     static bool hasFile = false;  // Pour suivre si un fichier est en cours d'upload
-    static String fullPath=questionsPath;
+    String fullPath=questionsPath;
     static String jsonString;
         
     hasFile = (filename != "");  // Vérifie si un fichier est présent
@@ -281,7 +291,7 @@ void startWebServer() {
     server.serveStatic("/files/", LittleFS, "/files/");
     
     // Servir les fichiers du répertoire files pour /files/*
-    server.serveStatic("/questions/", LittleFS, "/files/questions/");
+    server.serveStatic("/question/", LittleFS, "/files/questions/");
 
     // Route spécifique pour le background
     server.serveStatic("/background", LittleFS, "/files/background.jpg");
@@ -299,6 +309,7 @@ void startWebServer() {
     server.on("/reset", HTTP_GET, w_handleReset);
     server.on("/reboot", HTTP_GET, w_handleReboot);
     server.on("/listFiles",HTTP_GET, w_handleListFiles);
+    server.on("/listGame",HTTP_GET, w_handleListGame);
 
     server.on("/background", HTTP_POST, w_handleUploadComplete, w_handleUploadFile);
 

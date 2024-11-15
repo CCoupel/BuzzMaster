@@ -54,8 +54,9 @@ String jsonBuffer; // Tampon pour assembler les données JSON
 
 WiFiUDP ntpUDP;
 //NTPClient timeClient(ntpUDP, "pool.ntp.org");
-const char* GameFile="/game.json";
-const char* saveGameFile="/game.json.save";
+static const char* GameFile="/game.json";
+static const char* saveGameFile="/game.json.save";
+static const String questionsPath="/files/questions";
 
 QueueHandle_t messageQueue; // File d'attente pour les messages
 
@@ -85,7 +86,7 @@ void parseJSON(const String& data, AsyncClient* c);
 void wifiConnect();
 String listLittleFSFiles(String path="/");
 void resetBumpersTime();
-void startGame(const int delay=33);
+void startGame(const int delay=33, const String question="");
 void stopGame();
 void pauseAllGame(const int currentTime);
 void pauseGame(AsyncClient* client);

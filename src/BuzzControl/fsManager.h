@@ -359,7 +359,7 @@ String listLittleFSFiles(String path) {
     ESP_LOGI(FS_TAG, path.c_str());
     result=listLittleFSFilesRecursive(root);
 
-    result+=printLittleFSInfo();
+//    result+=printLittleFSInfo();
     return result;
 }
 
