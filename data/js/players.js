@@ -57,7 +57,7 @@ function handleServerAction(action, msg) {
             updateTimeBar(true);
             startTimer();
             updateDisplay();
-            console.log(msg);
+            receiveQuestion(msg.GAME.QUESTION)
             break;
         case 'STOP':
             gameState.gamePhase = 'STOP';
@@ -377,6 +377,22 @@ function renderPlayerScores() {
     setTimeout(() => {
         document.querySelectorAll('.highlight').forEach(row => row.classList.remove('highlight'));
     }, 1000);
+}
+
+function receiveQuestion(data) {
+    const question = data;
+    const questionContainer = document.getElementById('question-container-players');
+
+    questionContainer.innerHTML= '';
+
+    const questionDiv = document.createElement('div');
+    questionDiv.className = "question-div";
+
+    const questionP = document.createElement('p');
+    questionP.innerHTML = question.QUESTION;
+
+    questionDiv.appendChild(questionP);
+    questionContainer.appendChild(questionDiv);
 }
 
 document.addEventListener('DOMContentLoaded', function() {

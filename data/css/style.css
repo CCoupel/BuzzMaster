@@ -161,14 +161,53 @@
   }
   
   /* Styles spécifiques pour le jeu d'équipe */
-  .game-container {
+  #game-container {
     display: flex;
     justify-content: space-around;
     flex-wrap: wrap;
     padding-top: 10px;
     margin-top: 3%;
   }
-  
+
+  #question-container {
+    position: fixed;
+    bottom: 80px;
+    left: 0;
+    right: 0;
+    z-index: 999;
+  }
+
+  #question-container-players {
+    position: fixed;
+    bottom: 20px;
+    left: 0;
+    right: 0;
+    z-index: 999;
+  }
+
+  .question-div {
+    border: 2px solid var(--primary-color); 
+    border-radius: 10px;
+    width: 80%;
+    height: auto; 
+    display: flex;
+    align-items: center; 
+    justify-content: center; 
+    background-color: #f9f9f9; 
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1); 
+    padding: 20px; 
+    margin: 20px auto; 
+    font-family: 'Arial', sans-serif; 
+}
+
+.question-div p {
+    font-size: 1.2rem; 
+    color: #333; 
+    margin: 0; 
+    text-align: center;
+    line-height: 1.5;
+}
+
   .team {
     background-color: #fff;
     border-radius: 8px;

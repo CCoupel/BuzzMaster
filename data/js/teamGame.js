@@ -44,7 +44,7 @@ function handleServerAction(action, msg) {
             updateTimeBar(true);
             startTimer();
             updateDisplay();
-            console.log(msg);
+            receiveQuestion(msg.GAME.QUESTION)
             break;
         case 'STOP':
             gameState.gamePhase = 'STOP';
@@ -353,11 +353,35 @@ async function questionsSelect() {
     }
 }
 
+
 function sendQuestionId() {
     const select = document.getElementById('questions-select');
     const selectedOption = select.selectedOptions[0];
     const questionId = selectedOption.value;
     return questionId;
+}
+
+function receiveQuestion(data) {
+    const question = data;
+    const timeInput = document.getElementById('game-time-input');
+    const pointsInput = document.getElementById('game-points-input');
+    const questionsSelect = document.getElementById('questions-select');
+    timeInput.value = question.TIME;
+    pointsInput.value = question.POINTS;
+    questionsSelect.selectedOption = question.ID;
+
+    const questionContainer = document.getElementById('question-container');
+
+    questionContainer.innerHTML= '';
+
+    const questionDiv = document.createElement('div');
+    questionDiv.className = "question-div";
+
+    const questionP = document.createElement('p');
+    questionP.innerHTML = question.QUESTION;
+
+    questionDiv.appendChild(questionP);
+    questionContainer.appendChild(questionDiv);
 }
 
 document.addEventListener('DOMContentLoaded', function() {
