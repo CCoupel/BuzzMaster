@@ -86,6 +86,9 @@ function handleServerAction(action, msg) {
                 updateScores(msg);
             }
             break;
+        case 'UPDATE_TIMER':
+            updateGameState(msg.GAME);
+            break;
         case 'REMOTE':
             if (msg.GAME.REMOTE === 'SCORE') {
                 toggleDisplay('SCORE');
@@ -394,6 +397,9 @@ function receiveQuestion(data) {
     questionDiv.appendChild(questionP);
     questionContainer.appendChild(questionDiv);
 }
+
+
+
 
 document.addEventListener('DOMContentLoaded', function() {
     connectWebSocket(handleConfigSocketMessage);

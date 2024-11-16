@@ -1,0 +1,30 @@
+.time-bar-container-players {
+    height: 70px;
+}
+
+#timer-players {
+    top: 10px ;
+}
+
+#game-container {
+    padding-top: 0px;
+    margin-top: 0;
+}
+
+h2 {
+   font-size: 20px;
+   font-weight: bold;
+}
+
+p {
+    font-size: 18px;
+    font-weight: bold;
+}
+
+.question-div p {
+    font-size: 25px;
+}
+
+#websocket-tracker {
+    visibility: hidden;
+}
