@@ -1,4 +1,4 @@
-const filePathWebVersion = '../config/version.txt'
+const filePathWebVersion = '/config/version.txt'
 const CoreVersion = ''
 
 

@@ -39,27 +39,22 @@ function handleServerAction(action, msg) {
     console.log('Action reçue du serveur:', action);
     switch (action) {
         case 'START':          
-            const gameDelay = parseInt(msg.GAME.DELAY, 10) || 30;
             updateGameState(msg.GAME);
             updateTimeBar(true);
-            startTimer();
             updateDisplay();
             receiveQuestion(msg.GAME.QUESTION)
             break;
         case 'STOP':
             gameState.gamePhase = 'STOP';
             updateTimeBar(true);
-            stopTimer();
             updateDisplay();
             break;
         case 'PAUSE':
             gameState.gamePhase = 'PAUSE';
-            pauseTimer();
             updateTimeBar(true);
             break;
         case 'CONTINUE':
             gameState.gamePhase = 'START';
-            continueTimer();
             updateTimeBar(true);
             break;
         case 'UPDATE':
@@ -75,6 +70,8 @@ function handleServerAction(action, msg) {
             break;
         case 'UPDATE_TIMER':
             updateGameState(msg.GAME);
+            updateTimer();
+            updateTimeBar();
             break;
         default:
             console.log('Action non reconnue:', action);
@@ -96,7 +93,7 @@ function sendAction(action, msg = {}) {
                 sendWebSocketMessage( action, message);
                 break;
             case 'PAUSE':
-                message =  {'CURRENT_TIME':  gameState.timer.toString()};
+                message =  msg;
                 sendWebSocketMessage( action, message);
                 break;
             default:
@@ -108,41 +105,6 @@ function sendAction(action, msg = {}) {
     }
 
 
-function startTimer() {
-    if (localTimer) clearInterval(localTimer);
-    gameState.isRunning = true;
-    localTimer = setInterval(() => {
-        if (gameState.timer > 0) {
-            gameState.timer--;
-            updateTimer();
-            updateTimeBar();
-            if (gameState.timer === 0) {
-                sendAction('STOP');
-            }
-        } else {
-            stopTimer();
-        }
-    }, 1000);
-}
-
-function stopTimer() {
-    clearInterval(localTimer);
-    gameState.isRunning = false;
-    gameState.timer = 0;
-    updateTimer();
-    updateTimeBar(true);
-}
-
-function pauseTimer() {
-    clearInterval(localTimer);
-    gameState.isRunning = false;
-}
-
-function continueTimer() {
-    if (!gameState.isRunning) {
-        startTimer();
-    }
-}
 
 function updateDisplay() {
     console.log('Mise à jour de l\'affichage avec l\'état du jeu:', gameState);
@@ -150,8 +112,6 @@ function updateDisplay() {
     container.innerHTML = '';
 
     const sortedTeams = Object.entries(getTeams()).sort((a, b) => {
-//        const delayA = a[1].DELAY !== undefined ? a[1].DELAY : Infinity;
-//        const delayB = b[1].DELAY !== undefined ? b[1].DELAY : Infinity;
         const delayA = a[1].TIMESTAMP !== undefined ? a[1].TIMESTAMP : Infinity;
         const delayB = b[1].TIMESTAMP !== undefined ? b[1].TIMESTAMP : Infinity;
 
@@ -162,7 +122,6 @@ function updateDisplay() {
         const teamElement = document.createElement('div');
         const isStartPhase = gameState.gamePhase === 'START';
 
- //       const isTeamActive = teamData.DELAY !== undefined;
         const isTeamActive = teamData.TIMESTAMP !== undefined;
 
         teamElement.className = `team ${isTeamActive ? 'active' : ''} ${isStartPhase && !isTeamActive ? 'start-phase' : ''}`;
@@ -223,7 +182,6 @@ function updateTimer() {
     const minutes = Math.floor(gameState.timer / 60);
     const seconds = gameState.timer % 60;
     timerElement.textContent = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
-    sendAction('UPDATE_TIMER', {'CURRENT_TIME': gameState.timer.toString()});
 }
 
 function addPointToBumper(bumperMac) {
@@ -362,6 +320,10 @@ function sendQuestionId() {
 }
 
 function receiveQuestion(data) {
+    if (!data || Object.keys(data).length === 0) {
+        return;
+    }
+
     const question = data;
     const timeInput = document.getElementById('game-time-input');
     const pointsInput = document.getElementById('game-points-input');

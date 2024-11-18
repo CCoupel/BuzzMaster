@@ -186,16 +186,16 @@
   }
 
   .question-div {
-    border: 2px solid var(--primary-color); 
+    border: 5px solid var(--primary-color); 
     border-radius: 10px;
     width: 80%;
-    height: auto; 
+    height: auto;
     display: flex;
     align-items: center; 
     justify-content: center; 
     background-color: #f9f9f9; 
     box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1); 
-    padding: 20px; 
+    padding: 5px; 
     margin: 20px auto; 
     font-family: 'Arial', sans-serif; 
 }

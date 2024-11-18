@@ -10,14 +10,18 @@ let gameState = {
 };
 
 function updateGameState (msg) {
-    gameState.gameTime = msg.TIME;
-    gameState.gamePhase = msg.PHASE;
-    if (msg.CURRENT_TIME) {
-        gameState.timer = msg.CURRENT_TIME;
-    } else {
-        gameState.timer = msg.DELAY
+    console.log(msg)
+    if(msg.TIME){
+        gameState.gameTime = msg.TIME;
     }
-    gameState.totalTime = msg.DELAY;
+    if(msg.PHASE){
+        gameState.gamePhase = msg.PHASE;
+    }
+    gameState.timer = msg.CURRENT_TIME !== undefined ? msg.CURRENT_TIME : msg.DELAY;
+    
+    if(msg.DELAY){
+        gameState.totalTime = msg.DELAY;
+    }
 };
 
 let localTimer;
@@ -55,24 +59,20 @@ function handleServerAction(action, msg) {
         case 'START':          
             updateGameState(msg.GAME);
             updateTimeBar(true);
-            startTimer();
             updateDisplay();
             receiveQuestion(msg.GAME.QUESTION)
             break;
         case 'STOP':
             gameState.gamePhase = 'STOP';
             updateTimeBar(true);
-            stopTimer();
             updateDisplay();
             break;
         case 'PAUSE':
             gameState.gamePhase = 'PAUSE';
-            pauseTimer();
             updateTimeBar(true);
             break;
         case 'CONTINUE':
             gameState.gamePhase = 'START';
-            continueTimer();
             updateTimeBar(true);
             break;
         case 'UPDATE':
@@ -88,6 +88,8 @@ function handleServerAction(action, msg) {
             break;
         case 'UPDATE_TIMER':
             updateGameState(msg.GAME);
+            updateTimer();
+            updateTimeBar();
             break;
         case 'REMOTE':
             if (msg.GAME.REMOTE === 'SCORE') {
@@ -101,39 +103,6 @@ function handleServerAction(action, msg) {
     }
 }
 
-
-function startTimer() {
-    if (localTimer) clearInterval(localTimer);
-    gameState.isRunning = true;
-    localTimer = setInterval(() => {
-        if (gameState.timer > 0) {
-            gameState.timer--;
-            updateTimer();
-            updateTimeBar();
-        } else {
-            stopTimer();
-        }
-    }, 1000);
-}
-
-function stopTimer() {
-    clearInterval(localTimer);
-    gameState.isRunning = false;
-    gameState.timer = 0;
-    updateTimer();
-    updateTimeBar(true);
-}
-
-function pauseTimer() {
-    clearInterval(localTimer);
-    gameState.isRunning = false;
-}
-
-function continueTimer() {
-    if (!gameState.isRunning) {
-        startTimer();
-    }
-}
 
 function updateDisplay() {
     console.log('Mise à jour de l\'affichage avec l\'état du jeu:', gameState);
@@ -383,6 +352,10 @@ function renderPlayerScores() {
 }
 
 function receiveQuestion(data) {
+    if (!data || Object.keys(data).length === 0) {
+        return;
+    }
+    
     const question = data;
     const questionContainer = document.getElementById('question-container-players');
 
