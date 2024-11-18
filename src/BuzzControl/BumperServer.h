@@ -1,14 +1,26 @@
 #pragma once
 #include "Common/CustomLogger.h"
 #include "Common/led.h"
-
+#include "includes.h"
 #include <ArduinoJson.h>
 #include <AsyncTCP.h>
 #include <unordered_map>
+#include <Ticker.h>
 
 static const char* BUMPER_TAG = "BUMPER_SERVER";
 String gamePhase = "STOP"; /* STARTED PAUSED */
 int gameStartTimeStamp = 0;
+// Déclaration du Ticker global
+Ticker gameTimer;
+
+// Flag pour suivre l'état du timer
+bool isTimerRunning = false;
+
+void timerCallback() {
+    if (getGamePhase() =="START") {
+        updateTimer(getGameCurrentTime(), -1);
+    }
+}
 
 void processButtonPress(const String& bumperID, const char* b_team, int64_t b_time, int b_button) {
   ESP_LOGI(BUMPER_TAG, "Button Pressed %i at time %i", b_button, b_time);
@@ -75,32 +87,54 @@ void startGame(const int delay, const String question){
   setGameDelay(newDelay);
   setGameCurrentTime(newDelay);
   setGameTime();
-  GameStarted=true;
   setGamePhase( "START");
     putMsgToQueue("START",getTeamsAndBumpersJSON().c_str(),true);
+  // Démarrer le timer s'il n'est pas déjà en cours
+  if (!isTimerRunning) {
+      gameTimer.attach(1.0, timerCallback);
+      isTimerRunning = true;
+  }
 }
 
+void updateTimer(const int Time, const int delta ) {
+    int newTime = Time + delta;
+    if (newTime < 0) { 
+        newTime = 0;
+    }
+    setGameCurrentTime(newTime);
+    putMsgToQueue("UPDATE_TIMER", getTeamsAndBumpersJSON().c_str(), false);
+    if (newTime == 0) { 
+        stopGame();
+    }
+}
+
+
 void stopGame(){
-  GameStarted=false;
   setGameCurrentTime(0);
   setGamePhase( "STOP" );
-    putMsgToQueue("STOP",getTeamsAndBumpersJSON().c_str(),true);
+  putMsgToQueue("UPDATE_TIMER", getTeamsAndBumpersJSON().c_str(), false);
+  putMsgToQueue("STOP",getTeamsAndBumpersJSON().c_str(),true);
+  // Arrêter le timer
+  if (isTimerRunning) {
+      gameTimer.detach();
+      isTimerRunning = false;
+  }
 }
 
 void pauseGame(AsyncClient* client) {
   putMsgToQueue("PAUSE",getTeamsAndBumpersJSON().c_str(),true, client);
 }
 
-void pauseAllGame(const int currentTime=0){
+void pauseAllGame(){
   setGamePhase( "PAUSE" );
-  setGameCurrentTime(currentTime);
-    putMsgToQueue("PAUSE",getTeamsAndBumpersJSON().c_str(),true);
+  putMsgToQueue("UPDATE_TIMER", getTeamsAndBumpersJSON().c_str(), false);
+  putMsgToQueue("PAUSE",getTeamsAndBumpersJSON().c_str(),true);
 }
 
 void continueGame(){
-  GameStarted=true;
   setGamePhase( "START");
-      putMsgToQueue("CONTINUE",getTeamsAndBumpersJSON().c_str(),true);
+  putMsgToQueue("UPDATE_TIMER", getTeamsAndBumpersJSON().c_str(), false);
+  putMsgToQueue("CONTINUE",getTeamsAndBumpersJSON().c_str(),true);
 }
 
 void revealGame() {
@@ -242,4 +276,3 @@ void parseJSON(const String& data, AsyncClient* c)
       break;
   }
 }
-

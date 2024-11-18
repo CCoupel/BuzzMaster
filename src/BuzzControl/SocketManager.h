@@ -57,7 +57,7 @@ void parseDataFromSocket(const char* action, const JsonObject& message) {
       stopGame();
       break;
     case hash("PAUSE"):
-      pauseAllGame(message["CURRENT_TIME"]);
+      pauseAllGame();
       break;
     case hash("CONTINUE"):
       continueGame();
@@ -69,8 +69,9 @@ void parseDataFromSocket(const char* action, const JsonObject& message) {
       setRemotePage(message["REMOTE"]);
       break;
     case hash("UPDATE_TIMER"):
-      setGameCurrentTime(message["CURRENT_TIME"]);
-      putMsgToQueue("UPDATE_TIMER",getTeamsAndBumpersJSON().c_str(),false);
+//      updateTimer(message["CURRENT_TIME"]);
+      //setGameCurrentTime(message["CURRENT_TIME"]);
+      //putMsgToQueue("UPDATE_TIMER",getTeamsAndBumpersJSON().c_str(),false);
       break;
     default:
       ESP_LOGW(SOCKET_TAG, "Unrecognized action: %s", action);

@@ -10,6 +10,18 @@ JsonDocument teamsAndBumpers;
 JsonDocument& getTeamsAndBumpers() {
     return teamsAndBumpers;
 }
+
+String getTeamsAndBumpersJSON() {
+  String output;
+  JsonDocument& tb=getTeamsAndBumpers();
+  if (serializeJson(tb, output)) {
+    ESP_LOGI(TEAMs_TAG, "TeamsAndGame: %s", output.c_str());
+    return output;
+  } else {
+    ESP_LOGE(TEAMs_TAG, "Failed to serialize JSON");
+  }
+}
+
 // ### GAME ### */
 void setGamePhase(String phase) {
     if (teamsAndBumpers["GAME"].isNull()) {
@@ -18,6 +30,15 @@ void setGamePhase(String phase) {
     teamsAndBumpers["GAME"]["PHASE"] = phase;
 }
 
+String getGamePhase() {
+    if (teamsAndBumpers["GAME"].isNull()) {
+        teamsAndBumpers["GAME"] = JsonObject();
+    }
+    if (teamsAndBumpers["GAME"]["PHASE"].isNull()) {
+        teamsAndBumpers["GAME"]["PHASE"] = "";
+    }
+    return teamsAndBumpers["GAME"]["PHASE"];
+}
 void setGameTime() {
     if (teamsAndBumpers["GAME"].isNull()) {
         teamsAndBumpers["GAME"] = JsonObject();
@@ -30,6 +51,17 @@ void setGameCurrentTime(const int currentTime) {
         teamsAndBumpers["GAME"] = JsonObject();
     }
     teamsAndBumpers["GAME"]["CURRENT_TIME"] = currentTime;
+
+}
+
+int getGameCurrentTime() {
+    if (teamsAndBumpers["GAME"].isNull()) {
+        teamsAndBumpers["GAME"] = JsonObject();
+    }
+    if (teamsAndBumpers["GAME"]["CURRENT_TIME"].isNull()) {
+        teamsAndBumpers["GAME"]["CURRENT_TIME"] = 0;
+    }
+    return teamsAndBumpers["GAME"]["CURRENT_TIME"];
 
 }
 
@@ -91,16 +123,6 @@ String getQuestionQuestion() {
 
 String getQuestionResponse() {
     return getQuestionElement("ANSWER");
-}
-
-String getTeamsAndBumpersJSON() {
-  String output;
-  JsonDocument& tb=getTeamsAndBumpers();
-  if (serializeJson(tb, output)) {
-    return output;
-  } else {
-    ESP_LOGE(TEAMs_TAG, "Failed to serialize JSON");
-  }
 }
 
 //### BUMPERS ###
