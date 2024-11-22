@@ -277,7 +277,7 @@ void w_handleUploadQuestionFile(AsyncWebServerRequest *request, String filename,
 
 void startWebServer() {
     String ROOT="/";
-    if (LittleFS.exists("/CURRENT")) {
+    if (LittleFS.exists("/CURRENT/html/config.html")) {
         ESP_LOGD(FS_TAG, "Directory /CURRENT Exists");
         ROOT="/CURRENT";
     }
@@ -286,6 +286,7 @@ void startWebServer() {
     server.serveStatic("/", LittleFS, (ROOT+"/html").c_str());
     server.serveStatic("/js", LittleFS, (ROOT+"/js").c_str());
     server.serveStatic("/css", LittleFS, (ROOT+"/css").c_str());
+    server.serveStatic("/html", LittleFS, (ROOT+"/html").c_str());
 
     // Servir les fichiers du répertoire files pour /files/*
     server.serveStatic("/files/", LittleFS, "/files/");

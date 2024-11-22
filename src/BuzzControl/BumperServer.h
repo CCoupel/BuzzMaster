@@ -197,7 +197,6 @@ void resetServer() {
 
   dirToRemove="/CURRENT";
   deleteDirectory(dirToRemove.c_str());
-  ensureDirectoryExists(dirToRemove);
 
   loadJson(GameFile);
   sendResetToAll();
