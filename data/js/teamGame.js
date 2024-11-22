@@ -73,6 +73,9 @@ function handleServerAction(action, msg) {
             updateTimer();
             updateTimeBar();
             break;
+        case 'REVEAL':
+            showAnswer(msg)
+            break;
         default:
             console.log('Action non reconnue:', action);
     }
@@ -328,12 +331,14 @@ function receiveQuestion(data) {
     const timeInput = document.getElementById('game-time-input');
     const pointsInput = document.getElementById('game-points-input');
     const questionsSelect = document.getElementById('questions-select');
+    const answerButton = document.getElementById('answer');
+    const answerContainer = document.getElementById('answer-container');
     timeInput.value = question.TIME;
     pointsInput.value = question.POINTS;
     questionsSelect.selectedOption = question.ID;
 
     const questionContainer = document.getElementById('question-container');
-
+    answerContainer.innerHTML= '';
     questionContainer.innerHTML= '';
 
     const questionDiv = document.createElement('div');
@@ -344,7 +349,32 @@ function receiveQuestion(data) {
 
     questionDiv.appendChild(questionP);
     questionContainer.appendChild(questionDiv);
+
+    answerButton.addEventListener('click', function() {
+        sendAction('REVEAL');
+    });
 }
+
+function showAnswer(data) {
+    const answerContainer = document.getElementById('answer-container');
+    answerContainer.innerHTML = '';
+
+    if (!data || Object.keys(data).length === 0) {
+        return;
+    }
+    const answer = data;
+
+    if (!document.querySelector('.answer-div')) {
+        const answerDiv = document.createElement('div');
+        answerDiv.className = "answer-div";
+
+        const answerP = document.createElement('p');
+        answerP.innerHTML = answer;
+
+        answerDiv.appendChild(answerP);
+        answerContainer.appendChild(answerDiv);
+    }
+};
 
 document.addEventListener('DOMContentLoaded', function() {
     connectWebSocket(handleConfigSocketMessage);

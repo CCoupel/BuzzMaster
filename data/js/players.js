@@ -91,6 +91,9 @@ function handleServerAction(action, msg) {
             updateTimer();
             updateTimeBar();
             break;
+        case 'REVEAL':
+            showAnswer(msg)
+            break;
         case 'REMOTE':
             if (msg.GAME.REMOTE === 'SCORE') {
                 toggleDisplay('SCORE');
@@ -358,8 +361,10 @@ function receiveQuestion(data) {
     
     const question = data;
     const questionContainer = document.getElementById('question-container-players');
+    const answerContainer = document.getElementById('answer-container');
 
     questionContainer.innerHTML= '';
+    answerContainer.innerHTML= '';
 
     const questionDiv = document.createElement('div');
     questionDiv.className = "question-div";
@@ -371,8 +376,26 @@ function receiveQuestion(data) {
     questionContainer.appendChild(questionDiv);
 }
 
+function showAnswer(data) {
+    const answerContainer = document.getElementById('answer-container');
+    answerContainer.innerHTML = '';
 
+    if (!data || Object.keys(data).length === 0) {
+        return;
+    }
+    const answer = data;
 
+    if (!document.querySelector('.answer-div')) {
+        const answerDiv = document.createElement('div');
+        answerDiv.className = "answer-div";
+
+        const answerP = document.createElement('p');
+        answerP.innerHTML = answer;
+
+        answerDiv.appendChild(answerP);
+        answerContainer.appendChild(answerDiv);
+    }
+};
 
 document.addEventListener('DOMContentLoaded', function() {
     connectWebSocket(handleConfigSocketMessage);
