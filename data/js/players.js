@@ -94,6 +94,10 @@ function handleServerAction(action, msg) {
         case 'REVEAL':
             showAnswer(msg)
             break;
+        case 'READY':
+            cleanUp('question-container-players')
+            cleanUp('answer-container')
+            break;
         case 'REMOTE':
             if (msg.GAME.REMOTE === 'SCORE') {
                 toggleDisplay('SCORE');
@@ -106,6 +110,18 @@ function handleServerAction(action, msg) {
     }
 }
 
+function cleanUp(container) {
+    if (typeof container !== 'string') {
+        console.error('Container ID must be a string.');
+        return;
+    }
+    const cleanContainer = document.getElementById(container);
+    if (cleanContainer) {
+        cleanContainer.innerHTML = '';
+    } else {
+        console.warn(`Element with ID "${container}" not found.`);
+    }
+}
 
 function updateDisplay() {
     console.log('Mise à jour de l\'affichage avec l\'état du jeu:', gameState);
@@ -367,7 +383,7 @@ function receiveQuestion(data) {
     answerContainer.innerHTML= '';
 
     const questionDiv = document.createElement('div');
-    questionDiv.className = "question-div";
+    questionDiv.id = "question-div";
 
     const questionP = document.createElement('p');
     questionP.innerHTML = question.QUESTION;
@@ -387,7 +403,7 @@ function showAnswer(data) {
 
     if (!document.querySelector('.answer-div')) {
         const answerDiv = document.createElement('div');
-        answerDiv.className = "answer-div";
+        answerDiv.id = "answer-div";
 
         const answerP = document.createElement('p');
         answerP.innerHTML = answer;

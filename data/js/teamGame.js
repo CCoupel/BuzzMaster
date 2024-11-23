@@ -74,10 +74,26 @@ function handleServerAction(action, msg) {
             updateTimeBar();
             break;
         case 'REVEAL':
-            showAnswer(msg)
+            showAnswer()
+            break;
+        case 'READY':
+            cleanUp('question-container')
             break;
         default:
             console.log('Action non reconnue:', action);
+    }
+}
+
+function cleanUp(container) {
+    if (typeof container !== 'string') {
+        console.error('Container ID must be a string.');
+        return;
+    }
+    const cleanContainer = document.getElementById(container);
+    if (cleanContainer) {
+        cleanContainer.innerHTML = '';
+    } else {
+        console.warn(`Element with ID "${container}" not found.`);
     }
 }
 
@@ -332,22 +348,24 @@ function receiveQuestion(data) {
     const pointsInput = document.getElementById('game-points-input');
     const questionsSelect = document.getElementById('questions-select');
     const answerButton = document.getElementById('answer');
-    const answerContainer = document.getElementById('answer-container');
     timeInput.value = question.TIME;
     pointsInput.value = question.POINTS;
     questionsSelect.selectedOption = question.ID;
 
     const questionContainer = document.getElementById('question-container');
-    answerContainer.innerHTML= '';
     questionContainer.innerHTML= '';
 
     const questionDiv = document.createElement('div');
-    questionDiv.className = "question-div";
+    questionDiv.id = "question-div";
 
     const questionP = document.createElement('p');
     questionP.innerHTML = question.QUESTION;
 
+    const answerP = document.createElement('p');
+    answerP.innerHTML = `Réponse :   <span class="hidden-answer">${question.ANSWER}</span>`;
+
     questionDiv.appendChild(questionP);
+    questionDiv.appendChild(answerP);
     questionContainer.appendChild(questionDiv);
 
     answerButton.addEventListener('click', function() {
@@ -355,26 +373,14 @@ function receiveQuestion(data) {
     });
 }
 
-function showAnswer(data) {
-    const answerContainer = document.getElementById('answer-container');
-    answerContainer.innerHTML = '';
-
-    if (!data || Object.keys(data).length === 0) {
-        return;
+function showAnswer() {
+    const questionContainer = document.getElementById('question-div');
+    if (questionContainer) {
+        questionContainer.style.border = '5px solid red'; 
+    } else {
+        console.warn('Element with ID "question-container" not found.');
     }
-    const answer = data;
-
-    if (!document.querySelector('.answer-div')) {
-        const answerDiv = document.createElement('div');
-        answerDiv.className = "answer-div";
-
-        const answerP = document.createElement('p');
-        answerP.innerHTML = answer;
-
-        answerDiv.appendChild(answerP);
-        answerContainer.appendChild(answerDiv);
-    }
-};
+}
 
 document.addEventListener('DOMContentLoaded', function() {
     connectWebSocket(handleConfigSocketMessage);
@@ -384,7 +390,11 @@ document.addEventListener('DOMContentLoaded', function() {
     questionsSelect();
 
     const playersButton = document.getElementById('players');
-    const questionSelector = document.getElementById('questions-select');
+    const preparation = document.getElementById('preparation');
+
+    preparation.addEventListener('click', function() {
+        sendAction('READY')
+    })
 
     playersButton.onclick = () => {
         window.open('http://buzzcontrol.local/html/players.html')
