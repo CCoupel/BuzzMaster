@@ -42,7 +42,6 @@ function handleServerAction(action, msg) {
             updateGameState(msg.GAME);
             updateTimeBar(true);
             updateDisplay();
-            receiveQuestion(msg.GAME.QUESTION)
             break;
         case 'STOP':
             gameState.gamePhase = 'STOP';
@@ -78,6 +77,7 @@ function handleServerAction(action, msg) {
             break;
         case 'READY':
             cleanUp('question-container')
+            receiveQuestion(msg.QUESTION)
             break;
         default:
             console.log('Action non reconnue:', action);
@@ -102,9 +102,10 @@ function sendAction(action, msg = {}) {
         switch (action) {
             case 'START':
                 const gameTimeInput = document.getElementById('game-time-input');
-                const questionId = parseInt(sendQuestionId());
+                const gamePointsInput = document.getElementById('game-points-input');
                 const gameTime = parseInt(gameTimeInput.value, 10) || 30;
-                message = {'DELAY':  gameTime, 'QUESTION': questionId};
+                const gamePoints = parseInt(gamePointsInput.value, 10) || 30;
+                message = {'DELAY':  gameTime, 'POINTS': gamePoints};
                 sendWebSocketMessage( action, message);
                 break;
             case 'UPDATE':
@@ -113,6 +114,12 @@ function sendAction(action, msg = {}) {
                 break;
             case 'PAUSE':
                 message =  msg;
+                sendWebSocketMessage( action, message);
+                break;
+            case 'READY':
+                console.log("oui j'envoie")
+                const questionId = parseInt(sendQuestionId());
+                message = {'QUESTION': questionId};
                 sendWebSocketMessage( action, message);
                 break;
             default:
@@ -347,13 +354,18 @@ function receiveQuestion(data) {
     const timeInput = document.getElementById('game-time-input');
     const pointsInput = document.getElementById('game-points-input');
     const questionsSelect = document.getElementById('questions-select');
-    const answerButton = document.getElementById('answer');
     timeInput.value = question.TIME;
     pointsInput.value = question.POINTS;
     questionsSelect.selectedOption = question.ID;
 
     const questionContainer = document.getElementById('question-container');
     questionContainer.innerHTML= '';
+    
+    if(question.MEDIA) {
+        const questionMedia = document.createElement('img')
+        questionMedia.src ="http://buzzcontrol.local" + question.MEDIA;
+        questionContainer.appendChild(questionMedia);
+    }
 
     const questionDiv = document.createElement('div');
     questionDiv.id = "question-div";
@@ -367,10 +379,6 @@ function receiveQuestion(data) {
     questionDiv.appendChild(questionP);
     questionDiv.appendChild(answerP);
     questionContainer.appendChild(questionDiv);
-
-    answerButton.addEventListener('click', function() {
-        sendAction('REVEAL');
-    });
 }
 
 function showAnswer() {
@@ -391,6 +399,12 @@ document.addEventListener('DOMContentLoaded', function() {
 
     const playersButton = document.getElementById('players');
     const preparation = document.getElementById('preparation');
+    const answerButton = document.getElementById('answer');
+
+    
+    answerButton.addEventListener('click', function() {
+        sendAction('REVEAL');
+    });
 
     preparation.addEventListener('click', function() {
         sendAction('READY')

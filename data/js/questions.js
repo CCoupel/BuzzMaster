@@ -22,6 +22,7 @@ async function sendForm(formId, actionUrl) {
             console.log("Réponse du serveur :", responseData);
             questionList();
 
+            form.reset();
         } catch (error) {
             console.error("Erreur lors de l'envoi:", error);
             alert("Une erreur est survenue lors de la création de la question.");
@@ -41,21 +42,31 @@ async function questionList() {
         
         const container = document.getElementById('questions-container');
         
-        container.innerHTML='';
+        container.innerHTML = '';
 
         Object.keys(questions).forEach(key => {
             const questionData = questions[key];
+            console.log(questionData);
             
             const questionDiv = document.createElement('div');
             questionDiv.className = 'question-item';
 
             questionDiv.innerHTML = `
-                <p><strong>ID:</strong> ${questionData.ID}</p>
-                <p><strong>Question:</strong> ${questionData.QUESTION}</p>
-                <p><strong>Réponse:</strong> ${questionData.ANSWER}</p>
-                <p><strong>Points:</strong> ${questionData.POINTS}</p>
-                <p><strong>Temps:</strong> ${questionData.TIME} secondes</p>
+                <div class="text">
+                    <p><strong>ID:</strong> ${questionData.ID}</p>
+                    <p><strong>Question:</strong> ${questionData.QUESTION}</p>
+                    <p><strong>Réponse:</strong> ${questionData.ANSWER}</p>
+                    <p><strong>Points:</strong> ${questionData.POINTS}</p>
+                    <p><strong>Temps:</strong> ${questionData.TIME} secondes</p>
+                </div>
             `;
+
+            if (questionData.MEDIA) {
+                const imgDiv = document.createElement('div');
+                imgDiv.className = 'img';
+                imgDiv.innerHTML = `<img src="http://buzzcontrol.local${questionData.MEDIA}" alt="Question Media">`;
+                questionDiv.appendChild(imgDiv);
+            }
             
             container.appendChild(questionDiv);
         });

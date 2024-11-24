@@ -382,6 +382,12 @@ function receiveQuestion(data) {
     questionContainer.innerHTML= '';
     answerContainer.innerHTML= '';
 
+    if(question.MEDIA) {
+        const questionMedia = document.createElement('img')
+        questionMedia.src ="http://buzzcontrol.local" + question.MEDIA;
+        questionContainer.appendChild(questionMedia);
+    }
+    
     const questionDiv = document.createElement('div');
     questionDiv.id = "question-div";
 
