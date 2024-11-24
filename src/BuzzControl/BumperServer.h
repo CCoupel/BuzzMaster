@@ -73,16 +73,10 @@ void resetBumpersTime() {
   }
 }
 
-void startGame(const int delay, const String question){
-  ESP_LOGD(BUMPER_TAG, "STARTING GAME: %i (%s)",delay, question);
+void startGame(const int delay){
+  ESP_LOGD(BUMPER_TAG, "STARTING GAME: %i ",delay);
   int newDelay=delay;
-  if (question.toInt()>0) {
-    setQuestion(question);
-    newDelay=getQuestionTime().toInt();
-  } else {
-    setQuestion("");
-  }
-
+  
   resetBumpersTime();
   setGameDelay(newDelay);
   setGameCurrentTime(newDelay);
@@ -138,10 +132,25 @@ void continueGame(){
 }
 
 void revealGame() {
-    if (GameStarted==false) {
-      putMsgToQueue("REVEAL",getQuestionResponse().c_str(),true);
+    if (isGameStoped()) {
+      String msg="\""+getQuestionResponse()+"\"";
+      
+      putMsgToQueue("REVEAL",msg.c_str(),true);
     }
 }
+
+void readyGame(const String question) {
+    if (isGameStoped()) {
+      if (question.toInt()>0) {
+        setQuestion(question);
+      } else {
+        setQuestion("");
+      }
+      String msg="{\"QUESTION\": "+getQuestionElementJson()+"}";
+      putMsgToQueue("READY",msg.c_str(),true);
+    }
+}
+
 
 void RAZscores() {
   ESP_LOGI(BUMPER_TAG, "Resetting Bumpers Scores");

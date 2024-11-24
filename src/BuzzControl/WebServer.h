@@ -105,6 +105,9 @@ void w_handleUploadComplete(AsyncWebServerRequest *request) {
         // Créer le fichier JSON
         jsonString = "{\n";
             jsonString += "  \"ID\": \"" + currentDir + "\",\n";
+            if (isFileExists("/files/questions/" + currentDir + "/media.jpg")) {
+                jsonString += "  \"MEDIA\": \"/question/" + currentDir + "/media.jpg\",\n";
+            }
             jsonString += "  \"QUESTION\": \"" + questionText + "\",\n";
             jsonString += "  \"ANSWER\": \"" + reponseText + "\",\n";
             jsonString += "  \"POINTS\": " + pointsText + ",\n";
