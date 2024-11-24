@@ -39,6 +39,46 @@ String getGamePhase() {
     }
     return teamsAndBumpers["GAME"]["PHASE"];
 }
+
+bool isGameStarted() {
+    if (teamsAndBumpers["GAME"].isNull()) {
+        teamsAndBumpers["GAME"] = JsonObject();
+    }
+    if (teamsAndBumpers["GAME"]["PHASE"].isNull()) {
+        teamsAndBumpers["GAME"]["PHASE"] = "";
+    }
+    if (teamsAndBumpers["GAME"]["PHASE"]=="START") {
+        return true;
+    }
+    return false;
+}
+
+bool isGameStoped() {
+    if (teamsAndBumpers["GAME"].isNull()) {
+        teamsAndBumpers["GAME"] = JsonObject();
+    }
+    if (teamsAndBumpers["GAME"]["PHASE"].isNull()) {
+        teamsAndBumpers["GAME"]["PHASE"] = "";
+    }
+    if (teamsAndBumpers["GAME"]["PHASE"]=="STOP") {
+        return true;
+    }
+    return false;
+}
+
+bool isGamePaused() {
+    if (teamsAndBumpers["GAME"].isNull()) {
+        teamsAndBumpers["GAME"] = JsonObject();
+    }
+    if (teamsAndBumpers["GAME"]["PHASE"].isNull()) {
+        teamsAndBumpers["GAME"]["PHASE"] = "";
+    }
+    if (teamsAndBumpers["GAME"]["PHASE"]=="PAUSE") {
+        return true;
+    }
+    return false;
+}
+
 void setGameTime() {
     if (teamsAndBumpers["GAME"].isNull()) {
         teamsAndBumpers["GAME"] = JsonObject();
@@ -97,6 +137,24 @@ void setQuestion(const String qID) {
         teamsAndBumpers["GAME"].remove("QUESTION");
     } 
     
+}
+
+String getQuestionElementJson() {
+    String output="";
+    if (teamsAndBumpers["GAME"].isNull()) {
+        teamsAndBumpers["GAME"] = JsonObject();
+    }
+    if (teamsAndBumpers["GAME"]["QUESTION"].isNull()) {
+        teamsAndBumpers["GAME"]["QUESTION"] = JsonObject();
+    }
+
+    JsonObject tb=teamsAndBumpers["GAME"]["QUESTION"];
+    if (serializeJson(tb, output)) {
+        ESP_LOGI(TEAMs_TAG, "Question: %s", output.c_str());
+        return output;
+    } else {
+        ESP_LOGE(TEAMs_TAG, "Failed to serialize JSON");
+    }
 }
 
 String getQuestionElement(String Element) {

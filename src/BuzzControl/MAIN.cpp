@@ -13,7 +13,7 @@
 #include "messages.h"
 #include "BumperServer.h"
 #include "WebServer.h"
-
+#include "sdManager.h"
 //#include <esp_log.h>
 
 static const char* MAIN_TAG = "BUZZCONTROL";
@@ -61,13 +61,13 @@ void setup(void)
 
   listLittleFSFiles();
   printLittleFSInfo();
-  
+
   setLedColor(128, 128, 0, true);
 
   attachButtons();
   loadJson(GameFile);
 
-  
+  sdInit();
 
   startWebServer();
   startBumperServer();

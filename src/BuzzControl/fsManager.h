@@ -496,3 +496,7 @@ void downloadFiles() {
         moveDirectory(TEMP_DIR.c_str(),"/CURRENT" );
     }
 }
+
+bool isFileExists(String Path) {
+    return LittleFS.exists(Path);
+}
