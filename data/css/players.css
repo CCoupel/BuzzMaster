@@ -4,6 +4,7 @@
 
 #timer-players {
     top: 10px ;
+    font-size: 45px;
 }
 
 #game-container {
@@ -39,4 +40,110 @@ p {
 
 #websocket-tracker {
     visibility: hidden;
+}
+
+header {
+    height: 10%;
+}
+
+main {
+    height: 90%;
+}
+
+#question-container-players {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: space-around;
+    height: 100%;
+}
+
+#answer-container {
+    height: auto;
+    min-height: 10%;
+    width: 100%;
+}
+
+#image-container {
+    height: 60%;
+}
+
+#image-container img {
+    max-height: 100%;
+}
+
+#question-container {
+    height: auto;
+    min-height: 10%;
+    width: 100%;
+}
+
+#answer-div {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    box-sizing: border-box;
+    border: 5px solid var(--primary-color);
+    border-radius: 10px; 
+    width: 80%; 
+    height: 100%; 
+    background-color: #f9f9f9; 
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+    margin: auto;
+    p{
+        font-family: 'Arial', sans-serif;
+        font-size: 45px;
+        font-weight: bold;
+        text-align: center;
+    } 
+  }
+
+
+  #question-div {
+    position: relative; /* Nécessaire pour positionner le pseudo-élément */
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    box-sizing: border-box;
+    width: 80%;
+    height: 100%;
+    background-color: #f9f9f9;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+    margin: auto;
+    border-radius: 10px;
+
+    /* Le texte dans le div */
+    p {
+        max-width: 100%;
+        font-family: 'Arial', sans-serif;
+        font-size: 45px;
+        font-weight: bold;
+        text-align: center;
+        z-index: 1; /* Assure que le texte reste au-dessus de la bordure */
+    }
+}
+
+#question-div::before {
+    content: "";
+    position: absolute;
+    top: -10px; /* Positionne le pseudo-élément en dehors de la div */
+    left: -10px;
+    right: -10px;
+    bottom: -10px;
+    border: 10px solid transparent; /* Bordure transparente */
+    border-radius: 10px; /* Bordure arrondie */
+    background-image: linear-gradient(90deg, red, orange, yellow, green, blue, indigo, violet, red, orange, yellow, green, blue, indigo, violet, red);
+    background-size: 200% 200%;
+    background-position: 0% 50%;
+    animation: rotate-border 4s linear infinite; /* Animation de rotation */
+    z-index: -1; /* Assure que la bordure soit derrière la div */
+}
+
+@keyframes rotate-border {
+    0% {
+        background-position: 0% 50%;
+    }
+    100% {
+        background-position: 100% 50%; /* Rotation du dégradé */
+    }
 }

@@ -59,13 +59,13 @@ function handleServerAction(action, msg) {
         case 'START':          
             updateGameState(msg.GAME);
             updateTimeBar(true);
-            updateDisplay();
+            //updateDisplay();
             receiveQuestion(msg.GAME.QUESTION)
             break;
         case 'STOP':
             gameState.gamePhase = 'STOP';
             updateTimeBar(true);
-            updateDisplay();
+            //updateDisplay();
             break;
         case 'PAUSE':
             gameState.gamePhase = 'PAUSE';
@@ -77,10 +77,10 @@ function handleServerAction(action, msg) {
             break;
         case 'UPDATE':
             if (msg.teams && msg.bumpers) {
-                updateTeams(msg.teams);
-                updateBumpers(msg.bumpers);
+                /*updateTeams(msg.teams);
+                updateBumpers(msg.bumpers);*/
                 updateGameState(msg.GAME);
-                updateDisplay();
+                //updateDisplay();
                 updateTimeBar(true);
                 updateTimer();
                 updateScores(msg);
@@ -95,8 +95,9 @@ function handleServerAction(action, msg) {
             showAnswer(msg)
             break;
         case 'READY':
-            cleanUp('question-container-players')
+            cleanUp('question-container')
             cleanUp('answer-container')
+            cleanUp('image-container')
             break;
         case 'REMOTE':
             if (msg.GAME.REMOTE === 'SCORE') {
@@ -123,7 +124,7 @@ function cleanUp(container) {
     }
 }
 
-function updateDisplay() {
+/*function updateDisplay() {
     console.log('Mise à jour de l\'affichage avec l\'état du jeu:', gameState);
     const container = document.getElementById('game-container');
     container.innerHTML = '';
@@ -192,7 +193,7 @@ function updateDisplay() {
 
         container.appendChild(teamElement);
     });
-}
+}*/
 
 function updateTimer() {
     const timerElement = document.getElementById('timer-players');
@@ -204,7 +205,7 @@ function updateTimer() {
 function addPointToBumper(bumperMac) {
     if (gameState.gamePhase === 'STOP') {
         setBumperPoint(bumperMac, 1);
-        updateDisplay();
+        //updateDisplay();
     }
 }
 
@@ -376,8 +377,9 @@ function receiveQuestion(data) {
     }
     
     const question = data;
-    const questionContainer = document.getElementById('question-container-players');
+    const questionContainer = document.getElementById('question-container');
     const answerContainer = document.getElementById('answer-container');
+    const imageContainer = document.getElementById('image-container');
 
     questionContainer.innerHTML= '';
     answerContainer.innerHTML= '';
@@ -385,7 +387,7 @@ function receiveQuestion(data) {
     if(question.MEDIA) {
         const questionMedia = document.createElement('img')
         questionMedia.src ="http://buzzcontrol.local" + question.MEDIA;
-        questionContainer.appendChild(questionMedia);
+        imageContainer.appendChild(questionMedia);
     }
     
     const questionDiv = document.createElement('div');
@@ -421,7 +423,7 @@ function showAnswer(data) {
 
 document.addEventListener('DOMContentLoaded', function() {
     connectWebSocket(handleConfigSocketMessage);
-    updateDisplay();
+    //updateDisplay();
     updateTimer();
     updateTimeBar();
     renderTeamScores();

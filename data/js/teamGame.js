@@ -76,7 +76,7 @@ function handleServerAction(action, msg) {
             showAnswer()
             break;
         case 'READY':
-            cleanUp('question-container')
+            cleanUp('question-container-admin')
             receiveQuestion(msg.QUESTION)
             break;
         default:
@@ -358,7 +358,7 @@ function receiveQuestion(data) {
     pointsInput.value = question.POINTS;
     questionsSelect.selectedOption = question.ID;
 
-    const questionContainer = document.getElementById('question-container');
+    const questionContainer = document.getElementById('question-container-admin');
     questionContainer.innerHTML= '';
     
     if(question.MEDIA) {
@@ -368,7 +368,7 @@ function receiveQuestion(data) {
     }
 
     const questionDiv = document.createElement('div');
-    questionDiv.id = "question-div";
+    questionDiv.id = "question-div-admin";
 
     const questionP = document.createElement('p');
     questionP.innerHTML = question.QUESTION;
@@ -382,11 +382,11 @@ function receiveQuestion(data) {
 }
 
 function showAnswer() {
-    const questionContainer = document.getElementById('question-div');
+    const questionContainer = document.getElementById('question-div-admin');
     if (questionContainer) {
         questionContainer.style.border = '5px solid red'; 
     } else {
-        console.warn('Element with ID "question-container" not found.');
+        console.warn('Element with ID "question-container-admin" not found.');
     }
 }
 
