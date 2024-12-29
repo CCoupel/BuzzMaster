@@ -39,8 +39,8 @@ function handleConfigSocketMessage(event) {
 function toggleDisplay(target) {
     // Cache l'un avant de montrer l'autre
     const scoreDiv = document.getElementById("score-container")
-    const gameDiv = document.getElementById("game-container")
-
+    const gameDiv = document.getElementById("question-container-players")
+    
     scoreDiv.classList.add("hidden");
     gameDiv.classList.add("hidden");
 
