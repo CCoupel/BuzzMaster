@@ -67,7 +67,7 @@ void setup(void)
   attachButtons();
   loadJson(GameFile);
 
-  sdInit();
+//  sdInit();
 
   startWebServer();
   startBumperServer();
