@@ -1,0 +1,85 @@
+header {
+    height: 107px;
+    position: fixed;
+    top: 0px;
+}
+
+.navbar {
+    background-color: var(--primary-color);
+    padding: 1rem;
+    display: flex;
+    flex-direction: row;
+    justify-content: space-around;
+    align-items: center;
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: var(--navbar-height);
+}
+
+.navbar-item {
+    background-color: var(--accent-color);
+    color: white;
+    text-decoration: none;
+    border: none;
+    padding: 0.5rem 1rem;
+    border-radius: var(--border-radius);
+    cursor: pointer;
+    transition: var(--transition);
+    font-size: 1rem;
+}
+
+.navbar-item:hover {
+    background-color: var(--hover-color);
+}
+
+.time-bar-container {
+    position: fixed;
+    left: 0;
+    top: 72px;
+    width: 100%;
+    height: var(--timer-height);
+    line-height: var(--timer-height);
+    background-color: #ddd;
+}
+
+#time-bar {
+    height: 100%;
+    background-color: #4CAF50;
+    transition: width 0.2s linear, background-color 0.2s linear;
+}
+
+#timer {
+    width: 100%;
+    height:var(--timer-height);
+    font-size: 25px;
+    font-weight: bold;
+    color: #000;
+    position: fixed;
+    text-align: center;
+}
+
+@keyframes blinkFast {
+    0% { opacity: 1; }
+    50% { opacity: 0.3; }
+    100% { opacity: 1; }
+}
+
+#time-bar.pause-blink {
+    animation: blinkFast 0.5s linear infinite;
+}
+
+@keyframes blink {
+    0% { opacity: 1; }
+    50% { opacity: 0.3; }
+    100% { opacity: 1; }
+}
+
+.blink {
+    animation: blink 1s linear infinite;
+}
+
+.blink-fast {
+    animation: blink 0.5s linear infinite;
+}

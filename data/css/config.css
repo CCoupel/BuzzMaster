@@ -1,0 +1,118 @@
+.main-config-container {
+    display: flex;
+    flex: 1;
+    margin: 2rem;
+    background-color: white;
+    border-radius: var(--border-radius);
+    box-shadow: var(--shadow);
+    overflow: hidden;
+}
+
+.buzzer-container, .team-container {
+    padding: 1rem;
+    overflow-y: auto;
+}
+
+.buzzer-container {
+    width: 30%;
+    background-color: var(--background-color);
+    border-right: 1px solid var(--border-color);
+}
+
+#version-container {
+    width: 7%;
+}
+
+/* Styles spécifiques pour les bumpers dans le buzzer-container */
+.buzzer {
+    background-color: white;
+    border: 1px solid var(--border-color);
+    border-radius: var(--border-radius);
+    box-shadow: var(--shadow);
+    margin: 1rem auto;
+    padding: 0.5rem;
+    width: 90%;
+    text-align: center;
+}
+
+.buzzer-container .buzzer-id {
+    font-weight: bold;
+    margin-bottom: 0.5rem;
+}
+
+.buzzer-container .buzzer-name {
+    font-style: italic;
+}
+
+.buzzer-container .buzzer-form {
+    margin-top: 0.5rem;
+    width: 95%;
+    margin-inline: auto;
+}
+
+.buzzer-container .buzzer-form input {
+    width: 50%;
+    padding: 0.3rem;
+    margin-bottom: 0.5rem;
+    text-align: center;
+}
+
+.team-container {
+    width: 70%;
+}
+
+.dynamic-div {
+    background-color: white;
+    border-radius: var(--border-radius);
+    box-shadow: var(--shadow);
+    overflow: hidden;
+    margin: 1rem 0;
+    display: flex;
+    align-items: stretch;
+}
+
+.team-name {
+    background-color: var(--secondary-color);
+    color: white;
+    padding: 1rem;
+    font-size: 1.5rem;
+}
+
+.dropzone {
+    background-color: var(--background-color);
+    border: 2px dashed var(--border-color);
+    border-radius: var(--border-radius);
+    transition: var(--transition);
+    min-height: 100px;
+    padding: 1rem;
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    grid-template-rows: 0.3fr 1fr; 
+    grid-column-gap: 0px;
+    grid-row-gap: 0px; 
+}
+
+.dropzone-hover {
+    background-color: var(--hover-color);
+    border-color: var(--accent-color);
+}
+
+p.dropzone-text {
+    grid-area: 1 / 1 / 2 / 3;
+    text-align: center;
+}
+
+h2.dropzone-text {
+    text-align: center;
+    font-size: 20px;
+}
+
+.color-div {
+    width: 5%;
+    border-right: 1px solid var(--border-color);
+}
+
+.team-info {
+    flex-grow: 1;
+    padding: 10px;
+}

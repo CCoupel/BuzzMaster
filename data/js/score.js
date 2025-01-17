@@ -62,6 +62,8 @@ function renderPlayerScores() {
 
     tbody.innerHTML = '';
     const bumpers = getBumpers();
+    const teams = getTeams();
+
     const sortedPlayers = Object.entries(bumpers)
         .map(([id, data]) => ({
             id,
@@ -72,11 +74,26 @@ function renderPlayerScores() {
 
     sortedPlayers.forEach((player, index) => {
         const previousPosition = previousPlayerPositions[player.id];
-        
+
         const row = tbody.insertRow();
         row.insertCell(0).textContent = index + 1;
         row.insertCell(1).textContent = player.NAME || `Joueur ${player.id}`;
-        row.insertCell(2).textContent = player.TEAM || 'Sans équipe';
+
+        const teamNameCell = row.insertCell(2);
+        const teamNameDiv = document.createElement('div');
+        teamNameDiv.className = 'color-cell';
+        teamNameCell.appendChild(teamNameDiv);
+
+        if (teams[player.TEAM]) {
+            const teamColor = document.createElement('div');
+            teamColor.className = 'team-color';
+            teamColor.style.backgroundColor = `rgb(${teams[player.TEAM].COLOR.join(',')})`;
+            teamNameDiv.appendChild(teamColor);
+        }
+        
+        const teamNameP = document.createElement('p');
+        teamNameP.textContent = player.TEAM || 'Sans équipe';
+        teamNameDiv.appendChild(teamNameP);
         const scoreButtonCell = row.insertCell(3);
 
         // Créer le bouton -

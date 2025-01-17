@@ -1,10 +1,27 @@
+header {
+    height: 107px;
+    position: fixed;
+    top: 0px;
+}
+
 .time-bar-container-players {
+    position: fixed;
+    left: 0;
+    width: 100%;
     height: 70px;
+    line-height: var(--timer-height);
+    background-color: #ddd;
 }
 
 #timer-players {
+    width: 100%;
+    height:var(--timer-height);
     top: 10px ;
     font-size: 45px;
+    font-weight: bold;
+    color: #000;
+    position: fixed;
+    text-align: center;
 }
 
 #game-container {
@@ -99,7 +116,7 @@ main {
   }
 
 
-  #question-div {
+#question-div {
     position: relative; /* Nécessaire pour positionner le pseudo-élément */
     display: flex;
     justify-content: center;

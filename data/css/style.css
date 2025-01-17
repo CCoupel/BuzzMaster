@@ -1,655 +1,143 @@
+/* Main styles */
 :root {
-    --primary-color: #3498db;
-    --secondary-color: #2980b9;
-    --accent-color: #e74c3c;
-    --background-color: #ecf0f1;
-    --text-color: #2c3e50;
-    --border-color: #bdc3c7;
-    --hover-color: #2c3e50;
-    --shadow: 0 2px 5px 4px rgba(0,0,0,0.3);
-    --border-radius: 5px;
-    --transition: all 0.3s ease;
-    --navbar-height: 40px;
-    --timer-height: 50px;
-  }
-
-  html {
-    height: 100%;
-  }
-
-  body {
-    font-family: 'Arial', sans-serif;
-    background-color: var(--background-color);
-    background-image: linear-gradient(rgba(255, 255, 255, 0.5), rgba(255, 255, 255, 0.5)), url('http://buzzcontrol.local/files/background.jpg');
-    background-size: cover;
-    background-position: center;
-    color: var(--text-color);
-    line-height: 1.6;
-    display: flex;
-    flex-direction: column;
-    margin: 0;
-    padding: 0;
-    padding-top: calc(var(--navbar-height) + var(--timer-height));
-    height: 100%;
-  }
-  
-
-  header {
-    height: 107px;
-    position: fixed;
-    top: 0px;
-  }
-  /* Navbar styles */
-  .navbar {
-    background-color: var(--primary-color);
-    padding: 1rem;
-    display: flex;
-    flex-direction: row;
-    justify-content: space-around;
-    align-items: center;
-    position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
-    height: var(--navbar-height);
-  }
-  
-  .navbar-item {
-    color: white;
-    text-decoration: none;
-    padding: 0.5rem 1rem;
-    border-radius: var(--border-radius);
-    transition: var(--transition);
-    font-size: 1.2rem;
-  }
-  
-  .navbar-item:hover {
-    background-color: var(--hover-color);
-  }
-  
-  /* Styles pour la barre de temps et le timer */
-  .time-bar-container {
-    position: fixed;
-    left: 0;
-    top: 72px;
-    width: 100%;
-    height: var(--timer-height);
-    line-height: var(--timer-height);
-    background-color: #ddd;
-  }
-  
-  #time-bar {
-    height: 100%;
-    background-color: #4CAF50;
-    transition: width 0.2s linear, background-color 0.2s linear;
-  }
-  
-  #timer {
-    width: 100%;
-    height:var(--timer-height);
-    font-size: 25px;
-    font-weight: bold;
-    color: #000;
-    position: fixed;
-    text-align: center;
-  }
-
-  /* Main container styles */
-  .main-container {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    padding: 2rem;
-    margin-bottom: 60px;
-  }
-  
-  /* Button styles */
-  .button-container, .footer {
-    background-color: var(--secondary-color);
-    padding: 1rem;
-    display: flex;
-    justify-content: space-around;
-    align-items: center;
-    position: fixed;
-    bottom: 0;
-    left: 0;
-    right: 0;
-    z-index: 998;
-    height: 40px;
-  }
-
-  #config-button-container{
-    width: 80%;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-  }
-
-  .player-control{
-    width: 35%;
-    display: flex;
-    justify-content: space-around;
-    align-items: center;
-  }
-
-  .game-control{
-    width: 65%;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    gap: 2%;
-  }
-  
-  #background-form-container{
-    display: flex;
-    align-items: center;
-  }
-
-  button, .navbar-item {
-    background-color: var(--accent-color);
-    color: white;
-    border: none;
-    padding: 0.5rem 1rem;
-    border-radius: var(--border-radius);
-    cursor: pointer;
-    transition: var(--transition);
-    font-size: 1rem;
-  }
-  
-  button:hover {
-    background-color: var(--hover-color);
-  }
-  
-  /* Styles spécifiques pour le jeu d'équipe */
-  #game-container {
-    display: flex;
-    justify-content: space-around;
-    flex-wrap: wrap;
-    padding-top: 10px;
-    margin-top: 3%;
-  }
-
-  #question-container-admin {
-    position: fixed;
-    bottom: 80px;
-    left: 0;
-    right: 0;
-    z-index: 999;
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    align-items: center;
-  }
-
-  #question-container-admin img {
-    height: 200px;
-    width: 200px;
-    object-fit: contain;
-  }
-
-  #question-div-admin {
-    border: 5px solid var(--primary-color); 
-    border-radius: 10px;
-    width: 80%;
-    height: auto;
-    display: flex;
-    flex-direction: column;
-    align-items: center; 
-    justify-content: center; 
-    background-color: #f9f9f9; 
-    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1); 
-    padding: 5px; 
-    margin: 20px auto; 
-    font-family: 'Arial', sans-serif; 
+  --primary-color: #3498db;
+  --secondary-color: #2980b9;
+  --accent-color: #e74c3c;
+  --background-color: #ecf0f1;
+  --text-color: #2c3e50;
+  --border-color: #bdc3c7;
+  --hover-color: #2c3e50;
+  --shadow: 0 2px 5px 4px rgba(0,0,0,0.3);
+  --border-radius: 5px;
+  --transition: all 0.3s ease;
+  --navbar-height: 40px;
+  --timer-height: 50px;
 }
 
-#question-div-admin p {
-    font-size: 1.2rem; 
-    color: #333; 
-    margin: 0; 
-    text-align: center;
-    line-height: 1.5;
+html {
+  height: 100%;
 }
 
-.hidden-answer {
-  color: transparent; 
-  transition: color 0.3s;
-}
-
-.hidden-answer:hover {
-  color: black;
-}
-
-  .team {
-    background-color: #fff;
-    border-radius: 8px;
-    padding: 15px;
-    margin: 10px;
-    width: 13%;
-    min-height: 100px;
-    box-shadow: 0 2px 5px rgba(0,0,0,0.1);
-    transition: all 0.3s ease;
-  }
-  
-  .team.active {
-    opacity: 1;
-    transform: scale(1);
-    filter: none;
-    box-shadow: 0 0 15px rgba(255,215,0,0.7);
-  }
-  
-  .team.start-phase {
-    opacity: 0.1;
-    transform: scale(0.95);
-    filter: grayscale(100%);
-    box-shadow: 0 0 10px rgba(0,0,0,0.2) inset;
-  }
-  
-  .team-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    margin-bottom: 10px;
-  }
-  
-  .team-color {
-    width: 20px;
-    height: 20px;
-    border-radius: 50%;
-    margin-right: 10px;
-  }
-
-  #websocket-tracker {
-    width: 20px;
-    height: 20px;
-    border-radius: 50%;
-    position: fixed;
-    top: 25px;
-    right: 20px;
-  }
-
-
-  .bumper {
-    margin: 5px 0;
-    padding: 5px;
-    background-color: #f9f9f9;
-    border-radius: 4px;
-    transition: all 0.3s ease;
-    cursor: pointer;
-  }
-  
-  .bumper:hover {
-    background-color: #e0e0e0;
-  }
-  
-  .bumper.active {
-    opacity: 1;
-    background-color: #fffacd;
-  }
-  
-  .bumper.active:hover {
-    background-color: #ffeb3b;
-    cursor: pointer;
-  }
-  
-  .bumper.start-phase {
-    opacity: 0.1;
-    background-color: #e0e0e0;
-  }
-  
-  @keyframes blinkFast {
-    0% { opacity: 1; }
-    50% { opacity: 0.3; }
-    100% { opacity: 1; }
-  }
-  
-  #time-bar.pause-blink {
-    animation: blinkFast 0.5s linear infinite;
-  }
-  
-  @keyframes blink {
-    0% { opacity: 1; }
-    50% { opacity: 0.3; }
-    100% { opacity: 1; }
-  }
-  
-  .blink {
-    animation: blink 1s linear infinite;
-  }
-
-  .blink-fast {
-    animation: blink 0.5s linear infinite;
-  }
-  
-  /* Style pour l'input du temps de jeu */
-  #game-time-input {
-    margin-right: 10px;
-    padding: 5px;
-    font-size: 16px;
-    width: 60px;
-  }
-
-  #game-points-input {
-    margin-right: 10px;
-    padding: 5px;
-    font-size: 16px;
-    width: 60px;
-  }
-  
-  /* Styles pour la page de configuration */
-  .main-config-container {
-    display: flex;
-    flex: 1;
-    margin: 2rem;
-    background-color: white;
-    border-radius: var(--border-radius);
-    box-shadow: var(--shadow);
-    overflow: hidden;
-  }
-  
-  .buzzer-container, .team-container {
-    padding: 1rem;
-    overflow-y: auto;
-  }
-  
-  .buzzer-container {
-    width: 30%;
-    background-color: var(--background-color);
-    border-right: 1px solid var(--border-color);
-  }
-
-  #version-container {
-    width: 7%;
-  }
-  
-  /* Styles spécifiques pour les bumpers dans le buzzer-container */
-  .buzzer {
-    background-color: white;
-    border: 1px solid var(--border-color);
-    border-radius: var(--border-radius);
-    box-shadow: var(--shadow);
-    margin: 1rem auto;
-    padding: 0.5rem;
-    width: 90%;
-    text-align: center;
-  }
-  
-  .buzzer-container .buzzer-id {
-    font-weight: bold;
-    margin-bottom: 0.5rem;
-  }
-  
-  .buzzer-container .buzzer-name {
-    font-style: italic;
-  }
-  
-  .buzzer-container .buzzer-form {
-    margin-top: 0.5rem;
-    width: 95%;
-    margin-inline: auto;
-  }
-  
-  .buzzer-container .buzzer-form input {
-    width: 50%;
-    padding: 0.3rem;
-    margin-bottom: 0.5rem;
-    text-align: center;
-  }
-  
-  .team-container {
-    width: 70%;
-  }
-  
-  .dynamic-div {
-    background-color: white;
-    border-radius: var(--border-radius);
-    box-shadow: var(--shadow);
-    overflow: hidden;
-    margin: 1rem 0;
-    display: flex;
-    align-items: stretch;
-  }
-  
-  .team-name {
-    background-color: var(--secondary-color);
-    color: white;
-    padding: 1rem;
-    font-size: 1.5rem;
-  }
-  
-  .dropzone {
-    background-color: var(--background-color);
-    border: 2px dashed var(--border-color);
-    border-radius: var(--border-radius);
-    transition: var(--transition);
-    min-height: 100px;
-    padding: 1rem;
-    display: grid;
-    grid-template-columns: repeat(2, 1fr);
-    grid-template-rows: 0.3fr 1fr; 
-    grid-column-gap: 0px;
-    grid-row-gap: 0px; 
-  }
-  
-  .dropzone-hover {
-    background-color: var(--hover-color);
-    border-color: var(--accent-color);
-  }
-
-  p.dropzone-text {
-    grid-area: 1 / 1 / 2 / 3;
-    text-align: center;
-  }
-
-  h2.dropzone-text {
-    text-align: center;
-    font-size: 20px;
-  }
-
-  .color-div {
-    width: 5%;
-    border-right: 1px solid var(--border-color);
-  }
-  
-  .team-info {
-    flex-grow: 1;
-    padding: 10px;
-  }
-  
-  /* Form element styles */
-  select, input {
-    border: 1px solid var(--border-color);
-    border-radius: var(--border-radius);
-    padding: 0.5rem;
-    margin: 0.5rem 0;
-    font-size: 1rem;
-  }
-  
-  select:focus, input:focus {
-    outline: none;
-    border-color: var(--accent-color);
-  }
-  
-  /* Scoreboard styles */
-#score-container {
-  display:flex;
-  justify-content: space-around;
-}
-
-  .scoreboard {
-    background-color: white;
-    border-radius: var(--border-radius);
-    box-shadow: var(--shadow);
-    margin-bottom: 2rem;
-    padding: 1rem;
-    width:45%
-  }
-  
-  .scoreboard h2 {
-    color: var(--secondary-color);
-    border-bottom: 2px solid var(--border-color);
-    padding-bottom: 0.5rem;
-    margin-bottom: 1rem;
-  }
-  
-  .button-score {
-    width: 20px;
-    height: 20px;
-    padding: 0px;
-    padding-bottom: 1px;
-    opacity: 80%;
-  }
-
-  .scoreboard table {
-    width: 100%;
-    border-collapse: collapse;
-  }
-  
-  .scoreboard th, .scoreboard td {
-    text-align: center;
-    padding: 0.5%;
-    border-bottom: 1px solid var(--border-color);
-  }
-
-  .scoreboard th {
-    background-color: var(--background-color);
-    font-weight: bold;
-  }
-  
-  .scoreboard tr:last-child td {
-    border-bottom: none;
-  }
-
-  .scoreboard tr {
-    height: 100%;
-  }
-
-  .scoreboard td {
-    height: 100%;
-  }
-
-  .color-cell {
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    min-height: 100%;
-  }
-
-  .color-cell .team-color   {
-    height: 15px;
-    width: 15px;
-  }
-
-
-  @keyframes rowMoveGreen {
-    0% {
-        background-color: yellow; /* Couleur d'origine */
-        transform: scale(1);
-    }
-    50% {
-        background-color: lightgreen; /* Couleur quand la ligne est en mouvement (avance) */
-        transform: scale(1.05);
-    }
-    100% {
-        background-color: white; /* Retour à la couleur normale */
-        transform: scale(1);
-    }
-}
-
-@keyframes rowMove {
-  0% {
-    background-color: yellow; /* Couleur d'origine */
-    transform: scale(1);
-  }
-  50% {
-    background-color: lightgreen; /* Couleur quand la ligne est en mouvement */
-    transform: scale(1.05);
-  }
-  100% {
-    background-color: white; /* Retour à la couleur normale */
-    transform: scale(1);
-  }
-}
-
-.highlight {
-  animation: rowMove 0.5s ease-in-out;
-}
-
-/* Players styles */
-.time-bar-container-players {
-      position: fixed;
-      left: 0;
-      width: 100%;
-      height: var(--timer-height);
-      line-height: var(--timer-height);
-      background-color: #ddd;
-}
-#timer-players {
-      width: 100%;
-      height:var(--timer-height);
-      font-size: 25px;
-      font-weight: bold;
-      color: #000;
-      position: fixed;
-      text-align: center;
-}
-
-.hidden {
-      visibility: hidden;
-}
-
-/* Questions styles */
-
-.question-form-div {
-  width: 60%;
-  margin: auto;
-  form{
-    display: flex;
-    align-items: center;
-    flex-wrap: wrap;
-    label{
-      width: 19%;
-      text-align: right;
-      margin-right: 1%;
-    }
-    input[type="text"]{
-      width: 75%;
-    }
-    input[type="number"]{
-      width: 10%;
-    }
-    button {
-      width: 30%;
-      margin:auto
-    }
-  }
-}
-
-#questions-container {
+body {
+  font-family: 'Arial', sans-serif;
+  background-color: var(--background-color);
+  background-image: linear-gradient(rgba(255, 255, 255, 0.5), rgba(255, 255, 255, 0.5)), url('http://buzzcontrol.local/files/background.jpg');
+  background-size: cover;
+  background-position: center;
+  color: var(--text-color);
+  line-height: 1.6;
   display: flex;
-  gap: 1%;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  padding-top: calc(var(--navbar-height) + var(--timer-height));
+  height: 100%;
 }
 
-.question-item {
-  border: 1px solid #ddd;
-  padding: 10px;
-  margin: 10px 0;
-  border-radius: 5px;
-  width: 18%;
+.team-color {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  margin-right: 10px;
+}
+  
+/* Footer styles */
+.button-container, .footer {
+  background-color: var(--secondary-color);
+  padding: 1rem;
   display: flex;
   justify-content: space-around;
-  strong{
-    font-weight: 600;
-  }
+  align-items: center;
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 998;
+  height: 40px;
 }
 
-.img{
+#config-button-container{
+  width: 80%;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.player-control{
+  width: 35%;
+  display: flex;
+  justify-content: space-around;
+  align-items: center;
+}
+
+.game-control{
+  width: 65%;
   display: flex;
   justify-content: center;
-  align-items: center;   
-  img{
-    height:75px;
-    width:75px;
-    object-fit: contain;
-  }
+  align-items: center;
+  gap: 2%;
+}
+
+#background-form-container{
+  display: flex;
+  align-items: center;
+}
+
+button {
+  background-color: var(--accent-color);
+  color: white;
+  border: none;
+  padding: 0.5rem 1rem;
+  border-radius: var(--border-radius);
+  cursor: pointer;
+  transition: var(--transition);
+  font-size: 1rem;
+}
+
+button:hover {
+  background-color: var(--hover-color);
+}
+
+#websocket-tracker {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  position: fixed;
+  top: 25px;
+  right: 20px;
+}
+
+
+/* Style pour l'input du temps de jeu */
+#game-time-input {
+  margin-right: 10px;
+  padding: 5px;
+  font-size: 16px;
+  width: 60px;
+}
+
+#game-points-input {
+  margin-right: 10px;
+  padding: 5px;
+  font-size: 16px;
+  width: 60px;
+}
+  
+/* Form element styles */
+select, input {
+  border: 1px solid var(--border-color);
+  border-radius: var(--border-radius);
+  padding: 0.5rem;
+  margin: 0.5rem 0;
+  font-size: 1rem;
+}
+
+select:focus, input:focus {
+  outline: none;
+  border-color: var(--accent-color);
+}
+  
+/* hidden style*/
+.hidden {
+      visibility: hidden;
 }
