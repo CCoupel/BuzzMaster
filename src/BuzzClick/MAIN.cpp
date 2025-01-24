@@ -1,3 +1,6 @@
+//#include <gpio_viewer.h>
+//GPIOViewer gpio_viewer;
+
 #include "includes.h"
 #include "WifiManager.h"
 
@@ -30,8 +33,11 @@ void setup()
   settimeofday(&tv, NULL);
 
   Serial.begin(921600);
+  Serial.println("STARTING!!");
+
   esp_log_level_set("*", ESP_LOG_INFO);
   ESP_LOGI(MAIN_TAG, "Starting up...");
+  
   
   initLED();
   ESP_LOGI(MAIN_TAG, "STARTING:");
@@ -52,9 +58,10 @@ void setup()
 
   attachButtons();
 
-}
+  }
 
 void loop() {
   checkWifiStatus();
   manageButtonMessages();
+  
 }
