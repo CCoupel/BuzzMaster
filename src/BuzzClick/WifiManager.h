@@ -1,4 +1,6 @@
 #pragma once
+#include <gpio_viewer.h>
+GPIOViewer gpio_viewer;
 
 #include "Common/CustomLogger.h"
 #include "Common/led.h"
@@ -16,32 +18,32 @@ bool connectToWifi();
 
 void WiFiStationConnected(WiFiEvent_t event, WiFiEventInfo_t info){
   ESP_LOGI(WIFI_TAG,"Connecté au WiFi");
+
 }
 
 void WiFiGotIP(WiFiEvent_t event, WiFiEventInfo_t info){
   ESP_LOGI(WIFI_TAG,"Adresse IP obtenue %s", WiFi.localIP().toString());
-        if (!getServerIP()) {
-            ESP_LOGE(WIFI_TAG, "Failed to get server IP. Restarting...");
-            ESP.restart();
-        }
-        setLedColor(128,128,0,true);
-        resetGame();
-        yield();
-        if (!connectSRV()) {
-            ESP_LOGE(WIFI_TAG, "Failed to connect to server. Restarting...");
-            ESP.restart();
-        }
-        setLedColor(64,128,0,true);
-        yield();
-        if (!initBroadcastUDP()) {
-            ESP_LOGE(WIFI_TAG, "Failed to listen to server. Restarting...");
-            ESP.restart();
-        }
-        ESP_LOGI(WIFI_TAG, "READY");
-        setLedColor(0,0,0);
-        setLedIntensity(255);
-
-
+//    gpio_viewer.begin();
+    if (!getServerIP()) {
+        ESP_LOGE(WIFI_TAG, "Failed to get server IP. Restarting...");
+        ESP.restart();
+    }
+    setLedColor(128,128,0,true);
+    resetGame();
+    yield();
+    if (!connectSRV()) {
+        ESP_LOGE(WIFI_TAG, "Failed to connect to server. Restarting...");
+        ESP.restart();
+    }
+    setLedColor(64,128,0,true);
+    yield();
+    if (!initBroadcastUDP()) {
+        ESP_LOGE(WIFI_TAG, "Failed to listen to server. Restarting...");
+        ESP.restart();
+    }
+    ESP_LOGI(WIFI_TAG, "READY");
+    setLedColor(0,0,0);
+    setLedIntensity(255);
 }
 
 void WiFiStationDisconnected(WiFiEvent_t event, WiFiEventInfo_t info){
@@ -54,8 +56,8 @@ void WiFiStationDisconnected(WiFiEvent_t event, WiFiEventInfo_t info){
 bool connectToWifi() {
   ESP_LOGI(WIFI_TAG,"Tentative de connexion WiFi...");
   WiFi.mode(WIFI_STA);
+  //WiFi.begin(ssid, password);
   WiFi.begin(apSSID, apPASSWORD);
-
   unsigned long startAttemptTime = millis();
 
   while (WiFi.status() != WL_CONNECTED && millis() - startAttemptTime < WIFI_TIMEOUT_MS) {
