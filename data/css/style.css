@@ -12,6 +12,7 @@
   --transition: all 0.3s ease;
   --navbar-height: 40px;
   --timer-height: 50px;
+  --header-height: 122px;
 }
 
 html {
@@ -30,7 +31,6 @@ body {
   flex-direction: column;
   margin: 0;
   padding: 0;
-  padding-top: calc(var(--navbar-height) + var(--timer-height));
   height: 100%;
 }
 
