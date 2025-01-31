@@ -79,6 +79,48 @@ void w_handleListGame(AsyncWebServerRequest *request) {
     request->send(response);
 }
 
+String findFreeQuestion() {
+    JsonDocument Questions;
+    String jsonQuestions=getQuestions();
+    bool found;
+    if (xSemaphoreTake(questionMutex, pdMS_TO_TICKS(1000)) == pdTRUE) {
+
+        DeserializationError error = deserializeJson(Questions, jsonQuestions);
+        if (!error) {
+            ESP_LOGI(WEB_TAG, "Questions loaded successfully");
+            // Parcourir tous les IDs de 1 jusqu'à trouver un manquant
+            int currentId = 1;
+            while (true) {
+                found=false;
+                // Parcourir tous les objets du JSON
+                for (JsonPair kv : Questions.as<JsonObject>()) {
+                    if (kv.value()["ID"].as<int>() == currentId) {
+                        found = true;
+                        break;
+                    }
+                }
+                
+                if (!found) {
+                    ESP_LOGD(WEB_TAG, " free ID: %i", currentId);
+                    return String(currentId);
+                }
+                
+                currentId++;
+                // Protection contre une boucle infinie
+                if (currentId > 100) {
+                    return "1";
+                }
+            }
+        }
+            // Libérer le mutex
+        xSemaphoreGive(questionMutex);
+    } else {
+        // Le mutex n'a pas pu être obtenu après le timeout
+        ESP_LOGE(WEB_TAG, "Couldn't obtain mutex in findFreeQuestion");
+    }
+    return "0";
+}
+
 void w_handleUploadComplete(AsyncWebServerRequest *request) {
     static File file;
     static size_t totalSize = 0;
@@ -95,13 +137,18 @@ void w_handleUploadComplete(AsyncWebServerRequest *request) {
     ESP_LOGI(WEB_TAG,"receive a question ?");
     if(request->hasParam("number", true)) {
         currentDir = request->getParam("number", true)->value();
+        if (currentDir=="")
+        {
+            currentDir=findFreeQuestion();
+        }
+        
         questionText = request->hasParam("question", true) ? request->getParam("question", true)->value() : "";
         reponseText = request->hasParam("answer", true) ? request->getParam("answer", true)->value() : "";
         pointsText = request->hasParam("points", true) ? request->getParam("points", true)->value() : "0";
         tempsText = request->hasParam("time", true) ? request->getParam("time", true)->value() : "0";
         
         // Créer le répertoire si nécessaire
-        ensureDirectoryExists(fullPath);
+        ensureDirectoryExists(baseDir);
         fullPath =  baseDir + currentDir;
         totalSize=0;
         ensureDirectoryExists(fullPath);

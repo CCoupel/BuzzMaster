@@ -20,6 +20,7 @@
 
 #include <freertos/FreeRTOS.h>
 #include <freertos/queue.h>
+#include "freertos/semphr.h"
 
 hw_timer_t * timer = NULL;
 portMUX_TYPE timerMux = portMUX_INITIALIZER_UNLOCKED;
@@ -59,7 +60,8 @@ static const char* saveGameFile="/game.json.save";
 static const String questionsPath="/files/questions";
 
 QueueHandle_t messageQueue; // File d'attente pour les messages
-
+SemaphoreHandle_t questionMutex = NULL;
+SemaphoreHandle_t buttonMutex = NULL;
 
 // Map pour stocker les buffers par client (identifiés par IP)
 std::map<String, String> clientBuffers;

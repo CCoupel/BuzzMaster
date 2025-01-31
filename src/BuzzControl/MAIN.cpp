@@ -19,6 +19,7 @@
 static const char* MAIN_TAG = "BUZZCONTROL";
 const uint16_t logPort = 8888;  // Port UDP pour les logs
 
+
 void setup(void)
 {
   setenv("TZ", "UTC-1", 1);
@@ -82,6 +83,9 @@ void setup(void)
 
   xTaskCreate(sendMessageTask, "Send Message Task", 14096, NULL, 1, NULL);
   sendHelloToAll();
+  questionMutex = xSemaphoreCreateMutex();
+  buttonMutex = xSemaphoreCreateMutex();
+
 }
 
 void loop(void)
