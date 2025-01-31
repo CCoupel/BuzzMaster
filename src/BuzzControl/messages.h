@@ -9,7 +9,7 @@
 
 // Configuration
 const char* TAG = "MESSAGES";
-const int MAX_MESSAGE_LENGTH = 1024;
+const int MAX_MESSAGE_LENGTH = 6128;
 
 // Structure de message améliorée
 typedef struct {
@@ -47,6 +47,7 @@ void putMsgToQueue(const char* action, const char* msg, bool notify, AsyncClient
 }
 
 String makeJsonMessage(const String& action, const String& msg) {
+    ESP_LOGD(TAG, "msg in queue : %s", msg.c_str());
     String message="{";
     message += "\"ACTION\": \"" + action + "\"";
     message += ", \"VERSION\": \"" + String(VERSION) + "\"";
@@ -55,6 +56,7 @@ String makeJsonMessage(const String& action, const String& msg) {
     message += "} \n";
 
     return message;
+    ESP_LOGD(TAG, "msg to send : %s", message.c_str());
 }
 
 // Fonction générique pour calculer l'adresse de broadcast

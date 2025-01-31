@@ -80,45 +80,59 @@ void w_handleListGame(AsyncWebServerRequest *request) {
 }
 
 String findFreeQuestion() {
+    String result = "0";  // Valeur par défaut
     JsonDocument Questions;
-    String jsonQuestions=getQuestions();
+    String jsonQuestions = getQuestions();
     bool found;
-    if (xSemaphoreTake(questionMutex, pdMS_TO_TICKS(1000)) == pdTRUE) {
 
-        DeserializationError error = deserializeJson(Questions, jsonQuestions);
-        if (!error) {
-            ESP_LOGI(WEB_TAG, "Questions loaded successfully");
-            // Parcourir tous les IDs de 1 jusqu'à trouver un manquant
-            int currentId = 1;
-            while (true) {
-                found=false;
-                // Parcourir tous les objets du JSON
-                for (JsonPair kv : Questions.as<JsonObject>()) {
-                    if (kv.value()["ID"].as<int>() == currentId) {
-                        found = true;
+    if (xSemaphoreTake(questionMutex, pdMS_TO_TICKS(1000)) == pdTRUE) {
+        try {  // Ajout d'un try-catch pour garantir la libération du mutex
+            DeserializationError error = deserializeJson(Questions, jsonQuestions);
+            if (!error) {
+                ESP_LOGI(WEB_TAG, "Questions loaded successfully");
+                int currentId = 1;
+                while (true) {
+                    vTaskDelay(pdMS_TO_TICKS(1));
+                    found = false;
+                    
+                    for (JsonPair kv : Questions.as<JsonObject>()) {
+                        vTaskDelay(pdMS_TO_TICKS(1));
+                        if (kv.value()["ID"].as<int>() == currentId) {
+                            found = true;
+                            break;
+                        }
+                    }
+                    
+                    if (!found) {
+                        ESP_LOGD(WEB_TAG, "free ID: %i", currentId);
+                        result = String(currentId);
+                        break;  // Sort de la boucle while
+                    }
+                    
+                    currentId++;
+                    if (currentId > 100) {
+                        result = "1";
                         break;
                     }
                 }
-                
-                if (!found) {
-                    ESP_LOGD(WEB_TAG, " free ID: %i", currentId);
-                    return String(currentId);
-                }
-                
-                currentId++;
-                // Protection contre une boucle infinie
-                if (currentId > 100) {
-                    return "1";
-                }
             }
+        } catch (...) {
+            ESP_LOGE(WEB_TAG, "Exception in findFreeQuestion");
         }
-            // Libérer le mutex
+        
+        // Le mutex est toujours libéré, même en cas d'erreur
         xSemaphoreGive(questionMutex);
     } else {
-        // Le mutex n'a pas pu être obtenu après le timeout
         ESP_LOGE(WEB_TAG, "Couldn't obtain mutex in findFreeQuestion");
     }
-    return "0";
+    
+    return result;
+}
+
+
+void refreshTask(void * parameter) {
+    refreshQuestions(true);
+    vTaskDelete(NULL);
 }
 
 void w_handleUploadComplete(AsyncWebServerRequest *request) {
@@ -130,7 +144,7 @@ void w_handleUploadComplete(AsyncWebServerRequest *request) {
     static String pointsText;
     static String tempsText;
     static bool hasFile = false;  // Pour suivre si un fichier est en cours d'upload
-    static String baseDir="/files/questions/";
+    static String baseDir="/files/questions";
     String fullPath;
     static String jsonString="Upload Terminé";
 
@@ -149,19 +163,19 @@ void w_handleUploadComplete(AsyncWebServerRequest *request) {
         
         // Créer le répertoire si nécessaire
         ensureDirectoryExists(baseDir);
-        fullPath =  baseDir + currentDir;
+        fullPath =  baseDir + "/" + currentDir;
         totalSize=0;
         ensureDirectoryExists(fullPath);
         // Créer le fichier JSON
-        jsonString = "{\n";
-            jsonString += "  \"ID\": \"" + currentDir + "\",\n";
+        jsonString = "{";
+            jsonString += "  \"ID\": \"" + currentDir + "\",";
             if (isFileExists(fullPath + "/media.jpg")) {
-                jsonString += "  \"MEDIA\": \"/question/" + currentDir + "/media.jpg\",\n";
+                jsonString += "  \"MEDIA\": \"/question/" + currentDir + "/media.jpg\",";
             }
-            jsonString += "  \"QUESTION\": \"" + questionText + "\",\n";
-            jsonString += "  \"ANSWER\": \"" + reponseText + "\",\n";
-            jsonString += "  \"POINTS\": " + pointsText + ",\n";
-            jsonString += "  \"TIME\": " + tempsText + "\n";
+            jsonString += "  \"QUESTION\": \"" + questionText + "\",";
+            jsonString += "  \"ANSWER\": \"" + reponseText + "\",";
+            jsonString += "  \"POINTS\": " + pointsText + ",";
+            jsonString += "  \"TIME\": " + tempsText ;
             jsonString += "}";
 
         ESP_LOGD(WEB_TAG, "Question received: %s", jsonString.c_str());
@@ -175,11 +189,19 @@ void w_handleUploadComplete(AsyncWebServerRequest *request) {
             }
             jsonFile.close();
         }
-        putMsgToQueue("QUESTION",jsonString.c_str());
     }
 
     AsyncWebServerResponse *response = request->beginResponse(200, "text/json", jsonString);
     addCorsHeaders(response);
+    xTaskCreate(
+    refreshTask,    // Fonction
+    "refreshTask",  // Nom
+    8192,          // Stack size
+    NULL,          // Paramètres
+    1,             // Priorité
+    NULL           // Handle
+);
+
     request->send(response);
 }
 

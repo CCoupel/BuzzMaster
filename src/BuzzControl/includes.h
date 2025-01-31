@@ -105,7 +105,8 @@ void update(String action, JsonObject& obj);
 void resetServer();
 void rebootServer();
 void RAZscores();
-String getQuestions();
+String getQuestions(bool refresh=false);
+bool refreshQuestions(bool notify=false);
 
 /* **** INTERUPTIONS *** */
 static void IRAM_ATTR buttonHandler(void *arg);
