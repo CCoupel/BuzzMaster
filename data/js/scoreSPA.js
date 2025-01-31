@@ -1,0 +1,171 @@
+import { sendWebSocketMessage } from './websocket.js';
+import { updateBumpers, updateTeams, getTeams, getBumpers, setBumperPoint, } from './configSPA.js';
+
+function updateScores(data) {
+    if (data.teams) updateTeams(data.teams);
+    if (data.bumpers) updateBumpers(data.bumpers);
+    renderTeamScores();
+    renderPlayerScores();
+}
+
+let previousTeamPositions = {};
+let previousPlayerPositions = {};
+
+function renderTeamScores() {
+    const tbody = document.querySelector('#team-scores tbody');
+    if (!tbody) return;
+
+    tbody.innerHTML = '';
+    const teams = getTeams();
+    console.log(teams)
+    const sortedTeams = Object.entries(teams).sort((a, b) => b[1].SCORE - a[1].SCORE);
+
+    sortedTeams.forEach((team, index) => {
+        const [teamName, teamData] = team;
+        const row = tbody.insertRow();
+        row.insertCell(0).textContent = index + 1;
+
+        const teamNameCell = row.insertCell(1);
+        const teamNameDiv = document.createElement('div');
+        teamNameDiv.className = 'color-cell';
+        teamNameCell.appendChild(teamNameDiv);
+
+        if (teamData.COLOR) {
+            const teamColor = document.createElement('div');
+            teamColor.className = 'team-color';
+            teamColor.style.backgroundColor = `rgb(${teamData.COLOR.join(',')})`;
+            teamNameDiv.appendChild(teamColor);
+        }
+
+        const teamNameP = document.createElement('p');
+        teamNameP.textContent = teamName;
+        teamNameDiv.appendChild(teamNameP);
+
+        row.insertCell(2).textContent = teamData.SCORE || 0;
+
+        // Ajout de la classe highlight si la position de l'équipe change
+        if (previousTeamPositions[teamName] !== undefined && previousTeamPositions[teamName] !== index + 1) {
+            row.classList.add('highlight');
+        }
+
+        // Mettre à jour la position précédente de l'équipe
+        previousTeamPositions[teamName] = index + 1;
+    });
+
+    // Nettoyage de l'animation après un certain temps
+    setTimeout(() => {
+        document.querySelectorAll('.highlight').forEach(row => row.classList.remove('highlight'));
+    }, 1000);
+}
+
+function renderPlayerScores() {
+    const tbody = document.querySelector('#player-scores tbody');
+    if (!tbody) return;
+
+    tbody.innerHTML = '';
+    const bumpers = getBumpers();
+    const teams = getTeams();
+
+    const sortedPlayers = Object.entries(bumpers)
+        .map(([id, data]) => ({
+            id,
+            ...data,
+            SCORE: parseInt(data.SCORE) || 0
+        }))
+        .sort((a, b) => b.SCORE - a.SCORE);
+
+    sortedPlayers.forEach((player, index) => {
+        const previousPosition = previousPlayerPositions[player.id];
+
+        const row = tbody.insertRow();
+        row.insertCell(0).textContent = index + 1;
+        row.insertCell(1).textContent = player.NAME || `Joueur ${player.id}`;
+
+        const teamNameCell = row.insertCell(2);
+        const teamNameDiv = document.createElement('div');
+        teamNameDiv.className = 'color-cell';
+        teamNameCell.appendChild(teamNameDiv);
+
+        if (teams[player.TEAM]) {
+            const teamColor = document.createElement('div');
+            teamColor.className = 'team-color';
+            teamColor.style.backgroundColor = `rgb(${teams[player.TEAM].COLOR.join(',')})`;
+            teamNameDiv.appendChild(teamColor);
+        }
+        
+        const teamNameP = document.createElement('p');
+        teamNameP.textContent = player.TEAM || 'Sans équipe';
+        teamNameDiv.appendChild(teamNameP);
+        const scoreButtonCell = row.insertCell(3);
+
+        // Créer le bouton -
+        const buttonMinus = document.createElement('button');
+        buttonMinus.className = "button-score";
+        buttonMinus.textContent = '-';
+        buttonMinus.style = "background-color: #2196F3; margin-right: 5px;";
+        buttonMinus.onclick = () => {
+            setBumperPoint(player.id, -1);
+        };
+
+        // Ajouter le bouton - à la cellule
+        scoreButtonCell.appendChild(buttonMinus);
+
+        // Ajouter le score à la même cellule
+        const scoreText = document.createTextNode(player.SCORE || 0);
+        scoreButtonCell.appendChild(scoreText);
+
+        // Créer le bouton +
+        const buttonPlus = document.createElement('button');
+        buttonPlus.className = "button-score";
+        buttonPlus.textContent = '+';
+        buttonPlus.style = "margin-left: 5px;";
+        buttonPlus.onclick = () => {
+            setBumperPoint(player.id, 1);
+        };
+
+        // Ajouter le bouton + à la cellule
+        scoreButtonCell.appendChild(buttonPlus);
+
+        // Vérification si le joueur a changé de position
+        if (previousPosition !== undefined && previousPosition !== index + 1) {
+            // Ajouter une classe d'animation si le joueur a changé de position
+            row.classList.add('highlight');
+        }
+
+        // Mettre à jour la position précédente du joueur
+        previousPlayerPositions[player.id] = index + 1;
+    });
+
+    // Nettoyage de l'animation après un certain temps
+    setTimeout(() => {
+        document.querySelectorAll('.highlight').forEach(row => row.classList.remove('highlight'));
+    }, 1000);
+}
+
+function handleScoreWebSocketMessage(event) {
+    const data = JSON.parse(event.data);
+    if (data.ACTION === 'UPDATE' || data.ACTION === 'FULL') {
+        updateScores(data.MSG);
+    }
+}
+
+function handleResetScore() {
+    if (confirm('Êtes-vous sûr de vouloir réinitialiser les scores ?')) {
+        sendWebSocketMessage('RAZ', {});
+    }
+}
+
+export function scorePage() {
+    renderTeamScores();
+    renderPlayerScores();
+}
+
+
+document.addEventListener('DOMContentLoaded', () => {
+    //connectWebSocket(handleScoreWebSocketMessage);
+    //renderTeamScores();
+    renderPlayerScores();
+
+    const resetButton = document.getElementById('reset-score');
+    if (resetButton) resetButton.addEventListener('click', handleResetScore);
+});

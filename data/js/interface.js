@@ -1,4 +1,7 @@
 import {sendWebSocketMessage} from './websocket.js';
+import { updateBumpers, updateTeams, updateDisplay } from './configSPA.js';
+import { scorePage } from './scoreSPA.js';
+import { getQuestions, questionList } from './questionsSPA.js';
 
 let gameState = {
     timer: 30,
@@ -23,12 +26,20 @@ function updateGameState (msg) {
         gameState.totalTime = msg.DELAY;
     }
 }
+export let webSocketMessage = {};
+
+export function createElement(tag, className, attributes = {}) {
+    const element = document.createElement(tag);
+    if (className) element.className = className;
+    Object.entries(attributes).forEach(([key, value]) => element.setAttribute(key, value));
+    return element;
+};
 
 export function handleConfigSocketMessage(event) {
     console.log('Message reçu du serveur:', event.data);
-        const data = JSON.parse(event.data);
-        if (data.ACTION) {
-            handleServerAction(data.ACTION, data.MSG);
+    webSocketMessage = JSON.parse(event.data);
+        if (webSocketMessage.ACTION) {
+            handleServerAction(webSocketMessage.ACTION, webSocketMessage.MSG);
         } else {
             console.log("Pas d'action :" , console.log(event.data))
         };
@@ -57,14 +68,22 @@ function handleServerAction(action, msg) {
             break;
         case 'UPDATE':
             if (msg.teams && msg.bumpers) {
-                //updateTeams(msg.teams);
-                //updateBumpers(msg.bumpers);
-                updateGameState(msg.GAME);
-                //updateDisplay();
-                updateTimeBar(true);
-                updateTimer();
-                handlePhase(msg.GAME.PHASE);
+                updateTeams(msg.teams);
+                updateBumpers(msg.bumpers);
             }
+            switch (window.location.hash) {
+                case '#config':
+                    console.log("testconfig")
+                    updateDisplay(); 
+                    break;
+                case '#score':
+                    scorePage(); 
+                    break;
+            }
+            updateGameState(msg.GAME);
+            updateTimeBar(true);
+            updateTimer();
+            handlePhase(msg.GAME.PHASE);
             break;
         case 'UPDATE_TIMER':
             updateGameState(msg.GAME);
@@ -80,6 +99,10 @@ function handleServerAction(action, msg) {
             break;
         default:
             console.log('Action non reconnue:', action);
+        case 'QUESTIONS':
+            getQuestions(msg);
+            questionList();
+            break;
     }
 };
 
@@ -171,6 +194,7 @@ export function updateTimeBar(immediate = false) {
     }
 };
 
+/*
 async function questionsSelect() {
     try {
         const response = await fetch('http://buzzcontrol.local/questions');
@@ -217,6 +241,7 @@ async function questionsSelect() {
         console.error('Erreur lors de la récupération des questions :', error);
     }
 };
+*/
 
 function handlePhase(state) {
     const startStopButton = document.getElementById('startStopButton');
@@ -245,7 +270,7 @@ function handlePhase(state) {
 document.addEventListener('DOMContentLoaded', function() {
     updateTimer();
     updateTimeBar();
-    questionsSelect();
+    //questionsSelect();
 
     const playersButton = document.getElementById('players');
     const preparation = document.getElementById('preparation');

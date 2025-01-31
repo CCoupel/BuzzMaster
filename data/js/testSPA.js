@@ -1,4 +1,7 @@
 import { routes } from './routes.js';
+import { questionsPage } from './questionsSPA.js';
+import { configPage } from './configSPA.js';
+import { scorePage } from './scoreSPA.js';
 
 // Fonction pour mettre à jour le contenu de la page
 function navigate() {
@@ -12,12 +15,22 @@ function navigate() {
     } else {
         appDiv.innerHTML = '<h1>404 - Page non trouvée</h1>';
     }
-}
+};
 
 // Ajouter des événements spécifiques à chaque page
-function attachEvents(hash) {
-  
-}
+async function attachEvents(hash) {
+    if (hash === "#questions") {
+        questionsPage(); 
+    }
+
+    if (hash === "#config") {
+        configPage();
+    }
+
+    if (hash === "#score") {
+        scorePage();
+    }
+};
 
 // Écouter les changements de hash
 window.addEventListener('hashchange', navigate);

@@ -74,7 +74,11 @@ export const routes = {
                     <button type="submit">Valider la question</button>
                 </form>
             </div>
-            <div id="questions-container"></div>
+            <div id="questions-container">
+                <div id="loader" style="display:none;">
+                    <p>Chargement...</p>
+                </div>
+            </div>
         </div>
     `,
 };

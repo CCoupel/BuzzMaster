@@ -109,9 +109,8 @@ function stopPing() {
 }
 
 export function sendWebSocketMessage (action, MSG= "{}")  {
-    
-    webSocketColor();
 
+    webSocketColor();
     if (ws.readyState === WebSocket.OPEN) {
         const message = {
             "ACTION": action,

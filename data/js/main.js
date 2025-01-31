@@ -64,7 +64,7 @@ export function setBumperPoint(id, inc=0) {
         team["SCORE"]=team["SCORE"]+inc;
     }
     sendTeamsAndBumpers(); 
-}
+};
 
 
 export function setTeamColor(id, color) {
@@ -179,7 +179,8 @@ export function connectWebSocket(onMessageCallback) {
 }
 
 function startPing() {
-    stopPing();
+    console.log("je ping")
+    //stopPing();
     pingTimeout = setInterval(() => {
         if (ws.readyState === WebSocket.OPEN) {
             sendWebSocketMessage("PING", {}); 
