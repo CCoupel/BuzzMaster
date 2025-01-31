@@ -42,13 +42,20 @@ void w_handleNotFound(AsyncWebServerRequest *request) {
 }
 
 //####### TOOLING ######
+void w_handleRedirect(AsyncWebServerRequest *request) {
+    ESP_LOGD(WEB_TAG, "REdirecting for: %s", request->url().c_str());
+    request->redirect("http://buzzcontrol.local/config.html");
+}
+
 void w_handleReboot(AsyncWebServerRequest *request) {
     ESP_LOGI(WEB_TAG, "Handling reboot request");
+    w_handleRedirect(request);
     rebootServer();
 }
 
 void w_handleReset(AsyncWebServerRequest *request) {
     ESP_LOGI(WEB_TAG, "Handling reset request");
+    w_handleRedirect(request);
     resetServer();
     rebootServer();
 }
@@ -72,9 +79,46 @@ void w_handleListGame(AsyncWebServerRequest *request) {
     request->send(response);
 }
 
-void w_handleRedirect(AsyncWebServerRequest *request) {
-    ESP_LOGD(WEB_TAG, "REdirecting for: %s", request->url().c_str());
-    request->redirect("http://buzzcontrol.local/config.html");
+String findFreeQuestion() {
+    JsonDocument Questions;
+    String jsonQuestions=getQuestions();
+    bool found;
+    if (xSemaphoreTake(questionMutex, pdMS_TO_TICKS(1000)) == pdTRUE) {
+
+        DeserializationError error = deserializeJson(Questions, jsonQuestions);
+        if (!error) {
+            ESP_LOGI(WEB_TAG, "Questions loaded successfully");
+            // Parcourir tous les IDs de 1 jusqu'à trouver un manquant
+            int currentId = 1;
+            while (true) {
+                found=false;
+                // Parcourir tous les objets du JSON
+                for (JsonPair kv : Questions.as<JsonObject>()) {
+                    if (kv.value()["ID"].as<int>() == currentId) {
+                        found = true;
+                        break;
+                    }
+                }
+                
+                if (!found) {
+                    ESP_LOGD(WEB_TAG, " free ID: %i", currentId);
+                    return String(currentId);
+                }
+                
+                currentId++;
+                // Protection contre une boucle infinie
+                if (currentId > 100) {
+                    return "1";
+                }
+            }
+        }
+            // Libérer le mutex
+        xSemaphoreGive(questionMutex);
+    } else {
+        // Le mutex n'a pas pu être obtenu après le timeout
+        ESP_LOGE(WEB_TAG, "Couldn't obtain mutex in findFreeQuestion");
+    }
+    return "0";
 }
 
 void w_handleUploadComplete(AsyncWebServerRequest *request) {
@@ -86,26 +130,32 @@ void w_handleUploadComplete(AsyncWebServerRequest *request) {
     static String pointsText;
     static String tempsText;
     static bool hasFile = false;  // Pour suivre si un fichier est en cours d'upload
-    String fullPath=questionsPath;
+    static String baseDir="/files/questions/";
+    String fullPath;
     static String jsonString="Upload Terminé";
 
     ESP_LOGI(WEB_TAG,"receive a question ?");
     if(request->hasParam("number", true)) {
         currentDir = request->getParam("number", true)->value();
+        if (currentDir=="")
+        {
+            currentDir=findFreeQuestion();
+        }
+        
         questionText = request->hasParam("question", true) ? request->getParam("question", true)->value() : "";
         reponseText = request->hasParam("answer", true) ? request->getParam("answer", true)->value() : "";
         pointsText = request->hasParam("points", true) ? request->getParam("points", true)->value() : "0";
         tempsText = request->hasParam("time", true) ? request->getParam("time", true)->value() : "0";
         
         // Créer le répertoire si nécessaire
-        ensureDirectoryExists(fullPath);
-        fullPath += "/" + currentDir;
+        ensureDirectoryExists(baseDir);
+        fullPath =  baseDir + currentDir;
         totalSize=0;
         ensureDirectoryExists(fullPath);
         // Créer le fichier JSON
         jsonString = "{\n";
             jsonString += "  \"ID\": \"" + currentDir + "\",\n";
-            if (isFileExists("/files/questions/" + currentDir + "/media.jpg")) {
+            if (isFileExists(fullPath + "/media.jpg")) {
                 jsonString += "  \"MEDIA\": \"/question/" + currentDir + "/media.jpg\",\n";
             }
             jsonString += "  \"QUESTION\": \"" + questionText + "\",\n";
@@ -125,6 +175,7 @@ void w_handleUploadComplete(AsyncWebServerRequest *request) {
             }
             jsonFile.close();
         }
+        putMsgToQueue("QUESTION",jsonString.c_str());
     }
 
     AsyncWebServerResponse *response = request->beginResponse(200, "text/json", jsonString);
@@ -160,68 +211,10 @@ void w_handleUploadFile(AsyncWebServerRequest *request, String filename, size_t 
 }
 
 /***** QUESTIONS *******/
+
 void w_handleListQuestions(AsyncWebServerRequest *request) {
     ESP_LOGI(WEB_TAG, "Handling question list  request");
-    struct DirectoryContent {
-        String path;
-        String questionJson;
-    };
-
-    String jsonOutput = "{";
-    
-    if(!LittleFS.begin(true)) {
-        ESP_LOGE(WEB_TAG,"{\"error\": \"Failed to mount LittleFS\"}");
-    }
-
-    File root = LittleFS.open(questionsPath);
-    if(!root || !root.isDirectory()) {
-        ESP_LOGE(WEB_TAG, "{\"error\": \"Failed to open /files directory\"}");
-    }
-
-        // Première passe pour compter les répertoires
-    int dirCount = 0;
-    File countFile = root.openNextFile();
-    while(countFile) {
-        if(countFile.isDirectory()) {
-            dirCount++;
-        }
-        countFile = root.openNextFile();
-    }
-    root.close();
-
-    // Allouer le tableau avec la taille exacte
-    DirectoryContent* directories = new DirectoryContent[dirCount];
-    int currentIndex = 0;
-
-    // Seconde passe pour remplir le tableau
-    root = LittleFS.open(questionsPath);
-    File file = root.openNextFile();
-    while(file && currentIndex < dirCount) {
-        if(file.isDirectory()) {
-            directories[currentIndex].path = file.path();
-            String questionPath = directories[currentIndex].path + "/question.json";
-            File questionFile = LittleFS.open(questionPath, "r");
-            
-            if(questionFile) {
-                directories[currentIndex].questionJson = questionFile.readString();
-                questionFile.close();
-                currentIndex++;
-            }
-        }
-        file = root.openNextFile();
-    }
-
-    // Construire le JSON
-    for(int i = 0; i < dirCount; i++) {
-        if(i > 0) jsonOutput += ",";
-        jsonOutput += "\"" + directories[i].path + "\":";
-        jsonOutput += directories[i].questionJson;
-    }
-    
-    jsonOutput += "}";
-    
-    // Libérer la mémoire
-    delete[] directories;
+    String jsonOutput=getQuestions();
     
     ESP_LOGI(WEB_TAG, "Questions: %s", jsonOutput.c_str());
 
@@ -240,7 +233,7 @@ void w_handleUploadQuestionFile(AsyncWebServerRequest *request, String filename,
     static String pointsText;
     static String tempsText;
     static bool hasFile = false;  // Pour suivre si un fichier est en cours d'upload
-    String fullPath=questionsPath;
+    String fullPath;
     static String jsonString;
         
     hasFile = (filename != "");  // Vérifie si un fichier est présent
@@ -299,6 +292,7 @@ void startWebServer() {
 
     // Route spécifique pour le background
     server.serveStatic("/background", LittleFS, "/files/background.jpg");
+    server.serveStatic("/version", LittleFS, "/config/version.txt");
 
     server.on("/", HTTP_GET, w_handleRedirect);
     server.on("/index.html", w_handleRedirect);

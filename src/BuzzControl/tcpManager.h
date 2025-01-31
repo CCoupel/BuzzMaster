@@ -36,6 +36,7 @@ void b_handleData(void* arg, AsyncClient* c, void *data, size_t len) {
 void processClientBuffer(const String& clientID, AsyncClient* c) {
     String& jsonBuffer = clientBuffers[clientID];
     int endOfJson;
+    ESP_LOGD(TCP_TAG, "processClientBuffer %s",  jsonBuffer.c_str());
 
     while ((endOfJson = jsonBuffer.indexOf('\n')) > 0) {
         String jsonPart = jsonBuffer.substring(0, endOfJson);

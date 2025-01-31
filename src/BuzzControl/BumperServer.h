@@ -16,6 +16,71 @@ Ticker gameTimer;
 // Flag pour suivre l'état du timer
 bool isTimerRunning = false;
 
+String getQuestions() {
+    struct DirectoryContent {
+        String path;
+        String questionJson;
+    };
+
+    String jsonOutput = "{";
+    
+    if(!LittleFS.begin(true)) {
+        ESP_LOGE(BUMPER_TAG,"{\"error\": \"Failed to mount LittleFS\"}");
+    }
+
+    File root = LittleFS.open(questionsPath);
+    if(!root || !root.isDirectory()) {
+        ESP_LOGE(BUMPER_TAG, "{\"error\": \"Failed to open /files directory\"}");
+    }
+
+        // Première passe pour compter les répertoires
+    int dirCount = 0;
+    File countFile = root.openNextFile();
+    while(countFile) {
+        if(countFile.isDirectory()) {
+            dirCount++;
+        }
+        countFile = root.openNextFile();
+    }
+    root.close();
+
+    // Allouer le tableau avec la taille exacte
+    DirectoryContent* directories = new DirectoryContent[dirCount];
+    int currentIndex = 0;
+
+    // Seconde passe pour remplir le tableau
+    root = LittleFS.open(questionsPath);
+    File file = root.openNextFile();
+    while(file && currentIndex < dirCount) {
+        if(file.isDirectory()) {
+            directories[currentIndex].path = file.path();
+            String questionPath = directories[currentIndex].path + "/question.json";
+            File questionFile = LittleFS.open(questionPath, "r");
+            
+            if(questionFile) {
+                directories[currentIndex].questionJson = questionFile.readString();
+                questionFile.close();
+                currentIndex++;
+            }
+        }
+        file = root.openNextFile();
+    }
+
+    // Construire le JSON
+    for(int i = 0; i < dirCount; i++) {
+        if(i > 0) jsonOutput += ",";
+        jsonOutput += "\"" + directories[i].path + "\":";
+        jsonOutput += directories[i].questionJson;
+    }
+    
+    jsonOutput += "}";
+    
+    // Libérer la mémoire
+    delete[] directories;
+    return jsonOutput;
+}
+
+
 void timerCallback() {
     if (getGamePhase() =="START") {
         updateTimer(getGameCurrentTime(), -1);
@@ -24,19 +89,23 @@ void timerCallback() {
 
 void processButtonPress(const String& bumperID, const char* b_team, int64_t b_time, int b_button) {
   ESP_LOGI(BUMPER_TAG, "Button Pressed %i at time %i", b_button, b_time);
+  if (xSemaphoreTake(questionMutex, pdMS_TO_TICKS(1000)) == pdTRUE) {
 
-  setBumperButton(bumperID.c_str(), b_button);
-  setBumperTime(bumperID.c_str(), b_time);
-  setBumperStatus(bumperID.c_str(), "PAUSE");
+    setBumperButton(bumperID.c_str(), b_button);
+    setBumperTime(bumperID.c_str(), b_time);
+    setBumperStatus(bumperID.c_str(), "PAUSE");
 
-  int64_t teamTime=getTeamTime(b_team);
-  ESP_LOGD(BUMPER_TAG, "Actual Team Time %s:%i",b_team,teamTime);
-  if (teamTime == 0 or teamTime > b_time) {
-    setTeamBumper(b_team,bumperID.c_str());
-    setTeamTime(b_team, b_time);
-    setTeamStatus(b_team, "PAUSE");
-  }
-  
+    int64_t teamTime=getTeamTime(b_team);
+    ESP_LOGD(BUMPER_TAG, "Actual Team Time %s:%i",b_team,teamTime);
+    if (teamTime == 0 or teamTime > b_time) {
+      setTeamBumper(b_team,bumperID.c_str());
+      setTeamTime(b_team, b_time);
+      setTeamStatus(b_team, "PAUSE");
+    }
+    } else {
+        // Le mutex n'a pas pu être obtenu après le timeout
+        ESP_LOGI(BUMPER_TAG, "Couldn't obtain mutex in findFreeQuestion");
+    }
 }
 
 void resetBumpersTime() {
@@ -233,6 +302,7 @@ void handleHelloAction(const char* bumperID, JsonObject& MSG) {
   notifyAll();
 }
 
+
 void handleButtonAction(const char* bumperID, JsonObject& MSG, AsyncClient* c) {
   ESP_LOGE(BUMPER_TAG, "Button pressed: %s", bumperID);
   JsonObject bumper=getBumper(bumperID);
@@ -254,7 +324,7 @@ void parseJSON(const String& data, AsyncClient* c)
   JsonObject MSG;
   JsonObject bumpers = teamsAndBumpers["bumpers"];
   JsonObject teams = teamsAndBumpers["teams"];
-
+  ESP_LOGD(BUMPER_TAG, "parseJSON=%s", data.c_str());
   DeserializationError error = deserializeJson(receivedData, data);
   if (error) {
       ESP_LOGE(BUMPER_TAG, "Failed to parse JSON: %s", error.c_str());
