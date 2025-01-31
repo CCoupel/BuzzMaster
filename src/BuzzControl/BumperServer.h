@@ -16,6 +16,71 @@ Ticker gameTimer;
 // Flag pour suivre l'état du timer
 bool isTimerRunning = false;
 
+String getQuestions() {
+    struct DirectoryContent {
+        String path;
+        String questionJson;
+    };
+
+    String jsonOutput = "{";
+    
+    if(!LittleFS.begin(true)) {
+        ESP_LOGE(BUMPER_TAG,"{\"error\": \"Failed to mount LittleFS\"}");
+    }
+
+    File root = LittleFS.open(questionsPath);
+    if(!root || !root.isDirectory()) {
+        ESP_LOGE(BUMPER_TAG, "{\"error\": \"Failed to open /files directory\"}");
+    }
+
+        // Première passe pour compter les répertoires
+    int dirCount = 0;
+    File countFile = root.openNextFile();
+    while(countFile) {
+        if(countFile.isDirectory()) {
+            dirCount++;
+        }
+        countFile = root.openNextFile();
+    }
+    root.close();
+
+    // Allouer le tableau avec la taille exacte
+    DirectoryContent* directories = new DirectoryContent[dirCount];
+    int currentIndex = 0;
+
+    // Seconde passe pour remplir le tableau
+    root = LittleFS.open(questionsPath);
+    File file = root.openNextFile();
+    while(file && currentIndex < dirCount) {
+        if(file.isDirectory()) {
+            directories[currentIndex].path = file.path();
+            String questionPath = directories[currentIndex].path + "/question.json";
+            File questionFile = LittleFS.open(questionPath, "r");
+            
+            if(questionFile) {
+                directories[currentIndex].questionJson = questionFile.readString();
+                questionFile.close();
+                currentIndex++;
+            }
+        }
+        file = root.openNextFile();
+    }
+
+    // Construire le JSON
+    for(int i = 0; i < dirCount; i++) {
+        if(i > 0) jsonOutput += ",";
+        jsonOutput += "\"" + directories[i].path + "\":";
+        jsonOutput += directories[i].questionJson;
+    }
+    
+    jsonOutput += "}";
+    
+    // Libérer la mémoire
+    delete[] directories;
+    return jsonOutput;
+}
+
+
 void timerCallback() {
     if (getGamePhase() =="START") {
         updateTimer(getGameCurrentTime(), -1);
@@ -233,6 +298,7 @@ void handleHelloAction(const char* bumperID, JsonObject& MSG) {
   notifyAll();
 }
 
+
 void handleButtonAction(const char* bumperID, JsonObject& MSG, AsyncClient* c) {
   ESP_LOGE(BUMPER_TAG, "Button pressed: %s", bumperID);
   JsonObject bumper=getBumper(bumperID);
@@ -254,7 +320,7 @@ void parseJSON(const String& data, AsyncClient* c)
   JsonObject MSG;
   JsonObject bumpers = teamsAndBumpers["bumpers"];
   JsonObject teams = teamsAndBumpers["teams"];
-
+  ESP_LOGD(BUMPER_TAG, "parseJSON=%s", data.c_str());
   DeserializationError error = deserializeJson(receivedData, data);
   if (error) {
       ESP_LOGE(BUMPER_TAG, "Failed to parse JSON: %s", error.c_str());

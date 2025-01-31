@@ -151,10 +151,10 @@ void sendMessageTask(void *parameter) {
                 sendMessageToAllClients(receivedMessage.action, receivedMessage.message);
             }
 
-            if (receivedMessage.notifyAll) {
+//            if (receivedMessage.notifyAll) {
                 ESP_LOGD(TAG, "notify all");
                 notifyAll();
-            }
+//            }
             ESP_LOGD(TAG, "queue finished");
         }
     }

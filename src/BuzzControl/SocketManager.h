@@ -28,6 +28,7 @@ void parseDataFromSocket(const char* action, const JsonObject& message) {
       break;
     case hash("HELLO"):
       notifyAll();
+      putMsgToQueue("QUESTIONS",getQuestions().c_str());
       break;
     case hash("FULL"):
       setBumpers(message["bumpers"]);
