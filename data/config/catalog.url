@@ -19,6 +19,17 @@ js/team.js
 js/teamGame.js
 js/version.js
 js/questions.js
+jsSPA/buzzerSPA.js
+jsSPA/configSPA.js
+jsSPA/dragAndDropSPA.js
+jsSPA/interface.js
+jsSPA/questionSPA.js
+jsSPA/routes.js
+jsSPA/scoreSPA.js
+jsSPA/teamSPA.js
+jsSPA/testSPA.js
+jsSPA/version.js
+jsSPA/websocket.js
 css/reset.css
 css/style.css
 css/players.css

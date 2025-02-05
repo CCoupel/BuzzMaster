@@ -43,6 +43,7 @@
     width: 18%;
     display: flex;
     justify-content: space-around;
+    overflow: hidden;
     strong{
         font-weight: 600;
     }
