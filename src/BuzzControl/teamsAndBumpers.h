@@ -6,6 +6,7 @@
 
 static const char* TEAMs_TAG = "Team And Bumper";
 JsonDocument teamsAndBumpers;
+JsonDocument questions;
 
 JsonDocument& getTeamsAndBumpers() {
     return teamsAndBumpers;
@@ -119,7 +120,7 @@ void setGamePage(const String remotePage) {
         teamsAndBumpers["GAME"]["REMOTE"] = remotePage;
 }
 //##### QUESTION ######
-void setQuestion(const String qID) {
+void setGameQuestion(const String qID) {
     String question="";
     String qPath=questionsPath+"/"+qID+"/question.json";
 
@@ -137,6 +138,106 @@ void setQuestion(const String qID) {
         teamsAndBumpers["GAME"].remove("QUESTION");
     } 
     
+}
+
+bool refreshQuestions(bool notify) {
+    ESP_LOGD(TEAMs_TAG, "refreshQuestions Starting");
+    struct DirectoryContent {
+        String path;
+        String questionJson;
+    };
+
+    
+    
+    if(!LittleFS.begin(true)) {
+        ESP_LOGE(TEAMs_TAG,"{\"error\": \"Failed to mount LittleFS\"}");
+        return false;
+    }
+
+    File root = LittleFS.open(questionsPath);
+    if(!root || !root.isDirectory()) {
+        ESP_LOGE(TEAMs_TAG, "{\"error\": \"Failed to open /files directory\"}");
+        return false;
+    }
+
+        // Première passe pour compter les répertoires
+    int dirCount = 0;
+    File countFile = root.openNextFile();
+    while(countFile) {
+        vTaskDelay(pdMS_TO_TICKS(1));
+        if(countFile.isDirectory()) {
+            dirCount++;
+        }
+        countFile = root.openNextFile();
+    }
+    root.close();
+    ESP_LOGD(TEAMs_TAG, "refreshQuestions Nb Questions in Dir: %i", dirCount);
+    // Allouer le tableau avec la taille exacte
+    DirectoryContent* directories = new DirectoryContent[dirCount];
+    int currentIndex = 0;
+
+    // Seconde passe pour remplir le tableau
+    root = LittleFS.open(questionsPath);
+    File file = root.openNextFile();
+    while(file && currentIndex < dirCount) {
+        vTaskDelay(pdMS_TO_TICKS(1));
+        if(file.isDirectory()) {
+            directories[currentIndex].path = file.path();
+            String questionPath = directories[currentIndex].path + "/question.json";
+            File questionFile = LittleFS.open(questionPath, "r");
+            
+            if(questionFile) {
+                directories[currentIndex].questionJson = questionFile.readString();
+                questionFile.close();
+                currentIndex++;
+            }
+        }
+        file = root.openNextFile();
+    }
+
+    String jsonOutput = "{";
+    // Construire le JSON
+    for(int i = 0; i < dirCount; i++) {
+        vTaskDelay(pdMS_TO_TICKS(1));
+        if(i > 0) jsonOutput += ",";
+        jsonOutput += "\"" + directories[i].path + "\":";
+        jsonOutput += directories[i].questionJson;
+    }
+    
+    jsonOutput += "}";
+    ESP_LOGD(TEAMs_TAG, "refreshQuestions deserialization: %s", jsonOutput.c_str());
+    // Libérer la mémoire
+    delete[] directories;
+    DeserializationError error = deserializeJson(questions, jsonOutput);
+    if (error) {
+        ESP_LOGE(TEAMs_TAG, "deserializeJson() questions failed: %s", jsonOutput.c_str());
+        return false;
+    } 
+    if (notify) {
+        putMsgToQueue("QUESTIONS",jsonOutput.c_str());
+    }
+    return true;
+}
+
+JsonDocument getQuestionsJson(bool refresh=false ) {
+    ESP_LOGD(TEAMs_TAG, "getQuestionsJson Starting");
+    if (questions.isNull() or refresh) {
+        refreshQuestions();
+    }
+    return questions;
+}
+
+String getQuestions(bool refresh) {
+    ESP_LOGD(TEAMs_TAG, "getQuestions Starting");
+    String output="";
+    if (serializeJson(getQuestionsJson(refresh), output)) {
+        ESP_LOGI(TEAMs_TAG, "Questions: %s", output.c_str());
+        return output;
+    } else {
+        ESP_LOGE(TEAMs_TAG, "Failed to serialize Questions JSON");
+        return "{}";
+    }
+
 }
 
 String getQuestionElementJson() {
