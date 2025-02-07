@@ -2,6 +2,7 @@ import { routes } from './routes.js';
 import { questionsPage } from './questionsSPA.js';
 import { configPage } from './configSPA.js';
 import { scorePage } from './scoreSPA.js';
+import { updateDisplayGame } from './teamGameSPA.js';
 
 // Fonction pour mettre à jour le contenu de la page
 function navigate() {
@@ -29,6 +30,10 @@ async function attachEvents(hash) {
 
     if (hash === "#score") {
         scorePage();
+    }
+
+    if (hash === "#teamGame") {
+        updateDisplayGame();
     }
 };
 

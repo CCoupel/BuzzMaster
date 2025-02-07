@@ -91,12 +91,12 @@ export function sendTeamsAndBumpers() {
         if (data.MSG.bumpers) updateBumpers(data.MSG.bumpers);
         if (data.MSG.teams) updateTeams(data.MSG.teams);
         //if (data.MSG.VERSION) getCoreVersion(data.MSG.VERSION);
-        updateDisplay();
+        updateDisplayConfig();
     }
         //if (data.VERSION) getCoreVersion(data.VERSION);
 };*/
 
-export function updateDisplay() {
+export function updateDisplayConfig() {
     createTeamDiv(getTeams());
     createBuzzerDiv(getBumpers());
 };
@@ -167,14 +167,14 @@ document.addEventListener('DOMContentLoaded', () => {
     if (addButton) addButton.addEventListener('click', handleAddTeam);
     if (resetButton) resetButton.addEventListener('click', handleReset);
 
-    updateDisplay();
+    updateDisplayConfig();
 });
 
 export function configPage() {
     //sendFileForm('background-form', 'http://buzzcontrol.local/background');
     initializeDropzones();
     //getWebVersion();
-    updateDisplay();
+    updateDisplayConfig();
 };
 
 // Nettoyage lors du déchargement de la page

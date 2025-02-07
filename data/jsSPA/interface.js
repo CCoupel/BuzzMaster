@@ -1,9 +1,10 @@
 import {sendWebSocketMessage} from './websocket.js';
-import { updateBumpers, updateTeams, updateDisplay } from './configSPA.js';
+import { updateBumpers, updateTeams, updateDisplayConfig } from './configSPA.js';
 import { scorePage } from './scoreSPA.js';
 import { getQuestions, questionList } from './questionsSPA.js';
+import { updateDisplayGame } from './teamGameSPA.js';
 
-let gameState = {
+export let gameState = {
     timer: 30,
     isRunning: false,
     totalTime: 30,
@@ -51,12 +52,12 @@ function handleServerAction(action, msg) {
         case 'START':          
             updateGameState(msg.GAME);
             updateTimeBar(true);
-            //updateDisplay();
+            //updateDisplayConfig();
             break;
         case 'STOP':
             gameState.gamePhase = 'STOP';
             updateTimeBar(true);
-            //updateDisplay();
+            //updateDisplayConfig();
             break;
         case 'PAUSE':
             gameState.gamePhase = 'PAUSE';
@@ -74,10 +75,13 @@ function handleServerAction(action, msg) {
             switch (window.location.hash) {
                 case '#config':
                     console.log("testconfig")
-                    updateDisplay(); 
+                    updateDisplayConfig(); 
                     break;
                 case '#score':
                     scorePage(); 
+                    break;
+                case '#teamGame':
+                    updateDisplayGame(); 
                     break;
             }
             updateGameState(msg.GAME);

@@ -8,6 +8,7 @@ html/teamGame.html
 html/navbar.html
 html/players.html
 html/questions.html
+html/testSPA.html
 js/buzzer.js
 js/config.js
 js/dragAndDrop.js
@@ -30,6 +31,7 @@ jsSPA/teamSPA.js
 jsSPA/testSPA.js
 jsSPA/version.js
 jsSPA/websocket.js
+jsSPA/teamGameSPA.js
 css/reset.css
 css/style.css
 css/players.css
