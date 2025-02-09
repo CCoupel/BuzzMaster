@@ -1,4 +1,4 @@
-let questions = {};
+export let questions = {};
 
 async function sendForm(formId, actionUrl) {
     const form = document.getElementById(formId);
@@ -37,6 +37,7 @@ async function sendForm(formId, actionUrl) {
 
 export function getQuestions(questionData) {
     questions = questionData;
+    console.log(questionData)
 }
 
 

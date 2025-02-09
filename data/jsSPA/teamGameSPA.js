@@ -1,32 +1,9 @@
-import { sendWebSocketMessage } from './websocket.js';
 import { gameState } from './interface.js';
-//import { setBumperPoint,  updateTeams, updateBumpers, getBumpers, getTeams } from './main.js';
-import { updateTeams, updateBumpers, getBumpers, getTeams } from './configSPA.js'
+import { getBumpers, getTeams, setBumperPoint } from './configSPA.js'
+import { questions } from './questionsSPA.js';
+import { sendAction } from './interface.js';
 
-export function handleConfigSocketMessage(event) {
-    console.log('Message reçu du serveur:', event.data);
-        const data = JSON.parse(event.data);
-        if (data.ACTION) {
-            handleServerAction(data.ACTION, data.MSG);
-        } else {
-            console.log("Pas d'action :" , console.log(event.data))
-        }
-}
-
-
-function cleanUp(container) {
-    if (typeof container !== 'string') {
-        console.error('Container ID must be a string.');
-        return;
-    }
-    const cleanContainer = document.getElementById(container);
-    if (cleanContainer) {
-        cleanContainer.innerHTML = '';
-    } else {
-        console.warn(`Element with ID "${container}" not found.`);
-    }
-}
-
+let selectedQuestion = {};
 
 export function updateDisplayGame() {
     console.log('Mise à jour de l\'affichage avec l\'état du jeu:', gameState);
@@ -110,41 +87,148 @@ function addPointToBumper(bumperMac) {
     }
 }
 
-function receiveQuestion(data) {
+
+export function receiveQuestion(data) {
     if (!data || Object.keys(data).length === 0) {
         return;
     }
 
-    const question = data;
+    // Stocker les informations dans selectedQuestion
+    selectedQuestion = { ...data };
+
+    // Mettre à jour les inputs du formulaire
     const timeInput = document.getElementById('game-time-input');
     const pointsInput = document.getElementById('game-points-input');
-    const questionsSelect = document.getElementById('questions-select');
-    timeInput.value = question.TIME;
-    pointsInput.value = question.POINTS;
-    questionsSelect.selectedOption = question.ID;
 
+    if (timeInput) timeInput.value = selectedQuestion.TIME;
+    if (pointsInput) pointsInput.value = selectedQuestion.POINTS;
+    displayQuestion();
+};
+
+export function displayQuestion() {
     const questionContainer = document.getElementById('question-container-admin');
-    questionContainer.innerHTML= '';
-    
-    if(question.MEDIA) {
-        const questionMedia = document.createElement('img')
-        questionMedia.src ="http://buzzcontrol.local" + question.MEDIA;
+    if (!questionContainer) return;
+
+    // Vider le conteneur
+    questionContainer.innerHTML = '';
+
+    if (!selectedQuestion || Object.keys(selectedQuestion).length === 0) {
+        return;
+    }
+
+    // Ajouter un média s'il existe
+    if (selectedQuestion.MEDIA) {
+        const questionMedia = document.createElement('img');
+        questionMedia.src = "http://buzzcontrol.local" + selectedQuestion.MEDIA;
         questionContainer.appendChild(questionMedia);
     }
 
+    // Création des éléments HTML pour la question et la réponse
     const questionDiv = document.createElement('div');
     questionDiv.id = "question-div-admin";
 
     const questionP = document.createElement('p');
-    questionP.innerHTML = question.QUESTION;
+    questionP.innerHTML = selectedQuestion.QUESTION;
 
     const answerP = document.createElement('p');
-    answerP.innerHTML = `Réponse :   <span class="hidden-answer">${question.ANSWER}</span>`;
+    answerP.innerHTML = `Réponse : <span class="hidden-answer">${selectedQuestion.ANSWER}</span>`;
 
     questionDiv.appendChild(questionP);
     questionDiv.appendChild(answerP);
     questionContainer.appendChild(questionDiv);
 }
+
+function questionsSelectList() {
+    const container = document.getElementById('questions-select-list');
+    if (!container) return;
+    container.innerHTML = '';
+
+    if (!questions || Object.keys(questions).length === 0) {
+        container.innerHTML = '<p>Aucune question disponible pour le moment.</p>';
+        return;
+    }
+
+    Object.keys(questions).forEach(key => {
+        const questionData = questions[key];
+
+        const questionDiv = document.createElement('div');
+        questionDiv.className = 'question-item';
+        questionDiv.id = `question-${questionData.ID}`;
+
+        if (selectedQuestion && selectedQuestion.ID === questionData.ID) {
+            questionDiv.style.backgroundColor = 'yellow'; 
+        }
+
+        questionDiv.innerHTML = `
+            <p><strong>ID:</strong> ${questionData.ID} <strong>Question:</strong> ${questionData.QUESTION}</p>
+        `;
+
+        const popup = document.createElement('div');
+        popup.className = 'popup';
+        popup.innerHTML = `
+            <p><strong>Question:</strong> ${questionData.QUESTION}</p>
+            <p><strong>Réponse:</strong> ${questionData.ANSWER}</p>
+            <p><strong>Points:</strong> ${questionData.POINTS}</p>
+            <p><strong>Temps:</strong> ${questionData.TIME} sec</p>
+            ${questionData.MEDIA ? `<img src="http://buzzcontrol.local${questionData.MEDIA}" alt="Question Media">` : ''}
+        `;
+        popup.style.display = 'none';
+        popup.style.position = 'absolute';
+        popup.style.zIndex = '1000';
+        document.body.appendChild(popup);
+
+        let popupTimeout; 
+
+        questionDiv.addEventListener('mouseenter', (event) => {
+            popupTimeout = setTimeout(() => {
+                popup.style.display = 'block';
+                const rect = questionDiv.getBoundingClientRect(); 
+
+                let offsetX = 15; 
+                let offsetY = -popup.offsetHeight - 10; 
+
+                popup.style.left = `${rect.right + offsetX}px`; 
+                popup.style.top = `${rect.top + offsetY}px`;
+            }, 500); // Délai de 500 ms avant d'afficher la popup
+        });
+
+        questionDiv.addEventListener('mouseleave', () => {
+            clearTimeout(popupTimeout);
+            hidePopup();
+        });
+
+        popup.addEventListener('mouseleave', () => {
+            if (!questionDiv.matches(':hover')) {
+                hidePopup();
+            }
+        });
+
+        const hidePopup = () => {
+            popup.style.display = 'none';
+        };
+
+        questionDiv.addEventListener('click', () => {
+            document.querySelectorAll('.question-item').forEach(item => {
+                item.style.backgroundColor = '';
+            });
+
+            questionDiv.style.backgroundColor = 'yellow';
+
+            const allPopups = document.querySelectorAll('.popup');
+            allPopups.forEach(popup => {
+                popup.style.display = 'none';
+            });
+
+            selectedQuestion = { ...questionData };
+
+            sendAction("READY", questionData.ID);
+        });
+
+        container.appendChild(questionDiv);
+    });
+}
+
+
 
 function showAnswer() {
     const questionContainer = document.getElementById('question-div-admin');
@@ -153,6 +237,12 @@ function showAnswer() {
     } else {
         console.warn('Element with ID "question-container-admin" not found.');
     }
+}
+
+export function teamGamePage() {
+    updateDisplayGame();
+    questionsSelectList();
+    displayQuestion();
 }
 
 /*document.addEventListener('DOMContentLoaded', function() {

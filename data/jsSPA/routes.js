@@ -1,8 +1,13 @@
 export const routes = {
     '#teamGame': () => `
         <link rel="stylesheet" href="../css/teamGame.css">
-        <div id="game-container" class="game-container"></div>
-        <div id="question-container-admin"></div>
+        <div id="teamGame-page"> 
+            <div id="questions-select-list"></div>
+            <div id="admin-container">
+                <div id="game-container" class="game-container"></div>
+                <div id="question-container-admin"></div>
+            </div>
+        </div>
     `,
 
     '#score': () => `

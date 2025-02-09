@@ -1,3 +1,22 @@
+#main {
+    height: 77%;
+}
+#teamGame-page {
+    display: flex;
+    height: 100%;
+}
+
+#questions-select-list {
+    width: 20%;
+    height: 100%;
+    overflow: scroll;
+    padding-right: 1rem;
+}
+
+#admin-container {
+    width: 80%;
+}
+
 #game-container {
     display: flex;
     justify-content: space-around;
@@ -70,9 +89,9 @@
 #question-container-admin {
     position: fixed;
     bottom: 80px;
-    left: 0;
     right: 0;
     z-index: 999;
+    width: 80%;
     display: flex;
     flex-direction: column;
     justify-content: center;
@@ -107,6 +126,45 @@
     margin: 0; 
     text-align: center;
     line-height: 1.5;
+}
+
+.text {
+    border-radius: 5px;
+    border: solid 2px black;
+    strong {
+        font-weight: 600;
+    }
+}
+
+.popup {
+    position: absolute;
+    background-color: white;
+    border: 1px solid #ccc;
+    padding: 10px;
+    box-shadow: 2px 2px 10px rgba(0, 0, 0, 0.1);
+    white-space: nowrap;
+    z-index: 100;
+    strong {
+        font-weight: 600;
+    }
+    img {
+        max-height: 50px;
+        max-width: 100px;
+        height: auto;
+        width: auto;
+    }
+}
+
+.question-item {
+    background-color: white;
+    border-radius: 5px;
+    border: solid 2px black;
+    margin: 15px;
+    padding: 10px;
+    cursor: pointer;
+    strong {
+        font-weight: 600;
+    }
 }
 
 .hidden-answer {

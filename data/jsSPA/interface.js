@@ -2,7 +2,7 @@ import {sendWebSocketMessage} from './websocket.js';
 import { updateBumpers, updateTeams, updateDisplayConfig } from './configSPA.js';
 import { scorePage } from './scoreSPA.js';
 import { getQuestions, questionList } from './questionsSPA.js';
-import { updateDisplayGame } from './teamGameSPA.js';
+import { teamGamePage,receiveQuestion } from './teamGameSPA.js';
 
 export let gameState = {
     timer: 30,
@@ -81,7 +81,7 @@ function handleServerAction(action, msg) {
                     scorePage(); 
                     break;
                 case '#teamGame':
-                    updateDisplayGame(); 
+                    teamGamePage(); 
                     break;
             }
             updateGameState(msg.GAME);
@@ -110,7 +110,20 @@ function handleServerAction(action, msg) {
     }
 };
 
-function sendAction(action, msg = {}) {
+function cleanUp(container) {
+    if (typeof container !== 'string') {
+        console.error('Container ID must be a string.');
+        return;
+    }
+    const cleanContainer = document.getElementById(container);
+    if (cleanContainer) {
+        cleanContainer.innerHTML = '';
+    } else {
+        console.warn(`Element with ID "${container}" not found.`);
+    }
+}
+
+export function sendAction(action, msg = {}) {
         let message;
         switch (action) {
             case 'START':
@@ -131,8 +144,7 @@ function sendAction(action, msg = {}) {
                 break;
             case 'READY':
                 console.log("oui j'envoie")
-                const questionId = parseInt(sendQuestionId());
-                message = {'QUESTION': questionId};
+                message = {'QUESTION': msg};
                 sendWebSocketMessage( action, message);
                 break;
             default:
@@ -198,55 +210,6 @@ export function updateTimeBar(immediate = false) {
     }
 };
 
-/*
-async function questionsSelect() {
-    try {
-        const response = await fetch('http://buzzcontrol.local/questions');
-        
-        if (!response.ok) {
-            throw new Error('Erreur réseau : ' + response.statusText);
-        }
-        
-        const questions = await response.json();
-        
-        const container = document.getElementById('questions-select');
-        const timeInput = document.getElementById('game-time-input');
-        const pointsInput = document.getElementById('game-points-input');
-        
-        Object.keys(questions).forEach(key => {
-            const questionData = questions[key];
-            const questionOption = document.createElement('option');
-            questionOption.value=`${questionData.ID}`;
-            questionOption.innerHTML = `Question : ${questionData.ID}`;
-
-            questionOption.setAttribute('data-question', questionData.QUESTION);
-            questionOption.setAttribute('data-time', questionData.TIME);
-            questionOption.setAttribute('data-points', questionData.POINTS);
-            questionOption.setAttribute('data-answer', questionData.ANSWER);
-                 
-            container.appendChild(questionOption);
-        });
-
-        container.addEventListener('change', (event) => {
-            const selectedOption = event.target.selectedOptions[0];
-            
-            const question = selectedOption.getAttribute('data-question')
-            const time = selectedOption.getAttribute('data-time');
-            const points = selectedOption.getAttribute('data-points');
-            const answer = selectedOption.getAttribute('data-answer');
-            
-            console.log(`Temps : ${time}, Points : ${points},Question : ${question}, Réponse : ${answer}`);
-            
-            timeInput.value = time || '35';
-            pointsInput.value = points || '1';
-        });
-
-    } catch (error) {
-        console.error('Erreur lors de la récupération des questions :', error);
-    }
-};
-*/
-
 function handlePhase(state) {
     const startStopButton = document.getElementById('startStopButton');
     const pauseContinueButton = document.getElementById('pauseContinueButton');
@@ -274,7 +237,6 @@ function handlePhase(state) {
 document.addEventListener('DOMContentLoaded', function() {
     updateTimer();
     updateTimeBar();
-    //questionsSelect();
 
     const playersButton = document.getElementById('players');
     const preparation = document.getElementById('preparation');
@@ -284,10 +246,6 @@ document.addEventListener('DOMContentLoaded', function() {
     answerButton.addEventListener('click', function() {
         sendAction('REVEAL');
     });
-
-    preparation.addEventListener('click', function() {
-        sendAction('READY')
-    })
 
     playersButton.onclick = () => {
         window.open('http://buzzcontrol.local/html/players.html')
