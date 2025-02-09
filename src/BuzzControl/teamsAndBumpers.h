@@ -5,8 +5,9 @@
 #include <ArduinoJson.h>
 
 static const char* TEAMs_TAG = "Team And Bumper";
+static const char* QUESTION_TAG = "Questions";
+
 JsonDocument teamsAndBumpers;
-JsonDocument questions;
 
 JsonDocument& getTeamsAndBumpers() {
     return teamsAndBumpers;
@@ -120,58 +121,64 @@ void setGamePage(const String remotePage) {
         teamsAndBumpers["GAME"]["REMOTE"] = remotePage;
 }
 //##### QUESTION ######
-void setGameQuestion(const String qID) {
-    String question="";
-    String qPath=questionsPath+"/"+qID+"/question.json";
+int findFreeQuestion() {
+    try {
+        if (!LittleFS.begin(true)) {
+            ESP_LOGE(QUESTION_TAG, "Failed to mount LittleFS");
+            xSemaphoreGive(questionMutex);
+            return 0;
+        }
 
-    question=readFile(qPath);
+        // Test chaque ID de 1 à 100
+        for (int id = 1; id <= 100; id++) {
+            vTaskDelay(pdMS_TO_TICKS(1));  // Évite le watchdog timer
+            
+            String dirPath = questionsPath + "/" + String(id);
+            if (!LittleFS.exists(dirPath)) {
+                ESP_LOGI(QUESTION_TAG, "Found free question ID: %d", id);
+                return id;
+            }
+        }
+        
+        ESP_LOGW(QUESTION_TAG, "No free ID found between 1 and 100");
+        return 1;  // Si aucun ID libre n'est trouvé, retourne 1
 
-    if (teamsAndBumpers["GAME"].isNull()) {
-        teamsAndBumpers["GAME"] = JsonObject();
+    } catch (...) {
+        ESP_LOGE(QUESTION_TAG, "Exception in findFreeQuestion");
+        return 0;
     }
-    
-    ESP_LOGD(TEAMs_TAG, "Set Question %s: %s", qID, question.c_str());
-    
-    DeserializationError error = deserializeJson(teamsAndBumpers["GAME"]["QUESTION"], question);
-    if (error) {
-        ESP_LOGE(TEAMs_TAG, "deserializeJson() failed: %s", error.c_str());
-        teamsAndBumpers["GAME"].remove("QUESTION");
-    } 
-    
 }
 
-bool refreshQuestions(bool notify) {
-    ESP_LOGD(TEAMs_TAG, "refreshQuestions Starting");
+
+
+String getQuestions() {
     struct DirectoryContent {
         String path;
         String questionJson;
     };
 
-    
+    String jsonOutput = "{";
     
     if(!LittleFS.begin(true)) {
-        ESP_LOGE(TEAMs_TAG,"{\"error\": \"Failed to mount LittleFS\"}");
-        return false;
+        ESP_LOGE(QUESTION_TAG,"{\"error\": \"Failed to mount LittleFS\"}");
     }
 
     File root = LittleFS.open(questionsPath);
     if(!root || !root.isDirectory()) {
-        ESP_LOGE(TEAMs_TAG, "{\"error\": \"Failed to open /files directory\"}");
-        return false;
+        ESP_LOGE(QUESTION_TAG, "{\"error\": \"Failed to open %s directory\"}",questionsPath.c_str());
     }
 
         // Première passe pour compter les répertoires
     int dirCount = 0;
     File countFile = root.openNextFile();
     while(countFile) {
-        vTaskDelay(pdMS_TO_TICKS(1));
         if(countFile.isDirectory()) {
             dirCount++;
         }
         countFile = root.openNextFile();
     }
     root.close();
-    ESP_LOGD(TEAMs_TAG, "refreshQuestions Nb Questions in Dir: %i", dirCount);
+
     // Allouer le tableau avec la taille exacte
     DirectoryContent* directories = new DirectoryContent[dirCount];
     int currentIndex = 0;
@@ -180,7 +187,6 @@ bool refreshQuestions(bool notify) {
     root = LittleFS.open(questionsPath);
     File file = root.openNextFile();
     while(file && currentIndex < dirCount) {
-        vTaskDelay(pdMS_TO_TICKS(1));
         if(file.isDirectory()) {
             directories[currentIndex].path = file.path();
             String questionPath = directories[currentIndex].path + "/question.json";
@@ -195,49 +201,38 @@ bool refreshQuestions(bool notify) {
         file = root.openNextFile();
     }
 
-    String jsonOutput = "{";
     // Construire le JSON
     for(int i = 0; i < dirCount; i++) {
-        vTaskDelay(pdMS_TO_TICKS(1));
         if(i > 0) jsonOutput += ",";
         jsonOutput += "\"" + directories[i].path + "\":";
         jsonOutput += directories[i].questionJson;
     }
     
     jsonOutput += "}";
-    ESP_LOGD(TEAMs_TAG, "refreshQuestions deserialization: %s", jsonOutput.c_str());
+    
     // Libérer la mémoire
     delete[] directories;
-    DeserializationError error = deserializeJson(questions, jsonOutput);
+    return jsonOutput;
+}
+
+void setQuestion(const String qID) {
+    String question="";
+    String qPath=questionsPath+"/"+qID+"/question.json";
+
+    question=readFile(qPath);
+
+    if (teamsAndBumpers["GAME"].isNull()) {
+        teamsAndBumpers["GAME"] = JsonObject();
+    }
+    
+    ESP_LOGD(QUESTION_TAG, "Set Question %s: %s", qID, question.c_str());
+    
+    DeserializationError error = deserializeJson(teamsAndBumpers["GAME"]["QUESTION"], question);
     if (error) {
-        ESP_LOGE(TEAMs_TAG, "deserializeJson() questions failed: %s", jsonOutput.c_str());
-        return false;
+        ESP_LOGE(QUESTION_TAG, "deserializeJson() failed: %s", error.c_str());
+        teamsAndBumpers["GAME"].remove("QUESTION");
     } 
-    if (notify) {
-        putMsgToQueue("QUESTIONS",jsonOutput.c_str());
-    }
-    return true;
-}
-
-JsonDocument getQuestionsJson(bool refresh=false ) {
-    ESP_LOGD(TEAMs_TAG, "getQuestionsJson Starting");
-    if (questions.isNull() or refresh) {
-        refreshQuestions();
-    }
-    return questions;
-}
-
-String getQuestions(bool refresh) {
-    ESP_LOGD(TEAMs_TAG, "getQuestions Starting");
-    String output="";
-    if (serializeJson(getQuestionsJson(refresh), output)) {
-        ESP_LOGI(TEAMs_TAG, "Questions: %s", output.c_str());
-        return output;
-    } else {
-        ESP_LOGE(TEAMs_TAG, "Failed to serialize Questions JSON");
-        return "{}";
-    }
-
+    
 }
 
 String getQuestionElementJson() {
@@ -251,10 +246,10 @@ String getQuestionElementJson() {
 
     JsonObject tb=teamsAndBumpers["GAME"]["QUESTION"];
     if (serializeJson(tb, output)) {
-        ESP_LOGI(TEAMs_TAG, "Question: %s", output.c_str());
+        ESP_LOGI(QUESTION_TAG, "Question: %s", output.c_str());
         return output;
     } else {
-        ESP_LOGE(TEAMs_TAG, "Failed to serialize JSON");
+        ESP_LOGE(QUESTION_TAG, "Failed to serialize JSON");
     }
 }
 

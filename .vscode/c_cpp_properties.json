@@ -506,7 +506,7 @@
                 "CORE_DEBUG_LEVEL=4",
                 "ARDUINO_USB_MODE=1",
                 "ARDUINO_USB_CDC_ON_BOOT=1",
-                "VERSION=1.94",
+                "VERSION=1.95",
                 "CONTROLER_PORT=1234",
                 "HAVE_CONFIG_H",
                 "MBEDTLS_CONFIG_FILE=\"mbedtls/esp_config.h\"",

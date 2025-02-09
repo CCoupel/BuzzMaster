@@ -9,12 +9,12 @@
 
 // Configuration
 const char* TAG = "MESSAGES";
-const int MAX_MESSAGE_LENGTH = 6128;
+//const int MAX_MESSAGE_LENGTH = 4096;
 
 // Structure de message améliorée
 typedef struct {
     const char* action;
-    char message[MAX_MESSAGE_LENGTH];
+    String* message;  
     bool notifyAll;
     AsyncClient* client;
 } messageQueue_t;
@@ -34,20 +34,22 @@ void notifyAll() {
 
 
 void putMsgToQueue(const char* action, const char* msg, bool notify, AsyncClient* client) {
-    messageQueue_t message;
-    message.action = action;
-    strncpy(message.message, (msg && *msg) ? msg : "\"\"", MAX_MESSAGE_LENGTH - 1);
-    message.message[MAX_MESSAGE_LENGTH - 1] = '\0';  // Ensure null-termination
-    message.notifyAll = notify;
-    message.client = client;
+    messageQueue_t* message=new messageQueue_t;
+    message->action = action;
+    message->message = new String(msg);  // Création dynamique de la String
+    message->notifyAll = notify;
+    message->client = client;
+
 
     if (xQueueSend(messageQueue, &message, pdMS_TO_TICKS(100)) != pdPASS) {
         ESP_LOGE(TAG, "Failed to send message to queue");
+        delete message->message;  // Nettoyage en cas d'échec
+        delete message;
+
     }
 }
 
 String makeJsonMessage(const String& action, const String& msg) {
-    ESP_LOGD(TAG, "msg in queue : %s", msg.c_str());
     String message="{";
     message += "\"ACTION\": \"" + action + "\"";
     message += ", \"VERSION\": \"" + String(VERSION) + "\"";
@@ -56,7 +58,6 @@ String makeJsonMessage(const String& action, const String& msg) {
     message += "} \n";
 
     return message;
-    ESP_LOGD(TAG, "msg to send : %s", message.c_str());
 }
 
 // Fonction générique pour calculer l'adresse de broadcast
@@ -121,13 +122,13 @@ void sendMessageToAllClients(const String& action, const String& msg) {
 }
 
 void sendMessageTask(void *parameter) {
-    messageQueue_t receivedMessage;
+    messageQueue_t* receivedMessage;
     while (1) {
         ESP_LOGD(TAG, "Low stack space in Send Message Task: %i", uxTaskGetStackHighWaterMark(NULL));
         if (xQueueReceive(messageQueue, &receivedMessage, portMAX_DELAY)) {
-            ESP_LOGI(TAG, "New message in queue: %s", receivedMessage.action);
+            ESP_LOGI(TAG, "New message in queue: %s", receivedMessage->action);
             
-            switch (hash(receivedMessage.action)) {
+            switch (hash(receivedMessage->action)) {
                 case hash("HELLO"):
                     sendMessageToAllClients("HELLO", "{  }");
                     break;
@@ -145,18 +146,21 @@ void sendMessageTask(void *parameter) {
                     break;
             }
 
-            if (receivedMessage.client != nullptr) {
+            if (receivedMessage->client != nullptr) {
                 ESP_LOGD(TAG, "client is not null");
-                sendMessageToClient(receivedMessage.action, receivedMessage.message, receivedMessage.client);
+                sendMessageToClient(receivedMessage->action, *(receivedMessage->message), receivedMessage->client);
             } else {
                 ESP_LOGD(TAG, "client is null");
-                sendMessageToAllClients(receivedMessage.action, receivedMessage.message);
+                sendMessageToAllClients(receivedMessage->action, *(receivedMessage->message));
             }
 
 //            if (receivedMessage.notifyAll) {
                 ESP_LOGD(TAG, "notify all");
                 notifyAll();
 //            }
+// Nettoyage
+            delete receivedMessage->message;
+            delete receivedMessage;
             ESP_LOGD(TAG, "queue finished");
         }
     }
