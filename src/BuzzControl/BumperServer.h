@@ -26,35 +26,27 @@ void timerCallback() {
 }
 
 void processButtonPress(const String& bumperID, const char* b_team, int64_t b_time, int b_button) {
-    ESP_LOGI(BUMPER_TAG, "Button Pressed %i at time %i", b_button, b_time);
-    
-    if (xSemaphoreTake(questionMutex, pdMS_TO_TICKS(1000)) == pdTRUE) {
-        try {
-            // Mise à jour des informations du bumper
-            setBumperButton(bumperID.c_str(), b_button);
-            setBumperTime(bumperID.c_str(), b_time);
-            setBumperStatus(bumperID.c_str(), "PAUSE");
+  ESP_LOGI(BUMPER_TAG, "Button Pressed %i at time %i", b_button, b_time);
+  if (xSemaphoreTake(questionMutex, pdMS_TO_TICKS(1000)) == pdTRUE) {
 
-            // Mise à jour des informations de l'équipe
-            int64_t teamTime = getTeamTime(b_team);
-            ESP_LOGD(BUMPER_TAG, "Actual Team Time %s:%i", b_team, teamTime);
-            
-            if (teamTime == 0 || teamTime > b_time) {
-                setTeamBumper(b_team, bumperID.c_str());
-                setTeamTime(b_team, b_time);
-                setTeamStatus(b_team, "PAUSE");
-            }
-        } catch (...) {
-            ESP_LOGE(BUMPER_TAG, "Exception in processButtonPress");
-        }
-        
-        // Libération du mutex dans tous les cas
-        xSemaphoreGive(questionMutex);
-    } else {
-        ESP_LOGE(BUMPER_TAG, "Couldn't obtain mutex in processButtonPress");  // Changed to LOGE
+    setBumperButton(bumperID.c_str(), b_button);
+    setBumperTime(bumperID.c_str(), b_time);
+    setBumperStatus(bumperID.c_str(), "PAUSE");
+
+    int64_t teamTime=getTeamTime(b_team);
+    ESP_LOGD(BUMPER_TAG, "Actual Team Time %s:%i",b_team,teamTime);
+    if (teamTime == 0 or teamTime > b_time) {
+      setTeamBumper(b_team,bumperID.c_str());
+      setTeamTime(b_team, b_time);
+      setTeamStatus(b_team, "PAUSE");
     }
+    xSemaphoreGive(questionMutex);
+  } else {
+        // Le mutex n'a pas pu être obtenu après le timeout
+        ESP_LOGI(BUMPER_TAG, "Couldn't obtain mutex in processButtonPress");
+    }
+    
 }
-
 
 void resetBumpersTime() {
   std::vector<String> keysToRemove = {"STATUS", "BUTTON", "TIME", "TIMESTAMP", "BUMPER"};
@@ -159,9 +151,9 @@ void revealGame() {
 void readyGame(const String question) {
     if (isGameStoped()) {
       if (question.toInt()>0) {
-        setGameQuestion(question);
+        setQuestion(question);
       } else {
-        setGameQuestion("");
+        setQuestion("");
       }
       String msg="{\"QUESTION\": "+getQuestionElementJson()+"}";
       putMsgToQueue("READY",msg.c_str(),true);

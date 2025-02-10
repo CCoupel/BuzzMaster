@@ -85,7 +85,7 @@ void setup(void)
   sendHelloToAll();
   questionMutex = xSemaphoreCreateMutex();
   buttonMutex = xSemaphoreCreateMutex();
-  ensureDirectoryExists("/files");
+
 }
 
 void loop(void)

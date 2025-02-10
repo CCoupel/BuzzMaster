@@ -7,6 +7,35 @@
 
 static const char* WEB_TAG = "WEBSERVER";
 
+// Stockage temporaire des fichiers uploadés en attente d'un ID
+struct TempUpload {
+    std::vector<uint8_t> data;
+    uint32_t timestamp;
+};
+
+static std::map<String, TempUpload> pendingUploads;
+static SemaphoreHandle_t uploadMutex = NULL;
+
+// Fonction utilitaire pour générer un ID unique de requête
+String generateRequestId(AsyncWebServerRequest *request) {
+    String clientIP = request->client()->remoteIP().toString();
+    uint32_t timestamp = millis();
+    return clientIP + "_" + String(timestamp);
+}
+
+// Nettoie les uploads temporaires trop vieux (plus de 5 minutes)
+void cleanupOldUploads() {
+    uint32_t currentTime = millis();
+    for (auto it = pendingUploads.begin(); it != pendingUploads.end();) {
+        if (currentTime - it->second.timestamp > 300000) {
+            ESP_LOGW(WEB_TAG, "Suppression d'un upload temporaire non réclamé: %s", it->first.c_str());
+            it = pendingUploads.erase(it);
+        } else {
+            ++it;
+        }
+    }
+}
+
 void addCorsHeaders(AsyncWebServerResponse* response) {
     response->addHeader("Access-Control-Allow-Origin", "*");
     response->addHeader("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,OPTIONS");
@@ -79,131 +108,71 @@ void w_handleListGame(AsyncWebServerRequest *request) {
     request->send(response);
 }
 
-String findFreeQuestion() {
-    String result = "0";  // Valeur par défaut
-    JsonDocument Questions;
-    String jsonQuestions = getQuestions();
-    bool found;
+// Fonction pour sauvegarder une question et retourner son ID
+String saveQuestion(AsyncWebServerRequest *request, bool hasFile = false) {
+    String currentDir;
+    String jsonString;
 
-    if (xSemaphoreTake(questionMutex, pdMS_TO_TICKS(1000)) == pdTRUE) {
-        try {  // Ajout d'un try-catch pour garantir la libération du mutex
-            DeserializationError error = deserializeJson(Questions, jsonQuestions);
-            if (!error) {
-                ESP_LOGI(WEB_TAG, "Questions loaded successfully");
-                int currentId = 1;
-                while (true) {
-                    vTaskDelay(pdMS_TO_TICKS(1));
-                    found = false;
-                    
-                    for (JsonPair kv : Questions.as<JsonObject>()) {
-                        vTaskDelay(pdMS_TO_TICKS(1));
-                        if (kv.value()["ID"].as<int>() == currentId) {
-                            found = true;
-                            break;
-                        }
-                    }
-                    
-                    if (!found) {
-                        ESP_LOGD(WEB_TAG, "free ID: %i", currentId);
-                        result = String(currentId);
-                        break;  // Sort de la boucle while
-                    }
-                    
-                    currentId++;
-                    if (currentId > 100) {
-                        result = "1";
-                        break;
-                    }
-                }
-            }
-        } catch (...) {
-            ESP_LOGE(WEB_TAG, "Exception in findFreeQuestion");
-        }
-        
-        // Le mutex est toujours libéré, même en cas d'erreur
-        xSemaphoreGive(questionMutex);
-    } else {
-        ESP_LOGE(WEB_TAG, "Couldn't obtain mutex in findFreeQuestion");
-    }
-    
-    return result;
-}
-
-
-void refreshTask(void * parameter) {
-    refreshQuestions(true);
-    vTaskDelete(NULL);
-}
-
-void w_handleUploadComplete(AsyncWebServerRequest *request) {
-    static File file;
-    static size_t totalSize = 0;
-    static String currentDir;
-    static String questionText;
-    static String reponseText;
-    static String pointsText;
-    static String tempsText;
-    static bool hasFile = false;  // Pour suivre si un fichier est en cours d'upload
-    static String baseDir="/files/questions";
-    String fullPath;
-    static String jsonString="Upload Terminé";
-
-    ESP_LOGI(WEB_TAG,"receive a question ?");
+    // Détermine l'ID de la question
     if(request->hasParam("number", true)) {
         currentDir = request->getParam("number", true)->value();
-        if (currentDir=="")
-        {
-            currentDir=findFreeQuestion();
+        if (currentDir.isEmpty()) {
+            currentDir = findFreeQuestion();
         }
-        
-        questionText = request->hasParam("question", true) ? request->getParam("question", true)->value() : "";
-        reponseText = request->hasParam("answer", true) ? request->getParam("answer", true)->value() : "";
-        pointsText = request->hasParam("points", true) ? request->getParam("points", true)->value() : "0";
-        tempsText = request->hasParam("time", true) ? request->getParam("time", true)->value() : "0";
-        
-        // Créer le répertoire si nécessaire
-        ensureDirectoryExists(baseDir);
-        fullPath =  baseDir + "/" + currentDir;
-        totalSize=0;
-        ensureDirectoryExists(fullPath);
-        // Créer le fichier JSON
-        jsonString = "{";
-            jsonString += "  \"ID\": \"" + currentDir + "\",";
-            if (isFileExists(fullPath + "/media.jpg")) {
-                jsonString += "  \"MEDIA\": \"/question/" + currentDir + "/media.jpg\",";
-            }
-            jsonString += "  \"QUESTION\": \"" + questionText + "\",";
-            jsonString += "  \"ANSWER\": \"" + reponseText + "\",";
-            jsonString += "  \"POINTS\": " + pointsText + ",";
-            jsonString += "  \"TIME\": " + tempsText ;
-            jsonString += "}";
-
-        ESP_LOGD(WEB_TAG, "Question received: %s", jsonString.c_str());
-    
-        File jsonFile = LittleFS.open(fullPath + "/question.json", "w");
-        if(jsonFile) {
-            if(jsonFile.print(jsonString)) {
-                ESP_LOGI(WEB_TAG, "Fichier JSON créé avec succèsi dans %s", fullPath.c_str());
-            } else {
-                ESP_LOGE(WEB_TAG, "Erreur lors de l'écriture du JSON");
-            }
-            jsonFile.close();
-        }
+    } else {
+        currentDir = findFreeQuestion();
     }
 
+    // Récupère les paramètres du formulaire
+    String questionText = request->hasParam("question", true) ? request->getParam("question", true)->value() : "";
+    String reponseText = request->hasParam("answer", true) ? request->getParam("answer", true)->value() : "";
+    String pointsText = request->hasParam("points", true) ? request->getParam("points", true)->value() : "0";
+    String tempsText = request->hasParam("time", true) ? request->getParam("time", true)->value() : "0";
+    ensureDirectoryExists(questionsPath);
+    String fullPath = questionsPath + "/" + currentDir;
+    ensureDirectoryExists(fullPath);
+
+    // Crée le JSON
+    jsonString = "{\n";
+    jsonString += "  \"ID\": \"" + currentDir + "\",\n";
+    if (hasFile || isFileExists(fullPath + "/media.jpg")) {
+        jsonString += "  \"MEDIA\": \"/question/" + currentDir + "/media.jpg\",\n";
+    }
+    jsonString += "  \"QUESTION\": \"" + questionText + "\",\n";
+    jsonString += "  \"ANSWER\": \"" + reponseText + "\",\n";
+    jsonString += "  \"POINTS\": " + pointsText + ",\n";
+    jsonString += "  \"TIME\": " + tempsText + "\n";
+    jsonString += "}";
+
+    // Sauvegarde le fichier JSON
+    File jsonFile = LittleFS.open(fullPath + "/question.json", "w");
+    if(jsonFile) {
+        if(jsonFile.print(jsonString)) {
+            ESP_LOGI(WEB_TAG, "Fichier JSON créé avec succès dans %s", fullPath.c_str());
+        } else {
+            ESP_LOGE(WEB_TAG, "Erreur lors de l'écriture du JSON");
+        }
+        jsonFile.close();
+    }
+    
+    putMsgToQueue("QUESTIONS",getQuestions().c_str());
+
+    // Envoie la réponse au client
     AsyncWebServerResponse *response = request->beginResponse(200, "text/json", jsonString);
     addCorsHeaders(response);
-    xTaskCreate(
-    refreshTask,    // Fonction
-    "refreshTask",  // Nom
-    8192,          // Stack size
-    NULL,          // Paramètres
-    1,             // Priorité
-    NULL           // Handle
-);
-
     request->send(response);
+
+    return currentDir;
 }
+
+
+
+
+void w_handleUploadBackgroundComplete(AsyncWebServerRequest *request) {
+    // Ne sauvegarde que s'il n'y a pas de fichier dans le formulaire
+}
+
+
 
 void w_handleUploadFile(AsyncWebServerRequest *request, String filename, size_t index, uint8_t *data, size_t len, bool final) {
     static File file;
@@ -246,52 +215,41 @@ void w_handleListQuestions(AsyncWebServerRequest *request) {
 
 }
 
-void w_handleUploadQuestionFile(AsyncWebServerRequest *request, String filename, size_t index, uint8_t *data, size_t len, bool final) {
-    static File file;
-    static size_t totalSize = 0;
-    static String currentDir;
-    static String questionText;
-    static String reponseText;
-    static String pointsText;
-    static String tempsText;
-    static bool hasFile = false;  // Pour suivre si un fichier est en cours d'upload
-    String fullPath;
-    static String jsonString;
-        
-    hasFile = (filename != "");  // Vérifie si un fichier est présent
-
-    if(!index) { // Début de l'upload
-        if(request->hasParam("number", true)) {
-            ensureDirectoryExists(fullPath);
-            currentDir = request->getParam("number", true)->value();
-            ESP_LOGI(WEB_TAG,"Début de l'upload de l'image question id : %s", currentDir);
-            fullPath+="/"+currentDir;
-            ensureDirectoryExists(fullPath);
-            String filePath = fullPath + "/media.jpg";
-            ESP_LOGI(WEB_TAG, "Début de l'upload de l'image vers: %s", filePath.c_str());
-            
-            totalSize = 0;
-            file = LittleFS.open(filePath, "w");
-
-            if(!file) {
-                ESP_LOGI(WEB_TAG,"Échec de l'ouverture du fichier background en écriture");
-                return;
-            }
-        }
-    }    
-    if(hasFile && file && len) { // Écriture des données
-        file.write(data, len);
-        totalSize+=len;
-    }
-
-    if(final) { // Fin de l'upload
-        ESP_LOGD(WEB_TAG,"Upload media terminé: %i", totalSize);
-
-        if(file) {
-            file.close();
-        }
+void w_handleUploadQuestionComplete(AsyncWebServerRequest *request) {
+    // Ne sauvegarde que s'il n'y a pas de fichier dans le formulaire
+    if (!request->hasParam("file", true, true)) {  // Le dernier true indique qu'on cherche un fichier
+        ESP_LOGI(WEB_TAG,"Saving Question %s", saveQuestion(request, false).c_str());
     }
 }
+
+void w_handleUploadQuestionFile(AsyncWebServerRequest *request, String filename, size_t index, uint8_t *data, size_t len, bool final) {
+    static File file;
+    static String currentDir;
+    
+    if(!index) { // Début de l'upload
+        currentDir = saveQuestion(request, true); // Sauvegarde la question avec indicateur de fichier
+        
+        String fullPath = questionsPath + "/" + currentDir;
+        String filePath = fullPath + "/media.jpg";
+        
+        file = LittleFS.open(filePath, "w");
+        if(!file) {
+            ESP_LOGE(WEB_TAG, "Échec de l'ouverture du fichier media en écriture");
+            return;
+        }
+        ESP_LOGI(WEB_TAG, "Début de l'upload de l'image question id: %s", currentDir.c_str());
+    }
+
+    if(file && len) { // Écriture des données
+        file.write(data, len);
+    }
+
+    if(final && file) { // Fin de l'upload
+        file.close();
+        ESP_LOGI(WEB_TAG, "Upload du fichier terminé pour la question: %s", currentDir.c_str());
+    }
+}
+
 
 void startWebServer() {
     String ROOT="/";
@@ -331,9 +289,9 @@ void startWebServer() {
     server.on("/listFiles",HTTP_GET, w_handleListFiles);
     server.on("/listGame",HTTP_GET, w_handleListGame);
 
-    server.on("/background", HTTP_POST, w_handleUploadComplete, w_handleUploadFile);
+    server.on("/background", HTTP_POST, w_handleUploadBackgroundComplete, w_handleUploadFile);
 
-    server.on("/questions", HTTP_POST, w_handleUploadComplete, w_handleUploadQuestionFile);
+    server.on("/questions", HTTP_POST, w_handleUploadQuestionComplete, w_handleUploadQuestionFile);
     server.on("/questions", HTTP_GET, w_handleListQuestions);
 
     ws.onEvent(onWsEvent);
