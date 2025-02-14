@@ -53,13 +53,17 @@ export function createBuzzerDiv(buzzerData) {
                 return;
             }
             buzzerDiv.innerHTML = ''; 
-            const nameElement = createTextElement('buzzer-name', `Nom: ${currentPlayerName}`);  
+            const nameElement = createTextElement('buzzer-name', `${currentPlayerName}`);  
             buzzerDiv.appendChild(nameElement);
     
             nameElement.addEventListener('click', () => {
                 buzzerDiv.innerHTML = '';
                 createForm(id, buzzerDiv, currentPlayerName);
             });
+        });
+
+        input.addEventListener("submit", (e) => {
+            e.preventDefault();
         });
 
         form.appendChild(input);
@@ -77,7 +81,7 @@ export function createBuzzerDiv(buzzerData) {
         const updateView = (playerName) => {
             buzzerDiv.innerHTML = '';
             if (playerName) {
-                const nameElement = createTextElement('buzzer-name', `Nom: ${playerName}`);
+                const nameElement = createTextElement('buzzer-name', `${playerName}`);
                 buzzerDiv.appendChild(nameElement);
 
                 nameElement.addEventListener('click', () => {
@@ -117,6 +121,6 @@ export function createBuzzerDiv(buzzerData) {
 function updateBuzzerInfo(buzzerDiv, data) {
     const nameElement = buzzerDiv.querySelector('.buzzer-name');
     if (nameElement && data.NAME) {
-        nameElement.textContent = `Nom: ${data.NAME}`;
+        nameElement.textContent = `${data.NAME}`;
     }
 };

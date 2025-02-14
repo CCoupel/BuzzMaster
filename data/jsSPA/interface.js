@@ -239,7 +239,6 @@ document.addEventListener('DOMContentLoaded', function() {
     updateTimeBar();
 
     const playersButton = document.getElementById('players');
-    const preparation = document.getElementById('preparation');
     const answerButton = document.getElementById('answer');
 
     

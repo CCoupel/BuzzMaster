@@ -60,6 +60,13 @@
 
 .team-container {
     width: 70%;
+    display: grid;
+    grid-template-columns: repeat(2, 1fr); /* 2 colonnes */
+    gap: 1rem; /* Optionnel : espace entre les divs */
+}
+
+.dropzone-text {
+    grid-column: span 2;
 }
 
 .dynamic-div {
@@ -70,12 +77,13 @@
     margin: 1rem 0;
     display: flex;
     align-items: stretch;
+    width: 100%;
 }
 
 .team-name {
     background-color: var(--secondary-color);
     color: white;
-    padding: 1rem;
+    padding: 0.5rem;
     font-size: 1.5rem;
 }
 
@@ -89,7 +97,7 @@
     display: grid;
     grid-template-columns: repeat(2, 1fr);
     grid-template-rows: 0.3fr 1fr; 
-    grid-column-gap: 0px;
+    grid-column-gap: 5%;
     grid-row-gap: 0px; 
 }
 

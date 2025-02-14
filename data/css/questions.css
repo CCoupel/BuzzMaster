@@ -1,5 +1,5 @@
 #main {
-  height: 77%;
+  height: 78%;
 }
 
 .main-container-questions {
@@ -43,27 +43,57 @@
 }
   
 .question-item {
-    border: 1px solid #ddd;
-    padding: 10px;
-    margin: 10px 0;
-    border-radius: 5px;
-    flex: 1 1 calc(18% - 1%);
-    max-width: calc(18% - 1%);
-    display: flex;
-    justify-content: space-around;
-    overflow: hidden;
-    strong{
-        font-weight: 600;
-    }
+  position: relative;
+  border: 1px solid #ddd;
+  padding: 10px;
+  margin: 10px 0;
+  border-radius: 5px;
+  flex: 1 1 calc(18% - 1%);
+  max-width: calc(18% - 1%);
+  display: flex;
+  justify-content: space-around;
+  overflow: hidden;
+  strong{
+      font-weight: 600;
+  }
 }
-  
+
+.text {
+  width: 100%
+}
+
 .img{
     display: flex;
     justify-content: center;
     align-items: center;   
     img{
-      height:75px;
-      width:75px;
+      max-height:120px;
+      max-width:75px;
       object-fit: contain;
     }
+}
+
+.question-header {
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  display: flex;
+  gap: 5px;
+}
+
+.edit-button,
+.delete-button {
+  background: none;
+  border: none;
+  font-size: 13px;
+  cursor: pointer;
+  padding: 2px 5px;
+}
+
+.edit-button {
+  color: #4CAF50;
+}
+
+.delete-button {
+  color: red;
 }

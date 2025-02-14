@@ -1,3 +1,5 @@
+import { sendWebSocketMessage, ws} from './websocket.js';
+
 export let questions = {};
 
 async function sendForm(formId, actionUrl) {
@@ -82,6 +84,20 @@ export async function fetchQuestions() {
     }
 };
 */
+function deleteQuestion(questionId) {
+    if (!confirm(`Voulez-vous vraiment supprimer la question ${questionId} ?`)) {
+        return;
+    }
+
+    // Envoyer la demande de suppression au serveur via WebSocket
+    if (ws.readyState === WebSocket.OPEN) {
+        sendWebSocketMessage("DELETE", { "ID": questionId });
+        alert(`Suppression effectuée`);
+    } else {
+        console.log('WebSocket not ready. Retrying...');
+        setTimeout(() => deleteQuestion(questionId), 1000); // Réessaie après 1 seconde
+    }
+}
 
 export function questionList() {
     try {
@@ -95,20 +111,33 @@ export function questionList() {
             return;
         }
 
-        // Récupérer les entrées sous forme d'un tableau et extraire l'ID numérique
+        // Trier les questions par ID
         const sortedEntries = Object.entries(questions)
             .map(([key, data]) => ({
                 key,
                 data,
-                id: Number(data.ID) // Extraction et conversion de l'ID en nombre
+                id: Number(data.ID)
             }))
-            .sort((a, b) => a.id - b.id); // Tri basé sur l'ID numérique
+            .sort((a, b) => a.id - b.id);
 
         sortedEntries.forEach(({ data }) => {
             const questionDiv = document.createElement('div');
             questionDiv.className = 'question-item';
-
             questionDiv.innerHTML = `
+                <div class="question-header">
+                    <button class="edit-button" 
+                        data-id="${data.ID}"
+                        data-number="${data.ID}"
+                        data-question="${data.QUESTION}" 
+                        data-answer="${data.ANSWER}" 
+                        data-points="${data.POINTS}" 
+                        data-time="${data.TIME}">
+                        ✏️
+                    </button>
+                    <button class="delete-button" data-id="${data.ID}">
+                        ❌
+                    </button>
+                </div>
                 <div class="text">
                     <p><strong>ID:</strong> ${data.ID}</p>
                     <p><strong>Question:</strong> ${data.QUESTION}</p>
@@ -128,11 +157,30 @@ export function questionList() {
             container.appendChild(questionDiv);
         });
 
-    } catch (error) {
-        console.error('Erreur lors de l\'affichage des questions :', error);
-    }
-};
+        // Ajouter l'événement sur les boutons "Modifier"
+        document.querySelectorAll('.edit-button').forEach(button => {
+            button.addEventListener('click', (event) => {
+                const button = event.target;
+                document.querySelector('input[name="number"]').value = button.getAttribute('data-number');
+                document.querySelector('input[name="question"]').value = button.getAttribute('data-question');
+                document.querySelector('input[name="answer"]').value = button.getAttribute('data-answer');
+                document.querySelector('input[name="points"]').value = button.getAttribute('data-points');
+                document.querySelector('input[name="time"]').value = button.getAttribute('data-time');
+            });
+        });
 
+        // Ajouter l'événement sur les boutons "Supprimer"
+        document.querySelectorAll('.delete-button').forEach(button => {
+            button.addEventListener('click', (event) => {
+                const questionId = event.target.getAttribute('data-id');
+                deleteQuestion(questionId);
+            });
+        });
+
+    } catch (error) {
+        console.error("Erreur lors de l'affichage des questions :", error);
+    }
+}
 
 
 export function questionsPage() {

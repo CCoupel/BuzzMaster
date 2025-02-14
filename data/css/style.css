@@ -44,7 +44,6 @@ body {
 /* Footer styles */
 .button-container, .footer {
   background-color: var(--secondary-color);
-  padding: 1rem;
   display: flex;
   justify-content: space-around;
   align-items: center;
@@ -53,7 +52,7 @@ body {
   left: 0;
   right: 0;
   z-index: 998;
-  height: 50px;
+  height: auto;
 }
 
 #config-button-container{
@@ -61,23 +60,35 @@ body {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  padding: 1rem;
 }
 
 .player-control{
-  width: 40%;
-  display: flex;
-  justify-content: space-around;
-  align-items: center;
-  padding: 0 0.5rem;
-  border: solid 2px red;
-}
-
-.game-control{
-  width: 60%;
+  width: 37%;
+  height: 50px;
+  background-color: var(--primary-color);
   display: flex;
   justify-content: center;
   align-items: center;
   gap: 2%;
+  padding: 0.3rem 1rem;
+  margin: 0.7rem 0;
+  border: solid 2px lightgray;
+  border-radius: 5px;
+}
+
+.game-control{
+  width: 52%;
+  height: 50px;
+  background-color: var(--primary-color);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 2%;
+  padding: 0.3rem 1rem;
+  margin: 0.7rem 0;
+  border: solid 2px lightgray;
+  border-radius: 5px;
 }
 
 #background-form-container{
@@ -130,7 +141,7 @@ select, input {
   border: 1px solid var(--border-color);
   border-radius: var(--border-radius);
   padding: 0.5rem;
-  margin: 0.5rem 0;
+  margin: 0.5rem 0.2rem;
   font-size: 1rem;
 }
 
