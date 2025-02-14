@@ -147,10 +147,10 @@ function questionsSelectList() {
         container.innerHTML = '<p>Aucune question disponible pour le moment.</p>';
         return;
     }
-
-    Object.keys(questions).forEach(key => {
-        const questionData = questions[key];
-
+    
+    const sortedQuestions = Object.values(questions).sort((a, b) => parseInt(a.ID) - parseInt(b.ID));
+    
+    sortedQuestions.forEach(questionData => {
         const questionDiv = document.createElement('div');
         questionDiv.className = 'question-item';
         questionDiv.id = `question-${questionData.ID}`;

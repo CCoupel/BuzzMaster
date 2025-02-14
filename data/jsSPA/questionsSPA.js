@@ -90,32 +90,38 @@ export function questionList() {
 
         container.innerHTML = '';
 
-        // Vérification si les questions existent
         if (!questions || Object.keys(questions).length === 0) {
             container.innerHTML = '<p>Aucune question disponible pour le moment.</p>';
             return;
         }
 
-        Object.keys(questions).forEach(key => {
-            const questionData = questions[key];
+        // Récupérer les entrées sous forme d'un tableau et extraire l'ID numérique
+        const sortedEntries = Object.entries(questions)
+            .map(([key, data]) => ({
+                key,
+                data,
+                id: Number(data.ID) // Extraction et conversion de l'ID en nombre
+            }))
+            .sort((a, b) => a.id - b.id); // Tri basé sur l'ID numérique
 
+        sortedEntries.forEach(({ data }) => {
             const questionDiv = document.createElement('div');
             questionDiv.className = 'question-item';
 
             questionDiv.innerHTML = `
                 <div class="text">
-                    <p><strong>ID:</strong> ${questionData.ID}</p>
-                    <p><strong>Question:</strong> ${questionData.QUESTION}</p>
-                    <p><strong>Réponse:</strong> ${questionData.ANSWER}</p>
-                    <p><strong>Points:</strong> ${questionData.POINTS}</p>
-                    <p><strong>Temps:</strong> ${questionData.TIME} secondes</p>
+                    <p><strong>ID:</strong> ${data.ID}</p>
+                    <p><strong>Question:</strong> ${data.QUESTION}</p>
+                    <p><strong>Réponse:</strong> ${data.ANSWER}</p>
+                    <p><strong>Points:</strong> ${data.POINTS}</p>
+                    <p><strong>Temps:</strong> ${data.TIME} secondes</p>
                 </div>
             `;
 
-            if (questionData.MEDIA) {
+            if (data.MEDIA) {
                 const imgDiv = document.createElement('div');
                 imgDiv.className = 'img';
-                imgDiv.innerHTML = `<img src="http://buzzcontrol.local${questionData.MEDIA}" alt="Question Media">`;
+                imgDiv.innerHTML = `<img src="http://buzzcontrol.local${data.MEDIA}" alt="Question Media">`;
                 questionDiv.appendChild(imgDiv);
             }
 
@@ -126,6 +132,7 @@ export function questionList() {
         console.error('Erreur lors de l\'affichage des questions :', error);
     }
 };
+
 
 
 export function questionsPage() {
