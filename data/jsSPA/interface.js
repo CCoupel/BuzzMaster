@@ -72,6 +72,9 @@ function handleServerAction(action, msg) {
                 updateTeams(msg.teams);
                 updateBumpers(msg.bumpers);
             }
+            if (msg.GAME.REMOTE) {
+                remoteDisplay(msg.GAME.REMOTE)
+            }
             switch (window.location.hash) {
                 case '#config':
                     console.log("testconfig")
@@ -101,11 +104,12 @@ function handleServerAction(action, msg) {
             cleanUp('question-container-admin')
             receiveQuestion(msg.QUESTION)
             break;
-        default:
-            console.log('Action non reconnue:', action);
         case 'QUESTIONS':
             getQuestions(msg);
             questionList();
+            break;
+        default:
+            console.log('Action non reconnue:', action);
             break;
     }
 };
@@ -233,6 +237,18 @@ function handlePhase(state) {
     }
 };
 
+let isGame = true;
+
+function remoteDisplay(msg) {
+    const toggleButton = document.getElementById('toggleButton');
+    if (msg === "GAME") {
+        toggleButton.classList.remove('active');
+        isGame = true;
+    } else if (msg === "SCORE") {
+        toggleButton.classList.add('active');
+        isGame = false;
+    }
+}
 
 document.addEventListener('DOMContentLoaded', function() {
     updateTimer();
@@ -269,11 +285,11 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
 
-    playerGame.addEventListener('click', function() {
-        sendAction('REMOTE', {'REMOTE': 'GAME'});
-    });
+    document.getElementById('toggleButton').addEventListener('click', function() {
+        isGame = !isGame;
+        const newState = isGame ? 'GAME' : 'SCORE';
 
-    playerScores.addEventListener('click', function() {
-        sendAction('REMOTE', {'REMOTE' :'SCORE'});
+        remoteDisplay(newState);  // Met à jour l'affichage
+        sendAction('REMOTE', {'REMOTE': newState});  // Envoie l'action
     });
 });

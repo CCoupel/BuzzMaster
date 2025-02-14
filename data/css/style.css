@@ -78,7 +78,7 @@ body {
 }
 
 .game-control{
-  width: 52%;
+  width: 55%;
   height: 50px;
   background-color: var(--primary-color);
   display: flex;
@@ -104,7 +104,9 @@ button {
   border-radius: var(--border-radius);
   cursor: pointer;
   transition: var(--transition);
-  font-size: 1rem;
+  font-size: 16px;
+  font-weight: bold;
+  font-family: Arial, Helvetica, sans-serif;
 }
 
 button:hover {
@@ -120,6 +122,51 @@ button:hover {
   right: 20px;
 }
 
+.toggle-container {
+  display: flex;
+  width: auto;
+  height: 40px;
+  border-radius: var(--border-radius);
+  overflow: hidden;
+  border: none;
+  cursor: pointer;
+  font-weight: bold;
+  font-size: 16px;
+  text-align: center;
+}
+
+.toggle-container:hover {
+  background-color: var(--accent-color);
+}
+
+.toggle-text {
+  flex: 1;
+  width: 100px;
+  padding: 0.3rem 1rem;
+  transition: background 0.3s, color 0.3s;
+  border-radius: var(--border-radius);
+}
+
+.game {
+  background: white;
+  color: var(--accent-color);
+}
+
+.score {
+  background: var(--accent-color);
+  color: white;
+}
+
+/* Quand "SCORES" est actif */
+.active .game {
+  background: var(--accent-color);
+  color: white;
+}
+
+.active .score {
+  background: white;
+  color: var(--accent-color);
+}
 
 /* Style pour l'input du temps de jeu */
 #game-time-input {

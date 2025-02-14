@@ -110,7 +110,6 @@ export function questionList() {
             container.innerHTML = '<p>Aucune question disponible pour le moment.</p>';
             return;
         }
-
         // Trier les questions par ID
         const sortedEntries = Object.entries(questions)
             .map(([key, data]) => ({
