@@ -26,6 +26,11 @@ void parseDataFromSocket(const char* action, const JsonObject& message) {
     case hash("PING"):
       // Handle ping
       break;
+    case hash("DELETE"):
+      // Handle ping
+      deleteQuestion(message["ID"]);
+      
+      break;
     case hash("HELLO"):
       notifyAll();
       putMsgToQueue("QUESTIONS",getQuestions().c_str());
@@ -39,9 +44,7 @@ void parseDataFromSocket(const char* action, const JsonObject& message) {
       updateTeams(message["teams"]);
       updateBumpers(message["bumpers"]);
       break;
-    case hash("DELETE"):
-      //update("DELETE", message);
-      break;
+
     case hash("RESET"):
       resetServer();
       break;

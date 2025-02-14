@@ -97,6 +97,7 @@ void pauseGame(AsyncClient* client);
 void continueGame();
 void revealGame();
 void readyGame(const String question="");
+void deleteQuestion(const String ID);
 void setRemotePage(const String remotePage);
 void attachButtons();
 void startBumperServer();

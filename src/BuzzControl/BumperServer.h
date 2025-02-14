@@ -294,3 +294,12 @@ void parseJSON(const String& data, AsyncClient* c)
       break;
   }
 }
+
+void deleteQuestion(const String ID)
+{
+  if ( ID.toInt()>0)
+  {
+    deleteDirectory((questionsPath+"/"+ID).c_str());
+    putMsgToQueue("QUESTIONS",getQuestions().c_str());
+  }
+}
