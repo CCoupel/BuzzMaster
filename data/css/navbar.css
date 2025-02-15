@@ -32,6 +32,16 @@ header {
     background-color: var(--hover-color);
 }
 
+.span-navbar {
+    padding: 0.3rem 1rem;
+    border-radius: var(--border-radius);
+}
+
+.currentLocation {
+    background: white;
+    color: var(--accent-color);
+}
+
 .time-bar-container {
     position: fixed;
     top: calc(var(--navbar-height) + 2rem);

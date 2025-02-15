@@ -159,7 +159,8 @@
 .question-item {
     background-color: white;
     border-radius: 5px;
-    border: solid 2px black;
+    border: 1px solid #ddd;
+    box-shadow: var(--shadow);
     margin: 15px;
     padding: 10px;
     cursor: pointer;

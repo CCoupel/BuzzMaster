@@ -18,8 +18,22 @@ function navigate() {
     }
 };
 
+function navbarColor(location) {
+    // Supprime la classe de tous les boutons de navigation
+    document.querySelectorAll('.span-navbar').forEach(btn => {
+        btn.classList.remove('currentLocation');
+    });
+
+    // Ajoute la classe uniquement au bouton correspondant
+    const spanNavbar = document.getElementById(location);
+    if (!spanNavbar) return;
+    spanNavbar.classList.add('currentLocation');
+}
+
 // Ajouter des événements spécifiques à chaque page
 async function attachEvents(hash) {
+    navbarColor(hash.substring(1));
+
     if (hash === "#questions") {
         questionsPage(); 
     }

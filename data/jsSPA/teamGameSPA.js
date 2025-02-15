@@ -37,7 +37,7 @@ export function updateDisplayGame() {
         teamTitle.textContent = teamName;
         const teamScore = document.createElement('p');
         teamScore.className = 'team-score';
-        teamScore.textContent = `Score: ${teamData.SCORE ?? 0}`;
+        teamScore.textContent = `${teamData.SCORE ?? 0} Pts`;
         
         teamHeader.appendChild(teamColor);
         teamHeader.appendChild(teamTitle);

@@ -38,15 +38,17 @@
 #questions-container {
     display: flex;
     flex-wrap: wrap;
-    gap: 1%;
+    gap: 0.5%;
     overflow: scroll;
 }
   
 .question-item {
   position: relative;
+  background-color: white;
   border: 1px solid #ddd;
+  box-shadow: var(--shadow);
   padding: 10px;
-  margin: 10px 0;
+  margin: 10px;
   border-radius: 5px;
   flex: 1 1 calc(18% - 1%);
   max-width: calc(18% - 1%);

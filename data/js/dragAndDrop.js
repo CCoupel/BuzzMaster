@@ -112,7 +112,8 @@ function buzzerDropInTeams(buzzerElement, teamsContainer) {
     });
 
     const bumperMac = buzzerElement.id.replace('buzzer-', '');
-    const playerName = buzzerElement.querySelector('.buzzer-name')?.textContent.split(': ')[1] || 'Nouvelle équipe';
+    const playerName = buzzerElement.querySelector('.buzzer-name')?.textContent || 'Nouvelle équipe';
+    console.log("test" + playerName);
     const newTeamId = playerName.toUpperCase();
 
     console.log('Creating new team:', {
