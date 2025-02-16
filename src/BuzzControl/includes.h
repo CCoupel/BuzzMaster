@@ -88,6 +88,7 @@ void parseJSON(const String& data, AsyncClient* c);
 
 void wifiConnect();
 String listLittleFSFiles(String path="/");
+String printLittleFSInfo(bool isShort=false);
 void resetBumpersTime();
 void updateTimer(const int Time, const int delta = 0);
 void startGame(const int delay=33);

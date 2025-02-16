@@ -34,6 +34,7 @@ void parseDataFromSocket(const char* action, const JsonObject& message) {
     case hash("HELLO"):
       notifyAll();
       putMsgToQueue("QUESTIONS",getQuestions().c_str());
+      
       break;
     case hash("FULL"):
       setBumpers(message["bumpers"]);
@@ -79,6 +80,9 @@ void parseDataFromSocket(const char* action, const JsonObject& message) {
 //      updateTimer(message["CURRENT_TIME"]);
       //setGameCurrentTime(message["CURRENT_TIME"]);
       //putMsgToQueue("UPDATE_TIMER",getTeamsAndBumpersJSON().c_str(),false);
+      break;
+    case hash("FSINFO"):
+      putMsgToQueue("FSINFO",("{\"FSINFO\": \""+printLittleFSInfo()+"\"}").c_str());
       break;
     default:
       ESP_LOGW(SOCKET_TAG, "Unrecognized action: %s", action);

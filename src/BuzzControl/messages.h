@@ -55,6 +55,7 @@ String makeJsonMessage(const String& action, const String& msg) {
     message += ", \"VERSION\": \"" + String(VERSION) + "\"";
     message += ", \"MSG\":" + msg + "";
     message += ", \"TIME_EVENT\":" + String(micros()) + "";
+    message += ", \"FSINFO\": "+printLittleFSInfo(true)+"";
     message += "} \n";
 
     return message;
