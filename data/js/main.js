@@ -163,8 +163,7 @@ export function connectWebSocket(onMessageCallback) {
     ws.onclose = function(event) {
 
         console.log('WebSocket connection closed. Attempting to reconnect...');
-        setTimeout(connectWebSocket, reconnectInterval); // Tente de se reconnecter après un délai
-
+        setTimeout(() => connectWebSocket(onMessageCallback), reconnectInterval); // Tente de se reconnecter après un délai
         webSocketColor();
 
         stopPing();
