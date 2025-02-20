@@ -144,7 +144,6 @@ export function connectWebSocket(onMessageCallback) {
 
         console.log('WebSocket connection opened.');
         
-        // Nettoyage du tableau lors de la reconnexion
         cleanBoard();
 
         sendWebSocketMessage("HELLO", {} );

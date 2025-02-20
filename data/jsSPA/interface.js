@@ -1,5 +1,5 @@
 import {sendWebSocketMessage} from './websocket.js';
-import { updateBumpers, updateTeams, updateDisplayConfig } from './configSPA.js';
+import { updateBumpers, updateTeams, updateDisplayConfig, configPage } from './configSPA.js';
 import { scorePage } from './scoreSPA.js';
 import { getQuestions, questionList } from './questionsSPA.js';
 import { teamGamePage,receiveQuestion } from './teamGameSPA.js';
@@ -75,22 +75,23 @@ function handleServerAction(action, msg) {
             if (msg.GAME.REMOTE) {
                 remoteDisplay(msg.GAME.REMOTE)
             }
-            switch (window.location.hash) {
+            switch (window.location.hash || "#config") {
                 case '#config':
                     console.log("testconfig")
-                    updateDisplayConfig(); 
+                    configPage();
                     break;
                 case '#score':
                     scorePage(); 
                     break;
                 case '#teamGame':
-                    teamGamePage(); 
+                    teamGamePage();
                     break;
             }
             updateGameState(msg.GAME);
             updateTimeBar(true);
             updateTimer();
             handlePhase(msg.GAME.PHASE);
+            receiveQuestion(msg.GAME.QUESTION)
             break;
         case 'UPDATE_TIMER':
             updateGameState(msg.GAME);
@@ -98,7 +99,6 @@ function handleServerAction(action, msg) {
             updateTimeBar();
             break;
         case 'REVEAL':
-            showAnswer()
             break;
         case 'READY':
             cleanUp('question-container-admin')
@@ -161,6 +161,7 @@ export function sendAction(action, msg = {}) {
 
 export function updateTimer() {
     const timerElement = document.getElementById('timer');
+    if (!timerElement) return;
     const minutes = Math.floor(gameState.timer / 60);
     const seconds = gameState.timer % 60;
     timerElement.textContent = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
@@ -257,13 +258,16 @@ document.addEventListener('DOMContentLoaded', function() {
     const playersButton = document.getElementById('players');
     const answerButton = document.getElementById('answer');
 
-    
-    answerButton.addEventListener('click', function() {
-        sendAction('REVEAL');
-    });
+    if (answerButton) {
+        answerButton.addEventListener('click', function() {
+            sendAction('REVEAL');
+        });
+    }
 
-    playersButton.onclick = () => {
-        window.open('http://buzzcontrol.local/html/players.html')
+    if (playersButton) {
+        playersButton.onclick = () => {
+            window.open('http://buzzcontrol.local/html/players.html')
+        }
     }
 
     startStopButton.addEventListener('click', function() {

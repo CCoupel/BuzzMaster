@@ -131,7 +131,7 @@ export function displayQuestion() {
     questionP.innerHTML = selectedQuestion.QUESTION;
 
     const answerP = document.createElement('p');
-    answerP.innerHTML = `Réponse : <span class="hidden-answer">${selectedQuestion.ANSWER}</span>`;
+    answerP.innerHTML = `Réponse : ${selectedQuestion.ANSWER}`;
 
     questionDiv.appendChild(questionP);
     questionDiv.appendChild(answerP);

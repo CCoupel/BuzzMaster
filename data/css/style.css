@@ -22,7 +22,7 @@ html {
 body {
   font-family: 'Arial', sans-serif;
   background-color: var(--background-color);
-  background-image: linear-gradient(rgba(255, 255, 255, 0.5), rgba(255, 255, 255, 0.5)), url('http://buzzcontrol.local/files/background.jpg');
+  background-image: linear-gradient(rgba(255, 255, 255, 0.5));
   background-size: cover;
   background-position: center;
   color: var(--text-color);

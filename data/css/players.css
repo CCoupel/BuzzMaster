@@ -13,6 +13,10 @@ header {
     background-color: #ddd;
 }
 
+#time-bar{
+    height: 100%;
+}
+
 #timer-players {
     width: 100%;
     height:var(--timer-height);
@@ -73,6 +77,7 @@ main {
     align-items: center;
     justify-content: space-around;
     height: 100%;
+    padding-top: 75px;
 }
 
 #answer-container {

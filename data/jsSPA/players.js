@@ -1,6 +1,3 @@
-import { connectWebSocket, setBumperPoint, sendWebSocketMessage, updateTeams, updateBumpers, getBumpers, getTeams } from './main.js';
-
-
 let gameState = {
     timer: 30,
     isRunning: false,
@@ -9,6 +6,24 @@ let gameState = {
     gameTime: 0
 };
 
+let teams = {};
+let bumpers = {};
+
+export function getTeams() {
+    return teams;
+};
+
+export function getBumpers() {
+    return bumpers;
+};
+
+export function updateTeams(newTeams) {
+    teams = newTeams;
+};
+
+export function updateBumpers(newBumpers) {
+    bumpers = newBumpers;
+};
 function updateGameState (msg) {
     console.log(msg)
     if(msg.TIME){
@@ -26,7 +41,7 @@ function updateGameState (msg) {
 
 let localTimer;
 
-function handleConfigSocketMessage(event) {
+function handleConfigSocketMessagePlayers(event) {
     console.log('Message reçu du serveur:', event.data);
         const data = JSON.parse(event.data);
         if (data.ACTION) {
@@ -127,12 +142,6 @@ function updateTimer() {
     timerElement.textContent = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
 }
 
-function addPointToBumper(bumperMac) {
-    if (gameState.gamePhase === 'STOP') {
-        setBumperPoint(bumperMac, 1);
-        //updateDisplay();
-    }
-}
 
 function updateTimeBar(immediate = false) {
     const timeBar = document.getElementById('time-bar');
@@ -249,36 +258,10 @@ function renderPlayerScores() {
         row.insertCell(1).textContent = player.NAME || `Joueur ${player.id}`;
         row.insertCell(2).textContent = player.TEAM || 'Sans équipe';
         const scoreButtonCell = row.insertCell(3);
-
-        // Créer le bouton -
-        const buttonMinus = document.createElement('button');
-        buttonMinus.className = "button-score";
-        buttonMinus.textContent = '-';
-        buttonMinus.style = "background-color: #2196F3; margin-right: 5px;"; // Ajouter un espacement
-        buttonMinus.onclick = () => {
-            console.log(`Bouton - cliqué pour le joueur : ${player.NAME || `Joueur ${player.id}`}`);
-            setBumperPoint(player.id, -1);
-        };
-    
-        // Ajouter le bouton - à la cellule
-        scoreButtonCell.appendChild(buttonMinus);
-    
+  
         // Ajouter le score à la même cellule
         const scoreText = document.createTextNode(player.SCORE || 0);
         scoreButtonCell.appendChild(scoreText);
-    
-        // Créer le bouton +
-        const buttonPlus = document.createElement('button');
-        buttonPlus.className = "button-score";
-        buttonPlus.textContent = '+';
-        buttonPlus.style = "margin-left: 5px;";
-        buttonPlus.onclick = () => {
-            console.log(`Bouton + cliqué pour le joueur : ${player.NAME || `Joueur ${player.id}`}`);
-            setBumperPoint(player.id, 1);
-        };
-    
-        // Ajouter le bouton + à la cellule
-        scoreButtonCell.appendChild(buttonPlus);
     
         // Vérification si le joueur a changé de position
         if (previousPosition !== undefined && previousPosition !== index + 1) {
@@ -346,8 +329,66 @@ function showAnswer(data) {
     }
 };
 
+const loc = "buzzcontrol.local";
+const wsProtocol = "ws:"
+const wsUrl = `${wsProtocol}//${loc}/ws`;
+let ws;
+let reconnectInterval = 5000;
+
+export function connectWebSocketPlayers(onMessageCallback) {
+    if (ws && ws.readyState === WebSocket.OPEN) {
+        return ws;
+    }
+
+    ws = new WebSocket(wsUrl);
+
+    ws.onopen = function(event) {
+
+        console.log('WebSocket connection opened.');
+        
+        // Nettoyage du tableau lors de la reconnexion
+        //cleanBoard();
+
+        sendWebSocketMessage("HELLO", {} );
+
+    };
+
+    ws.onerror = function(event) {
+        console.error('WebSocket error:', event);
+    }
+
+    ws.onclose = function(event) {
+
+        console.log('WebSocket connection closed. Attempting to reconnect...');
+        setTimeout(() => connectWebSocketPlayers(onMessageCallback), reconnectInterval); // Tente de se reconnecter après un délai
+
+    };
+
+    ws.onmessage = onMessageCallback || function(event) {
+        console.log('Message reçu:', event.data);
+    };
+    return ws;
+
+}
+
+
+export function sendWebSocketMessage (action, MSG= "{}")  {
+
+    if (ws.readyState === WebSocket.OPEN) {
+        const message = {
+            "ACTION": action,
+            "MSG": MSG
+        };
+
+    ws.send(JSON.stringify(message));
+
+    } else {
+        console.error("WebSocket is not open. Current state: ", ws.readyState);
+    }
+};
+
 document.addEventListener('DOMContentLoaded', function() {
-    connectWebSocket(handleConfigSocketMessage);
+    connectWebSocketPlayers(handleConfigSocketMessagePlayers);
     updateTimer();
     updateTimeBar();
     renderTeamScores();

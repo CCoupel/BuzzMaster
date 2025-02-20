@@ -2,11 +2,15 @@
     display: flex;
     flex: 1;
     margin: 2rem;
-    margin-bottom: 5rem;
+    margin-bottom: 100px;
     background-color: white;
     border-radius: var(--border-radius);
     box-shadow: var(--shadow);
     overflow: hidden;
+}
+
+body {
+    background-image: linear-gradient(rgba(255, 255, 255, 0.5)), url('http://buzzcontrol.local/files/background.jpg');
 }
 
 .buzzer-container, .team-container {

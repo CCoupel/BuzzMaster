@@ -4,10 +4,9 @@ import { configPage } from './configSPA.js';
 import { scorePage } from './scoreSPA.js';
 import { teamGamePage } from './teamGameSPA.js';
 
-// Fonction pour mettre à jour le contenu de la page
 function navigate() {
     const appDiv = document.getElementById('main');
-    const hash = window.location.hash || '#config'; // Par défaut, aller à #home
+    const hash = window.location.hash || '#config';
     const route = routes[hash];
 
     if (route) {
@@ -19,18 +18,15 @@ function navigate() {
 };
 
 function navbarColor(location) {
-    // Supprime la classe de tous les boutons de navigation
     document.querySelectorAll('.span-navbar').forEach(btn => {
         btn.classList.remove('currentLocation');
     });
 
-    // Ajoute la classe uniquement au bouton correspondant
     const spanNavbar = document.getElementById(location);
     if (!spanNavbar) return;
     spanNavbar.classList.add('currentLocation');
 }
 
-// Ajouter des événements spécifiques à chaque page
 async function attachEvents(hash) {
     navbarColor(hash.substring(1));
 
