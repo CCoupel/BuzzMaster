@@ -4,6 +4,7 @@ config/version.txt
 html/players.html
 html/testSPA.html
 jsSPA/buzzerSPA.js
+jsSPA/players.js
 jsSPA/configSPA.js
 jsSPA/dragAndDropSPA.js
 jsSPA/interface.js
