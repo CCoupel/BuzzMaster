@@ -103,7 +103,7 @@ export function questionList() {
     try {
         const container = document.getElementById('questions-container');
         if (!container) return;
-
+        
         container.innerHTML = '';
 
         if (!questions || Object.keys(questions).length === 0) {

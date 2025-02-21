@@ -1,6 +1,6 @@
 import { gameState } from './interface.js';
 import { getBumpers, getTeams, setBumperPoint } from './configSPA.js'
-import { questions } from './questionsSPA.js';
+import { getQuestions, questions } from './questionsSPA.js';
 import { sendAction } from './interface.js';
 
 let selectedQuestion = {};
@@ -108,7 +108,8 @@ export function receiveQuestion(data) {
 export function displayQuestion() {
     const questionContainer = document.getElementById('question-container-admin');
     if (!questionContainer) return;
-
+    console.log("j'affiche les questions")
+    getQuestions();
     // Vider le conteneur
     questionContainer.innerHTML = '';
 

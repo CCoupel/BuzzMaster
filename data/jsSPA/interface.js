@@ -107,6 +107,9 @@ function handleServerAction(action, msg) {
         case 'QUESTIONS':
             getQuestions(msg);
             questionList();
+            if (window.location.hash === "#teamGame") {
+                teamGamePage();
+            }
             break;
         default:
             console.log('Action non reconnue:', action);
