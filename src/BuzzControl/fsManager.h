@@ -278,9 +278,10 @@ bool moveDirectory(const char* sourceDir, const char* destDir) {
 
 /******* TOOLS *******/
 
-String printLittleFSInfo() {
+String printLittleFSInfo(bool isShort) {
     String result="";
     String line="";
+    String s_result="{";
 
     if (!LittleFS.begin(true)) {
         ESP_LOGE(FS_TAG, "Failed to mount LittleFS");
@@ -299,21 +300,32 @@ String printLittleFSInfo() {
     ESP_LOGI(FS_TAG, line.c_str());
 
     line="Total size: "+String(totalBytes/1024)+" Kbytes";
+    
     result += line+"\n";
     ESP_LOGI(FS_TAG, line.c_str());
     //ESP_LOGI(FS_TAG, "Total size: %lu bytes", totalBytes);
 
     line="Used space: "+String(usedBytes/1024)+" Kbytes ("+usedPercentage+")";
     result += line+"\n";
+    
     ESP_LOGI(FS_TAG, line.c_str());
     //ESP_LOGI(FS_TAG, "Used space: %lu bytes (%.2f%%)", usedBytes, usedPercentage);
 
     line="Free space: "+String(freeBytes/1024)+" Kbytes ("+String(freePercentage)+")";
     result += line+"\n";
+
     ESP_LOGI(FS_TAG, line.c_str());
     //ESP_LOGI(FS_TAG, "Free space: %lu bytes (%.2f%%)", freeBytes, freePercentage);
 
-    return result;
+    s_result+="\"TOTAL\": "+String(totalBytes/1024)+", ";
+    s_result+="\"USED\": "+String(usedBytes/1024)+", ";
+    s_result+="\"FREE\": "+String(freeBytes/1024)+", ";
+    s_result+="\"P_USED\": "+String(usedPercentage)+", ";
+    s_result+="\"P_FREE\": "+String(freePercentage)+"}";
+
+    if (isShort) {return s_result;}
+    else {return result;}
+
 }
 
 String listLittleFSFilesRecursive(File &dir, const String &indent = "") {

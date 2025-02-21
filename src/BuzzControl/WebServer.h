@@ -73,7 +73,7 @@ void w_handleNotFound(AsyncWebServerRequest *request) {
 //####### TOOLING ######
 void w_handleRedirect(AsyncWebServerRequest *request) {
     ESP_LOGD(WEB_TAG, "REdirecting for: %s", request->url().c_str());
-    request->redirect("http://buzzcontrol.local/config.html");
+    request->redirect("http://buzzcontrol.local/html/testSPA.html#config");
 }
 
 void w_handleReboot(AsyncWebServerRequest *request) {
@@ -90,8 +90,8 @@ void w_handleReset(AsyncWebServerRequest *request) {
 }
 
 void w_handleListFiles(AsyncWebServerRequest *request) {
-    String result;
-    result=listLittleFSFiles();
+    String result="";
+//    result+=listLittleFSFiles();
     result+=printLittleFSInfo();
     
     AsyncWebServerResponse *response = request->beginResponse(200, "text/text", result);
@@ -259,10 +259,11 @@ void startWebServer() {
     }
     server.onNotFound(w_handleNotFound);
 
-    server.serveStatic("/", LittleFS, (ROOT+"/html").c_str());
+    server.serveStatic("/jspa", LittleFS, (ROOT+"/jspa").c_str());
     server.serveStatic("/js", LittleFS, (ROOT+"/js").c_str());
     server.serveStatic("/css", LittleFS, (ROOT+"/css").c_str());
     server.serveStatic("/html", LittleFS, (ROOT+"/html").c_str());
+    server.serveStatic("/config", LittleFS, (ROOT+"/config").c_str());
 
     // Servir les fichiers du répertoire files pour /files/*
     server.serveStatic("/files/", LittleFS, "/files/");
