@@ -291,6 +291,7 @@ function receiveQuestion(data) {
 
     questionContainer.innerHTML= '';
     answerContainer.innerHTML= '';
+    imageContainer.innerHTML= '';
 
     if(question.MEDIA) {
         const questionMedia = document.createElement('img')

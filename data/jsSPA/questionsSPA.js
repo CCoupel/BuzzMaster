@@ -39,7 +39,7 @@ async function sendForm(formId, actionUrl) {
 
 export function getQuestions(questionData) {
     questions = questionData;
-    console.log(questionData)
+    console.log(questions)
 }
 
 

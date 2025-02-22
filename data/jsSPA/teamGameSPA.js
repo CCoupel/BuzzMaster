@@ -109,7 +109,6 @@ export function displayQuestion() {
     const questionContainer = document.getElementById('question-container-admin');
     if (!questionContainer) return;
     console.log("j'affiche les questions")
-    getQuestions();
     // Vider le conteneur
     questionContainer.innerHTML = '';
 
