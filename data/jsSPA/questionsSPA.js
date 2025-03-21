@@ -4,7 +4,7 @@ export let questions = {};
 
 function validateFileSize(event) {
     const fileInput = document.querySelector('input[name="file"]');
-    const maxSize = 200 * 1024; // Limite de 200 Ko
+    const maxSize = 400 * 1024; // Limite de 200 Ko
 
     if (fileInput.files.length > 0 && fileInput.files[0].size > maxSize) {
         alert("Le fichier est trop volumineux. La taille maximale autorisée est de 200 Ko.");
