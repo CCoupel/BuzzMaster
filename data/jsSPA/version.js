@@ -17,6 +17,7 @@ export function getWebVersion() {
             console.error('Erreur :', error);
             document.getElementById('web-version').textContent = "Erreur lors de l'affichage de la version.";
         });
+        console.log("coucou")
 }
 
 export function getCoreVersion(data) {
@@ -28,3 +29,6 @@ export function getCoreVersion(data) {
       document.getElementById('core-version').textContent = "Erreur lors de l'affichage de la version.";  
     }
 }
+
+
+getWebVersion()
