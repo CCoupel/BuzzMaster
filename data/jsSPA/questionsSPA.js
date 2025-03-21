@@ -2,6 +2,18 @@ import { sendWebSocketMessage, ws} from './websocket.js';
 
 export let questions = {};
 
+function validateFileSize(event) {
+    const fileInput = document.querySelector('input[name="file"]');
+    const maxSize = 200 * 1024; // Limite de 200 Ko
+
+    if (fileInput.files.length > 0 && fileInput.files[0].size > maxSize) {
+        alert("Le fichier est trop volumineux. La taille maximale autorisée est de 200 Ko.");
+        event.preventDefault();
+        return false;
+    }
+    return true;
+}
+
 async function sendForm(formId, actionUrl) {
     const form = document.getElementById(formId);
 
@@ -9,6 +21,8 @@ async function sendForm(formId, actionUrl) {
 
     form.addEventListener('submit', async function(event) {
         event.preventDefault();
+
+        if (!validateFileSize(event)) return;
 
         const formData = new FormData(form);
 
@@ -24,7 +38,7 @@ async function sendForm(formId, actionUrl) {
 
             const responseData = await response.text();
 
-            alert("Question crée avec succès !");
+            alert("Question créée avec succès !");
             console.log("Réponse du serveur :", responseData);
             questionList();
 
@@ -34,8 +48,7 @@ async function sendForm(formId, actionUrl) {
             alert("Une erreur est survenue lors de la création de la question.");
         }
     });
-};
-
+}
 
 export function getQuestions(questionData) {
     questions = questionData;
@@ -185,4 +198,4 @@ export function questionList() {
 export function questionsPage() {
     sendForm('question-form', 'http://buzzcontrol.local/questions');
     questionList();
-};
+}
