@@ -21,6 +21,7 @@ String getTeamsAndBumpersJSON() {
     return output;
   } else {
     ESP_LOGE(TEAMs_TAG, "Failed to serialize JSON");
+    return "";
   }
 }
 
@@ -250,6 +251,7 @@ String getQuestionElementJson() {
         return output;
     } else {
         ESP_LOGE(QUESTION_TAG, "Failed to serialize JSON");
+        return "";
     }
 }
 
