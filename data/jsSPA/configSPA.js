@@ -1,7 +1,6 @@
 import { createTeamDiv } from './teamSPA.js';
 import { createBuzzerDiv } from './buzzerSPA.js';
 import { initializeDropzones } from './dragAndDropSPA.js'
-//import { getWebVersion, getCoreVersion } from './version.js';
 import { sendWebSocketMessage, ws} from './websocket.js';
  
 let teams = {};
@@ -114,38 +113,7 @@ function handleReset() {
     }
 };
 
-async function sendFileForm(formId, actionUrl) {
-    const form = document.getElementById(formId);
-
-    form.addEventListener('submit', async function(event) {
-        event.preventDefault();
-
-        const formData = new FormData(form);
-
-        try {
-            const response = await fetch(actionUrl, {
-                method: 'POST',
-                body: formData 
-            });
-
-            if (!response.ok) {
-                throw new Error("Erreur du serveur: " + response.statusText);
-            }
-
-            const responseData = await response.text();
-
-            alert("Image envoyée avec succès !");
-            console.log("Réponse du serveur :", responseData);
-
-        } catch (error) {
-            console.error("Erreur lors de l'envoi:", error);
-            alert("Une erreur est survenue lors de l'envoi de l'image.");
-        }
-    });
-};
-
 document.addEventListener('DOMContentLoaded', () => {
-    //sendFileForm('background-form', 'http://buzzcontrol.local/background');
     //connectWebSocket(handleConfigSocketMessage);
     initializeDropzones();
     //getWebVersion();
@@ -160,9 +128,7 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 export function configPage() {
-    //sendFileForm('background-form', 'http://buzzcontrol.local/background');
     initializeDropzones();
-    //getWebVersion();
     updateDisplayConfig();
 };
 

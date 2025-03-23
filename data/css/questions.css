@@ -99,3 +99,20 @@
 .delete-button {
   color: red;
 }
+
+body {
+  background-image: linear-gradient(rgba(255, 255, 255, 0.5)), url('http://buzzcontrol.local/files/background.jpg');
+}
+
+#background-container {
+  border-radius: var(--border-radius);
+  box-shadow: var(--shadow);
+  width: 40%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 5px;
+  margin-inline: auto;
+  margin-top: 1.5rem;
+  background-color: white;
+}

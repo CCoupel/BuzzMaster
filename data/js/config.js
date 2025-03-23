@@ -46,19 +46,19 @@ function handleReset() {
 }
 
 async function sendFileForm(formId, actionUrl) {
+    
     const form = document.getElementById(formId);
-
     form.addEventListener('submit', async function(event) {
         event.preventDefault();
 
         const formData = new FormData(form);
 
         try {
+            console.log("upload en cours")
             const response = await fetch(actionUrl, {
                 method: 'POST',
                 body: formData 
             });
-
             if (!response.ok) {
                 throw new Error("Erreur du serveur: " + response.statusText);
             }

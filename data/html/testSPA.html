@@ -3,6 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
     <link rel="stylesheet" href="../css/reset.css">
     <link rel="stylesheet" href="../css/style.css">
     <link rel="stylesheet" href="../css/navbar.css">
@@ -51,10 +54,15 @@
             <button id="startStopButton">START</button>
             <button id="pauseContinueButton">PAUSE</button>
             <button id ="answer">Réveler la réponse</button>
+            <div id="version-container">
+                <pre id="web-version"></pre>
+                <pre id="core-version"></pre>
+            </div>
         </div>
         <script type="module" src="../jsSPA/testSPA.js"></script>
         <script type="module" src="../jsSPA/websocket.js"></script>
         <script type="module" src="../jsSPA/interface.js"></script>
+        <script type="module" src="../jsSPA/version.js"></script>
     </footer>
 </body>
 </html>

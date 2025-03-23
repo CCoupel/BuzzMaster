@@ -4,7 +4,7 @@ export let questions = {};
 
 function validateFileSize(event) {
     const fileInput = document.querySelector('input[name="file"]');
-    const maxSize = 200 * 1024; // Limite de 200 Ko
+    const maxSize = 400 * 1024; // Limite de 200 Ko
 
     if (fileInput.files.length > 0 && fileInput.files[0].size > maxSize) {
         alert("Le fichier est trop volumineux. La taille maximale autorisée est de 200 Ko.");
@@ -46,6 +46,36 @@ async function sendForm(formId, actionUrl) {
         } catch (error) {
             console.error("Erreur lors de l'envoi:", error);
             alert("Une erreur est survenue lors de la création de la question.");
+        }
+    });
+}
+
+async function sendFileForm(formId, actionUrl) {
+    
+    const form = document.getElementById(formId);
+    form.addEventListener('submit', async function(event) {
+        event.preventDefault();
+
+        const formData = new FormData(form);
+
+        try {
+            console.log("upload en cours")
+            const response = await fetch(actionUrl, {
+                method: 'POST',
+                body: formData 
+            });
+            if (!response.ok) {
+                throw new Error("Erreur du serveur: " + response.statusText);
+            }
+
+            const responseData = await response.text();
+
+            alert("Image envoyée avec succès !");
+            console.log("Réponse du serveur :", responseData);
+
+        } catch (error) {
+            console.error("Erreur lors de l'envoi:", error);
+            alert("Une erreur est survenue lors de l'envoi de l'image.");
         }
     });
 }
@@ -197,5 +227,6 @@ export function questionList() {
 
 export function questionsPage() {
     sendForm('question-form', 'http://buzzcontrol.local/questions');
+    sendFileForm('background-form', 'http://buzzcontrol.local/background');
     questionList();
 }
