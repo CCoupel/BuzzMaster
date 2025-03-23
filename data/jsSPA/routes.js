@@ -56,6 +56,15 @@ export const routes = {
 
     '#questions': () => `
         <link rel="stylesheet" href="../css/questions.css">
+        <div id="background-container">
+            <form method="post" enctype="multipart/form-data" id="background-form" action="http://buzzcontrol.local/background">
+                <div>
+                    <label for="file">Image de fond :</label>
+                    <input type="file" id="background" name="background"/>
+                    <button type="submit">Envoyer</button>
+                </div> 
+            </form>
+        </div> 
         <div class="main-container-questions">
             <div class="question-form-div">
                 <form id="question-form">

@@ -1,16 +1,12 @@
 .main-config-container {
     display: flex;
     flex: 1;
-    margin: 2rem;
+    margin: 1.5rem;
     margin-bottom: 100px;
     background-color: white;
     border-radius: var(--border-radius);
     box-shadow: var(--shadow);
     overflow: hidden;
-}
-
-body {
-    background-image: linear-gradient(rgba(255, 255, 255, 0.5)), url('http://buzzcontrol.local/files/background.jpg');
 }
 
 .buzzer-container, .team-container {
@@ -128,4 +124,17 @@ h2.dropzone-text {
 .team-info {
     flex-grow: 1;
     padding: 10px;
+}
+
+#background-container {
+    border-radius: var(--border-radius);
+    box-shadow: var(--shadow);
+    width: 40%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 5px;
+    margin-inline: auto;
+    margin-top: 1.5rem;
+    background-color: white;
 }
