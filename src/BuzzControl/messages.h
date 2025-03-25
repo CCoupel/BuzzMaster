@@ -17,6 +17,7 @@ typedef struct {
     String* message;  
     bool notifyAll;
     AsyncClient* client;
+    String* msgTime;
 } messageQueue_t;
 
 void notifyAll() {
@@ -37,6 +38,7 @@ void putMsgToQueue(const char* action, const char* msg, bool notify, AsyncClient
     messageQueue_t* message=new messageQueue_t;
     message->action = action;
     message->message = new String(msg);  // Création dynamique de la String
+    message -> msgTime = new String(micros());
     message->notifyAll = notify;
     message->client = client;
 
@@ -49,7 +51,7 @@ void putMsgToQueue(const char* action, const char* msg, bool notify, AsyncClient
     }
 }
 
-String makeJsonMessage(const String& action, const String& msg) {
+String makeJsonMessage(const String& action, const String& msg ) {
     String message="{";
     message += "\"ACTION\": \"" + action + "\"";
     message += ", \"VERSION\": \"" + String(VERSION) + "\"";
@@ -127,7 +129,7 @@ void sendMessageTask(void *parameter) {
     while (1) {
         ESP_LOGD(TAG, "Low stack space in Send Message Task: %i", uxTaskGetStackHighWaterMark(NULL));
         if (xQueueReceive(messageQueue, &receivedMessage, portMAX_DELAY)) {
-            ESP_LOGI(TAG, "New message in queue: %s", receivedMessage->action);
+            ESP_LOGI(TAG, "New message in queue: %s (%s)", receivedMessage->action, receivedMessage->msgTime);
             
             switch (hash(receivedMessage->action)) {
                 case hash("HELLO"):
@@ -155,10 +157,10 @@ void sendMessageTask(void *parameter) {
                 sendMessageToAllClients(receivedMessage->action, *(receivedMessage->message));
             }
 
-//            if (receivedMessage.notifyAll) {
+            if (receivedMessage -> notifyAll) {
                 ESP_LOGD(TAG, "notify all");
                 notifyAll();
-//            }
+            }
 // Nettoyage
             delete receivedMessage->message;
             delete receivedMessage;

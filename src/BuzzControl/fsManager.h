@@ -172,6 +172,11 @@ bool deleteDirectory(const char* dirPath) {
     dirStack.push_back(String(dirPath));
 
     while (!dirStack.empty()) {
+        // Reset watchdog timer périodiquement
+        esp_task_wdt_reset();
+        
+        // Ajouter un delay pour céder du temps CPU
+        vTaskDelay(pdMS_TO_TICKS(1));
         String currentPath = dirStack.back();
         
         File dir = LittleFS.open(currentPath.c_str());
@@ -305,13 +310,13 @@ String printLittleFSInfo(bool isShort) {
     ESP_LOGI(FS_TAG, line.c_str());
     //ESP_LOGI(FS_TAG, "Total size: %lu bytes", totalBytes);
 
-    line="Used space: "+String(usedBytes/1024)+" Kbytes ("+usedPercentage+")";
+    line="Used space: "+String(usedBytes/1024)+" Kbytes ("+usedPercentage+"%)";
     result += line+"\n";
     
     ESP_LOGI(FS_TAG, line.c_str());
     //ESP_LOGI(FS_TAG, "Used space: %lu bytes (%.2f%%)", usedBytes, usedPercentage);
 
-    line="Free space: "+String(freeBytes/1024)+" Kbytes ("+String(freePercentage)+")";
+    line="Free space: "+String(freeBytes/1024)+" Kbytes ("+String(freePercentage)+"%)";
     result += line+"\n";
 
     ESP_LOGI(FS_TAG, line.c_str());
@@ -333,14 +338,19 @@ String listLittleFSFilesRecursive(File &dir, const String &indent = "") {
     String line="";
     File file = dir.openNextFile();
     while (file) {
+        // Reset watchdog timer périodiquement
+        esp_task_wdt_reset();
+        
+        // Ajouter un delay pour céder du temps CPU
+        vTaskDelay(pdMS_TO_TICKS(1));
         if (file.isDirectory()) {
             line=String(indent)+"L__"+String(file.name())+"/";
             //ESP_LOGI(FS_TAG, "%s├── %s/", indent.c_str(), file.name());
-            ESP_LOGI(FS_TAG, line.c_str());
+//            ESP_LOGI(FS_TAG, line.c_str());
             line+=listLittleFSFilesRecursive(file, indent + "    ");
         } else {
             line=String(indent)+"L__"+String(file.name())+" ("+String(file.size())+")";
-            ESP_LOGI(FS_TAG, line.c_str());
+//            ESP_LOGI(FS_TAG, line.c_str());
             //ESP_LOGI(FS_TAG, "%s├── %s (%d bytes)", indent.c_str(), file.name(), file.size());
         }
         

@@ -19,6 +19,22 @@
 static const char* MAIN_TAG = "BUZZCONTROL";
 const uint16_t logPort = 8888;  // Port UDP pour les logs
 
+// Nouvelle tâche de surveillance du watchdog
+void watchdogTask(void *pvParameters) {
+    // Configurer le watchdog avec un délai plus long si nécessaire
+    esp_task_wdt_init(10, true); // 10 secondes de délai
+    esp_task_wdt_add(NULL);      // S'enregistrer auprès du watchdog
+    
+    for (;;) {
+        // Réinitialiser le watchdog
+        esp_task_wdt_reset();
+        
+        // Surveillance du système
+        ESP_LOGD("WATCHDOG", "Memory: %u bytes free", ESP.getFreeHeap());
+        
+        vTaskDelay(pdMS_TO_TICKS(1000));
+    }
+}
 
 void setup(void)
 {
@@ -81,7 +97,16 @@ void setup(void)
     return;
   }
 
-  xTaskCreate(sendMessageTask, "Send Message Task", 14096, NULL, 1, NULL);
+  xTaskCreate(sendMessageTask, "Send Message Task", 14096, NULL, 2, NULL);
+  // Créer une tâche spécifique pour surveiller le watchdog
+    xTaskCreate(
+        watchdogTask,
+        "WatchdogTask",
+        2048,
+        NULL,
+        configMAX_PRIORITIES - 1, // Haute priorité
+        NULL
+    );
   sendHelloToAll();
   questionMutex = xSemaphoreCreateMutex();
   buttonMutex = xSemaphoreCreateMutex();

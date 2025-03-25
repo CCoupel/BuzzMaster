@@ -91,7 +91,7 @@ void w_handleReset(AsyncWebServerRequest *request) {
 
 void w_handleListFiles(AsyncWebServerRequest *request) {
     String result="";
-//    result+=listLittleFSFiles();
+    result+=listLittleFSFiles();
     result+=printLittleFSInfo();
     
     AsyncWebServerResponse *response = request->beginResponse(200, "text/text", result);
@@ -155,12 +155,12 @@ String saveQuestion(AsyncWebServerRequest *request, bool hasFile = false) {
         jsonFile.close();
     }
     
-    putMsgToQueue("QUESTIONS",getQuestions().c_str());
+ //   putMsgToQueue("QUESTIONS",getQuestions().c_str());
 
     // Envoie la réponse au client
-    AsyncWebServerResponse *response = request->beginResponse(200, "text/json", jsonString);
-    addCorsHeaders(response);
-    request->send(response);
+//    AsyncWebServerResponse *response = request->beginResponse(200, "text/json", jsonString);
+//    addCorsHeaders(response);
+//    request->send(response);
 
     return currentDir;
 }
@@ -170,20 +170,23 @@ String saveQuestion(AsyncWebServerRequest *request, bool hasFile = false) {
 
 void w_handleUploadBackgroundComplete(AsyncWebServerRequest *request) {
     // Ne sauvegarde que s'il n'y a pas de fichier dans le formulaire
+    ESP_LOGI(WEB_TAG,"upload du fichier w_handleUploadBackground Complete");
+    AsyncWebServerResponse *response = request->beginResponse(200, "text/json", "Background Saved");
+    addCorsHeaders(response);
+    request->send(response);
 }
 
-
-
-void w_handleUploadFile(AsyncWebServerRequest *request, String filename, size_t index, uint8_t *data, size_t len, bool final) {
+void saveFile(AsyncWebServerRequest *request, String destFile, String filename, size_t index, uint8_t *data, size_t len, bool final) {
     static File file;
     static size_t totalSize = 0;
+    ESP_LOGI(WEB_TAG,"upload du fichier %s %i %s (%i) [%i]", destFile.c_str(), index, filename.c_str(), len,final);
 
     if(!index) { // Début de l'upload
-        ESP_LOGI(WEB_TAG,"Début de l'upload du Background %i %s (%i)", index, filename.c_str(), len);
-        file = LittleFS.open("/files/background.jpg", "w");
+        ESP_LOGI(WEB_TAG,"Début de l'upload du %s %i %s (%i) [%i]", destFile.c_str(),index, filename.c_str(), len,final);
+        file = LittleFS.open(destFile, "w");
         totalSize=0;
         if(!file) {
-            ESP_LOGI(WEB_TAG,"Échec de l'ouverture du fichier background en écriture");
+            ESP_LOGI(WEB_TAG,"Échec de l'ouverture du fichier %s en écriture",destFile.c_str());
             return;
         }
     }
@@ -195,10 +198,14 @@ void w_handleUploadFile(AsyncWebServerRequest *request, String filename, size_t 
 
     if(final) { // Fin de l'upload
         if(file) {
-            ESP_LOGD(WEB_TAG,"Upload background terminé: %i", totalSize);
+            ESP_LOGD(WEB_TAG,"Upload %s terminé: %i", destFile.c_str(),totalSize);
             file.close();
         }
     }
+}
+
+void w_handleUploadFile(AsyncWebServerRequest *request, String filename, size_t index, uint8_t *data, size_t len, bool final) {
+    saveFile(request, "/files/background.jpg",  filename,  index,  data,  len,  final);
 }
 
 /***** QUESTIONS *******/
@@ -217,22 +224,58 @@ void w_handleListQuestions(AsyncWebServerRequest *request) {
 
 void w_handleUploadQuestionComplete(AsyncWebServerRequest *request) {
     // Ne sauvegarde que s'il n'y a pas de fichier dans le formulaire
+        ESP_LOGI(WEB_TAG,"upload du fichier w_handleUploadQuestion Complete");
+
     if (!request->hasParam("file", true, true)) {  // Le dernier true indique qu'on cherche un fichier
         ESP_LOGI(WEB_TAG,"Saving Question %s", saveQuestion(request, false).c_str());
     }
+    AsyncWebServerResponse *response = request->beginResponse(200, "text/json", "Background Saved");
+    addCorsHeaders(response);
+    request->send(response);
+
 }
 
 void w_handleUploadQuestionFile(AsyncWebServerRequest *request, String filename, size_t index, uint8_t *data, size_t len, bool final) {
     static File file;
+    static size_t totalSize = 0;
     static String currentDir;
-    
+    static String fullPath;
+    static String filePath;
+
     if(!index) { // Début de l'upload
+       currentDir = saveQuestion(request, true); // Sauvegarde la question avec indicateur de fichier
+        
+        fullPath = questionsPath + "/" + currentDir;
+        filePath = fullPath + "/media.jpg";
+    }        
+
+    saveFile(request, filePath,  filename,  index,  data,  len,  final);
+    if(final) { // Fin de l'upload
+        ESP_LOGI(WEB_TAG, "Upload du fichier terminé pour la question: %s (%i)", currentDir.c_str(), totalSize);
+        putMsgToQueue("QUESTIONS",getQuestions().c_str());
+    }
+}
+
+void _w_handleUploadQuestionFile(AsyncWebServerRequest *request, String filename, size_t index, uint8_t *data, size_t len, bool final) {
+    static File file;
+    static size_t totalSize = 0;
+    static String currentDir;
+    ESP_LOGI(WEB_TAG, "Chunk received %s: %i: %i Bytes (%i)", filename.c_str(), index, len,final);
+    if(!index) { // Début de l'upload
+    // Close any previously open file that wasn't properly closed
+        if (file) {
+            ESP_LOGW(WEB_TAG, "Closing previously unclosed file");
+            file.close();
+        }
         currentDir = saveQuestion(request, true); // Sauvegarde la question avec indicateur de fichier
         
         String fullPath = questionsPath + "/" + currentDir;
         String filePath = fullPath + "/media.jpg";
         
-        file = LittleFS.open(filePath, "w");
+        
+          file = LittleFS.open(filePath, "w"); // First chunk - create new file
+          
+
         if(!file) {
             ESP_LOGE(WEB_TAG, "Échec de l'ouverture du fichier media en écriture");
             return;
@@ -240,22 +283,31 @@ void w_handleUploadQuestionFile(AsyncWebServerRequest *request, String filename,
         ESP_LOGI(WEB_TAG, "Début de l'upload de l'image question id: %s", currentDir.c_str());
     }
 
-    if(file && len) { // Écriture des données
-        file.write(data, len);
-    }
-
-    if(final && file) { // Fin de l'upload
-        file.close();
-        ESP_LOGI(WEB_TAG, "Upload du fichier terminé pour la question: %s", currentDir.c_str());
-    }
+        if(len>0) { // Écriture des données
+            size_t bytesWritten=file.write(data, len);
+//            size_t bytesWritten=len;
+            totalSize+=bytesWritten;
+            ESP_LOGI(WEB_TAG, "Writing image question id: %s (%i=>%i) %i bytes written %i", currentDir.c_str(),index, len,totalSize, bytesWritten);
+            if(bytesWritten != len) {
+                ESP_LOGW(WEB_TAG, "Partial write: %d of %d bytes written", bytesWritten, len);
+            }
+            
+        }
+        if(final) { // Fin de l'upload
+            file.close();
+            ESP_LOGI(WEB_TAG, "Upload du fichier terminé pour la question: %s (%i)", currentDir.c_str(), totalSize);
+            putMsgToQueue("QUESTIONS",getQuestions().c_str());
+        }
 }
-
 
 void startWebServer() {
     String ROOT="/";
-    if (LittleFS.exists("/CURRENT/html/config.html")) {
+    if (LittleFS.exists("/CURRENT/html/testSPA.html")) {
         ESP_LOGD(FS_TAG, "Directory /CURRENT Exists");
         ROOT="/CURRENT";
+    }
+    else {
+        ESP_LOGE(FS_TAG, "Directory /CURRENT do not contains /CURRENT/html/testSPA.html : fall back to local version");
     }
     server.onNotFound(w_handleNotFound);
 

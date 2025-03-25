@@ -77,7 +77,7 @@ void putMsgToQueue(const char* action=nullptr, const char* msg="", bool notify=f
 //void setLedIntensity(int intensity);
 //void applyLedColor();
 void sendMessageToClient(const String& action, const String& msg, AsyncClient* client);
-void sendMessageToAllClients(const String& action, const String& msg );
+void sendMessageToAllClients(const String& action, const String& msg);
 void notifyAll();
 String readFile(const String& path, const String& defaultValue="");
 bool isFileExists(String path);
