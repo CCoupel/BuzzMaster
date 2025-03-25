@@ -12,6 +12,10 @@
 
 .question-form-div {
     width: 60%;
+    border-radius: var(--border-radius);
+    box-shadow: var(--shadow);
+    padding: 1%;
+    background-color: var(--background-color);
     margin: 2rem auto;
     form{
       display: flex;
@@ -107,11 +111,11 @@ body {
 #background-container {
   border-radius: var(--border-radius);
   box-shadow: var(--shadow);
-  width: 40%;
+  width: 60%;
+  padding: 0 1%;
   display: flex;
   justify-content: center;
   align-items: center;
-  gap: 5px;
   margin-inline: auto;
   margin-top: 1.5rem;
   background-color: white;
