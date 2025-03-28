@@ -176,7 +176,7 @@ void w_handleUploadBackgroundComplete(AsyncWebServerRequest *request) {
     request->send(response);
 }
 
-void saveFile(AsyncWebServerRequest *request, String destFile, String filename, size_t index, uint8_t *data, size_t len, bool final) {
+size_t saveFile(AsyncWebServerRequest *request, String destFile, String filename, size_t index, uint8_t *data, size_t len, bool final) {
     static File file;
     static size_t totalSize = 0;
     ESP_LOGI(WEB_TAG,"upload du fichier %s %i %s (%i) [%i]", destFile.c_str(), index, filename.c_str(), len,final);
@@ -187,7 +187,7 @@ void saveFile(AsyncWebServerRequest *request, String destFile, String filename, 
         totalSize=0;
         if(!file) {
             ESP_LOGI(WEB_TAG,"Échec de l'ouverture du fichier %s en écriture",destFile.c_str());
-            return;
+            return totalSize;
         }
     }
 
@@ -202,6 +202,7 @@ void saveFile(AsyncWebServerRequest *request, String destFile, String filename, 
             file.close();
         }
     }
+    return totalSize;
 }
 
 void w_handleUploadFile(AsyncWebServerRequest *request, String filename, size_t index, uint8_t *data, size_t len, bool final) {
@@ -229,10 +230,10 @@ void w_handleUploadQuestionComplete(AsyncWebServerRequest *request) {
     if (!request->hasParam("file", true, true)) {  // Le dernier true indique qu'on cherche un fichier
         ESP_LOGI(WEB_TAG,"Saving Question %s", saveQuestion(request, false).c_str());
     }
-    AsyncWebServerResponse *response = request->beginResponse(200, "text/json", "Background Saved");
+    AsyncWebServerResponse *response = request->beginResponse(200, "text/json", "Question Saved");
     addCorsHeaders(response);
     request->send(response);
-
+    putMsgToQueue("QUESTIONS",getQuestions().c_str());
 }
 
 void w_handleUploadQuestionFile(AsyncWebServerRequest *request, String filename, size_t index, uint8_t *data, size_t len, bool final) {
@@ -249,10 +250,10 @@ void w_handleUploadQuestionFile(AsyncWebServerRequest *request, String filename,
         filePath = fullPath + "/media.jpg";
     }        
 
-    saveFile(request, filePath,  filename,  index,  data,  len,  final);
+    totalSize=saveFile(request, filePath,  filename,  index,  data,  len,  final);
     if(final) { // Fin de l'upload
         ESP_LOGI(WEB_TAG, "Upload du fichier terminé pour la question: %s (%i)", currentDir.c_str(), totalSize);
-        putMsgToQueue("QUESTIONS",getQuestions().c_str());
+        
     }
 }
 
