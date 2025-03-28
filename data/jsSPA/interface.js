@@ -1,7 +1,7 @@
 import {sendWebSocketMessage} from './websocket.js';
 import { updateBumpers, updateTeams, updateDisplayConfig, configPage } from './configSPA.js';
 import { scorePage } from './scoreSPA.js';
-import { getQuestions, questionList } from './questionsSPA.js';
+import { getQuestions, questionList, getFileStorage, fsInfo } from './questionsSPA.js';
 import { teamGamePage,receiveQuestion } from './teamGameSPA.js';
 
 export let gameState = {
@@ -40,13 +40,13 @@ export function handleConfigSocketMessage(event) {
     console.log('Message reçu du serveur:', event.data);
     webSocketMessage = JSON.parse(event.data);
         if (webSocketMessage.ACTION) {
-            handleServerAction(webSocketMessage.ACTION, webSocketMessage.MSG);
+            handleServerAction(webSocketMessage.ACTION, webSocketMessage.MSG, webSocketMessage.FSINFO);
         } else {
             console.log("Pas d'action :" , console.log(event.data))
         };
 };
 
-function handleServerAction(action, msg) {
+function handleServerAction(action, msg, fsinfo) {
     console.log('Action reçue du serveur:', action);
     switch (action) {
         case 'START':          
@@ -91,7 +91,9 @@ function handleServerAction(action, msg) {
             updateTimeBar(true);
             updateTimer();
             handlePhase(msg.GAME.PHASE);
-            receiveQuestion(msg.GAME.QUESTION)
+            receiveQuestion(msg.GAME.QUESTION);
+            getFileStorage(fsinfo);
+            fsInfo();
             break;
         case 'UPDATE_TIMER':
             updateGameState(msg.GAME);
@@ -106,6 +108,8 @@ function handleServerAction(action, msg) {
             break;
         case 'QUESTIONS':
             getQuestions(msg);
+            getFileStorage(fsinfo);
+            fsInfo();
             questionList();
             if (window.location.hash === "#teamGame") {
                 teamGamePage();

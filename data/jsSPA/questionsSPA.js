@@ -1,6 +1,7 @@
 import { sendWebSocketMessage, ws} from './websocket.js';
 
 export let questions = {};
+export let fileStorage = {};
 
 function validateFileSize(event) {
     const fileInput = document.querySelector('input[name="file"]');
@@ -78,6 +79,10 @@ async function sendFileForm(formId, actionUrl) {
             alert("Une erreur est survenue lors de l'envoi de l'image.");
         }
     });
+}
+export function getFileStorage(fileStorageData) {
+    fileStorage = fileStorageData;
+    console.log(fileStorage)
 }
 
 export function getQuestions(questionData) {
@@ -224,9 +229,18 @@ export function questionList() {
     }
 }
 
+export function fsInfo() {
+    document.getElementById("file-storage-text").textContent = 
+    `Espace: ${fileStorage.USED} / ${fileStorage.TOTAL} MB, Libre: ${fileStorage.FREE} MB`;
+    const progressBar = document.getElementById("file");
+    progressBar.value = fileStorage.P_USED;
+}
+
+
 
 export function questionsPage() {
     sendForm('question-form', 'http://buzzcontrol.local/questions');
     sendFileForm('background-form', 'http://buzzcontrol.local/background');
     questionList();
+    fsInfo();
 }

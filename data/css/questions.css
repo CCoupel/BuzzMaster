@@ -15,7 +15,7 @@
     border-radius: var(--border-radius);
     box-shadow: var(--shadow);
     padding: 1%;
-    background-color: var(--background-color);
+    background-color: white;
     margin: 2rem auto;
     form{
       display: flex;
@@ -119,4 +119,31 @@ body {
   margin-inline: auto;
   margin-top: 1.5rem;
   background-color: white;
+}
+
+#flex-container {
+  display: flex;
+}
+
+#file-storage-container {
+  width: 25%;
+  margin-inline: auto;
+  margin-top: 3%;
+}
+
+#form-container{
+padding-left: 15%;
+}
+
+#file-storage {
+  border-radius: var(--border-radius);
+  box-shadow: var(--shadow);
+  background-color: white;
+  padding: 5%;
+  text-align: center;
+}
+
+progress {
+  width: 85%;
+  height: 25px;
 }
