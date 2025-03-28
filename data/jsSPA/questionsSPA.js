@@ -230,8 +230,9 @@ export function questionList() {
 }
 
 export function fsInfo() {
+    const numberOfQuestions = Math.round (fileStorage.FREE / 300);
     document.getElementById("file-storage-text").textContent = 
-    `Espace: ${fileStorage.USED} / ${fileStorage.TOTAL} MB, Libre: ${fileStorage.FREE} MB`;
+    `Espace utilisé: ${fileStorage.USED} / ${fileStorage.TOTAL} Ko, Libre: ${fileStorage.FREE} Ko. Environ ${numberOfQuestions} questions avec image restantes`;
     const progressBar = document.getElementById("file");
     progressBar.value = fileStorage.P_USED;
 }
