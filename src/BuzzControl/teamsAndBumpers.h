@@ -414,7 +414,7 @@ void setBumperButton(const char* bumperID, int button) {
 */
     int copy = int(button);
     teamsAndBumpers["bumpers"][bID]["BUTTON"] = copy;
-    ESP_LOGI(TEAMs_TAG, "Bumper Button %s %i", bID, copy);
+    ESP_LOGI(TEAMs_TAG, "Bumper Button %s %i", bID.c_str(), copy);
 }
 
 void setBumperStatus(const char* bumperID, String status) {
@@ -435,7 +435,7 @@ void setBumperStatus(const char* bumperID, String status) {
 */
     String copy = String(status);
     teamsAndBumpers["bumpers"][bID]["STATUS"] = copy;
-    ESP_LOGI(TEAMs_TAG, "Bumper Status %s %s", bID, copy);
+    ESP_LOGI(TEAMs_TAG, "Bumper Status %s %s", bID.c_str(), copy);
 }
 
 void setBumperScore(const char* bumperID, const int new_score) {
@@ -472,7 +472,7 @@ void setBumperTime(const char* bumperID, const int64_t new_delay) {
 */
     int64_t copy = int64_t(new_delay);
     teamsAndBumpers["bumpers"][bID]["TIMESTAMP"]=copy;
-    ESP_LOGI(TEAMs_TAG, "BumperID Delay %s %i", bID, copy);
+    ESP_LOGI(TEAMs_TAG, "BumperID Delay %s %i", bID.c_str(), copy);
 }
 
 void  mergeJson(JsonObject& destObj, const JsonObject& srcObj) {

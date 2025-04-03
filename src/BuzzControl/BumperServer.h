@@ -26,7 +26,7 @@ void timerCallback() {
 }
 
 void processButtonPress(const String& bumperID, const char* b_team, int64_t b_time, int b_button) {
-  ESP_LOGI(BUMPER_TAG, "Button Pressed %i at time %i", b_button, b_time);
+  ESP_LOGI(BUMPER_TAG, "Button Pressed %i@%s at time %i", b_button, bumperID.c_str(),b_team,b_time);
   if (xSemaphoreTake(questionMutex, pdMS_TO_TICKS(1000)) == pdTRUE) {
 
     setBumperButton(bumperID.c_str(), b_button);
