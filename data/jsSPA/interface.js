@@ -1,8 +1,8 @@
 import {sendWebSocketMessage} from './websocket.js';
 import { updateBumpers, updateTeams, updateDisplayConfig, configPage } from './configSPA.js';
 import { scorePage } from './scoreSPA.js';
-import { getQuestions, questionList, getFileStorage, fsInfo } from './questionsSPA.js';
-import { teamGamePage,receiveQuestion } from './teamGameSPA.js';
+import { getQuestions, questionList,  getFileStorage, fsInfo } from './questionsSPA.js';
+import { teamGamePage, receiveQuestion, questionsSelectList, displayQuestion } from './teamGameSPA.js';
 
 export let gameState = {
     timer: 30,
@@ -111,6 +111,7 @@ function handleServerAction(action, msg, fsinfo) {
             getFileStorage(fsinfo);
             fsInfo();
             questionList();
+            questionsSelectList();
             if (window.location.hash === "#teamGame") {
                 teamGamePage();
             }
@@ -225,22 +226,31 @@ export function updateTimeBar(immediate = false) {
 function handlePhase(state) {
     const startStopButton = document.getElementById('startStopButton');
     const pauseContinueButton = document.getElementById('pauseContinueButton');
+    const revealButton = document.getElementById('answer');
     switch (state) {
         case 'START' :
             startStopButton.textContent = "STOP";
             pauseContinueButton.textContent = "PAUSE";
+            pauseContinueButton.disabled = false;
+            revealButton.disabled = true;
             break;
         case 'STOP' :
             startStopButton.textContent = "START";
             pauseContinueButton.textContent = "PAUSE";
+            pauseContinueButton.disabled = true;
+            revealButton.disabled = false;
             break;
         case 'PAUSE' :
-            pauseContinueButton.textContent = "CONTINUE";
             startStopButton.textContent = "STOP";
+            pauseContinueButton.textContent = "CONTINUE";
+            pauseContinueButton.disabled = false;
+            revealButton.disabled = true;
             break;
         case 'CONTINUE' :
-            pauseContinueButton.textContent = "PAUSE";
             startStopButton.textContent = "STOP";
+            pauseContinueButton.textContent = "PAUSE";
+            pauseContinueButton.disabled = false;
+            revealButton.disabled = true;
             break;
     }
 };

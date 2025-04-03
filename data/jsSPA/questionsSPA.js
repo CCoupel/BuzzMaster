@@ -1,3 +1,4 @@
+import { gameState } from './interface.js';
 import { sendWebSocketMessage, ws} from './websocket.js';
 
 export let questions = {};
@@ -230,13 +231,15 @@ export function questionList() {
 }
 
 export function fsInfo() {
+    const container = document.getElementById('file-storage-text');
+    if (!container) return;
+    
     const numberOfQuestions = Math.round (fileStorage.FREE / 300);
-    document.getElementById("file-storage-text").textContent = 
+    container.textContent = 
     `Espace utilisé: ${fileStorage.USED} / ${fileStorage.TOTAL} Ko, Libre: ${fileStorage.FREE} Ko. Environ ${numberOfQuestions} questions avec image restantes`;
     const progressBar = document.getElementById("file");
     progressBar.value = fileStorage.P_USED;
 }
-
 
 
 export function questionsPage() {

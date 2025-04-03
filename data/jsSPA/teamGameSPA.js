@@ -138,7 +138,7 @@ export function displayQuestion() {
     questionContainer.appendChild(questionDiv);
 }
 
-function questionsSelectList() {
+export function questionsSelectList() {
     const container = document.getElementById('questions-select-list');
     if (!container) return;
     container.innerHTML = '';
@@ -189,7 +189,7 @@ function questionsSelectList() {
 
                 popup.style.left = `${rect.right + offsetX}px`; 
                 popup.style.top = `${rect.top + offsetY}px`;
-            }, 500); // Délai de 500 ms avant d'afficher la popup
+            }, 500);
         });
 
         questionDiv.addEventListener('mouseleave', () => {
@@ -207,28 +207,31 @@ function questionsSelectList() {
             popup.style.display = 'none';
         };
 
-        questionDiv.addEventListener('click', () => {
-            document.querySelectorAll('.question-item').forEach(item => {
-                item.style.backgroundColor = '';
+        if (gameState.gamePhase === "STOP") {
+            questionDiv.addEventListener('click', () => {
+                document.querySelectorAll('.question-item').forEach(item => {
+                    item.style.backgroundColor = '';
+                });
+    
+                questionDiv.style.backgroundColor = 'yellow';
+    
+                const allPopups = document.querySelectorAll('.popup');
+                allPopups.forEach(popup => {
+                    popup.style.display = 'none';
+                });
+    
+                selectedQuestion = { ...questionData };
+    
+                sendAction("READY", questionData.ID);
             });
-
-            questionDiv.style.backgroundColor = 'yellow';
-
-            const allPopups = document.querySelectorAll('.popup');
-            allPopups.forEach(popup => {
-                popup.style.display = 'none';
-            });
-
-            selectedQuestion = { ...questionData };
-
-            sendAction("READY", questionData.ID);
-        });
+        } else {
+            questionDiv.style.opacity = '0.5'; // Visuellement indiquer que ce n'est pas cliquable
+            questionDiv.style.cursor = 'not-allowed';
+        }
 
         container.appendChild(questionDiv);
     });
 }
-
-
 
 function showAnswer() {
     const questionContainer = document.getElementById('question-div-admin');
@@ -238,6 +241,7 @@ function showAnswer() {
         console.warn('Element with ID "question-container-admin" not found.');
     }
 }
+
 
 export function teamGamePage() {
     updateDisplayGame();

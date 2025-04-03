@@ -90,3 +90,8 @@ header {
 .blink-fast {
     animation: blink 0.5s linear infinite;
 }
+
+button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
