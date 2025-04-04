@@ -207,7 +207,7 @@ export function questionsSelectList() {
             popup.style.display = 'none';
         };
 
-        if (gameState.gamePhase === "STOP") {
+        if (["STOP", "PREPARE", "READY"].includes(gameState.gamePhase)) {
             questionDiv.addEventListener('click', () => {
                 document.querySelectorAll('.question-item').forEach(item => {
                     item.style.backgroundColor = '';

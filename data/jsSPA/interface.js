@@ -252,6 +252,12 @@ function handlePhase(state) {
             pauseContinueButton.disabled = false;
             revealButton.disabled = true;
             break;
+        case 'PREPARE' :
+            startStopButton.textContent = "START";
+            pauseContinueButton.textContent = "PAUSE";
+            pauseContinueButton.disabled = true;
+            revealButton.disabled = true;
+            break;
     }
 };
 
