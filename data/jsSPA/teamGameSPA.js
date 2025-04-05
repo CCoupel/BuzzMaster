@@ -60,6 +60,18 @@ export function updateDisplayGame() {
             const bumperTime = document.createElement('p');
             const isBumperActive = bumperData.BUTTON !== undefined || bumperData.TIMESTAMP !== undefined;
             bumperElement.className = `bumper ${isBumperActive ? 'active' : ''} ${isStartPhase && !isBumperActive ? 'start-phase' : ''}`;
+            if (bumperData.READY === "FALSE") {
+                bumperElement.classList.add('not-ready');
+            }
+            if (bumperData.READY === "TRUE") {
+                bumperElement.classList.remove('not-ready');
+                bumperElement.classList.add('ready');
+            }
+
+            if (gameState.gamePhase != "PREPARE") {
+                bumperElement.classList.remove('ready');
+                bumperElement.classList.remove('not-ready');
+            }
             bumperText.textContent = `${bumperData.NAME}`;
             bumperTime.textContent = `${bumperData.TIMESTAMP !== undefined ? ' Temps : ' + ((bumperData.TIMESTAMP - gameState.gameTime) / 1000000) + ' s' : ''}`;
             

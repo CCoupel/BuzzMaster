@@ -231,30 +231,42 @@ function handlePhase(state) {
         case 'START' :
             startStopButton.textContent = "STOP";
             pauseContinueButton.textContent = "PAUSE";
+            startStopButton.disabled = false;
             pauseContinueButton.disabled = false;
             revealButton.disabled = true;
             break;
         case 'STOP' :
             startStopButton.textContent = "START";
             pauseContinueButton.textContent = "PAUSE";
+            startStopButton.disabled = false;
             pauseContinueButton.disabled = true;
             revealButton.disabled = false;
             break;
         case 'PAUSE' :
             startStopButton.textContent = "STOP";
             pauseContinueButton.textContent = "CONTINUE";
+            startStopButton.disabled = false;
             pauseContinueButton.disabled = false;
             revealButton.disabled = true;
             break;
         case 'CONTINUE' :
             startStopButton.textContent = "STOP";
             pauseContinueButton.textContent = "PAUSE";
+            startStopButton.disabled = false;
             pauseContinueButton.disabled = false;
             revealButton.disabled = true;
             break;
         case 'PREPARE' :
             startStopButton.textContent = "START";
             pauseContinueButton.textContent = "PAUSE";
+            startStopButton.disabled = true;
+            pauseContinueButton.disabled = true;
+            revealButton.disabled = true;
+            break;
+        case 'READY' :
+            startStopButton.textContent = "START";
+            pauseContinueButton.textContent = "PAUSE";
+            startStopButton.disabled = false;
             pauseContinueButton.disabled = true;
             revealButton.disabled = true;
             break;
@@ -294,7 +306,7 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     startStopButton.addEventListener('click', function() {
-        if (gameState.gamePhase ==='STOP') {
+        if (gameState.gamePhase ==='STOP' || gameState.gamePhase ==='READY' ) {
             sendAction('START');
         } else {
             startStopButton.textContent = "STOP";

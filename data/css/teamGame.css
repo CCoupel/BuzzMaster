@@ -169,11 +169,10 @@
     }
 }
 
-.hidden-answer {
-    color: transparent; 
-    transition: color 0.3s;
+.bumper.not-ready {
+    background-color: red;
 }
 
-.hidden-answer:hover {
-    color: black;
+.bumper.ready {
+    background-color: lightgreen;
 }
