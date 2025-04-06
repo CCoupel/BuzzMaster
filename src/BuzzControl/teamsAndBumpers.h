@@ -69,6 +69,32 @@ bool isGameStoped() {
     return false;
 }
 
+bool isGamePrepare() {
+    if (teamsAndBumpers["GAME"].isNull()) {
+        teamsAndBumpers["GAME"] = JsonObject();
+    }
+    if (teamsAndBumpers["GAME"]["PHASE"].isNull()) {
+        teamsAndBumpers["GAME"]["PHASE"] = "";
+    }
+    if (teamsAndBumpers["GAME"]["PHASE"]=="PREPARE") {
+        return true;
+    }
+    return false;
+}
+
+bool isGameReady() {
+    if (teamsAndBumpers["GAME"].isNull()) {
+        teamsAndBumpers["GAME"] = JsonObject();
+    }
+    if (teamsAndBumpers["GAME"]["PHASE"].isNull()) {
+        teamsAndBumpers["GAME"]["PHASE"] = "";
+    }
+    if (teamsAndBumpers["GAME"]["PHASE"]=="READY") {
+        return true;
+    }
+    return false;
+}
+
 bool isGamePaused() {
     if (teamsAndBumpers["GAME"].isNull()) {
         teamsAndBumpers["GAME"] = JsonObject();
@@ -475,13 +501,31 @@ void setBumperTime(const char* bumperID, const int64_t new_delay) {
     ESP_LOGI(TEAMs_TAG, "BumperID Delay %s %i", bID.c_str(), copy);
 }
 
+void resetBumpersReady() {
+  JsonObject bumpers = getBumpers();
+  if (!bumpers.isNull()) {
+    for (JsonPair bumperPair : bumpers) {
+      JsonObject bumper = bumperPair.value().as<JsonObject>();
+      bumper["READY"]="FALSE";
+    }
+  } else {
+    ESP_LOGW(TEAMs_TAG, "Bumpers object is null or invalid");
+  }  
+  ESP_LOGI(TEAMs_TAG, "All bumpers marked as not ready");
+}
+
+void setBumperReady(const char* bumperID) {
+  String bID = ensureBumperExists(bumperID);
+  teamsAndBumpers["bumpers"][bID]["READY"]="TRUE";
+  ESP_LOGI(TEAMs_TAG, "Bumper %s marked as ready", bID.c_str());
+}
+
 void  mergeJson(JsonObject& destObj, const JsonObject& srcObj) {
   for (JsonPair kvp : srcObj) {
       ESP_LOGD("Teams&Bumpers","Merging: %s", kvp.key());
 
       destObj[kvp.key()] = kvp.value();
     }
-  
 }
 
 void updateBumper(const char* bumperID, const JsonObject& new_bumper) {
@@ -522,7 +566,6 @@ String getBumperIDByIP(const char* clientIP) {
   }
   return String(); // Retourne une chaîne vide si aucune correspondance n'est trouvée
 }
-
 
 //#### TEAMS ###
 JsonObject getTeams() {
@@ -647,4 +690,55 @@ void updateTeams(const JsonObject& teams) {
   for (JsonPair obj : teams) {
         updateTeam(obj.key().c_str(), obj.value().as<JsonObject>());
       }
+}
+
+void resetTeamsReady() {
+JsonObject teams = getTeams();
+  if (!teams.isNull()) {
+    for (JsonPair teamPair : teams) {
+      JsonObject team = teamPair.value().as<JsonObject>();
+      team["READY"]="TRUE";
+    }
+    ESP_LOGI(TEAMs_TAG, "All teams marked as initially ready");
+  } else {
+    ESP_LOGW(TEAMs_TAG, "Teams object is null or invalid");
+  }
+}
+
+void updateTeamsReady() {
+JsonObject team;
+    resetTeamsReady() ;
+    ESP_LOGD(TEAMs_TAG, "Updating team readiness status");
+
+    JsonObject bumpers = getBumpers();
+    if (!bumpers.isNull()) {
+        for (JsonPair bumperPair : bumpers) {
+            JsonObject bumper = bumperPair.value().as<JsonObject>();
+            const char* teamID = bumper["TEAM"];
+    //        ESP_LOGD(TEAMs_TAG, "Updating READY team %s => %s : %s", bumper["TEAM"], teamsAndBumpers["teams"][bumper["TEAM"]]["READY"], bumper["READY"]);
+            if (teamID != nullptr && bumper["READY"] == "FALSE") {
+                JsonObject  team=getTeam(bumper["TEAM"]);
+                if (!team.isNull()) {
+                    team["READY"]="FALSE";
+                    ESP_LOGD(TEAMs_TAG, "Team %s marked as not ready due to bumper status", teamID);
+                }
+            }
+        }
+    } else {
+        ESP_LOGW(TEAMs_TAG, "Bumpers object is null or invalid when updating team readiness");
+    }
+}
+
+bool areAllTeamsReady() {
+    JsonObject teams = getTeams();
+    if (!teams.isNull()) {
+        for (JsonPair teamPair : teams) {
+            JsonObject team = teamPair.value().as<JsonObject>();
+            if (team["READY"] == "FALSE") {
+                return false;
+            }
+        }
+        return true;
+    }
+    return false;
 }

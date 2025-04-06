@@ -476,7 +476,7 @@ void downloadFiles() {
     }
 
     ESP_LOGI(FS_TAG, "La version locale est a remplacer %f / %f", localVersion, remoteVersion);
-    
+    setLedColor(255, 128, 0, true);
     // Télécharger le fichier catalogue distant
     String remoteCatalogUrl = baseUrl + baseFILE;
     String tempCatalogPath = baseFILE+"_remote";
@@ -494,6 +494,7 @@ void downloadFiles() {
     bool updateSuccess = true;
     int pos = 0;
     while (pos < catalogContent.length()) {
+        setLedColor(255*(catalogContent.length()-pos)/catalogContent.length(),128*(catalogContent.length()-pos)/catalogContent.length(),0,true);
         int endPos = catalogContent.indexOf('\n', pos);
         if (endPos == -1) endPos = catalogContent.length();
         
