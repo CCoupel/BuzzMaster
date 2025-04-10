@@ -1,4 +1,4 @@
-import { getTeams, setTeamColor } from './configSPA.js';
+import { getTeams, setTeamColor, setTeamName } from './configSPA.js';
 import { createElement} from './interface.js';
 import { configureDropzone, configureDragElement } from './dragAndDropSPA.js'; 
 
@@ -83,6 +83,19 @@ export function createTeamDiv(teams) {
         const colorSelect = createElement('select', '', { id: `color-select-${id}` });
 
         title.textContent = id;
+        const editButton = createElement('button', 'edit-button');
+        editButton.innerHTML = '✏️';
+        editButton.title = 'Modifier le nom de l’équipe';
+        
+        editButton.addEventListener('click', () => {
+            const newName = prompt('Nouveau nom pour cette équipe :', id);
+            if (newName && newName.trim() !== '' && !teams[newName]) {
+                setTeamName(id, newName);
+            } else {
+                alert('Le nom est invalide ou déjà utilisé.');
+            }
+        });
+
 
         const dropzoneText = createElement('p', 'dropzone-text');
         dropzoneText.textContent = 'Glissez les membres de la team ici';
@@ -104,8 +117,10 @@ export function createTeamDiv(teams) {
         colorSelectors[id] = colorSelect;
 
         colorSelect.addEventListener('change', handleColorChange(id, colorSelect, colorDiv, colorSelectors));
-
-        teamInfoDiv.append(title, dropzone, colorLabel, colorSelect);
+        const titleWrapper = createElement('div', 'team-title-wrapper');
+        titleWrapper.appendChild(title);
+        titleWrapper.appendChild(editButton);
+        teamInfoDiv.append(titleWrapper, dropzone, colorLabel, colorSelect);
         teamDiv.append(colorDiv, teamInfoDiv);
         container.appendChild(teamDiv);
     }

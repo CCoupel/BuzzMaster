@@ -27,6 +27,25 @@ export function addNewTeam(id) {
   sendTeamsAndBumpers();
 };
 
+export function setTeamName(oldId, newId) {
+    if (teams[newId]) {
+        alert(`Le nom "${newId}" est déjà utilisé.`);
+        return;
+    }
+
+    teams[newId] = { ...teams[oldId] };
+
+    for (const bId in bumpers) {
+        if (bumpers[bId]["TEAM"] === oldId) {
+            bumpers[bId]["TEAM"] = newId;
+        }
+    }
+
+    delete teams[oldId];
+    sendTeamsAndBumpers();
+    updateDisplayConfig();
+};
+
 export function setBumperName(id, name) {
     for (const bumperId in bumpers) {
         if (bumpers[bumperId]["NAME"] === name && bumperId !== id) {

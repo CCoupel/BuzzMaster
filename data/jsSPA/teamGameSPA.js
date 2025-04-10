@@ -34,14 +34,22 @@ export function updateDisplayGame() {
             teamColor.style.backgroundColor = `rgb(${teamData.COLOR.join(',')})`;
         }       
         const teamTitle = document.createElement('h2');
+        teamTitle.className = 'team-name';
         teamTitle.textContent = teamName;
-        const teamScore = document.createElement('p');
-        teamScore.className = 'team-score';
-        teamScore.textContent = `${teamData.SCORE ?? 0} Pts`;
         
+        if (gameState.gamePhase === "PREPARE" && teamData.READY === "FALSE") {
+            teamElement.classList.remove('ready');
+            teamElement.classList.add('not-ready');
+        } else if (gameState.gamePhase === "PREPARE" && teamData.READY === "TRUE") {
+            teamElement.classList.remove('not-ready');
+            teamElement.classList.add('ready');
+        } else {
+            teamElement.classList.remove('not-ready');
+            teamElement.classList.remove('ready');
+        }
+
         teamHeader.appendChild(teamColor);
         teamHeader.appendChild(teamTitle);
-        teamHeader.appendChild(teamScore);
         teamElement.appendChild(teamHeader);
 
         const teamBumpers = Object.entries(getBumpers())
@@ -168,7 +176,11 @@ export function questionsSelectList() {
         questionDiv.id = `question-${questionData.ID}`;
 
         if (selectedQuestion && selectedQuestion.ID === questionData.ID) {
-            questionDiv.style.backgroundColor = 'yellow'; 
+            if (gameState.gamePhase === "PREPARE") {
+                questionDiv.style.backgroundColor = '#fff176'; 
+            } else {
+                questionDiv.style.backgroundColor = '#aed581';
+            }
         }
 
         questionDiv.innerHTML = `

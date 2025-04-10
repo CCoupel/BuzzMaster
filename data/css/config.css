@@ -80,11 +80,13 @@
     width: 100%;
 }
 
-.team-name {
+.team-title-wrapper {
     background-color: var(--secondary-color);
     color: white;
     padding: 0.5rem;
     font-size: 1.5rem;
+    display: flex;
+    justify-content: space-between;
 }
 
 .dropzone {

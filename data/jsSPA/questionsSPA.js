@@ -173,7 +173,7 @@ export function questionList() {
             questionDiv.className = 'question-item';
             questionDiv.innerHTML = `
                 <div class="question-header">
-                    <button class="edit-button" 
+                    <button class="edit-button"
                         data-id="${data.ID}"
                         data-number="${data.ID}"
                         data-question="${data.QUESTION}" 

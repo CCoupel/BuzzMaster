@@ -68,6 +68,7 @@ function handleServerAction(action, msg, fsinfo) {
             updateTimeBar(true);
             break;
         case 'UPDATE':
+            updateGameState(msg.GAME);
             if (msg.teams && msg.bumpers) {
                 updateTeams(msg.teams);
                 updateBumpers(msg.bumpers);
@@ -87,7 +88,6 @@ function handleServerAction(action, msg, fsinfo) {
                     teamGamePage();
                     break;
             }
-            updateGameState(msg.GAME);
             updateTimeBar(true);
             updateTimer();
             handlePhase(msg.GAME.PHASE);

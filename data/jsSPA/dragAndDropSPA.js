@@ -2,11 +2,27 @@ import { getTeams, getBumpers, addBumperToTeam, addNewTeam, removeBumperFromTeam
 import { createTeamDiv } from './teamSPA.js';
 import { createBuzzerDiv } from './buzzerSPA.js';
 
+let autoScrollInterval = null;
+let lastMouseY = 0;
+
+function trackMouseY(e) {
+    lastMouseY = e.clientY;
+}
+
 function setupDraggableElement(element) {
     element.draggable = true;
-    element.stopPropagation;
-    element.addEventListener('dragstart', handleDragStart);
-};
+
+    element.addEventListener('dragstart', (e) => {
+        handleDragStart(e);
+        window.addEventListener('dragover', trackMouseY);
+        startAutoScroll();
+    });
+
+    element.addEventListener('dragend', () => {
+        window.removeEventListener('dragover', trackMouseY);
+        stopAutoScroll();
+    });
+}
 
 function handleDragStart(e) {
     e.dataTransfer.setData('text', e.target.id);
@@ -89,7 +105,25 @@ function handleDrop(e) {
     });
 };
 
+function startAutoScroll() {
+    if (autoScrollInterval) return;
 
+    autoScrollInterval = setInterval(() => {
+        const threshold = 100; // marge haute/basse
+        const scrollSpeed = 25;
+
+        if (lastMouseY < threshold) {
+            window.scrollBy(0, -scrollSpeed);
+        } else if (lastMouseY > window.innerHeight - threshold) {
+            window.scrollBy(0, scrollSpeed);
+        }
+    }, 20);
+}
+
+function stopAutoScroll() {
+    clearInterval(autoScrollInterval);
+    autoScrollInterval = null;
+}
 
 function showInvalidDropFeedback(element) {
     element.classList.add('invalid-drop');
