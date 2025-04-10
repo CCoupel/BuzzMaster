@@ -149,15 +149,21 @@ void revealGame() {
 }
 
 void readyGame(const String question) {
-    if (isGameStoped()) {
-      if (question.toInt()>0) {
-        setQuestion(question);
-      } else {
-        setQuestion("");
-      }
-      String msg="{\"QUESTION\": "+getQuestionElementJson()+"}";
-      putMsgToQueue("READY",msg.c_str(),true);
+  ESP_LOGI(BUMPER_TAG, "Preparing game with question: %s", question.c_str());
+
+  if (isGameStoped() || isGamePrepare() || isGameReady()) {
+    setGamePhase("PREPARE");
+    if (question.toInt()>0) {
+      setQuestion(question);
+    } else {
+      setQuestion("");
     }
+    resetBumpersTime();
+    resetBumpersReady();
+    resetTeamsReady();
+    putMsgToQueue("UPDATE",getTeamsAndBumpersJSON().c_str(),false);
+    putMsgToQueue("PING","{}",false);
+  }
 }
 
 
@@ -254,6 +260,22 @@ void handleButtonAction(const char* bumperID, JsonObject& MSG, AsyncClient* c) {
   }
 }
 
+void handlePingResponseAction(const char* bumperID) {
+    ESP_LOGI(BUMPER_TAG, "Bumper PONG received from: %s", bumperID);
+    if (isGamePrepare()) {
+        setBumperReady(bumperID);
+        updateTeamsReady();
+        notifyAll();
+        
+        // Check if all teams are ready to potentially transition to READY state
+        if (areAllTeamsReady()) {
+            ESP_LOGI(BUMPER_TAG, "All teams are ready to start");
+            setGamePhase("READY");
+            putMsgToQueue("READY", getTeamsAndBumpersJSON().c_str(), true);
+        }
+    }
+}
+
 void parseJSON(const String& data, AsyncClient* c)
 {
   String action;
@@ -286,8 +308,8 @@ void parseJSON(const String& data, AsyncClient* c)
     case hash("BUTTON"):
       handleButtonAction(bumperID.c_str(), MSG, c);
       break;
-    case hash("PING"):
-      // Handle PING action if needed
+    case hash("PONG"):
+      handlePingResponseAction(bumperID.c_str());
       break;
     default:
       ESP_LOGW(BUMPER_TAG, "Unknown action: %s", action.c_str());

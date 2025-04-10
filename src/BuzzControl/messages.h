@@ -120,8 +120,6 @@ void sendMessageToAllClients(const String& action, const String& msg) {
             ESP_LOGE(TAG, "Failed to send UDP broadcast on AP network");
         }
     }
-
-    ESP_LOGI(TAG, "Broadcast messages sent: %s", message.c_str());
 }
 
 void sendMessageTask(void *parameter) {
