@@ -1,4 +1,10 @@
 export const routes = {
+    '#welcome': () => `
+    <div id="welcome-page"> 
+
+    </div>
+    `,
+
     '#teamGame': () => `
         <link rel="stylesheet" href="../css/teamGame.css">
         <div id="teamGame-page"> 

@@ -7,6 +7,7 @@ let lastMouseY = 0;
 
 function trackMouseY(e) {
     lastMouseY = e.clientY;
+    console.log('lastMouseY', lastMouseY);
 }
 
 function setupDraggableElement(element) {
@@ -14,14 +15,15 @@ function setupDraggableElement(element) {
 
     element.addEventListener('dragstart', (e) => {
         handleDragStart(e);
-        window.addEventListener('dragover', trackMouseY);
-        startAutoScroll();
+        document.addEventListener('dragover', trackMouseY);
+        startAutoScroll(e);
     });
 
     element.addEventListener('dragend', () => {
-        window.removeEventListener('dragover', trackMouseY);
+        document.removeEventListener('dragover', trackMouseY);
         stopAutoScroll();
     });
+    
 }
 
 function handleDragStart(e) {
@@ -105,17 +107,29 @@ function handleDrop(e) {
     });
 };
 
-function startAutoScroll() {
+function getScrollableContainerUnderMouse(e) {
+    const el = document.elementFromPoint(e.clientX, e.clientY); // Utilise les coordonnées réelles
+    return el?.closest('.buzzer-container, .team-container');
+};
+
+function startAutoScroll(e) {
     if (autoScrollInterval) return;
 
     autoScrollInterval = setInterval(() => {
-        const threshold = 100; // marge haute/basse
+        const threshold = 400; // 👈 ici tu peux le monter à 150-200 pour démarrer plus tôt
         const scrollSpeed = 25;
 
-        if (lastMouseY < threshold) {
-            window.scrollBy(0, -scrollSpeed);
-        } else if (lastMouseY > window.innerHeight - threshold) {
-            window.scrollBy(0, scrollSpeed);
+        const scrollableContainer = getScrollableContainerUnderMouse(e);
+        if (!scrollableContainer) return;
+
+        const rect = scrollableContainer.getBoundingClientRect();
+
+        const mouseYInContainer = lastMouseY - rect.top;
+
+        if (mouseYInContainer < threshold) {
+            scrollableContainer.scrollTop -= scrollSpeed;
+        } else if (mouseYInContainer > rect.height - threshold) {
+            scrollableContainer.scrollTop += scrollSpeed;
         }
     }, 20);
 }
@@ -123,7 +137,7 @@ function startAutoScroll() {
 function stopAutoScroll() {
     clearInterval(autoScrollInterval);
     autoScrollInterval = null;
-}
+};
 
 function showInvalidDropFeedback(element) {
     element.classList.add('invalid-drop');
@@ -155,16 +169,13 @@ function buzzerDropInTeams(buzzerElement, teamsContainer) {
         newTeamId
     });
 
-    addNewTeam(newTeamId);
+    addNewTeam(newTeamId, false);
     addBumperToTeam(bumperMac, newTeamId);
 
     console.log('Team created and buzzer added:', {
         newTeamId,
         bumperMac
     });
-
-    createTeamDiv(getTeams());
-    createBuzzerDiv(getBumpers());
 };
 
 function buzzerDropInTeam(buzzerElement, teamDropzone) {
@@ -185,10 +196,6 @@ function buzzerDropInTeam(buzzerElement, teamDropzone) {
     teamDropzone.appendChild(buzzerElement);
 
     console.log('Buzzer added to team');
-    
-    // Mettre à jour l'affichage
-    createTeamDiv(getTeams());
-    createBuzzerDiv(getBumpers());
 };
 
 function buzzerDropInBuzzers(buzzerElement, buzzerContainer) {
@@ -223,7 +230,7 @@ function teamDropInBuzzers(teamElement, buzzerContainer) {
 
     buzzers.forEach(buzzer => {
         const bumperMac = buzzer.id.replace('buzzer-', '');
-        removeBumperFromTeam(bumperMac);
+        removeBumperFromTeam(bumperMac, false);
         buzzerContainer.appendChild(buzzer);
         console.log('Buzzer removed from team:', bumperMac);
     });
@@ -232,11 +239,6 @@ function teamDropInBuzzers(teamElement, buzzerContainer) {
     teamElement.remove();
 
     console.log('Team deleted:', teamId);
-
-    createTeamDiv(getTeams());
-    createBuzzerDiv(getBumpers());
-
-    console.log('Team and buzzer views updated');
 };
 
 export function configureDropzone(dropzone) {

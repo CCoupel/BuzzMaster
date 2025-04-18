@@ -22,9 +22,11 @@ export function updateBumpers(newBumpers) {
     bumpers = newBumpers;
 };
 
-export function addNewTeam(id) {
-  teams[id]={"COLOR": [64, 64, 64]};
-  sendTeamsAndBumpers();
+export function addNewTeam(id, notify = true) {
+    teams[id]={"COLOR": [64, 64, 64]};
+    if (notify) {
+        sendTeamsAndBumpers();
+    }
 };
 
 export function setTeamName(oldId, newId) {
@@ -77,15 +79,17 @@ export function deleteTeam(id) {
     sendTeamsAndBumpers();
 };
 
-export function addBumperToTeam(bId, tId) {
+export function addBumperToTeam(bId, tId,) {
     bumpers[bId]["TEAM"]=tId;
     sendTeamsAndBumpers()
 };
 
-export function removeBumperFromTeam(bId) {
-    bumpers[bId]["TEAM"]='';
-    sendTeamsAndBumpers()
-};
+export function removeBumperFromTeam(bId, notify = true) {
+    bumpers[bId]["TEAM"] = '';
+    if (notify) {
+        sendTeamsAndBumpers();
+    }
+}
 
 export function setTeamColor(id, color) {
     console.log("MAIN: set team color id=%s",id)
@@ -134,16 +138,16 @@ function handleReset() {
 
 document.addEventListener('DOMContentLoaded', () => {
     //connectWebSocket(handleConfigSocketMessage);
-    initializeDropzones();
+    //initializeDropzones();
     //getWebVersion();
 
-    const addButton = document.getElementById('addDivButton');
-    const resetButton = document.getElementById('resetButton');
+    //const addButton = document.getElementById('addDivButton');
+    //const resetButton = document.getElementById('resetButton');
     
-    if (addButton) addButton.addEventListener('click', handleAddTeam);
-    if (resetButton) resetButton.addEventListener('click', handleReset);
+    //if (addButton) addButton.addEventListener('click', handleAddTeam);
+    //if (resetButton) resetButton.addEventListener('click', handleReset);
 
-    updateDisplayConfig();
+    //updateDisplayConfig();
 });
 
 export function configPage() {

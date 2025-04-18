@@ -67,6 +67,7 @@ main {
     display: grid;
     grid-template-columns: repeat(2, 1fr); /* 2 colonnes */
     gap: 1rem; /* Optionnel : espace entre les divs */
+    align-items: start;
 }
 
 .dropzone-text {

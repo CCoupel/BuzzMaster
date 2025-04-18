@@ -6,7 +6,7 @@ import { teamGamePage } from './teamGameSPA.js';
 
 function navigate() {
     const appDiv = document.getElementById('main');
-    const hash = window.location.hash || '#config';
+    const hash = window.location.hash || '#welcome';
     const route = routes[hash];
 
     if (route) {
