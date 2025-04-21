@@ -25,11 +25,11 @@ void timerCallback() {
     }
 }
 
-void processButtonPress(const String& bumperID, const char* b_team, int64_t b_time, int b_button) {
-  ESP_LOGI(BUMPER_TAG, "Button Pressed %i@%s at time %i", b_button, bumperID.c_str(),b_team,b_time);
+void processButtonPress(const String& bumperID, const char* b_team, int64_t b_time, const char* s_button) {
+  ESP_LOGI(BUMPER_TAG, "Button Pressed %s@%s at time %i", s_button, bumperID.c_str(),b_team,b_time);
   if (xSemaphoreTake(questionMutex, pdMS_TO_TICKS(1000)) == pdTRUE) {
 
-    setBumperButton(bumperID.c_str(), b_button);
+    setBumperButton(bumperID.c_str(), s_button);
     setBumperTime(bumperID.c_str(), b_time);
     setBumperStatus(bumperID.c_str(), "PAUSE");
 
@@ -250,12 +250,12 @@ void handleHelloAction(const char* bumperID, JsonObject& MSG) {
 
 
 void handleButtonAction(const char* bumperID, JsonObject& MSG, AsyncClient* c) {
-  ESP_LOGE(BUMPER_TAG, "Button pressed: %s", bumperID);
+  ESP_LOGD(BUMPER_TAG, "Button pressed: %s", bumperID);
   JsonObject bumper=getBumper(bumperID);
   const char* teamID=bumper["TEAM"];
-  int b_button = MSG["button"];
+  const char* s_button = MSG["button"];
   if (teamID != nullptr) {
-    processButtonPress(bumperID, teamID, micros(), b_button);
+    processButtonPress(bumperID, teamID, micros(), s_button);
     pauseGame(c);
   }
 }

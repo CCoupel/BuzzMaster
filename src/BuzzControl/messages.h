@@ -52,13 +52,13 @@ void putMsgToQueue(const char* action, const char* msg, bool notify, AsyncClient
 }
 
 String makeJsonMessage(const String& action, const String& msg ) {
-    String message="{";
-    message += "\"ACTION\": \"" + action + "\"";
-    message += ", \"VERSION\": \"" + String(VERSION) + "\"";
-    message += ", \"MSG\":" + msg + "";
-    message += ", \"TIME_EVENT\":" + String(micros()) + "";
-    message += ", \"FSINFO\": "+printLittleFSInfo(true)+"";
-    message += "} \n";
+    String message="{\n";
+    message += "\"ACTION\": \"" + action + "\"\n";
+    message += ", \"VERSION\": \"" + String(VERSION) + "\"\n";
+    message += ", \"MSG\":" + msg + "\n";
+    message += ", \"TIME_EVENT\":" + String(micros()) + "\n";
+    message += ", \"FSINFO\": "+printLittleFSInfo(true)+"\n";
+    message += "} \n\0";
 
     return message;
 }
@@ -73,13 +73,14 @@ IPAddress calculateBroadcast(const IPAddress& ip, const IPAddress& subnet) {
 }
 
 void sendMessageToClient(const String& action, const String& msg, AsyncClient* client) {
-    if (client && client->connected()) {
+/*    if (client && client->connected()) {
         String message=makeJsonMessage(action, msg);
         client->write(message.c_str(), message.length());
         ESP_LOGI(TAG, "Sent to %s: %s", client->remoteIP().toString().c_str(), message.c_str());
     } else {
         ESP_LOGW(TAG, "Client not connected or null");
     }
+*/
 }
 
 void sendMessageToAllClients(const String& action, const String& msg) {

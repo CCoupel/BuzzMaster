@@ -494,7 +494,7 @@ void downloadFiles() {
     bool updateSuccess = true;
     int pos = 0;
     while (pos < catalogContent.length()) {
-        setLedColor(255*(catalogContent.length()-pos)/catalogContent.length(),128*(catalogContent.length()-pos)/catalogContent.length(),0,true);
+        setLedColor(255*(pos)/catalogContent.length(),128*(pos)/catalogContent.length(),0,true);
         int endPos = catalogContent.indexOf('\n', pos);
         if (endPos == -1) endPos = catalogContent.length();
         
@@ -506,6 +506,7 @@ void downloadFiles() {
 
         String fileUrl = baseUrl + "/" + filePath;
         String tempFilePath = TEMP_DIR + "/" + filePath;
+        setLedColor(0,0,0,true);
 
         if (!downloadFile(fileUrl, tempFilePath)) {
             ESP_LOGE(FS_TAG, "Échec du téléchargement ou de la création du répertoire pour %s", fileUrl.c_str());
@@ -513,6 +514,7 @@ void downloadFiles() {
             break;
         }
     }
+    setLedColor(128,255,0,true);
 
     if (updateSuccess) { 
         deleteDirectory("/CURRENT");

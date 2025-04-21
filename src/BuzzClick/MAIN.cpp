@@ -25,6 +25,22 @@ void printPinInfo() {
   #endif
 }
 
+void watchdogTask(void *pvParameters) {
+    // Configurer le watchdog avec un délai plus long si nécessaire
+    esp_task_wdt_init(30, true); // 10 secondes de délai
+    esp_task_wdt_add(NULL);      // S'enregistrer auprès du watchdog
+    
+    for (;;) {
+        // Réinitialiser le watchdog
+        esp_task_wdt_reset();
+        
+        // Surveillance du système
+        ESP_LOGD("WATCHDOG", "Memory: %u bytes free", ESP.getFreeHeap());
+        
+        vTaskDelay(pdMS_TO_TICKS(1000));
+    }
+}
+
 void setup() 
 {
   setenv("TZ", "UTC-1", 1);
@@ -38,7 +54,16 @@ void setup()
   esp_log_level_set("*", ESP_LOG_INFO);
   ESP_LOGI(MAIN_TAG, "Starting up...");
   
-  
+  // Créer une tâche spécifique pour surveiller le watchdog
+    xTaskCreate(
+        watchdogTask,
+        "WatchdogTask",
+        2048,
+        NULL,
+        configMAX_PRIORITIES - 1, // Haute priorité
+        NULL
+    );
+
   initLED();
   ESP_LOGI(MAIN_TAG, "STARTING:");
   printPinInfo();
@@ -53,7 +78,7 @@ void setup()
 
   setLedColor(255,255,0,true);
 
-  esp_task_wdt_init(15, true); 
+//  esp_task_wdt_init(15, true); 
   setLedColor(0,64,0,true);
 
   attachButtons();
@@ -61,7 +86,7 @@ void setup()
   }
 
 void loop() {
-  checkWifiStatus();
+//  checkWifiStatus();
   manageButtonMessages();
   
 }

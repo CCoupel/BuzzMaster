@@ -18,33 +18,7 @@ bool isGameStarted = false;
 AsyncUDP udp;
 
 String BcastJsonBuffer = "";
-/*
-// LED 
-void applyLedColor() {
-  int adjustedRed = (currentRed * currentIntensity) / 255;
-  int adjustedGreen = (currentGreen * currentIntensity) / 255;
-  int adjustedBlue = (currentBlue * currentIntensity) / 255;
 
-  neopixelWrite(rgbPin,adjustedRed,adjustedGreen,adjustedBlue);
-  int pwmValue = 255 - currentIntensity;
-
-}
-
-void setLedColor(int red, int green, int blue, bool isApplyLedColor) {
-
-  currentRed = red;
-  currentGreen = green;
-  currentBlue = blue;
-  if (isApplyLedColor) {
-    applyLedColor();
-  }
-}
-
-void setLedIntensity(int intensity) {
-  currentIntensity = intensity;
-  applyLedColor();
-}
-*/
 
 /* SOCKET */
 
@@ -84,27 +58,6 @@ bool connectSRV()
   return true;
 }
 
-/*
-void sendPing() {
-  if (client->connected()) {
-    sendMSG("PING", "''");
-  } else {
-    ESP_LOGW(SRV_TAG, "Connection lost. Attempting to reconnect...");
-    connectSRV();  // Tenter de se reconnecter
-  }
-}
-
-
-bool checkConnection() {
-  if (!client->connected()) {
-    ESP_LOGW(SRV_TAG, "Connection lost. Attempting to reconnect...");
-    return connectSRV();
-  } else {
-    sendPing();
-    return true;
-  }
-}
-*/
 
 bool getServerIP()
 {
@@ -140,7 +93,7 @@ void onConnect(void* arg, AsyncClient* c) {
 }
 
 void onData(void* arg, AsyncClient* c, void* data, size_t len) {
-  String s_data = String((char*)data).substring(0, len);
+/*  String s_data = String((char*)data).substring(0, len);
   ESP_LOGI(SRV_TAG, "DATA received: %s", s_data.c_str());
   
   jsonBuffer += s_data;
@@ -150,6 +103,7 @@ void onData(void* arg, AsyncClient* c, void* data, size_t len) {
     jsonBuffer = jsonBuffer.substring(endOfJson + 1);
     parseJSON(jsonPart, c);
   }
+  */
 }
 
 void onDisconnect(void* arg, AsyncClient* c) {
@@ -182,9 +136,11 @@ void onDataBroadcast(AsyncUDPPacket packet) {
     
     BcastJsonBuffer += s_data;
     int endOfJson;
-    while ((endOfJson = BcastJsonBuffer.indexOf('\n')) > 0) {
+    while ((endOfJson = BcastJsonBuffer.indexOf('\0')) > 0) {
       String jsonPart = BcastJsonBuffer.substring(0, endOfJson);
-      BcastJsonBuffer = BcastJsonBuffer.substring(endOfJson + 1);
+      BcastJsonBuffer = BcastJsonBuffer.substring(endOfJson + 2);
+      ESP_LOGI(SRV_TAG,"Broadcast MSG complete at %i : %s", endOfJson, jsonPart.c_str()); 
+
       parseJSON(jsonPart, nullptr);  // Passer nullptr car nous n'avons pas de client AsyncClient ici
     }
   }
@@ -211,18 +167,88 @@ bool initBroadcastUDP()
 /* CORE */
 void startGame() {
   isGameStarted=true;
-  setLedIntensity(10);
+//  setLedIntensity(10);
 }
 
 void stopGame() {
   isGameStarted=false;
-  setLedIntensity(255);
+//  setLedIntensity(255);
 
 }
 
 void pauseGame() {
   isGameStarted=false;
-  setLedIntensity(128);
+//  setLedIntensity(128);
+}
+
+void manageLeds(JsonObject& buzzer, JsonObject& team, JsonArray& colorArray, JsonObject& message)
+{
+// Determine game phase with priority (buzzer status, then team status, then game phase)
+  const char* game_phase = NULL;
+  const char* team_status=team["STATUS"];
+  const char* buzzer_Status=buzzer["STATUS"];
+  if (buzzer_Status != NULL) {
+    game_phase = buzzer_Status;
+  } else if (team_status != NULL) {
+    game_phase = team_status;
+  } else if (message.containsKey("GAME") && message["GAME"].containsKey("PHASE")) {
+    game_phase = message["GAME"]["PHASE"];
+  } else {
+    game_phase = "UNKNOWN"; // Default value if no valid status is found
+  }
+  
+
+  int current_time=message["GAME"]["CURRENT_TIME"];
+  int delay=message["GAME"]["DELAY"];
+  const char* button=buzzer["BUTTON"];
+  if (strcmp(game_phase,"READY")==0)
+  {
+    setLedColor(colorArray[0], colorArray[1], colorArray[2],true);
+  }
+  else if (strcmp(game_phase,"STOP")==0)
+  {
+    ESP_LOGI(SRV_TAG, "Game Phase=STOP");
+    setLedIntensity(255);
+  }
+  else if (strcmp(game_phase, "START")==0)
+  {
+    ESP_LOGI(SRV_TAG, "Game Phase=START");
+    //setLedColor(colorArray[0], colorArray[1], colorArray[2],true);
+    setLedIntensity(10);
+    
+    
+    // Fix potential integer division issues with float calculation
+    float progress = (float)current_time / delay;
+    // Calculate LED position and color for progress indicator
+    int led = current_time%(NUMPIXELS/4);
+    int nR = 255 * (1.0 - progress);
+    int nG = 255 * progress;
+    int nB = 0;
+    
+    ESP_LOGD(SRV_TAG, "set LED %i R=%i G=%i B=%i", led, nR, nG, nB);
+    for (int l=1; l<NUMPIXELS; l+=NUMPIXELS/4)
+    {
+      setPixelColor(l+led, nR, nG, nB);
+    }
+  }
+  else if (strcmp(game_phase, "PAUSE")==0)
+  {
+    ESP_LOGI(SRV_TAG, "Game Phase=PAUSE");
+    setLedIntensity(64);
+    if ( button != NULL )
+    {
+      ESP_LOGD(SRV_TAG, "Button=%s", button);
+      for (int led=0+current_time%2; led<NUMPIXELS; led+=2)
+      {
+        setPixelColor(led, 64, 64, 64);
+      }
+    }
+  }
+  else if (strcmp(game_phase, "PREPARE")==0)
+  {
+    ESP_LOGI(SRV_TAG, "Game Phase=PREPARE");
+    setLedColor(0, 0, 0,true);
+  }
 }
 
 void handleUpdateAction(JsonObject& message, const String& macAddress) {
@@ -276,7 +302,7 @@ void handleUpdateAction(JsonObject& message, const String& macAddress) {
 
   }
   // Change la couleur de la LED
-  setLedColor(r, g, b,true);
+//  setLedColor(r, g, b,true);
 
   int intensity=255;
   if (team.containsKey("STATUS")) {
@@ -297,7 +323,8 @@ void handleUpdateAction(JsonObject& message, const String& macAddress) {
       }
     }
   }
-  setLedIntensity(intensity);
+//  setLedIntensity(intensity);
+  manageLeds(buzzer, team, colorArray, message);
 }
 
 void hello_bumper()
@@ -313,6 +340,8 @@ void resetGame() {
 
 void parseJSON(const String& data, AsyncClient* c) {
   JsonDocument receivedData;
+  ESP_LOGD(SRV_TAG, " parse JSON: %s", data.c_str());
+
   DeserializationError error = deserializeJson(receivedData, data);
   if (error) {
     ESP_LOGE(SRV_TAG, "Failed to parse JSON: %s", error.c_str());
@@ -346,7 +375,11 @@ void parseJSON(const String& data, AsyncClient* c) {
   }else if (strcmp(action, "RESET") == 0) {
     ESP_LOGI(SRV_TAG, "REseting Datas");
     resetGame();
+  }else if (strcmp(action, "UPDATE_TIMER") == 0) {
+    ESP_LOGI(SRV_TAG, "UPDATING TIMER");
+    handleUpdateAction(message, WiFi.macAddress());
   }
+  
 
 }
 
@@ -356,7 +389,7 @@ int64_t getAbsoluteTimeMicros() {
 
 void IRAM_ATTR buttonHandler(void *arg) {
   ButtonInfo* buttonInfo = static_cast<ButtonInfo*>(arg);
-
+//  ESP_LOGI(SRV_TAG, "BUTTON Pressed ");
   if (isGameStarted) {
     buttonInfo->time = String(micros());
     buttonInfo->pressed = true;
@@ -375,7 +408,9 @@ void attachButtons()
     }
 
     pinMode(buttonsInfo[id].pin, INPUT_PULLUP); 
-    
+    pinMode(buttonsInfo[id].pin+1, OUTPUT); 
+    digitalWrite(buttonsInfo[id].pin+1, LOW); 
+
     int8_t interruptPin = digitalPinToInterrupt(buttonsInfo[id].pin);
     if (interruptPin == -1) {
       ESP_LOGE(SRV_TAG, "Failed to get interrupt for button %zu (%s) on pin %d", id, buttonsInfo[id].name.c_str(), buttonsInfo[id].pin);

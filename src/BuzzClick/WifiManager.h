@@ -1,10 +1,11 @@
 #pragma once
-#include <gpio_viewer.h>
-GPIOViewer gpio_viewer;
+//#include <gpio_viewer.h>
+//GPIOViewer gpio_viewer;
 
 #include "Common/CustomLogger.h"
 #include "Common/led.h"
 #include "serverConnection.h"
+#include "esp_task_wdt.h"
 
 #include <WiFi.h>
 
@@ -61,6 +62,8 @@ bool connectToWifi() {
   unsigned long startAttemptTime = millis();
 
   while (WiFi.status() != WL_CONNECTED && millis() - startAttemptTime < WIFI_TIMEOUT_MS) {
+    esp_task_wdt_reset();
+
     delay(100);
     Serial.print(".");
   }
