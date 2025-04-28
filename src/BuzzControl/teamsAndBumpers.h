@@ -697,7 +697,7 @@ JsonObject teams = getTeams();
   if (!teams.isNull()) {
     for (JsonPair teamPair : teams) {
       JsonObject team = teamPair.value().as<JsonObject>();
-      team["READY"]="TRUE";
+      team["READY"]="true";
     }
     ESP_LOGI(TEAMs_TAG, "All teams marked as initially ready");
   } else {

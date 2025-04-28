@@ -160,7 +160,7 @@ void readyGame(const String question) {
     }
     resetBumpersTime();
     resetBumpersReady();
-    resetTeamsReady();
+    updateTeamsReady();
     putMsgToQueue("UPDATE",getTeamsAndBumpersJSON().c_str(),false);
     putMsgToQueue("PING","{}",false);
   }

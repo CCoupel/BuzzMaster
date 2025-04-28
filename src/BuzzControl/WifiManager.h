@@ -10,8 +10,8 @@
 static const char* WIFI_TAG = "WIFI";
 
 
-IPAddress apIP(8,8,8,8);
-IPAddress gateway(8,8,8,8);
+IPAddress apIP(192,168,100,254);
+IPAddress gateway(192,168,100,254);
 IPAddress subnet(255, 255, 255, 0);
 
 
