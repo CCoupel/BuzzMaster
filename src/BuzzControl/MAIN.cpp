@@ -10,11 +10,11 @@
 #include "tcpManager.h"
 #include "buttonManager.h"
 #include "fsManager.h"
-#include "messages.h"
+#include "messages_received.h"
+#include "messages_to_send.h"
 #include "BumperServer.h"
 #include "WebServer.h"
 #include "sdManager.h"
-//#include <esp_log.h>
 
 static const char* MAIN_TAG = "BUZZCONTROL";
 const uint16_t logPort = 8888;  // Port UDP pour les logs
@@ -22,7 +22,7 @@ const uint16_t logPort = 8888;  // Port UDP pour les logs
 // Nouvelle tâche de surveillance du watchdog
 void watchdogTask(void *pvParameters) {
     // Configurer le watchdog avec un délai plus long si nécessaire
-    esp_task_wdt_init(30, true); // 10 secondes de délai
+    esp_task_wdt_init(10, true); // 10 secondes de délai
     esp_task_wdt_add(NULL);      // S'enregistrer auprès du watchdog
     
     for (;;) {
@@ -49,15 +49,6 @@ void setup(void)
   
   initLED();
   ESP_LOGI(MAIN_TAG, "STARTING:");
-  // Créer une tâche spécifique pour surveiller le watchdog
-    xTaskCreate(
-        watchdogTask,
-        "WatchdogTask",
-        2048,
-        NULL,
-        configMAX_PRIORITIES - 1, // Haute priorité
-        NULL
-    );
 
   setLedColor(255, 0, 0);
   setLedIntensity(255);
@@ -93,24 +84,34 @@ void setup(void)
   attachButtons();
   loadJson(GameFile);
 
-//  sdInit();
-
   startWebServer();
   startBumperServer();
   setLedColor(0, 128, 0, true);
 
-  messageQueue = xQueueCreate(10, sizeof(messageQueue_t));
+  // Initialisation des files d'attente de messages
+  initIncomingQueue();
+  initOutgoingQueue();
 
-  if (messageQueue == NULL) {
-    ESP_LOGE(MAIN_TAG, "Échec de la création de la file d'attente");
-    return;
-  }
-
+  // Création des tâches pour traiter les messages
+  xTaskCreate(receiveMessageTask, "Receive Message Task", 14096, NULL, 2, NULL);
   xTaskCreate(sendMessageTask, "Send Message Task", 14096, NULL, 2, NULL);
-  sendHelloToAll();
+
+  // Création de la tâche pour surveiller le watchdog
+  xTaskCreate(
+      watchdogTask,
+      "WatchdogTask",
+      2048,
+      NULL,
+      configMAX_PRIORITIES - 1,
+      NULL
+  );
+  
+  // Initialisation des mutex
   questionMutex = xSemaphoreCreateMutex();
   buttonMutex = xSemaphoreCreateMutex();
-
+  
+  // Envoyer un message de bienvenue à tous les clients
+  enqueueOutgoingMessage("HELLO", "{}", false, nullptr);
 }
 
 void loop(void)

@@ -1,94 +1,11 @@
 #pragma once
 #include "Common/CustomLogger.h"
 #include "Common/led.h"
+#include "messages_received.h"
 
 #include <ArduinoJson.h>
-//#include <esp_log.h>
 
 const char* SOCKET_TAG = "SOCKET";
-
-void parseDataFromSocket(const char* action, const JsonObject& message) {
-  ESP_LOGI(SOCKET_TAG, "Parsing action: %s", action);
-  String output="";
-  serializeJson(message, output);
-
-  if (output.length() > 0) {
-    ESP_LOGI(SOCKET_TAG, "Parsing message: %i: %s", output.length(), output.c_str());
-  } else {
-    output="!! NULL !!";
-    ESP_LOGI(SOCKET_TAG, "Parsing null message: %s", output.c_str());
-  }
-  
-
-  switch (hash(action)) {
-//    case hash("FILE"):
-//      handleFile(message["FILE"]);
-    case hash("PING"):
-      // Handle ping
-      break;
-    case hash("DELETE"):
-      // Handle ping
-      deleteQuestion(message["ID"]);
-      
-      break;
-    case hash("HELLO"):
-      notifyAll();
-      putMsgToQueue("QUESTIONS",getQuestions().c_str());
-      
-      break;
-    case hash("FULL"):
-      setBumpers(message["bumpers"]);
-      setTeams(message["teams"]);
-      notifyAll();
-      break;
-    case hash("UPDATE"):
-      updateTeams(message["teams"]);
-      updateBumpers(message["bumpers"]);
-      break;
-
-    case hash("RESET"):
-      resetServer();
-      break;
-    case hash("REBOOT"):
-      rebootServer();
-      break;
-    case hash("REVEAL"):
-      revealGame();
-      break;
-    case hash("READY"):
-      readyGame(message["QUESTION"]);
-      break;
-    case hash("START"):
-      startGame(message["DELAY"]);
-      break;
-    case hash("STOP"):
-      stopGame();
-      break;
-    case hash("PAUSE"):
-      pauseAllGame();
-      break;
-    case hash("CONTINUE"):
-      continueGame();
-      break;
-    case hash("RAZ"):
-      RAZscores();
-      break;
-    case hash("REMOTE"):
-      setRemotePage(message["REMOTE"]);
-      break;
-    case hash("UPDATE_TIMER"):
-//      updateTimer(message["CURRENT_TIME"]);
-      //setGameCurrentTime(message["CURRENT_TIME"]);
-      //putMsgToQueue("UPDATE_TIMER",getTeamsAndBumpersJSON().c_str(),false);
-      break;
-    case hash("FSINFO"):
-      putMsgToQueue("FSINFO",("{\"FSINFO\": \""+printLittleFSInfo()+"\"}").c_str());
-      break;
-    default:
-      ESP_LOGW(SOCKET_TAG, "Unrecognized action: %s", action);
-      break;
-  }
-}
 
 void handleWebSocketData(AsyncWebSocketClient *client, uint8_t *data, size_t len) {
   IPAddress clientIP = client->remoteIP();
@@ -111,45 +28,50 @@ void handleWebSocketData(AsyncWebSocketClient *client, uint8_t *data, size_t len
              logLength, logBuffer, len > maxLogLength ? "..." : "");
   } else {
     ESP_LOGD(SOCKET_TAG, "Received empty WebSocket data");
+    return;
   }
 
-  JsonDocument receivedData;
-  DeserializationError error = deserializeJson(receivedData, data, len);
-  if (error) {
-      ESP_LOGE(SOCKET_TAG, "Failed to parse JSON: %s", error.c_str());
-      return;
+  // Utiliser le même système de buffer que pour TCP
+  static std::map<String, String> wsClientBuffers;
+  String clientID = ipStr + "_" + String(client->id());
+  String partial_data = String((char*)data, len);
+  
+  // Ajouter les données au buffer du client
+  wsClientBuffers[clientID] += partial_data;
+  
+  // Traiter le buffer du client, à la recherche de messages JSON complets
+  String& jsonBuffer = wsClientBuffers[clientID];
+  int endOfJson;
+  
+  while ((endOfJson = jsonBuffer.indexOf('\0')) > 0) {
+    String jsonPart = jsonBuffer.substring(0, endOfJson);
+    jsonBuffer = jsonBuffer.substring(endOfJson + 1);
+    
+    // Envoyer le message JSON complet à la file d'attente
+    enqueueIncomingMessage("WebSocket", jsonPart.c_str(), nullptr);
   }
-
-  if (!receivedData.containsKey("ACTION") || !receivedData.containsKey("MSG")) {
-      ESP_LOGE(SOCKET_TAG, "Invalid JSON structure");
-      return;
-  }
-
-  const char* action = receivedData["ACTION"];
-  JsonObject message = receivedData["MSG"].as<JsonObject>();
-
-  parseDataFromSocket(action, message);
 }
 
 void onWsEvent(AsyncWebSocket *server, AsyncWebSocketClient *client, AwsEventType type, void *arg, uint8_t *data, size_t len) {
   IPAddress clientIP = client->remoteIP();
   String ipStr = clientIP.toString();
-  String output;
-  JsonDocument receivedData;
+  
   switch(type) {
     case WS_EVT_CONNECT:
       // Quand un client se connecte, envoyer un message
-      ESP_LOGI(SOCKET_TAG, "Client %u IP: %S connecté\n", client->id(), ipStr.c_str());
-      //client->text("Bienvenue sur le serveur WebSocket !");
+      ESP_LOGI(SOCKET_TAG, "WebSocket client %u IP: %s connected", client->id(), ipStr.c_str());
       break;
+      
     case WS_EVT_DISCONNECT:
       // Quand un client se déconnecte
-      ESP_LOGI(SOCKET_TAG, "Client %u déconnecté\n", client->id());
+      ESP_LOGI(SOCKET_TAG, "WebSocket client %u disconnected", client->id());
       break;
+      
     case WS_EVT_DATA:
-        handleWebSocketData(client, data, len);
-        break;
+      handleWebSocketData(client, data, len);
+      break;
+      
     default:
-        break;
+      break;
   }
 }

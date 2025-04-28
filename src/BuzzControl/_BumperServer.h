@@ -2,8 +2,6 @@
 #include "Common/CustomLogger.h"
 #include "Common/led.h"
 #include "includes.h"
-#include "messages_to_send.h"
-#include "messages_received.h"
 #include <ArduinoJson.h>
 #include <AsyncTCP.h>
 #include <unordered_map>
@@ -18,24 +16,27 @@ Ticker gameTimer;
 // Flag pour suivre l'état du timer
 bool isTimerRunning = false;
 
+
+
+
 void timerCallback() {
-    if (getGamePhase() == "START") {
+    if (getGamePhase() =="START") {
         updateTimer(getGameCurrentTime(), -1);
     }
 }
 
-void processButtonPress(const String& bumperID, const char* b_team, int64_t b_time, String b_button) {
-  ESP_LOGI(BUMPER_TAG, "Button Pressed %i@%s at time %i", b_button, bumperID.c_str(), b_time);
+void processButtonPress(const String& bumperID, const char* b_team, int64_t b_time, const char* s_button) {
+  ESP_LOGI(BUMPER_TAG, "Button Pressed %s@%s at time %i", s_button, bumperID.c_str(),b_team,b_time);
   if (xSemaphoreTake(questionMutex, pdMS_TO_TICKS(1000)) == pdTRUE) {
 
-    setBumperButton(bumperID.c_str(), b_button);
+    setBumperButton(bumperID.c_str(), s_button);
     setBumperTime(bumperID.c_str(), b_time);
     setBumperStatus(bumperID.c_str(), "PAUSE");
 
-    int64_t teamTime = getTeamTime(b_team);
-    ESP_LOGD(BUMPER_TAG, "Actual Team Time %s:%i", b_team, teamTime);
-    if (teamTime == 0 || teamTime > b_time) {
-      setTeamBumper(b_team, bumperID.c_str());
+    int64_t teamTime=getTeamTime(b_team);
+    ESP_LOGD(BUMPER_TAG, "Actual Team Time %s:%i",b_team,teamTime);
+    if (teamTime == 0 or teamTime > b_time) {
+      setTeamBumper(b_team,bumperID.c_str());
       setTeamTime(b_team, b_time);
       setTeamStatus(b_team, "PAUSE");
     }
@@ -43,7 +44,8 @@ void processButtonPress(const String& bumperID, const char* b_team, int64_t b_ti
   } else {
         // Le mutex n'a pas pu être obtenu après le timeout
         ESP_LOGI(BUMPER_TAG, "Couldn't obtain mutex in processButtonPress");
-  }
+    }
+    
 }
 
 void resetBumpersTime() {
@@ -80,17 +82,16 @@ void resetBumpersTime() {
   }
 }
 
-void startGame(const int delay) {
-  ESP_LOGD(BUMPER_TAG, "STARTING GAME: %i ", delay);
-  int newDelay = delay;
+void startGame(const int delay){
+  ESP_LOGD(BUMPER_TAG, "STARTING GAME: %i ",delay);
+  int newDelay=delay;
   
   resetBumpersTime();
   setGameDelay(newDelay);
   setGameCurrentTime(newDelay);
   setGameTime();
-  setGamePhase("START");
-  enqueueOutgoingMessage("START", getTeamsAndBumpersJSON().c_str(), true, nullptr);
-  
+  setGamePhase( "START");
+    putMsgToQueue("START",getTeamsAndBumpersJSON().c_str(),true);
   // Démarrer le timer s'il n'est pas déjà en cours
   if (!isTimerRunning) {
       gameTimer.attach(1.0, timerCallback);
@@ -98,24 +99,24 @@ void startGame(const int delay) {
   }
 }
 
-void updateTimer(const int Time, const int delta) {
+void updateTimer(const int Time, const int delta ) {
     int newTime = Time + delta;
     if (newTime < 0) { 
         newTime = 0;
     }
     setGameCurrentTime(newTime);
-    enqueueOutgoingMessage("UPDATE_TIMER", getTeamsAndBumpersJSON().c_str(), false, nullptr);
+    putMsgToQueue("UPDATE_TIMER", getTeamsAndBumpersJSON().c_str(), false);
     if (newTime == 0) { 
         stopGame();
     }
 }
 
-void stopGame() {
+
+void stopGame(){
   setGameCurrentTime(0);
-  setGamePhase("STOP");
-//  enqueueOutgoingMessage("UPDATE_TIMER", getTeamsAndBumpersJSON().c_str(), false, nullptr);
-  enqueueOutgoingMessage("STOP", getTeamsAndBumpersJSON().c_str(), true, nullptr);
-  
+  setGamePhase( "STOP" );
+  putMsgToQueue("UPDATE_TIMER", getTeamsAndBumpersJSON().c_str(), false);
+  putMsgToQueue("STOP",getTeamsAndBumpersJSON().c_str(),true);
   // Arrêter le timer
   if (isTimerRunning) {
       gameTimer.detach();
@@ -124,25 +125,26 @@ void stopGame() {
 }
 
 void pauseGame(AsyncClient* client) {
-  enqueueOutgoingMessage("PAUSE", getTeamsAndBumpersJSON().c_str(), true, client);
+  putMsgToQueue("PAUSE",getTeamsAndBumpersJSON().c_str(),true, client);
 }
 
-void pauseAllGame() {
-  setGamePhase("PAUSE");
-//  enqueueOutgoingMessage("UPDATE_TIMER", getTeamsAndBumpersJSON().c_str(), false, nullptr);
-  enqueueOutgoingMessage("PAUSE", getTeamsAndBumpersJSON().c_str(), true, nullptr);
+void pauseAllGame(){
+  setGamePhase( "PAUSE" );
+  putMsgToQueue("UPDATE_TIMER", getTeamsAndBumpersJSON().c_str(), false);
+  putMsgToQueue("PAUSE",getTeamsAndBumpersJSON().c_str(),true);
 }
 
-void continueGame() {
-  setGamePhase("START");
-//  enqueueOutgoingMessage("UPDATE_TIMER", getTeamsAndBumpersJSON().c_str(), false, nullptr);
-  enqueueOutgoingMessage("CONTINUE", getTeamsAndBumpersJSON().c_str(), true, nullptr);
+void continueGame(){
+  setGamePhase( "START");
+  putMsgToQueue("UPDATE_TIMER", getTeamsAndBumpersJSON().c_str(), false);
+  putMsgToQueue("CONTINUE",getTeamsAndBumpersJSON().c_str(),true);
 }
 
 void revealGame() {
     if (isGameStoped()) {
-      String msg = "\"" + getQuestionResponse() + "\"";
-      enqueueOutgoingMessage("REVEAL", msg.c_str(), true, nullptr);
+      String msg="\""+getQuestionResponse()+"\"";
+      
+      putMsgToQueue("REVEAL",msg.c_str(),true);
     }
 }
 
@@ -151,7 +153,7 @@ void readyGame(const String question) {
 
   if (isGameStoped() || isGamePrepare() || isGameReady()) {
     setGamePhase("PREPARE");
-    if (question.toInt() > 0) {
+    if (question.toInt()>0) {
       setQuestion(question);
     } else {
       setQuestion("");
@@ -159,14 +161,15 @@ void readyGame(const String question) {
     resetBumpersTime();
     resetBumpersReady();
     updateTeamsReady();
-    enqueueOutgoingMessage("UPDATE", getTeamsAndBumpersJSON().c_str(), false, nullptr);
-    enqueueOutgoingMessage("PING", "{}", false, nullptr);
+    putMsgToQueue("UPDATE",getTeamsAndBumpersJSON().c_str(),false);
+    putMsgToQueue("PING","{}",false);
   }
 }
 
+
 void RAZscores() {
   ESP_LOGI(BUMPER_TAG, "Resetting Bumpers Scores");
-  JsonObject bumpers = getBumpers();
+  JsonObject bumpers=getBumpers();
   if (!bumpers.isNull()) {
         for (JsonPair kvp : bumpers) {
             const char* key = kvp.key().c_str();
@@ -175,7 +178,7 @@ void RAZscores() {
             setBumperTime(key, -1);
         }
     } else {
-        ESP_LOGW(BUMPER_TAG, "Bumpers object is null or invalid");
+        ESP_LOGW(TAG, "Bumpers object is null or invalid");
     }
   
   ESP_LOGI(BUMPER_TAG, "Resetting Teams Scores");
@@ -188,18 +191,19 @@ void RAZscores() {
             setTeamTime(key, -1);
         }
     } else {
-        ESP_LOGW(BUMPER_TAG, "Teams object is null or invalid");
+        ESP_LOGW(TAG, "Teams object is null or invalid");
     }
   ESP_LOGI(BUMPER_TAG, "Resetted Scores");
   notifyAll();
+  
 }
 
 void sendHelloToAll() {
-  enqueueOutgoingMessage("HELLO", "{  }", true, nullptr);
+  putMsgToQueue("HELLO", "{  }",true);
 }
 
 void sendResetToAll() {
-  enqueueOutgoingMessage("RESET", "{  }", true, nullptr);
+  putMsgToQueue("RESET", "{  }",true);
 }
 
 void resetServer() {
@@ -211,11 +215,11 @@ void resetServer() {
       ESP_LOGE(BUMPER_TAG, "Error: Unable to delete save file");
     }
   } 
-  String dirToRemove = "/files";
+  String dirToRemove="/files";
   deleteDirectory(dirToRemove.c_str());
   ensureDirectoryExists(dirToRemove);
 
-  dirToRemove = "/CURRENT";
+  dirToRemove="/CURRENT";
   deleteDirectory(dirToRemove.c_str());
 
   loadJson(GameFile);
@@ -230,26 +234,28 @@ void rebootServer() {
 }
 
 void setRemotePage(const String remotePage) {
-  if (remotePage == nullptr || remotePage.isEmpty() || remotePage == "null") {
+  if (remotePage==nullptr or remotePage.isEmpty() or remotePage == "null") {
     setGamePage("GAME");
   } else {
     setGamePage(remotePage);
   }
-  enqueueOutgoingMessage("REMOTE", getTeamsAndBumpersJSON().c_str(), false, nullptr);
+  putMsgToQueue("REMOTE",getTeamsAndBumpersJSON().c_str());
 }
+
 
 void handleHelloAction(const char* bumperID, JsonObject& MSG) {
   updateBumper(bumperID, MSG);
   notifyAll();
 }
 
+
 void handleButtonAction(const char* bumperID, JsonObject& MSG, AsyncClient* c) {
-  ESP_LOGE(BUMPER_TAG, "Button pressed: %s", bumperID);
-  JsonObject bumper = getBumper(bumperID);
-  const char* teamID = bumper["TEAM"];
-  String b_button = MSG["button"];
+  ESP_LOGD(BUMPER_TAG, "Button pressed: %s", bumperID);
+  JsonObject bumper=getBumper(bumperID);
+  const char* teamID=bumper["TEAM"];
+  const char* s_button = MSG["button"];
   if (teamID != nullptr) {
-    processButtonPress(bumperID, teamID, micros(), b_button);
+    processButtonPress(bumperID, teamID, micros(), s_button);
     pauseGame(c);
   }
 }
@@ -265,14 +271,57 @@ void handlePingResponseAction(const char* bumperID) {
         if (areAllTeamsReady()) {
             ESP_LOGI(BUMPER_TAG, "All teams are ready to start");
             setGamePhase("READY");
-            enqueueOutgoingMessage("READY", getTeamsAndBumpersJSON().c_str(), true, nullptr);
+            putMsgToQueue("READY", getTeamsAndBumpersJSON().c_str(), true);
         }
     }
 }
 
-void deleteQuestion(const String ID) {
-  if (ID.toInt() > 0) {
-    deleteDirectory((questionsPath + "/" + ID).c_str());
-    enqueueOutgoingMessage("QUESTIONS", getQuestions().c_str(), false, nullptr);
+void parseJSON(const String& data, AsyncClient* c)
+{
+  String action;
+  String bumperID;
+  String versionBuzzer;
+
+  JsonDocument receivedData;
+  JsonObject MSG;
+  JsonObject bumpers = teamsAndBumpers["bumpers"];
+  JsonObject teams = teamsAndBumpers["teams"];
+  ESP_LOGD(BUMPER_TAG, "parseJSON=%s", data.c_str());
+  DeserializationError error = deserializeJson(receivedData, data);
+  if (error) {
+      ESP_LOGE(BUMPER_TAG, "Failed to parse JSON: %s", error.c_str());
+      return;
+  }
+  JsonObject jsonObjData = receivedData.as<JsonObject>();
+
+  bumperID = jsonObjData["ID"].as<String>();
+  versionBuzzer = jsonObjData["VERSION"].as<String>();
+  action = jsonObjData["ACTION"].as<String>();
+  MSG = jsonObjData["MSG"];
+
+  ESP_LOGD(BUMPER_TAG, "bumperID=%s version= %s ACTION=%s", bumperID.c_str(), versionBuzzer.c_str(), action.c_str());
+    
+  switch(hash(action.c_str())) {
+    case hash("HELLO"):
+      handleHelloAction(bumperID.c_str(), MSG);
+      break;
+    case hash("BUTTON"):
+      handleButtonAction(bumperID.c_str(), MSG, c);
+      break;
+    case hash("PONG"):
+      handlePingResponseAction(bumperID.c_str());
+      break;
+    default:
+      ESP_LOGW(BUMPER_TAG, "Unknown action: %s", action.c_str());
+      break;
+  }
+}
+
+void deleteQuestion(const String ID)
+{
+  if ( ID.toInt()>0)
+  {
+    deleteDirectory((questionsPath+"/"+ID).c_str());
+    putMsgToQueue("QUESTIONS",getQuestions().c_str());
   }
 }
