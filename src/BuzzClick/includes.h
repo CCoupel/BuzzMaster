@@ -44,7 +44,8 @@ struct ButtonInfo {
 };
 
 ButtonInfo buttonsInfo[] = {
-  {0, "test", false, ""},
+  
+  {1, "test", false, ""},
   {9, "local", false, ""} // Initialisation complète
 };
 

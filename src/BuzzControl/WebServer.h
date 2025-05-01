@@ -2,6 +2,7 @@
 #include "Common/CustomLogger.h"
 #include "Common/led.h"
 #include "fsManager.h"
+#include "messages_to_send.h"
 
 #include <ESPAsyncWebServer.h>
 
@@ -72,7 +73,7 @@ void w_handleNotFound(AsyncWebServerRequest *request) {
 
 //####### TOOLING ######
 void w_handleRedirect(AsyncWebServerRequest *request) {
-    ESP_LOGD(WEB_TAG, "REdirecting for: %s", request->url().c_str());
+//    ESP_LOGD(WEB_TAG, "REdirecting for: %s", request->url().c_str());
     request->redirect("http://buzzcontrol.local/html/testSPA.html#config");
 }
 
@@ -154,19 +155,9 @@ String saveQuestion(AsyncWebServerRequest *request, bool hasFile = false) {
         }
         jsonFile.close();
     }
-    
- //   putMsgToQueue("QUESTIONS",getQuestions().c_str());
-
-    // Envoie la réponse au client
-//    AsyncWebServerResponse *response = request->beginResponse(200, "text/json", jsonString);
-//    addCorsHeaders(response);
-//    request->send(response);
 
     return currentDir;
 }
-
-
-
 
 void w_handleUploadBackgroundComplete(AsyncWebServerRequest *request) {
     // Ne sauvegarde que s'il n'y a pas de fichier dans le formulaire
@@ -220,12 +211,11 @@ void w_handleListQuestions(AsyncWebServerRequest *request) {
     AsyncWebServerResponse *response = request->beginResponse(200, "text/json", jsonOutput);
     addCorsHeaders(response);
     request->send(response);
-
 }
 
 void w_handleUploadQuestionComplete(AsyncWebServerRequest *request) {
     // Ne sauvegarde que s'il n'y a pas de fichier dans le formulaire
-        ESP_LOGI(WEB_TAG,"upload du fichier w_handleUploadQuestion Complete");
+    ESP_LOGI(WEB_TAG,"upload du fichier w_handleUploadQuestion Complete");
 
     if (!request->hasParam("file", true, true)) {  // Le dernier true indique qu'on cherche un fichier
         ESP_LOGI(WEB_TAG,"Saving Question %s", saveQuestion(request, false).c_str());
@@ -233,7 +223,7 @@ void w_handleUploadQuestionComplete(AsyncWebServerRequest *request) {
     AsyncWebServerResponse *response = request->beginResponse(200, "text/json", "Question Saved");
     addCorsHeaders(response);
     request->send(response);
-    putMsgToQueue("QUESTIONS",getQuestions().c_str());
+    enqueueOutgoingMessage("QUESTIONS", getQuestions().c_str(), false, nullptr);
 }
 
 void w_handleUploadQuestionFile(AsyncWebServerRequest *request, String filename, size_t index, uint8_t *data, size_t len, bool final) {
@@ -253,7 +243,6 @@ void w_handleUploadQuestionFile(AsyncWebServerRequest *request, String filename,
     totalSize=saveFile(request, filePath,  filename,  index,  data,  len,  final);
     if(final) { // Fin de l'upload
         ESP_LOGI(WEB_TAG, "Upload du fichier terminé pour la question: %s (%i)", currentDir.c_str(), totalSize);
-        
     }
 }
 
@@ -297,7 +286,7 @@ void _w_handleUploadQuestionFile(AsyncWebServerRequest *request, String filename
         if(final) { // Fin de l'upload
             file.close();
             ESP_LOGI(WEB_TAG, "Upload du fichier terminé pour la question: %s (%i)", currentDir.c_str(), totalSize);
-            putMsgToQueue("QUESTIONS",getQuestions().c_str());
+            enqueueOutgoingMessage("QUESTIONS", getQuestions().c_str(), false, nullptr);
         }
 }
 
@@ -330,13 +319,6 @@ void startWebServer() {
 
     server.on("/", HTTP_GET, w_handleRedirect);
     server.on("/index.html", w_handleRedirect);
-
-    server.on("/generate_204", w_handleRedirect);  // Android captive portal
-    server.on("/gen_204", w_handleRedirect);       // Android captive portal
-    server.on("/hotspot-detect.html", w_handleRedirect);  // iOS captive portal
-    server.on("/canonical.html", w_handleRedirect);       // Windows captive portal
-    server.on("/success.txt", w_handleRedirect);          // macOS captive portal
-    server.on("/favicon.ico", w_handleRedirect);   // Browser icon
 
     server.on("/reset", HTTP_GET, w_handleReset);
     server.on("/reboot", HTTP_GET, w_handleReboot);

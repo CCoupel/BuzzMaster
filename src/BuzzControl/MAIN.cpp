@@ -10,11 +10,11 @@
 #include "tcpManager.h"
 #include "buttonManager.h"
 #include "fsManager.h"
-#include "messages.h"
+#include "messages_received.h"
+#include "messages_to_send.h"
 #include "BumperServer.h"
 #include "WebServer.h"
 #include "sdManager.h"
-//#include <esp_log.h>
 
 static const char* MAIN_TAG = "BUZZCONTROL";
 const uint16_t logPort = 8888;  // Port UDP pour les logs
@@ -84,33 +84,34 @@ void setup(void)
   attachButtons();
   loadJson(GameFile);
 
-//  sdInit();
-
   startWebServer();
   startBumperServer();
   setLedColor(0, 128, 0, true);
 
-  messageQueue = xQueueCreate(10, sizeof(messageQueue_t));
+  // Initialisation des files d'attente de messages
+  initIncomingQueue();
+  initOutgoingQueue();
 
-  if (messageQueue == NULL) {
-    ESP_LOGE(MAIN_TAG, "Échec de la création de la file d'attente");
-    return;
-  }
-
+  // Création des tâches pour traiter les messages
+  xTaskCreate(receiveMessageTask, "Receive Message Task", 14096, NULL, 2, NULL);
   xTaskCreate(sendMessageTask, "Send Message Task", 14096, NULL, 2, NULL);
-  // Créer une tâche spécifique pour surveiller le watchdog
-    xTaskCreate(
-        watchdogTask,
-        "WatchdogTask",
-        2048,
-        NULL,
-        configMAX_PRIORITIES - 1, // Haute priorité
-        NULL
-    );
-  sendHelloToAll();
+
+  // Création de la tâche pour surveiller le watchdog
+  xTaskCreate(
+      watchdogTask,
+      "WatchdogTask",
+      2048,
+      NULL,
+      configMAX_PRIORITIES - 1,
+      NULL
+  );
+  
+  // Initialisation des mutex
   questionMutex = xSemaphoreCreateMutex();
   buttonMutex = xSemaphoreCreateMutex();
-
+  
+  // Envoyer un message de bienvenue à tous les clients
+  enqueueOutgoingMessage("HELLO", "{}", false, nullptr);
 }
 
 void loop(void)

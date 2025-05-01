@@ -422,7 +422,7 @@ void setBumperVERSION(const char* bumperID, const char* version) {
 
 }
 
-void setBumperButton(const char* bumperID, int button) {
+void setBumperButton(const char* bumperID, String button) {
 /*
     if (bumperID == nullptr || strlen(bumperID) == 0) {
         ESP_LOGE(TEAMs_TAG, "Invalid bumperID provided: %s", bumperID);
@@ -438,9 +438,9 @@ void setBumperButton(const char* bumperID, int button) {
         teamsAndBumpers["bumpers"][bumperID]=JsonObject();
     }
 */
-    int copy = int(button);
+    String copy = String (button);
     teamsAndBumpers["bumpers"][bID]["BUTTON"] = copy;
-    ESP_LOGI(TEAMs_TAG, "Bumper Button %s %i", bID.c_str(), copy);
+    ESP_LOGI(TEAMs_TAG, "Bumper Button %s %s", bID.c_str(), copy.c_str());
 }
 
 void setBumperStatus(const char* bumperID, String status) {
@@ -697,7 +697,7 @@ JsonObject teams = getTeams();
   if (!teams.isNull()) {
     for (JsonPair teamPair : teams) {
       JsonObject team = teamPair.value().as<JsonObject>();
-      team["READY"]="TRUE";
+      team["READY"]="true";
     }
     ESP_LOGI(TEAMs_TAG, "All teams marked as initially ready");
   } else {
