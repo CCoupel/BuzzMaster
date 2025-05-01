@@ -2,7 +2,7 @@ import {sendWebSocketMessage} from './websocket.js';
 import { updateBumpers, updateTeams, updateDisplayConfig, configPage } from './configSPA.js';
 import { scorePage } from './scoreSPA.js';
 import { getQuestions, questionList,  getFileStorage, fsInfo } from './questionsSPA.js';
-import { teamGamePage, receiveQuestion, questionsSelectList, displayQuestion } from './teamGameSPA.js';
+import { teamGamePage, receiveQuestion, questionsSelectList, displayQuestion, updateDisplayGame } from './teamGameSPA.js';
 
 export let gameState = {
     timer: 30,
@@ -66,6 +66,13 @@ function handleServerAction(action, msg, fsinfo) {
         case 'CONTINUE':
             gameState.gamePhase = 'START';
             updateTimeBar(true);
+            break;
+        case 'BUMPER':
+            if (msg.teams && msg.bumpers) {
+                updateTeams(msg.teams);
+                updateBumpers(msg.bumpers);
+            }
+            updateDisplayGame();
             break;
         case 'UPDATE':
             updateGameState(msg.GAME);
