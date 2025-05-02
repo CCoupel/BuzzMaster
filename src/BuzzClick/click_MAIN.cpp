@@ -1,14 +1,14 @@
 //#include <gpio_viewer.h>
 //GPIOViewer gpio_viewer;
 
-#include "includes.h"
-#include "WifiManager.h"
+#include "click_includes.h"
+#include "click_WifiManager.h"
 
 #include "Common/CustomLogger.h"
 #include "Common/led.h"
 
 #include "esp_task_wdt.h"
-#include "serverConnection.h"
+#include "click_serverConnection.h"
 //#include "esp_sntp.h"
 
 static const char* MAIN_TAG = "MAIN";

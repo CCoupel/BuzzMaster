@@ -4,6 +4,7 @@
 #include "Common/CustomLogger.h"
 #include "Common/led.h"
 
+//#include "jsonManager.h"
 #include "teamsAndBumpers.h"
 
 #include "SocketManager.h"
@@ -93,8 +94,8 @@ void setup(void)
   initOutgoingQueue();
 
   // Création des tâches pour traiter les messages
-  xTaskCreate(receiveMessageTask, "Receive Message Task", 14096, NULL, 2, NULL);
-  xTaskCreate(sendMessageTask, "Send Message Task", 14096, NULL, 2, NULL);
+  xTaskCreate(receiveMessageTask, "Receive Message Task", 20480, NULL, 2, NULL);
+  xTaskCreate(sendMessageTask, "Send Message Task", 20480, NULL, 2, NULL);
 
   // Création de la tâche pour surveiller le watchdog
   xTaskCreate(

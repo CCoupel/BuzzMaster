@@ -9,6 +9,8 @@
 #include <unordered_map>
 #include <Ticker.h>
 
+//#include "jsonManager.h"
+
 static const char* BUMPER_TAG = "BUMPER_SERVER";
 String gamePhase = "STOP"; /* STARTED PAUSED */
 int gameStartTimeStamp = 0;
@@ -33,12 +35,18 @@ void processButtonPress(const String& bumperID, const char* b_team, int64_t b_ti
     setBumperStatus(bumperID.c_str(), "PAUSE");
 
     int64_t teamTime = getTeamTime(b_team);
-    ESP_LOGD(BUMPER_TAG, "Actual Team Time %s:%i", b_team, teamTime);
+    ESP_LOGD(BUMPER_TAG, "Actual Team Time %s:%i/%i", b_team, teamTime, b_time);
     if (teamTime == 0 || teamTime > b_time) {
       setTeamBumper(b_team, bumperID.c_str());
       setTeamTime(b_team, b_time);
       setTeamStatus(b_team, "PAUSE");
+//      enqueueOutgoingMessage("BUMPER", getTeamsAndBumpersJSON().c_str(), false, nullptr);
+      enqueueOutgoingMessage("UPDATE", getTeamsAndBumpersJSON().c_str(), false, nullptr);
     }
+    else {
+      ESP_LOGD(BUMPER_TAG, "Actual Team Time already setup %s:%i", b_team, teamTime);
+    }
+    
     xSemaphoreGive(questionMutex);
   } else {
         // Le mutex n'a pas pu être obtenu après le timeout
@@ -104,7 +112,7 @@ void updateTimer(const int Time, const int delta) {
         newTime = 0;
     }
     setGameCurrentTime(newTime);
-    enqueueOutgoingMessage("UPDATE_TIMER", getTeamsAndBumpersJSON().c_str(), false, nullptr);
+    enqueueOutgoingMessage("UPDATE_TIMER", getGameJSON().c_str(), false, nullptr);
     if (newTime == 0) { 
         stopGame();
     }
@@ -140,7 +148,7 @@ void continueGame() {
 }
 
 void revealGame() {
-    if (isGameStoped()) {
+    if (isGameStopped()) {
       String msg = "\"" + getQuestionResponse() + "\"";
       enqueueOutgoingMessage("REVEAL", msg.c_str(), true, nullptr);
     }
@@ -149,7 +157,9 @@ void revealGame() {
 void readyGame(const String question) {
   ESP_LOGI(BUMPER_TAG, "Preparing game with question: %s", question.c_str());
 
-  if (isGameStoped() || isGamePrepare() || isGameReady()) {
+
+  if (isGameStopped() || isGamePrepare() || isGameReady()) {
+ 
     setGamePhase("PREPARE");
     if (question.toInt() > 0) {
       setQuestion(question);
@@ -160,6 +170,7 @@ void readyGame(const String question) {
     resetBumpersReady();
     updateTeamsReady();
     enqueueOutgoingMessage("UPDATE", getTeamsAndBumpersJSON().c_str(), false, nullptr);
+
     enqueueOutgoingMessage("PING", "{}", false, nullptr);
   }
 }

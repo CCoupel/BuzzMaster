@@ -10,12 +10,14 @@
 // Configuration
 const char* RECEIVE_TAG = "MSG_RECEIVE";
 
+int receivedMsgId=0;
 // Structure de message pour les messages entrants
 typedef struct {
     String source;     // "TCP", "WebSocket", "Button", etc.
     String* data;      // Contenu du message
     AsyncClient* client; // Client source (si applicable)
     String* timestamp;  // Horodatage pour le traçage
+    int msgID;
 } IncomingMessage_t;
 
 // Queue pour les messages entrants
@@ -34,6 +36,7 @@ void enqueueIncomingMessage(const char* source, const char* data, AsyncClient* c
     message->source = source;
     message->data = new String(data);
     message->timestamp = new String(micros());
+    message->msgID = receivedMsgId++;
     message->client = client;
 
     if (xQueueSend(incomingQueue, &message, pdMS_TO_TICKS(100)) != pdPASS) {
@@ -42,7 +45,7 @@ void enqueueIncomingMessage(const char* source, const char* data, AsyncClient* c
         delete message->timestamp;
         delete message;
     } else {
-        ESP_LOGD(RECEIVE_TAG, "Message enqueued from source: %s", source);
+        ESP_LOGD(RECEIVE_TAG, "Message ID %i enqueued from source: %s: %s", message->msgID, source, message->data->c_str());
     }
 }
 
@@ -213,8 +216,8 @@ void receiveMessageTask(void *parameter) {
     while (1) {
         ESP_LOGD(RECEIVE_TAG, "Waiting for incoming messages");
         if (xQueueReceive(incomingQueue, &receivedMessage, portMAX_DELAY)) {
-            ESP_LOGI(RECEIVE_TAG, "Received message from %s at time %s", 
-                     receivedMessage->source.c_str(), receivedMessage->timestamp->c_str());
+            ESP_LOGI(RECEIVE_TAG, "dequeue message %i from %s : %s", receivedMessage->msgID,
+                     receivedMessage->source.c_str(), receivedMessage->data->c_str());
             
             // Traiter le message selon sa source
             if (receivedMessage->source == "TCP") {

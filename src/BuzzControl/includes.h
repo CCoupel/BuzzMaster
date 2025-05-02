@@ -61,7 +61,7 @@ std::map<String, String> clientBuffers;
 /* **** FUNCTIONS DEFINITIONS *** */
 
 // teamsAndBumpers.h
-void setGamePhase(String phase);
+//void setGamePhase(String phase);
 
 // messages_to_send.h
 void enqueueOutgoingMessage(const char* action, const char* msg, bool notify = false, AsyncClient* client = nullptr);
