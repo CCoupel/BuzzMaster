@@ -30,6 +30,10 @@ export function addNewTeam(id, notify = true) {
 };
 
 export function setTeamName(oldId, newId) {
+    if (oldId === newId) {
+        return;
+    }
+
     if (teams[newId]) {
         alert(`Le nom "${newId}" est déjà utilisé.`);
         return;
@@ -46,7 +50,8 @@ export function setTeamName(oldId, newId) {
     delete teams[oldId];
     sendTeamsAndBumpers();
     updateDisplayConfig();
-};
+}
+
 
 export function setBumperName(id, name) {
     for (const bumperId in bumpers) {

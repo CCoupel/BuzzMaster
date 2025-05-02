@@ -89,11 +89,22 @@ export function createTeamDiv(teams) {
         
         editButton.addEventListener('click', () => {
             const newName = prompt('Nouveau nom pour cette équipe :', id);
-            if (newName && newName.trim() !== '' && !teams[newName]) {
-                setTeamName(id, newName);
-            } else {
-                alert('Le nom est invalide ou déjà utilisé.');
+        
+            if (!newName || newName.trim() === '') {
+                alert('Le nom est invalide.');
+                return;
             }
+        
+            if (newName === id) {
+                return;
+            }
+        
+            if (teams[newName]) {
+                alert('Le nom est déjà utilisé.');
+                return;
+            }
+        
+            setTeamName(id, newName);
         });
 
 
