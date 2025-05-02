@@ -16,7 +16,7 @@ typedef struct {
     String source;     // "TCP", "WebSocket", "Button", etc.
     String* data;      // Contenu du message
     AsyncClient* client; // Client source (si applicable)
-    String* timestamp;  // Horodatage pour le traçage
+    int64_t timestamp;  // Horodatage pour le traçage
     int msgID;
 } IncomingMessage_t;
 
@@ -35,21 +35,21 @@ void enqueueIncomingMessage(const char* source, const char* data, AsyncClient* c
     IncomingMessage_t* message = new IncomingMessage_t;
     message->source = source;
     message->data = new String(data);
-    message->timestamp = new String(micros());
+    message->timestamp = micros();
     message->msgID = receivedMsgId++;
     message->client = client;
 
     if (xQueueSend(incomingQueue, &message, pdMS_TO_TICKS(100)) != pdPASS) {
         ESP_LOGE(RECEIVE_TAG, "Failed to send message to incoming queue");
         delete message->data;
-        delete message->timestamp;
+    //    delete message->timestamp;
         delete message;
     } else {
-        ESP_LOGD(RECEIVE_TAG, "Message ID %i enqueued from source: %s: %s", message->msgID, source, message->data->c_str());
+        ESP_LOGD(RECEIVE_TAG, "Message ID %i enqueued from source: %s: %s at %i", message->msgID, source, message->data->c_str(), message->timestamp);
     }
 }
 
-void processDataFromSocket(const char* action, const JsonObject& message) {
+void processDataFromSocket(const char* action, const JsonObject& message, int64_t timestamp) {
   ESP_LOGI(RECEIVE_TAG, "Processing action: %s", action);
   String output = "";
   serializeJson(message, output);
@@ -136,7 +136,7 @@ void processDataFromSocket(const char* action, const JsonObject& message) {
 // Déclaration externe de la fonction définie dans BumperServer.h
 extern void processButtonPress(const String& bumperID, const char* b_team, int64_t b_time, String b_button);
 
-void processTCPMessage(const String& data, AsyncClient* client) {
+void processTCPMessage(const String& data, AsyncClient* client, int64_t timestamp) {
     JsonDocument receivedData;
     DeserializationError error = deserializeJson(receivedData, data);
     if (error) {
@@ -165,7 +165,7 @@ void processTCPMessage(const String& data, AsyncClient* client) {
         const char* teamID = bumper["TEAM"];
         String b_button = MSG["button"];
         if (teamID != nullptr) {
-            processButtonPress(bumperID, teamID, micros(), b_button);
+            processButtonPress(bumperID, teamID, timestamp, b_button);
 //            pauseGame(client);
 
         }
@@ -191,7 +191,7 @@ void processTCPMessage(const String& data, AsyncClient* client) {
     }
 }
 
-void processWebSocketMessage(const String& data) {
+void processWebSocketMessage(const String& data, int64_t timestamp) {
     JsonDocument receivedData;
     DeserializationError error = deserializeJson(receivedData, data);
     if (error) {
@@ -208,7 +208,7 @@ void processWebSocketMessage(const String& data) {
     JsonObject message = receivedData["MSG"].as<JsonObject>();
 
     // Le message est déjà validé, le traiter directement
-    processDataFromSocket(action, message);
+    processDataFromSocket(action, message, timestamp);
 }
 
 void receiveMessageTask(void *parameter) {
@@ -221,10 +221,10 @@ void receiveMessageTask(void *parameter) {
             
             // Traiter le message selon sa source
             if (receivedMessage->source == "TCP") {
-                processTCPMessage(*(receivedMessage->data), receivedMessage->client);
+                processTCPMessage(*(receivedMessage->data), receivedMessage->client, receivedMessage->timestamp);
             } 
             else if (receivedMessage->source == "WebSocket") {
-                processWebSocketMessage(*(receivedMessage->data));
+                processWebSocketMessage(*(receivedMessage->data), receivedMessage->timestamp);
             }
             else {
                 ESP_LOGW(RECEIVE_TAG, "Unknown message source: %s", receivedMessage->source.c_str());
@@ -232,7 +232,7 @@ void receiveMessageTask(void *parameter) {
             
             // Nettoyage
             delete receivedMessage->data;
-            delete receivedMessage->timestamp;
+        //    delete receivedMessage->timestamp;
             delete receivedMessage;
         }
     }

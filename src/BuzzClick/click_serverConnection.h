@@ -7,6 +7,7 @@
 #include <AsyncUDP.h>
 
 JsonDocument myCompleteConfig;  // Store the complete configuration
+bool isConfigInitialized = false;
 
 String myConfig="{ }";
 static const char* SRV_TAG = "ServerConnection";
@@ -234,6 +235,7 @@ void manageLeds(JsonObject& buzzer, JsonObject& team, JsonArray& colorArray, Jso
     game_phase = "UNKNOWN"; // Default value if no valid status is found
   }
   
+ESP_LOGI(SRV_TAG, "Game Phase=%s",game_phase);
 
   int current_time=message["GAME"]["CURRENT_TIME"];
   int delay=message["GAME"]["DELAY"];
@@ -244,12 +246,11 @@ void manageLeds(JsonObject& buzzer, JsonObject& team, JsonArray& colorArray, Jso
   }
   else if (strcmp(game_phase,"STOP")==0)
   {
-    ESP_LOGI(SRV_TAG, "Game Phase=STOP");
+    setLedColor(colorArray[0], colorArray[1], colorArray[2]);
     setLedIntensity(255);
   }
   else if (strcmp(game_phase, "START")==0)
   {
-    ESP_LOGI(SRV_TAG, "Game Phase=START");
     //setLedColor(colorArray[0], colorArray[1], colorArray[2],true);
     setLedIntensity(10);
     
@@ -270,7 +271,6 @@ void manageLeds(JsonObject& buzzer, JsonObject& team, JsonArray& colorArray, Jso
   }
   else if (strcmp(game_phase, "PAUSE")==0)
   {
-    ESP_LOGI(SRV_TAG, "Game Phase=PAUSE");
     setLedIntensity(64);
     if ( button != NULL )
     {
@@ -283,7 +283,6 @@ void manageLeds(JsonObject& buzzer, JsonObject& team, JsonArray& colorArray, Jso
   }
   else if (strcmp(game_phase, "PREPARE")==0)
   {
-    ESP_LOGI(SRV_TAG, "Game Phase=PREPARE");
     setLedColor(0, 0, 0,true);
   }
 }
@@ -303,28 +302,17 @@ void handleUpdateAction(JsonObject& message, const String& macAddress) {
     // Extract the bumper config for our device
     buzzer = message["bumpers"][macAddress].as<JsonObject>();
     
-    // If this is our first config or we want a complete overwrite
-    if (!isConfigInitialized) {
-      // Initialize our complete config with this buzzer data
       myCompleteConfig["buzzer"] = buzzer;
       isConfigInitialized = true;
-    } else {
-      // Merge the new buzzer data into our existing config
-      // Only update fields that are present in the new data
-      for (JsonPair kv : buzzer) {
-        myCompleteConfig["buzzer"][kv.key()] = kv.value();
-      }
-    }
     
-    // Log current buzzer config
-    serializeJson(myCompleteConfig["buzzer"], output);
-    ESP_LOGI(SRV_TAG, "My Config=%s", output.c_str());
-    myConfig = output;
-  } else if (isConfigInitialized) {
-    // If we already have config but this message doesn't contain our bumper info,
-    // use the stored buzzer info
-    buzzer = myCompleteConfig["buzzer"].as<JsonObject>();
   }
+
+  buzzer = myCompleteConfig["buzzer"].as<JsonObject>();
+    // Log current buzzer config
+  serializeJson(myCompleteConfig["buzzer"], output);
+  ESP_LOGI(SRV_TAG, "My Config=%s", output.c_str());
+  myConfig = output;
+
 
   // Process team information
   const char* t_name = "";
@@ -340,11 +328,10 @@ void handleUpdateAction(JsonObject& message, const String& macAddress) {
       
       serializeJson(team, output);
       ESP_LOGI(SRV_TAG, "    =>%s", output.c_str());
-    } else if (myCompleteConfig.containsKey("team")) {
-      // Use previously stored team info if not in this message
-      team = myCompleteConfig["team"].as<JsonObject>();
     }
   }
+
+  team = myCompleteConfig["team"].as<JsonObject>();
 
   // Extract color information
   int r = 0, g = 0, b = 0;
@@ -432,6 +419,7 @@ void parseJSON(const String& data, AsyncClient* c) {
       
     case hash("PING"):
       ESP_LOGI(SRV_TAG, "Replying PONG");
+      resetGame();
       sendMSG("PONG", "'" + WiFi.localIP().toString() + "'");
       break;
       

@@ -71,7 +71,7 @@ void notifyAll();
 
 // messages_received.h
 void enqueueIncomingMessage(const char* source, const char* data, AsyncClient* client);
-void processDataFromSocket(const char* action, const JsonObject& message);
+//void processDataFromSocket(const char* action, const JsonObject& message);
 void processTCPMessage(const String& data, AsyncClient* client);
 void processWebSocketMessage(const String& data);
 
@@ -115,7 +115,4 @@ static void b_onClientDisconnect(void* arg, AsyncClient* client);
 static void b_onCLientConnect(void* arg, AsyncClient* client);
 void onWsEvent(AsyncWebSocket *server, AsyncWebSocketClient *client, AwsEventType type, void *arg, uint8_t *data, size_t len);
 
-/* **** UTILITY FUNCTIONS *** */
-constexpr unsigned int hash(const char* str, int h = 0) {
-    return !str[h] ? 5381 : (hash(str, h+1) * 33) ^ str[h];
-}
+

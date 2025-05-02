@@ -27,15 +27,21 @@ void timerCallback() {
 }
 
 void processButtonPress(const String& bumperID, const char* b_team, int64_t b_time, String b_button) {
-  ESP_LOGI(BUMPER_TAG, "Button Pressed %i@%s at time %i", b_button, bumperID.c_str(), b_time);
+  ESP_LOGI(BUMPER_TAG, "Button Pressed %s@%s at time %lld", b_button, bumperID.c_str(), b_time);
   if (xSemaphoreTake(questionMutex, pdMS_TO_TICKS(1000)) == pdTRUE) {
-
-    setBumperButton(bumperID.c_str(), b_button);
-    setBumperTime(bumperID.c_str(), b_time);
-    setBumperStatus(bumperID.c_str(), "PAUSE");
-
+    int64_t bTime = getBumperTime(bumperID.c_str());
     int64_t teamTime = getTeamTime(b_team);
-    ESP_LOGD(BUMPER_TAG, "Actual Team Time %s:%i/%i", b_team, teamTime, b_time);
+    ESP_LOGI(BUMPER_TAG, "Button Pressed %s: existing time %i", b_button, bTime);
+    ESP_LOGI(BUMPER_TAG, "Button Pressed %s for team %s: existing Team time %lld", b_button, b_team, teamTime);
+    if (bTime == 0)
+    {
+      setBumperButton(bumperID.c_str(), b_button);
+      setBumperTime(bumperID.c_str(), b_time);
+      setBumperStatus(bumperID.c_str(), "PAUSE");
+    }
+
+    
+    ESP_LOGD(BUMPER_TAG, "Actual Team Time %s:%lld/%lld", b_team, teamTime, b_time);
     if (teamTime == 0 || teamTime > b_time) {
       setTeamBumper(b_team, bumperID.c_str());
       setTeamTime(b_team, b_time);
@@ -44,7 +50,7 @@ void processButtonPress(const String& bumperID, const char* b_team, int64_t b_ti
       enqueueOutgoingMessage("UPDATE", getTeamsAndBumpersJSON().c_str(), false, nullptr);
     }
     else {
-      ESP_LOGD(BUMPER_TAG, "Actual Team Time already setup %s:%i", b_team, teamTime);
+      ESP_LOGD(BUMPER_TAG, "Actual Team Time already setup %s:%lld", b_team, teamTime);
     }
     
     xSemaphoreGive(questionMutex);
