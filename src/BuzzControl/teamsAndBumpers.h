@@ -8,9 +8,28 @@ static const char* TEAMs_TAG = "Team And Bumper";
 static const char* QUESTION_TAG = "Questions";
 
 JsonDocument teamsAndBumpers;
-
 JsonDocument& getTeamsAndBumpers() {
     return teamsAndBumpers;
+}
+
+JsonObject getKEYObj(String key) {
+  JsonDocument& doc=getTeamsAndBumpers();
+  if (doc[key].isNull()) {
+    doc[key] = JsonObject();
+  }
+  return doc[key].as<JsonObject>();
+}
+
+JsonObject getTeamsObj() {
+  return getKEYObj("teams");
+}
+
+JsonObject getBumpersObj() {
+  return getKEYObj("bumpers");
+}
+
+JsonObject getGameObj() {
+  return getKEYObj("GAME");
 }
 
 String getTeamsAndBumpersJSON() {
@@ -21,16 +40,29 @@ String getTeamsAndBumpersJSON() {
     return output;
   } else {
     ESP_LOGE(TEAMs_TAG, "Failed to serialize JSON");
-    return "";
+    return "{}";
   }
 }
 
 // ### GAME ### */
+String getGameJSON() {
+  String output;
+  JsonDocument doc;
+  
+  // Copy the GAME object to our temporary document
+  doc["GAME"] = getGameObj();
+  
+  if (serializeJson(doc, output)) {
+//    ESP_LOGI(TEAMs_TAG, "GAME: %s", output.c_str());
+    return output;
+  } else {
+    ESP_LOGE(TEAMs_TAG, "Failed to serialize JSON");
+    return "{}";
+  }
+}
+
 void setGamePhase(String phase) {
-    if (teamsAndBumpers["GAME"].isNull()) {
-        teamsAndBumpers["GAME"] = JsonObject();
-    }
-    teamsAndBumpers["GAME"]["PHASE"] = phase;
+    getGameObj()["PHASE"] = phase;
 }
 
 String getGamePhase() {
@@ -56,7 +88,7 @@ bool isGameStarted() {
     return false;
 }
 
-bool isGameStoped() {
+bool isGameStopped() {
     if (teamsAndBumpers["GAME"].isNull()) {
         teamsAndBumpers["GAME"] = JsonObject();
     }

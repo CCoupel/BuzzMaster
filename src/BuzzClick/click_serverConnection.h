@@ -1,10 +1,12 @@
 #pragma once
-#include "includes.h"
+#include "click_includes.h"
 #include "Common/CustomLogger.h"
 #include "Common/led.h"
 
 #include <esp_timer.h>
 #include <AsyncUDP.h>
+
+JsonDocument myCompleteConfig;  // Store the complete configuration
 
 String myConfig="{ }";
 static const char* SRV_TAG = "ServerConnection";
@@ -18,6 +20,7 @@ bool isGameStarted = false;
 AsyncUDP udp;
 
 String BcastJsonBuffer = "";
+const size_t MAX_BUFFER_SIZE = 8192; // Taille maximale du buffer (ajustez selon vos besoins)
 
 
 /* SOCKET */
@@ -128,22 +131,56 @@ void sendMSG(String msgType, String message)
 }
 
 /* BROADCAST */
+// Fonction pour réinitialiser le buffer de manière sécurisée
+void resetBcastBuffer() {
+  if (BcastJsonBuffer.length() > MAX_BUFFER_SIZE || BcastJsonBuffer.indexOf('{') == -1) {
+    ESP_LOGW(SRV_TAG, "Buffer reset: size=%d", BcastJsonBuffer.length());
+    BcastJsonBuffer = "";
+  }
+}
 
 void onDataBroadcast(AsyncUDPPacket packet) {
-  if (packet.length() > 0) {
+  if (packet.length() <= 0) {
+    ESP_LOGW(SRV_TAG, "Empty broadcast packet received");
+    return;
+  }
+
     String s_data = String((char*)packet.data(), packet.length());
     ESP_LOGI(SRV_TAG, "Broadcast data received from %s: %i => %s", packet.remoteIP().toString().c_str(), packet.length(), s_data.c_str());
     
     BcastJsonBuffer += s_data;
-    int endOfJson;
-    while ((endOfJson = BcastJsonBuffer.indexOf('\0')) > 0) {
-      String jsonPart = BcastJsonBuffer.substring(0, endOfJson);
-      BcastJsonBuffer = BcastJsonBuffer.substring(endOfJson + 2);
-      ESP_LOGI(SRV_TAG,"Broadcast MSG complete at %i : %s", endOfJson, jsonPart.c_str()); 
-
-      parseJSON(jsonPart, nullptr);  // Passer nullptr car nous n'avons pas de client AsyncClient ici
-    }
+// Limiter la taille du buffer pour éviter les problèmes de mémoire
+  if (BcastJsonBuffer.length() > MAX_BUFFER_SIZE) {
+    ESP_LOGW(SRV_TAG, "Buffer overflow, truncating: %d bytes", BcastJsonBuffer.length());
+    BcastJsonBuffer = BcastJsonBuffer.substring(BcastJsonBuffer.length() - MAX_BUFFER_SIZE);
   }
+
+  // Traitement des messages complets
+  int startPos = 0;
+  int endOfJson;
+  while ((endOfJson = BcastJsonBuffer.indexOf('\0', startPos)) > 0) {
+    // Extraire un message JSON complet
+    String jsonPart = BcastJsonBuffer.substring(startPos, endOfJson);
+    
+    // Vérifier que le message est un JSON valide (contient au moins { et })
+    if (jsonPart.indexOf('{') >= 0 && jsonPart.indexOf('}') >= 0) {
+      ESP_LOGI(SRV_TAG, "Processing complete broadcast message: %s", jsonPart.c_str());
+      parseJSON(jsonPart, nullptr);
+    } else {
+      ESP_LOGW(SRV_TAG, "Invalid JSON fragment received: %s", jsonPart.c_str());
+    }
+    
+    // Avancer dans le buffer
+    startPos = endOfJson + 1;
+  }
+  
+  // Conserver uniquement la partie non traitée du buffer
+  if (startPos > 0) {
+    BcastJsonBuffer = BcastJsonBuffer.substring(startPos);
+  }
+  
+  // Vérifier périodiquement l'état du buffer
+  resetBcastBuffer();
 }
 
 bool initBroadcastUDP()
@@ -253,79 +290,103 @@ void manageLeds(JsonObject& buzzer, JsonObject& team, JsonArray& colorArray, Jso
 
 void handleUpdateAction(JsonObject& message, const String& macAddress) {
   JsonObject buzzer;
-    JsonObject team;
-    String output;
-    JsonDocument JsonDoc;
-    JsonArray colorArray=JsonDoc.to<JsonArray>();
-    colorArray.add(0);
-    colorArray.add(0);
-    colorArray.add(0);
+  JsonObject team;
+  String output;
+  JsonDocument JsonDoc;
+  JsonArray colorArray = JsonDoc.to<JsonArray>();
+  colorArray.add(0);
+  colorArray.add(0);
+  colorArray.add(0);
 
-  if ( message.containsKey("bumpers") ) {
-    if ( message["bumpers"].containsKey(macAddress) ) {
-      buzzer = message["bumpers"][macAddress].as<JsonObject>();
-      serializeJson(buzzer, output);
-      ESP_LOGI(SRV_TAG, "My Config=%s",output.c_str());
-      myConfig=output;
-    }
-  }
-
-  const char * t_name="";
-  if (buzzer.containsKey("TEAM") ) {
-    t_name=buzzer["TEAM"];
-    ESP_LOGI(SRV_TAG, "My team=%s",t_name);
-    if ( message.containsKey("teams") ) {
-      if (message["teams"].containsKey(t_name) ) {
-        team = message["teams"][t_name];
-        serializeJson(team, output);
-        ESP_LOGI(SRV_TAG, "    =>%s",output.c_str());
+  // Check if we're receiving a bumper update for our device
+  if (message.containsKey("bumpers") && message["bumpers"].containsKey(macAddress)) {
+    // Extract the bumper config for our device
+    buzzer = message["bumpers"][macAddress].as<JsonObject>();
+    
+    // If this is our first config or we want a complete overwrite
+    if (!isConfigInitialized) {
+      // Initialize our complete config with this buzzer data
+      myCompleteConfig["buzzer"] = buzzer;
+      isConfigInitialized = true;
+    } else {
+      // Merge the new buzzer data into our existing config
+      // Only update fields that are present in the new data
+      for (JsonPair kv : buzzer) {
+        myCompleteConfig["buzzer"][kv.key()] = kv.value();
       }
     }
+    
+    // Log current buzzer config
+    serializeJson(myCompleteConfig["buzzer"], output);
+    ESP_LOGI(SRV_TAG, "My Config=%s", output.c_str());
+    myConfig = output;
+  } else if (isConfigInitialized) {
+    // If we already have config but this message doesn't contain our bumper info,
+    // use the stored buzzer info
+    buzzer = myCompleteConfig["buzzer"].as<JsonObject>();
   }
 
-  int r = 0;
-  int g = 0;
-  int b = 0;
+  // Process team information
+  const char* t_name = "";
+  if (buzzer.containsKey("TEAM")) {
+    t_name = buzzer["TEAM"];
+    ESP_LOGI(SRV_TAG, "My team=%s", t_name);
+    
+    if (message.containsKey("teams") && message["teams"].containsKey(t_name)) {
+      team = message["teams"][t_name];
+      
+      // Store/update the team information in our complete config
+      myCompleteConfig["team"] = team;
+      
+      serializeJson(team, output);
+      ESP_LOGI(SRV_TAG, "    =>%s", output.c_str());
+    } else if (myCompleteConfig.containsKey("team")) {
+      // Use previously stored team info if not in this message
+      team = myCompleteConfig["team"].as<JsonObject>();
+    }
+  }
 
+  // Extract color information
+  int r = 0, g = 0, b = 0;
   if (team.containsKey("COLOR")) {
     colorArray = team["COLOR"].as<JsonArray>();
-  }
-  if (team.containsKey("color")) {
+  } else if (team.containsKey("color")) {
     colorArray = team["color"].as<JsonArray>();
   }
-  // S'assurer que le tableau contient bien 3 éléments (R, G, B)
-  if (colorArray.size() == 3) 
-  {
-      r = colorArray[0];
-      g = colorArray[1];
-      b = colorArray[2];
-
+  
+  if (colorArray.size() == 3) {
+    r = colorArray[0];
+    g = colorArray[1];
+    b = colorArray[2];
   }
-  // Change la couleur de la LED
-//  setLedColor(r, g, b,true);
 
-  int intensity=255;
+  // Process status and intensity
+  int intensity = 255;
   if (team.containsKey("STATUS")) {
-    String status=team["STATUS"].as<String>();
+    String status = team["STATUS"].as<String>();
     if (status == "PAUSE") {
       pauseGame();
 
       if (team.containsKey("BUMPER")) {
-        String macBumper=team["BUMPER"].as<String>();
-        if ( macBumper == macAddress) {
+        String macBumper = team["BUMPER"].as<String>();
+        if (macBumper == macAddress) {
           ESP_LOGI(SRV_TAG, "BUMP!");
-          intensity=255;
-        }
-        else {
+          intensity = 255;
+        } else {
           ESP_LOGI(SRV_TAG, "PAUSING");
-          intensity=2;
+          intensity = 2;
         }
       }
     }
   }
-//  setLedIntensity(intensity);
+  
+  // Always store the full message for reference
+  myCompleteConfig["lastMessage"] = message;
+  
+  // Apply LED settings
   manageLeds(buzzer, team, colorArray, message);
 }
+
 
 void hello_bumper()
 {
@@ -351,36 +412,50 @@ void parseJSON(const String& data, AsyncClient* c) {
   const char* action = receivedData["ACTION"];
   JsonObject message = receivedData["MSG"];
   ESP_LOGD(SRV_TAG, "Parsing ACTION=%s", action);
-  if (strcmp(action, "START") == 0) {
-    ESP_LOGI(SRV_TAG, "STARTING");
-    startGame();
-  } else if (strcmp(action, "STOP") == 0) {
-    ESP_LOGI(SRV_TAG, "STOPPING");
-    stopGame();
-  } else if (strcmp(action, "PAUSE") == 0) {
-    ESP_LOGI(SRV_TAG, "PAUSING");
-    pauseGame();
-  } else if (strcmp(action, "CONTINUE") == 0) {
-    ESP_LOGI(SRV_TAG, "STARTING");
-    startGame();
-  } else if (strcmp(action, "PING") == 0) {
-    ESP_LOGI(SRV_TAG, "Replying PONG");
-    sendMSG("PONG", "'" + WiFi.localIP().toString() + "'");
-  } else if (strcmp(action, "UPDATE") == 0) {
-    ESP_LOGI(SRV_TAG, "Updating My Config: %s", WiFi.macAddress().c_str());
-    handleUpdateAction(message, WiFi.macAddress());
-  } else if (strcmp(action, "HELLO") == 0) {
-    ESP_LOGI(SRV_TAG, "Send HELLO to COntroler");
-    connectSRV();
-  }else if (strcmp(action, "RESET") == 0) {
-    ESP_LOGI(SRV_TAG, "REseting Datas");
-    resetGame();
-  }else if (strcmp(action, "UPDATE_TIMER") == 0) {
-    ESP_LOGI(SRV_TAG, "UPDATING TIMER");
-    handleUpdateAction(message, WiFi.macAddress());
+ // Utiliser un switch case avec hash pour un traitement plus rapide et plus propre
+  switch (hash(action)) {
+    case hash("START"):
+    case hash("CONTINUE"):
+      ESP_LOGI(SRV_TAG, "STARTING");
+      startGame();
+      break;
+      
+    case hash("STOP"):
+      ESP_LOGI(SRV_TAG, "STOPPING");
+      stopGame();
+      break;
+      
+    case hash("PAUSE"):
+      ESP_LOGI(SRV_TAG, "PAUSING");
+      pauseGame();
+      break;
+      
+    case hash("PING"):
+      ESP_LOGI(SRV_TAG, "Replying PONG");
+      sendMSG("PONG", "'" + WiFi.localIP().toString() + "'");
+      break;
+      
+    case hash("UPDATE"):
+    case hash("UPDATE_TIMER"):
+      ESP_LOGI(SRV_TAG, action[0] == 'U' ? "Updating My Config: %s" : "UPDATING TIMER", 
+               WiFi.macAddress().c_str());
+      handleUpdateAction(message, WiFi.macAddress());
+      break;
+      
+    case hash("HELLO"):
+      ESP_LOGI(SRV_TAG, "Send HELLO to Controller");
+      connectSRV();
+      break;
+      
+    case hash("RESET"):
+      ESP_LOGI(SRV_TAG, "Resetting Data");
+      resetGame();
+      break;
+      
+    default:
+      ESP_LOGW(SRV_TAG, "Unknown action: %s", action);
+      break;
   }
-  
-
 }
 
 int64_t getAbsoluteTimeMicros() {

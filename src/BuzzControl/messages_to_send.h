@@ -8,6 +8,7 @@
 
 // Configuration
 const char* SEND_TAG = "MSG_SEND";
+int sentMsgId=0;
 
 // Structure de message pour les envois
 typedef struct {
@@ -15,6 +16,7 @@ typedef struct {
     String* message;  
     bool notifyAll;
     AsyncClient* client;
+    int msgID;
     String* msgTime;
 } OutgoingMessage_t;
 
@@ -30,16 +32,9 @@ void initOutgoingQueue() {
 }
 
 void notifyAll() {
-    String output;
-    JsonDocument& tb = getTeamsAndBumpers();
-
-    if (serializeJson(tb, output)) {
-        saveJson();
-        ESP_LOGI(SEND_TAG, "Sending update to all clients: %s", output.c_str());
+    String output= getTeamsAndBumpersJSON();;
+    
         sendMessageToAllClients("UPDATE", output.c_str());
-    } else {
-        ESP_LOGE(SEND_TAG, "Failed to serialize JSON");
-    }
 }
 
 void enqueueOutgoingMessage(const char* action, const char* msg, bool notify, AsyncClient* client) {
@@ -47,6 +42,7 @@ void enqueueOutgoingMessage(const char* action, const char* msg, bool notify, As
     message->action = action;
     message->message = new String(msg);
     message->msgTime = new String(micros());
+    message->msgID = sentMsgId++;
     message->notifyAll = notify;
     message->client = client;
 
@@ -55,6 +51,8 @@ void enqueueOutgoingMessage(const char* action, const char* msg, bool notify, As
         delete message->message;
         delete message->msgTime;
         delete message;
+    } else {
+        ESP_LOGD(SEND_TAG, "Message ID %i enqueued %s : %s", message->msgID, message->action.c_str(), msg);
     }
 }
 
@@ -89,15 +87,84 @@ void sendMessageToClient(const String& action, const String& msg, AsyncClient* c
     }
 }
 
+bool sendBroadcastUDP(const String& action, const String& msg) {
+  ESP_LOGI(SEND_TAG, "Sending broadcast message: %s", action.c_str());
+  String message = makeJsonMessage(action, msg);
+  ESP_LOGD(SEND_TAG, "Broadcasting message: %s", message.c_str());
+
+  bool success = false;
+  WiFiUDP udp;
+  const int maxRetries = 3;  // Nombre de tentatives maximum
+  
+  // Adresses de broadcast pour les réseaux STA et AP
+  IPAddress staBroadcast;
+  IPAddress apBroadcast;
+  
+  if (WiFi.status() == WL_CONNECTED) {
+    staBroadcast = calculateBroadcast(WiFi.localIP(), WiFi.subnetMask());
+  }
+  
+  if (WiFi.softAPgetStationNum() > 0) {
+    apBroadcast = calculateBroadcast(WiFi.softAPIP(), IPAddress(255, 255, 255, 0));
+  }
+  
+  // Tentatives d'envoi sur le réseau STA
+  if (WiFi.status() == WL_CONNECTED) {
+    for (int attempt = 0; attempt < maxRetries; attempt++) {
+      if (udp.beginPacket(staBroadcast, CONTROLER_PORT)) {
+        size_t bytesSent = udp.write((const uint8_t*)message.c_str(), message.length());
+        if (bytesSent == message.length() && udp.endPacket()) {
+          ESP_LOGI(SEND_TAG, "UDP broadcast sent successfully on STA network to %s (%d bytes)", 
+                  staBroadcast.toString().c_str(), bytesSent);
+          success = true;
+          break;
+        } else {
+          ESP_LOGW(SEND_TAG, "UDP broadcast failed on STA network (attempt %d/%d): %d/%d bytes sent", 
+                   attempt+1, maxRetries, bytesSent, message.length());
+          delay(50); // Petit délai avant la prochaine tentative
+        }
+      } else {
+        ESP_LOGE(SEND_TAG, "Failed to begin UDP packet on STA network (attempt %d/%d)", 
+                 attempt+1, maxRetries);
+      }
+    }
+  }
+  
+  // Tentatives d'envoi sur le réseau AP
+  if (WiFi.softAPgetStationNum() > 0) {
+    for (int attempt = 0; attempt < maxRetries; attempt++) {
+      if (udp.beginPacket(apBroadcast, CONTROLER_PORT)) {
+        size_t bytesSent = udp.write((const uint8_t*)message.c_str(), message.length());
+        if (bytesSent == message.length() && udp.endPacket()) {
+          ESP_LOGI(SEND_TAG, "UDP broadcast sent successfully on AP network to %s (%d bytes)", 
+                  apBroadcast.toString().c_str(), bytesSent);
+          success = true;
+          break;
+        } else {
+          ESP_LOGW(SEND_TAG, "UDP broadcast failed on AP network (attempt %d/%d): %d/%d bytes sent", 
+                   attempt+1, maxRetries, bytesSent, message.length());
+          delay(50); // Petit délai avant la prochaine tentative
+        }
+      } else {
+        ESP_LOGE(SEND_TAG, "Failed to begin UDP packet on AP network (attempt %d/%d)", 
+                 attempt+1, maxRetries);
+      }
+    }
+  }
+  
+  return success;
+}
+
 void sendMessageToAllClients(const String& action, const String& msg) {
+
     ESP_LOGI(SEND_TAG, "Sending broadcast message");
     String message = makeJsonMessage(action, msg);
     ESP_LOGD(SEND_TAG, "Broadcasting message: %s", message.c_str());
 
     // Envoyer le message en broadcast à tous les clients WebSocket
     ws.textAll(message.c_str());
-    
-    WiFiUDP udp;
+    sendBroadcastUDP(action, msg);
+/*    WiFiUDP udp;
     
     // Broadcast sur le réseau STA si connecté
     if (WiFi.status() == WL_CONNECTED) {
@@ -127,6 +194,7 @@ void sendMessageToAllClients(const String& action, const String& msg) {
             ESP_LOGE(SEND_TAG, "Failed to send UDP broadcast on AP network");
         }
     }
+*/
 }
 
 void sendMessageTask(void *parameter) {
@@ -134,7 +202,7 @@ void sendMessageTask(void *parameter) {
     while (1) {
         ESP_LOGD(SEND_TAG, "Low stack space in Send Message Task: %i", uxTaskGetStackHighWaterMark(NULL));
         if (xQueueReceive(outgoingQueue, &receivedMessage, portMAX_DELAY)) {
-            ESP_LOGI(SEND_TAG, "New message in queue: %s (%s)", receivedMessage->action.c_str(), receivedMessage->msgTime->c_str());
+            ESP_LOGI(SEND_TAG, "dequeue message %i : %s", receivedMessage->msgID, receivedMessage->action.c_str());
             
             switch (hash(receivedMessage->action.c_str())) {
                 case hash("HELLO"):
