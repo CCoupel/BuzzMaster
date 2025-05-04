@@ -85,7 +85,7 @@ async function sendForm(formId, actionUrl) {
 function sendFileForm(formId, actionUrl) {
     const form = document.getElementById(formId);
     const progressBar = document.getElementById('progressBar');
-  
+
     form.addEventListener('submit', function(event) {
       event.preventDefault();
       
@@ -96,6 +96,7 @@ function sendFileForm(formId, actionUrl) {
   
       // Suivi de la progression de l'upload
       xhr.upload.onprogress = function(event) {
+        console.log(event)
         if (event.lengthComputable) {
           const percent = (event.loaded / event.total) * 100;
           progressBar.value = percent;
