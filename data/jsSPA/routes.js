@@ -73,6 +73,7 @@ export const routes = {
                                 <button type="submit">Envoyer</button>
                             </div> 
                         </form>
+                        <progress id="progressBar" value="0" max="100"></progress>
                     </div> 
                     <div class="question-form-div">
                         <form id="question-form">

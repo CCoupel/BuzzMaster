@@ -52,7 +52,7 @@ async function sendForm(formId, actionUrl) {
     });
 }
 
-async function sendFileForm(formId, actionUrl) {
+/*async function sendFileForm(formId, actionUrl) {
     
     const form = document.getElementById(formId);
     form.addEventListener('submit', async function(event) {
@@ -80,7 +80,46 @@ async function sendFileForm(formId, actionUrl) {
             alert("Une erreur est survenue lors de l'envoi de l'image.");
         }
     });
-}
+}*/
+
+function sendFileForm(formId, actionUrl) {
+    const form = document.getElementById(formId);
+    const progressBar = document.getElementById('progressBar');
+  
+    form.addEventListener('submit', function(event) {
+      event.preventDefault();
+      
+      const formData = new FormData(form);
+      const xhr = new XMLHttpRequest();
+  
+      xhr.open('POST', actionUrl);
+  
+      // Suivi de la progression de l'upload
+      xhr.upload.onprogress = function(event) {
+        if (event.lengthComputable) {
+          const percent = (event.loaded / event.total) * 100;
+          progressBar.value = percent;
+        }
+      };
+  
+      xhr.onload = function() {
+        if (xhr.status === 200) {
+          alert('Image envoyée avec succès !');
+          console.log('Réponse du serveur :', xhr.responseText);
+        } else {
+          alert('Erreur lors de l\'upload.');
+          console.error('Erreur :', xhr.statusText);
+        }
+      };
+  
+      xhr.onerror = function() {
+        alert('Une erreur réseau est survenue.');
+      };
+  
+      xhr.send(formData);
+    });
+  }
+
 export function getFileStorage(fileStorageData) {
     fileStorage = fileStorageData;
     console.log(fileStorage)
@@ -233,12 +272,21 @@ export function questionList() {
 export function fsInfo() {
     const container = document.getElementById('file-storage-text');
     if (!container) return;
-    
-    const numberOfQuestions = Math.round (fileStorage.FREE / 300);
-    container.textContent = 
-    `Espace utilisé: ${fileStorage.USED} / ${fileStorage.TOTAL} Ko, Libre: ${fileStorage.FREE} Ko. Environ ${numberOfQuestions} questions avec image restantes`;
+
+    const numberOfQuestions = Math.round(fileStorage.FREE / 300);
+    container.textContent =
+        `Espace utilisé: ${fileStorage.USED} / ${fileStorage.TOTAL} Ko, Libre: ${fileStorage.FREE} Ko. Environ ${numberOfQuestions} questions avec image restantes`;
+
     const progressBar = document.getElementById("file");
-    progressBar.value = fileStorage.P_USED;
+
+    const usedPercent = fileStorage.P_USED;
+
+    if (Number.isFinite(usedPercent)) {
+        progressBar.value = usedPercent;
+    } else {
+        console.warn("fileStorage.P_USED n'est pas un nombre valide :", usedPercent);
+        progressBar.value = 0;
+    }
 }
 
 
