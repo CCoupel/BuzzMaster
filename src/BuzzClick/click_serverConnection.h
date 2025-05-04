@@ -471,8 +471,8 @@ void attachButtons()
     }
 
     pinMode(buttonsInfo[id].pin, INPUT_PULLUP); 
-    pinMode(buttonsInfo[id].pin+1, OUTPUT); 
-    digitalWrite(buttonsInfo[id].pin+1, LOW); 
+    pinMode(pin_gnd, OUTPUT); 
+    digitalWrite(pin_gnd, LOW); 
 
     int8_t interruptPin = digitalPinToInterrupt(buttonsInfo[id].pin);
     if (interruptPin == -1) {

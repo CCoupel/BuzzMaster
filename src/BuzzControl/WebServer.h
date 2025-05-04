@@ -37,17 +37,9 @@ void cleanupOldUploads() {
     }
 }
 
-void addCorsHeaders(AsyncWebServerResponse* response) {
-    response->addHeader("Access-Control-Allow-Origin", "*");
-    response->addHeader("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,OPTIONS");
-    response->addHeader("Access-Control-Allow-Headers", "Content-Type,Authorization");
-    response->addHeader("Access-Control-Allow-Credentials", "true");
-}
-
 void w_handleRoot(AsyncWebServerRequest *request) {
   ESP_LOGI(WEB_TAG, "Handling root request");
   AsyncWebServerResponse *response = request->beginResponse(200, "text/html", "hello from BuzzControl!");
-    addCorsHeaders(response);
 
   request->send(response);
 
@@ -66,14 +58,12 @@ void w_handleNotFound(AsyncWebServerRequest *request) {
   }
   
   AsyncWebServerResponse *response = request->beginResponse(404, "text/plain", message);
-    addCorsHeaders(response);
 
   request->send(response);
 }
 
 //####### TOOLING ######
 void w_handleRedirect(AsyncWebServerRequest *request) {
-//    ESP_LOGD(WEB_TAG, "REdirecting for: %s", request->url().c_str());
     request->redirect("http://buzzcontrol.local/html/testSPA.html#config");
 }
 
@@ -96,7 +86,6 @@ void w_handleListFiles(AsyncWebServerRequest *request) {
     result+=printLittleFSInfo();
     
     AsyncWebServerResponse *response = request->beginResponse(200, "text/text", result);
-    addCorsHeaders(response);
     request->send(response);
 }
 
@@ -105,7 +94,6 @@ void w_handleListGame(AsyncWebServerRequest *request) {
     result=getTeamsAndBumpersJSON();
     
     AsyncWebServerResponse *response = request->beginResponse(200, "text/text", result);
-    addCorsHeaders(response);
     request->send(response);
 }
 
@@ -163,7 +151,6 @@ void w_handleUploadBackgroundComplete(AsyncWebServerRequest *request) {
     // Ne sauvegarde que s'il n'y a pas de fichier dans le formulaire
     ESP_LOGI(WEB_TAG,"upload du fichier w_handleUploadBackground Complete");
     AsyncWebServerResponse *response = request->beginResponse(200, "text/json", "Background Saved");
-    addCorsHeaders(response);
     request->send(response);
 }
 
@@ -209,7 +196,6 @@ void w_handleListQuestions(AsyncWebServerRequest *request) {
     ESP_LOGI(WEB_TAG, "Questions: %s", jsonOutput.c_str());
 
     AsyncWebServerResponse *response = request->beginResponse(200, "text/json", jsonOutput);
-    addCorsHeaders(response);
     request->send(response);
 }
 
@@ -221,7 +207,6 @@ void w_handleUploadQuestionComplete(AsyncWebServerRequest *request) {
         ESP_LOGI(WEB_TAG,"Saving Question %s", saveQuestion(request, false).c_str());
     }
     AsyncWebServerResponse *response = request->beginResponse(200, "text/json", "Question Saved");
-    addCorsHeaders(response);
     request->send(response);
     enqueueOutgoingMessage("QUESTIONS", getQuestions().c_str(), false, nullptr);
 }
@@ -299,7 +284,24 @@ void startWebServer() {
     else {
         ESP_LOGE(FS_TAG, "Directory /CURRENT do not contains /CURRENT/html/testSPA.html : fall back to local version");
     }
+
+
+    DefaultHeaders::Instance().addHeader("Access-Control-Allow-Origin", "*");
+    DefaultHeaders::Instance().addHeader("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,OPTIONS");
+    DefaultHeaders::Instance().addHeader("Access-Control-Allow-Headers", "Content-Type,Authorization");
+    DefaultHeaders::Instance().addHeader("Access-Control-Allow-Credentials", "true");
+    DefaultHeaders::Instance().addHeader("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0");
+    DefaultHeaders::Instance().addHeader("Access-Control-Max-Age", "1");
+    DefaultHeaders::Instance().addHeader("Vary", "Origin");
+    DefaultHeaders::Instance().addHeader("Pragma", "no-cache");
+    DefaultHeaders::Instance().addHeader("Expires", "-1");
+
     server.onNotFound(w_handleNotFound);
+    
+    server.on("/*", HTTP_OPTIONS, [](AsyncWebServerRequest *request) {
+      AsyncWebServerResponse *response = request->beginResponse(204);
+      request->send(response);
+    });
 
     server.serveStatic("/jspa", LittleFS, (ROOT+"/jspa").c_str());
     server.serveStatic("/js", LittleFS, (ROOT+"/js").c_str());
@@ -313,8 +315,8 @@ void startWebServer() {
     // Servir les fichiers du répertoire files pour /files/*
     server.serveStatic("/question/", LittleFS, "/files/questions/");
 
-    // Route spécifique pour le background
     server.serveStatic("/background", LittleFS, "/files/background.jpg");
+    server.serveStatic("/favicon.ico", LittleFS, "/files/background.jpg");
     server.serveStatic("/version", LittleFS, "/config/version.txt");
 
     server.on("/", HTTP_GET, w_handleRedirect);

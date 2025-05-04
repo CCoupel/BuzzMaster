@@ -103,7 +103,7 @@ void startGame(const int delay) {
   setGameCurrentTime(newDelay);
   setGameTime();
   setGamePhase("START");
-  enqueueOutgoingMessage("START", getTeamsAndBumpersJSON().c_str(), true, nullptr);
+  enqueueOutgoingMessage("START", getGameJSON().c_str(), true, nullptr);
   
   // Démarrer le timer s'il n'est pas déjà en cours
   if (!isTimerRunning) {
@@ -128,7 +128,7 @@ void stopGame() {
   setGameCurrentTime(0);
   setGamePhase("STOP");
 //  enqueueOutgoingMessage("UPDATE_TIMER", getTeamsAndBumpersJSON().c_str(), false, nullptr);
-  enqueueOutgoingMessage("STOP", getTeamsAndBumpersJSON().c_str(), true, nullptr);
+  enqueueOutgoingMessage("STOP", getGameJSON().c_str(), true, nullptr);
   
   // Arrêter le timer
   if (isTimerRunning) {
@@ -138,19 +138,19 @@ void stopGame() {
 }
 
 void pauseGame(AsyncClient* client) {
-  enqueueOutgoingMessage("PAUSE", getTeamsAndBumpersJSON().c_str(), true, client);
+  enqueueOutgoingMessage("PAUSE", getGameJSON().c_str(), true, client);
 }
 
 void pauseAllGame() {
   setGamePhase("PAUSE");
 //  enqueueOutgoingMessage("UPDATE_TIMER", getTeamsAndBumpersJSON().c_str(), false, nullptr);
-  enqueueOutgoingMessage("PAUSE", getTeamsAndBumpersJSON().c_str(), true, nullptr);
+  enqueueOutgoingMessage("PAUSE", getGameJSON().c_str(), true, nullptr);
 }
 
 void continueGame() {
   setGamePhase("START");
 //  enqueueOutgoingMessage("UPDATE_TIMER", getTeamsAndBumpersJSON().c_str(), false, nullptr);
-  enqueueOutgoingMessage("CONTINUE", getTeamsAndBumpersJSON().c_str(), true, nullptr);
+  enqueueOutgoingMessage("CONTINUE", getGameJSON().c_str(), true, nullptr);
 }
 
 void revealGame() {
