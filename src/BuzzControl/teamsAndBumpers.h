@@ -513,7 +513,8 @@ void setBumperScore(const char* bumperID, const int new_score) {
 }
 
 const int64_t getBumperTime(const char* bumperID) {
-    return int64_t(teamsAndBumpers["bumpers"][bumperID]["TIMESTAMP"]);
+    String bID = ensureBumperExists(bumperID);
+    return int64_t(teamsAndBumpers["bumpers"][bID]["TIMESTAMP"]);
 }
 
 void setBumperTime(const char* bumperID, const int64_t new_delay) {
@@ -530,7 +531,7 @@ void setBumperTime(const char* bumperID, const int64_t new_delay) {
 */
     int64_t copy = int64_t(new_delay);
     teamsAndBumpers["bumpers"][bID]["TIMESTAMP"]=copy;
-    ESP_LOGI(TEAMs_TAG, "BumperID Delay %s %i", bID.c_str(), copy);
+    ESP_LOGI(TEAMs_TAG, "BumperID Delay %s %lld", bID.c_str(), copy);
 }
 
 void resetBumpersReady() {
