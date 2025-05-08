@@ -87,39 +87,43 @@ function sendFileForm(formId, actionUrl) {
     const progressBar = document.getElementById('progressBar');
 
     form.addEventListener('submit', function(event) {
-      event.preventDefault();
-      
-      const formData = new FormData(form);
-      const xhr = new XMLHttpRequest();
-  
-      xhr.open('POST', actionUrl);
-  
-      // Suivi de la progression de l'upload
-      xhr.upload.onprogress = function(event) {
-        console.log(event)
-        if (event.lengthComputable) {
-          const percent = (event.loaded / event.total) * 100;
-          progressBar.value = percent;
-        }
-      };
-  
-      xhr.onload = function() {
-        if (xhr.status === 200) {
-          alert('Image envoyée avec succès !');
-          console.log('Réponse du serveur :', xhr.responseText);
-        } else {
-          alert('Erreur lors de l\'upload.');
-          console.error('Erreur :', xhr.statusText);
-        }
-      };
-  
-      xhr.onerror = function() {
-        alert('Une erreur réseau est survenue.');
-      };
-  
-      xhr.send(formData);
+        event.preventDefault();
+        
+        const formData = new FormData(form);
+        const xhr = new XMLHttpRequest();
+
+        xhr.open('POST', actionUrl);
+
+        // Suivi de la progression de l'upload
+        xhr.upload.onprogress = function(event) {
+            if (event.lengthComputable) {
+                const percent = (event.loaded / event.total) * 100;
+                progressBar.value = percent;
+            }
+        };
+
+        xhr.onload = function() {
+            if (xhr.status === 200) {
+                alert('Image envoyée avec succès !');
+                console.log('Réponse du serveur :', xhr.responseText);
+
+                const timestamp = Date.now();
+                document.body.style.backgroundImage =
+                  `linear-gradient(rgba(255, 255, 255, 0.5)), url('/background?t=${timestamp}')`;
+
+            } else {
+                alert('Erreur lors de l\'upload.');
+                console.error('Erreur :', xhr.statusText);
+            }
+        };
+
+        xhr.onerror = function() {
+            alert('Une erreur réseau est survenue.');
+        };
+
+        xhr.send(formData);
     });
-  }
+}
 
 export function getFileStorage(fileStorageData) {
     fileStorage = fileStorageData;
@@ -236,9 +240,10 @@ export function questionList() {
             `;
 
             if (data.MEDIA) {
+                const timestamp = Date.now();
                 const imgDiv = document.createElement('div');
                 imgDiv.className = 'img';
-                imgDiv.innerHTML = `<img src="http://buzzcontrol.local${data.MEDIA}" alt="Question Media">`;
+                imgDiv.innerHTML = `<img src="http://buzzcontrol.local${data.MEDIA}?t=${timestamp}" alt="Question Media">`;
                 questionDiv.appendChild(imgDiv);
             }
 

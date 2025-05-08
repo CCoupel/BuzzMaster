@@ -388,10 +388,28 @@ export function sendWebSocketMessage (action, MSG= "{}")  {
     }
 };
 
+function applyBackgroundFromServer() {
+    const timestamp = Date.now();
+    const backgroundUrl = `/background?t=${timestamp}`;
+
+    const img = new Image();
+    img.onload = function () {
+        document.body.style.backgroundImage =
+            `linear-gradient(rgba(255, 255, 255, 0.5)), url('${backgroundUrl}')`;
+        console.log('Background mis à jour depuis le serveur.');
+    };
+    img.onerror = function () {
+        console.error('Erreur lors du chargement de l’image de fond.');
+    };
+
+    img.src = backgroundUrl;
+}
+
 document.addEventListener('DOMContentLoaded', function() {
     connectWebSocketPlayers(handleConfigSocketMessagePlayers);
     updateTimer();
     updateTimeBar();
     renderTeamScores();
     renderPlayerScores();
+    applyBackgroundFromServer();
 });
