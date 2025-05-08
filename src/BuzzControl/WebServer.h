@@ -89,6 +89,15 @@ void w_handleListFiles(AsyncWebServerRequest *request) {
     request->send(response);
 }
 
+void w_handleUpdate(AsyncWebServerRequest *request) {
+    String result="";
+    downloadFiles();
+    result+=listLittleFSFiles();
+    
+    AsyncWebServerResponse *response = request->beginResponse(200, "text/text", result);
+    request->send(response);
+}
+
 void w_handleListGame(AsyncWebServerRequest *request) {
     String result;
     result=getTeamsAndBumpersJSON();
@@ -318,12 +327,14 @@ void startWebServer() {
     server.serveStatic("/background", LittleFS, "/files/background.jpg");
     server.serveStatic("/favicon.ico", LittleFS, "/files/background.jpg");
     server.serveStatic("/version", LittleFS, "/config/version.txt");
+    server.serveStatic("/connecttest.txt", LittleFS, "/config/version.txt");
 
     server.on("/", HTTP_GET, w_handleRedirect);
     server.on("/index.html", w_handleRedirect);
 
     server.on("/reset", HTTP_GET, w_handleReset);
     server.on("/reboot", HTTP_GET, w_handleReboot);
+    server.on("/update", HTTP_GET, w_handleUpdate);
     server.on("/listFiles",HTTP_GET, w_handleListFiles);
     server.on("/listGame",HTTP_GET, w_handleListGame);
 
