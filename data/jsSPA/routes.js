@@ -63,6 +63,11 @@ export const routes = {
     '#questions': () => `
         <link rel="stylesheet" href="../css/questions.css">
         <div class="main-container-questions">
+            <div id="questions-container">
+                <div id="loader" style="display:none;">
+                    <p>Chargement...</p>
+                </div>
+            </div>
             <div id ="flex-container">
                 <div id ="form-container">
                     <div id="background-container">
@@ -103,11 +108,6 @@ export const routes = {
                         <p id="file-storage-text"></p>
                         <progress id="file" max="100" value=""></progress>
                     </div>
-                </div>
-            </div>
-            <div id="questions-container">
-                <div id="loader" style="display:none;">
-                    <p>Chargement...</p>
                 </div>
             </div>
         </div>

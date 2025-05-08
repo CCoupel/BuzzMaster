@@ -6,10 +6,10 @@ export let fileStorage = {};
 
 function validateFileSize(event) {
     const fileInput = document.querySelector('input[name="file"]');
-    const maxSize = 400 * 1024; // Limite de 200 Ko
+    const maxSize = 400 * 1024;
 
     if (fileInput.files.length > 0 && fileInput.files[0].size > maxSize) {
-        alert("Le fichier est trop volumineux. La taille maximale autorisée est de 200 Ko.");
+        alert("Le fichier est trop volumineux. La taille maximale autorisée est de 400 Ko.");
         event.preventDefault();
         return false;
     }
@@ -109,7 +109,7 @@ function sendFileForm(formId, actionUrl) {
 
                 const timestamp = Date.now();
                 document.body.style.backgroundImage =
-                  `linear-gradient(rgba(255, 255, 255, 0.5)), url('/background?t=${timestamp}')`;
+                  `linear-gradient(rgba(255, 255, 255, 0.5)), url('http://buzzcontrol.local/background?t=${timestamp}')`;
 
             } else {
                 alert('Erreur lors de l\'upload.');

@@ -18,57 +18,63 @@ export function createBuzzerDiv(buzzerData) {
         textElement.textContent = text;
         return textElement;
     };
-
+ 
     const createForm = (id, buzzerDiv, playerName = '') => {
         const form = document.createElement('form');
         form.className = 'buzzer-form';
+    
+        // Intercepte le "submit" pour éviter le rechargement
+        form.addEventListener('submit', (e) => {
+            e.preventDefault();
+            submitBtn.click(); // Valide comme si on cliquait sur "Valider"
+        });
     
         const input = document.createElement('input');
         input.type = 'text';
         input.name = 'buzzer-text';
         input.id = `buzzer-text-${id}`;
-        input.maxLength = '20'
+        input.maxLength = '20';
         input.placeholder = 'Nom du joueur';
-        input.value = playerName;  
-
+        input.value = playerName;
+    
         setTimeout(() => {
             input.focus(); 
         }, 0);
-
-        let timeoutId;
-        input.addEventListener('input', (e) => {
-            clearTimeout(timeoutId);
-            timeoutId = setTimeout(() => {
-                const newPlayerName = e.target.value.trim();
-                if (newPlayerName) {
-                    setBumperName(id, newPlayerName);  
-                }
-            }, 500); // Délai de 500ms avant l'envoi
-        });
-
+    
         input.addEventListener('blur', () => {
-            const currentPlayerName = input.value.trim() || playerName;  
+            const currentPlayerName = input.value.trim() || playerName;
             if (!currentPlayerName) {
                 input.focus();
                 return;
             }
-            buzzerDiv.innerHTML = ''; 
-            const nameElement = createTextElement('buzzer-name', `${currentPlayerName}`);  
-            buzzerDiv.appendChild(nameElement);
+        });
     
-            nameElement.addEventListener('click', () => {
+        // Bouton "Valider"
+        const submitBtn = document.createElement('button');
+        submitBtn.type = 'button';
+        submitBtn.textContent = 'Valider';
+        submitBtn.addEventListener('click', () => {
+            const newPlayerName = input.value.trim();
+            if (newPlayerName) {
+                setBumperName(id, newPlayerName);
                 buzzerDiv.innerHTML = '';
-                createForm(id, buzzerDiv, currentPlayerName);
-            });
+                const nameElement = createTextElement('buzzer-name', `${newPlayerName}`);
+                buzzerDiv.appendChild(nameElement);
+    
+                nameElement.addEventListener('click', () => {
+                    buzzerDiv.innerHTML = '';
+                    createForm(id, buzzerDiv, newPlayerName);
+                });
+            } else {
+                input.focus();
+            }
         });
-
-        input.addEventListener("submit", (e) => {
-            e.preventDefault();
-        });
-
+    
         form.appendChild(input);
+        form.appendChild(submitBtn);
         buzzerDiv.appendChild(form);
     };
+    
 
     const createBuzzerElement = (id, data) => {
         const buzzerDiv = document.createElement('div');
