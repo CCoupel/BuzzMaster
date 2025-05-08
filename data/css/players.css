@@ -169,3 +169,27 @@ main {
         background-position: 100% 50%; /* Rotation du dégradé */
     }
 }
+
+@keyframes blinkFast {
+    0% { opacity: 1; }
+    50% { opacity: 0.3; }
+    100% { opacity: 1; }
+}
+
+#time-bar.pause-blink {
+    animation: blinkFast 0.5s linear infinite;
+}
+
+@keyframes blink {
+    0% { opacity: 1; }
+    50% { opacity: 0.3; }
+    100% { opacity: 1; }
+}
+
+.blink {
+    animation: blink 1s linear infinite;
+}
+
+.blink-fast {
+    animation: blink 0.5s linear infinite;
+}

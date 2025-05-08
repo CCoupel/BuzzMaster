@@ -187,21 +187,33 @@ export function questionsSelectList() {
             <p><strong>ID:</strong> ${questionData.ID} <strong>Question:</strong> ${questionData.QUESTION}</p>
         `;
 
-        const popup = document.createElement('div');
-        popup.className = 'popup';
-        popup.innerHTML = `
-            <p><strong>Question:</strong> ${questionData.QUESTION}</p>
-            <p><strong>Réponse:</strong> ${questionData.ANSWER}</p>
-            <p><strong>Points:</strong> ${questionData.POINTS}</p>
-            <p><strong>Temps:</strong> ${questionData.TIME} sec</p>
-            ${questionData.MEDIA ? `<img src="http://buzzcontrol.local${questionData.MEDIA}" alt="Question Media">` : ''}
-        `;
-        popup.style.display = 'none';
-        popup.style.position = 'absolute';
-        popup.style.zIndex = '1000';
-        document.body.appendChild(popup);
+        let popup = document.getElementById(`popup-question-${questionData.ID}`);
+        if (!popup) {
+            popup = document.createElement('div');
+            popup.className = 'popup';
+            popup.id = `popup-question-${questionData.ID}`;
 
-        let popupTimeout; 
+            popup.innerHTML = `
+                <p><strong>Question:</strong> ${questionData.QUESTION}</p>
+                <p><strong>Réponse:</strong> ${questionData.ANSWER}</p>
+                <p><strong>Points:</strong> ${questionData.POINTS}</p>
+                <p><strong>Temps:</strong> ${questionData.TIME} sec</p>
+                ${questionData.MEDIA ? `<img src="http://buzzcontrol.local${questionData.MEDIA}" alt="Question Media">` : ''}
+            `;
+            popup.style.display = 'none';
+            popup.style.position = 'absolute';
+            popup.style.zIndex = '1000';
+
+            document.body.appendChild(popup);
+
+            popup.addEventListener('mouseleave', () => {
+                if (!questionDiv.matches(':hover')) {
+                    popup.style.display = 'none';
+                }
+            });
+        }
+
+        let popupTimeout;
 
         questionDiv.addEventListener('mouseenter', (event) => {
             popupTimeout = setTimeout(() => {
