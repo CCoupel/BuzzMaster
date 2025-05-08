@@ -1,4 +1,6 @@
 #include "includes.h"
+#include "Common/configManager.h"
+
 #include "WifiManager.h"
 
 #include "Common/CustomLogger.h"
@@ -54,6 +56,17 @@ void setup(void)
   setLedColor(255, 0, 0);
   setLedIntensity(255);
 
+  if (!LittleFS.begin()) {
+    ESP_LOGE(MAIN_TAG, "Erreur de montage LittleFS");
+    return;
+  }
+  
+  // Load configuration
+  if (!configManager.load()) {
+      ESP_LOGW(MAIN_TAG, "Failed to load config, using defaults");
+  } else {
+      ESP_LOGI(MAIN_TAG, "Configuration loaded successfully");
+  }
   wifiConnect();
   CustomLogger::init(logPort);
 
@@ -65,14 +78,10 @@ void setup(void)
   ESP_LOGI(MAIN_TAG, "NEO pin: %d", PIN_NEOPIXEL);
 
   setLedIntensity(128);
+
   setupAP();
   setupDNSServer();
 
-  if (!LittleFS.begin()) {
-    ESP_LOGE(MAIN_TAG, "Erreur de montage LittleFS");
-    return;
-  }
-  
   yield();
   sleep(2);
   downloadFiles();

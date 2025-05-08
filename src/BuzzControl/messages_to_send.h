@@ -111,7 +111,7 @@ bool sendBroadcastUDP(const String& action, const String& msg) {
   // Tentatives d'envoi sur le réseau STA
   if (WiFi.status() == WL_CONNECTED) {
     for (int attempt = 0; attempt < maxRetries; attempt++) {
-      if (udp.beginPacket(staBroadcast, CONTROLER_PORT)) {
+      if (udp.beginPacket(staBroadcast, configManager.getControllerPort())) {
         size_t bytesSent = udp.write((const uint8_t*)message.c_str(), message.length());
         if (bytesSent == message.length() && udp.endPacket()) {
           ESP_LOGI(SEND_TAG, "UDP broadcast sent successfully on STA network to %s (%d bytes)", 
@@ -133,7 +133,7 @@ bool sendBroadcastUDP(const String& action, const String& msg) {
   // Tentatives d'envoi sur le réseau AP
   if (WiFi.softAPgetStationNum() > 0) {
     for (int attempt = 0; attempt < maxRetries; attempt++) {
-      if (udp.beginPacket(apBroadcast, CONTROLER_PORT)) {
+      if (udp.beginPacket(apBroadcast, configManager.getControllerPort())) {
         size_t bytesSent = udp.write((const uint8_t*)message.c_str(), message.length());
         if (bytesSent == message.length() && udp.endPacket()) {
           ESP_LOGI(SEND_TAG, "UDP broadcast sent successfully on AP network to %s (%d bytes)", 

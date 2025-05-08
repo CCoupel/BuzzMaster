@@ -316,7 +316,7 @@ void startWebServer() {
     server.serveStatic("/js", LittleFS, (ROOT+"/js").c_str());
     server.serveStatic("/css", LittleFS, (ROOT+"/css").c_str());
     server.serveStatic("/html", LittleFS, (ROOT+"/html").c_str());
-    server.serveStatic("/config", LittleFS, (ROOT+"/config").c_str());
+    server.serveStatic("/config", LittleFS, "/config");
 
     // Servir les fichiers du répertoire files pour /files/*
     server.serveStatic("/files/", LittleFS, "/files/");

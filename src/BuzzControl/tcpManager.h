@@ -9,7 +9,7 @@
 const char* TCP_TAG = "TCP";
 
 void startBumperServer() {
-  bumperServer = new AsyncServer(CONTROLER_PORT);
+  bumperServer = new AsyncServer(configManager.getControllerPort());
   bumperServer->onClient(&b_onCLientConnect, bumperServer);
   
   // Afficher les adresses IP des interfaces
@@ -20,7 +20,7 @@ void startBumperServer() {
   ESP_LOGI(TCP_TAG, "AP IP Address: %s", apIP.toString().c_str());
 
   bumperServer->begin();
-  ESP_LOGI(TCP_TAG, "BUMPER server started on port %i", CONTROLER_PORT);
+  ESP_LOGI(TCP_TAG, "BUMPER server started on port %i", configManager.getControllerPort());
 }
 
 void b_handleData(void* arg, AsyncClient* c, void *data, size_t len) {
