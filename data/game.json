@@ -1,21 +1,4 @@
 {
-    "teams": {
-    },
-    "bumpers": {
-        "AAA":{"NAME": "FAKE 1"},
-        "bbb":{"NAME": "FAKE 2"},
-        "ccc":{"NAME": "FAKE 3"},
-        "ddd":{"NAME": "FAKE 4"},
-        "eee":{"NAME": "FAKE 5"},
-        "fff":{"NAME": "FAKE 6"},
-        "ggg":{"NAME": "FAKE 7"},
-        "hhh":{"NAME": "FAKE 8"},
-        "iii":{"NAME": "FAKE 9"},
-        "jjj":{"NAME": "FAKE 10"},
-        "kkk":{"NAME": "FAKE 11"},
-        "lll":{"NAME": "FAKE 12"},
-        "mmm":{"NAME": "FAKE 13"}
-    },
     "GAME": {
         "DELAY": 35,
         "PHASE": "STOP",
