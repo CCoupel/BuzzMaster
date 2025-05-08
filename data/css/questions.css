@@ -40,11 +40,12 @@
 
 #questions-container {
   width: 40%;
-    display: flex;
-    flex-direction: column;
-    flex-wrap: wrap;
-    gap: 0.5%;
-    overflow: scroll;
+  height: 90%;
+  display: flex;
+  flex-direction: column;
+  flex-wrap: nowrap;
+  gap: 0.5%;
+  overflow: scroll;
 }
   
 .question-item {
@@ -57,7 +58,6 @@
   border-radius: 5px;
   display: flex;
   justify-content: space-around;
-  overflow: hidden;
   strong{
       font-weight: 600;
   }
