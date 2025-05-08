@@ -35,6 +35,7 @@ String jsonBuffer; // Tampon pour assembler les données JSON
 
 unsigned long lastCheckTime = 0;
 const unsigned long checkInterval = 2000; // Intervalle de 5 secondes
+const int pin_gnd=5;
 
 struct ButtonInfo {
   int pin;
@@ -46,7 +47,10 @@ struct ButtonInfo {
 ButtonInfo buttonsInfo[] = {
   
   {1, "test", false, ""},
-  {9, "local", false, ""} // Initialisation complète
+  {6, "ROUGE", false, ""},
+  {7, "VERT", false, ""},
+  {8, "BLEU", false, ""},
+  {9, "JAUNE", false, ""}
 };
 
 

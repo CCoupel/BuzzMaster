@@ -1,7 +1,7 @@
 //const char* WIFI_SSID     = "buzzmaster";
 //const char* WIFI_PASSWORD = "BuzzMaster";
 
-const char* ssid     = "CC-Home";
+const char* ssid     = "CC-Home2";
 const char* password = "GenericPassword";
 
 const char* apSSID = "buzzmaster";
