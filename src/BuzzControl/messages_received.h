@@ -131,6 +131,7 @@ void processDataFromSocket(const char* action, const JsonObject& message, int64_
       ESP_LOGW(RECEIVE_TAG, "Unrecognized action: %s", action);
       break;
   }
+  saveJson();
 }
 
 // Déclaration externe de la fonction définie dans BumperServer.h
@@ -189,6 +190,7 @@ void processTCPMessage(const String& data, AsyncClient* client, int64_t timestam
     else {
         ESP_LOGW(RECEIVE_TAG, "Unknown TCP action: %s", action.c_str());
     }
+    saveJson();
 }
 
 void processWebSocketMessage(const String& data, int64_t timestamp) {
