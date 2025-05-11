@@ -1,0 +1,59 @@
+body {
+    font-family: Arial, sans-serif;
+    background-color: #f9f9f9;
+    color: #333;
+    padding: 20px;
+}
+
+#configuration {
+    max-width: 600px;
+    margin: auto;
+    background-color: #fff;
+    border: 1px solid #ddd;
+    border-radius: 12px;
+    padding: 20px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+
+#configuration h1 {
+    font-size: 28px;
+    margin-bottom: 20px;
+    text-align: center;
+    color: #444;
+}
+
+#configuration h2 {
+    font-size: 20px;
+    margin-top: 20px;
+    color: #0077cc;
+    border-bottom: 1px solid #eee;
+    padding-bottom: 5px;
+}
+
+#configuration p {
+    margin: 5px 0 10px 10px;
+    padding-left: 10px;
+    border-left: 3px solid #0077cc;
+    background-color: #f0f8ff;
+    border-radius: 4px;
+}
+
+#editButton {
+  margin-top: 20px;
+  padding: 10px 20px;
+  background-color: #0077cc;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+#editButton:hover {
+  background-color: #005fa3;
+}
+
+input[type="text"] {
+  padding: 6px;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+}
