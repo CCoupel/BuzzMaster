@@ -3,6 +3,7 @@ config/catalog.url
 config/version.txt
 html/players.html
 html/testSPA.html
+html/options.html
 jsSPA/buzzerSPA.js
 jsSPA/players.js
 jsSPA/configSPA.js
@@ -16,6 +17,7 @@ jsSPA/testSPA.js
 jsSPA/version.js
 jsSPA/websocket.js
 jsSPA/teamGameSPA.js
+jsSPA/options.js
 css/reset.css
 css/style.css
 css/players.css
@@ -24,3 +26,4 @@ css/navbar.css
 css/questions.css
 css/teamGame.css
 css/score.css
+css/options.css

@@ -470,7 +470,7 @@ void downloadFiles() {
 
     // Comparer les versions
     if (localVersion >= remoteVersion) {
-        ESP_LOGI(FS_TAG, "La version locale est à jour");
+        ESP_LOGI(FS_TAG, "La version locale est à jour %f / %f", localVersion, remoteVersion);
         LittleFS.remove(tempVersionPath);
         return;
     }

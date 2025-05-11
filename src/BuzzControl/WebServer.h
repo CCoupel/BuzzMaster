@@ -91,6 +91,7 @@ void w_handleListFiles(AsyncWebServerRequest *request) {
 
 void w_handleUpdate(AsyncWebServerRequest *request) {
     String result="";
+    ESP_LOGI(WEB_TAG,"Updating Web pages from GIT");
     downloadFiles();
     result+=listLittleFSFiles();
     

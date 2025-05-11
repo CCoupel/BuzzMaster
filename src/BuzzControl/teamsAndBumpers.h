@@ -266,8 +266,8 @@ String getQuestions() {
         jsonOutput += "\"" + directories[i].path + "\":";
         jsonOutput += directories[i].questionJson;
     }
-    
-    jsonOutput += "}";
+    jsonOutput += "}, \"FSINFO\": " + printLittleFSInfo(true) + "";
+    //jsonOutput += "}";
     
     // Libérer la mémoire
     delete[] directories;
