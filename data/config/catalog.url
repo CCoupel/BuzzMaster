@@ -3,6 +3,7 @@ config/catalog.url
 config/version.txt
 html/players.html
 html/testSPA.html
+html/options.html
 jsSPA/buzzerSPA.js
 jsSPA/players.js
 jsSPA/configSPA.js
