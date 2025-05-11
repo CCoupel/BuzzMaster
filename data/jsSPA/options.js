@@ -90,7 +90,6 @@ function enableEditMode() {
       });
 
       if (!response.ok) throw new Error('Erreur lors de l’envoi');
-
       configData = updatedConfig;
       displayConfig(updatedConfig);
     } catch (error) {
