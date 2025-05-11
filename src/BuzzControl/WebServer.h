@@ -158,11 +158,9 @@ void w_handleUploadConfigComplete(AsyncWebServerRequest *request) {
     request->send(response);
 }
 
-void w_handleUploadConfigBody(AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total) {
-    //saveFile(request, "/config/config.json",  filename,  index,  data,  len,  final);
-    
-        ESP_LOGI(WEB_TAG, "Upload du fichier Config terminé: %s", String((char*)data, len));
-
+void w_handleUploadConfigBody(AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total) {    
+        ESP_LOGI(WEB_TAG, "Upload du fichier Config terminé: %i:%s", len, (char*)data);
+        saveFile(request, "/config/config.json.current",  "",  index,  data,  len,  true);
 }
 
 /***** QUESTIONS *******/

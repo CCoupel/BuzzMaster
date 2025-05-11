@@ -232,6 +232,7 @@ bool moveDirectory(const char* sourceDir, const char* destDir) {
     dirStack.push_back({String(sourceDir), String(destDir)});
 
     while (!dirStack.empty()) {
+        esp_task_wdt_reset();
         auto [currentSource, currentDest] = dirStack.back();
         dirStack.pop_back();
 
@@ -494,6 +495,7 @@ void downloadFiles() {
     bool updateSuccess = true;
     int pos = 0;
     while (pos < catalogContent.length()) {
+        esp_task_wdt_reset();
         setLedColor(255*(pos)/catalogContent.length(),128*(pos)/catalogContent.length(),0,true);
         int endPos = catalogContent.indexOf('\n', pos);
         if (endPos == -1) endPos = catalogContent.length();
