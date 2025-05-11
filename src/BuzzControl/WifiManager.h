@@ -17,7 +17,11 @@ IPAddress subnet(255, 255, 255, 0);
 
 DNSServer dnsServer;
 TaskHandle_t wifiConnectTaskHandle = NULL;
+
 void wifiConnectTask(void * parameter) {
+        // Load configuration
+    String ssid = configManager.getWifiSSID();
+    String password = configManager.getWifiPassword();
     for (;;) {
         if (WiFi.status() != WL_CONNECTED) {
             ESP_LOGI(WIFI_TAG, "Attempting to connect to %s", ssid);
@@ -42,7 +46,7 @@ void wifiConnectTask(void * parameter) {
 }
 
 void wifiConnect() {
-    ESP_LOGI(WIFI_TAG, "Connecting to %s", ssid);
+    ESP_LOGI(WIFI_TAG, "Starting WiFi connection");
     WiFi.mode(WIFI_AP_STA);
     xTaskCreate(
         wifiConnectTask,
@@ -55,14 +59,18 @@ void wifiConnect() {
 }
 
 void setupAP() {
+    String apSSID = configManager.getAPSSID();
+    String apPassword = configManager.getAPPassword();
+
     WiFi.softAPConfig(apIP, gateway, subnet);
-    WiFi.softAP(apSSID, apPASSWORD);
+    WiFi.softAP(apSSID.c_str(), apPassword.c_str());
     
     // Attendez un peu que l'AP soit complètement configuré
     delay(100);
     
     IPAddress IP = WiFi.softAPIP();
-    ESP_LOGI(WIFI_TAG, "WiFi AP: %s started with IP: %s", apSSID, IP.toString().c_str());
+    ESP_LOGI(WIFI_TAG, "WiFi AP: %s started with IP: %s", apSSID.c_str(), IP.toString().c_str());
+
 }
 
 
@@ -75,12 +83,13 @@ void setupDNSServer() {
         ESP_LOGI(WIFI_TAG, "MDNS responder started");
         
         // Enregistrer les services
-        MDNS.addService("buzzcontrol", "tcp", localWWWPort);
-        MDNS.addService("http", "tcp", localWWWPort);
-        MDNS.addService("sock", "tcp", CONTROLER_PORT);
+        MDNS.addService("buzzcontrol", "tcp", configManager.getControllerPort());
+        MDNS.addService("http", "tcp", 80);  // HTTP is always on port 80
+        MDNS.addService("sock", "tcp", configManager.getControllerPort());
         
-        // Afficher les IPs pour debug
+        // Show IPs for debug
         ESP_LOGI(WIFI_TAG, "AP IP: %s", apIP.toString().c_str());
         ESP_LOGI(WIFI_TAG, "STA IP: %s", WiFi.localIP().toString().c_str());
+
     }
 }

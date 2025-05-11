@@ -89,68 +89,20 @@ void w_handleListFiles(AsyncWebServerRequest *request) {
     request->send(response);
 }
 
-void w_handleListGame(AsyncWebServerRequest *request) {
-    String result;
-    result=getTeamsAndBumpersJSON();
+void w_handleUpdate(AsyncWebServerRequest *request) {
+    String result="";
+    downloadFiles();
+    result+=listLittleFSFiles();
     
     AsyncWebServerResponse *response = request->beginResponse(200, "text/text", result);
     request->send(response);
 }
 
-// Fonction pour sauvegarder une question et retourner son ID
-String saveQuestion(AsyncWebServerRequest *request, bool hasFile = false) {
-    String currentDir;
-    String jsonString;
-
-    // Détermine l'ID de la question
-    if(request->hasParam("number", true)) {
-        currentDir = request->getParam("number", true)->value();
-        if (currentDir.isEmpty()) {
-            currentDir = findFreeQuestion();
-        }
-    } else {
-        currentDir = findFreeQuestion();
-    }
-
-    // Récupère les paramètres du formulaire
-    String questionText = request->hasParam("question", true) ? request->getParam("question", true)->value() : "";
-    String reponseText = request->hasParam("answer", true) ? request->getParam("answer", true)->value() : "";
-    String pointsText = request->hasParam("points", true) ? request->getParam("points", true)->value() : "0";
-    String tempsText = request->hasParam("time", true) ? request->getParam("time", true)->value() : "0";
-    ensureDirectoryExists(questionsPath);
-    String fullPath = questionsPath + "/" + currentDir;
-    ensureDirectoryExists(fullPath);
-
-    // Crée le JSON
-    jsonString = "{\n";
-    jsonString += "  \"ID\": \"" + currentDir + "\",\n";
-    if (hasFile || isFileExists(fullPath + "/media.jpg")) {
-        jsonString += "  \"MEDIA\": \"/question/" + currentDir + "/media.jpg\",\n";
-    }
-    jsonString += "  \"QUESTION\": \"" + questionText + "\",\n";
-    jsonString += "  \"ANSWER\": \"" + reponseText + "\",\n";
-    jsonString += "  \"POINTS\": " + pointsText + ",\n";
-    jsonString += "  \"TIME\": " + tempsText + "\n";
-    jsonString += "}";
-
-    // Sauvegarde le fichier JSON
-    File jsonFile = LittleFS.open(fullPath + "/question.json", "w");
-    if(jsonFile) {
-        if(jsonFile.print(jsonString)) {
-            ESP_LOGI(WEB_TAG, "Fichier JSON créé avec succès dans %s", fullPath.c_str());
-        } else {
-            ESP_LOGE(WEB_TAG, "Erreur lors de l'écriture du JSON");
-        }
-        jsonFile.close();
-    }
-
-    return currentDir;
-}
-
-void w_handleUploadBackgroundComplete(AsyncWebServerRequest *request) {
-    // Ne sauvegarde que s'il n'y a pas de fichier dans le formulaire
-    ESP_LOGI(WEB_TAG,"upload du fichier w_handleUploadBackground Complete");
-    AsyncWebServerResponse *response = request->beginResponse(200, "text/json", "Background Saved");
+void w_handleListGame(AsyncWebServerRequest *request) {
+    String result;
+    result=getTeamsAndBumpersJSON();
+    
+    AsyncWebServerResponse *response = request->beginResponse(200, "text/text", result);
     request->send(response);
 }
 
@@ -183,11 +135,87 @@ size_t saveFile(AsyncWebServerRequest *request, String destFile, String filename
     return totalSize;
 }
 
-void w_handleUploadFile(AsyncWebServerRequest *request, String filename, size_t index, uint8_t *data, size_t len, bool final) {
+void w_handleUploadBackgroundComplete(AsyncWebServerRequest *request) {
+    // Ne sauvegarde que s'il n'y a pas de fichier dans le formulaire
+    ESP_LOGI(WEB_TAG,"upload du fichier Backgroud Complete");
+    AsyncWebServerResponse *response = request->beginResponse(200, "text/json", "Background Saved");
+    request->send(response);
+}
+
+
+void w_handleUploadBackgroundFile(AsyncWebServerRequest *request, String filename, size_t index, uint8_t *data, size_t len, bool final) {
     saveFile(request, "/files/background.jpg",  filename,  index,  data,  len,  final);
+    if(final) { // Fin de l'upload
+        ESP_LOGI(WEB_TAG, "Upload du fichier Config terminé");
+    }
+}
+
+void w_handleUploadConfigComplete(AsyncWebServerRequest *request) {
+    // Ne sauvegarde que s'il n'y a pas de fichier dans le formulaire
+    ESP_LOGI(WEB_TAG,"upload Config Complete");
+    AsyncWebServerResponse *response = request->beginResponse(200, "text/json", "Config Saved");
+    request->send(response);
+}
+
+void w_handleUploadConfigBody(AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total) {
+    //saveFile(request, "/config/config.json",  filename,  index,  data,  len,  final);
+    
+        ESP_LOGI(WEB_TAG, "Upload du fichier Config terminé: %s", String((char*)data, len));
+
 }
 
 /***** QUESTIONS *******/
+// Fonction pour sauvegarder une question et retourner son ID
+String saveQuestion(AsyncWebServerRequest *request, String fileName = "") {
+    String currentDir;
+    String jsonString;
+
+    ESP_LOGI(WEB_TAG, "saveQuestions with fileName=%s", fileName.c_str());
+    // Détermine l'ID de la question
+    if(request->hasParam("number", true)) {
+        currentDir = request->getParam("number", true)->value();
+        if (currentDir.isEmpty()) {
+            currentDir = findFreeQuestion();
+        }
+    } else {
+        currentDir = findFreeQuestion();
+    }
+
+    // Récupère les paramètres du formulaire
+    String questionText = request->hasParam("question", true) ? request->getParam("question", true)->value() : "";
+    String reponseText = request->hasParam("answer", true) ? request->getParam("answer", true)->value() : "";
+    String pointsText = request->hasParam("points", true) ? request->getParam("points", true)->value() : "0";
+    String tempsText = request->hasParam("time", true) ? request->getParam("time", true)->value() : "0";
+    ensureDirectoryExists(questionsPath);
+    String fullPath = questionsPath + "/" + currentDir;
+    ensureDirectoryExists(fullPath);
+
+    // Crée le JSON
+    jsonString = "{\n";
+    jsonString += "  \"ID\": \"" + currentDir + "\",\n";
+    if (fileName.length()>0 && isFileExists(fullPath + "/" + fileName)) {
+        ESP_LOGI(WEB_TAG, "saveQuestions adding filename");
+        jsonString += "  \"MEDIA\": \"/question/" + currentDir + "/" + fileName +"\",\n";
+    }
+    jsonString += "  \"QUESTION\": \"" + questionText + "\",\n";
+    jsonString += "  \"ANSWER\": \"" + reponseText + "\",\n";
+    jsonString += "  \"POINTS\": " + pointsText + ",\n";
+    jsonString += "  \"TIME\": " + tempsText + "\n";
+    jsonString += "}";
+
+    // Sauvegarde le fichier JSON
+    File jsonFile = LittleFS.open(fullPath + "/question.json", "w");
+    if(jsonFile) {
+        if(jsonFile.print(jsonString)) {
+            ESP_LOGI(WEB_TAG, "Fichier JSON créé avec succès dans %s", fullPath.c_str());
+        } else {
+            ESP_LOGE(WEB_TAG, "Erreur lors de l'écriture du JSON");
+        }
+        jsonFile.close();
+    }
+
+    return currentDir;
+}
 
 void w_handleListQuestions(AsyncWebServerRequest *request) {
     ESP_LOGI(WEB_TAG, "Handling question list  request");
@@ -201,10 +229,10 @@ void w_handleListQuestions(AsyncWebServerRequest *request) {
 
 void w_handleUploadQuestionComplete(AsyncWebServerRequest *request) {
     // Ne sauvegarde que s'il n'y a pas de fichier dans le formulaire
-    ESP_LOGI(WEB_TAG,"upload du fichier w_handleUploadQuestion Complete");
+    ESP_LOGI(WEB_TAG,"upload Question Complete");
 
     if (!request->hasParam("file", true, true)) {  // Le dernier true indique qu'on cherche un fichier
-        ESP_LOGI(WEB_TAG,"Saving Question %s", saveQuestion(request, false).c_str());
+        ESP_LOGI(WEB_TAG,"Saving Question %s", saveQuestion(request, "").c_str());
     }
     AsyncWebServerResponse *response = request->beginResponse(200, "text/json", "Question Saved");
     request->send(response);
@@ -217,62 +245,39 @@ void w_handleUploadQuestionFile(AsyncWebServerRequest *request, String filename,
     static String currentDir;
     static String fullPath;
     static String filePath;
+    static String fileName;
+
+    
 
     if(!index) { // Début de l'upload
-       currentDir = saveQuestion(request, true); // Sauvegarde la question avec indicateur de fichier
-        
+        currentDir = saveQuestion(request, "" ); // Sauvegarde la question avec indicateur de fichier
         fullPath = questionsPath + "/" + currentDir;
-        filePath = fullPath + "/media.jpg";
+        fileName="media_"+String(random(1000, 9999))+".jpg";
+        filePath = fullPath + "/" + fileName;
     }        
+    
 
     totalSize=saveFile(request, filePath,  filename,  index,  data,  len,  final);
     if(final) { // Fin de l'upload
-        ESP_LOGI(WEB_TAG, "Upload du fichier terminé pour la question: %s (%i)", currentDir.c_str(), totalSize);
+        ESP_LOGI(WEB_TAG, "Upload du fichier Question terminé pour la question: %s (%i)", currentDir.c_str(), totalSize);
+        currentDir = saveQuestion(request, fileName ); // Sauvegarde la question avec indicateur de fichier
+
     }
 }
 
-void _w_handleUploadQuestionFile(AsyncWebServerRequest *request, String filename, size_t index, uint8_t *data, size_t len, bool final) {
-    static File file;
-    static size_t totalSize = 0;
-    static String currentDir;
-    ESP_LOGI(WEB_TAG, "Chunk received %s: %i: %i Bytes (%i)", filename.c_str(), index, len,final);
-    if(!index) { // Début de l'upload
-    // Close any previously open file that wasn't properly closed
-        if (file) {
-            ESP_LOGW(WEB_TAG, "Closing previously unclosed file");
-            file.close();
-        }
-        currentDir = saveQuestion(request, true); // Sauvegarde la question avec indicateur de fichier
-        
-        String fullPath = questionsPath + "/" + currentDir;
-        String filePath = fullPath + "/media.jpg";
-        
-        
-          file = LittleFS.open(filePath, "w"); // First chunk - create new file
-          
+void setGlobalWebRoute(AsyncWebServer& server, const char* uri, const char* path, const char* fileType) {
+        // Pour servir le même fichier pour toute URL commençant par /background
+    server.on(uri, HTTP_GET, [path, fileType](AsyncWebServerRequest *request){
+        AsyncWebServerResponse *response = request->beginResponse(LittleFS, path, fileType);
+        request->send(response);
+    });
 
-        if(!file) {
-            ESP_LOGE(WEB_TAG, "Échec de l'ouverture du fichier media en écriture");
-            return;
-        }
-        ESP_LOGI(WEB_TAG, "Début de l'upload de l'image question id: %s", currentDir.c_str());
-    }
-
-        if(len>0) { // Écriture des données
-            size_t bytesWritten=file.write(data, len);
-//            size_t bytesWritten=len;
-            totalSize+=bytesWritten;
-            ESP_LOGI(WEB_TAG, "Writing image question id: %s (%i=>%i) %i bytes written %i", currentDir.c_str(),index, len,totalSize, bytesWritten);
-            if(bytesWritten != len) {
-                ESP_LOGW(WEB_TAG, "Partial write: %d of %d bytes written", bytesWritten, len);
-            }
-            
-        }
-        if(final) { // Fin de l'upload
-            file.close();
-            ESP_LOGI(WEB_TAG, "Upload du fichier terminé pour la question: %s (%i)", currentDir.c_str(), totalSize);
-            enqueueOutgoingMessage("QUESTIONS", getQuestions().c_str(), false, nullptr);
-        }
+    // Si vous voulez aussi capturer les sous-chemins (ex: /background/something)
+    String wildcardUri = String(uri) + "/*";
+    server.on(wildcardUri.c_str(), HTTP_GET, [path, fileType](AsyncWebServerRequest *request){
+        AsyncWebServerResponse *response = request->beginResponse(LittleFS, path, fileType);
+        request->send(response);
+    });
 }
 
 void startWebServer() {
@@ -290,11 +295,11 @@ void startWebServer() {
     DefaultHeaders::Instance().addHeader("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,OPTIONS");
     DefaultHeaders::Instance().addHeader("Access-Control-Allow-Headers", "Content-Type,Authorization");
     DefaultHeaders::Instance().addHeader("Access-Control-Allow-Credentials", "true");
-    DefaultHeaders::Instance().addHeader("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0");
-    DefaultHeaders::Instance().addHeader("Access-Control-Max-Age", "1");
-    DefaultHeaders::Instance().addHeader("Vary", "Origin");
-    DefaultHeaders::Instance().addHeader("Pragma", "no-cache");
-    DefaultHeaders::Instance().addHeader("Expires", "-1");
+//    DefaultHeaders::Instance().addHeader("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0");
+//    DefaultHeaders::Instance().addHeader("Access-Control-Max-Age", "1");
+//    DefaultHeaders::Instance().addHeader("Vary", "Origin");
+//    DefaultHeaders::Instance().addHeader("Pragma", "no-cache");
+//    DefaultHeaders::Instance().addHeader("Expires", "-1");
 
     server.onNotFound(w_handleNotFound);
     
@@ -307,28 +312,58 @@ void startWebServer() {
     server.serveStatic("/js", LittleFS, (ROOT+"/js").c_str());
     server.serveStatic("/css", LittleFS, (ROOT+"/css").c_str());
     server.serveStatic("/html", LittleFS, (ROOT+"/html").c_str());
-    server.serveStatic("/config", LittleFS, (ROOT+"/config").c_str());
+    server.serveStatic("/config", LittleFS, "/config");
 
     // Servir les fichiers du répertoire files pour /files/*
     server.serveStatic("/files/", LittleFS, "/files/");
     
     // Servir les fichiers du répertoire files pour /files/*
     server.serveStatic("/question/", LittleFS, "/files/questions/");
+/*
+    // Pour servir le même fichier pour toute URL commençant par /background
+    server.on("/background", HTTP_GET, [](AsyncWebServerRequest *request){
+        AsyncWebServerResponse *response = request->beginResponse(LittleFS, "/files/background.jpg", "image/jpeg");
+        request->send(response);
+    });
 
-    server.serveStatic("/background", LittleFS, "/files/background.jpg");
+    // Si vous voulez aussi capturer les sous-chemins (ex: /background/something)
+    server.on("/background/*", HTTP_GET, [](AsyncWebServerRequest *request){
+        AsyncWebServerResponse *response = request->beginResponse(LittleFS, "/files/background.jpg", "image/jpeg");
+        request->send(response);
+    });
+
+
+
+    // Pour servir le même fichier pour toute URL commençant par /version
+    server.on("/version", HTTP_GET, [](AsyncWebServerRequest *request){
+        AsyncWebServerResponse *response = request->beginResponse(LittleFS, "/config/version.txt", "text/plain");
+        request->send(response);
+    });
+
+    // Si vous voulez aussi capturer les sous-chemins (ex: /version/something)
+    server.on("/version/*", HTTP_GET, [](AsyncWebServerRequest *request){
+        AsyncWebServerResponse *response = request->beginResponse(LittleFS, "/config/version.txt", "text/plain");
+        request->send(response);
+    });
+*/
+    setGlobalWebRoute(server,  "/background", "/files/background.jpg", "image/jpeg");
+    setGlobalWebRoute(server,  "/version", "/config/version.txt", "text/plain");
+
     server.serveStatic("/favicon.ico", LittleFS, "/files/background.jpg");
-    server.serveStatic("/version", LittleFS, "/config/version.txt");
+    server.serveStatic("/version/", LittleFS, "/config/version.txt");
+    server.serveStatic("/connecttest.txt", LittleFS, "/config/version.txt");
 
     server.on("/", HTTP_GET, w_handleRedirect);
     server.on("/index.html", w_handleRedirect);
 
     server.on("/reset", HTTP_GET, w_handleReset);
     server.on("/reboot", HTTP_GET, w_handleReboot);
+    server.on("/update", HTTP_GET, w_handleUpdate);
     server.on("/listFiles",HTTP_GET, w_handleListFiles);
     server.on("/listGame",HTTP_GET, w_handleListGame);
 
-    server.on("/background", HTTP_POST, w_handleUploadBackgroundComplete, w_handleUploadFile);
-
+    server.on("/background", HTTP_POST, w_handleUploadBackgroundComplete, w_handleUploadBackgroundFile);
+    server.on("/config/config.json", HTTP_POST, w_handleUploadConfigComplete, NULL, w_handleUploadConfigBody);
     server.on("/questions", HTTP_POST, w_handleUploadQuestionComplete, w_handleUploadQuestionFile);
     server.on("/questions", HTTP_GET, w_handleListQuestions);
 

@@ -52,7 +52,9 @@ void enqueueOutgoingMessage(const char* action, const char* msg, bool notify, As
         delete message->msgTime;
         delete message;
     } else {
-        ESP_LOGD(SEND_TAG, "Message ID %i enqueued %s : %s", message->msgID, message->action.c_str(), msg);
+        UBaseType_t messagesWaiting = uxQueueMessagesWaiting(outgoingQueue);
+
+        ESP_LOGD(SEND_TAG, "Message ID %i enqueued as %u %s : %s", message->msgID, messagesWaiting, message->action.c_str(), msg);
     }
 }
 
@@ -111,7 +113,7 @@ bool sendBroadcastUDP(const String& action, const String& msg) {
   // Tentatives d'envoi sur le réseau STA
   if (WiFi.status() == WL_CONNECTED) {
     for (int attempt = 0; attempt < maxRetries; attempt++) {
-      if (udp.beginPacket(staBroadcast, CONTROLER_PORT)) {
+      if (udp.beginPacket(staBroadcast, configManager.getControllerPort())) {
         size_t bytesSent = udp.write((const uint8_t*)message.c_str(), message.length());
         if (bytesSent == message.length() && udp.endPacket()) {
           ESP_LOGI(SEND_TAG, "UDP broadcast sent successfully on STA network to %s (%d bytes)", 
@@ -133,7 +135,7 @@ bool sendBroadcastUDP(const String& action, const String& msg) {
   // Tentatives d'envoi sur le réseau AP
   if (WiFi.softAPgetStationNum() > 0) {
     for (int attempt = 0; attempt < maxRetries; attempt++) {
-      if (udp.beginPacket(apBroadcast, CONTROLER_PORT)) {
+      if (udp.beginPacket(apBroadcast, configManager.getControllerPort())) {
         size_t bytesSent = udp.write((const uint8_t*)message.c_str(), message.length());
         if (bytesSent == message.length() && udp.endPacket()) {
           ESP_LOGI(SEND_TAG, "UDP broadcast sent successfully on AP network to %s (%d bytes)", 
@@ -159,7 +161,7 @@ void sendMessageToAllClients(const String& action, const String& msg) {
 
     ESP_LOGI(SEND_TAG, "Sending broadcast message");
     String message = makeJsonMessage(action, msg);
-    ESP_LOGD(SEND_TAG, "Broadcasting message: %s", message.c_str());
+    ESP_LOGD(SEND_TAG, "Broadcasting to all message: %s", message.c_str());
 
     // Envoyer le message en broadcast à tous les clients WebSocket
     ws.textAll(message.c_str());
@@ -201,6 +203,9 @@ void sendMessageTask(void *parameter) {
     OutgoingMessage_t* receivedMessage;
     while (1) {
         ESP_LOGD(SEND_TAG, "Low stack space in Send Message Task: %i", uxTaskGetStackHighWaterMark(NULL));
+        UBaseType_t messagesWaitingBefore = uxQueueMessagesWaiting(outgoingQueue);
+        ESP_LOGD(SEND_TAG, "Waiting for incoming messages (%u in queue)", messagesWaitingBefore);
+        
         if (xQueueReceive(outgoingQueue, &receivedMessage, portMAX_DELAY)) {
             ESP_LOGI(SEND_TAG, "dequeue message %i : %s", receivedMessage->msgID, receivedMessage->action.c_str());
             

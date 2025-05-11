@@ -45,7 +45,9 @@ void enqueueIncomingMessage(const char* source, const char* data, AsyncClient* c
     //    delete message->timestamp;
         delete message;
     } else {
-        ESP_LOGD(RECEIVE_TAG, "Message ID %i enqueued from source: %s: %s at %i", message->msgID, source, message->data->c_str(), message->timestamp);
+      UBaseType_t messagesWaiting = uxQueueMessagesWaiting(incomingQueue);
+
+      ESP_LOGD(RECEIVE_TAG, "Message ID %i enqueued at queue %u from source: %s: %s at %i", message->msgID, messagesWaiting, source, message->data->c_str(), message->timestamp);
     }
 }
 
@@ -216,7 +218,9 @@ void processWebSocketMessage(const String& data, int64_t timestamp) {
 void receiveMessageTask(void *parameter) {
     IncomingMessage_t* receivedMessage;
     while (1) {
-        ESP_LOGD(RECEIVE_TAG, "Waiting for incoming messages");
+      UBaseType_t messagesWaitingBefore = uxQueueMessagesWaiting(incomingQueue);
+
+        ESP_LOGD(RECEIVE_TAG, "Waiting for incoming messages (%u inqueue)", messagesWaitingBefore);
         if (xQueueReceive(incomingQueue, &receivedMessage, portMAX_DELAY)) {
             ESP_LOGI(RECEIVE_TAG, "dequeue message %i from %s : %s", receivedMessage->msgID,
                      receivedMessage->source.c_str(), receivedMessage->data->c_str());
