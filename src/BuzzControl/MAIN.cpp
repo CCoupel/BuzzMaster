@@ -2,6 +2,7 @@
 #include "Common/configManager.h"
 
 #include "WifiManager.h"
+#include "DNS.h"
 
 #include "Common/CustomLogger.h"
 #include "Common/led.h"

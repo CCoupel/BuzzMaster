@@ -279,6 +279,12 @@ void setGlobalWebRoute(AsyncWebServer& server, const char* uri, const char* path
     });
 }
 
+void handleWindowsConnectTest(AsyncWebServerRequest *request) {
+    ESP_LOGI(WEB_TAG, "Windows test request");
+    AsyncWebServerResponse *response = request->beginResponse(200, "text/text", "Microsoft NCSI");
+    request->send(response);
+}
+
 void startWebServer() {
     String ROOT="/";
     if (LittleFS.exists("/CURRENT/html/testSPA.html")) {
@@ -318,39 +324,16 @@ void startWebServer() {
     
     // Servir les fichiers du répertoire files pour /files/*
     server.serveStatic("/question/", LittleFS, "/files/questions/");
-/*
-    // Pour servir le même fichier pour toute URL commençant par /background
-    server.on("/background", HTTP_GET, [](AsyncWebServerRequest *request){
-        AsyncWebServerResponse *response = request->beginResponse(LittleFS, "/files/background.jpg", "image/jpeg");
-        request->send(response);
-    });
 
-    // Si vous voulez aussi capturer les sous-chemins (ex: /background/something)
-    server.on("/background/*", HTTP_GET, [](AsyncWebServerRequest *request){
-        AsyncWebServerResponse *response = request->beginResponse(LittleFS, "/files/background.jpg", "image/jpeg");
-        request->send(response);
-    });
-
-
-
-    // Pour servir le même fichier pour toute URL commençant par /version
-    server.on("/version", HTTP_GET, [](AsyncWebServerRequest *request){
-        AsyncWebServerResponse *response = request->beginResponse(LittleFS, "/config/version.txt", "text/plain");
-        request->send(response);
-    });
-
-    // Si vous voulez aussi capturer les sous-chemins (ex: /version/something)
-    server.on("/version/*", HTTP_GET, [](AsyncWebServerRequest *request){
-        AsyncWebServerResponse *response = request->beginResponse(LittleFS, "/config/version.txt", "text/plain");
-        request->send(response);
-    });
-*/
     setGlobalWebRoute(server,  "/background", "/files/background.jpg", "image/jpeg");
     setGlobalWebRoute(server,  "/version", "/config/version.txt", "text/plain");
 
     server.serveStatic("/favicon.ico", LittleFS, "/files/background.jpg");
     server.serveStatic("/version/", LittleFS, "/config/version.txt");
-    server.serveStatic("/connecttest.txt", LittleFS, "/config/version.txt");
+
+    server.on("/connecttest.txt", HTTP_GET, handleWindowsConnectTest);
+    server.on("/nsci.txt", HTTP_GET, handleWindowsConnectTest);
+
 
     server.on("/", HTTP_GET, w_handleRedirect);
     server.on("/index.html", w_handleRedirect);
