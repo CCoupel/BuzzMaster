@@ -45,6 +45,21 @@ String getTeamsAndBumpersJSON() {
 }
 
 // ### GAME ### */
+void setBackgroundFile(String pathBackground) {
+    String path;
+  if (teamsAndBumpers["GAME"].isNull()) {
+        teamsAndBumpers["GAME"] = JsonObject();
+    }
+  // Copy the GAME object to our temporary document
+  
+  if (!teamsAndBumpers["GAME"]["background"].isNull()) {
+    path=teamsAndBumpers["GAME"]["background"].as<String>();
+    deleteFile(path.c_str());
+  }
+
+  teamsAndBumpers["GAME"]["background"]=pathBackground;
+}
+
 String getGameJSON() {
   String output;
   JsonDocument doc;

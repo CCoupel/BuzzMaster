@@ -5,6 +5,7 @@
 
 static const char* CONFIG_TAG = "CONFIG_MANAGER";
 static const char* CONFIG_FILE = "/config/config.json";
+static const char* CONFIG_FILE_CURRENT = "/files/config.current.json";
 
 class ConfigManager {
 private:
@@ -29,6 +30,8 @@ public:
     }
     
     bool load() {
+        File file;
+
         if (!LittleFS.begin()) {
             ESP_LOGE(CONFIG_TAG, "Failed to mount LittleFS");
             return false;
@@ -39,12 +42,20 @@ public:
             LittleFS.mkdir("/config");
         }
         
-        if (!LittleFS.exists(CONFIG_FILE)) {
-            ESP_LOGW(CONFIG_TAG, "Config file not found, creating default");
-            return save(); // Save default configuration
+        if (!LittleFS.exists(CONFIG_FILE_CURRENT)) {
+            ESP_LOGW(CONFIG_TAG, "Checking Current Config file");
+            file = LittleFS.open(CONFIG_FILE, "r");
         }
-        
-        File file = LittleFS.open(CONFIG_FILE, "r");
+
+        if (!file) {
+            if (!LittleFS.exists(CONFIG_FILE)) {
+                ESP_LOGW(CONFIG_TAG, "Config file not found, creating default");
+                return save(); // Save default configuration
+            }
+            ESP_LOGW(CONFIG_TAG, "Checking Defqult Config file");
+            file = LittleFS.open(CONFIG_FILE, "r");
+        }
+
         if (!file) {
             ESP_LOGE(CONFIG_TAG, "Failed to open config file");
             return false;

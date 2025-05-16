@@ -61,7 +61,6 @@ void setup(void)
     ESP_LOGE(MAIN_TAG, "Erreur de montage LittleFS");
     return;
   }
-  
   // Load configuration
   if (!configManager.load()) {
       ESP_LOGW(MAIN_TAG, "Failed to load config, using defaults");

@@ -24,6 +24,6 @@ void setupDNSServer() {
     }
 
     dnsServer.setErrorReplyCode(DNSReplyCode::NoError);
-    dnsServer.start(53, "*", IPAddress(131,107,255,255));
+    dnsServer.start(53, "dns.msftncsi.com", IPAddress(131,107,255,255));
 
 }

@@ -145,9 +145,17 @@ void w_handleUploadBackgroundComplete(AsyncWebServerRequest *request) {
 
 
 void w_handleUploadBackgroundFile(AsyncWebServerRequest *request, String filename, size_t index, uint8_t *data, size_t len, bool final) {
-    saveFile(request, "/files/background.jpg",  filename,  index,  data,  len,  final);
+    static String filePath;
+    static String fileName;
+    if(!index) { // Début de l'upload
+        
+        fileName="background_"+String(random(1000, 9999))+".jpg";
+        filePath = "/files/" + fileName;
+    }     
+    saveFile(request, filePath,  filename,  index,  data,  len,  final);
     if(final) { // Fin de l'upload
         ESP_LOGI(WEB_TAG, "Upload du fichier Config terminé");
+        setBackgroundFile(filePath);
     }
 }
 
@@ -255,7 +263,6 @@ void w_handleUploadQuestionFile(AsyncWebServerRequest *request, String filename,
         filePath = fullPath + "/" + fileName;
     }        
     
-
     totalSize=saveFile(request, filePath,  filename,  index,  data,  len,  final);
     if(final) { // Fin de l'upload
         ESP_LOGI(WEB_TAG, "Upload du fichier Question terminé pour la question: %s (%i)", currentDir.c_str(), totalSize);
