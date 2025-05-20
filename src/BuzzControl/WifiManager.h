@@ -8,8 +8,8 @@
 #include <esp_private/wifi.h>
 
 static const char* WIFI_TAG = "WIFI";
-IPAddress apIP(192, 168, 100, 254);
-IPAddress gateway(192, 168, 100, 254);
+IPAddress apIP(192, 168, 4, 254);
+IPAddress gateway(192, 168, 4, 254);
 IPAddress subnet(255, 255, 255, 0);
 TaskHandle_t wifiConnectTaskHandle = NULL;
 

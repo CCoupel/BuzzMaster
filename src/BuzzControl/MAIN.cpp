@@ -67,9 +67,9 @@ sleep(5);
   } else {
       ESP_LOGI(MAIN_TAG, "Configuration loaded successfully");
   }
-//  wifiConnect();
+  wifiConnect();
 
-//  CustomLogger::init(logPort);
+  CustomLogger::init(logPort);
 
   setLedColor(255, 255, 0, true);
   ESP_LOGI(MAIN_TAG, "BOOTING Version: %s", String(VERSION));
@@ -82,7 +82,12 @@ sleep(5);
 
 
   yield();
-//  downloadFiles();
+
+  //Wait for Wifi connection
+  int count=0;
+  while(WiFi.status() != WL_CONNECTED && count++ <3) {sleep(1);};
+
+  downloadFiles();
 
   listLittleFSFiles();
   printLittleFSInfo();

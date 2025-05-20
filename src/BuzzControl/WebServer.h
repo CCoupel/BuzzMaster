@@ -42,9 +42,19 @@ void w_handleRoot(AsyncWebServerRequest *request) {
   ESP_LOGI(WEB_TAG, "Handling root request");
   //AsyncWebServerResponse *response = request->beginResponse(200, "text/html", "hello from BuzzControl!");
 
-  request->send(200, "text/text", "hello from BuzzControl!");
+  request->send(200, "text/plain", "hello from BuzzControl!");
 
   digitalWrite(ledPin, LOW);
+}
+
+void handleWindowsConnectTest(AsyncWebServerRequest *request) {
+    ESP_LOGI(WEB_TAG, "Windows url test request");
+    AsyncWebServerResponse *response = request->beginResponse(200, "text/plain", "Microsoft NCSI");
+    response->addHeader("Connection","close");
+    response->addHeader("Cache-Control","no-cache, no-store");
+    response->addHeader("Pragma","no-cache");
+
+    request->send(response);
 }
 
 void w_handleNotFound(AsyncWebServerRequest *request) {
@@ -52,7 +62,8 @@ void w_handleNotFound(AsyncWebServerRequest *request) {
   
   ESP_LOGW(WEB_TAG, "Handling 404 for: %s://%s", host.c_str(),request->url().c_str());
   if (host.equals("www.msftncsi.com") || host.equals("www.msftconnecttest.com")) {
-    request->send(200, "text/text", "Microsoft NCSI");
+    ESP_LOGI(WEB_TAG, "Windows host %s test request", host.c_str());
+    handleWindowsConnectTest(request);
   }
   else {
     String message = "File Not Found\n\n";
@@ -70,6 +81,7 @@ void w_handleNotFound(AsyncWebServerRequest *request) {
   }
 }
 
+
 //####### TOOLING ######
 void w_handleRedirect(AsyncWebServerRequest *request) {
     ESP_LOGI(WEB_TAG, "Handling redirect request:%s",(request->url()).c_str());
@@ -86,7 +98,7 @@ void w_handleReset(AsyncWebServerRequest *request) {
     ESP_LOGI(WEB_TAG, "Handling reset request");
     w_handleRedirect(request);
     resetServer();
-    rebootServer();
+//    rebootServer();
 }
 
 void w_handleListFiles(AsyncWebServerRequest *request) {
@@ -113,7 +125,7 @@ void w_handleListGame(AsyncWebServerRequest *request) {
     result=getTeamsAndBumpersJSON();
     
     //AsyncWebServerResponse *response = request->beginResponse(200, "text/text", result);
-    request->send(200, "text/text", result);
+    request->send(200, "text/plain", result);
 }
 
 size_t saveFile(AsyncWebServerRequest *request, String destFile, String filename, size_t index, uint8_t *data, size_t len, bool final) {
@@ -185,7 +197,7 @@ void w_handleConfigBody(AsyncWebServerRequest *request) {
     String result;
     result=configManager.getConfigJSON() ;
     //AsyncWebServerResponse *response = request->beginResponse(200, "text/text", result);
-    request->send(200, "text/text", result);
+    request->send(200, "text/plain", result);
 }
 
 /***** QUESTIONS *******/
@@ -303,12 +315,6 @@ void setGlobalWebRoute(AsyncWebServer& server, const char* uri, const char* path
     });
 }
 
-void handleWindowsConnectTest(AsyncWebServerRequest *request) {
-    ESP_LOGI(WEB_TAG, "Windows test request");
-    //AsyncWebServerResponse *response = request->beginResponse(200, "text/text", "Microsoft NCSI");
-    request->send(200, "text/text", "Microsoft NCSI");
-}
-
 void startWebServer() {
     String ROOT="/";
     if (LittleFS.exists("/CURRENT/html/testSPA.html")) {
@@ -333,7 +339,7 @@ void startWebServer() {
     server.onNotFound(w_handleNotFound);
     
     server.on("/*", HTTP_OPTIONS, [](AsyncWebServerRequest *request) {
-        ESP_LOGD(FS_TAG, "Defqult response: %s", (request->url()).c_str());
+        ESP_LOGD(FS_TAG, "Default response: %s", (request->url()).c_str());
       AsyncWebServerResponse *response = request->beginResponse(200);
       request->send(response);
     });
