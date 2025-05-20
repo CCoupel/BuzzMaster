@@ -16,6 +16,7 @@ function validateFileSize(event) {
     return true;
 }
 
+
 async function sendForm(formId, actionUrl) {
     const form = document.getElementById(formId);
 
@@ -85,16 +86,19 @@ async function sendForm(formId, actionUrl) {
 function sendFileForm(formId, actionUrl) {
     const form = document.getElementById(formId);
     const progressBar = document.getElementById('progressBar');
+    const submitButton = form.querySelector('button[type="submit"]');
 
     form.addEventListener('submit', function(event) {
         event.preventDefault();
-        
+
+        submitButton.disabled = true;
+        submitButton.classList.add('disabled'); // Ajout de la classe pour le style
+
         const formData = new FormData(form);
         const xhr = new XMLHttpRequest();
 
         xhr.open('POST', actionUrl);
 
-        // Suivi de la progression de l'upload
         xhr.upload.onprogress = function(event) {
             if (event.lengthComputable) {
                 const percent = (event.loaded / event.total) * 100;
@@ -103,13 +107,12 @@ function sendFileForm(formId, actionUrl) {
         };
 
         xhr.onload = function() {
+            submitButton.disabled = false;
+            submitButton.classList.remove('disabled');
+
             if (xhr.status === 200) {
                 alert('Image envoyée avec succès !');
                 console.log('Réponse du serveur :', xhr.responseText);
-
-                const timestamp = Date.now();
-                document.body.style.backgroundImage =
-                  `linear-gradient(rgba(255, 255, 255, 0.5)), url('http://buzzcontrol.local/background?t=${timestamp}')`;
 
             } else {
                 alert('Erreur lors de l\'upload.');
@@ -118,6 +121,8 @@ function sendFileForm(formId, actionUrl) {
         };
 
         xhr.onerror = function() {
+            submitButton.disabled = false;
+            submitButton.classList.remove('disabled');
             alert('Une erreur réseau est survenue.');
         };
 
@@ -240,10 +245,9 @@ export function questionList() {
             `;
 
             if (data.MEDIA) {
-                const timestamp = Date.now();
                 const imgDiv = document.createElement('div');
                 imgDiv.className = 'img';
-                imgDiv.innerHTML = `<img src="http://buzzcontrol.local${data.MEDIA}?t=${timestamp}" alt="Question Media">`;
+                imgDiv.innerHTML = `<img src="http://buzzcontrol.local${data.MEDIA}" alt="Question Media">`;
                 questionDiv.appendChild(imgDiv);
             }
 

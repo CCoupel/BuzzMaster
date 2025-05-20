@@ -12,7 +12,6 @@ export let gameState = {
     gameTime: 0
 };
 
-
 function updateGameState (msg) {
     console.log(msg)
     if(msg.TIME){
@@ -99,8 +98,8 @@ function handleServerAction(action, msg, fsinfo) {
             updateTimer();
             handlePhase(msg.GAME.PHASE);
             receiveQuestion(msg.GAME.QUESTION);
-            getFileStorage(fsinfo);
-            fsInfo();
+            getBackgroundUrl(msg.GAME);
+            applyBackground();
             break;
         case 'UPDATE_TIMER':
             updateGameState(msg.GAME);
@@ -172,6 +171,19 @@ export function sendAction(action, msg = {}) {
                 break;
         }
     console.log('Envoi de l\'action au serveur:', action, "Message", message);
+};
+
+let backgroundUrl = '';
+
+function getBackgroundUrl(MSG) {
+    backgroundUrl = MSG.background || null;
+    console.log(backgroundUrl)
+};
+
+function applyBackground() {
+    console.log(backgroundUrl)
+    document.body.style.backgroundImage =
+    `linear-gradient(rgba(255, 255, 255, 0.5)), url('http://buzzcontrol.local${backgroundUrl}')`;
 };
 
 export function updateTimer() {

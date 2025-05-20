@@ -89,6 +89,8 @@ function handleServerAction(action, msg) {
             updateTimeBar(true);
             break;
         case 'UPDATE':
+            getBackgroundUrl(msg.GAME);
+            applyBackground();
             if (msg.teams && msg.bumpers) {
                 updateGameState(msg.GAME);
                 updateTimeBar(true);
@@ -133,6 +135,19 @@ function cleanUp(container) {
         console.warn(`Element with ID "${container}" not found.`);
     }
 }
+
+let backgroundUrl = '';
+
+function getBackgroundUrl(MSG) {
+    backgroundUrl = MSG.background || null;
+    console.log(backgroundUrl)
+};
+
+function applyBackground() {
+    console.log(backgroundUrl)
+    document.body.style.backgroundImage =
+    `linear-gradient(rgba(255, 255, 255, 0.5)), url('http://buzzcontrol.local${backgroundUrl}')`;
+};
 
 
 function updateTimer() {
@@ -388,22 +403,6 @@ export function sendWebSocketMessage (action, MSG= "{}")  {
     }
 };
 
-function applyBackgroundFromServer() {
-    const timestamp = Date.now();
-    const backgroundUrl = `/background?t=${timestamp}`;
-
-    const img = new Image();
-    img.onload = function () {
-        document.body.style.backgroundImage =
-            `linear-gradient(rgba(255, 255, 255, 0.5)), url('${backgroundUrl}')`;
-        console.log('Background mis à jour depuis le serveur.');
-    };
-    img.onerror = function () {
-        console.error('Erreur lors du chargement de l’image de fond.');
-    };
-
-    img.src = backgroundUrl;
-}
 
 document.addEventListener('DOMContentLoaded', function() {
     connectWebSocketPlayers(handleConfigSocketMessagePlayers);
@@ -411,5 +410,4 @@ document.addEventListener('DOMContentLoaded', function() {
     updateTimeBar();
     renderTeamScores();
     renderPlayerScores();
-    applyBackgroundFromServer();
 });
