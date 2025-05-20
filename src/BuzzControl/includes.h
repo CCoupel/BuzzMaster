@@ -78,6 +78,7 @@ void processWebSocketMessage(const String& data);
 // File system management
 String readFile(const String& path, const String& defaultValue = "");
 bool isFileExists(String path);
+bool deleteFile(const char* filePath);
 void loadJson(String path);
 void saveJson();
 void processClientBuffer(const String& clientID, AsyncClient* c);

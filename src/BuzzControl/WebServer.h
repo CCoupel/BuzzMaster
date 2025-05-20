@@ -3,6 +3,7 @@
 #include "Common/led.h"
 #include "fsManager.h"
 #include "messages_to_send.h"
+#include "common/configManager.h"
 
 #include <ESPAsyncWebServer.h>
 
@@ -39,31 +40,51 @@ void cleanupOldUploads() {
 
 void w_handleRoot(AsyncWebServerRequest *request) {
   ESP_LOGI(WEB_TAG, "Handling root request");
-  AsyncWebServerResponse *response = request->beginResponse(200, "text/html", "hello from BuzzControl!");
+  //AsyncWebServerResponse *response = request->beginResponse(200, "text/html", "hello from BuzzControl!");
 
-  request->send(response);
+  request->send(200, "text/plain", "hello from BuzzControl!");
 
   digitalWrite(ledPin, LOW);
 }
 
-void w_handleNotFound(AsyncWebServerRequest *request) {
-  ESP_LOGW(WEB_TAG, "Handling 404 for: %s", request->url().c_str());
-  String message = "File Not Found\n\n";
-  message += "URI: " + request->url() + "\n";
-  message += "Method: " + String((request->method() == HTTP_GET) ? "GET" : "POST") + "\n";
-  message += "Arguments: " + String(request->args()) + "\n";
-  
-  for (uint8_t i = 0; i < request->args(); i++) {
-      message += " " + request->argName(i) + ": " + request->arg(i) + "\n";
-  }
-  
-  AsyncWebServerResponse *response = request->beginResponse(404, "text/plain", message);
+void handleWindowsConnectTest(AsyncWebServerRequest *request) {
+    ESP_LOGI(WEB_TAG, "Windows url test request");
+    AsyncWebServerResponse *response = request->beginResponse(200, "text/plain", "Microsoft NCSI");
+    response->addHeader("Connection","close");
+    response->addHeader("Cache-Control","no-cache, no-store");
+    response->addHeader("Pragma","no-cache");
 
-  request->send(response);
+    request->send(response);
 }
+
+void w_handleNotFound(AsyncWebServerRequest *request) {
+  String host=request->host();
+  
+  ESP_LOGW(WEB_TAG, "Handling 404 for: %s://%s", host.c_str(),request->url().c_str());
+  if (host.equals("www.msftncsi.com") || host.equals("www.msftconnecttest.com")) {
+    ESP_LOGI(WEB_TAG, "Windows host %s test request", host.c_str());
+    handleWindowsConnectTest(request);
+  }
+  else {
+    String message = "File Not Found\n\n";
+    message += "URI: " + request->url() + "\n";
+    message += "Method: " + String((request->method() == HTTP_GET) ? "GET" : "POST") + "\n";
+    message += "Arguments: " + String(request->args()) + "\n";
+    
+    for (uint8_t i = 0; i < request->args(); i++) {
+        message += " " + request->argName(i) + ": " + request->arg(i) + "\n";
+    }
+    
+    AsyncWebServerResponse *response = request->beginResponse(404, "text/plain", message);
+
+    request->send(response);
+  }
+}
+
 
 //####### TOOLING ######
 void w_handleRedirect(AsyncWebServerRequest *request) {
+    ESP_LOGI(WEB_TAG, "Handling redirect request:%s",(request->url()).c_str());
     request->redirect("http://buzzcontrol.local/html/testSPA.html#config");
 }
 
@@ -77,7 +98,7 @@ void w_handleReset(AsyncWebServerRequest *request) {
     ESP_LOGI(WEB_TAG, "Handling reset request");
     w_handleRedirect(request);
     resetServer();
-    rebootServer();
+//    rebootServer();
 }
 
 void w_handleListFiles(AsyncWebServerRequest *request) {
@@ -85,8 +106,8 @@ void w_handleListFiles(AsyncWebServerRequest *request) {
     result+=listLittleFSFiles();
     result+=printLittleFSInfo();
     
-    AsyncWebServerResponse *response = request->beginResponse(200, "text/text", result);
-    request->send(response);
+    //AsyncWebServerResponse *response = request->beginResponse(200, "text/text", result);
+    request->send(200, "text/text", result);
 }
 
 void w_handleUpdate(AsyncWebServerRequest *request) {
@@ -95,16 +116,16 @@ void w_handleUpdate(AsyncWebServerRequest *request) {
     downloadFiles();
     result+=listLittleFSFiles();
     
-    AsyncWebServerResponse *response = request->beginResponse(200, "text/text", result);
-    request->send(response);
+    //AsyncWebServerResponse *response = request->beginResponse(200, "text/text", result);
+    request->send(200, "text/text", result);
 }
 
 void w_handleListGame(AsyncWebServerRequest *request) {
     String result;
     result=getTeamsAndBumpersJSON();
     
-    AsyncWebServerResponse *response = request->beginResponse(200, "text/text", result);
-    request->send(response);
+    //AsyncWebServerResponse *response = request->beginResponse(200, "text/text", result);
+    request->send(200, "text/plain", result);
 }
 
 size_t saveFile(AsyncWebServerRequest *request, String destFile, String filename, size_t index, uint8_t *data, size_t len, bool final) {
@@ -139,30 +160,44 @@ size_t saveFile(AsyncWebServerRequest *request, String destFile, String filename
 void w_handleUploadBackgroundComplete(AsyncWebServerRequest *request) {
     // Ne sauvegarde que s'il n'y a pas de fichier dans le formulaire
     ESP_LOGI(WEB_TAG,"upload du fichier Backgroud Complete");
-    AsyncWebServerResponse *response = request->beginResponse(200, "text/json", "Background Saved");
-    request->send(response);
+    //AsyncWebServerResponse *response = request->beginResponse(200, "text/json", "Background Saved");
+    request->send(200, "text/json", "Background Saved");
 }
 
 
 void w_handleUploadBackgroundFile(AsyncWebServerRequest *request, String filename, size_t index, uint8_t *data, size_t len, bool final) {
-    saveFile(request, "/files/background.jpg",  filename,  index,  data,  len,  final);
+    static String filePath;
+    static String fileName;
+    if(!index) { // Début de l'upload
+        
+        fileName="background_"+String(random(1000, 9999))+".jpg";
+        filePath = "/files/" + fileName;
+    }     
+    saveFile(request, filePath,  filename,  index,  data,  len,  final);
     if(final) { // Fin de l'upload
         ESP_LOGI(WEB_TAG, "Upload du fichier Config terminé");
+        setBackgroundFile(filePath);
     }
 }
 
 void w_handleUploadConfigComplete(AsyncWebServerRequest *request) {
     // Ne sauvegarde que s'il n'y a pas de fichier dans le formulaire
     ESP_LOGI(WEB_TAG,"upload Config Complete");
-    AsyncWebServerResponse *response = request->beginResponse(200, "text/json", "Config Saved");
-    request->send(response);
+    //AsyncWebServerResponse *response = request->beginResponse(200, "text/json", "Config Saved");
+    request->send(200, "text/json", "Config Saved");
 }
 
-void w_handleUploadConfigBody(AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total) {
-    //saveFile(request, "/config/config.json",  filename,  index,  data,  len,  final);
-    
-        ESP_LOGI(WEB_TAG, "Upload du fichier Config terminé: %s", String((char*)data, len));
+void w_handleUploadConfigBody(AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total) {    
+        ESP_LOGI(WEB_TAG, "Upload du fichier Config terminé: %i:%s", len, (char*)data);
+        saveFile(request, "/files/config.json.current",  "",  index,  data,  len,  true);
+        configManager.load();
+}
 
+void w_handleConfigBody(AsyncWebServerRequest *request) {
+    String result;
+    result=configManager.getConfigJSON() ;
+    //AsyncWebServerResponse *response = request->beginResponse(200, "text/text", result);
+    request->send(200, "text/plain", result);
 }
 
 /***** QUESTIONS *******/
@@ -235,8 +270,8 @@ void w_handleUploadQuestionComplete(AsyncWebServerRequest *request) {
     if (!request->hasParam("file", true, true)) {  // Le dernier true indique qu'on cherche un fichier
         ESP_LOGI(WEB_TAG,"Saving Question %s", saveQuestion(request, "").c_str());
     }
-    AsyncWebServerResponse *response = request->beginResponse(200, "text/json", "Question Saved");
-    request->send(response);
+    //AsyncWebServerResponse *response = request->beginResponse(200, "text/json", "Question Saved");
+    request->send(200, "text/json", "Question Saved");
     enqueueOutgoingMessage("QUESTIONS", getQuestions().c_str(), false, nullptr);
 }
 
@@ -257,7 +292,6 @@ void w_handleUploadQuestionFile(AsyncWebServerRequest *request, String filename,
         filePath = fullPath + "/" + fileName;
     }        
     
-
     totalSize=saveFile(request, filePath,  filename,  index,  data,  len,  final);
     if(final) { // Fin de l'upload
         ESP_LOGI(WEB_TAG, "Upload du fichier Question terminé pour la question: %s (%i)", currentDir.c_str(), totalSize);
@@ -305,7 +339,8 @@ void startWebServer() {
     server.onNotFound(w_handleNotFound);
     
     server.on("/*", HTTP_OPTIONS, [](AsyncWebServerRequest *request) {
-      AsyncWebServerResponse *response = request->beginResponse(204);
+        ESP_LOGD(FS_TAG, "Default response: %s", (request->url()).c_str());
+      AsyncWebServerResponse *response = request->beginResponse(200);
       request->send(response);
     });
 
@@ -320,41 +355,19 @@ void startWebServer() {
     
     // Servir les fichiers du répertoire files pour /files/*
     server.serveStatic("/question/", LittleFS, "/files/questions/");
-/*
-    // Pour servir le même fichier pour toute URL commençant par /background
-    server.on("/background", HTTP_GET, [](AsyncWebServerRequest *request){
-        AsyncWebServerResponse *response = request->beginResponse(LittleFS, "/files/background.jpg", "image/jpeg");
-        request->send(response);
-    });
 
-    // Si vous voulez aussi capturer les sous-chemins (ex: /background/something)
-    server.on("/background/*", HTTP_GET, [](AsyncWebServerRequest *request){
-        AsyncWebServerResponse *response = request->beginResponse(LittleFS, "/files/background.jpg", "image/jpeg");
-        request->send(response);
-    });
-
-
-
-    // Pour servir le même fichier pour toute URL commençant par /version
-    server.on("/version", HTTP_GET, [](AsyncWebServerRequest *request){
-        AsyncWebServerResponse *response = request->beginResponse(LittleFS, "/config/version.txt", "text/plain");
-        request->send(response);
-    });
-
-    // Si vous voulez aussi capturer les sous-chemins (ex: /version/something)
-    server.on("/version/*", HTTP_GET, [](AsyncWebServerRequest *request){
-        AsyncWebServerResponse *response = request->beginResponse(LittleFS, "/config/version.txt", "text/plain");
-        request->send(response);
-    });
-*/
     setGlobalWebRoute(server,  "/background", "/files/background.jpg", "image/jpeg");
     setGlobalWebRoute(server,  "/version", "/config/version.txt", "text/plain");
 
     server.serveStatic("/favicon.ico", LittleFS, "/files/background.jpg");
     server.serveStatic("/version/", LittleFS, "/config/version.txt");
-    server.serveStatic("/connecttest.txt", LittleFS, "/config/version.txt");
+
+    server.on("/connecttest.txt", HTTP_GET, handleWindowsConnectTest);
+    server.on("/ncsi.txt", HTTP_GET, handleWindowsConnectTest);
+
 
     server.on("/", HTTP_GET, w_handleRedirect);
+    server.on("/redirect", HTTP_GET, w_handleRedirect);
     server.on("/index.html", w_handleRedirect);
 
     server.on("/reset", HTTP_GET, w_handleReset);
@@ -364,7 +377,11 @@ void startWebServer() {
     server.on("/listGame",HTTP_GET, w_handleListGame);
 
     server.on("/background", HTTP_POST, w_handleUploadBackgroundComplete, w_handleUploadBackgroundFile);
+
+    server.on("/config.json", HTTP_GET, w_handleConfigBody);
     server.on("/config/config.json", HTTP_POST, w_handleUploadConfigComplete, NULL, w_handleUploadConfigBody);
+    server.on("/config.json", HTTP_POST, w_handleUploadConfigComplete, NULL, w_handleUploadConfigBody);
+
     server.on("/questions", HTTP_POST, w_handleUploadQuestionComplete, w_handleUploadQuestionFile);
     server.on("/questions", HTTP_GET, w_handleListQuestions);
 

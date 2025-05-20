@@ -45,6 +45,21 @@ String getTeamsAndBumpersJSON() {
 }
 
 // ### GAME ### */
+void setBackgroundFile(String pathBackground) {
+    String path;
+  if (teamsAndBumpers["GAME"].isNull()) {
+        teamsAndBumpers["GAME"] = JsonObject();
+    }
+  // Copy the GAME object to our temporary document
+  
+  if (!teamsAndBumpers["GAME"]["background"].isNull()) {
+    path=teamsAndBumpers["GAME"]["background"].as<String>();
+    deleteFile(path.c_str());
+  }
+
+  teamsAndBumpers["GAME"]["background"]=pathBackground;
+}
+
 String getGameJSON() {
   String output;
   JsonDocument doc;
@@ -423,7 +438,7 @@ void setBumperNAME(const char* bumperID, const char* NAME) {
 */
     String NAMECopy = String(NAME);
     teamsAndBumpers["bumpers"][bID]["NAME"] = NAMECopy;
-    ESP_LOGI(TEAMs_TAG, "Bumper NAME %s => %s", bID, NAMECopy);
+    ESP_LOGI(TEAMs_TAG, "Bumper NAME %s => %s", bID.c_str(), NAMECopy.c_str());
 }
 
 void setBumperVERSION(const char* bumperID, const char* version) {
@@ -493,7 +508,7 @@ void setBumperStatus(const char* bumperID, String status) {
 */
     String copy = String(status);
     teamsAndBumpers["bumpers"][bID]["STATUS"] = copy;
-    ESP_LOGI(TEAMs_TAG, "Bumper Status %s %s", bID.c_str(), copy);
+    ESP_LOGI(TEAMs_TAG, "Bumper Status %s %s", bID.c_str(), copy.c_str());
 }
 
 void setBumperScore(const char* bumperID, const int new_score) {
