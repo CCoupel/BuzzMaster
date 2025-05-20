@@ -32,7 +32,7 @@ void watchdogTask(void *pvParameters) {
     for (;;) {
         // Réinitialiser le watchdog
         esp_task_wdt_reset();
-        
+        yield();
         // Surveillance du système
         ESP_LOGD("WATCHDOG", "Memory: %u bytes free", ESP.getFreeHeap());
         
@@ -46,7 +46,7 @@ void setup(void)
   tzset();
   struct timeval tv = { .tv_sec = 0 }; // Une date quelconque
   settimeofday(&tv, NULL);
-
+sleep(5);
   Serial.begin(921600);
   esp_log_level_set("*", ESP_LOG_INFO);
   ESP_LOGI(MAIN_TAG, "Starting up...");
@@ -67,8 +67,9 @@ void setup(void)
   } else {
       ESP_LOGI(MAIN_TAG, "Configuration loaded successfully");
   }
-  wifiConnect();
-  CustomLogger::init(logPort);
+//  wifiConnect();
+
+//  CustomLogger::init(logPort);
 
   setLedColor(255, 255, 0, true);
   ESP_LOGI(MAIN_TAG, "BOOTING Version: %s", String(VERSION));
@@ -79,12 +80,9 @@ void setup(void)
 
   setLedIntensity(128);
 
-  setupAP();
-  setupDNSServer();
 
   yield();
-  sleep(2);
-  downloadFiles();
+//  downloadFiles();
 
   listLittleFSFiles();
   printLittleFSInfo();
@@ -93,6 +91,9 @@ void setup(void)
 
   attachButtons();
   loadJson(GameFile);
+  setupAP();
+sleep(2);
+  setupDNSServer();
 
   startWebServer();
   startBumperServer();
@@ -107,14 +108,7 @@ void setup(void)
   xTaskCreate(sendMessageTask, "Send Message Task", 20480, NULL, 2, NULL);
 
   // Création de la tâche pour surveiller le watchdog
-  xTaskCreate(
-      watchdogTask,
-      "WatchdogTask",
-      2048,
-      NULL,
-      configMAX_PRIORITIES - 1,
-      NULL
-  );
+  xTaskCreate( watchdogTask, "WatchdogTask", 2048, NULL, configMAX_PRIORITIES - 1, NULL );
   
   // Initialisation des mutex
   questionMutex = xSemaphoreCreateMutex();
@@ -124,7 +118,8 @@ void setup(void)
   enqueueOutgoingMessage("HELLO", "{}", false, nullptr);
 }
 
-void loop(void)
-{
+void loop(void) {
+  // Traitement des requêtes DNS
   dnsServer.processNextRequest();
+
 }

@@ -5,7 +5,7 @@
 
 static const char* CONFIG_TAG = "CONFIG_MANAGER";
 static const char* CONFIG_FILE = "/config/config.json";
-static const char* CONFIG_FILE_CURRENT = "/files/config.current.json";
+static const char* CONFIG_FILE_CURRENT = "/files/config.json.current";
 
 class ConfigManager {
 private:
@@ -14,7 +14,7 @@ private:
     
     // Default configuration values
     void setDefaults() {
-        config["wifi"]["ssid"] = "CC-Home";
+        config["wifi"]["ssid"] = "CC-Home1";
         config["wifi"]["password"] = "GenericPassword";
         config["ap"]["ssid"] = "buzzmaster";
         config["ap"]["password"] = "BuzzMaster";
@@ -30,7 +30,9 @@ public:
     }
     
     bool load() {
-        File file;
+        File default_file;
+        File current_file;
+        String  json;
 
         if (!LittleFS.begin()) {
             ESP_LOGE(CONFIG_TAG, "Failed to mount LittleFS");
@@ -38,40 +40,45 @@ public:
         }
         
         // Create directory if it doesn't exist
-        if (!LittleFS.exists("/config")) {
-            LittleFS.mkdir("/config");
+        if (!LittleFS.exists("/files")) {
+            LittleFS.mkdir("/files");
         }
         
-        if (!LittleFS.exists(CONFIG_FILE_CURRENT)) {
-            ESP_LOGW(CONFIG_TAG, "Checking Current Config file");
-            file = LittleFS.open(CONFIG_FILE, "r");
+        setDefaults();
+            
+        if (LittleFS.exists(CONFIG_FILE)) {
+            ESP_LOGD(CONFIG_TAG, "Checking Config file");
+            default_file = LittleFS.open(CONFIG_FILE, "r");
         }
 
-        if (!file) {
-            if (!LittleFS.exists(CONFIG_FILE)) {
-                ESP_LOGW(CONFIG_TAG, "Config file not found, creating default");
-                return save(); // Save default configuration
+        if (LittleFS.exists(CONFIG_FILE_CURRENT)) {
+            ESP_LOGD(CONFIG_TAG, "Checking Current Config file");
+            current_file = LittleFS.open(CONFIG_FILE_CURRENT,"r");
+        }
+
+        if (default_file) {
+            ESP_LOGD(CONFIG_TAG, "Loading Default Config file");
+            DeserializationError error = deserializeJson(config, default_file);
+            if (error) {
+                ESP_LOGE(CONFIG_TAG, "Failed to parse Default config file: %s", error.c_str());
             }
-            ESP_LOGW(CONFIG_TAG, "Checking Defqult Config file");
-            file = LittleFS.open(CONFIG_FILE, "r");
         }
 
-        if (!file) {
-            ESP_LOGE(CONFIG_TAG, "Failed to open config file");
-            return false;
+        if (current_file) {
+            ESP_LOGD(CONFIG_TAG, "Loading Current Config file");
+            DeserializationError error = deserializeJson(config, current_file);
+            if (error) {
+                ESP_LOGE(CONFIG_TAG, "Failed to parse Current config file: %s", error.c_str());
+            }
         }
-        
-        DeserializationError error = deserializeJson(config, file);
-        file.close();
-        
-        if (error) {
-            ESP_LOGE(CONFIG_TAG, "Failed to parse config file: %s", error.c_str());
-            setDefaults(); // Revert to defaults on error
-            return false;
-        }
+
+        default_file.close();
+        current_file.close();
         
         loaded = true;
         ESP_LOGI(CONFIG_TAG, "Configuration loaded successfully");
+        serializeJsonPretty(config, json);
+            ESP_LOGD(CONFIG_TAG, "Loaded Config : %s", json.c_str());
         return true;
     }
     

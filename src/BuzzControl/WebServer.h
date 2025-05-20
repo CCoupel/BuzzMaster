@@ -3,6 +3,7 @@
 #include "Common/led.h"
 #include "fsManager.h"
 #include "messages_to_send.h"
+#include "common/configManager.h"
 
 #include <ESPAsyncWebServer.h>
 
@@ -39,31 +40,39 @@ void cleanupOldUploads() {
 
 void w_handleRoot(AsyncWebServerRequest *request) {
   ESP_LOGI(WEB_TAG, "Handling root request");
-  AsyncWebServerResponse *response = request->beginResponse(200, "text/html", "hello from BuzzControl!");
+  //AsyncWebServerResponse *response = request->beginResponse(200, "text/html", "hello from BuzzControl!");
 
-  request->send(response);
+  request->send(200, "text/text", "hello from BuzzControl!");
 
   digitalWrite(ledPin, LOW);
 }
 
 void w_handleNotFound(AsyncWebServerRequest *request) {
-  ESP_LOGW(WEB_TAG, "Handling 404 for: %s", request->url().c_str());
-  String message = "File Not Found\n\n";
-  message += "URI: " + request->url() + "\n";
-  message += "Method: " + String((request->method() == HTTP_GET) ? "GET" : "POST") + "\n";
-  message += "Arguments: " + String(request->args()) + "\n";
+  String host=request->host();
   
-  for (uint8_t i = 0; i < request->args(); i++) {
-      message += " " + request->argName(i) + ": " + request->arg(i) + "\n";
+  ESP_LOGW(WEB_TAG, "Handling 404 for: %s://%s", host.c_str(),request->url().c_str());
+  if (host.equals("www.msftncsi.com") || host.equals("www.msftconnecttest.com")) {
+    request->send(200, "text/text", "Microsoft NCSI");
   }
-  
-  AsyncWebServerResponse *response = request->beginResponse(404, "text/plain", message);
+  else {
+    String message = "File Not Found\n\n";
+    message += "URI: " + request->url() + "\n";
+    message += "Method: " + String((request->method() == HTTP_GET) ? "GET" : "POST") + "\n";
+    message += "Arguments: " + String(request->args()) + "\n";
+    
+    for (uint8_t i = 0; i < request->args(); i++) {
+        message += " " + request->argName(i) + ": " + request->arg(i) + "\n";
+    }
+    
+    AsyncWebServerResponse *response = request->beginResponse(404, "text/plain", message);
 
-  request->send(response);
+    request->send(response);
+  }
 }
 
 //####### TOOLING ######
 void w_handleRedirect(AsyncWebServerRequest *request) {
+    ESP_LOGI(WEB_TAG, "Handling redirect request:%s",(request->url()).c_str());
     request->redirect("http://buzzcontrol.local/html/testSPA.html#config");
 }
 
@@ -85,8 +94,8 @@ void w_handleListFiles(AsyncWebServerRequest *request) {
     result+=listLittleFSFiles();
     result+=printLittleFSInfo();
     
-    AsyncWebServerResponse *response = request->beginResponse(200, "text/text", result);
-    request->send(response);
+    //AsyncWebServerResponse *response = request->beginResponse(200, "text/text", result);
+    request->send(200, "text/text", result);
 }
 
 void w_handleUpdate(AsyncWebServerRequest *request) {
@@ -95,16 +104,16 @@ void w_handleUpdate(AsyncWebServerRequest *request) {
     downloadFiles();
     result+=listLittleFSFiles();
     
-    AsyncWebServerResponse *response = request->beginResponse(200, "text/text", result);
-    request->send(response);
+    //AsyncWebServerResponse *response = request->beginResponse(200, "text/text", result);
+    request->send(200, "text/text", result);
 }
 
 void w_handleListGame(AsyncWebServerRequest *request) {
     String result;
     result=getTeamsAndBumpersJSON();
     
-    AsyncWebServerResponse *response = request->beginResponse(200, "text/text", result);
-    request->send(response);
+    //AsyncWebServerResponse *response = request->beginResponse(200, "text/text", result);
+    request->send(200, "text/text", result);
 }
 
 size_t saveFile(AsyncWebServerRequest *request, String destFile, String filename, size_t index, uint8_t *data, size_t len, bool final) {
@@ -139,8 +148,8 @@ size_t saveFile(AsyncWebServerRequest *request, String destFile, String filename
 void w_handleUploadBackgroundComplete(AsyncWebServerRequest *request) {
     // Ne sauvegarde que s'il n'y a pas de fichier dans le formulaire
     ESP_LOGI(WEB_TAG,"upload du fichier Backgroud Complete");
-    AsyncWebServerResponse *response = request->beginResponse(200, "text/json", "Background Saved");
-    request->send(response);
+    //AsyncWebServerResponse *response = request->beginResponse(200, "text/json", "Background Saved");
+    request->send(200, "text/json", "Background Saved");
 }
 
 
@@ -162,13 +171,21 @@ void w_handleUploadBackgroundFile(AsyncWebServerRequest *request, String filenam
 void w_handleUploadConfigComplete(AsyncWebServerRequest *request) {
     // Ne sauvegarde que s'il n'y a pas de fichier dans le formulaire
     ESP_LOGI(WEB_TAG,"upload Config Complete");
-    AsyncWebServerResponse *response = request->beginResponse(200, "text/json", "Config Saved");
-    request->send(response);
+    //AsyncWebServerResponse *response = request->beginResponse(200, "text/json", "Config Saved");
+    request->send(200, "text/json", "Config Saved");
 }
 
 void w_handleUploadConfigBody(AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total) {    
         ESP_LOGI(WEB_TAG, "Upload du fichier Config terminé: %i:%s", len, (char*)data);
-        saveFile(request, "/config/config.json.current",  "",  index,  data,  len,  true);
+        saveFile(request, "/files/config.json.current",  "",  index,  data,  len,  true);
+        configManager.load();
+}
+
+void w_handleConfigBody(AsyncWebServerRequest *request) {
+    String result;
+    result=configManager.getConfigJSON() ;
+    //AsyncWebServerResponse *response = request->beginResponse(200, "text/text", result);
+    request->send(200, "text/text", result);
 }
 
 /***** QUESTIONS *******/
@@ -241,8 +258,8 @@ void w_handleUploadQuestionComplete(AsyncWebServerRequest *request) {
     if (!request->hasParam("file", true, true)) {  // Le dernier true indique qu'on cherche un fichier
         ESP_LOGI(WEB_TAG,"Saving Question %s", saveQuestion(request, "").c_str());
     }
-    AsyncWebServerResponse *response = request->beginResponse(200, "text/json", "Question Saved");
-    request->send(response);
+    //AsyncWebServerResponse *response = request->beginResponse(200, "text/json", "Question Saved");
+    request->send(200, "text/json", "Question Saved");
     enqueueOutgoingMessage("QUESTIONS", getQuestions().c_str(), false, nullptr);
 }
 
@@ -288,8 +305,8 @@ void setGlobalWebRoute(AsyncWebServer& server, const char* uri, const char* path
 
 void handleWindowsConnectTest(AsyncWebServerRequest *request) {
     ESP_LOGI(WEB_TAG, "Windows test request");
-    AsyncWebServerResponse *response = request->beginResponse(200, "text/text", "Microsoft NCSI");
-    request->send(response);
+    //AsyncWebServerResponse *response = request->beginResponse(200, "text/text", "Microsoft NCSI");
+    request->send(200, "text/text", "Microsoft NCSI");
 }
 
 void startWebServer() {
@@ -316,7 +333,8 @@ void startWebServer() {
     server.onNotFound(w_handleNotFound);
     
     server.on("/*", HTTP_OPTIONS, [](AsyncWebServerRequest *request) {
-      AsyncWebServerResponse *response = request->beginResponse(204);
+        ESP_LOGD(FS_TAG, "Defqult response: %s", (request->url()).c_str());
+      AsyncWebServerResponse *response = request->beginResponse(200);
       request->send(response);
     });
 
@@ -339,10 +357,11 @@ void startWebServer() {
     server.serveStatic("/version/", LittleFS, "/config/version.txt");
 
     server.on("/connecttest.txt", HTTP_GET, handleWindowsConnectTest);
-    server.on("/nsci.txt", HTTP_GET, handleWindowsConnectTest);
+    server.on("/ncsi.txt", HTTP_GET, handleWindowsConnectTest);
 
 
     server.on("/", HTTP_GET, w_handleRedirect);
+    server.on("/redirect", HTTP_GET, w_handleRedirect);
     server.on("/index.html", w_handleRedirect);
 
     server.on("/reset", HTTP_GET, w_handleReset);
@@ -352,7 +371,11 @@ void startWebServer() {
     server.on("/listGame",HTTP_GET, w_handleListGame);
 
     server.on("/background", HTTP_POST, w_handleUploadBackgroundComplete, w_handleUploadBackgroundFile);
+
+    server.on("/config.json", HTTP_GET, w_handleConfigBody);
     server.on("/config/config.json", HTTP_POST, w_handleUploadConfigComplete, NULL, w_handleUploadConfigBody);
+    server.on("/config.json", HTTP_POST, w_handleUploadConfigComplete, NULL, w_handleUploadConfigBody);
+
     server.on("/questions", HTTP_POST, w_handleUploadQuestionComplete, w_handleUploadQuestionFile);
     server.on("/questions", HTTP_GET, w_handleListQuestions);
 
