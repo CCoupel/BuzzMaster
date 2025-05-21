@@ -144,3 +144,9 @@ progress {
   width: 85%;
   height: 25px;
 }
+
+button.disabled {
+  background-color: #ccc !important;
+  cursor: not-allowed;
+  opacity: 0.6;
+}
