@@ -22,8 +22,7 @@ void setupmDNS() {
         MDNS.addService("http", "tcp", 80);  // HTTP is always on port 80
         MDNS.addService("sock", "tcp", configManager.getControllerPort());
         
-
-            ESP_LOGI(DNS_TAG, "Serveur mDNS démarré");
+        ESP_LOGI(DNS_TAG, "Serveur mDNS démarré");
 
     }
 }

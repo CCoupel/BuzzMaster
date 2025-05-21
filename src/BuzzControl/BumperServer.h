@@ -46,7 +46,6 @@ void processButtonPress(const String& bumperID, const char* b_team, int64_t b_ti
       setTeamBumper(b_team, bumperID.c_str());
       setTeamTime(b_team, b_time);
       setTeamStatus(b_team, "PAUSE");
-//      enqueueOutgoingMessage("BUMPER", getTeamsAndBumpersJSON().c_str(), false, nullptr);
       enqueueOutgoingMessage("UPDATE", getTeamsAndBumpersJSON().c_str(), false, nullptr);
     }
     else {
@@ -127,7 +126,6 @@ void updateTimer(const int Time, const int delta) {
 void stopGame() {
   setGameCurrentTime(0);
   setGamePhase("STOP");
-//  enqueueOutgoingMessage("UPDATE_TIMER", getTeamsAndBumpersJSON().c_str(), false, nullptr);
   enqueueOutgoingMessage("STOP", getGameJSON().c_str(), true, nullptr);
   
   // Arrêter le timer
@@ -143,13 +141,11 @@ void pauseGame(AsyncClient* client) {
 
 void pauseAllGame() {
   setGamePhase("PAUSE");
-//  enqueueOutgoingMessage("UPDATE_TIMER", getTeamsAndBumpersJSON().c_str(), false, nullptr);
   enqueueOutgoingMessage("PAUSE", getGameJSON().c_str(), true, nullptr);
 }
 
 void continueGame() {
   setGamePhase("START");
-//  enqueueOutgoingMessage("UPDATE_TIMER", getTeamsAndBumpersJSON().c_str(), false, nullptr);
   enqueueOutgoingMessage("CONTINUE", getGameJSON().c_str(), true, nullptr);
 }
 

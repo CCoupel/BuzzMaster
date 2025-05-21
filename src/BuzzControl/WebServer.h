@@ -40,10 +40,7 @@ void cleanupOldUploads() {
 
 void w_handleRoot(AsyncWebServerRequest *request) {
   ESP_LOGI(WEB_TAG, "Handling root request");
-  //AsyncWebServerResponse *response = request->beginResponse(200, "text/html", "hello from BuzzControl!");
-
   request->send(200, "text/plain", "hello from BuzzControl!");
-
   digitalWrite(ledPin, LOW);
 }
 
@@ -98,16 +95,13 @@ void w_handleReset(AsyncWebServerRequest *request) {
     ESP_LOGI(WEB_TAG, "Handling reset request");
     w_handleRedirect(request);
     resetServer();
-//    rebootServer();
 }
 
 void w_handleListFiles(AsyncWebServerRequest *request) {
     String result="";
     result+=listLittleFSFiles();
     result+=printLittleFSInfo();
-    
-    //AsyncWebServerResponse *response = request->beginResponse(200, "text/text", result);
-    request->send(200, "text/text", result);
+    request->send(200, "text/plain", result);
 }
 
 void w_handleUpdate(AsyncWebServerRequest *request) {
@@ -115,16 +109,12 @@ void w_handleUpdate(AsyncWebServerRequest *request) {
     ESP_LOGI(WEB_TAG,"Updating Web pages from GIT");
     downloadFiles();
     result+=listLittleFSFiles();
-    
-    //AsyncWebServerResponse *response = request->beginResponse(200, "text/text", result);
-    request->send(200, "text/text", result);
+    request->send(200, "text/plain", result);
 }
 
 void w_handleListGame(AsyncWebServerRequest *request) {
     String result;
     result=getTeamsAndBumpersJSON();
-    
-    //AsyncWebServerResponse *response = request->beginResponse(200, "text/text", result);
     request->send(200, "text/plain", result);
 }
 
@@ -160,7 +150,6 @@ size_t saveFile(AsyncWebServerRequest *request, String destFile, String filename
 void w_handleUploadBackgroundComplete(AsyncWebServerRequest *request) {
     // Ne sauvegarde que s'il n'y a pas de fichier dans le formulaire
     ESP_LOGI(WEB_TAG,"upload du fichier Backgroud Complete");
-    //AsyncWebServerResponse *response = request->beginResponse(200, "text/json", "Background Saved");
     request->send(200, "text/json", "Background Saved");
 }
 
@@ -177,13 +166,13 @@ void w_handleUploadBackgroundFile(AsyncWebServerRequest *request, String filenam
     if(final) { // Fin de l'upload
         ESP_LOGI(WEB_TAG, "Upload du fichier Config terminé");
         setBackgroundFile(filePath);
+        enqueueOutgoingMessage("UPDATE", getGameJSON().c_str(), false, nullptr);
     }
 }
 
 void w_handleUploadConfigComplete(AsyncWebServerRequest *request) {
     // Ne sauvegarde que s'il n'y a pas de fichier dans le formulaire
     ESP_LOGI(WEB_TAG,"upload Config Complete");
-    //AsyncWebServerResponse *response = request->beginResponse(200, "text/json", "Config Saved");
     request->send(200, "text/json", "Config Saved");
 }
 
@@ -196,7 +185,6 @@ void w_handleUploadConfigBody(AsyncWebServerRequest *request, uint8_t *data, siz
 void w_handleConfigBody(AsyncWebServerRequest *request) {
     String result;
     result=configManager.getConfigJSON() ;
-    //AsyncWebServerResponse *response = request->beginResponse(200, "text/text", result);
     request->send(200, "text/plain", result);
 }
 
@@ -270,7 +258,6 @@ void w_handleUploadQuestionComplete(AsyncWebServerRequest *request) {
     if (!request->hasParam("file", true, true)) {  // Le dernier true indique qu'on cherche un fichier
         ESP_LOGI(WEB_TAG,"Saving Question %s", saveQuestion(request, "").c_str());
     }
-    //AsyncWebServerResponse *response = request->beginResponse(200, "text/json", "Question Saved");
     request->send(200, "text/json", "Question Saved");
     enqueueOutgoingMessage("QUESTIONS", getQuestions().c_str(), false, nullptr);
 }
@@ -325,16 +312,10 @@ void startWebServer() {
         ESP_LOGE(FS_TAG, "Directory /CURRENT do not contains /CURRENT/html/testSPA.html : fall back to local version");
     }
 
-
     DefaultHeaders::Instance().addHeader("Access-Control-Allow-Origin", "*");
     DefaultHeaders::Instance().addHeader("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,OPTIONS");
     DefaultHeaders::Instance().addHeader("Access-Control-Allow-Headers", "Content-Type,Authorization");
     DefaultHeaders::Instance().addHeader("Access-Control-Allow-Credentials", "true");
-//    DefaultHeaders::Instance().addHeader("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0");
-//    DefaultHeaders::Instance().addHeader("Access-Control-Max-Age", "1");
-//    DefaultHeaders::Instance().addHeader("Vary", "Origin");
-//    DefaultHeaders::Instance().addHeader("Pragma", "no-cache");
-//    DefaultHeaders::Instance().addHeader("Expires", "-1");
 
     server.onNotFound(w_handleNotFound);
     
@@ -348,7 +329,7 @@ void startWebServer() {
     server.serveStatic("/js", LittleFS, (ROOT+"/js").c_str());
     server.serveStatic("/css", LittleFS, (ROOT+"/css").c_str());
     server.serveStatic("/html", LittleFS, (ROOT+"/html").c_str());
-    server.serveStatic("/config", LittleFS, "/config");
+    server.serveStatic("/config", LittleFS,  (ROOT+"/config").c_str());
 
     // Servir les fichiers du répertoire files pour /files/*
     server.serveStatic("/files/", LittleFS, "/files/");
@@ -356,16 +337,10 @@ void startWebServer() {
     // Servir les fichiers du répertoire files pour /files/*
     server.serveStatic("/question/", LittleFS, "/files/questions/");
 
-    setGlobalWebRoute(server,  "/background", "/files/background.jpg", "image/jpeg");
-    setGlobalWebRoute(server,  "/version", "/config/version.txt", "text/plain");
-
-    server.serveStatic("/favicon.ico", LittleFS, "/files/background.jpg");
-    server.serveStatic("/version/", LittleFS, "/config/version.txt");
-
     server.on("/connecttest.txt", HTTP_GET, handleWindowsConnectTest);
     server.on("/ncsi.txt", HTTP_GET, handleWindowsConnectTest);
 
-
+    server.on("/version", HTTP_GET, [](AsyncWebServerRequest *request){request->send(200,"text/plain",VERSION);});
     server.on("/", HTTP_GET, w_handleRedirect);
     server.on("/redirect", HTTP_GET, w_handleRedirect);
     server.on("/index.html", w_handleRedirect);
