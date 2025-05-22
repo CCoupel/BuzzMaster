@@ -121,7 +121,7 @@ document.addEventListener('DOMContentLoaded', () => {
     callApi("http://buzzcontrol.local/reset");
   });
 
-  document.getElementById("uploadButton").addEventListener("click", () => {
-    callApi("http://buzzcontrol.local/upload");
+  document.getElementById("updateButton").addEventListener("click", () => {
+    callApi("http://buzzcontrol.local/update");
   });
 });

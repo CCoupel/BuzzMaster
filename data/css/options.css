@@ -7,7 +7,7 @@ body {
 
 #configuration {
     max-width: 600px;
-    margin: auto;
+    margin: 20px auto;
     background-color: #fff;
     border: 1px solid #ddd;
     border-radius: 12px;
@@ -17,7 +17,7 @@ body {
 
 #configuration-buttons {
     max-width: 600px;
-    margin: auto;
+    margin: 20px auto;
     background-color: #fff;
     border: 1px solid #ddd;
     border-radius: 12px;

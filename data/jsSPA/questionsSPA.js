@@ -17,71 +17,87 @@ function validateFileSize(event) {
 }
 
 
-async function sendForm(formId, actionUrl) {
+function sendForm(formId, actionUrl) {
     const form = document.getElementById(formId);
+    const progressBar = document.getElementById("progressBarQuestion");
+    const submitButton = form?.querySelector('button[type="submit"]');
 
-    if (!form) return;
+    if (!form || !progressBar || !submitButton) return;
 
-    form.addEventListener('submit', async function(event) {
+    form.addEventListener('submit', function(event) {
         event.preventDefault();
 
         if (!validateFileSize(event)) return;
 
+        // On cherche les ID existants dans questions (pas number)
+        const usedIds = Object.values(questions)
+            .map(q => parseInt(q.ID))
+            .filter(n => !isNaN(n))
+            .sort((a, b) => a - b);
+
+        // Trouver le plus petit ID manquant
+        let nextId = 1;
+        for (let i = 0; i < usedIds.length; i++) {
+            if (usedIds[i] !== nextId) break;
+            nextId++;
+        }
+
         const formData = new FormData(form);
 
-        try {
-            const response = await fetch(actionUrl, {
-                method: 'POST',
-                body: formData 
-            });
+        const numberField = form.querySelector('[name="number"]');
+        const currentNumberValue = numberField ? numberField.value.trim() : "";
 
-            if (!response.ok) {
-                throw new Error("Erreur du serveur: " + response.statusText);
+        // Valide number dans form
+        const isValidNumber = /^[1-9]\d*$/.test(currentNumberValue);
+
+        // Si vide ou invalide, on remplace par nextId trouvé via ID
+        if (!isValidNumber) {
+            const nextNumberStr = nextId.toString().trim();
+            formData.set("number", nextNumberStr);
+        }
+        console.log("FormData avant envoi :");
+            for (const [key, val] of formData.entries()) {
+                console.log(`- ${key}: "${val}"`);
             }
 
-            const responseData = await response.text();
+        const xhr = new XMLHttpRequest();
+        xhr.open("POST", actionUrl, true);
 
-            alert("Question créée avec succès !");
-            console.log("Réponse du serveur :", responseData);
-            questionList();
+        submitButton.disabled = true;
 
-            form.reset();
-        } catch (error) {
-            console.error("Erreur lors de l'envoi:", error);
+        xhr.upload.onprogress = function(e) {
+            if (e.lengthComputable) {
+                const percentComplete = (e.loaded / e.total) * 100;
+                progressBar.value = percentComplete;
+            }
+        };
+
+        xhr.onload = function() {
+            submitButton.disabled = false;
+            progressBar.value = 0;
+
+            if (xhr.status >= 200 && xhr.status < 300) {
+                alert("Question créée avec succès !");
+                console.log("Réponse du serveur :", xhr.responseText);
+                questionList();
+                form.reset();
+            } else {
+                alert("Erreur du serveur: " + xhr.statusText);
+                console.error("Erreur lors de l'envoi:", xhr.statusText);
+            }
+        };
+
+        xhr.onerror = function() {
+            submitButton.disabled = false;
+            progressBar.value = 0;
+
             alert("Une erreur est survenue lors de la création de la question.");
-        }
+            console.error("Erreur lors de l'envoi.");
+        };
+
+        xhr.send(formData);
     });
 }
-
-/*async function sendFileForm(formId, actionUrl) {
-    
-    const form = document.getElementById(formId);
-    form.addEventListener('submit', async function(event) {
-        event.preventDefault();
-
-        const formData = new FormData(form);
-
-        try {
-            console.log("upload en cours")
-            const response = await fetch(actionUrl, {
-                method: 'POST',
-                body: formData 
-            });
-            if (!response.ok) {
-                throw new Error("Erreur du serveur: " + response.statusText);
-            }
-
-            const responseData = await response.text();
-
-            alert("Image envoyée avec succès !");
-            console.log("Réponse du serveur :", responseData);
-
-        } catch (error) {
-            console.error("Erreur lors de l'envoi:", error);
-            alert("Une erreur est survenue lors de l'envoi de l'image.");
-        }
-    });
-}*/
 
 function sendFileForm(formId, actionUrl) {
     const form = document.getElementById(formId);
@@ -141,61 +157,63 @@ export function getQuestions(questionData) {
 }
 
 
-/*
-export async function fetchQuestions() {
-    try {
-        // Vérifier si l'élément loader existe avant d'essayer de manipuler son style
-        const loader = document.getElementById('loader');
-        if (loader) {
-            loader.style.display = 'block'; // Afficher le loader
-        }
+function showCustomConfirm(message) {
+  return new Promise((resolve) => {
+    const modal = document.getElementById('custom-confirm');
+    const msgElem = document.getElementById('confirm-message');
+    const yesBtn = document.getElementById('confirm-yes');
+    const noBtn = document.getElementById('confirm-no');
 
-        const response = await fetch('http://buzzcontrol.local/questions');
+    msgElem.textContent = message;
+    modal.classList.remove('modal-hidden');
 
-        if (!response.ok) {
-            throw new Error('Erreur réseau : ' + response.statusText);
-        }
-
-        const newQuestions = await response.json();
-
-        // Vérifier si les nouvelles données sont différentes des précédentes
-        if (JSON.stringify(questions) !== JSON.stringify(newQuestions)) {
-            questions = newQuestions;
-            localStorage.setItem('questions', JSON.stringify(questions)); // Sauvegarder dans le localStorage
-            questionList(); // Rafraîchir l'affichage si les données ont changé
-        } else {
-            questionList(); // Afficher la liste même sans changement
-        }
-    } catch (error) {
-        console.error('Erreur lors de la récupération des questions :', error);
-        const savedQuestions = localStorage.getItem('questions');
-        if (savedQuestions) {
-            questions = JSON.parse(savedQuestions); // Récupérer les questions depuis localStorage si l'API échoue
-        }
-        questionList(); // Toujours afficher la liste, même en cas d'erreur
-    } finally {
-        // Vérifier à nouveau si le loader existe avant de le masquer
-        const loader = document.getElementById('loader');
-        if (loader) {
-            loader.style.display = 'none'; // Masquer le loader une fois le chargement terminé
-        }
-    }
-};
-*/
-function deleteQuestion(questionId) {
-    if (!confirm(`Voulez-vous vraiment supprimer la question ${questionId} ?`)) {
-        return;
+    function cleanup() {
+      modal.classList.add('modal-hidden');
+      yesBtn.removeEventListener('click', onYes);
+      noBtn.removeEventListener('click', onNo);
     }
 
-    // Envoyer la demande de suppression au serveur via WebSocket
-    if (ws.readyState === WebSocket.OPEN) {
-        sendWebSocketMessage("DELETE", { "ID": questionId });
-        alert(`Suppression effectuée`);
-    } else {
-        console.log('WebSocket not ready. Retrying...');
-        setTimeout(() => deleteQuestion(questionId), 1000); // Réessaie après 1 seconde
+    function onYes() {
+      cleanup();
+      resolve(true);
     }
+
+    function onNo() {
+      cleanup();
+      resolve(false);
+    }
+
+    yesBtn.addEventListener('click', onYes);
+    noBtn.addEventListener('click', onNo);
+  });
 }
+
+async function deleteQuestion(questionId) {
+  console.log("Suppression demandée pour la question ID:", questionId);
+
+  const confirmed = await showCustomConfirm(`Voulez-vous vraiment supprimer la question ${questionId} ?`);
+  if (!confirmed) {
+    console.log("Suppression annulée par l'utilisateur.");
+    return;
+  }
+
+  if (!ws) {
+    console.error("WebSocket non initialisée !");
+    return;
+  }
+
+  console.log("Etat WebSocket :", ws.readyState);
+
+  if (ws.readyState === WebSocket.OPEN) {
+    sendWebSocketMessage("DELETE", { "ID": questionId });
+    alert(`Suppression effectuée`);
+    console.log("Message DELETE envoyé via WebSocket");
+  } else {
+    console.log('WebSocket not ready. Retrying dans 1s...');
+    setTimeout(() => deleteQuestion(questionId), 1000);
+  }
+}
+
 
 export function questionList() {
     try {
@@ -270,6 +288,7 @@ export function questionList() {
         document.querySelectorAll('.delete-button').forEach(button => {
             button.addEventListener('click', (event) => {
                 const questionId = event.target.getAttribute('data-id');
+                console.log('Bouton supprimer cliqué, id =', questionId);
                 deleteQuestion(questionId);
             });
         });
