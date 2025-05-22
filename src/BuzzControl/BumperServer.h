@@ -59,6 +59,19 @@ void processButtonPress(const String& bumperID, const char* b_team, int64_t b_ti
   }
 }
 
+
+void sendQuestions() {
+  enqueueOutgoingMessage("QUESTIONS", getQuestions().c_str(), false, nullptr);
+}
+
+void sendGame() {
+  enqueueOutgoingMessage("UPDATE", getGameJSON().c_str(), false, nullptr);
+}
+
+void sendTeamsAndBumpers() {
+  enqueueOutgoingMessage("UPDATE", getTeamsAndBumpersJSON().c_str(), false, nullptr);
+}
+
 void resetBumpersTime() {
   std::vector<String> keysToRemove = {"STATUS", "BUTTON", "TIME", "TIMESTAMP", "BUMPER"};
 
@@ -102,6 +115,7 @@ void startGame(const int delay) {
   setGameCurrentTime(newDelay);
   setGameTime();
   setGamePhase("START");
+  setQuestionStatus("STARTED");
   enqueueOutgoingMessage("START", getGameJSON().c_str(), true, nullptr);
   
   // Démarrer le timer s'il n'est pas déjà en cours
@@ -126,6 +140,7 @@ void updateTimer(const int Time, const int delta) {
 void stopGame() {
   setGameCurrentTime(0);
   setGamePhase("STOP");
+  setQuestionStatus("STOPED");
   enqueueOutgoingMessage("STOP", getGameJSON().c_str(), true, nullptr);
   
   // Arrêter le timer
@@ -152,6 +167,7 @@ void continueGame() {
 void revealGame() {
     if (isGameStopped()) {
       String msg = "\"" + getQuestionResponse() + "\"";
+      setQuestionStatus("REVEALED");
       enqueueOutgoingMessage("REVEAL", msg.c_str(), true, nullptr);
     }
 }
@@ -164,14 +180,15 @@ void readyGame(const String question) {
  
     setGamePhase("PREPARE");
     if (question.toInt() > 0) {
-      setQuestion(question);
+      setCurrentQuestion(question);
+      setQuestionStatus("AVAILLABLE");
     } else {
-      setQuestion("");
+      setCurrentQuestion("");
     }
     resetBumpersTime();
     resetBumpersReady();
     updateTeamsReady();
-    enqueueOutgoingMessage("UPDATE", getTeamsAndBumpersJSON().c_str(), false, nullptr);
+    sendTeamsAndBumpers();
 
     enqueueOutgoingMessage("PING", "{}", false, nullptr);
   }
@@ -215,6 +232,7 @@ void sendResetToAll() {
   enqueueOutgoingMessage("RESET", "{  }", true, nullptr);
 }
 
+
 void resetServer() {
   ESP_LOGI(BUMPER_TAG, "Resetting server");
   if (LittleFS.exists(saveGameFile)) {
@@ -235,6 +253,7 @@ void resetServer() {
   sendResetToAll();
   sleep(2);
   sendHelloToAll();
+  sendQuestions();
 }
 
 void rebootServer() {
@@ -286,6 +305,6 @@ void handlePingResponseAction(const char* bumperID) {
 void deleteQuestion(const String ID) {
   if (ID.toInt() > 0) {
     deleteDirectory((questionsPath + "/" + ID).c_str());
-    enqueueOutgoingMessage("QUESTIONS", getQuestions().c_str(), false, nullptr);
+    sendQuestions();
   }
 }

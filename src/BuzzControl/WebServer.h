@@ -210,9 +210,9 @@ String saveQuestion(AsyncWebServerRequest *request, String fileName = "") {
     String reponseText = request->hasParam("answer", true) ? request->getParam("answer", true)->value() : "";
     String pointsText = request->hasParam("points", true) ? request->getParam("points", true)->value() : "0";
     String tempsText = request->hasParam("time", true) ? request->getParam("time", true)->value() : "0";
-    ensureDirectoryExists(questionsPath);
+//    ensureDirectoryExists(questionsPath);
     String fullPath = questionsPath + "/" + currentDir;
-    ensureDirectoryExists(fullPath);
+//    ensureDirectoryExists(fullPath);
 
     // Crée le JSON
     jsonString = "{\n";
@@ -228,6 +228,7 @@ String saveQuestion(AsyncWebServerRequest *request, String fileName = "") {
     jsonString += "}";
 
     // Sauvegarde le fichier JSON
+    /*
     File jsonFile = LittleFS.open(fullPath + "/question.json", "w");
     if(jsonFile) {
         if(jsonFile.print(jsonString)) {
@@ -237,7 +238,8 @@ String saveQuestion(AsyncWebServerRequest *request, String fileName = "") {
         }
         jsonFile.close();
     }
-
+*/
+    writeQuestion(currentDir,jsonString);
     return currentDir;
 }
 
@@ -340,7 +342,6 @@ void startWebServer() {
     server.on("/connecttest.txt", HTTP_GET, handleWindowsConnectTest);
     server.on("/ncsi.txt", HTTP_GET, handleWindowsConnectTest);
 
-    server.on("/version", HTTP_GET, [](AsyncWebServerRequest *request){request->send(200,"text/plain",VERSION);});
     server.on("/", HTTP_GET, w_handleRedirect);
     server.on("/redirect", HTTP_GET, w_handleRedirect);
     server.on("/index.html", w_handleRedirect);
@@ -351,10 +352,10 @@ void startWebServer() {
     server.on("/listFiles",HTTP_GET, w_handleListFiles);
     server.on("/listGame",HTTP_GET, w_handleListGame);
 
+    server.on("/version", HTTP_GET, [](AsyncWebServerRequest *request){request->send(200,"text/plain",VERSION);});
     server.on("/background", HTTP_POST, w_handleUploadBackgroundComplete, w_handleUploadBackgroundFile);
 
     server.on("/config.json", HTTP_GET, w_handleConfigBody);
-    server.on("/config/config.json", HTTP_POST, w_handleUploadConfigComplete, NULL, w_handleUploadConfigBody);
     server.on("/config.json", HTTP_POST, w_handleUploadConfigComplete, NULL, w_handleUploadConfigBody);
 
     server.on("/questions", HTTP_POST, w_handleUploadQuestionComplete, w_handleUploadQuestionFile);
