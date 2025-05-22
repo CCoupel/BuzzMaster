@@ -17,11 +17,19 @@ function webSocketColor() {
     let webSocketColorDiv = document.getElementById('websocket-tracker');
 
     // Vérifie si la div existe déjà
-    if (!webSocketColorDiv) {
-        webSocketColorDiv = document.createElement('div');
-        webSocketColorDiv.id = 'websocket-tracker';
-        document.body.appendChild(webSocketColorDiv);
-    }
+if (!webSocketColorDiv) {
+    webSocketColorDiv = document.createElement('div');
+    webSocketColorDiv.id = 'websocket-tracker';
+    document.body.appendChild(webSocketColorDiv);
+
+    // Ajout du comportement au clic
+    webSocketColorDiv.style.cursor = 'pointer';
+    webSocketColorDiv.addEventListener('click', function () {
+        window.open('http://buzzcontrol.local/html/options.html', '_blank'); 
+        // ou
+        // window.location.href = 'http://buzzcontrol.local/html/options.html'; // Redirige dans le même onglet
+    });
+}
 
     function updateColor() {
 
