@@ -101,7 +101,7 @@ function sendForm(formId, actionUrl) {
 
 function sendFileForm(formId, actionUrl) {
     const form = document.getElementById(formId);
-    const progressBar = document.getElementById('progressBar');
+    const progressBar = document.getElementById('progressBarBackground');
     const submitButton = form.querySelector('button[type="submit"]');
 
     form.addEventListener('submit', function(event) {
