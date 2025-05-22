@@ -238,7 +238,6 @@ void receiveMessageTask(void *parameter) {
             
             // Nettoyage
             delete receivedMessage->data;
-        //    delete receivedMessage->timestamp;
             delete receivedMessage;
         }
     }

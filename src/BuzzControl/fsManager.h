@@ -346,13 +346,9 @@ String listLittleFSFilesRecursive(File &dir, const String &indent = "") {
         vTaskDelay(pdMS_TO_TICKS(1));
         if (file.isDirectory()) {
             line=String(indent)+"L__"+String(file.name())+"/";
-            //ESP_LOGI(FS_TAG, "%s├── %s/", indent.c_str(), file.name());
-//            ESP_LOGI(FS_TAG, line.c_str());
             line+=listLittleFSFilesRecursive(file, indent + "    ");
         } else {
             line=String(indent)+"L__"+String(file.name())+" ("+String(file.size())+")";
-//            ESP_LOGI(FS_TAG, line.c_str());
-            //ESP_LOGI(FS_TAG, "%s├── %s (%d bytes)", indent.c_str(), file.name(), file.size());
         }
         
         result+="\n"+line;
@@ -382,7 +378,6 @@ String listLittleFSFiles(String path) {
     ESP_LOGI(FS_TAG, path.c_str());
     result=listLittleFSFilesRecursive(root);
 
-//    result+=printLittleFSInfo();
     return result;
 }
 

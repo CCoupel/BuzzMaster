@@ -173,7 +173,7 @@ void setupAP() {
     
     // Démarrer l'AP avec le canal optimal
     // Le dernier paramètre est le nombre maximal de connexions (8 est souvent la limite dans Arduino ESP32)
-    if (WiFi.softAP(apSSID.c_str(), apPassword.c_str(), bestChannel, 0, 8)) {
+    if (WiFi.softAP(apSSID.c_str(), apPassword.c_str(), bestChannel, 0, 16)) {
         ESP_LOGI(WIFI_TAG, "AP started with max 8 connections");
     } else {
         ESP_LOGW(WIFI_TAG, "AP started with default max connections");

@@ -51,7 +51,6 @@ public:
         logPort = port;
         initialized = true;
         broadcastIP = IPAddress(255, 255, 255, 255);  // Adresse de broadcast
-//        configTime(0, 0, "pool.ntp.org");  // Configurez le fuseau horaire et le serveur NTP si nécessaire
     }
 
     static int customLogFunction(esp_log_level_t level, const char* tag, const char* format, va_list args) {
