@@ -2,7 +2,7 @@ let configData = {}; // pour conserver les données JSON
 
 async function fetchConfig() {
   try {
-    const response = await fetch('http://buzzcontrol.local/config/config.json');
+    const response = await fetch('http://buzzcontrol.local/config.json');
     if (!response.ok) throw new Error(`Erreur HTTP : ${response.status}`);
     configData = await response.json();
     displayConfig(configData);
@@ -81,7 +81,7 @@ function enableEditMode() {
     }
 
     try {
-      const response = await fetch('http://buzzcontrol.local/config/config.json', {
+      const response = await fetch('http://buzzcontrol.local/config.json', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
@@ -98,7 +98,30 @@ function enableEditMode() {
   });
 }
 
+function callApi(url) {
+  fetch(url, { method: "GET" })
+    .then(response => {
+      if (!response.ok) throw new Error("HTTP error " + response.status);
+      console.log(`Call to ${url} successful`);
+    })
+    .catch(error => console.error(`Error calling ${url}:`, error));
+}
+
+
+
 document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('editButton').addEventListener('click', enableEditMode);
   fetchConfig();
+
+ document.getElementById("rebootButton").addEventListener("click", () => {
+    callApi("http://buzzcontrol.local/reboot");
+  });
+
+  document.getElementById("resetButton").addEventListener("click", () => {
+    callApi("http://buzzcontrol.local/reset");
+  });
+
+  document.getElementById("uploadButton").addEventListener("click", () => {
+    callApi("http://buzzcontrol.local/upload");
+  });
 });
