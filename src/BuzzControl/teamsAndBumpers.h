@@ -285,7 +285,7 @@ String getQuestions() {
     return jsonOutput;
 }
 
-void setQuestion(const String qID) {
+void setCurrentQuestion(const String qID) {
     String question="";
     String qPath=questionsPath+"/"+qID+"/question.json";
 
@@ -302,19 +302,26 @@ void setQuestion(const String qID) {
         ESP_LOGE(QUESTION_TAG, "deserializeJson() failed: %s", error.c_str());
         teamsAndBumpers["GAME"].remove("QUESTION");
     } 
-    
 }
 
-String getQuestionElementJson() {
-    String output="";
+JsonObject getCurrentQuestion() {
     if (teamsAndBumpers["GAME"].isNull()) {
         teamsAndBumpers["GAME"] = JsonObject();
     }
     if (teamsAndBumpers["GAME"]["QUESTION"].isNull()) {
         teamsAndBumpers["GAME"]["QUESTION"] = JsonObject();
     }
+    return teamsAndBumpers["GAME"]["QUESTION"];
+}
 
-    JsonObject tb=teamsAndBumpers["GAME"]["QUESTION"];
+String getQuestionElement(String Element) {
+    return getCurrentQuestion()[Element];
+}
+
+String getQuestionElementJson() {
+    String output="";
+
+    JsonObject tb=getCurrentQuestion();
     if (serializeJson(tb, output)) {
         ESP_LOGI(QUESTION_TAG, "Question: %s", output.c_str());
         return output;
@@ -323,15 +330,33 @@ String getQuestionElementJson() {
         return "";
     }
 }
+void writeQuestion(String id, String question) {
 
-String getQuestionElement(String Element) {
-    if (teamsAndBumpers["GAME"].isNull()) {
-        teamsAndBumpers["GAME"] = JsonObject();
+    ensureDirectoryExists(questionsPath);
+    String fullPath = questionsPath + "/" + id;
+    ensureDirectoryExists(fullPath);
+
+    File jsonFile = LittleFS.open(fullPath + "/question.json", "w");
+    if(jsonFile) {
+        if(jsonFile.print(question)) {
+            ESP_LOGI(QUESTION_TAG, "Fichier JSON créé avec succès dans %s", fullPath.c_str());
+        } else {
+            ESP_LOGE(QUESTION_TAG, "Erreur lors de l'écriture du JSON");
+        }
+        jsonFile.close();
     }
-    if (teamsAndBumpers["GAME"]["QUESTION"].isNull()) {
-        teamsAndBumpers["GAME"]["QUESTION"] = JsonObject();
+}
+
+void setQuestionStatus(String status) {
+    JsonObject tb=getCurrentQuestion();
+    String output;
+    tb["STATUS"]=status;
+    if (serializeJson(tb, output)) {
+        ESP_LOGI(QUESTION_TAG, "Question: %s", output.c_str());
+        writeQuestion(tb["ID"],output);
+    } else {
+        ESP_LOGE(QUESTION_TAG, "Failed to serialize JSON");
     }
-    return teamsAndBumpers["GAME"]["QUESTION"][Element];
 }
 
 String getQuestionTime() {

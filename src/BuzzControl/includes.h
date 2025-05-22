@@ -82,6 +82,7 @@ bool deleteFile(const char* filePath);
 void loadJson(String path);
 void saveJson();
 void processClientBuffer(const String& clientID, AsyncClient* c);
+bool ensureDirectoryExists(const String& path);
 
 // WiFi and server management
 void wifiConnect();

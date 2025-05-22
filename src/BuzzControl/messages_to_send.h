@@ -157,10 +157,8 @@ bool sendBroadcastUDP(const String& action, const String& msg) {
 }
 
 void sendMessageToAllClients(const String& action, const String& msg) {
-
-    ESP_LOGI(SEND_TAG, "Sending broadcast message");
     String message = makeJsonMessage(action, msg);
-    ESP_LOGD(SEND_TAG, "Broadcasting to all message: %s", message.c_str());
+    ESP_LOGD(SEND_TAG, "Broadcasting to Socket et UDP message: %s", message.c_str());
 
     // Envoyer le message en broadcast à tous les clients WebSocket
     ws.textAll(message.c_str());
