@@ -109,6 +109,7 @@ void rebootServer();
 void RAZscores();
 String getQuestions();
 
+void startWebServer();
 /* **** INTERRUPTS *** */
 static void IRAM_ATTR buttonHandler(void *arg);
 void onTimerISR();

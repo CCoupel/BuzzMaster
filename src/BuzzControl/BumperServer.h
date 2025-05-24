@@ -250,6 +250,8 @@ void resetServer() {
   deleteDirectory(dirToRemove.c_str());
 
   loadJson(GameFile);
+  startWebServer();
+  
   sendResetToAll();
   sleep(2);
   sendHelloToAll();

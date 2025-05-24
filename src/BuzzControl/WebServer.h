@@ -305,7 +305,7 @@ void setGlobalWebRoute(AsyncWebServer& server, const char* uri, const char* path
 }
 
 void startWebServer() {
-    String ROOT="/";
+    String ROOT="";
     if (LittleFS.exists("/CURRENT/html/testSPA.html")) {
         ESP_LOGD(FS_TAG, "Directory /CURRENT Exists");
         ROOT="/CURRENT";
