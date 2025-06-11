@@ -153,9 +153,26 @@ export function getFileStorage(fileStorageData) {
 
 export function getQuestions(questionData) {
     questions = questionData;
-    console.log(questions)
+    console.log("Questions initialisées :", questions);
 }
 
+export function updateQuestionFromGame(question) {
+    if (!question || !question.ID) {
+        console.warn("Question invalide.");
+        return;
+    }
+
+    // Recherche la clé existante correspondant à l'ID
+    for (const key in questions) {
+        if (questions[key].ID === question.ID) {
+            questions[key] = question;
+            console.log(`Question ID ${question.ID} mise à jour.`);
+            return;
+        }
+    }
+
+    console.warn(`Question ID ${question.ID} non trouvée dans questions.`);
+}
 
 function showCustomConfirm(message) {
   return new Promise((resolve) => {

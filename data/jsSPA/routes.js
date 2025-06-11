@@ -50,6 +50,15 @@ export const routes = {
                 </table>
             </div>
         </div>
+
+        <div id="score-modal" class="modal hidden">
+            <div class="modal-content">
+                <p id="modal-player-name"></p>
+                <input type="number" id="score-input" />
+                <button id="save-score">Valider</button>
+                <button id="close-modal">Fermer</button>
+            </div>
+        </div>
     `,
 
     '#config': () => `
