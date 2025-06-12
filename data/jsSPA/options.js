@@ -125,7 +125,7 @@ document.addEventListener('DOMContentLoaded', () => {
     callApi("http://buzzcontrol.local/update");
   });
 
-    document.getElementById("updateButton").addEventListener("click", () => {
+  document.getElementById("clearGameButton").addEventListener("click", () => {
     callApi("http://buzzcontrol.local/clearGame");
   });
 });
