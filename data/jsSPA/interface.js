@@ -1,8 +1,9 @@
 import {sendWebSocketMessage} from './websocket.js';
 import { updateBumpers, updateTeams, updateDisplayConfig, configPage } from './configSPA.js';
 import { scorePage } from './scoreSPA.js';
-import { getQuestions, questionList,  getFileStorage, fsInfo } from './questionsSPA.js';
+import { getQuestions, questionList,  getFileStorage, fsInfo, updateQuestionFromGame } from './questionsSPA.js';
 import { teamGamePage, receiveQuestion, questionsSelectList, displayQuestion, updateDisplayGame } from './teamGameSPA.js';
+import { getCoreVersion } from './version.js';
 
 export let gameState = {
     timer: 30,
@@ -39,13 +40,13 @@ export function handleConfigSocketMessage(event) {
     console.log('Message reçu du serveur:', event.data);
     webSocketMessage = JSON.parse(event.data);
         if (webSocketMessage.ACTION) {
-            handleServerAction(webSocketMessage.ACTION, webSocketMessage.MSG, webSocketMessage.FSINFO);
+            handleServerAction(webSocketMessage.ACTION, webSocketMessage.MSG, webSocketMessage.FSINFO, webSocketMessage.VERSION);
         } else {
             console.log("Pas d'action :" , console.log(event.data))
         };
 };
 
-function handleServerAction(action, msg, fsinfo) {
+function handleServerAction(action, msg, fsinfo, version) {
     console.log('Action reçue du serveur:', action);
     switch (action) {
         case 'START':          
@@ -75,6 +76,7 @@ function handleServerAction(action, msg, fsinfo) {
             break;
         case 'UPDATE':
             updateGameState(msg.GAME);
+            updateQuestionFromGame(msg.GAME.QUESTION);
             if (msg.teams && msg.bumpers) {
                 updateTeams(msg.teams);
                 updateBumpers(msg.bumpers);
@@ -94,6 +96,7 @@ function handleServerAction(action, msg, fsinfo) {
                     teamGamePage();
                     break;
             }
+            getCoreVersion(version);
             updateTimeBar(true);
             updateTimer();
             handlePhase(msg.GAME.PHASE);

@@ -10,6 +10,7 @@ function updateScores(data) {
 
 let previousTeamPositions = {};
 let previousPlayerPositions = {};
+let editingPlayerId = null;
 
 function renderTeamScores() {
     const tbody = document.querySelector('#team-scores tbody');
@@ -92,51 +93,37 @@ function renderPlayerScores() {
             teamColor.style.backgroundColor = `rgb(${teams[player.TEAM].COLOR.join(',')})`;
             teamNameDiv.appendChild(teamColor);
         }
-        
+
         const teamNameP = document.createElement('p');
         teamNameP.textContent = player.TEAM || 'Sans équipe';
         teamNameDiv.appendChild(teamNameP);
-        const scoreButtonCell = row.insertCell(3);
 
-        // Créer le bouton -
-        const buttonMinus = document.createElement('button');
-        buttonMinus.className = "button-score";
-        buttonMinus.textContent = '-';
-        buttonMinus.style = "background-color: #2196F3; margin-right: 5px;";
-        buttonMinus.onclick = () => {
-            setBumperPoint(player.id, -1);
-        };
+        const scoreCell = row.insertCell(3);
 
-        // Ajouter le bouton - à la cellule
-        scoreButtonCell.appendChild(buttonMinus);
+        const modalPlayerName = document.getElementById('modal-player-name');
+        const scoreInput = document.getElementById('score-input');
+        const modal = document.getElementById('score-modal');
 
-        // Ajouter le score à la même cellule
-        const scoreText = document.createTextNode(player.SCORE || 0);
-        scoreButtonCell.appendChild(scoreText);
+        // Score cliquable
+        const scoreText = document.createElement('span');
+        scoreText.textContent = player.SCORE || 0;
+        scoreText.style.cursor = 'pointer';
+        scoreText.addEventListener('click', () => {
+            editingPlayerId = player.id;
+            modalPlayerName.textContent = player.NAME || `Joueur ${player.id}`;
+            scoreInput.value = player.SCORE || 0;
+            modal.classList.remove('hidden');
+        });
+        scoreCell.appendChild(scoreText);
 
-        // Créer le bouton +
-        const buttonPlus = document.createElement('button');
-        buttonPlus.className = "button-score";
-        buttonPlus.textContent = '+';
-        buttonPlus.style = "margin-left: 5px;";
-        buttonPlus.onclick = () => {
-            setBumperPoint(player.id, 1);
-        };
-
-        // Ajouter le bouton + à la cellule
-        scoreButtonCell.appendChild(buttonPlus);
-
-        // Vérification si le joueur a changé de position
+        // Animation si changement de position
         if (previousPosition !== undefined && previousPosition !== index + 1) {
-            // Ajouter une classe d'animation si le joueur a changé de position
             row.classList.add('highlight');
         }
 
-        // Mettre à jour la position précédente du joueur
         previousPlayerPositions[player.id] = index + 1;
     });
 
-    // Nettoyage de l'animation après un certain temps
     setTimeout(() => {
         document.querySelectorAll('.highlight').forEach(row => row.classList.remove('highlight'));
     }, 1000);
@@ -155,11 +142,35 @@ function handleResetScore() {
     }
 }
 
+function modalEvents() {
+    const modal = document.getElementById('score-modal');
+    const scoreInput = document.getElementById('score-input');
+    const closeModalBtn = document.getElementById('close-modal');
+    const saveScoreBtn = document.getElementById('save-score');
+    closeModalBtn.onclick = () => modal.classList.add('hidden');
+
+    saveScoreBtn.onclick = () => {
+        const bumpers = getBumpers();
+        if (editingPlayerId && bumpers[editingPlayerId]) {
+            const currentScore = bumpers[editingPlayerId].SCORE || 0;
+            const newScore = parseInt(scoreInput.value) || 0;
+            const diff = newScore - currentScore;
+
+            if (diff !== 0) {
+                setBumperPoint(editingPlayerId, diff);
+            }
+
+            renderPlayerScores();
+            modal.classList.add('hidden');
+        }
+    };
+}
+
 export function scorePage() {
     renderTeamScores();
     renderPlayerScores();
+    modalEvents()
 }
-
 
 document.addEventListener('DOMContentLoaded', () => {
     //connectWebSocket(handleScoreWebSocketMessage);

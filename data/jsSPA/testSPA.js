@@ -10,12 +10,18 @@ function navigate() {
     const route = routes[hash];
 
     if (route) {
-        appDiv.innerHTML = route(); // Appeler la fonction associée à la route
-        attachEvents(hash); // Ajouter des événements spécifiques à la page
+        appDiv.innerHTML = route();
+
+        // Assurer que le DOM est bien rendu avant d'attacher les événements
+        Promise.resolve().then(() => {
+            requestAnimationFrame(() => {
+                attachEvents(hash);
+            });
+        });
     } else {
         appDiv.innerHTML = '<h1>404 - Page non trouvée</h1>';
     }
-};
+}
 
 function navbarColor(location) {
     document.querySelectorAll('.span-navbar').forEach(btn => {

@@ -158,6 +158,14 @@ export function displayQuestion() {
     questionContainer.appendChild(questionDiv);
 }
 
+function updateQuestionClass(element, status) {
+  const statusClasses = ["STARTED", "STOPPED", "AVAILABLE", "REVEALED", "PAUSED"];
+  element.classList.remove(...statusClasses);
+  if (statusClasses.includes(status)) {
+    element.classList.add(status);
+  }
+}
+
 export function questionsSelectList() {
     const container = document.getElementById('questions-select-list');
     if (!container) return;
@@ -174,6 +182,8 @@ export function questionsSelectList() {
         const questionDiv = document.createElement('div');
         questionDiv.className = 'question-item';
         questionDiv.id = `question-${questionData.ID}`;
+
+        updateQuestionClass(questionDiv, questionData.STATUS);
 
         if (selectedQuestion && selectedQuestion.ID === questionData.ID) {
             if (gameState.gamePhase === "PREPARE") {

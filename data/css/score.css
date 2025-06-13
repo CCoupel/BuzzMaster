@@ -101,3 +101,28 @@
 .highlight {
   animation: rowMove 0.5s ease-in-out;
 }
+
+.modal.hidden {
+    display: none;
+}
+.modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0,0,0,0.5);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+.modal-content {
+    background: white;
+    padding: 1em;
+    border-radius: 8px;
+    text-align: center;
+}
+.modal-buttons button {
+    margin: 0 5px;
+    font-size: 1.2em;
+}
