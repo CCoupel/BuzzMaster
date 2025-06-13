@@ -491,7 +491,7 @@ void downloadFiles() {
     int pos = 0;
     while (pos < catalogContent.length()) {
         esp_task_wdt_reset();
-        setLedColor(255*(pos)/catalogContent.length(),128*(pos)/catalogContent.length(),0,true);
+        setLedColor(0,128*(pos)/catalogContent.length(),255*(pos)/catalogContent.length(),true);
         int endPos = catalogContent.indexOf('\n', pos);
         if (endPos == -1) endPos = catalogContent.length();
         

@@ -91,10 +91,18 @@ void w_handleReboot(AsyncWebServerRequest *request) {
     rebootServer();
 }
 
+void w_handleClearGame(AsyncWebServerRequest *request) {
+    ESP_LOGI(WEB_TAG, "Handling reset request");
+    w_handleRedirect(request);
+    clearGame();
+}
+
 void w_handleReset(AsyncWebServerRequest *request) {
     ESP_LOGI(WEB_TAG, "Handling reset request");
     w_handleRedirect(request);
+    clearGame();
     resetServer();
+    rebootServer();
 }
 
 void w_handleListFiles(AsyncWebServerRequest *request) {
@@ -346,6 +354,7 @@ void startWebServer() {
     server.on("/redirect", HTTP_GET, w_handleRedirect);
     server.on("/index.html", w_handleRedirect);
 
+    server.on("/clearGame", HTTP_GET, w_handleClearGame);
     server.on("/reset", HTTP_GET, w_handleReset);
     server.on("/reboot", HTTP_GET, w_handleReboot);
     server.on("/update", HTTP_GET, w_handleUpdate);

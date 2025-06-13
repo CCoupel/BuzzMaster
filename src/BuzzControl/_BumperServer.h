@@ -206,8 +206,8 @@ void sendResetToAll() {
   putMsgToQueue("RESET", "{  }",true);
 }
 
-void resetServer() {
-  ESP_LOGI(BUMPER_TAG, "Resetting server");
+void clearGame(bool notify=true) {
+  ESP_LOGI(BUMPER_TAG, "Clearing Game");
   if (LittleFS.exists(saveGameFile)) {
     if (LittleFS.remove(saveGameFile)) {
       ESP_LOGI(BUMPER_TAG, "Save file deleted successfully");
@@ -218,14 +218,28 @@ void resetServer() {
   String dirToRemove="/files";
   deleteDirectory(dirToRemove.c_str());
   ensureDirectoryExists(dirToRemove);
+  
+  loadJson(GameFile);
+  if (notify) {
+    sendResetToAll();
+    sleep(2);
+    sendHelloToAll();
+  }
+}
+
+void resetServer(bool notify=true) {
+  ESP_LOGI(BUMPER_TAG, "Resetting server");
+  clearGame(false);
 
   dirToRemove="/CURRENT";
   deleteDirectory(dirToRemove.c_str());
 
   loadJson(GameFile);
-  sendResetToAll();
-  sleep(2);
-  sendHelloToAll();
+  if (notify) {
+    sendResetToAll();
+    sleep(2);
+    sendHelloToAll();
+  }
 }
 
 void rebootServer() {

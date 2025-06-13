@@ -140,7 +140,7 @@ void updateTimer(const int Time, const int delta) {
 void stopGame() {
   setGameCurrentTime(0);
   setGamePhase("STOP");
-  setQuestionStatus("STOPED");
+  setQuestionStatus("STOPPED");
   enqueueOutgoingMessage("STOP", getGameJSON().c_str(), true, nullptr);
   
   // Arrêter le timer
@@ -156,11 +156,13 @@ void pauseGame(AsyncClient* client) {
 
 void pauseAllGame() {
   setGamePhase("PAUSE");
+  setQuestionStatus("PAUSED");
   enqueueOutgoingMessage("PAUSE", getGameJSON().c_str(), true, nullptr);
 }
 
 void continueGame() {
   setGamePhase("START");
+  setQuestionStatus("STARTED");
   enqueueOutgoingMessage("CONTINUE", getGameJSON().c_str(), true, nullptr);
 }
 
@@ -181,7 +183,7 @@ void readyGame(const String question) {
     setGamePhase("PREPARE");
     if (question.toInt() > 0) {
       setCurrentQuestion(question);
-      setQuestionStatus("AVAILLABLE");
+      setQuestionStatus("AVAILABLE");
     } else {
       setCurrentQuestion("");
     }
@@ -232,9 +234,8 @@ void sendResetToAll() {
   enqueueOutgoingMessage("RESET", "{  }", true, nullptr);
 }
 
-
-void resetServer() {
-  ESP_LOGI(BUMPER_TAG, "Resetting server");
+void clearGame(bool notify=true) {
+  ESP_LOGI(BUMPER_TAG, "clear Game");
   if (LittleFS.exists(saveGameFile)) {
     if (LittleFS.remove(saveGameFile)) {
       ESP_LOGI(BUMPER_TAG, "Save file deleted successfully");
@@ -245,21 +246,25 @@ void resetServer() {
   String dirToRemove = "/files";
   deleteDirectory(dirToRemove.c_str());
   ensureDirectoryExists(dirToRemove);
+  loadJson(GameFile);
+  if (notify) {
+    sendResetToAll();
+    sleep(2);
+    sendHelloToAll();
+    sendQuestions();
+  }
+}
 
-  dirToRemove = "/CURRENT";
+void resetServer() {
+  String dirToRemove = "/CURRENT";
   deleteDirectory(dirToRemove.c_str());
 
-  loadJson(GameFile);
-  startWebServer();
-  
-  sendResetToAll();
-  sleep(2);
-  sendHelloToAll();
-  sendQuestions();
+  clearGame();
 }
 
 void rebootServer() {
   ESP_LOGI(BUMPER_TAG, "Rebooting server");
+  setLedColor(255,16,16,true);
   ESP.restart();
 }
 
