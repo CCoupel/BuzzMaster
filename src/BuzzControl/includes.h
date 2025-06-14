@@ -49,7 +49,7 @@ String jsonBuffer; // Tampon pour assembler les données JSON
 
 WiFiUDP ntpUDP;
 static const char* GameFile = "/config/game.json";
-static const char* saveGameFile = "/config/game.json.save";
+static const char* saveGameFile = "/files/game.json.save";
 static const String questionsPath = "/files/questions";
 
 SemaphoreHandle_t questionMutex = NULL;

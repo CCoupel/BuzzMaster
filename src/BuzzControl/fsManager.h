@@ -10,16 +10,213 @@
 #include "esp_littlefs.h"
 #include <LittleFS.h>
 
+#define DEST_FS_USES_LITTLEFS
+#include <ESP32-targz.h>
 
 static const char* FS_TAG = "FS_MANAGER";
 String VERSION_FILE="/config/version.txt";
 String TEMP_DIR="/temp_update";
-String BACKUP_DIR="/backup";
+//String BACKUP_DIR="/backup";
 
 String baseURL="/config/base.url";
 String baseFILE="/config/catalog.url";
 
 bool createDirectories(const String& path);
+// RESTAURE //
+
+
+
+
+
+
+
+
+
+// BACKUP //
+// Classe Stream simple pour recevoir les données TAR d'ESP32-targz
+class SimpleStreamBuffer : public Stream {
+private:
+    uint8_t* buffer;
+    size_t bufferSize;
+    size_t dataSize;
+    size_t readPos;
+    
+public:
+    SimpleStreamBuffer(size_t size = 16384) : bufferSize(size), dataSize(0), readPos(0) {
+        buffer = (uint8_t*)malloc(size);
+    }
+    
+    ~SimpleStreamBuffer() {
+        if (buffer) free(buffer);
+    }
+    
+    bool isValid() { return buffer != nullptr; }
+    
+    // Interface Stream pour ESP32-targz (écriture)
+    size_t write(uint8_t data) override {
+        if (dataSize < bufferSize) {
+            buffer[dataSize++] = data;
+            return 1;
+        }
+        return 0;
+    }
+    
+    size_t write(const uint8_t *data, size_t len) override {
+        size_t available = bufferSize - dataSize;
+        size_t toWrite = min(len, available);
+        if (toWrite > 0) {
+            memcpy(buffer + dataSize, data, toWrite);
+            dataSize += toWrite;
+        }
+        return toWrite;
+    }
+    
+    // Interface Stream (pas utilisé ici)
+    int available() override { return dataSize - readPos; }
+    int read() override { return (readPos < dataSize) ? buffer[readPos++] : -1; }
+    int peek() override { return (readPos < dataSize) ? buffer[readPos] : -1; }
+    void flush() override {}
+    
+    // Méthodes pour récupérer les données
+    size_t getDataSize() { return dataSize; }
+    uint8_t* getData() { return buffer; }
+    
+    void reset() {
+        dataSize = 0;
+        readPos = 0;
+    }
+};
+
+// Variables globales pour le backup
+static SimpleStreamBuffer* tarBuffer = nullptr;
+static bool tarReady = false;
+static size_t tarSentBytes = 0;
+
+// Génère le nom de fichier de backup
+String generateBackupFilename() {
+    time_t now = time(nullptr);
+    struct tm* timeinfo = localtime(&now);
+    
+    char filename[64];
+    strftime(filename, sizeof(filename), "buzzcontrol_backup_%Y%m%d_%H%M%S.tar", timeinfo);
+    
+    return String(filename);
+}
+
+// Initialise le backup TAR
+bool initTarBackup() {
+    // Nettoyer toute session précédente
+    if (tarBuffer) {
+        delete tarBuffer;
+        tarBuffer = nullptr;
+    }
+    
+    tarReady = false;
+    tarSentBytes = 0;
+    
+    // Vérifier que le répertoire /files existe
+    if (!LittleFS.exists("/files")) {
+        ESP_LOGW(FS_TAG, "Répertoire /files non trouvé");
+        return false;
+    }
+    
+    // Reset watchdog avant opération longue
+    yield();
+    
+    // Créer le buffer pour recevoir le TAR
+    tarBuffer = new SimpleStreamBuffer(32768); // 32KB buffer
+    if (!tarBuffer || !tarBuffer->isValid()) {
+        ESP_LOGE(FS_TAG, "Échec allocation buffer TAR");
+        if (tarBuffer) {
+            delete tarBuffer;
+            tarBuffer = nullptr;
+        }
+        return false;
+    }
+    
+    // Reset watchdog avant collecte
+    yield();
+    
+    // Collecter les entités du répertoire /files
+    std::vector<TAR::dir_entity_t> entities;
+    TarPacker::collectDirEntities(&entities, &LittleFS, "/files");
+    
+    if (entities.empty()) {
+        ESP_LOGW(FS_TAG, "Aucun fichier trouvé dans /files");
+        delete tarBuffer;
+        tarBuffer = nullptr;
+        return false;
+    }
+    
+    ESP_LOGI(FS_TAG, "Collecté %d entités depuis /files", entities.size());
+    
+    // Reset watchdog avant génération TAR (opération la plus longue)
+    yield();
+    
+    // Générer le TAR en une seule fois
+    size_t tarSize = TarPacker::pack_files(&LittleFS, entities, tarBuffer);
+    
+    // Reset watchdog après génération
+    yield();
+    
+    if (tarSize > 0) {
+        ESP_LOGI(FS_TAG, "TAR généré avec succès: %zu bytes", tarSize);
+        tarReady = true;
+        return true;
+    } else {
+        ESP_LOGE(FS_TAG, "Erreur lors de la génération du TAR");
+        delete tarBuffer;
+        tarBuffer = nullptr;
+        return false;
+    }
+}
+
+// Récupère le prochain chunk du TAR
+size_t getTarChunk(uint8_t* output, size_t maxLen) {
+    if (!tarBuffer || !tarReady) {
+        return 0;
+    }
+    
+    // Reset watchdog pendant l'envoi (opération potentiellement longue)
+    yield();
+    
+    size_t totalSize = tarBuffer->getDataSize();
+    size_t remaining = totalSize - tarSentBytes;
+    
+    if (remaining == 0) {
+        // Terminé
+        return 0;
+    }
+    
+    size_t toSend = min(remaining, maxLen);
+    memcpy(output, tarBuffer->getData() + tarSentBytes, toSend);
+    tarSentBytes += toSend;
+    
+    if (tarSentBytes >= totalSize) {
+        ESP_LOGI(FS_TAG, "Backup TAR envoyé complètement: %zu bytes", tarSentBytes);
+    }
+    
+    return toSend;
+}
+
+// Nettoie le backup TAR
+void cleanupTarBackup() {
+    if (tarBuffer) {
+        delete tarBuffer;
+        tarBuffer = nullptr;
+    }
+    tarReady = false;
+    tarSentBytes = 0;
+    ESP_LOGI(FS_TAG, "Backup TAR nettoyé");
+}
+
+
+
+
+
+
+
+
 
 /***** FILES ********/
 String readFile(const String& path, const String& defaultValue) {

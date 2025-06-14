@@ -4,6 +4,10 @@
         "*.py": "python",
         "system_error": "cpp",
         "random": "cpp",
-        "functional": "cpp"
+        "functional": "cpp",
+        "deque": "cpp",
+        "string": "cpp",
+        "vector": "cpp",
+        "new": "cpp"
     }
 }
