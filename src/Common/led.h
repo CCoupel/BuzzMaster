@@ -24,7 +24,7 @@ int currentIntensity = 255;
 Adafruit_DotStar strip_sk98 = Adafruit_DotStar(NUMPIXELS, DATAPIN_sk98, CLOCKPIN_sk98, DOTSTAR_BGR);
 
 void showPixels() {
-  strip_ws28.show();
+ // strip_ws28.show();
   strip_sk98.show();
 
 }
@@ -65,8 +65,8 @@ void setLedIntensity(int intensity) {
 }
 
 void initLED() {
-  setLedColor(0, 0, 0);
-  setLedIntensity(0);
+  setLedColor(128, 128, 128);
+  setLedIntensity(128);
 
   //strip_ws28.begin();
   strip_sk98.begin();
