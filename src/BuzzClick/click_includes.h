@@ -22,10 +22,10 @@ String serverIP="";
 String serverPort="";
 
 AsyncClient* client = new AsyncClient();
-/*
+
 const char* WIFI_SSID     = "buzzmaster";
 const char* WIFI_PASSWORD = "BuzzMaster";
-*/
+const int CONTROLER_PORT = 1234;
 
 // Créer une instance de la classe WiFiUDP
   WiFiUDP bcast;

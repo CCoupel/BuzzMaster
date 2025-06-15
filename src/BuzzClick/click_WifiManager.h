@@ -58,7 +58,7 @@ bool connectToWifi() {
   ESP_LOGI(WIFI_TAG,"Tentative de connexion WiFi...");
   WiFi.mode(WIFI_STA);
   //WiFi.begin(ssid, password);
-  WiFi.begin(apSSID, apPASSWORD);
+  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
   unsigned long startAttemptTime = millis();
 
   while (WiFi.status() != WL_CONNECTED && millis() - startAttemptTime < WIFI_TIMEOUT_MS) {

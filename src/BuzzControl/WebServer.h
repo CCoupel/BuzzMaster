@@ -91,10 +91,18 @@ void w_handleReboot(AsyncWebServerRequest *request) {
     rebootServer();
 }
 
+void w_handleClearGame(AsyncWebServerRequest *request) {
+    ESP_LOGI(WEB_TAG, "Handling reset request");
+    w_handleRedirect(request);
+    clearGame();
+}
+
 void w_handleReset(AsyncWebServerRequest *request) {
     ESP_LOGI(WEB_TAG, "Handling reset request");
     w_handleRedirect(request);
+    clearGame();
     resetServer();
+    rebootServer();
 }
 
 void w_handleListFiles(AsyncWebServerRequest *request) {
@@ -304,8 +312,42 @@ void setGlobalWebRoute(AsyncWebServer& server, const char* uri, const char* path
     });
 }
 
+void handleBackup(AsyncWebServerRequest *request) {
+    // Initialiser le backup TAR
+    if (!initTarBackup()) {
+        request->send(500, "text/plain", "Aucun fichier à sauvegarder dans /files");
+        return;
+    }
+    
+    String filename = generateBackupFilename();
+    
+    AsyncWebServerResponse *response = request->beginChunkedResponse(
+        "application/x-tar",
+        [](uint8_t *buffer, size_t maxLen, size_t index) -> size_t {
+            size_t bytesRead = getTarChunk(buffer, maxLen);
+            
+            // Nettoyer automatiquement quand terminé
+            if (bytesRead == 0) {
+                cleanupTarBackup();
+            }
+            
+            return bytesRead;
+        }
+    );
+    
+    response->addHeader("Content-Disposition", "attachment; filename=\"" + filename + "\"");
+    response->addHeader("Content-Type", "application/x-tar");
+    
+    request->send(response);
+    
+    ESP_LOGI("WEBSERVER", "Backup démarré: %s", filename.c_str());
+}
+
+
+
+
 void startWebServer() {
-    String ROOT="/";
+    String ROOT="";
     if (LittleFS.exists("/CURRENT/html/testSPA.html")) {
         ESP_LOGD(FS_TAG, "Directory /CURRENT Exists");
         ROOT="/CURRENT";
@@ -346,11 +388,13 @@ void startWebServer() {
     server.on("/redirect", HTTP_GET, w_handleRedirect);
     server.on("/index.html", w_handleRedirect);
 
+    server.on("/clearGame", HTTP_GET, w_handleClearGame);
     server.on("/reset", HTTP_GET, w_handleReset);
     server.on("/reboot", HTTP_GET, w_handleReboot);
     server.on("/update", HTTP_GET, w_handleUpdate);
     server.on("/listFiles",HTTP_GET, w_handleListFiles);
     server.on("/listGame",HTTP_GET, w_handleListGame);
+    server.on("/backup", HTTP_GET, handleBackup);
 
     server.on("/version", HTTP_GET, [](AsyncWebServerRequest *request){request->send(200,"text/plain",VERSION);});
     server.on("/background", HTTP_POST, w_handleUploadBackgroundComplete, w_handleUploadBackgroundFile);

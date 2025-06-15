@@ -97,9 +97,9 @@ void onConnect(void* arg, AsyncClient* c) {
 }
 
 void onData(void* arg, AsyncClient* c, void* data, size_t len) {
-/*  String s_data = String((char*)data).substring(0, len);
-  ESP_LOGI(SRV_TAG, "DATA received: %s", s_data.c_str());
-  
+  String s_data = String((char*)data).substring(0, len);
+  ESP_LOGE(SRV_TAG, "direct DATA received: %s", s_data.c_str());
+/*
   jsonBuffer += s_data;
   int endOfJson;
   while ((endOfJson = jsonBuffer.indexOf('\n')) > 0) {
@@ -107,7 +107,7 @@ void onData(void* arg, AsyncClient* c, void* data, size_t len) {
     jsonBuffer = jsonBuffer.substring(endOfJson + 1);
     parseJSON(jsonPart, c);
   }
-  */
+*/
 }
 
 void onDisconnect(void* arg, AsyncClient* c) {
@@ -283,7 +283,8 @@ ESP_LOGI(SRV_TAG, "Game Phase=%s",game_phase);
   }
   else if (strcmp(game_phase, "PREPARE")==0)
   {
-    setLedColor(0, 0, 0,true);
+    setLedColor(colorArray[0], colorArray[1], colorArray[2]);
+    setLedIntensity(32);
   }
 }
 

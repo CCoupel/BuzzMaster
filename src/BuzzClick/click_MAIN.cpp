@@ -50,7 +50,8 @@ void setup()
 
   Serial.begin(921600);
   Serial.println("STARTING!!");
-
+  setLedColor(255,255,255);
+  setLedIntensity(128);
   esp_log_level_set("*", ESP_LOG_INFO);
   ESP_LOGI(MAIN_TAG, "Starting up...");
   

@@ -18,7 +18,6 @@
 #include "messages_to_send.h"
 #include "BumperServer.h"
 #include "WebServer.h"
-//#include "sdManager.h"
 
 static const char* MAIN_TAG = "BUZZCONTROL";
 const uint16_t logPort = 8888;  // Port UDP pour les logs
@@ -101,6 +100,7 @@ sleep(2);
   setupDNSServer();
 
   startWebServer();
+
   startBumperServer();
   setLedColor(0, 128, 0, true);
 
