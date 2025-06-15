@@ -16,12 +16,20 @@ body {
 }
 
 #configuration-buttons {
-    max-width: 600px;
     margin: 20px auto;
     background-color: #fff;
     border: 1px solid #ddd;
     border-radius: 12px;
     padding: 20px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+
+#restoreForm {
+    margin: 5px auto;
+    background-color: #fff;
+    border: 1px solid #ddd;
+    border-radius: 12px;
+    padding: 5px 20px;
     box-shadow: 0 2px 8px rgba(0,0,0,0.1);
 }
 

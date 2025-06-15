@@ -128,4 +128,16 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById("clearGameButton").addEventListener("click", () => {
     callApi("http://buzzcontrol.local/clearGame");
   });
+
+  document.getElementById('listFilesButton').addEventListener('click', () => {
+    window.open('http://buzzcontrol.local/listFiles', '_blank');
+  });
+
+  document.getElementById('listGameButton').addEventListener('click', () => {
+    window.open('http://buzzcontrol.local/listGame', '_blank');
+  });
+
+  document.getElementById('backupButton').addEventListener('click', () => {
+    window.open('http://buzzcontrol.local/backup', '_blank');
+  });
 });
