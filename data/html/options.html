@@ -21,6 +21,16 @@
         <button id="resetButton">Reset</button>
         <button id="updateButton">Update</button>
         <button id="clearGameButton">Clear Game</button>
+        <button id="listFilesButton">List Files</button>
+        <button id="listGameButton">List Game</button>
+        <button id="backupButton">Backup</button>
+        <button id="restoreButton">Restore</button>
+    </div>
+    <div id="restoreForm">
+        <form method="POST" action="http://buzzcontrol.local/restore" enctype="multipart/form-data">
+            <input type="file" name="backup" accept=".tar" required>
+            <button type="submit">Restaurer le backup</button>
+        </form>
     </div>
 </body>
 </html>
