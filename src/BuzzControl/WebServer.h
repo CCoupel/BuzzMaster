@@ -343,6 +343,30 @@ void handleBackup(AsyncWebServerRequest *request) {
     ESP_LOGI("WEBSERVER", "Backup démarré: %s", filename.c_str());
 }
 
+// Handler pour upload de fichier TAR
+void handleRestore(AsyncWebServerRequest *request, String filename, 
+                  size_t index, uint8_t *data, size_t len, bool final) {
+    
+    if (index == 0) {
+        ESP_LOGI("WEBSERVER", "Début restore: %s", filename.c_str());
+        if (!initTarRestore()) {
+            request->send(500, "text/plain", "Erreur init restore");
+            return;
+        }
+    }
+    
+    if (len > 0) {
+        processTarChunk(data, len);
+    }
+    
+    if (final) {
+        bool success = finalizeTarRestore();
+        request->send(success ? 200 : 500, "text/plain", 
+                     success ? "Restore réussi" : "Erreur restore");
+        cleanupTarRestore();
+    }
+}
+
 
 
 
@@ -394,7 +418,10 @@ void startWebServer() {
     server.on("/update", HTTP_GET, w_handleUpdate);
     server.on("/listFiles",HTTP_GET, w_handleListFiles);
     server.on("/listGame",HTTP_GET, w_handleListGame);
+
     server.on("/backup", HTTP_GET, handleBackup);
+    server.on("/restore", HTTP_POST, [](AsyncWebServerRequest *request){}, handleRestore);
+
 
     server.on("/version", HTTP_GET, [](AsyncWebServerRequest *request){request->send(200,"text/plain",VERSION);});
     server.on("/background", HTTP_POST, w_handleUploadBackgroundComplete, w_handleUploadBackgroundFile);

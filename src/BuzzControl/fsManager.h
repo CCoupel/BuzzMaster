@@ -22,15 +22,6 @@ String baseURL="/config/base.url";
 String baseFILE="/config/catalog.url";
 
 bool createDirectories(const String& path);
-// RESTAURE //
-
-
-
-
-
-
-
-
 
 // BACKUP //
 // Classe Stream simple pour recevoir les données TAR d'ESP32-targz
@@ -210,8 +201,302 @@ void cleanupTarBackup() {
     ESP_LOGI(FS_TAG, "Backup TAR nettoyé");
 }
 
+// RESTAURE //
 
+// ========== PARTIE RESTORE TAR ==========
+// À ajouter dans fsManager.h après les fonctions de backup
 
+// Classe pour traiter les données TAR en streaming lors du restore
+// Classe Stream pour recevoir les données TAR depuis HTTP en streaming
+class HttpTarStream : public Stream {
+private:
+    uint8_t* buffer;
+    size_t bufferSize;
+    size_t writePos;
+    size_t readPos;
+    size_t totalReceived; // Nouvelle variable pour tracer la taille totale
+    bool streamComplete;
+    
+public:
+    HttpTarStream(size_t size = 8192) : 
+        bufferSize(size), writePos(0), readPos(0), totalReceived(0), streamComplete(false) {
+        buffer = (uint8_t*)malloc(size);
+    }
+    
+    ~HttpTarStream() {
+        if (buffer) free(buffer);
+    }
+    
+    bool isValid() { return buffer != nullptr; }
+    
+    // Méthodes pour recevoir les données HTTP
+    size_t receiveData(const uint8_t* data, size_t len) {
+        if (!buffer || streamComplete) return 0;
+        
+        size_t space = bufferSize - writePos;
+        size_t toWrite = min(len, space);
+        
+        if (toWrite > 0) {
+            memcpy(buffer + writePos, data, toWrite);
+            writePos += toWrite;
+            totalReceived += toWrite; // Mettre à jour la taille totale
+        }
+        
+        yield(); // Céder la main pendant la réception
+        return toWrite;
+    }
+    
+    void markComplete() {
+        streamComplete = true;
+    }
+    
+    bool isComplete() {
+        return streamComplete && (readPos >= writePos);
+    }
+    
+    // Nouvelle méthode pour obtenir la taille totale reçue
+    size_t getTotalSize() {
+        return totalReceived;
+    }
+    
+    // Interface Stream pour ESP32-targz (lecture)
+    int available() override {
+        return writePos - readPos;
+    }
+    
+    int read() override {
+        if (readPos < writePos) {
+            return buffer[readPos++];
+        }
+        return -1;
+    }
+    
+    int peek() override {
+        if (readPos < writePos) {
+            return buffer[readPos];
+        }
+        return -1;
+    }
+    
+    void flush() override {
+        // Compacter le buffer : déplacer les données non lues au début
+        if (readPos > 0 && readPos < writePos) {
+            memmove(buffer, buffer + readPos, writePos - readPos);
+            writePos -= readPos;
+            readPos = 0;
+        }
+    }
+    
+    // Interface Stream pour écriture (pas utilisé)
+    size_t write(uint8_t) override { return 0; }
+    size_t write(const uint8_t*, size_t) override { return 0; }
+    
+    // Méthodes utilitaires
+    bool hasSpace() {
+        return writePos < bufferSize;
+    }
+    
+    size_t getFreeSpace() {
+        return bufferSize - writePos;
+    }
+    
+    void reset() {
+        writePos = 0;
+        readPos = 0;
+        totalReceived = 0;
+        streamComplete = false;
+    }
+};
+
+// Variables globales pour le restore
+static HttpTarStream* tarStream = nullptr;
+static TarUnpacker* tarUnpacker = nullptr;
+static bool restoreInProgress = false;
+static bool restoreSuccess = false;
+static bool tarGzFSInitialized = false;
+
+// Déclaration anticipée
+void cleanupTarRestore();
+
+// Initialise tarGzFS (requis par ESP32-targz)
+bool initTarGzFS() {
+    if (tarGzFSInitialized) {
+        return true;
+    }
+    
+    // tarGzFS est un alias automatique créé par ESP32-targz quand DEST_FS_USES_LITTLEFS est défini
+    // Il pointe vers LittleFS
+    if (!tarGzFS.begin()) {
+        ESP_LOGE(FS_TAG, "Échec initialisation tarGzFS");
+        return false;
+    }
+    
+    tarGzFSInitialized = true;
+    ESP_LOGI(FS_TAG, "tarGzFS initialisé");
+    return true;
+}
+
+// Initialise le restore TAR streaming
+bool initTarRestore() {
+    if (restoreInProgress) {
+        ESP_LOGW(FS_TAG, "Un restore est déjà en cours");
+        return false;
+    }
+    
+    // Nettoyer toute session précédente
+    cleanupTarRestore();
+    
+    yield();
+    
+    // Initialiser tarGzFS (OBLIGATOIRE)
+    if (!initTarGzFS()) {
+        ESP_LOGE(FS_TAG, "Impossible d'initialiser tarGzFS");
+        return false;
+    }
+    
+    // Créer le stream pour recevoir les données HTTP
+    tarStream = new HttpTarStream();
+    if (!tarStream || !tarStream->isValid()) {
+        ESP_LOGE(FS_TAG, "Échec allocation HttpTarStream");
+        cleanupTarRestore();
+        return false;
+    }
+    
+    // Créer le TarUnpacker d'ESP32-targz
+    tarUnpacker = new TarUnpacker();
+    if (!tarUnpacker) {
+        ESP_LOGE(FS_TAG, "Échec création TarUnpacker");
+        cleanupTarRestore();
+        return false;
+    }
+    
+    // Configuration du unpacker (basée sur l'exemple)
+    tarUnpacker->haltOnError(false); // Continuer en cas d'erreur mineure
+    tarUnpacker->setTarVerify(false); // Pas de vérification pour économiser la RAM
+    
+    // Setup callbacks comme dans l'exemple
+    tarUnpacker->setupFSCallbacks(targzTotalBytesFn, targzFreeBytesFn);
+    
+    // Callbacks de progression
+    tarUnpacker->setTarProgressCallback([](uint8_t progress) {
+        static uint8_t lastProgress = 255;
+        if (progress != lastProgress && progress % 20 == 0) {
+            ESP_LOGI(FS_TAG, "Restore progress: %d%%", progress);
+            lastProgress = progress;
+        }
+    });
+    
+    tarUnpacker->setTarStatusProgressCallback([](const char* name, size_t size, size_t total_unpacked) {
+        ESP_LOGI(FS_TAG, "Extrait: %s (%zu bytes)", name, size);
+    });
+    
+    tarUnpacker->setTarMessageCallback(BaseUnpacker::targzPrintLoggerCallback);
+    
+    // S'assurer que le répertoire de destination existe
+    ensureDirectoryExists("/files");
+    
+    restoreInProgress = true;
+    restoreSuccess = false;
+    
+    ESP_LOGI(FS_TAG, "Restore TAR streaming initialisé");
+    return true;
+}
+
+// Traite un chunk de données TAR reçues depuis HTTP
+size_t processTarChunk(const uint8_t* data, size_t len) {
+    if (!tarStream || !restoreInProgress) {
+        ESP_LOGE(FS_TAG, "Restore non initialisé");
+        return 0;
+    }
+    
+    yield();
+    
+    // Recevoir les données dans le stream
+    size_t received = tarStream->receiveData(data, len);
+    
+    if (received != len) {
+        ESP_LOGW(FS_TAG, "Chunk partiellement reçu: %zu/%zu bytes", received, len);
+    }
+    
+    return received;
+}
+
+// Finalise le restore en traitant toutes les données
+bool finalizeTarRestore() {
+    if (!tarStream || !tarUnpacker || !restoreInProgress) {
+        ESP_LOGW(FS_TAG, "Restore non initialisé pour finalisation");
+        return false;
+    }
+    
+    yield();
+    
+    // Marquer le stream comme complet
+    tarStream->markComplete();
+    
+    ESP_LOGI(FS_TAG, "Début extraction TAR streaming...");
+    
+    // Obtenir la taille totale du TAR reçu
+    size_t streamSize = tarStream->getTotalSize();
+    if (streamSize == 0) {
+        ESP_LOGW(FS_TAG, "Aucune donnée TAR reçue");
+        restoreInProgress = false;
+        return false;
+    }
+    
+    ESP_LOGI(FS_TAG, "Taille totale du TAR reçu: %zu bytes", streamSize);
+    
+    // Utiliser la signature correcte de l'exemple Unpack_tar_stream.ino
+    // Format : tarStreamExpander(Stream* stream, size_t streamSize, fs::FS& destinationFS, const char* destinationPath)
+    bool success = tarUnpacker->tarStreamExpander(tarStream, streamSize, tarGzFS, "/");
+    
+    if (success) {
+        ESP_LOGI(FS_TAG, "Restore TAR terminé avec succès");
+        restoreSuccess = true;
+    } else {
+        int errorCode = tarUnpacker->tarGzGetError();
+        ESP_LOGE(FS_TAG, "Erreur restore TAR, code: %d", errorCode);
+        restoreSuccess = false;
+    }
+    
+    // Nettoyer
+    restoreInProgress = false;
+    
+    return success;
+}
+
+// Nettoie le restore TAR
+void cleanupTarRestore() {
+    if (tarUnpacker) {
+        delete tarUnpacker;
+        tarUnpacker = nullptr;
+    }
+    
+    if (tarStream) {
+        delete tarStream;
+        tarStream = nullptr;
+    }
+    
+    restoreInProgress = false;
+    ESP_LOGI(FS_TAG, "Restore TAR nettoyé");
+}
+
+// Vérifie si un restore est en cours
+bool isRestoreInProgress() {
+    return restoreInProgress;
+}
+
+// Obtient le status du restore
+String getRestoreStatus() {
+    if (!restoreInProgress) {
+        if (restoreSuccess) {
+            return "Restore terminé avec succès";
+        } else {
+            return "Aucun restore en cours";
+        }
+    }
+    
+    return "Restore en cours...";
+}
 
 
 
