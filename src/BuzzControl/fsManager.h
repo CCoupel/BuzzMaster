@@ -12,6 +12,7 @@
 
 #define DEST_FS_USES_LITTLEFS
 #include <ESP32-targz.h>
+#include <vector>
 
 static const char* FS_TAG = "FS_MANAGER";
 String VERSION_FILE="/config/version.txt";
@@ -24,66 +25,372 @@ String baseFILE="/config/catalog.url";
 bool createDirectories(const String& path);
 
 // BACKUP //
-// Classe Stream simple pour recevoir les données TAR d'ESP32-targz
-class SimpleStreamBuffer : public Stream {
+class StreamingTarBuffer : public Stream {
 private:
-    uint8_t* buffer;
-    size_t bufferSize;
-    size_t dataSize;
-    size_t readPos;
+    std::vector<TAR::dir_entity_t> entities;
+    size_t currentEntityIndex;
+    size_t currentFileOffset;
+    File currentFile;
+    bool headerSent;
+    size_t totalBytesGenerated;
+    size_t pendingPadding;
+    size_t endBlocksSent; // Pour compter les blocs de fin envoyés
+    
+    // Buffer temporaire pour les headers TAR
+    uint8_t headerBuffer[512];
+    size_t headerPos;
     
 public:
-    SimpleStreamBuffer(size_t size = 16384) : bufferSize(size), dataSize(0), readPos(0) {
-        buffer = (uint8_t*)malloc(size);
+    StreamingTarBuffer() : currentEntityIndex(0), currentFileOffset(0), 
+                          headerSent(false), totalBytesGenerated(0), headerPos(0),
+                          pendingPadding(0), endBlocksSent(0) {}
+    
+    ~StreamingTarBuffer() {
+        if (currentFile) currentFile.close();
     }
     
-    ~SimpleStreamBuffer() {
-        if (buffer) free(buffer);
-    }
-    
-    bool isValid() { return buffer != nullptr; }
-    
-    // Interface Stream pour ESP32-targz (écriture)
-    size_t write(uint8_t data) override {
-        if (dataSize < bufferSize) {
-            buffer[dataSize++] = data;
-            return 1;
+    bool initialize() {
+        entities.clear();
+        currentEntityIndex = 0;
+        currentFileOffset = 0;
+        headerSent = false;
+        totalBytesGenerated = 0;
+        headerPos = 0;
+        pendingPadding = 0;
+        endBlocksSent = 0;
+        
+        if (currentFile) {
+            currentFile.close();
         }
-        return 0;
-    }
-    
-    size_t write(const uint8_t *data, size_t len) override {
-        size_t available = bufferSize - dataSize;
-        size_t toWrite = min(len, available);
-        if (toWrite > 0) {
-            memcpy(buffer + dataSize, data, toWrite);
-            dataSize += toWrite;
+        
+        yield(); // Reset watchdog
+        
+        // Collecter seulement le CONTENU de /files (pas le dossier lui-même)
+        std::vector<TAR::dir_entity_t> allEntities;
+        TarPacker::collectDirEntities(&allEntities, &LittleFS, "/files");
+        
+        // Filtrer pour exclure le dossier /files lui-même
+        for (const auto& entity : allEntities) {
+            if (entity.path != "/files") {  // Exclure le dossier racine /files
+                entities.push_back(entity);
+            }
         }
-        return toWrite;
+        
+        if (entities.empty()) {
+            ESP_LOGW(FS_TAG, "Aucun contenu trouvé dans /files");
+            return false;
+        }
+        
+        ESP_LOGI(FS_TAG, "Collecté %d entités depuis le contenu de /files", entities.size());
+        for (const auto& entity : entities) {
+            ESP_LOGD(FS_TAG, "  - %s (%s)", entity.path.c_str(), entity.is_dir ? "DIR" : "FILE");
+        }
+        return true;
     }
     
-    // Interface Stream (pas utilisé ici)
-    int available() override { return dataSize - readPos; }
-    int read() override { return (readPos < dataSize) ? buffer[readPos++] : -1; }
-    int peek() override { return (readPos < dataSize) ? buffer[readPos] : -1; }
+    // Méthodes Stream non utilisées mais nécessaires
+    size_t write(uint8_t data) override { return 0; }
+    size_t write(const uint8_t *data, size_t len) override { return 0; }
+    int peek() override { return -1; }
     void flush() override {}
     
-    // Méthodes pour récupérer les données
-    size_t getDataSize() { return dataSize; }
-    uint8_t* getData() { return buffer; }
+    int available() override {
+        // Retourne qu'il y a des données disponibles si :
+        // - On n'a pas fini tous les fichiers
+        // - Ou on a du padding en attente
+        // - Ou on n'a pas encore envoyé les 2 blocs de fin (1024 bytes)
+        return (currentEntityIndex < entities.size() || pendingPadding > 0 || endBlocksSent < 1024) ? 1 : 0;
+    }
     
-    void reset() {
-        dataSize = 0;
-        readPos = 0;
+    int read() override {
+        uint8_t byte;
+        return (readBytes(&byte, 1) == 1) ? byte : -1;
+    }
+    
+    size_t readBytes(uint8_t* buffer, size_t length) {
+        size_t bytesRead = 0;
+        
+        while (bytesRead < length) {
+            yield(); // Reset watchdog périodiquement
+            
+            // Gérer le padding en attente d'abord
+            if (pendingPadding > 0) {
+                size_t paddingToAdd = min(pendingPadding, length - bytesRead);
+                memset(buffer + bytesRead, 0, paddingToAdd);
+                bytesRead += paddingToAdd;
+                pendingPadding -= paddingToAdd;
+                totalBytesGenerated += paddingToAdd;
+                continue;
+            }
+            
+            // Si on a fini tous les fichiers, envoyer les blocs de fin
+            if (currentEntityIndex >= entities.size()) {
+                if (endBlocksSent < 1024) {
+                    size_t endBytesToSend = min((size_t)(1024 - endBlocksSent), length - bytesRead);
+                    memset(buffer + bytesRead, 0, endBytesToSend);
+                    bytesRead += endBytesToSend;
+                    endBlocksSent += endBytesToSend;
+                    totalBytesGenerated += endBytesToSend;
+                    continue;
+                } else {
+                    // Vraiment fini
+                    break;
+                }
+            }
+            
+            // Si on n'a pas encore envoyé le header pour le fichier courant
+            if (!headerSent) {
+                size_t headerBytesAvailable = 512 - headerPos;
+                if (headerBytesAvailable > 0) {
+                    // Générer le header TAR si pas encore fait
+                    if (headerPos == 0) {
+                        generateTarHeader(entities[currentEntityIndex]);
+                    }
+                    
+                    size_t toCopy = min(headerBytesAvailable, length - bytesRead);
+                    memcpy(buffer + bytesRead, headerBuffer + headerPos, toCopy);
+                    headerPos += toCopy;
+                    bytesRead += toCopy;
+                    totalBytesGenerated += toCopy;
+                    
+                    if (headerPos >= 512) {
+                        headerSent = true;
+                        headerPos = 0;
+                        
+                        // Ouvrir le fichier s'il ne s'agit pas d'un répertoire
+                        if (!entities[currentEntityIndex].is_dir) {
+                            currentFile = LittleFS.open(entities[currentEntityIndex].path.c_str(), "r");
+                            if (!currentFile) {
+                                ESP_LOGE(FS_TAG, "Impossible d'ouvrir le fichier: %s", 
+                                        entities[currentEntityIndex].path.c_str());
+                                // Passer au fichier suivant
+                                nextEntity();
+                                continue;
+                            }
+                        } else {
+                            // Pour un répertoire, passer directement au suivant
+                            nextEntity();
+                            continue;
+                        }
+                    }
+                    continue;
+                }
+            }
+            
+            // Lire les données du fichier (seulement si ce n'est pas un répertoire)
+            if (currentFile && currentFile.available()) {
+                size_t maxRead = min((size_t)currentFile.available(), length - bytesRead);
+                size_t actualRead = currentFile.read(buffer + bytesRead, maxRead);
+                bytesRead += actualRead;
+                currentFileOffset += actualRead;
+                totalBytesGenerated += actualRead;
+                
+                // Vérifier si on a fini de lire le fichier
+                if (!currentFile.available()) {
+                    currentFile.close();
+                    
+                    // Calculer le padding nécessaire pour aligner sur 512 bytes
+                    pendingPadding = (512 - (currentFileOffset % 512)) % 512;
+                    
+                    // Si on peut ajouter du padding maintenant, le faire
+                    if (pendingPadding > 0 && bytesRead < length) {
+                        size_t paddingToAdd = min(pendingPadding, length - bytesRead);
+                        memset(buffer + bytesRead, 0, paddingToAdd);
+                        bytesRead += paddingToAdd;
+                        pendingPadding -= paddingToAdd;
+                        totalBytesGenerated += paddingToAdd;
+                    }
+                    
+                    // Passer au fichier suivant seulement si on a fini le padding
+                    if (pendingPadding == 0) {
+                        nextEntity();
+                    }
+                }
+            } else {
+                // Pas de fichier ouvert ou plus de données - passer au suivant
+                nextEntity();
+            }
+        }
+        
+        return bytesRead;
+    }
+    
+private:
+    void nextEntity() {
+        currentEntityIndex++;
+        currentFileOffset = 0;
+        headerSent = false;
+        headerPos = 0;
+        pendingPadding = 0;
+        if (currentFile) {
+            currentFile.close();
+        }
+    }
+    
+    void generateTarHeader(const TAR::dir_entity_t& entity) {
+        memset(headerBuffer, 0, 512);
+        
+        // Nom du fichier - RETIRER le préfixe /files/ pour mettre à la racine du TAR
+        String relativePath = entity.path;
+        if (relativePath.startsWith("/files/")) {
+            relativePath = relativePath.substring(7);  // Enlever "/files/"
+        }
+        
+        ESP_LOGD(FS_TAG, "Génération header TAR: %s -> %s", entity.path.c_str(), relativePath.c_str());
+        
+        strncpy((char*)headerBuffer, relativePath.c_str(), 100);
+        
+        // Mode (permissions)
+        sprintf((char*)headerBuffer + 100, "%07o", entity.is_dir ? 0755 : 0644);
+        
+        // UID/GID
+        sprintf((char*)headerBuffer + 108, "%07o", 0);
+        sprintf((char*)headerBuffer + 116, "%07o", 0);
+        
+        // Taille
+        if (!entity.is_dir) {
+            sprintf((char*)headerBuffer + 124, "%011lo", (unsigned long)entity.size);
+        } else {
+            sprintf((char*)headerBuffer + 124, "%011o", 0);
+        }
+        
+        // Timestamp
+        sprintf((char*)headerBuffer + 136, "%011lo", (unsigned long)time(nullptr));
+        
+        // Type de fichier
+        headerBuffer[156] = entity.is_dir ? '5' : '0';
+        
+        // Magic number
+        strcpy((char*)headerBuffer + 257, "ustar");
+        headerBuffer[263] = '0';
+        headerBuffer[264] = '0';
+        
+        // Calculer et définir le checksum
+        unsigned int checksum = 0;
+        for (int i = 0; i < 512; i++) {
+            if (i >= 148 && i < 156) {
+                checksum += ' '; // Les octets du checksum sont comptés comme des espaces
+            } else {
+                checksum += headerBuffer[i];
+            }
+        }
+        sprintf((char*)headerBuffer + 148, "%06o", checksum);
+        headerBuffer[154] = 0;
+        headerBuffer[155] = ' ';
+    }
+    
+public:
+    size_t getTotalBytesGenerated() { return totalBytesGenerated; }
+    bool isFinished() { 
+        return currentEntityIndex >= entities.size() && 
+               pendingPadding == 0 && 
+               endBlocksSent >= 1024; 
     }
 };
 
-// Variables globales pour le backup
-static SimpleStreamBuffer* tarBuffer = nullptr;
-static bool tarReady = false;
-static size_t tarSentBytes = 0;
+// Variables globales pour le backup streaming
+static StreamingTarBuffer* streamingTarBuffer = nullptr;
+static bool tarStreamReady = false;
 
-// Génère le nom de fichier de backup
+// Initialise le backup TAR streaming
+bool initStreamingTarBackup() {
+    // Nettoyer toute session précédente
+    if (streamingTarBuffer) {
+        delete streamingTarBuffer;
+        streamingTarBuffer = nullptr;
+    }
+    
+    tarStreamReady = false;
+    
+    // Vérifier que le répertoire /files existe
+    if (!LittleFS.exists("/files")) {
+        ESP_LOGW(FS_TAG, "Répertoire /files non trouvé");
+        return false;
+    }
+    
+    yield(); // Reset watchdog
+    
+    // Créer le buffer streaming
+    streamingTarBuffer = new StreamingTarBuffer();
+    if (!streamingTarBuffer) {
+        ESP_LOGE(FS_TAG, "Échec allocation StreamingTarBuffer");
+        return false;
+    }
+    
+    // Initialiser le streaming
+    if (!streamingTarBuffer->initialize()) {
+        ESP_LOGE(FS_TAG, "Échec initialisation StreamingTarBuffer");
+        delete streamingTarBuffer;
+        streamingTarBuffer = nullptr;
+        return false;
+    }
+    
+    tarStreamReady = true;
+    ESP_LOGI(FS_TAG, "Backup TAR streaming initialisé avec succès");
+    return true;
+}
+
+// Récupère le prochain chunk du TAR (streaming)
+size_t getStreamingTarChunk(uint8_t* output, size_t maxLen) {
+    if (!streamingTarBuffer || !tarStreamReady) {
+        return 0;
+    }
+    
+    yield(); // Reset watchdog
+    
+    // Logging pour debug (seulement périodiquement)
+    static size_t lastLoggedBytes = 0;
+    size_t currentBytes = streamingTarBuffer->getTotalBytesGenerated();
+    if (currentBytes - lastLoggedBytes > 10240) { // Log tous les 10KB
+        ESP_LOGI(FS_TAG, "Backup progress: %zu bytes générés", currentBytes);
+        lastLoggedBytes = currentBytes;
+    }
+    
+    size_t bytesRead = streamingTarBuffer->readBytes(output, maxLen);
+    
+    if (bytesRead == 0 && streamingTarBuffer->isFinished()) {
+        ESP_LOGI(FS_TAG, "Backup TAR streaming terminé: %zu bytes total", 
+                streamingTarBuffer->getTotalBytesGenerated());
+        lastLoggedBytes = 0; // Reset pour le prochain backup
+    }
+    
+    return bytesRead;
+}
+
+// Nettoie le backup TAR streaming
+void cleanupStreamingTarBackup() {
+    if (streamingTarBuffer) {
+        delete streamingTarBuffer;
+        streamingTarBuffer = nullptr;
+    }
+    tarStreamReady = false;
+    ESP_LOGI(FS_TAG, "Backup TAR streaming nettoyé");
+}
+
+// Fonction utilitaire pour obtenir la taille estimée du backup
+size_t getEstimatedBackupSize() {
+    if (!LittleFS.exists("/files")) {
+        return 0;
+    }
+    
+    std::vector<TAR::dir_entity_t> entities;
+    TarPacker::collectDirEntities(&entities, &LittleFS, "/files");
+    
+    size_t estimatedSize = 0;
+    for (const auto& entity : entities) {
+        estimatedSize += 512; // Header TAR
+        if (!entity.is_dir) {
+            // Taille du fichier + padding pour aligner sur 512
+            size_t fileSize = entity.size;
+            size_t paddedSize = ((fileSize + 511) / 512) * 512;
+            estimatedSize += paddedSize;
+        }
+    }
+    estimatedSize += 1024; // Blocs de fin TAR
+    
+    return estimatedSize;
+}
+// GÃ©nÃ¨re le nom de fichier de backup
 String generateBackupFilename() {
     time_t now = time(nullptr);
     struct tm* timeinfo = localtime(&now);
@@ -94,112 +401,6 @@ String generateBackupFilename() {
     return String(filename);
 }
 
-// Initialise le backup TAR
-bool initTarBackup() {
-    // Nettoyer toute session précédente
-    if (tarBuffer) {
-        delete tarBuffer;
-        tarBuffer = nullptr;
-    }
-    
-    tarReady = false;
-    tarSentBytes = 0;
-    
-    // Vérifier que le répertoire /files existe
-    if (!LittleFS.exists("/files")) {
-        ESP_LOGW(FS_TAG, "Répertoire /files non trouvé");
-        return false;
-    }
-    
-    // Reset watchdog avant opération longue
-    yield();
-    
-    // Créer le buffer pour recevoir le TAR
-    tarBuffer = new SimpleStreamBuffer(32768); // 32KB buffer
-    if (!tarBuffer || !tarBuffer->isValid()) {
-        ESP_LOGE(FS_TAG, "Échec allocation buffer TAR");
-        if (tarBuffer) {
-            delete tarBuffer;
-            tarBuffer = nullptr;
-        }
-        return false;
-    }
-    
-    // Reset watchdog avant collecte
-    yield();
-    
-    // Collecter les entités du répertoire /files
-    std::vector<TAR::dir_entity_t> entities;
-    TarPacker::collectDirEntities(&entities, &LittleFS, "/files");
-    
-    if (entities.empty()) {
-        ESP_LOGW(FS_TAG, "Aucun fichier trouvé dans /files");
-        delete tarBuffer;
-        tarBuffer = nullptr;
-        return false;
-    }
-    
-    ESP_LOGI(FS_TAG, "Collecté %d entités depuis /files", entities.size());
-    
-    // Reset watchdog avant génération TAR (opération la plus longue)
-    yield();
-    
-    // Générer le TAR en une seule fois
-    size_t tarSize = TarPacker::pack_files(&LittleFS, entities, tarBuffer);
-    
-    // Reset watchdog après génération
-    yield();
-    
-    if (tarSize > 0) {
-        ESP_LOGI(FS_TAG, "TAR généré avec succès: %zu bytes", tarSize);
-        tarReady = true;
-        return true;
-    } else {
-        ESP_LOGE(FS_TAG, "Erreur lors de la génération du TAR");
-        delete tarBuffer;
-        tarBuffer = nullptr;
-        return false;
-    }
-}
-
-// Récupère le prochain chunk du TAR
-size_t getTarChunk(uint8_t* output, size_t maxLen) {
-    if (!tarBuffer || !tarReady) {
-        return 0;
-    }
-    
-    // Reset watchdog pendant l'envoi (opération potentiellement longue)
-    yield();
-    
-    size_t totalSize = tarBuffer->getDataSize();
-    size_t remaining = totalSize - tarSentBytes;
-    
-    if (remaining == 0) {
-        // Terminé
-        return 0;
-    }
-    
-    size_t toSend = min(remaining, maxLen);
-    memcpy(output, tarBuffer->getData() + tarSentBytes, toSend);
-    tarSentBytes += toSend;
-    
-    if (tarSentBytes >= totalSize) {
-        ESP_LOGI(FS_TAG, "Backup TAR envoyé complètement: %zu bytes", tarSentBytes);
-    }
-    
-    return toSend;
-}
-
-// Nettoie le backup TAR
-void cleanupTarBackup() {
-    if (tarBuffer) {
-        delete tarBuffer;
-        tarBuffer = nullptr;
-    }
-    tarReady = false;
-    tarSentBytes = 0;
-    ESP_LOGI(FS_TAG, "Backup TAR nettoyé");
-}
 
 // RESTAURE //
 
@@ -447,7 +648,7 @@ bool finalizeTarRestore() {
     
     // Utiliser la signature correcte de l'exemple Unpack_tar_stream.ino
     // Format : tarStreamExpander(Stream* stream, size_t streamSize, fs::FS& destinationFS, const char* destinationPath)
-    bool success = tarUnpacker->tarStreamExpander(tarStream, streamSize, tarGzFS, "/");
+    bool success = tarUnpacker->tarStreamExpander(tarStream, streamSize, tarGzFS, "/files");
     
     if (success) {
         ESP_LOGI(FS_TAG, "Restore TAR terminé avec succès");

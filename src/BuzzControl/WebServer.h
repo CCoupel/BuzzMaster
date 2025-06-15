@@ -314,34 +314,61 @@ void setGlobalWebRoute(AsyncWebServer& server, const char* uri, const char* path
 
 void handleBackup(AsyncWebServerRequest *request) {
     // Initialiser le backup TAR
-    if (!initTarBackup()) {
-        request->send(500, "text/plain", "Aucun fichier à sauvegarder dans /files");
+    ESP_LOGI(WEB_TAG, "Demande de téléchargement de backup");
+    
+    // Vérifier si un backup est déjà en cours
+    if (tarStreamReady) {
+        request->send(429, "text/plain", "Un backup est déjà en cours");
         return;
     }
     
+    // Initialiser le backup streaming
+    if (!initStreamingTarBackup()) {
+        request->send(500, "text/plain", "Erreur lors de l'initialisation du backup");
+        return;
+    }
+    
+    // Obtenir la taille estimée pour le header Content-Length
+    size_t estimatedSize = getEstimatedBackupSize();
+    
+    // Générer le nom de fichier
     String filename = generateBackupFilename();
     
+    ESP_LOGI(WEB_TAG, "Début du streaming backup: %s (taille estimée: %zu bytes)", 
+             filename.c_str(), estimatedSize);
+    
+    // Créer la réponse streaming
     AsyncWebServerResponse *response = request->beginChunkedResponse(
         "application/x-tar",
         [](uint8_t *buffer, size_t maxLen, size_t index) -> size_t {
-            size_t bytesRead = getTarChunk(buffer, maxLen);
+            // Cette callback est appelée pour chaque chunk
+            yield(); // Reset watchdog
             
-            // Nettoyer automatiquement quand terminé
+            size_t bytesRead = getStreamingTarChunk(buffer, maxLen);
+            
             if (bytesRead == 0) {
-                cleanupTarBackup();
+                // Fini - nettoyer
+                cleanupStreamingTarBackup();
+                ESP_LOGI(WEB_TAG, "Backup streaming terminé");
             }
             
             return bytesRead;
         }
     );
     
+    // Définir les headers
     response->addHeader("Content-Disposition", "attachment; filename=\"" + filename + "\"");
     response->addHeader("Content-Type", "application/x-tar");
     
-    request->send(response);
+    // Optionnel: ajouter Content-Length si on veut (estimation)
+    if (estimatedSize > 0) {
+        response->addHeader("Content-Length", String(estimatedSize));
+    }
     
-    ESP_LOGI("WEBSERVER", "Backup démarré: %s", filename.c_str());
+    // Envoyer la réponse
+    request->send(response);
 }
+
 
 // Handler pour upload de fichier TAR
 void handleRestore(AsyncWebServerRequest *request, String filename, 
