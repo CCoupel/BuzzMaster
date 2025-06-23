@@ -402,122 +402,583 @@ String generateBackupFilename() {
 }
 
 
+
+
+
+
+
+
+
+
+
+
+
 // RESTAURE //
+// Déclarations anticipées
+void cleanupTrueParallelTarRestore();
+bool initTarGzFS();
 
-// ========== PARTIE RESTORE TAR ==========
-// À ajouter dans fsManager.h après les fonctions de backup
+// Task handle pour le traitement en arrière-plan
+static TaskHandle_t tarProcessingTask = nullptr;
 
-// Classe pour traiter les données TAR en streaming lors du restore
-// Classe Stream pour recevoir les données TAR depuis HTTP en streaming
-class HttpTarStream : public Stream {
+// Stream qui traite VRAIMENT en parallèle - VERSION SÉCURISÉE
+class TrueParallelTarProcessor : public Stream {
 private:
-    uint8_t* buffer;
-    size_t bufferSize;
-    size_t writePos;
-    size_t readPos;
-    size_t totalReceived; // Nouvelle variable pour tracer la taille totale
+    std::vector<String> chunkFiles;
+    size_t currentReadChunk;
+    File currentReadFile;
+    size_t totalReceived;
+    size_t totalProcessed;
+    size_t currentWriteChunkSize;
+    File currentWriteFile;
+    String tempDir;
     bool streamComplete;
+    bool processingStarted;
+    bool processingComplete; // AJOUTÉ : Pour coordination sécurisée
+    
+    // Synchronisation
+    SemaphoreHandle_t readMutex;
+    SemaphoreHandle_t writeMutex;
+    
+    // Configuration
+    static const size_t CHUNK_SIZE = 8192*4;         // 8KB par chunk
+    static const size_t START_PROCESSING_AFTER = 1; // Démarrer après 2 chunks
     
 public:
-    HttpTarStream(size_t size = 8192) : 
-        bufferSize(size), writePos(0), readPos(0), totalReceived(0), streamComplete(false) {
-        buffer = (uint8_t*)malloc(size);
+    TrueParallelTarProcessor() : 
+        currentReadChunk(0), totalReceived(0), totalProcessed(0), 
+        currentWriteChunkSize(0), streamComplete(false), 
+        processingStarted(false), processingComplete(false) { // AJOUTÉ processingComplete
+        tempDir = "/temp_parallel";
+        
+        // Créer les semaphores pour thread-safety
+        readMutex = xSemaphoreCreateMutex();
+        writeMutex = xSemaphoreCreateMutex();
     }
     
-    ~HttpTarStream() {
-        if (buffer) free(buffer);
+    ~TrueParallelTarProcessor() {
+        cleanup();
+        if (readMutex) vSemaphoreDelete(readMutex);
+        if (writeMutex) vSemaphoreDelete(writeMutex);
     }
     
-    bool isValid() { return buffer != nullptr; }
-    
-    // Méthodes pour recevoir les données HTTP
-    size_t receiveData(const uint8_t* data, size_t len) {
-        if (!buffer || streamComplete) return 0;
+    bool initialize() {
+        cleanup();
         
-        size_t space = bufferSize - writePos;
-        size_t toWrite = min(len, space);
-        
-        if (toWrite > 0) {
-            memcpy(buffer + writePos, data, toWrite);
-            writePos += toWrite;
-            totalReceived += toWrite; // Mettre à jour la taille totale
+        if (LittleFS.exists(tempDir)) {
+            cleanupTempDirectory();
         }
         
-        yield(); // Céder la main pendant la réception
-        return toWrite;
+        if (!LittleFS.mkdir(tempDir)) {
+            ESP_LOGE(FS_TAG, "Impossible de créer: %s", tempDir.c_str());
+            return false;
+        }
+        
+        ESP_LOGI(FS_TAG, "TrueParallelTarProcessor initialisé");
+        return true;
+    }
+    
+    // Ajouter des données (thread principal - HTTP)
+    size_t addData(const uint8_t* data, size_t len) {
+        if (streamComplete) return 0;
+        
+        // Protéger l'écriture
+        if (xSemaphoreTake(writeMutex, pdMS_TO_TICKS(100)) != pdTRUE) {
+            ESP_LOGW(FS_TAG, "Timeout écriture mutex");
+            return 0;
+        }
+        
+        size_t totalWritten = 0;
+        
+        while (totalWritten < len) {
+            yield(); // Reset watchdog
+            
+            // Créer nouveau chunk si nécessaire
+            if (!currentWriteFile || currentWriteChunkSize >= CHUNK_SIZE) {
+                if (!createNewWriteChunk()) {
+                    ESP_LOGE(FS_TAG, "Impossible de créer chunk d'écriture");
+                    break;
+                }
+            }
+            
+            // Écrire dans le chunk courant
+            size_t remaining = len - totalWritten;
+            size_t space = CHUNK_SIZE - currentWriteChunkSize;
+            size_t toWrite = min(remaining, space);
+            
+            size_t written = currentWriteFile.write(data + totalWritten, toWrite);
+            if (written != toWrite) {
+                ESP_LOGE(FS_TAG, "Erreur écriture: %zu/%zu", written, toWrite);
+                break;
+            }
+            
+            totalWritten += written;
+            currentWriteChunkSize += written;
+            totalReceived += written;
+            
+            // Fermer le chunk s'il est plein
+            if (currentWriteChunkSize >= CHUNK_SIZE) {
+                currentWriteFile.close();
+                ESP_LOGD(FS_TAG, "Chunk %d fermé: %zu bytes", chunkFiles.size() - 1, currentWriteChunkSize);
+                currentWriteChunkSize = 0;
+            }
+        }
+        
+        xSemaphoreGive(writeMutex);
+        
+        // Démarrer le traitement parallèle si conditions remplies
+        if (!processingStarted && chunkFiles.size() >= START_PROCESSING_AFTER) {
+            startParallelProcessing();
+        }
+        
+        return totalWritten;
     }
     
     void markComplete() {
         streamComplete = true;
+        
+        // Protéger l'écriture
+        if (xSemaphoreTake(writeMutex, pdMS_TO_TICKS(1000)) == pdTRUE) {
+            if (currentWriteFile) {
+                currentWriteFile.close();
+                ESP_LOGI(FS_TAG, "Dernier chunk fermé: %zu bytes", currentWriteChunkSize);
+            }
+            xSemaphoreGive(writeMutex);
+        }
+        
+        // Démarrer le traitement même avec moins de chunks
+        if (!processingStarted) {
+            startParallelProcessing();
+        }
+        
+        ESP_LOGI(FS_TAG, "Stream marqué complet: %zu bytes en %d chunks", 
+                totalReceived, chunkFiles.size());
     }
     
-    bool isComplete() {
-        return streamComplete && (readPos >= writePos);
-    }
-    
-    // Nouvelle méthode pour obtenir la taille totale reçue
-    size_t getTotalSize() {
-        return totalReceived;
-    }
-    
-    // Interface Stream pour ESP32-targz (lecture)
+    // Interface Stream pour TarUnpacker (thread de traitement)
     int available() override {
-        return writePos - readPos;
+        if (!processingStarted) return 0;
+        
+        // Protéger la lecture
+        if (xSemaphoreTake(readMutex, pdMS_TO_TICKS(10)) != pdTRUE) {
+            return 0; // Timeout court pour éviter de bloquer
+        }
+        
+        int result = 0;
+        
+        // Vérifier le chunk courant
+        if (currentReadFile && currentReadFile.available()) {
+            result = currentReadFile.available();
+        } else {
+            // Essayer d'ouvrir le chunk suivant
+            if (openNextReadChunk()) {
+                result = currentReadFile ? currentReadFile.available() : 0;
+            } else {
+                // Plus de chunks disponibles
+                if (streamComplete) {
+                    ESP_LOGD(FS_TAG, "🏁 Stream terminé - available() retourne 0");
+                    result = 0;
+                } else {
+                    // Décompression plus rapide - on attend
+                    ESP_LOGD(FS_TAG, "🏃‍♂️ Décompression plus rapide que réception - attente");
+                    result = 0; // Le TarUnpacker va réessayer
+                }
+            }
+        }
+        
+        xSemaphoreGive(readMutex);
+        return result;
     }
     
     int read() override {
-        if (readPos < writePos) {
-            return buffer[readPos++];
+        if (!processingStarted) return -1;
+        
+        // Protéger la lecture
+        if (xSemaphoreTake(readMutex, pdMS_TO_TICKS(100)) != pdTRUE) {
+            return -1;
         }
-        return -1;
+        
+        int result = -1;
+        
+        // Lire depuis le chunk courant
+        if (currentReadFile && currentReadFile.available()) {
+            result = currentReadFile.read();
+            if (result != -1) {
+                totalProcessed++;
+            }
+        } else {
+            // Chunk courant épuisé - passer au suivant
+            if (openNextReadChunk()) {
+                result = read(); // Récursion pour lire depuis le nouveau chunk
+            }
+        }
+        
+        xSemaphoreGive(readMutex);
+        return result;
+    }
+    
+    size_t readBytes(uint8_t* buffer, size_t length) override {
+        if (!processingStarted) return 0;
+        
+        // Protéger la lecture
+        if (xSemaphoreTake(readMutex, pdMS_TO_TICKS(200)) != pdTRUE) {
+            return 0;
+        }
+        
+        size_t totalRead = 0;
+        
+        while (totalRead < length) {
+            // Lire depuis le chunk courant
+            if (currentReadFile && currentReadFile.available()) {
+                size_t toRead = min(length - totalRead, (size_t)currentReadFile.available());
+                size_t actualRead = currentReadFile.read(buffer + totalRead, toRead);
+                totalRead += actualRead;
+                totalProcessed += actualRead;
+                
+                if (actualRead < toRead) break; // Erreur de lecture
+            } else {
+                // Passer au chunk suivant
+                if (!openNextReadChunk()) {
+                    break; // Plus de chunks
+                }
+            }
+        }
+        
+        xSemaphoreGive(readMutex);
+        return totalRead;
     }
     
     int peek() override {
-        if (readPos < writePos) {
-            return buffer[readPos];
+        if (!processingStarted) return -1;
+        
+        if (xSemaphoreTake(readMutex, pdMS_TO_TICKS(50)) != pdTRUE) {
+            return -1;
         }
-        return -1;
+        
+        int result = -1;
+        if (currentReadFile && currentReadFile.available()) {
+            size_t pos = currentReadFile.position();
+            result = currentReadFile.read();
+            currentReadFile.seek(pos);
+        }
+        
+        xSemaphoreGive(readMutex);
+        return result;
     }
     
     void flush() override {
-        // Compacter le buffer : déplacer les données non lues au début
-        if (readPos > 0 && readPos < writePos) {
-            memmove(buffer, buffer + readPos, writePos - readPos);
-            writePos -= readPos;
-            readPos = 0;
-        }
+        // Pas d'action nécessaire
     }
     
     // Interface Stream pour écriture (pas utilisé)
     size_t write(uint8_t) override { return 0; }
     size_t write(const uint8_t*, size_t) override { return 0; }
     
-    // Méthodes utilitaires
-    bool hasSpace() {
-        return writePos < bufferSize;
-    }
+    // Informations de diagnostic
+    size_t getTotalReceived() const { return totalReceived; }
+    size_t getTotalProcessed() const { return totalProcessed; }
+    int getChunkCount() const { return chunkFiles.size(); }
+    int getCurrentReadChunk() const { return currentReadChunk; }
     
-    size_t getFreeSpace() {
-        return bufferSize - writePos;
-    }
+    // AJOUTÉ : Méthodes pour coordination sécurisée
+    bool isProcessingComplete() const { return processingComplete; }
+    void setProcessingComplete(bool complete) { processingComplete = complete; }
     
-    void reset() {
-        writePos = 0;
-        readPos = 0;
+    // CORRIGÉ : Cleanup sécurisé contre les crashes
+    void cleanup() {
+        if (currentWriteFile) currentWriteFile.close();
+        if (currentReadFile) currentReadFile.close();
+        
+        // CORRECTION CRITIQUE : Cleanup sécurisé de la tâche
+        if (tarProcessingTask) {
+            ESP_LOGI(FS_TAG, "🛑 Arrêt sécurisé de la tâche");
+            
+            // Signal d'arrêt
+            processingComplete = true;
+            streamComplete = true;
+            
+            // Attendre que la tâche se termine naturellement
+            int timeout = 3000; // 3 secondes max
+            while (tarProcessingTask && timeout > 0) {
+                vTaskDelay(pdMS_TO_TICKS(100));
+                timeout -= 100;
+                yield();
+            }
+            
+            // Si la tâche existe encore, vérifier son état avant suppression
+            if (tarProcessingTask) {
+                eTaskState taskState = eTaskGetState(tarProcessingTask);
+                if (taskState != eDeleted && taskState != eInvalid) {
+                    ESP_LOGW(FS_TAG, "⚠️ Force suppression tâche");
+                    vTaskDelete(tarProcessingTask);
+                } else {
+                    ESP_LOGI(FS_TAG, "✅ Tâche déjà supprimée naturellement");
+                }
+            }
+            tarProcessingTask = nullptr;
+        }
+        
+        cleanupTempDirectory();
+        
+        chunkFiles.clear();
+        currentReadChunk = 0;
         totalReceived = 0;
+        totalProcessed = 0;
+        currentWriteChunkSize = 0;
         streamComplete = false;
+        processingStarted = false;
+        processingComplete = false;
+        
+        ESP_LOGI(FS_TAG, "✅ Cleanup sécurisé terminé");
+    }
+    
+private:
+    // CORRIGÉ : Démarrage sécurisé avec pile plus grande
+    void startParallelProcessing() {
+        if (processingStarted) return;
+        
+        processingStarted = true;
+        ESP_LOGI(FS_TAG, "🚀 Démarrage traitement parallèle sécurisé");
+        
+        // CRITIQUE : Pile plus grande pour éviter stack overflow
+        const size_t STACK_SIZE = 16384; // 16KB au lieu de 8KB
+        
+        BaseType_t result = xTaskCreate(
+            parallelProcessingTask,         // Fonction sécurisée
+            "SafeTarProcessor",             // Nom
+            STACK_SIZE,                     // PILE PLUS GRANDE
+            this,                           // Paramètre
+            1,                              // Priorité normale
+            &tarProcessingTask              // Handle
+        );
+        
+        if (result != pdPASS) {
+            ESP_LOGE(FS_TAG, "❌ Échec création tâche sécurisée");
+            processingStarted = false;
+        } else {
+            ESP_LOGI(FS_TAG, "✅ Tâche sécurisée créée avec pile de %d bytes", STACK_SIZE);
+        }
+    }
+    
+    // CORRIGÉ : Tâche avec auto-suppression sécurisée
+    static void parallelProcessingTask(void* parameter) {
+        TrueParallelTarProcessor* processor = static_cast<TrueParallelTarProcessor*>(parameter);
+        
+        ESP_LOGI(FS_TAG, "🔄 Tâche sécurisée démarrée");
+        
+        TarUnpacker* unpacker = nullptr;
+        bool success = false;
+        
+        try {
+            unpacker = new TarUnpacker();
+            if (!unpacker) {
+                ESP_LOGE(FS_TAG, "❌ Échec allocation TarUnpacker");
+                goto cleanup_and_exit;
+            }
+            
+            unpacker->haltOnError(true); // ARRÊTER sur erreur
+            unpacker->setTarVerify(false);
+            unpacker->setupFSCallbacks(targzTotalBytesFn, targzFreeBytesFn);
+            
+            // CORRIGÉ : Callbacks sans capture (pointeurs de fonction simples)
+            unpacker->setTarProgressCallback([](uint8_t progress) {
+                static uint8_t lastProgress = 255;
+                if (progress != lastProgress && progress % 20 == 0) {
+                    ESP_LOGI(FS_TAG, "🔄 Extraction: %d%%", progress);
+                    lastProgress = progress;
+                    yield();
+                }
+            });
+            
+            unpacker->setTarStatusProgressCallback([](const char* name, size_t size, size_t total_unpacked) {
+                ESP_LOGI(FS_TAG, "📁 Extrait: %s (%zu bytes)", name, size);
+                yield();
+            });
+            
+            // Attendre des données
+            int waitCount = 0;
+            while (processor->available() == 0 && waitCount < 100 && !processor->processingComplete) {
+                vTaskDelay(pdMS_TO_TICKS(100));
+                waitCount++;
+                yield();
+            }
+            
+            if (processor->processingComplete) {
+                ESP_LOGI(FS_TAG, "🛑 Arrêt demandé avant extraction");
+                goto cleanup_and_exit;
+            }
+            
+            ESP_LOGI(FS_TAG, "🎯 Début extraction");
+            success = unpacker->tarStreamExpander(processor, 0, tarGzFS, "/files");
+            
+            if (success) {
+                ESP_LOGI(FS_TAG, "✅ Extraction terminée avec succès");
+            } else {
+                int errorCode = unpacker->tarGzGetError();
+                ESP_LOGE(FS_TAG, "❌ Erreur extraction, code: %d", errorCode);
+            }
+            
+        } catch (...) {
+            ESP_LOGE(FS_TAG, "💥 EXCEPTION dans la tâche!");
+        }
+        
+    cleanup_and_exit:
+        if (unpacker) {
+            delete unpacker;
+            unpacker = nullptr;
+        }
+        
+        processor->processingComplete = true;
+        
+        ESP_LOGI(FS_TAG, "🏁 Tâche terminée - auto-suppression");
+        
+        // CRITIQUE : Délai avant auto-suppression pour éviter race condition
+        vTaskDelay(pdMS_TO_TICKS(200));
+        
+        // CRITIQUE : Marquer que la tâche va s'auto-supprimer
+        tarProcessingTask = nullptr; // Important: faire ça AVANT vTaskDelete
+        
+        // Auto-suppression sécurisée
+        vTaskDelete(nullptr);
+    }
+    
+    bool createNewWriteChunk() {
+        if (currentWriteFile) {
+            currentWriteFile.close();
+        }
+        
+        String chunkPath = tempDir + "/chunk_" + String(chunkFiles.size()) + ".bin";
+        currentWriteFile = LittleFS.open(chunkPath, "w");
+        
+        if (!currentWriteFile) {
+            ESP_LOGE(FS_TAG, "Impossible de créer: %s", chunkPath.c_str());
+            return false;
+        }
+        
+        chunkFiles.push_back(chunkPath);
+        currentWriteChunkSize = 0;
+        
+        ESP_LOGD(FS_TAG, "Nouveau chunk créé: %s", chunkPath.c_str());
+        return true;
+    }
+    
+    bool openNextReadChunk() {
+        // Fermer et supprimer le chunk courant s'il existe
+        if (currentReadFile) {
+            currentReadFile.close();
+            
+            // Supprimer le chunk traité (avec protection)
+            if (currentReadChunk > 0) {
+                String oldChunkPath = chunkFiles[currentReadChunk - 1];
+                if (LittleFS.remove(oldChunkPath)) {
+                    ESP_LOGD(FS_TAG, "🗑️ Chunk supprimé: %s", oldChunkPath.c_str());
+                } else {
+                    ESP_LOGW(FS_TAG, "Impossible de supprimer: %s", oldChunkPath.c_str());
+                }
+            }
+        }
+        
+        // Vérifier s'il y a un chunk suivant disponible
+        if (currentReadChunk >= chunkFiles.size()) {
+            if (streamComplete) {
+                ESP_LOGI(FS_TAG, "🏁 Fin de stream atteinte - plus de chunks à attendre");
+                return false; // Vraiment fini
+            } else {
+                // Attendre que plus de chunks arrivent
+                ESP_LOGD(FS_TAG, "⏳ Attente de nouveaux chunks... (chunk %d/%d)", 
+                        currentReadChunk, chunkFiles.size());
+                
+                // Attente intelligente avec timeout
+                int waitCount = 0;
+                const int maxWaitCycles = 100; // 5 secondes max (100 * 50ms)
+                
+                while (currentReadChunk >= chunkFiles.size() && !streamComplete && waitCount < maxWaitCycles) {
+                    vTaskDelay(pdMS_TO_TICKS(50));
+                    waitCount++;
+                    
+                    // Logger périodiquement pour debug
+                    if (waitCount % 20 == 0) {
+                        ESP_LOGI(FS_TAG, "⏱️ Attente chunks depuis %d secondes (reçu: %zu, traité: %zu)", 
+                                waitCount / 20, totalReceived, totalProcessed);
+                    }
+                }
+                
+                if (waitCount >= maxWaitCycles) {
+                    ESP_LOGW(FS_TAG, "⚠️ Timeout attente chunks - arrêt du traitement");
+                    return false;
+                }
+                
+                // Re-vérifier après l'attente
+                if (currentReadChunk >= chunkFiles.size()) {
+                    return false;
+                }
+            }
+        }
+        
+        // Vérifier si le chunk est prêt (pas en cours d'écriture)
+        if (currentReadChunk == chunkFiles.size() - 1) {
+            // C'est le dernier chunk - il pourrait être en cours d'écriture
+            if (!streamComplete) {
+                ESP_LOGD(FS_TAG, "📝 Chunk en cours d'écriture - attente...");
+                
+                // Attendre que l'écriture soit terminée
+                int writeWaitCount = 0;
+                const int maxWriteWait = 20; // 1 seconde max
+                
+                while (!streamComplete && writeWaitCount < maxWriteWait) {
+                    vTaskDelay(pdMS_TO_TICKS(50));
+                    writeWaitCount++;
+                }
+                
+                if (!streamComplete && writeWaitCount >= maxWriteWait) {
+                    ESP_LOGD(FS_TAG, "📝 Lecture du chunk en cours d'écriture (risqué)");
+                }
+            }
+        }
+        
+        // Ouvrir le chunk suivant
+        String chunkPath = chunkFiles[currentReadChunk];
+        currentReadFile = LittleFS.open(chunkPath, "r");
+        
+        if (!currentReadFile) {
+            ESP_LOGE(FS_TAG, "❌ Impossible d'ouvrir: %s", chunkPath.c_str());
+            return false;
+        }
+        
+        ESP_LOGD(FS_TAG, "📖 Chunk ouvert: %s (%d bytes)", 
+                chunkPath.c_str(), currentReadFile.size());
+        
+        currentReadChunk++;
+        return true;
+    }
+    
+    void cleanupTempDirectory() {
+        if (!LittleFS.exists(tempDir)) return;
+        
+        File dir = LittleFS.open(tempDir);
+        if (dir && dir.isDirectory()) {
+            File file = dir.openNextFile();
+            while (file) {
+                String filePath = tempDir + "/" + String(file.name());
+                file.close();
+                
+                LittleFS.remove(filePath);
+                file = dir.openNextFile();
+                yield();
+            }
+            dir.close();
+        }
+        
+        LittleFS.rmdir(tempDir);
+        ESP_LOGI(FS_TAG, "Répertoire temporaire nettoyé: %s", tempDir.c_str());
     }
 };
 
-// Variables globales pour le restore
-static HttpTarStream* tarStream = nullptr;
-static TarUnpacker* tarUnpacker = nullptr;
-static bool restoreInProgress = false;
-static bool restoreSuccess = false;
+// Variables globales
+static TrueParallelTarProcessor* parallelProcessor = nullptr;
+static bool parallelRestoreInProgress = false;
+static bool parallelRestoreSuccess = false;
 static bool tarGzFSInitialized = false;
-
-// Déclaration anticipée
-void cleanupTarRestore();
 
 // Initialise tarGzFS (requis par ESP32-targz)
 bool initTarGzFS() {
@@ -525,8 +986,6 @@ bool initTarGzFS() {
         return true;
     }
     
-    // tarGzFS est un alias automatique créé par ESP32-targz quand DEST_FS_USES_LITTLEFS est défini
-    // Il pointe vers LittleFS
     if (!tarGzFS.begin()) {
         ESP_LOGE(FS_TAG, "Échec initialisation tarGzFS");
         return false;
@@ -537,167 +996,138 @@ bool initTarGzFS() {
     return true;
 }
 
-// Initialise le restore TAR streaming
-bool initTarRestore() {
-    if (restoreInProgress) {
-        ESP_LOGW(FS_TAG, "Un restore est déjà en cours");
+// CORRIGÉ : Cleanup sécurisé
+void cleanupTrueParallelTarRestore() {
+    ESP_LOGI(FS_TAG, "🧹 Début cleanup sécurisé");
+    
+    if (parallelProcessor) {
+        parallelProcessor->cleanup(); // Cette méthode est maintenant sécurisée
+        
+        // Délai de sécurité avant suppression de l'objet
+        vTaskDelay(pdMS_TO_TICKS(500));
+        
+        delete parallelProcessor;
+        parallelProcessor = nullptr;
+    }
+    
+    parallelRestoreInProgress = false;
+    ESP_LOGI(FS_TAG, "✅ Cleanup sécurisé terminé");
+}
+
+// Initialise le restore streaming
+bool initTrueParallelTarRestore() {
+    if (parallelRestoreInProgress) {
+        ESP_LOGW(FS_TAG, "Un restore parallèle est déjà en cours");
         return false;
     }
     
-    // Nettoyer toute session précédente
-    cleanupTarRestore();
-    
+    cleanupTrueParallelTarRestore();
     yield();
     
-    // Initialiser tarGzFS (OBLIGATOIRE)
     if (!initTarGzFS()) {
         ESP_LOGE(FS_TAG, "Impossible d'initialiser tarGzFS");
         return false;
     }
     
-    // Créer le stream pour recevoir les données HTTP
-    tarStream = new HttpTarStream();
-    if (!tarStream || !tarStream->isValid()) {
-        ESP_LOGE(FS_TAG, "Échec allocation HttpTarStream");
-        cleanupTarRestore();
+    // Créer le processeur parallèle
+    parallelProcessor = new TrueParallelTarProcessor();
+    if (!parallelProcessor || !parallelProcessor->initialize()) {
+        ESP_LOGE(FS_TAG, "Échec initialisation TrueParallelTarProcessor");
+        cleanupTrueParallelTarRestore();
         return false;
     }
     
-    // Créer le TarUnpacker d'ESP32-targz
-    tarUnpacker = new TarUnpacker();
-    if (!tarUnpacker) {
-        ESP_LOGE(FS_TAG, "Échec création TarUnpacker");
-        cleanupTarRestore();
-        return false;
-    }
-    
-    // Configuration du unpacker (basée sur l'exemple)
-    tarUnpacker->haltOnError(false); // Continuer en cas d'erreur mineure
-    tarUnpacker->setTarVerify(false); // Pas de vérification pour économiser la RAM
-    
-    // Setup callbacks comme dans l'exemple
-    tarUnpacker->setupFSCallbacks(targzTotalBytesFn, targzFreeBytesFn);
-    
-    // Callbacks de progression
-    tarUnpacker->setTarProgressCallback([](uint8_t progress) {
-        static uint8_t lastProgress = 255;
-        if (progress != lastProgress && progress % 20 == 0) {
-            ESP_LOGI(FS_TAG, "Restore progress: %d%%", progress);
-            lastProgress = progress;
-        }
-    });
-    
-    tarUnpacker->setTarStatusProgressCallback([](const char* name, size_t size, size_t total_unpacked) {
-        ESP_LOGI(FS_TAG, "Extrait: %s (%zu bytes)", name, size);
-    });
-    
-    tarUnpacker->setTarMessageCallback(BaseUnpacker::targzPrintLoggerCallback);
-    
-    // S'assurer que le répertoire de destination existe
     ensureDirectoryExists("/files");
     
-    restoreInProgress = true;
-    restoreSuccess = false;
+    parallelRestoreInProgress = true;
+    parallelRestoreSuccess = false;
     
-    ESP_LOGI(FS_TAG, "Restore TAR streaming initialisé");
+    ESP_LOGI(FS_TAG, "🚀 Restore TAR parallèle RÉEL initialisé");
     return true;
 }
 
-// Traite un chunk de données TAR reçues depuis HTTP
-size_t processTarChunk(const uint8_t* data, size_t len) {
-    if (!tarStream || !restoreInProgress) {
-        ESP_LOGE(FS_TAG, "Restore non initialisé");
+size_t processTrueParallelTarChunk(const uint8_t* data, size_t len) {
+    if (!parallelProcessor || !parallelRestoreInProgress) {
+        ESP_LOGE(FS_TAG, "Restore parallèle non initialisé");
         return 0;
     }
     
     yield();
-    
-    // Recevoir les données dans le stream
-    size_t received = tarStream->receiveData(data, len);
-    
-    if (received != len) {
-        ESP_LOGW(FS_TAG, "Chunk partiellement reçu: %zu/%zu bytes", received, len);
-    }
-    
-    return received;
+    return parallelProcessor->addData(data, len);
 }
 
-// Finalise le restore en traitant toutes les données
-bool finalizeTarRestore() {
-    if (!tarStream || !tarUnpacker || !restoreInProgress) {
-        ESP_LOGW(FS_TAG, "Restore non initialisé pour finalisation");
+// CORRIGÉ : Finalisation avec délais de sécurité
+bool finalizeTrueParallelTarRestore() {
+    if (!parallelProcessor || !parallelRestoreInProgress) {
+        ESP_LOGW(FS_TAG, "Restore parallèle non initialisé pour finalisation");
         return false;
     }
     
     yield();
     
-    // Marquer le stream comme complet
-    tarStream->markComplete();
+    parallelProcessor->markComplete();
     
-    ESP_LOGI(FS_TAG, "Début extraction TAR streaming...");
+    ESP_LOGI(FS_TAG, "⏳ Attente fin traitement...");
     
-    // Obtenir la taille totale du TAR reçu
-    size_t streamSize = tarStream->getTotalSize();
-    if (streamSize == 0) {
-        ESP_LOGW(FS_TAG, "Aucune donnée TAR reçue");
-        restoreInProgress = false;
-        return false;
+    // Attente avec timeout
+    int timeout = 120000; // 60 secondes max
+    while (!parallelProcessor->isProcessingComplete() && timeout > 0) {
+        vTaskDelay(pdMS_TO_TICKS(250));
+        timeout -= 250;
+        yield();
+        
+        if (timeout % 5000 == 0) {
+            ESP_LOGI(FS_TAG, "⏱️ Attente... (timeout: %d ms)", timeout);
+        }
     }
     
-    ESP_LOGI(FS_TAG, "Taille totale du TAR reçu: %zu bytes", streamSize);
-    
-    // Utiliser la signature correcte de l'exemple Unpack_tar_stream.ino
-    // Format : tarStreamExpander(Stream* stream, size_t streamSize, fs::FS& destinationFS, const char* destinationPath)
-    bool success = tarUnpacker->tarStreamExpander(tarStream, streamSize, tarGzFS, "/files");
+    bool success = parallelProcessor->isProcessingComplete();
     
     if (success) {
-        ESP_LOGI(FS_TAG, "Restore TAR terminé avec succès");
-        restoreSuccess = true;
+        ESP_LOGI(FS_TAG, "✅ Restore parallèle terminé avec succès");
+        ESP_LOGI(FS_TAG, "📊 Statistiques: %zu reçus, %zu traités", 
+                parallelProcessor->getTotalReceived(), parallelProcessor->getTotalProcessed());
+        parallelRestoreSuccess = true;
     } else {
-        int errorCode = tarUnpacker->tarGzGetError();
-        ESP_LOGE(FS_TAG, "Erreur restore TAR, code: %d", errorCode);
-        restoreSuccess = false;
+        ESP_LOGE(FS_TAG, "❌ Timeout ou erreur restore parallèle");
+        parallelRestoreSuccess = false;
     }
     
-    // Nettoyer
-    restoreInProgress = false;
+    parallelRestoreInProgress = false;
+    
+    // CRITIQUE : Délai avant nettoyage pour stabiliser
+    vTaskDelay(pdMS_TO_TICKS(1000)); // 1 seconde de délai
     
     return success;
 }
 
-// Nettoie le restore TAR
-void cleanupTarRestore() {
-    if (tarUnpacker) {
-        delete tarUnpacker;
-        tarUnpacker = nullptr;
-    }
-    
-    if (tarStream) {
-        delete tarStream;
-        tarStream = nullptr;
-    }
-    
-    restoreInProgress = false;
-    ESP_LOGI(FS_TAG, "Restore TAR nettoyé");
+bool isTrueParallelRestoreInProgress() {
+    return parallelRestoreInProgress;
 }
 
-// Vérifie si un restore est en cours
-bool isRestoreInProgress() {
-    return restoreInProgress;
-}
-
-// Obtient le status du restore
-String getRestoreStatus() {
-    if (!restoreInProgress) {
-        if (restoreSuccess) {
-            return "Restore terminé avec succès";
+String getTrueParallelRestoreStatus() {
+    if (!parallelRestoreInProgress) {
+        if (parallelRestoreSuccess) {
+            return "Restore parallèle terminé avec succès";
         } else {
             return "Aucun restore en cours";
         }
     }
     
-    return "Restore en cours...";
+    if (parallelProcessor) {
+        return "Restore parallèle en cours... (" + 
+               String(parallelProcessor->getTotalProcessed()) + 
+               "/" + String(parallelProcessor->getTotalReceived()) + " bytes, " +
+               String(parallelProcessor->getChunkCount()) + " chunks)";
+    }
+    
+    return "Restore parallèle en cours...";
 }
+
+
+
+
+
 
 
 

@@ -246,6 +246,10 @@ void clearGame(bool notify=true) {
   String dirToRemove = "/files";
   deleteDirectory(dirToRemove.c_str());
   ensureDirectoryExists(dirToRemove);
+  dirToRemove = "/temp_chunks";
+  deleteDirectory(dirToRemove.c_str());
+  dirToRemove = "/temp_stream";
+  deleteDirectory(dirToRemove.c_str());
   loadJson(GameFile);
   if (notify) {
     sendResetToAll();

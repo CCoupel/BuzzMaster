@@ -371,28 +371,128 @@ void handleBackup(AsyncWebServerRequest *request) {
 
 
 // Handler pour upload de fichier TAR
-void handleRestore(AsyncWebServerRequest *request, String filename, 
-                  size_t index, uint8_t *data, size_t len, bool final) {
+// Structure pour gérer l'upload sécurisé
+struct SafeParallelRestoreUploadState {
+    bool initialized = false;
+    size_t totalReceived = 0;
+    size_t totalExpected = 0;
+    unsigned long lastChunkTime = 0;
+    bool uploadComplete = false;
+    unsigned long startTime = 0;
+};
+
+static SafeParallelRestoreUploadState safeUploadState;
+
+// HANDLER SÉCURISÉ : Remplace handleTrueParallelRestoreUpload
+void handleTrueParallelRestoreUpload(AsyncWebServerRequest *request, String filename, size_t index, uint8_t *data, size_t len, bool final) {
+    yield(); // Reset watchdog
     
+    // Initialisation au premier chunk
     if (index == 0) {
-        ESP_LOGI("WEBSERVER", "Début restore: %s", filename.c_str());
-        if (!initTarRestore()) {
-            request->send(500, "text/plain", "Erreur init restore");
+        ESP_LOGI(WEB_TAG, "🛡️ Début restore sécurisé: %s", filename.c_str());
+        ESP_LOGI(WEB_TAG, "💾 Mémoire libre: %zu bytes", ESP.getFreeHeap());
+        
+        // Reset l'état
+        safeUploadState.initialized = false;
+        safeUploadState.totalReceived = 0;
+        safeUploadState.totalExpected = request->contentLength();
+        safeUploadState.lastChunkTime = millis();
+        safeUploadState.uploadComplete = false;
+        safeUploadState.startTime = millis();
+        
+        // Vérifier la mémoire disponible
+        if (ESP.getFreeHeap() < 50000) { // Moins de 50KB libre
+            ESP_LOGW(WEB_TAG, "⚠️ MÉMOIRE FAIBLE: %zu bytes", ESP.getFreeHeap());
+        }
+        
+        // Initialiser le restore parallèle
+        if (!initTrueParallelTarRestore()) {
+            ESP_LOGE(WEB_TAG, "❌ Erreur initialisation restore");
+            request->send(500, "text/plain", "Erreur initialisation restore");
             return;
+        }
+        
+        safeUploadState.initialized = true;
+        ESP_LOGI(WEB_TAG, "✅ Restore initialisé, taille attendue: %zu bytes", safeUploadState.totalExpected);
+    }
+    
+    if (!safeUploadState.initialized) {
+        ESP_LOGE(WEB_TAG, "❌ Restore non initialisé");
+        return;
+    }
+    
+    // Traiter le chunk
+    if (len > 0) {
+        size_t written = processTrueParallelTarChunk(data, len);
+        
+        if (written != len) {
+            ESP_LOGW(WEB_TAG, "⚠️ Écriture partielle: %zu/%zu bytes (heap: %zu)", 
+                    written, len, ESP.getFreeHeap());
+        }
+        
+        safeUploadState.totalReceived += written;
+        safeUploadState.lastChunkTime = millis();
+        
+        // Logger le progrès avec monitoring mémoire
+        static size_t lastLoggedBytes = 0;
+        if (safeUploadState.totalReceived - lastLoggedBytes > 32768) { // Log tous les 32KB
+            float percent = safeUploadState.totalExpected > 0 ? 
+                           (100.0 * safeUploadState.totalReceived / safeUploadState.totalExpected) : 0;
+            
+            unsigned long elapsed = millis() - safeUploadState.startTime;
+            float speed = elapsed > 0 ? (safeUploadState.totalReceived / 1024.0) / (elapsed / 1000.0) : 0;
+            
+            ESP_LOGI(WEB_TAG, "📈 Progress: %zu/%zu bytes (%.1f%%) - %.1f KB/s - Heap: %zu", 
+                    safeUploadState.totalReceived, safeUploadState.totalExpected, 
+                    percent, speed, ESP.getFreeHeap());
+            lastLoggedBytes = safeUploadState.totalReceived;
         }
     }
     
-    if (len > 0) {
-        processTarChunk(data, len);
-    }
-    
+    // Finalisation au dernier chunk
     if (final) {
-        bool success = finalizeTarRestore();
-        request->send(success ? 200 : 500, "text/plain", 
-                     success ? "Restore réussi" : "Erreur restore");
-        cleanupTarRestore();
+        safeUploadState.uploadComplete = true;
+        unsigned long uploadTime = millis() - safeUploadState.startTime;
+        
+        ESP_LOGI(WEB_TAG, "📤 Upload terminé: %zu bytes en %lu ms", 
+                safeUploadState.totalReceived, uploadTime);
+        ESP_LOGI(WEB_TAG, "💾 Mémoire après upload: %zu bytes", ESP.getFreeHeap());
+        
+        // Finaliser le restore (attend la fin du traitement)
+        ESP_LOGI(WEB_TAG, "⏳ Finalisation sécurisée...");
+        bool success = finalizeTrueParallelTarRestore();
+        
+        unsigned long totalTime = millis() - safeUploadState.startTime;
+        
+        ESP_LOGI(WEB_TAG, "💾 Mémoire après finalisation: %zu bytes", ESP.getFreeHeap());
+        ESP_LOGI(WEB_TAG, "💾 Minimum heap session: %zu bytes", ESP.getMinFreeHeap());
+        
+        if (success) {
+            ESP_LOGI(WEB_TAG, "✅ Restore sécurisé terminé avec succès en %lu ms", totalTime);
+            
+            String response = "🛡️ Restore sécurisé terminé avec succès!\n";
+            response += "⏱️ Temps total: " + String(totalTime) + " ms\n";
+            response += "📈 Vitesse: " + String((safeUploadState.totalReceived / 1024.0) / (totalTime / 1000.0), 1) + " KB/s\n";
+            response += "💾 Mémoire finale: " + String(ESP.getFreeHeap()) + " bytes";
+            
+            request->send(200, "text/plain", response);
+        } else {
+            ESP_LOGE(WEB_TAG, "❌ Erreur lors du restore sécurisé");
+            request->send(500, "text/plain", "Erreur lors du restore - Vérifiez les logs");
+        }
+        
+        // Nettoyage sécurisé avec délai
+        ESP_LOGI(WEB_TAG, "🧹 Nettoyage sécurisé...");
+        cleanupTrueParallelTarRestore();
+        
+        // Reset avec délai
+        vTaskDelay(pdMS_TO_TICKS(500));
+        safeUploadState = {};
+        
+        ESP_LOGI(WEB_TAG, "💾 Mémoire après nettoyage: %zu bytes", ESP.getFreeHeap());
     }
 }
+
 
 
 
@@ -447,7 +547,7 @@ void startWebServer() {
     server.on("/listGame",HTTP_GET, w_handleListGame);
 
     server.on("/backup", HTTP_GET, handleBackup);
-    server.on("/restore", HTTP_POST, [](AsyncWebServerRequest *request){}, handleRestore);
+    server.on("/restore", HTTP_POST, [](AsyncWebServerRequest *request){}, handleTrueParallelRestoreUpload);
 
 
     server.on("/version", HTTP_GET, [](AsyncWebServerRequest *request){request->send(200,"text/plain",VERSION);});

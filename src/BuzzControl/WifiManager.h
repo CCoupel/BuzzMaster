@@ -188,7 +188,10 @@ void setupAP() {
              apSSID.c_str(), IP.toString().c_str(), bestChannel);
     
     // Optimisations supplémentaires via méthodes spécifiques à Arduino
-    WiFi.setSleep(WIFI_PS_NONE);  // Désactiver le mode d'économie d'énergie
+    WiFi.setSleep(false);                    // Désactiver le sleep WiFi
+    WiFi.setTxPower(WIFI_POWER_19_5dBm);    // Puissance max
+    esp_wifi_set_ps(WIFI_PS_NONE);          // Pas de power saving
+
     
     // Optionnellement, tenter d'utiliser des méthodes de bas niveau si disponibles
     #ifdef ESP_IDF_VERSION_MAJOR
