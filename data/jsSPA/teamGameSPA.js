@@ -163,6 +163,8 @@ function updateQuestionClass(element, status) {
   element.classList.remove(...statusClasses);
   if (statusClasses.includes(status)) {
     element.classList.add(status);
+  } else {
+    element.classList.add("AVAILABLE")
   }
 }
 

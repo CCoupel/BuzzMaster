@@ -187,3 +187,15 @@
 .team.ready {
     box-shadow: 0 2px 5px 4px rgba(174, 213, 129, 1);
 }
+
+.STOPPED {
+    background-color: pink;
+}
+
+.REVEALED {
+    background-color: lightgray;
+    font-size: 75%;
+    font-style: oblique 30deg;
+    opacity: 0.6;
+    width: 75%;
+}
