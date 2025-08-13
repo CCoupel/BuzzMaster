@@ -179,14 +179,15 @@ void processTCPMessage(const String& data, AsyncClient* client, int64_t timestam
         if (isGamePrepare()) {
             setBumperReady(bumperID.c_str());
             updateTeamsReady();
-            notifyAll();
-            
+
             // Check if all teams are ready to potentially transition to READY state
             if (areAllTeamsReady()) {
                 ESP_LOGI(RECEIVE_TAG, "All teams are ready to start");
                 setGamePhase("READY");
-                enqueueOutgoingMessage("READY", getTeamsAndBumpersJSON().c_str(), true, nullptr);
+                //enqueueOutgoingMessage("READY", getTeamsAndBumpersJSON().c_str(), false, nullptr);
             }
+            notifyAll();
+            sleep(1);
         }
     }
     else {
