@@ -193,3 +193,56 @@ main {
 .blink-fast {
     animation: blink 0.5s linear infinite;
 }
+
+.points-animation {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%) scale(0.5);
+    font-size: 2rem;
+    font-weight: bold;
+    color: #fff;
+    background: rgba(0, 0, 0, 0.7);
+    padding: 20px 40px;
+    border-radius: 10px;
+    opacity: 0;
+    z-index: 9999;
+}
+
+.points-animation.show {
+    animation: dropAndGrow 1s ease-out forwards;
+}
+
+.points-animation.hide {
+    animation: growAndDrop 1s ease-in forwards;
+}
+
+@keyframes dropAndGrow {
+    0% {
+        transform: translate(-50%, -200%) scale(0.5);
+        opacity: 0;
+    }
+    60% {
+        transform: translate(-50%, -50%) scale(1.1);
+        opacity: 1;
+    }
+    100% {
+        transform: translate(-50%, -30%) scale(1);
+        opacity: 1;
+    }
+}
+
+@keyframes growAndDrop {
+    0% {
+        transform: translate(-50%, -30%) scale(1);
+        opacity: 1;
+    }
+    40% {
+        transform: translate(-50%, 0%) scale(1.1);
+        opacity: 0.8;
+    }
+    100% {
+        transform: translate(-50%, 200%) scale(0.5);
+        opacity: 0;
+    }
+}

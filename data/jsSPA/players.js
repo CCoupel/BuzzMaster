@@ -44,8 +44,12 @@ let localTimer;
 function handleConfigSocketMessagePlayers(event) {
     console.log('Message reçu du serveur:', event.data);
         const data = JSON.parse(event.data);
-        if (data.ACTION) {
-            handleServerAction(data.ACTION, data.MSG);
+        if (data.ACTION) { 
+            if (data.POINTS) {
+                handleServerAction(data.ACTION, data.MSG, data.POINTS);
+            } else {
+                handleServerAction(data.ACTION, data.MSG);
+            }
         } else {
             console.log("Pas d'action :" , console.log(event.data))
         }
@@ -68,7 +72,7 @@ function toggleDisplay(target) {
     }, 500); // Délai pour permettre au CSS de cacher les éléments
 }
 
-function handleServerAction(action, msg) {
+function handleServerAction(action, msg, msgpoints) {
     console.log('Action reçue du serveur:', action);
     switch (action) {
         case 'START':          
@@ -96,6 +100,11 @@ function handleServerAction(action, msg) {
                 updateTimeBar(true);
                 updateTimer();
                 updateScores(msg);
+            }
+            if (msgpoints) {
+                console.log("Je suis là")
+                const { teamId, points } = msgpoints;
+                triggerPointsAnimation(teamId, points);
             }
             break;
         case 'UPDATE_TIMER':
@@ -403,6 +412,30 @@ export function sendWebSocketMessage (action, MSG= "{}")  {
     }
 };
 
+function triggerPointsAnimation(teamName, points) {
+    const container = document.createElement('div');
+    container.classList.add('points-animation');
+    container.textContent = `${teamName} +${points} points !`;
+
+    document.body.appendChild(container);
+
+    // Lancer l'animation d'apparition
+    requestAnimationFrame(() => {
+        container.classList.add('show');
+    });
+
+    // Après 1s (durée de l'animation d'apparition), lancer la disparition
+    setTimeout(() => {
+        container.classList.remove('show');
+        container.classList.add('hide');
+
+        // Attendre la fin de l'animation de disparition avant suppression
+        container.addEventListener('animationend', () => {
+            container.remove();
+        }, { once: true });
+
+    }, 1500); // délai avant disparition (peut être ajusté)
+}
 
 document.addEventListener('DOMContentLoaded', function() {
     connectWebSocketPlayers(handleConfigSocketMessagePlayers);

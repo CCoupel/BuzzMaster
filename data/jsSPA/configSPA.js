@@ -64,7 +64,7 @@ export function setBumperName(id, name) {
     sendTeamsAndBumpers();
 };
 
-export function setBumperPoint(id, inc=0) {
+/*export function setBumperPoint(id, inc=0) {
     const bumper=bumpers[id];
     console.log(id)
     const team=teams[bumper["TEAM"]];
@@ -77,7 +77,24 @@ export function setBumperPoint(id, inc=0) {
         team["SCORE"]=team["SCORE"]+inc;
     }
     sendTeamsAndBumpers(); 
-};
+};*/
+
+export function setBumperPoint(id, inc = 0) {
+    const bumper = bumpers[id];
+    if (!bumper) return; // sécurité si l'id n'existe pas
+
+    const team = teams[bumper["TEAM"]];
+    if (!bumper["SCORE"]) { bumper["SCORE"] = 0; }
+
+    bumper["SCORE"] += inc;
+    if (team) {
+        if (!team["SCORE"]) { team["SCORE"] = 0; }
+        team["SCORE"] += inc;
+    }
+
+    // Envoi seulement l'info nécessaire
+    sendPoints(id, inc);
+}
 
 export function deleteTeam(id) {
     delete teams[id];
@@ -111,6 +128,17 @@ export function sendTeamsAndBumpers() {
     }
 };
 
+export function sendPoints(bumperId, points) {
+    if (ws.readyState === WebSocket.OPEN) {
+        sendWebSocketMessage("POINTS", {
+            bumperId: bumperId,
+            points: points
+        });
+    } else {
+        console.log('WebSocket not ready. Retrying...');
+        setTimeout(() => sendPoints(bumperId, points), 1000);
+    }
+}
 
 export function updateDisplayConfig() {
     createTeamDiv(getTeams());
