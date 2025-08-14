@@ -1545,23 +1545,25 @@ void saveJson() {
 
 void downloadFiles() {
     // Lire l'URL de base
-    String baseUrl = readFile(baseURL,"https://bitbucket.org/ccoupel/buzzcontrol/raw/main/data");
+    String baseUrl = configManager.getUpdateBaseURL(); 
+    String VersionFile= configManager.getVersionFile();
+    //readFile(baseURL,"https://bitbucket.org/ccoupel/buzzcontrol/raw/main/data");
     if (baseUrl.isEmpty()) {
         ESP_LOGE(FS_TAG, "Impossible de lire l'URL de base");
         return;
     }
 
     // Lire la version locale
-    float localVersion =readFile("/CURRENT"+VERSION_FILE,"-1").toFloat();
+    float localVersion =readFile("/CURRENT"+VersionFile,"-1").toFloat();
     ESP_LOGI(FS_TAG, "CURRENT Version=%f", localVersion);
     if (localVersion<0) {
-        localVersion = readFile(VERSION_FILE, "-1").toFloat();
+        localVersion = readFile(VersionFile, "-1").toFloat();
         ESP_LOGW(FS_TAG, "Local Version=%f", localVersion);
     }
     
 
     // Télécharger et lire la version distante
-    String remoteVersionUrl = baseUrl + VERSION_FILE;
+    String remoteVersionUrl = baseUrl + VersionFile;
     String tempVersionPath = "/remote_version.txt";
     deleteDirectory(TEMP_DIR.c_str());
 

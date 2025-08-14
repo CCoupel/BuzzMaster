@@ -14,6 +14,7 @@ int sentMsgId=0;
 typedef struct {
     String action;
     String* message;  
+    String* update;  
     bool notifyAll;
     AsyncClient* client;
     int msgID;
@@ -32,15 +33,16 @@ void initOutgoingQueue() {
 }
 
 void notifyAll() {
-    String output= getTeamsAndBumpersJSON();;
+    String output= getTeamsAndBumpersJSON();
     
         sendMessageToAllClients("UPDATE", output.c_str());
 }
 
-void enqueueOutgoingMessage(const char* action, const char* msg, bool notify, AsyncClient* client) {
+void enqueueOutgoingMessage(const char* action, const char* msg, bool notify, AsyncClient* client, const char* update) {
     OutgoingMessage_t* message = new OutgoingMessage_t;
     message->action = action;
     message->message = new String(msg);
+    message->update = new String(update);
     message->msgTime = new String(micros());
     message->msgID = sentMsgId++;
     message->notifyAll = notify;
@@ -50,18 +52,20 @@ void enqueueOutgoingMessage(const char* action, const char* msg, bool notify, As
         ESP_LOGE(SEND_TAG, "Failed to send message to outgoing queue");
         delete message->message;
         delete message->msgTime;
+        delete message->update;
         delete message;
     } else {
         UBaseType_t messagesWaiting = uxQueueMessagesWaiting(outgoingQueue);
 
-        ESP_LOGD(SEND_TAG, "Message ID %i enqueued as %u %s : %s", message->msgID, messagesWaiting, message->action.c_str(), msg);
+        ESP_LOGD(SEND_TAG, "Message ID %i enqueued as %u %s : %s => %s", message->msgID, messagesWaiting, message->action.c_str(), msg, update);
     }
 }
 
-String makeJsonMessage(const String& action, const String& msg) {
+String makeJsonMessage(const String& action, const String& msg, const String& update) {
     String message = "{";
     message += "\"ACTION\": \"" + action + "\"";
     message += ", \"VERSION\": \"" + String(VERSION) + "\"";
+    if (update != "") { message += "," + update + "";};
     message += ", \"MSG\":" + msg + "";
     message += ", \"TIME_EVENT\":" + String(micros()) + "";
     message += "} \n\0";
@@ -78,9 +82,9 @@ IPAddress calculateBroadcast(const IPAddress& ip, const IPAddress& subnet) {
     return broadcast;
 }
 
-void sendMessageToClient(const String& action, const String& msg, AsyncClient* client) {
+void sendMessageToClient(const String& action, const String& msg, const String& update, AsyncClient* client) {
     if (client && client->connected()) {
-        String message = makeJsonMessage(action, msg);
+        String message = makeJsonMessage(action, msg, update);
         client->write(message.c_str(), message.length());
         ESP_LOGI(SEND_TAG, "Sent to %s: %s", client->remoteIP().toString().c_str(), message.c_str());
     } else {
@@ -88,9 +92,9 @@ void sendMessageToClient(const String& action, const String& msg, AsyncClient* c
     }
 }
 
-bool sendBroadcastUDP(const String& action, const String& msg) {
+bool sendBroadcastUDP(const String& action, const String& msg, const String& update) {
   ESP_LOGI(SEND_TAG, "Sending broadcast message: %s", action.c_str());
-  String message = makeJsonMessage(action, msg);
+  String message = makeJsonMessage(action, msg, update);
   ESP_LOGD(SEND_TAG, "Broadcasting message: %s", message.c_str());
 
   bool success = false;
@@ -156,13 +160,13 @@ bool sendBroadcastUDP(const String& action, const String& msg) {
   return success;
 }
 
-void sendMessageToAllClients(const String& action, const String& msg) {
-    String message = makeJsonMessage(action, msg);
+void sendMessageToAllClients(const String& action, const String& msg, const String& update) {
+    String message = makeJsonMessage(action, msg, update);
     ESP_LOGD(SEND_TAG, "Broadcasting to Socket et UDP message: %s", message.c_str());
 
     // Envoyer le message en broadcast à tous les clients WebSocket
     ws.textAll(message.c_str());
-    sendBroadcastUDP(action, msg);
+    sendBroadcastUDP(action, msg, update);
 }
 
 void sendMessageTask(void *parameter) {
@@ -195,10 +199,10 @@ void sendMessageTask(void *parameter) {
 
             if (receivedMessage->client != nullptr) {
                 ESP_LOGD(SEND_TAG, "client is not null");
-                sendMessageToClient(receivedMessage->action, *(receivedMessage->message), receivedMessage->client);
+                sendMessageToClient(receivedMessage->action, *(receivedMessage->message),*(receivedMessage->update), receivedMessage->client);
             } else {
                 ESP_LOGD(SEND_TAG, "client is null");
-                sendMessageToAllClients(receivedMessage->action, *(receivedMessage->message));
+                sendMessageToAllClients(receivedMessage->action, *(receivedMessage->message), *(receivedMessage->update));
             }
 
             if (receivedMessage->notifyAll) {

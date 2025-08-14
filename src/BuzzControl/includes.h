@@ -1,5 +1,7 @@
 #pragma once
 #include "common/Constant.h"
+#include "Common/configManager.h"
+
 #include "Common/CustomLogger.h"
 #include "Common/led.h"
 
@@ -64,9 +66,9 @@ std::map<String, String> clientBuffers;
 //void setGamePhase(String phase);
 
 // messages_to_send.h
-void enqueueOutgoingMessage(const char* action, const char* msg, bool notify = false, AsyncClient* client = nullptr);
-void sendMessageToClient(const String& action, const String& msg, AsyncClient* client);
-void sendMessageToAllClients(const String& action, const String& msg);
+void enqueueOutgoingMessage(const char* action, const char* msg, const char* update, bool notify = false, AsyncClient* client = nullptr);
+void sendMessageToClient(const String& action, const String& msg, const String& update, AsyncClient* client);
+void sendMessageToAllClients(const String& action, const String& msg, const String& update="");
 void notifyAll();
 
 // messages_received.h
@@ -91,6 +93,7 @@ String printLittleFSInfo(bool isShort = false);
 
 // Game management
 void resetBumpersTime();
+void updateScore(const String bumperID, const int points);
 void updateTimer(const int Time, const int delta = 0);
 void startGame(const int delay = 33);
 void stopGame();

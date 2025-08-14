@@ -71,7 +71,7 @@ void processDataFromSocket(const char* action, const JsonObject& message, int64_
       
     case hash("HELLO"):
       notifyAll();
-      enqueueOutgoingMessage("QUESTIONS", getQuestions().c_str(), false, nullptr);
+      enqueueOutgoingMessage("QUESTIONS", getQuestions().c_str(), false, nullptr, "");
       break;
       
     case hash("FULL"):
@@ -85,10 +85,14 @@ void processDataFromSocket(const char* action, const JsonObject& message, int64_
       updateBumpers(message["bumpers"]);
       break;
 
+    case hash("POINTS"):
+      updateScore(message["bumperId"], message["points"]);
+      break;
+
     case hash("RESET"):
       resetServer();
       break;
-      
+
     case hash("REBOOT"):
       rebootServer();
       break;
@@ -126,7 +130,7 @@ void processDataFromSocket(const char* action, const JsonObject& message, int64_
       break;
       
     case hash("FSINFO"):
-      enqueueOutgoingMessage("FSINFO", ("{\"FSINFO\": \"" + printLittleFSInfo() + "\"}").c_str(), false, nullptr);
+      enqueueOutgoingMessage("FSINFO", ("{\"FSINFO\": \"" + printLittleFSInfo() + "\"}").c_str(), false, nullptr,"");
       break;
       
     default:

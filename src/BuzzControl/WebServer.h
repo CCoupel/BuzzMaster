@@ -174,7 +174,7 @@ void w_handleUploadBackgroundFile(AsyncWebServerRequest *request, String filenam
     if(final) { // Fin de l'upload
         ESP_LOGI(WEB_TAG, "Upload du fichier Config terminé");
         setBackgroundFile(filePath);
-        enqueueOutgoingMessage("UPDATE", getGameJSON().c_str(), false, nullptr);
+        enqueueOutgoingMessage("UPDATE", getGameJSON().c_str(), false, nullptr,"");
     }
 }
 
@@ -269,7 +269,7 @@ void w_handleUploadQuestionComplete(AsyncWebServerRequest *request) {
         ESP_LOGI(WEB_TAG,"Saving Question %s", saveQuestion(request, "").c_str());
     }
     request->send(200, "text/json", "Question Saved");
-    enqueueOutgoingMessage("QUESTIONS", getQuestions().c_str(), false, nullptr);
+    enqueueOutgoingMessage("QUESTIONS", getQuestions().c_str(), false, nullptr,"");
 }
 
 void w_handleUploadQuestionFile(AsyncWebServerRequest *request, String filename, size_t index, uint8_t *data, size_t len, bool final) {
