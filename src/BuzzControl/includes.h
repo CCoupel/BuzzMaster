@@ -56,6 +56,7 @@ static const String questionsPath = "/files/questions";
 
 SemaphoreHandle_t questionMutex = NULL;
 SemaphoreHandle_t buttonMutex = NULL;
+SemaphoreHandle_t updateMutex = NULL;
 
 // Map pour stocker les buffers par client (identifiés par IP)
 std::map<String, String> clientBuffers;
