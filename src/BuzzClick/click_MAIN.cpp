@@ -50,8 +50,7 @@ void setup()
 
   Serial.begin(921600);
   Serial.println("STARTING!!");
-  setLedColor(255,255,255);
-  setLedIntensity(128);
+
   esp_log_level_set("*", ESP_LOG_INFO);
   ESP_LOGI(MAIN_TAG, "Starting up...");
   
@@ -64,27 +63,34 @@ void setup()
         configMAX_PRIORITIES - 1, // Haute priorité
         NULL
     );
-
+ 
   initLED();
   ESP_LOGI(MAIN_TAG, "STARTING:");
   printPinInfo();
-  setLedColor(255,0,0);
-  setLedIntensity(255);
+  for (int led=0; led<NUMPIXELS/4; led++) {
+    setPixelColor(led+1, 255, 0, 0);
+  }
+  showPixels();
 
   setupWifi();
   yield();
-
+  
   CustomLogger::init(logPort);
   ESP_LOGI(MAIN_TAG, "BOOTING Version: %s", String(VERSION));
 
-  setLedColor(255,255,0,true);
-
-//  esp_task_wdt_init(15, true); 
-  setLedColor(0,64,0,true);
-
-  attachButtons();
-
+for (int led=0; led<NUMPIXELS/4; led++) {
+    setPixelColor(NUMPIXELS/4+led+1, 0, 0, 255);
   }
+  showPixels();
+//  esp_task_wdt_init(15, true); 
+
+//  esp_task_
+  attachButtons();
+for (int led=0; led<NUMPIXELS/4; led++) {
+    setPixelColor(2*NUMPIXELS/2+led+1, 0, 255, 0);
+  }
+  showPixels();
+}
 
 void loop() {
 //  checkWifiStatus();

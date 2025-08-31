@@ -78,8 +78,6 @@ bool connectToWifi() {
 }
 
 void setupWifi() {
-    setLedColor(255,0,0);
-  setLedIntensity(255);
 
   WiFi.onEvent(WiFiStationConnected, WiFiEvent_t::ARDUINO_EVENT_WIFI_STA_CONNECTED);
   WiFi.onEvent(WiFiGotIP, WiFiEvent_t::ARDUINO_EVENT_WIFI_STA_GOT_IP);
