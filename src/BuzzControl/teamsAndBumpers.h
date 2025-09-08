@@ -469,6 +469,21 @@ void setBumperScore(const char* bumperID, const int new_score) {
     teamsAndBumpers["bumpers"][bID]["SCORE"]=copy;
 }
 
+int  updateBumperScore(const char* bumperID, const int points) {
+    String bID = ensureBumperExists(bumperID);
+    int score=teamsAndBumpers["bumpers"][bID]["SCORE"];
+    int newscore=score+points;
+    ESP_LOGI(TEAMs_TAG, "Bumper update old Score %s %i+%i=%i", bID.c_str(), score, points, newscore);
+    teamsAndBumpers["bumpers"][bID]["SCORE"]=newscore;
+    return newscore;
+}
+
+const String getBumperTeam(const char* bumperID) {
+    String bID = ensureBumperExists(bumperID);
+    String tId=teamsAndBumpers["bumpers"][bID]["TEAM"];
+    return tId;
+}
+
 const int64_t getBumperTime(const char* bumperID) {
     String bID = ensureBumperExists(bumperID);
     return int64_t(teamsAndBumpers["bumpers"][bID]["TIMESTAMP"]);
@@ -609,6 +624,38 @@ void setTeamScore(const char* teamID, const int new_score) {
     int copy = int(new_score);
     teamsAndBumpers["teams"][bID]["SCORE"] = copy;
     ESP_LOGI(TEAMs_TAG, "Team Score %s %i", bID, copy);
+}
+
+
+
+
+
+
+/*
+void updateBumperScore(const char* bumperID, const int points) {
+    String bID = ensureBumperExists(bumperID);
+    int score=teamsAndBumpers["bumpers"][bID]["SCORE"];
+    int newscore=score+points;
+    ESP_LOGI(TEAMs_TAG, "Bumper update old Score %s %i+%i=%i", bID.c_str(), score, points, newscore);
+    teamsAndBumpers["bumpers"][bID]["SCORE"]=newscore;
+}
+
+*/
+
+
+
+
+
+int  updateBumperTeamScore(const char* bumperID, const int points) {
+    ESP_LOGI(TEAMs_TAG, "team Bumper update old Score %s %i", bumperID, points);
+
+    String bID=(teamsAndBumpers["bumpers"][String(bumperID)]["TEAM"]);
+    int score=teamsAndBumpers["teams"][bID]["SCORE"];
+    int newscore=score+points;
+    ESP_LOGI(TEAMs_TAG, "Bumper Team update old Score %s %s %i+%i=%i",bumperID, bID.c_str(), score, points, newscore);
+
+    teamsAndBumpers["teams"][bID]["SCORE"] = int(teamsAndBumpers["teams"][bID]["SCORE"])+points;
+    return newscore;
 }
 
 void updateTeam(const char* teamID, const JsonObject& new_team) {

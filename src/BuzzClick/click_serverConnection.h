@@ -275,6 +275,7 @@ ESP_LOGI(SRV_TAG, "Game Phase=%s",game_phase);
     if ( button != NULL )
     {
       ESP_LOGD(SRV_TAG, "Button=%s", button);
+      setLedIntensity(255);
       for (int led=0+current_time%2; led<NUMPIXELS; led+=2)
       {
         setPixelColor(led, 64, 64, 64);
@@ -284,7 +285,7 @@ ESP_LOGI(SRV_TAG, "Game Phase=%s",game_phase);
   else if (strcmp(game_phase, "PREPARE")==0)
   {
     setLedColor(colorArray[0], colorArray[1], colorArray[2]);
-    setLedIntensity(32);
+    setLedIntensity(255);
   }
 }
 

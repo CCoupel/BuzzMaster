@@ -46,7 +46,7 @@ void processButtonPress(const String& bumperID, const char* b_team, int64_t b_ti
       setTeamBumper(b_team, bumperID.c_str());
       setTeamTime(b_team, b_time);
       setTeamStatus(b_team, "PAUSE");
-      enqueueOutgoingMessage("UPDATE", getTeamsAndBumpersJSON().c_str(), false, nullptr);
+      enqueueOutgoingMessage("UPDATE", getTeamsAndBumpersJSON().c_str(), false, nullptr,"");
     }
     else {
       ESP_LOGD(BUMPER_TAG, "Actual Team Time already setup %s:%lld", b_team, teamTime);
@@ -61,15 +61,15 @@ void processButtonPress(const String& bumperID, const char* b_team, int64_t b_ti
 
 
 void sendQuestions() {
-  enqueueOutgoingMessage("QUESTIONS", getQuestions().c_str(), false, nullptr);
+  enqueueOutgoingMessage("QUESTIONS", getQuestions().c_str(), false, nullptr,"");
 }
 
 void sendGame() {
-  enqueueOutgoingMessage("UPDATE", getGameJSON().c_str(), false, nullptr);
+  enqueueOutgoingMessage("UPDATE", getGameJSON().c_str(), false, nullptr,"");
 }
 
 void sendTeamsAndBumpers() {
-  enqueueOutgoingMessage("UPDATE", getTeamsAndBumpersJSON().c_str(), false, nullptr);
+  enqueueOutgoingMessage("UPDATE", getTeamsAndBumpersJSON().c_str(), false, nullptr,"");
 }
 
 void resetBumpersTime() {
@@ -116,7 +116,7 @@ void startGame(const int delay) {
   setGameTime();
   setGamePhase("START");
   setQuestionStatus("STARTED");
-  enqueueOutgoingMessage("START", getGameJSON().c_str(), true, nullptr);
+  enqueueOutgoingMessage("START", getGameJSON().c_str(), true, nullptr,"");
   
   // Démarrer le timer s'il n'est pas déjà en cours
   if (!isTimerRunning) {
@@ -131,7 +131,7 @@ void updateTimer(const int Time, const int delta) {
         newTime = 0;
     }
     setGameCurrentTime(newTime);
-    enqueueOutgoingMessage("UPDATE_TIMER", getGameJSON().c_str(), false, nullptr);
+    enqueueOutgoingMessage("UPDATE_TIMER", getGameJSON().c_str(), false, nullptr,"");
     if (newTime == 0) { 
         stopGame();
     }
@@ -141,7 +141,7 @@ void stopGame() {
   setGameCurrentTime(0);
   setGamePhase("STOP");
   setQuestionStatus("STOPPED");
-  enqueueOutgoingMessage("STOP", getGameJSON().c_str(), true, nullptr);
+  enqueueOutgoingMessage("STOP", getGameJSON().c_str(), true, nullptr,"");
   
   // Arrêter le timer
   if (isTimerRunning) {
@@ -151,27 +151,42 @@ void stopGame() {
 }
 
 void pauseGame(AsyncClient* client) {
-  enqueueOutgoingMessage("PAUSE", getGameJSON().c_str(), true, client);
+  enqueueOutgoingMessage("PAUSE", getGameJSON().c_str(), true, client,"");
 }
 
 void pauseAllGame() {
   setGamePhase("PAUSE");
   setQuestionStatus("PAUSED");
-  enqueueOutgoingMessage("PAUSE", getGameJSON().c_str(), true, nullptr);
+  enqueueOutgoingMessage("PAUSE", getGameJSON().c_str(), true, nullptr,"");
 }
 
 void continueGame() {
   setGamePhase("START");
   setQuestionStatus("STARTED");
-  enqueueOutgoingMessage("CONTINUE", getGameJSON().c_str(), true, nullptr);
+  enqueueOutgoingMessage("CONTINUE", getGameJSON().c_str(), true, nullptr,"");
 }
 
 void revealGame() {
     if (isGameStopped()) {
       String msg = "\"" + getQuestionResponse() + "\"";
       setQuestionStatus("REVEALED");
-      enqueueOutgoingMessage("REVEAL", msg.c_str(), true, nullptr);
+      enqueueOutgoingMessage("REVEAL", msg.c_str(), true, nullptr,"");
     }
+}
+
+void updateScore(const String bumperID, const int points) {
+  ESP_LOGD(BUMPER_TAG, "Bumper update %s %i", bumperID.c_str(), points);
+  int bscore=updateBumperScore(bumperID.c_str(), points);
+  int tscore=updateBumperTeamScore(bumperID.c_str(), points);
+  String update="\"POINTS\": {";
+  update+="\"bumperId\": \""+bumperID+"\"";
+  update+=", \"teamId\": \""+String(getBumperTeam(bumperID.c_str()))+"\"";
+  update+=", \"points\": "+String(points);
+  update+=", \"scoreBumper\": "+String(bscore);
+  update+=", \"scoreTeam\": "+String(tscore);
+  
+  update+="}";
+  enqueueOutgoingMessage("UPDATE", getTeamsAndBumpersJSON().c_str(), false, nullptr, update.c_str());
 }
 
 void readyGame(const String question) {
@@ -192,7 +207,7 @@ void readyGame(const String question) {
     updateTeamsReady();
     sendTeamsAndBumpers();
 
-    enqueueOutgoingMessage("PING", "{}", false, nullptr);
+    enqueueOutgoingMessage("PING", "{}", false, nullptr,"");
   }
 }
 
@@ -227,11 +242,11 @@ void RAZscores() {
 }
 
 void sendHelloToAll() {
-  enqueueOutgoingMessage("HELLO", "{  }", true, nullptr);
+  enqueueOutgoingMessage("HELLO", "{  }", true, nullptr,"");
 }
 
 void sendResetToAll() {
-  enqueueOutgoingMessage("RESET", "{  }", true, nullptr);
+  enqueueOutgoingMessage("RESET", "{  }", true, nullptr,"");
 }
 
 void clearGame(bool notify=true) {
@@ -278,7 +293,7 @@ void setRemotePage(const String remotePage) {
   } else {
     setGamePage(remotePage);
   }
-  enqueueOutgoingMessage("REMOTE", getTeamsAndBumpersJSON().c_str(), false, nullptr);
+  enqueueOutgoingMessage("REMOTE", getTeamsAndBumpersJSON().c_str(), false, nullptr,"");
 }
 
 void handleHelloAction(const char* bumperID, JsonObject& MSG) {
@@ -308,7 +323,7 @@ void handlePingResponseAction(const char* bumperID) {
         if (areAllTeamsReady()) {
             ESP_LOGI(BUMPER_TAG, "All teams are ready to start");
             setGamePhase("READY");
-            enqueueOutgoingMessage("READY", getTeamsAndBumpersJSON().c_str(), true, nullptr);
+            enqueueOutgoingMessage("READY", getTeamsAndBumpersJSON().c_str(), true, nullptr,"");
         }
     }
 }

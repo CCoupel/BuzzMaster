@@ -86,7 +86,7 @@ sleep(5);
   int count=0;
   while(WiFi.status() != WL_CONNECTED && count++ <3) {sleep(1);};
 
-  downloadFiles();
+  //downloadFiles();
 
   listLittleFSFiles();
   printLittleFSInfo();
@@ -118,9 +118,9 @@ sleep(2);
   // Initialisation des mutex
   questionMutex = xSemaphoreCreateMutex();
   buttonMutex = xSemaphoreCreateMutex();
-  
+  updateMutex = xSemaphoreCreateMutex();
   // Envoyer un message de bienvenue à tous les clients
-  enqueueOutgoingMessage("HELLO", "{}", false, nullptr);
+  enqueueOutgoingMessage("HELLO", "{}", false, nullptr,"");
 }
 
 void loop(void) {

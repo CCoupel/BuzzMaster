@@ -71,7 +71,7 @@ void processDataFromSocket(const char* action, const JsonObject& message, int64_
       
     case hash("HELLO"):
       notifyAll();
-      enqueueOutgoingMessage("QUESTIONS", getQuestions().c_str(), false, nullptr);
+      enqueueOutgoingMessage("QUESTIONS", getQuestions().c_str(), false, nullptr, "");
       break;
       
     case hash("FULL"):
@@ -85,10 +85,14 @@ void processDataFromSocket(const char* action, const JsonObject& message, int64_
       updateBumpers(message["bumpers"]);
       break;
 
+    case hash("POINTS"):
+      updateScore(message["bumperId"], message["points"]);
+      break;
+
     case hash("RESET"):
       resetServer();
       break;
-      
+
     case hash("REBOOT"):
       rebootServer();
       break;
@@ -126,7 +130,7 @@ void processDataFromSocket(const char* action, const JsonObject& message, int64_
       break;
       
     case hash("FSINFO"):
-      enqueueOutgoingMessage("FSINFO", ("{\"FSINFO\": \"" + printLittleFSInfo() + "\"}").c_str(), false, nullptr);
+      enqueueOutgoingMessage("FSINFO", ("{\"FSINFO\": \"" + printLittleFSInfo() + "\"}").c_str(), false, nullptr,"");
       break;
       
     default:
@@ -177,17 +181,22 @@ void processTCPMessage(const String& data, AsyncClient* client, int64_t timestam
         // Handle ping response
         ESP_LOGI(RECEIVE_TAG, "Bumper PONG received from: %s", bumperID.c_str());
         if (isGamePrepare()) {
+          if (xSemaphoreTake(updateMutex, pdMS_TO_TICKS(1000)) == pdTRUE) {
             setBumperReady(bumperID.c_str());
             updateTeamsReady();
-
+            //notifyAll();
+            sleep(1);
             // Check if all teams are ready to potentially transition to READY state
             if (areAllTeamsReady()) {
                 ESP_LOGI(RECEIVE_TAG, "All teams are ready to start");
                 setGamePhase("READY");
-                //enqueueOutgoingMessage("READY", getTeamsAndBumpersJSON().c_str(), false, nullptr);
+                enqueueOutgoingMessage("READY", getTeamsAndBumpersJSON().c_str(), false, nullptr,"");
             }
-            notifyAll();
-            sleep(1);
+            enqueueOutgoingMessage("UPDATE", getTeamsAndBumpersJSON().c_str(), false, nullptr,"");
+            xSemaphoreGive(updateMutex);
+          } else {
+            ESP_LOGI(RECEIVE_TAG, "Couldn't obtain mutex in processTCPMessage");
+          }
         }
     }
     else {
