@@ -195,54 +195,126 @@ main {
 }
 
 .points-animation {
-    position: fixed;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%) scale(0.5);
-    font-size: 2rem;
-    font-weight: bold;
-    color: #fff;
-    background: rgba(0, 0, 0, 0.7);
-    padding: 20px 40px;
-    border-radius: 10px;
-    opacity: 0;
-    z-index: 9999;
+  --color-rgb: 255, 255, 255;
+  --color: rgb(var(--color-rgb));
+  --glow: rgba(var(--color-rgb), 0.85);
+
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -200%) scale(0.5);
+  font-size: 2rem;
+  font-weight: bold;
+  color: var(--color);
+  background: rgba(0, 0, 0, 0.6);
+  padding: 20px 40px;
+  border-radius: 12px;
+  opacity: 0;
+  z-index: 9999;
+  pointer-events: none;
+  box-shadow: 0 0 22px var(--glow);
+  text-shadow: 
+    0 0 14px var(--glow),
+    -1px -1px 0 lightgray,
+    1px -1px 0 lightgray,
+    -1px  1px 0 lightgray,
+    1px  1px 0 lightgray;
+  will-change: transform, opacity;
 }
 
+/* Aura / traînée */
+.points-animation::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: var(--color);
+  filter: blur(45px);
+  opacity: 0.8;
+  z-index: -1;
+}
+
+/* Apparition */
 .points-animation.show {
-    animation: dropAndGrow 1s ease-out forwards;
+  animation: dropAndGrow 1s ease-out forwards;
 }
 
+.points-animation.show::after {
+  animation: trailFade 1.2s ease-out forwards;
+  opacity: 0.5;
+}
+
+/* Disparition */
 .points-animation.hide {
-    animation: growAndDrop 1s ease-in forwards;
+  animation: growAndDrop 1s ease-in forwards;
 }
 
+/* Ghosts */
+.points-animation.ghost {
+  pointer-events: none;
+  filter: blur(6px);
+  color: var(--color);
+  background: transparent;
+  box-shadow: none;
+  text-shadow: none;
+  z-index: 9998;
+  transform: translate(-50%, -200%) scale(0.5);
+  visibility: hidden;
+}
+
+.points-animation.ghost::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: var(--color);
+  filter: blur(45px);
+  opacity: 0.8;
+  z-index: -1;
+    box-shadow: none;
+  text-shadow: none;
+}
+
+
+.points-animation.ghost.show {
+  animation: dropAndGrow 1s ease-out; /* retirer forwards */
+}
+.points-animation.ghost.hide {
+  animation: growAndDrop 1s ease-in; /* retirer forwards si nécessaire */
+}
+
+/* Keyframes */
 @keyframes dropAndGrow {
-    0% {
-        transform: translate(-50%, -200%) scale(0.5);
-        opacity: 0;
-    }
-    60% {
-        transform: translate(-50%, -50%) scale(1.1);
-        opacity: 1;
-    }
-    100% {
-        transform: translate(-50%, -30%) scale(1);
-        opacity: 1;
-    }
+  0% {
+    transform: translate(-50%, -500%) scale(0.5);
+    opacity: 0;
+  }
+  60% {
+    transform: translate(-50%, -50%) scale(2.2); /* zoom plus fort */
+    opacity: 1;
+  }
+  100% {
+    transform: translate(-50%, -30%) scale(2); /* taille finale doublée */
+    opacity: 1;
+  }
 }
 
 @keyframes growAndDrop {
-    0% {
-        transform: translate(-50%, -30%) scale(1);
-        opacity: 1;
-    }
-    40% {
-        transform: translate(-50%, 0%) scale(1.1);
-        opacity: 0.8;
-    }
-    100% {
-        transform: translate(-50%, 200%) scale(0.5);
-        opacity: 0;
-    }
+  0% {
+    transform: translate(-50%, -30%) scale(2);
+    opacity: 1;
+  }
+  40% {
+    transform: translate(-50%, 0%) scale(2.16); /* petit overshoot */
+    opacity: 0.85;
+  }
+  100% {
+    transform: translate(-50%, 400%) scale(1); /* rétrécit en disparaissant */
+    opacity: 0;
+  }
+}
+
+@keyframes trailFade {
+  0%   { opacity: 0.8; transform: scale(2); }
+  100% { opacity: 0;   transform: scale(4); }
 }

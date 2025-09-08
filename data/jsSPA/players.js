@@ -102,9 +102,17 @@ function handleServerAction(action, msg, msgpoints) {
                 updateScores(msg);
             }
             if (msgpoints) {
-                console.log("Je suis là")
                 const { teamId, points } = msgpoints;
-                triggerPointsAnimation(teamId, points);
+
+                const teamData = msg.teams[teamId];
+
+                if (teamData && teamData.COLOR) {
+                    const color = teamData.COLOR; // Ex: [64,64,64]
+                    triggerPointsAnimation(teamId, points, color);
+                } else {
+                    console.warn(`Team ${teamId} non trouvée ou pas de couleur`);
+                    triggerPointsAnimation(teamId, points, null);
+                }
             }
             break;
         case 'UPDATE_TIMER':
@@ -412,29 +420,84 @@ export function sendWebSocketMessage (action, MSG= "{}")  {
     }
 };
 
-function triggerPointsAnimation(teamName, points) {
-    const container = document.createElement('div');
-    container.classList.add('points-animation');
-    container.textContent = `${teamName} +${points} points !`;
+function triggerPointsAnimation(teamName, points, colorRGB = '64, 64, 64') {
+  const text = `${teamName} +${points} points !`;
 
-    document.body.appendChild(container);
+  // Texte principal
+  const el = document.createElement('div');
+  el.className = 'points-animation';
+  el.textContent = text;
+  el.style.setProperty('--color-rgb', colorRGB);
+  document.body.appendChild(el);
 
-    // Lancer l'animation d'apparition
-    requestAnimationFrame(() => {
-        container.classList.add('show');
-    });
+  // Lancer apparition du texte principal
+  requestAnimationFrame(() => el.classList.add('show'));
 
-    // Après 1s (durée de l'animation d'apparition), lancer la disparition
-    setTimeout(() => {
-        container.classList.remove('show');
-        container.classList.add('hide');
+  // Création des ghosts
+const createGhost = (delay, opacity) => {
+  const ghost = document.createElement('div');
+  ghost.className = 'points-animation ghost';
+  ghost.textContent = text;
+  ghost.style.setProperty('--color-rgb', colorRGB);
 
-        // Attendre la fin de l'animation de disparition avant suppression
-        container.addEventListener('animationend', () => {
-            container.remove();
-        }, { once: true });
+  ghost.style.opacity = '0';
+  ghost.style.transform = 'translate(-50%, -200%) scale(0.5)';
+  ghost.style.visibility = 'hidden';
+  ghost.style.animationDelay = `${delay}s`;
+  ghost.style.animationPlayState = 'running';
 
-    }, 1500); // délai avant disparition (peut être ajusté)
+  document.body.appendChild(ghost);
+
+  requestAnimationFrame(() => {
+    ghost.style.visibility = 'visible';
+    ghost.style.opacity = opacity;
+    ghost.classList.add('show');
+  });
+
+  let dropDone = false;
+  ghost.addEventListener('animationend', (e) => {
+    if (!dropDone && e.animationName === 'dropAndGrow') {
+        dropDone = true;
+        ghost.classList.remove('show');
+        ghost.offsetWidth; // force reflow
+        ghost.classList.add('hide'); // facultatif si tu as growAndDrop
+    } else if (e.animationName === 'growAndDrop') {
+      ghost.remove(); // supprime le ghost correctement
+    }
+  });
+};
+
+    function sleep(ms) {
+        return new Promise(resolve => setTimeout(resolve, ms));
+    }
+  // Créer plusieurs ghosts avec delays et opacités différentes
+    async function spawnGhosts(points) {
+    for (let i = 0; i < Math.min(points, 5); i++) {
+        createGhost(0.0 * i, 0.4 - i * 0.08);
+        await sleep(200); // pause de 200ms
+    }
+    }
+
+    spawnGhosts(points)
+
+  // Gestion animation texte principal
+  const onAnimEnd = (e) => {
+    if (e.target !== el) return;
+
+    if (e.animationName === 'dropAndGrow') {
+      // Pause 500ms au centre avant disparition
+      setTimeout(() => {
+        el.classList.remove('show');
+        el.offsetWidth; // force reflow
+        el.classList.add('hide');
+      }, 500);
+    } else if (e.animationName === 'growAndDrop') {
+      el.removeEventListener('animationend', onAnimEnd);
+      el.remove();
+    }
+  };
+
+  el.addEventListener('animationend', onAnimEnd);
 }
 
 document.addEventListener('DOMContentLoaded', function() {
