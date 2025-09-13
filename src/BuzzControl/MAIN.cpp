@@ -122,6 +122,7 @@ sleep(2);
   updateMutex = xSemaphoreCreateMutex();
   // Envoyer un message de bienvenue à tous les clients
   enqueueOutgoingMessage("HELLO", "{}", false, nullptr,"");
+  setLedByState(GameState::READY);
 }
 
 void loop(void) {

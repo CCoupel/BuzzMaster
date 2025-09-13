@@ -4,6 +4,8 @@
 #include "fsManager.h"
 #include "messages_to_send.h"
 #include "common/configManager.h"
+#include "backupManager.h"
+#include "backupManager.h"
 
 #include <ESPAsyncWebServer.h>
 
@@ -174,6 +176,7 @@ void w_handleUploadBackgroundFile(AsyncWebServerRequest *request, String filenam
     if(final) { // Fin de l'upload
         ESP_LOGI(WEB_TAG, "Upload du fichier Config terminé");
         setBackgroundFile(filePath);
+        saveJson();
         enqueueOutgoingMessage("UPDATE", getGameJSON().c_str(), false, nullptr,"");
     }
 }
@@ -495,6 +498,101 @@ handleTrueParallelRestoreUpload(AsyncWebServerRequest *request, String filename,
 }
 
 
+// Fonction pour le backup complet du filesystem (ancien système renommé)
+void handleFSBackup(AsyncWebServerRequest *request) {
+    // Initialiser le backup TAR complet (fonction existante de fsManager)
+    if (!initStreamingTarBackup()) {
+        request->send(500, "text/plain", "Aucun fichier à sauvegarder dans /files");
+        return;
+    }
+    
+    String filename = generateBackupFilename();
+    
+    AsyncWebServerResponse *response = request->beginChunkedResponse(
+        "application/x-tar",
+        [](uint8_t *buffer, size_t maxLen, size_t index) -> size_t {
+            size_t bytesRead = getStreamingTarChunk(buffer, maxLen);
+            
+            // Nettoyer automatiquement quand terminé
+            if (bytesRead == 0) {
+                cleanupStreamingTarBackup();
+            }
+            
+            return bytesRead;
+        }
+    );
+    
+    response->addHeader("Content-Disposition", "attachment; filename=\"" + filename + "\"");
+    response->addHeader("Content-Type", "application/x-tar");
+    
+    request->send(response);
+    
+    ESP_LOGI(WEB_TAG, "FS Backup complet démarré: %s", filename.c_str());
+}
+
+// Nouvelle fonction pour le backup sélectif de jeu
+void handleGameBackup(AsyncWebServerRequest *request) {
+    // Initialiser le backup de jeu sélectif (nouveau système)
+    if (!initGameBackup()) {
+        request->send(500, "text/plain", "Aucun fichier de jeu à sauvegarder");
+        return;
+    }
+    
+    String filename = generateGameBackupFilename();
+    
+    AsyncWebServerResponse *response = request->beginChunkedResponse(
+        "application/x-tar",
+        [](uint8_t *buffer, size_t maxLen, size_t index) -> size_t {
+            size_t bytesRead = getGameBackupChunk(buffer, maxLen);
+            
+            // Nettoyer automatiquement quand terminé
+            if (bytesRead == 0) {
+                cleanupGameBackup();
+            }
+            
+            return bytesRead;
+        }
+    );
+    
+    response->addHeader("Content-Disposition", "attachment; filename=\"" + filename + "\"");
+    response->addHeader("Content-Type", "application/x-tar");
+    
+    request->send(response);
+    
+    ESP_LOGI(WEB_TAG, "Game Backup sélectif démarré: %s", filename.c_str());
+}
+
+// Handler pour restore de backup complet (ancien système renommé)
+void handleFSRestore(AsyncWebServerRequest *request, String filename, 
+                      size_t index, uint8_t *data, size_t len, bool final) {
+    
+    if (index == 0) {
+        ESP_LOGI(WEB_TAG, "Début FS restore: %s", filename.c_str());
+        if (!initTrueParallelTarRestore()) {
+            request->send(500, "text/plain", "Erreur init FS restore");
+            return;
+        }
+    }
+    
+    if (len > 0) {
+        processTrueParallelTarChunk(data, len);
+    }
+    
+    if (final) {
+        bool success = finalizeTrueParallelTarRestore();
+        request->send(success ? 200 : 500, "text/plain", 
+                     success ? "FS Restore réussi" : "Erreur FS restore");
+        cleanupTrueParallelTarRestore();
+        
+        if (success) {
+            ESP_LOGI(WEB_TAG, "FS Restore terminé avec succès, rechargement de la configuration");
+            // Recharger les données après restauration
+            loadJson(GameFile);
+            configManager.load();
+        }
+    }
+}
+
 
 
 
@@ -547,9 +645,13 @@ void startWebServer() {
     server.on("/listFiles",HTTP_GET, w_handleListFiles);
     server.on("/listGame",HTTP_GET, w_handleListGame);
 
-    server.on("/backup", HTTP_GET, handleBackup);
-    server.on("/restore", HTTP_POST, [](AsyncWebServerRequest *request){}, handleTrueParallelRestoreUpload);
+    server.on("/fs-backup", HTTP_GET, handleFSBackup);
+    server.on("/game-backup", HTTP_GET, handleGameBackup);
+    server.on("/backup", HTTP_GET, [](AsyncWebServerRequest *request){
+        request->redirect("/fs-backup");
+    });
 
+    server.on("/restore", HTTP_POST, [](AsyncWebServerRequest *request){}, handleFSRestore);
 
     server.on("/version", HTTP_GET, [](AsyncWebServerRequest *request){request->send(200,"text/plain",VERSION);});
     server.on("/background", HTTP_POST, w_handleUploadBackgroundComplete, w_handleUploadBackgroundFile);
