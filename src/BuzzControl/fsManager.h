@@ -1447,7 +1447,229 @@ String printLittleFSInfo(bool isShort) {
 
 }
 
+//#######
+String listLittleFSFilesRecursiveHTML(File &dir, const String &basePath = "", const String &indent = "") {
+    String result = "";
+    String line = "";
+    File file = dir.openNextFile();
+    
+    while (file) {
+        // Reset watchdog timer périodiquement
+        esp_task_wdt_reset();
+        
+        // Ajouter un delay pour céder du temps CPU
+        vTaskDelay(pdMS_TO_TICKS(1));
+        
+        String currentPath = basePath + "/" + String(file.name());
+        // Nettoyer le path (enlever les doubles slashes)
+        currentPath.replace("//", "/");
+        
+        if (file.isDirectory()) {
+            line = "<div class='file-item directory'>";
+            line += "<span class='indent'>" + indent + "</span>";
+            line += "<span class='folder-icon'>📁</span>";
+            line += "<span class='file-name'>" + String(file.name()) + "/</span>";
+            line += "<span class='file-actions'>";
+            if (currentPath.startsWith("/files/"))
+            {
+                line += "<button class='action-btn delete-btn' onclick='deleteFile(\"" + currentPath + "\")' title='Supprimer le fichier'>🗑️</button>";
+            }
+            line += "</span>";
+            line += "</div>";
+            line += listLittleFSFilesRecursiveHTML(file, currentPath, indent + "    ");
+        } else {
+            line = "<div class='file-item'>";
+            line += "<span class='indent'>" + indent + "</span>";
+            line += "<span class='file-icon'>📄</span>";
+            line += "<span class='file-name'>" + String(file.name()) + "</span>";
+            line += "<span class='file-size'>(" + String(file.size()) + " bytes)</span>";
+            line += "<span class='file-actions'>";
+            line += "<button class='action-btn view-btn' onclick='viewFile(\"" + currentPath + "\")' title='Voir le fichier'>👁️</button>";
+            if (currentPath.startsWith("/files/"))
+            {
+                line += "<button class='action-btn delete-btn' onclick='deleteFile(\"" + currentPath + "\")' title='Supprimer le fichier'>🗑️</button>";
+            }
+            line += "</span>";
+            line += "</div>";
+        }
+        
+        result += line;
+        file = dir.openNextFile();
+    }
+    return result;
+}
+
+String listLittleFSFilesHTML(String path) {
+    String result = "";
+    ESP_LOGI(FS_TAG, "Listing files in LittleFS:");
+    
+    if (!LittleFS.begin()) {
+        ESP_LOGE(FS_TAG, "Failed to mount LittleFS");
+        return "<div class='error'>Failed to mount LittleFS</div>";
+    }
+
+    File root = LittleFS.open(path);
+    if (!root) {
+        ESP_LOGE(FS_TAG, "Failed to open root directory");
+        return "<div class='error'>Failed to open directory: " + path + "</div>";
+    }
+    
+    if (!root.isDirectory()) {
+        ESP_LOGE(FS_TAG, "Root is not a directory");
+        return "<div class='error'>Path is not a directory: " + path + "</div>";
+    }
+
+    // Générer le HTML complet
+    result = R"(
+<!DOCTYPE html>
+<html lang='fr'>
+<head>
+    <meta charset='UTF-8'>
+    <meta name='viewport' content='width=device-width, initial-scale=1.0'>
+    <title>Gestionnaire de fichiers LittleFS</title>
+    <style>
+        body {
+            font-family: 'Courier New', monospace;
+            margin: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            border-bottom: 2px solid #007bff;
+            padding-bottom: 10px;
+        }
+        .file-item {
+            display: flex;
+            align-items: center;
+            padding: 5px 0;
+            border-bottom: 1px solid #eee;
+        }
+        .file-item:hover {
+            background-color: #f8f9fa;
+        }
+        .indent {
+            white-space: pre;
+            color: #666;
+        }
+        .folder-icon, .file-icon {
+            margin-right: 8px;
+            font-size: 16px;
+        }
+        .file-name {
+            flex-grow: 1;
+            color: #333;
+            font-weight: bold;
+        }
+        .directory .file-name {
+            color: #007bff;
+        }
+        .file-size {
+            color: #666;
+            font-size: 12px;
+            margin-right: 15px;
+        }
+        .file-actions {
+            display: flex;
+            gap: 5px;
+        }
+        .action-btn {
+            background: none;
+            border: none;
+            font-size: 18px;
+            cursor: pointer;
+            padding: 5px;
+            border-radius: 4px;
+            transition: background-color 0.2s;
+        }
+        .view-btn:hover {
+            background-color: #e3f2fd;
+        }
+        .delete-btn:hover {
+            background-color: #ffebee;
+        }
+        .error {
+            color: #dc3545;
+            background-color: #f8d7da;
+            border: 1px solid #f5c6cb;
+            padding: 10px;
+            border-radius: 4px;
+        }
+        .refresh-btn {
+            background-color: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-bottom: 20px;
+        }
+        .refresh-btn:hover {
+            background-color: #0056b3;
+        }
+    </style>
+</head>
+<body>
+    <div class='container'>
+        <h1>📁 Gestionnaire de fichiers - )" + path + R"(</h1>
+        <button class='refresh-btn' onclick='location.reload()'>🔄 Actualiser</button>
+        <div class='file-list'>
+)";
+
+    // Ajouter la liste des fichiers
+    result += listLittleFSFilesRecursiveHTML(root, path);
+    result += printLittleFSInfo();
+
+    result += R"(
+        </div>
+    </div>
+
+    <script>
+        function viewFile(filePath) {
+            // Ouvrir le fichier dans un nouvel onglet
+            const url = 'http://buzzcontrol.local' + filePath;
+            window.open(url, '_blank');
+        }
+
+        function deleteFile(filePath) {
+            if (confirm('Êtes-vous sûr de vouloir supprimer le fichier : ' + filePath + ' ?')) {
+                fetch('http://buzzcontrol.local' + filePath, {
+                    method: 'DELETE'
+                })
+                .then(response => {
+                    if (response.ok) {
+                        alert('Fichier supprimé avec succès');
+                        location.reload(); // Actualiser la page
+                    } else {
+                        return response.text().then(text => {
+                            throw new Error(text || 'Erreur lors de la suppression');
+                        });
+                    }
+                })
+                .catch(error => {
+                    alert('Erreur lors de la suppression : ' + error.message);
+                    console.error('Error:', error);
+                });
+            }
+        }
+    </script>
+</body>
+</html>
+)";
+
+    ESP_LOGI(FS_TAG, "HTML file list generated for path: %s", path.c_str());
+    return result;
+}
+
+
+
 String listLittleFSFilesRecursive(File &dir, const String &indent = "") {
+/*
     String result="";
     String line="";
     File file = dir.openNextFile();
@@ -1467,7 +1689,8 @@ String listLittleFSFilesRecursive(File &dir, const String &indent = "") {
         result+="\n"+line;
         file = dir.openNextFile();
     }
-    return result;
+*/
+    return listLittleFSFilesHTML("/");
 }
 
 String listLittleFSFiles(String path) {
@@ -1493,6 +1716,8 @@ String listLittleFSFiles(String path) {
 
     return result;
 }
+
+
 
 void loadJson(String path) {
     File file;
@@ -1636,4 +1861,19 @@ void downloadFiles() {
 
 bool isFileExists(String Path) {
     return LittleFS.exists(Path);
+}
+
+bool deleteAny(const char* filePath) {
+    if (!LittleFS.exists(filePath)) {
+        ESP_LOGW(FS_TAG, "File does not exist: %s", filePath);
+        return false;
+    }
+    File dir = LittleFS.open(filePath);
+    if (dir.isDirectory()) {
+      dir.close();
+      return deleteDirectory(filePath);
+    } else {
+        dir.close();
+        return deleteFile(filePath);
+    }
 }
