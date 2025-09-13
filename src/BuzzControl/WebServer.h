@@ -384,7 +384,8 @@ struct SafeParallelRestoreUploadState {
 static SafeParallelRestoreUploadState safeUploadState;
 
 // HANDLER SÉCURISÉ : Remplace handleTrueParallelRestoreUpload
-void handleTrueParallelRestoreUpload(AsyncWebServerRequest *request, String filename, size_t index, uint8_t *data, size_t len, bool final) {
+void 
+handleTrueParallelRestoreUpload(AsyncWebServerRequest *request, String filename, size_t index, uint8_t *data, size_t len, bool final) {
     yield(); // Reset watchdog
     
     // Initialisation au premier chunk

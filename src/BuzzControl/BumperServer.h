@@ -117,7 +117,7 @@ void startGame(const int delay) {
   setGamePhase("START");
   setQuestionStatus("STARTED");
   enqueueOutgoingMessage("START", getGameJSON().c_str(), true, nullptr,"");
-  
+  setLedByState(GameState::START);  
   // Démarrer le timer s'il n'est pas déjà en cours
   if (!isTimerRunning) {
       gameTimer.attach(1.0, timerCallback);
@@ -142,7 +142,7 @@ void stopGame() {
   setGamePhase("STOP");
   setQuestionStatus("STOPPED");
   enqueueOutgoingMessage("STOP", getGameJSON().c_str(), true, nullptr,"");
-  
+  setLedByState(GameState::STOP);  
   // Arrêter le timer
   if (isTimerRunning) {
       gameTimer.detach();
@@ -152,18 +152,21 @@ void stopGame() {
 
 void pauseGame(AsyncClient* client) {
   enqueueOutgoingMessage("PAUSE", getGameJSON().c_str(), true, client,"");
+  setLedByState(GameState::PAUSE);  
 }
 
 void pauseAllGame() {
   setGamePhase("PAUSE");
   setQuestionStatus("PAUSED");
   enqueueOutgoingMessage("PAUSE", getGameJSON().c_str(), true, nullptr,"");
+  setLedByState(GameState::PAUSE);  
 }
 
 void continueGame() {
   setGamePhase("START");
   setQuestionStatus("STARTED");
   enqueueOutgoingMessage("CONTINUE", getGameJSON().c_str(), true, nullptr,"");
+  setLedByState(GameState::START);  
 }
 
 void revealGame() {
@@ -171,6 +174,7 @@ void revealGame() {
       String msg = "\"" + getQuestionResponse() + "\"";
       setQuestionStatus("REVEALED");
       enqueueOutgoingMessage("REVEAL", msg.c_str(), true, nullptr,"");
+      setLedByState(GameState::REVEAL);  
     }
 }
 
@@ -208,6 +212,7 @@ void readyGame(const String question) {
     sendTeamsAndBumpers();
 
     enqueueOutgoingMessage("PING", "{}", false, nullptr,"");
+    setLedByState(GameState::PREPARE);  
   }
 }
 
@@ -283,7 +288,8 @@ void resetServer() {
 
 void rebootServer() {
   ESP_LOGI(BUMPER_TAG, "Rebooting server");
-  setLedColor(255,16,16,true);
+  setLedByState(GameState::ERROR);  
+//  setLedColor(255,16,16,true);
   ESP.restart();
 }
 
@@ -324,6 +330,7 @@ void handlePingResponseAction(const char* bumperID) {
             ESP_LOGI(BUMPER_TAG, "All teams are ready to start");
             setGamePhase("READY");
             enqueueOutgoingMessage("READY", getTeamsAndBumpersJSON().c_str(), true, nullptr,"");
+            setLedByState(GameState::READY);  
         }
     }
 }
