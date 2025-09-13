@@ -59,7 +59,7 @@ void handleWindowsConnectTest(AsyncWebServerRequest *request) {
 void w_handleNotFound(AsyncWebServerRequest *request) {
   String host=request->host();
   
-  ESP_LOGW(WEB_TAG, "Handling 404 for: %s://%s", host.c_str(),request->url().c_str());
+  ESP_LOGW(WEB_TAG, "Handling 404 for: host:%s url:%s",  host.c_str(),request->url().c_str());
   if (host.equals("www.msftncsi.com") || host.equals("www.msftconnecttest.com")) {
     ESP_LOGI(WEB_TAG, "Windows host %s test request", host.c_str());
     handleWindowsConnectTest(request);
@@ -67,7 +67,7 @@ void w_handleNotFound(AsyncWebServerRequest *request) {
   else {
     String message = "File Not Found\n\n";
     message += "URI: " + request->url() + "\n";
-    message += "Method: " + String((request->method() == HTTP_GET) ? "GET" : "POST") + "\n";
+    message += "Method: " + String((request->method() == HTTP_GET) ? "GET" : (request->method() == HTTP_DELETE) ? "DELETE" : "POST") + "\n";
     message += "Arguments: " + String(request->args()) + "\n";
     
     for (uint8_t i = 0; i < request->args(); i++) {
@@ -116,8 +116,8 @@ void w_handleReset(AsyncWebServerRequest *request) {
 void w_handleListFiles(AsyncWebServerRequest *request) {
     String result="";
     result+=listLittleFSFiles();
-    result+=printLittleFSInfo();
-    request->send(200, "text/plain", result);
+//    result+=printLittleFSInfo();
+    request->send(200, "text/html", result);
 }
 
 void w_handleUpdate(AsyncWebServerRequest *request) {
@@ -131,7 +131,7 @@ void w_handleUpdate(AsyncWebServerRequest *request) {
 void w_handleListGame(AsyncWebServerRequest *request) {
     String result;
     result=getTeamsAndBumpersJSON();
-    request->send(200, "text/plain", result);
+    request->send(200, "text/json", result);
 }
 
 size_t saveFile(AsyncWebServerRequest *request, String destFile, String filename, size_t index, uint8_t *data, size_t len, bool final) {
@@ -604,7 +604,7 @@ void handleFSRestore(AsyncWebServerRequest *request, String filename,
 
 void startWebServer() {
     String ROOT="";
-    if (LittleFS.exists("/CURRENT/html/testSPA.html")) {
+    if (isFileExists("/CURRENT/html/testSPA.html")) {
         ESP_LOGD(FS_TAG, "Directory /CURRENT Exists");
         ROOT="/CURRENT";
     }
@@ -633,7 +633,17 @@ void startWebServer() {
 
     // Servir les fichiers du répertoire files pour /files/*
     server.serveStatic("/files/", LittleFS, "/files/");
-    
+    server.on("/*", HTTP_DELETE, [](AsyncWebServerRequest *request){
+        String filePath = request->url(); // Enlever "/files"
+        AsyncWebServerResponse *response;
+        if (deleteAny(filePath.c_str())) {
+            response = request->beginResponse(200);
+        } else {
+            response = request->beginResponse(500);
+        }
+        request->send(response);
+    });
+
     // Servir les fichiers du répertoire files pour /files/*
     server.serveStatic("/question/", LittleFS, "/files/questions/");
 
