@@ -279,6 +279,20 @@ void clearGame(bool notify=true) {
   }
 }
 
+void clearBuzzers() {
+  ESP_LOGI(BUMPER_TAG, "clear Buzzers");
+  RAZscores();
+  JsonObject bumpers = teamsAndBumpers["bumpers"];
+  for (JsonPair kvp : bumpers) {
+        bumpers.remove(kvp.key());
+      }
+  JsonObject teams = teamsAndBumpers["teams"];
+  for (JsonPair kvp : teams) {
+      teams.remove(kvp.key());
+    }
+
+}
+
 void resetServer() {
   String dirToRemove = "/CURRENT";
   deleteDirectory(dirToRemove.c_str());
