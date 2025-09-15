@@ -130,7 +130,7 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
     document.getElementById("clearBuzzersButton").addEventListener("click", () => {
-    callApi("http://buzzcontrol.local/cleaBuzzers");
+    callApi("http://buzzcontrol.local/clearBuzzers");
   });
 
   document.getElementById('listFilesButton').addEventListener('click', () => {
@@ -145,7 +145,7 @@ document.addEventListener('DOMContentLoaded', () => {
     window.open('http://buzzcontrol.local/fs-backup', '_blank');
   });
 
-  document.getElementById('gameBackupButtonButton').addEventListener('click', () => {
+  document.getElementById('gameBackupButton').addEventListener('click', () => {
     window.open('http://buzzcontrol.local/game-backup', '_blank');
   });  
 });
