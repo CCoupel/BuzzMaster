@@ -366,7 +366,10 @@ const loc = "buzzcontrol.local";
 const wsProtocol = "ws:"
 const wsUrl = `${wsProtocol}//${loc}/ws`;
 let ws;
-let reconnectInterval = 5000;
+const reconnectInterval = 5000; // 5s pour la reconnexion
+const heartbeatInterval = 15000; // 15s pour vérifier l'état
+
+let heartbeatTimer = null;
 
 export function connectWebSocketPlayers(onMessageCallback) {
     if (ws && ws.readyState === WebSocket.OPEN) {
@@ -376,49 +379,66 @@ export function connectWebSocketPlayers(onMessageCallback) {
     ws = new WebSocket(wsUrl);
 
     ws.onopen = function(event) {
-
         console.log('WebSocket connection opened.');
-        
-        // Nettoyage du tableau lors de la reconnexion
-        //cleanBoard();
 
-        sendWebSocketMessage("HELLO", {} );
+        // On démarre le heartbeat
+        startHeartbeat();
 
+        sendWebSocketMessage("PING", {});
     };
 
     ws.onerror = function(event) {
         console.error('WebSocket error:', event);
-    }
+    };
 
     ws.onclose = function(event) {
-
         console.log('WebSocket connection closed. Attempting to reconnect...');
-        setTimeout(() => connectWebSocketPlayers(onMessageCallback), reconnectInterval); // Tente de se reconnecter après un délai
 
+        stopHeartbeat(); // Arrête le heartbeat si la connexion est fermée
+
+        setTimeout(() => connectWebSocketPlayers(onMessageCallback), reconnectInterval);
     };
 
     ws.onmessage = onMessageCallback || function(event) {
         console.log('Message reçu:', event.data);
     };
-    return ws;
 
+    return ws;
 }
 
-
-export function sendWebSocketMessage (action, MSG= "{}")  {
-
-    if (ws.readyState === WebSocket.OPEN) {
+export function sendWebSocketMessage(action, MSG = "{}") {
+    if (ws && ws.readyState === WebSocket.OPEN) {
         const message = {
             "ACTION": action,
             "MSG": MSG
         };
-
-    ws.send(JSON.stringify(message));
-
+        ws.send(JSON.stringify(message));
+        console.log("Envoie du message :" + (JSON.stringify(message)))
     } else {
-        console.error("WebSocket is not open. Current state: ", ws.readyState);
+        console.error("WebSocket is not open. Current state: ", ws ? ws.readyState : "undefined");
     }
 };
+
+// Vérification régulière de l'état de la connexion
+function startHeartbeat() {
+    stopHeartbeat(); // pour éviter plusieurs intervalles en même temps
+    heartbeatTimer = setInterval(() => {
+        if (!ws || ws.readyState !== WebSocket.OPEN) {
+            console.warn("WebSocket seems closed. Reconnecting...");
+            connectWebSocketPlayers();
+        } else {
+            // Tu peux aussi envoyer un ping si ton serveur supporte
+            sendWebSocketMessage("PING", {});
+        }
+    }, heartbeatInterval);
+}
+
+function stopHeartbeat() {
+    if (heartbeatTimer) {
+        clearInterval(heartbeatTimer);
+        heartbeatTimer = null;
+    }
+}
 
 function triggerPointsAnimation(teamName, points, colorRGB = '64, 64, 64') {
   const text = `${teamName} +${points} points !`;
