@@ -177,8 +177,11 @@ export function questionsSelectList() {
         container.innerHTML = '<p>Aucune question disponible pour le moment.</p>';
         return;
     }
-    
-    const sortedQuestions = Object.values(questions).sort((a, b) => parseInt(a.ID) - parseInt(b.ID));
+
+    console.log("questions values:", Object.values(questions));
+    const sortedQuestions = Object.values(questions)
+    .filter(q => q && q.ID !== undefined) // remove null/invalid
+    .sort((a, b) => parseInt(a.ID) - parseInt(b.ID));
     
     sortedQuestions.forEach(questionData => {
         const questionDiv = document.createElement('div');
