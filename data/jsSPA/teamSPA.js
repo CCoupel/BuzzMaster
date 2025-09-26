@@ -10,7 +10,13 @@ const colors = [
     { name: 'vert', rgb: [0, 128, 0] },
     { name: 'violet', rgb: [128, 0, 128] },
     { name: 'orange', rgb: [255, 165, 0] },
-    { name: 'rose', rgb: [255, 192, 203] }
+    { name: 'rose', rgb: [255, 192, 203] },
+    { name: 'gris', rgb: [128, 128, 128] },
+    { name: 'cyan', rgb: [0, 255, 255] },
+    { name: 'marron', rgb: [139, 69, 19] },
+    { name: 'turquoise', rgb: [64, 224, 208] },
+    { name: 'beige', rgb: [245, 245, 220] },
+    { name: 'argent', rgb: [192, 192, 192] }
 ];
 
 function getUsedColors(teams) {
