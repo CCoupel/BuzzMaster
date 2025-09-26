@@ -270,6 +270,8 @@ void clearGame(bool notify=true) {
   deleteDirectory(dirToRemove.c_str());
   dirToRemove = "/temp_stream";
   deleteDirectory(dirToRemove.c_str());
+  dirToRemove = "/temp_parallel";
+  deleteDirectory(dirToRemove.c_str());
   loadJson(GameFile);
   if (notify) {
     sendResetToAll();

@@ -1452,7 +1452,7 @@ String listLittleFSFilesRecursiveHTML(File &dir, const String &basePath = "", co
     String result = "";
     String line = "";
     File file = dir.openNextFile();
-    
+    ESP_LOGI(FS_TAG, "PARSING dir %s", String(file.name()));
     while (file) {
         // Reset watchdog timer périodiquement
         esp_task_wdt_reset();
@@ -1486,6 +1486,10 @@ String listLittleFSFilesRecursiveHTML(File &dir, const String &basePath = "", co
             line += "<span class='file-actions'>";
             line += "<button class='action-btn view-btn' onclick='viewFile(\"" + currentPath + "\")' title='Voir le fichier'>👁️</button>";
             if (currentPath.startsWith("/files/"))
+            {
+                line += "<button class='action-btn delete-btn' onclick='deleteFile(\"" + currentPath + "\")' title='Supprimer le fichier'>🗑️</button>";
+            }
+            if (currentPath.startsWith("/temp_parallel/"))
             {
                 line += "<button class='action-btn delete-btn' onclick='deleteFile(\"" + currentPath + "\")' title='Supprimer le fichier'>🗑️</button>";
             }
