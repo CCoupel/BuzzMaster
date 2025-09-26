@@ -129,6 +129,10 @@ document.addEventListener('DOMContentLoaded', () => {
     callApi("http://buzzcontrol.local/clearGame");
   });
 
+    document.getElementById("clearBuzzersButton").addEventListener("click", () => {
+    callApi("http://buzzcontrol.local/clearBuzzers");
+  });
+
   document.getElementById('listFilesButton').addEventListener('click', () => {
     window.open('http://buzzcontrol.local/listFiles', '_blank');
   });
@@ -138,6 +142,10 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   document.getElementById('backupButton').addEventListener('click', () => {
-    window.open('http://buzzcontrol.local/backup', '_blank');
+    window.open('http://buzzcontrol.local/fs-backup', '_blank');
   });
+
+  document.getElementById('gameBackupButton').addEventListener('click', () => {
+    window.open('http://buzzcontrol.local/game-backup', '_blank');
+  });  
 });

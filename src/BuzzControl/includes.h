@@ -22,6 +22,84 @@
 #include <freertos/FreeRTOS.h>
 #include <freertos/queue.h>
 #include "freertos/semphr.h"
+struct LedColor {
+    uint8_t red;
+    uint8_t green;
+    uint8_t blue;
+    uint8_t intensity;
+    
+    LedColor(uint8_t r = 0, uint8_t g = 0, uint8_t b = 0, uint8_t i = 255) 
+        : red(r), green(g), blue(b), intensity(i) {}
+};
+
+// Énumération des états possibles pour une meilleure gestion
+enum class GameState {
+    BOOT1, BOOT2, BOOT3, BOOT4,
+    START,
+    STOP,
+    PAUSE,
+    PREPARE,
+    READY,
+    REVEAL,
+    ERROR,
+    WAITING,
+    CONNECTED,
+    DISCONNECTED
+};
+
+// Tableau de définition des couleurs par état
+const std::map<GameState, LedColor> stateColors = {
+    {GameState::BOOT1,          LedColor(255,   0, 0,   64)},  // Rouge low
+    {GameState::BOOT2,          LedColor(255,   0, 0,   200)},  // Rouge brillant
+    {GameState::BOOT3,          LedColor(255,   255, 0,   200)},  // Orange low
+    {GameState::BOOT4,          LedColor(255,   255, 0,   200)},  // Orange brillant
+
+    {GameState::PREPARE,        LedColor(0,   0,   255, 64)},  // Bleu low
+    {GameState::READY,          LedColor(0,   0,   255, 180)},  // Bleu
+    {GameState::START,          LedColor(0,   255, 0,   200)},  // Vert brillant
+    {GameState::STOP,           LedColor(0,   255, 0,   64)},  // Rouge brillant
+    {GameState::PAUSE,          LedColor(0,   255, 0,   64)},  // Vert modéré
+
+    {GameState::REVEAL,         LedColor(255, 255, 255, 128)},  // Blanc maximal
+    {GameState::ERROR,          LedColor(255, 0,   0,   255)},  // Rouge maximal
+    {GameState::WAITING,        LedColor(128, 128, 128, 100)},  // Gris faible
+    {GameState::CONNECTED,      LedColor(0,   255, 255, 150)},  // Cyan
+    {GameState::DISCONNECTED,   LedColor(128, 0,   128, 100)}   // Violet faible
+};
+
+void setLedByState(GameState state) {
+    auto it = stateColors.find(state);
+    if (it != stateColors.end()) {
+        const LedColor& color = it->second;
+        setLedColor(color.red, color.green, color.blue);
+        setLedIntensity(color.intensity);
+    }
+}
+
+void setLedByState(const String& stateName) {
+    // Conversion string vers enum
+    static const std::map<String, GameState> stringToState = {
+      {"BOOT1",        GameState::BOOT1},
+      {"BOOT2",        GameState::BOOT2},
+      {"BOOT3",        GameState::BOOT3},
+      {"BOOT4",        GameState::BOOT4},
+      {"PREPARE",        GameState::PREPARE},
+        {"START",        GameState::START},
+        {"STOP",         GameState::STOP},
+        {"PAUSE",        GameState::PAUSE},
+        {"READY",        GameState::READY},
+        {"REVEAL",       GameState::REVEAL},
+        {"ERROR",        GameState::ERROR},
+        {"WAITING",      GameState::WAITING},
+        {"CONNECTED",    GameState::CONNECTED},
+        {"DISCONNECTED", GameState::DISCONNECTED}
+    };
+    
+    auto it = stringToState.find(stateName);
+    if (it != stringToState.end()) {
+        setLedByState(it->second);
+    }
+}
 
 hw_timer_t * timer = NULL;
 portMUX_TYPE timerMux = portMUX_INITIALIZER_UNLOCKED;

@@ -53,9 +53,9 @@ sleep(5);
   initLED();
   ESP_LOGI(MAIN_TAG, "STARTING:");
 
-  setLedColor(255, 0, 0);
-  setLedIntensity(255);
-
+  //setLedColor(255, 0, 0);
+  //setLedIntensity(255);
+  setLedByState(GameState::BOOT1);  
   if (!LittleFS.begin()) {
     ESP_LOGE(MAIN_TAG, "Erreur de montage LittleFS");
     return;
@@ -70,7 +70,8 @@ sleep(5);
 
   CustomLogger::init(logPort);
 
-  setLedColor(255, 255, 0, true);
+  //setLedColor(255, 255, 0, true);
+  setLedByState(GameState::BOOT2);  
   ESP_LOGI(MAIN_TAG, "BOOTING Version: %s", String(VERSION));
 
   ESP_LOGI(MAIN_TAG, "RGB pin: %d", RGB_BUILTIN);
@@ -78,7 +79,6 @@ sleep(5);
   ESP_LOGI(MAIN_TAG, "NEO pin: %d", PIN_NEOPIXEL);
 
   setLedIntensity(128);
-
 
   yield();
 
@@ -88,10 +88,11 @@ sleep(5);
 
   //downloadFiles();
 
-  listLittleFSFiles();
-  printLittleFSInfo();
+//  listLittleFSFiles();
+//  printLittleFSInfo();
 
-  setLedColor(128, 128, 0, true);
+  //setLedColor(128, 128, 0, true);
+  setLedByState(GameState::BOOT3);  
 
   attachButtons();
   loadJson(GameFile);
@@ -102,8 +103,8 @@ sleep(2);
   startWebServer();
 
   startBumperServer();
-  setLedColor(0, 128, 0, true);
-
+  //setLedColor(0, 128, 0, true);
+  setLedByState(GameState::BOOT4);  
   // Initialisation des files d'attente de messages
   initIncomingQueue();
   initOutgoingQueue();
@@ -121,6 +122,7 @@ sleep(2);
   updateMutex = xSemaphoreCreateMutex();
   // Envoyer un message de bienvenue à tous les clients
   enqueueOutgoingMessage("HELLO", "{}", false, nullptr,"");
+  setLedByState(GameState::READY);
 }
 
 void loop(void) {

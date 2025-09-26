@@ -16,15 +16,26 @@
         <div id="configContent"></div>
         <button id="editButton">Modifier</button>
     </div>
-    <div id="configuration-buttons">
-        <button id="rebootButton">Reboot</button>
-        <button id="resetButton">Reset</button>
-        <button id="updateButton">Update</button>
-        <button id="clearGameButton">Clear Game</button>
-        <button id="listFilesButton">List Files</button>
-        <button id="listGameButton">List Game</button>
-        <button id="backupButton">Backup</button>
+    <div id="button-container">
+        <div id="configuration-buttons" class="button-div">
+            <button id="rebootButton">Reboot</button>
+            <button id="resetButton">Reset</button>
+            <button id="updateButton">Update</button>
+        </div>
+        <div id="clear-buttons" class="button-div">
+            <button id="clearGameButton">Clear Game</button>
+            <button id="clearBuzzersButton">Clear Buzzers</button>
+        </div>
+        <div id="list-buttons" class="button-div">
+            <button id="listFilesButton">List Files</button>
+            <button id="listGameButton">List Game</button>
+        </div>
+        <div id="backups-buttons" class="button-div">
+            <button id="backupButton">Filesystem Backup</button>
+            <button id="gameBackupButton">Game Backup</button>
+        </div>
     </div>
+    
     <div id="restoreForm">
         <form method="POST" action="http://buzzcontrol.local/restore" enctype="multipart/form-data">
             <input type="file" name="backup" accept=".tar" required>
