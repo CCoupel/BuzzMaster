@@ -25,7 +25,7 @@ const uint16_t logPort = 8888;  // Port UDP pour les logs
 // Nouvelle tâche de surveillance du watchdog
 void watchdogTask(void *pvParameters) {
     // Configurer le watchdog avec un délai plus long si nécessaire
-    esp_task_wdt_init(30, true); // 10 secondes de délai
+    esp_task_wdt_init(60, false); // 10 secondes de délai
     esp_task_wdt_add(NULL);      // S'enregistrer auprès du watchdog
     
     for (;;) {

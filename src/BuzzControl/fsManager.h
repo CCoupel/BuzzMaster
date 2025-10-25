@@ -62,7 +62,7 @@ public:
         if (currentFile) {
             currentFile.close();
         }
-        
+        esp_task_wdt_reset();
         yield(); // Reset watchdog
         
         // Collecter seulement le CONTENU de /files (pas le dossier lui-même)
@@ -111,6 +111,7 @@ public:
         size_t bytesRead = 0;
         
         while (bytesRead < length) {
+            esp_task_wdt_reset();
             yield(); // Reset watchdog périodiquement
             
             // Gérer le padding en attente d'abord
@@ -307,7 +308,7 @@ bool initStreamingTarBackup() {
         ESP_LOGW(FS_TAG, "Répertoire /files non trouvé");
         return false;
     }
-    
+    esp_task_wdt_reset();
     yield(); // Reset watchdog
     
     // Créer le buffer streaming
@@ -491,6 +492,7 @@ public:
         size_t totalWritten = 0;
         
         while (totalWritten < len) {
+            esp_task_wdt_reset();
             yield(); // Reset watchdog
             
             // Créer nouveau chunk si nécessaire
@@ -629,6 +631,7 @@ public:
         
         while (totalRead < length) {
             // Lire depuis le chunk courant
+            esp_task_wdt_reset();
             if (currentReadFile && currentReadFile.available()) {
                 size_t toRead = min(length - totalRead, (size_t)currentReadFile.available());
                 size_t actualRead = currentReadFile.read(buffer + totalRead, toRead);
@@ -702,6 +705,7 @@ public:
             while (tarProcessingTask && timeout > 0) {
                 vTaskDelay(pdMS_TO_TICKS(100));
                 timeout -= 100;
+                esp_task_wdt_reset();
                 yield();
             }
             
@@ -786,12 +790,14 @@ private:
                 if (progress != lastProgress && progress % 20 == 0) {
                     ESP_LOGI(FS_TAG, "🔄 Extraction: %d%%", progress);
                     lastProgress = progress;
+                    esp_task_wdt_reset();
                     yield();
                 }
             });
             
             unpacker->setTarStatusProgressCallback([](const char* name, size_t size, size_t total_unpacked) {
                 ESP_LOGI(FS_TAG, "📁 Extrait: %s (%zu bytes)", name, size);
+                esp_task_wdt_reset();
                 yield();
             });
             
@@ -800,6 +806,7 @@ private:
             while (processor->available() == 0 && waitCount < 100 && !processor->processingComplete) {
                 vTaskDelay(pdMS_TO_TICKS(100));
                 waitCount++;
+                esp_task_wdt_reset();
                 yield();
             }
             
@@ -964,6 +971,7 @@ private:
                 
                 LittleFS.remove(filePath);
                 file = dir.openNextFile();
+                esp_task_wdt_reset();
                 yield();
             }
             dir.close();
@@ -1022,6 +1030,7 @@ bool initTrueParallelTarRestore() {
     }
     
     cleanupTrueParallelTarRestore();
+    esp_task_wdt_reset();
     yield();
     
     if (!initTarGzFS()) {
@@ -1051,7 +1060,7 @@ size_t processTrueParallelTarChunk(const uint8_t* data, size_t len) {
         ESP_LOGE(FS_TAG, "Restore parallèle non initialisé");
         return 0;
     }
-    
+    esp_task_wdt_reset();
     yield();
     return parallelProcessor->addData(data, len);
 }
@@ -1062,7 +1071,7 @@ bool finalizeTrueParallelTarRestore() {
         ESP_LOGW(FS_TAG, "Restore parallèle non initialisé pour finalisation");
         return false;
     }
-    
+    esp_task_wdt_reset();
     yield();
     
     parallelProcessor->markComplete();
@@ -1074,6 +1083,7 @@ bool finalizeTrueParallelTarRestore() {
     while (!parallelProcessor->isProcessingComplete() && timeout > 0) {
         vTaskDelay(pdMS_TO_TICKS(250));
         timeout -= 250;
+        esp_task_wdt_reset();
         yield();
         
         if (timeout % 5000 == 0) {
@@ -1452,7 +1462,7 @@ String listLittleFSFilesRecursiveHTML(File &dir, const String &basePath = "", co
     String result = "";
     String line = "";
     File file = dir.openNextFile();
-    ESP_LOGI(FS_TAG, "PARSING dir %s", String(file.name()));
+    ESP_LOGI(FS_TAG, "PARSING dir %s", String(file.name()).c_str());
     while (file) {
         // Reset watchdog timer périodiquement
         esp_task_wdt_reset();
