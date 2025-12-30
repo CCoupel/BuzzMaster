@@ -1,0 +1,9 @@
+{
+    "bumpers": {},
+    "teams": {},
+    "GAME": {
+        "DELAY": 35,
+        "PHASE": "STOP",
+        "REMOTE": "GAME"
+    }
+}

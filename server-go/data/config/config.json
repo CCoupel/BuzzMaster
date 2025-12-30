@@ -1,0 +1,18 @@
+{
+    "wifi": {
+      "ssid": "CC-Home",
+      "password": "GenericPassword"
+    },
+    "ap": {
+      "ssid": "buzzmaster",
+      "password": "BuzzMaster"
+    },
+    "network": {
+      "controler_port": 1234,
+      "log_port": 8888
+    },
+    "update": {
+      "base_url": "https://bitbucket.org/ccoupel/buzzcontrol/raw/main/data",
+      "version_file": "/config/version.txt"
+    }
+  }

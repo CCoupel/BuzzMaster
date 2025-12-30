@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BuzzControl - Questions</title>
+    <link rel="stylesheet" href="../css/reset.css">
+    <link rel="stylesheet" href="../css/style.css">
+    <link rel="stylesheet" href="../css/questions.css">
+    <script src="../js/navbar.js"></script>
+    <link rel="shortcut icon" href="#" />
+</head>
+<body>
+    <header></header>
+    <main>
+        <div class="main-container-questions">
+            <div class="question-form-div">
+                <form id="question-form">
+                    <label for="number">Numéro de la question :</label>
+                    <input name="number" type="number" min="1">
+                    <label for="points">Nombre de points :</label>
+                    <input name="points" type="number" min="1" value="1">
+                    <label for="time">Temps (en secondes) :</label>
+                    <input name="time" type="number" min="1" value="40">
+                    <label for="question">Question :</label>
+                    <input name="question" type="text">
+                    <label for="answer">Réponse :</label>
+                    <input name="answer" type="text">
+                    <input name="file" type="file">
+                    <button type="submit">Valider la question</button>
+                </form>
+            </div>
+            <div id="questions-container">
+                
+            </div>
+        </div>
+    </main>
+    <footer>
+        <script type="module" src="../js/main.js"></script>
+        <script type="module" src="../js/questions.js"></script>
+    </footer>
+    
+</body>
+</html>

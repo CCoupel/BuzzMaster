@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BuzzControl - Configuration</title>
+    <link rel="stylesheet" href="../css/reset.css">
+    <link rel="stylesheet" href="../css/style.css">
+    <link rel="stylesheet" href="../css/config.css">
+    <script src="../js/navbar.js"></script>
+    <link rel="shortcut icon" href="#" />
+</head>
+<body>
+    <header></header>
+    <main>
+        <div class="main-config-container">
+            <div class="buzzer-container">
+                <!-- Les buzzers seront ajoutés ici dynamiquement -->
+            </div>
+            <div class="team-container">
+                <!-- Les équipes seront ajoutées ici dynamiquement -->
+            </div>
+        </div>
+
+        <div class="button-container">
+            <div id="config-button-container">
+                <button id="resetButton">Réinitialiser</button>
+                <div id="background-form-container">
+                    <form method="post" enctype="multipart/form-data" id="background-form" action="/background">
+                        <div>
+                            <label for="file">Image de fond :</label>
+                            <input type="file" id="background" name="background"/>
+                            <button type="submit">Envoyer</button>
+                        </div> 
+                    </form>
+                </div> 
+                <button id="addDivButton">Ajouter une team</button>
+            </div>
+            <div id="version-container">
+                <pre id="web-version"></pre>
+                <pre id="core-version"></pre>
+            </div>
+        </div>
+    </main>
+    <footer>
+        <script type="module" src="../js/config.js"></script> 
+    </footer>
+</body>
+</html>

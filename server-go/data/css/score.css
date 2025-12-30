@@ -1,0 +1,128 @@
+#score-container {
+    display:flex;
+    justify-content: space-around;
+    margin-top: 2rem;
+}
+
+.scoreboard {
+    background-color: white;
+    border-radius: var(--border-radius);
+    box-shadow: var(--shadow);
+    margin-bottom: 2rem;
+    padding: 1rem;
+    width:45%
+}
+
+.scoreboard h2 {
+    color: var(--secondary-color);
+    border-bottom: 2px solid var(--border-color);
+    padding-bottom: 0.5rem;
+    margin-bottom: 1rem;
+}
+
+.button-score {
+    width: 20px;
+    height: 20px;
+    padding: 0px;
+    padding-bottom: 1px;
+    opacity: 80%;
+}
+
+.scoreboard table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.scoreboard th, .scoreboard td {
+    text-align: center;
+    padding: 0.5%;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.scoreboard th {
+    background-color: var(--background-color);
+    font-weight: bold;
+}
+
+.scoreboard tr:last-child td {
+    border-bottom: none;
+}
+
+.scoreboard tr {
+    height: 100%;
+}
+
+.scoreboard td {
+    height: 100%;
+}
+
+.color-cell {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100%;
+}
+
+.color-cell .team-color   {
+    height: 15px;
+    width: 15px;
+}
+
+@keyframes rowMoveGreen {
+    0% {
+        background-color: yellow; /* Couleur d'origine */
+        transform: scale(1);
+    }
+    50% {
+        background-color: lightgreen; /* Couleur quand la ligne est en mouvement (avance) */
+        transform: scale(1.05);
+    }
+    100% {
+        background-color: white; /* Retour à la couleur normale */
+        transform: scale(1);
+    }
+}
+
+@keyframes rowMove {
+  0% {
+    background-color: yellow; /* Couleur d'origine */
+    transform: scale(1);
+  }
+  50% {
+    background-color: lightgreen; /* Couleur quand la ligne est en mouvement */
+    transform: scale(1.05);
+  }
+  100% {
+    background-color: white; /* Retour à la couleur normale */
+    transform: scale(1);
+  }
+}
+
+.highlight {
+  animation: rowMove 0.5s ease-in-out;
+}
+
+.modal.hidden {
+    display: none;
+}
+.modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0,0,0,0.5);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+.modal-content {
+    background: white;
+    padding: 1em;
+    border-radius: 8px;
+    text-align: center;
+}
+.modal-buttons button {
+    margin: 0 5px;
+    font-size: 1.2em;
+}

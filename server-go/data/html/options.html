@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Configuration</title>
+    <link rel="stylesheet" href="../css/reset.css">
+    <link rel="stylesheet" href="../css/style.css">
+    <link rel="stylesheet" href="../css/options.css">
+    <script src="../jsSPA/options.js"></script>
+    <link rel="shortcut icon" href="#" />
+</head>
+<body>
+    <div id="configuration">
+        <h1>Configuration</h1>
+        <div id="configContent"></div>
+        <button id="editButton">Modifier</button>
+    </div>
+    <div id="button-container">
+        <div id="configuration-buttons" class="button-div">
+            <button id="rebootButton">Reboot</button>
+            <button id="resetButton">Reset</button>
+            <button id="updateButton">Update</button>
+        </div>
+        <div id="clear-buttons" class="button-div">
+            <button id="clearGameButton">Clear Game</button>
+            <button id="clearBuzzersButton">Clear Buzzers</button>
+        </div>
+        <div id="list-buttons" class="button-div">
+            <button id="listFilesButton">List Files</button>
+            <button id="listGameButton">List Game</button>
+        </div>
+        <div id="backups-buttons" class="button-div">
+            <button id="backupButton">Filesystem Backup</button>
+            <button id="gameBackupButton">Game Backup</button>
+        </div>
+    </div>
+    
+    <div id="restoreForm">
+        <form method="POST" action="/restore" enctype="multipart/form-data">
+            <input type="file" name="backup" accept=".tar" required>
+            <button type="submit">Restaurer le backup</button>
+        </form>
+    </div>
+</body>
+</html>

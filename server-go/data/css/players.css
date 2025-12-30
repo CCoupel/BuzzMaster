@@ -1,0 +1,323 @@
+header {
+    height: 107px;
+    position: fixed;
+    top: 0px;
+}
+
+.time-bar-container-players {
+    position: fixed;
+    left: 0;
+    width: 100%;
+    height: 70px;
+    line-height: var(--timer-height);
+    background-color: #ddd;
+}
+
+#time-bar{
+    height: 100%;
+}
+
+#timer-players {
+    width: 100%;
+    height:var(--timer-height);
+    top: 10px ;
+    font-size: 45px;
+    font-weight: bold;
+    color: #000;
+    position: fixed;
+    text-align: center;
+}
+
+#game-container {
+    padding-top: 0px;
+    margin-top: 0;
+}
+
+#score-container {
+    position: fixed;
+    width: 100%;
+    top: 100px;
+}
+
+h2 {
+   font-size: 20px;
+   font-weight: bold;
+}
+
+p {
+    font-size: 18px;
+    font-weight: bold;
+}
+
+.question-div p {
+    font-size: 40px;
+}
+
+.answer-div {
+    top: 100px;
+    p {
+    font-size: 50px;
+}}
+
+#websocket-tracker {
+    visibility: hidden;
+}
+
+header {
+    height: 10%;
+}
+
+main {
+    height: 90%;
+}
+
+#question-container-players {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: space-around;
+    height: 100%;
+    padding-top: 75px;
+}
+
+#answer-container {
+    height: auto;
+    min-height: 10%;
+    width: 100%;
+}
+
+#image-container {
+    height: 60%;
+}
+
+#image-container img {
+    height: 100%;
+    width: 100%;
+    object-fit: contain;
+
+}
+
+#question-container {
+    height: auto;
+    min-height: 10%;
+    width: 100%;
+}
+
+#answer-div {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    box-sizing: border-box;
+    border: 5px solid var(--primary-color);
+    border-radius: 10px; 
+    width: 80%; 
+    height: 100%; 
+    background-color: #f9f9f9; 
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+    margin: auto;
+    p{
+        font-family: 'Arial', sans-serif;
+        font-size: 45px;
+        font-weight: bold;
+        text-align: center;
+    } 
+  }
+
+
+#question-div {
+    position: relative; /* Nécessaire pour positionner le pseudo-élément */
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    box-sizing: border-box;
+    width: 80%;
+    height: 100%;
+    background-color: #f9f9f9;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+    margin: auto;
+    border-radius: 10px;
+
+    /* Le texte dans le div */
+    p {
+        max-width: 100%;
+        font-family: 'Arial', sans-serif;
+        font-size: 45px;
+        font-weight: bold;
+        text-align: center;
+        z-index: 1; /* Assure que le texte reste au-dessus de la bordure */
+    }
+}
+
+#question-div::before {
+    content: "";
+    position: absolute;
+    top: -10px; /* Positionne le pseudo-élément en dehors de la div */
+    left: -10px;
+    right: -10px;
+    bottom: -10px;
+    border: 10px solid transparent; /* Bordure transparente */
+    border-radius: 10px; /* Bordure arrondie */
+    background-image: linear-gradient(90deg, red, orange, yellow, green, blue, indigo, violet, red, orange, yellow, green, blue, indigo, violet, red);
+    background-size: 200% 200%;
+    background-position: 0% 50%;
+    animation: rotate-border 4s linear infinite; /* Animation de rotation */
+    z-index: -1; /* Assure que la bordure soit derrière la div */
+}
+
+@keyframes rotate-border {
+    0% {
+        background-position: 0% 50%;
+    }
+    100% {
+        background-position: 100% 50%; /* Rotation du dégradé */
+    }
+}
+
+@keyframes blinkFast {
+    0% { opacity: 1; }
+    50% { opacity: 0.3; }
+    100% { opacity: 1; }
+}
+
+#time-bar.pause-blink {
+    animation: blinkFast 0.5s linear infinite;
+}
+
+@keyframes blink {
+    0% { opacity: 1; }
+    50% { opacity: 0.3; }
+    100% { opacity: 1; }
+}
+
+.blink {
+    animation: blink 1s linear infinite;
+}
+
+.blink-fast {
+    animation: blink 0.5s linear infinite;
+}
+
+.points-animation {
+  --color-rgb: 255, 255, 255;
+  --color: rgb(var(--color-rgb));
+  --glow: rgba(var(--color-rgb), 0.85);
+
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -200%) scale(0.5);
+  font-size: 2rem;
+  font-weight: bold;
+  color: var(--color);
+  background: rgba(0, 0, 0, 0.6);
+  padding: 20px 40px;
+  border-radius: 12px;
+  opacity: 0;
+  z-index: 9999;
+  pointer-events: none;
+  box-shadow: 0 0 22px var(--glow);
+  text-shadow: 
+    0 0 14px var(--glow),
+    -1px -1px 0 lightgray,
+    1px -1px 0 lightgray,
+    -1px  1px 0 lightgray,
+    1px  1px 0 lightgray;
+  will-change: transform, opacity;
+}
+
+/* Aura / traînée */
+.points-animation::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: var(--color);
+  filter: blur(45px);
+  opacity: 0.8;
+  z-index: -1;
+}
+
+/* Apparition */
+.points-animation.show {
+  animation: dropAndGrow 1s ease-out forwards;
+}
+
+.points-animation.show::after {
+  animation: trailFade 1.2s ease-out forwards;
+  opacity: 0.5;
+}
+
+/* Disparition */
+.points-animation.hide {
+  animation: growAndDrop 1s ease-in forwards;
+}
+
+/* Ghosts */
+.points-animation.ghost {
+  pointer-events: none;
+  filter: blur(6px);
+  color: var(--color);
+  background: transparent;
+  box-shadow: none;
+  text-shadow: none;
+  z-index: 9998;
+  transform: translate(-50%, -200%) scale(0.5);
+  visibility: hidden;
+}
+
+.points-animation.ghost::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: var(--color);
+  filter: blur(45px);
+  opacity: 0.8;
+  z-index: -1;
+    box-shadow: none;
+  text-shadow: none;
+}
+
+
+.points-animation.ghost.show {
+  animation: dropAndGrow 1s ease-out; /* retirer forwards */
+}
+.points-animation.ghost.hide {
+  animation: growAndDrop 1s ease-in; /* retirer forwards si nécessaire */
+}
+
+/* Keyframes */
+@keyframes dropAndGrow {
+  0% {
+    transform: translate(-50%, -500%) scale(0.5);
+    opacity: 0;
+  }
+  60% {
+    transform: translate(-50%, -50%) scale(2.2); /* zoom plus fort */
+    opacity: 1;
+  }
+  100% {
+    transform: translate(-50%, -30%) scale(2); /* taille finale doublée */
+    opacity: 1;
+  }
+}
+
+@keyframes growAndDrop {
+  0% {
+    transform: translate(-50%, -30%) scale(2);
+    opacity: 1;
+  }
+  40% {
+    transform: translate(-50%, 0%) scale(2.16); /* petit overshoot */
+    opacity: 0.85;
+  }
+  100% {
+    transform: translate(-50%, 400%) scale(1); /* rétrécit en disparaissant */
+    opacity: 0;
+  }
+}
+
+@keyframes trailFade {
+  0%   { opacity: 0.8; transform: scale(2); }
+  100% { opacity: 0;   transform: scale(4); }
+}

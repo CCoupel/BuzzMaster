@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BuzzControl - Jeu Team</title>
+    <link rel="stylesheet" href="../css/reset.css">
+    <link rel="stylesheet" href="../css/style.css">
+    <link rel="stylesheet" href="../css/teamGame.css">
+    <script src="../js/navbar.js"></script>
+    <link rel="shortcut icon" href="#"/>
+</head>
+<body>
+    <header>
+        <div class="time-bar-container">
+            <div id="time-bar">
+                <p id="timer">00:00</p>
+            </div>
+        </div>
+    </header>
+    <main>
+        <div id="game-container" class="game-container">
+            <!-- Les équipes et les bumpers seront ajoutés ici dynamiquement -->
+        </div>
+        <div id="question-container-admin">
+
+        </div>
+        <div class="footer">
+            <div class="player-control">
+                <p>Contrôle de l'affichage des joueurs :</p>
+                <button id="playerGame">JEU</button>
+                <button id="playerScores">SCORES</button>
+                <button id="players">PAGE JOUEURS</button>
+            </div>         
+            <div class="game-control">
+                <select name="questions" id="questions-select">
+                    <option value="0">Question manuelle</option>
+                </select>
+                <label for="time">Temps :</label>
+                <input type="number" name="time" id="game-time-input" placeholder="Temps (s)" min="1" value="35">
+                <label for="points">Points :</label>
+                <input type="number" name="points" id="game-points-input" placeholder="Points" min="1" value="1">
+                <button id="startStopButton">START</button>
+                <button id="pauseContinueButton">PAUSE</button>
+                <button id ="answer">Réveler la réponse</button>
+                <button id ="preparation">Préparation</button>
+            </div>
+        </div>
+    </main>
+    <footer>
+        <script type="module" src="../js/teamGame.js"></script>
+    </footer>
+</body>
+</html>

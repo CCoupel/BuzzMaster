@@ -1,0 +1,203 @@
+/* Main styles */
+:root {
+  --primary-color: #3498db;
+  --secondary-color: #2980b9;
+  --accent-color: #e74c3c;
+  --background-color: #ecf0f1;
+  --text-color: #2c3e50;
+  --border-color: #bdc3c7;
+  --hover-color: #2c3e50;
+  --shadow: 0 2px 5px 4px rgba(0,0,0,0.3);
+  --border-radius: 5px;
+  --transition: all 0.3s ease;
+  --navbar-height: 40px;
+  --timer-height: 50px;
+  --header-height: 122px;
+}
+
+html {
+  height: 100%;
+}
+
+body {
+  font-family: 'Arial', sans-serif;
+  background-color: var(--background-color);
+  background-image: linear-gradient(rgba(255, 255, 255, 0.5));
+  background-size: cover;
+  background-position: center;
+  color: var(--text-color);
+  line-height: 1.6;
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  height: 100%;
+}
+
+.team-color {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  margin-right: 10px;
+}
+  
+/* Footer styles */
+.button-container, .footer {
+  background-color: var(--secondary-color);
+  display: flex;
+  justify-content: space-around;
+  align-items: center;
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 998;
+  height: auto;
+}
+
+#config-button-container{
+  width: 80%;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1rem;
+}
+
+.player-control{
+  width: 37%;
+  height: 50px;
+  background-color: var(--primary-color);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 2%;
+  padding: 0.3rem 1rem;
+  margin: 0.7rem 0;
+  border: solid 2px lightgray;
+  border-radius: 5px;
+}
+
+.game-control{
+  width: 55%;
+  height: 50px;
+  background-color: var(--primary-color);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 2%;
+  padding: 0.3rem 1rem;
+  margin: 0.7rem 0;
+  border: solid 2px lightgray;
+  border-radius: 5px;
+}
+
+#background-form-container{
+  display: flex;
+  align-items: center;
+}
+
+button {
+  background-color: var(--accent-color);
+  color: white;
+  border: none;
+  padding: 0.5rem 1rem;
+  border-radius: var(--border-radius);
+  cursor: pointer;
+  transition: var(--transition);
+  font-size: 16px;
+  font-weight: bold;
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+button:hover {
+  background-color: var(--hover-color);
+}
+
+#websocket-tracker {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  position: fixed;
+  top: 25px;
+  right: 20px;
+}
+
+.toggle-container {
+  display: flex;
+  width: auto;
+  height: 40px;
+  border-radius: var(--border-radius);
+  overflow: hidden;
+  border: none;
+  cursor: pointer;
+  font-weight: bold;
+  font-size: 16px;
+  text-align: center;
+}
+
+.toggle-container:hover {
+  background-color: var(--accent-color);
+}
+
+.toggle-text {
+  flex: 1;
+  width: 100px;
+  padding: 0.3rem 1rem;
+  transition: background 0.3s, color 0.3s;
+  border-radius: var(--border-radius);
+}
+
+.game {
+  background: white;
+  color: var(--accent-color);
+}
+
+.score {
+  background: var(--accent-color);
+  color: white;
+}
+
+/* Quand "SCORES" est actif */
+.active .game {
+  background: var(--accent-color);
+  color: white;
+}
+
+.active .score {
+  background: white;
+  color: var(--accent-color);
+}
+
+/* Style pour l'input du temps de jeu */
+#game-time-input {
+  margin-right: 10px;
+  padding: 5px;
+  font-size: 16px;
+  width: 60px;
+}
+
+#game-points-input {
+  margin-right: 10px;
+  padding: 5px;
+  font-size: 16px;
+  width: 60px;
+}
+  
+/* Form element styles */
+select, input {
+  border: 1px solid var(--border-color);
+  border-radius: var(--border-radius);
+  padding: 0.5rem;
+  margin: 0.5rem 0.2rem;
+  font-size: 1rem;
+}
+
+select:focus, input:focus {
+  outline: none;
+  border-color: var(--accent-color);
+}
+  
+/* hidden style*/
+.hidden {
+      visibility: hidden;
+}

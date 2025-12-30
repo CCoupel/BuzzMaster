@@ -1,0 +1,201 @@
+#main {
+    height: 78%;
+}
+
+#teamGame-page {
+    display: flex;
+    height: 100%;
+}
+
+#questions-select-list {
+    width: 20%;
+    height: 100%;
+    overflow: scroll;
+    padding-right: 1rem;
+}
+
+#admin-container {
+    width: 80%;
+}
+
+#game-container {
+    display: flex;
+    justify-content: space-around;
+    flex-wrap: wrap;
+    padding-top: 10px;
+    margin-top: 3%;
+}
+/* Team Container Styles */
+.team {
+    background-color: #fff;
+    border-radius: 8px;
+    padding: 15px;
+    margin: 10px;
+    width: 15%;
+    min-height: 100px;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+    transition: all 0.3s ease;
+}
+
+.team.active {
+    opacity: 1;
+    transform: scale(1);
+    filter: none;
+    box-shadow: 0 0 15px rgba(255,215,0,0.7);
+}
+
+.team.start-phase {
+    opacity: 0.1;
+    transform: scale(0.95);
+    filter: grayscale(100%);
+    box-shadow: 0 0 10px rgba(0,0,0,0.2) inset;
+}
+
+.team-header {
+    display: flex;
+    margin-bottom: 10px;
+}
+
+.team-name {
+    width: 75%;
+    text-align: center;
+}
+
+/* Bumper Styles */
+.bumper {
+    margin: 5px 0;
+    padding: 5px;
+    background-color: #f9f9f9;
+    border-radius: 4px;
+    transition: all 0.3s ease;
+    cursor: pointer;
+}
+
+.bumper:hover {
+    background-color: #e0e0e0;
+}
+
+.bumper.active {
+    opacity: 1;
+    background-color: #fffacd;
+}
+
+.bumper.active:hover {
+    background-color: #ffeb3b;
+    cursor: pointer;
+}
+
+.bumper.start-phase {
+    opacity: 0.1;
+    background-color: #e0e0e0;
+}
+/* Question Container for admin Styles */
+#question-container-admin {
+    position: fixed;
+    bottom: 80px;
+    right: 0;
+    z-index: 999;
+    width: 80%;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+}
+
+#question-container-admin img {
+    height: 200px;
+    width: 200px;
+    object-fit: contain;
+}
+
+#question-div-admin {
+    border: 5px solid var(--primary-color); 
+    border-radius: 10px;
+    width: 80%;
+    height: auto;
+    display: flex;
+    flex-direction: column;
+    align-items: center; 
+    justify-content: center; 
+    background-color: #f9f9f9; 
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1); 
+    padding: 5px; 
+    margin: 20px auto; 
+    font-family: 'Arial', sans-serif; 
+}
+
+#question-div-admin p {
+    font-size: 1.2rem; 
+    color: #333; 
+    margin: 0; 
+    text-align: center;
+    line-height: 1.5;
+}
+
+.text {
+    border-radius: 5px;
+    border: solid 2px black;
+    strong {
+        font-weight: 600;
+    }
+}
+
+.popup {
+    position: absolute;
+    background-color: white;
+    border: 1px solid #ccc;
+    padding: 10px;
+    box-shadow: 2px 2px 10px rgba(0, 0, 0, 0.1);
+    white-space: nowrap;
+    z-index: 100;
+    strong {
+        font-weight: 600;
+    }
+    img {
+        max-height: 50px;
+        max-width: 100px;
+        height: auto;
+        width: auto;
+    }
+}
+
+.question-item {
+    background-color: white;
+    border-radius: 5px;
+    border: 1px solid #ddd;
+    box-shadow: var(--shadow);
+    margin: 15px;
+    padding: 10px;
+    cursor: pointer;
+    strong {
+        font-weight: 600;
+    }
+}
+
+.bumper.not-ready {
+    background-color:  #f0625d;
+}
+
+.bumper.ready {
+    background-color: #aed581;
+}
+
+.team.not-ready {
+    box-shadow: 0 2px 5px 4px rgba(240, 98, 93, 1);
+}
+
+.team.ready {
+    box-shadow: 0 2px 5px 4px rgba(174, 213, 129, 1);
+}
+
+.STOPPED {
+    background-color: pink;
+}
+
+.REVEALED {
+    background-color: lightgray;
+    font-size: 75%;
+    font-style: oblique 30deg;
+    opacity: 0.6;
+    width: 75%;
+}

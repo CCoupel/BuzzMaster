@@ -1,0 +1,616 @@
+package main
+
+import (
+	"buzzcontrol/internal/config"
+	"buzzcontrol/internal/game"
+	"buzzcontrol/internal/protocol"
+	"buzzcontrol/internal/server"
+	"encoding/json"
+	"log"
+	"os"
+	"os/signal"
+	"path/filepath"
+	"syscall"
+)
+
+// App holds all server components
+type App struct {
+	config     *config.Config
+	engine     *game.Engine
+	tcpServer  *server.TCPServer
+	udpBcast   *server.UDPBroadcaster
+	httpServer *server.HTTPServer
+	wsHub      *server.WebSocketHub
+	mdnsServer *server.MDNSServer
+	dnsServer  *server.DNSServer
+}
+
+func main() {
+	log.SetFlags(log.LstdFlags | log.Lshortfile)
+	log.Println("=== BuzzControl Server (Go) ===")
+
+	// Load configuration
+	cfg, err := config.Load("config.json")
+	if err != nil {
+		log.Printf("Using default configuration: %v", err)
+		cfg = config.Get()
+	}
+	config.SetInstance(cfg)
+
+	log.Printf("Version: %s", cfg.Version)
+	log.Printf("HTTP Port: %d", cfg.Server.HTTPPort)
+	log.Printf("TCP Port: %d", cfg.Server.TCPPort)
+
+	// Create app
+	app := &App{
+		config: cfg,
+	}
+
+	// Initialize components
+	app.init()
+
+	// Start servers
+	if err := app.start(); err != nil {
+		log.Fatalf("Failed to start: %v", err)
+	}
+
+	log.Println("Server started successfully")
+	log.Printf("Web interface: http://localhost:%d", cfg.Server.HTTPPort)
+	log.Printf("TCP server (buzzers): port %d", cfg.Server.TCPPort)
+
+	// Wait for shutdown signal
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
+	<-sigCh
+
+	log.Println("Shutting down...")
+	app.stop()
+}
+
+func (a *App) init() {
+	// Game engine
+	a.engine = game.NewEngine()
+
+	// WebSocket hub
+	a.wsHub = server.NewWebSocketHub()
+
+	// TCP server for buzzers
+	a.tcpServer = server.NewTCPServer(a.config.Server.TCPPort)
+
+	// UDP broadcaster
+	a.udpBcast = server.NewUDPBroadcaster(a.config.Server.TCPPort)
+
+	// HTTP server
+	a.httpServer = server.NewHTTPServer(a.config.Server.HTTPPort, a.engine, a.wsHub)
+
+	// mDNS server (advertise buzzcontrol.local)
+	a.mdnsServer = server.NewMDNSServer("buzzcontrol", a.config.Server.HTTPPort, a.config.Server.TCPPort)
+
+	// DNS server (captive portal - redirects all DNS to this server)
+	a.dnsServer = server.NewDNSServer(53, nil)
+
+	// Set up callbacks
+	a.setupCallbacks()
+}
+
+func (a *App) setupCallbacks() {
+	// Handle TCP messages from buzzers
+	go func() {
+		for msg := range a.tcpServer.Incoming {
+			a.handleBuzzerMessage(msg)
+		}
+	}()
+
+	// Handle WebSocket messages from web clients
+	go func() {
+		for msg := range a.wsHub.Incoming {
+			a.handleWebMessage(msg)
+		}
+	}()
+
+	// Game state changes
+	a.engine.OnStateChange = func(phase game.GamePhase) {
+		a.broadcastGameState(string(phase))
+	}
+
+	// Timer ticks
+	a.engine.OnTimerTick = func(currentTime int) {
+		a.broadcastTimerUpdate(currentTime)
+	}
+
+	// Buzzer press
+	a.engine.OnBuzzerPress = func(bumperID, teamID string, pressTime int64, button string) {
+		a.broadcastPause(bumperID)
+	}
+
+	// HTTP actions
+	a.httpServer.OnAction = func(action string, data json.RawMessage) {
+		switch action {
+		case "CLEAR_GAME":
+			a.broadcastReset()
+		case "CLEAR_BUZZERS":
+			a.broadcastUpdate()
+		case "REBOOT", "RESET":
+			a.broadcastReset()
+		case "RESTORE":
+			a.broadcastQuestions()
+			a.broadcastUpdate()
+		}
+	}
+
+	// Question upload broadcast
+	a.httpServer.OnQuestionUpload = func() {
+		a.broadcastQuestions()
+	}
+}
+
+func (a *App) start() error {
+	// Start WebSocket hub
+	go a.wsHub.Run()
+
+	// Start TCP server
+	if err := a.tcpServer.Start(); err != nil {
+		return err
+	}
+
+	// Start UDP broadcaster
+	if err := a.udpBcast.Start(); err != nil {
+		return err
+	}
+
+	// Start HTTP server
+	if err := a.httpServer.Start(); err != nil {
+		return err
+	}
+
+	// Start mDNS server (non-fatal if it fails)
+	if err := a.mdnsServer.Start(); err != nil {
+		log.Printf("[mDNS] Warning: Failed to start mDNS: %v", err)
+	}
+
+	// Start DNS server (non-fatal if it fails - may need admin rights)
+	if err := a.dnsServer.Start(); err != nil {
+		log.Printf("[DNS] Warning: Failed to start DNS server: %v (may need admin rights)", err)
+	}
+
+	// Send initial HELLO
+	a.broadcastHello()
+
+	return nil
+}
+
+func (a *App) stop() {
+	a.dnsServer.Stop()
+	a.mdnsServer.Stop()
+	a.httpServer.Stop()
+	a.tcpServer.Stop()
+	a.udpBcast.Stop()
+}
+
+// handleBuzzerMessage processes messages from BuzzClick buzzers (TCP)
+func (a *App) handleBuzzerMessage(incoming *protocol.IncomingMessage) {
+	msg := incoming.Data
+
+	switch msg.Action {
+	case protocol.ActionHello:
+		a.handleHello(incoming.ClientID, msg)
+
+	case protocol.ActionButton:
+		a.handleButton(incoming.ClientID, msg, incoming.Timestamp.UnixMicro())
+
+	case protocol.ActionPong:
+		a.handlePong(incoming.ClientID, msg)
+
+	default:
+		log.Printf("[App] Unknown buzzer action: %s", msg.Action)
+	}
+}
+
+// handleWebMessage processes messages from web clients (WebSocket)
+func (a *App) handleWebMessage(incoming *protocol.IncomingMessage) {
+	msg := incoming.Data
+
+	switch msg.Action {
+	case protocol.ActionHello:
+		a.broadcastUpdate()
+		a.broadcastQuestions()
+
+	case protocol.ActionFull:
+		a.handleFullUpdate(msg)
+
+	case protocol.ActionUpdate:
+		a.handleUpdate(msg)
+
+	case protocol.ActionPoints:
+		a.handlePoints(msg)
+
+	case protocol.ActionReady:
+		a.handleReady(msg)
+
+	case protocol.ActionStart:
+		a.handleStart(msg)
+
+	case protocol.ActionStop:
+		a.engine.Stop()
+		a.broadcastStop()
+
+	case protocol.ActionPause:
+		a.engine.PauseAll()
+		a.broadcastPauseAll()
+
+	case protocol.ActionContinue:
+		a.engine.Continue()
+		a.broadcastContinue()
+
+	case protocol.ActionReveal:
+		answer := a.engine.Reveal()
+		a.broadcastReveal(answer)
+
+	case protocol.ActionRAZ:
+		a.engine.RAZScores()
+		a.broadcastUpdate()
+
+	case protocol.ActionRemote:
+		a.handleRemote(msg)
+
+	case protocol.ActionDelete:
+		a.handleDelete(msg)
+
+	case protocol.ActionReset:
+		a.broadcastReset()
+
+	case protocol.ActionReboot:
+		log.Println("[App] Reboot requested from web client")
+
+	default:
+		log.Printf("[App] Unknown web action: %s", msg.Action)
+	}
+}
+
+func (a *App) handleHello(clientID string, msg *protocol.Message) {
+	log.Printf("[App] HELLO from buzzer: %s", clientID)
+
+	// Parse payload
+	var payload map[string]interface{}
+	if err := json.Unmarshal(msg.Msg, &payload); err == nil {
+		a.engine.UpdateBumper(clientID, payload)
+	}
+
+	// Send current state to all
+	a.broadcastUpdate()
+}
+
+func (a *App) handleButton(clientID string, msg *protocol.Message, timestamp int64) {
+	payload, err := msg.ParseButtonPayload()
+	if err != nil {
+		log.Printf("[App] Failed to parse button payload: %v", err)
+		return
+	}
+
+	log.Printf("[App] BUTTON from %s: %s", clientID, payload.Button)
+
+	// Process in engine
+	a.engine.ProcessButtonPress(clientID, timestamp, payload.Button)
+
+	// Broadcast pause to all
+	a.broadcastPause(clientID)
+	a.broadcastUpdate()
+}
+
+func (a *App) handlePong(clientID string, msg *protocol.Message) {
+	log.Printf("[App] PONG from buzzer: %s", clientID)
+
+	if a.engine.IsGamePrepare() {
+		a.engine.SetBumperReady(clientID)
+
+		// Check if all ready
+		if a.engine.AreAllTeamsReady() {
+			a.engine.TransitionToReady()
+			a.broadcastReady()
+		}
+
+		a.broadcastUpdate()
+	}
+}
+
+func (a *App) handleFullUpdate(msg *protocol.Message) {
+	var data struct {
+		Teams   map[string]*game.Team   `json:"teams"`
+		Bumpers map[string]*game.Bumper `json:"bumpers"`
+	}
+
+	if err := json.Unmarshal(msg.Msg, &data); err != nil {
+		log.Printf("[App] Failed to parse FULL update: %v", err)
+		return
+	}
+
+	a.engine.SetTeams(data.Teams)
+	a.engine.SetBumpers(data.Bumpers)
+	a.broadcastUpdate()
+}
+
+func (a *App) handleUpdate(msg *protocol.Message) {
+	// Similar to FULL but partial update
+	a.handleFullUpdate(msg)
+}
+
+func (a *App) handlePoints(msg *protocol.Message) {
+	var payload protocol.PointsPayload
+	if err := json.Unmarshal(msg.Msg, &payload); err != nil {
+		log.Printf("[App] Failed to parse POINTS: %v", err)
+		return
+	}
+
+	bumperScore, teamScore := a.engine.UpdateScore(payload.BumperID, payload.Points)
+	log.Printf("[App] Points: bumper=%s, +%d, bumperScore=%d, teamScore=%d",
+		payload.BumperID, payload.Points, bumperScore, teamScore)
+
+	a.broadcastUpdate()
+}
+
+func (a *App) handleReady(msg *protocol.Message) {
+	var payload protocol.ReadyPayload
+	if err := json.Unmarshal(msg.Msg, &payload); err != nil {
+		log.Printf("[App] Failed to parse READY: %v", err)
+		return
+	}
+
+	// TODO: Load question from storage
+	var question *game.Question
+	if payload.Question != "" {
+		question = &game.Question{ID: payload.Question}
+	}
+
+	a.engine.Ready(payload.Question, question)
+
+	// Send PING to all buzzers
+	a.broadcastPing()
+}
+
+func (a *App) handleStart(msg *protocol.Message) {
+	var payload protocol.StartPayload
+	if err := json.Unmarshal(msg.Msg, &payload); err != nil {
+		payload.Delay = a.config.Game.DefaultDelay
+	}
+
+	if payload.Delay <= 0 {
+		payload.Delay = a.config.Game.DefaultDelay
+	}
+
+	a.engine.Start(payload.Delay)
+	a.broadcastStart()
+}
+
+func (a *App) handleRemote(msg *protocol.Message) {
+	var payload protocol.RemotePayload
+	if err := json.Unmarshal(msg.Msg, &payload); err != nil {
+		return
+	}
+
+	a.engine.SetPage(payload.Remote)
+	a.broadcastRemote()
+}
+
+func (a *App) handleDelete(msg *protocol.Message) {
+	var payload protocol.DeletePayload
+	if err := json.Unmarshal(msg.Msg, &payload); err != nil {
+		log.Printf("[App] Failed to parse DELETE: %v", err)
+		return
+	}
+
+	// Validate ID (must be numeric like ESP32)
+	if payload.ID == "" {
+		log.Printf("[App] DELETE: empty ID")
+		return
+	}
+
+	// Delete question directory (like ESP32: deleteDirectory(questionsPath + "/" + ID))
+	questionsDir := a.config.Storage.QuestionsDir
+	if questionsDir == "" {
+		questionsDir = "./data/files/questions"
+	}
+	questionPath := filepath.Join(questionsDir, payload.ID)
+
+	log.Printf("[App] DELETE: Attempting to delete path: %s", questionPath)
+
+	// Check if path exists before deleting
+	if _, err := os.Stat(questionPath); os.IsNotExist(err) {
+		log.Printf("[App] DELETE: Path does not exist: %s", questionPath)
+	}
+
+	if err := os.RemoveAll(questionPath); err != nil {
+		log.Printf("[App] Failed to delete question %s: %v", payload.ID, err)
+	} else {
+		log.Printf("[App] Deleted question: %s (path: %s)", payload.ID, questionPath)
+	}
+
+	// Broadcast updated questions list (like ESP32: sendQuestions())
+	a.broadcastQuestions()
+}
+
+// Broadcast methods
+func (a *App) broadcast(action string, data json.RawMessage, viaTCP bool) {
+	msg, _ := protocol.NewMessage(action, nil)
+	msg.Msg = data
+
+	// WebSocket
+	a.wsHub.Broadcast(msg)
+
+	// UDP Broadcast (for buzzers)
+	if viaTCP {
+		a.udpBcast.Broadcast(msg)
+	}
+}
+
+func (a *App) broadcastHello() {
+	msg, _ := protocol.NewMessage(protocol.ActionHello, map[string]interface{}{})
+	a.wsHub.Broadcast(msg)
+	a.udpBcast.Broadcast(msg)
+}
+
+func (a *App) broadcastUpdate() {
+	data := a.engine.GetTeamsAndBumpersJSON()
+	a.broadcast(protocol.ActionUpdate, data, false)
+}
+
+func (a *App) broadcastGameState(phase string) {
+	data := a.engine.GetGameJSON()
+	a.broadcast(protocol.ActionUpdate, data, false)
+}
+
+func (a *App) broadcastStart() {
+	data := a.engine.GetGameJSON()
+	a.broadcast(protocol.ActionStart, data, true)
+}
+
+func (a *App) broadcastStop() {
+	data := a.engine.GetGameJSON()
+	a.broadcast(protocol.ActionStop, data, true)
+}
+
+func (a *App) broadcastPause(bumperID string) {
+	data := a.engine.GetGameJSON()
+	a.broadcast(protocol.ActionPause, data, true)
+}
+
+func (a *App) broadcastPauseAll() {
+	data := a.engine.GetGameJSON()
+	a.broadcast(protocol.ActionPause, data, true)
+}
+
+func (a *App) broadcastContinue() {
+	data := a.engine.GetGameJSON()
+	a.broadcast(protocol.ActionContinue, data, true)
+}
+
+func (a *App) broadcastTimerUpdate(currentTime int) {
+	data := a.engine.GetGameJSON()
+	a.broadcast(protocol.ActionUpdateTimer, data, true)
+}
+
+func (a *App) broadcastPing() {
+	msg, _ := protocol.NewMessage(protocol.ActionPing, map[string]interface{}{})
+	a.udpBcast.Broadcast(msg)
+}
+
+func (a *App) broadcastReady() {
+	data := a.engine.GetTeamsAndBumpersJSON()
+	a.broadcast(protocol.ActionReady, data, true)
+}
+
+func (a *App) broadcastReveal(answer string) {
+	data, _ := json.Marshal(answer)
+	a.broadcast(protocol.ActionReveal, data, true)
+}
+
+func (a *App) broadcastReset() {
+	msg, _ := protocol.NewMessage(protocol.ActionReset, map[string]interface{}{})
+	a.wsHub.Broadcast(msg)
+	a.udpBcast.Broadcast(msg)
+
+	// Then send HELLO
+	a.broadcastHello()
+}
+
+func (a *App) broadcastRemote() {
+	data := a.engine.GetTeamsAndBumpersJSON()
+	a.broadcast(protocol.ActionRemote, data, false)
+}
+
+func (a *App) broadcastQuestions() {
+	// Load questions from storage
+	questions := a.loadQuestions()
+	data, _ := json.Marshal(questions)
+
+	// Get storage info
+	fsInfo := a.getStorageInfo()
+
+	// Create message with FSINFO
+	msg, _ := protocol.NewMessage(protocol.ActionQuestions, nil)
+	msg.Msg = data
+	msg.FSInfo = fsInfo
+	msg.Version = a.config.Version
+
+	// Broadcast via WebSocket only (not to buzzers)
+	a.wsHub.Broadcast(msg)
+}
+
+// getStorageInfo returns file storage information
+func (a *App) getStorageInfo() *protocol.FSInfo {
+	filesDir := a.config.Storage.FilesDir
+	if filesDir == "" {
+		filesDir = "./data/files"
+	}
+
+	var totalSize int64 = 0
+	filepath.Walk(filesDir, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return nil
+		}
+		if !info.IsDir() {
+			totalSize += info.Size()
+		}
+		return nil
+	})
+
+	// Assume 10MB total storage for questions (configurable)
+	const maxStorage int64 = 10 * 1024 * 1024
+	usedKB := int(totalSize / 1024)
+	totalKB := int(maxStorage / 1024)
+	freeKB := totalKB - usedKB
+	if freeKB < 0 {
+		freeKB = 0
+	}
+
+	pUsed := float64(totalSize) / float64(maxStorage) * 100
+	if pUsed > 100 {
+		pUsed = 100
+	}
+
+	return &protocol.FSInfo{
+		Used:  usedKB,
+		Free:  freeKB,
+		Total: totalKB,
+		PUsed: pUsed,
+	}
+}
+
+// loadQuestions loads all questions from the questions directory
+// Returns format matching ESP32: {"/files/questions/1": {...}, ...}
+func (a *App) loadQuestions() map[string]map[string]interface{} {
+	questions := make(map[string]map[string]interface{})
+
+	questionsDir := a.config.Storage.QuestionsDir
+	if questionsDir == "" {
+		questionsDir = "./data/files/questions"
+	}
+
+	entries, err := os.ReadDir(questionsDir)
+	if err != nil {
+		log.Printf("[App] Failed to read questions directory: %v", err)
+		return questions
+	}
+
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+
+		questionFile := filepath.Join(questionsDir, entry.Name(), "question.json")
+		data, err := os.ReadFile(questionFile)
+		if err != nil {
+			continue
+		}
+
+		var question map[string]interface{}
+		if err := json.Unmarshal(data, &question); err != nil {
+			continue
+		}
+
+		// Use full path as key (like ESP32: /files/questions/1)
+		key := "/files/questions/" + entry.Name()
+		questions[key] = question
+	}
+
+	return questions
+}

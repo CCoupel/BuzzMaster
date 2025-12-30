@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BuzzControl - Scores</title>
+    <link rel="stylesheet" href="../css/reset.css">
+    <link rel="stylesheet" href="../css/style.css">
+    <link rel="stylesheet" href="../css/score.css">
+    <script src="../js/navbar.js"></script>
+    <link rel="shortcut icon" href="#" />
+</head>
+<body>
+    <header></header>
+    <main>
+        <div id="score-container">
+            <div class="scoreboard">
+                <h2>Classement des Équipes</h2>
+                <table id="team-scores">
+                    <thead>
+                        <tr>
+                            <th>Rang</th>
+                            <th>Équipe</th>
+                            <th>Score Total</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <!-- Le contenu sera ajouté dynamiquement par JavaScript -->
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="scoreboard">
+                <h2>Classement des Joueurs</h2>
+                <table id="player-scores">
+                    <thead>
+                        <tr>
+                            <th>Rang</th>
+                            <th>Joueur</th>
+                            <th>Équipe</th>
+                            <th>Score</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <!-- Le contenu sera ajouté dynamiquement par JavaScript -->
+                    </tbody>
+                </table>
+            </div>
+            <div class="footer">
+                <button id="reset-score"> Réinitialiser les scores</button>
+            </div>
+        </div>
+    </main>
+    <footer>
+        <script type="module" src="../js/score.js"></script>
+    </footer>
+</body>
+</html>
