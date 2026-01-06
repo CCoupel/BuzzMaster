@@ -656,16 +656,166 @@ func (h *HTTPServer) handleRestore(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *HTTPServer) handleUpdate(w http.ResponseWriter, r *http.Request) {
-	// On Raspberry Pi / Go server, updates are handled differently than ESP32
-	// This could trigger a git pull or download of new web assets
-	log.Printf("[HTTP] Update requested")
+	log.Printf("[HTTP] Update requested - downloading from remote")
+
+	// Read base URL from config file (like ESP32)
+	baseURLFile := filepath.Join(h.dataDir, "config", "base.url")
+	baseURLBytes, err := os.ReadFile(baseURLFile)
+	if err != nil {
+		log.Printf("[HTTP] Update: Cannot read base URL: %v", err)
+		http.Error(w, "Cannot read base URL config", http.StatusInternalServerError)
+		return
+	}
+	baseURL := strings.TrimSpace(string(baseURLBytes))
+	if baseURL == "" {
+		http.Error(w, "Empty base URL", http.StatusInternalServerError)
+		return
+	}
+	log.Printf("[HTTP] Update: Base URL = %s", baseURL)
+
+	// Read local version
+	versionFile := filepath.Join(h.dataDir, "config", "version.txt")
+	localVersion := float64(-1)
+	if data, err := os.ReadFile(versionFile); err == nil {
+		fmt.Sscanf(strings.TrimSpace(string(data)), "%f", &localVersion)
+	}
+	log.Printf("[HTTP] Update: Local version = %.1f", localVersion)
+
+	// Download remote version
+	remoteVersionURL := baseURL + "/config/version.txt"
+	remoteVersionStr, err := h.downloadString(remoteVersionURL)
+	if err != nil {
+		log.Printf("[HTTP] Update: Cannot download remote version: %v", err)
+		http.Error(w, "Cannot download remote version", http.StatusInternalServerError)
+		return
+	}
+	remoteVersion := float64(-1)
+	fmt.Sscanf(strings.TrimSpace(remoteVersionStr), "%f", &remoteVersion)
+	log.Printf("[HTTP] Update: Remote version = %.1f", remoteVersion)
+
+	// Compare versions
+	if localVersion >= remoteVersion {
+		log.Printf("[HTTP] Update: Already up to date (local=%.1f, remote=%.1f)", localVersion, remoteVersion)
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"status":         "ok",
+			"message":        "Already up to date",
+			"local_version":  localVersion,
+			"remote_version": remoteVersion,
+		})
+		return
+	}
+
+	log.Printf("[HTTP] Update: Updating from %.1f to %.1f", localVersion, remoteVersion)
+
+	// Download catalog file
+	catalogURL := baseURL + "/config/catalog.url"
+	catalogContent, err := h.downloadString(catalogURL)
+	if err != nil {
+		log.Printf("[HTTP] Update: Cannot download catalog: %v", err)
+		http.Error(w, "Cannot download catalog", http.StatusInternalServerError)
+		return
+	}
+
+	// Parse catalog and download each file
+	tempDir := filepath.Join(h.dataDir, "_temp_update")
+	os.RemoveAll(tempDir)
+	os.MkdirAll(tempDir, 0755)
+
+	var updatedFiles []string
+	lines := strings.Split(catalogContent, "\n")
+	for _, line := range lines {
+		filePath := strings.TrimSpace(line)
+		if filePath == "" {
+			continue
+		}
+
+		fileURL := baseURL + "/" + filePath
+		tempFilePath := filepath.Join(tempDir, filePath)
+
+		if err := h.downloadFile(fileURL, tempFilePath); err != nil {
+			log.Printf("[HTTP] Update: Failed to download %s: %v", filePath, err)
+			os.RemoveAll(tempDir)
+			http.Error(w, "Failed to download: "+filePath, http.StatusInternalServerError)
+			return
+		}
+		updatedFiles = append(updatedFiles, filePath)
+		log.Printf("[HTTP] Update: Downloaded %s", filePath)
+	}
+
+	// Move temp to CURRENT (atomic update)
+	currentDir := filepath.Join(h.dataDir, "CURRENT")
+	os.RemoveAll(currentDir)
+	if err := os.Rename(tempDir, currentDir); err != nil {
+		log.Printf("[HTTP] Update: Failed to move temp to CURRENT: %v", err)
+		http.Error(w, "Failed to finalize update", http.StatusInternalServerError)
+		return
+	}
+
+	// Save new version
+	os.WriteFile(filepath.Join(h.dataDir, "CURRENT", "config", "version.txt"),
+		[]byte(fmt.Sprintf("%.1f", remoteVersion)), 0644)
+
+	log.Printf("[HTTP] Update: Successfully updated to version %.1f (%d files)", remoteVersion, len(updatedFiles))
 
 	if h.OnAction != nil {
 		h.OnAction("UPDATE", nil)
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	w.Write([]byte(`{"status": "ok", "message": "Update triggered"}`))
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"status":        "ok",
+		"message":       fmt.Sprintf("Updated to version %.1f", remoteVersion),
+		"from_version":  localVersion,
+		"to_version":    remoteVersion,
+		"updated_files": updatedFiles,
+	})
+}
+
+// downloadString downloads a URL and returns its content as string
+func (h *HTTPServer) downloadString(url string) (string, error) {
+	resp, err := http.Get(url)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("HTTP %d", resp.StatusCode)
+	}
+
+	data, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", err
+	}
+	return string(data), nil
+}
+
+// downloadFile downloads a URL to a local file
+func (h *HTTPServer) downloadFile(url, destPath string) error {
+	// Ensure parent directory exists
+	if err := os.MkdirAll(filepath.Dir(destPath), 0755); err != nil {
+		return err
+	}
+
+	resp, err := http.Get(url)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("HTTP %d", resp.StatusCode)
+	}
+
+	out, err := os.Create(destPath)
+	if err != nil {
+		return err
+	}
+	defer out.Close()
+
+	_, err = io.Copy(out, resp.Body)
+	return err
 }
 
 func (h *HTTPServer) handleWebSocket(w http.ResponseWriter, r *http.Request) {

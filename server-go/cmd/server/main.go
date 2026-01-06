@@ -6,10 +6,15 @@ import (
 	"buzzcontrol/internal/protocol"
 	"buzzcontrol/internal/server"
 	"encoding/json"
+	"fmt"
 	"log"
+	"net"
 	"os"
+	"os/exec"
 	"os/signal"
 	"path/filepath"
+	"runtime"
+	"strings"
 	"syscall"
 )
 
@@ -28,6 +33,9 @@ type App struct {
 func main() {
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
 	log.Println("=== BuzzControl Server (Go) ===")
+
+	// Check for Bonjour/mDNS support
+	checkBonjourSupport()
 
 	// Load configuration
 	cfg, err := config.Load("config.json")
@@ -55,8 +63,10 @@ func main() {
 	}
 
 	log.Println("Server started successfully")
-	log.Printf("Web interface: http://localhost:%d", cfg.Server.HTTPPort)
 	log.Printf("TCP server (buzzers): port %d", cfg.Server.TCPPort)
+
+	// Display all accessible URLs and open browser
+	displayAndOpenURLs(cfg.Server.HTTPPort)
 
 	// Wait for shutdown signal
 	sigCh := make(chan os.Signal, 1)
@@ -613,4 +623,158 @@ func (a *App) loadQuestions() map[string]map[string]interface{} {
 	}
 
 	return questions
+}
+
+// displayAndOpenURLs shows all accessible URLs and opens the browser
+func displayAndOpenURLs(httpPort int) {
+	log.Println("")
+	log.Println("╔════════════════════════════════════════════════════════════╗")
+	log.Println("║                    WEB INTERFACE URLs                      ║")
+	log.Println("╠════════════════════════════════════════════════════════════╣")
+
+	var primaryURL string
+
+	// Get all local IPs
+	interfaces, err := getNetworkInterfaces()
+	if err == nil {
+		for _, iface := range interfaces {
+			url := fmt.Sprintf("http://%s:%d", iface.IP, httpPort)
+			if httpPort == 80 {
+				url = fmt.Sprintf("http://%s", iface.IP)
+			}
+			log.Printf("║  %-56s  ║", fmt.Sprintf("%s (%s)", url, iface.Name))
+
+			// Use first non-virtual interface as primary
+			if primaryURL == "" && !strings.Contains(strings.ToLower(iface.Name), "virtual") &&
+				!strings.Contains(strings.ToLower(iface.Name), "vethernet") &&
+				!strings.Contains(strings.ToLower(iface.Name), "wsl") {
+				primaryURL = url
+			}
+		}
+	}
+
+	// Localhost
+	localhostURL := fmt.Sprintf("http://localhost:%d", httpPort)
+	if httpPort == 80 {
+		localhostURL = "http://localhost"
+	}
+	log.Printf("║  %-56s  ║", localhostURL+" (localhost)")
+
+	log.Println("╚════════════════════════════════════════════════════════════╝")
+	log.Println("")
+
+	// Use localhost if no primary found
+	if primaryURL == "" {
+		primaryURL = localhostURL
+	}
+
+	// Open browser
+	log.Printf("Opening browser: %s", primaryURL)
+	openBrowser(primaryURL)
+}
+
+// NetworkInterface represents a network interface with IP
+type NetworkInterface struct {
+	Name string
+	IP   string
+}
+
+// getNetworkInterfaces returns all active network interfaces with IPv4 addresses
+func getNetworkInterfaces() ([]NetworkInterface, error) {
+	var result []NetworkInterface
+
+	interfaces, err := net.Interfaces()
+	if err != nil {
+		return nil, err
+	}
+
+	for _, iface := range interfaces {
+		// Skip down and loopback interfaces
+		if iface.Flags&net.FlagUp == 0 || iface.Flags&net.FlagLoopback != 0 {
+			continue
+		}
+
+		addrs, err := iface.Addrs()
+		if err != nil {
+			continue
+		}
+
+		for _, addr := range addrs {
+			var ip net.IP
+			switch v := addr.(type) {
+			case *net.IPNet:
+				ip = v.IP
+			case *net.IPAddr:
+				ip = v.IP
+			}
+
+			// Only IPv4
+			if ip == nil || ip.To4() == nil {
+				continue
+			}
+
+			result = append(result, NetworkInterface{
+				Name: iface.Name,
+				IP:   ip.String(),
+			})
+		}
+	}
+
+	return result, nil
+}
+
+// openBrowser opens the default browser with the given URL
+func openBrowser(url string) {
+	var cmd *exec.Cmd
+
+	switch runtime.GOOS {
+	case "windows":
+		cmd = exec.Command("cmd", "/c", "start", url)
+	case "darwin":
+		cmd = exec.Command("open", url)
+	default: // Linux
+		cmd = exec.Command("xdg-open", url)
+	}
+
+	if err := cmd.Start(); err != nil {
+		log.Printf("Failed to open browser: %v", err)
+	}
+}
+
+// checkBonjourSupport checks if Bonjour/mDNS is available on the system
+func checkBonjourSupport() {
+	if runtime.GOOS != "windows" {
+		// On Linux/macOS, mDNS is usually available via avahi or built-in
+		log.Println("[mDNS] Running on", runtime.GOOS, "- mDNS should be available")
+		return
+	}
+
+	// On Windows, check if Bonjour service is running
+	log.Println("[mDNS] Checking Bonjour service status...")
+
+	// Query the Bonjour service using sc command
+	cmd := exec.Command("sc", "query", "Bonjour Service")
+	output, err := cmd.Output()
+	if err != nil {
+		// Service not found or error
+		log.Println("[mDNS] ⚠ Bonjour is NOT installed")
+		log.Println("[mDNS]   → mDNS hostname resolution (buzzcontrol.local) will NOT work")
+		log.Println("[mDNS]   → BuzzClick service discovery will still work")
+		log.Println("[mDNS]   → To enable hostname resolution, install Bonjour:")
+		log.Println("[mDNS]     https://support.apple.com/kb/DL999")
+		return
+	}
+
+	// Check if service is running
+	outputStr := string(output)
+	if strings.Contains(outputStr, "RUNNING") {
+		log.Println("[mDNS] ✓ Bonjour service is running")
+		log.Println("[mDNS]   → mDNS hostname resolution (buzzcontrol.local) should work")
+	} else if strings.Contains(outputStr, "STOPPED") {
+		log.Println("[mDNS] ⚠ Bonjour service is installed but STOPPED")
+		log.Println("[mDNS]   → Start the service: sc start \"Bonjour Service\"")
+	} else {
+		log.Println("[mDNS] ⚠ Bonjour service status unknown")
+		log.Printf("[mDNS]   → Output: %s", strings.TrimSpace(outputStr))
+	}
 }
