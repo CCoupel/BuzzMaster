@@ -250,6 +250,7 @@ export default function PlayerDisplay() {
                         const rgbColor = getRgbColor(team.color)
                         const isChanged = changedTeams[team.name]
                         const isTied = sortedTeams.filter(t => t.rank === team.rank).length > 1
+                        const barWidth = (team.score / maxTeamScore) * 100
 
                         return (
                           <motion.div
@@ -266,8 +267,18 @@ export default function PlayerDisplay() {
                               {team.rank === 1 ? '🥇' : team.rank === 2 ? '🥈' : team.rank === 3 ? '🥉' : `#${team.rank}`}
                               {isTied && <span className="tied-indicator">ex</span>}
                             </div>
-                            <div className="score-team-badge-name" style={{ backgroundColor: rgbColor }}>
-                              {team.name}
+                            <div className="score-team-info">
+                              <div className="score-team-badge-name" style={{ backgroundColor: rgbColor }}>
+                                {team.name}
+                              </div>
+                              <div className="score-team-bar">
+                                <motion.div
+                                  className="score-team-bar-fill"
+                                  initial={{ width: 0 }}
+                                  animate={{ width: `${barWidth}%` }}
+                                  transition={{ duration: 0.5 }}
+                                />
+                              </div>
                             </div>
                             <motion.span
                               className="score-points"

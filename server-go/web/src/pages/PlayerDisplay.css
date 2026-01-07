@@ -416,8 +416,15 @@
   opacity: 0.9;
 }
 
-.score-team-badge-name {
+.score-team-info {
   flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.score-team-badge-name {
   padding: var(--space-2) var(--space-3);
   border-radius: var(--radius-lg);
   font-family: var(--font-display);
@@ -428,6 +435,20 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.score-team-bar {
+  height: 8px;
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: var(--radius-full);
+  overflow: hidden;
+}
+
+.score-team-bar-fill {
+  height: 100%;
+  background: var(--team-color);
+  border-radius: var(--radius-full);
+  box-shadow: 0 0 10px var(--team-color);
 }
 
 /* Podium Display */

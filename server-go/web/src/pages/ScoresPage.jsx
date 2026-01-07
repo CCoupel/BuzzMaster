@@ -32,6 +32,9 @@ export default function ScoresPage() {
     })
   }, [teams])
 
+  // Calculate max scores for progress bars
+  const maxTeamScore = useMemo(() => Math.max(...sortedTeams.map(t => t.score), 1), [sortedTeams])
+
   // Sort players by score with rank calculation
   const sortedPlayers = useMemo(() => {
     const sorted = Object.entries(bumpers)
@@ -57,6 +60,8 @@ export default function ScoresPage() {
       return { ...player, rank: currentRank }
     })
   }, [bumpers, teams])
+
+  const maxPlayerScore = useMemo(() => Math.max(...sortedPlayers.map(p => p.score), 1), [sortedPlayers])
 
   // Top 3 players for podium
   const topPlayers = useMemo(() => {
@@ -128,6 +133,8 @@ export default function ScoresPage() {
                   const rgbColor = getRgbColor(team.color)
                   const isTied = sortedTeams.filter(t => t.rank === team.rank).length > 1
 
+                  const barWidth = (team.score / maxTeamScore) * 100
+
                   return (
                     <motion.div
                       key={team.name}
@@ -136,6 +143,7 @@ export default function ScoresPage() {
                       animate={{ opacity: 1, y: 0 }}
                       exit={{ opacity: 0, y: -20 }}
                       layout
+                      style={{ '--team-color': rgbColor }}
                     >
                       <div className="ranking-rank">
                         <span className="rank-medal">{getMedalEmoji(team.rank)}</span>
@@ -146,6 +154,14 @@ export default function ScoresPage() {
                       </div>
                       <div className="ranking-info">
                         <span className="ranking-name">{team.name}</span>
+                        <div className="ranking-bar">
+                          <motion.div
+                            className="ranking-bar-fill"
+                            initial={{ width: 0 }}
+                            animate={{ width: `${barWidth}%` }}
+                            transition={{ duration: 0.5 }}
+                          />
+                        </div>
                       </div>
                       <div className="ranking-score">{team.score}</div>
                       <div className="ranking-controls">
@@ -190,6 +206,7 @@ export default function ScoresPage() {
                 {sortedPlayers.map((player) => {
                   const rgbColor = getRgbColor(player.teamColor)
                   const isTied = sortedPlayers.filter(p => p.rank === player.rank).length > 1
+                  const barWidth = (player.score / maxPlayerScore) * 100
 
                   return (
                     <motion.div
@@ -199,6 +216,7 @@ export default function ScoresPage() {
                       animate={{ opacity: 1, y: 0 }}
                       exit={{ opacity: 0, y: -20 }}
                       layout
+                      style={{ '--team-color': rgbColor }}
                     >
                       <div className="ranking-rank">
                         <span className="rank-medal">{getMedalEmoji(player.rank)}</span>
@@ -210,6 +228,14 @@ export default function ScoresPage() {
                       <div className="ranking-info">
                         <span className="ranking-name">{player.name}</span>
                         <span className="ranking-team">{player.team || 'Sans equipe'}</span>
+                        <div className="ranking-bar">
+                          <motion.div
+                            className="ranking-bar-fill"
+                            initial={{ width: 0 }}
+                            animate={{ width: `${barWidth}%` }}
+                            transition={{ duration: 0.5 }}
+                          />
+                        </div>
                       </div>
                       <div className="ranking-score">{player.score}</div>
                       <div className="ranking-controls">
