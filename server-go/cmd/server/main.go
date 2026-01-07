@@ -57,6 +57,9 @@ func main() {
 	// Initialize components
 	app.init()
 
+	// Initialize test data (teams, bumpers)
+	app.initTestData()
+
 	// Start servers
 	if err := app.start(); err != nil {
 		log.Fatalf("Failed to start: %v", err)
@@ -943,6 +946,109 @@ func openBrowser(url string) {
 	if err := cmd.Start(); err != nil {
 		log.Printf("Failed to open browser: %v", err)
 	}
+}
+
+// initTestData creates test teams and bumpers for development
+func (a *App) initTestData() {
+	log.Println("[App] Initializing test data...")
+
+	// 5 teams with different colors
+	teams := map[string]*game.Team{
+		"Les Rouges": {
+			Name:  "Les Rouges",
+			Color: []int{239, 68, 68}, // Red
+			Score: 15,
+		},
+		"Les Bleus": {
+			Name:  "Les Bleus",
+			Color: []int{59, 130, 246}, // Blue
+			Score: 12,
+		},
+		"Les Verts": {
+			Name:  "Les Verts",
+			Color: []int{34, 197, 94}, // Green
+			Score: 8,
+		},
+		"Les Jaunes": {
+			Name:  "Les Jaunes",
+			Color: []int{234, 179, 8}, // Yellow
+			Score: 10,
+		},
+		"Les Violets": {
+			Name:  "Les Violets",
+			Color: []int{168, 85, 247}, // Purple
+			Score: 5,
+		},
+	}
+
+	// Fake bumpers (2-3 per team)
+	bumpers := map[string]*game.Bumper{
+		"AA:BB:CC:DD:EE:01": {
+			Name:    "Alice",
+			Team:    "Les Rouges",
+			Score:   8,
+			Version: "1.0.0",
+		},
+		"AA:BB:CC:DD:EE:02": {
+			Name:    "Bob",
+			Team:    "Les Rouges",
+			Score:   7,
+			Version: "1.0.0",
+		},
+		"AA:BB:CC:DD:EE:03": {
+			Name:    "Charlie",
+			Team:    "Les Bleus",
+			Score:   6,
+			Version: "1.0.0",
+		},
+		"AA:BB:CC:DD:EE:04": {
+			Name:    "Diana",
+			Team:    "Les Bleus",
+			Score:   6,
+			Version: "1.0.0",
+		},
+		"AA:BB:CC:DD:EE:05": {
+			Name:    "Ethan",
+			Team:    "Les Verts",
+			Score:   5,
+			Version: "1.0.0",
+		},
+		"AA:BB:CC:DD:EE:06": {
+			Name:    "Fiona",
+			Team:    "Les Verts",
+			Score:   3,
+			Version: "1.0.0",
+		},
+		"AA:BB:CC:DD:EE:07": {
+			Name:    "George",
+			Team:    "Les Jaunes",
+			Score:   7,
+			Version: "1.0.0",
+		},
+		"AA:BB:CC:DD:EE:08": {
+			Name:    "Hannah",
+			Team:    "Les Jaunes",
+			Score:   3,
+			Version: "1.0.0",
+		},
+		"AA:BB:CC:DD:EE:09": {
+			Name:    "Ivan",
+			Team:    "Les Violets",
+			Score:   3,
+			Version: "1.0.0",
+		},
+		"AA:BB:CC:DD:EE:10": {
+			Name:    "Julia",
+			Team:    "Les Violets",
+			Score:   2,
+			Version: "1.0.0",
+		},
+	}
+
+	a.engine.SetTeams(teams)
+	a.engine.SetBumpers(bumpers)
+
+	log.Printf("[App] Test data initialized: %d teams, %d bumpers", len(teams), len(bumpers))
 }
 
 // checkBonjourSupport checks if Bonjour/mDNS is available on the system

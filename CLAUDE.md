@@ -457,26 +457,51 @@ scp buzzcontrol pi@raspberrypi.local:~/
 
 ### Layout GamePage (Admin)
 
-Layout 3 colonnes responsive :
+Layout avec timer pleine largeur + 3 colonnes responsive :
 ```
-| Questions | Contrôles + Aperçu TV | Équipes |
-| 220px     | 1fr (flexible)        | 200px   |
+| Timer (pleine largeur, 95%)                    |  ligne 1
+|------------------------------------------------|
+| Questions | Contrôles + Aperçu TV | Équipes    |  ligne 2
+| 280px     | 1fr (flexible)        | 260px      |
 ```
 
-**Colonne gauche (220px)** : Liste des questions avec miniatures
+- **max-width** : 1800px (pour exploiter les grands écrans)
+- **Breakpoints** : 1600px, 1400px, 1200px, 768px
+
+**Ligne 1** : Timer avec barre de progression 95% de largeur
+
+**Colonne gauche (280px)** : Liste des questions avec miniatures
+
 **Colonne centrale (flexible)** :
-- Timer et contrôles de jeu (START, PAUSE, REPONSE)
-- Aperçu TV 16:9 (QuestionPreview) - miniature de ce qui s'affiche sur /tv
+- Contrôles de jeu (START/PAUSE sur même ligne, REPONSE)
+- Toggle affichage TV (Jeu, Équipes, Joueurs)
+- Aperçu TV 16:9 (QuestionPreview)
 
-**Colonne droite (200px)** : Cartes équipes empilées verticalement
+**Colonne droite (260px)** : Cartes équipes empilées verticalement
+
+### Statuts des questions (couleurs)
+
+| Statut | Couleur bordure | Fond | Apparence |
+|--------|-----------------|------|-----------|
+| AVAILABLE | Vert | Vert clair | Normal |
+| STARTED | Orange | Orange clair | Normal |
+| STOPPED | Rouge | Rouge clair | Normal |
+| REVEALED | Gris | Gris | Compact (image/réponse masquées, opacité 50%) |
 
 ### Composants clés
 
 | Composant | Fichier | Description |
 |-----------|---------|-------------|
 | QuestionPreview | `components/QuestionPreview.jsx` | Aperçu 16:9 de l'affichage TV |
-| TeamCard | `components/TeamCard.jsx` | Carte équipe compacte (200px) |
+| TeamCard | `components/TeamCard.jsx` | Carte équipe compacte (260px) |
+| Timer | `components/Timer.jsx` | Chronomètre avec barre de progression |
 | Navbar | `components/Navbar.jsx` | Navigation + versions + compteurs clients |
+
+### Données de test (développement)
+
+Au démarrage, le serveur initialise des données de test via `initTestData()` :
+- **5 équipes** : Les Rouges, Les Bleus, Les Verts, Les Jaunes, Les Violets
+- **10 buzzers** : 2 joueurs par équipe avec scores variés
 
 ### WebSocket Messages
 
