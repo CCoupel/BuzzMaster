@@ -465,6 +465,42 @@ func (e *Engine) UpdateScore(bumperID string, points int) (bumperScore, teamScor
 	return bumperScore, teamScore
 }
 
+// UpdateBumperScore updates only the bumper score (not the team)
+func (e *Engine) UpdateBumperScore(bumperID string, points int) int {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+
+	bumper, ok := e.data.Bumpers[bumperID]
+	if !ok {
+		log.Printf("[Engine] UpdateBumperScore: bumper not found: %s", bumperID)
+		return 0
+	}
+
+	bumper.Score += points
+	log.Printf("[Engine] Bumper score update: bumper=%s, points=%+d, newScore=%d",
+		bumperID, points, bumper.Score)
+
+	return bumper.Score
+}
+
+// UpdateTeamScore updates only the team score directly
+func (e *Engine) UpdateTeamScore(teamName string, points int) int {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+
+	team, ok := e.data.Teams[teamName]
+	if !ok {
+		log.Printf("[Engine] UpdateTeamScore: team not found: %s", teamName)
+		return 0
+	}
+
+	team.Score += points
+	log.Printf("[Engine] Team score update: team=%s, points=%+d, newScore=%d",
+		teamName, points, team.Score)
+
+	return team.Score
+}
+
 // RAZScores resets all scores to zero
 func (e *Engine) RAZScores() {
 	e.mu.Lock()
@@ -503,6 +539,47 @@ func (e *Engine) SetPage(page string) {
 		page = "GAME"
 	}
 	e.state.Page = page
+}
+
+// SetBackgrounds sets all backgrounds
+func (e *Engine) SetBackgrounds(backgrounds []Background) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.state.Backgrounds = backgrounds
+}
+
+// GetBackgrounds returns all backgrounds
+func (e *Engine) GetBackgrounds() []Background {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	return e.state.Backgrounds
+}
+
+// AddBackground adds a background
+func (e *Engine) AddBackground(bg Background) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.state.Backgrounds = append(e.state.Backgrounds, bg)
+}
+
+// RemoveBackground removes a background by path
+func (e *Engine) RemoveBackground(path string) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	newBgs := make([]Background, 0, len(e.state.Backgrounds))
+	for _, bg := range e.state.Backgrounds {
+		if bg.Path != path {
+			newBgs = append(newBgs, bg)
+		}
+	}
+	e.state.Backgrounds = newBgs
+}
+
+// ClearBackgrounds removes all backgrounds
+func (e *Engine) ClearBackgrounds() {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.state.Backgrounds = nil
 }
 
 // GetGameJSON returns game state as JSON

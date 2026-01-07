@@ -1,0 +1,254 @@
+import { useState, useEffect, useCallback, useRef } from 'react'
+
+const RECONNECT_INTERVAL = 5000
+
+export default function useWebSocket() {
+  const [status, setStatus] = useState('disconnected')
+  const [gameState, setGameState] = useState({
+    phase: 'STOP',
+    timer: 30,
+    totalTime: 30,
+    gameTime: 0,
+    question: null,
+    remote: 'GAME',
+    backgrounds: [],
+  })
+  const [teams, setTeams] = useState({})
+  const [bumpers, setBumpers] = useState({})
+  const [questions, setQuestions] = useState({})
+  const [fsInfo, setFsInfo] = useState(null)
+  const [version, setVersion] = useState(null)
+
+  const wsRef = useRef(null)
+  const reconnectTimeoutRef = useRef(null)
+
+  const connect = useCallback(() => {
+    if (wsRef.current?.readyState === WebSocket.OPEN) return
+
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+    const wsUrl = `${protocol}//${window.location.host}/ws`
+
+    setStatus('connecting')
+    const ws = new WebSocket(wsUrl)
+    wsRef.current = ws
+
+    ws.onopen = () => {
+      setStatus('connected')
+      sendMessage('HELLO', {})
+    }
+
+    ws.onclose = () => {
+      setStatus('disconnected')
+      wsRef.current = null
+      reconnectTimeoutRef.current = setTimeout(connect, RECONNECT_INTERVAL)
+    }
+
+    ws.onerror = (error) => {
+      console.error('WebSocket error:', error)
+    }
+
+    ws.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data)
+        handleMessage(data)
+      } catch (error) {
+        console.error('Failed to parse message:', error)
+      }
+    }
+  }, [])
+
+  const handleMessage = useCallback((data) => {
+    const { ACTION, MSG, FSINFO, VERSION } = data
+    console.log('[WS] Received:', ACTION, MSG)
+
+    switch (ACTION) {
+      case 'UPDATE':
+        if (MSG?.GAME) {
+          setGameState(prev => ({
+            ...prev,
+            phase: MSG.GAME.PHASE || prev.phase,
+            timer: MSG.GAME.CURRENT_TIME ?? MSG.GAME.DELAY ?? prev.timer,
+            totalTime: MSG.GAME.DELAY ?? prev.totalTime,
+            gameTime: MSG.GAME.TIME ?? prev.gameTime,
+            question: MSG.GAME.QUESTION || prev.question,
+            remote: MSG.GAME.REMOTE || prev.remote,
+            backgrounds: MSG.GAME.backgrounds || prev.backgrounds,
+          }))
+        }
+        if (MSG?.teams) setTeams(MSG.teams)
+        if (MSG?.bumpers) setBumpers(MSG.bumpers)
+        if (VERSION) setVersion(VERSION)
+        break
+
+      case 'UPDATE_TIMER':
+        if (MSG?.GAME) {
+          setGameState(prev => ({
+            ...prev,
+            timer: MSG.GAME.CURRENT_TIME ?? prev.timer,
+            gameTime: MSG.GAME.TIME ?? prev.gameTime,
+          }))
+        }
+        break
+
+      case 'START':
+        if (MSG?.GAME) {
+          setGameState(prev => ({
+            ...prev,
+            phase: 'START',
+            timer: MSG.GAME.CURRENT_TIME ?? MSG.GAME.DELAY ?? prev.timer,
+            totalTime: MSG.GAME.DELAY ?? prev.totalTime,
+            gameTime: MSG.GAME.TIME ?? prev.gameTime,
+          }))
+        }
+        break
+
+      case 'STOP':
+        setGameState(prev => ({ ...prev, phase: 'STOP' }))
+        break
+
+      case 'PAUSE':
+        setGameState(prev => ({ ...prev, phase: 'PAUSE' }))
+        break
+
+      case 'CONTINUE':
+        setGameState(prev => ({ ...prev, phase: 'START' }))
+        break
+
+      case 'BUMPER':
+        if (MSG?.teams) setTeams(MSG.teams)
+        if (MSG?.bumpers) setBumpers(MSG.bumpers)
+        break
+
+      case 'QUESTIONS':
+        console.log('[WS] QUESTIONS handler - MSG:', MSG, 'FSINFO:', FSINFO)
+        if (MSG) {
+          const questionsMap = {}
+          Object.entries(MSG).forEach(([key, value]) => {
+            if (key !== 'FSINFO' && value?.ID) {
+              questionsMap[value.ID] = value
+            }
+          })
+          console.log('[WS] Parsed questions:', questionsMap)
+          setQuestions(questionsMap)
+        }
+        if (FSINFO) setFsInfo(FSINFO)
+        break
+
+      case 'READY':
+        setGameState(prev => ({
+          ...prev,
+          phase: 'READY',
+          question: MSG?.QUESTION || prev.question,
+        }))
+        break
+
+      case 'REVEAL':
+        // Handle reveal action if needed
+        break
+
+      case 'REMOTE':
+        console.log('[WS] REMOTE handler - MSG.GAME:', MSG?.GAME)
+        if (MSG?.GAME?.REMOTE) {
+          console.log('[WS] Setting remote to:', MSG.GAME.REMOTE)
+          setGameState(prev => ({ ...prev, remote: MSG.GAME.REMOTE }))
+        }
+        if (MSG?.teams) setTeams(MSG.teams)
+        if (MSG?.bumpers) setBumpers(MSG.bumpers)
+        break
+
+      default:
+        console.log('Unknown action:', ACTION)
+    }
+  }, [])
+
+  const sendMessage = useCallback((action, msg = {}) => {
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      const message = JSON.stringify({ ACTION: action, MSG: msg })
+      console.log('[WS] Sending:', action, msg)
+      wsRef.current.send(message)
+    } else {
+      console.error('WebSocket is not connected')
+    }
+  }, [])
+
+  // Game actions
+  const startGame = useCallback((delay, points) => {
+    sendMessage('START', { DELAY: delay, POINTS: points })
+  }, [sendMessage])
+
+  const stopGame = useCallback(() => {
+    sendMessage('STOP', {})
+  }, [sendMessage])
+
+  const pauseGame = useCallback(() => {
+    sendMessage('PAUSE', {})
+  }, [sendMessage])
+
+  const continueGame = useCallback(() => {
+    sendMessage('CONTINUE', {})
+  }, [sendMessage])
+
+  const revealAnswer = useCallback(() => {
+    sendMessage('REVEAL', {})
+  }, [sendMessage])
+
+  const selectQuestion = useCallback((questionId) => {
+    sendMessage('READY', { QUESTION: questionId })
+  }, [sendMessage])
+
+  const setRemoteDisplay = useCallback((display) => {
+    sendMessage('REMOTE', { REMOTE: display })
+  }, [sendMessage])
+
+  const updateConfig = useCallback((config) => {
+    sendMessage('UPDATE', config)
+  }, [sendMessage])
+
+  const deleteQuestion = useCallback((questionId) => {
+    sendMessage('DELETE', { ID: questionId })
+  }, [sendMessage])
+
+  const setBumperPoints = useCallback((bumperMac, points) => {
+    sendMessage('BUMPER_POINTS', { ID: bumperMac, POINTS: points })
+  }, [sendMessage])
+
+  const setTeamPoints = useCallback((teamName, points) => {
+    sendMessage('TEAM_POINTS', { TEAM: teamName, POINTS: points })
+  }, [sendMessage])
+
+  useEffect(() => {
+    connect()
+
+    return () => {
+      if (reconnectTimeoutRef.current) {
+        clearTimeout(reconnectTimeoutRef.current)
+      }
+      if (wsRef.current) {
+        wsRef.current.close()
+      }
+    }
+  }, [connect])
+
+  return {
+    status,
+    gameState,
+    teams,
+    bumpers,
+    questions,
+    fsInfo,
+    version,
+    // Actions
+    sendMessage,
+    startGame,
+    stopGame,
+    pauseGame,
+    continueGame,
+    revealAnswer,
+    selectQuestion,
+    setRemoteDisplay,
+    updateConfig,
+    deleteQuestion,
+    setBumperPoints,
+    setTeamPoints,
+  }
+}

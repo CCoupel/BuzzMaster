@@ -1,0 +1,156 @@
+/* Timer Component */
+.timer {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-3);
+  width: 100%;
+}
+
+/* Timer Display */
+.timer-display {
+  font-family: var(--font-display);
+  font-weight: 700;
+  color: var(--gray-800);
+  background: white;
+  padding: var(--space-3) var(--space-6);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-md);
+  transition: all var(--transition-base);
+}
+
+.timer-sm .timer-display {
+  font-size: 1.5rem;
+  padding: var(--space-2) var(--space-4);
+}
+
+.timer-md .timer-display {
+  font-size: 2.5rem;
+  padding: var(--space-3) var(--space-6);
+}
+
+.timer-lg .timer-display {
+  font-size: 4rem;
+  padding: var(--space-4) var(--space-8);
+}
+
+.timer-xl .timer-display {
+  font-size: 6rem;
+  padding: var(--space-5) var(--space-10);
+}
+
+/* Urgent state (10 seconds or less) */
+.timer-display.urgent {
+  color: var(--warning);
+  box-shadow: var(--shadow-md), 0 0 20px rgba(234, 179, 8, 0.4);
+}
+
+/* Critical state (5 seconds or less) */
+.timer-display.critical {
+  color: var(--error);
+  box-shadow: var(--shadow-lg), 0 0 30px rgba(239, 68, 68, 0.5);
+  background: linear-gradient(145deg, white, #fff5f5);
+}
+
+/* Paused state */
+.timer-display.paused {
+  color: var(--primary-500);
+  box-shadow: var(--shadow-md), var(--shadow-glow);
+}
+
+/* Timer Bar */
+.timer-bar-container {
+  width: 100%;
+  max-width: 400px;
+  height: 12px;
+  background: var(--gray-200);
+  border-radius: var(--radius-full);
+  overflow: hidden;
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.timer-lg .timer-bar-container,
+.timer-xl .timer-bar-container {
+  height: 16px;
+  max-width: 600px;
+}
+
+.timer-bar {
+  height: 100%;
+  border-radius: var(--radius-full);
+  transition: background-color var(--transition-base);
+  position: relative;
+  overflow: hidden;
+}
+
+/* Animated shine effect on bar */
+.timer-bar::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.4),
+    transparent
+  );
+  animation: shine 2s infinite;
+}
+
+@keyframes shine {
+  to {
+    left: 100%;
+  }
+}
+
+.timer-bar.urgent::after {
+  animation: shine 1s infinite;
+}
+
+.timer-bar.paused::after {
+  animation: none;
+}
+
+/* Phase Badge */
+.timer-phase {
+  margin-top: var(--space-2);
+}
+
+.phase-badge {
+  display: inline-flex;
+  padding: var(--space-1) var(--space-3);
+  font-family: var(--font-display);
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  border-radius: var(--radius-full);
+}
+
+.phase-running {
+  background: var(--success);
+  color: white;
+  box-shadow: 0 0 10px rgba(34, 197, 94, 0.5);
+}
+
+.phase-paused {
+  background: var(--primary-500);
+  color: white;
+  box-shadow: var(--shadow-glow);
+  animation: pulse 1.5s infinite;
+}
+
+.phase-prepare {
+  background: var(--warning);
+  color: var(--gray-900);
+  box-shadow: 0 0 10px rgba(234, 179, 8, 0.5);
+}
+
+.phase-ready {
+  background: var(--accent-cyan);
+  color: white;
+  box-shadow: 0 0 10px rgba(6, 182, 212, 0.5);
+}

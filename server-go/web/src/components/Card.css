@@ -1,0 +1,107 @@
+/* Card Component */
+.card {
+  background: var(--gradient-card);
+  backdrop-filter: blur(10px);
+  border-radius: var(--radius-2xl);
+  border: 1px solid rgba(255, 255, 255, 0.8);
+  box-shadow: var(--shadow-lg);
+  overflow: hidden;
+  transition: all var(--transition-base);
+}
+
+button.card {
+  width: 100%;
+  text-align: left;
+  cursor: pointer;
+  border: 1px solid rgba(255, 255, 255, 0.8);
+}
+
+/* Variants */
+.card-default {
+  background: white;
+}
+
+.card-glass {
+  background: rgba(255, 255, 255, 0.7);
+  backdrop-filter: blur(20px);
+}
+
+.card-gradient {
+  background: var(--gradient-primary);
+  color: white;
+  border: none;
+}
+
+.card-gradient .card-header,
+.card-gradient .card-body,
+.card-gradient .card-footer {
+  color: white;
+}
+
+.card-outlined {
+  background: transparent;
+  border: 2px solid var(--gray-200);
+  box-shadow: none;
+}
+
+.card-elevated {
+  background: white;
+  box-shadow: var(--shadow-xl);
+}
+
+/* Padding */
+.card-padding-none { padding: 0; }
+.card-padding-sm { padding: var(--space-3); }
+.card-padding-md { padding: var(--space-5); }
+.card-padding-lg { padding: var(--space-8); }
+
+/* Hover Effect */
+.card-hover {
+  cursor: pointer;
+}
+
+.card-hover:hover {
+  box-shadow: var(--shadow-xl), var(--shadow-glow);
+  border-color: var(--primary-200);
+}
+
+/* Card Sections */
+.card-header {
+  padding-bottom: var(--space-4);
+  border-bottom: 1px solid var(--gray-100);
+  margin-bottom: var(--space-4);
+}
+
+.card-body {
+  flex: 1;
+}
+
+.card-footer {
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--gray-100);
+  margin-top: var(--space-4);
+}
+
+/* Team Color Border */
+.card[data-team-color] {
+  border-left: 4px solid var(--team-color, var(--primary-500));
+}
+
+/* Active/Selected State */
+.card.active {
+  border-color: var(--primary-500);
+  box-shadow: var(--shadow-lg), 0 0 0 3px var(--primary-200);
+}
+
+/* Status indicators */
+.card.card-success {
+  border-left: 4px solid var(--success);
+}
+
+.card.card-warning {
+  border-left: 4px solid var(--warning);
+}
+
+.card.card-error {
+  border-left: 4px solid var(--error);
+}

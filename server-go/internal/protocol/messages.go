@@ -26,8 +26,10 @@ const (
 	ActionFull        = "FULL"
 	ActionRAZ         = "RAZ"
 	ActionReboot      = "REBOOT"
-	ActionFSInfo      = "FSINFO"
-	ActionDelete      = "DELETE"
+	ActionFSInfo       = "FSINFO"
+	ActionDelete       = "DELETE"
+	ActionBumperPoints = "BUMPER_POINTS"
+	ActionTeamPoints   = "TEAM_POINTS"
 )
 
 // FSInfo represents file storage information
@@ -95,6 +97,18 @@ type RemotePayload struct {
 // DeletePayload for DELETE action
 type DeletePayload struct {
 	ID string `json:"ID"`
+}
+
+// BumperPointsPayload for BUMPER_POINTS action
+type BumperPointsPayload struct {
+	ID     string `json:"ID"`
+	Points int    `json:"POINTS"`
+}
+
+// TeamPointsPayload for TEAM_POINTS action
+type TeamPointsPayload struct {
+	Team   string `json:"TEAM"`
+	Points int    `json:"POINTS"`
 }
 
 // NewMessage creates a new outgoing message

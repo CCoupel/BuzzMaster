@@ -106,6 +106,23 @@ The ESP32-C3 buzzers connect to the Go server without any modification.
 - Format: Same JSON structure as TCP
 - Used by: Admin interface, display screens
 
+**WebSocket Actions (Web client to Server):**
+| Action | Description | Payload |
+|--------|-------------|---------|
+| HELLO | Client registration | `{}` |
+| START | Start game round | `{DELAY: seconds}` |
+| STOP | Stop game round | `{}` |
+| PAUSE | Pause game | `{}` |
+| CONTINUE | Resume game | `{}` |
+| READY | Select question | `{QUESTION: questionId}` |
+| REVEAL | Show answer | `{}` |
+| REMOTE | Change TV display | `{REMOTE: "GAME\|SCORES\|PLAYERS"}` |
+| RAZ | Reset all scores | `{}` |
+| DELETE | Delete question | `{ID: questionId}` |
+| UPDATE | Update teams/bumpers | `{teams: {...}, bumpers: {...}}` |
+| TEAM_POINTS | Modify team score | `{TEAM: teamName, POINTS: delta}` |
+| BUMPER_POINTS | Modify player score | `{ID: bumperMac, POINTS: delta}` |
+
 ### HTTP REST API
 | Method | Endpoint | Description |
 |--------|----------|-------------|

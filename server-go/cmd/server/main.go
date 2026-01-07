@@ -93,6 +93,15 @@ func (a *App) init() {
 	// HTTP server
 	a.httpServer = server.NewHTTPServer(a.config.Server.HTTPPort, a.engine, a.wsHub)
 
+	// Check for React build and set it if exists
+	reactDir := filepath.Join(".", "web", "dist")
+	if _, err := os.Stat(filepath.Join(reactDir, "index.html")); err == nil {
+		log.Println("[HTTP] React build found, serving modern UI")
+		a.httpServer.SetReactDir(reactDir)
+	} else {
+		log.Println("[HTTP] No React build found, using legacy UI")
+	}
+
 	// mDNS server (advertise buzzcontrol.local)
 	a.mdnsServer = server.NewMDNSServer("buzzcontrol", a.config.Server.HTTPPort, a.config.Server.TCPPort)
 
@@ -151,6 +160,123 @@ func (a *App) setupCallbacks() {
 	// Question upload broadcast
 	a.httpServer.OnQuestionUpload = func() {
 		a.broadcastQuestions()
+	}
+
+	// Background change handler
+	a.httpServer.OnBackgroundChange = func(action string) {
+		if action == "save" {
+			// Config was updated via PUT, just save
+			a.saveBackgroundsConfig()
+		} else {
+			// Files changed (upload/delete), reload from disk
+			a.loadBackgrounds()
+			a.saveBackgroundsConfig()
+		}
+		a.broadcastUpdate()
+	}
+
+	// Detect existing backgrounds on startup
+	a.loadBackgrounds()
+}
+
+func (a *App) loadBackgrounds() {
+	filesDir := a.config.Storage.FilesDir
+	if filesDir == "" {
+		filesDir = "./data/files"
+	}
+	bgDir := filepath.Join(filesDir, "backgrounds")
+	configPath := filepath.Join(bgDir, "backgrounds.json")
+
+	// Try to load existing config
+	var savedConfig []game.Background
+	if data, err := os.ReadFile(configPath); err == nil {
+		json.Unmarshal(data, &savedConfig)
+	}
+
+	// Build a map of saved configs by path
+	savedMap := make(map[string]game.Background)
+	for _, bg := range savedConfig {
+		savedMap[bg.Path] = bg
+	}
+
+	var backgrounds []game.Background
+
+	// Scan backgrounds directory
+	entries, err := os.ReadDir(bgDir)
+	if err == nil {
+		for _, entry := range entries {
+			if entry.IsDir() || entry.Name() == "backgrounds.json" {
+				continue
+			}
+			ext := strings.ToLower(filepath.Ext(entry.Name()))
+			if ext == ".jpg" || ext == ".jpeg" || ext == ".png" || ext == ".gif" || ext == ".webp" {
+				bgPath := "/files/backgrounds/" + entry.Name()
+				// Check if we have saved config for this file
+				if saved, ok := savedMap[bgPath]; ok {
+					// Ensure opacity has a default value
+					if saved.Opacity == 0 {
+						saved.Opacity = 100
+					}
+					backgrounds = append(backgrounds, saved)
+					delete(savedMap, bgPath) // Mark as found
+				} else {
+					// New file, use defaults
+					backgrounds = append(backgrounds, game.Background{
+						Path:     bgPath,
+						Duration: 10,  // Default 10 seconds
+						Opacity:  100, // Default 100% opacity
+					})
+				}
+			}
+		}
+	}
+
+	// Also check for legacy single background file
+	legacyMatches, _ := filepath.Glob(filepath.Join(filesDir, "background.*"))
+	for _, match := range legacyMatches {
+		ext := filepath.Ext(match)
+		bgPath := "/files/background" + ext
+		if saved, ok := savedMap[bgPath]; ok {
+			if saved.Opacity == 0 {
+				saved.Opacity = 100
+			}
+			backgrounds = append(backgrounds, saved)
+		} else {
+			backgrounds = append(backgrounds, game.Background{
+				Path:     bgPath,
+				Duration: 10,
+				Opacity:  100,
+			})
+		}
+	}
+
+	a.engine.SetBackgrounds(backgrounds)
+	if len(backgrounds) > 0 {
+		log.Printf("[App] Loaded %d background(s)", len(backgrounds))
+	}
+}
+
+func (a *App) saveBackgroundsConfig() {
+	filesDir := a.config.Storage.FilesDir
+	if filesDir == "" {
+		filesDir = "./data/files"
+	}
+	bgDir := filepath.Join(filesDir, "backgrounds")
+	configPath := filepath.Join(bgDir, "backgrounds.json")
+
+	os.MkdirAll(bgDir, 0755)
+
+	backgrounds := a.engine.GetBackgrounds()
+	data, err := json.MarshalIndent(backgrounds, "", "  ")
+	if err != nil {
+		log.Printf("[App] Failed to marshal backgrounds config: %v", err)
+		return
+	}
+
+	if err := os.WriteFile(configPath, data, 0644); err != nil {
+		log.Printf("[App] Failed to save backgrounds config: %v", err)
+	} else {
+		log.Printf("[App] Saved backgrounds config")
 	}
 }
 
@@ -271,6 +397,12 @@ func (a *App) handleWebMessage(incoming *protocol.IncomingMessage) {
 
 	case protocol.ActionReboot:
 		log.Println("[App] Reboot requested from web client")
+
+	case protocol.ActionBumperPoints:
+		a.handleBumperPoints(msg)
+
+	case protocol.ActionTeamPoints:
+		a.handleTeamPoints(msg)
 
 	default:
 		log.Printf("[App] Unknown web action: %s", msg.Action)
@@ -438,6 +570,34 @@ func (a *App) handleDelete(msg *protocol.Message) {
 	a.broadcastQuestions()
 }
 
+func (a *App) handleBumperPoints(msg *protocol.Message) {
+	var payload protocol.BumperPointsPayload
+	if err := json.Unmarshal(msg.Msg, &payload); err != nil {
+		log.Printf("[App] Failed to parse BUMPER_POINTS: %v", err)
+		return
+	}
+
+	newScore := a.engine.UpdateBumperScore(payload.ID, payload.Points)
+	log.Printf("[App] Bumper points: id=%s, points=%+d, newScore=%d",
+		payload.ID, payload.Points, newScore)
+
+	a.broadcastUpdate()
+}
+
+func (a *App) handleTeamPoints(msg *protocol.Message) {
+	var payload protocol.TeamPointsPayload
+	if err := json.Unmarshal(msg.Msg, &payload); err != nil {
+		log.Printf("[App] Failed to parse TEAM_POINTS: %v", err)
+		return
+	}
+
+	newScore := a.engine.UpdateTeamScore(payload.Team, payload.Points)
+	log.Printf("[App] Team points: team=%s, points=%+d, newScore=%d",
+		payload.Team, payload.Points, newScore)
+
+	a.broadcastUpdate()
+}
+
 // Broadcast methods
 func (a *App) broadcast(action string, data json.RawMessage, viaTCP bool) {
 	msg, _ := protocol.NewMessage(action, nil)
@@ -459,7 +619,7 @@ func (a *App) broadcastHello() {
 }
 
 func (a *App) broadcastUpdate() {
-	data := a.engine.GetTeamsAndBumpersJSON()
+	data := a.engine.GetGameJSON()
 	a.broadcast(protocol.ActionUpdate, data, false)
 }
 
@@ -523,7 +683,7 @@ func (a *App) broadcastReset() {
 }
 
 func (a *App) broadcastRemote() {
-	data := a.engine.GetTeamsAndBumpersJSON()
+	data := a.engine.GetGameJSON()
 	a.broadcast(protocol.ActionRemote, data, false)
 }
 
@@ -545,7 +705,7 @@ func (a *App) broadcastQuestions() {
 	a.wsHub.Broadcast(msg)
 }
 
-// getStorageInfo returns file storage information
+// getStorageInfo returns file storage information (in bytes, like ESP32)
 func (a *App) getStorageInfo() *protocol.FSInfo {
 	filesDir := a.config.Storage.FilesDir
 	if filesDir == "" {
@@ -563,13 +723,13 @@ func (a *App) getStorageInfo() *protocol.FSInfo {
 		return nil
 	})
 
-	// Assume 10MB total storage for questions (configurable)
-	const maxStorage int64 = 10 * 1024 * 1024
-	usedKB := int(totalSize / 1024)
-	totalKB := int(maxStorage / 1024)
-	freeKB := totalKB - usedKB
-	if freeKB < 0 {
-		freeKB = 0
+	// Assume 100MB total storage (like ESP32 LittleFS)
+	const maxStorage int64 = 100 * 1024 * 1024
+	usedBytes := int(totalSize)
+	totalBytes := int(maxStorage)
+	freeBytes := totalBytes - usedBytes
+	if freeBytes < 0 {
+		freeBytes = 0
 	}
 
 	pUsed := float64(totalSize) / float64(maxStorage) * 100
@@ -578,9 +738,9 @@ func (a *App) getStorageInfo() *protocol.FSInfo {
 	}
 
 	return &protocol.FSInfo{
-		Used:  usedKB,
-		Free:  freeKB,
-		Total: totalKB,
+		Used:  usedBytes,
+		Free:  freeBytes,
+		Total: totalBytes,
 		PUsed: pUsed,
 	}
 }
