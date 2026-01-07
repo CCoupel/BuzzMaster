@@ -6,6 +6,7 @@ export default function Navbar({ connectionStatus = 'disconnected' }) {
   const navItems = [
     { to: '/', label: 'Jeu', icon: '🎮' },
     { to: '/scoreboard', label: 'Scores', icon: '🏆' },
+    { to: '/teams', label: 'Equipes', icon: '👥' },
     { to: '/quiz', label: 'Questions', icon: '❓' },
     { to: '/settings', label: 'Config', icon: '⚙️' },
   ]
