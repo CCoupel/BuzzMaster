@@ -1,9 +1,42 @@
-/* Game Page - 3 Column Layout */
+/* Game Page - 3 Column Layout with Timer Row */
 .game-page {
   display: grid;
-  grid-template-columns: 220px 1fr 200px;
+  grid-template-columns: 280px 1fr 260px;
+  grid-template-rows: auto 1fr;
   gap: var(--space-4);
   min-height: calc(100vh - 120px);
+}
+
+/* Timer Section - Full Width Top */
+.timer-section {
+  grid-column: 1 / -1;
+  grid-row: 1;
+}
+
+.timer-card {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-2) var(--space-6);
+}
+
+.timer-card .timer {
+  width: 100%;
+  gap: var(--space-2);
+}
+
+.timer-card .timer .timer-display {
+  font-size: 2rem;
+  padding: var(--space-2) var(--space-4);
+}
+
+.timer-card .timer .timer-bar-container {
+  max-width: 95%;
+  height: 12px;
+}
+
+.timer-card .timer .timer-phase {
+  margin-top: 0;
 }
 
 /* Questions Panel - Left */
@@ -192,11 +225,11 @@
   margin-top: auto;
 }
 
-.timer-card {
+.controls-card {
   display: flex;
   flex-direction: column;
-  align-items: center;
-  gap: var(--space-5);
+  gap: var(--space-3);
+  padding: var(--space-4);
 }
 
 .control-inputs {
@@ -243,15 +276,24 @@
 .control-buttons {
   display: flex;
   flex-direction: column;
-  gap: var(--space-3);
+  gap: var(--space-2);
   width: 100%;
+}
+
+.control-buttons-row {
+  display: flex;
+  gap: var(--space-2);
+}
+
+.control-buttons-row > * {
+  flex: 1;
 }
 
 .display-toggle {
   display: flex;
   align-items: center;
   gap: var(--space-3);
-  padding-top: var(--space-4);
+  padding-top: var(--space-2);
   border-top: 1px solid var(--gray-200);
   width: 100%;
 }
@@ -367,32 +409,43 @@
 }
 
 /* Responsive */
+@media (max-width: 1600px) {
+  .game-page {
+    grid-template-columns: 250px 1fr 220px;
+  }
+}
+
 @media (max-width: 1400px) {
   .game-page {
-    grid-template-columns: 200px 1fr 180px;
+    grid-template-columns: 220px 1fr 200px;
   }
 }
 
 @media (max-width: 1200px) {
   .game-page {
     grid-template-columns: 1fr 1fr;
-    grid-template-rows: auto auto;
+    grid-template-rows: auto auto auto;
+  }
+
+  .timer-section {
+    grid-column: 1 / -1;
+    grid-row: 1;
   }
 
   .questions-panel {
     grid-column: 1;
-    grid-row: 1;
+    grid-row: 2;
     max-height: 400px;
   }
 
   .control-panel {
     grid-column: 2;
-    grid-row: 1;
+    grid-row: 2;
   }
 
   .right-panel {
     grid-column: 1 / -1;
-    grid-row: 2;
+    grid-row: 3;
   }
 
   .teams-grid {
@@ -408,23 +461,28 @@
 @media (max-width: 768px) {
   .game-page {
     grid-template-columns: 1fr;
-    grid-template-rows: auto auto auto;
+    grid-template-rows: auto auto auto auto;
+  }
+
+  .timer-section {
+    grid-column: 1;
+    grid-row: 1;
   }
 
   .questions-panel {
     grid-column: 1;
-    grid-row: 1;
+    grid-row: 2;
     max-height: 300px;
   }
 
   .control-panel {
     grid-column: 1;
-    grid-row: 2;
+    grid-row: 3;
   }
 
   .right-panel {
     grid-column: 1;
-    grid-row: 3;
+    grid-row: 4;
   }
 
   .control-buttons {

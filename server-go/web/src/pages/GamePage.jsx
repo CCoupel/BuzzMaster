@@ -102,6 +102,18 @@ export default function GamePage() {
 
   return (
     <div className="game-page page">
+      {/* Timer - Full Width Top */}
+      <div className="timer-section">
+        <Card variant="elevated" padding="lg" className="timer-card">
+          <Timer
+            currentTime={gameState.timer}
+            totalTime={gameState.totalTime}
+            phase={gameState.phase}
+            size="lg"
+          />
+        </Card>
+      </div>
+
       {/* Questions Panel - Left */}
       <div className="questions-panel">
         <h2 className="panel-title">Questions</h2>
@@ -141,14 +153,7 @@ export default function GamePage() {
 
       {/* Control Panel - Center */}
       <div className="control-panel">
-        <Card variant="elevated" padding="lg" className="timer-card">
-          <Timer
-            currentTime={gameState.timer}
-            totalTime={gameState.totalTime}
-            phase={gameState.phase}
-            size="lg"
-          />
-
+        <Card variant="elevated" padding="lg" className="controls-card">
           <div className="control-inputs">
             <div className="input-group">
               <label htmlFor="time-input">Temps (sec)</label>
@@ -176,27 +181,29 @@ export default function GamePage() {
           </div>
 
           <div className="control-buttons">
-            <Button
-              variant={isPlaying ? 'danger' : 'success'}
-              size="xl"
-              onClick={handleStartStop}
-              disabled={gameState.phase === 'PREPARE'}
-            >
-              {isPlaying ? 'STOP' : 'START'}
-            </Button>
+            <div className="control-buttons-row">
+              <Button
+                variant={isPlaying ? 'danger' : 'success'}
+                size="lg"
+                onClick={handleStartStop}
+                disabled={gameState.phase === 'PREPARE'}
+              >
+                {isPlaying ? 'STOP' : 'START'}
+              </Button>
 
-            <Button
-              variant={gameState.phase === 'PAUSE' ? 'primary' : 'warning'}
-              size="lg"
-              onClick={handlePauseContinue}
-              disabled={!isPlaying}
-            >
-              {gameState.phase === 'PAUSE' ? 'CONTINUER' : 'PAUSE'}
-            </Button>
+              <Button
+                variant={gameState.phase === 'PAUSE' ? 'primary' : 'warning'}
+                size="lg"
+                onClick={handlePauseContinue}
+                disabled={!isPlaying}
+              >
+                {gameState.phase === 'PAUSE' ? 'CONTINUER' : 'PAUSE'}
+              </Button>
+            </div>
 
             <Button
               variant="secondary"
-              size="lg"
+              size="md"
               onClick={revealAnswer}
               disabled={gameState.phase !== 'STOP'}
             >

@@ -39,10 +39,14 @@
 .display-timer-bar {
   position: relative;
   z-index: 1;
-  padding: var(--space-6);
+  padding: var(--space-4) var(--space-6);
   background: rgba(0, 0, 0, 0.3);
   display: flex;
   justify-content: center;
+}
+
+.display-timer-bar .timer-wrapper {
+  width: 100%;
 }
 
 .display-timer-bar .timer-display {
@@ -64,10 +68,12 @@
   box-shadow: 0 0 60px rgba(239, 68, 68, 0.6);
 }
 
-.display-timer-bar .timer-bar-container {
-  max-width: 800px;
-  height: 20px;
+.display-timer-bar .timer .timer-bar-container {
+  width: 100%;
+  max-width: 95%;
+  height: 24px;
   background: rgba(255, 255, 255, 0.1);
+  border-radius: var(--radius-lg);
 }
 
 /* Game Display */

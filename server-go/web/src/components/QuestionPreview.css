@@ -49,6 +49,15 @@
   justify-content: center;
 }
 
+.tv-preview-timer-bar .timer {
+  width: 100%;
+}
+
+.tv-preview-timer-bar .timer .timer-bar-container {
+  max-width: 95%;
+  height: 8px;
+}
+
 /* Content */
 .tv-preview-content {
   position: relative;
