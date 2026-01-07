@@ -16,5 +16,5 @@
     "questions_dir": "./data/files/questions",
     "files_dir": "./data/files"
   },
-  "version": "2.6.0"
+  "version": "2.6.1"
 }

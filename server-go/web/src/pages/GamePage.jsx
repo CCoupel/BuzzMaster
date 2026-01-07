@@ -8,6 +8,14 @@ import TeamCard from '../components/TeamCard'
 import QuestionPreview from '../components/QuestionPreview'
 import './GamePage.css'
 
+// QCM answer colors
+const QCM_COLORS = {
+  RED: { label: 'Rouge', color: '#ef4444', letter: 'A' },
+  GREEN: { label: 'Vert', color: '#22c55e', letter: 'B' },
+  YELLOW: { label: 'Jaune', color: '#eab308', letter: 'C' },
+  BLUE: { label: 'Bleu', color: '#3b82f6', letter: 'D' },
+}
+
 export default function GamePage() {
   const {
     gameState,
@@ -131,6 +139,9 @@ export default function GamePage() {
             >
               <div className="preview-header">
                 <span className="preview-id">#{question.ID}</span>
+                {question.TYPE === 'QCM' && (
+                  <span className="preview-qcm-badge">QCM</span>
+                )}
                 <span className="preview-status">{question.STATUS || 'AVAILABLE'}</span>
               </div>
               {question.MEDIA && (
@@ -140,7 +151,17 @@ export default function GamePage() {
               )}
               <div className="preview-content">
                 <p className="preview-question">{question.QUESTION}</p>
-                <p className="preview-answer">{question.ANSWER}</p>
+                {question.TYPE === 'QCM' && question.QCM_CORRECT && QCM_COLORS[question.QCM_CORRECT] ? (
+                  <p
+                    className="preview-answer preview-answer-qcm"
+                    style={{ backgroundColor: QCM_COLORS[question.QCM_CORRECT].color }}
+                  >
+                    <span className="qcm-letter">{QCM_COLORS[question.QCM_CORRECT].letter}</span>
+                    {question.ANSWER}
+                  </p>
+                ) : (
+                  <p className="preview-answer">{question.ANSWER}</p>
+                )}
               </div>
               <div className="preview-meta">
                 <span className="preview-time">{question.TIME}s</span>

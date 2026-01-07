@@ -167,8 +167,8 @@
 
 .preview-header {
   display: flex;
-  justify-content: space-between;
   align-items: center;
+  gap: var(--space-2);
   margin-bottom: var(--space-2);
 }
 
@@ -179,7 +179,19 @@
   color: var(--primary-600);
 }
 
+.preview-qcm-badge {
+  font-size: 0.55rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  padding: 2px 5px;
+  background: linear-gradient(135deg, #ef4444, #3b82f6);
+  color: white;
+  border-radius: var(--radius-sm);
+  letter-spacing: 0.5px;
+}
+
 .preview-status {
+  margin-left: auto;
   font-size: 0.6rem;
   font-weight: 600;
   text-transform: uppercase;
@@ -253,6 +265,26 @@
   -webkit-line-clamp: 1;
   -webkit-box-orient: vertical;
   overflow: hidden;
+}
+
+.preview-answer-qcm {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 4px 8px;
+  border-radius: var(--radius-md);
+  color: white;
+  font-style: normal;
+  font-weight: 600;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+}
+
+.preview-answer-qcm .qcm-letter {
+  font-size: 0.65rem;
+  font-weight: 700;
+  background: rgba(255, 255, 255, 0.3);
+  padding: 2px 5px;
+  border-radius: var(--radius-sm);
 }
 
 .preview-meta {
