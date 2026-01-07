@@ -359,6 +359,28 @@ func (h *HTTPServer) handleUploadQuestion(w http.ResponseWriter, r *http.Request
 		"TIME":     r.FormValue("time"),
 	}
 
+	// Handle question type (NORMAL or QCM)
+	questionType := r.FormValue("type")
+	if questionType == "" {
+		questionType = "NORMAL"
+	}
+	question["TYPE"] = questionType
+
+	// Handle QCM specific fields
+	if questionType == "QCM" {
+		qcmAnswersStr := r.FormValue("qcm_answers")
+		if qcmAnswersStr != "" {
+			var qcmAnswers map[string]string
+			if err := json.Unmarshal([]byte(qcmAnswersStr), &qcmAnswers); err == nil {
+				question["QCM_ANSWERS"] = qcmAnswers
+			}
+		}
+		qcmCorrect := r.FormValue("qcm_correct")
+		if qcmCorrect != "" {
+			question["QCM_CORRECT"] = qcmCorrect
+		}
+	}
+
 	// Handle file upload
 	file, header, err := r.FormFile("file")
 	if err == nil {

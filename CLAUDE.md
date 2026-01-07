@@ -194,9 +194,30 @@ The ESP32-C3 buzzers connect to the Go server without any modification.
   "ID": "1",
   "QUESTION": "What is 2+2?",
   "ANSWER": "4",
+  "TYPE": "NORMAL",
   "POINTS": 10,
   "TIME": 30,
   "MEDIA": "/question/1/image.jpg"
+}
+```
+
+### Question (QCM type)
+```json
+{
+  "ID": "2",
+  "QUESTION": "Quelle est la capitale de la France?",
+  "ANSWER": "Paris",
+  "TYPE": "QCM",
+  "QCM_ANSWERS": {
+    "RED": "Londres",
+    "GREEN": "Paris",
+    "YELLOW": "Berlin",
+    "BLUE": "Madrid"
+  },
+  "QCM_CORRECT": "GREEN",
+  "POINTS": 10,
+  "TIME": 30,
+  "MEDIA": "/question/2/image.jpg"
 }
 ```
 
@@ -361,6 +382,26 @@ const ANSWER_COLORS = {
   BLUE: { label: 'Bleu', color: '#3b82f6', letter: 'D' },
 }
 ```
+
+#### Questions QCM (v2.6.0)
+Support des questions à choix multiples (QCM) :
+- **Types de question** : `NORMAL` (réponse libre) ou `QCM` (4 choix colorés)
+- **Réponses QCM** : 4 réponses associées aux couleurs (Rouge A, Vert B, Jaune C, Bleu D)
+- **Réponse correcte** : Champ `QCM_CORRECT` indique la couleur de la bonne réponse
+- **UI** : Sélecteur de type + 4 champs de réponse colorés + bouton pour marquer la bonne réponse
+- **Badge** : Les questions QCM affichent un badge "QCM" dans la liste
+
+**Champs Question QCM :**
+- `TYPE`: `"QCM"` pour les questions à choix multiples
+- `QCM_ANSWERS`: Objet avec les 4 réponses `{RED, GREEN, YELLOW, BLUE}`
+- `QCM_CORRECT`: Couleur de la bonne réponse (`"RED"`, `"GREEN"`, `"YELLOW"`, `"BLUE"`)
+- `ANSWER`: Contient automatiquement le texte de la bonne réponse
+
+**Fichiers modifiés :**
+- `server-go/internal/game/models.go` : Types `QuestionType`, `QCMAnswers`, champs Question
+- `server-go/internal/server/http.go` : Handling des champs QCM dans POST /questions
+- `server-go/web/src/pages/QuestionsPage.jsx` : UI formulaire QCM
+- `server-go/web/src/pages/QuestionsPage.css` : Styles QCM
 
 ### WebSocket Actions for Client Management
 

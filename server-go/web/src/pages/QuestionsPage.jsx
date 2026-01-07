@@ -5,6 +5,14 @@ import Button from '../components/Button'
 import Card, { CardHeader, CardBody } from '../components/Card'
 import './QuestionsPage.css'
 
+// QCM answer colors
+const QCM_COLORS = {
+  RED: { label: 'Rouge', color: '#ef4444', letter: 'A' },
+  GREEN: { label: 'Vert', color: '#22c55e', letter: 'B' },
+  YELLOW: { label: 'Jaune', color: '#eab308', letter: 'C' },
+  BLUE: { label: 'Bleu', color: '#3b82f6', letter: 'D' },
+}
+
 export default function QuestionsPage() {
   const { questions, fsInfo, deleteQuestion } = useGame()
   const [isUploading, setIsUploading] = useState(false)
@@ -15,6 +23,9 @@ export default function QuestionsPage() {
   const [formData, setFormData] = useState({
     question: '',
     answer: '',
+    type: 'NORMAL',
+    qcmAnswers: { RED: '', GREEN: '', YELLOW: '', BLUE: '' },
+    qcmCorrect: '',
     points: '1',
     time: '30',
     media: null,
@@ -43,6 +54,9 @@ export default function QuestionsPage() {
     setFormData({
       question: question.QUESTION || '',
       answer: question.ANSWER || '',
+      type: question.TYPE || 'NORMAL',
+      qcmAnswers: question.QCM_ANSWERS || { RED: '', GREEN: '', YELLOW: '', BLUE: '' },
+      qcmCorrect: question.QCM_CORRECT || '',
       points: question.POINTS || '1',
       time: question.TIME || '30',
       media: null,
@@ -58,6 +72,9 @@ export default function QuestionsPage() {
     setFormData({
       question: '',
       answer: '',
+      type: 'NORMAL',
+      qcmAnswers: { RED: '', GREEN: '', YELLOW: '', BLUE: '' },
+      qcmCorrect: '',
       points: '1',
       time: '30',
       media: null,
@@ -68,9 +85,20 @@ export default function QuestionsPage() {
     }
   }
 
+  const handleQcmAnswerChange = (color, value) => {
+    setFormData(prev => ({
+      ...prev,
+      qcmAnswers: { ...prev.qcmAnswers, [color]: value }
+    }))
+  }
+
   const handleSubmit = async (e) => {
     e.preventDefault()
-    if (!formData.question || !formData.answer) return
+    // For normal questions, need question and answer
+    // For QCM, need question and at least the correct answer filled
+    if (!formData.question) return
+    if (formData.type === 'NORMAL' && !formData.answer) return
+    if (formData.type === 'QCM' && (!formData.qcmCorrect || !formData.qcmAnswers[formData.qcmCorrect])) return
 
     setIsUploading(true)
 
@@ -79,9 +107,20 @@ export default function QuestionsPage() {
       data.append('number', editingId)
     }
     data.append('question', formData.question)
-    data.append('answer', formData.answer)
+    data.append('type', formData.type)
     data.append('points', formData.points)
     data.append('time', formData.time)
+
+    if (formData.type === 'NORMAL') {
+      data.append('answer', formData.answer)
+    } else {
+      // QCM mode - send QCM answers and correct answer
+      data.append('qcm_answers', JSON.stringify(formData.qcmAnswers))
+      data.append('qcm_correct', formData.qcmCorrect)
+      // The answer field contains the correct answer text for display
+      data.append('answer', formData.qcmAnswers[formData.qcmCorrect])
+    }
+
     if (formData.media) {
       data.append('file', formData.media)
     }
@@ -142,6 +181,9 @@ export default function QuestionsPage() {
                   >
                     <div className="question-card-header">
                       <span className="question-id">#{question.ID}</span>
+                      {question.TYPE === 'QCM' && (
+                        <span className="qcm-badge">QCM</span>
+                      )}
                       <Button
                         variant="danger"
                         size="xs"
@@ -199,17 +241,80 @@ export default function QuestionsPage() {
                   />
                 </div>
 
+                {/* Question Type Selector */}
                 <div className="form-group">
-                  <label htmlFor="answer-input">Reponse *</label>
-                  <input
-                    id="answer-input"
-                    type="text"
-                    value={formData.answer}
-                    onChange={(e) => handleInputChange('answer', e.target.value)}
-                    placeholder="Entrez la reponse..."
-                    required
-                  />
+                  <label>Type de question</label>
+                  <div className="type-selector">
+                    <button
+                      type="button"
+                      className={`type-btn ${formData.type === 'NORMAL' ? 'active' : ''}`}
+                      onClick={() => handleInputChange('type', 'NORMAL')}
+                    >
+                      Normal
+                    </button>
+                    <button
+                      type="button"
+                      className={`type-btn qcm ${formData.type === 'QCM' ? 'active' : ''}`}
+                      onClick={() => handleInputChange('type', 'QCM')}
+                    >
+                      QCM
+                    </button>
+                  </div>
                 </div>
+
+                {/* Normal Answer */}
+                {formData.type === 'NORMAL' && (
+                  <div className="form-group">
+                    <label htmlFor="answer-input">Reponse *</label>
+                    <input
+                      id="answer-input"
+                      type="text"
+                      value={formData.answer}
+                      onChange={(e) => handleInputChange('answer', e.target.value)}
+                      placeholder="Entrez la reponse..."
+                      required
+                    />
+                  </div>
+                )}
+
+                {/* QCM Answers */}
+                {formData.type === 'QCM' && (
+                  <div className="qcm-answers-section">
+                    <label>Reponses QCM *</label>
+                    <div className="qcm-answers-grid">
+                      {Object.entries(QCM_COLORS).map(([colorKey, { label, color, letter }]) => (
+                        <div
+                          key={colorKey}
+                          className={`qcm-answer-item ${formData.qcmCorrect === colorKey ? 'correct' : ''}`}
+                          style={{ '--qcm-color': color }}
+                        >
+                          <div className="qcm-answer-header">
+                            <span className="qcm-letter" style={{ backgroundColor: color }}>{letter}</span>
+                            <span className="qcm-label">{label}</span>
+                            <button
+                              type="button"
+                              className={`qcm-correct-btn ${formData.qcmCorrect === colorKey ? 'active' : ''}`}
+                              onClick={() => handleInputChange('qcmCorrect', colorKey)}
+                              title="Marquer comme bonne reponse"
+                            >
+                              {formData.qcmCorrect === colorKey ? '✓' : '○'}
+                            </button>
+                          </div>
+                          <input
+                            type="text"
+                            value={formData.qcmAnswers[colorKey]}
+                            onChange={(e) => handleQcmAnswerChange(colorKey, e.target.value)}
+                            placeholder={`Reponse ${letter}...`}
+                            className="qcm-answer-input"
+                          />
+                        </div>
+                      ))}
+                    </div>
+                    {!formData.qcmCorrect && (
+                      <p className="qcm-hint">Cliquez sur ○ pour indiquer la bonne reponse</p>
+                    )}
+                  </div>
+                )}
 
                 <div className="form-row">
                   <div className="form-group">

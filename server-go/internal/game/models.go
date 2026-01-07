@@ -61,15 +61,34 @@ type Bumper struct {
 	AnswerColor AnswerColor `json:"ANSWER_COLOR,omitempty"`
 }
 
+// QuestionType represents the type of question
+type QuestionType string
+
+const (
+	QuestionTypeNormal QuestionType = "NORMAL"
+	QuestionTypeQCM    QuestionType = "QCM"
+)
+
+// QCMAnswers holds the 4 possible answers for a QCM question
+type QCMAnswers struct {
+	Red    string `json:"RED"`
+	Green  string `json:"GREEN"`
+	Yellow string `json:"YELLOW"`
+	Blue   string `json:"BLUE"`
+}
+
 // Question represents a quiz question
 type Question struct {
-	ID       string         `json:"ID"`
-	Question string         `json:"QUESTION"`
-	Answer   string         `json:"ANSWER"`
-	Points   int            `json:"POINTS"`
-	Time     int            `json:"TIME"`
-	Media    string         `json:"MEDIA,omitempty"`
-	Status   QuestionStatus `json:"STATUS,omitempty"`
+	ID         string         `json:"ID"`
+	Question   string         `json:"QUESTION"`
+	Answer     string         `json:"ANSWER"`                // For normal questions
+	Type       QuestionType   `json:"TYPE,omitempty"`        // "NORMAL" or "QCM" (default NORMAL)
+	QCMAnswers *QCMAnswers    `json:"QCM_ANSWERS,omitempty"` // For QCM questions
+	QCMCorrect string         `json:"QCM_CORRECT,omitempty"` // "RED", "GREEN", "YELLOW", "BLUE"
+	Points     int            `json:"POINTS"`
+	Time       int            `json:"TIME"`
+	Media      string         `json:"MEDIA,omitempty"`
+	Status     QuestionStatus `json:"STATUS,omitempty"`
 }
 
 // Background represents a background image with its settings
