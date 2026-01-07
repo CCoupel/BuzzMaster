@@ -294,6 +294,16 @@ server-go/
 | Client type tracking | ✅ | Admin vs TV client differentiation |
 | Client count indicators | ✅ | Real-time admin/TV count in navbar |
 | Version display | ✅ | Server + Web versions in navbar |
+| Score progress bars | ✅ | Animated bars proportional to score ratio |
+
+### UI Components
+
+#### Score Progress Bars
+Teams and players display animated progress bars showing their score relative to the maximum score:
+- **Width calculation**: `(score / maxScore) * 100%`
+- **Color**: Team color with glow effect
+- **Animation**: Smooth transition using framer-motion
+- **Location**: Admin Scores page + TV/Player display (SCORE and PLAYERS views)
 
 ### WebSocket Actions for Client Management
 
