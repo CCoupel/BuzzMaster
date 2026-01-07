@@ -29,7 +29,7 @@ export default function Navbar({ connectionStatus = 'disconnected', clientCounts
           </span>
           <span className="version-badge web" title="Version interface web React">
             <span className="version-icon">🌐</span>
-            <span className="version-value">2.1.0</span>
+            <span className="version-value">2.3.0</span>
           </span>
         </div>
       </div>

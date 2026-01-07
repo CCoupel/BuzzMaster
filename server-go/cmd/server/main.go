@@ -651,7 +651,10 @@ func (a *App) broadcastHello() {
 
 func (a *App) broadcastUpdate() {
 	data := a.engine.GetGameJSON()
-	a.broadcast(protocol.ActionUpdate, data, false)
+	msg, _ := protocol.NewMessage(protocol.ActionUpdate, nil)
+	msg.Msg = data
+	msg.Version = a.config.Version
+	a.wsHub.Broadcast(msg)
 }
 
 func (a *App) broadcastGameState(phase string) {

@@ -23,25 +23,33 @@ type HTTPServer struct {
 	wsHub     *WebSocketHub
 	dataDir   string
 	webDir    string
+	reactDir  string // React build directory
 	mux       *http.ServeMux
 	server    *http.Server
 
 	// Callbacks
-	OnAction         func(action string, data json.RawMessage)
-	OnQuestionUpload func() // Called after question upload to broadcast update
+	OnAction           func(action string, data json.RawMessage)
+	OnQuestionUpload   func() // Called after question upload to broadcast update
+	OnBackgroundChange func(path string) // Called after background upload/delete
 }
 
 // NewHTTPServer creates a new HTTP server
 func NewHTTPServer(port int, engine *game.Engine, wsHub *WebSocketHub) *HTTPServer {
 	cfg := config.Get()
 	return &HTTPServer{
-		port:    port,
-		engine:  engine,
-		wsHub:   wsHub,
-		dataDir: cfg.Storage.DataDir,
-		webDir:  cfg.Storage.DataDir,
-		mux:     http.NewServeMux(),
+		port:     port,
+		engine:   engine,
+		wsHub:    wsHub,
+		dataDir:  cfg.Storage.DataDir,
+		webDir:   cfg.Storage.DataDir,
+		reactDir: "", // Will be set if React build exists
+		mux:      http.NewServeMux(),
 	}
+}
+
+// SetReactDir sets the directory for React build files
+func (h *HTTPServer) SetReactDir(dir string) {
+	h.reactDir = dir
 }
 
 // SetWebDir sets the directory for static web files
@@ -93,7 +101,10 @@ func (h *HTTPServer) corsMiddleware(next http.Handler) http.Handler {
 }
 
 func (h *HTTPServer) setupRoutes() {
-	// Static files
+	// React static files (if React build exists)
+	h.mux.HandleFunc("/assets/", h.handleReactAssets)
+
+	// Legacy static files (for backward compatibility)
 	h.mux.HandleFunc("/html/", h.handleStatic)
 	h.mux.HandleFunc("/js/", h.handleStatic)
 	h.mux.HandleFunc("/css/", h.handleStatic)
@@ -106,7 +117,7 @@ func (h *HTTPServer) setupRoutes() {
 	h.mux.HandleFunc("/connecttest.txt", h.handleWindowsConnect)
 	h.mux.HandleFunc("/ncsi.txt", h.handleWindowsConnect)
 
-	// Redirects
+	// Root and SPA routes
 	h.mux.HandleFunc("/", h.handleRoot)
 	h.mux.HandleFunc("/redirect", h.handleRedirect)
 	h.mux.HandleFunc("/index.html", h.handleRedirect)
@@ -141,6 +152,19 @@ func (h *HTTPServer) setupRoutes() {
 }
 
 func (h *HTTPServer) handleRoot(w http.ResponseWriter, r *http.Request) {
+	// Check if React build exists
+	if h.reactDir != "" {
+		indexPath := filepath.Join(h.reactDir, "index.html")
+		if _, err := os.Stat(indexPath); err == nil {
+			// For SPA routes, serve index.html
+			if r.URL.Path == "/" || h.isSPARoute(r.URL.Path) {
+				http.ServeFile(w, r, indexPath)
+				return
+			}
+		}
+	}
+
+	// Fallback to legacy behavior
 	if r.URL.Path != "/" {
 		h.handleNotFound(w, r)
 		return
@@ -148,7 +172,38 @@ func (h *HTTPServer) handleRoot(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/html/testSPA.html#config", http.StatusFound)
 }
 
+// isSPARoute checks if the path is a React SPA route
+// Uses distinct paths to avoid conflicts with API endpoints
+func (h *HTTPServer) isSPARoute(path string) bool {
+	spaRoutes := []string{"/scoreboard", "/quiz", "/settings", "/tv", "/game"}
+	for _, route := range spaRoutes {
+		if strings.HasPrefix(path, route) {
+			return true
+		}
+	}
+	return false
+}
+
+// handleReactAssets serves React build assets
+func (h *HTTPServer) handleReactAssets(w http.ResponseWriter, r *http.Request) {
+	if h.reactDir == "" {
+		http.NotFound(w, r)
+		return
+	}
+	filePath := filepath.Join(h.reactDir, r.URL.Path)
+	http.ServeFile(w, r, filePath)
+}
+
 func (h *HTTPServer) handleRedirect(w http.ResponseWriter, r *http.Request) {
+	// If React build exists, redirect to React app
+	if h.reactDir != "" {
+		indexPath := filepath.Join(h.reactDir, "index.html")
+		if _, err := os.Stat(indexPath); err == nil {
+			http.Redirect(w, r, "/", http.StatusFound)
+			return
+		}
+	}
+	// Fallback to legacy
 	http.Redirect(w, r, "/html/testSPA.html#config", http.StatusFound)
 }
 
@@ -452,50 +507,113 @@ func (h *HTTPServer) handleReset(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *HTTPServer) handleBackground(w http.ResponseWriter, r *http.Request) {
-	if r.Method != "POST" {
+	log.Printf("[HTTP] Background request: method=%s, content-type=%s", r.Method, r.Header.Get("Content-Type"))
+	bgDir := filepath.Join(h.dataDir, "files", "backgrounds")
+
+	switch r.Method {
+	case "POST":
+		// Parse multipart form (max 10MB)
+		if err := r.ParseMultipartForm(10 << 20); err != nil {
+			log.Printf("[HTTP] Failed to parse multipart form: %v", err)
+			http.Error(w, "Failed to parse form: "+err.Error(), http.StatusBadRequest)
+			return
+		}
+
+		file, header, err := r.FormFile("file")
+		if err != nil {
+			log.Printf("[HTTP] FormFile error: %v", err)
+			http.Error(w, "No file uploaded: "+err.Error(), http.StatusBadRequest)
+			return
+		}
+		defer file.Close()
+
+		os.MkdirAll(bgDir, 0755)
+
+		// Generate unique filename with timestamp
+		ext := filepath.Ext(header.Filename)
+		if ext == "" {
+			ext = ".jpg"
+		}
+		timestamp := time.Now().UnixMilli()
+		fileName := fmt.Sprintf("bg_%d%s", timestamp, ext)
+		destPath := filepath.Join(bgDir, fileName)
+
+		dst, err := os.Create(destPath)
+		if err != nil {
+			http.Error(w, "Failed to save file", http.StatusInternalServerError)
+			return
+		}
+		defer dst.Close()
+
+		if _, err := io.Copy(dst, file); err != nil {
+			http.Error(w, "Failed to write file", http.StatusInternalServerError)
+			return
+		}
+
+		bgPath := "/files/backgrounds/" + fileName
+		log.Printf("[HTTP] Background image uploaded: %s", destPath)
+
+		if h.OnBackgroundChange != nil {
+			h.OnBackgroundChange("reload")
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{"status": "ok", "path": "` + bgPath + `"}`))
+
+	case "PUT":
+		// Update backgrounds config (order, duration)
+		var backgrounds []game.Background
+		if err := json.NewDecoder(r.Body).Decode(&backgrounds); err != nil {
+			log.Printf("[HTTP] Failed to decode backgrounds config: %v", err)
+			http.Error(w, "Invalid JSON: "+err.Error(), http.StatusBadRequest)
+			return
+		}
+
+		h.engine.SetBackgrounds(backgrounds)
+		log.Printf("[HTTP] Backgrounds config updated: %d items", len(backgrounds))
+
+		if h.OnBackgroundChange != nil {
+			h.OnBackgroundChange("save")
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{"status": "ok"}`))
+
+	case "DELETE":
+		// Check if deleting specific file or all
+		filename := r.URL.Query().Get("file")
+		if filename != "" {
+			// Delete specific file
+			filePath := filepath.Join(bgDir, filepath.Base(filename))
+			if err := os.Remove(filePath); err != nil {
+				log.Printf("[HTTP] Failed to delete background: %v", err)
+			} else {
+				log.Printf("[HTTP] Background deleted: %s", filePath)
+			}
+		} else {
+			// Delete all backgrounds
+			os.RemoveAll(bgDir)
+			log.Printf("[HTTP] All backgrounds removed")
+		}
+
+		if h.OnBackgroundChange != nil {
+			h.OnBackgroundChange("reload")
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{"status": "ok"}`))
+
+	default:
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
 	}
+}
 
-	// Parse multipart form (max 10MB)
-	if err := r.ParseMultipartForm(10 << 20); err != nil {
-		http.Error(w, "Failed to parse form", http.StatusBadRequest)
-		return
+func (h *HTTPServer) removeBackgroundFiles(filesDir string) {
+	// Remove any existing background files (legacy - background.jpg, background.png, etc.)
+	matches, _ := filepath.Glob(filepath.Join(filesDir, "background.*"))
+	for _, match := range matches {
+		os.Remove(match)
 	}
-
-	file, header, err := r.FormFile("background")
-	if err != nil {
-		http.Error(w, "No file uploaded", http.StatusBadRequest)
-		return
-	}
-	defer file.Close()
-
-	// Save to files directory
-	filesDir := filepath.Join(h.dataDir, "files")
-	os.MkdirAll(filesDir, 0755)
-
-	// Keep original extension
-	ext := filepath.Ext(header.Filename)
-	if ext == "" {
-		ext = ".jpg"
-	}
-	destPath := filepath.Join(filesDir, "background"+ext)
-
-	dst, err := os.Create(destPath)
-	if err != nil {
-		http.Error(w, "Failed to save file", http.StatusInternalServerError)
-		return
-	}
-	defer dst.Close()
-
-	if _, err := io.Copy(dst, file); err != nil {
-		http.Error(w, "Failed to write file", http.StatusInternalServerError)
-		return
-	}
-
-	log.Printf("[HTTP] Background image uploaded: %s", destPath)
-	w.Header().Set("Content-Type", "application/json")
-	w.Write([]byte(`{"status": "ok", "path": "/files/background` + ext + `"}`))
 }
 
 func (h *HTTPServer) handleBackupRedirect(w http.ResponseWriter, r *http.Request) {

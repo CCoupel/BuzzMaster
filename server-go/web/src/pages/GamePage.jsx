@@ -5,6 +5,7 @@ import Button from '../components/Button'
 import Card, { CardHeader, CardBody } from '../components/Card'
 import Timer from '../components/Timer'
 import TeamCard from '../components/TeamCard'
+import QuestionPreview from '../components/QuestionPreview'
 import './GamePage.css'
 
 export default function GamePage() {
@@ -101,7 +102,44 @@ export default function GamePage() {
 
   return (
     <div className="game-page page">
-      {/* Control Panel */}
+      {/* Questions Panel - Left */}
+      <div className="questions-panel">
+        <h2 className="panel-title">Questions</h2>
+        <div className="questions-list">
+          {sortedQuestions.map((question) => (
+            <motion.div
+              key={question.ID}
+              className={`question-preview ${question.STATUS?.toLowerCase() || 'available'} ${
+                gameState.question?.ID === question.ID ? 'selected' : ''
+              }`}
+              onClick={() => handleQuestionSelect(question)}
+              whileHover={canSelectQuestion ? { scale: 1.01 } : undefined}
+              whileTap={canSelectQuestion ? { scale: 0.99 } : undefined}
+              style={{ cursor: canSelectQuestion ? 'pointer' : 'not-allowed' }}
+            >
+              <div className="preview-header">
+                <span className="preview-id">#{question.ID}</span>
+                <span className="preview-status">{question.STATUS || 'AVAILABLE'}</span>
+              </div>
+              {question.MEDIA && (
+                <div className="preview-image">
+                  <img src={question.MEDIA} alt="" />
+                </div>
+              )}
+              <div className="preview-content">
+                <p className="preview-question">{question.QUESTION}</p>
+                <p className="preview-answer">{question.ANSWER}</p>
+              </div>
+              <div className="preview-meta">
+                <span className="preview-time">{question.TIME}s</span>
+                <span className="preview-points">{question.POINTS} pts</span>
+              </div>
+            </motion.div>
+          ))}
+        </div>
+      </div>
+
+      {/* Control Panel - Center */}
       <div className="control-panel">
         <Card variant="elevated" padding="lg" className="timer-card">
           <Timer
@@ -194,92 +232,46 @@ export default function GamePage() {
           </div>
         </Card>
 
-        {/* Current Question */}
-        <AnimatePresence mode="wait">
-          {gameState.question && (
-            <motion.div
-              key={gameState.question.ID}
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -20 }}
-            >
-              <Card variant="gradient" padding="lg" className="question-card">
-                <CardHeader>
-                  <div className="question-meta">
-                    <span className="question-id">Question #{gameState.question.ID}</span>
-                    <span className="question-points">{gameState.question.POINTS} pts</span>
-                  </div>
-                </CardHeader>
-                <CardBody>
-                  {gameState.question.MEDIA && (
-                    <img
-                      src={gameState.question.MEDIA}
-                      alt="Question"
-                      className="question-media"
-                    />
-                  )}
-                  <p className="question-text">{gameState.question.QUESTION}</p>
-                  <p className="question-answer">
-                    Reponse: {gameState.question.ANSWER}
-                  </p>
-                </CardBody>
-              </Card>
-            </motion.div>
-          )}
-        </AnimatePresence>
-      </div>
-
-      {/* Teams Grid */}
-      <div className="teams-section">
-        <h2 className="section-title">Equipes</h2>
-        <div className="teams-grid">
-          <AnimatePresence>
-            {sortedTeams.map((team, index) => (
-              <motion.div
-                key={team.name}
-                initial={{ opacity: 0, scale: 0.9 }}
-                animate={{ opacity: 1, scale: 1 }}
-                transition={{ delay: index * 0.1 }}
-              >
-                <TeamCard
-                  name={team.name}
-                  color={team.COLOR}
-                  score={team.SCORE || 0}
-                  ready={team.READY === 'TRUE'}
-                  active={team.TIMESTAMP !== undefined}
-                  timestamp={team.TIMESTAMP}
-                  gameTime={gameState.gameTime}
-                  buzzers={team.buzzers.map(b => ({
-                    ...b,
-                    onClick: () => handleBumperClick(b.mac)
-                  }))}
-                />
-              </motion.div>
-            ))}
-          </AnimatePresence>
+        {/* TV Preview */}
+        <div className="tv-preview-container">
+          <QuestionPreview
+            question={gameState.question}
+            gameState={gameState}
+            backgrounds={gameState.backgrounds || []}
+          />
         </div>
       </div>
 
-      {/* Questions List */}
-      <div className="questions-section">
-        <h2 className="section-title">Questions</h2>
-        <div className="questions-list">
-          {sortedQuestions.map((question) => (
-            <motion.div
-              key={question.ID}
-              className={`question-item ${question.STATUS?.toLowerCase() || 'available'} ${
-                gameState.question?.ID === question.ID ? 'selected' : ''
-              }`}
-              onClick={() => handleQuestionSelect(question)}
-              whileHover={canSelectQuestion ? { scale: 1.02 } : undefined}
-              whileTap={canSelectQuestion ? { scale: 0.98 } : undefined}
-              style={{ cursor: canSelectQuestion ? 'pointer' : 'not-allowed' }}
-            >
-              <span className="question-item-id">#{question.ID}</span>
-              <span className="question-item-text">{question.QUESTION}</span>
-              <span className="question-item-status">{question.STATUS || 'AVAILABLE'}</span>
-            </motion.div>
-          ))}
+      {/* Right Panel - Teams */}
+      <div className="right-panel">
+        <div className="teams-section">
+          <h2 className="section-title">Equipes</h2>
+          <div className="teams-grid">
+            <AnimatePresence>
+              {sortedTeams.map((team, index) => (
+                <motion.div
+                  key={team.name}
+                  initial={{ opacity: 0, scale: 0.9 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  transition={{ delay: index * 0.1 }}
+                >
+                  <TeamCard
+                    name={team.name}
+                    color={team.COLOR}
+                    score={team.SCORE || 0}
+                    ready={team.READY === 'TRUE'}
+                    active={team.TIMESTAMP !== undefined}
+                    timestamp={team.TIMESTAMP}
+                    gameTime={gameState.gameTime}
+                    buzzers={team.buzzers.map(b => ({
+                      ...b,
+                      onClick: () => handleBumperClick(b.mac)
+                    }))}
+                  />
+                </motion.div>
+              ))}
+            </AnimatePresence>
+          </div>
         </div>
       </div>
     </div>

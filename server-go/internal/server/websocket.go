@@ -127,7 +127,6 @@ func (h *WebSocketHub) GetClientCounts() (adminCount, tvCount int) {
 // SetClientType updates the type of a client by ID
 func (h *WebSocketHub) SetClientType(clientID string, clientType ClientType) {
 	h.mu.Lock()
-	defer h.mu.Unlock()
 	for client := range h.clients {
 		if client.ID == clientID {
 			client.Type = clientType
@@ -135,6 +134,9 @@ func (h *WebSocketHub) SetClientType(clientID string, clientType ClientType) {
 			break
 		}
 	}
+	h.mu.Unlock()
+	// Notify after releasing lock to avoid deadlock
+	h.notifyClientChange()
 }
 
 // Broadcast sends a message to all connected clients

@@ -295,6 +295,7 @@ server-go/
 | Client count indicators | ✅ | Real-time admin/TV count in navbar |
 | Version display | ✅ | Server + Web versions in navbar |
 | Score progress bars | ✅ | Animated bars proportional to score ratio |
+| Game page 3-column layout | ✅ | Questions left, controls center, teams right |
 
 ### UI Components
 
@@ -304,6 +305,17 @@ Teams and players display animated progress bars showing their score relative to
 - **Color**: Team color with glow effect
 - **Animation**: Smooth transition using framer-motion
 - **Location**: Admin Scores page + TV/Player display (SCORE and PLAYERS views)
+
+#### Game Page Layout (v2.2.0)
+3-column responsive layout for the game control page:
+- **Left column (280px)**: Questions list with preview (image, answer, time, points)
+- **Center column (380px)**: Timer, time/points inputs, control buttons (START/STOP/PAUSE)
+- **Right column (flex)**: Current question detail + Teams grid
+
+**Responsive breakpoints:**
+- `>1400px`: 3 columns (280px / 350px / 1fr)
+- `1200-1400px`: 2 columns (questions + controls / teams)
+- `<768px`: 1 column (stacked)
 
 ### WebSocket Actions for Client Management
 
@@ -411,14 +423,171 @@ scp buzzcontrol pi@raspberrypi.local:~/
   "server": {
     "http_port": 80,
     "tcp_port": 1234,
-    "udp_port": 1235,
-    "dns_port": 53
+    "websocket_path": "/ws"
   },
   "storage": {
     "data_dir": "./data",
     "questions_dir": "./data/files/questions"
   }
 }
+```
+
+### Standard Ports
+| Service | Port | Description |
+|---------|------|-------------|
+| HTTP | 80 | Web interface |
+| TCP | 1234 | BuzzClick buzzer protocol |
+| UDP | 1234 | Broadcast (same as TCP) |
+| DNS | 53 | Captive portal (optional) |
+
+---
+
+## React Web Interface (v2.3.0)
+
+### Structure des pages
+
+| Route | Page | Description |
+|-------|------|-------------|
+| `/` | GamePage | Interface admin principale |
+| `/tv` | PlayerDisplay | Affichage joueurs (plein écran) |
+| `/scoreboard` | ScoresPage | Tableau des scores |
+| `/teams` | TeamsPage | Gestion des équipes |
+| `/quiz` | QuizPage | Gestion des questions |
+| `/settings` | SettingsPage | Configuration |
+
+### Layout GamePage (Admin)
+
+Layout 3 colonnes responsive :
+```
+| Questions | Contrôles + Aperçu TV | Équipes |
+| 220px     | 1fr (flexible)        | 200px   |
+```
+
+**Colonne gauche (220px)** : Liste des questions avec miniatures
+**Colonne centrale (flexible)** :
+- Timer et contrôles de jeu (START, PAUSE, REPONSE)
+- Aperçu TV 16:9 (QuestionPreview) - miniature de ce qui s'affiche sur /tv
+
+**Colonne droite (200px)** : Cartes équipes empilées verticalement
+
+### Composants clés
+
+| Composant | Fichier | Description |
+|-----------|---------|-------------|
+| QuestionPreview | `components/QuestionPreview.jsx` | Aperçu 16:9 de l'affichage TV |
+| TeamCard | `components/TeamCard.jsx` | Carte équipe compacte (200px) |
+| Navbar | `components/Navbar.jsx` | Navigation + versions + compteurs clients |
+
+### WebSocket Messages
+
+Le hook `useWebSocket.js` gère la communication :
+
+| Message reçu | Données | Utilisation |
+|--------------|---------|-------------|
+| UPDATE | `{GAME, teams, bumpers}` + VERSION | État du jeu + version serveur |
+| QUESTIONS | `{questions}` + FSINFO + VERSION | Liste questions + espace disque |
+| CLIENTS | `{ADMIN_COUNT, TV_COUNT}` | Compteurs clients connectés |
+
+**Important** : VERSION est inclus dans UPDATE et QUESTIONS pour afficher la version serveur dans la navbar.
+
+---
+
+## Gestion des Versions
+
+### Format de version : x.y.z
+
+| Segment | Signification | Quand incrémenter |
+|---------|---------------|-------------------|
+| **x** | Version majeure | Changement d'architecture ou breaking change |
+| **y** | Version mineure | Nouvelle fonctionnalité |
+| **z** | Version de test | À chaque relance du serveur pour test |
+
+### Règles de versionnement
+
+1. **Nouvelle fonctionnalité** → Incrémenter **y**, mettre z à 1
+   - Exemple : 2.1.0 → 2.2.1
+
+2. **Relance serveur pour test** → Incrémenter **z** (pas de limite)
+   - Exemple : 2.2.1 → 2.2.2 → 2.2.3 → 2.2.15...
+
+3. **Validation par l'utilisateur** → Remettre **z** à 0, documenter et commit
+   - Exemple : 2.2.15 → 2.2.0 (puis commit)
+
+### Fichiers à mettre à jour
+
+| Fichier | Champ |
+|---------|-------|
+| `server-go/web/package.json` | `"version": "x.y.z"` |
+| `server-go/web/src/components/Navbar.jsx` | `<span className="version-value">x.y.z</span>` |
+
+---
+
+## Procédure de Test Systématique
+
+Avant chaque test du serveur, suivre cette procédure pour garantir un environnement propre :
+
+### Étapes
+
+| # | Tâche | Commande / Action |
+|---|-------|-------------------|
+| 1 | **Arrêter le serveur en cours** | `taskkill /IM server.exe /F` ou `taskkill /IM buzzserver.exe /F` |
+| 2 | **Vérifier l'arrêt et la disponibilité des ports** | `netstat -ano \| findstr :80` et `netstat -ano \| findstr :1234` |
+| 3 | **Mettre à jour config.json** | Ports standards : HTTP=80, TCP=1234 |
+| 4 | **Exécuter le serveur dans une fenêtre visible** | `cd server-go && server.exe` (fenêtre CMD visible) |
+| 5 | **Vérifier page admin (/)** | Ouvrir http://localhost/ dans Chrome |
+| 6 | **Vérifier page joueur (/tv)** | Ouvrir http://localhost/tv dans Chrome |
+| 7 | **Vérifier les versions affichées** | Navbar : Serveur (🖥️) et Web (🌐) |
+
+### Vérifications attendues
+
+- [ ] Page admin (/) s'affiche correctement
+- [ ] Page joueur (/tv) s'affiche correctement
+- [ ] Version serveur affichée (ex: 2.0.0)
+- [ ] Version web affichée (ex: 2.2.1)
+- [ ] Compteurs clients visibles (Admin: X, TV: Y)
+- [ ] WebSocket connecté (pas d'erreur console)
+
+### En cas d'erreur de port occupé
+
+```bash
+# Trouver le processus utilisant le port
+netstat -ano | findstr :80
+
+# Tuer le processus par PID
+taskkill /PID <PID> /F
+```
+
+---
+
+## Procédure de Validation et Commit
+
+Lorsque l'utilisateur valide l'implémentation :
+
+### Étapes
+
+| # | Tâche | Action |
+|---|-------|--------|
+| 1 | **Remettre z à 0** | Version x.y.z → x.y.0 |
+| 2 | **Mettre à jour package.json** | `"version": "x.y.0"` |
+| 3 | **Mettre à jour Navbar.jsx** | Version affichée = x.y.0 |
+| 4 | **Mettre à jour CLAUDE.md** | Documenter les nouvelles fonctionnalités |
+| 5 | **Rebuild le frontend** | `npm run build` |
+| 6 | **Git commit** | Message décrivant les changements |
+
+### Format de commit
+
+```bash
+git add .
+git commit -m "feat: Description de la fonctionnalité
+
+- Détail 1
+- Détail 2
+
+Version: Server x.y.z / Web x.y.0
+
+🤖 Generated with [Claude Code](https://claude.com/claude-code)
+
+Co-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>"
 ```
 
 ---

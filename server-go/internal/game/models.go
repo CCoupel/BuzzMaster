@@ -60,13 +60,21 @@ type Question struct {
 	Status   QuestionStatus `json:"STATUS,omitempty"`
 }
 
+// Background represents a background image with its settings
+type Background struct {
+	Path     string  `json:"path"`
+	Duration int     `json:"duration"` // Duration in seconds (default 10)
+	Opacity  float64 `json:"opacity"`  // Opacity 0-100 (default 100)
+}
+
 // GameState holds the current game state
 type GameState struct {
-	Phase       GamePhase `json:"PHASE"`
-	Delay       int       `json:"DELAY"`
-	CurrentTime int       `json:"CURRENT_TIME"`
-	Question    *Question `json:"QUESTION,omitempty"`
-	Page        string    `json:"PAGE,omitempty"`
+	Phase       GamePhase    `json:"PHASE"`
+	Delay       int          `json:"DELAY"`
+	CurrentTime int          `json:"CURRENT_TIME"`
+	Question    *Question    `json:"QUESTION,omitempty"`
+	Page        string       `json:"REMOTE,omitempty"`
+	Backgrounds []Background `json:"backgrounds,omitempty"`
 }
 
 // TeamsAndBumpers holds all teams and bumpers data
