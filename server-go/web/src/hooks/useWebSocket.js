@@ -18,6 +18,7 @@ export default function useWebSocket() {
   const [questions, setQuestions] = useState({})
   const [fsInfo, setFsInfo] = useState(null)
   const [version, setVersion] = useState(null)
+  const [clientCounts, setClientCounts] = useState({ admin: 0, tv: 0 })
 
   const wsRef = useRef(null)
   const reconnectTimeoutRef = useRef(null)
@@ -132,6 +133,7 @@ export default function useWebSocket() {
           setQuestions(questionsMap)
         }
         if (FSINFO) setFsInfo(FSINFO)
+        if (VERSION) setVersion(VERSION)
         break
 
       case 'READY':
@@ -154,6 +156,15 @@ export default function useWebSocket() {
         }
         if (MSG?.teams) setTeams(MSG.teams)
         if (MSG?.bumpers) setBumpers(MSG.bumpers)
+        break
+
+      case 'CLIENTS':
+        if (MSG) {
+          setClientCounts({
+            admin: MSG.ADMIN_COUNT ?? 0,
+            tv: MSG.TV_COUNT ?? 0,
+          })
+        }
         break
 
       default:
@@ -216,6 +227,10 @@ export default function useWebSocket() {
     sendMessage('TEAM_POINTS', { TEAM: teamName, POINTS: points })
   }, [sendMessage])
 
+  const setClientType = useCallback((type) => {
+    sendMessage('SET_CLIENT_TYPE', { TYPE: type })
+  }, [sendMessage])
+
   useEffect(() => {
     connect()
 
@@ -237,6 +252,7 @@ export default function useWebSocket() {
     questions,
     fsInfo,
     version,
+    clientCounts,
     // Actions
     sendMessage,
     startGame,
@@ -250,5 +266,6 @@ export default function useWebSocket() {
     deleteQuestion,
     setBumperPoints,
     setTeamPoints,
+    setClientType,
   }
 }

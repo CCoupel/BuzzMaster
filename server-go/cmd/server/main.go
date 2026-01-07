@@ -177,6 +177,11 @@ func (a *App) setupCallbacks() {
 
 	// Detect existing backgrounds on startup
 	a.loadBackgrounds()
+
+	// Handle client count changes (WebSocket connect/disconnect)
+	a.wsHub.OnClientChange = func(adminCount, tvCount int) {
+		a.broadcastClientCounts(adminCount, tvCount)
+	}
 }
 
 func (a *App) loadBackgrounds() {
@@ -404,6 +409,9 @@ func (a *App) handleWebMessage(incoming *protocol.IncomingMessage) {
 	case protocol.ActionTeamPoints:
 		a.handleTeamPoints(msg)
 
+	case protocol.ActionSetClientType:
+		a.handleSetClientType(incoming.ClientID, msg)
+
 	default:
 		log.Printf("[App] Unknown web action: %s", msg.Action)
 	}
@@ -598,6 +606,29 @@ func (a *App) handleTeamPoints(msg *protocol.Message) {
 	a.broadcastUpdate()
 }
 
+func (a *App) handleSetClientType(clientID string, msg *protocol.Message) {
+	var payload protocol.SetClientTypePayload
+	if err := json.Unmarshal(msg.Msg, &payload); err != nil {
+		log.Printf("[App] Failed to parse SET_CLIENT_TYPE: %v", err)
+		return
+	}
+
+	// Map string type to ClientType
+	var clientType server.ClientType
+	switch payload.Type {
+	case "tv":
+		clientType = server.ClientTypeTV
+	default:
+		clientType = server.ClientTypeAdmin
+	}
+
+	a.wsHub.SetClientType(clientID, clientType)
+
+	// Broadcast updated counts
+	adminCount, tvCount := a.wsHub.GetClientCounts()
+	a.broadcastClientCounts(adminCount, tvCount)
+}
+
 // Broadcast methods
 func (a *App) broadcast(action string, data json.RawMessage, viaTCP bool) {
 	msg, _ := protocol.NewMessage(action, nil)
@@ -685,6 +716,16 @@ func (a *App) broadcastReset() {
 func (a *App) broadcastRemote() {
 	data := a.engine.GetGameJSON()
 	a.broadcast(protocol.ActionRemote, data, false)
+}
+
+func (a *App) broadcastClientCounts(adminCount, tvCount int) {
+	payload := protocol.ClientsPayload{
+		AdminCount: adminCount,
+		TVCount:    tvCount,
+	}
+	data, _ := json.Marshal(payload)
+	a.broadcast(protocol.ActionClients, data, false)
+	log.Printf("[App] Client counts: admin=%d, tv=%d", adminCount, tvCount)
 }
 
 func (a *App) broadcastQuestions() {

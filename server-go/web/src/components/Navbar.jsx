@@ -2,7 +2,7 @@ import { NavLink } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import './Navbar.css'
 
-export default function Navbar({ connectionStatus = 'disconnected' }) {
+export default function Navbar({ connectionStatus = 'disconnected', clientCounts = { admin: 0, tv: 0 }, serverVersion = '' }) {
   const navItems = [
     { to: '/', label: 'Jeu', icon: '🎮' },
     { to: '/scoreboard', label: 'Scores', icon: '🏆' },
@@ -22,6 +22,16 @@ export default function Navbar({ connectionStatus = 'disconnected' }) {
           🐝
         </motion.span>
         <span className="brand-text">BuzzControl</span>
+        <div className="version-badges">
+          <span className="version-badge server" title="Version serveur Go">
+            <span className="version-icon">🖥️</span>
+            <span className="version-value">{serverVersion || '...'}</span>
+          </span>
+          <span className="version-badge web" title="Version interface web React">
+            <span className="version-icon">🌐</span>
+            <span className="version-value">2.1.0</span>
+          </span>
+        </div>
       </div>
 
       <div className="navbar-links">
@@ -40,6 +50,16 @@ export default function Navbar({ connectionStatus = 'disconnected' }) {
       </div>
 
       <div className="navbar-status">
+        <div className="client-counts">
+          <span className="client-count admin" title="Interfaces admin">
+            <span className="count-icon">A</span>
+            <span className="count-value">{clientCounts.admin}</span>
+          </span>
+          <span className="client-count tv" title="Ecrans TV/joueurs">
+            <span className="count-icon">TV</span>
+            <span className="count-value">{clientCounts.tv}</span>
+          </span>
+        </div>
         <div className={`connection-status ${connectionStatus}`}>
           <span className="status-dot" />
           <span className="status-text">

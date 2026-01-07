@@ -30,6 +30,8 @@ const (
 	ActionDelete       = "DELETE"
 	ActionBumperPoints = "BUMPER_POINTS"
 	ActionTeamPoints   = "TEAM_POINTS"
+	ActionClients      = "CLIENTS"
+	ActionSetClientType = "SET_CLIENT_TYPE"
 )
 
 // FSInfo represents file storage information
@@ -109,6 +111,17 @@ type BumperPointsPayload struct {
 type TeamPointsPayload struct {
 	Team   string `json:"TEAM"`
 	Points int    `json:"POINTS"`
+}
+
+// ClientsPayload for CLIENTS action (client count broadcast)
+type ClientsPayload struct {
+	AdminCount int `json:"ADMIN_COUNT"`
+	TVCount    int `json:"TV_COUNT"`
+}
+
+// SetClientTypePayload for SET_CLIENT_TYPE action
+type SetClientTypePayload struct {
+	Type string `json:"TYPE"` // "admin" or "tv"
 }
 
 // NewMessage creates a new outgoing message

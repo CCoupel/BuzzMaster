@@ -18,13 +18,22 @@ var upgrader = websocket.Upgrader{
 	},
 }
 
+// ClientType identifies the type of WebSocket client
+type ClientType string
+
+const (
+	ClientTypeAdmin ClientType = "admin"
+	ClientTypeTV    ClientType = "tv"
+)
+
 // WebSocketClient represents a connected WebSocket client
 type WebSocketClient struct {
-	ID       string
-	Conn     *websocket.Conn
-	Send     chan []byte
-	Hub      *WebSocketHub
-	LastSeen time.Time
+	ID         string
+	Type       ClientType
+	Conn       *websocket.Conn
+	Send       chan []byte
+	Hub        *WebSocketHub
+	LastSeen   time.Time
 }
 
 // WebSocketHub manages all WebSocket connections
@@ -40,6 +49,9 @@ type WebSocketHub struct {
 
 	// Callback for handling messages
 	OnMessage func(clientID string, msg *protocol.Message)
+
+	// Callback when client count changes
+	OnClientChange func(adminCount, tvCount int)
 }
 
 // NewWebSocketHub creates a new WebSocket hub
@@ -61,7 +73,8 @@ func (h *WebSocketHub) Run() {
 			h.mu.Lock()
 			h.clients[client] = true
 			h.mu.Unlock()
-			log.Printf("[WebSocket] Client connected: %s", client.ID)
+			log.Printf("[WebSocket] Client connected: %s (type: %s)", client.ID, client.Type)
+			h.notifyClientChange()
 
 		case client := <-h.unregister:
 			h.mu.Lock()
@@ -70,7 +83,8 @@ func (h *WebSocketHub) Run() {
 				close(client.Send)
 			}
 			h.mu.Unlock()
-			log.Printf("[WebSocket] Client disconnected: %s", client.ID)
+			log.Printf("[WebSocket] Client disconnected: %s (type: %s)", client.ID, client.Type)
+			h.notifyClientChange()
 
 		case message := <-h.broadcast:
 			h.mu.RLock()
@@ -83,6 +97,42 @@ func (h *WebSocketHub) Run() {
 				}
 			}
 			h.mu.RUnlock()
+		}
+	}
+}
+
+// notifyClientChange calls the OnClientChange callback with current counts
+func (h *WebSocketHub) notifyClientChange() {
+	if h.OnClientChange != nil {
+		adminCount, tvCount := h.GetClientCounts()
+		h.OnClientChange(adminCount, tvCount)
+	}
+}
+
+// GetClientCounts returns the count of admin and TV clients
+func (h *WebSocketHub) GetClientCounts() (adminCount, tvCount int) {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	for client := range h.clients {
+		switch client.Type {
+		case ClientTypeTV:
+			tvCount++
+		default:
+			adminCount++
+		}
+	}
+	return
+}
+
+// SetClientType updates the type of a client by ID
+func (h *WebSocketHub) SetClientType(clientID string, clientType ClientType) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	for client := range h.clients {
+		if client.ID == clientID {
+			client.Type = clientType
+			log.Printf("[WebSocket] Client %s type set to: %s", clientID, clientType)
+			break
 		}
 	}
 }

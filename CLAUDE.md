@@ -276,11 +276,11 @@ server-go/
 └── go.sum
 ```
 
-### Implemented Features (v1.0)
+### Implemented Features (v2.0)
 
 | Feature | Status | Notes |
 |---------|--------|-------|
-| HTTP server (port 80) | ✅ | Static files, REST API |
+| HTTP server (port 8080) | ✅ | Static files, REST API |
 | WebSocket server (/ws) | ✅ | Web client communication |
 | TCP server (port 1234) | ✅ | BuzzClick buzzer protocol |
 | UDP broadcast (port 1235) | ✅ | Time-critical messages |
@@ -291,6 +291,26 @@ server-go/
 | Game state machine | ✅ | STOP→PREPARE→READY→START→PAUSE |
 | TAR backup/restore | ✅ | /backup and /restore endpoints |
 | Configuration | ✅ | JSON config file |
+| Client type tracking | ✅ | Admin vs TV client differentiation |
+| Client count indicators | ✅ | Real-time admin/TV count in navbar |
+| Version display | ✅ | Server + Web versions in navbar |
+
+### WebSocket Actions for Client Management
+
+| Action | Direction | Description |
+|--------|-----------|-------------|
+| SET_CLIENT_TYPE | Client→Server | Set client type (admin/tv) |
+| CLIENTS | Server→Client | Broadcast client counts |
+
+**SET_CLIENT_TYPE payload:**
+```json
+{ "TYPE": "admin" }  // or "tv"
+```
+
+**CLIENTS payload:**
+```json
+{ "ADMIN_COUNT": 2, "TV_COUNT": 1 }
+```
 
 ### Key Implementation Decisions
 
