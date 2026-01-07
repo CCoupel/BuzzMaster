@@ -245,6 +245,8 @@ export default function GamePage() {
             question={gameState.question}
             gameState={gameState}
             backgrounds={gameState.backgrounds || []}
+            teams={teams}
+            bumpers={bumpers}
           />
         </div>
       </div>

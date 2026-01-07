@@ -177,6 +177,18 @@ export default function PlayerDisplay() {
   const maxTeamScore = Math.max(...sortedTeams.map(t => t.score), 1)
   const maxPlayerScore = Math.max(...sortedPlayers.map(p => p.score), 1)
 
+  // Top 3 players for podium
+  const topPlayers = useMemo(() => {
+    return sortedPlayers.slice(0, 3).map(player => ({
+      ...player,
+      name: player.name,
+      color: player.teamColor,
+    }))
+  }, [sortedPlayers])
+
+  // Calculate if we need 2 columns for players (if more than 6 players)
+  const useTwoColumns = sortedPlayers.length > 6
+
   // Current background
   const backgrounds = gameState.backgrounds || []
   const currentBg = backgrounds.length > 0 ? backgrounds[currentBgIndex] : null
@@ -308,57 +320,67 @@ export default function PlayerDisplay() {
           >
             <h1 className="scores-title">Classement Joueurs</h1>
 
-            <div className="players-list-container">
-              <div className="players-list">
-                <AnimatePresence mode="popLayout">
-                  {sortedPlayers.map((player, index) => {
-                    const rgbColor = getRgbColor(player.teamColor)
-                    const barWidth = (player.score / maxPlayerScore) * 100
-                    const isTied = sortedPlayers.filter(p => p.rank === player.rank).length > 1
+            <div className="players-layout">
+              {/* Podium - main focus */}
+              {topPlayers.length >= 1 && (
+                <div className="players-podium-section">
+                  <Podium teams={topPlayers} changedTeams={{}} />
+                </div>
+              )}
 
-                    return (
-                      <motion.div
-                        key={player.mac}
-                        className="player-row"
-                        initial={{ opacity: 0, y: 20 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0, y: -20 }}
-                        transition={{ delay: index * 0.05, type: 'spring', stiffness: 300, damping: 30 }}
-                        style={{ '--team-color': rgbColor }}
-                        layout
-                      >
-                        <div className="player-rank">
-                          {player.rank <= 3 ? (
-                            <span className="player-medal">
-                              {player.rank === 1 ? '🥇' : player.rank === 2 ? '🥈' : '🥉'}
-                            </span>
-                          ) : (
-                            <span className="player-rank-number">#{player.rank}</span>
-                          )}
-                        </div>
-                        <div className="player-avatar" style={{ backgroundColor: rgbColor }}>
-                          {player.name.charAt(0).toUpperCase()}
-                        </div>
-                        <div className="player-info">
-                          <span className="player-name">{player.name}</span>
-                          <span className="player-team">{player.team || 'Sans equipe'}</span>
-                          <div className="player-bar-outer">
-                            <motion.div
-                              className="player-bar-inner"
-                              initial={{ width: 0 }}
-                              animate={{ width: `${barWidth}%` }}
-                              transition={{ delay: 0.2, duration: 0.5 }}
-                            />
+              {/* Players list */}
+              <div className="players-list-section">
+                <div className={`players-list ${useTwoColumns ? 'two-columns' : ''}`}>
+                  <AnimatePresence mode="popLayout">
+                    {sortedPlayers.map((player, index) => {
+                      const rgbColor = getRgbColor(player.teamColor)
+                      const barWidth = (player.score / maxPlayerScore) * 100
+                      const isTied = sortedPlayers.filter(p => p.rank === player.rank).length > 1
+
+                      return (
+                        <motion.div
+                          key={player.mac}
+                          className="player-row"
+                          initial={{ opacity: 0, y: 20 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          exit={{ opacity: 0, y: -20 }}
+                          transition={{ delay: index * 0.03, type: 'spring', stiffness: 300, damping: 30 }}
+                          style={{ '--team-color': rgbColor }}
+                          layout
+                        >
+                          <div className="player-rank">
+                            {player.rank <= 3 ? (
+                              <span className="player-medal">
+                                {player.rank === 1 ? '🥇' : player.rank === 2 ? '🥈' : '🥉'}
+                              </span>
+                            ) : (
+                              <span className="player-rank-number">#{player.rank}</span>
+                            )}
                           </div>
-                        </div>
-                        <div className="player-score-section">
-                          {isTied && <span className="player-tied">ex</span>}
-                          <span className="player-score">{player.score} pts</span>
-                        </div>
-                      </motion.div>
-                    )
-                  })}
-                </AnimatePresence>
+                          <div className="player-avatar" style={{ backgroundColor: rgbColor }}>
+                            {player.name.charAt(0).toUpperCase()}
+                          </div>
+                          <div className="player-info">
+                            <span className="player-name">{player.name}</span>
+                            <span className="player-team">{player.team || 'Sans equipe'}</span>
+                            <div className="player-bar-outer">
+                              <motion.div
+                                className="player-bar-inner"
+                                initial={{ width: 0 }}
+                                animate={{ width: `${barWidth}%` }}
+                                transition={{ delay: 0.2, duration: 0.5 }}
+                              />
+                            </div>
+                          </div>
+                          <div className="player-score-section">
+                            {isTied && <span className="player-tied">ex</span>}
+                            <span className="player-score">{player.score} pts</span>
+                          </div>
+                        </motion.div>
+                      )
+                    })}
+                  </AnimatePresence>
+                </div>
               </div>
             </div>
           </motion.div>

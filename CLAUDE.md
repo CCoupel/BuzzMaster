@@ -299,6 +299,26 @@ server-go/
 
 ### UI Components
 
+#### Podium Component (v2.4.0)
+Shared component for displaying rankings with tie support:
+- **Location**: `components/Podium.jsx` + `components/Podium.css`
+- **Used by**: ScoresPage (teams), PlayerDisplay (players), QuestionPreview (both)
+- **Variants**: `default` (full size), `compact` (smaller for admin/preview)
+- **Tie handling**: Multiple teams/players with same score share the same rank
+- **Animation**: Framer-motion for entrance animations and score changes
+
+```jsx
+// Usage example
+<Podium teams={sortedTeams} variant="compact" />
+```
+
+#### QuestionPreview Component (v2.4.0)
+TV preview component showing what will appear on the display:
+- **Location**: `components/QuestionPreview.jsx` + `components/QuestionPreview.css`
+- **Displays**: Question with media, game states (PREPARE/READY), team/player rankings
+- **Reuses**: Podium component for consistent ranking display with ties
+- **Props**: `question`, `gameState`, `backgrounds`, `teams`, `bumpers`
+
 #### Score Progress Bars
 Teams and players display animated progress bars showing their score relative to the maximum score:
 - **Width calculation**: `(score / maxScore) * 100%`
@@ -306,15 +326,15 @@ Teams and players display animated progress bars showing their score relative to
 - **Animation**: Smooth transition using framer-motion
 - **Location**: Admin Scores page + TV/Player display (SCORE and PLAYERS views)
 
-#### Game Page Layout (v2.2.0)
-3-column responsive layout for the game control page:
-- **Left column (280px)**: Questions list with preview (image, answer, time, points)
-- **Center column (380px)**: Timer, time/points inputs, control buttons (START/STOP/PAUSE)
-- **Right column (flex)**: Current question detail + Teams grid
+#### Game Page Layout (v2.3.0)
+3-column responsive layout with TV preview:
+- **Left column (220px)**: Questions list with compact preview
+- **Center column (flex)**: Timer + controls + TV preview (16:9)
+- **Right column (200px)**: Teams list (vertical)
 
 **Responsive breakpoints:**
-- `>1400px`: 3 columns (280px / 350px / 1fr)
-- `1200-1400px`: 2 columns (questions + controls / teams)
+- `>1200px`: 3 columns (220px / 1fr / 200px)
+- `768-1200px`: 2 columns (questions + controls / teams)
 - `<768px`: 1 column (stacked)
 
 ### WebSocket Actions for Client Management
@@ -492,7 +512,8 @@ Layout avec timer pleine largeur + 3 colonnes responsive :
 
 | Composant | Fichier | Description |
 |-----------|---------|-------------|
-| QuestionPreview | `components/QuestionPreview.jsx` | Aperçu 16:9 de l'affichage TV |
+| Podium | `components/Podium.jsx` | Podium 1-2-3 avec gestion égalités (variantes: default, compact) |
+| QuestionPreview | `components/QuestionPreview.jsx` | Aperçu 16:9 de l'affichage TV (utilise Podium) |
 | TeamCard | `components/TeamCard.jsx` | Carte équipe compacte (260px) |
 | Timer | `components/Timer.jsx` | Chronomètre avec barre de progression |
 | Navbar | `components/Navbar.jsx` | Navigation + versions + compteurs clients |

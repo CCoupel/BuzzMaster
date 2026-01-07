@@ -652,6 +652,78 @@
 }
 
 /* Players Display */
+.players-layout {
+  display: flex;
+  gap: var(--space-4);
+  width: 100%;
+  max-width: 1400px;
+  flex: 1;
+  align-items: flex-start;
+  justify-content: center;
+}
+
+.players-podium-section {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 300px;
+  max-width: 500px;
+}
+
+.players-list-section {
+  flex: 2;
+  max-width: 800px;
+  max-height: calc(100vh - 180px);
+  overflow-y: auto;
+}
+
+.players-list-section::-webkit-scrollbar {
+  width: 6px;
+}
+
+.players-list-section::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 3px;
+}
+
+.players-list-section::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.3);
+  border-radius: 3px;
+}
+
+.players-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+/* Two columns layout for many players */
+.players-list.two-columns {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-2);
+}
+
+.players-list.two-columns .player-row {
+  padding: var(--space-2) var(--space-3);
+}
+
+.players-list.two-columns .player-name {
+  font-size: 1rem;
+}
+
+.players-list.two-columns .player-avatar {
+  width: 40px;
+  height: 40px;
+  font-size: 1.2rem;
+}
+
+.players-list.two-columns .player-score {
+  font-size: 1rem;
+}
+
+/* Legacy single container (kept for compatibility) */
 .players-list-container {
   width: 100%;
   max-width: 800px;
@@ -671,12 +743,6 @@
 .players-list-container::-webkit-scrollbar-thumb {
   background: rgba(255, 255, 255, 0.3);
   border-radius: 3px;
-}
-
-.players-list {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
 }
 
 .player-row {
@@ -774,6 +840,26 @@
 }
 
 /* Responsive */
+@media (max-width: 1200px) {
+  .players-layout {
+    flex-direction: column;
+    align-items: center;
+  }
+
+  .players-podium-section {
+    min-width: unset;
+    max-width: 100%;
+  }
+
+  .players-list-section {
+    max-width: 100%;
+  }
+
+  .players-list.two-columns {
+    grid-template-columns: 1fr;
+  }
+}
+
 @media (max-width: 1024px) {
   .question-text {
     font-size: 2rem;
