@@ -5,7 +5,7 @@
 
 .teams-layout {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: 1fr 320px;
   gap: var(--space-6);
 }
 
@@ -63,7 +63,7 @@
 /* Teams Grid */
 .teams-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
   gap: var(--space-4);
 }
 
@@ -76,6 +76,17 @@
 
 .team-card:hover {
   box-shadow: var(--shadow-lg);
+}
+
+/* Drop target styles */
+.team-card.can-drop {
+  border: 2px dashed var(--gray-300);
+}
+
+.team-card.drop-target {
+  border: 2px dashed var(--primary-400);
+  background: rgba(99, 102, 241, 0.05);
+  box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.1);
 }
 
 .team-header {
@@ -176,45 +187,205 @@
   box-shadow: 0 0 0 2px white, 0 0 0 4px var(--gray-300);
 }
 
-/* Team Members */
-.team-members {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-1);
+/* Team Members Zone */
+.team-members-zone {
   padding-top: var(--space-3);
   border-top: 1px solid var(--gray-100);
+  min-height: 60px;
 }
 
-.member-tag {
-  font-size: 0.75rem;
-  padding: var(--space-1) var(--space-2);
-  background: var(--gray-100);
+.team-drop-hint {
+  text-align: center;
+  padding: var(--space-4);
+  color: var(--gray-400);
+  font-size: 0.85rem;
+  border: 2px dashed var(--gray-200);
   border-radius: var(--radius-md);
-  color: var(--gray-600);
 }
 
-/* Bumpers List */
-.bumpers-list {
+.team-members-list {
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
-  max-height: calc(100vh - 280px);
-  overflow-y: auto;
-  padding-right: var(--space-2);
 }
 
-.bumpers-list::-webkit-scrollbar {
-  width: 6px;
+/* Draggable Member in Team */
+.draggable-member {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2);
+  background: var(--gray-50);
+  border-radius: var(--radius-md);
+  cursor: grab;
+  transition: all var(--transition-fast);
 }
 
-.bumpers-list::-webkit-scrollbar-track {
+.draggable-member:hover {
   background: var(--gray-100);
-  border-radius: 3px;
 }
 
-.bumpers-list::-webkit-scrollbar-thumb {
-  background: var(--gray-300);
-  border-radius: 3px;
+.draggable-member.dragging {
+  opacity: 0.5;
+  cursor: grabbing;
+}
+
+.member-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-full);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 0.85rem;
+  color: white;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+  flex-shrink: 0;
+}
+
+.member-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.member-name-input {
+  font-weight: 600;
+  font-size: 0.85rem;
+  color: var(--gray-800);
+  border: none;
+  background: transparent;
+  width: 100%;
+  padding: 2px 0;
+}
+
+.member-name-input:focus {
+  outline: none;
+  background: white;
+  border-radius: var(--radius-sm);
+  padding: 2px 4px;
+}
+
+.member-name-input::placeholder {
+  color: var(--gray-400);
+}
+
+.member-mac {
+  display: block;
+  font-size: 0.65rem;
+  font-family: monospace;
+  color: var(--gray-400);
+}
+
+.drag-handle {
+  color: var(--gray-400);
+  font-size: 1rem;
+  padding: 0 var(--space-1);
+  cursor: grab;
+}
+
+/* Answer Color Selector */
+.answer-color-selector {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.answer-color-btn {
+  width: 24px;
+  height: 24px;
+  border: 2px solid transparent;
+  border-radius: var(--radius-sm);
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: white;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  opacity: 0.5;
+}
+
+.answer-color-btn:hover {
+  opacity: 0.8;
+  transform: scale(1.1);
+}
+
+.answer-color-btn.active {
+  opacity: 1;
+  border-color: white;
+  box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.2), 0 2px 4px rgba(0, 0, 0, 0.2);
+  transform: scale(1.1);
+}
+
+/* Answer Color Badge (shown in team) */
+.answer-color-badge {
+  width: 20px;
+  height: 20px;
+  border-radius: var(--radius-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.65rem;
+  font-weight: 700;
+  color: white;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+  flex-shrink: 0;
+}
+
+/* Unassigned Zone */
+.unassigned-zone {
+  background: var(--gray-50);
+  border: 2px dashed var(--gray-200);
+  border-radius: var(--radius-lg);
+  padding: var(--space-3);
+  min-height: 200px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  transition: all var(--transition-fast);
+}
+
+.unassigned-zone.can-drop {
+  border-color: var(--gray-300);
+}
+
+.unassigned-zone.drop-target {
+  border-color: var(--primary-400);
+  background: rgba(99, 102, 241, 0.05);
+  box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.1);
+}
+
+.empty-unassigned {
+  text-align: center;
+  padding: var(--space-6);
+  color: var(--gray-400);
+}
+
+.empty-unassigned p:first-child {
+  font-size: 0.95rem;
+  font-weight: 500;
+  margin-bottom: var(--space-2);
+}
+
+.drop-hint-large {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 1;
+  font-size: 1rem;
+  font-weight: 500;
+  color: var(--primary-500);
+  text-align: center;
+}
+
+/* Draggable Bumper */
+.draggable-bumper {
+  cursor: grab;
+}
+
+.draggable-bumper.dragging {
+  opacity: 0.5;
+  cursor: grabbing;
 }
 
 /* Bumper Card */
@@ -222,7 +393,6 @@
   display: flex;
   align-items: center;
   gap: var(--space-3);
-  border-left: 4px solid var(--bumper-team-color, var(--gray-200));
   transition: all var(--transition-fast);
 }
 
@@ -244,6 +414,7 @@
   font-weight: 700;
   font-size: 1rem;
   color: white;
+  background: var(--gray-400);
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
   flex-shrink: 0;
 }
@@ -300,21 +471,6 @@
   gap: var(--space-2);
 }
 
-.team-select {
-  padding: var(--space-2) var(--space-3);
-  border: 1px solid var(--gray-200);
-  border-radius: var(--radius-md);
-  font-size: 0.85rem;
-  background: white;
-  cursor: pointer;
-  min-width: 120px;
-}
-
-.team-select:focus {
-  outline: none;
-  border-color: var(--primary-400);
-}
-
 .ready-badge {
   font-size: 0.65rem;
   font-weight: 700;
@@ -350,8 +506,8 @@
     grid-template-columns: 1fr;
   }
 
-  .bumpers-list {
-    max-height: none;
+  .unassigned-zone {
+    min-height: auto;
   }
 }
 
@@ -383,9 +539,5 @@
     margin-top: var(--space-2);
     padding-top: var(--space-2);
     border-top: 1px solid var(--gray-100);
-  }
-
-  .team-select {
-    flex: 1;
   }
 }

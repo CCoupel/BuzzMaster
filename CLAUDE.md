@@ -337,6 +337,31 @@ Teams and players display animated progress bars showing their score relative to
 - `768-1200px`: 2 columns (questions + controls / teams)
 - `<768px`: 1 column (stacked)
 
+#### Teams Page - Drag & Drop (v2.5.0)
+Interface de gestion des équipes avec drag & drop :
+- **Gauche** : Grille des équipes (zones de dépôt)
+- **Droite (320px)** : Joueurs non assignés
+- **Drag & Drop** : Glisser un joueur sur une équipe pour l'assigner
+- **Désassigner** : Glisser vers la zone "non assignés"
+
+#### Couleurs de Réponse (v2.5.0)
+Chaque joueur peut avoir une couleur de réponse pour le mode QCM :
+- **Couleurs disponibles** : Rouge (A), Vert (B), Jaune (C), Bleu (D)
+- **Sélection** : Uniquement quand le joueur n'est PAS assigné à une équipe
+- **Affichage** : La couleur devient le fond de l'avatar du joueur
+- **Sans couleur** : Avatar gris par défaut
+- **Champ** : `ANSWER_COLOR` dans le modèle Bumper (valeurs: `RED`, `GREEN`, `YELLOW`, `BLUE`)
+
+```jsx
+// Couleurs définies dans TeamsPage.jsx
+const ANSWER_COLORS = {
+  RED: { label: 'Rouge', color: '#ef4444', letter: 'A' },
+  GREEN: { label: 'Vert', color: '#22c55e', letter: 'B' },
+  YELLOW: { label: 'Jaune', color: '#eab308', letter: 'C' },
+  BLUE: { label: 'Bleu', color: '#3b82f6', letter: 'D' },
+}
+```
+
 ### WebSocket Actions for Client Management
 
 | Action | Direction | Description |
@@ -563,26 +588,31 @@ Le hook `useWebSocket.js` gère la communication :
 
 | Fichier | Champ |
 |---------|-------|
+| `server-go/config.json` | `"version": "x.y.z"` |
 | `server-go/web/package.json` | `"version": "x.y.z"` |
-| `server-go/web/src/components/Navbar.jsx` | `<span className="version-value">x.y.z</span>` |
+
+**Note** : La version serveur est lue depuis `config.json`, la version web depuis `package.json`.
 
 ---
 
 ## Procédure de Test Systématique
 
-Avant chaque test du serveur, suivre cette procédure pour garantir un environnement propre :
+Avant chaque test du serveur, suivre cette procédure pour garantir un environnement propre.
+
+**IMPORTANT** : Toujours lancer le serveur en mode visible (fenêtre CMD) pour voir les logs en temps réel. Ne jamais utiliser `-WindowStyle Hidden` en développement.
 
 ### Étapes
 
 | # | Tâche | Commande / Action |
 |---|-------|-------------------|
-| 1 | **Arrêter le serveur en cours** | `taskkill /IM server.exe /F` ou `taskkill /IM buzzserver.exe /F` |
-| 2 | **Vérifier l'arrêt et la disponibilité des ports** | `netstat -ano \| findstr :80` et `netstat -ano \| findstr :1234` |
-| 3 | **Mettre à jour config.json** | Ports standards : HTTP=80, TCP=1234 |
-| 4 | **Exécuter le serveur dans une fenêtre visible** | `cd server-go && server.exe` (fenêtre CMD visible) |
-| 5 | **Vérifier page admin (/)** | Ouvrir http://localhost/ dans Chrome |
-| 6 | **Vérifier page joueur (/tv)** | Ouvrir http://localhost/tv dans Chrome |
-| 7 | **Vérifier les versions affichées** | Navbar : Serveur (🖥️) et Web (🌐) |
+| 1 | **Arrêter le serveur en cours** | `taskkill /IM server.exe /F` |
+| 2 | **Mettre à jour les versions** | `config.json` et `package.json` (voir section Gestion des Versions) |
+| 3 | **Rebuild le frontend** | `npm run build --prefix server-go/web` |
+| 4 | **Rebuild le serveur Go** | `go build -o server.exe ./cmd/server` |
+| 5 | **Lancer le serveur EN MODE VISIBLE** | Ouvrir CMD, `cd server-go`, puis `server.exe` |
+| 6 | **Vérifier page admin (/)** | Ouvrir http://localhost/ dans Chrome |
+| 7 | **Vérifier page joueur (/tv)** | Ouvrir http://localhost/tv dans Chrome |
+| 8 | **Vérifier les versions affichées** | Navbar : Serveur et Web doivent correspondre |
 
 ### Vérifications attendues
 
@@ -614,11 +644,12 @@ Lorsque l'utilisateur valide l'implémentation :
 | # | Tâche | Action |
 |---|-------|--------|
 | 1 | **Remettre z à 0** | Version x.y.z → x.y.0 |
-| 2 | **Mettre à jour package.json** | `"version": "x.y.0"` |
-| 3 | **Mettre à jour Navbar.jsx** | Version affichée = x.y.0 |
+| 2 | **Mettre à jour config.json** | `"version": "x.y.0"` |
+| 3 | **Mettre à jour package.json** | `"version": "x.y.0"` |
 | 4 | **Mettre à jour CLAUDE.md** | Documenter les nouvelles fonctionnalités |
-| 5 | **Rebuild le frontend** | `npm run build` |
-| 6 | **Git commit** | Message décrivant les changements |
+| 5 | **Rebuild le frontend** | `npm run build --prefix server-go/web` |
+| 6 | **Rebuild le serveur Go** | `go build -o server.exe ./cmd/server` |
+| 7 | **Git commit** | Message décrivant les changements |
 
 ### Format de commit
 

@@ -36,17 +36,29 @@ type Team struct {
 	Ready  bool   `json:"READY,omitempty"`
 }
 
+// AnswerColor represents a player's assigned answer color for QCM
+type AnswerColor string
+
+const (
+	AnswerColorNone   AnswerColor = ""
+	AnswerColorRed    AnswerColor = "RED"
+	AnswerColorGreen  AnswerColor = "GREEN"
+	AnswerColorYellow AnswerColor = "YELLOW"
+	AnswerColorBlue   AnswerColor = "BLUE"
+)
+
 // Bumper represents a buzzer/player
 type Bumper struct {
-	Name    string `json:"NAME,omitempty"`
-	Team    string `json:"TEAM,omitempty"`
-	Score   int    `json:"SCORE"`
-	Time    int64  `json:"TIME,omitempty"`
-	Button  string `json:"BUTTON,omitempty"`
-	Status  string `json:"STATUS,omitempty"`
-	Version string `json:"VERSION,omitempty"`
-	IP      string `json:"IP,omitempty"`
-	Ready   bool   `json:"READY,omitempty"`
+	Name        string      `json:"NAME,omitempty"`
+	Team        string      `json:"TEAM,omitempty"`
+	Score       int         `json:"SCORE"`
+	Time        int64       `json:"TIME,omitempty"`
+	Button      string      `json:"BUTTON,omitempty"`
+	Status      string      `json:"STATUS,omitempty"`
+	Version     string      `json:"VERSION,omitempty"`
+	IP          string      `json:"IP,omitempty"`
+	Ready       bool        `json:"READY,omitempty"`
+	AnswerColor AnswerColor `json:"ANSWER_COLOR,omitempty"`
 }
 
 // Question represents a quiz question

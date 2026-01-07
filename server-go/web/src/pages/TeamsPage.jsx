@@ -16,9 +16,19 @@ const PRESET_COLORS = [
   [236, 72, 153],   // Pink
 ]
 
+// Answer colors for QCM mode
+const ANSWER_COLORS = {
+  RED: { label: 'Rouge', color: '#ef4444', letter: 'A' },
+  GREEN: { label: 'Vert', color: '#22c55e', letter: 'B' },
+  YELLOW: { label: 'Jaune', color: '#eab308', letter: 'C' },
+  BLUE: { label: 'Bleu', color: '#3b82f6', letter: 'D' },
+}
+
 export default function TeamsPage() {
   const { teams, bumpers, updateConfig } = useGame()
   const [newTeamName, setNewTeamName] = useState('')
+  const [draggedBumper, setDraggedBumper] = useState(null)
+  const [dragOverTarget, setDragOverTarget] = useState(null)
 
   // Group bumpers by team
   const bumpersByTeam = useMemo(() => {
@@ -30,6 +40,9 @@ export default function TeamsPage() {
     })
     return grouped
   }, [bumpers])
+
+  // Unassigned bumpers
+  const unassignedBumpers = bumpersByTeam.unassigned || []
 
   const handleTeamColorChange = (teamName, color) => {
     updateConfig({
@@ -54,6 +67,15 @@ export default function TeamsPage() {
       bumpers: {
         ...bumpers,
         [mac]: { ...bumpers[mac], TEAM: teamName }
+      }
+    })
+  }
+
+  const handleBumperAnswerColorChange = (mac, answerColor) => {
+    updateConfig({
+      bumpers: {
+        ...bumpers,
+        [mac]: { ...bumpers[mac], ANSWER_COLOR: answerColor }
       }
     })
   }
@@ -103,11 +125,57 @@ export default function TeamsPage() {
     updateConfig({ teams: newTeams, bumpers: newBumpers })
   }
 
+  // Drag and Drop handlers
+  const handleDragStart = (e, mac) => {
+    setDraggedBumper(mac)
+    e.dataTransfer.effectAllowed = 'move'
+    e.dataTransfer.setData('text/plain', mac)
+    // Add dragging class after a small delay for visual feedback
+    setTimeout(() => {
+      e.target.classList.add('dragging')
+    }, 0)
+  }
+
+  const handleDragEnd = (e) => {
+    e.target.classList.remove('dragging')
+    setDraggedBumper(null)
+    setDragOverTarget(null)
+  }
+
+  const handleDragOver = (e, targetTeam) => {
+    e.preventDefault()
+    e.dataTransfer.dropEffect = 'move'
+    setDragOverTarget(targetTeam)
+  }
+
+  const handleDragLeave = (e) => {
+    // Only clear if leaving the drop zone entirely
+    if (!e.currentTarget.contains(e.relatedTarget)) {
+      setDragOverTarget(null)
+    }
+  }
+
+  const handleDrop = (e, targetTeam) => {
+    e.preventDefault()
+    const mac = e.dataTransfer.getData('text/plain')
+    if (mac) {
+      handleBumperTeamChange(mac, targetTeam === 'unassigned' ? '' : targetTeam)
+    }
+    setDragOverTarget(null)
+    setDraggedBumper(null)
+  }
+
+  const getRgbColor = (color) => {
+    if (!color) return 'var(--gray-400)'
+    if (Array.isArray(color)) return `rgb(${color.join(',')})`
+    return color
+  }
+
   return (
     <div className="teams-page page">
       <header className="page-header">
         <h1 className="page-title">Equipes & Joueurs</h1>
-        <p className="page-subtitle">Gerez vos equipes et assignez les buzzers</p>
+        <p className="page-subtitle">Glissez-deposez les joueurs pour les assigner aux equipes</p>
       </header>
 
       <div className="teams-layout">
@@ -131,7 +199,8 @@ export default function TeamsPage() {
             <AnimatePresence>
               {Object.entries(teams).map(([name, data], index) => {
                 const teamBumpers = bumpersByTeam[name] || []
-                const rgbColor = data.COLOR ? `rgb(${data.COLOR.join(',')})` : 'var(--gray-400)'
+                const rgbColor = getRgbColor(data.COLOR)
+                const isDropTarget = dragOverTarget === name
 
                 return (
                   <motion.div
@@ -142,7 +211,14 @@ export default function TeamsPage() {
                     transition={{ delay: index * 0.05 }}
                     className="team-card-wrapper"
                   >
-                    <Card padding="lg" className="team-card" style={{ '--team-color': rgbColor }}>
+                    <Card
+                      padding="lg"
+                      className={`team-card ${isDropTarget ? 'drop-target' : ''} ${draggedBumper ? 'can-drop' : ''}`}
+                      style={{ '--team-color': rgbColor }}
+                      onDragOver={(e) => handleDragOver(e, name)}
+                      onDragLeave={handleDragLeave}
+                      onDrop={(e) => handleDrop(e, name)}
+                    >
                       <div className="team-header">
                         <div
                           className="team-color-badge"
@@ -187,15 +263,56 @@ export default function TeamsPage() {
                         ))}
                       </div>
 
-                      {teamBumpers.length > 0 && (
-                        <div className="team-members">
-                          {teamBumpers.map(bumper => (
-                            <span key={bumper.mac} className="member-tag">
-                              {bumper.NAME || bumper.mac.slice(-6)}
-                            </span>
-                          ))}
-                        </div>
-                      )}
+                      {/* Team Members - Draggable */}
+                      <div className="team-members-zone">
+                        {teamBumpers.length > 0 ? (
+                          <div className="team-members-list">
+                            {teamBumpers.map(bumper => {
+                              // Use answer color if set, otherwise gray
+                              const avatarColor = bumper.ANSWER_COLOR && ANSWER_COLORS[bumper.ANSWER_COLOR]
+                                ? ANSWER_COLORS[bumper.ANSWER_COLOR].color
+                                : 'var(--gray-400)'
+                              return (
+                                <div
+                                  key={bumper.mac}
+                                  className="draggable-member"
+                                  draggable
+                                  onDragStart={(e) => handleDragStart(e, bumper.mac)}
+                                  onDragEnd={handleDragEnd}
+                                >
+                                  <div
+                                    className="member-avatar"
+                                    style={{ backgroundColor: avatarColor }}
+                                  >
+                                    {(bumper.NAME || bumper.mac.slice(-6)).charAt(0).toUpperCase()}
+                                  </div>
+                                  <div className="member-info">
+                                    <input
+                                      type="text"
+                                      value={bumper.NAME || ''}
+                                      placeholder={bumper.mac.slice(-6)}
+                                      onChange={(e) => handleBumperNameChange(bumper.mac, e.target.value)}
+                                      className="member-name-input"
+                                      onClick={(e) => e.stopPropagation()}
+                                    />
+                                    <span className="member-mac">{bumper.mac}</span>
+                                  </div>
+                                  {bumper.ANSWER_COLOR && ANSWER_COLORS[bumper.ANSWER_COLOR] && (
+                                    <span className="answer-color-badge" style={{ backgroundColor: ANSWER_COLORS[bumper.ANSWER_COLOR].color }}>
+                                      {ANSWER_COLORS[bumper.ANSWER_COLOR].letter}
+                                    </span>
+                                  )}
+                                  <span className="drag-handle">⋮⋮</span>
+                                </div>
+                              )
+                            })}
+                          </div>
+                        ) : (
+                          <div className="team-drop-hint">
+                            Deposez des joueurs ici
+                          </div>
+                        )}
+                      </div>
                     </Card>
                   </motion.div>
                 )
@@ -211,78 +328,99 @@ export default function TeamsPage() {
           </div>
         </section>
 
-        {/* Bumpers Section */}
+        {/* Unassigned Bumpers Section */}
         <section className="bumpers-section">
           <div className="section-header">
-            <h2 className="section-title">Joueurs / Buzzers</h2>
+            <h2 className="section-title">Joueurs non assignes</h2>
             <span className="bumper-count">{Object.keys(bumpers).length} connecte(s)</span>
           </div>
 
-          <div className="bumpers-list">
+          <div
+            className={`unassigned-zone ${dragOverTarget === 'unassigned' ? 'drop-target' : ''} ${draggedBumper ? 'can-drop' : ''}`}
+            onDragOver={(e) => handleDragOver(e, 'unassigned')}
+            onDragLeave={handleDragLeave}
+            onDrop={(e) => handleDrop(e, 'unassigned')}
+          >
             <AnimatePresence>
-              {Object.entries(bumpers).map(([mac, data], index) => {
-                const teamColor = data.TEAM && teams[data.TEAM]?.COLOR
-                  ? `rgb(${teams[data.TEAM].COLOR.join(',')})`
-                  : 'var(--gray-300)'
-
-                return (
-                  <motion.div
-                    key={mac}
-                    initial={{ opacity: 0, x: -20 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    exit={{ opacity: 0, x: 20 }}
-                    transition={{ delay: index * 0.03 }}
+              {unassignedBumpers.map((bumper, index) => (
+                <motion.div
+                  key={bumper.mac}
+                  initial={{ opacity: 0, x: -20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: 20 }}
+                  transition={{ delay: index * 0.03 }}
+                  className="draggable-bumper"
+                  draggable
+                  onDragStart={(e) => handleDragStart(e, bumper.mac)}
+                  onDragEnd={handleDragEnd}
+                >
+                  <Card
+                    padding="md"
+                    className={`bumper-card ${bumper.READY === 'TRUE' ? 'ready' : ''}`}
                   >
-                    <Card
-                      padding="md"
-                      className={`bumper-card ${data.READY === 'TRUE' ? 'ready' : ''}`}
-                      style={{ '--bumper-team-color': teamColor }}
+                    <div
+                      className={`bumper-avatar ${bumper.ANSWER_COLOR ? 'has-color' : ''}`}
+                      style={bumper.ANSWER_COLOR && ANSWER_COLORS[bumper.ANSWER_COLOR]
+                        ? { backgroundColor: ANSWER_COLORS[bumper.ANSWER_COLOR].color }
+                        : {}
+                      }
                     >
-                      <div className="bumper-avatar" style={{ backgroundColor: teamColor }}>
-                        {(data.NAME || mac.slice(-6)).charAt(0).toUpperCase()}
-                      </div>
+                      {(bumper.NAME || bumper.mac.slice(-6)).charAt(0).toUpperCase()}
+                    </div>
 
-                      <div className="bumper-info">
-                        <input
-                          type="text"
-                          value={data.NAME || ''}
-                          placeholder={mac.slice(-6)}
-                          onChange={(e) => handleBumperNameChange(mac, e.target.value)}
-                          className="bumper-name-input"
-                        />
-                        <div className="bumper-meta">
-                          <span className="bumper-mac">{mac}</span>
-                          {data.VERSION && <span className="bumper-version">v{data.VERSION}</span>}
-                        </div>
+                    <div className="bumper-info">
+                      <input
+                        type="text"
+                        value={bumper.NAME || ''}
+                        placeholder={bumper.mac.slice(-6)}
+                        onChange={(e) => handleBumperNameChange(bumper.mac, e.target.value)}
+                        className="bumper-name-input"
+                      />
+                      <div className="bumper-meta">
+                        <span className="bumper-mac">{bumper.mac}</span>
+                        {bumper.VERSION && <span className="bumper-version">v{bumper.VERSION}</span>}
                       </div>
+                    </div>
 
-                      <div className="bumper-controls">
-                        <select
-                          value={data.TEAM || ''}
-                          onChange={(e) => handleBumperTeamChange(mac, e.target.value)}
-                          className="team-select"
+                    <div className="answer-color-selector">
+                      {Object.entries(ANSWER_COLORS).map(([key, { color, letter }]) => (
+                        <button
+                          key={key}
+                          className={`answer-color-btn ${bumper.ANSWER_COLOR === key ? 'active' : ''}`}
+                          style={{ backgroundColor: color }}
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            handleBumperAnswerColorChange(bumper.mac, bumper.ANSWER_COLOR === key ? '' : key)
+                          }}
+                          title={ANSWER_COLORS[key].label}
                         >
-                          <option value="">Sans equipe</option>
-                          {Object.keys(teams).map(teamName => (
-                            <option key={teamName} value={teamName}>{teamName}</option>
-                          ))}
-                        </select>
+                          {letter}
+                        </button>
+                      ))}
+                    </div>
 
-                        {data.READY === 'TRUE' && (
-                          <span className="ready-badge">PRET</span>
-                        )}
-                      </div>
-                    </Card>
-                  </motion.div>
-                )
-              })}
+                    <div className="bumper-controls">
+                      {bumper.READY === 'TRUE' && (
+                        <span className="ready-badge">PRET</span>
+                      )}
+                      <span className="drag-handle">⋮⋮</span>
+                    </div>
+                  </Card>
+                </motion.div>
+              ))}
             </AnimatePresence>
 
-            {Object.keys(bumpers).length === 0 && (
-              <Card variant="outlined" padding="lg" className="empty-state">
-                <p>Aucun buzzer connecte</p>
-                <p className="empty-hint">Allumez vos buzzers pour les voir apparaitre ici</p>
-              </Card>
+            {unassignedBumpers.length === 0 && !draggedBumper && (
+              <div className="empty-unassigned">
+                <p>Tous les joueurs sont assignes</p>
+                <p className="empty-hint">Deposez des joueurs ici pour les retirer de leur equipe</p>
+              </div>
+            )}
+
+            {unassignedBumpers.length === 0 && draggedBumper && (
+              <div className="drop-hint-large">
+                Deposez ici pour retirer de l'equipe
+              </div>
             )}
           </div>
         </section>
