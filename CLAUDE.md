@@ -122,6 +122,7 @@ The ESP32-C3 buzzers connect to the Go server without any modification.
 | UPDATE | Update teams/bumpers | `{teams: {...}, bumpers: {...}}` |
 | TEAM_POINTS | Modify team score | `{TEAM: teamName, POINTS: delta}` |
 | BUMPER_POINTS | Modify player score | `{ID: bumperMac, POINTS: delta}` |
+| REORDER_QUESTIONS | Reorder questions | `{ORDER: [questionId1, questionId2, ...]}` |
 
 ### HTTP REST API
 | Method | Endpoint | Description |
@@ -317,6 +318,7 @@ server-go/
 | Version display | ✅ | Server + Web versions in navbar |
 | Score progress bars | ✅ | Animated bars proportional to score ratio |
 | Game page 3-column layout | ✅ | Questions left, controls center, teams right |
+| Question reordering | ✅ | Drag and drop in Questions page |
 
 ### UI Components
 
@@ -402,6 +404,25 @@ Support des questions à choix multiples (QCM) :
 - `server-go/internal/server/http.go` : Handling des champs QCM dans POST /questions
 - `server-go/web/src/pages/QuestionsPage.jsx` : UI formulaire QCM
 - `server-go/web/src/pages/QuestionsPage.css` : Styles QCM
+
+#### Question Reordering (v2.7.0)
+Drag and drop pour reordonner les questions :
+- **Interface** : Glisser-deposer les cartes de questions dans QuestionsPage
+- **Poignee** : Icone ⋮⋮ sur chaque carte pour indiquer le drag
+- **Feedback visuel** : Opacite reduite pendant le drag, bordure pointillee sur la cible
+- **Persistance** : Champ `ORDER` dans chaque `question.json`
+- **Tri** : Questions triees par `ORDER` si disponible, sinon par `ID`
+
+**Action WebSocket :**
+- `REORDER_QUESTIONS` : `{ORDER: ["6", "4", "1", "2", "3", "5"]}`
+
+**Fichiers modifies :**
+- `server-go/internal/protocol/messages.go` : Action et payload `ReorderQuestionsPayload`
+- `server-go/cmd/server/main.go` : Handler `handleReorderQuestions`
+- `server-go/web/src/pages/QuestionsPage.jsx` : UI drag and drop
+- `server-go/web/src/pages/QuestionsPage.css` : Styles drag and drop
+- `server-go/web/src/pages/GamePage.jsx` : Tri par ORDER
+
 
 ### WebSocket Actions for Client Management
 

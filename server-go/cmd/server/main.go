@@ -415,6 +415,9 @@ func (a *App) handleWebMessage(incoming *protocol.IncomingMessage) {
 	case protocol.ActionSetClientType:
 		a.handleSetClientType(incoming.ClientID, msg)
 
+	case protocol.ActionReorderQuestions:
+		a.handleReorderQuestions(msg)
+
 	default:
 		log.Printf("[App] Unknown web action: %s", msg.Action)
 	}
@@ -578,6 +581,62 @@ func (a *App) handleDelete(msg *protocol.Message) {
 	}
 
 	// Broadcast updated questions list (like ESP32: sendQuestions())
+	a.broadcastQuestions()
+}
+
+func (a *App) handleReorderQuestions(msg *protocol.Message) {
+	var payload protocol.ReorderQuestionsPayload
+	if err := json.Unmarshal(msg.Msg, &payload); err != nil {
+		log.Printf("[App] Failed to parse REORDER_QUESTIONS: %v", err)
+		return
+	}
+
+	if len(payload.Order) == 0 {
+		log.Printf("[App] REORDER_QUESTIONS: empty order")
+		return
+	}
+
+	questionsDir := a.config.Storage.QuestionsDir
+	if questionsDir == "" {
+		questionsDir = "./data/files/questions"
+	}
+
+	// Update ORDER field in each question.json
+	for order, questionID := range payload.Order {
+		questionFile := filepath.Join(questionsDir, questionID, "question.json")
+
+		// Read existing question
+		data, err := os.ReadFile(questionFile)
+		if err != nil {
+			log.Printf("[App] REORDER: Failed to read question %s: %v", questionID, err)
+			continue
+		}
+
+		var question map[string]interface{}
+		if err := json.Unmarshal(data, &question); err != nil {
+			log.Printf("[App] REORDER: Failed to parse question %s: %v", questionID, err)
+			continue
+		}
+
+		// Update ORDER field
+		question["ORDER"] = order
+
+		// Write back
+		newData, err := json.MarshalIndent(question, "", "  ")
+		if err != nil {
+			log.Printf("[App] REORDER: Failed to marshal question %s: %v", questionID, err)
+			continue
+		}
+
+		if err := os.WriteFile(questionFile, newData, 0644); err != nil {
+			log.Printf("[App] REORDER: Failed to write question %s: %v", questionID, err)
+			continue
+		}
+	}
+
+	log.Printf("[App] Reordered %d questions", len(payload.Order))
+
+	// Broadcast updated questions list
 	a.broadcastQuestions()
 }
 
@@ -952,32 +1011,32 @@ func openBrowser(url string) {
 func (a *App) initTestData() {
 	log.Println("[App] Initializing test data...")
 
-	// 5 teams with different colors
+	// 5 teams with different colors (scores will be calculated from bumpers)
 	teams := map[string]*game.Team{
 		"Les Rouges": {
 			Name:  "Les Rouges",
 			Color: []int{239, 68, 68}, // Red
-			Score: 15,
+			Score: 0,
 		},
 		"Les Bleus": {
 			Name:  "Les Bleus",
 			Color: []int{59, 130, 246}, // Blue
-			Score: 12,
+			Score: 0,
 		},
 		"Les Verts": {
 			Name:  "Les Verts",
 			Color: []int{34, 197, 94}, // Green
-			Score: 8,
+			Score: 0,
 		},
 		"Les Jaunes": {
 			Name:  "Les Jaunes",
 			Color: []int{234, 179, 8}, // Yellow
-			Score: 10,
+			Score: 0,
 		},
 		"Les Violets": {
 			Name:  "Les Violets",
 			Color: []int{168, 85, 247}, // Purple
-			Score: 5,
+			Score: 0,
 		},
 	}
 
@@ -1047,6 +1106,7 @@ func (a *App) initTestData() {
 
 	a.engine.SetTeams(teams)
 	a.engine.SetBumpers(bumpers)
+	a.engine.RecalculateAllTeamScores()
 
 	log.Printf("[App] Test data initialized: %d teams, %d bumpers", len(teams), len(bumpers))
 }

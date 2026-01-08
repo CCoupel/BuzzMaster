@@ -68,11 +68,11 @@ export default function GamePage() {
       })
   }, [teams, teamBumpers])
 
-  // Sort questions by ID
+  // Sort questions by ORDER if available, otherwise by ID
   const sortedQuestions = useMemo(() => {
     return Object.values(questions)
       .filter(q => q && q.ID)
-      .sort((a, b) => parseInt(a.ID) - parseInt(b.ID))
+      .sort((a, b) => { const orderA = a.ORDER !== undefined ? parseInt(a.ORDER) : parseInt(a.ID); const orderB = b.ORDER !== undefined ? parseInt(b.ORDER) : parseInt(b.ID); return orderA - orderB })
   }, [questions])
 
   const handleStartStop = () => {

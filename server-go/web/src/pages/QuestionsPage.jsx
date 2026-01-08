@@ -14,10 +14,12 @@ const QCM_COLORS = {
 }
 
 export default function QuestionsPage() {
-  const { questions, fsInfo, deleteQuestion } = useGame()
+  const { questions, fsInfo, deleteQuestion, sendMessage } = useGame()
   const [isUploading, setIsUploading] = useState(false)
   const [editingId, setEditingId] = useState(null)
   const fileInputRef = useRef(null)
+  const [draggedId, setDraggedId] = useState(null)
+  const [dragOverId, setDragOverId] = useState(null)
 
   // Form state
   const [formData, setFormData] = useState({
@@ -35,8 +37,65 @@ export default function QuestionsPage() {
   const sortedQuestions = useMemo(() => {
     return Object.values(questions)
       .filter(q => q && q.ID)
-      .sort((a, b) => parseInt(a.ID) - parseInt(b.ID))
+      .sort((a, b) => {
+        // Sort by ORDER if available, otherwise by ID
+        const orderA = a.ORDER !== undefined ? parseInt(a.ORDER) : parseInt(a.ID)
+        const orderB = b.ORDER !== undefined ? parseInt(b.ORDER) : parseInt(b.ID)
+        return orderA - orderB
+      })
   }, [questions])
+
+  // Drag and drop handlers
+  const handleDragStart = (e, questionId) => {
+    setDraggedId(questionId)
+    e.dataTransfer.effectAllowed = 'move'
+    e.dataTransfer.setData('text/plain', questionId)
+  }
+
+  const handleDragOver = (e, questionId) => {
+    e.preventDefault()
+    e.dataTransfer.dropEffect = 'move'
+    if (questionId !== draggedId) {
+      setDragOverId(questionId)
+    }
+  }
+
+  const handleDragLeave = () => {
+    setDragOverId(null)
+  }
+
+  const handleDragEnd = () => {
+    setDraggedId(null)
+    setDragOverId(null)
+  }
+
+  const handleDrop = async (e, targetId) => {
+    e.preventDefault()
+    const sourceId = draggedId
+
+    if (!sourceId || sourceId === targetId) {
+      setDraggedId(null)
+      setDragOverId(null)
+      return
+    }
+
+    // Calculate new order
+    const currentOrder = sortedQuestions.map(q => q.ID)
+    const sourceIndex = currentOrder.indexOf(sourceId)
+    const targetIndex = currentOrder.indexOf(targetId)
+
+    if (sourceIndex === -1 || targetIndex === -1) return
+
+    // Remove source and insert at target position
+    currentOrder.splice(sourceIndex, 1)
+    currentOrder.splice(targetIndex, 0, sourceId)
+
+    // Send new order to server
+    sendMessage('REORDER_QUESTIONS', { ORDER: currentOrder })
+
+    setDraggedId(null)
+    setDragOverId(null)
+  }
 
   const handleInputChange = (field, value) => {
     setFormData(prev => ({ ...prev, [field]: value }))
@@ -172,6 +231,13 @@ export default function QuestionsPage() {
                   animate={{ opacity: 1, scale: 1 }}
                   exit={{ opacity: 0, scale: 0.9 }}
                   transition={{ delay: index * 0.05 }}
+                  draggable
+                  onDragStart={(e) => handleDragStart(e, question.ID)}
+                  onDragOver={(e) => handleDragOver(e, question.ID)}
+                  onDragLeave={handleDragLeave}
+                  onDragEnd={handleDragEnd}
+                  onDrop={(e) => handleDrop(e, question.ID)}
+                  className={`question-drag-wrapper ${draggedId === question.ID ? 'dragging' : ''} ${dragOverId === question.ID ? 'drag-over' : ''}`}
                 >
                   <Card
                     hover
@@ -180,6 +246,7 @@ export default function QuestionsPage() {
                     onClick={() => handleQuestionClick(question)}
                   >
                     <div className="question-card-header">
+                      <span className="drag-handle">⋮⋮</span>
                       <span className="question-id">#{question.ID}</span>
                       {question.TYPE === 'QCM' && (
                         <span className="qcm-badge">QCM</span>

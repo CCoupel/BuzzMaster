@@ -27,11 +27,12 @@ const (
 	ActionRAZ         = "RAZ"
 	ActionReboot      = "REBOOT"
 	ActionFSInfo       = "FSINFO"
-	ActionDelete       = "DELETE"
-	ActionBumperPoints = "BUMPER_POINTS"
-	ActionTeamPoints   = "TEAM_POINTS"
-	ActionClients      = "CLIENTS"
-	ActionSetClientType = "SET_CLIENT_TYPE"
+	ActionDelete           = "DELETE"
+	ActionBumperPoints     = "BUMPER_POINTS"
+	ActionTeamPoints       = "TEAM_POINTS"
+	ActionClients          = "CLIENTS"
+	ActionSetClientType    = "SET_CLIENT_TYPE"
+	ActionReorderQuestions = "REORDER_QUESTIONS"
 )
 
 // FSInfo represents file storage information
@@ -122,6 +123,11 @@ type ClientsPayload struct {
 // SetClientTypePayload for SET_CLIENT_TYPE action
 type SetClientTypePayload struct {
 	Type string `json:"TYPE"` // "admin" or "tv"
+}
+
+// ReorderQuestionsPayload for REORDER_QUESTIONS action
+type ReorderQuestionsPayload struct {
+	Order []string `json:"ORDER"` // Array of question IDs in new order
 }
 
 // NewMessage creates a new outgoing message
