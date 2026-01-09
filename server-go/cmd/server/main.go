@@ -133,6 +133,7 @@ func (a *App) setupCallbacks() {
 	// Game state changes
 	a.engine.OnStateChange = func(phase game.GamePhase) {
 		a.broadcastGameState(string(phase))
+		a.broadcastQuestions() // Sync question status with phase
 	}
 
 	// Timer ticks
@@ -838,6 +839,18 @@ func (a *App) broadcastClientCounts(adminCount, tvCount int) {
 func (a *App) broadcastQuestions() {
 	// Load questions from storage
 	questions := a.loadQuestions()
+
+	// Merge current question status from game state
+	state := a.engine.GetState()
+	if state.Question != nil && state.Question.ID != "" {
+		for _, q := range questions {
+			if qID, ok := q["ID"].(string); ok && qID == state.Question.ID {
+				q["STATUS"] = string(state.Question.Status)
+				break
+			}
+		}
+	}
+
 	data, _ := json.Marshal(questions)
 
 	// Get storage info
@@ -1115,55 +1128,63 @@ func (a *App) initTestData() {
 		},
 	}
 
-	// Fake bumpers (2-3 per team)
+	// Fake bumpers (2-3 per team) with answer colors for QCM mode
 	bumpers := map[string]*game.Bumper{
 		"AA:BB:CC:DD:EE:01": {
-			Name:    "Alice",
-			Team:    "Les Rouges",
-			Score:   8,
-			Version: "1.0.0",
+			Name:        "Alice",
+			Team:        "Les Rouges",
+			Score:       8,
+			Version:     "1.0.0",
+			AnswerColor: game.AnswerColorRed,
 		},
 		"AA:BB:CC:DD:EE:02": {
-			Name:    "Bob",
-			Team:    "Les Rouges",
-			Score:   7,
-			Version: "1.0.0",
+			Name:        "Bob",
+			Team:        "Les Rouges",
+			Score:       7,
+			Version:     "1.0.0",
+			AnswerColor: game.AnswerColorGreen,
 		},
 		"AA:BB:CC:DD:EE:03": {
-			Name:    "Charlie",
-			Team:    "Les Bleus",
-			Score:   6,
-			Version: "1.0.0",
+			Name:        "Charlie",
+			Team:        "Les Bleus",
+			Score:       6,
+			Version:     "1.0.0",
+			AnswerColor: game.AnswerColorYellow,
 		},
 		"AA:BB:CC:DD:EE:04": {
-			Name:    "Diana",
-			Team:    "Les Bleus",
-			Score:   6,
-			Version: "1.0.0",
+			Name:        "Diana",
+			Team:        "Les Bleus",
+			Score:       6,
+			Version:     "1.0.0",
+			AnswerColor: game.AnswerColorBlue,
 		},
 		"AA:BB:CC:DD:EE:05": {
-			Name:    "Ethan",
-			Team:    "Les Verts",
-			Score:   5,
-			Version: "1.0.0",
+			Name:        "Ethan",
+			Team:        "Les Verts",
+			Score:       5,
+			Version:     "1.0.0",
+			AnswerColor: game.AnswerColorRed,
 		},
 		"AA:BB:CC:DD:EE:06": {
-			Name:    "Fiona",
-			Team:    "Les Verts",
-			Score:   3,
-			Version: "1.0.0",
+			Name:        "Fiona",
+			Team:        "Les Verts",
+			Score:       3,
+			Version:     "1.0.0",
+			AnswerColor: game.AnswerColorGreen,
 		},
 		"AA:BB:CC:DD:EE:07": {
-			Name:    "George",
-			Team:    "Les Jaunes",
-			Score:   7,
-			Version: "1.0.0",
+			Name:        "George",
+			Team:        "Les Jaunes",
+			Score:       7,
+			Version:     "1.0.0",
+			AnswerColor: game.AnswerColorYellow,
 		},
 		"AA:BB:CC:DD:EE:08": {
-			Name:    "Hannah",
-			Team:    "Les Jaunes",
-			Score:   3,
-			Version: "1.0.0",
+			Name:        "Hannah",
+			Team:        "Les Jaunes",
+			Score:       3,
+			Version:     "1.0.0",
+			AnswerColor: game.AnswerColorBlue,
 		},
 		"AA:BB:CC:DD:EE:09": {
 			Name:    "Ivan",

@@ -1,24 +1,32 @@
-/* TeamCard Component - Compact for 200px column */
+/* TeamCard Component - Same style as question-preview */
 .team-card {
   --team-color: var(--primary-500);
 
-  background: white;
-  border-radius: var(--radius-xl);
+  background: color-mix(in srgb, var(--team-color) 8%, white);
+  border-radius: var(--radius-lg);
   padding: var(--space-3);
-  box-shadow: var(--shadow-sm);
   border-left: 4px solid var(--team-color);
   position: relative;
   overflow: hidden;
   transition: all var(--transition-base);
+  box-sizing: border-box;
+  width: 100% !important;
+  max-width: 100% !important;
+  min-width: 0;
+}
+
+.team-card:hover {
+  background: color-mix(in srgb, var(--team-color) 12%, white);
+  box-shadow: var(--shadow-sm);
 }
 
 .team-card.active {
-  box-shadow: var(--shadow-xl), 0 0 30px color-mix(in srgb, var(--team-color) 40%, transparent);
-  transform: translateY(-2px);
+  box-shadow: var(--shadow-md), 0 0 20px color-mix(in srgb, var(--team-color) 30%, transparent);
 }
 
 .team-card.ready {
   border-color: var(--success);
+  background: color-mix(in srgb, var(--success) 8%, white);
 }
 
 /* Header */
@@ -123,6 +131,11 @@
   background: var(--gray-50);
   border-radius: var(--radius-md);
   transition: all var(--transition-fast);
+  cursor: pointer;
+}
+
+.buzzer-mini:hover {
+  background: var(--gray-100);
 }
 
 .buzzer-mini.active {
@@ -138,6 +151,29 @@
   opacity: 0.6;
 }
 
+.buzzer-info {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+  flex: 1;
+}
+
+.buzzer-answer-color {
+  width: 24px;
+  height: 24px;
+  border-radius: var(--radius-md);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: white;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+  flex-shrink: 0;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.2);
+}
+
 .buzzer-name {
   font-size: 0.75rem;
   font-weight: 500;
@@ -145,7 +181,18 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: 70px;
+}
+
+/* Highlight buzzer row when has answer color */
+.buzzer-mini.has-answer-color {
+  border-left: 4px solid var(--answer-color);
+  padding-left: calc(var(--space-2) - 4px);
+  background: color-mix(in srgb, var(--answer-color) 20%, white);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--answer-color) 30%, transparent);
+}
+
+.buzzer-mini.has-answer-color:hover {
+  background: color-mix(in srgb, var(--answer-color) 30%, white);
 }
 
 .buzzer-time {
@@ -160,7 +207,7 @@
   position: absolute;
   inset: 0;
   border: 3px solid var(--team-color);
-  border-radius: var(--radius-2xl);
+  border-radius: var(--radius-lg);
   animation: pulse-border 1.5s ease-in-out infinite;
   pointer-events: none;
 }
@@ -179,4 +226,34 @@
 /* Hover effects */
 .team-card[onClick]:hover {
   cursor: pointer;
+}
+
+/* Waiting state - grayed out until PONG received */
+.team-card.waiting {
+  opacity: 0.5;
+  filter: grayscale(70%);
+  border-left-color: var(--gray-300);
+}
+
+.team-card.waiting .team-color-indicator {
+  background: var(--gray-400);
+  box-shadow: none;
+}
+
+.waiting-badge {
+  padding: 2px var(--space-2);
+  background: var(--gray-400);
+  color: white;
+  font-family: var(--font-display);
+  font-size: 0.65rem;
+  font-weight: 600;
+  border-radius: var(--radius-full);
+  letter-spacing: 2px;
+  flex-shrink: 0;
+  animation: pulse-waiting 1s ease-in-out infinite;
+}
+
+@keyframes pulse-waiting {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
 }

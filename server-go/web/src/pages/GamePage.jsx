@@ -49,6 +49,7 @@ export default function GamePage() {
         button: bumper.BUTTON,
         ready: bumper.READY === 'TRUE',
         active: bumper.TIMESTAMP !== undefined || bumper.BUTTON !== undefined,
+        answerColor: bumper.ANSWER_COLOR,
       })
     })
     return grouped
@@ -288,6 +289,7 @@ export default function GamePage() {
               {sortedTeams.map((team, index) => (
                 <motion.div
                   key={team.name}
+                  className="team-card-wrapper"
                   initial={{ opacity: 0, scale: 0.9 }}
                   animate={{ opacity: 1, scale: 1 }}
                   transition={{ delay: index * 0.1 }}

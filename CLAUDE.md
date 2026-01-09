@@ -352,16 +352,24 @@ Teams and players display animated progress bars showing their score relative to
 - **Animation**: Smooth transition using framer-motion
 - **Location**: Admin Scores page + TV/Player display (SCORE and PLAYERS views)
 
-#### Game Page Layout (v2.3.0)
-3-column responsive layout with TV preview:
-- **Left column (220px)**: Questions list with compact preview
+#### Game Page Layout (v2.12.0)
+3-column responsive layout with TV preview, harmonized columns:
+- **Left column (280px)**: Questions list with compact preview
 - **Center column (flex)**: Timer + controls + TV preview (16:9)
-- **Right column (200px)**: Teams list (vertical)
+- **Right column (280px)**: Teams list (vertical) - same width as questions
 
 **Responsive breakpoints:**
-- `>1200px`: 3 columns (220px / 1fr / 200px)
+- `>1600px`: 3 columns (280px / 1fr / 280px)
+- `1400-1600px`: 3 columns (250px / 1fr / 250px)
+- `1200-1400px`: 3 columns (220px / 1fr / 220px)
 - `768-1200px`: 2 columns (questions + controls / teams)
 - `<768px`: 1 column (stacked)
+
+**Team cards styling (v2.12.0):**
+- Same width as question cards (240px max)
+- Team color as subtle background tint (8%)
+- Player answer colors displayed with colored badge (A/B/C/D)
+- Player rows highlighted with answer color (20% tint, 4px left border)
 
 #### Teams Page - Drag & Drop (v2.5.0)
 Interface de gestion des équipes avec drag & drop :
@@ -616,29 +624,32 @@ scp buzzcontrol pi@raspberrypi.local:~/
 | `/quiz` | QuizPage | Gestion des questions |
 | `/settings` | SettingsPage | Configuration |
 
-### Layout GamePage (Admin)
+### Layout GamePage (Admin) - v2.12.0
 
-Layout avec timer pleine largeur + 3 colonnes responsive :
+Layout avec timer pleine largeur + 3 colonnes harmonisées :
 ```
 | Timer (pleine largeur, 95%)                    |  ligne 1
 |------------------------------------------------|
 | Questions | Contrôles + Aperçu TV | Équipes    |  ligne 2
-| 280px     | 1fr (flexible)        | 260px      |
+| 280px     | 1fr (flexible)        | 280px      |
 ```
 
 - **max-width** : 1800px (pour exploiter les grands écrans)
-- **Breakpoints** : 1600px, 1400px, 1200px, 768px
+- **Breakpoints** : 1600px (250px), 1400px (220px), 1200px, 768px
+- **Colonnes harmonisées** : Questions et Équipes ont la même largeur
 
 **Ligne 1** : Timer avec barre de progression 95% de largeur
 
-**Colonne gauche (280px)** : Liste des questions avec miniatures
+**Colonne gauche (280px)** : Liste des questions avec miniatures (cartes 240px)
 
 **Colonne centrale (flexible)** :
 - Contrôles de jeu (START/PAUSE sur même ligne, REPONSE)
 - Toggle affichage TV (Jeu, Équipes, Joueurs)
-- Aperçu TV 16:9 (QuestionPreview)
+- Aperçu TV 16:9 (QuestionPreview en iframe vers /tv)
 
-**Colonne droite (260px)** : Cartes équipes empilées verticalement
+**Colonne droite (280px)** : Cartes équipes empilées verticalement (cartes 240px)
+- Fond coloré estompé avec la couleur d'équipe
+- Affichage des couleurs de réponse QCM pour chaque joueur
 
 ### Statuts des questions (couleurs)
 
