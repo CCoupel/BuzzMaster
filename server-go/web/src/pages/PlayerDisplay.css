@@ -1020,7 +1020,16 @@
   backdrop-filter: blur(20px);
   padding: var(--space-1) var(--space-4);
   border-radius: var(--radius-lg);
-  border: 2px solid rgba(255, 255, 255, 0.1);
+  color: var(--success); /* Default: green like timer bar */
+}
+
+.zone-timer .timer-display.urgent {
+  color: var(--warning);
+}
+
+.zone-timer .timer-display.critical {
+  color: var(--error);
+  background: rgba(239, 68, 68, 0.2);
 }
 
 .zone-timer .timer-bar-container {
