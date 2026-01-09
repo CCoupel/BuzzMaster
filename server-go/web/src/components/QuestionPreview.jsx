@@ -5,6 +5,14 @@ import './QuestionPreview.css'
 
 const DEFAULT_DURATION = 10
 
+// QCM answer colors
+const QCM_COLORS = {
+  RED: { label: 'Rouge', color: '#ef4444', letter: 'A' },
+  GREEN: { label: 'Vert', color: '#22c55e', letter: 'B' },
+  YELLOW: { label: 'Jaune', color: '#eab308', letter: 'C' },
+  BLUE: { label: 'Bleu', color: '#3b82f6', letter: 'D' },
+}
+
 export default function QuestionPreview({ question, gameState, backgrounds = [], teams = {}, bumpers = {} }) {
   const [currentBgIndex, setCurrentBgIndex] = useState(0)
   const timerRef = useRef(null)
@@ -42,10 +50,17 @@ export default function QuestionPreview({ question, gameState, backgrounds = [],
   const currentBackground = currentBg?.path || null
   const currentOpacity = (currentBg?.opacity ?? 100) / 100
 
-  const phase = gameState?.phase || 'STOP'
+  const phase = gameState?.phase || 'STOPPED'
   const isShowingGame = gameState?.remote !== 'SCORE' && gameState?.remote !== 'PLAYERS'
   const isShowingScores = gameState?.remote === 'SCORE'
   const isShowingPlayers = gameState?.remote === 'PLAYERS'
+  
+  // Question should only be visible during STARTED, PAUSED, STOPPED, or REVEALED
+  const showQuestionContent = ['STARTED', 'PAUSED', 'STOPPED', 'REVEALED'].includes(phase)
+  // QCM answers visible from READY phase
+  const showQcmAnswers = ['READY', 'STARTED', 'PAUSED', 'STOPPED', 'REVEALED'].includes(phase)
+  const isQcm = question?.TYPE === 'QCM'
+  const isRevealed = phase === 'REVEALED'
 
   // Sort teams by score for podium (with rank calculation for ties)
   const sortedTeams = useMemo(() => {
@@ -112,59 +127,100 @@ export default function QuestionPreview({ question, gameState, backgrounds = [],
         <div className="tv-preview-bg-overlay" />
       </div>
 
-      {/* Timer Bar */}
-      {isShowingGame && (
-        <div className="tv-preview-timer-bar">
-          <Timer
-            currentTime={gameState?.timer || 0}
-            totalTime={gameState?.totalTime || 30}
-            phase={phase}
-            size="sm"
-          />
-        </div>
-      )}
+      {/* 4-Zone Layout Content */}
+      <div className="tv-preview-zones">
+        {/* Zone 1: Timer - at top, compact */}
+        {isShowingGame && (
+          <div className="tv-zone-timer">
+            <Timer
+              currentTime={gameState?.timer || 0}
+              totalTime={gameState?.totalTime || 30}
+              phase={phase}
+              size="sm"
+            />
+          </div>
+        )}
 
-      {/* Content */}
-      <div className="tv-preview-content">
-        {/* Question Display */}
-        {question && (
-          <div className="tv-preview-question">
-            {question.MEDIA && (
-              <div className="tv-preview-media-container">
-                <img
-                  src={question.MEDIA}
-                  alt=""
-                  className="tv-preview-media"
-                />
+        {/* Zone 2: Question - close to timer, bigger text */}
+        {question && showQuestionContent && (
+          <div className="tv-zone-question">
+            <p className="tv-zone-question-text">{question.QUESTION}</p>
+          </div>
+        )}
+
+        {/* Zone 3: Media (or spacer if no media) */}
+        {question && showQuestionContent && (
+          question.MEDIA ? (
+            <div className="tv-zone-media">
+              <img
+                src={question.MEDIA}
+                alt=""
+                className="tv-zone-media-img"
+              />
+            </div>
+          ) : (
+            <div className="tv-zone-media-spacer" />
+          )
+        )}
+
+        {/* Zone 4: Answers - fixed at bottom */}
+        {question && showQuestionContent && (
+          <div className="tv-zone-answers">
+            {/* QCM Answers */}
+            {isQcm && question.QCM_ANSWERS && (
+              <div className="tv-zone-qcm-grid">
+                {Object.entries(QCM_COLORS).map(([colorKey, colorData]) => {
+                  const answer = question.QCM_ANSWERS[colorKey]
+                  if (!answer) return null
+                  const isCorrect = question.QCM_CORRECT === colorKey
+
+                  return (
+                    <div
+                      key={colorKey}
+                      className={`tv-zone-qcm-item ${isRevealed ? (isCorrect ? 'correct' : 'wrong') : ''}`}
+                      style={{
+                        backgroundColor: isRevealed && !isCorrect ? '#6b7280' : colorData.color,
+                        opacity: isRevealed && !isCorrect ? 0.5 : 1
+                      }}
+                    >
+                      <span className="tv-zone-qcm-letter">{colorData.letter}</span>
+                      <span className="tv-zone-qcm-text">{answer}</span>
+                    </div>
+                  )
+                })}
               </div>
             )}
-            <div className="tv-preview-text-container">
-              <p className="tv-preview-question-text">{question.QUESTION}</p>
-            </div>
+
+            {/* Answer for non-QCM in REVEALED phase */}
+            {!isQcm && isRevealed && question.ANSWER && (
+              <div className="tv-zone-answer">
+                <p className="tv-zone-answer-text">{question.ANSWER}</p>
+              </div>
+            )}
           </div>
         )}
 
-        {/* States */}
-        {!question && phase === 'STOP' && (
-          <div className="tv-preview-state waiting">
-            <span className="tv-preview-state-emoji">🎮</span>
-            <span className="tv-preview-state-text">En attente...</span>
+        {/* QCM Answers in READY phase (without question) - uses zone layout */}
+        {question && isQcm && showQcmAnswers && !showQuestionContent && question.QCM_ANSWERS && (
+          <div className="tv-zone-qcm-ready">
+            {Object.entries(QCM_COLORS).map(([colorKey, colorData]) => {
+              const answer = question.QCM_ANSWERS[colorKey]
+              if (!answer) return null
+
+              return (
+                <div
+                  key={colorKey}
+                  className="tv-zone-qcm-item"
+                  style={{ backgroundColor: colorData.color }}
+                >
+                  <span className="tv-zone-qcm-letter">{colorData.letter}</span>
+                  <span className="tv-zone-qcm-text">{answer}</span>
+                </div>
+              )
+            })}
           </div>
         )}
 
-        {phase === 'PREPARE' && (
-          <div className="tv-preview-state prepare">
-            <span className="tv-preview-state-emoji">🔔</span>
-            <span className="tv-preview-state-text">Preparez-vous !</span>
-          </div>
-        )}
-
-        {phase === 'READY' && (
-          <div className="tv-preview-state ready">
-            <span className="tv-preview-state-emoji">✋</span>
-            <span className="tv-preview-state-text">PRETS ?</span>
-          </div>
-        )}
 
         {/* Teams ranking with Podium component */}
         {isShowingScores && (

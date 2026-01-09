@@ -44,7 +44,8 @@ buzzcontrol/
 │       └── Constant.h
 ├── data/                     # Web assets (HTML/JS/CSS)
 ├── docs/
-│   └── MIGRATION_ARCHITECTURE.md  # Architecture decisions
+│   ├── MIGRATION_ARCHITECTURE.md  # Architecture decisions
+│   └── GAME_STATE_MACHINE.md      # Game state machine specification
 ├── platformio.ini            # PlatformIO config
 ├── partitions.csv            # ESP32 partition table
 └── CLAUDE.md                 # This file
@@ -224,6 +225,8 @@ The ESP32-C3 buzzers connect to the Go server without any modification.
 
 ## Game Flow
 
+> **Documentation complète**: Voir [docs/GAME_STATE_MACHINE.md](docs/GAME_STATE_MACHINE.md) pour la spécification détaillée.
+
 ```
 1. STOP (initial)
    └─► readyGame(questionId) ─► PREPARE
@@ -335,12 +338,13 @@ Shared component for displaying rankings with tie support:
 <Podium teams={sortedTeams} variant="compact" />
 ```
 
-#### QuestionPreview Component (v2.4.0)
+#### QuestionPreview Component (v2.10.0)
 TV preview component showing what will appear on the display:
 - **Location**: `components/QuestionPreview.jsx` + `components/QuestionPreview.css`
-- **Displays**: Question with media, game states (PREPARE/READY), team/player rankings
+- **Displays**: Question with media, team/player rankings (no game state display)
 - **Reuses**: Podium component for consistent ranking display with ties
 - **Props**: `question`, `gameState`, `backgrounds`, `teams`, `bumpers`
+- **4-Zone Layout**: Same structure as PlayerDisplay (Timer 40px, Question 35px, Media flex, Answers 50px)
 
 #### Score Progress Bars
 Teams and players display animated progress bars showing their score relative to the maximum score:
@@ -423,6 +427,45 @@ Drag and drop pour reordonner les questions :
 - `server-go/web/src/pages/QuestionsPage.css` : Styles drag and drop
 - `server-go/web/src/pages/GamePage.jsx` : Tri par ORDER
 
+#### PlayerDisplay 4-Zone Layout (v2.10.0)
+Layout vertical en 4 zones avec hauteurs fixes pour l'affichage TV (/tv) :
+- **Zone 1 - Timer** : 100px hauteur fixe, centré en haut
+- **Zone 2 - Question** : 80px hauteur fixe, texte de la question
+- **Zone 3 - Media** : flex: 1, remplit l'espace restant, image centrée
+- **Zone 4 - Answers** : 120px hauteur fixe, `margin-top: auto` (aligné en bas)
+
+**Structure CSS :**
+```css
+.game-content-zones {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  overflow: hidden;
+}
+.zone-timer { height: 100px; flex-shrink: 0; }
+.zone-question { height: 80px; flex-shrink: 0; }
+.zone-media { flex: 1; min-height: 0; overflow: hidden; }
+.zone-answers { height: 120px; flex-shrink: 0; margin-top: auto; }
+```
+
+**Fichiers :**
+- `server-go/web/src/pages/PlayerDisplay.jsx` : Structure des zones
+- `server-go/web/src/pages/PlayerDisplay.css` : Styles des zones
+
+#### Timer Phase Badges (v2.10.0)
+Pastilles colorées indiquant l'état du jeu dans le composant Timer :
+- **ARRET** (STOPPED) : Rouge (`--error`) - Affiché
+- **PREPARATION** : Orange (`--warning`)
+- **PRET** : Cyan (`--accent-cyan`)
+- **EN COURS** : Vert (`--success`)
+- **PAUSE** : Bleu (`--primary-500`)
+- **REPONSE** (REVEALED) : Gris (`--gray-400`)
+
+Les couleurs correspondent aux statuts de questions (AVAILABLE=vert, STARTED=orange, STOPPED=rouge, REVEALED=gris).
+
+**Fichiers :**
+- `server-go/web/src/components/Timer.jsx` : Affichage des badges
+- `server-go/web/src/components/Timer.css` : Styles `.phase-stopped`, `.phase-revealed`
 
 ### WebSocket Actions for Client Management
 
