@@ -1,18 +1,20 @@
 {
-    "wifi": {
-      "ssid": "CC-Home",
-      "password": "GenericPassword"
-    },
-    "ap": {
-      "ssid": "buzzmaster",
-      "password": "BuzzMaster"
-    },
-    "network": {
-      "controler_port": 1234,
-      "log_port": 8888
-    },
-    "update": {
-      "base_url": "https://bitbucket.org/ccoupel/buzzcontrol/raw/main/data",
-      "version_file": "/config/version.txt"
-    }
+  "wifi": {
+    "ssid": "CC-Home",
+    "password": "GenericPassword"
+  },
+  "server": {
+    "http_port": 80,
+    "tcp_port": 1236,
+    "websocket_path": "/ws"
+  },
+  "game": {
+    "default_delay": 30
+  },
+  "version": "2.12.0",
+  "storage": {
+    "data_dir": "./data",
+    "questions_dir": "./data/files/questions",
+    "files_dir": "./data/files"
   }
+}

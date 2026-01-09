@@ -21,12 +21,13 @@
 }
 
 .team-card.active {
-  box-shadow: var(--shadow-md), 0 0 20px color-mix(in srgb, var(--team-color) 30%, transparent);
+  box-shadow: var(--shadow-md), 0 0 20px color-mix(in srgb, var(--team-color) 40%, transparent);
+  border-left-width: 6px;
 }
 
+/* Ready state - keep team color, just add glow */
 .team-card.ready {
-  border-color: var(--success);
-  background: color-mix(in srgb, var(--success) 8%, white);
+  box-shadow: var(--shadow-sm), 0 0 10px color-mix(in srgb, var(--team-color) 25%, transparent);
 }
 
 /* Header */
@@ -144,7 +145,7 @@
 }
 
 .buzzer-mini.ready {
-  background: color-mix(in srgb, var(--success) 10%, white);
+  background: color-mix(in srgb, var(--team-color) 10%, white);
 }
 
 .buzzer-mini:not(.ready):not(.active) {
@@ -256,4 +257,36 @@
 @keyframes pulse-waiting {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.5; }
+}
+
+/* Waiting for buzz state - grayed out during STARTED/PAUSED until buzz */
+.team-card.waiting-buzz {
+  opacity: 0.5;
+  filter: grayscale(60%);
+}
+
+.team-card.waiting-buzz .team-color-indicator {
+  box-shadow: none;
+}
+
+/* When team is active (has buzzed), restore full visibility */
+.team-card.waiting-buzz.active {
+  opacity: 1;
+  filter: none;
+}
+
+.team-card.waiting-buzz.active .team-color-indicator {
+  box-shadow: 0 0 8px var(--team-color);
+}
+
+/* Buzzer waiting for buzz - grayed out until they buzz */
+.buzzer-mini.waiting-buzz {
+  opacity: 0.5;
+  filter: grayscale(60%);
+}
+
+/* When buzzer is active (has buzzed), restore full visibility */
+.buzzer-mini.waiting-buzz.active {
+  opacity: 1;
+  filter: none;
 }

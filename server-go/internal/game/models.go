@@ -8,19 +8,23 @@ import (
 type GamePhase string
 
 const (
-	PhaseStop    GamePhase = "STOP"
+	PhaseStopped  GamePhase = "STOPPED"
 	PhasePrepare GamePhase = "PREPARE"
 	PhaseReady   GamePhase = "READY"
-	PhaseStart   GamePhase = "START"
-	PhasePause   GamePhase = "PAUSE"
+	PhaseStarted  GamePhase = "STARTED"
+	PhasePaused   GamePhase = "PAUSED"
+	PhaseRevealed GamePhase = "REVEALED"
 )
 
-// QuestionStatus represents question state
+// QuestionStatus represents question state (synced with GamePhase)
 type QuestionStatus string
 
 const (
 	StatusAvailable QuestionStatus = "AVAILABLE"
+	StatusPrepare   QuestionStatus = "PREPARE"
+	StatusReady     QuestionStatus = "READY"
 	StatusStarted   QuestionStatus = "STARTED"
+	StatusPaused    QuestionStatus = "PAUSED"
 	StatusStopped   QuestionStatus = "STOPPED"
 	StatusRevealed  QuestionStatus = "REVEALED"
 )
@@ -85,8 +89,9 @@ type Question struct {
 	Type       QuestionType   `json:"TYPE,omitempty"`        // "NORMAL" or "QCM" (default NORMAL)
 	QCMAnswers *QCMAnswers    `json:"QCM_ANSWERS,omitempty"` // For QCM questions
 	QCMCorrect string         `json:"QCM_CORRECT,omitempty"` // "RED", "GREEN", "YELLOW", "BLUE"
-	Points     int            `json:"POINTS"`
-	Time       int            `json:"TIME"`
+	Points     string         `json:"POINTS"`                // String to match JSON format
+	Time       string         `json:"TIME"`                  // String to match JSON format
+	Order      int            `json:"ORDER,omitempty"`       // Display order (for drag and drop)
 	Media      string         `json:"MEDIA,omitempty"`
 	Status     QuestionStatus `json:"STATUS,omitempty"`
 }
@@ -103,6 +108,7 @@ type GameState struct {
 	Phase       GamePhase    `json:"PHASE"`
 	Delay       int          `json:"DELAY"`
 	CurrentTime int          `json:"CURRENT_TIME"`
+	GameTime    int64        `json:"TIME,omitempty"`
 	Question    *Question    `json:"QUESTION,omitempty"`
 	Page        string       `json:"REMOTE,omitempty"`
 	Backgrounds []Background `json:"backgrounds,omitempty"`

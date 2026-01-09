@@ -21,6 +21,7 @@ export default function TeamCard({
   onClick,
   className = '',
   waitingForReady = false,
+  waitingForBuzz = false,
 }) {
   const rgbColor = color ? `rgb(${color.join(',')})` : 'var(--primary-500)'
   const reactionTime = timestamp && gameTime
@@ -30,9 +31,12 @@ export default function TeamCard({
   // Team is waiting when in PREPARE/READY phase but hasn't responded PONG yet
   const isWaiting = waitingForReady && !ready
 
+  // Team is waiting for buzz when in STARTED/PAUSED phase and hasn't buzzed yet
+  const isWaitingForBuzz = waitingForBuzz && !active
+
   return (
     <motion.div
-      className={`team-card ${active ? 'active' : ''} ${ready ? 'ready' : ''} ${isWaiting ? 'waiting' : ''} ${className}`}
+      className={`team-card ${active ? 'active' : ''} ${ready ? 'ready' : ''} ${isWaiting ? 'waiting' : ''} ${isWaitingForBuzz ? 'waiting-buzz' : ''} ${className}`}
       style={{ '--team-color': rgbColor }}
       onClick={onClick}
       initial={{ opacity: 0, y: 20 }}
@@ -93,10 +97,11 @@ export default function TeamCard({
         <div className="team-buzzers">
           {buzzers.map((buzzer, index) => {
             const answerColorData = buzzer.answerColor && ANSWER_COLORS[buzzer.answerColor]
+            const buzzerWaitingBuzz = waitingForBuzz && !buzzer.active
             return (
               <motion.div
                 key={buzzer.mac || index}
-                className={`buzzer-mini ${buzzer.active ? 'active' : ''} ${buzzer.ready ? 'ready' : ''} ${answerColorData ? 'has-answer-color' : ''}`}
+                className={`buzzer-mini ${buzzer.active ? 'active' : ''} ${buzzer.ready ? 'ready' : ''} ${answerColorData ? 'has-answer-color' : ''} ${buzzerWaitingBuzz ? 'waiting-buzz' : ''}`}
                 style={answerColorData ? { '--answer-color': answerColorData.color } : undefined}
                 initial={{ opacity: 0, scale: 0.8 }}
                 animate={{ opacity: 1, scale: 1 }}

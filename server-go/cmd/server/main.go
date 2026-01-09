@@ -16,6 +16,7 @@ import (
 	"runtime"
 	"strings"
 	"syscall"
+	"time"
 )
 
 // App holds all server components
@@ -422,6 +423,10 @@ func (a *App) handleWebMessage(incoming *protocol.IncomingMessage) {
 	case protocol.ActionForceReady:
 		a.handleForceReady()
 
+	case protocol.ActionButton:
+		// Simulated button press from web client (for testing)
+		a.handleSimulatedButton(msg)
+
 	default:
 		log.Printf("[App] Unknown web action: %s", msg.Action)
 	}
@@ -454,6 +459,41 @@ func (a *App) handleButton(clientID string, msg *protocol.Message, timestamp int
 
 	// Broadcast pause to all
 	a.broadcastPause(clientID)
+	a.broadcastUpdate()
+}
+
+// handleSimulatedButton processes button press from web client (debug/testing)
+func (a *App) handleSimulatedButton(msg *protocol.Message) {
+	var payload struct {
+		ID     string `json:"ID"`
+		Button string `json:"button"`
+	}
+	if err := json.Unmarshal(msg.Msg, &payload); err != nil {
+		log.Printf("[App] Failed to parse simulated button payload: %v", err)
+		return
+	}
+
+	if payload.ID == "" {
+		log.Printf("[App] Simulated BUTTON missing ID")
+		return
+	}
+
+	// Default button to "A" if not specified
+	button := payload.Button
+	if button == "" {
+		button = "A"
+	}
+
+	// Use current time as timestamp (microseconds)
+	timestamp := time.Now().UnixMicro()
+
+	log.Printf("[App] Simulated BUTTON from %s: %s (time: %d)", payload.ID, button, timestamp)
+
+	// Process in engine (same as real button press)
+	a.engine.ProcessButtonPress(payload.ID, timestamp, button)
+
+	// Broadcast pause to all
+	a.broadcastPause(payload.ID)
 	a.broadcastUpdate()
 }
 

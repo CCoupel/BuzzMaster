@@ -135,7 +135,7 @@ func (e *Engine) Ready(questionID string, question *Question) {
 	e.state.Phase = PhasePrepare
 	e.state.Question = question
 	if question != nil {
-		question.Status = StatusAvailable
+		question.Status = StatusPrepare
 	}
 
 	// Reset bumper times
@@ -219,26 +219,35 @@ func (e *Engine) AreAllTeamsReady() bool {
 // TransitionToReady moves to READY phase when all buzzers responded
 func (e *Engine) TransitionToReady() {
 	e.mu.Lock()
-	defer e.mu.Unlock()
 
-	if e.state.Phase == PhasePrepare {
-		e.state.Phase = PhaseReady
-		log.Printf("[Engine] All teams ready, transitioning to READY")
+	if e.state.Phase != PhasePrepare {
+		e.mu.Unlock()
+		return
+	}
 
-		if e.OnStateChange != nil {
-			e.OnStateChange(PhaseReady)
-		}
+	e.state.Phase = PhaseReady
+	if e.state.Question != nil {
+		e.state.Question.Status = StatusReady
+	}
+	log.Printf("[Engine] All teams ready, transitioning to READY")
+
+	// Release lock BEFORE calling callback to avoid deadlock
+	callback := e.OnStateChange
+	e.mu.Unlock()
+
+	if callback != nil {
+		callback(PhaseReady)
 	}
 }
 
 // Start begins the game round
 func (e *Engine) Start(delay int) {
 	e.mu.Lock()
-	defer e.mu.Unlock()
 
 	e.state.Phase = PhaseStarted
 	e.state.Delay = delay
 	e.state.CurrentTime = delay
+	e.state.GameTime = time.Now().UnixMicro()
 
 	if e.state.Question != nil {
 		e.state.Question.Status = StatusStarted
@@ -262,8 +271,12 @@ func (e *Engine) Start(delay int) {
 	// Start timer
 	e.startTimer()
 
-	if e.OnStateChange != nil {
-		e.OnStateChange(PhaseStarted)
+	// Release lock BEFORE calling callback to avoid deadlock
+	callback := e.OnStateChange
+	e.mu.Unlock()
+
+	if callback != nil {
+		callback(PhaseStarted)
 	}
 }
 
@@ -310,7 +323,6 @@ func (e *Engine) startTimer() {
 // Stop ends the game round
 func (e *Engine) Stop() {
 	e.mu.Lock()
-	defer e.mu.Unlock()
 
 	// Signal timer goroutine to stop
 	if e.stopCh != nil {
@@ -337,26 +349,33 @@ func (e *Engine) Stop() {
 
 	log.Printf("[Engine] Game stopped")
 
-	if e.OnStateChange != nil {
-		e.OnStateChange(PhaseStopped)
+	// Release lock BEFORE calling callback to avoid deadlock
+	callback := e.OnStateChange
+	e.mu.Unlock()
+
+	if callback != nil {
+		callback(PhaseStopped)
 	}
 }
 
 // Pause pauses the game (single buzzer)
 func (e *Engine) Pause() {
 	e.mu.Lock()
-	defer e.mu.Unlock()
 
 	e.state.Phase = PhasePaused
 
 	if e.state.Question != nil {
-		e.state.Question.Status = StatusStopped
+		e.state.Question.Status = StatusPaused
 	}
 
 	log.Printf("[Engine] Game paused")
 
-	if e.OnStateChange != nil {
-		e.OnStateChange(PhasePaused)
+	// Release lock BEFORE calling callback to avoid deadlock
+	callback := e.OnStateChange
+	e.mu.Unlock()
+
+	if callback != nil {
+		callback(PhasePaused)
 	}
 }
 
@@ -368,7 +387,6 @@ func (e *Engine) PauseAll() {
 // Continue resumes the game
 func (e *Engine) Continue() {
 	e.mu.Lock()
-	defer e.mu.Unlock()
 
 	e.state.Phase = PhaseStarted
 
@@ -378,56 +396,67 @@ func (e *Engine) Continue() {
 
 	log.Printf("[Engine] Game continued")
 
-	if e.OnStateChange != nil {
-		e.OnStateChange(PhaseStarted)
+	// Release lock BEFORE calling callback to avoid deadlock
+	callback := e.OnStateChange
+	e.mu.Unlock()
+
+	if callback != nil {
+		callback(PhaseStarted)
 	}
 }
 
 // Reveal shows the answer
 func (e *Engine) Reveal() string {
 	e.mu.Lock()
-	defer e.mu.Unlock()
 
 	if e.state.Phase != PhaseStopped {
 		log.Printf("[Engine] Cannot reveal from phase %s", e.state.Phase)
+		e.mu.Unlock()
 		return ""
 	}
 
 	e.state.Phase = PhaseRevealed
 
+	var answer string
 	if e.state.Question != nil {
 		e.state.Question.Status = StatusRevealed
+		answer = e.state.Question.Answer
 		log.Printf("[Engine] Answer revealed")
-
-		if e.OnStateChange != nil {
-			e.OnStateChange(PhaseRevealed)
-		}
-
-		return e.state.Question.Answer
 	}
-	return ""
+
+	// Release lock BEFORE calling callback to avoid deadlock
+	callback := e.OnStateChange
+	e.mu.Unlock()
+
+	if callback != nil {
+		callback(PhaseRevealed)
+	}
+
+	return answer
 }
 
 
 // ProcessButtonPress handles a button press from a buzzer
 func (e *Engine) ProcessButtonPress(bumperID string, pressTime int64, button string) {
 	e.mu.Lock()
-	defer e.mu.Unlock()
 
 	if e.state.Phase != PhaseStarted {
 		log.Printf("[Engine] Ignoring button press, game not started")
+		e.mu.Unlock()
 		return
 	}
 
 	bumper, ok := e.data.Bumpers[bumperID]
 	if !ok {
 		log.Printf("[Engine] Unknown bumper: %s", bumperID)
+		e.mu.Unlock()
 		return
 	}
 
 	// Check if bumper already pressed
 	if bumper.Time > 0 {
 		log.Printf("[Engine] Bumper %s already pressed", bumperID)
+		e.mu.Unlock()
 		return
 	}
 
@@ -437,11 +466,13 @@ func (e *Engine) ProcessButtonPress(bumperID string, pressTime int64, button str
 
 	teamID := bumper.Team
 	if teamID == "" {
+		e.mu.Unlock()
 		return
 	}
 
 	team, ok := e.data.Teams[teamID]
 	if !ok {
+		e.mu.Unlock()
 		return
 	}
 
@@ -455,8 +486,12 @@ func (e *Engine) ProcessButtonPress(bumperID string, pressTime int64, button str
 	log.Printf("[Engine] Button press: bumper=%s, team=%s, button=%s, time=%d",
 		bumperID, teamID, button, pressTime)
 
-	if e.OnBuzzerPress != nil {
-		e.OnBuzzerPress(bumperID, teamID, pressTime, button)
+	// Release lock BEFORE calling callback to avoid deadlock
+	callback := e.OnBuzzerPress
+	e.mu.Unlock()
+
+	if callback != nil {
+		callback(bumperID, teamID, pressTime, button)
 	}
 }
 
@@ -709,6 +744,9 @@ func (e *Engine) ForceReady() {
 	}
 
 	e.state.Phase = PhaseReady
+	if e.state.Question != nil {
+		e.state.Question.Status = StatusReady
+	}
 	log.Printf("[Engine] FORCE_READY: transitioning to READY")
 
 	// Release lock BEFORE calling callback to avoid deadlock

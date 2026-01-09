@@ -18,11 +18,13 @@ const QCM_COLORS = {
 
 export default function PlayerDisplay() {
   const { gameState, teams, bumpers } = useGame()
-  const [lastWinner, setLastWinner] = useState(null)
   const [currentBgIndex, setCurrentBgIndex] = useState(0)
   const timerRef = useRef(null)
   const [previousRanking, setPreviousRanking] = useState({})
   const [changedTeams, setChangedTeams] = useState({})
+  const [previousPlayerScores, setPreviousPlayerScores] = useState({})
+  const [changedPlayers, setChangedPlayers] = useState({})
+  const [pointsAnimation, setPointsAnimation] = useState(null) // {name, points, color}
 
   // Sort teams by score for scoreboard with rank calculation
   const sortedTeams = useMemo(() => {
@@ -74,7 +76,7 @@ export default function PlayerDisplay() {
     })
   }, [bumpers, teams])
 
-  // Detect ranking changes
+  // Detect team ranking changes
   useEffect(() => {
     const currentRanking = {}
     const changes = {}
@@ -100,27 +102,45 @@ export default function PlayerDisplay() {
     setPreviousRanking(currentRanking)
   }, [sortedTeams])
 
-  // Find winning bumper (first to press)
-  const winningBumper = useMemo(() => {
-    let earliest = { timestamp: Infinity, data: null }
-    Object.entries(bumpers).forEach(([mac, bumper]) => {
-      if (bumper.TIMESTAMP && bumper.TIMESTAMP < earliest.timestamp) {
-        earliest = {
-          timestamp: bumper.TIMESTAMP,
-          data: { mac, ...bumper, teamColor: teams[bumper.TEAM]?.COLOR }
-        }
+  // Detect player score changes
+  useEffect(() => {
+    const currentScores = {}
+    const changes = {}
+
+    sortedPlayers.forEach((player) => {
+      currentScores[player.mac] = player.score
+
+      const prevScore = previousPlayerScores[player.mac]
+      if (prevScore !== undefined && prevScore !== player.score) {
+        changes[player.mac] = player.score > prevScore ? 'up' : 'down'
       }
     })
-    return earliest.data
-  }, [bumpers, teams])
 
-  // Celebration when points are scored
-  useEffect(() => {
-    if (winningBumper && gameState.phase === 'REVEALED' && winningBumper !== lastWinner) {
-      setLastWinner(winningBumper)
-      triggerCelebration(winningBumper.teamColor)
+    if (Object.keys(changes).length > 0) {
+      setChangedPlayers(changes)
+      setTimeout(() => setChangedPlayers({}), 2000)
     }
-  }, [winningBumper, gameState.phase])
+
+    setPreviousPlayerScores(currentScores)
+  }, [sortedPlayers])
+
+  // Detect score changes and trigger celebration animation in GAME view
+  useEffect(() => {
+    // Check for team score changes
+    sortedTeams.forEach((team) => {
+      const prev = previousRanking[team.name]
+      if (prev && prev.score !== team.score && team.score > prev.score) {
+        const pointsAdded = team.score - prev.score
+        setPointsAnimation({
+          name: team.name,
+          points: pointsAdded,
+          color: team.color
+        })
+        triggerCelebration(team.color)
+        setTimeout(() => setPointsAnimation(null), 2500)
+      }
+    })
+  }, [sortedTeams, previousRanking])
 
   // Background cycling with per-image duration
   useEffect(() => {
@@ -323,11 +343,12 @@ export default function PlayerDisplay() {
                       const rgbColor = getRgbColor(player.teamColor)
                       const barWidth = (player.score / maxPlayerScore) * 100
                       const isTied = sortedPlayers.filter(p => p.rank === player.rank).length > 1
+                      const isPlayerChanged = changedPlayers[player.mac]
 
                       return (
                         <motion.div
                           key={player.mac}
-                          className="player-row"
+                          className={`player-row ${isPlayerChanged ? 'score-changed' : ''}`}
                           initial={{ opacity: 0, y: 20 }}
                           animate={{ opacity: 1, y: 0 }}
                           exit={{ opacity: 0, y: -20 }}
@@ -361,7 +382,17 @@ export default function PlayerDisplay() {
                           </div>
                           <div className="player-score-section">
                             {isTied && <span className="player-tied">ex</span>}
-                            <span className="player-score">{player.score} pts</span>
+                            <motion.span
+                              className="player-score"
+                              key={player.score}
+                              animate={isPlayerChanged ? {
+                                scale: [1, 1.4, 1],
+                                color: ['#fff', '#22c55e', '#fff']
+                              } : {}}
+                              transition={{ duration: 0.5 }}
+                            >
+                              {player.score} pts
+                            </motion.span>
                           </div>
                         </motion.div>
                       )
@@ -524,27 +555,6 @@ export default function PlayerDisplay() {
                   </div>
                 </div>
 
-                {/* Winner Display - only in REVEALED phase */}
-                <AnimatePresence>
-                  {showAnswer && winningBumper && (
-                    <motion.div
-                      className="winner-display"
-                      initial={{ opacity: 0, scale: 0.5, y: 50 }}
-                      animate={{ opacity: 1, scale: 1, y: 0 }}
-                      exit={{ opacity: 0, scale: 0.5 }}
-                      style={{
-                        '--team-color': winningBumper.teamColor
-                          ? `rgb(${winningBumper.teamColor.join(',')})`
-                          : 'var(--primary-500)'
-                      }}
-                    >
-                      <span className="winner-emoji">🎉</span>
-                      <span className="winner-name">{winningBumper.NAME}</span>
-                      <span className="winner-team">{winningBumper.TEAM}</span>
-                      <span className="winner-points">+{gameState.question?.POINTS || 1} pts</span>
-                    </motion.div>
-                  )}
-                </AnimatePresence>
               </div>
             )}
 
@@ -603,27 +613,6 @@ export default function PlayerDisplay() {
                   )}
                 </div>
 
-                {/* Winner Display - only in REVEALED phase */}
-                <AnimatePresence>
-                  {showAnswer && winningBumper && (
-                    <motion.div
-                      className="winner-display"
-                      initial={{ opacity: 0, scale: 0.5, y: 50 }}
-                      animate={{ opacity: 1, scale: 1, y: 0 }}
-                      exit={{ opacity: 0, scale: 0.5 }}
-                      style={{
-                        '--team-color': winningBumper.teamColor
-                          ? `rgb(${winningBumper.teamColor.join(',')})`
-                          : 'var(--primary-500)'
-                      }}
-                    >
-                      <span className="winner-emoji">🎉</span>
-                      <span className="winner-name">{winningBumper.NAME}</span>
-                      <span className="winner-team">{winningBumper.TEAM}</span>
-                      <span className="winner-points">+{gameState.question?.POINTS || 1} pts</span>
-                    </motion.div>
-                  )}
-                </AnimatePresence>
               </div>
             )}
 
@@ -638,6 +627,27 @@ export default function PlayerDisplay() {
                 <span className="waiting-text">En attente de la prochaine question...</span>
               </motion.div>
             )}
+
+            {/* Points Animation - floating +X pts when score changes */}
+            <AnimatePresence>
+              {pointsAnimation && (
+                <motion.div
+                  className="points-animation"
+                  initial={{ opacity: 0, scale: 0.5, y: 100 }}
+                  animate={{ opacity: 1, scale: 1, y: 0 }}
+                  exit={{ opacity: 0, scale: 1.5, y: -100 }}
+                  transition={{ duration: 0.5 }}
+                  style={{
+                    '--team-color': pointsAnimation.color
+                      ? `rgb(${pointsAnimation.color.join(',')})`
+                      : 'var(--success)'
+                  }}
+                >
+                  <span className="points-team">{pointsAnimation.name}</span>
+                  <span className="points-value">+{pointsAnimation.points} pts</span>
+                </motion.div>
+              )}
+            </AnimatePresence>
           </motion.div>
         )}
       </AnimatePresence>

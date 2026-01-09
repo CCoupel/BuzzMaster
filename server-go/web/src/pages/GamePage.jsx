@@ -31,12 +31,13 @@ export default function GamePage() {
     setRemoteDisplay,
     setBumperPoints,
     forceReady,
+    simulateButton,
   } = useGame()
 
   const [timeInput, setTimeInput] = useState(30)
   const [pointsInput, setPointsInput] = useState(1)
 
-  // Group bumpers by team
+  // Group bumpers by team and sort by timestamp
   const teamBumpers = useMemo(() => {
     const grouped = {}
     Object.entries(bumpers).forEach(([mac, bumper]) => {
@@ -45,11 +46,19 @@ export default function GamePage() {
       grouped[teamName].push({
         mac,
         name: bumper.NAME,
-        timestamp: bumper.TIMESTAMP,
+        timestamp: bumper.TIME,
         button: bumper.BUTTON,
-        ready: bumper.READY === 'TRUE',
-        active: bumper.TIMESTAMP !== undefined || bumper.BUTTON !== undefined,
+        ready: bumper.READY === true || bumper.READY === 'TRUE',
+        active: bumper.TIME !== undefined && bumper.TIME > 0,
         answerColor: bumper.ANSWER_COLOR,
+      })
+    })
+    // Sort bumpers by timestamp within each team
+    Object.values(grouped).forEach(bumperList => {
+      bumperList.sort((a, b) => {
+        const timeA = a.timestamp ?? Infinity
+        const timeB = b.timestamp ?? Infinity
+        return timeA - timeB
       })
     })
     return grouped
@@ -64,8 +73,8 @@ export default function GamePage() {
         buzzers: teamBumpers[name] || [],
       }))
       .sort((a, b) => {
-        const timeA = a.TIMESTAMP ?? Infinity
-        const timeB = b.TIMESTAMP ?? Infinity
+        const timeA = a.TIME ?? Infinity
+        const timeB = b.TIME ?? Infinity
         return timeA - timeB
       })
   }, [teams, teamBumpers])
@@ -109,9 +118,18 @@ export default function GamePage() {
     }
   }
 
-  const handleBumperClick = (bumperMac) => {
+  const handleBumperClick = (bumperMac, ctrlKey = false) => {
+    if (ctrlKey && ['STARTED', 'PAUSED'].includes(gameState.phase)) {
+      // Ctrl+click: simulate buzzer button press (debug)
+      simulateButton(bumperMac, 'A')
+      return
+    }
     if (gameState.phase === 'STOPPED' || gameState.phase === 'REVEALED') {
-      setBumperPoints(bumperMac, pointsInput)
+      // Only allow points for players who have buzzed
+      const bumper = bumpers[bumperMac]
+      if (bumper?.TIME && bumper.TIME > 0) {
+        setBumperPoints(bumperMac, pointsInput)
+      }
     }
   }
 
@@ -298,14 +316,15 @@ export default function GamePage() {
                     name={team.name}
                     color={team.COLOR}
                     score={team.SCORE || 0}
-                    ready={team.READY === 'TRUE'}
-                    active={team.TIMESTAMP !== undefined}
-                    timestamp={team.TIMESTAMP}
+                    ready={team.READY === true || team.READY === 'TRUE'}
+                    active={team.TIME !== undefined && team.TIME > 0}
+                    timestamp={team.TIME}
                     gameTime={gameState.gameTime}
                     waitingForReady={['PREPARE', 'READY'].includes(gameState.phase)}
+                    waitingForBuzz={['STARTED', 'PAUSED'].includes(gameState.phase)}
                     buzzers={team.buzzers.map(b => ({
                       ...b,
-                      onClick: () => handleBumperClick(b.mac)
+                      onClick: (e) => handleBumperClick(b.mac, e?.ctrlKey)
                     }))}
                   />
                 </motion.div>

@@ -371,6 +371,32 @@ Teams and players display animated progress bars showing their score relative to
 - Player answer colors displayed with colored badge (A/B/C/D)
 - Player rows highlighted with answer color (20% tint, 4px left border)
 
+#### Points Animation (v2.12.0)
+Animation visuelle quand des points sont ajoutés :
+- **Confetti** : Particules avec la couleur de l'équipe
+- **Animation flottante** : Nom de l'équipe + "+X pts" au centre de l'écran
+- **Durée** : 2.5 secondes puis disparition
+- **Déclenchement** : Uniquement quand les points sont ajoutés (pas au REVEAL)
+- **Vue JOUEURS** : Animation sur la ligne du joueur (scale + couleur verte)
+
+#### Debug Features (v2.12.0)
+Fonctionnalités de test pour l'admin :
+- **Ctrl+clic sur joueur** : Simule un appui buzzer (pendant STARTED/PAUSED)
+- **Ctrl+clic sur question** : Force l'état READY sans attendre les PONGs
+
+#### Waiting States (v2.12.0)
+États visuels pour équipes/joueurs :
+- **PREPARE/READY** : Grisés jusqu'à réception du PONG
+- **STARTED/PAUSED** : Grisés jusqu'au buzz
+- **Après buzz** : Visibilité restaurée avec couleur d'équipe
+
+#### Reaction Time (v2.12.0)
+Affichage du temps de réaction :
+- **GameTime** : Timestamp serveur au démarrage (microsecondes)
+- **Calcul** :  ms
+- **Tri** : Joueurs triés par temps de réponse dans chaque équipe
+
+
 #### Teams Page - Drag & Drop (v2.5.0)
 Interface de gestion des équipes avec drag & drop :
 - **Gauche** : Grille des équipes (zones de dépôt)

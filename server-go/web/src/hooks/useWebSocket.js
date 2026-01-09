@@ -5,7 +5,7 @@ const RECONNECT_INTERVAL = 5000
 export default function useWebSocket() {
   const [status, setStatus] = useState('disconnected')
   const [gameState, setGameState] = useState({
-    phase: 'STOP',
+    phase: 'STOPPED',
     timer: 30,
     totalTime: 30,
     gameTime: 0,
@@ -95,24 +95,33 @@ export default function useWebSocket() {
         if (MSG?.GAME) {
           setGameState(prev => ({
             ...prev,
-            phase: 'START',
+            phase: 'STARTED',
             timer: MSG.GAME.CURRENT_TIME ?? MSG.GAME.DELAY ?? prev.timer,
             totalTime: MSG.GAME.DELAY ?? prev.totalTime,
             gameTime: MSG.GAME.TIME ?? prev.gameTime,
+            question: MSG.GAME.QUESTION || prev.question,
           }))
         }
         break
 
       case 'STOP':
-        setGameState(prev => ({ ...prev, phase: 'STOP' }))
+        if (MSG?.GAME) {
+          setGameState(prev => ({
+            ...prev,
+            phase: 'STOPPED',
+            question: MSG.GAME.QUESTION || prev.question,
+          }))
+        } else {
+          setGameState(prev => ({ ...prev, phase: 'STOPPED' }))
+        }
         break
 
       case 'PAUSE':
-        setGameState(prev => ({ ...prev, phase: 'PAUSE' }))
+        setGameState(prev => ({ ...prev, phase: 'PAUSED' }))
         break
 
       case 'CONTINUE':
-        setGameState(prev => ({ ...prev, phase: 'START' }))
+        setGameState(prev => ({ ...prev, phase: 'STARTED' }))
         break
 
       case 'BUMPER':
@@ -145,7 +154,7 @@ export default function useWebSocket() {
         break
 
       case 'REVEAL':
-        // Handle reveal action if needed
+        setGameState(prev => ({ ...prev, phase: 'REVEALED' }))
         break
 
       case 'REMOTE':
@@ -236,6 +245,11 @@ export default function useWebSocket() {
     sendMessage('FORCE_READY', {})
   }, [sendMessage])
 
+  // Debug: Simulate a button press from a buzzer (for testing)
+  const simulateButton = useCallback((bumperMac, button = 'A') => {
+    sendMessage('BUTTON', { ID: bumperMac, button })
+  }, [sendMessage])
+
   useEffect(() => {
     connect()
 
@@ -273,5 +287,6 @@ export default function useWebSocket() {
     setTeamPoints,
     setClientType,
     forceReady,
+    simulateButton,
   }
 }
