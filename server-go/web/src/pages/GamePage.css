@@ -594,3 +594,39 @@
     height: 60px;
   }
 }
+
+/* Selected state overrides status colors - ENHANCED visibility */
+.question-preview.selected,
+.question-preview.available.selected,
+.question-preview.started.selected,
+.question-preview.stopped.selected {
+  border-left-color: var(--primary-600) !important;
+  border-left-width: 6px !important;
+  background: linear-gradient(135deg, var(--primary-100), var(--primary-50)) !important;
+  box-shadow:
+    var(--shadow-lg),
+    0 0 0 3px var(--primary-400),
+    0 0 20px rgba(99, 102, 241, 0.3) !important;
+  transform: scale(1.02);
+  animation: selectedPulse 2s ease-in-out infinite;
+}
+
+@keyframes selectedPulse {
+  0%, 100% {
+    box-shadow:
+      var(--shadow-lg),
+      0 0 0 3px var(--primary-400),
+      0 0 20px rgba(99, 102, 241, 0.3);
+  }
+  50% {
+    box-shadow:
+      var(--shadow-lg),
+      0 0 0 4px var(--primary-500),
+      0 0 30px rgba(99, 102, 241, 0.5);
+  }
+}
+
+.question-preview.selected .preview-id {
+  color: var(--primary-700);
+  font-size: 1rem;
+}

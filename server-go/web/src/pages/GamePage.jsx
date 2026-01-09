@@ -30,6 +30,7 @@ export default function GamePage() {
     selectQuestion,
     setRemoteDisplay,
     setBumperPoints,
+    forceReady,
   } = useGame()
 
   const [timeInput, setTimeInput] = useState(30)
@@ -76,23 +77,31 @@ export default function GamePage() {
   }, [questions])
 
   const handleStartStop = () => {
-    if (gameState.phase === 'STOP' || gameState.phase === 'READY') {
+    if (gameState.phase === 'READY') {
       startGame(timeInput, pointsInput)
-    } else {
+    } else if (gameState.phase === 'STARTED' || gameState.phase === 'PAUSED') {
       stopGame()
     }
   }
 
   const handlePauseContinue = () => {
-    if (gameState.phase === 'PAUSE') {
+    if (gameState.phase === 'PAUSED') {
       continueGame()
-    } else {
+    } else if (gameState.phase === 'STARTED') {
       pauseGame()
     }
   }
 
-  const handleQuestionSelect = (question) => {
-    if (['STOP', 'PREPARE', 'READY'].includes(gameState.phase)) {
+  const handleQuestionSelect = (question, ctrlKey = false) => {
+    if (['STOPPED', 'REVEALED', 'PREPARE', 'READY'].includes(gameState.phase)) {
+      if (ctrlKey) {
+        // Ctrl+click: select and force to READY (debug)
+        selectQuestion(question.ID)
+        setTimeInput(parseInt(question.TIME) || 30)
+        setPointsInput(parseInt(question.POINTS) || 1)
+        forceReady()
+        return
+      }
       selectQuestion(question.ID)
       setTimeInput(parseInt(question.TIME) || 30)
       setPointsInput(parseInt(question.POINTS) || 1)
@@ -100,13 +109,17 @@ export default function GamePage() {
   }
 
   const handleBumperClick = (bumperMac) => {
-    if (gameState.phase === 'STOP') {
+    if (gameState.phase === 'STOPPED' || gameState.phase === 'REVEALED') {
       setBumperPoints(bumperMac, pointsInput)
     }
   }
 
-  const isPlaying = gameState.phase === 'START' || gameState.phase === 'PAUSE'
-  const canSelectQuestion = ['STOP', 'PREPARE', 'READY'].includes(gameState.phase)
+  const isPlaying = gameState.phase === 'STARTED' || gameState.phase === 'PAUSED'
+  const canSelectQuestion = ['STOPPED', 'REVEALED', 'PREPARE', 'READY'].includes(gameState.phase)
+  // REPONSE button active only in STOPPED phase after a question was played
+  const canReveal = gameState.phase === 'STOPPED' && gameState.question?.STATUS === 'STOPPED'
+  // START button only active in READY phase
+  const canStart = gameState.phase === 'READY'
 
   return (
     <div className="game-page page">
@@ -132,7 +145,7 @@ export default function GamePage() {
               className={`question-preview ${question.STATUS?.toLowerCase() || 'available'} ${
                 gameState.question?.ID === question.ID ? 'selected' : ''
               }`}
-              onClick={() => handleQuestionSelect(question)}
+              onClick={(e) => handleQuestionSelect(question, e.ctrlKey)}
               whileHover={canSelectQuestion ? { scale: 1.01 } : undefined}
               whileTap={canSelectQuestion ? { scale: 0.99 } : undefined}
               style={{ cursor: canSelectQuestion ? 'pointer' : 'not-allowed' }}
@@ -207,18 +220,18 @@ export default function GamePage() {
                 variant={isPlaying ? 'danger' : 'success'}
                 size="lg"
                 onClick={handleStartStop}
-                disabled={gameState.phase === 'PREPARE'}
+                disabled={!canStart && !isPlaying}
               >
                 {isPlaying ? 'STOP' : 'START'}
               </Button>
 
               <Button
-                variant={gameState.phase === 'PAUSE' ? 'primary' : 'warning'}
+                variant={gameState.phase === 'PAUSED' ? 'primary' : 'warning'}
                 size="lg"
                 onClick={handlePauseContinue}
                 disabled={!isPlaying}
               >
-                {gameState.phase === 'PAUSE' ? 'CONTINUER' : 'PAUSE'}
+                {gameState.phase === 'PAUSED' ? 'CONTINUER' : 'PAUSE'}
               </Button>
             </div>
 
@@ -226,7 +239,7 @@ export default function GamePage() {
               variant="secondary"
               size="md"
               onClick={revealAnswer}
-              disabled={gameState.phase !== 'STOP'}
+              disabled={!canReveal}
             >
               REPONSE
             </Button>
@@ -293,6 +306,7 @@ export default function GamePage() {
                     active={team.TIMESTAMP !== undefined}
                     timestamp={team.TIMESTAMP}
                     gameTime={gameState.gameTime}
+                    waitingForReady={['PREPARE', 'READY'].includes(gameState.phase)}
                     buzzers={team.buzzers.map(b => ({
                       ...b,
                       onClick: () => handleBumperClick(b.mac)

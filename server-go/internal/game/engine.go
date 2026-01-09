@@ -25,7 +25,7 @@ type Engine struct {
 func NewEngine() *Engine {
 	return &Engine{
 		state: GameState{
-			Phase:       PhaseStop,
+			Phase:       PhaseStopped,
 			Delay:       30,
 			CurrentTime: 0,
 			Page:        "GAME",
@@ -122,10 +122,13 @@ func (e *Engine) SetBumpers(bumpers map[string]*Bumper) {
 // Ready prepares a new question round
 func (e *Engine) Ready(questionID string, question *Question) {
 	e.mu.Lock()
-	defer e.mu.Unlock()
 
-	if e.state.Phase != PhaseStop && e.state.Phase != PhasePrepare && e.state.Phase != PhaseReady {
+	// Allow from: STOPPED, REVEALED, PREPARE, READY
+	allowedPhases := e.state.Phase == PhaseStopped || e.state.Phase == PhaseRevealed ||
+		e.state.Phase == PhasePrepare || e.state.Phase == PhaseReady
+	if !allowedPhases {
 		log.Printf("[Engine] Cannot ready game from phase %s", e.state.Phase)
+		e.mu.Unlock()
 		return
 	}
 
@@ -153,8 +156,12 @@ func (e *Engine) Ready(questionID string, question *Question) {
 
 	log.Printf("[Engine] Game ready with question: %s", questionID)
 
-	if e.OnStateChange != nil {
-		e.OnStateChange(PhasePrepare)
+	// Release lock BEFORE calling callback to avoid deadlock
+	callback := e.OnStateChange
+	e.mu.Unlock()
+
+	if callback != nil {
+		callback(PhasePrepare)
 	}
 }
 
@@ -229,7 +236,7 @@ func (e *Engine) Start(delay int) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 
-	e.state.Phase = PhaseStart
+	e.state.Phase = PhaseStarted
 	e.state.Delay = delay
 	e.state.CurrentTime = delay
 
@@ -256,7 +263,7 @@ func (e *Engine) Start(delay int) {
 	e.startTimer()
 
 	if e.OnStateChange != nil {
-		e.OnStateChange(PhaseStart)
+		e.OnStateChange(PhaseStarted)
 	}
 }
 
@@ -278,7 +285,7 @@ func (e *Engine) startTimer() {
 			select {
 			case <-ticker.C:
 				e.mu.Lock()
-				if e.state.Phase == PhaseStart {
+				if e.state.Phase == PhaseStarted {
 					e.state.CurrentTime--
 					currentTime := e.state.CurrentTime
 					e.mu.Unlock()
@@ -321,7 +328,7 @@ func (e *Engine) Stop() {
 		e.timer = nil
 	}
 
-	e.state.Phase = PhaseStop
+	e.state.Phase = PhaseStopped
 	e.state.CurrentTime = 0
 
 	if e.state.Question != nil {
@@ -331,7 +338,7 @@ func (e *Engine) Stop() {
 	log.Printf("[Engine] Game stopped")
 
 	if e.OnStateChange != nil {
-		e.OnStateChange(PhaseStop)
+		e.OnStateChange(PhaseStopped)
 	}
 }
 
@@ -340,7 +347,7 @@ func (e *Engine) Pause() {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 
-	e.state.Phase = PhasePause
+	e.state.Phase = PhasePaused
 
 	if e.state.Question != nil {
 		e.state.Question.Status = StatusStopped
@@ -349,7 +356,7 @@ func (e *Engine) Pause() {
 	log.Printf("[Engine] Game paused")
 
 	if e.OnStateChange != nil {
-		e.OnStateChange(PhasePause)
+		e.OnStateChange(PhasePaused)
 	}
 }
 
@@ -363,7 +370,7 @@ func (e *Engine) Continue() {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 
-	e.state.Phase = PhaseStart
+	e.state.Phase = PhaseStarted
 
 	if e.state.Question != nil {
 		e.state.Question.Status = StatusStarted
@@ -372,7 +379,7 @@ func (e *Engine) Continue() {
 	log.Printf("[Engine] Game continued")
 
 	if e.OnStateChange != nil {
-		e.OnStateChange(PhaseStart)
+		e.OnStateChange(PhaseStarted)
 	}
 }
 
@@ -381,19 +388,33 @@ func (e *Engine) Reveal() string {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 
+	if e.state.Phase != PhaseStopped {
+		log.Printf("[Engine] Cannot reveal from phase %s", e.state.Phase)
+		return ""
+	}
+
+	e.state.Phase = PhaseRevealed
+
 	if e.state.Question != nil {
 		e.state.Question.Status = StatusRevealed
+		log.Printf("[Engine] Answer revealed")
+
+		if e.OnStateChange != nil {
+			e.OnStateChange(PhaseRevealed)
+		}
+
 		return e.state.Question.Answer
 	}
 	return ""
 }
+
 
 // ProcessButtonPress handles a button press from a buzzer
 func (e *Engine) ProcessButtonPress(bumperID string, pressTime int64, button string) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 
-	if e.state.Phase != PhaseStart {
+	if e.state.Phase != PhaseStarted {
 		log.Printf("[Engine] Ignoring button press, game not started")
 		return
 	}
@@ -465,7 +486,7 @@ func (e *Engine) UpdateScore(bumperID string, points int) (bumperScore, teamScor
 	return bumperScore, teamScore
 }
 
-// UpdateBumperScore updates only the bumper score (not the team)
+// UpdateBumperScore updates the bumper score and recalculates team score
 func (e *Engine) UpdateBumperScore(bumperID string, points int) int {
 	e.mu.Lock()
 	defer e.mu.Unlock()
@@ -480,10 +501,15 @@ func (e *Engine) UpdateBumperScore(bumperID string, points int) int {
 	log.Printf("[Engine] Bumper score update: bumper=%s, points=%+d, newScore=%d",
 		bumperID, points, bumper.Score)
 
+	// Recalculate team score as sum of all bumpers in team
+	if bumper.Team != "" {
+		e.recalculateTeamScoreUnsafe(bumper.Team)
+	}
+
 	return bumper.Score
 }
 
-// UpdateTeamScore updates only the team score directly
+// UpdateTeamScore distributes points evenly to all bumpers in the team
 func (e *Engine) UpdateTeamScore(teamName string, points int) int {
 	e.mu.Lock()
 	defer e.mu.Unlock()
@@ -494,11 +520,66 @@ func (e *Engine) UpdateTeamScore(teamName string, points int) int {
 		return 0
 	}
 
-	team.Score += points
-	log.Printf("[Engine] Team score update: team=%s, points=%+d, newScore=%d",
-		teamName, points, team.Score)
+	// Find all bumpers in this team
+	var teamBumpers []*Bumper
+	for _, bumper := range e.data.Bumpers {
+		if bumper.Team == teamName {
+			teamBumpers = append(teamBumpers, bumper)
+		}
+	}
+
+	if len(teamBumpers) > 0 {
+		// Distribute points evenly among all bumpers
+		pointsPerBumper := points / len(teamBumpers)
+		remainder := points % len(teamBumpers)
+
+		for i, bumper := range teamBumpers {
+			toAdd := pointsPerBumper
+			// Give remainder to first bumpers
+			if i < remainder {
+				toAdd++
+			}
+			bumper.Score += toAdd
+		}
+		log.Printf("[Engine] Team points distributed: team=%s, points=%+d, bumpers=%d",
+			teamName, points, len(teamBumpers))
+	} else {
+		log.Printf("[Engine] UpdateTeamScore: no bumpers in team %s, points not assigned", teamName)
+	}
+
+	// Recalculate team score
+	e.recalculateTeamScoreUnsafe(teamName)
 
 	return team.Score
+}
+
+// recalculateTeamScoreUnsafe sets team score to sum of all bumper scores (caller must hold lock)
+func (e *Engine) recalculateTeamScoreUnsafe(teamName string) {
+	team, ok := e.data.Teams[teamName]
+	if !ok {
+		return
+	}
+
+	var total int
+	for _, bumper := range e.data.Bumpers {
+		if bumper.Team == teamName {
+			total += bumper.Score
+		}
+	}
+
+	team.Score = total
+	log.Printf("[Engine] Team score recalculated: team=%s, newScore=%d", teamName, total)
+}
+
+// RecalculateAllTeamScores recalculates scores for all teams based on bumper scores
+func (e *Engine) RecalculateAllTeamScores() {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+
+	for teamName := range e.data.Teams {
+		e.recalculateTeamScoreUnsafe(teamName)
+	}
+	log.Printf("[Engine] All team scores recalculated")
 }
 
 // RAZScores resets all scores to zero
@@ -606,11 +687,44 @@ func (e *Engine) GetTeamsAndBumpersJSON() json.RawMessage {
 	return result
 }
 
+
+// ForceReady forces transition to READY phase (debug function, skips PONG wait)
+func (e *Engine) ForceReady() {
+	e.mu.Lock()
+
+	if e.state.Phase != PhasePrepare {
+		log.Printf("[Engine] ForceReady: not in PREPARE phase, current: %s", e.state.Phase)
+		e.mu.Unlock()
+		return
+	}
+
+	// Mark all bumpers as ready
+	for _, bumper := range e.data.Bumpers {
+		bumper.Ready = true
+	}
+
+	// Mark all teams as ready
+	for _, team := range e.data.Teams {
+		team.Ready = true
+	}
+
+	e.state.Phase = PhaseReady
+	log.Printf("[Engine] FORCE_READY: transitioning to READY")
+
+	// Release lock BEFORE calling callback to avoid deadlock
+	callback := e.OnStateChange
+	e.mu.Unlock()
+
+	if callback != nil {
+		callback(PhaseReady)
+	}
+}
+
 // IsGameStopped returns true if game is stopped
 func (e *Engine) IsGameStopped() bool {
 	e.mu.RLock()
 	defer e.mu.RUnlock()
-	return e.state.Phase == PhaseStop
+	return e.state.Phase == PhaseStopped
 }
 
 // IsGamePrepare returns true if game is in prepare phase
@@ -631,5 +745,5 @@ func (e *Engine) IsGameReady() bool {
 func (e *Engine) IsGameStarted() bool {
 	e.mu.RLock()
 	defer e.mu.RUnlock()
-	return e.state.Phase == PhaseStart
+	return e.state.Phase == PhaseStarted
 }

@@ -33,6 +33,7 @@ const (
 	ActionClients          = "CLIENTS"
 	ActionSetClientType    = "SET_CLIENT_TYPE"
 	ActionReorderQuestions = "REORDER_QUESTIONS"
+	ActionForceReady       = "FORCE_READY"
 )
 
 // FSInfo represents file storage information

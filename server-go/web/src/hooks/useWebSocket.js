@@ -231,6 +231,11 @@ export default function useWebSocket() {
     sendMessage('SET_CLIENT_TYPE', { TYPE: type })
   }, [sendMessage])
 
+  // Debug: Force transition to READY state (skips PREPARE/PONG wait)
+  const forceReady = useCallback(() => {
+    sendMessage('FORCE_READY', {})
+  }, [sendMessage])
+
   useEffect(() => {
     connect()
 
@@ -267,5 +272,6 @@ export default function useWebSocket() {
     setBumperPoints,
     setTeamPoints,
     setClientType,
+    forceReady,
   }
 }

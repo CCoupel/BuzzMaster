@@ -356,8 +356,8 @@ func (a *App) handleWebMessage(incoming *protocol.IncomingMessage) {
 
 	switch msg.Action {
 	case protocol.ActionHello:
-		a.broadcastUpdate()
-		a.broadcastQuestions()
+		// Send state directly to the connecting client (not broadcast - avoids race condition)
+		a.sendStateToClient(incoming.ClientID)
 
 	case protocol.ActionFull:
 		a.handleFullUpdate(msg)
@@ -417,6 +417,9 @@ func (a *App) handleWebMessage(incoming *protocol.IncomingMessage) {
 
 	case protocol.ActionReorderQuestions:
 		a.handleReorderQuestions(msg)
+
+	case protocol.ActionForceReady:
+		a.handleForceReady()
 
 	default:
 		log.Printf("[App] Unknown web action: %s", msg.Action)
@@ -511,16 +514,46 @@ func (a *App) handleReady(msg *protocol.Message) {
 		return
 	}
 
-	// TODO: Load question from storage
+	// Load question from storage
 	var question *game.Question
 	if payload.Question != "" {
-		question = &game.Question{ID: payload.Question}
+		question = a.loadQuestion(payload.Question)
+		if question == nil {
+			log.Printf("[App] Question not found: %s", payload.Question)
+			return
+		}
 	}
 
 	a.engine.Ready(payload.Question, question)
 
+	// Broadcast state update to web clients
+	a.broadcastUpdate()
+
 	// Send PING to all buzzers
 	a.broadcastPing()
+}
+
+// loadQuestion loads a question from storage by ID
+func (a *App) loadQuestion(id string) *game.Question {
+	questionsDir := a.config.Storage.QuestionsDir
+	if questionsDir == "" {
+		questionsDir = "./data/files/questions"
+	}
+
+	questionFile := filepath.Join(questionsDir, id, "question.json")
+	data, err := os.ReadFile(questionFile)
+	if err != nil {
+		log.Printf("[App] Failed to read question file %s: %v", questionFile, err)
+		return nil
+	}
+
+	var q game.Question
+	if err := json.Unmarshal(data, &q); err != nil {
+		log.Printf("[App] Failed to parse question JSON: %v", err)
+		return nil
+	}
+
+	return &q
 }
 
 func (a *App) handleStart(msg *protocol.Message) {
@@ -640,6 +673,14 @@ func (a *App) handleReorderQuestions(msg *protocol.Message) {
 	a.broadcastQuestions()
 }
 
+
+
+func (a *App) handleForceReady() {
+	log.Printf("[App] FORCE_READY requested (debug)")
+	a.engine.ForceReady()
+	a.broadcastReady()
+	a.broadcastUpdate()
+}
 func (a *App) handleBumperPoints(msg *protocol.Message) {
 	var payload protocol.BumperPointsPayload
 	if err := json.Unmarshal(msg.Msg, &payload); err != nil {
@@ -711,14 +752,15 @@ func (a *App) broadcastHello() {
 	a.udpBcast.Broadcast(msg)
 }
 
+
 func (a *App) broadcastUpdate() {
 	data := a.engine.GetGameJSON()
+	log.Printf("[App] Broadcasting UPDATE: %s", string(data)[:min(200, len(data))])
 	msg, _ := protocol.NewMessage(protocol.ActionUpdate, nil)
 	msg.Msg = data
 	msg.Version = a.config.Version
 	a.wsHub.Broadcast(msg)
 }
-
 func (a *App) broadcastGameState(phase string) {
 	data := a.engine.GetGameJSON()
 	a.broadcast(protocol.ActionUpdate, data, false)
@@ -809,6 +851,39 @@ func (a *App) broadcastQuestions() {
 
 	// Broadcast via WebSocket only (not to buzzers)
 	a.wsHub.Broadcast(msg)
+}
+
+// sendStateToClient sends the full state to a specific client (used on HELLO)
+func (a *App) sendStateToClient(clientID string) {
+	log.Printf("[App] Sending state to client: %s", clientID)
+
+	// Send UPDATE with game state
+	data := a.engine.GetGameJSON()
+	updateMsg, _ := protocol.NewMessage(protocol.ActionUpdate, nil)
+	updateMsg.Msg = data
+	updateMsg.Version = a.config.Version
+	a.wsHub.SendToClient(clientID, updateMsg)
+
+	// Send QUESTIONS
+	questions := a.loadQuestions()
+	qData, _ := json.Marshal(questions)
+	fsInfo := a.getStorageInfo()
+	questionsMsg, _ := protocol.NewMessage(protocol.ActionQuestions, nil)
+	questionsMsg.Msg = qData
+	questionsMsg.FSInfo = fsInfo
+	questionsMsg.Version = a.config.Version
+	a.wsHub.SendToClient(clientID, questionsMsg)
+
+	// Send CLIENTS counts
+	adminCount, tvCount := a.wsHub.GetClientCounts()
+	clientsPayload := protocol.ClientsPayload{
+		AdminCount: adminCount,
+		TVCount:    tvCount,
+	}
+	cData, _ := json.Marshal(clientsPayload)
+	clientsMsg, _ := protocol.NewMessage(protocol.ActionClients, nil)
+	clientsMsg.Msg = cData
+	a.wsHub.SendToClient(clientID, clientsMsg)
 }
 
 // getStorageInfo returns file storage information (in bytes, like ESP32)
