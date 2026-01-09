@@ -273,15 +273,9 @@ export default function GamePage() {
           </div>
         </Card>
 
-        {/* TV Preview */}
+        {/* TV Preview (iframe to /tv) */}
         <div className="tv-preview-container">
-          <QuestionPreview
-            question={gameState.question}
-            gameState={gameState}
-            backgrounds={gameState.backgrounds || []}
-            teams={teams}
-            bumpers={bumpers}
-          />
+          <QuestionPreview />
         </div>
       </div>
 

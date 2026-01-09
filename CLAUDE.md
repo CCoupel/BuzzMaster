@@ -338,13 +338,12 @@ Shared component for displaying rankings with tie support:
 <Podium teams={sortedTeams} variant="compact" />
 ```
 
-#### QuestionPreview Component (v2.10.0)
-TV preview component showing what will appear on the display:
+#### QuestionPreview Component (v2.11.0)
+TV preview as iframe - perfect sync with actual /tv display:
 - **Location**: `components/QuestionPreview.jsx` + `components/QuestionPreview.css`
-- **Displays**: Question with media, team/player rankings (no game state display)
-- **Reuses**: Podium component for consistent ranking display with ties
-- **Props**: `question`, `gameState`, `backgrounds`, `teams`, `bumpers`
-- **4-Zone Layout**: Same structure as PlayerDisplay (Timer 40px, Question 35px, Media flex, Answers 50px)
+- **Implementation**: Simple iframe pointing to `/tv`
+- **Benefits**: Zero maintenance, always in sync, ~15 lines of code
+- **Trade-off**: Double WebSocket connection (acceptable for admin preview)
 
 #### Score Progress Bars
 Teams and players display animated progress bars showing their score relative to the maximum score:
@@ -427,12 +426,18 @@ Drag and drop pour reordonner les questions :
 - `server-go/web/src/pages/QuestionsPage.css` : Styles drag and drop
 - `server-go/web/src/pages/GamePage.jsx` : Tri par ORDER
 
-#### PlayerDisplay 4-Zone Layout (v2.10.0)
+#### PlayerDisplay 4-Zone Layout (v2.11.0)
 Layout vertical en 4 zones avec hauteurs fixes pour l'affichage TV (/tv) :
 - **Zone 1 - Timer** : 100px hauteur fixe, centré en haut
 - **Zone 2 - Question** : 80px hauteur fixe, texte de la question
 - **Zone 3 - Media** : flex: 1, remplit l'espace restant, image centrée
 - **Zone 4 - Answers** : 120px hauteur fixe, `margin-top: auto` (aligné en bas)
+
+**Transition QCM READY → STARTED :**
+- Bloc QCM unifié couvrant les phases READY → STARTED → REVEALED
+- Les réponses QCM restent en place (pas de re-render/flash)
+- Seuls la question et le média apparaissent en fondu à STARTED
+- Le message "PREPAREZ-VOUS" disparaît, remplacé par le média
 
 **Structure CSS :**
 ```css

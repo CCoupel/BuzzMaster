@@ -8,9 +8,16 @@ import './PlayerDisplay.css'
 
 const DEFAULT_DURATION = 10 // seconds
 
+// QCM answer colors
+const QCM_COLORS = {
+  RED: { label: 'Rouge', color: '#ef4444', letter: 'A' },
+  GREEN: { label: 'Vert', color: '#22c55e', letter: 'B' },
+  YELLOW: { label: 'Jaune', color: '#eab308', letter: 'C' },
+  BLUE: { label: 'Bleu', color: '#3b82f6', letter: 'D' },
+}
+
 export default function PlayerDisplay() {
   const { gameState, teams, bumpers } = useGame()
-  const [showAnswer, setShowAnswer] = useState(false)
   const [lastWinner, setLastWinner] = useState(null)
   const [currentBgIndex, setCurrentBgIndex] = useState(0)
   const timerRef = useRef(null)
@@ -32,10 +39,8 @@ export default function PlayerDisplay() {
     let lastRank = 1
     return sorted.map((team, index) => {
       if (index > 0 && team.score === lastScore) {
-        // Same score as previous team, use same rank
         return { ...team, rank: lastRank }
       }
-      // New score, assign new rank
       currentRank = index + 1
       lastScore = team.score
       lastRank = currentRank
@@ -60,10 +65,8 @@ export default function PlayerDisplay() {
     let lastRank = 1
     return sorted.map((player, index) => {
       if (index > 0 && player.score === lastScore) {
-        // Same score as previous player, use same rank
         return { ...player, rank: lastRank }
       }
-      // New score, assign new rank
       currentRank = index + 1
       lastScore = player.score
       lastRank = currentRank
@@ -111,18 +114,9 @@ export default function PlayerDisplay() {
     return earliest.data
   }, [bumpers, teams])
 
-  // Show answer on STOP phase after START
-  useEffect(() => {
-    if (gameState.phase === 'STOP') {
-      // Could trigger answer reveal here
-    } else {
-      setShowAnswer(false)
-    }
-  }, [gameState.phase])
-
   // Celebration when points are scored
   useEffect(() => {
-    if (winningBumper && gameState.phase === 'STOP' && winningBumper !== lastWinner) {
+    if (winningBumper && gameState.phase === 'REVEALED' && winningBumper !== lastWinner) {
       setLastWinner(winningBumper)
       triggerCelebration(winningBumper.teamColor)
     }
@@ -177,6 +171,15 @@ export default function PlayerDisplay() {
   const maxTeamScore = Math.max(...sortedTeams.map(t => t.score), 1)
   const maxPlayerScore = Math.max(...sortedPlayers.map(p => p.score), 1)
 
+  // Display logic for game content
+  const showPrepare = gameState.phase === 'PREPARE'
+  const showReady = gameState.phase === 'READY'
+  const showGameContent = ['STARTED', 'PAUSED', 'STOPPED', 'REVEALED'].includes(gameState.phase)
+  const showAnswer = gameState.phase === 'REVEALED'
+  const isQcm = gameState.question?.TYPE === 'QCM'
+  // QCM answers visible from READY through REVEALED (no re-render on transition)
+  const showQcmAnswers = ['READY', 'STARTED', 'PAUSED', 'STOPPED', 'REVEALED'].includes(gameState.phase)
+
   // Top 3 players for podium
   const topPlayers = useMemo(() => {
     return sortedPlayers.slice(0, 3).map(player => ({
@@ -221,18 +224,6 @@ export default function PlayerDisplay() {
         <div className="background-overlay" />
       </div>
 
-      {/* Timer Bar - only show during game */}
-      {isShowingGame && (
-        <div className="display-timer-bar">
-          <Timer
-            currentTime={gameState.timer}
-            totalTime={gameState.totalTime}
-            phase={gameState.phase}
-            size="xl"
-          />
-        </div>
-      )}
-
       <AnimatePresence mode="wait">
         {isShowingScores ? (
           /* Team Scores View */
@@ -246,14 +237,12 @@ export default function PlayerDisplay() {
             <h1 className="scores-title">Classement Equipes</h1>
 
             <div className="scores-layout">
-              {/* Podium - main focus */}
               {sortedTeams.length >= 1 && (
                 <div className="scores-podium-section">
                   <Podium teams={sortedTeams} changedTeams={changedTeams} />
                 </div>
               )}
 
-              {/* Compact scores list */}
               {sortedTeams.length > 0 && (
                 <div className="scores-list-section">
                   <div className="scores-list compact">
@@ -321,14 +310,12 @@ export default function PlayerDisplay() {
             <h1 className="scores-title">Classement Joueurs</h1>
 
             <div className="players-layout">
-              {/* Podium - main focus */}
               {topPlayers.length >= 1 && (
                 <div className="players-podium-section">
                   <Podium teams={topPlayers} changedTeams={{}} />
                 </div>
               )}
 
-              {/* Players list */}
               <div className="players-list-section">
                 <div className={`players-list ${useTwoColumns ? 'two-columns' : ''}`}>
                   <AnimatePresence mode="popLayout">
@@ -385,7 +372,7 @@ export default function PlayerDisplay() {
             </div>
           </motion.div>
         ) : (
-          /* Game View */
+          /* Game View - 4 vertical zones */
           <motion.div
             key="game"
             className="game-display"
@@ -393,87 +380,12 @@ export default function PlayerDisplay() {
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
           >
-            {/* Question Content */}
-            {gameState.question && (
-              <div className="question-display">
-                {gameState.question.MEDIA && (
-                  <motion.div
-                    className="question-media-container"
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                  >
-                    <img
-                      src={gameState.question.MEDIA}
-                      alt=""
-                      className="question-media"
-                    />
-                  </motion.div>
-                )}
-
-                <motion.div
-                  className="question-text-container"
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: 0.2 }}
-                >
-                  <p className="question-text">{gameState.question.QUESTION}</p>
-                </motion.div>
-
-                <AnimatePresence>
-                  {showAnswer && (
-                    <motion.div
-                      className="answer-container"
-                      initial={{ opacity: 0, scale: 0.8, y: 20 }}
-                      animate={{ opacity: 1, scale: 1, y: 0 }}
-                      exit={{ opacity: 0, scale: 0.8 }}
-                    >
-                      <p className="answer-text">{gameState.question.ANSWER}</p>
-                    </motion.div>
-                  )}
-                </AnimatePresence>
-              </div>
-            )}
-
-            {/* Winner Display */}
-            <AnimatePresence>
-              {winningBumper && gameState.phase === 'STOP' && (
-                <motion.div
-                  className="winner-display"
-                  initial={{ opacity: 0, scale: 0.5, y: 100 }}
-                  animate={{ opacity: 1, scale: 1, y: 0 }}
-                  exit={{ opacity: 0, scale: 0.5 }}
-                  style={{
-                    '--team-color': winningBumper.teamColor
-                      ? `rgb(${winningBumper.teamColor.join(',')})`
-                      : 'var(--primary-500)'
-                  }}
-                >
-                  <span className="winner-emoji">🎉</span>
-                  <span className="winner-name">{winningBumper.NAME}</span>
-                  <span className="winner-team">{winningBumper.TEAM}</span>
-                  <span className="winner-points">+{gameState.question?.POINTS || 1} pts</span>
-                </motion.div>
-              )}
-            </AnimatePresence>
-
-            {/* Waiting State */}
-            {!gameState.question && gameState.phase === 'STOP' && (
-              <motion.div
-                className="waiting-state"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-              >
-                <span className="waiting-emoji">🎮</span>
-                <span className="waiting-text">En attente de la prochaine question...</span>
-              </motion.div>
-            )}
-
-            {/* Prepare State */}
-            {gameState.phase === 'PREPARE' && (
+            {/* PREPARE State - Fixed "Preparez-vous" */}
+            {showPrepare && (
               <motion.div
                 className="prepare-state"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
+                initial={{ opacity: 0, scale: 0.8 }}
+                animate={{ opacity: 1, scale: 1 }}
               >
                 <motion.span
                   className="prepare-emoji"
@@ -482,25 +394,248 @@ export default function PlayerDisplay() {
                 >
                   🔔
                 </motion.span>
-                <span className="prepare-text">Preparez vos buzzers !</span>
+                <span className="prepare-text">PREPAREZ-VOUS</span>
               </motion.div>
             )}
 
-            {/* Ready State */}
-            {gameState.phase === 'READY' && (
+            {/* READY State - Non-QCM: centered message */}
+            {showReady && !isQcm && (
               <motion.div
-                className="ready-state"
+                className="ready-state-container"
                 initial={{ opacity: 0, scale: 0.8 }}
                 animate={{ opacity: 1, scale: 1 }}
               >
-                <motion.span
-                  className="ready-emoji"
-                  animate={{ scale: [1, 1.2, 1] }}
-                  transition={{ duration: 0.5, repeat: Infinity }}
+                <div className="ready-state">
+                  <motion.span
+                    className="ready-emoji"
+                    animate={{ scale: [1, 1.3, 1] }}
+                    transition={{ duration: 0.4, repeat: Infinity }}
+                  >
+                    ✋
+                  </motion.span>
+                  <motion.span
+                    className="ready-text"
+                    animate={{ opacity: [1, 0.2, 1] }}
+                    transition={{ duration: 0.6, repeat: Infinity }}
+                  >
+                    PREPAREZ-VOUS
+                  </motion.span>
+                </div>
+              </motion.div>
+            )}
+
+            {/* QCM Game Content - unified block for READY through REVEALED (no flash on transition) */}
+            {isQcm && showQcmAnswers && gameState.question && (
+              <div className="game-content-zones">
+                {/* Zone 1: Timer */}
+                <div className="zone-timer">
+                  <Timer
+                    currentTime={gameState.timer}
+                    totalTime={gameState.totalTime}
+                    phase={gameState.phase}
+                    size="xl"
+                    showPhase={false}
+                  />
+                </div>
+
+                {/* Zone 2: Question (only visible from STARTED) */}
+                <div className="zone-question">
+                  {showGameContent ? (
+                    <motion.p
+                      className="question-text"
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: 0.1 }}
+                    >
+                      {gameState.question.QUESTION}
+                    </motion.p>
+                  ) : (
+                    <div className="zone-question-placeholder" />
+                  )}
+                </div>
+
+                {/* Zone 3: Media or "PREPAREZ-VOUS" message */}
+                <div className="zone-media">
+                  {showReady ? (
+                    <motion.div
+                      className="ready-state"
+                      initial={{ opacity: 0, scale: 0.8 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      exit={{ opacity: 0, scale: 0.8 }}
+                    >
+                      <motion.span
+                        className="ready-emoji"
+                        animate={{ scale: [1, 1.3, 1] }}
+                        transition={{ duration: 0.4, repeat: Infinity }}
+                      >
+                        ✋
+                      </motion.span>
+                      <motion.span
+                        className="ready-text"
+                        animate={{ opacity: [1, 0.2, 1] }}
+                        transition={{ duration: 0.6, repeat: Infinity }}
+                      >
+                        PREPAREZ-VOUS
+                      </motion.span>
+                    </motion.div>
+                  ) : gameState.question.MEDIA ? (
+                    <motion.img
+                      src={gameState.question.MEDIA}
+                      alt=""
+                      className="question-media"
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: 0.2 }}
+                    />
+                  ) : null}
+                </div>
+
+                {/* Zone 4: QCM Answers - persistent across READY→STARTED transition */}
+                <div className="zone-answers">
+                  <div className="qcm-answers-grid">
+                    {Object.entries(QCM_COLORS).map(([colorKey, colorData]) => {
+                      const answer = gameState.question.QCM_ANSWERS?.[colorKey]
+                      if (!answer) return null
+                      const isCorrect = gameState.question.QCM_CORRECT === colorKey
+
+                      return (
+                        <motion.div
+                          key={colorKey}
+                          className={`qcm-answer-item ${showAnswer ? (isCorrect ? 'correct' : 'wrong') : ''}`}
+                          style={{
+                            backgroundColor: showAnswer && !isCorrect ? '#4b5563' : colorData.color,
+                            opacity: showAnswer && !isCorrect ? 0.4 : 1
+                          }}
+                          animate={showAnswer && isCorrect ? {
+                            scale: [1, 1.08, 1],
+                            boxShadow: [
+                              `0 0 0px ${colorData.color}`,
+                              `0 0 30px ${colorData.color}`,
+                              `0 0 0px ${colorData.color}`
+                            ]
+                          } : {}}
+                          transition={{ duration: 0.5, repeat: showAnswer && isCorrect ? 3 : 0 }}
+                        >
+                          <span className="qcm-answer-letter">{colorData.letter}</span>
+                          <span className="qcm-answer-text">{answer}</span>
+                        </motion.div>
+                      )
+                    })}
+                  </div>
+                </div>
+
+                {/* Winner Display - only in REVEALED phase */}
+                <AnimatePresence>
+                  {showAnswer && winningBumper && (
+                    <motion.div
+                      className="winner-display"
+                      initial={{ opacity: 0, scale: 0.5, y: 50 }}
+                      animate={{ opacity: 1, scale: 1, y: 0 }}
+                      exit={{ opacity: 0, scale: 0.5 }}
+                      style={{
+                        '--team-color': winningBumper.teamColor
+                          ? `rgb(${winningBumper.teamColor.join(',')})`
+                          : 'var(--primary-500)'
+                      }}
+                    >
+                      <span className="winner-emoji">🎉</span>
+                      <span className="winner-name">{winningBumper.NAME}</span>
+                      <span className="winner-team">{winningBumper.TEAM}</span>
+                      <span className="winner-points">+{gameState.question?.POINTS || 1} pts</span>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
+            )}
+
+            {/* Non-QCM Game Content - 4 vertical zones: Timer, Question, Media, Answers */}
+            {!isQcm && showGameContent && gameState.question && (
+              <div className="game-content-zones">
+                {/* Zone 1: Timer */}
+                <div className="zone-timer">
+                  <Timer
+                    currentTime={gameState.timer}
+                    totalTime={gameState.totalTime}
+                    phase={gameState.phase}
+                    size="xl"
+                    showPhase={false}
+                  />
+                </div>
+
+                {/* Zone 2: Question */}
+                <motion.div
+                  className="zone-question"
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.1 }}
                 >
-                  ✋
-                </motion.span>
-                <span className="ready-text">PRETS ?</span>
+                  <p className="question-text">{gameState.question.QUESTION}</p>
+                </motion.div>
+
+                {/* Zone 3: Media (or spacer if no media) */}
+                {gameState.question.MEDIA ? (
+                  <motion.div
+                    className="zone-media"
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.2 }}
+                  >
+                    <img
+                      src={gameState.question.MEDIA}
+                      alt=""
+                      className="question-media"
+                    />
+                  </motion.div>
+                ) : (
+                  <div className="zone-media-spacer" />
+                )}
+
+                {/* Zone 4: Answer - only in REVEALED phase */}
+                <div className="zone-answers">
+                  {showAnswer && (
+                    <motion.div
+                      className="answer-container"
+                      initial={{ opacity: 0, scale: 0.8, y: 20 }}
+                      animate={{ opacity: 1, scale: 1, y: 0 }}
+                    >
+                      <p className="answer-text">{gameState.question.ANSWER}</p>
+                    </motion.div>
+                  )}
+                </div>
+
+                {/* Winner Display - only in REVEALED phase */}
+                <AnimatePresence>
+                  {showAnswer && winningBumper && (
+                    <motion.div
+                      className="winner-display"
+                      initial={{ opacity: 0, scale: 0.5, y: 50 }}
+                      animate={{ opacity: 1, scale: 1, y: 0 }}
+                      exit={{ opacity: 0, scale: 0.5 }}
+                      style={{
+                        '--team-color': winningBumper.teamColor
+                          ? `rgb(${winningBumper.teamColor.join(',')})`
+                          : 'var(--primary-500)'
+                      }}
+                    >
+                      <span className="winner-emoji">🎉</span>
+                      <span className="winner-name">{winningBumper.NAME}</span>
+                      <span className="winner-team">{winningBumper.TEAM}</span>
+                      <span className="winner-points">+{gameState.question?.POINTS || 1} pts</span>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
+            )}
+
+            {/* Waiting State - no question selected */}
+            {!gameState.question && gameState.phase === 'STOPPED' && (
+              <motion.div
+                className="waiting-state"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+              >
+                <span className="waiting-emoji">🎮</span>
+                <span className="waiting-text">En attente de la prochaine question...</span>
               </motion.div>
             )}
           </motion.div>
