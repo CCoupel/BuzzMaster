@@ -11,7 +11,7 @@
   "game": {
     "default_delay": 30
   },
-  "version": "2.12.0",
+  "version": "2.18.1",
   "storage": {
     "data_dir": "./data",
     "questions_dir": "./data/files/questions",

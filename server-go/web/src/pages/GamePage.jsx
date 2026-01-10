@@ -30,6 +30,7 @@ export default function GamePage() {
     selectQuestion,
     setRemoteDisplay,
     setBumperPoints,
+    setTeamPoints,
     forceReady,
     simulateButton,
   } = useGame()
@@ -46,6 +47,7 @@ export default function GamePage() {
       grouped[teamName].push({
         mac,
         name: bumper.NAME,
+        score: bumper.SCORE || 0,
         timestamp: bumper.TIME,
         button: bumper.BUTTON,
         ready: bumper.READY === true || bumper.READY === 'TRUE',
@@ -325,12 +327,19 @@ export default function GamePage() {
                     name={team.name}
                     color={team.COLOR}
                     score={team.SCORE || 0}
+                    teamPoints={team.TEAM_POINTS || 0}
                     ready={team.READY === true || team.READY === 'TRUE'}
                     active={team.TIME !== undefined && team.TIME > 0}
                     timestamp={team.TIME}
                     gameTime={gameState.gameTime}
                     waitingForReady={['PREPARE', 'READY'].includes(gameState.phase)}
                     waitingForBuzz={['STARTED', 'PAUSED'].includes(gameState.phase)}
+                    onTeamClick={(teamName) => {
+                      if (['STOPPED', 'REVEALED'].includes(gameState.phase)) {
+                        setTeamPoints(teamName, pointsInput)
+                      }
+                    }}
+                    onPlayerClick={(bumperMac) => handleBumperClick(bumperMac)}
                     buzzers={team.buzzers.map(b => ({
                       ...b,
                       onClick: (e) => handleBumperClick(b.mac, e?.ctrlKey)

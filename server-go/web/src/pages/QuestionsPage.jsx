@@ -27,6 +27,7 @@ export default function QuestionsPage() {
     question: '',
     answer: '',
     type: 'NORMAL',
+    pointsTarget: 'PLAYER', // PLAYER or TEAM
     qcmAnswers: { RED: '', GREEN: '', YELLOW: '', BLUE: '' },
     qcmCorrect: '',
     points: '1',
@@ -101,7 +102,14 @@ export default function QuestionsPage() {
   }
 
   const handleInputChange = (field, value) => {
-    setFormData(prev => ({ ...prev, [field]: value }))
+    setFormData(prev => {
+      const updates = { [field]: value }
+      // Auto-set pointsTarget when type changes
+      if (field === 'type') {
+        updates.pointsTarget = value === 'QCM' ? 'TEAM' : 'PLAYER'
+      }
+      return { ...prev, ...updates }
+    })
   }
 
   const handleFileChange = (e) => {
@@ -120,10 +128,14 @@ export default function QuestionsPage() {
 
   const handleQuestionClick = (question) => {
     setEditingId(question.ID)
+    const qType = question.TYPE || 'NORMAL'
+    // Default pointsTarget based on type if not set
+    const defaultTarget = qType === 'QCM' ? 'TEAM' : 'PLAYER'
     setFormData({
       question: question.QUESTION || '',
       answer: question.ANSWER || '',
-      type: question.TYPE || 'NORMAL',
+      type: qType,
+      pointsTarget: question.POINTS_TARGET || defaultTarget,
       qcmAnswers: question.QCM_ANSWERS || { RED: '', GREEN: '', YELLOW: '', BLUE: '' },
       qcmCorrect: question.QCM_CORRECT || '',
       points: question.POINTS || '1',
@@ -147,6 +159,7 @@ export default function QuestionsPage() {
       question: '',
       answer: '',
       type: 'NORMAL',
+      pointsTarget: 'PLAYER',
       qcmAnswers: { RED: '', GREEN: '', YELLOW: '', BLUE: '' },
       qcmCorrect: '',
       points: '1',
@@ -187,6 +200,7 @@ export default function QuestionsPage() {
     }
     data.append('question', formData.question)
     data.append('type', formData.type)
+    data.append('points_target', formData.pointsTarget)
     data.append('points', formData.points)
     data.append('time', formData.time)
 
@@ -361,6 +375,39 @@ export default function QuestionsPage() {
                       onClick={() => handleInputChange('type', 'QCM')}
                     >
                       QCM
+                    </button>
+                  </div>
+                </div>
+
+                {/* Points Target Selector */}
+                <div className="form-group">
+                  <label>Attribution des points</label>
+                  <div className="type-selector points-target-selector">
+                    <button
+                      type="button"
+                      className={`type-btn target-btn ${formData.pointsTarget === 'PLAYER' ? 'active' : ''}`}
+                      onClick={() => handleInputChange('pointsTarget', 'PLAYER')}
+                      title="Points attribues au joueur"
+                    >
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                        <circle cx="12" cy="8" r="4"/>
+                        <path d="M12 14c-4 0-8 2-8 4v2h16v-2c0-2-4-4-8-4z"/>
+                      </svg>
+                      <span>Individuel</span>
+                    </button>
+                    <button
+                      type="button"
+                      className={`type-btn target-btn ${formData.pointsTarget === 'TEAM' ? 'active' : ''}`}
+                      onClick={() => handleInputChange('pointsTarget', 'TEAM')}
+                      title="Points attribues a l'equipe"
+                    >
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                        <circle cx="9" cy="7" r="3"/>
+                        <circle cx="15" cy="7" r="3"/>
+                        <path d="M9 12c-3 0-6 1.5-6 3v2h12v-2c0-1.5-3-3-6-3z"/>
+                        <path d="M15 12c-.5 0-1 .1-1.5.2.8.6 1.5 1.4 1.5 2.3v2.5h6v-2c0-1.5-3-3-6-3z"/>
+                      </svg>
+                      <span>Equipe</span>
                     </button>
                   </div>
                 </div>

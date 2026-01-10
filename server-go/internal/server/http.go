@@ -127,6 +127,7 @@ func (h *HTTPServer) setupRoutes() {
 	h.mux.HandleFunc("/listGame", h.handleListGame)
 	h.mux.HandleFunc("/listFiles", h.handleListFiles)
 	h.mux.HandleFunc("/questions", h.handleQuestions)
+	h.mux.HandleFunc("/history", h.handleHistory)
 	h.mux.HandleFunc("/config.json", h.handleConfig)
 
 	// Actions
@@ -175,7 +176,7 @@ func (h *HTTPServer) handleRoot(w http.ResponseWriter, r *http.Request) {
 // isSPARoute checks if the path is a React SPA route
 // Uses distinct paths to avoid conflicts with API endpoints
 func (h *HTTPServer) isSPARoute(path string) bool {
-	spaRoutes := []string{"/scoreboard", "/quiz", "/settings", "/tv", "/game"}
+	spaRoutes := []string{"/scoreboard", "/quiz", "/settings", "/tv", "/game", "/teams", "/history-page"}
 	for _, route := range spaRoutes {
 		if strings.HasPrefix(path, route) {
 			return true
@@ -275,6 +276,12 @@ func (h *HTTPServer) handleListGame(w http.ResponseWriter, r *http.Request) {
 	w.Write(h.engine.GetTeamsAndBumpersJSON())
 }
 
+func (h *HTTPServer) handleHistory(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	history := h.engine.GetHistory()
+	json.NewEncoder(w).Encode(history)
+}
+
 func (h *HTTPServer) handleListFiles(w http.ResponseWriter, r *http.Request) {
 	var result strings.Builder
 	filesDir := filepath.Join(h.dataDir, "files")
@@ -365,6 +372,18 @@ func (h *HTTPServer) handleUploadQuestion(w http.ResponseWriter, r *http.Request
 		questionType = "NORMAL"
 	}
 	question["TYPE"] = questionType
+
+	// Handle points target (PLAYER or TEAM)
+	pointsTarget := r.FormValue("points_target")
+	if pointsTarget == "" {
+		// Default: NORMAL questions -> PLAYER, QCM questions -> TEAM
+		if questionType == "QCM" {
+			pointsTarget = "TEAM"
+		} else {
+			pointsTarget = "PLAYER"
+		}
+	}
+	question["POINTS_TARGET"] = pointsTarget
 
 	// Handle QCM specific fields
 	if questionType == "QCM" {

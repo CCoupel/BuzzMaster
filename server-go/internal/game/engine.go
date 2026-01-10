@@ -11,6 +11,7 @@ import (
 type Engine struct {
 	state   GameState
 	data    *TeamsAndBumpers
+	history []GameEvent
 	mu      sync.RWMutex
 	timer   *time.Ticker
 	stopCh  chan struct{}
@@ -544,7 +545,7 @@ func (e *Engine) UpdateBumperScore(bumperID string, points int) int {
 	return bumper.Score
 }
 
-// UpdateTeamScore distributes points evenly to all bumpers in the team
+// UpdateTeamScore adds points directly to team's own TeamPoints (not bumpers)
 func (e *Engine) UpdateTeamScore(teamName string, points int) int {
 	e.mu.Lock()
 	defer e.mu.Unlock()
@@ -555,55 +556,34 @@ func (e *Engine) UpdateTeamScore(teamName string, points int) int {
 		return 0
 	}
 
-	// Find all bumpers in this team
-	var teamBumpers []*Bumper
-	for _, bumper := range e.data.Bumpers {
-		if bumper.Team == teamName {
-			teamBumpers = append(teamBumpers, bumper)
-		}
-	}
+	// Add points directly to TeamPoints (independent from bumper scores)
+	team.TeamPoints += points
+	log.Printf("[Engine] Team points update: team=%s, points=%+d, newTeamPoints=%d",
+		teamName, points, team.TeamPoints)
 
-	if len(teamBumpers) > 0 {
-		// Distribute points evenly among all bumpers
-		pointsPerBumper := points / len(teamBumpers)
-		remainder := points % len(teamBumpers)
-
-		for i, bumper := range teamBumpers {
-			toAdd := pointsPerBumper
-			// Give remainder to first bumpers
-			if i < remainder {
-				toAdd++
-			}
-			bumper.Score += toAdd
-		}
-		log.Printf("[Engine] Team points distributed: team=%s, points=%+d, bumpers=%d",
-			teamName, points, len(teamBumpers))
-	} else {
-		log.Printf("[Engine] UpdateTeamScore: no bumpers in team %s, points not assigned", teamName)
-	}
-
-	// Recalculate team score
+	// Recalculate total team score (TeamPoints + bumper scores)
 	e.recalculateTeamScoreUnsafe(teamName)
 
 	return team.Score
 }
 
-// recalculateTeamScoreUnsafe sets team score to sum of all bumper scores (caller must hold lock)
+// recalculateTeamScoreUnsafe sets team score to TeamPoints + sum of bumper scores (caller must hold lock)
 func (e *Engine) recalculateTeamScoreUnsafe(teamName string) {
 	team, ok := e.data.Teams[teamName]
 	if !ok {
 		return
 	}
 
-	var total int
+	var bumperTotal int
 	for _, bumper := range e.data.Bumpers {
 		if bumper.Team == teamName {
-			total += bumper.Score
+			bumperTotal += bumper.Score
 		}
 	}
 
-	team.Score = total
-	log.Printf("[Engine] Team score recalculated: team=%s, newScore=%d", teamName, total)
+	team.Score = team.TeamPoints + bumperTotal
+	log.Printf("[Engine] Team score recalculated: team=%s, teamPoints=%d, bumperTotal=%d, totalScore=%d",
+		teamName, team.TeamPoints, bumperTotal, team.Score)
 }
 
 // RecalculateAllTeamScores recalculates scores for all teams based on bumper scores
@@ -629,10 +609,14 @@ func (e *Engine) RAZScores() {
 
 	for _, team := range e.data.Teams {
 		team.Score = 0
+		team.TeamPoints = 0
 		team.Time = 0
 	}
 
-	log.Printf("[Engine] All scores reset")
+	// Clear history as well
+	e.history = nil
+
+	log.Printf("[Engine] All scores and history reset")
 }
 
 // ClearBumpers removes all bumpers (keeps teams intact)
@@ -795,4 +779,31 @@ func (e *Engine) IsGameStarted() bool {
 	e.mu.RLock()
 	defer e.mu.RUnlock()
 	return e.state.Phase == PhaseStarted
+}
+
+// AddGameEvent adds an event to the history
+func (e *Engine) AddGameEvent(event GameEvent) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.history = append(e.history, event)
+	log.Printf("[Engine] Game event added: type=%s, winner=%s, points=%d",
+		event.EventType, event.WinnerName, event.Points)
+}
+
+// GetHistory returns the game event history
+func (e *Engine) GetHistory() []GameEvent {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	// Return a copy to avoid race conditions
+	result := make([]GameEvent, len(e.history))
+	copy(result, e.history)
+	return result
+}
+
+// ClearHistory clears the game event history
+func (e *Engine) ClearHistory() {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.history = nil
+	log.Printf("[Engine] History cleared")
 }

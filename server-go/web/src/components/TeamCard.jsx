@@ -1,4 +1,5 @@
 import { motion } from 'framer-motion'
+import { useState } from 'react'
 import './TeamCard.css'
 
 // QCM answer colors - same as TeamsPage
@@ -13,16 +14,20 @@ export default function TeamCard({
   name,
   color,
   score = 0,
+  teamPoints = 0,
   ready = false,
   active = false,
   timestamp,
   gameTime,
   buzzers = [],
   onClick,
+  onTeamClick,
+  onPlayerClick,
   className = '',
   waitingForReady = false,
   waitingForBuzz = false,
 }) {
+  const [showTooltip, setShowTooltip] = useState(false)
   const rgbColor = color ? `rgb(${color.join(',')})` : 'var(--primary-500)'
   const reactionTime = timestamp && gameTime
     ? ((timestamp - gameTime) / 1000000).toFixed(3)
@@ -34,17 +39,32 @@ export default function TeamCard({
   // Team is waiting for buzz when in STARTED/PAUSED phase and hasn't buzzed yet
   const isWaitingForBuzz = waitingForBuzz && !active
 
+  // Calculate bumper total for tooltip
+  const bumperTotal = buzzers.reduce((sum, b) => sum + (b.score || 0), 0)
+
+  // Handle team header click (for team points)
+  const handleTeamClick = (e) => {
+    e.stopPropagation()
+    if (onTeamClick) {
+      onTeamClick(name)
+    } else if (onClick) {
+      onClick()
+    }
+  }
+
   return (
     <motion.div
       className={`team-card ${active ? 'active' : ''} ${ready ? 'ready' : ''} ${isWaiting ? 'waiting' : ''} ${isWaitingForBuzz ? 'waiting-buzz' : ''} ${className}`}
       style={{ '--team-color': rgbColor }}
-      onClick={onClick}
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
-      whileHover={onClick ? { scale: 1.02 } : undefined}
-      whileTap={onClick ? { scale: 0.98 } : undefined}
     >
-      <div className="team-card-header">
+      <div
+        className={`team-card-header ${onTeamClick ? 'clickable' : ''}`}
+        onClick={handleTeamClick}
+        onMouseEnter={() => setShowTooltip(true)}
+        onMouseLeave={() => setShowTooltip(false)}
+      >
         <div className="team-color-indicator" />
         <h3 className="team-name">{name}</h3>
         {ready && (
@@ -65,22 +85,39 @@ export default function TeamCard({
             ...
           </motion.span>
         )}
+        <motion.span
+          className="score-value header-score"
+          key={score}
+          initial={{ scale: 1.5, color: 'var(--accent-green)' }}
+          animate={{ scale: 1, color: 'var(--gray-800)' }}
+          transition={{ duration: 0.3 }}
+        >
+          {score} Pts
+        </motion.span>
+
+        {/* Score decomposition tooltip */}
+        {showTooltip && (teamPoints > 0 || bumperTotal > 0) && (
+          <div className="score-tooltip">
+            <div className="tooltip-row">
+              <span>Equipe:</span>
+              <span>{teamPoints} pts</span>
+            </div>
+            {buzzers.map((b, i) => (
+              <div key={b.mac || i} className="tooltip-row">
+                <span>+ {b.name}:</span>
+                <span>{b.score || 0} pts</span>
+              </div>
+            ))}
+            <div className="tooltip-row tooltip-total">
+              <span>= Total:</span>
+              <span>{score} pts</span>
+            </div>
+          </div>
+        )}
       </div>
 
-      <div className="team-card-body">
-        <div className="team-score">
-          <motion.span
-            className="score-value"
-            key={score}
-            initial={{ scale: 1.5, color: 'var(--accent-green)' }}
-            animate={{ scale: 1, color: 'var(--gray-800)' }}
-            transition={{ duration: 0.3 }}
-          >
-            {score} Pts
-          </motion.span>
-        </div>
-
-        {reactionTime && (
+      {reactionTime && (
+        <div className="team-card-body">
           <motion.div
             className="reaction-time"
             initial={{ opacity: 0, x: 20 }}
@@ -89,23 +126,31 @@ export default function TeamCard({
             <span className="time-label">Temps</span>
             <span className="time-value">{reactionTime}s</span>
           </motion.div>
-        )}
-      </div>
+        </div>
+      )}
 
       {buzzers.length > 0 && (
         <div className="team-buzzers">
           {buzzers.map((buzzer, index) => {
             const answerColorData = buzzer.answerColor && ANSWER_COLORS[buzzer.answerColor]
             const buzzerWaitingBuzz = waitingForBuzz && !buzzer.active
+            const handleBuzzerClick = (e) => {
+              e.stopPropagation()
+              if (onPlayerClick) {
+                onPlayerClick(buzzer.mac)
+              } else if (buzzer.onClick) {
+                buzzer.onClick(e)
+              }
+            }
             return (
               <motion.div
                 key={buzzer.mac || index}
-                className={`buzzer-mini ${buzzer.active ? 'active' : ''} ${buzzer.ready ? 'ready' : ''} ${answerColorData ? 'has-answer-color' : ''} ${buzzerWaitingBuzz ? 'waiting-buzz' : ''}`}
+                className={`buzzer-mini ${buzzer.active ? 'active' : ''} ${buzzer.ready ? 'ready' : ''} ${answerColorData ? 'has-answer-color' : ''} ${buzzerWaitingBuzz ? 'waiting-buzz' : ''} ${onPlayerClick ? 'clickable' : ''}`}
                 style={answerColorData ? { '--answer-color': answerColorData.color } : undefined}
                 initial={{ opacity: 0, scale: 0.8 }}
                 animate={{ opacity: 1, scale: 1 }}
                 transition={{ delay: index * 0.1 }}
-                onClick={buzzer.onClick}
+                onClick={handleBuzzerClick}
               >
                 <div className="buzzer-info">
                   {answerColorData && (
@@ -118,11 +163,14 @@ export default function TeamCard({
                   )}
                   <span className="buzzer-name">{buzzer.name}</span>
                 </div>
-                {buzzer.timestamp && gameTime && (
-                  <span className="buzzer-time">
-                    {((buzzer.timestamp - gameTime) / 1000000).toFixed(3)}s
-                  </span>
-                )}
+                <div className="buzzer-right">
+                  {buzzer.timestamp && gameTime && (
+                    <span className="buzzer-time">
+                      {((buzzer.timestamp - gameTime) / 1000000).toFixed(3)}s
+                    </span>
+                  )}
+                  <span className="buzzer-score">{buzzer.score || 0} pts</span>
+                </div>
               </motion.div>
             )
           })}

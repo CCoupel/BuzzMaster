@@ -8,6 +8,7 @@ export default function Navbar({ connectionStatus = 'disconnected', clientCounts
     { to: '/scoreboard', label: 'Scores', icon: '🏆' },
     { to: '/teams', label: 'Equipes', icon: '👥' },
     { to: '/quiz', label: 'Questions', icon: '❓' },
+    { to: '/history-page', label: 'Historique', icon: '📜' },
     { to: '/settings', label: 'Config', icon: '⚙️' },
   ]
 

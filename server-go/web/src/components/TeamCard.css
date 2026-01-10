@@ -36,6 +36,25 @@
   align-items: center;
   gap: var(--space-2);
   margin-bottom: var(--space-1);
+  position: relative;
+}
+
+.team-card-header.clickable {
+  cursor: pointer;
+  border-radius: var(--radius-md);
+  padding: var(--space-1);
+  margin: calc(-1 * var(--space-1));
+  margin-bottom: 0;
+  transition: background-color var(--transition-fast);
+}
+
+.team-card-header.clickable:hover {
+  background-color: color-mix(in srgb, var(--team-color) 15%, transparent);
+}
+
+.header-score {
+  margin-left: auto;
+  font-size: 1rem !important;
 }
 
 .team-color-indicator {
@@ -196,11 +215,67 @@
   background: color-mix(in srgb, var(--answer-color) 30%, white);
 }
 
+.buzzer-right {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
 .buzzer-time {
   font-family: var(--font-display);
   font-size: 0.75rem;
   font-weight: 600;
   color: var(--accent-cyan);
+}
+
+.buzzer-score {
+  font-family: var(--font-display);
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--gray-600);
+  min-width: 40px;
+  text-align: right;
+}
+
+.buzzer-mini.clickable {
+  cursor: pointer;
+}
+
+.buzzer-mini.clickable:hover {
+  transform: translateX(2px);
+  box-shadow: var(--shadow-sm);
+}
+
+/* Score decomposition tooltip */
+.score-tooltip {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  z-index: 100;
+  background: white;
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+  padding: var(--space-2);
+  min-width: 150px;
+  margin-top: var(--space-1);
+  font-size: 0.75rem;
+  border: 1px solid var(--gray-200);
+}
+
+.tooltip-row {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding: 2px 0;
+  color: var(--gray-600);
+}
+
+.tooltip-row.tooltip-total {
+  border-top: 1px solid var(--gray-200);
+  margin-top: var(--space-1);
+  padding-top: var(--space-1);
+  font-weight: 600;
+  color: var(--gray-800);
 }
 
 /* Active Indicator Animation */

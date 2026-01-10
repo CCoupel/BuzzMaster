@@ -473,6 +473,28 @@
   color: var(--gray-800);
 }
 
+/* Points Target Selector */
+.points-target-selector {
+  margin-top: var(--space-1);
+}
+
+.target-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+}
+
+.target-btn svg {
+  flex-shrink: 0;
+}
+
+.target-btn.active {
+  border-color: var(--accent-cyan);
+  background: color-mix(in srgb, var(--accent-cyan) 10%, white);
+  color: var(--accent-cyan);
+}
+
 /* QCM Answers Section */
 .qcm-answers-section {
   display: flex;
