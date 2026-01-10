@@ -18,6 +18,7 @@ export default function QuestionsPage() {
   const [isUploading, setIsUploading] = useState(false)
   const [editingId, setEditingId] = useState(null)
   const fileInputRef = useRef(null)
+  const fileAnswerInputRef = useRef(null)
   const [draggedId, setDraggedId] = useState(null)
   const [dragOverId, setDragOverId] = useState(null)
 
@@ -32,6 +33,8 @@ export default function QuestionsPage() {
     time: '30',
     media: null,
     existingMedia: null,
+    mediaAnswer: null,
+    existingMediaAnswer: null,
   })
 
   const sortedQuestions = useMemo(() => {
@@ -108,6 +111,13 @@ export default function QuestionsPage() {
     }
   }
 
+  const handleFileAnswerChange = (e) => {
+    const file = e.target.files?.[0]
+    if (file) {
+      setFormData(prev => ({ ...prev, mediaAnswer: file, existingMediaAnswer: null }))
+    }
+  }
+
   const handleQuestionClick = (question) => {
     setEditingId(question.ID)
     setFormData({
@@ -120,9 +130,14 @@ export default function QuestionsPage() {
       time: question.TIME || '30',
       media: null,
       existingMedia: question.MEDIA || null,
+      mediaAnswer: null,
+      existingMediaAnswer: question.MEDIA_ANSWER || null,
     })
     if (fileInputRef.current) {
       fileInputRef.current.value = ''
+    }
+    if (fileAnswerInputRef.current) {
+      fileAnswerInputRef.current.value = ''
     }
   }
 
@@ -138,9 +153,14 @@ export default function QuestionsPage() {
       time: '30',
       media: null,
       existingMedia: null,
+      mediaAnswer: null,
+      existingMediaAnswer: null,
     })
     if (fileInputRef.current) {
       fileInputRef.current.value = ''
+    }
+    if (fileAnswerInputRef.current) {
+      fileAnswerInputRef.current.value = ''
     }
   }
 
@@ -182,6 +202,10 @@ export default function QuestionsPage() {
 
     if (formData.media) {
       data.append('file', formData.media)
+    }
+
+    if (formData.mediaAnswer) {
+      data.append('file_answer', formData.mediaAnswer)
     }
 
     try {
@@ -259,12 +283,24 @@ export default function QuestionsPage() {
                         X
                       </Button>
                     </div>
-                    {question.MEDIA && (
-                      <img
-                        src={question.MEDIA}
-                        alt=""
-                        className="question-thumbnail"
-                      />
+                    {(question.MEDIA || question.MEDIA_ANSWER) && (
+                      <div className="question-thumbnails">
+                        {question.MEDIA && (
+                          <img
+                            src={question.MEDIA}
+                            alt=""
+                            className="question-thumbnail"
+                          />
+                        )}
+                        {question.MEDIA_ANSWER && (
+                          <img
+                            src={question.MEDIA_ANSWER}
+                            alt=""
+                            className="question-thumbnail answer-thumbnail"
+                            title="Image réponse"
+                          />
+                        )}
+                      </div>
                     )}
                     <p className="question-preview">{question.QUESTION}</p>
                     <div className="question-meta">
@@ -409,7 +445,7 @@ export default function QuestionsPage() {
                 </div>
 
                 <div className="form-group">
-                  <label htmlFor="media-input">Image (optionnel)</label>
+                  <label htmlFor="media-input">Image question (optionnel)</label>
                   <input
                     id="media-input"
                     type="file"
@@ -431,7 +467,36 @@ export default function QuestionsPage() {
                           if (fileInputRef.current) fileInputRef.current.value = ''
                         }}
                       >
-                        Supprimer image
+                        Supprimer
+                      </Button>
+                    </div>
+                  )}
+                </div>
+
+                <div className="form-group">
+                  <label htmlFor="media-answer-input">Image reponse (optionnel)</label>
+                  <input
+                    id="media-answer-input"
+                    type="file"
+                    ref={fileAnswerInputRef}
+                    onChange={handleFileAnswerChange}
+                    accept="image/*"
+                  />
+                  {(formData.mediaAnswer || formData.existingMediaAnswer) && (
+                    <div className="media-preview media-preview-answer">
+                      <img
+                        src={formData.mediaAnswer ? URL.createObjectURL(formData.mediaAnswer) : formData.existingMediaAnswer}
+                        alt="Preview reponse"
+                      />
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => {
+                          setFormData(prev => ({ ...prev, mediaAnswer: null, existingMediaAnswer: null }))
+                          if (fileAnswerInputRef.current) fileAnswerInputRef.current.value = ''
+                        }}
+                      >
+                        Supprimer
                       </Button>
                     </div>
                   )}

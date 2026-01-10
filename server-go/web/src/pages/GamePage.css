@@ -259,12 +259,17 @@
   color: white;
 }
 
+/* Preview images container */
+.preview-images {
+  position: relative;
+  margin-bottom: var(--space-2);
+}
+
 .preview-image {
   width: 100%;
-  height: 80px;
+  height: 60px;
   border-radius: var(--radius-md);
   overflow: hidden;
-  margin-bottom: var(--space-2);
   background: var(--gray-200);
 }
 
@@ -272,6 +277,30 @@
   width: 100%;
   height: 100%;
   object-fit: cover;
+}
+
+/* Answer image - positioned at bottom right */
+.preview-image-answer {
+  position: absolute;
+  bottom: 3px;
+  right: 3px;
+  width: 40px;
+  height: 30px;
+  border: 2px solid var(--success);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3), 0 0 6px rgba(34, 197, 94, 0.4);
+  border-radius: var(--radius-sm);
+}
+
+/* When only answer image exists - show placeholder with small answer at bottom-right */
+.preview-images:has(.preview-image-answer:only-child) {
+  height: 60px;
+  background: var(--gray-200);
+  border-radius: var(--radius-md);
+}
+
+/* Answer image stays small and at bottom-right even when it's the only image */
+.preview-images:has(.preview-image-answer:only-child) .preview-image-answer {
+  /* Keep absolute positioning - same as when question image exists */
 }
 
 .preview-content {

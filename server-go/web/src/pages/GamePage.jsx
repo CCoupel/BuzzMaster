@@ -176,9 +176,18 @@ export default function GamePage() {
                 )}
                 <span className="preview-status">{question.STATUS || 'AVAILABLE'}</span>
               </div>
-              {question.MEDIA && (
-                <div className="preview-image">
-                  <img src={question.MEDIA} alt="" />
+              {(question.MEDIA || question.MEDIA_ANSWER) && (
+                <div className="preview-images">
+                  {question.MEDIA && (
+                    <div className="preview-image">
+                      <img src={question.MEDIA} alt="" />
+                    </div>
+                  )}
+                  {question.MEDIA_ANSWER && (
+                    <div className="preview-image preview-image-answer" title="Image réponse">
+                      <img src={question.MEDIA_ANSWER} alt="" />
+                    </div>
+                  )}
                 </div>
               )}
               <div className="preview-content">

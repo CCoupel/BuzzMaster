@@ -83,17 +83,18 @@ type QCMAnswers struct {
 
 // Question represents a quiz question
 type Question struct {
-	ID         string         `json:"ID"`
-	Question   string         `json:"QUESTION"`
-	Answer     string         `json:"ANSWER"`                // For normal questions
-	Type       QuestionType   `json:"TYPE,omitempty"`        // "NORMAL" or "QCM" (default NORMAL)
-	QCMAnswers *QCMAnswers    `json:"QCM_ANSWERS,omitempty"` // For QCM questions
-	QCMCorrect string         `json:"QCM_CORRECT,omitempty"` // "RED", "GREEN", "YELLOW", "BLUE"
-	Points     string         `json:"POINTS"`                // String to match JSON format
-	Time       string         `json:"TIME"`                  // String to match JSON format
-	Order      int            `json:"ORDER,omitempty"`       // Display order (for drag and drop)
-	Media      string         `json:"MEDIA,omitempty"`
-	Status     QuestionStatus `json:"STATUS,omitempty"`
+	ID          string         `json:"ID"`
+	Question    string         `json:"QUESTION"`
+	Answer      string         `json:"ANSWER"`                // For normal questions
+	Type        QuestionType   `json:"TYPE,omitempty"`        // "NORMAL" or "QCM" (default NORMAL)
+	QCMAnswers  *QCMAnswers    `json:"QCM_ANSWERS,omitempty"` // For QCM questions
+	QCMCorrect  string         `json:"QCM_CORRECT,omitempty"` // "RED", "GREEN", "YELLOW", "BLUE"
+	Points      string         `json:"POINTS"`                // String to match JSON format
+	Time        string         `json:"TIME"`                  // String to match JSON format
+	Order       int            `json:"ORDER,omitempty"`       // Display order (for drag and drop)
+	Media       string         `json:"MEDIA,omitempty"`       // Question media (shown during game)
+	MediaAnswer string         `json:"MEDIA_ANSWER,omitempty"` // Answer media (shown during REVEAL)
+	Status      QuestionStatus `json:"STATUS,omitempty"`
 }
 
 // Background represents a background image with its settings

@@ -381,7 +381,7 @@ func (h *HTTPServer) handleUploadQuestion(w http.ResponseWriter, r *http.Request
 		}
 	}
 
-	// Handle file upload
+	// Handle question media upload
 	file, header, err := r.FormFile("file")
 	if err == nil {
 		defer file.Close()
@@ -395,6 +395,22 @@ func (h *HTTPServer) handleUploadQuestion(w http.ResponseWriter, r *http.Request
 			defer dst.Close()
 			io.Copy(dst, file)
 			question["MEDIA"] = "/question/" + id + "/" + fileName
+		}
+	}
+
+	// Handle answer media upload
+	fileAnswer, headerAnswer, err := r.FormFile("file_answer")
+	if err == nil {
+		defer fileAnswer.Close()
+		randomNum := rand.Intn(9000) + 1000
+		fileName := fmt.Sprintf("media_answer_%d%s", randomNum, filepath.Ext(headerAnswer.Filename))
+		filePath := filepath.Join(questionsDir, fileName)
+
+		dst, err := os.Create(filePath)
+		if err == nil {
+			defer dst.Close()
+			io.Copy(dst, fileAnswer)
+			question["MEDIA_ANSWER"] = "/question/" + id + "/" + fileName
 		}
 	}
 

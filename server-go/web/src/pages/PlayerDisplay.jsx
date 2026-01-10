@@ -509,8 +509,19 @@ export default function PlayerDisplay() {
                         PREPAREZ-VOUS
                       </motion.span>
                     </motion.div>
+                  ) : (showAnswer && gameState.question.MEDIA_ANSWER) ? (
+                    <motion.img
+                      key="answer-media"
+                      src={gameState.question.MEDIA_ANSWER}
+                      alt=""
+                      className="question-media answer-media-highlight"
+                      initial={{ opacity: 0, scale: 0.9 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      transition={{ delay: 0.2 }}
+                    />
                   ) : gameState.question.MEDIA ? (
                     <motion.img
+                      key="question-media"
                       src={gameState.question.MEDIA}
                       alt=""
                       className="question-media"
@@ -582,10 +593,25 @@ export default function PlayerDisplay() {
                   <p className="question-text">{gameState.question.QUESTION}</p>
                 </motion.div>
 
-                {/* Zone 3: Media (or spacer if no media) */}
-                {gameState.question.MEDIA ? (
+                {/* Zone 3: Media - shows MEDIA_ANSWER during REVEAL if available */}
+                {(showAnswer && gameState.question.MEDIA_ANSWER) ? (
                   <motion.div
                     className="zone-media"
+                    key="answer-media"
+                    initial={{ opacity: 0, scale: 0.9 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    transition={{ delay: 0.2 }}
+                  >
+                    <img
+                      src={gameState.question.MEDIA_ANSWER}
+                      alt=""
+                      className="question-media answer-media-highlight"
+                    />
+                  </motion.div>
+                ) : gameState.question.MEDIA ? (
+                  <motion.div
+                    className="zone-media"
+                    key="question-media"
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: 0.2 }}

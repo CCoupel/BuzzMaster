@@ -157,6 +157,7 @@ The ESP32-C3 buzzers connect to the Go server without any modification.
     "POINTS": 10,
     "TIME": 30,
     "MEDIA": "/question/1/media.jpg",
+    "MEDIA_ANSWER": "/question/1/answer.jpg",
     "STATUS": "AVAILABLE|STARTED|STOPPED|REVEALED"
   },
   "PAGE": "GAME|SCORES|..."
@@ -199,7 +200,8 @@ The ESP32-C3 buzzers connect to the Go server without any modification.
   "TYPE": "NORMAL",
   "POINTS": 10,
   "TIME": 30,
-  "MEDIA": "/question/1/image.jpg"
+  "MEDIA": "/question/1/image.jpg",
+  "MEDIA_ANSWER": "/question/1/answer.jpg"
 }
 ```
 
@@ -219,9 +221,14 @@ The ESP32-C3 buzzers connect to the Go server without any modification.
   "QCM_CORRECT": "GREEN",
   "POINTS": 10,
   "TIME": 30,
-  "MEDIA": "/question/2/image.jpg"
+  "MEDIA": "/question/2/image.jpg",
+  "MEDIA_ANSWER": "/question/2/answer.jpg"
 }
 ```
+
+**Champs Media:**
+- `MEDIA`: Image de la question (affichée pendant STARTED/PAUSED)
+- `MEDIA_ANSWER`: Image de la réponse (remplace MEDIA pendant REVEALED)
 
 ## Game Flow
 
@@ -511,6 +518,38 @@ Les couleurs correspondent aux statuts de questions (AVAILABLE=vert, STARTED=ora
 **Fichiers :**
 - `server-go/web/src/components/Timer.jsx` : Affichage des badges
 - `server-go/web/src/components/Timer.css` : Styles `.phase-stopped`, `.phase-revealed`
+
+#### Media Answer (v2.14.0)
+Support des images de réponse distinctes de l'image de question :
+- **MEDIA** : Image affichée pendant les phases STARTED et PAUSED
+- **MEDIA_ANSWER** : Image de réponse qui REMPLACE MEDIA pendant la phase REVEALED
+- **Effet visuel** : Cadre vert pulsant autour de l'image de réponse pendant REVEALED
+- **Thumbnails** : Vignette de l'image réponse affichée en bas à droite des cartes questions
+
+**Comportement :**
+- Si MEDIA_ANSWER existe : affiché à la place de MEDIA pendant REVEALED
+- Si seul MEDIA existe : affiché pendant toutes les phases (comportement existant)
+- Les vignettes de réponse sont TOUJOURS petites et positionnées en bas à droite
+- Quand il n'y a pas d'image question, un placeholder gris s'affiche avec la vignette réponse en bas à droite
+
+**Styles CSS :**
+```css
+.answer-media-highlight {
+  border: 4px solid var(--success);
+  box-shadow: 0 0 40px rgba(34, 197, 94, 0.6);
+  animation: answer-media-pulse 2s ease-in-out infinite;
+}
+```
+
+**Fichiers modifiés :**
+- `server-go/internal/game/models.go` : Champ `MEDIA_ANSWER` dans Question
+- `server-go/internal/server/http.go` : Upload `file_answer` dans POST /questions
+- `server-go/web/src/pages/QuestionsPage.jsx` : Input pour image réponse + vignettes
+- `server-go/web/src/pages/QuestionsPage.css` : Styles thumbnails avec positionnement absolu
+- `server-go/web/src/pages/GamePage.jsx` : Vignettes réponse dans liste questions
+- `server-go/web/src/pages/GamePage.css` : Styles preview-image-answer
+- `server-go/web/src/pages/PlayerDisplay.jsx` : Affichage MEDIA_ANSWER pendant REVEALED
+- `server-go/web/src/pages/PlayerDisplay.css` : Styles answer-media-highlight avec animation
 
 ### WebSocket Actions for Client Management
 
