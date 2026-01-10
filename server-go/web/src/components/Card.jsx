@@ -27,8 +27,16 @@ export default function Card({
   )
 }
 
-export function CardHeader({ children, className = '' }) {
-  return <div className={`card-header ${className}`}>{children}</div>
+export function CardHeader({ children, className = '', onClick }) {
+  return (
+    <div
+      className={`card-header ${className}`}
+      onClick={onClick}
+      style={onClick ? { cursor: 'pointer' } : undefined}
+    >
+      {children}
+    </div>
+  )
 }
 
 export function CardBody({ children, className = '' }) {

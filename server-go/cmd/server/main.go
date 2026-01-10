@@ -747,6 +747,46 @@ func (a *App) handleBumperPoints(msg *protocol.Message) {
 	log.Printf("[App] Bumper points: id=%s, points=%+d, newScore=%d",
 		payload.ID, payload.Points, newScore)
 
+	// Record event to history
+	state := a.engine.GetState()
+	bumper := a.engine.GetBumper(payload.ID)
+	bumperName := payload.ID
+	teamName := ""
+	var teamColor []int
+	playerColor := ""
+	if bumper != nil {
+		if bumper.Name != "" {
+			bumperName = bumper.Name
+		}
+		teamName = bumper.Team
+		playerColor = string(bumper.AnswerColor)
+		// Get team color
+		if team := a.engine.GetTeam(bumper.Team); team != nil {
+			teamColor = team.Color
+		}
+	}
+	questionID := ""
+	questionText := ""
+	if state.Question != nil {
+		questionID = state.Question.ID
+		questionText = state.Question.Question
+	}
+	event := game.GameEvent{
+		Timestamp:    time.Now().UnixMicro(),
+		QuestionID:   questionID,
+		QuestionText: questionText,
+		EventType:    "POINTS_AWARDED",
+		WinnerID:     payload.ID,
+		WinnerName:   bumperName,
+		WinnerType:   "PLAYER",
+		TeamName:     teamName,
+		TeamColor:    teamColor,
+		PlayerName:   bumperName,
+		PlayerColor:  playerColor,
+		Points:       payload.Points,
+	}
+	a.engine.AddGameEvent(event)
+
 	a.broadcastUpdate()
 }
 
@@ -760,6 +800,32 @@ func (a *App) handleTeamPoints(msg *protocol.Message) {
 	newScore := a.engine.UpdateTeamScore(payload.Team, payload.Points)
 	log.Printf("[App] Team points: team=%s, points=%+d, newScore=%d",
 		payload.Team, payload.Points, newScore)
+
+	// Record event to history
+	state := a.engine.GetState()
+	var teamColor []int
+	if team := a.engine.GetTeam(payload.Team); team != nil {
+		teamColor = team.Color
+	}
+	questionID := ""
+	questionText := ""
+	if state.Question != nil {
+		questionID = state.Question.ID
+		questionText = state.Question.Question
+	}
+	event := game.GameEvent{
+		Timestamp:    time.Now().UnixMicro(),
+		QuestionID:   questionID,
+		QuestionText: questionText,
+		EventType:    "POINTS_AWARDED",
+		WinnerID:     payload.Team,
+		WinnerName:   payload.Team,
+		WinnerType:   "TEAM",
+		TeamName:     payload.Team,
+		TeamColor:    teamColor,
+		Points:       payload.Points,
+	}
+	a.engine.AddGameEvent(event)
 
 	a.broadcastUpdate()
 }

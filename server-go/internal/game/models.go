@@ -165,13 +165,17 @@ func (f *FullGameState) ToJSON() (json.RawMessage, error) {
 
 // GameEvent represents a game event for history tracking
 type GameEvent struct {
-	Timestamp    int64  `json:"TIMESTAMP"`     // Server timestamp in microseconds
-	QuestionID   string `json:"QUESTION_ID"`   // Question ID
-	QuestionText string `json:"QUESTION_TEXT"` // Question text for display
-	EventType    string `json:"EVENT_TYPE"`    // "POINTS_AWARDED", "BUZZ", etc.
-	WinnerID     string `json:"WINNER_ID"`     // MAC bumper or team name
-	WinnerName   string `json:"WINNER_NAME"`   // Display name
-	WinnerType   string `json:"WINNER_TYPE"`   // "PLAYER" or "TEAM"
-	Points       int    `json:"POINTS"`        // Points awarded
-	ReactionTime int64  `json:"REACTION_TIME"` // Reaction time in microseconds
+	Timestamp    int64  `json:"TIMESTAMP"`               // Server timestamp in microseconds
+	QuestionID   string `json:"QUESTION_ID"`             // Question ID
+	QuestionText string `json:"QUESTION_TEXT"`           // Question text for display
+	EventType    string `json:"EVENT_TYPE"`              // "POINTS_AWARDED", "BUZZ", etc.
+	WinnerID     string `json:"WINNER_ID"`               // MAC bumper or team name
+	WinnerName   string `json:"WINNER_NAME"`             // Display name (player or team)
+	WinnerType   string `json:"WINNER_TYPE"`             // "PLAYER" or "TEAM"
+	TeamName     string `json:"TEAM_NAME,omitempty"`     // Team name (always filled)
+	TeamColor    []int  `json:"TEAM_COLOR,omitempty"`    // Team RGB color
+	PlayerName   string `json:"PLAYER_NAME,omitempty"`   // Player name (only if PLAYER)
+	PlayerColor  string `json:"PLAYER_COLOR,omitempty"`  // Player answer color (RED/GREEN/YELLOW/BLUE)
+	Points       int    `json:"POINTS"`                  // Points awarded
+	ReactionTime int64  `json:"REACTION_TIME,omitempty"` // Reaction time in microseconds
 }

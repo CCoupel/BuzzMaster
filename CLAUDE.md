@@ -1,5 +1,7 @@
 # CLAUDE.md - BuzzControl Project Reference
 
+> **Historique des versions** : Voir [CHANGELOG.md](CHANGELOG.md) pour l'historique détaillé des fonctionnalités par version.
+
 ## Project Overview
 
 BuzzControl is a wireless buzzer system for quiz games. The system consists of:
@@ -48,7 +50,8 @@ buzzcontrol/
 │   └── GAME_STATE_MACHINE.md      # Game state machine specification
 ├── platformio.ini            # PlatformIO config
 ├── partitions.csv            # ESP32 partition table
-└── CLAUDE.md                 # This file
+├── CLAUDE.md                 # This file
+└── CHANGELOG.md              # Version history
 ```
 
 ## Migration Context
@@ -423,6 +426,34 @@ Restriction du buzz à un seul joueur par équipe :
 - **Règle** : Si `team.Time > 0`, le buzz est ignoré pour les autres joueurs de l'équipe
 - **Fichier** : `engine.go:ProcessButtonPress()`
 - **Comportement** : Premier joueur à buzzer représente l'équipe
+
+#### History Page (v2.20.0)
+Page d'historique des événements de jeu :
+- **Route** : `/history-page`
+- **Endpoint API** : `GET /history` retourne `[]GameEvent`
+- **Fonctionnalités** :
+  - Événements groupés par question (ordre chronologique)
+  - Vue collapsible : clic sur l'en-tête pour ouvrir/fermer
+  - Boutons "Tout ouvrir" / "Tout fermer"
+  - **Vue réduite** : Résumé des points par équipe et par joueur (badges colorés)
+  - **Vue détaillée** : Tableau avec Heure, Équipe, Joueur, Temps, Points
+  - Séparation stricte : points TEAM vs points PLAYER (pas de cumul mixte)
+- **GameEvent model** :
+  ```go
+  type GameEvent struct {
+    Timestamp    int64   // Server timestamp (microseconds)
+    QuestionID   string  // Question ID
+    QuestionText string  // Question text
+    EventType    string  // "POINTS_AWARDED"
+    WinnerType   string  // "PLAYER" or "TEAM"
+    TeamName     string  // Team name
+    TeamColor    []int   // Team RGB color
+    PlayerName   string  // Player name (if PLAYER)
+    PlayerColor  string  // Player answer color
+    Points       int     // Points awarded
+  }
+  ```
+- **Fichiers** : `HistoryPage.jsx`, `HistoryPage.css`, `engine.go:AddGameEvent()`
 
 #### Teams Page - Drag & Drop (v2.5.0)
 Interface de gestion des équipes avec drag & drop :
