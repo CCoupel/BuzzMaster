@@ -1018,6 +1018,39 @@
   flex: 1;
 }
 
+/* Team badges on QCM answers - shows which teams buzzed each answer */
+/* Horizontal layout with size gradient */
+.qcm-team-badges {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: flex-end;
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  gap: 4px;
+  overflow: visible;
+}
+
+.qcm-team-badge {
+  border-radius: 50%;
+  border: 3px solid white;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(0, 0, 0, 0.2);
+  flex-shrink: 0;
+  /* Size is set dynamically via inline style */
+}
+
+/* First badge - overflow left */
+.qcm-team-badge.first-badge {
+  margin-left: -8px;
+}
+
+/* Last badge - overflow right */
+.qcm-team-badge.last-badge {
+  margin-right: -8px;
+}
+
 @media (max-width: 768px) {
   .qcm-answers-display {
     grid-template-columns: 1fr;
@@ -1030,6 +1063,12 @@
 
   .qcm-answer-text {
     font-size: 1.25rem;
+  }
+
+  .qcm-team-badge {
+    width: 24px;
+    height: 24px;
+    border-width: 2px;
   }
 }
 
@@ -1194,6 +1233,8 @@
   border-radius: var(--radius-lg);
   transition: all 0.3s ease;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+  position: relative; /* Required for absolute badge positioning */
+  overflow: visible; /* Allow badges to overflow */
 }
 
 .qcm-answers-grid .qcm-answer-item.correct {

@@ -16,6 +16,14 @@ const QCM_COLORS = {
   BLUE: { label: 'Bleu', color: '#3b82f6', letter: 'D' },
 }
 
+// Mapping from button press (A, B, C, D) to QCM color
+const BUTTON_TO_QCM_COLOR = {
+  'A': 'RED',
+  'B': 'GREEN',
+  'C': 'YELLOW',
+  'D': 'BLUE',
+}
+
 export default function PlayerDisplay() {
   const { gameState, teams, bumpers } = useGame()
   const [currentBgIndex, setCurrentBgIndex] = useState(0)
@@ -211,6 +219,49 @@ export default function PlayerDisplay() {
 
   // Calculate if we need 2 columns for players (if more than 6 players)
   const useTwoColumns = sortedPlayers.length > 6
+
+  // Calculate teams that buzzed each QCM answer (for STOPPED/REVEALED phases)
+  const teamsByQcmAnswer = useMemo(() => {
+    const result = { RED: [], GREEN: [], YELLOW: [], BLUE: [] }
+
+    // Only compute during STOPPED or REVEALED phases for QCM questions
+    if (!['STOPPED', 'REVEALED'].includes(gameState.phase) || gameState.question?.TYPE !== 'QCM') {
+      return result
+    }
+
+    // Group bumpers by team, keeping only those who buzzed
+    // Use ANSWER_COLOR (the player's assigned QCM color) to determine their answer
+    const teamBuzzes = {}
+    Object.entries(bumpers).forEach(([mac, bumper]) => {
+      if (bumper.TIME && bumper.TIME > 0 && bumper.ANSWER_COLOR && bumper.TEAM) {
+        const qcmColor = bumper.ANSWER_COLOR // Already in RED/GREEN/YELLOW/BLUE format
+        if (qcmColor && !teamBuzzes[bumper.TEAM]) {
+          // Use first buzzer from each team
+          teamBuzzes[bumper.TEAM] = {
+            team: bumper.TEAM,
+            color: teams[bumper.TEAM]?.COLOR,
+            qcmAnswer: qcmColor,
+            time: bumper.TIME,
+          }
+        }
+      }
+    })
+
+    // Distribute teams to their QCM answer, sorted by response time
+    Object.values(teamBuzzes)
+      .sort((a, b) => a.time - b.time) // Sort by time (fastest first)
+      .forEach(buzz => {
+        if (result[buzz.qcmAnswer]) {
+          result[buzz.qcmAnswer].push({
+            name: buzz.team,
+            color: buzz.color,
+            time: buzz.time,
+          })
+        }
+      })
+
+    return result
+  }, [gameState.phase, gameState.question?.TYPE, bumpers, teams])
 
   // Current background
   const backgrounds = gameState.backgrounds || []
@@ -539,6 +590,8 @@ export default function PlayerDisplay() {
                       const answer = gameState.question.QCM_ANSWERS?.[colorKey]
                       if (!answer) return null
                       const isCorrect = gameState.question.QCM_CORRECT === colorKey
+                      const teamsOnThisAnswer = teamsByQcmAnswer[colorKey] || []
+                      const showTeamBadges = ['STOPPED', 'REVEALED'].includes(gameState.phase) && teamsOnThisAnswer.length > 0
 
                       return (
                         <motion.div
@@ -560,6 +613,42 @@ export default function PlayerDisplay() {
                         >
                           <span className="qcm-answer-letter">{colorData.letter}</span>
                           <span className="qcm-answer-text">{answer}</span>
+                          {/* Team badges - show which teams buzzed this answer */}
+                          {showTeamBadges && (
+                            <div className="qcm-team-badges">
+                              {teamsOnThisAnswer.map((team, idx) => {
+                                const totalBadges = teamsOnThisAnswer.length
+                                const isFirst = idx === 0
+                                const isLast = idx === totalBadges - 1
+                                // Size gradient: 70% (first) to 40% (last) of base size (60px)
+                                const maxSize = 60
+                                const minSize = 20
+                                const sizeRatio = totalBadges > 1
+                                  ? 0.70 - (idx / (totalBadges - 1)) * 0.30
+                                  : 0.70
+                                const badgeSize = Math.round(maxSize * sizeRatio)
+                                const finalSize = Math.max(badgeSize, minSize)
+
+                                return (
+                                  <motion.div
+                                    key={team.name}
+                                    className={`qcm-team-badge ${isFirst ? 'first-badge' : ''} ${isLast && totalBadges > 1 ? 'last-badge' : ''}`}
+                                    style={{
+                                      backgroundColor: team.color
+                                        ? (Array.isArray(team.color) ? `rgb(${team.color.join(',')})` : team.color)
+                                        : 'var(--gray-400)',
+                                      width: `${finalSize}px`,
+                                      height: `${finalSize}px`,
+                                    }}
+                                    initial={{ scale: 0, opacity: 0 }}
+                                    animate={{ scale: 1, opacity: 1 }}
+                                    transition={{ delay: idx * 0.1 }}
+                                    title={team.name}
+                                  />
+                                )
+                              })}
+                            </div>
+                          )}
                         </motion.div>
                       )
                     })}
@@ -643,7 +732,7 @@ export default function PlayerDisplay() {
             )}
 
             {/* Waiting State - no question selected */}
-            {!gameState.question && gameState.phase === 'STOPPED' && (
+            {!gameState.question && ['STOPPED', 'REVEALED'].includes(gameState.phase) && (
               <motion.div
                 className="waiting-state"
                 initial={{ opacity: 0 }}

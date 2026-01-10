@@ -524,8 +524,13 @@ func (a *App) handleFullUpdate(msg *protocol.Message) {
 		return
 	}
 
-	a.engine.SetTeams(data.Teams)
-	a.engine.SetBumpers(data.Bumpers)
+	// Only update if data is provided (don't overwrite with nil)
+	if data.Teams != nil {
+		a.engine.SetTeams(data.Teams)
+	}
+	if data.Bumpers != nil {
+		a.engine.SetBumpers(data.Bumpers)
+	}
 	a.broadcastUpdate()
 }
 
@@ -1139,7 +1144,7 @@ func openBrowser(url string) {
 func (a *App) initTestData() {
 	log.Println("[App] Initializing test data...")
 
-	// 5 teams with different colors (scores will be calculated from bumpers)
+	// 6 teams with different colors (scores will be calculated from bumpers)
 	teams := map[string]*game.Team{
 		"Les Rouges": {
 			Name:  "Les Rouges",
@@ -1164,6 +1169,11 @@ func (a *App) initTestData() {
 		"Les Violets": {
 			Name:  "Les Violets",
 			Color: []int{168, 85, 247}, // Purple
+			Score: 0,
+		},
+		"Les Oranges": {
+			Name:  "Les Oranges",
+			Color: []int{249, 115, 22}, // Orange
 			Score: 0,
 		},
 	}
@@ -1237,6 +1247,20 @@ func (a *App) initTestData() {
 			Team:    "Les Violets",
 			Score:   2,
 			Version: "1.0.0",
+		},
+		"AA:BB:CC:DD:EE:11": {
+			Name:        "Kevin",
+			Team:        "Les Oranges",
+			Score:       4,
+			Version:     "1.0.0",
+			AnswerColor: game.AnswerColorYellow, // C
+		},
+		"AA:BB:CC:DD:EE:12": {
+			Name:        "Laura",
+			Team:        "Les Oranges",
+			Score:       5,
+			Version:     "1.0.0",
+			AnswerColor: game.AnswerColorRed, // A
 		},
 	}
 

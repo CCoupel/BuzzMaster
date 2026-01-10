@@ -449,6 +449,23 @@ Support des questions à choix multiples (QCM) :
 - `server-go/web/src/pages/QuestionsPage.jsx` : UI formulaire QCM
 - `server-go/web/src/pages/QuestionsPage.css` : Styles QCM
 
+#### QCM Team Badges (v2.16.0)
+Pastilles d'équipes sur les réponses QCM pendant STOPPED/REVEALED :
+- **Affichage** : Pastilles colorées sur chaque réponse QCM montrant quelles équipes ont répondu
+- **Couleur** : Couleur de l'équipe (pas la couleur de la réponse QCM)
+- **Disposition** : Horizontale, alignée à droite de chaque réponse
+- **Taille dégradée** : 70% (première) à 40% (dernière) de la taille de base (60px)
+- **Tri** : Par temps de réponse (plus rapide = plus grand, à gauche)
+- **Phases** : Visible en STOPPED et REVEALED
+
+**Logique de calcul :**
+- Utilise `ANSWER_COLOR` du bumper (couleur assignée au joueur pour QCM)
+- Premier joueur de chaque équipe à buzzer détermine la réponse de l'équipe
+- Temps de réponse (`bumper.TIME`) utilisé pour le tri
+
+**Fichiers modifiés :**
+- `server-go/web/src/pages/PlayerDisplay.jsx` : `teamsByQcmAnswer` useMemo, rendu des badges
+- `server-go/web/src/pages/PlayerDisplay.css` : Styles `.qcm-team-badges`, `.qcm-team-badge`
 #### Question Reordering (v2.7.0)
 Drag and drop pour reordonner les questions :
 - **Interface** : Glisser-deposer les cartes de questions dans QuestionsPage
@@ -738,8 +755,8 @@ Layout avec timer pleine largeur + 3 colonnes harmonisées :
 ### Données de test (développement)
 
 Au démarrage, le serveur initialise des données de test via `initTestData()` :
-- **5 équipes** : Les Rouges, Les Bleus, Les Verts, Les Jaunes, Les Violets
-- **10 buzzers** : 2 joueurs par équipe avec scores variés
+- **6 équipes** : Les Rouges, Les Bleus, Les Verts, Les Jaunes, Les Violets, Les Oranges
+- **12 buzzers** : 2 joueurs par équipe avec scores variés et couleurs de réponse assignées
 
 ### WebSocket Messages
 
@@ -801,7 +818,7 @@ Avant chaque test du serveur, suivre cette procédure pour garantir un environne
 | 2 | **Mettre à jour les versions** | `config.json` et `package.json` (voir section Gestion des Versions) |
 | 3 | **Rebuild le frontend** | `npm run build --prefix server-go/web` |
 | 4 | **Rebuild le serveur Go** | `go build -o server.exe ./cmd/server` |
-| 5 | **Lancer le serveur EN MODE VISIBLE** | Ouvrir CMD, `cd server-go`, puis `server.exe` |
+| 5 | **Lancer le serveur EN MODE VISIBLE** | Ouvrir une fenêtre CMD/PowerShell, `cd server-go`, puis `./server.exe` |
 | 6 | **Vérifier page admin (/)** | Ouvrir http://localhost/ dans Chrome |
 | 7 | **Vérifier page joueur (/tv)** | Ouvrir http://localhost/tv dans Chrome |
 | 8 | **Vérifier les versions affichées** | Navbar : Serveur et Web doivent correspondre |

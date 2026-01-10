@@ -635,15 +635,26 @@ func (e *Engine) RAZScores() {
 	log.Printf("[Engine] All scores reset")
 }
 
-// ClearBumpers removes all bumpers
+// ClearBumpers removes all bumpers (keeps teams intact)
 func (e *Engine) ClearBumpers() {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+
+	e.data.Bumpers = make(map[string]*Bumper)
+	// Note: Teams are preserved - use ClearAll() to clear both
+
+	log.Printf("[Engine] All bumpers cleared")
+}
+
+// ClearAll removes all teams and bumpers
+func (e *Engine) ClearAll() {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 
 	e.data.Bumpers = make(map[string]*Bumper)
 	e.data.Teams = make(map[string]*Team)
 
-	log.Printf("[Engine] All bumpers cleared")
+	log.Printf("[Engine] All teams and bumpers cleared")
 }
 
 // SetPage sets the remote page
