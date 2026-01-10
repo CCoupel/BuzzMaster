@@ -403,6 +403,26 @@ Affichage du temps de réaction :
 - **Calcul** :  ms
 - **Tri** : Joueurs triés par temps de réponse dans chaque équipe
 
+#### Question Cards Layout (v2.19.0)
+Nouvelle mise en page des cartes questions dans le panneau admin :
+- **Layout horizontal** : Thumbnail (70x70px) à gauche, texte à droite
+- **Header** : `#ID 👤 30s 1pt [STATUS]` - ID, badge target, temps, points, status
+- **Body** : Question (4 lignes max), Réponse (3 lignes max)
+- **Lisibilité** : Plus d'espace pour le texte, pas besoin de zoom
+
+#### POINTS_TARGET (v2.19.0)
+Système d'attribution des points par question :
+- **POINTS_TARGET** : Champ sur chaque question (`PLAYER` ou `TEAM`)
+- **Défaut** : `PLAYER` pour NORMAL, `TEAM` pour QCM
+- **Indicateur admin** : Badge "👤 Joueur" (cyan) ou "👥 Equipe" (orange) sur la ligne "Affichage TV"
+- **Badge question** : Icône personne/groupe sur chaque carte question
+- **Attribution** : Clic sur joueur → points au joueur OU à l'équipe selon target
+
+#### Un seul buzz par équipe (v2.19.0)
+Restriction du buzz à un seul joueur par équipe :
+- **Règle** : Si `team.Time > 0`, le buzz est ignoré pour les autres joueurs de l'équipe
+- **Fichier** : `engine.go:ProcessButtonPress()`
+- **Comportement** : Premier joueur à buzzer représente l'équipe
 
 #### Teams Page - Drag & Drop (v2.5.0)
 Interface de gestion des équipes avec drag & drop :

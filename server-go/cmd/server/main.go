@@ -599,6 +599,15 @@ func (a *App) loadQuestion(id string) *game.Question {
 		return nil
 	}
 
+	// Set default POINTS_TARGET if not present
+	if q.PointsTarget == "" {
+		if q.Type == game.QuestionTypeQCM {
+			q.PointsTarget = game.PointsTargetTeam
+		} else {
+			q.PointsTarget = game.PointsTargetPlayer
+		}
+	}
+
 	return &q
 }
 
@@ -1014,6 +1023,16 @@ func (a *App) loadQuestions() map[string]map[string]interface{} {
 		var question map[string]interface{}
 		if err := json.Unmarshal(data, &question); err != nil {
 			continue
+		}
+
+		// Set default POINTS_TARGET if not present
+		if _, ok := question["POINTS_TARGET"]; !ok {
+			qType, _ := question["TYPE"].(string)
+			if qType == "QCM" {
+				question["POINTS_TARGET"] = "TEAM"
+			} else {
+				question["POINTS_TARGET"] = "PLAYER"
+			}
 		}
 
 		// Use full path as key (like ESP32: /files/questions/1)

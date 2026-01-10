@@ -91,6 +91,28 @@
   flex-shrink: 0;
 }
 
+/* Points target badge - shows if points go to player or team */
+.points-target-badge {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: var(--radius-full);
+  flex-shrink: 0;
+  transition: all var(--transition-fast);
+}
+
+.points-target-badge.player {
+  background: color-mix(in srgb, var(--accent-cyan) 20%, white);
+  color: var(--accent-cyan);
+}
+
+.points-target-badge.team {
+  background: color-mix(in srgb, var(--accent-orange) 20%, white);
+  color: var(--accent-orange);
+}
+
 /* Body */
 .team-card-body {
   display: flex;

@@ -26,6 +26,7 @@ export default function TeamCard({
   className = '',
   waitingForReady = false,
   waitingForBuzz = false,
+  pointsTarget = null,  // PLAYER or TEAM - from current question
 }) {
   const [showTooltip, setShowTooltip] = useState(false)
   const rgbColor = color ? `rgb(${color.join(',')})` : 'var(--primary-500)'
@@ -137,7 +138,7 @@ export default function TeamCard({
             const handleBuzzerClick = (e) => {
               e.stopPropagation()
               if (onPlayerClick) {
-                onPlayerClick(buzzer.mac)
+                onPlayerClick(buzzer.mac, e?.ctrlKey)
               } else if (buzzer.onClick) {
                 buzzer.onClick(e)
               }

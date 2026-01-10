@@ -461,12 +461,12 @@ func (e *Engine) ProcessButtonPress(bumperID string, pressTime int64, button str
 		return
 	}
 
-	bumper.Time = pressTime
-	bumper.Button = button
-	bumper.Status = "PAUSE"
-
 	teamID := bumper.Team
 	if teamID == "" {
+		// Bumper has no team - allow individual press
+		bumper.Time = pressTime
+		bumper.Button = button
+		bumper.Status = "PAUSE"
 		e.mu.Unlock()
 		return
 	}
@@ -477,12 +477,21 @@ func (e *Engine) ProcessButtonPress(bumperID string, pressTime int64, button str
 		return
 	}
 
-	// Check if this is the first/fastest press for the team
-	if team.Time == 0 || pressTime < team.Time {
-		team.Time = pressTime
-		team.Bumper = bumperID
-		team.Status = "PAUSE"
+	// Check if team already has a press - only ONE player per team can buzz
+	if team.Time > 0 {
+		log.Printf("[Engine] Team %s already buzzed, ignoring bumper %s", teamID, bumperID)
+		e.mu.Unlock()
+		return
 	}
+
+	// Record the press for both bumper and team
+	bumper.Time = pressTime
+	bumper.Button = button
+	bumper.Status = "PAUSE"
+
+	team.Time = pressTime
+	team.Bumper = bumperID
+	team.Status = "PAUSE"
 
 	log.Printf("[Engine] Button press: bumper=%s, team=%s, button=%s, time=%d",
 		bumperID, teamID, button, pressTime)

@@ -66,7 +66,7 @@ export default function GamePage() {
     return grouped
   }, [bumpers])
 
-  // Sort teams by timestamp (first to buzz)
+  // Sort teams by total score (descending), then by timestamp if tied
   const sortedTeams = useMemo(() => {
     return Object.entries(teams)
       .map(([name, data]) => ({
@@ -75,6 +75,10 @@ export default function GamePage() {
         buzzers: teamBumpers[name] || [],
       }))
       .sort((a, b) => {
+        const scoreA = a.SCORE ?? 0
+        const scoreB = b.SCORE ?? 0
+        if (scoreB !== scoreA) return scoreB - scoreA  // Higher score first
+        // If tied, sort by timestamp (earlier first)
         const timeA = a.TIME ?? Infinity
         const timeB = b.TIME ?? Infinity
         return timeA - timeB
@@ -130,7 +134,15 @@ export default function GamePage() {
       // Only allow points for players who have buzzed
       const bumper = bumpers[bumperMac]
       if (bumper?.TIME && bumper.TIME > 0) {
-        setBumperPoints(bumperMac, pointsInput)
+        // Check POINTS_TARGET: if TEAM, give points to team instead of player
+        if (gameState.question?.POINTS_TARGET === 'TEAM') {
+          const teamName = bumper.TEAM
+          if (teamName) {
+            setTeamPoints(teamName, pointsInput)
+          }
+        } else {
+          setBumperPoints(bumperMac, pointsInput)
+        }
       }
     }
   }
@@ -176,39 +188,58 @@ export default function GamePage() {
                 {question.TYPE === 'QCM' && (
                   <span className="preview-qcm-badge">QCM</span>
                 )}
+                {question.POINTS_TARGET && (
+                  <span className={`preview-target-badge ${question.POINTS_TARGET.toLowerCase()}`} title={question.POINTS_TARGET === 'TEAM' ? 'Points équipe' : 'Points joueur'}>
+                    {question.POINTS_TARGET === 'TEAM' ? (
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
+                        <circle cx="9" cy="7" r="4"/>
+                        <path d="M17 11c1.66 0 2.99-1.34 2.99-3S18.66 5 17 5c-.32 0-.63.05-.91.14.57.81.9 1.79.9 2.86s-.34 2.04-.9 2.86c.28.09.59.14.91.14z"/>
+                        <path d="M3 18v-1c0-2.66 5.33-4 8-4s8 1.34 8 4v1H3z"/>
+                        <path d="M17 13c2.05.26 5 1.22 5 3v1h-3v-1.5c0-1.19-.68-2.14-2-2.5z"/>
+                      </svg>
+                    ) : (
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
+                        <circle cx="12" cy="7" r="4"/>
+                        <path d="M12 14c-4 0-8 2-8 4v2h16v-2c0-2-4-4-8-4z"/>
+                      </svg>
+                    )}
+                  </span>
+                )}
+                <span className="preview-meta">
+                  <span className="preview-time">{question.TIME}s</span>
+                  <span className="preview-points">{question.POINTS}pt</span>
+                </span>
                 <span className="preview-status">{question.STATUS || 'AVAILABLE'}</span>
               </div>
-              {(question.MEDIA || question.MEDIA_ANSWER) && (
-                <div className="preview-images">
-                  {question.MEDIA && (
-                    <div className="preview-image">
-                      <img src={question.MEDIA} alt="" />
-                    </div>
-                  )}
-                  {question.MEDIA_ANSWER && (
-                    <div className="preview-image preview-image-answer" title="Image réponse">
-                      <img src={question.MEDIA_ANSWER} alt="" />
-                    </div>
+              <div className="preview-body">
+                {(question.MEDIA || question.MEDIA_ANSWER) && (
+                  <div className="preview-images">
+                    {question.MEDIA && (
+                      <div className="preview-image">
+                        <img src={question.MEDIA} alt="" />
+                      </div>
+                    )}
+                    {question.MEDIA_ANSWER && (
+                      <div className="preview-image preview-image-answer" title="Image réponse">
+                        <img src={question.MEDIA_ANSWER} alt="" />
+                      </div>
+                    )}
+                  </div>
+                )}
+                <div className="preview-content">
+                  <p className="preview-question">{question.QUESTION}</p>
+                  {question.TYPE === 'QCM' && question.QCM_CORRECT && QCM_COLORS[question.QCM_CORRECT] ? (
+                    <p
+                      className="preview-answer preview-answer-qcm"
+                      style={{ backgroundColor: QCM_COLORS[question.QCM_CORRECT].color }}
+                    >
+                      <span className="qcm-letter">{QCM_COLORS[question.QCM_CORRECT].letter}</span>
+                      {question.ANSWER}
+                    </p>
+                  ) : (
+                    <p className="preview-answer">{question.ANSWER}</p>
                   )}
                 </div>
-              )}
-              <div className="preview-content">
-                <p className="preview-question">{question.QUESTION}</p>
-                {question.TYPE === 'QCM' && question.QCM_CORRECT && QCM_COLORS[question.QCM_CORRECT] ? (
-                  <p
-                    className="preview-answer preview-answer-qcm"
-                    style={{ backgroundColor: QCM_COLORS[question.QCM_CORRECT].color }}
-                  >
-                    <span className="qcm-letter">{QCM_COLORS[question.QCM_CORRECT].letter}</span>
-                    {question.ANSWER}
-                  </p>
-                ) : (
-                  <p className="preview-answer">{question.ANSWER}</p>
-                )}
-              </div>
-              <div className="preview-meta">
-                <span className="preview-time">{question.TIME}s</span>
-                <span className="preview-points">{question.POINTS} pts</span>
               </div>
             </motion.div>
           ))}
@@ -300,6 +331,29 @@ export default function GamePage() {
                 Joueurs
               </Button>
             </div>
+            {gameState.question?.POINTS_TARGET && (
+              <div className={`points-target-indicator ${gameState.question.POINTS_TARGET.toLowerCase()}`} title={gameState.question.POINTS_TARGET === 'TEAM' ? 'Points attribués à l\'équipe' : 'Points attribués au joueur'}>
+                {gameState.question.POINTS_TARGET === 'TEAM' ? (
+                  <>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                      <circle cx="9" cy="7" r="4"/>
+                      <path d="M17 11c1.66 0 2.99-1.34 2.99-3S18.66 5 17 5c-.32 0-.63.05-.91.14.57.81.9 1.79.9 2.86s-.34 2.04-.9 2.86c.28.09.59.14.91.14z"/>
+                      <path d="M3 18v-1c0-2.66 5.33-4 8-4s8 1.34 8 4v1H3z"/>
+                      <path d="M17 13c2.05.26 5 1.22 5 3v1h-3v-1.5c0-1.19-.68-2.14-2-2.5z"/>
+                    </svg>
+                    <span>Equipe</span>
+                  </>
+                ) : (
+                  <>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                      <circle cx="12" cy="7" r="4"/>
+                      <path d="M12 14c-4 0-8 2-8 4v2h16v-2c0-2-4-4-8-4z"/>
+                    </svg>
+                    <span>Joueur</span>
+                  </>
+                )}
+              </div>
+            )}
           </div>
         </Card>
 
@@ -339,7 +393,7 @@ export default function GamePage() {
                         setTeamPoints(teamName, pointsInput)
                       }
                     }}
-                    onPlayerClick={(bumperMac) => handleBumperClick(bumperMac)}
+                    onPlayerClick={(bumperMac, ctrlKey) => handleBumperClick(bumperMac, ctrlKey)}
                     buzzers={team.buzzers.map(b => ({
                       ...b,
                       onClick: (e) => handleBumperClick(b.mac, e?.ctrlKey)
