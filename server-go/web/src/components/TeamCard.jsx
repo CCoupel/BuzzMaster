@@ -69,7 +69,6 @@ export default function TeamCard({
 
       <div className="team-card-body">
         <div className="team-score">
-          <span className="score-label">Score</span>
           <motion.span
             className="score-value"
             key={score}
@@ -77,7 +76,7 @@ export default function TeamCard({
             animate={{ scale: 1, color: 'var(--gray-800)' }}
             transition={{ duration: 0.3 }}
           >
-            {score}
+            {score} Pts
           </motion.span>
         </div>
 

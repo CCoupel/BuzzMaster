@@ -1411,3 +1411,15 @@ Stored in NVS (Non-Volatile Storage):
 - [ ] WebSocket + legacy protocol coexistence
 - [ ] OTA update without bricking (Phase 3)
 - [ ] Configuration persistence across reboots
+
+#### Admin Layout Fix (v2.17.0)
+Correction du layout de la page admin pour éviter le scroll global :
+- **Page fixe** : `height` au lieu de `min-height` sur `.game-page`
+- **Scroll interne** : Chaque colonne (Questions, Contrôles, Équipes) a sa propre zone de scroll
+- **Alignement** : Les colonnes s'alignent avec le bas de la preview TV
+
+#### TeamCard Optimisé (v2.17.0)
+Réduction de l'espace occupé par les cartes d'équipe :
+- **Score compact** : Suppression du label "Score", affichage "X Pts" directement
+- **Espacement réduit** : Moins d'espace entre le score et la liste des joueurs
+- **Taille réduite** : Police du score réduite (1.5rem → 1.25rem)
