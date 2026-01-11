@@ -2,6 +2,51 @@
 
 Historique des versions du projet BuzzControl.
 
+## [2.30.0] - Background Image Synchronization
+
+### Ajouts
+- **Synchronisation des images de fond** : Tous les écrans TV affichent la même image simultanément
+  - Le serveur maintient `CurrentBackgroundIndex` dans GameState
+  - Goroutine de cycling basée sur la durée de chaque image
+  - Broadcast `BACKGROUND_CHANGE` à tous les clients à chaque transition
+  - Les clients utilisent l'index serveur au lieu du cycling local
+  - Transitions parfaitement synchronisées entre tous les écrans
+
+### Fichiers
+- `engine.go` : Méthodes `GetCurrentBackgroundIndex()`, `SetCurrentBackgroundIndex()`, `NextBackground()`, `GetCurrentBackgroundDuration()`
+- `models.go` : Champ `CurrentBackgroundIndex` dans GameState
+- `messages.go` : Action `BACKGROUND_CHANGE`, `BackgroundChangePayload`
+- `main.go` : Goroutine `startBackgroundCycling()`, `broadcastBackgroundChange()`
+- `useWebSocket.js` : Handler `BACKGROUND_CHANGE`, state `currentBackgroundIndex`
+- `PlayerDisplay.jsx` : Utilise `gameState.currentBackgroundIndex`
+
+---
+
+## [2.29.0] - 3-Second Countdown
+
+### Ajouts
+- **Décompte 3-2-1 avant le timer** : Phase COUNTDOWN distincte
+  - Affichage visuel "3... 2... 1... GO!" avant le timer principal
+  - Nouvelle phase `COUNTDOWN` dans la machine d'états
+  - Badge orange "DECOMPTE" dans le Timer
+  - Les buzzers restent bloqués pendant le décompte
+  - Le timer démarre automatiquement après le décompte
+
+- **Comportement QCM amélioré** :
+  - READY : Zones de couleur sans texte de réponse
+  - COUNTDOWN : Texte des réponses apparaît avec animation
+  - STARTED : Question et médias affichés
+
+### Fichiers
+- `engine.go` : Phase `COUNTDOWN`, callback `OnCountdownTick`
+- `models.go` : `PhaseCountdown`, `CountdownTime` dans GameState
+- `main.go` : `broadcastCountdownUpdate()`, gestion START avec countdown
+- `Timer.jsx` : Badge "DECOMPTE", affichage du compteur
+- `PlayerDisplay.jsx` : États COUNTDOWN, animation texte QCM
+- `useWebSocket.js` : Handler `countdownTime`
+
+---
+
 ## [2.28.0] - PONG Visual Feedback & Refactoring
 
 ### Ajouts
