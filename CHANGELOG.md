@@ -2,6 +2,56 @@
 
 Historique des versions du projet BuzzControl.
 
+## [2.21.0] - Data Persistence & Administration
+
+### Ajouts
+- **Persistance des données** : Sauvegarde automatique sur disque
+  - `data/config/teams.json` : Équipes avec scores et TeamPoints
+  - `data/config/bumpers.json` : Joueurs avec scores et assignations
+  - `data/config/history.json` : Historique des événements (source de vérité)
+  - Auto-save asynchrone après chaque modification
+  - Chargement automatique au démarrage
+
+- **Event Sourcing** : L'historique est la source de vérité pour les scores
+  - `RecalculateScoresFromHistory()` : Recalcule tous les scores depuis les événements
+  - Les scores peuvent être entièrement reconstruits à tout moment
+
+- **Backup sélectif** (`/backup-select`) : Choisir quoi sauvegarder
+  - Paramètres : `questions`, `teams`, `bumpers`, `history`, `backgrounds`
+  - Exemple : `/backup-select?questions=true&history=true`
+
+- **Reset sélectif** (`/reset-select`) : Choisir quoi réinitialiser
+  - Paramètres : `all`, `questions`, `teams`, `bumpers`, `history`, `backgrounds`
+  - Exemple : `/reset-select?history=true&bumpers=true`
+
+- **Restore intelligent** (`/restore`) : Détection automatique du contenu TAR
+  - Détecte les fichiers présents dans l'archive
+  - Restaure uniquement les éléments détectés
+  - Recharge les données dans l'engine après restauration
+
+- **Interface ConfigPage** : Sélecteurs pour backup et reset
+  - Section Sauvegarde : 5 cases à cocher (Questions, Équipes, Joueurs, Historique, Fonds)
+  - Section Réinitialisation : 5 cases à cocher avec confirmation
+  - Boutons Sauvegarder/Restaurer/Réinitialiser
+
+### Documentation
+- Nouveau fichier `docs/ADMIN_GUIDE.md` : Guide d'administration complet
+  - Persistance des données
+  - Sauvegarde et restauration
+  - Réinitialisation sélective
+  - Gestion des scores
+  - Historique des événements
+
+### Fichiers
+- `engine.go` : SaveTeams/LoadTeams, SaveBumpers/LoadBumpers, SaveHistory/LoadHistory
+- `http.go` : handleBackupSelect, handleResetSelect, handleRestore (intelligent)
+- `main.go` : Configuration des chemins de persistance
+- `ConfigPage.jsx` : UI pour backup/reset sélectif
+- `ConfigPage.css` : Styles pour les sections checkbox
+- `docs/ADMIN_GUIDE.md` : Guide d'administration
+
+---
+
 ## [2.20.0] - History Page
 
 ### Ajouts

@@ -2,6 +2,7 @@ package server
 
 import (
 	"archive/tar"
+	"bytes"
 	"buzzcontrol/internal/config"
 	"buzzcontrol/internal/game"
 	"encoding/json"
@@ -143,7 +144,9 @@ func (h *HTTPServer) setupRoutes() {
 	h.mux.HandleFunc("/backup", h.handleBackupRedirect)
 	h.mux.HandleFunc("/fs-backup", h.handleFSBackup)
 	h.mux.HandleFunc("/game-backup", h.handleGameBackup)
+	h.mux.HandleFunc("/backup-select", h.handleBackupSelect)
 	h.mux.HandleFunc("/restore", h.handleRestore)
+	h.mux.HandleFunc("/reset-select", h.handleResetSelect)
 
 	// Update
 	h.mux.HandleFunc("/update", h.handleUpdate)
@@ -326,6 +329,15 @@ func (h *HTTPServer) handleQuestions(w http.ResponseWriter, r *http.Request) {
 				var q map[string]interface{}
 				if err := json.Unmarshal(data, &q); err != nil {
 					continue
+				}
+				// Set default POINTS_TARGET if not present
+				if _, ok := q["POINTS_TARGET"]; !ok {
+					qType, _ := q["TYPE"].(string)
+					if qType == "QCM" {
+						q["POINTS_TARGET"] = "TEAM"
+					} else {
+						q["POINTS_TARGET"] = "PLAYER"
+					}
 				}
 				// Use full path as key (like ESP32)
 				key := "/files/questions/" + entry.Name()
@@ -686,6 +698,236 @@ func (h *HTTPServer) handleGameBackup(w http.ResponseWriter, r *http.Request) {
 	h.createTARBackup(w, r, filesDir, "buzzcontrol-game-backup")
 }
 
+// handleBackupSelect creates a selective backup based on query parameters
+// Query params: questions=true, teams=true, bumpers=true, history=true, backgrounds=true
+func (h *HTTPServer) handleBackupSelect(w http.ResponseWriter, r *http.Request) {
+	includeQuestions := r.URL.Query().Get("questions") == "true"
+	includeTeams := r.URL.Query().Get("teams") == "true"
+	includeBumpers := r.URL.Query().Get("bumpers") == "true"
+	includeHistory := r.URL.Query().Get("history") == "true"
+	includeBackgrounds := r.URL.Query().Get("backgrounds") == "true"
+
+	// If nothing selected, include everything
+	if !includeQuestions && !includeTeams && !includeBumpers && !includeHistory && !includeBackgrounds {
+		includeQuestions = true
+		includeTeams = true
+		includeBumpers = true
+		includeHistory = true
+		includeBackgrounds = true
+	}
+
+	log.Printf("[HTTP] Selective backup: questions=%v, teams=%v, bumpers=%v, history=%v, backgrounds=%v",
+		includeQuestions, includeTeams, includeBumpers, includeHistory, includeBackgrounds)
+
+	// Set headers for TAR download
+	timestamp := time.Now().Format("2006-01-02_15-04-05")
+	filename := fmt.Sprintf("buzzcontrol-backup_%s.tar", timestamp)
+	w.Header().Set("Content-Type", "application/x-tar")
+	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"", filename))
+
+	// Create TAR writer
+	tw := tar.NewWriter(w)
+	defer tw.Close()
+
+	configDir := filepath.Join(h.dataDir, "config")
+	filesDir := filepath.Join(h.dataDir, "files")
+
+	// Add questions
+	if includeQuestions {
+		questionsDir := filepath.Join(filesDir, "questions")
+		if _, err := os.Stat(questionsDir); err == nil {
+			h.addDirToTAR(tw, questionsDir, "files/questions")
+		}
+	}
+
+	// Add teams.json
+	if includeTeams {
+		teamsPath := filepath.Join(configDir, "teams.json")
+		if _, err := os.Stat(teamsPath); err == nil {
+			h.addFileToTAR(tw, teamsPath, "config/teams.json")
+		}
+	}
+
+	// Add bumpers.json
+	if includeBumpers {
+		bumpersPath := filepath.Join(configDir, "bumpers.json")
+		if _, err := os.Stat(bumpersPath); err == nil {
+			h.addFileToTAR(tw, bumpersPath, "config/bumpers.json")
+		}
+	}
+
+	// Add history.json
+	if includeHistory {
+		historyPath := filepath.Join(configDir, "history.json")
+		if _, err := os.Stat(historyPath); err == nil {
+			h.addFileToTAR(tw, historyPath, "config/history.json")
+		}
+	}
+
+	// Add backgrounds
+	if includeBackgrounds {
+		backgroundsDir := filepath.Join(filesDir, "backgrounds")
+		if _, err := os.Stat(backgroundsDir); err == nil {
+			h.addDirToTAR(tw, backgroundsDir, "files/backgrounds")
+		}
+	}
+
+	log.Printf("[HTTP] Selective backup completed")
+}
+
+// addFileToTAR adds a single file to TAR archive
+func (h *HTTPServer) addFileToTAR(tw *tar.Writer, filePath, tarPath string) error {
+	file, err := os.Open(filePath)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+
+	info, err := file.Stat()
+	if err != nil {
+		return err
+	}
+
+	header, err := tar.FileInfoHeader(info, "")
+	if err != nil {
+		return err
+	}
+	header.Name = tarPath
+
+	if err := tw.WriteHeader(header); err != nil {
+		return err
+	}
+
+	_, err = io.Copy(tw, file)
+	return err
+}
+
+// addDirToTAR adds a directory recursively to TAR archive
+func (h *HTTPServer) addDirToTAR(tw *tar.Writer, sourceDir, tarPrefix string) error {
+	return filepath.Walk(sourceDir, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return nil // Skip errors
+		}
+
+		relPath, err := filepath.Rel(sourceDir, path)
+		if err != nil {
+			return nil
+		}
+
+		if relPath == "." {
+			return nil
+		}
+
+		header, err := tar.FileInfoHeader(info, "")
+		if err != nil {
+			return nil
+		}
+
+		header.Name = tarPrefix + "/" + filepath.ToSlash(relPath)
+
+		if err := tw.WriteHeader(header); err != nil {
+			return nil
+		}
+
+		if !info.IsDir() {
+			file, err := os.Open(path)
+			if err != nil {
+				return nil
+			}
+			defer file.Close()
+			io.Copy(tw, file)
+		}
+
+		return nil
+	})
+}
+
+// handleResetSelect performs selective reset based on query parameters
+// Query params: questions=true, teams=true, bumpers=true, history=true, backgrounds=true, all=true
+func (h *HTTPServer) handleResetSelect(w http.ResponseWriter, r *http.Request) {
+	resetQuestions := r.URL.Query().Get("questions") == "true"
+	resetTeams := r.URL.Query().Get("teams") == "true"
+	resetBumpers := r.URL.Query().Get("bumpers") == "true"
+	resetHistory := r.URL.Query().Get("history") == "true"
+	resetBackgrounds := r.URL.Query().Get("backgrounds") == "true"
+	resetAll := r.URL.Query().Get("all") == "true"
+
+	// "all" means reset everything
+	if resetAll {
+		resetQuestions = true
+		resetTeams = true
+		resetBumpers = true
+		resetHistory = true
+		resetBackgrounds = true
+	}
+
+	log.Printf("[HTTP] Selective reset: questions=%v, teams=%v, bumpers=%v, history=%v, backgrounds=%v",
+		resetQuestions, resetTeams, resetBumpers, resetHistory, resetBackgrounds)
+
+	result := make(map[string]bool)
+	configDir := filepath.Join(h.dataDir, "config")
+	filesDir := filepath.Join(h.dataDir, "files")
+
+	// Reset questions (delete all question directories)
+	if resetQuestions {
+		questionsDir := filepath.Join(filesDir, "questions")
+		if err := os.RemoveAll(questionsDir); err == nil {
+			os.MkdirAll(questionsDir, 0755)
+			result["questions"] = true
+			log.Printf("[HTTP] Reset: Questions cleared")
+		}
+	}
+
+	// Reset teams (clear engine data and file)
+	if resetTeams {
+		h.engine.SetTeams(make(map[string]*game.Team))
+		teamsPath := filepath.Join(configDir, "teams.json")
+		os.Remove(teamsPath)
+		result["teams"] = true
+		log.Printf("[HTTP] Reset: Teams cleared")
+	}
+
+	// Reset bumpers (clear engine data and file)
+	if resetBumpers {
+		h.engine.SetBumpers(make(map[string]*game.Bumper))
+		bumpersPath := filepath.Join(configDir, "bumpers.json")
+		os.Remove(bumpersPath)
+		result["bumpers"] = true
+		log.Printf("[HTTP] Reset: Bumpers cleared")
+	}
+
+	// Reset history (clear engine history and file)
+	if resetHistory {
+		h.engine.ClearHistory()
+		historyPath := filepath.Join(configDir, "history.json")
+		os.Remove(historyPath)
+		result["history"] = true
+		log.Printf("[HTTP] Reset: History cleared")
+	}
+
+	// Reset backgrounds (delete backgrounds directory)
+	if resetBackgrounds {
+		backgroundsDir := filepath.Join(filesDir, "backgrounds")
+		if err := os.RemoveAll(backgroundsDir); err == nil {
+			os.MkdirAll(backgroundsDir, 0755)
+			h.engine.ClearBackgrounds()
+			result["backgrounds"] = true
+			log.Printf("[HTTP] Reset: Backgrounds cleared")
+		}
+	}
+
+	// Notify clients of changes
+	if h.OnAction != nil {
+		h.OnAction("RESET_SELECT", nil)
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"status": "ok",
+		"reset":  result,
+	})
+}
+
 func (h *HTTPServer) createTARBackup(w http.ResponseWriter, r *http.Request, sourceDir, filenamePrefix string) {
 	// Set headers for TAR download
 	timestamp := time.Now().Format("2006-01-02_15-04-05")
@@ -768,15 +1010,31 @@ func (h *HTTPServer) handleRestore(w http.ResponseWriter, r *http.Request) {
 	}
 	defer file.Close()
 
-	// Target directory for restore
-	targetDir := filepath.Join(h.dataDir, "files")
+	// Read entire file into memory for two-pass processing
+	fileData, err := io.ReadAll(file)
+	if err != nil {
+		http.Error(w, "Failed to read file", http.StatusInternalServerError)
+		return
+	}
 
-	// Clear existing files directory
-	os.RemoveAll(targetDir)
-	os.MkdirAll(targetDir, 0755)
+	// First pass: detect what's in the archive
+	detected := h.detectTARContents(fileData)
+	log.Printf("[HTTP] Restore: Detected contents: %+v", detected)
 
-	// Read TAR archive
-	tr := tar.NewReader(file)
+	// Prepare result
+	result := map[string]interface{}{
+		"status":   "ok",
+		"restored": make(map[string]bool),
+	}
+	restoredMap := result["restored"].(map[string]bool)
+
+	configDir := filepath.Join(h.dataDir, "config")
+	filesDir := filepath.Join(h.dataDir, "files")
+	os.MkdirAll(configDir, 0755)
+	os.MkdirAll(filesDir, 0755)
+
+	// Second pass: extract files based on what was detected
+	tr := tar.NewReader(bytes.NewReader(fileData))
 
 	for {
 		header, err := tr.Next()
@@ -788,21 +1046,60 @@ func (h *HTTPServer) handleRestore(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		// Build target path
-		targetPath := filepath.Join(targetDir, header.Name)
+		tarPath := filepath.ToSlash(header.Name)
 
-		// Ensure the target path is within targetDir (security)
-		if !strings.HasPrefix(filepath.Clean(targetPath), filepath.Clean(targetDir)) {
+		// Determine where to restore based on path prefix
+		var targetPath string
+		var allowed bool
+
+		switch {
+		case strings.HasPrefix(tarPath, "files/questions/"):
+			if detected["questions"] {
+				targetPath = filepath.Join(h.dataDir, tarPath)
+				allowed = true
+			}
+		case strings.HasPrefix(tarPath, "files/backgrounds/"):
+			if detected["backgrounds"] {
+				targetPath = filepath.Join(h.dataDir, tarPath)
+				allowed = true
+			}
+		case tarPath == "config/teams.json":
+			if detected["teams"] {
+				targetPath = filepath.Join(configDir, "teams.json")
+				allowed = true
+			}
+		case tarPath == "config/bumpers.json":
+			if detected["bumpers"] {
+				targetPath = filepath.Join(configDir, "bumpers.json")
+				allowed = true
+			}
+		case tarPath == "config/history.json":
+			if detected["history"] {
+				targetPath = filepath.Join(configDir, "history.json")
+				allowed = true
+			}
+		// Legacy format: questions directly in root
+		case strings.HasPrefix(tarPath, "questions/"):
+			if detected["questions"] {
+				targetPath = filepath.Join(filesDir, tarPath)
+				allowed = true
+			}
+		}
+
+		if !allowed {
+			continue
+		}
+
+		// Security check
+		cleanTarget := filepath.Clean(targetPath)
+		if !strings.HasPrefix(cleanTarget, filepath.Clean(h.dataDir)) {
 			continue
 		}
 
 		switch header.Typeflag {
 		case tar.TypeDir:
-			if err := os.MkdirAll(targetPath, 0755); err != nil {
-				log.Printf("[HTTP] Restore mkdir error: %v", err)
-			}
+			os.MkdirAll(targetPath, 0755)
 		case tar.TypeReg:
-			// Ensure parent directory exists
 			os.MkdirAll(filepath.Dir(targetPath), 0755)
 
 			outFile, err := os.Create(targetPath)
@@ -820,14 +1117,87 @@ func (h *HTTPServer) handleRestore(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	log.Printf("[HTTP] Restore completed to %s", targetDir)
+	// Post-restore: load config files into engine
+	if detected["teams"] {
+		if err := h.engine.LoadTeams(); err == nil {
+			restoredMap["teams"] = true
+			log.Printf("[HTTP] Restore: Teams loaded into engine")
+		}
+	}
+
+	if detected["bumpers"] {
+		if err := h.engine.LoadBumpers(); err == nil {
+			restoredMap["bumpers"] = true
+			log.Printf("[HTTP] Restore: Bumpers loaded into engine")
+		}
+	}
+
+	if detected["history"] {
+		if err := h.engine.LoadHistory(); err == nil {
+			h.engine.RecalculateScoresFromHistory()
+			restoredMap["history"] = true
+			log.Printf("[HTTP] Restore: History loaded and scores recalculated")
+		}
+	}
+
+	if detected["questions"] {
+		restoredMap["questions"] = true
+		log.Printf("[HTTP] Restore: Questions restored")
+	}
+
+	if detected["backgrounds"] {
+		restoredMap["backgrounds"] = true
+		// Reload backgrounds config
+		if h.OnBackgroundChange != nil {
+			h.OnBackgroundChange("reload")
+		}
+		log.Printf("[HTTP] Restore: Backgrounds restored")
+	}
+
+	log.Printf("[HTTP] Intelligent restore completed")
 
 	if h.OnAction != nil {
 		h.OnAction("RESTORE", nil)
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	w.Write([]byte(`{"status": "ok"}`))
+	json.NewEncoder(w).Encode(result)
+}
+
+// detectTARContents scans a TAR archive and returns what types of content it contains
+func (h *HTTPServer) detectTARContents(data []byte) map[string]bool {
+	detected := map[string]bool{
+		"questions":   false,
+		"teams":       false,
+		"bumpers":     false,
+		"history":     false,
+		"backgrounds": false,
+	}
+
+	tr := tar.NewReader(bytes.NewReader(data))
+	for {
+		header, err := tr.Next()
+		if err != nil {
+			break
+		}
+
+		tarPath := filepath.ToSlash(header.Name)
+
+		switch {
+		case strings.HasPrefix(tarPath, "files/questions/") || strings.HasPrefix(tarPath, "questions/"):
+			detected["questions"] = true
+		case strings.HasPrefix(tarPath, "files/backgrounds/") || strings.HasPrefix(tarPath, "backgrounds/"):
+			detected["backgrounds"] = true
+		case tarPath == "config/teams.json" || tarPath == "teams.json":
+			detected["teams"] = true
+		case tarPath == "config/bumpers.json" || tarPath == "bumpers.json":
+			detected["bumpers"] = true
+		case tarPath == "config/history.json" || tarPath == "history.json":
+			detected["history"] = true
+		}
+	}
+
+	return detected
 }
 
 func (h *HTTPServer) handleUpdate(w http.ResponseWriter, r *http.Request) {

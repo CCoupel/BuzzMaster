@@ -1,6 +1,7 @@
 # CLAUDE.md - BuzzControl Project Reference
 
 > **Historique des versions** : Voir [CHANGELOG.md](CHANGELOG.md) pour l'historique détaillé des fonctionnalités par version.
+> **Guide d'administration** : Voir [docs/ADMIN_GUIDE.md](docs/ADMIN_GUIDE.md) pour la persistance, sauvegarde/restauration et gestion des scores.
 
 ## Project Overview
 
@@ -47,7 +48,8 @@ buzzcontrol/
 ├── data/                     # Web assets (HTML/JS/CSS)
 ├── docs/
 │   ├── MIGRATION_ARCHITECTURE.md  # Architecture decisions
-│   └── GAME_STATE_MACHINE.md      # Game state machine specification
+│   ├── GAME_STATE_MACHINE.md      # Game state machine specification
+│   └── ADMIN_GUIDE.md             # Administration guide (backup, restore, scores)
 ├── platformio.ini            # PlatformIO config
 ├── partitions.csv            # ESP32 partition table
 ├── CLAUDE.md                 # This file
@@ -136,14 +138,46 @@ The ESP32-C3 buzzers connect to the Go server without any modification.
 | GET | `/listGame` | Current game state JSON |
 | GET | `/questions` | List all questions |
 | POST | `/questions` | Upload question (multipart) |
-| GET | `/backup` | Download TAR backup |
-| POST | `/restore` | Upload TAR restore |
+| GET | `/history` | Get game event history |
+| GET | `/backup` | Download full TAR backup |
+| GET | `/backup-select` | Selective backup (see params below) |
+| POST | `/restore` | Intelligent restore from TAR |
+| GET | `/reset-select` | Selective reset (see params below) |
 | GET | `/config.json` | Get configuration |
 | POST | `/config.json` | Update configuration |
 | GET | `/clearGame` | Clear game data |
 | GET | `/clearBuzzers` | Clear buzzers |
 | GET | `/reboot` | Reboot server |
 | GET | `/reset` | Factory reset |
+
+#### Selective Backup (`/backup-select`)
+Query parameters (all boolean, default: `true` if none specified):
+- `questions=true` - Include questions directory
+- `teams=true` - Include teams.json
+- `bumpers=true` - Include bumpers.json
+- `history=true` - Include history.json
+- `backgrounds=true` - Include backgrounds directory
+
+Example: `/backup-select?questions=true&history=true`
+
+#### Selective Reset (`/reset-select`)
+Query parameters (all boolean):
+- `all=true` - Reset everything
+- `questions=true` - Delete all questions
+- `teams=true` - Clear teams data
+- `bumpers=true` - Clear bumpers data
+- `history=true` - Clear history
+- `backgrounds=true` - Delete backgrounds
+
+Example: `/reset-select?history=true&bumpers=true`
+
+#### Intelligent Restore (`/restore`)
+The restore endpoint now automatically detects what's in the TAR archive and restores accordingly:
+- Detects `files/questions/*` → restores questions
+- Detects `config/teams.json` → loads teams into engine
+- Detects `config/bumpers.json` → loads bumpers into engine
+- Detects `config/history.json` → loads history and recalculates scores
+- Detects `files/backgrounds/*` → restores backgrounds
 
 ## Data Models
 
@@ -332,6 +366,43 @@ server-go/
 | Score progress bars | ✅ | Animated bars proportional to score ratio |
 | Game page 3-column layout | ✅ | Questions left, controls center, teams right |
 | Question reordering | ✅ | Drag and drop in Questions page |
+| History persistence | ✅ | Event sourcing with auto-save |
+| Teams/Bumpers persistence | ✅ | Auto-save after modifications |
+| Selective backup | ✅ | Choose what to include in backup |
+| Selective reset | ✅ | Choose what to reset |
+| Intelligent restore | ✅ | Auto-detect and restore from TAR |
+
+### Data Persistence (v2.21.0)
+
+The server now persists all game data to disk with automatic saving.
+
+#### Persistence Files
+| File | Location | Description |
+|------|----------|-------------|
+| `teams.json` | `data/config/teams.json` | All teams with colors, scores, TeamPoints |
+| `bumpers.json` | `data/config/bumpers.json` | All bumpers/players with scores, teams |
+| `history.json` | `data/config/history.json` | Game events (source of truth for scores) |
+
+#### Event Sourcing Pattern
+History is the **source of truth** for all scores:
+- Each `POINTS_AWARDED` event is recorded with timestamp, question, winner, points
+- On startup, `RecalculateScoresFromHistory()` replays all events to derive scores
+- Scores can be fully reconstructed from history at any time
+
+#### Auto-Save Behavior
+All modifications trigger async save to disk:
+- `UpdateBumper()` → saves bumpers.json
+- `UpdateTeam()` → saves teams.json
+- `SetTeams()`/`SetBumpers()` → saves respective files
+- `UpdateBumperScore()`/`UpdateTeamScore()` → saves both
+- `AddGameEvent()` → saves history.json
+- `RAZScores()` → saves all (with zeros/empty history)
+
+#### Startup Behavior
+1. Try to load teams.json and bumpers.json
+2. If no files exist, initialize test data
+3. Load history.json
+4. Recalculate all scores from history events
 
 ### UI Components
 

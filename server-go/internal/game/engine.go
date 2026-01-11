@@ -3,18 +3,23 @@ package game
 import (
 	"encoding/json"
 	"log"
+	"os"
+	"path/filepath"
 	"sync"
 	"time"
 )
 
 // Engine manages the game state and logic
 type Engine struct {
-	state   GameState
-	data    *TeamsAndBumpers
-	history []GameEvent
-	mu      sync.RWMutex
-	timer   *time.Ticker
-	stopCh  chan struct{}
+	state       GameState
+	data        *TeamsAndBumpers
+	history     []GameEvent
+	historyPath string
+	teamsPath   string
+	bumpersPath string
+	mu          sync.RWMutex
+	timer       *time.Ticker
+	stopCh      chan struct{}
 
 	// Callbacks
 	OnStateChange func(phase GamePhase)
@@ -74,7 +79,6 @@ func (e *Engine) GetBumper(id string) *Bumper {
 // UpdateBumper updates or creates a bumper
 func (e *Engine) UpdateBumper(id string, data map[string]interface{}) {
 	e.mu.Lock()
-	defer e.mu.Unlock()
 
 	bumper, exists := e.data.Bumpers[id]
 	if !exists {
@@ -97,27 +101,40 @@ func (e *Engine) UpdateBumper(id string, data map[string]interface{}) {
 	}
 
 	log.Printf("[Engine] Updated bumper %s: team=%s, name=%s", id, bumper.Team, bumper.Name)
+	e.mu.Unlock()
+
+	// Auto-save bumpers to disk
+	go e.SaveBumpers()
 }
 
 // UpdateTeam updates or creates a team
 func (e *Engine) UpdateTeam(id string, team *Team) {
 	e.mu.Lock()
-	defer e.mu.Unlock()
 	e.data.Teams[id] = team
+	e.mu.Unlock()
+
+	// Auto-save teams to disk
+	go e.SaveTeams()
 }
 
 // SetTeams sets all teams
 func (e *Engine) SetTeams(teams map[string]*Team) {
 	e.mu.Lock()
-	defer e.mu.Unlock()
 	e.data.Teams = teams
+	e.mu.Unlock()
+
+	// Auto-save teams to disk
+	go e.SaveTeams()
 }
 
 // SetBumpers sets all bumpers
 func (e *Engine) SetBumpers(bumpers map[string]*Bumper) {
 	e.mu.Lock()
-	defer e.mu.Unlock()
 	e.data.Bumpers = bumpers
+	e.mu.Unlock()
+
+	// Auto-save bumpers to disk
+	go e.SaveBumpers()
 }
 
 // Ready prepares a new question round
@@ -534,11 +551,11 @@ func (e *Engine) UpdateScore(bumperID string, points int) (bumperScore, teamScor
 // UpdateBumperScore updates the bumper score and recalculates team score
 func (e *Engine) UpdateBumperScore(bumperID string, points int) int {
 	e.mu.Lock()
-	defer e.mu.Unlock()
 
 	bumper, ok := e.data.Bumpers[bumperID]
 	if !ok {
 		log.Printf("[Engine] UpdateBumperScore: bumper not found: %s", bumperID)
+		e.mu.Unlock()
 		return 0
 	}
 
@@ -551,17 +568,24 @@ func (e *Engine) UpdateBumperScore(bumperID string, points int) int {
 		e.recalculateTeamScoreUnsafe(bumper.Team)
 	}
 
-	return bumper.Score
+	score := bumper.Score
+	e.mu.Unlock()
+
+	// Auto-save (scores are part of bumper/team data)
+	go e.SaveBumpers()
+	go e.SaveTeams()
+
+	return score
 }
 
 // UpdateTeamScore adds points directly to team's own TeamPoints (not bumpers)
 func (e *Engine) UpdateTeamScore(teamName string, points int) int {
 	e.mu.Lock()
-	defer e.mu.Unlock()
 
 	team, ok := e.data.Teams[teamName]
 	if !ok {
 		log.Printf("[Engine] UpdateTeamScore: team not found: %s", teamName)
+		e.mu.Unlock()
 		return 0
 	}
 
@@ -573,7 +597,13 @@ func (e *Engine) UpdateTeamScore(teamName string, points int) int {
 	// Recalculate total team score (TeamPoints + bumper scores)
 	e.recalculateTeamScoreUnsafe(teamName)
 
-	return team.Score
+	score := team.Score
+	e.mu.Unlock()
+
+	// Auto-save teams to disk
+	go e.SaveTeams()
+
+	return score
 }
 
 // recalculateTeamScoreUnsafe sets team score to TeamPoints + sum of bumper scores (caller must hold lock)
@@ -609,7 +639,6 @@ func (e *Engine) RecalculateAllTeamScores() {
 // RAZScores resets all scores to zero
 func (e *Engine) RAZScores() {
 	e.mu.Lock()
-	defer e.mu.Unlock()
 
 	for _, bumper := range e.data.Bumpers {
 		bumper.Score = 0
@@ -626,28 +655,37 @@ func (e *Engine) RAZScores() {
 	e.history = nil
 
 	log.Printf("[Engine] All scores and history reset")
+	e.mu.Unlock()
+
+	// Save all data to disk
+	go e.SaveHistory()
+	go e.SaveTeams()
+	go e.SaveBumpers()
 }
 
 // ClearBumpers removes all bumpers (keeps teams intact)
 func (e *Engine) ClearBumpers() {
 	e.mu.Lock()
-	defer e.mu.Unlock()
-
 	e.data.Bumpers = make(map[string]*Bumper)
 	// Note: Teams are preserved - use ClearAll() to clear both
-
 	log.Printf("[Engine] All bumpers cleared")
+	e.mu.Unlock()
+
+	// Auto-save empty bumpers
+	go e.SaveBumpers()
 }
 
 // ClearAll removes all teams and bumpers
 func (e *Engine) ClearAll() {
 	e.mu.Lock()
-	defer e.mu.Unlock()
-
 	e.data.Bumpers = make(map[string]*Bumper)
 	e.data.Teams = make(map[string]*Team)
-
 	log.Printf("[Engine] All teams and bumpers cleared")
+	e.mu.Unlock()
+
+	// Auto-save empty data
+	go e.SaveTeams()
+	go e.SaveBumpers()
 }
 
 // SetPage sets the remote page
@@ -790,13 +828,16 @@ func (e *Engine) IsGameStarted() bool {
 	return e.state.Phase == PhaseStarted
 }
 
-// AddGameEvent adds an event to the history
+// AddGameEvent adds an event to the history and saves to disk
 func (e *Engine) AddGameEvent(event GameEvent) {
 	e.mu.Lock()
-	defer e.mu.Unlock()
 	e.history = append(e.history, event)
 	log.Printf("[Engine] Game event added: type=%s, winner=%s, points=%d",
 		event.EventType, event.WinnerName, event.Points)
+	e.mu.Unlock()
+
+	// Save history to disk (non-blocking, async)
+	go e.SaveHistory()
 }
 
 // GetHistory returns the game event history
@@ -815,4 +856,260 @@ func (e *Engine) ClearHistory() {
 	defer e.mu.Unlock()
 	e.history = nil
 	log.Printf("[Engine] History cleared")
+}
+
+// SetHistoryPath sets the path for history persistence
+func (e *Engine) SetHistoryPath(path string) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.historyPath = path
+	log.Printf("[Engine] History path set to: %s", path)
+}
+
+// SaveHistory persists history to disk
+func (e *Engine) SaveHistory() error {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+
+	if e.historyPath == "" {
+		return nil // No path configured, skip
+	}
+
+	// Ensure directory exists
+	dir := filepath.Dir(e.historyPath)
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		log.Printf("[Engine] Failed to create history directory: %v", err)
+		return err
+	}
+
+	data, err := json.MarshalIndent(e.history, "", "  ")
+	if err != nil {
+		log.Printf("[Engine] Failed to marshal history: %v", err)
+		return err
+	}
+
+	if err := os.WriteFile(e.historyPath, data, 0644); err != nil {
+		log.Printf("[Engine] Failed to save history: %v", err)
+		return err
+	}
+
+	log.Printf("[Engine] History saved: %d events to %s", len(e.history), e.historyPath)
+	return nil
+}
+
+// LoadHistory loads history from disk
+func (e *Engine) LoadHistory() error {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+
+	if e.historyPath == "" {
+		return nil // No path configured, skip
+	}
+
+	data, err := os.ReadFile(e.historyPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			log.Printf("[Engine] No history file found, starting fresh")
+			return nil
+		}
+		log.Printf("[Engine] Failed to read history: %v", err)
+		return err
+	}
+
+	var history []GameEvent
+	if err := json.Unmarshal(data, &history); err != nil {
+		log.Printf("[Engine] Failed to parse history: %v", err)
+		return err
+	}
+
+	e.history = history
+	log.Printf("[Engine] History loaded: %d events from %s", len(history), e.historyPath)
+	return nil
+}
+
+// RecalculateScoresFromHistory recalculates all scores from history events
+func (e *Engine) RecalculateScoresFromHistory() {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+
+	// Reset all scores first
+	for _, bumper := range e.data.Bumpers {
+		bumper.Score = 0
+	}
+	for _, team := range e.data.Teams {
+		team.Score = 0
+		team.TeamPoints = 0
+	}
+
+	// Replay all events
+	playerPoints := 0
+	teamPoints := 0
+
+	for _, event := range e.history {
+		switch event.WinnerType {
+		case "PLAYER":
+			// Add points to bumper
+			if bumper, ok := e.data.Bumpers[event.WinnerID]; ok {
+				bumper.Score += event.Points
+				playerPoints += event.Points
+			}
+		case "TEAM":
+			// Add points to team's TeamPoints
+			if team, ok := e.data.Teams[event.TeamName]; ok {
+				team.TeamPoints += event.Points
+				teamPoints += event.Points
+			}
+		}
+	}
+
+	// Recalculate all team total scores (TeamPoints + bumper scores)
+	for teamName := range e.data.Teams {
+		e.recalculateTeamScoreUnsafe(teamName)
+	}
+
+	log.Printf("[Engine] Scores recalculated from history: %d events, playerPoints=%d, teamPoints=%d",
+		len(e.history), playerPoints, teamPoints)
+}
+
+// SetTeamsPath sets the path for teams persistence
+func (e *Engine) SetTeamsPath(path string) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.teamsPath = path
+	log.Printf("[Engine] Teams path set to: %s", path)
+}
+
+// SetBumpersPath sets the path for bumpers persistence
+func (e *Engine) SetBumpersPath(path string) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.bumpersPath = path
+	log.Printf("[Engine] Bumpers path set to: %s", path)
+}
+
+// SaveTeams persists teams to disk
+func (e *Engine) SaveTeams() error {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+
+	if e.teamsPath == "" {
+		return nil
+	}
+
+	dir := filepath.Dir(e.teamsPath)
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		log.Printf("[Engine] Failed to create teams directory: %v", err)
+		return err
+	}
+
+	data, err := json.MarshalIndent(e.data.Teams, "", "  ")
+	if err != nil {
+		log.Printf("[Engine] Failed to marshal teams: %v", err)
+		return err
+	}
+
+	if err := os.WriteFile(e.teamsPath, data, 0644); err != nil {
+		log.Printf("[Engine] Failed to save teams: %v", err)
+		return err
+	}
+
+	log.Printf("[Engine] Teams saved: %d teams to %s", len(e.data.Teams), e.teamsPath)
+	return nil
+}
+
+// LoadTeams loads teams from disk
+func (e *Engine) LoadTeams() error {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+
+	if e.teamsPath == "" {
+		return nil
+	}
+
+	data, err := os.ReadFile(e.teamsPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			log.Printf("[Engine] No teams file found, starting fresh")
+			return nil
+		}
+		log.Printf("[Engine] Failed to read teams: %v", err)
+		return err
+	}
+
+	var teams map[string]*Team
+	if err := json.Unmarshal(data, &teams); err != nil {
+		log.Printf("[Engine] Failed to parse teams: %v", err)
+		return err
+	}
+
+	e.data.Teams = teams
+	log.Printf("[Engine] Teams loaded: %d teams from %s", len(teams), e.teamsPath)
+	return nil
+}
+
+// SaveBumpers persists bumpers to disk
+func (e *Engine) SaveBumpers() error {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+
+	if e.bumpersPath == "" {
+		return nil
+	}
+
+	dir := filepath.Dir(e.bumpersPath)
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		log.Printf("[Engine] Failed to create bumpers directory: %v", err)
+		return err
+	}
+
+	data, err := json.MarshalIndent(e.data.Bumpers, "", "  ")
+	if err != nil {
+		log.Printf("[Engine] Failed to marshal bumpers: %v", err)
+		return err
+	}
+
+	if err := os.WriteFile(e.bumpersPath, data, 0644); err != nil {
+		log.Printf("[Engine] Failed to save bumpers: %v", err)
+		return err
+	}
+
+	log.Printf("[Engine] Bumpers saved: %d bumpers to %s", len(e.data.Bumpers), e.bumpersPath)
+	return nil
+}
+
+// LoadBumpers loads bumpers from disk
+func (e *Engine) LoadBumpers() error {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+
+	if e.bumpersPath == "" {
+		return nil
+	}
+
+	data, err := os.ReadFile(e.bumpersPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			log.Printf("[Engine] No bumpers file found, starting fresh")
+			return nil
+		}
+		log.Printf("[Engine] Failed to read bumpers: %v", err)
+		return err
+	}
+
+	var bumpers map[string]*Bumper
+	if err := json.Unmarshal(data, &bumpers); err != nil {
+		log.Printf("[Engine] Failed to parse bumpers: %v", err)
+		return err
+	}
+
+	e.data.Bumpers = bumpers
+	log.Printf("[Engine] Bumpers loaded: %d bumpers from %s", len(bumpers), e.bumpersPath)
+	return nil
+}
+
+// SaveAll saves teams, bumpers and history to disk
+func (e *Engine) SaveAll() {
+	go e.SaveTeams()
+	go e.SaveBumpers()
+	go e.SaveHistory()
 }

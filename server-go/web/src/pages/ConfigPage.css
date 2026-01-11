@@ -457,10 +457,9 @@
 }
 
 .system-card {
-  display: grid;
-  grid-template-columns: 1fr auto;
-  gap: var(--space-6);
-  align-items: center;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
 }
 
 .system-info {
@@ -499,6 +498,55 @@
   cursor: pointer;
 }
 
+/* Config Sections (Backup/Reset) */
+.config-section {
+  margin-top: var(--space-5);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--gray-200);
+}
+
+.config-section-title {
+  font-family: var(--font-display);
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--gray-700);
+  margin: 0 0 var(--space-3) 0;
+}
+
+.checkbox-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-4);
+  margin-bottom: var(--space-4);
+}
+
+.checkbox-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  cursor: pointer;
+  font-size: 0.875rem;
+  color: var(--gray-700);
+  user-select: none;
+}
+
+.checkbox-item input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--primary-500);
+  cursor: pointer;
+}
+
+.checkbox-item:hover {
+  color: var(--gray-900);
+}
+
+.config-section-actions {
+  display: flex;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
 /* Responsive */
 @media (max-width: 1024px) {
   .config-layout {
@@ -511,7 +559,7 @@
   }
 
   .system-card {
-    grid-template-columns: 1fr;
+    flex-direction: column;
   }
 
   .system-actions {

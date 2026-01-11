@@ -58,8 +58,30 @@ func main() {
 	// Initialize components
 	app.init()
 
-	// Initialize test data (teams, bumpers)
-	app.initTestData()
+	// Try to load saved teams and bumpers from disk
+	teamsLoaded := app.engine.LoadTeams() == nil && len(app.engine.GetTeamsAndBumpers().Teams) > 0
+	bumpersLoaded := app.engine.LoadBumpers() == nil && len(app.engine.GetTeamsAndBumpers().Bumpers) > 0
+
+	// Only initialize test data if no saved data exists
+	if !teamsLoaded && !bumpersLoaded {
+		log.Println("[App] No saved teams/bumpers found, initializing test data...")
+		app.initTestData()
+		// Save initial test data
+		app.engine.SaveTeams()
+		app.engine.SaveBumpers()
+	} else {
+		log.Printf("[App] Loaded from disk: %d teams, %d bumpers",
+			len(app.engine.GetTeamsAndBumpers().Teams),
+			len(app.engine.GetTeamsAndBumpers().Bumpers))
+		app.engine.RecalculateAllTeamScores()
+	}
+
+	// Load history and recalculate scores from events (overrides test data scores)
+	if err := app.engine.LoadHistory(); err != nil {
+		log.Printf("Warning: Could not load history: %v", err)
+	} else {
+		app.engine.RecalculateScoresFromHistory()
+	}
 
 	// Start servers
 	if err := app.start(); err != nil {
@@ -84,6 +106,12 @@ func main() {
 func (a *App) init() {
 	// Game engine
 	a.engine = game.NewEngine()
+
+	// Set persistence paths
+	configDir := filepath.Join(a.config.Storage.DataDir, "config")
+	a.engine.SetHistoryPath(filepath.Join(configDir, "history.json"))
+	a.engine.SetTeamsPath(filepath.Join(configDir, "teams.json"))
+	a.engine.SetBumpersPath(filepath.Join(configDir, "bumpers.json"))
 
 	// WebSocket hub
 	a.wsHub = server.NewWebSocketHub()
@@ -157,6 +185,9 @@ func (a *App) setupCallbacks() {
 		case "REBOOT", "RESET":
 			a.broadcastReset()
 		case "RESTORE":
+			a.broadcastQuestions()
+			a.broadcastUpdate()
+		case "RESET_SELECT":
 			a.broadcastQuestions()
 			a.broadcastUpdate()
 		}
