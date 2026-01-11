@@ -83,6 +83,11 @@ func main() {
 		app.engine.RecalculateScoresFromHistory()
 	}
 
+	// Load question statuses
+	if err := app.engine.LoadStatuses(); err != nil {
+		log.Printf("Warning: Could not load question statuses: %v", err)
+	}
+
 	// Start servers
 	if err := app.start(); err != nil {
 		log.Fatalf("Failed to start: %v", err)
@@ -112,6 +117,7 @@ func (a *App) init() {
 	a.engine.SetHistoryPath(filepath.Join(configDir, "history.json"))
 	a.engine.SetTeamsPath(filepath.Join(configDir, "teams.json"))
 	a.engine.SetBumpersPath(filepath.Join(configDir, "bumpers.json"))
+	a.engine.SetStatusesPath(filepath.Join(configDir, "question_statuses.json"))
 
 	// WebSocket hub
 	a.wsHub = server.NewWebSocketHub()
@@ -997,14 +1003,11 @@ func (a *App) broadcastQuestions() {
 	// Load questions from storage
 	questions := a.loadQuestions()
 
-	// Merge current question status from game state
-	state := a.engine.GetState()
-	if state.Question != nil && state.Question.ID != "" {
-		for _, q := range questions {
-			if qID, ok := q["ID"].(string); ok && qID == state.Question.ID {
-				q["STATUS"] = string(state.Question.Status)
-				break
-			}
+	// Inject status from questionStatuses map for ALL questions
+	for _, q := range questions {
+		if qID, ok := q["ID"].(string); ok && qID != "" {
+			status := a.engine.GetQuestionStatus(qID)
+			q["STATUS"] = string(status)
 		}
 	}
 
@@ -1034,8 +1037,15 @@ func (a *App) sendStateToClient(clientID string) {
 	updateMsg.Version = a.config.Version
 	a.wsHub.SendToClient(clientID, updateMsg)
 
-	// Send QUESTIONS
+	// Send QUESTIONS with statuses
 	questions := a.loadQuestions()
+	// Inject status from questionStatuses map for ALL questions
+	for _, q := range questions {
+		if qID, ok := q["ID"].(string); ok && qID != "" {
+			status := a.engine.GetQuestionStatus(qID)
+			q["STATUS"] = string(status)
+		}
+	}
 	qData, _ := json.Marshal(questions)
 	fsInfo := a.getStorageInfo()
 	questionsMsg, _ := protocol.NewMessage(protocol.ActionQuestions, nil)

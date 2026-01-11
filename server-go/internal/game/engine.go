@@ -11,15 +11,17 @@ import (
 
 // Engine manages the game state and logic
 type Engine struct {
-	state       GameState
-	data        *TeamsAndBumpers
-	history     []GameEvent
-	historyPath string
-	teamsPath   string
-	bumpersPath string
-	mu          sync.RWMutex
-	timer       *time.Ticker
-	stopCh      chan struct{}
+	state            GameState
+	data             *TeamsAndBumpers
+	questionStatuses map[string]QuestionStatus // Track question statuses across selections
+	history          []GameEvent
+	historyPath      string
+	teamsPath        string
+	bumpersPath      string
+	statusesPath     string // Path to question_statuses.json
+	mu               sync.RWMutex
+	timer            *time.Ticker
+	stopCh           chan struct{}
 
 	// Callbacks
 	OnStateChange func(phase GamePhase)
@@ -36,8 +38,9 @@ func NewEngine() *Engine {
 			CurrentTime: 0,
 			Page:        "GAME",
 		},
-		data:   NewTeamsAndBumpers(),
-		stopCh: make(chan struct{}),
+		data:             NewTeamsAndBumpers(),
+		questionStatuses: make(map[string]QuestionStatus),
+		stopCh:           make(chan struct{}),
 	}
 }
 
@@ -74,6 +77,25 @@ func (e *Engine) GetBumper(id string) *Bumper {
 	e.mu.RLock()
 	defer e.mu.RUnlock()
 	return e.data.Bumpers[id]
+}
+
+// GetQuestionStatus returns the status of a question by ID
+func (e *Engine) GetQuestionStatus(id string) QuestionStatus {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	if status, ok := e.questionStatuses[id]; ok {
+		return status
+	}
+	return StatusAvailable
+}
+
+// setQuestionStatus updates both the current question and the status map (must hold lock)
+func (e *Engine) setQuestionStatus(status QuestionStatus) {
+	if e.state.Question != nil {
+		e.state.Question.Status = status
+		e.questionStatuses[e.state.Question.ID] = status
+		go e.SaveStatuses() // Persist to disk
+	}
 }
 
 // UpdateBumper updates or creates a bumper
@@ -152,9 +174,7 @@ func (e *Engine) Ready(questionID string, question *Question) {
 
 	e.state.Phase = PhasePrepare
 	e.state.Question = question
-	if question != nil {
-		question.Status = StatusPrepare
-	}
+	e.setQuestionStatus(StatusPrepare)
 
 	// Reset bumper times
 	for _, bumper := range e.data.Bumpers {
@@ -244,9 +264,7 @@ func (e *Engine) TransitionToReady() {
 	}
 
 	e.state.Phase = PhaseReady
-	if e.state.Question != nil {
-		e.state.Question.Status = StatusReady
-	}
+	e.setQuestionStatus(StatusReady)
 	log.Printf("[Engine] All teams ready, transitioning to READY")
 
 	// Release lock BEFORE calling callback to avoid deadlock
@@ -267,9 +285,7 @@ func (e *Engine) Start(delay int) {
 	e.state.CurrentTime = delay
 	e.state.GameTime = time.Now().UnixMicro()
 
-	if e.state.Question != nil {
-		e.state.Question.Status = StatusStarted
-	}
+	e.setQuestionStatus(StatusStarted)
 
 	// Reset bumper times again
 	for _, bumper := range e.data.Bumpers {
@@ -361,9 +377,7 @@ func (e *Engine) Stop() {
 	e.state.Phase = PhaseStopped
 	e.state.CurrentTime = 0
 
-	if e.state.Question != nil {
-		e.state.Question.Status = StatusStopped
-	}
+	e.setQuestionStatus(StatusStopped)
 
 	log.Printf("[Engine] Game stopped")
 
@@ -382,9 +396,7 @@ func (e *Engine) Pause() {
 
 	e.state.Phase = PhasePaused
 
-	if e.state.Question != nil {
-		e.state.Question.Status = StatusPaused
-	}
+	e.setQuestionStatus(StatusPaused)
 
 	log.Printf("[Engine] Game paused")
 
@@ -408,9 +420,7 @@ func (e *Engine) Continue() {
 
 	e.state.Phase = PhaseStarted
 
-	if e.state.Question != nil {
-		e.state.Question.Status = StatusStarted
-	}
+	e.setQuestionStatus(StatusStarted)
 
 	log.Printf("[Engine] Game continued")
 
@@ -437,7 +447,7 @@ func (e *Engine) Reveal() string {
 
 	var answer string
 	if e.state.Question != nil {
-		e.state.Question.Status = StatusRevealed
+		e.setQuestionStatus(StatusRevealed)
 		answer = e.state.Question.Answer
 		log.Printf("[Engine] Answer revealed")
 	}
@@ -786,9 +796,7 @@ func (e *Engine) ForceReady() {
 	}
 
 	e.state.Phase = PhaseReady
-	if e.state.Question != nil {
-		e.state.Question.Status = StatusReady
-	}
+	e.setQuestionStatus(StatusReady)
 	log.Printf("[Engine] FORCE_READY: transitioning to READY")
 
 	// Release lock BEFORE calling callback to avoid deadlock
@@ -1107,9 +1115,86 @@ func (e *Engine) LoadBumpers() error {
 	return nil
 }
 
-// SaveAll saves teams, bumpers and history to disk
+// SetStatusesPath sets the path for question statuses persistence
+func (e *Engine) SetStatusesPath(path string) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.statusesPath = path
+	log.Printf("[Engine] Statuses path set to: %s", path)
+}
+
+// SaveStatuses persists question statuses to disk
+func (e *Engine) SaveStatuses() error {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+
+	if e.statusesPath == "" {
+		return nil
+	}
+
+	dir := filepath.Dir(e.statusesPath)
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		log.Printf("[Engine] Failed to create statuses directory: %v", err)
+		return err
+	}
+
+	data, err := json.MarshalIndent(e.questionStatuses, "", "  ")
+	if err != nil {
+		log.Printf("[Engine] Failed to marshal statuses: %v", err)
+		return err
+	}
+
+	if err := os.WriteFile(e.statusesPath, data, 0644); err != nil {
+		log.Printf("[Engine] Failed to save statuses: %v", err)
+		return err
+	}
+
+	log.Printf("[Engine] Statuses saved: %d statuses to %s", len(e.questionStatuses), e.statusesPath)
+	return nil
+}
+
+// LoadStatuses loads question statuses from disk
+func (e *Engine) LoadStatuses() error {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+
+	if e.statusesPath == "" {
+		return nil
+	}
+
+	data, err := os.ReadFile(e.statusesPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			log.Printf("[Engine] No statuses file found, starting fresh")
+			return nil
+		}
+		log.Printf("[Engine] Failed to read statuses: %v", err)
+		return err
+	}
+
+	var statuses map[string]QuestionStatus
+	if err := json.Unmarshal(data, &statuses); err != nil {
+		log.Printf("[Engine] Failed to parse statuses: %v", err)
+		return err
+	}
+
+	e.questionStatuses = statuses
+	log.Printf("[Engine] Statuses loaded: %d statuses from %s", len(statuses), e.statusesPath)
+	return nil
+}
+
+// ClearStatuses resets all question statuses
+func (e *Engine) ClearStatuses() {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.questionStatuses = make(map[string]QuestionStatus)
+	log.Printf("[Engine] Question statuses cleared")
+}
+
+// SaveAll saves teams, bumpers, history and statuses to disk
 func (e *Engine) SaveAll() {
 	go e.SaveTeams()
 	go e.SaveBumpers()
 	go e.SaveHistory()
+	go e.SaveStatuses()
 }

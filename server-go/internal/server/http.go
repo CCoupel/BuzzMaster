@@ -339,6 +339,12 @@ func (h *HTTPServer) handleQuestions(w http.ResponseWriter, r *http.Request) {
 						q["POINTS_TARGET"] = "PLAYER"
 					}
 				}
+				// Inject status from engine's questionStatuses map
+				qID, _ := q["ID"].(string)
+				if qID != "" && h.engine != nil {
+					status := h.engine.GetQuestionStatus(qID)
+					q["STATUS"] = string(status)
+				}
 				// Use full path as key (like ESP32)
 				key := "/files/questions/" + entry.Name()
 				questions[key] = q
@@ -369,6 +375,13 @@ func (h *HTTPServer) handleUploadQuestion(w http.ResponseWriter, r *http.Request
 	questionsDir := filepath.Join(h.dataDir, "files", "questions", id)
 	os.MkdirAll(questionsDir, 0755)
 
+	// Load existing question to preserve media if not updated
+	existingQuestion := make(map[string]interface{})
+	existingPath := filepath.Join(questionsDir, "question.json")
+	if data, err := os.ReadFile(existingPath); err == nil {
+		json.Unmarshal(data, &existingQuestion)
+	}
+
 	// Save question data
 	question := map[string]interface{}{
 		"ID":       id,
@@ -376,6 +389,18 @@ func (h *HTTPServer) handleUploadQuestion(w http.ResponseWriter, r *http.Request
 		"ANSWER":   r.FormValue("answer"),
 		"POINTS":   r.FormValue("points"),
 		"TIME":     r.FormValue("time"),
+	}
+
+	// Preserve existing media if not replaced
+	if media, ok := existingQuestion["MEDIA"].(string); ok && media != "" {
+		question["MEDIA"] = media
+	}
+	if mediaAnswer, ok := existingQuestion["MEDIA_ANSWER"].(string); ok && mediaAnswer != "" {
+		question["MEDIA_ANSWER"] = mediaAnswer
+	}
+	// Preserve ORDER if exists
+	if order, ok := existingQuestion["ORDER"]; ok {
+		question["ORDER"] = order
 	}
 
 	// Handle question type (NORMAL or QCM)
@@ -396,6 +421,12 @@ func (h *HTTPServer) handleUploadQuestion(w http.ResponseWriter, r *http.Request
 		}
 	}
 	question["POINTS_TARGET"] = pointsTarget
+
+	// Handle category
+	category := r.FormValue("category")
+	if category != "" {
+		question["CATEGORY"] = category
+	}
 
 	// Handle QCM specific fields
 	if questionType == "QCM" {
@@ -764,6 +795,14 @@ func (h *HTTPServer) handleBackupSelect(w http.ResponseWriter, r *http.Request) 
 		}
 	}
 
+	// Add question_statuses.json (with questions since they're related)
+	if includeQuestions {
+		statusesPath := filepath.Join(configDir, "question_statuses.json")
+		if _, err := os.Stat(statusesPath); err == nil {
+			h.addFileToTAR(tw, statusesPath, "config/question_statuses.json")
+		}
+	}
+
 	// Add backgrounds
 	if includeBackgrounds {
 		backgroundsDir := filepath.Join(filesDir, "backgrounds")
@@ -868,7 +907,7 @@ func (h *HTTPServer) handleResetSelect(w http.ResponseWriter, r *http.Request) {
 	configDir := filepath.Join(h.dataDir, "config")
 	filesDir := filepath.Join(h.dataDir, "files")
 
-	// Reset questions (delete all question directories)
+	// Reset questions (delete all question directories and statuses)
 	if resetQuestions {
 		questionsDir := filepath.Join(filesDir, "questions")
 		if err := os.RemoveAll(questionsDir); err == nil {
@@ -876,6 +915,11 @@ func (h *HTTPServer) handleResetSelect(w http.ResponseWriter, r *http.Request) {
 			result["questions"] = true
 			log.Printf("[HTTP] Reset: Questions cleared")
 		}
+		// Also reset question statuses
+		h.engine.ClearStatuses()
+		statusesPath := filepath.Join(configDir, "question_statuses.json")
+		os.Remove(statusesPath)
+		log.Printf("[HTTP] Reset: Question statuses cleared")
 	}
 
 	// Reset teams (clear engine data and file)
@@ -1078,6 +1122,11 @@ func (h *HTTPServer) handleRestore(w http.ResponseWriter, r *http.Request) {
 				targetPath = filepath.Join(configDir, "history.json")
 				allowed = true
 			}
+		case tarPath == "config/question_statuses.json":
+			if detected["questions"] { // Statuses are tied to questions
+				targetPath = filepath.Join(configDir, "question_statuses.json")
+				allowed = true
+			}
 		// Legacy format: questions directly in root
 		case strings.HasPrefix(tarPath, "questions/"):
 			if detected["questions"] {
@@ -1142,6 +1191,10 @@ func (h *HTTPServer) handleRestore(w http.ResponseWriter, r *http.Request) {
 
 	if detected["questions"] {
 		restoredMap["questions"] = true
+		// Also load question statuses
+		if err := h.engine.LoadStatuses(); err == nil {
+			log.Printf("[HTTP] Restore: Question statuses loaded into engine")
+		}
 		log.Printf("[HTTP] Restore: Questions restored")
 	}
 

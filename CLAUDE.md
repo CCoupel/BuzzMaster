@@ -371,6 +371,7 @@ server-go/
 | Selective backup | ✅ | Choose what to include in backup |
 | Selective reset | ✅ | Choose what to reset |
 | Intelligent restore | ✅ | Auto-detect and restore from TAR |
+| Question status persistence | ✅ | Statuses preserved across selections & restarts |
 
 ### Data Persistence (v2.21.0)
 
@@ -382,6 +383,7 @@ The server now persists all game data to disk with automatic saving.
 | `teams.json` | `data/config/teams.json` | All teams with colors, scores, TeamPoints |
 | `bumpers.json` | `data/config/bumpers.json` | All bumpers/players with scores, teams |
 | `history.json` | `data/config/history.json` | Game events (source of truth for scores) |
+| `question_statuses.json` | `data/config/question_statuses.json` | Question statuses (AVAILABLE/STARTED/STOPPED/REVEALED) |
 
 #### Event Sourcing Pattern
 History is the **source of truth** for all scores:
@@ -403,6 +405,26 @@ All modifications trigger async save to disk:
 2. If no files exist, initialize test data
 3. Load history.json
 4. Recalculate all scores from history events
+5. Load question_statuses.json (restore previous question states)
+
+#### Question Status Persistence (v2.26.0)
+Question statuses are now persisted independently of the current selection:
+- **Problem solved**: Previously, selecting a new question would reset all other questions to AVAILABLE
+- **Solution**: `questionStatuses` map in Engine tracks status for ALL questions
+- **Persistence**: Saved to `question_statuses.json` on every status change
+- **Broadcasting**: `broadcastQuestions()` injects status for ALL questions (not just current)
+- **Initial state**: `sendStateToClient()` also injects all statuses on WebSocket connect
+
+**Status values:**
+- `AVAILABLE`: Question not yet played (green)
+- `STARTED`: Question currently in play (orange)
+- `STOPPED`: Question was played but not revealed (red)
+- `REVEALED`: Answer has been shown (gray, dimmed)
+
+**Files modified:**
+- `engine.go`: `questionStatuses` map, `SaveStatuses()`, `LoadStatuses()`, `GetQuestionStatus()`
+- `main.go`: `broadcastQuestions()` and `sendStateToClient()` inject all statuses
+- `http.go`: Include in backup/restore
 
 ### UI Components
 
