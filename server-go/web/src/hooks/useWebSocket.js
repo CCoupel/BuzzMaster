@@ -8,10 +8,12 @@ export default function useWebSocket() {
     phase: 'STOPPED',
     timer: 30,
     totalTime: 30,
+    countdownTime: 0,
     gameTime: 0,
     question: null,
     remote: 'GAME',
     backgrounds: [],
+    currentBackgroundIndex: 0, // Server-synchronized
   })
   const [teams, setTeams] = useState({})
   const [bumpers, setBumpers] = useState({})
@@ -70,10 +72,12 @@ export default function useWebSocket() {
             phase: MSG.GAME.PHASE || prev.phase,
             timer: MSG.GAME.CURRENT_TIME ?? MSG.GAME.DELAY ?? prev.timer,
             totalTime: MSG.GAME.DELAY ?? prev.totalTime,
+            countdownTime: MSG.GAME.COUNTDOWN_TIME ?? prev.countdownTime,
             gameTime: MSG.GAME.TIME ?? prev.gameTime,
             question: MSG.GAME.QUESTION || prev.question,
             remote: MSG.GAME.REMOTE || prev.remote,
             backgrounds: MSG.GAME.backgrounds || prev.backgrounds,
+            currentBackgroundIndex: MSG.GAME.CURRENT_BACKGROUND_INDEX ?? prev.currentBackgroundIndex,
           }))
         }
         if (MSG?.teams) setTeams(MSG.teams)
@@ -85,7 +89,9 @@ export default function useWebSocket() {
         if (MSG?.GAME) {
           setGameState(prev => ({
             ...prev,
+            phase: MSG.GAME.PHASE || prev.phase,
             timer: MSG.GAME.CURRENT_TIME ?? prev.timer,
+            countdownTime: MSG.GAME.COUNTDOWN_TIME ?? prev.countdownTime,
             gameTime: MSG.GAME.TIME ?? prev.gameTime,
           }))
         }
@@ -95,9 +101,10 @@ export default function useWebSocket() {
         if (MSG?.GAME) {
           setGameState(prev => ({
             ...prev,
-            phase: 'STARTED',
+            phase: MSG.GAME.PHASE || 'STARTED', // Use server phase (could be COUNTDOWN)
             timer: MSG.GAME.CURRENT_TIME ?? MSG.GAME.DELAY ?? prev.timer,
             totalTime: MSG.GAME.DELAY ?? prev.totalTime,
+            countdownTime: MSG.GAME.COUNTDOWN_TIME ?? prev.countdownTime,
             gameTime: MSG.GAME.TIME ?? prev.gameTime,
             question: MSG.GAME.QUESTION || prev.question,
           }))
@@ -173,6 +180,15 @@ export default function useWebSocket() {
             admin: MSG.ADMIN_COUNT ?? 0,
             tv: MSG.TV_COUNT ?? 0,
           })
+        }
+        break
+
+      case 'BACKGROUND_CHANGE':
+        if (MSG?.INDEX !== undefined) {
+          setGameState(prev => ({
+            ...prev,
+            currentBackgroundIndex: MSG.INDEX,
+          }))
         }
         break
 

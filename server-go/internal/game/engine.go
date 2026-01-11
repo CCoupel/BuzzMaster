@@ -22,11 +22,15 @@ type Engine struct {
 	mu               sync.RWMutex
 	timer            *time.Ticker
 	stopCh           chan struct{}
+	countdownTimer   *time.Ticker
+	countdownStopCh  chan struct{}
+	pendingDelay     int // Store delay for after countdown
 
 	// Callbacks
-	OnStateChange func(phase GamePhase)
-	OnTimerTick   func(currentTime int)
-	OnBuzzerPress func(bumperID, teamID string, pressTime int64, button string)
+	OnStateChange   func(phase GamePhase)
+	OnTimerTick     func(currentTime int)
+	OnCountdownTick func(countdownTime int)
+	OnBuzzerPress   func(bumperID, teamID string, pressTime int64, button string)
 }
 
 // NewEngine creates a new game engine
@@ -276,18 +280,109 @@ func (e *Engine) TransitionToReady() {
 	}
 }
 
-// Start begins the game round
+// Start begins the game round with a 3-second countdown
 func (e *Engine) Start(delay int) {
 	e.mu.Lock()
 
-	e.state.Phase = PhaseStarted
+	// Store delay for after countdown
+	e.pendingDelay = delay
+
+	// Enter COUNTDOWN phase
+	e.state.Phase = PhaseCountdown
+	e.state.CountdownTime = 3
 	e.state.Delay = delay
 	e.state.CurrentTime = delay
+
+	log.Printf("[Engine] Starting 3-second countdown before game (delay=%d)", delay)
+
+	// Start countdown timer
+	e.startCountdown()
+
+	// Capture callbacks before releasing lock
+	stateCallback := e.OnStateChange
+	countdownCallback := e.OnCountdownTick
+	e.mu.Unlock()
+
+	// Notify state change
+	if stateCallback != nil {
+		stateCallback(PhaseCountdown)
+	}
+
+	// Broadcast initial countdown value (3) immediately
+	// The ticker will then broadcast 2, 1, 0 at 1-second intervals
+	if countdownCallback != nil {
+		countdownCallback(3)
+	}
+}
+
+// startCountdown starts the 3-2-1 countdown timer
+func (e *Engine) startCountdown() {
+	if e.countdownTimer != nil {
+		e.countdownTimer.Stop()
+	}
+
+	// Create new stop channel for this countdown instance
+	e.countdownStopCh = make(chan struct{})
+	e.countdownTimer = time.NewTicker(1 * time.Second)
+
+	// Capture references locally
+	ticker := e.countdownTimer
+	stopCh := e.countdownStopCh
+
+	go func() {
+		for {
+			select {
+			case <-ticker.C:
+				e.mu.Lock()
+				if e.state.Phase == PhaseCountdown {
+					e.state.CountdownTime--
+					countdownTime := e.state.CountdownTime
+					e.mu.Unlock()
+
+					if e.OnCountdownTick != nil {
+						e.OnCountdownTick(countdownTime)
+					}
+
+					if countdownTime <= 0 {
+						// Countdown finished, start the actual game
+						e.actualStart()
+					}
+				} else {
+					e.mu.Unlock()
+				}
+			case <-stopCh:
+				return
+			}
+		}
+	}()
+}
+
+// actualStart is called after countdown finishes to start the actual game
+func (e *Engine) actualStart() {
+	e.mu.Lock()
+
+	// Stop countdown timer
+	if e.countdownStopCh != nil {
+		select {
+		case <-e.countdownStopCh:
+			// Already closed
+		default:
+			close(e.countdownStopCh)
+		}
+		e.countdownStopCh = nil
+	}
+	if e.countdownTimer != nil {
+		e.countdownTimer.Stop()
+		e.countdownTimer = nil
+	}
+
+	e.state.Phase = PhaseStarted
+	e.state.CountdownTime = 0
 	e.state.GameTime = time.Now().UnixMicro()
 
 	e.setQuestionStatus(StatusStarted)
 
-	// Reset bumper times again
+	// Reset bumper times
 	for _, bumper := range e.data.Bumpers {
 		bumper.Time = 0
 		bumper.Button = ""
@@ -300,9 +395,9 @@ func (e *Engine) Start(delay int) {
 		team.Status = ""
 	}
 
-	log.Printf("[Engine] Game started with delay %d", delay)
+	log.Printf("[Engine] Countdown finished, game started with delay %d", e.pendingDelay)
 
-	// Start timer
+	// Start main timer
 	e.startTimer()
 
 	// Release lock BEFORE calling callback to avoid deadlock
@@ -358,7 +453,22 @@ func (e *Engine) startTimer() {
 func (e *Engine) Stop() {
 	e.mu.Lock()
 
-	// Signal timer goroutine to stop
+	// Signal countdown timer goroutine to stop (if running)
+	if e.countdownStopCh != nil {
+		select {
+		case <-e.countdownStopCh:
+			// Already closed
+		default:
+			close(e.countdownStopCh)
+		}
+		e.countdownStopCh = nil
+	}
+	if e.countdownTimer != nil {
+		e.countdownTimer.Stop()
+		e.countdownTimer = nil
+	}
+
+	// Signal main timer goroutine to stop
 	if e.stopCh != nil {
 		select {
 		case <-e.stopCh:
@@ -376,6 +486,7 @@ func (e *Engine) Stop() {
 
 	e.state.Phase = PhaseStopped
 	e.state.CurrentTime = 0
+	e.state.CountdownTime = 0
 
 	e.setQuestionStatus(StatusStopped)
 
@@ -748,6 +859,49 @@ func (e *Engine) ClearBackgrounds() {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	e.state.Backgrounds = nil
+	e.state.CurrentBackgroundIndex = 0
+}
+
+// GetCurrentBackgroundIndex returns the current background index
+func (e *Engine) GetCurrentBackgroundIndex() int {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	return e.state.CurrentBackgroundIndex
+}
+
+// SetCurrentBackgroundIndex sets the current background index
+func (e *Engine) SetCurrentBackgroundIndex(index int) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if len(e.state.Backgrounds) > 0 {
+		e.state.CurrentBackgroundIndex = index % len(e.state.Backgrounds)
+	} else {
+		e.state.CurrentBackgroundIndex = 0
+	}
+}
+
+// NextBackground advances to the next background and returns the new index
+func (e *Engine) NextBackground() int {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if len(e.state.Backgrounds) > 0 {
+		e.state.CurrentBackgroundIndex = (e.state.CurrentBackgroundIndex + 1) % len(e.state.Backgrounds)
+	}
+	return e.state.CurrentBackgroundIndex
+}
+
+// GetCurrentBackgroundDuration returns the duration of the current background in seconds
+func (e *Engine) GetCurrentBackgroundDuration() int {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	if len(e.state.Backgrounds) == 0 {
+		return 0
+	}
+	bg := e.state.Backgrounds[e.state.CurrentBackgroundIndex]
+	if bg.Duration <= 0 {
+		return 10 // Default 10 seconds
+	}
+	return bg.Duration
 }
 
 // GetGameJSON returns game state as JSON

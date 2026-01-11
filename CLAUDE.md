@@ -764,6 +764,34 @@ Support des images de réponse distinctes de l'image de question :
 { "ADMIN_COUNT": 2, "TV_COUNT": 1 }
 ```
 
+### Background Image Synchronization (v2.30.0)
+
+The server centralizes background image cycling to ensure all TV displays show the same image simultaneously.
+
+| Action | Direction | Description |
+|--------|-----------|-------------|
+| BACKGROUND_CHANGE | Server→Client | Broadcast current background index |
+
+**BACKGROUND_CHANGE payload:**
+```json
+{ "INDEX": 0 }  // 0-based index into backgrounds array
+```
+
+**How it works:**
+- Server maintains `CurrentBackgroundIndex` in GameState
+- Goroutine cycles through backgrounds based on each image's duration
+- On each cycle, server broadcasts `BACKGROUND_CHANGE` to all clients
+- Clients use the server-provided index instead of local cycling
+- `GameState.backgrounds` contains the array of background images with paths, durations, and opacities
+
+**Files involved:**
+- `internal/game/models.go`: `CurrentBackgroundIndex` field in GameState
+- `internal/game/engine.go`: Methods `GetCurrentBackgroundIndex()`, `SetCurrentBackgroundIndex()`, `NextBackground()`, `GetCurrentBackgroundDuration()`
+- `internal/protocol/messages.go`: `ActionBackgroundChange`, `BackgroundChangePayload`
+- `cmd/server/main.go`: `startBackgroundCycling()` goroutine, `broadcastBackgroundChange()`
+- `web/src/hooks/useWebSocket.js`: `BACKGROUND_CHANGE` handler
+- `web/src/pages/PlayerDisplay.jsx`: Uses `gameState.currentBackgroundIndex`
+
 ### Key Implementation Decisions
 
 #### 1. HTTP /questions Response Format
@@ -946,6 +974,7 @@ Le hook `useWebSocket.js` gère la communication :
 | UPDATE | `{GAME, teams, bumpers}` + VERSION | État du jeu + version serveur |
 | QUESTIONS | `{questions}` + FSINFO + VERSION | Liste questions + espace disque |
 | CLIENTS | `{ADMIN_COUNT, TV_COUNT}` | Compteurs clients connectés |
+| BACKGROUND_CHANGE | `{INDEX}` | Index de l'image de fond courante (synchronisé) |
 
 **Important** : VERSION est inclus dans UPDATE et QUESTIONS pour afficher la version serveur dans la navbar.
 

@@ -32,8 +32,9 @@ const (
 	ActionTeamPoints       = "TEAM_POINTS"
 	ActionClients          = "CLIENTS"
 	ActionSetClientType    = "SET_CLIENT_TYPE"
-	ActionReorderQuestions = "REORDER_QUESTIONS"
-	ActionForceReady       = "FORCE_READY"
+	ActionReorderQuestions  = "REORDER_QUESTIONS"
+	ActionForceReady        = "FORCE_READY"
+	ActionBackgroundChange  = "BACKGROUND_CHANGE"
 )
 
 // FSInfo represents file storage information
@@ -129,6 +130,11 @@ type SetClientTypePayload struct {
 // ReorderQuestionsPayload for REORDER_QUESTIONS action
 type ReorderQuestionsPayload struct {
 	Order []string `json:"ORDER"` // Array of question IDs in new order
+}
+
+// BackgroundChangePayload for BACKGROUND_CHANGE action
+type BackgroundChangePayload struct {
+	Index int `json:"INDEX"` // Current background index (0-based)
 }
 
 // NewMessage creates a new outgoing message

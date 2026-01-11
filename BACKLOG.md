@@ -82,10 +82,10 @@ Fonctionnalités à implémenter.
 
 ## Affichage TV
 
-- [ ] **Synchronisation des changements d'image de fond**
-  - **Problème actuel** : Chaque interface gère son propre cycle de diaporama → désynchronisation entre écrans
-  - **Solution** : Le serveur centralise le timing et notifie tous les clients
-  - Le serveur maintient un timer global pour le diaporama
-  - Broadcast WebSocket `BACKGROUND_CHANGE` avec l'index/path de l'image courante
-  - Tous les clients TV affichent la même image au même moment
-  - Les transitions sont synchronisées sur tous les écrans
+- [x] **Synchronisation des changements d'image de fond** *(v2.30.0)*
+  - Le serveur centralise le timing et notifie tous les clients
+  - `CurrentBackgroundIndex` dans GameState (backend)
+  - Goroutine de cycling dans main.go
+  - Action `BACKGROUND_CHANGE` dans le protocole WebSocket
+  - Tous les clients TV reçoivent l'index synchronisé
+  - Transitions simultanées sur tous les écrans

@@ -176,6 +176,11 @@ func (a *App) setupCallbacks() {
 		a.broadcastTimerUpdate(currentTime)
 	}
 
+	// Countdown ticks (3-2-1 before game starts)
+	a.engine.OnCountdownTick = func(countdownTime int) {
+		a.broadcastCountdownUpdate(countdownTime)
+	}
+
 	// Buzzer press
 	a.engine.OnBuzzerPress = func(bumperID, teamID string, pressTime int64, button string) {
 		a.broadcastPause(bumperID)
@@ -327,6 +332,31 @@ func (a *App) saveBackgroundsConfig() {
 	}
 }
 
+// startBackgroundCycling manages server-synchronized background image cycling
+func (a *App) startBackgroundCycling() {
+	log.Println("[App] Starting background cycling goroutine")
+
+	for {
+		// Get current background duration
+		duration := a.engine.GetCurrentBackgroundDuration()
+		if duration <= 0 {
+			duration = 10 // Default 10 seconds
+		}
+
+		// Wait for the duration
+		time.Sleep(time.Duration(duration) * time.Second)
+
+		// Move to next background and broadcast
+		backgrounds := a.engine.GetBackgrounds()
+		if len(backgrounds) > 1 {
+			newIndex := a.engine.NextBackground()
+			a.broadcastBackgroundChange(newIndex)
+			// Also include in regular UPDATE so new clients get the index
+			a.broadcastUpdate()
+		}
+	}
+}
+
 func (a *App) start() error {
 	// Start WebSocket hub
 	go a.wsHub.Run()
@@ -358,6 +388,9 @@ func (a *App) start() error {
 
 	// Send initial HELLO
 	a.broadcastHello()
+
+	// Start background cycling goroutine
+	go a.startBackgroundCycling()
 
 	return nil
 }
@@ -975,6 +1008,12 @@ func (a *App) broadcastTimerUpdate(currentTime int) {
 	a.broadcast(protocol.ActionUpdateTimer, data, true)
 }
 
+func (a *App) broadcastCountdownUpdate(countdownTime int) {
+	data := a.engine.GetGameJSON()
+	log.Printf("[App] Broadcasting countdown: %d", countdownTime)
+	a.broadcast(protocol.ActionUpdateTimer, data, true)
+}
+
 func (a *App) broadcastPing() {
 	msg, _ := protocol.NewMessage(protocol.ActionPing, map[string]interface{}{})
 	a.udpBcast.Broadcast(msg)
@@ -1012,6 +1051,15 @@ func (a *App) broadcastClientCounts(adminCount, tvCount int) {
 	data, _ := json.Marshal(payload)
 	a.broadcast(protocol.ActionClients, data, false)
 	log.Printf("[App] Client counts: admin=%d, tv=%d", adminCount, tvCount)
+}
+
+func (a *App) broadcastBackgroundChange(index int) {
+	payload := protocol.BackgroundChangePayload{
+		Index: index,
+	}
+	data, _ := json.Marshal(payload)
+	a.broadcast(protocol.ActionBackgroundChange, data, false)
+	log.Printf("[App] Background change: index=%d", index)
 }
 
 func (a *App) broadcastQuestions() {

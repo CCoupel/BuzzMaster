@@ -8,12 +8,13 @@ import (
 type GamePhase string
 
 const (
-	PhaseStopped  GamePhase = "STOPPED"
-	PhasePrepare GamePhase = "PREPARE"
-	PhaseReady   GamePhase = "READY"
-	PhaseStarted  GamePhase = "STARTED"
-	PhasePaused   GamePhase = "PAUSED"
-	PhaseRevealed GamePhase = "REVEALED"
+	PhaseStopped   GamePhase = "STOPPED"
+	PhasePrepare   GamePhase = "PREPARE"
+	PhaseReady     GamePhase = "READY"
+	PhaseCountdown GamePhase = "COUNTDOWN"
+	PhaseStarted   GamePhase = "STARTED"
+	PhasePaused    GamePhase = "PAUSED"
+	PhaseRevealed  GamePhase = "REVEALED"
 )
 
 // QuestionStatus represents question state (synced with GamePhase)
@@ -132,13 +133,15 @@ type Background struct {
 
 // GameState holds the current game state
 type GameState struct {
-	Phase       GamePhase    `json:"PHASE"`
-	Delay       int          `json:"DELAY"`
-	CurrentTime int          `json:"CURRENT_TIME"`
-	GameTime    int64        `json:"TIME,omitempty"`
-	Question    *Question    `json:"QUESTION,omitempty"`
-	Page        string       `json:"REMOTE,omitempty"`
-	Backgrounds []Background `json:"backgrounds,omitempty"`
+	Phase                  GamePhase    `json:"PHASE"`
+	Delay                  int          `json:"DELAY"`
+	CurrentTime            int          `json:"CURRENT_TIME"`
+	CountdownTime          int          `json:"COUNTDOWN_TIME,omitempty"` // 3, 2, 1 countdown before start
+	GameTime               int64        `json:"TIME,omitempty"`
+	Question               *Question    `json:"QUESTION,omitempty"`
+	Page                   string       `json:"REMOTE,omitempty"`
+	Backgrounds            []Background `json:"backgrounds,omitempty"`
+	CurrentBackgroundIndex int          `json:"CURRENT_BACKGROUND_INDEX"` // Server-synchronized background index
 }
 
 // TeamsAndBumpers holds all teams and bumpers data
@@ -157,9 +160,10 @@ func NewTeamsAndBumpers() *TeamsAndBumpers {
 
 // GameData combines game state with teams/bumpers for messages
 type GameData struct {
-	Game    *GameState `json:"GAME,omitempty"`
-	Teams   map[string]*Team   `json:"teams,omitempty"`
-	Bumpers map[string]*Bumper `json:"bumpers,omitempty"`
+	Game             *GameState                `json:"GAME,omitempty"`
+	Teams            map[string]*Team          `json:"teams,omitempty"`
+	Bumpers          map[string]*Bumper        `json:"bumpers,omitempty"`
+	QuestionStatuses map[string]QuestionStatus `json:"-"` // Not serialized, internal tracking
 }
 
 // ToJSON serializes the game data

@@ -1,12 +1,11 @@
-import { useEffect, useMemo, useState, useRef } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import confetti from 'canvas-confetti'
 import { useGame } from '../hooks/GameContext'
 import Timer from '../components/Timer'
 import Podium from '../components/Podium'
+import { CATEGORIES } from './QuestionsPage'
 import './PlayerDisplay.css'
-
-const DEFAULT_DURATION = 10 // seconds
 
 // QCM answer colors
 const QCM_COLORS = {
@@ -26,8 +25,6 @@ const BUTTON_TO_QCM_COLOR = {
 
 export default function PlayerDisplay() {
   const { gameState, teams, bumpers } = useGame()
-  const [currentBgIndex, setCurrentBgIndex] = useState(0)
-  const timerRef = useRef(null)
   const [previousRanking, setPreviousRanking] = useState({})
   const [changedTeams, setChangedTeams] = useState({})
   const [previousPlayerScores, setPreviousPlayerScores] = useState({})
@@ -150,36 +147,8 @@ export default function PlayerDisplay() {
     })
   }, [sortedTeams, previousRanking])
 
-  // Background cycling with per-image duration
-  useEffect(() => {
-    const backgrounds = gameState.backgrounds || []
-    if (backgrounds.length <= 1) return
-
-    if (timerRef.current) {
-      clearTimeout(timerRef.current)
-    }
-
-    const currentBg = backgrounds[currentBgIndex]
-    const duration = (currentBg?.duration || DEFAULT_DURATION) * 1000
-
-    timerRef.current = setTimeout(() => {
-      setCurrentBgIndex(prev => (prev + 1) % backgrounds.length)
-    }, duration)
-
-    return () => {
-      if (timerRef.current) {
-        clearTimeout(timerRef.current)
-      }
-    }
-  }, [gameState.backgrounds, currentBgIndex])
-
-  // Reset index when backgrounds change
-  useEffect(() => {
-    const backgrounds = gameState.backgrounds || []
-    if (currentBgIndex >= backgrounds.length) {
-      setCurrentBgIndex(0)
-    }
-  }, [gameState.backgrounds, currentBgIndex])
+  // Background index is now server-synchronized via gameState.currentBackgroundIndex
+  // No local cycling needed - server broadcasts BACKGROUND_CHANGE to all clients
 
   const triggerCelebration = (color) => {
     const rgb = color || [99, 102, 241]
@@ -202,11 +171,14 @@ export default function PlayerDisplay() {
   // Display logic for game content
   const showPrepare = gameState.phase === 'PREPARE'
   const showReady = gameState.phase === 'READY'
+  const showCountdown = gameState.phase === 'COUNTDOWN'
   const showGameContent = ['STARTED', 'PAUSED', 'STOPPED', 'REVEALED'].includes(gameState.phase)
   const showAnswer = gameState.phase === 'REVEALED'
   const isQcm = gameState.question?.TYPE === 'QCM'
   // QCM answers visible from READY through REVEALED (no re-render on transition)
-  const showQcmAnswers = ['READY', 'STARTED', 'PAUSED', 'STOPPED', 'REVEALED'].includes(gameState.phase)
+  const showQcmAnswers = ['READY', 'COUNTDOWN', 'STARTED', 'PAUSED', 'STOPPED', 'REVEALED'].includes(gameState.phase)
+  // QCM answer TEXT visible from COUNTDOWN (READY shows only colored zones with letters)
+  const showQcmAnswerText = ['COUNTDOWN', 'STARTED', 'PAUSED', 'STOPPED', 'REVEALED'].includes(gameState.phase)
 
   // Top 3 players for podium
   const topPlayers = useMemo(() => {
@@ -263,9 +235,10 @@ export default function PlayerDisplay() {
     return result
   }, [gameState.phase, gameState.question?.TYPE, bumpers, teams])
 
-  // Current background
+  // Current background - index is server-synchronized
   const backgrounds = gameState.backgrounds || []
-  const currentBg = backgrounds.length > 0 ? backgrounds[currentBgIndex] : null
+  const bgIndex = gameState.currentBackgroundIndex ?? 0
+  const currentBg = backgrounds.length > 0 ? backgrounds[bgIndex % backgrounds.length] : null
   const currentBackground = currentBg?.path || null
   const currentOpacity = (currentBg?.opacity ?? 100) / 100
 
@@ -469,6 +442,17 @@ export default function PlayerDisplay() {
                 initial={{ opacity: 0, scale: 0.8 }}
                 animate={{ opacity: 1, scale: 1 }}
               >
+                {gameState.question?.CATEGORY && CATEGORIES[gameState.question.CATEGORY] && (
+                  <motion.div
+                    className="category-display"
+                    style={{ backgroundColor: CATEGORIES[gameState.question.CATEGORY].color }}
+                    initial={{ opacity: 0, y: -20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                  >
+                    <span className="category-icon">{CATEGORIES[gameState.question.CATEGORY].icon}</span>
+                    <span className="category-label">{CATEGORIES[gameState.question.CATEGORY].label}</span>
+                  </motion.div>
+                )}
                 <motion.span
                   className="prepare-emoji"
                   animate={{ rotate: [0, 10, -10, 0] }}
@@ -480,6 +464,37 @@ export default function PlayerDisplay() {
               </motion.div>
             )}
 
+            {/* COUNTDOWN State - Big 3... 2... 1... display (non-QCM) */}
+            {showCountdown && !isQcm && (
+              <motion.div
+                className="countdown-state"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+              >
+                {gameState.question?.CATEGORY && CATEGORIES[gameState.question.CATEGORY] && (
+                  <motion.div
+                    className="category-display"
+                    style={{ backgroundColor: CATEGORIES[gameState.question.CATEGORY].color }}
+                    initial={{ opacity: 0, y: -20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                  >
+                    <span className="category-icon">{CATEGORIES[gameState.question.CATEGORY].icon}</span>
+                    <span className="category-label">{CATEGORIES[gameState.question.CATEGORY].label}</span>
+                  </motion.div>
+                )}
+                <motion.div
+                  key={gameState.countdownTime}
+                  className="countdown-number"
+                  initial={{ scale: 2, opacity: 0 }}
+                  animate={{ scale: 1, opacity: 1 }}
+                  exit={{ scale: 0.5, opacity: 0 }}
+                  transition={{ duration: 0.3, ease: 'easeOut' }}
+                >
+                  {gameState.countdownTime > 0 ? gameState.countdownTime : 'GO!'}
+                </motion.div>
+              </motion.div>
+            )}
+
             {/* READY State - Non-QCM: centered message */}
             {showReady && !isQcm && (
               <motion.div
@@ -487,6 +502,17 @@ export default function PlayerDisplay() {
                 initial={{ opacity: 0, scale: 0.8 }}
                 animate={{ opacity: 1, scale: 1 }}
               >
+                {gameState.question?.CATEGORY && CATEGORIES[gameState.question.CATEGORY] && (
+                  <motion.div
+                    className="category-display"
+                    style={{ backgroundColor: CATEGORIES[gameState.question.CATEGORY].color }}
+                    initial={{ opacity: 0, y: -20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                  >
+                    <span className="category-icon">{CATEGORIES[gameState.question.CATEGORY].icon}</span>
+                    <span className="category-label">{CATEGORIES[gameState.question.CATEGORY].label}</span>
+                  </motion.div>
+                )}
                 <div className="ready-state">
                   <motion.span
                     className="ready-emoji"
@@ -536,15 +562,43 @@ export default function PlayerDisplay() {
                   )}
                 </div>
 
-                {/* Zone 3: Media or "PREPAREZ-VOUS" message */}
+                {/* Zone 3: Media or "PREPAREZ-VOUS" message or COUNTDOWN */}
                 <div className="zone-media">
-                  {showReady ? (
+                  {showCountdown ? (
+                    <motion.div
+                      className="countdown-state"
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                    >
+                      <motion.div
+                        key={gameState.countdownTime}
+                        className="countdown-number"
+                        initial={{ scale: 2, opacity: 0 }}
+                        animate={{ scale: 1, opacity: 1 }}
+                        exit={{ scale: 0.5, opacity: 0 }}
+                        transition={{ duration: 0.3, ease: 'easeOut' }}
+                      >
+                        {gameState.countdownTime > 0 ? gameState.countdownTime : 'GO!'}
+                      </motion.div>
+                    </motion.div>
+                  ) : showReady ? (
                     <motion.div
                       className="ready-state"
                       initial={{ opacity: 0, scale: 0.8 }}
                       animate={{ opacity: 1, scale: 1 }}
                       exit={{ opacity: 0, scale: 0.8 }}
                     >
+                      {gameState.question?.CATEGORY && CATEGORIES[gameState.question.CATEGORY] && (
+                        <motion.div
+                          className="category-display"
+                          style={{ backgroundColor: CATEGORIES[gameState.question.CATEGORY].color }}
+                          initial={{ opacity: 0, y: -20 }}
+                          animate={{ opacity: 1, y: 0 }}
+                        >
+                          <span className="category-icon">{CATEGORIES[gameState.question.CATEGORY].icon}</span>
+                          <span className="category-label">{CATEGORIES[gameState.question.CATEGORY].label}</span>
+                        </motion.div>
+                      )}
                       <motion.span
                         className="ready-emoji"
                         animate={{ scale: [1, 1.3, 1] }}
@@ -612,7 +666,14 @@ export default function PlayerDisplay() {
                           transition={{ duration: 0.5, repeat: showAnswer && isCorrect ? 3 : 0 }}
                         >
                           <span className="qcm-answer-letter">{colorData.letter}</span>
-                          <span className="qcm-answer-text">{answer}</span>
+                          <motion.span
+                            className="qcm-answer-text"
+                            initial={showQcmAnswerText ? { opacity: 0, y: 10 } : false}
+                            animate={{ opacity: showQcmAnswerText ? 1 : 0, y: 0 }}
+                            transition={{ duration: 0.3 }}
+                          >
+                            {answer}
+                          </motion.span>
                           {/* Team badges - show which teams buzzed this answer */}
                           {showTeamBadges && (
                             <div className="qcm-team-badges">
