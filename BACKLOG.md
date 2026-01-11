@@ -30,8 +30,62 @@ Fonctionnalités à implémenter.
 
 ## Timer et gameplay
 
-- [ ] **Décompte de 3 secondes avant le timer**
-  - Ajouter un décompte visuel "3... 2... 1..." avant de lancer le timer principal
-  - Animation ou affichage distinct du timer normal
+- [x] **Décompte de 3 secondes avant le timer** *(v2.29.0)*
+  - Décompte visuel "3... 2... 1..." avant le timer principal
+  - Phase COUNTDOWN distincte avec badge orange "DECOMPTE"
   - Les buzzers restent bloqués pendant le décompte
-  - Le timer démarre automatiquement après "1"
+  - Le timer démarre automatiquement après le décompte
+
+---
+
+## QCM - Indices et pénalités
+
+- [ ] **Invalidation automatique des mauvaises réponses QCM**
+  - Si aucun joueur n'a buzzé, invalider une mauvaise réponse à certains seuils
+  - La réponse invalidée est visuellement barrée/grisée sur l'affichage TV
+  - L'invalidation est aléatoire parmi les mauvaises réponses restantes
+  - **Seuils proportionnels au timer :**
+    - Seuil 1 (1er indice) : 25% du temps restant
+    - Seuil 2 (2ème indice) : 12.5% du temps restant
+  - **Contraintes de sécurité :**
+    - Seuil 2 ≥ 2s minimum (temps pour réagir)
+    - Seuil 1 ≥ Seuil 2 + 2s (écart minimum entre indices)
+    - Si timer < 6s → pas d'indices ni pénalités
+  - **Exemples :**
+    | Timer | Seuil 1 | Seuil 2 |
+    |-------|---------|---------|
+    | 30s   | 7.5s    | 3.75s   |
+    | 20s   | 5s      | 2.5s    |
+    | 15s   | 4s      | 2s      |
+    | 10s   | 4s      | 2s      |
+    | <6s   | —       | —       |
+
+- [ ] **Pénalités de points selon le nombre de réponses restantes**
+  - Si un joueur buzz après invalidation(s), ses points sont réduits
+  - **Ratio de pénalité :**
+    - 4 réponses (aucune invalidée) → 100% des points
+    - 3 réponses (1 invalidée) → 67% des points (pénalité 1/3)
+    - 2 réponses (2 invalidées) → 33% des points (pénalité 2/3)
+  - Afficher la pénalité applicable sur l'interface admin
+  - L'historique enregistre les points effectivement attribués
+
+---
+
+## Debug et tests
+
+- [x] **Ctrl+Click sur joueur en PREPARE simule PONG** *(v2.28.0)*
+  - En état PREPARE, Ctrl+Click sur un joueur simule la réponse au PING
+  - Permet de tester sans buzzers physiques connectés
+  - Le joueur passe de "en attente" à "prêt"
+
+---
+
+## Affichage TV
+
+- [ ] **Synchronisation des changements d'image de fond**
+  - **Problème actuel** : Chaque interface gère son propre cycle de diaporama → désynchronisation entre écrans
+  - **Solution** : Le serveur centralise le timing et notifie tous les clients
+  - Le serveur maintient un timer global pour le diaporama
+  - Broadcast WebSocket `BACKGROUND_CHANGE` avec l'index/path de l'image courante
+  - Tous les clients TV affichent la même image au même moment
+  - Les transitions sont synchronisées sur tous les écrans
