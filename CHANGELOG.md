@@ -2,6 +2,32 @@
 
 Historique des versions du projet BuzzControl.
 
+## [2.28.0] - PONG Visual Feedback & Refactoring
+
+### Ajouts
+- **Feedback visuel PONG** : Indication claire de l'état de préparation des joueurs
+  - Équipes grisées (opacity 60%, grayscale 50%) en attendant que tous les joueurs répondent
+  - Badge compteur "X/Y" (ex: "1/3") indiquant joueurs prêts / total au lieu de "..."
+  - Joueurs individuels grisés jusqu'à leur réponse PONG
+  - Joueurs ayant répondu retrouvent leur couleur d'équipe avec bordure colorée
+  - Bordure d'équipe pointillée en attente, solide quand prête
+
+- **Simulation PONG (debug)** : Ctrl+clic sur un joueur en phase PREPARE simule une réponse PONG
+
+### Refactoring
+- **Fusion handlePong** : Les handlers TCP et WebSocket fusionnés en une seule fonction
+  - ID bumper extrait du payload si présent (WebSocket), sinon utilise clientID (TCP)
+  - Suppression du code dupliqué `handleSimulatedPong`
+
+### Fichiers
+- `main.go` : Refactoring `handlePong()` unifié
+- `TeamCard.jsx` : Compteur `readyBuzzersCount/totalBuzzersCount`, classe `waiting-pong`
+- `TeamCard.css` : Styles `.team-card.waiting`, `.waiting-pong`, `.waiting-pong.ready`
+- `useWebSocket.js` : Fonction `simulatePong()`
+- `GamePage.jsx` : Gestion Ctrl+clic pour simuler PONG
+
+---
+
 ## [2.23.0] - Category Balance & History Categories
 
 ### Ajouts

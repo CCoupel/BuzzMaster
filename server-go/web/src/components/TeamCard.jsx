@@ -37,6 +37,10 @@ export default function TeamCard({
   // Team is waiting when in PREPARE/READY phase but hasn't responded PONG yet
   const isWaiting = waitingForReady && !ready
 
+  // Count ready buzzers for waiting badge
+  const readyBuzzersCount = buzzers.filter(b => b.ready).length
+  const totalBuzzersCount = buzzers.length
+
   // Team is waiting for buzz when in STARTED/PAUSED phase and hasn't buzzed yet
   const isWaitingForBuzz = waitingForBuzz && !active
 
@@ -83,7 +87,7 @@ export default function TeamCard({
             initial={{ scale: 0 }}
             animate={{ scale: 1 }}
           >
-            ...
+            {readyBuzzersCount}/{totalBuzzersCount}
           </motion.span>
         )}
         <motion.span
@@ -135,6 +139,7 @@ export default function TeamCard({
           {buzzers.map((buzzer, index) => {
             const answerColorData = buzzer.answerColor && ANSWER_COLORS[buzzer.answerColor]
             const buzzerWaitingBuzz = waitingForBuzz && !buzzer.active
+            const buzzerWaitingPong = waitingForReady  // In PREPARE phase, show PONG status
             const handleBuzzerClick = (e) => {
               e.stopPropagation()
               if (onPlayerClick) {
@@ -146,7 +151,7 @@ export default function TeamCard({
             return (
               <motion.div
                 key={buzzer.mac || index}
-                className={`buzzer-mini ${buzzer.active ? 'active' : ''} ${buzzer.ready ? 'ready' : ''} ${answerColorData ? 'has-answer-color' : ''} ${buzzerWaitingBuzz ? 'waiting-buzz' : ''} ${onPlayerClick ? 'clickable' : ''}`}
+                className={`buzzer-mini ${buzzer.active ? 'active' : ''} ${buzzer.ready ? 'ready' : ''} ${answerColorData ? 'has-answer-color' : ''} ${buzzerWaitingBuzz ? 'waiting-buzz' : ''} ${buzzerWaitingPong ? 'waiting-pong' : ''} ${onPlayerClick ? 'clickable' : ''}`}
                 style={answerColorData ? { '--answer-color': answerColorData.color } : undefined}
                 initial={{ opacity: 0, scale: 0.8 }}
                 animate={{ opacity: 1, scale: 1 }}

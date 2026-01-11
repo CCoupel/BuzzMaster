@@ -250,6 +250,11 @@ export default function useWebSocket() {
     sendMessage('BUTTON', { ID: bumperMac, button })
   }, [sendMessage])
 
+  // Debug: Simulate a PONG response from a buzzer (for testing in PREPARE state)
+  const simulatePong = useCallback((bumperMac) => {
+    sendMessage('PONG', { ID: bumperMac })
+  }, [sendMessage])
+
   useEffect(() => {
     connect()
 
@@ -288,5 +293,6 @@ export default function useWebSocket() {
     setClientType,
     forceReady,
     simulateButton,
+    simulatePong,
   }
 }

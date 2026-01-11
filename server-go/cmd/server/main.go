@@ -464,6 +464,10 @@ func (a *App) handleWebMessage(incoming *protocol.IncomingMessage) {
 		// Simulated button press from web client (for testing)
 		a.handleSimulatedButton(msg)
 
+	case protocol.ActionPong:
+		// PONG from web client (simulated, for testing in PREPARE state)
+		a.handlePong(incoming.ClientID, msg)
+
 	default:
 		log.Printf("[App] Unknown web action: %s", msg.Action)
 	}
@@ -534,11 +538,22 @@ func (a *App) handleSimulatedButton(msg *protocol.Message) {
 	a.broadcastUpdate()
 }
 
+// handlePong processes PONG from buzzer (TCP) or web client (WebSocket simulation)
 func (a *App) handlePong(clientID string, msg *protocol.Message) {
-	log.Printf("[App] PONG from buzzer: %s", clientID)
+	// If ID in payload, use it (web simulation), otherwise use clientID (TCP buzzer)
+	bumperID := clientID
+
+	var payload struct {
+		ID string `json:"ID"`
+	}
+	if json.Unmarshal(msg.Msg, &payload) == nil && payload.ID != "" {
+		bumperID = payload.ID
+	}
+
+	log.Printf("[App] PONG from %s", bumperID)
 
 	if a.engine.IsGamePrepare() {
-		a.engine.SetBumperReady(clientID)
+		a.engine.SetBumperReady(bumperID)
 
 		// Check if all ready
 		if a.engine.AreAllTeamsReady() {

@@ -186,11 +186,28 @@
 }
 
 .buzzer-mini.ready {
-  background: color-mix(in srgb, var(--team-color) 10%, white);
+  background: color-mix(in srgb, var(--team-color) 15%, white);
+  border-left: 3px solid var(--team-color);
 }
 
 .buzzer-mini:not(.ready):not(.active) {
   opacity: 0.6;
+}
+
+/* Bumper waiting for PONG in PREPARE state */
+.buzzer-mini.waiting-pong {
+  opacity: 0.4;
+  filter: grayscale(80%);
+  border-left: 3px dashed var(--gray-400);
+}
+
+/* Bumper that responded to PONG - show team color */
+.buzzer-mini.waiting-pong.ready {
+  opacity: 1;
+  filter: none;
+  border-left: 3px solid var(--team-color);
+  background: color-mix(in srgb, var(--team-color) 20%, white);
+  box-shadow: 0 0 8px color-mix(in srgb, var(--team-color) 30%, transparent);
 }
 
 .buzzer-info {
@@ -326,15 +343,14 @@
   cursor: pointer;
 }
 
-/* Waiting state - grayed out until PONG received */
+/* Waiting state - team is in PREPARE but not all bumpers have responded */
 .team-card.waiting {
-  opacity: 0.5;
-  filter: grayscale(70%);
-  border-left-color: var(--gray-300);
+  opacity: 0.6;
+  filter: grayscale(50%);
+  border-left-style: dashed;
 }
 
 .team-card.waiting .team-color-indicator {
-  background: var(--gray-400);
   box-shadow: none;
 }
 
@@ -346,14 +362,8 @@
   font-size: 0.65rem;
   font-weight: 600;
   border-radius: var(--radius-full);
-  letter-spacing: 2px;
+  letter-spacing: 0.5px;
   flex-shrink: 0;
-  animation: pulse-waiting 1s ease-in-out infinite;
-}
-
-@keyframes pulse-waiting {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.5; }
 }
 
 /* Waiting for buzz state - grayed out during STARTED/PAUSED until buzz */

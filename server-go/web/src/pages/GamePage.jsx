@@ -26,6 +26,7 @@ export default function GamePage() {
     setTeamPoints,
     forceReady,
     simulateButton,
+    simulatePong,
   } = useGame()
 
   const [timeInput, setTimeInput] = useState(30)
@@ -118,6 +119,11 @@ export default function GamePage() {
   }
 
   const handleBumperClick = (bumperMac, ctrlKey = false) => {
+    if (ctrlKey && gameState.phase === 'PREPARE') {
+      // Ctrl+click in PREPARE: simulate PONG response (debug)
+      simulatePong(bumperMac)
+      return
+    }
     if (ctrlKey && ['STARTED', 'PAUSED'].includes(gameState.phase)) {
       // Ctrl+click: simulate buzzer button press (debug)
       simulateButton(bumperMac, 'A')
