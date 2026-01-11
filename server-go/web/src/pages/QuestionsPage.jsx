@@ -1,12 +1,13 @@
 import { useState, useRef, useMemo } from 'react'
-import { motion, AnimatePresence } from 'framer-motion'
+import { AnimatePresence, motion } from 'framer-motion'
 import { useGame } from '../hooks/GameContext'
 import Button from '../components/Button'
 import Card, { CardHeader, CardBody } from '../components/Card'
 import CategoryBalance from '../components/CategoryBalance'
+import QuestionCard, { CATEGORIES } from '../components/QuestionCard'
 import './QuestionsPage.css'
 
-// QCM answer colors
+// QCM answer colors (for form only)
 const QCM_COLORS = {
   RED: { label: 'Rouge', color: '#ef4444', letter: 'A' },
   GREEN: { label: 'Vert', color: '#22c55e', letter: 'B' },
@@ -14,17 +15,8 @@ const QCM_COLORS = {
   BLUE: { label: 'Bleu', color: '#3b82f6', letter: 'D' },
 }
 
-// Question categories (Trivial Pursuit + extras)
-export const CATEGORIES = {
-  GEOGRAPHY: { label: 'Geographie', icon: '🌍', color: '#3b82f6' },      // Blue
-  ENTERTAINMENT: { label: 'Divertissement', icon: '🎭', color: '#ec4899' }, // Pink
-  HISTORY: { label: 'Histoire', icon: '📜', color: '#eab308' },          // Yellow
-  ARTS: { label: 'Arts & Litterature', icon: '🎨', color: '#a855f7' },   // Purple
-  SCIENCE: { label: 'Sciences & Nature', icon: '🔬', color: '#22c55e' }, // Green
-  SPORTS: { label: 'Sports & Loisirs', icon: '⚽', color: '#f97316' },   // Orange
-  FOOD: { label: 'Gastronomie', icon: '🍽️', color: '#991b1b' },          // Bordeaux
-  ANIMALS: { label: 'Animaux', icon: '🐾', color: '#78716c' },           // Brown
-}
+// Re-export CATEGORIES for backward compatibility
+export { CATEGORIES }
 
 export default function QuestionsPage() {
   const { questions, fsInfo, deleteQuestion, sendMessage } = useGame()
@@ -267,6 +259,16 @@ export default function QuestionsPage() {
     }
   }
 
+  // Handler for QuestionCard onDelete prop (receives ID directly)
+  const handleDeleteQuestion = (questionId) => {
+    if (window.confirm(`Supprimer la question #${questionId} ?`)) {
+      deleteQuestion(questionId)
+      if (editingId === questionId) {
+        handleNewQuestion()
+      }
+    }
+  }
+
   const storagePercent = fsInfo?.P_USED ? parseFloat(fsInfo.P_USED) : 0
 
   return (
@@ -285,75 +287,25 @@ export default function QuestionsPage() {
           <div className="questions-grid">
             <AnimatePresence>
               {sortedQuestions.map((question, index) => (
-                <motion.div
+                <QuestionCard
                   key={question.ID}
-                  initial={{ opacity: 0, scale: 0.9 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  exit={{ opacity: 0, scale: 0.9 }}
-                  transition={{ delay: index * 0.05 }}
+                  question={question}
+                  selected={editingId === question.ID}
                   draggable
-                  onDragStart={(e) => handleDragStart(e, question.ID)}
-                  onDragOver={(e) => handleDragOver(e, question.ID)}
-                  onDragLeave={handleDragLeave}
-                  onDragEnd={handleDragEnd}
-                  onDrop={(e) => handleDrop(e, question.ID)}
-                  className={`question-drag-wrapper ${draggedId === question.ID ? 'dragging' : ''} ${dragOverId === question.ID ? 'drag-over' : ''}`}
-                >
-                  <Card
-                    hover
-                    padding="md"
-                    className={`question-card ${editingId === question.ID ? 'selected' : ''}`}
-                    onClick={() => handleQuestionClick(question)}
-                  >
-                    <div className="question-card-header">
-                      <span className="drag-handle">⋮⋮</span>
-                      <span className="question-id">#{question.ID}</span>
-                      {question.CATEGORY && CATEGORIES[question.CATEGORY] && (
-                        <span
-                          className="category-badge"
-                          style={{ backgroundColor: CATEGORIES[question.CATEGORY].color }}
-                          title={CATEGORIES[question.CATEGORY].label}
-                        >
-                          {CATEGORIES[question.CATEGORY].icon}
-                        </span>
-                      )}
-                      {question.TYPE === 'QCM' && (
-                        <span className="qcm-badge">QCM</span>
-                      )}
-                      <Button
-                        variant="danger"
-                        size="xs"
-                        onClick={(e) => handleDelete(e, question.ID)}
-                      >
-                        X
-                      </Button>
-                    </div>
-                    {(question.MEDIA || question.MEDIA_ANSWER) && (
-                      <div className="question-thumbnails">
-                        {question.MEDIA && (
-                          <img
-                            src={question.MEDIA}
-                            alt=""
-                            className="question-thumbnail"
-                          />
-                        )}
-                        {question.MEDIA_ANSWER && (
-                          <img
-                            src={question.MEDIA_ANSWER}
-                            alt=""
-                            className="question-thumbnail answer-thumbnail"
-                            title="Image réponse"
-                          />
-                        )}
-                      </div>
-                    )}
-                    <p className="question-preview">{question.QUESTION}</p>
-                    <div className="question-meta">
-                      <span>{question.POINTS} pts</span>
-                      <span>{question.TIME}s</span>
-                    </div>
-                  </Card>
-                </motion.div>
+                  showDelete
+                  onClick={() => handleQuestionClick(question)}
+                  onDelete={handleDeleteQuestion}
+                  dragHandlers={{
+                    index,
+                    isDragging: draggedId === question.ID,
+                    isDragOver: dragOverId === question.ID,
+                    onDragStart: (e) => handleDragStart(e, question.ID),
+                    onDragOver: (e) => handleDragOver(e, question.ID),
+                    onDragLeave: handleDragLeave,
+                    onDragEnd: handleDragEnd,
+                    onDrop: (e) => handleDrop(e, question.ID),
+                  }}
+                />
               ))}
             </AnimatePresence>
           </div>

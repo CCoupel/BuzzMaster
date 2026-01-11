@@ -173,11 +173,12 @@
   font-size: 0.75rem;
 }
 
-.question-preview.revealed .preview-images {
+.question-preview.revealed .preview-media-zone {
   display: none;
 }
 
-.question-preview.revealed .preview-content {
+.question-preview.revealed .preview-question-zone {
+  height: auto;
   margin-bottom: var(--space-1);
 }
 
@@ -186,7 +187,7 @@
   -webkit-line-clamp: 1;
 }
 
-.question-preview.revealed .preview-answer {
+.question-preview.revealed .preview-answer-zone {
   display: none;
 }
 
@@ -281,68 +282,62 @@
   color: white;
 }
 
-/* Card body with thumbnail layout */
-.preview-body {
+/* Fixed Media Zone - always visible */
+.preview-media-zone {
   display: flex;
   gap: var(--space-2);
+  height: 55px;
   margin-bottom: var(--space-2);
 }
 
-/* Preview images container - now a small thumbnail */
-.preview-images {
-  position: relative;
-  flex-shrink: 0;
-  width: 70px;
-  height: 70px;
-}
-
-.preview-image {
-  width: 70px;
-  height: 70px;
+.preview-media-slot {
+  flex: 1;
+  height: 55px;
   border-radius: var(--radius-md);
   overflow: hidden;
-  background: var(--gray-200);
   display: flex;
   align-items: center;
   justify-content: center;
+  background: var(--gray-100);
+  border: 2px dashed var(--gray-200);
 }
 
-.preview-image img {
+.preview-media-slot.has-media {
+  border: none;
+  background: var(--gray-200);
+}
+
+.preview-media-slot img {
   width: 100%;
   height: 100%;
   object-fit: cover;
 }
 
-/* Answer image - positioned at bottom right of thumbnail */
-.preview-image-answer {
-  position: absolute;
-  bottom: -4px;
-  right: -4px;
-  width: 28px;
-  height: 22px;
+.preview-media-slot.answer-slot {
+  border-color: var(--success);
+  background: color-mix(in srgb, var(--success) 5%, white);
+}
+
+.preview-media-slot.answer-slot.has-media {
   border: 2px solid var(--success);
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3), 0 0 4px rgba(34, 197, 94, 0.4);
-  border-radius: var(--radius-sm);
+  box-shadow: 0 0 6px rgba(34, 197, 94, 0.3);
 }
 
-/* When only answer image exists - show it centered */
-.preview-images:has(.preview-image-answer:only-child) {
-  background: var(--gray-200);
-  border-radius: var(--radius-md);
+.media-placeholder {
+  font-size: 1.2rem;
+  opacity: 0.3;
 }
 
-.preview-images:has(.preview-image-answer:only-child) .preview-image-answer {
-  position: relative;
-  bottom: auto;
-  right: auto;
-  width: 50px;
-  height: 40px;
-  margin: auto;
+.preview-media-slot.answer-slot .media-placeholder {
+  color: var(--success);
+  opacity: 0.4;
 }
 
-.preview-content {
-  flex: 1;
-  min-width: 0;
+/* Fixed Question Zone */
+.preview-question-zone {
+  height: 42px;
+  overflow: hidden;
+  margin-bottom: var(--space-2);
 }
 
 .preview-question {
@@ -350,10 +345,16 @@
   font-weight: 600;
   color: var(--gray-900);
   line-height: 1.3;
-  margin-bottom: var(--space-1);
+  margin: 0;
   display: -webkit-box;
-  -webkit-line-clamp: 4;
+  -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* Fixed Answer Zone */
+.preview-answer-zone {
+  height: 28px;
   overflow: hidden;
 }
 
@@ -362,8 +363,9 @@
   color: var(--gray-600);
   font-style: italic;
   line-height: 1.3;
+  margin: 0;
   display: -webkit-box;
-  -webkit-line-clamp: 3;
+  -webkit-line-clamp: 1;
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
@@ -372,19 +374,21 @@
   display: flex;
   align-items: center;
   gap: var(--space-2);
-  padding: 4px 8px;
+  padding: 3px 8px;
   border-radius: var(--radius-md);
   color: white;
   font-style: normal;
   font-weight: 600;
+  font-size: 0.7rem;
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+  height: 100%;
 }
 
 .preview-answer-qcm .qcm-letter {
-  font-size: 0.65rem;
+  font-size: 0.6rem;
   font-weight: 700;
   background: rgba(255, 255, 255, 0.3);
-  padding: 2px 5px;
+  padding: 2px 4px;
   border-radius: var(--radius-sm);
 }
 
@@ -512,7 +516,6 @@
   border-radius: var(--radius-full);
   font-size: 0.75rem;
   font-weight: 600;
-  margin-left: auto;
 }
 
 .points-target-indicator.player {
@@ -523,6 +526,38 @@
 .points-target-indicator.team {
   background: color-mix(in srgb, var(--accent-orange) 20%, white);
   color: var(--accent-orange);
+}
+
+/* Question indicators container */
+.question-indicators {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-left: auto;
+}
+
+/* Category indicator in control panel */
+.category-indicator {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-md);
+  font-size: 1rem;
+  color: white;
+}
+
+/* Category badge on question cards */
+.preview-category-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  font-size: 0.75rem;
+  border-radius: var(--radius-sm);
+  color: white;
 }
 
 /* Right Panel - Same style as questions-panel */

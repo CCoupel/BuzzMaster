@@ -43,6 +43,18 @@ export default function CategoryBalance({ questions = [] }) {
     const avgQuestions = totalQuestions / representedCategories.length
     const avgPoints = totalPoints / representedCategories.length
 
+    // Calculate PLAYER vs TEAM balance
+    let playerCount = 0
+    let teamCount = 0
+    questions.forEach(q => {
+      const target = q.POINTS_TARGET || (q.TYPE === 'QCM' ? 'TEAM' : 'PLAYER')
+      if (target === 'TEAM') {
+        teamCount++
+      } else {
+        playerCount++
+      }
+    })
+
     // Calculate deviations and colors for each category
     const categories = representedCategories.map(cat => {
       const data = categoryData[cat]
@@ -89,6 +101,8 @@ export default function CategoryBalance({ questions = [] }) {
       avgPoints: avgPoints.toFixed(0),
       maxQuestionsDev,
       maxPointsDev,
+      playerCount,
+      teamCount,
     }
   }, [questions])
 
@@ -103,6 +117,9 @@ export default function CategoryBalance({ questions = [] }) {
         <span className="balance-summary">
           {stats.totalQuestions} questions • {stats.totalPoints} pts •
           Moy: {stats.avgQuestions} quest. / {stats.avgPoints} pts
+          {(stats.playerCount > 0 || stats.teamCount > 0) && (
+            <> • 👤 {stats.playerCount} / 👥 {stats.teamCount}</>
+          )}
         </span>
       </div>
 

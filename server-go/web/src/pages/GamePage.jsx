@@ -1,20 +1,13 @@
 import { useState, useMemo } from 'react'
-import { motion, AnimatePresence } from 'framer-motion'
+import { AnimatePresence, motion } from 'framer-motion'
 import { useGame } from '../hooks/GameContext'
 import Button from '../components/Button'
-import Card, { CardHeader, CardBody } from '../components/Card'
+import Card from '../components/Card'
 import Timer from '../components/Timer'
 import TeamCard from '../components/TeamCard'
 import QuestionPreview from '../components/QuestionPreview'
+import QuestionCard, { CATEGORIES } from '../components/QuestionCard'
 import './GamePage.css'
-
-// QCM answer colors
-const QCM_COLORS = {
-  RED: { label: 'Rouge', color: '#ef4444', letter: 'A' },
-  GREEN: { label: 'Vert', color: '#22c55e', letter: 'B' },
-  YELLOW: { label: 'Jaune', color: '#eab308', letter: 'C' },
-  BLUE: { label: 'Bleu', color: '#3b82f6', letter: 'D' },
-}
 
 export default function GamePage() {
   const {
@@ -173,75 +166,16 @@ export default function GamePage() {
         <h2 className="panel-title">Questions</h2>
         <div className="questions-list">
           {sortedQuestions.map((question) => (
-            <motion.div
+            <QuestionCard
               key={question.ID}
-              className={`question-preview ${question.STATUS?.toLowerCase() || 'available'} ${
-                gameState.question?.ID === question.ID ? 'selected' : ''
-              }`}
-              onClick={(e) => handleQuestionSelect(question, e.ctrlKey)}
-              whileHover={canSelectQuestion ? { scale: 1.01 } : undefined}
-              whileTap={canSelectQuestion ? { scale: 0.99 } : undefined}
-              style={{ cursor: canSelectQuestion ? 'pointer' : 'not-allowed' }}
-            >
-              <div className="preview-header">
-                <span className="preview-id">#{question.ID}</span>
-                {question.TYPE === 'QCM' && (
-                  <span className="preview-qcm-badge">QCM</span>
-                )}
-                {question.POINTS_TARGET && (
-                  <span className={`preview-target-badge ${question.POINTS_TARGET.toLowerCase()}`} title={question.POINTS_TARGET === 'TEAM' ? 'Points équipe' : 'Points joueur'}>
-                    {question.POINTS_TARGET === 'TEAM' ? (
-                      <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
-                        <circle cx="9" cy="7" r="4"/>
-                        <path d="M17 11c1.66 0 2.99-1.34 2.99-3S18.66 5 17 5c-.32 0-.63.05-.91.14.57.81.9 1.79.9 2.86s-.34 2.04-.9 2.86c.28.09.59.14.91.14z"/>
-                        <path d="M3 18v-1c0-2.66 5.33-4 8-4s8 1.34 8 4v1H3z"/>
-                        <path d="M17 13c2.05.26 5 1.22 5 3v1h-3v-1.5c0-1.19-.68-2.14-2-2.5z"/>
-                      </svg>
-                    ) : (
-                      <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
-                        <circle cx="12" cy="7" r="4"/>
-                        <path d="M12 14c-4 0-8 2-8 4v2h16v-2c0-2-4-4-8-4z"/>
-                      </svg>
-                    )}
-                  </span>
-                )}
-                <span className="preview-meta">
-                  <span className="preview-time">{question.TIME}s</span>
-                  <span className="preview-points">{question.POINTS}pt</span>
-                </span>
-                <span className="preview-status">{question.STATUS || 'AVAILABLE'}</span>
-              </div>
-              <div className="preview-body">
-                {(question.MEDIA || question.MEDIA_ANSWER) && (
-                  <div className="preview-images">
-                    {question.MEDIA && (
-                      <div className="preview-image">
-                        <img src={question.MEDIA} alt="" />
-                      </div>
-                    )}
-                    {question.MEDIA_ANSWER && (
-                      <div className="preview-image preview-image-answer" title="Image réponse">
-                        <img src={question.MEDIA_ANSWER} alt="" />
-                      </div>
-                    )}
-                  </div>
-                )}
-                <div className="preview-content">
-                  <p className="preview-question">{question.QUESTION}</p>
-                  {question.TYPE === 'QCM' && question.QCM_CORRECT && QCM_COLORS[question.QCM_CORRECT] ? (
-                    <p
-                      className="preview-answer preview-answer-qcm"
-                      style={{ backgroundColor: QCM_COLORS[question.QCM_CORRECT].color }}
-                    >
-                      <span className="qcm-letter">{QCM_COLORS[question.QCM_CORRECT].letter}</span>
-                      {question.ANSWER}
-                    </p>
-                  ) : (
-                    <p className="preview-answer">{question.ANSWER}</p>
-                  )}
-                </div>
-              </div>
-            </motion.div>
+              question={question}
+              selected={gameState.question?.ID === question.ID}
+              compact
+              showStatus
+              showTarget
+              canSelect={canSelectQuestion}
+              onClick={handleQuestionSelect}
+            />
           ))}
         </div>
       </div>
@@ -331,29 +265,40 @@ export default function GamePage() {
                 Joueurs
               </Button>
             </div>
-            {gameState.question?.POINTS_TARGET && (
-              <div className={`points-target-indicator ${gameState.question.POINTS_TARGET.toLowerCase()}`} title={gameState.question.POINTS_TARGET === 'TEAM' ? 'Points attribués à l\'équipe' : 'Points attribués au joueur'}>
-                {gameState.question.POINTS_TARGET === 'TEAM' ? (
-                  <>
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                      <circle cx="9" cy="7" r="4"/>
-                      <path d="M17 11c1.66 0 2.99-1.34 2.99-3S18.66 5 17 5c-.32 0-.63.05-.91.14.57.81.9 1.79.9 2.86s-.34 2.04-.9 2.86c.28.09.59.14.91.14z"/>
-                      <path d="M3 18v-1c0-2.66 5.33-4 8-4s8 1.34 8 4v1H3z"/>
-                      <path d="M17 13c2.05.26 5 1.22 5 3v1h-3v-1.5c0-1.19-.68-2.14-2-2.5z"/>
-                    </svg>
-                    <span>Equipe</span>
-                  </>
-                ) : (
-                  <>
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                      <circle cx="12" cy="7" r="4"/>
-                      <path d="M12 14c-4 0-8 2-8 4v2h16v-2c0-2-4-4-8-4z"/>
-                    </svg>
-                    <span>Joueur</span>
-                  </>
-                )}
-              </div>
-            )}
+            <div className="question-indicators">
+              {gameState.question?.CATEGORY && CATEGORIES[gameState.question.CATEGORY] && (
+                <div
+                  className="category-indicator"
+                  style={{ backgroundColor: CATEGORIES[gameState.question.CATEGORY].color }}
+                  title={CATEGORIES[gameState.question.CATEGORY].label}
+                >
+                  <span>{CATEGORIES[gameState.question.CATEGORY].icon}</span>
+                </div>
+              )}
+              {gameState.question?.POINTS_TARGET && (
+                <div className={`points-target-indicator ${gameState.question.POINTS_TARGET.toLowerCase()}`} title={gameState.question.POINTS_TARGET === 'TEAM' ? 'Points attribués à l\'équipe' : 'Points attribués au joueur'}>
+                  {gameState.question.POINTS_TARGET === 'TEAM' ? (
+                    <>
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                        <circle cx="9" cy="7" r="4"/>
+                        <path d="M17 11c1.66 0 2.99-1.34 2.99-3S18.66 5 17 5c-.32 0-.63.05-.91.14.57.81.9 1.79.9 2.86s-.34 2.04-.9 2.86c.28.09.59.14.91.14z"/>
+                        <path d="M3 18v-1c0-2.66 5.33-4 8-4s8 1.34 8 4v1H3z"/>
+                        <path d="M17 13c2.05.26 5 1.22 5 3v1h-3v-1.5c0-1.19-.68-2.14-2-2.5z"/>
+                      </svg>
+                      <span>Equipe</span>
+                    </>
+                  ) : (
+                    <>
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                        <circle cx="12" cy="7" r="4"/>
+                        <path d="M12 14c-4 0-8 2-8 4v2h16v-2c0-2-4-4-8-4z"/>
+                      </svg>
+                      <span>Joueur</span>
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
         </Card>
 

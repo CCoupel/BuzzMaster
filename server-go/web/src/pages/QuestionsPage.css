@@ -105,55 +105,92 @@
   color: white;
 }
 
-/* Question thumbnails container */
-.question-thumbnails {
+/* Fixed Media Zone */
+.question-media-zone {
   display: flex;
   gap: var(--space-2);
+  height: 80px;
   margin-bottom: var(--space-3);
-  position: relative;
 }
 
-.question-thumbnail {
+.question-media-slot {
   flex: 1;
-  height: 100px;
-  object-fit: cover;
+  height: 80px;
   border-radius: var(--radius-lg);
-}
-
-/* Answer thumbnail - positioned at bottom right */
-.question-thumbnail.answer-thumbnail {
-  position: absolute;
-  bottom: 4px;
-  right: 4px;
-  width: 60px;
-  height: 45px;
-  flex: none;
-  border: 2px solid var(--success);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3), 0 0 8px rgba(34, 197, 94, 0.4);
-  border-radius: var(--radius-md);
-}
-
-/* When only answer thumbnail exists, show placeholder with small answer at bottom-right */
-.question-thumbnails:has(.answer-thumbnail:only-child) {
-  height: 100px;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   background: var(--gray-100);
-  border-radius: var(--radius-lg);
+  border: 2px dashed var(--gray-200);
 }
 
-/* Answer thumbnail stays small and at bottom-right even when it's the only image */
-.question-thumbnails:has(.answer-thumbnail:only-child) .answer-thumbnail {
-  /* Keep absolute positioning - same as when question image exists */
+.question-media-slot.has-media {
+  border: none;
+  background: var(--gray-200);
 }
 
-.question-preview {
+.question-media-slot img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.question-media-slot.answer-slot {
+  border-color: var(--success);
+  background: color-mix(in srgb, var(--success) 5%, white);
+}
+
+.question-media-slot.answer-slot.has-media {
+  border: 2px solid var(--success);
+  box-shadow: 0 0 8px rgba(34, 197, 94, 0.3);
+}
+
+.question-media-slot .media-placeholder {
+  font-size: 1.5rem;
+  opacity: 0.3;
+}
+
+.question-media-slot.answer-slot .media-placeholder {
+  color: var(--success);
+  opacity: 0.4;
+}
+
+/* Fixed Question Zone */
+.question-text-zone {
+  height: 48px;
+  overflow: hidden;
+  margin-bottom: var(--space-2);
+}
+
+.question-preview-text {
   font-size: 0.875rem;
   color: var(--gray-700);
-  line-height: 1.5;
+  line-height: 1.4;
+  margin: 0;
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
-  margin-bottom: var(--space-3);
+}
+
+/* Fixed Answer Zone */
+.question-answer-zone {
+  height: 24px;
+  overflow: hidden;
+  margin-bottom: var(--space-2);
+}
+
+.question-answer-text {
+  font-size: 0.8rem;
+  color: var(--success);
+  font-weight: 500;
+  line-height: 1.3;
+  margin: 0;
+  display: -webkit-box;
+  -webkit-line-clamp: 1;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 
 .question-meta {
@@ -435,6 +472,63 @@
   color: white;
   border-radius: var(--radius-sm);
   letter-spacing: 0.5px;
+}
+
+/* Category Badge */
+.category-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  font-size: 0.9rem;
+  border-radius: var(--radius-sm);
+  color: white;
+}
+
+/* Category Selector */
+.category-selector {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.category-btn {
+  width: 40px;
+  height: 40px;
+  border: 2px solid var(--gray-200);
+  border-radius: var(--radius-lg);
+  background: white;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.category-btn:hover {
+  border-color: var(--cat-color);
+  background: color-mix(in srgb, var(--cat-color) 10%, white);
+}
+
+.category-btn.active {
+  border-color: var(--cat-color);
+  background: var(--cat-color);
+}
+
+.category-btn.active .category-icon {
+  filter: brightness(1.2);
+}
+
+.category-icon {
+  font-size: 1.25rem;
+}
+
+.category-label {
+  display: block;
+  font-size: 0.75rem;
+  font-weight: 500;
+  margin-top: var(--space-1);
 }
 
 /* Type Selector */
