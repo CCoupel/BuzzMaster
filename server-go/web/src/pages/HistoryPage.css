@@ -81,6 +81,18 @@
   font-size: 1rem;
 }
 
+.group-category {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  font-size: 0.9rem;
+  border-radius: var(--radius-md);
+  color: white;
+  flex-shrink: 0;
+}
+
 .group-question {
   flex: 1;
   font-size: 0.875rem;

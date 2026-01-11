@@ -82,6 +82,21 @@ const (
 	PointsTargetTeam   PointsTarget = "TEAM"
 )
 
+// QuestionCategory represents the category of a question
+type QuestionCategory string
+
+const (
+	CategoryNone          QuestionCategory = ""
+	CategoryGeography     QuestionCategory = "GEOGRAPHY"
+	CategoryEntertainment QuestionCategory = "ENTERTAINMENT"
+	CategoryHistory       QuestionCategory = "HISTORY"
+	CategoryArts          QuestionCategory = "ARTS"
+	CategoryScience       QuestionCategory = "SCIENCE"
+	CategorySports        QuestionCategory = "SPORTS"
+	CategoryFood          QuestionCategory = "FOOD"
+	CategoryAnimals       QuestionCategory = "ANIMALS"
+)
+
 // QCMAnswers holds the 4 possible answers for a QCM question
 type QCMAnswers struct {
 	Red    string `json:"RED"`
@@ -92,19 +107,20 @@ type QCMAnswers struct {
 
 // Question represents a quiz question
 type Question struct {
-	ID           string         `json:"ID"`
-	Question     string         `json:"QUESTION"`
-	Answer       string         `json:"ANSWER"`                  // For normal questions
-	Type         QuestionType   `json:"TYPE,omitempty"`          // "NORMAL" or "QCM" (default NORMAL)
-	PointsTarget PointsTarget   `json:"POINTS_TARGET,omitempty"` // "PLAYER" or "TEAM" (default based on type)
-	QCMAnswers   *QCMAnswers    `json:"QCM_ANSWERS,omitempty"`   // For QCM questions
-	QCMCorrect   string         `json:"QCM_CORRECT,omitempty"`   // "RED", "GREEN", "YELLOW", "BLUE"
-	Points       string         `json:"POINTS"`                  // String to match JSON format
-	Time         string         `json:"TIME"`                    // String to match JSON format
-	Order        int            `json:"ORDER,omitempty"`         // Display order (for drag and drop)
-	Media        string         `json:"MEDIA,omitempty"`         // Question media (shown during game)
-	MediaAnswer  string         `json:"MEDIA_ANSWER,omitempty"`  // Answer media (shown during REVEAL)
-	Status       QuestionStatus `json:"STATUS,omitempty"`
+	ID           string           `json:"ID"`
+	Question     string           `json:"QUESTION"`
+	Answer       string           `json:"ANSWER"`                  // For normal questions
+	Type         QuestionType     `json:"TYPE,omitempty"`          // "NORMAL" or "QCM" (default NORMAL)
+	Category     QuestionCategory `json:"CATEGORY,omitempty"`      // Question category
+	PointsTarget PointsTarget     `json:"POINTS_TARGET,omitempty"` // "PLAYER" or "TEAM" (default based on type)
+	QCMAnswers   *QCMAnswers      `json:"QCM_ANSWERS,omitempty"`   // For QCM questions
+	QCMCorrect   string           `json:"QCM_CORRECT,omitempty"`   // "RED", "GREEN", "YELLOW", "BLUE"
+	Points       string           `json:"POINTS"`                  // String to match JSON format
+	Time         string           `json:"TIME"`                    // String to match JSON format
+	Order        int              `json:"ORDER,omitempty"`         // Display order (for drag and drop)
+	Media        string           `json:"MEDIA,omitempty"`         // Question media (shown during game)
+	MediaAnswer  string           `json:"MEDIA_ANSWER,omitempty"`  // Answer media (shown during REVEAL)
+	Status       QuestionStatus   `json:"STATUS,omitempty"`
 }
 
 // Background represents a background image with its settings
@@ -165,17 +181,18 @@ func (f *FullGameState) ToJSON() (json.RawMessage, error) {
 
 // GameEvent represents a game event for history tracking
 type GameEvent struct {
-	Timestamp    int64  `json:"TIMESTAMP"`               // Server timestamp in microseconds
-	QuestionID   string `json:"QUESTION_ID"`             // Question ID
-	QuestionText string `json:"QUESTION_TEXT"`           // Question text for display
-	EventType    string `json:"EVENT_TYPE"`              // "POINTS_AWARDED", "BUZZ", etc.
-	WinnerID     string `json:"WINNER_ID"`               // MAC bumper or team name
-	WinnerName   string `json:"WINNER_NAME"`             // Display name (player or team)
-	WinnerType   string `json:"WINNER_TYPE"`             // "PLAYER" or "TEAM"
-	TeamName     string `json:"TEAM_NAME,omitempty"`     // Team name (always filled)
-	TeamColor    []int  `json:"TEAM_COLOR,omitempty"`    // Team RGB color
-	PlayerName   string `json:"PLAYER_NAME,omitempty"`   // Player name (only if PLAYER)
-	PlayerColor  string `json:"PLAYER_COLOR,omitempty"`  // Player answer color (RED/GREEN/YELLOW/BLUE)
-	Points       int    `json:"POINTS"`                  // Points awarded
-	ReactionTime int64  `json:"REACTION_TIME,omitempty"` // Reaction time in microseconds
+	Timestamp        int64  `json:"TIMESTAMP"`                   // Server timestamp in microseconds
+	QuestionID       string `json:"QUESTION_ID"`                 // Question ID
+	QuestionText     string `json:"QUESTION_TEXT"`               // Question text for display
+	QuestionCategory string `json:"QUESTION_CATEGORY,omitempty"` // Question category (GEOGRAPHY, etc.)
+	EventType        string `json:"EVENT_TYPE"`                  // "POINTS_AWARDED", "BUZZ", etc.
+	WinnerID         string `json:"WINNER_ID"`                   // MAC bumper or team name
+	WinnerName       string `json:"WINNER_NAME"`                 // Display name (player or team)
+	WinnerType       string `json:"WINNER_TYPE"`                 // "PLAYER" or "TEAM"
+	TeamName         string `json:"TEAM_NAME,omitempty"`         // Team name (always filled)
+	TeamColor        []int  `json:"TEAM_COLOR,omitempty"`        // Team RGB color
+	PlayerName       string `json:"PLAYER_NAME,omitempty"`       // Player name (only if PLAYER)
+	PlayerColor      string `json:"PLAYER_COLOR,omitempty"`      // Player answer color (RED/GREEN/YELLOW/BLUE)
+	Points           int    `json:"POINTS"`                      // Points awarded
+	ReactionTime     int64  `json:"REACTION_TIME,omitempty"`     // Reaction time in microseconds
 }

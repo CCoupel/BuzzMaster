@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import Card, { CardHeader, CardBody } from '../components/Card'
+import { CATEGORIES } from './QuestionsPage'
 import './HistoryPage.css'
 
 // Player answer colors
@@ -47,6 +48,7 @@ export default function HistoryPage() {
         groups[qId] = {
           questionId: qId,
           questionText: event.QUESTION_TEXT || `Question #${qId}`,
+          questionCategory: event.QUESTION_CATEGORY || '',
           events: [],
           firstTimestamp: event.TIMESTAMP
         }
@@ -55,6 +57,10 @@ export default function HistoryPage() {
       // Track earliest timestamp for sorting
       if (event.TIMESTAMP < groups[qId].firstTimestamp) {
         groups[qId].firstTimestamp = event.TIMESTAMP
+      }
+      // Update category if not yet set
+      if (!groups[qId].questionCategory && event.QUESTION_CATEGORY) {
+        groups[qId].questionCategory = event.QUESTION_CATEGORY
       }
     })
 
@@ -193,6 +199,15 @@ export default function HistoryPage() {
                       <div className="group-header">
                         <span className={`collapse-icon ${isExpanded ? 'open' : ''}`}>▶</span>
                         <span className="group-id">#{group.questionId}</span>
+                        {group.questionCategory && CATEGORIES[group.questionCategory] && (
+                          <span
+                            className="group-category"
+                            style={{ backgroundColor: CATEGORIES[group.questionCategory].color }}
+                            title={CATEGORIES[group.questionCategory].label}
+                          >
+                            {CATEGORIES[group.questionCategory].icon}
+                          </span>
+                        )}
                         <span className="group-question">{group.questionText}</span>
                         <span className="group-count">{group.events.length} evt</span>
                         <span className={`group-total ${group.totalPoints >= 0 ? 'positive' : 'negative'}`}>

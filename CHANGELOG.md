@@ -2,6 +2,38 @@
 
 Historique des versions du projet BuzzControl.
 
+## [2.23.0] - Category Balance & History Categories
+
+### Ajouts
+- **CategoryBalance Component** : Visualisation de l'équilibre des catégories sur la page Questions
+  - Barres divergentes par catégorie (questions et points)
+  - Zéro au centre = moyenne, droite = excès, gauche = manque
+  - Code couleur : vert (≤25%), orange (25-50%), rouge (>50%)
+  - Tooltip au survol avec détails complets
+  - Seules les catégories représentées sont affichées
+  - Animation framer-motion à l'entrée
+
+- **Catégorie dans l'historique** : Badge catégorie sur chaque groupe de question
+  - Ajout du champ `QuestionCategory` au modèle `GameEvent`
+  - Icône colorée dans le header de chaque groupe
+  - Visible dans la vue réduite et détaillée
+
+### Corrections
+- **Fix sélection de question** : Correction de l'erreur JSON unmarshal
+  - Les questions de test avaient POINTS/TIME en nombres au lieu de strings
+  - La sélection depuis PREPARE/READY fonctionne maintenant correctement
+
+### Fichiers
+- `components/CategoryBalance.jsx` : Nouveau composant
+- `components/CategoryBalance.css` : Styles des barres divergentes
+- `pages/QuestionsPage.jsx` : Intégration du composant
+- `pages/HistoryPage.jsx` : Import CATEGORIES, affichage badge catégorie
+- `pages/HistoryPage.css` : Style `.group-category`
+- `internal/game/models.go` : Champ `QuestionCategory` dans `GameEvent`
+- `cmd/server/main.go` : Fix POINTS/TIME strings, catégorie dans événements
+
+---
+
 ## [2.21.0] - Data Persistence & Administration
 
 ### Ajouts

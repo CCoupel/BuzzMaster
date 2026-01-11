@@ -512,19 +512,54 @@ Page d'historique des événements de jeu :
 - **GameEvent model** :
   ```go
   type GameEvent struct {
-    Timestamp    int64   // Server timestamp (microseconds)
-    QuestionID   string  // Question ID
-    QuestionText string  // Question text
-    EventType    string  // "POINTS_AWARDED"
-    WinnerType   string  // "PLAYER" or "TEAM"
-    TeamName     string  // Team name
-    TeamColor    []int   // Team RGB color
-    PlayerName   string  // Player name (if PLAYER)
-    PlayerColor  string  // Player answer color
-    Points       int     // Points awarded
+    Timestamp        int64   // Server timestamp (microseconds)
+    QuestionID       string  // Question ID
+    QuestionText     string  // Question text
+    QuestionCategory string  // Question category (v2.23.0)
+    EventType        string  // "POINTS_AWARDED"
+    WinnerType       string  // "PLAYER" or "TEAM"
+    TeamName         string  // Team name
+    TeamColor        []int   // Team RGB color
+    PlayerName       string  // Player name (if PLAYER)
+    PlayerColor      string  // Player answer color
+    Points           int     // Points awarded
   }
   ```
+- **Badge catégorie** : Icône colorée par groupe dans l'historique (v2.23.0)
 - **Fichiers** : `HistoryPage.jsx`, `HistoryPage.css`, `engine.go:AddGameEvent()`
+
+#### CategoryBalance Component (v2.23.0)
+Visualisation de l'équilibre des catégories sur la page Questions :
+- **Location** : `components/CategoryBalance.jsx` + `components/CategoryBalance.css`
+- **Affichage** : Barre horizontale avec toutes les catégories représentées
+- **Données par catégorie** :
+  - Nombre de questions
+  - Total des points
+  - 2 barres divergentes (questions / points)
+
+**Barres divergentes** :
+- **Zéro au centre** : représente la moyenne
+- **Vers la droite** : excès (sur-représenté)
+- **Vers la gauche** : manque (sous-représenté)
+
+**Code couleur** :
+| Écart à la moyenne | Couleur | Signification |
+|--------------------|---------|---------------|
+| ≤ 25% | 🟢 Vert | Équilibré |
+| 25% - 50% | 🟠 Orange | Attention |
+| > 50% | 🔴 Rouge | Déséquilibré |
+
+**Tooltip au survol** :
+- Nom complet de la catégorie
+- Nombre de questions (+ moyenne)
+- Écart en valeur absolue et pourcentage
+- Total des points (+ moyenne)
+- Statut : Équilibré / Sur-représenté / Sous-représenté
+
+**Caractéristiques** :
+- Seules les catégories avec ≥1 question sont affichées
+- Mise à jour automatique à chaque ajout/modification de question
+- Animation d'entrée avec framer-motion
 
 #### Teams Page - Drag & Drop (v2.5.0)
 Interface de gestion des équipes avec drag & drop :

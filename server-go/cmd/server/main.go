@@ -798,23 +798,26 @@ func (a *App) handleBumperPoints(msg *protocol.Message) {
 	}
 	questionID := ""
 	questionText := ""
+	questionCategory := ""
 	if state.Question != nil {
 		questionID = state.Question.ID
 		questionText = state.Question.Question
+		questionCategory = string(state.Question.Category)
 	}
 	event := game.GameEvent{
-		Timestamp:    time.Now().UnixMicro(),
-		QuestionID:   questionID,
-		QuestionText: questionText,
-		EventType:    "POINTS_AWARDED",
-		WinnerID:     payload.ID,
-		WinnerName:   bumperName,
-		WinnerType:   "PLAYER",
-		TeamName:     teamName,
-		TeamColor:    teamColor,
-		PlayerName:   bumperName,
-		PlayerColor:  playerColor,
-		Points:       payload.Points,
+		Timestamp:        time.Now().UnixMicro(),
+		QuestionID:       questionID,
+		QuestionText:     questionText,
+		QuestionCategory: questionCategory,
+		EventType:        "POINTS_AWARDED",
+		WinnerID:         payload.ID,
+		WinnerName:       bumperName,
+		WinnerType:       "PLAYER",
+		TeamName:         teamName,
+		TeamColor:        teamColor,
+		PlayerName:       bumperName,
+		PlayerColor:      playerColor,
+		Points:           payload.Points,
 	}
 	a.engine.AddGameEvent(event)
 
@@ -840,21 +843,24 @@ func (a *App) handleTeamPoints(msg *protocol.Message) {
 	}
 	questionID := ""
 	questionText := ""
+	questionCategory := ""
 	if state.Question != nil {
 		questionID = state.Question.ID
 		questionText = state.Question.Question
+		questionCategory = string(state.Question.Category)
 	}
 	event := game.GameEvent{
-		Timestamp:    time.Now().UnixMicro(),
-		QuestionID:   questionID,
-		QuestionText: questionText,
-		EventType:    "POINTS_AWARDED",
-		WinnerID:     payload.Team,
-		WinnerName:   payload.Team,
-		WinnerType:   "TEAM",
-		TeamName:     payload.Team,
-		TeamColor:    teamColor,
-		Points:       payload.Points,
+		Timestamp:        time.Now().UnixMicro(),
+		QuestionID:       questionID,
+		QuestionText:     questionText,
+		QuestionCategory: questionCategory,
+		EventType:        "POINTS_AWARDED",
+		WinnerID:         payload.Team,
+		WinnerName:       payload.Team,
+		WinnerType:       "TEAM",
+		TeamName:         payload.Team,
+		TeamColor:        teamColor,
+		Points:           payload.Points,
 	}
 	a.engine.AddGameEvent(event)
 
@@ -1384,7 +1390,177 @@ func (a *App) initTestData() {
 	a.engine.SetBumpers(bumpers)
 	a.engine.RecalculateAllTeamScores()
 
+	// Create test questions with different categories
+	a.createTestQuestions()
+
 	log.Printf("[App] Test data initialized: %d teams, %d bumpers", len(teams), len(bumpers))
+}
+
+// createTestQuestions creates test questions with various categories
+func (a *App) createTestQuestions() {
+	questionsDir := a.config.Storage.QuestionsDir
+	if questionsDir == "" {
+		questionsDir = "./data/files/questions"
+	}
+
+	// Ensure questions directory exists
+	os.MkdirAll(questionsDir, 0755)
+
+	// Check if questions already exist
+	entries, _ := os.ReadDir(questionsDir)
+	if len(entries) > 0 {
+		log.Printf("[App] Questions already exist (%d), skipping test questions", len(entries))
+		return
+	}
+
+	log.Println("[App] Creating test questions with categories...")
+
+	testQuestions := []map[string]interface{}{
+		// GEOGRAPHY
+		{
+			"ID":            "1",
+			"QUESTION":      "Quelle est la capitale de l'Australie?",
+			"ANSWER":        "Canberra",
+			"POINTS":        "10",
+			"TIME":          "30",
+			"TYPE":          "NORMAL",
+			"CATEGORY":      "GEOGRAPHY",
+			"POINTS_TARGET": "PLAYER",
+			"ORDER":         0,
+		},
+		// ENTERTAINMENT - QCM
+		{
+			"ID":       "2",
+			"QUESTION": "Quel acteur joue Iron Man dans les films Marvel?",
+			"ANSWER":   "Robert Downey Jr.",
+			"POINTS":   "10",
+			"TIME":     "20",
+			"TYPE":     "QCM",
+			"CATEGORY": "ENTERTAINMENT",
+			"QCM_ANSWERS": map[string]string{
+				"RED":    "Chris Evans",
+				"GREEN":  "Robert Downey Jr.",
+				"YELLOW": "Chris Hemsworth",
+				"BLUE":   "Mark Ruffalo",
+			},
+			"QCM_CORRECT":   "GREEN",
+			"POINTS_TARGET": "TEAM",
+			"ORDER":         1,
+		},
+		// HISTORY
+		{
+			"ID":            "3",
+			"QUESTION":      "En quelle annee a eu lieu la Revolution francaise?",
+			"ANSWER":        "1789",
+			"POINTS":        "10",
+			"TIME":          "30",
+			"TYPE":          "NORMAL",
+			"CATEGORY":      "HISTORY",
+			"POINTS_TARGET": "PLAYER",
+			"ORDER":         2,
+		},
+		// ARTS - QCM
+		{
+			"ID":       "4",
+			"QUESTION": "Qui a peint la Joconde?",
+			"ANSWER":   "Leonard de Vinci",
+			"POINTS":   "10",
+			"TIME":     "20",
+			"TYPE":     "QCM",
+			"CATEGORY": "ARTS",
+			"QCM_ANSWERS": map[string]string{
+				"RED":    "Michel-Ange",
+				"GREEN":  "Leonard de Vinci",
+				"YELLOW": "Raphael",
+				"BLUE":   "Botticelli",
+			},
+			"QCM_CORRECT":   "GREEN",
+			"POINTS_TARGET": "TEAM",
+			"ORDER":         3,
+		},
+		// SCIENCE
+		{
+			"ID":            "5",
+			"QUESTION":      "Quel est le symbole chimique de l'or?",
+			"ANSWER":        "Au",
+			"POINTS":        "10",
+			"TIME":          "30",
+			"TYPE":          "NORMAL",
+			"CATEGORY":      "SCIENCE",
+			"POINTS_TARGET": "PLAYER",
+			"ORDER":         4,
+		},
+		// SPORTS - QCM
+		{
+			"ID":       "6",
+			"QUESTION": "Dans quel sport utilise-t-on un volant?",
+			"ANSWER":   "Badminton",
+			"POINTS":   "10",
+			"TIME":     "20",
+			"TYPE":     "QCM",
+			"CATEGORY": "SPORTS",
+			"QCM_ANSWERS": map[string]string{
+				"RED":    "Tennis",
+				"GREEN":  "Badminton",
+				"YELLOW": "Squash",
+				"BLUE":   "Ping-pong",
+			},
+			"QCM_CORRECT":   "GREEN",
+			"POINTS_TARGET": "TEAM",
+			"ORDER":         5,
+		},
+		// FOOD
+		{
+			"ID":            "7",
+			"QUESTION":      "De quel pays vient le sushi?",
+			"ANSWER":        "Japon",
+			"POINTS":        "10",
+			"TIME":          "30",
+			"TYPE":          "NORMAL",
+			"CATEGORY":      "FOOD",
+			"POINTS_TARGET": "PLAYER",
+			"ORDER":         6,
+		},
+		// ANIMALS - QCM
+		{
+			"ID":       "8",
+			"QUESTION": "Quel est le plus grand animal terrestre?",
+			"ANSWER":   "Elephant d'Afrique",
+			"POINTS":   "10",
+			"TIME":     "20",
+			"TYPE":     "QCM",
+			"CATEGORY": "ANIMALS",
+			"QCM_ANSWERS": map[string]string{
+				"RED":    "Girafe",
+				"GREEN":  "Elephant d'Afrique",
+				"YELLOW": "Rhinoceros",
+				"BLUE":   "Hippopotame",
+			},
+			"QCM_CORRECT":   "GREEN",
+			"POINTS_TARGET": "TEAM",
+			"ORDER":         7,
+		},
+	}
+
+	for _, q := range testQuestions {
+		id := q["ID"].(string)
+		questionDir := filepath.Join(questionsDir, id)
+		os.MkdirAll(questionDir, 0755)
+
+		data, err := json.MarshalIndent(q, "", "  ")
+		if err != nil {
+			log.Printf("[App] Failed to marshal question %s: %v", id, err)
+			continue
+		}
+
+		questionFile := filepath.Join(questionDir, "question.json")
+		if err := os.WriteFile(questionFile, data, 0644); err != nil {
+			log.Printf("[App] Failed to write question %s: %v", id, err)
+			continue
+		}
+	}
+
+	log.Printf("[App] Created %d test questions", len(testQuestions))
 }
 
 // checkBonjourSupport checks if Bonjour/mDNS is available on the system

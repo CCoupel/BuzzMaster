@@ -1,8 +1,9 @@
-import { useState, useRef, useMemo, useEffect } from 'react'
+import { useState, useRef, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useGame } from '../hooks/GameContext'
 import Button from '../components/Button'
 import Card, { CardHeader, CardBody } from '../components/Card'
+import CategoryBalance from '../components/CategoryBalance'
 import './QuestionsPage.css'
 
 // QCM answer colors
@@ -11,6 +12,18 @@ const QCM_COLORS = {
   GREEN: { label: 'Vert', color: '#22c55e', letter: 'B' },
   YELLOW: { label: 'Jaune', color: '#eab308', letter: 'C' },
   BLUE: { label: 'Bleu', color: '#3b82f6', letter: 'D' },
+}
+
+// Question categories (Trivial Pursuit + extras)
+export const CATEGORIES = {
+  GEOGRAPHY: { label: 'Geographie', icon: '🌍', color: '#3b82f6' },      // Blue
+  ENTERTAINMENT: { label: 'Divertissement', icon: '🎭', color: '#ec4899' }, // Pink
+  HISTORY: { label: 'Histoire', icon: '📜', color: '#eab308' },          // Yellow
+  ARTS: { label: 'Arts & Litterature', icon: '🎨', color: '#a855f7' },   // Purple
+  SCIENCE: { label: 'Sciences & Nature', icon: '🔬', color: '#22c55e' }, // Green
+  SPORTS: { label: 'Sports & Loisirs', icon: '⚽', color: '#f97316' },   // Orange
+  FOOD: { label: 'Gastronomie', icon: '🍽️', color: '#991b1b' },          // Bordeaux
+  ANIMALS: { label: 'Animaux', icon: '🐾', color: '#78716c' },           // Brown
 }
 
 export default function QuestionsPage() {
@@ -27,6 +40,7 @@ export default function QuestionsPage() {
     question: '',
     answer: '',
     type: 'NORMAL',
+    category: '', // Question category
     pointsTarget: 'PLAYER', // PLAYER or TEAM
     qcmAnswers: { RED: '', GREEN: '', YELLOW: '', BLUE: '' },
     qcmCorrect: '',
@@ -135,6 +149,7 @@ export default function QuestionsPage() {
       question: question.QUESTION || '',
       answer: question.ANSWER || '',
       type: qType,
+      category: question.CATEGORY || '',
       pointsTarget: question.POINTS_TARGET || defaultTarget,
       qcmAnswers: question.QCM_ANSWERS || { RED: '', GREEN: '', YELLOW: '', BLUE: '' },
       qcmCorrect: question.QCM_CORRECT || '',
@@ -159,6 +174,7 @@ export default function QuestionsPage() {
       question: '',
       answer: '',
       type: 'NORMAL',
+      category: '',
       pointsTarget: 'PLAYER',
       qcmAnswers: { RED: '', GREEN: '', YELLOW: '', BLUE: '' },
       qcmCorrect: '',
@@ -200,6 +216,9 @@ export default function QuestionsPage() {
     }
     data.append('question', formData.question)
     data.append('type', formData.type)
+    if (formData.category) {
+      data.append('category', formData.category)
+    }
     data.append('points_target', formData.pointsTarget)
     data.append('points', formData.points)
     data.append('time', formData.time)
@@ -257,6 +276,9 @@ export default function QuestionsPage() {
         <p className="page-subtitle">{sortedQuestions.length} questions disponibles</p>
       </header>
 
+      {/* Category Balance Visualization */}
+      <CategoryBalance questions={sortedQuestions} />
+
       <div className="questions-layout">
         {/* Questions List */}
         <section className="questions-list-section">
@@ -286,6 +308,15 @@ export default function QuestionsPage() {
                     <div className="question-card-header">
                       <span className="drag-handle">⋮⋮</span>
                       <span className="question-id">#{question.ID}</span>
+                      {question.CATEGORY && CATEGORIES[question.CATEGORY] && (
+                        <span
+                          className="category-badge"
+                          style={{ backgroundColor: CATEGORIES[question.CATEGORY].color }}
+                          title={CATEGORIES[question.CATEGORY].label}
+                        >
+                          {CATEGORIES[question.CATEGORY].icon}
+                        </span>
+                      )}
                       {question.TYPE === 'QCM' && (
                         <span className="qcm-badge">QCM</span>
                       )}
@@ -377,6 +408,30 @@ export default function QuestionsPage() {
                       QCM
                     </button>
                   </div>
+                </div>
+
+                {/* Category Selector */}
+                <div className="form-group">
+                  <label>Categorie</label>
+                  <div className="category-selector">
+                    {Object.entries(CATEGORIES).map(([key, { label, icon, color }]) => (
+                      <button
+                        key={key}
+                        type="button"
+                        className={`category-btn ${formData.category === key ? 'active' : ''}`}
+                        style={{ '--cat-color': color }}
+                        onClick={() => handleInputChange('category', formData.category === key ? '' : key)}
+                        title={label}
+                      >
+                        <span className="category-icon">{icon}</span>
+                      </button>
+                    ))}
+                  </div>
+                  {formData.category && (
+                    <span className="category-label" style={{ color: CATEGORIES[formData.category]?.color }}>
+                      {CATEGORIES[formData.category]?.label}
+                    </span>
+                  )}
                 </div>
 
                 {/* Points Target Selector */}
