@@ -474,6 +474,34 @@ Teams and players display animated progress bars showing their score relative to
 - Player answer colors displayed with colored badge (A/B/C/D)
 - Player rows highlighted with answer color (20% tint, 4px left border)
 
+#### CSS Specificity & Layout Fixes (v2.32.0)
+
+**Problème résolu** : Conflits CSS entre GamePage.css et TeamsPage.css sur les mêmes classes `.teams-grid` et `.team-card`.
+
+**Solution - Sélecteurs spécifiques** :
+Les styles de GamePage utilisent des sélecteurs plus spécifiques pour éviter que TeamsPage.css ne les écrase :
+
+```css
+/* GamePage.css - Sélecteurs spécifiques à la page Jeu */
+.game-page .teams-grid { display: flex; flex-direction: column; ... }
+.game-page .teams-grid .team-card { overflow: visible; flex-shrink: 0; ... }
+.game-page .team-card .team-buzzers { display: flex !important; ... }
+.game-page .team-card .buzzer-mini { display: flex !important; ... }
+```
+
+**Raison** : TeamsPage.css définit `.teams-grid { display: grid; grid-template-columns: minmax(300px, 1fr); }` qui forçait une largeur minimale de 300px sur les cartes, les faisant déborder de la colonne Équipes (300px).
+
+**Corrections appliquées** :
+| Problème | Cause | Solution |
+|----------|-------|----------|
+| Cartes équipes débordent | `.teams-grid { display: grid; minmax(300px) }` de TeamsPage | Sélecteur `.game-page .teams-grid` avec `display: flex` |
+| Joueurs non visibles | `.team-card { overflow: hidden }` coupe le contenu | `overflow: visible` + `flex-shrink: 0` sur `.game-page .team-card` |
+| Preview TV hauteur différente | `aspect-ratio: 16/9` contraignait la hauteur | `height: 100%` + `align-items: stretch` sur le container |
+
+**Fichiers modifiés** :
+- `GamePage.css` : Sélecteurs `.game-page .teams-grid`, `.game-page .team-card`
+- `QuestionPreview.css` : Suppression `aspect-ratio`, ajout `height: 100%`
+
 #### Points Animation (v2.12.0)
 Animation visuelle quand des points sont ajoutés :
 - **Confetti** : Particules avec la couleur de l'équipe

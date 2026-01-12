@@ -1,7 +1,8 @@
 .tv-preview {
   position: relative;
   width: 100%;
-  aspect-ratio: 16 / 9;
+  
+  height: 100%;
   border-radius: var(--radius-lg);
   overflow: hidden;
   background: var(--gray-900);

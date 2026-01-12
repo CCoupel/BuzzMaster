@@ -2,6 +2,32 @@
 
 Historique des versions du projet BuzzControl.
 
+
+## [2.32.0] - CSS Specificity & Layout Fixes
+
+### Corrections
+- **Cartes équipes - largeur** : Les cartes équipes s'adaptent maintenant à la largeur de la colonne
+  - Problème : TeamsPage.css définissait `.teams-grid { display: grid; minmax(300px, 1fr) }` qui forçait une largeur minimale de 300px
+  - Solution : Sélecteur plus spécifique `.game-page .teams-grid { display: flex }` dans GamePage.css
+
+- **Cartes équipes - joueurs visibles** : Tous les joueurs sont maintenant affichés dans les cartes équipes
+  - Problème : `.team-card { overflow: hidden }` coupait le contenu débordant
+  - Solution : `overflow: visible` et `flex-shrink: 0` sur `.game-page .team-card`
+
+- **Preview TV - hauteur alignée** : La zone de preview TV a maintenant la même hauteur que les colonnes Questions et Équipes
+  - Problème : `aspect-ratio: 16/9` et `max-height` contraignaient la hauteur du preview
+  - Solution : `height: 100%` sur `.tv-preview` et `align-items: stretch` sur le container
+
+### Technique
+- Utilisation de sélecteurs CSS spécifiques (`.game-page .class`) pour éviter les conflits entre pages
+- Les règles `!important` sur `display`, `visibility` et `height` garantissent l'affichage des joueurs
+
+### Fichiers modifiés
+- `GamePage.css` : Sélecteurs spécifiques `.game-page .teams-grid`, `.game-page .team-card`
+- `QuestionPreview.css` : Suppression `aspect-ratio: 16/9`, ajout `height: 100%`
+- `CLAUDE.md` : Documentation de la section "CSS Specificity & Layout Fixes"
+
+---
 ## [2.30.0] - Background Image Synchronization
 
 ### Ajouts
