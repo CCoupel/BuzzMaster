@@ -35,6 +35,7 @@ const (
 	ActionReorderQuestions  = "REORDER_QUESTIONS"
 	ActionForceReady        = "FORCE_READY"
 	ActionBackgroundChange  = "BACKGROUND_CHANGE"
+	ActionFlipMemoryCard    = "FLIP_MEMORY_CARD"
 )
 
 // FSInfo represents file storage information
@@ -135,6 +136,11 @@ type ReorderQuestionsPayload struct {
 // BackgroundChangePayload for BACKGROUND_CHANGE action
 type BackgroundChangePayload struct {
 	Index int `json:"INDEX"` // Current background index (0-based)
+}
+
+// FlipMemoryCardPayload for FLIP_MEMORY_CARD action
+type FlipMemoryCardPayload struct {
+	CardID string `json:"CARD_ID"` // Card ID to flip (e.g., "1-1", "2-2")
 }
 
 // NewMessage creates a new outgoing message

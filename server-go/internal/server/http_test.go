@@ -14,14 +14,19 @@ import (
 )
 
 func setupTestHTTPServer(t *testing.T) (*HTTPServer, string) {
-	// Initialize config
+	// Initialize config - use same temp dir for both DataDir and QuestionsDir
+	dataDir := t.TempDir()
+
+	// Trigger once.Do first by calling Get(), then override with SetInstance
+	_ = config.Get()
+
 	cfg := &config.Config{
 		Server: config.ServerConfig{
 			HTTPPort: 8080,
 		},
 		Storage: config.StorageConfig{
-			DataDir:      t.TempDir(),
-			QuestionsDir: filepath.Join(t.TempDir(), "files", "questions"),
+			DataDir:      dataDir,
+			QuestionsDir: filepath.Join(dataDir, "files", "questions"),
 		},
 		Version: "2.0.0-test",
 	}
@@ -494,5 +499,179 @@ func TestHTTPServer_FindFreeQuestionID(t *testing.T) {
 	id = server.findFreeQuestionID()
 	if id != "5" {
 		t.Errorf("Expected next ID to be 5, got %s", id)
+	}
+}
+
+// ========================================
+// Memory Game HTTP Tests - Phase 1
+// ========================================
+
+func TestHTTPServer_MemoryQuestionUpload(t *testing.T) {
+	server, dataDir := setupTestHTTPServer(t)
+
+	// Ensure the questions directory exists
+	questionsDir := filepath.Join(dataDir, "files", "questions")
+	os.MkdirAll(questionsDir, 0755)
+
+	// Create multipart form with Memory question data
+	body := strings.NewReader("--boundary\r\n" +
+		"Content-Disposition: form-data; name=\"question\"\r\n\r\n" +
+		"Match capitals with countries\r\n" +
+		"--boundary\r\n" +
+		"Content-Disposition: form-data; name=\"answer\"\r\n\r\n" +
+		"2 paires\r\n" +
+		"--boundary\r\n" +
+		"Content-Disposition: form-data; name=\"type\"\r\n\r\n" +
+		"MEMORY\r\n" +
+		"--boundary\r\n" +
+		"Content-Disposition: form-data; name=\"points\"\r\n\r\n" +
+		"20\r\n" +
+		"--boundary\r\n" +
+		"Content-Disposition: form-data; name=\"time\"\r\n\r\n" +
+		"60\r\n" +
+		"--boundary\r\n" +
+		"Content-Disposition: form-data; name=\"memory_pairs\"\r\n\r\n" +
+		`[{"ID":1,"CARD1":{"TEXT":"Paris","IS_IMAGE":false},"CARD2":{"TEXT":"France","IS_IMAGE":false}},{"ID":2,"CARD1":{"TEXT":"Berlin","IS_IMAGE":false},"CARD2":{"TEXT":"Germany","IS_IMAGE":false}}]` + "\r\n" +
+		"--boundary\r\n" +
+		"Content-Disposition: form-data; name=\"memory_config\"\r\n\r\n" +
+		`{"FLIP_DELAY":3000,"POINTS_PER_PAIR":10,"ERROR_PENALTY":0,"COMPLETION_BONUS":0,"USE_TIMER":true}` + "\r\n" +
+		"--boundary--\r\n")
+
+	req := httptest.NewRequest("POST", "/questions", body)
+	req.Header.Set("Content-Type", "multipart/form-data; boundary=boundary")
+	w := httptest.NewRecorder()
+
+	server.mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		bodyBytes, _ := io.ReadAll(w.Body)
+		t.Errorf("Expected 200, got %d: %s", w.Code, string(bodyBytes))
+	}
+
+	// Verify question was created with Memory data (use same questionsDir from above)
+	entries, _ := os.ReadDir(questionsDir)
+	if len(entries) == 0 {
+		t.Fatal("Expected question directory to be created")
+	}
+
+	// Read the created question.json
+	questionFile := filepath.Join(questionsDir, entries[0].Name(), "question.json")
+	data, err := os.ReadFile(questionFile)
+	if err != nil {
+		t.Fatalf("Failed to read question.json: %v", err)
+	}
+
+	var question map[string]interface{}
+	if err := json.Unmarshal(data, &question); err != nil {
+		t.Fatalf("Failed to parse question.json: %v", err)
+	}
+
+	// Verify TYPE is MEMORY
+	if question["TYPE"] != "MEMORY" {
+		t.Errorf("Expected TYPE 'MEMORY', got '%v'", question["TYPE"])
+	}
+
+	// Verify MEMORY_PAIRS exists and has 2 pairs
+	pairs, ok := question["MEMORY_PAIRS"].([]interface{})
+	if !ok {
+		t.Fatal("MEMORY_PAIRS should be an array")
+	}
+	if len(pairs) != 2 {
+		t.Errorf("Expected 2 pairs, got %d", len(pairs))
+	}
+
+	// Verify MEMORY_CONFIG exists
+	config, ok := question["MEMORY_CONFIG"].(map[string]interface{})
+	if !ok {
+		t.Fatal("MEMORY_CONFIG should be an object")
+	}
+	if config["FLIP_DELAY"] != float64(3000) {
+		t.Errorf("Expected FLIP_DELAY 3000, got %v", config["FLIP_DELAY"])
+	}
+}
+
+func TestHTTPServer_MemoryQuestionLoad(t *testing.T) {
+	server, dataDir := setupTestHTTPServer(t)
+
+	// Create a Memory question manually
+	questionsDir := filepath.Join(dataDir, "files", "questions", "1")
+	os.MkdirAll(questionsDir, 0755)
+
+	questionData := map[string]interface{}{
+		"ID":       "1",
+		"QUESTION": "Match capitals",
+		"ANSWER":   "2 paires",
+		"TYPE":     "MEMORY",
+		"POINTS":   "20",
+		"TIME":     "60",
+		"MEMORY_PAIRS": []map[string]interface{}{
+			{
+				"ID": 1,
+				"CARD1": map[string]interface{}{"TEXT": "Paris", "IS_IMAGE": false},
+				"CARD2": map[string]interface{}{"TEXT": "France", "IS_IMAGE": false},
+			},
+			{
+				"ID": 2,
+				"CARD1": map[string]interface{}{"TEXT": "Berlin", "IS_IMAGE": false},
+				"CARD2": map[string]interface{}{"TEXT": "Germany", "IS_IMAGE": false},
+			},
+		},
+		"MEMORY_CONFIG": map[string]interface{}{
+			"FLIP_DELAY":       3000,
+			"POINTS_PER_PAIR":  10,
+			"ERROR_PENALTY":    0,
+			"COMPLETION_BONUS": 0,
+			"USE_TIMER":        true,
+		},
+	}
+	data, _ := json.Marshal(questionData)
+	os.WriteFile(filepath.Join(questionsDir, "question.json"), data, 0644)
+
+	// Request the questions list
+	req := httptest.NewRequest("GET", "/questions", nil)
+	w := httptest.NewRecorder()
+
+	server.mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("Expected 200, got %d", w.Code)
+	}
+
+	var response map[string]interface{}
+	if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
+		t.Fatalf("Failed to parse response: %v", err)
+	}
+
+	// Find the question (keys are like "/files/questions/1")
+	var q map[string]interface{}
+	for key, val := range response {
+		if key != "FSINFO" {
+			q = val.(map[string]interface{})
+			break
+		}
+	}
+	if q == nil {
+		t.Fatal("No question found in response")
+	}
+
+	// Verify TYPE
+	if q["TYPE"] != "MEMORY" {
+		t.Errorf("Expected TYPE 'MEMORY', got '%v'", q["TYPE"])
+	}
+
+	// Verify MEMORY_PAIRS
+	pairs, ok := q["MEMORY_PAIRS"].([]interface{})
+	if !ok {
+		t.Fatal("MEMORY_PAIRS should be an array")
+	}
+	if len(pairs) != 2 {
+		t.Errorf("Expected 2 pairs, got %d", len(pairs))
+	}
+
+	// Verify first pair
+	pair1 := pairs[0].(map[string]interface{})
+	card1 := pair1["CARD1"].(map[string]interface{})
+	if card1["TEXT"] != "Paris" {
+		t.Errorf("Expected Card1 text 'Paris', got '%v'", card1["TEXT"])
 	}
 }

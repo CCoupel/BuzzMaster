@@ -443,6 +443,67 @@ func (h *HTTPServer) handleUploadQuestion(w http.ResponseWriter, r *http.Request
 		}
 	}
 
+	// Handle Memory specific fields
+	if questionType == "MEMORY" {
+		// Parse memory pairs JSON
+		if pairsStr := r.FormValue("memory_pairs"); pairsStr != "" {
+			var pairs []map[string]interface{}
+			if err := json.Unmarshal([]byte(pairsStr), &pairs); err == nil {
+				// Process each pair to handle image uploads
+				for i, pair := range pairs {
+					pairID := int(pair["ID"].(float64))
+
+					// Handle card1 image upload
+					card1FieldName := fmt.Sprintf("memory_card_%d_1", pairID)
+					if file, header, err := r.FormFile(card1FieldName); err == nil {
+						defer file.Close()
+						randomNum := rand.Intn(9000) + 1000
+						fileName := fmt.Sprintf("memory_%d_1_%d%s", pairID, randomNum, filepath.Ext(header.Filename))
+						filePath := filepath.Join(questionsDir, fileName)
+						if dst, err := os.Create(filePath); err == nil {
+							io.Copy(dst, file)
+							dst.Close()
+							// Update pair with image path
+							if card1, ok := pair["CARD1"].(map[string]interface{}); ok {
+								card1["IMAGE"] = "/question/" + id + "/" + fileName
+								card1["IS_IMAGE"] = true
+								pairs[i]["CARD1"] = card1
+							}
+						}
+					}
+
+					// Handle card2 image upload
+					card2FieldName := fmt.Sprintf("memory_card_%d_2", pairID)
+					if file, header, err := r.FormFile(card2FieldName); err == nil {
+						defer file.Close()
+						randomNum := rand.Intn(9000) + 1000
+						fileName := fmt.Sprintf("memory_%d_2_%d%s", pairID, randomNum, filepath.Ext(header.Filename))
+						filePath := filepath.Join(questionsDir, fileName)
+						if dst, err := os.Create(filePath); err == nil {
+							io.Copy(dst, file)
+							dst.Close()
+							// Update pair with image path
+							if card2, ok := pair["CARD2"].(map[string]interface{}); ok {
+								card2["IMAGE"] = "/question/" + id + "/" + fileName
+								card2["IS_IMAGE"] = true
+								pairs[i]["CARD2"] = card2
+							}
+						}
+					}
+				}
+				question["MEMORY_PAIRS"] = pairs
+			}
+		}
+
+		// Parse memory config JSON
+		if configStr := r.FormValue("memory_config"); configStr != "" {
+			var config map[string]interface{}
+			if err := json.Unmarshal([]byte(configStr), &config); err == nil {
+				question["MEMORY_CONFIG"] = config
+			}
+		}
+	}
+
 	// Handle question media upload
 	file, header, err := r.FormFile("file")
 	if err == nil {

@@ -24,12 +24,27 @@ const BUTTON_TO_QCM_COLOR = {
 }
 
 export default function PlayerDisplay() {
-  const { gameState, teams, bumpers } = useGame()
+  const { gameState, teams, bumpers, flipMemoryCard } = useGame()
   const [previousRanking, setPreviousRanking] = useState({})
   const [changedTeams, setChangedTeams] = useState({})
   const [previousPlayerScores, setPreviousPlayerScores] = useState({})
   const [changedPlayers, setChangedPlayers] = useState({})
   const [pointsAnimation, setPointsAnimation] = useState(null) // {name, points, color}
+  const [justMatchedPairs, setJustMatchedPairs] = useState([]) // Track newly matched pairs for animation
+  const [prevMatchedPairs, setPrevMatchedPairs] = useState([]) // Previous matched pairs
+  const [revealedPairs, setRevealedPairs] = useState([]) // Pairs revealed progressively during REVEAL phase
+  const [prevPhase, setPrevPhase] = useState(null) // Track phase changes
+  const [countdownVisibleCards, setCountdownVisibleCards] = useState([]) // Cards progressively revealed during countdown
+  const [cascadeRevealDone, setCascadeRevealDone] = useState(false) // True when all cards are revealed in cascade
+  const [cascadeHideDone, setCascadeHideDone] = useState(false) // True when all cards are hidden after cascade
+  const [cascadeHideStarted, setCascadeHideStarted] = useState(false) // True when cascade hide has been triggered
+  const [localCountdown, setLocalCountdown] = useState(null) // Local countdown that starts after cascade reveal is done
+
+  // Check if admin mode (for pair hints visibility)
+  const isAdminPreview = useMemo(() => {
+    const params = new URLSearchParams(window.location.search)
+    return params.get('admin') === 'true'
+  }, [])
 
   // Sort teams by score for scoreboard with rank calculation
   const sortedTeams = useMemo(() => {
@@ -150,6 +165,179 @@ export default function PlayerDisplay() {
   // Background index is now server-synchronized via gameState.currentBackgroundIndex
   // No local cycling needed - server broadcasts BACKGROUND_CHANGE to all clients
 
+  // Detect newly matched Memory pairs for celebration animation
+  useEffect(() => {
+    const currentMatched = gameState.memoryMatchedPairs || []
+
+    // Find newly matched pairs (in current but not in previous)
+    const newlyMatched = currentMatched.filter(pairId => !prevMatchedPairs.includes(pairId))
+
+    if (newlyMatched.length > 0) {
+      // Wait for flip animation to complete (0.6s) before starting celebration
+      setTimeout(() => {
+        // Add to justMatched for celebration animation
+        setJustMatchedPairs(prev => [...prev, ...newlyMatched])
+
+        // Remove from justMatched after celebration animation completes (0.8s)
+        setTimeout(() => {
+          setJustMatchedPairs(prev => prev.filter(id => !newlyMatched.includes(id)))
+        }, 800)
+      }, 600) // Delay = flip animation duration
+    }
+
+    setPrevMatchedPairs(currentMatched)
+  }, [gameState.memoryMatchedPairs])
+
+  // Reset all Memory local state when entering PREPARE (new game)
+  useEffect(() => {
+    if (gameState.phase === 'PREPARE') {
+      setJustMatchedPairs([])
+      setPrevMatchedPairs([])
+      setRevealedPairs([])
+      setCountdownVisibleCards([])
+      setCascadeRevealDone(false)
+      setCascadeHideDone(false)
+      setCascadeHideStarted(false)
+      setLocalCountdown(null)
+    }
+  }, [gameState.phase])
+
+  // Local countdown timer - starts when cascade reveal is done
+  // Uses MEMORIZE_TIME as the visual countdown (backend accounts for cascade durations)
+  useEffect(() => {
+    const memoryConfig = gameState.question?.MEMORY_CONFIG || {}
+    const memorizeTime = memoryConfig.MEMORIZE_TIME || 5
+
+    // Start local countdown when cascade reveal is done
+    // The countdown is simply MEMORIZE_TIME (backend phase duration includes cascade times)
+    if (cascadeRevealDone && localCountdown === null && gameState.phase === 'COUNTDOWN') {
+      setLocalCountdown(memorizeTime)
+    }
+
+    // Reset when leaving COUNTDOWN
+    if (gameState.phase !== 'COUNTDOWN') {
+      setLocalCountdown(null)
+    }
+  }, [cascadeRevealDone, gameState.phase, gameState.question?.MEMORY_CONFIG, localCountdown])
+
+  // Decrement local countdown every second
+  useEffect(() => {
+    if (localCountdown !== null && localCountdown > 0) {
+      const timer = setTimeout(() => {
+        setLocalCountdown(prev => prev - 1)
+      }, 1000)
+      return () => clearTimeout(timer)
+    }
+  }, [localCountdown])
+
+  // Trigger cascade hide when localCountdown reaches 0
+  useEffect(() => {
+    if (localCountdown === 0 && !cascadeHideStarted && gameState.phase === 'COUNTDOWN') {
+      const isMemoryQuestion = gameState.question?.TYPE === 'MEMORY'
+      const memoryConfig = gameState.question?.MEMORY_CONFIG || {}
+      const showDuringMemorize = memoryConfig.SHOW_DURING_MEMORIZE === undefined || memoryConfig.SHOW_DURING_MEMORIZE === true
+      const pairs = gameState.question?.MEMORY_PAIRS || []
+      const cardCount = pairs.length * 2
+      const STAGGER_DELAY = 200
+
+      if (isMemoryQuestion && showDuringMemorize && cardCount > 0) {
+        setCascadeHideStarted(true)
+        setCascadeHideDone(false)
+        // Hide cards one by one starting from index 0 (remove from beginning)
+        for (let i = 0; i < cardCount; i++) {
+          setTimeout(() => {
+            setCountdownVisibleCards(prev => {
+              const newArr = [...prev]
+              newArr.shift() // Remove first element
+              return newArr
+            })
+            // Mark hide as done when last card starts hiding
+            if (i === cardCount - 1) {
+              setTimeout(() => {
+                setCascadeHideDone(true)
+              }, 600)
+            }
+          }, i * STAGGER_DELAY)
+        }
+      }
+    }
+  }, [localCountdown, cascadeHideStarted, gameState.phase, gameState.question])
+
+  // Progressive reveal of pairs when entering REVEALED phase
+  useEffect(() => {
+    const currentPhase = gameState.phase
+    const pairs = gameState.question?.MEMORY_PAIRS || []
+    const matchedPairs = gameState.memoryMatchedPairs || []
+    const memoryConfig = gameState.question?.MEMORY_CONFIG || {}
+    // Default reveal delay is 0.5s, convert to ms
+    const revealDelayMs = (memoryConfig.REVEAL_DELAY || 0.5) * 1000
+
+    // Detect transition to REVEALED
+    if (currentPhase === 'REVEALED' && prevPhase !== 'REVEALED' && pairs.length > 0) {
+      // Reset revealed pairs
+      setRevealedPairs([])
+
+      // Filter out already matched pairs - they are already visible
+      const pairsToReveal = pairs.filter(pair => !matchedPairs.includes(pair.ID))
+
+      // Reveal unmatched pairs one by one with configurable delay
+      pairsToReveal.forEach((pair, index) => {
+        setTimeout(() => {
+          setRevealedPairs(prev => [...prev, pair.ID])
+        }, index * revealDelayMs)
+      })
+    }
+
+    // Reset when leaving REVEALED
+    if (currentPhase !== 'REVEALED' && prevPhase === 'REVEALED') {
+      setRevealedPairs([])
+    }
+
+    setPrevPhase(currentPhase)
+  }, [gameState.phase, gameState.question?.MEMORY_PAIRS, gameState.question?.MEMORY_CONFIG, gameState.memoryMatchedPairs, prevPhase])
+
+  // Cascading flip animation during COUNTDOWN phase (Memory only)
+  // Cards flip one after another with 200ms stagger (0.33 of 0.6s flip animation)
+  useEffect(() => {
+    const isMemoryQuestion = gameState.question?.TYPE === 'MEMORY'
+    const memoryConfig = gameState.question?.MEMORY_CONFIG || {}
+    const showDuringMemorize = memoryConfig.SHOW_DURING_MEMORIZE === undefined || memoryConfig.SHOW_DURING_MEMORIZE === true
+    const pairs = gameState.question?.MEMORY_PAIRS || []
+    const cardCount = pairs.length * 2
+    const STAGGER_DELAY = 200 // 0.33 of flip animation (0.6s)
+
+    // Entering COUNTDOWN - progressively reveal cards starting from card 1
+    if (gameState.phase === 'COUNTDOWN' && prevPhase !== 'COUNTDOWN' && isMemoryQuestion && showDuringMemorize && cardCount > 0) {
+      setCountdownVisibleCards([])
+      setCascadeRevealDone(false)
+      setCascadeHideDone(false)
+      setCascadeHideStarted(false)
+      // Reveal cards one by one starting from index 0
+      for (let i = 0; i < cardCount; i++) {
+        setTimeout(() => {
+          setCountdownVisibleCards(prev => [...prev, i])
+          // Mark reveal as done when last card starts flipping
+          if (i === cardCount - 1) {
+            // Wait for flip animation to complete (0.6s) before marking as done
+            setTimeout(() => {
+              setCascadeRevealDone(true)
+            }, 600)
+          }
+        }, i * STAGGER_DELAY)
+      }
+    }
+
+    // Note: Cascade hide is now triggered by localCountdown === 0 (see earlier useEffect)
+
+    // Direct exit (not to STARTED) - clear immediately
+    if (prevPhase === 'COUNTDOWN' && gameState.phase !== 'STARTED' && gameState.phase !== 'COUNTDOWN') {
+      setCountdownVisibleCards([])
+      setCascadeRevealDone(false)
+      setCascadeHideDone(false)
+      setCascadeHideStarted(false)
+    }
+  }, [gameState.phase, gameState.question?.TYPE, gameState.question?.MEMORY_CONFIG, gameState.question?.MEMORY_PAIRS, prevPhase])
+
   const triggerCelebration = (color) => {
     const rgb = color || [99, 102, 241]
     const hex = `#${rgb.map(c => c.toString(16).padStart(2, '0')).join('')}`
@@ -175,8 +363,11 @@ export default function PlayerDisplay() {
   const showGameContent = ['STARTED', 'PAUSED', 'STOPPED', 'REVEALED'].includes(gameState.phase)
   const showAnswer = gameState.phase === 'REVEALED'
   const isQcm = gameState.question?.TYPE === 'QCM'
+  const isMemory = gameState.question?.TYPE === 'MEMORY'
   // QCM answers visible from READY through REVEALED (no re-render on transition)
   const showQcmAnswers = ['READY', 'COUNTDOWN', 'STARTED', 'PAUSED', 'STOPPED', 'REVEALED'].includes(gameState.phase)
+  // Memory grid visible from READY (cards face down during countdown) through REVEALED
+  const showMemoryGrid = ['READY', 'COUNTDOWN', 'STARTED', 'PAUSED', 'STOPPED', 'REVEALED'].includes(gameState.phase)
   // QCM answer TEXT visible from COUNTDOWN (READY shows only colored zones with letters)
   const showQcmAnswerText = ['COUNTDOWN', 'STARTED', 'PAUSED', 'STOPPED', 'REVEALED'].includes(gameState.phase)
 
@@ -188,6 +379,57 @@ export default function PlayerDisplay() {
       color: player.teamColor,
     }))
   }, [sortedPlayers])
+
+  // Prepare Memory cards - all cards shuffled (Card1 and Card2 from each pair)
+  const memoryCards = useMemo(() => {
+    const pairs = gameState.question?.MEMORY_PAIRS || []
+    if (pairs.length === 0) return []
+
+    // Create array with all cards, each linked to its pair ID
+    const allCards = []
+    pairs.forEach((pair) => {
+      allCards.push({
+        id: `${pair.ID}-1`,
+        pairId: pair.ID,
+        card: pair.CARD1,
+        cardIndex: 1,
+      })
+      allCards.push({
+        id: `${pair.ID}-2`,
+        pairId: pair.ID,
+        card: pair.CARD2,
+        cardIndex: 2,
+      })
+    })
+
+    // Shuffle using Fisher-Yates with seeded randomness based on question ID
+    // This ensures consistent shuffle for same question across all clients
+    const questionId = gameState.question?.ID || '0'
+    let seed = parseInt(questionId, 10) || 1
+    const shuffled = [...allCards]
+    for (let i = shuffled.length - 1; i > 0; i--) {
+      seed = (seed * 1103515245 + 12345) & 0x7fffffff
+      const j = seed % (i + 1)
+      ;[shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]]
+    }
+    return shuffled
+  }, [gameState.question?.MEMORY_PAIRS, gameState.question?.ID])
+
+  // Calculate grid columns and rows based on card count
+  // Optimized for common configurations: 2x2, 2x3, 3x4, 4x4, 4x5, 4x6
+  const memoryGridCols = useMemo(() => {
+    const cardCount = memoryCards.length
+    if (cardCount <= 4) return 2   // 2x2
+    if (cardCount <= 6) return 3   // 2x3
+    if (cardCount <= 16) return 4  // 4x4 max (changed from 12)
+    if (cardCount <= 20) return 5  // 4x5
+    return 6                       // 4x6
+  }, [memoryCards.length])
+
+  const memoryGridRows = useMemo(() => {
+    const cardCount = memoryCards.length
+    return Math.ceil(cardCount / memoryGridCols)
+  }, [memoryCards.length, memoryGridCols])
 
   // Calculate if we need 2 columns for players (if more than 6 players)
   const useTwoColumns = sortedPlayers.length > 6
@@ -435,7 +677,7 @@ export default function PlayerDisplay() {
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
           >
-            {/* PREPARE State - Fixed "Preparez-vous" */}
+            {/* PREPARE State - Fixed "Preparez-vous" (all question types) */}
             {showPrepare && (
               <motion.div
                 className="prepare-state"
@@ -464,72 +706,120 @@ export default function PlayerDisplay() {
               </motion.div>
             )}
 
-            {/* COUNTDOWN State - Big 3... 2... 1... display (non-QCM) */}
-            {showCountdown && !isQcm && (
-              <motion.div
-                className="countdown-state"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-              >
-                {gameState.question?.CATEGORY && CATEGORIES[gameState.question.CATEGORY] && (
+            {/* COUNTDOWN State - Timer + Big 3... 2... 1... display (non-QCM, non-Memory) */}
+            {showCountdown && !isQcm && !isMemory && (
+              <div className="game-content-zones">
+                {/* Zone 1: Timer */}
+                <div className="zone-timer">
+                  <Timer
+                    currentTime={gameState.timer}
+                    totalTime={gameState.totalTime}
+                    phase={gameState.phase}
+                    size="xl"
+                    showPhase={false}
+                  />
+                </div>
+
+                {/* Zone 2: Empty question placeholder */}
+                <div className="zone-question">
+                  <div className="zone-question-placeholder" />
+                </div>
+
+                {/* Zone 3: Big countdown number */}
+                <div className="zone-media">
                   <motion.div
-                    className="category-display"
-                    style={{ backgroundColor: CATEGORIES[gameState.question.CATEGORY].color }}
-                    initial={{ opacity: 0, y: -20 }}
-                    animate={{ opacity: 1, y: 0 }}
+                    className="countdown-state"
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
                   >
-                    <span className="category-icon">{CATEGORIES[gameState.question.CATEGORY].icon}</span>
-                    <span className="category-label">{CATEGORIES[gameState.question.CATEGORY].label}</span>
+                    {gameState.question?.CATEGORY && CATEGORIES[gameState.question.CATEGORY] && (
+                      <motion.div
+                        className="category-display"
+                        style={{ backgroundColor: CATEGORIES[gameState.question.CATEGORY].color }}
+                        initial={{ opacity: 0, y: -20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                      >
+                        <span className="category-icon">{CATEGORIES[gameState.question.CATEGORY].icon}</span>
+                        <span className="category-label">{CATEGORIES[gameState.question.CATEGORY].label}</span>
+                      </motion.div>
+                    )}
+                    <AnimatePresence mode="wait">
+                      <motion.div
+                        key={gameState.countdownTime}
+                        className="countdown-number"
+                        initial={{ scale: 0.5, opacity: 0 }}
+                        animate={{ scale: 1.2, opacity: 1 }}
+                        exit={{ scale: 1.8, opacity: 0 }}
+                        transition={{ duration: 0.35, ease: 'easeOut' }}
+                      >
+                        {gameState.countdownTime > 0 ? gameState.countdownTime : 'GO!'}
+                      </motion.div>
+                    </AnimatePresence>
                   </motion.div>
-                )}
-                <motion.div
-                  key={gameState.countdownTime}
-                  className="countdown-number"
-                  initial={{ scale: 2, opacity: 0 }}
-                  animate={{ scale: 1, opacity: 1 }}
-                  exit={{ scale: 0.5, opacity: 0 }}
-                  transition={{ duration: 0.3, ease: 'easeOut' }}
-                >
-                  {gameState.countdownTime > 0 ? gameState.countdownTime : 'GO!'}
-                </motion.div>
-              </motion.div>
+                </div>
+
+                {/* Zone 4: Empty answers placeholder */}
+                <div className="zone-answers" />
+              </div>
             )}
 
-            {/* READY State - Non-QCM: centered message */}
-            {showReady && !isQcm && (
-              <motion.div
-                className="ready-state-container"
-                initial={{ opacity: 0, scale: 0.8 }}
-                animate={{ opacity: 1, scale: 1 }}
-              >
-                {gameState.question?.CATEGORY && CATEGORIES[gameState.question.CATEGORY] && (
-                  <motion.div
-                    className="category-display"
-                    style={{ backgroundColor: CATEGORIES[gameState.question.CATEGORY].color }}
-                    initial={{ opacity: 0, y: -20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                  >
-                    <span className="category-icon">{CATEGORIES[gameState.question.CATEGORY].icon}</span>
-                    <span className="category-label">{CATEGORIES[gameState.question.CATEGORY].label}</span>
-                  </motion.div>
-                )}
-                <div className="ready-state">
-                  <motion.span
-                    className="ready-emoji"
-                    animate={{ scale: [1, 1.3, 1] }}
-                    transition={{ duration: 0.4, repeat: Infinity }}
-                  >
-                    ✋
-                  </motion.span>
-                  <motion.span
-                    className="ready-text"
-                    animate={{ opacity: [1, 0.2, 1] }}
-                    transition={{ duration: 0.6, repeat: Infinity }}
-                  >
-                    PREPAREZ-VOUS
-                  </motion.span>
+            {/* READY State - Non-QCM, Non-Memory: Timer + centered message (same layout as QCM) */}
+            {showReady && !isQcm && !isMemory && (
+              <div className="game-content-zones">
+                {/* Zone 1: Timer */}
+                <div className="zone-timer">
+                  <Timer
+                    currentTime={gameState.timer}
+                    totalTime={gameState.totalTime}
+                    phase={gameState.phase}
+                    size="xl"
+                    showPhase={false}
+                  />
                 </div>
-              </motion.div>
+
+                {/* Zone 2: Empty question placeholder */}
+                <div className="zone-question">
+                  <div className="zone-question-placeholder" />
+                </div>
+
+                {/* Zone 3: "PREPAREZ-VOUS" message */}
+                <div className="zone-media">
+                  <motion.div
+                    className="ready-state"
+                    initial={{ opacity: 0, scale: 0.8 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                  >
+                    {gameState.question?.CATEGORY && CATEGORIES[gameState.question.CATEGORY] && (
+                      <motion.div
+                        className="category-display"
+                        style={{ backgroundColor: CATEGORIES[gameState.question.CATEGORY].color }}
+                        initial={{ opacity: 0, y: -20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                      >
+                        <span className="category-icon">{CATEGORIES[gameState.question.CATEGORY].icon}</span>
+                        <span className="category-label">{CATEGORIES[gameState.question.CATEGORY].label}</span>
+                      </motion.div>
+                    )}
+                    <motion.span
+                      className="ready-emoji"
+                      animate={{ scale: [1, 1.3, 1] }}
+                      transition={{ duration: 0.4, repeat: Infinity }}
+                    >
+                      ✋
+                    </motion.span>
+                    <motion.span
+                      className="ready-text"
+                      animate={{ opacity: [1, 0.2, 1] }}
+                      transition={{ duration: 0.6, repeat: Infinity }}
+                    >
+                      PREPAREZ-VOUS
+                    </motion.span>
+                  </motion.div>
+                </div>
+
+                {/* Zone 4: Empty answers placeholder */}
+                <div className="zone-answers" />
+              </div>
             )}
 
             {/* QCM Game Content - unified block for READY through REVEALED (no flash on transition) */}
@@ -570,16 +860,18 @@ export default function PlayerDisplay() {
                       initial={{ opacity: 0 }}
                       animate={{ opacity: 1 }}
                     >
-                      <motion.div
-                        key={gameState.countdownTime}
-                        className="countdown-number"
-                        initial={{ scale: 2, opacity: 0 }}
-                        animate={{ scale: 1, opacity: 1 }}
-                        exit={{ scale: 0.5, opacity: 0 }}
-                        transition={{ duration: 0.3, ease: 'easeOut' }}
-                      >
-                        {gameState.countdownTime > 0 ? gameState.countdownTime : 'GO!'}
-                      </motion.div>
+                      <AnimatePresence mode="wait">
+                        <motion.div
+                          key={gameState.countdownTime}
+                          className="countdown-number"
+                          initial={{ scale: 0.5, opacity: 0 }}
+                          animate={{ scale: 1.2, opacity: 1 }}
+                          exit={{ scale: 1.8, opacity: 0 }}
+                          transition={{ duration: 0.35, ease: 'easeOut' }}
+                        >
+                          {gameState.countdownTime > 0 ? gameState.countdownTime : 'GO!'}
+                        </motion.div>
+                      </AnimatePresence>
                     </motion.div>
                   ) : showReady ? (
                     <motion.div
@@ -719,8 +1011,181 @@ export default function PlayerDisplay() {
               </div>
             )}
 
-            {/* Non-QCM Game Content - 4 vertical zones: Timer, Question, Media, Answers */}
-            {!isQcm && showGameContent && gameState.question && (
+            {/* MEMORY Game Content - unified block for READY through REVEALED */}
+            {isMemory && showMemoryGrid && gameState.question && (
+              <div className="game-content-zones memory-game">
+                {/* Zone 1: Timer - only show during STARTED when cascade hide is done */}
+                <div className="zone-timer">
+                  {/* During STARTED: only show timer after cascade hide is complete */}
+                  {gameState.phase === 'STARTED' ? (
+                    cascadeHideDone ? (
+                      <Timer
+                        currentTime={gameState.timer}
+                        totalTime={gameState.totalTime}
+                        phase={gameState.phase}
+                        size="xl"
+                        showPhase={false}
+                      />
+                    ) : (
+                      <motion.div
+                        className="memory-hiding-message"
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                      >
+                        <span className="hiding-text">C'EST PARTI !</span>
+                      </motion.div>
+                    )
+                  ) : (
+                    <Timer
+                      currentTime={gameState.timer}
+                      totalTime={gameState.totalTime}
+                      phase={gameState.phase}
+                      size="xl"
+                      showPhase={false}
+                    />
+                  )}
+                </div>
+
+                {/* Zone 2: Question, MEMORISEZ during COUNTDOWN, or PREPAREZ-VOUS during READY */}
+                <div className="zone-question">
+                  {showGameContent ? (
+                    /* During STARTED: only show question after cascade hide is done */
+                    (gameState.phase === 'STARTED' && !cascadeHideDone) ? (
+                      <div className="zone-question-placeholder" />
+                    ) : (
+                      <motion.p
+                        className="question-text"
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: 0.1 }}
+                      >
+                        {gameState.question.QUESTION}
+                      </motion.p>
+                    )
+                  ) : showCountdown ? (
+                    <motion.div
+                      className="memory-memorize-message"
+                      initial={{ opacity: 0, scale: 0.9 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                    >
+                      {/* Only show countdown number after cascade reveal is done, use local countdown */}
+                      {cascadeRevealDone && localCountdown !== null ? (
+                        <>
+                          <span className="memorize-countdown">{localCountdown > 0 ? localCountdown : 'GO!'}</span>
+                          <span className="memorize-text">MÉMORISEZ !</span>
+                        </>
+                      ) : (
+                        <span className="memorize-text">MÉMORISEZ !</span>
+                      )}
+                    </motion.div>
+                  ) : (
+                    <motion.div
+                      className="memory-prepare-message"
+                      initial={{ opacity: 0, scale: 0.9 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                    >
+                      <span className="prepare-emoji">🔔</span>
+                      <span className="prepare-text">PREPAREZ-VOUS</span>
+                    </motion.div>
+                  )}
+                </div>
+
+                {/* Zone 3: Memory Grid - cards always visible, no overlay */}
+                <div className="zone-media zone-memory-grid">
+                  <div
+                    className="memory-grid"
+                    style={{ '--memory-cols': memoryGridCols, '--memory-rows': memoryGridRows }}
+                  >
+                    {memoryCards.map((cardData, index) => {
+                      const cardLetter = String.fromCharCode(65 + index)
+                      const memoryConfig = gameState.question?.MEMORY_CONFIG || {}
+                      // Default to true if SHOW_DURING_MEMORIZE is not set (undefined) or explicitly true
+                      const showDuringMemorize = memoryConfig.SHOW_DURING_MEMORIZE === undefined || memoryConfig.SHOW_DURING_MEMORIZE === true
+
+                      // Phases before gameplay starts - hide all previous game state
+                      const isPreGamePhase = ['PREPARE', 'READY', 'COUNTDOWN'].includes(gameState.phase)
+                      // Phases during/after gameplay - show matched pairs
+                      const isGameplayPhase = ['STARTED', 'PAUSED', 'STOPPED', 'REVEALED'].includes(gameState.phase)
+
+                      // Cascading memorization: card visible during COUNTDOWN if its index is in countdownVisibleCards
+                      const isInCountdownCascade = gameState.phase === 'COUNTDOWN' && showDuringMemorize && countdownVisibleCards.includes(index)
+                      // Cards still hiding in cascade after COUNTDOWN ends (going to STARTED)
+                      const isStillVisibleInCascade = gameState.phase === 'STARTED' && countdownVisibleCards.includes(index)
+                      // REVEALED: progressively reveal pairs (using revealedPairs state)
+                      const isProgressivelyRevealed = gameState.phase === 'REVEALED' && revealedPairs.includes(cardData.pairId)
+                      const isMatched = gameState.memoryMatchedPairs?.includes(cardData.pairId)
+                      const isPlayerFlipped = gameState.memoryFlippedCards?.includes(cardData.id)
+
+                      // Cards are flipped (face up) during: cascading COUNTDOWN reveal, still hiding after countdown, progressive REVEAL, matched pairs, or player clicked
+                      const isFlipped = isInCountdownCascade || isStillVisibleInCascade || (isGameplayPhase && (isProgressivelyRevealed || isMatched || isPlayerFlipped))
+                      const isJustMatched = justMatchedPairs.includes(cardData.pairId)
+                      const canClick = gameState.phase === 'STARTED' && !isMatched && !isFlipped
+                      // Only show matched styling during gameplay phases (not before game starts)
+                      const showMatchedStyle = isGameplayPhase && isMatched
+                      return (
+                        <motion.div
+                          key={cardData.id}
+                          className={`memory-card ${isFlipped ? 'flipped' : ''} ${showMatchedStyle ? 'matched' : ''} ${isJustMatched ? 'just-matched' : ''}`}
+                          initial={{ opacity: 0, scale: 0.8 }}
+                          animate={{ opacity: 1, scale: 1 }}
+                          transition={{ delay: index * 0.05, duration: 0.3 }}
+                          onClick={() => canClick && flipMemoryCard(cardData.id)}
+                          style={{ cursor: canClick ? 'pointer' : 'default' }}
+                        >
+                          <div className="memory-card-inner">
+                            <div className="memory-card-front">
+                              {cardData.card.IS_IMAGE && cardData.card.IMAGE ? (
+                                <img src={cardData.card.IMAGE} alt="" className="memory-card-image" />
+                              ) : (
+                                <span className="memory-card-text">{cardData.card.TEXT}</span>
+                              )}
+                            </div>
+                            <div className="memory-card-back">
+                              <span className="memory-card-letter">{cardLetter}</span>
+                              {isAdminPreview && <span className="memory-card-pair-hint">{cardData.pairId}</span>}
+                            </div>
+                          </div>
+                        </motion.div>
+                      )
+                    })}
+                  </div>
+                </div>
+
+                {/* Zone 4: Memory stats during gameplay, answer during reveal */}
+                <div className="zone-answers">
+                  {/* Memory stats during STARTED/PAUSED */}
+                  {(gameState.phase === 'STARTED' || gameState.phase === 'PAUSED') && (
+                    <div className="memory-stats">
+                      <div className="memory-stat">
+                        <span className="memory-stat-label">Paires</span>
+                        <span className="memory-stat-value">
+                          {gameState.memoryMatchedPairs?.length || 0} / {gameState.question?.MEMORY_PAIRS?.length || 0}
+                        </span>
+                      </div>
+                      {(gameState.memoryErrors > 0 || gameState.question?.MEMORY_CONFIG?.ERROR_PENALTY > 0) && (
+                        <div className="memory-stat errors">
+                          <span className="memory-stat-label">Erreurs</span>
+                          <span className="memory-stat-value">{gameState.memoryErrors || 0}</span>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  {/* Answer during REVEALED */}
+                  {showAnswer && (
+                    <motion.div
+                      className="answer-container memory-answer"
+                      initial={{ opacity: 0, scale: 0.8, y: 20 }}
+                      animate={{ opacity: 1, scale: 1, y: 0 }}
+                    >
+                      <p className="answer-text">{gameState.question.ANSWER}</p>
+                    </motion.div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Non-QCM/Non-Memory Game Content - 4 vertical zones: Timer, Question, Media, Answers */}
+            {!isQcm && !isMemory && showGameContent && gameState.question && (
               <div className="game-content-zones">
                 {/* Zone 1: Timer */}
                 <div className="zone-timer">

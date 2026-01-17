@@ -3,6 +3,71 @@
 Historique des versions du projet BuzzControl.
 
 
+## [2.33.0] - Memory Game Complete
+
+### Ajouts
+- **Animation cascade pour Memory** : Les cartes se retournent une par une pendant la phase COUNTDOWN
+  - Cascade reveal : cartes se révèlent avec 200ms de délai entre chaque (1→2→3→...→N)
+  - Décompte visuel : affiché seulement quand toutes les cartes sont révélées (5...4...3...2...1)
+  - Cascade hide : cartes se cachent immédiatement quand le décompte atteint 0
+  - Transition automatique vers STARTED quand toutes les cartes sont cachées
+
+- **Synchronisation backend/frontend** : Le backend calcule la durée totale de la phase COUNTDOWN
+  - Durée = cascade_reveal + MEMORIZE_TIME + cascade_hide
+  - Le frontend gère les animations localement avec des états dédiés
+
+- **Calcul des points Memory** : Score dynamique basé sur les paires trouvées et erreurs
+  - Formule : `Score = (paires_trouvées × POINTS_PER_PAIR) + COMPLETION_BONUS - (erreurs × ERROR_PENALTY)`
+  - Backend : `CalculateMemoryScore()` dans engine.go
+  - Frontend : `memoryScore` useMemo dans GamePage.jsx
+  - Score minimum = 0 (pas de score négatif)
+
+- **Interface admin Memory** :
+  - Zone Points : Affiche le score total calculé (readonly) avec tooltip détaillé
+  - Zone Affichage TV : Compteur paires (X/Y) et erreurs
+  - Attribution des points : Clic sur équipe/joueur attribue le score calculé
+
+- **QuestionCard Memory** :
+  - Points affichés = total maximum possible (paires × points_par_paire + bonus)
+  - Zone média remplacée par 2 slots de configuration :
+    - Slot gauche : `+X / paire` (gradient violet)
+    - Slot droit : `-Y / erreur` (rouge si pénalité, gris sinon)
+  - Badge "MEMORY" violet/rose
+
+### Configuration
+- **MEMORY_CONFIG** : Toutes les durées sont maintenant en secondes (plus de mix ms/s)
+  - `FLIP_DELAY` : 3s (avant: 3000ms)
+  - `REVEAL_DELAY` : 0.5s (avant: 500ms)
+  - `MEMORIZE_TIME` : 5s (temps du décompte visuel)
+  - `POINTS_PER_PAIR` : 10 (points par paire trouvée)
+  - `ERROR_PENALTY` : 0 (pénalité par erreur)
+  - `COMPLETION_BONUS` : 0 (bonus si toutes les paires trouvées)
+
+### États frontend (PlayerDisplay.jsx)
+- `cascadeRevealDone` : true quand toutes les cartes sont révélées
+- `localCountdown` : décompte indépendant du backend, démarre après cascade reveal
+- `cascadeHideStarted` : true quand la cascade hide est déclenchée (localCountdown === 0)
+- `cascadeHideDone` : true quand toutes les cartes sont cachées
+
+### Constantes d'animation
+```javascript
+STAGGER_DELAY = 200ms    // délai entre chaque carte
+FLIP_ANIMATION = 600ms   // durée de l'animation flip
+```
+
+### Fichiers modifiés
+- `engine.go` : Calcul de la durée totale COUNTDOWN + `CalculateMemoryScore()`
+- `models.go` : FlipDelay et RevealDelay en float64 (secondes)
+- `PlayerDisplay.jsx` : États et effets pour les animations cascade
+- `GamePage.jsx` : `memoryScore` useMemo, attribution des points Memory
+- `GamePage.css` : Style `.memory-score-input`, `.memory-admin-stats`
+- `QuestionCard.jsx` : Affichage config Memory au lieu des images
+- `QuestionCard.css` : Styles `.qcard-memory-config-slot`
+- `QuestionsPage.jsx` : UI config en secondes
+- `CLAUDE.md` : Documentation complète Memory
+
+---
+
 ## [2.32.0] - CSS Specificity & Layout Fixes
 
 ### Corrections

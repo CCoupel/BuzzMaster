@@ -263,6 +263,100 @@ The restore endpoint now automatically detects what's in the TAR archive and res
 }
 ```
 
+### Question (MEMORY type) - v2.33.0
+```json
+{
+  "ID": "10",
+  "QUESTION": "Associez les pays à leurs capitales",
+  "TYPE": "MEMORY",
+  "CATEGORY": "GEOGRAPHY",
+  "TIME": 120,
+  "POINTS_TARGET": "TEAM",
+  "MEMORY_PAIRS": [
+    {"ID": 1, "CARD1": {"TEXT": "France", "IS_IMAGE": false}, "CARD2": {"TEXT": "Paris", "IS_IMAGE": false}},
+    {"ID": 2, "CARD1": {"IMAGE": "/question/10/memory_2_1_4521.jpg", "IS_IMAGE": true}, "CARD2": {"TEXT": "Berlin", "IS_IMAGE": false}}
+  ],
+  "MEMORY_CONFIG": {
+    "FLIP_DELAY": 3000,
+    "POINTS_PER_PAIR": 10,
+    "ERROR_PENALTY": 0,
+    "COMPLETION_BONUS": 20,
+    "USE_TIMER": true
+  },
+  "ORDER": 10
+}
+```
+
+**Champs MEMORY :**
+- `TYPE`: `"MEMORY"` pour les jeux de paires
+- `MEMORY_PAIRS`: Tableau de paires `[{ID, CARD1, CARD2}]`
+  - Chaque carte : `TEXT` (string) OU `IMAGE` (chemin), avec `IS_IMAGE` (bool)
+- `MEMORY_CONFIG`: Configuration du gameplay (toutes les durées en secondes)
+  - `FLIP_DELAY`: Délai avant retournement si non-match (s, défaut: 3)
+  - `REVEAL_DELAY`: Délai entre chaque paire révélée en fin de jeu (s, défaut: 0.5)
+  - `POINTS_PER_PAIR`: Points par paire trouvée (défaut: 10)
+  - `ERROR_PENALTY`: Pénalité par erreur (défaut: 0)
+  - `COMPLETION_BONUS`: Bonus si toutes trouvées (défaut: 0)
+  - `USE_TIMER`: true = timer global, false = illimité
+  - `MEMORIZE_TIME`: Temps de mémorisation affiché (s, défaut: 5)
+  - `SHOW_DURING_MEMORIZE`: Afficher les cartes pendant la mémorisation (défaut: true)
+
+**Calcul des points :**
+```
+Score = (paires_trouvées × POINTS_PER_PAIR) + COMPLETION_BONUS - (erreurs × ERROR_PENALTY)
+```
+
+**Fichiers implémentés (Phase 1 & 2) :**
+- `server-go/internal/game/models.go` : Structs MemoryCard, MemoryPair, MemoryConfig
+- `server-go/internal/server/http.go` : Parsing MEMORY dans POST /questions
+- `server-go/web/src/pages/QuestionsPage.jsx` : UI éditeur de paires + config
+- `server-go/web/src/pages/QuestionsPage.css` : Styles section Memory
+- `server-go/web/src/pages/PlayerDisplay.jsx` : Affichage grille Memory sur TV
+- `server-go/web/src/pages/PlayerDisplay.css` : Styles grille + animations flip
+
+**Affichage TV (PlayerDisplay) :**
+- Grille responsive avec Container Queries (cqw, cqh, cqmin)
+- Colonnes automatiques selon nombre de cartes (2-6 colonnes)
+- Animation flip 3D CSS sur les cartes
+- États visuels : dos (violet), révélée, matched (vert)
+
+**Phase COUNTDOWN - Cascade Timing (v2.33.0) :**
+
+Le jeu Memory utilise une phase COUNTDOWN avec animations en cascade synchronisées entre backend et frontend.
+
+| Étape | Description | Durée |
+|-------|-------------|-------|
+| 1. Cascade reveal | Cartes se retournent une par une (200ms entre chaque) | `(cardCount × 200ms + 600ms)` |
+| 2. Décompte visuel | Affichage 5...4...3...2...1 (MEMORIZE_TIME) | `MEMORIZE_TIME` secondes |
+| 3. Cascade hide | Cartes se cachent une par une (200ms entre chaque) | `(cardCount × 200ms + 600ms)` |
+| 4. Transition | Backend passe en STARTED, jeu commence | - |
+
+**Synchronisation Backend/Frontend :**
+
+```
+Backend COUNTDOWN duration = cascade_reveal + MEMORIZE_TIME + cascade_hide
+                           = ceil((cardCount × 200 + 600) / 1000) × 2 + MEMORIZE_TIME
+```
+
+- **Backend** (`engine.go:Start()`) : Calcule la durée totale incluant les cascades
+- **Frontend** (`PlayerDisplay.jsx`) : Gère les animations localement
+  - `cascadeRevealDone` : true quand toutes les cartes sont révélées
+  - `localCountdown` : décompte local (commence quand cascadeRevealDone)
+  - `cascadeHideStarted` : true quand la cascade hide est déclenchée (localCountdown === 0)
+  - `cascadeHideDone` : true quand toutes les cartes sont cachées
+
+**Exemple avec 4 paires (8 cartes), MEMORIZE_TIME = 5s :**
+- Cascade reveal : ceil((8 × 200 + 600) / 1000) = ceil(2.2) = 3s
+- Décompte visuel : 5s
+- Cascade hide : 3s
+- **Total phase COUNTDOWN : 11 secondes**
+
+**Constantes d'animation :**
+```javascript
+const STAGGER_DELAY = 200      // ms entre chaque carte
+const FLIP_ANIMATION = 600     // ms durée animation flip
+```
+
 **Champs Media:**
 - `MEDIA`: Image de la question (affichée pendant STARTED/PAUSED)
 - `MEDIA_ANSWER`: Image de la réponse (remplace MEDIA pendant REVEALED)

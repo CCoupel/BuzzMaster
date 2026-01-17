@@ -73,6 +73,7 @@ type QuestionType string
 const (
 	QuestionTypeNormal QuestionType = "NORMAL"
 	QuestionTypeQCM    QuestionType = "QCM"
+	QuestionTypeMemory QuestionType = "MEMORY"
 )
 
 // PointsTarget represents who receives points for a question
@@ -106,16 +107,44 @@ type QCMAnswers struct {
 	Blue   string `json:"BLUE"`
 }
 
+// MemoryCard represents a card in the Memory game (text OR image)
+type MemoryCard struct {
+	Text    string `json:"TEXT,omitempty"`
+	Image   string `json:"IMAGE,omitempty"`
+	IsImage bool   `json:"IS_IMAGE"`
+}
+
+// MemoryPair represents a pair of cards to match in the Memory game
+type MemoryPair struct {
+	ID    int        `json:"ID"`
+	Card1 MemoryCard `json:"CARD1"`
+	Card2 MemoryCard `json:"CARD2"`
+}
+
+// MemoryConfig holds configuration for the Memory game
+type MemoryConfig struct {
+	FlipDelay          float64 `json:"FLIP_DELAY"`           // seconds before card flips back (default: 3)
+	PointsPerPair      int     `json:"POINTS_PER_PAIR"`      // points per found pair (default: 10)
+	ErrorPenalty       int     `json:"ERROR_PENALTY"`        // penalty per error (default: 0)
+	CompletionBonus    int     `json:"COMPLETION_BONUS"`     // bonus if all pairs found (default: 0)
+	UseTimer           bool    `json:"USE_TIMER"`            // true = global timer, false = unlimited
+	MemorizeTime       int     `json:"MEMORIZE_TIME"`        // seconds for memorization countdown (default: 5)
+	ShowDuringMemorize bool    `json:"SHOW_DURING_MEMORIZE"` // show cards during memorization countdown (default: true)
+	RevealDelay        float64 `json:"REVEAL_DELAY"`         // seconds between each pair reveal at end (default: 0.5)
+}
+
 // Question represents a quiz question
 type Question struct {
 	ID           string           `json:"ID"`
 	Question     string           `json:"QUESTION"`
 	Answer       string           `json:"ANSWER"`                  // For normal questions
-	Type         QuestionType     `json:"TYPE,omitempty"`          // "NORMAL" or "QCM" (default NORMAL)
+	Type         QuestionType     `json:"TYPE,omitempty"`          // "NORMAL", "QCM", or "MEMORY" (default NORMAL)
 	Category     QuestionCategory `json:"CATEGORY,omitempty"`      // Question category
 	PointsTarget PointsTarget     `json:"POINTS_TARGET,omitempty"` // "PLAYER" or "TEAM" (default based on type)
 	QCMAnswers   *QCMAnswers      `json:"QCM_ANSWERS,omitempty"`   // For QCM questions
 	QCMCorrect   string           `json:"QCM_CORRECT,omitempty"`   // "RED", "GREEN", "YELLOW", "BLUE"
+	MemoryPairs  []MemoryPair     `json:"MEMORY_PAIRS,omitempty"`  // For Memory questions
+	MemoryConfig *MemoryConfig    `json:"MEMORY_CONFIG,omitempty"` // Memory game configuration
 	Points       string           `json:"POINTS"`                  // String to match JSON format
 	Time         string           `json:"TIME"`                    // String to match JSON format
 	Order        int              `json:"ORDER,omitempty"`         // Display order (for drag and drop)
@@ -141,7 +170,10 @@ type GameState struct {
 	Question               *Question    `json:"QUESTION,omitempty"`
 	Page                   string       `json:"REMOTE,omitempty"`
 	Backgrounds            []Background `json:"backgrounds,omitempty"`
-	CurrentBackgroundIndex int          `json:"CURRENT_BACKGROUND_INDEX"` // Server-synchronized background index
+	CurrentBackgroundIndex int          `json:"CURRENT_BACKGROUND_INDEX"`       // Server-synchronized background index
+	MemoryFlippedCards     []string     `json:"MEMORY_FLIPPED_CARDS,omitempty"` // IDs of currently flipped Memory cards (max 2)
+	MemoryMatchedPairs     []int        `json:"MEMORY_MATCHED_PAIRS,omitempty"` // IDs of matched pairs (permanent)
+	MemoryErrors           int          `json:"MEMORY_ERRORS,omitempty"`        // Number of failed match attempts
 }
 
 // TeamsAndBumpers holds all teams and bumpers data

@@ -6,8 +6,8 @@ import (
 )
 
 func TestGamePhase_Values(t *testing.T) {
-	phases := []GamePhase{PhaseStop, PhasePrepare, PhaseReady, PhaseStart, PhasePause}
-	expected := []string{"STOP", "PREPARE", "READY", "START", "PAUSE"}
+	phases := []GamePhase{PhaseStopped, PhasePrepare, PhaseReady, PhaseStarted, PhasePaused}
+	expected := []string{"STOPPED", "PREPARE", "READY", "STARTED", "PAUSED"}
 
 	for i, phase := range phases {
 		if string(phase) != expected[i] {
@@ -102,8 +102,8 @@ func TestQuestion_JSONSerialization(t *testing.T) {
 		ID:       "1",
 		Question: "What is 2+2?",
 		Answer:   "4",
-		Points:   10,
-		Time:     30,
+		Points:   "10",
+		Time:     "30",
 		Media:    "/question/1/image.jpg",
 		Status:   StatusAvailable,
 	}
@@ -133,7 +133,7 @@ func TestQuestion_JSONSerialization(t *testing.T) {
 
 func TestGameState_JSONSerialization(t *testing.T) {
 	state := &GameState{
-		Phase:       PhaseStart,
+		Phase:       PhaseStarted,
 		Delay:       30,
 		CurrentTime: 25,
 		Question:    &Question{ID: "1"},
@@ -150,7 +150,7 @@ func TestGameState_JSONSerialization(t *testing.T) {
 		t.Fatalf("Unmarshal failed: %v", err)
 	}
 
-	if decoded.Phase != PhaseStart {
+	if decoded.Phase != PhaseStarted {
 		t.Errorf("Phase mismatch: %s", decoded.Phase)
 	}
 
@@ -217,7 +217,7 @@ func TestTeamsAndBumpers_JSONSerialization(t *testing.T) {
 func TestGameData_ToJSON(t *testing.T) {
 	gameData := &GameData{
 		Game: &GameState{
-			Phase:       PhaseStart,
+			Phase:       PhaseStarted,
 			CurrentTime: 20,
 		},
 		Teams: map[string]*Team{
@@ -254,7 +254,7 @@ func TestGameData_ToJSON(t *testing.T) {
 func TestFullGameState_ToJSON(t *testing.T) {
 	fullState := &FullGameState{
 		GameState: GameState{
-			Phase: PhaseStart,
+			Phase: PhaseStarted,
 			Delay: 30,
 		},
 		Teams: map[string]*Team{
@@ -305,5 +305,252 @@ func TestTeam_OmitEmpty(t *testing.T) {
 	// Time of 0 should be omitted (omitempty)
 	if _, ok := decoded["TIME"]; ok {
 		t.Error("TIME should be omitted when 0")
+	}
+}
+
+// ========================================
+// Memory Game Tests - Phase 1
+// ========================================
+
+func TestQuestionType_MemoryConstant(t *testing.T) {
+	if string(QuestionTypeMemory) != "MEMORY" {
+		t.Errorf("Expected QuestionTypeMemory to be 'MEMORY', got %s", QuestionTypeMemory)
+	}
+}
+
+func TestMemoryCard_TextSerialization(t *testing.T) {
+	card := MemoryCard{
+		Text:    "Paris",
+		IsImage: false,
+	}
+
+	data, err := json.Marshal(card)
+	if err != nil {
+		t.Fatalf("Marshal failed: %v", err)
+	}
+
+	var decoded MemoryCard
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		t.Fatalf("Unmarshal failed: %v", err)
+	}
+
+	if decoded.Text != "Paris" {
+		t.Errorf("Text mismatch: expected 'Paris', got '%s'", decoded.Text)
+	}
+	if decoded.IsImage != false {
+		t.Error("IsImage should be false for text card")
+	}
+}
+
+func TestMemoryCard_ImageSerialization(t *testing.T) {
+	card := MemoryCard{
+		Image:   "/question/1/memory_1_1_4521.jpg",
+		IsImage: true,
+	}
+
+	data, err := json.Marshal(card)
+	if err != nil {
+		t.Fatalf("Marshal failed: %v", err)
+	}
+
+	var decoded MemoryCard
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		t.Fatalf("Unmarshal failed: %v", err)
+	}
+
+	if decoded.Image != "/question/1/memory_1_1_4521.jpg" {
+		t.Errorf("Image path mismatch: got '%s'", decoded.Image)
+	}
+	if decoded.IsImage != true {
+		t.Error("IsImage should be true for image card")
+	}
+}
+
+func TestMemoryPair_JSONSerialization(t *testing.T) {
+	pair := MemoryPair{
+		ID: 1,
+		Card1: MemoryCard{
+			Text:    "Paris",
+			IsImage: false,
+		},
+		Card2: MemoryCard{
+			Text:    "France",
+			IsImage: false,
+		},
+	}
+
+	data, err := json.Marshal(pair)
+	if err != nil {
+		t.Fatalf("Marshal failed: %v", err)
+	}
+
+	var decoded MemoryPair
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		t.Fatalf("Unmarshal failed: %v", err)
+	}
+
+	if decoded.ID != 1 {
+		t.Errorf("ID mismatch: expected 1, got %d", decoded.ID)
+	}
+	if decoded.Card1.Text != "Paris" {
+		t.Errorf("Card1 text mismatch")
+	}
+	if decoded.Card2.Text != "France" {
+		t.Errorf("Card2 text mismatch")
+	}
+}
+
+func TestMemoryConfig_JSONSerialization(t *testing.T) {
+	config := MemoryConfig{
+		FlipDelay:       3,
+		PointsPerPair:   10,
+		ErrorPenalty:    5,
+		CompletionBonus: 50,
+		UseTimer:        true,
+	}
+
+	data, err := json.Marshal(config)
+	if err != nil {
+		t.Fatalf("Marshal failed: %v", err)
+	}
+
+	var decoded MemoryConfig
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		t.Fatalf("Unmarshal failed: %v", err)
+	}
+
+	if decoded.FlipDelay != 3 {
+		t.Errorf("FlipDelay mismatch: expected 3, got %v", decoded.FlipDelay)
+	}
+	if decoded.PointsPerPair != 10 {
+		t.Errorf("PointsPerPair mismatch: expected 10, got %d", decoded.PointsPerPair)
+	}
+	if decoded.ErrorPenalty != 5 {
+		t.Errorf("ErrorPenalty mismatch: expected 5, got %d", decoded.ErrorPenalty)
+	}
+	if decoded.CompletionBonus != 50 {
+		t.Errorf("CompletionBonus mismatch: expected 50, got %d", decoded.CompletionBonus)
+	}
+	if decoded.UseTimer != true {
+		t.Error("UseTimer should be true")
+	}
+}
+
+func TestMemoryConfig_UseTimerFalse(t *testing.T) {
+	config := MemoryConfig{
+		FlipDelay:       3,
+		PointsPerPair:   10,
+		ErrorPenalty:    0,
+		CompletionBonus: 0,
+		UseTimer:        false,
+	}
+
+	data, err := json.Marshal(config)
+	if err != nil {
+		t.Fatalf("Marshal failed: %v", err)
+	}
+
+	var decoded MemoryConfig
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		t.Fatalf("Unmarshal failed: %v", err)
+	}
+
+	if decoded.UseTimer != false {
+		t.Error("UseTimer should be false")
+	}
+}
+
+func TestQuestion_MemoryType_JSONSerialization(t *testing.T) {
+	question := &Question{
+		ID:       "5",
+		Question: "Match capitals with countries",
+		Answer:   "3 paires",
+		Type:     QuestionTypeMemory,
+		Points:   "30",
+		Time:     "60",
+		MemoryPairs: []MemoryPair{
+			{
+				ID:    1,
+				Card1: MemoryCard{Text: "Paris", IsImage: false},
+				Card2: MemoryCard{Text: "France", IsImage: false},
+			},
+			{
+				ID:    2,
+				Card1: MemoryCard{Text: "Berlin", IsImage: false},
+				Card2: MemoryCard{Text: "Germany", IsImage: false},
+			},
+			{
+				ID:    3,
+				Card1: MemoryCard{Image: "/question/5/memory_3_1_1234.jpg", IsImage: true},
+				Card2: MemoryCard{Text: "Tour Eiffel", IsImage: false},
+			},
+		},
+		MemoryConfig: &MemoryConfig{
+			FlipDelay:       3,
+			PointsPerPair:   10,
+			ErrorPenalty:    0,
+			CompletionBonus: 0,
+			UseTimer:        true,
+		},
+	}
+
+	data, err := json.Marshal(question)
+	if err != nil {
+		t.Fatalf("Marshal failed: %v", err)
+	}
+
+	var decoded Question
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		t.Fatalf("Unmarshal failed: %v", err)
+	}
+
+	if decoded.Type != QuestionTypeMemory {
+		t.Errorf("Type mismatch: expected MEMORY, got %s", decoded.Type)
+	}
+	if len(decoded.MemoryPairs) != 3 {
+		t.Errorf("Expected 3 pairs, got %d", len(decoded.MemoryPairs))
+	}
+	if decoded.MemoryConfig == nil {
+		t.Fatal("MemoryConfig should not be nil")
+	}
+	if decoded.MemoryConfig.FlipDelay != 3 {
+		t.Errorf("FlipDelay mismatch in decoded question")
+	}
+
+	// Verify pair 3 has image card
+	if !decoded.MemoryPairs[2].Card1.IsImage {
+		t.Error("Pair 3 Card1 should be an image")
+	}
+	if decoded.MemoryPairs[2].Card1.Image != "/question/5/memory_3_1_1234.jpg" {
+		t.Error("Pair 3 Card1 image path mismatch")
+	}
+}
+
+func TestQuestion_MemoryOmitEmpty(t *testing.T) {
+	// NORMAL question should not have MEMORY_PAIRS or MEMORY_CONFIG
+	question := &Question{
+		ID:       "1",
+		Question: "Normal question",
+		Answer:   "Answer",
+		Type:     QuestionTypeNormal,
+		Points:   "10",
+		Time:     "30",
+	}
+
+	data, err := json.Marshal(question)
+	if err != nil {
+		t.Fatalf("Marshal failed: %v", err)
+	}
+
+	var decoded map[string]interface{}
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		t.Fatalf("Unmarshal failed: %v", err)
+	}
+
+	if _, ok := decoded["MEMORY_PAIRS"]; ok {
+		t.Error("MEMORY_PAIRS should be omitted for NORMAL question")
+	}
+	if _, ok := decoded["MEMORY_CONFIG"]; ok {
+		t.Error("MEMORY_CONFIG should be omitted for NORMAL question")
 	}
 }

@@ -9,8 +9,8 @@ import (
 func TestNewEngine(t *testing.T) {
 	e := NewEngine()
 
-	if e.GetPhase() != PhaseStop {
-		t.Errorf("Expected initial phase STOP, got %s", e.GetPhase())
+	if e.GetPhase() != PhaseStopped {
+		t.Errorf("Expected initial phase STOPPED, got %s", e.GetPhase())
 	}
 
 	state := e.GetState()
@@ -206,8 +206,8 @@ func TestEngine_Start(t *testing.T) {
 
 	e.Start(20)
 
-	if e.GetPhase() != PhaseStart {
-		t.Errorf("Expected phase START, got %s", e.GetPhase())
+	if e.GetPhase() != PhaseStarted {
+		t.Errorf("Expected phase STARTED, got %s", e.GetPhase())
 	}
 
 	state := e.GetState()
@@ -229,8 +229,8 @@ func TestEngine_Stop(t *testing.T) {
 	e.Start(30)
 	e.Stop()
 
-	if e.GetPhase() != PhaseStop {
-		t.Errorf("Expected phase STOP, got %s", e.GetPhase())
+	if e.GetPhase() != PhaseStopped {
+		t.Errorf("Expected phase STOPPED, got %s", e.GetPhase())
 	}
 
 	state := e.GetState()
@@ -245,8 +245,8 @@ func TestEngine_Pause(t *testing.T) {
 	e.Start(30)
 	e.Pause()
 
-	if e.GetPhase() != PhasePause {
-		t.Errorf("Expected phase PAUSE, got %s", e.GetPhase())
+	if e.GetPhase() != PhasePaused {
+		t.Errorf("Expected phase PAUSED, got %s", e.GetPhase())
 	}
 
 	e.Stop() // cleanup
@@ -259,8 +259,8 @@ func TestEngine_Continue(t *testing.T) {
 	e.Pause()
 	e.Continue()
 
-	if e.GetPhase() != PhaseStart {
-		t.Errorf("Expected phase START after continue, got %s", e.GetPhase())
+	if e.GetPhase() != PhaseStarted {
+		t.Errorf("Expected phase STARTED after continue, got %s", e.GetPhase())
 	}
 
 	e.Stop() // cleanup
@@ -594,18 +594,18 @@ func TestEngine_StateChangeCallback(t *testing.T) {
 	}
 
 	e.Start(30)
-	if lastPhase != PhaseStart {
-		t.Errorf("Callback should receive START, got %s", lastPhase)
+	if lastPhase != PhaseStarted {
+		t.Errorf("Callback should receive STARTED, got %s", lastPhase)
 	}
 
 	e.Pause()
-	if lastPhase != PhasePause {
-		t.Errorf("Callback should receive PAUSE, got %s", lastPhase)
+	if lastPhase != PhasePaused {
+		t.Errorf("Callback should receive PAUSED, got %s", lastPhase)
 	}
 
 	e.Stop()
-	if lastPhase != PhaseStop {
-		t.Errorf("Callback should receive STOP, got %s", lastPhase)
+	if lastPhase != PhaseStopped {
+		t.Errorf("Callback should receive STOPPED, got %s", lastPhase)
 	}
 }
 

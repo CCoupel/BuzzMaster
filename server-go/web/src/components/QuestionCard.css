@@ -192,6 +192,17 @@
   letter-spacing: 0.5px;
 }
 
+.qcard-memory-badge {
+  font-size: 0.55rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  padding: 2px 5px;
+  background: linear-gradient(135deg, #a855f7, #ec4899);
+  color: white;
+  border-radius: var(--radius-sm);
+  letter-spacing: 0.5px;
+}
+
 .qcard-target-badge {
   display: flex;
   align-items: center;
@@ -353,6 +364,53 @@
   opacity: 0.4;
 }
 
+/* Memory Config Slots (replace media slots for Memory questions) */
+.qcard-memory-config-slot {
+  flex: 1;
+  border-radius: var(--radius-md);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, var(--primary-50), var(--accent-purple-50));
+  border: 2px solid var(--primary-200);
+  padding: var(--space-1);
+}
+
+.qcard-memory-config-slot.penalty {
+  background: linear-gradient(135deg, var(--error-50, #fef2f2), var(--warning-50, #fffbeb));
+  border-color: var(--error-200, #fecaca);
+}
+
+.qcard-memory-config-slot.no-penalty {
+  background: linear-gradient(135deg, var(--gray-50), var(--gray-100));
+  border-color: var(--gray-200);
+}
+
+.qcard-memory-config-value {
+  font-family: var(--font-display);
+  font-size: 1.1rem;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--primary-600);
+}
+
+.qcard-memory-config-slot.penalty .qcard-memory-config-value {
+  color: var(--error);
+}
+
+.qcard-memory-config-slot.no-penalty .qcard-memory-config-value {
+  color: var(--gray-400);
+}
+
+.qcard-memory-config-label {
+  font-size: 0.6rem;
+  color: var(--gray-500);
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  margin-top: 2px;
+}
+
 /* Question Zone */
 .qcard-question-zone {
   height: 42px;
@@ -416,6 +474,27 @@
   background: rgba(255, 255, 255, 0.3);
   padding: 2px 4px;
   border-radius: var(--radius-sm);
+  flex-shrink: 0;
+}
+
+.qcard-answer-memory {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 3px 8px;
+  border-radius: var(--radius-md);
+  background: linear-gradient(135deg, rgba(168, 85, 247, 0.15), rgba(236, 72, 153, 0.15));
+  color: var(--gray-700);
+  font-weight: 600;
+  font-size: 0.7rem;
+  height: 100%;
+  -webkit-line-clamp: unset;
+  -webkit-box-orient: unset;
+  display: flex;
+}
+
+.qcard-memory-icon {
+  font-size: 0.85rem;
   flex-shrink: 0;
 }
 

@@ -14,6 +14,9 @@ export default function useWebSocket() {
     remote: 'GAME',
     backgrounds: [],
     currentBackgroundIndex: 0, // Server-synchronized
+    memoryFlippedCards: [], // Server-synchronized flipped Memory cards (max 2)
+    memoryMatchedPairs: [], // Server-synchronized matched pair IDs (permanent)
+    memoryErrors: 0, // Server-synchronized error count (non-matches)
   })
   const [teams, setTeams] = useState({})
   const [bumpers, setBumpers] = useState({})
@@ -78,6 +81,9 @@ export default function useWebSocket() {
             remote: MSG.GAME.REMOTE || prev.remote,
             backgrounds: MSG.GAME.backgrounds || prev.backgrounds,
             currentBackgroundIndex: MSG.GAME.CURRENT_BACKGROUND_INDEX ?? prev.currentBackgroundIndex,
+            memoryFlippedCards: MSG.GAME.MEMORY_FLIPPED_CARDS || [],
+            memoryMatchedPairs: MSG.GAME.MEMORY_MATCHED_PAIRS || [],
+            memoryErrors: MSG.GAME.MEMORY_ERRORS || 0,
           }))
         }
         if (MSG?.teams) setTeams(MSG.teams)
@@ -271,6 +277,11 @@ export default function useWebSocket() {
     sendMessage('PONG', { ID: bumperMac })
   }, [sendMessage])
 
+  // Memory game: Flip a card
+  const flipMemoryCard = useCallback((cardId) => {
+    sendMessage('FLIP_MEMORY_CARD', { CARD_ID: cardId })
+  }, [sendMessage])
+
   useEffect(() => {
     connect()
 
@@ -310,5 +321,6 @@ export default function useWebSocket() {
     forceReady,
     simulateButton,
     simulatePong,
+    flipMemoryCard,
   }
 }

@@ -337,8 +337,8 @@ func TestE2E_GameStateMachine(t *testing.T) {
 
 	// START -> PAUSE
 	engine.Pause()
-	if engine.GetPhase() != game.PhasePause {
-		t.Error("Should be in PAUSE phase")
+	if engine.GetPhase() != game.PhasePaused {
+		t.Error("Should be in PAUSED phase")
 	}
 
 	// PAUSE -> START (continue)
@@ -357,10 +357,10 @@ func TestE2E_GameStateMachine(t *testing.T) {
 	expectedSequence := []game.GamePhase{
 		game.PhasePrepare,
 		game.PhaseReady,
-		game.PhaseStart,
-		game.PhasePause,
-		game.PhaseStart,
-		game.PhaseStop,
+		game.PhaseCountdown,
+		game.PhasePaused,
+		game.PhaseStarted,
+		game.PhaseStopped,
 	}
 
 	if len(stateChanges) != len(expectedSequence) {

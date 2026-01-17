@@ -4,7 +4,7 @@ export default function QuestionPreview() {
   return (
     <div className="tv-preview">
       <iframe
-        src="/tv"
+        src="/tv?admin=true"
         className="tv-preview-iframe"
         title="Aperçu TV"
       />

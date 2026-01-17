@@ -1,5 +1,4 @@
-import { useState, useMemo } from 'react'
-import { AnimatePresence, motion } from 'framer-motion'
+﻿import { useState, useMemo } from 'react'
 import { useGame } from '../hooks/GameContext'
 import Button from '../components/Button'
 import Card from '../components/Card'
@@ -86,6 +85,28 @@ export default function GamePage() {
       .sort((a, b) => { const orderA = a.ORDER !== undefined ? parseInt(a.ORDER) : parseInt(a.ID); const orderB = b.ORDER !== undefined ? parseInt(b.ORDER) : parseInt(b.ID); return orderA - orderB })
   }, [questions])
 
+  // Calculate Memory score based on matched pairs, errors, and config
+  const memoryScore = useMemo(() => {
+    if (gameState.question?.TYPE !== 'MEMORY') return null
+
+    const config = gameState.question.MEMORY_CONFIG || {}
+    const pointsPerPair = config.POINTS_PER_PAIR || 10
+    const errorPenalty = config.ERROR_PENALTY || 0
+    const completionBonus = config.COMPLETION_BONUS || 0
+
+    const matchedPairs = gameState.memoryMatchedPairs?.length || 0
+    const totalPairs = gameState.question.MEMORY_PAIRS?.length || 0
+    const errors = gameState.memoryErrors || 0
+    const isComplete = matchedPairs === totalPairs && totalPairs > 0
+
+    let score = matchedPairs * pointsPerPair
+    if (isComplete) score += completionBonus
+    score -= errors * errorPenalty
+    if (score < 0) score = 0
+
+    return { score, matchedPairs, totalPairs, errors, isComplete, pointsPerPair, errorPenalty, completionBonus }
+  }, [gameState.question, gameState.memoryMatchedPairs, gameState.memoryErrors])
+
   const handleStartStop = () => {
     if (gameState.phase === 'READY') {
       startGame(timeInput, pointsInput)
@@ -133,14 +154,16 @@ export default function GamePage() {
       // Only allow points for players who have buzzed
       const bumper = bumpers[bumperMac]
       if (bumper?.TIME && bumper.TIME > 0) {
+        // For Memory questions, use calculated score; otherwise use pointsInput
+        const pointsToAward = memoryScore ? memoryScore.score : pointsInput
         // Check POINTS_TARGET: if TEAM, give points to team instead of player
         if (gameState.question?.POINTS_TARGET === 'TEAM') {
           const teamName = bumper.TEAM
           if (teamName) {
-            setTeamPoints(teamName, pointsInput)
+            setTeamPoints(teamName, pointsToAward)
           }
         } else {
-          setBumperPoints(bumperMac, pointsInput)
+          setBumperPoints(bumperMac, pointsToAward)
         }
       }
     }
@@ -155,15 +178,102 @@ export default function GamePage() {
 
   return (
     <div className="game-page page">
-      {/* Timer - Full Width Top */}
-      <div className="timer-section">
-        <Card variant="elevated" padding="lg" className="timer-card">
+      {/* Timer + Display Section (stacked vertically) */}
+      <div className="timer-display-section">
+        <Card variant="elevated" padding="md" className="timer-card">
           <Timer
             currentTime={gameState.timer}
             totalTime={gameState.totalTime}
             phase={gameState.phase}
             size="lg"
+            showPhase={false}
           />
+        </Card>
+        <Card variant="elevated" padding="sm" className="display-card">
+          <span className="toggle-label">Affichage TV:</span>
+          <div className="toggle-buttons">
+            <Button
+              variant={gameState.remote === 'GAME' ? 'primary' : 'ghost'}
+              size="sm"
+              onClick={() => setRemoteDisplay('GAME')}
+            >
+              Jeu
+            </Button>
+            <Button
+              variant={gameState.remote === 'SCORE' ? 'primary' : 'ghost'}
+              size="sm"
+              onClick={() => setRemoteDisplay('SCORE')}
+            >
+              Equipes
+            </Button>
+            <Button
+              variant={gameState.remote === 'PLAYERS' ? 'primary' : 'ghost'}
+              size="sm"
+              onClick={() => setRemoteDisplay('PLAYERS')}
+            >
+              Joueurs
+            </Button>
+          </div>
+          <div className="phase-badge-container">
+            {gameState.phase === 'STOPPED' && <span className="phase-badge phase-stopped">ARRET</span>}
+            {gameState.phase === 'PAUSED' && <span className="phase-badge phase-paused">PAUSE</span>}
+            {gameState.phase === 'STARTED' && <span className="phase-badge phase-running">EN COURS</span>}
+            {gameState.phase === 'PREPARE' && <span className="phase-badge phase-prepare">PREPARATION</span>}
+            {gameState.phase === 'READY' && <span className="phase-badge phase-ready">PRET</span>}
+            {gameState.phase === 'REVEALED' && <span className="phase-badge phase-revealed">REPONSE</span>}
+          </div>
+          <div className="question-indicators">
+            {gameState.question?.CATEGORY && CATEGORIES[gameState.question.CATEGORY] && (
+              <div
+                className="category-indicator"
+                style={{ backgroundColor: CATEGORIES[gameState.question.CATEGORY].color }}
+                title={CATEGORIES[gameState.question.CATEGORY].label}
+              >
+                <span>{CATEGORIES[gameState.question.CATEGORY].icon}</span>
+              </div>
+            )}
+            {gameState.question?.POINTS_TARGET && (
+              <div className={`points-target-indicator ${gameState.question.POINTS_TARGET.toLowerCase()}`} title={gameState.question.POINTS_TARGET === 'TEAM' ? 'Points à l\'équipe' : 'Points au joueur'}>
+                {gameState.question.POINTS_TARGET === 'TEAM' ? (
+                  <>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                      <circle cx="9" cy="7" r="4"/>
+                      <path d="M17 11c1.66 0 2.99-1.34 2.99-3S18.66 5 17 5c-.32 0-.63.05-.91.14.57.81.9 1.79.9 2.86s-.34 2.04-.9 2.86c.28.09.59.14.91.14z"/>
+                      <path d="M3 18v-1c0-2.66 5.33-4 8-4s8 1.34 8 4v1H3z"/>
+                      <path d="M17 13c2.05.26 5 1.22 5 3v1h-3v-1.5c0-1.19-.68-2.14-2-2.5z"/>
+                    </svg>
+                    <span>Equipe</span>
+                  </>
+                ) : (
+                  <>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                      <circle cx="12" cy="7" r="4"/>
+                      <path d="M12 14c-4 0-8 2-8 4v2h16v-2c0-2-4-4-8-4z"/>
+                    </svg>
+                    <span>Joueur</span>
+                  </>
+                )}
+              </div>
+            )}
+          </div>
+          {/* Memory Stats - inline in display bar (Paires & Erreurs only, Points in input) */}
+          {memoryScore && (
+            <div className="memory-admin-stats">
+              <div className="memory-admin-stat">
+                <span className="memory-admin-stat-label">Paires</span>
+                <span className={`memory-admin-stat-value ${memoryScore.isComplete ? 'success' : ''}`}>
+                  {memoryScore.matchedPairs}/{memoryScore.totalPairs}
+                  {memoryScore.isComplete && ' ✓'}
+                </span>
+              </div>
+              <div className="memory-admin-stat">
+                <span className="memory-admin-stat-label">Erreurs</span>
+                <span className={`memory-admin-stat-value ${memoryScore.errors > 0 ? 'error' : ''}`}>
+                  {memoryScore.errors}
+                </span>
+              </div>
+            </div>
+          )}
         </Card>
       </div>
 
@@ -204,14 +314,25 @@ export default function GamePage() {
             </div>
             <div className="input-group">
               <label htmlFor="points-input">Points</label>
-              <input
-                id="points-input"
-                type="number"
-                value={pointsInput}
-                onChange={(e) => setPointsInput(parseInt(e.target.value) || 1)}
-                min="1"
-                max="100"
-              />
+              {memoryScore ? (
+                <input
+                  id="points-input"
+                  type="number"
+                  value={memoryScore.score}
+                  readOnly
+                  className="memory-score-input"
+                  title={`${memoryScore.matchedPairs}×${memoryScore.pointsPerPair}${memoryScore.isComplete ? ` +${memoryScore.completionBonus}` : ''}${memoryScore.errors > 0 ? ` -${memoryScore.errors}×${memoryScore.errorPenalty}` : ''}`}
+                />
+              ) : (
+                <input
+                  id="points-input"
+                  type="number"
+                  value={pointsInput}
+                  onChange={(e) => setPointsInput(parseInt(e.target.value) || 1)}
+                  min="1"
+                  max="100"
+                />
+              )}
             </div>
           </div>
 
@@ -245,73 +366,12 @@ export default function GamePage() {
               REPONSE
             </Button>
           </div>
-
-          <div className="display-toggle">
-            <span className="toggle-label">Affichage TV:</span>
-            <div className="toggle-buttons">
-              <Button
-                variant={gameState.remote === 'GAME' ? 'primary' : 'ghost'}
-                size="sm"
-                onClick={() => setRemoteDisplay('GAME')}
-              >
-                Jeu
-              </Button>
-              <Button
-                variant={gameState.remote === 'SCORE' ? 'primary' : 'ghost'}
-                size="sm"
-                onClick={() => setRemoteDisplay('SCORE')}
-              >
-                Equipes
-              </Button>
-              <Button
-                variant={gameState.remote === 'PLAYERS' ? 'primary' : 'ghost'}
-                size="sm"
-                onClick={() => setRemoteDisplay('PLAYERS')}
-              >
-                Joueurs
-              </Button>
-            </div>
-            <div className="question-indicators">
-              {gameState.question?.CATEGORY && CATEGORIES[gameState.question.CATEGORY] && (
-                <div
-                  className="category-indicator"
-                  style={{ backgroundColor: CATEGORIES[gameState.question.CATEGORY].color }}
-                  title={CATEGORIES[gameState.question.CATEGORY].label}
-                >
-                  <span>{CATEGORIES[gameState.question.CATEGORY].icon}</span>
-                </div>
-              )}
-              {gameState.question?.POINTS_TARGET && (
-                <div className={`points-target-indicator ${gameState.question.POINTS_TARGET.toLowerCase()}`} title={gameState.question.POINTS_TARGET === 'TEAM' ? 'Points attribués à l\'équipe' : 'Points attribués au joueur'}>
-                  {gameState.question.POINTS_TARGET === 'TEAM' ? (
-                    <>
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                        <circle cx="9" cy="7" r="4"/>
-                        <path d="M17 11c1.66 0 2.99-1.34 2.99-3S18.66 5 17 5c-.32 0-.63.05-.91.14.57.81.9 1.79.9 2.86s-.34 2.04-.9 2.86c.28.09.59.14.91.14z"/>
-                        <path d="M3 18v-1c0-2.66 5.33-4 8-4s8 1.34 8 4v1H3z"/>
-                        <path d="M17 13c2.05.26 5 1.22 5 3v1h-3v-1.5c0-1.19-.68-2.14-2-2.5z"/>
-                      </svg>
-                      <span>Equipe</span>
-                    </>
-                  ) : (
-                    <>
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                        <circle cx="12" cy="7" r="4"/>
-                        <path d="M12 14c-4 0-8 2-8 4v2h16v-2c0-2-4-4-8-4z"/>
-                      </svg>
-                      <span>Joueur</span>
-                    </>
-                  )}
-                </div>
-              )}
-            </div>
-          </div>
         </Card>
+      </div>
 
-        {/* TV Preview (iframe to /tv) */}
-        <div className="tv-preview-container">
-          <QuestionPreview />
-        </div>
+      {/* TV Preview (Row 2 Col 2) */}
+      <div className="tv-preview-container">
+        <QuestionPreview />
       </div>
 
       {/* Right Panel - Teams */}
@@ -319,43 +379,37 @@ export default function GamePage() {
         <div className="teams-section">
           <h2 className="section-title">Equipes</h2>
           <div className="teams-grid">
-            <AnimatePresence>
-              {sortedTeams.map((team, index) => (
-                <motion.div
-                  key={team.name}
-                  className="team-card-wrapper"
-                  initial={{ opacity: 0, scale: 0.9 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  transition={{ delay: index * 0.1 }}
-                >
-                  <TeamCard
-                    name={team.name}
-                    color={team.COLOR}
-                    score={team.SCORE || 0}
-                    teamPoints={team.TEAM_POINTS || 0}
-                    ready={team.READY === true || team.READY === 'TRUE'}
-                    active={team.TIME !== undefined && team.TIME > 0}
-                    timestamp={team.TIME}
-                    gameTime={gameState.gameTime}
-                    waitingForReady={['PREPARE', 'READY'].includes(gameState.phase)}
-                    waitingForBuzz={['STARTED', 'PAUSED'].includes(gameState.phase)}
-                    onTeamClick={(teamName) => {
-                      if (['STOPPED', 'REVEALED'].includes(gameState.phase)) {
-                        setTeamPoints(teamName, pointsInput)
-                      }
-                    }}
-                    onPlayerClick={(bumperMac, ctrlKey) => handleBumperClick(bumperMac, ctrlKey)}
-                    buzzers={team.buzzers.map(b => ({
-                      ...b,
-                      onClick: (e) => handleBumperClick(b.mac, e?.ctrlKey)
-                    }))}
-                  />
-                </motion.div>
-              ))}
-            </AnimatePresence>
+            {sortedTeams.map((team) => (
+              <TeamCard
+                key={team.name}
+                name={team.name}
+                color={team.COLOR}
+                score={team.SCORE || 0}
+                teamPoints={team.TEAM_POINTS || 0}
+                ready={team.READY === true || team.READY === 'TRUE'}
+                active={team.TIME !== undefined && team.TIME > 0}
+                timestamp={team.TIME}
+                gameTime={gameState.gameTime}
+                waitingForReady={['PREPARE', 'READY'].includes(gameState.phase)}
+                waitingForBuzz={['STARTED', 'PAUSED'].includes(gameState.phase)}
+                onTeamClick={(teamName) => {
+                  if (['STOPPED', 'REVEALED'].includes(gameState.phase)) {
+                    // For Memory questions, use calculated score; otherwise use pointsInput
+                    const pointsToAward = memoryScore ? memoryScore.score : pointsInput
+                    setTeamPoints(teamName, pointsToAward)
+                  }
+                }}
+                onPlayerClick={(bumperMac, ctrlKey) => handleBumperClick(bumperMac, ctrlKey)}
+                buzzers={team.buzzers.map(b => ({
+                  ...b,
+                  onClick: (e) => handleBumperClick(b.mac, e?.ctrlKey)
+                }))}
+              />
+            ))}
           </div>
         </div>
       </div>
     </div>
   )
 }
+

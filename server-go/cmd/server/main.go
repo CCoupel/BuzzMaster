@@ -501,6 +501,9 @@ func (a *App) handleWebMessage(incoming *protocol.IncomingMessage) {
 		// PONG from web client (simulated, for testing in PREPARE state)
 		a.handlePong(incoming.ClientID, msg)
 
+	case protocol.ActionFlipMemoryCard:
+		a.handleFlipMemoryCard(msg)
+
 	default:
 		log.Printf("[App] Unknown web action: %s", msg.Action)
 	}
@@ -821,6 +824,49 @@ func (a *App) handleForceReady() {
 	a.broadcastReady()
 	a.broadcastUpdate()
 }
+
+func (a *App) handleFlipMemoryCard(msg *protocol.Message) {
+	var payload protocol.FlipMemoryCardPayload
+	if err := json.Unmarshal(msg.Msg, &payload); err != nil {
+		log.Printf("[App] Failed to parse FLIP_MEMORY_CARD: %v", err)
+		return
+	}
+
+	if payload.CardID == "" {
+		log.Printf("[App] FLIP_MEMORY_CARD: empty card ID")
+		return
+	}
+
+	log.Printf("[App] FLIP_MEMORY_CARD: cardID=%s", payload.CardID)
+
+	// Process the flip with game logic
+	isMatch, shouldFlipBack, flipDelay, isComplete := a.engine.FlipMemoryCard(payload.CardID)
+
+	// Broadcast updated game state to all clients
+	a.broadcastUpdate()
+
+	// If no match and 2 cards are flipped, schedule auto-flip-back
+	if shouldFlipBack && flipDelay > 0 {
+		go func() {
+			time.Sleep(time.Duration(flipDelay) * time.Millisecond)
+			a.engine.ClearMemoryFlippedCards()
+			log.Printf("[App] Memory auto-flip-back after %dms", flipDelay)
+			a.broadcastUpdate()
+		}()
+	}
+
+	if isMatch {
+		log.Printf("[App] Memory MATCH found!")
+	}
+
+	// If all pairs matched, automatically stop the game
+	if isComplete {
+		log.Printf("[App] Memory game COMPLETE! All pairs matched.")
+		a.engine.Stop()
+		a.broadcastUpdate()
+	}
+}
+
 func (a *App) handleBumperPoints(msg *protocol.Message) {
 	var payload protocol.BumperPointsPayload
 	if err := json.Unmarshal(msg.Msg, &payload); err != nil {

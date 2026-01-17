@@ -54,7 +54,17 @@ export default function QuestionCard({
 }) {
   const status = question.STATUS?.toLowerCase() || 'available'
   const isQCM = question.TYPE === 'QCM'
+  const isMemory = question.TYPE === 'MEMORY'
   const qcmColor = isQCM && question.QCM_CORRECT ? QCM_COLORS[question.QCM_CORRECT] : null
+  const memoryPairCount = isMemory && question.MEMORY_PAIRS ? question.MEMORY_PAIRS.length : 0
+
+  // Calculate max points for Memory questions
+  const memoryConfig = isMemory ? (question.MEMORY_CONFIG || {}) : null
+  const memoryMaxPoints = isMemory ? (
+    memoryPairCount * (memoryConfig.POINTS_PER_PAIR || 10) + (memoryConfig.COMPLETION_BONUS || 0)
+  ) : 0
+  const memoryPointsPerPair = memoryConfig?.POINTS_PER_PAIR || 10
+  const memoryErrorPenalty = memoryConfig?.ERROR_PENALTY || 0
 
   const handleClick = (e) => {
     if (onClick && canSelect) {
@@ -91,6 +101,7 @@ export default function QuestionCard({
         )}
 
         {isQCM && <span className="qcard-qcm-badge">QCM</span>}
+        {isMemory && <span className="qcard-memory-badge">MEMORY</span>}
 
         {showTarget && question.POINTS_TARGET && (
           <span
@@ -115,7 +126,7 @@ export default function QuestionCard({
 
         <span className="qcard-meta">
           <span className="qcard-time">{question.TIME}s</span>
-          <span className="qcard-points">{question.POINTS}pt</span>
+          <span className="qcard-points">{isMemory ? memoryMaxPoints : question.POINTS}pt</span>
         </span>
 
         {showStatus && (
@@ -127,22 +138,37 @@ export default function QuestionCard({
         )}
       </div>
 
-      {/* Fixed media zone */}
+      {/* Fixed media zone - for Memory shows config, for others shows images */}
       <div className="qcard-media-zone">
-        <div className={`qcard-media-slot ${question.MEDIA ? 'has-media' : 'empty'}`}>
-          {question.MEDIA ? (
-            <img src={question.MEDIA} alt="" />
-          ) : (
-            <span className="qcard-media-placeholder">📷</span>
-          )}
-        </div>
-        <div className={`qcard-media-slot answer-slot ${question.MEDIA_ANSWER ? 'has-media' : 'empty'}`}>
-          {question.MEDIA_ANSWER ? (
-            <img src={question.MEDIA_ANSWER} alt="" />
-          ) : (
-            <span className="qcard-media-placeholder">✓</span>
-          )}
-        </div>
+        {isMemory ? (
+          <>
+            <div className="qcard-memory-config-slot">
+              <span className="qcard-memory-config-value">+{memoryPointsPerPair}</span>
+              <span className="qcard-memory-config-label">/ paire</span>
+            </div>
+            <div className={`qcard-memory-config-slot ${memoryErrorPenalty > 0 ? 'penalty' : 'no-penalty'}`}>
+              <span className="qcard-memory-config-value">{memoryErrorPenalty > 0 ? `-${memoryErrorPenalty}` : '0'}</span>
+              <span className="qcard-memory-config-label">/ erreur</span>
+            </div>
+          </>
+        ) : (
+          <>
+            <div className={`qcard-media-slot ${question.MEDIA ? 'has-media' : 'empty'}`}>
+              {question.MEDIA ? (
+                <img src={question.MEDIA} alt="" />
+              ) : (
+                <span className="qcard-media-placeholder">📷</span>
+              )}
+            </div>
+            <div className={`qcard-media-slot answer-slot ${question.MEDIA_ANSWER ? 'has-media' : 'empty'}`}>
+              {question.MEDIA_ANSWER ? (
+                <img src={question.MEDIA_ANSWER} alt="" />
+              ) : (
+                <span className="qcard-media-placeholder">✓</span>
+              )}
+            </div>
+          </>
+        )}
       </div>
 
       {/* Fixed question zone */}
@@ -152,7 +178,12 @@ export default function QuestionCard({
 
       {/* Fixed answer zone */}
       <div className="qcard-answer-zone">
-        {qcmColor ? (
+        {isMemory ? (
+          <p className="qcard-answer qcard-answer-memory">
+            <span className="qcard-memory-icon">🎴</span>
+            {memoryPairCount} paires
+          </p>
+        ) : qcmColor ? (
           <p className="qcard-answer qcard-answer-qcm" style={{ backgroundColor: qcmColor.color }}>
             <span className="qcard-qcm-letter">{qcmColor.letter}</span>
             {question.ANSWER}

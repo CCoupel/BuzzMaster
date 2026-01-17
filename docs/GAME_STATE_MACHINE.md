@@ -2,16 +2,16 @@
 
 Ce document décrit la machine à états qui gouverne le déroulement d'une partie dans BuzzControl.
 
-## États du Jeu
+## États du Jeu (Phases)
 
-| État | Description |
-|------|-------------|
-| **STOPPED** | État initial ou après arrêt du jeu. Aucune question active. |
-| **PREPARE** | Question sélectionnée, en attente des PONG des buzzers. |
-| **READY** | Tous les buzzers ont répondu PONG, prêt à démarrer. |
-| **STARTED** | Jeu en cours, chronomètre actif. |
-| **PAUSED** | Jeu en pause, chronomètre suspendu. |
-| **REVEALED** | Réponse affichée. |
+| Phase | Description | Badge Timer |
+|-------|-------------|-------------|
+| **STOPPED** | État initial ou après arrêt du jeu. Aucune question active. | *(aucun)* |
+| **PREPARE** | Question sélectionnée, en attente des PONG des buzzers. | `PREPARATION` (orange) |
+| **READY** | Tous les buzzers ont répondu PONG, prêt à démarrer. | `PRET` (cyan) |
+| **STARTED** | Jeu en cours, chronomètre actif. | `EN COURS` (vert) |
+| **PAUSED** | Jeu en pause, chronomètre suspendu. | `PAUSE` (bleu) |
+| **REVEALED** | Réponse affichée. | `REPONSE` (violet) |
 
 ## Diagramme des États
 
@@ -125,9 +125,27 @@ Ce document décrit la machine à états qui gouverne le déroulement d'une part
 - Fichier: `server-go/web/src/pages/PlayerDisplay.jsx`
 - L'affichage est conditionné par `gameState.phase`
 
+## États du Chronomètre (Timer)
+
+Le chronomètre affiche différents états visuels :
+
+| État | Affichage | Animation | Couleur |
+|------|-----------|-----------|---------|
+| **Normal** | `MM:SS` | Barre de progression verte | Vert |
+| **Urgent** (≤10s) | `MM:SS` | Barre orange, shine rapide | Orange |
+| **Critique** (≤5s) | `MM:SS` | Pulsation, ombre rouge | Rouge |
+| **Pause** | `MM:SS` | Clignotement opacité | Bleu |
+
+### Barre de progression
+
+- **>50%** : Vert (`--success`)
+- **25-50%** : Orange (`--warning`)
+- **<25%** : Rouge (`--error`)
+
 ## Historique
 
 | Version | Date | Changements |
 |---------|------|-------------|
+| 2.9.1 | 2026-01 | Fix deadlock callbacks, cohérence noms phases frontend/backend |
 | 2.9.0 | 2026-01 | Ajout transitions PREPARE→PREPARE et READY→PREPARE pour changer de question |
 | 2.8.0 | 2026-01 | Refonte complète de la machine à états |

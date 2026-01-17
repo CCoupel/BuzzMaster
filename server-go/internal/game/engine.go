@@ -196,6 +196,11 @@ func (e *Engine) Ready(questionID string, question *Question) {
 		team.Ready = false
 	}
 
+	// Reset Memory game state for new question
+	e.state.MemoryFlippedCards = nil
+	e.state.MemoryMatchedPairs = nil
+	e.state.MemoryErrors = 0
+
 	log.Printf("[Engine] Game ready with question: %s", questionID)
 
 	// Release lock BEFORE calling callback to avoid deadlock
@@ -280,20 +285,46 @@ func (e *Engine) TransitionToReady() {
 	}
 }
 
-// Start begins the game round with a 3-second countdown
+// Start begins the game round with a countdown
+// For Memory questions, uses MEMORIZE_TIME from config (default 5s) plus cascade animation times
+// For other questions, uses 3-second countdown
 func (e *Engine) Start(delay int) {
 	e.mu.Lock()
 
 	// Store delay for after countdown
 	e.pendingDelay = delay
 
+	// Determine countdown duration
+	countdownDuration := 3 // default for normal/QCM questions
+	if e.state.Question != nil && e.state.Question.Type == QuestionTypeMemory {
+		memorizeTime := 5 // default
+		if e.state.Question.MemoryConfig != nil && e.state.Question.MemoryConfig.MemorizeTime > 0 {
+			memorizeTime = e.state.Question.MemoryConfig.MemorizeTime
+		}
+
+		// Calculate cascade animation duration for Memory questions
+		// Frontend uses: STAGGER_DELAY = 200ms per card, FLIP_ANIMATION = 600ms
+		cardCount := 0
+		if e.state.Question.MemoryPairs != nil {
+			cardCount = len(e.state.Question.MemoryPairs) * 2
+		}
+		// cascadeDuration = (cardCount * 200ms + 600ms) / 1000, rounded up
+		cascadeDurationMs := cardCount*200 + 600
+		cascadeDurationSecs := (cascadeDurationMs + 999) / 1000 // round up
+
+		// Total = cascade_reveal + memorize_time + cascade_hide
+		countdownDuration = cascadeDurationSecs + memorizeTime + cascadeDurationSecs
+		log.Printf("[Engine] Memory countdown: cards=%d, cascade=%ds, memorize=%ds, total=%ds",
+			cardCount, cascadeDurationSecs, memorizeTime, countdownDuration)
+	}
+
 	// Enter COUNTDOWN phase
 	e.state.Phase = PhaseCountdown
-	e.state.CountdownTime = 3
+	e.state.CountdownTime = countdownDuration
 	e.state.Delay = delay
 	e.state.CurrentTime = delay
 
-	log.Printf("[Engine] Starting 3-second countdown before game (delay=%d)", delay)
+	log.Printf("[Engine] Starting %d-second countdown before game (delay=%d)", countdownDuration, delay)
 
 	// Start countdown timer
 	e.startCountdown()
@@ -308,10 +339,10 @@ func (e *Engine) Start(delay int) {
 		stateCallback(PhaseCountdown)
 	}
 
-	// Broadcast initial countdown value (3) immediately
-	// The ticker will then broadcast 2, 1, 0 at 1-second intervals
+	// Broadcast initial countdown value immediately
+	// The ticker will then broadcast remaining values at 1-second intervals
 	if countdownCallback != nil {
-		countdownCallback(3)
+		countdownCallback(countdownDuration)
 	}
 }
 
@@ -381,6 +412,11 @@ func (e *Engine) actualStart() {
 	e.state.GameTime = time.Now().UnixMicro()
 
 	e.setQuestionStatus(StatusStarted)
+
+	// Clear Memory game state for fresh start
+	e.state.MemoryFlippedCards = nil
+	e.state.MemoryMatchedPairs = nil
+	e.state.MemoryErrors = 0
 
 	// Reset bumper times
 	for _, bumper := range e.data.Bumpers {
@@ -1351,4 +1387,215 @@ func (e *Engine) SaveAll() {
 	go e.SaveBumpers()
 	go e.SaveHistory()
 	go e.SaveStatuses()
+}
+
+// FlipMemoryCard handles flipping a Memory card with game logic
+// Returns: (isMatch bool, shouldFlipBack bool, flipDelay int, isComplete bool)
+// - isMatch: true if the 2nd card matches the 1st (same pair)
+// - shouldFlipBack: true if we have 2 non-matching cards and need to flip back
+// - flipDelay: milliseconds to wait before flipping back (from question config)
+// - isComplete: true if all pairs have been matched (game complete)
+func (e *Engine) FlipMemoryCard(cardID string) (isMatch bool, shouldFlipBack bool, flipDelay int, isComplete bool) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+
+	// Only allow flipping during STARTED phase
+	if e.state.Phase != PhaseStarted {
+		log.Printf("[Engine] Memory flip ignored: game not in STARTED phase (current: %s)", e.state.Phase)
+		return false, false, 0, false
+	}
+
+	// Extract pair ID from card ID (format: "pairID-cardNum", e.g., "1-1", "2-2")
+	pairID := e.extractPairID(cardID)
+	if pairID == 0 {
+		log.Printf("[Engine] Memory flip ignored: invalid card ID format: %s", cardID)
+		return false, false, 0, false
+	}
+
+	// Check if this pair is already matched
+	for _, matchedPairID := range e.state.MemoryMatchedPairs {
+		if matchedPairID == pairID {
+			log.Printf("[Engine] Memory flip ignored: pair %d already matched", pairID)
+			return false, false, 0, false
+		}
+	}
+
+	// Check if card is already flipped
+	for _, id := range e.state.MemoryFlippedCards {
+		if id == cardID {
+			log.Printf("[Engine] Memory flip ignored: card %s already flipped", cardID)
+			return false, false, 0, false
+		}
+	}
+
+	// Don't allow more than 2 cards to be flipped at once
+	if len(e.state.MemoryFlippedCards) >= 2 {
+		log.Printf("[Engine] Memory flip ignored: already 2 cards flipped")
+		return false, false, 0, false
+	}
+
+	// Add card to flipped cards
+	e.state.MemoryFlippedCards = append(e.state.MemoryFlippedCards, cardID)
+	log.Printf("[Engine] Memory card %s flipped (revealed)", cardID)
+
+	// If only 1 card flipped, just wait for second card
+	if len(e.state.MemoryFlippedCards) == 1 {
+		return false, false, 0, false
+	}
+
+	// Two cards are now flipped - check if they match
+	firstCardID := e.state.MemoryFlippedCards[0]
+	secondCardID := e.state.MemoryFlippedCards[1]
+	firstPairID := e.extractPairID(firstCardID)
+	secondPairID := e.extractPairID(secondCardID)
+
+	// Get flip delay from question config (config is in seconds, convert to ms)
+	flipDelay = 3000 // Default 3 seconds
+	if e.state.Question != nil && e.state.Question.MemoryConfig != nil && e.state.Question.MemoryConfig.FlipDelay > 0 {
+		flipDelay = int(e.state.Question.MemoryConfig.FlipDelay * 1000)
+	}
+
+	if firstPairID == secondPairID {
+		// MATCH! Add to matched pairs and clear flipped cards
+		e.state.MemoryMatchedPairs = append(e.state.MemoryMatchedPairs, firstPairID)
+		e.state.MemoryFlippedCards = nil
+
+		// Check if all pairs are matched (game complete)
+		totalPairs := 0
+		if e.state.Question != nil && e.state.Question.MemoryPairs != nil {
+			totalPairs = len(e.state.Question.MemoryPairs)
+		}
+		isComplete = len(e.state.MemoryMatchedPairs) >= totalPairs && totalPairs > 0
+
+		log.Printf("[Engine] Memory MATCH! Pair %d found. Total matched: %d/%d. Complete: %v", firstPairID, len(e.state.MemoryMatchedPairs), totalPairs, isComplete)
+		return true, false, 0, isComplete
+	}
+
+	// No match - increment error counter, caller should schedule flip-back after delay
+	e.state.MemoryErrors++
+	log.Printf("[Engine] Memory NO MATCH (error #%d). Cards %s and %s will flip back after %dms", e.state.MemoryErrors, firstCardID, secondCardID, flipDelay)
+	return false, true, flipDelay, false
+}
+
+// extractPairID extracts the pair ID from a card ID (format: "pairID-cardNum")
+func (e *Engine) extractPairID(cardID string) int {
+	var pairID, cardNum int
+	_, err := parseCardID(cardID, &pairID, &cardNum)
+	if err != nil {
+		return 0
+	}
+	return pairID
+}
+
+// parseCardID parses "pairID-cardNum" format
+func parseCardID(cardID string, pairID, cardNum *int) (bool, error) {
+	n, _ := parseCardIDParts(cardID)
+	if n >= 1 {
+		parts := splitCardID(cardID)
+		if len(parts) == 2 {
+			*pairID = parseInt(parts[0])
+			*cardNum = parseInt(parts[1])
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+func splitCardID(cardID string) []string {
+	var parts []string
+	current := ""
+	for _, c := range cardID {
+		if c == '-' {
+			parts = append(parts, current)
+			current = ""
+		} else {
+			current += string(c)
+		}
+	}
+	if current != "" {
+		parts = append(parts, current)
+	}
+	return parts
+}
+
+func parseCardIDParts(cardID string) (int, error) {
+	count := 0
+	for _, c := range cardID {
+		if c == '-' {
+			count++
+		}
+	}
+	return count + 1, nil
+}
+
+func parseInt(s string) int {
+	result := 0
+	for _, c := range s {
+		if c >= '0' && c <= '9' {
+			result = result*10 + int(c-'0')
+		}
+	}
+	return result
+}
+
+// ClearMemoryFlippedCards resets all flipped cards
+func (e *Engine) ClearMemoryFlippedCards() {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.state.MemoryFlippedCards = nil
+	log.Printf("[Engine] Memory flipped cards cleared")
+}
+
+// GetMemoryFlippedCards returns the list of flipped card IDs
+func (e *Engine) GetMemoryFlippedCards() []string {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	return e.state.MemoryFlippedCards
+}
+
+// CalculateMemoryScore calculates the score for a Memory game based on matched pairs, errors, and config
+// Returns: score, matchedPairs, totalPairs, errors, isComplete
+func (e *Engine) CalculateMemoryScore() (int, int, int, int, bool) {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+
+	if e.state.Question == nil || e.state.Question.Type != QuestionTypeMemory {
+		return 0, 0, 0, 0, false
+	}
+
+	// Get config values with defaults
+	pointsPerPair := 10
+	errorPenalty := 0
+	completionBonus := 0
+
+	if e.state.Question.MemoryConfig != nil {
+		if e.state.Question.MemoryConfig.PointsPerPair > 0 {
+			pointsPerPair = e.state.Question.MemoryConfig.PointsPerPair
+		}
+		errorPenalty = e.state.Question.MemoryConfig.ErrorPenalty
+		completionBonus = e.state.Question.MemoryConfig.CompletionBonus
+	}
+
+	// Calculate stats
+	matchedPairs := len(e.state.MemoryMatchedPairs)
+	totalPairs := len(e.state.Question.MemoryPairs)
+	errors := e.state.MemoryErrors
+	isComplete := matchedPairs == totalPairs && totalPairs > 0
+
+	// Calculate score: (matched × pointsPerPair) + completionBonus - (errors × errorPenalty)
+	score := matchedPairs * pointsPerPair
+	if isComplete {
+		score += completionBonus
+	}
+	score -= errors * errorPenalty
+
+	// Score cannot be negative
+	if score < 0 {
+		score = 0
+	}
+
+	log.Printf("[Engine] Memory score: matched=%d/%d, errors=%d, complete=%v, score=%d (perPair=%d, bonus=%d, penalty=%d)",
+		matchedPairs, totalPairs, errors, isComplete, score, pointsPerPair, completionBonus, errorPenalty)
+
+	return score, matchedPairs, totalPairs, errors, isComplete
 }

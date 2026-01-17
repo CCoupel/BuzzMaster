@@ -216,6 +216,11 @@
 .input-group input { padding: var(--space-2); border: 2px solid var(--gray-200); border-radius: var(--radius-md); font-size: 1rem; font-family: var(--font-display); font-weight: 600; text-align: center; transition: all var(--transition-base); }
 .input-group input:focus { outline: none; border-color: var(--primary-400); box-shadow: 0 0 0 3px var(--primary-100); }
 .input-group input:disabled { background: var(--gray-100); color: var(--gray-400); }
+
+/* Memory score input (readonly, styled differently) */
+.memory-score-input { background: linear-gradient(135deg, var(--primary-100), var(--accent-purple-100)) !important; border-color: var(--primary-300) !important; color: var(--primary-600) !important; cursor: help; }
+.memory-score-input:focus { border-color: var(--primary-400) !important; }
+
 .control-buttons { display: flex; flex-direction: column; gap: var(--space-1); width: 100%; }
 .control-buttons-row { display: flex; gap: var(--space-1); }
 .control-buttons-row > * { flex: 1; }
@@ -297,4 +302,43 @@
   .right-panel { grid-column: 1; grid-row: 5; }
   .control-buttons { flex-direction: row; flex-wrap: wrap; }
   .teams-grid { flex-direction: column; }
+}
+
+/* Memory Admin Stats - inline in display bar */
+.memory-admin-stats {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-1) var(--space-2);
+  background: var(--gray-100);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--gray-200);
+}
+
+.memory-admin-stat {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.memory-admin-stat-label {
+  font-size: 0.7rem;
+  color: var(--gray-500);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  font-weight: 500;
+}
+
+.memory-admin-stat-value {
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: var(--gray-800);
+}
+
+.memory-admin-stat-value.success {
+  color: var(--success);
+}
+
+.memory-admin-stat-value.error {
+  color: var(--error);
 }
