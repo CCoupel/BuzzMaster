@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"io/fs"
 	"log"
 	"math/rand"
 	"net/http"
@@ -19,14 +20,15 @@ import (
 
 // HTTPServer handles HTTP requests
 type HTTPServer struct {
-	port      int
-	engine    *game.Engine
-	wsHub     *WebSocketHub
-	dataDir   string
-	webDir    string
-	reactDir  string // React build directory
-	mux       *http.ServeMux
-	server    *http.Server
+	port       int
+	engine     *game.Engine
+	wsHub      *WebSocketHub
+	dataDir    string
+	webDir     string
+	reactDir   string // React build directory (filesystem)
+	embeddedFS fs.FS  // Embedded web filesystem (takes priority over reactDir)
+	mux        *http.ServeMux
+	server     *http.Server
 
 	// Callbacks
 	OnAction           func(action string, data json.RawMessage)
@@ -51,6 +53,12 @@ func NewHTTPServer(port int, engine *game.Engine, wsHub *WebSocketHub) *HTTPServ
 // SetReactDir sets the directory for React build files
 func (h *HTTPServer) SetReactDir(dir string) {
 	h.reactDir = dir
+}
+
+// SetEmbeddedFS sets the embedded filesystem for serving web files
+// This takes priority over reactDir if set
+func (h *HTTPServer) SetEmbeddedFS(fsys fs.FS) {
+	h.embeddedFS = fsys
 }
 
 // SetWebDir sets the directory for static web files
@@ -156,12 +164,23 @@ func (h *HTTPServer) setupRoutes() {
 }
 
 func (h *HTTPServer) handleRoot(w http.ResponseWriter, r *http.Request) {
-	// Check if React build exists
-	if h.reactDir != "" {
-		indexPath := filepath.Join(h.reactDir, "index.html")
-		if _, err := os.Stat(indexPath); err == nil {
-			// For SPA routes, serve index.html
-			if r.URL.Path == "/" || h.isSPARoute(r.URL.Path) {
+	// For SPA routes or root, serve index.html
+	if r.URL.Path == "/" || h.isSPARoute(r.URL.Path) {
+		// Try embedded FS first
+		if h.embeddedFS != nil {
+			if f, err := h.embeddedFS.Open("index.html"); err == nil {
+				defer f.Close()
+				stat, _ := f.Stat()
+				content, _ := io.ReadAll(f)
+				http.ServeContent(w, r, "index.html", stat.ModTime(), bytes.NewReader(content))
+				return
+			}
+		}
+
+		// Try filesystem reactDir
+		if h.reactDir != "" {
+			indexPath := filepath.Join(h.reactDir, "index.html")
+			if _, err := os.Stat(indexPath); err == nil {
 				http.ServeFile(w, r, indexPath)
 				return
 			}
@@ -179,7 +198,7 @@ func (h *HTTPServer) handleRoot(w http.ResponseWriter, r *http.Request) {
 // isSPARoute checks if the path is a React SPA route
 // Uses distinct paths to avoid conflicts with API endpoints
 func (h *HTTPServer) isSPARoute(path string) bool {
-	spaRoutes := []string{"/scoreboard", "/quiz", "/settings", "/tv", "/game", "/teams", "/history-page"}
+	spaRoutes := []string{"/scoreboard", "/quiz", "/settings", "/tv", "/game", "/teams", "/history-page", "/palmares"}
 	for _, route := range spaRoutes {
 		if strings.HasPrefix(path, route) {
 			return true
@@ -190,6 +209,26 @@ func (h *HTTPServer) isSPARoute(path string) bool {
 
 // handleReactAssets serves React build assets
 func (h *HTTPServer) handleReactAssets(w http.ResponseWriter, r *http.Request) {
+	// Try embedded FS first
+	if h.embeddedFS != nil {
+		// Remove leading slash for fs.FS
+		filePath := strings.TrimPrefix(r.URL.Path, "/")
+		if f, err := h.embeddedFS.Open(filePath); err == nil {
+			defer f.Close()
+			stat, _ := f.Stat()
+			content, _ := io.ReadAll(f)
+			// Set content type based on extension
+			if strings.HasSuffix(filePath, ".js") {
+				w.Header().Set("Content-Type", "application/javascript")
+			} else if strings.HasSuffix(filePath, ".css") {
+				w.Header().Set("Content-Type", "text/css")
+			}
+			http.ServeContent(w, r, filepath.Base(filePath), stat.ModTime(), bytes.NewReader(content))
+			return
+		}
+	}
+
+	// Fallback to filesystem
 	if h.reactDir == "" {
 		http.NotFound(w, r)
 		return
@@ -199,7 +238,11 @@ func (h *HTTPServer) handleReactAssets(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *HTTPServer) handleRedirect(w http.ResponseWriter, r *http.Request) {
-	// If React build exists, redirect to React app
+	// If embedded FS or React build exists, redirect to React app
+	if h.embeddedFS != nil {
+		http.Redirect(w, r, "/", http.StatusFound)
+		return
+	}
 	if h.reactDir != "" {
 		indexPath := filepath.Join(h.reactDir, "index.html")
 		if _, err := os.Stat(indexPath); err == nil {

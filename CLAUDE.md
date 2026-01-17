@@ -1005,7 +1005,7 @@ func (h *HTTPServer) getStorageInfo() map[string]interface{} {
 ### Running the Server
 
 ```bash
-# Development (Windows)
+# Development (Windows) - with filesystem web files
 cd server-go
 go build -v ./cmd/server
 ./server.exe
@@ -1014,6 +1014,38 @@ go build -v ./cmd/server
 GOOS=linux GOARCH=arm64 go build -o buzzcontrol ./cmd/server
 scp buzzcontrol pi@raspberrypi.local:~/
 ```
+
+### Portable Build (v2.35.0)
+
+L'exécutable portable embarque les fichiers web directement dans le binaire.
+
+```bash
+# Windows (PowerShell)
+cd server-go
+.\build.ps1
+
+# Linux/macOS (Bash)
+cd server-go
+./build.sh
+```
+
+**Structure du build portable :**
+```
+server.exe        # Exécutable autonome (~13 MB)
+data/             # Données variables (créé automatiquement)
+├── config/       # Configuration (teams, bumpers, history)
+└── files/        # Fichiers utilisateur (questions, backgrounds)
+```
+
+**Mode de fonctionnement :**
+- Si des fichiers web sont embarqués → mode portable (prioritaire)
+- Sinon, si `web/dist/` existe → mode développement
+- Sinon → mode legacy (ancienne UI)
+
+**Avantages du mode portable :**
+- Un seul fichier à distribuer
+- Données dans `./data/` à côté de l'exécutable
+- Idéal pour clé USB ou distribution simple
 
 ### Configuration File (config.json)
 ```json

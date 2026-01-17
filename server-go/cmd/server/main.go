@@ -131,13 +131,19 @@ func (a *App) init() {
 	// HTTP server
 	a.httpServer = server.NewHTTPServer(a.config.Server.HTTPPort, a.engine, a.wsHub)
 
-	// Check for React build and set it if exists
-	reactDir := filepath.Join(".", "web", "dist")
-	if _, err := os.Stat(filepath.Join(reactDir, "index.html")); err == nil {
-		log.Println("[HTTP] React build found, serving modern UI")
-		a.httpServer.SetReactDir(reactDir)
+	// Try embedded web files first, then fallback to filesystem
+	if embeddedFS, ok := GetEmbeddedWebFS(); ok {
+		log.Println("[HTTP] Using embedded web files (portable mode)")
+		a.httpServer.SetEmbeddedFS(embeddedFS)
 	} else {
-		log.Println("[HTTP] No React build found, using legacy UI")
+		// Check for React build on filesystem
+		reactDir := filepath.Join(".", "web", "dist")
+		if _, err := os.Stat(filepath.Join(reactDir, "index.html")); err == nil {
+			log.Println("[HTTP] React build found, serving modern UI")
+			a.httpServer.SetReactDir(reactDir)
+		} else {
+			log.Println("[HTTP] No React build found, using legacy UI")
+		}
 	}
 
 	// mDNS server (advertise buzzcontrol.local)

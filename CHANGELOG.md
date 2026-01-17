@@ -3,6 +3,38 @@
 Historique des versions du projet BuzzControl.
 
 
+## [2.35.0] - Portable Executable
+
+### Ajouts
+- **Exécutable portable** : Les fichiers web sont embarqués dans le binaire Go
+  - Utilise `//go:embed` pour inclure `web/dist/` dans l'exécutable
+  - Taille finale : ~13 MB (exécutable autonome)
+  - Aucune dépendance externe pour l'interface web
+  - Mode portable prioritaire sur le mode filesystem
+
+- **Scripts de build** : Automatisation du build portable
+  - `build.ps1` : Script PowerShell pour Windows
+  - `build.sh` : Script Bash pour Linux/macOS
+  - Étapes : build frontend → copie dist → build Go
+
+- **Structure de données portable** :
+  - Données dans `./data/` à côté de l'exécutable
+  - `data/config/` : Configuration (teams, bumpers, history)
+  - `data/files/` : Fichiers utilisateur (questions, backgrounds)
+
+### Technique
+- `cmd/server/embed.go` : Directive `//go:embed all:dist`
+- `internal/server/http.go` : Support `fs.FS` pour fichiers embarqués
+- Fallback automatique : embedded → filesystem → legacy
+
+### Fichiers
+- `cmd/server/embed.go` : Embedding des fichiers web
+- `internal/server/http.go` : `SetEmbeddedFS()`, handlers modifiés
+- `cmd/server/main.go` : Détection mode embedded
+- `build.ps1`, `build.sh` : Scripts de build
+
+---
+
 ## [2.34.0] - Category Palmares
 
 ### Ajouts
