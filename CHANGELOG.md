@@ -3,6 +3,38 @@
 Historique des versions du projet BuzzControl.
 
 
+## [2.34.0] - Category Palmares
+
+### Ajouts
+- **Vue PALMARES TV** : Classement des équipes et joueurs par catégorie sur l'affichage TV
+  - Nouvelle vue accessible depuis le bouton "Palmares" dans les contrôles TV de l'admin
+  - Grille 3x2 fixe avec maximum 6 catégories (affichage statique, pas de scroll)
+  - Chaque carte catégorie affiche : icône, nom, total points (équipes + joueurs)
+  - Classement séparé Équipes et Joueurs avec médailles 🥇🥈🥉
+  - Mise en évidence des vainqueurs (rank-1) avec effet doré lumineux
+
+- **Page admin Palmares** : Route `/palmares` dans la navbar
+  - Vue collapsible par catégorie avec boutons "Tout ouvrir/fermer"
+  - Résumé des points par catégorie
+  - Composant Podium compact pour le top 3
+
+### Technique
+- Fetch `/history` pour agréger les points par catégorie
+- Séparation stricte TEAM vs PLAYER (pas de mélange)
+- Calcul des rangs avec gestion des égalités
+- CSS viewport-based pour l'affichage TV statique
+
+### Fichiers
+- `CategoryPalmaresPage.jsx` : Page admin Palmares
+- `CategoryPalmaresPage.css` : Styles page admin
+- `PlayerDisplay.jsx` : Vue PALMARES TV avec fetch history et aggregation
+- `PlayerDisplay.css` : Styles grille 3x2 et highlighting vainqueurs
+- `GamePage.jsx` : Bouton "Palmares" dans contrôles TV
+- `App.jsx` : Route `/palmares`
+- `Navbar.jsx` : Lien navigation "Palmares"
+
+---
+
 ## [2.33.0] - Memory Game Complete
 
 ### Ajouts

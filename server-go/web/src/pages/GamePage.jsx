@@ -213,6 +213,13 @@ export default function GamePage() {
             >
               Joueurs
             </Button>
+            <Button
+              variant={gameState.remote === 'PALMARES' ? 'primary' : 'ghost'}
+              size="sm"
+              onClick={() => setRemoteDisplay('PALMARES')}
+            >
+              Palmares
+            </Button>
           </div>
           <div className="phase-badge-container">
             {gameState.phase === 'STOPPED' && <span className="phase-badge phase-stopped">ARRET</span>}

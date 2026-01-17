@@ -122,7 +122,7 @@ The ESP32-C3 buzzers connect to the Go server without any modification.
 | CONTINUE | Resume game | `{}` |
 | READY | Select question | `{QUESTION: questionId}` |
 | REVEAL | Show answer | `{}` |
-| REMOTE | Change TV display | `{REMOTE: "GAME\|SCORES\|PLAYERS"}` |
+| REMOTE | Change TV display | `{REMOTE: "GAME\|SCORE\|PLAYERS\|PALMARES"}` |
 | RAZ | Reset all scores | `{}` |
 | DELETE | Delete question | `{ID: questionId}` |
 | UPDATE | Update teams/bumpers | `{teams: {...}, bumpers: {...}}` |
@@ -785,6 +785,24 @@ Drag and drop pour reordonner les questions :
 - `server-go/web/src/pages/QuestionsPage.css` : Styles drag and drop
 - `server-go/web/src/pages/GamePage.jsx` : Tri par ORDER
 
+#### Contrainte Affichage TV - IMPORTANT
+**L'affichage TV (`/tv`) est STATIQUE et ne permet PAS de scroll.**
+Toutes les vues TV doivent tenir entièrement à l'écran sans défilement :
+- Utiliser `overflow: hidden` (jamais `auto` ou `scroll`)
+- Dimensionner avec des unités viewport (`vh`, `vw`, `%`)
+- Utiliser `flex` avec `min-height: 0` pour permettre le rétrécissement
+- Limiter le contenu visible (ex: top 3, max 6 catégories)
+
+**Fichiers concernés** : `PlayerDisplay.jsx` + `PlayerDisplay.css`
+
+#### Vues TV disponibles (v2.34.0)
+| Vue | Action REMOTE | Description |
+|-----|---------------|-------------|
+| JEU | `GAME` | Question en cours, timer, média |
+| EQUIPES | `SCORE` | Podium + classement équipes |
+| JOUEURS | `PLAYERS` | Podium + classement joueurs |
+| PALMARES | `PALMARES` | Classement par catégorie (grille 3x2) |
+
 #### PlayerDisplay 4-Zone Layout (v2.11.1)
 Layout vertical en 4 zones avec hauteurs fixes pour l'affichage TV (/tv) :
 - **Zone 1 - Timer** : 100px hauteur fixe, centré en haut
@@ -1022,18 +1040,38 @@ scp buzzcontrol pi@raspberrypi.local:~/
 
 ---
 
-## React Web Interface (v2.3.0)
+## React Web Interface (v2.34.0)
 
 ### Structure des pages
 
 | Route | Page | Description |
 |-------|------|-------------|
 | `/` | GamePage | Interface admin principale |
-| `/tv` | PlayerDisplay | Affichage joueurs (plein écran) |
+| `/tv` | PlayerDisplay | Affichage TV (plein écran, statique) |
 | `/scoreboard` | ScoresPage | Tableau des scores |
 | `/teams` | TeamsPage | Gestion des équipes |
 | `/quiz` | QuizPage | Gestion des questions |
 | `/settings` | SettingsPage | Configuration |
+| `/history-page` | HistoryPage | Historique des événements |
+| `/palmares` | CategoryPalmaresPage | Palmarès par catégorie |
+
+### Affichage TV - Vues disponibles (v2.34.0)
+
+L'affichage TV (`/tv`) est **statique** : pas de scroll autorisé, tout doit tenir sur un seul écran.
+
+| Vue | Action REMOTE | Description |
+|-----|---------------|-------------|
+| JEU | `GAME` | Question, timer, réponses QCM |
+| EQUIPES | `SCORE` | Podium des équipes (top 3) |
+| JOUEURS | `PLAYERS` | Liste des joueurs par équipe |
+| PALMARES | `PALMARES` | Classement par catégorie (grille 3x2, max 6 catégories) |
+
+**Vue PALMARES** :
+- Fetch `/history` pour agréger les points par catégorie
+- Grille fixe 3x2 (max 6 catégories affichées)
+- Chaque carte : icône, nom, total points, classement Équipes/Joueurs
+- Médailles 🥇🥈🥉 pour le top 3
+- Vainqueurs (rank-1) mis en évidence avec effet doré lumineux
 
 ### Layout GamePage (Admin) - v2.12.0
 
@@ -1055,7 +1093,7 @@ Layout avec timer pleine largeur + 3 colonnes harmonisées :
 
 **Colonne centrale (flexible)** :
 - Contrôles de jeu (START/PAUSE sur même ligne, REPONSE)
-- Toggle affichage TV (Jeu, Équipes, Joueurs)
+- Toggle affichage TV (Jeu, Équipes, Joueurs, Palmares)
 - Aperçu TV 16:9 (QuestionPreview en iframe vers /tv)
 
 **Colonne droite (280px)** : Cartes équipes empilées verticalement (cartes 240px)

@@ -7,6 +7,7 @@ import ScoresPage from './pages/ScoresPage'
 import TeamsPage from './pages/TeamsPage'
 import QuestionsPage from './pages/QuestionsPage'
 import HistoryPage from './pages/HistoryPage'
+import CategoryPalmaresPage from './pages/CategoryPalmaresPage'
 import ConfigPage from './pages/ConfigPage'
 import PlayerDisplay from './pages/PlayerDisplay'
 import './App.css'
@@ -40,6 +41,7 @@ function AppContent() {
           <Route path="/teams" element={<TeamsPage />} />
           <Route path="/quiz" element={<QuestionsPage />} />
           <Route path="/history-page" element={<HistoryPage />} />
+          <Route path="/palmares" element={<CategoryPalmaresPage />} />
           <Route path="/settings" element={<ConfigPage />} />
           <Route path="/tv" element={<PlayerDisplay />} />
         </Routes>

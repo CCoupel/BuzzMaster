@@ -1732,3 +1732,208 @@
   0% { transform: scale(1); opacity: 1; }
   100% { transform: scale(1.05); opacity: 0.8; }
 }
+
+/* ==================== PALMARES DISPLAY ==================== */
+/* NOTE: TV display is STATIC - no scrolling allowed, must fit on screen */
+
+.palmares-display {
+  position: relative;
+  z-index: 1;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding: var(--space-3) var(--space-4);
+  overflow: hidden; /* NO SCROLL on TV */
+  height: 100%;
+  max-height: 100%;
+}
+
+.palmares-display .scores-title {
+  text-align: center;
+  margin-bottom: var(--space-3);
+  font-size: clamp(1.5rem, 4vh, 2.5rem);
+}
+
+.palmares-categories {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr); /* Fixed 3 columns */
+  grid-template-rows: repeat(2, 1fr); /* Fixed 2 rows - max 6 categories visible */
+  gap: var(--space-2);
+  flex: 1;
+  min-height: 0; /* Allow shrinking */
+  max-height: calc(100vh - 180px); /* Leave room for title and timer bar */
+}
+
+.palmares-category {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  backdrop-filter: blur(10px);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.palmares-category-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  color: white;
+  flex-shrink: 0;
+}
+
+.palmares-category-icon {
+  font-size: 1.3rem;
+}
+
+.palmares-category-name {
+  font-family: var(--font-display);
+  font-size: 1rem;
+  font-weight: 700;
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.palmares-category-stats {
+  display: flex;
+  gap: var(--space-2);
+}
+
+.palmares-stat {
+  font-size: 0.75rem;
+  font-weight: 600;
+  background: rgba(0, 0, 0, 0.2);
+  padding: 2px 8px;
+  border-radius: var(--radius-full);
+  white-space: nowrap;
+}
+
+.palmares-category-content {
+  display: flex;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.palmares-ranking {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.palmares-ranking-title {
+  font-family: var(--font-display);
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.7);
+  margin: 0 0 var(--space-1) 0;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.palmares-ranking-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1;
+  min-height: 0;
+}
+
+.palmares-ranking-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 4px 8px;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: var(--radius-sm);
+  border-left: 3px solid var(--team-color, #6b7280);
+}
+
+.palmares-ranking-item.rank-1 {
+  background: linear-gradient(135deg, rgba(255, 215, 0, 0.25) 0%, rgba(255, 180, 0, 0.15) 100%);
+  border-left: 4px solid #ffd700;
+  box-shadow: 0 0 12px rgba(255, 215, 0, 0.4), inset 0 0 20px rgba(255, 215, 0, 0.1);
+  transform: scale(1.02);
+}
+
+.palmares-ranking-item.rank-1 .palmares-rank-medal {
+  font-size: 1.3rem;
+  filter: drop-shadow(0 0 6px rgba(255, 215, 0, 0.8));
+}
+
+.palmares-ranking-item.rank-1 .palmares-rank-name {
+  font-weight: 700;
+  color: #ffd700;
+  text-shadow: 0 0 10px rgba(255, 215, 0, 0.5);
+}
+
+.palmares-ranking-item.rank-1 .palmares-rank-points {
+  color: #ffd700;
+  font-size: 0.95rem;
+  text-shadow: 0 0 8px rgba(255, 215, 0, 0.6);
+}
+
+.palmares-ranking-item.rank-2 {
+  background: rgba(192, 192, 192, 0.1);
+  opacity: 0.85;
+}
+
+.palmares-ranking-item.rank-3 {
+  background: rgba(205, 127, 50, 0.1);
+  opacity: 0.75;
+}
+
+.palmares-rank-medal {
+  font-size: 1rem;
+}
+
+.palmares-rank-name {
+  flex: 1;
+  font-weight: 600;
+  font-size: 0.85rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.palmares-rank-points {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 0.85rem;
+  color: var(--team-color, white);
+  white-space: nowrap;
+}
+
+.palmares-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 1.5rem;
+}
+
+/* Responsive palmares - adjust grid for smaller screens */
+@media (max-width: 1200px) {
+  .palmares-categories {
+    grid-template-columns: repeat(2, 1fr);
+    grid-template-rows: repeat(3, 1fr);
+  }
+}
+
+@media (max-width: 800px) {
+  .palmares-categories {
+    grid-template-columns: 1fr;
+    grid-template-rows: repeat(4, 1fr);
+  }
+
+  .palmares-category-content {
+    flex-direction: row;
+  }
+}

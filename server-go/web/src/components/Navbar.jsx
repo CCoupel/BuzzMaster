@@ -9,6 +9,7 @@ export default function Navbar({ connectionStatus = 'disconnected', clientCounts
     { to: '/teams', label: 'Equipes', icon: '👥' },
     { to: '/quiz', label: 'Questions', icon: '❓' },
     { to: '/history-page', label: 'Historique', icon: '📜' },
+    { to: '/palmares', label: 'Palmares', icon: '🏅' },
     { to: '/settings', label: 'Config', icon: '⚙️' },
   ]
 
