@@ -1193,14 +1193,13 @@ Le hook `useWebSocket.js` gère la communication :
 3. **Validation par l'utilisateur** → Remettre **z** à 0, documenter et commit
    - Exemple : 2.2.15 → 2.2.0 (puis commit)
 
-### Fichiers à mettre à jour
+### Fichier à mettre à jour
 
 | Fichier | Champ |
 |---------|-------|
 | `server-go/config.json` | `"version": "x.y.z"` |
-| `server-go/web/package.json` | `"version": "x.y.z"` |
 
-**Note** : La version serveur est lue depuis `config.json`, la version web depuis `package.json`.
+**Note** : Depuis v2.35.0 (mode portable), une seule version est utilisée pour le bundle complet (serveur + web).
 
 ---
 
@@ -1221,14 +1220,13 @@ Avant chaque test du serveur, suivre cette procédure pour garantir un environne
 | 5 | **Lancer le serveur EN MODE VISIBLE** | Ouvrir une fenêtre CMD/PowerShell, `cd server-go`, puis `./server.exe` |
 | 6 | **Vérifier page admin (/)** | Ouvrir http://localhost/ dans Chrome |
 | 7 | **Vérifier page joueur (/tv)** | Ouvrir http://localhost/tv dans Chrome |
-| 8 | **Vérifier les versions affichées** | Navbar : Serveur et Web doivent correspondre |
+| 8 | **Vérifier la version affichée** | Navbar : Version du bundle (ex: v2.35.0) |
 
 ### Vérifications attendues
 
 - [ ] Page admin (/) s'affiche correctement
 - [ ] Page joueur (/tv) s'affiche correctement
-- [ ] Version serveur affichée (ex: 2.0.0)
-- [ ] Version web affichée (ex: 2.2.1)
+- [ ] Version affichée dans la navbar (ex: v2.35.0)
 - [ ] Compteurs clients visibles (Admin: X, TV: Y)
 - [ ] WebSocket connecté (pas d'erreur console)
 
@@ -1254,22 +1252,18 @@ Lorsque l'utilisateur valide l'implémentation :
 |---|-------|--------|
 | 1 | **Remettre z à 0** | Version x.y.z → x.y.0 |
 | 2 | **Mettre à jour config.json** | `"version": "x.y.0"` |
-| 3 | **Mettre à jour package.json** | `"version": "x.y.0"` |
-| 4 | **Mettre à jour CLAUDE.md** | Documenter les nouvelles fonctionnalités |
-| 5 | **Rebuild le frontend** | `npm run build --prefix server-go/web` |
-| 6 | **Rebuild le serveur Go** | `go build -o server.exe ./cmd/server` |
-| 7 | **Git commit** | Message décrivant les changements |
+| 3 | **Mettre à jour CLAUDE.md** | Documenter les nouvelles fonctionnalités |
+| 4 | **Build portable** | `cd server-go && ./build.ps1` (ou `./build.sh` sur Linux/macOS) |
+| 5 | **Git commit** | Message décrivant les changements |
 
 ### Format de commit
 
 ```bash
 git add .
-git commit -m "feat: Description de la fonctionnalité
+git commit -m "feat: Description de la fonctionnalité vx.y.0
 
 - Détail 1
 - Détail 2
-
-Version: Server x.y.z / Web x.y.0
 
 🤖 Generated with [Claude Code](https://claude.com/claude-code)
 

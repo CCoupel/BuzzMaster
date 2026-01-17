@@ -34,43 +34,16 @@
   -webkit-text-fill-color: transparent;
 }
 
-.version-badges {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  margin-left: var(--space-3);
-}
-
 .version-badge {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  font-size: 0.6rem;
+  font-size: 0.7rem;
   font-weight: 600;
+  font-family: var(--font-mono, monospace);
   padding: 2px 8px;
+  margin-left: var(--space-2);
   border-radius: var(--radius-sm);
-  cursor: help;
-  line-height: 1.2;
-}
-
-.version-badge.server {
   background: linear-gradient(135deg, var(--primary-100), var(--primary-50));
   color: var(--primary-700);
-}
-
-.version-badge.web {
-  background: linear-gradient(135deg, var(--gray-100), var(--gray-50));
-  color: var(--gray-600);
-}
-
-.version-icon {
-  font-size: 0.7rem;
-  line-height: 1;
-}
-
-.version-value {
-  font-family: var(--font-mono, monospace);
-  letter-spacing: 0.5px;
+  cursor: help;
 }
 
 /* Navigation Links */

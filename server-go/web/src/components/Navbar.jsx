@@ -24,16 +24,9 @@ export default function Navbar({ connectionStatus = 'disconnected', clientCounts
           🐝
         </motion.span>
         <span className="brand-text">BuzzControl</span>
-        <div className="version-badges">
-          <span className="version-badge server" title="Version serveur Go">
-            <span className="version-icon">🖥️</span>
-            <span className="version-value">{serverVersion || '...'}</span>
-          </span>
-          <span className="version-badge web" title="Version interface web React">
-            <span className="version-icon">🌐</span>
-            <span className="version-value">2.3.0</span>
-          </span>
-        </div>
+        <span className="version-badge" title="Version BuzzControl">
+          v{serverVersion || '...'}
+        </span>
       </div>
 
       <div className="navbar-links">
