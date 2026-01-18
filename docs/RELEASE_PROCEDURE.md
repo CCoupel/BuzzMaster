@@ -199,9 +199,12 @@ git push origin vX.Y.0
 
 ---
 
-### 12. Surveiller la CI
+### 12. Surveiller la CI (Claude)
 
-Ouvrir : https://github.com/CCoupel/BuzzMaster/actions
+> **🤖 Responsabilité Claude** : Cette étape est automatiquement effectuée par Claude.
+> Claude doit attendre la fin du pipeline CI et vérifier que tous les jobs sont verts (✅).
+
+**URL** : https://github.com/CCoupel/BuzzMaster/actions
 
 Le pipeline s'exécute en 3 étapes :
 
@@ -232,6 +235,11 @@ Le pipeline s'exécute en 3 étapes :
 
 **Durée totale** : ~2-3 minutes
 
+**Claude doit** :
+1. Attendre la fin complète du pipeline (~2-3 minutes)
+2. Vérifier que les 3 jobs sont verts (✅)
+3. En cas d'échec, analyser les logs et informer l'utilisateur
+
 **En cas d'échec** :
 1. Cliquer sur le job en erreur
 2. Lire les logs pour identifier le problème
@@ -239,13 +247,20 @@ Le pipeline s'exécute en 3 étapes :
 
 ---
 
-### 13. Vérifier la Release
+### 13. Vérifier la Release (Claude)
 
-1. Aller sur : https://github.com/CCoupel/BuzzMaster/releases
-2. Vérifier que la release `vX.Y.0` contient :
-   - [ ] `buzzcontrol-vX.Y.0-windows-amd64.exe` (~8-9 MB)
-   - [ ] `buzzcontrol-vX.Y.0-linux-arm64` (~8 MB)
-   - [ ] Notes de release extraites du CHANGELOG
+> **🤖 Responsabilité Claude** : Cette étape est automatiquement effectuée par Claude.
+> Claude doit vérifier que la release est bien disponible sur GitHub avec tous les binaires.
+
+**URL** : https://github.com/CCoupel/BuzzMaster/releases
+
+**Claude doit vérifier** :
+1. La release `vX.Y.0` existe
+2. Les binaires sont attachés :
+   - `buzzcontrol-vX.Y.0-windows-amd64.exe` (~8-9 MB)
+   - `buzzcontrol-vX.Y.0-linux-arm64` (~8 MB)
+3. Les notes de release sont extraites du CHANGELOG
+4. Informer l'utilisateur du succès ou de l'échec
 
 ---
 
@@ -263,8 +278,8 @@ Le pipeline s'exécute en 3 étapes :
 [ ] 9.  Changements commités
 [ ] 10. Commits poussés
 [ ] 11. Tag créé et poussé (déclenche CI)
-[ ] 12. CI surveillée (3 jobs verts ✅)
-[ ] 13. Release vérifiée sur GitHub (binaires + notes)
+[ ] 12. 🤖 CI surveillée par Claude (3 jobs verts ✅)
+[ ] 13. 🤖 Release vérifiée par Claude (binaires + notes)
 ```
 
 ---
