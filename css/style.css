@@ -193,6 +193,18 @@ body {
     display: grid;
     grid-template-columns: repeat(2, 1fr);
     gap: 2rem;
+    align-items: start;
+}
+
+.demo-zone {
+    display: flex;
+    flex-direction: column;
+}
+
+.demo-zone .demo-item {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
 }
 
 .demo-showcase {
@@ -226,10 +238,6 @@ body {
     font-size: 0.9rem;
     text-align: center;
     border-top: 1px solid rgba(255, 255, 255, 0.05);
-}
-
-.demo-zone {
-    margin-bottom: 0;
 }
 
 .demo-zone-title {
