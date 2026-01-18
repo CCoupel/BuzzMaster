@@ -3,6 +3,22 @@
 Historique des versions du projet BuzzControl.
 
 
+## [2.37.0] - QCM Form Layout Fix
+
+### Corrigé
+- **Formulaire QCM** : Les 4 réponses (A, B, C, D) s'affichent maintenant correctement dans la colonne de configuration
+  - Layout vertical (flex column) au lieu de grille 2x2
+  - Chaque réponse a un fond coloré correspondant à sa couleur (rouge/vert/jaune/bleu estompé)
+  - Résolution du conflit CSS entre `QuestionsPage.css` et `PlayerDisplay.css`
+  - Classe renommée de `.qcm-answers-grid` à `.qcm-form-answers` pour éviter les collisions
+
+### Technique
+- `QuestionsPage.jsx` : Classe CSS renommée pour éviter le conflit
+- `QuestionsPage.css` : Layout flex column avec fond coloré par réponse
+- La réponse correcte garde sa couleur d'origine (pas de forçage en vert)
+
+---
+
 ## [2.36.0] - Documentation & Procedures
 
 ### Ajouts
