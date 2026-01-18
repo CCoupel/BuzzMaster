@@ -1,0 +1,142 @@
+name: Build and Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+env:
+  GO_VERSION: '1.21'
+  NODE_VERSION: '18'
+
+jobs:
+  build:
+    name: Build Release Binaries
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: server-go/web/package-lock.json
+
+      - name: Get version from tag
+        id: version
+        run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+
+      - name: Verify versions match
+        run: |
+          CONFIG_VERSION=$(grep '"version"' server-go/config.json | sed 's/.*"version": "\([^"]*\)".*/\1/')
+          PACKAGE_VERSION=$(grep '"version"' server-go/web/package.json | sed 's/.*"version": "\([^"]*\)".*/\1/')
+          TAG_VERSION="${{ steps.version.outputs.VERSION }}"
+
+          echo "Tag version: $TAG_VERSION"
+          echo "Config version: $CONFIG_VERSION"
+          echo "Package version: $PACKAGE_VERSION"
+
+          if [ "$CONFIG_VERSION" != "$TAG_VERSION" ]; then
+            echo "ERROR: config.json version ($CONFIG_VERSION) does not match tag ($TAG_VERSION)"
+            exit 1
+          fi
+
+          if [ "$PACKAGE_VERSION" != "$TAG_VERSION" ]; then
+            echo "ERROR: package.json version ($PACKAGE_VERSION) does not match tag ($TAG_VERSION)"
+            exit 1
+          fi
+
+          echo "All versions match: $TAG_VERSION"
+
+      - name: Install frontend dependencies
+        working-directory: server-go/web
+        run: npm ci
+
+      - name: Build frontend
+        working-directory: server-go/web
+        run: npm run build
+
+      - name: Copy dist for embedding
+        run: |
+          rm -rf server-go/cmd/server/dist
+          cp -r server-go/web/dist server-go/cmd/server/dist
+
+      - name: Build Windows AMD64
+        working-directory: server-go
+        env:
+          GOOS: windows
+          GOARCH: amd64
+          CGO_ENABLED: 0
+        run: |
+          go build -ldflags="-s -w" -o ../buzzcontrol-v${{ steps.version.outputs.VERSION }}-windows-amd64.exe ./cmd/server
+
+      - name: Build Linux ARM64 (Raspberry Pi)
+        working-directory: server-go
+        env:
+          GOOS: linux
+          GOARCH: arm64
+          CGO_ENABLED: 0
+        run: |
+          go build -ldflags="-s -w" -o ../buzzcontrol-v${{ steps.version.outputs.VERSION }}-linux-arm64 ./cmd/server
+
+      - name: Validate binaries
+        run: |
+          echo "Checking binary sizes..."
+
+          WIN_SIZE=$(stat -c%s "buzzcontrol-v${{ steps.version.outputs.VERSION }}-windows-amd64.exe")
+          LINUX_SIZE=$(stat -c%s "buzzcontrol-v${{ steps.version.outputs.VERSION }}-linux-arm64")
+
+          echo "Windows binary: $WIN_SIZE bytes"
+          echo "Linux binary: $LINUX_SIZE bytes"
+
+          # Minimum 5MB (5242880 bytes)
+          MIN_SIZE=5242880
+
+          if [ "$WIN_SIZE" -lt "$MIN_SIZE" ]; then
+            echo "ERROR: Windows binary too small ($WIN_SIZE < $MIN_SIZE)"
+            exit 1
+          fi
+
+          if [ "$LINUX_SIZE" -lt "$MIN_SIZE" ]; then
+            echo "ERROR: Linux binary too small ($LINUX_SIZE < $MIN_SIZE)"
+            exit 1
+          fi
+
+          echo "Binary validation passed!"
+
+      - name: Generate release notes
+        id: release_notes
+        run: |
+          VERSION="${{ steps.version.outputs.VERSION }}"
+
+          # Extract release notes from CHANGELOG.md
+          NOTES=$(awk "/## \[$VERSION\]/{flag=1; next} /## \[/{flag=0} flag" CHANGELOG.md)
+
+          if [ -z "$NOTES" ]; then
+            NOTES="Release v$VERSION"
+          fi
+
+          # Save to file for multiline support
+          echo "$NOTES" > release_notes.md
+          echo "Generated release notes for v$VERSION"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          name: BuzzControl v${{ steps.version.outputs.VERSION }}
+          body_path: release_notes.md
+          files: |
+            buzzcontrol-v${{ steps.version.outputs.VERSION }}-windows-amd64.exe
+            buzzcontrol-v${{ steps.version.outputs.VERSION }}-linux-arm64
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
