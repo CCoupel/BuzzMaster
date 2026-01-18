@@ -222,6 +222,39 @@ body {
     border-top: 1px solid rgba(255, 255, 255, 0.05);
 }
 
+.demo-zone {
+    margin-bottom: 4rem;
+}
+
+.demo-zone:last-child {
+    margin-bottom: 0;
+}
+
+.demo-zone-title {
+    text-align: center;
+    font-size: 1.75rem;
+    margin-bottom: 0.75rem;
+    color: var(--primary);
+}
+
+.demo-zone-desc {
+    text-align: center;
+    color: var(--text-muted);
+    margin-bottom: 2rem;
+    max-width: 600px;
+    margin-left: auto;
+    margin-right: auto;
+}
+
+.demo-item-large {
+    max-width: 900px;
+    margin: 0 auto;
+}
+
+.demo-item-large .demo-gif {
+    border-radius: 8px 8px 0 0;
+}
+
 /* ============================================
    Features Section
    ============================================ */
