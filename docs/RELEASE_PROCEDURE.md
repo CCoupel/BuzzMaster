@@ -8,7 +8,8 @@ Ce document décrit la procédure complète pour publier une nouvelle version de
 
 - [ ] Go 1.21+ installé
 - [ ] Node.js 18+ installé
-- [ ] Git configuré avec accès Bitbucket
+- [ ] Git configuré avec accès GitHub
+- [ ] GitHub CLI (`gh`) installé et authentifié (optionnel)
 - [ ] Accès en écriture au dépôt
 
 ---
@@ -284,32 +285,37 @@ git push origin vX.Y.0
 
 ---
 
-### 15. Publier la Release sur Bitbucket
+### 15. Publier la Release sur GitHub
 
-#### Via l'interface web Bitbucket
-
-1. Aller sur : `https://bitbucket.org/ccoupel/buzzcontrol/downloads/`
-2. Cliquer sur "Add files"
-3. Uploader les fichiers :
-   - `buzzcontrol-vX.Y.0-windows-amd64.exe`
-   - `buzzcontrol-vX.Y.0-linux-arm64`
-4. Ajouter une description de la release
-
-#### Via l'API Bitbucket (optionnel)
+#### Via GitHub CLI (recommandé)
 
 ```bash
-# Upload Windows exe
-curl -X POST \
-  -u username:app_password \
-  -F files=@releases/buzzcontrol-vX.Y.0-windows-amd64.exe \
-  https://api.bitbucket.org/2.0/repositories/ccoupel/buzzcontrol/downloads
+cd server-go
 
-# Upload Linux binary
-curl -X POST \
-  -u username:app_password \
-  -F files=@releases/buzzcontrol-vX.Y.0-linux-arm64 \
-  https://api.bitbucket.org/2.0/repositories/ccoupel/buzzcontrol/downloads
+# Créer la release avec les binaires
+gh release create vX.Y.0 \
+  releases/buzzcontrol-vX.Y.0-windows-amd64.exe \
+  releases/buzzcontrol-vX.Y.0-linux-arm64 \
+  --title "BuzzControl vX.Y.0" \
+  --notes "## Nouveautés
+- Feature 1
+- Feature 2
+
+## Corrections
+- Fix 1
+- Fix 2"
 ```
+
+#### Via l'interface web GitHub
+
+1. Aller sur : `https://github.com/CCoupel/BuzzMaster/releases/new`
+2. Choisir le tag `vX.Y.0` existant
+3. Titre : `BuzzControl vX.Y.0`
+4. Description : copier depuis CHANGELOG.md
+5. Glisser-déposer les fichiers :
+   - `releases/buzzcontrol-vX.Y.0-windows-amd64.exe`
+   - `releases/buzzcontrol-vX.Y.0-linux-arm64`
+6. Cliquer "Publish release"
 
 ---
 
@@ -330,7 +336,7 @@ curl -X POST \
 [ ] 12. Changements commités
 [ ] 13. Commits poussés
 [ ] 14. Tag de version créé et poussé
-[ ] 15. Release publiée sur Bitbucket
+[ ] 15. Release publiée sur GitHub
 ```
 
 ---
@@ -353,9 +359,14 @@ git push origin --delete vX.Y.0
 git reset --soft HEAD~1
 ```
 
-### Supprimer une release Bitbucket
+### Supprimer une release GitHub
 
-Via l'interface web : Downloads > Supprimer le fichier
+```bash
+# Via gh CLI
+gh release delete vX.Y.0 --yes
+
+# Ou via l'interface web : Releases > vX.Y.0 > Delete
+```
 
 ---
 

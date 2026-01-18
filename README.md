@@ -70,7 +70,7 @@ BuzzControl est une solution complete pour animer des jeux de quiz avec des buzz
 
 ### Option 1 : Executable Portable (Recommande)
 
-1. Telecharger la derniere release :
+1. Telecharger la derniere release sur [GitHub Releases](https://github.com/CCoupel/BuzzMaster/releases) :
    - `buzzcontrol-vX.Y.Z-windows-amd64.exe` (Windows)
    - `buzzcontrol-vX.Y.Z-linux-arm64` (Raspberry Pi)
 
@@ -94,8 +94,8 @@ BuzzControl est une solution complete pour animer des jeux de quiz avec des buzz
 
 ```bash
 # Cloner le depot
-git clone https://bitbucket.org/ccoupel/buzzcontrol.git
-cd buzzcontrol/server-go
+git clone https://github.com/CCoupel/BuzzMaster.git
+cd BuzzMaster/server-go
 
 # Installer les dependances frontend
 cd web && npm install && cd ..
@@ -270,5 +270,5 @@ Projet prive - Tous droits reserves.
 ## Support
 
 Pour signaler un bug ou demander une fonctionnalite :
-- Ouvrir une issue sur le depot Bitbucket
+- Ouvrir une [issue sur GitHub](https://github.com/CCoupel/BuzzMaster/issues)
 - Contacter l'auteur directement
