@@ -89,3 +89,25 @@ Thumbs.db
 *.flv
 *.mov
 *.wmv
+
+# BuzzControl - Runtime data (user-created content)
+server-go/data/config/
+server-go/data/files/questions/
+server-go/data/files/backgrounds/
+
+# BuzzControl - Build outputs
+server-go/releases/
+server-go/web/dist/
+server-go/cmd/server/dist/
+
+# BuzzControl - Temp/debug files
+server-go/nul
+server-go/server-output.txt
+server-go/server-error.txt
+server-go/test-report.txt
+server-go/test-summary.txt
+*.bak
+nul
+
+# Claude Code local settings
+.claude/settings.local.json

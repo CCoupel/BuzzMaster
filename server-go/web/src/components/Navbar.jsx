@@ -3,15 +3,33 @@ import { motion } from 'framer-motion'
 import './Navbar.css'
 
 export default function Navbar({ connectionStatus = 'disconnected', clientCounts = { admin: 0, tv: 0 }, serverVersion = '' }) {
-  const navItems = [
+  // Zone Jeu: pages principales du jeu
+  const gameItems = [
     { to: '/', label: 'Jeu', icon: '🎮' },
     { to: '/scoreboard', label: 'Scores', icon: '🏆' },
-    { to: '/teams', label: 'Equipes', icon: '👥' },
-    { to: '/quiz', label: 'Questions', icon: '❓' },
+    { to: '/palmares', label: 'Palmarès', icon: '🏅' },
     { to: '/history-page', label: 'Historique', icon: '📜' },
-    { to: '/palmares', label: 'Palmares', icon: '🏅' },
+  ]
+
+  // Zone Config: configuration et gestion
+  const configItems = [
+    { to: '/teams', label: 'Équipes', icon: '👥' },
+    { to: '/quiz', label: 'Questions', icon: '❓' },
     { to: '/settings', label: 'Config', icon: '⚙️' },
   ]
+
+  const renderNavLink = (item) => (
+    <NavLink
+      key={item.to}
+      to={item.to}
+      className={({ isActive }) =>
+        `nav-link ${isActive ? 'active' : ''}`
+      }
+    >
+      <span className="nav-icon">{item.icon}</span>
+      <span className="nav-label">{item.label}</span>
+    </NavLink>
+  )
 
   return (
     <nav className="navbar">
@@ -30,18 +48,18 @@ export default function Navbar({ connectionStatus = 'disconnected', clientCounts
       </div>
 
       <div className="navbar-links">
-        {navItems.map((item) => (
-          <NavLink
-            key={item.to}
-            to={item.to}
-            className={({ isActive }) =>
-              `nav-link ${isActive ? 'active' : ''}`
-            }
-          >
-            <span className="nav-icon">{item.icon}</span>
-            <span className="nav-label">{item.label}</span>
-          </NavLink>
-        ))}
+        <div className="nav-group nav-group-game">
+          <span className="nav-group-label">Jeu</span>
+          <div className="nav-group-items">
+            {gameItems.map(renderNavLink)}
+          </div>
+        </div>
+        <div className="nav-group nav-group-config">
+          <span className="nav-group-label">Config</span>
+          <div className="nav-group-items">
+            {configItems.map(renderNavLink)}
+          </div>
+        </div>
       </div>
 
       <div className="navbar-status">

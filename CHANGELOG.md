@@ -3,6 +3,35 @@
 Historique des versions du projet BuzzControl.
 
 
+## [2.36.0] - Documentation & Procedures
+
+### Ajouts
+- **Procédures de développement** : Workflow complet DEV → QUALIF → RELEASE
+  - `docs/DEV_PROCEDURE.md` : Environnement, conventions, debugging
+  - `docs/QUALIF_PROCEDURE.md` : Tests, checklists, rapport de qualification
+  - `docs/RELEASE_PROCEDURE.md` : 15 étapes pour mise en production
+  - Scripts de build : `build-release.ps1` et `build-release.sh`
+
+- **README.md** : Présentation complète du projet
+  - Fonctionnalités, installation, architecture
+  - Guide de démarrage rapide
+  - Liens vers toute la documentation
+
+- **Navbar réorganisée** : 2 zones distinctes
+  - Zone Jeu (fond bleu) : Jeu, Scores, Palmarès, Historique
+  - Zone Config (fond gris) : Équipes, Questions, Config
+  - Labels verticaux pour identifier chaque zone
+
+### Modifié
+- **CLAUDE.md simplifié** : Références vers les procédures au lieu de duplication
+- **Version unique** : Plus de version web séparée (bundle complet)
+
+### Technique
+- `Navbar.jsx` : Structure en 2 groupes avec `nav-group-game` et `nav-group-config`
+- `Navbar.css` : Styles des zones avec dégradés et labels verticaux
+
+---
+
 ## [2.35.0] - Portable Executable
 
 ### Ajouts

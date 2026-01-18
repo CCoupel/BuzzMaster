@@ -21,10 +21,10 @@ Fonctionnalités à implémenter.
   - UI pour sélectionner/créer une catégorie lors de l'ajout de question
   - Filtrage des questions par catégorie dans QuestionsPage
 
-- [ ] **Palmarès par catégorie**
-  - Afficher un classement des équipes filtré par catégorie
-  - Afficher un classement des joueurs filtré par catégorie
-  - Nouveau mode d'affichage TV ou onglet dans ScoresPage
+- [x] **Palmarès par catégorie** *(v2.34.0)*
+  - Page admin `/palmares` avec classement par catégorie
+  - Vue TV Palmares avec grille 3x2 des catégories
+  - Classement séparé équipes/joueurs avec médailles
 
 ---
 

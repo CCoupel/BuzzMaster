@@ -1,7 +1,11 @@
 # CLAUDE.md - BuzzControl Project Reference
 
 > **Historique des versions** : Voir [CHANGELOG.md](CHANGELOG.md) pour l'historique détaillé des fonctionnalités par version.
-> **Guide d'administration** : Voir [docs/ADMIN_GUIDE.md](docs/ADMIN_GUIDE.md) pour la persistance, sauvegarde/restauration et gestion des scores.
+>
+> **Procédures** : DEV → QUALIF → RELEASE (voir section [Procédures de Développement et Production](#procédures-de-développement-et-production))
+> - [DEV_PROCEDURE.md](docs/DEV_PROCEDURE.md) | [TEST_PROCEDURE.md](docs/TEST_PROCEDURE.md) | [QUALIF_PROCEDURE.md](docs/QUALIF_PROCEDURE.md) | [RELEASE_PROCEDURE.md](docs/RELEASE_PROCEDURE.md)
+>
+> **Guide utilisateur** : Voir [docs/ADMIN_GUIDE.md](docs/ADMIN_GUIDE.md) pour la persistance, sauvegarde/restauration et gestion des scores.
 
 ## Project Overview
 
@@ -1203,71 +1207,43 @@ Le hook `useWebSocket.js` gère la communication :
 
 ---
 
-## Procédure de Test Systématique
+## Procédures de Développement et Production
 
-Avant chaque test du serveur, suivre cette procédure pour garantir un environnement propre.
+Les procédures détaillées sont documentées dans des fichiers séparés.
 
-**IMPORTANT** : Toujours lancer le serveur en mode visible (fenêtre CMD) pour voir les logs en temps réel. Ne jamais utiliser `-WindowStyle Hidden` en développement.
+### Cycle de vie
 
-### Étapes
-
-| # | Tâche | Commande / Action |
-|---|-------|-------------------|
-| 1 | **Arrêter le serveur en cours** | `taskkill /IM server.exe /F` |
-| 2 | **Mettre à jour les versions** | `config.json` et `package.json` (voir section Gestion des Versions) |
-| 3 | **Rebuild le frontend** | `npm run build --prefix server-go/web` |
-| 4 | **Rebuild le serveur Go** | `go build -o server.exe ./cmd/server` |
-| 5 | **Lancer le serveur EN MODE VISIBLE** | Ouvrir une fenêtre CMD/PowerShell, `cd server-go`, puis `./server.exe` |
-| 6 | **Vérifier page admin (/)** | Ouvrir http://localhost/ dans Chrome |
-| 7 | **Vérifier page joueur (/tv)** | Ouvrir http://localhost/tv dans Chrome |
-| 8 | **Vérifier la version affichée** | Navbar : Version du bundle (ex: v2.35.0) |
-
-### Vérifications attendues
-
-- [ ] Page admin (/) s'affiche correctement
-- [ ] Page joueur (/tv) s'affiche correctement
-- [ ] Version affichée dans la navbar (ex: v2.35.0)
-- [ ] Compteurs clients visibles (Admin: X, TV: Y)
-- [ ] WebSocket connecté (pas d'erreur console)
-
-### En cas d'erreur de port occupé
-
-```bash
-# Trouver le processus utilisant le port
-netstat -ano | findstr :80
-
-# Tuer le processus par PID
-taskkill /PID <PID> /F
+```
+┌─────────────────┐     Validation     ┌─────────────────┐     Validation     ┌─────────────────┐
+│  DEV + TEST     │ ─────────────────► │  QUALIF + TEST  │ ─────────────────► │  RELEASE        │
+│  (Développement)│                    │  (Qualification)│                    │  (Production)   │
+└─────────────────┘                    └─────────────────┘                    └─────────────────┘
 ```
 
----
+**Important** : Le passage d'une phase à l'autre nécessite une validation explicite de l'utilisateur.
 
-## Procédure de Validation et Commit
+### Documents de procédure
 
-Lorsque l'utilisateur valide l'implémentation :
+| Phase | Document | Description |
+|-------|----------|-------------|
+| DEV | [docs/DEV_PROCEDURE.md](docs/DEV_PROCEDURE.md) | Workflow de développement |
+| TEST | [docs/TEST_PROCEDURE.md](docs/TEST_PROCEDURE.md) | Tests unitaires et E2E |
+| QUALIF | [docs/QUALIF_PROCEDURE.md](docs/QUALIF_PROCEDURE.md) | Qualification avant release |
+| RELEASE | [docs/RELEASE_PROCEDURE.md](docs/RELEASE_PROCEDURE.md) | Mise en production |
+| UTILISATEUR | [docs/ADMIN_GUIDE.md](docs/ADMIN_GUIDE.md) | Guide utilisateur |
 
-### Étapes
-
-| # | Tâche | Action |
-|---|-------|--------|
-| 1 | **Remettre z à 0** | Version x.y.z → x.y.0 |
-| 2 | **Mettre à jour config.json** | `"version": "x.y.0"` |
-| 3 | **Mettre à jour CLAUDE.md** | Documenter les nouvelles fonctionnalités |
-| 4 | **Build portable** | `cd server-go && ./build.ps1` (ou `./build.sh` sur Linux/macOS) |
-| 5 | **Git commit** | Message décrivant les changements |
-
-### Format de commit
+### Commandes rapides
 
 ```bash
-git add .
-git commit -m "feat: Description de la fonctionnalité vx.y.0
+# Développement
+cd server-go
+go build -o server.exe ./cmd/server && ./server.exe
 
-- Détail 1
-- Détail 2
+# Tests unitaires
+go test ./... -v -cover
 
-🤖 Generated with [Claude Code](https://claude.com/claude-code)
-
-Co-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>"
+# Build release (Windows + Linux ARM64)
+./build-release.ps1
 ```
 
 ---
