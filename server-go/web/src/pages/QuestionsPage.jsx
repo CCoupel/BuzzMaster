@@ -642,7 +642,7 @@ export default function QuestionsPage() {
                 {formData.type === 'QCM' && (
                   <div className="qcm-answers-section">
                     <label>Reponses QCM *</label>
-                    <div className="qcm-answers-grid">
+                    <div className="qcm-form-answers">
                       {Object.entries(QCM_COLORS).map(([colorKey, { label, color, letter }]) => (
                         <div
                           key={colorKey}

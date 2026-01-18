@@ -152,24 +152,26 @@ Jeu de mémoire avec paires de cartes à retrouver.
 
 ### Phase 4 - Interface Admin (GamePage)
 
-- [ ] **Preview Memory cliquable dans GamePage**
-  - La preview existante (iframe /tv) est déjà cliquable
-  - Ajouter indicateurs en temps réel (paires, erreurs) dans le panel admin
-  - Bouton "Révéler tout" pour terminer manuellement
+- [x] **Indicateurs Memory en temps réel dans GamePage** *(implémenté)*
+  - Paires trouvées X/Y, compteur d'erreurs
+  - Badge de succès si toutes les paires sont trouvées
+
+- [x] **Bouton "Révéler tout" pour Memory** *(implémenté)*
+  - Le bouton "REPONSE" passe en phase REVEALED
+  - Révèle toutes les cartes en cascade avec REVEAL_DELAY
 
 ### Phase 5 - Scoring et historique
 
-- [ ] **Calcul des points Memory**
+- [x] **Calcul des points Memory** *(implémenté dans GamePage.jsx + engine.go)*
   ```
   Score = (paires_trouvées × POINTS_PER_PAIR)
         + (COMPLETION_BONUS si toutes trouvées)
         - (erreurs × ERROR_PENALTY)
   ```
 
-- [ ] **Enregistrement dans l'historique**
-  - EventType: "MEMORY_COMPLETED"
+- [ ] **Enregistrement spécifique dans l'historique**
+  - EventType: "MEMORY_COMPLETED" (actuellement "POINTS_AWARDED")
   - Détails: paires trouvées, erreurs, temps total
-  - Attribution des points à l'équipe/joueur (selon POINTS_TARGET)
 
 ### Améliorations futures (hors scope initial)
 
