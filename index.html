@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BuzzMaster - Systeme de Buzzers pour Quiz</title>
+    <meta name="description" content="Solution complete de buzzers sans fil pour animer vos quiz, team buildings et jeux televises.">
+    <link rel="stylesheet" href="css/style.css">
+    <link rel="icon" href="images/favicon.ico" type="image/x-icon">
+</head>
+<body>
+    <!-- Header -->
+    <header class="header">
+        <nav class="nav container">
+            <div class="nav-brand">
+                <span class="logo">🐝</span>
+                <span class="brand-name">BuzzMaster</span>
+            </div>
+            <ul class="nav-links">
+                <li><a href="#features">Fonctionnalites</a></li>
+                <li><a href="#components">Composants</a></li>
+                <li><a href="#download">Telecharger</a></li>
+                <li><a href="https://github.com/CCoupel/BuzzMaster" target="_blank">GitHub</a></li>
+            </ul>
+        </nav>
+    </header>
+
+    <!-- Hero Section -->
+    <section class="hero">
+        <div class="container">
+            <h1>Animez vos Quiz comme un Pro</h1>
+            <p class="hero-subtitle">
+                Systeme complet de buzzers sans fil pour quiz d'entreprise,
+                team buildings et soirees entre amis.
+            </p>
+            <div class="hero-buttons">
+                <a href="#download" class="btn btn-primary">Telecharger</a>
+                <a href="https://github.com/CCoupel/BuzzMaster" class="btn btn-secondary" target="_blank">Voir sur GitHub</a>
+            </div>
+        </div>
+    </section>
+
+    <!-- Features Section -->
+    <section id="features" class="features">
+        <div class="container">
+            <h2>Fonctionnalites</h2>
+            <div class="features-grid">
+                <div class="feature-card">
+                    <div class="feature-icon">🎯</div>
+                    <h3>3 Types de Questions</h3>
+                    <p>Questions ouvertes, QCM 4 couleurs, et jeux Memory pour varier les plaisirs.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">📺</div>
+                    <h3>Affichage TV</h3>
+                    <p>Interface plein ecran pour videoprojecteur avec scores, podium et animations.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">⚡</div>
+                    <h3>Temps Reel</h3>
+                    <p>Reaction en microsecondes. Le premier a buzzer gagne, sans contestation possible.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">👥</div>
+                    <h3>Multi-equipes</h3>
+                    <p>Jusqu'a 6 equipes avec plusieurs joueurs par equipe. Points individuels ou collectifs.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">🏆</div>
+                    <h3>Palmares</h3>
+                    <p>Classements par categorie, historique complet et statistiques detaillees.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">💾</div>
+                    <h3>Sauvegarde</h3>
+                    <p>Exportez et importez vos questions, scores et configurations facilement.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Components Section -->
+    <section id="components" class="components">
+        <div class="container">
+            <h2>Composants du Systeme</h2>
+            <div class="components-grid">
+                <div class="component-card">
+                    <div class="component-header">
+                        <span class="component-icon">🖥️</span>
+                        <h3>BuzzControl</h3>
+                    </div>
+                    <p>Serveur central avec interface web d'administration. Gere les questions, equipes, scores et l'affichage TV.</p>
+                    <ul class="component-tech">
+                        <li>Go 1.21+</li>
+                        <li>React 18</li>
+                        <li>WebSocket</li>
+                    </ul>
+                </div>
+                <div class="component-card">
+                    <div class="component-header">
+                        <span class="component-icon">🔴</span>
+                        <h3>BuzzClick</h3>
+                    </div>
+                    <p>Buzzers individuels sans fil. 4 boutons colores, connexion WiFi automatique, LED de statut.</p>
+                    <ul class="component-tech">
+                        <li>ESP32-C3</li>
+                        <li>WiFi</li>
+                        <li>Batterie</li>
+                    </ul>
+                </div>
+                <div class="component-card coming-soon">
+                    <div class="component-header">
+                        <span class="component-icon">📱</span>
+                        <h3>BuzzApp</h3>
+                        <span class="badge">Bientot</span>
+                    </div>
+                    <p>Application mobile pour transformer votre smartphone en buzzer. iOS et Android.</p>
+                    <ul class="component-tech">
+                        <li>React Native</li>
+                        <li>iOS</li>
+                        <li>Android</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Download Section -->
+    <section id="download" class="download">
+        <div class="container">
+            <h2>Telecharger</h2>
+            <p class="download-subtitle">Executables portables, prets a l'emploi. Aucune installation requise.</p>
+            <div class="download-buttons">
+                <a href="https://github.com/CCoupel/BuzzMaster/releases/latest" class="download-card" target="_blank">
+                    <span class="download-icon">🪟</span>
+                    <span class="download-os">Windows</span>
+                    <span class="download-arch">AMD64</span>
+                </a>
+                <a href="https://github.com/CCoupel/BuzzMaster/releases/latest" class="download-card" target="_blank">
+                    <span class="download-icon">🍓</span>
+                    <span class="download-os">Raspberry Pi</span>
+                    <span class="download-arch">ARM64</span>
+                </a>
+            </div>
+            <p class="download-note">
+                <a href="https://github.com/CCoupel/BuzzMaster/releases" target="_blank">Voir toutes les versions</a>
+            </p>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="container">
+            <div class="footer-content">
+                <div class="footer-brand">
+                    <span class="logo">🐝</span>
+                    <span>BuzzMaster</span>
+                </div>
+                <div class="footer-links">
+                    <a href="https://github.com/CCoupel/BuzzMaster" target="_blank">GitHub</a>
+                    <a href="https://github.com/CCoupel/BuzzMaster/issues" target="_blank">Support</a>
+                    <a href="https://github.com/CCoupel/BuzzMaster/blob/main/CHANGELOG.md" target="_blank">Changelog</a>
+                </div>
+            </div>
+            <p class="footer-copyright">
+                &copy; 2024-2025 Cyril Coupel. Projet open source.
+            </p>
+        </div>
+    </footer>
+
+    <script src="js/main.js"></script>
+</body>
+</html>
