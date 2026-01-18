@@ -260,12 +260,75 @@ The restore endpoint now automatically detects what's in the TAR archive and res
     "BLUE": "Madrid"
   },
   "QCM_CORRECT": "GREEN",
+  "QCM_HINTS_ENABLED": true,
   "POINTS": 10,
   "TIME": 30,
   "MEDIA": "/question/2/image.jpg",
   "MEDIA_ANSWER": "/question/2/answer.jpg"
 }
 ```
+
+### QCM Hints & Penalties (v2.38.0)
+
+Système d'indices automatiques pour les questions QCM avec pénalités de points configurables.
+
+**Champs Question :**
+- `QCM_HINTS_ENABLED`: boolean (défaut: false) - Active les indices automatiques
+- `QCM_HINT_THRESHOLD_1`: float64 (défaut: 0.25) - Seuil du 1er indice (% du temps restant)
+- `QCM_HINT_THRESHOLD_2`: float64 (défaut: 0.125) - Seuil du 2ème indice (% du temps restant)
+- `QCM_PENALTY_1`: float64 (défaut: 0.67) - Multiplicateur de points après 1 indice (67%)
+- `QCM_PENALTY_2`: float64 (défaut: 0.33) - Multiplicateur de points après 2 indices (33%)
+
+**Champs GameState :**
+- `QcmInvalidated`: []string - Liste des couleurs invalidées (ex: `["RED", "YELLOW"]`)
+
+**Logique d'invalidation :**
+- Seuil 1 : configurable (défaut 25% du temps restant) → invalide 1 mauvaise réponse aléatoire
+- Seuil 2 : configurable (défaut 12.5% du temps restant) → invalide 1 autre mauvaise réponse
+
+**Contraintes de sécurité :**
+- Minimum 1s entre les deux indices
+- Seuil 2 ≥ 1s avant la fin du jeu
+- Si contraintes non respectables → indices désactivés
+
+**Calcul des seuils (exemple avec défauts) :**
+```go
+// Exemple avec timer de 30s
+seuil1 = 30 * 0.25 = 7.5s  // Indice 1 quand il reste 7.5s
+seuil2 = 30 * 0.125 = 3.75s // Indice 2 quand il reste 3.75s
+
+// Vérification des contraintes
+if seuil1 - seuil2 < 1 || seuil2 < 1 {
+    // Ajuster ou désactiver les indices
+}
+```
+
+**Pénalités de points (configurables par question) :**
+| Réponses restantes | Multiplicateur (défaut) | Exemple (10 pts) |
+|--------------------|-------------------------|------------------|
+| 4 (aucun indice) | 100% | 10 pts |
+| 3 (1 indice) | 67% (configurable) | 6.7 → 7 pts |
+| 2 (2 indices) | 33% (configurable) | 3.3 → 3 pts |
+
+**Action WebSocket :**
+```json
+{
+  "ACTION": "QCM_HINT",
+  "MSG": {
+    "COLOR": "RED",
+    "REMAINING": 3
+  }
+}
+```
+
+**Fichiers concernés :**
+- `internal/game/models.go` : Champs `QcmHintsEnabled`, `QCMHintThreshold1/2`, `QCMPenalty1/2` dans Question, `QcmInvalidated` dans GameState
+- `internal/game/engine.go` : Logique d'invalidation avec seuils configurables dans le timer tick
+- `internal/server/http.go` : Parsing des seuils et pénalités depuis le formulaire
+- `cmd/server/main.go` : Handler `QCM_HINT`, broadcast aux clients
+- `web/src/pages/QuestionsPage.jsx` : Toggle + inputs seuils et pénalités
+- `web/src/pages/PlayerDisplay.jsx` : Affichage des réponses invalidées (barré/grisé)
+- `web/src/pages/GamePage.jsx` : Badge de pénalité (configurable)
 
 ### Question (MEMORY type) - v2.33.0
 ```json

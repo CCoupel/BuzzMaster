@@ -36,6 +36,11 @@ export default function QuestionsPage() {
     pointsTarget: 'PLAYER', // PLAYER or TEAM
     qcmAnswers: { RED: '', GREEN: '', YELLOW: '', BLUE: '' },
     qcmCorrect: '',
+    qcmHintsEnabled: false, // Enable automatic hint invalidation for QCM
+    qcmHintThreshold1: 0.25, // First hint at 25% of time remaining
+    qcmHintThreshold2: 0.125, // Second hint at 12.5% of time remaining
+    qcmPenalty1: 0.67, // Points multiplier after 1 hint (67%)
+    qcmPenalty2: 0.33, // Points multiplier after 2 hints (33%)
     // Memory game fields
     memoryPairs: [
       { id: 1, card1: { text: '', image: null, isImage: false }, card2: { text: '', image: null, isImage: false } },
@@ -207,6 +212,11 @@ export default function QuestionsPage() {
       pointsTarget: question.POINTS_TARGET || defaultTarget,
       qcmAnswers: question.QCM_ANSWERS || { RED: '', GREEN: '', YELLOW: '', BLUE: '' },
       qcmCorrect: question.QCM_CORRECT || '',
+      qcmHintsEnabled: question.QCM_HINTS_ENABLED || false,
+      qcmHintThreshold1: question.QCM_HINT_THRESHOLD_1 || 0.25,
+      qcmHintThreshold2: question.QCM_HINT_THRESHOLD_2 || 0.125,
+      qcmPenalty1: question.QCM_PENALTY_1 || 0.67,
+      qcmPenalty2: question.QCM_PENALTY_2 || 0.33,
       memoryPairs,
       memoryConfig,
       points: question.POINTS || '1',
@@ -234,6 +244,11 @@ export default function QuestionsPage() {
       pointsTarget: 'PLAYER',
       qcmAnswers: { RED: '', GREEN: '', YELLOW: '', BLUE: '' },
       qcmCorrect: '',
+      qcmHintsEnabled: false,
+      qcmHintThreshold1: 0.25,
+      qcmHintThreshold2: 0.125,
+      qcmPenalty1: 0.67,
+      qcmPenalty2: 0.33,
       memoryPairs: [
         { id: 1, card1: { text: '', image: null, isImage: false }, card2: { text: '', image: null, isImage: false } },
         { id: 2, card1: { text: '', image: null, isImage: false }, card2: { text: '', image: null, isImage: false } },
@@ -377,6 +392,14 @@ export default function QuestionsPage() {
       data.append('qcm_correct', formData.qcmCorrect)
       // The answer field contains the correct answer text for display
       data.append('answer', formData.qcmAnswers[formData.qcmCorrect])
+      // QCM hints enabled flag and thresholds
+      data.append('qcm_hints_enabled', formData.qcmHintsEnabled ? 'true' : 'false')
+      if (formData.qcmHintsEnabled) {
+        data.append('qcm_hint_threshold_1', formData.qcmHintThreshold1.toString())
+        data.append('qcm_hint_threshold_2', formData.qcmHintThreshold2.toString())
+        data.append('qcm_penalty_1', formData.qcmPenalty1.toString())
+        data.append('qcm_penalty_2', formData.qcmPenalty2.toString())
+      }
     } else if (formData.type === 'MEMORY') {
       // Memory mode - send pairs and config
       // Serialize pairs (convert File objects to flags, actual files uploaded separately)
@@ -673,6 +696,69 @@ export default function QuestionsPage() {
                     {!formData.qcmCorrect && (
                       <p className="qcm-hint">Cliquez sur ○ pour indiquer la bonne reponse</p>
                     )}
+
+                    {/* QCM Hints Toggle */}
+                    <div className="qcm-hints-toggle">
+                      <label>
+                        <input
+                          type="checkbox"
+                          checked={formData.qcmHintsEnabled}
+                          onChange={(e) => handleInputChange('qcmHintsEnabled', e.target.checked)}
+                        />
+                        Activer les indices progressifs
+                      </label>
+                      <span className="qcm-hints-description">
+                        {formData.qcmHintsEnabled
+                          ? `Les mauvaises reponses seront invalidees progressivement (penalites: ${Math.round((formData.qcmPenalty1 || 0.67) * 100)}% puis ${Math.round((formData.qcmPenalty2 || 0.33) * 100)}%)`
+                          : 'Pas d\'indices automatiques'}
+                      </span>
+                      {formData.qcmHintsEnabled && (
+                        <div className="qcm-hints-config">
+                          <div className="hint-row">
+                            <span className="hint-label">Indice 1 :</span>
+                            <span className="hint-at">a</span>
+                            <input
+                              type="number"
+                              min="1"
+                              max="99"
+                              value={Math.round((formData.qcmHintThreshold1 || 0.25) * 100)}
+                              onChange={(e) => handleInputChange('qcmHintThreshold1', parseInt(e.target.value) / 100)}
+                            />
+                            <span className="hint-unit">%</span>
+                            <span className="hint-arrow">→</span>
+                            <input
+                              type="number"
+                              min="1"
+                              max="99"
+                              value={Math.round((formData.qcmPenalty1 || 0.67) * 100)}
+                              onChange={(e) => handleInputChange('qcmPenalty1', parseInt(e.target.value) / 100)}
+                            />
+                            <span className="hint-unit">% pts</span>
+                          </div>
+                          <div className="hint-row">
+                            <span className="hint-label">Indice 2 :</span>
+                            <span className="hint-at">a</span>
+                            <input
+                              type="number"
+                              min="1"
+                              max="99"
+                              value={Math.round((formData.qcmHintThreshold2 || 0.125) * 100)}
+                              onChange={(e) => handleInputChange('qcmHintThreshold2', parseInt(e.target.value) / 100)}
+                            />
+                            <span className="hint-unit">%</span>
+                            <span className="hint-arrow">→</span>
+                            <input
+                              type="number"
+                              min="1"
+                              max="99"
+                              value={Math.round((formData.qcmPenalty2 || 0.33) * 100)}
+                              onChange={(e) => handleInputChange('qcmPenalty2', parseInt(e.target.value) / 100)}
+                            />
+                            <span className="hint-unit">% pts</span>
+                          </div>
+                        </div>
+                      )}
+                    </div>
                   </div>
                 )}
 

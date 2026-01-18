@@ -107,6 +107,29 @@ export default function GamePage() {
     return { score, matchedPairs, totalPairs, errors, isComplete, pointsPerPair, errorPenalty, completionBonus }
   }, [gameState.question, gameState.memoryMatchedPairs, gameState.memoryErrors])
 
+  // Calculate QCM penalty based on invalidated answers (hints given)
+  const qcmPenalty = useMemo(() => {
+    // Only apply for QCM questions with hints enabled
+    if (gameState.question?.TYPE !== 'QCM' || !gameState.question?.QCM_HINTS_ENABLED) return null
+
+    const invalidatedCount = gameState.qcmInvalidated?.length || 0
+    if (invalidatedCount === 0) return null
+
+    // Use configurable penalties from question, with defaults
+    const penalty1 = gameState.question?.QCM_PENALTY_1 || 0.67
+    const penalty2 = gameState.question?.QCM_PENALTY_2 || 0.33
+
+    let multiplier = 1
+    if (invalidatedCount === 1) multiplier = penalty1
+    else if (invalidatedCount >= 2) multiplier = penalty2
+
+    // Ensure effective points is at least 1 (never 0)
+    const effectivePoints = Math.max(1, Math.round(pointsInput * multiplier))
+    const penaltyPercent = Math.round(multiplier * 100)
+
+    return { invalidatedCount, multiplier, effectivePoints, penaltyPercent }
+  }, [gameState.question, gameState.qcmInvalidated, pointsInput])
+
   const handleStartStop = () => {
     if (gameState.phase === 'READY') {
       startGame(timeInput, pointsInput)
@@ -154,8 +177,15 @@ export default function GamePage() {
       // Only allow points for players who have buzzed
       const bumper = bumpers[bumperMac]
       if (bumper?.TIME && bumper.TIME > 0) {
-        // For Memory questions, use calculated score; otherwise use pointsInput
-        const pointsToAward = memoryScore ? memoryScore.score : pointsInput
+        // For Memory questions, use calculated score
+        // For QCM with hints, use penalty-adjusted points
+        // Otherwise use pointsInput
+        let pointsToAward = pointsInput
+        if (memoryScore) {
+          pointsToAward = memoryScore.score
+        } else if (qcmPenalty) {
+          pointsToAward = qcmPenalty.effectivePoints
+        }
         // Check POINTS_TARGET: if TEAM, give points to team instead of player
         if (gameState.question?.POINTS_TARGET === 'TEAM') {
           const teamName = bumper.TEAM
@@ -320,7 +350,14 @@ export default function GamePage() {
               />
             </div>
             <div className="input-group">
-              <label htmlFor="points-input">Points</label>
+              <label htmlFor="points-input">
+                Points
+                {qcmPenalty && (
+                  <span className="qcm-penalty-badge" title={`${qcmPenalty.invalidatedCount} indice(s) donne(s) - penalite ${100 - qcmPenalty.penaltyPercent}%`}>
+                    {qcmPenalty.penaltyPercent}%
+                  </span>
+                )}
+              </label>
               {memoryScore ? (
                 <input
                   id="points-input"
@@ -329,6 +366,15 @@ export default function GamePage() {
                   readOnly
                   className="memory-score-input"
                   title={`${memoryScore.matchedPairs}×${memoryScore.pointsPerPair}${memoryScore.isComplete ? ` +${memoryScore.completionBonus}` : ''}${memoryScore.errors > 0 ? ` -${memoryScore.errors}×${memoryScore.errorPenalty}` : ''}`}
+                />
+              ) : qcmPenalty ? (
+                <input
+                  id="points-input"
+                  type="number"
+                  value={qcmPenalty.effectivePoints}
+                  readOnly
+                  className="qcm-penalty-input"
+                  title={`Base: ${pointsInput} pts × ${qcmPenalty.penaltyPercent}% = ${qcmPenalty.effectivePoints} pts`}
                 />
               ) : (
                 <input
@@ -401,8 +447,15 @@ export default function GamePage() {
                 waitingForBuzz={['STARTED', 'PAUSED'].includes(gameState.phase)}
                 onTeamClick={(teamName) => {
                   if (['STOPPED', 'REVEALED'].includes(gameState.phase)) {
-                    // For Memory questions, use calculated score; otherwise use pointsInput
-                    const pointsToAward = memoryScore ? memoryScore.score : pointsInput
+                    // For Memory questions, use calculated score
+                    // For QCM with hints, use penalty-adjusted points
+                    // Otherwise use pointsInput
+                    let pointsToAward = pointsInput
+                    if (memoryScore) {
+                      pointsToAward = memoryScore.score
+                    } else if (qcmPenalty) {
+                      pointsToAward = qcmPenalty.effectivePoints
+                    }
                     setTeamPoints(teamName, pointsToAward)
                   }
                 }}

@@ -221,6 +221,38 @@
 .memory-score-input { background: linear-gradient(135deg, var(--primary-100), var(--accent-purple-100)) !important; border-color: var(--primary-300) !important; color: var(--primary-600) !important; cursor: help; }
 .memory-score-input:focus { border-color: var(--primary-400) !important; }
 
+/* QCM penalty badge and input */
+.qcm-penalty-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-left: var(--space-2);
+  padding: 2px 8px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  background: linear-gradient(135deg, var(--warning), var(--error));
+  color: white;
+  border-radius: var(--radius-full);
+  cursor: help;
+  animation: penalty-pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes penalty-pulse {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.05); opacity: 0.9; }
+}
+
+.qcm-penalty-input {
+  background: linear-gradient(135deg, var(--warning-100, #fef3c7), var(--error-100, #fee2e2)) !important;
+  border-color: var(--warning) !important;
+  color: var(--warning-700, #92400e) !important;
+  cursor: help;
+}
+
+.qcm-penalty-input:focus {
+  border-color: var(--error) !important;
+}
+
 .control-buttons { display: flex; flex-direction: column; gap: var(--space-1); width: 100%; }
 .control-buttons-row { display: flex; gap: var(--space-1); }
 .control-buttons-row > * { flex: 1; }

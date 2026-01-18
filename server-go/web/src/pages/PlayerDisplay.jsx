@@ -1122,16 +1122,17 @@ export default function PlayerDisplay() {
                       const answer = gameState.question.QCM_ANSWERS?.[colorKey]
                       if (!answer) return null
                       const isCorrect = gameState.question.QCM_CORRECT === colorKey
+                      const isInvalidated = gameState.qcmInvalidated?.includes(colorKey)
                       const teamsOnThisAnswer = teamsByQcmAnswer[colorKey] || []
                       const showTeamBadges = ['STOPPED', 'REVEALED'].includes(gameState.phase) && teamsOnThisAnswer.length > 0
 
                       return (
                         <motion.div
                           key={colorKey}
-                          className={`qcm-answer-item ${showAnswer ? (isCorrect ? 'correct' : 'wrong') : ''}`}
+                          className={`qcm-answer-item ${showAnswer ? (isCorrect ? 'correct' : 'wrong') : ''} ${isInvalidated ? 'invalidated' : ''}`}
                           style={{
-                            backgroundColor: showAnswer && !isCorrect ? '#4b5563' : colorData.color,
-                            opacity: showAnswer && !isCorrect ? 0.4 : 1
+                            backgroundColor: isInvalidated ? '#374151' : (showAnswer && !isCorrect ? '#4b5563' : colorData.color),
+                            opacity: isInvalidated ? 0.35 : (showAnswer && !isCorrect ? 0.4 : 1)
                           }}
                           animate={showAnswer && isCorrect ? {
                             scale: [1, 1.08, 1],

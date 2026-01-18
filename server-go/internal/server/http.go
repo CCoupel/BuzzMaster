@@ -14,6 +14,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -483,6 +484,35 @@ func (h *HTTPServer) handleUploadQuestion(w http.ResponseWriter, r *http.Request
 		qcmCorrect := r.FormValue("qcm_correct")
 		if qcmCorrect != "" {
 			question["QCM_CORRECT"] = qcmCorrect
+		}
+		// Handle QCM hints enabled flag
+		qcmHintsEnabled := r.FormValue("qcm_hints_enabled")
+		if qcmHintsEnabled == "true" {
+			question["QCM_HINTS_ENABLED"] = true
+		} else {
+			question["QCM_HINTS_ENABLED"] = false
+		}
+		// Handle QCM hint thresholds
+		if t1Str := r.FormValue("qcm_hint_threshold_1"); t1Str != "" {
+			if t1, err := strconv.ParseFloat(t1Str, 64); err == nil && t1 > 0 {
+				question["QCM_HINT_THRESHOLD_1"] = t1
+			}
+		}
+		if t2Str := r.FormValue("qcm_hint_threshold_2"); t2Str != "" {
+			if t2, err := strconv.ParseFloat(t2Str, 64); err == nil && t2 > 0 {
+				question["QCM_HINT_THRESHOLD_2"] = t2
+			}
+		}
+		// Handle QCM penalties
+		if p1Str := r.FormValue("qcm_penalty_1"); p1Str != "" {
+			if p1, err := strconv.ParseFloat(p1Str, 64); err == nil && p1 > 0 && p1 <= 1 {
+				question["QCM_PENALTY_1"] = p1
+			}
+		}
+		if p2Str := r.FormValue("qcm_penalty_2"); p2Str != "" {
+			if p2, err := strconv.ParseFloat(p2Str, 64); err == nil && p2 > 0 && p2 <= 1 {
+				question["QCM_PENALTY_2"] = p2
+			}
 		}
 	}
 

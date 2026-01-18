@@ -6,7 +6,7 @@ $ErrorActionPreference = "Stop"
 Write-Host "=== BuzzControl Build Script ===" -ForegroundColor Cyan
 
 # Step 1: Build frontend
-Write-Host "`n[1/3] Building frontend..." -ForegroundColor Yellow
+Write-Host "`n[1/2] Building frontend..." -ForegroundColor Yellow
 Set-Location web
 npm run build
 if ($LASTEXITCODE -ne 0) {
@@ -15,15 +15,8 @@ if ($LASTEXITCODE -ne 0) {
 }
 Set-Location ..
 
-# Step 2: Copy dist to cmd/server for embedding
-Write-Host "`n[2/3] Copying dist for embedding..." -ForegroundColor Yellow
-if (Test-Path "cmd/server/dist") {
-    Remove-Item -Recurse -Force "cmd/server/dist"
-}
-Copy-Item -Recurse "web/dist" "cmd/server/dist"
-
-# Step 3: Build Go executable
-Write-Host "`n[3/3] Building Go executable..." -ForegroundColor Yellow
+# Step 2: Build Go executable (web/dist is embedded directly via web/embed.go)
+Write-Host "`n[2/2] Building Go executable..." -ForegroundColor Yellow
 go build -o server.exe ./cmd/server
 if ($LASTEXITCODE -ne 0) {
     Write-Host "Go build failed!" -ForegroundColor Red
@@ -34,5 +27,5 @@ if ($LASTEXITCODE -ne 0) {
 $size = (Get-Item "server.exe").Length / 1MB
 Write-Host "`n=== Build Complete ===" -ForegroundColor Green
 Write-Host "Executable: server.exe ($([math]::Round($size, 2)) MB)" -ForegroundColor Green
-Write-Host "Mode: Portable (embedded web files)" -ForegroundColor Green
+Write-Host "Mode: Portable (embedded web files from web/dist)" -ForegroundColor Green
 Write-Host "`nTo run: .\server.exe" -ForegroundColor Cyan

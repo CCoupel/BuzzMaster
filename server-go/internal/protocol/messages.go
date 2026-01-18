@@ -36,6 +36,7 @@ const (
 	ActionForceReady        = "FORCE_READY"
 	ActionBackgroundChange  = "BACKGROUND_CHANGE"
 	ActionFlipMemoryCard    = "FLIP_MEMORY_CARD"
+	ActionQCMHint           = "QCM_HINT"
 )
 
 // FSInfo represents file storage information
@@ -141,6 +142,12 @@ type BackgroundChangePayload struct {
 // FlipMemoryCardPayload for FLIP_MEMORY_CARD action
 type FlipMemoryCardPayload struct {
 	CardID string `json:"CARD_ID"` // Card ID to flip (e.g., "1-1", "2-2")
+}
+
+// QCMHintPayload for QCM_HINT action
+type QCMHintPayload struct {
+	Color     string `json:"COLOR"`     // Invalidated color (RED, GREEN, YELLOW, BLUE)
+	Remaining int    `json:"REMAINING"` // Number of remaining valid answers
 }
 
 // NewMessage creates a new outgoing message

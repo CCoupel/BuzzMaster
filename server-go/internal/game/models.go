@@ -141,9 +141,14 @@ type Question struct {
 	Type         QuestionType     `json:"TYPE,omitempty"`          // "NORMAL", "QCM", or "MEMORY" (default NORMAL)
 	Category     QuestionCategory `json:"CATEGORY,omitempty"`      // Question category
 	PointsTarget PointsTarget     `json:"POINTS_TARGET,omitempty"` // "PLAYER" or "TEAM" (default based on type)
-	QCMAnswers   *QCMAnswers      `json:"QCM_ANSWERS,omitempty"`   // For QCM questions
-	QCMCorrect   string           `json:"QCM_CORRECT,omitempty"`   // "RED", "GREEN", "YELLOW", "BLUE"
-	MemoryPairs  []MemoryPair     `json:"MEMORY_PAIRS,omitempty"`  // For Memory questions
+	QCMAnswers        *QCMAnswers      `json:"QCM_ANSWERS,omitempty"`        // For QCM questions
+	QCMCorrect        string           `json:"QCM_CORRECT,omitempty"`        // "RED", "GREEN", "YELLOW", "BLUE"
+	QCMHintsEnabled   bool             `json:"QCM_HINTS_ENABLED,omitempty"`  // Enable automatic hint invalidation
+	QCMHintThreshold1 float64          `json:"QCM_HINT_THRESHOLD_1,omitempty"` // First hint at this % of time remaining (default 0.25)
+	QCMHintThreshold2 float64          `json:"QCM_HINT_THRESHOLD_2,omitempty"` // Second hint at this % of time remaining (default 0.125)
+	QCMPenalty1       float64          `json:"QCM_PENALTY_1,omitempty"`        // Point multiplier after 1 hint (default 0.67)
+	QCMPenalty2       float64          `json:"QCM_PENALTY_2,omitempty"`        // Point multiplier after 2 hints (default 0.33)
+	MemoryPairs       []MemoryPair     `json:"MEMORY_PAIRS,omitempty"`       // For Memory questions
 	MemoryConfig *MemoryConfig    `json:"MEMORY_CONFIG,omitempty"` // Memory game configuration
 	Points       string           `json:"POINTS"`                  // String to match JSON format
 	Time         string           `json:"TIME"`                    // String to match JSON format
@@ -174,6 +179,7 @@ type GameState struct {
 	MemoryFlippedCards     []string     `json:"MEMORY_FLIPPED_CARDS,omitempty"` // IDs of currently flipped Memory cards (max 2)
 	MemoryMatchedPairs     []int        `json:"MEMORY_MATCHED_PAIRS,omitempty"` // IDs of matched pairs (permanent)
 	MemoryErrors           int          `json:"MEMORY_ERRORS,omitempty"`        // Number of failed match attempts
+	QcmInvalidated         []string     `json:"QCM_INVALIDATED,omitempty"`      // Invalidated QCM answers (e.g., ["RED", "YELLOW"])
 }
 
 // TeamsAndBumpers holds all teams and bumpers data

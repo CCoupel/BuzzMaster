@@ -3,6 +3,7 @@ package game
 import (
 	"encoding/json"
 	"log"
+	"math/rand"
 	"os"
 	"path/filepath"
 	"sync"
@@ -31,6 +32,7 @@ type Engine struct {
 	OnTimerTick     func(currentTime int)
 	OnCountdownTick func(countdownTime int)
 	OnBuzzerPress   func(bumperID, teamID string, pressTime int64, button string)
+	OnQCMHint       func(invalidatedColor string, remainingAnswers int) // QCM hint callback
 }
 
 // NewEngine creates a new game engine
@@ -200,6 +202,9 @@ func (e *Engine) Ready(questionID string, question *Question) {
 	e.state.MemoryFlippedCards = nil
 	e.state.MemoryMatchedPairs = nil
 	e.state.MemoryErrors = 0
+
+	// Reset QCM hints state for new question
+	e.state.QcmInvalidated = nil
 
 	log.Printf("[Engine] Game ready with question: %s", questionID)
 
@@ -418,6 +423,9 @@ func (e *Engine) actualStart() {
 	e.state.MemoryMatchedPairs = nil
 	e.state.MemoryErrors = 0
 
+	// Reset QCM hints state for fresh start
+	e.state.QcmInvalidated = nil
+
 	// Reset bumper times
 	for _, bumper := range e.data.Bumpers {
 		bumper.Time = 0
@@ -466,10 +474,28 @@ func (e *Engine) startTimer() {
 				if e.state.Phase == PhaseStarted {
 					e.state.CurrentTime--
 					currentTime := e.state.CurrentTime
+					totalTime := e.state.Delay
+
+					// Check for QCM hint invalidation
+					var qcmHintCallback func(string, int)
+					var invalidatedColor string
+					var remainingAnswers int
+					if e.shouldTriggerQCMHint(currentTime, totalTime) {
+						invalidatedColor, remainingAnswers = e.invalidateRandomWrongAnswer()
+						if invalidatedColor != "" {
+							qcmHintCallback = e.OnQCMHint
+						}
+					}
+
 					e.mu.Unlock()
 
 					if e.OnTimerTick != nil {
 						e.OnTimerTick(currentTime)
+					}
+
+					// Call QCM hint callback outside of lock
+					if qcmHintCallback != nil && invalidatedColor != "" {
+						qcmHintCallback(invalidatedColor, remainingAnswers)
 					}
 
 					if currentTime <= 0 {
@@ -483,6 +509,101 @@ func (e *Engine) startTimer() {
 			}
 		}
 	}()
+}
+
+// shouldTriggerQCMHint checks if a QCM hint should be triggered at the current time
+// Must be called with lock held
+func (e *Engine) shouldTriggerQCMHint(currentTime, totalTime int) bool {
+	// Check if question is QCM with hints enabled
+	if e.state.Question == nil || e.state.Question.Type != QuestionTypeQCM || !e.state.Question.QCMHintsEnabled {
+		return false
+	}
+
+	// Get thresholds from question config (or use defaults)
+	// Threshold 1: % of total time remaining for first hint (default 25%)
+	// Threshold 2: % of total time remaining for second hint (default 12.5%)
+	t1Percent := e.state.Question.QCMHintThreshold1
+	t2Percent := e.state.Question.QCMHintThreshold2
+	if t1Percent <= 0 {
+		t1Percent = 0.25 // Default 25%
+	}
+	if t2Percent <= 0 {
+		t2Percent = 0.125 // Default 12.5%
+	}
+	threshold1 := int(float64(totalTime) * t1Percent)
+	threshold2 := int(float64(totalTime) * t2Percent)
+
+	// Safety constraints:
+	// - Min 1s between hints: threshold1 - threshold2 >= 1
+	// - Last hint >= 1s before end: threshold2 >= 1
+	if threshold1 <= 0 || threshold2 < 1 || (threshold1 - threshold2) < 1 {
+		// Constraints not met, disable hints for this question
+		return false
+	}
+
+	invalidatedCount := len(e.state.QcmInvalidated)
+
+	// Check if we hit threshold 1 (first hint)
+	if currentTime == threshold1 && invalidatedCount == 0 {
+		log.Printf("[Engine] QCM hint threshold 1 reached: time=%d, total=%d, threshold=%d", currentTime, totalTime, threshold1)
+		return true
+	}
+
+	// Check if we hit threshold 2 (second hint)
+	if currentTime == threshold2 && invalidatedCount == 1 {
+		log.Printf("[Engine] QCM hint threshold 2 reached: time=%d, total=%d, threshold=%d", currentTime, totalTime, threshold2)
+		return true
+	}
+
+	return false
+}
+
+// invalidateRandomWrongAnswer invalidates a random wrong QCM answer
+// Must be called with lock held
+// Returns the invalidated color and the number of remaining valid answers
+func (e *Engine) invalidateRandomWrongAnswer() (string, int) {
+	if e.state.Question == nil || e.state.Question.QCMAnswers == nil {
+		return "", 0
+	}
+
+	correctAnswer := e.state.Question.QCMCorrect
+	allColors := []string{"RED", "GREEN", "YELLOW", "BLUE"}
+
+	// Find wrong answers that haven't been invalidated yet
+	var availableWrongAnswers []string
+	for _, color := range allColors {
+		if color == correctAnswer {
+			continue // Skip correct answer
+		}
+		// Check if already invalidated
+		isInvalidated := false
+		for _, inv := range e.state.QcmInvalidated {
+			if inv == color {
+				isInvalidated = true
+				break
+			}
+		}
+		if !isInvalidated {
+			availableWrongAnswers = append(availableWrongAnswers, color)
+		}
+	}
+
+	if len(availableWrongAnswers) == 0 {
+		return "", 4 - len(e.state.QcmInvalidated)
+	}
+
+	// Pick a random wrong answer to invalidate
+	randomIndex := rand.Intn(len(availableWrongAnswers))
+	invalidatedColor := availableWrongAnswers[randomIndex]
+
+	// Add to invalidated list
+	e.state.QcmInvalidated = append(e.state.QcmInvalidated, invalidatedColor)
+
+	// Calculate remaining valid answers (4 total - invalidated count)
+	remainingAnswers := 4 - len(e.state.QcmInvalidated)
+
+	log.Printf("[Engine] QCM hint: invalidated %s, remaining answers: %d", invalidatedColor, remainingAnswers)
+	return invalidatedColor, remainingAnswers
 }
 
 // Stop ends the game round

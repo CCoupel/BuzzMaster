@@ -5,6 +5,7 @@ import (
 	"buzzcontrol/internal/game"
 	"buzzcontrol/internal/protocol"
 	"buzzcontrol/internal/server"
+	"buzzcontrol/web"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -132,7 +133,7 @@ func (a *App) init() {
 	a.httpServer = server.NewHTTPServer(a.config.Server.HTTPPort, a.engine, a.wsHub)
 
 	// Try embedded web files first, then fallback to filesystem
-	if embeddedFS, ok := GetEmbeddedWebFS(); ok {
+	if embeddedFS, ok := web.GetEmbeddedFS(); ok {
 		log.Println("[HTTP] Using embedded web files (portable mode)")
 		a.httpServer.SetEmbeddedFS(embeddedFS)
 	} else {
@@ -190,6 +191,11 @@ func (a *App) setupCallbacks() {
 	// Buzzer press
 	a.engine.OnBuzzerPress = func(bumperID, teamID string, pressTime int64, button string) {
 		a.broadcastPause(bumperID)
+	}
+
+	// QCM hint (when a wrong answer is invalidated)
+	a.engine.OnQCMHint = func(invalidatedColor string, remainingAnswers int) {
+		a.broadcastQCMHint(invalidatedColor, remainingAnswers)
 	}
 
 	// HTTP actions
@@ -1112,6 +1118,19 @@ func (a *App) broadcastBackgroundChange(index int) {
 	data, _ := json.Marshal(payload)
 	a.broadcast(protocol.ActionBackgroundChange, data, false)
 	log.Printf("[App] Background change: index=%d", index)
+}
+
+func (a *App) broadcastQCMHint(invalidatedColor string, remainingAnswers int) {
+	payload := protocol.QCMHintPayload{
+		Color:     invalidatedColor,
+		Remaining: remainingAnswers,
+	}
+	data, _ := json.Marshal(payload)
+	a.broadcast(protocol.ActionQCMHint, data, false)
+	log.Printf("[App] QCM hint: invalidated=%s, remaining=%d", invalidatedColor, remainingAnswers)
+
+	// Also broadcast full update so clients receive the updated QcmInvalidated state
+	a.broadcastUpdate()
 }
 
 func (a *App) broadcastQuestions() {

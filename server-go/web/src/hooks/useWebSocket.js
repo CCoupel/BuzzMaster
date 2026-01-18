@@ -17,6 +17,7 @@ export default function useWebSocket() {
     memoryFlippedCards: [], // Server-synchronized flipped Memory cards (max 2)
     memoryMatchedPairs: [], // Server-synchronized matched pair IDs (permanent)
     memoryErrors: 0, // Server-synchronized error count (non-matches)
+    qcmInvalidated: [], // Server-synchronized invalidated QCM answers (e.g., ["RED", "YELLOW"])
   })
   const [teams, setTeams] = useState({})
   const [bumpers, setBumpers] = useState({})
@@ -84,6 +85,7 @@ export default function useWebSocket() {
             memoryFlippedCards: MSG.GAME.MEMORY_FLIPPED_CARDS || [],
             memoryMatchedPairs: MSG.GAME.MEMORY_MATCHED_PAIRS || [],
             memoryErrors: MSG.GAME.MEMORY_ERRORS || 0,
+            qcmInvalidated: MSG.GAME.QCM_INVALIDATED || [],
           }))
         }
         if (MSG?.teams) setTeams(MSG.teams)
@@ -194,6 +196,17 @@ export default function useWebSocket() {
           setGameState(prev => ({
             ...prev,
             currentBackgroundIndex: MSG.INDEX,
+          }))
+        }
+        break
+
+      case 'QCM_HINT':
+        // A QCM answer was invalidated - append to the list
+        if (MSG?.COLOR) {
+          console.log('[WS] QCM_HINT: invalidated color:', MSG.COLOR, 'remaining:', MSG.REMAINING)
+          setGameState(prev => ({
+            ...prev,
+            qcmInvalidated: [...prev.qcmInvalidated, MSG.COLOR],
           }))
         }
         break
