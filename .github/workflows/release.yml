@@ -13,9 +13,66 @@ env:
   NODE_VERSION: '18'
 
 jobs:
-  build:
-    name: Build Release Binaries
+  # ============================================
+  # STAGE 1: Checking
+  # ============================================
+  checking:
+    name: 🔍 Checking
     runs-on: ubuntu-latest
+
+    outputs:
+      version: ${{ steps.version.outputs.VERSION }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Get version from tag
+        id: version
+        run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+
+      - name: Verify config.json version
+        run: |
+          CONFIG_VERSION=$(grep '"version"' server-go/config.json | sed 's/.*"version": "\([^"]*\)".*/\1/')
+          TAG_VERSION="${{ steps.version.outputs.VERSION }}"
+
+          echo "Config version: $CONFIG_VERSION"
+          echo "Tag version: $TAG_VERSION"
+
+          if [ "$CONFIG_VERSION" != "$TAG_VERSION" ]; then
+            echo "❌ ERROR: config.json version ($CONFIG_VERSION) does not match tag ($TAG_VERSION)"
+            exit 1
+          fi
+          echo "✅ config.json version matches"
+
+      - name: Verify package.json version
+        run: |
+          PACKAGE_VERSION=$(grep '"version"' server-go/web/package.json | sed 's/.*"version": "\([^"]*\)".*/\1/')
+          TAG_VERSION="${{ steps.version.outputs.VERSION }}"
+
+          echo "Package version: $PACKAGE_VERSION"
+          echo "Tag version: $TAG_VERSION"
+
+          if [ "$PACKAGE_VERSION" != "$TAG_VERSION" ]; then
+            echo "❌ ERROR: package.json version ($PACKAGE_VERSION) does not match tag ($TAG_VERSION)"
+            exit 1
+          fi
+          echo "✅ package.json version matches"
+
+      - name: Version check summary
+        run: |
+          echo "=========================================="
+          echo "✅ All version checks passed!"
+          echo "   Release version: v${{ steps.version.outputs.VERSION }}"
+          echo "=========================================="
+
+  # ============================================
+  # STAGE 2: Compiling
+  # ============================================
+  compiling:
+    name: 🔨 Compiling
+    runs-on: ubuntu-latest
+    needs: checking
 
     steps:
       - name: Checkout code
@@ -32,32 +89,6 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'npm'
           cache-dependency-path: server-go/web/package-lock.json
-
-      - name: Get version from tag
-        id: version
-        run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
-
-      - name: Verify versions match
-        run: |
-          CONFIG_VERSION=$(grep '"version"' server-go/config.json | sed 's/.*"version": "\([^"]*\)".*/\1/')
-          PACKAGE_VERSION=$(grep '"version"' server-go/web/package.json | sed 's/.*"version": "\([^"]*\)".*/\1/')
-          TAG_VERSION="${{ steps.version.outputs.VERSION }}"
-
-          echo "Tag version: $TAG_VERSION"
-          echo "Config version: $CONFIG_VERSION"
-          echo "Package version: $PACKAGE_VERSION"
-
-          if [ "$CONFIG_VERSION" != "$TAG_VERSION" ]; then
-            echo "ERROR: config.json version ($CONFIG_VERSION) does not match tag ($TAG_VERSION)"
-            exit 1
-          fi
-
-          if [ "$PACKAGE_VERSION" != "$TAG_VERSION" ]; then
-            echo "ERROR: package.json version ($PACKAGE_VERSION) does not match tag ($TAG_VERSION)"
-            exit 1
-          fi
-
-          echo "All versions match: $TAG_VERSION"
 
       - name: Install frontend dependencies
         working-directory: server-go/web
@@ -79,7 +110,9 @@ jobs:
           GOARCH: amd64
           CGO_ENABLED: 0
         run: |
-          go build -ldflags="-s -w" -o ../buzzcontrol-v${{ steps.version.outputs.VERSION }}-windows-amd64.exe ./cmd/server
+          echo "Building Windows AMD64..."
+          go build -ldflags="-s -w" -o ../buzzcontrol-v${{ needs.checking.outputs.version }}-windows-amd64.exe ./cmd/server
+          echo "✅ Windows build complete"
 
       - name: Build Linux ARM64 (Raspberry Pi)
         working-directory: server-go
@@ -88,58 +121,111 @@ jobs:
           GOARCH: arm64
           CGO_ENABLED: 0
         run: |
-          go build -ldflags="-s -w" -o ../buzzcontrol-v${{ steps.version.outputs.VERSION }}-linux-arm64 ./cmd/server
+          echo "Building Linux ARM64..."
+          go build -ldflags="-s -w" -o ../buzzcontrol-v${{ needs.checking.outputs.version }}-linux-arm64 ./cmd/server
+          echo "✅ Linux ARM64 build complete"
 
-      - name: Validate binaries
+      - name: Validate Windows binary
         run: |
-          echo "Checking binary sizes..."
+          FILE="buzzcontrol-v${{ needs.checking.outputs.version }}-windows-amd64.exe"
+          SIZE=$(stat -c%s "$FILE")
+          echo "Windows binary: $SIZE bytes ($(numfmt --to=iec $SIZE))"
 
-          WIN_SIZE=$(stat -c%s "buzzcontrol-v${{ steps.version.outputs.VERSION }}-windows-amd64.exe")
-          LINUX_SIZE=$(stat -c%s "buzzcontrol-v${{ steps.version.outputs.VERSION }}-linux-arm64")
-
-          echo "Windows binary: $WIN_SIZE bytes"
-          echo "Linux binary: $LINUX_SIZE bytes"
-
-          # Minimum 5MB (5242880 bytes)
           MIN_SIZE=5242880
-
-          if [ "$WIN_SIZE" -lt "$MIN_SIZE" ]; then
-            echo "ERROR: Windows binary too small ($WIN_SIZE < $MIN_SIZE)"
+          if [ "$SIZE" -lt "$MIN_SIZE" ]; then
+            echo "❌ ERROR: Windows binary too small ($SIZE < $MIN_SIZE)"
             exit 1
           fi
+          echo "✅ Windows binary validation passed"
 
-          if [ "$LINUX_SIZE" -lt "$MIN_SIZE" ]; then
-            echo "ERROR: Linux binary too small ($LINUX_SIZE < $MIN_SIZE)"
+      - name: Validate Linux binary
+        run: |
+          FILE="buzzcontrol-v${{ needs.checking.outputs.version }}-linux-arm64"
+          SIZE=$(stat -c%s "$FILE")
+          echo "Linux binary: $SIZE bytes ($(numfmt --to=iec $SIZE))"
+
+          MIN_SIZE=5242880
+          if [ "$SIZE" -lt "$MIN_SIZE" ]; then
+            echo "❌ ERROR: Linux binary too small ($SIZE < $MIN_SIZE)"
             exit 1
           fi
+          echo "✅ Linux binary validation passed"
 
-          echo "Binary validation passed!"
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: binaries
+          path: |
+            buzzcontrol-v${{ needs.checking.outputs.version }}-windows-amd64.exe
+            buzzcontrol-v${{ needs.checking.outputs.version }}-linux-arm64
+          retention-days: 1
+
+  # ============================================
+  # STAGE 3: Releasing
+  # ============================================
+  releasing:
+    name: 🚀 Releasing
+    runs-on: ubuntu-latest
+    needs: [checking, compiling]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: binaries
+
+      - name: List artifacts
+        run: |
+          echo "Downloaded artifacts:"
+          ls -lh buzzcontrol-*
 
       - name: Generate release notes
         id: release_notes
         run: |
-          VERSION="${{ steps.version.outputs.VERSION }}"
+          VERSION="${{ needs.checking.outputs.version }}"
+
+          echo "Extracting release notes for v$VERSION from CHANGELOG.md..."
 
           # Extract release notes from CHANGELOG.md
           NOTES=$(awk "/## \[$VERSION\]/{flag=1; next} /## \[/{flag=0} flag" CHANGELOG.md)
 
           if [ -z "$NOTES" ]; then
             NOTES="Release v$VERSION"
+            echo "⚠️ No release notes found in CHANGELOG.md, using default"
+          else
+            echo "✅ Release notes extracted"
           fi
 
           # Save to file for multiline support
           echo "$NOTES" > release_notes.md
-          echo "Generated release notes for v$VERSION"
+          echo "--- Release Notes ---"
+          cat release_notes.md
+          echo "---------------------"
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v1
         with:
-          name: BuzzControl v${{ steps.version.outputs.VERSION }}
+          name: BuzzControl v${{ needs.checking.outputs.version }}
           body_path: release_notes.md
           files: |
-            buzzcontrol-v${{ steps.version.outputs.VERSION }}-windows-amd64.exe
-            buzzcontrol-v${{ steps.version.outputs.VERSION }}-linux-arm64
+            buzzcontrol-v${{ needs.checking.outputs.version }}-windows-amd64.exe
+            buzzcontrol-v${{ needs.checking.outputs.version }}-linux-arm64
           draft: false
           prerelease: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Release summary
+        run: |
+          echo "=========================================="
+          echo "🎉 Release v${{ needs.checking.outputs.version }} published!"
+          echo ""
+          echo "📦 Assets:"
+          echo "   - buzzcontrol-v${{ needs.checking.outputs.version }}-windows-amd64.exe"
+          echo "   - buzzcontrol-v${{ needs.checking.outputs.version }}-linux-arm64"
+          echo ""
+          echo "🔗 https://github.com/${{ github.repository }}/releases/tag/v${{ needs.checking.outputs.version }}"
+          echo "=========================================="
