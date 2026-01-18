@@ -199,15 +199,53 @@ git push origin vX.Y.0
 
 ---
 
-### 12. Vérifier la Release
+### 12. Surveiller la CI
 
-1. Aller sur : https://github.com/CCoupel/BuzzMaster/actions
-2. Vérifier que le workflow "Build and Release" est en succès ✅
-3. Aller sur : https://github.com/CCoupel/BuzzMaster/releases
-4. Vérifier que la release contient :
-   - `buzzcontrol-vX.Y.0-windows-amd64.exe`
-   - `buzzcontrol-vX.Y.0-linux-arm64`
-   - Notes de release extraites du CHANGELOG
+Ouvrir : https://github.com/CCoupel/BuzzMaster/actions
+
+Le pipeline s'exécute en 3 étapes :
+
+```
+┌─────────────────────────────────────────────┐
+│  🔍 Checking (~10s)                         │
+│  └─ Vérifie versions config/package/tag     │
+└─────────────────────┬───────────────────────┘
+                      │
+        ┌─────────────┴─────────────┐
+        ▼                           ▼
+┌───────────────────┐   ┌───────────────────┐
+│ 🔨 Compile Windows│   │ 🔨 Compile Linux  │
+│    (~1-2 min)     │   │    (~1-2 min)     │
+│ ├─ npm ci/build   │   │ ├─ npm ci/build   │
+│ ├─ go build       │   │ ├─ go build       │
+│ └─ validate >5MB  │   │ └─ validate >5MB  │
+└─────────┬─────────┘   └─────────┬─────────┘
+          └───────────┬───────────┘
+                      ▼
+┌─────────────────────────────────────────────┐
+│  🚀 Releasing (~30s)                        │
+│  ├─ Télécharge les binaires                 │
+│  ├─ Extrait notes du CHANGELOG              │
+│  └─ Publie la release GitHub                │
+└─────────────────────────────────────────────┘
+```
+
+**Durée totale** : ~2-3 minutes
+
+**En cas d'échec** :
+1. Cliquer sur le job en erreur
+2. Lire les logs pour identifier le problème
+3. Voir section "En Cas de Problème" ci-dessous
+
+---
+
+### 13. Vérifier la Release
+
+1. Aller sur : https://github.com/CCoupel/BuzzMaster/releases
+2. Vérifier que la release `vX.Y.0` contient :
+   - [ ] `buzzcontrol-vX.Y.0-windows-amd64.exe` (~8-9 MB)
+   - [ ] `buzzcontrol-vX.Y.0-linux-arm64` (~8 MB)
+   - [ ] Notes de release extraites du CHANGELOG
 
 ---
 
@@ -225,7 +263,8 @@ git push origin vX.Y.0
 [ ] 9.  Changements commités
 [ ] 10. Commits poussés
 [ ] 11. Tag créé et poussé (déclenche CI)
-[ ] 12. Release vérifiée sur GitHub
+[ ] 12. CI surveillée (3 jobs verts ✅)
+[ ] 13. Release vérifiée sur GitHub (binaires + notes)
 ```
 
 ---
