@@ -169,6 +169,60 @@ body {
 }
 
 /* ============================================
+   Demo Section
+   ============================================ */
+
+.demo {
+    padding: 6rem 0;
+    background: var(--surface);
+}
+
+.demo h2 {
+    text-align: center;
+    font-size: 2.5rem;
+    margin-bottom: 1rem;
+}
+
+.demo-subtitle {
+    text-align: center;
+    color: var(--text-muted);
+    margin-bottom: 3rem;
+}
+
+.demo-showcase {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+    gap: 2rem;
+}
+
+.demo-item {
+    background: var(--background);
+    border-radius: 16px;
+    overflow: hidden;
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    transition: transform 0.3s, box-shadow 0.3s;
+}
+
+.demo-item:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 20px 40px rgba(245, 158, 11, 0.2);
+}
+
+.demo-gif {
+    width: 100%;
+    height: auto;
+    display: block;
+}
+
+.demo-caption {
+    padding: 1rem 1.5rem;
+    color: var(--text-muted);
+    font-size: 0.9rem;
+    text-align: center;
+    border-top: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+/* ============================================
    Features Section
    ============================================ */
 
@@ -421,10 +475,15 @@ body {
         font-size: 1rem;
     }
 
+    .demo h2,
     .features h2,
     .components h2,
     .download h2 {
         font-size: 2rem;
+    }
+
+    .demo-showcase {
+        grid-template-columns: 1fr;
     }
 
     .footer-content {
