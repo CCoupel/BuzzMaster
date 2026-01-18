@@ -189,6 +189,12 @@ body {
     margin-bottom: 3rem;
 }
 
+.demo-zones-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 2rem;
+}
+
 .demo-showcase {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
@@ -223,10 +229,6 @@ body {
 }
 
 .demo-zone {
-    margin-bottom: 4rem;
-}
-
-.demo-zone:last-child {
     margin-bottom: 0;
 }
 
@@ -247,7 +249,7 @@ body {
 }
 
 .demo-item-large {
-    max-width: 900px;
+    max-width: 100%;
     margin: 0 auto;
 }
 
@@ -517,6 +519,11 @@ body {
 
     .demo-showcase {
         grid-template-columns: 1fr;
+    }
+
+    .demo-zones-grid {
+        grid-template-columns: 1fr;
+        gap: 3rem;
     }
 
     .footer-content {
