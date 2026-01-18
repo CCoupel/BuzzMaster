@@ -67,12 +67,24 @@ jobs:
           echo "=========================================="
 
   # ============================================
-  # STAGE 2: Compiling
+  # STAGE 2: Compiling (parallel builds)
   # ============================================
   compiling:
-    name: 🔨 Compiling
+    name: 🔨 Compile ${{ matrix.target }}
     runs-on: ubuntu-latest
     needs: checking
+
+    strategy:
+      matrix:
+        include:
+          - target: Windows
+            goos: windows
+            goarch: amd64
+            suffix: windows-amd64.exe
+          - target: Linux ARM64
+            goos: linux
+            goarch: arm64
+            suffix: linux-arm64
 
     steps:
       - name: Checkout code
@@ -103,61 +115,35 @@ jobs:
           rm -rf server-go/cmd/server/dist
           cp -r server-go/web/dist server-go/cmd/server/dist
 
-      - name: Build Windows AMD64
+      - name: Build ${{ matrix.target }}
         working-directory: server-go
         env:
-          GOOS: windows
-          GOARCH: amd64
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
           CGO_ENABLED: 0
         run: |
-          echo "Building Windows AMD64..."
-          go build -ldflags="-s -w" -o ../buzzcontrol-v${{ needs.checking.outputs.version }}-windows-amd64.exe ./cmd/server
-          echo "✅ Windows build complete"
+          echo "Building ${{ matrix.target }}..."
+          go build -ldflags="-s -w" -o ../buzzcontrol-v${{ needs.checking.outputs.version }}-${{ matrix.suffix }} ./cmd/server
+          echo "✅ ${{ matrix.target }} build complete"
 
-      - name: Build Linux ARM64 (Raspberry Pi)
-        working-directory: server-go
-        env:
-          GOOS: linux
-          GOARCH: arm64
-          CGO_ENABLED: 0
+      - name: Validate binary
         run: |
-          echo "Building Linux ARM64..."
-          go build -ldflags="-s -w" -o ../buzzcontrol-v${{ needs.checking.outputs.version }}-linux-arm64 ./cmd/server
-          echo "✅ Linux ARM64 build complete"
-
-      - name: Validate Windows binary
-        run: |
-          FILE="buzzcontrol-v${{ needs.checking.outputs.version }}-windows-amd64.exe"
+          FILE="buzzcontrol-v${{ needs.checking.outputs.version }}-${{ matrix.suffix }}"
           SIZE=$(stat -c%s "$FILE")
-          echo "Windows binary: $SIZE bytes ($(numfmt --to=iec $SIZE))"
+          echo "${{ matrix.target }} binary: $SIZE bytes ($(numfmt --to=iec $SIZE))"
 
           MIN_SIZE=5242880
           if [ "$SIZE" -lt "$MIN_SIZE" ]; then
-            echo "❌ ERROR: Windows binary too small ($SIZE < $MIN_SIZE)"
+            echo "❌ ERROR: Binary too small ($SIZE < $MIN_SIZE)"
             exit 1
           fi
-          echo "✅ Windows binary validation passed"
+          echo "✅ ${{ matrix.target }} binary validation passed"
 
-      - name: Validate Linux binary
-        run: |
-          FILE="buzzcontrol-v${{ needs.checking.outputs.version }}-linux-arm64"
-          SIZE=$(stat -c%s "$FILE")
-          echo "Linux binary: $SIZE bytes ($(numfmt --to=iec $SIZE))"
-
-          MIN_SIZE=5242880
-          if [ "$SIZE" -lt "$MIN_SIZE" ]; then
-            echo "❌ ERROR: Linux binary too small ($SIZE < $MIN_SIZE)"
-            exit 1
-          fi
-          echo "✅ Linux binary validation passed"
-
-      - name: Upload artifacts
+      - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: binaries
-          path: |
-            buzzcontrol-v${{ needs.checking.outputs.version }}-windows-amd64.exe
-            buzzcontrol-v${{ needs.checking.outputs.version }}-linux-arm64
+          name: binary-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: buzzcontrol-v${{ needs.checking.outputs.version }}-${{ matrix.suffix }}
           retention-days: 1
 
   # ============================================
@@ -172,15 +158,17 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Download artifacts
+      - name: Download all artifacts
         uses: actions/download-artifact@v4
         with:
-          name: binaries
+          path: artifacts
+          pattern: binary-*
+          merge-multiple: true
 
       - name: List artifacts
         run: |
           echo "Downloaded artifacts:"
-          ls -lh buzzcontrol-*
+          ls -lh artifacts/
 
       - name: Generate release notes
         id: release_notes
@@ -210,9 +198,7 @@ jobs:
         with:
           name: BuzzControl v${{ needs.checking.outputs.version }}
           body_path: release_notes.md
-          files: |
-            buzzcontrol-v${{ needs.checking.outputs.version }}-windows-amd64.exe
-            buzzcontrol-v${{ needs.checking.outputs.version }}-linux-arm64
+          files: artifacts/*
           draft: false
           prerelease: false
         env:
@@ -224,8 +210,7 @@ jobs:
           echo "🎉 Release v${{ needs.checking.outputs.version }} published!"
           echo ""
           echo "📦 Assets:"
-          echo "   - buzzcontrol-v${{ needs.checking.outputs.version }}-windows-amd64.exe"
-          echo "   - buzzcontrol-v${{ needs.checking.outputs.version }}-linux-arm64"
+          ls -1 artifacts/
           echo ""
           echo "🔗 https://github.com/${{ github.repository }}/releases/tag/v${{ needs.checking.outputs.version }}"
           echo "=========================================="
