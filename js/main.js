@@ -51,4 +51,19 @@ document.addEventListener('DOMContentLoaded', () => {
         card.style.transition = 'opacity 0.5s ease, transform 0.5s ease';
         observer.observe(card);
     });
+
+    // Slideshow functionality
+    document.querySelectorAll('.slideshow').forEach(slideshow => {
+        const slides = slideshow.querySelectorAll('.slide');
+        const interval = parseInt(slideshow.dataset.interval) || 3000;
+        let currentIndex = 0;
+
+        if (slides.length <= 1) return;
+
+        setInterval(() => {
+            slides[currentIndex].classList.remove('active');
+            currentIndex = (currentIndex + 1) % slides.length;
+            slides[currentIndex].classList.add('active');
+        }, interval);
+    });
 });
