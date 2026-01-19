@@ -65,6 +65,7 @@ type Bumper struct {
 	IP          string      `json:"IP,omitempty"`
 	Ready       bool        `json:"READY,omitempty"`
 	AnswerColor AnswerColor `json:"ANSWER_COLOR,omitempty"`
+	HintsAtBuzz int         `json:"HINTS_AT_BUZZ,omitempty"` // Number of QCM hints when player buzzed
 }
 
 // QuestionType represents the type of question

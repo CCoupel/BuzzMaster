@@ -218,6 +218,20 @@
   flex: 1;
 }
 
+/* Wrapper for answer color badge with penalty ring */
+.buzzer-answer-color-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.buzzer-answer-color-wrapper.has-penalty {
+  width: 36px;
+  height: 36px;
+}
+
 .buzzer-answer-color {
   width: 24px;
   height: 24px;
@@ -231,6 +245,41 @@
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
   flex-shrink: 0;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.2);
+}
+
+/* Penalty ring SVG - circular progress indicator */
+.penalty-ring {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 36px;
+  height: 36px;
+  pointer-events: none;
+}
+
+.penalty-ring-bg {
+  stroke: var(--gray-300);
+}
+
+.penalty-ring-fill {
+  stroke: var(--warning);
+  stroke-linecap: round;
+  transition: stroke-dasharray 0.3s ease;
+}
+
+/* Penalty badge showing percentage */
+.penalty-badge {
+  position: absolute;
+  bottom: -6px;
+  right: -6px;
+  background: var(--warning);
+  color: white;
+  font-size: 0.55rem;
+  font-weight: 700;
+  padding: 1px 3px;
+  border-radius: var(--radius-sm);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+  white-space: nowrap;
 }
 
 .buzzer-name {

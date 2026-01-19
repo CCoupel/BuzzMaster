@@ -1081,22 +1081,44 @@
   overflow: visible;
 }
 
+/* Wrapper for team badge with penalty ring */
+.qcm-team-badge-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
 .qcm-team-badge {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
   border-radius: 50%;
   border: 3px solid white;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(0, 0, 0, 0.2);
-  flex-shrink: 0;
   /* Size is set dynamically via inline style */
 }
 
-/* First badge - overflow left */
-.qcm-team-badge.first-badge {
-  margin-left: -8px;
+/* Penalty ring SVG around team badge */
+.qcm-penalty-ring {
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
 }
 
-/* Last badge - overflow right */
-.qcm-team-badge.last-badge {
-  margin-right: -8px;
+/* Full ring (no penalty) - white/light */
+.qcm-penalty-ring-full {
+  stroke: rgba(255, 255, 255, 0.8);
+  stroke-linecap: round;
+}
+
+/* Partial ring (with penalty) - warning color */
+.qcm-penalty-ring-fill {
+  stroke: var(--warning);
+  stroke-linecap: round;
+  filter: drop-shadow(0 0 3px var(--warning));
 }
 
 @media (max-width: 768px) {

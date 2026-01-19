@@ -56,11 +56,13 @@ git pull origin main
 
 ```json
 {
-  "version": "x.y.z"  // Incrémenter z pour chaque session de dev
+  "version": "x.y.z"
 }
 ```
 
-**Règle** : `z` est incrémenté à chaque relance du serveur pour tests.
+**Règles de versionnement** :
+- **Y** : Incrémenter pour une **nouvelle fonctionnalité** (ex: 2.37.0 → 2.38.0)
+- **Z** : Incrémenter pour une **correction de bug** ou à chaque relance serveur pour tests (ex: 2.38.0 → 2.38.1)
 
 ### 2.3 Lancer le serveur en mode développement
 
@@ -228,8 +230,34 @@ npm install
 
 Avant de passer en QUALIF :
 
+### 7.1 Compilation et démarrage
+
+```bash
+cd server-go
+go build -o server.exe ./cmd/server && ./server.exe
+```
+
+### 7.2 Vérification de la version
+
+```bash
+# Via API - vérifier que la version correspond à celle de dev
+curl http://localhost/version
+# Doit afficher : {"version":"x.y.z"} avec la version attendue
+```
+
+**Dans le navigateur** : La version doit s'afficher dans la navbar de l'interface admin.
+
+### 7.3 Exécution du plan de test
+
+Lancer le plan de test correspondant à la fonctionnalité développée :
+- Voir [TEST_PROCEDURE.md](TEST_PROCEDURE.md) pour les tests standards
+- Vérifier les cas nominaux et les cas limites
+
+### 7.4 Checklist finale
+
 - [ ] Code compilé sans erreur
-- [ ] Fonctionnalité principale testée manuellement
+- [ ] Version vérifiée via `/version`
+- [ ] Plan de test exécuté et validé
 - [ ] Pas de console.log ou fmt.Println de debug oubliés
 - [ ] Pas de fichiers temporaires non désirés
 

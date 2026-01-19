@@ -46,6 +46,7 @@ export default function GamePage() {
         ready: bumper.READY === true || bumper.READY === 'TRUE',
         active: bumper.TIME !== undefined && bumper.TIME > 0,
         answerColor: bumper.ANSWER_COLOR,
+        hintsAtBuzz: bumper.HINTS_AT_BUZZ || 0, // QCM hints count when player buzzed
       })
     })
     // Sort bumpers by timestamp within each team
@@ -445,6 +446,10 @@ export default function GamePage() {
                 gameTime={gameState.gameTime}
                 waitingForReady={['PREPARE', 'READY'].includes(gameState.phase)}
                 waitingForBuzz={['STARTED', 'PAUSED'].includes(gameState.phase)}
+                qcmPenaltyConfig={gameState.question?.TYPE === 'QCM' && gameState.question?.QCM_HINTS_ENABLED ? {
+                  penalty1: gameState.question?.QCM_PENALTY_1 || 0.67,
+                  penalty2: gameState.question?.QCM_PENALTY_2 || 0.33,
+                } : null}
                 onTeamClick={(teamName) => {
                   if (['STOPPED', 'REVEALED'].includes(gameState.phase)) {
                     // For Memory questions, use calculated score

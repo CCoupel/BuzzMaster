@@ -226,7 +226,9 @@ The restore endpoint now automatically detects what's in the TAR archive and res
       "TIME": 123456,
       "BUTTON": "A",
       "STATUS": "READY|PAUSE",
-      "VERSION": "1.0.0"
+      "VERSION": "1.0.0",
+      "ANSWER_COLOR": "RED|GREEN|YELLOW|BLUE",
+      "HINTS_AT_BUZZ": 0
     }
   }
 }
@@ -282,6 +284,9 @@ Système d'indices automatiques pour les questions QCM avec pénalités de point
 **Champs GameState :**
 - `QcmInvalidated`: []string - Liste des couleurs invalidées (ex: `["RED", "YELLOW"]`)
 
+**Champs Bumper :**
+- `HINTS_AT_BUZZ`: int - Nombre d'indices donnés au moment où le joueur a buzzé (pour pénalité individuelle)
+
 **Logique d'invalidation :**
 - Seuil 1 : configurable (défaut 25% du temps restant) → invalide 1 mauvaise réponse aléatoire
 - Seuil 2 : configurable (défaut 12.5% du temps restant) → invalide 1 autre mauvaise réponse
@@ -321,14 +326,29 @@ if seuil1 - seuil2 < 1 || seuil2 < 1 {
 }
 ```
 
+**Pénalité individuelle par joueur :**
+- Le QCM ne met PAS en pause le jeu : tous les joueurs peuvent buzzer
+- Chaque joueur reçoit sa propre pénalité basée sur le nombre d'indices **au moment de son buzz**
+- `HINTS_AT_BUZZ` stocké dans le bumper lors de `ProcessButtonPress`
+
+**Affichage des pénalités :**
+
+| Page | Affichage | Description |
+|------|-----------|-------------|
+| **Page JEU (TV)** | Anneaux autour des pastilles d'équipes | Blanc complet = 100%, Jaune partiel = pénalité |
+| **Page Admin** | Anneau + badge % autour du badge joueur | Anneau jaune + badge "67%" ou "33%" |
+
 **Fichiers concernés :**
-- `internal/game/models.go` : Champs `QcmHintsEnabled`, `QCMHintThreshold1/2`, `QCMPenalty1/2` dans Question, `QcmInvalidated` dans GameState
-- `internal/game/engine.go` : Logique d'invalidation avec seuils configurables dans le timer tick
+- `internal/game/models.go` : Champs `QcmHintsEnabled`, `QCMHintThreshold1/2`, `QCMPenalty1/2` dans Question, `QcmInvalidated` dans GameState, `HintsAtBuzz` dans Bumper
+- `internal/game/engine.go` : Logique d'invalidation avec seuils configurables, stockage de `HintsAtBuzz` au buzz
 - `internal/server/http.go` : Parsing des seuils et pénalités depuis le formulaire
 - `cmd/server/main.go` : Handler `QCM_HINT`, broadcast aux clients
 - `web/src/pages/QuestionsPage.jsx` : Toggle + inputs seuils et pénalités
-- `web/src/pages/PlayerDisplay.jsx` : Affichage des réponses invalidées (barré/grisé)
-- `web/src/pages/GamePage.jsx` : Badge de pénalité (configurable)
+- `web/src/pages/PlayerDisplay.jsx` : Anneaux de pénalité autour des pastilles d'équipes QCM (phase STOPPED/REVEALED)
+- `web/src/pages/PlayerDisplay.css` : Styles `.qcm-penalty-ring`, `.qcm-penalty-ring-full`, `.qcm-penalty-ring-fill`
+- `web/src/pages/GamePage.jsx` : Badge de pénalité globale, transmission config pénalité au TeamCard
+- `web/src/components/TeamCard.jsx` : Anneau de pénalité individuel par joueur avec badge %
+- `web/src/components/TeamCard.css` : Styles de l'anneau de pénalité admin
 
 ### Question (MEMORY type) - v2.33.0
 ```json

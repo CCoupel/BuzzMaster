@@ -10,6 +10,14 @@ const ANSWER_COLORS = {
   BLUE: { label: 'D', color: '#3b82f6' },
 }
 
+// Calculate penalty percentage based on hints at buzz time
+const getPenaltyPercent = (hintsAtBuzz, penaltyConfig) => {
+  if (!penaltyConfig || hintsAtBuzz === 0) return 100
+  if (hintsAtBuzz === 1) return Math.round(penaltyConfig.penalty1 * 100)
+  if (hintsAtBuzz >= 2) return Math.round(penaltyConfig.penalty2 * 100)
+  return 100
+}
+
 export default function TeamCard({
   name,
   color,
@@ -27,6 +35,7 @@ export default function TeamCard({
   waitingForReady = false,
   waitingForBuzz = false,
   pointsTarget = null,  // PLAYER or TEAM - from current question
+  qcmPenaltyConfig = null, // { penalty1: 0.67, penalty2: 0.33 } - for QCM penalty display
 }) {
   const [showTooltip, setShowTooltip] = useState(false)
   const rgbColor = color ? `rgb(${color.join(',')})` : 'var(--primary-500)'
@@ -148,6 +157,11 @@ export default function TeamCard({
                 buzzer.onClick(e)
               }
             }
+            // Calculate penalty for this buzzer based on hints at buzz time
+            const penaltyPercent = buzzer.active && qcmPenaltyConfig
+              ? getPenaltyPercent(buzzer.hintsAtBuzz, qcmPenaltyConfig)
+              : 100
+            const hasPenalty = penaltyPercent < 100
             return (
               <motion.div
                 key={buzzer.mac || index}
@@ -160,12 +174,36 @@ export default function TeamCard({
               >
                 <div className="buzzer-info">
                   {answerColorData && (
-                    <span
-                      className="buzzer-answer-color"
-                      style={{ backgroundColor: answerColorData.color }}
-                    >
-                      {answerColorData.label}
-                    </span>
+                    <div className={`buzzer-answer-color-wrapper ${hasPenalty ? 'has-penalty' : ''}`}>
+                      <span
+                        className="buzzer-answer-color"
+                        style={{ backgroundColor: answerColorData.color }}
+                      >
+                        {answerColorData.label}
+                      </span>
+                      {hasPenalty && (
+                        <svg className="penalty-ring" viewBox="0 0 36 36">
+                          <circle
+                            className="penalty-ring-bg"
+                            cx="18" cy="18" r="16"
+                            fill="none"
+                            strokeWidth="3"
+                          />
+                          <circle
+                            className="penalty-ring-fill"
+                            cx="18" cy="18" r="16"
+                            fill="none"
+                            strokeWidth="3"
+                            strokeDasharray={`${penaltyPercent} ${100 - penaltyPercent}`}
+                            strokeDashoffset="25"
+                            transform="rotate(-90 18 18)"
+                          />
+                        </svg>
+                      )}
+                      {hasPenalty && (
+                        <span className="penalty-badge">{penaltyPercent}%</span>
+                      )}
+                    </div>
                   )}
                   <span className="buzzer-name">{buzzer.name}</span>
                 </div>

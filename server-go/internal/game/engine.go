@@ -188,6 +188,7 @@ func (e *Engine) Ready(questionID string, question *Question) {
 		bumper.Button = ""
 		bumper.Status = ""
 		bumper.Ready = false
+		bumper.HintsAtBuzz = 0
 	}
 
 	// Reset team times
@@ -431,6 +432,7 @@ func (e *Engine) actualStart() {
 		bumper.Time = 0
 		bumper.Button = ""
 		bumper.Status = ""
+		bumper.HintsAtBuzz = 0
 	}
 
 	for _, team := range e.data.Teams {
@@ -783,6 +785,9 @@ func (e *Engine) ProcessButtonPress(bumperID string, pressTime int64, button str
 	bumper.Time = pressTime
 	bumper.Button = button
 	bumper.Status = "PAUSE"
+
+	// Store the number of QCM hints at buzz time for per-player penalty calculation
+	bumper.HintsAtBuzz = len(e.state.QcmInvalidated)
 
 	team.Time = pressTime
 	team.Bumper = bumperID

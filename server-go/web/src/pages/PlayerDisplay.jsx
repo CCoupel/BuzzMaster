@@ -554,6 +554,7 @@ export default function PlayerDisplay() {
             color: teams[bumper.TEAM]?.COLOR,
             qcmAnswer: qcmColor,
             time: bumper.TIME,
+            hintsAtBuzz: bumper.HINTS_AT_BUZZ || 0, // Store hints count at buzz time for penalty display
           }
         }
       }
@@ -568,6 +569,7 @@ export default function PlayerDisplay() {
             name: buzz.team,
             color: buzz.color,
             time: buzz.time,
+            hintsAtBuzz: buzz.hintsAtBuzz,
           })
         }
       })
@@ -1158,8 +1160,6 @@ export default function PlayerDisplay() {
                             <div className="qcm-team-badges">
                               {teamsOnThisAnswer.map((team, idx) => {
                                 const totalBadges = teamsOnThisAnswer.length
-                                const isFirst = idx === 0
-                                const isLast = idx === totalBadges - 1
                                 // Size gradient: 70% (first) to 40% (last) of base size (60px)
                                 const maxSize = 60
                                 const minSize = 20
@@ -1168,23 +1168,50 @@ export default function PlayerDisplay() {
                                   : 0.70
                                 const badgeSize = Math.round(maxSize * sizeRatio)
                                 const finalSize = Math.max(badgeSize, minSize)
+                                const ringSize = finalSize + 8
+
+                                // Calculate penalty percentage based on hintsAtBuzz
+                                const hintsAtBuzz = team.hintsAtBuzz || 0
+                                const penalty1 = gameState.question?.QCM_PENALTY_1 || 0.67
+                                const penalty2 = gameState.question?.QCM_PENALTY_2 || 0.33
+                                const penaltyPercent = hintsAtBuzz === 0 ? 100
+                                  : hintsAtBuzz === 1 ? Math.round(penalty1 * 100)
+                                  : Math.round(penalty2 * 100)
 
                                 return (
                                   <motion.div
                                     key={team.name}
-                                    className={`qcm-team-badge ${isFirst ? 'first-badge' : ''} ${isLast && totalBadges > 1 ? 'last-badge' : ''}`}
-                                    style={{
-                                      backgroundColor: team.color
-                                        ? (Array.isArray(team.color) ? `rgb(${team.color.join(',')})` : team.color)
-                                        : 'var(--gray-400)',
-                                      width: `${finalSize}px`,
-                                      height: `${finalSize}px`,
-                                    }}
+                                    className="qcm-team-badge-wrapper"
+                                    style={{ width: `${ringSize}px`, height: `${ringSize}px` }}
                                     initial={{ scale: 0, opacity: 0 }}
                                     animate={{ scale: 1, opacity: 1 }}
                                     transition={{ delay: idx * 0.1 }}
                                     title={team.name}
-                                  />
+                                  >
+                                    {/* Penalty ring around badge - always shown */}
+                                    <svg className="qcm-penalty-ring" viewBox="0 0 36 36">
+                                      <circle
+                                        className={penaltyPercent < 100 ? 'qcm-penalty-ring-fill' : 'qcm-penalty-ring-full'}
+                                        cx="18" cy="18" r="16"
+                                        fill="none"
+                                        strokeWidth="3"
+                                        strokeDasharray={`${penaltyPercent} ${100 - penaltyPercent}`}
+                                        strokeDashoffset="25"
+                                        style={{ transform: 'rotate(-90deg)', transformOrigin: 'center' }}
+                                      />
+                                    </svg>
+                                    {/* Team color badge */}
+                                    <div
+                                      className="qcm-team-badge"
+                                      style={{
+                                        backgroundColor: team.color
+                                          ? (Array.isArray(team.color) ? `rgb(${team.color.join(',')})` : team.color)
+                                          : 'var(--gray-400)',
+                                        width: `${finalSize}px`,
+                                        height: `${finalSize}px`,
+                                      }}
+                                    />
+                                  </motion.div>
                                 )
                               })}
                             </div>
