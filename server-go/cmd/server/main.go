@@ -1,6 +1,7 @@
 package main
 
 import (
+	"buzzcontrol/assets"
 	"buzzcontrol/internal/config"
 	"buzzcontrol/internal/game"
 	"buzzcontrol/internal/protocol"
@@ -8,10 +9,8 @@ import (
 	"buzzcontrol/web"
 	"encoding/json"
 	"fmt"
-	"io"
 	"log"
 	"net"
-	"net/http"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -2081,26 +2080,30 @@ func (a *App) createDemoBackgrounds() {
 	bgDir := filepath.Join(filesDir, "backgrounds")
 	os.MkdirAll(bgDir, 0755)
 
-	// Demo backgrounds: download from Unsplash if not present
+	// Demo backgrounds: extract from embedded assets
 	demoImages := []struct {
 		filename string
-		url      string
 		duration int
 		opacity  float64
 	}{
-		{"demo_bg_1.jpg", "https://images.unsplash.com/photo-1557683316-973673baf926?w=1920&q=80", 8, 100},
-		{"demo_bg_2.jpg", "https://images.unsplash.com/photo-1579546929518-9e396f3cc809?w=1920&q=80", 12, 80},
-		{"demo_bg_3.jpg", "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=1920&q=80", 10, 60},
+		{"demo_bg_1.jpg", 8, 100},
+		{"demo_bg_2.jpg", 12, 80},
+		{"demo_bg_3.jpg", 10, 60},
 	}
 
 	var backgrounds []game.Background
 	for _, img := range demoImages {
 		destPath := filepath.Join(bgDir, img.filename)
-		// Download if not exists
+		// Extract from embedded assets if not exists
 		if _, err := os.Stat(destPath); os.IsNotExist(err) {
-			log.Printf("[App] Downloading demo background: %s", img.filename)
-			if err := downloadFile(destPath, img.url); err != nil {
-				log.Printf("[App] Failed to download %s: %v", img.filename, err)
+			log.Printf("[App] Extracting demo background: %s", img.filename)
+			data, err := assets.DemoAssets.ReadFile("demo/" + img.filename)
+			if err != nil {
+				log.Printf("[App] Failed to read embedded %s: %v", img.filename, err)
+				continue
+			}
+			if err := os.WriteFile(destPath, data, 0644); err != nil {
+				log.Printf("[App] Failed to write %s: %v", img.filename, err)
 				continue
 			}
 		}
@@ -2114,24 +2117,6 @@ func (a *App) createDemoBackgrounds() {
 	a.engine.SetBackgrounds(backgrounds)
 	a.saveBackgroundsConfig()
 	log.Printf("[App] Created %d demo backgrounds", len(backgrounds))
-}
-
-// downloadFile downloads a file from URL to local path
-func downloadFile(filepath string, url string) error {
-	resp, err := http.Get(url)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-
-	out, err := os.Create(filepath)
-	if err != nil {
-		return err
-	}
-	defer out.Close()
-
-	_, err = io.Copy(out, resp.Body)
-	return err
 }
 
 // createDemoHistory creates demo history events for PALMARES view
