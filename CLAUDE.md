@@ -153,6 +153,7 @@ The ESP32-C3 buzzers connect to the Go server without any modification.
 | GET | `/clearBuzzers` | Clear buzzers |
 | GET | `/reboot` | Reboot server |
 | GET | `/reset` | Factory reset |
+| GET | `/shutdown` | Graceful server shutdown |
 
 #### Selective Backup (`/backup-select`)
 Query parameters (all boolean, default: `true` if none specified):

@@ -35,6 +35,7 @@ type HTTPServer struct {
 	OnAction           func(action string, data json.RawMessage)
 	OnQuestionUpload   func() // Called after question upload to broadcast update
 	OnBackgroundChange func(path string) // Called after background upload/delete
+	OnShutdown         func() // Called before server shutdown for cleanup
 }
 
 // NewHTTPServer creates a new HTTP server
@@ -145,6 +146,7 @@ func (h *HTTPServer) setupRoutes() {
 	h.mux.HandleFunc("/clearBuzzers", h.handleClearBuzzers)
 	h.mux.HandleFunc("/reboot", h.handleReboot)
 	h.mux.HandleFunc("/reset", h.handleReset)
+	h.mux.HandleFunc("/shutdown", h.handleShutdown)
 
 	// Background image upload
 	h.mux.HandleFunc("/background", h.handleBackground)
@@ -728,6 +730,22 @@ func (h *HTTPServer) handleReboot(w http.ResponseWriter, r *http.Request) {
 	if h.OnAction != nil {
 		h.OnAction("REBOOT", nil)
 	}
+}
+
+func (h *HTTPServer) handleShutdown(w http.ResponseWriter, r *http.Request) {
+	log.Printf("[HTTP] Shutdown requested")
+	w.Header().Set("Content-Type", "application/json")
+	w.Write([]byte(`{"status":"shutting_down"}`))
+
+	// Call shutdown callback for cleanup, then exit
+	go func() {
+		time.Sleep(100 * time.Millisecond) // Give time for response to be sent
+		if h.OnShutdown != nil {
+			h.OnShutdown()
+		}
+		log.Printf("[HTTP] Server shutting down...")
+		os.Exit(0)
+	}()
 }
 
 func (h *HTTPServer) handleReset(w http.ResponseWriter, r *http.Request) {
