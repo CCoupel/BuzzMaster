@@ -8,8 +8,10 @@ import (
 	"buzzcontrol/web"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"net"
+	"net/http"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -2072,8 +2074,6 @@ func (a *App) createDemoQuestions() {
 
 // createDemoBackgrounds creates demo backgrounds with varied opacities
 func (a *App) createDemoBackgrounds() {
-	// Create placeholder backgrounds using simple colored PNGs
-	// In a real scenario, you'd copy actual images
 	filesDir := a.config.Storage.FilesDir
 	if filesDir == "" {
 		filesDir = "./data/files"
@@ -2081,31 +2081,57 @@ func (a *App) createDemoBackgrounds() {
 	bgDir := filepath.Join(filesDir, "backgrounds")
 	os.MkdirAll(bgDir, 0755)
 
-	// Create demo backgrounds config with varied settings
-	backgrounds := []game.Background{
-		{Path: "/files/backgrounds/demo_bg_1.png", Duration: 8, Opacity: 100},
-		{Path: "/files/backgrounds/demo_bg_2.png", Duration: 12, Opacity: 80},
-		{Path: "/files/backgrounds/demo_bg_3.png", Duration: 10, Opacity: 60},
+	// Demo backgrounds: download from Unsplash if not present
+	demoImages := []struct {
+		filename string
+		url      string
+		duration int
+		opacity  float64
+	}{
+		{"demo_bg_1.jpg", "https://images.unsplash.com/photo-1557683316-973673baf926?w=1920&q=80", 8, 100},
+		{"demo_bg_2.jpg", "https://images.unsplash.com/photo-1579546929518-9e396f3cc809?w=1920&q=80", 12, 80},
+		{"demo_bg_3.jpg", "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=1920&q=80", 10, 60},
 	}
 
-	// Create simple placeholder PNG files (1x1 pixel colored images)
-	colors := [][]byte{
-		{0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00, 0x00, 0x0D, 0x49, 0x48, 0x44, 0x52, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x08, 0x02, 0x00, 0x00, 0x00, 0x90, 0x77, 0x53, 0xDE, 0x00, 0x00, 0x00, 0x0C, 0x49, 0x44, 0x41, 0x54, 0x08, 0xD7, 0x63, 0x78, 0xC1, 0xC0, 0x00, 0x00, 0x01, 0x4B, 0x00, 0xEB, 0x3E, 0x2E, 0xFD, 0xA4, 0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4E, 0x44, 0xAE, 0x42, 0x60, 0x82}, // Blue pixel
-		{0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00, 0x00, 0x0D, 0x49, 0x48, 0x44, 0x52, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x08, 0x02, 0x00, 0x00, 0x00, 0x90, 0x77, 0x53, 0xDE, 0x00, 0x00, 0x00, 0x0C, 0x49, 0x44, 0x41, 0x54, 0x08, 0xD7, 0x63, 0x60, 0xF8, 0x0F, 0x00, 0x00, 0x01, 0x01, 0x00, 0x05, 0xFE, 0xDC, 0xCC, 0x59, 0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4E, 0x44, 0xAE, 0x42, 0x60, 0x82}, // Green pixel
-		{0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00, 0x00, 0x0D, 0x49, 0x48, 0x44, 0x52, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x08, 0x02, 0x00, 0x00, 0x00, 0x90, 0x77, 0x53, 0xDE, 0x00, 0x00, 0x00, 0x0C, 0x49, 0x44, 0x41, 0x54, 0x08, 0xD7, 0x63, 0xF8, 0xCF, 0x00, 0x00, 0x01, 0x41, 0x00, 0xF5, 0x1D, 0x38, 0x6E, 0x7B, 0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4E, 0x44, 0xAE, 0x42, 0x60, 0x82}, // Purple pixel
-	}
-
-	for i, bg := range backgrounds {
-		filename := filepath.Base(bg.Path)
-		destPath := filepath.Join(bgDir, filename)
-		if i < len(colors) {
-			os.WriteFile(destPath, colors[i], 0644)
+	var backgrounds []game.Background
+	for _, img := range demoImages {
+		destPath := filepath.Join(bgDir, img.filename)
+		// Download if not exists
+		if _, err := os.Stat(destPath); os.IsNotExist(err) {
+			log.Printf("[App] Downloading demo background: %s", img.filename)
+			if err := downloadFile(destPath, img.url); err != nil {
+				log.Printf("[App] Failed to download %s: %v", img.filename, err)
+				continue
+			}
 		}
+		backgrounds = append(backgrounds, game.Background{
+			Path:     "/files/backgrounds/" + img.filename,
+			Duration: img.duration,
+			Opacity:  img.opacity,
+		})
 	}
 
 	a.engine.SetBackgrounds(backgrounds)
 	a.saveBackgroundsConfig()
 	log.Printf("[App] Created %d demo backgrounds", len(backgrounds))
+}
+
+// downloadFile downloads a file from URL to local path
+func downloadFile(filepath string, url string) error {
+	resp, err := http.Get(url)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	out, err := os.Create(filepath)
+	if err != nil {
+		return err
+	}
+	defer out.Close()
+
+	_, err = io.Copy(out, resp.Body)
+	return err
 }
 
 // createDemoHistory creates demo history events for PALMARES view
