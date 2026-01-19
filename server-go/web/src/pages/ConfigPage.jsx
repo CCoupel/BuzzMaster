@@ -29,9 +29,31 @@ export default function ConfigPage() {
     backgrounds: false,
   })
 
+  const [loadingDemo, setLoadingDemo] = useState(false)
+
   const handleResetScores = () => {
     if (!window.confirm('Remettre tous les scores a zero ?')) return
     sendMessage('RAZ', {})
+  }
+
+  const handleLoadDemo = async () => {
+    if (!window.confirm('Charger les donnees de demonstration ? Les donnees actuelles seront remplacees.')) return
+
+    setLoadingDemo(true)
+    try {
+      const response = await fetch('/load-demo', { method: 'POST' })
+      if (response.ok) {
+        window.location.reload()
+      } else {
+        const data = await response.json()
+        alert('Erreur: ' + (data.message || 'Echec du chargement'))
+      }
+    } catch (error) {
+      console.error('Load demo failed:', error)
+      alert('Erreur: ' + error.message)
+    } finally {
+      setLoadingDemo(false)
+    }
   }
 
   const handleBackup = async () => {
@@ -308,6 +330,19 @@ export default function ConfigPage() {
               <Button variant="secondary" onClick={handleResetScores}>
                 Remettre les scores a zero
               </Button>
+            </div>
+
+            {/* Demo Section */}
+            <div className="config-section">
+              <h3 className="config-section-title">Mode Demo</h3>
+              <p className="config-section-hint">
+                Charge des donnees de demonstration: equipes, joueurs, questions (QCM, Memory, Normal) et historique.
+              </p>
+              <div className="config-section-actions">
+                <Button variant="primary" onClick={handleLoadDemo} loading={loadingDemo}>
+                  Charger la demo
+                </Button>
+              </div>
             </div>
 
             {/* Backup Section */}

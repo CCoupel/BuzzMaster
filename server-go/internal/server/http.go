@@ -36,6 +36,7 @@ type HTTPServer struct {
 	OnQuestionUpload   func() // Called after question upload to broadcast update
 	OnBackgroundChange func(path string) // Called after background upload/delete
 	OnShutdown         func() // Called before server shutdown for cleanup
+	OnLoadDemo         func() // Called to load demo data
 }
 
 // NewHTTPServer creates a new HTTP server
@@ -147,6 +148,7 @@ func (h *HTTPServer) setupRoutes() {
 	h.mux.HandleFunc("/reboot", h.handleReboot)
 	h.mux.HandleFunc("/reset", h.handleReset)
 	h.mux.HandleFunc("/shutdown", h.handleShutdown)
+	h.mux.HandleFunc("/load-demo", h.handleLoadDemo)
 
 	// Background image upload
 	h.mux.HandleFunc("/background", h.handleBackground)
@@ -746,6 +748,18 @@ func (h *HTTPServer) handleShutdown(w http.ResponseWriter, r *http.Request) {
 		log.Printf("[HTTP] Server shutting down...")
 		os.Exit(0)
 	}()
+}
+
+func (h *HTTPServer) handleLoadDemo(w http.ResponseWriter, r *http.Request) {
+	log.Printf("[HTTP] Load demo requested")
+	w.Header().Set("Content-Type", "application/json")
+
+	if h.OnLoadDemo != nil {
+		h.OnLoadDemo()
+		w.Write([]byte(`{"status":"ok","message":"Demo data loaded"}`))
+	} else {
+		http.Error(w, `{"status":"error","message":"Demo handler not configured"}`, http.StatusInternalServerError)
+	}
 }
 
 func (h *HTTPServer) handleReset(w http.ResponseWriter, r *http.Request) {

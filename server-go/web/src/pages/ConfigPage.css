@@ -513,6 +513,12 @@
   margin: 0 0 var(--space-3) 0;
 }
 
+.config-section-hint {
+  font-size: 0.875rem;
+  color: var(--gray-500);
+  margin: 0 0 var(--space-3) 0;
+}
+
 .checkbox-group {
   display: flex;
   flex-wrap: wrap;

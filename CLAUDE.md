@@ -1113,6 +1113,34 @@ curl http://localhost/shutdown
 taskkill /IM server.exe /F
 ```
 
+### Demo Mode (v2.38.0)
+
+Le mode démo charge des données de démonstration pour présenter toutes les fonctionnalités.
+
+**Accès** : Page Configuration → Section "Mode Demo" → Bouton "Charger la demo"
+
+**API** : `POST /load-demo`
+
+**Données créées :**
+| Type | Quantité | Détails |
+|------|----------|---------|
+| Équipes | 6 | Avec TeamPoints pré-remplis |
+| Joueurs | 24 | 4 par équipe, toutes couleurs QCM (A/B/C/D) |
+| Questions | 10 | QCM (avec indices), MEMORY, NORMAL |
+| Catégories | 8 | GEOGRAPHY, ENTERTAINMENT, HISTORY, etc. |
+| Historique | 10 | Événements pour vue PALMARES |
+| Fonds | 3 | Opacités variées (100%, 80%, 60%) |
+
+**Questions démo :**
+- 4 QCM (3 avec `QCM_HINTS_ENABLED: true`)
+- 4 NORMAL (points joueur)
+- 2 MEMORY (pays/capitales, superhéros/pouvoirs)
+
+**Fichiers concernés :**
+- `internal/server/http.go` : Endpoint `/load-demo`, callback `OnLoadDemo`
+- `cmd/server/main.go` : `loadDemoData()`, `createDemoQuestions()`, `createDemoBackgrounds()`, `createDemoHistory()`
+- `web/src/pages/ConfigPage.jsx` : Bouton "Charger la demo"
+
 ### Portable Build (v2.35.0)
 
 L'exécutable portable embarque les fichiers web directement dans le binaire.
