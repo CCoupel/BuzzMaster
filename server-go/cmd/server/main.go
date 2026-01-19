@@ -1824,7 +1824,7 @@ func (a *App) createDemoQuestions() {
 	os.MkdirAll(questionsDir, 0755)
 
 	demoQuestions := []map[string]interface{}{
-		// GEOGRAPHY - QCM with hints
+		// GEOGRAPHY - QCM with hints + image
 		{
 			"ID":                    "demo1",
 			"QUESTION":              "Quelle est la capitale de l'Australie?",
@@ -1847,6 +1847,7 @@ func (a *App) createDemoQuestions() {
 			},
 			"QCM_CORRECT": "GREEN",
 			"ORDER":       0,
+			"MEDIA":       "/question/demo1/media.jpg",
 		},
 		// ENTERTAINMENT - Normal question
 		{
@@ -1880,7 +1881,7 @@ func (a *App) createDemoQuestions() {
 			"QCM_CORRECT": "GREEN",
 			"ORDER":       2,
 		},
-		// SCIENCE - Normal question
+		// SCIENCE - Normal question + images
 		{
 			"ID":            "demo4",
 			"QUESTION":      "Quel est le symbole chimique de l'or?",
@@ -1891,6 +1892,8 @@ func (a *App) createDemoQuestions() {
 			"CATEGORY":      "SCIENCE",
 			"POINTS_TARGET": "PLAYER",
 			"ORDER":         3,
+			"MEDIA":         "/question/demo4/media.jpg",
+			"MEDIA_ANSWER":  "/question/demo4/media_answer.jpg",
 		},
 		// SPORTS - QCM
 		{
@@ -1923,7 +1926,7 @@ func (a *App) createDemoQuestions() {
 			"POINTS_TARGET": "PLAYER",
 			"ORDER":         5,
 		},
-		// FOOD - QCM with hints
+		// FOOD - QCM with hints + images
 		{
 			"ID":                    "demo7",
 			"QUESTION":              "De quel pays vient la pizza?",
@@ -1940,8 +1943,10 @@ func (a *App) createDemoQuestions() {
 				"YELLOW": "Espagne",
 				"BLUE":   "Grece",
 			},
-			"QCM_CORRECT": "GREEN",
-			"ORDER":       6,
+			"QCM_CORRECT":  "GREEN",
+			"ORDER":        6,
+			"MEDIA":        "/question/demo7/media.jpg",
+			"MEDIA_ANSWER": "/question/demo7/media_answer.jpg",
 		},
 		// ANIMALS - Normal
 		{
@@ -2068,7 +2073,36 @@ func (a *App) createDemoQuestions() {
 		}
 	}
 
-	log.Printf("[App] Created %d demo questions", len(demoQuestions))
+	// Extract demo question images from embedded assets
+	demoImages := []struct {
+		questionID  string
+		assetName   string
+		destName    string
+	}{
+		{"demo1", "demo1_australia.jpg", "media.jpg"},
+		{"demo4", "demo4_gold_miner.jpg", "media.jpg"},
+		{"demo4", "demo4_periodic_table.jpg", "media_answer.jpg"},
+		{"demo7", "demo7_pizza.jpg", "media.jpg"},
+		{"demo7", "demo7_italy.jpg", "media_answer.jpg"},
+	}
+
+	for _, img := range demoImages {
+		questionDir := filepath.Join(questionsDir, img.questionID)
+		destPath := filepath.Join(questionDir, img.destName)
+
+		data, err := assets.DemoAssets.ReadFile("demo/" + img.assetName)
+		if err != nil {
+			log.Printf("[App] Failed to read embedded %s: %v", img.assetName, err)
+			continue
+		}
+		if err := os.WriteFile(destPath, data, 0644); err != nil {
+			log.Printf("[App] Failed to write %s: %v", destPath, err)
+			continue
+		}
+		log.Printf("[App] Extracted demo image: %s -> %s", img.assetName, destPath)
+	}
+
+	log.Printf("[App] Created %d demo questions with images", len(demoQuestions))
 }
 
 // createDemoBackgrounds creates demo backgrounds with varied opacities
