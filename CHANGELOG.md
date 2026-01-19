@@ -3,6 +3,31 @@
 Historique des versions du projet BuzzControl.
 
 
+## [2.39.0] - 2026-01-19
+
+### Ajouts
+- **Mode Demo avec images embarquées** : Les questions de démonstration incluent maintenant des images
+  - `demo1` : Carte de l'Australie (question géographie)
+  - `demo4` : Chercheur d'or (question) + Tableau périodique (réponse)
+  - `demo7` : Pizza (question) + Carte de l'Italie (réponse)
+  - Images téléchargées depuis Unsplash et embarquées dans l'exécutable
+  - Extraction automatique au premier lancement
+
+### Modifié
+- **Layout des cartes questions** : Réorganisation en 2 lignes pour plus de clarté
+  - Ligne 1 : Nom de la question + Badge statut (AVAILABLE, STARTED, STOPPED, REVEALED) + Bouton supprimer
+  - Ligne 2 : Catégorie + Type (Normal/QCM/MEMORY) + Target (Joueur/Équipe) + Temps + Points
+  - Badge "Normal" ajouté pour les questions standards (comme QCM et MEMORY)
+  - Le badge Target est maintenant toujours visible
+
+### Technique
+- `QuestionCard.jsx` : Header divisé en `qcard-header-row1` et `qcard-header-row2`
+- `QuestionCard.css` : Styles pour les deux lignes + badge `.qcard-normal-badge`
+- `main.go` : `createDemoQuestions()` avec champs MEDIA, extraction depuis `embed.FS`
+- `assets/demo/` : 5 images embarquées (demo1_australia, demo4_gold_miner, demo4_periodic_table, demo7_pizza, demo7_italy)
+
+---
+
 ## [2.37.0] - QCM Form Layout Fix
 
 ### Corrigé

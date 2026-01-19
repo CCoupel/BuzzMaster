@@ -1126,7 +1126,7 @@ curl http://localhost/shutdown
 taskkill /IM server.exe /F
 ```
 
-### Demo Mode (v2.38.0)
+### Demo Mode (v2.38.10)
 
 Le mode démo charge des données de démonstration pour présenter toutes les fonctionnalités.
 
@@ -1143,13 +1143,27 @@ Le mode démo charge des données de démonstration pour présenter toutes les f
 | Catégories | 8 | GEOGRAPHY, ENTERTAINMENT, HISTORY, etc. |
 | Historique | 10 | Événements pour vue PALMARES |
 | Fonds | 3 | Opacités variées (100%, 80%, 60%) |
+| Images | 5 | Embarquées dans l'exécutable |
 
 **Questions démo :**
 - 4 QCM (3 avec `QCM_HINTS_ENABLED: true`)
 - 4 NORMAL (points joueur)
 - 2 MEMORY (pays/capitales, superhéros/pouvoirs)
 
+**Images embarquées (extraites automatiquement) :**
+| Question | Image Question | Image Réponse |
+|----------|----------------|---------------|
+| demo1 | Australie (paysage) | - |
+| demo4 | Chercheur d'or | Tableau périodique |
+| demo7 | Pizza | Carte de l'Italie |
+
+**Assets embarqués** : `assets/demo/`
+- `demo_bg_1.jpg`, `demo_bg_2.jpg`, `demo_bg_3.jpg` (fonds)
+- `demo1_australia.jpg`, `demo4_gold_miner.jpg`, `demo4_periodic_table.jpg`
+- `demo7_pizza.jpg`, `demo7_italy.jpg`
+
 **Fichiers concernés :**
+- `assets/embed.go` : Embed des assets demo
 - `internal/server/http.go` : Endpoint `/load-demo`, callback `OnLoadDemo`
 - `cmd/server/main.go` : `loadDemoData()`, `createDemoQuestions()`, `createDemoBackgrounds()`, `createDemoHistory()`
 - `web/src/pages/ConfigPage.jsx` : Bouton "Charger la demo"
