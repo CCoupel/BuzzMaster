@@ -709,12 +709,25 @@ Affichage du temps de réaction :
 - **Calcul** :  ms
 - **Tri** : Joueurs triés par temps de réponse dans chaque équipe
 
-#### Question Cards Layout (v2.19.0)
-Nouvelle mise en page des cartes questions dans le panneau admin :
-- **Layout horizontal** : Thumbnail (70x70px) à gauche, texte à droite
-- **Header** : `#ID 👤 30s 1pt [STATUS]` - ID, badge target, temps, points, status
-- **Body** : Question (4 lignes max), Réponse (3 lignes max)
-- **Lisibilité** : Plus d'espace pour le texte, pas besoin de zoom
+#### Question Cards Layout (v2.38.9)
+Nouvelle mise en page des cartes questions en deux lignes d'en-tête :
+
+**Ligne 1** : Nom + Status
+- Poignée de drag (si draggable)
+- `#ID - Texte question...` (tronqué à 40 caractères)
+- Badge status `AVAILABLE|STARTED|STOPPED|REVEALED` (à droite)
+- Bouton supprimer (si showDelete)
+
+**Ligne 2** : Métadonnées
+- Badge catégorie (icône colorée)
+- Badge type `QCM|MEMORY|Normal`
+- Badge cible (individuel/équipe)
+- Temps + Points (`30s 10pt`)
+
+**Zones fixes** :
+- Zone média : 2 slots (question/réponse) ou config Memory
+- Zone question : Texte complet (2 lignes max)
+- Zone réponse : Réponse colorée selon type
 
 #### POINTS_TARGET (v2.19.0)
 Système d'attribution des points par question :
@@ -1361,12 +1374,22 @@ Les procédures détaillées sont documentées dans des fichiers séparés.
 cd server-go
 go build -o server.exe ./cmd/server && ./server.exe
 
+# Relancer le serveur (IMPORTANT: toujours utiliser cette méthode)
+curl -s http://localhost/shutdown && sleep 2 && ./server.exe
+
 # Tests unitaires
 go test ./... -v -cover
 
 # Build release (Windows + Linux ARM64)
 ./build-release.ps1
 ```
+
+**IMPORTANT - Procédure de relance du serveur:**
+1. Appeler l'API shutdown: `curl http://localhost/shutdown`
+2. Attendre l'arrêt (2 secondes)
+3. Relancer l'exécutable: `./server.exe`
+
+Ne jamais utiliser `taskkill` ou `kill` pour arrêter le serveur.
 
 ---
 
