@@ -264,6 +264,32 @@ Le pipeline s'exécute en 3 étapes :
 
 ---
 
+### 14. Relancer le Serveur (Claude)
+
+> **🤖 Responsabilité Claude** : Cette étape est automatiquement effectuée par Claude.
+> Claude doit relancer le serveur local avec la version de production.
+
+```bash
+# Arrêter le serveur en cours
+curl -s http://localhost/shutdown
+
+# Attendre l'arrêt
+sleep 2
+
+# Relancer le serveur
+cd server-go && ./server.exe &
+
+# Vérifier la version
+curl -s http://localhost/version
+```
+
+**Claude doit vérifier** :
+1. Le serveur répond à `/version`
+2. La version retournée correspond à la release (`X.Y.0`)
+3. Informer l'utilisateur que le serveur est opérationnel
+
+---
+
 ## Checklist Récapitulative
 
 ```
@@ -280,6 +306,7 @@ Le pipeline s'exécute en 3 étapes :
 [ ] 11. Tag créé et poussé (déclenche CI)
 [ ] 12. 🤖 CI surveillée par Claude (3 jobs verts ✅)
 [ ] 13. 🤖 Release vérifiée par Claude (binaires + notes)
+[ ] 14. 🤖 Serveur relancé par Claude (version vérifiée)
 ```
 
 ---
