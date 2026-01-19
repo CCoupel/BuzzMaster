@@ -101,7 +101,9 @@ npm run dev
 ### 3.2 Modifications Backend (Go)
 
 ```bash
-# Arrêter le serveur (Ctrl+C)
+# Arrêter le serveur proprement via API
+curl http://localhost/shutdown
+
 # Modifier les fichiers .go
 # Rebuild et relancer
 go build -o server.exe ./cmd/server && ./server.exe
@@ -190,20 +192,25 @@ En mode admin, `Ctrl+clic` sur un joueur simule un appui buzzer.
 
 ## 6. Gestion des Erreurs Courantes
 
-### Port 80 occupé
+### Serveur déjà en cours d'exécution
+
+```bash
+# Méthode 1 : Arrêt propre via API (recommandé)
+curl http://localhost/shutdown
+
+# Méthode 2 : Force kill (si le serveur ne répond pas)
+taskkill /IM server.exe /F
+```
+
+### Port 80 ou 1234 occupé par un autre processus
 
 ```bash
 # Trouver le processus
 netstat -ano | findstr :80
+netstat -ano | findstr :1234
 
-# Tuer le processus
+# Tuer le processus par PID
 taskkill /PID <PID> /F
-```
-
-### Port 1234 (TCP) occupé
-
-```bash
-taskkill /IM server.exe /F
 ```
 
 ### Erreur de build Go

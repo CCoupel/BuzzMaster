@@ -1103,6 +1103,16 @@ GOOS=linux GOARCH=arm64 go build -o buzzcontrol ./cmd/server
 scp buzzcontrol pi@raspberrypi.local:~/
 ```
 
+### Stopping the Server
+
+```bash
+# Graceful shutdown via API (recommended)
+curl http://localhost/shutdown
+
+# Force kill (if server not responding)
+taskkill /IM server.exe /F
+```
+
 ### Portable Build (v2.35.0)
 
 L'exécutable portable embarque les fichiers web directement dans le binaire.
