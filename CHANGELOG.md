@@ -3,6 +3,38 @@
 Historique des versions du projet BuzzControl.
 
 
+## [2.40.0] - 2026-01-19
+
+### Ajouts
+- **Nouvelles images de fond festives** : Remplacement des dégradés par des images plus joyeuses
+  - Confettis colorés sur fond noir
+  - Ballons dorés avec serpentins
+  - Traînées de lumières néon
+  - Images sourced from Unsplash (libres de droits)
+
+### Modifié
+- **Affichage TV - Phase PREPARATION** : Nouveau design centré
+  - Texte "NOUVELLE QUESTION" remplace "PREPAREZ-VOUS"
+  - Catégorie masquée (affichée uniquement en phase PRÊT)
+  - Centrage parfait à l'écran
+
+- **Affichage TV - Phase PRÊT (READY)** : Affichage de la catégorie
+  - Icône de catégorie (grande) remplace l'icône main ✋
+  - Nom de catégorie avec fond coloré
+  - Animation pulsante
+
+- **Affichage TV - Phase DÉCOMPTE (COUNTDOWN)** : Animation de la catégorie
+  - La catégorie s'anime du centre vers la zone question
+  - Format inline : icône à gauche + nom avec fond coloré
+  - Applicable aux questions NORMAL, QCM et MEMORY
+
+### Technique
+- `PlayerDisplay.jsx` : Refonte des phases PREPARE, READY, COUNTDOWN
+- `PlayerDisplay.css` : Nouveaux styles `.prepare-state`, `.category-badge-inline`, `.category-badge-large`
+- `assets/demo/demo_bg_*.jpg` : 3 nouvelles images de fond embarquées
+
+---
+
 ## [2.39.0] - 2026-01-19
 
 ### Ajouts

@@ -865,24 +865,13 @@ export default function PlayerDisplay() {
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
           >
-            {/* PREPARE State - Fixed "Preparez-vous" (all question types) */}
+            {/* PREPARE State - Fixed "Preparez-vous" centered, no category (all question types) */}
             {showPrepare && (
               <motion.div
                 className="prepare-state"
                 initial={{ opacity: 0, scale: 0.8 }}
                 animate={{ opacity: 1, scale: 1 }}
               >
-                {gameState.question?.CATEGORY && CATEGORIES[gameState.question.CATEGORY] && (
-                  <motion.div
-                    className="category-display"
-                    style={{ backgroundColor: CATEGORIES[gameState.question.CATEGORY].color }}
-                    initial={{ opacity: 0, y: -20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                  >
-                    <span className="category-icon">{CATEGORIES[gameState.question.CATEGORY].icon}</span>
-                    <span className="category-label">{CATEGORIES[gameState.question.CATEGORY].label}</span>
-                  </motion.div>
-                )}
                 <motion.span
                   className="prepare-emoji"
                   animate={{ rotate: [0, 10, -10, 0] }}
@@ -890,11 +879,11 @@ export default function PlayerDisplay() {
                 >
                   🔔
                 </motion.span>
-                <span className="prepare-text">PREPAREZ-VOUS</span>
+                <span className="prepare-text">NOUVELLE QUESTION</span>
               </motion.div>
             )}
 
-            {/* COUNTDOWN State - Timer + Big 3... 2... 1... display (non-QCM, non-Memory) */}
+            {/* COUNTDOWN State - Timer + Category animates to question zone + Big countdown number */}
             {showCountdown && !isQcm && !isMemory && (
               <div className="game-content-zones">
                 {/* Zone 1: Timer */}
@@ -908,9 +897,20 @@ export default function PlayerDisplay() {
                   />
                 </div>
 
-                {/* Zone 2: Empty question placeholder */}
+                {/* Zone 2: Category badge animates from center to question zone */}
                 <div className="zone-question">
-                  <div className="zone-question-placeholder" />
+                  {gameState.question?.CATEGORY && CATEGORIES[gameState.question.CATEGORY] && (
+                    <motion.div
+                      className="category-badge-inline"
+                      style={{ backgroundColor: CATEGORIES[gameState.question.CATEGORY].color }}
+                      initial={{ opacity: 0, y: 150, scale: 1.5 }}
+                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                      transition={{ duration: 0.5, ease: 'easeOut' }}
+                    >
+                      <span className="category-badge-icon">{CATEGORIES[gameState.question.CATEGORY].icon}</span>
+                      <span className="category-badge-label">{CATEGORIES[gameState.question.CATEGORY].label}</span>
+                    </motion.div>
+                  )}
                 </div>
 
                 {/* Zone 3: Big countdown number */}
@@ -920,17 +920,6 @@ export default function PlayerDisplay() {
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
                   >
-                    {gameState.question?.CATEGORY && CATEGORIES[gameState.question.CATEGORY] && (
-                      <motion.div
-                        className="category-display"
-                        style={{ backgroundColor: CATEGORIES[gameState.question.CATEGORY].color }}
-                        initial={{ opacity: 0, y: -20 }}
-                        animate={{ opacity: 1, y: 0 }}
-                      >
-                        <span className="category-icon">{CATEGORIES[gameState.question.CATEGORY].icon}</span>
-                        <span className="category-label">{CATEGORIES[gameState.question.CATEGORY].label}</span>
-                      </motion.div>
-                    )}
                     <AnimatePresence mode="wait">
                       <motion.div
                         key={gameState.countdownTime}
@@ -970,38 +959,49 @@ export default function PlayerDisplay() {
                   <div className="zone-question-placeholder" />
                 </div>
 
-                {/* Zone 3: "PREPAREZ-VOUS" message */}
+                {/* Zone 3: Category icon + name with colored background */}
                 <div className="zone-media">
                   <motion.div
                     className="ready-state"
                     initial={{ opacity: 0, scale: 0.8 }}
                     animate={{ opacity: 1, scale: 1 }}
                   >
-                    {gameState.question?.CATEGORY && CATEGORIES[gameState.question.CATEGORY] && (
-                      <motion.div
-                        className="category-display"
-                        style={{ backgroundColor: CATEGORIES[gameState.question.CATEGORY].color }}
-                        initial={{ opacity: 0, y: -20 }}
-                        animate={{ opacity: 1, y: 0 }}
-                      >
-                        <span className="category-icon">{CATEGORIES[gameState.question.CATEGORY].icon}</span>
-                        <span className="category-label">{CATEGORIES[gameState.question.CATEGORY].label}</span>
-                      </motion.div>
+                    {gameState.question?.CATEGORY && CATEGORIES[gameState.question.CATEGORY] ? (
+                      <>
+                        <motion.span
+                          className="ready-category-icon"
+                          animate={{ scale: [1, 1.3, 1] }}
+                          transition={{ duration: 0.4, repeat: Infinity }}
+                        >
+                          {CATEGORIES[gameState.question.CATEGORY].icon}
+                        </motion.span>
+                        <motion.span
+                          className="ready-category-name"
+                          style={{ backgroundColor: CATEGORIES[gameState.question.CATEGORY].color }}
+                          animate={{ opacity: [1, 0.7, 1] }}
+                          transition={{ duration: 0.6, repeat: Infinity }}
+                        >
+                          {CATEGORIES[gameState.question.CATEGORY].label}
+                        </motion.span>
+                      </>
+                    ) : (
+                      <>
+                        <motion.span
+                          className="ready-emoji"
+                          animate={{ scale: [1, 1.3, 1] }}
+                          transition={{ duration: 0.4, repeat: Infinity }}
+                        >
+                          ✋
+                        </motion.span>
+                        <motion.span
+                          className="ready-text"
+                          animate={{ opacity: [1, 0.2, 1] }}
+                          transition={{ duration: 0.6, repeat: Infinity }}
+                        >
+                          PREPAREZ-VOUS
+                        </motion.span>
+                      </>
                     )}
-                    <motion.span
-                      className="ready-emoji"
-                      animate={{ scale: [1, 1.3, 1] }}
-                      transition={{ duration: 0.4, repeat: Infinity }}
-                    >
-                      ✋
-                    </motion.span>
-                    <motion.span
-                      className="ready-text"
-                      animate={{ opacity: [1, 0.2, 1] }}
-                      transition={{ duration: 0.6, repeat: Infinity }}
-                    >
-                      PREPAREZ-VOUS
-                    </motion.span>
                   </motion.div>
                 </div>
 
@@ -1024,7 +1024,7 @@ export default function PlayerDisplay() {
                   />
                 </div>
 
-                {/* Zone 2: Question (only visible from STARTED) */}
+                {/* Zone 2: Question (visible from STARTED) or Category badge (during COUNTDOWN) */}
                 <div className="zone-question">
                   {showGameContent ? (
                     <motion.p
@@ -1035,6 +1035,17 @@ export default function PlayerDisplay() {
                     >
                       {gameState.question.QUESTION}
                     </motion.p>
+                  ) : showCountdown && gameState.question?.CATEGORY && CATEGORIES[gameState.question.CATEGORY] ? (
+                    <motion.div
+                      className="category-badge-inline"
+                      style={{ backgroundColor: CATEGORIES[gameState.question.CATEGORY].color }}
+                      initial={{ opacity: 0, y: 150, scale: 1.5 }}
+                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                      transition={{ duration: 0.5, ease: 'easeOut' }}
+                    >
+                      <span className="category-badge-icon">{CATEGORIES[gameState.question.CATEGORY].icon}</span>
+                      <span className="category-badge-label">{CATEGORIES[gameState.question.CATEGORY].label}</span>
+                    </motion.div>
                   ) : (
                     <div className="zone-question-placeholder" />
                   )}
@@ -1068,31 +1079,42 @@ export default function PlayerDisplay() {
                       animate={{ opacity: 1, scale: 1 }}
                       exit={{ opacity: 0, scale: 0.8 }}
                     >
-                      {gameState.question?.CATEGORY && CATEGORIES[gameState.question.CATEGORY] && (
-                        <motion.div
-                          className="category-display"
-                          style={{ backgroundColor: CATEGORIES[gameState.question.CATEGORY].color }}
-                          initial={{ opacity: 0, y: -20 }}
-                          animate={{ opacity: 1, y: 0 }}
-                        >
-                          <span className="category-icon">{CATEGORIES[gameState.question.CATEGORY].icon}</span>
-                          <span className="category-label">{CATEGORIES[gameState.question.CATEGORY].label}</span>
-                        </motion.div>
+                      {gameState.question?.CATEGORY && CATEGORIES[gameState.question.CATEGORY] ? (
+                        <>
+                          <motion.span
+                            className="ready-category-icon"
+                            animate={{ scale: [1, 1.3, 1] }}
+                            transition={{ duration: 0.4, repeat: Infinity }}
+                          >
+                            {CATEGORIES[gameState.question.CATEGORY].icon}
+                          </motion.span>
+                          <motion.span
+                            className="ready-category-name"
+                            style={{ backgroundColor: CATEGORIES[gameState.question.CATEGORY].color }}
+                            animate={{ opacity: [1, 0.7, 1] }}
+                            transition={{ duration: 0.6, repeat: Infinity }}
+                          >
+                            {CATEGORIES[gameState.question.CATEGORY].label}
+                          </motion.span>
+                        </>
+                      ) : (
+                        <>
+                          <motion.span
+                            className="ready-emoji"
+                            animate={{ scale: [1, 1.3, 1] }}
+                            transition={{ duration: 0.4, repeat: Infinity }}
+                          >
+                            ✋
+                          </motion.span>
+                          <motion.span
+                            className="ready-text"
+                            animate={{ opacity: [1, 0.2, 1] }}
+                            transition={{ duration: 0.6, repeat: Infinity }}
+                          >
+                            PREPAREZ-VOUS
+                          </motion.span>
+                        </>
                       )}
-                      <motion.span
-                        className="ready-emoji"
-                        animate={{ scale: [1, 1.3, 1] }}
-                        transition={{ duration: 0.4, repeat: Infinity }}
-                      >
-                        ✋
-                      </motion.span>
-                      <motion.span
-                        className="ready-text"
-                        animate={{ opacity: [1, 0.2, 1] }}
-                        transition={{ duration: 0.6, repeat: Infinity }}
-                      >
-                        PREPAREZ-VOUS
-                      </motion.span>
                     </motion.div>
                   ) : (showAnswer && gameState.question.MEDIA_ANSWER) ? (
                     <motion.img
@@ -1298,8 +1320,22 @@ export default function PlayerDisplay() {
                       initial={{ opacity: 0, scale: 0.9 }}
                       animate={{ opacity: 1, scale: 1 }}
                     >
-                      <span className="prepare-emoji">🔔</span>
-                      <span className="prepare-text">PREPAREZ-VOUS</span>
+                      {gameState.question?.CATEGORY && CATEGORIES[gameState.question.CATEGORY] ? (
+                        <motion.div
+                          className="category-badge-inline category-badge-large"
+                          style={{ backgroundColor: CATEGORIES[gameState.question.CATEGORY].color }}
+                          animate={{ scale: [1, 1.05, 1] }}
+                          transition={{ duration: 0.6, repeat: Infinity }}
+                        >
+                          <span className="category-badge-icon">{CATEGORIES[gameState.question.CATEGORY].icon}</span>
+                          <span className="category-badge-label">{CATEGORIES[gameState.question.CATEGORY].label}</span>
+                        </motion.div>
+                      ) : (
+                        <>
+                          <span className="prepare-emoji">🔔</span>
+                          <span className="prepare-text">PREPAREZ-VOUS</span>
+                        </>
+                      )}
                     </motion.div>
                   )}
                 </div>

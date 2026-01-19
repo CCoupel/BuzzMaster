@@ -917,11 +917,24 @@ Layout vertical en 4 zones avec hauteurs fixes pour l'affichage TV (/tv) :
 - Orange (`--warning`) : 25-50% du temps (urgent)
 - Rouge (`--error`) : < 25% du temps (critique)
 
+**Affichage des phases de jeu (v2.40.0) :**
+
+| Phase | Affichage TV | Description |
+|-------|--------------|-------------|
+| PREPARE | 🔔 "NOUVELLE QUESTION" | Centré à l'écran, pas de catégorie |
+| READY | Icône catégorie + Nom (fond coloré) | Grande icône animée (pulsante) |
+| COUNTDOWN | Catégorie en haut + Décompte au centre | Animation de la catégorie du centre vers le haut |
+| STARTED | Question + Média + Réponses | Affichage normal du jeu |
+
+**Animation COUNTDOWN :**
+- La catégorie s'anime depuis le centre (position READY) vers la zone question (haut)
+- Format inline : icône à gauche + nom avec fond coloré de la catégorie
+- Applicable à tous les types : NORMAL, QCM, MEMORY
+
 **Transition QCM READY → STARTED :**
 - Bloc QCM unifié couvrant les phases READY → STARTED → REVEALED
 - Les réponses QCM restent en place (pas de re-render/flash)
 - Seuls la question et le média apparaissent en fondu à STARTED
-- Le message "PREPAREZ-VOUS" disparaît, remplacé par le média
 
 **Structure CSS :**
 ```css
