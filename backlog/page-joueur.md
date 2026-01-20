@@ -169,57 +169,86 @@ return showQrCode && (
 ### 1. Connexion VJoueur (modale initiale obligatoire)
 
 - [ ] **Modale de connexion au chargement de `/player`**
-  - **Champ "Nom/Pseudo"** (OBLIGATOIRE)
+  - **Champ "Nom/Pseudo"** (UNIQUE CHAMP)
     - Minimum 2 caractères, maximum 20 caractères
     - Validation en temps réel
     - Message d'erreur si vide ou invalide
-    - Pas de validation d'unicité côté client (gérée par le serveur)
-  - Sélection de l'équipe (liste déroulante, OBLIGATOIRE)
-  - Sélection couleur QCM (optionnel) : Rouge/Vert/Jaune/Bleu
-  - Bouton "Rejoindre" (désactivé tant que nom invalide)
+    - Bouton "Rejoindre" (désactivé tant que nom invalide)
   - Persistance dans localStorage (reconnexion auto si < 30 min)
   - La modale ne peut pas être fermée sans connexion valide
+  - **Pas de sélection d'équipe ou de couleur** : Géré par l'admin après connexion
 
 - [ ] **Validation côté serveur**
   - Vérifier que le nom n'est pas vide (après trim)
   - Vérifier longueur (2-20 caractères)
-  - Optionnel : Vérifier unicité du nom dans l'équipe
+  - Optionnel : Vérifier unicité du nom global
     - Si doublon : ajouter un suffixe (ex: "Alice (2)")
     - Ou refuser la connexion avec message d'erreur
-  - Vérifier que l'équipe existe
 
 - [ ] **Enregistrement côté serveur**
   - Action WebSocket `PLAYER_CONNECT`
   - Création d'un bumper virtuel avec flag `IS_VIRTUAL: true`
+  - État initial : **NON ASSIGNÉ** (pas d'équipe, pas de couleur QCM)
   - Réponse serveur : `PLAYER_CONNECTED` avec ID de session et nom validé
-  - Le VJoueur apparaît dans `/admin/teams` comme un joueur normal
-  - Badge visuel pour distinguer VJoueur des joueurs physiques (optionnel)
+  - Le VJoueur apparaît dans `/admin/teams` comme un **buzzer standard non assigné**
+  - Badge visuel "📱 VIRTUEL" pour distinguer des buzzers physiques
+
+- [ ] **Attribution par l'admin**
+  - Le VJoueur apparaît dans la liste des joueurs non assignés (comme un buzzer physique)
+  - L'admin peut glisser-déposer le VJoueur vers une équipe (drag & drop existant)
+  - L'admin peut attribuer une couleur QCM (interface existante)
+  - Identique au workflow d'un buzzer physique qui se connecte
 
 **Payload PLAYER_CONNECT :**
 ```json
 {
   "ACTION": "PLAYER_CONNECT",
   "MSG": {
+    "NAME": "Alice"
+  }
+}
+```
+
+**Réponse PLAYER_CONNECTED :**
+```json
+{
+  "ACTION": "PLAYER_CONNECTED",
+  "MSG": {
+    "SESSION_ID": "vplayer_abc123",
     "NAME": "Alice",
-    "TEAM": "Les Rouges",
-    "ANSWER_COLOR": "RED"
+    "STATUS": "UNASSIGNED"
   }
 }
 ```
 
 ### 2. Mini header personnalisé (80px fixe)
 
-- [ ] **Affichage compact**
+- [ ] **Affichage compact selon état d'assignation**
+
+  **Si NON ASSIGNÉ** (pas encore attribué par l'admin) :
+  - Avatar circulaire (40px) gris avec icône 📱
+  - Nom du joueur (tronqué si trop long)
+  - Texte : "En attente d'assignation..."
+  - Indicateur de connexion (point vert/rouge)
+
+  ```
+  ┌──────────────────────────────────────┐
+  │ 📱 Alice  •  En attente...           │
+  └──────────────────────────────────────┘
+  ```
+
+  **Si ASSIGNÉ** (équipe attribuée par l'admin) :
   - Avatar circulaire (40px) avec couleur de l'équipe
   - Nom du joueur (tronqué si trop long)
+  - Nom de l'équipe
   - Score personnel (ex: "25 pts")
   - Indicateur de connexion (point vert/rouge)
 
-```
-┌──────────────────────────────────────┐
-│ 🔴 Alice  •  Les Rouges  •  25 pts  │
-└──────────────────────────────────────┘
-```
+  ```
+  ┌──────────────────────────────────────┐
+  │ 🔴 Alice  •  Les Rouges  •  25 pts  │
+  └──────────────────────────────────────┘
+  ```
 
 ### 3. Zone PlayerDisplay (réutilisée à 100%)
 
@@ -258,13 +287,16 @@ return showQrCode && (
 
   | État | Apparence | Comportement |
   |------|-----------|--------------|
+  | **NON ASSIGNÉ** | Gris, "Pas encore assigné" | Non cliquable |
   | **STOPPED** | Gris, désactivé, "En attente..." | Non cliquable |
   | **PREPARE** | Gris, désactivé, "Préparez-vous..." | Non cliquable |
   | **READY** | Couleur équipe, "PRÊT !" | Non cliquable (attente démarrage) |
-  | **STARTED** | Couleur équipe pulsante, "BUZZ !" | ✅ Cliquable |
+  | **STARTED** | Couleur équipe pulsante, "BUZZ !" | ✅ Cliquable (si assigné) |
   | **PAUSED (autre joueur)** | Gris, "Un joueur a buzzé" | Non cliquable |
   | **PAUSED (vous)** | Vert, "Vous avez buzzé !" + temps | Non cliquable |
   | **REVEALED** | Gris, désactivé | Non cliquable |
+
+  **Important** : Le bouton reste désactivé tant que le VJoueur n'a pas été assigné à une équipe par l'admin.
 
 - [ ] **Envoi de l'action au clic**
   ```javascript
@@ -406,10 +438,11 @@ return showQrCode && (
 const PlayerContext = {
   playerId: string,        // ID de session généré par serveur
   playerName: string,      // "Alice"
-  teamName: string,        // "Les Rouges"
-  answerColor: string,     // "RED" (pour QCM)
-  score: number,           // Score personnel
+  teamName: string | null, // "Les Rouges" (null si non assigné)
+  answerColor: string | null, // "RED" (null si non assigné)
+  score: number,           // Score personnel (0 si non assigné)
   connected: boolean,      // État connexion WebSocket
+  isAssigned: boolean,     // true si assigné à une équipe par l'admin
   hasBuzzed: boolean,      // A buzzé dans cette question
   reactionTime: number,    // Temps de réaction (ms)
 }
@@ -419,11 +452,26 @@ const PlayerContext = {
 
 | Action | Direction | Description |
 |--------|-----------|-------------|
-| `PLAYER_CONNECT` | Client→Server | Connexion joueur virtuel |
-| `PLAYER_CONNECTED` | Server→Client | Confirmation avec session ID |
+| `PLAYER_CONNECT` | Client→Server | Connexion joueur virtuel (avec nom uniquement) |
+| `PLAYER_CONNECTED` | Server→Client | Confirmation avec session ID et statut UNASSIGNED |
+| `PLAYER_ASSIGNED` | Server→Client | Notification quand l'admin assigne à une équipe |
 | `PLAYER_DISCONNECT` | Client→Server | Déconnexion propre |
 | `SHOW_QR_CODE` | Admin→Server→TV | Afficher QR code sur /tv |
 | `HIDE_QR_CODE` | Admin→Server→TV | Masquer QR code sur /tv |
+
+**Action PLAYER_ASSIGNED (nouvelle)** :
+```json
+{
+  "ACTION": "PLAYER_ASSIGNED",
+  "MSG": {
+    "TEAM": "Les Rouges",
+    "TEAM_COLOR": [255, 0, 0],
+    "ANSWER_COLOR": "RED"
+  }
+}
+```
+
+Cette action est envoyée au VJoueur quand l'admin l'assigne à une équipe via drag & drop dans `/admin/teams`.
 
 **Pas de nouvelles actions pour le gameplay** : Le joueur virtuel utilise `BUTTON` comme un buzzer physique.
 
@@ -494,27 +542,25 @@ const PlayerContext = {
 
 ```
 ┌────────────────────────────────┐
-│  Rejoindre le jeu              │
+│  📱 Rejoindre le jeu           │
 │                                │
-│  Nom/Pseudo * (obligatoire)    │
+│  Entrez votre nom/pseudo :     │
+│                                │
 │  [____________]                │
 │  ⚠️ 2-20 caractères            │
 │                                │
-│  Équipe * (obligatoire)        │
-│  [▼ Les Rouges   ]             │
-│                                │
-│  Couleur QCM (optionnel) :     │
-│  ○ Rouge  ○ Vert               │
-│  ○ Jaune  ○ Bleu               │
+│  L'animateur vous assignera    │
+│  à une équipe.                 │
 │                                │
 │    [ Rejoindre ] (désactivé)   │
-│                                │
-│  * Champs obligatoires         │
 └────────────────────────────────┘
 
 États du bouton "Rejoindre" :
-- Désactivé (gris) : Si nom invalide ou équipe non sélectionnée
-- Actif (vert) : Si tous les champs obligatoires sont valides
+- Désactivé (gris) : Si nom invalide (< 2 ou > 20 caractères)
+- Actif (vert) : Si nom valide
+- Chargement : Pendant la connexion au serveur
+
+Note : Modale non-fermable (pas de croix ×)
 ```
 
 ### 3. `/player` - Question normale
@@ -562,6 +608,11 @@ const PlayerContext = {
   - Modale non-fermable jusqu'à connexion valide
   - Validation en temps réel côté client
   - Validation et unicité optionnelle côté serveur
+- **Attribution par l'admin** : Le VJoueur ne choisit PAS son équipe ni sa couleur
+  - Connexion = juste le nom
+  - Apparaît comme un buzzer non assigné dans `/admin/teams`
+  - L'admin fait l'attribution via drag & drop (workflow existant)
+  - Identique à un buzzer physique qui se connecte
 
 ### ❓ Questions ouvertes
 
