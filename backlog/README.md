@@ -15,6 +15,7 @@ Chaque fichier correspond à une fonctionnalité ou un ensemble de fonctionnalit
 | [debug-tests.md](debug-tests.md) | ✅ v2.28.0 | Fonctionnalités de test sans buzzers |
 | [affichage-tv.md](affichage-tv.md) | ✅ v2.30.0 | Synchronisation des fonds d'écran |
 | [memory-game.md](memory-game.md) | ✅ v2.33.0 | Jeu de mémoire avec paires |
+| [page-joueur.md](page-joueur.md) | 📋 Planifié | Interface personnalisée pour jouer depuis smartphone |
 | [generateur-ia.md](generateur-ia.md) | 📋 Planifié | Générateur de jeu complet via IA |
 
 ## Légende des statuts
@@ -63,3 +64,4 @@ vX.Y.Z
 
 - 2026-01-20 : Création de la structure de backlog modulaire
 - 2026-01-20 : Ajout du générateur IA
+- 2026-01-20 : Ajout de la page joueur (/player)

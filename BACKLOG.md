@@ -35,6 +35,7 @@ Le backlog est organisé en fichiers individuels dans le dossier `backlog/` pour
 
 | Fonctionnalité | Fichier |
 |----------------|---------|
+| Page Joueur (/player) | [page-joueur.md](backlog/page-joueur.md) |
 | Générateur de jeu via IA | [generateur-ia.md](backlog/generateur-ia.md) |
 
 ---
@@ -43,7 +44,8 @@ Le backlog est organisé en fichiers individuels dans le dossier `backlog/` pour
 
 1. **v2.38.0** : Terminer QCM - Indices et pénalités
 2. **v2.39.0** : Enregistrement spécifique historique Memory
-3. **Future** : Générateur IA (MVP Phase 1)
+3. **v2.40.0** : Page Joueur (MVP - Phases 1 & 2)
+4. **Future** : Générateur IA (MVP Phase 1)
 
 ---
 
