@@ -14,65 +14,124 @@
 - **Pas de navigation** : Le joueur ne change jamais de page, l'affichage s'adapte automatiquement
 - **Contrôle minimal** : Uniquement buzzer, pas de stats détaillées ni de dashboard complexe
 - **Gestion par l'animateur** : Tout est piloté depuis `/admin`
+- **Accès via QR Code** : Les joueurs scannent un QR code affiché sur `/tv` pour rejoindre facilement
 
 ---
 
-## Organisation des routes (révision)
+## Organisation des routes (simplifiée)
 
-### Routes actuelles vs proposées
+### Routes actuelles vs nouvelles
 
-| Route actuelle | Usage actuel | Proposition | Raison |
-|----------------|--------------|-------------|--------|
-| `/` | Admin (GamePage) | → `/admin` | Clarifier le rôle |
-| `/tv` | Affichage TV | Inchangé | OK |
-| `/quiz` | Questions admin | → `/admin/questions` | Regrouper admin |
-| `/teams` | Équipes admin | → `/admin/teams` | Regrouper admin |
-| `/settings` | Config admin | → `/admin/settings` | Regrouper admin |
-| `/history-page` | Historique admin | → `/admin/history` | Regrouper admin |
-| `/palmares` | Palmarès admin | → `/admin/palmares` | Regrouper admin |
-| `/scoreboard` | Scores admin | → `/admin/scores` | Regrouper admin |
-| - | - | **`/player` (nouveau)** | Interface joueur |
-| `/` | - | **Page d'accueil** | Choix admin/tv/player |
+| Route actuelle | Usage actuel | Nouvelle route | Notes |
+|----------------|--------------|----------------|-------|
+| `/` | Admin (GamePage) | `/admin` | Breaking change OK, pas de compatibilité |
+| `/tv` | Affichage TV | `/tv` | Inchangé + QR code en overlay |
+| `/quiz` | Questions admin | `/admin/questions` | Sous /admin |
+| `/teams` | Équipes admin | `/admin/teams` | Sous /admin |
+| `/settings` | Config admin | `/admin/settings` | Sous /admin |
+| `/history-page` | Historique admin | `/admin/history` | Sous /admin |
+| `/palmares` | Palmarès admin | `/admin/palmares` | Sous /admin |
+| `/scoreboard` | Scores admin | `/admin/scores` | Sous /admin |
+| - | - | **`/player`** | Nouveau : Interface joueur |
 
-### Nouvelle structure proposée
-
-```
-/                           # Page d'accueil : 3 gros boutons
-├── /admin                  # Interface admin (anciennement /)
-│   ├── /admin/questions    # Gestion questions
-│   ├── /admin/teams        # Gestion équipes
-│   ├── /admin/settings     # Configuration
-│   ├── /admin/history      # Historique
-│   ├── /admin/palmares     # Palmarès
-│   └── /admin/scores       # Scores
-├── /tv                     # Affichage TV (inchangé)
-└── /player                 # Interface joueur (nouveau)
-```
-
-### Page d'accueil `/`
+### Structure finale
 
 ```
-┌─────────────────────────────────────┐
-│        🎮 BuzzMaster                │
-│                                     │
-│   ┌───────────────────────────┐    │
-│   │   👤 JOUEUR               │    │
-│   │   Jouer depuis mon        │    │
-│   │   téléphone               │    │
-│   └───────────────────────────┘    │
-│                                     │
-│   ┌───────────────────────────┐    │
-│   │   📺 TV                   │    │
-│   │   Affichage grand écran   │    │
-│   └───────────────────────────┘    │
-│                                     │
-│   ┌───────────────────────────┐    │
-│   │   ⚙️ ADMIN                │    │
-│   │   Gérer le jeu            │    │
-│   └───────────────────────────┘    │
-│                                     │
-│   Version: 2.40.0                  │
-└─────────────────────────────────────┘
+/admin                      # Interface admin (breaking change: anciennement /)
+├── /admin/questions        # Gestion questions
+├── /admin/teams            # Gestion équipes
+├── /admin/settings         # Configuration
+├── /admin/history          # Historique
+├── /admin/palmares         # Palmarès
+└── /admin/scores           # Scores
+
+/tv                         # Affichage TV + QR code (overlay à la demande)
+
+/player                     # Interface joueur (accès via QR code)
+```
+
+**Pas de page d'accueil `/`** : Redirection directe vers `/admin`
+
+---
+
+## QR Code sur /tv (Nouvelle fonctionnalité clé)
+
+### Concept
+
+L'animateur affiche un QR code sur l'écran TV que les joueurs scannent pour accéder directement à `/player`.
+
+### Avantages
+
+✅ **Simplicité** : Pas besoin de taper l'URL
+✅ **Sécurité** : Les joueurs ne peuvent pas "tomber" sur `/admin` par erreur
+✅ **Contrôle** : L'animateur décide quand afficher/masquer le QR code
+✅ **UX fluide** : Scan → Connexion → Jouer
+
+### Implémentation
+
+- [ ] **Bouton dans l'interface admin**
+  - Ajout d'un bouton "📱 Afficher QR Code" dans `/admin` (GamePage)
+  - Ou dans un menu déroulant "Joueurs virtuels"
+  - Toggle : afficher/masquer le QR code sur `/tv`
+
+- [ ] **Action WebSocket**
+  - Action `SHOW_QR_CODE` / `HIDE_QR_CODE`
+  - Payload : `{URL: "http://192.168.4.1/player"}`
+  - Broadcast à tous les clients `/tv`
+
+- [ ] **Affichage sur /tv**
+  - **Option 1 - Overlay coin** :
+    - QR code 200x200px dans le coin inférieur droit
+    - Fond semi-transparent
+    - Texte : "Scannez pour jouer !"
+    - N'obstrue pas le contenu principal
+  - **Option 2 - Plein écran** (phase STOPPED uniquement) :
+    - QR code 400x400px centré
+    - Grand texte : "Rejoignez le jeu !"
+    - Instructions : "Scannez ce code avec votre smartphone"
+    - Visible uniquement quand aucune question n'est active
+
+- [ ] **Génération du QR code**
+  - Bibliothèque : `qrcode` (npm) côté frontend
+  - URL dynamique : `http://${serverIP}/player`
+  - Niveau de correction d'erreur : M (15%)
+
+```javascript
+// Exemple React
+import QRCode from 'qrcode'
+
+const [qrCodeUrl, setQrCodeUrl] = useState('')
+
+useEffect(() => {
+  if (showQrCode) {
+    QRCode.toDataURL(`http://${serverIP}/player`)
+      .then(url => setQrCodeUrl(url))
+  }
+}, [showQrCode, serverIP])
+
+return showQrCode && (
+  <div className="qr-code-overlay">
+    <img src={qrCodeUrl} alt="QR Code" />
+    <p>Scannez pour jouer !</p>
+  </div>
+)
+```
+
+### Maquette QR Code (Overlay coin)
+
+```
+┌────────────────────────────────────┐
+│  [Question affichée ici]           │
+│  [Timer, média, réponses QCM...]   │
+│                                    │
+│                       ┌──────────┐ │
+│                       │ ░░░░░░░░ │ │
+│                       │ ░░▓▓▓▓░░ │ │ QR Code
+│                       │ ░░▓▓▓▓░░ │ │ 200x200px
+│                       │ ░░░░░░░░ │ │
+│                       └──────────┘ │
+│                       Scannez !    │
+└────────────────────────────────────┘
 ```
 
 ---
@@ -104,7 +163,7 @@
   - Sélection de l'équipe (liste déroulante)
   - Sélection couleur QCM (optionnel) : Rouge/Vert/Jaune/Bleu
   - Bouton "Rejoindre"
-  - Persistance dans localStorage (reconnexion auto)
+  - Persistance dans localStorage (reconnexion auto si < 30 min)
 
 - [ ] **Enregistrement côté serveur**
   - Action WebSocket `PLAYER_CONNECT`
@@ -304,16 +363,16 @@
 
 | Composant | Fichier | Rôle |
 |-----------|---------|------|
-| `HomePage` | `pages/HomePage.jsx` | Page d'accueil avec 3 boutons |
 | `PlayerPage` | `pages/PlayerPage.jsx` | Wrapper `/player` |
 | `PlayerHeader` | `components/PlayerHeader.jsx` | Mini header 80px |
 | `BuzzButton` | `components/BuzzButton.jsx` | Bouton BUZZ avec états |
 | `PlayerConnectionModal` | `components/PlayerConnectionModal.jsx` | Modale de connexion |
+| `QRCodeOverlay` | `components/QRCodeOverlay.jsx` | Overlay QR code sur /tv |
 
 ### Réutilisation maximale
 
 - ✅ `PlayerDisplay` → Utilisé tel quel (0 modification)
-- ✅ `useWebSocket` → Même hook, ajout action `PLAYER_CONNECT`
+- ✅ `useWebSocket` → Même hook, ajout actions `PLAYER_CONNECT`, `SHOW_QR_CODE`
 - ✅ CSS existant → Réutilisé pour cohérence visuelle
 - ✅ Logique de jeu → Aucune modification côté serveur (sauf flag `IS_VIRTUAL`)
 
@@ -339,6 +398,8 @@ const PlayerContext = {
 | `PLAYER_CONNECT` | Client→Server | Connexion joueur virtuel |
 | `PLAYER_CONNECTED` | Server→Client | Confirmation avec session ID |
 | `PLAYER_DISCONNECT` | Client→Server | Déconnexion propre |
+| `SHOW_QR_CODE` | Admin→Server→TV | Afficher QR code sur /tv |
+| `HIDE_QR_CODE` | Admin→Server→TV | Masquer QR code sur /tv |
 
 **Pas de nouvelles actions pour le gameplay** : Le joueur virtuel utilise `BUTTON` comme un buzzer physique.
 
@@ -353,6 +414,7 @@ const PlayerContext = {
 | **Interactivité** | Lecture seule | Bouton BUZZ (+ QCM + Memory) |
 | **Layout** | Horizontal 16:9 | Vertical portrait (mobile-first) |
 | **Reconnexion** | Pas nécessaire | Auto-reconnexion avec localStorage |
+| **QR Code** | Affichable en overlay | N/A |
 
 ---
 
@@ -362,16 +424,17 @@ const PlayerContext = {
 |-----------|-------|----------|
 | **Jeu sans buzzers** | Tous les joueurs sur `/player` | Pas de matériel nécessaire |
 | **Grand groupe (20+)** | Mix buzzers + `/player` | Scalabilité |
-| **Spectateur actif** | `/player` en lecture seule | Suivre depuis son téléphone |
 | **Backup buzzer** | Si buzzer physique en panne | Continuité du jeu |
+| **Spectateur** | `/tv` (lecture seule) | Pas besoin de page dédiée |
 
 ---
 
 ## Priorités de développement
 
 **v2.40.0 - MVP** :
-- Phase 1 : Page d'accueil + `/player` avec BUZZ simple
-- Réorganisation routes (optionnel, peut attendre)
+- Phase 1 : `/player` avec BUZZ simple
+- QR Code sur `/tv` (affichage/masquage par admin)
+- Réorganisation routes (breaking change : `/` → `/admin`)
 
 **v2.41.0** :
 - Phase 2 : QCM interactif (4 boutons)
@@ -386,16 +449,43 @@ const PlayerContext = {
 
 ## Maquettes (à créer)
 
-### 1. Page d'accueil `/`
-- 3 gros boutons (JOUEUR / TV / ADMIN)
-- Responsive (mobile + desktop)
+### 1. QR Code sur /tv (Overlay coin)
+
+```
+┌────────────────────────────────────┐
+│  QUESTION EN COURS                 │
+│  [Timer, média, réponses...]       │
+│                                    │
+│                       ┌──────────┐ │
+│                       │ ▓▓▓▓▓▓▓▓ │ │
+│                       │ ▓▓░░░░▓▓ │ │
+│                       │ ▓▓░░░░▓▓ │ │
+│                       │ ▓▓▓▓▓▓▓▓ │ │
+│                       └──────────┘ │
+│                       Scannez !    │
+└────────────────────────────────────┘
+```
 
 ### 2. Modale de connexion joueur
-- Champ nom
-- Sélection équipe
-- Sélection couleur QCM
+
+```
+┌────────────────────────────────┐
+│  Rejoindre le jeu              │
+│                                │
+│  Nom : [____________]          │
+│                                │
+│  Équipe : [▼ Les Rouges   ]   │
+│                                │
+│  Couleur QCM (optionnel) :     │
+│  ○ Rouge  ○ Vert               │
+│  ○ Jaune  ○ Bleu               │
+│                                │
+│        [ Rejoindre ]           │
+└────────────────────────────────┘
+```
 
 ### 3. `/player` - Question normale
+
 ```
 ┌────────────────────────────────┐
 │ 🔴 Alice • Les Rouges • 25pts │  Header
@@ -412,6 +502,7 @@ const PlayerContext = {
 ```
 
 ### 4. `/player` - QCM
+
 ```
 ┌────────────────────────────────┐
 │ 🔴 Alice • Les Rouges • 25pts │
@@ -425,21 +516,29 @@ const PlayerContext = {
 
 ---
 
-## Questions ouvertes
+## Décisions de conception
 
-- [ ] **Réorganisation routes** : Faut-il vraiment déplacer `/` vers `/admin` ?
-  - **Option 1** : Oui, clarté maximale (/ = accueil, /admin = gestion, /tv = TV, /player = joueur)
-  - **Option 2** : Non, garder `/` comme admin pour compatibilité (anciens favoris)
-  - **Proposition** : Option 1, avec redirection `/` → `/admin` pendant 1 version de transition
+### ✅ Validées
 
-- [ ] **Statistiques joueur** : Faut-il afficher plus que le score dans le header ?
-  - **Proposition** : Non, garder minimaliste. Si besoin, ajouter une page `/player/stats` plus tard
+- **Pas de page d'accueil** : QR code sur /tv suffit
+- **Pas de mode spectateur** : Utiliser `/tv` directement
+- **Breaking change routes** : `/` → `/admin` sans compatibilité
+- **QR Code overlay** : Affichage à la demande par l'admin
+- **Réutilisation maximale** : PlayerDisplay inchangé
 
-- [ ] **Mode spectateur** : Autoriser `/player` sans buzzer (lecture seule) ?
-  - **Proposition** : Oui, si pas d'équipe sélectionnée → mode spectateur automatique
+### ❓ Questions ouvertes
 
-- [ ] **Déconnexion** : Combien de temps garder le joueur virtuel après déconnexion ?
+- [ ] **Position QR code** : Coin (moins intrusif) ou plein écran (phase STOPPED uniquement) ?
+  - **Proposition** : Coin par défaut, option plein écran ajoutée plus tard
+
+- [ ] **Persistance connexion** : Combien de temps garder le localStorage ?
+  - **Proposition** : 30 minutes, puis demander reconnexion
+
+- [ ] **Déconnexion serveur** : Combien de temps garder le joueur virtuel ?
   - **Proposition** : 5 minutes, puis marquer comme "absent" (grisé dans `/admin/teams`)
+
+- [ ] **Limite joueurs virtuels** : Y a-t-il une limite technique ?
+  - **Proposition** : Pas de limite hard, mais recommander < 50 pour performance
 
 ---
 
@@ -451,3 +550,4 @@ const PlayerContext = {
 | **Latence buzz** | < 100ms (feedback optimiste) |
 | **Taux d'adoption** | 30% des joueurs utilisent `/player` |
 | **Réutilisation code** | > 80% du code vient de `/tv` existant |
+| **Scan QR → Jouer** | < 15 secondes |
