@@ -6,6 +6,15 @@
 
 **Surcouche légère sur `/tv`** permettant aux joueurs de buzzer depuis leur smartphone. L'affichage suit automatiquement le rythme du jeu géré par l'animateur, sans contrôle supplémentaire pour le joueur.
 
+### Terminologie
+
+- **Joueur Physique** : Joueur avec un buzzer ESP32 (BuzzClick)
+- **VJoueur** (Joueur Virtuel) : Joueur connecté depuis un navigateur web via `/player`
+  - Utilise son smartphone/tablette comme buzzer
+  - **Doit obligatoirement entrer un nom/pseudo** lors de la connexion
+  - Apparaît comme un bumper virtuel dans `/admin/teams`
+  - Fonctionne exactement comme un buzzer physique pour le gameplay
+
 ### Principe de conception
 
 > `/player` = `/tv` (affichage synchronisé) + Mini header personnalisé + Bouton BUZZ
@@ -15,6 +24,7 @@
 - **Contrôle minimal** : Uniquement buzzer, pas de stats détaillées ni de dashboard complexe
 - **Gestion par l'animateur** : Tout est piloté depuis `/admin`
 - **Accès via QR Code** : Les joueurs scannent un QR code affiché sur `/tv` pour rejoindre facilement
+- **Identification obligatoire** : Chaque VJoueur doit entrer un nom/pseudo unique
 
 ---
 
@@ -156,20 +166,34 @@ return showQrCode && (
 └─────────────────────────────┘
 ```
 
-### 1. Connexion joueur (modale initiale)
+### 1. Connexion VJoueur (modale initiale obligatoire)
 
 - [ ] **Modale de connexion au chargement de `/player`**
-  - Champ "Nom du joueur"
-  - Sélection de l'équipe (liste déroulante)
+  - **Champ "Nom/Pseudo"** (OBLIGATOIRE)
+    - Minimum 2 caractères, maximum 20 caractères
+    - Validation en temps réel
+    - Message d'erreur si vide ou invalide
+    - Pas de validation d'unicité côté client (gérée par le serveur)
+  - Sélection de l'équipe (liste déroulante, OBLIGATOIRE)
   - Sélection couleur QCM (optionnel) : Rouge/Vert/Jaune/Bleu
-  - Bouton "Rejoindre"
+  - Bouton "Rejoindre" (désactivé tant que nom invalide)
   - Persistance dans localStorage (reconnexion auto si < 30 min)
+  - La modale ne peut pas être fermée sans connexion valide
+
+- [ ] **Validation côté serveur**
+  - Vérifier que le nom n'est pas vide (après trim)
+  - Vérifier longueur (2-20 caractères)
+  - Optionnel : Vérifier unicité du nom dans l'équipe
+    - Si doublon : ajouter un suffixe (ex: "Alice (2)")
+    - Ou refuser la connexion avec message d'erreur
+  - Vérifier que l'équipe existe
 
 - [ ] **Enregistrement côté serveur**
   - Action WebSocket `PLAYER_CONNECT`
   - Création d'un bumper virtuel avec flag `IS_VIRTUAL: true`
-  - Réponse serveur : `PLAYER_CONNECTED` avec ID de session
-  - Le joueur virtuel apparaît dans `/admin/teams` comme un joueur normal
+  - Réponse serveur : `PLAYER_CONNECTED` avec ID de session et nom validé
+  - Le VJoueur apparaît dans `/admin/teams` comme un joueur normal
+  - Badge visuel pour distinguer VJoueur des joueurs physiques (optionnel)
 
 **Payload PLAYER_CONNECT :**
 ```json
@@ -466,22 +490,31 @@ const PlayerContext = {
 └────────────────────────────────────┘
 ```
 
-### 2. Modale de connexion joueur
+### 2. Modale de connexion VJoueur
 
 ```
 ┌────────────────────────────────┐
 │  Rejoindre le jeu              │
 │                                │
-│  Nom : [____________]          │
+│  Nom/Pseudo * (obligatoire)    │
+│  [____________]                │
+│  ⚠️ 2-20 caractères            │
 │                                │
-│  Équipe : [▼ Les Rouges   ]   │
+│  Équipe * (obligatoire)        │
+│  [▼ Les Rouges   ]             │
 │                                │
 │  Couleur QCM (optionnel) :     │
 │  ○ Rouge  ○ Vert               │
 │  ○ Jaune  ○ Bleu               │
 │                                │
-│        [ Rejoindre ]           │
+│    [ Rejoindre ] (désactivé)   │
+│                                │
+│  * Champs obligatoires         │
 └────────────────────────────────┘
+
+États du bouton "Rejoindre" :
+- Désactivé (gris) : Si nom invalide ou équipe non sélectionnée
+- Actif (vert) : Si tous les champs obligatoires sont valides
 ```
 
 ### 3. `/player` - Question normale
@@ -525,6 +558,10 @@ const PlayerContext = {
 - **Breaking change routes** : `/` → `/admin` sans compatibilité
 - **QR Code overlay** : Affichage à la demande par l'admin
 - **Réutilisation maximale** : PlayerDisplay inchangé
+- **Identification obligatoire** : Tout VJoueur doit entrer un nom/pseudo (2-20 caractères)
+  - Modale non-fermable jusqu'à connexion valide
+  - Validation en temps réel côté client
+  - Validation et unicité optionnelle côté serveur
 
 ### ❓ Questions ouvertes
 
