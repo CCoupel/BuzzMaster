@@ -4,424 +4,442 @@
 
 ## Concept
 
-Version adaptée de la page `/tv` pour les joueurs individuels, permettant de jouer depuis un smartphone/tablette sans buzzer physique et d'avoir une expérience personnalisée avec ses statistiques et son interface dédiée.
+**Surcouche légère sur `/tv`** permettant aux joueurs de buzzer depuis leur smartphone. L'affichage suit automatiquement le rythme du jeu géré par l'animateur, sans contrôle supplémentaire pour le joueur.
+
+### Principe de conception
+
+> `/player` = `/tv` (affichage synchronisé) + Mini header personnalisé + Bouton BUZZ
+
+- **Réutilisation maximale** : Même composant `PlayerDisplay` que `/tv`
+- **Pas de navigation** : Le joueur ne change jamais de page, l'affichage s'adapte automatiquement
+- **Contrôle minimal** : Uniquement buzzer, pas de stats détaillées ni de dashboard complexe
+- **Gestion par l'animateur** : Tout est piloté depuis `/admin`
 
 ---
 
-## Phase 1 - Interface joueur de base
+## Organisation des routes (révision)
 
-### Connexion et identification
+### Routes actuelles vs proposées
 
-- [ ] **Page de connexion `/player`**
-  - Sélection de l'équipe
-  - Saisie du nom du joueur (ou sélection parmi les joueurs existants)
-  - Choix de la couleur de réponse QCM (Rouge/Vert/Jaune/Bleu)
-  - Génération d'un ID de session unique
-  - Persistance de l'identité dans localStorage
+| Route actuelle | Usage actuel | Proposition | Raison |
+|----------------|--------------|-------------|--------|
+| `/` | Admin (GamePage) | → `/admin` | Clarifier le rôle |
+| `/tv` | Affichage TV | Inchangé | OK |
+| `/quiz` | Questions admin | → `/admin/questions` | Regrouper admin |
+| `/teams` | Équipes admin | → `/admin/teams` | Regrouper admin |
+| `/settings` | Config admin | → `/admin/settings` | Regrouper admin |
+| `/history-page` | Historique admin | → `/admin/history` | Regrouper admin |
+| `/palmares` | Palmarès admin | → `/admin/palmares` | Regrouper admin |
+| `/scoreboard` | Scores admin | → `/admin/scores` | Regrouper admin |
+| - | - | **`/player` (nouveau)** | Interface joueur |
+| `/` | - | **Page d'accueil** | Choix admin/tv/player |
+
+### Nouvelle structure proposée
+
+```
+/                           # Page d'accueil : 3 gros boutons
+├── /admin                  # Interface admin (anciennement /)
+│   ├── /admin/questions    # Gestion questions
+│   ├── /admin/teams        # Gestion équipes
+│   ├── /admin/settings     # Configuration
+│   ├── /admin/history      # Historique
+│   ├── /admin/palmares     # Palmarès
+│   └── /admin/scores       # Scores
+├── /tv                     # Affichage TV (inchangé)
+└── /player                 # Interface joueur (nouveau)
+```
+
+### Page d'accueil `/`
+
+```
+┌─────────────────────────────────────┐
+│        🎮 BuzzMaster                │
+│                                     │
+│   ┌───────────────────────────┐    │
+│   │   👤 JOUEUR               │    │
+│   │   Jouer depuis mon        │    │
+│   │   téléphone               │    │
+│   └───────────────────────────┘    │
+│                                     │
+│   ┌───────────────────────────┐    │
+│   │   📺 TV                   │    │
+│   │   Affichage grand écran   │    │
+│   └───────────────────────────┘    │
+│                                     │
+│   ┌───────────────────────────┐    │
+│   │   ⚙️ ADMIN                │    │
+│   │   Gérer le jeu            │    │
+│   └───────────────────────────┘    │
+│                                     │
+│   Version: 2.40.0                  │
+└─────────────────────────────────────┘
+```
+
+---
+
+## Phase 1 - MVP (v2.40.0)
+
+### Page `/player` - Structure
+
+```
+┌─────────────────────────────┐
+│ Mini Header Joueur (80px)   │ ← Nouveau : nom, équipe, score
+├─────────────────────────────┤
+│                             │
+│   PlayerDisplay (réutilisé) │ ← Identique à /tv
+│   - Question                │
+│   - Timer                   │
+│   - Média                   │
+│   - Réponses QCM / Memory   │
+│                             │
+├─────────────────────────────┤
+│ Zone Bouton (120px)         │ ← Nouveau : bouton BUZZ
+└─────────────────────────────┘
+```
+
+### 1. Connexion joueur (modale initiale)
+
+- [ ] **Modale de connexion au chargement de `/player`**
+  - Champ "Nom du joueur"
+  - Sélection de l'équipe (liste déroulante)
+  - Sélection couleur QCM (optionnel) : Rouge/Vert/Jaune/Bleu
+  - Bouton "Rejoindre"
+  - Persistance dans localStorage (reconnexion auto)
 
 - [ ] **Enregistrement côté serveur**
   - Action WebSocket `PLAYER_CONNECT`
-  - Création d'un bumper virtuel dans le GameEngine
-  - Payload : `{NAME, TEAM, ANSWER_COLOR}`
-  - Le serveur assigne un ID unique au joueur virtuel
+  - Création d'un bumper virtuel avec flag `IS_VIRTUAL: true`
+  - Réponse serveur : `PLAYER_CONNECTED` avec ID de session
+  - Le joueur virtuel apparaît dans `/admin/teams` comme un joueur normal
 
-### Affichage de jeu personnalisé
-
-- [ ] **Header personnalisé**
-  - Avatar du joueur avec couleur de son équipe
-  - Nom du joueur et nom de l'équipe
-  - Score personnel affiché en permanence
-  - Indicateur de connexion (connecté/déconnecté)
-
-- [ ] **Zone de question**
-  - Question en cours (identique à /tv)
-  - Timer synchronisé avec le serveur
-  - Média de la question (image/vidéo)
-
-- [ ] **Zone d'action joueur**
-  - Bouton BUZZ principal (grand, tactile)
-  - État visuel : disponible / bloqué / a buzzé
-  - Feedback immédiat au buzz
-
----
-
-## Phase 2 - Contrôles interactifs
-
-### Bouton de buzz virtuel
-
-- [ ] **Bouton tactile responsive**
-  - Taille minimum 80x80px (accessible au doigt)
-  - Couleur de l'équipe du joueur
-  - Animation au tap (vibration haptique sur mobile)
-  - Désactivé si le joueur n'est pas en état READY
-
-- [ ] **Envoi de l'action BUTTON**
-  - Action WebSocket identique aux buzzers physiques
-  - Timestamp côté client + serveur
-  - Feedback visuel immédiat (changement de couleur/animation)
-
-- [ ] **États du bouton**
-  - **PREPARE** : Grisé "En attente..."
-  - **READY** : Actif, couleur équipe "BUZZ !"
-  - **STARTED** : Actif pulsant "BUZZ MAINTENANT !"
-  - **Buzzé** : Bloqué "Vous avez buzzé" (affiche temps de réaction)
-  - **PAUSED** : Bloqué "En pause"
-  - **STOPPED/REVEALED** : Bloqué "Terminé"
-
-### QCM - Boutons de réponse
-
-- [ ] **Affichage des 4 choix**
-  - 4 boutons colorés (Rouge A, Vert B, Jaune C, Bleu D)
-  - Texte de la réponse sur chaque bouton
-  - Disposition verticale ou grille 2x2 selon espace
-
-- [ ] **Sélection et envoi**
-  - Clic sur un bouton = buzz automatique avec couleur
-  - Action `BUTTON` avec payload `{button: "A|B|C|D"}`
-  - Feedback visuel : bouton sélectionné mis en évidence
-  - Les autres boutons grisés après sélection
-
-- [ ] **Affichage des indices (si activés)**
-  - Réponses invalidées barrées/grisées en temps réel
-  - Badge de pénalité affiché (67% / 33%)
-  - Message "Indice donné ! Points réduits"
-
----
-
-## Phase 3 - Memory - Contrôle des cartes
-
-### Interface Memory pour joueur
-
-- [ ] **Grille de cartes interactive**
-  - Affichage identique à /tv
-  - Cartes cliquables pour les retourner
-  - Animation flip au tap
-
-- [ ] **Envoi de l'action FLIP_MEMORY_CARD**
-  - Clic sur carte → envoi au serveur
-  - Payload : `{CARD_ID: "pairID-cardNum"}`
-  - Feedback immédiat (pas d'attente serveur pour le flip visuel)
-
-- [ ] **Synchronisation avec le serveur**
-  - État des cartes mis à jour via WebSocket
-  - Cartes matchées restent révélées
-  - Cartes non-matchées se cachent après délai
-
-- [ ] **Indicateurs de progression**
-  - Compteur "Paires trouvées : X/Y"
-  - Compteur "Erreurs : Z" (si pénalité active)
-  - Temps restant (si timer global)
-
----
-
-## Phase 4 - Statistiques et historique personnel
-
-### Statistiques de session
-
-- [ ] **Tableau de bord personnel**
-  - Score total de la session
-  - Nombre de questions jouées
-  - Taux de réussite (si question attribuée au joueur)
-  - Temps de réaction moyen
-  - Classement dans l'équipe
-
-- [ ] **Historique des réponses**
-  - Liste des questions jouées
-  - Pour chaque question :
-    - Texte de la question (tronqué)
-    - Temps de réaction
-    - Points gagnés/perdus
-    - Icône ✅ / ❌ (si attribution points)
-  - Scroll vertical pour naviguer
-
-- [ ] **Graphiques et visualisations**
-  - Évolution du score au fil du temps
-  - Répartition des points par catégorie (graphique en barres)
-  - Comparaison avec les autres joueurs de l'équipe
-
----
-
-## Phase 5 - Expérience utilisateur avancée
-
-### Notifications et feedback
-
-- [ ] **Notifications push (PWA)**
-  - "C'est à votre équipe !" quand question démarre
-  - "Vous avez buzzé le plus vite !" si premier
-  - "Bonne réponse ! +X points" si attribution
-  - "Mauvaise réponse, dommage" si pas de points
-
-- [ ] **Feedback haptique (mobile)**
-  - Vibration au buzz
-  - Vibration double si premier à buzzer
-  - Vibration pattern pour bonne/mauvaise réponse
-
-- [ ] **Animations et transitions**
-  - Confetti si bonne réponse
-  - Animation de score montant
-  - Transition fluide entre les phases de jeu
-
-### Mode spectateur
-
-- [ ] **Vue spectateur quand équipe ne joue pas**
-  - Affichage de la question en cours (lecture seule)
-  - Bouton BUZZ grisé et désactivé
-  - Message "C'est au tour de [Équipe X]"
-  - Possibilité de voir les stats d'autres équipes
-
-- [ ] **Mode entraînement (hors partie)**
-  - Répondre aux questions sans impact sur le score
-  - Timer personnel pour s'entraîner
-  - Sauvegarde des stats d'entraînement séparément
-
----
-
-## Phase 6 - Social et collaboration
-
-### Chat d'équipe
-
-- [ ] **Chat textuel entre membres de l'équipe**
-  - Zone de chat repliable
-  - Messages visibles uniquement par l'équipe
-  - Notifications de nouveaux messages
-  - Émojis et réactions rapides
-
-- [ ] **Stratégie collaborative (Memory)**
-  - Marqueurs visuels partagés sur les cartes
-  - "J'ai vu cette carte ici" (pointer une carte)
-  - Vote pour la prochaine carte à retourner
-
-### Avatars et personnalisation
-
-- [ ] **Avatar personnalisé**
-  - Upload d'image ou sélection dans bibliothèque
-  - Génération automatique d'avatar (initiales + couleur)
-  - Affichage de l'avatar dans le header et les classements
-
-- [ ] **Personnalisation de l'interface**
-  - Thème clair/sombre
-  - Taille de police ajustable (accessibilité)
-  - Réduction des animations (mode économie batterie)
-
----
-
-## Phase 7 - Progressive Web App (PWA)
-
-### Installation et offline
-
-- [ ] **Manifest PWA**
-  - Fichier `manifest.json` avec métadonnées
-  - Icônes pour écran d'accueil (mobile)
-  - Mode standalone (fullscreen)
-  - Orientation portrait/paysage
-
-- [ ] **Service Worker**
-  - Cache des assets statiques (HTML/CSS/JS)
-  - Fonctionnement offline pour l'interface (pas le jeu)
-  - Mise à jour automatique des assets
-
-- [ ] **Expérience native**
-  - Pas de barre d'adresse en mode standalone
-  - Splash screen au lancement
-  - Retour haptique natif
-  - Gestion des notifications push
-
----
-
-## Cas d'usage identifiés
-
-| Cas d'usage | Description | Avantages |
-|-------------|-------------|-----------|
-| **Jeu sans buzzers** | Jouer uniquement avec des smartphones | Pas besoin de matériel dédié, accessible à tous |
-| **Joueur hybride** | Joueur avec buzzer physique + smartphone pour stats | Meilleure expérience, stats en temps réel |
-| **Spectateur actif** | Suivre la partie depuis son téléphone sans jouer | Engagement même en observation |
-| **Entraînement solo** | S'entraîner sur les questions hors partie | Amélioration des performances |
-| **Grand groupe** | Parties avec 20+ joueurs sans buzzers physiques | Scalabilité sans limite matérielle |
-| **Accessibilité** | Interface adaptée aux personnes à mobilité réduite | Boutons tactiles plus accessibles que buzzers |
-
----
-
-## Architecture technique
-
-### Routing
-
-```
-/player                     # Page de connexion
-/player/:sessionId          # Interface de jeu personnalisée
-/player/:sessionId/stats    # Page de statistiques détaillées
-```
-
-### WebSocket Protocol Extensions
-
-| Action | Direction | Description |
-|--------|-----------|-------------|
-| `PLAYER_CONNECT` | Client→Server | Connexion d'un joueur virtuel |
-| `PLAYER_DISCONNECT` | Client→Server | Déconnexion propre |
-| `PLAYER_STATS` | Server→Client | Mise à jour des stats personnelles |
-| `PLAYER_NOTIFICATION` | Server→Client | Notification push pour le joueur |
-
-**PLAYER_CONNECT payload :**
+**Payload PLAYER_CONNECT :**
 ```json
 {
-  "NAME": "Alice",
-  "TEAM": "Les Rouges",
-  "ANSWER_COLOR": "RED",
-  "DEVICE_INFO": {
-    "type": "mobile|tablet|desktop",
-    "os": "iOS|Android|Windows",
-    "browser": "Safari|Chrome|Firefox"
+  "ACTION": "PLAYER_CONNECT",
+  "MSG": {
+    "NAME": "Alice",
+    "TEAM": "Les Rouges",
+    "ANSWER_COLOR": "RED"
   }
 }
 ```
 
-**PLAYER_STATS payload :**
-```json
-{
-  "SESSION_SCORE": 50,
-  "QUESTIONS_PLAYED": 10,
-  "AVG_REACTION_TIME": 1234,
-  "SUCCESS_RATE": 0.7,
-  "RANK_IN_TEAM": 2
-}
+### 2. Mini header personnalisé (80px fixe)
+
+- [ ] **Affichage compact**
+  - Avatar circulaire (40px) avec couleur de l'équipe
+  - Nom du joueur (tronqué si trop long)
+  - Score personnel (ex: "25 pts")
+  - Indicateur de connexion (point vert/rouge)
+
+```
+┌──────────────────────────────────────┐
+│ 🔴 Alice  •  Les Rouges  •  25 pts  │
+└──────────────────────────────────────┘
 ```
 
-### State Management (Frontend)
+### 3. Zone PlayerDisplay (réutilisée à 100%)
+
+- [ ] **Import du composant existant**
+  ```jsx
+  import PlayerDisplay from './pages/PlayerDisplay'
+
+  function PlayerPage() {
+    return (
+      <>
+        <PlayerHeader />
+        <PlayerDisplay /> {/* Réutilisé tel quel */}
+        <BuzzButtonZone />
+      </>
+    )
+  }
+  ```
+
+- [ ] **Comportement identique à `/tv`**
+  - Affichage de la question en cours
+  - Timer synchronisé
+  - Média (image/vidéo)
+  - Réponses QCM affichées (mais pas cliquables ici)
+  - Grille Memory affichée (mais pas cliquable ici)
+  - Changement de vue selon `gameState.PAGE` (GAME/SCORE/PLAYERS/PALMARES)
+
+### 4. Zone Bouton BUZZ (120px fixe, en bas)
+
+- [ ] **Bouton principal de buzz**
+  - Taille : 100% largeur, 80px hauteur
+  - Couleur : Couleur de l'équipe du joueur
+  - Texte : "BUZZ !" (grande police, bold)
+  - Position : Fixe en bas de l'écran (sticky)
+
+- [ ] **États du bouton**
+
+  | État | Apparence | Comportement |
+  |------|-----------|--------------|
+  | **STOPPED** | Gris, désactivé, "En attente..." | Non cliquable |
+  | **PREPARE** | Gris, désactivé, "Préparez-vous..." | Non cliquable |
+  | **READY** | Couleur équipe, "PRÊT !" | Non cliquable (attente démarrage) |
+  | **STARTED** | Couleur équipe pulsante, "BUZZ !" | ✅ Cliquable |
+  | **PAUSED (autre joueur)** | Gris, "Un joueur a buzzé" | Non cliquable |
+  | **PAUSED (vous)** | Vert, "Vous avez buzzé !" + temps | Non cliquable |
+  | **REVEALED** | Gris, désactivé | Non cliquable |
+
+- [ ] **Envoi de l'action au clic**
+  ```javascript
+  const handleBuzz = () => {
+    if (gameState.PHASE !== 'STARTED') return
+
+    const now = Date.now()
+    sendWebSocketMessage({
+      ACTION: 'BUTTON',
+      ID: playerId,
+      MSG: { button: answerColor || 'A', timestamp: now }
+    })
+
+    // Feedback optimiste
+    setLocalBuzzed(true)
+    navigator.vibrate && navigator.vibrate(50)
+  }
+  ```
+
+- [ ] **Feedback immédiat**
+  - Vibration haptique (50ms) sur mobile
+  - Changement de couleur instantané (vert)
+  - Affichage du temps de réaction si disponible
+
+---
+
+## Phase 2 - QCM interactif (v2.41.0)
+
+### QCM : Boutons de réponse à la place du BUZZ
+
+- [ ] **Détection du type de question**
+  - Si `gameState.QUESTION.TYPE === 'QCM'` → Afficher 4 boutons au lieu d'un seul
+  - Sinon → Bouton BUZZ classique
+
+- [ ] **4 boutons colorés (disposition 2x2)**
+  ```
+  ┌─────────────────────────────────┐
+  │ [A] Rouge: Paris      [B] Vert  │
+  │                                 │
+  │ [C] Jaune: Berlin     [D] Bleu  │
+  └─────────────────────────────────┘
+  ```
+
+- [ ] **Clic sur un bouton = buzz avec couleur**
+  ```javascript
+  const handleQcmAnswer = (color) => {
+    sendWebSocketMessage({
+      ACTION: 'BUTTON',
+      ID: playerId,
+      MSG: { button: color } // 'RED', 'GREEN', 'YELLOW', 'BLUE'
+    })
+  }
+  ```
+
+- [ ] **Affichage des indices (si activés)**
+  - Réponses invalidées : bouton barré + grisé
+  - Badge de pénalité au-dessus des boutons : "⚠️ Pénalité -33%"
+  - Synchronisé avec l'action `QCM_HINT` du serveur
+
+---
+
+## Phase 3 - Memory interactif (v2.42.0)
+
+### Memory : Cartes cliquables
+
+- [ ] **Rendre la grille Memory interactive**
+  - Si `gameState.QUESTION.TYPE === 'MEMORY'` → Ajouter onClick sur les cartes
+  - Réutiliser le composant Memory de PlayerDisplay
+  - Ajouter un wrapper pour capturer les clics
+
+- [ ] **Envoi de l'action FLIP au clic sur carte**
+  ```javascript
+  const handleCardClick = (cardId) => {
+    if (canFlipCard(cardId)) {
+      sendWebSocketMessage({
+        ACTION: 'FLIP_MEMORY_CARD',
+        MSG: { CARD_ID: cardId }
+      })
+    }
+  }
+  ```
+
+- [ ] **Pas de bouton BUZZ pour Memory**
+  - Zone bouton cachée ou affiche "Cliquez sur les cartes"
+
+---
+
+## Phase 4 - PWA basique (v2.43.0)
+
+### Installation comme app
+
+- [ ] **Manifest PWA**
+  ```json
+  {
+    "name": "BuzzMaster Joueur",
+    "short_name": "BuzzMaster",
+    "start_url": "/player",
+    "display": "standalone",
+    "orientation": "portrait",
+    "theme_color": "#6366f1",
+    "background_color": "#0f172a",
+    "icons": [...]
+  }
+  ```
+
+- [ ] **Service Worker minimal**
+  - Cache des assets statiques (HTML/CSS/JS)
+  - Pas de fonctionnement offline (jeu nécessite connexion)
+
+- [ ] **Feedback haptique amélioré**
+  - Vibration au buzz (50ms)
+  - Double vibration si premier à buzzer (50ms, pause 50ms, 50ms)
+  - Pattern différent pour bonne/mauvaise réponse (si détectable)
+
+---
+
+## Architecture technique simplifiée
+
+### Composants nouveaux (minimalistes)
+
+| Composant | Fichier | Rôle |
+|-----------|---------|------|
+| `HomePage` | `pages/HomePage.jsx` | Page d'accueil avec 3 boutons |
+| `PlayerPage` | `pages/PlayerPage.jsx` | Wrapper `/player` |
+| `PlayerHeader` | `components/PlayerHeader.jsx` | Mini header 80px |
+| `BuzzButton` | `components/BuzzButton.jsx` | Bouton BUZZ avec états |
+| `PlayerConnectionModal` | `components/PlayerConnectionModal.jsx` | Modale de connexion |
+
+### Réutilisation maximale
+
+- ✅ `PlayerDisplay` → Utilisé tel quel (0 modification)
+- ✅ `useWebSocket` → Même hook, ajout action `PLAYER_CONNECT`
+- ✅ CSS existant → Réutilisé pour cohérence visuelle
+- ✅ Logique de jeu → Aucune modification côté serveur (sauf flag `IS_VIRTUAL`)
+
+### State management (React Context)
 
 ```javascript
-// Contexte joueur dans React
 const PlayerContext = {
-  playerId: string,
-  sessionId: string,
-  playerName: string,
-  teamName: string,
-  answerColor: string,
-  score: number,
-  stats: PlayerStats,
-  connected: boolean,
+  playerId: string,        // ID de session généré par serveur
+  playerName: string,      // "Alice"
+  teamName: string,        // "Les Rouges"
+  answerColor: string,     // "RED" (pour QCM)
+  score: number,           // Score personnel
+  connected: boolean,      // État connexion WebSocket
+  hasBuzzed: boolean,      // A buzzé dans cette question
+  reactionTime: number,    // Temps de réaction (ms)
 }
 ```
 
----
+### WebSocket Protocol - Nouveautés
 
-## Considérations techniques
+| Action | Direction | Description |
+|--------|-----------|-------------|
+| `PLAYER_CONNECT` | Client→Server | Connexion joueur virtuel |
+| `PLAYER_CONNECTED` | Server→Client | Confirmation avec session ID |
+| `PLAYER_DISCONNECT` | Client→Server | Déconnexion propre |
 
-### Performance
-
-- [ ] **Optimisation mobile**
-  - Bundle JS < 100KB (gzip)
-  - Images optimisées (WebP, lazy loading)
-  - Polling réduit, WebSocket uniquement
-  - Throttling des animations sur mobile
-
-- [ ] **Gestion de la latence**
-  - Feedback optimiste (UI update immédiat)
-  - Synchronisation serveur en arrière-plan
-  - Gestion des conflits (ex: 2 joueurs buzzent simultanément)
-  - Indicateur de latence réseau
-
-### Sécurité
-
-- [ ] **Authentification joueur**
-  - Token de session unique généré par le serveur
-  - Validation du token à chaque action
-  - Expiration de session après inactivité
-  - Protection contre usurpation d'identité
-
-- [ ] **Rate limiting**
-  - Limite de buzz par seconde (anti-spam)
-  - Cooldown entre les actions
-  - Détection de comportement anormal
-
-- [ ] **Validation côté serveur**
-  - Vérifier que le joueur peut buzzer (état READY/STARTED)
-  - Vérifier que c'est bien son tour
-  - Ignorer les actions invalides
-
-### Accessibilité (WCAG 2.1)
-
-- [ ] **Navigation clavier**
-  - Boutons accessibles au clavier (Tab)
-  - Raccourcis clavier (Espace = buzz)
-  - Focus visible sur les éléments interactifs
-
-- [ ] **Screen readers**
-  - Labels ARIA sur tous les boutons
-  - Annonces des changements d'état
-  - Descriptions alternatives des images
-
-- [ ] **Contraste et lisibilité**
-  - Contraste minimum 4.5:1 pour le texte
-  - Taille de texte minimum 16px
-  - Mode haut contraste disponible
+**Pas de nouvelles actions pour le gameplay** : Le joueur virtuel utilise `BUTTON` comme un buzzer physique.
 
 ---
 
-## Différences avec /tv
+## Différences `/tv` vs `/player`
 
-| Aspect | /tv (Affichage public) | /player (Interface joueur) |
-|--------|------------------------|----------------------------|
-| **Contenu** | Question + réponses + classements | Question + contrôles personnalisés + stats |
-| **Interactivité** | Lecture seule (sauf admin) | Boutons de buzz/QCM/Memory |
-| **Personnalisation** | Générique pour tous | Adapté au joueur et son équipe |
-| **Layout** | Horizontal (TV 16:9) | Vertical (mobile portrait) |
-| **Statistiques** | Globales (tous les joueurs) | Personnelles (joueur uniquement) |
-| **Notifications** | Aucune | Push notifications |
-| **État de connexion** | Toujours connecté | Peut se déconnecter/reconnecter |
+| Aspect | `/tv` | `/player` |
+|--------|-------|-----------|
+| **Header** | Aucun (fullscreen) | Mini header 80px (nom + score) |
+| **Affichage** | PlayerDisplay pur | PlayerDisplay + header + bouton |
+| **Interactivité** | Lecture seule | Bouton BUZZ (+ QCM + Memory) |
+| **Layout** | Horizontal 16:9 | Vertical portrait (mobile-first) |
+| **Reconnexion** | Pas nécessaire | Auto-reconnexion avec localStorage |
+
+---
+
+## Cas d'usage
+
+| Situation | Usage | Avantage |
+|-----------|-------|----------|
+| **Jeu sans buzzers** | Tous les joueurs sur `/player` | Pas de matériel nécessaire |
+| **Grand groupe (20+)** | Mix buzzers + `/player` | Scalabilité |
+| **Spectateur actif** | `/player` en lecture seule | Suivre depuis son téléphone |
+| **Backup buzzer** | Si buzzer physique en panne | Continuité du jeu |
 
 ---
 
 ## Priorités de développement
 
-**Court terme (MVP)** :
-- Phase 1 : Interface de base avec connexion et affichage
-- Phase 2 : Bouton de buzz virtuel fonctionnel
-- QCM : Boutons de réponse colorés
+**v2.40.0 - MVP** :
+- Phase 1 : Page d'accueil + `/player` avec BUZZ simple
+- Réorganisation routes (optionnel, peut attendre)
 
-**Moyen terme** :
-- Phase 3 : Contrôle Memory
-- Phase 4 : Statistiques de base (score, historique)
-- Phase 5 : Notifications et feedback haptique
+**v2.41.0** :
+- Phase 2 : QCM interactif (4 boutons)
 
-**Long terme** :
-- Phase 6 : Chat d'équipe et collaboration
-- Phase 7 : PWA complète avec offline
+**v2.42.0** :
+- Phase 3 : Memory interactif (cartes cliquables)
+
+**v2.43.0** :
+- Phase 4 : PWA basique (manifest + service worker)
 
 ---
 
 ## Maquettes (à créer)
 
-### Écrans principaux
+### 1. Page d'accueil `/`
+- 3 gros boutons (JOUEUR / TV / ADMIN)
+- Responsive (mobile + desktop)
 
-1. **Connexion** : Sélection équipe + nom + couleur QCM
-2. **Attente** : "En attente du lancement de la question..."
-3. **Jeu Normal** : Question + grand bouton BUZZ
-4. **Jeu QCM** : Question + 4 boutons de réponse
-5. **Jeu Memory** : Grille de cartes interactive
-6. **Résultat** : Feedback + points gagnés + classement
-7. **Statistiques** : Dashboard personnel
+### 2. Modale de connexion joueur
+- Champ nom
+- Sélection équipe
+- Sélection couleur QCM
 
-### Composants réutilisables
+### 3. `/player` - Question normale
+```
+┌────────────────────────────────┐
+│ 🔴 Alice • Les Rouges • 25pts │  Header
+├────────────────────────────────┤
+│                                │
+│   [Question affichée ici]      │  PlayerDisplay
+│   [Timer, média, etc.]         │  (réutilisé)
+│                                │
+├────────────────────────────────┤
+│    ┌──────────────────────┐   │
+│    │      BUZZ !          │   │  Bouton BUZZ
+│    └──────────────────────┘   │
+└────────────────────────────────┘
+```
 
-- `<PlayerHeader>` : Avatar + nom + score
-- `<BuzzButton>` : Bouton de buzz avec états
-- `<QCMButtons>` : 4 boutons de réponse
-- `<MemoryGrid>` : Grille de cartes Memory
-- `<PlayerStats>` : Widget de statistiques
-- `<PlayerHistory>` : Liste des questions jouées
-- `<TeamChat>` : Interface de chat
+### 4. `/player` - QCM
+```
+┌────────────────────────────────┐
+│ 🔴 Alice • Les Rouges • 25pts │
+├────────────────────────────────┤
+│   [Question QCM ici]           │
+├────────────────────────────────┤
+│ [A] Paris    [B] Londres       │  4 boutons
+│ [C] Berlin   [D] Madrid        │  colorés
+└────────────────────────────────┘
+```
 
 ---
 
-## Technologies suggérées
+## Questions ouvertes
 
-| Composant | Technologies |
-|-----------|-------------|
-| **Frontend** | React + TypeScript, TailwindCSS, Framer Motion |
-| **State** | React Context + useReducer (ou Zustand) |
-| **PWA** | Workbox (service worker), Web Push API |
-| **Animations** | Framer Motion, CSS animations |
-| **Haptique** | Vibration API (navigator.vibrate) |
-| **Charts** | Recharts, Chart.js (stats) |
+- [ ] **Réorganisation routes** : Faut-il vraiment déplacer `/` vers `/admin` ?
+  - **Option 1** : Oui, clarté maximale (/ = accueil, /admin = gestion, /tv = TV, /player = joueur)
+  - **Option 2** : Non, garder `/` comme admin pour compatibilité (anciens favoris)
+  - **Proposition** : Option 1, avec redirection `/` → `/admin` pendant 1 version de transition
+
+- [ ] **Statistiques joueur** : Faut-il afficher plus que le score dans le header ?
+  - **Proposition** : Non, garder minimaliste. Si besoin, ajouter une page `/player/stats` plus tard
+
+- [ ] **Mode spectateur** : Autoriser `/player` sans buzzer (lecture seule) ?
+  - **Proposition** : Oui, si pas d'équipe sélectionnée → mode spectateur automatique
+
+- [ ] **Déconnexion** : Combien de temps garder le joueur virtuel après déconnexion ?
+  - **Proposition** : 5 minutes, puis marquer comme "absent" (grisé dans `/admin/teams`)
 
 ---
 
@@ -429,27 +447,7 @@ const PlayerContext = {
 
 | Métrique | Cible |
 |----------|-------|
-| **Latence buzz** | < 100ms (optimiste) |
-| **Temps de chargement** | < 2s (3G) |
-| **Taux d'adoption** | 50% des joueurs utilisent /player |
-| **Satisfaction** | > 4/5 en feedback utilisateur |
-| **Taux d'erreur** | < 1% d'actions échouées |
-
----
-
-## Questions ouvertes
-
-- [ ] **Gestion des déconnexions** : Comment gérer un joueur qui se déconnecte en plein jeu ?
-  - Proposition : Garder son état 5 minutes, puis le marquer comme "absent"
-
-- [ ] **Conflits de buzz** : Que se passe-t-il si un joueur buzz à la fois avec buzzer physique et virtuel ?
-  - Proposition : Premier arrivé compte, ignorer le second
-
-- [ ] **Limite de joueurs virtuels** : Combien de joueurs /player simultanés maximum ?
-  - Proposition : Pas de limite technique, mais recommander < 50 pour performance
-
-- [ ] **Mode spectateur pur** : Autoriser des spectateurs sans équipe ?
-  - Proposition : Oui, avec route `/spectator` dédiée (lecture seule)
-
-- [ ] **Reconnexion automatique** : Que faire en cas de perte WebSocket ?
-  - Proposition : Tentatives exponentielles, restaurer l'état avec le sessionId
+| **Temps de chargement `/player`** | < 2s (3G) |
+| **Latence buzz** | < 100ms (feedback optimiste) |
+| **Taux d'adoption** | 30% des joueurs utilisent `/player` |
+| **Réutilisation code** | > 80% du code vient de `/tv` existant |
