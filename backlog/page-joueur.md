@@ -64,17 +64,22 @@
 
 ---
 
-## QR Code sur /tv (Nouvelle fonctionnalité clé)
+## QR Code sur /tv (Phase d'enrôlement)
 
 ### Concept
 
-L'animateur affiche un QR code sur l'écran TV que les joueurs scannent pour accéder directement à `/player`.
+L'animateur affiche un QR code sur l'écran TV pour **ouvrir la phase d'enrôlement** : les joueurs scannent le code pour accéder à `/player` et se connecter en tant que VJoueurs.
+
+**Distinction importante** :
+- **QR code AFFICHÉ** = Phase d'enrôlement ACTIVE → Nouveaux VJoueurs acceptés
+- **QR code MASQUÉ** = Phase d'enrôlement FERMÉE → Seules les reconnexions sont acceptées
 
 ### Avantages
 
 ✅ **Simplicité** : Pas besoin de taper l'URL
 ✅ **Sécurité** : Les joueurs ne peuvent pas "tomber" sur `/admin` par erreur
-✅ **Contrôle** : L'animateur décide quand afficher/masquer le QR code
+✅ **Contrôle de l'enrôlement** : L'animateur décide quand accepter de nouveaux VJoueurs
+✅ **Reconnexion toujours possible** : Les VJoueurs déconnectés peuvent revenir même sans QR code
 ✅ **UX fluide** : Scan → Connexion → Jouer
 
 ### Implémentation
@@ -84,10 +89,14 @@ L'animateur affiche un QR code sur l'écran TV que les joueurs scannent pour acc
   - Ou dans un menu déroulant "Joueurs virtuels"
   - Toggle : afficher/masquer le QR code sur `/tv`
 
-- [ ] **Action WebSocket**
-  - Action `SHOW_QR_CODE` / `HIDE_QR_CODE`
+- [ ] **Action WebSocket et gestion de l'enrôlement**
+  - Action `SHOW_QR_CODE` : Active l'enrôlement (`enrollmentActive = true`)
+  - Action `HIDE_QR_CODE` : Désactive l'enrôlement (`enrollmentActive = false`)
   - Payload : `{URL: "http://192.168.4.1/player"}`
   - Broadcast à tous les clients `/tv`
+  - **Impact côté serveur** :
+    - `SHOW_QR_CODE` → accepter nouveaux VJoueurs + reconnexions
+    - `HIDE_QR_CODE` → accepter uniquement les reconnexions
 
 - [ ] **Affichage sur /tv**
   - **Option 1 - Overlay coin** :
@@ -177,6 +186,10 @@ return showQrCode && (
   - Persistance dans localStorage (reconnexion auto si < 30 min)
   - La modale ne peut pas être fermée sans connexion valide
   - **Pas de sélection d'équipe ou de couleur** : Géré par l'admin après connexion
+  - **Gestion erreur enrôlement fermé** :
+    - Si `PLAYER_CONNECT_ERROR` avec `ENROLLMENT_CLOSED`
+    - Afficher message : "❌ L'enrôlement est fermé. Contactez l'animateur pour qu'il affiche le QR code."
+    - Le bouton "Rejoindre" reste actif pour retenter (cas reconnexion)
 
 - [ ] **Validation côté serveur**
   - Vérifier que le nom n'est pas vide (après trim)
@@ -185,13 +198,49 @@ return showQrCode && (
     - Si doublon : ajouter un suffixe (ex: "Alice (2)")
     - Ou refuser la connexion avec message d'erreur
 
-- [ ] **Enregistrement côté serveur**
-  - Action WebSocket `PLAYER_CONNECT`
+- [ ] **Enregistrement côté serveur : Distinction Enrôlement vs Reconnexion**
+
+  **Phase d'enrôlement** (QR code affiché) :
+  - Variable serveur : `enrollmentActive` (booléen)
+  - Activé quand l'admin affiche le QR code (`SHOW_QR_CODE`)
+  - Désactivé quand l'admin masque le QR code (`HIDE_QR_CODE`)
+  - Pendant l'enrôlement : accepter **nouveaux VJoueurs** ET **reconnexions**
+
+  **Hors enrôlement** (QR code masqué) :
+  - Refuser les nouveaux VJoueurs (erreur : "Enrôlement fermé, contactez l'animateur")
+  - Accepter uniquement les **reconnexions** de VJoueurs connus
+  - Le serveur garde en mémoire les VJoueurs déjà enregistrés (même déconnectés)
+
+  **Logique serveur lors de `PLAYER_CONNECT`** :
+  ```go
+  if !isKnownPlayer(name) {
+    // Nouveau joueur
+    if !enrollmentActive {
+      return error("Enrôlement fermé")
+    }
+    // Créer nouveau bumper virtuel
+    createVirtualBumper(name)
+  } else {
+    // Reconnexion d'un joueur connu
+    // Toujours autorisée (même hors enrôlement)
+    reconnectVirtualBumper(name)
+  }
+  ```
+
+  **Création d'un nouveau VJoueur (première connexion)** :
+  - Action WebSocket `PLAYER_CONNECT` avec `NAME`
   - Création d'un bumper virtuel avec flag `IS_VIRTUAL: true`
   - État initial : **NON ASSIGNÉ** (pas d'équipe, pas de couleur QCM)
   - Réponse serveur : `PLAYER_CONNECTED` avec ID de session et nom validé
   - Le VJoueur apparaît dans `/admin/teams` comme un **buzzer standard non assigné**
   - Badge visuel "📱 VIRTUEL" pour distinguer des buzzers physiques
+
+  **Reconnexion d'un VJoueur existant** :
+  - Le VJoueur envoie le même `NAME` que lors de sa première connexion
+  - Le serveur retrouve le bumper virtuel correspondant
+  - Restauration de l'état : équipe, couleur QCM, score (si déjà assigné)
+  - Réponse serveur : `PLAYER_CONNECTED` avec état complet restauré
+  - Le VJoueur retrouve son interface comme avant la déconnexion
 
 - [ ] **Attribution par l'admin**
   - Le VJoueur apparaît dans la liste des joueurs non assignés (comme un buzzer physique)
@@ -209,14 +258,43 @@ return showQrCode && (
 }
 ```
 
-**Réponse PLAYER_CONNECTED :**
+**Réponse PLAYER_CONNECTED (nouveau VJoueur) :**
 ```json
 {
   "ACTION": "PLAYER_CONNECTED",
   "MSG": {
     "SESSION_ID": "vplayer_abc123",
     "NAME": "Alice",
-    "STATUS": "UNASSIGNED"
+    "STATUS": "UNASSIGNED",
+    "IS_RECONNECTION": false
+  }
+}
+```
+
+**Réponse PLAYER_CONNECTED (reconnexion VJoueur existant) :**
+```json
+{
+  "ACTION": "PLAYER_CONNECTED",
+  "MSG": {
+    "SESSION_ID": "vplayer_abc123",
+    "NAME": "Alice",
+    "STATUS": "ASSIGNED",
+    "IS_RECONNECTION": true,
+    "TEAM": "Les Rouges",
+    "TEAM_COLOR": [255, 0, 0],
+    "ANSWER_COLOR": "RED",
+    "SCORE": 25
+  }
+}
+```
+
+**Réponse d'erreur (enrôlement fermé) :**
+```json
+{
+  "ACTION": "PLAYER_CONNECT_ERROR",
+  "MSG": {
+    "ERROR": "ENROLLMENT_CLOSED",
+    "MESSAGE": "L'enrôlement est fermé. Contactez l'animateur."
   }
 }
 ```
@@ -453,11 +531,12 @@ const PlayerContext = {
 | Action | Direction | Description |
 |--------|-----------|-------------|
 | `PLAYER_CONNECT` | Client→Server | Connexion joueur virtuel (avec nom uniquement) |
-| `PLAYER_CONNECTED` | Server→Client | Confirmation avec session ID et statut UNASSIGNED |
+| `PLAYER_CONNECTED` | Server→Client | Confirmation (nouveau ou reconnexion) |
+| `PLAYER_CONNECT_ERROR` | Server→Client | Erreur de connexion (ex: enrôlement fermé) |
 | `PLAYER_ASSIGNED` | Server→Client | Notification quand l'admin assigne à une équipe |
 | `PLAYER_DISCONNECT` | Client→Server | Déconnexion propre |
-| `SHOW_QR_CODE` | Admin→Server→TV | Afficher QR code sur /tv |
-| `HIDE_QR_CODE` | Admin→Server→TV | Masquer QR code sur /tv |
+| `SHOW_QR_CODE` | Admin→Server→TV | Afficher QR code + activer enrôlement |
+| `HIDE_QR_CODE` | Admin→Server→TV | Masquer QR code + désactiver enrôlement |
 
 **Action PLAYER_ASSIGNED (nouvelle)** :
 ```json
@@ -613,17 +692,31 @@ Note : Modale non-fermable (pas de croix ×)
   - Apparaît comme un buzzer non assigné dans `/admin/teams`
   - L'admin fait l'attribution via drag & drop (workflow existant)
   - Identique à un buzzer physique qui se connecte
+- **Phase d'enrôlement contrôlée** : Les nouveaux VJoueurs ne peuvent se connecter que pendant l'affichage du QR code
+  - QR code affiché = Enrôlement OUVERT (nouveaux + reconnexions)
+  - QR code masqué = Enrôlement FERMÉ (reconnexions uniquement)
+  - Variable serveur : `enrollmentActive` (booléen)
+  - Les VJoueurs connus peuvent toujours se reconnecter (même hors enrôlement)
+  - Reconnexion = restauration de l'état complet (équipe, couleur, score)
 
 ### ❓ Questions ouvertes
 
 - [ ] **Position QR code** : Coin (moins intrusif) ou plein écran (phase STOPPED uniquement) ?
   - **Proposition** : Coin par défaut, option plein écran ajoutée plus tard
 
-- [ ] **Persistance connexion** : Combien de temps garder le localStorage ?
+- [ ] **Persistance connexion (localStorage)** : Combien de temps garder le localStorage côté client ?
   - **Proposition** : 30 minutes, puis demander reconnexion
 
-- [ ] **Déconnexion serveur** : Combien de temps garder le joueur virtuel ?
-  - **Proposition** : 5 minutes, puis marquer comme "absent" (grisé dans `/admin/teams`)
+- [ ] **Mémoire serveur des VJoueurs** : Combien de temps garder un VJoueur en mémoire après déconnexion ?
+  - **Option 1 - Durée de session** : Jusqu'à la fin de la partie (action RAZ scores)
+  - **Option 2 - Timeout** : 30 minutes après déconnexion, puis suppression
+  - **Option 3 - Persistance** : Toujours en mémoire, suppression manuelle par l'admin
+  - **Proposition** : Option 1 (durée de session) - supprimé uniquement au RAZ scores
+
+- [ ] **État visuel VJoueur déconnecté** : Comment afficher un VJoueur déconnecté dans `/admin/teams` ?
+  - Badge "🔌 DÉCONNECTÉ" + grisé
+  - Reste visible et déplaçable (l'admin peut toujours le gérer)
+  - Reprend sa couleur normale à la reconnexion
 
 - [ ] **Limite joueurs virtuels** : Y a-t-il une limite technique ?
   - **Proposition** : Pas de limite hard, mais recommander < 50 pour performance
