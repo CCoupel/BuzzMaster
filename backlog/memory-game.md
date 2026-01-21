@@ -89,7 +89,9 @@ Jeu de mémoire avec paires de cartes à retrouver.
 
 Ajout de plusieurs modes de jeu pour le Memory, permettant de faire jouer plusieurs équipes avec des règles différentes.
 
-### Modes disponibles
+### Modes de jeu (gameplay)
+
+Définissent **comment les équipes jouent** (ordre, tour, rotation).
 
 - [ ] **Mode SOLO** (mode actuel - par défaut)
   - Une seule équipe joue
@@ -257,6 +259,219 @@ Tour 5 - Équipe Bleu (encore) :
 - ✅ Rétrocompatible : Questions Memory existantes sans `MEMORY_MODE` utilisent "SOLO" par défaut
 - ✅ Mode SOLO identique au comportement actuel
 - ✅ Pas de modification nécessaire des questions existantes
+
+---
+
+## Phase 7 - Modes de points (scoring)
+
+### Concept
+
+Les modes de points définissent **comment les points sont calculés** et **ce qui se passe en cas d'erreur**. Ils sont **combinables** avec les modes de jeu (Phase 6).
+
+### Modes de points disponibles
+
+- [ ] **Mode TO_THE_END** (mode actuel - par défaut)
+  - Les paires trouvées restent visibles jusqu'à la fin
+  - Cartes matched ne se retournent jamais
+  - Calcul de points classique : `(paires × POINTS) + BONUS - (erreurs × PENALTY)`
+  - C'est le mode actuellement implémenté
+
+- [ ] **Mode MORT_SUBITE** (hardcore)
+  - En cas de **mauvaise paire** (non-match), **RESET complet** :
+    - ❌ Toutes les cartes sont remises face cachée (même les paires trouvées)
+    - ❌ Les points de toutes les équipes sont remis à zéro
+    - ✅ On garde une trace du **meilleur score** atteint avant le reset
+  - La partie continue avec les cartes réinitialisées
+  - Affichage permanent du "High Score" pendant le jeu
+  - Mode très difficile : une seule erreur = tout recommencer
+  - **Note** : En mode multi-équipes, c'est l'erreur de n'importe quelle équipe qui déclenche le reset global
+
+- [ ] **Mode PERFECT** (bonus perfectionniste)
+  - Identique à TO_THE_END, mais avec un gros bonus si **aucune erreur**
+  - `PERFECT_BONUS` : points supplémentaires si erreurs = 0
+  - Encourage la concentration et la stratégie
+  - Exemple : +50 points si toutes les paires trouvées sans erreur
+
+- [ ] **Mode CASCADE** (multiplicateur progressif)
+  - Les paires trouvées **consécutivement** sans erreur augmentent le multiplicateur
+  - Multiplicateur : ×1, ×1.5, ×2, ×2.5, ×3... (plafond : ×5)
+  - Une erreur **reset le multiplicateur** à ×1 (mais garde les paires trouvées)
+  - Encourage les séries de réussite
+  - Affichage du multiplicateur actuel à côté du score
+
+- [ ] **Mode TIME_BONUS** (course contre la montre)
+  - Bonus proportionnel au **temps restant** à la fin
+  - Calcul : `BONUS = temps_restant / temps_total × MAX_TIME_BONUS`
+  - Exemple : Si complété avec 50% du temps restant → +50% du TIME_BONUS max
+  - Encourage la vitesse en plus de la mémoire
+
+- [ ] **Mode ZERO_SUM** (risque élevé)
+  - Score peut devenir **négatif**
+  - Pénalités d'erreur élevées (ex: -20 par erreur)
+  - Points par paire modérés (ex: +15)
+  - Score final peut être négatif (affiché en rouge)
+  - Mode punitif pour experts
+
+### Implémentation
+
+- [ ] **Nouveau champ dans Question MEMORY**
+  ```json
+  {
+    "TYPE": "MEMORY",
+    "MEMORY_MODE": "SOLO" | "CHACUN_SON_TOUR" | "TANT_QUE_JE_GAGNE",
+    "MEMORY_SCORING_MODE": "TO_THE_END" | "MORT_SUBITE" | "PERFECT" | "CASCADE" | "TIME_BONUS" | "ZERO_SUM",
+    "MEMORY_PAIRS": [...],
+    "MEMORY_CONFIG": {
+      "POINTS_PER_PAIR": 10,
+      "ERROR_PENALTY": 0,
+      "COMPLETION_BONUS": 20,
+      "PERFECT_BONUS": 50,         // Pour mode PERFECT
+      "CASCADE_MAX_MULTIPLIER": 5, // Pour mode CASCADE
+      "MAX_TIME_BONUS": 100,       // Pour mode TIME_BONUS
+      // ...
+    }
+  }
+  ```
+
+- [ ] **Structure GameState étendue pour MORT_SUBITE**
+  ```go
+  type GameState struct {
+    // ... champs existants
+    MemoryHighScore     int     // Meilleur score avant reset (mode MORT_SUBITE)
+    MemoryResetCount    int     // Nombre de resets (mode MORT_SUBITE)
+  }
+  ```
+
+- [ ] **Structure GameState étendue pour CASCADE**
+  ```go
+  type GameState struct {
+    // ... champs existants
+    MemoryMultiplier    float64 // Multiplicateur actuel (mode CASCADE)
+    MemoryStreak        int     // Nombre de paires consécutives sans erreur
+  }
+  ```
+
+- [ ] **Logique de reset MORT_SUBITE (engine.go)**
+  ```go
+  // Lors d'un non-match
+  if scoringMode == "MORT_SUBITE" {
+    // Sauvegarder le high score
+    currentScore := calculateCurrentScore()
+    if currentScore > gameState.MemoryHighScore {
+      gameState.MemoryHighScore = currentScore
+    }
+
+    // Reset complet
+    gameState.MemoryMatchedPairs = []int{}
+    gameState.MemoryErrors = 0
+    gameState.MemoryResetCount++
+
+    // Reset scores équipes
+    for teamName := range gameState.MemoryTeamPairs {
+      gameState.MemoryTeamPairs[teamName] = 0
+    }
+
+    // Broadcast reset aux clients
+    broadcastMemoryReset()
+  }
+  ```
+
+- [ ] **Calcul multiplicateur CASCADE**
+  ```go
+  // Lors d'un match
+  if scoringMode == "CASCADE" {
+    gameState.MemoryStreak++
+    multiplier := min(1.0 + float64(gameState.MemoryStreak) * 0.5, cascadeMaxMultiplier)
+    gameState.MemoryMultiplier = multiplier
+  }
+
+  // Lors d'un non-match
+  if scoringMode == "CASCADE" {
+    gameState.MemoryStreak = 0
+    gameState.MemoryMultiplier = 1.0
+  }
+  ```
+
+- [ ] **Interface admin (QuestionsPage)**
+  - Sélecteur de mode de scoring Memory :
+    - Radio buttons ou dropdown : TO_THE_END / MORT_SUBITE / PERFECT / CASCADE / TIME_BONUS / ZERO_SUM
+    - Description courte + icône pour chaque mode
+    - Inputs conditionnels selon le mode (PERFECT_BONUS, CASCADE_MAX_MULTIPLIER, etc.)
+
+- [ ] **Affichages spécifiques par mode**
+
+  **MORT_SUBITE** :
+  - Badge "💀 MORT SUBITE" rouge permanent
+  - Affichage High Score : "🏆 Meilleur : 45 pts"
+  - Compteur de resets : "🔄 Resets : 2"
+  - Animation dramatique lors du reset (écran rouge, son, shake)
+
+  **CASCADE** :
+  - Badge multiplicateur dynamique : "×2.5"
+  - Couleur du badge selon le niveau (×1 blanc, ×3 jaune, ×5 or)
+  - Animation d'augmentation du multiplicateur
+  - Streak visible : "🔥 Série : 5"
+
+  **TIME_BONUS** :
+  - Indicateur temps restant avec projection du bonus
+  - "⏱️ Bonus temps : +34 pts"
+  - Barre de progression temps avec couleur du bonus
+
+### Modes de jeu supplémentaires (propositions)
+
+- [ ] **Mode ELIMINATION** (battle royale)
+  - Multi-équipes uniquement
+  - Chaque équipe a un quota d'erreurs (ex: 3 erreurs max)
+  - Si une équipe dépasse le quota → éliminée
+  - La dernière équipe en jeu gagne
+  - Affichage des cœurs/vies par équipe
+
+- [ ] **Mode SPEED_RUN** (timer par tour)
+  - Multi-équipes avec timer court par tour (ex: 10s)
+  - Si temps écoulé sans retourner 2 cartes → erreur + passe au suivant
+  - Encourage la prise de décision rapide
+  - Affichage d'un petit timer par tour
+
+- [ ] **Mode BLITZ** (cartes éphémères)
+  - Les cartes révélées se cachent plus rapidement (ex: 1.5s au lieu de 3s)
+  - Nécessite mémorisation rapide
+  - Peut être combiné avec d'autres modes
+  - Paramètre : `BLITZ_FLIP_DELAY` (défaut: 1.5s)
+
+### Tableau des combinaisons pertinentes
+
+| Mode de jeu | Mode de points | Difficulté | Description | Cas d'usage |
+|-------------|----------------|------------|-------------|-------------|
+| **SOLO** | TO_THE_END | ⭐ Facile | Une équipe, paires restent visibles | Apprentissage, débutants |
+| **SOLO** | PERFECT | ⭐⭐ Moyen | Une équipe, bonus si aucune erreur | Entraînement concentration |
+| **SOLO** | MORT_SUBITE | ⭐⭐⭐⭐⭐ Extrême | Une équipe, reset complet si erreur | Challenge hardcore |
+| **SOLO** | CASCADE | ⭐⭐⭐ Difficile | Une équipe, multiplicateur progressif | Récompenser les séries |
+| **SOLO** | TIME_BONUS | ⭐⭐ Moyen | Une équipe, bonus temps | Course contre la montre |
+| **CHACUN_SON_TOUR** | TO_THE_END | ⭐⭐ Moyen | Multi-équipes, tour par tour classique | Jeu équitable multi-équipes |
+| **CHACUN_SON_TOUR** | PERFECT | ⭐⭐⭐ Difficile | Multi-équipes, bonus si équipe parfaite | Compétition précision |
+| **CHACUN_SON_TOUR** | CASCADE | ⭐⭐⭐⭐ Très difficile | Multi-équipes, multiplicateur par équipe | Compétition séries |
+| **CHACUN_SON_TOUR** | ELIMINATION | ⭐⭐⭐ Difficile | Multi-équipes, quota d'erreurs | Battle royale |
+| **TANT_QUE_JE_GAGNE** | TO_THE_END | ⭐⭐⭐ Difficile | Multi-équipes, garde la main si match | Récompenser la réussite |
+| **TANT_QUE_JE_GAGNE** | CASCADE | ⭐⭐⭐⭐ Très difficile | Multi-équipes, multiplicateur + garde main | Pro, très compétitif |
+| **TANT_QUE_JE_GAGNE** | MORT_SUBITE | ⭐⭐⭐⭐⭐ Extrême | Multi-équipes, reset global si erreur | Tension maximale |
+| **TANT_QUE_JE_GAGNE** | ZERO_SUM | ⭐⭐⭐⭐ Très difficile | Multi-équipes, score négatif possible | Experts, risque élevé |
+| **SOLO + BLITZ** | TIME_BONUS | ⭐⭐⭐ Difficile | Cartes rapides + bonus temps | Speed run |
+| **CHACUN_SON_TOUR + SPEED_RUN** | TO_THE_END | ⭐⭐⭐ Difficile | Timer par tour, tour par tour | Décisions rapides |
+| **ELIMINATION** | TO_THE_END | ⭐⭐⭐ Difficile | Multi-équipes, élimination progressive | Battle royale memory |
+
+### Combinaisons NON recommandées
+
+| Mode de jeu | Mode de points | Raison |
+|-------------|----------------|--------|
+| SOLO | ELIMINATION | Pas de sens (une seule équipe) |
+| MORT_SUBITE | ZERO_SUM | Trop punitif (double pénalité) |
+| BLITZ | MORT_SUBITE | Quasi impossible (cartes trop rapides + reset) |
+
+### Compatibilité
+
+- ✅ Rétrocompatible : Questions Memory sans `MEMORY_SCORING_MODE` utilisent "TO_THE_END" par défaut
+- ✅ Combinaisons infinies : 3 modes jeu × 6 modes points = 18 variantes de base
+- ✅ Extension future facile : ajouter de nouveaux modes sans casser l'existant
 
 ## Améliorations futures (hors scope initial)
 
