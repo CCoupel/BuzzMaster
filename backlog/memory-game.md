@@ -635,7 +635,56 @@ Statistiques :
   - Équipe la plus performante : Bleu (aucune erreur fatale)
 ```
 
-### Tableau des combinaisons pertinentes
+### Tableau de synthèse des caractéristiques
+
+Ce tableau synthétise toutes les dimensions des modes Memory (jeu + scoring).
+
+| Mode | Solo/Multi | Changement équipe | Reset cartes | Reset scores | Élimination | Multiplicateur | Bonus temps | High Score | Difficulté |
+|------|------------|-------------------|--------------|--------------|-------------|----------------|-------------|------------|------------|
+| **SOLO + TO_THE_END** | Solo | - | ❌ Non | ❌ Non | ❌ Non | ❌ Non | ❌ Non | ❌ Non | ⭐ Facile |
+| **SOLO + PERFECT** | Solo | - | ❌ Non | ❌ Non | ❌ Non | ❌ Non | ❌ Non | ❌ Non | ⭐⭐ Moyen |
+| **SOLO + CASCADE** | Solo | - | ❌ Non | ❌ Non | ❌ Non | ✅ Progressif | ❌ Non | ❌ Non | ⭐⭐⭐ Difficile |
+| **SOLO + MORT_SUBITE** | Solo | - | ✅ Si erreur | ✅ Si erreur | ❌ Non | ❌ Non | ❌ Non | ✅ Oui | ⭐⭐⭐⭐⭐ Extrême |
+| **SOLO + TIME_BONUS** | Solo | - | ❌ Non | ❌ Non | ❌ Non | ❌ Non | ✅ Fin partie | ❌ Non | ⭐⭐ Moyen |
+| **SOLO + ZERO_SUM** | Solo | - | ❌ Non | ❌ Non | ❌ Non | ❌ Non | ❌ Non | ❌ Non | ⭐⭐⭐⭐ Très difficile |
+| **CHACUN_SON_TOUR + TO_THE_END** | Multi | Après chaque tour | ❌ Non | ❌ Non | ❌ Non | ❌ Non | ❌ Non | ❌ Non | ⭐⭐ Moyen |
+| **CHACUN_SON_TOUR + PERFECT** | Multi | Après chaque tour | ❌ Non | ❌ Non | ❌ Non | ❌ Non | ❌ Non | ❌ Non | ⭐⭐⭐ Difficile |
+| **CHACUN_SON_TOUR + CASCADE** | Multi | Après chaque tour | ❌ Non | ❌ Non | ❌ Non | ✅ Par équipe | ❌ Non | ❌ Non | ⭐⭐⭐⭐ Très difficile |
+| **CHACUN_SON_TOUR + ELIMINATION** | Multi | Après chaque tour | ❌ Non | ❌ Non | ✅ Quota erreurs | ❌ Non | ❌ Non | ❌ Non | ⭐⭐⭐ Difficile |
+| **TANT_QUE_JE_GAGNE + TO_THE_END** | Multi | Si erreur | ❌ Non | ❌ Non | ❌ Non | ❌ Non | ❌ Non | ❌ Non | ⭐⭐⭐ Difficile |
+| **TANT_QUE_JE_GAGNE + CASCADE** | Multi | Si erreur | ❌ Non | ❌ Non | ❌ Non | ✅ Par équipe | ❌ Non | ❌ Non | ⭐⭐⭐⭐ Très difficile |
+| **TANT_QUE_JE_GAGNE + MORT_SUBITE** | Multi | Si erreur | ✅ Si erreur | ✅ Si erreur | ❌ Non | ❌ Non | ❌ Non | ✅ Oui | ⭐⭐⭐⭐⭐ Extrême |
+| **TANT_QUE_JE_GAGNE + ZERO_SUM** | Multi | Si erreur | ❌ Non | ❌ Non | ❌ Non | ❌ Non | ❌ Non | ❌ Non | ⭐⭐⭐⭐ Très difficile |
+| **MAILLON_FAIBLE** | Multi | Si erreur | ✅ Si erreur | ✅ Si erreur | ❌ Non | ❌ Non | ❌ Non | ✅ Oui | ⭐⭐⭐⭐⭐ Extrême |
+| **MAILLON_FAIBLE + bonus chaîne** | Multi | Si erreur | ✅ Si erreur | ✅ Si erreur | ❌ Non | ✅ Par équipe | ❌ Non | ✅ Oui | ⭐⭐⭐⭐⭐ Extrême |
+| **MAILLON_FAIBLE + élimination** | Multi | Si erreur | ✅ Si erreur | ✅ Si erreur | ✅ Quota erreurs | ❌ Non | ❌ Non | ✅ Oui | ⭐⭐⭐⭐⭐ Extrême |
+| **MAILLON_FAIBLE + chaîne + élim** | Multi | Si erreur | ✅ Si erreur | ✅ Si erreur | ✅ Quota erreurs | ✅ Par équipe | ❌ Non | ✅ Oui | ⭐⭐⭐⭐⭐ Extrême |
+| **ELIMINATION + TO_THE_END** | Multi | Après chaque tour | ❌ Non | ❌ Non | ✅ Quota erreurs | ❌ Non | ❌ Non | ❌ Non | ⭐⭐⭐ Difficile |
+| **SPEED_RUN + TO_THE_END** | Multi | Si timeout | ❌ Non | ❌ Non | ❌ Non | ❌ Non | ❌ Non | ❌ Non | ⭐⭐⭐ Difficile |
+| **BLITZ + TIME_BONUS** | Solo/Multi | Selon mode | ❌ Non | ❌ Non | ❌ Non | ❌ Non | ✅ Fin partie | ❌ Non | ⭐⭐⭐ Difficile |
+
+**Légende :**
+- **Solo/Multi** : Nombre d'équipes qui jouent
+- **Changement équipe** : Quand passe-t-on à l'équipe suivante ? (`-` = Solo)
+- **Reset cartes** : Les cartes matchées sont-elles remises face cachée ?
+- **Reset scores** : Les scores sont-ils remis à zéro ?
+- **Élimination** : Des équipes peuvent-elles être éliminées ?
+- **Multiplicateur** : Y a-t-il un multiplicateur de points progressif ?
+- **Bonus temps** : Y a-t-il un bonus lié au temps restant ?
+- **High Score** : Y a-t-il un high score conservé après reset ?
+- **Difficulté** : Niveau de difficulté global (⭐ à ⭐⭐⭐⭐⭐)
+
+**Notes importantes :**
+1. **MAILLON_FAIBLE** est un mode **hybride autonome** qui :
+   - Combine tour par tour (continue si match) + reset complet si erreur
+   - Ne se combine PAS avec d'autres modes de points (il a son propre système)
+   - Peut avoir 2 options : bonus chaîne (multiplicateur) et/ou élimination
+
+2. **BLITZ** est un **modificateur** applicable à n'importe quel mode (cartes se cachent plus vite)
+
+3. **SPEED_RUN** et **ELIMINATION** sont des **modes de jeu** à part entière, combinables avec modes de points
+
+### Tableau des combinaisons pertinentes (cas d'usage)
 
 | Mode de jeu | Mode de points | Difficulté | Description | Cas d'usage |
 |-------------|----------------|------------|-------------|-------------|
