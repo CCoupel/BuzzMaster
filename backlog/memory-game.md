@@ -637,56 +637,59 @@ Statistiques :
 
 ### Tableau de synthèse des caractéristiques
 
-#### Tableau 1 : Options activables par mode de jeu
+#### Tableau 1 : Cycles de jeu et modificateurs activables
 
-Ce tableau montre quelles options de scoring sont **combinables** avec chaque mode de jeu.
+Ce tableau montre les **cycles de jeu** (comment le jeu se déroule) en lignes et les **modificateurs activables** en colonnes.
 
-| Mode de jeu | Solo/Multi | TO_THE_END | PERFECT | CASCADE | MORT_SUBITE | TIME_BONUS | ZERO_SUM | CHAIN_BONUS | ELIMINATION | Notes |
-|-------------|------------|------------|---------|---------|-------------|------------|----------|-------------|-------------|-------|
-| **SOLO** | Solo | ✅ Défaut | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ | ❌ | Tous les modes de scoring sauf options multi-équipes |
-| **CHACUN_SON_TOUR** | Multi | ✅ Défaut | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ | ✅ | Rotation stricte après chaque tour |
-| **TANT_QUE_JE_GAGNE** | Multi | ✅ Défaut | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ | ✅ | Équipe continue si match, change si erreur |
-| **MAILLON_FAIBLE** | Multi | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ✅ Option | ✅ Option | Mode **hybride autonome**, non combinable avec modes de scoring |
-| **ELIMINATION** | Multi | ✅ Défaut | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ | ✅ Intégré | Mode de jeu avec élimination intégrée |
-| **SPEED_RUN** | Multi | ✅ Défaut | ✅ | ✅ | ⚠️ Difficile | ✅ | ✅ | ❌ | ✅ | Timer par tour, combinable avec scoring |
-| **BLITZ** | Solo/Multi | ✅ | ✅ | ✅ | ⚠️ Extrême | ✅ | ✅ | ❌ | ✅ | **Modificateur** applicable à tous les modes |
+| Cycle de jeu | Description du cycle | Solo/Multi | Scoring | Multiplicateur | Reset | Timer | Élimination | Vitesse cartes |
+|--------------|---------------------|------------|---------|----------------|-------|-------|-------------|----------------|
+| **SOLO** | Une seule équipe joue. Tous les joueurs de l'équipe peuvent retourner les cartes. Partie se termine quand toutes les paires sont trouvées ou timer épuisé. | Solo | ✅ Tous | ✅ CASCADE | ✅ MORT_SUBITE | ✅ USE_TIMER | ❌ | ✅ BLITZ |
+| **CHACUN_SON_TOUR** | Multi-équipes en rotation stricte. Après chaque tentative (2 cartes), on passe à l'équipe suivante, que la paire soit trouvée ou non. Équipe 1 → Équipe 2 → Équipe 3 → Équipe 1... | Multi | ✅ Tous | ✅ CASCADE | ✅ MORT_SUBITE | ✅ USE_TIMER | ✅ ELIMINATION | ✅ BLITZ |
+| **TANT_QUE_JE_GAGNE** | Multi-équipes avec garde de la main. Une équipe continue de jouer tant qu'elle trouve des paires valides. Dès qu'elle fait une erreur, on passe à l'équipe suivante. | Multi | ✅ Tous | ✅ CASCADE | ✅ MORT_SUBITE | ✅ USE_TIMER | ✅ ELIMINATION | ✅ BLITZ |
+| **MAILLON_FAIBLE** | Multi-équipes hybride : combine "garde de la main" + reset global. L'équipe continue si elle trouve des paires. Si erreur → **RESET COMPLET** (toutes cartes cachées, tous scores à zéro) + passage à l'équipe suivante. High score conservé. | Multi | ❌ Intégré | ✅ CHAIN_BONUS (option) | ✅ Reset intégré | ✅ USE_TIMER | ✅ ELIMINATION (option) | ✅ BLITZ |
+
+**Modificateurs détaillés (colonnes) :**
+
+| Modificateur | Type | Description | Paramètre config |
+|--------------|------|-------------|------------------|
+| **Scoring** | Modes de points | TO_THE_END (défaut), PERFECT, TIME_BONUS, ZERO_SUM | `MEMORY_SCORING_MODE` |
+| **Multiplicateur** | Bonus points | CASCADE : multiplicateur progressif ×1 → ×5 sur les paires consécutives sans erreur | `CASCADE_MAX_MULTIPLIER` |
+| **Reset** | Pénalité | MORT_SUBITE : reset cartes + scores si erreur (conserve high score) | - |
+| **Timer** | Contrainte temps | USE_TIMER: true = timer global, false = temps illimité | `USE_TIMER` dans MEMORY_CONFIG |
+| **Élimination** | Battle royale | Quota d'erreurs par équipe (ex: 3 max), équipe éliminée si dépassé | `ELIMINATION_ENABLED`, `ERROR_QUOTA` |
+| **Vitesse cartes** | Difficulté mémoire | BLITZ : cartes se cachent plus vite (1.5s au lieu de 3s) | `BLITZ_FLIP_DELAY` |
+
+**Combinaisons spéciales :**
+
+| Combinaison | Description | Exemple |
+|-------------|-------------|---------|
+| **CHACUN_SON_TOUR + SPEED_RUN** | Tour par tour avec timer court par tour (ex: 10s). Si timeout → erreur + équipe suivante. | Jeu rapide, décisions sous pression |
+| **TANT_QUE_JE_GAGNE + CASCADE** | Équipe accumule un multiplicateur tant qu'elle trouve des paires. Erreur → reset multiplicateur + change équipe. | Compétition intense, séries récompensées |
+| **MAILLON_FAIBLE + CHAIN_BONUS + ELIMINATION** | Combo extrême : garde main + multiplicateur + reset global + élimination. | Tension maximale, survie |
+| **SOLO + BLITZ + TIME_BONUS** | Speed run en solo : cartes rapides + bonus temps restant. | Course contre la montre |
 
 **Légende :**
-- ✅ **Compatible** : L'option peut être activée avec ce mode de jeu
-- ✅ **Défaut** : Mode de scoring par défaut si non spécifié
-- ✅ **Option** : Option activable dans la configuration du mode (pas un mode de scoring séparé)
-- ✅ **Intégré** : Fonctionnalité intégrée dans le mode de jeu
-- ❌ **Non compatible** : Impossible de combiner
-- ⚠️ **Difficile/Extrême** : Techniquement possible mais très difficile à jouer
+- ✅ **Tous** : Tous les modes de scoring sont compatibles (TO_THE_END, PERFECT, TIME_BONUS, ZERO_SUM)
+- ✅ **Nom** : Modificateur spécifique activable
+- ✅ **Option** : Activable via paramètre booléen dans config
+- ❌ **Intégré** : Système de scoring propre, non combinable avec autres modes
+- ❌ : Non compatible
 
-**Colonnes expliquées :**
-- **TO_THE_END** : Paires restent visibles, scoring classique
-- **PERFECT** : Bonus si aucune erreur
-- **CASCADE** : Multiplicateur progressif (×1 à ×5)
-- **MORT_SUBITE** : Reset complet si erreur (cartes + scores)
-- **TIME_BONUS** : Bonus proportionnel au temps restant
-- **ZERO_SUM** : Score peut être négatif
-- **CHAIN_BONUS** : Multiplicateur pendant la série (spécifique MAILLON_FAIBLE)
-- **ELIMINATION** : Quota d'erreurs, équipes éliminées
+**Notes importantes :**
 
-**Cas particuliers :**
+1. **MAILLON_FAIBLE** est unique :
+   - **NE SE COMBINE PAS** avec les modes de scoring standards
+   - Reset intégré dans le cycle de jeu (pas un modificateur)
+   - 2 options bonus : CHAIN_BONUS (multiplicateur) et ELIMINATION (quota erreurs)
 
-1. **MAILLON_FAIBLE** :
-   - **NE SE COMBINE PAS** avec les modes de scoring (TO_THE_END, PERFECT, etc.)
-   - A son propre système de scoring intégré (reset si erreur)
-   - 2 options activables indépendantes :
-     - `CHAIN_BONUS_ENABLED: true/false` → Active le multiplicateur CASCADE
-     - `ELIMINATION_ENABLED: true/false` → Active le quota d'erreurs + élimination
+2. **Modificateurs indépendants** :
+   - **BLITZ** s'applique à tous les cycles (change juste la vitesse des cartes)
+   - **ELIMINATION** s'applique aux cycles multi-équipes (sauf MAILLON_FAIBLE où c'est une option)
+   - **Timer** peut être désactivé sur tous les cycles (temps illimité)
 
-2. **BLITZ** :
-   - N'est **PAS un mode de jeu**, c'est un **modificateur**
-   - S'applique à n'importe quel mode (SOLO, CHACUN_SON_TOUR, etc.)
-   - Change uniquement le `FLIP_DELAY` (1.5s au lieu de 3s)
-
-3. **ELIMINATION** :
-   - Peut être un mode de jeu à part entière (ligne ELIMINATION)
-   - OU une option dans MAILLON_FAIBLE (colonne ELIMINATION)
-   - OU une option combinée avec CHACUN_SON_TOUR/TANT_QUE_JE_GAGNE
+3. **SPEED_RUN** n'est pas un cycle :
+   - C'est une variante de CHACUN_SON_TOUR avec timer par tour au lieu de timer global
+   - Ajout d'un timeout qui compte comme erreur
 
 #### Tableau 2 : Caractéristiques détaillées par combinaison
 
