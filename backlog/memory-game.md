@@ -318,7 +318,7 @@ Les modes de points définissent **comment les points sont calculés** et **ce q
   ```json
   {
     "TYPE": "MEMORY",
-    "MEMORY_MODE": "SOLO" | "CHACUN_SON_TOUR" | "TANT_QUE_JE_GAGNE",
+    "MEMORY_MODE": "SOLO" | "CHACUN_SON_TOUR" | "TANT_QUE_JE_GAGNE" | "MAILLON_FAIBLE",
     "MEMORY_SCORING_MODE": "TO_THE_END" | "MORT_SUBITE" | "PERFECT" | "CASCADE" | "TIME_BONUS" | "ZERO_SUM",
     "MEMORY_PAIRS": [...],
     "MEMORY_CONFIG": {
@@ -328,6 +328,9 @@ Les modes de points définissent **comment les points sont calculés** et **ce q
       "PERFECT_BONUS": 50,         // Pour mode PERFECT
       "CASCADE_MAX_MULTIPLIER": 5, // Pour mode CASCADE
       "MAX_TIME_BONUS": 100,       // Pour mode TIME_BONUS
+      "CHAIN_BONUS_ENABLED": false,   // Pour mode MAILLON_FAIBLE
+      "ELIMINATION_ENABLED": false,   // Pour mode MAILLON_FAIBLE
+      "ERROR_QUOTA": 3,               // Pour mode MAILLON_FAIBLE + ELIMINATION
       // ...
     }
   }
@@ -392,6 +395,74 @@ Les modes de points définissent **comment les points sont calculés** et **ce q
   }
   ```
 
+- [ ] **Logique MAILLON_FAIBLE (engine.go)**
+  ```go
+  // Extension GameState pour MAILLON_FAIBLE
+  type GameState struct {
+    // ... champs existants
+    MemoryTeamErrors    map[string]int  // Nombre d'erreurs par équipe (pour élimination)
+    MemoryEliminatedTeams []string       // Équipes éliminées
+  }
+
+  // Lors d'un match (équipe continue)
+  if gameMode == "MAILLON_FAIBLE" {
+    // Attribuer la paire à l'équipe courante
+    gameState.MemoryTeamPairs[currentTeam]++
+
+    // Si bonus chaîne activé
+    if config.ChainBonusEnabled {
+      gameState.MemoryStreak++
+      gameState.MemoryMultiplier = min(1.0 + float64(gameState.MemoryStreak) * 0.5, config.CascadeMaxMultiplier)
+    }
+
+    // L'équipe continue (pas de changement d'équipe)
+  }
+
+  // Lors d'un non-match (reset + élimination optionnelle)
+  if gameMode == "MAILLON_FAIBLE" {
+    // Sauvegarder high score
+    currentScore := calculateCurrentScore()
+    if currentScore > gameState.MemoryHighScore {
+      gameState.MemoryHighScore = currentScore
+    }
+
+    // Incrémenter erreurs de l'équipe courante
+    gameState.MemoryTeamErrors[currentTeam]++
+
+    // Élimination si quota dépassé
+    if config.EliminationEnabled && gameState.MemoryTeamErrors[currentTeam] >= config.ErrorQuota {
+      gameState.MemoryEliminatedTeams = append(gameState.MemoryEliminatedTeams, currentTeam)
+      broadcastTeamEliminated(currentTeam)
+    }
+
+    // Reset complet (MORT_SUBITE)
+    gameState.MemoryMatchedPairs = []int{}
+    gameState.MemoryFlippedCards = []string{}
+    for teamName := range gameState.MemoryTeamPairs {
+      gameState.MemoryTeamPairs[teamName] = 0
+    }
+
+    // Reset multiplicateur
+    gameState.MemoryStreak = 0
+    gameState.MemoryMultiplier = 1.0
+    gameState.MemoryResetCount++
+
+    // Passer à l'équipe suivante (en sautant les éliminées)
+    nextTeam := getNextNonEliminatedTeam()
+    gameState.MemoryCurrentTeam = nextTeam
+
+    // Broadcast reset dramatique
+    broadcastMemoryReset()
+  }
+
+  // Vérifier fin de partie
+  if len(gameState.MemoryEliminatedTeams) >= totalTeams - 1 {
+    // Une seule équipe reste → game over
+    winningTeam := getLastStandingTeam()
+    endGameWithWinner(winningTeam)
+  }
+  ```
+
 - [ ] **Interface admin (QuestionsPage)**
   - Sélecteur de mode de scoring Memory :
     - Radio buttons ou dropdown : TO_THE_END / MORT_SUBITE / PERFECT / CASCADE / TIME_BONUS / ZERO_SUM
@@ -417,6 +488,26 @@ Les modes de points définissent **comment les points sont calculés** et **ce q
   - "⏱️ Bonus temps : +34 pts"
   - Barre de progression temps avec couleur du bonus
 
+  **MAILLON_FAIBLE** :
+  - Badge mode permanent : "⚡ MAILLON FAIBLE" avec couleur équipe courante
+  - Indicateur équipe qui joue : "🎮 Tour de : [Équipe]" (grande bannière colorée)
+  - High Score visible en permanence : "🏆 Meilleur : 42 pts"
+  - Compteur de resets global : "🔄 Resets : 5"
+  - Si bonus chaîne activé : Badge multiplicateur "×3.5" + "🔥 Série : 7"
+  - Si élimination activée :
+    - Cœurs/vies par équipe : "❤️❤️🖤" (ex: 2/3 vies restantes)
+    - Liste équipes éliminées (grisées, barrées) : "~~Les Rouges~~"
+    - Badge "ÉLIMINÉ" rouge sur équipe éliminée
+  - Animation dramatique lors du reset :
+    - Écran rouge clignotant
+    - Shake de toute la grille
+    - Son de buzzer négatif
+    - Affichage temporaire "❌ ERREUR ! RESET COMPLET !"
+  - Animation lors d'élimination :
+    - Équipe qui disparaît en fondu
+    - Badge "💀 ÉLIMINÉE" qui apparaît
+    - Son dramatique
+
 ### Modes de jeu supplémentaires (propositions)
 
 - [ ] **Mode ELIMINATION** (battle royale)
@@ -438,6 +529,112 @@ Les modes de points définissent **comment les points sont calculés** et **ce q
   - Peut être combiné avec d'autres modes
   - Paramètre : `BLITZ_FLIP_DELAY` (défaut: 1.5s)
 
+- [ ] **Mode MAILLON_FAIBLE** (hybride tour par tour + reset)
+  - **Hybride** : Combine CHACUN_SON_TOUR + MORT_SUBITE + options CASCADE/ELIMINATION
+  - Multi-équipes uniquement
+  - **Règles de base** :
+    - Les équipes jouent à tour de rôle (rotation stricte)
+    - Tant que l'équipe trouve des paires valides, elle continue de jouer
+    - Si une paire est invalide → **RESET COMPLET** pour toutes les équipes :
+      - ❌ Toutes les cartes remises face cachée
+      - ❌ Tous les points retombent à zéro
+      - ✅ High Score conservé
+    - Passage à l'équipe suivante après le reset
+  - **Option bonus chaîne** (activable) :
+    - Multiplicateur CASCADE pendant la série de l'équipe
+    - Reset du multiplicateur lors de l'erreur (en plus du reset global)
+  - **Option élimination** (activable) :
+    - Quota d'erreurs par équipe (ex: 3 erreurs max)
+    - L'équipe qui fait l'erreur est éliminée (ne joue plus)
+    - Les autres équipes continuent avec reset des cartes
+    - Dernière équipe en jeu gagne
+  - **Paramètres configurables** :
+    - `CHAIN_BONUS_ENABLED` : activer le multiplicateur (bool)
+    - `ELIMINATION_ENABLED` : activer l'élimination (bool)
+    - `ERROR_QUOTA` : nombre d'erreurs avant élimination (int, si ELIMINATION_ENABLED)
+  - Mode extrêmement tendu : combinaison la plus difficile
+  - Référence au jeu TV "Le Maillon Faible"
+
+### Scénario d'usage : Mode MAILLON_FAIBLE (avec bonus chaîne + élimination)
+
+```
+Initial : 6 paires à trouver, 3 équipes (Rouge, Bleu, Vert)
+Quota d'erreurs : 2 max par équipe
+Bonus chaîne : activé (multiplicateur)
+
+Tour 1 - Équipe Rouge (×1.0) :
+  - Retourne carte 1 (chat) + carte 3 (chat)
+  - Match ! → +10 pts (×1.0) = 10 pts pour Rouge
+  - Multiplicateur → ×1.5
+  - Rouge continue (car match)
+
+Tour 2 - Équipe Rouge (×1.5) :
+  - Retourne carte 2 (oiseau) + carte 4 (oiseau)
+  - Match ! → +10 pts (×1.5) = 15 pts pour Rouge
+  - Total Rouge : 25 pts
+  - Multiplicateur → ×2.0
+  - Rouge continue
+
+Tour 3 - Équipe Rouge (×2.0) :
+  - Retourne carte 5 (chien) + carte 7 (poisson)
+  - Non-match ! ❌
+  - Rouge Erreur #1 (sur 2 max)
+  → RESET COMPLET :
+    - Toutes les cartes face cachée
+    - Scores : Rouge 0, Bleu 0, Vert 0
+    - High Score : 25 pts (conservé)
+    - Multiplicateur reset → ×1.0
+    - Compteur resets : 1
+  → Passe à Équipe Bleu
+
+Tour 4 - Équipe Bleu (×1.0) :
+  - Retourne carte 1 (chat) + carte 3 (chat)
+  - Match ! → +10 pts pour Bleu
+  - Multiplicateur → ×1.5
+  - Bleu continue
+
+Tour 5 - Équipe Bleu (×1.5) :
+  - Retourne carte 6 (souris) + carte 8 (lapin)
+  - Non-match ! ❌
+  - Bleu Erreur #1 (sur 2 max)
+  → RESET COMPLET (compteur resets : 2)
+  → Passe à Équipe Vert
+
+Tour 6 - Équipe Vert (×1.0) :
+  - Retourne carte 2 (oiseau) + carte 8 (lapin)
+  - Non-match ! ❌
+  - Vert Erreur #1 (sur 2 max)
+  → RESET COMPLET (compteur resets : 3)
+  → Passe à Équipe Rouge
+
+Tour 7 - Équipe Rouge (×1.0) :
+  - Retourne carte 5 (chien) + carte 1 (chat)
+  - Non-match ! ❌
+  - Rouge Erreur #2 (quota atteint)
+  → 💀 ÉQUIPE ROUGE ÉLIMINÉE
+  → RESET COMPLET (compteur resets : 4)
+  → Passe à Équipe Bleu
+
+Tour 8 - Équipe Bleu (×1.0) :
+  - Retourne carte 1 (chat) + carte 3 (chat)
+  - Match ! → +10 pts
+  - Bleu continue...
+  - (série de 6 matches consécutifs avec multiplicateurs croissants)
+  - Bleu complète toutes les paires !
+  → High Score final : 95 pts (avec multiplicateurs)
+  → ÉQUIPE BLEU GAGNE
+
+Équipes finales :
+  🥇 Bleu : 95 pts (gagnant)
+  🥈 Vert : 0 pts (éliminé)
+  🥉 Rouge : 0 pts (éliminé)
+
+Statistiques :
+  - High Score de la partie : 95 pts
+  - Nombre de resets : 7
+  - Équipe la plus performante : Bleu (aucune erreur fatale)
+```
+
 ### Tableau des combinaisons pertinentes
 
 | Mode de jeu | Mode de points | Difficulté | Description | Cas d'usage |
@@ -458,6 +655,9 @@ Les modes de points définissent **comment les points sont calculés** et **ce q
 | **SOLO + BLITZ** | TIME_BONUS | ⭐⭐⭐ Difficile | Cartes rapides + bonus temps | Speed run |
 | **CHACUN_SON_TOUR + SPEED_RUN** | TO_THE_END | ⭐⭐⭐ Difficile | Timer par tour, tour par tour | Décisions rapides |
 | **ELIMINATION** | TO_THE_END | ⭐⭐⭐ Difficile | Multi-équipes, élimination progressive | Battle royale memory |
+| **MAILLON_FAIBLE** | - | ⭐⭐⭐⭐⭐ Extrême | Tour par tour + reset global si erreur | "Le Maillon Faible" TV |
+| **MAILLON_FAIBLE + bonus chaîne** | - | ⭐⭐⭐⭐⭐ Extrême | + multiplicateur CASCADE pendant série | Très compétitif, risque max |
+| **MAILLON_FAIBLE + élimination** | - | ⭐⭐⭐⭐⭐ Extrême | + quota erreurs, élimination équipes | Survie, tension maximale |
 
 ### Combinaisons NON recommandées
 
@@ -470,7 +670,9 @@ Les modes de points définissent **comment les points sont calculés** et **ce q
 ### Compatibilité
 
 - ✅ Rétrocompatible : Questions Memory sans `MEMORY_SCORING_MODE` utilisent "TO_THE_END" par défaut
-- ✅ Combinaisons infinies : 3 modes jeu × 6 modes points = 18 variantes de base
+- ✅ Rétrocompatible : Questions Memory sans `MEMORY_MODE` utilisent "SOLO" par défaut
+- ✅ Combinaisons infinies : 4 modes jeu × 6 modes points = 24 variantes de base (+ modes hybrides)
+- ✅ MAILLON_FAIBLE est un mode hybride autonome (pas combinable avec d'autres modes de points)
 - ✅ Extension future facile : ajouter de nouveaux modes sans casser l'existant
 
 ## Améliorations futures (hors scope initial)
