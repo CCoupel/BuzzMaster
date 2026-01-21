@@ -637,6 +637,59 @@ Statistiques :
 
 ### Tableau de synthèse des caractéristiques
 
+#### Tableau 1 : Options activables par mode de jeu
+
+Ce tableau montre quelles options de scoring sont **combinables** avec chaque mode de jeu.
+
+| Mode de jeu | Solo/Multi | TO_THE_END | PERFECT | CASCADE | MORT_SUBITE | TIME_BONUS | ZERO_SUM | CHAIN_BONUS | ELIMINATION | Notes |
+|-------------|------------|------------|---------|---------|-------------|------------|----------|-------------|-------------|-------|
+| **SOLO** | Solo | ✅ Défaut | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ | ❌ | Tous les modes de scoring sauf options multi-équipes |
+| **CHACUN_SON_TOUR** | Multi | ✅ Défaut | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ | ✅ | Rotation stricte après chaque tour |
+| **TANT_QUE_JE_GAGNE** | Multi | ✅ Défaut | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ | ✅ | Équipe continue si match, change si erreur |
+| **MAILLON_FAIBLE** | Multi | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ✅ Option | ✅ Option | Mode **hybride autonome**, non combinable avec modes de scoring |
+| **ELIMINATION** | Multi | ✅ Défaut | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ | ✅ Intégré | Mode de jeu avec élimination intégrée |
+| **SPEED_RUN** | Multi | ✅ Défaut | ✅ | ✅ | ⚠️ Difficile | ✅ | ✅ | ❌ | ✅ | Timer par tour, combinable avec scoring |
+| **BLITZ** | Solo/Multi | ✅ | ✅ | ✅ | ⚠️ Extrême | ✅ | ✅ | ❌ | ✅ | **Modificateur** applicable à tous les modes |
+
+**Légende :**
+- ✅ **Compatible** : L'option peut être activée avec ce mode de jeu
+- ✅ **Défaut** : Mode de scoring par défaut si non spécifié
+- ✅ **Option** : Option activable dans la configuration du mode (pas un mode de scoring séparé)
+- ✅ **Intégré** : Fonctionnalité intégrée dans le mode de jeu
+- ❌ **Non compatible** : Impossible de combiner
+- ⚠️ **Difficile/Extrême** : Techniquement possible mais très difficile à jouer
+
+**Colonnes expliquées :**
+- **TO_THE_END** : Paires restent visibles, scoring classique
+- **PERFECT** : Bonus si aucune erreur
+- **CASCADE** : Multiplicateur progressif (×1 à ×5)
+- **MORT_SUBITE** : Reset complet si erreur (cartes + scores)
+- **TIME_BONUS** : Bonus proportionnel au temps restant
+- **ZERO_SUM** : Score peut être négatif
+- **CHAIN_BONUS** : Multiplicateur pendant la série (spécifique MAILLON_FAIBLE)
+- **ELIMINATION** : Quota d'erreurs, équipes éliminées
+
+**Cas particuliers :**
+
+1. **MAILLON_FAIBLE** :
+   - **NE SE COMBINE PAS** avec les modes de scoring (TO_THE_END, PERFECT, etc.)
+   - A son propre système de scoring intégré (reset si erreur)
+   - 2 options activables indépendantes :
+     - `CHAIN_BONUS_ENABLED: true/false` → Active le multiplicateur CASCADE
+     - `ELIMINATION_ENABLED: true/false` → Active le quota d'erreurs + élimination
+
+2. **BLITZ** :
+   - N'est **PAS un mode de jeu**, c'est un **modificateur**
+   - S'applique à n'importe quel mode (SOLO, CHACUN_SON_TOUR, etc.)
+   - Change uniquement le `FLIP_DELAY` (1.5s au lieu de 3s)
+
+3. **ELIMINATION** :
+   - Peut être un mode de jeu à part entière (ligne ELIMINATION)
+   - OU une option dans MAILLON_FAIBLE (colonne ELIMINATION)
+   - OU une option combinée avec CHACUN_SON_TOUR/TANT_QUE_JE_GAGNE
+
+#### Tableau 2 : Caractéristiques détaillées par combinaison
+
 Ce tableau synthétise toutes les dimensions des modes Memory (jeu + scoring).
 
 | Mode | Solo/Multi | Changement équipe | Reset cartes | Reset scores | Élimination | Multiplicateur | Bonus temps | High Score | Difficulté |
