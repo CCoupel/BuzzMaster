@@ -193,6 +193,98 @@ Task({
 
 **Action** : Lance l'agent DEPLOY sur l'environnement spécifié
 
+### Commande `/backlog [description]`
+
+**Format** :
+- `/backlog` (sans argument) → Affiche le backlog complet
+- `/backlog <description>` → Ajoute une nouvelle entrée au backlog
+
+**Exemples** :
+- `/backlog` → Affiche le contenu de tous les fichiers dans `backlog/`
+- `/backlog Mode SPEED_RUN pour Memory avec timer par tour` → Ajoute cette entrée au backlog approprié
+
+**Action sans argument** :
+1. Lister tous les fichiers dans `/home/user/BuzzMaster/backlog/`
+2. Lire et présenter le contenu de chaque fichier
+3. Afficher les Phases complétées (✅) et à faire (⬜)
+
+**Code d'exécution (lecture)** :
+```javascript
+// Détecté : /backlog
+// 1. Lister les fichiers backlog
+const backlogFiles = glob("backlog/*.md")
+
+// 2. Lire chaque fichier
+for (file of backlogFiles) {
+  const content = Read(file)
+  // Présenter le contenu avec formatage
+}
+
+// 3. Résumer l'état
+// - Nombre de phases totales
+// - Phases complétées
+// - Phases en cours
+// - Prochaines phases prioritaires
+```
+
+**Action avec argument** :
+1. Analyser la description fournie
+2. Déterminer le fichier backlog approprié (ex: `memory-game.md`, `ui-improvements.md`, etc.)
+3. Ajouter l'entrée dans la section appropriée
+4. Formater selon le template Markdown du backlog
+5. Commit avec message `docs(backlog): Add [description]`
+
+**Code d'exécution (ajout)** :
+```javascript
+// Détecté : /backlog Mode SPEED_RUN pour Memory
+const description = "Mode SPEED_RUN pour Memory avec timer par tour"
+
+// 1. Identifier le fichier cible
+const targetFile = "backlog/memory-game.md" // ou autre selon contexte
+
+// 2. Lire le fichier
+const content = Read(targetFile)
+
+// 3. Ajouter l'entrée dans la section appropriée
+// Format :
+// - [ ] **Mode SPEED_RUN** (timer par tour)
+//   - Multi-équipes avec timer court par tour (ex: 10s)
+//   - Si temps écoulé sans retourner 2 cartes → erreur + équipe suivante
+//   - Encourage la prise de décision rapide
+//   - Affichage d'un petit timer par tour
+
+// 4. Écrire le fichier mis à jour
+Write(targetFile, updatedContent)
+
+// 5. Commit
+git commit -m "docs(backlog): Add SPEED_RUN mode for Memory"
+```
+
+**Template d'entrée backlog** :
+```markdown
+- [ ] **[Nom de la feature]** ([description courte])
+  - [Détail 1]
+  - [Détail 2]
+  - [Détail technique si pertinent]
+  - [Impact / Bénéfice utilisateur]
+```
+
+**Validation** :
+Après ajout, demander à l'utilisateur :
+```
+J'ai ajouté l'entrée suivante au backlog (backlog/memory-game.md) :
+
+- [ ] **Mode SPEED_RUN** (timer par tour)
+  - Multi-équipes avec timer court par tour (ex: 10s)
+  - ...
+
+Veux-tu :
+1. Modifier l'entrée
+2. La déplacer vers un autre fichier backlog
+3. L'implémenter immédiatement avec /feature
+4. OK comme ça
+```
+
 ---
 
 ## 🧠 Décision intelligente du workflow
