@@ -239,13 +239,96 @@ Tu dois :
 
 ---
 
+## Versioning (IMPORTANT)
+
+**Rôle de l'agent DEV** : Tu es responsable de l'incrémentation du **z** (version patch) à chaque cycle de développement.
+
+### Règle de versioning
+
+Format : `x.y.z` (majeur.mineur.patch)
+
+- **x** (majeur) : Breaking change, changement d'architecture (rarement modifié)
+- **y** (mineur) : Nouvelle feature (géré par l'agent PLAN)
+- **z** (patch) : **Test incrémental** ← **TU INCRÉMENTES CECI À CHAQUE CYCLE**
+
+### Cycle de développement
+
+Chaque fois que tu es appelé (nouveau développement, correction après REVIEW, correction après QA), tu dois :
+
+1. **Lire la version actuelle** dans `server-go/config.json`
+   ```json
+   {
+     "version": "2.40.1"
+   }
+   ```
+
+2. **Incrémenter le z**
+   - Avant : `2.40.1`
+   - Après ton cycle : `2.40.2`
+
+3. **Modifier config.json IMMÉDIATEMENT**
+   - C'est la **première** chose que tu fais en début de cycle
+   - Commit séparé : `chore(version): Bump to 2.40.2`
+
+### Exemple de workflow
+
+**Cycle 1** (implémentation initiale) :
+```bash
+# 1. Incrémenter version
+Version: 2.40.0 → 2.40.1
+git commit -m "chore(version): Bump to 2.40.1"
+
+# 2. Développer la feature
+git commit -m "feat(memory): Add MemoryMode field"
+git commit -m "feat(memory): Implement team rotation"
+...
+```
+
+**Cycle 2** (corrections après REVIEW) :
+```bash
+# 1. Incrémenter version
+Version: 2.40.1 → 2.40.2
+git commit -m "chore(version): Bump to 2.40.2"
+
+# 2. Corriger selon feedback REVIEW
+git commit -m "fix(memory): Handle null team case"
+...
+```
+
+**Cycle 3** (corrections après QA) :
+```bash
+# 1. Incrémenter version
+Version: 2.40.2 → 2.40.3
+git commit -m "chore(version): Bump to 2.40.3"
+
+# 2. Corriger les tests en échec
+git commit -m "fix(memory): Fix rotation when team is eliminated"
+...
+```
+
+### Pourquoi incrémenter à chaque cycle ?
+
+- Permet de tracer précisément chaque itération de développement
+- Facilite le rollback si problème
+- Montre la progression (2.40.1 → 2.40.2 → 2.40.3 → ... → 2.40.15)
+- Quand tout est validé, l'agent DOC remettra z à 0 (2.40.15 → 2.40.0 final)
+
+### ⚠️ IMPORTANT
+
+- Incrémente **TOUJOURS** le z en début de cycle, même si c'est juste une petite correction
+- Commit séparé `chore(version): Bump to x.y.z` AVANT tout autre commit
+- N'incrémente JAMAIS le y (c'est le rôle de l'agent PLAN)
+
+---
+
 ## Contraintes importantes
 
-1. **Pas d'improvisation** : Suis strictement le plan fourni
-2. **Tests obligatoires** : Chaque fonction doit avoir ses tests
-3. **Commits atomiques** : Un commit par tâche majeure, pas un gros commit final
-4. **Rétrocompatibilité** : Ne casse jamais le code existant
-5. **Build avant de finir** : Vérifie toujours que tout compile
+1. **Versioning** : Incrémenter z au début de **chaque cycle** de développement
+2. **Pas d'improvisation** : Suis strictement le plan fourni
+3. **Tests obligatoires** : Chaque fonction doit avoir ses tests
+4. **Commits atomiques** : Un commit par tâche majeure, pas un gros commit final
+5. **Rétrocompatibilité** : Ne casse jamais le code existant
+6. **Build avant de finir** : Vérifie toujours que tout compile
 
 ---
 

@@ -190,13 +190,45 @@ Si la feature impacte l'utilisation admin, documenter :
 
 **Règles de versioning** :
 - **x** (majeur) : Breaking change, changement d'architecture
-- **y** (mineur) : Nouvelle feature
-- **z** (patch) : Correction de bug, amélioration mineure
+- **y** (mineur) : Nouvelle feature (incrémenté par l'agent PLAN)
+- **z** (patch) : Cycle de développement (incrémenté par l'agent DEV à chaque cycle)
+
+**Rôle de l'agent DOC** : Tu dois **remettre z à 0** pour la version finale documentée.
+
+### Processus de versioning complet
+
+**Cycle de développement** :
+1. Agent PLAN incrémente **y** : `2.39.0` → `2.40.0`
+2. Agent DEV cycle 1 incrémente **z** : `2.40.0` → `2.40.1`
+3. Agent DEV cycle 2 (corrections REVIEW) : `2.40.1` → `2.40.2`
+4. Agent DEV cycle 3 (corrections QA) : `2.40.2` → `2.40.3`
+5. ... (peut aller jusqu'à 2.40.15, 2.40.20, etc.)
+6. **Agent DOC (toi) finalise** : `2.40.X` → **`2.40.0`** ← Version officielle
+
+### Pourquoi remettre z à 0 ?
+
+- Le z incrémenté pendant le développement sert uniquement au **tracking interne**
+- La version **finale documentée et déployée** doit avoir `z = 0`
+- Exemple : Après 15 cycles de dev (2.40.15), la version release est **2.40.0**
+
+### Procédure
+
+Quand tu documentes :
+
+1. **Lire la version actuelle** dans `config.json` (ex: `2.40.15`)
+2. **Remettre z à 0** : `2.40.15` → `2.40.0`
+3. **Mettre à jour config.json** :
+   ```json
+   {
+     "version": "2.40.0"
+   }
+   ```
+4. **Commit** : `docs(version): Finalize v2.40.0`
+5. **Documenter dans CHANGELOG** avec la version finale `2.40.0`
 
 **Exemples** :
-- `2.39.0` : Nouvelle feature Memory CHACUN_SON_TOUR
-- `2.39.1` : Correction d'un bug dans CHACUN_SON_TOUR
-- `3.0.0` : Refonte complète de l'architecture Memory
+- Dev termine à `2.40.15` → DOC finalise à **`2.40.0`** (nouvelle feature)
+- Dev termine à `2.39.5` → DOC finalise à **`2.39.1`** (hotfix, z = 1 car patch)
 
 ---
 

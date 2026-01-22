@@ -530,6 +530,145 @@ Exemple :
 
 ---
 
+## Gestion Git (branche gh-pages)
+
+**IMPORTANT** : Le site marketing est géré sur une branche Git dédiée : **gh-pages**
+
+### Pourquoi gh-pages ?
+
+GitHub Pages héberge automatiquement le site marketing depuis la branche `gh-pages`. Cette séparation permet de :
+- Déployer le site indépendamment du code source
+- Avoir un historique Git dédié au contenu marketing
+- Faciliter les previews et rollbacks du site
+
+### Workflow Git pour l'agent MARKETING
+
+#### 1. Basculer sur la branche gh-pages
+
+```bash
+# Sauvegarder la branche courante
+current_branch=$(git branch --show-current)
+
+# Basculer sur gh-pages (créer si n'existe pas)
+git checkout gh-pages || git checkout -b gh-pages
+```
+
+#### 2. Mettre à jour le site marketing
+
+```bash
+# Modifier les fichiers dans docs/site/
+# Créer les release notes dans docs/releases/
+
+# Exemples de fichiers à modifier :
+# - docs/site/index.html
+# - docs/site/features.html
+# - docs/site/releases.html
+# - docs/site/download.html
+# - docs/releases/v2.40.0.md
+```
+
+#### 3. Commit et push sur gh-pages
+
+```bash
+# Ajouter tous les changements
+git add docs/site/ docs/releases/
+
+# Commit avec message descriptif
+git commit -m "docs(marketing): Release v2.40.0 - Memory Multi-Teams
+
+- Update homepage with v2.40.0
+- Add Memory modes to features page
+- Create public release notes
+- Update download links
+"
+
+# Push sur gh-pages
+git push origin gh-pages
+```
+
+#### 4. Retourner sur la branche d'origine
+
+```bash
+# Retour à la branche de développement
+git checkout $current_branch
+```
+
+### Exemple complet
+
+```bash
+#!/bin/bash
+# Script utilisé par l'agent MARKETING
+
+echo "📣 Agent MARKETING - Mise à jour site pour v2.40.0"
+
+# 1. Sauvegarder branche actuelle
+current_branch=$(git branch --show-current)
+echo "Branche actuelle : $current_branch"
+
+# 2. Basculer sur gh-pages
+echo "Bascule sur gh-pages..."
+git checkout gh-pages || git checkout -b gh-pages
+
+# 3. Mettre à jour le site
+echo "Mise à jour du site marketing..."
+# [Modifications des fichiers docs/site/*]
+
+# 4. Commit
+echo "Commit des changements..."
+git add docs/site/ docs/releases/
+git commit -m "docs(marketing): Release v2.40.0 - Memory Multi-Teams"
+
+# 5. Push
+echo "Push sur gh-pages..."
+git push origin gh-pages
+
+# 6. Retour à la branche d'origine
+echo "Retour sur $current_branch..."
+git checkout $current_branch
+
+echo "✅ Site marketing mis à jour sur gh-pages"
+```
+
+### Structure des fichiers sur gh-pages
+
+```
+gh-pages (branche)
+├── docs/
+│   ├── site/                    # Site marketing public
+│   │   ├── index.html          # Homepage
+│   │   ├── features.html       # Liste features
+│   │   ├── releases.html       # Liste releases
+│   │   ├── download.html       # Page téléchargement
+│   │   ├── css/
+│   │   │   └── style.css
+│   │   ├── js/
+│   │   │   └── main.js
+│   │   └── img/
+│   │       ├── screenshots/
+│   │       └── features/
+│   └── releases/                # Release notes publiques
+│       ├── v2.40.0.md
+│       ├── v2.39.0.md
+│       └── ...
+└── README.md                    # Info sur le site marketing
+```
+
+### ⚠️ IMPORTANT
+
+- **Toujours travailler sur gh-pages** pour le contenu marketing
+- **Ne jamais merger gh-pages dans main** (branches indépendantes)
+- **Toujours revenir à la branche d'origine** après les modifications
+- **Push uniquement sur gh-pages**, jamais sur main/develop depuis marketing
+
+### URL du site
+
+Une fois pushé sur gh-pages, le site est accessible à :
+```
+https://<username>.github.io/<repo>/docs/site/
+```
+
+---
+
 ## Ce que tu NE dois PAS faire
 
 ❌ N'utilise PAS de jargon technique dans le contenu grand public

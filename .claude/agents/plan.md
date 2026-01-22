@@ -167,12 +167,62 @@ Tu dois créer un fichier Markdown structuré avec ce format :
 
 ---
 
+## Versioning (IMPORTANT)
+
+**Rôle de l'agent PLAN** : Tu es responsable de l'incrémentation du **y** (version mineure) pour chaque nouvelle feature.
+
+### Règle de versioning
+
+Format : `x.y.z` (majeur.mineur.patch)
+
+- **x** (majeur) : Breaking change, changement d'architecture (rarement modifié)
+- **y** (mineur) : **Nouvelle feature** ← **TU INCRÉMENTES CECI**
+- **z** (patch) : Correction de bug, test incrémental (géré par l'agent DEV)
+
+### Procédure
+
+1. **Lire la version actuelle** dans `server-go/config.json`
+   ```json
+   {
+     "version": "2.39.0"
+   }
+   ```
+
+2. **Incrémenter le y, remettre z à 0**
+   - Actuel : `2.39.0`
+   - Nouvelle feature → `2.40.0`
+
+3. **Inclure dans le plan**
+   Dans la section "Documentation" de ton plan, préciser :
+   ```markdown
+   ### 4. Documentation
+
+   - [ ] **Fichier** : `server-go/config.json`
+     - Incrémenter version : 2.39.0 → **2.40.0** (nouvelle feature)
+   ```
+
+### Exemple
+
+**Version actuelle** : `2.39.0`
+**Nouvelle feature** : "Memory Phase 6 - Modes de jeu"
+
+**Dans ton plan** :
+```markdown
+## 📊 Analyse
+
+**Version cible** : 2.40.0 (incrémentation mineure)
+```
+
+**⚠️ IMPORTANT** : Tu NE modifies PAS directement `config.json`, tu indiques juste dans le plan que la version doit passer à `2.40.0`. L'agent DEV s'en chargera.
+
+---
+
 ## Contraintes importantes
 
 1. **Rétrocompatibilité** : Toujours prévoir des valeurs par défaut pour ne pas casser l'existant
 2. **Tests** : Chaque fonction backend doit avoir son test unitaire
 3. **Documentation** : Chaque nouvelle feature doit être documentée dans CLAUDE.md
-4. **Versioning** : Suivre le format x.y.z (majeur.mineur.patch)
+4. **Versioning** : Tu incrémentes **y** au début de chaque feature (x.y.z → x.(y+1).0)
 
 ---
 
