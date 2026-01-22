@@ -12,7 +12,7 @@ Chaque agent a un rôle clair et des responsabilités précises.
 
 ---
 
-## 📋 Les 6 agents
+## 📋 Les 7 agents
 
 | Agent | Rôle | Appelé quand | Input | Output |
 |-------|------|--------------|-------|--------|
@@ -20,8 +20,9 @@ Chaque agent a un rôle clair et des responsabilités précises.
 | **DEV** | Développement | Après validation du plan | Plan d'implémentation | Code + tests + commits |
 | **REVIEW** | Revue de code | Après développement | Code modifié | Rapport de review (qualité, sécurité) |
 | **QA** | Tests & Qualité | Après review | Code à tester | Rapport de tests (PASS/FAIL) |
-| **DOC** | Documentation | Après validation QA | Feature implémentée | Documentation mise à jour |
-| **DEPLOY** | Déploiement | En dernier | Version à déployer | Déploiement QUALIF/PROD |
+| **DOC** | Documentation | Après validation QA | Feature implémentée | Documentation technique mise à jour |
+| **DEPLOY** | Déploiement | Avant marketing | Version à déployer | Déploiement QUALIF/PROD |
+| **MARKETING** | Communication | Après PROD déployée | Version en production | Site marketing + release notes + social |
 
 ---
 
@@ -64,21 +65,35 @@ Utilisateur : "Implémente Memory Phase 6"
 └────┬─────┘
      │ Tests PASS ✓
      │
-     │ 5️⃣ Documentation
+     │ 5️⃣ Documentation technique
      ▼
 ┌──────────┐
 │   DOC    │ Met à jour CHANGELOG, CLAUDE.md, etc.
 └────┬─────┘
-     │ Docs à jour ✓
+     │ Docs techniques à jour ✓
      │
-     │ 6️⃣ Déploiement
+     │ 6️⃣ Déploiement QUALIF
      ▼
 ┌──────────┐
-│  DEPLOY  │ Build + déploiement QUALIF ou PROD
+│  DEPLOY  │ Build + déploiement QUALIF
+└────┬─────┘
+     │ QUALIF validée par utilisateur ✓
+     │
+     │ 7️⃣ Déploiement PROD
+     ▼
+┌──────────┐
+│  DEPLOY  │ Build optimisé + déploiement PROD
+└────┬─────┘
+     │ PROD déployée ✓
+     │
+     │ 8️⃣ Communication
+     ▼
+┌──────────┐
+│MARKETING │ Site web + release notes + posts sociaux
 └────┬─────┘
      │
      ▼
-   ✅ Feature complète et déployée
+   ✅ Feature complète, déployée et communiquée
 ```
 
 ---
@@ -129,12 +144,13 @@ Task({
 ```
 .claude/agents/
 ├── README.md           # Ce fichier
-├── plan.md            # Agent PLAN
-├── dev.md             # Agent DEV
-├── review.md          # Agent REVIEW
-├── qa.md              # Agent QA
-├── doc.md             # Agent DOC
-└── deploy.md          # Agent DEPLOY
+├── plan.md            # Agent PLAN - Planification
+├── dev.md             # Agent DEV - Développement
+├── review.md          # Agent REVIEW - Revue de code
+├── qa.md              # Agent QA - Tests & Qualité
+├── doc.md             # Agent DOC - Documentation technique
+├── deploy.md          # Agent DEPLOY - Déploiement
+└── marketing.md       # Agent MARKETING - Communication
 ```
 
 ---
@@ -144,8 +160,10 @@ Task({
 | Avantage | Description |
 |----------|-------------|
 | **Séparation des responsabilités** | Chaque agent a un rôle clair |
+| **Spécialisation** | Agent DOC (technique) séparé de MARKETING (communication) |
 | **Qualité garantie** | Chaque étape est validée (review, tests) |
 | **Traçabilité** | Chaque agent génère un rapport |
+| **Communication professionnelle** | Contenu marketing prêt après chaque release |
 | **Flexibilité** | L'orchestrateur peut sauter des étapes si besoin |
 | **Scalabilité** | Facile d'ajouter de nouveaux agents |
 | **Automatisation** | L'orchestrateur gère tout le workflow |
@@ -181,6 +199,7 @@ Chaque agent génère un rapport structuré :
 | QA | Rapport de tests (Markdown) |
 | DOC | Résumé de documentation (Markdown) |
 | DEPLOY | Rapport de déploiement (Markdown) |
+| MARKETING | Rapport marketing + contenu prêt à publier (Markdown + HTML) |
 
 Ces rapports sont présentés à l'utilisateur pour validation/information.
 
@@ -188,19 +207,29 @@ Ces rapports sont présentés à l'utilisateur pour validation/information.
 
 ## ⚡ Workflows prédéfinis
 
-### Feature complète
+### Feature complète (release publique)
 ```
-PLAN → DEV → REVIEW → QA → DOC → DEPLOY (QUALIF) → DEPLOY (PROD)
+PLAN → DEV → REVIEW → QA → DOC → DEPLOY (QUALIF) → DEPLOY (PROD) → MARKETING
+```
+
+### Feature interne (pas de communication)
+```
+PLAN → DEV → REVIEW → QA → DOC → DEPLOY (QUALIF)
 ```
 
 ### Hotfix urgent
 ```
-DEV → QA → DEPLOY (PROD)
+DEV → QA → DEPLOY (PROD) → MARKETING (annonce correctif)
 ```
 
-### Documentation seule
+### Documentation technique seule
 ```
 DOC
+```
+
+### Communication seule
+```
+MARKETING
 ```
 
 ### Tests seuls
@@ -214,17 +243,19 @@ L'orchestrateur décide automatiquement du workflow selon la demande de l'utilis
 
 ## 🎯 Exemples d'utilisation
 
-### Exemple 1 : Nouvelle feature
+### Exemple 1 : Nouvelle feature (release publique)
 
-**Utilisateur** : "Implémente Memory Phase 6 - Mode CHACUN_SON_TOUR"
+**Utilisateur** : "Implémente Memory Phase 6 - Mode CHACUN_SON_TOUR et déploie en production"
 
 **Orchestrateur** :
 1. Lance PLAN → Présente le plan
 2. Utilisateur valide → Lance DEV
 3. Lance REVIEW → Rapport OK
 4. Lance QA → Tests PASS
-5. Lance DOC → Docs mises à jour
-6. Utilisateur : "Déploie en QUALIF" → Lance DEPLOY (QUALIF)
+5. Lance DOC → Docs techniques mises à jour
+6. Lance DEPLOY (QUALIF) → Déploiement QUALIF réussi
+7. Utilisateur valide QUALIF → Lance DEPLOY (PROD)
+8. Lance MARKETING → Présente le contenu prêt à publier (site, posts, release notes)
 
 ### Exemple 2 : Correction de bug
 
