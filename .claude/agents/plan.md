@@ -167,53 +167,90 @@ Tu dois créer un fichier Markdown structuré avec ce format :
 
 ---
 
-## Versioning (IMPORTANT)
+## Git : Création de branche (IMPORTANT)
 
-**Rôle de l'agent PLAN** : Tu es responsable de l'incrémentation du **y** (version mineure) pour chaque nouvelle feature.
+**Rôle de l'agent PLAN** : Tu es responsable de :
+1. Créer une **branche de travail** isolée depuis `main`
+2. Incrémenter le **y** (version mineure) pour chaque nouvelle feature
+3. Faire le **premier commit et push** de la branche
 
-### Règle de versioning
+### Procédure Git
 
-Format : `x.y.z` (majeur.mineur.patch)
+#### 1. Créer la branche de travail
+
+```bash
+# S'assurer d'être à jour sur main
+git checkout main
+git pull origin main
+
+# Créer la branche de feature
+git checkout -b feature/<nom-court-feature>
+```
+
+**Nommage de branche** :
+- `feature/<nom>` : Nouvelle fonctionnalité (ex: `feature/memory-modes`)
+- `bugfix/<nom>` : Correction de bug (ex: `bugfix/score-calculation`)
+- `hotfix/<nom>` : Correction urgente en production
+
+#### 2. Incrémenter la version
+
+**Format** : `x.y.z` (majeur.mineur.patch)
 
 - **x** (majeur) : Breaking change, changement d'architecture (rarement modifié)
 - **y** (mineur) : **Nouvelle feature** ← **TU INCRÉMENTES CECI**
-- **z** (patch) : Correction de bug, test incrémental (géré par l'agent DEV)
+- **z** (patch) : Correction de bug (géré par l'agent DEV)
 
-### Procédure
+**Modifier `server-go/config.json`** :
+```json
+{
+  "version": "2.40.0"  // Était 2.39.0
+}
+```
 
-1. **Lire la version actuelle** dans `server-go/config.json`
-   ```json
-   {
-     "version": "2.39.0"
-   }
-   ```
+#### 3. Premier commit et push
 
-2. **Incrémenter le y, remettre z à 0**
-   - Actuel : `2.39.0`
-   - Nouvelle feature → `2.40.0`
+```bash
+# Commit de démarrage
+git add server-go/config.json
+git commit -m "chore(version): Start v2.40.0 - <nom de la feature>"
 
-3. **Inclure dans le plan**
-   Dans la section "Documentation" de ton plan, préciser :
-   ```markdown
-   ### 4. Documentation
+# Push avec tracking de la branche
+git push -u origin feature/<nom-court-feature>
+```
 
-   - [ ] **Fichier** : `server-go/config.json`
-     - Incrémenter version : 2.39.0 → **2.40.0** (nouvelle feature)
-   ```
-
-### Exemple
+### Exemple complet
 
 **Version actuelle** : `2.39.0`
 **Nouvelle feature** : "Memory Phase 6 - Modes de jeu"
 
-**Dans ton plan** :
+```bash
+# 1. Créer la branche
+git checkout main
+git pull origin main
+git checkout -b feature/memory-modes
+
+# 2. Incrémenter la version dans config.json (2.39.0 → 2.40.0)
+
+# 3. Commit et push
+git add server-go/config.json
+git commit -m "chore(version): Start v2.40.0 - Memory game modes"
+git push -u origin feature/memory-modes
+```
+
+**Dans ton plan, documenter** :
 ```markdown
 ## 📊 Analyse
 
+**Branche** : `feature/memory-modes`
 **Version cible** : 2.40.0 (incrémentation mineure)
 ```
 
-**⚠️ IMPORTANT** : Tu NE modifies PAS directement `config.json`, tu indiques juste dans le plan que la version doit passer à `2.40.0`. L'agent DEV s'en chargera.
+### ⚠️ IMPORTANT
+
+- Tu CRÉES la branche et tu PUSH immédiatement
+- Tu MODIFIES `config.json` pour incrémenter la version
+- Le plan doit mentionner le nom de la branche créée
+- Tous les agents suivants travailleront sur cette branche
 
 ---
 

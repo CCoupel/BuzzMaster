@@ -64,11 +64,11 @@ func TestNomFonction(t *testing.T) {
 - ✅ Cas limites (valeurs nulles, vides, extrêmes)
 - ✅ Cas d'erreur (si applicable)
 
-### 4. Commits structurés
+### 4. Commits structurés et push
 
-Créer un commit **par tâche majeure** avec un message descriptif :
+Créer un commit **par tâche majeure** avec un message descriptif, puis **push sur la branche**.
 
-**Format** :
+**Format des commits** :
 ```
 <type>(<scope>): <description>
 
@@ -98,6 +98,20 @@ test(memory): Add E2E tests for team rotation
 
 Test full workflow: START → rotation → points → END
 ```
+
+### 5. Push en fin de cycle
+
+**À la fin de chaque cycle DEV**, push tous les commits sur la branche de feature :
+
+```bash
+git push origin feature/<nom-feature>
+```
+
+**Pourquoi pusher systématiquement ?**
+- Sauvegarde du travail sur le serveur distant
+- Permet la revue de code par REVIEW
+- Évite la perte de travail en cas de problème local
+- La branche de feature est isolée, pas de risque pour `main`
 
 ---
 
@@ -282,6 +296,9 @@ git commit -m "chore(version): Bump to 2.40.1"
 git commit -m "feat(memory): Add MemoryMode field"
 git commit -m "feat(memory): Implement team rotation"
 ...
+
+# 3. Push en fin de cycle
+git push origin feature/memory-modes
 ```
 
 **Cycle 2** (corrections après REVIEW) :
@@ -293,6 +310,9 @@ git commit -m "chore(version): Bump to 2.40.2"
 # 2. Corriger selon feedback REVIEW
 git commit -m "fix(memory): Handle null team case"
 ...
+
+# 3. Push en fin de cycle
+git push origin feature/memory-modes
 ```
 
 **Cycle 3** (corrections après QA) :
@@ -304,6 +324,9 @@ git commit -m "chore(version): Bump to 2.40.3"
 # 2. Corriger les tests en échec
 git commit -m "fix(memory): Fix rotation when team is eliminated"
 ...
+
+# 3. Push en fin de cycle
+git push origin feature/memory-modes
 ```
 
 ### Pourquoi incrémenter à chaque cycle ?

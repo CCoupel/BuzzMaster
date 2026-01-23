@@ -93,12 +93,11 @@ tar -czf deploy/qualif/buzzcontrol-v2.39.0-qualif.tar.gz -C deploy/qualif/v2.39.
 - `buzzcontrol` (binaire Linux ARM64)
 - `data/files/` (assets, backgrounds, etc.)
 
-#### 5. Tag Git (QUALIF)
+#### 5. Rapport de qualification
 
-```bash
-git tag -a v2.39.0-qualif -m "Release v2.39.0 - QUALIF"
-git push origin v2.39.0-qualif
-```
+Créer un rapport de déploiement QUALIF (pas de tag Git à cette étape).
+
+**Note** : Le tag Git sera créé uniquement lors du déploiement PROD.
 
 ---
 
@@ -152,7 +151,50 @@ cp -r data/files deploy/prod/v2.39.0/
 tar -czf deploy/prod/buzzcontrol-v2.39.0.tar.gz -C deploy/prod/v2.39.0 .
 ```
 
-#### 4. Tag Git (PROD)
+#### 4. Squash merge dans main (CRITIQUE)
+
+**C'est à cette étape que la branche de feature est mergée dans main.**
+
+On utilise **squash merge** : tous les commits de la branche sont fusionnés en un seul commit propre.
+
+```bash
+# 1. S'assurer que main est à jour
+git checkout main
+git pull origin main
+
+# 2. Squash merge (fusionne tous les commits en un seul)
+git merge --squash feature/<nom-feature>
+
+# 3. Créer le commit unique avec un message descriptif
+git commit -m "feat(memory): Add memory game modes (v2.39.0)
+
+- Add MemoryMode field in Question model
+- Implement team rotation logic
+- Add admin UI for mode selection
+- Add TV display for current team
+- Add unit and E2E tests
+"
+
+# 4. Push main
+git push origin main
+```
+
+**Pourquoi squash merge ?**
+- `main` reste propre : 1 feature = 1 commit
+- Cache les commits intermédiaires ("wip", "fix typo", etc.)
+- Historique lisible et facile à parcourir
+- Facile à reverter si problème (un seul commit)
+
+**Format du message de commit squash :**
+```
+<type>(<scope>): <description courte> (v<version>)
+
+- Point 1 : résumé des changements majeurs
+- Point 2 : ...
+- Point 3 : ...
+```
+
+#### 5. Tag Git (PROD)
 
 ```bash
 git tag -a v2.39.0 -m "Release v2.39.0
@@ -167,7 +209,7 @@ Bug fixes:
 git push origin v2.39.0
 ```
 
-#### 5. Création de la GitHub Release (si applicable)
+#### 6. Création de la GitHub Release (si applicable)
 
 ```bash
 # Si GitHub CLI installé
@@ -175,6 +217,16 @@ gh release create v2.39.0 \
   deploy/prod/buzzcontrol-v2.39.0.tar.gz \
   --title "BuzzControl v2.39.0" \
   --notes-file CHANGELOG_EXTRACT.md
+```
+
+#### 7. Nettoyage de la branche de feature (optionnel)
+
+```bash
+# Supprimer la branche locale
+git branch -d feature/<nom-feature>
+
+# Supprimer la branche distante
+git push origin --delete feature/<nom-feature>
 ```
 
 ---
@@ -275,20 +327,21 @@ $ curl http://localhost/shutdown
 
 ---
 
-## 🏷️ Tags Git
+## 🏷️ Git (PROD uniquement)
 
-### QUALIF
+### Squash merge dans main
 
 ```bash
-$ git tag -a v2.39.0-qualif -m "Release v2.39.0 - QUALIF"
-$ git push origin v2.39.0-qualif
+$ git checkout main
+$ git pull origin main
+$ git merge --squash feature/<nom-feature>
+$ git commit -m "feat(memory): Add memory game modes (v2.39.0)"
+$ git push origin main
 ```
 
-**Résultat** : ✅ Tag créé et poussé
+**Résultat** : ✅ Feature fusionnée en 1 commit dans main
 
----
-
-### PROD (si applicable)
+### Tag de version
 
 ```bash
 $ git tag -a v2.39.0 -m "Release v2.39.0"
@@ -296,6 +349,15 @@ $ git push origin v2.39.0
 ```
 
 **Résultat** : ✅ Tag créé et poussé
+
+### Nettoyage branche feature
+
+```bash
+$ git branch -d feature/<nom-feature>
+$ git push origin --delete feature/<nom-feature>
+```
+
+**Résultat** : ✅ Branche supprimée
 
 ---
 
@@ -324,8 +386,10 @@ $ git push origin v2.39.0
 ### Déploiement
 
 - ✅ Archives créées
-- ✅ Tags Git créés et poussés
+- ✅ Branche mergée dans main (PROD uniquement)
+- ✅ Tag Git créé et poussé (PROD uniquement)
 - ✅ Release GitHub (si applicable)
+- ✅ Branche feature supprimée (PROD uniquement)
 
 ---
 
@@ -486,9 +550,20 @@ ls -lh server.exe buzzcontrol
 # Créer archive
 tar -czf deploy.tar.gz buzzcontrol data/
 
-# Tag Git
+# Squash merge dans main (PROD uniquement)
+git checkout main
+git pull origin main
+git merge --squash feature/<nom-feature>
+git commit -m "feat(xxx): Description (v2.39.0)"
+git push origin main
+
+# Tag Git (PROD uniquement)
 git tag -a v2.39.0 -m "Release v2.39.0"
 git push origin v2.39.0
+
+# Nettoyage branche (PROD uniquement)
+git branch -d feature/<nom-feature>
+git push origin --delete feature/<nom-feature>
 
 # Arrêt gracieux
 curl http://localhost/shutdown
@@ -499,7 +574,9 @@ curl http://localhost/shutdown
 ## Ce que tu NE dois PAS faire
 
 ❌ Ne déploie PAS en PROD si les tests QUALIF ne sont pas validés
-❌ N'oublie PAS de créer les tags Git
+❌ Ne crée PAS de tag Git en QUALIF (uniquement en PROD)
+❌ Ne merge PAS dans main en QUALIF (uniquement en PROD)
+❌ N'oublie PAS de merger la branche avant de créer le tag (PROD)
 ❌ Ne force PAS le push des tags (--force)
 ❌ N'ignore PAS les erreurs de build
 ❌ Ne saute PAS l'étape de tests post-build

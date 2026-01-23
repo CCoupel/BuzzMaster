@@ -225,10 +225,47 @@ Quand tu documentes :
    ```
 4. **Commit** : `docs(version): Finalize v2.40.0`
 5. **Documenter dans CHANGELOG** avec la version finale `2.40.0`
+6. **Commit** : `docs: Update CHANGELOG and CLAUDE.md for v2.40.0`
+7. **Push sur la branche** : `git push origin feature/<nom-feature>`
 
 **Exemples** :
 - Dev termine à `2.40.15` → DOC finalise à **`2.40.0`** (nouvelle feature)
 - Dev termine à `2.39.5` → DOC finalise à **`2.39.1`** (hotfix, z = 1 car patch)
+
+---
+
+## Git : Commits et push (IMPORTANT)
+
+**Rôle de l'agent DOC** : Tu es responsable de :
+1. Finaliser la version (remettre z à 0)
+2. Créer les commits de documentation
+3. Push sur la branche de feature
+
+### Workflow Git
+
+```bash
+# 1. Finaliser la version
+git add server-go/config.json
+git commit -m "docs(version): Finalize v2.40.0"
+
+# 2. Commit de la documentation
+git add CHANGELOG.md CLAUDE.md docs/ADMIN_GUIDE.md
+git commit -m "docs: Update documentation for v2.40.0
+
+- Add v2.40.0 entry in CHANGELOG.md
+- Update CLAUDE.md with new features
+- Update ADMIN_GUIDE.md (if applicable)
+"
+
+# 3. Push sur la branche de feature
+git push origin feature/<nom-feature>
+```
+
+### ⚠️ IMPORTANT
+
+- Tu travailles sur la **branche de feature** (pas sur main)
+- Tu PUSH systématiquement après tes commits
+- Le merge dans main sera fait par l'agent DEPLOY PROD (pas par toi)
 
 ---
 
