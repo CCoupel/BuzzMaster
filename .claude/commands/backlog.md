@@ -12,29 +12,67 @@ Le backlog est organisé en fichiers séparés dans le dossier `backlog/` :
 
 ## Comportement
 
-### Si aucun argument fourni → Afficher le backlog
+### Si aucun argument fourni → Afficher le backlog EXHAUSTIF
 
-1. Lire le fichier `backlog/README.md`
-2. Afficher un résumé structuré :
+1. Lire le fichier `backlog/README.md` pour identifier tous les fichiers
+2. **Lire CHAQUE fichier** du backlog pour extraire le contenu détaillé
+3. Pour chaque feature, identifier :
+   - Les phases/sections implémentées (cochées `[x]`)
+   - Les phases/sections non implémentées (non cochées `[ ]`)
+   - Le statut global et la version
+
+4. Afficher dans cet ordre STRICT :
 
 ```
 ## Backlog BuzzControl
 
-### ✅ Complété
-- gestion-scores.md (v2.18.0)
-- categories-questions.md (v2.34.0)
-...
+---
 
-### ⏳ En cours
-- qcm-indices-penalites.md (v2.38.0)
+### ⏳ EN COURS
 
-### 📋 Planifié
-- page-joueur.md
-- generateur-ia.md
+#### feature-name.md (vX.Y.Z)
+**Description** : [description courte]
 
-### 🔮 Idées
+**Non implémenté :**
+- [ ] Phase X - Nom de la phase
+  - Sous-tâche 1
+  - Sous-tâche 2
+- [ ] Phase Y - Autre phase
+  - ...
+
+**Implémenté :**
+- [x] Phase 1 - Nom (vX.Y.Z)
+- [x] Phase 2 - Nom (vX.Y.Z)
+
+---
+
+### 📋 PLANIFIÉ (non implémenté)
+
+#### autre-feature.md
+**Description** : [description courte]
+
+**À implémenter :**
+- [ ] Phase 1 - Nom
+  - Détails des tâches
+- [ ] Phase 2 - Nom
+  - Détails des tâches
+
+---
+
+### ✅ COMPLÉTÉ
+
+| Feature | Version | Description |
+|---------|---------|-------------|
+| feature-a.md | v2.18.0 | Description courte |
+| feature-b.md | v2.34.0 | Description courte |
+
+---
+
+### 🔮 IDÉES
 - (aucune)
 ```
+
+**IMPORTANT** : Être EXHAUSTIF sur les évolutions définies. Lister toutes les phases, tous les modes, toutes les options documentées dans chaque fichier. Ne pas résumer, montrer le détail.
 
 ### Si argument fourni → Ajouter au backlog
 
@@ -75,7 +113,7 @@ vX.Y.Z (à déterminer)
 /backlog
 ```
 
-→ Affiche le résumé du backlog avec tous les fichiers et leurs statuts
+→ Affiche le backlog EXHAUSTIF avec TOUTES les évolutions définies dans chaque fichier
 
 ### Mode ajout
 
@@ -87,14 +125,21 @@ vX.Y.Z (à déterminer)
 
 ## Légende des statuts
 
-- ✅ **Complété** : Fonctionnalité implémentée et livrée
-- ⏳ **En cours** : Implémentation en cours
-- 📋 **Planifié** : Spécification validée, pas encore démarré
+- ⏳ **En cours** : Implémentation en cours (montrer détail non implémenté + implémenté)
+- 📋 **Planifié** : Non démarré (montrer tout le détail à implémenter)
+- ✅ **Complété** : Tout implémenté (tableau résumé avec version)
 - 🔮 **Idée** : Concept à explorer
+
+## Ordre d'affichage (STRICT)
+
+1. **⏳ En cours** - Priorité max, travail actif
+2. **📋 Planifié** - Prochaines fonctionnalités
+3. **✅ Complété** - Référence historique (en dernier)
+4. **🔮 Idées** - Si présentes
 
 ## Commence maintenant
 
 **Argument reçu** : $ARGUMENTS
 
-- Si vide → Lire `backlog/README.md` et afficher le résumé
+- Si vide → Lire `backlog/README.md` ET tous les fichiers référencés, afficher exhaustivement
 - Si texte → Créer un nouveau fichier backlog et mettre à jour le README

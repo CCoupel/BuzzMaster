@@ -11,10 +11,11 @@ Chaque fichier correspond à une fonctionnalité ou un ensemble de fonctionnalit
 | [gestion-scores.md](gestion-scores.md) | ✅ v2.18.0 | Points d'équipe dissociés des points joueurs |
 | [categories-questions.md](categories-questions.md) | ✅ v2.34.0 | Système de catégorisation et palmarès |
 | [timer-gameplay.md](timer-gameplay.md) | ✅ v2.29.0 | Décompte de préparation avant timer |
-| [qcm-indices-penalites.md](qcm-indices-penalites.md) | ⏳ v2.38.0 | Indices automatiques pour QCM avec pénalités |
+| [qcm-indices-penalites.md](qcm-indices-penalites.md) | ✅ v2.38.0 | Indices automatiques pour QCM avec pénalités |
 | [debug-tests.md](debug-tests.md) | ✅ v2.28.0 | Fonctionnalités de test sans buzzers |
 | [affichage-tv.md](affichage-tv.md) | ✅ v2.30.0 | Synchronisation des fonds d'écran |
 | [memory-game.md](memory-game.md) | ✅ v2.33.0 | Jeu de mémoire avec paires |
+| [mode-demo.md](mode-demo.md) | ✅ v2.40.0 | Mode démonstration avec données complètes |
 | [page-joueur.md](page-joueur.md) | 📋 Planifié | Interface personnalisée pour jouer depuis smartphone |
 | [generateur-ia.md](generateur-ia.md) | 📋 Planifié | Générateur de jeu complet via IA |
 
@@ -62,6 +63,8 @@ vX.Y.Z
 
 ## Historique
 
+- 2026-01-23 : Ajout du mode demo (v2.40.0)
+- 2026-01-23 : Correction statut QCM indices/pénalités (⏳ → ✅ v2.38.0)
 - 2026-01-20 : Création de la structure de backlog modulaire
 - 2026-01-20 : Ajout du générateur IA
 - 2026-01-20 : Ajout de la page joueur (/player)
