@@ -1,6 +1,6 @@
 # QCM - Indices et pénalités
 
-**Statut** : ⏳ En cours d'implémentation (v2.38.0)
+**Statut** : ✅ Terminé (v2.38.0)
 
 ## Description
 
@@ -8,14 +8,15 @@ Système d'indices automatiques pour les questions QCM avec pénalités de point
 
 ## Configuration
 
-- [ ] **Option activable par question QCM**
+- [x] **Option activable par question QCM** *(v2.38.0)*
   - Champ `QCM_HINTS_ENABLED` (boolean, défaut: false)
   - Visible uniquement pour les questions de type QCM
   - Toggle dans le formulaire de création/édition de question
+  - Seuils configurables : `QCM_HINT_THRESHOLD_1`, `QCM_HINT_THRESHOLD_2`
 
 ## Invalidation automatique des mauvaises réponses
 
-- [ ] **Logique d'invalidation (Backend)**
+- [x] **Logique d'invalidation (Backend)** *(v2.38.0)*
   - Si aucun joueur n'a buzzé, invalider une mauvaise réponse aux seuils configurés
   - L'invalidation est aléatoire parmi les mauvaises réponses restantes
   - **Seuils par défaut (proportionnels au timer) :**
@@ -34,32 +35,34 @@ Système d'indices automatiques pour les questions QCM avec pénalités de point
     | 4s    | 1s      | —       | 1 seul indice possible |
     | 2s    | —       | —       | Pas d'indices |
 
-- [ ] **Affichage TV (Frontend)**
-  - Réponse invalidée : visuellement barrée/grisée
-  - Animation de transition lors de l'invalidation
+- [x] **Affichage TV (Frontend)** *(v2.38.0)*
+  - Réponse invalidée : visuellement grisée avec opacité réduite
   - État `QCM_INVALIDATED` dans GameState : liste des couleurs invalidées
+  - Fichiers : `PlayerDisplay.jsx`, `PlayerDisplay.css` (`.invalidated`)
 
-- [ ] **Broadcast WebSocket**
-  - Action `QCM_HINT` : notifie les clients d'une invalidation
-  - Payload : `{COLOR: "RED|GREEN|YELLOW|BLUE"}`
+- [x] **Broadcast WebSocket** *(v2.38.0)*
+  - Action `QCM_HINT` : `{COLOR, REMAINING}`
+  - Fichiers : `messages.go`, `main.go` (`broadcastQCMHint`)
 
 ## Pénalités de points
 
-- [ ] **Calcul des pénalités (Backend)**
-  - Si un joueur buzz après invalidation(s), ses points sont réduits
+- [x] **Calcul des pénalités (Backend)** *(v2.38.0)*
+  - Champ `HintsAtBuzz` sur Bumper
   - **Ratio de pénalité :**
     - 4 réponses (aucune invalidée) → 100% des points
     - 3 réponses (1 invalidée) → 67% des points
     - 2 réponses (2 invalidées) → 33% des points
   - Calcul : `points_effectifs = points_base × (réponses_restantes / 4)`
+  - Fichiers : `engine.go`, `models.go`
 
-- [ ] **Affichage admin (Frontend)**
-  - Indicateur de pénalité applicable sur GamePage
-  - Badge "67%" ou "33%" à côté des points si pénalité active
+- [x] **Affichage admin (Frontend)** *(v2.38.0)*
+  - Badge pénalité sur GamePage
+  - Indicateur visuel sur TeamCard avec anneau de pénalité
+  - Fichiers : `GamePage.jsx`, `TeamCard.jsx`, `TeamCard.css`
 
-- [ ] **Historique**
+- [x] **Historique** *(v2.38.0)*
   - L'historique enregistre les points effectivement attribués (après pénalité)
-  - Champ optionnel : `PenaltyApplied` (pourcentage de réduction)
+  - Champ `HintsAtBuzz` capturé au moment du buzz
 
 ## Version cible
 

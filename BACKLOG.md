@@ -24,12 +24,11 @@ Le backlog est organisé en fichiers individuels dans le dossier `backlog/` pour
 | Debug et tests | v2.28.0 | [debug-tests.md](backlog/debug-tests.md) |
 | Affichage TV | v2.30.0 | [affichage-tv.md](backlog/affichage-tv.md) |
 | Memory game | v2.33.0 | [memory-game.md](backlog/memory-game.md) |
+| QCM - Indices et pénalités | v2.38.0 | [qcm-indices-penalites.md](backlog/qcm-indices-penalites.md) |
 
 ### ⏳ En cours
 
-| Fonctionnalité | Version | Fichier |
-|----------------|---------|---------|
-| QCM - Indices et pénalités | v2.38.0 | [qcm-indices-penalites.md](backlog/qcm-indices-penalites.md) |
+_Aucune fonctionnalité en cours_
 
 ### 📋 Planifiées
 
@@ -42,10 +41,9 @@ Le backlog est organisé en fichiers individuels dans le dossier `backlog/` pour
 
 ## Priorités actuelles
 
-1. **v2.38.0** : Terminer QCM - Indices et pénalités
-2. **v2.39.0** : Enregistrement spécifique historique Memory
-3. **v2.40.0** : Page Joueur (MVP - Phases 1 & 2)
-4. **Future** : Générateur IA (MVP Phase 1)
+1. **v2.39.0** : Enregistrement spécifique historique Memory
+2. **v2.40.0** : Page Joueur (MVP - Phases 1 & 2)
+3. **Future** : Générateur IA (MVP Phase 1)
 
 ---
 
