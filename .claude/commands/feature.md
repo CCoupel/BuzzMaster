@@ -1,90 +1,212 @@
 # Commande /feature - Workflow Feature Complet
 
-Tu lance le **CDP** du système d'agents BuzzControl.
+Orchestre le workflow complet de développement d'une feature via les sous-agents spécialisés.
 
 ## Argument reçu
 
 $ARGUMENTS
 
-## Workflow à exécuter
+## Workflow complet
 
 ```
-PLAN → DEV → REVIEW → QA → DOC → DEPLOY(QUALIF) → [validation] → DEPLOY(PROD) → MARKETING
+[Git] → PLAN → DEV → REVIEW → QA → DOC → DEPLOY(QUALIF) → [FIN]
 ```
+
+**Note** : Le déploiement en PROD se fait via `/deploy PROD` après validation de la QUALIF.
 
 ## Instructions
 
-### Étape 1 : Agent PLAN
+Cette commande orchestre le workflow jusqu'à la QUALIF. Elle lance les sous-agents dans l'ordre avec le point de validation utilisateur.
 
-1. Lire le fichier `.claude/agents/plan.md` pour connaître les responsabilités de l'agent PLAN
-2. Lancer l'agent PLAN avec la description fournie :
-   - Analyser le backlog ou la description
-   - Créer la branche `feature/<nom-court>`
-   - Incrémenter la version mineure (y)
-   - Créer le plan d'implémentation détaillé
-   - Commit et push initial
+### Phase 0 : Préparation Git (via PLAN)
 
-3. **ATTENDRE LA VALIDATION UTILISATEUR** avant de continuer
+L'agent PLAN s'occupe de la préparation Git :
 
-### Étape 2 : Agent DEV
+```bash
+git checkout main && git pull origin main
+git checkout -b feature/<nom-court>
+```
 
-1. Lire le fichier `.claude/agents/dev.md`
-2. Implémenter selon le plan validé
-3. Commits par tâche + push en fin de cycle
+Puis incrémente y dans `server-go/config.json` : `2.39.0` → `2.40.0`
 
-### Étape 3 : Agent REVIEW
+```bash
+git add server-go/config.json
+git commit -m "chore(version): Start v2.40.0 - <feature name>"
+git push -u origin feature/<nom-court>
+```
 
-1. Lire le fichier `.claude/agents/review.md`
-2. Analyser le code (qualité, sécurité, architecture)
-3. Si problèmes critiques → retour à DEV
+### Phase 1 : Planification (PLAN)
 
-### Étape 4 : Agent QA
+Lance le sous-agent **implementation-planner** via Task tool :
 
-1. Lire le fichier `.claude/agents/qa.md`
-2. Exécuter tous les tests (unit, E2E)
-3. Si échecs → retour à DEV
+```
+subagent_type: "implementation-planner"
+description: "Créer plan d'implémentation"
+prompt: "Crée un plan d'implémentation détaillé pour BuzzControl.
 
-### Étape 5 : Agent DOC
+**Contexte projet :**
+- Répertoire : C:\Users\cyril\Documents\VScode\buzzcontrol
+- Serveur Go : server-go/
+- Config version : server-go/config.json
+- Backlog : backlog/*.md
 
-1. Lire le fichier `.claude/agents/doc.md`
-2. Mettre à jour CHANGELOG.md, CLAUDE.md
-3. Finaliser la version (z → 0)
-4. Commit et push
+**Demande utilisateur :** $ARGUMENTS
 
-### Étape 6 : Agent DEPLOY (QUALIF)
+**Actions :**
+1. Analyser le backlog ou la description
+2. Créer la branche feature/<nom-court>
+3. Incrémenter la version mineure (y) dans config.json
+4. Commit et push initial
+5. Produire le plan d'implémentation structuré
 
-1. Lire le fichier `.claude/agents/deploy.md`
-2. Build Windows + Linux ARM64
-3. Tests post-build
-4. Créer archive QUALIF
-5. **ATTENDRE LA VALIDATION UTILISATEUR** avant PROD
+**IMPORTANT :** Attendre validation utilisateur avant de passer à DEV."
+```
 
-### Étape 7 : Agent DEPLOY (PROD)
+**⏸️ POINT DE VALIDATION : Attendre que l'utilisateur valide le plan**
 
-1. Squash merge dans main
-2. Tag de version
-3. Push main + tag
-4. Nettoyage branche feature
-5. Créer GitHub Release (optionnel)
+### Phase 2 : Implémentation (DEV)
 
-### Étape 8 : Agent MARKETING
+Après validation du plan, lance le sous-agent **dev-feature-implementation** via Task tool :
 
-1. Lire le fichier `.claude/agents/marketing.md`
-2. Mettre à jour le site (branche gh-pages)
-3. Créer les release notes publiques
-4. Préparer le contenu social
+```
+subagent_type: "dev-feature-implementation"
+description: "Implémenter feature"
+prompt: "Implémente le code pour BuzzControl selon le plan validé.
 
-## Points de validation
+**Contexte projet :**
+- Répertoire : C:\Users\cyril\Documents\VScode\buzzcontrol
+- Serveur Go : server-go/
+- Frontend React : server-go/web/src/
+- Config version : server-go/config.json
 
-- **Après PLAN** : L'utilisateur valide le plan avant implémentation
-- **Après DEPLOY QUALIF** : L'utilisateur valide avant mise en production
+**Plan :** [Plan validé de la phase précédente]
+
+**Actions :**
+1. Incrémenter z dans config.json
+2. Implémenter Backend → Frontend → Tests
+3. Commits atomiques par tâche
+4. Push en fin de cycle"
+```
+
+### Phase 3 : Revue de code (REVIEW)
+
+Lance le sous-agent **code-reviewer** via Task tool :
+
+```
+subagent_type: "code-reviewer"
+description: "Revue de code"
+prompt: "Effectue une revue de code complète pour BuzzControl.
+
+**Contexte projet :**
+- Répertoire : C:\Users\cyril\Documents\VScode\buzzcontrol
+- Architecture : CLAUDE.md
+
+**Actions :**
+1. Analyser qualité (Go, React)
+2. Analyser sécurité (OWASP)
+3. Vérifier conformité architecture
+4. Détecter duplications de code
+5. Produire rapport de review
+
+**Si problèmes critiques :** Retour à DEV avec feedback."
+```
+
+### Phase 4 : Tests QA (QA)
+
+Lance le sous-agent **QA** via Task tool :
+
+```
+subagent_type: "QA"
+description: "Exécuter tests QA"
+prompt: "Exécute la procédure de tests QA complète pour BuzzControl.
+
+**Contexte projet :**
+- Répertoire : C:\Users\cyril\Documents\VScode\buzzcontrol
+- Serveur Go : server-go/
+
+**Actions :**
+1. Build de production
+2. Tests unitaires
+3. Tests E2E
+4. Rapport de qualité
+
+**Si échecs :** Retour à DEV avec erreurs."
+```
+
+### Phase 5 : Documentation (DOC)
+
+Lance le sous-agent **doc-updater** via Task tool :
+
+```
+subagent_type: "doc-updater"
+description: "Mettre à jour documentation"
+prompt: "Mets à jour la documentation pour BuzzControl.
+
+**Contexte projet :**
+- Répertoire : C:\Users\cyril\Documents\VScode\buzzcontrol
+- Config version : server-go/config.json
+
+**Type :** feature
+
+**Actions :**
+1. CHANGELOG.md : Ajouter entrée version
+2. CLAUDE.md : Mettre à jour sections impactées
+3. ADMIN_GUIDE.md : Documenter fonctionnalités user-facing
+4. Finaliser version (reset z à 0)
+5. Commit et push"
+```
+
+### Phase 6 : Déploiement QUALIF (DEPLOY)
+
+Lance le sous-agent **deploy** via Task tool :
+
+```
+subagent_type: "deploy"
+description: "Déploiement QUALIF"
+prompt: "Déploie le serveur BuzzControl vers l'environnement QUALIF.
+
+**Contexte projet :**
+- Répertoire : C:\Users\cyril\Documents\VScode\buzzcontrol
+- Serveur Go : server-go/
+- Config version : server-go/config.json
+
+**Environnement :** QUALIF
+
+**Actions :**
+1. Build Windows + ARM64
+2. Tests post-build
+3. Créer archive QUALIF"
+```
+
+## Fin du workflow /feature
+
+**✅ Le workflow /feature s'arrête ici.**
+
+Pour continuer vers la production :
+1. **Valider la QUALIF** manuellement
+2. **Lancer** `/deploy PROD` pour le déploiement en production
+3. **Lancer** `/marketing` pour la communication (optionnel)
 
 ## Gestion des erreurs
 
-- Si REVIEW trouve des problèmes critiques → relancer DEV avec feedback
-- Si QA échoue → relancer DEV avec les tests en échec
-- Maximum 3 cycles DEV ↔ REVIEW/QA avant escalade
+| Situation | Action |
+|-----------|--------|
+| REVIEW trouve problèmes critiques | Retour à Phase 2 (DEV) avec feedback |
+| QA échoue | Retour à Phase 2 (DEV) avec tests en échec |
+| Build échoue | Retour à Phase 2 (DEV) pour correction |
+| Maximum 3 cycles DEV ↔ REVIEW/QA | Escalade vers utilisateur |
 
-## Commence maintenant
+## Point de validation obligatoire
 
-Lance l'agent PLAN avec la description : **$ARGUMENTS**
+- **Après PLAN** : L'utilisateur doit valider le plan avant implémentation
+
+## Action immédiate
+
+Lance maintenant la **Phase 1 (PLAN)** avec le Task tool :
+
+```
+Task tool:
+- subagent_type: "implementation-planner"
+- description: "Créer plan d'implémentation"
+- prompt: [prompt de la Phase 1 avec $ARGUMENTS]
+```

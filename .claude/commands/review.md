@@ -1,159 +1,128 @@
 # Commande /review - Revue de Code
 
-Tu es l'agent **Code Reviewer** du système BuzzControl. Tu analyses le code implémenté pour détecter les problèmes de qualité, sécurité et conformité architecturale.
+Lance le sous-agent REVIEW pour analyser le code implémenté et détecter les problèmes.
 
 ## Argument reçu (optionnel)
 
 $ARGUMENTS
 
+**Formats possibles** :
+- `/review` : Auto-détecte depuis git diff main
+- `/review internal/game/engine.go` : Fichier spécifique
+- `/review "Feature QCM hints"` : Avec contexte
+- `/review HEAD~5..HEAD` : Range de commits
+
 ## Instructions
 
-### Étape 1 : Collecter le contexte
-
-**Récupère automatiquement** :
-
-1. **Branche courante** : `git branch --show-current`
-2. **Fichiers modifiés** : `git diff main --name-only`
-3. **Diff complet** : `git diff main` pour voir les changements
-4. **Commits récents** : `git log main..HEAD --oneline`
-
-**L'argument peut être** :
-- Une liste de fichiers spécifiques à reviewer
-- Un résumé d'implémentation du DEV
-- Un commit ou range de commits
-
-### Étape 2 : Lire la procédure
-
-Lis le fichier `.claude/agents/code-reviewer.md` pour connaître les critères d'analyse.
-
-### Étape 3 : Analyser le code
-
-| Catégorie | Points vérifiés |
-|-----------|-----------------|
-| **Qualité Go** | Naming, fonctions courtes, error handling, idiomatic Go |
-| **Qualité React** | Hooks, props, state minimal, useEffect deps, memoization |
-| **Sécurité OWASP** | Injection, XSS, auth, secrets, config |
-| **Performance** | Boucles infinies, re-renders, structures de données |
-| **Architecture** | Conformité CLAUDE.md, patterns existants, rétrocompat |
-| **Tests** | Présence, couverture, qualité |
-
-### Étape 4 : Classifier les problèmes
-
-| Niveau | Signification | Action |
-|--------|---------------|--------|
-| 🔴 **Critical** | Faille sécurité, bug majeur, ne compile pas | DOIT être corrigé |
-| 🟡 **Warning** | Mauvaise pratique, perf suboptimale, tests insuffisants | Devrait être corrigé |
-| 🔵 **Suggestion** | Optimisation possible, refactoring suggéré | Optionnel |
-
-### Étape 5 : Produire le rapport
-
-Structure obligatoire :
-
-```markdown
-# Review Report: [Feature Name]
-
-## 📊 Overview
-- Files analyzed: X
-- Lines added/removed: +Y / -Z
-- Overall status: ✅/⚠️/❌
-
-## ✅ Positive Points
-## ⚠️ Issues Detected (Critical / Warning / Suggestion)
-## 🔒 Security Analysis
-## 📈 Performance Analysis
-## 🏗️ Architecture Conformity
-## 📝 Test Quality
-## 🎯 Recommendations
-## ✅ Final Decision
-```
-
-## Inputs nécessaires
-
-| Input | Source | Description |
-|-------|--------|-------------|
-| Fichiers modifiés | `git diff main` | Liste des changements |
-| Diff | `git diff main` | Contenu des modifications |
-| Commits | `git log main..HEAD` | Historique des commits |
-| Résumé DEV | Argument (optionnel) | Ce qui a été implémenté |
-
-## Critères de décision
-
-### ✅ APPROVED
-- Aucun problème critique
-- Code de qualité acceptable
-- Tests présents et pertinents
-- Sécurité OK
-
-### ⚠️ APPROVED WITH RESERVATIONS
-- Pas de critique bloquant
-- Quelques warnings à noter
-- Peut continuer mais à surveiller
-
-### ❌ REJECTED
-- Problème critique détecté
-- Faille de sécurité
-- Bug majeur
-- Code ne compile pas
-- Tests manquants pour fonction critique
-
-## Exemples d'utilisation
+Utilise le Task tool pour lancer le sous-agent code-reviewer avec les paramètres suivants :
 
 ```
-/review                              # Auto-détecte depuis git diff
-/review internal/game/engine.go     # Fichier spécifique
-/review "Feature QCM hints"          # Avec contexte
-/review HEAD~5..HEAD                 # Range de commits
+subagent_type: "code-reviewer"
+description: "Revue de code"
+prompt: voir ci-dessous
 ```
 
-## Checklist d'analyse
+### Prompt à transmettre au sous-agent
 
-### Backend Go
-- [ ] Naming clair et cohérent
-- [ ] Fonctions < 50 lignes
-- [ ] Erreurs gérées (pas ignorées)
-- [ ] Pas de code dupliqué
-- [ ] Go idiomatique (defer, error patterns)
+```
+Effectue une revue de code complète pour BuzzControl.
 
-### Frontend React
-- [ ] Composants fonctionnels + hooks
-- [ ] Props bien définies
-- [ ] State minimal
-- [ ] useEffect deps corrects
-- [ ] Memoization appropriée
+**Contexte projet :**
+- Répertoire : C:\Users\cyril\Documents\VScode\buzzcontrol
+- Serveur Go : server-go/
+- Frontend React : server-go/web/src/
+- Architecture : CLAUDE.md
 
-### Sécurité OWASP
-- [ ] Pas d'injection (queries paramétrées)
-- [ ] Pas de XSS (input échappé)
-- [ ] Pas de secrets hardcodés
-- [ ] Auth/permissions vérifiées
-- [ ] Config sécurisée
+**Input utilisateur :** $ARGUMENTS
 
-### Architecture
-- [ ] Conforme à CLAUDE.md
-- [ ] Patterns existants respectés
-- [ ] Rétrocompatibilité préservée
-- [ ] Tests unitaires présents
+**Étapes à exécuter :**
 
-## Règles critiques
+1. **Collecter le contexte**
+   - Branche : git branch --show-current
+   - Fichiers modifiés : git diff main --name-only
+   - Diff complet : git diff main
+   - Commits récents : git log main..HEAD --oneline
 
-| Règle | Description |
-|-------|-------------|
-| ❌ JAMAIS | Approuver avec faille sécurité critique |
-| ❌ JAMAIS | Être trop indulgent (mieux vaut signaler un doute) |
-| ❌ JAMAIS | Corriger le code (tu reviews seulement) |
-| ❌ JAMAIS | Oublier d'analyser les tests |
-| ✅ TOUJOURS | Analyser la logique, pas juste la syntaxe |
-| ✅ TOUJOURS | Être constructif dans les critiques |
+2. **Analyser le code selon les catégories**
 
-## Après la review
+   | Catégorie | Points vérifiés |
+   |-----------|-----------------|
+   | Qualité Go | Naming, fonctions courtes, error handling, idiomatic Go |
+   | Qualité React | Hooks, props, state minimal, useEffect deps, memoization |
+   | Sécurité OWASP | Injection, XSS, auth, secrets, config |
+   | Performance | Boucles infinies, re-renders, structures de données |
+   | Architecture | Conformité CLAUDE.md, patterns existants, rétrocompat |
+   | Tests | Présence, couverture, qualité |
+   | Rationalisation | Duplications, patterns répétés, code consolidable |
 
-Le rapport va à l'orchestrateur qui :
-1. **✅ APPROVED** → Lance l'agent QA
-2. **⚠️ WITH RESERVATIONS** → Continue mais note les réserves
-3. **❌ REJECTED** → Relance l'agent DEV avec les corrections
+3. **Classifier les problèmes**
 
-## Commence maintenant
+   | Niveau | Signification | Action |
+   |--------|---------------|--------|
+   | 🔴 Critical | Faille sécurité, bug majeur, ne compile pas | DOIT être corrigé |
+   | 🟡 Warning | Mauvaise pratique, perf suboptimale, tests insuffisants | Devrait être corrigé |
+   | 🟠 Rationalization | Duplications 70%+, patterns 3+ occurrences | Devrait être consolidé |
+   | 🔵 Suggestion | Optimisation possible, refactoring suggéré | Optionnel |
 
-Analyse le code pour : **$ARGUMENTS**
+4. **Produire le rapport structuré**
 
-*(Si aucun argument → analyse git diff main)*
+   ```markdown
+   # Review Report: [Feature Name]
+
+   ## 📊 Overview
+   - Files analyzed: X
+   - Lines added/removed: +Y / -Z
+   - Overall status: ✅/⚠️/❌
+
+   ## ✅ Positive Points
+   ## ⚠️ Issues Detected (Critical / Warning / Suggestion)
+   ## 🔒 Security Analysis
+   ## 📈 Performance Analysis
+   ## 🏗️ Architecture Conformity
+   ## 🔄 Code Rationalization Analysis
+   ## 📝 Test Quality
+   ## 🎯 Recommendations
+   ## ✅ Final Decision
+   ```
+
+**Critères de décision :**
+| Décision | Critères |
+|----------|----------|
+| ✅ APPROVED | Aucun critique, qualité OK, tests présents, sécurité OK |
+| ⚠️ APPROVED WITH RESERVATIONS | Pas de bloquant, quelques warnings |
+| ❌ REJECTED | Critique détecté, faille sécurité, bug majeur, tests manquants |
+
+**Checklists d'analyse :**
+
+Backend Go :
+- Naming clair et cohérent
+- Fonctions < 50 lignes
+- Erreurs gérées (pas ignorées)
+- Pas de code dupliqué
+- Go idiomatique (defer, error patterns)
+
+Frontend React :
+- Composants fonctionnels + hooks
+- Props bien définies
+- State minimal
+- useEffect deps corrects
+- Memoization appropriée
+
+Sécurité OWASP :
+- Pas d'injection
+- Pas de XSS
+- Pas de secrets hardcodés
+- Auth/permissions vérifiées
+
+**Règles critiques :**
+- JAMAIS approuver avec faille sécurité critique
+- JAMAIS être trop indulgent (signaler les doutes)
+- JAMAIS corriger le code (review seulement)
+- JAMAIS oublier d'analyser les tests
+- TOUJOURS analyser la logique, pas juste la syntaxe
+- TOUJOURS chercher les duplications de code
+```
+
+## Action immédiate
+
+Lance maintenant le sous-agent code-reviewer avec le Task tool.

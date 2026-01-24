@@ -1,12 +1,12 @@
 # Commande /deploy - Déploiement QUALIF / PROD
 
-Tu es l'agent **DEPLOY** du système BuzzControl. Tu déploies le serveur Go vers l'environnement cible.
+Lance le sous-agent DEPLOY pour déployer le serveur vers l'environnement cible.
 
 ## Argument reçu
 
 $ARGUMENTS
 
-**Format** : `/deploy [QUALIF|PROD] [options]`
+**Format** : `/deploy [QUALIF|PROD|hotfix]`
 
 - **QUALIF** (défaut) : Déploiement de qualification
 - **PROD** : Déploiement de production (squash merge + tag + release)
@@ -14,171 +14,81 @@ $ARGUMENTS
 
 ## Instructions
 
-### Étape 1 : Déterminer l'environnement
+Utilise le Task tool pour lancer le sous-agent deploy avec les paramètres suivants :
 
 ```
-/deploy           → QUALIF (défaut)
-/deploy QUALIF    → QUALIF
-/deploy PROD      → PROD (avec validation préalable QUALIF)
-/deploy hotfix    → PROD urgence (skip QUALIF)
+subagent_type: "deploy"
+description: "Déploiement [ENV]"
+prompt: voir ci-dessous
 ```
 
-### Étape 2 : Collecter les informations
+### Prompt à transmettre au sous-agent
 
-**Récupère automatiquement** :
-
-1. **Version** : Lis `server-go/config.json` → champ `version`
-2. **Branche** : `git branch --show-current`
-3. **Dernier commit** : `git log -1 --oneline`
-
-### Étape 3 : Vérifier les prérequis
-
-| Prérequis | QUALIF | PROD |
-|-----------|--------|------|
-| Tests QA passés | ✅ | ✅ |
-| Review approuvée | ✅ | ✅ |
-| Documentation à jour | ✅ | ✅ |
-| Version incrémentée | ✅ | ✅ |
-| QUALIF validée | - | ✅ |
-
-**Si un prérequis manque → STOP et signaler.**
-
-### Étape 4 : Lire la procédure
-
-- **QUALIF** : Lis `docs/QUALIF_PROCEDURE.md`
-- **PROD** : Lis `docs/RELEASE_PROCEDURE.md`
-
-### Étape 5 : Build
-
-```bash
-cd server-go
-
-# Windows
-go build -o server.exe ./cmd/server
-
-# Raspberry Pi (Linux ARM64)
-GOOS=linux GOARCH=arm64 go build -o buzzcontrol ./cmd/server
-
-# PROD optimisé
-GOOS=linux GOARCH=arm64 go build -ldflags="-s -w" -o buzzcontrol ./cmd/server
 ```
+Déploie le serveur BuzzControl vers l'environnement cible.
 
-### Étape 6 : Tests post-build
+**Contexte projet :**
+- Répertoire : C:\Users\cyril\Documents\VScode\buzzcontrol
+- Serveur Go : server-go/
+- Config version : server-go/config.json
+- Procédure QUALIF : docs/QUALIF_PROCEDURE.md
+- Procédure PROD : docs/RELEASE_PROCEDURE.md
 
-```bash
-# Démarrer le serveur
-./server.exe &
+**Environnement cible :** $ARGUMENTS (QUALIF par défaut si vide)
 
-# Vérifier les endpoints
-curl http://localhost/version
-curl http://localhost/listGame
+**Étapes à exécuter :**
 
-# Arrêt graceful
-curl http://localhost/shutdown
-```
+1. **Collecter les informations**
+   - Version : lire server-go/config.json → champ "version"
+   - Branche : git branch --show-current
+   - Dernier commit : git log -1 --oneline
 
-### Étape 7 : Créer l'archive
+2. **Vérifier les prérequis**
+   - Tests QA passés
+   - Review approuvée
+   - Documentation à jour
+   - Version incrémentée
 
-```bash
-mkdir -p deploy/<ENV>/v<VERSION>
-cp buzzcontrol deploy/<ENV>/v<VERSION>/
-tar -czf deploy/<ENV>/buzzcontrol-v<VERSION>.tar.gz -C deploy/<ENV>/v<VERSION> .
-```
+3. **Build**
+   cd server-go
+   # Windows
+   go build -o server.exe ./cmd/server
+   # Linux ARM64 (Raspberry Pi)
+   GOOS=linux GOARCH=arm64 go build -o buzzcontrol ./cmd/server
 
-### Étape 8 : Git (PROD uniquement)
+4. **Tests post-build**
+   - Démarrer le serveur
+   - Vérifier /version et /listGame
+   - Arrêt graceful via /shutdown
 
-```bash
-# Squash merge
-git checkout main
-git pull origin main
-git merge --squash feature/<name>
-git commit -m "feat(<scope>): <description> (v<version>)"
-git push origin main
+5. **Git (PROD uniquement)**
+   - Squash merge vers main
+   - Tag annotée v<version>
+   - Cleanup branche feature
 
-# Tag
-git tag -a v<VERSION> -m "Release v<VERSION>"
-git push origin v<VERSION>
+6. **Générer le rapport de déploiement** avec :
+   - Informations : Version, env, date, branche, commit
+   - Builds : Résultats + tailles binaires
+   - Tests : Résultats post-build
+   - Git (PROD) : Merge, tag, cleanup
+   - Décision : SUCCESS / FAILED
 
-# Cleanup branche
-git branch -d feature/<name>
-git push origin --delete feature/<name>
-```
-
-## Différences QUALIF vs PROD
-
+**Différences QUALIF vs PROD :**
 | Action | QUALIF | PROD |
 |--------|--------|------|
-| Build Windows + ARM64 | ✅ | ✅ |
-| Tests post-build | ✅ | ✅ |
-| Archive | ✅ | ✅ |
-| Squash merge main | ❌ | ✅ |
-| Tag Git | ❌ | ✅ |
-| GitHub Release | ❌ | ✅ (optionnel) |
-| Cleanup branche | ❌ | ✅ |
+| Build Windows + ARM64 | Oui | Oui |
+| Tests post-build | Oui | Oui |
+| Squash merge main | Non | Oui |
+| Tag Git | Non | Oui |
+| Cleanup branche | Non | Oui |
 
-## Exemples d'utilisation
-
-```
-/deploy              # QUALIF par défaut
-/deploy QUALIF       # Explicitement QUALIF
-/deploy PROD         # Production complète
-/deploy hotfix       # Urgence production
+**Règles critiques :**
+- JAMAIS déployer PROD sans QUALIF validée
+- JAMAIS créer des tags Git en QUALIF
+- JAMAIS merge main en QUALIF
+- TOUJOURS tester l'arrêt graceful
 ```
 
-## Critères de succès
+## Action immédiate
 
-### ✅ SUCCÈS si :
-- Tous les builds réussissent
-- Tests post-build passent
-- Serveur démarre et répond
-- Archives créées correctement
-- Git OK (PROD)
-
-### ❌ ÉCHEC si :
-- Build échoue
-- Tests post-build échouent
-- Serveur ne démarre pas
-- Erreurs critiques dans les logs
-- Git échoue (PROD)
-
-## Règles critiques
-
-| Règle | Description |
-|-------|-------------|
-| ❌ JAMAIS | Déployer PROD sans QUALIF validée |
-| ❌ JAMAIS | Créer des tags Git en QUALIF |
-| ❌ JAMAIS | Merge main en QUALIF |
-| ❌ JAMAIS | Force push des tags |
-| ❌ JAMAIS | Skip les tests post-build |
-| ✅ TOUJOURS | Vérifier les prérequis |
-| ✅ TOUJOURS | Tester l'arrêt graceful |
-| ✅ TOUJOURS | Documenter les problèmes |
-| ✅ TOUJOURS | Fournir un plan de rollback (PROD) |
-
-## Mode Hotfix
-
-Pour bugs critiques en production uniquement :
-- Skip QUALIF si vraiment critique
-- Tests minimaux (critiques seulement)
-- Tag format : `v<version>-hotfix`
-- Documenter l'urgence clairement
-
-## Rapport de déploiement
-
-Le rapport doit inclure :
-1. **Informations** : Version, env, date, branche, commit
-2. **Builds** : Résultats par plateforme + tailles
-3. **Tests** : Résultats post-build
-4. **Archives** : Fichiers créés + tailles
-5. **Git** (PROD) : Merge, tag, cleanup
-6. **Checklist** : Vérifications effectuées
-7. **Instructions** : Étapes manuelles Raspberry Pi
-8. **Problèmes** : Issues rencontrées
-9. **Rollback** (PROD) : Plan de récupération
-10. **Décision** : SUCCESS / FAILED
-
-## Commence maintenant
-
-Déploie vers l'environnement : **$ARGUMENTS**
-
-*(Si aucun argument → QUALIF par défaut)*
+Lance maintenant le sous-agent deploy avec le Task tool.
