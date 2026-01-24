@@ -39,10 +39,11 @@ type Engine struct {
 func NewEngine() *Engine {
 	return &Engine{
 		state: GameState{
-			Phase:       PhaseStopped,
-			Delay:       30,
-			CurrentTime: 0,
-			Page:        "GAME",
+			Phase:              PhaseStopped,
+			Delay:              30,
+			CurrentTime:        0,
+			Page:               "GAME",
+			VirtualPlayerLimit: 20, // Default limit
 		},
 		data:             NewTeamsAndBumpers(),
 		questionStatuses: make(map[string]QuestionStatus),
@@ -62,6 +63,14 @@ func (e *Engine) GetPhase() GamePhase {
 	e.mu.RLock()
 	defer e.mu.RUnlock()
 	return e.state.Phase
+}
+
+// SetPhase sets the game phase
+func (e *Engine) SetPhase(phase GamePhase) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.state.Phase = phase
+	log.Printf("[Engine] Phase set to: %s", phase)
 }
 
 // GetTeamsAndBumpers returns teams and bumpers data
@@ -155,10 +164,12 @@ func (e *Engine) SetTeams(teams map[string]*Team) {
 	go e.SaveTeams()
 }
 
-// SetBumpers sets all bumpers
+// SetBumpers sets all bumpers and synchronizes VirtualPlayerCount
 func (e *Engine) SetBumpers(bumpers map[string]*Bumper) {
 	e.mu.Lock()
 	e.data.Bumpers = bumpers
+	// Synchronize VirtualPlayerCount with actual bumper count
+	e.state.VirtualPlayerCount = e.countVirtualPlayersUnsafe()
 	e.mu.Unlock()
 
 	// Auto-save bumpers to disk
@@ -1724,4 +1735,169 @@ func (e *Engine) CalculateMemoryScore() (int, int, int, int, bool) {
 		matchedPairs, totalPairs, errors, isComplete, score, pointsPerPair, completionBonus, errorPenalty)
 
 	return score, matchedPairs, totalPairs, errors, isComplete
+}
+
+// SetEnrollmentActive enables or disables virtual player enrollment (QR code display)
+func (e *Engine) SetEnrollmentActive(active bool) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.state.EnrollmentActive = active
+	log.Printf("[Engine] Enrollment active: %v", active)
+}
+
+// GetEnrollmentActive returns whether enrollment is currently active
+func (e *Engine) GetEnrollmentActive() bool {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	return e.state.EnrollmentActive
+}
+
+// SetShowQRCode sets whether the QR code should be displayed on TV
+func (e *Engine) SetShowQRCode(show bool) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.state.ShowQRCode = show
+
+	// When showing QR code, switch to ENROLL phase
+	// When hiding QR code, return to STOPPED phase
+	if show {
+		e.state.Phase = PhaseEnroll
+		log.Printf("[Engine] Show QR code: enabled, switching to ENROLL phase")
+	} else {
+		e.state.Phase = PhaseStopped
+		log.Printf("[Engine] Show QR code: disabled, returning to STOPPED phase")
+	}
+}
+
+// GetShowQRCode returns whether the QR code should be displayed
+func (e *Engine) GetShowQRCode() bool {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	return e.state.ShowQRCode
+}
+
+// GetVirtualPlayerCount returns the current count of enrolled virtual players
+func (e *Engine) GetVirtualPlayerCount() int {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	return e.state.VirtualPlayerCount
+}
+
+// IncrementVirtualPlayerCount increments the virtual player counter
+func (e *Engine) IncrementVirtualPlayerCount() int {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.state.VirtualPlayerCount++
+	count := e.state.VirtualPlayerCount
+	log.Printf("[Engine] Virtual player count: %d", count)
+	return count
+}
+
+// ResetVirtualPlayerCount resets the virtual player counter to zero
+func (e *Engine) ResetVirtualPlayerCount() {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.state.VirtualPlayerCount = 0
+	log.Printf("[Engine] Virtual player count reset")
+}
+
+// GetVirtualPlayerLimit returns the maximum number of virtual players allowed
+func (e *Engine) GetVirtualPlayerLimit() int {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	if e.state.VirtualPlayerLimit == 0 {
+		return 20 // Default limit
+	}
+	return e.state.VirtualPlayerLimit
+}
+
+// SetVirtualPlayerLimit sets the maximum number of virtual players allowed
+func (e *Engine) SetVirtualPlayerLimit(limit int) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if limit < 1 {
+		limit = 20 // Minimum 1, default to 20 if invalid
+	}
+	e.state.VirtualPlayerLimit = limit
+	log.Printf("[Engine] Virtual player limit set to: %d", limit)
+}
+
+// CreateVirtualPlayer creates a new virtual player (bumper) during enrollment
+func (e *Engine) CreateVirtualPlayer(name string) (string, *Bumper, error) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+
+	// Check phase ENROLL
+	if e.state.Phase != PhaseEnroll {
+		return "", nil, &EnrollmentError{Reason: "ENROLLMENT_CLOSED"}
+	}
+
+	// Check limit
+	currentCount := e.countVirtualPlayersUnsafe()
+	limit := e.state.VirtualPlayerLimit
+	if limit == 0 {
+		limit = 20 // Default
+	}
+	if currentCount >= limit {
+		return "", nil, &EnrollmentError{Reason: "LIMIT_REACHED"}
+	}
+
+	// Generate unique ID
+	id := "vjoueur_" + name + "_" + time.Now().Format("20060102_150405")
+
+	// Create virtual bumper
+	bumper := &Bumper{
+		Name:      name,
+		Team:      "",
+		Score:     0,
+		IsVirtual: true,
+		Status:    "READY",
+	}
+
+	e.data.Bumpers[id] = bumper
+
+	// Increment virtual player count in GameState
+	e.state.VirtualPlayerCount++
+	log.Printf("[Engine] Virtual player created: id=%s, name=%s, count=%d", id, name, e.state.VirtualPlayerCount)
+
+	// Save bumpers to disk (in goroutine to avoid blocking)
+	go e.SaveBumpers()
+
+	return id, bumper, nil
+}
+
+// countVirtualPlayersUnsafe counts virtual players (caller must hold lock)
+func (e *Engine) countVirtualPlayersUnsafe() int {
+	count := 0
+	for _, b := range e.data.Bumpers {
+		if b.IsVirtual {
+			count++
+		}
+	}
+	return count
+}
+
+// CountVirtualPlayers counts virtual players (thread-safe)
+func (e *Engine) CountVirtualPlayers() int {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	return e.countVirtualPlayersUnsafe()
+}
+
+// SyncVirtualPlayerCount synchronizes VirtualPlayerCount with actual bumper count
+// This should be called after loading bumpers from disk
+func (e *Engine) SyncVirtualPlayerCount() {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.state.VirtualPlayerCount = e.countVirtualPlayersUnsafe()
+	log.Printf("[Engine] Virtual player count synchronized: %d", e.state.VirtualPlayerCount)
+}
+
+// EnrollmentError represents an enrollment rejection error
+type EnrollmentError struct {
+	Reason string
+}
+
+func (e *EnrollmentError) Error() string {
+	return e.Reason
 }

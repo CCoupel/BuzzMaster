@@ -1,0 +1,331 @@
+/* ===========================
+   LAYOUT ENROLLMENT
+   (Formulaire d'inscription)
+   =========================== */
+
+.player-page-enrollment {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  padding: 1rem;
+}
+
+.player-card {
+  background: white;
+  border-radius: 20px;
+  padding: 2.5rem 2rem;
+  width: 100%;
+  max-width: 400px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+  text-align: center;
+  animation: slideUp 0.4s ease-out;
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(30px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.player-card h1 {
+  font-size: 1.75rem;
+  margin-bottom: 1.5rem;
+  color: #1f2937;
+  font-weight: 700;
+}
+
+.player-card input {
+  width: 100%;
+  padding: 1rem;
+  font-size: 1.1rem;
+  border: 2px solid #e5e7eb;
+  border-radius: 12px;
+  margin-bottom: 1rem;
+  text-align: center;
+  transition: all 0.2s;
+}
+
+.player-card input:focus {
+  outline: none;
+  border-color: #667eea;
+  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+}
+
+.player-card input:disabled {
+  background-color: #f3f4f6;
+  cursor: not-allowed;
+}
+
+.player-card button {
+  width: 100%;
+  padding: 1rem;
+  font-size: 1.1rem;
+  font-weight: 600;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  border: none;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: transform 0.2s, box-shadow 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+}
+
+.player-card button:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 30px rgba(102, 126, 234, 0.4);
+}
+
+.player-card button:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.player-card button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.player-card button.loading {
+  background: linear-gradient(135deg, #9ca3af 0%, #6b7280 100%);
+}
+
+.spinner {
+  display: inline-block;
+  width: 16px;
+  height: 16px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-top-color: white;
+  border-radius: 50%;
+  animation: spin 0.6s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.spinner-large {
+  display: inline-block;
+  width: 48px;
+  height: 48px;
+  border: 4px solid rgba(102, 126, 234, 0.2);
+  border-top-color: #667eea;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+  margin: 1rem auto;
+}
+
+.reconnection-info {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+  padding: 1rem 0;
+}
+
+.reconnection-info p {
+  color: #6b7280;
+  font-size: 1rem;
+  font-weight: 500;
+  margin: 0;
+}
+
+.forget-btn {
+  padding: 0.75rem 1.5rem !important;
+  font-size: 0.95rem !important;
+  background: var(--gray-200) !important;
+  color: var(--gray-700) !important;
+  border: 2px solid var(--gray-300) !important;
+  transition: all 0.2s !important;
+  width: auto !important;
+}
+
+.forget-btn:hover {
+  background: var(--gray-300) !important;
+  border-color: var(--gray-400) !important;
+  transform: none !important;
+  box-shadow: none !important;
+}
+
+.error-message {
+  background: #fee2e2;
+  color: #991b1b;
+  padding: 1rem;
+  border-radius: 12px;
+  margin-bottom: 1rem;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  animation: shake 0.5s ease-out;
+}
+
+@keyframes shake {
+  0%, 100% {
+    transform: translateX(0);
+  }
+  25% {
+    transform: translateX(-10px);
+  }
+  75% {
+    transform: translateX(10px);
+  }
+}
+
+.error-icon {
+  font-size: 1.25rem;
+}
+
+.closed-message {
+  color: #6b7280;
+  font-size: 1.2rem;
+  margin-bottom: 1rem;
+  font-weight: 500;
+}
+
+.help-text {
+  color: #9ca3af;
+  font-size: 0.95rem;
+  margin-top: 1rem;
+}
+
+/* Écran d'attente après inscription */
+.waiting-card {
+  background: linear-gradient(180deg, #ecfdf5 0%, #ffffff 100%);
+  border: 2px solid #10b981;
+}
+
+.waiting-card h1 {
+  color: #059669;
+}
+
+.success-icon {
+  width: 80px;
+  height: 80px;
+  background: #10b981;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 2.5rem;
+  color: white;
+  margin: 0 auto 1.5rem;
+  animation: scaleIn 0.4s ease-out;
+}
+
+@keyframes scaleIn {
+  from {
+    opacity: 0;
+    transform: scale(0.5);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.waiting-message {
+  color: #6b7280;
+  font-size: 1.1rem;
+  font-weight: 500;
+  margin-top: 1.5rem;
+  animation: pulse 2s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.6;
+  }
+}
+
+/* ===========================
+   LAYOUT GAME
+   (Interface de jeu)
+   =========================== */
+
+.player-page-game {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  overflow: hidden;
+  background: var(--gray-900);
+}
+
+.player-display-zone {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+}
+
+.buzz-button-zone {
+  height: 120px;
+  flex-shrink: 0;
+  padding: 20px;
+  background: var(--gray-900);
+  border-top: 1px solid var(--gray-700);
+}
+
+/* ===========================
+   MOBILE RESPONSIVE
+   =========================== */
+
+/* Small phones (375px and below) */
+@media (max-width: 375px) {
+  .player-page-enrollment {
+    padding: 0.5rem;
+  }
+
+  .player-card {
+    padding: 2rem 1.5rem;
+    max-width: 100%;
+  }
+
+  .player-card h1 {
+    font-size: 1.5rem;
+  }
+
+  .player-card input,
+  .player-card button {
+    font-size: 1rem;
+  }
+
+  .buzz-button-zone {
+    height: 110px;
+    padding: 18px;
+  }
+}
+
+/* Landscape mode on mobile */
+@media (max-height: 600px) and (orientation: landscape) {
+  .buzz-button-zone {
+    height: 90px;
+    padding: 12px;
+  }
+}
+
+/* Large tablets and up - center enrollment card */
+@media (min-width: 768px) {
+  .player-page-enrollment {
+    padding: 2rem;
+  }
+
+  .player-card {
+    max-width: 450px;
+  }
+}

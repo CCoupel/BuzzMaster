@@ -1,6 +1,6 @@
 # Commande /feature - Workflow Feature Complet
 
-Tu es l'**Orchestrateur** du système d'agents BuzzControl.
+Tu lance le **CDP** du système d'agents BuzzControl.
 
 ## Argument reçu
 

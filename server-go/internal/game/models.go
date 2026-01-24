@@ -15,6 +15,7 @@ const (
 	PhaseStarted   GamePhase = "STARTED"
 	PhasePaused    GamePhase = "PAUSED"
 	PhaseRevealed  GamePhase = "REVEALED"
+	PhaseEnroll    GamePhase = "ENROLL" // Player enrollment phase (virtual players)
 )
 
 // QuestionStatus represents question state (synced with GamePhase)
@@ -66,6 +67,7 @@ type Bumper struct {
 	Ready       bool        `json:"READY,omitempty"`
 	AnswerColor AnswerColor `json:"ANSWER_COLOR,omitempty"`
 	HintsAtBuzz int         `json:"HINTS_AT_BUZZ,omitempty"` // Number of QCM hints when player buzzed
+	IsVirtual   bool        `json:"IS_VIRTUAL,omitempty"`    // True for virtual players (mobile app)
 }
 
 // QuestionType represents the type of question
@@ -181,6 +183,10 @@ type GameState struct {
 	MemoryMatchedPairs     []int        `json:"MEMORY_MATCHED_PAIRS,omitempty"` // IDs of matched pairs (permanent)
 	MemoryErrors           int          `json:"MEMORY_ERRORS,omitempty"`        // Number of failed match attempts
 	QcmInvalidated         []string     `json:"QCM_INVALIDATED,omitempty"`      // Invalidated QCM answers (e.g., ["RED", "YELLOW"])
+	VirtualPlayerCount     int          `json:"VIRTUAL_PLAYER_COUNT"`           // Number of enrolled virtual players
+	VirtualPlayerLimit     int          `json:"VIRTUAL_PLAYER_LIMIT"`           // Maximum number of virtual players allowed
+	EnrollmentActive       bool         `json:"ENROLLMENT_ACTIVE,omitempty"`    // Whether player enrollment is active
+	ShowQRCode             bool         `json:"SHOW_QR_CODE,omitempty"`         // Whether to display QR code on TV
 }
 
 // TeamsAndBumpers holds all teams and bumpers data

@@ -1233,6 +1233,43 @@
   flex-shrink: 0;
 }
 
+/* Player info wrapper - nom joueur (gauche), timer (centre), équipe (droite) */
+.player-info-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  width: 100%;
+}
+
+.player-name-badge-mobile,
+.player-team-badge-mobile {
+  padding: 0.5rem 0.75rem;
+  border-radius: 0.5rem;
+  font-weight: 700;
+  color: white;
+  font-size: 0.85rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  flex-shrink: 1;
+  min-width: 0;
+  max-width: 30%;
+}
+
+.player-name-badge-mobile {
+  text-align: left;
+}
+
+.player-team-badge-mobile {
+  text-align: right;
+}
+
+.player-info-wrapper .timer {
+  flex: 1;
+  min-width: 0;
+}
+
 .zone-timer .timer {
   width: 100%;
   display: flex;

@@ -78,6 +78,9 @@ func main() {
 		app.engine.RecalculateAllTeamScores()
 	}
 
+	// Synchronize virtual player count with actual bumper count
+	app.engine.SyncVirtualPlayerCount()
+
 	// Load history and recalculate scores from events (overrides test data scores)
 	if err := app.engine.LoadHistory(); err != nil {
 		log.Printf("Warning: Could not load history: %v", err)
@@ -492,6 +495,9 @@ func (a *App) handleWebMessage(incoming *protocol.IncomingMessage) {
 	case protocol.ActionDelete:
 		a.handleDelete(msg)
 
+	case protocol.ActionDeleteBumper:
+		a.handleDeleteBumper(msg)
+
 	case protocol.ActionReset:
 		a.broadcastReset()
 
@@ -523,6 +529,18 @@ func (a *App) handleWebMessage(incoming *protocol.IncomingMessage) {
 
 	case protocol.ActionFlipMemoryCard:
 		a.handleFlipMemoryCard(msg)
+
+	case protocol.ActionShowQRCode:
+		a.handleShowQRCode()
+
+	case protocol.ActionHideQRCode:
+		a.handleHideQRCode()
+
+	case protocol.ActionSetVirtualPlayerLimit:
+		a.handleSetVirtualPlayerLimit(msg)
+
+	case protocol.ActionPlayerConnect:
+		a.handlePlayerConnect(incoming.ClientID, msg)
 
 	default:
 		log.Printf("[App] Unknown web action: %s", msg.Action)
@@ -780,6 +798,36 @@ func (a *App) handleDelete(msg *protocol.Message) {
 	a.broadcastQuestions()
 }
 
+func (a *App) handleDeleteBumper(msg *protocol.Message) {
+	var payload protocol.DeletePayload
+	if err := json.Unmarshal(msg.Msg, &payload); err != nil {
+		log.Printf("[App] Failed to parse DELETE_BUMPER: %v", err)
+		return
+	}
+
+	if payload.ID == "" {
+		log.Printf("[App] DELETE_BUMPER: empty ID")
+		return
+	}
+
+	log.Printf("[App] DELETE_BUMPER: Deleting bumper %s", payload.ID)
+
+	// Remove bumper from engine
+	bumpers := a.engine.GetTeamsAndBumpers().Bumpers
+	if _, exists := bumpers[payload.ID]; !exists {
+		log.Printf("[App] DELETE_BUMPER: Bumper %s not found", payload.ID)
+		return
+	}
+
+	delete(bumpers, payload.ID)
+	a.engine.SetBumpers(bumpers)
+
+	log.Printf("[App] Deleted bumper: %s", payload.ID)
+
+	// Broadcast updated state
+	a.broadcastUpdate()
+}
+
 func (a *App) handleReorderQuestions(msg *protocol.Message) {
 	var payload protocol.ReorderQuestionsPayload
 	if err := json.Unmarshal(msg.Msg, &payload); err != nil {
@@ -1010,6 +1058,118 @@ func (a *App) handleSetClientType(clientID string, msg *protocol.Message) {
 	a.broadcastClientCounts(adminCount, tvCount)
 }
 
+func (a *App) handleShowQRCode() {
+	a.engine.SetEnrollmentActive(true)
+	a.engine.SetShowQRCode(true)
+	a.engine.SetPhase(game.PhaseEnroll)
+	a.engine.ResetVirtualPlayerCount()
+	log.Println("[App] Entering ENROLL phase - QR code displayed")
+	a.broadcastUpdate()
+}
+
+func (a *App) handleHideQRCode() {
+	a.engine.SetEnrollmentActive(false)
+	a.engine.SetShowQRCode(false)
+	a.engine.SetPhase(game.PhaseStopped)
+	log.Printf("[App] Exiting ENROLL phase - %d virtual players enrolled", a.engine.GetVirtualPlayerCount())
+	a.broadcastUpdate()
+}
+
+func (a *App) handleSetVirtualPlayerLimit(msg *protocol.Message) {
+	var payload protocol.SetVirtualPlayerLimitPayload
+	if err := json.Unmarshal(msg.Msg, &payload); err != nil {
+		log.Printf("[App] Error parsing SET_VIRTUAL_PLAYER_LIMIT payload: %v", err)
+		return
+	}
+	a.engine.SetVirtualPlayerLimit(payload.Limit)
+	log.Printf("[App] Virtual player limit set to: %d", payload.Limit)
+	a.broadcastUpdate()
+}
+
+func (a *App) handlePlayerConnect(clientID string, msg *protocol.Message) {
+	var payload protocol.PlayerConnectPayload
+	if err := json.Unmarshal(msg.Msg, &payload); err != nil {
+		log.Printf("[App] Error parsing PLAYER_CONNECT payload: %v", err)
+		return
+	}
+
+	// Validate name (trim whitespace and check length: 2-20 chars)
+	playerName := strings.TrimSpace(payload.Name)
+	if len(playerName) < 2 || len(playerName) > 20 {
+		log.Printf("[App] PLAYER_CONNECT: invalid name length (%d chars) from client %s", len(playerName), clientID)
+
+		// Send rejection to this client
+		rejectPayload := protocol.PlayerRejectedPayload{
+			Reason: "INVALID_NAME",
+		}
+		rejectMsg, _ := protocol.NewMessage(protocol.ActionPlayerRejected, rejectPayload)
+		a.wsHub.SendToClient(clientID, rejectMsg)
+		return
+	}
+
+	// Check if player with this name already exists (reconnection)
+	var existingBumperID string
+	var existingBumper *game.Bumper
+	for id, b := range a.engine.GetTeamsAndBumpers().Bumpers {
+		if b.IsVirtual && b.Name == playerName {
+			existingBumperID = id
+			existingBumper = b
+			break
+		}
+	}
+
+	// If player exists, allow reconnection
+	if existingBumper != nil {
+		log.Printf("[App] PLAYER_CONNECT: reconnecting existing player: id=%s, name=%s", existingBumperID, existingBumper.Name)
+
+		// Send confirmation to this client
+		connectedPayload := protocol.PlayerConnectedPayload{
+			ID:   existingBumperID,
+			Name: existingBumper.Name,
+			Team: existingBumper.Team,
+		}
+		connectedMsg, _ := protocol.NewMessage(protocol.ActionPlayerConnected, connectedPayload)
+		a.wsHub.SendToClient(clientID, connectedMsg)
+
+		// Broadcast UPDATE to all clients (to notify of reconnection)
+		a.broadcastUpdate()
+		return
+	}
+
+	// New player: Try to create virtual player
+	bumperID, bumper, err := a.engine.CreateVirtualPlayer(playerName)
+	if err != nil {
+		// Send rejection to this client only
+		reason := "ENROLLMENT_CLOSED"
+		if enrollErr, ok := err.(*game.EnrollmentError); ok {
+			reason = enrollErr.Reason
+		}
+
+		rejectPayload := protocol.PlayerRejectedPayload{
+			Reason: reason,
+		}
+		rejectMsg, _ := protocol.NewMessage(protocol.ActionPlayerRejected, rejectPayload)
+
+		// Send rejection via WebSocket
+		a.wsHub.SendToClient(clientID, rejectMsg)
+		log.Printf("[App] PLAYER_CONNECT: rejected player=%s, reason=%s", payload.Name, reason)
+		return
+	}
+
+	// Send confirmation to this client
+	connectedPayload := protocol.PlayerConnectedPayload{
+		ID:   bumperID,
+		Name: bumper.Name,
+		Team: bumper.Team,
+	}
+	connectedMsg, _ := protocol.NewMessage(protocol.ActionPlayerConnected, connectedPayload)
+	a.wsHub.SendToClient(clientID, connectedMsg)
+	log.Printf("[App] PLAYER_CONNECT: player connected: id=%s, name=%s", bumperID, bumper.Name)
+
+	// Broadcast UPDATE to all clients (teams/bumpers updated)
+	a.broadcastUpdate()
+}
+
 // Broadcast methods
 func (a *App) broadcast(action string, data json.RawMessage, viaTCP bool) {
 	msg, _ := protocol.NewMessage(action, nil)
@@ -1139,6 +1299,26 @@ func (a *App) broadcastQCMHint(invalidatedColor string, remainingAnswers int) {
 
 	// Also broadcast full update so clients receive the updated QcmInvalidated state
 	a.broadcastUpdate()
+}
+
+func (a *App) broadcastShowQRCode() {
+	payload := protocol.QRCodePayload{
+		URL:  "http://localhost/player",
+		Show: true,
+	}
+	data, _ := json.Marshal(payload)
+	a.broadcast(protocol.ActionShowQRCode, data, false)
+	log.Println("[App] QR Code enrollment activated")
+}
+
+func (a *App) broadcastHideQRCode() {
+	payload := protocol.QRCodePayload{
+		URL:  "",
+		Show: false,
+	}
+	data, _ := json.Marshal(payload)
+	a.broadcast(protocol.ActionHideQRCode, data, false)
+	log.Println("[App] QR Code enrollment deactivated")
 }
 
 func (a *App) broadcastQuestions() {
@@ -1341,9 +1521,26 @@ func displayAndOpenURLs(httpPort int) {
 		primaryURL = localhostURL
 	}
 
-	// Open browser
-	log.Printf("Opening browser: %s", primaryURL)
-	openBrowser(primaryURL)
+	// Open browsers to /, /tv and /anim pages with small delays
+	// Order: /anim (admin), /tv (display), / (home) - admin opens first
+	pagesToOpen := []struct {
+		path string
+		name string
+	}{
+		{"/anim", "admin"},
+		{"/tv", "TV display"},
+		{"/", "home"},
+	}
+
+	for i, page := range pagesToOpen {
+		url := primaryURL + page.path
+		log.Printf("Opening browser: %s (%s)", url, page.name)
+		openBrowser(url)
+		// Small delay between browser opens to avoid resource issues
+		if i < len(pagesToOpen)-1 {
+			time.Sleep(500 * time.Millisecond)
+		}
+	}
 }
 
 // NetworkInterface represents a network interface with IP

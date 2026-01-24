@@ -18,6 +18,8 @@ export default function useWebSocket() {
     memoryMatchedPairs: [], // Server-synchronized matched pair IDs (permanent)
     memoryErrors: 0, // Server-synchronized error count (non-matches)
     qcmInvalidated: [], // Server-synchronized invalidated QCM answers (e.g., ["RED", "YELLOW"])
+    virtualPlayerCount: 0, // Server-synchronized virtual player count (ENROLL phase)
+    virtualPlayerLimit: 20, // Server-synchronized virtual player limit
   })
   const [teams, setTeams] = useState({})
   const [bumpers, setBumpers] = useState({})
@@ -86,6 +88,8 @@ export default function useWebSocket() {
             memoryMatchedPairs: MSG.GAME.MEMORY_MATCHED_PAIRS || [],
             memoryErrors: MSG.GAME.MEMORY_ERRORS || 0,
             qcmInvalidated: MSG.GAME.QCM_INVALIDATED || [],
+            virtualPlayerCount: MSG.GAME.VIRTUAL_PLAYER_COUNT ?? prev.virtualPlayerCount,
+            virtualPlayerLimit: MSG.GAME.VIRTUAL_PLAYER_LIMIT ?? prev.virtualPlayerLimit,
           }))
         }
         if (MSG?.teams) setTeams(MSG.teams)

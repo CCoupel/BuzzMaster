@@ -28,6 +28,7 @@ const (
 	ActionReboot      = "REBOOT"
 	ActionFSInfo       = "FSINFO"
 	ActionDelete           = "DELETE"
+	ActionDeleteBumper     = "DELETE_BUMPER"
 	ActionBumperPoints     = "BUMPER_POINTS"
 	ActionTeamPoints       = "TEAM_POINTS"
 	ActionClients          = "CLIENTS"
@@ -37,6 +38,13 @@ const (
 	ActionBackgroundChange  = "BACKGROUND_CHANGE"
 	ActionFlipMemoryCard    = "FLIP_MEMORY_CARD"
 	ActionQCMHint           = "QCM_HINT"
+	// Virtual player enrollment actions
+	ActionShowQRCode           = "SHOW_QR_CODE"
+	ActionHideQRCode           = "HIDE_QR_CODE"
+	ActionSetVirtualPlayerLimit = "SET_VIRTUAL_PLAYER_LIMIT"
+	ActionPlayerConnect        = "PLAYER_CONNECT"
+	ActionPlayerConnected      = "PLAYER_CONNECTED"
+	ActionPlayerRejected       = "PLAYER_REJECTED"
 )
 
 // FSInfo represents file storage information
@@ -148,6 +156,34 @@ type FlipMemoryCardPayload struct {
 type QCMHintPayload struct {
 	Color     string `json:"COLOR"`     // Invalidated color (RED, GREEN, YELLOW, BLUE)
 	Remaining int    `json:"REMAINING"` // Number of remaining valid answers
+}
+
+// SetVirtualPlayerLimitPayload for SET_VIRTUAL_PLAYER_LIMIT action
+type SetVirtualPlayerLimitPayload struct {
+	Limit int `json:"LIMIT"` // Maximum number of virtual players
+}
+
+// PlayerConnectPayload for PLAYER_CONNECT action (virtual player enrollment)
+type PlayerConnectPayload struct {
+	Name string `json:"NAME"` // Player name
+}
+
+// PlayerConnectedPayload for PLAYER_CONNECTED action (enrollment accepted)
+type PlayerConnectedPayload struct {
+	ID   string `json:"ID"`   // Bumper ID
+	Name string `json:"NAME"` // Player name
+	Team string `json:"TEAM"` // Team name (if assigned)
+}
+
+// PlayerRejectedPayload for PLAYER_REJECTED action (enrollment rejected)
+type PlayerRejectedPayload struct {
+	Reason string `json:"REASON"` // Rejection reason (LIMIT, CLOSED, INVALID_NAME)
+}
+
+// QRCodePayload for SHOW_QR_CODE/HIDE_QR_CODE actions
+type QRCodePayload struct {
+	URL  string `json:"URL"`  // URL to encode in QR code
+	Show bool   `json:"SHOW"` // Whether to show or hide
 }
 
 // NewMessage creates a new outgoing message

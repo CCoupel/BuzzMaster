@@ -609,3 +609,43 @@ func TestEngine_StateChangeCallback(t *testing.T) {
 	}
 }
 
+func TestEngine_SetBumpers_SyncsVirtualPlayerCount(t *testing.T) {
+	e := NewEngine()
+
+	// Start with no bumpers
+	if e.GetVirtualPlayerCount() != 0 {
+		t.Errorf("Expected initial virtual player count 0, got %d", e.GetVirtualPlayerCount())
+	}
+
+	// Add 2 virtual and 1 physical bumper
+	bumpers := map[string]*Bumper{
+		"virtual1": {Name: "Player1", IsVirtual: true},
+		"virtual2": {Name: "Player2", IsVirtual: true},
+		"buzzer1":  {Name: "Buzzer1", IsVirtual: false},
+	}
+	e.SetBumpers(bumpers)
+
+	// Should have 2 virtual players
+	if e.GetVirtualPlayerCount() != 2 {
+		t.Errorf("Expected virtual player count 2, got %d", e.GetVirtualPlayerCount())
+	}
+
+	// Remove one virtual player
+	delete(bumpers, "virtual1")
+	e.SetBumpers(bumpers)
+
+	// Should have 1 virtual player
+	if e.GetVirtualPlayerCount() != 1 {
+		t.Errorf("Expected virtual player count 1 after deletion, got %d", e.GetVirtualPlayerCount())
+	}
+
+	// Remove all virtual players
+	delete(bumpers, "virtual2")
+	e.SetBumpers(bumpers)
+
+	// Should have 0 virtual players (only physical buzzer remains)
+	if e.GetVirtualPlayerCount() != 0 {
+		t.Errorf("Expected virtual player count 0, got %d", e.GetVirtualPlayerCount())
+	}
+}
+

@@ -3,6 +3,22 @@
 Historique des versions du projet BuzzControl.
 
 
+## [2.44.3] - 2026-01-24
+
+### Corrigé
+- **Synchronisation compteur joueurs virtuels** : Le compteur affiché sur la page Équipes (/teams) est maintenant synchronisé avec celui de l'affichage TV (/tv)
+  - Utilise `gameState.virtualPlayerCount` (source de vérité serveur) au lieu d'un calcul local
+  - Affichage séparé : 🎮 joueurs physiques et 📱 joueurs virtuels
+  - Ajout des champs `PhaseEnroll`, `IsVirtual` et des actions protocole associées
+
+### Technique
+- `TeamsPage.jsx` : Import de `gameState` depuis `useGame()`, calcul `physicalBumperCount` et utilisation de `virtualPlayerCount`
+- `TeamsPage.css` : Styles `.bumper-counts`, `.bumper-count.physical`, `.bumper-count.virtual`
+- `models.go` : Ajout `PhaseEnroll`, `IsVirtual`, `VirtualPlayerCount`, `VirtualPlayerLimit`, `EnrollmentActive`, `ShowQRCode`
+- `messages.go` : Ajout actions PLAYER_CONNECT, PLAYER_CONNECTED, PLAYER_REJECTED, SHOW_QR_CODE, HIDE_QR_CODE
+
+---
+
 ## [2.40.0] - 2026-01-19
 
 ### Ajouts

@@ -10,14 +10,15 @@ import HistoryPage from './pages/HistoryPage'
 import CategoryPalmaresPage from './pages/CategoryPalmaresPage'
 import ConfigPage from './pages/ConfigPage'
 import PlayerDisplay from './pages/PlayerDisplay'
+import PlayerPage from './pages/PlayerPage'
 import './App.css'
 
 function AppContent() {
   const { status, clientCounts, setClientType, version } = useGame()
   const location = useLocation()
 
-  // Hide navbar on TV display
-  const hideNavbar = location.pathname === '/tv'
+  // Hide navbar on TV display and player page
+  const hideNavbar = location.pathname === '/tv' || location.pathname === '/' || location.pathname === '/player'
 
   // Set client type based on route (TV display vs admin)
   // Only send when connected to ensure WebSocket is ready
@@ -36,7 +37,9 @@ function AppContent() {
       {!hideNavbar && <Navbar connectionStatus={status} clientCounts={clientCounts} serverVersion={version} />}
       <main className={`main-content ${hideNavbar ? 'fullscreen' : ''}`}>
         <Routes>
-          <Route path="/" element={<GamePage />} />
+          <Route path="/" element={<PlayerPage />} />
+          <Route path="/player" element={<PlayerPage />} />
+          <Route path="/anim" element={<GamePage />} />
           <Route path="/scoreboard" element={<ScoresPage />} />
           <Route path="/teams" element={<TeamsPage />} />
           <Route path="/quiz" element={<QuestionsPage />} />

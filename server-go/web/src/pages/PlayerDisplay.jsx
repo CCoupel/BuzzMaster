@@ -4,6 +4,8 @@ import confetti from 'canvas-confetti'
 import { useGame } from '../hooks/GameContext'
 import Timer from '../components/Timer'
 import Podium from '../components/Podium'
+import QRCodeOverlay from '../components/QRCodeOverlay'
+import QRCodeDisplay from '../components/QRCodeDisplay'
 import { CATEGORIES } from './QuestionsPage'
 import './PlayerDisplay.css'
 
@@ -23,8 +25,8 @@ const BUTTON_TO_QCM_COLOR = {
   'D': 'BLUE',
 }
 
-export default function PlayerDisplay() {
-  const { gameState, teams, bumpers, flipMemoryCard } = useGame()
+export default function PlayerDisplay({ playerName = null, playerNameColor = null, teamName = null, teamColor = null }) {
+  const { gameState, teams, bumpers, flipMemoryCard, showQRCode } = useGame()
   const [previousRanking, setPreviousRanking] = useState({})
   const [changedTeams, setChangedTeams] = useState({})
   const [history, setHistory] = useState([]) // For PALMARES view
@@ -611,7 +613,37 @@ export default function PlayerDisplay() {
       </div>
 
       <AnimatePresence mode="wait">
-        {isShowingScores ? (
+        {gameState.phase === 'ENROLL' ? (
+          /* Enrollment Phase - QR Code Display */
+          <motion.div
+            key="enroll"
+            className="enroll-phase"
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.9 }}
+          >
+            <div className="enroll-header">
+              <h1>📱 INSCRIPTION DES JOUEURS</h1>
+            </div>
+
+            <div className="enroll-qr-zone">
+              <QRCodeDisplay url={`http://${window.location.hostname}/player`} size={400} />
+              <p className="enroll-instruction">Scannez ce code avec votre smartphone</p>
+            </div>
+
+            <div className="enroll-progress">
+              <div className="enroll-progress-bar">
+                <div
+                  className="enroll-progress-fill"
+                  style={{ width: `${Math.min(((gameState.virtualPlayerCount || 0) / (gameState.virtualPlayerLimit || 20)) * 100, 100)}%` }}
+                />
+              </div>
+              <span className="enroll-progress-text">
+                {gameState.virtualPlayerCount || 0} / {gameState.virtualPlayerLimit || 20} joueurs
+              </span>
+            </div>
+          </motion.div>
+        ) : isShowingScores ? (
           /* Team Scores View */
           <motion.div
             key="scores"
@@ -1437,15 +1469,36 @@ export default function PlayerDisplay() {
             {/* Non-QCM/Non-Memory Game Content - 4 vertical zones: Timer, Question, Media, Answers */}
             {!isQcm && !isMemory && showGameContent && gameState.question && (
               <div className="game-content-zones">
-                {/* Zone 1: Timer */}
+                {/* Zone 1: Timer with player info */}
                 <div className="zone-timer">
-                  <Timer
-                    currentTime={gameState.timer}
-                    totalTime={gameState.totalTime}
-                    phase={gameState.phase}
-                    size="xl"
-                    showPhase={false}
-                  />
+                  {playerName && (
+                    <div className="player-info-wrapper">
+                      <div className="player-name-badge-mobile" style={{ backgroundColor: playerNameColor }}>
+                        {playerName}
+                      </div>
+                      <Timer
+                        currentTime={gameState.timer}
+                        totalTime={gameState.totalTime}
+                        phase={gameState.phase}
+                        size="xl"
+                        showPhase={false}
+                      />
+                      {teamName && (
+                        <div className="player-team-badge-mobile" style={{ backgroundColor: teamColor }}>
+                          {teamName}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  {!playerName && (
+                    <Timer
+                      currentTime={gameState.timer}
+                      totalTime={gameState.totalTime}
+                      phase={gameState.phase}
+                      size="xl"
+                      showPhase={false}
+                    />
+                  )}
                 </div>
 
                 {/* Zone 2: Question */}
@@ -1542,6 +1595,9 @@ export default function PlayerDisplay() {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* QR Code Overlay for player enrollment */}
+      <QRCodeOverlay show={showQRCode} />
     </div>
   )
 }

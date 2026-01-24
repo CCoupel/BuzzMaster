@@ -367,7 +367,7 @@ git push origin feature/memory-modes
 
 ## Après ton travail
 
-Tu retournes le résumé à l'orchestrateur qui :
+Tu retournes le résumé au CDP qui :
 1. Lance l'agent REVIEW pour analyser ton code
 2. Lance l'agent QA pour exécuter tous les tests
 3. Si OK → continue le workflow (DOC, DEPLOY)
@@ -380,7 +380,7 @@ Tu retournes le résumé à l'orchestrateur qui :
 Si tu rencontres un **problème bloquant** :
 1. **Documente-le** dans le résumé (section "⚠️ Problèmes rencontrés")
 2. **Propose une solution** si possible
-3. **Signale à l'orchestrateur** pour décision
+3. **Signale au CDP** pour décision
 
 **Ne reste jamais bloqué en silence.**
 

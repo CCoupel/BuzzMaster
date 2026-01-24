@@ -25,10 +25,18 @@ const ANSWER_COLORS = {
 }
 
 export default function TeamsPage() {
-  const { teams, bumpers, updateConfig } = useGame()
+  const { teams, bumpers, gameState, updateConfig } = useGame()
   const [newTeamName, setNewTeamName] = useState('')
   const [draggedBumper, setDraggedBumper] = useState(null)
   const [dragOverTarget, setDragOverTarget] = useState(null)
+
+  // Count physical vs virtual bumpers from server-synchronized data
+  const physicalBumperCount = useMemo(() => {
+    return Object.values(bumpers).filter(b => !b.IS_VIRTUAL).length
+  }, [bumpers])
+
+  // Use server-synchronized virtual player count (source of truth)
+  const virtualPlayerCount = gameState?.virtualPlayerCount || 0
 
   // Group bumpers by team
   const bumpersByTeam = useMemo(() => {
@@ -332,7 +340,10 @@ export default function TeamsPage() {
         <section className="bumpers-section">
           <div className="section-header">
             <h2 className="section-title">Joueurs non assignes</h2>
-            <span className="bumper-count">{Object.keys(bumpers).length} connecte(s)</span>
+            <div className="bumper-counts">
+              <span className="bumper-count physical">🎮 {physicalBumperCount}</span>
+              <span className="bumper-count virtual">📱 {virtualPlayerCount}</span>
+            </div>
           </div>
 
           <div
