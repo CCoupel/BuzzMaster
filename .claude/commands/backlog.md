@@ -109,7 +109,9 @@ vX.Y.Z (à déterminer)
 ```
 
 3. Mettre à jour `backlog/README.md` pour ajouter la référence
-4. Commit et push
+4. **Afficher un résumé** de ce qui a été créé/modifié
+5. **Demander confirmation** à l'utilisateur avant de commit et push
+6. Si confirmé → Commit et push
 
 ## Exemples
 
