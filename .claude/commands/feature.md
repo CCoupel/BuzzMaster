@@ -16,9 +16,26 @@ $ARGUMENTS
 
 ## Instructions
 
-Cette commande orchestre le workflow jusqu'à la QUALIF. Elle lance les sous-agents dans l'ordre avec le point de validation utilisateur.
+Cette commande orchestre le workflow jusqu'à la QUALIF. Elle lance les sous-agents dans l'ordre avec les points de validation utilisateur.
 
-### Phase 0 : Préparation Git (via PLAN)
+### Phase 0 : Recherche backlog (AVANT tout)
+
+**OBLIGATOIRE** : Avant de lancer le PLAN, rechercher dans le backlog une entrée correspondante.
+
+1. **Lire `backlog/README.md`** pour lister toutes les entrées
+2. **Chercher une correspondance** avec l'argument fourni (par nom, description, mots-clés)
+3. **Si correspondance trouvée** :
+   - Afficher le nom du fichier backlog trouvé et sa description
+   - **Demander confirmation** : "J'ai trouvé l'entrée `backlog/<nom>.md` : <description>. Est-ce bien la feature à implémenter ?"
+   - Si confirmé → Lire le fichier backlog complet et le passer au PLAN
+   - Si refusé → Demander clarification ou créer une nouvelle spécification
+4. **Si aucune correspondance** :
+   - Informer l'utilisateur qu'aucun backlog n'existe
+   - Proposer de créer une entrée backlog d'abord (`/backlog <description>`) ou continuer sans
+
+**⏸️ POINT DE VALIDATION : Attendre confirmation de l'entrée backlog**
+
+### Phase 0b : Préparation Git (via PLAN)
 
 L'agent PLAN s'occupe de la préparation Git :
 
@@ -196,17 +213,16 @@ Pour continuer vers la production :
 | Build échoue | Retour à Phase 2 (DEV) pour correction |
 | Maximum 3 cycles DEV ↔ REVIEW/QA | Escalade vers utilisateur |
 
-## Point de validation obligatoire
+## Points de validation obligatoires
 
-- **Après PLAN** : L'utilisateur doit valider le plan avant implémentation
+1. **Phase 0 (Backlog)** : L'utilisateur doit confirmer l'entrée backlog trouvée
+2. **Après PLAN** : L'utilisateur doit valider le plan avant implémentation
 
 ## Action immédiate
 
-Lance maintenant la **Phase 1 (PLAN)** avec le Task tool :
+Lance maintenant la **Phase 0 (Recherche backlog)** :
 
-```
-Task tool:
-- subagent_type: "implementation-planner"
-- description: "Créer plan d'implémentation"
-- prompt: [prompt de la Phase 1 avec $ARGUMENTS]
-```
+1. Lire `backlog/README.md`
+2. Chercher une entrée correspondant à "$ARGUMENTS"
+3. Si trouvée → Afficher et demander confirmation
+4. Si confirmée → Passer à Phase 0b + Phase 1 (PLAN) avec le backlog
