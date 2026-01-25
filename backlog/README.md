@@ -12,6 +12,7 @@ Chaque fichier correspond à une fonctionnalité ou un ensemble de fonctionnalit
 | [categories-questions.md](categories-questions.md) | ✅ v2.34.0 | Système de catégorisation et palmarès |
 | [timer-gameplay.md](timer-gameplay.md) | ✅ v2.29.0 | Décompte de préparation avant timer |
 | [qcm-indices-penalites.md](qcm-indices-penalites.md) | ✅ v2.38.0 | Indices automatiques pour QCM avec pénalités |
+| [qcm-marqueurs-indices.md](qcm-marqueurs-indices.md) | 📋 Planifié | Marqueurs d'indices sur la barre de temps |
 | [debug-tests.md](debug-tests.md) | ✅ v2.28.0 | Fonctionnalités de test sans buzzers |
 | [affichage-tv.md](affichage-tv.md) | ✅ v2.30.0 | Synchronisation des fonds d'écran |
 | [memory-game.md](memory-game.md) | ✅ v2.33.0 | Jeu de mémoire avec paires |
@@ -64,6 +65,7 @@ vX.Y.Z
 
 ## Historique
 
+- 2026-01-25 : Ajout marqueurs indices QCM sur barre de temps (📋 Planifié)
 - 2026-01-25 : Ajout de la page logs (📋 Planifié)
 - 2026-01-25 : Complétion page joueur (v2.41.0)
 - 2026-01-23 : Ajout du mode demo (v2.40.0)
