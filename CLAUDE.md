@@ -813,6 +813,32 @@ Interface de gestion des équipes avec drag & drop :
 - **Drag & Drop** : Glisser un joueur sur une équipe pour l'assigner
 - **Désassigner** : Glisser vers la zone "non assignés"
 
+#### Carte Joueur Non Assigné (v2.44.10)
+Organisation en 3 lignes pour les joueurs non assignés à une équipe :
+
+**Ligne 1 - Identification :**
+- Input de modification du nom du joueur
+- Badge "PRET" (si `READY === 'TRUE'`)
+- Bouton de suppression (×) en coin supérieur droit
+
+**Ligne 2 - Configuration visuelle :**
+- Pastille avatar avec initiale du joueur (fond = couleur QCM si définie)
+- 4 boutons de sélection de couleur QCM (Rouge A, Vert B, Jaune C, Bleu D)
+- Poignée de drag and drop
+
+**Ligne 3 - Informations techniques :**
+- Adresse MAC du buzzer
+- Version du firmware (si disponible)
+
+**Règles :**
+- Suppression possible uniquement pour les joueurs non assignés
+- Sélection de couleur QCM possible uniquement si non assigné
+- Confirmation obligatoire avant suppression (affichage du nom)
+
+**Fichiers concernés :**
+- `TeamsPage.jsx` : Classes `.bumper-row-name`, `.bumper-row-colors`, `.bumper-row-tech`
+- `TeamsPage.css` : Styles pour les 3 lignes, positionnement bouton suppression
+
 #### Couleurs de Réponse (v2.5.0)
 Chaque joueur peut avoir une couleur de réponse pour le mode QCM :
 - **Couleurs disponibles** : Rouge (A), Vert (B), Jaune (C), Bleu (D)
@@ -1238,20 +1264,31 @@ data/             # Données variables (créé automatiquement)
 
 ---
 
-## React Web Interface (v2.34.0)
+## React Web Interface (v2.44.10)
 
 ### Structure des pages
 
-| Route | Page | Description |
-|-------|------|-------------|
-| `/` | GamePage | Interface admin principale |
-| `/tv` | PlayerDisplay | Affichage TV (plein écran, statique) |
-| `/scoreboard` | ScoresPage | Tableau des scores |
-| `/teams` | TeamsPage | Gestion des équipes |
-| `/quiz` | QuizPage | Gestion des questions |
-| `/settings` | SettingsPage | Configuration |
-| `/history-page` | HistoryPage | Historique des événements |
-| `/palmares` | CategoryPalmaresPage | Palmarès par catégorie |
+**Architecture des routes :**
+- Route `/` : Page d'inscription des joueurs (PlayerPage)
+- Route `/tv` : Affichage TV plein écran (PlayerDisplay)
+- Routes `/admin/*` : Pages d'administration
+- Routes `/anim/*` : Alias des routes admin (même comportement)
+
+| Route | Alias | Page | Description |
+|-------|-------|------|-------------|
+| `/` | - | PlayerPage | Page d'inscription des joueurs |
+| `/tv` | - | PlayerDisplay | Affichage TV (plein écran, statique) |
+| `/admin` | `/anim` | GamePage | Interface admin principale (Jeu) |
+| `/admin/scoreboard` | `/anim/scoreboard` | ScoresPage | Tableau des scores |
+| `/admin/teams` | `/anim/teams` | TeamsPage | Gestion des joueurs et équipes |
+| `/admin/quiz` | `/anim/quiz` | QuestionsPage | Gestion des questions |
+| `/admin/settings` | `/anim/settings` | ConfigPage | Configuration |
+| `/admin/history` | `/anim/history` | HistoryPage | Historique des événements |
+| `/admin/palmares` | `/anim/palmares` | CategoryPalmaresPage | Palmarès par catégorie |
+
+**Navbar :**
+- Affiché uniquement sur les routes `/admin/*` et `/anim/*`
+- Détection active des routes via fonction `isActiveRoute()` qui vérifie les deux préfixes
 
 ### Affichage TV - Vues disponibles (v2.34.0)
 

@@ -3,6 +3,55 @@
 Historique des versions du projet BuzzControl.
 
 
+## [2.44.10] - 2026-01-25
+
+### Fixed
+- **[Routes]**: Restructuration de l'architecture des routes pour clarté et cohérence
+  - Route `/` : Page d'inscription joueurs (PlayerPage)
+  - Routes `/admin/*` : Pages d'administration (GamePage, Scores, Teams, Quiz, etc.)
+  - Routes `/anim/*` : Alias des routes admin (même comportement)
+  - Route `/tv` : Affichage TV plein écran
+  - Correction : La page Jeu (GamePage) est maintenant accessible via `/admin` et `/anim`
+- **[Navbar]**: Correction de la détection active pour supporter les deux préfixes (`/admin` et `/anim`)
+  - Fonction `isActiveRoute()` pour vérifier les deux chemins
+  - Mise à jour des liens vers `/admin/*` au lieu des routes racine
+- **[TeamsPage]**: Réorganisation de la carte joueur non assigné en 3 lignes
+  - Ligne 1 : Input nom + badge PRET + bouton suppression (coin supérieur droit)
+  - Ligne 2 : Pastille avatar + 4 boutons couleurs QCM + poignée de drag
+  - Ligne 3 : Informations techniques (adresse MAC + version)
+  - Suppression possible uniquement pour les joueurs non assignés
+
+### Technique
+- `App.jsx` : Tableau `adminRoutes` dupliqué pour `/admin` et `/anim`, route `/` vers PlayerPage
+- `Navbar.jsx` : Import `useLocation`, fonction `isActiveRoute()`, liens mis à jour
+- `TeamsPage.jsx` : Classes `.bumper-row-name`, `.bumper-row-colors`, `.bumper-row-tech`
+- `TeamsPage.css` : Styles pour les 3 lignes de la carte joueur non assigné
+- `engine.go` : Aucune modification backend pour ce bugfix
+
+---
+
+## [2.44.7] - 2026-01-24
+
+### Fixed
+- **[TeamsPage]**: Ajout d'un bouton de suppression (×) sur les cartes joueurs
+  - Bouton rouge discret en haut à droite de chaque carte joueur
+  - Confirmation avant suppression avec affichage du nom du joueur
+  - Fonction `handleDeleteBumper()` pour gérer la suppression propre
+- **[Navbar]**: Renommage de l'onglet "Équipes" → "Joueurs" pour plus de clarté
+  - Reflète mieux le contenu de la page (gestion des joueurs et équipes)
+- **[Tests]**: Correction des tests unitaires liés à la phase COUNTDOWN
+  - Ajout de `StartImmediate()` dans engine.go pour tester sans goroutines
+  - Correction des tests COUNTDOWN dans engine_test.go
+
+### Technique
+- `TeamsPage.jsx`: Fonction `handleDeleteBumper()`, bouton avec classe `.bumper-delete-btn`
+- `TeamsPage.css`: Styles `.bumper-delete-btn` (hover rouge), `.member-delete-btn`
+- `Navbar.jsx`: Label modifié ligne 16 (`'Joueurs'` au lieu de `'Équipes'`)
+- `engine.go`: Méthode `StartImmediate()` pour tests synchrones
+- `engine_test.go`: Utilisation de `StartImmediate()` dans les tests COUNTDOWN
+
+---
+
 ## [2.44.3] - 2026-01-24
 
 ### Corrigé

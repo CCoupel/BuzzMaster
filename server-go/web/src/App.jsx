@@ -13,15 +13,26 @@ import PlayerDisplay from './pages/PlayerDisplay'
 import PlayerPage from './pages/PlayerPage'
 import './App.css'
 
+// Admin routes - duplicated for both /admin and /anim prefixes
+const adminRoutes = [
+  { path: '', element: <GamePage /> },
+  { path: 'scoreboard', element: <ScoresPage /> },
+  { path: 'teams', element: <TeamsPage /> },
+  { path: 'quiz', element: <QuestionsPage /> },
+  { path: 'history', element: <HistoryPage /> },
+  { path: 'palmares', element: <CategoryPalmaresPage /> },
+  { path: 'settings', element: <ConfigPage /> },
+]
+
 function AppContent() {
   const { status, clientCounts, setClientType, version } = useGame()
   const location = useLocation()
 
-  // Hide navbar on TV display and player page
-  const hideNavbar = location.pathname === '/tv' || location.pathname === '/' || location.pathname === '/player'
+  // Show navbar only on admin pages (/admin/* or /anim/*)
+  const isAdminRoute = location.pathname.startsWith('/admin') || location.pathname.startsWith('/anim')
+  const hideNavbar = !isAdminRoute
 
   // Set client type based on route (TV display vs admin)
-  // Only send when connected to ensure WebSocket is ready
   React.useEffect(() => {
     if (status === 'connected') {
       if (location.pathname === '/tv') {
@@ -37,16 +48,29 @@ function AppContent() {
       {!hideNavbar && <Navbar connectionStatus={status} clientCounts={clientCounts} serverVersion={version} />}
       <main className={`main-content ${hideNavbar ? 'fullscreen' : ''}`}>
         <Routes>
+          {/* Player enrollment page */}
           <Route path="/" element={<PlayerPage />} />
-          <Route path="/player" element={<PlayerPage />} />
-          <Route path="/anim" element={<GamePage />} />
-          <Route path="/scoreboard" element={<ScoresPage />} />
-          <Route path="/teams" element={<TeamsPage />} />
-          <Route path="/quiz" element={<QuestionsPage />} />
-          <Route path="/history-page" element={<HistoryPage />} />
-          <Route path="/palmares" element={<CategoryPalmaresPage />} />
-          <Route path="/settings" element={<ConfigPage />} />
+
+          {/* TV display */}
           <Route path="/tv" element={<PlayerDisplay />} />
+
+          {/* Admin routes with /admin prefix */}
+          {adminRoutes.map(route => (
+            <Route
+              key={`admin-${route.path}`}
+              path={`/admin/${route.path}`}
+              element={route.element}
+            />
+          ))}
+
+          {/* Admin routes with /anim prefix (alias) */}
+          {adminRoutes.map(route => (
+            <Route
+              key={`anim-${route.path}`}
+              path={`/anim/${route.path}`}
+              element={route.element}
+            />
+          ))}
         </Routes>
       </main>
     </div>

@@ -11,219 +11,450 @@
 - **Joueur Physique** : Joueur avec un buzzer ESP32 (BuzzClick)
 - **VJoueur** (Joueur Virtuel) : Joueur connecté depuis un navigateur web via `/player`
   - Utilise son smartphone/tablette comme buzzer
-  - **Doit obligatoirement entrer un nom/pseudo** lors de la connexion
+  - **Doit obligatoirement entrer un nom/pseudo unique** lors de l'enrôlement
   - Apparaît comme un bumper virtuel dans `/admin/teams`
   - Fonctionne exactement comme un buzzer physique pour le gameplay
+- **Phase ENROLL** : Période pendant laquelle les VJoueurs peuvent s'enregistrer
+  - Contrôlée par l'admin depuis `/admin/teams`
+  - QR code affiché sur `/tv` dans la zone MEDIA
 
 ### Principe de conception
 
-> `/player` = `/tv` (affichage synchronisé) + Mini header personnalisé + Bouton BUZZ
+> `/player` = `/tv` (affichage synchronisé) + Header personnalisé (nom/équipe) + Zone BUZZ tactile
 
 - **Réutilisation maximale** : Même composant `PlayerDisplay` que `/tv`
 - **Pas de navigation** : Le joueur ne change jamais de page, l'affichage s'adapte automatiquement
 - **Contrôle minimal** : Uniquement buzzer, pas de stats détaillées ni de dashboard complexe
 - **Gestion par l'animateur** : Tout est piloté depuis `/admin`
 - **Accès via QR Code** : Les joueurs scannent un QR code affiché sur `/tv` pour rejoindre facilement
-- **Identification obligatoire** : Chaque VJoueur doit entrer un nom/pseudo unique
+- **Identification obligatoire** : Chaque VJoueur doit entrer un nom/pseudo unique (unicité gérée par le serveur)
+- **Persistance** : Cookie/localStorage pour reconnexion automatique (durée paramétrable, défaut 24h)
+- **Buzz tactile** : Tap au centre de l'écran (zone média) pour buzzer
 
 ---
 
-## Organisation des routes (simplifiée)
+## Organisation des routes (définitive)
 
-### Routes actuelles vs nouvelles
+### Structure des routes
 
-| Route actuelle | Usage actuel | Nouvelle route | Notes |
-|----------------|--------------|----------------|-------|
-| `/` | Admin (GamePage) | `/admin` | Breaking change OK, pas de compatibilité |
-| `/tv` | Affichage TV | `/tv` | Inchangé + QR code en overlay |
-| `/quiz` | Questions admin | `/admin/questions` | Sous /admin |
-| `/teams` | Équipes admin | `/admin/teams` | Sous /admin |
-| `/settings` | Config admin | `/admin/settings` | Sous /admin |
-| `/history-page` | Historique admin | `/admin/history` | Sous /admin |
-| `/palmares` | Palmarès admin | `/admin/palmares` | Sous /admin |
-| `/scoreboard` | Scores admin | `/admin/scores` | Sous /admin |
-| - | - | **`/player`** | Nouveau : Interface joueur |
+| Route | Composant | Description |
+|-------|-----------|-------------|
+| **`/`** | `EnrollPage` | Page d'enrôlement VJoueur (saisie pseudo) |
+| **`/player`** | `VPlayerPage` | Interface de jeu VJoueur (équivalent /tv + buzz) |
+| **`/tv`** | `PlayerDisplay` | Affichage TV (+ QR code pendant ENROLL) |
+| **`/admin`** | `GamePage` | Interface admin principale |
+| `/admin/scoreboard` | `ScoresPage` | Tableau des scores |
+| `/admin/teams` | `TeamsPage` | Gestion équipes + zone ENROLL |
+| `/admin/quiz` | `QuestionsPage` | Gestion questions |
+| `/admin/history` | `HistoryPage` | Historique des événements |
+| `/admin/palmares` | `CategoryPalmaresPage` | Palmarès par catégorie |
+| `/admin/settings` | `ConfigPage` | Configuration |
 
-### Structure finale
+**Alias `/anim/*`** : Toutes les routes `/admin/*` ont un alias `/anim/*` (même comportement)
+
+### Schéma des routes
 
 ```
-/admin                      # Interface admin (breaking change: anciennement /)
-├── /admin/questions        # Gestion questions
-├── /admin/teams            # Gestion équipes
-├── /admin/settings         # Configuration
+/                           # Page d'enrôlement VJoueur (scan QR → saisie pseudo)
+│
+/player                     # Interface de jeu VJoueur (après enrôlement)
+│
+/tv                         # Affichage TV (lecture seule + QR code pendant ENROLL)
+│
+/admin (ou /anim)           # Interface admin
+├── /admin/scoreboard       # Scores
+├── /admin/teams            # Équipes + zone ENROLL
+├── /admin/quiz             # Questions
 ├── /admin/history          # Historique
 ├── /admin/palmares         # Palmarès
-└── /admin/scores           # Scores
-
-/tv                         # Affichage TV + QR code (overlay à la demande)
-
-/player                     # Interface joueur (accès via QR code)
+└── /admin/settings         # Configuration
 ```
 
-**Pas de page d'accueil `/`** : Redirection directe vers `/admin`
+### Flux utilisateur
+
+```
+[QR Code sur /tv]
+       │
+       ▼
+[Scan smartphone]
+       │
+       ▼
+[/] Page d'enrôlement ──► Saisie pseudo ──► Validation serveur
+       │                                            │
+       │ (cookie existant)                          │ (succès)
+       ▼                                            ▼
+[/player] Interface VJoueur ◄───────────────────────┘
+```
 
 ---
 
-## QR Code sur /tv (Phase d'enrôlement)
+## Phase ENROLL - Configuration Admin
+
+### Zone de configuration dans TeamsPage
+
+La configuration de l'enrôlement se situe dans `/admin/teams`, **dans la colonne "Joueurs non assignés"**, entre les compteurs de joueurs et la liste des joueurs non assignés.
+
+```
+┌─────────────────────────────────────┐
+│ JOUEURS NON ASSIGNÉS (3)            │  ← Titre + compteur
+├─────────────────────────────────────┤
+│ ┌─────────────────────────────────┐ │
+│ │ 📱 ENRÔLEMENT VJOUEURS          │ │
+│ │                                 │ │
+│ │ Places max : [____10____] ▼    │ │  ← Nombre max VJoueurs
+│ │                                 │ │
+│ │ VJoueurs : 3/10                 │ │  ← Compteur actuel
+│ │                                 │ │
+│ │ [ ▶ DÉMARRER ENROLL ]           │ │  ← Bouton toggle
+│ │   ou                            │ │
+│ │ [ ⏹ ARRÊTER ENROLL ] (actif)   │ │
+│ └─────────────────────────────────┘ │
+├─────────────────────────────────────┤
+│ [Carte joueur non assigné 1]        │  ← Liste des joueurs
+│ [Carte joueur non assigné 2]        │
+│ ...                                 │
+└─────────────────────────────────────┘
+```
+
+### Actions admin
+
+- [ ] **Démarrer ENROLL**
+  - Définir le nombre max de VJoueurs (champ numérique, défaut: 10)
+  - Bouton "▶ DÉMARRER ENROLL"
+  - Envoie action WebSocket `START_ENROLL` avec `{MAX_PLAYERS: n}`
+  - Le QR code s'affiche sur `/tv` dans la zone MEDIA
+  - État serveur : `enrollmentActive = true`, `maxVPlayers = n`
+
+- [ ] **Arrêter ENROLL**
+  - Bouton "⏹ ARRÊTER ENROLL"
+  - Envoie action WebSocket `STOP_ENROLL`
+  - Le QR code disparaît de `/tv`
+  - État serveur : `enrollmentActive = false`
+  - Les VJoueurs déjà enrôlés restent actifs
+  - Les reconnexions restent toujours autorisées
+
+- [ ] **Compteur temps réel**
+  - Affichage "VJoueurs : X/Y" (X = enrôlés, Y = max)
+  - Se met à jour en temps réel via WebSocket
+  - Si X >= Y : afficher "Complet" et refuser nouveaux enrôlements
+
+---
+
+## QR Code sur /tv (Phase ENROLL)
 
 ### Concept
 
-L'animateur affiche un QR code sur l'écran TV pour **ouvrir la phase d'enrôlement** : les joueurs scannent le code pour accéder à `/player` et se connecter en tant que VJoueurs.
+Pendant la phase ENROLL, le QR code s'affiche **dans la zone MEDIA** de `/tv` (pas en overlay). Les joueurs scannent le code pour accéder à la page d'enrôlement.
 
 **Distinction importante** :
-- **QR code AFFICHÉ** = Phase d'enrôlement ACTIVE → Nouveaux VJoueurs acceptés
-- **QR code MASQUÉ** = Phase d'enrôlement FERMÉE → Seules les reconnexions sont acceptées
+- **Phase ENROLL ACTIVE** = QR code visible dans zone MEDIA → Nouveaux VJoueurs acceptés (jusqu'au max)
+- **Phase ENROLL INACTIVE** = Zone MEDIA normale → Seules les reconnexions sont acceptées
 
 ### Avantages
 
 ✅ **Simplicité** : Pas besoin de taper l'URL
+✅ **Visibilité maximale** : QR code dans la zone MEDIA (grande taille)
 ✅ **Sécurité** : Les joueurs ne peuvent pas "tomber" sur `/admin` par erreur
 ✅ **Contrôle de l'enrôlement** : L'animateur décide quand accepter de nouveaux VJoueurs
-✅ **Reconnexion toujours possible** : Les VJoueurs déconnectés peuvent revenir même sans QR code
-✅ **UX fluide** : Scan → Connexion → Jouer
+✅ **Limite configurable** : Nombre max de VJoueurs paramétrable
+✅ **Reconnexion toujours possible** : Les VJoueurs déconnectés peuvent revenir même hors phase ENROLL
+✅ **UX fluide** : Scan → Saisie pseudo → Jouer
+
+### Affichage QR Code sur /tv (Phase ENROLL)
+
+```
+┌────────────────────────────────────┐
+│           ZONE TIMER               │
+├────────────────────────────────────┤
+│           ZONE QUESTION            │
+│   "Scannez pour rejoindre !"       │
+├────────────────────────────────────┤
+│                                    │
+│         ┌──────────────┐           │
+│         │ ▓▓▓▓▓▓▓▓▓▓▓▓ │           │
+│         │ ▓▓░░░░░░░░▓▓ │           │
+│         │ ▓▓░░▓▓▓▓░░▓▓ │           │  ZONE MEDIA
+│         │ ▓▓░░▓▓▓▓░░▓▓ │           │  = QR CODE
+│         │ ▓▓░░░░░░░░▓▓ │           │
+│         │ ▓▓▓▓▓▓▓▓▓▓▓▓ │           │
+│         └──────────────┘           │
+│                                    │
+│   ┌────────────────────────────┐   │
+│   │████████████░░░░░░░░░░░░░░░░│   │  ← BARRE DE PROGRESSION
+│   └────────────────────────────┘   │
+│        VJoueurs : 3/10             │  ← Compteur texte
+│                                    │
+├────────────────────────────────────┤
+│          ZONE RÉPONSES             │
+└────────────────────────────────────┘
+```
+
+**Barre de progression :**
+- Largeur proportionnelle : `(current / max) * 100%`
+- Couleur : Vert si < 80%, Orange si 80-99%, Rouge si complet (100%)
+- Animation de remplissage progressive
+- Texte "X/Y" centré sous la barre
 
 ### Implémentation
 
-- [ ] **Bouton dans l'interface admin**
-  - Ajout d'un bouton "📱 Afficher QR Code" dans `/admin` (GamePage)
-  - Ou dans un menu déroulant "Joueurs virtuels"
-  - Toggle : afficher/masquer le QR code sur `/tv`
+- [ ] **Action WebSocket START_ENROLL**
+  - Envoyé par admin depuis TeamsPage
+  - Payload : `{MAX_PLAYERS: 10}`
+  - Serveur : `enrollmentActive = true`, `maxVPlayers = 10`
+  - Broadcast à tous les clients `/tv` : afficher QR code
 
-- [ ] **Action WebSocket et gestion de l'enrôlement**
-  - Action `SHOW_QR_CODE` : Active l'enrôlement (`enrollmentActive = true`)
-  - Action `HIDE_QR_CODE` : Désactive l'enrôlement (`enrollmentActive = false`)
-  - Payload : `{URL: "http://192.168.4.1/player"}`
-  - Broadcast à tous les clients `/tv`
-  - **Impact côté serveur** :
-    - `SHOW_QR_CODE` → accepter nouveaux VJoueurs + reconnexions
-    - `HIDE_QR_CODE` → accepter uniquement les reconnexions
+- [ ] **Action WebSocket STOP_ENROLL**
+  - Envoyé par admin depuis TeamsPage
+  - Serveur : `enrollmentActive = false`
+  - Broadcast à tous les clients `/tv` : masquer QR code
 
-- [ ] **Affichage sur /tv**
-  - **Option 1 - Overlay coin** :
-    - QR code 200x200px dans le coin inférieur droit
-    - Fond semi-transparent
-    - Texte : "Scannez pour jouer !"
-    - N'obstrue pas le contenu principal
-  - **Option 2 - Plein écran** (phase STOPPED uniquement) :
-    - QR code 400x400px centré
-    - Grand texte : "Rejoignez le jeu !"
-    - Instructions : "Scannez ce code avec votre smartphone"
-    - Visible uniquement quand aucune question n'est active
+- [ ] **Action WebSocket ENROLL_UPDATE**
+  - Broadcast quand un VJoueur s'enrôle ou se déconnecte
+  - Payload : `{CURRENT: 5, MAX: 10}`
+  - Mise à jour du compteur sur admin et TV
 
 - [ ] **Génération du QR code**
   - Bibliothèque : `qrcode` (npm) côté frontend
-  - URL dynamique : `http://${serverIP}/player`
+  - URL dynamique : `http://${serverIP}/` (page d'enrôlement)
   - Niveau de correction d'erreur : M (15%)
+  - Rendu dans la zone MEDIA (remplacement du média question)
 
 ```javascript
-// Exemple React
+// Exemple React - Dans PlayerDisplay.jsx
 import QRCode from 'qrcode'
 
 const [qrCodeUrl, setQrCodeUrl] = useState('')
 
 useEffect(() => {
-  if (showQrCode) {
-    QRCode.toDataURL(`http://${serverIP}/player`)
+  if (gameState.enrollmentActive) {
+    QRCode.toDataURL(`http://${serverIP}/`, { width: 400 })
       .then(url => setQrCodeUrl(url))
   }
-}, [showQrCode, serverIP])
+}, [gameState.enrollmentActive, serverIP])
 
-return showQrCode && (
-  <div className="qr-code-overlay">
-    <img src={qrCodeUrl} alt="QR Code" />
-    <p>Scannez pour jouer !</p>
+// Dans la zone MEDIA
+{gameState.enrollmentActive ? (
+  <div className="enroll-qr-zone">
+    <img src={qrCodeUrl} alt="QR Code" className="enroll-qr-code" />
+    <p className="enroll-counter">VJoueurs : {gameState.vPlayerCount}/{gameState.maxVPlayers}</p>
   </div>
-)
-```
-
-### Maquette QR Code (Overlay coin)
-
-```
-┌────────────────────────────────────┐
-│  [Question affichée ici]           │
-│  [Timer, média, réponses QCM...]   │
-│                                    │
-│                       ┌──────────┐ │
-│                       │ ░░░░░░░░ │ │
-│                       │ ░░▓▓▓▓░░ │ │ QR Code
-│                       │ ░░▓▓▓▓░░ │ │ 200x200px
-│                       │ ░░░░░░░░ │ │
-│                       └──────────┘ │
-│                       Scannez !    │
-└────────────────────────────────────┘
+) : (
+  <MediaDisplay media={question.MEDIA} />
+)}
 ```
 
 ---
 
-## Phase 1 - MVP (v2.40.0)
+## Phase 1 - MVP (v2.45.0)
 
-### Page `/player` - Structure
+### Routes
+
+| Route | Description |
+|-------|-------------|
+| `/` | Page d'enrôlement VJoueur (saisie pseudo) |
+| `/player` | Page de jeu VJoueur (équivalent /tv + buzz) |
+| `/tv` | Affichage TV (inchangé, + QR code en phase ENROLL) |
+| `/admin/*` | Pages admin (inchangé) |
+
+### Page `/` - Enrôlement VJoueur
+
+Page de saisie du pseudo, accessible via scan du QR code affiché sur `/tv`.
 
 ```
-┌─────────────────────────────┐
-│ Mini Header Joueur (80px)   │ ← Nouveau : nom, équipe, score
-├─────────────────────────────┤
-│                             │
-│   PlayerDisplay (réutilisé) │ ← Identique à /tv
-│   - Question                │
-│   - Timer                   │
-│   - Média                   │
-│   - Réponses QCM / Memory   │
-│                             │
-├─────────────────────────────┤
-│ Zone Bouton (120px)         │ ← Nouveau : bouton BUZZ
-└─────────────────────────────┘
+┌────────────────────────────────────┐
+│                                    │
+│         🐝 BuzzControl             │
+│                                    │
+│    ┌────────────────────────┐      │
+│    │  Entrez votre pseudo   │      │
+│    │                        │      │
+│    │  [________________]    │      │
+│    │                        │      │
+│    │  ⚠️ 2-20 caractères    │      │
+│    │                        │      │
+│    │   [ REJOINDRE ]        │      │
+│    └────────────────────────┘      │
+│                                    │
+└────────────────────────────────────┘
 ```
 
-### 1. Connexion VJoueur (modale initiale obligatoire)
+- [ ] **Champ pseudo**
+  - Minimum 2 caractères, maximum 20 caractères
+  - Validation en temps réel côté client
+  - Bouton "Rejoindre" désactivé si invalide
 
-- [ ] **Modale de connexion au chargement de `/player`**
-  - **Champ "Nom/Pseudo"** (UNIQUE CHAMP)
-    - Minimum 2 caractères, maximum 20 caractères
-    - Validation en temps réel
-    - Message d'erreur si vide ou invalide
-    - Bouton "Rejoindre" (désactivé tant que nom invalide)
-  - Persistance dans localStorage (reconnexion auto si < 30 min)
-  - La modale ne peut pas être fermée sans connexion valide
-  - **Pas de sélection d'équipe ou de couleur** : Géré par l'admin après connexion
-  - **Gestion erreur enrôlement fermé** :
-    - Si `PLAYER_CONNECT_ERROR` avec `ENROLLMENT_CLOSED`
-    - Afficher message : "❌ L'enrôlement est fermé. Contactez l'animateur pour qu'il affiche le QR code."
-    - Le bouton "Rejoindre" reste actif pour retenter (cas reconnexion)
+- [ ] **Unicité des pseudos (côté serveur)**
+  - Vérification lors de `PLAYER_CONNECT`
+  - Si pseudo déjà pris : erreur `PSEUDO_TAKEN`
+  - Message : "Ce pseudo est déjà utilisé, choisissez-en un autre"
 
-- [ ] **Validation côté serveur**
-  - Vérifier que le nom n'est pas vide (après trim)
-  - Vérifier longueur (2-20 caractères)
-  - Optionnel : Vérifier unicité du nom global
-    - Si doublon : ajouter un suffixe (ex: "Alice (2)")
-    - Ou refuser la connexion avec message d'erreur
+- [ ] **Gestion erreurs**
+  - `ENROLLMENT_CLOSED` : "L'enrôlement est fermé"
+  - `ENROLLMENT_FULL` : "Nombre max de joueurs atteint"
+  - `PSEUDO_TAKEN` : "Ce pseudo est déjà utilisé"
 
-- [ ] **Enregistrement côté serveur : Distinction Enrôlement vs Reconnexion**
+- [ ] **Après enrôlement réussi**
+  - Redirection automatique vers `/player`
+  - Sauvegarde cookie/localStorage (durée paramétrable, défaut 24h)
 
-  **Phase d'enrôlement** (QR code affiché) :
-  - Variable serveur : `enrollmentActive` (booléen)
-  - Activé quand l'admin affiche le QR code (`SHOW_QR_CODE`)
-  - Désactivé quand l'admin masque le QR code (`HIDE_QR_CODE`)
-  - Pendant l'enrôlement : accepter **nouveaux VJoueurs** ET **reconnexions**
+### Page `/player` - Interface VJoueur
 
-  **Hors enrôlement** (QR code masqué) :
-  - Refuser les nouveaux VJoueurs (erreur : "Enrôlement fermé, contactez l'animateur")
-  - Accepter uniquement les **reconnexions** de VJoueurs connus
-  - Le serveur garde en mémoire les VJoueurs déjà enregistrés (même déconnectés)
+Équivalent à `/tv` avec header personnalisé et zone de buzz tactile.
+
+```
+┌────────────────────────────────────┐
+│ 🔴 Alice      [TIMER]   Les Rouges │ ← Header : nom (gauche) + équipe (droite)
+├────────────────────────────────────┤
+│           ZONE QUESTION            │
+├────────────────────────────────────┤
+│                                    │
+│                                    │
+│         ZONE MÉDIA                 │ ← TAP POUR BUZZER
+│         (zone tactile)             │
+│                                    │
+│                                    │
+├────────────────────────────────────┤
+│          ZONE RÉPONSES             │
+└────────────────────────────────────┘
+```
+
+**Header personnalisé :**
+- **Gauche** : Nom du VJoueur avec fond de couleur assignée
+- **Centre** : Timer (identique à /tv)
+- **Droite** : Nom de l'équipe avec fond de couleur assignée
+- Si non assigné : "En attente..." en gris
+
+**Zone de buzz tactile :**
+- Tap au centre de l'écran (zone média) pour buzzer
+- Pas de bouton séparé - toute la zone média est cliquable
+- Vibration haptique (50ms) sur mobile
+
+### Feedback visuel du buzz
+
+Le VJoueur reçoit un retour visuel selon que son buzz est accepté ou refusé par le serveur.
+
+**Buzz VALIDÉ (accepté par le serveur) :**
+- Flash vert sur toute la zone média
+- Bordure verte épaisse (4px) pendant 500ms
+- Vibration longue (100ms)
+- Affichage du temps de réaction (ex: "0.342s")
+
+**Buzz REFUSÉ (ignoré par le serveur) :**
+- Flash rouge sur toute la zone média
+- Bordure rouge épaisse (4px) pendant 500ms
+- Vibration courte (25ms)
+- Message d'erreur discret (ex: "Trop tard", "Déjà buzzé")
+
+**Raisons de refus possibles :**
+- `ALREADY_BUZZED` : Le VJoueur a déjà buzzé cette question
+- `TEAM_ALREADY_BUZZED` : Un autre joueur de l'équipe a buzzé
+- `GAME_NOT_STARTED` : La phase n'est pas STARTED
+- `NOT_ASSIGNED` : Le VJoueur n'est pas assigné à une équipe
+
+### Mode Debug (feedback refusé)
+
+Option pour afficher visuellement les buzz refusés (utile pour debug).
+
+- [ ] **Toggle dans GamePage (admin)**
+  - Checkbox "Afficher buzz refusés sur VJoueur"
+  - Par défaut : OFF (désactivé)
+  - Quand ON : Le VJoueur voit le flash rouge si son buzz est refusé
+  - Quand OFF : Aucun feedback visuel si buzz refusé (comportement discret)
+
+- [ ] **Action WebSocket BUZZ_RESULT**
+  - Envoyé par le serveur au VJoueur après un buzz
+  - Payload succès : `{STATUS: "ACCEPTED", TIME: 342}`
+  - Payload refus : `{STATUS: "REJECTED", REASON: "TEAM_ALREADY_BUZZED"}`
+  - Le client affiche le feedback visuel approprié
+
+- [ ] **Configuration GameState**
+  ```go
+  type GameState struct {
+    // ...
+    DebugShowRejectedBuzz bool `json:"DEBUG_SHOW_REJECTED_BUZZ"`
+  }
+  ```
+
+**Comportement par défaut (debug OFF) :**
+| Buzz | Feedback visuel | Vibration |
+|------|-----------------|-----------|
+| Validé | ✅ Flash vert | ✅ Longue (100ms) |
+| Refusé | ❌ Aucun | ❌ Aucune |
+
+**Comportement debug (debug ON) :**
+| Buzz | Feedback visuel | Vibration |
+|------|-----------------|-----------|
+| Validé | ✅ Flash vert | ✅ Longue (100ms) |
+| Refusé | ✅ Flash rouge | ✅ Courte (25ms) |
+
+### Persistance de l'identité VJoueur
+
+- [ ] **Cookie/localStorage**
+  - Clé : `vplayer_session`
+  - Valeur : `{id, name, timestamp}`
+  - Durée : paramétrable dans config (défaut 24h)
+
+- [ ] **Reconnexion automatique**
+  - Au chargement de `/` ou `/player`
+  - Si cookie valide et non expiré → reconnexion directe
+  - Si cookie invalide ou expiré → afficher page d'enrôlement
+  - En cas de déconnexion/refresh → restauration automatique
+
+- [ ] **Configuration serveur** (config.json)
+  ```json
+  {
+    "vplayer": {
+      "session_duration_hours": 24,
+      "max_players": 50
+    }
+  }
+  ```
+
+### Validation côté serveur
+
+- [ ] **Logique d'enrôlement complète**
+
+  **État serveur :**
+  ```go
+  type EnrollmentState struct {
+    Active      bool      // Phase ENROLL active
+    MaxPlayers  int       // Limite configurée par l'admin
+    VPlayers    map[string]*VPlayer  // Joueurs enrôlés (clé = pseudo)
+  }
+  ```
 
   **Logique serveur lors de `PLAYER_CONNECT`** :
   ```go
-  if !isKnownPlayer(name) {
-    // Nouveau joueur
-    if !enrollmentActive {
-      return error("Enrôlement fermé")
+  func handlePlayerConnect(name string, sessionID string) Response {
+    name = strings.TrimSpace(name)
+
+    // Validation du pseudo
+    if len(name) < 2 || len(name) > 20 {
+      return error("INVALID_PSEUDO", "Le pseudo doit faire 2-20 caractères")
     }
-    // Créer nouveau bumper virtuel
-    createVirtualBumper(name)
-  } else {
-    // Reconnexion d'un joueur connu
-    // Toujours autorisée (même hors enrôlement)
-    reconnectVirtualBumper(name)
+
+    // Reconnexion via sessionID (cookie)
+    if sessionID != "" && isValidSession(sessionID) {
+      return reconnectVPlayer(sessionID)
+    }
+
+    // Vérifier unicité du pseudo
+    if isNameTaken(name) {
+      return error("PSEUDO_TAKEN", "Ce pseudo est déjà utilisé")
+    }
+
+    // Vérifier si enrôlement actif
+    if !enrollmentActive {
+      return error("ENROLLMENT_CLOSED", "L'enrôlement est fermé")
+    }
+
+    // Vérifier limite de joueurs
+    if len(vPlayers) >= maxPlayers {
+      return error("ENROLLMENT_FULL", "Nombre max de joueurs atteint")
+    }
+
+    // Créer nouveau VJoueur
+    return createVPlayer(name)
   }
   ```
 

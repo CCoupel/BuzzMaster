@@ -1,30 +1,37 @@
-import { NavLink } from 'react-router-dom'
+import { NavLink, useLocation } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import './Navbar.css'
 
 export default function Navbar({ connectionStatus = 'disconnected', clientCounts = { admin: 0, tv: 0 }, serverVersion = '' }) {
+  const location = useLocation()
+
   // Zone Jeu: pages principales du jeu
   const gameItems = [
-    { to: '/', label: 'Jeu', icon: '🎮' },
-    { to: '/scoreboard', label: 'Scores', icon: '🏆' },
-    { to: '/palmares', label: 'Palmarès', icon: '🏅' },
-    { to: '/history-page', label: 'Historique', icon: '📜' },
+    { to: '/admin', label: 'Jeu', icon: '🎮' },
+    { to: '/admin/scoreboard', label: 'Scores', icon: '🏆' },
+    { to: '/admin/palmares', label: 'Palmarès', icon: '🏅' },
+    { to: '/admin/history', label: 'Historique', icon: '📜' },
   ]
 
   // Zone Config: configuration et gestion
   const configItems = [
-    { to: '/teams', label: 'Équipes', icon: '👥' },
-    { to: '/quiz', label: 'Questions', icon: '❓' },
-    { to: '/settings', label: 'Config', icon: '⚙️' },
+    { to: '/admin/teams', label: 'Joueurs', icon: '👥' },
+    { to: '/admin/quiz', label: 'Questions', icon: '❓' },
+    { to: '/admin/settings', label: 'Config', icon: '⚙️' },
   ]
+
+  // Check if current path matches (works for both /admin and /anim prefixes)
+  const isActiveRoute = (to) => {
+    const adminPath = to
+    const animPath = to.replace('/admin', '/anim')
+    return location.pathname === adminPath || location.pathname === animPath
+  }
 
   const renderNavLink = (item) => (
     <NavLink
       key={item.to}
       to={item.to}
-      className={({ isActive }) =>
-        `nav-link ${isActive ? 'active' : ''}`
-      }
+      className={() => `nav-link ${isActiveRoute(item.to) ? 'active' : ''}`}
     >
       <span className="nav-icon">{item.icon}</span>
       <span className="nav-label">{item.label}</span>

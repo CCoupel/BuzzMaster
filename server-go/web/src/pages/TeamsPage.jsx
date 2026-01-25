@@ -88,6 +88,17 @@ export default function TeamsPage() {
     })
   }
 
+  const handleDeleteBumper = (mac) => {
+    const bumper = bumpers[mac]
+    const confirmMsg = bumper?.NAME
+      ? `Supprimer le joueur "${bumper.NAME}" ?`
+      : `Supprimer le joueur ${mac.slice(-6)} ?`
+    if (!window.confirm(confirmMsg)) return
+    const newBumpers = { ...bumpers }
+    delete newBumpers[mac]
+    updateConfig({ bumpers: newBumpers })
+  }
+
   const handleAddTeam = () => {
     if (!newTeamName.trim()) return
     const randomColor = PRESET_COLORS[Math.floor(Math.random() * PRESET_COLORS.length)]
@@ -369,17 +380,8 @@ export default function TeamsPage() {
                     padding="md"
                     className={`bumper-card ${bumper.READY === 'TRUE' ? 'ready' : ''}`}
                   >
-                    <div
-                      className={`bumper-avatar ${bumper.ANSWER_COLOR ? 'has-color' : ''}`}
-                      style={bumper.ANSWER_COLOR && ANSWER_COLORS[bumper.ANSWER_COLOR]
-                        ? { backgroundColor: ANSWER_COLORS[bumper.ANSWER_COLOR].color }
-                        : {}
-                      }
-                    >
-                      {(bumper.NAME || bumper.mac.slice(-6)).charAt(0).toUpperCase()}
-                    </div>
-
-                    <div className="bumper-info">
+                    {/* Ligne 1: Nom + bouton suppression */}
+                    <div className="bumper-row-name">
                       <input
                         type="text"
                         value={bumper.NAME || ''}
@@ -387,34 +389,55 @@ export default function TeamsPage() {
                         onChange={(e) => handleBumperNameChange(bumper.mac, e.target.value)}
                         className="bumper-name-input"
                       />
-                      <div className="bumper-meta">
-                        <span className="bumper-mac">{bumper.mac}</span>
-                        {bumper.VERSION && <span className="bumper-version">v{bumper.VERSION}</span>}
-                      </div>
-                    </div>
-
-                    <div className="answer-color-selector">
-                      {Object.entries(ANSWER_COLORS).map(([key, { color, letter }]) => (
-                        <button
-                          key={key}
-                          className={`answer-color-btn ${bumper.ANSWER_COLOR === key ? 'active' : ''}`}
-                          style={{ backgroundColor: color }}
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            handleBumperAnswerColorChange(bumper.mac, bumper.ANSWER_COLOR === key ? '' : key)
-                          }}
-                          title={ANSWER_COLORS[key].label}
-                        >
-                          {letter}
-                        </button>
-                      ))}
-                    </div>
-
-                    <div className="bumper-controls">
                       {bumper.READY === 'TRUE' && (
                         <span className="ready-badge">PRET</span>
                       )}
+                      <button
+                        className="bumper-delete-btn"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          handleDeleteBumper(bumper.mac)
+                        }}
+                        title="Supprimer le joueur"
+                      >
+                        ×
+                      </button>
+                    </div>
+
+                    {/* Ligne 2: Pastille avatar + 4 couleurs */}
+                    <div className="bumper-row-colors">
+                      <div
+                        className={`bumper-avatar ${bumper.ANSWER_COLOR ? 'has-color' : ''}`}
+                        style={bumper.ANSWER_COLOR && ANSWER_COLORS[bumper.ANSWER_COLOR]
+                          ? { backgroundColor: ANSWER_COLORS[bumper.ANSWER_COLOR].color }
+                          : {}
+                        }
+                      >
+                        {(bumper.NAME || bumper.mac.slice(-6)).charAt(0).toUpperCase()}
+                      </div>
+                      <div className="answer-color-selector">
+                        {Object.entries(ANSWER_COLORS).map(([key, { color, letter }]) => (
+                          <button
+                            key={key}
+                            className={`answer-color-btn ${bumper.ANSWER_COLOR === key ? 'active' : ''}`}
+                            style={{ backgroundColor: color }}
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              handleBumperAnswerColorChange(bumper.mac, bumper.ANSWER_COLOR === key ? '' : key)
+                            }}
+                            title={ANSWER_COLORS[key].label}
+                          >
+                            {letter}
+                          </button>
+                        ))}
+                      </div>
                       <span className="drag-handle">⋮⋮</span>
+                    </div>
+
+                    {/* Ligne 3: Infos techniques (MAC + version) */}
+                    <div className="bumper-row-tech">
+                      <span className="bumper-mac">{bumper.mac}</span>
+                      {bumper.VERSION && <span className="bumper-version">v{bumper.VERSION}</span>}
                     </div>
                   </Card>
                 </motion.div>

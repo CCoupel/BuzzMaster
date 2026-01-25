@@ -466,6 +466,53 @@ func (e *Engine) actualStart() {
 	}
 }
 
+// StartImmediate starts the game immediately without countdown (for tests)
+func (e *Engine) StartImmediate(delay int) {
+	e.mu.Lock()
+
+	e.pendingDelay = delay
+	e.state.Phase = PhaseStarted
+	e.state.CountdownTime = 0
+	e.state.GameTime = time.Now().UnixMicro()
+	e.state.Delay = delay
+	e.state.CurrentTime = delay
+
+	e.setQuestionStatus(StatusStarted)
+
+	// Reset Memory and QCM state
+	e.state.MemoryFlippedCards = nil
+	e.state.MemoryMatchedPairs = nil
+	e.state.MemoryErrors = 0
+	e.state.QcmInvalidated = nil
+
+	// Reset bumper times
+	for _, bumper := range e.data.Bumpers {
+		bumper.Time = 0
+		bumper.Button = ""
+		bumper.Status = ""
+		bumper.HintsAtBuzz = 0
+	}
+
+	for _, team := range e.data.Teams {
+		team.Time = 0
+		team.Bumper = ""
+		team.Status = ""
+	}
+
+	log.Printf("[Engine] Game started immediately (no countdown) with delay %d", delay)
+
+	// Start main timer
+	e.startTimer()
+
+	// Release lock BEFORE calling callback to avoid deadlock
+	callback := e.OnStateChange
+	e.mu.Unlock()
+
+	if callback != nil {
+		callback(PhaseStarted)
+	}
+}
+
 func (e *Engine) startTimer() {
 	if e.timer != nil {
 		e.timer.Stop()

@@ -204,7 +204,8 @@ func TestEngine_AreAllTeamsReady(t *testing.T) {
 func TestEngine_Start(t *testing.T) {
 	e := NewEngine()
 
-	e.Start(20)
+	// Use StartImmediate to skip countdown for testing
+	e.StartImmediate(20)
 
 	if e.GetPhase() != PhaseStarted {
 		t.Errorf("Expected phase STARTED, got %s", e.GetPhase())
@@ -223,10 +224,29 @@ func TestEngine_Start(t *testing.T) {
 	e.Stop()
 }
 
+func TestEngine_Start_WithCountdown(t *testing.T) {
+	e := NewEngine()
+
+	// Test that Start() enters COUNTDOWN phase
+	e.Start(20)
+
+	if e.GetPhase() != PhaseCountdown {
+		t.Errorf("Expected phase COUNTDOWN, got %s", e.GetPhase())
+	}
+
+	state := e.GetState()
+	if state.CountdownTime <= 0 {
+		t.Errorf("Expected countdown time > 0, got %d", state.CountdownTime)
+	}
+
+	// Clean up
+	e.Stop()
+}
+
 func TestEngine_Stop(t *testing.T) {
 	e := NewEngine()
 
-	e.Start(30)
+	e.StartImmediate(30)
 	e.Stop()
 
 	if e.GetPhase() != PhaseStopped {
@@ -242,7 +262,7 @@ func TestEngine_Stop(t *testing.T) {
 func TestEngine_Pause(t *testing.T) {
 	e := NewEngine()
 
-	e.Start(30)
+	e.StartImmediate(30)
 	e.Pause()
 
 	if e.GetPhase() != PhasePaused {
@@ -255,7 +275,7 @@ func TestEngine_Pause(t *testing.T) {
 func TestEngine_Continue(t *testing.T) {
 	e := NewEngine()
 
-	e.Start(30)
+	e.StartImmediate(30)
 	e.Pause()
 	e.Continue()
 
@@ -275,8 +295,8 @@ func TestEngine_ProcessButtonPress(t *testing.T) {
 	})
 	e.UpdateBumper("b1", map[string]interface{}{"TEAM": "red"})
 
-	// Must be in START phase
-	e.Start(30)
+	// Must be in START phase - use StartImmediate to skip countdown
+	e.StartImmediate(30)
 
 	pressTime := time.Now().UnixMicro()
 	e.ProcessButtonPress("b1", pressTime, "A")
@@ -328,7 +348,7 @@ func TestEngine_ProcessButtonPress_IgnoresDoublePress(t *testing.T) {
 		"red": {Name: "Team Red"},
 	})
 	e.UpdateBumper("b1", map[string]interface{}{"TEAM": "red"})
-	e.Start(30)
+	e.StartImmediate(30)
 
 	firstPress := int64(1000000)
 	secondPress := int64(2000000)
@@ -356,7 +376,7 @@ func TestEngine_ProcessButtonPress_FastestWins(t *testing.T) {
 	})
 	e.UpdateBumper("b1", map[string]interface{}{"TEAM": "red"})
 	e.UpdateBumper("b2", map[string]interface{}{"TEAM": "red"})
-	e.Start(30)
+	e.StartImmediate(30)
 
 	// b2 presses first (lower time = earlier)
 	e.ProcessButtonPress("b2", 1000, "A")
@@ -571,8 +591,8 @@ func TestEngine_PhaseChecks(t *testing.T) {
 		t.Error("Should be in prepare phase")
 	}
 
-	// Start
-	e.Start(30)
+	// Start (use StartImmediate to skip countdown)
+	e.StartImmediate(30)
 	if !e.IsGameStarted() {
 		t.Error("Should be started")
 	}
@@ -593,7 +613,8 @@ func TestEngine_StateChangeCallback(t *testing.T) {
 		t.Errorf("Callback should receive PREPARE, got %s", lastPhase)
 	}
 
-	e.Start(30)
+	// Use StartImmediate to skip countdown
+	e.StartImmediate(30)
 	if lastPhase != PhaseStarted {
 		t.Errorf("Callback should receive STARTED, got %s", lastPhase)
 	}

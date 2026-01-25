@@ -1,6 +1,6 @@
-# Commande /deploy - Déploiement QUALIF / PROD
+# Commande /deploy - Arrêt et Redéploiement QUALIF / PROD
 
-Lance le sous-agent DEPLOY pour déployer le serveur vers l'environnement cible.
+Arrête le serveur en cours puis redéploie vers l'environnement cible.
 
 ## Argument reçu
 
@@ -8,8 +8,8 @@ $ARGUMENTS
 
 **Format** : `/deploy [QUALIF|PROD|hotfix]`
 
-- **QUALIF** (défaut) : Déploiement de qualification
-- **PROD** : Déploiement de production (squash merge + tag + release)
+- **QUALIF** (défaut) : Redéploiement de qualification
+- **PROD** : Redéploiement de production (squash merge + tag + release)
 - **hotfix** : Mode urgence pour bugs critiques
 
 ## Instructions
@@ -18,14 +18,14 @@ Utilise le Task tool pour lancer le sous-agent deploy avec les paramètres suiva
 
 ```
 subagent_type: "deploy"
-description: "Déploiement [ENV]"
+description: "Redéploiement [ENV]"
 prompt: voir ci-dessous
 ```
 
 ### Prompt à transmettre au sous-agent
 
 ```
-Déploie le serveur BuzzControl vers l'environnement cible.
+Arrête et redéploie le serveur BuzzControl vers l'environnement cible.
 
 **Contexte projet :**
 - Répertoire : C:\Users\cyril\Documents\VScode\buzzcontrol
@@ -38,55 +38,62 @@ Déploie le serveur BuzzControl vers l'environnement cible.
 
 **Étapes à exécuter :**
 
-1. **Collecter les informations**
+1. **Arrêter le serveur en cours**
+   curl -s http://localhost/shutdown || echo "Serveur non actif"
+   # Attendre 2 secondes pour l'arrêt complet
+
+2. **Collecter les informations**
    - Version : lire server-go/config.json → champ "version"
    - Branche : git branch --show-current
    - Dernier commit : git log -1 --oneline
 
-2. **Vérifier les prérequis**
+3. **Vérifier les prérequis**
    - Tests QA passés
    - Review approuvée
    - Documentation à jour
    - Version incrémentée
 
-3. **Build**
+4. **Build**
    cd server-go
    # Windows
    go build -o server.exe ./cmd/server
    # Linux ARM64 (Raspberry Pi)
    GOOS=linux GOARCH=arm64 go build -o buzzcontrol ./cmd/server
 
-4. **Tests post-build**
-   - Démarrer le serveur
+5. **Redémarrer le serveur**
+   - Lancer le serveur en arrière-plan
    - Vérifier /version et /listGame
-   - Arrêt graceful via /shutdown
+   - Le serveur reste actif après les tests
 
-5. **Git (PROD uniquement)**
+6. **Git (PROD uniquement)**
    - Squash merge vers main
    - Tag annotée v<version>
    - Cleanup branche feature
 
-6. **Générer le rapport de déploiement** avec :
+7. **Générer le rapport de redéploiement** avec :
    - Informations : Version, env, date, branche, commit
+   - Arrêt : Résultat de l'arrêt du serveur précédent
    - Builds : Résultats + tailles binaires
-   - Tests : Résultats post-build
+   - Redémarrage : Résultats des tests post-build
    - Git (PROD) : Merge, tag, cleanup
    - Décision : SUCCESS / FAILED
 
 **Différences QUALIF vs PROD :**
 | Action | QUALIF | PROD |
 |--------|--------|------|
+| Arrêt serveur | Oui | Oui |
 | Build Windows + ARM64 | Oui | Oui |
-| Tests post-build | Oui | Oui |
+| Redémarrage + tests | Oui | Oui |
 | Squash merge main | Non | Oui |
 | Tag Git | Non | Oui |
 | Cleanup branche | Non | Oui |
 
 **Règles critiques :**
+- TOUJOURS arrêter le serveur avant de rebuild
 - JAMAIS déployer PROD sans QUALIF validée
 - JAMAIS créer des tags Git en QUALIF
 - JAMAIS merge main en QUALIF
-- TOUJOURS tester l'arrêt graceful
+- Le serveur doit rester actif après le redéploiement
 ```
 
 ## Action immédiate
