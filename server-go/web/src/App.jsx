@@ -10,7 +10,8 @@ import HistoryPage from './pages/HistoryPage'
 import CategoryPalmaresPage from './pages/CategoryPalmaresPage'
 import ConfigPage from './pages/ConfigPage'
 import PlayerDisplay from './pages/PlayerDisplay'
-import PlayerPage from './pages/PlayerPage'
+import EnrollPage from './pages/EnrollPage'
+import VPlayerPage from './pages/VPlayerPage'
 import './App.css'
 
 // Admin routes - duplicated for both /admin and /anim prefixes
@@ -49,13 +50,20 @@ function AppContent() {
       <main className={`main-content ${hideNavbar ? 'fullscreen' : ''}`}>
         <Routes>
           {/* Player enrollment page */}
-          <Route path="/" element={<PlayerPage />} />
+          <Route path="/" element={<EnrollPage />} />
+
+          {/* Virtual player page */}
+          <Route path="/player" element={<VPlayerPage />} />
 
           {/* TV display */}
           <Route path="/tv" element={<PlayerDisplay />} />
 
-          {/* Admin routes with /admin prefix */}
-          {adminRoutes.map(route => (
+          {/* Admin root routes (without trailing slash) */}
+          <Route path="/admin" element={<GamePage />} />
+          <Route path="/anim" element={<GamePage />} />
+
+          {/* Admin sub-routes with /admin prefix */}
+          {adminRoutes.filter(r => r.path !== '').map(route => (
             <Route
               key={`admin-${route.path}`}
               path={`/admin/${route.path}`}
@@ -63,8 +71,8 @@ function AppContent() {
             />
           ))}
 
-          {/* Admin routes with /anim prefix (alias) */}
-          {adminRoutes.map(route => (
+          {/* Admin sub-routes with /anim prefix (alias) */}
+          {adminRoutes.filter(r => r.path !== '').map(route => (
             <Route
               key={`anim-${route.path}`}
               path={`/anim/${route.path}`}

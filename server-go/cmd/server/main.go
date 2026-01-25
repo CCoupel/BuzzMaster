@@ -101,8 +101,8 @@ func main() {
 	log.Println("Server started successfully")
 	log.Printf("TCP server (buzzers): port %d", cfg.Server.TCPPort)
 
-	// Display all accessible URLs and open browser
-	displayAndOpenURLs(cfg.Server.HTTPPort)
+	// Display all accessible URLs and open browser if enabled
+	displayAndOpenURLs(cfg.Server.HTTPPort, cfg.Server.AutoOpenBrowsers, cfg.Server.Debug)
 
 	// Wait for shutdown signal
 	sigCh := make(chan os.Signal, 1)
@@ -1059,20 +1059,26 @@ func (a *App) handleSetClientType(clientID string, msg *protocol.Message) {
 }
 
 func (a *App) handleShowQRCode() {
-	a.engine.SetEnrollmentActive(true)
-	a.engine.SetShowQRCode(true)
+	// Get current limit (or use default)
+	state := a.engine.GetState()
+	limit := state.VirtualPlayerLimit
+	if limit == 0 {
+		limit = 20 // Default
+	}
+
+	a.engine.StartEnrollment(limit)
 	a.engine.SetPhase(game.PhaseEnroll)
-	a.engine.ResetVirtualPlayerCount()
-	log.Println("[App] Entering ENROLL phase - QR code displayed")
+	log.Printf("[App] Entering ENROLL phase - QR code displayed, limit: %d", limit)
 	a.broadcastUpdate()
+	a.broadcastEnrollmentUpdate()
 }
 
 func (a *App) handleHideQRCode() {
-	a.engine.SetEnrollmentActive(false)
-	a.engine.SetShowQRCode(false)
+	a.engine.StopEnrollment()
 	a.engine.SetPhase(game.PhaseStopped)
 	log.Printf("[App] Exiting ENROLL phase - %d virtual players enrolled", a.engine.GetVirtualPlayerCount())
 	a.broadcastUpdate()
+	a.broadcastEnrollmentUpdate()
 }
 
 func (a *App) handleSetVirtualPlayerLimit(msg *protocol.Message) {
@@ -1084,6 +1090,7 @@ func (a *App) handleSetVirtualPlayerLimit(msg *protocol.Message) {
 	a.engine.SetVirtualPlayerLimit(payload.Limit)
 	log.Printf("[App] Virtual player limit set to: %d", payload.Limit)
 	a.broadcastUpdate()
+	a.broadcastEnrollmentUpdate()
 }
 
 func (a *App) handlePlayerConnect(clientID string, msg *protocol.Message) {
@@ -1168,6 +1175,8 @@ func (a *App) handlePlayerConnect(clientID string, msg *protocol.Message) {
 
 	// Broadcast UPDATE to all clients (teams/bumpers updated)
 	a.broadcastUpdate()
+	// Broadcast enrollment count update
+	a.broadcastEnrollmentUpdate()
 }
 
 // Broadcast methods
@@ -1198,6 +1207,18 @@ func (a *App) broadcastUpdate() {
 	msg.Msg = data
 	msg.Version = a.config.Version
 	a.wsHub.Broadcast(msg)
+}
+
+func (a *App) broadcastEnrollmentUpdate() {
+	state := a.engine.GetState()
+	payload := protocol.EnrollmentUpdatePayload{
+		VirtualPlayerCount: state.VirtualPlayerCount,
+		VirtualPlayerLimit: state.VirtualPlayerLimit,
+		EnrollmentActive:   state.EnrollmentActive,
+	}
+	msg, _ := protocol.NewMessage(protocol.ActionEnrollmentUpdate, payload)
+	a.wsHub.Broadcast(msg)
+	log.Printf("[App] Broadcasting ENROLLMENT_UPDATE: %d/%d players", state.VirtualPlayerCount, state.VirtualPlayerLimit)
 }
 func (a *App) broadcastGameState(phase string) {
 	data := a.engine.GetGameJSON()
@@ -1479,7 +1500,7 @@ func (a *App) loadQuestions() map[string]map[string]interface{} {
 }
 
 // displayAndOpenURLs shows all accessible URLs and opens the browser
-func displayAndOpenURLs(httpPort int) {
+func displayAndOpenURLs(httpPort int, autoOpen bool, debug bool) {
 	log.Println("")
 	log.Println("╔════════════════════════════════════════════════════════════╗")
 	log.Println("║                    WEB INTERFACE URLs                      ║")
@@ -1521,8 +1542,14 @@ func displayAndOpenURLs(httpPort int) {
 		primaryURL = localhostURL
 	}
 
+	// Only auto-open if enabled in config
+	if !autoOpen {
+		log.Println("Auto-open browsers disabled in config")
+		return
+	}
+
 	// Open browsers to /, /tv and /anim pages with small delays
-	// Order: /anim (admin), /tv (display), / (home) - admin opens first
+	// Order: /anim (admin), /tv (display), / (home), /logs (if debug)
 	pagesToOpen := []struct {
 		path string
 		name string
@@ -1530,6 +1557,14 @@ func displayAndOpenURLs(httpPort int) {
 		{"/anim", "admin"},
 		{"/tv", "TV display"},
 		{"/", "home"},
+	}
+
+	// Add /logs page if debug mode is enabled
+	if debug {
+		pagesToOpen = append(pagesToOpen, struct {
+			path string
+			name string
+		}{"/logs", "logs (debug)"})
 	}
 
 	for i, page := range pagesToOpen {

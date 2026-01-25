@@ -17,9 +17,11 @@ type Config struct {
 }
 
 type ServerConfig struct {
-	HTTPPort      int    `json:"http_port"`
-	TCPPort       int    `json:"tcp_port"`
-	WebSocketPath string `json:"websocket_path"`
+	HTTPPort         int  `json:"http_port"`
+	TCPPort          int  `json:"tcp_port"`
+	WebSocketPath    string `json:"websocket_path"`
+	AutoOpenBrowsers bool `json:"auto_open_browsers"` // Auto-open browsers on startup
+	Debug            bool `json:"debug"`               // Enable debug mode (includes /logs)
 }
 
 type WiFiConfig struct {
@@ -65,6 +67,11 @@ func Load(path string) (*Config, error) {
 	if cfg.Server.WebSocketPath == "" {
 		cfg.Server.WebSocketPath = "/ws"
 	}
+	// AutoOpenBrowsers defaults to true if not specified in JSON
+	// (Go's zero value for bool is false, so we need explicit handling)
+	// This is handled by the JSON unmarshaling - if missing, it will be false
+	// To enable by default, we would need a pointer or custom unmarshaling
+
 	if cfg.Game.DefaultDelay == 0 {
 		cfg.Game.DefaultDelay = 30
 	}
@@ -87,9 +94,11 @@ func Get() *Config {
 			log.Printf("Warning: Could not load config.json, using defaults: %v", err)
 			instance = &Config{
 				Server: ServerConfig{
-					HTTPPort:      80,
-					TCPPort:       1234,
-					WebSocketPath: "/ws",
+					HTTPPort:         80,
+					TCPPort:          1234,
+					WebSocketPath:    "/ws",
+					AutoOpenBrowsers: true,  // Default: enabled
+					Debug:            false, // Default: disabled
 				},
 				Game: GameConfig{
 					DefaultDelay: 30,

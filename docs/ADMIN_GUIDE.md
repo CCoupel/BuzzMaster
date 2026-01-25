@@ -9,6 +9,7 @@ Ce document decrit les fonctionnalites d'administration du systeme BuzzControl.
 - [Reinitialisation selective](#reinitialisation-selective)
 - [Gestion des scores](#gestion-des-scores)
 - [Historique des evenements](#historique-des-evenements)
+- [Joueurs Virtuels (VPlayer)](#joueurs-virtuels-vplayer)
 
 ---
 
@@ -199,6 +200,108 @@ L'historique est la **source de verite** pour les scores :
 - Fonction `RecalculateScoresFromHistory()` recalcule tous les scores
 - Permet de reconstruire l'etat a tout moment
 - Garantit la coherence des donnees
+
+---
+
+## Joueurs Virtuels (VPlayer)
+
+### Presentation
+
+La fonctionnalite VPlayer permet aux joueurs de buzzer depuis leur smartphone en scannant un QR Code. Les joueurs virtuels fonctionnent exactement comme des buzzers physiques une fois inscrits.
+
+### Workflow d'inscription
+
+1. **Ouvrir les inscriptions**
+   - Aller sur la page Joueurs (`/admin/teams` ou `/anim/teams`)
+   - Section "Inscriptions" en haut de la page
+   - Cliquer sur "Lancer Inscriptions"
+
+2. **Affichage du QR Code**
+   - Le QR Code s'affiche automatiquement sur l'affichage TV (`/tv`)
+   - Les joueurs scannent le QR Code avec leur smartphone
+   - Barre de progression : Inscrits X/Y (Y = limite max)
+
+3. **Inscription joueur**
+   - Le joueur arrive sur la page d'inscription (`/`)
+   - Il saisit un pseudo (2-20 caracteres)
+   - Clic sur "Rejoindre" → redirection automatique vers `/player`
+
+4. **Fermer les inscriptions**
+   - Retour sur `/admin/teams`
+   - Cliquer sur "Fin Inscriptions"
+   - Le QR Code disparait de l'affichage TV
+
+### Page joueur (`/player`)
+
+L'interface joueur affiche :
+- **Badges permanents** : Nom du joueur (gauche), Équipe (droite)
+- **Affichage TV** : Vue synchronisee du jeu en cours
+- **Zone media cliquable** : Cliquer sur l'image pour buzzer (76% de largeur)
+- **Bouton BUZZ** : États visuels selon la phase du jeu
+
+#### États du bouton BUZZ
+
+| Phase du jeu | Texte affiché | État | Couleur |
+|--------------|---------------|------|---------|
+| Pas d'équipe | "En attente..." | Désactivé | Gris |
+| STOPPED | "En attente de question" | Désactivé | Gris |
+| PREPARE | "Préparation..." | Désactivé | Orange |
+| READY / COUNTDOWN | "Prêt !" | Désactivé | Cyan |
+| STARTED | "BUZZ !" | Actif | Vert pulsant |
+| PAUSED | "Déjà buzzé" | Désactivé | Bleu |
+
+#### Feedback au buzz
+
+Quand le joueur clique pour buzzer :
+- **Vibration haptique** (100ms, si supporté)
+- **Overlay vert** avec checkmark géant
+- **Texte "BUZZÉ !"** avec glow vert
+- Disparition automatique après 1.5 secondes
+
+### Gestion des joueurs virtuels
+
+#### Assignation à une équipe
+
+Les joueurs virtuels apparaissent dans la colonne "Joueurs non assignés" :
+- Utiliser le drag & drop pour assigner à une équipe
+- Les joueurs assignés peuvent buzzer normalement
+
+#### Suppression d'un joueur
+
+Pour supprimer un joueur virtuel :
+1. S'assurer qu'il n'est **pas assigné** à une équipe (drag vers colonne droite si besoin)
+2. Cliquer sur le bouton × en haut à droite de la carte joueur
+3. Confirmer la suppression
+
+**Important :** Le joueur est automatiquement déconnecté et redirigé vers la page d'inscription.
+
+#### Compteurs
+
+Dans la section "Inscriptions" :
+- **Places max** : Nombre maximum de joueurs virtuels (configurable)
+- **Inscrits** : X/Y avec distinction 🎮 physiques / 📱 virtuels
+
+### Restrictions
+
+#### Questions MEMORY
+
+Les joueurs virtuels **ne peuvent pas** buzzer sur les questions de type MEMORY :
+- Le contrôle du jeu reste exclusif à l'admin
+- Le buzz est bloqué côté serveur
+- Aucun feedback visuel n'est affiché
+
+#### Session et reconnexion
+
+- Session stockée dans localStorage (24h)
+- Si le joueur ferme puis rouvre `/player` → reconnexion automatique
+- Si l'admin supprime le joueur → redirection automatique vers `/`
+
+### Bonnes pratiques
+
+1. **Limite de joueurs** : Définir une limite réaliste selon le nombre d'équipes
+2. **Fermer les inscriptions** : Toujours fermer avant de commencer le jeu
+3. **Assignation rapide** : Assigner les joueurs aux équipes dès leur inscription
+4. **Suppression prudente** : Ne supprimer un joueur que s'il ne participe plus
 
 ---
 

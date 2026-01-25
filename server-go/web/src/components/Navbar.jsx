@@ -5,33 +5,38 @@ import './Navbar.css'
 export default function Navbar({ connectionStatus = 'disconnected', clientCounts = { admin: 0, tv: 0 }, serverVersion = '' }) {
   const location = useLocation()
 
-  // Zone Jeu: pages principales du jeu
+  // Detect current prefix from URL (default to /admin)
+  const currentPrefix = location.pathname.startsWith('/anim') ? '/anim' : '/admin'
+
+  // Zone Jeu: pages principales du jeu (use relative paths, prefix added dynamically)
   const gameItems = [
-    { to: '/admin', label: 'Jeu', icon: '🎮' },
-    { to: '/admin/scoreboard', label: 'Scores', icon: '🏆' },
-    { to: '/admin/palmares', label: 'Palmarès', icon: '🏅' },
-    { to: '/admin/history', label: 'Historique', icon: '📜' },
+    { path: '', label: 'Jeu', icon: '🎮' },
+    { path: 'scoreboard', label: 'Scores', icon: '🏆' },
+    { path: 'palmares', label: 'Palmarès', icon: '🏅' },
+    { path: 'history', label: 'Historique', icon: '📜' },
   ]
 
   // Zone Config: configuration et gestion
   const configItems = [
-    { to: '/admin/teams', label: 'Joueurs', icon: '👥' },
-    { to: '/admin/quiz', label: 'Questions', icon: '❓' },
-    { to: '/admin/settings', label: 'Config', icon: '⚙️' },
+    { path: 'teams', label: 'Joueurs', icon: '👥' },
+    { path: 'quiz', label: 'Questions', icon: '❓' },
+    { path: 'settings', label: 'Config', icon: '⚙️' },
   ]
 
-  // Check if current path matches (works for both /admin and /anim prefixes)
-  const isActiveRoute = (to) => {
-    const adminPath = to
-    const animPath = to.replace('/admin', '/anim')
-    return location.pathname === adminPath || location.pathname === animPath
+  // Build full path with current prefix
+  const getFullPath = (path) => path ? `${currentPrefix}/${path}` : currentPrefix
+
+  // Check if current path matches
+  const isActiveRoute = (path) => {
+    const fullPath = getFullPath(path)
+    return location.pathname === fullPath
   }
 
   const renderNavLink = (item) => (
     <NavLink
-      key={item.to}
-      to={item.to}
-      className={() => `nav-link ${isActiveRoute(item.to) ? 'active' : ''}`}
+      key={item.path}
+      to={getFullPath(item.path)}
+      className={() => `nav-link ${isActiveRoute(item.path) ? 'active' : ''}`}
     >
       <span className="nav-icon">{item.icon}</span>
       <span className="nav-label">{item.label}</span>

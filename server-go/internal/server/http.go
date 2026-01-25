@@ -203,7 +203,8 @@ func (h *HTTPServer) handleRoot(w http.ResponseWriter, r *http.Request) {
 // isSPARoute checks if the path is a React SPA route
 // Uses distinct paths to avoid conflicts with API endpoints
 func (h *HTTPServer) isSPARoute(path string) bool {
-	spaRoutes := []string{"/scoreboard", "/quiz", "/settings", "/tv", "/game", "/teams", "/history-page", "/palmares", "/anim", "/player"}
+	// /admin and /anim are aliases for the admin interface
+	spaRoutes := []string{"/admin", "/anim", "/scoreboard", "/quiz", "/settings", "/tv", "/game", "/teams", "/history-page", "/palmares", "/player"}
 	for _, route := range spaRoutes {
 		if strings.HasPrefix(path, route) {
 			return true

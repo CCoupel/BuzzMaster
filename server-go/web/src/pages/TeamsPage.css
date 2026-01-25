@@ -370,6 +370,53 @@
   color: white;
 }
 
+/* Enrollment Zone - Compact */
+.enrollment-zone-compact {
+  background: var(--gray-100);
+  border: 1px solid var(--gray-200);
+  border-radius: var(--radius-md);
+  padding: var(--space-2);
+  margin-bottom: var(--space-2);
+}
+
+.enrollment-line {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-bottom: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.enrollment-label {
+  font-size: 0.8rem;
+  color: var(--gray-600);
+}
+
+.enrollment-input {
+  width: 50px;
+  padding: var(--space-1);
+  border: 1px solid var(--gray-300);
+  border-radius: var(--radius-sm);
+  font-size: 0.8rem;
+  text-align: center;
+}
+
+.enrollment-input:focus {
+  outline: none;
+  border-color: var(--primary-400);
+}
+
+.enrollment-input:disabled {
+  background: var(--gray-200);
+  cursor: not-allowed;
+}
+
+.enrollment-count {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--primary-600);
+}
+
 /* Unassigned Zone */
 .unassigned-zone {
   background: var(--gray-50);
@@ -545,6 +592,17 @@
   font-weight: 700;
   padding: var(--space-1) var(--space-2);
   background: var(--success);
+  color: white;
+  border-radius: var(--radius-md);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.virtual-badge {
+  font-size: 0.65rem;
+  font-weight: 700;
+  padding: var(--space-1) var(--space-2);
+  background: var(--accent-cyan);
   color: white;
   border-radius: var(--radius-md);
   text-transform: uppercase;

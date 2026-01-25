@@ -1226,14 +1226,53 @@
 /* Zone 1: Timer - At top, contains timer-display + timer-bar */
 .zone-timer {
   height: 10vh;
-  width: 80%;
+  width: 100%;
   display: flex;
   justify-content: center;
   align-items: center;
   flex-shrink: 0;
 }
 
-/* Player info wrapper - nom joueur (gauche), timer (centre), équipe (droite) */
+/* VPlayer permanent info - always shown at top of game display */
+.vplayer-permanent-info {
+  position: absolute;
+  top: 1rem;
+  left: 0;
+  right: 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0 1rem;
+  gap: 0.5rem;
+  z-index: 10;
+  pointer-events: none;
+}
+
+.vplayer-permanent-info .player-name-badge-mobile,
+.vplayer-permanent-info .player-team-badge-mobile {
+  padding: 0.5rem 1rem;
+  border-radius: 0.5rem;
+  font-weight: 700;
+  color: white;
+  font-size: clamp(0.75rem, 2vw, 1rem);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+  flex: 0 0 auto;
+  max-width: 25%;
+  pointer-events: auto;
+}
+
+.vplayer-permanent-info .player-name-badge-mobile {
+  text-align: left;
+}
+
+.vplayer-permanent-info .player-team-badge-mobile {
+  text-align: right;
+}
+
+/* Player info wrapper - kept for backward compatibility but no longer used */
 .player-info-wrapper {
   display: flex;
   align-items: center;
@@ -1282,7 +1321,7 @@
   font-size: clamp(1.5rem, 4vh, 3rem);
   background: rgba(0, 0, 0, 0.4);
   backdrop-filter: blur(20px);
-  padding: 1vh 2vw;
+  padding: 0.5rem 1rem; /* Match badge height */
   border-radius: var(--radius-lg);
   color: var(--success); /* Default: green like timer bar */
 }
@@ -1298,7 +1337,7 @@
 
 .zone-timer .timer-bar-container {
   height: 12px;
-  width: 100%;
+  width: 95%; /* Same as zone-answers */
   max-width: none;
   margin: 0 auto;
   background: rgba(255, 255, 255, 0.1);

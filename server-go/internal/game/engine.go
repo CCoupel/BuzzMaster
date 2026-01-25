@@ -157,6 +157,12 @@ func (e *Engine) UpdateTeam(id string, team *Team) {
 // SetTeams sets all teams
 func (e *Engine) SetTeams(teams map[string]*Team) {
 	e.mu.Lock()
+	// Ensure team NAME field is populated from the map key
+	for teamID, team := range teams {
+		if team.Name == "" {
+			team.Name = teamID
+		}
+	}
 	e.data.Teams = teams
 	e.mu.Unlock()
 
@@ -765,10 +771,45 @@ func (e *Engine) Continue() {
 func (e *Engine) Reveal() string {
 	e.mu.Lock()
 
-	if e.state.Phase != PhaseStopped {
-		log.Printf("[Engine] Cannot reveal from phase %s", e.state.Phase)
+	// Allow reveal from STOPPED or PAUSED
+	if e.state.Phase != PhaseStopped && e.state.Phase != PhasePaused {
+		log.Printf("[Engine] Cannot reveal from phase %s (must be STOPPED or PAUSED)", e.state.Phase)
 		e.mu.Unlock()
 		return ""
+	}
+
+	// Stop timer if revealing from PAUSED
+	if e.state.Phase == PhasePaused {
+		// Signal countdown timer goroutine to stop (if running)
+		if e.countdownStopCh != nil {
+			select {
+			case <-e.countdownStopCh:
+				// Already closed
+			default:
+				close(e.countdownStopCh)
+			}
+			e.countdownStopCh = nil
+		}
+		if e.countdownTimer != nil {
+			e.countdownTimer.Stop()
+			e.countdownTimer = nil
+		}
+
+		// Signal main timer goroutine to stop
+		if e.stopCh != nil {
+			select {
+			case <-e.stopCh:
+				// Already closed
+			default:
+				close(e.stopCh)
+			}
+			e.stopCh = nil
+		}
+
+		if e.timer != nil {
+			e.timer.Stop()
+			e.timer = nil
+		}
 	}
 
 	e.state.Phase = PhaseRevealed
@@ -798,6 +839,13 @@ func (e *Engine) ProcessButtonPress(bumperID string, pressTime int64, button str
 
 	if e.state.Phase != PhaseStarted {
 		log.Printf("[Engine] Ignoring button press, game not started")
+		e.mu.Unlock()
+		return
+	}
+
+	// Ignore buzz for MEMORY questions - admin controls the game
+	if e.state.Question != nil && e.state.Question.Type == "MEMORY" {
+		log.Printf("[Engine] Ignoring buzz for MEMORY question from %s", bumperID)
 		e.mu.Unlock()
 		return
 	}
@@ -1008,12 +1056,21 @@ func (e *Engine) RAZScores() {
 func (e *Engine) ClearBumpers() {
 	e.mu.Lock()
 	e.data.Bumpers = make(map[string]*Bumper)
-	// Note: Teams are preserved - use ClearAll() to clear both
-	log.Printf("[Engine] All bumpers cleared")
+
+	// Reset team references to bumpers
+	for _, team := range e.data.Teams {
+		team.Bumper = ""
+		team.Time = 0
+		team.Status = ""
+		team.Ready = false
+	}
+
+	log.Printf("[Engine] All bumpers cleared and dissociated from teams")
 	e.mu.Unlock()
 
-	// Auto-save empty bumpers
+	// Auto-save empty bumpers and updated teams
 	go e.SaveBumpers()
+	go e.SaveTeams()
 }
 
 // ClearAll removes all teams and bumpers
@@ -1947,4 +2004,130 @@ type EnrollmentError struct {
 
 func (e *EnrollmentError) Error() string {
 	return e.Reason
+}
+
+// StartEnrollment starts the virtual player enrollment process
+func (e *Engine) StartEnrollment(maxPlayers int) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+
+	e.state.EnrollmentActive = true
+	e.state.ShowQRCode = true
+	e.state.VirtualPlayerLimit = maxPlayers
+	log.Printf("[Engine] Enrollment started with limit: %d", maxPlayers)
+}
+
+// StopEnrollment stops the virtual player enrollment process
+func (e *Engine) StopEnrollment() {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+
+	e.state.EnrollmentActive = false
+	e.state.ShowQRCode = false
+	log.Printf("[Engine] Enrollment stopped")
+}
+
+// HandleVirtualPlayerConnect handles a virtual player connection request
+// Returns (bumperID, bumper, error)
+func (e *Engine) HandleVirtualPlayerConnect(name, sessionID string) (string, *Bumper, error) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+
+	// Check if enrollment is active
+	if !e.state.EnrollmentActive {
+		return "", nil, &EnrollmentError{Reason: "ENROLLMENT_CLOSED"}
+	}
+
+	// Check if limit is reached
+	virtualCount := e.countVirtualPlayersUnsafe()
+	if virtualCount >= e.state.VirtualPlayerLimit {
+		return "", nil, &EnrollmentError{Reason: "ENROLLMENT_FULL"}
+	}
+
+	// Validate name (2-20 characters, alphanumeric + spaces)
+	if len(name) < 2 || len(name) > 20 {
+		return "", nil, &EnrollmentError{Reason: "INVALID_NAME"}
+	}
+
+	// Check if name is already taken
+	for _, bumper := range e.data.Bumpers {
+		if bumper.Name == name && bumper.IsVirtual {
+			return "", nil, &EnrollmentError{Reason: "PSEUDO_TAKEN"}
+		}
+	}
+
+	// Generate unique ID using sessionID
+	id := sessionID
+	if id == "" {
+		id = "vplayer_" + name + "_" + time.Now().Format("20060102_150405")
+	}
+
+	// Create virtual bumper
+	bumper := &Bumper{
+		Name:      name,
+		Team:      "",
+		Score:     0,
+		IsVirtual: true,
+		Status:    "READY",
+	}
+
+	e.data.Bumpers[id] = bumper
+	e.state.VirtualPlayerCount++
+
+	log.Printf("[Engine] Virtual player connected: id=%s, name=%s, sessionID=%s", id, name, sessionID)
+	return id, bumper, nil
+}
+
+// reconnectVPlayer reconnects an existing virtual player
+func (e *Engine) reconnectVPlayer(sessionID string) (string, *Bumper, error) {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+
+	// Find existing bumper with this sessionID
+	for id, bumper := range e.data.Bumpers {
+		if bumper.IsVirtual && id == sessionID {
+			log.Printf("[Engine] Virtual player reconnected: id=%s, name=%s", id, bumper.Name)
+			return id, bumper, nil
+		}
+	}
+
+	return "", nil, &EnrollmentError{Reason: "SESSION_NOT_FOUND"}
+}
+
+// AssignVirtualPlayer assigns a virtual player to a team and answer color
+func (e *Engine) AssignVirtualPlayer(bumperID, team string, answerColor AnswerColor) error {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+
+	bumper, exists := e.data.Bumpers[bumperID]
+	if !exists {
+		return &EnrollmentError{Reason: "BUMPER_NOT_FOUND"}
+	}
+
+	if !bumper.IsVirtual {
+		return &EnrollmentError{Reason: "NOT_VIRTUAL_PLAYER"}
+	}
+
+	// Check if team exists
+	if _, exists := e.data.Teams[team]; !exists {
+		return &EnrollmentError{Reason: "TEAM_NOT_FOUND"}
+	}
+
+	// Assign team and answer color
+	bumper.Team = team
+	bumper.AnswerColor = answerColor
+
+	log.Printf("[Engine] Virtual player assigned: id=%s, team=%s, color=%s", bumperID, team, answerColor)
+
+	// Save bumpers to disk
+	go e.SaveBumpers()
+
+	return nil
+}
+
+// GetEnrollmentStatus returns enrollment active status
+func (e *Engine) GetEnrollmentStatus() bool {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	return e.state.EnrollmentActive
 }

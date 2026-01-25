@@ -45,6 +45,8 @@ const (
 	ActionPlayerConnect        = "PLAYER_CONNECT"
 	ActionPlayerConnected      = "PLAYER_CONNECTED"
 	ActionPlayerRejected       = "PLAYER_REJECTED"
+	ActionEnrollmentUpdate     = "ENROLLMENT_UPDATE"
+	ActionPlayerAssigned       = "PLAYER_ASSIGNED"
 )
 
 // FSInfo represents file storage information
@@ -184,6 +186,20 @@ type PlayerRejectedPayload struct {
 type QRCodePayload struct {
 	URL  string `json:"URL"`  // URL to encode in QR code
 	Show bool   `json:"SHOW"` // Whether to show or hide
+}
+
+// EnrollmentUpdatePayload for ENROLLMENT_UPDATE action (broadcast virtual player count)
+type EnrollmentUpdatePayload struct {
+	VirtualPlayerCount int  `json:"VIRTUAL_PLAYER_COUNT"` // Current count
+	VirtualPlayerLimit int  `json:"VIRTUAL_PLAYER_LIMIT"` // Maximum allowed
+	EnrollmentActive   bool `json:"ENROLLMENT_ACTIVE"`    // Whether enrollment is open
+}
+
+// PlayerAssignedPayload for PLAYER_ASSIGNED action (player assigned to team)
+type PlayerAssignedPayload struct {
+	ID          string `json:"ID"`            // Bumper ID
+	Team        string `json:"TEAM"`          // Team name
+	AnswerColor string `json:"ANSWER_COLOR"`  // Assigned answer color (RED/GREEN/YELLOW/BLUE)
 }
 
 // NewMessage creates a new outgoing message

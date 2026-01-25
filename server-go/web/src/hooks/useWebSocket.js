@@ -20,6 +20,8 @@ export default function useWebSocket() {
     qcmInvalidated: [], // Server-synchronized invalidated QCM answers (e.g., ["RED", "YELLOW"])
     virtualPlayerCount: 0, // Server-synchronized virtual player count (ENROLL phase)
     virtualPlayerLimit: 20, // Server-synchronized virtual player limit
+    enrollmentActive: false, // Whether enrollment is currently open
+    showQRCode: false, // Whether QR code should be displayed on TV
   })
   const [teams, setTeams] = useState({})
   const [bumpers, setBumpers] = useState({})
@@ -90,6 +92,8 @@ export default function useWebSocket() {
             qcmInvalidated: MSG.GAME.QCM_INVALIDATED || [],
             virtualPlayerCount: MSG.GAME.VIRTUAL_PLAYER_COUNT ?? prev.virtualPlayerCount,
             virtualPlayerLimit: MSG.GAME.VIRTUAL_PLAYER_LIMIT ?? prev.virtualPlayerLimit,
+            enrollmentActive: MSG.GAME.ENROLLMENT_ACTIVE ?? prev.enrollmentActive,
+            showQRCode: MSG.GAME.SHOW_QR_CODE ?? prev.showQRCode,
           }))
         }
         if (MSG?.teams) setTeams(MSG.teams)
@@ -215,6 +219,51 @@ export default function useWebSocket() {
         }
         break
 
+      case 'SHOW_QR_CODE':
+        console.log('[WS] SHOW_QR_CODE received')
+        setGameState(prev => ({
+          ...prev,
+          showQRCode: true,
+          enrollmentActive: true,
+        }))
+        break
+
+      case 'HIDE_QR_CODE':
+        console.log('[WS] HIDE_QR_CODE received')
+        setGameState(prev => ({
+          ...prev,
+          showQRCode: false,
+          enrollmentActive: false,
+        }))
+        break
+
+      case 'PLAYER_CONNECTED':
+        console.log('[WS] PLAYER_CONNECTED:', MSG)
+        // Player successfully enrolled - state will be updated via UPDATE message
+        break
+
+      case 'PLAYER_REJECTED':
+        console.log('[WS] PLAYER_REJECTED:', MSG?.REASON)
+        // Handle rejection (will be used by EnrollPage)
+        break
+
+      case 'PLAYER_ASSIGNED':
+        console.log('[WS] PLAYER_ASSIGNED:', MSG)
+        // Player assigned to team - state will be updated via UPDATE message
+        break
+
+      case 'ENROLLMENT_UPDATE':
+        console.log('[WS] ENROLLMENT_UPDATE:', MSG)
+        if (MSG) {
+          setGameState(prev => ({
+            ...prev,
+            virtualPlayerCount: MSG.VIRTUAL_PLAYER_COUNT ?? prev.virtualPlayerCount,
+            virtualPlayerLimit: MSG.VIRTUAL_PLAYER_LIMIT ?? prev.virtualPlayerLimit,
+            enrollmentActive: MSG.ENROLLMENT_ACTIVE ?? prev.enrollmentActive,
+          }))
+        }
+        break
+
       default:
         console.log('Unknown action:', ACTION)
     }
@@ -299,6 +348,26 @@ export default function useWebSocket() {
     sendMessage('FLIP_MEMORY_CARD', { CARD_ID: cardId })
   }, [sendMessage])
 
+  // VPlayer enrollment: Show QR code
+  const showQRCode = useCallback(() => {
+    sendMessage('SHOW_QR_CODE', {})
+  }, [sendMessage])
+
+  // VPlayer enrollment: Hide QR code
+  const hideQRCode = useCallback(() => {
+    sendMessage('HIDE_QR_CODE', {})
+  }, [sendMessage])
+
+  // VPlayer enrollment: Connect as virtual player
+  const connectVirtualPlayer = useCallback((name) => {
+    sendMessage('PLAYER_CONNECT', { NAME: name })
+  }, [sendMessage])
+
+  // VPlayer enrollment: Set virtual player limit
+  const setVirtualPlayerLimit = useCallback((limit) => {
+    sendMessage('SET_VIRTUAL_PLAYER_LIMIT', { LIMIT: limit })
+  }, [sendMessage])
+
   useEffect(() => {
     connect()
 
@@ -339,5 +408,10 @@ export default function useWebSocket() {
     simulateButton,
     simulatePong,
     flipMemoryCard,
+    // VPlayer enrollment
+    showQRCode,
+    hideQRCode,
+    connectVirtualPlayer,
+    setVirtualPlayerLimit,
   }
 }

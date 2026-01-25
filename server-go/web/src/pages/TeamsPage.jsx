@@ -25,10 +25,11 @@ const ANSWER_COLORS = {
 }
 
 export default function TeamsPage() {
-  const { teams, bumpers, gameState, updateConfig } = useGame()
+  const { teams, bumpers, gameState, updateConfig, showQRCode, hideQRCode, setVirtualPlayerLimit } = useGame()
   const [newTeamName, setNewTeamName] = useState('')
   const [draggedBumper, setDraggedBumper] = useState(null)
   const [dragOverTarget, setDragOverTarget] = useState(null)
+  const [maxPlayers, setMaxPlayers] = useState(10)
 
   // Count physical vs virtual bumpers from server-synchronized data
   const physicalBumperCount = useMemo(() => {
@@ -37,6 +38,7 @@ export default function TeamsPage() {
 
   // Use server-synchronized virtual player count (source of truth)
   const virtualPlayerCount = gameState?.virtualPlayerCount || 0
+  const enrollmentActive = gameState?.enrollmentActive || false
 
   // Group bumpers by team
   const bumpersByTeam = useMemo(() => {
@@ -188,6 +190,15 @@ export default function TeamsPage() {
     if (!color) return 'var(--gray-400)'
     if (Array.isArray(color)) return `rgb(${color.join(',')})`
     return color
+  }
+
+  const handleStartEnrollment = () => {
+    setVirtualPlayerLimit(maxPlayers)
+    showQRCode()
+  }
+
+  const handleStopEnrollment = () => {
+    hideQRCode()
   }
 
   return (
@@ -357,6 +368,32 @@ export default function TeamsPage() {
             </div>
           </div>
 
+          {/* Enrollment Zone - Compact 2 lines */}
+          <div className="enrollment-zone-compact">
+            <div className="enrollment-line">
+              <span className="enrollment-label">Places max:</span>
+              <input
+                type="number"
+                min="1"
+                max="100"
+                value={maxPlayers}
+                onChange={(e) => setMaxPlayers(parseInt(e.target.value, 10) || 1)}
+                className="enrollment-input"
+                disabled={enrollmentActive}
+              />
+              <span className="enrollment-label">Inscrits:</span>
+              <span className="enrollment-count">{virtualPlayerCount}/{maxPlayers}</span>
+            </div>
+            <Button
+              variant={enrollmentActive ? 'danger' : 'success'}
+              onClick={enrollmentActive ? handleStopEnrollment : handleStartEnrollment}
+              fullWidth
+              size="sm"
+            >
+              {enrollmentActive ? '⏹ Fin Inscriptions' : '▶ Lancer Inscriptions'}
+            </Button>
+          </div>
+
           <div
             className={`unassigned-zone ${dragOverTarget === 'unassigned' ? 'drop-target' : ''} ${draggedBumper ? 'can-drop' : ''}`}
             onDragOver={(e) => handleDragOver(e, 'unassigned')}
@@ -380,7 +417,7 @@ export default function TeamsPage() {
                     padding="md"
                     className={`bumper-card ${bumper.READY === 'TRUE' ? 'ready' : ''}`}
                   >
-                    {/* Ligne 1: Nom + bouton suppression */}
+                    {/* Ligne 1: Nom + badges + bouton suppression */}
                     <div className="bumper-row-name">
                       <input
                         type="text"
@@ -389,6 +426,9 @@ export default function TeamsPage() {
                         onChange={(e) => handleBumperNameChange(bumper.mac, e.target.value)}
                         className="bumper-name-input"
                       />
+                      {bumper.IS_VIRTUAL && (
+                        <span className="virtual-badge">📱 VIRTUEL</span>
+                      )}
                       {bumper.READY === 'TRUE' && (
                         <span className="ready-badge">PRET</span>
                       )}

@@ -1,6 +1,6 @@
 # Page Joueur (/player)
 
-**Statut** : 📋 Planifié
+**Statut** : ✅ Phase 1 Implémentée (v2.45.0)
 
 ## Concept
 
@@ -245,16 +245,36 @@ useEffect(() => {
 
 ---
 
-## Phase 1 - MVP (v2.45.0)
+## Phase 1 - MVP (v2.45.0) ✅ IMPLÉMENTÉE
+
+### Fichiers implémentés
+
+| Fichier | Description |
+|---------|-------------|
+| `web/src/pages/VPlayerPage.jsx` | Page VJoueur avec buzz tactile |
+| `web/src/pages/VPlayerPage.css` | Styles spécifiques VPlayer (badges, overlay buzz) |
+| `web/src/pages/PlayerPage.jsx` | Page d'enrôlement (saisie pseudo) |
+| `web/src/pages/PlayerPage.css` | Styles page d'enrôlement |
+| `web/src/pages/PlayerDisplay.jsx` | Composant réutilisé avec props `isVPlayer`, `onMediaClick` |
+| `web/src/pages/PlayerDisplay.css` | Styles partagés (timer 95%, zones) |
+
+### Caractéristiques implémentées
+
+- **Badges responsives** : Positionnés à 15% (nom) et 85% (équipe), taille avec `clamp()`
+- **Timer** : Barre de progression à 95% largeur (même que zone-answers)
+- **Zone cliquable** : 76% largeur (80% de zone-answers)
+- **Overlay buzz** : Checkmark vert animé + bordure pulsante
+- **Reconnexion** : Détection suppression bumper par admin → redirection `/`
+- **Auto-PONG** : Envoi automatique en phase PREPARE
 
 ### Routes
 
-| Route | Description |
-|-------|-------------|
-| `/` | Page d'enrôlement VJoueur (saisie pseudo) |
-| `/player` | Page de jeu VJoueur (équivalent /tv + buzz) |
-| `/tv` | Affichage TV (inchangé, + QR code en phase ENROLL) |
-| `/admin/*` | Pages admin (inchangé) |
+| Route | Description | Statut |
+|-------|-------------|--------|
+| `/` | Page d'enrôlement VJoueur (saisie pseudo) | ✅ |
+| `/player` | Page de jeu VJoueur (équivalent /tv + buzz) | ✅ |
+| `/tv` | Affichage TV (inchangé) | ✅ |
+| `/admin/*` | Pages admin (inchangé) | ✅ |
 
 ### Page `/` - Enrôlement VJoueur
 
@@ -278,24 +298,23 @@ Page de saisie du pseudo, accessible via scan du QR code affiché sur `/tv`.
 └────────────────────────────────────┘
 ```
 
-- [ ] **Champ pseudo**
+- [x] **Champ pseudo**
   - Minimum 2 caractères, maximum 20 caractères
   - Validation en temps réel côté client
   - Bouton "Rejoindre" désactivé si invalide
 
-- [ ] **Unicité des pseudos (côté serveur)**
+- [x] **Unicité des pseudos (côté serveur)**
   - Vérification lors de `PLAYER_CONNECT`
-  - Si pseudo déjà pris : erreur `PSEUDO_TAKEN`
-  - Message : "Ce pseudo est déjà utilisé, choisissez-en un autre"
+  - Si pseudo déjà pris : recherche du bumper existant pour reconnexion
 
-- [ ] **Gestion erreurs**
+- [ ] **Gestion erreurs** (partiel)
   - `ENROLLMENT_CLOSED` : "L'enrôlement est fermé"
   - `ENROLLMENT_FULL` : "Nombre max de joueurs atteint"
   - `PSEUDO_TAKEN` : "Ce pseudo est déjà utilisé"
 
-- [ ] **Après enrôlement réussi**
+- [x] **Après enrôlement réussi**
   - Redirection automatique vers `/player`
-  - Sauvegarde cookie/localStorage (durée paramétrable, défaut 24h)
+  - Sauvegarde localStorage (`vplayer_name`, `vplayer_session`)
 
 ### Page `/player` - Interface VJoueur
 
@@ -318,26 +337,27 @@ Page de saisie du pseudo, accessible via scan du QR code affiché sur `/tv`.
 └────────────────────────────────────┘
 ```
 
-**Header personnalisé :**
-- **Gauche** : Nom du VJoueur avec fond de couleur assignée
-- **Centre** : Timer (identique à /tv)
-- **Droite** : Nom de l'équipe avec fond de couleur assignée
-- Si non assigné : "En attente..." en gris
+**Header personnalisé :** ✅ Implémenté
+- **Gauche (15%)** : Badge nom du VJoueur avec couleur QCM assignée
+- **Centre** : Timer avec barre de progression (95% largeur)
+- **Droite (85%)** : Badge équipe avec couleur de l'équipe
+- Badges responsives avec clamp() (vh/vw)
+- Si non assigné : badge équipe absent
 
-**Zone de buzz tactile :**
-- Tap au centre de l'écran (zone média) pour buzzer
-- Pas de bouton séparé - toute la zone média est cliquable
-- Vibration haptique (50ms) sur mobile
+**Zone de buzz tactile :** ✅ Implémenté
+- Tap sur la zone média (76% largeur) pour buzzer
+- Toute la zone média est cliquable via `onMediaClick`
+- Overlay de confirmation avec checkmark vert
 
-### Feedback visuel du buzz
+### Feedback visuel du buzz ✅ Implémenté (partiel)
 
-Le VJoueur reçoit un retour visuel selon que son buzz est accepté ou refusé par le serveur.
+Le VJoueur reçoit un retour visuel selon que son buzz est accepté.
 
-**Buzz VALIDÉ (accepté par le serveur) :**
-- Flash vert sur toute la zone média
-- Bordure verte épaisse (4px) pendant 500ms
-- Vibration longue (100ms)
-- Affichage du temps de réaction (ex: "0.342s")
+**Buzz VALIDÉ (accepté par le serveur) :** ✅
+- Overlay vert couvrant tout l'écran avec animation pulsante
+- Checkmark vert animé (✓) avec effet "pop"
+- Texte "BUZZÉ !" en vert
+- Bordure verte épaisse (8px) avec glow
 
 **Buzz REFUSÉ (ignoré par le serveur) :**
 - Flash rouge sur toute la zone média
@@ -387,18 +407,18 @@ Option pour afficher visuellement les buzz refusés (utile pour debug).
 | Validé | ✅ Flash vert | ✅ Longue (100ms) |
 | Refusé | ✅ Flash rouge | ✅ Courte (25ms) |
 
-### Persistance de l'identité VJoueur
+### Persistance de l'identité VJoueur ✅ Implémenté
 
-- [ ] **Cookie/localStorage**
-  - Clé : `vplayer_session`
-  - Valeur : `{id, name, timestamp}`
-  - Durée : paramétrable dans config (défaut 24h)
+- [x] **localStorage**
+  - Clés : `vplayer_name`, `vplayer_session`
+  - Persistance jusqu'à suppression manuelle ou suppression admin
 
-- [ ] **Reconnexion automatique**
-  - Au chargement de `/` ou `/player`
-  - Si cookie valide et non expiré → reconnexion directe
-  - Si cookie invalide ou expiré → afficher page d'enrôlement
-  - En cas de déconnexion/refresh → restauration automatique
+- [x] **Reconnexion automatique**
+  - Au chargement de `/player` : vérifie localStorage
+  - Si `vplayer_name` et `vplayer_session` présents → restauration automatique
+  - Si absents → redirection vers `/` (page d'enrôlement)
+  - En cas de déconnexion : envoi automatique `PLAYER_CONNECT` après 2s
+  - Détection suppression par admin → redirection vers `/`
 
 - [ ] **Configuration serveur** (config.json)
   ```json
@@ -559,76 +579,67 @@ Option pour afficher visuellement les buzz refusés (utile pour debug).
   └──────────────────────────────────────┘
   ```
 
-### 3. Zone PlayerDisplay (réutilisée à 100%)
+### 3. Zone PlayerDisplay (réutilisée à 100%) ✅ Implémenté
 
-- [ ] **Import du composant existant**
+- [x] **Import du composant existant**
   ```jsx
-  import PlayerDisplay from './pages/PlayerDisplay'
+  import PlayerDisplay from './PlayerDisplay'
 
-  function PlayerPage() {
-    return (
-      <>
-        <PlayerHeader />
-        <PlayerDisplay /> {/* Réutilisé tel quel */}
-        <BuzzButtonZone />
-      </>
-    )
-  }
+  // VPlayerPage.jsx
+  <PlayerDisplay
+    playerName={bumper?.NAME}
+    playerNameColor={getPlayerNameColor()}
+    teamName={team?.NAME}
+    teamColor={getTeamColor()}
+    isVPlayer={true}
+    onMediaClick={handleBuzz}
+  />
   ```
 
-- [ ] **Comportement identique à `/tv`**
+- [x] **Comportement identique à `/tv`**
   - Affichage de la question en cours
-  - Timer synchronisé
-  - Média (image/vidéo)
-  - Réponses QCM affichées (mais pas cliquables ici)
-  - Grille Memory affichée (mais pas cliquable ici)
-  - Changement de vue selon `gameState.PAGE` (GAME/SCORE/PLAYERS/PALMARES)
+  - Timer synchronisé (95% largeur, barre de progression)
+  - Média (image/vidéo) dans zone cliquable (76% largeur)
+  - Réponses QCM affichées
+  - Grille Memory affichée
+  - Changement de vue selon `gameState.PAGE`
 
-### 4. Zone Bouton BUZZ (120px fixe, en bas)
+### 4. Zone Bouton BUZZ ✅ Implémenté (via zone média)
 
-- [ ] **Bouton principal de buzz**
-  - Taille : 100% largeur, 80px hauteur
-  - Couleur : Couleur de l'équipe du joueur
-  - Texte : "BUZZ !" (grande police, bold)
-  - Position : Fixe en bas de l'écran (sticky)
+**Note** : Implémentation différente de la spécification initiale - le buzz se fait via la zone média cliquable (76% largeur), pas via un bouton séparé en bas.
 
-- [ ] **États du bouton**
+- [x] **Zone média cliquable**
+  - Taille : 76% largeur (80% de zone-answers 95%)
+  - Zone : `.zone-media` avec `cursor: pointer`
+  - Callback : `onMediaClick={handleBuzz}`
 
-  | État | Apparence | Comportement |
-  |------|-----------|--------------|
-  | **NON ASSIGNÉ** | Gris, "Pas encore assigné" | Non cliquable |
-  | **STOPPED** | Gris, désactivé, "En attente..." | Non cliquable |
-  | **PREPARE** | Gris, désactivé, "Préparez-vous..." | Non cliquable |
-  | **READY** | Couleur équipe, "PRÊT !" | Non cliquable (attente démarrage) |
-  | **STARTED** | Couleur équipe pulsante, "BUZZ !" | ✅ Cliquable (si assigné) |
-  | **PAUSED (autre joueur)** | Gris, "Un joueur a buzzé" | Non cliquable |
-  | **PAUSED (vous)** | Vert, "Vous avez buzzé !" + temps | Non cliquable |
-  | **REVEALED** | Gris, désactivé | Non cliquable |
+- [x] **États du buzz** ✅ Implémenté
 
-  **Important** : Le bouton reste désactivé tant que le VJoueur n'a pas été assigné à une équipe par l'admin.
+  | État | Comportement | Implémentation |
+  |------|--------------|----------------|
+  | **STARTED/PAUSED** | ✅ Buzz autorisé | `handleBuzz()` envoie `BUTTON` |
+  | **Autres phases** | Buzz ignoré | Vérification phase dans `handleBuzz()` |
+  | **MEMORY** | Buzz bloqué | Question.TYPE === 'MEMORY' |
+  | **Déjà buzzé** | Overlay vert affiché | `bumper.TIME > 0` |
 
-- [ ] **Envoi de l'action au clic**
+  **Simplification** : Pas de bouton séparé avec états visuels - la zone média est toujours visible, le buzz est autorisé/ignoré selon la phase.
+
+- [x] **Envoi de l'action au clic** ✅ Implémenté
   ```javascript
+  // VPlayerPage.jsx - handleBuzz()
   const handleBuzz = () => {
-    if (gameState.PHASE !== 'STARTED') return
+    if (!bumper || !bumper.id) return
+    if (gameState.phase !== 'STARTED' && gameState.phase !== 'PAUSED') return
+    if (gameState.question?.TYPE === 'MEMORY') return
 
-    const now = Date.now()
-    sendWebSocketMessage({
-      ACTION: 'BUTTON',
-      ID: playerId,
-      MSG: { button: answerColor || 'A', timestamp: now }
-    })
-
-    // Feedback optimiste
-    setLocalBuzzed(true)
-    navigator.vibrate && navigator.vibrate(50)
+    sendMessage('BUTTON', { ID: bumper.id, button: 'A' })
   }
   ```
 
-- [ ] **Feedback immédiat**
-  - Vibration haptique (50ms) sur mobile
-  - Changement de couleur instantané (vert)
-  - Affichage du temps de réaction si disponible
+- [x] **Feedback immédiat** ✅ Implémenté
+  - Overlay vert avec checkmark animé
+  - Animation pulsante sur la bordure
+  - Texte "BUZZÉ !" affiché
 
 ---
 

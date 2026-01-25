@@ -1264,19 +1264,21 @@ data/             # Données variables (créé automatiquement)
 
 ---
 
-## React Web Interface (v2.44.10)
+## React Web Interface (v2.45.0)
 
 ### Structure des pages
 
 **Architecture des routes :**
-- Route `/` : Page d'inscription des joueurs (PlayerPage)
+- Route `/` : Page d'inscription VJoueurs (EnrollPage)
+- Route `/player` : Interface de jeu VJoueur (VPlayerPage)
 - Route `/tv` : Affichage TV plein écran (PlayerDisplay)
 - Routes `/admin/*` : Pages d'administration
 - Routes `/anim/*` : Alias des routes admin (même comportement)
 
 | Route | Alias | Page | Description |
 |-------|-------|------|-------------|
-| `/` | - | PlayerPage | Page d'inscription des joueurs |
+| `/` | - | EnrollPage | Page d'inscription VJoueurs |
+| `/player` | - | VPlayerPage | Interface de jeu VJoueur (smartphone) |
 | `/tv` | - | PlayerDisplay | Affichage TV (plein écran, statique) |
 | `/admin` | `/anim` | GamePage | Interface admin principale (Jeu) |
 | `/admin/scoreboard` | `/anim/scoreboard` | ScoresPage | Tableau des scores |
@@ -1288,7 +1290,148 @@ data/             # Données variables (créé automatiquement)
 
 **Navbar :**
 - Affiché uniquement sur les routes `/admin/*` et `/anim/*`
-- Détection active des routes via fonction `isActiveRoute()` qui vérifie les deux préfixes
+- Préfixe dynamique : détecte `/anim` ou `/admin` depuis l'URL et construit les liens en conséquence
+- Fonction `getFullPath(path)` pour construire les chemins avec le bon préfixe
+
+### VPlayer - Joueurs Virtuels (v2.45.0)
+
+Permet aux joueurs de buzzer depuis leur smartphone en scannant un QR Code.
+
+**Workflow :**
+1. Admin ouvre `/anim/teams` → Zone "Inscriptions" → "Lancer Inscriptions"
+2. QR Code s'affiche sur `/tv`
+3. Joueurs scannent → arrivent sur `/` → saisissent pseudo → redirigés vers `/player`
+4. Admin ferme inscriptions → QR Code disparaît, joueurs voient page d'attente
+5. Joueurs sur `/player` peuvent buzzer pendant les questions
+6. Si admin supprime un joueur → détection automatique → redirection vers `/`
+
+**Page d'inscription (`/` - EnrollPage) :**
+- Fond blanc pour lisibilité
+- Si inscriptions fermées : "⏳ En attente de l'ouverture des inscriptions..."
+- Formulaire : pseudo (2-20 caractères) + bouton "Rejoindre"
+- Reconnexion auto : si joueur existe côté serveur → redirige vers `/player`
+- Stockage localStorage : `vplayer_name`, `vplayer_session`
+
+**Page de jeu (`/player` - VPlayerPage) :**
+
+Layout responsive en 4 zones avec badges permanents non-intrusifs :
+
+**Structure :**
+```
+┌─────────────────────────────────────┐
+│  Badges permanents (overlay absolu) │ ← Zone 1 (5rem, z-index: 20)
+│  [Nom 15%]  [Timer 50%]  [Équipe 85%]│
+├─────────────────────────────────────┤
+│  PlayerDisplay (flex: 1)            │ ← Zone 2 (flex)
+│  - Zone Timer (100px)               │
+│  - Zone Question (80px)             │
+│  - Zone Média (flex, clickable)     │   76% largeur (zone de buzz)
+│  - Zone Réponses (120px)            │
+└─────────────────────────────────────┘
+```
+
+**Badges flottants (VPlayerPage.css) :**
+- Position absolue, overlay non-intrusif (`pointer-events: none`)
+- Badge nom joueur : **15%** de gauche (centré via `translateX(-50%)`)
+- Badge équipe : **85%** de gauche (centré via `translateX(-50%)`)
+- Alignés verticalement à la hauteur du timer
+- Responsive avec `clamp()` : `font-size: clamp(1rem, 3vh, 2.5rem)`
+- Max-width 30% pour éviter débordement
+
+**Zone média cliquable pour buzz :**
+- Largeur : **76%** (80% de zone-answers qui fait 95%)
+- Centrée avec `margin: 0 auto`
+- Seulement la zone média déclenche le buzz (pas les réponses QCM ni le timer)
+
+**VPlayerHeader Component :**
+```jsx
+{
+  bumper: { NAME, TEAM, SCORE, IS_VIRTUAL },
+  team: { NAME, COLOR }
+}
+```
+- Avatar : initiale du joueur + fond couleur équipe
+- Si non assigné : fond gris + "En attente d'assignation..."
+- Si assigné : nom équipe + score
+
+**BuzzButton Component :**
+
+États visuels selon phase du jeu :
+
+| Phase | Texte | Couleur | État | Animation |
+|-------|-------|---------|------|-----------|
+| NOT_ASSIGNED | "En attente..." | Gris | disabled | - |
+| STOPPED | "En attente de question" | Gris | disabled | - |
+| PREPARE | "Préparation..." | Orange | disabled | - |
+| READY / COUNTDOWN | "Prêt !" | Cyan | disabled | - |
+| STARTED | "BUZZ !" | Vert | active | Pulse + glow |
+| PAUSED | "Déjà buzzé" | Bleu | disabled | - |
+
+**Retour haptique :**
+- Vibration 100ms au clic (si `navigator.vibrate` supporté)
+- Animation visuelle pressing (300ms scale)
+
+**Feedback visuel de buzz (VPlayerPage.jsx) :**
+- Overlay plein écran (`position: fixed, z-index: 9999`)
+- Bordure verte pulsante (8px solid var(--success))
+- Checkmark géant : `✓` avec font-size clamp(4rem, 15vw, 8rem)
+- Texte "BUZZÉ !" en glow vert
+- Animation pop-in du checkmark (scale 0 → 1)
+- Disparition automatique après 1.5s
+
+**Protection MEMORY :**
+- Questions MEMORY ne peuvent pas être buzzées par VPlayers
+- `engine.go:ProcessButtonPress()` ignore les buzz si TYPE="MEMORY"
+- Test unitaire : `TestMemoryQuestionBuzzBlocking`
+
+**Détection suppression par admin :**
+- useEffect surveille si `bumpers[playerName]` existe toujours
+- Si disparu : clear localStorage + redirection vers `/`
+
+**Zone Enrollment (TeamsPage) :**
+```
+L1: Places max: [10]  Inscrits: 0/10 (🎮 physiques / 📱 virtuels)
+L2: [▶ Lancer Inscriptions] / [⏹ Fin Inscriptions]
+```
+
+**QR Code Overlay (PlayerDisplay) :**
+- Affiché quand `gameState.showQRCode === true`
+- QR Code 300x300px vers `http://{hostname}/`
+- Barre de progression joueurs inscrits
+
+**Actions WebSocket :**
+| Action | Direction | Description |
+|--------|-----------|-------------|
+| SHOW_QR_CODE | Admin→Server | Démarre enrollment |
+| HIDE_QR_CODE | Admin→Server | Arrête enrollment |
+| PLAYER_CONNECT | VPlayer→Server | Demande d'inscription |
+| PLAYER_CONNECTED | Server→VPlayer | Inscription réussie |
+| PLAYER_REJECTED | Server→VPlayer | Inscription refusée |
+| ENROLLMENT_UPDATE | Server→All | Mise à jour compteur |
+
+**Champs GameState :**
+- `enrollmentActive: bool` - Inscriptions ouvertes
+- `showQRCode: bool` - QR Code affiché sur TV
+- `virtualPlayerCount: int` - Nombre de VJoueurs inscrits
+- `virtualPlayerLimit: int` - Limite max de VJoueurs
+
+**Champs Bumper :**
+- `IS_VIRTUAL: bool` - Distingue VPlayer des buzzers physiques
+
+**Fichiers concernés :**
+- `VPlayerPage.jsx` : Layout + overlay buzz + détection suppression
+- `VPlayerPage.css` : Positionnement badges (15%/85%), zone média 76%, responsive
+- `VPlayerHeader.jsx` : Header avatar + infos joueur
+- `VPlayerHeader.css` : Styles header
+- `BuzzButton.jsx` : États bouton + vibration
+- `BuzzButton.css` : Animations pulse, glow, états visuels
+- `EnrollPage.jsx` : Formulaire inscription + reconnexion auto
+- `QRCodeOverlay.jsx` : Overlay QR Code sur /tv
+- `TeamsPage.jsx` : Zone enrollment + compteurs
+- `PlayerDisplay.jsx` : Badges permanents VPlayer (nom + équipe)
+- `PlayerDisplay.css` : Styles `.player-name-badge-mobile`, `.player-team-badge-mobile`
+- `engine.go` : `ProcessButtonPress()` blocage MEMORY, `Reveal()` depuis PAUSED
+- `models.go` : Champ `IS_VIRTUAL` sur Bumper
 
 ### Affichage TV - Vues disponibles (v2.34.0)
 

@@ -25,7 +25,7 @@ const BUTTON_TO_QCM_COLOR = {
   'D': 'BLUE',
 }
 
-export default function PlayerDisplay({ playerName = null, playerNameColor = null, teamName = null, teamColor = null }) {
+export default function PlayerDisplay({ playerName = null, playerNameColor = null, teamName = null, teamColor = null, isVPlayer = false, onMediaClick = null }) {
   const { gameState, teams, bumpers, flipMemoryCard, showQRCode } = useGame()
   const [previousRanking, setPreviousRanking] = useState({})
   const [changedTeams, setChangedTeams] = useState({})
@@ -897,6 +897,20 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
           >
+            {/* VPlayer permanent info - always shown regardless of phase */}
+            {playerName && isVPlayer && (
+              <div className="vplayer-permanent-info">
+                <div className="player-name-badge-mobile" style={{ backgroundColor: playerNameColor }}>
+                  {playerName}
+                </div>
+                {teamName && (
+                  <div className="player-team-badge-mobile" style={{ backgroundColor: teamColor }}>
+                    {teamName}
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* PREPARE State - Fixed "Preparez-vous" centered, no category (all question types) */}
             {showPrepare && (
               <motion.div
@@ -1084,7 +1098,11 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
                 </div>
 
                 {/* Zone 3: Media or "PREPAREZ-VOUS" message or COUNTDOWN */}
-                <div className="zone-media">
+                <div
+                  className="zone-media"
+                  onClick={onMediaClick && isVPlayer && (gameState.phase === 'STARTED' || gameState.phase === 'PAUSED') ? onMediaClick : undefined}
+                  style={{ cursor: onMediaClick && isVPlayer && (gameState.phase === 'STARTED' || gameState.phase === 'PAUSED') ? 'pointer' : 'default' }}
+                >
                   {showCountdown ? (
                     <motion.div
                       className="countdown-state"
@@ -1401,7 +1419,8 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
                       // Cards are flipped (face up) during: cascading COUNTDOWN reveal, still hiding after countdown, progressive REVEAL, matched pairs, or player clicked
                       const isFlipped = isInCountdownCascade || isStillVisibleInCascade || (isGameplayPhase && (isProgressivelyRevealed || isMatched || isPlayerFlipped))
                       const isJustMatched = justMatchedPairs.includes(cardData.pairId)
-                      const canClick = gameState.phase === 'STARTED' && !isMatched && !isFlipped
+                      // VPlayer cannot flip cards - only admin can
+                      const canClick = gameState.phase === 'STARTED' && !isMatched && !isFlipped && !isVPlayer
                       // Only show matched styling during gameplay phases (not before game starts)
                       const showMatchedStyle = isGameplayPhase && isMatched
                       return (
@@ -1469,36 +1488,15 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
             {/* Non-QCM/Non-Memory Game Content - 4 vertical zones: Timer, Question, Media, Answers */}
             {!isQcm && !isMemory && showGameContent && gameState.question && (
               <div className="game-content-zones">
-                {/* Zone 1: Timer with player info */}
+                {/* Zone 1: Timer */}
                 <div className="zone-timer">
-                  {playerName && (
-                    <div className="player-info-wrapper">
-                      <div className="player-name-badge-mobile" style={{ backgroundColor: playerNameColor }}>
-                        {playerName}
-                      </div>
-                      <Timer
-                        currentTime={gameState.timer}
-                        totalTime={gameState.totalTime}
-                        phase={gameState.phase}
-                        size="xl"
-                        showPhase={false}
-                      />
-                      {teamName && (
-                        <div className="player-team-badge-mobile" style={{ backgroundColor: teamColor }}>
-                          {teamName}
-                        </div>
-                      )}
-                    </div>
-                  )}
-                  {!playerName && (
-                    <Timer
-                      currentTime={gameState.timer}
-                      totalTime={gameState.totalTime}
-                      phase={gameState.phase}
-                      size="xl"
-                      showPhase={false}
-                    />
-                  )}
+                  <Timer
+                    currentTime={gameState.timer}
+                    totalTime={gameState.totalTime}
+                    phase={gameState.phase}
+                    size="xl"
+                    showPhase={false}
+                  />
                 </div>
 
                 {/* Zone 2: Question */}
@@ -1511,38 +1509,34 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
                   <p className="question-text">{gameState.question.QUESTION}</p>
                 </motion.div>
 
-                {/* Zone 3: Media - shows MEDIA_ANSWER during REVEAL if available */}
-                {(showAnswer && gameState.question.MEDIA_ANSWER) ? (
-                  <motion.div
-                    className="zone-media"
-                    key="answer-media"
-                    initial={{ opacity: 0, scale: 0.9 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    transition={{ delay: 0.2 }}
-                  >
-                    <img
+                {/* Zone 3: Media - shows MEDIA_ANSWER during REVEAL if available - ALWAYS clickable for VPlayer buzz */}
+                <div
+                  className="zone-media"
+                  onClick={onMediaClick && isVPlayer && (gameState.phase === 'STARTED' || gameState.phase === 'PAUSED') ? onMediaClick : undefined}
+                  style={{ cursor: onMediaClick && isVPlayer && (gameState.phase === 'STARTED' || gameState.phase === 'PAUSED') ? 'pointer' : 'default' }}
+                >
+                  {(showAnswer && gameState.question.MEDIA_ANSWER) ? (
+                    <motion.img
+                      key="answer-media"
                       src={gameState.question.MEDIA_ANSWER}
                       alt=""
                       className="question-media answer-media-highlight"
+                      initial={{ opacity: 0, scale: 0.9 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      transition={{ delay: 0.2 }}
                     />
-                  </motion.div>
-                ) : gameState.question.MEDIA ? (
-                  <motion.div
-                    className="zone-media"
-                    key="question-media"
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: 0.2 }}
-                  >
-                    <img
+                  ) : gameState.question.MEDIA ? (
+                    <motion.img
+                      key="question-media"
                       src={gameState.question.MEDIA}
                       alt=""
                       className="question-media"
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: 0.2 }}
                     />
-                  </motion.div>
-                ) : (
-                  <div className="zone-media-spacer" />
-                )}
+                  ) : null}
+                </div>
 
                 {/* Zone 4: Answer - only in REVEALED phase */}
                 <div className="zone-answers">
@@ -1560,8 +1554,8 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
               </div>
             )}
 
-            {/* Waiting State - no question selected */}
-            {!gameState.question && ['STOPPED', 'REVEALED'].includes(gameState.phase) && (
+            {/* Waiting State - no question selected (NOT shown for VPlayer) */}
+            {!isVPlayer && !gameState.question && ['STOPPED', 'REVEALED'].includes(gameState.phase) && (
               <motion.div
                 className="waiting-state"
                 initial={{ opacity: 0 }}
@@ -1597,7 +1591,7 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
       </AnimatePresence>
 
       {/* QR Code Overlay for player enrollment */}
-      <QRCodeOverlay show={showQRCode} />
+      <QRCodeOverlay show={gameState.showQRCode || false} />
     </div>
   )
 }

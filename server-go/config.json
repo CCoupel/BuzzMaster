@@ -2,7 +2,9 @@
   "server": {
     "http_port": 80,
     "tcp_port": 1234,
-    "websocket_path": "/ws"
+    "websocket_path": "/ws",
+    "auto_open_browsers": true,
+    "debug": false
   },
   "wifi": {
     "ssid": "buzzmaster",
@@ -16,5 +18,5 @@
     "questions_dir": "./data/files/questions",
     "files_dir": "./data/files"
   },
-  "version": "2.44.10"
+  "version": "2.45.0"
 }

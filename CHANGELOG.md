@@ -3,6 +3,85 @@
 Historique des versions du projet BuzzControl.
 
 
+## [2.45.0] - 2026-01-25
+
+### Ajouts
+- **[VPlayer]**: Interface complète de joueur virtuel avec affichage optimisé
+  - **Page d'enrôlement `/`** : Formulaire d'inscription (pseudo 2-20 caractères)
+    - Fond blanc pour meilleure lisibilité
+    - État d'attente si inscriptions fermées ("En attente de l'ouverture...")
+    - Reconnexion automatique si joueur déjà inscrit côté serveur
+    - Validation temps réel du pseudo
+  - **Page VPlayer `/player`** : Interface responsive avec badges d'identité permanents
+    - Layout en 4 zones : Timer (top), Question, Média (cliquable pour buzz), Réponses
+    - Zone média clickable pour buzzer (76% de largeur, centrée)
+    - Badges flottants non-intrusifs : Nom joueur (15%), Équipe (85%)
+    - Alignement précis horizontal avec les badges à hauteur du timer
+    - Détection de suppression : redirection automatique vers `/` si admin supprime le joueur
+  - **Bouton BUZZ intelligent** : États visuels et retour haptique
+    - Phase STOPPED : "En attente de question" (gris, désactivé)
+    - Phase PREPARE : "Préparation..." (orange, désactivé)
+    - Phase READY/COUNTDOWN : "Prêt !" (cyan, désactivé)
+    - Phase STARTED : "BUZZ !" (vert pulsant, actif)
+    - Phase PAUSED : "Déjà buzzé" (bleu, désactivé)
+    - Vibration haptique au buzz (100ms si supporté)
+  - **Feedback visuel de buzz** : Overlay vert avec checkmark géant
+    - Bordure verte pulsante plein écran
+    - Animation checkmark (✓) avec pop-in
+    - Texte "BUZZÉ !" avec glow vert
+    - Disparition automatique après 1.5s
+  - **QR Code sur `/tv`** : Overlay affiché quand l'enrollment est actif
+    - QR Code 300x300px généré dynamiquement
+    - Barre de progression des joueurs inscrits
+  - **Zone ENROLL dans `/anim/teams`** : Contrôles compacts sur 2 lignes
+    - L1: "Places max: [10] Inscrits: 0/10"
+    - L2: Bouton "Lancer Inscriptions" / "Fin Inscriptions"
+  - **Routes `/admin` et `/anim`** : Alias complets fonctionnels
+    - Navbar avec préfixe dynamique selon l'URL courante
+    - Toutes les sous-routes fonctionnent avec les deux préfixes
+
+### Améliorations
+- **[Engine]**: Protection MEMORY contre buzz VPlayer
+  - Questions MEMORY ne peuvent pas être buzzées (contrôle exclusif admin)
+  - `ProcessButtonPress()` ignore les buzz pour TYPE="MEMORY"
+  - Test unitaire ajouté : `TestMemoryQuestionBuzzBlocking`
+- **[Engine]**: Correction REVEAL depuis PAUSED
+  - Permettre REVEAL depuis STOPPED ou PAUSED
+  - Arrêt propre des timers countdown et principal
+- **[Engine]**: Amélioration `ClearBumpers()`
+  - Dissociation des bumpers dans les équipes (reset `team.Bumper`)
+  - Reset complet des statuts et temps d'équipes
+- **[Engine]**: Garantie champ team.NAME
+  - `SetTeams()` remplit automatiquement `team.Name` depuis la clé si vide
+- **[UI]**: Responsive VPlayer layout
+  - Container queries pour adaptation aux différentes tailles d'écran
+  - Badges redimensionnés dynamiquement (clamp)
+  - Zone média ajustée pour smartphones et tablettes
+
+### Technique
+- `models.go` : Champs `EnrollmentActive`, `ShowQRCode` sans `omitempty`, champ `IS_VIRTUAL` sur Bumper
+- `engine.go` :
+  - `StartEnrollment()`, `StopEnrollment()`, `HandleVirtualPlayerConnect()`
+  - `ProcessButtonPress()` : Blocage MEMORY
+  - `Reveal()` : Support PAUSED → REVEALED avec arrêt timers
+  - `ClearBumpers()` : Dissociation équipes
+  - `SetTeams()` : Remplissage auto team.Name
+- `protocol/messages.go` : Actions SHOW_QR_CODE, HIDE_QR_CODE, PLAYER_CONNECT, PLAYER_CONNECTED, ENROLLMENT_UPDATE
+- `http.go` : Ajout `/admin` dans la liste des routes SPA
+- `EnrollPage.jsx` : Gestion état d'attente, reconnexion auto, fond blanc
+- `VPlayerPage.jsx` : Layout 4 zones, badges permanents overlay, zone média cliquable, détection suppression
+- `VPlayerPage.css` : Positionnement absolu badges (15%/85%), zone média 76%, responsive avec clamp
+- `VPlayerHeader.jsx` : Composant header avec avatar, nom, équipe, score
+- `BuzzButton.jsx` : Composant bouton avec états visuels et vibration haptique
+- `BuzzButton.css` : Animations pulse, glow, scaling
+- `QRCodeOverlay.jsx` : Overlay QR code sans URL affichée
+- `TeamsPage.jsx` : Zone enrollment compacte 2 lignes, compteur VPlayers
+- `Navbar.jsx` : Préfixe dynamique `/admin` ou `/anim` selon URL
+- `PlayerDisplay.jsx` : Badges permanents pour VPlayer (nom + équipe)
+- `PlayerDisplay.css` : Styles `.player-name-badge-mobile`, `.player-team-badge-mobile`
+
+---
+
 ## [2.44.10] - 2026-01-25
 
 ### Fixed

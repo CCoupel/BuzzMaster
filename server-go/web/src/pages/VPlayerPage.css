@@ -1,0 +1,180 @@
+.vplayer-page {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  overflow: hidden;
+  background: var(--bg-primary);
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  position: relative;
+}
+
+.vplayer-page.loading {
+  align-items: center;
+  justify-content: center;
+}
+
+.loading-spinner {
+  font-size: 1.5rem;
+  color: var(--text-secondary);
+  animation: pulse 2s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 0.5;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+/* Permanent info container - absolute positioning as overlay, does NOT affect PlayerDisplay layout */
+.vplayer-page .vplayer-permanent-info {
+  position: absolute;
+  top: 1rem;
+  left: 0;
+  right: 0;
+  width: 100%;
+  height: 5rem; /* Fixed height for positioning context */
+  display: block; /* Override flex from PlayerDisplay.css */
+  z-index: 20; /* Above game content */
+  pointer-events: none; /* Allow clicks to pass through to game content */
+}
+
+/* VPlayer-specific styling for player name badge - aligned at 15% */
+.vplayer-page .player-name-badge-mobile {
+  position: absolute;
+  top: 0; /* Align with timer vertical position */
+  left: 15%;
+  transform: translateX(-50%); /* Center on 15% */
+  font-family: var(--font-display);
+  font-size: clamp(1rem, 3vh, 2.5rem);
+  font-weight: 700;
+  padding: clamp(0.4rem, 1vh, 0.75rem) clamp(0.8rem, 2vw, 1.5rem);
+  border-radius: clamp(6px, 1.5vh, 12px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: clamp(2rem, 5vh, 3.5rem);
+  text-shadow:
+    0 2px 4px rgba(0, 0, 0, 0.8),
+    0 0 10px rgba(0, 0, 0, 0.4);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  max-width: 30%;
+  pointer-events: auto; /* Badge itself is clickable */
+}
+
+/* VPlayer team badge - aligned at 85% */
+.vplayer-page .player-team-badge-mobile {
+  position: absolute;
+  top: 0; /* Align with timer vertical position */
+  left: 85%;
+  transform: translateX(-50%); /* Center on 85% */
+  font-family: var(--font-display);
+  font-size: clamp(1rem, 3vh, 2.5rem);
+  font-weight: 700;
+  padding: clamp(0.4rem, 1vh, 0.75rem) clamp(0.8rem, 2vw, 1.5rem);
+  border-radius: clamp(6px, 1.5vh, 12px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: clamp(2rem, 5vh, 3.5rem);
+  text-shadow:
+    0 2px 4px rgba(0, 0, 0, 0.8),
+    0 0 10px rgba(0, 0, 0, 0.4);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  max-width: 30%;
+  pointer-events: auto; /* Badge itself is clickable */
+}
+
+/* VPlayer clickable zone - 76% width (80% of zone-answers 95%) */
+.vplayer-page .zone-media {
+  width: 76%;
+  margin: 0 auto;
+}
+
+/* Buzz confirmation overlay */
+.vplayer-buzz-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 9999;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: rgba(34, 197, 94, 0.15);
+  border: 8px solid var(--success);
+  animation: buzz-pulse 1.5s ease-in-out infinite;
+  pointer-events: none;
+}
+
+.vplayer-buzz-checkmark {
+  font-size: clamp(4rem, 15vw, 8rem);
+  color: var(--success);
+  font-weight: 900;
+  text-shadow:
+    0 4px 8px rgba(0, 0, 0, 0.8),
+    0 0 40px rgba(34, 197, 94, 0.6);
+  animation: buzz-checkmark-pop 0.6s ease-out;
+}
+
+.vplayer-buzz-text {
+  margin-top: 1rem;
+  font-size: clamp(2rem, 6vw, 3.5rem);
+  font-weight: 700;
+  color: var(--success);
+  text-shadow:
+    0 2px 4px rgba(0, 0, 0, 0.8),
+    0 0 30px rgba(34, 197, 94, 0.5);
+  letter-spacing: 2px;
+}
+
+@keyframes buzz-pulse {
+  0%, 100% {
+    border-color: var(--success);
+    box-shadow:
+      inset 0 0 40px rgba(34, 197, 94, 0.3),
+      0 0 60px rgba(34, 197, 94, 0.5);
+  }
+  50% {
+    border-color: rgba(34, 197, 94, 0.7);
+    box-shadow:
+      inset 0 0 60px rgba(34, 197, 94, 0.5),
+      0 0 80px rgba(34, 197, 94, 0.7);
+  }
+}
+
+@keyframes buzz-checkmark-pop {
+  0% {
+    transform: scale(0.3);
+    opacity: 0;
+  }
+  50% {
+    transform: scale(1.2);
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+/* Mobile responsiveness */
+@media (max-width: 768px) {
+  .vplayer-page {
+    cursor: pointer;
+  }
+
+  .vplayer-identity-bar {
+    padding: 1rem 1.5rem;
+  }
+
+  .vplayer-player-name,
+  .vplayer-team-name {
+    max-width: 45%;
+  }
+}

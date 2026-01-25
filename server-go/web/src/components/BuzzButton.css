@@ -1,105 +1,99 @@
 .buzz-button-container {
-  position: relative;
+  position: sticky;
+  bottom: 0;
   width: 100%;
-  height: 100%;
+  height: 120px;
   display: flex;
   align-items: center;
   justify-content: center;
+  background: var(--card-bg);
+  border-top: 2px solid var(--border-color);
+  padding: 1rem;
+  flex-shrink: 0;
 }
 
 .buzz-button {
-  width: min(80vw, 300px);
-  height: min(80vw, 300px);
+  width: 200px;
+  height: 200px;
   border-radius: 50%;
   border: none;
   cursor: pointer;
-  font-size: 2rem;
-  font-weight: bold;
+  font-size: 1.5rem;
+  font-weight: 700;
   color: white;
   text-transform: uppercase;
-  background: linear-gradient(145deg, var(--team-color), color-mix(in srgb, var(--team-color) 80%, black));
-  box-shadow:
-    0 10px 30px rgba(0, 0, 0, 0.3),
-    0 0 60px var(--team-color-light),
-    inset 0 5px 10px rgba(255, 255, 255, 0.2);
-  transition: all 0.15s ease;
+  background: linear-gradient(135deg, var(--primary-500), var(--primary-700));
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+  transition: all 0.2s ease;
   user-select: none;
   -webkit-tap-highlight-color: transparent;
 }
 
-.buzz-button:not(.disabled):hover {
-  transform: scale(1.05);
-  box-shadow:
-    0 15px 40px rgba(0, 0, 0, 0.4),
-    0 0 80px var(--team-color-light),
-    inset 0 5px 10px rgba(255, 255, 255, 0.2);
+/* State-specific styles */
+.buzz-button.started {
+  background: linear-gradient(135deg, var(--success), #15803d);
+  animation: pulse-active 1.5s ease-in-out infinite;
 }
 
-.buzz-button:not(.disabled):active,
-.buzz-button.pressed {
-  transform: scale(0.95);
-  box-shadow:
-    0 5px 15px rgba(0, 0, 0, 0.3),
-    0 0 40px var(--team-color-light),
-    inset 0 -5px 10px rgba(0, 0, 0, 0.2);
+.buzz-button.not_assigned,
+.buzz-button.stopped,
+.buzz-button.prepare {
+  background: linear-gradient(135deg, var(--gray-500), var(--gray-700));
 }
 
-.buzz-button.disabled {
-  opacity: 0.5;
+.buzz-button.ready {
+  background: linear-gradient(135deg, var(--accent-cyan), #0e7490);
+}
+
+.buzz-button.paused {
+  background: linear-gradient(135deg, var(--warning), #d97706);
+}
+
+.buzz-button.revealed {
+  background: linear-gradient(135deg, var(--gray-600), var(--gray-800));
+}
+
+.buzz-button.active:hover {
+  transform: scale(1.1);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.4);
+}
+
+.buzz-button.pressing {
+  transform: scale(0.9);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+
+.buzz-button:disabled {
+  opacity: 0.6;
   cursor: not-allowed;
-  filter: grayscale(50%);
+  transform: none;
 }
 
-.buzz-button.buzzed {
-  background: linear-gradient(145deg, #22c55e, #16a34a);
-  animation: pulse-success 1s ease infinite;
+@keyframes pulse-active {
+  0%, 100% {
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3), 0 0 40px rgba(34, 197, 94, 0.4);
+    transform: scale(1);
+  }
+  50% {
+    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.4), 0 0 60px rgba(34, 197, 94, 0.6);
+    transform: scale(1.05);
+  }
 }
 
 .buzz-text {
   text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+  display: block;
 }
 
-/* Confetti animation */
-.confetti-overlay {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  pointer-events: none;
-  overflow: hidden;
-}
-
-.confetti-piece {
-  position: absolute;
-  top: 50%;
-  left: var(--x);
-  width: 10px;
-  height: 10px;
-  border-radius: 2px;
-  animation: confetti-fall 1.5s ease-out var(--delay) forwards;
-}
-
-@keyframes confetti-fall {
-  0% {
-    transform: translateY(0) rotate(0deg);
-    opacity: 1;
+/* Mobile responsiveness */
+@media (max-width: 768px) {
+  .buzz-button-container {
+    height: 100px;
   }
-  100% {
-    transform: translateY(-200px) rotate(720deg);
-    opacity: 0;
-  }
-}
 
-@keyframes pulse-success {
-  0%, 100% {
-    box-shadow:
-      0 10px 30px rgba(0, 0, 0, 0.3),
-      0 0 60px rgba(34, 197, 94, 0.4);
-  }
-  50% {
-    box-shadow:
-      0 10px 30px rgba(0, 0, 0, 0.3),
-      0 0 100px rgba(34, 197, 94, 0.6);
+  .buzz-button {
+    width: 160px;
+    height: 160px;
+    font-size: 1.2rem;
   }
 }

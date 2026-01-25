@@ -9,7 +9,7 @@ $ARGUMENTS
 ## Workflow complet
 
 ```
-[Git] → PLAN → DEV → REVIEW → QA → DOC → DEPLOY(QUALIF) → [FIN]
+[Git] → PLAN → DEV → QA → DOC → DEPLOY(QUALIF) → [FIN]
 ```
 
 **Note** : Le déploiement en PROD se fait via `/deploy PROD` après validation de la QUALIF.

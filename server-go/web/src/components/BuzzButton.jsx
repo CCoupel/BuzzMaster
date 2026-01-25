@@ -1,75 +1,83 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState } from 'react'
 import './BuzzButton.css'
 
-export default function BuzzButton({ phase, isAssigned, teamColor, hasBuzzed, onClick }) {
-  const [isPressed, setIsPressed] = useState(false)
-  const [showConfetti, setShowConfetti] = useState(false)
-  const buttonRef = useRef(null)
+export default function BuzzButton({ bumper, phase, onBuzz, disabled }) {
+  const [isPressing, setIsPressing] = useState(false)
 
-  // Determine button state
-  const isDisabled = phase !== 'STARTED' || !isAssigned || hasBuzzed
-  const showWaiting = !isAssigned
-  const showBuzzed = hasBuzzed
+  const handlePress = () => {
+    if (disabled) return
 
-  const handleClick = () => {
-    if (isDisabled) return
-
-    setIsPressed(true)
-    const isFirst = onClick?.()
-
-    if (isFirst) {
-      setShowConfetti(true)
-      setTimeout(() => setShowConfetti(false), 2000)
+    // Trigger vibration if available
+    if (navigator.vibrate) {
+      navigator.vibrate(100)
     }
 
-    setTimeout(() => setIsPressed(false), 200)
+    setIsPressing(true)
+    onBuzz()
+
+    // Reset visual state after animation
+    setTimeout(() => {
+      setIsPressing(false)
+    }, 300)
   }
 
-  const handleTouchStart = (e) => {
-    e.preventDefault()
-    handleClick()
+  // Determine button state
+  const getButtonState = () => {
+    if (!bumper?.TEAM) return 'NOT_ASSIGNED'
+
+    switch (phase) {
+      case 'STOPPED':
+      case 'REVEALED':
+        return 'STOPPED'
+      case 'PREPARE':
+        return 'PREPARE'
+      case 'READY':
+      case 'COUNTDOWN':
+        return 'READY'
+      case 'STARTED':
+        return 'STARTED'
+      case 'PAUSED':
+        return 'PAUSED'
+      default:
+        return 'STOPPED'
+    }
   }
 
-  // Get status text
-  const getStatusText = () => {
-    if (showWaiting) return "En attente d'attribution..."
-    if (showBuzzed) return "Buzzed!"
-    if (phase === 'STARTED') return "BUZZ!"
-    if (phase === 'PAUSE') return "Pause"
-    if (phase === 'READY' || phase === 'PREPARE') return "Prêt..."
-    return "En attente..."
+  const getButtonText = () => {
+    const state = getButtonState()
+
+    switch (state) {
+      case 'NOT_ASSIGNED':
+        return 'En attente...'
+      case 'STOPPED':
+        return 'En attente de question'
+      case 'PREPARE':
+        return 'Préparation...'
+      case 'READY':
+        return 'Prêt !'
+      case 'STARTED':
+        return 'BUZZ !'
+      case 'PAUSED':
+        return 'Déjà buzzé'
+      case 'REVEALED':
+        return 'Réponse révélée'
+      default:
+        return 'BUZZ'
+    }
   }
+
+  const buttonState = getButtonState()
+  const isActive = buttonState === 'STARTED' && !disabled
+  const isDisabled = disabled || buttonState === 'NOT_ASSIGNED' || buttonState === 'PAUSED' || buttonState === 'STOPPED'
 
   return (
     <div className="buzz-button-container">
-      {showConfetti && (
-        <div className="confetti-overlay">
-          {[...Array(20)].map((_, i) => (
-            <div
-              key={i}
-              className="confetti-piece"
-              style={{
-                '--x': `${Math.random() * 100}%`,
-                '--delay': `${Math.random() * 0.5}s`,
-                backgroundColor: teamColor || '#6366f1'
-              }}
-            />
-          ))}
-        </div>
-      )}
-
       <button
-        ref={buttonRef}
-        className={`buzz-button ${isPressed ? 'pressed' : ''} ${isDisabled ? 'disabled' : ''} ${showBuzzed ? 'buzzed' : ''}`}
-        onClick={handleClick}
-        onTouchStart={handleTouchStart}
+        className={`buzz-button ${buttonState.toLowerCase()} ${isPressing ? 'pressing' : ''} ${isActive ? 'active' : ''}`}
+        onClick={handlePress}
         disabled={isDisabled}
-        style={{
-          '--team-color': teamColor || '#6366f1',
-          '--team-color-light': `${teamColor || '#6366f1'}40`
-        }}
       >
-        <span className="buzz-text">{getStatusText()}</span>
+        <span className="buzz-text">{getButtonText()}</span>
       </button>
     </div>
   )

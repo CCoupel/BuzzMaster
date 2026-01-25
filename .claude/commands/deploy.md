@@ -6,10 +6,11 @@ Arrête le serveur en cours puis redéploie vers l'environnement cible.
 
 $ARGUMENTS
 
-**Format** : `/deploy [QUALIF|PROD|hotfix]`
+**Format** : `/deploy [QUALIF|PREPROD|PROD|hotfix]`
 
-- **QUALIF** (défaut) : Redéploiement de qualification
-- **PROD** : Redéploiement de production (squash merge + tag + release)
+- **QUALIF** (défaut) : Build Windows, redémarrage local pour tests
+- **PREPROD** : Build Windows + ARM64, redémarrage local pour validation finale
+- **PROD** : Build Windows + ARM64 + squash merge + tag + release GitHub
 - **hotfix** : Mode urgence pour bugs critiques
 
 ## Instructions
@@ -48,52 +49,67 @@ Arrête et redéploie le serveur BuzzControl vers l'environnement cible.
    - Dernier commit : git log -1 --oneline
 
 3. **Vérifier les prérequis**
-   - Tests QA passés
-   - Review approuvée
-   - Documentation à jour
+   - Tests QA passés (PREPROD/PROD)
+   - Review approuvée (PREPROD/PROD)
+   - Documentation à jour (PROD)
    - Version incrémentée
 
-4. **Build**
+4. **Build selon environnement**
    cd server-go
-   # Windows
+
+   # QUALIF : Windows uniquement
    go build -o server.exe ./cmd/server
-   # Linux ARM64 (Raspberry Pi)
+
+   # PREPROD/PROD : Windows + ARM64
+   go build -o server.exe ./cmd/server
    GOOS=linux GOARCH=arm64 go build -o buzzcontrol ./cmd/server
 
-5. **Redémarrer le serveur**
-   - Lancer le serveur en arrière-plan
+5. **Redémarrer le serveur Windows**
+   - Lancer server.exe en arrière-plan
    - Vérifier /version et /listGame
    - Le serveur reste actif après les tests
 
 6. **Git (PROD uniquement)**
    - Squash merge vers main
    - Tag annotée v<version>
+   - Push tag
    - Cleanup branche feature
 
 7. **Générer le rapport de redéploiement** avec :
    - Informations : Version, env, date, branche, commit
    - Arrêt : Résultat de l'arrêt du serveur précédent
-   - Builds : Résultats + tailles binaires
+   - Builds : Résultats + tailles binaires (Windows + ARM64 si applicable)
    - Redémarrage : Résultats des tests post-build
    - Git (PROD) : Merge, tag, cleanup
    - Décision : SUCCESS / FAILED
 
-**Différences QUALIF vs PROD :**
-| Action | QUALIF | PROD |
-|--------|--------|------|
-| Arrêt serveur | Oui | Oui |
-| Build Windows + ARM64 | Oui | Oui |
-| Redémarrage + tests | Oui | Oui |
-| Squash merge main | Non | Oui |
-| Tag Git | Non | Oui |
-| Cleanup branche | Non | Oui |
+**Différences par environnement :**
+| Action | QUALIF | PREPROD | PROD |
+|--------|--------|---------|------|
+| Arrêt serveur | Oui | Oui | Oui |
+| Build Windows | Oui | Oui | Oui |
+| Build ARM64 | Non | Oui | Oui |
+| Redémarrage Windows | Oui | Oui | Oui |
+| Squash merge main | Non | Non | Oui |
+| Tag Git | Non | Non | Oui |
+| Cleanup branche | Non | Non | Oui |
+
+**Workflow recommandé :**
+```
+QUALIF → Tests rapides (Windows uniquement)
+   ↓
+PREPROD → Validation finale (Windows + ARM64 prêt)
+   ↓
+PROD → Release (merge + tag + binaires prêts pour Raspberry Pi)
+```
 
 **Règles critiques :**
 - TOUJOURS arrêter le serveur avant de rebuild
-- JAMAIS déployer PROD sans QUALIF validée
-- JAMAIS créer des tags Git en QUALIF
-- JAMAIS merge main en QUALIF
-- Le serveur doit rester actif après le redéploiement
+- JAMAIS déployer PROD sans PREPROD validée
+- JAMAIS créer des tags Git en QUALIF ou PREPROD
+- JAMAIS merge main en QUALIF ou PREPROD
+- Le serveur Windows doit rester actif après le redéploiement
+- PREPROD valide que le build ARM64 compile correctement
 ```
 
 ## Action immédiate

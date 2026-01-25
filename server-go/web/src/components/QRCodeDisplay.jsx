@@ -1,5 +1,24 @@
-// QRCodeDisplay - Placeholder component
+import { useEffect, useRef } from 'react'
+import QRCode from 'qrcode'
+
 export default function QRCodeDisplay({ url, size = 200, label }) {
+  const canvasRef = useRef(null)
+
+  useEffect(() => {
+    if (!canvasRef.current || !url) return
+
+    QRCode.toCanvas(canvasRef.current, url, {
+      width: size,
+      margin: 2,
+      color: {
+        dark: '#000000',
+        light: '#FFFFFF',
+      },
+    }, (error) => {
+      if (error) console.error('QR Code generation error:', error)
+    })
+  }, [url, size])
+
   return (
     <div style={{
       display: 'flex',
@@ -7,23 +26,8 @@ export default function QRCodeDisplay({ url, size = 200, label }) {
       alignItems: 'center',
       gap: '0.5rem'
     }}>
-      <div style={{
-        width: size,
-        height: size,
-        backgroundColor: '#f0f0f0',
-        border: '2px solid #ddd',
-        borderRadius: '0.5rem',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        fontSize: '0.8rem',
-        color: '#666',
-        textAlign: 'center',
-        padding: '1rem'
-      }}>
-        QR Code<br />{url}
-      </div>
-      {label && <span style={{ fontSize: '0.9rem', color: '#666' }}>{label}</span>}
+      <canvas ref={canvasRef} />
+      {label && <span style={{ fontSize: '0.9rem', color: '#666', fontWeight: 600 }}>{label}</span>}
     </div>
   )
 }

@@ -394,6 +394,44 @@ func TestEngine_ProcessButtonPress_FastestWins(t *testing.T) {
 	e.Stop()
 }
 
+func TestEngine_ProcessButtonPress_IgnoresMemoryQuestions(t *testing.T) {
+	e := NewEngine()
+
+	e.SetTeams(map[string]*Team{
+		"red": {Name: "Team Red"},
+	})
+	e.UpdateBumper("b1", map[string]interface{}{"TEAM": "red"})
+
+	// Set a MEMORY question
+	memoryQuestion := &Question{
+		ID:       "m1",
+		Question: "Memory game",
+		Type:     "MEMORY",
+		Time:     "120",
+	}
+	e.state.Question = memoryQuestion
+
+	// Start the game
+	e.StartImmediate(120)
+
+	// Try to buzz - should be ignored for MEMORY questions
+	pressTime := int64(1000000)
+	e.ProcessButtonPress("b1", pressTime, "A")
+
+	// Verify the buzz was ignored
+	bumper := e.GetBumper("b1")
+	if bumper.Time != 0 {
+		t.Errorf("Buzz should be ignored for MEMORY questions, but time was recorded: %d", bumper.Time)
+	}
+
+	team := e.GetTeam("red")
+	if team.Time != 0 {
+		t.Errorf("Team time should not be set for MEMORY questions, got %d", team.Time)
+	}
+
+	e.Stop()
+}
+
 func TestEngine_UpdateScore(t *testing.T) {
 	e := NewEngine()
 

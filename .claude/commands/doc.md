@@ -56,6 +56,7 @@ Mets à jour la documentation pour BuzzControl après validation d'une feature.
    | CHANGELOG.md | Entrée version format Keep a Changelog |
    | CLAUDE.md | Sections impactées (Models, Protocol, UI) |
    | docs/ADMIN_GUIDE.md | Instructions user-facing (si applicable) |
+   | backlog/*.md | Mettre à jour le statut et cocher les items implémentés |
    | server-go/config.json | Finaliser version (z=0 pour features) |
 
 4. **Format CHANGELOG.md**
@@ -74,18 +75,51 @@ Mets à jour la documentation pour BuzzControl après validation d'une feature.
    - **[Composant]**: Bug corrigé
    ```
 
-5. **Commit et push**
+5. **Mettre à jour le BACKLOG (OBLIGATOIRE)**
+
+   Identifier le fichier backlog correspondant dans `backlog/` :
+   - Lire le fichier pour comprendre la spécification initiale
+   - Mettre à jour le statut global (📋 Planifié → ✅ Implémenté)
+   - Cocher les items implémentés avec [x]
+   - Ajouter une section "Fichiers implémentés" avec la liste des fichiers créés/modifiés
+   - Ajouter une section "Caractéristiques implémentées" résumant ce qui a été fait
+   - **Documenter les choix et décisions** :
+     - Différences entre spécification et implémentation
+     - Raisons des choix techniques
+     - Simplifications effectuées
+     - Points non implémentés et pourquoi
+
+   Exemple de mise à jour :
+   ```markdown
+   **Statut** : ✅ Phase 1 Implémentée (v2.45.0)
+
+   ### Fichiers implémentés
+   | Fichier | Description |
+   |---------|-------------|
+   | `Component.jsx` | Composant principal |
+
+   ### Caractéristiques implémentées
+   - Feature 1 : description
+   - Feature 2 : description
+
+   ### Choix et décisions
+   - **Différence spec** : X implémenté différemment car...
+   - **Simplification** : Y simplifié pour...
+   ```
+
+7. **Commit et push**
    git add server-go/config.json
    git commit -m "docs(version): Finalize vX.Y.0"
-   git add CHANGELOG.md CLAUDE.md docs/ADMIN_GUIDE.md
+   git add CHANGELOG.md CLAUDE.md docs/ADMIN_GUIDE.md backlog/*.md
    git commit -m "docs: Update documentation for vX.Y.0"
    git push origin <branche>
 
-6. **Générer le résumé de documentation** :
+8. **Générer le résumé de documentation** :
    - Fichiers mis à jour
    - Contenu ajouté (extraits)
    - Vérifications effectuées
    - Statistiques
+   - Backlog mis à jour
 
 **Règle de versionnement :**
 | Type | Version finale |
@@ -98,11 +132,15 @@ Mets à jour la documentation pour BuzzControl après validation d'une feature.
 - CHANGELOG.md : Format correct + date du jour
 - CLAUDE.md : Sections impactées mises à jour
 - ADMIN_GUIDE.md : Instructions claires (si applicable)
+- backlog/*.md : Statut mis à jour + items cochés + choix documentés
 - config.json : Version finalisée
 - Commits créés et poussés
 
 **Règles critiques :**
 - Toujours mettre à jour CHANGELOG.md
+- Toujours mettre à jour le fichier BACKLOG correspondant
+- Documenter les choix et décisions prises pendant la session
+- Documenter les différences entre spécification et implémentation
 - Ne documenter que ce qui a été implémenté
 - Vérifier les exemples de code
 - Reset z à 0 pour les features

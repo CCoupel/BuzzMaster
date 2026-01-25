@@ -185,8 +185,8 @@ type GameState struct {
 	QcmInvalidated         []string     `json:"QCM_INVALIDATED,omitempty"`      // Invalidated QCM answers (e.g., ["RED", "YELLOW"])
 	VirtualPlayerCount     int          `json:"VIRTUAL_PLAYER_COUNT"`           // Number of enrolled virtual players
 	VirtualPlayerLimit     int          `json:"VIRTUAL_PLAYER_LIMIT"`           // Maximum number of virtual players allowed
-	EnrollmentActive       bool         `json:"ENROLLMENT_ACTIVE,omitempty"`    // Whether player enrollment is active
-	ShowQRCode             bool         `json:"SHOW_QR_CODE,omitempty"`         // Whether to display QR code on TV
+	EnrollmentActive       bool         `json:"ENROLLMENT_ACTIVE"`              // Whether player enrollment is active
+	ShowQRCode             bool         `json:"SHOW_QR_CODE"`                   // Whether to display QR code on TV
 }
 
 // TeamsAndBumpers holds all teams and bumpers data
