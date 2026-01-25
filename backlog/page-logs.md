@@ -1,199 +1,236 @@
-# Page Logs Serveur (/logs)
+# Page Logs (/logs)
 
 **Statut** : 📋 Planifié
 
-## Concept
+## Description
 
-Page web affichant les logs du serveur en temps réel, accessible via `/logs`. Utile pour le debug et le monitoring sans avoir accès à la console serveur.
+Une page `/logs` dans l'interface admin pour afficher les logs du serveur en temps réel. Cette page permet à l'animateur et aux administrateurs de surveiller l'activité du serveur, diagnostiquer les problèmes et comprendre le flux des événements.
 
----
+## Objectifs
 
-## Spécifications
+- [ ] Afficher les logs du serveur Go en temps réel via WebSocket
+- [ ] Filtrer les logs par niveau (DEBUG, INFO, WARN, ERROR)
+- [ ] Filtrer les logs par composant (Engine, HTTP, WebSocket, TCP)
+- [ ] Permettre la recherche dans les logs
+- [ ] Auto-scroll avec pause au survol
+- [ ] Export des logs visibles
 
-### Route
+## Architecture
 
-| Route | Composant | Description |
-|-------|-----------|-------------|
-| `/logs` | `LogsPage` | Affichage des logs serveur en temps réel |
+### Backend (Go)
 
-### Fonctionnalités
+Le serveur Go doit broadcaster les logs vers les clients WebSocket connectés.
 
-- [ ] **Affichage temps réel**
-  - Logs streamés via WebSocket
-  - Auto-scroll vers le bas (désactivable)
-  - Limite d'affichage : 1000 lignes (configurable)
+```
+┌─────────────────┐     ┌──────────────┐     ┌─────────────────┐
+│  Logger Go      │ ──► │  Log Buffer  │ ──► │  WebSocket      │
+│  (CustomLogger) │     │  (ring 1000) │     │  Broadcast      │
+└─────────────────┘     └──────────────┘     └─────────────────┘
+                                                     │
+                                                     ▼
+                                             ┌─────────────────┐
+                                             │  /admin/logs    │
+                                             │  (React client) │
+                                             └─────────────────┘
+```
 
-- [ ] **Filtrage**
-  - Par niveau : DEBUG, INFO, WARN, ERROR
-  - Par composant : Engine, HTTP, WebSocket, TCP, UDP
-  - Recherche textuelle (filtre local)
+### Frontend (React)
 
-- [ ] **Actions**
-  - Pause/Resume du stream
-  - Effacer l'affichage
-  - Télécharger les logs visibles (.txt)
-  - Copier une ligne au clic
-
-- [ ] **Formatage**
-  - Coloration syntaxique par niveau
-  - Timestamp lisible
-  - Composant en badge coloré
-
-### Maquette
+Page admin avec affichage des logs en temps réel.
 
 ```
 ┌────────────────────────────────────────────────────────────┐
-│ 📋 Logs Serveur                           [⏸ Pause] [🗑️]  │
+│ 🔍 [Recherche...        ]  [DEBUG] [INFO] [WARN] [ERROR]   │
+│ Composant: [Tous ▼]        [ ] Auto-scroll   [Exporter]    │
 ├────────────────────────────────────────────────────────────┤
-│ Niveau: [x]DEBUG [x]INFO [x]WARN [x]ERROR                  │
-│ Composant: [x]All [x]Engine [x]HTTP [x]WS [x]TCP           │
-│ Recherche: [________________________] 🔍                    │
-├────────────────────────────────────────────────────────────┤
-│ 10:24:01.234 [INFO]  [Engine] Game started with delay 30   │
-│ 10:24:01.456 [DEBUG] [TCP]    Bumper b1 connected          │
-│ 10:24:02.789 [INFO]  [Engine] Button press: b1, team=red   │
-│ 10:24:03.012 [WARN]  [WS]     Client disconnected          │
-│ 10:24:05.345 [ERROR] [HTTP]   Failed to parse request      │
+│ 22:15:03.123 INFO  [Engine]   Game started, delay=30s      │
+│ 22:15:03.456 DEBUG [WebSocket] Client connected: admin_1   │
+│ 22:15:05.789 INFO  [TCP]      Bumper AA:BB:CC:DD connected │
+│ 22:15:06.012 WARN  [Engine]   Bumper not found: XX:YY:ZZ   │
+│ 22:15:10.345 INFO  [Engine]   Button press: AA:BB:CC:DD    │
+│ 22:15:10.567 DEBUG [Engine]   Processing buzz, time=342ms  │
 │ ...                                                         │
-│                                                    [v Auto] │
+│                                                             │
+│                                                             │
 └────────────────────────────────────────────────────────────┘
 ```
 
-### Couleurs par niveau
+## Tâches
 
-| Niveau | Couleur | Badge |
-|--------|---------|-------|
-| DEBUG | Gris | `#6b7280` |
-| INFO | Bleu | `#3b82f6` |
-| WARN | Orange | `#f59e0b` |
-| ERROR | Rouge | `#ef4444` |
+### Phase 1 - Backend (v2.42.0)
 
-### Couleurs par composant
+- [ ] **LogBuffer** : Buffer circulaire pour stocker les derniers 1000 logs
+  - Struct `LogEntry` : Timestamp, Level, Component, Message
+  - Thread-safe avec mutex
+  - Méthode `GetRecent(n int)` pour récupérer les n derniers logs
 
-| Composant | Couleur |
-|-----------|---------|
-| Engine | Violet |
-| HTTP | Vert |
-| WebSocket | Cyan |
-| TCP | Jaune |
-| UDP | Orange |
+- [ ] **LogBroadcaster** : Broadcast des logs vers les clients WebSocket
+  - Canal Go pour recevoir les nouveaux logs
+  - Action WebSocket `LOG_ENTRY` pour envoyer un log
+  - Action WebSocket `LOG_HISTORY` pour envoyer l'historique initial
 
----
+- [ ] **Intégration CustomLogger** : Connecter le logger existant au buffer
+  - Hook pour capturer chaque log
+  - Parsing du niveau et du composant
 
-## Implémentation Backend
+- [ ] **Action WebSocket SUBSCRIBE_LOGS** : Client demande à recevoir les logs
+  - Envoie l'historique récent (100 derniers)
+  - Ajoute le client à la liste des abonnés
 
-### Action WebSocket
+- [ ] **Action WebSocket UNSUBSCRIBE_LOGS** : Client arrête de recevoir les logs
+  - Retire le client de la liste des abonnés
 
-| Action | Direction | Description |
-|--------|-----------|-------------|
-| `SUBSCRIBE_LOGS` | Client→Server | S'abonner aux logs |
-| `UNSUBSCRIBE_LOGS` | Client→Server | Se désabonner |
-| `LOG_ENTRY` | Server→Client | Nouvelle entrée de log |
+### Phase 2 - Frontend (v2.42.0)
 
-**Payload LOG_ENTRY :**
-```json
-{
-  "ACTION": "LOG_ENTRY",
-  "MSG": {
-    "TIMESTAMP": 1706234567890,
-    "LEVEL": "INFO",
-    "COMPONENT": "Engine",
-    "MESSAGE": "Game started with delay 30"
-  }
-}
-```
+- [ ] **LogsPage.jsx** : Page principale d'affichage des logs
+  - Route `/admin/logs` et `/anim/logs`
+  - Connexion WebSocket pour recevoir les logs
+  - État local pour stocker les logs reçus (max 5000)
 
-### Système de logging Go
+- [ ] **Composant LogEntry** : Affichage d'une ligne de log
+  - Couleur selon le niveau (DEBUG=gris, INFO=blanc, WARN=orange, ERROR=rouge)
+  - Badge coloré pour le composant
+  - Timestamp formaté (HH:MM:SS.mmm)
+  - Message avec highlight de la recherche
 
-- [ ] **Ring buffer** pour stocker les N derniers logs (défaut: 1000)
-- [ ] **Broadcast** aux clients abonnés
-- [ ] **Historique initial** : envoyer les 100 derniers logs à la connexion
+- [ ] **Filtres de niveau** : Boutons toggle pour chaque niveau
+  - DEBUG, INFO, WARN, ERROR
+  - Filtrage côté client (tous les logs reçus, filtrés à l'affichage)
+
+- [ ] **Filtre de composant** : Dropdown pour filtrer par composant
+  - Options : Tous, Engine, HTTP, WebSocket, TCP, UDP
+  - Extraction automatique des composants depuis les logs
+
+- [ ] **Recherche** : Input de recherche temps réel
+  - Filtre sur le message du log
+  - Highlight des termes trouvés
+  - Debounce 300ms
+
+- [ ] **Auto-scroll** : Scroll automatique vers le bas
+  - Checkbox pour activer/désactiver
+  - Pause automatique si l'utilisateur scroll manuellement
+  - Reprise si scroll en bas
+
+- [ ] **Export** : Bouton pour exporter les logs visibles
+  - Format texte avec timestamp
+  - Téléchargement fichier `.log`
+
+### Phase 3 - Améliorations (v2.43.0)
+
+- [ ] **Persistence logs** : Option pour sauvegarder les logs sur disque
+  - Configuration dans config.json : `logs.persist`, `logs.max_size_mb`
+  - Rotation automatique des fichiers
+
+- [ ] **Niveaux de log configurables** : Changer le niveau minimum en temps réel
+  - Action WebSocket `SET_LOG_LEVEL`
+  - Dropdown dans la page logs
+
+- [ ] **Logs structurés** : Ajouter des métadonnées aux logs
+  - ID de requête, ID de bumper, ID de question
+  - Filtrage avancé par métadonnée
+
+## Modèle de données
+
+### LogEntry (Backend)
 
 ```go
 type LogEntry struct {
-    Timestamp int64  `json:"TIMESTAMP"`
-    Level     string `json:"LEVEL"`
-    Component string `json:"COMPONENT"`
-    Message   string `json:"MESSAGE"`
-}
-
-type LogBuffer struct {
-    entries []LogEntry
-    maxSize int
-    mu      sync.RWMutex
-}
-
-func (lb *LogBuffer) Add(entry LogEntry) {
-    lb.mu.Lock()
-    defer lb.mu.Unlock()
-
-    if len(lb.entries) >= lb.maxSize {
-        lb.entries = lb.entries[1:]
-    }
-    lb.entries = append(lb.entries, entry)
-
-    // Broadcast to subscribers
-    broadcastLogEntry(entry)
+    Timestamp int64  `json:"timestamp"` // Unix milliseconds
+    Level     string `json:"level"`     // DEBUG, INFO, WARN, ERROR
+    Component string `json:"component"` // Engine, HTTP, WebSocket, TCP, UDP
+    Message   string `json:"message"`   // Log message
 }
 ```
 
----
+### LogEntry (Frontend)
 
-## Implémentation Frontend
-
-### Composants
-
-| Composant | Fichier | Description |
-|-----------|---------|-------------|
-| `LogsPage` | `pages/LogsPage.jsx` | Page principale |
-| `LogEntry` | `components/LogEntry.jsx` | Ligne de log formatée |
-| `LogFilters` | `components/LogFilters.jsx` | Barre de filtres |
-
-### État React
-
-```javascript
-const [logs, setLogs] = useState([])
-const [paused, setPaused] = useState(false)
-const [autoScroll, setAutoScroll] = useState(true)
-const [filters, setFilters] = useState({
-  levels: ['DEBUG', 'INFO', 'WARN', 'ERROR'],
-  components: ['Engine', 'HTTP', 'WebSocket', 'TCP', 'UDP'],
-  search: ''
-})
+```typescript
+interface LogEntry {
+    timestamp: number;  // Unix milliseconds
+    level: 'DEBUG' | 'INFO' | 'WARN' | 'ERROR';
+    component: string;
+    message: string;
+}
 ```
 
-### Gestion mémoire
+## Actions WebSocket
 
-- Limite locale : 1000 entrées affichées
-- Suppression FIFO quand limite atteinte
-- Virtualisation si performance nécessaire (react-window)
+| Action | Direction | Description |
+|--------|-----------|-------------|
+| `SUBSCRIBE_LOGS` | Client→Server | S'abonner aux logs temps réel |
+| `UNSUBSCRIBE_LOGS` | Client→Server | Se désabonner des logs |
+| `LOG_HISTORY` | Server→Client | Historique initial (100 derniers) |
+| `LOG_ENTRY` | Server→Client | Nouveau log en temps réel |
+| `SET_LOG_LEVEL` | Client→Server | Changer le niveau minimum (Phase 3) |
 
----
+### Payloads
 
-## Sécurité
-
-- [ ] **Accès restreint** : Route accessible uniquement depuis réseau local
-- [ ] **Pas de données sensibles** : Ne jamais logger mots de passe, tokens
-- [ ] **Rate limiting** : Max 100 logs/seconde broadcastés
-
----
-
-## Configuration
-
+**LOG_HISTORY** :
 ```json
 {
-  "logging": {
-    "buffer_size": 1000,
-    "broadcast_enabled": true,
-    "min_level": "DEBUG"
-  }
+    "ACTION": "LOG_HISTORY",
+    "MSG": {
+        "entries": [
+            {"timestamp": 1706000000000, "level": "INFO", "component": "Engine", "message": "Game started"},
+            ...
+        ]
+    }
 }
 ```
 
----
+**LOG_ENTRY** :
+```json
+{
+    "ACTION": "LOG_ENTRY",
+    "MSG": {
+        "timestamp": 1706000000123,
+        "level": "DEBUG",
+        "component": "WebSocket",
+        "message": "Client connected: admin_1"
+    }
+}
+```
 
-## Priorité
+## Styles CSS
 
-**Basse** - Feature de debug/monitoring, pas critique pour le gameplay.
+### Couleurs par niveau
 
-À implémenter après les features principales (VJoueur, QCM interactif, etc.).
+| Niveau | Couleur texte | Couleur badge |
+|--------|---------------|---------------|
+| DEBUG | `--text-secondary` (gris) | `--gray-600` |
+| INFO | `--text-primary` (blanc) | `--primary-500` |
+| WARN | `--warning` (orange) | `--warning` |
+| ERROR | `--error` (rouge) | `--error` |
+
+### Couleurs par composant
+
+| Composant | Couleur badge |
+|-----------|---------------|
+| Engine | `--accent-purple` |
+| HTTP | `--accent-cyan` |
+| WebSocket | `--accent-green` |
+| TCP | `--accent-orange` |
+| UDP | `--accent-pink` |
+
+## Navbar
+
+Ajouter l'onglet "Logs" dans la navbar admin :
+
+```jsx
+{ path: '/admin/logs', label: 'Logs', icon: '📋' }
+```
+
+Position : Après "Palmarès", avant "Config"
+
+## Version cible
+
+- **Phase 1-2** : v2.42.0 (fonctionnalité complète de base)
+- **Phase 3** : v2.43.0 (améliorations optionnelles)
+
+## Notes techniques
+
+- Le buffer de logs doit être thread-safe (mutex)
+- Limiter le nombre de logs côté client (5000 max) pour éviter les problèmes de mémoire
+- Utiliser `requestAnimationFrame` pour le scroll auto (performance)
+- Les logs sont transmis uniquement aux clients qui ont souscrit (pas de broadcast global)
+- Déconnexion WebSocket = désabonnement automatique

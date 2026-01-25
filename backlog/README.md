@@ -16,7 +16,8 @@ Chaque fichier correspond à une fonctionnalité ou un ensemble de fonctionnalit
 | [affichage-tv.md](affichage-tv.md) | ✅ v2.30.0 | Synchronisation des fonds d'écran |
 | [memory-game.md](memory-game.md) | ✅ v2.33.0 | Jeu de mémoire avec paires |
 | [mode-demo.md](mode-demo.md) | ✅ v2.40.0 | Mode démonstration avec données complètes |
-| [page-joueur.md](page-joueur.md) | 📋 Planifié | Interface personnalisée pour jouer depuis smartphone |
+| [page-joueur.md](page-joueur.md) | ✅ v2.41.0 | Interface personnalisée pour jouer depuis smartphone |
+| [page-logs.md](page-logs.md) | 📋 Planifié | Affichage des logs serveur en temps réel |
 | [generateur-ia.md](generateur-ia.md) | 📋 Planifié | Générateur de jeu complet via IA |
 
 ## Légende des statuts
@@ -63,6 +64,8 @@ vX.Y.Z
 
 ## Historique
 
+- 2026-01-25 : Ajout de la page logs (📋 Planifié)
+- 2026-01-25 : Complétion page joueur (v2.41.0)
 - 2026-01-23 : Ajout du mode demo (v2.40.0)
 - 2026-01-23 : Correction statut QCM indices/pénalités (⏳ → ✅ v2.38.0)
 - 2026-01-20 : Création de la structure de backlog modulaire
