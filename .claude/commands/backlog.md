@@ -76,6 +76,12 @@ Le backlog est organisé en fichiers séparés dans le dossier `backlog/` :
 
 ### Si argument fourni → Ajouter au backlog
 
+**RÈGLE IMPORTANTE** : Toujours créer une NOUVELLE entrée de backlog. Ne JAMAIS modifier une entrée existante, sauf si l'utilisateur demande explicitement de modifier un fichier backlog spécifique.
+
+**Exemples** :
+- "ajouter des marqueurs QCM" → Créer `backlog/qcm-marqueurs.md` (même si `qcm-indices-penalites.md` existe)
+- "modifier backlog/qcm-indices-penalites.md pour ajouter X" → OK, modification explicite demandée
+
 1. Générer un nom de fichier à partir de la description (kebab-case)
 2. Créer le fichier `backlog/<nom>.md` avec le template :
 
