@@ -69,13 +69,19 @@ Arrête et redéploie le serveur BuzzControl vers l'environnement cible.
    - Vérifier /version et /listGame
    - Le serveur reste actif après les tests
 
-6. **Git (PROD uniquement)**
+6. **Synchroniser package.json (PROD uniquement)**
+   - Lire la version depuis server-go/config.json
+   - Mettre à jour server-go/web/package.json → "version": "<version>"
+   - Commit: git commit -am "chore(version): Sync package.json to vX.Y.Z"
+   - Push la branche feature
+
+7. **Git (PROD uniquement)**
    - Squash merge vers main
    - Tag annotée v<version>
    - Push tag
    - Cleanup branche feature
 
-7. **Générer le rapport de redéploiement** avec :
+8. **Générer le rapport de redéploiement** avec :
    - Informations : Version, env, date, branche, commit
    - Arrêt : Résultat de l'arrêt du serveur précédent
    - Builds : Résultats + tailles binaires (Windows + ARM64 si applicable)
@@ -90,6 +96,7 @@ Arrête et redéploie le serveur BuzzControl vers l'environnement cible.
 | Build Windows | Oui | Oui | Oui |
 | Build ARM64 | Non | Oui | Oui |
 | Redémarrage Windows | Oui | Oui | Oui |
+| Sync package.json | Non | Non | Oui |
 | Squash merge main | Non | Non | Oui |
 | Tag Git | Non | Non | Oui |
 | Cleanup branche | Non | Non | Oui |
@@ -105,6 +112,7 @@ PROD → Release (merge + tag + binaires prêts pour Raspberry Pi)
 
 **Règles critiques :**
 - TOUJOURS arrêter le serveur avant de rebuild
+- TOUJOURS synchroniser package.json avec config.json avant le tag PROD
 - JAMAIS déployer PROD sans PREPROD validée
 - JAMAIS créer des tags Git en QUALIF ou PREPROD
 - JAMAIS merge main en QUALIF ou PREPROD
