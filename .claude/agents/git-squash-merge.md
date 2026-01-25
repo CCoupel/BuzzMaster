@@ -1,7 +1,7 @@
 ---
 name: git-squash-merge
 description: "Use this agent when the user wants to commit current changes, push to the current branch, and then squash-merge into main. This includes requests like 'commit and merge to main', 'squash merge my branch', 'finalize my feature branch', or when the user explicitly asks to consolidate commits before merging to main.\\n\\nExamples:\\n\\n<example>\\nContext: User has been working on a feature branch and wants to finalize their work.\\nuser: \"J'ai fini ma feature, merge dans main\"\\nassistant: \"Je vais utiliser l'agent git-squash-merge pour committer, pousser et merger en squash dans main.\"\\n<commentary>\\nSince the user wants to finalize their feature branch into main, use the git-squash-merge agent to handle the full workflow.\\n</commentary>\\n</example>\\n\\n<example>\\nContext: User has made several commits and wants to clean up before merging.\\nuser: \"Push et merge tout ça dans main proprement\"\\nassistant: \"Je lance l'agent git-squash-merge pour consolider vos commits et merger dans main.\"\\n<commentary>\\nThe user wants a clean merge into main, use the git-squash-merge agent to squash all commits into one.\\n</commentary>\\n</example>\\n\\n<example>\\nContext: User finished implementing a feature.\\nuser: \"Commit et push, puis squash merge dans main\"\\nassistant: \"J'utilise l'agent git-squash-merge pour effectuer le commit, push et squash merge.\"\\n<commentary>\\nExplicit request for squash merge workflow, use the git-squash-merge agent.\\n</commentary>\\n</example>"
-model: sonnet
+model: haiku
 color: red
 ---
 

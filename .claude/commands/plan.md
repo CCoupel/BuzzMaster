@@ -1,6 +1,6 @@
 # Commande /plan - Planification d'Implémentation
 
-Lance le sous-agent PLAN pour créer un plan d'implémentation détaillé AVANT tout développement.
+Lance le sous-agent implementation-planner pour créer un plan d'implémentation détaillé AVANT tout développement.
 
 ## Argument reçu
 

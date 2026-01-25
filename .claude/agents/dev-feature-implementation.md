@@ -1,7 +1,7 @@
 ---
 name: dev-feature-implementation
 description: "Use this agent when you need to implement a feature or bugfix according to an implementation plan provided by the PLAN agent. This agent handles all coding work including backend Go development, frontend React development, unit testing, and structured git commits.\\n\\n<example>\\nContext: The user has received an implementation plan from the PLAN agent for a new Memory game mode feature.\\nuser: \"Voici le plan d'implémentation pour les modes Memory. Implémente-le.\"\\nassistant: \"Je vais utiliser l'agent DEV pour implémenter cette feature selon le plan fourni.\"\\n<commentary>\\nSince an implementation plan was provided and code needs to be written, use the dev-feature-implementation agent to develop the code according to the plan.\\n</commentary>\\n</example>\\n\\n<example>\\nContext: The REVIEW agent has provided feedback on code that needs corrections.\\nuser: \"L'agent REVIEW a trouvé des problèmes. Corrige-les.\"\\nassistant: \"Je vais utiliser l'agent DEV pour corriger les problèmes identifiés par REVIEW.\"\\n<commentary>\\nSince corrections are needed after code review, use the dev-feature-implementation agent to fix the issues while following proper versioning and commit practices.\\n</commentary>\\n</example>\\n\\n<example>\\nContext: QA tests have failed and fixes are required.\\nuser: \"Les tests QA ont échoué sur la rotation d'équipe. Corrige le bug.\"\\nassistant: \"Je vais utiliser l'agent DEV pour corriger le bug identifié par QA.\"\\n<commentary>\\nSince QA identified a bug that needs fixing, use the dev-feature-implementation agent to implement the fix with proper testing.\\n</commentary>\\n</example>"
-model: sonnet
+model: opus
 color: green
 ---
 
