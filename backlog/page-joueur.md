@@ -1,6 +1,6 @@
 # Page Joueur (/player)
 
-**Statut** : ✅ Phase 1 Implémentée (v2.45.0)
+**Statut** : ✅ Phase 1 Implémentée (v2.41.0)
 
 ## Concept
 
@@ -245,7 +245,7 @@ useEffect(() => {
 
 ---
 
-## Phase 1 - MVP (v2.45.0) ✅ IMPLÉMENTÉE
+## Phase 1 - MVP (v2.41.0) ✅ IMPLÉMENTÉE
 
 ### Fichiers implémentés
 

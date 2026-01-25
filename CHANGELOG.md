@@ -3,7 +3,7 @@
 Historique des versions du projet BuzzControl.
 
 
-## [2.45.0] - 2026-01-25
+## [2.41.0] - 2026-01-25
 
 ### Ajouts
 - **[VPlayer]**: Interface complète de joueur virtuel avec affichage optimisé
@@ -58,92 +58,38 @@ Historique des versions du projet BuzzControl.
   - Badges redimensionnés dynamiquement (clamp)
   - Zone média ajustée pour smartphones et tablettes
 
-### Technique
-- `models.go` : Champs `EnrollmentActive`, `ShowQRCode` sans `omitempty`, champ `IS_VIRTUAL` sur Bumper
-- `engine.go` :
-  - `StartEnrollment()`, `StopEnrollment()`, `HandleVirtualPlayerConnect()`
-  - `ProcessButtonPress()` : Blocage MEMORY
-  - `Reveal()` : Support PAUSED → REVEALED avec arrêt timers
-  - `ClearBumpers()` : Dissociation équipes
-  - `SetTeams()` : Remplissage auto team.Name
-- `protocol/messages.go` : Actions SHOW_QR_CODE, HIDE_QR_CODE, PLAYER_CONNECT, PLAYER_CONNECTED, ENROLLMENT_UPDATE
-- `http.go` : Ajout `/admin` dans la liste des routes SPA
-- `EnrollPage.jsx` : Gestion état d'attente, reconnexion auto, fond blanc
-- `VPlayerPage.jsx` : Layout 4 zones, badges permanents overlay, zone média cliquable, détection suppression
-- `VPlayerPage.css` : Positionnement absolu badges (15%/85%), zone média 76%, responsive avec clamp
-- `VPlayerHeader.jsx` : Composant header avec avatar, nom, équipe, score
-- `BuzzButton.jsx` : Composant bouton avec états visuels et vibration haptique
-- `BuzzButton.css` : Animations pulse, glow, scaling
-- `QRCodeOverlay.jsx` : Overlay QR code sans URL affichée
-- `TeamsPage.jsx` : Zone enrollment compacte 2 lignes, compteur VPlayers
-- `Navbar.jsx` : Préfixe dynamique `/admin` ou `/anim` selon URL
-- `PlayerDisplay.jsx` : Badges permanents pour VPlayer (nom + équipe)
-- `PlayerDisplay.css` : Styles `.player-name-badge-mobile`, `.player-team-badge-mobile`
-
----
-
-## [2.44.10] - 2026-01-25
-
-### Fixed
+### Corrigé
 - **[Routes]**: Restructuration de l'architecture des routes pour clarté et cohérence
   - Route `/` : Page d'inscription joueurs (PlayerPage)
   - Routes `/admin/*` : Pages d'administration (GamePage, Scores, Teams, Quiz, etc.)
   - Routes `/anim/*` : Alias des routes admin (même comportement)
   - Route `/tv` : Affichage TV plein écran
-  - Correction : La page Jeu (GamePage) est maintenant accessible via `/admin` et `/anim`
-- **[Navbar]**: Correction de la détection active pour supporter les deux préfixes (`/admin` et `/anim`)
+- **[Navbar]**: Correction de la détection active pour supporter les deux préfixes
   - Fonction `isActiveRoute()` pour vérifier les deux chemins
-  - Mise à jour des liens vers `/admin/*` au lieu des routes racine
+  - Renommage de l'onglet "Équipes" → "Joueurs"
 - **[TeamsPage]**: Réorganisation de la carte joueur non assigné en 3 lignes
-  - Ligne 1 : Input nom + badge PRET + bouton suppression (coin supérieur droit)
+  - Ligne 1 : Input nom + badge PRET + bouton suppression
   - Ligne 2 : Pastille avatar + 4 boutons couleurs QCM + poignée de drag
   - Ligne 3 : Informations techniques (adresse MAC + version)
-  - Suppression possible uniquement pour les joueurs non assignés
-
-### Technique
-- `App.jsx` : Tableau `adminRoutes` dupliqué pour `/admin` et `/anim`, route `/` vers PlayerPage
-- `Navbar.jsx` : Import `useLocation`, fonction `isActiveRoute()`, liens mis à jour
-- `TeamsPage.jsx` : Classes `.bumper-row-name`, `.bumper-row-colors`, `.bumper-row-tech`
-- `TeamsPage.css` : Styles pour les 3 lignes de la carte joueur non assigné
-- `engine.go` : Aucune modification backend pour ce bugfix
-
----
-
-## [2.44.7] - 2026-01-24
-
-### Fixed
-- **[TeamsPage]**: Ajout d'un bouton de suppression (×) sur les cartes joueurs
-  - Bouton rouge discret en haut à droite de chaque carte joueur
-  - Confirmation avant suppression avec affichage du nom du joueur
-  - Fonction `handleDeleteBumper()` pour gérer la suppression propre
-- **[Navbar]**: Renommage de l'onglet "Équipes" → "Joueurs" pour plus de clarté
-  - Reflète mieux le contenu de la page (gestion des joueurs et équipes)
+  - Bouton de suppression (×) avec confirmation
 - **[Tests]**: Correction des tests unitaires liés à la phase COUNTDOWN
   - Ajout de `StartImmediate()` dans engine.go pour tester sans goroutines
-  - Correction des tests COUNTDOWN dans engine_test.go
+- **Synchronisation compteur joueurs virtuels** : Utilise `gameState.virtualPlayerCount` (source serveur)
 
 ### Technique
-- `TeamsPage.jsx`: Fonction `handleDeleteBumper()`, bouton avec classe `.bumper-delete-btn`
-- `TeamsPage.css`: Styles `.bumper-delete-btn` (hover rouge), `.member-delete-btn`
-- `Navbar.jsx`: Label modifié ligne 16 (`'Joueurs'` au lieu de `'Équipes'`)
-- `engine.go`: Méthode `StartImmediate()` pour tests synchrones
-- `engine_test.go`: Utilisation de `StartImmediate()` dans les tests COUNTDOWN
-
----
-
-## [2.44.3] - 2026-01-24
-
-### Corrigé
-- **Synchronisation compteur joueurs virtuels** : Le compteur affiché sur la page Équipes (/teams) est maintenant synchronisé avec celui de l'affichage TV (/tv)
-  - Utilise `gameState.virtualPlayerCount` (source de vérité serveur) au lieu d'un calcul local
-  - Affichage séparé : 🎮 joueurs physiques et 📱 joueurs virtuels
-  - Ajout des champs `PhaseEnroll`, `IsVirtual` et des actions protocole associées
-
-### Technique
-- `TeamsPage.jsx` : Import de `gameState` depuis `useGame()`, calcul `physicalBumperCount` et utilisation de `virtualPlayerCount`
-- `TeamsPage.css` : Styles `.bumper-counts`, `.bumper-count.physical`, `.bumper-count.virtual`
-- `models.go` : Ajout `PhaseEnroll`, `IsVirtual`, `VirtualPlayerCount`, `VirtualPlayerLimit`, `EnrollmentActive`, `ShowQRCode`
-- `messages.go` : Ajout actions PLAYER_CONNECT, PLAYER_CONNECTED, PLAYER_REJECTED, SHOW_QR_CODE, HIDE_QR_CODE
+- `models.go` : Champs `EnrollmentActive`, `ShowQRCode`, `IS_VIRTUAL`, `PhaseEnroll`, `VirtualPlayerCount`
+- `engine.go` : `StartEnrollment()`, `StopEnrollment()`, `HandleVirtualPlayerConnect()`, `StartImmediate()`
+- `protocol/messages.go` : Actions SHOW_QR_CODE, HIDE_QR_CODE, PLAYER_CONNECT, PLAYER_CONNECTED
+- `http.go` : Ajout `/admin` dans la liste des routes SPA
+- `App.jsx` : Routes `/admin/*` et `/anim/*` en alias
+- `VPlayerPage.jsx` : Layout 4 zones, badges permanents, zone média cliquable
+- `VPlayerPage.css` : Positionnement badges (15%/85%), zone média 76%, responsive clamp
+- `EnrollPage.jsx` : Gestion état d'attente, reconnexion auto
+- `BuzzButton.jsx` : Bouton avec états visuels et vibration haptique
+- `QRCodeOverlay.jsx` : Overlay QR code
+- `TeamsPage.jsx` : Zone enrollment compacte, carte joueur 3 lignes, bouton suppression
+- `Navbar.jsx` : Préfixe dynamique `/admin` ou `/anim`, `isActiveRoute()`
+- `PlayerDisplay.jsx` : Badges permanents pour VPlayer
 
 ---
 
