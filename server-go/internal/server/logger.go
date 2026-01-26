@@ -4,6 +4,7 @@ import (
 	"buzzcontrol/internal/game"
 	"fmt"
 	"log"
+	"sync"
 	"time"
 )
 
@@ -95,35 +96,70 @@ func (bl *BroadcastLogger) GetRecent(n int) []game.LogEntry {
 	return bl.buffer.GetRecent(n)
 }
 
-// InitLogger creates a new BroadcastLogger (alias for NewBroadcastLogger)
+// InitLogger creates a new BroadcastLogger and sets it as the global logger
 func InitLogger(capacity int) *BroadcastLogger {
-	return NewBroadcastLogger(capacity)
+	bl := NewBroadcastLogger(capacity)
+	SetGlobalLogger(bl)
+	return bl
 }
 
-// Package-level logging functions for use without BroadcastLogger instance
-// These are simple wrappers around log.Printf for contexts where
-// the BroadcastLogger is not available (e.g., HTTP server startup)
+// Global logger instance for package-level functions
+var globalLogger *BroadcastLogger
+var globalLoggerMu sync.RWMutex
+
+// SetGlobalLogger sets the global logger instance
+func SetGlobalLogger(bl *BroadcastLogger) {
+	globalLoggerMu.Lock()
+	defer globalLoggerMu.Unlock()
+	globalLogger = bl
+}
+
+// GetGlobalLogger returns the global logger instance
+func GetGlobalLogger() *BroadcastLogger {
+	globalLoggerMu.RLock()
+	defer globalLoggerMu.RUnlock()
+	return globalLogger
+}
+
+// Package-level logging functions that use the global BroadcastLogger
+// If no global logger is set, falls back to standard log.Printf
 
 // LogDebug logs a debug message at package level
 func LogDebug(component game.LogComponent, format string, args ...interface{}) {
-	message := fmt.Sprintf(format, args...)
-	log.Printf("[%s][DEBUG] %s", component, message)
+	if logger := GetGlobalLogger(); logger != nil {
+		logger.Debug(component, format, args...)
+	} else {
+		message := fmt.Sprintf(format, args...)
+		log.Printf("[%s][DEBUG] %s", component, message)
+	}
 }
 
 // LogInfo logs an info message at package level
 func LogInfo(component game.LogComponent, format string, args ...interface{}) {
-	message := fmt.Sprintf(format, args...)
-	log.Printf("[%s][INFO] %s", component, message)
+	if logger := GetGlobalLogger(); logger != nil {
+		logger.Info(component, format, args...)
+	} else {
+		message := fmt.Sprintf(format, args...)
+		log.Printf("[%s][INFO] %s", component, message)
+	}
 }
 
 // LogWarn logs a warning message at package level
 func LogWarn(component game.LogComponent, format string, args ...interface{}) {
-	message := fmt.Sprintf(format, args...)
-	log.Printf("[%s][WARN] %s", component, message)
+	if logger := GetGlobalLogger(); logger != nil {
+		logger.Warn(component, format, args...)
+	} else {
+		message := fmt.Sprintf(format, args...)
+		log.Printf("[%s][WARN] %s", component, message)
+	}
 }
 
 // LogError logs an error message at package level
 func LogError(component game.LogComponent, format string, args ...interface{}) {
-	message := fmt.Sprintf(format, args...)
-	log.Printf("[%s][ERROR] %s", component, message)
+	if logger := GetGlobalLogger(); logger != nil {
+		logger.Error(component, format, args...)
+	} else {
+		message := fmt.Sprintf(format, args...)
+		log.Printf("[%s][ERROR] %s", component, message)
+	}
 }
