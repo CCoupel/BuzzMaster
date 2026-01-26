@@ -1,6 +1,6 @@
 # Page Logs (/logs)
 
-**Statut** : Implemente v2.42.0
+**Statut** : ✅ Implémenté v2.43.0 (WebSocket dédiée)
 
 ## Description
 
@@ -116,7 +116,26 @@ Page admin avec affichage des logs en temps réel.
   - Format texte avec timestamp ISO
   - Téléchargement fichier `.log`
 
-### Phase 3 - Améliorations (v2.43.0)
+### Phase 3 - WebSocket dédiée (v2.43.0) ✅
+
+- [x] **Séparation des WebSockets** : `/ws` pour le jeu, `/ws/logs` pour les logs
+  - Endpoint dédié `/ws/logs` (independant de `/ws`)
+  - Fichier `logswebsocket.go` pour la gestion des connexions logs
+  - Connexion automatique → envoi immédiat de `LOG_HISTORY`
+  - Temps réel via `LOG_ENTRY` pour chaque nouveau log
+  - Déconnexion = désabonnement automatique (pas d'action UNSUBSCRIBE)
+
+- [x] **Hook dédié** : `useLogsWebSocket()` pour LogsPage
+  - Connexion directe à `/ws/logs` au lieu de `/ws`
+  - Pas de pollution de la WebSocket principale
+  - Meilleure séparation des préoccupations
+
+- [x] **Layout fixe** : Correction du scroll de la page Logs
+  - Position fixed sur `.logs-page` (pas de scroll global)
+  - Toolbar sticky en haut (z-index: 10)
+  - Liste scrollable avec flex: 1
+
+### Phase 4 - Améliorations futures (v2.44+)
 
 - [ ] **Persistence logs** : Option pour sauvegarder les logs sur disque
   - Configuration dans config.json : `logs.persist`, `logs.max_size_mb`
@@ -225,8 +244,9 @@ Position : Après "Palmarès", avant "Config"
 
 ## Version cible
 
-- **Phase 1-2** : v2.42.0 (fonctionnalité complète de base)
-- **Phase 3** : v2.43.0 (améliorations optionnelles)
+- **Phase 1-2** : v2.42.0 (fonctionnalité complète de base) ✅
+- **Phase 3** : v2.43.0 (WebSocket dédiée + layout fixe) ✅
+- **Phase 4** : v2.44+ (améliorations optionnelles)
 
 ## Notes techniques
 
