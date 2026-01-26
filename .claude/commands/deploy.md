@@ -66,26 +66,34 @@ Arrête et redéploie le serveur BuzzControl vers l'environnement cible.
 
 5. **Redémarrer le serveur Windows**
    - Lancer server.exe en arrière-plan
-   - Vérifier /version et /listGame
+   - Attendre 2-3 secondes pour le démarrage complet
    - Le serveur reste actif après les tests
 
-6. **Synchroniser package.json (PROD uniquement)**
+6. **Vérification finale de la version**
+   - Lire la version attendue depuis server-go/config.json
+   - Appeler curl http://localhost/version
+   - **COMPARER** : La version retournée DOIT correspondre à celle de config.json
+   - Si différence → **ERREUR CRITIQUE** : Arrêter et signaler le problème
+   - Si identique → Vérifier /listGame fonctionne
+
+7. **Synchroniser package.json (PROD uniquement)**
    - Lire la version depuis server-go/config.json
    - Mettre à jour server-go/web/package.json → "version": "<version>"
    - Commit: git commit -am "chore(version): Sync package.json to vX.Y.Z"
    - Push la branche feature
 
-7. **Git (PROD uniquement)**
+8. **Git (PROD uniquement)**
    - Squash merge vers main
    - Tag annotée v<version>
    - Push tag
    - Cleanup branche feature
 
-8. **Générer le rapport de redéploiement** avec :
+9. **Générer le rapport de redéploiement** avec :
    - Informations : Version, env, date, branche, commit
    - Arrêt : Résultat de l'arrêt du serveur précédent
    - Builds : Résultats + tailles binaires (Windows + ARM64 si applicable)
    - Redémarrage : Résultats des tests post-build
+   - Vérification version : Version attendue vs version serveur (DOIT MATCHER)
    - Git (PROD) : Merge, tag, cleanup
    - Décision : SUCCESS / FAILED
 
