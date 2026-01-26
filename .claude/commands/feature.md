@@ -105,30 +105,7 @@ prompt: "Implémente le code pour BuzzControl selon le plan validé.
 4. Push en fin de cycle"
 ```
 
-### Phase 3 : Revue de code (REVIEW)
-
-Lance le sous-agent **code-reviewer** via Task tool :
-
-```
-subagent_type: "code-reviewer"
-description: "Revue de code"
-prompt: "Effectue une revue de code complète pour BuzzControl.
-
-**Contexte projet :**
-- Répertoire : C:\Users\cyril\Documents\VScode\buzzcontrol
-- Architecture : CLAUDE.md
-
-**Actions :**
-1. Analyser qualité (Go, React)
-2. Analyser sécurité (OWASP)
-3. Vérifier conformité architecture
-4. Détecter duplications de code
-5. Produire rapport de review
-
-**Si problèmes critiques :** Retour à DEV avec feedback."
-```
-
-### Phase 4 : Tests QA (QA)
+### Phase 3 : Tests QA (QA)
 
 Lance le sous-agent **QA** via Task tool :
 
@@ -150,7 +127,7 @@ prompt: "Exécute la procédure de tests QA complète pour BuzzControl.
 **Si échecs :** Retour à DEV avec erreurs."
 ```
 
-### Phase 5 : Documentation (DOC)
+### Phase 4 : Documentation (DOC)
 
 Lance le sous-agent **doc-updater** via Task tool :
 
@@ -173,7 +150,7 @@ prompt: "Mets à jour la documentation pour BuzzControl.
 5. Commit et push"
 ```
 
-### Phase 6 : Déploiement QUALIF (DEPLOY)
+### Phase 5 : Déploiement QUALIF (DEPLOY)
 
 Lance le sous-agent **deploy** via Task tool :
 
@@ -208,10 +185,9 @@ Pour continuer vers la production :
 
 | Situation | Action |
 |-----------|--------|
-| REVIEW trouve problèmes critiques | Retour à Phase 2 (DEV) avec feedback |
 | QA échoue | Retour à Phase 2 (DEV) avec tests en échec |
 | Build échoue | Retour à Phase 2 (DEV) pour correction |
-| Maximum 3 cycles DEV ↔ REVIEW/QA | Escalade vers utilisateur |
+| Maximum 3 cycles DEV ↔ QA | Escalade vers utilisateur |
 
 ## Points de validation obligatoires
 
