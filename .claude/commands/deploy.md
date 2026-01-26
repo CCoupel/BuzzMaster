@@ -69,12 +69,18 @@ Arrête et redéploie le serveur BuzzControl vers l'environnement cible.
    - Attendre 2-3 secondes pour le démarrage complet
    - Le serveur reste actif après les tests
 
-6. **Vérification finale de la version**
+6. **Vérification finale de la version (avec retry automatique)**
    - Lire la version attendue depuis server-go/config.json
    - Appeler curl http://localhost/version
    - **COMPARER** : La version retournée DOIT correspondre à celle de config.json
-   - Si différence → **ERREUR CRITIQUE** : Arrêter et signaler le problème
-   - Si identique → Vérifier /listGame fonctionne
+   - **Si DIFFÉRENCE** :
+     1. Afficher WARNING : "Version mismatch: expected X.Y.Z, got A.B.C"
+     2. Arrêter le serveur : curl http://localhost/shutdown
+     3. Attendre 2 secondes
+     4. **RELANCER** les étapes 4, 5, 6 (rebuild + restart + verify)
+     5. Maximum 2 tentatives de retry
+     6. Si échec après 2 retries → **ERREUR CRITIQUE** : Arrêter et escalader
+   - **Si IDENTIQUE** : Vérifier /listGame fonctionne → Continuer
 
 7. **Synchroniser package.json (PROD uniquement)**
    - Lire la version depuis server-go/config.json
@@ -94,6 +100,7 @@ Arrête et redéploie le serveur BuzzControl vers l'environnement cible.
    - Builds : Résultats + tailles binaires (Windows + ARM64 si applicable)
    - Redémarrage : Résultats des tests post-build
    - Vérification version : Version attendue vs version serveur (DOIT MATCHER)
+   - Retries : Nombre de tentatives si version mismatch (0 = succès direct)
    - Git (PROD) : Merge, tag, cleanup
    - Décision : SUCCESS / FAILED
 
@@ -120,6 +127,8 @@ PROD → Release (merge + tag + binaires prêts pour Raspberry Pi)
 
 **Règles critiques :**
 - TOUJOURS arrêter le serveur avant de rebuild
+- TOUJOURS vérifier que /version correspond à config.json après redémarrage
+- TOUJOURS retry automatique (max 2x) si version mismatch
 - TOUJOURS synchroniser package.json avec config.json avant le tag PROD
 - JAMAIS déployer PROD sans PREPROD validée
 - JAMAIS créer des tags Git en QUALIF ou PREPROD
