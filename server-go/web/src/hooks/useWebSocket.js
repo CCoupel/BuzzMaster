@@ -29,8 +29,10 @@ export default function useWebSocket() {
   const [fsInfo, setFsInfo] = useState(null)
   const [version, setVersion] = useState(null)
   const [clientCounts, setClientCounts] = useState({ admin: 0, tv: 0 })
+  const [logs, setLogs] = useState([])
 
   const wsRef = useRef(null)
+  const logCallbackRef = useRef(null)
   const reconnectTimeoutRef = useRef(null)
 
   const connect = useCallback(() => {
@@ -264,6 +266,26 @@ export default function useWebSocket() {
         }
         break
 
+      case 'LOG_HISTORY':
+        // Receive full log history on subscription
+        if (MSG?.entries) {
+          setLogs(MSG.entries)
+          if (logCallbackRef.current) {
+            MSG.entries.forEach(entry => logCallbackRef.current(entry))
+          }
+        }
+        break
+
+      case 'LOG_ENTRY':
+        // Receive a single new log entry
+        if (MSG) {
+          setLogs(prev => [...prev, MSG])
+          if (logCallbackRef.current) {
+            logCallbackRef.current(MSG)
+          }
+        }
+        break
+
       default:
         console.log('Unknown action:', ACTION)
     }
@@ -368,6 +390,23 @@ export default function useWebSocket() {
     sendMessage('SET_VIRTUAL_PLAYER_LIMIT', { LIMIT: limit })
   }, [sendMessage])
 
+  // Logs: Subscribe to log updates
+  const subscribeLogs = useCallback((callback = null) => {
+    logCallbackRef.current = callback
+    sendMessage('SUBSCRIBE_LOGS', {})
+  }, [sendMessage])
+
+  // Logs: Unsubscribe from log updates
+  const unsubscribeLogs = useCallback(() => {
+    logCallbackRef.current = null
+    sendMessage('UNSUBSCRIBE_LOGS', {})
+  }, [sendMessage])
+
+  // Logs: Clear local logs state
+  const clearLogs = useCallback(() => {
+    setLogs([])
+  }, [])
+
   useEffect(() => {
     connect()
 
@@ -413,5 +452,10 @@ export default function useWebSocket() {
     hideQRCode,
     connectVirtualPlayer,
     setVirtualPlayerLimit,
+    // Logs
+    logs,
+    subscribeLogs,
+    unsubscribeLogs,
+    clearLogs,
   }
 }

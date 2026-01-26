@@ -773,6 +773,35 @@ Page d'historique des événements de jeu :
 - **Badge catégorie** : Icône colorée par groupe dans l'historique (v2.23.0)
 - **Fichiers** : `HistoryPage.jsx`, `HistoryPage.css`, `engine.go:AddGameEvent()`
 
+#### Logs Page (v2.42.0)
+Page de visualisation des logs serveur en temps reel :
+- **Route** : `/admin/logs` et `/anim/logs`
+- **Fonctionnalites** :
+  - Affichage temps reel des logs via WebSocket dediee
+  - Filtrage par niveau : DEBUG (gris), INFO (blanc), WARN (orange), ERROR (rouge)
+  - Filtrage par composant : App, Engine, HTTP, WebSocket, TCP, UDP
+  - Recherche avec debounce 300ms et highlight des termes
+  - Auto-scroll intelligent (pause au scroll manuel, reprise en bas)
+  - Export des logs filtres au format `.log`
+- **Backend** :
+  - `LogBuffer` : Buffer circulaire thread-safe (1000 logs max)
+  - `BroadcastLogger` : Logger avec diffusion temps reel
+  - **WebSocket dediee** : `/ws/logs` (separee de `/ws` pour le jeu)
+- **Architecture WebSocket Logs** (v2.43.0) :
+  - **Endpoint** : `/ws/logs` (WebSocket dediee, independante de `/ws`)
+  - **Connexion** : Le client se connecte → recoit automatiquement `LOG_HISTORY`
+  - **Temps reel** : Chaque nouveau log est envoye via `LOG_ENTRY`
+  - **Deconnexion** : Fermer la WebSocket = desabonnement (pas d'action explicite)
+  - **Avantages** : Pas de gestion d'abonnement, isolation du trafic logs/jeu
+- **Messages WebSocket** :
+  | Message | Direction | Description |
+  |---------|-----------|-------------|
+  | `LOG_HISTORY` | Server->Client | Historique complet a la connexion |
+  | `LOG_ENTRY` | Server->Client | Nouveau log temps reel |
+- **Fichiers** :
+  - Backend : `logbuffer.go`, `logger.go`, `logswebsocket.go` (nouveau)
+  - Frontend : `LogsPage.jsx`, `LogsPage.css`, `LogEntry.jsx`, `LogEntry.css`
+
 #### CategoryBalance Component (v2.23.0)
 Visualisation de l'équilibre des catégories sur la page Questions :
 - **Location** : `components/CategoryBalance.jsx` + `components/CategoryBalance.css`

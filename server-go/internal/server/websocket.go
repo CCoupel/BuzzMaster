@@ -1,8 +1,8 @@
 package server
 
 import (
+	"buzzcontrol/internal/game"
 	"buzzcontrol/internal/protocol"
-	"log"
 	"net/http"
 	"sync"
 	"time"
@@ -28,12 +28,12 @@ const (
 
 // WebSocketClient represents a connected WebSocket client
 type WebSocketClient struct {
-	ID         string
-	Type       ClientType
-	Conn       *websocket.Conn
-	Send       chan []byte
-	Hub        *WebSocketHub
-	LastSeen   time.Time
+	ID       string
+	Type     ClientType
+	Conn     *websocket.Conn
+	Send     chan []byte
+	Hub      *WebSocketHub
+	LastSeen time.Time
 }
 
 // WebSocketHub manages all WebSocket connections
@@ -73,7 +73,7 @@ func (h *WebSocketHub) Run() {
 			h.mu.Lock()
 			h.clients[client] = true
 			h.mu.Unlock()
-			log.Printf("[WebSocket] Client connected: %s (type: %s)", client.ID, client.Type)
+			LogInfo(game.LogComponentWebSocket, "Client connected: %s (type: %s)", client.ID, client.Type)
 			h.notifyClientChange()
 
 		case client := <-h.unregister:
@@ -83,20 +83,28 @@ func (h *WebSocketHub) Run() {
 				close(client.Send)
 			}
 			h.mu.Unlock()
-			log.Printf("[WebSocket] Client disconnected: %s (type: %s)", client.ID, client.Type)
+			LogInfo(game.LogComponentWebSocket, "Client disconnected: %s (type: %s)", client.ID, client.Type)
 			h.notifyClientChange()
 
 		case message := <-h.broadcast:
-			h.mu.RLock()
+			h.mu.Lock()
+			// Collect clients to remove (don't delete while iterating)
+			var toRemove []*WebSocketClient
 			for client := range h.clients {
 				select {
 				case client.Send <- message:
+					// Message sent successfully
 				default:
+					// Channel full or closed, mark for removal
 					close(client.Send)
-					delete(h.clients, client)
+					toRemove = append(toRemove, client)
 				}
 			}
-			h.mu.RUnlock()
+			// Remove failed clients
+			for _, client := range toRemove {
+				delete(h.clients, client)
+			}
+			h.mu.Unlock()
 		}
 	}
 }
@@ -130,7 +138,7 @@ func (h *WebSocketHub) SetClientType(clientID string, clientType ClientType) {
 	for client := range h.clients {
 		if client.ID == clientID {
 			client.Type = clientType
-			log.Printf("[WebSocket] Client %s type set to: %s", clientID, clientType)
+			LogInfo(game.LogComponentWebSocket, "Client %s type set to: %s", clientID, clientType)
 			break
 		}
 	}
@@ -143,7 +151,7 @@ func (h *WebSocketHub) SetClientType(clientID string, clientType ClientType) {
 func (h *WebSocketHub) Broadcast(msg *protocol.Message) {
 	data, err := msg.SerializeForWebSocket()
 	if err != nil {
-		log.Printf("[WebSocket] Failed to serialize message: %v", err)
+		LogError(game.LogComponentWebSocket, "Failed to serialize message: %v", err)
 		return
 	}
 
@@ -190,7 +198,7 @@ func (h *WebSocketHub) ClientCount() int {
 func (h *WebSocketHub) HandleConnection(w http.ResponseWriter, r *http.Request) {
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
-		log.Printf("[WebSocket] Upgrade error: %v", err)
+		LogError(game.LogComponentWebSocket, "Upgrade error: %v", err)
 		return
 	}
 
@@ -225,7 +233,7 @@ func (c *WebSocketClient) readPump() {
 		_, message, err := c.Conn.ReadMessage()
 		if err != nil {
 			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
-				log.Printf("[WebSocket] Read error: %v", err)
+				LogWarn(game.LogComponentWebSocket, "Read error: %v", err)
 			}
 			break
 		}
@@ -235,11 +243,11 @@ func (c *WebSocketClient) readPump() {
 		// Parse message
 		msg, err := protocol.ParseSingle(message)
 		if err != nil {
-			log.Printf("[WebSocket] Parse error: %v", err)
+			LogError(game.LogComponentWebSocket, "Parse error: %v", err)
 			continue
 		}
 
-		log.Printf("[WebSocket] Received from %s: ACTION=%s", c.ID, msg.Action)
+		LogDebug(game.LogComponentWebSocket, "Received from %s: ACTION=%s", c.ID, msg.Action)
 
 		incoming := &protocol.IncomingMessage{
 			Source:    "WebSocket",
@@ -251,7 +259,7 @@ func (c *WebSocketClient) readPump() {
 		select {
 		case c.Hub.Incoming <- incoming:
 		default:
-			log.Printf("[WebSocket] Incoming channel full, dropping message")
+			LogWarn(game.LogComponentWebSocket, "Incoming channel full, dropping message")
 		}
 
 		if c.Hub.OnMessage != nil {

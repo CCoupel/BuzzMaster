@@ -228,6 +228,36 @@ func (f *FullGameState) ToJSON() (json.RawMessage, error) {
 	return json.Marshal(f)
 }
 
+// LogLevel represents the severity of a log entry
+type LogLevel string
+
+const (
+	LogLevelDebug LogLevel = "DEBUG"
+	LogLevelInfo  LogLevel = "INFO"
+	LogLevelWarn  LogLevel = "WARN"
+	LogLevelError LogLevel = "ERROR"
+)
+
+// LogComponent represents the source component of a log entry
+type LogComponent string
+
+const (
+	LogComponentEngine    LogComponent = "Engine"
+	LogComponentHTTP      LogComponent = "HTTP"
+	LogComponentWebSocket LogComponent = "WebSocket"
+	LogComponentTCP       LogComponent = "TCP"
+	LogComponentUDP       LogComponent = "UDP"
+	LogComponentApp       LogComponent = "App"
+)
+
+// LogEntry represents a log entry for the logs page
+type LogEntry struct {
+	Timestamp int64        `json:"timestamp"` // Unix milliseconds
+	Level     LogLevel     `json:"level"`     // DEBUG, INFO, WARN, ERROR
+	Component LogComponent `json:"component"` // Engine, HTTP, WebSocket, TCP, UDP, App
+	Message   string       `json:"message"`
+}
+
 // GameEvent represents a game event for history tracking
 type GameEvent struct {
 	Timestamp        int64  `json:"TIMESTAMP"`                   // Server timestamp in microseconds

@@ -8,6 +8,7 @@ import TeamsPage from './pages/TeamsPage'
 import QuestionsPage from './pages/QuestionsPage'
 import HistoryPage from './pages/HistoryPage'
 import CategoryPalmaresPage from './pages/CategoryPalmaresPage'
+import LogsPage from './pages/LogsPage'
 import ConfigPage from './pages/ConfigPage'
 import PlayerDisplay from './pages/PlayerDisplay'
 import EnrollPage from './pages/EnrollPage'
@@ -26,7 +27,7 @@ const adminRoutes = [
 ]
 
 function AppContent() {
-  const { status, clientCounts, setClientType, version } = useGame()
+  const { status, clientCounts, setClientType, version, subscribeLogs, unsubscribeLogs, logs } = useGame()
   const location = useLocation()
 
   // Show navbar only on admin pages (/admin/* or /anim/*)
@@ -79,6 +80,16 @@ function AppContent() {
               element={route.element}
             />
           ))}
+
+          {/* Logs page (dedicated WebSocket) */}
+          <Route
+            path="/admin/logs"
+            element={<LogsPage />}
+          />
+          <Route
+            path="/anim/logs"
+            element={<LogsPage />}
+          />
         </Routes>
       </main>
     </div>

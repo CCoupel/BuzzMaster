@@ -1,6 +1,6 @@
 # Page Logs (/logs)
 
-**Statut** : 📋 Planifié
+**Statut** : Implemente v2.42.0
 
 ## Description
 
@@ -8,12 +8,12 @@ Une page `/logs` dans l'interface admin pour afficher les logs du serveur en tem
 
 ## Objectifs
 
-- [ ] Afficher les logs du serveur Go en temps réel via WebSocket
-- [ ] Filtrer les logs par niveau (DEBUG, INFO, WARN, ERROR)
-- [ ] Filtrer les logs par composant (Engine, HTTP, WebSocket, TCP)
-- [ ] Permettre la recherche dans les logs
-- [ ] Auto-scroll avec pause au survol
-- [ ] Export des logs visibles
+- [x] Afficher les logs du serveur Go en temps réel via WebSocket
+- [x] Filtrer les logs par niveau (DEBUG, INFO, WARN, ERROR)
+- [x] Filtrer les logs par composant (Engine, HTTP, WebSocket, TCP, UDP, App)
+- [x] Permettre la recherche dans les logs
+- [x] Auto-scroll avec pause au survol
+- [x] Export des logs visibles
 
 ## Architecture
 
@@ -59,60 +59,61 @@ Page admin avec affichage des logs en temps réel.
 
 ### Phase 1 - Backend (v2.42.0)
 
-- [ ] **LogBuffer** : Buffer circulaire pour stocker les derniers 1000 logs
+- [x] **LogBuffer** : Buffer circulaire pour stocker les derniers 1000 logs
   - Struct `LogEntry` : Timestamp, Level, Component, Message
   - Thread-safe avec mutex
   - Méthode `GetRecent(n int)` pour récupérer les n derniers logs
 
-- [ ] **LogBroadcaster** : Broadcast des logs vers les clients WebSocket
+- [x] **LogBroadcaster** : Broadcast des logs vers les clients WebSocket
   - Canal Go pour recevoir les nouveaux logs
   - Action WebSocket `LOG_ENTRY` pour envoyer un log
   - Action WebSocket `LOG_HISTORY` pour envoyer l'historique initial
 
-- [ ] **Intégration CustomLogger** : Connecter le logger existant au buffer
+- [x] **Intégration CustomLogger** : Connecter le logger existant au buffer
   - Hook pour capturer chaque log
   - Parsing du niveau et du composant
 
-- [ ] **Action WebSocket SUBSCRIBE_LOGS** : Client demande à recevoir les logs
-  - Envoie l'historique récent (100 derniers)
+- [x] **Action WebSocket SUBSCRIBE_LOGS** : Client demande à recevoir les logs
+  - Envoie l'historique récent (tous les logs du buffer)
   - Ajoute le client à la liste des abonnés
 
-- [ ] **Action WebSocket UNSUBSCRIBE_LOGS** : Client arrête de recevoir les logs
+- [x] **Action WebSocket UNSUBSCRIBE_LOGS** : Client arrête de recevoir les logs
   - Retire le client de la liste des abonnés
 
 ### Phase 2 - Frontend (v2.42.0)
 
-- [ ] **LogsPage.jsx** : Page principale d'affichage des logs
+- [x] **LogsPage.jsx** : Page principale d'affichage des logs
   - Route `/admin/logs` et `/anim/logs`
   - Connexion WebSocket pour recevoir les logs
-  - État local pour stocker les logs reçus (max 5000)
+  - État local pour stocker les logs reçus
 
-- [ ] **Composant LogEntry** : Affichage d'une ligne de log
+- [x] **Composant LogEntry** : Affichage d'une ligne de log
   - Couleur selon le niveau (DEBUG=gris, INFO=blanc, WARN=orange, ERROR=rouge)
   - Badge coloré pour le composant
   - Timestamp formaté (HH:MM:SS.mmm)
   - Message avec highlight de la recherche
 
-- [ ] **Filtres de niveau** : Boutons toggle pour chaque niveau
+- [x] **Filtres de niveau** : Boutons toggle pour chaque niveau
   - DEBUG, INFO, WARN, ERROR
   - Filtrage côté client (tous les logs reçus, filtrés à l'affichage)
 
-- [ ] **Filtre de composant** : Dropdown pour filtrer par composant
-  - Options : Tous, Engine, HTTP, WebSocket, TCP, UDP
-  - Extraction automatique des composants depuis les logs
+- [x] **Filtre de composant** : Boutons toggle pour filtrer par composant
+  - Options : App, Engine, HTTP, WebSocket, TCP, UDP
+  - Sélection multiple
 
-- [ ] **Recherche** : Input de recherche temps réel
+- [x] **Recherche** : Input de recherche temps réel
   - Filtre sur le message du log
   - Highlight des termes trouvés
   - Debounce 300ms
 
-- [ ] **Auto-scroll** : Scroll automatique vers le bas
-  - Checkbox pour activer/désactiver
+- [x] **Auto-scroll** : Scroll automatique vers le bas
+  - Bouton pour activer/désactiver
   - Pause automatique si l'utilisateur scroll manuellement
   - Reprise si scroll en bas
+  - Indicateur visuel pour nouveaux logs
 
-- [ ] **Export** : Bouton pour exporter les logs visibles
-  - Format texte avec timestamp
+- [x] **Export** : Bouton pour exporter les logs visibles
+  - Format texte avec timestamp ISO
   - Téléchargement fichier `.log`
 
 ### Phase 3 - Améliorations (v2.43.0)

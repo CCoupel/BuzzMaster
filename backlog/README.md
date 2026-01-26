@@ -18,7 +18,7 @@ Chaque fichier correspond à une fonctionnalité ou un ensemble de fonctionnalit
 | [memory-game.md](memory-game.md) | ✅ v2.33.0 | Jeu de mémoire avec paires |
 | [mode-demo.md](mode-demo.md) | ✅ v2.40.0 | Mode démonstration avec données complètes |
 | [page-joueur.md](page-joueur.md) | ✅ v2.41.0 | Interface personnalisée pour jouer depuis smartphone |
-| [page-logs.md](page-logs.md) | 📋 Planifié | Affichage des logs serveur en temps réel |
+| [page-logs.md](page-logs.md) | ✅ v2.42.0 | Affichage des logs serveur en temps réel |
 | [tri-rapidite-reponse.md](tri-rapidite-reponse.md) | 📋 Planifié | Tri équipes/joueurs par rapidité de buzz |
 | [generateur-ia.md](generateur-ia.md) | 📋 Planifié | Générateur de jeu complet via IA |
 
@@ -66,6 +66,7 @@ vX.Y.Z
 
 ## Historique
 
+- 2026-01-26 : Completion page logs (v2.42.0)
 - 2026-01-25 : Ajout tri équipes/joueurs par rapidité de buzz (📋 Planifié, priorité haute)
 - 2026-01-25 : Ajout marqueurs indices QCM sur barre de temps (📋 Planifié)
 - 2026-01-25 : Ajout de la page logs (📋 Planifié)

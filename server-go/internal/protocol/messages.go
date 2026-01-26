@@ -46,7 +46,10 @@ const (
 	ActionPlayerConnected      = "PLAYER_CONNECTED"
 	ActionPlayerRejected       = "PLAYER_REJECTED"
 	ActionEnrollmentUpdate     = "ENROLLMENT_UPDATE"
-	ActionPlayerAssigned       = "PLAYER_ASSIGNED"
+	ActionPlayerAssigned = "PLAYER_ASSIGNED"
+	// Log actions (via dedicated /ws/logs WebSocket)
+	ActionLogHistory = "LOG_HISTORY"
+	ActionLogEntry   = "LOG_ENTRY"
 )
 
 // FSInfo represents file storage information
@@ -197,9 +200,22 @@ type EnrollmentUpdatePayload struct {
 
 // PlayerAssignedPayload for PLAYER_ASSIGNED action (player assigned to team)
 type PlayerAssignedPayload struct {
-	ID          string `json:"ID"`            // Bumper ID
-	Team        string `json:"TEAM"`          // Team name
-	AnswerColor string `json:"ANSWER_COLOR"`  // Assigned answer color (RED/GREEN/YELLOW/BLUE)
+	ID          string `json:"ID"`           // Bumper ID
+	Team        string `json:"TEAM"`         // Team name
+	AnswerColor string `json:"ANSWER_COLOR"` // Assigned answer color (RED/GREEN/YELLOW/BLUE)
+}
+
+// LogHistoryPayload for LOG_HISTORY action (send log history to client)
+type LogHistoryPayload struct {
+	Entries []LogEntryPayload `json:"entries"` // Array of log entries
+}
+
+// LogEntryPayload for LOG_ENTRY action (single log entry broadcast)
+type LogEntryPayload struct {
+	Timestamp int64  `json:"timestamp"` // Unix milliseconds
+	Level     string `json:"level"`     // DEBUG, INFO, WARN, ERROR
+	Component string `json:"component"` // Engine, HTTP, WebSocket, TCP, UDP, App
+	Message   string `json:"message"`
 }
 
 // NewMessage creates a new outgoing message

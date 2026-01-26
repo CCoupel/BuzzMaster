@@ -20,6 +20,7 @@ export default function Navbar({ connectionStatus = 'disconnected', clientCounts
   const configItems = [
     { path: 'teams', label: 'Joueurs', icon: '👥' },
     { path: 'quiz', label: 'Questions', icon: '❓' },
+    { path: 'logs', label: 'Logs', icon: '📋' },
     { path: 'settings', label: 'Config', icon: '⚙️' },
   ]
 

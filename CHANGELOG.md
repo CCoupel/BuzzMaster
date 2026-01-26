@@ -3,6 +3,66 @@
 Historique des versions du projet BuzzControl.
 
 
+## [2.43.0] - 2026-01-26
+
+### Ajouts
+- **[Logs]**: WebSocket dédiée `/ws/logs` pour une gestion optimisée des logs
+  - **Séparation des WebSockets** : `/ws` pour le jeu, `/ws/logs` pour les logs
+  - **Connexion directe** : LogsPage se connecte à `/ws/logs` au lieu de `/ws`
+  - **Messages dédiés** : LOG_HISTORY (historique à la connexion), LOG_ENTRY (temps réel)
+  - **Pas de conflit** : Les logs ne transitent plus par la WebSocket de jeu
+
+### Modifié
+- **[LogsPage]**: Utilise `connectToLogs()` au lieu de `connect()`
+  - Hook personnalisé pour gérer la WebSocket `/ws/logs`
+  - Subscription/unsubscription automatique
+
+### Corrigé
+- **[LogsPage]**: Layout avec position fixed et scroll interne
+  - Page fixe sans scroll global (`.logs-page { position: fixed }`)
+  - Toolbar sticky en haut (`.logs-toolbar { position: sticky, z-index: 10 }`)
+  - Liste des logs scrollable (`.logs-list { flex: 1, overflow-y: auto }`)
+
+### Technique
+- `websocket.go` : Nouvelle fonction `ServeLogsWS()` pour `/ws/logs`
+- `main.go` : Handler `/ws/logs`, `ConnectToLogs()`, `DisconnectFromLogs()`
+- `LogsPage.jsx` : Hook `useLogsWebSocket()` avec connexion dédiée
+- `LogsPage.css` : Structure flexbox avec position fixed
+- `useWebSocket.js` : Suppression handlers LOG_HISTORY et LOG_ENTRY (déplacés vers useLogsWebSocket)
+
+---
+
+## [2.42.0] - 2026-01-26
+
+### Ajouts
+- **[Logs]**: Page de visualisation des logs serveur en temps reel
+  - **Route `/admin/logs` et `/anim/logs`** : Nouvelle page d'administration
+  - **LogBuffer** : Buffer circulaire thread-safe (capacite 1000 logs)
+  - **BroadcastLogger** : Logger avec diffusion temps reel via WebSocket
+  - **Filtres de niveau** : DEBUG (gris), INFO (blanc), WARN (orange), ERROR (rouge)
+  - **Filtres de composant** : App, Engine, HTTP, WebSocket, TCP, UDP
+  - **Recherche temps reel** : Debounce 300ms avec highlight des termes
+  - **Auto-scroll intelligent** : Pause automatique au scroll manuel, reprise en bas
+  - **Indicateur nouveaux logs** : Badge flottant cliquable pour descendre
+  - **Export** : Telechargement des logs filtres au format `.log`
+
+### Technique
+- `models.go` : Structs `LogLevel`, `LogComponent`, `LogEntry`
+- `logbuffer.go` : `LogBuffer` avec `Add()`, `GetAll()`, `GetRecent()`
+- `logger.go` : `BroadcastLogger` avec `Debug()`, `Info()`, `Warn()`, `Error()`
+- `websocket.go` : `SubscribeToLogs()`, `UnsubscribeFromLogs()`, `BroadcastToLogSubscribers()`
+- `messages.go` : Actions `SUBSCRIBE_LOGS`, `UNSUBSCRIBE_LOGS`, `LOG_HISTORY`, `LOG_ENTRY`
+- `main.go` : Handlers et integration du logger
+- `LogsPage.jsx` : Page principale avec toolbar et liste de logs
+- `LogEntry.jsx` : Composant d'affichage d'une ligne de log
+- `useWebSocket.js` : Handlers `LOG_HISTORY`, `LOG_ENTRY`, fonctions `subscribeLogs`, `unsubscribeLogs`
+- `Navbar.jsx` : Lien "Logs" dans la section Config
+
+### Tests
+- `logbuffer_test.go` : Tests unitaires pour LogBuffer (Add, Circular, Concurrency, GetRecent)
+
+---
+
 ## [2.41.0] - 2026-01-25
 
 ### Ajouts

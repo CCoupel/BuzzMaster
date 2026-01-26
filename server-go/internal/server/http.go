@@ -24,6 +24,7 @@ type HTTPServer struct {
 	port       int
 	engine     *game.Engine
 	wsHub      *WebSocketHub
+	logsHub    *LogsWebSocketHub
 	dataDir    string
 	webDir     string
 	reactDir   string // React build directory (filesystem)
@@ -40,12 +41,13 @@ type HTTPServer struct {
 }
 
 // NewHTTPServer creates a new HTTP server
-func NewHTTPServer(port int, engine *game.Engine, wsHub *WebSocketHub) *HTTPServer {
+func NewHTTPServer(port int, engine *game.Engine, wsHub *WebSocketHub, logsHub *LogsWebSocketHub) *HTTPServer {
 	cfg := config.Get()
 	return &HTTPServer{
 		port:     port,
 		engine:   engine,
 		wsHub:    wsHub,
+		logsHub:  logsHub,
 		dataDir:  cfg.Storage.DataDir,
 		webDir:   cfg.Storage.DataDir,
 		reactDir: "", // Will be set if React build exists
@@ -79,10 +81,10 @@ func (h *HTTPServer) Start() error {
 		Handler: h.corsMiddleware(h.mux),
 	}
 
-	log.Printf("[HTTP] Server starting on port %d", h.port)
+	LogInfo(game.LogComponentHTTP, "Server starting on port %d", h.port)
 	go func() {
 		if err := h.server.ListenAndServe(); err != http.ErrServerClosed {
-			log.Printf("[HTTP] Server error: %v", err)
+			LogError(game.LogComponentHTTP, "Server error: %v", err)
 		}
 	}()
 
@@ -166,11 +168,19 @@ func (h *HTTPServer) setupRoutes() {
 
 	// WebSocket
 	h.mux.HandleFunc("/ws", h.handleWebSocket)
+
+	// Logs WebSocket (dedicated)
+	h.mux.HandleFunc("/ws/logs", h.handleLogsWebSocket)
 }
 
 func (h *HTTPServer) handleRoot(w http.ResponseWriter, r *http.Request) {
 	// For SPA routes or root, serve index.html
 	if r.URL.Path == "/" || h.isSPARoute(r.URL.Path) {
+		// Prevent caching of index.html to ensure fresh content
+		w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
+		w.Header().Set("Pragma", "no-cache")
+		w.Header().Set("Expires", "0")
+
 		// Try embedded FS first
 		if h.embeddedFS != nil {
 			if f, err := h.embeddedFS.Open("index.html"); err == nil {
@@ -215,6 +225,9 @@ func (h *HTTPServer) isSPARoute(path string) bool {
 
 // handleReactAssets serves React build assets
 func (h *HTTPServer) handleReactAssets(w http.ResponseWriter, r *http.Request) {
+	// Assets in /assets/ have hashes in filenames, so they can be cached forever
+	w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+
 	// Try embedded FS first
 	if h.embeddedFS != nil {
 		// Remove leading slash for fs.FS
@@ -619,7 +632,7 @@ func (h *HTTPServer) handleUploadQuestion(w http.ResponseWriter, r *http.Request
 	data, _ := json.MarshalIndent(question, "", "  ")
 	os.WriteFile(filepath.Join(questionsDir, "question.json"), data, 0644)
 
-	log.Printf("[HTTP] Question %s saved", id)
+	LogInfo(game.LogComponentHTTP, "Question %s saved", id)
 
 	// Broadcast questions update (like ESP32)
 	if h.OnQuestionUpload != nil {
@@ -698,7 +711,7 @@ func (h *HTTPServer) handleConfig(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *HTTPServer) handleClearGame(w http.ResponseWriter, r *http.Request) {
-	log.Printf("[HTTP] Clear game requested")
+	LogInfo(game.LogComponentHTTP, "Clear game requested")
 
 	// Clear files directory
 	filesDir := filepath.Join(h.dataDir, "files")
@@ -713,7 +726,7 @@ func (h *HTTPServer) handleClearGame(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *HTTPServer) handleClearBuzzers(w http.ResponseWriter, r *http.Request) {
-	log.Printf("[HTTP] Clear buzzers requested")
+	LogInfo(game.LogComponentHTTP, "Clear buzzers requested")
 
 	h.engine.ClearBumpers()
 
@@ -725,7 +738,7 @@ func (h *HTTPServer) handleClearBuzzers(w http.ResponseWriter, r *http.Request) 
 }
 
 func (h *HTTPServer) handleReboot(w http.ResponseWriter, r *http.Request) {
-	log.Printf("[HTTP] Reboot requested")
+	LogInfo(game.LogComponentHTTP, "Reboot requested")
 	http.Redirect(w, r, "/html/testSPA.html#config", http.StatusFound)
 
 	// In a real scenario, you might restart the service
@@ -736,7 +749,7 @@ func (h *HTTPServer) handleReboot(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *HTTPServer) handleShutdown(w http.ResponseWriter, r *http.Request) {
-	log.Printf("[HTTP] Shutdown requested")
+	LogInfo(game.LogComponentHTTP, "Shutdown requested")
 	w.Header().Set("Content-Type", "application/json")
 	w.Write([]byte(`{"status":"shutting_down"}`))
 
@@ -746,13 +759,13 @@ func (h *HTTPServer) handleShutdown(w http.ResponseWriter, r *http.Request) {
 		if h.OnShutdown != nil {
 			h.OnShutdown()
 		}
-		log.Printf("[HTTP] Server shutting down...")
+		LogInfo(game.LogComponentHTTP, "Server shutting down...")
 		os.Exit(0)
 	}()
 }
 
 func (h *HTTPServer) handleLoadDemo(w http.ResponseWriter, r *http.Request) {
-	log.Printf("[HTTP] Load demo requested")
+	LogInfo(game.LogComponentHTTP, "Load demo requested")
 	w.Header().Set("Content-Type", "application/json")
 
 	if h.OnLoadDemo != nil {
@@ -764,7 +777,7 @@ func (h *HTTPServer) handleLoadDemo(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *HTTPServer) handleReset(w http.ResponseWriter, r *http.Request) {
-	log.Printf("[HTTP] Reset requested")
+	LogInfo(game.LogComponentHTTP, "Reset requested")
 
 	h.handleClearGame(w, r)
 
@@ -774,21 +787,21 @@ func (h *HTTPServer) handleReset(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *HTTPServer) handleBackground(w http.ResponseWriter, r *http.Request) {
-	log.Printf("[HTTP] Background request: method=%s, content-type=%s", r.Method, r.Header.Get("Content-Type"))
+	LogDebug(game.LogComponentHTTP, "Background request: method=%s, content-type=%s", r.Method, r.Header.Get("Content-Type"))
 	bgDir := filepath.Join(h.dataDir, "files", "backgrounds")
 
 	switch r.Method {
 	case "POST":
 		// Parse multipart form (max 10MB)
 		if err := r.ParseMultipartForm(10 << 20); err != nil {
-			log.Printf("[HTTP] Failed to parse multipart form: %v", err)
+			LogError(game.LogComponentHTTP, "Failed to parse multipart form: %v", err)
 			http.Error(w, "Failed to parse form: "+err.Error(), http.StatusBadRequest)
 			return
 		}
 
 		file, header, err := r.FormFile("file")
 		if err != nil {
-			log.Printf("[HTTP] FormFile error: %v", err)
+			LogError(game.LogComponentHTTP, "FormFile error: %v", err)
 			http.Error(w, "No file uploaded: "+err.Error(), http.StatusBadRequest)
 			return
 		}
@@ -818,7 +831,7 @@ func (h *HTTPServer) handleBackground(w http.ResponseWriter, r *http.Request) {
 		}
 
 		bgPath := "/files/backgrounds/" + fileName
-		log.Printf("[HTTP] Background image uploaded: %s", destPath)
+		LogInfo(game.LogComponentHTTP, "Background image uploaded: %s", destPath)
 
 		if h.OnBackgroundChange != nil {
 			h.OnBackgroundChange("reload")
@@ -831,7 +844,7 @@ func (h *HTTPServer) handleBackground(w http.ResponseWriter, r *http.Request) {
 		// Update backgrounds config (order, duration)
 		var backgrounds []game.Background
 		if err := json.NewDecoder(r.Body).Decode(&backgrounds); err != nil {
-			log.Printf("[HTTP] Failed to decode backgrounds config: %v", err)
+			LogError(game.LogComponentHTTP, "Failed to decode backgrounds config: %v", err)
 			http.Error(w, "Invalid JSON: "+err.Error(), http.StatusBadRequest)
 			return
 		}
@@ -1585,4 +1598,8 @@ func (h *HTTPServer) downloadFile(url, destPath string) error {
 
 func (h *HTTPServer) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 	h.wsHub.HandleConnection(w, r)
+}
+
+func (h *HTTPServer) handleLogsWebSocket(w http.ResponseWriter, r *http.Request) {
+	h.logsHub.HandleConnection(w, r)
 }

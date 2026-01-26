@@ -23,14 +23,16 @@ import (
 
 // App holds all server components
 type App struct {
-	config     *config.Config
-	engine     *game.Engine
-	tcpServer  *server.TCPServer
-	udpBcast   *server.UDPBroadcaster
-	httpServer *server.HTTPServer
-	wsHub      *server.WebSocketHub
-	mdnsServer *server.MDNSServer
-	dnsServer  *server.DNSServer
+	config      *config.Config
+	engine      *game.Engine
+	tcpServer   *server.TCPServer
+	udpBcast    *server.UDPBroadcaster
+	httpServer  *server.HTTPServer
+	wsHub       *server.WebSocketHub
+	logsHub     *server.LogsWebSocketHub
+	mdnsServer  *server.MDNSServer
+	dnsServer   *server.DNSServer
+	logger      *server.BroadcastLogger
 }
 
 func main() {
@@ -66,13 +68,13 @@ func main() {
 
 	// Only initialize test data if no saved data exists
 	if !teamsLoaded && !bumpersLoaded {
-		log.Println("[App] No saved teams/bumpers found, initializing test data...")
+		server.LogInfo(game.LogComponentApp, "No saved teams/bumpers found, initializing test data...")
 		app.initTestData()
 		// Save initial test data
 		app.engine.SaveTeams()
 		app.engine.SaveBumpers()
 	} else {
-		log.Printf("[App] Loaded from disk: %d teams, %d bumpers",
+		server.LogInfo(game.LogComponentApp, "Loaded from disk: %d teams, %d bumpers",
 			len(app.engine.GetTeamsAndBumpers().Teams),
 			len(app.engine.GetTeamsAndBumpers().Bumpers))
 		app.engine.RecalculateAllTeamScores()
@@ -83,23 +85,24 @@ func main() {
 
 	// Load history and recalculate scores from events (overrides test data scores)
 	if err := app.engine.LoadHistory(); err != nil {
-		log.Printf("Warning: Could not load history: %v", err)
+		server.LogWarn(game.LogComponentApp, "Could not load history: %v", err)
 	} else {
 		app.engine.RecalculateScoresFromHistory()
 	}
 
 	// Load question statuses
 	if err := app.engine.LoadStatuses(); err != nil {
-		log.Printf("Warning: Could not load question statuses: %v", err)
+		server.LogWarn(game.LogComponentApp, "Could not load question statuses: %v", err)
 	}
 
 	// Start servers
 	if err := app.start(); err != nil {
-		log.Fatalf("Failed to start: %v", err)
+		server.LogError(game.LogComponentApp, "Failed to start: %v", err)
+		os.Exit(1)
 	}
 
-	log.Println("Server started successfully")
-	log.Printf("TCP server (buzzers): port %d", cfg.Server.TCPPort)
+	server.LogInfo(game.LogComponentApp, "Server started successfully")
+	server.LogInfo(game.LogComponentTCP, "TCP server (buzzers): port %d", cfg.Server.TCPPort)
 
 	// Display all accessible URLs and open browser if enabled
 	displayAndOpenURLs(cfg.Server.HTTPPort, cfg.Server.AutoOpenBrowsers, cfg.Server.Debug)
@@ -109,7 +112,7 @@ func main() {
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
 	<-sigCh
 
-	log.Println("Shutting down...")
+	server.LogInfo(game.LogComponentApp, "Shutting down...")
 	app.stop()
 }
 
@@ -127,6 +130,13 @@ func (a *App) init() {
 	// WebSocket hub
 	a.wsHub = server.NewWebSocketHub()
 
+	// Logs WebSocket hub (dedicated for logs)
+	a.logsHub = server.NewLogsWebSocketHub(1000)
+
+	// Initialize global logger (singleton)
+	a.logger = server.InitLogger(1000)
+	a.logger.SetDebugEnabled(a.config.Server.Debug)
+
 	// TCP server for buzzers
 	a.tcpServer = server.NewTCPServer(a.config.Server.TCPPort)
 
@@ -134,20 +144,20 @@ func (a *App) init() {
 	a.udpBcast = server.NewUDPBroadcaster(a.config.Server.TCPPort)
 
 	// HTTP server
-	a.httpServer = server.NewHTTPServer(a.config.Server.HTTPPort, a.engine, a.wsHub)
+	a.httpServer = server.NewHTTPServer(a.config.Server.HTTPPort, a.engine, a.wsHub, a.logsHub)
 
 	// Try embedded web files first, then fallback to filesystem
 	if embeddedFS, ok := web.GetEmbeddedFS(); ok {
-		log.Println("[HTTP] Using embedded web files (portable mode)")
+		server.LogInfo(game.LogComponentHTTP, "Using embedded web files (portable mode)")
 		a.httpServer.SetEmbeddedFS(embeddedFS)
 	} else {
 		// Check for React build on filesystem
 		reactDir := filepath.Join(".", "web", "dist")
 		if _, err := os.Stat(filepath.Join(reactDir, "index.html")); err == nil {
-			log.Println("[HTTP] React build found, serving modern UI")
+			server.LogInfo(game.LogComponentHTTP, "React build found, serving modern UI")
 			a.httpServer.SetReactDir(reactDir)
 		} else {
-			log.Println("[HTTP] No React build found, using legacy UI")
+			server.LogInfo(game.LogComponentHTTP, "No React build found, using legacy UI")
 		}
 	}
 
@@ -252,6 +262,17 @@ func (a *App) setupCallbacks() {
 	a.wsHub.OnClientChange = func(adminCount, tvCount int) {
 		a.broadcastClientCounts(adminCount, tvCount)
 	}
+
+	// Handle new log entries - broadcast to logs WebSocket clients
+	a.logger.SetOnNewEntry(func(entry game.LogEntry) {
+		payload := protocol.LogEntryPayload{
+			Timestamp: entry.Timestamp,
+			Level:     string(entry.Level),
+			Component: string(entry.Component),
+			Message:   entry.Message,
+		}
+		a.logsHub.BroadcastLogEntry(payload)
+	})
 }
 
 func (a *App) loadBackgrounds() {
@@ -327,7 +348,7 @@ func (a *App) loadBackgrounds() {
 
 	a.engine.SetBackgrounds(backgrounds)
 	if len(backgrounds) > 0 {
-		log.Printf("[App] Loaded %d background(s)", len(backgrounds))
+		server.LogInfo(game.LogComponentApp, "Loaded %d background(s)", len(backgrounds))
 	}
 }
 
@@ -344,20 +365,20 @@ func (a *App) saveBackgroundsConfig() {
 	backgrounds := a.engine.GetBackgrounds()
 	data, err := json.MarshalIndent(backgrounds, "", "  ")
 	if err != nil {
-		log.Printf("[App] Failed to marshal backgrounds config: %v", err)
+		server.LogError(game.LogComponentApp, "Failed to marshal backgrounds config: %v", err)
 		return
 	}
 
 	if err := os.WriteFile(configPath, data, 0644); err != nil {
-		log.Printf("[App] Failed to save backgrounds config: %v", err)
+		server.LogError(game.LogComponentApp, "Failed to save backgrounds config: %v", err)
 	} else {
-		log.Printf("[App] Saved backgrounds config")
+		server.LogDebug(game.LogComponentApp, "Saved backgrounds config")
 	}
 }
 
 // startBackgroundCycling manages server-synchronized background image cycling
 func (a *App) startBackgroundCycling() {
-	log.Println("[App] Starting background cycling goroutine")
+	server.LogDebug(game.LogComponentApp, "Starting background cycling goroutine")
 
 	for {
 		// Get current background duration
@@ -384,29 +405,35 @@ func (a *App) start() error {
 	// Start WebSocket hub
 	go a.wsHub.Run()
 
+	// Start Logs WebSocket hub
+	go a.logsHub.Run()
+
 	// Start TCP server
 	if err := a.tcpServer.Start(); err != nil {
 		return err
 	}
+	a.logger.Info(game.LogComponentTCP, "TCP server started on port %d", a.config.Server.TCPPort)
 
 	// Start UDP broadcaster
 	if err := a.udpBcast.Start(); err != nil {
 		return err
 	}
+	a.logger.Info(game.LogComponentUDP, "UDP broadcaster started on port %d", a.config.Server.TCPPort)
 
 	// Start HTTP server
 	if err := a.httpServer.Start(); err != nil {
 		return err
 	}
+	a.logger.Info(game.LogComponentHTTP, "HTTP server started on port %d", a.config.Server.HTTPPort)
 
 	// Start mDNS server (non-fatal if it fails)
 	if err := a.mdnsServer.Start(); err != nil {
-		log.Printf("[mDNS] Warning: Failed to start mDNS: %v", err)
+		a.logger.Warn(game.LogComponentApp, "Failed to start mDNS: %v", err)
 	}
 
 	// Start DNS server (non-fatal if it fails - may need admin rights)
 	if err := a.dnsServer.Start(); err != nil {
-		log.Printf("[DNS] Warning: Failed to start DNS server: %v (may need admin rights)", err)
+		a.logger.Warn(game.LogComponentApp, "Failed to start DNS server: %v (may need admin rights)", err)
 	}
 
 	// Send initial HELLO
@@ -414,6 +441,8 @@ func (a *App) start() error {
 
 	// Start background cycling goroutine
 	go a.startBackgroundCycling()
+
+	a.logger.Info(game.LogComponentApp, "BuzzControl server v%s started successfully", a.config.Version)
 
 	return nil
 }
@@ -441,7 +470,7 @@ func (a *App) handleBuzzerMessage(incoming *protocol.IncomingMessage) {
 		a.handlePong(incoming.ClientID, msg)
 
 	default:
-		log.Printf("[App] Unknown buzzer action: %s", msg.Action)
+		server.LogWarn(game.LogComponentApp, "Unknown buzzer action: %s", msg.Action)
 	}
 }
 
@@ -470,22 +499,27 @@ func (a *App) handleWebMessage(incoming *protocol.IncomingMessage) {
 		a.handleStart(msg)
 
 	case protocol.ActionStop:
+		a.logger.Info(game.LogComponentEngine, "STOP game")
 		a.engine.Stop()
 		a.broadcastStop()
 
 	case protocol.ActionPause:
+		a.logger.Info(game.LogComponentEngine, "PAUSE all")
 		a.engine.PauseAll()
 		a.broadcastPauseAll()
 
 	case protocol.ActionContinue:
+		a.logger.Info(game.LogComponentEngine, "CONTINUE game")
 		a.engine.Continue()
 		a.broadcastContinue()
 
 	case protocol.ActionReveal:
+		a.logger.Info(game.LogComponentEngine, "REVEAL answer")
 		answer := a.engine.Reveal()
 		a.broadcastReveal(answer)
 
 	case protocol.ActionRAZ:
+		a.logger.Info(game.LogComponentEngine, "RAZ - Reset all scores")
 		a.engine.RAZScores()
 		a.broadcastUpdate()
 
@@ -502,7 +536,7 @@ func (a *App) handleWebMessage(incoming *protocol.IncomingMessage) {
 		a.broadcastReset()
 
 	case protocol.ActionReboot:
-		log.Println("[App] Reboot requested from web client")
+		server.LogInfo(game.LogComponentApp, "Reboot requested from web client")
 
 	case protocol.ActionBumperPoints:
 		a.handleBumperPoints(msg)
@@ -543,12 +577,12 @@ func (a *App) handleWebMessage(incoming *protocol.IncomingMessage) {
 		a.handlePlayerConnect(incoming.ClientID, msg)
 
 	default:
-		log.Printf("[App] Unknown web action: %s", msg.Action)
+		server.LogWarn(game.LogComponentApp, "Unknown web action: %s", msg.Action)
 	}
 }
 
 func (a *App) handleHello(clientID string, msg *protocol.Message) {
-	log.Printf("[App] HELLO from buzzer: %s", clientID)
+	a.logger.Info(game.LogComponentTCP, "HELLO from buzzer: %s", clientID)
 
 	// Parse payload
 	var payload map[string]interface{}
@@ -563,11 +597,11 @@ func (a *App) handleHello(clientID string, msg *protocol.Message) {
 func (a *App) handleButton(clientID string, msg *protocol.Message, timestamp int64) {
 	payload, err := msg.ParseButtonPayload()
 	if err != nil {
-		log.Printf("[App] Failed to parse button payload: %v", err)
+		server.LogError(game.LogComponentApp, "Failed to parse button payload: %v", err)
 		return
 	}
 
-	log.Printf("[App] BUTTON from %s: %s", clientID, payload.Button)
+	server.LogInfo(game.LogComponentTCP, "BUTTON from %s: %s", clientID, payload.Button)
 
 	// Process in engine
 	a.engine.ProcessButtonPress(clientID, timestamp, payload.Button)
@@ -584,12 +618,12 @@ func (a *App) handleSimulatedButton(msg *protocol.Message) {
 		Button string `json:"button"`
 	}
 	if err := json.Unmarshal(msg.Msg, &payload); err != nil {
-		log.Printf("[App] Failed to parse simulated button payload: %v", err)
+		server.LogError(game.LogComponentApp, "Failed to parse simulated button payload: %v", err)
 		return
 	}
 
 	if payload.ID == "" {
-		log.Printf("[App] Simulated BUTTON missing ID")
+		server.LogWarn(game.LogComponentApp, "Simulated BUTTON missing ID")
 		return
 	}
 
@@ -602,7 +636,7 @@ func (a *App) handleSimulatedButton(msg *protocol.Message) {
 	// Use current time as timestamp (microseconds)
 	timestamp := time.Now().UnixMicro()
 
-	log.Printf("[App] Simulated BUTTON from %s: %s (time: %d)", payload.ID, button, timestamp)
+	server.LogInfo(game.LogComponentEngine, "Simulated BUTTON from %s: %s (time: %d)", payload.ID, button, timestamp)
 
 	// Process in engine (same as real button press)
 	a.engine.ProcessButtonPress(payload.ID, timestamp, button)
@@ -624,7 +658,7 @@ func (a *App) handlePong(clientID string, msg *protocol.Message) {
 		bumperID = payload.ID
 	}
 
-	log.Printf("[App] PONG from %s", bumperID)
+	server.LogInfo(game.LogComponentTCP, "PONG from %s", bumperID)
 
 	if a.engine.IsGamePrepare() {
 		a.engine.SetBumperReady(bumperID)
@@ -646,7 +680,7 @@ func (a *App) handleFullUpdate(msg *protocol.Message) {
 	}
 
 	if err := json.Unmarshal(msg.Msg, &data); err != nil {
-		log.Printf("[App] Failed to parse FULL update: %v", err)
+		server.LogError(game.LogComponentApp, "Failed to parse FULL update: %v", err)
 		return
 	}
 
@@ -668,12 +702,12 @@ func (a *App) handleUpdate(msg *protocol.Message) {
 func (a *App) handlePoints(msg *protocol.Message) {
 	var payload protocol.PointsPayload
 	if err := json.Unmarshal(msg.Msg, &payload); err != nil {
-		log.Printf("[App] Failed to parse POINTS: %v", err)
+		server.LogError(game.LogComponentApp, "Failed to parse POINTS: %v", err)
 		return
 	}
 
 	bumperScore, teamScore := a.engine.UpdateScore(payload.BumperID, payload.Points)
-	log.Printf("[App] Points: bumper=%s, +%d, bumperScore=%d, teamScore=%d",
+	server.LogInfo(game.LogComponentEngine, "Points: bumper=%s, +%d, bumperScore=%d, teamScore=%d",
 		payload.BumperID, payload.Points, bumperScore, teamScore)
 
 	a.broadcastUpdate()
@@ -682,7 +716,7 @@ func (a *App) handlePoints(msg *protocol.Message) {
 func (a *App) handleReady(msg *protocol.Message) {
 	var payload protocol.ReadyPayload
 	if err := json.Unmarshal(msg.Msg, &payload); err != nil {
-		log.Printf("[App] Failed to parse READY: %v", err)
+		a.logger.Error(game.LogComponentEngine, "Failed to parse READY: %v", err)
 		return
 	}
 
@@ -691,11 +725,12 @@ func (a *App) handleReady(msg *protocol.Message) {
 	if payload.Question != "" {
 		question = a.loadQuestion(payload.Question)
 		if question == nil {
-			log.Printf("[App] Question not found: %s", payload.Question)
+			a.logger.Warn(game.LogComponentEngine, "Question not found: %s", payload.Question)
 			return
 		}
 	}
 
+	a.logger.Info(game.LogComponentEngine, "READY question=%s", payload.Question)
 	a.engine.Ready(payload.Question, question)
 
 	// Broadcast state update to web clients
@@ -715,13 +750,13 @@ func (a *App) loadQuestion(id string) *game.Question {
 	questionFile := filepath.Join(questionsDir, id, "question.json")
 	data, err := os.ReadFile(questionFile)
 	if err != nil {
-		log.Printf("[App] Failed to read question file %s: %v", questionFile, err)
+		server.LogError(game.LogComponentApp, "Failed to read question file %s: %v", questionFile, err)
 		return nil
 	}
 
 	var q game.Question
 	if err := json.Unmarshal(data, &q); err != nil {
-		log.Printf("[App] Failed to parse question JSON: %v", err)
+		server.LogError(game.LogComponentApp, "Failed to parse question JSON: %v", err)
 		return nil
 	}
 
@@ -747,6 +782,7 @@ func (a *App) handleStart(msg *protocol.Message) {
 		payload.Delay = a.config.Game.DefaultDelay
 	}
 
+	a.logger.Info(game.LogComponentEngine, "START game with delay=%ds", payload.Delay)
 	a.engine.Start(payload.Delay)
 	a.broadcastStart()
 }
@@ -764,13 +800,13 @@ func (a *App) handleRemote(msg *protocol.Message) {
 func (a *App) handleDelete(msg *protocol.Message) {
 	var payload protocol.DeletePayload
 	if err := json.Unmarshal(msg.Msg, &payload); err != nil {
-		log.Printf("[App] Failed to parse DELETE: %v", err)
+		server.LogError(game.LogComponentApp, "Failed to parse DELETE: %v", err)
 		return
 	}
 
 	// Validate ID (must be numeric like ESP32)
 	if payload.ID == "" {
-		log.Printf("[App] DELETE: empty ID")
+		server.LogWarn(game.LogComponentApp, "DELETE: empty ID")
 		return
 	}
 
@@ -781,17 +817,17 @@ func (a *App) handleDelete(msg *protocol.Message) {
 	}
 	questionPath := filepath.Join(questionsDir, payload.ID)
 
-	log.Printf("[App] DELETE: Attempting to delete path: %s", questionPath)
+	server.LogInfo(game.LogComponentApp, "DELETE question: path=%s", questionPath)
 
 	// Check if path exists before deleting
 	if _, err := os.Stat(questionPath); os.IsNotExist(err) {
-		log.Printf("[App] DELETE: Path does not exist: %s", questionPath)
+		server.LogWarn(game.LogComponentApp, "DELETE: Path does not exist: %s", questionPath)
 	}
 
 	if err := os.RemoveAll(questionPath); err != nil {
-		log.Printf("[App] Failed to delete question %s: %v", payload.ID, err)
+		server.LogError(game.LogComponentApp, "Failed to delete question %s: %v", payload.ID, err)
 	} else {
-		log.Printf("[App] Deleted question: %s (path: %s)", payload.ID, questionPath)
+		server.LogInfo(game.LogComponentApp, "Deleted question: %s (path: %s)", payload.ID, questionPath)
 	}
 
 	// Broadcast updated questions list (like ESP32: sendQuestions())
@@ -801,28 +837,28 @@ func (a *App) handleDelete(msg *protocol.Message) {
 func (a *App) handleDeleteBumper(msg *protocol.Message) {
 	var payload protocol.DeletePayload
 	if err := json.Unmarshal(msg.Msg, &payload); err != nil {
-		log.Printf("[App] Failed to parse DELETE_BUMPER: %v", err)
+		server.LogError(game.LogComponentApp, "Failed to parse DELETE_BUMPER: %v", err)
 		return
 	}
 
 	if payload.ID == "" {
-		log.Printf("[App] DELETE_BUMPER: empty ID")
+		server.LogWarn(game.LogComponentApp, "DELETE_BUMPER: empty ID")
 		return
 	}
 
-	log.Printf("[App] DELETE_BUMPER: Deleting bumper %s", payload.ID)
+	server.LogInfo(game.LogComponentApp, "DELETE_BUMPER: id=%s", payload.ID)
 
 	// Remove bumper from engine
 	bumpers := a.engine.GetTeamsAndBumpers().Bumpers
 	if _, exists := bumpers[payload.ID]; !exists {
-		log.Printf("[App] DELETE_BUMPER: Bumper %s not found", payload.ID)
+		server.LogWarn(game.LogComponentApp, "DELETE_BUMPER: Bumper %s not found", payload.ID)
 		return
 	}
 
 	delete(bumpers, payload.ID)
 	a.engine.SetBumpers(bumpers)
 
-	log.Printf("[App] Deleted bumper: %s", payload.ID)
+	server.LogInfo(game.LogComponentApp, "Deleted bumper: %s", payload.ID)
 
 	// Broadcast updated state
 	a.broadcastUpdate()
@@ -831,12 +867,12 @@ func (a *App) handleDeleteBumper(msg *protocol.Message) {
 func (a *App) handleReorderQuestions(msg *protocol.Message) {
 	var payload protocol.ReorderQuestionsPayload
 	if err := json.Unmarshal(msg.Msg, &payload); err != nil {
-		log.Printf("[App] Failed to parse REORDER_QUESTIONS: %v", err)
+		server.LogError(game.LogComponentApp, "Failed to parse REORDER_QUESTIONS: %v", err)
 		return
 	}
 
 	if len(payload.Order) == 0 {
-		log.Printf("[App] REORDER_QUESTIONS: empty order")
+		server.LogWarn(game.LogComponentApp, "REORDER_QUESTIONS: empty order")
 		return
 	}
 
@@ -852,13 +888,13 @@ func (a *App) handleReorderQuestions(msg *protocol.Message) {
 		// Read existing question
 		data, err := os.ReadFile(questionFile)
 		if err != nil {
-			log.Printf("[App] REORDER: Failed to read question %s: %v", questionID, err)
+			server.LogError(game.LogComponentApp, "REORDER: Failed to read question %s: %v", questionID, err)
 			continue
 		}
 
 		var question map[string]interface{}
 		if err := json.Unmarshal(data, &question); err != nil {
-			log.Printf("[App] REORDER: Failed to parse question %s: %v", questionID, err)
+			server.LogError(game.LogComponentApp, "REORDER: Failed to parse question %s: %v", questionID, err)
 			continue
 		}
 
@@ -868,17 +904,17 @@ func (a *App) handleReorderQuestions(msg *protocol.Message) {
 		// Write back
 		newData, err := json.MarshalIndent(question, "", "  ")
 		if err != nil {
-			log.Printf("[App] REORDER: Failed to marshal question %s: %v", questionID, err)
+			server.LogError(game.LogComponentApp, "REORDER: Failed to marshal question %s: %v", questionID, err)
 			continue
 		}
 
 		if err := os.WriteFile(questionFile, newData, 0644); err != nil {
-			log.Printf("[App] REORDER: Failed to write question %s: %v", questionID, err)
+			server.LogError(game.LogComponentApp, "REORDER: Failed to write question %s: %v", questionID, err)
 			continue
 		}
 	}
 
-	log.Printf("[App] Reordered %d questions", len(payload.Order))
+	server.LogInfo(game.LogComponentApp, "Reordered %d questions", len(payload.Order))
 
 	// Broadcast updated questions list
 	a.broadcastQuestions()
@@ -887,7 +923,7 @@ func (a *App) handleReorderQuestions(msg *protocol.Message) {
 
 
 func (a *App) handleForceReady() {
-	log.Printf("[App] FORCE_READY requested (debug)")
+	server.LogInfo(game.LogComponentEngine, "FORCE_READY requested (debug)")
 	a.engine.ForceReady()
 	a.broadcastReady()
 	a.broadcastUpdate()
@@ -896,16 +932,16 @@ func (a *App) handleForceReady() {
 func (a *App) handleFlipMemoryCard(msg *protocol.Message) {
 	var payload protocol.FlipMemoryCardPayload
 	if err := json.Unmarshal(msg.Msg, &payload); err != nil {
-		log.Printf("[App] Failed to parse FLIP_MEMORY_CARD: %v", err)
+		server.LogError(game.LogComponentApp, "Failed to parse FLIP_MEMORY_CARD: %v", err)
 		return
 	}
 
 	if payload.CardID == "" {
-		log.Printf("[App] FLIP_MEMORY_CARD: empty card ID")
+		server.LogWarn(game.LogComponentApp, "FLIP_MEMORY_CARD: empty card ID")
 		return
 	}
 
-	log.Printf("[App] FLIP_MEMORY_CARD: cardID=%s", payload.CardID)
+	server.LogInfo(game.LogComponentEngine, "FLIP_MEMORY_CARD: cardID=%s", payload.CardID)
 
 	// Process the flip with game logic
 	isMatch, shouldFlipBack, flipDelay, isComplete := a.engine.FlipMemoryCard(payload.CardID)
@@ -918,18 +954,18 @@ func (a *App) handleFlipMemoryCard(msg *protocol.Message) {
 		go func() {
 			time.Sleep(time.Duration(flipDelay) * time.Millisecond)
 			a.engine.ClearMemoryFlippedCards()
-			log.Printf("[App] Memory auto-flip-back after %dms", flipDelay)
+			server.LogInfo(game.LogComponentEngine, "Memory auto-flip-back after %dms", flipDelay)
 			a.broadcastUpdate()
 		}()
 	}
 
 	if isMatch {
-		log.Printf("[App] Memory MATCH found!")
+		server.LogInfo(game.LogComponentEngine, "Memory MATCH found!")
 	}
 
 	// If all pairs matched, automatically stop the game
 	if isComplete {
-		log.Printf("[App] Memory game COMPLETE! All pairs matched.")
+		server.LogInfo(game.LogComponentEngine, "Memory game COMPLETE! All pairs matched.")
 		a.engine.Stop()
 		a.broadcastUpdate()
 	}
@@ -938,12 +974,12 @@ func (a *App) handleFlipMemoryCard(msg *protocol.Message) {
 func (a *App) handleBumperPoints(msg *protocol.Message) {
 	var payload protocol.BumperPointsPayload
 	if err := json.Unmarshal(msg.Msg, &payload); err != nil {
-		log.Printf("[App] Failed to parse BUMPER_POINTS: %v", err)
+		server.LogError(game.LogComponentApp, "Failed to parse BUMPER_POINTS: %v", err)
 		return
 	}
 
 	newScore := a.engine.UpdateBumperScore(payload.ID, payload.Points)
-	log.Printf("[App] Bumper points: id=%s, points=%+d, newScore=%d",
+	server.LogInfo(game.LogComponentEngine, "Bumper points: id=%s, points=%+d, newScore=%d",
 		payload.ID, payload.Points, newScore)
 
 	// Record event to history
@@ -995,12 +1031,12 @@ func (a *App) handleBumperPoints(msg *protocol.Message) {
 func (a *App) handleTeamPoints(msg *protocol.Message) {
 	var payload protocol.TeamPointsPayload
 	if err := json.Unmarshal(msg.Msg, &payload); err != nil {
-		log.Printf("[App] Failed to parse TEAM_POINTS: %v", err)
+		server.LogError(game.LogComponentApp, "Failed to parse TEAM_POINTS: %v", err)
 		return
 	}
 
 	newScore := a.engine.UpdateTeamScore(payload.Team, payload.Points)
-	log.Printf("[App] Team points: team=%s, points=%+d, newScore=%d",
+	server.LogInfo(game.LogComponentEngine, "Team points: team=%s, points=%+d, newScore=%d",
 		payload.Team, payload.Points, newScore)
 
 	// Record event to history
@@ -1038,7 +1074,7 @@ func (a *App) handleTeamPoints(msg *protocol.Message) {
 func (a *App) handleSetClientType(clientID string, msg *protocol.Message) {
 	var payload protocol.SetClientTypePayload
 	if err := json.Unmarshal(msg.Msg, &payload); err != nil {
-		log.Printf("[App] Failed to parse SET_CLIENT_TYPE: %v", err)
+		server.LogError(game.LogComponentApp, "Failed to parse SET_CLIENT_TYPE: %v", err)
 		return
 	}
 
@@ -1068,7 +1104,7 @@ func (a *App) handleShowQRCode() {
 
 	a.engine.StartEnrollment(limit)
 	a.engine.SetPhase(game.PhaseEnroll)
-	log.Printf("[App] Entering ENROLL phase - QR code displayed, limit: %d", limit)
+	server.LogInfo(game.LogComponentApp, "Entering ENROLL phase - QR code displayed, limit: %d", limit)
 	a.broadcastUpdate()
 	a.broadcastEnrollmentUpdate()
 }
@@ -1076,7 +1112,7 @@ func (a *App) handleShowQRCode() {
 func (a *App) handleHideQRCode() {
 	a.engine.StopEnrollment()
 	a.engine.SetPhase(game.PhaseStopped)
-	log.Printf("[App] Exiting ENROLL phase - %d virtual players enrolled", a.engine.GetVirtualPlayerCount())
+	server.LogInfo(game.LogComponentApp, "Exiting ENROLL phase - %d virtual players enrolled", a.engine.GetVirtualPlayerCount())
 	a.broadcastUpdate()
 	a.broadcastEnrollmentUpdate()
 }
@@ -1084,11 +1120,11 @@ func (a *App) handleHideQRCode() {
 func (a *App) handleSetVirtualPlayerLimit(msg *protocol.Message) {
 	var payload protocol.SetVirtualPlayerLimitPayload
 	if err := json.Unmarshal(msg.Msg, &payload); err != nil {
-		log.Printf("[App] Error parsing SET_VIRTUAL_PLAYER_LIMIT payload: %v", err)
+		server.LogError(game.LogComponentApp, "Error parsing SET_VIRTUAL_PLAYER_LIMIT payload: %v", err)
 		return
 	}
 	a.engine.SetVirtualPlayerLimit(payload.Limit)
-	log.Printf("[App] Virtual player limit set to: %d", payload.Limit)
+	server.LogInfo(game.LogComponentApp, "Virtual player limit set to: %d", payload.Limit)
 	a.broadcastUpdate()
 	a.broadcastEnrollmentUpdate()
 }
@@ -1096,14 +1132,14 @@ func (a *App) handleSetVirtualPlayerLimit(msg *protocol.Message) {
 func (a *App) handlePlayerConnect(clientID string, msg *protocol.Message) {
 	var payload protocol.PlayerConnectPayload
 	if err := json.Unmarshal(msg.Msg, &payload); err != nil {
-		log.Printf("[App] Error parsing PLAYER_CONNECT payload: %v", err)
+		server.LogError(game.LogComponentApp, "Error parsing PLAYER_CONNECT payload: %v", err)
 		return
 	}
 
 	// Validate name (trim whitespace and check length: 2-20 chars)
 	playerName := strings.TrimSpace(payload.Name)
 	if len(playerName) < 2 || len(playerName) > 20 {
-		log.Printf("[App] PLAYER_CONNECT: invalid name length (%d chars) from client %s", len(playerName), clientID)
+		server.LogWarn(game.LogComponentApp, "PLAYER_CONNECT: invalid name length (%d chars) from client %s", len(playerName), clientID)
 
 		// Send rejection to this client
 		rejectPayload := protocol.PlayerRejectedPayload{
@@ -1127,7 +1163,7 @@ func (a *App) handlePlayerConnect(clientID string, msg *protocol.Message) {
 
 	// If player exists, allow reconnection
 	if existingBumper != nil {
-		log.Printf("[App] PLAYER_CONNECT: reconnecting existing player: id=%s, name=%s", existingBumperID, existingBumper.Name)
+		server.LogInfo(game.LogComponentWebSocket, "PLAYER_CONNECT: reconnecting existing player: id=%s, name=%s", existingBumperID, existingBumper.Name)
 
 		// Send confirmation to this client
 		connectedPayload := protocol.PlayerConnectedPayload{
@@ -1159,7 +1195,7 @@ func (a *App) handlePlayerConnect(clientID string, msg *protocol.Message) {
 
 		// Send rejection via WebSocket
 		a.wsHub.SendToClient(clientID, rejectMsg)
-		log.Printf("[App] PLAYER_CONNECT: rejected player=%s, reason=%s", payload.Name, reason)
+		server.LogWarn(game.LogComponentWebSocket, "PLAYER_CONNECT: rejected player=%s, reason=%s", payload.Name, reason)
 		return
 	}
 
@@ -1171,7 +1207,7 @@ func (a *App) handlePlayerConnect(clientID string, msg *protocol.Message) {
 	}
 	connectedMsg, _ := protocol.NewMessage(protocol.ActionPlayerConnected, connectedPayload)
 	a.wsHub.SendToClient(clientID, connectedMsg)
-	log.Printf("[App] PLAYER_CONNECT: player connected: id=%s, name=%s", bumperID, bumper.Name)
+	server.LogInfo(game.LogComponentWebSocket, "PLAYER_CONNECT: player connected: id=%s, name=%s", bumperID, bumper.Name)
 
 	// Broadcast UPDATE to all clients (teams/bumpers updated)
 	a.broadcastUpdate()
@@ -1202,7 +1238,7 @@ func (a *App) broadcastHello() {
 
 func (a *App) broadcastUpdate() {
 	data := a.engine.GetGameJSON()
-	log.Printf("[App] Broadcasting UPDATE: %s", string(data)[:min(200, len(data))])
+	server.LogDebug(game.LogComponentApp, "Broadcasting UPDATE: %s", string(data)[:min(200, len(data))])
 	msg, _ := protocol.NewMessage(protocol.ActionUpdate, nil)
 	msg.Msg = data
 	msg.Version = a.config.Version
@@ -1218,7 +1254,7 @@ func (a *App) broadcastEnrollmentUpdate() {
 	}
 	msg, _ := protocol.NewMessage(protocol.ActionEnrollmentUpdate, payload)
 	a.wsHub.Broadcast(msg)
-	log.Printf("[App] Broadcasting ENROLLMENT_UPDATE: %d/%d players", state.VirtualPlayerCount, state.VirtualPlayerLimit)
+	server.LogDebug(game.LogComponentApp, "Broadcasting ENROLLMENT_UPDATE: %d/%d players", state.VirtualPlayerCount, state.VirtualPlayerLimit)
 }
 func (a *App) broadcastGameState(phase string) {
 	data := a.engine.GetGameJSON()
@@ -1257,7 +1293,7 @@ func (a *App) broadcastTimerUpdate(currentTime int) {
 
 func (a *App) broadcastCountdownUpdate(countdownTime int) {
 	data := a.engine.GetGameJSON()
-	log.Printf("[App] Broadcasting countdown: %d", countdownTime)
+	server.LogDebug(game.LogComponentApp, "Broadcasting countdown: %d", countdownTime)
 	a.broadcast(protocol.ActionUpdateTimer, data, true)
 }
 
@@ -1297,7 +1333,7 @@ func (a *App) broadcastClientCounts(adminCount, tvCount int) {
 	}
 	data, _ := json.Marshal(payload)
 	a.broadcast(protocol.ActionClients, data, false)
-	log.Printf("[App] Client counts: admin=%d, tv=%d", adminCount, tvCount)
+	server.LogDebug(game.LogComponentWebSocket, "Client counts: admin=%d, tv=%d", adminCount, tvCount)
 }
 
 func (a *App) broadcastBackgroundChange(index int) {
@@ -1306,7 +1342,7 @@ func (a *App) broadcastBackgroundChange(index int) {
 	}
 	data, _ := json.Marshal(payload)
 	a.broadcast(protocol.ActionBackgroundChange, data, false)
-	log.Printf("[App] Background change: index=%d", index)
+	server.LogDebug(game.LogComponentApp, "Background change: index=%d", index)
 }
 
 func (a *App) broadcastQCMHint(invalidatedColor string, remainingAnswers int) {
@@ -1316,7 +1352,7 @@ func (a *App) broadcastQCMHint(invalidatedColor string, remainingAnswers int) {
 	}
 	data, _ := json.Marshal(payload)
 	a.broadcast(protocol.ActionQCMHint, data, false)
-	log.Printf("[App] QCM hint: invalidated=%s, remaining=%d", invalidatedColor, remainingAnswers)
+	server.LogInfo(game.LogComponentEngine, "QCM hint: invalidated=%s, remaining=%d", invalidatedColor, remainingAnswers)
 
 	// Also broadcast full update so clients receive the updated QcmInvalidated state
 	a.broadcastUpdate()
@@ -1329,7 +1365,7 @@ func (a *App) broadcastShowQRCode() {
 	}
 	data, _ := json.Marshal(payload)
 	a.broadcast(protocol.ActionShowQRCode, data, false)
-	log.Println("[App] QR Code enrollment activated")
+	server.LogInfo(game.LogComponentApp, "QR Code enrollment activated")
 }
 
 func (a *App) broadcastHideQRCode() {
@@ -1339,7 +1375,7 @@ func (a *App) broadcastHideQRCode() {
 	}
 	data, _ := json.Marshal(payload)
 	a.broadcast(protocol.ActionHideQRCode, data, false)
-	log.Println("[App] QR Code enrollment deactivated")
+	server.LogInfo(game.LogComponentApp, "QR Code enrollment deactivated")
 }
 
 func (a *App) broadcastQuestions() {
@@ -1371,7 +1407,7 @@ func (a *App) broadcastQuestions() {
 
 // sendStateToClient sends the full state to a specific client (used on HELLO)
 func (a *App) sendStateToClient(clientID string) {
-	log.Printf("[App] Sending state to client: %s", clientID)
+	server.LogDebug(game.LogComponentWebSocket, "Sending state to client: %s", clientID)
 
 	// Send UPDATE with game state
 	data := a.engine.GetGameJSON()
@@ -1461,7 +1497,7 @@ func (a *App) loadQuestions() map[string]map[string]interface{} {
 
 	entries, err := os.ReadDir(questionsDir)
 	if err != nil {
-		log.Printf("[App] Failed to read questions directory: %v", err)
+		server.LogError(game.LogComponentApp, "Failed to read questions directory: %v", err)
 		return questions
 	}
 
@@ -1642,13 +1678,13 @@ func openBrowser(url string) {
 	}
 
 	if err := cmd.Start(); err != nil {
-		log.Printf("Failed to open browser: %v", err)
+		server.LogWarn(game.LogComponentApp, "Failed to open browser: %v", err)
 	}
 }
 
 // initTestData creates test teams and bumpers for development
 func (a *App) initTestData() {
-	log.Println("[App] Initializing test data...")
+	server.LogInfo(game.LogComponentApp, "Initializing test data...")
 
 	// 6 teams with different colors (scores will be calculated from bumpers)
 	teams := map[string]*game.Team{
@@ -1777,7 +1813,7 @@ func (a *App) initTestData() {
 	// Create test questions with different categories
 	a.createTestQuestions()
 
-	log.Printf("[App] Test data initialized: %d teams, %d bumpers", len(teams), len(bumpers))
+	server.LogInfo(game.LogComponentApp, "Test data initialized: %d teams, %d bumpers", len(teams), len(bumpers))
 }
 
 // createTestQuestions creates test questions with various categories
@@ -1793,11 +1829,11 @@ func (a *App) createTestQuestions() {
 	// Check if questions already exist
 	entries, _ := os.ReadDir(questionsDir)
 	if len(entries) > 0 {
-		log.Printf("[App] Questions already exist (%d), skipping test questions", len(entries))
+		server.LogInfo(game.LogComponentApp, "Questions already exist (%d), skipping test questions", len(entries))
 		return
 	}
 
-	log.Println("[App] Creating test questions with categories...")
+	server.LogInfo(game.LogComponentApp, "Creating test questions with categories...")
 
 	testQuestions := []map[string]interface{}{
 		// GEOGRAPHY
@@ -1933,23 +1969,23 @@ func (a *App) createTestQuestions() {
 
 		data, err := json.MarshalIndent(q, "", "  ")
 		if err != nil {
-			log.Printf("[App] Failed to marshal question %s: %v", id, err)
+			server.LogError(game.LogComponentApp, "Failed to marshal question %s: %v", id, err)
 			continue
 		}
 
 		questionFile := filepath.Join(questionDir, "question.json")
 		if err := os.WriteFile(questionFile, data, 0644); err != nil {
-			log.Printf("[App] Failed to write question %s: %v", id, err)
+			server.LogError(game.LogComponentApp, "Failed to write question %s: %v", id, err)
 			continue
 		}
 	}
 
-	log.Printf("[App] Created %d test questions", len(testQuestions))
+	server.LogInfo(game.LogComponentApp, "Created %d test questions", len(testQuestions))
 }
 
 // loadDemoData creates comprehensive demo data for showcasing all features
 func (a *App) loadDemoData() {
-	log.Println("[App] Loading demo data...")
+	server.LogInfo(game.LogComponentApp, "Loading demo data...")
 
 	// Clear existing data first
 	a.engine.ClearHistory()
@@ -2041,7 +2077,7 @@ func (a *App) loadDemoData() {
 	// Create demo history events for PALMARES
 	a.createDemoHistory()
 
-	log.Printf("[App] Demo data loaded: %d teams, %d players", len(teams), len(bumpers))
+	server.LogInfo(game.LogComponentApp, "Demo data loaded: %d teams, %d players", len(teams), len(bumpers))
 }
 
 // createDemoQuestions creates diverse demo questions
@@ -2294,13 +2330,13 @@ func (a *App) createDemoQuestions() {
 
 		data, err := json.MarshalIndent(q, "", "  ")
 		if err != nil {
-			log.Printf("[App] Failed to marshal demo question %s: %v", id, err)
+			server.LogError(game.LogComponentApp, "Failed to marshal demo question %s: %v", id, err)
 			continue
 		}
 
 		questionFile := filepath.Join(questionDir, "question.json")
 		if err := os.WriteFile(questionFile, data, 0644); err != nil {
-			log.Printf("[App] Failed to write demo question %s: %v", id, err)
+			server.LogError(game.LogComponentApp, "Failed to write demo question %s: %v", id, err)
 			continue
 		}
 	}
@@ -2324,17 +2360,17 @@ func (a *App) createDemoQuestions() {
 
 		data, err := assets.DemoAssets.ReadFile("demo/" + img.assetName)
 		if err != nil {
-			log.Printf("[App] Failed to read embedded %s: %v", img.assetName, err)
+			server.LogError(game.LogComponentApp, "Failed to read embedded %s: %v", img.assetName, err)
 			continue
 		}
 		if err := os.WriteFile(destPath, data, 0644); err != nil {
-			log.Printf("[App] Failed to write %s: %v", destPath, err)
+			server.LogError(game.LogComponentApp, "Failed to write %s: %v", destPath, err)
 			continue
 		}
-		log.Printf("[App] Extracted demo image: %s -> %s", img.assetName, destPath)
+		server.LogDebug(game.LogComponentApp, "Extracted demo image: %s -> %s", img.assetName, destPath)
 	}
 
-	log.Printf("[App] Created %d demo questions with images", len(demoQuestions))
+	server.LogInfo(game.LogComponentApp, "Created %d demo questions with images", len(demoQuestions))
 }
 
 // createDemoBackgrounds creates demo backgrounds with varied opacities
@@ -2362,14 +2398,14 @@ func (a *App) createDemoBackgrounds() {
 		destPath := filepath.Join(bgDir, img.filename)
 		// Extract from embedded assets if not exists
 		if _, err := os.Stat(destPath); os.IsNotExist(err) {
-			log.Printf("[App] Extracting demo background: %s", img.filename)
+			server.LogDebug(game.LogComponentApp, "Extracting demo background: %s", img.filename)
 			data, err := assets.DemoAssets.ReadFile("demo/" + img.filename)
 			if err != nil {
-				log.Printf("[App] Failed to read embedded %s: %v", img.filename, err)
+				server.LogError(game.LogComponentApp, "Failed to read embedded %s: %v", img.filename, err)
 				continue
 			}
 			if err := os.WriteFile(destPath, data, 0644); err != nil {
-				log.Printf("[App] Failed to write %s: %v", img.filename, err)
+				server.LogError(game.LogComponentApp, "Failed to write %s: %v", img.filename, err)
 				continue
 			}
 		}
@@ -2382,7 +2418,7 @@ func (a *App) createDemoBackgrounds() {
 
 	a.engine.SetBackgrounds(backgrounds)
 	a.saveBackgroundsConfig()
-	log.Printf("[App] Created %d demo backgrounds", len(backgrounds))
+	server.LogInfo(game.LogComponentApp, "Created %d demo backgrounds", len(backgrounds))
 }
 
 // createDemoHistory creates demo history events for PALMARES view
@@ -2523,7 +2559,7 @@ func (a *App) createDemoHistory() {
 		a.engine.AddGameEvent(event)
 	}
 
-	log.Printf("[App] Created %d demo history events", len(events))
+	server.LogInfo(game.LogComponentApp, "Created %d demo history events", len(events))
 }
 
 // checkBonjourSupport checks if Bonjour/mDNS is available on the system
