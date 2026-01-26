@@ -236,9 +236,11 @@ func TestE2E_WebSocketClient(t *testing.T) {
 
 	engine := game.NewEngine()
 	wsHub := NewWebSocketHub()
-	httpServer := NewHTTPServer(0, engine, wsHub)
+	logsHub := NewLogsWebSocketHub(100)
+	httpServer := NewHTTPServer(0, engine, wsHub, logsHub)
 
 	go wsHub.Run()
+	go logsHub.Run()
 	httpServer.setupRoutes()
 
 	// Create test server
@@ -389,9 +391,11 @@ func TestE2E_HTTPWithEngine(t *testing.T) {
 
 	engine := game.NewEngine()
 	wsHub := NewWebSocketHub()
-	httpServer := NewHTTPServer(0, engine, wsHub)
+	logsHub := NewLogsWebSocketHub(100)
+	httpServer := NewHTTPServer(0, engine, wsHub, logsHub)
 
 	go wsHub.Run()
+	go logsHub.Run()
 	httpServer.setupRoutes()
 
 	// Add data to engine

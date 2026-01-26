@@ -35,8 +35,10 @@ func setupTestHTTPServer(t *testing.T) (*HTTPServer, string) {
 	engine := game.NewEngine()
 	wsHub := NewWebSocketHub()
 	go wsHub.Run()
+	logsHub := NewLogsWebSocketHub(100)
+	go logsHub.Run()
 
-	server := NewHTTPServer(8080, engine, wsHub)
+	server := NewHTTPServer(8080, engine, wsHub, logsHub)
 	server.SetWebDir(cfg.Storage.DataDir)
 	server.setupRoutes()
 

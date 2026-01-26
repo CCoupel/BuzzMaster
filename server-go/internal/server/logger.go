@@ -94,3 +94,36 @@ func (bl *BroadcastLogger) GetHistory() []game.LogEntry {
 func (bl *BroadcastLogger) GetRecent(n int) []game.LogEntry {
 	return bl.buffer.GetRecent(n)
 }
+
+// InitLogger creates a new BroadcastLogger (alias for NewBroadcastLogger)
+func InitLogger(capacity int) *BroadcastLogger {
+	return NewBroadcastLogger(capacity)
+}
+
+// Package-level logging functions for use without BroadcastLogger instance
+// These are simple wrappers around log.Printf for contexts where
+// the BroadcastLogger is not available (e.g., HTTP server startup)
+
+// LogDebug logs a debug message at package level
+func LogDebug(component game.LogComponent, format string, args ...interface{}) {
+	message := fmt.Sprintf(format, args...)
+	log.Printf("[%s][DEBUG] %s", component, message)
+}
+
+// LogInfo logs an info message at package level
+func LogInfo(component game.LogComponent, format string, args ...interface{}) {
+	message := fmt.Sprintf(format, args...)
+	log.Printf("[%s][INFO] %s", component, message)
+}
+
+// LogWarn logs a warning message at package level
+func LogWarn(component game.LogComponent, format string, args ...interface{}) {
+	message := fmt.Sprintf(format, args...)
+	log.Printf("[%s][WARN] %s", component, message)
+}
+
+// LogError logs an error message at package level
+func LogError(component game.LogComponent, format string, args ...interface{}) {
+	message := fmt.Sprintf(format, args...)
+	log.Printf("[%s][ERROR] %s", component, message)
+}
