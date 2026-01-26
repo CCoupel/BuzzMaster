@@ -92,7 +92,7 @@ Arrête et redéploie le serveur BuzzControl vers l'environnement cible.
    - Squash merge vers main
    - Tag annotée v<version>
    - Push tag
-   - Cleanup branche feature
+   - NE PAS supprimer la branche (garder l'historique)
 
 9. **Générer le rapport de redéploiement** avec :
    - Informations : Version, env, date, branche, commit
@@ -114,7 +114,7 @@ Arrête et redéploie le serveur BuzzControl vers l'environnement cible.
 | Sync package.json | Non | Non | Oui |
 | Squash merge main | Non | Non | Oui |
 | Tag Git | Non | Non | Oui |
-| Cleanup branche | Non | Non | Oui |
+| Conserver branche | - | - | Oui |
 
 **Workflow recommandé :**
 ```
