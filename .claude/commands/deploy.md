@@ -88,13 +88,20 @@ Arrête et redéploie le serveur BuzzControl vers l'environnement cible.
    - Commit: git commit -am "chore(version): Sync package.json to vX.Y.Z"
    - Push la branche feature
 
-8. **Git (PROD uniquement)**
+8. **Vérifier état Git avant merge (PROD uniquement - OBLIGATOIRE)**
+   - Exécuter `git status` pour vérifier qu'il n'y a pas de fichiers non commités
+   - Exécuter `git log origin/<branche>..<branche>` pour vérifier qu'il n'y a pas de commits non pushés
+   - **Si fichiers non commités** → STOP : Commiter et pusher d'abord
+   - **Si commits non pushés** → STOP : Pusher d'abord
+   - **Si tout est propre** → Continuer vers le merge
+
+9. **Git (PROD uniquement)**
    - Squash merge vers main
    - Tag annotée v<version>
    - Push tag
    - NE PAS supprimer la branche (garder l'historique)
 
-9. **Générer le rapport de redéploiement** avec :
+10. **Générer le rapport de redéploiement** avec :
    - Informations : Version, env, date, branche, commit
    - Arrêt : Résultat de l'arrêt du serveur précédent
    - Builds : Résultats + tailles binaires (Windows + ARM64 si applicable)
