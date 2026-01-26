@@ -74,6 +74,14 @@ git tag -a v<version> -m "Release v<version>\n\nFeatures:\n- ...\n\nBug fixes:\n
 git push origin v<version>
 ```
 
+**Monitor CI:**
+After pushing the tag, monitor the GitHub Actions CI execution:
+```bash
+gh run list --limit 5
+gh run watch <run-id>
+```
+Wait for CI to complete successfully before proceeding. If CI fails, investigate and fix before cleanup.
+
 **Cleanup:**
 ```bash
 git branch -d feature/<name>
