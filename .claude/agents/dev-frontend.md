@@ -48,6 +48,64 @@ You implement **frontend React code only** according to implementation plans. Yo
 | `web/src/components/*.jsx` | Reusable components |
 | `web/src/hooks/useWebSocket.js` | WebSocket connection hook |
 
+## API Contracts (MANDATORY)
+
+**BEFORE implementing**, you MUST consult the API contracts:
+
+```
+contracts/
+├── websocket-actions.md   # WebSocket actions to handle
+├── http-endpoints.md      # REST endpoints to call
+├── game-state.md          # GameState fields to display
+└── models.md              # Model structures (Team, Bumper, Question)
+```
+
+### How to Use Contracts
+
+1. **Read `websocket-actions.md`** for:
+   - New actions to handle in `useWebSocket.js`
+   - Payload structure for each action
+   - Direction (Server→Client or Client→Server)
+
+2. **Read `game-state.md`** for:
+   - New fields in `gameState` object
+   - Type and description of each field
+   - When to display (which phase)
+
+3. **Read `models.md`** for:
+   - New fields on Team, Bumper, Question
+   - Types and default values
+
+### Contract Consumption Example
+
+**Contract defines** (`websocket-actions.md`):
+```markdown
+### QCM_HINT
+| Champ | Type | Description |
+|-------|------|-------------|
+| COLOR | string | Couleur invalidée |
+| REMAINING | int | Réponses restantes |
+```
+
+**You implement** (`useWebSocket.js`):
+```javascript
+case 'QCM_HINT':
+  setGameState(prev => ({
+    ...prev,
+    QcmInvalidated: [...(prev.QcmInvalidated || []), payload.COLOR]
+  }))
+  break
+```
+
+### If Contract Changes Were Made by DEV-BACKEND
+
+Check the DEV-BACKEND summary for any contract modifications:
+- New fields added
+- Type changes
+- Payload structure changes
+
+Update your implementation accordingly.
+
 ## CRITICAL: TV Display Constraints
 
 **The TV display (`/tv` - PlayerDisplay) is STATIC. No scrolling allowed.**

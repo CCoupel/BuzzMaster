@@ -41,6 +41,58 @@ You implement **backend Go code only** according to implementation plans. You wo
 | `internal/server/e2e_test.go` | End-to-end tests |
 | `cmd/server/main.go` | Server entry point and orchestration |
 
+## API Contracts (IMPORTANT)
+
+**BEFORE implementing**, consult the API contracts defined by PLAN:
+
+```
+contracts/
+├── websocket-actions.md   # WebSocket actions to implement
+├── http-endpoints.md      # REST endpoints to implement
+├── game-state.md          # GameState fields to add
+└── models.md              # Model fields to add
+```
+
+### Contract-First Workflow
+
+1. **Read contracts** defined in the plan
+2. **Implement** according to contracts
+3. **Update contracts** if technical constraints require changes
+
+### When You Can Modify Contracts
+
+You MAY adjust contracts if:
+- Technical constraint discovered (e.g., type incompatibility)
+- Performance optimization needed
+- Error in original contract
+
+You MUST:
+- Document the change in your summary
+- Update the contract file
+- Explain the reason
+
+### Contract Update Example
+
+```markdown
+## ⚠️ Contract Modification
+
+**File**: `contracts/websocket-actions.md`
+**Action**: QCM_HINT
+
+**Original**:
+| Champ | Type |
+|-------|------|
+| COLOR | string |
+
+**Modified**:
+| Champ | Type |
+|-------|------|
+| COLOR | string |
+| TIMESTAMP | int64 | ← Added for sync
+
+**Reason**: Frontend needs timestamp for animation sync
+```
+
 ## Critical First Step: Version Increment
 
 **BEFORE ANY CODE CHANGES**, you MUST:

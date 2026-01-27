@@ -218,6 +218,100 @@ Your plan MUST follow this exact structure:
 - **Dev procedures**: `docs/DEV_PROCEDURE.md`
 - **Existing models**: `server-go/internal/game/models.go`
 - **Game logic**: `server-go/internal/game/engine.go`
+- **API Contracts**: `contracts/*.md` (WebSocket, HTTP, models)
+
+## API Contracts (MANDATORY for new features)
+
+You MUST define API contracts BEFORE development begins. These contracts are the source of truth for backend and frontend communication.
+
+### Contract Files Location
+
+```
+contracts/
+├── websocket-actions.md   # WebSocket actions
+├── http-endpoints.md      # REST API endpoints
+├── game-state.md          # GameState structure
+└── models.md              # Shared models (Team, Bumper, Question)
+```
+
+### When to Update Contracts
+
+| Change Type | Action Required |
+|-------------|-----------------|
+| New WebSocket action | Add to `websocket-actions.md` |
+| New HTTP endpoint | Add to `http-endpoints.md` |
+| New GameState field | Add to `game-state.md` |
+| New/modified model | Add to `models.md` |
+
+### Contract Format for Plan
+
+In your implementation plan, include a **Contrats API** section:
+
+```markdown
+## 📡 Contrats API (nouveaux/modifiés)
+
+### Nouvelles actions WebSocket
+
+#### ACTION_NAME
+
+| Propriété | Valeur |
+|-----------|--------|
+| Direction | `Server→Client` |
+| Phase     | STARTED |
+| Trigger   | Description |
+
+**Payload** :
+
+| Champ | Type | Obligatoire | Description |
+|-------|------|-------------|-------------|
+| FIELD | string | ✅ | Description |
+
+**Exemple** :
+\`\`\`json
+{"ACTION": "ACTION_NAME", "MSG": {"FIELD": "value"}}
+\`\`\`
+
+---
+
+### Nouveaux champs GameState
+
+| Champ | Type | Description |
+|-------|------|-------------|
+| newField | string[] | Description |
+
+---
+
+### Nouveaux champs modèles
+
+**Bumper** :
+| Champ | Type | Description |
+|-------|------|-------------|
+| NEW_FIELD | int | Description |
+
+---
+
+### Fichiers contrats à mettre à jour
+
+- [ ] `contracts/websocket-actions.md` : Ajouter ACTION_NAME
+- [ ] `contracts/game-state.md` : Ajouter newField
+- [ ] `contracts/models.md` : Ajouter NEW_FIELD à Bumper
+```
+
+### Contract-First Workflow
+
+```
+PLAN (vous)           DEV-BACKEND           DEV-FRONTEND
+    │                      │                      │
+    │ 1. Définit contrats  │                      │
+    │─────────────────────►│                      │
+    │                      │ 2. Implémente        │
+    │                      │    (peut ajuster)    │
+    │                      │─────────────────────►│
+    │                      │                      │ 3. Consomme contrats
+    │                      │                      │
+```
+
+DEV-BACKEND peut ajuster les contrats si nécessaire (contrainte technique) mais doit documenter les changements.
 
 ## Output
 

@@ -53,9 +53,10 @@ Phase 0: ANALYSE
 Phase 1: PLANIFICATION
     │
     ├── Lancer `implementation-planner`
-    ├── Recevoir le plan structuré
+    ├── Recevoir le plan structuré + contrats API définis
     ├── Analyser les dépendances backend ↔ frontend
-    └── ⏸️ DEMANDER VALIDATION UTILISATEUR
+    ├── Vérifier que les contrats sont créés dans contracts/
+    └── ⏸️ DEMANDER VALIDATION UTILISATEUR (plan + contrats)
     │
     ▼
 Phase 2: DÉVELOPPEMENT
@@ -141,15 +142,67 @@ Les tests E2E utilisent **MCP claude-in-chrome** pour automatiser les interactio
 
 **Important** : `test-writer` définit les scénarios, `QA` les exécute via Chrome.
 
+## Contrats API (Contract-First)
+
+Le workflow utilise une approche **Contract-First** pour la communication backend/frontend.
+
+### Répertoire des contrats
+
+```
+contracts/
+├── websocket-actions.md   # Actions WebSocket
+├── http-endpoints.md      # Endpoints REST
+├── game-state.md          # Structure GameState
+└── models.md              # Modèles partagés
+```
+
+### Flux des contrats dans le workflow
+
+```
+PLAN (implementation-planner)
+    │
+    │ 1. Définit les nouveaux contrats
+    │    (nouvelles actions, endpoints, champs)
+    │
+    ▼
+DEV-BACKEND
+    │
+    │ 2. Implémente selon les contrats
+    │ 3. Peut MODIFIER les contrats si contrainte technique
+    │    → Doit documenter les changements
+    │
+    ▼
+DEV-FRONTEND
+    │
+    │ 4. CONSULTE les contrats (lecture seule)
+    │ 5. Implémente selon les contrats finaux
+    │
+    ▼
+REVIEW
+    │
+    │ 6. Vérifie la conformité code ↔ contrats
+```
+
+### Points de validation contrats
+
+| Phase | Action sur contrats |
+|-------|---------------------|
+| PLAN | Crée/définit les contrats |
+| DEV-BACKEND | Peut modifier (avec justification) |
+| DEV-FRONTEND | Consulte uniquement |
+| REVIEW | Vérifie conformité |
+
 ## Détection des Dépendances
 
 ### Dépendances Backend → Frontend (Séquentiel obligatoire)
 
-Le frontend DÉPEND du backend si le plan contient :
+Le frontend DÉPEND du backend si **les contrats contiennent** :
 - Nouvelles actions WebSocket (ex: `MEMORY_TURN`, `QCM_HINT`)
 - Nouveaux champs GameState (ex: `QcmInvalidated`, `HintsAtBuzz`)
 - Nouveaux endpoints HTTP (ex: `POST /load-demo`)
 - Modifications de modèles consommés par React
+
+**Important** : dev-backend peut modifier les contrats, donc dev-frontend doit attendre.
 
 ### Indépendant (Parallélisable)
 
@@ -158,6 +211,7 @@ Backend et frontend sont INDÉPENDANTS si :
 - Bug CSS uniquement
 - Bug logique backend uniquement
 - Tests unitaires isolés
+- **Aucun changement de contrat**
 
 ## Gestion des Cycles
 
@@ -282,6 +336,11 @@ Implémente le code backend Go pour BuzzControl.
 - Branche : feature/xxx
 - Version : 2.45.x
 
+**Contrats API** :
+- Consulter : contracts/websocket-actions.md
+- Consulter : contracts/game-state.md
+- Tu peux modifier les contrats si contrainte technique (documenter)
+
 **Plan backend** :
 1. Ajouter champ X dans models.go
 2. Implémenter méthode Y dans engine.go
@@ -290,7 +349,7 @@ Implémente le code backend Go pour BuzzControl.
 **Contraintes** :
 - Incrémenter z avant tout code
 - Commits atomiques
-- Documenter les nouvelles actions WebSocket
+- Mettre à jour contracts/ si modifications
 "
 ```
 
