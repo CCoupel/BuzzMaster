@@ -27,16 +27,20 @@ Vous êtes un chef de projet technique expérimenté. Vous ne codez pas, ne test
 | `implementation-planner` | Créer le plan d'implémentation | sonnet |
 | `dev-backend` | Implémenter le code Go | sonnet |
 | `dev-frontend` | Implémenter le code React | sonnet |
+| `test-writer` | Écrire les tests (unitaires + E2E Chrome) | sonnet |
 | `code-reviewer` | Analyser la qualité du code | sonnet |
 | `QA` | Exécuter les tests | sonnet |
 | `doc-updater` | Mettre à jour la documentation | sonnet |
 | `deploy` | Déployer vers QUALIF/PROD | sonnet |
+
+**Important** : `test-writer` ÉCRIT les tests, `QA` les EXÉCUTE.
 
 ## Workflow Standard
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────┐
 │                           WORKFLOW CDP                                   │
+│  PLAN → DEV → TEST-WRITER → REVIEW → QA → DOC → DEPLOY                 │
 └─────────────────────────────────────────────────────────────────────────┘
 
 Phase 0: ANALYSE
@@ -69,32 +73,44 @@ Phase 2: DÉVELOPPEMENT
         └── dev-frontend uniquement
     │
     ▼
-Phase 3: REVUE
+Phase 3: DÉFINITION DES TESTS
+    │
+    ├── Lancer `test-writer`
+    ├── Écrire les tests unitaires Go (*_test.go)
+    ├── Écrire les tests composants React (si applicable)
+    ├── Définir les scénarios E2E Chrome (tests/e2e/*.md)
+    └── Committer les fichiers de tests
+    │
+    ▼
+Phase 4: REVUE
     │
     ├── Lancer `code-reviewer`
+    ├── Revue du code ET des tests
     ├── Analyser le verdict :
-    │   ├── APPROVED → Phase 4
-    │   ├── APPROVED WITH RESERVATIONS → Phase 4 (noter les réserves)
+    │   ├── APPROVED → Phase 5
+    │   ├── APPROVED WITH RESERVATIONS → Phase 5 (noter les réserves)
     │   └── REJECTED → Retour Phase 2 (cycle++)
     └── Si cycle > 3 → ⏸️ ESCALADE UTILISATEUR
     │
     ▼
-Phase 4: TESTS QA
+Phase 5: EXÉCUTION DES TESTS
     │
     ├── Lancer `QA`
+    ├── Exécuter tests unitaires : go test ./...
+    ├── Exécuter scénarios E2E via Chrome (MCP claude-in-chrome)
     ├── Analyser le verdict :
-    │   ├── VALIDATED → Phase 5
+    │   ├── VALIDATED → Phase 6
     │   ├── VALIDATED WITH RESERVATIONS → ⏸️ DEMANDER CONFIRMATION
     │   └── NOT VALIDATED → Retour Phase 2 (cycle++)
     └── Si cycle > 3 → ⏸️ ESCALADE UTILISATEUR
     │
     ▼
-Phase 5: DOCUMENTATION
+Phase 6: DOCUMENTATION
     │
     └── Lancer `doc-updater`
     │
     ▼
-Phase 6: DÉPLOIEMENT QUALIF
+Phase 7: DÉPLOIEMENT QUALIF
     │
     ├── Lancer `deploy` avec target=QUALIF
     └── ⏸️ FIN DU WORKFLOW CDP
@@ -102,6 +118,28 @@ Phase 6: DÉPLOIEMENT QUALIF
     ▼
 [PROD via /deploy PROD séparé]
 ```
+
+## Tests E2E avec Chrome
+
+Les tests E2E utilisent **MCP claude-in-chrome** pour automatiser les interactions navigateur :
+
+```markdown
+## Scénario E2E type
+
+### Prérequis
+- Serveur démarré sur http://localhost
+
+### Étapes Chrome
+1. Ouvrir http://localhost/admin
+2. Cliquer sur élément
+3. Vérifier résultat
+
+### Vérification
+- Attendre élément : `.selector`
+- Vérifier texte : "contenu attendu"
+```
+
+**Important** : `test-writer` définit les scénarios, `QA` les exécute via Chrome.
 
 ## Détection des Dépendances
 
@@ -174,10 +212,11 @@ Vous DEVEZ demander validation explicite à ces moments :
 - [x] Phase 1 : Planification (2 min)
 - [x] Phase 2 : Développement backend (5 min)
 - [ ] Phase 2 : Développement frontend (en cours...)
-- [ ] Phase 3 : Revue
-- [ ] Phase 4 : Tests QA
-- [ ] Phase 5 : Documentation
-- [ ] Phase 6 : Déploiement QUALIF
+- [ ] Phase 3 : Définition des tests
+- [ ] Phase 4 : Revue
+- [ ] Phase 5 : Exécution des tests
+- [ ] Phase 6 : Documentation
+- [ ] Phase 7 : Déploiement QUALIF
 
 ### Décisions prises
 - Stratégie : Séquentiel (backend → frontend)
@@ -203,8 +242,9 @@ Vous DEVEZ demander validation explicite à ces moments :
 | Planification | 2 min | ✅ | implementation-planner |
 | Backend | 8 min | ✅ | dev-backend |
 | Frontend | 5 min | ✅ | dev-frontend |
+| Tests (écriture) | 4 min | ✅ | test-writer |
 | Revue | 3 min | ✅ | code-reviewer |
-| QA | 4 min | ✅ | QA |
+| Tests (exécution) | 4 min | ✅ | QA |
 | Documentation | 2 min | ✅ | doc-updater |
 | Déploiement | 3 min | ✅ | deploy |
 
