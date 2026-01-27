@@ -1,204 +1,169 @@
 # Commande /feature - Workflow Feature Complet
 
-Orchestre le workflow complet de développement d'une feature via les sous-agents spécialisés.
+Orchestre le workflow complet de développement d'une feature via le **Chef De Projet (CDP)**.
 
 ## Argument reçu
 
 $ARGUMENTS
 
-## Workflow complet
+## Workflow orchestré par CDP
 
 ```
-[Git] → PLAN → DEV → QA → DOC → DEPLOY(QUALIF) → [FIN]
+CDP → [Backlog] → PLAN → DEV → REVIEW → QA → DOC → DEPLOY(QUALIF) → [FIN]
 ```
 
 **Note** : Le déploiement en PROD se fait via `/deploy PROD` après validation de la QUALIF.
 
 ## Instructions
 
-Cette commande orchestre le workflow jusqu'à la QUALIF. Elle lance les sous-agents dans l'ordre avec les points de validation utilisateur.
+Cette commande lance le sous-agent **CDP** qui orchestre automatiquement le workflow complet.
 
-### Phase 0 : Recherche backlog (AVANT tout)
+### Lancement du CDP
 
-**OBLIGATOIRE** : Avant de lancer le PLAN, rechercher dans le backlog une entrée correspondante.
-
-1. **Lire `backlog/README.md`** pour lister toutes les entrées
-2. **Chercher une correspondance** avec l'argument fourni (par nom, description, mots-clés)
-3. **Si correspondance trouvée** :
-   - Afficher le nom du fichier backlog trouvé et sa description
-   - **Demander confirmation** : "J'ai trouvé l'entrée `backlog/<nom>.md` : <description>. Est-ce bien la feature à implémenter ?"
-   - Si confirmé → Lire le fichier backlog complet et le passer au PLAN
-   - Si refusé → Demander clarification ou créer une nouvelle spécification
-4. **Si aucune correspondance** :
-   - Informer l'utilisateur qu'aucun backlog n'existe
-   - Proposer de créer une entrée backlog d'abord (`/backlog <description>`) ou continuer sans
-
-**⏸️ POINT DE VALIDATION : Attendre confirmation de l'entrée backlog**
-
-### Phase 0b : Préparation Git (via PLAN)
-
-L'agent PLAN s'occupe de la préparation Git :
-
-```bash
-git checkout main && git pull origin main
-git checkout -b feature/<nom-court>
-```
-
-Puis incrémente y dans `server-go/config.json` : `2.39.0` → `2.40.0`
-
-```bash
-git add server-go/config.json
-git commit -m "chore(version): Start v2.40.0 - <feature name>"
-git push -u origin feature/<nom-court>
-```
-
-### Phase 1 : Planification (PLAN)
-
-Lance le sous-agent **implementation-planner** via Task tool :
+Lance le sous-agent **cdp** via Task tool :
 
 ```
-subagent_type: "implementation-planner"
-description: "Créer plan d'implémentation"
-prompt: "Crée un plan d'implémentation détaillé pour BuzzControl.
+subagent_type: "cdp"
+description: "Orchestrer feature complète"
+prompt: voir ci-dessous
+```
+
+### Prompt à transmettre au CDP
+
+```
+Orchestre le workflow complet de développement d'une feature pour BuzzControl.
 
 **Contexte projet :**
-- Répertoire : C:\Users\cyril\Documents\VScode\buzzcontrol
-- Serveur Go : server-go/
-- Config version : server-go/config.json
-- Backlog : backlog/*.md
-
-**Demande utilisateur :** $ARGUMENTS
-
-**Actions :**
-1. Analyser le backlog ou la description
-2. Créer la branche feature/<nom-court>
-3. Incrémenter la version mineure (y) dans config.json
-4. Commit et push initial
-5. Produire le plan d'implémentation structuré
-
-**IMPORTANT :** Attendre validation utilisateur avant de passer à DEV."
-```
-
-**⏸️ POINT DE VALIDATION : Attendre que l'utilisateur valide le plan**
-
-### Phase 2 : Implémentation (DEV)
-
-Après validation du plan, lance le sous-agent **dev-feature-implementation** via Task tool :
-
-```
-subagent_type: "dev-feature-implementation"
-description: "Implémenter feature"
-prompt: "Implémente le code pour BuzzControl selon le plan validé.
-
-**Contexte projet :**
-- Répertoire : C:\Users\cyril\Documents\VScode\buzzcontrol
+- Répertoire : /home/user/BuzzMaster
 - Serveur Go : server-go/
 - Frontend React : server-go/web/src/
 - Config version : server-go/config.json
+- Backlog : backlog/*.md
+- Architecture : CLAUDE.md
 
-**Plan :** [Plan validé de la phase précédente]
+**Demande utilisateur :** $ARGUMENTS
 
-**Actions :**
-1. Incrémenter z dans config.json
-2. Implémenter Backend → Frontend → Tests
-3. Commits atomiques par tâche
-4. Push en fin de cycle"
+**Type de workflow :** FEATURE (nouvelle fonctionnalité)
+
+---
+
+## Phase 0 : Recherche Backlog
+
+1. Lire `backlog/README.md` pour lister les entrées
+2. Chercher une correspondance avec "$ARGUMENTS"
+3. Si trouvée : Demander confirmation à l'utilisateur
+4. Si confirmée : Utiliser le backlog pour le PLAN
+
+⏸️ VALIDATION : Confirmer l'entrée backlog
+
+---
+
+## Phase 1 : Planification
+
+1. Lancer l'agent `implementation-planner`
+2. Créer branche `feature/<nom-court>`
+3. Incrémenter version mineure (y) : 2.40.0 → 2.41.0
+4. Commit initial et push
+5. Produire le plan structuré
+
+⏸️ VALIDATION : L'utilisateur doit valider le plan
+
+---
+
+## Phase 2 : Développement
+
+Analyser le plan pour déterminer la stratégie :
+
+**Si dépendances backend → frontend :**
+1. Lancer `dev-backend` avec les tâches backend
+2. Attendre le résumé (nouvelles actions WS, champs GameState)
+3. Lancer `dev-frontend` avec les tâches frontend + résumé backend
+
+**Si indépendant :**
+1. Lancer `dev-backend` ET `dev-frontend` en parallèle
+
+**Si backend seul :**
+1. Lancer `dev-backend` uniquement
+
+**Si frontend seul :**
+1. Lancer `dev-frontend` uniquement
+
+---
+
+## Phase 3 : Revue de Code
+
+1. Lancer l'agent `code-reviewer`
+2. Analyser le verdict :
+   - APPROVED → Phase 4
+   - APPROVED WITH RESERVATIONS → Phase 4 (noter réserves)
+   - REJECTED → Retour Phase 2 avec corrections (cycle++)
+
+---
+
+## Phase 4 : Tests QA
+
+1. Lancer l'agent `QA`
+2. Analyser le verdict :
+   - VALIDATED → Phase 5
+   - VALIDATED WITH RESERVATIONS → ⏸️ Demander confirmation
+   - NOT VALIDATED → Retour Phase 2 avec erreurs (cycle++)
+
+Si cycle > 3 → ⏸️ ESCALADE utilisateur
+
+---
+
+## Phase 5 : Documentation
+
+1. Lancer l'agent `doc-updater`
+2. Type : feature
+3. Finaliser version (reset z à 0)
+
+---
+
+## Phase 6 : Déploiement QUALIF
+
+1. Lancer l'agent `deploy` avec target=QUALIF
+2. Build Windows + ARM64
+3. Créer archive QUALIF
+
+---
+
+## Fin du workflow
+
+Produire le rapport final avec :
+- Durée totale
+- Cycles effectués
+- Livrables produits
+- Prochaines étapes (valider QUALIF, puis /deploy PROD)
 ```
 
-### Phase 3 : Tests QA (QA)
+## Points de validation CDP
 
-Lance le sous-agent **QA** via Task tool :
+| Point | Qui décide | Options |
+|-------|------------|---------|
+| Backlog | Utilisateur | Confirmer / Refuser / Autre |
+| Plan | Utilisateur | Valider / Modifier / Refuser |
+| QA avec réserves | Utilisateur | Continuer / Corriger |
+| Escalade (3 cycles) | Utilisateur | Continuer / Abandonner |
 
-```
-subagent_type: "QA"
-description: "Exécuter tests QA"
-prompt: "Exécute la procédure de tests QA complète pour BuzzControl.
+## Gestion des erreurs par CDP
 
-**Contexte projet :**
-- Répertoire : C:\Users\cyril\Documents\VScode\buzzcontrol
-- Serveur Go : server-go/
+| Situation | Action CDP |
+|-----------|------------|
+| Backlog non trouvé | Proposer création ou continuer sans |
+| Plan refusé | Demander modifications |
+| Review rejetée | Retour DEV avec corrections |
+| QA échoue | Retour DEV avec erreurs |
+| Build échoue | Retour DEV avec erreur build |
+| 3 cycles atteints | Escalade utilisateur |
 
-**Actions :**
-1. Build de production
-2. Tests unitaires
-3. Tests E2E
-4. Rapport de qualité
+## Avantages du CDP
 
-**Si échecs :** Retour à DEV avec erreurs."
-```
-
-### Phase 4 : Documentation (DOC)
-
-Lance le sous-agent **doc-updater** via Task tool :
-
-```
-subagent_type: "doc-updater"
-description: "Mettre à jour documentation"
-prompt: "Mets à jour la documentation pour BuzzControl.
-
-**Contexte projet :**
-- Répertoire : C:\Users\cyril\Documents\VScode\buzzcontrol
-- Config version : server-go/config.json
-
-**Type :** feature
-
-**Actions :**
-1. CHANGELOG.md : Ajouter entrée version
-2. CLAUDE.md : Mettre à jour sections impactées
-3. ADMIN_GUIDE.md : Documenter fonctionnalités user-facing
-4. Finaliser version (reset z à 0)
-5. Commit et push"
-```
-
-### Phase 5 : Déploiement QUALIF (DEPLOY)
-
-Lance le sous-agent **deploy** via Task tool :
-
-```
-subagent_type: "deploy"
-description: "Déploiement QUALIF"
-prompt: "Déploie le serveur BuzzControl vers l'environnement QUALIF.
-
-**Contexte projet :**
-- Répertoire : C:\Users\cyril\Documents\VScode\buzzcontrol
-- Serveur Go : server-go/
-- Config version : server-go/config.json
-
-**Environnement :** QUALIF
-
-**Actions :**
-1. Build Windows + ARM64
-2. Tests post-build
-3. Créer archive QUALIF"
-```
-
-## Fin du workflow /feature
-
-**✅ Le workflow /feature s'arrête ici.**
-
-Pour continuer vers la production :
-1. **Valider la QUALIF** manuellement
-2. **Lancer** `/deploy PROD` pour le déploiement en production
-3. **Lancer** `/marketing` pour la communication (optionnel)
-
-## Gestion des erreurs
-
-| Situation | Action |
-|-----------|--------|
-| QA échoue | Retour à Phase 2 (DEV) avec tests en échec |
-| Build échoue | Retour à Phase 2 (DEV) pour correction |
-| Maximum 3 cycles DEV ↔ QA | Escalade vers utilisateur |
-
-## Points de validation obligatoires
-
-1. **Phase 0 (Backlog)** : L'utilisateur doit confirmer l'entrée backlog trouvée
-2. **Après PLAN** : L'utilisateur doit valider le plan avant implémentation
+- **Décision intelligente** : Parallélise ou séquence selon les dépendances
+- **Gestion des cycles** : Automatique jusqu'à 3 cycles
+- **Reporting** : Progression en temps réel
+- **Moins d'intervention** : Validation uniquement aux points clés
 
 ## Action immédiate
 
-Lance maintenant la **Phase 0 (Recherche backlog)** :
-
-1. Lire `backlog/README.md`
-2. Chercher une entrée correspondant à "$ARGUMENTS"
-3. Si trouvée → Afficher et demander confirmation
-4. Si confirmée → Passer à Phase 0b + Phase 1 (PLAN) avec le backlog
+Lance maintenant le sous-agent **CDP** avec le Task tool pour orchestrer cette feature.
