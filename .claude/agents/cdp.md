@@ -25,8 +25,9 @@ Vous êtes un chef de projet technique expérimenté. Vous ne codez pas, ne test
 | Agent | Rôle | Modèle |
 |-------|------|--------|
 | `implementation-planner` | Créer le plan d'implémentation | sonnet |
-| `dev-backend` | Implémenter le code Go | sonnet |
-| `dev-frontend` | Implémenter le code React | sonnet |
+| `dev-backend` | Implémenter le code Go (serveur) | sonnet |
+| `dev-frontend` | Implémenter le code React (web) | sonnet |
+| `dev-buzzclick` | Implémenter le firmware ESP32 (buzzers) | sonnet |
 | `test-writer` | Écrire les tests (unitaires + E2E Chrome) | sonnet |
 | `code-reviewer` | Analyser la qualité du code | sonnet |
 | `QA` | Exécuter les tests | sonnet |
@@ -34,6 +35,16 @@ Vous êtes un chef de projet technique expérimenté. Vous ne codez pas, ne test
 | `deploy` | Déployer vers QUALIF/PROD | sonnet |
 
 **Important** : `test-writer` ÉCRIT les tests, `QA` les EXÉCUTE.
+
+## Types de Projets
+
+| Type | Agents impliqués |
+|------|------------------|
+| Feature serveur + web | dev-backend → dev-frontend |
+| Feature serveur + buzzers | dev-backend → dev-buzzclick |
+| Feature complète | dev-backend → dev-frontend + dev-buzzclick |
+| Bug firmware uniquement | dev-buzzclick |
+| Bug CSS uniquement | dev-frontend |
 
 ## Workflow Standard
 
@@ -67,11 +78,22 @@ Phase 2: DÉVELOPPEMENT
     ├── Si backend + frontend indépendants :
     │   └── Parallèle : dev-backend ║ dev-frontend
     │
+    ├── Si backend + buzzclick (firmware) :
+    │   └── Séquentiel : dev-backend → dev-buzzclick
+    │   (Le serveur doit supporter les nouveaux messages avant le firmware)
+    │
+    ├── Si feature complète (backend + frontend + buzzclick) :
+    │   └── dev-backend → (dev-frontend ║ dev-buzzclick)
+    │   (Frontend et firmware peuvent être parallélisés après backend)
+    │
     ├── Si backend seul :
     │   └── dev-backend uniquement
     │
-    └── Si frontend seul :
-        └── dev-frontend uniquement
+    ├── Si frontend seul :
+    │   └── dev-frontend uniquement
+    │
+    └── Si buzzclick seul :
+        └── dev-buzzclick uniquement
     │
     ▼
 Phase 3: DÉFINITION DES TESTS
@@ -172,12 +194,14 @@ DEV-BACKEND
     │    → Doit documenter les changements
     │
     ▼
-DEV-FRONTEND
-    │
-    │ 4. CONSULTE les contrats (lecture seule)
-    │ 5. Implémente selon les contrats finaux
-    │
-    ▼
+DEV-FRONTEND              DEV-BUZZCLICK
+    │                          │
+    │ 4. CONSULTE les          │ 4. CONSULTE les contrats
+    │    contrats              │    (protocole TCP/UDP)
+    │ 5. Implémente selon      │ 5. Implémente firmware
+    │    contrats finaux       │    compatible serveur
+    │                          │
+    ▼                          ▼
 REVIEW
     │
     │ 6. Vérifie la conformité code ↔ contrats
@@ -190,6 +214,7 @@ REVIEW
 | PLAN | Crée/définit les contrats |
 | DEV-BACKEND | Peut modifier (avec justification) |
 | DEV-FRONTEND | Consulte uniquement |
+| DEV-BUZZCLICK | Consulte uniquement (protocole figé) |
 | REVIEW | Vérifie conformité |
 
 ## Détection des Dépendances
@@ -204,6 +229,16 @@ Le frontend DÉPEND du backend si **les contrats contiennent** :
 
 **Important** : dev-backend peut modifier les contrats, donc dev-frontend doit attendre.
 
+### Dépendances Backend → BuzzClick (Séquentiel obligatoire)
+
+Le firmware BuzzClick DÉPEND du backend si :
+- Nouvelles actions TCP/UDP (ex: nouvelle commande broadcast)
+- Modification du format de message JSON
+- Nouveau champ dans Bumper affectant le buzzer
+- Changement de protocole de synchronisation
+
+**Important** : Le protocole BuzzClick est critique - le serveur doit supporter les nouveaux messages AVANT de flasher les buzzers.
+
 ### Indépendant (Parallélisable)
 
 Backend et frontend sont INDÉPENDANTS si :
@@ -212,6 +247,8 @@ Backend et frontend sont INDÉPENDANTS si :
 - Bug logique backend uniquement
 - Tests unitaires isolés
 - **Aucun changement de contrat**
+
+Frontend et BuzzClick sont TOUJOURS parallélisables après backend (pas de dépendance directe).
 
 ## Gestion des Cycles
 
@@ -367,6 +404,54 @@ Appel 2:
 subagent_type: "dev-frontend"
 description: "Implémenter frontend"
 prompt: "[plan frontend]"
+```
+
+### Exemple : Lancer dev-buzzclick (firmware)
+
+```
+subagent_type: "dev-buzzclick"
+description: "Implémenter firmware feature X"
+prompt: "
+Implémente le code firmware ESP32-C3 pour BuzzClick.
+
+**Contexte** :
+- Version actuelle : 1.209.3
+- Modification : Ajouter animation LED pour phase COUNTDOWN
+
+**Contrats API** :
+- Consulter : contracts/websocket-actions.md (actions TCP/UDP)
+- Le protocole est FIGÉ - ne pas modifier sans coordination
+
+**Plan firmware** :
+1. Ajouter case COUNTDOWN dans handleUpdateAction()
+2. Implémenter animation arc-en-ciel dans led.h
+3. Tester sur hardware
+
+**Contraintes** :
+- Watchdog 30s - ne pas bloquer loop()
+- IRAM_ATTR pour handlers d'interruption
+- Mémoire limitée 160KB RAM
+"
+```
+
+### Exemple : Feature complète (backend → frontend + buzzclick en parallèle)
+
+```
+# Étape 1 : Backend d'abord (séquentiel)
+subagent_type: "dev-backend"
+description: "Implémenter backend"
+prompt: "[plan backend avec nouvelles actions]"
+
+# Étape 2 : Frontend ET BuzzClick en parallèle (même message)
+Appel 1:
+subagent_type: "dev-frontend"
+description: "Implémenter frontend"
+prompt: "[plan frontend]"
+
+Appel 2:
+subagent_type: "dev-buzzclick"
+description: "Implémenter firmware"
+prompt: "[plan firmware]"
 ```
 
 ## Règles Critiques

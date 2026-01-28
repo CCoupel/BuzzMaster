@@ -1,29 +1,57 @@
 # Contrats API - BuzzMaster
 
-Ce répertoire contient les **contrats d'interface** entre le backend (Go) et le frontend (React).
+Ce repertoire contient les **contrats d'interface** entre les differents composants du systeme.
+
+## Composants du Systeme
+
+```
+┌─────────────┐     WebSocket/HTTP     ┌─────────────┐
+│  Frontend   │◄──────────────────────►│   Server    │
+│   (React)   │                        │    (Go)     │
+└─────────────┘                        └──────┬──────┘
+                                              │
+                                       TCP/UDP│Broadcast
+                                              │
+                                       ┌──────▼──────┐
+                                       │  BuzzClick  │
+                                       │  (ESP32-C3) │
+                                       └─────────────┘
+```
 
 ## Principe "Contract First"
 
 ```
-PLAN (définit) → contracts/ → DEV-BACKEND (implémente/ajuste)
+PLAN (definit) → contracts/ → DEV-BACKEND (implemente/ajuste)
                      │
-                     └──────→ DEV-FRONTEND (consomme)
+                     ├──────→ DEV-FRONTEND (consomme - WebSocket/HTTP)
+                     │
+                     └──────→ DEV-BUZZCLICK (consomme - TCP/UDP)
 ```
 
-1. **PLAN** crée les contrats avant le développement
-2. **DEV-BACKEND** implémente et peut ajuster si nécessaire
-3. **DEV-FRONTEND** consulte les contrats pour implémenter
+1. **PLAN** cree les contrats avant le developpement
+2. **DEV-BACKEND** implemente et peut ajuster si necessaire
+3. **DEV-FRONTEND** consulte les contrats WebSocket/HTTP
+4. **DEV-BUZZCLICK** consulte les contrats TCP/UDP (protocole fige)
 
 ## Structure
 
 ```
 contracts/
 ├── README.md                    # Ce fichier
-├── websocket-actions.md         # Actions WebSocket (server ↔ client)
+├── websocket-actions.md         # Actions WebSocket (server ↔ web client)
 ├── http-endpoints.md            # Endpoints REST API
 ├── game-state.md                # Structure GameState
-└── models.md                    # Modèles partagés (Team, Bumper, Question)
+├── models.md                    # Modeles partages (Team, Bumper, Question)
+└── tcp-udp-protocol.md          # Protocole BuzzClick (server ↔ buzzer)
 ```
+
+## Contrats par Composant
+
+| Composant | Contrats a consulter |
+|-----------|----------------------|
+| **Frontend (React)** | websocket-actions.md, http-endpoints.md, game-state.md, models.md |
+| **BuzzClick (ESP32)** | tcp-udp-protocol.md, models.md (Bumper) |
+| **Backend (Go)** | Tous (reference) |
 
 ## Format des fichiers
 
@@ -127,10 +155,19 @@ L'agent `dev-backend` peut ajuster les contrats si :
 
 ### Consultation (DEV-FRONTEND)
 
-L'agent `dev-frontend` **doit** consulter les contrats avant d'implémenter :
+L'agent `dev-frontend` **doit** consulter les contrats avant d'implementer :
 1. Lire `websocket-actions.md` pour les handlers WebSocket
 2. Lire `http-endpoints.md` pour les appels API
-3. Lire `game-state.md` pour les champs à afficher
+3. Lire `game-state.md` pour les champs a afficher
+
+### Consultation (DEV-BUZZCLICK)
+
+L'agent `dev-buzzclick` **doit** consulter les contrats avant d'implementer :
+1. Lire `tcp-udp-protocol.md` pour le protocole de communication
+2. Lire `models.md` pour la structure Bumper
+
+**Important** : Le protocole TCP/UDP est **fige** pour la retrocompatibilite.
+Toute modification doit etre coordonnee avec `dev-backend`.
 
 ## Versioning
 
