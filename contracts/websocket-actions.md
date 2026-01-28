@@ -544,5 +544,198 @@ Mise à jour compteur inscriptions.
 
 | Champ | Type | Description |
 |-------|------|-------------|
-| COUNT | int | Nombre inscrits |
-| LIMIT | int | Limite max |
+| VIRTUAL_PLAYER_COUNT | int | Nombre inscrits |
+| VIRTUAL_PLAYER_LIMIT | int | Limite max |
+| ENROLLMENT_ACTIVE | bool | Inscriptions ouvertes |
+
+---
+
+## Actions Système
+
+### UPDATE_TIMER
+
+Broadcast périodique du timer.
+
+| Propriété | Valeur |
+|-----------|--------|
+| Direction | `Server→Client` |
+| Trigger   | Chaque seconde pendant STARTED |
+
+#### Payload
+
+Même structure que UPDATE (GAME, teams, bumpers).
+
+---
+
+### RESET
+
+Réinitialisation complète du serveur.
+
+| Propriété | Valeur |
+|-----------|--------|
+| Direction | `Client→Server` |
+
+#### Payload
+
+Aucun.
+
+---
+
+### REBOOT
+
+Redémarre le serveur.
+
+| Propriété | Valeur |
+|-----------|--------|
+| Direction | `Client→Server` |
+
+#### Payload
+
+Aucun.
+
+---
+
+### PING
+
+Vérification de connexion (buzzers).
+
+| Propriété | Valeur |
+|-----------|--------|
+| Direction | `Server→Client` |
+
+#### Payload
+
+Aucun.
+
+---
+
+### PONG
+
+Réponse au PING.
+
+| Propriété | Valeur |
+|-----------|--------|
+| Direction | `Client→Server` |
+
+#### Payload
+
+Aucun.
+
+---
+
+### FULL
+
+Mise à jour complète (équipes + joueurs).
+
+| Propriété | Valeur |
+|-----------|--------|
+| Direction | `Server→Client` |
+| Trigger   | Modification équipes/joueurs |
+
+#### Payload
+
+| Champ | Type | Description |
+|-------|------|-------------|
+| teams | object | Map complète des équipes |
+| bumpers | object | Map complète des joueurs |
+
+---
+
+### DELETE_BUMPER
+
+Supprime un joueur.
+
+| Propriété | Valeur |
+|-----------|--------|
+| Direction | `Client→Server` |
+
+#### Payload
+
+| Champ | Type | Description |
+|-------|------|-------------|
+| ID | string | MAC ou ID du joueur |
+
+---
+
+### FORCE_READY
+
+Force la transition PREPARE → READY (debug).
+
+| Propriété | Valeur |
+|-----------|--------|
+| Direction | `Client→Server` |
+| Phase     | PREPARE |
+
+#### Payload
+
+Aucun.
+
+---
+
+### PLAYER_ASSIGNED
+
+Notification d'assignation VPlayer.
+
+| Propriété | Valeur |
+|-----------|--------|
+| Direction | `Server→Client` |
+
+#### Payload
+
+| Champ | Type | Description |
+|-------|------|-------------|
+| ID | string | ID du joueur |
+| TEAM | string | Nom de l'équipe |
+| ANSWER_COLOR | string | Couleur assignée (RED/GREEN/YELLOW/BLUE) |
+
+---
+
+### BUTTON
+
+Simulation buzzer (Ctrl+clic admin).
+
+| Propriété | Valeur |
+|-----------|--------|
+| Direction | `Client→Server` |
+| Phase     | STARTED, PAUSED |
+
+#### Payload
+
+| Champ | Type | Description |
+|-------|------|-------------|
+| ID | string | MAC du bumper à simuler |
+| button | string | Bouton ("A", "B", "C", "D") |
+
+---
+
+### FLIP_MEMORY_CARD
+
+Retourne une carte Memory.
+
+| Propriété | Valeur |
+|-----------|--------|
+| Direction | `Client→Server` |
+| Phase     | STARTED |
+| Type      | MEMORY |
+
+#### Payload
+
+| Champ | Type | Description |
+|-------|------|-------------|
+| CARD_ID | string | ID de la carte (ex: "1-1", "2-2") |
+
+---
+
+### SET_VIRTUAL_PLAYER_LIMIT
+
+Définit la limite de VPlayers.
+
+| Propriété | Valeur |
+|-----------|--------|
+| Direction | `Client→Server` |
+
+#### Payload
+
+| Champ | Type | Description |
+|-------|------|-------------|
+| LIMIT | int | Nombre max de VPlayers |

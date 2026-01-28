@@ -133,7 +133,23 @@ Met à jour la configuration.
 
 ### GET /backup
 
-Télécharge une sauvegarde complète (TAR).
+Redirige vers /fs-backup (sauvegarde complète).
+
+---
+
+### GET /fs-backup
+
+Télécharge une sauvegarde complète du système de fichiers (TAR).
+
+| Propriété | Valeur |
+|-----------|--------|
+| Response  | application/x-tar |
+
+---
+
+### GET /game-backup
+
+Télécharge uniquement les données de jeu (config, pas les questions).
 
 | Propriété | Valeur |
 |-----------|--------|
@@ -242,7 +258,34 @@ Version du serveur.
 
 ### GET /listGame
 
-État actuel du jeu (JSON).
+État brut du jeu (JSON).
+
+#### Response 200
+
+Retourne l'état complet du jeu avec équipes et joueurs.
+
+```json
+{
+  "GAME": { /* GameState */ },
+  "teams": { /* Map des équipes */ },
+  "bumpers": { /* Map des joueurs */ }
+}
+```
+
+---
+
+### GET /listFiles
+
+Liste tous les fichiers média.
+
+#### Response 200
+
+```json
+{
+  "questions": ["1", "2", "3"],
+  "backgrounds": ["bg1.jpg", "bg2.jpg"]
+}
+```
 
 ---
 
@@ -326,3 +369,55 @@ Récupère l'image d'une question.
 ### GET /backgrounds/{filename}
 
 Récupère une image de fond.
+
+---
+
+## Captive Portal
+
+### GET /connecttest.txt
+
+Endpoint pour détection de captive portal Windows.
+
+#### Response 200
+
+```
+Microsoft Connect Test
+```
+
+---
+
+### GET /ncsi.txt
+
+Endpoint NCSI (Network Connectivity Status Indicator) Windows.
+
+#### Response 200
+
+```
+Microsoft NCSI
+```
+
+---
+
+## WebSocket
+
+### GET /ws
+
+WebSocket principal pour le jeu.
+
+| Propriété | Valeur |
+|-----------|--------|
+| Protocol  | WebSocket |
+| Usage     | Admin, TV, Buzzers web |
+
+---
+
+### GET /ws/logs
+
+WebSocket dédiée aux logs temps réel.
+
+| Propriété | Valeur |
+|-----------|--------|
+| Protocol  | WebSocket |
+| Usage     | Page Logs uniquement |
+
+Actions: `LOG_HISTORY`, `LOG_ENTRY`

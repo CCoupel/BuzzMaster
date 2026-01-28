@@ -12,20 +12,27 @@ interface GameState {
   PHASE: Phase
   DELAY: number              // Durée totale en secondes
   CURRENT_TIME: number       // Temps restant en secondes
-  PAGE: Page                 // Vue TV actuelle
+  COUNTDOWN_TIME?: number    // 3, 2, 1 countdown avant STARTED (Memory)
+  TIME?: number              // Timestamp serveur (microsecondes)
+  REMOTE?: Page              // Vue TV actuelle
   QUESTION: Question | null  // Question en cours
 
   // QCM
-  QcmInvalidated: string[]   // Couleurs invalidées ["RED", "YELLOW"]
+  QCM_INVALIDATED?: string[]   // Couleurs invalidées ["RED", "YELLOW"]
+
+  // Memory
+  MEMORY_FLIPPED_CARDS?: string[]  // IDs cartes retournées (max 2)
+  MEMORY_MATCHED_PAIRS?: number[]  // IDs paires trouvées
+  MEMORY_ERRORS?: number           // Nombre d'erreurs
 
   // Enrollment (VPlayers)
-  enrollmentActive: boolean
-  showQRCode: boolean
-  virtualPlayerCount: number
-  virtualPlayerLimit: number
+  ENROLLMENT_ACTIVE: boolean
+  SHOW_QR_CODE: boolean
+  VIRTUAL_PLAYER_COUNT: number
+  VIRTUAL_PLAYER_LIMIT: number
 
   // Background
-  currentBackgroundIndex: number
+  CURRENT_BACKGROUND_INDEX: number
   backgrounds: Background[]
 }
 ```
@@ -36,23 +43,24 @@ interface GameState {
 
 ```typescript
 type Phase =
-  | "STOP"      // Arrêté, en attente
+  | "STOPPED"   // Arrêté, en attente
   | "PREPARE"   // Question sélectionnée, attente buzzers
   | "READY"     // Tous buzzers prêts
   | "COUNTDOWN" // Décompte Memory
-  | "START"     // Timer en cours
-  | "PAUSE"     // En pause (joueur a buzzé)
+  | "STARTED"   // Timer en cours
+  | "PAUSED"    // En pause (joueur a buzzé)
   | "REVEALED"  // Réponse affichée
+  | "ENROLL"    // Inscriptions VPlayers ouvertes
 ```
 
 ### Transitions autorisées
 
 ```
-STOP ──(READY)──► PREPARE ──(All PONG)──► READY
-                                            │
-                                     (START)│
-                                            ▼
-              ◄──(STOP)── PAUSE ◄──(BUTTON)── START
+STOPPED ──(READY)──► PREPARE ──(All PONG)──► READY ──(START)──► COUNTDOWN ──(auto)──► STARTED
+                                               │                                         │
+                                               └──(START sans COUNTDOWN)─────────────────┘
+                                                                                         │
+              ◄──(STOP)── PAUSED ◄──(BUTTON)──────────────────────────────────────────┘
               │                               │
               │                        (Timer=0)
               ▼                               │
@@ -114,43 +122,58 @@ type QuestionStatus =
 
 ## Champs QCM spécifiques
 
+### Dans GameState
+
 | Champ | Type | Description |
 |-------|------|-------------|
-| `QcmInvalidated` | string[] | Couleurs éliminées par indices |
+| `QCM_INVALIDATED` | string[] | Couleurs éliminées par indices (broadcast temps réel) |
+
+### Dans Question
+
+| Champ | Type | Description |
+|-------|------|-------------|
 | `QCM_HINTS_ENABLED` | boolean | Indices actifs pour cette question |
-| `QCM_HINT_THRESHOLD_1` | float | % temps pour 1er indice (défaut: 0.25) |
-| `QCM_HINT_THRESHOLD_2` | float | % temps pour 2e indice (défaut: 0.125) |
-| `QCM_PENALTY_1` | float | Multiplicateur après 1 indice |
-| `QCM_PENALTY_2` | float | Multiplicateur après 2 indices |
+| `QCM_HINT_THRESHOLD_1` | float64 | % temps pour 1er indice (défaut: 0.25) |
+| `QCM_HINT_THRESHOLD_2` | float64 | % temps pour 2e indice (défaut: 0.125) |
+| `QCM_PENALTY_1` | float64 | Multiplicateur après 1 indice (défaut: 0.67) |
+| `QCM_PENALTY_2` | float64 | Multiplicateur après 2 indices (défaut: 0.33) |
 
 ---
 
 ## Champs Memory spécifiques
+
+### Dans GameState
+
+| Champ | Type | Description |
+|-------|------|-------------|
+| `MEMORY_FLIPPED_CARDS` | string[] | IDs des cartes retournées (max 2) |
+| `MEMORY_MATCHED_PAIRS` | number[] | IDs des paires trouvées (permanent) |
+| `MEMORY_ERRORS` | number | Nombre d'erreurs (tentatives ratées) |
+
+### Dans Question
 
 ```typescript
 interface MemoryPair {
   ID: number
   CARD1: MemoryCard
   CARD2: MemoryCard
-  matched: boolean
 }
 
 interface MemoryCard {
   TEXT?: string
   IMAGE?: string
   IS_IMAGE: boolean
-  revealed: boolean
 }
 
 interface MemoryConfig {
-  FLIP_DELAY: number       // Délai retournement (secondes)
-  REVEAL_DELAY: number     // Délai entre révélations
-  POINTS_PER_PAIR: number
-  ERROR_PENALTY: number
-  COMPLETION_BONUS: number
-  USE_TIMER: boolean
-  MEMORIZE_TIME: number
-  SHOW_DURING_MEMORIZE: boolean
+  FLIP_DELAY: number           // Délai retournement si non-match (secondes, défaut: 3)
+  REVEAL_DELAY: number         // Délai entre révélations finales (secondes, défaut: 0.5)
+  POINTS_PER_PAIR: number      // Points par paire (défaut: 10)
+  ERROR_PENALTY: number        // Pénalité par erreur (défaut: 0)
+  COMPLETION_BONUS: number     // Bonus si tout trouvé (défaut: 0)
+  USE_TIMER: boolean           // Timer global activé (défaut: true)
+  MEMORIZE_TIME: number        // Durée mémorisation (secondes, défaut: 5)
+  SHOW_DURING_MEMORIZE: boolean // Afficher pendant mémorisation (défaut: true)
 }
 ```
 
@@ -188,17 +211,18 @@ interface Background {
 
 ```json
 {
-  "PHASE": "START",
+  "PHASE": "STARTED",
   "DELAY": 30,
   "CURRENT_TIME": 22,
-  "PAGE": "GAME",
+  "TIME": 1706380823456789,
+  "REMOTE": "GAME",
   "QUESTION": {
     "ID": "5",
     "QUESTION": "Quelle est la capitale de la France ?",
     "ANSWER": "Paris",
     "TYPE": "QCM",
-    "POINTS": 10,
-    "TIME": 30,
+    "POINTS": "10",
+    "TIME": "30",
     "CATEGORY": "GEOGRAPHY",
     "STATUS": "STARTED",
     "QCM_ANSWERS": {
@@ -208,14 +232,18 @@ interface Background {
       "BLUE": "Madrid"
     },
     "QCM_CORRECT": "GREEN",
-    "QCM_HINTS_ENABLED": true
+    "QCM_HINTS_ENABLED": true,
+    "QCM_HINT_THRESHOLD_1": 0.25,
+    "QCM_HINT_THRESHOLD_2": 0.125,
+    "QCM_PENALTY_1": 0.67,
+    "QCM_PENALTY_2": 0.33
   },
-  "QcmInvalidated": ["RED"],
-  "enrollmentActive": false,
-  "showQRCode": false,
-  "virtualPlayerCount": 0,
-  "virtualPlayerLimit": 10,
-  "currentBackgroundIndex": 0,
+  "QCM_INVALIDATED": ["RED"],
+  "ENROLLMENT_ACTIVE": false,
+  "SHOW_QR_CODE": false,
+  "VIRTUAL_PLAYER_COUNT": 0,
+  "VIRTUAL_PLAYER_LIMIT": 10,
+  "CURRENT_BACKGROUND_INDEX": 0,
   "backgrounds": []
 }
 ```

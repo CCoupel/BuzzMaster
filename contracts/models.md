@@ -10,12 +10,13 @@
 ```typescript
 interface Team {
   NAME: string          // Nom de l'équipe
-  COLOR: string         // Couleur hex "#FF0000"
-  SCORE: number         // Score total
-  TIME: number          // Timestamp du buzz (microsecondes)
+  COLOR: number[]       // Couleur RGB [R, G, B] (ex: [239, 68, 68])
+  SCORE: number         // Score total (calculé: TEAM_POINTS + somme joueurs)
+  TEAM_POINTS: number   // Points équipe (indépendants des joueurs)
+  TIME: number          // Timestamp du buzz (microsecondes, 0 si non buzzé)
   STATUS: TeamStatus
   BUMPER: string        // ID du bumper gagnant (après buzz)
-  TeamPoints: number    // Points équipe (vs points joueurs)
+  READY: boolean        // true si l'équipe est prête
 }
 
 type TeamStatus = "READY" | "PAUSE"
@@ -27,22 +28,25 @@ type TeamStatus = "READY" | "PAUSE"
 {
   "Les Rouges": {
     "NAME": "Les Rouges",
-    "COLOR": "#ef4444",
+    "COLOR": [239, 68, 68],
     "SCORE": 150,
+    "TEAM_POINTS": 50,
     "TIME": 0,
     "STATUS": "READY",
     "BUMPER": "",
-    "TeamPoints": 50
+    "READY": true
   }
 }
 ```
 
 ### Notes
 
-- `SCORE` = Total des points (joueurs + équipe)
-- `TeamPoints` = Points attribués à l'équipe (pas aux joueurs)
+- `COLOR` = Tableau RGB `[R, G, B]` (pas string hex)
+- `SCORE` = Total calculé (TEAM_POINTS + somme des scores joueurs)
+- `TEAM_POINTS` = Points attribués uniquement à l'équipe
 - `TIME` > 0 signifie qu'un joueur de l'équipe a buzzé
 - `BUMPER` = ID du premier joueur à buzzer
+- `READY` = true si l'équipe est prête (tous buzzers connectés)
 
 ---
 
@@ -53,14 +57,15 @@ interface Bumper {
   NAME: string           // Nom du joueur
   TEAM: string           // Nom de l'équipe (vide si non assigné)
   SCORE: number          // Score personnel
-  TIME: number           // Timestamp du buzz (microsecondes)
+  TIME: number           // Timestamp du buzz (microsecondes, 0 si non buzzé)
   BUTTON: string         // Bouton pressé ("A", "B", "C", "D")
   STATUS: BumperStatus
   VERSION: string        // Version firmware buzzer
+  IP: string             // Adresse IP du buzzer
+  READY: boolean         // true si prêt (PONG reçu)
   ANSWER_COLOR: AnswerColor  // Couleur QCM assignée
-  HINTS_AT_BUZZ: number  // Indices donnés au moment du buzz
+  HINTS_AT_BUZZ: number  // Indices donnés au moment du buzz (QCM)
   IS_VIRTUAL: boolean    // true = VPlayer (smartphone)
-  READY: string          // "TRUE" si prêt
 }
 
 type BumperStatus = "READY" | "PAUSE"
@@ -80,10 +85,11 @@ type AnswerColor = "" | "RED" | "GREEN" | "YELLOW" | "BLUE"
     "BUTTON": "A",
     "STATUS": "PAUSE",
     "VERSION": "1.2.0",
+    "IP": "192.168.4.10",
+    "READY": true,
     "ANSWER_COLOR": "GREEN",
     "HINTS_AT_BUZZ": 1,
-    "IS_VIRTUAL": false,
-    "READY": "TRUE"
+    "IS_VIRTUAL": false
   }
 }
 ```
@@ -91,10 +97,12 @@ type AnswerColor = "" | "RED" | "GREEN" | "YELLOW" | "BLUE"
 ### Notes
 
 - Clé = Adresse MAC du buzzer (ou ID généré pour VPlayers)
-- `TIME` en microsecondes depuis epoch serveur
+- `TIME` en microsecondes depuis epoch serveur (0 si non buzzé)
+- `IP` = Adresse IP du buzzer sur le réseau
+- `READY` = true après réception du PONG
 - `ANSWER_COLOR` = Couleur du bouton pour mode QCM
-- `HINTS_AT_BUZZ` = Pour calcul pénalité individuelle
-- `IS_VIRTUAL` = Distingue buzzers physiques et VPlayers
+- `HINTS_AT_BUZZ` = Nombre d'indices donnés au moment du buzz (pénalité individuelle)
+- `IS_VIRTUAL` = Distingue buzzers physiques et VPlayers smartphone
 
 ---
 
@@ -216,17 +224,18 @@ interface QCMAnswers {
 
 ```typescript
 interface GameEvent {
-  Timestamp: number       // Microsecondes
-  QuestionID: string
-  QuestionText: string
-  QuestionCategory: string
-  EventType: "POINTS_AWARDED"
-  WinnerType: "PLAYER" | "TEAM"
-  TeamName: string
-  TeamColor: [number, number, number]  // RGB
-  PlayerName: string
-  PlayerColor: AnswerColor
-  Points: number
+  TIMESTAMP: number               // Microsecondes (epoch serveur)
+  QUESTION_ID: string
+  QUESTION_TEXT: string
+  QUESTION_CATEGORY: string
+  EVENT_TYPE: "POINTS_AWARDED"
+  WINNER_TYPE: "PLAYER" | "TEAM"
+  TEAM_NAME: string
+  TEAM_COLOR: [number, number, number]  // RGB
+  PLAYER_NAME: string             // Vide si TEAM
+  PLAYER_COLOR: AnswerColor       // Couleur réponse (si PLAYER)
+  POINTS: number
+  REACTION_TIME: number           // Temps de réaction en microsecondes
 }
 ```
 
@@ -234,17 +243,18 @@ interface GameEvent {
 
 ```json
 {
-  "Timestamp": 1706380800000000,
-  "QuestionID": "5",
-  "QuestionText": "Capitale de la France ?",
-  "QuestionCategory": "GEOGRAPHY",
-  "EventType": "POINTS_AWARDED",
-  "WinnerType": "PLAYER",
-  "TeamName": "Les Rouges",
-  "TeamColor": [239, 68, 68],
-  "PlayerName": "Alice",
-  "PlayerColor": "GREEN",
-  "Points": 10
+  "TIMESTAMP": 1706380800000000,
+  "QUESTION_ID": "5",
+  "QUESTION_TEXT": "Capitale de la France ?",
+  "QUESTION_CATEGORY": "GEOGRAPHY",
+  "EVENT_TYPE": "POINTS_AWARDED",
+  "WINNER_TYPE": "PLAYER",
+  "TEAM_NAME": "Les Rouges",
+  "TEAM_COLOR": [239, 68, 68],
+  "PLAYER_NAME": "Alice",
+  "PLAYER_COLOR": "GREEN",
+  "POINTS": 10,
+  "REACTION_TIME": 1234567
 }
 ```
 
