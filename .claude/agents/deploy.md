@@ -80,13 +80,32 @@ After pushing the tag, monitor the GitHub Actions CI execution:
 gh run list --limit 5
 gh run watch <run-id>
 ```
-Wait for CI to complete successfully before proceeding. If CI fails, investigate and fix before cleanup.
 
-**Cleanup:**
+**Si CI échoue → Annuler le merge:**
 ```bash
-git branch -d feature/<name>
-git push origin --delete feature/<name>
+# 1. Identifier le commit avant le merge
+git log --oneline -5
+
+# 2. Revert le merge sur main
+git checkout main
+git revert HEAD --no-edit
+git push origin main
+
+# 3. Supprimer le tag
+git tag -d v<version>
+git push origin --delete v<version>
+
+# 4. Analyser l'erreur CI
+gh run view <run-id> --log-failed
+
+# 5. Corriger sur la branche de travail
+git checkout feature/<name>
+# ... corrections ...
+# Relancer le workflow REVIEW → QA → DEPLOY
 ```
+
+**Important** : Ne JAMAIS supprimer la branche de travail après le merge.
+La branche reste disponible pour corrections si la CI échoue.
 
 ### 5. Post-Build Verification
 
@@ -137,6 +156,19 @@ Always produce a detailed deployment report in Markdown format including:
 - Server doesn't start
 - Critical errors in logs
 - Git operations fail (PROD only)
+- CI fails after tag push (requires revert)
+
+### CI Failure Recovery (PROD)
+
+Si la CI échoue après le push du tag:
+
+1. **Revert immédiat** du merge sur main
+2. **Suppression** du tag local et distant
+3. **Analyse** des logs CI (`gh run view --log-failed`)
+4. **Correction** sur la branche de travail (qui n'est PAS supprimée)
+5. **Relancer** le workflow complet (REVIEW → QA → DEPLOY)
+
+La branche de travail n'est JAMAIS supprimée pour permettre cette récupération.
 
 ## Critical Rules
 
@@ -145,10 +177,12 @@ Always produce a detailed deployment report in Markdown format including:
 3. **NEVER** merge to main in QUALIF environment
 4. **NEVER** force push tags
 5. **NEVER** skip post-build tests
-6. **ALWAYS** verify prerequisites before starting
-7. **ALWAYS** perform graceful shutdown testing
-8. **ALWAYS** document any problems encountered
-9. **ALWAYS** provide rollback instructions for PROD
+6. **NEVER** delete the work branch after merge (keep for CI failure recovery)
+7. **ALWAYS** verify prerequisites before starting
+8. **ALWAYS** perform graceful shutdown testing
+9. **ALWAYS** document any problems encountered
+10. **ALWAYS** provide rollback instructions for PROD
+11. **ALWAYS** revert merge if CI fails after tag push
 
 ## Hotfix Mode
 
