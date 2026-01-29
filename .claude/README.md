@@ -13,6 +13,7 @@ Template de gestion de projet pour Claude Code.
 ```
 .claude/
 ├── README.md                 # Ce fichier
+├── INITIALIZATION.md         # Guide complet d'initialisation (publiable)
 ├── CLAUDE_TEMPLATE.md        # Template CLAUDE.md (copier vers ../CLAUDE.md)
 ├── project-config.json       # Configuration generee (apres init)
 ├── agents/                   # Agents specialises
@@ -44,21 +45,46 @@ Template de gestion de projet pour Claude Code.
 
 ## Premiere Utilisation
 
-Au premier demarrage avec Claude Code, le template detecte automatiquement qu'il n'est pas initialise et lance l'assistant de configuration.
+Au premier demarrage, Claude detecte automatiquement l'etat du projet.
 
-### Questions posees :
+> **Documentation complete** : [INITIALIZATION.md](INITIALIZATION.md)
 
-1. **Nom du projet**
-2. **Description**
-3. **Stack backend** : Go, Node.js, Python, Java, etc.
-4. **Stack frontend** : React, Vue, Angular, etc.
-5. **Mobile** : React Native, Flutter, natif, etc.
-6. **Firmware** : ESP32, Raspberry Pi, etc.
-7. **Base de donnees** : PostgreSQL, MongoDB, SQLite, etc.
-8. **CI/CD** : GitHub Actions, GitLab CI, Jenkins, etc.
-9. **Deploiement** : Docker, Kubernetes, VPS, etc.
-10. **Tests** : Frameworks utilises
-11. **Securite** : Preoccupations specifiques
+### Etape 1 : Detection de code existant
+
+Claude analyse le projet pour detecter :
+- Fichiers de configuration (`package.json`, `go.mod`, `requirements.txt`, etc.)
+- Dependances et frameworks utilises
+- CI/CD et outils de deploiement
+
+### Etape 2 : Proposition d'initialisation
+
+**Si du code existe :**
+```
+Technologies detectees :
+- Backend : Go (go.mod)
+- Frontend : React + TypeScript (package.json)
+- CI/CD : GitHub Actions
+
+Voulez-vous :
+a) Initialiser avec cette configuration (recommande)
+b) Initialiser manuellement (questionnaire complet)
+c) Annuler
+```
+
+**Si projet vide :** Questionnaire complet pose.
+
+### Questions (mode manuel ou complement) :
+
+1. **Nom du projet** et **Description**
+2. **Stack backend** : Go, Node.js, Python, Java, etc.
+3. **Stack frontend** : React, Vue, Angular, etc.
+4. **Mobile** : React Native, Flutter, natif, etc.
+5. **Firmware** : ESP32, Raspberry Pi, etc.
+6. **Base de donnees** : PostgreSQL, MongoDB, SQLite, etc.
+7. **CI/CD** : GitHub Actions, GitLab CI, Jenkins, etc.
+8. **Deploiement** : Docker, Kubernetes, VPS, etc.
+9. **Tests** : Frameworks utilises
+10. **Securite** : Preoccupations specifiques
 
 ### Resultat :
 

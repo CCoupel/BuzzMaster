@@ -2,16 +2,52 @@
 
 > **Version** : 1.0.0
 > **Template** : Claude Code Project Management
+> **Guide d'initialisation** : [.claude/INITIALIZATION.md](.claude/INITIALIZATION.md)
 
 ---
 
 ## INITIALISATION OBLIGATOIRE
 
-**IMPORTANT** : Avant toute action, verifie si le fichier `.claude/project-config.json` existe.
+**IMPORTANT** : Au demarrage, verifie l'etat d'initialisation du projet.
 
-- **Si le fichier N'EXISTE PAS** : Ce projet n'est pas initialise. Tu DOIS executer la commande `/init-project` AVANT toute autre action. Informe l'utilisateur et lance l'initialisation.
+### Verification
 
-- **Si le fichier EXISTE** : Le projet est initialise. Tu peux continuer normalement.
+1. **Verifier** si `.claude/project-config.json` existe
+2. **Si NON** → Lancer l'initialisation (voir ci-dessous)
+3. **Si OUI** → Continuer normalement
+
+### Processus d'Initialisation
+
+> Documentation complete : [.claude/INITIALIZATION.md](.claude/INITIALIZATION.md)
+
+**Etape 1 : Detection de code existant**
+
+Avant toute question, analyser le projet pour detecter :
+- Fichiers de configuration (`package.json`, `go.mod`, `requirements.txt`, etc.)
+- Structure de dossiers (`src/`, `server/`, `web/`, etc.)
+- Fichiers CI/CD (`.github/workflows/`, `.gitlab-ci.yml`, etc.)
+
+**Etape 2 : Proposition a l'utilisateur**
+
+```
+[Si code detecte]
+Je detecte du code existant dans ce projet :
+- <liste des technologies detectees>
+
+Voulez-vous :
+a) Initialiser en analysant le code existant (recommande)
+b) Initialiser manuellement (questionnaire complet)
+c) Annuler
+
+[Si projet vide]
+Ce projet semble vide. Lancement du questionnaire d'initialisation.
+```
+
+**Etape 3 : Configuration**
+
+- Si analyse automatique : deduire la stack et proposer confirmation
+- Si manuel : poser les questions (voir INITIALIZATION.md)
+- Generer `project-config.json` et les agents
 
 ---
 
