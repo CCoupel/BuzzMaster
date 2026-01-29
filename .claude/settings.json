@@ -1,0 +1,6 @@
+{
+  "statusLine": {
+    "type": "command",
+    "command": "cd /root/.claude/claude-code-limit-tracker && uv run python status_line.py"
+  }
+}
