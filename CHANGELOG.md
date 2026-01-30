@@ -3,6 +3,40 @@
 Historique des versions du projet BuzzControl.
 
 
+## [2.46.0] - 2026-01-30
+
+### Ajouts
+- **[Effet Néon]**: Bordure lumineuse animée autour de l'écran TV et VPlayer
+  - Couleur automatique selon la catégorie de la question
+  - Animation CSS conic-gradient avec rotation spatiale continue
+  - Configurable depuis la page Configuration avec 4 paramètres ajustables
+  - **Paramètres disponibles** :
+    - `enabled` : Activer/désactiver l'effet (défaut: désactivé)
+    - `arc_width` : Largeur de l'arc lumineux en degrés, 30-180° (défaut: 60°)
+    - `intensity_gap` : Écart d'intensité (opacité) 0-100% (défaut: 80%)
+    - `rotation_speed` : Vitesse de rotation en secondes, 1-10s (défaut: 4s)
+  - **Phases actives** : READY, COUNTDOWN, STARTED, PAUSED
+  - Diffusion en temps réel via WebSocket : changement config appliqué instantanément
+
+### Technique
+- **Backend** : Configuration NeonEffectConfig dans config.json
+- **Frontend** : CSS @property + conic-gradient pour animations GPU-accelerated
+- **Diffusion** : ACTION CONFIG_UPDATE broadcast à tous les clients WebSocket
+- **Styles** : neon.css avec variables CSS dynamiques pour personnalisation
+
+### Fichiers modifiés
+- `server-go/internal/config/config.go` : Struct NeonEffectConfig
+- `server-go/internal/protocol/messages.go` : ACTION CONFIG_UPDATE
+- `server-go/internal/server/http.go` : GET/POST /config.json avec neon_effect
+- `server-go/web/src/styles/neon.css` : Styles effet néon avec @property
+- `server-go/web/src/constants/colors.js` : Fonction getCategoryColor()
+- `server-go/web/src/pages/PlayerDisplay.jsx` : Classe neon-border conditionnelle
+- `server-go/web/src/pages/ConfigPage.jsx` : Section sliders configuration néon
+- `server-go/web/src/hooks/useWebSocket.js` : Handler CONFIG_UPDATE
+- `server-go/config.json` : Version 2.46.0
+
+---
+
 ## [2.45.0] - 2026-01-30
 
 ### Améliorations
