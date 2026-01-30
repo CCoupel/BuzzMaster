@@ -114,7 +114,7 @@ Afficher des marqueurs visuels sur la barre de progression du timer pour indique
 
 - Nécessite que `QCM_HINTS_ENABLED` soit activé sur la question
 - Utilise les seuils existants : `QCM_HINT_THRESHOLD_1`, `QCM_HINT_THRESHOLD_2`
-- Référence : `backlog/qcm-indices-penalites.md` (v2.38.0)
+- Référence : `backlog/DONE/qcm-indices-penalites.md` (v2.38.0)
 
 ## Version cible
 
