@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { motion } from 'framer-motion'
 import { useGame } from '../hooks/GameContext'
 import Button from '../components/Button'
@@ -10,6 +10,15 @@ export default function ConfigPage() {
   const [uploadingBg, setUploadingBg] = useState(false)
   const bgInputRef = useRef(null)
   const [draggedIndex, setDraggedIndex] = useState(null)
+
+  // Neon effect configuration
+  const [neonConfig, setNeonConfig] = useState({
+    enabled: false,
+    arc_width: 60,
+    intensity_gap: 80,
+    rotation_speed: 4
+  })
+  const [savingNeon, setSavingNeon] = useState(false)
 
   // Backup options
   const [backupOptions, setBackupOptions] = useState({
@@ -30,6 +39,51 @@ export default function ConfigPage() {
   })
 
   const [loadingDemo, setLoadingDemo] = useState(false)
+
+  // Load neon config from server on mount
+  useEffect(() => {
+    const fetchNeonConfig = async () => {
+      try {
+        const response = await fetch('/config.json')
+        if (response.ok) {
+          const data = await response.json()
+          if (data.neon_effect) {
+            setNeonConfig(data.neon_effect)
+          }
+        }
+      } catch (error) {
+        console.error('Failed to fetch neon config:', error)
+      }
+    }
+    fetchNeonConfig()
+  }, [])
+
+  // Update local state when gameState.neonEffect changes (from WebSocket)
+  useEffect(() => {
+    if (gameState?.neonEffect) {
+      setNeonConfig(gameState.neonEffect)
+    }
+  }, [gameState?.neonEffect])
+
+  const handleSaveNeonConfig = async () => {
+    setSavingNeon(true)
+    try {
+      const response = await fetch('/config.json', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ neon_effect: neonConfig })
+      })
+      if (!response.ok) {
+        const text = await response.text()
+        alert('Erreur: ' + text)
+      }
+    } catch (error) {
+      console.error('Save neon config failed:', error)
+      alert('Erreur: ' + error.message)
+    } finally {
+      setSavingNeon(false)
+    }
+  }
 
   const handleResetScores = () => {
     if (!window.confirm('Remettre tous les scores a zero ?')) return
@@ -341,6 +395,76 @@ export default function ConfigPage() {
               <div className="config-section-actions">
                 <Button variant="primary" onClick={handleLoadDemo} loading={loadingDemo}>
                   Charger la demo
+                </Button>
+              </div>
+            </div>
+
+            {/* Neon Effect Section */}
+            <div className="config-section">
+              <h3 className="config-section-title">Effet Neon</h3>
+              <p className="config-section-hint">
+                Bordure lumineuse animee autour de l'ecran TV et VJoueur, avec la couleur de la categorie.
+              </p>
+
+              <label className="checkbox-item neon-toggle">
+                <input
+                  type="checkbox"
+                  checked={neonConfig.enabled}
+                  onChange={(e) => setNeonConfig(prev => ({ ...prev, enabled: e.target.checked }))}
+                />
+                <span>Activer l'effet neon</span>
+              </label>
+
+              {neonConfig.enabled && (
+                <div className="neon-sliders">
+                  <div className="slider-row">
+                    <label>Largeur de l'arc</label>
+                    <div className="slider-control">
+                      <input
+                        type="range"
+                        min="30"
+                        max="180"
+                        value={neonConfig.arc_width}
+                        onChange={(e) => setNeonConfig(prev => ({ ...prev, arc_width: parseInt(e.target.value) }))}
+                      />
+                      <span className="slider-value">{neonConfig.arc_width}°</span>
+                    </div>
+                  </div>
+
+                  <div className="slider-row">
+                    <label>Ecart d'intensite</label>
+                    <div className="slider-control">
+                      <input
+                        type="range"
+                        min="0"
+                        max="100"
+                        value={neonConfig.intensity_gap}
+                        onChange={(e) => setNeonConfig(prev => ({ ...prev, intensity_gap: parseInt(e.target.value) }))}
+                      />
+                      <span className="slider-value">{neonConfig.intensity_gap}%</span>
+                    </div>
+                  </div>
+
+                  <div className="slider-row">
+                    <label>Vitesse de rotation</label>
+                    <div className="slider-control">
+                      <input
+                        type="range"
+                        min="1"
+                        max="10"
+                        step="0.5"
+                        value={neonConfig.rotation_speed}
+                        onChange={(e) => setNeonConfig(prev => ({ ...prev, rotation_speed: parseFloat(e.target.value) }))}
+                      />
+                      <span className="slider-value">{neonConfig.rotation_speed}s</span>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              <div className="config-section-actions">
+                <Button variant="primary" onClick={handleSaveNeonConfig} loading={savingNeon}>
+                  Enregistrer
                 </Button>
               </div>
             </div>

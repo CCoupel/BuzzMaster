@@ -7,7 +7,9 @@ import Podium from '../components/Podium'
 import QRCodeOverlay from '../components/QRCodeOverlay'
 import QRCodeDisplay from '../components/QRCodeDisplay'
 import { CATEGORIES } from './QuestionsPage'
+import { getCategoryColor } from '../constants/colors'
 import './PlayerDisplay.css'
+import '../styles/neon.css'
 
 // QCM answer colors
 const QCM_COLORS = {
@@ -592,8 +594,40 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
     return color
   }
 
+  // Neon effect configuration
+  const neonConfig = useMemo(() => {
+    return gameState?.neonEffect || {
+      enabled: false,
+      arc_width: 60,
+      intensity_gap: 80,
+      rotation_speed: 4
+    }
+  }, [gameState?.neonEffect])
+
+  // Show neon effect during game phases
+  const showNeon = useMemo(() => {
+    return neonConfig.enabled &&
+      ['READY', 'COUNTDOWN', 'STARTED', 'PAUSED'].includes(gameState?.phase)
+  }, [neonConfig.enabled, gameState?.phase])
+
+  // Get category color for neon effect
+  const neonCategoryColor = useMemo(() => {
+    return getCategoryColor(gameState?.question?.CATEGORY)
+  }, [gameState?.question?.CATEGORY])
+
+  // Neon style variables
+  const neonStyle = useMemo(() => {
+    if (!showNeon) return {}
+    return {
+      '--neon-color': neonCategoryColor,
+      '--neon-arc-width': `${neonConfig.arc_width}deg`,
+      '--neon-intensity-gap': neonConfig.intensity_gap / 100,
+      '--neon-rotation-speed': `${neonConfig.rotation_speed}s`,
+    }
+  }, [showNeon, neonCategoryColor, neonConfig])
+
   return (
-    <div className="player-display">
+    <div className={`player-display ${showNeon ? 'neon-border' : ''}`} style={neonStyle}>
       {/* Background Images with Crossfade */}
       <div className="background-container">
         <AnimatePresence mode="sync">

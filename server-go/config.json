@@ -18,5 +18,11 @@
     "questions_dir": "./data/files/questions",
     "files_dir": "./data/files"
   },
+  "neon_effect": {
+    "enabled": false,
+    "arc_width": 60,
+    "intensity_gap": 80,
+    "rotation_speed": 4
+  },
   "version": "2.46.2"
 }

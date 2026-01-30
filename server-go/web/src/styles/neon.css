@@ -1,0 +1,93 @@
+/* Neon Border Effect - Rotating conic gradient */
+
+/* CSS Custom Property for animation - enables smooth rotation */
+@property --rotation-angle {
+  syntax: '<angle>';
+  initial-value: 0deg;
+  inherits: false;
+}
+
+/* Main neon border class */
+.neon-border {
+  --neon-color: #8b5cf6;  /* Default violet if no category */
+  --neon-arc-width: 60deg;
+  --neon-intensity-gap: 0.8;
+  --neon-rotation-speed: 4s;
+  position: relative;
+}
+
+.neon-border::before {
+  content: '';
+  position: absolute;
+  inset: -8px;
+  z-index: -1;
+  border-radius: inherit;
+  background: conic-gradient(
+    from var(--rotation-angle),
+    transparent 0deg,
+    var(--neon-color) calc(var(--neon-arc-width) / 2),
+    transparent var(--neon-arc-width),
+    transparent 360deg
+  );
+  filter: blur(15px);
+  opacity: 1;
+  animation: neon-rotate var(--neon-rotation-speed) linear infinite;
+  pointer-events: none;
+}
+
+/* Secondary glow layer for more intensity */
+.neon-border::after {
+  content: '';
+  position: absolute;
+  inset: -4px;
+  z-index: -1;
+  border-radius: inherit;
+  background: conic-gradient(
+    from var(--rotation-angle),
+    transparent 0deg,
+    var(--neon-color) calc(var(--neon-arc-width) / 2),
+    transparent var(--neon-arc-width),
+    transparent 360deg
+  );
+  filter: blur(8px);
+  opacity: 0.8;
+  animation: neon-rotate var(--neon-rotation-speed) linear infinite;
+  pointer-events: none;
+}
+
+/* Rotation animation */
+@keyframes neon-rotate {
+  from { --rotation-angle: 0deg; }
+  to { --rotation-angle: 360deg; }
+}
+
+/* Fallback for browsers without @property support */
+@supports not (animation: neon-rotate 1s) {
+  .neon-border::before,
+  .neon-border::after {
+    background: var(--neon-color);
+    opacity: 0.4;
+    animation: neon-pulse 2s ease-in-out infinite;
+  }
+
+  .neon-border::after {
+    opacity: 0.2;
+  }
+}
+
+@keyframes neon-pulse {
+  0%, 100% { opacity: 0.4; }
+  50% { opacity: 0.2; }
+}
+
+/* Fade-in transition when effect appears */
+.neon-border-enter::before,
+.neon-border-enter::after {
+  animation: neon-rotate var(--neon-rotation-speed) linear infinite,
+             neon-fade-in 0.5s ease-out forwards;
+}
+
+@keyframes neon-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
