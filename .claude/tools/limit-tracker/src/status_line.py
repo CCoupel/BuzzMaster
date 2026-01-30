@@ -9,6 +9,11 @@ import sys
 import time
 import os
 from pathlib import Path
+
+# Force UTF-8 encoding for Windows compatibility (emojis)
+if sys.platform == 'win32':
+    sys.stdout.reconfigure(encoding='utf-8')
+
 from tracker import UsageTracker
 from config import Config
 from git_info import GitInfo
