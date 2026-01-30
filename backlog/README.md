@@ -84,12 +84,67 @@ vX.Y.Z
 ## Cycle de vie d'une fonctionnalité
 
 ```
-TODO/ ──► En-Cours/ ──► DONE/
+TODO/ ──────────► En-Cours/ ──────────► DONE/
+       Démarrage            Mise en prod
 ```
 
-1. Nouvelle fonctionnalité → créer dans `TODO/`
-2. Début implémentation → déplacer dans `En-Cours/`
-3. Implémentation terminée → déplacer dans `DONE/`
+### 1. Nouvelle fonctionnalité
+
+**Action** : Créer le fichier dans `TODO/`
+
+**Statut dans le fichier** :
+```markdown
+**Statut** : 📋 Planifié
+```
+
+### 2. Démarrage de l'implémentation
+
+**Action** : Déplacer de `TODO/` vers `En-Cours/`
+
+```bash
+mv backlog/TODO/ma-feature.md backlog/En-Cours/
+```
+
+**Mise à jour du fichier** :
+```markdown
+**Statut** : ⏳ En cours (vX.Y.Z)
+```
+
+**Mise à jour des README** :
+- Ce fichier : déplacer la ligne de la section TODO vers En-Cours
+- `BACKLOG.md` : mettre à jour le lien
+
+### 3. Feature complète et mise en production
+
+**Action** : Déplacer de `En-Cours/` vers `DONE/`
+
+```bash
+mv backlog/En-Cours/ma-feature.md backlog/DONE/
+```
+
+**Mise à jour du fichier** :
+```markdown
+**Statut** : ✅ Complété (vX.Y.0)
+```
+
+**Mise à jour des README** :
+- Ce fichier : déplacer la ligne vers DONE avec la version
+- `BACKLOG.md` : mettre à jour le lien et ajouter la version
+
+### Exemple complet
+
+```bash
+# 1. Démarrage de "QCM Marqueurs" pour v2.46.0
+mv backlog/TODO/qcm-marqueurs-indices.md backlog/En-Cours/
+# → Éditer le fichier : **Statut** : ⏳ En cours (v2.46.0)
+# → Mettre à jour README.md et BACKLOG.md
+
+# 2. Après /deploy PROD de v2.46.0
+mv backlog/En-Cours/qcm-marqueurs-indices.md backlog/DONE/
+# → Éditer le fichier : **Statut** : ✅ Complété (v2.46.0)
+# → Mettre à jour README.md et BACKLOG.md
+# → Commit : "docs(backlog): Move qcm-marqueurs-indices to DONE (v2.46.0)"
+```
 
 ## Historique
 
