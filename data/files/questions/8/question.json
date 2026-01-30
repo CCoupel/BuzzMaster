@@ -1,0 +1,18 @@
+{
+  "ANSWER": "Elephant d'Afrique",
+  "CATEGORY": "ANIMALS",
+  "ID": "8",
+  "ORDER": 7,
+  "POINTS": "10",
+  "POINTS_TARGET": "TEAM",
+  "QCM_ANSWERS": {
+    "BLUE": "Hippopotame",
+    "GREEN": "Elephant d'Afrique",
+    "RED": "Girafe",
+    "YELLOW": "Rhinoceros"
+  },
+  "QCM_CORRECT": "GREEN",
+  "QUESTION": "Quel est le plus grand animal terrestre?",
+  "TIME": "20",
+  "TYPE": "QCM"
+}

@@ -1,0 +1,18 @@
+{
+  "ANSWER": "Robert Downey Jr.",
+  "CATEGORY": "ENTERTAINMENT",
+  "ID": "2",
+  "ORDER": 1,
+  "POINTS": "10",
+  "POINTS_TARGET": "TEAM",
+  "QCM_ANSWERS": {
+    "BLUE": "Mark Ruffalo",
+    "GREEN": "Robert Downey Jr.",
+    "RED": "Chris Evans",
+    "YELLOW": "Chris Hemsworth"
+  },
+  "QCM_CORRECT": "GREEN",
+  "QUESTION": "Quel acteur joue Iron Man dans les films Marvel?",
+  "TIME": "20",
+  "TYPE": "QCM"
+}

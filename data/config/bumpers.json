@@ -1,0 +1,106 @@
+{
+  "AA:BB:CC:DD:EE:01": {
+    "NAME": "Alice",
+    "TEAM": "Les Rouges",
+    "SCORE": 0,
+    "VERSION": "1.0.0",
+    "READY": true,
+    "ANSWER_COLOR": "RED"
+  },
+  "AA:BB:CC:DD:EE:02": {
+    "NAME": "Bob",
+    "TEAM": "Les Rouges",
+    "SCORE": 0,
+    "VERSION": "1.0.0",
+    "READY": true,
+    "ANSWER_COLOR": "GREEN"
+  },
+  "AA:BB:CC:DD:EE:03": {
+    "NAME": "Charlie",
+    "TEAM": "Les Bleus",
+    "SCORE": 0,
+    "VERSION": "1.0.0",
+    "READY": true,
+    "ANSWER_COLOR": "YELLOW"
+  },
+  "AA:BB:CC:DD:EE:04": {
+    "NAME": "Diana",
+    "TEAM": "Les Bleus",
+    "SCORE": 0,
+    "VERSION": "1.0.0",
+    "READY": true,
+    "ANSWER_COLOR": "BLUE"
+  },
+  "AA:BB:CC:DD:EE:05": {
+    "NAME": "Ethan",
+    "TEAM": "Les Verts",
+    "SCORE": 0,
+    "VERSION": "1.0.0",
+    "READY": true,
+    "ANSWER_COLOR": "RED"
+  },
+  "AA:BB:CC:DD:EE:06": {
+    "NAME": "Fiona",
+    "TEAM": "Les Verts",
+    "SCORE": 0,
+    "VERSION": "1.0.0",
+    "READY": true,
+    "ANSWER_COLOR": "GREEN"
+  },
+  "AA:BB:CC:DD:EE:07": {
+    "NAME": "George",
+    "TEAM": "Les Jaunes",
+    "SCORE": 0,
+    "VERSION": "1.0.0",
+    "READY": true,
+    "ANSWER_COLOR": "YELLOW"
+  },
+  "AA:BB:CC:DD:EE:08": {
+    "NAME": "Hannah",
+    "TEAM": "Les Jaunes",
+    "SCORE": 0,
+    "VERSION": "1.0.0",
+    "READY": true,
+    "ANSWER_COLOR": "BLUE"
+  },
+  "AA:BB:CC:DD:EE:09": {
+    "NAME": "Ivan",
+    "TEAM": "Les Violets",
+    "SCORE": 0,
+    "VERSION": "1.0.0",
+    "READY": true
+  },
+  "AA:BB:CC:DD:EE:10": {
+    "NAME": "Julia",
+    "TEAM": "Les Violets",
+    "SCORE": 0,
+    "VERSION": "1.0.0",
+    "READY": true
+  },
+  "AA:BB:CC:DD:EE:11": {
+    "NAME": "Kevin",
+    "TEAM": "Les Oranges",
+    "SCORE": 0,
+    "VERSION": "1.0.0",
+    "READY": true,
+    "ANSWER_COLOR": "YELLOW"
+  },
+  "AA:BB:CC:DD:EE:12": {
+    "NAME": "Laura",
+    "TEAM": "Les Oranges",
+    "SCORE": 0,
+    "VERSION": "1.0.0",
+    "READY": true,
+    "ANSWER_COLOR": "RED"
+  },
+  "vjoueur_toto_20260130_142436": {
+    "NAME": "toto",
+    "TEAM": "Les Oranges",
+    "SCORE": 0,
+    "TIME": 1769779512496778,
+    "BUTTON": "A",
+    "STATUS": "PAUSE",
+    "READY": true,
+    "IS_VIRTUAL": true
+  }
+}
