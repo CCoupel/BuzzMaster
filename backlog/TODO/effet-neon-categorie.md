@@ -75,6 +75,40 @@ Ajouter un effet néon lumineux autour de l'écran sur les pages `/tv` (PlayerDi
   - Option pour activer/désactiver l'effet
   - Choix du mode d'intensité (uniforme / aléatoire / rotation)
 
+### Phase 3 - Configuration avancée (ConfigPage)
+
+- [ ] **Paramètres configurables dans la page Configuration**
+  - **Largeur de l'arc lumineux** : Angle en degrés de la zone intense (ex: 60°, 90°, 120°)
+    - Variable CSS : `--neon-arc-width`
+    - Slider : 30° → 180° (défaut: 60°)
+  - **Écart d'intensité** : Différence entre zone intense et zone sombre
+    - Variable CSS : `--neon-intensity-min` et `--neon-intensity-max`
+    - Slider : 0% → 100% (défaut: 80%)
+    - 0% = intensité uniforme, 100% = zone sombre totalement invisible
+  - **Vitesse de rotation** : Durée d'un tour complet
+    - Variable CSS : `--neon-rotation-speed`
+    - Slider : 1s → 10s (défaut: 4s)
+
+- [ ] **Backend - Stockage configuration**
+  - Ajouter champs dans `config.json` :
+    ```json
+    {
+      "neon_effect": {
+        "enabled": true,
+        "arc_width": 60,
+        "intensity_gap": 80,
+        "rotation_speed": 4
+      }
+    }
+    ```
+  - Exposer via WebSocket dans le gameState ou config
+
+- [ ] **Frontend - ConfigPage.jsx**
+  - Nouvelle section "Effet Néon"
+  - Toggle activer/désactiver
+  - 3 sliders avec prévisualisation live
+  - Sauvegarde via POST /config.json
+
 ## Styles CSS proposés
 
 ### Phase 1 - Effet de base
@@ -159,6 +193,28 @@ Ajouter un effet néon lumineux autour de l'écran sur les pages `/tv` (PlayerDi
 
 **Note** : L'effet aléatoire nécessitera probablement du JavaScript pour générer des variations d'intensité par segment.
 
+### Phase 3 - CSS avec variables configurables
+
+```css
+/* Variables injectées depuis la configuration */
+:root {
+  --neon-arc-width: 60deg;        /* Largeur de l'arc (30-180°) */
+  --neon-intensity-gap: 0.8;      /* Écart d'intensité (0-1) */
+  --neon-rotation-speed: 4s;      /* Vitesse de rotation (1-10s) */
+}
+
+.neon-border-rotating::before {
+  background: conic-gradient(
+    from var(--rotation-angle),
+    rgba(var(--neon-color-rgb), calc(1 - var(--neon-intensity-gap))) 0deg,
+    var(--neon-color) calc(var(--neon-arc-width) / 2),
+    rgba(var(--neon-color-rgb), calc(1 - var(--neon-intensity-gap))) var(--neon-arc-width),
+    rgba(var(--neon-color-rgb), calc(1 - var(--neon-intensity-gap))) 360deg
+  );
+  animation: neon-rotate var(--neon-rotation-speed) linear infinite;
+}
+```
+
 ## Fichiers à modifier
 
 | Fichier | Modification |
@@ -167,6 +223,12 @@ Ajouter un effet néon lumineux autour de l'écran sur les pages `/tv` (PlayerDi
 | `PlayerDisplay.css` | Styles .neon-border et animation |
 | `VPlayerPage.jsx` | Ajout classe neon-border conditionnelle |
 | `VPlayerPage.css` | Styles .neon-border (ou import partagé) |
+| `ConfigPage.jsx` | Section configuration effet néon (sliders) |
+| `ConfigPage.css` | Styles section néon + preview |
+| `config/config.go` | Struct NeonEffectConfig |
+| `server/http.go` | GET/POST /config.json avec neon_effect |
+| `styles/neon.css` | Styles partagés avec variables CSS |
+| `constants/colors.js` | Centralisation CATEGORIES avec couleurs |
 
 ## Dépendances
 
