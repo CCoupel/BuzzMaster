@@ -30,7 +30,7 @@
     transparent 360deg
   );
   filter: blur(15px);
-  opacity: 1;
+  opacity: var(--neon-intensity-gap);
   animation: neon-rotate var(--neon-rotation-speed) linear infinite;
   pointer-events: none;
 }
@@ -50,7 +50,7 @@
     transparent 360deg
   );
   filter: blur(8px);
-  opacity: 0.8;
+  opacity: calc(var(--neon-intensity-gap) * 0.8);
   animation: neon-rotate var(--neon-rotation-speed) linear infinite;
   pointer-events: none;
 }
