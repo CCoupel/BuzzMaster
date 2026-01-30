@@ -1,6 +1,6 @@
 # Page Joueur (/player)
 
-**Statut** : ✅ Phase 1 Implémentée (v2.41.0)
+**Statut** : ✅ Phase 1 Complète (v2.45.0)
 
 ## Concept
 
@@ -118,25 +118,25 @@ La configuration de l'enrôlement se situe dans `/admin/teams`, **dans la colonn
 
 ### Actions admin
 
-- [ ] **Démarrer ENROLL**
+- [x] **Démarrer ENROLL** *(v2.45.0)*
   - Définir le nombre max de VJoueurs (champ numérique, défaut: 10)
-  - Bouton "▶ DÉMARRER ENROLL"
-  - Envoie action WebSocket `START_ENROLL` avec `{MAX_PLAYERS: n}`
-  - Le QR code s'affiche sur `/tv` dans la zone MEDIA
-  - État serveur : `enrollmentActive = true`, `maxVPlayers = n`
+  - Bouton "▶ Lancer Inscriptions"
+  - Envoie action WebSocket `SHOW_QR_CODE`
+  - Le QR code s'affiche sur `/tv` en overlay plein écran
+  - État serveur : `enrollmentActive = true`, `virtualPlayerLimit = n`
 
-- [ ] **Arrêter ENROLL**
-  - Bouton "⏹ ARRÊTER ENROLL"
-  - Envoie action WebSocket `STOP_ENROLL`
+- [x] **Arrêter ENROLL** *(v2.45.0)*
+  - Bouton "⏹ Fin Inscriptions"
+  - Envoie action WebSocket `HIDE_QR_CODE`
   - Le QR code disparaît de `/tv`
   - État serveur : `enrollmentActive = false`
   - Les VJoueurs déjà enrôlés restent actifs
   - Les reconnexions restent toujours autorisées
 
-- [ ] **Compteur temps réel**
-  - Affichage "VJoueurs : X/Y" (X = enrôlés, Y = max)
-  - Se met à jour en temps réel via WebSocket
-  - Si X >= Y : afficher "Complet" et refuser nouveaux enrôlements
+- [x] **Compteur temps réel** *(v2.45.0)*
+  - Affichage "Inscrits: X/Y" dans TeamsPage
+  - Se met à jour en temps réel via WebSocket (action `ENROLLMENT_UPDATE`)
+  - Barre de progression sur le QR code overlay
 
 ---
 
@@ -195,29 +195,28 @@ Pendant la phase ENROLL, le QR code s'affiche **dans la zone MEDIA** de `/tv` (p
 - Animation de remplissage progressive
 - Texte "X/Y" centré sous la barre
 
-### Implémentation
+### Implémentation ✅ Complète (v2.45.0)
 
-- [ ] **Action WebSocket START_ENROLL**
+- [x] **Action WebSocket SHOW_QR_CODE**
   - Envoyé par admin depuis TeamsPage
-  - Payload : `{MAX_PLAYERS: 10}`
-  - Serveur : `enrollmentActive = true`, `maxVPlayers = 10`
-  - Broadcast à tous les clients `/tv` : afficher QR code
+  - Serveur : `enrollmentActive = true`, `showQRCode = true`
+  - Broadcast à tous les clients `/tv` : afficher QR code overlay
 
-- [ ] **Action WebSocket STOP_ENROLL**
+- [x] **Action WebSocket HIDE_QR_CODE**
   - Envoyé par admin depuis TeamsPage
-  - Serveur : `enrollmentActive = false`
+  - Serveur : `enrollmentActive = false`, `showQRCode = false`
   - Broadcast à tous les clients `/tv` : masquer QR code
 
-- [ ] **Action WebSocket ENROLL_UPDATE**
+- [x] **Action WebSocket ENROLLMENT_UPDATE**
   - Broadcast quand un VJoueur s'enrôle ou se déconnecte
-  - Payload : `{CURRENT: 5, MAX: 10}`
+  - Payload dans GameState : `{VIRTUAL_PLAYER_COUNT, VIRTUAL_PLAYER_LIMIT}`
   - Mise à jour du compteur sur admin et TV
 
-- [ ] **Génération du QR code**
-  - Bibliothèque : `qrcode` (npm) côté frontend
-  - URL dynamique : `http://${serverIP}/` (page d'enrôlement)
-  - Niveau de correction d'erreur : M (15%)
-  - Rendu dans la zone MEDIA (remplacement du média question)
+- [x] **Génération du QR code**
+  - Bibliothèque : `qrcode.react` (npm)
+  - URL dynamique : `http://${window.location.hostname}/`
+  - Composants : `QRCodeOverlay.jsx` + `QRCodeDisplay.jsx`
+  - Overlay plein écran avec barre de progression joueurs
 
 ```javascript
 // Exemple React - Dans PlayerDisplay.jsx
@@ -251,12 +250,18 @@ useEffect(() => {
 
 | Fichier | Description |
 |---------|-------------|
-| `web/src/pages/VPlayerPage.jsx` | Page VJoueur avec buzz tactile |
+| `web/src/pages/EnrollPage.jsx` | Page d'enrôlement `/` (saisie pseudo) |
+| `web/src/pages/EnrollPage.css` | Styles page d'enrôlement |
+| `web/src/pages/VPlayerPage.jsx` | Page VJoueur `/player` avec buzz tactile |
 | `web/src/pages/VPlayerPage.css` | Styles spécifiques VPlayer (badges, overlay buzz) |
-| `web/src/pages/PlayerPage.jsx` | Page d'enrôlement (saisie pseudo) |
-| `web/src/pages/PlayerPage.css` | Styles page d'enrôlement |
 | `web/src/pages/PlayerDisplay.jsx` | Composant réutilisé avec props `isVPlayer`, `onMediaClick` |
 | `web/src/pages/PlayerDisplay.css` | Styles partagés (timer 95%, zones) |
+| `web/src/components/QRCodeOverlay.jsx` | Overlay QR code sur /tv |
+| `web/src/components/QRCodeDisplay.jsx` | Composant de génération QR code |
+| `web/src/pages/TeamsPage.jsx` | Zone enrollment (boutons + compteur) |
+| `internal/game/models.go` | Champs GameState (EnrollmentActive, ShowQRCode, etc.) |
+| `internal/game/engine.go` | CreateVirtualPlayer, StartEnrollment, StopEnrollment |
+| `cmd/server/main.go` | Handlers SHOW_QR_CODE, HIDE_QR_CODE, PLAYER_CONNECT |
 
 ### Caractéristiques implémentées
 
@@ -307,10 +312,10 @@ Page de saisie du pseudo, accessible via scan du QR code affiché sur `/tv`.
   - Vérification lors de `PLAYER_CONNECT`
   - Si pseudo déjà pris : recherche du bumper existant pour reconnexion
 
-- [ ] **Gestion erreurs** (partiel)
-  - `ENROLLMENT_CLOSED` : "L'enrôlement est fermé"
-  - `ENROLLMENT_FULL` : "Nombre max de joueurs atteint"
-  - `PSEUDO_TAKEN` : "Ce pseudo est déjà utilisé"
+- [x] **Gestion erreurs** *(v2.45.0)*
+  - Backend : `EnrollmentError` avec raisons (`ENROLLMENT_CLOSED`, `ENROLLMENT_FULL`, `PSEUDO_TAKEN`)
+  - Action `PLAYER_REJECTED` envoyée au client avec la raison
+  - Frontend : Message "Les inscriptions ne sont pas ouvertes" dans EnrollPage
 
 - [x] **Après enrôlement réussi**
   - Redirection automatique vers `/player`
@@ -420,7 +425,7 @@ Option pour afficher visuellement les buzz refusés (utile pour debug).
   - En cas de déconnexion : envoi automatique `PLAYER_CONNECT` après 2s
   - Détection suppression par admin → redirection vers `/`
 
-- [ ] **Configuration serveur** (config.json)
+- [ ] **Configuration serveur** (config.json) - *Optionnel, valeurs par défaut fonctionnelles*
   ```json
   {
     "vplayer": {
@@ -430,74 +435,40 @@ Option pour afficher visuellement les buzz refusés (utile pour debug).
   }
   ```
 
-### Validation côté serveur
+### Validation côté serveur ✅ Implémenté (v2.45.0)
 
-- [ ] **Logique d'enrôlement complète**
+- [x] **Logique d'enrôlement complète**
 
-  **État serveur :**
+  **État serveur (GameState)** :
   ```go
-  type EnrollmentState struct {
-    Active      bool      // Phase ENROLL active
-    MaxPlayers  int       // Limite configurée par l'admin
-    VPlayers    map[string]*VPlayer  // Joueurs enrôlés (clé = pseudo)
-  }
+  VirtualPlayerCount  int  `json:"VIRTUAL_PLAYER_COUNT"`  // Nombre de VJoueurs enrôlés
+  VirtualPlayerLimit  int  `json:"VIRTUAL_PLAYER_LIMIT"`  // Limite max configurée
+  EnrollmentActive    bool `json:"ENROLLMENT_ACTIVE"`     // Phase ENROLL active
+  ShowQRCode          bool `json:"SHOW_QR_CODE"`          // QR code affiché sur /tv
   ```
 
-  **Logique serveur lors de `PLAYER_CONNECT`** :
-  ```go
-  func handlePlayerConnect(name string, sessionID string) Response {
-    name = strings.TrimSpace(name)
+  **Logique serveur lors de `PLAYER_CONNECT`** (dans `main.go:handlePlayerConnect`) :
+  - Validation pseudo (2-20 caractères)
+  - Recherche bumper existant pour reconnexion
+  - Vérification enrôlement actif
+  - Vérification limite joueurs
+  - Création via `engine.CreateVirtualPlayer()`
+  - Envoi `PLAYER_CONNECTED` ou `PLAYER_REJECTED`
 
-    // Validation du pseudo
-    if len(name) < 2 || len(name) > 20 {
-      return error("INVALID_PSEUDO", "Le pseudo doit faire 2-20 caractères")
-    }
-
-    // Reconnexion via sessionID (cookie)
-    if sessionID != "" && isValidSession(sessionID) {
-      return reconnectVPlayer(sessionID)
-    }
-
-    // Vérifier unicité du pseudo
-    if isNameTaken(name) {
-      return error("PSEUDO_TAKEN", "Ce pseudo est déjà utilisé")
-    }
-
-    // Vérifier si enrôlement actif
-    if !enrollmentActive {
-      return error("ENROLLMENT_CLOSED", "L'enrôlement est fermé")
-    }
-
-    // Vérifier limite de joueurs
-    if len(vPlayers) >= maxPlayers {
-      return error("ENROLLMENT_FULL", "Nombre max de joueurs atteint")
-    }
-
-    // Créer nouveau VJoueur
-    return createVPlayer(name)
-  }
-  ```
-
-  **Création d'un nouveau VJoueur (première connexion)** :
-  - Action WebSocket `PLAYER_CONNECT` avec `NAME`
-  - Création d'un bumper virtuel avec flag `IS_VIRTUAL: true`
-  - État initial : **NON ASSIGNÉ** (pas d'équipe, pas de couleur QCM)
-  - Réponse serveur : `PLAYER_CONNECTED` avec ID de session et nom validé
-  - Le VJoueur apparaît dans `/admin/teams` comme un **buzzer standard non assigné**
-  - Badge visuel "📱 VIRTUEL" pour distinguer des buzzers physiques
+  **Création d'un nouveau VJoueur** :
+  - Bumper virtuel avec `IS_VIRTUAL: true`
+  - ID généré : `vplayer_<timestamp>`
+  - État initial : NON ASSIGNÉ
+  - Apparaît dans `/admin/teams` comme un buzzer standard
 
   **Reconnexion d'un VJoueur existant** :
-  - Le VJoueur envoie le même `NAME` que lors de sa première connexion
-  - Le serveur retrouve le bumper virtuel correspondant
-  - Restauration de l'état : équipe, couleur QCM, score (si déjà assigné)
-  - Réponse serveur : `PLAYER_CONNECTED` avec état complet restauré
-  - Le VJoueur retrouve son interface comme avant la déconnexion
+  - Recherche par `NAME` dans les bumpers virtuels existants
+  - Restauration automatique de l'état complet
 
-- [ ] **Attribution par l'admin**
-  - Le VJoueur apparaît dans la liste des joueurs non assignés (comme un buzzer physique)
-  - L'admin peut glisser-déposer le VJoueur vers une équipe (drag & drop existant)
-  - L'admin peut attribuer une couleur QCM (interface existante)
-  - Identique au workflow d'un buzzer physique qui se connecte
+- [x] **Attribution par l'admin**
+  - VJoueur dans la liste des joueurs non assignés
+  - Drag & drop vers une équipe (workflow existant)
+  - Attribution couleur QCM (interface existante)
 
 **Payload PLAYER_CONNECT :**
 ```json
@@ -643,7 +614,7 @@ Option pour afficher visuellement les buzz refusés (utile pour debug).
 
 ---
 
-## Phase 2 - QCM interactif (v2.41.0)
+## Phase 2 - QCM interactif (v2.46.0)
 
 ### QCM : Boutons de réponse à la place du BUZZ
 
@@ -678,7 +649,7 @@ Option pour afficher visuellement les buzz refusés (utile pour debug).
 
 ---
 
-## Phase 3 - Memory interactif (v2.42.0)
+## Phase 3 - Memory interactif (v2.47.0)
 
 ### Memory : Cartes cliquables
 
@@ -704,7 +675,7 @@ Option pour afficher visuellement les buzz refusés (utile pour debug).
 
 ---
 
-## Phase 4 - PWA basique (v2.43.0)
+## Phase 4 - PWA basique (v2.48.0)
 
 ### Installation comme app
 
@@ -824,18 +795,21 @@ Cette action est envoyée au VJoueur quand l'admin l'assigne à une équipe via 
 
 ## Priorités de développement
 
-**v2.40.0 - MVP** :
-- Phase 1 : `/player` avec BUZZ simple
-- QR Code sur `/tv` (affichage/masquage par admin)
-- Réorganisation routes (breaking change : `/` → `/admin`)
+**v2.41.0 - v2.45.0** : ✅ Phase 1 Complète
+- `/player` avec BUZZ simple
+- QR Code overlay sur `/tv` (affichage/masquage par admin)
+- Zone enrollment dans TeamsPage
+- Reconnexion automatique
+- Auto-PONG en phase PREPARE
+- Blocage buzz pour MEMORY
 
-**v2.41.0** :
-- Phase 2 : QCM interactif (4 boutons)
+**v2.46.0** :
+- Phase 2 : QCM interactif (4 boutons colorés)
 
-**v2.42.0** :
+**v2.47.0** :
 - Phase 3 : Memory interactif (cartes cliquables)
 
-**v2.43.0** :
+**v2.48.0** :
 - Phase 4 : PWA basique (manifest + service worker)
 
 ---
