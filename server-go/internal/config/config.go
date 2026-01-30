@@ -9,11 +9,12 @@ import (
 
 // Config holds all server configuration
 type Config struct {
-	Server  ServerConfig  `json:"server"`
-	WiFi    WiFiConfig    `json:"wifi"`
-	Game    GameConfig    `json:"game"`
-	Storage StorageConfig `json:"storage"`
-	Version string        `json:"version"`
+	Server     ServerConfig     `json:"server"`
+	WiFi       WiFiConfig       `json:"wifi"`
+	Game       GameConfig       `json:"game"`
+	Storage    StorageConfig    `json:"storage"`
+	NeonEffect NeonEffectConfig `json:"neon_effect"`
+	Version    string           `json:"version"`
 }
 
 type ServerConfig struct {
@@ -37,6 +38,13 @@ type StorageConfig struct {
 	DataDir      string `json:"data_dir"`
 	QuestionsDir string `json:"questions_dir"`
 	FilesDir     string `json:"files_dir"`
+}
+
+type NeonEffectConfig struct {
+	Enabled       bool    `json:"enabled"`
+	ArcWidth      int     `json:"arc_width"`       // 30-180 degrees, default 60
+	IntensityGap  int     `json:"intensity_gap"`   // 0-100%, default 80
+	RotationSpeed float64 `json:"rotation_speed"`  // 1-10 seconds, default 4
 }
 
 var (
@@ -82,6 +90,18 @@ func Load(path string) (*Config, error) {
 		cfg.Version = "2.0.0"
 	}
 
+	// NeonEffect defaults
+	if cfg.NeonEffect.ArcWidth == 0 {
+		cfg.NeonEffect.ArcWidth = 60
+	}
+	if cfg.NeonEffect.IntensityGap == 0 {
+		cfg.NeonEffect.IntensityGap = 80
+	}
+	if cfg.NeonEffect.RotationSpeed == 0 {
+		cfg.NeonEffect.RotationSpeed = 4.0
+	}
+	// Enabled defaults to false (zero value)
+
 	return &cfg, nil
 }
 
@@ -112,6 +132,12 @@ func Get() *Config {
 					QuestionsDir: "./data/files/questions",
 					FilesDir:     "./data/files",
 				},
+				NeonEffect: NeonEffectConfig{
+					Enabled:       false, // Default: disabled
+					ArcWidth:      60,
+					IntensityGap:  80,
+					RotationSpeed: 4.0,
+				},
 				Version: "2.0.0",
 			}
 		}
@@ -122,4 +148,28 @@ func Get() *Config {
 // SetInstance sets the singleton config instance (must be called before Get)
 func SetInstance(cfg *Config) {
 	instance = cfg
+}
+
+// ValidateAndClampNeonEffect validates and clamps neon effect values to acceptable ranges
+func (c *Config) ValidateAndClampNeonEffect() {
+	// Clamp arc_width to 30-180 degrees
+	if c.NeonEffect.ArcWidth < 30 {
+		c.NeonEffect.ArcWidth = 30
+	} else if c.NeonEffect.ArcWidth > 180 {
+		c.NeonEffect.ArcWidth = 180
+	}
+
+	// Clamp intensity_gap to 0-100%
+	if c.NeonEffect.IntensityGap < 0 {
+		c.NeonEffect.IntensityGap = 0
+	} else if c.NeonEffect.IntensityGap > 100 {
+		c.NeonEffect.IntensityGap = 100
+	}
+
+	// Clamp rotation_speed to 1.0-10.0 seconds
+	if c.NeonEffect.RotationSpeed < 1.0 {
+		c.NeonEffect.RotationSpeed = 1.0
+	} else if c.NeonEffect.RotationSpeed > 10.0 {
+		c.NeonEffect.RotationSpeed = 10.0
+	}
 }

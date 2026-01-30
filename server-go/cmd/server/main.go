@@ -263,6 +263,11 @@ func (a *App) setupCallbacks() {
 		a.broadcastUpdate()
 	}
 
+	// Config update handler
+	a.httpServer.OnConfigUpdate = func() {
+		a.broadcastConfigUpdate()
+	}
+
 	// Detect existing backgrounds on startup
 	a.loadBackgrounds()
 
@@ -1384,6 +1389,22 @@ func (a *App) broadcastHideQRCode() {
 	data, _ := json.Marshal(payload)
 	a.broadcast(protocol.ActionHideQRCode, data, false)
 	server.LogInfo(game.LogComponentApp, "QR Code enrollment deactivated")
+}
+
+func (a *App) broadcastConfigUpdate() {
+	cfg := config.Get()
+	payload := protocol.ConfigUpdatePayload{
+		NeonEffect: protocol.NeonEffectPayload{
+			Enabled:       cfg.NeonEffect.Enabled,
+			ArcWidth:      cfg.NeonEffect.ArcWidth,
+			IntensityGap:  cfg.NeonEffect.IntensityGap,
+			RotationSpeed: cfg.NeonEffect.RotationSpeed,
+		},
+	}
+	data, _ := json.Marshal(payload)
+	a.broadcast(protocol.ActionConfigUpdate, data, false)
+	server.LogInfo(game.LogComponentApp, "Config update broadcast (neon: enabled=%v, arc=%d, intensity=%d, speed=%.1f)",
+		cfg.NeonEffect.Enabled, cfg.NeonEffect.ArcWidth, cfg.NeonEffect.IntensityGap, cfg.NeonEffect.RotationSpeed)
 }
 
 func (a *App) broadcastQuestions() {

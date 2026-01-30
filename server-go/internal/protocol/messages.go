@@ -50,6 +50,8 @@ const (
 	// Log actions (via dedicated /ws/logs WebSocket)
 	ActionLogHistory = "LOG_HISTORY"
 	ActionLogEntry   = "LOG_ENTRY"
+	// Config update action
+	ActionConfigUpdate = "CONFIG_UPDATE"
 )
 
 // FSInfo represents file storage information
@@ -216,6 +218,19 @@ type LogEntryPayload struct {
 	Level     string `json:"level"`     // DEBUG, INFO, WARN, ERROR
 	Component string `json:"component"` // Engine, HTTP, WebSocket, TCP, UDP, App
 	Message   string `json:"message"`
+}
+
+// ConfigUpdatePayload for CONFIG_UPDATE action (broadcast config changes)
+type ConfigUpdatePayload struct {
+	NeonEffect NeonEffectPayload `json:"neon_effect"`
+}
+
+// NeonEffectPayload represents neon effect configuration
+type NeonEffectPayload struct {
+	Enabled       bool    `json:"enabled"`
+	ArcWidth      int     `json:"arc_width"`
+	IntensityGap  int     `json:"intensity_gap"`
+	RotationSpeed float64 `json:"rotation_speed"`
 }
 
 // NewMessage creates a new outgoing message
