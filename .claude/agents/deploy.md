@@ -146,8 +146,8 @@ curl -L -o server-go/server.exe "https://github.com/CCoupel/BuzzMaster/releases/
 The user must see the logs in a visible console window:
 
 ```powershell
-# PowerShell
-Start-Process -FilePath "server-go/server.exe" -WorkingDirectory "server-go"
+# PowerShell (depuis la racine du projet)
+Start-Process -FilePath "server.exe" -WorkingDirectory "server-go"
 ```
 
 ```cmd

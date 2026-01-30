@@ -167,10 +167,10 @@ Arrête et redéploie le serveur BuzzControl vers l'environnement cible.
 16. **Lancer le serveur dans une fenêtre visible (PROD uniquement)**
     L'utilisateur doit voir les logs dans la console :
 
-    # PowerShell
-    Start-Process -FilePath "server-go/server.exe" -WorkingDirectory "server-go"
+    # PowerShell (depuis la racine du projet)
+    Start-Process -FilePath "server.exe" -WorkingDirectory "server-go"
 
-    # Ou CMD
+    # Ou CMD (depuis la racine du projet)
     start cmd /k "cd server-go && server.exe"
 
     Attendre 3-5 secondes pour le démarrage
