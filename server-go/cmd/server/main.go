@@ -21,6 +21,9 @@ import (
 	"time"
 )
 
+// Version is set at build time via -ldflags="-X main.Version=X.Y.Z"
+var Version = "dev"
+
 // App holds all server components
 type App struct {
 	config      *config.Config
@@ -48,9 +51,14 @@ func main() {
 		log.Printf("Using default configuration: %v", err)
 		cfg = config.Get()
 	}
+
+	// Override version with embedded value (set via -ldflags at build time)
+	if Version != "dev" {
+		cfg.Version = Version
+	}
 	config.SetInstance(cfg)
 
-	log.Printf("Version: %s", cfg.Version)
+	log.Printf("Version: %s (embedded: %s)", cfg.Version, Version)
 	log.Printf("HTTP Port: %d", cfg.Server.HTTPPort)
 	log.Printf("TCP Port: %d", cfg.Server.TCPPort)
 

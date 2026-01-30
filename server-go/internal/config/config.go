@@ -87,6 +87,10 @@ func Load(path string) (*Config, error) {
 
 // Get returns the singleton config instance
 func Get() *Config {
+	// If instance was set via SetInstance, return it directly
+	if instance != nil {
+		return instance
+	}
 	once.Do(func() {
 		var err error
 		instance, err = Load("config.json")
@@ -115,7 +119,7 @@ func Get() *Config {
 	return instance
 }
 
-// SetInstance allows setting config for testing
+// SetInstance sets the singleton config instance (must be called before Get)
 func SetInstance(cfg *Config) {
 	instance = cfg
 }

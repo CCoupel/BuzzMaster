@@ -13,10 +13,16 @@ cd web
 npm run build
 cd ..
 
-# Step 2: Build Go executable (web/dist is embedded directly via web/embed.go)
+# Step 2: Read version from config.json
 echo ""
-echo "[2/2] Building Go executable..."
-go build -o server.exe ./cmd/server
+echo "[2/3] Reading version..."
+VERSION=$(grep '"version"' config.json | sed 's/.*"version": *"\([^"]*\)".*/\1/')
+echo "Version: $VERSION"
+
+# Step 3: Build Go executable with embedded version
+echo ""
+echo "[3/3] Building Go executable..."
+go build -ldflags="-X main.Version=$VERSION" -o server.exe ./cmd/server
 
 # Show result
 SIZE=$(ls -lh server.exe | awk '{print $5}')

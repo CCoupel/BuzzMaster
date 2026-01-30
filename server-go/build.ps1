@@ -15,9 +15,16 @@ if ($LASTEXITCODE -ne 0) {
 }
 Set-Location ..
 
-# Step 2: Build Go executable (web/dist is embedded directly via web/embed.go)
-Write-Host "`n[2/2] Building Go executable..." -ForegroundColor Yellow
-go build -o server.exe ./cmd/server
+# Step 2: Read version from config.json
+Write-Host "`n[2/3] Reading version..." -ForegroundColor Yellow
+$configJson = Get-Content "config.json" | ConvertFrom-Json
+$version = $configJson.version
+Write-Host "Version: $version" -ForegroundColor Cyan
+
+# Step 3: Build Go executable with embedded version
+Write-Host "`n[3/3] Building Go executable..." -ForegroundColor Yellow
+$ldflags = "-X main.Version=$version"
+go build -ldflags "$ldflags" -o server.exe ./cmd/server
 if ($LASTEXITCODE -ne 0) {
     Write-Host "Go build failed!" -ForegroundColor Red
     exit 1

@@ -122,8 +122,9 @@ jobs:
           GOARCH: ${{ matrix.goarch }}
           CGO_ENABLED: 0
         run: |
-          echo "Building ${{ matrix.target }}..."
-          go build -ldflags="-s -w" -o ../buzzcontrol-v${{ needs.checking.outputs.version }}-${{ matrix.suffix }} ./cmd/server
+          VERSION="${{ needs.checking.outputs.version }}"
+          echo "Building ${{ matrix.target }} with embedded version $VERSION..."
+          go build -ldflags="-s -w -X main.Version=$VERSION" -o ../buzzcontrol-v$VERSION-${{ matrix.suffix }} ./cmd/server
           echo "✅ ${{ matrix.target }} build complete"
 
       - name: Validate binary
