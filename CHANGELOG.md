@@ -3,6 +3,99 @@
 Historique des versions du projet BuzzControl.
 
 
+## [2.45.0] - 2026-01-30
+
+### Améliorations
+- **[Tri Rapidité]**: Persistance du tri jusqu'à PREPARE
+  - **Avant** : Les cartes reprenaient leur place dès STOP
+  - **Après** : Le tri par temps de buzz persiste en STARTED/PAUSED/REVEALED/STOPPED
+  - **Reset** : Uniquement lors de la sélection d'une nouvelle question (PREPARE)
+
+- **[TeamCard]**: Animation par-dessus les autres cartes
+  - **zIndex dynamique** : Cartes actives (zIndex: 10) passent au-dessus des autres (zIndex: 1)
+  - **Effet** : Animations de réorganisation plus fluides et visibles
+
+- **[TeamCard]**: Suppression des temps de réponse en double
+  - **Supprimé** : Temps vert sur la carte équipe (team-response-time)
+  - **Supprimé** : Temps gris sur chaque joueur (buzzer-response-time)
+  - **Raison** : Le temps existant sur la carte suffit
+
+### Corrections
+- **[VPlayer]**: Page VJoueur visible pendant ENROLL
+  - **Problème** : VPlayers voyaient le QR Code au lieu de leur interface
+  - **Solution** : Condition `gameState.phase === 'ENROLL' && !isVPlayer`
+
+### Fichiers modifiés
+- `server-go/web/src/pages/GamePage.jsx` : Condition tri étendue à STOPPED
+- `server-go/web/src/components/TeamCard.jsx` : zIndex + suppression temps + condition tri
+- `server-go/web/src/pages/PlayerDisplay.jsx` : Condition ENROLL pour VPlayers
+- `server-go/config.json` : Version 2.45.0
+
+---
+
+## [2.44.2] - 2026-01-30
+
+### Corrections
+- **[TeamCard]**: Correction de la visibilité des animations de réorganisation
+  - **Problème** : Animations framer-motion des joueurs/équipes invisibles lors du tri par rapidité
+  - **Cause racine** : CSS `overflow: hidden` créait un stacking context bloquant layout animations
+  - **Solution** : Changement `overflow: hidden` → `overflow: visible` sur `.team-card` et `.team-card-header`
+  - **Impact** : Animations spring (300ms) maintenant visibles lors du réarrangement des équipes/joueurs
+  - **Gestion du texte débordant** : Conservée via `text-overflow: ellipsis` sur `.team-name`
+
+### Fichiers modifiés
+- `server-go/web/src/components/TeamCard.css` : 2 changements (lignes 10 et 34)
+- `server-go/config.json` : Version bumped (2.44.1 → 2.44.2)
+
+### Validation
+- ✅ Code review : CSS specificity et non-régression vérifiés
+- ✅ QA : Animations testées, performances inchangées
+- ✅ Breaking changes : Aucun
+
+### Notes
+- Patch release (2.44.y) - correction mineure sans nouveau feature
+- Backward compatible - aucun change API
+- Frontend only - aucune modification backend
+
+---
+
+## [2.44.1] - 2026-01-30
+
+### Ajouts
+- **[GamePage]**: Tri équipes et joueurs par temps de réponse (feature tri-rapidite-reponse)
+  - **Tri dynamique** : Équipes et joueurs triés par temps de buzz (plus rapide en haut)
+  - **Phase-aware** : Tri actif UNIQUEMENT en STARTED/PAUSED/REVEALED (hors jeu = tri par score)
+  - **Badges de classement** : 🏆 (rang 1), 🥈 (rang 2), 🥉 (rang 3)
+  - **Affichage temps** : XXXms pour chaque équipe et joueur ayant buzzé
+  - **Animation réorganisation** : Spring transition ~300ms (stiffness: 300, damping: 30)
+  - **Flash animation** : Pulsation verte 500ms au nouveau buzz
+  - **Équipes non-buzzées** : Restent au bas de la liste sans badge ni temps
+  - **Tri stable** : Même temps de buzz conserve l'ordre original
+  - **Responsive** : Font-size adaptée (0.85rem desktop, 0.75rem tablet, 0.6-0.7rem mobile)
+
+### Technique
+- `GamePage.jsx` : Logic tri équipes (lines 63-97), useMemo optimization
+- `GamePage.css` : Styles `.rank-badge`, `.team-response-time`
+- `TeamCard.jsx` : Logique tri joueurs (lines 64-77), calcul temps ms (lines 50-52)
+- `TeamCard.jsx` : Affichage badges (line 120) et temps (lines 123, 253-256)
+- `TeamCard.css` : Styles `.buzzer-response-time`, animation `@keyframes buzz-flash`
+- `GamePage.test.jsx` : 7 tests unitaires couvrant logique tri et calculs
+- `tests/e2e/tri-rapidite-reponse.md` : 12 scénarios E2E documentés
+
+### Tests
+- **Unit tests JS** : 7 tests validant calcul temps, tri, badges, phase-aware
+- **E2E scenarios** : 12 scénarios manuels (buzz équipes, joueurs, responsive, edge cases)
+- **Code review** : APPROVED (Phase 3 complétée)
+- **QA validation** : VALIDATED (Phase 4 complétée)
+
+### Notes
+- Calcul temps : `(timestamp - gameTime) / 1000` (µs → ms)
+- Dépendances : Aucune nouvelle dépendance (utilise Framer-Motion existant)
+- Performance : Optimisé via useMemo + layoutId Framer-Motion
+- Breaking changes : Aucun
+
+---
+
 ## [2.43.0] - 2026-01-26
 
 ### Ajouts

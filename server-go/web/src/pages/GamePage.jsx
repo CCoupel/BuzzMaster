@@ -1,4 +1,5 @@
 ﻿import { useState, useMemo } from 'react'
+// AnimatePresence removed - layout animations handled by motion.div in TeamCard
 import { useGame } from '../hooks/GameContext'
 import Button from '../components/Button'
 import Card from '../components/Card'
@@ -61,14 +62,30 @@ export default function GamePage() {
   }, [bumpers])
 
   // Sort teams by total score (descending), then by timestamp if tied
+  // During STARTED/PAUSED/REVEALED phases, sort by buzz time instead (faster first)
   const sortedTeams = useMemo(() => {
-    return Object.entries(teams)
+    const teamsList = Object.entries(teams)
       .map(([name, data]) => ({
         name,
         ...data,
         buzzers: teamBumpers[name] || [],
       }))
-      .sort((a, b) => {
+
+    // Tri par temps de réponse si en STARTED/PAUSED/REVEALED/STOPPED (feature tri-rapidite)
+    // Le tri persiste jusqu'à PREPARE (nouvelle question)
+    if (['STARTED', 'PAUSED', 'REVEALED', 'STOPPED'].includes(gameState.phase)) {
+      // Séparer équipes buzzées et non-buzzées
+      const buzzedTeams = teamsList.filter(t => (t.TIME ?? 0) > 0)
+      const nonBuzzedTeams = teamsList.filter(t => (t.TIME ?? 0) === 0)
+
+      // Trier équipes buzzées par temps croissant (plus rapide en haut)
+      buzzedTeams.sort((a, b) => a.TIME - b.TIME)
+
+      // Garder l'ordre original des non-buzzés
+      return [...buzzedTeams, ...nonBuzzedTeams]
+    } else {
+      // Tri par score hors phases de jeu actif (STOP, PREPARE, READY)
+      teamsList.sort((a, b) => {
         const scoreA = a.SCORE ?? 0
         const scoreB = b.SCORE ?? 0
         if (scoreB !== scoreA) return scoreB - scoreA  // Higher score first
@@ -77,7 +94,9 @@ export default function GamePage() {
         const timeB = b.TIME ?? Infinity
         return timeA - timeB
       })
-  }, [teams, teamBumpers])
+      return teamsList
+    }
+  }, [teams, teamBumpers, gameState.phase])
 
   // Sort questions by ORDER if available, otherwise by ID
   const sortedQuestions = useMemo(() => {
@@ -433,45 +452,48 @@ export default function GamePage() {
         <div className="teams-section">
           <h2 className="section-title">Equipes</h2>
           <div className="teams-grid">
-            {sortedTeams.map((team) => (
-              <TeamCard
-                key={team.name}
-                name={team.name}
-                color={team.COLOR}
-                score={team.SCORE || 0}
-                teamPoints={team.TEAM_POINTS || 0}
-                ready={team.READY === true || team.READY === 'TRUE'}
-                active={team.TIME !== undefined && team.TIME > 0}
-                timestamp={team.TIME}
-                gameTime={gameState.gameTime}
-                waitingForReady={['PREPARE', 'READY'].includes(gameState.phase)}
-                waitingForBuzz={['STARTED', 'PAUSED'].includes(gameState.phase)}
-                qcmPenaltyConfig={gameState.question?.TYPE === 'QCM' && gameState.question?.QCM_HINTS_ENABLED ? {
-                  penalty1: gameState.question?.QCM_PENALTY_1 || 0.67,
-                  penalty2: gameState.question?.QCM_PENALTY_2 || 0.33,
-                } : null}
-                onTeamClick={(teamName) => {
-                  if (['STOPPED', 'REVEALED'].includes(gameState.phase)) {
-                    // For Memory questions, use calculated score
-                    // For QCM with hints, use penalty-adjusted points
-                    // Otherwise use pointsInput
-                    let pointsToAward = pointsInput
-                    if (memoryScore) {
-                      pointsToAward = memoryScore.score
-                    } else if (qcmPenalty) {
-                      pointsToAward = qcmPenalty.effectivePoints
+              {sortedTeams.map((team, index) => (
+                <TeamCard
+                  key={team.name}
+                  name={team.name}
+                  color={team.COLOR}
+                  score={team.SCORE || 0}
+                  teamPoints={team.TEAM_POINTS || 0}
+                  ready={team.READY === true || team.READY === 'TRUE'}
+                  active={team.TIME !== undefined && team.TIME > 0}
+                  timestamp={team.TIME}
+                  gameTime={gameState.gameTime}
+                  gamePhase={gameState.phase}
+                  rank={index + 1}
+                  showResponseTime={['STARTED', 'PAUSED', 'REVEALED'].includes(gameState.phase)}
+                  waitingForReady={['PREPARE', 'READY'].includes(gameState.phase)}
+                  waitingForBuzz={['STARTED', 'PAUSED'].includes(gameState.phase)}
+                  qcmPenaltyConfig={gameState.question?.TYPE === 'QCM' && gameState.question?.QCM_HINTS_ENABLED ? {
+                    penalty1: gameState.question?.QCM_PENALTY_1 || 0.67,
+                    penalty2: gameState.question?.QCM_PENALTY_2 || 0.33,
+                  } : null}
+                  onTeamClick={(teamName) => {
+                    if (['STOPPED', 'REVEALED'].includes(gameState.phase)) {
+                      // For Memory questions, use calculated score
+                      // For QCM with hints, use penalty-adjusted points
+                      // Otherwise use pointsInput
+                      let pointsToAward = pointsInput
+                      if (memoryScore) {
+                        pointsToAward = memoryScore.score
+                      } else if (qcmPenalty) {
+                        pointsToAward = qcmPenalty.effectivePoints
+                      }
+                      setTeamPoints(teamName, pointsToAward)
                     }
-                    setTeamPoints(teamName, pointsToAward)
-                  }
-                }}
-                onPlayerClick={(bumperMac, ctrlKey) => handleBumperClick(bumperMac, ctrlKey)}
-                buzzers={team.buzzers.map(b => ({
-                  ...b,
-                  onClick: (e) => handleBumperClick(b.mac, e?.ctrlKey)
-                }))}
-              />
-            ))}
-          </div>
+                  }}
+                  onPlayerClick={(bumperMac, ctrlKey) => handleBumperClick(bumperMac, ctrlKey)}
+                  buzzers={team.buzzers.map(b => ({
+                    ...b,
+                    onClick: (e) => handleBumperClick(b.mac, e?.ctrlKey)
+                  }))}
+                />
+              ))}
+            </div>
         </div>
       </div>
     </div>

@@ -374,3 +374,41 @@
 .memory-admin-stat-value.error {
   color: var(--error);
 }
+
+/* Tri par rapidité de réponse - Styles équipes */
+
+.team-header-content {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex: 1;
+}
+
+.rank-badge {
+  font-size: 1.5rem;
+  line-height: 1;
+  margin-right: 0.25rem;
+}
+
+.team-response-time {
+  font-size: 0.85rem;
+  color: var(--gray-400);
+  margin-left: auto;
+  padding-right: 0.5rem;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+/* Couleur progressive pour temps (vert → gris) */
+.game-page .teams-grid .team-card:nth-child(1) .team-response-time {
+  color: var(--success);
+  font-weight: 600;
+}
+
+.game-page .teams-grid .team-card:nth-child(2) .team-response-time {
+  color: var(--success-light, #86efac);
+}
+
+.game-page .teams-grid .team-card:nth-child(3) .team-response-time {
+  color: var(--warning-light, #fcd34d);
+}

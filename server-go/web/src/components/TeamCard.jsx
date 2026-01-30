@@ -1,5 +1,5 @@
 import { motion } from 'framer-motion'
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import './TeamCard.css'
 
 // QCM answer colors - same as TeamsPage
@@ -27,6 +27,9 @@ export default function TeamCard({
   active = false,
   timestamp,
   gameTime,
+  gamePhase,
+  rank,
+  showResponseTime,
   buzzers = [],
   onClick,
   onTeamClick,
@@ -42,6 +45,37 @@ export default function TeamCard({
   const reactionTime = timestamp && gameTime
     ? ((timestamp - gameTime) / 1000000).toFixed(3)
     : null
+
+  // Calcul du temps de réponse en ms (feature tri-rapidite)
+  const responseTime = timestamp && gameTime
+    ? Math.round((timestamp - gameTime) / 1000)
+    : null
+
+  // Badge de classement (🏆 🥈 🥉)
+  const getRankBadge = (r) => {
+    if (r === 1) return '🏆'
+    if (r === 2) return '🥈'
+    if (r === 3) return '🥉'
+    return null
+  }
+
+  const rankBadge = rank && showResponseTime ? getRankBadge(rank) : null
+
+  // Tri des joueurs au sein de l'équipe (feature tri-rapidite)
+  // Le tri persiste jusqu'à PREPARE (nouvelle question)
+  const sortedBuzzers = useMemo(() => {
+    if (!['STARTED', 'PAUSED', 'REVEALED', 'STOPPED'].includes(gamePhase)) {
+      return buzzers || []
+    }
+
+    const buzzed = (buzzers || []).filter(b => (b.timestamp ?? 0) > 0)
+    const notBuzzed = (buzzers || []).filter(b => (b.timestamp ?? 0) === 0)
+
+    // Tri stable : trier par timestamp croissant (plus rapide en haut)
+    buzzed.sort((a, b) => a.timestamp - b.timestamp)
+
+    return [...buzzed, ...notBuzzed]
+  }, [buzzers, gamePhase])
 
   // Team is waiting when in PREPARE/READY phase but hasn't responded PONG yet
   const isWaiting = waitingForReady && !ready
@@ -68,10 +102,13 @@ export default function TeamCard({
 
   return (
     <motion.div
+      layoutId={`team-${name}`}
+      layout
       className={`team-card ${active ? 'active' : ''} ${ready ? 'ready' : ''} ${isWaiting ? 'waiting' : ''} ${isWaitingForBuzz ? 'waiting-buzz' : ''} ${className}`}
-      style={{ '--team-color': rgbColor }}
+      style={{ '--team-color': rgbColor, zIndex: active ? 10 : 1 }}
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
+      transition={{ type: 'spring', stiffness: 300, damping: 30 }}
     >
       <div
         className={`team-card-header ${onTeamClick ? 'clickable' : ''}`}
@@ -80,7 +117,10 @@ export default function TeamCard({
         onMouseLeave={() => setShowTooltip(false)}
       >
         <div className="team-color-indicator" />
-        <h3 className="team-name">{name}</h3>
+        <div className="team-header-content">
+          {rankBadge && <span className="rank-badge">{rankBadge}</span>}
+          <h3 className="team-name">{name}</h3>
+        </div>
         {ready && (
           <motion.span
             className="ready-badge"
@@ -143,9 +183,9 @@ export default function TeamCard({
         </div>
       )}
 
-      {buzzers.length > 0 && (
+      {sortedBuzzers.length > 0 && (
         <div className="team-buzzers">
-          {buzzers.map((buzzer, index) => {
+          {sortedBuzzers.map((buzzer, index) => {
             const answerColorData = buzzer.answerColor && ANSWER_COLORS[buzzer.answerColor]
             const buzzerWaitingBuzz = waitingForBuzz && !buzzer.active
             const buzzerWaitingPong = waitingForReady  // In PREPARE phase, show PONG status
@@ -164,12 +204,14 @@ export default function TeamCard({
             const hasPenalty = penaltyPercent < 100
             return (
               <motion.div
-                key={buzzer.mac || index}
+                key={`${buzzer.mac}-${buzzer.timestamp}`}
+                layoutId={`buzzer-${buzzer.mac}`}
+                layout
                 className={`buzzer-mini ${buzzer.active ? 'active' : ''} ${buzzer.ready ? 'ready' : ''} ${answerColorData ? 'has-answer-color' : ''} ${buzzerWaitingBuzz ? 'waiting-buzz' : ''} ${buzzerWaitingPong ? 'waiting-pong' : ''} ${onPlayerClick ? 'clickable' : ''}`}
                 style={answerColorData ? { '--answer-color': answerColorData.color } : undefined}
-                initial={{ opacity: 0, scale: 0.8 }}
-                animate={{ opacity: 1, scale: 1 }}
-                transition={{ delay: index * 0.1 }}
+                initial={{ scale: 0.95, opacity: 0.8 }}
+                animate={{ scale: 1, opacity: 1 }}
+                transition={{ type: 'spring', stiffness: 300, damping: 30 }}
                 onClick={handleBuzzerClick}
               >
                 <div className="buzzer-info">

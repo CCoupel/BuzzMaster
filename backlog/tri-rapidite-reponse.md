@@ -1,8 +1,10 @@
 # Tri par rapidité de réponse (Page Jeu Admin)
 
-**Statut** : 📋 Planifié
+**Statut** : ✅ v2.44.1 - COMPLÉTÉ
 
-**Priorité** : Haute
+**Implémentation** : 2026-01-30
+**Branch** : feature/tri-rapidite-reponse
+**Commits** : 5 commits (d3f746c...7b630ed)
 
 ## Description
 
@@ -10,10 +12,14 @@ Sur la page de jeu de l'animateur (`/admin` ou `/anim`), trier dynamiquement les
 
 ## Objectifs
 
-- [ ] Trier les équipes par temps de réponse (plus rapide en haut)
-- [ ] Trier les joueurs au sein de chaque équipe par temps de réponse
-- [ ] Affichage dynamique dès qu'un buzz est reçu
-- [ ] Indicateur visuel du temps de réponse
+- [x] Trier les équipes par temps de réponse (plus rapide en haut)
+- [x] Trier les joueurs au sein de chaque équipe par temps de réponse
+- [x] Affichage dynamique dès qu'un buzz est reçu
+- [x] Indicateur visuel du temps de réponse
+- [x] Phase-aware (tri OFF hors jeu, ON en STARTED/PAUSED/REVEALED)
+- [x] Badges de classement (🏆🥈🥉)
+- [x] Animation fluide (300ms spring + 500ms flash)
+- [x] Responsive design (desktop, tablet, mobile)
 
 ## Design
 

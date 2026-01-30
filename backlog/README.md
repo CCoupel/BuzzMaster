@@ -17,9 +17,9 @@ Chaque fichier correspond à une fonctionnalité ou un ensemble de fonctionnalit
 | [affichage-tv.md](affichage-tv.md) | ✅ v2.30.0 | Synchronisation des fonds d'écran |
 | [memory-game.md](memory-game.md) | ✅ v2.33.0 | Jeu de mémoire avec paires |
 | [mode-demo.md](mode-demo.md) | ✅ v2.40.0 | Mode démonstration avec données complètes |
-| [page-joueur.md](page-joueur.md) | ✅ v2.41.0 | Interface personnalisée pour jouer depuis smartphone |
+| [page-joueur.md](page-joueur.md) | ✅ v2.45.0 | Interface personnalisée pour jouer depuis smartphone (Phase 1) |
 | [page-logs.md](page-logs.md) | ✅ v2.43.0 | Affichage des logs serveur en temps réel (WebSocket dédiée) |
-| [tri-rapidite-reponse.md](tri-rapidite-reponse.md) | 📋 Planifié | Tri équipes/joueurs par rapidité de buzz |
+| [tri-rapidite-reponse.md](tri-rapidite-reponse.md) | ✅ v2.44.1 | Tri équipes/joueurs par rapidité de buzz |
 | [generateur-ia.md](generateur-ia.md) | 📋 Planifié | Générateur de jeu complet via IA |
 
 ## Légende des statuts
@@ -66,6 +66,7 @@ vX.Y.Z
 
 ## Historique
 
+- 2026-01-30 : Completion tri équipes/joueurs par rapidité de buzz (v2.44.1) ✅
 - 2026-01-26 : WebSocket dédiée pour logs (v2.43.0)
 - 2026-01-26 : Completion page logs (v2.42.0)
 - 2026-01-25 : Ajout tri équipes/joueurs par rapidité de buzz (📋 Planifié, priorité haute)

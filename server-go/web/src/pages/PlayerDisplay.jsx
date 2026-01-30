@@ -613,8 +613,8 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
       </div>
 
       <AnimatePresence mode="wait">
-        {gameState.phase === 'ENROLL' ? (
-          /* Enrollment Phase - QR Code Display */
+        {gameState.phase === 'ENROLL' && !isVPlayer ? (
+          /* Enrollment Phase - QR Code Display (only for TV, not for VPlayers) */
           <motion.div
             key="enroll"
             className="enroll-phase"
