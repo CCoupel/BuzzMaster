@@ -16,6 +16,7 @@ backlog/
 
 | Fichier | Description |
 |---------|-------------|
+| [effet-neon-categorie.md](TODO/effet-neon-categorie.md) | Effet néon couleur catégorie sur TV et VJoueur |
 | [qcm-marqueurs-indices.md](TODO/qcm-marqueurs-indices.md) | Marqueurs d'indices sur la barre de temps |
 | [generateur-ia.md](TODO/generateur-ia.md) | Générateur de jeu complet via IA |
 
@@ -148,6 +149,7 @@ mv backlog/En-Cours/qcm-marqueurs-indices.md backlog/DONE/
 
 ## Historique
 
+- 2026-01-30 : Ajout effet néon catégorie sur TV et VJoueur
 - 2026-01-30 : Réorganisation du backlog en 3 dossiers (TODO, En-Cours, DONE)
 - 2026-01-30 : Completion tri équipes/joueurs par rapidité de buzz (v2.44.1)
 - 2026-01-26 : WebSocket dédiée pour logs (v2.43.0)
