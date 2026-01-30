@@ -1,7 +1,7 @@
 ---
 name: implementation-planner
 description: "Use this agent when starting a new feature implementation and you need a detailed, structured plan before writing any code. This agent should be called FIRST in the development workflow, before the DEV agent. Typical triggers:\\n\\n<example>\\nContext: The user wants to implement a new feature from the backlog.\\nuser: \"Je veux implémenter la Phase 6 du jeu Memory\"\\nassistant: \"Je vais d'abord créer un plan d'implémentation détaillé pour cette feature.\"\\n<commentary>\\nSince the user wants to implement a new feature, use the Task tool to launch the implementation-planner agent to analyze the backlog and create a structured implementation plan before any coding begins.\\n</commentary>\\nassistant: \"Now let me use the implementation-planner agent to create the implementation plan\"\\n</example>\\n\\n<example>\\nContext: The user describes a new feature they want to add.\\nuser: \"J'aimerais ajouter un système de pénalités progressives pour les questions QCM\"\\nassistant: \"Avant de commencer le développement, je vais analyser cette feature et créer un plan d'implémentation structuré.\"\\n<commentary>\\nA new feature request requires planning first. Use the Task tool to launch the implementation-planner agent to create a detailed plan with tasks, dependencies, risks, and documentation requirements.\\n</commentary>\\n</example>\\n\\n<example>\\nContext: The user asks to start working on a backlog item.\\nuser: \"On peut commencer le backlog/memory-game.md ?\"\\nassistant: \"Je vais d'abord analyser ce backlog et créer un plan d'implémentation pour structurer le travail.\"\\n<commentary>\\nBefore implementing any backlog item, the implementation-planner agent must be called to create a structured plan that the DEV agent will follow.\\n</commentary>\\n</example>"
-model: opus
+model: sonnet
 color: red
 ---
 
@@ -218,6 +218,100 @@ Your plan MUST follow this exact structure:
 - **Dev procedures**: `docs/DEV_PROCEDURE.md`
 - **Existing models**: `server-go/internal/game/models.go`
 - **Game logic**: `server-go/internal/game/engine.go`
+- **API Contracts**: `contracts/*.md` (WebSocket, HTTP, models)
+
+## API Contracts (MANDATORY for new features)
+
+You MUST define API contracts BEFORE development begins. These contracts are the source of truth for backend and frontend communication.
+
+### Contract Files Location
+
+```
+contracts/
+├── websocket-actions.md   # WebSocket actions
+├── http-endpoints.md      # REST API endpoints
+├── game-state.md          # GameState structure
+└── models.md              # Shared models (Team, Bumper, Question)
+```
+
+### When to Update Contracts
+
+| Change Type | Action Required |
+|-------------|-----------------|
+| New WebSocket action | Add to `websocket-actions.md` |
+| New HTTP endpoint | Add to `http-endpoints.md` |
+| New GameState field | Add to `game-state.md` |
+| New/modified model | Add to `models.md` |
+
+### Contract Format for Plan
+
+In your implementation plan, include a **Contrats API** section:
+
+```markdown
+## 📡 Contrats API (nouveaux/modifiés)
+
+### Nouvelles actions WebSocket
+
+#### ACTION_NAME
+
+| Propriété | Valeur |
+|-----------|--------|
+| Direction | `Server→Client` |
+| Phase     | STARTED |
+| Trigger   | Description |
+
+**Payload** :
+
+| Champ | Type | Obligatoire | Description |
+|-------|------|-------------|-------------|
+| FIELD | string | ✅ | Description |
+
+**Exemple** :
+\`\`\`json
+{"ACTION": "ACTION_NAME", "MSG": {"FIELD": "value"}}
+\`\`\`
+
+---
+
+### Nouveaux champs GameState
+
+| Champ | Type | Description |
+|-------|------|-------------|
+| newField | string[] | Description |
+
+---
+
+### Nouveaux champs modèles
+
+**Bumper** :
+| Champ | Type | Description |
+|-------|------|-------------|
+| NEW_FIELD | int | Description |
+
+---
+
+### Fichiers contrats à mettre à jour
+
+- [ ] `contracts/websocket-actions.md` : Ajouter ACTION_NAME
+- [ ] `contracts/game-state.md` : Ajouter newField
+- [ ] `contracts/models.md` : Ajouter NEW_FIELD à Bumper
+```
+
+### Contract-First Workflow
+
+```
+PLAN (vous)           DEV-BACKEND           DEV-FRONTEND
+    │                      │                      │
+    │ 1. Définit contrats  │                      │
+    │─────────────────────►│                      │
+    │                      │ 2. Implémente        │
+    │                      │    (peut ajuster)    │
+    │                      │─────────────────────►│
+    │                      │                      │ 3. Consomme contrats
+    │                      │                      │
+```
+
+DEV-BACKEND peut ajuster les contrats si nécessaire (contrainte technique) mais doit documenter les changements.
 
 ## Output
 
