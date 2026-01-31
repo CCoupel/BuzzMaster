@@ -3,6 +3,32 @@
 Historique des versions du projet BuzzControl.
 
 
+## [2.47.0] - 2026-01-31
+
+### Ajouts - Authentification VJoueurs WebSocket
+
+**Correction de sécurité critique** :
+- Les VJoueurs (joueurs virtuels) se connectent maintenant correctement avec un type de client distinct
+- Avant : VJoueurs = admin par défaut (risque sécurité)
+- Après : VJoueurs = type "vplayer", séparé d'admin et TV
+
+**Détails** :
+- Ajout du type de client `vplayer` dans l'enum ClientType (serveur)
+- VPlayerPage envoie `SET_CLIENT_TYPE { TYPE: "vplayer" }` au montage
+- EnrollPage envoie `SET_CLIENT_TYPE { TYPE: "vplayer" }` avant l'inscription
+- Serveur broadcast CLIENTS avec 3 compteurs : admin, tv, vplayer
+- Navbar affiche les 3 compteurs distinctement
+
+**Fichiers modifiés** :
+- `server-go/internal/server/websocket.go` : Ajout ClientTypeVPlayer
+- `server-go/cmd/server/main.go` : handleSetClientType supporte "vplayer"
+- `server-go/web/src/hooks/useWebSocket.js` : clientCounts inclut vplayer
+- `server-go/web/src/pages/EnrollPage.jsx` : Appelle setClientType('vplayer')
+- `server-go/web/src/pages/VPlayerPage.jsx` : Appelle setClientType('vplayer')
+- `server-go/web/src/components/Navbar.jsx` : Affiche les 3 compteurs
+- `contracts/websocket-actions.md` : Documentation SET_CLIENT_TYPE + CLIENTS
+
+
 ## [2.46.0] - 2026-01-31
 
 ### Ajouts - Effet Néon Avancé

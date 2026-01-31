@@ -5,13 +5,21 @@ import './EnrollPage.css'
 
 export default function EnrollPage() {
   const navigate = useNavigate()
-  const { connectVirtualPlayer, gameState, status, bumpers } = useGame()
+  const { connectVirtualPlayer, gameState, status, bumpers, setClientType } = useGame()
 
   const [playerName, setPlayerName] = useState('')
   const [error, setError] = useState('')
   const [isConnecting, setIsConnecting] = useState(false)
   const [validationError, setValidationError] = useState('')
   const [checkingSession, setCheckingSession] = useState(true)
+
+  // Identify as vplayer IMMEDIATELY on connection (before any other action)
+  useEffect(() => {
+    if (status === 'connected') {
+      console.log('[EnrollPage] Setting client type to vplayer')
+      setClientType('vplayer')
+    }
+  }, [status, setClientType])
 
   // Timeout to stop checking after 2 seconds
   useEffect(() => {
@@ -95,7 +103,7 @@ export default function EnrollPage() {
     setError('')
     setIsConnecting(true)
 
-    // Send connection request
+    // Client type already set on mount, just send connection request
     connectVirtualPlayer(trimmedName)
 
     // Store in localStorage for reconnection

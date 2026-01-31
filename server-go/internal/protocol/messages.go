@@ -135,13 +135,14 @@ type TeamPointsPayload struct {
 
 // ClientsPayload for CLIENTS action (client count broadcast)
 type ClientsPayload struct {
-	AdminCount int `json:"ADMIN_COUNT"`
-	TVCount    int `json:"TV_COUNT"`
+	AdminCount   int `json:"ADMIN_COUNT"`
+	TVCount      int `json:"TV_COUNT"`
+	VPlayerCount int `json:"VPLAYER_COUNT"`
 }
 
 // SetClientTypePayload for SET_CLIENT_TYPE action
 type SetClientTypePayload struct {
-	Type string `json:"TYPE"` // "admin" or "tv"
+	Type string `json:"TYPE"` // "admin", "tv", or "vplayer"
 }
 
 // ReorderQuestionsPayload for REORDER_QUESTIONS action

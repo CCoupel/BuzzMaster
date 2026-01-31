@@ -34,7 +34,7 @@ Aucun payload requis.
 
 ### SET_CLIENT_TYPE
 
-Définit le type de client (admin ou TV).
+Définit le type de client (admin, TV, ou VJoueur virtuel).
 
 | Propriété | Valeur |
 |-----------|--------|
@@ -45,7 +45,15 @@ Définit le type de client (admin ou TV).
 
 | Champ | Type | Obligatoire | Description |
 |-------|------|-------------|-------------|
-| TYPE | string | ✅ | `"admin"` ou `"tv"` |
+| TYPE | string | ✅ | `"admin"`, `"tv"`, ou `"vplayer"` |
+
+#### Types de Clients
+
+| Type | Description | Utilisation |
+|------|-------------|-------------|
+| admin | Interface d'administration | Page /admin - Contrôle du jeu |
+| tv | Affichage TV/écran joueurs | Page /tv - Affichage public |
+| vplayer | Joueur virtuel (WebSocket) | EnrollPage → VPlayerPage (mobile/web) |
 
 #### Exemple
 
@@ -57,6 +65,12 @@ Définit le type de client (admin ou TV).
   }
 }
 ```
+
+#### VJoueur (v2.47.0+)
+
+Les joueurs virtuels envoient cette action deux fois :
+1. **EnrollPage** : Avant de s'inscrire (`connectVirtualPlayer`)
+2. **VPlayerPage** : Après reconnexion WebSocket (confirmation du type)
 
 ---
 
@@ -355,19 +369,39 @@ Liste des questions.
 
 ### CLIENTS
 
-Compteurs de clients connectés.
+Compteurs de clients connectés (3 types depuis v2.47.0).
 
 | Propriété | Valeur |
 |-----------|--------|
 | Direction | `Server→Client` |
 | Trigger   | Connexion/déconnexion client |
+| Broadcast | Tous les clients |
 
 #### Payload
 
-| Champ | Type | Description |
-|-------|------|-------------|
-| ADMIN_COUNT | int | Nombre d'admins |
-| TV_COUNT | int | Nombre de TVs |
+| Champ | Type | Description | Depuis |
+|-------|------|-------------|--------|
+| ADMIN_COUNT | int | Nombre d'interfaces admin | v2.0 |
+| TV_COUNT | int | Nombre d'affichages TV | v2.0 |
+| VPLAYER_COUNT | int | Nombre de joueurs virtuels | v2.47.0 |
+
+#### Exemple
+
+```json
+{
+  "ACTION": "CLIENTS",
+  "MSG": {
+    "ADMIN_COUNT": 2,
+    "TV_COUNT": 1,
+    "VPLAYER_COUNT": 5
+  }
+}
+```
+
+#### Historique des Versions
+
+- **v2.0-v2.46.0** : 2 compteurs (admin, tv)
+- **v2.47.0+** : 3 compteurs (admin, tv, vplayer) - Identification sécurisée des joueurs virtuels
 
 ---
 
