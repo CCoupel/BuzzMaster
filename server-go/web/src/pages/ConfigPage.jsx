@@ -18,6 +18,7 @@ export default function ConfigPage() {
     arc_width: 60,
     intensity_gap: 80,
     rotation_speed: 4,
+    glow_pulse_speed: 2,
     bar_offset: 20,
     bar_thickness: 4,
     arc_blur: 100
@@ -473,18 +474,37 @@ export default function ConfigPage() {
                     </>
                   )}
 
-                  {/* Intensity - both modes */}
-                  <div className="slider-row">
-                    <label>Intensite du glow</label>
-                    <div className="slider-control">
-                      <input
-                        type="range"
-                        min="0"
-                        max="100"
-                        value={neonConfig.intensity_gap}
-                        onChange={(e) => setNeonConfig(prev => ({ ...prev, intensity_gap: parseInt(e.target.value) }))}
-                      />
-                      <span className="slider-value">{neonConfig.intensity_gap}%</span>
+                  {/* Glow section - grouped */}
+                  <div className="neon-glow-section">
+                    <h4 className="neon-subsection-title">Glow</h4>
+
+                    <div className="slider-row">
+                      <label>Intensite</label>
+                      <div className="slider-control">
+                        <input
+                          type="range"
+                          min="0"
+                          max="100"
+                          value={neonConfig.intensity_gap}
+                          onChange={(e) => setNeonConfig(prev => ({ ...prev, intensity_gap: parseInt(e.target.value) }))}
+                        />
+                        <span className="slider-value">{neonConfig.intensity_gap}%</span>
+                      </div>
+                    </div>
+
+                    <div className="slider-row">
+                      <label>Pulsation</label>
+                      <div className="slider-control">
+                        <input
+                          type="range"
+                          min="0.5"
+                          max="5"
+                          step="0.1"
+                          value={neonConfig.glow_pulse_speed || 2}
+                          onChange={(e) => setNeonConfig(prev => ({ ...prev, glow_pulse_speed: parseFloat(e.target.value) }))}
+                        />
+                        <span className="slider-value">{neonConfig.glow_pulse_speed || 2}s</span>
+                      </div>
                     </div>
                   </div>
 

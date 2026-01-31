@@ -13,6 +13,7 @@
   --neon-arc-width: 60deg;
   --neon-intensity-gap: 0.8;
   --neon-rotation-speed: 4s;
+  --neon-glow-pulse-speed: 2s;  /* Glow pulsation speed */
   --neon-mode: bar;  /* "bar" or "halo" */
   --neon-bar-offset: 20px;
   --neon-bar-thickness: 4px;
@@ -58,7 +59,7 @@
     /* 3. Glow blanc au centre pour renforcer */
     0 0 8px 0 rgba(255, 255, 255, 0.9);
   opacity: var(--neon-intensity-gap);
-  animation: neon-bar-pulse 2s ease-in-out infinite;
+  animation: neon-bar-pulse var(--neon-glow-pulse-speed) ease-in-out infinite;
 }
 
 /* Rotating arc overlay for bar mode - masked to show only border area */
@@ -130,7 +131,7 @@
     0 0 30px var(--neon-color),
     0 0 60px var(--neon-color);
   opacity: calc(var(--neon-intensity-gap) * 0.5);
-  animation: neon-halo-pulse 2s ease-in-out infinite;
+  animation: neon-halo-pulse var(--neon-glow-pulse-speed) ease-in-out infinite;
 }
 
 /* Rotating arc overlay for halo mode - masked to show only border */

@@ -41,14 +41,15 @@ type StorageConfig struct {
 }
 
 type NeonEffectConfig struct {
-	Enabled       bool    `json:"enabled"`
-	Mode          string  `json:"mode"`            // "halo" or "bar", default "bar"
-	ArcWidth      int     `json:"arc_width"`       // 30-180 degrees, default 60
-	IntensityGap  int     `json:"intensity_gap"`   // 0-100%, default 80
-	RotationSpeed float64 `json:"rotation_speed"`  // 1-10 seconds, default 4
-	BarOffset     int     `json:"bar_offset"`      // 10-100 pixels from edge, default 20
-	BarThickness  int     `json:"bar_thickness"`   // 2-20 pixels, default 4
-	ArcBlur       int     `json:"arc_blur"`        // 0-200% of bar thickness, default 100
+	Enabled        bool    `json:"enabled"`
+	Mode           string  `json:"mode"`             // "halo" or "bar", default "bar"
+	ArcWidth       int     `json:"arc_width"`        // 30-180 degrees, default 60
+	IntensityGap   int     `json:"intensity_gap"`    // 0-100%, default 80
+	RotationSpeed  float64 `json:"rotation_speed"`   // 1-10 seconds, default 4
+	BarOffset      int     `json:"bar_offset"`       // 10-100 pixels from edge, default 20
+	BarThickness   int     `json:"bar_thickness"`    // 2-20 pixels, default 4
+	ArcBlur        int     `json:"arc_blur"`         // 0-200% of bar thickness, default 100
+	GlowPulseSpeed float64 `json:"glow_pulse_speed"` // 0.5-5 seconds, default 2
 }
 
 var (
@@ -116,6 +117,9 @@ func Load(path string) (*Config, error) {
 	if cfg.NeonEffect.ArcBlur == 0 {
 		cfg.NeonEffect.ArcBlur = 100 // 100% of bar thickness
 	}
+	if cfg.NeonEffect.GlowPulseSpeed == 0 {
+		cfg.NeonEffect.GlowPulseSpeed = 2.0 // 2 seconds
+	}
 	// Enabled defaults to false (zero value)
 
 	return &cfg, nil
@@ -149,14 +153,15 @@ func Get() *Config {
 					FilesDir:     "./data/files",
 				},
 				NeonEffect: NeonEffectConfig{
-					Enabled:       false, // Default: disabled
-					Mode:          "bar", // Default: bar mode
-					ArcWidth:      60,
-					IntensityGap:  80,
-					RotationSpeed: 4.0,
-					BarOffset:     20,
-					BarThickness:  4,
-					ArcBlur:       100,
+					Enabled:        false, // Default: disabled
+					Mode:           "bar", // Default: bar mode
+					ArcWidth:       60,
+					IntensityGap:   80,
+					RotationSpeed:  4.0,
+					BarOffset:      20,
+					BarThickness:   4,
+					ArcBlur:        100,
+					GlowPulseSpeed: 2.0,
 				},
 				Version: "2.0.0",
 			}
@@ -217,5 +222,12 @@ func (c *Config) ValidateAndClampNeonEffect() {
 		c.NeonEffect.ArcBlur = 0
 	} else if c.NeonEffect.ArcBlur > 200 {
 		c.NeonEffect.ArcBlur = 200
+	}
+
+	// Clamp glow_pulse_speed to 0.5-5.0 seconds
+	if c.NeonEffect.GlowPulseSpeed < 0.5 {
+		c.NeonEffect.GlowPulseSpeed = 0.5
+	} else if c.NeonEffect.GlowPulseSpeed > 5.0 {
+		c.NeonEffect.GlowPulseSpeed = 5.0
 	}
 }

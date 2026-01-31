@@ -724,3 +724,16 @@
   text-transform: uppercase;
   letter-spacing: 0.05em;
 }
+
+/* Neon Glow subsection */
+.neon-glow-section {
+  margin-top: var(--space-4);
+  padding: var(--space-4);
+  background: var(--gray-100);
+  border-radius: var(--radius-lg);
+  border-left: 3px solid var(--accent-cyan);
+}
+
+.neon-glow-section .neon-subsection-title {
+  color: var(--accent-cyan);
+}
