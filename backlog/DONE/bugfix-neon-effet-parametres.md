@@ -1,6 +1,6 @@
 # Bugfix - Effet Néon : Paramètres non appliqués
 
-**Statut** : 📋 Planifié
+**Statut** : ✅ Terminé (v2.47.0)
 
 ## Description
 
@@ -27,19 +27,33 @@ L'effet néon (v2.46.0) a plusieurs paramètres de configuration qui ne sont pas
 ## Tâches
 
 ### Diagnostic
-- [ ] Vérifier `neon.css` pour identifier les variables non utilisées
-- [ ] Vérifier `PlayerDisplay.jsx` pour les variables CSS injectées
-- [ ] Identifier les valeurs hardcodées à remplacer par les variables
+- [x] Vérifier `neon.css` pour identifier les variables non utilisées
+- [x] Vérifier `PlayerDisplay.jsx` pour les variables CSS injectées
+- [x] Identifier les valeurs hardcodées à remplacer par les variables
 
 ### Corrections CSS
-- [ ] Appliquer `--neon-glow-pulse-speed` à l'animation
-- [ ] Utiliser `--neon-glow-pulse-min` et `--neon-glow-pulse-max` pour l'opacité
-- [ ] Appliquer `--neon-bar-thickness` à l'épaisseur de l'arc
-- [ ] Supprimer l'utilisation de `intensity_gap` pour la pulsation
+- [x] Appliquer `--neon-glow-pulse-speed` à l'animation
+- [x] Utiliser `--neon-glow-pulse-min` et `--neon-glow-pulse-max` pour l'opacité
+- [x] Appliquer `--neon-bar-thickness` à l'épaisseur de l'arc
+- [x] Supprimer l'utilisation de `intensity_gap` pour la pulsation
 
 ### Validation
-- [ ] Tester chaque paramètre individuellement
-- [ ] Vérifier l'aperçu temps réel dans ConfigPage
+- [x] Tester chaque paramètre individuellement
+- [x] Vérifier l'aperçu temps réel dans ConfigPage
+
+## Corrections appliquées (v2.47.0)
+
+**Cause racine identifiée** :
+Le struct `NeonEffectPayload` dans le protocole WebSocket ne contenait que 8 des 11 champs de configuration néon.
+
+**Solution** :
+- Ajout des 3 champs manquants dans `internal/protocol/messages.go`
+- Mise à jour de la sérialisation dans `cmd/server/main.go` (2 fonctions)
+- Complétion des defaults dans `PlayerDisplay.jsx`
+
+**Améliorations UI** :
+- Bouton mode "Barre" → "Neon" (plus clair)
+- Slider "Intensité" déplacé vers "Arc lumineux" (meilleure organisation)
 
 ## Fichiers concernés
 

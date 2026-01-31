@@ -3,36 +3,22 @@
 Historique des versions du projet BuzzControl.
 
 
-## [2.47.1] - 2026-01-31
-
-### Correctifs - Paramètres Effet Néon
-
-**Problème** :
-Les paramètres de pulsation du glow (glow_pulse_speed, glow_pulse_min, glow_pulse_max) n'étaient pas transmis du serveur au frontend, causant des valeurs hardcodées dans le CSS.
-
-**Cause racine** :
-Le struct `NeonEffectPayload` du protocole WebSocket était incomplet et ne contenait que 8 des 11 champs de configuration.
-
-**Corrections** :
-- Ajout des 3 champs manquants au `NeonEffectPayload` dans `internal/protocol/messages.go`
-- Mise à jour de la sérialisation dans `cmd/server/main.go` (2 endroits)
-- Complément des valeurs par défaut dans `PlayerDisplay.jsx`
-- Suppression des fallbacks CSS (|| 2, || 30, || 50)
-
-**Résultat** :
-- ✓ Vitesse de pulsation maintenant configurable (0.5-5s)
-- ✓ Amplitude min/max du glow appliquée correctement
-- ✓ Configuration sauvegardée et persistée
-- ✓ Pas de breaking change (backward compatible)
-
-**Fichiers modifiés** :
-- `server-go/internal/protocol/messages.go` : NeonEffectPayload struct
-- `server-go/cmd/server/main.go` : broadcastConfigUpdate + sendStateToClient
-- `server-go/web/src/pages/PlayerDisplay.jsx` : neonConfig defaults + injection CSS
-- `server-go/config.json` : Valeurs par défaut glow_pulse_min et glow_pulse_max
-
-
 ## [2.47.0] - 2026-01-31
+
+### Fixed
+- **Effet Néon**: Paramètres de pulsation du glow correctement transmis via WebSocket
+  - Ajout de 3 champs manquants dans `NeonEffectPayload` (glow_pulse_speed, glow_pulse_min, glow_pulse_max)
+  - Correction de la sérialisation dans `broadcastConfigUpdate()` et `sendStateToClient()`
+  - Vitesse de pulsation maintenant configurable (0.5-5s)
+  - Amplitude min/max du glow appliquée correctement
+
+### Changed
+- **UI Configuration**: Amélioration de l'organisation des paramètres néon
+  - Bouton mode "Barre" renommé en "Neon" (plus clair)
+  - Slider "Intensité" déplacé vers section "Arc lumineux" (meilleure cohérence)
+
+
+## [2.46.0] - 2026-01-31
 
 ### Ajouts - Authentification VJoueurs WebSocket
 
