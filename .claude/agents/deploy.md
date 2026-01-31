@@ -87,7 +87,19 @@ git commit -m "feat(<scope>): <description> (v<version>)"
 git push origin main
 ```
 
-**Create Tag:**
+**Check Tag Existence (BEFORE creating):**
+```bash
+# Check if tag exists locally
+git tag -l "v<version>"
+
+# Check if tag exists on remote
+git ls-remote --tags origin "refs/tags/v<version>"
+```
+
+**If tag already exists → Increment version and rebuild:**
+See section "Tag Conflict Resolution" below. Increment y for features, z for bugfixes.
+
+**Create Tag (only if no conflict):**
 ```bash
 git tag -a v<version> -m "Release v<version>
 
@@ -265,6 +277,84 @@ Si la CI échoue après le push du tag:
 
 La branche de travail n'est JAMAIS supprimée pour permettre cette récupération.
 
+### Tag Conflict Resolution (PROD)
+
+**AVANT de créer un tag**, toujours vérifier s'il existe déjà :
+
+```bash
+# Vérifier localement
+LOCAL_TAG=$(git tag -l "v<version>")
+
+# Vérifier sur GitHub
+REMOTE_TAG=$(git ls-remote --tags origin "refs/tags/v<version>" 2>/dev/null)
+
+if [ -n "$LOCAL_TAG" ] || [ -n "$REMOTE_TAG" ]; then
+    echo "⚠️ Tag v<version> already exists - incrementing version"
+fi
+```
+
+**Si le tag existe (local OU distant) → Procédure de résolution :**
+
+1. **Déterminer le type de release** et incrémenter en conséquence :
+   - **Feature** (nouvelle fonctionnalité) → Incrémenter **y** (minor), z reste à 0
+     - Exemple : `2.47.0` → `2.48.0`
+   - **Bugfix** (correction de bug) → Incrémenter **z** (patch)
+     - Exemple : `2.47.0` → `2.47.1`
+   - Ne PAS supprimer le tag existant (il correspond à une release valide)
+
+2. **Mettre à jour les fichiers de version** :
+   ```bash
+   # Pour une FEATURE (y+1, z=0)
+   # config.json : "2.47.0" → "2.48.0"
+   # package.json : "2.47.0" → "2.48.0"
+
+   # Pour un BUGFIX (z+1)
+   # config.json : "2.47.0" → "2.47.1"
+   # package.json : "2.47.0" → "2.47.1"
+   ```
+
+3. **Mettre à jour CHANGELOG.md** avec la nouvelle version :
+   - Feature : `## [X.Y.0]` → `## [X.(Y+1).0]`
+   - Bugfix : `## [X.Y.0]` → `## [X.Y.(Z+1)]`
+
+4. **Commit des modifications de version** :
+   ```bash
+   # Feature
+   git add server-go/config.json server-go/web/package.json CHANGELOG.md
+   git commit -m "chore: bump version to X.(Y+1).0 (tag conflict)"
+
+   # Bugfix
+   git add server-go/config.json server-go/web/package.json CHANGELOG.md
+   git commit -m "chore: bump version to X.Y.(Z+1) (tag conflict)"
+   ```
+
+5. **Rebuilder complètement** :
+   ```bash
+   # Frontend
+   cd server-go/web && npm run build
+
+   # Backend Windows
+   cd server-go && go build -o server.exe ./cmd/server
+
+   # Backend ARM64
+   GOOS=linux GOARCH=arm64 go build -o buzzcontrol ./cmd/server
+   ```
+
+6. **Vérifier le build local** :
+   ```bash
+   ./server.exe &
+   curl http://localhost/version  # Doit retourner la nouvelle version
+   curl http://localhost/shutdown
+   ```
+
+7. **Relancer la procédure PROD** depuis Phase 4 (Git et CI) :
+   - Push feature branch
+   - Merge to main
+   - Create new tag with incremented version
+   - Continue CI verification
+
+**Important** : Cette procédure est automatique. Ne JAMAIS supprimer un tag existant qui correspond à une release GitHub valide. Toujours incrémenter la version (y pour feature, z pour bugfix).
+
 ## Critical Rules
 
 1. **NEVER** create Git tags in QUALIF/PREPROD environment (PROD only)
@@ -287,6 +377,9 @@ La branche de travail n'est JAMAIS supprimée pour permettre cette récupératio
 18. **ALWAYS** provide rollback instructions for PROD
 19. **ALWAYS** analyze and auto-fix CI failures (max 3 attempts before escalating)
 20. **ALWAYS** proceed with deployment when user explicitly requests it
+21. **ALWAYS** check tag existence BEFORE creating (local + remote)
+22. **ALWAYS** increment version if tag already exists: y+1 for features, z+1 for bugfixes, then rebuild everything
+23. **NEVER** delete an existing tag that corresponds to a valid GitHub release
 
 ## Hotfix Mode
 
@@ -334,19 +427,21 @@ For PROD deployment, execute these steps IN ORDER:
 ### Phase 4: Git et CI
 14. **Push feature branch**: `git push origin <feature-branch>`
 15. **Git merge**: `git checkout main && git merge --squash <feature-branch> && git commit && git push`
-16. **Git tag**: `git tag -a v<version> -m "..." && git push origin v<version>`
-17. **Verify CI automatically**: Poll GitHub API every 30s (max 10 min), check status/conclusion
-18. **If CI failed**: AUTOMATIC FIX - analyze error, launch correction agent, increment version, retry (max 3 attempts)
+16. **Check tag existence**: `git tag -l "v<version>"` AND `git ls-remote --tags origin "refs/tags/v<version>"`
+17. **If tag exists**: INCREMENT version based on release type (feature → y+1, bugfix → z+1), update config.json + package.json + CHANGELOG.md, commit, rebuild all, then continue
+18. **Git tag**: `git tag -a v<version> -m "..." && git push origin v<version>`
+19. **Verify CI automatically**: Poll GitHub API every 30s (max 10 min), check status/conclusion
+20. **If CI failed**: AUTOMATIC FIX - analyze error, launch correction agent, increment version, retry (max 3 attempts)
 
 ### Phase 5: Validation Release GitHub
-19. **Stop local server**: `curl -s http://localhost/shutdown`
-20. **Download GitHub Release**: Use Invoke-WebRequest or curl -L
-21. **Start release exe (VISIBLE WINDOW)**: `Start-Process` or `start cmd /k`
-22. **Verify release version**: `curl http://localhost/version` must match release
-23. **Confirm to user**: "✅ Release validated. Server running from GitHub Release."
+21. **Stop local server**: `curl -s http://localhost/shutdown`
+22. **Download GitHub Release**: Use Invoke-WebRequest or curl -L
+23. **Start release exe (VISIBLE WINDOW)**: `Start-Process` or `start cmd /k`
+24. **Verify release version**: `curl http://localhost/version` must match release
+25. **Confirm to user**: "✅ Release validated. Server running from GitHub Release."
 
 ### Phase 6: Rapport
-24. **Generate deployment report**: All information, decisions, status
+26. **Generate deployment report**: All information, decisions, status
 
 **IMPORTANT: NE PAS SUPPRIMER la branche feature** - elle reste disponible pour corrections si CI échoue.
 
