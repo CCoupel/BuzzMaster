@@ -1223,6 +1223,23 @@
   overflow: hidden;
 }
 
+/* Margin pour ne pas chevaucher l'effet néon */
+.neon-border .game-content-zones {
+  margin: calc(var(--neon-bar-offset) + var(--neon-bar-thickness));
+}
+
+/* Ajustement des éléments VPlayer avec effet néon */
+.neon-border .vplayer-permanent-info {
+  top: calc(var(--neon-bar-offset) + var(--neon-bar-thickness) + 1rem);
+  left: calc(var(--neon-bar-offset) + var(--neon-bar-thickness));
+  right: calc(var(--neon-bar-offset) + var(--neon-bar-thickness));
+}
+
+/* Ajustement de la barre de temps avec effet néon */
+.neon-border .zone-timer .timer-bar-container {
+  width: calc(100% - 2 * (var(--neon-bar-offset) + var(--neon-bar-thickness)));
+}
+
 /* Zone 1: Timer - At top, contains timer-display + timer-bar */
 .zone-timer {
   height: 10vh;
