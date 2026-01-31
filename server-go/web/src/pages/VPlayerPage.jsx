@@ -14,7 +14,7 @@ const ANSWER_COLORS = {
 
 export default function VPlayerPage() {
   const navigate = useNavigate()
-  const { sendMessage, gameState, bumpers, teams, status } = useWebSocket()
+  const { sendMessage, gameState, bumpers, teams, status, setClientType } = useWebSocket()
 
   const [playerSession, setPlayerSession] = useState(null)
   const [bumper, setBumper] = useState(null)
@@ -58,6 +58,14 @@ export default function VPlayerPage() {
       }
     }
   }, [playerSession, bumpers, teams])
+
+  // Set client type on mount (identify as vplayer)
+  useEffect(() => {
+    if (playerSession && status === 'connected') {
+      console.log('[VPlayer] Setting client type to vplayer')
+      setClientType('vplayer')
+    }
+  }, [playerSession, status, setClientType])
 
   // Detect if bumper was deleted by admin - redirect to enrollment page
   useEffect(() => {

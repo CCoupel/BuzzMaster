@@ -2,7 +2,7 @@ import { NavLink, useLocation } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import './Navbar.css'
 
-export default function Navbar({ connectionStatus = 'disconnected', clientCounts = { admin: 0, tv: 0 }, serverVersion = '' }) {
+export default function Navbar({ connectionStatus = 'disconnected', clientCounts = { admin: 0, tv: 0, vplayer: 0 }, serverVersion = '' }) {
   const location = useLocation()
 
   // Detect current prefix from URL (default to /admin)
@@ -84,6 +84,10 @@ export default function Navbar({ connectionStatus = 'disconnected', clientCounts
           <span className="client-count tv" title="Ecrans TV/joueurs">
             <span className="count-icon">TV</span>
             <span className="count-value">{clientCounts.tv}</span>
+          </span>
+          <span className="client-count vplayer" title="Joueurs virtuels">
+            <span className="count-icon">📱</span>
+            <span className="count-value">{clientCounts.vplayer}</span>
           </span>
         </div>
         <div className={`connection-status ${connectionStatus}`}>

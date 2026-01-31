@@ -21,8 +21,8 @@
   "neon_effect": {
     "enabled": true,
     "mode": "bar",
-    "arc_width": 30,
-    "intensity_gap": 0,
+    "arc_width": 168,
+    "intensity_gap": 76,
     "rotation_speed": 10,
     "bar_offset": 18,
     "bar_thickness": 4,

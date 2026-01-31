@@ -28,7 +28,7 @@ export default function useWebSocket() {
   const [questions, setQuestions] = useState({})
   const [fsInfo, setFsInfo] = useState(null)
   const [version, setVersion] = useState(null)
-  const [clientCounts, setClientCounts] = useState({ admin: 0, tv: 0 })
+  const [clientCounts, setClientCounts] = useState({ admin: 0, tv: 0, vplayer: 0 })
   const [logs, setLogs] = useState([])
 
   const wsRef = useRef(null)
@@ -197,6 +197,7 @@ export default function useWebSocket() {
           setClientCounts({
             admin: MSG.ADMIN_COUNT ?? 0,
             tv: MSG.TV_COUNT ?? 0,
+            vplayer: MSG.VPLAYER_COUNT ?? 0,
           })
         }
         break

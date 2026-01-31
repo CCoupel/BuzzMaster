@@ -5,7 +5,7 @@ import './EnrollPage.css'
 
 export default function EnrollPage() {
   const navigate = useNavigate()
-  const { connectVirtualPlayer, gameState, status, bumpers } = useGame()
+  const { connectVirtualPlayer, gameState, status, bumpers, setClientType } = useGame()
 
   const [playerName, setPlayerName] = useState('')
   const [error, setError] = useState('')
@@ -94,6 +94,9 @@ export default function EnrollPage() {
     // Clear previous errors
     setError('')
     setIsConnecting(true)
+
+    // Set client type before connecting
+    setClientType('vplayer')
 
     // Send connection request
     connectVirtualPlayer(trimmedName)

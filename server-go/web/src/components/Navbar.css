@@ -162,6 +162,11 @@
   color: var(--gray-600);
 }
 
+.client-count.vplayer {
+  background: linear-gradient(135deg, var(--accent-cyan-light, #e0f7fa), var(--accent-cyan-lighter, #f0fbfc));
+  color: var(--accent-cyan-dark, #00838f);
+}
+
 .count-icon {
   font-size: 0.65rem;
   text-transform: uppercase;
