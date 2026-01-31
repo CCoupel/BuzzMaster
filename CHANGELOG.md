@@ -15,19 +15,33 @@ Historique des versions du projet BuzzControl.
   - Animation slideDown fluide
   - Accessibilité : aria-label et title présents
 
+**Nouveau groupe "Pages" dans la navbar** :
+- Zone dédiée aux pages TV et joueurs
+- Label vertical "Pages" avec icône
+- Liens : 📺 TV et 👥 Joueurs
+- Même design que zones "Jeu" et "Config"
+- Cohérence visuelle améliorée
+
 ### Changed
 
 - **Navbar restructuring** : Config et Logs retirés de la navbar principale
   - Avant : 8 liens visibles [Jeu|Scores|Palmarès|Historique|Joueurs|Questions|Config|Logs]
-  - Après : 6 liens visibles + menu déroulant [🐝▼|Jeu|Scores|Palmarès|Historique|Joueurs|Questions]
-  - Navbar plus épurée et moins encombrée
+  - Après : 8 liens + menu déroulant [🐝▼|Jeu|Scores|Palmarès|Historique|Joueurs|Questions|📺 TV|👥 Joueurs]
+  - Navbar restructurée avec 3 zones : Jeu | Config | Pages
+  - TV et Joueurs accessibles directement depuis la navbar
   - Pastille de connexion intacte
+
+- **GamePage UI improvement** : Label "Affichage TV" changé en "TV" vertical
+  - Alignment avec le style de la navbar
+  - Label vertical centré et cohérent
+  - Better space efficiency
 
 ### Technical Details
 
 **Fichiers modifiés** :
-- `server-go/web/src/components/Navbar.jsx` : Ajout useState, useRef, useEffect pour gestion menu
-- `server-go/web/src/components/Navbar.css` : Styles menu, animations, responsive
+- `server-go/web/src/components/Navbar.jsx` : Ajout useState, useRef, useEffect pour gestion menu + groupe Pages
+- `server-go/web/src/components/Navbar.css` : Styles menu, animations, responsive + Pages group
+- `server-go/web/src/pages/GamePage.jsx` : Label "TV" vertical au lieu de "Affichage TV:"
 
 **Implémentation** :
 - État React `isMenuOpen` avec useState
