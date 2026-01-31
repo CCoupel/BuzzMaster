@@ -24,7 +24,7 @@ export default function Navbar({ connectionStatus = 'disconnected', clientCounts
         document.removeEventListener('mousedown', handleClickOutside)
       }
     }
-  }, [isMenuOpen])
+  }, [isMenuOpen, menuRef, buttonRef])
 
   // Detect current prefix from URL (default to /admin)
   const currentPrefix = location.pathname.startsWith('/anim') ? '/anim' : '/admin'

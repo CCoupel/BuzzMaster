@@ -60,10 +60,6 @@
   margin-left: var(--space-1);
 }
 
-.brand-logo-button[class*=""] .menu-indicator {
-  transform: rotate(-180deg);
-}
-
 /* Menu Déroulant */
 .navbar-menu-dropdown {
   position: absolute;
