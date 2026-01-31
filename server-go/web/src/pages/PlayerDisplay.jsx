@@ -618,16 +618,26 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
   // Neon style variables
   const neonStyle = useMemo(() => {
     if (!showNeon) return {}
+    const barThickness = neonConfig.bar_thickness || 4
+    const arcBlurPercent = neonConfig.arc_blur !== undefined ? neonConfig.arc_blur : 100
+    // arc_blur is 0-200% of bar thickness
+    const arcBlurPx = (barThickness * arcBlurPercent) / 100
     return {
       '--neon-color': neonCategoryColor,
       '--neon-arc-width': `${neonConfig.arc_width}deg`,
       '--neon-intensity-gap': neonConfig.intensity_gap / 100,
       '--neon-rotation-speed': `${neonConfig.rotation_speed}s`,
+      '--neon-bar-offset': `${neonConfig.bar_offset || 20}px`,
+      '--neon-bar-thickness': `${barThickness}px`,
+      '--neon-arc-blur': `${arcBlurPx}px`,
     }
   }, [showNeon, neonCategoryColor, neonConfig])
 
+  // Neon mode class
+  const neonModeClass = neonConfig.mode === 'halo' ? 'neon-mode-halo' : 'neon-mode-bar'
+
   return (
-    <div className={`player-display ${showNeon ? 'neon-border' : ''}`} style={neonStyle}>
+    <div className={`player-display ${showNeon ? `neon-border ${neonModeClass}` : ''}`} style={neonStyle}>
       {/* Background Images with Crossfade */}
       <div className="background-container">
         <AnimatePresence mode="sync">

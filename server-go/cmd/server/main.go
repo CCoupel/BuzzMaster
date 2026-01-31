@@ -1396,15 +1396,19 @@ func (a *App) broadcastConfigUpdate() {
 	payload := protocol.ConfigUpdatePayload{
 		NeonEffect: protocol.NeonEffectPayload{
 			Enabled:       cfg.NeonEffect.Enabled,
+			Mode:          cfg.NeonEffect.Mode,
 			ArcWidth:      cfg.NeonEffect.ArcWidth,
 			IntensityGap:  cfg.NeonEffect.IntensityGap,
 			RotationSpeed: cfg.NeonEffect.RotationSpeed,
+			BarOffset:     cfg.NeonEffect.BarOffset,
+			BarThickness:  cfg.NeonEffect.BarThickness,
+			ArcBlur:       cfg.NeonEffect.ArcBlur,
 		},
 	}
 	data, _ := json.Marshal(payload)
 	a.broadcast(protocol.ActionConfigUpdate, data, false)
-	server.LogInfo(game.LogComponentApp, "Config update broadcast (neon: enabled=%v, arc=%d, intensity=%d, speed=%.1f)",
-		cfg.NeonEffect.Enabled, cfg.NeonEffect.ArcWidth, cfg.NeonEffect.IntensityGap, cfg.NeonEffect.RotationSpeed)
+	server.LogInfo(game.LogComponentApp, "Config update broadcast (neon: enabled=%v, mode=%s, arc=%d, intensity=%d, speed=%.1f, offset=%d, thickness=%d, blur=%d)",
+		cfg.NeonEffect.Enabled, cfg.NeonEffect.Mode, cfg.NeonEffect.ArcWidth, cfg.NeonEffect.IntensityGap, cfg.NeonEffect.RotationSpeed, cfg.NeonEffect.BarOffset, cfg.NeonEffect.BarThickness, cfg.NeonEffect.ArcBlur)
 }
 
 func (a *App) broadcastQuestions() {
@@ -1478,9 +1482,13 @@ func (a *App) sendStateToClient(clientID string) {
 	neonPayload := protocol.ConfigUpdatePayload{
 		NeonEffect: protocol.NeonEffectPayload{
 			Enabled:       cfg.NeonEffect.Enabled,
+			Mode:          cfg.NeonEffect.Mode,
 			ArcWidth:      cfg.NeonEffect.ArcWidth,
 			IntensityGap:  cfg.NeonEffect.IntensityGap,
 			RotationSpeed: cfg.NeonEffect.RotationSpeed,
+			BarOffset:     cfg.NeonEffect.BarOffset,
+			BarThickness:  cfg.NeonEffect.BarThickness,
+			ArcBlur:       cfg.NeonEffect.ArcBlur,
 		},
 	}
 	neonData, _ := json.Marshal(neonPayload)

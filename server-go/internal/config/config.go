@@ -42,9 +42,13 @@ type StorageConfig struct {
 
 type NeonEffectConfig struct {
 	Enabled       bool    `json:"enabled"`
+	Mode          string  `json:"mode"`            // "halo" or "bar", default "bar"
 	ArcWidth      int     `json:"arc_width"`       // 30-180 degrees, default 60
 	IntensityGap  int     `json:"intensity_gap"`   // 0-100%, default 80
 	RotationSpeed float64 `json:"rotation_speed"`  // 1-10 seconds, default 4
+	BarOffset     int     `json:"bar_offset"`      // 10-100 pixels from edge, default 20
+	BarThickness  int     `json:"bar_thickness"`   // 2-20 pixels, default 4
+	ArcBlur       int     `json:"arc_blur"`        // 0-200% of bar thickness, default 100
 }
 
 var (
@@ -87,10 +91,13 @@ func Load(path string) (*Config, error) {
 		cfg.Storage.DataDir = "./data"
 	}
 	if cfg.Version == "" {
-		cfg.Version = "2.0.0"
+		cfg.Version = "2.46.1"
 	}
 
 	// NeonEffect defaults
+	if cfg.NeonEffect.Mode == "" {
+		cfg.NeonEffect.Mode = "bar" // Default to bar mode
+	}
 	if cfg.NeonEffect.ArcWidth == 0 {
 		cfg.NeonEffect.ArcWidth = 60
 	}
@@ -99,6 +106,15 @@ func Load(path string) (*Config, error) {
 	}
 	if cfg.NeonEffect.RotationSpeed == 0 {
 		cfg.NeonEffect.RotationSpeed = 4.0
+	}
+	if cfg.NeonEffect.BarOffset == 0 {
+		cfg.NeonEffect.BarOffset = 20 // 20 pixels from edge
+	}
+	if cfg.NeonEffect.BarThickness == 0 {
+		cfg.NeonEffect.BarThickness = 4 // 4 pixels thick
+	}
+	if cfg.NeonEffect.ArcBlur == 0 {
+		cfg.NeonEffect.ArcBlur = 100 // 100% of bar thickness
 	}
 	// Enabled defaults to false (zero value)
 
@@ -134,9 +150,13 @@ func Get() *Config {
 				},
 				NeonEffect: NeonEffectConfig{
 					Enabled:       false, // Default: disabled
+					Mode:          "bar", // Default: bar mode
 					ArcWidth:      60,
 					IntensityGap:  80,
 					RotationSpeed: 4.0,
+					BarOffset:     20,
+					BarThickness:  4,
+					ArcBlur:       100,
 				},
 				Version: "2.0.0",
 			}
@@ -152,6 +172,11 @@ func SetInstance(cfg *Config) {
 
 // ValidateAndClampNeonEffect validates and clamps neon effect values to acceptable ranges
 func (c *Config) ValidateAndClampNeonEffect() {
+	// Validate mode
+	if c.NeonEffect.Mode != "halo" && c.NeonEffect.Mode != "bar" {
+		c.NeonEffect.Mode = "bar"
+	}
+
 	// Clamp arc_width to 30-180 degrees
 	if c.NeonEffect.ArcWidth < 30 {
 		c.NeonEffect.ArcWidth = 30
@@ -171,5 +196,26 @@ func (c *Config) ValidateAndClampNeonEffect() {
 		c.NeonEffect.RotationSpeed = 1.0
 	} else if c.NeonEffect.RotationSpeed > 10.0 {
 		c.NeonEffect.RotationSpeed = 10.0
+	}
+
+	// Clamp bar_offset to 10-100 pixels
+	if c.NeonEffect.BarOffset < 10 {
+		c.NeonEffect.BarOffset = 10
+	} else if c.NeonEffect.BarOffset > 100 {
+		c.NeonEffect.BarOffset = 100
+	}
+
+	// Clamp bar_thickness to 2-20 pixels
+	if c.NeonEffect.BarThickness < 2 {
+		c.NeonEffect.BarThickness = 2
+	} else if c.NeonEffect.BarThickness > 20 {
+		c.NeonEffect.BarThickness = 20
+	}
+
+	// Clamp arc_blur to 0-200%
+	if c.NeonEffect.ArcBlur < 0 {
+		c.NeonEffect.ArcBlur = 0
+	} else if c.NeonEffect.ArcBlur > 200 {
+		c.NeonEffect.ArcBlur = 200
 	}
 }

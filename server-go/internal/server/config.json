@@ -20,13 +20,9 @@
   },
   "neon_effect": {
     "enabled": true,
-    "mode": "bar",
-    "arc_width": 180,
-    "intensity_gap": 100,
-    "rotation_speed": 10,
-    "bar_offset": 10,
-    "bar_thickness": 3,
-    "arc_blur": 200
+    "arc_width": 90,
+    "intensity_gap": 75,
+    "rotation_speed": 5.5
   },
-  "version": ""
+  "version": "2.46.0"
 }

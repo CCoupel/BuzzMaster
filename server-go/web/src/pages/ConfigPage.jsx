@@ -14,9 +14,13 @@ export default function ConfigPage() {
   // Neon effect configuration
   const [neonConfig, setNeonConfig] = useState({
     enabled: false,
+    mode: 'bar',
     arc_width: 60,
     intensity_gap: 80,
-    rotation_speed: 4
+    rotation_speed: 4,
+    bar_offset: 20,
+    bar_thickness: 4,
+    arc_blur: 100
   })
   const [savingNeon, setSavingNeon] = useState(false)
 
@@ -417,22 +421,61 @@ export default function ConfigPage() {
 
               {neonConfig.enabled && (
                 <div className="neon-sliders">
+                  {/* Mode selector */}
                   <div className="slider-row">
-                    <label>Largeur de l'arc</label>
-                    <div className="slider-control">
-                      <input
-                        type="range"
-                        min="30"
-                        max="180"
-                        value={neonConfig.arc_width}
-                        onChange={(e) => setNeonConfig(prev => ({ ...prev, arc_width: parseInt(e.target.value) }))}
-                      />
-                      <span className="slider-value">{neonConfig.arc_width}°</span>
+                    <label>Mode d'affichage</label>
+                    <div className="mode-selector">
+                      <button
+                        className={`mode-btn ${neonConfig.mode !== 'halo' ? 'active' : ''}`}
+                        onClick={() => setNeonConfig(prev => ({ ...prev, mode: 'bar' }))}
+                      >
+                        Barre
+                      </button>
+                      <button
+                        className={`mode-btn ${neonConfig.mode === 'halo' ? 'active' : ''}`}
+                        onClick={() => setNeonConfig(prev => ({ ...prev, mode: 'halo' }))}
+                      >
+                        Halo
+                      </button>
                     </div>
                   </div>
 
+                  {/* Bar mode specific settings */}
+                  {neonConfig.mode !== 'halo' && (
+                    <>
+                      <div className="slider-row">
+                        <label>Distance du bord</label>
+                        <div className="slider-control">
+                          <input
+                            type="range"
+                            min="10"
+                            max="100"
+                            value={neonConfig.bar_offset || 20}
+                            onChange={(e) => setNeonConfig(prev => ({ ...prev, bar_offset: parseInt(e.target.value) }))}
+                          />
+                          <span className="slider-value">{neonConfig.bar_offset || 20}px</span>
+                        </div>
+                      </div>
+
+                      <div className="slider-row">
+                        <label>Epaisseur de la barre</label>
+                        <div className="slider-control">
+                          <input
+                            type="range"
+                            min="2"
+                            max="20"
+                            value={neonConfig.bar_thickness || 4}
+                            onChange={(e) => setNeonConfig(prev => ({ ...prev, bar_thickness: parseInt(e.target.value) }))}
+                          />
+                          <span className="slider-value">{neonConfig.bar_thickness || 4}px</span>
+                        </div>
+                      </div>
+                    </>
+                  )}
+
+                  {/* Intensity - both modes */}
                   <div className="slider-row">
-                    <label>Ecart d'intensite</label>
+                    <label>Intensite du glow</label>
                     <div className="slider-control">
                       <input
                         type="range"
@@ -445,18 +488,52 @@ export default function ConfigPage() {
                     </div>
                   </div>
 
-                  <div className="slider-row">
-                    <label>Vitesse de rotation</label>
-                    <div className="slider-control">
-                      <input
-                        type="range"
-                        min="1"
-                        max="10"
-                        step="0.5"
-                        value={neonConfig.rotation_speed}
-                        onChange={(e) => setNeonConfig(prev => ({ ...prev, rotation_speed: parseFloat(e.target.value) }))}
-                      />
-                      <span className="slider-value">{neonConfig.rotation_speed}s</span>
+                  {/* Arc section - grouped */}
+                  <div className="neon-arc-section">
+                    <h4 className="neon-subsection-title">Arc lumineux</h4>
+
+                    <div className="slider-row">
+                      <label>Largeur</label>
+                      <div className="slider-control">
+                        <input
+                          type="range"
+                          min="30"
+                          max="180"
+                          value={neonConfig.arc_width}
+                          onChange={(e) => setNeonConfig(prev => ({ ...prev, arc_width: parseInt(e.target.value) }))}
+                        />
+                        <span className="slider-value">{neonConfig.arc_width}°</span>
+                      </div>
+                    </div>
+
+                    <div className="slider-row">
+                      <label>Epaisseur</label>
+                      <div className="slider-control">
+                        <input
+                          type="range"
+                          min="0"
+                          max="200"
+                          step="10"
+                          value={neonConfig.arc_blur !== undefined ? neonConfig.arc_blur : 100}
+                          onChange={(e) => setNeonConfig(prev => ({ ...prev, arc_blur: parseInt(e.target.value) }))}
+                        />
+                        <span className="slider-value">{neonConfig.arc_blur !== undefined ? neonConfig.arc_blur : 100}%</span>
+                      </div>
+                    </div>
+
+                    <div className="slider-row">
+                      <label>Vitesse</label>
+                      <div className="slider-control">
+                        <input
+                          type="range"
+                          min="1"
+                          max="10"
+                          step="0.5"
+                          value={neonConfig.rotation_speed}
+                          onChange={(e) => setNeonConfig(prev => ({ ...prev, rotation_speed: parseFloat(e.target.value) }))}
+                        />
+                        <span className="slider-value">{neonConfig.rotation_speed}s</span>
+                      </div>
                     </div>
                   </div>
                 </div>

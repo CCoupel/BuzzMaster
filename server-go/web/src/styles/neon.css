@@ -1,4 +1,4 @@
-/* Neon Border Effect - Rotating conic gradient */
+/* Neon Border Effect - Bar and Halo modes */
 
 /* CSS Custom Property for animation - enables smooth rotation */
 @property --rotation-angle {
@@ -13,81 +13,151 @@
   --neon-arc-width: 60deg;
   --neon-intensity-gap: 0.8;
   --neon-rotation-speed: 4s;
+  --neon-mode: bar;  /* "bar" or "halo" */
+  --neon-bar-offset: 20px;
+  --neon-bar-thickness: 4px;
+  --neon-arc-blur: 4px;  /* Blur for rotating arc */
   position: relative;
+  isolation: isolate; /* Create stacking context */
+  overflow: hidden; /* Clip pseudo-elements that extend outside */
 }
 
-.neon-border::before {
+/* Preserve fixed positioning when neon-border is applied to player-display */
+.player-display.neon-border {
+  position: fixed;
+  inset: 0;
+}
+
+/* ===== BAR MODE ===== */
+/* Static glowing border */
+.neon-border.neon-mode-bar::before {
   content: '';
   position: absolute;
-  inset: -8px;
-  z-index: -1;
-  border-radius: inherit;
+  top: var(--neon-bar-offset);
+  left: var(--neon-bar-offset);
+  right: var(--neon-bar-offset);
+  bottom: var(--neon-bar-offset);
+  z-index: 1;
+  pointer-events: none;
+  border: var(--neon-bar-thickness) solid var(--neon-color);
+  border-radius: 8px;
+  box-shadow:
+    0 0 10px var(--neon-color),
+    0 0 20px var(--neon-color),
+    0 0 40px var(--neon-color),
+    inset 0 0 10px var(--neon-color),
+    inset 0 0 20px var(--neon-color);
+  opacity: calc(var(--neon-intensity-gap) * 0.5);
+  animation: neon-bar-pulse 2s ease-in-out infinite;
+}
+
+/* Rotating arc overlay for bar mode - masked to show only border area */
+.neon-border.neon-mode-bar::after {
+  content: '';
+  position: absolute;
+  top: var(--neon-bar-offset);
+  left: var(--neon-bar-offset);
+  right: var(--neon-bar-offset);
+  bottom: var(--neon-bar-offset);
+  z-index: 2;
+  pointer-events: none;
+  border-radius: 8px;
+  /* Arc lumineux rotatif */
   background: conic-gradient(
     from var(--rotation-angle),
     transparent 0deg,
-    var(--neon-color) calc(var(--neon-arc-width) / 2),
-    transparent var(--neon-arc-width),
+    transparent calc(180deg - var(--neon-arc-width) / 2),
+    var(--neon-color) calc(180deg - var(--neon-arc-width) / 4),
+    var(--neon-color) calc(180deg + var(--neon-arc-width) / 4),
+    transparent calc(180deg + var(--neon-arc-width) / 2),
     transparent 360deg
   );
-  filter: blur(15px);
+  /* Masque pour ne garder que la bordure - crée un anneau */
+  -webkit-mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  /* L'épaisseur de l'anneau visible = arc_blur (padding) */
+  padding: var(--neon-arc-blur);
+  filter: blur(calc(var(--neon-arc-blur) / 2));
   opacity: var(--neon-intensity-gap);
   animation: neon-rotate var(--neon-rotation-speed) linear infinite;
-  pointer-events: none;
 }
 
-/* Secondary glow layer for more intensity */
-.neon-border::after {
+/* Bar pulse animation */
+@keyframes neon-bar-pulse {
+  0%, 100% {
+    opacity: calc(var(--neon-intensity-gap) * 0.5);
+  }
+  50% {
+    opacity: calc(var(--neon-intensity-gap) * 0.3);
+  }
+}
+
+/* ===== HALO MODE ===== */
+/* Primary glow layer - box-shadow based */
+.neon-border.neon-mode-halo::before {
   content: '';
   position: absolute;
-  inset: -4px;
-  z-index: -1;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  border-radius: inherit;
+  box-shadow:
+    inset 0 0 30px var(--neon-color),
+    inset 0 0 60px var(--neon-color),
+    0 0 30px var(--neon-color),
+    0 0 60px var(--neon-color);
+  opacity: calc(var(--neon-intensity-gap) * 0.5);
+  animation: neon-halo-pulse 2s ease-in-out infinite;
+}
+
+/* Rotating arc overlay for halo mode - masked to show only border */
+.neon-border.neon-mode-halo::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
   border-radius: inherit;
   background: conic-gradient(
     from var(--rotation-angle),
     transparent 0deg,
-    var(--neon-color) calc(var(--neon-arc-width) / 2),
-    transparent var(--neon-arc-width),
+    transparent calc(180deg - var(--neon-arc-width) / 2),
+    var(--neon-color) calc(180deg - var(--neon-arc-width) / 4),
+    var(--neon-color) calc(180deg + var(--neon-arc-width) / 4),
+    transparent calc(180deg + var(--neon-arc-width) / 2),
     transparent 360deg
   );
-  filter: blur(8px);
-  opacity: calc(var(--neon-intensity-gap) * 0.8);
+  /* Masque pour ne garder que la bordure */
+  -webkit-mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  padding: var(--neon-arc-blur);
+  filter: blur(calc(var(--neon-arc-blur) / 2));
+  opacity: var(--neon-intensity-gap);
   animation: neon-rotate var(--neon-rotation-speed) linear infinite;
-  pointer-events: none;
 }
 
-/* Rotation animation */
+/* Halo pulse animation */
+@keyframes neon-halo-pulse {
+  0%, 100% { opacity: calc(var(--neon-intensity-gap) * 0.5); }
+  50% { opacity: calc(var(--neon-intensity-gap) * 0.3); }
+}
+
+/* Rotation animation - shared by both modes */
 @keyframes neon-rotate {
   from { --rotation-angle: 0deg; }
   to { --rotation-angle: 360deg; }
 }
 
 /* Fallback for browsers without @property support */
-@supports not (animation: neon-rotate 1s) {
-  .neon-border::before,
-  .neon-border::after {
-    background: var(--neon-color);
-    opacity: 0.4;
-    animation: neon-pulse 2s ease-in-out infinite;
+@supports not (background: conic-gradient(red, blue)) {
+  .neon-border.neon-mode-bar::after,
+  .neon-border.neon-mode-halo::after {
+    display: none;
   }
-
-  .neon-border::after {
-    opacity: 0.2;
-  }
-}
-
-@keyframes neon-pulse {
-  0%, 100% { opacity: 0.4; }
-  50% { opacity: 0.2; }
-}
-
-/* Fade-in transition when effect appears */
-.neon-border-enter::before,
-.neon-border-enter::after {
-  animation: neon-rotate var(--neon-rotation-speed) linear infinite,
-             neon-fade-in 0.5s ease-out forwards;
-}
-
-@keyframes neon-fade-in {
-  from { opacity: 0; }
-  to { opacity: 1; }
 }

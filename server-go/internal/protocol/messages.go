@@ -228,9 +228,13 @@ type ConfigUpdatePayload struct {
 // NeonEffectPayload represents neon effect configuration
 type NeonEffectPayload struct {
 	Enabled       bool    `json:"enabled"`
-	ArcWidth      int     `json:"arc_width"`
-	IntensityGap  int     `json:"intensity_gap"`
-	RotationSpeed float64 `json:"rotation_speed"`
+	Mode          string  `json:"mode"`           // "halo" or "bar"
+	ArcWidth      int     `json:"arc_width"`      // 30-180 degrees (halo mode)
+	IntensityGap  int     `json:"intensity_gap"`  // 0-100%
+	RotationSpeed float64 `json:"rotation_speed"` // 1-10 seconds
+	BarOffset     int     `json:"bar_offset"`     // 10-100 pixels (bar mode)
+	BarThickness  int     `json:"bar_thickness"`  // 2-20 pixels (bar mode)
+	ArcBlur       int     `json:"arc_blur"`       // 0-200% of bar thickness
 }
 
 // NewMessage creates a new outgoing message

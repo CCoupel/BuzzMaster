@@ -733,8 +733,8 @@ func (h *HTTPServer) handleConfig(w http.ResponseWriter, r *http.Request) {
 			h.OnConfigUpdate()
 		}
 
-		LogInfo(game.LogComponentHTTP, "Config updated and saved (neon_effect: enabled=%v, arc=%d, intensity=%d, speed=%.1f)",
-			cfg.NeonEffect.Enabled, cfg.NeonEffect.ArcWidth, cfg.NeonEffect.IntensityGap, cfg.NeonEffect.RotationSpeed)
+		LogInfo(game.LogComponentHTTP, "Config updated and saved (neon_effect: enabled=%v, mode=%s, arc=%d, intensity=%d, speed=%.1f, offset=%d, thickness=%d)",
+			cfg.NeonEffect.Enabled, cfg.NeonEffect.Mode, cfg.NeonEffect.ArcWidth, cfg.NeonEffect.IntensityGap, cfg.NeonEffect.RotationSpeed, cfg.NeonEffect.BarOffset, cfg.NeonEffect.BarThickness)
 
 		w.Header().Set("Content-Type", "application/json")
 		w.Write(validatedJSON)
