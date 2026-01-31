@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import useWebSocket from '../hooks/useWebSocket'
+import { useGame } from '../hooks/GameContext'
 import PlayerDisplay from './PlayerDisplay'
 import './VPlayerPage.css'
 
@@ -14,7 +14,7 @@ const ANSWER_COLORS = {
 
 export default function VPlayerPage() {
   const navigate = useNavigate()
-  const { sendMessage, gameState, bumpers, teams, status, setClientType } = useWebSocket()
+  const { sendMessage, gameState, bumpers, teams, status, setClientType } = useGame()
 
   const [playerSession, setPlayerSession] = useState(null)
   const [bumper, setBumper] = useState(null)
