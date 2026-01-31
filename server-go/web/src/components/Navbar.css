@@ -19,9 +19,114 @@
   gap: var(--space-2);
 }
 
+/* Brand Logo Container et Button */
+.brand-logo-container {
+  position: relative;
+}
+
+.brand-logo-button {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  background: none;
+  border: none;
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: all var(--transition-base);
+  font-size: 1rem;
+}
+
+.brand-logo-button:hover {
+  background: var(--gray-100);
+  transform: scale(1.05);
+}
+
+.brand-logo-button:active {
+  transform: scale(0.95);
+}
+
 .brand-logo {
   font-size: 1.75rem;
   line-height: 1;
+  display: block;
+}
+
+.menu-indicator {
+  font-size: 0.75rem;
+  color: var(--gray-600);
+  transition: transform var(--transition-base);
+  display: inline-block;
+  margin-left: var(--space-1);
+}
+
+.brand-logo-button[class*=""] .menu-indicator {
+  transform: rotate(-180deg);
+}
+
+/* Menu Déroulant */
+.navbar-menu-dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  margin-top: var(--space-2);
+  background: white;
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md), 0 8px 16px rgba(0, 0, 0, 0.1);
+  border: 1px solid var(--gray-200);
+  overflow: hidden;
+  z-index: 1000;
+  min-width: 180px;
+  animation: slideDown 200ms ease-out;
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.menu-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  color: var(--gray-700);
+  text-decoration: none;
+  transition: all var(--transition-base);
+  border-left: 3px solid transparent;
+}
+
+.menu-item:hover {
+  background: var(--gray-50);
+  color: var(--gray-900);
+  padding-left: calc(var(--space-3) + 2px);
+  border-left-color: var(--primary-500);
+}
+
+.menu-item.active {
+  background: var(--primary-50);
+  color: var(--primary-700);
+  font-weight: 600;
+  border-left-color: var(--primary-600);
+}
+
+.menu-icon {
+  font-size: 1.1rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.5rem;
+}
+
+.menu-label {
+  font-size: 0.875rem;
+  font-weight: 500;
 }
 
 .brand-text {

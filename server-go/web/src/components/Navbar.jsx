@@ -1,9 +1,30 @@
+import { useState, useRef, useEffect } from 'react'
 import { NavLink, useLocation } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import './Navbar.css'
 
 export default function Navbar({ connectionStatus = 'disconnected', clientCounts = { admin: 0, tv: 0, vplayer: 0 }, serverVersion = '' }) {
   const location = useLocation()
+  const [isMenuOpen, setIsMenuOpen] = useState(false)
+  const menuRef = useRef(null)
+  const buttonRef = useRef(null)
+
+  // Fermeture du menu au clic extérieur
+  useEffect(() => {
+    function handleClickOutside(event) {
+      if (menuRef.current && !menuRef.current.contains(event.target) &&
+          buttonRef.current && !buttonRef.current.contains(event.target)) {
+        setIsMenuOpen(false)
+      }
+    }
+
+    if (isMenuOpen) {
+      document.addEventListener('mousedown', handleClickOutside)
+      return () => {
+        document.removeEventListener('mousedown', handleClickOutside)
+      }
+    }
+  }, [isMenuOpen])
 
   // Detect current prefix from URL (default to /admin)
   const currentPrefix = location.pathname.startsWith('/anim') ? '/anim' : '/admin'
@@ -16,12 +37,16 @@ export default function Navbar({ connectionStatus = 'disconnected', clientCounts
     { path: 'history', label: 'Historique', icon: '📜' },
   ]
 
-  // Zone Config: configuration et gestion
+  // Zone Config: configuration et gestion (sans Config et Logs qui sont dans le menu)
   const configItems = [
     { path: 'teams', label: 'Joueurs', icon: '👥' },
     { path: 'quiz', label: 'Questions', icon: '❓' },
-    { path: 'logs', label: 'Logs', icon: '📋' },
+  ]
+
+  // Menu items dans le menu déroulant
+  const menuItems = [
     { path: 'settings', label: 'Config', icon: '⚙️' },
+    { path: 'logs', label: 'Logs', icon: '📋' },
   ]
 
   // Build full path with current prefix
@@ -47,13 +72,42 @@ export default function Navbar({ connectionStatus = 'disconnected', clientCounts
   return (
     <nav className="navbar">
       <div className="navbar-brand">
-        <motion.span
-          className="brand-logo"
-          animate={{ rotate: [0, 10, -10, 0] }}
-          transition={{ duration: 2, repeat: Infinity, repeatDelay: 3 }}
-        >
-          🐝
-        </motion.span>
+        <div className="brand-logo-container">
+          <button
+            ref={buttonRef}
+            className="brand-logo-button"
+            onClick={() => setIsMenuOpen(!isMenuOpen)}
+            title="Menu"
+            aria-label="Menu de navigation"
+          >
+            <motion.span
+              className="brand-logo"
+              animate={{ rotate: [0, 10, -10, 0] }}
+              transition={{ duration: 2, repeat: Infinity, repeatDelay: 3 }}
+            >
+              🐝
+            </motion.span>
+            <span className="menu-indicator">▼</span>
+          </button>
+
+          {/* Menu déroulant */}
+          {isMenuOpen && (
+            <div ref={menuRef} className="navbar-menu-dropdown">
+              {menuItems.map((item) => (
+                <NavLink
+                  key={item.path}
+                  to={getFullPath(item.path)}
+                  className={() => `menu-item ${isActiveRoute(item.path) ? 'active' : ''}`}
+                  onClick={() => setIsMenuOpen(false)}
+                >
+                  <span className="menu-icon">{item.icon}</span>
+                  <span className="menu-label">{item.label}</span>
+                </NavLink>
+              ))}
+            </div>
+          )}
+        </div>
+
         <span className="brand-text">BuzzControl</span>
         <span className="version-badge" title="Version BuzzControl">
           v{serverVersion || '...'}
