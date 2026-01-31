@@ -22,8 +22,9 @@ var upgrader = websocket.Upgrader{
 type ClientType string
 
 const (
-	ClientTypeAdmin ClientType = "admin"
-	ClientTypeTV    ClientType = "tv"
+	ClientTypeAdmin   ClientType = "admin"
+	ClientTypeTV      ClientType = "tv"
+	ClientTypeVPlayer ClientType = "vplayer"
 )
 
 // WebSocketClient represents a connected WebSocket client
@@ -51,7 +52,7 @@ type WebSocketHub struct {
 	OnMessage func(clientID string, msg *protocol.Message)
 
 	// Callback when client count changes
-	OnClientChange func(adminCount, tvCount int)
+	OnClientChange func(adminCount, tvCount, vplayerCount int)
 }
 
 // NewWebSocketHub creates a new WebSocket hub
@@ -112,19 +113,21 @@ func (h *WebSocketHub) Run() {
 // notifyClientChange calls the OnClientChange callback with current counts
 func (h *WebSocketHub) notifyClientChange() {
 	if h.OnClientChange != nil {
-		adminCount, tvCount := h.GetClientCounts()
-		h.OnClientChange(adminCount, tvCount)
+		adminCount, tvCount, vplayerCount := h.GetClientCounts()
+		h.OnClientChange(adminCount, tvCount, vplayerCount)
 	}
 }
 
-// GetClientCounts returns the count of admin and TV clients
-func (h *WebSocketHub) GetClientCounts() (adminCount, tvCount int) {
+// GetClientCounts returns the count of admin, TV, and VPlayer clients
+func (h *WebSocketHub) GetClientCounts() (adminCount, tvCount, vplayerCount int) {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
 	for client := range h.clients {
 		switch client.Type {
 		case ClientTypeTV:
 			tvCount++
+		case ClientTypeVPlayer:
+			vplayerCount++
 		default:
 			adminCount++
 		}

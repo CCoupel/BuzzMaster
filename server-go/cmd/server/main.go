@@ -272,8 +272,8 @@ func (a *App) setupCallbacks() {
 	a.loadBackgrounds()
 
 	// Handle client count changes (WebSocket connect/disconnect)
-	a.wsHub.OnClientChange = func(adminCount, tvCount int) {
-		a.broadcastClientCounts(adminCount, tvCount)
+	a.wsHub.OnClientChange = func(adminCount, tvCount, vplayerCount int) {
+		a.broadcastClientCounts(adminCount, tvCount, vplayerCount)
 	}
 
 	// Handle new log entries - broadcast to logs WebSocket clients
@@ -1096,6 +1096,8 @@ func (a *App) handleSetClientType(clientID string, msg *protocol.Message) {
 	switch payload.Type {
 	case "tv":
 		clientType = server.ClientTypeTV
+	case "vplayer":
+		clientType = server.ClientTypeVPlayer
 	default:
 		clientType = server.ClientTypeAdmin
 	}
@@ -1103,8 +1105,8 @@ func (a *App) handleSetClientType(clientID string, msg *protocol.Message) {
 	a.wsHub.SetClientType(clientID, clientType)
 
 	// Broadcast updated counts
-	adminCount, tvCount := a.wsHub.GetClientCounts()
-	a.broadcastClientCounts(adminCount, tvCount)
+	adminCount, tvCount, vplayerCount := a.wsHub.GetClientCounts()
+	a.broadcastClientCounts(adminCount, tvCount, vplayerCount)
 }
 
 func (a *App) handleShowQRCode() {
@@ -1339,14 +1341,15 @@ func (a *App) broadcastRemote() {
 	a.broadcast(protocol.ActionRemote, data, false)
 }
 
-func (a *App) broadcastClientCounts(adminCount, tvCount int) {
+func (a *App) broadcastClientCounts(adminCount, tvCount, vplayerCount int) {
 	payload := protocol.ClientsPayload{
-		AdminCount: adminCount,
-		TVCount:    tvCount,
+		AdminCount:   adminCount,
+		TVCount:      tvCount,
+		VPlayerCount: vplayerCount,
 	}
 	data, _ := json.Marshal(payload)
 	a.broadcast(protocol.ActionClients, data, false)
-	server.LogDebug(game.LogComponentWebSocket, "Client counts: admin=%d, tv=%d", adminCount, tvCount)
+	server.LogDebug(game.LogComponentWebSocket, "Client counts: admin=%d, tv=%d, vplayer=%d", adminCount, tvCount, vplayerCount)
 }
 
 func (a *App) broadcastBackgroundChange(index int) {
@@ -1467,10 +1470,11 @@ func (a *App) sendStateToClient(clientID string) {
 	a.wsHub.SendToClient(clientID, questionsMsg)
 
 	// Send CLIENTS counts
-	adminCount, tvCount := a.wsHub.GetClientCounts()
+	adminCount, tvCount, vplayerCount := a.wsHub.GetClientCounts()
 	clientsPayload := protocol.ClientsPayload{
-		AdminCount: adminCount,
-		TVCount:    tvCount,
+		AdminCount:   adminCount,
+		TVCount:      tvCount,
+		VPlayerCount: vplayerCount,
 	}
 	cData, _ := json.Marshal(clientsPayload)
 	clientsMsg, _ := protocol.NewMessage(protocol.ActionClients, nil)

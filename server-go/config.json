@@ -21,12 +21,12 @@
   "neon_effect": {
     "enabled": true,
     "mode": "bar",
-    "arc_width": 105,
-    "intensity_gap": 100,
-    "rotation_speed": 4.5,
+    "arc_width": 30,
+    "intensity_gap": 0,
+    "rotation_speed": 10,
     "bar_offset": 18,
     "bar_thickness": 4,
-    "arc_blur": 200,
+    "arc_blur": 0,
     "glow_pulse_speed": 0.5,
     "glow_pulse_min": 0,
     "glow_pulse_max": 0
