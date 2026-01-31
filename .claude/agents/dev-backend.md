@@ -271,6 +271,19 @@ Return a structured summary:
 5. **Error handling**: Never ignore errors
 6. **Backward compatible**: Add default values for new fields
 7. **Atomic commits**: One commit per logical change
+8. **Build order**: If frontend changes were made, rebuild frontend BEFORE Go build
+
+## Build Command
+
+**⚠️ IMPORTANT** : En mode portable, TOUJOURS rebuilder le frontend AVANT le Go build si des fichiers web ont été modifiés.
+
+```bash
+# Si frontend modifié aussi :
+cd server-go/web && npm run build && cd .. && go build -o server.exe ./cmd/server
+
+# Si backend uniquement :
+cd server-go && go build -o server.exe ./cmd/server
+```
 
 ## What You Must NOT Do
 

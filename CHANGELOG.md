@@ -3,6 +3,75 @@
 Historique des versions du projet BuzzControl.
 
 
+## [2.46.0] - 2026-01-31
+
+### Ajouts - Effet Néon Avancé
+
+**Modes d'affichage** :
+- **Mode "bar"** (défaut) : Tube lumineux fin avec centre blanc et rotation d'arc
+  - Tube fixe avec 3 couches (externe floutée, centrale précise, centre blanc)
+  - Arc rotatif au centre du tube avec hotspot blanc brillant
+  - Proportions équilibrées : 1/3 par couche (blur, tube, glow central)
+
+- **Mode "halo"** : Effet néon classique avec bordure lumineuse large
+  - Conic-gradient rotatif avec arc lumineux configurable
+  - Glow pulsant autour de l'écran
+
+**Paramètres configurables** (Page Configuration) :
+
+| Paramètre | Plage | Défaut | Description |
+|-----------|-------|--------|-------------|
+| `enabled` | bool | false | Activer/désactiver l'effet |
+| `mode` | "bar" / "halo" | "bar" | Type d'effet visuel |
+| `arc_width` | 30-180° | 60° | Largeur de l'arc lumineux |
+| `intensity_gap` | 0-100% | 80% | Écart d'intensité (opacité zone sombre) |
+| `rotation_speed` | 1-10s | 4s | Vitesse de rotation de l'arc |
+| `bar_offset` | 10-100px | 20px | Distance du tube par rapport au bord (mode bar) |
+| `bar_thickness` | 2-20px | 4px | Épaisseur du tube lumineux (mode bar) |
+| `arc_blur` | 0-200% | 100% | Flou de l'arc (% de bar_thickness) |
+| `glow_pulse_speed` | 0.5-5s | 2s | Vitesse de pulsation du glow |
+| `glow_pulse_min` | 0-100% | 30% | Opacité minimale du glow pulsant |
+| `glow_pulse_max` | 0-100% | 50% | Opacité maximale du glow pulsant |
+
+**Caractéristiques techniques** :
+- Couleur automatique selon la catégorie de la question
+- Animations CSS GPU-accelerated (@property + conic-gradient)
+- Diffusion temps réel via WebSocket (ACTION: CONFIG_UPDATE)
+- Phases actives : READY, COUNTDOWN, STARTED, PAUSED
+- Ajustement automatique des marges pour éviter chevauchement avec contenu
+
+### Corrections
+- **[Positionnement]** : Préservation du `position: fixed` sur PlayerDisplay
+- **[Marges]** : Ajustement dynamique des marges de contenu selon `bar_offset`
+- **[Centrage]** : Arc rotatif parfaitement centré sur le tube en mode bar
+- **[Proportions]** : Équilibre visuel des 3 couches du tube (1/3 chacune)
+- **[Configuration]** : Restauration des valeurs par défaut correctes dans config.json
+
+### Fichiers modifiés
+
+**Backend** :
+- `server-go/internal/config/config.go` : NeonEffectConfig avec 11 paramètres
+- `server-go/internal/protocol/messages.go` : ACTION CONFIG_UPDATE
+- `server-go/cmd/server/main.go` : Broadcast CONFIG_UPDATE aux clients
+
+**Frontend** :
+- `server-go/web/src/styles/neon.css` : Modes bar/halo, animations CSS
+- `server-go/web/src/pages/ConfigPage.jsx` : UI complète avec 2 onglets (Structure, Glow)
+- `server-go/web/src/pages/ConfigPage.css` : Styles sliders et sections néon
+- `server-go/web/src/pages/PlayerDisplay.jsx` : Application classes + variables CSS
+- `server-go/web/src/pages/PlayerDisplay.css` : Marges dynamiques selon bar_offset
+- `server-go/web/src/pages/VPlayerPage.css` : Support effet néon sur mobile
+- `server-go/web/src/hooks/useWebSocket.js` : Handler CONFIG_UPDATE
+
+**Documentation** :
+- `docs/ADMIN_GUIDE.md` : Section complète effet néon avec guide visuel
+- `docs/DEV_PROCEDURE.md` : Ajout étape rebuild frontend obligatoire
+- `.claude/commands/deploy.md` : Procédure rebuild frontend avant build Go
+
+---
+
+---
+
 ## [2.45.0] - 2026-01-30
 
 ### Améliorations

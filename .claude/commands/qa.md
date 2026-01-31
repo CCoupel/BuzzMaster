@@ -34,8 +34,10 @@ Exécute la procédure de tests QA complète pour BuzzControl.
 
 **Étapes à exécuter :**
 
-1. Build de production
-   cd server-go && go build -o server.exe ./cmd/server
+1. Build de production (ORDRE IMPORTANT : frontend PUIS backend)
+   cd server-go/web && npm run build && cd .. && go build -o server.exe ./cmd/server
+
+   ⚠️ TOUJOURS rebuilder le frontend AVANT le Go build (mode portable).
 
 2. Tests unitaires (sauf si argument = e2e)
    go test ./... -v -cover

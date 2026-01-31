@@ -1,0 +1,28 @@
+{
+  "server": {
+    "http_port": 0,
+    "tcp_port": 0,
+    "websocket_path": "",
+    "auto_open_browsers": false,
+    "debug": false
+  },
+  "wifi": {
+    "ssid": "",
+    "password": ""
+  },
+  "game": {
+    "default_delay": 0
+  },
+  "storage": {
+    "data_dir": "",
+    "questions_dir": "",
+    "files_dir": ""
+  },
+  "neon_effect": {
+    "enabled": true,
+    "arc_width": 90,
+    "intensity_gap": 75,
+    "rotation_speed": 5.5
+  },
+  "version": "2.46.0"
+}

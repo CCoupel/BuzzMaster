@@ -1,22 +1,35 @@
 {
   "server": {
-    "http_port": 80,
-    "tcp_port": 1234,
-    "websocket_path": "/ws",
-    "auto_open_browsers": true,
+    "http_port": 0,
+    "tcp_port": 0,
+    "websocket_path": "",
+    "auto_open_browsers": false,
     "debug": false
   },
   "wifi": {
-    "ssid": "buzzmaster",
-    "password": "BuzzMaster"
+    "ssid": "",
+    "password": ""
   },
   "game": {
-    "default_delay": 30
+    "default_delay": 0
   },
   "storage": {
-    "data_dir": "./data",
-    "questions_dir": "./data/files/questions",
-    "files_dir": "./data/files"
+    "data_dir": "",
+    "questions_dir": "",
+    "files_dir": ""
   },
-  "version": "2.45.0"
+  "neon_effect": {
+    "enabled": true,
+    "mode": "bar",
+    "arc_width": 180,
+    "intensity_gap": 100,
+    "rotation_speed": 10,
+    "bar_offset": 31,
+    "bar_thickness": 4,
+    "arc_blur": 200,
+    "glow_pulse_speed": 2,
+    "glow_pulse_min": 30,
+    "glow_pulse_max": 50
+  },
+  "version": "2.46.0"
 }

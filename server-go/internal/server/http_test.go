@@ -203,12 +203,7 @@ func TestHTTPServer_WindowsCaptivePortal(t *testing.T) {
 }
 
 func TestHTTPServer_Config_GET(t *testing.T) {
-	server, dataDir := setupTestHTTPServer(t)
-
-	// Create config file
-	configDir := filepath.Join(dataDir, "files")
-	os.MkdirAll(configDir, 0755)
-	os.WriteFile(filepath.Join(configDir, "config.json.current"), []byte(`{"test":true}`), 0644)
+	server, _ := setupTestHTTPServer(t)
 
 	req := httptest.NewRequest("GET", "/config.json", nil)
 	w := httptest.NewRecorder()
@@ -219,20 +214,33 @@ func TestHTTPServer_Config_GET(t *testing.T) {
 		t.Errorf("Expected 200, got %d", w.Code)
 	}
 
-	body := w.Body.String()
-	if body != `{"test":true}` {
-		t.Errorf("Unexpected config: %s", body)
+	// Parse response to verify it's valid JSON with neon_effect
+	var cfg map[string]interface{}
+	if err := json.Unmarshal(w.Body.Bytes(), &cfg); err != nil {
+		t.Fatalf("Response is not valid JSON: %v", err)
+	}
+
+	// Verify neon_effect exists in response
+	if _, ok := cfg["neon_effect"]; !ok {
+		t.Errorf("Expected neon_effect in config, got: %v", cfg)
 	}
 }
 
 func TestHTTPServer_Config_POST(t *testing.T) {
-	server, dataDir := setupTestHTTPServer(t)
+	server, _ := setupTestHTTPServer(t)
 
-	// Create config directory
-	configDir := filepath.Join(dataDir, "files")
-	os.MkdirAll(configDir, 0755)
+	// Post a valid config with neon_effect
+	configJSON := `{
+		"version": "2.46.0",
+		"neon_effect": {
+			"enabled": true,
+			"arc_width": 90,
+			"intensity_gap": 75,
+			"rotation_speed": 5.5
+		}
+	}`
 
-	req := httptest.NewRequest("POST", "/config.json", strings.NewReader(`{"saved":true}`))
+	req := httptest.NewRequest("POST", "/config.json", strings.NewReader(configJSON))
 	w := httptest.NewRecorder()
 
 	server.mux.ServeHTTP(w, req)
@@ -241,14 +249,23 @@ func TestHTTPServer_Config_POST(t *testing.T) {
 		t.Errorf("Expected 200, got %d", w.Code)
 	}
 
-	// Verify file was saved
-	data, err := os.ReadFile(filepath.Join(configDir, "config.json.current"))
-	if err != nil {
-		t.Fatalf("Config file not saved: %v", err)
+	// Parse response to verify validation
+	var cfg map[string]interface{}
+	if err := json.Unmarshal(w.Body.Bytes(), &cfg); err != nil {
+		t.Fatalf("Response is not valid JSON: %v", err)
 	}
 
-	if string(data) != `{"saved":true}` {
-		t.Errorf("Config content mismatch: %s", string(data))
+	// Verify neon_effect was saved
+	neonEffect, ok := cfg["neon_effect"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("neon_effect not found in response")
+	}
+
+	if neonEffect["enabled"] != true {
+		t.Errorf("Expected enabled=true, got %v", neonEffect["enabled"])
+	}
+	if neonEffect["arc_width"] != float64(90) {
+		t.Errorf("Expected arc_width=90, got %v", neonEffect["arc_width"])
 	}
 }
 

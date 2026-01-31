@@ -263,6 +263,11 @@ func (a *App) setupCallbacks() {
 		a.broadcastUpdate()
 	}
 
+	// Config update handler
+	a.httpServer.OnConfigUpdate = func() {
+		a.broadcastConfigUpdate()
+	}
+
 	// Detect existing backgrounds on startup
 	a.loadBackgrounds()
 
@@ -1386,6 +1391,26 @@ func (a *App) broadcastHideQRCode() {
 	server.LogInfo(game.LogComponentApp, "QR Code enrollment deactivated")
 }
 
+func (a *App) broadcastConfigUpdate() {
+	cfg := config.Get()
+	payload := protocol.ConfigUpdatePayload{
+		NeonEffect: protocol.NeonEffectPayload{
+			Enabled:       cfg.NeonEffect.Enabled,
+			Mode:          cfg.NeonEffect.Mode,
+			ArcWidth:      cfg.NeonEffect.ArcWidth,
+			IntensityGap:  cfg.NeonEffect.IntensityGap,
+			RotationSpeed: cfg.NeonEffect.RotationSpeed,
+			BarOffset:     cfg.NeonEffect.BarOffset,
+			BarThickness:  cfg.NeonEffect.BarThickness,
+			ArcBlur:       cfg.NeonEffect.ArcBlur,
+		},
+	}
+	data, _ := json.Marshal(payload)
+	a.broadcast(protocol.ActionConfigUpdate, data, false)
+	server.LogInfo(game.LogComponentApp, "Config update broadcast (neon: enabled=%v, mode=%s, arc=%d, intensity=%d, speed=%.1f, offset=%d, thickness=%d, blur=%d)",
+		cfg.NeonEffect.Enabled, cfg.NeonEffect.Mode, cfg.NeonEffect.ArcWidth, cfg.NeonEffect.IntensityGap, cfg.NeonEffect.RotationSpeed, cfg.NeonEffect.BarOffset, cfg.NeonEffect.BarThickness, cfg.NeonEffect.ArcBlur)
+}
+
 func (a *App) broadcastQuestions() {
 	// Load questions from storage
 	questions := a.loadQuestions()
@@ -1451,6 +1476,25 @@ func (a *App) sendStateToClient(clientID string) {
 	clientsMsg, _ := protocol.NewMessage(protocol.ActionClients, nil)
 	clientsMsg.Msg = cData
 	a.wsHub.SendToClient(clientID, clientsMsg)
+
+	// Send CONFIG_UPDATE with neon effect settings
+	cfg := config.Get()
+	neonPayload := protocol.ConfigUpdatePayload{
+		NeonEffect: protocol.NeonEffectPayload{
+			Enabled:       cfg.NeonEffect.Enabled,
+			Mode:          cfg.NeonEffect.Mode,
+			ArcWidth:      cfg.NeonEffect.ArcWidth,
+			IntensityGap:  cfg.NeonEffect.IntensityGap,
+			RotationSpeed: cfg.NeonEffect.RotationSpeed,
+			BarOffset:     cfg.NeonEffect.BarOffset,
+			BarThickness:  cfg.NeonEffect.BarThickness,
+			ArcBlur:       cfg.NeonEffect.ArcBlur,
+		},
+	}
+	neonData, _ := json.Marshal(neonPayload)
+	neonMsg, _ := protocol.NewMessage(protocol.ActionConfigUpdate, nil)
+	neonMsg.Msg = neonData
+	a.wsHub.SendToClient(clientID, neonMsg)
 }
 
 // getStorageInfo returns file storage information (in bytes, like ESP32)

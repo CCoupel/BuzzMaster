@@ -102,7 +102,9 @@ Implémente le code backend Go pour BuzzControl.
 2. Implémenter : models → engine → tests → protocol → handlers
 3. Commits atomiques
 4. Documenter nouvelles actions WebSocket et champs GameState
-5. Push
+5. Build final : `cd server-go/web && npm run build && cd .. && go build -o server.exe ./cmd/server`
+   ⚠️ TOUJOURS rebuilder le frontend AVANT le Go build (mode portable)
+6. Push
 ```
 
 ### Prompt pour dev-frontend
@@ -126,7 +128,9 @@ Implémente le code frontend React pour BuzzControl.
 2. Implémenter : hooks → components → pages → PlayerDisplay → CSS
 3. Vérifier contrainte TV STATIQUE
 4. Commits atomiques
-5. Push
+5. Build final : `cd server-go/web && npm run build && cd .. && go build -o server.exe ./cmd/server`
+   ⚠️ TOUJOURS rebuilder le frontend AVANT le Go build (mode portable)
+6. Push
 ```
 
 ## Gestion des erreurs

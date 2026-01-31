@@ -89,6 +89,13 @@
   pointer-events: auto; /* Badge itself is clickable */
 }
 
+/* Ajustement des badges VPlayer avec effet néon */
+.vplayer-page .neon-border .vplayer-permanent-info {
+  top: calc(var(--neon-bar-offset) + var(--neon-bar-thickness) + 1rem);
+  left: calc(var(--neon-bar-offset) + var(--neon-bar-thickness));
+  right: calc(var(--neon-bar-offset) + var(--neon-bar-thickness));
+}
+
 /* VPlayer clickable zone - 76% width (80% of zone-answers 95%) */
 .vplayer-page .zone-media {
   width: 76%;

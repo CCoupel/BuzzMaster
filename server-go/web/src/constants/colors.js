@@ -37,3 +37,17 @@ export const ANSWER_COLORS = {
   YELLOW: { label: 'Jaune', color: '#eab308', letter: 'C' },
   BLUE: { label: 'Bleu', color: '#3b82f6', letter: 'D' },
 }
+
+// Default color for neon effect when no category
+export const DEFAULT_NEON_COLOR = '#6b7280';
+
+/**
+ * Get the color for a category (for neon effect)
+ * @param {string} category - Category name (e.g., 'GEOGRAPHY', 'HISTORY')
+ * @returns {string} Hex color code
+ */
+export const getCategoryColor = (category) => {
+  if (!category) return DEFAULT_NEON_COLOR;
+  const cat = CATEGORIES[category];
+  return cat ? cat.color : DEFAULT_NEON_COLOR;
+}

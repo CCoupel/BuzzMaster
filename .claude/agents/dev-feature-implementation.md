@@ -74,7 +74,15 @@ Types: `feat`, `fix`, `refactor`, `test`, `docs`, `style`, `chore`
 - Create integration tests in `server-go/internal/server/e2e_test.go`
 
 ### Step 4: Final Verification
-- ✅ `go build ./cmd/server` - No errors
+
+**⚠️ IMPORTANT : TOUJOURS rebuilder le frontend AVANT le Go build (mode portable).**
+
+```bash
+cd server-go/web && npm run build && cd .. && go build -o server.exe ./cmd/server
+```
+
+- ✅ `npm run build` (frontend) - No errors
+- ✅ `go build ./cmd/server` (backend) - No errors
 - ✅ `go test ./...` - All pass
 - ✅ No linting errors
 - ✅ Backward compatibility preserved

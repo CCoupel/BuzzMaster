@@ -10,6 +10,7 @@ Ce document decrit les fonctionnalites d'administration du systeme BuzzControl.
 - [Gestion des scores](#gestion-des-scores)
 - [Historique des evenements](#historique-des-evenements)
 - [Joueurs Virtuels (VPlayer)](#joueurs-virtuels-vplayer)
+- [Configuration Effet Neon](#configuration-effet-neon)
 
 ---
 
@@ -305,6 +306,205 @@ Les joueurs virtuels **ne peuvent pas** buzzer sur les questions de type MEMORY 
 
 ---
 
+## Configuration Effet Neon
+
+### Presentation
+
+L'effet néon affiche une bordure lumineuse animée autour de l'écran TV (`/tv`) et de l'interface VPlayer (`/player`). La couleur s'adapte automatiquement à la catégorie de la question en cours.
+
+### Accès à la configuration
+
+1. Ouvrir la page Configuration (`/admin/settings` ou `/anim/settings`)
+2. Section "Effet Néon" en bas de la page
+3. Toggle pour activer/désactiver
+4. Deux onglets : **Structure** et **Glow**
+
+### Modes d'affichage
+
+L'effet néon propose 2 modes visuels :
+
+| Mode | Description | Cas d'usage |
+|------|-------------|-------------|
+| **bar** (défaut) | Tube lumineux fin avec centre blanc et arc rotatif | Effet moderne et subtil |
+| **halo** | Bordure lumineuse large type néon classique | Effet spectaculaire et immersif |
+
+**Mode "bar" - Composition visuelle** :
+- Tube fixe avec 3 couches (externe floutée, centrale précise, centre blanc)
+- Arc rotatif au centre du tube avec hotspot blanc brillant
+- Proportions équilibrées : 1/3 par couche
+
+### Paramètres disponibles
+
+**Onglet Structure** :
+
+| Paramètre | Plage | Défaut | Description |
+|-----------|-------|--------|-------------|
+| **Activé** | On/Off | Off | Active ou désactive l'effet néon |
+| **Mode** | bar / halo | bar | Type d'effet visuel |
+| **Largeur arc** | 30-180° | 60° | Largeur de l'arc lumineux en degrés |
+| **Écart intensité** | 0-100% | 80% | Écart d'intensité (opacité zone sombre) |
+| **Vitesse rotation** | 1-10s | 4s | Vitesse de rotation de l'arc (en secondes) |
+| **Distance bord** | 10-100px | 20px | Distance du tube par rapport au bord (mode bar) |
+| **Épaisseur tube** | 2-20px | 4px | Épaisseur du tube lumineux (mode bar) |
+| **Flou arc** | 0-200% | 100% | Flou de l'arc (% de épaisseur tube, mode bar) |
+
+**Onglet Glow** :
+
+| Paramètre | Plage | Défaut | Description |
+|-----------|-------|--------|-------------|
+| **Vitesse pulsation** | 0.5-5s | 2s | Vitesse de pulsation du glow |
+| **Opacité min** | 0-100% | 30% | Opacité minimale du glow pulsant |
+| **Opacité max** | 0-100% | 50% | Opacité maximale du glow pulsant |
+
+### Comment utiliser
+
+#### Activer l'effet
+
+1. Cocher la case "Activer l'effet néon"
+2. Ajuster les sliders selon vos préférences
+3. Cliquer sur "Enregistrer la configuration"
+4. L'effet s'applique **immédiatement** sur tous les écrans connectés
+
+#### Phases actives
+
+L'effet néon s'affiche uniquement pendant les phases de jeu suivantes :
+- **READY** : Question prête à démarrer
+- **COUNTDOWN** : Décompte avant le timer
+- **STARTED** : Question en cours
+- **PAUSED** : Jeu en pause après un buzz
+
+L'effet **disparaît** pendant les phases :
+- **STOPPED** : Jeu arrêté
+- **REVEALED** : Réponse affichée
+
+#### Couleur automatique
+
+La couleur de la bordure correspond à la catégorie de la question active :
+- **GEOGRAPHY** : Vert (#22c55e)
+- **ENTERTAINMENT** : Magenta (#d946ef)
+- **HISTORY** : Orange (#f59e0b)
+- **SCIENCE** : Bleu (#3b82f6)
+- **SPORTS** : Rouge (#ef4444)
+- **ARTS** : Violet (#a855f7)
+- **CULTURE** : Cyan (#06b6d4)
+- **OTHER** : Gris (#6b7280)
+
+### Conseils d'utilisation
+
+#### Choix du mode
+
+- **Mode "bar"** : Préférer pour un affichage discret et moderne. Le tube fin ne prend pas trop d'espace à l'écran.
+- **Mode "halo"** : Préférer pour un affichage spectaculaire et immersif. La bordure large est très visible.
+
+#### Largeur de l'arc (30-180°)
+
+- **30-60°** : Arc fin et discret
+- **90°** : Arc moyen (un quart de cercle)
+- **120-180°** : Arc large et spectaculaire
+
+**Recommandation** : Commencer à 60° pour un équilibre entre visibilité et discrétion.
+
+#### Écart d'intensité (0-100%)
+
+Contrôle la différence d'opacité entre le point le plus lumineux et le point le moins lumineux :
+- **0%** : Pas de dégradé (arc uniforme)
+- **50%** : Dégradé modéré
+- **80%** : Dégradé marqué (recommandé)
+- **100%** : Dégradé maximal (fade complet)
+
+**Recommandation** : 80% pour un effet néon réaliste avec dégradé visible.
+
+#### Vitesse de rotation (1-10s)
+
+- **1-2s** : Rotation rapide (dynamique)
+- **4s** : Vitesse modérée (recommandé)
+- **8-10s** : Rotation lente (ambiance)
+
+**Recommandation** : 4s pour un effet fluide sans distraction.
+
+#### Distance du bord (10-100px, mode bar)
+
+Contrôle la distance entre le tube et le bord de l'écran :
+- **10-20px** : Tube proche du bord (recommandé)
+- **30-50px** : Tube plus éloigné
+- **60-100px** : Tube très éloigné (pour grands écrans)
+
+**Recommandation** : 20px pour un effet bien cadré sans chevaucher le contenu.
+
+#### Épaisseur du tube (2-20px, mode bar)
+
+- **2-4px** : Tube très fin (discret, recommandé)
+- **6-10px** : Tube moyen
+- **12-20px** : Tube épais (très visible)
+
+**Recommandation** : 4px pour un bon équilibre entre visibilité et discrétion.
+
+#### Flou de l'arc (0-200%, mode bar)
+
+Contrôle le flou de l'arc rotatif (en % de l'épaisseur du tube) :
+- **0-50%** : Arc net et précis
+- **100%** : Arc flou modéré (recommandé)
+- **150-200%** : Arc très flou (effet glow intense)
+
+**Recommandation** : 100% pour un effet lumineux réaliste.
+
+#### Vitesse de pulsation (0.5-5s)
+
+- **0.5-1s** : Pulsation rapide
+- **2s** : Pulsation modérée (recommandé)
+- **3-5s** : Pulsation lente (ambiance)
+
+**Recommandation** : 2s pour une pulsation visible mais pas trop rapide.
+
+#### Opacité du glow pulsant (0-100%)
+
+Définit la plage d'opacité du glow pulsant :
+- **Min 30% / Max 50%** : Pulsation subtile (recommandé)
+- **Min 10% / Max 90%** : Pulsation très marquée
+- **Min 40% / Max 60%** : Pulsation discrète
+
+**Recommandation** : Min 30% / Max 50% pour une pulsation visible sans distraction.
+
+### Diffusion en temps réel
+
+Quand vous modifiez la configuration :
+- Les changements sont **broadcastés instantanément** via WebSocket
+- Tous les écrans connectés reçoivent la mise à jour (ACTION: CONFIG_UPDATE)
+- Pas besoin de rafraîchir les pages
+
+### Désactivation
+
+Pour désactiver complètement l'effet :
+1. Décocher "Activer l'effet néon"
+2. Cliquer sur "Enregistrer la configuration"
+3. La bordure disparaît immédiatement de tous les écrans
+
+### Fichier de configuration
+
+Les paramètres sont sauvegardés dans `server-go/config.json` :
+
+```json
+{
+  "neon_effect": {
+    "enabled": false,
+    "mode": "bar",
+    "arc_width": 60,
+    "intensity_gap": 80,
+    "rotation_speed": 4,
+    "bar_offset": 20,
+    "bar_thickness": 4,
+    "arc_blur": 100,
+    "glow_pulse_speed": 2,
+    "glow_pulse_min": 30,
+    "glow_pulse_max": 50
+  }
+}
+```
+
+Ces paramètres sont chargés au démarrage du serveur et peuvent être modifiés via l'interface admin.
+
+---
+
 ## Resume des endpoints admin
 
 | Methode | Endpoint | Description |
@@ -315,8 +515,8 @@ Les joueurs virtuels **ne peuvent pas** buzzer sur les questions de type MEMORY 
 | POST | `/reset-select?...` | Reinitialisation selective |
 | GET | `/history` | Liste des evenements |
 | GET | `/version` | Version du serveur |
-| GET | `/config.json` | Configuration |
-| POST | `/config.json` | Modifier configuration |
+| GET | `/config.json` | Configuration (incluant effet néon) |
+| POST | `/config.json` | Modifier configuration (incluant effet néon) |
 
 ---
 

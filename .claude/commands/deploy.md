@@ -84,7 +84,16 @@ Arrête et redéploie le serveur BuzzControl vers l'environnement cible.
 
 ## PHASE 3 : BUILD ET TEST LOCAL
 
-9. **Build selon environnement**
+9. **Build Frontend React (OBLIGATOIRE - mode portable)**
+   cd server-go/web
+   npm run build
+   cd ..
+
+   **IMPORTANT** : Le frontend DOIT être rebuild AVANT le Go car les fichiers
+   web sont embarqués dans le binaire (mode portable). Sans rebuild frontend,
+   les modifications CSS/JS ne seront pas incluses.
+
+10. **Build Go selon environnement**
    cd server-go
 
    # QUALIF : Windows uniquement
@@ -94,12 +103,12 @@ Arrête et redéploie le serveur BuzzControl vers l'environnement cible.
    go build -o server.exe ./cmd/server
    GOOS=linux GOARCH=arm64 go build -o buzzcontrol ./cmd/server
 
-10. **Redémarrer le serveur Windows**
+11. **Redémarrer le serveur Windows**
     - Lancer server.exe en arrière-plan
     - Attendre 2-3 secondes pour le démarrage complet
     - Le serveur reste actif après les tests
 
-11. **Vérification de la version (avec retry automatique)**
+12. **Vérification de la version (avec retry automatique)**
     - Lire la version attendue depuis server-go/config.json
     - Appeler curl http://localhost/version
     - **COMPARER** : La version retournée DOIT correspondre à celle de config.json
@@ -107,14 +116,14 @@ Arrête et redéploie le serveur BuzzControl vers l'environnement cible.
       1. Afficher WARNING : "Version mismatch: expected X.Y.Z, got A.B.C"
       2. Arrêter le serveur : curl http://localhost/shutdown
       3. Attendre 2 secondes
-      4. **RELANCER** les étapes 9, 10, 11 (rebuild + restart + verify)
+      4. **RELANCER** les étapes 9, 10, 11, 12 (rebuild frontend + Go + restart + verify)
       5. Maximum 2 tentatives de retry
       6. Si échec après 2 retries → **ERREUR CRITIQUE** : Arrêter et escalader
     - **Si IDENTIQUE** : Vérifier /listGame fonctionne → Continuer
 
 ## PHASE 4 : GIT ET CI (PROD uniquement)
 
-12. **Push et merge (PROD uniquement)**
+13. **Push et merge (PROD uniquement)**
     - Push la branche feature (avec le commit de doc)
     - Checkout main et pull
     - Squash merge vers main
@@ -123,7 +132,7 @@ Arrête et redéploie le serveur BuzzControl vers l'environnement cible.
     - Push tag
     - **NE PAS supprimer la branche** (conservée pour rollback CI)
 
-13. **Attendre et vérifier la CI (PROD uniquement)**
+14. **Attendre et vérifier la CI (PROD uniquement)**
     La CI GitHub Actions se déclenche automatiquement au push du tag.
 
     a) **Demander à l'utilisateur de vérifier** :
@@ -148,12 +157,12 @@ Arrête et redéploie le serveur BuzzControl vers l'environnement cible.
 
 ## PHASE 5 : VALIDATION RELEASE GITHUB (PROD uniquement)
 
-14. **Arrêter le serveur local (PROD uniquement)**
+15. **Arrêter le serveur local (PROD uniquement)**
     Après validation CI, arrêter le serveur buildé localement :
     curl -s http://localhost/shutdown
     # Attendre 2 secondes
 
-15. **Télécharger l'exécutable GitHub Release (PROD uniquement)**
+16. **Télécharger l'exécutable GitHub Release (PROD uniquement)**
     Télécharger le binaire Windows depuis la release GitHub :
 
     # PowerShell (Windows)
@@ -164,7 +173,7 @@ Arrête et redéploie le serveur BuzzControl vers l'environnement cible.
     # Ou avec curl
     curl -L -o server-go/server.exe "https://github.com/CCoupel/BuzzMaster/releases/download/vX.Y.0/buzzcontrol-vX.Y.0-windows-amd64.exe"
 
-16. **Lancer le serveur dans une fenêtre visible (PROD uniquement)**
+17. **Lancer le serveur dans une fenêtre visible (PROD uniquement)**
     L'utilisateur doit voir les logs dans la console :
 
     # PowerShell (depuis la racine du projet)
@@ -175,7 +184,7 @@ Arrête et redéploie le serveur BuzzControl vers l'environnement cible.
 
     Attendre 3-5 secondes pour le démarrage
 
-17. **Validation finale de la release (PROD uniquement)**
+18. **Validation finale de la release (PROD uniquement)**
     a) **Vérifier la version** :
        curl http://localhost/version
        # DOIT retourner exactement la version de la release (X.Y.0)
@@ -190,7 +199,7 @@ Arrête et redéploie le serveur BuzzControl vers l'environnement cible.
 
 ## PHASE 6 : RAPPORT
 
-18. **Générer le rapport de redéploiement** avec :
+19. **Générer le rapport de redéploiement** avec :
     - Informations : Version, env, date, branche, commit
     - Arrêt : Résultat de l'arrêt du serveur précédent
     - Documentation : Fichiers mis à jour (CHANGELOG, CLAUDE.md, config.json)
@@ -213,6 +222,7 @@ Arrête et redéploie le serveur BuzzControl vers l'environnement cible.
 | Version z=0 + sync package.json | Non | Non | Oui |
 | TaskUpdate(completed) | Non | Non | Oui |
 | Commit documentation | Non | Non | Oui |
+| **Build Frontend React (npm run build)** | **Oui** | **Oui** | **Oui** |
 | Build Windows | Oui | Oui | Oui |
 | Build ARM64 | Non | Oui | Oui |
 | Redémarrage Windows (build local) | Oui | Oui | Oui |
@@ -236,6 +246,7 @@ PROD → Release (merge + tag + binaires prêts pour Raspberry Pi)
 
 **Règles critiques :**
 - TOUJOURS arrêter le serveur avant de rebuild
+- TOUJOURS rebuild le frontend React (npm run build) AVANT le build Go (mode portable)
 - TOUJOURS finaliser la documentation AVANT le build (PROD)
 - TOUJOURS mettre z=0 dans la version pour une release (ex: 2.45.3 → 2.45.0)
 - TOUJOURS marquer les tâches comme complétées (TaskUpdate) avant le push (PROD)

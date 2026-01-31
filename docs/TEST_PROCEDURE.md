@@ -284,11 +284,19 @@ taskkill /IM server.exe /F 2>nul
 # 2. Mettre à jour versions
 # config.json et package.json
 
-# 3. Rebuild
+# 3. Rebuild (ORDRE IMPORTANT : frontend PUIS backend)
 cd server-go
-go build -v ./cmd/server
-npm run build --prefix web
+
+# 3a. Frontend d'abord (OBLIGATOIRE)
+cd web
+npm run build
+cd ..
+
+# 3b. Backend Go ensuite (embarque les fichiers web)
+go build -o server.exe ./cmd/server
 ```
+
+**⚠️ IMPORTANT** : Toujours rebuilder le frontend AVANT le Go build. Le serveur Go embarque les fichiers web compilés.
 
 ### Étape 2 : Tests Unitaires
 

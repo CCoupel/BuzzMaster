@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { motion } from 'framer-motion'
 import { useGame } from '../hooks/GameContext'
 import Button from '../components/Button'
@@ -9,7 +9,24 @@ export default function ConfigPage() {
   const { teams, bumpers, gameState, updateConfig, sendMessage, version } = useGame()
   const [uploadingBg, setUploadingBg] = useState(false)
   const bgInputRef = useRef(null)
+  const dualRangeTrackRef = useRef(null)
   const [draggedIndex, setDraggedIndex] = useState(null)
+
+  // Neon effect configuration
+  const [neonConfig, setNeonConfig] = useState({
+    enabled: false,
+    mode: 'bar',
+    arc_width: 60,
+    intensity_gap: 80,
+    rotation_speed: 4,
+    glow_pulse_speed: 2,
+    glow_pulse_min: 30,
+    glow_pulse_max: 50,
+    bar_offset: 20,
+    bar_thickness: 4,
+    arc_blur: 100
+  })
+  const [savingNeon, setSavingNeon] = useState(false)
 
   // Backup options
   const [backupOptions, setBackupOptions] = useState({
@@ -30,6 +47,51 @@ export default function ConfigPage() {
   })
 
   const [loadingDemo, setLoadingDemo] = useState(false)
+
+  // Load neon config from server on mount
+  useEffect(() => {
+    const fetchNeonConfig = async () => {
+      try {
+        const response = await fetch('/config.json')
+        if (response.ok) {
+          const data = await response.json()
+          if (data.neon_effect) {
+            setNeonConfig(data.neon_effect)
+          }
+        }
+      } catch (error) {
+        console.error('Failed to fetch neon config:', error)
+      }
+    }
+    fetchNeonConfig()
+  }, [])
+
+  // Update local state when gameState.neonEffect changes (from WebSocket)
+  useEffect(() => {
+    if (gameState?.neonEffect) {
+      setNeonConfig(gameState.neonEffect)
+    }
+  }, [gameState?.neonEffect])
+
+  const handleSaveNeonConfig = async () => {
+    setSavingNeon(true)
+    try {
+      const response = await fetch('/config.json', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ neon_effect: neonConfig })
+      })
+      if (!response.ok) {
+        const text = await response.text()
+        alert('Erreur: ' + text)
+      }
+    } catch (error) {
+      console.error('Save neon config failed:', error)
+      alert('Erreur: ' + error.message)
+    } finally {
+      setSavingNeon(false)
+    }
+  }
 
   const handleResetScores = () => {
     if (!window.confirm('Remettre tous les scores a zero ?')) return
@@ -341,6 +403,263 @@ export default function ConfigPage() {
               <div className="config-section-actions">
                 <Button variant="primary" onClick={handleLoadDemo} loading={loadingDemo}>
                   Charger la demo
+                </Button>
+              </div>
+            </div>
+
+            {/* Neon Effect Section */}
+            <div className="config-section">
+              <h3 className="config-section-title">Effet Neon</h3>
+              <p className="config-section-hint">
+                Bordure lumineuse animee autour de l'ecran TV et VJoueur, avec la couleur de la categorie.
+              </p>
+
+              <label className="checkbox-item neon-toggle">
+                <input
+                  type="checkbox"
+                  checked={neonConfig.enabled}
+                  onChange={(e) => setNeonConfig(prev => ({ ...prev, enabled: e.target.checked }))}
+                />
+                <span>Activer l'effet neon</span>
+              </label>
+
+              {neonConfig.enabled && (
+                <div className="neon-sliders">
+                  {/* Mode selector */}
+                  <div className="slider-row">
+                    <label>Mode d'affichage</label>
+                    <div className="mode-selector">
+                      <button
+                        className={`mode-btn ${neonConfig.mode !== 'halo' ? 'active' : ''}`}
+                        onClick={() => setNeonConfig(prev => ({ ...prev, mode: 'bar' }))}
+                      >
+                        Barre
+                      </button>
+                      <button
+                        className={`mode-btn ${neonConfig.mode === 'halo' ? 'active' : ''}`}
+                        onClick={() => setNeonConfig(prev => ({ ...prev, mode: 'halo' }))}
+                      >
+                        Halo
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Bar mode specific settings */}
+                  {neonConfig.mode !== 'halo' && (
+                    <>
+                      <div className="slider-row">
+                        <label>Distance du bord</label>
+                        <div className="slider-control">
+                          <input
+                            type="range"
+                            min="10"
+                            max="100"
+                            value={neonConfig.bar_offset || 20}
+                            onChange={(e) => setNeonConfig(prev => ({ ...prev, bar_offset: parseInt(e.target.value) }))}
+                          />
+                          <span className="slider-value">{neonConfig.bar_offset || 20}px</span>
+                        </div>
+                      </div>
+
+                      <div className="slider-row">
+                        <label>Epaisseur de la barre</label>
+                        <div className="slider-control">
+                          <input
+                            type="range"
+                            min="2"
+                            max="20"
+                            value={neonConfig.bar_thickness || 4}
+                            onChange={(e) => setNeonConfig(prev => ({ ...prev, bar_thickness: parseInt(e.target.value) }))}
+                          />
+                          <span className="slider-value">{neonConfig.bar_thickness || 4}px</span>
+                        </div>
+                      </div>
+                    </>
+                  )}
+
+                  {/* Glow section - grouped */}
+                  <div className="neon-glow-section">
+                    <h4 className="neon-subsection-title">Glow</h4>
+
+                    <div className="slider-row">
+                      <label>Intensite</label>
+                      <div className="slider-control">
+                        <input
+                          type="range"
+                          min="0"
+                          max="100"
+                          value={neonConfig.intensity_gap}
+                          onChange={(e) => setNeonConfig(prev => ({ ...prev, intensity_gap: parseInt(e.target.value) }))}
+                        />
+                        <span className="slider-value">{neonConfig.intensity_gap}%</span>
+                      </div>
+                    </div>
+
+                    <div className="slider-row">
+                      <label>Vitesse pulsation</label>
+                      <div className="slider-control">
+                        <input
+                          type="range"
+                          min="0.5"
+                          max="5"
+                          step="0.1"
+                          value={neonConfig.glow_pulse_speed || 2}
+                          onChange={(e) => setNeonConfig(prev => ({ ...prev, glow_pulse_speed: parseFloat(e.target.value) }))}
+                        />
+                        <span className="slider-value">{neonConfig.glow_pulse_speed || 2}s</span>
+                      </div>
+                    </div>
+
+                    <div className="slider-row">
+                      <label>Amplitude pulsation</label>
+                      <div className="dual-range-container">
+                        <div className="dual-range-track" ref={dualRangeTrackRef}>
+                          <div
+                            className="dual-range-fill"
+                            style={{
+                              left: `${neonConfig.glow_pulse_min || 30}%`,
+                              width: `${(neonConfig.glow_pulse_max || 50) - (neonConfig.glow_pulse_min || 30)}%`,
+                              background: `linear-gradient(to right,
+                                rgba(0, 200, 200, ${(neonConfig.glow_pulse_min || 30) / 100}),
+                                rgba(0, 200, 200, ${(neonConfig.glow_pulse_max || 50) / 100}))`
+                            }}
+                            onMouseDown={(e) => {
+                              e.preventDefault()
+                              const track = dualRangeTrackRef.current
+                              if (!track) return
+                              const trackRect = track.getBoundingClientRect()
+                              const startX = e.clientX
+                              const startMin = neonConfig.glow_pulse_min || 30
+                              const startMax = neonConfig.glow_pulse_max || 50
+                              const gap = startMax - startMin
+
+                              const onMouseMove = (moveEvent) => {
+                                const deltaX = moveEvent.clientX - startX
+                                const deltaPercent = (deltaX / trackRect.width) * 100
+                                let newMin = Math.round(startMin + deltaPercent)
+                                let newMax = Math.round(startMax + deltaPercent)
+
+                                // Clamp to boundaries - min cannot go below 1%
+                                if (newMin < 1) {
+                                  newMin = 1
+                                  newMax = 1 + gap
+                                }
+                                // max cannot go above 100
+                                if (newMax > 100) {
+                                  newMax = 100
+                                  newMin = 100 - gap
+                                }
+
+                                // Final safety clamp (min at least 1%)
+                                newMin = Math.max(1, Math.min(100, newMin))
+                                newMax = Math.max(1, Math.min(100, newMax))
+
+                                setNeonConfig(prev => ({
+                                  ...prev,
+                                  glow_pulse_min: newMin,
+                                  glow_pulse_max: newMax
+                                }))
+                              }
+
+                              const onMouseUp = () => {
+                                document.removeEventListener('mousemove', onMouseMove)
+                                document.removeEventListener('mouseup', onMouseUp)
+                              }
+
+                              document.addEventListener('mousemove', onMouseMove)
+                              document.addEventListener('mouseup', onMouseUp)
+                            }}
+                          />
+                          <input
+                            type="range"
+                            className="dual-range-input dual-range-min"
+                            min="1"
+                            max="100"
+                            value={neonConfig.glow_pulse_min || 30}
+                            onChange={(e) => {
+                              const val = parseInt(e.target.value)
+                              const max = neonConfig.glow_pulse_max || 50
+                              setNeonConfig(prev => ({
+                                ...prev,
+                                glow_pulse_min: Math.max(1, Math.min(val, max - 5))
+                              }))
+                            }}
+                          />
+                          <input
+                            type="range"
+                            className="dual-range-input dual-range-max"
+                            min="0"
+                            max="100"
+                            value={neonConfig.glow_pulse_max || 50}
+                            onChange={(e) => {
+                              const val = parseInt(e.target.value)
+                              const min = neonConfig.glow_pulse_min || 30
+                              setNeonConfig(prev => ({
+                                ...prev,
+                                glow_pulse_max: Math.max(val, min + 5)
+                              }))
+                            }}
+                          />
+                        </div>
+                        <span className="slider-value">{neonConfig.glow_pulse_min || 30}% - {neonConfig.glow_pulse_max || 50}%</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Arc section - grouped */}
+                  <div className="neon-arc-section">
+                    <h4 className="neon-subsection-title">Arc lumineux</h4>
+
+                    <div className="slider-row">
+                      <label>Largeur</label>
+                      <div className="slider-control">
+                        <input
+                          type="range"
+                          min="30"
+                          max="180"
+                          value={neonConfig.arc_width}
+                          onChange={(e) => setNeonConfig(prev => ({ ...prev, arc_width: parseInt(e.target.value) }))}
+                        />
+                        <span className="slider-value">{neonConfig.arc_width}°</span>
+                      </div>
+                    </div>
+
+                    <div className="slider-row">
+                      <label>Epaisseur</label>
+                      <div className="slider-control">
+                        <input
+                          type="range"
+                          min="0"
+                          max="200"
+                          step="10"
+                          value={neonConfig.arc_blur !== undefined ? neonConfig.arc_blur : 100}
+                          onChange={(e) => setNeonConfig(prev => ({ ...prev, arc_blur: parseInt(e.target.value) }))}
+                        />
+                        <span className="slider-value">{neonConfig.arc_blur !== undefined ? neonConfig.arc_blur : 100}%</span>
+                      </div>
+                    </div>
+
+                    <div className="slider-row">
+                      <label>Vitesse</label>
+                      <div className="slider-control">
+                        <input
+                          type="range"
+                          min="1"
+                          max="10"
+                          step="0.5"
+                          value={neonConfig.rotation_speed}
+                          onChange={(e) => setNeonConfig(prev => ({ ...prev, rotation_speed: parseFloat(e.target.value) }))}
+                        />
+                        <span className="slider-value">{neonConfig.rotation_speed}s</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              <div className="config-section-actions">
+                <Button variant="primary" onClick={handleSaveNeonConfig} loading={savingNeon}>
+                  Enregistrer
                 </Button>
               </div>
             </div>

@@ -7,7 +7,9 @@ import Podium from '../components/Podium'
 import QRCodeOverlay from '../components/QRCodeOverlay'
 import QRCodeDisplay from '../components/QRCodeDisplay'
 import { CATEGORIES } from './QuestionsPage'
+import { getCategoryColor } from '../constants/colors'
 import './PlayerDisplay.css'
+import '../styles/neon.css'
 
 // QCM answer colors
 const QCM_COLORS = {
@@ -592,8 +594,53 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
     return color
   }
 
+  // Neon effect configuration
+  const neonConfig = useMemo(() => {
+    return gameState?.neonEffect || {
+      enabled: false,
+      arc_width: 60,
+      intensity_gap: 80,
+      rotation_speed: 4
+    }
+  }, [gameState?.neonEffect])
+
+  // Show neon effect during game phases
+  const showNeon = useMemo(() => {
+    return neonConfig.enabled &&
+      ['READY', 'COUNTDOWN', 'STARTED', 'PAUSED'].includes(gameState?.phase)
+  }, [neonConfig.enabled, gameState?.phase])
+
+  // Get category color for neon effect
+  const neonCategoryColor = useMemo(() => {
+    return getCategoryColor(gameState?.question?.CATEGORY)
+  }, [gameState?.question?.CATEGORY])
+
+  // Neon style variables
+  const neonStyle = useMemo(() => {
+    if (!showNeon) return {}
+    const barThickness = neonConfig.bar_thickness || 4
+    const arcBlurPercent = neonConfig.arc_blur !== undefined ? neonConfig.arc_blur : 100
+    // arc_blur is 0-200% of bar thickness
+    const arcBlurPx = (barThickness * arcBlurPercent) / 100
+    return {
+      '--neon-color': neonCategoryColor,
+      '--neon-arc-width': `${neonConfig.arc_width}deg`,
+      '--neon-intensity-gap': neonConfig.intensity_gap / 100,
+      '--neon-rotation-speed': `${neonConfig.rotation_speed}s`,
+      '--neon-glow-pulse-speed': `${neonConfig.glow_pulse_speed || 2}s`,
+      '--neon-glow-pulse-min': (neonConfig.glow_pulse_min || 30) / 100,
+      '--neon-glow-pulse-max': (neonConfig.glow_pulse_max || 50) / 100,
+      '--neon-bar-offset': `${neonConfig.bar_offset || 20}px`,
+      '--neon-bar-thickness': `${barThickness}px`,
+      '--neon-arc-blur': `${arcBlurPx}px`,
+    }
+  }, [showNeon, neonCategoryColor, neonConfig])
+
+  // Neon mode class
+  const neonModeClass = neonConfig.mode === 'halo' ? 'neon-mode-halo' : 'neon-mode-bar'
+
   return (
-    <div className="player-display">
+    <div className={`player-display ${showNeon ? `neon-border ${neonModeClass}` : ''}`} style={neonStyle}>
       {/* Background Images with Crossfade */}
       <div className="background-container">
         <AnimatePresence mode="sync">

@@ -18,11 +18,21 @@ You are methodical, thorough, and uncompromising on quality. You follow establis
 You must follow the exact workflow defined in the project's test procedures:
 
 **Step 0: Production Build**
+
+**⚠️ IMPORTANT : TOUJOURS rebuilder le frontend AVANT le Go build (mode portable).**
+
 ```bash
 cd /home/user/BuzzMaster/server-go
+
+# 1. Frontend d'abord (OBLIGATOIRE)
+cd web
+npm run build
+cd ..
+
+# 2. Backend Go ensuite (embarque les fichiers web)
 go build -o server.exe ./cmd/server
 ```
-Verify: Build succeeds without errors, no critical warnings, executable generated.
+Verify: Build succeeds without errors, no critical warnings, executable generated, web files embedded.
 
 **Step 1: Server Restart and Verification**
 - Call the /shutdown API endpoint

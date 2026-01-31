@@ -38,6 +38,7 @@ type HTTPServer struct {
 	OnBackgroundChange func(path string) // Called after background upload/delete
 	OnShutdown         func() // Called before server shutdown for cleanup
 	OnLoadDemo         func() // Called to load demo data
+	OnConfigUpdate     func() // Called after config update to broadcast to clients
 }
 
 // NewHTTPServer creates a new HTTP server
@@ -692,18 +693,60 @@ func (h *HTTPServer) getStorageInfo() map[string]interface{} {
 }
 
 func (h *HTTPServer) handleConfig(w http.ResponseWriter, r *http.Request) {
-	configPath := filepath.Join(h.dataDir, "files", "config.json.current")
+	configPath := "config.json" // Main config file
 
 	if r.Method == "POST" {
-		body, _ := io.ReadAll(r.Body)
-		os.WriteFile(configPath, body, 0644)
-		w.Write([]byte("Config Saved"))
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			http.Error(w, "Failed to read request body", http.StatusBadRequest)
+			return
+		}
+
+		// Parse the incoming config to validate neon_effect fields
+		var cfg config.Config
+		if err := json.Unmarshal(body, &cfg); err != nil {
+			http.Error(w, "Invalid JSON", http.StatusBadRequest)
+			return
+		}
+
+		// Validate and clamp neon effect values
+		cfg.ValidateAndClampNeonEffect()
+
+		// Marshal back to JSON with proper formatting
+		validatedJSON, err := json.MarshalIndent(&cfg, "", "  ")
+		if err != nil {
+			http.Error(w, "Failed to encode config", http.StatusInternalServerError)
+			return
+		}
+
+		// Save to file
+		if err := os.WriteFile(configPath, validatedJSON, 0644); err != nil {
+			http.Error(w, "Failed to save config", http.StatusInternalServerError)
+			return
+		}
+
+		// Reload config singleton
+		config.SetInstance(&cfg)
+
+		// Trigger broadcast callback
+		if h.OnConfigUpdate != nil {
+			h.OnConfigUpdate()
+		}
+
+		LogInfo(game.LogComponentHTTP, "Config updated and saved (neon_effect: enabled=%v, mode=%s, arc=%d, intensity=%d, speed=%.1f, offset=%d, thickness=%d)",
+			cfg.NeonEffect.Enabled, cfg.NeonEffect.Mode, cfg.NeonEffect.ArcWidth, cfg.NeonEffect.IntensityGap, cfg.NeonEffect.RotationSpeed, cfg.NeonEffect.BarOffset, cfg.NeonEffect.BarThickness)
+
+		w.Header().Set("Content-Type", "application/json")
+		w.Write(validatedJSON)
 		return
 	}
 
-	data, err := os.ReadFile(configPath)
+	// GET: return current config
+	cfg := config.Get()
+	data, err := json.MarshalIndent(cfg, "", "  ")
 	if err != nil {
-		data = []byte("{}")
+		http.Error(w, "Failed to encode config", http.StatusInternalServerError)
+		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")

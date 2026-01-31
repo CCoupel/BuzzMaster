@@ -266,6 +266,16 @@ export default function useWebSocket() {
         }
         break
 
+      case 'CONFIG_UPDATE':
+        console.log('[WS] CONFIG_UPDATE:', MSG)
+        if (MSG?.neon_effect) {
+          setGameState(prev => ({
+            ...prev,
+            neonEffect: MSG.neon_effect,
+          }))
+        }
+        break
+
       case 'LOG_HISTORY':
         // Receive full log history on subscription
         if (MSG?.entries) {

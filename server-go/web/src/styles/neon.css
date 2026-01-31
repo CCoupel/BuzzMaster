@@ -1,0 +1,187 @@
+/* Neon Border Effect - Bar and Halo modes */
+
+/* CSS Custom Property for animation - enables smooth rotation */
+@property --rotation-angle {
+  syntax: '<angle>';
+  initial-value: 0deg;
+  inherits: false;
+}
+
+/* Main neon border class */
+.neon-border {
+  --neon-color: #8b5cf6;  /* Default violet if no category */
+  --neon-arc-width: 60deg;
+  --neon-intensity-gap: 0.8;
+  --neon-rotation-speed: 4s;
+  --neon-glow-pulse-speed: 2s;  /* Glow pulsation speed */
+  --neon-glow-pulse-min: 0.3;   /* Minimum glow opacity (0-1) */
+  --neon-glow-pulse-max: 0.5;   /* Maximum glow opacity (0-1) */
+  --neon-mode: bar;  /* "bar" or "halo" */
+  --neon-bar-offset: 20px;
+  --neon-bar-thickness: 4px;
+  --neon-arc-blur: 4px;  /* Blur for rotating arc */
+  position: relative;
+  isolation: isolate; /* Create stacking context */
+  overflow: hidden; /* Clip pseudo-elements that extend outside */
+}
+
+/* Preserve fixed positioning when neon-border is applied to player-display */
+.player-display.neon-border {
+  position: fixed;
+  inset: 0;
+}
+
+/* ===== BAR MODE ===== */
+/* Static glowing border with bright center (tube neon effect) */
+/* Structure: [halo ext] [couleur] [blanc vif] [couleur] [halo int] */
+.neon-border.neon-mode-bar::before {
+  content: '';
+  position: absolute;
+  top: var(--neon-bar-offset);
+  left: var(--neon-bar-offset);
+  right: var(--neon-bar-offset);
+  bottom: var(--neon-bar-offset);
+  z-index: 1;
+  pointer-events: none;
+  border-radius: 8px;
+  /* Bordure blanche = cœur lumineux du tube (1/3 de l'épaisseur, min 1px) */
+  border: max(1px, calc(var(--neon-bar-thickness) / 3)) solid white;
+  /* Box-shadow: premier = dessous, dernier = dessus */
+  /* Structure: [couleur 1/3] [blanc 1/3] [couleur 1/3] */
+  box-shadow:
+    /* 1. FOND: Halos diffus couleur */
+    0 0 60px var(--neon-color),
+    0 0 40px var(--neon-color),
+    0 0 20px var(--neon-color),
+    inset 0 0 40px var(--neon-color),
+    inset 0 0 20px var(--neon-color),
+    /* 2. Bandes couleur autour du blanc (1/3 de l'épaisseur chacune) */
+    0 0 0 calc(var(--neon-bar-thickness) / 3) var(--neon-color),
+    inset 0 0 0 calc(var(--neon-bar-thickness) / 3) var(--neon-color),
+    /* 3. Glow blanc au centre pour renforcer */
+    0 0 8px 0 rgba(255, 255, 255, 0.9);
+  opacity: var(--neon-intensity-gap);
+  animation: neon-bar-pulse var(--neon-glow-pulse-speed) ease-in-out infinite;
+}
+
+/* Rotating arc overlay for bar mode - masked to show only border area */
+.neon-border.neon-mode-bar::after {
+  content: '';
+  position: absolute;
+  /* Même position que le tube */
+  top: var(--neon-bar-offset);
+  left: var(--neon-bar-offset);
+  right: var(--neon-bar-offset);
+  bottom: var(--neon-bar-offset);
+  z-index: 2;
+  pointer-events: none;
+  border-radius: 8px;
+  /* Arc lumineux rotatif */
+  background: conic-gradient(
+    from var(--rotation-angle),
+    transparent 0deg,
+    transparent calc(180deg - var(--neon-arc-width) / 2),
+    var(--neon-color) calc(180deg - var(--neon-arc-width) / 4),
+    var(--neon-color) calc(180deg + var(--neon-arc-width) / 4),
+    transparent calc(180deg + var(--neon-arc-width) / 2),
+    transparent 360deg
+  );
+  /* Masque pour ne garder que la bordure - crée un anneau */
+  -webkit-mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  /* Épaisseur de l'anneau = épaisseur du tube */
+  padding: var(--neon-bar-thickness);
+  /* Blur contrôlé par arc_blur (divisé par 100 pour être en px) */
+  filter: blur(calc(var(--neon-arc-blur) * 0.1px));
+  opacity: var(--neon-intensity-gap);
+  animation: neon-rotate var(--neon-rotation-speed) linear infinite;
+}
+
+/* Bar pulse animation */
+@keyframes neon-bar-pulse {
+  0%, 100% {
+    opacity: calc(var(--neon-intensity-gap) * var(--neon-glow-pulse-max));
+  }
+  50% {
+    opacity: calc(var(--neon-intensity-gap) * var(--neon-glow-pulse-min));
+  }
+}
+
+/* ===== HALO MODE ===== */
+/* Primary glow layer - box-shadow based with bright center */
+.neon-border.neon-mode-halo::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  border-radius: inherit;
+  box-shadow:
+    /* Ligne blanche centrale vive (effet tube néon) */
+    inset 0 0 3px white,
+    inset 0 0 8px rgba(255, 255, 255, 0.5),
+    /* Halo interne couleur */
+    inset 0 0 30px var(--neon-color),
+    inset 0 0 60px var(--neon-color),
+    /* Ligne blanche externe vive */
+    0 0 2px white,
+    0 0 6px rgba(255, 255, 255, 0.6),
+    /* Halo externe couleur */
+    0 0 30px var(--neon-color),
+    0 0 60px var(--neon-color);
+  opacity: calc(var(--neon-intensity-gap) * 0.5);
+  animation: neon-halo-pulse var(--neon-glow-pulse-speed) ease-in-out infinite;
+}
+
+/* Rotating arc overlay for halo mode - masked to show only border */
+.neon-border.neon-mode-halo::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+  border-radius: inherit;
+  /* Arc lumineux rotatif */
+  background: conic-gradient(
+    from var(--rotation-angle),
+    transparent 0deg,
+    transparent calc(180deg - var(--neon-arc-width) / 2),
+    var(--neon-color) calc(180deg - var(--neon-arc-width) / 4),
+    var(--neon-color) calc(180deg + var(--neon-arc-width) / 4),
+    transparent calc(180deg + var(--neon-arc-width) / 2),
+    transparent 360deg
+  );
+  /* Masque pour ne garder que la bordure */
+  -webkit-mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  padding: var(--neon-bar-thickness);
+  filter: blur(calc(var(--neon-arc-blur) * 0.1px));
+  opacity: var(--neon-intensity-gap);
+  animation: neon-rotate var(--neon-rotation-speed) linear infinite;
+}
+
+/* Halo pulse animation */
+@keyframes neon-halo-pulse {
+  0%, 100% { opacity: calc(var(--neon-intensity-gap) * var(--neon-glow-pulse-max)); }
+  50% { opacity: calc(var(--neon-intensity-gap) * var(--neon-glow-pulse-min)); }
+}
+
+/* Rotation animation - shared by both modes */
+@keyframes neon-rotate {
+  from { --rotation-angle: 0deg; }
+  to { --rotation-angle: 360deg; }
+}
+
+/* Fallback for browsers without @property support */
+@supports not (background: conic-gradient(red, blue)) {
+  .neon-border.neon-mode-bar::after,
+  .neon-border.neon-mode-halo::after {
+    display: none;
+  }
+}
