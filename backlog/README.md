@@ -20,7 +20,6 @@ backlog/
 | [effet-neon-categorie.md](TODO/effet-neon-categorie.md) | Effet néon couleur catégorie sur TV et VJoueur |
 | [qcm-marqueurs-indices.md](TODO/qcm-marqueurs-indices.md) | Marqueurs d'indices sur la barre de temps |
 | [generateur-ia.md](TODO/generateur-ia.md) | Générateur de jeu complet via IA |
-| [vjoueur-websocket-identification.md](TODO/vjoueur-websocket-identification.md) | Vérifier identification WebSocket des VJoueurs |
 | [metadata-binaires.md](TODO/metadata-binaires.md) | Métadonnées dans les binaires (nom, version, icône) |
 | [bugfix-neon-effet-parametres.md](TODO/bugfix-neon-effet-parametres.md) | Bugfix: Paramètres effet néon non appliqués |
 | [navbar-menu-connexion.md](TODO/navbar-menu-connexion.md) | Menu déroulant sur pastille de connexion (Config, Logs) |
@@ -36,6 +35,7 @@ backlog/
 
 | Fichier | Version | Description |
 |---------|---------|-------------|
+| [vjoueur-websocket-identification.md](DONE/vjoueur-websocket-identification.md) | v2.47.0 | Identification WebSocket des VJoueurs (type vplayer distinct) |
 | [tri-rapidite-reponse.md](DONE/tri-rapidite-reponse.md) | v2.44.1 | Tri équipes/joueurs par rapidité de buzz |
 | [page-joueur.md](DONE/page-joueur.md) | v2.45.0 | Interface personnalisée pour jouer depuis smartphone (Phase 1) |
 | [page-logs.md](DONE/page-logs.md) | v2.43.0 | Affichage des logs serveur en temps réel (WebSocket dédiée) |
@@ -155,6 +155,7 @@ mv backlog/En-Cours/qcm-marqueurs-indices.md backlog/DONE/
 
 ## Historique
 
+- 2026-01-31 : Completion VJoueur WebSocket identification (v2.47.0)
 - 2026-01-31 : Ajout menu déroulant navbar (pastille connexion)
 - 2026-01-31 : Ajout bugfix paramètres effet néon non appliqués
 - 2026-01-31 : Ajout filtrage broadcasts WebSocket par type de client

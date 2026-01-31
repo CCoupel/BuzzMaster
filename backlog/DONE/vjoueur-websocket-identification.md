@@ -1,6 +1,6 @@
 # VJoueur - Identification WebSocket
 
-**Statut** : 📋 Planifié
+**Statut** : ✅ Complété (v2.47.0)
 
 ## Description
 
