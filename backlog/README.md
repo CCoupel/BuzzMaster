@@ -22,6 +22,7 @@ backlog/
 | [generateur-ia.md](TODO/generateur-ia.md) | Générateur de jeu complet via IA |
 | [vjoueur-websocket-identification.md](TODO/vjoueur-websocket-identification.md) | Vérifier identification WebSocket des VJoueurs |
 | [metadata-binaires.md](TODO/metadata-binaires.md) | Métadonnées dans les binaires (nom, version, icône) |
+| [bugfix-neon-effet-parametres.md](TODO/bugfix-neon-effet-parametres.md) | Bugfix: Paramètres effet néon non appliqués |
 
 ## En-Cours
 
@@ -152,6 +153,7 @@ mv backlog/En-Cours/qcm-marqueurs-indices.md backlog/DONE/
 
 ## Historique
 
+- 2026-01-31 : Ajout bugfix paramètres effet néon non appliqués
 - 2026-01-31 : Ajout filtrage broadcasts WebSocket par type de client
 - 2026-01-30 : Ajout effet néon catégorie sur TV et VJoueur
 - 2026-01-30 : Réorganisation du backlog en 3 dossiers (TODO, En-Cours, DONE)
