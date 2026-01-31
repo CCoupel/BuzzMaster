@@ -1398,20 +1398,23 @@ func (a *App) broadcastConfigUpdate() {
 	cfg := config.Get()
 	payload := protocol.ConfigUpdatePayload{
 		NeonEffect: protocol.NeonEffectPayload{
-			Enabled:       cfg.NeonEffect.Enabled,
-			Mode:          cfg.NeonEffect.Mode,
-			ArcWidth:      cfg.NeonEffect.ArcWidth,
-			IntensityGap:  cfg.NeonEffect.IntensityGap,
-			RotationSpeed: cfg.NeonEffect.RotationSpeed,
-			BarOffset:     cfg.NeonEffect.BarOffset,
-			BarThickness:  cfg.NeonEffect.BarThickness,
-			ArcBlur:       cfg.NeonEffect.ArcBlur,
+			Enabled:        cfg.NeonEffect.Enabled,
+			Mode:           cfg.NeonEffect.Mode,
+			ArcWidth:       cfg.NeonEffect.ArcWidth,
+			IntensityGap:   cfg.NeonEffect.IntensityGap,
+			RotationSpeed:  cfg.NeonEffect.RotationSpeed,
+			BarOffset:      cfg.NeonEffect.BarOffset,
+			BarThickness:   cfg.NeonEffect.BarThickness,
+			ArcBlur:        cfg.NeonEffect.ArcBlur,
+			GlowPulseSpeed: cfg.NeonEffect.GlowPulseSpeed,
+			GlowPulseMin:   cfg.NeonEffect.GlowPulseMin,
+			GlowPulseMax:   cfg.NeonEffect.GlowPulseMax,
 		},
 	}
 	data, _ := json.Marshal(payload)
 	a.broadcast(protocol.ActionConfigUpdate, data, false)
-	server.LogInfo(game.LogComponentApp, "Config update broadcast (neon: enabled=%v, mode=%s, arc=%d, intensity=%d, speed=%.1f, offset=%d, thickness=%d, blur=%d)",
-		cfg.NeonEffect.Enabled, cfg.NeonEffect.Mode, cfg.NeonEffect.ArcWidth, cfg.NeonEffect.IntensityGap, cfg.NeonEffect.RotationSpeed, cfg.NeonEffect.BarOffset, cfg.NeonEffect.BarThickness, cfg.NeonEffect.ArcBlur)
+	server.LogInfo(game.LogComponentApp, "Config update broadcast (neon: enabled=%v, mode=%s, arc=%d, intensity=%d, speed=%.1f, pulsing=%.1f-%d%%, offset=%d, thickness=%d, blur=%d)",
+		cfg.NeonEffect.Enabled, cfg.NeonEffect.Mode, cfg.NeonEffect.ArcWidth, cfg.NeonEffect.IntensityGap, cfg.NeonEffect.RotationSpeed, cfg.NeonEffect.GlowPulseSpeed, cfg.NeonEffect.GlowPulseMax, cfg.NeonEffect.BarOffset, cfg.NeonEffect.BarThickness, cfg.NeonEffect.ArcBlur)
 }
 
 func (a *App) broadcastQuestions() {
@@ -1485,14 +1488,17 @@ func (a *App) sendStateToClient(clientID string) {
 	cfg := config.Get()
 	neonPayload := protocol.ConfigUpdatePayload{
 		NeonEffect: protocol.NeonEffectPayload{
-			Enabled:       cfg.NeonEffect.Enabled,
-			Mode:          cfg.NeonEffect.Mode,
-			ArcWidth:      cfg.NeonEffect.ArcWidth,
-			IntensityGap:  cfg.NeonEffect.IntensityGap,
-			RotationSpeed: cfg.NeonEffect.RotationSpeed,
-			BarOffset:     cfg.NeonEffect.BarOffset,
-			BarThickness:  cfg.NeonEffect.BarThickness,
-			ArcBlur:       cfg.NeonEffect.ArcBlur,
+			Enabled:        cfg.NeonEffect.Enabled,
+			Mode:           cfg.NeonEffect.Mode,
+			ArcWidth:       cfg.NeonEffect.ArcWidth,
+			IntensityGap:   cfg.NeonEffect.IntensityGap,
+			RotationSpeed:  cfg.NeonEffect.RotationSpeed,
+			BarOffset:      cfg.NeonEffect.BarOffset,
+			BarThickness:   cfg.NeonEffect.BarThickness,
+			ArcBlur:        cfg.NeonEffect.ArcBlur,
+			GlowPulseSpeed: cfg.NeonEffect.GlowPulseSpeed,
+			GlowPulseMin:   cfg.NeonEffect.GlowPulseMin,
+			GlowPulseMax:   cfg.NeonEffect.GlowPulseMax,
 		},
 	}
 	neonData, _ := json.Marshal(neonPayload)

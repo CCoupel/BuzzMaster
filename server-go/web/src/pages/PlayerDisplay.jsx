@@ -598,9 +598,16 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
   const neonConfig = useMemo(() => {
     return gameState?.neonEffect || {
       enabled: false,
+      mode: 'bar',
       arc_width: 60,
       intensity_gap: 80,
-      rotation_speed: 4
+      rotation_speed: 4,
+      bar_offset: 20,
+      bar_thickness: 4,
+      arc_blur: 100,
+      glow_pulse_speed: 2,
+      glow_pulse_min: 30,
+      glow_pulse_max: 50
     }
   }, [gameState?.neonEffect])
 
@@ -618,8 +625,8 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
   // Neon style variables
   const neonStyle = useMemo(() => {
     if (!showNeon) return {}
-    const barThickness = neonConfig.bar_thickness || 4
-    const arcBlurPercent = neonConfig.arc_blur !== undefined ? neonConfig.arc_blur : 100
+    const barThickness = neonConfig.bar_thickness
+    const arcBlurPercent = neonConfig.arc_blur
     // arc_blur is 0-200% of bar thickness
     const arcBlurPx = (barThickness * arcBlurPercent) / 100
     return {
@@ -627,10 +634,10 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
       '--neon-arc-width': `${neonConfig.arc_width}deg`,
       '--neon-intensity-gap': neonConfig.intensity_gap / 100,
       '--neon-rotation-speed': `${neonConfig.rotation_speed}s`,
-      '--neon-glow-pulse-speed': `${neonConfig.glow_pulse_speed || 2}s`,
-      '--neon-glow-pulse-min': (neonConfig.glow_pulse_min || 30) / 100,
-      '--neon-glow-pulse-max': (neonConfig.glow_pulse_max || 50) / 100,
-      '--neon-bar-offset': `${neonConfig.bar_offset || 20}px`,
+      '--neon-glow-pulse-speed': `${neonConfig.glow_pulse_speed}s`,
+      '--neon-glow-pulse-min': neonConfig.glow_pulse_min / 100,
+      '--neon-glow-pulse-max': neonConfig.glow_pulse_max / 100,
+      '--neon-bar-offset': `${neonConfig.bar_offset}px`,
       '--neon-bar-thickness': `${barThickness}px`,
       '--neon-arc-blur': `${arcBlurPx}px`,
     }

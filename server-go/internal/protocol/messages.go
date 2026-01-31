@@ -228,14 +228,17 @@ type ConfigUpdatePayload struct {
 
 // NeonEffectPayload represents neon effect configuration
 type NeonEffectPayload struct {
-	Enabled       bool    `json:"enabled"`
-	Mode          string  `json:"mode"`           // "halo" or "bar"
-	ArcWidth      int     `json:"arc_width"`      // 30-180 degrees (halo mode)
-	IntensityGap  int     `json:"intensity_gap"`  // 0-100%
-	RotationSpeed float64 `json:"rotation_speed"` // 1-10 seconds
-	BarOffset     int     `json:"bar_offset"`     // 10-100 pixels (bar mode)
-	BarThickness  int     `json:"bar_thickness"`  // 2-20 pixels (bar mode)
-	ArcBlur       int     `json:"arc_blur"`       // 0-200% of bar thickness
+	Enabled        bool    `json:"enabled"`
+	Mode           string  `json:"mode"`             // "halo" or "bar"
+	ArcWidth       int     `json:"arc_width"`        // 30-180 degrees (halo mode)
+	IntensityGap   int     `json:"intensity_gap"`    // 0-100%
+	RotationSpeed  float64 `json:"rotation_speed"`   // 1-10 seconds
+	BarOffset      int     `json:"bar_offset"`       // 10-100 pixels (bar mode)
+	BarThickness   int     `json:"bar_thickness"`    // 2-20 pixels (bar mode)
+	ArcBlur        int     `json:"arc_blur"`         // 0-200% of bar thickness
+	GlowPulseSpeed float64 `json:"glow_pulse_speed"` // 0.5-5 seconds
+	GlowPulseMin   int     `json:"glow_pulse_min"`   // 0-100%
+	GlowPulseMax   int     `json:"glow_pulse_max"`   // 0-100%
 }
 
 // NewMessage creates a new outgoing message
