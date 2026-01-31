@@ -62,12 +62,15 @@
   z-index: 2;
   pointer-events: none;
   border-radius: 8px;
-  /* Arc lumineux rotatif */
+  /* Arc lumineux rotatif avec point blanc central (hotspot) */
   background: conic-gradient(
     from var(--rotation-angle),
     transparent 0deg,
     transparent calc(180deg - var(--neon-arc-width) / 2),
     var(--neon-color) calc(180deg - var(--neon-arc-width) / 4),
+    rgba(255, 255, 255, 0.8) calc(180deg - 0.5deg),
+    white 180deg,
+    rgba(255, 255, 255, 0.8) calc(180deg + 0.5deg),
     var(--neon-color) calc(180deg + var(--neon-arc-width) / 4),
     transparent calc(180deg + var(--neon-arc-width) / 2),
     transparent 360deg
@@ -121,11 +124,15 @@
   z-index: 2;
   pointer-events: none;
   border-radius: inherit;
+  /* Arc lumineux rotatif avec point blanc central (hotspot) */
   background: conic-gradient(
     from var(--rotation-angle),
     transparent 0deg,
     transparent calc(180deg - var(--neon-arc-width) / 2),
     var(--neon-color) calc(180deg - var(--neon-arc-width) / 4),
+    rgba(255, 255, 255, 0.8) calc(180deg - 0.5deg),
+    white 180deg,
+    rgba(255, 255, 255, 0.8) calc(180deg + 0.5deg),
     var(--neon-color) calc(180deg + var(--neon-arc-width) / 4),
     transparent calc(180deg + var(--neon-arc-width) / 2),
     transparent 360deg
