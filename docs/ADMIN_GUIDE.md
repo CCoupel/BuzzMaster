@@ -316,16 +316,45 @@ L'effet néon affiche une bordure lumineuse animée autour de l'écran TV (`/tv`
 
 1. Ouvrir la page Configuration (`/admin/settings` ou `/anim/settings`)
 2. Section "Effet Néon" en bas de la page
-3. Quatre sliders pour ajuster les paramètres
+3. Toggle pour activer/désactiver
+4. Deux onglets : **Structure** et **Glow**
+
+### Modes d'affichage
+
+L'effet néon propose 2 modes visuels :
+
+| Mode | Description | Cas d'usage |
+|------|-------------|-------------|
+| **bar** (défaut) | Tube lumineux fin avec centre blanc et arc rotatif | Effet moderne et subtil |
+| **halo** | Bordure lumineuse large type néon classique | Effet spectaculaire et immersif |
+
+**Mode "bar" - Composition visuelle** :
+- Tube fixe avec 3 couches (externe floutée, centrale précise, centre blanc)
+- Arc rotatif au centre du tube avec hotspot blanc brillant
+- Proportions équilibrées : 1/3 par couche
 
 ### Paramètres disponibles
+
+**Onglet Structure** :
 
 | Paramètre | Plage | Défaut | Description |
 |-----------|-------|--------|-------------|
 | **Activé** | On/Off | Off | Active ou désactive l'effet néon |
+| **Mode** | bar / halo | bar | Type d'effet visuel |
 | **Largeur arc** | 30-180° | 60° | Largeur de l'arc lumineux en degrés |
-| **Écart intensité** | 0-100% | 80% | Écart d'intensité (opacité du dégradé) |
+| **Écart intensité** | 0-100% | 80% | Écart d'intensité (opacité zone sombre) |
 | **Vitesse rotation** | 1-10s | 4s | Vitesse de rotation de l'arc (en secondes) |
+| **Distance bord** | 10-100px | 20px | Distance du tube par rapport au bord (mode bar) |
+| **Épaisseur tube** | 2-20px | 4px | Épaisseur du tube lumineux (mode bar) |
+| **Flou arc** | 0-200% | 100% | Flou de l'arc (% de épaisseur tube, mode bar) |
+
+**Onglet Glow** :
+
+| Paramètre | Plage | Défaut | Description |
+|-----------|-------|--------|-------------|
+| **Vitesse pulsation** | 0.5-5s | 2s | Vitesse de pulsation du glow |
+| **Opacité min** | 0-100% | 30% | Opacité minimale du glow pulsant |
+| **Opacité max** | 0-100% | 50% | Opacité maximale du glow pulsant |
 
 ### Comment utiliser
 
@@ -362,6 +391,11 @@ La couleur de la bordure correspond à la catégorie de la question active :
 
 ### Conseils d'utilisation
 
+#### Choix du mode
+
+- **Mode "bar"** : Préférer pour un affichage discret et moderne. Le tube fin ne prend pas trop d'espace à l'écran.
+- **Mode "halo"** : Préférer pour un affichage spectaculaire et immersif. La bordure large est très visible.
+
 #### Largeur de l'arc (30-180°)
 
 - **30-60°** : Arc fin et discret
@@ -388,6 +422,49 @@ Contrôle la différence d'opacité entre le point le plus lumineux et le point 
 
 **Recommandation** : 4s pour un effet fluide sans distraction.
 
+#### Distance du bord (10-100px, mode bar)
+
+Contrôle la distance entre le tube et le bord de l'écran :
+- **10-20px** : Tube proche du bord (recommandé)
+- **30-50px** : Tube plus éloigné
+- **60-100px** : Tube très éloigné (pour grands écrans)
+
+**Recommandation** : 20px pour un effet bien cadré sans chevaucher le contenu.
+
+#### Épaisseur du tube (2-20px, mode bar)
+
+- **2-4px** : Tube très fin (discret, recommandé)
+- **6-10px** : Tube moyen
+- **12-20px** : Tube épais (très visible)
+
+**Recommandation** : 4px pour un bon équilibre entre visibilité et discrétion.
+
+#### Flou de l'arc (0-200%, mode bar)
+
+Contrôle le flou de l'arc rotatif (en % de l'épaisseur du tube) :
+- **0-50%** : Arc net et précis
+- **100%** : Arc flou modéré (recommandé)
+- **150-200%** : Arc très flou (effet glow intense)
+
+**Recommandation** : 100% pour un effet lumineux réaliste.
+
+#### Vitesse de pulsation (0.5-5s)
+
+- **0.5-1s** : Pulsation rapide
+- **2s** : Pulsation modérée (recommandé)
+- **3-5s** : Pulsation lente (ambiance)
+
+**Recommandation** : 2s pour une pulsation visible mais pas trop rapide.
+
+#### Opacité du glow pulsant (0-100%)
+
+Définit la plage d'opacité du glow pulsant :
+- **Min 30% / Max 50%** : Pulsation subtile (recommandé)
+- **Min 10% / Max 90%** : Pulsation très marquée
+- **Min 40% / Max 60%** : Pulsation discrète
+
+**Recommandation** : Min 30% / Max 50% pour une pulsation visible sans distraction.
+
 ### Diffusion en temps réel
 
 Quand vous modifiez la configuration :
@@ -410,9 +487,16 @@ Les paramètres sont sauvegardés dans `server-go/config.json` :
 {
   "neon_effect": {
     "enabled": false,
+    "mode": "bar",
     "arc_width": 60,
     "intensity_gap": 80,
-    "rotation_speed": 4
+    "rotation_speed": 4,
+    "bar_offset": 20,
+    "bar_thickness": 4,
+    "arc_blur": 100,
+    "glow_pulse_speed": 2,
+    "glow_pulse_min": 30,
+    "glow_pulse_max": 50
   }
 }
 ```

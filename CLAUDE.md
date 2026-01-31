@@ -514,9 +514,16 @@ Same network configuration, implemented via:
   },
   "neon_effect": {
     "enabled": false,
+    "mode": "bar",
     "arc_width": 60,
     "intensity_gap": 80,
-    "rotation_speed": 4
+    "rotation_speed": 4,
+    "bar_offset": 20,
+    "bar_thickness": 4,
+    "arc_blur": 100,
+    "glow_pulse_speed": 2,
+    "glow_pulse_min": 30,
+    "glow_pulse_max": 50
   },
   "version": "2.46.0"
 }
@@ -526,31 +533,65 @@ Same network configuration, implemented via:
 
 Système d'effet néon rotatif autour de l'écran TV et VPlayer avec couleur de catégorie.
 
+**Modes d'affichage :**
+
+| Mode | Description | Visuel |
+|------|-------------|--------|
+| `bar` | Tube lumineux fin avec centre blanc et arc rotatif (défaut) | Tube fixe + arc mobile au centre |
+| `halo` | Bordure lumineuse large type néon classique | Conic-gradient rotatif complet |
+
 **Champs neon_effect :**
-- `enabled` : boolean (défaut: false) - Active/désactive l'effet néon
-- `arc_width` : int (30-180, défaut: 60) - Largeur de l'arc lumineux en degrés
-- `intensity_gap` : int (0-100, défaut: 80) - Écart d'intensité (opacité en %)
-- `rotation_speed` : int (1-10, défaut: 4) - Vitesse de rotation en secondes
+
+| Champ | Type | Plage | Défaut | Description |
+|-------|------|-------|--------|-------------|
+| `enabled` | boolean | - | false | Active/désactive l'effet néon |
+| `mode` | string | "bar" / "halo" | "bar" | Type d'effet visuel |
+| `arc_width` | int | 30-180 | 60 | Largeur de l'arc lumineux en degrés |
+| `intensity_gap` | int | 0-100 | 80 | Écart d'intensité (opacité zone sombre en %) |
+| `rotation_speed` | float | 1-10 | 4 | Vitesse de rotation en secondes |
+| `bar_offset` | int | 10-100 | 20 | Distance du tube par rapport au bord (px, mode bar) |
+| `bar_thickness` | int | 2-20 | 4 | Épaisseur du tube lumineux (px, mode bar) |
+| `arc_blur` | int | 0-200 | 100 | Flou de l'arc (% de bar_thickness) |
+| `glow_pulse_speed` | float | 0.5-5 | 2 | Vitesse de pulsation du glow (secondes) |
+| `glow_pulse_min` | int | 0-100 | 30 | Opacité minimale du glow pulsant (%) |
+| `glow_pulse_max` | int | 0-100 | 50 | Opacité maximale du glow pulsant (%) |
+
+**Mode "bar" - Composition visuelle :**
+```
+   ┌─────────────────────────────────────┐
+   │ ═════════════════════════════════   │  ← 3 couches superposées
+   │ ║ blur ║ tube ║ glow central ║      │     (1/3 chacune du total)
+   │ ═══════════⚪═══════════════════     │     ⚪ = hotspot blanc rotatif
+   │                                     │
+```
+- Couche externe : Blur flou (1/3 épaisseur totale)
+- Couche centrale : Tube net coloré (1/3 épaisseur totale)
+- Couche interne : Glow blanc au centre (1/3 épaisseur totale)
+- Arc rotatif : Centré sur le tube avec hotspot blanc brillant
 
 **Comment ça fonctionne :**
 - La bordure lumineuse utilise la couleur de la catégorie de la question active
 - Animation CSS conic-gradient avec rotation spatiale continue
 - L'effet est visible uniquement pendant les phases READY, COUNTDOWN, STARTED, PAUSED
 - Changement de configuration appliqué en temps réel via WebSocket (ACTION: CONFIG_UPDATE)
+- Marges de contenu ajustées automatiquement selon `bar_offset`
 
 **Configuration depuis l'interface admin :**
 - Page Configuration → Section "Effet Néon"
-- 4 sliders pour ajuster les paramètres en direct
+- 2 onglets : **Structure** (mode, arc, offset) et **Glow** (pulsation, opacité)
+- 11 sliders pour ajuster les paramètres en direct
 - Aperçu instantané sur tous les écrans connectés
 
 **Fichiers concernés :**
-- `server-go/internal/config/config.go` : Struct NeonEffectConfig
+- `server-go/internal/config/config.go` : Struct NeonEffectConfig (11 champs)
 - `server-go/internal/protocol/messages.go` : ACTION CONFIG_UPDATE
 - `server-go/internal/server/http.go` : GET/POST /config.json avec validation
-- `server-go/web/src/styles/neon.css` : Styles avec @property et conic-gradient
-- `server-go/web/src/constants/colors.js` : Fonction getCategoryColor()
-- `server-go/web/src/pages/PlayerDisplay.jsx` : Application classe neon-border
-- `server-go/web/src/pages/ConfigPage.jsx` : UI sliders configuration
+- `server-go/cmd/server/main.go` : Broadcast CONFIG_UPDATE
+- `server-go/web/src/styles/neon.css` : Styles modes bar/halo avec @property
+- `server-go/web/src/pages/PlayerDisplay.jsx` : Application classe + variables CSS
+- `server-go/web/src/pages/PlayerDisplay.css` : Marges dynamiques selon bar_offset
+- `server-go/web/src/pages/ConfigPage.jsx` : UI complète avec onglets Structure/Glow
+- `server-go/web/src/pages/ConfigPage.css` : Styles sliders et sections néon
 - `server-go/web/src/hooks/useWebSocket.js` : Handler CONFIG_UPDATE
 
 ## Go Server Implementation (Phase 1 - Complete)

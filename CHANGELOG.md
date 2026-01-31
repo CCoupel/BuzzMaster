@@ -3,52 +3,72 @@
 Historique des versions du projet BuzzControl.
 
 
-## [2.46.1] - 2026-01-31
+## [2.46.0] - 2026-01-31
+
+### Ajouts - Effet Néon Avancé
+
+**Modes d'affichage** :
+- **Mode "bar"** (défaut) : Tube lumineux fin avec centre blanc et rotation d'arc
+  - Tube fixe avec 3 couches (externe floutée, centrale précise, centre blanc)
+  - Arc rotatif au centre du tube avec hotspot blanc brillant
+  - Proportions équilibrées : 1/3 par couche (blur, tube, glow central)
+
+- **Mode "halo"** : Effet néon classique avec bordure lumineuse large
+  - Conic-gradient rotatif avec arc lumineux configurable
+  - Glow pulsant autour de l'écran
+
+**Paramètres configurables** (Page Configuration) :
+
+| Paramètre | Plage | Défaut | Description |
+|-----------|-------|--------|-------------|
+| `enabled` | bool | false | Activer/désactiver l'effet |
+| `mode` | "bar" / "halo" | "bar" | Type d'effet visuel |
+| `arc_width` | 30-180° | 60° | Largeur de l'arc lumineux |
+| `intensity_gap` | 0-100% | 80% | Écart d'intensité (opacité zone sombre) |
+| `rotation_speed` | 1-10s | 4s | Vitesse de rotation de l'arc |
+| `bar_offset` | 10-100px | 20px | Distance du tube par rapport au bord (mode bar) |
+| `bar_thickness` | 2-20px | 4px | Épaisseur du tube lumineux (mode bar) |
+| `arc_blur` | 0-200% | 100% | Flou de l'arc (% de bar_thickness) |
+| `glow_pulse_speed` | 0.5-5s | 2s | Vitesse de pulsation du glow |
+| `glow_pulse_min` | 0-100% | 30% | Opacité minimale du glow pulsant |
+| `glow_pulse_max` | 0-100% | 50% | Opacité maximale du glow pulsant |
+
+**Caractéristiques techniques** :
+- Couleur automatique selon la catégorie de la question
+- Animations CSS GPU-accelerated (@property + conic-gradient)
+- Diffusion temps réel via WebSocket (ACTION: CONFIG_UPDATE)
+- Phases actives : READY, COUNTDOWN, STARTED, PAUSED
+- Ajustement automatique des marges pour éviter chevauchement avec contenu
 
 ### Corrections
-- **[Bug Effet Néon]**: Barre blanche au bas de l'écran TV/Player quand l'effet néon est activé
-  - **Cause** : Conflit CSS - `.neon-border` ajoutait `position: relative` qui écrasait le `position: fixed` de `.player-display`
-  - **Solution** : Ajout d'une règle spécifique `.player-display.neon-border` pour restaurer `position: fixed` uniquement sur l'affichage TV/Player
-  - **Impact** : L'effet néon reste pleinement fonctionnel sans réduire la zone utile d'affichage
-
-### Technique
-- **Frontend** : CSS spécificité - `.player-display.neon-border` (0,2,0) > `.neon-border` (0,1,0)
-- **Fichier modifié** : `server-go/web/src/styles/neon.css`
-- **Version** : Incrémentée en 2.46.1 (maintien des fonctionnalités v2.46.0)
-
----
-
-## [2.46.0] - 2026-01-30
-
-### Ajouts
-- **[Effet Néon]**: Bordure lumineuse animée autour de l'écran TV et VPlayer
-  - Couleur automatique selon la catégorie de la question
-  - Animation CSS conic-gradient avec rotation spatiale continue
-  - Configurable depuis la page Configuration avec 4 paramètres ajustables
-  - **Paramètres disponibles** :
-    - `enabled` : Activer/désactiver l'effet (défaut: désactivé)
-    - `arc_width` : Largeur de l'arc lumineux en degrés, 30-180° (défaut: 60°)
-    - `intensity_gap` : Écart d'intensité (opacité) 0-100% (défaut: 80%)
-    - `rotation_speed` : Vitesse de rotation en secondes, 1-10s (défaut: 4s)
-  - **Phases actives** : READY, COUNTDOWN, STARTED, PAUSED
-  - Diffusion en temps réel via WebSocket : changement config appliqué instantanément
-
-### Technique
-- **Backend** : Configuration NeonEffectConfig dans config.json
-- **Frontend** : CSS @property + conic-gradient pour animations GPU-accelerated
-- **Diffusion** : ACTION CONFIG_UPDATE broadcast à tous les clients WebSocket
-- **Styles** : neon.css avec variables CSS dynamiques pour personnalisation
+- **[Positionnement]** : Préservation du `position: fixed` sur PlayerDisplay
+- **[Marges]** : Ajustement dynamique des marges de contenu selon `bar_offset`
+- **[Centrage]** : Arc rotatif parfaitement centré sur le tube en mode bar
+- **[Proportions]** : Équilibre visuel des 3 couches du tube (1/3 chacune)
+- **[Configuration]** : Restauration des valeurs par défaut correctes dans config.json
 
 ### Fichiers modifiés
-- `server-go/internal/config/config.go` : Struct NeonEffectConfig
+
+**Backend** :
+- `server-go/internal/config/config.go` : NeonEffectConfig avec 11 paramètres
 - `server-go/internal/protocol/messages.go` : ACTION CONFIG_UPDATE
-- `server-go/internal/server/http.go` : GET/POST /config.json avec neon_effect
-- `server-go/web/src/styles/neon.css` : Styles effet néon avec @property
-- `server-go/web/src/constants/colors.js` : Fonction getCategoryColor()
-- `server-go/web/src/pages/PlayerDisplay.jsx` : Classe neon-border conditionnelle
-- `server-go/web/src/pages/ConfigPage.jsx` : Section sliders configuration néon
+- `server-go/cmd/server/main.go` : Broadcast CONFIG_UPDATE aux clients
+
+**Frontend** :
+- `server-go/web/src/styles/neon.css` : Modes bar/halo, animations CSS
+- `server-go/web/src/pages/ConfigPage.jsx` : UI complète avec 2 onglets (Structure, Glow)
+- `server-go/web/src/pages/ConfigPage.css` : Styles sliders et sections néon
+- `server-go/web/src/pages/PlayerDisplay.jsx` : Application classes + variables CSS
+- `server-go/web/src/pages/PlayerDisplay.css` : Marges dynamiques selon bar_offset
+- `server-go/web/src/pages/VPlayerPage.css` : Support effet néon sur mobile
 - `server-go/web/src/hooks/useWebSocket.js` : Handler CONFIG_UPDATE
-- `server-go/config.json` : Version 2.46.0
+
+**Documentation** :
+- `docs/ADMIN_GUIDE.md` : Section complète effet néon avec guide visuel
+- `docs/DEV_PROCEDURE.md` : Ajout étape rebuild frontend obligatoire
+- `.claude/commands/deploy.md` : Procédure rebuild frontend avant build Go
+
+---
 
 ---
 
