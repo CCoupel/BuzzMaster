@@ -5,6 +5,21 @@ Historique des versions du projet BuzzControl.
 
 ## [2.47.0] - 2026-01-31
 
+### Fixed
+- **Effet Néon**: Paramètres de pulsation du glow correctement transmis via WebSocket
+  - Ajout de 3 champs manquants dans `NeonEffectPayload` (glow_pulse_speed, glow_pulse_min, glow_pulse_max)
+  - Correction de la sérialisation dans `broadcastConfigUpdate()` et `sendStateToClient()`
+  - Vitesse de pulsation maintenant configurable (0.5-5s)
+  - Amplitude min/max du glow appliquée correctement
+
+### Changed
+- **UI Configuration**: Amélioration de l'organisation des paramètres néon
+  - Bouton mode "Barre" renommé en "Neon" (plus clair)
+  - Slider "Intensité" déplacé vers section "Arc lumineux" (meilleure cohérence)
+
+
+## [2.46.0] - 2026-01-31
+
 ### Ajouts - Authentification VJoueurs WebSocket
 
 **Correction de sécurité critique** :
