@@ -196,6 +196,14 @@
   color: var(--gray-500);
 }
 
+.nav-group-tv {
+  background: linear-gradient(135deg, var(--accent-purple-light, #f3e5f5), var(--accent-purple-lighter, #fce4ec));
+}
+
+.nav-group-tv .nav-group-label {
+  color: var(--accent-purple, #9c27b0);
+}
+
 .nav-link {
   display: flex;
   align-items: center;

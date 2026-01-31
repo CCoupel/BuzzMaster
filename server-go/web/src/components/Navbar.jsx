@@ -43,6 +43,12 @@ export default function Navbar({ connectionStatus = 'disconnected', clientCounts
     { path: 'quiz', label: 'Questions', icon: '❓' },
   ]
 
+  // Zone TV: affichage TV et joueurs
+  const tvItems = [
+    { path: '/tv', label: 'TV', icon: '📺', absolute: true },
+    { path: '/player', label: 'Joueur', icon: '📱', absolute: true },
+  ]
+
   // Menu items dans le menu déroulant
   const menuItems = [
     { path: 'settings', label: 'Config', icon: '⚙️' },
@@ -58,16 +64,20 @@ export default function Navbar({ connectionStatus = 'disconnected', clientCounts
     return location.pathname === fullPath
   }
 
-  const renderNavLink = (item) => (
-    <NavLink
-      key={item.path}
-      to={getFullPath(item.path)}
-      className={() => `nav-link ${isActiveRoute(item.path) ? 'active' : ''}`}
-    >
-      <span className="nav-icon">{item.icon}</span>
-      <span className="nav-label">{item.label}</span>
-    </NavLink>
-  )
+  const renderNavLink = (item) => {
+    const path = item.absolute ? item.path : getFullPath(item.path)
+    const isActive = item.absolute ? location.pathname === item.path : isActiveRoute(item.path)
+    return (
+      <NavLink
+        key={item.path}
+        to={path}
+        className={() => `nav-link ${isActive ? 'active' : ''}`}
+      >
+        <span className="nav-icon">{item.icon}</span>
+        <span className="nav-label">{item.label}</span>
+      </NavLink>
+    )
+  }
 
   return (
     <nav className="navbar">
@@ -125,6 +135,12 @@ export default function Navbar({ connectionStatus = 'disconnected', clientCounts
           <span className="nav-group-label">Config</span>
           <div className="nav-group-items">
             {configItems.map(renderNavLink)}
+          </div>
+        </div>
+        <div className="nav-group nav-group-tv">
+          <span className="nav-group-label">TV</span>
+          <div className="nav-group-items">
+            {tvItems.map(renderNavLink)}
           </div>
         </div>
       </div>
