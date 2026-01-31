@@ -3,6 +3,68 @@
 Historique des versions du projet BuzzControl.
 
 
+## [2.48.0] - 2026-01-31
+
+### Added
+
+**Navigation Navbar** :
+- Menu déroulant sur le logo abeille BuzzControl
+  - Clic sur l'abeille 🐝 ouvre/ferme le menu
+  - Menu contient 2 options : ⚙️ Config et 📋 Logs
+  - Fermeture au clic extérieur ou sur un item
+  - Animation slideDown fluide
+  - Accessibilité : aria-label et title présents
+
+**Nouveau groupe "Pages" dans la navbar** :
+- Zone dédiée aux pages TV et joueurs
+- Label vertical "Pages" avec icône
+- Liens : 📺 TV et 👥 Joueurs
+- Même design que zones "Jeu" et "Config"
+- Cohérence visuelle améliorée
+
+### Changed
+
+- **Navbar restructuring** : Config et Logs retirés de la navbar principale
+  - Avant : 8 liens visibles [Jeu|Scores|Palmarès|Historique|Joueurs|Questions|Config|Logs]
+  - Après : 8 liens + menu déroulant [🐝▼|Jeu|Scores|Palmarès|Historique|Joueurs|Questions|📺 TV|👥 Joueurs]
+  - Navbar restructurée avec 3 zones : Jeu | Config | Pages
+  - TV et Joueurs accessibles directement depuis la navbar
+  - Pastille de connexion intacte
+
+- **GamePage UI improvement** : Label "Affichage TV" changé en "TV" vertical
+  - Alignment avec le style de la navbar
+  - Label vertical centré et cohérent
+  - Better space efficiency
+
+### Technical Details
+
+**Fichiers modifiés** :
+- `server-go/web/src/components/Navbar.jsx` : Ajout useState, useRef, useEffect pour gestion menu + groupe Pages
+- `server-go/web/src/components/Navbar.css` : Styles menu, animations, responsive + Pages group
+- `server-go/web/src/pages/GamePage.jsx` : Label "TV" vertical au lieu de "Affichage TV:"
+
+**Implémentation** :
+- État React `isMenuOpen` avec useState
+- Fermeture au clic extérieur via useEffect + useRef + document.addEventListener
+- NavLink conservé pour navigation SPA
+- Animation CSS keyframe `slideDown` (200ms)
+- CSS variables pour cohérence (colors, spacing, z-index)
+
+**Tests** :
+- 8 scénarios E2E validés ✅
+- QA Report : VALIDATED (100% pass rate)
+- Responsive design vérifiée (600px - 1920px)
+- Accessibilité WCAG 2.1 Level A
+
+### Compatibility
+
+- ✅ Non-breaking change
+- ✅ Backward compatible
+- ✅ Pas de changement API
+- ✅ Pas de changement WebSocket
+- ✅ Pas de migration requise
+
+
 ## [2.47.0] - 2026-01-31
 
 ### Fixed

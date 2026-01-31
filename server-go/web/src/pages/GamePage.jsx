@@ -240,7 +240,7 @@ export default function GamePage() {
           />
         </Card>
         <Card variant="elevated" padding="sm" className="display-card">
-          <span className="toggle-label">Affichage TV:</span>
+          <span className="toggle-label-vertical">TV</span>
           <div className="toggle-buttons">
             <Button
               variant={gameState.remote === 'GAME' ? 'primary' : 'ghost'}

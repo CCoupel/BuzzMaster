@@ -56,6 +56,18 @@
   font-weight: 500;
 }
 
+.display-card .toggle-label-vertical {
+  font-size: 0.65rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--gray-500);
+  padding: 0 var(--space-1);
+  writing-mode: vertical-rl;
+  text-orientation: mixed;
+  transform: rotate(180deg);
+}
+
 .display-card .toggle-buttons {
   display: flex;
   gap: var(--space-1);
