@@ -628,6 +628,8 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
       '--neon-intensity-gap': neonConfig.intensity_gap / 100,
       '--neon-rotation-speed': `${neonConfig.rotation_speed}s`,
       '--neon-glow-pulse-speed': `${neonConfig.glow_pulse_speed || 2}s`,
+      '--neon-glow-pulse-min': (neonConfig.glow_pulse_min || 30) / 100,
+      '--neon-glow-pulse-max': (neonConfig.glow_pulse_max || 50) / 100,
       '--neon-bar-offset': `${neonConfig.bar_offset || 20}px`,
       '--neon-bar-thickness': `${barThickness}px`,
       '--neon-arc-blur': `${arcBlurPx}px`,

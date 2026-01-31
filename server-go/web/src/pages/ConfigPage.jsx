@@ -9,6 +9,7 @@ export default function ConfigPage() {
   const { teams, bumpers, gameState, updateConfig, sendMessage, version } = useGame()
   const [uploadingBg, setUploadingBg] = useState(false)
   const bgInputRef = useRef(null)
+  const dualRangeTrackRef = useRef(null)
   const [draggedIndex, setDraggedIndex] = useState(null)
 
   // Neon effect configuration
@@ -19,6 +20,8 @@ export default function ConfigPage() {
     intensity_gap: 80,
     rotation_speed: 4,
     glow_pulse_speed: 2,
+    glow_pulse_min: 30,
+    glow_pulse_max: 50,
     bar_offset: 20,
     bar_thickness: 4,
     arc_blur: 100
@@ -493,7 +496,7 @@ export default function ConfigPage() {
                     </div>
 
                     <div className="slider-row">
-                      <label>Pulsation</label>
+                      <label>Vitesse pulsation</label>
                       <div className="slider-control">
                         <input
                           type="range"
@@ -504,6 +507,101 @@ export default function ConfigPage() {
                           onChange={(e) => setNeonConfig(prev => ({ ...prev, glow_pulse_speed: parseFloat(e.target.value) }))}
                         />
                         <span className="slider-value">{neonConfig.glow_pulse_speed || 2}s</span>
+                      </div>
+                    </div>
+
+                    <div className="slider-row">
+                      <label>Amplitude pulsation</label>
+                      <div className="dual-range-container">
+                        <div className="dual-range-track" ref={dualRangeTrackRef}>
+                          <div
+                            className="dual-range-fill"
+                            style={{
+                              left: `${neonConfig.glow_pulse_min || 30}%`,
+                              width: `${(neonConfig.glow_pulse_max || 50) - (neonConfig.glow_pulse_min || 30)}%`,
+                              background: `linear-gradient(to right,
+                                rgba(0, 200, 200, ${(neonConfig.glow_pulse_min || 30) / 100}),
+                                rgba(0, 200, 200, ${(neonConfig.glow_pulse_max || 50) / 100}))`
+                            }}
+                            onMouseDown={(e) => {
+                              e.preventDefault()
+                              const track = dualRangeTrackRef.current
+                              if (!track) return
+                              const trackRect = track.getBoundingClientRect()
+                              const startX = e.clientX
+                              const startMin = neonConfig.glow_pulse_min || 30
+                              const startMax = neonConfig.glow_pulse_max || 50
+                              const gap = startMax - startMin
+
+                              const onMouseMove = (moveEvent) => {
+                                const deltaX = moveEvent.clientX - startX
+                                const deltaPercent = (deltaX / trackRect.width) * 100
+                                let newMin = Math.round(startMin + deltaPercent)
+                                let newMax = Math.round(startMax + deltaPercent)
+
+                                // Clamp to boundaries - min cannot go below 1%
+                                if (newMin < 1) {
+                                  newMin = 1
+                                  newMax = 1 + gap
+                                }
+                                // max cannot go above 100
+                                if (newMax > 100) {
+                                  newMax = 100
+                                  newMin = 100 - gap
+                                }
+
+                                // Final safety clamp (min at least 1%)
+                                newMin = Math.max(1, Math.min(100, newMin))
+                                newMax = Math.max(1, Math.min(100, newMax))
+
+                                setNeonConfig(prev => ({
+                                  ...prev,
+                                  glow_pulse_min: newMin,
+                                  glow_pulse_max: newMax
+                                }))
+                              }
+
+                              const onMouseUp = () => {
+                                document.removeEventListener('mousemove', onMouseMove)
+                                document.removeEventListener('mouseup', onMouseUp)
+                              }
+
+                              document.addEventListener('mousemove', onMouseMove)
+                              document.addEventListener('mouseup', onMouseUp)
+                            }}
+                          />
+                          <input
+                            type="range"
+                            className="dual-range-input dual-range-min"
+                            min="1"
+                            max="100"
+                            value={neonConfig.glow_pulse_min || 30}
+                            onChange={(e) => {
+                              const val = parseInt(e.target.value)
+                              const max = neonConfig.glow_pulse_max || 50
+                              setNeonConfig(prev => ({
+                                ...prev,
+                                glow_pulse_min: Math.max(1, Math.min(val, max - 5))
+                              }))
+                            }}
+                          />
+                          <input
+                            type="range"
+                            className="dual-range-input dual-range-max"
+                            min="0"
+                            max="100"
+                            value={neonConfig.glow_pulse_max || 50}
+                            onChange={(e) => {
+                              const val = parseInt(e.target.value)
+                              const min = neonConfig.glow_pulse_min || 30
+                              setNeonConfig(prev => ({
+                                ...prev,
+                                glow_pulse_max: Math.max(val, min + 5)
+                              }))
+                            }}
+                          />
+                        </div>
+                        <span className="slider-value">{neonConfig.glow_pulse_min || 30}% - {neonConfig.glow_pulse_max || 50}%</span>
                       </div>
                     </div>
                   </div>

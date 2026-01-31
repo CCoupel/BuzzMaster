@@ -50,6 +50,8 @@ type NeonEffectConfig struct {
 	BarThickness   int     `json:"bar_thickness"`    // 2-20 pixels, default 4
 	ArcBlur        int     `json:"arc_blur"`         // 0-200% of bar thickness, default 100
 	GlowPulseSpeed float64 `json:"glow_pulse_speed"` // 0.5-5 seconds, default 2
+	GlowPulseMin   int     `json:"glow_pulse_min"`   // 0-100%, minimum glow opacity, default 30
+	GlowPulseMax   int     `json:"glow_pulse_max"`   // 0-100%, maximum glow opacity, default 50
 }
 
 var (
@@ -120,6 +122,12 @@ func Load(path string) (*Config, error) {
 	if cfg.NeonEffect.GlowPulseSpeed == 0 {
 		cfg.NeonEffect.GlowPulseSpeed = 2.0 // 2 seconds
 	}
+	if cfg.NeonEffect.GlowPulseMin == 0 {
+		cfg.NeonEffect.GlowPulseMin = 30 // 30% minimum glow
+	}
+	if cfg.NeonEffect.GlowPulseMax == 0 {
+		cfg.NeonEffect.GlowPulseMax = 50 // 50% maximum glow
+	}
 	// Enabled defaults to false (zero value)
 
 	return &cfg, nil
@@ -162,6 +170,8 @@ func Get() *Config {
 					BarThickness:   4,
 					ArcBlur:        100,
 					GlowPulseSpeed: 2.0,
+					GlowPulseMin:   30,
+					GlowPulseMax:   50,
 				},
 				Version: "2.0.0",
 			}
@@ -229,5 +239,24 @@ func (c *Config) ValidateAndClampNeonEffect() {
 		c.NeonEffect.GlowPulseSpeed = 0.5
 	} else if c.NeonEffect.GlowPulseSpeed > 5.0 {
 		c.NeonEffect.GlowPulseSpeed = 5.0
+	}
+
+	// Clamp glow_pulse_min to 0-100%
+	if c.NeonEffect.GlowPulseMin < 0 {
+		c.NeonEffect.GlowPulseMin = 0
+	} else if c.NeonEffect.GlowPulseMin > 100 {
+		c.NeonEffect.GlowPulseMin = 100
+	}
+
+	// Clamp glow_pulse_max to 0-100%
+	if c.NeonEffect.GlowPulseMax < 0 {
+		c.NeonEffect.GlowPulseMax = 0
+	} else if c.NeonEffect.GlowPulseMax > 100 {
+		c.NeonEffect.GlowPulseMax = 100
+	}
+
+	// Ensure min <= max
+	if c.NeonEffect.GlowPulseMin > c.NeonEffect.GlowPulseMax {
+		c.NeonEffect.GlowPulseMin, c.NeonEffect.GlowPulseMax = c.NeonEffect.GlowPulseMax, c.NeonEffect.GlowPulseMin
 	}
 }

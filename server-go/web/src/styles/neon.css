@@ -14,6 +14,8 @@
   --neon-intensity-gap: 0.8;
   --neon-rotation-speed: 4s;
   --neon-glow-pulse-speed: 2s;  /* Glow pulsation speed */
+  --neon-glow-pulse-min: 0.3;   /* Minimum glow opacity (0-1) */
+  --neon-glow-pulse-max: 0.5;   /* Maximum glow opacity (0-1) */
   --neon-mode: bar;  /* "bar" or "halo" */
   --neon-bar-offset: 20px;
   --neon-bar-thickness: 4px;
@@ -101,10 +103,10 @@
 /* Bar pulse animation */
 @keyframes neon-bar-pulse {
   0%, 100% {
-    opacity: calc(var(--neon-intensity-gap) * 0.5);
+    opacity: calc(var(--neon-intensity-gap) * var(--neon-glow-pulse-max));
   }
   50% {
-    opacity: calc(var(--neon-intensity-gap) * 0.3);
+    opacity: calc(var(--neon-intensity-gap) * var(--neon-glow-pulse-min));
   }
 }
 
@@ -166,8 +168,8 @@
 
 /* Halo pulse animation */
 @keyframes neon-halo-pulse {
-  0%, 100% { opacity: calc(var(--neon-intensity-gap) * 0.5); }
-  50% { opacity: calc(var(--neon-intensity-gap) * 0.3); }
+  0%, 100% { opacity: calc(var(--neon-intensity-gap) * var(--neon-glow-pulse-max)); }
+  50% { opacity: calc(var(--neon-intensity-gap) * var(--neon-glow-pulse-min)); }
 }
 
 /* Rotation animation - shared by both modes */
