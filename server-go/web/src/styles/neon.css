@@ -64,6 +64,7 @@
 .neon-border.neon-mode-bar::after {
   content: '';
   position: absolute;
+  /* Même position que le tube */
   top: var(--neon-bar-offset);
   left: var(--neon-bar-offset);
   right: var(--neon-bar-offset);
@@ -87,9 +88,10 @@
     linear-gradient(#fff 0 0);
   -webkit-mask-composite: xor;
   mask-composite: exclude;
-  /* L'épaisseur de l'anneau visible = arc_blur (padding) */
-  padding: var(--neon-arc-blur);
-  filter: blur(calc(var(--neon-arc-blur) / 2));
+  /* Épaisseur de l'anneau = épaisseur du tube */
+  padding: var(--neon-bar-thickness);
+  /* Blur contrôlé par arc_blur (divisé par 100 pour être en px) */
+  filter: blur(calc(var(--neon-arc-blur) * 0.1px));
   opacity: var(--neon-intensity-gap);
   animation: neon-rotate var(--neon-rotation-speed) linear infinite;
 }
@@ -154,8 +156,8 @@
     linear-gradient(#fff 0 0);
   -webkit-mask-composite: xor;
   mask-composite: exclude;
-  padding: var(--neon-arc-blur);
-  filter: blur(calc(var(--neon-arc-blur) / 2));
+  padding: var(--neon-bar-thickness);
+  filter: blur(calc(var(--neon-arc-blur) * 0.1px));
   opacity: var(--neon-intensity-gap);
   animation: neon-rotate var(--neon-rotation-speed) linear infinite;
 }
