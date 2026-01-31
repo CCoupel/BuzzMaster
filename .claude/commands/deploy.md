@@ -132,28 +132,51 @@ Arrête et redéploie le serveur BuzzControl vers l'environnement cible.
     - Push tag
     - **NE PAS supprimer la branche** (conservée pour rollback CI)
 
-14. **Attendre et vérifier la CI (PROD uniquement)**
+14. **Attendre et vérifier la CI automatiquement (PROD uniquement)**
     La CI GitHub Actions se déclenche automatiquement au push du tag.
 
-    a) **Demander à l'utilisateur de vérifier** :
-       Afficher : "⏳ La CI GitHub Actions est en cours.
-       Veuillez vérifier sur : https://github.com/CCoupel/BuzzMaster/actions
+    a) **Vérification automatique via API GitHub** :
+       Utiliser l'API GitHub pour surveiller le statut de la CI :
 
-       Attendez que tous les jobs soient ✅ (verts) puis confirmez.
-       Si un job est ❌ (rouge), informez-moi pour lancer le rollback."
+       ```bash
+       # Boucle de vérification (max 10 minutes, intervalle 30s)
+       MAX_ATTEMPTS=20
+       ATTEMPT=0
+       while [ $ATTEMPT -lt $MAX_ATTEMPTS ]; do
+           RESPONSE=$(curl -s "https://api.github.com/repos/CCoupel/BuzzMaster/actions/runs?per_page=1")
+           STATUS=$(echo $RESPONSE | grep -o '"status":"[^"]*"' | head -1 | cut -d'"' -f4)
+           CONCLUSION=$(echo $RESPONSE | grep -o '"conclusion":"[^"]*"' | head -1 | cut -d'"' -f4)
 
-    b) **Utiliser AskUserQuestion** pour demander :
-       - Option 1 : "✅ CI réussie - Continuer"
-       - Option 2 : "❌ CI échouée - Rollback nécessaire"
+           echo "CI Status: $STATUS, Conclusion: $CONCLUSION"
 
-    c) **Si CI échouée** (ROLLBACK) :
-       1. Revert le merge sur main :
+           if [ "$STATUS" = "completed" ]; then
+               break
+           fi
+
+           ATTEMPT=$((ATTEMPT + 1))
+           sleep 30
+       done
+       ```
+
+    b) **Analyser le résultat** :
+       - Extraire `status` et `conclusion` de la réponse JSON
+       - Si `status` = "completed" ET `conclusion` = "success" → Continuer
+       - Si `status` = "completed" ET `conclusion` != "success" → ROLLBACK
+       - Si timeout (10 min) → Afficher erreur et demander à l'utilisateur
+
+    c) **Si CI réussie** :
+       Afficher : "✅ CI GitHub Actions terminée avec succès"
+       Continuer vers Phase 5
+
+    d) **Si CI échouée** (ROLLBACK automatique) :
+       1. Afficher : "❌ CI échouée - Lancement du rollback automatique"
+       2. Revert le merge sur main :
           git checkout main && git revert HEAD --no-edit && git push origin main
-       2. Supprimer le tag :
+       3. Supprimer le tag :
           git tag -d v<version> && git push origin --delete v<version>
-       3. Informer l'utilisateur de vérifier les logs CI sur GitHub
-       4. Retourner sur la branche feature pour corriger
-       5. **ARRÊTER LE WORKFLOW** et informer l'utilisateur
+       4. Afficher le lien vers les logs CI : https://github.com/CCoupel/BuzzMaster/actions
+       5. Retourner sur la branche feature pour corriger
+       6. **ARRÊTER LE WORKFLOW** et informer l'utilisateur
 
 ## PHASE 5 : VALIDATION RELEASE GITHUB (PROD uniquement)
 
@@ -229,7 +252,7 @@ Arrête et redéploie le serveur BuzzControl vers l'environnement cible.
 | Push branche feature | Non | Non | Oui |
 | Squash merge main | Non | Non | Oui |
 | Tag Git | Non | Non | Oui |
-| Attendre + vérifier CI (utilisateur) | Non | Non | Oui |
+| Vérifier CI automatiquement (API GitHub) | Non | Non | Oui |
 | Télécharger exe GitHub Release | Non | Non | Oui |
 | Lancer exe release (fenêtre visible) | Non | Non | Oui |
 | Validation version release | Non | Non | Oui |
@@ -254,7 +277,7 @@ PROD → Release (merge + tag + binaires prêts pour Raspberry Pi)
 - TOUJOURS vérifier que /version correspond à config.json après redémarrage
 - TOUJOURS retry automatique (max 2x) si version mismatch
 - TOUJOURS synchroniser package.json avec config.json
-- TOUJOURS demander à l'utilisateur de vérifier la CI sur GitHub (PROD)
+- TOUJOURS vérifier la CI automatiquement via API GitHub (PROD) - max 10 min d'attente
 - TOUJOURS rollback (revert + delete tag) si CI échoue (PROD)
 - TOUJOURS télécharger l'exécutable Windows depuis GitHub Release (PROD)
 - TOUJOURS lancer l'exécutable release dans une FENÊTRE VISIBLE (pas en arrière-plan)

@@ -99,11 +99,35 @@ Bug fixes:
 git push origin v<version>
 ```
 
-**Monitor CI (User Verification):**
-After pushing the tag, ask the user to verify CI on GitHub Actions:
-- URL: https://github.com/CCoupel/BuzzMaster/actions
-- Use AskUserQuestion to confirm CI status
-- Wait for user confirmation before proceeding
+**Monitor CI (Automatic Verification via GitHub API):**
+After pushing the tag, automatically verify CI status using GitHub API:
+
+```bash
+# Poll CI status every 30 seconds for max 10 minutes
+MAX_ATTEMPTS=20
+for i in $(seq 1 $MAX_ATTEMPTS); do
+    RESPONSE=$(curl -s "https://api.github.com/repos/CCoupel/BuzzMaster/actions/runs?per_page=1")
+    # Extract status and conclusion from JSON response
+    # status: "queued", "in_progress", "completed"
+    # conclusion: "success", "failure", "cancelled"
+
+    if status == "completed"; then
+        if conclusion == "success"; then
+            echo "✅ CI passed"
+            break
+        else
+            echo "❌ CI failed - initiating rollback"
+            # Execute rollback procedure
+        fi
+    fi
+    sleep 30
+done
+```
+
+- Parse JSON to extract `workflow_runs[0].status` and `workflow_runs[0].conclusion`
+- Wait until `status` = "completed"
+- If `conclusion` = "success" → Continue to Phase 5
+- If `conclusion` != "success" → Execute automatic rollback
 
 **Si CI échoue → Annuler le merge:**
 ```bash
@@ -175,7 +199,7 @@ Always produce a detailed deployment report in Markdown format including:
 4. **Build Results**: Platform-specific build outcomes with sizes
 5. **Test Results**: Post-build test outcomes
 6. **Git Operations** (PROD only): Merge, tag results
-7. **CI Status** (PROD only): User-verified status
+7. **CI Status** (PROD only): Automatically verified via GitHub API
 8. **Release Download** (PROD only): URL, binary source
 9. **Final Executable**: Source (GitHub Release), version validated
 10. **Verification Checklist**: All checks performed
@@ -227,7 +251,7 @@ La branche de travail n'est JAMAIS supprimée pour permettre cette récupératio
 9. **ALWAYS** mark tasks as completed (TaskUpdate) before push (PROD only)
 10. **ALWAYS** commit documentation BEFORE push and merge (PROD only)
 11. **ALWAYS** rebuild web files before Go build (portable mode)
-12. **ALWAYS** ask user to verify CI on GitHub (no gh CLI available)
+12. **ALWAYS** verify CI automatically via GitHub API (poll every 30s, max 10 min)
 13. **ALWAYS** download GitHub Release executable (PROD only)
 14. **ALWAYS** launch release executable in VISIBLE WINDOW (not background)
 15. **ALWAYS** validate release version before completing (PROD only)
@@ -284,8 +308,8 @@ For PROD deployment, execute these steps IN ORDER:
 14. **Push feature branch**: `git push origin <feature-branch>`
 15. **Git merge**: `git checkout main && git merge --squash <feature-branch> && git commit && git push`
 16. **Git tag**: `git tag -a v<version> -m "..." && git push origin v<version>`
-17. **Ask user to verify CI**: Use AskUserQuestion, URL: https://github.com/CCoupel/BuzzMaster/actions
-18. **If CI failed**: ROLLBACK - revert merge, delete tag, return to feature branch
+17. **Verify CI automatically**: Poll GitHub API every 30s (max 10 min), check status/conclusion
+18. **If CI failed**: AUTOMATIC ROLLBACK - revert merge, delete tag, return to feature branch
 
 ### Phase 5: Validation Release GitHub
 19. **Stop local server**: `curl -s http://localhost/shutdown`
