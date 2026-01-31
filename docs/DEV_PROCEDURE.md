@@ -98,27 +98,59 @@ npm run dev
 4. Répéter jusqu'à satisfaction
 ```
 
-### 3.2 Modifications Backend (Go)
+### 3.2 Build Complet (OBLIGATOIRE)
+
+**⚠️ IMPORTANT : Toujours rebuilder le frontend AVANT le backend Go.**
+
+Le serveur Go embarque les fichiers web compilés. Si vous ne rebuilder pas le frontend, vos modifications React/CSS ne seront pas prises en compte.
 
 ```bash
 # Arrêter le serveur proprement via API
 curl http://localhost/shutdown
 
-# Modifier les fichiers .go
-# Rebuild et relancer
+# 1. TOUJOURS rebuilder le frontend d'abord
+cd server-go/web
+npm run build
+
+# 2. PUIS rebuilder le backend Go
+cd ..
+go build -o server.exe ./cmd/server
+
+# 3. Relancer le serveur
+./server.exe
+```
+
+**Commande one-liner (recommandée) :**
+```bash
+curl -s http://localhost/shutdown; sleep 2; cd server-go/web && npm run build && cd .. && go build -o server.exe ./cmd/server && ./server.exe
+```
+
+### 3.3 Modifications Backend uniquement (Go)
+
+Si vous modifiez **uniquement** des fichiers `.go` (pas de React/CSS) :
+
+```bash
+# Arrêter le serveur proprement via API
+curl http://localhost/shutdown
+
+# Rebuild et relancer (frontend inchangé)
 go build -o server.exe ./cmd/server && ./server.exe
 ```
 
-### 3.3 Modifications Frontend (React)
+### 3.4 Modifications Frontend (React)
 
 ```bash
-# Si npm run dev est actif : hot reload automatique
-# Sinon :
-npm run build --prefix web
-# Puis relancer le serveur Go
+# Si npm run dev est actif : hot reload automatique (dev mode)
+# Sinon, pour le mode production (embedded) :
+cd server-go/web
+npm run build
+cd ..
+go build -o server.exe ./cmd/server && ./server.exe
 ```
 
-### 3.4 Tests rapides pendant le dev
+**Note** : En mode portable (production), les fichiers web sont embarqués dans l'exécutable Go. Il faut donc TOUJOURS rebuilder Go après avoir modifié le frontend.
+
+### 3.5 Tests rapides pendant le dev
 
 ```bash
 # Test unitaire d'un package spécifique

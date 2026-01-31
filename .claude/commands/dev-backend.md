@@ -60,13 +60,18 @@ Implémente le code backend Go pour BuzzControl.
    - Thread-safety avec mutex
    - Tests table-driven
 
-5. **Vérifications finales**
-   - go build ./cmd/server (compilation)
+5. **Build final (ORDRE IMPORTANT)**
+   ⚠️ TOUJOURS rebuilder le frontend AVANT le Go build (mode portable)
+   ```bash
+   cd server-go/web && npm run build && cd .. && go build -o server.exe ./cmd/server
+   ```
+
+6. **Vérifications finales**
    - go test ./... -v (tests)
    - go test -race ./... (race conditions)
    - git push origin <branche>
 
-6. **Générer le résumé** :
+7. **Générer le résumé** :
    - Fichiers modifiés avec changements
    - Tests créés et résultats
    - Commits créés

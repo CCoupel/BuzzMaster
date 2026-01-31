@@ -340,6 +340,19 @@ Return a structured summary:
 5. **Responsive**: Test at multiple breakpoints
 6. **Accessibility**: Use semantic HTML, ARIA when needed
 7. **Atomic commits**: One commit per logical change
+8. **Build order**: TOUJOURS rebuilder frontend AVANT Go build (mode portable)
+
+## Build Command
+
+**⚠️ IMPORTANT** : En mode portable, le serveur Go embarque les fichiers web compilés. Vous DEVEZ :
+1. Rebuilder le frontend avec `npm run build`
+2. PUIS rebuilder le Go avec `go build`
+
+```bash
+cd server-go/web && npm run build && cd .. && go build -o server.exe ./cmd/server
+```
+
+Si vous ne faites que `go build`, vos modifications React/CSS ne seront pas prises en compte !
 
 ## What You Must NOT Do
 

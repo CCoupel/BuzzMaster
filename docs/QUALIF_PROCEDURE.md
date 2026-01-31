@@ -43,20 +43,21 @@ rm -f *.bak web/src/pages/*.bak
 
 ### 1.2 Rebuild complet
 
+**⚠️ IMPORTANT : TOUJOURS rebuilder le frontend AVANT le backend Go.**
+
 ```bash
-# Backend
-go build -v ./cmd/server
+cd server-go
 
-# Frontend (production build)
-npm run build --prefix web
+# 1. Frontend d'abord (OBLIGATOIRE)
+cd web
+npm run build
+cd ..
 
-# Copier pour embedding
-rm -rf cmd/server/dist
-cp -r web/dist cmd/server/dist
-
-# Rebuild final avec embedded
+# 2. Backend Go ensuite (embarque les fichiers web)
 go build -o server.exe ./cmd/server
 ```
+
+**Note** : Le serveur Go embarque automatiquement les fichiers `web/dist/`. Si vous inversez l'ordre, les modifications frontend ne seront pas prises en compte.
 
 ### 1.3 Démarrer le serveur
 
