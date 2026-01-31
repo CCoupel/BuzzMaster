@@ -59,13 +59,14 @@ export default function VPlayerPage() {
     }
   }, [playerSession, bumpers, teams])
 
-  // Set client type on mount (identify as vplayer)
+  // Identify as vplayer IMMEDIATELY on connection (before any other action)
+  // This must happen first, before checking session or bumper
   useEffect(() => {
-    if (playerSession && status === 'connected') {
+    if (status === 'connected') {
       console.log('[VPlayer] Setting client type to vplayer')
       setClientType('vplayer')
     }
-  }, [playerSession, status, setClientType])
+  }, [status, setClientType])
 
   // Detect if bumper was deleted by admin - redirect to enrollment page
   useEffect(() => {
