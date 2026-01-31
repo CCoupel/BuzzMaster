@@ -20,16 +20,16 @@
   },
   "neon_effect": {
     "enabled": true,
-    "mode": "bar",
-    "arc_width": 168,
-    "intensity_gap": 76,
-    "rotation_speed": 10,
-    "bar_offset": 18,
-    "bar_thickness": 4,
-    "arc_blur": 0,
-    "glow_pulse_speed": 0.5,
-    "glow_pulse_min": 30,
-    "glow_pulse_max": 50
+    "mode": "halo",
+    "arc_width": 30,
+    "intensity_gap": 100,
+    "rotation_speed": 5,
+    "bar_offset": 12,
+    "bar_thickness": 5,
+    "arc_blur": 180,
+    "glow_pulse_speed": 3.7,
+    "glow_pulse_min": 50,
+    "glow_pulse_max": 70
   },
-  "version": "2.47.1"
+  "version": "2.47.0"
 }
