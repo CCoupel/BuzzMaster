@@ -3,6 +3,21 @@
 Historique des versions du projet BuzzControl.
 
 
+## [2.46.1] - 2026-01-31
+
+### Corrections
+- **[Bug Effet Néon]**: Barre blanche au bas de l'écran TV/Player quand l'effet néon est activé
+  - **Cause** : Conflit CSS - `.neon-border` ajoutait `position: relative` qui écrasait le `position: fixed` de `.player-display`
+  - **Solution** : Ajout d'une règle spécifique `.player-display.neon-border` pour restaurer `position: fixed` uniquement sur l'affichage TV/Player
+  - **Impact** : L'effet néon reste pleinement fonctionnel sans réduire la zone utile d'affichage
+
+### Technique
+- **Frontend** : CSS spécificité - `.player-display.neon-border` (0,2,0) > `.neon-border` (0,1,0)
+- **Fichier modifié** : `server-go/web/src/styles/neon.css`
+- **Version** : Incrémentée en 2.46.1 (maintien des fonctionnalités v2.46.0)
+
+---
+
 ## [2.46.0] - 2026-01-30
 
 ### Ajouts
