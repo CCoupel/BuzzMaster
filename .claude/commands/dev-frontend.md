@@ -68,13 +68,19 @@ Implémente le code frontend React pour BuzzControl.
    - Unités viewport (vh, vw, %)
    - Tester à 1920x1080
 
-6. **Vérifications finales**
+6. **Build final (ORDRE IMPORTANT)**
+   ⚠️ TOUJOURS rebuilder le frontend AVANT le Go build (mode portable)
+   ```bash
+   cd server-go/web && npm run build && cd .. && go build -o server.exe ./cmd/server
+   ```
+
+7. **Vérifications finales**
    - Test visuel dans navigateur
    - Test responsive
    - Test TV à 1920x1080
    - git push origin <branche>
 
-7. **Générer le résumé** :
+8. **Générer le résumé** :
    - Fichiers modifiés avec changements
    - Changements UI (Admin / TV)
    - Vérifications visuelles effectuées
