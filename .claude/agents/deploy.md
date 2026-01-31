@@ -127,24 +127,43 @@ done
 - Parse JSON to extract `workflow_runs[0].status` and `workflow_runs[0].conclusion`
 - Wait until `status` = "completed"
 - If `conclusion` = "success" → Continue to Phase 5
-- If `conclusion` != "success" → Execute automatic rollback
+- If `conclusion` != "success" → Execute automatic error analysis and correction
 
-**Si CI échoue → Annuler le merge:**
+**Si CI échoue → Analyser et corriger automatiquement:**
+
 ```bash
-# 1. Revert le merge sur main
+# 1. Récupérer les détails de l'erreur
+RUN_ID=$(curl -s "https://api.github.com/repos/CCoupel/BuzzMaster/actions/runs?per_page=1" | grep -o '"id":[0-9]*' | head -1 | cut -d':' -f2)
+JOBS=$(curl -s "https://api.github.com/repos/CCoupel/BuzzMaster/actions/runs/$RUN_ID/jobs")
+# Analyser le contenu pour identifier le job et step qui a échoué
+
+# 2. Revert temporaire pour permettre la correction
 git checkout main
 git revert HEAD --no-edit
 git push origin main
 
-# 2. Supprimer le tag
+# 3. Supprimer le tag
 git tag -d v<version>
 git push origin --delete v<version>
 
-# 3. Retourner sur la branche feature
+# 4. Retourner sur la branche feature
 git checkout feature/<name>
-# ... corrections ...
-# Relancer le workflow REVIEW → QA → DEPLOY
+
+# 5. Analyser l'erreur et lancer l'agent de correction approprié
+#    - Erreur Go (build/test) → dev-backend agent
+#    - Erreur React (build/lint) → dev-frontend agent
+#    - Erreur mixte → les deux agents
+
+# 6. Après correction, incrémenter z et relancer /deploy PROD
 ```
+
+**Processus de correction automatique :**
+1. **Récupérer les logs CI** via API GitHub (`/actions/runs/{id}/jobs`)
+2. **Identifier le type d'erreur** : build Go, build npm, test, lint
+3. **Lancer l'agent approprié** avec le message d'erreur comme contexte
+4. **Vérifier la correction** localement (rebuild + tests)
+5. **Relancer le déploiement** avec version incrémentée
+6. **Maximum 3 tentatives** - après 3 échecs, escalader à l'utilisateur
 
 **Important** : Ne JAMAIS supprimer la branche de travail après le merge.
 La branche reste disponible pour corrections si la CI échoue.
@@ -226,15 +245,23 @@ Always produce a detailed deployment report in Markdown format including:
 - CI fails after tag push (requires revert)
 - GitHub Release executable fails to run
 
-### CI Failure Recovery (PROD)
+### CI Failure Recovery (PROD) - Correction Automatique
 
 Si la CI échoue après le push du tag:
 
-1. **Revert immédiat** du merge sur main
-2. **Suppression** du tag local et distant
-3. **Informer l'utilisateur** de vérifier les logs CI sur GitHub
-4. **Correction** sur la branche de travail (qui n'est PAS supprimée)
-5. **Relancer** le workflow complet (REVIEW → QA → DEPLOY)
+1. **Récupérer les logs d'erreur** via API GitHub (`/actions/runs/{id}/jobs`)
+2. **Revert temporaire** du merge sur main (pour débloquer la branche)
+3. **Suppression** du tag local et distant
+4. **Retour sur la branche feature** (qui n'est PAS supprimée)
+5. **Analyser l'erreur** et déterminer le type :
+   - Build Go échoué → agent `dev-backend`
+   - Build npm échoué → agent `dev-frontend`
+   - Test échoué → agent correspondant au type de test
+6. **Lancer l'agent de correction** avec le message d'erreur
+7. **Vérifier localement** (rebuild + tests)
+8. **Incrémenter z** de la version (ex: 2.47.0 → 2.47.1)
+9. **Relancer `/deploy PROD`** automatiquement
+10. **Maximum 3 tentatives** - après 3 échecs, escalader à l'utilisateur
 
 La branche de travail n'est JAMAIS supprimée pour permettre cette récupération.
 
@@ -258,7 +285,7 @@ La branche de travail n'est JAMAIS supprimée pour permettre cette récupératio
 16. **ALWAYS** perform graceful shutdown testing
 17. **ALWAYS** document any problems encountered
 18. **ALWAYS** provide rollback instructions for PROD
-19. **ALWAYS** revert merge if CI fails after tag push
+19. **ALWAYS** analyze and auto-fix CI failures (max 3 attempts before escalating)
 20. **ALWAYS** proceed with deployment when user explicitly requests it
 
 ## Hotfix Mode
@@ -309,7 +336,7 @@ For PROD deployment, execute these steps IN ORDER:
 15. **Git merge**: `git checkout main && git merge --squash <feature-branch> && git commit && git push`
 16. **Git tag**: `git tag -a v<version> -m "..." && git push origin v<version>`
 17. **Verify CI automatically**: Poll GitHub API every 30s (max 10 min), check status/conclusion
-18. **If CI failed**: AUTOMATIC ROLLBACK - revert merge, delete tag, return to feature branch
+18. **If CI failed**: AUTOMATIC FIX - analyze error, launch correction agent, increment version, retry (max 3 attempts)
 
 ### Phase 5: Validation Release GitHub
 19. **Stop local server**: `curl -s http://localhost/shutdown`

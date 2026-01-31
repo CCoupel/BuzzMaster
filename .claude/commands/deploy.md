@@ -168,15 +168,51 @@ Arrête et redéploie le serveur BuzzControl vers l'environnement cible.
        Afficher : "✅ CI GitHub Actions terminée avec succès"
        Continuer vers Phase 5
 
-    d) **Si CI échouée** (ROLLBACK automatique) :
-       1. Afficher : "❌ CI échouée - Lancement du rollback automatique"
-       2. Revert le merge sur main :
+    d) **Si CI échouée** (ANALYSE ET CORRECTION automatique) :
+       1. Afficher : "❌ CI échouée - Analyse de l'erreur en cours..."
+
+       2. **Récupérer les logs d'erreur via GitHub API** :
+          ```bash
+          # Récupérer l'ID du workflow run
+          RUN_ID=$(curl -s "https://api.github.com/repos/CCoupel/BuzzMaster/actions/runs?per_page=1" | grep -o '"id":[0-9]*' | head -1 | cut -d':' -f2)
+
+          # Récupérer les jobs du workflow
+          JOBS=$(curl -s "https://api.github.com/repos/CCoupel/BuzzMaster/actions/runs/$RUN_ID/jobs")
+
+          # Identifier le job qui a échoué et récupérer ses logs
+          ```
+
+       3. **Analyser le type d'erreur** :
+          - Erreur de build Go → Problème backend (syntaxe, import, compilation)
+          - Erreur de build npm → Problème frontend (syntaxe JS/CSS, dépendances)
+          - Erreur de test → Test unitaire ou E2E échoué
+          - Erreur de lint → Problème de formatage ou règles
+
+       4. **Revert temporaire et retour sur branche feature** :
           git checkout main && git revert HEAD --no-edit && git push origin main
-       3. Supprimer le tag :
           git tag -d v<version> && git push origin --delete v<version>
-       4. Afficher le lien vers les logs CI : https://github.com/CCoupel/BuzzMaster/actions
-       5. Retourner sur la branche feature pour corriger
-       6. **ARRÊTER LE WORKFLOW** et informer l'utilisateur
+          git checkout <feature-branch>
+
+       5. **Lancer l'agent de correction approprié** :
+          - Si erreur backend Go → Lancer agent `dev-backend` avec le message d'erreur
+          - Si erreur frontend React → Lancer agent `dev-frontend` avec le message d'erreur
+          - Si erreur mixte → Lancer les deux agents séquentiellement
+
+          **Prompt pour l'agent de correction** :
+          ```
+          La CI a échoué avec l'erreur suivante :
+          [COLLER LE MESSAGE D'ERREUR]
+
+          Analyse cette erreur et corrige-la. Après correction :
+          1. Rebuild et vérifie localement
+          2. Commit avec message "fix: [description de la correction]"
+          ```
+
+       6. **Après correction, relancer le déploiement** :
+          - Incrémenter z de la version (ex: 2.47.0 → 2.47.1)
+          - Relancer `/deploy PROD` automatiquement
+
+       7. **Si 3 tentatives échouent** → ARRÊTER et escalader à l'utilisateur
 
 ## PHASE 5 : VALIDATION RELEASE GITHUB (PROD uniquement)
 
@@ -278,7 +314,7 @@ PROD → Release (merge + tag + binaires prêts pour Raspberry Pi)
 - TOUJOURS retry automatique (max 2x) si version mismatch
 - TOUJOURS synchroniser package.json avec config.json
 - TOUJOURS vérifier la CI automatiquement via API GitHub (PROD) - max 10 min d'attente
-- TOUJOURS rollback (revert + delete tag) si CI échoue (PROD)
+- TOUJOURS analyser et corriger automatiquement si CI échoue (PROD) - max 3 tentatives
 - TOUJOURS télécharger l'exécutable Windows depuis GitHub Release (PROD)
 - TOUJOURS lancer l'exécutable release dans une FENÊTRE VISIBLE (pas en arrière-plan)
 - TOUJOURS valider la version de l'exécutable release avant de terminer (PROD)
