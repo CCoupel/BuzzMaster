@@ -1472,6 +1472,21 @@ func (a *App) sendStateToClient(clientID string) {
 	clientsMsg, _ := protocol.NewMessage(protocol.ActionClients, nil)
 	clientsMsg.Msg = cData
 	a.wsHub.SendToClient(clientID, clientsMsg)
+
+	// Send CONFIG_UPDATE with neon effect settings
+	cfg := config.Get()
+	neonPayload := protocol.ConfigUpdatePayload{
+		NeonEffect: protocol.NeonEffectPayload{
+			Enabled:       cfg.NeonEffect.Enabled,
+			ArcWidth:      cfg.NeonEffect.ArcWidth,
+			IntensityGap:  cfg.NeonEffect.IntensityGap,
+			RotationSpeed: cfg.NeonEffect.RotationSpeed,
+		},
+	}
+	neonData, _ := json.Marshal(neonPayload)
+	neonMsg, _ := protocol.NewMessage(protocol.ActionConfigUpdate, nil)
+	neonMsg.Msg = neonData
+	a.wsHub.SendToClient(clientID, neonMsg)
 }
 
 // getStorageInfo returns file storage information (in bytes, like ESP32)
