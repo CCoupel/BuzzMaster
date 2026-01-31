@@ -35,8 +35,14 @@ function AppContent() {
   const hideNavbar = !isAdminRoute
 
   // Set client type based on route (TV display vs admin)
+  // VPlayer routes (/ and /player) handle their own type, don't override
   React.useEffect(() => {
     if (status === 'connected') {
+      const isVPlayerRoute = location.pathname === '/' || location.pathname === '/player'
+      if (isVPlayerRoute) {
+        // VPlayer pages set their own type (vplayer), don't override here
+        return
+      }
       if (location.pathname === '/tv') {
         setClientType('tv')
       } else {

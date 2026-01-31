@@ -24,6 +24,7 @@ backlog/
 | [metadata-binaires.md](TODO/metadata-binaires.md) | Métadonnées dans les binaires (nom, version, icône) |
 | [bugfix-neon-effet-parametres.md](TODO/bugfix-neon-effet-parametres.md) | Bugfix: Paramètres effet néon non appliqués |
 | [navbar-menu-connexion.md](TODO/navbar-menu-connexion.md) | Menu déroulant sur pastille de connexion (Config, Logs) |
+| [admin-joueur-card-style.md](TODO/admin-joueur-card-style.md) | Style neutre gris pour cartes joueurs (page admin Jeu) |
 
 ## En-Cours
 
