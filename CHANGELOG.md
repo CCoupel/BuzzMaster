@@ -3,6 +3,54 @@
 Historique des versions du projet BuzzControl.
 
 
+## [2.48.0] - 2026-01-31
+
+### Added
+
+**Navigation Navbar** :
+- Menu déroulant sur le logo abeille BuzzControl
+  - Clic sur l'abeille 🐝 ouvre/ferme le menu
+  - Menu contient 2 options : ⚙️ Config et 📋 Logs
+  - Fermeture au clic extérieur ou sur un item
+  - Animation slideDown fluide
+  - Accessibilité : aria-label et title présents
+
+### Changed
+
+- **Navbar restructuring** : Config et Logs retirés de la navbar principale
+  - Avant : 8 liens visibles [Jeu|Scores|Palmarès|Historique|Joueurs|Questions|Config|Logs]
+  - Après : 6 liens visibles + menu déroulant [🐝▼|Jeu|Scores|Palmarès|Historique|Joueurs|Questions]
+  - Navbar plus épurée et moins encombrée
+  - Pastille de connexion intacte
+
+### Technical Details
+
+**Fichiers modifiés** :
+- `server-go/web/src/components/Navbar.jsx` : Ajout useState, useRef, useEffect pour gestion menu
+- `server-go/web/src/components/Navbar.css` : Styles menu, animations, responsive
+
+**Implémentation** :
+- État React `isMenuOpen` avec useState
+- Fermeture au clic extérieur via useEffect + useRef + document.addEventListener
+- NavLink conservé pour navigation SPA
+- Animation CSS keyframe `slideDown` (200ms)
+- CSS variables pour cohérence (colors, spacing, z-index)
+
+**Tests** :
+- 8 scénarios E2E validés ✅
+- QA Report : VALIDATED (100% pass rate)
+- Responsive design vérifiée (600px - 1920px)
+- Accessibilité WCAG 2.1 Level A
+
+### Compatibility
+
+- ✅ Non-breaking change
+- ✅ Backward compatible
+- ✅ Pas de changement API
+- ✅ Pas de changement WebSocket
+- ✅ Pas de migration requise
+
+
 ## [2.47.0] - 2026-01-31
 
 ### Fixed

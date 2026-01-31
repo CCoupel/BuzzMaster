@@ -25,10 +25,15 @@ Ce document décrit l'interface web React de BuzzControl.
 | `/admin/palmares` | `/anim/palmares` | CategoryPalmaresPage | Palmarès par catégorie |
 | `/admin/logs` | `/anim/logs` | LogsPage | Logs serveur temps réel |
 
-**Navbar :**
+**Navbar (v2.48.0) :**
 - Affiché uniquement sur les routes `/admin/*` et `/anim/*`
 - Préfixe dynamique : détecte `/anim` ou `/admin` depuis l'URL et construit les liens en conséquence
 - Fonction `getFullPath(path)` pour construire les chemins avec le bon préfixe
+- **Menu déroulant sur l'abeille** : Clic sur le logo 🐝 ouvre un menu avec Config et Logs
+  - État `isMenuOpen` géré via useState
+  - Fermeture au clic extérieur via useRef + useEffect
+  - Animation CSS slideDown (200ms)
+  - Accessibilité : aria-label="Menu de navigation", title="Menu"
 
 ## Composants Clés
 
