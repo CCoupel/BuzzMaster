@@ -20,6 +20,7 @@ backlog/
 | [qcm-marqueurs-indices.md](TODO/qcm-marqueurs-indices.md) | Marqueurs d'indices sur la barre de temps |
 | [generateur-ia.md](TODO/generateur-ia.md) | Générateur de jeu complet via IA |
 | [vjoueur-websocket-identification.md](TODO/vjoueur-websocket-identification.md) | Vérifier identification WebSocket des VJoueurs |
+| [metadata-binaires.md](TODO/metadata-binaires.md) | Métadonnées dans les binaires (nom, version, icône) |
 
 ## En-Cours
 
