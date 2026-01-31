@@ -433,7 +433,7 @@ export default function ConfigPage() {
                         className={`mode-btn ${neonConfig.mode !== 'halo' ? 'active' : ''}`}
                         onClick={() => setNeonConfig(prev => ({ ...prev, mode: 'bar' }))}
                       >
-                        Barre
+                        Neon
                       </button>
                       <button
                         className={`mode-btn ${neonConfig.mode === 'halo' ? 'active' : ''}`}
@@ -480,20 +480,6 @@ export default function ConfigPage() {
                   {/* Glow section - grouped */}
                   <div className="neon-glow-section">
                     <h4 className="neon-subsection-title">Glow</h4>
-
-                    <div className="slider-row">
-                      <label>Intensite</label>
-                      <div className="slider-control">
-                        <input
-                          type="range"
-                          min="0"
-                          max="100"
-                          value={neonConfig.intensity_gap}
-                          onChange={(e) => setNeonConfig(prev => ({ ...prev, intensity_gap: parseInt(e.target.value) }))}
-                        />
-                        <span className="slider-value">{neonConfig.intensity_gap}%</span>
-                      </div>
-                    </div>
 
                     <div className="slider-row">
                       <label>Vitesse pulsation</label>
@@ -609,6 +595,20 @@ export default function ConfigPage() {
                   {/* Arc section - grouped */}
                   <div className="neon-arc-section">
                     <h4 className="neon-subsection-title">Arc lumineux</h4>
+
+                    <div className="slider-row">
+                      <label>Intensite</label>
+                      <div className="slider-control">
+                        <input
+                          type="range"
+                          min="0"
+                          max="100"
+                          value={neonConfig.intensity_gap}
+                          onChange={(e) => setNeonConfig(prev => ({ ...prev, intensity_gap: parseInt(e.target.value) }))}
+                        />
+                        <span className="slider-value">{neonConfig.intensity_gap}%</span>
+                      </div>
+                    </div>
 
                     <div className="slider-row">
                       <label>Largeur</label>

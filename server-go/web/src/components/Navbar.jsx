@@ -138,7 +138,7 @@ export default function Navbar({ connectionStatus = 'disconnected', clientCounts
           </div>
         </div>
         <div className="nav-group nav-group-tv">
-          <span className="nav-group-label">TV</span>
+          <span className="nav-group-label">Pages</span>
           <div className="nav-group-items">
             {tvItems.map(renderNavLink)}
           </div>
