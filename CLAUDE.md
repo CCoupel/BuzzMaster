@@ -134,6 +134,45 @@ The ESP32-C3 buzzers connect to the Go server without any modification.
 | BUMPER_POINTS | Modify player score | `{ID: bumperMac, POINTS: delta}` |
 | REORDER_QUESTIONS | Reorder questions | `{ORDER: [questionId1, questionId2, ...]}` |
 
+#### WebSocket Client Types (v2.47.0+)
+
+VJoueurs (joueurs virtuels) sont identifiés avec un type de client distinct via `SET_CLIENT_TYPE`.
+
+**Types de clients** :
+| Type | Description | Identification | Compteur |
+|------|-------------|-----------------|----------|
+| admin | Interface d'administration | App.jsx : route /admin | ADMIN_COUNT |
+| tv | Affichage TV/joueurs | App.jsx : route /tv | TV_COUNT |
+| vplayer | Joueur virtuel (WebSocket) | EnrollPage + VPlayerPage | VPLAYER_COUNT |
+
+**Flux d'identification VJoueur** :
+```
+1. Joueur → http://localhost (EnrollPage)
+2. EnrollPage.handleSubmit() :
+   - Appelle setClientType('vplayer')
+   - Appelle connectVirtualPlayer(name)
+3. Serveur reçoit SET_CLIENT_TYPE { TYPE: "vplayer" }
+4. Backend crée ClientTypeVPlayer
+5. Broadcast CLIENTS { admin, tv, vplayer }
+6. VPlayerPage au montage :
+   - Appelle setClientType('vplayer') (confirmation)
+7. Navbar affiche 3 compteurs distincts
+```
+
+**Action CLIENTS mise à jour (v2.47.0+)** :
+```json
+{
+  "ACTION": "CLIENTS",
+  "MSG": {
+    "ADMIN_COUNT": 2,
+    "TV_COUNT": 1,
+    "VPLAYER_COUNT": 5
+  }
+}
+```
+
+**Sécurité** : vplayer ne fallback jamais à admin. Chaque type a un compteur distinct.
+
 ### HTTP REST API
 | Method | Endpoint | Description |
 |--------|----------|-------------|
