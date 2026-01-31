@@ -29,7 +29,8 @@
 }
 
 /* ===== BAR MODE ===== */
-/* Static glowing border */
+/* Static glowing border with bright center (tube neon effect) */
+/* Structure: [halo ext] [couleur] [blanc vif] [couleur] [halo int] */
 .neon-border.neon-mode-bar::before {
   content: '';
   position: absolute;
@@ -39,15 +40,23 @@
   bottom: var(--neon-bar-offset);
   z-index: 1;
   pointer-events: none;
-  border: var(--neon-bar-thickness) solid var(--neon-color);
   border-radius: 8px;
+  /* Bordure blanche = cœur lumineux du tube */
+  border: calc(var(--neon-bar-thickness) - 2px) solid white;
+  /* Box-shadow: premier = dessous, dernier = dessus */
   box-shadow:
-    0 0 10px var(--neon-color),
-    0 0 20px var(--neon-color),
+    /* 1. FOND: Halos diffus couleur */
+    0 0 60px var(--neon-color),
     0 0 40px var(--neon-color),
-    inset 0 0 10px var(--neon-color),
-    inset 0 0 20px var(--neon-color);
-  opacity: calc(var(--neon-intensity-gap) * 0.5);
+    0 0 20px var(--neon-color),
+    inset 0 0 40px var(--neon-color),
+    inset 0 0 20px var(--neon-color),
+    /* 2. Bandes couleur autour du blanc (bordure) */
+    0 0 0 1px var(--neon-color),
+    inset 0 0 0 1px var(--neon-color),
+    /* 3. Glow blanc au centre pour renforcer */
+    0 0 8px 0 rgba(255, 255, 255, 0.9);
+  opacity: var(--neon-intensity-gap);
   animation: neon-bar-pulse 2s ease-in-out infinite;
 }
 
@@ -62,15 +71,12 @@
   z-index: 2;
   pointer-events: none;
   border-radius: 8px;
-  /* Arc lumineux rotatif avec point blanc central (hotspot) */
+  /* Arc lumineux rotatif */
   background: conic-gradient(
     from var(--rotation-angle),
     transparent 0deg,
     transparent calc(180deg - var(--neon-arc-width) / 2),
     var(--neon-color) calc(180deg - var(--neon-arc-width) / 4),
-    rgba(255, 255, 255, 0.8) calc(180deg - 0.5deg),
-    white 180deg,
-    rgba(255, 255, 255, 0.8) calc(180deg + 0.5deg),
     var(--neon-color) calc(180deg + var(--neon-arc-width) / 4),
     transparent calc(180deg + var(--neon-arc-width) / 2),
     transparent 360deg
@@ -99,7 +105,7 @@
 }
 
 /* ===== HALO MODE ===== */
-/* Primary glow layer - box-shadow based */
+/* Primary glow layer - box-shadow based with bright center */
 .neon-border.neon-mode-halo::before {
   content: '';
   position: absolute;
@@ -108,8 +114,16 @@
   pointer-events: none;
   border-radius: inherit;
   box-shadow:
+    /* Ligne blanche centrale vive (effet tube néon) */
+    inset 0 0 3px white,
+    inset 0 0 8px rgba(255, 255, 255, 0.5),
+    /* Halo interne couleur */
     inset 0 0 30px var(--neon-color),
     inset 0 0 60px var(--neon-color),
+    /* Ligne blanche externe vive */
+    0 0 2px white,
+    0 0 6px rgba(255, 255, 255, 0.6),
+    /* Halo externe couleur */
     0 0 30px var(--neon-color),
     0 0 60px var(--neon-color);
   opacity: calc(var(--neon-intensity-gap) * 0.5);
@@ -124,15 +138,12 @@
   z-index: 2;
   pointer-events: none;
   border-radius: inherit;
-  /* Arc lumineux rotatif avec point blanc central (hotspot) */
+  /* Arc lumineux rotatif */
   background: conic-gradient(
     from var(--rotation-angle),
     transparent 0deg,
     transparent calc(180deg - var(--neon-arc-width) / 2),
     var(--neon-color) calc(180deg - var(--neon-arc-width) / 4),
-    rgba(255, 255, 255, 0.8) calc(180deg - 0.5deg),
-    white 180deg,
-    rgba(255, 255, 255, 0.8) calc(180deg + 0.5deg),
     var(--neon-color) calc(180deg + var(--neon-arc-width) / 4),
     transparent calc(180deg + var(--neon-arc-width) / 2),
     transparent 360deg
