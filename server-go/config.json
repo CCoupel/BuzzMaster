@@ -27,7 +27,9 @@
     "bar_offset": 31,
     "bar_thickness": 4,
     "arc_blur": 200,
-    "glow_pulse_speed": 2
+    "glow_pulse_speed": 2,
+    "glow_pulse_min": 30,
+    "glow_pulse_max": 50
   },
-  "version": "2.46.10"
+  "version": "2.46.0"
 }
