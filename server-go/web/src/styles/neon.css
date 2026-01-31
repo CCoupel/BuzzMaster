@@ -41,9 +41,10 @@
   z-index: 1;
   pointer-events: none;
   border-radius: 8px;
-  /* Bordure blanche = cœur lumineux du tube */
-  border: calc(var(--neon-bar-thickness) - 2px) solid white;
+  /* Bordure blanche = cœur lumineux du tube (1/3 de l'épaisseur, min 1px) */
+  border: max(1px, calc(var(--neon-bar-thickness) / 3)) solid white;
   /* Box-shadow: premier = dessous, dernier = dessus */
+  /* Structure: [couleur 1/3] [blanc 1/3] [couleur 1/3] */
   box-shadow:
     /* 1. FOND: Halos diffus couleur */
     0 0 60px var(--neon-color),
@@ -51,9 +52,9 @@
     0 0 20px var(--neon-color),
     inset 0 0 40px var(--neon-color),
     inset 0 0 20px var(--neon-color),
-    /* 2. Bandes couleur autour du blanc (bordure) */
-    0 0 0 1px var(--neon-color),
-    inset 0 0 0 1px var(--neon-color),
+    /* 2. Bandes couleur autour du blanc (1/3 de l'épaisseur chacune) */
+    0 0 0 calc(var(--neon-bar-thickness) / 3) var(--neon-color),
+    inset 0 0 0 calc(var(--neon-bar-thickness) / 3) var(--neon-color),
     /* 3. Glow blanc au centre pour renforcer */
     0 0 8px 0 rgba(255, 255, 255, 0.9);
   opacity: var(--neon-intensity-gap);
