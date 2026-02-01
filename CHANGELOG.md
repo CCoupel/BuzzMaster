@@ -3,6 +3,18 @@
 Historique des versions du projet BuzzControl.
 
 
+## [2.50.1] - 2026-02-01
+
+### Fixed
+
+**Filtrage des releases incomplètes** :
+- Exclusion des releases en draft (non publiées)
+- Exclusion des prereleases (beta/alpha)
+- Exclusion des releases sans binaires (CI non terminée)
+- Exclusion des releases avec binaires < 1MB (upload en cours)
+
+---
+
 ## [2.50.0] - 2026-02-01
 
 ### Added
