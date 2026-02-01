@@ -133,6 +133,13 @@ func (u *Updater) HandleGetUpdates(w http.ResponseWriter, r *http.Request) {
 
 	var versions []UpdateInfo
 	for _, release := range releases {
+		// Skip releases that are not ready (draft, prerelease, CI in progress)
+		if !IsReleaseReady(release, platform) {
+			LogDebug(game.LogComponentUpdater, "Skipping release %s (not ready: draft=%v, prerelease=%v)",
+				release.TagName, release.Draft, release.Prerelease)
+			continue
+		}
+
 		asset := FindAssetForPlatform(release, platform)
 		if asset == nil {
 			LogDebug(game.LogComponentUpdater, "No asset found for platform %s in release %s", platform, release.TagName)
@@ -184,6 +191,13 @@ func (u *Updater) HandleCheckUpdates(w http.ResponseWriter, r *http.Request) {
 	var releaseURL string
 
 	for _, release := range releases {
+		// Skip releases that are not ready (draft, prerelease, CI in progress)
+		if !IsReleaseReady(release, platform) {
+			LogDebug(game.LogComponentUpdater, "Skipping release %s in check (not ready: draft=%v, prerelease=%v)",
+				release.TagName, release.Draft, release.Prerelease)
+			continue
+		}
+
 		asset := FindAssetForPlatform(release, platform)
 		if asset == nil {
 			continue
