@@ -151,6 +151,15 @@ if [ -z "$RUN_ID" ]; then
 fi
 ```
 
+**IMPORTANT - Notification utilisateur (Étape 1) :**
+Dès que le workflow est détecté, **NOTIFIER L'UTILISATEUR** avec un message visible :
+```
+🚀 **CI DÉMARRÉE**
+- Run ID: {RUN_ID}
+- URL: https://github.com/CCoupel/BuzzMaster/actions/runs/{RUN_ID}
+- Status: in_progress
+```
+
 **Étape 2 - Attendre que le workflow SE TERMINE :**
 ```bash
 # Poll le status du workflow spécifique (max 10 minutes, intervalle 30s)
@@ -188,6 +197,28 @@ if [ "$CI_SUCCESS" != "true" ]; then
     echo "   Check manually: https://github.com/CCoupel/BuzzMaster/actions/runs/$RUN_ID"
     exit 1
 fi
+```
+
+**IMPORTANT - Notification utilisateur (Étape 2) :**
+Dès que le workflow est terminé, **NOTIFIER L'UTILISATEUR** avec un message visible :
+
+Si succès :
+```
+✅ **CI TERMINÉE AVEC SUCCÈS**
+- Run ID: {RUN_ID}
+- Status: completed
+- Conclusion: success
+- URL: https://github.com/CCoupel/BuzzMaster/actions/runs/{RUN_ID}
+```
+
+Si échec :
+```
+❌ **CI ÉCHOUÉE**
+- Run ID: {RUN_ID}
+- Status: completed
+- Conclusion: {conclusion}
+- URL: https://github.com/CCoupel/BuzzMaster/actions/runs/{RUN_ID}
+→ Lancement de la procédure de correction automatique...
 ```
 
 - Wait until `status` = "completed"
