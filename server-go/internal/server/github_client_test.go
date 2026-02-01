@@ -131,3 +131,126 @@ func TestReleasesCache(t *testing.T) {
 		t.Errorf("getExpired should return cached data, got %d releases", len(expired))
 	}
 }
+
+func TestIsReleaseReady(t *testing.T) {
+	tests := []struct {
+		name     string
+		release  GitHubRelease
+		platform string
+		expected bool
+		reason   string
+	}{
+		{
+			name: "draft release",
+			release: GitHubRelease{
+				Draft:      true,
+				Prerelease: false,
+				Assets: []GitHubAsset{
+					{Name: "buzzcontrol-v2.50.0-windows-amd64.exe", Size: 50000000},
+				},
+			},
+			platform: "windows-amd64",
+			expected: false,
+			reason:   "Draft releases should not be ready",
+		},
+		{
+			name: "prerelease",
+			release: GitHubRelease{
+				Draft:      false,
+				Prerelease: true,
+				Assets: []GitHubAsset{
+					{Name: "buzzcontrol-v2.50.0-beta-windows-amd64.exe", Size: 50000000},
+				},
+			},
+			platform: "windows-amd64",
+			expected: false,
+			reason:   "Prereleases should not be ready",
+		},
+		{
+			name: "no assets",
+			release: GitHubRelease{
+				Draft:      false,
+				Prerelease: false,
+				Assets:     []GitHubAsset{},
+			},
+			platform: "windows-amd64",
+			expected: false,
+			reason:   "Releases without assets should not be ready",
+		},
+		{
+			name: "wrong platform",
+			release: GitHubRelease{
+				Draft:      false,
+				Prerelease: false,
+				Assets: []GitHubAsset{
+					{Name: "buzzcontrol-v2.50.0-linux-arm64", Size: 50000000},
+				},
+			},
+			platform: "windows-amd64",
+			expected: false,
+			reason:   "Assets for wrong platform should not match",
+		},
+		{
+			name: "small asset (CI in progress)",
+			release: GitHubRelease{
+				Draft:      false,
+				Prerelease: false,
+				Assets: []GitHubAsset{
+					{Name: "buzzcontrol-v2.50.0-windows-amd64.exe", Size: 100},
+				},
+			},
+			platform: "windows-amd64",
+			expected: false,
+			reason:   "Assets smaller than 1MB should not be ready (CI in progress)",
+		},
+		{
+			name: "valid asset at 1MB threshold",
+			release: GitHubRelease{
+				Draft:      false,
+				Prerelease: false,
+				Assets: []GitHubAsset{
+					{Name: "buzzcontrol-v2.50.0-windows-amd64.exe", Size: 1024 * 1024},
+				},
+			},
+			platform: "windows-amd64",
+			expected: true,
+			reason:   "Assets at exactly 1MB should be ready",
+		},
+		{
+			name: "ready release",
+			release: GitHubRelease{
+				Draft:      false,
+				Prerelease: false,
+				Assets: []GitHubAsset{
+					{Name: "buzzcontrol-v2.50.0-windows-amd64.exe", Size: 50000000},
+				},
+			},
+			platform: "windows-amd64",
+			expected: true,
+			reason:   "Valid releases with complete assets should be ready",
+		},
+		{
+			name: "ready release with multiple assets",
+			release: GitHubRelease{
+				Draft:      false,
+				Prerelease: false,
+				Assets: []GitHubAsset{
+					{Name: "buzzcontrol-v2.50.0-linux-arm64", Size: 48000000},
+					{Name: "buzzcontrol-v2.50.0-windows-amd64.exe", Size: 50000000},
+				},
+			},
+			platform: "windows-amd64",
+			expected: true,
+			reason:   "Should find correct asset among multiple platforms",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := IsReleaseReady(tt.release, tt.platform)
+			if result != tt.expected {
+				t.Errorf("IsReleaseReady() = %v, want %v. Reason: %s", result, tt.expected, tt.reason)
+			}
+		})
+	}
+}
