@@ -13,11 +13,13 @@ import (
 
 // GitHubRelease represents a GitHub release
 type GitHubRelease struct {
-	TagName   string        `json:"tag_name"`
-	Name      string        `json:"name"`
-	Body      string        `json:"body"`
-	Assets    []GitHubAsset `json:"assets"`
-	CreatedAt time.Time     `json:"created_at"`
+	TagName    string        `json:"tag_name"`
+	Name       string        `json:"name"`
+	Body       string        `json:"body"`
+	Assets     []GitHubAsset `json:"assets"`
+	CreatedAt  time.Time     `json:"created_at"`
+	Draft      bool          `json:"draft"`
+	Prerelease bool          `json:"prerelease"`
 }
 
 // GitHubAsset represents a downloadable asset from a release
@@ -191,4 +193,33 @@ func (c *releasesCache) set(releases []GitHubRelease) {
 	defer c.mu.Unlock()
 	c.releases = releases
 	c.fetchedAt = time.Now()
+}
+
+// IsReleaseReady checks if a release is complete and ready for use
+// Returns false if draft, prerelease, or assets not ready
+func IsReleaseReady(release GitHubRelease, platform string) bool {
+	// Skip drafts
+	if release.Draft {
+		return false
+	}
+
+	// Skip prereleases (beta/alpha versions)
+	if release.Prerelease {
+		return false
+	}
+
+	// Check if asset exists for platform
+	asset := FindAssetForPlatform(release, platform)
+	if asset == nil {
+		return false
+	}
+
+	// Check asset size (CI might still be uploading)
+	// Assets smaller than 1MB are likely incomplete or corrupted
+	const minAssetSize = 1024 * 1024 // 1MB
+	if asset.Size < minAssetSize {
+		return false
+	}
+
+	return true
 }
