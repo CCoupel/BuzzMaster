@@ -21,6 +21,7 @@ backlog/
 | [generateur-ia.md](TODO/generateur-ia.md) | Générateur de jeu complet via IA |
 | [metadata-binaires.md](TODO/metadata-binaires.md) | Métadonnées dans les binaires (nom, version, icône) |
 | [navbar-menu-connexion.md](TODO/navbar-menu-connexion.md) | Menu déroulant sur pastille de connexion (Config, Logs) |
+| [notification-nouvelle-version.md](TODO/notification-nouvelle-version.md) | Mise à jour automatique : téléchargement et redémarrage sur nouvelle version |
 
 ## En-Cours
 
@@ -154,6 +155,7 @@ mv backlog/En-Cours/qcm-marqueurs-indices.md backlog/DONE/
 
 ## Historique
 
+- 2026-02-01 : Ajout mise à jour automatique du serveur (téléchargement + redémarrage)
 - 2026-02-01 : Maintenance backlog - déplacement effet-neon-categorie vers DONE, suppression entrée bugfix-neon-effet-parametres inexistante
 - 2026-01-31 : Completion VJoueur WebSocket identification (v2.47.0)
 - 2026-01-31 : Ajout menu déroulant navbar (pastille connexion)
