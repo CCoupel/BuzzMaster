@@ -190,8 +190,6 @@ if [ "$CI_SUCCESS" != "true" ]; then
 fi
 ```
 
-- **Étape 1** : Utiliser `gh run list --commit` pour trouver le bon workflow
-- **Étape 2** : Utiliser `gh run view` pour suivre le status
 - Wait until `status` = "completed"
 - If `conclusion` = "success" → Continue to Phase 5
 - If `conclusion` != "success" → Execute automatic error analysis and correction
