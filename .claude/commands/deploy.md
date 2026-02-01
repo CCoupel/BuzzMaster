@@ -135,48 +135,72 @@ Arrête et redéploie le serveur BuzzControl vers l'environnement cible.
 14. **Attendre et vérifier la CI automatiquement (PROD uniquement)**
     La CI GitHub Actions se déclenche automatiquement au push du tag.
 
-    a) **Vérification automatique via API GitHub** :
-       Utiliser l'API GitHub pour surveiller le statut de la CI :
+    **IMPORTANT : Deux étapes distinctes pour détecter correctement la CI**
 
+    a) **Étape 1 - Attendre que le workflow APPARAISSE** (filtrer par commit SHA) :
        ```bash
-       # Boucle de vérification (max 10 minutes, intervalle 30s)
-       MAX_ATTEMPTS=20
-       ATTEMPT=0
-       while [ $ATTEMPT -lt $MAX_ATTEMPTS ]; do
-           RESPONSE=$(curl -s "https://api.github.com/repos/CCoupel/BuzzMaster/actions/runs?per_page=1")
-           STATUS=$(echo $RESPONSE | grep -o '"status":"[^"]*"' | head -1 | cut -d'"' -f4)
-           CONCLUSION=$(echo $RESPONSE | grep -o '"conclusion":"[^"]*"' | head -1 | cut -d'"' -f4)
+       # Récupérer le SHA du commit actuel (celui qui est taggé)
+       COMMIT_SHA=$(git rev-parse HEAD)
 
-           echo "CI Status: $STATUS, Conclusion: $CONCLUSION"
+       # Attendre que le workflow apparaisse (max 2 minutes, intervalle 10s)
+       echo "⏳ Waiting for CI workflow to start for commit $COMMIT_SHA..."
+       RUN_ID=""
+       for i in $(seq 1 12); do
+           # Filtrer les runs par head_sha pour trouver NOTRE run spécifique
+           RESPONSE=$(curl -s "https://api.github.com/repos/CCoupel/BuzzMaster/actions/runs?head_sha=$COMMIT_SHA&per_page=1")
+           TOTAL_COUNT=$(echo $RESPONSE | grep -o '"total_count":[0-9]*' | cut -d':' -f2)
+
+           if [ "$TOTAL_COUNT" != "0" ] && [ -n "$TOTAL_COUNT" ]; then
+               RUN_ID=$(echo $RESPONSE | grep -o '"id":[0-9]*' | head -1 | cut -d':' -f2)
+               echo "✅ CI workflow started (Run ID: $RUN_ID)"
+               break
+           fi
+
+           echo "   Attempt $i/12 - Workflow not yet started, waiting 10s..."
+           sleep 10
+       done
+
+       # Si pas de workflow après 2 min → afficher erreur
+       if [ -z "$RUN_ID" ]; then
+           echo "❌ ERROR: CI workflow did not start after 2 minutes"
+           echo "   Manual check: https://github.com/CCoupel/BuzzMaster/actions"
+       fi
+       ```
+
+    b) **Étape 2 - Attendre que le workflow SE TERMINE** :
+       ```bash
+       # Poll le status du workflow spécifique par son ID (max 10 minutes, intervalle 30s)
+       echo "⏳ Waiting for CI workflow $RUN_ID to complete..."
+       for i in $(seq 1 20); do
+           RESPONSE=$(curl -s "https://api.github.com/repos/CCoupel/BuzzMaster/actions/runs/$RUN_ID")
+           STATUS=$(echo $RESPONSE | grep -o '"status":"[^"]*"' | head -1 | cut -d'"' -f4)
+           # Note: conclusion peut être "null" quand le workflow n'est pas terminé
+           CONCLUSION=$(echo $RESPONSE | grep -o '"conclusion":[^,]*' | head -1 | cut -d':' -f2 | tr -d '"' | tr -d ' ')
+
+           echo "   Attempt $i/20 - Status: $STATUS, Conclusion: $CONCLUSION"
 
            if [ "$STATUS" = "completed" ]; then
                break
            fi
-
-           ATTEMPT=$((ATTEMPT + 1))
            sleep 30
        done
        ```
 
-    b) **Analyser le résultat** :
-       - Extraire `status` et `conclusion` de la réponse JSON
-       - Si `status` = "completed" ET `conclusion` = "success" → Continuer
-       - Si `status` = "completed" ET `conclusion` != "success" → ROLLBACK
-       - Si timeout (10 min) → Afficher erreur et demander à l'utilisateur
+    c) **Analyser le résultat** :
+       - Si `status` = "completed" ET `conclusion` = "success" → Continuer vers Phase 5
+       - Si `status` = "completed" ET `conclusion` != "success" → ROLLBACK et correction
+       - Si timeout (10 min + 2 min) → Afficher erreur et demander à l'utilisateur
 
-    c) **Si CI réussie** :
+    d) **Si CI réussie** :
        Afficher : "✅ CI GitHub Actions terminée avec succès"
        Continuer vers Phase 5
 
-    d) **Si CI échouée** (ANALYSE ET CORRECTION automatique) :
+    e) **Si CI échouée** (ANALYSE ET CORRECTION automatique) :
        1. Afficher : "❌ CI échouée - Analyse de l'erreur en cours..."
 
-       2. **Récupérer les logs d'erreur via GitHub API** :
+       2. **Récupérer les logs d'erreur via GitHub API** (utiliser le RUN_ID déjà obtenu) :
           ```bash
-          # Récupérer l'ID du workflow run
-          RUN_ID=$(curl -s "https://api.github.com/repos/CCoupel/BuzzMaster/actions/runs?per_page=1" | grep -o '"id":[0-9]*' | head -1 | cut -d':' -f2)
-
-          # Récupérer les jobs du workflow
+          # Récupérer les jobs du workflow avec l'ID qu'on a déjà
           JOBS=$(curl -s "https://api.github.com/repos/CCoupel/BuzzMaster/actions/runs/$RUN_ID/jobs")
 
           # Identifier le job qui a échoué et récupérer ses logs

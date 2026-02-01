@@ -112,31 +112,67 @@ git push origin v<version>
 ```
 
 **Monitor CI (Automatic Verification via GitHub API):**
-After pushing the tag, automatically verify CI status using GitHub API:
+After pushing the tag, automatically verify CI status using GitHub API.
 
+**IMPORTANT: Deux étapes distinctes pour détecter la CI correctement :**
+
+**Étape 1 - Attendre que le workflow APPARAISSE (filtrer par commit SHA) :**
 ```bash
-# Poll CI status every 30 seconds for max 10 minutes
-MAX_ATTEMPTS=20
-for i in $(seq 1 $MAX_ATTEMPTS); do
-    RESPONSE=$(curl -s "https://api.github.com/repos/CCoupel/BuzzMaster/actions/runs?per_page=1")
-    # Extract status and conclusion from JSON response
-    # status: "queued", "in_progress", "completed"
-    # conclusion: "success", "failure", "cancelled"
+# Récupérer le SHA du commit actuel (celui taggé)
+COMMIT_SHA=$(git rev-parse HEAD)
 
-    if status == "completed"; then
-        if conclusion == "success"; then
-            echo "✅ CI passed"
+# Attendre que le workflow apparaisse (max 2 minutes, intervalle 10s)
+echo "⏳ Waiting for CI workflow to start for commit $COMMIT_SHA..."
+for i in $(seq 1 12); do
+    # Filtrer les runs par head_sha pour trouver NOTRE run
+    RESPONSE=$(curl -s "https://api.github.com/repos/CCoupel/BuzzMaster/actions/runs?head_sha=$COMMIT_SHA&per_page=1")
+    TOTAL_COUNT=$(echo $RESPONSE | grep -o '"total_count":[0-9]*' | cut -d':' -f2)
+
+    if [ "$TOTAL_COUNT" != "0" ] && [ -n "$TOTAL_COUNT" ]; then
+        RUN_ID=$(echo $RESPONSE | grep -o '"id":[0-9]*' | head -1 | cut -d':' -f2)
+        echo "✅ CI workflow started (Run ID: $RUN_ID)"
+        break
+    fi
+
+    echo "   Attempt $i/12 - Workflow not yet started, waiting 10s..."
+    sleep 10
+done
+
+# Si pas de workflow après 2 min → échec
+if [ "$TOTAL_COUNT" = "0" ] || [ -z "$TOTAL_COUNT" ]; then
+    echo "❌ ERROR: CI workflow did not start after 2 minutes"
+    echo "   Check: https://github.com/CCoupel/BuzzMaster/actions"
+    exit 1
+fi
+```
+
+**Étape 2 - Attendre que le workflow SE TERMINE :**
+```bash
+# Poll le status du workflow spécifique (max 10 minutes, intervalle 30s)
+echo "⏳ Waiting for CI workflow $RUN_ID to complete..."
+for i in $(seq 1 20); do
+    RESPONSE=$(curl -s "https://api.github.com/repos/CCoupel/BuzzMaster/actions/runs/$RUN_ID")
+    STATUS=$(echo $RESPONSE | grep -o '"status":"[^"]*"' | head -1 | cut -d'"' -f4)
+    CONCLUSION=$(echo $RESPONSE | grep -o '"conclusion":[^,]*' | head -1 | cut -d':' -f2 | tr -d '"' | tr -d ' ')
+
+    echo "   Attempt $i/20 - Status: $STATUS, Conclusion: $CONCLUSION"
+
+    if [ "$STATUS" = "completed" ]; then
+        if [ "$CONCLUSION" = "success" ]; then
+            echo "✅ CI passed successfully!"
             break
         else
-            echo "❌ CI failed - initiating rollback"
+            echo "❌ CI failed with conclusion: $CONCLUSION"
             # Execute rollback procedure
+            exit 1
         fi
     fi
     sleep 30
 done
 ```
 
-- Parse JSON to extract `workflow_runs[0].status` and `workflow_runs[0].conclusion`
+- **Étape 1** : Filtrer par `head_sha` pour trouver le bon workflow (pas le dernier global)
+- **Étape 2** : Poll le workflow spécifique par son ID
 - Wait until `status` = "completed"
 - If `conclusion` = "success" → Continue to Phase 5
 - If `conclusion` != "success" → Execute automatic error analysis and correction
