@@ -125,11 +125,12 @@ COMMIT_SHA=$(git rev-parse HEAD)
 echo "⏳ Waiting for CI workflow to start for commit $COMMIT_SHA..."
 for i in $(seq 1 12); do
     # Filtrer les runs par head_sha pour trouver NOTRE run
-    RESPONSE=$(curl -s "https://api.github.com/repos/CCoupel/BuzzMaster/actions/runs?head_sha=$COMMIT_SHA&per_page=1")
-    TOTAL_COUNT=$(echo $RESPONSE | grep -o '"total_count":[0-9]*' | cut -d':' -f2)
+    # Note: tr -d '\n' nécessaire car curl retourne du JSON formaté multilignes
+    RESPONSE=$(curl -s "https://api.github.com/repos/CCoupel/BuzzMaster/actions/runs?head_sha=$COMMIT_SHA&per_page=1" | tr -d '\n')
+    TOTAL_COUNT=$(echo $RESPONSE | grep -oP '"total_count":\K[0-9]+')
 
     if [ "$TOTAL_COUNT" != "0" ] && [ -n "$TOTAL_COUNT" ]; then
-        RUN_ID=$(echo $RESPONSE | grep -o '"id":[0-9]*' | head -1 | cut -d':' -f2)
+        RUN_ID=$(echo $RESPONSE | grep -oP '"id":\K[0-9]+' | head -1)
         echo "✅ CI workflow started (Run ID: $RUN_ID)"
         break
     fi
@@ -151,9 +152,10 @@ fi
 # Poll le status du workflow spécifique (max 10 minutes, intervalle 30s)
 echo "⏳ Waiting for CI workflow $RUN_ID to complete..."
 for i in $(seq 1 20); do
-    RESPONSE=$(curl -s "https://api.github.com/repos/CCoupel/BuzzMaster/actions/runs/$RUN_ID")
-    STATUS=$(echo $RESPONSE | grep -o '"status":"[^"]*"' | head -1 | cut -d'"' -f4)
-    CONCLUSION=$(echo $RESPONSE | grep -o '"conclusion":[^,]*' | head -1 | cut -d':' -f2 | tr -d '"' | tr -d ' ')
+    # Note: tr -d '\n' nécessaire pour parser le JSON correctement
+    RESPONSE=$(curl -s "https://api.github.com/repos/CCoupel/BuzzMaster/actions/runs/$RUN_ID" | tr -d '\n')
+    STATUS=$(echo $RESPONSE | grep -oP '"status":\s*"\K[^"]+')
+    CONCLUSION=$(echo $RESPONSE | grep -oP '"conclusion":\s*"\K[^"]+' | head -1)
 
     echo "   Attempt $i/20 - Status: $STATUS, Conclusion: $CONCLUSION"
 
