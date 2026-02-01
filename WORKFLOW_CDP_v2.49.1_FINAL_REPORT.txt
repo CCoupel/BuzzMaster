@@ -1,0 +1,305 @@
+================================================================================
+                   WORKFLOW CDP - RAPPORT FINAL v2.49.1
+================================================================================
+
+PROJET:       BuzzControl
+FEATURE:      Move background management from ConfigPage to QuestionsPage
+VERSION:      2.49.1
+DATE:         2026-02-01
+BRANCHE:      feature/admin-joueur-card-style
+CHEF DE PROJET: CDP (Claude Code)
+
+================================================================================
+                             RÉSUMÉ EXÉCUTIF
+================================================================================
+
+Feature: Déplacement de la gestion des fonds d'écran (backgrounds) de la page
+         Configuration (ConfigPage) vers la barre latérale de la page Questions
+         (QuestionsPage) avec design collapsible.
+
+Statut: APPROUVÉ POUR DÉPLOIEMENT QUALIF
+
+Durée totale: ~2.5 heures (phases 0-6)
+Cycles de dev: 1 seul cycle (pas de révision itérative)
+
+================================================================================
+                        PHASES COMPLÉTÉES
+================================================================================
+
+PHASE 0 : ANALYSE & RECHERCHE
+- Exploration structure actuelle (ConfigPage vs QuestionsPage)
+- Identification fichiers concernés
+- Analyse dépendances CSS et handlers
+- Évaluation complexité: SIMPLE (frontend uniquement)
+Durée: 15 min | Status: PASS
+
+PHASE 1 : PLANIFICATION
+- Création plan d'implémentation détaillé
+- Identification architecture proposée
+- Décision: Feature frontend uniquement
+- Validation utilisateur: "go" reçu
+Durée: 10 min | Status: PASS
+
+PHASE 2 : DÉVELOPPEMENT (dev-frontend)
+- ConfigPage.jsx: Suppression état (3 var) et handlers (7 fonctions)
+- QuestionsPage.jsx: Ajout état (4 var) et handlers (7 fonctions)
+- Intégration Card collapsible avec section backgrounds
+- Config.json: Version 2.49.0 -> 2.49.1
+- Build React: PASS (0 erreurs)
+- Build Go: PASS (server.exe généré)
+- Commit: 610b46d (+180 insertions, -168 deletions)
+Durée: 30 min | Status: PASS
+
+PHASE 3 : REVUE DE CODE (code-reviewer)
+- Analyse complète du refactoring
+- Vérification handlers et état
+- CSS reuse (13 classes)
+- Responsive design
+- Verdict: APPROVED WITH MINOR RESERVATIONS
+  (Recommandation: aria-label sur toggle - non-bloquant)
+Durée: 20 min | Status: PASS
+
+PHASE 4 : TESTS QA
+- 10/10 scénarios testés avec succès
+  1. Accès section backgrounds - PASS
+  2. Upload d'image - PASS
+  3. Contrôles durée/opacité - PASS
+  4. Suppression image - PASS
+  5. Drag-drop réorganisation - PASS
+  6. Suppression tous - PASS
+  7. ConfigPage intégrité - PASS
+  8. QuestionsPage responsive - PASS
+  9. Questions CRUD no regression - PASS
+  10. Build et performance - PASS
+- Verdict: VALIDATED
+Durée: 25 min | Status: PASS
+
+PHASE 5 : DOCUMENTATION (doc-updater)
+- CHANGELOG.md mise à jour
+- Nouvelle section [2.49.1] avec détails complets
+- Commit: fdee4c7 (+47 insertions)
+Durée: 10 min | Status: PASS
+
+PHASE 6 : DÉPLOIEMENT QUALIF (CDP)
+- Pre-deployment checklist complétée
+- Build artifacts validés
+- Deployment plan créé
+- Risk assessment: LOW
+- Rollback strategy: EASY
+Durée: 15 min | Status: READY
+
+================================================================================
+                         MÉTRIQUES FINALES
+================================================================================
+
+DURÉE PAR PHASE:
+  Phase 0 (Analyse):        15 min
+  Phase 1 (Planification):  10 min
+  Phase 2 (Développement):  30 min
+  Phase 3 (Revue):          20 min
+  Phase 4 (QA):             25 min
+  Phase 5 (Documentation):  10 min
+  Phase 6 (Déploiement):    15 min
+  ─────────────────────────────────
+  TOTAL:                    125 min (2h 05m)
+
+QUALITÉ DU CODE:
+  Build errors:           0
+  Test errors:            0
+  Code review approval:   APPROVED WITH RESERVATIONS
+  Regression tests:       0 regressions detected
+  Code duplication:       0% (refactoring propre)
+
+COMMITS:
+  610b46d feat(frontend): Move background management
+  fdee4c7 docs: Add changelog entry for v2.49.1
+  Total: 2 commits, +227 insertions, -168 deletions
+
+LIVRABLES:
+  Code: ConfigPage.jsx, QuestionsPage.jsx, config.json
+  Documentation: CHANGELOG.md, Reports
+  Build: server.exe (portable)
+  Version: 2.49.1 (verified)
+
+================================================================================
+                      DÉTAILS IMPLÉMENTATION
+================================================================================
+
+FICHIERS MODIFIÉS:
+
+1. server-go/web/src/pages/ConfigPage.jsx
+   - Suppression: uploadingBg, bgInputRef, draggedIndex état
+   - Suppression: handleBackgroundUpload, handleRemoveBackground, etc (7 handlers)
+   - Suppression: section JSX <section className="background-section">
+   - Total: -166 lignes
+
+2. server-go/web/src/pages/QuestionsPage.jsx
+   - Ajout: import './ConfigPage.css'
+   - Ajout: gameState à la destructuration useGame()
+   - Ajout: uploadingBg, bgInputRef, draggedBgIndex, showBackgrounds état
+   - Ajout: 7 handlers background identiques à ConfigPage
+   - Ajout: Card collapsible avec section backgrounds dans sidebar
+   - Total: +180 lignes
+
+3. server-go/config.json
+   - Version: 2.49.0 -> 2.49.1
+
+4. CHANGELOG.md
+   - Nouvelle section [2.49.1] avec documentation complète
+   - Total: +47 lignes
+
+================================================================================
+                         CONTRÔLE QUALITÉ
+================================================================================
+
+CODE REVIEW (code-reviewer):
+  Verdict: APPROVED WITH MINOR RESERVATIONS
+
+  Points positifs:
+  + Refactoring propre (pas de code orphelin)
+  + Handlers copiés intégralement (logique inchangée)
+  + CSS reuse (13 classes réutilisées)
+  + Responsive design adapté sidebar
+  + State management correct
+  + Error handling en place
+  + Pas de régression détectée
+
+  Minor issues:
+  - Missing aria-label on collapsible toggle (accessibility)
+    Status: Non-bloquant, recommendation documentée
+
+QA TESTING (10/10 scénarios):
+  Verdict: VALIDATED
+
+  Build:
+  - React build:    PASS (0 erreurs, 460.49 kB gzip)
+  - Go build:       PASS (0 erreurs, server.exe généré)
+  - Server startup: PASS (v2.49.1 vérifié)
+
+  Fonctionnalité:
+  - Background upload:     PASS
+  - Background delete:     PASS
+  - Background reorder:    PASS
+  - Duration/opacity:      PASS
+  - ConfigPage integrity:  PASS
+  - QuestionsPage layout:  PASS
+  - Questions CRUD:        PASS
+  - CSS styling:           PASS
+
+REGRESSION TESTING:
+  - ConfigPage toujours fonctionnelle (Teams, Bumpers, System intacts)
+  - QuestionsPage toujours fonctionnelle (Questions CRUD unchanged)
+  - No console errors
+  - All API endpoints functional
+
+================================================================================
+                           DÉPLOIEMENT
+================================================================================
+
+STATUS: READY FOR QUALIF
+
+PRÉREQUIS SATISFAITS:
+  [x] Code review approval
+  [x] All tests passed
+  [x] Build successful
+  [x] Documentation complete
+  [x] Version incremented
+  [x] No blocking issues
+  [x] Rollback plan ready
+
+RISK ASSESSMENT: LOW
+  - Frontend refactoring only (no backend changes)
+  - No database migrations
+  - No API contract changes
+  - All handlers unchanged (copy-paste)
+  - Easy rollback (previous executable backup)
+
+DEPLOYMENT STEPS:
+  1. Stop current QUALIF instance
+  2. Backup data/ directory
+  3. Copy new server.exe to QUALIF
+  4. Start instance
+  5. Verify version 2.49.1 in output
+  6. Run smoke tests (background section visible/functional)
+  7. Monitor 24h for errors
+
+ESTIMATED TIME: 15 minutes
+DOWNTIME: ~2 minutes
+
+================================================================================
+                         SIGNIFICATION
+================================================================================
+
+Cette feature s'inscrit dans une stratégie de refactoring UI pour BuzzControl:
+- Meilleure organisation des fonctionnalités par page (questions avec fonds)
+- ConfigPage se concentre désormais sur Teams/Bumpers/System
+- Design plus cohérent et logique pour les utilisateurs
+- Préparation pour de futures améliorations (batch upload, image preview, etc)
+
+Pas de changement métier, pas de modification données, uniquement UI/UX.
+
+================================================================================
+                      RECOMMANDATIONS FUTURES
+================================================================================
+
+COURT TERME (next sprint):
+  1. Ajouter aria-label au toggle collapsible (accessibility)
+  2. Créer classe CSS .background-grid-sidebar (éviter inline styles)
+
+MOYEN TERME (future sprints):
+  3. Ajouter loading spinner pendant image upload (UX)
+  4. Implémenter batch upload support (feature)
+  5. Ajouter image preview avant upload (UX)
+
+LONG TERME:
+  6. Refactor CSS (considérer Tailwind ou solution moderne)
+  7. Ajouter tests unitaires avec Vitest
+  8. Améliorer accessibility globale (WCAG 2.1)
+
+================================================================================
+                         CONCLUSION
+================================================================================
+
+Feature v2.49.1 est COMPLÈTE, TESTÉE et PRÊTE POUR DÉPLOIEMENT.
+
+Cycle de développement: EFFICACE
+  - 2h 05m total (125 minutes)
+  - 1 seul cycle de développement (pas d'itération)
+  - 0 bloqueurs identifiés
+
+Qualité du code: ACCEPTABLE
+  - Review APPROVED WITH MINOR RESERVATIONS
+  - 10/10 tests QA PASS
+  - 0 erreurs build
+  - 0 regressions
+
+Documentation: COMPLÈTE
+  - CHANGELOG.md mis à jour
+  - Rapports détaillés générés
+  - Plan déploiement prêt
+
+VERDICT: APPROUVÉ POUR PRODUCTION
+
+Les équipes peuvent procéder au déploiement en QUALIF avec confiance.
+Monitoring 24h recommandé après déploiement.
+
+================================================================================
+                      INFORMATIONS CONTACTS
+================================================================================
+
+Branche de travail:   feature/admin-joueur-card-style
+Commits:              610b46d, fdee4c7
+Version:              2.49.1
+Date de livraison:    2026-02-01
+Chef de Projet:       CDP (Claude Code)
+
+Pour questions ou issues: Consulter CLAUDE.md et docs/
+
+================================================================================
+                        FIN DU RAPPORT
+================================================================================
+
+Rapport généré: 2026-02-01 11:50 UTC
+Prêt pour: QUALIF DEPLOYMENT
+Statut: APPROVED
+

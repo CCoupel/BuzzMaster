@@ -3,7 +3,7 @@
     "http_port": 0,
     "tcp_port": 0,
     "websocket_path": "",
-    "auto_open_browsers": false,
+    "auto_open_browsers": true,
     "debug": false
   },
   "wifi": {
@@ -31,5 +31,5 @@
     "glow_pulse_min": 50,
     "glow_pulse_max": 70
   },
-  "version": "2.48.0"
+  "version": "2.49.0"
 }

@@ -1,0 +1,214 @@
+/* Backup Page */
+.backup-page {
+  min-height: calc(100vh - 120px);
+  padding: var(--space-6);
+}
+
+.backup-layout {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+  gap: var(--space-6);
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+/* Section Styling */
+.backup-section,
+.restore-section,
+.reset-section {
+  display: flex;
+  flex-direction: column;
+}
+
+.backup-card,
+.restore-card,
+.reset-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  height: 100%;
+}
+
+.section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-bottom: var(--space-2);
+}
+
+.section-title {
+  font-family: var(--font-display);
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: var(--gray-800);
+  margin: 0;
+}
+
+.section-icon {
+  font-size: 1.75rem;
+  opacity: 0.8;
+}
+
+.section-description {
+  font-size: 0.875rem;
+  color: var(--gray-600);
+  margin: 0 0 var(--space-3) 0;
+  line-height: 1.5;
+}
+
+/* Backup Section Specific */
+.backup-card {
+  border-left: 4px solid var(--primary-500);
+}
+
+.backup-card .section-icon {
+  color: var(--primary-500);
+}
+
+/* Restore Section Specific */
+.restore-card {
+  border-left: 4px solid var(--accent-blue);
+}
+
+.restore-card .section-icon {
+  color: var(--accent-blue);
+}
+
+.restore-action {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  margin-bottom: var(--space-2);
+}
+
+.restore-btn {
+  display: inline-block;
+  cursor: pointer;
+}
+
+.restore-hint {
+  font-size: 0.75rem;
+  color: var(--gray-500);
+  margin: 0;
+  padding-left: var(--space-1);
+}
+
+/* Reset Section Specific */
+.reset-card {
+  border-left: 4px solid var(--danger);
+}
+
+.reset-card .section-icon {
+  color: var(--danger);
+}
+
+/* Checkbox Group */
+.checkbox-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-4);
+  margin-bottom: var(--space-4);
+  padding: var(--space-3);
+  background: var(--gray-50);
+  border-radius: var(--radius-lg);
+}
+
+.checkbox-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  cursor: pointer;
+  font-size: 0.875rem;
+  color: var(--gray-700);
+  user-select: none;
+  flex: 0 0 auto;
+}
+
+.checkbox-item input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--primary-500);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.checkbox-item:hover {
+  color: var(--gray-900);
+}
+
+/* Section Actions */
+.section-actions {
+  display: flex;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+  margin-top: auto;
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--gray-200);
+}
+
+/* Responsive */
+@media (max-width: 1024px) {
+  .backup-layout {
+    grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+    gap: var(--space-5);
+  }
+
+  .section-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--space-2);
+  }
+
+  .section-title {
+    font-size: 1.125rem;
+  }
+}
+
+@media (max-width: 768px) {
+  .backup-page {
+    padding: var(--space-4);
+  }
+
+  .backup-layout {
+    grid-template-columns: 1fr;
+    gap: var(--space-4);
+  }
+
+  .checkbox-group {
+    flex-direction: column;
+    gap: var(--space-2);
+  }
+
+  .checkbox-item {
+    flex: 1 0 auto;
+  }
+
+  .section-actions {
+    flex-direction: column;
+  }
+
+  .section-actions button {
+    width: 100%;
+  }
+
+  .restore-btn {
+    width: 100%;
+  }
+
+  .restore-btn button {
+    width: 100%;
+  }
+}
+
+/* Animation pour les sections */
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}

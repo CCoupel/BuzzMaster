@@ -52,6 +52,7 @@ export default function Navbar({ connectionStatus = 'disconnected', clientCounts
   // Menu items dans le menu déroulant
   const menuItems = [
     { path: 'settings', label: 'Config', icon: '⚙️' },
+    { path: 'backup', label: 'Backup/Restaure', icon: '💾' },
     { path: 'logs', label: 'Logs', icon: '📋' },
   ]
 

@@ -6,6 +6,7 @@ import Card, { CardHeader, CardBody } from '../components/Card'
 import CategoryBalance from '../components/CategoryBalance'
 import QuestionCard, { CATEGORIES } from '../components/QuestionCard'
 import './QuestionsPage.css'
+import './ConfigPage.css'
 
 // QCM answer colors (for form only)
 const QCM_COLORS = {
@@ -19,13 +20,18 @@ const QCM_COLORS = {
 export { CATEGORIES }
 
 export default function QuestionsPage() {
-  const { questions, fsInfo, deleteQuestion, sendMessage } = useGame()
+  const { questions, fsInfo, deleteQuestion, sendMessage, gameState } = useGame()
   const [isUploading, setIsUploading] = useState(false)
   const [editingId, setEditingId] = useState(null)
   const fileInputRef = useRef(null)
   const fileAnswerInputRef = useRef(null)
   const [draggedId, setDraggedId] = useState(null)
   const [dragOverId, setDragOverId] = useState(null)
+
+  // Background management state
+  const [uploadingBg, setUploadingBg] = useState(false)
+  const bgInputRef = useRef(null)
+  const [draggedBgIndex, setDraggedBgIndex] = useState(null)
 
   // Form state
   const [formData, setFormData] = useState({
@@ -74,6 +80,83 @@ export default function QuestionsPage() {
         return orderA - orderB
       })
   }, [questions])
+
+  // Background handlers
+  const handleBackgroundUpload = async (e) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    setUploadingBg(true)
+    const formData = new FormData()
+    formData.append('file', file)
+
+    try {
+      const response = await fetch('/background', { method: 'POST', body: formData })
+      if (response.ok) {
+        window.location.reload()
+      } else {
+        const text = await response.text()
+        alert('Erreur: ' + text)
+      }
+    } catch (error) {
+      console.error('Background upload failed:', error)
+      alert('Erreur: ' + error.message)
+    } finally {
+      setUploadingBg(false)
+      if (bgInputRef.current) bgInputRef.current.value = ''
+    }
+  }
+
+  const handleRemoveBackground = async (bgPath) => {
+    if (!window.confirm('Supprimer cette image de fond ?')) return
+    try {
+      const filename = bgPath.split('/').pop()
+      await fetch(`/background?file=${encodeURIComponent(filename)}`, { method: 'DELETE' })
+    } catch (error) {
+      console.error('Remove background failed:', error)
+    }
+  }
+
+  const handleRemoveAllBackgrounds = async () => {
+    if (!window.confirm('Supprimer toutes les images de fond ?')) return
+    try {
+      await fetch('/background', { method: 'DELETE' })
+    } catch (error) {
+      console.error('Remove all backgrounds failed:', error)
+    }
+  }
+
+  const handleDurationChange = async (index, newDuration) => {
+    const backgrounds = [...(gameState?.backgrounds || [])]
+    backgrounds[index] = { ...backgrounds[index], duration: parseInt(newDuration) || 10 }
+    await saveBackgrounds(backgrounds)
+  }
+
+  const handleOpacityChange = async (index, newOpacity) => {
+    const backgrounds = [...(gameState?.backgrounds || [])]
+    backgrounds[index] = { ...backgrounds[index], opacity: Math.max(0, Math.min(100, parseInt(newOpacity) || 100)) }
+    await saveBackgrounds(backgrounds)
+  }
+
+  const handleMoveBackground = async (fromIndex, toIndex) => {
+    if (fromIndex === toIndex) return
+    const backgrounds = [...(gameState?.backgrounds || [])]
+    const [moved] = backgrounds.splice(fromIndex, 1)
+    backgrounds.splice(toIndex, 0, moved)
+    await saveBackgrounds(backgrounds)
+  }
+
+  const saveBackgrounds = async (backgrounds) => {
+    try {
+      await fetch('/background', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(backgrounds)
+      })
+    } catch (error) {
+      console.error('Save backgrounds failed:', error)
+    }
+  }
 
   // Drag and drop handlers
   const handleDragStart = (e, questionId) => {
@@ -498,6 +581,99 @@ export default function QuestionsPage() {
         <p className="page-subtitle">{sortedQuestions.length} questions disponibles</p>
       </header>
 
+      {/* Background Section */}
+      <section className="background-section">
+        <Card padding="lg">
+          <CardHeader>
+            <div className="section-header">
+              <h3 className="section-title">Fonds d'ecran</h3>
+              <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
+                <label className="upload-bg-btn">
+                  <input
+                    type="file"
+                    ref={bgInputRef}
+                    accept="image/*"
+                    onChange={handleBackgroundUpload}
+                    style={{ display: 'none' }}
+                  />
+                  <Button variant="primary" size="sm" as="span" loading={uploadingBg}>
+                    + Image
+                  </Button>
+                </label>
+                {gameState?.backgrounds?.length > 0 && (
+                  <Button variant="ghost" size="sm" onClick={handleRemoveAllBackgrounds}>
+                    Tout supprimer
+                  </Button>
+                )}
+              </div>
+            </div>
+          </CardHeader>
+          <CardBody>
+            <p className="section-hint">Glissez-deposez pour changer l'ordre.</p>
+            <div className="backgrounds-grid">
+              {gameState?.backgrounds?.length > 0 ? (
+                gameState.backgrounds.map((bg, index) => (
+                  <motion.div
+                    key={bg.path}
+                    className={`background-item ${draggedBgIndex === index ? 'dragging' : ''}`}
+                    initial={{ opacity: 0, scale: 0.9 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    transition={{ delay: index * 0.05 }}
+                    draggable
+                    onDragStart={() => setDraggedBgIndex(index)}
+                    onDragEnd={() => setDraggedBgIndex(null)}
+                    onDragOver={(e) => e.preventDefault()}
+                    onDrop={() => {
+                      if (draggedBgIndex !== null) {
+                        handleMoveBackground(draggedBgIndex, index)
+                      }
+                    }}
+                  >
+                    <img src={bg.path} alt={`Background ${index + 1}`} className="bg-thumb" />
+                    <button
+                      className="bg-delete-btn"
+                      onClick={() => handleRemoveBackground(bg.path)}
+                      title="Supprimer"
+                    >
+                      ×
+                    </button>
+                    <span className="bg-index">{index + 1}</span>
+                    <div className="bg-controls">
+                      <div className="bg-duration">
+                        <input
+                          type="number"
+                          min="1"
+                          max="300"
+                          value={bg.duration || 10}
+                          onChange={(e) => handleDurationChange(index, e.target.value)}
+                          className="duration-input"
+                        />
+                        <span className="duration-label">s</span>
+                      </div>
+                      <div className="bg-opacity">
+                        <input
+                          type="range"
+                          min="0"
+                          max="100"
+                          value={bg.opacity ?? 100}
+                          onChange={(e) => handleOpacityChange(index, e.target.value)}
+                          className="opacity-slider"
+                        />
+                        <span className="opacity-value">{bg.opacity ?? 100}%</span>
+                      </div>
+                    </div>
+                  </motion.div>
+                ))
+              ) : (
+                <div className="backgrounds-empty">
+                  <p className="empty-state">Aucune image de fond</p>
+                </div>
+              )}
+            </div>
+          </CardBody>
+        </Card>
+      </section>
+
       {/* Category Balance Visualization */}
       <CategoryBalance questions={sortedQuestions} />
 
@@ -533,6 +709,7 @@ export default function QuestionsPage() {
 
         {/* Sidebar */}
         <aside className="questions-sidebar">
+
           {/* Question Form */}
           <Card padding="lg" className="add-form-card">
             <CardHeader>

@@ -3,6 +3,65 @@
 Historique des versions du projet BuzzControl.
 
 
+## [2.49.0] - 2026-02-01
+
+### Added
+
+**Dedicated Backup/Restore Page** :
+- Nouvelle page dédiée pour la gestion des sauvegardes, restaurations et réinitialisations
+  - Accessible via le menu abeille (dropdown) du header
+  - Page complète : `/admin/backup` et `/anim/backup`
+  - Interface déplacée depuis ConfigPage vers une page dédiée
+  - Design: 3 sections avec cartes distinctes (Sauvegarde, Restauration, Réinitialisation)
+  - Responsive: 3-colonnes sur desktop, single-colonne sur mobile
+
+**Server Parameters Configuration** :
+- Exposition des paramètres serveur dans la page Configuration
+  - `auto_open_browsers` : Ouvrir les navigateurs automatiquement au démarrage
+  - `debug` : Activer le mode debug pour les logs serveur
+  - Nouvelle section "Parametres serveur" dans ConfigPage
+  - Chargement depuis `/config.json` au montage
+  - Sauvegarde via POST `/config.json` avec feedback utilisateur
+  - Intégration harmonieuse avec les sections existantes
+  - Responsive design mobile
+
+### Changed
+
+**Background Management Relocation** :
+- Déplacement de la gestion des fonds d'écran de ConfigPage vers QuestionsPage
+  - Section "Fonds d'écran" retirée de la page Configuration
+  - Intégrée dans la barre latérale de la page Questions avec design collapsible
+  - Nouvelle fonctionnalité : bouton toggle (▶/▼) pour économiser l'espace
+  - Grille adaptée à la largeur de la sidebar (2 colonnes au lieu de 4)
+  - Upload, durée, opacité, drag-drop toujours fonctionnels
+
+**Player Card Styling** :
+- Remplacé la couleur d'équipe (couleur QCM) par un gris neutre pour les cartes joueurs
+  - Avant : Fond coloré selon la couleur QCM du joueur (rouge, vert, jaune, bleu)
+  - Après : Fond gris neutre (#f3f4f6) cohérent pour tous les joueurs
+  - Les bordures latérales colorées (team-color) restent visibles
+  - Les indicateurs de couleur QCM restent visibles dans les badges
+
+**Configuration Page Cleanup** :
+- Suppression des sections Sauvegarde, Restauration, Réinitialisation de ConfigPage
+  - ConfigPage conserve : Neon, Server Params, Demo, Reset Scores
+  - Gain d'espace et clarté de la page de configuration
+
+### Fixed
+
+**UI Styling** :
+- Suppression collapse/expand button de la section Fonds d'écran (QuestionsPage)
+  - Toggle logique conservé mais plus de bouton visuel
+  - Amélioration UX : actions simplifiées
+
+### Documentation
+
+**CLAUDE.md mis à jour** :
+- Section Key Files détaillée avec toutes les pages frontend
+- Documentation de l'organisation UI (menu principal, menu abeille)
+- Répartition des fonctionnalités par page
+- Décisions d'architecture v2.49.0 documentées
+
 ## [2.48.0] - 2026-01-31
 
 ### Added

@@ -103,5 +103,33 @@ Toutes les vues TV doivent tenir entièrement à l'écran sans défilement :
 
 ### Key Files
 - **Backend** : `server-go/cmd/server/main.go`, `internal/game/engine.go`, `internal/game/models.go`
-- **Frontend** : `web/src/pages/GamePage.jsx`, `web/src/pages/PlayerDisplay.jsx`, `web/src/components/TeamCard.jsx`
+- **Frontend** :
+  - `web/src/pages/GamePage.jsx` : Page admin principale (jeu en cours)
+  - `web/src/pages/QuestionsPage.jsx` : Gestion questions + fonds d'écran
+  - `web/src/pages/ConfigPage.jsx` : Configuration serveur (paramètres, effet néon)
+  - `web/src/pages/BackupPage.jsx` : Sauvegarde/Restauration/Réinitialisation
+  - `web/src/pages/PlayerDisplay.jsx` : Affichage TV (STATIQUE)
+  - `web/src/components/TeamCard.jsx` : Carte équipe/joueurs
+  - `web/src/components/Navbar.jsx` : Navigation + menu abeille (dropdown)
 - **Config** : `server-go/config.json`
+
+### Organisation UI (v2.49.x)
+
+**Menu principal (Navbar)** :
+- Liens directs : Jeu, Scores, Équipes, Questions, Historique, Palmarès
+- Menu abeille (🐝 dropdown) : Config, Backup/Restaure, Logs
+
+**Répartition des fonctionnalités** :
+| Page | Fonctionnalités |
+|------|-----------------|
+| `/admin/game` | Contrôle du jeu, affichage équipes, timer |
+| `/admin/questions` | CRUD questions + **gestion fonds d'écran** |
+| `/admin/config` | Paramètres serveur, effet néon, mode démo |
+| `/admin/backup` | Sauvegarde, restauration, réinitialisation |
+| `/admin/logs` | Logs serveur en temps réel |
+
+**Décisions d'architecture (v2.49.x)** :
+- Fonds d'écran déplacés de ConfigPage vers QuestionsPage (cohérence : médias avec questions)
+- Backup/Restore extrait vers page dédiée (menu secondaire, moins fréquent)
+- Paramètres serveur (auto_open, debug) exposés dans ConfigPage
+- Cartes joueurs en gris neutre (plus de couleur QCM)

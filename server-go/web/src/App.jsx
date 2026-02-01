@@ -10,6 +10,7 @@ import HistoryPage from './pages/HistoryPage'
 import CategoryPalmaresPage from './pages/CategoryPalmaresPage'
 import LogsPage from './pages/LogsPage'
 import ConfigPage from './pages/ConfigPage'
+import BackupPage from './pages/BackupPage'
 import PlayerDisplay from './pages/PlayerDisplay'
 import EnrollPage from './pages/EnrollPage'
 import VPlayerPage from './pages/VPlayerPage'
@@ -24,6 +25,7 @@ const adminRoutes = [
   { path: 'history', element: <HistoryPage /> },
   { path: 'palmares', element: <CategoryPalmaresPage /> },
   { path: 'settings', element: <ConfigPage /> },
+  { path: 'backup', element: <BackupPage /> },
 ]
 
 function AppContent() {
