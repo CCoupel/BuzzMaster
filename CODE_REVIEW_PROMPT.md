@@ -1,287 +1,202 @@
-# Code Review - Feature Tri par Rapidité de Réponse (v2.44.1)
+# Prompt pour code-reviewer : Auto-Update Implementation Review
 
-Tu es l'agent `code-reviewer` responsable de l'analyse qualité du code pour la feature "Tri par rapidité de réponse".
+## Contexte
 
-## CONTEXTE
+You are the Code Reviewer for BuzzControl auto-update feature (v2.50.0).
 
-- Feature : Tri dynamique équipes/joueurs par temps de buzz
-- Version : v2.44.1
-- Branche : feature/tri-rapidite-reponse
-- 5 commits : tri équipes, affichage temps, styles CSS, tests unitaires, tests E2E
-- Scope : Frontend React uniquement
+Your task is to conduct a comprehensive code review of the completed backend and frontend implementation.
 
----
+## Current State
 
-## FICHIERS À REVIEWER
+- **Branch** : feature/auto-update
+- **Version** : 2.50.0
+- **Backend** : COMPLETED (4 endpoints, GitHub client, tests)
+- **Frontend** : COMPLETED (hook, UpdatePage, Navbar badge)
+- **Tests** : ALL PASSING (go test ./..., npm test)
 
-### 1. GamePage.jsx (Tri des équipes)
+## Review Scope
 
-**Zone critique** : Fonction `sortedTeams` useMemo (ligne ~64-95)
+### Backend Files (Go)
 
-À vérifier :
-- ✅ Logic correcte du tri phase-aware ?
-- ✅ Séparation buzzed/notBuzzed correct ?
-- ✅ Tri stable préservé ?
-- ✅ Dépendances useMemo complètes ?
-  - `teams`, `teamBumpers`, `gameState.PHASE` présentes ?
-- ✅ Pas de dépendances manquantes ?
-- ✅ Pas de dépendances superflues ?
-- ✅ Performance acceptable (tri O(n log n)) ?
+1. **internal/server/github_client.go**
+   - GitHub Releases API integration
+   - Cache mechanism (1 hour TTL)
+   - Platform detection (windows-amd64, linux-arm64)
+   - Asset filtering
 
-**Zone secondaire** : Passage paramètres à TeamCard (ligne ~453)
+2. **internal/server/updater.go**
+   - 4 HTTP handlers (GET/POST)
+   - Download logic
+   - Update application logic
+   - State preservation
 
-À vérifier :
-- ✅ `gamePhase={gameState.PHASE}` correct ?
-- ✅ `rank={index + 1}` correct (1-based indexing) ?
-- ✅ `showResponseTime={['STARTED', 'PAUSED', 'REVEALED'].includes(gameState.PHASE)}` correct ?
-- ✅ Pas de paramètres oubliés ?
-- ✅ Pas de paramètres mal nommés ?
+3. **internal/server/github_client_test.go**
+   - Unit tests for GitHub client
+   - Mock API responses
+   - Cache testing
+   - Error scenarios
 
-### 2. TeamCard.jsx (Tri joueurs + animations)
+4. **internal/server/updater_test.go**
+   - Unit tests for handlers
+   - Request/response validation
+   - Error path testing
+   - Edge cases
 
-**Zone critique 1** : Props et calcul temps (ligne ~21-80)
+5. **internal/server/http.go (modifications)**
+   - Route registration
+   - Integration with existing server
 
-À vérifier :
-- ✅ Tous les props déclarés et avec défaut ?
-- ✅ `responseTime` calculé correctement (ms, pas µs) ?
-- ✅ `getRankBadge()` retourne bon emoji pour chaque rang ?
-- ✅ `rankBadge` correctement filtré (null si pas showResponseTime) ?
-- ✅ useMemo import ajouté ?
+6. **internal/config/config.go (modifications)**
+   - auto_check_updates configuration
+   - Default values
 
-**Zone critique 2** : Tri joueurs (ligne ~82-100)
+### Frontend Files (React)
 
-À vérifier :
-- ✅ `sortedBuzzers` useMemo correct ?
-- ✅ Séparation buzzed/notBuzzed correct ?
-- ✅ Tri stable (sort croissant) ?
-- ✅ Dépendances : `[buzzers, gamePhase]` correct ?
-- ✅ Phase-aware : vérifier les phases exactes ?
-- ✅ Return correct : [...buzzed, ...notBuzzed] ?
+1. **web/src/hooks/useUpdates.js**
+   - Custom React hook
+   - State management
+   - API integration
+   - Error handling
 
-**Zone critique 3** : Animations Framer-motion (ligne ~115-125)
+2. **web/src/pages/UpdatePage.jsx**
+   - Main update management component
+   - User interface
+   - Version selection and download
+   - Apply and restart workflow
 
-À vérifier :
-- ✅ `layoutId={team-${name}}` correct ?
-- ✅ `layout` prop présent ?
-- ✅ `transition={{ type: 'spring', stiffness: 300, damping: 30 }}` correct ?
-- ✅ Pas de conflit avec animations existantes ?
-- ✅ Key stable pour `sortedBuzzers.map()` ?
-  - `key={buzzer.mac}-${buzzer.timestamp}` correct ?
-- ✅ `layoutId={buzzer-${buzzer.mac}}` unique pour chaque joueur ?
+3. **web/src/pages/UpdatePage.css**
+   - Styling for UpdatePage
+   - Responsive design
+   - Progress indicators
 
-**Zone secondaire** : Affichage temps équipe/joueur
+4. **web/src/components/Navbar.jsx (modifications)**
+   - Update notification badge
+   - Check for updates on load
 
-À vérifier :
-- ✅ Template header correct : team-header-content div ?
-- ✅ Badge affiché si `rankBadge && showResponseTime` ?
-- ✅ Temps équipe : `{responseTime}ms` format correct ?
-- ✅ Temps joueur : `{Math.round((buzzer.timestamp - gameTime) / 1000)}ms` correct ?
-- ✅ Pas de duplication de calcul temps ?
+5. **web/src/App.jsx (modifications)**
+   - Route to UpdatePage
+   - Navigation integration
 
-### 3. GamePage.css + TeamCard.css (Styles)
+## Review Criteria (Weighted)
 
-**GamePage.css** :
-À vérifier :
-- ✅ `.team-header-content` flexbox correct ?
-  - `display: flex`, `align-items: center`, `gap: 0.5rem` ?
-  - `flex: 1` pour que nom prenne espace ?
-- ✅ `.rank-badge` style correct ?
-  - `font-size: 1.5rem`, `line-height: 1` pour pas de décalage ?
-  - `margin-right: 0.25rem` correct ?
-- ✅ `.team-response-time` style correct ?
-  - `margin-left: auto` pour push à droite ?
-  - `color: var(--gray-400)` lisible ?
-  - `white-space: nowrap` pour pas de retour à ligne ?
-- ✅ Couleurs progressives correctes ?
-  - `:nth-child(1)` → `var(--success)` vert ?
-  - `:nth-child(2)` → `var(--success-light)` vert clair ?
-  - `:nth-child(3)` → `var(--warning-light)` jaune ?
-- ✅ Sélecteurs spécifiques `.game-page .teams-grid .team-card:nth-child(n)` correct ?
-  - Pas de conflit avec TeamsPage.css ?
-- ✅ Font-size 0.85rem lisible sur Desktop ?
+1. **Code Quality** (30%) : Clean, readable, no duplication
+2. **Error Handling** (25%) : All error paths covered, clear messages
+3. **Security & Safety** (20%) : Safe file ops, backup/rollback, no secrets
+4. **Testing** (15%) : Comprehensive coverage, all tests passing
+5. **Documentation** (10%) : Comments, API contracts followed
 
-**TeamCard.css** :
-À vérifier :
-- ✅ `.buzzer-response-time` style correct ?
-  - `margin-left: auto` pour push à droite ?
-  - `font-size: 0.75rem` lisible ?
-  - `padding: 0.25rem 0.5rem` correct ?
-  - `white-space: nowrap` pour pas de retour à ligne ?
-- ✅ `.buzzer-mini` transition correct ?
-  - `transition: all 0.3s cubic-bezier(0.4, 0.0, 0.2, 1)` smooth ?
-- ✅ `@keyframes buzz-flash` correct ?
-  - `0%` : scale 0.95, bg rgba(34, 197, 94, 0.2) vert ?
-  - `50%` : bg rgba(34, 197, 94, 0.1) plus léger ?
-  - `100%` : transparent, scale 1 ?
-  - Durée non spécifiée (utilise animation dans JSX ?)
-- ✅ Media queries responsive ?
-  - 768px : `font-size: 0.75rem` ?
-  - 480px : `font-size: 0.7rem` ?
-  - Pas de valeurs en dur, uses variables de design ?
-- ✅ Pas de conflits avec styles existants ?
+## Contracts to Validate
 
-### 4. GamePage.test.jsx (Tests unitaires)
+All implementation must match:
+- **contracts/auto-update-endpoints.md** (4 endpoints)
+- **contracts/http-endpoints.md** (existing endpoints)
+- **PLAN_AUTO_UPDATE_v2.50.0.md** (architecture)
 
-À vérifier :
-- ✅ Structure correcte (describe, test) ?
-- ✅ 7 tests implémentés ?
-- ✅ Chaque test a une description claire ?
+## Pass Criteria
 
-**Test 1** : Calcul temps en ms
-- ✅ Mathématique correcte : (1000100000 - 1000000000) / 1000 = 100 ?
-- ✅ Math.round() utilisé pour arrondir ?
+### APPROVED (Proceed to QA)
+- Code quality >= 80%
+- Error handling >= 85%
+- Security & Safety >= 90% (CRITICAL)
+- Testing >= 80%
+- No critical or high severity issues
+- All contracts validated
 
-**Test 2** : Tri croissant
-- ✅ Sort correct : [100, 150, 200] ?
-- ✅ Vérifier les 3 valeurs dans l'ordre ?
+### APPROVED WITH RESERVATIONS (Fix medium issues, then QA)
+- Code quality >= 75%
+- Error handling >= 80%
+- Security & Safety >= 85%
+- Testing >= 75%
+- Only medium severity issues (documented, non-blocking)
 
-**Test 3** : Équipes non buzzées en bas
-- ✅ buzzedTeams en premier, notBuzzed en dernier ?
-- ✅ Vérifier TIME > 0 vs TIME === 0 ?
+### REJECTED (Back to development)
+- Any criteria below threshold
+- Critical/high severity issues present
+- Breaking changes detected
+- Security concerns
 
-**Test 4** : Tri stable
-- ✅ Même TIME = même résultat ?
-- ✅ Vérifier ordre préservé : A, B, C ?
+## Deliverables
 
-**Test 5** : Phase-aware
-- ✅ Vérifier phases actives : STARTED, PAUSED, REVEALED ?
-- ✅ Vérifier phases inactives : STOP, PREPARE, READY ?
+Provide detailed review report with:
 
-**Test 6** : Badge classement
-- ✅ Rang 1 → 🏆 ?
-- ✅ Rang 2 → 🥈 ?
-- ✅ Rang 3 → 🥉 ?
-- ✅ Rang 4+ → null ?
+1. **Overall Verdict** : APPROVED / APPROVED WITH RESERVATIONS / REJECTED
 
-**Test 7** : Tri joueurs
-- ✅ Même logique que équipes ?
-- ✅ Vérifier ordre final : b (100ms), a (200ms), c (0ms) ?
+2. **Issues Summary**
+   - Critical : X
+   - High : Y
+   - Medium : Z
+   - Low : W
 
----
+3. **Detailed Issues** (for each issue)
+   - Issue description
+   - File and line number
+   - Severity level
+   - Recommendation / Code fix
 
-## CRITÈRES DE QUALITÉ
+4. **Strengths** (positive aspects)
 
-### React Best Practices
+5. **Risks Assessment** (likelihood, impact, mitigation)
 
-1. **Hooks correctement utilisés** ?
-   - ✅ useMemo avec dépendances correctes ?
-   - ✅ Pas de hooks conditionnels ?
-   - ✅ Dependencies array complet ?
+6. **Recommendations** (actionable items)
 
-2. **Component Props** ?
-   - ✅ PropTypes ou TypeScript ?
-   - ✅ Défauts fournis pour tous les optionnels ?
-   - ✅ Pas de props inutilisés ?
+7. **Blockers for QA** (if any)
 
-3. **Key Props** ?
-   - ✅ `key={buzzer.mac}-${buzzer.timestamp}` unique ?
-   - ✅ Pas de key avec index ?
-   - ✅ Key stable (ne change pas en réaffichage) ?
+## Key Review Points
 
-4. **Performance** ?
-   - ✅ useMemo utilisé pour tri (O(n log n)) ?
-   - ✅ Pas de re-render inutiles ?
-   - ✅ Animations via Framer-motion (GPU) ?
-   - ✅ Pas de calculs dans render ?
+### Backend Safety
+- [ ] Backup always created before file operations
+- [ ] Old binary restorable on failure
+- [ ] File operations atomic
+- [ ] No partial states
+- [ ] State saved before shutdown
 
-5. **Accessibility** ?
-   - ✅ aria-labels sur badges ?
-   - ✅ Pas de `onClick` sur div sans role ?
-   - ✅ Contraste couleur suffisant (WCAG AA) ?
+### Frontend UX
+- [ ] Badge visible when update available
+- [ ] Clear user feedback at each step
+- [ ] Proper button states (enabled/disabled)
+- [ ] Error messages helpful
+- [ ] Auto-reload on restart
 
-### Code Quality
+### Testing
+- [ ] go test ./... passes (>= 80% coverage)
+- [ ] npm test passes
+- [ ] Mock data realistic
+- [ ] Edge cases covered
 
-1. **Lisibilité** ?
-   - ✅ Variables bien nommées ?
-   - ✅ Fonctions courtes et claires ?
-   - ✅ Commentaires sur logique complexe ?
+### Documentation
+- [ ] Code comments clear
+- [ ] Implementation matches contracts
+- [ ] Complex logic explained
 
-2. **Maintenabilité** ?
-   - ✅ DRY : pas de code dupliqué ?
-   - ✅ Logique tri testée unitairement ?
-   - ✅ Facilement extensible (ajouter rang 4) ?
+## Timeline
 
-3. **Sécurité** ?
-   - ✅ Pas d'injection XSS (template string safe) ?
-   - ✅ Pas de données sensibles loggées ?
-   - ✅ Math.round() protège contre precision issues ?
+Estimated review time: 2-3 hours
 
-### Test Coverage
+## Questions & References
 
-1. **Unit Tests** ?
-   - ✅ Couverture : Tri, Calcul temps, Badges, Phase-aware ?
-   - ✅ Edge cases testés : équipes non buzzées, temps égaux ?
-   - ✅ Pas de tests qui font du mock Redux ?
+If unclear, refer to:
+- **Detailed specs** : DEV_BACKEND_AUTO_UPDATE.md, DEV_FRONTEND_AUTO_UPDATE.md
+- **Code review spec** : CODE_REVIEW_SPEC.md
+- **Contracts** : contracts/auto-update-endpoints.md
+- **Plan** : PLAN_AUTO_UPDATE_v2.50.0.md
 
-2. **E2E Tests** ?
-   - ✅ 12 scénarios couvrent cas d'usage clés ?
-   - ✅ Scénarios du basic au responsive ?
-   - ✅ Points critiques vérifiés ?
+## Sign-Off Template
 
-### CSS Quality
-
-1. **Responsive** ?
-   - ✅ Desktop 1920px : lisible 0.85rem ?
-   - ✅ Tablet 768px : lisible 0.75rem ?
-   - ✅ Mobile 320px : lisible 0.7rem ?
-
-2. **Accessibilité CSS** ?
-   - ✅ Contraste couleur `var(--gray-400)` vs background ?
-   - ✅ Font tailles lisibles (min 12px mobile) ?
-   - ✅ Pas de couleur seule pour distinguer (emoji aussi) ?
-
-3. **Performance CSS** ?
-   - ✅ Pas de animations bloquantes ?
-   - ✅ Utilise transform/opacity (GPU) ?
-   - ✅ Media queries optimisées ?
+```
+Code Review Completed
+Reviewed By: [name]
+Date: [YYYY-MM-DD]
+Status: APPROVED | APPROVED WITH RESERVATIONS | REJECTED
+Critical Issues: X
+High Issues: Y
+Medium Issues: Z
+Low Issues: W
+Recommendation: PROCEED TO QA | FIX AND RESUBMIT | ESCALATE
+```
 
 ---
 
-## FORMAT DE VERDICT
+**Status** : READY FOR CODE REVIEW
 
-Produire un rapport avec :
+Begin comprehensive review of all files. Commit summary when complete.
 
-1. **Résumé exécutif** (1-2 paragraphes)
-2. **Évaluation par fichier** :
-   - GamePage.jsx : GOOD / CONCERNS / MAJOR_ISSUE
-   - TeamCard.jsx : GOOD / CONCERNS / MAJOR_ISSUE
-   - CSS : GOOD / CONCERNS / MAJOR_ISSUE
-   - Tests : GOOD / CONCERNS / MAJOR_ISSUE
-
-3. **Verdict global** :
-   - ✅ **APPROVED** (pas de blocage)
-   - ⚠️ **APPROVED WITH RESERVATIONS** (mineurs, pas blocage)
-   - ❌ **REJECTED** (majeurs, refaire)
-
-4. **Détails par issue** (si CONCERNS ou REJECTED) :
-   - Fichier et ligne
-   - Problème exact
-   - Recommandation
-   - Sévérité : MINOR / MAJOR / CRITICAL
-
-5. **Points positifs** (2-3 points clés)
-6. **Prochaines étapes** (selon verdict)
-
----
-
-## QUESTIONS CLÉS À RÉPONDRE
-
-1. Le code React est-il bien structuré et suit les bonnes pratiques ?
-2. Les useMemo ont-ils les bonnes dépendances ?
-3. Les animations sont-elles fluides sans impacter performance ?
-4. Les tests unitaires couvrent-ils les cas critiques ?
-5. Le code est-il sécurisé (pas XSS, pas fuite data) ?
-6. Peut-on merger en confiance vers main ?
-
----
-
-## RESSOURCES
-
-- Plan : PLAN_TRI_RAPIDITE_v2.44.1.md
-- Commits : 5 commits atomiques (voir git log)
-- Tests : GamePage.test.jsx (7 tests) + tri-rapidite-reponse.md (12 E2E)
-- Branche : feature/tri-rapidite-reponse
-
----
-
-**Commence maintenant ta revue code-reviewer. Sois critique mais juste. Merci !**

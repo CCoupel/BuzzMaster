@@ -248,6 +248,7 @@ const (
 	LogComponentTCP       LogComponent = "TCP"
 	LogComponentUDP       LogComponent = "UDP"
 	LogComponentApp       LogComponent = "App"
+	LogComponentUpdater   LogComponent = "Updater"
 )
 
 // LogEntry represents a log entry for the logs page

@@ -102,12 +102,13 @@ Toutes les vues TV doivent tenir entièrement à l'écran sans défilement :
 - Limiter le contenu visible (ex: top 3, max 6 catégories)
 
 ### Key Files
-- **Backend** : `server-go/cmd/server/main.go`, `internal/game/engine.go`, `internal/game/models.go`
+- **Backend** : `server-go/cmd/server/main.go`, `internal/game/engine.go`, `internal/game/models.go`, `internal/updater/updater.go`
 - **Frontend** :
   - `web/src/pages/GamePage.jsx` : Page admin principale (jeu en cours)
   - `web/src/pages/QuestionsPage.jsx` : Gestion questions + fonds d'écran
   - `web/src/pages/ConfigPage.jsx` : Configuration serveur (paramètres, effet néon)
   - `web/src/pages/BackupPage.jsx` : Sauvegarde/Restauration/Réinitialisation
+  - `web/src/pages/UpdatePage.jsx` : Gestion des mises à jour automatiques
   - `web/src/pages/PlayerDisplay.jsx` : Affichage TV (STATIQUE)
   - `web/src/components/TeamCard.jsx` : Carte équipe/joueurs
   - `web/src/components/Navbar.jsx` : Navigation + menu abeille (dropdown)
@@ -117,7 +118,7 @@ Toutes les vues TV doivent tenir entièrement à l'écran sans défilement :
 
 **Menu principal (Navbar)** :
 - Liens directs : Jeu, Scores, Équipes, Questions, Historique, Palmarès
-- Menu abeille (🐝 dropdown) : Config, Backup/Restaure, Logs
+- Menu abeille (🐝 dropdown) : Config, Backup/Restaure, Logs, Mises à jour
 
 **Répartition des fonctionnalités** :
 | Page | Fonctionnalités |
@@ -127,6 +128,7 @@ Toutes les vues TV doivent tenir entièrement à l'écran sans défilement :
 | `/admin/config` | Paramètres serveur, effet néon, mode démo |
 | `/admin/backup` | Sauvegarde, restauration, réinitialisation |
 | `/admin/logs` | Logs serveur en temps réel |
+| `/admin/updates` | Vérification et installation mises à jour |
 
 **Décisions d'architecture (v2.49.x)** :
 - Fonds d'écran déplacés de ConfigPage vers QuestionsPage (cohérence : médias avec questions)

@@ -136,6 +136,7 @@
 }
 
 .version-badge {
+  position: relative;
   font-size: 0.7rem;
   font-weight: 600;
   font-family: var(--font-mono, monospace);
@@ -145,6 +146,38 @@
   background: linear-gradient(135deg, var(--primary-100), var(--primary-50));
   color: var(--primary-700);
   cursor: help;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.update-badge-version {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  background: var(--warning);
+  color: white;
+  border-radius: 50%;
+  font-size: 0.65rem;
+  font-weight: 700;
+  animation: pulse 2s infinite;
+}
+
+.update-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  background: var(--warning);
+  color: white;
+  border-radius: 50%;
+  font-size: 0.7rem;
+  font-weight: 700;
+  margin-left: auto;
+  animation: pulse 2s infinite;
 }
 
 /* Navigation Links */

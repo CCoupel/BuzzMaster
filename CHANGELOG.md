@@ -3,6 +3,31 @@
 Historique des versions du projet BuzzControl.
 
 
+## [2.50.0] - 2026-02-01
+
+### Added
+
+**Mise à jour automatique du serveur** :
+- Vérification des nouvelles versions via GitHub Releases API
+- Badge de notification dans la navbar si mise à jour disponible
+- Page dédiée `/admin/updates` pour gérer les mises à jour
+  - Liste compacte des versions (1 par ligne)
+  - Icônes de statut : ✅ actuelle, ⬆️ plus récente, ⚠️ obsolète
+  - Titres descriptifs extraits automatiquement du changelog
+  - Notes de version dépliables avec rendu Markdown
+  - Badge "Version locale" pour versions non publiées
+- Téléchargement avec vérification de taille (40 MB min)
+- Application avec backup automatique et rollback en cas d'échec
+- Redémarrage automatique avec polling côté client
+
+### Technical
+- Nouveaux endpoints REST : GET/POST /api/updates/*
+- Cache GitHub API (1h) pour éviter rate limiting
+- Option config `auto_check_updates` (défaut: true)
+- Parseur Markdown léger pour les notes de version
+
+---
+
 ## [2.49.0] - 2026-02-01
 
 ### Added

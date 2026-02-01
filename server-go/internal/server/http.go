@@ -31,6 +31,7 @@ type HTTPServer struct {
 	embeddedFS fs.FS  // Embedded web filesystem (takes priority over reactDir)
 	mux        *http.ServeMux
 	server     *http.Server
+	updater    *Updater // Auto-update handler
 
 	// Callbacks
 	OnAction           func(action string, data json.RawMessage)
@@ -53,6 +54,7 @@ func NewHTTPServer(port int, engine *game.Engine, wsHub *WebSocketHub, logsHub *
 		webDir:   cfg.Storage.DataDir,
 		reactDir: "", // Will be set if React build exists
 		mux:      http.NewServeMux(),
+		updater:  NewUpdater(cfg.Version),
 	}
 }
 
@@ -164,8 +166,14 @@ func (h *HTTPServer) setupRoutes() {
 	h.mux.HandleFunc("/restore", h.handleRestore)
 	h.mux.HandleFunc("/reset-select", h.handleResetSelect)
 
-	// Update
+	// Update (legacy route)
 	h.mux.HandleFunc("/update", h.handleUpdate)
+
+	// Auto-update API
+	h.mux.HandleFunc("/api/updates", h.handleAPIUpdates)
+	h.mux.HandleFunc("/api/updates/check", h.handleAPIUpdatesCheck)
+	h.mux.HandleFunc("/api/updates/download", h.handleAPIUpdatesDownload)
+	h.mux.HandleFunc("/api/updates/apply", h.handleAPIUpdatesApply)
 
 	// WebSocket
 	h.mux.HandleFunc("/ws", h.handleWebSocket)
@@ -1645,4 +1653,38 @@ func (h *HTTPServer) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 
 func (h *HTTPServer) handleLogsWebSocket(w http.ResponseWriter, r *http.Request) {
 	h.logsHub.HandleConnection(w, r)
+}
+
+// Auto-update API handlers
+
+func (h *HTTPServer) handleAPIUpdates(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	h.updater.HandleGetUpdates(w, r)
+}
+
+func (h *HTTPServer) handleAPIUpdatesCheck(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	h.updater.HandleCheckUpdates(w, r)
+}
+
+func (h *HTTPServer) handleAPIUpdatesDownload(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	h.updater.HandleDownloadUpdate(w, r)
+}
+
+func (h *HTTPServer) handleAPIUpdatesApply(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	h.updater.HandleApplyUpdate(w, r)
 }

@@ -11,6 +11,7 @@ Ce document decrit les fonctionnalites d'administration du systeme BuzzControl.
 - [Historique des evenements](#historique-des-evenements)
 - [Joueurs Virtuels (VPlayer)](#joueurs-virtuels-vplayer)
 - [Configuration Effet Neon](#configuration-effet-neon)
+- [Mises a jour automatiques](#mises-a-jour-automatiques)
 
 ---
 
@@ -505,6 +506,170 @@ Ces paramètres sont chargés au démarrage du serveur et peuvent être modifié
 
 ---
 
+## Mises a jour automatiques
+
+### Presentation
+
+BuzzControl peut vérifier et installer automatiquement les nouvelles versions depuis GitHub Releases. Cette fonctionnalité permet de garder votre installation à jour sans intervention manuelle complexe.
+
+### Accès à la page de mise à jour
+
+1. Cliquer sur le logo abeille (🐝) dans la navbar
+2. Sélectionner "Mises à jour" dans le menu déroulant
+3. La page `/admin/updates` s'affiche
+
+**Notification automatique** :
+- Un badge rouge avec icône apparaît sur le logo abeille si une mise à jour est disponible
+- La vérification se fait automatiquement au démarrage du serveur (si `auto_check_updates: true`)
+
+### Vérifier les mises à jour
+
+Sur la page de mise à jour, vous verrez :
+- **Version actuelle** : Version installée de BuzzControl
+- **Dernière version** : Dernière version disponible sur GitHub
+- **Statut** : À jour, mise à jour disponible, vérification en cours, etc.
+
+Pour vérifier manuellement :
+1. Cliquer sur "Vérifier maintenant"
+2. Le serveur interroge GitHub Releases API
+3. Le résultat s'affiche en quelques secondes
+
+### Télécharger une mise à jour
+
+Si une mise à jour est disponible :
+1. Le bouton "Télécharger" devient actif
+2. Le changelog de la nouvelle version s'affiche automatiquement
+3. Cliquer sur "Télécharger"
+4. La progression du téléchargement s'affiche (statut "Téléchargement...")
+5. Une fois terminé, le bouton "Installer et redémarrer" devient actif
+
+**Vérifications automatiques** :
+- Détection automatique de la plateforme (Windows, Linux x64, Linux ARM64)
+- Vérification de la taille du fichier (minimum 40 MB)
+- Téléchargement dans le dossier du serveur
+
+### Installer la mise à jour
+
+Après téléchargement :
+1. Cliquer sur "Installer et redémarrer"
+2. Le serveur effectue les opérations suivantes :
+   - Sauvegarde de l'ancien exécutable (suffixe `.backup`)
+   - Remplacement par la nouvelle version
+   - Redémarrage automatique du serveur
+3. L'interface affiche "Installation en cours..."
+4. Reconnexion automatique après redémarrage (polling toutes les 2 secondes)
+
+**Durée estimée** :
+- Installation : 2-5 secondes
+- Redémarrage : 5-10 secondes
+- Reconnexion : 2-4 secondes
+
+### Que se passe-t-il pendant le redémarrage
+
+Pendant la mise à jour :
+1. **Backup** : L'ancien exécutable est sauvegardé avec l'extension `.backup`
+2. **Remplacement** : Le nouveau fichier remplace l'ancien
+3. **Redémarrage** : Le serveur redémarre automatiquement
+4. **Reconnexion** : L'interface tente de se reconnecter toutes les 2 secondes (10 tentatives max)
+
+**Important** :
+- Ne fermez pas la page pendant la mise à jour
+- Les connexions WebSocket seront temporairement coupées
+- Les joueurs virtuels devront se reconnecter après le redémarrage
+
+### Rollback automatique
+
+En cas d'échec du redémarrage :
+- Le serveur détecte que la nouvelle version ne démarre pas correctement
+- Il restaure automatiquement l'ancien exécutable depuis `.backup`
+- Un message d'erreur s'affiche dans l'interface
+
+**Rollback manuel** :
+Si le serveur ne redémarre pas du tout :
+1. Arrêter le processus serveur (Ctrl+C ou kill)
+2. Renommer `server.exe.backup` en `server.exe` (Windows)
+3. Ou renommer `server.backup` en `server` (Linux)
+4. Relancer le serveur normalement
+
+### Vérifier que la mise à jour a réussi
+
+Après reconnexion :
+1. La page de mise à jour affiche la nouvelle version actuelle
+2. Le statut passe à "À jour"
+3. Le badge de notification disparaît de la navbar
+4. Vérifier les logs pour confirmer le bon démarrage
+
+### Configuration automatique
+
+Dans `config.json` :
+
+```json
+{
+  "server": {
+    "auto_check_updates": true
+  }
+}
+```
+
+| Paramètre | Défaut | Description |
+|-----------|--------|-------------|
+| `auto_check_updates` | true | Vérifier les mises à jour au démarrage |
+
+**Recommandation** : Laisser à `true` pour être notifié des nouvelles versions.
+
+### Cache GitHub API
+
+Pour éviter le rate limiting GitHub (60 requêtes/heure pour IP publique) :
+- Le serveur met en cache la réponse pendant 1 heure
+- Les vérifications fréquentes utilisent le cache
+- Le cache se rafraîchit automatiquement après expiration
+
+### Bonnes pratiques
+
+1. **Sauvegarder avant mise à jour** : Effectuer une sauvegarde complète via `/admin/backup`
+2. **Lire le changelog** : Vérifier les changements de la nouvelle version
+3. **Tester après mise à jour** : Vérifier que toutes les fonctionnalités marchent
+4. **Garder le .backup** : Ne supprimez pas le fichier `.backup` immédiatement après mise à jour
+
+### Dépannage
+
+#### La vérification échoue
+
+**Erreur : "Failed to check for updates"**
+- Vérifier la connexion Internet
+- GitHub API peut être temporairement indisponible
+- Rate limit GitHub atteint (attendre 1 heure)
+
+#### Le téléchargement échoue
+
+**Erreur : "Failed to download update"**
+- Vérifier l'espace disque disponible (minimum 100 MB)
+- Vérifier les permissions d'écriture dans le dossier du serveur
+- Le fichier téléchargé est trop petit (< 40 MB) - relancer le téléchargement
+
+#### Le redémarrage échoue
+
+**Erreur : "Server did not restart"**
+- Le serveur tente un rollback automatique
+- Vérifier les logs pour identifier le problème
+- Effectuer un rollback manuel si nécessaire (voir section Rollback)
+
+#### L'interface ne se reconnecte pas
+
+**Après 10 tentatives, toujours "Reconnexion..."**
+- Rafraîchir la page manuellement (F5)
+- Vérifier que le serveur est bien démarré (logs)
+- Vérifier le port 80 disponible
+
+### Limites connues
+
+- **Plateforme** : Mise à jour disponible uniquement pour Windows, Linux x64 et Linux ARM64
+- **Permissions** : Le serveur doit avoir les droits d'écriture sur son propre exécutable
+- **Session** : Les joueurs virtuels doivent se reconnecter après mise à jour
+- **État du jeu** : La partie en cours est interrompue pendant la mise à jour
+
+---
+
 ## Resume des endpoints admin
 
 | Methode | Endpoint | Description |
@@ -517,6 +682,9 @@ Ces paramètres sont chargés au démarrage du serveur et peuvent être modifié
 | GET | `/version` | Version du serveur |
 | GET | `/config.json` | Configuration (incluant effet néon) |
 | POST | `/config.json` | Modifier configuration (incluant effet néon) |
+| GET | `/api/updates/check` | Vérifier les mises à jour disponibles |
+| POST | `/api/updates/download` | Télécharger une mise à jour |
+| POST | `/api/updates/apply` | Installer et redémarrer |
 
 ---
 

@@ -283,6 +283,26 @@ RÉSULTAT: QUALIFIÉ / NON QUALIFIÉ
 - [ ] Aucune anomalie bloquante
 - [ ] Rapport de qualification complété
 - [ ] Version stable identifiée
+- [ ] **Serveur redémarré et opérationnel**
+
+### Redémarrage du Serveur
+
+**⚠️ IMPORTANT** : Ne jamais laisser le serveur arrêté après la qualification.
+
+```bash
+# Vérifier si le serveur tourne
+curl -s http://localhost/version
+
+# Si pas de réponse, redémarrer le serveur
+cd server-go
+./server.exe &
+# ou en mode visible :
+# start ./server.exe
+```
+
+Vérifier :
+- [ ] `[HTTP] Server starting on port 80`
+- [ ] Version correcte affichée sur http://localhost
 
 ---
 

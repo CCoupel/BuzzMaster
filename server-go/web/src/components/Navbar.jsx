@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { NavLink, useLocation } from 'react-router-dom'
 import { motion } from 'framer-motion'
+import { useUpdates } from '../hooks/useUpdates'
 import './Navbar.css'
 
 export default function Navbar({ connectionStatus = 'disconnected', clientCounts = { admin: 0, tv: 0, vplayer: 0 }, serverVersion = '' }) {
@@ -8,6 +9,12 @@ export default function Navbar({ connectionStatus = 'disconnected', clientCounts
   const [isMenuOpen, setIsMenuOpen] = useState(false)
   const menuRef = useRef(null)
   const buttonRef = useRef(null)
+  const { updateInfo, checkForUpdates } = useUpdates()
+
+  // Vérifier les mises à jour au montage
+  useEffect(() => {
+    checkForUpdates()
+  }, [checkForUpdates])
 
   // Fermeture du menu au clic extérieur
   useEffect(() => {
@@ -53,6 +60,7 @@ export default function Navbar({ connectionStatus = 'disconnected', clientCounts
   const menuItems = [
     { path: 'settings', label: 'Config', icon: '⚙️' },
     { path: 'backup', label: 'Backup/Restaure', icon: '💾' },
+    { path: 'updates', label: 'Mises à jour', icon: '🔄', badge: updateInfo?.update_available },
     { path: 'logs', label: 'Logs', icon: '📋' },
   ]
 
@@ -113,6 +121,7 @@ export default function Navbar({ connectionStatus = 'disconnected', clientCounts
                 >
                   <span className="menu-icon">{item.icon}</span>
                   <span className="menu-label">{item.label}</span>
+                  {item.badge && <span className="update-badge">!</span>}
                 </NavLink>
               ))}
             </div>
@@ -122,6 +131,9 @@ export default function Navbar({ connectionStatus = 'disconnected', clientCounts
         <span className="brand-text">BuzzControl</span>
         <span className="version-badge" title="Version BuzzControl">
           v{serverVersion || '...'}
+          {updateInfo?.update_available && (
+            <span className="update-badge-version" title="Mise à jour disponible">!</span>
+          )}
         </span>
       </div>
 

@@ -337,6 +337,23 @@ cat data/files/questions/[ID]/question.json | jq .
 
 Remplir le template de rapport avec les résultats.
 
+### Étape 7 : Redémarrer le Serveur
+
+**⚠️ IMPORTANT** : Ne jamais laisser le serveur arrêté après les tests.
+
+```bash
+# Vérifier si le serveur tourne
+curl -s http://localhost/version
+
+# Si pas de réponse, redémarrer le serveur
+cd server-go
+./server.exe &
+# ou en mode visible :
+# start ./server.exe
+```
+
+Le serveur doit toujours être opérationnel à la fin de la procédure de test.
+
 ---
 
 ## 8. Historique des Phases

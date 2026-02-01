@@ -23,6 +23,7 @@ type ServerConfig struct {
 	WebSocketPath    string `json:"websocket_path"`
 	AutoOpenBrowsers bool `json:"auto_open_browsers"` // Auto-open browsers on startup
 	Debug            bool `json:"debug"`               // Enable debug mode (includes /logs)
+	AutoCheckUpdates bool `json:"auto_check_updates"`  // Auto-check for updates on startup
 }
 
 type WiFiConfig struct {
@@ -151,6 +152,7 @@ func Get() *Config {
 					WebSocketPath:    "/ws",
 					AutoOpenBrowsers: true,  // Default: enabled
 					Debug:            false, // Default: disabled
+					AutoCheckUpdates: true,  // Default: enabled
 				},
 				Game: GameConfig{
 					DefaultDelay: 30,
