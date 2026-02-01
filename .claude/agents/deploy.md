@@ -112,7 +112,7 @@ git push origin v<version>
 ```
 
 **Monitor CI (Automatic Verification via GitHub API):**
-After pushing the tag, automatically verify CI status using GitHub API.
+After pushing the tag, automatically verify CI status using `curl` + GitHub API.
 
 **IMPORTANT: Deux étapes distinctes pour détecter la CI correctement :**
 
@@ -120,18 +120,21 @@ After pushing the tag, automatically verify CI status using GitHub API.
 ```bash
 # Récupérer le SHA du commit actuel (celui taggé)
 COMMIT_SHA=$(git rev-parse HEAD)
+echo "⏳ Waiting for CI workflow to start for commit $COMMIT_SHA..."
 
 # Attendre que le workflow apparaisse (max 2 minutes, intervalle 10s)
-echo "⏳ Waiting for CI workflow to start for commit $COMMIT_SHA..."
+RUN_ID=""
 for i in $(seq 1 12); do
-    # Filtrer les runs par head_sha pour trouver NOTRE run
-    # Note: tr -d '\n' nécessaire car curl retourne du JSON formaté multilignes
-    RESPONSE=$(curl -s "https://api.github.com/repos/CCoupel/BuzzMaster/actions/runs?head_sha=$COMMIT_SHA&per_page=1" | tr -d '\n')
-    TOTAL_COUNT=$(echo $RESPONSE | grep -oP '"total_count":\K[0-9]+')
+    RESPONSE=$(curl -s "https://api.github.com/repos/CCoupel/BuzzMaster/actions/runs?head_sha=$COMMIT_SHA&per_page=1")
 
-    if [ "$TOTAL_COUNT" != "0" ] && [ -n "$TOTAL_COUNT" ]; then
-        RUN_ID=$(echo $RESPONSE | grep -oP '"id":\K[0-9]+' | head -1)
+    # Extraire total_count avec sed (compatible Windows/MINGW)
+    TOTAL=$(echo "$RESPONSE" | sed -n 's/.*"total_count": *\([0-9]*\).*/\1/p')
+
+    if [ "$TOTAL" != "0" ] && [ -n "$TOTAL" ]; then
+        # Extraire le premier ID de run
+        RUN_ID=$(echo "$RESPONSE" | sed -n 's/.*"id": *\([0-9]*\).*/\1/p' | head -1)
         echo "✅ CI workflow started (Run ID: $RUN_ID)"
+        echo "   URL: https://github.com/CCoupel/BuzzMaster/actions/runs/$RUN_ID"
         break
     fi
 
@@ -140,9 +143,10 @@ for i in $(seq 1 12); do
 done
 
 # Si pas de workflow après 2 min → échec
-if [ "$TOTAL_COUNT" = "0" ] || [ -z "$TOTAL_COUNT" ]; then
+if [ -z "$RUN_ID" ]; then
     echo "❌ ERROR: CI workflow did not start after 2 minutes"
-    echo "   Check: https://github.com/CCoupel/BuzzMaster/actions"
+    echo "   Commit SHA: $COMMIT_SHA"
+    echo "   Check manually: https://github.com/CCoupel/BuzzMaster/actions"
     exit 1
 fi
 ```
@@ -151,30 +155,43 @@ fi
 ```bash
 # Poll le status du workflow spécifique (max 10 minutes, intervalle 30s)
 echo "⏳ Waiting for CI workflow $RUN_ID to complete..."
+CI_SUCCESS=false
+
 for i in $(seq 1 20); do
-    # Note: tr -d '\n' nécessaire pour parser le JSON correctement
-    RESPONSE=$(curl -s "https://api.github.com/repos/CCoupel/BuzzMaster/actions/runs/$RUN_ID" | tr -d '\n')
-    STATUS=$(echo $RESPONSE | grep -oP '"status":\s*"\K[^"]+')
-    CONCLUSION=$(echo $RESPONSE | grep -oP '"conclusion":\s*"\K[^"]+' | head -1)
+    RESPONSE=$(curl -s "https://api.github.com/repos/CCoupel/BuzzMaster/actions/runs/$RUN_ID")
+
+    # Extraire status et conclusion avec sed (compatible Windows/MINGW)
+    STATUS=$(echo "$RESPONSE" | sed -n 's/.*"status": *"\([^"]*\)".*/\1/p' | head -1)
+    CONCLUSION=$(echo "$RESPONSE" | sed -n 's/.*"conclusion": *"\([^"]*\)".*/\1/p' | head -1)
 
     echo "   Attempt $i/20 - Status: $STATUS, Conclusion: $CONCLUSION"
 
     if [ "$STATUS" = "completed" ]; then
         if [ "$CONCLUSION" = "success" ]; then
             echo "✅ CI passed successfully!"
+            echo "   URL: https://github.com/CCoupel/BuzzMaster/actions/runs/$RUN_ID"
+            CI_SUCCESS=true
             break
         else
             echo "❌ CI failed with conclusion: $CONCLUSION"
-            # Execute rollback procedure
+            echo "   View logs: https://github.com/CCoupel/BuzzMaster/actions/runs/$RUN_ID"
             exit 1
         fi
     fi
     sleep 30
 done
+
+# Vérifier si on a atteint le timeout
+if [ "$CI_SUCCESS" != "true" ]; then
+    echo "⚠️ WARNING: CI did not complete within 10 minutes"
+    echo "   Current status: $STATUS"
+    echo "   Check manually: https://github.com/CCoupel/BuzzMaster/actions/runs/$RUN_ID"
+    exit 1
+fi
 ```
 
-- **Étape 1** : Filtrer par `head_sha` pour trouver le bon workflow (pas le dernier global)
-- **Étape 2** : Poll le workflow spécifique par son ID
+- **Étape 1** : Utiliser `gh run list --commit` pour trouver le bon workflow
+- **Étape 2** : Utiliser `gh run view` pour suivre le status
 - Wait until `status` = "completed"
 - If `conclusion` = "success" → Continue to Phase 5
 - If `conclusion` != "success" → Execute automatic error analysis and correction
