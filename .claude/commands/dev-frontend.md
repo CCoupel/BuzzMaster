@@ -26,72 +26,20 @@ prompt: voir ci-dessous
 ```
 Implémente le code frontend React pour BuzzControl.
 
-**Contexte projet :**
-- Répertoire : /home/user/BuzzMaster
-- Frontend React : server-go/web/src/
-- Config version : server-go/config.json
-- Procédure : docs/DEV_PROCEDURE.md
+**Contexte projet :** Voir `context/COMMON.md` section 1
+**Workflow DEV :** Voir `context/DEVELOPMENT.md`
+- Étapes : section 4 (Workflow Commun)
+- Ordre frontend : section 6
+- Standards React : section 6
+- Contrainte TV : section 6 (TV STATIQUE)
+- Build : section 4.4
+- Règles : section 8
 
 **Input utilisateur :** $ARGUMENTS
 
-**Étapes à exécuter :**
-
-1. **Collecter le contexte**
-   - Version actuelle : server-go/config.json → "version"
-   - Branche : git branch --show-current
-   - Si DEV-BACKEND a terminé, lire son résumé pour :
-     - Nouvelles actions WebSocket à gérer
-     - Nouveaux champs GameState à afficher
-
-2. **Incrémenter la version (OBLIGATOIRE)**
-   - AVANT tout code, incrémenter z : 2.40.1 → 2.40.2
-   - Commit : chore(version): Bump to X.Y.Z
-
-3. **Implémenter selon l'ordre frontend**
-   | Étape | Fichier | Actions |
-   |-------|---------|---------|
-   | 1 | hooks/useWebSocket.js | Nouveaux handlers |
-   | 2 | components/*.jsx | Composants réutilisables |
-   | 3 | pages/*Page.jsx | Pages admin |
-   | 4 | pages/PlayerDisplay.jsx | Affichage TV (STATIQUE!) |
-   | 5 | pages/*.css | Styles |
-
-4. **Standards React**
-   - Composants fonctionnels + hooks
-   - useMemo/useCallback pour optimisation
-   - CSS variables (pas de hardcoded)
-   - PropTypes si nécessaire
-
-5. **CONTRAINTE CRITIQUE : TV STATIQUE**
-   - PlayerDisplay.jsx : JAMAIS de scroll
-   - overflow: hidden (pas auto/scroll)
-   - Unités viewport (vh, vw, %)
-   - Tester à 1920x1080
-
-6. **Build final (ORDRE IMPORTANT)**
-   ⚠️ TOUJOURS rebuilder le frontend AVANT le Go build (mode portable)
-   ```bash
-   cd server-go/web && npm run build && cd .. && go build -o server.exe ./cmd/server
-   ```
-
-7. **Vérifications finales**
-   - Test visuel dans navigateur
-   - Test responsive
-   - Test TV à 1920x1080
-   - git push origin <branche>
-
-8. **Générer le résumé** :
-   - Fichiers modifiés avec changements
-   - Changements UI (Admin / TV)
-   - Vérifications visuelles effectuées
-   - Commits créés
-
-**Règles critiques :**
-- Frontend UNIQUEMENT : Ne pas toucher aux fichiers Go
-- Version first : Incrémenter z AVANT tout code
-- TV STATIQUE : Jamais de scroll sur PlayerDisplay
-- CSS variables : Utiliser les design tokens
-- Commits atomiques : 1 commit par tâche logique
+**Si backend terminé, intégrer :**
+- Nouvelles actions WebSocket
+- Nouveaux champs GameState
 ```
 
 ## Action immédiate

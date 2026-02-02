@@ -21,42 +21,20 @@ prompt: voir ci-dessous
 ```
 Exécute la procédure de tests QA complète pour BuzzControl.
 
-**Contexte projet :**
-- Répertoire : C:\Users\cyril\Documents\VScode\buzzcontrol
-- Serveur Go : server-go/
-- Procédure : docs/TEST_PROCEDURE.md
+**Contexte projet :** Voir `context/COMMON.md` section 1
+**Build :** Voir `context/COMMON.md` section 2
+**Framework Qualité :** Voir `context/QUALITY.md`
+- Commandes test : section 7
+- Critères validation : section 6
+- Verdicts : section 5
+- Structure rapport : section 9
+- Règles : section 10
 
 **Argument utilisateur (optionnel) :** $ARGUMENTS
 - `unit` : Tests unitaires uniquement
 - `e2e` : Tests E2E uniquement
 - `full` ou vide : Suite complète (défaut)
-- Nom de package : Tests d'un package spécifique (ex: `game`, `server`)
-
-**Étapes à exécuter :**
-
-1. Build de production (ORDRE IMPORTANT : frontend PUIS backend)
-   cd server-go/web && npm run build && cd .. && go build -o server.exe ./cmd/server
-
-   ⚠️ TOUJOURS rebuilder le frontend AVANT le Go build (mode portable).
-
-2. Tests unitaires (sauf si argument = e2e)
-   go test ./... -v -cover
-
-3. Tests E2E (sauf si argument = unit)
-   go test ./internal/server -v -run TestE2E
-
-4. Génère un rapport QA structuré avec :
-   - Résumé : Date, branche, statut global
-   - Tests unitaires : Résultats par package, tests échoués
-   - Tests E2E : Scénarios testés, échecs
-   - Build : Résultat, taille binaire
-   - Couverture : Pourcentage global
-   - Décision finale : VALIDATED / VALIDATED WITH RESERVATIONS / NOT VALIDATED
-
-**Critères de validation :**
-- VALIDATED : Tous tests passent, coverage > 70%, build OK
-- VALIDATED WITH RESERVATIONS : 1-2 tests non-critiques échouent, coverage 60-70%
-- NOT VALIDATED : Plus de 2 tests échouent, tests critiques KO, build KO, coverage < 60%
+- Nom de package : Tests d'un package spécifique
 ```
 
 ## Action immédiate

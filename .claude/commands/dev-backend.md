@@ -26,64 +26,19 @@ prompt: voir ci-dessous
 ```
 Implémente le code backend Go pour BuzzControl.
 
-**Contexte projet :**
-- Répertoire : /home/user/BuzzMaster
-- Serveur Go : server-go/
-- Config version : server-go/config.json
-- Procédure : docs/DEV_PROCEDURE.md
+**Contexte projet :** Voir `context/COMMON.md` section 1
+**Workflow DEV :** Voir `context/DEVELOPMENT.md`
+- Étapes : section 4 (Workflow Commun)
+- Ordre backend : section 5
+- Standards Go : section 5
+- Build : section 4.4
+- Règles : section 8
 
 **Input utilisateur :** $ARGUMENTS
 
-**Étapes à exécuter :**
-
-1. **Collecter le contexte**
-   - Version actuelle : server-go/config.json → "version"
-   - Branche : git branch --show-current
-
-2. **Incrémenter la version (OBLIGATOIRE)**
-   - AVANT tout code, incrémenter z : 2.40.1 → 2.40.2
-   - Commit : chore(version): Bump to X.Y.Z
-
-3. **Implémenter selon l'ordre backend**
-   | Étape | Fichier | Actions |
-   |-------|---------|---------|
-   | 1 | internal/game/models.go | Structs, champs, JSON tags |
-   | 2 | internal/game/engine.go | Logique métier, mutex |
-   | 3 | internal/game/engine_test.go | Tests unitaires |
-   | 4 | internal/protocol/messages.go | Actions, payloads |
-   | 5 | cmd/server/main.go | Handlers WebSocket |
-   | 6 | internal/server/http.go | Endpoints REST |
-
-4. **Standards Go**
-   - PascalCase exports, camelCase privé
-   - Error handling obligatoire
-   - Thread-safety avec mutex
-   - Tests table-driven
-
-5. **Build final (ORDRE IMPORTANT)**
-   ⚠️ TOUJOURS rebuilder le frontend AVANT le Go build (mode portable)
-   ```bash
-   cd server-go/web && npm run build && cd .. && go build -o server.exe ./cmd/server
-   ```
-
-6. **Vérifications finales**
-   - go test ./... -v (tests)
-   - go test -race ./... (race conditions)
-   - git push origin <branche>
-
-7. **Générer le résumé** :
-   - Fichiers modifiés avec changements
-   - Tests créés et résultats
-   - Commits créés
-   - Nouvelles actions WebSocket (pour DEV-FRONTEND)
-   - Nouveaux champs GameState (pour DEV-FRONTEND)
-
-**Règles critiques :**
-- Backend UNIQUEMENT : Ne pas toucher aux fichiers JSX/CSS
-- Version first : Incrémenter z AVANT tout code
-- Tests obligatoires : Chaque fonction publique = tests
-- Thread-safety : Mutex pour état partagé
-- Commits atomiques : 1 commit par tâche logique
+**Résumé à fournir (pour DEV-FRONTEND si applicable) :**
+- Nouvelles actions WebSocket
+- Nouveaux champs GameState
 ```
 
 ## Action immédiate
