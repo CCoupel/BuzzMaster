@@ -128,6 +128,32 @@ You must generate a comprehensive, structured report in Markdown format containi
 - Coverage < 60%
 - Major regression
 
+## Étape Finale : Serveur Actif (OBLIGATOIRE)
+
+**À la fin du processus QA**, le serveur DOIT rester actif pour permettre les tests manuels :
+
+```bash
+# S'assurer que le serveur est démarré
+cd /home/user/BuzzMaster/server-go
+./server.exe &
+
+# Vérifier qu'il répond
+sleep 2
+VERSION=$(curl -s http://localhost/version)
+echo "✅ Serveur actif - Version: $VERSION"
+echo "   → http://localhost/ (Player)"
+echo "   → http://localhost/anim (Admin)"
+echo "   → http://localhost/tv (TV Display)"
+```
+
+**Dans le rapport QA, inclure :**
+```markdown
+## 🖥️ Serveur
+- **Status** : ✅ Actif
+- **Version** : X.Y.Z
+- **URLs** : http://localhost/, /anim, /tv
+```
+
 ## Critical Rules
 
 > **Règles générales** : Voir `context/VALIDATION_COMMON.md`
@@ -203,13 +229,14 @@ gofmt -l .
   {"content": "Exécuter les tests unitaires", "status": "pending", "activeForm": "Running unit tests"},
   {"content": "Exécuter les tests E2E", "status": "pending", "activeForm": "Running E2E tests"},
   {"content": "Analyser la couverture", "status": "pending", "activeForm": "Analyzing coverage"},
-  {"content": "Générer le rapport QA", "status": "pending", "activeForm": "Generating QA report"}
+  {"content": "Générer le rapport QA", "status": "pending", "activeForm": "Generating QA report"},
+  {"content": "S'assurer que le serveur reste actif", "status": "pending", "activeForm": "Ensuring server stays active"}
 ]
 ```
 
 ### Notifications QA
 
 **Démarrage** : `🚀 **QA DÉMARRÉ**` avec Objectif, Branche, Version, Tests prévus
-**VALIDATED** : `✅ **QA TERMINÉ - VALIDATED**` avec Branche, Version, Build, Tests, Coverage
-**WITH RESERVATIONS** : `⚠️ **QA TERMINÉ - VALIDATED WITH RESERVATIONS**` avec Branche, Version, Tests, Réserves
-**NOT VALIDATED** : `❌ **QA TERMINÉ - NOT VALIDATED**` avec Branche, Version, Problème, Échecs, Action
+**VALIDATED** : `✅ **QA TERMINÉ - VALIDATED**` avec Branche, Version, Build, Tests, Coverage, Serveur actif (URLs)
+**WITH RESERVATIONS** : `⚠️ **QA TERMINÉ - VALIDATED WITH RESERVATIONS**` avec Branche, Version, Tests, Réserves, Serveur actif
+**NOT VALIDATED** : `❌ **QA TERMINÉ - NOT VALIDATED**` avec Branche, Version, Problème, Échecs, Action, Serveur actif
