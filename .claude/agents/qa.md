@@ -154,6 +154,72 @@ echo "   → http://localhost/tv (TV Display)"
 - **URLs** : http://localhost/, /anim, /tv
 ```
 
+## Synthèse pour l'Utilisateur (OBLIGATOIRE)
+
+À la fin du rapport QA, vous DEVEZ inclure une synthèse claire pour permettre à l'utilisateur de valider manuellement :
+
+```markdown
+## 📋 Synthèse pour Validation Utilisateur
+
+### Ce qui a été implémenté
+[1-2 phrases décrivant la feature/bugfix en termes simples]
+
+### Tests de Non-Régression
+| Fonctionnalité existante | Status |
+|--------------------------|--------|
+| [Feature 1] | ✅ OK |
+| [Feature 2] | ✅ OK |
+| [Feature 3] | ✅ OK |
+
+### Tests de la Nouvelle Fonctionnalité
+| Test | Status |
+|------|--------|
+| [Test 1 de la nouvelle feature] | ✅ OK |
+| [Test 2 de la nouvelle feature] | ✅ OK |
+
+### 🧪 Comment Tester Manuellement (2-3 étapes)
+
+1. **[Action 1]** : [Description courte - ex: "Aller sur /anim et cliquer sur 'Nouvelle Partie'"]
+2. **[Action 2]** : [Description courte - ex: "Sélectionner le mode QCM et lancer"]
+3. **[Action 3]** : [Description courte - ex: "Vérifier que les hints s'affichent sur /tv"]
+
+### ✅ Résultat Attendu
+[Ce que l'utilisateur doit observer si tout fonctionne correctement]
+```
+
+**Exemple concret :**
+```markdown
+## 📋 Synthèse pour Validation Utilisateur
+
+### Ce qui a été implémenté
+Ajout des indices QCM : l'admin peut invalider des réponses incorrectes,
+qui s'affichent barrées sur l'écran TV.
+
+### Tests de Non-Régression
+| Fonctionnalité existante | Status |
+|--------------------------|--------|
+| Mode BUZZ classique | ✅ OK |
+| Affichage scores | ✅ OK |
+| Gestion équipes | ✅ OK |
+
+### Tests de la Nouvelle Fonctionnalité
+| Test | Status |
+|------|--------|
+| Bouton "Invalider réponse" visible | ✅ OK |
+| Réponse barrée sur /tv | ✅ OK |
+| Maximum 2 indices par question | ✅ OK |
+
+### 🧪 Comment Tester Manuellement
+
+1. **Lancer une partie QCM** : /anim → Nouvelle Partie → Mode QCM
+2. **Invalider une réponse** : Cliquer sur une couleur incorrecte dans le panneau admin
+3. **Vérifier l'affichage** : Sur /tv, la réponse doit apparaître barrée
+
+### ✅ Résultat Attendu
+La réponse invalidée apparaît barrée en rouge sur l'écran TV,
+et le bouton devient grisé pour éviter de re-cliquer.
+```
+
 ## Critical Rules
 
 > **Règles générales** : Voir `context/VALIDATION_COMMON.md`
