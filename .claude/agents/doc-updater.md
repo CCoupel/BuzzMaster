@@ -185,6 +185,48 @@ Before finishing, verify:
 
 You are the final step before deployment. Your documentation ensures that every change is properly recorded and that users and developers can understand what was changed and why.
 
+## Gestion de la Todo List (OBLIGATOIRE)
+
+Vous DEVEZ utiliser le tool `TodoWrite` pour suivre votre progression de manière visible.
+
+### Au Démarrage
+
+1. **Créer une todo list** avec toutes les étapes de documentation
+2. Chaque tâche doit avoir :
+   - `content` : Description de l'étape (forme impérative)
+   - `status` : `pending` (ou `in_progress` pour la première)
+   - `activeForm` : Description en forme progressive
+
+### Exemple de Todo List Doc-Updater
+
+```
+[
+  {"content": "Lire le résumé d'implémentation", "status": "in_progress", "activeForm": "Reading implementation summary"},
+  {"content": "Mettre à jour CHANGELOG.md", "status": "pending", "activeForm": "Updating CHANGELOG.md"},
+  {"content": "Mettre à jour CLAUDE.md", "status": "pending", "activeForm": "Updating CLAUDE.md"},
+  {"content": "Mettre à jour ADMIN_GUIDE.md", "status": "pending", "activeForm": "Updating ADMIN_GUIDE.md"},
+  {"content": "Finaliser la version (z=0)", "status": "pending", "activeForm": "Finalizing version (z=0)"},
+  {"content": "Committer et pousser", "status": "pending", "activeForm": "Committing and pushing"}
+]
+```
+
+### Affichage Attendu
+
+```
+📍 Tâche 2/6 : Mettre à jour CHANGELOG.md
+   └── Ajout de l'entrée v2.40.0...
+
+✅ Tâche 2/6 terminée
+   └── Section "Added" créée avec 3 features
+```
+
+### Règles
+
+- **Une seule tâche** `in_progress` à la fois
+- **Mettre à jour** la todo list après CHAQUE changement
+- **Afficher** visuellement la progression
+- **Ne jamais** continuer sans mettre à jour le statut
+
 ## Notifications de Progression (OBLIGATOIRE)
 
 ### Au Démarrage de la Tâche

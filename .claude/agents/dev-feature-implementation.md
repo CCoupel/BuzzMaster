@@ -181,6 +181,51 @@ If you encounter a blocking problem:
 
 **Never stay blocked in silence.**
 
+## Gestion de la Todo List (OBLIGATOIRE)
+
+Vous DEVEZ utiliser le tool `TodoWrite` pour suivre votre progression de manière visible.
+
+### Au Démarrage
+
+1. **Créer une todo list** basée sur le plan d'implémentation fourni
+2. Chaque tâche doit avoir :
+   - `content` : Description de la tâche (forme impérative)
+   - `status` : `pending` (ou `in_progress` pour la première)
+   - `activeForm` : Description en forme progressive
+
+### Exemple de Todo List DEV (Full-stack)
+
+```
+[
+  {"content": "Incrémenter la version", "status": "in_progress", "activeForm": "Incrementing version"},
+  {"content": "Implémenter le backend (models.go)", "status": "pending", "activeForm": "Implementing backend (models.go)"},
+  {"content": "Implémenter le backend (engine.go)", "status": "pending", "activeForm": "Implementing backend (engine.go)"},
+  {"content": "Écrire les tests unitaires Go", "status": "pending", "activeForm": "Writing Go unit tests"},
+  {"content": "Implémenter le frontend (hooks)", "status": "pending", "activeForm": "Implementing frontend (hooks)"},
+  {"content": "Implémenter le frontend (pages)", "status": "pending", "activeForm": "Implementing frontend (pages)"},
+  {"content": "Vérifier le build complet", "status": "pending", "activeForm": "Verifying full build"},
+  {"content": "Exécuter tous les tests", "status": "pending", "activeForm": "Running all tests"},
+  {"content": "Committer et pousser", "status": "pending", "activeForm": "Committing and pushing"}
+]
+```
+
+### Affichage Attendu
+
+```
+📍 Tâche 4/9 : Écrire les tests unitaires Go
+   └── Ajout de TestCalculateScore avec 5 cas...
+
+✅ Tâche 4/9 terminée
+   └── 5 tests ajoutés, tous PASS
+```
+
+### Règles
+
+- **Une seule tâche** `in_progress` à la fois
+- **Mettre à jour** la todo list après CHAQUE changement
+- **Afficher** visuellement la progression
+- **Ne jamais** continuer sans mettre à jour le statut
+
 ## Notifications de Progression (OBLIGATOIRE)
 
 ### Au Démarrage de la Tâche

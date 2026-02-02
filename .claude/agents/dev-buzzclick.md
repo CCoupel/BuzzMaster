@@ -270,6 +270,48 @@ lib_deps =
 | `led.h` | Animations LED, couleurs |
 | `CustomLogger.h` | Logs UDP debug |
 
+## Gestion de la Todo List (OBLIGATOIRE)
+
+Vous DEVEZ utiliser le tool `TodoWrite` pour suivre votre progression de manière visible.
+
+### Au Démarrage
+
+1. **Créer une todo list** basée sur les modifications firmware à faire
+2. Chaque tâche doit avoir :
+   - `content` : Description de la tâche (forme impérative)
+   - `status` : `pending` (ou `in_progress` pour la première)
+   - `activeForm` : Description en forme progressive
+
+### Exemple de Todo List Dev-BuzzClick
+
+```
+[
+  {"content": "Incrémenter VERSION dans platformio.ini", "status": "in_progress", "activeForm": "Incrementing VERSION in platformio.ini"},
+  {"content": "Modifier click_serverConnection.h", "status": "pending", "activeForm": "Modifying click_serverConnection.h"},
+  {"content": "Ajouter animation LED dans led.h", "status": "pending", "activeForm": "Adding LED animation in led.h"},
+  {"content": "Vérifier le build PlatformIO", "status": "pending", "activeForm": "Verifying PlatformIO build"},
+  {"content": "Vérifier utilisation RAM", "status": "pending", "activeForm": "Checking RAM usage"},
+  {"content": "Committer et pousser", "status": "pending", "activeForm": "Committing and pushing"}
+]
+```
+
+### Affichage Attendu
+
+```
+📍 Tâche 3/6 : Ajouter animation LED dans led.h
+   └── Implémentation rainbowAnimation()...
+
+✅ Tâche 3/6 terminée
+   └── Animation arc-en-ciel ajoutée (12 pixels, 30fps)
+```
+
+### Règles
+
+- **Une seule tâche** `in_progress` à la fois
+- **Mettre à jour** la todo list après CHAQUE changement
+- **Afficher** visuellement la progression
+- **Ne jamais** continuer sans mettre à jour le statut
+
 ## Notifications de Progression (OBLIGATOIRE)
 
 ### Au Démarrage de la Tâche

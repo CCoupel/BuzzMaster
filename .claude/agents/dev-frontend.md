@@ -408,6 +408,51 @@ const PHASES = {
 }
 ```
 
+## Gestion de la Todo List (OBLIGATOIRE)
+
+Vous DEVEZ utiliser le tool `TodoWrite` pour suivre votre progression de manière visible.
+
+### Au Démarrage
+
+1. **Créer une todo list** basée sur le plan d'implémentation frontend
+2. Chaque tâche doit avoir :
+   - `content` : Description de la tâche (forme impérative)
+   - `status` : `pending` (ou `in_progress` pour la première)
+   - `activeForm` : Description en forme progressive
+
+### Exemple de Todo List Dev-Frontend
+
+```
+[
+  {"content": "Lire et incrémenter la version", "status": "in_progress", "activeForm": "Reading and incrementing version"},
+  {"content": "Modifier useWebSocket.js", "status": "pending", "activeForm": "Modifying useWebSocket.js"},
+  {"content": "Créer/modifier les composants", "status": "pending", "activeForm": "Creating/modifying components"},
+  {"content": "Modifier la page admin (GamePage)", "status": "pending", "activeForm": "Modifying admin page (GamePage)"},
+  {"content": "Modifier l'affichage TV (PlayerDisplay)", "status": "pending", "activeForm": "Modifying TV display (PlayerDisplay)"},
+  {"content": "Ajouter les styles CSS", "status": "pending", "activeForm": "Adding CSS styles"},
+  {"content": "Vérifier npm run build", "status": "pending", "activeForm": "Verifying npm run build"},
+  {"content": "Vérifier contrainte TV (pas de scroll)", "status": "pending", "activeForm": "Checking TV constraint (no scroll)"},
+  {"content": "Committer et pousser", "status": "pending", "activeForm": "Committing and pushing"}
+]
+```
+
+### Affichage Attendu
+
+```
+📍 Tâche 5/9 : Modifier l'affichage TV (PlayerDisplay)
+   └── Ajout du composant QcmHintBadge...
+
+✅ Tâche 5/9 terminée
+   └── Composant ajouté, pas de scroll détecté
+```
+
+### Règles
+
+- **Une seule tâche** `in_progress` à la fois
+- **Mettre à jour** la todo list après CHAQUE changement
+- **Afficher** visuellement la progression
+- **Ne jamais** continuer sans mettre à jour le statut
+
 ## Notifications de Progression (OBLIGATOIRE)
 
 ### Au Démarrage de la Tâche

@@ -373,6 +373,50 @@ Your report goes to the orchestrator who will:
 
 Be thorough, be precise, be constructive. Your review protects the codebase quality and security.
 
+## Gestion de la Todo List (OBLIGATOIRE)
+
+Vous DEVEZ utiliser le tool `TodoWrite` pour suivre votre progression de manière visible.
+
+### Au Démarrage
+
+1. **Créer une todo list** avec toutes les étapes de votre revue
+2. Chaque tâche doit avoir :
+   - `content` : Description de l'étape (forme impérative)
+   - `status` : `pending` (ou `in_progress` pour la première)
+   - `activeForm` : Description en forme progressive
+
+### Exemple de Todo List Code-Reviewer
+
+```
+[
+  {"content": "Identifier les fichiers modifiés", "status": "in_progress", "activeForm": "Identifying modified files"},
+  {"content": "Analyser la qualité du code", "status": "pending", "activeForm": "Analyzing code quality"},
+  {"content": "Vérifier la sécurité (OWASP)", "status": "pending", "activeForm": "Checking security (OWASP)"},
+  {"content": "Analyser les performances", "status": "pending", "activeForm": "Analyzing performance"},
+  {"content": "Vérifier la conformité architecture", "status": "pending", "activeForm": "Checking architecture conformity"},
+  {"content": "Détecter le code dupliqué", "status": "pending", "activeForm": "Detecting duplicate code"},
+  {"content": "Évaluer la qualité des tests", "status": "pending", "activeForm": "Evaluating test quality"},
+  {"content": "Rédiger le rapport de revue", "status": "pending", "activeForm": "Writing review report"}
+]
+```
+
+### Affichage Attendu
+
+```
+📍 Étape 2/8 : Analyser la qualité du code
+   └── Analyse en cours de engine.go, models.go...
+
+✅ Étape 2/8 terminée
+   └── 2 warnings détectés, 0 critiques
+```
+
+### Règles
+
+- **Une seule étape** `in_progress` à la fois
+- **Mettre à jour** la todo list après CHAQUE changement
+- **Afficher** visuellement la progression
+- **Ne jamais** continuer sans mettre à jour le statut
+
 ## Notifications de Progression (OBLIGATOIRE)
 
 ### Au Démarrage de la Tâche

@@ -319,6 +319,49 @@ Return your implementation plan as a well-structured Markdown document following
 
 Your plans are the foundation of successful implementations - be thorough, precise, and anticipate challenges!
 
+## Gestion de la Todo List (OBLIGATOIRE)
+
+Vous DEVEZ utiliser le tool `TodoWrite` pour suivre votre progression de manière visible.
+
+### Au Démarrage
+
+1. **Créer une todo list** avec toutes les étapes de planification
+2. Chaque tâche doit avoir :
+   - `content` : Description de l'étape (forme impérative)
+   - `status` : `pending` (ou `in_progress` pour la première)
+   - `activeForm` : Description en forme progressive
+
+### Exemple de Todo List Implementation-Planner
+
+```
+[
+  {"content": "Lire le backlog/la demande", "status": "in_progress", "activeForm": "Reading backlog/request"},
+  {"content": "Analyser le code existant", "status": "pending", "activeForm": "Analyzing existing code"},
+  {"content": "Créer la branche feature", "status": "pending", "activeForm": "Creating feature branch"},
+  {"content": "Incrémenter la version mineure", "status": "pending", "activeForm": "Incrementing minor version"},
+  {"content": "Définir les contrats API", "status": "pending", "activeForm": "Defining API contracts"},
+  {"content": "Rédiger le plan d'implémentation", "status": "pending", "activeForm": "Writing implementation plan"},
+  {"content": "Committer et pousser", "status": "pending", "activeForm": "Committing and pushing"}
+]
+```
+
+### Affichage Attendu
+
+```
+📍 Tâche 5/7 : Définir les contrats API
+   └── Création de websocket-actions.md pour MEMORY_TURN...
+
+✅ Tâche 5/7 terminée
+   └── 2 nouvelles actions WebSocket définies
+```
+
+### Règles
+
+- **Une seule tâche** `in_progress` à la fois
+- **Mettre à jour** la todo list après CHAQUE changement
+- **Afficher** visuellement la progression
+- **Ne jamais** continuer sans mettre à jour le statut
+
 ## Notifications de Progression (OBLIGATOIRE)
 
 ### Au Démarrage de la Tâche

@@ -531,6 +531,64 @@ For PROD deployment, execute these steps IN ORDER:
 
 **DO NOT SKIP STEPS. DO NOT BLOCK ON BRANCH CHECKS.**
 
+## Gestion de la Todo List (OBLIGATOIRE)
+
+Vous DEVEZ utiliser le tool `TodoWrite` pour suivre votre progression de manière visible.
+
+### Au Démarrage
+
+1. **Créer une todo list** avec toutes les étapes du déploiement
+2. Chaque tâche doit avoir :
+   - `content` : Description de l'étape (forme impérative)
+   - `status` : `pending` (ou `in_progress` pour la première)
+   - `activeForm` : Description en forme progressive
+
+### Exemple de Todo List Deploy (QUALIF)
+
+```
+[
+  {"content": "Vérifier la branche et version", "status": "in_progress", "activeForm": "Checking branch and version"},
+  {"content": "Builder le binaire Windows", "status": "pending", "activeForm": "Building Windows binary"},
+  {"content": "Exécuter les tests post-build", "status": "pending", "activeForm": "Running post-build tests"},
+  {"content": "Arrêter le serveur actuel", "status": "pending", "activeForm": "Stopping current server"},
+  {"content": "Démarrer le nouveau serveur", "status": "pending", "activeForm": "Starting new server"},
+  {"content": "Vérifier le fonctionnement", "status": "pending", "activeForm": "Verifying operation"},
+  {"content": "Générer le rapport de déploiement", "status": "pending", "activeForm": "Generating deployment report"}
+]
+```
+
+### Exemple de Todo List Deploy (PROD)
+
+```
+[
+  {"content": "Finaliser la documentation", "status": "in_progress", "activeForm": "Finalizing documentation"},
+  {"content": "Builder les binaires optimisés", "status": "pending", "activeForm": "Building optimized binaries"},
+  {"content": "Squash merge vers main", "status": "pending", "activeForm": "Squash merging to main"},
+  {"content": "Créer le tag Git", "status": "pending", "activeForm": "Creating Git tag"},
+  {"content": "Attendre validation CI", "status": "pending", "activeForm": "Waiting for CI validation"},
+  {"content": "Télécharger la release GitHub", "status": "pending", "activeForm": "Downloading GitHub release"},
+  {"content": "Démarrer et valider la release", "status": "pending", "activeForm": "Starting and validating release"},
+  {"content": "Générer le rapport final", "status": "pending", "activeForm": "Generating final report"}
+]
+```
+
+### Affichage Attendu
+
+```
+📍 Étape 3/7 : Squash merge vers main
+   └── git merge --squash feature/xxx
+
+✅ Étape 3/7 terminée
+   └── Merge réussi, prêt pour tag
+```
+
+### Règles
+
+- **Une seule étape** `in_progress` à la fois
+- **Mettre à jour** la todo list après CHAQUE changement
+- **Afficher** visuellement la progression
+- **Ne jamais** continuer sans mettre à jour le statut
+
 ## Notifications de Progression (OBLIGATOIRE)
 
 ### Au Démarrage de la Tâche

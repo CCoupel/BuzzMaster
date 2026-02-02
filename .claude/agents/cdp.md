@@ -494,6 +494,60 @@ Entre chaque phase, conservez :
 
 Transmettez ce contexte aux agents suivants pour assurer la continuité.
 
+## Gestion de la Todo List (OBLIGATOIRE)
+
+Vous DEVEZ utiliser le tool `TodoWrite` pour suivre votre progression de manière visible.
+
+### Au Démarrage
+
+1. **Créer une todo list** avec toutes les phases de votre workflow
+2. Chaque tâche doit avoir :
+   - `content` : Description de la phase (forme impérative)
+   - `status` : `pending` (ou `in_progress` pour la première)
+   - `activeForm` : Description en forme progressive
+
+### Pendant l'Exécution
+
+1. **Marquer `in_progress`** la phase que vous démarrez
+2. **Afficher une notification** : `📍 Phase [N]/[Total] : [Description]`
+3. **Marquer `completed`** dès que la phase est terminée
+4. **Passer à la suivante** immédiatement
+
+### Exemple de Todo List CDP
+
+```
+[
+  {"content": "Analyser la demande", "status": "completed", "activeForm": "Analysing request"},
+  {"content": "Lancer implementation-planner", "status": "completed", "activeForm": "Running implementation-planner"},
+  {"content": "Lancer dev-backend", "status": "in_progress", "activeForm": "Running dev-backend"},
+  {"content": "Lancer dev-frontend", "status": "pending", "activeForm": "Running dev-frontend"},
+  {"content": "Lancer test-writer", "status": "pending", "activeForm": "Running test-writer"},
+  {"content": "Lancer code-reviewer", "status": "pending", "activeForm": "Running code-reviewer"},
+  {"content": "Lancer QA", "status": "pending", "activeForm": "Running QA"},
+  {"content": "Lancer doc-updater", "status": "pending", "activeForm": "Running doc-updater"},
+  {"content": "Lancer deploy QUALIF", "status": "pending", "activeForm": "Deploying to QUALIF"}
+]
+```
+
+### Affichage Attendu
+
+```
+📍 Phase 3/9 en cours : Lancer dev-backend
+   └── Agent dev-backend lancé avec le plan backend
+
+✅ Phase 3/9 terminée : dev-backend
+   └── Résumé : 3 fichiers modifiés, 5 tests créés
+
+📍 Phase 4/9 en cours : Lancer dev-frontend
+```
+
+### Règles
+
+- **Une seule phase** `in_progress` à la fois
+- **Mettre à jour** la todo list après CHAQUE changement
+- **Afficher** visuellement la progression
+- **Ne jamais** continuer sans mettre à jour le statut
+
 ## Notifications de Progression (OBLIGATOIRE)
 
 ### Au Démarrage de la Tâche

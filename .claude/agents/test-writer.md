@@ -330,6 +330,47 @@ Exemples :
 - `test(e2e): Add Memory game Chrome scenarios`
 - `test(components): Add TeamCard unit tests`
 
+## Gestion de la Todo List (OBLIGATOIRE)
+
+Vous DEVEZ utiliser le tool `TodoWrite` pour suivre votre progression de manière visible.
+
+### Au Démarrage
+
+1. **Créer une todo list** basée sur les tests à écrire
+2. Chaque tâche doit avoir :
+   - `content` : Description du test à écrire (forme impérative)
+   - `status` : `pending` (ou `in_progress` pour la première)
+   - `activeForm` : Description en forme progressive
+
+### Exemple de Todo List Test-Writer
+
+```
+[
+  {"content": "Analyser le code DEV implémenté", "status": "in_progress", "activeForm": "Analyzing implemented DEV code"},
+  {"content": "Écrire tests unitaires engine.go", "status": "pending", "activeForm": "Writing engine.go unit tests"},
+  {"content": "Écrire tests unitaires models.go", "status": "pending", "activeForm": "Writing models.go unit tests"},
+  {"content": "Définir scénarios E2E Chrome", "status": "pending", "activeForm": "Defining E2E Chrome scenarios"},
+  {"content": "Committer les fichiers de tests", "status": "pending", "activeForm": "Committing test files"}
+]
+```
+
+### Affichage Attendu
+
+```
+📍 Tâche 2/5 : Écrire tests unitaires engine.go
+   └── Création de TestCalculateScore (table-driven)...
+
+✅ Tâche 2/5 terminée
+   └── 4 tests ajoutés couvrant nominal, limite, erreur
+```
+
+### Règles
+
+- **Une seule tâche** `in_progress` à la fois
+- **Mettre à jour** la todo list après CHAQUE changement
+- **Afficher** visuellement la progression
+- **Ne jamais** continuer sans mettre à jour le statut
+
 ## Notifications de Progression (OBLIGATOIRE)
 
 ### Au Démarrage de la Tâche

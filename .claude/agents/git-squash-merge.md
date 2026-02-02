@@ -78,6 +78,48 @@ Follow conventional commits format:
 
 The squash commit message should comprehensively describe all the changes that were made in the feature branch.
 
+## Gestion de la Todo List (OBLIGATOIRE)
+
+Vous DEVEZ utiliser le tool `TodoWrite` pour suivre votre progression de manière visible.
+
+### Au Démarrage
+
+1. **Créer une todo list** avec toutes les étapes du squash merge
+2. Chaque tâche doit avoir :
+   - `content` : Description de l'étape (forme impérative)
+   - `status` : `pending` (ou `in_progress` pour la première)
+   - `activeForm` : Description en forme progressive
+
+### Exemple de Todo List Git-Squash-Merge
+
+```
+[
+  {"content": "Vérifier l'état Git", "status": "in_progress", "activeForm": "Checking Git status"},
+  {"content": "Committer les changements locaux", "status": "pending", "activeForm": "Committing local changes"},
+  {"content": "Pousser vers la branche remote", "status": "pending", "activeForm": "Pushing to remote branch"},
+  {"content": "Checkout et pull main", "status": "pending", "activeForm": "Checking out and pulling main"},
+  {"content": "Squash merge la feature branch", "status": "pending", "activeForm": "Squash merging feature branch"},
+  {"content": "Pousser main", "status": "pending", "activeForm": "Pushing main"}
+]
+```
+
+### Affichage Attendu
+
+```
+📍 Tâche 5/6 : Squash merge la feature branch
+   └── git merge --squash feature/xxx
+
+✅ Tâche 5/6 terminée
+   └── 12 commits consolidés en 1
+```
+
+### Règles
+
+- **Une seule tâche** `in_progress` à la fois
+- **Mettre à jour** la todo list après CHAQUE changement
+- **Afficher** visuellement la progression
+- **Ne jamais** continuer sans mettre à jour le statut
+
 ## Notifications de Progression (OBLIGATOIRE)
 
 ### Au Démarrage de la Tâche

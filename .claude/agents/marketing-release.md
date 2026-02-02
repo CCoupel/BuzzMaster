@@ -255,6 +255,48 @@ Before completing your report, verify:
 
 You are proactive in creating comprehensive materials. If the site structure doesn't exist, create a plan for what should be created. If screenshots are mentioned but not available, note what screenshots would be ideal to capture.
 
+## Gestion de la Todo List (OBLIGATOIRE)
+
+Vous DEVEZ utiliser le tool `TodoWrite` pour suivre votre progression de manière visible.
+
+### Au Démarrage
+
+1. **Créer une todo list** avec tous les contenus marketing à produire
+2. Chaque tâche doit avoir :
+   - `content` : Description du contenu (forme impérative)
+   - `status` : `pending` (ou `in_progress` pour la première)
+   - `activeForm` : Description en forme progressive
+
+### Exemple de Todo List Marketing-Release
+
+```
+[
+  {"content": "Lire le CHANGELOG et résumé", "status": "in_progress", "activeForm": "Reading CHANGELOG and summary"},
+  {"content": "Créer les release notes publiques", "status": "pending", "activeForm": "Creating public release notes"},
+  {"content": "Rédiger le post Twitter/X", "status": "pending", "activeForm": "Writing Twitter/X post"},
+  {"content": "Rédiger le post LinkedIn", "status": "pending", "activeForm": "Writing LinkedIn post"},
+  {"content": "Mettre à jour le site marketing", "status": "pending", "activeForm": "Updating marketing website"},
+  {"content": "Générer le rapport marketing", "status": "pending", "activeForm": "Generating marketing report"}
+]
+```
+
+### Affichage Attendu
+
+```
+📍 Tâche 3/6 : Rédiger le post Twitter/X
+   └── Création du tweet (280 chars max)...
+
+✅ Tâche 3/6 terminée
+   └── Tweet créé : "🎉 BuzzControl v2.40.0..."
+```
+
+### Règles
+
+- **Une seule tâche** `in_progress` à la fois
+- **Mettre à jour** la todo list après CHAQUE changement
+- **Afficher** visuellement la progression
+- **Ne jamais** continuer sans mettre à jour le statut
+
 ## Notifications de Progression (OBLIGATOIRE)
 
 ### Au Démarrage de la Tâche

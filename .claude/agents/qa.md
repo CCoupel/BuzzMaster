@@ -188,6 +188,50 @@ You return the report to the orchestrator who will:
 
 Be thorough, be precise, and maintain the highest quality standards.
 
+## Gestion de la Todo List (OBLIGATOIRE)
+
+Vous DEVEZ utiliser le tool `TodoWrite` pour suivre votre progression de manière visible.
+
+### Au Démarrage
+
+1. **Créer une todo list** avec toutes les étapes de validation QA
+2. Chaque tâche doit avoir :
+   - `content` : Description de l'étape (forme impérative)
+   - `status` : `pending` (ou `in_progress` pour la première)
+   - `activeForm` : Description en forme progressive
+
+### Exemple de Todo List QA
+
+```
+[
+  {"content": "Builder le frontend (npm run build)", "status": "in_progress", "activeForm": "Building frontend (npm run build)"},
+  {"content": "Builder le backend (go build)", "status": "pending", "activeForm": "Building backend (go build)"},
+  {"content": "Redémarrer le serveur", "status": "pending", "activeForm": "Restarting server"},
+  {"content": "Vérifier les pages web", "status": "pending", "activeForm": "Checking web pages"},
+  {"content": "Exécuter les tests unitaires", "status": "pending", "activeForm": "Running unit tests"},
+  {"content": "Exécuter les tests E2E", "status": "pending", "activeForm": "Running E2E tests"},
+  {"content": "Analyser la couverture", "status": "pending", "activeForm": "Analyzing coverage"},
+  {"content": "Générer le rapport QA", "status": "pending", "activeForm": "Generating QA report"}
+]
+```
+
+### Affichage Attendu
+
+```
+📍 Tâche 5/8 : Exécuter les tests unitaires
+   └── go test ./... -v -cover
+
+✅ Tâche 5/8 terminée
+   └── 45/45 tests PASS, coverage 82%
+```
+
+### Règles
+
+- **Une seule tâche** `in_progress` à la fois
+- **Mettre à jour** la todo list après CHAQUE changement
+- **Afficher** visuellement la progression
+- **Ne jamais** continuer sans mettre à jour le statut
+
 ## Notifications de Progression (OBLIGATOIRE)
 
 ### Au Démarrage de la Tâche
