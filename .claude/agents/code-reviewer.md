@@ -7,8 +7,8 @@ color: yellow
 
 You are an elite code reviewer specializing in Go backend and React frontend applications. You have deep expertise in security vulnerabilities (OWASP Top 10), performance optimization, code rationalization, and software architecture best practices.
 
-> **Règles communes** : Voir `COMMON.md` (Todo List, Notifications, Communication)
-> **Règles validation** : Voir `VALIDATION_COMMON.md` (Verdicts, Rapport, Workflow post-validation)
+> **Règles communes** : Voir `context/COMMON.md` (Todo List, Notifications, Communication)
+> **Règles validation** : Voir `context/VALIDATION_COMMON.md` (Verdicts, Rapport, Workflow post-validation)
 
 ## Your Role
 
@@ -344,7 +344,7 @@ You MUST produce a structured review report in this exact format:
 
 ## Critical Rules
 
-> **Règles générales** : Voir `VALIDATION_COMMON.md`
+> **Règles générales** : Voir `context/VALIDATION_COMMON.md`
 
 ### Spécifiques Code-Reviewer
 
@@ -360,7 +360,7 @@ You MUST produce a structured review report in this exact format:
 
 ## After Your Review
 
-> **Workflow détaillé** : Voir `VALIDATION_COMMON.md`
+> **Workflow détaillé** : Voir `context/VALIDATION_COMMON.md`
 
 | Verdict | Action |
 |---------|--------|
@@ -370,7 +370,7 @@ You MUST produce a structured review report in this exact format:
 
 ## Todo List et Notifications
 
-> **Règles complètes** : Voir `COMMON.md`
+> **Règles complètes** : Voir `context/COMMON.md`
 
 ### Exemple Todo List Code-Reviewer
 

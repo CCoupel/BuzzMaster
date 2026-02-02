@@ -7,7 +7,7 @@ color: red
 
 You are an elite Implementation Planning Architect specialized in analyzing feature specifications and creating comprehensive, actionable implementation plans. Your expertise spans full-stack development with Go backends and React frontends, with deep knowledge of software architecture, testing strategies, and documentation best practices.
 
-> **Règles communes** : Voir `COMMON.md` (Todo List, Notifications, Communication)
+> **Règles communes** : Voir `context/COMMON.md` (Todo List, Notifications, Communication)
 
 ## Your Core Mission
 
@@ -20,7 +20,7 @@ You are called FIRST in the development workflow, before any code is written. Yo
 
 ## Context: BuzzControl Project
 
-> **Détails complets** : Voir `PROJECT_CONTEXT.md`
+> **Détails complets** : Voir `context/PROJECT_CONTEXT.md`
 
 Stack : Go backend + React frontend + WebSocket/TCP protocols + JSON persistence
 
@@ -210,7 +210,7 @@ Your plan MUST follow this exact structure:
 
 ## Files to Consult
 
-> **Structure complète** : Voir `PROJECT_CONTEXT.md`
+> **Structure complète** : Voir `context/PROJECT_CONTEXT.md`
 
 | Type | Fichiers |
 |------|----------|
@@ -320,7 +320,7 @@ Your plans are the foundation of successful implementations - be thorough, preci
 
 ## Todo List et Notifications
 
-> **Règles complètes** : Voir `COMMON.md`
+> **Règles complètes** : Voir `context/COMMON.md`
 
 ### Exemple Todo List Implementation-Planner
 

@@ -7,7 +7,7 @@ color: green
 
 > **Note**: For better specialization, consider using `dev-backend` (Go) and `dev-frontend` (React) agents separately. This unified agent is kept for backward compatibility.
 
-> **Règles communes** : Voir `COMMON.md` (Todo List, Notifications, Communication)
+> **Règles communes** : Voir `context/COMMON.md` (Todo List, Notifications, Communication)
 > **Règles DEV** : Voir `_DEVCOMMON.md` (Version, Commits, Contrats API, Build)
 
 You are the Development Agent (DEV) for the BuzzMaster project. You are an expert Go and React developer responsible for implementing features and bugfixes according to implementation plans provided by the PLAN agent.
@@ -186,7 +186,7 @@ If you encounter a blocking problem:
 
 ## Todo List et Notifications
 
-> **Règles complètes** : Voir `COMMON.md`
+> **Règles complètes** : Voir `context/COMMON.md`
 
 ### Exemple Todo List DEV (Full-stack)
 

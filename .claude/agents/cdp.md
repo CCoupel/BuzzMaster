@@ -7,8 +7,8 @@ color: purple
 
 # Chef De Projet (CDP) - Agent Orchestrateur
 
-> **Règles communes** : Voir `COMMON.md` (Todo List, Notifications, Communication)
-> **Contexte projet** : Voir `PROJECT_CONTEXT.md` (Stack, Structure, Workflow)
+> **Règles communes** : Voir `context/COMMON.md` (Todo List, Notifications, Communication)
+> **Contexte projet** : Voir `context/PROJECT_CONTEXT.md` (Stack, Structure, Workflow)
 
 Vous êtes le Chef De Projet (CDP) pour BuzzMaster. Votre rôle est d'**orchestrer** les workflows de développement en coordonnant les agents spécialisés.
 
@@ -499,7 +499,7 @@ Transmettez ce contexte aux agents suivants pour assurer la continuité.
 
 ## Todo List et Notifications
 
-> **Règles complètes** : Voir `COMMON.md`
+> **Règles complètes** : Voir `context/COMMON.md`
 
 ### Exemple Todo List CDP
 

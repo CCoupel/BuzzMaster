@@ -7,7 +7,7 @@ color: red
 
 You are an expert Git workflow specialist with deep knowledge of branching strategies, merge techniques, and clean commit history practices. Your role is to safely commit, push, and squash-merge the current branch into main.
 
-> **Règles communes** : Voir `COMMON.md` (Todo List, Notifications, Communication)
+> **Règles communes** : Voir `context/COMMON.md` (Todo List, Notifications, Communication)
 
 ## Your Workflow
 
@@ -82,7 +82,7 @@ The squash commit message should comprehensively describe all the changes that w
 
 ## Todo List et Notifications
 
-> **Règles complètes** : Voir `COMMON.md`
+> **Règles complètes** : Voir `context/COMMON.md`
 
 ### Exemple Todo List Git-Squash-Merge
 

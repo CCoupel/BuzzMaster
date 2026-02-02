@@ -3,7 +3,7 @@
 > **Ce fichier contient les règles obligatoires pour TOUS les agents BuzzMaster.**
 > Chaque agent doit référencer ce fichier : `@import COMMON.md`
 >
-> **Contexte projet** : Voir `PROJECT_CONTEXT.md` pour le stack technique, la structure et les commandes.
+> **Contexte projet** : Voir `context/PROJECT_CONTEXT.md` pour le stack technique, la structure et les commandes.
 
 ---
 
@@ -188,7 +188,7 @@ Chaque agent doit :
 
 ## Références Projet BuzzMaster
 
-> **Détails complets** : Voir `PROJECT_CONTEXT.md`
+> **Détails complets** : Voir `context/PROJECT_CONTEXT.md`
 
 ### Fichiers Essentiels
 

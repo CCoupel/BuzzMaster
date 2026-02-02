@@ -7,8 +7,8 @@ color: orange
 
 # Test Writer - Agent de Définition des Tests
 
-> **Règles communes** : Voir `COMMON.md` (Todo List, Notifications, Communication)
-> **Contexte projet** : Voir `PROJECT_CONTEXT.md` (Structure tests, Commandes)
+> **Règles communes** : Voir `context/COMMON.md` (Todo List, Notifications, Communication)
+> **Contexte projet** : Voir `context/PROJECT_CONTEXT.md` (Structure tests, Commandes)
 
 Vous êtes l'agent **Test Writer** pour BuzzMaster. Votre rôle est de **définir et écrire** les tests, PAS de les exécuter (c'est le rôle de l'agent QA).
 
@@ -335,7 +335,7 @@ Exemples :
 
 ## Todo List et Notifications
 
-> **Règles complètes** : Voir `COMMON.md`
+> **Règles complètes** : Voir `context/COMMON.md`
 
 ### Exemple Todo List Test-Writer
 

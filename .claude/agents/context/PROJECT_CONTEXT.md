@@ -1,7 +1,7 @@
 # Contexte Projet BuzzMaster
 
 > **Ce fichier contient le contexte technique du projet BuzzMaster.**
-> Référencé par `COMMON.md` pour tous les agents.
+> Référencé par `context/COMMON.md` pour tous les agents.
 
 ---
 
@@ -143,24 +143,107 @@ Le Go build utilise `//go:embed` pour intégrer les fichiers web compilés.
 
 ---
 
-## Commandes Essentielles
+## Commandes par Catégorie
+
+### Build
 
 ```bash
-# Développement
-cd server-go
-go build -o server.exe ./cmd/server && ./server.exe
-
-# Tests unitaires
-go test ./... -v -cover
-
-# Tests E2E
-go test ./internal/server -v -run TestE2E
-
-# Build portable (frontend + backend)
+# Build portable COMPLET (frontend + backend) - RECOMMANDÉ
 cd server-go/web && npm run build && cd .. && go build -o server.exe ./cmd/server
 
-# Relancer le serveur
+# Build backend uniquement (si pas de modifs frontend)
+cd server-go && go build -o server.exe ./cmd/server
+
+# Build Raspberry Pi (Linux ARM64)
+cd server-go && GOOS=linux GOARCH=arm64 go build -o buzzcontrol ./cmd/server
+
+# Build production optimisé (Raspberry Pi)
+cd server-go && GOOS=linux GOARCH=arm64 go build -ldflags="-s -w" -o buzzcontrol ./cmd/server
+```
+
+### Tests
+
+```bash
+# Tests unitaires avec couverture
+cd server-go && go test ./... -v -cover
+
+# Tests d'un package spécifique
+cd server-go && go test ./internal/game -v
+
+# Tests E2E
+cd server-go && go test ./internal/server -v -run TestE2E
+
+# Couverture détaillée
+cd server-go && go test ./internal/game -coverprofile=coverage.out
+go tool cover -func=coverage.out
+go tool cover -html=coverage.out  # Vue HTML
+```
+
+### Qualité de Code
+
+```bash
+# Linting Go
+cd server-go && golangci-lint run ./...
+
+# Vérification formatage
+cd server-go && gofmt -l .
+
+# Formatage automatique
+cd server-go && gofmt -w .
+```
+
+### Serveur
+
+```bash
+# Démarrer le serveur
+cd server-go && ./server.exe
+
+# Arrêter le serveur (API)
+curl -s http://localhost/shutdown
+
+# Redémarrer le serveur
 curl -s http://localhost/shutdown && sleep 2 && ./server.exe
+
+# Vérifier la version
+curl -s http://localhost/version
+```
+
+### Git Workflow
+
+```bash
+# Créer une branche feature
+git checkout main && git pull origin main
+git checkout -b feature/<nom-feature>
+
+# Push initial
+git push -u origin feature/<nom-feature>
+
+# Squash merge vers main (PROD uniquement)
+git checkout main && git pull origin main
+git merge --squash feature/<nom-feature>
+git commit -m "feat(<scope>): <description> (v<version>)"
+git push origin main
+
+# Créer un tag
+git tag -a v<version> -m "Release v<version>"
+git push origin v<version>
+
+# Vérifier si tag existe
+git tag -l "v<version>"
+git ls-remote --tags origin "refs/tags/v<version>"
+```
+
+### BuzzClick (Firmware ESP32)
+
+```bash
+# Build firmware
+pio run -e buzzclick
+
+# Build et upload via USB
+pio run -e buzzclick -t upload
+
+# Monitor série
+pio device monitor -b 115200
 ```
 
 ---

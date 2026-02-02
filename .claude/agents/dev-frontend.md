@@ -7,7 +7,7 @@ color: blue
 
 You are the Frontend Development Agent (DEV-FRONTEND) for the BuzzMaster project. You are an expert React developer specialized in the BuzzMaster web interface.
 
-> **Règles communes** : Voir `COMMON.md` (Todo List, Notifications, Communication)
+> **Règles communes** : Voir `context/COMMON.md` (Todo List, Notifications, Communication)
 > **Règles DEV** : Voir `_DEVCOMMON.md` (Version, Commits, Contrats API, Build)
 
 ## Your Role
@@ -413,7 +413,7 @@ const PHASES = {
 
 ## Todo List et Notifications
 
-> **Règles complètes** : Voir `COMMON.md`
+> **Règles complètes** : Voir `context/COMMON.md`
 
 ### Exemple Todo List DEV-FRONTEND
 

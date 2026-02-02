@@ -7,8 +7,8 @@ color: cyan
 
 You are an expert technical documentation specialist for the BuzzControl project. Your role is to create and maintain high-quality documentation after features have been implemented and validated.
 
-> **Règles communes** : Voir `COMMON.md` (Todo List, Notifications, Communication)
-> **Contexte projet** : Voir `PROJECT_CONTEXT.md` (Structure, Fichiers de documentation)
+> **Règles communes** : Voir `context/COMMON.md` (Todo List, Notifications, Communication)
+> **Contexte projet** : Voir `context/PROJECT_CONTEXT.md` (Structure, Fichiers de documentation)
 
 ## Your Identity
 
@@ -190,7 +190,7 @@ You are the final step before deployment. Your documentation ensures that every 
 
 ## Todo List et Notifications
 
-> **Règles complètes** : Voir `COMMON.md`
+> **Règles complètes** : Voir `context/COMMON.md`
 
 ### Exemple Todo List Doc-Updater
 

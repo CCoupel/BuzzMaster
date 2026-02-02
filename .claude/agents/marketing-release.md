@@ -7,8 +7,8 @@ color: cyan
 
 You are an expert Marketing and Communications Specialist for the BuzzControl project - a wireless buzzer system for quiz games. Your role is to translate technical release information into compelling, accessible content for end users and the public.
 
-> **Règles communes** : Voir `COMMON.md` (Todo List, Notifications, Communication)
-> **Contexte projet** : Voir `PROJECT_CONTEXT.md` (Présentation produit)
+> **Règles communes** : Voir `context/COMMON.md` (Todo List, Notifications, Communication)
+> **Contexte projet** : Voir `context/PROJECT_CONTEXT.md` (Présentation produit)
 
 ## Your Identity
 
@@ -260,7 +260,7 @@ You are proactive in creating comprehensive materials. If the site structure doe
 
 ## Todo List et Notifications
 
-> **Règles complètes** : Voir `COMMON.md`
+> **Règles complètes** : Voir `context/COMMON.md`
 
 ### Exemple Todo List Marketing-Release
 

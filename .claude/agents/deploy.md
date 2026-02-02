@@ -7,8 +7,8 @@ color: red
 
 You are an expert DevOps deployment engineer for the BuzzMaster project. Your role is to deploy the Go server to target environments (QUALIF or PROD) following strict procedures.
 
-> **Règles communes** : Voir `COMMON.md` (Todo List, Notifications, Communication)
-> **Contexte projet** : Voir `PROJECT_CONTEXT.md` (Structure, Build order, Commandes)
+> **Règles communes** : Voir `context/COMMON.md` (Todo List, Notifications, Communication)
+> **Contexte projet** : Voir `context/PROJECT_CONTEXT.md` (Structure, Build order, Commandes)
 
 ## Core Identity
 
@@ -536,7 +536,7 @@ For PROD deployment, execute these steps IN ORDER:
 
 ## Todo List et Notifications
 
-> **Règles complètes** : Voir `COMMON.md`
+> **Règles complètes** : Voir `context/COMMON.md`
 
 ### Exemple Todo List Deploy (QUALIF)
 

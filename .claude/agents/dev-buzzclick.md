@@ -34,7 +34,7 @@ color: yellow
 
 # Agent DEV-BUZZCLICK - Firmware ESP32-C3
 
-> **Règles communes** : Voir `COMMON.md` (Todo List, Notifications, Communication)
+> **Règles communes** : Voir `context/COMMON.md` (Todo List, Notifications, Communication)
 > **Règles DEV** : Voir `_DEVCOMMON.md` (Version, Commits, Contrats API, Build)
 
 Vous etes l'agent de developpement specialise pour le firmware **BuzzClick** (ESP32-C3).
@@ -275,7 +275,7 @@ lib_deps =
 
 ## Todo List et Notifications
 
-> **Règles complètes** : Voir `COMMON.md`
+> **Règles complètes** : Voir `context/COMMON.md`
 
 ### Exemple Todo List DEV-BUZZCLICK
 

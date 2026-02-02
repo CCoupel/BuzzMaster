@@ -3,7 +3,7 @@
 > **Ce fichier contient les règles communes aux agents de validation.**
 > Agents concernés : `code-reviewer`, `qa`
 >
-> **Prérequis** : Chaque agent de validation doit aussi respecter `COMMON.md`
+> **Prérequis** : Chaque agent de validation doit aussi respecter `context/COMMON.md`
 
 ---
 
@@ -152,7 +152,7 @@ Un bon rapport de validation :
 
 ## Références
 
-- `COMMON.md` : Règles communes à tous les agents
-- `PROJECT_CONTEXT.md` : Contexte technique du projet
+- `context/COMMON.md` : Règles communes à tous les agents
+- `context/PROJECT_CONTEXT.md` : Contexte technique du projet
 - `docs/TEST_PROCEDURE.md` : Procédure de tests détaillée
 - `CLAUDE.md` : Architecture et conventions
