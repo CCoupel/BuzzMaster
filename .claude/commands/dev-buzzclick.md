@@ -21,28 +21,27 @@ Cette commande lance l'agent `dev-buzzclick` pour implementer du code firmware E
 /dev-buzzclick Ajouter animation LED arc-en-ciel pour phase COUNTDOWN
 ```
 
-## Agent lance
+## Références
 
-Lance directement l'agent `dev-buzzclick` avec le contexte :
-- Branche Git actuelle
-- Description de la tache
-- Contraintes firmware (watchdog, memoire, interruptions)
+**Contexte projet :** Voir `context/COMMON.md` section 1
+**Workflow DEV :** Voir `context/DEVELOPMENT.md`
+- Ordre BuzzClick : section 7
+- Standards ESP32 : section 7
+- Règles : section 8
+
+## Agent lancé
+
+Lance directement l'agent `dev-buzzclick` avec le contexte projet.
 
 ## Quand utiliser
 
-- Modification du firmware BuzzClick (src/BuzzClick/)
-- Modification du code partage (src/Common/)
-- Bugs de communication TCP/UDP
+- Modification firmware BuzzClick (src/BuzzClick/)
+- Modification code partagé (src/Common/)
+- Bugs communication TCP/UDP
 - Animations LED
 - Gestion boutons/interruptions
-- Optimisation memoire ESP32
 
 ## Workflow complet
 
-Pour une feature complete impliquant BuzzClick + serveur :
-
-```
-/feature "Ajouter synchronisation temps NTP pour BuzzClick"
-```
-
-Le CDP orchestrera automatiquement dev-backend (serveur) puis dev-buzzclick (firmware).
+Pour une feature impliquant BuzzClick + serveur, utiliser `/feature`.
+Le CDP orchestrera dev-backend puis dev-buzzclick.

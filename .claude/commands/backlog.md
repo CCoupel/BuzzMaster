@@ -1,5 +1,9 @@
 # Commande /backlog - Gestion du Backlog
 
+## Références
+
+**Contexte projet :** Voir `context/COMMON.md` section 1
+
 ## Argument reçu
 
 $ARGUMENTS
