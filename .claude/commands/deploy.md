@@ -28,13 +28,14 @@ prompt: voir ci-dessous
 ```
 Arrête et redéploie le serveur BuzzControl vers l'environnement cible.
 
-**Contexte projet :**
-- Répertoire : C:\Users\cyril\Documents\VScode\buzzcontrol
-- Serveur Go : server-go/
-- Config version : server-go/config.json
-- Procédure QUALIF : docs/QUALIF_PROCEDURE.md
-- Procédure PROD : docs/RELEASE_PROCEDURE.md
-- GitHub repo : https://github.com/CCoupel/BuzzMaster
+**Contexte projet :** Voir `.claude/context/COMMON.md` section 1
+**Contrôle serveur :** Voir `.claude/context/COMMON.md` section 3
+**Build :** Voir `.claude/context/COMMON.md` section 2
+**Checklists :** Voir `.claude/context/COMMON.md` section 7
+
+**Procédures détaillées :**
+- QUALIF : docs/QUALIF_PROCEDURE.md
+- PROD : docs/RELEASE_PROCEDURE.md
 
 **Environnement cible :** $ARGUMENTS (QUALIF par défaut si vide)
 
@@ -43,8 +44,7 @@ Arrête et redéploie le serveur BuzzControl vers l'environnement cible.
 ## PHASE 1 : PRÉPARATION
 
 1. **Arrêter le serveur en cours**
-   curl -s http://localhost/shutdown || echo "Serveur non actif"
-   # Attendre 2 secondes pour l'arrêt complet
+   Voir `.claude/context/COMMON.md` section 3.1 (Arrêt Gracieux)
 
 2. **Collecter les informations**
    - Version : lire server-go/config.json → champ "version"
@@ -84,24 +84,16 @@ Arrête et redéploie le serveur BuzzControl vers l'environnement cible.
 
 ## PHASE 3 : BUILD ET TEST LOCAL
 
-9. **Build Frontend React (OBLIGATOIRE - mode portable)**
-   cd server-go/web
-   npm run build
-   cd ..
+9. **Build Frontend + Backend**
+   Voir `.claude/context/COMMON.md` section 2.1 (Build Complet)
 
-   **IMPORTANT** : Le frontend DOIT être rebuild AVANT le Go car les fichiers
-   web sont embarqués dans le binaire (mode portable). Sans rebuild frontend,
-   les modifications CSS/JS ne seront pas incluses.
+   ⚠️ RÈGLE CRITIQUE : Frontend AVANT Backend (mode portable)
 
 10. **Build Go selon environnement**
-   cd server-go
+   Voir `.claude/context/COMMON.md` section 2.2 (Build Cross-Platform)
 
-   # QUALIF : Windows uniquement
-   go build -o server.exe ./cmd/server
-
-   # PREPROD/PROD : Windows + ARM64
-   go build -o server.exe ./cmd/server
-   GOOS=linux GOARCH=arm64 go build -o buzzcontrol ./cmd/server
+   - QUALIF : Windows uniquement
+   - PREPROD/PROD : Windows + ARM64
 
 11. **Redémarrer le serveur Windows**
     - Lancer server.exe en arrière-plan
@@ -109,17 +101,11 @@ Arrête et redéploie le serveur BuzzControl vers l'environnement cible.
     - Le serveur reste actif après les tests
 
 12. **Vérification de la version (avec retry automatique)**
-    - Lire la version attendue depuis server-go/config.json
-    - Appeler curl http://localhost/version
-    - **COMPARER** : La version retournée DOIT correspondre à celle de config.json
-    - **Si DIFFÉRENCE** :
-      1. Afficher WARNING : "Version mismatch: expected X.Y.Z, got A.B.C"
-      2. Arrêter le serveur : curl http://localhost/shutdown
-      3. Attendre 2 secondes
-      4. **RELANCER** les étapes 9, 10, 11, 12 (rebuild frontend + Go + restart + verify)
-      5. Maximum 2 tentatives de retry
-      6. Si échec après 2 retries → **ERREUR CRITIQUE** : Arrêter et escalader
-    - **Si IDENTIQUE** : Vérifier /listGame fonctionne → Continuer
+    Voir `.claude/context/COMMON.md` section 3.3 (Vérification Post-Démarrage)
+    et section 3.4 (Gestion Version Mismatch)
+
+    - Maximum 2 tentatives de retry
+    - Si échec après 2 retries → **ERREUR CRITIQUE** : Arrêter et escalader
 
 ## PHASE 4 : GIT ET CI (PROD uniquement)
 
@@ -330,25 +316,14 @@ PROD → Release (merge + tag + binaires prêts pour Raspberry Pi)
 ```
 
 **Règles critiques :**
-- TOUJOURS arrêter le serveur avant de rebuild
-- TOUJOURS rebuild le frontend React (npm run build) AVANT le build Go (mode portable)
-- TOUJOURS finaliser la documentation AVANT le build (PROD)
-- TOUJOURS mettre z=0 dans la version pour une release (ex: 2.45.3 → 2.45.0)
-- TOUJOURS marquer les tâches comme complétées (TaskUpdate) avant le push (PROD)
-- TOUJOURS commit la doc AVANT le push et le merge (PROD)
-- TOUJOURS vérifier que /version correspond à config.json après redémarrage
-- TOUJOURS retry automatique (max 2x) si version mismatch
-- TOUJOURS synchroniser package.json avec config.json
-- TOUJOURS vérifier la CI automatiquement via API GitHub (PROD) - max 10 min d'attente
-- TOUJOURS analyser et corriger automatiquement si CI échoue (PROD) - max 3 tentatives
-- TOUJOURS télécharger l'exécutable Windows depuis GitHub Release (PROD)
-- TOUJOURS lancer l'exécutable release dans une FENÊTRE VISIBLE (pas en arrière-plan)
-- TOUJOURS valider la version de l'exécutable release avant de terminer (PROD)
-- JAMAIS déployer PROD sans PREPROD validée
-- JAMAIS créer des tags Git en QUALIF ou PREPROD
-- JAMAIS merge main en QUALIF ou PREPROD
-- JAMAIS supprimer la branche feature après merge (garde pour rollback CI)
-- PREPROD valide que le build ARM64 compile correctement
+Voir `.claude/context/COMMON.md` sections 2-7 pour les règles détaillées.
+
+Résumé :
+- Build : Frontend AVANT Backend (mode portable) - COMMON.md 2.1
+- Serveur : Arrêt gracieux via API - COMMON.md 3.1
+- Version : Vérification + retry automatique - COMMON.md 3.3-3.4
+- PROD : z=0, sync package.json, doc AVANT build - COMMON.md 5.4, 7.3
+- Git : Jamais supprimer branche feature (rollback) - COMMON.md 6.4
 ```
 
 ## Action immédiate

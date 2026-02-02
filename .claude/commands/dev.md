@@ -90,20 +90,18 @@ prompt: [Tâches frontend]
 ```
 Implémente le code backend Go pour BuzzControl.
 
-**Contexte projet :**
-- Répertoire : /home/user/BuzzMaster
-- Serveur Go : server-go/
-- Config version : server-go/config.json
+**Contexte projet :** Voir `.claude/context/COMMON.md` section 1
+**Build :** Voir `.claude/context/COMMON.md` section 2
+**Versionnement :** Voir `.claude/context/COMMON.md` section 5
 
 **Plan backend :** $ARGUMENTS (partie backend)
 
 **Actions :**
-1. Incrémenter z dans config.json
+1. Incrémenter z dans config.json (voir COMMON.md section 5.2)
 2. Implémenter : models → engine → tests → protocol → handlers
-3. Commits atomiques
+3. Commits atomiques (voir COMMON.md section 6.2)
 4. Documenter nouvelles actions WebSocket et champs GameState
-5. Build final : `cd server-go/web && npm run build && cd .. && go build -o server.exe ./cmd/server`
-   ⚠️ TOUJOURS rebuilder le frontend AVANT le Go build (mode portable)
+5. Build complet (voir COMMON.md section 2.1)
 6. Push
 ```
 
@@ -112,10 +110,9 @@ Implémente le code backend Go pour BuzzControl.
 ```
 Implémente le code frontend React pour BuzzControl.
 
-**Contexte projet :**
-- Répertoire : /home/user/BuzzMaster
-- Frontend React : server-go/web/src/
-- Config version : server-go/config.json
+**Contexte projet :** Voir `.claude/context/COMMON.md` section 1
+**Build :** Voir `.claude/context/COMMON.md` section 2
+**Versionnement :** Voir `.claude/context/COMMON.md` section 5
 
 **Plan frontend :** $ARGUMENTS (partie frontend)
 
@@ -124,12 +121,11 @@ Implémente le code frontend React pour BuzzControl.
 - Nouveaux champs GameState : [liste]
 
 **Actions :**
-1. Incrémenter z dans config.json
+1. Incrémenter z dans config.json (voir COMMON.md section 5.2)
 2. Implémenter : hooks → components → pages → PlayerDisplay → CSS
-3. Vérifier contrainte TV STATIQUE
-4. Commits atomiques
-5. Build final : `cd server-go/web && npm run build && cd .. && go build -o server.exe ./cmd/server`
-   ⚠️ TOUJOURS rebuilder le frontend AVANT le Go build (mode portable)
+3. Vérifier contrainte TV STATIQUE (overflow: hidden, unités vh/vw)
+4. Commits atomiques (voir COMMON.md section 6.2)
+5. Build complet (voir COMMON.md section 2.1)
 6. Push
 ```
 
