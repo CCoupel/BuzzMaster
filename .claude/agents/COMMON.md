@@ -2,6 +2,8 @@
 
 > **Ce fichier contient les règles obligatoires pour TOUS les agents BuzzMaster.**
 > Chaque agent doit référencer ce fichier : `@import COMMON.md`
+>
+> **Contexte projet** : Voir `PROJECT_CONTEXT.md` pour le stack technique, la structure et les commandes.
 
 ---
 
@@ -186,30 +188,29 @@ Chaque agent doit :
 
 ## Références Projet BuzzMaster
 
-### Fichiers Importants
+> **Détails complets** : Voir `PROJECT_CONTEXT.md`
+
+### Fichiers Essentiels
 
 | Fichier | Description |
 |---------|-------------|
-| `CLAUDE.md` | Architecture et conventions projet |
+| `CLAUDE.md` | Architecture complète |
 | `CHANGELOG.md` | Historique des versions |
-| `docs/DEV_PROCEDURE.md` | Procédure de développement |
-| `docs/TEST_PROCEDURE.md` | Procédure de tests |
 | `server-go/config.json` | Version actuelle |
-| `contracts/*.md` | Contrats API (WebSocket, HTTP, Models) |
+| `contracts/*.md` | Contrats API |
+
+### Build Order (CRITIQUE)
+
+**TOUJOURS rebuilder le frontend AVANT le backend Go.**
+
+```bash
+cd server-go/web && npm run build && cd .. && go build -o server.exe ./cmd/server
+```
 
 ### Contrainte TV (CRITIQUE)
 
 **L'affichage TV (`/tv`) est STATIQUE - pas de scroll autorisé.**
 
 ```css
-/* CORRECT */
-.container {
-    height: 100vh;
-    overflow: hidden;
-}
-
-/* INCORRECT */
-.container {
-    overflow: auto;  /* INTERDIT */
-}
+.container { height: 100vh; overflow: hidden; }
 ```

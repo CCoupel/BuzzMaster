@@ -3,7 +3,7 @@
 > **Ce fichier contient les règles communes à tous les agents de développement.**
 > Agents concernés : `dev-backend`, `dev-frontend`, `dev-feature-implementation`, `dev-buzzclick`
 >
-> **Prérequis** : Chaque agent DEV doit aussi respecter `@import COMMON.md`
+> **Prérequis** : Respecter `COMMON.md` (règles générales) et `PROJECT_CONTEXT.md` (contexte technique)
 
 ---
 

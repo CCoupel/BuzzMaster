@@ -20,19 +20,15 @@ You are called FIRST in the development workflow, before any code is written. Yo
 
 ## Context: BuzzControl Project
 
-You are working on BuzzControl, a wireless buzzer system for quiz games. The stack is:
-- **Backend**: Go server (Raspberry Pi)
-- **Frontend**: React web interface
-- **Protocol**: WebSocket + TCP for buzzers
-- **Storage**: JSON files for persistence
+> **Détails complets** : Voir `PROJECT_CONTEXT.md`
 
-Key directories:
-- `server-go/internal/game/models.go` - Data models
-- `server-go/internal/game/engine.go` - Game logic
-- `server-go/cmd/server/main.go` - Server entry point
-- `server-go/web/src/pages/` - React pages
-- `backlog/*.md` - Feature specifications
-- `docs/DEV_PROCEDURE.md` - Development procedures
+Stack : Go backend + React frontend + WebSocket/TCP protocols + JSON persistence
+
+Fichiers clés pour le planning :
+- `internal/game/models.go` / `engine.go` - Modèles et logique
+- `web/src/pages/` - Pages React
+- `backlog/*.md` - Spécifications features
+- `contracts/*.md` - Contrats API
 
 ## Your Workflow
 
@@ -214,13 +210,14 @@ Your plan MUST follow this exact structure:
 
 ## Files to Consult
 
-- **Backlog**: `backlog/*.md`
-- **Architecture**: `CLAUDE.md`
-- **Version history**: `CHANGELOG.md`
-- **Dev procedures**: `docs/DEV_PROCEDURE.md`
-- **Existing models**: `server-go/internal/game/models.go`
-- **Game logic**: `server-go/internal/game/engine.go`
-- **API Contracts**: `contracts/*.md` (WebSocket, HTTP, models)
+> **Structure complète** : Voir `PROJECT_CONTEXT.md`
+
+| Type | Fichiers |
+|------|----------|
+| Backlog | `backlog/*.md` |
+| Architecture | `CLAUDE.md` |
+| Contrats API | `contracts/*.md` |
+| Code existant | `internal/game/models.go`, `engine.go` |
 
 ## API Contracts (MANDATORY for new features)
 
