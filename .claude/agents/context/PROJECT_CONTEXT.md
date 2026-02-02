@@ -208,6 +208,28 @@ curl -s http://localhost/shutdown && sleep 2 && ./server.exe
 curl -s http://localhost/version
 ```
 
+### Validation Post-Build (DEV)
+
+```bash
+# Script complet de validation après build
+cd server-go
+./server.exe &
+SERVER_PID=$!
+sleep 2
+
+# Vérifier version
+VERSION=$(curl -s http://localhost/version)
+echo "Version: $VERSION"
+
+# Vérifier que le serveur répond
+curl -s http://localhost/health || echo "Health check failed"
+
+# Arrêt propre
+curl -s http://localhost/shutdown
+wait $SERVER_PID 2>/dev/null
+echo "✅ Validation OK"
+```
+
 ### Git Workflow
 
 ```bash

@@ -135,6 +135,7 @@ Si vous devez modifier un contrat, documentez-le dans votre summary :
 | Build npm | `npm run build` | frontend, feature |
 | Build PlatformIO | `pio run -e buzzclick` | buzzclick |
 | Tests Go | `go test ./...` | backend, feature |
+| **Validation serveur** | `./server.exe` + `curl /version` | backend, frontend, feature |
 | Pas de scroll TV | Vérification visuelle 1920x1080 | frontend |
 
 ### Ordre de Build (Mode Portable)
@@ -148,6 +149,48 @@ cd server-go/web && npm run build && cd .. && go build -o server.exe ./cmd/serve
 # Incorrect (modifications React non prises en compte)
 go build -o server.exe ./cmd/server
 ```
+
+### Validation Serveur (OBLIGATOIRE)
+
+**Après le build**, vous DEVEZ vérifier que le serveur démarre correctement :
+
+```bash
+# 1. Lancer le serveur en arrière-plan
+cd server-go && ./server.exe &
+SERVER_PID=$!
+
+# 2. Attendre le démarrage (max 5 secondes)
+sleep 2
+
+# 3. Vérifier la version
+ACTUAL_VERSION=$(curl -s http://localhost/version 2>/dev/null)
+EXPECTED_VERSION="X.Y.Z"  # Remplacer par la version attendue
+
+if [ "$ACTUAL_VERSION" != "$EXPECTED_VERSION" ]; then
+    echo "❌ Version incorrecte: attendu $EXPECTED_VERSION, obtenu $ACTUAL_VERSION"
+    kill $SERVER_PID 2>/dev/null
+    exit 1
+fi
+
+echo "✅ Version correcte: $ACTUAL_VERSION"
+
+# 4. Arrêter proprement le serveur
+curl -s http://localhost/shutdown
+wait $SERVER_PID 2>/dev/null
+```
+
+**Vérifications** :
+| Check | Critère |
+|-------|---------|
+| Démarrage | Serveur répond en < 5s |
+| Version | `/version` retourne la version attendue |
+| Logs | Pas d'erreur critique dans les logs |
+| Arrêt | `/shutdown` termine proprement |
+
+**En cas d'échec** :
+- Vérifier les logs du serveur
+- S'assurer que le port 80 est disponible
+- Vérifier que le build a réussi
 
 ---
 
@@ -274,5 +317,7 @@ Chaque agent DEV doit produire un summary structuré :
 ## Verification
 - [x] Build OK
 - [x] Tests PASS
+- [x] Server starts OK
+- [x] Version verified: X.Y.Z
 - [x] [Autres vérifications spécifiques]
 ```
