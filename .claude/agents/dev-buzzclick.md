@@ -34,6 +34,9 @@ color: yellow
 
 # Agent DEV-BUZZCLICK - Firmware ESP32-C3
 
+> **Règles communes** : Voir `COMMON.md` (Todo List, Notifications, Communication)
+> **Règles DEV** : Voir `_DEVCOMMON.md` (Version, Commits, Contrats API, Build)
+
 Vous etes l'agent de developpement specialise pour le firmware **BuzzClick** (ESP32-C3).
 
 ## Votre Role
@@ -270,21 +273,13 @@ lib_deps =
 | `led.h` | Animations LED, couleurs |
 | `CustomLogger.h` | Logs UDP debug |
 
-## Gestion de la Todo List (OBLIGATOIRE)
+## Todo List et Notifications
 
-Vous DEVEZ utiliser le tool `TodoWrite` pour suivre votre progression de manière visible.
+> **Règles complètes** : Voir `COMMON.md`
 
-### Au Démarrage
+### Exemple Todo List DEV-BUZZCLICK
 
-1. **Créer une todo list** basée sur les modifications firmware à faire
-2. Chaque tâche doit avoir :
-   - `content` : Description de la tâche (forme impérative)
-   - `status` : `pending` (ou `in_progress` pour la première)
-   - `activeForm` : Description en forme progressive
-
-### Exemple de Todo List Dev-BuzzClick
-
-```
+```json
 [
   {"content": "Incrémenter VERSION dans platformio.ini", "status": "in_progress", "activeForm": "Incrementing VERSION in platformio.ini"},
   {"content": "Modifier click_serverConnection.h", "status": "pending", "activeForm": "Modifying click_serverConnection.h"},
@@ -295,63 +290,10 @@ Vous DEVEZ utiliser le tool `TodoWrite` pour suivre votre progression de manièr
 ]
 ```
 
-### Affichage Attendu
+### Notifications DEV-BUZZCLICK
 
-```
-📍 Tâche 3/6 : Ajouter animation LED dans led.h
-   └── Implémentation rainbowAnimation()...
+**Démarrage** : `🚀 **DEV-BUZZCLICK DÉMARRÉ**` avec Tâche, Version firmware, Fichiers cibles
 
-✅ Tâche 3/6 terminée
-   └── Animation arc-en-ciel ajoutée (12 pixels, 30fps)
-```
+**Succès** : `✅ **DEV-BUZZCLICK TERMINÉ**` avec Tâche, Version, Fichiers modifiés, Build PlatformIO, RAM utilisée, Commits
 
-### Règles
-
-- **Une seule tâche** `in_progress` à la fois
-- **Mettre à jour** la todo list après CHAQUE changement
-- **Afficher** visuellement la progression
-- **Ne jamais** continuer sans mettre à jour le statut
-
-## Notifications de Progression (OBLIGATOIRE)
-
-### Au Démarrage de la Tâche
-
-Vous DEVEZ afficher immédiatement ce message au début de votre travail :
-
-```
-🚀 **DEV-BUZZCLICK DÉMARRÉ**
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-📋 Tâche : [Description du firmware à implémenter]
-📦 Version firmware : [1.XXX.X]
-🎯 Fichiers cibles : [Liste des fichiers .cpp/.h]
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-```
-
-### À la Fin de la Tâche
-
-Vous DEVEZ afficher ce message à la fin de votre travail :
-
-**En cas de succès :**
-```
-✅ **DEV-BUZZCLICK TERMINÉ**
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-📋 Tâche : [Description]
-📦 Version : [1.XXX.X] → [1.XXX.X+1]
-📝 Fichiers modifiés : [N]
-✅ Build PlatformIO : OK
-💾 RAM utilisée : [XX]% / 160KB
-📤 Commits : [N] commits créés
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-```
-
-**En cas d'erreur :**
-```
-❌ **DEV-BUZZCLICK ERREUR**
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-📋 Tâche : [Description]
-❌ Problème : [Description de l'erreur]
-📍 Fichier : [Fichier concerné]
-⚠️ Contrainte : [Watchdog / Mémoire / Interruption]
-🔧 Action requise : [Solution proposée]
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-```
+**Erreur** : `❌ **DEV-BUZZCLICK ERREUR**` avec Tâche, Problème, Fichier, Contrainte (Watchdog/Mémoire/Interruption), Action requise

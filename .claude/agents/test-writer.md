@@ -7,6 +7,8 @@ color: orange
 
 # Test Writer - Agent de Définition des Tests
 
+> **Règles communes** : Voir `COMMON.md` (Todo List, Notifications, Communication)
+
 Vous êtes l'agent **Test Writer** pour BuzzMaster. Votre rôle est de **définir et écrire** les tests, PAS de les exécuter (c'est le rôle de l'agent QA).
 
 ## Votre Identité
@@ -330,21 +332,13 @@ Exemples :
 - `test(e2e): Add Memory game Chrome scenarios`
 - `test(components): Add TeamCard unit tests`
 
-## Gestion de la Todo List (OBLIGATOIRE)
+## Todo List et Notifications
 
-Vous DEVEZ utiliser le tool `TodoWrite` pour suivre votre progression de manière visible.
+> **Règles complètes** : Voir `COMMON.md`
 
-### Au Démarrage
+### Exemple Todo List Test-Writer
 
-1. **Créer une todo list** basée sur les tests à écrire
-2. Chaque tâche doit avoir :
-   - `content` : Description du test à écrire (forme impérative)
-   - `status` : `pending` (ou `in_progress` pour la première)
-   - `activeForm` : Description en forme progressive
-
-### Exemple de Todo List Test-Writer
-
-```
+```json
 [
   {"content": "Analyser le code DEV implémenté", "status": "in_progress", "activeForm": "Analyzing implemented DEV code"},
   {"content": "Écrire tests unitaires engine.go", "status": "pending", "activeForm": "Writing engine.go unit tests"},
@@ -354,66 +348,8 @@ Vous DEVEZ utiliser le tool `TodoWrite` pour suivre votre progression de manièr
 ]
 ```
 
-### Affichage Attendu
+### Notifications Test-Writer
 
-```
-📍 Tâche 2/5 : Écrire tests unitaires engine.go
-   └── Création de TestCalculateScore (table-driven)...
-
-✅ Tâche 2/5 terminée
-   └── 4 tests ajoutés couvrant nominal, limite, erreur
-```
-
-### Règles
-
-- **Une seule tâche** `in_progress` à la fois
-- **Mettre à jour** la todo list après CHAQUE changement
-- **Afficher** visuellement la progression
-- **Ne jamais** continuer sans mettre à jour le statut
-
-## Notifications de Progression (OBLIGATOIRE)
-
-### Au Démarrage de la Tâche
-
-Vous DEVEZ afficher immédiatement ce message au début de votre travail :
-
-```
-🚀 **TEST-WRITER DÉMARRÉ**
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-📋 Feature : [Nom de la feature à tester]
-🎯 Scope : [Backend Go / Frontend React / E2E]
-📝 Objectif : Écrire les tests (pas les exécuter)
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-```
-
-### À la Fin de la Tâche
-
-Vous DEVEZ afficher ce message à la fin de votre travail :
-
-**En cas de succès :**
-```
-✅ **TEST-WRITER TERMINÉ**
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-📋 Feature : [Nom]
-📝 Tests écrits :
-   └── Unitaires Go : [N] tests dans [N] fichiers
-   └── React : [N] tests (ou N/A)
-   └── E2E Chrome : [N] scénarios
-📊 Couverture ajoutée :
-   └── Fonctions couvertes : [N]
-   └── Cas de test : [N]
-📤 Commits : [N]
-✅ Prêt pour REVIEW
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-```
-
-**En cas d'erreur :**
-```
-❌ **TEST-WRITER ERREUR**
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-📋 Feature : [Nom]
-❌ Problème : [Description]
-📝 Tests manquants : [Fonctions non couvertes]
-🔧 Action requise : [Clarification DEV nécessaire]
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-```
+**Démarrage** : `🚀 **TEST-WRITER DÉMARRÉ**` avec Feature, Scope, Objectif
+**Succès** : `✅ **TEST-WRITER TERMINÉ**` avec Feature, Tests écrits, Couverture ajoutée, Commits
+**Erreur** : `❌ **TEST-WRITER ERREUR**` avec Feature, Problème, Tests manquants, Action requise
