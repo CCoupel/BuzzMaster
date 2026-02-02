@@ -1,6 +1,6 @@
 # Type de jeu : Memory
 
-**Statut** : ✅ Complété (Phases 1-5), ⏳ Une tâche restante
+**Statut** : ✅ Complété (Phases 1-5), ⏳ Phases 6-7 à faire
 
 ## Description
 
@@ -70,7 +70,7 @@ Jeu de mémoire avec paires de cartes à retrouver.
   - Le bouton "REPONSE" passe en phase REVEALED
   - Révèle toutes les cartes en cascade avec REVEAL_DELAY
 
-## Phase 5 - Scoring et historique
+## Phase 5 - Scoring ✅
 
 - [x] **Calcul des points Memory**
   ```
@@ -79,9 +79,7 @@ Jeu de mémoire avec paires de cartes à retrouver.
         - (erreurs × ERROR_PENALTY)
   ```
 
-- [ ] **Enregistrement spécifique dans l'historique**
-  - EventType: "MEMORY_COMPLETED" (actuellement "POINTS_AWARDED")
-  - Détails: paires trouvées, erreurs, temps total
+> **Note** : L'enregistrement dans l'historique est reporté à la Phase 6 pour inclure les informations multi-équipes dès le départ.
 
 ## Phase 6 - Modes de jeu multi-équipes
 
@@ -188,6 +186,29 @@ Définissent **comment les équipes jouent** (ordre, tour, rotation).
   - Afficher le nombre de paires par équipe
   - Classement en direct
   - Mise à jour à chaque paire trouvée
+
+- [ ] **Enregistrement dans l'historique (MEMORY_COMPLETED)**
+  - EventType: `"MEMORY_COMPLETED"` (remplace `"POINTS_AWARDED"`)
+  - Détails de base : paires trouvées, total paires, erreurs, temps total
+  - Détails multi-équipes : mode de jeu, résultats par équipe
+  - Structure :
+    ```json
+    {
+      "EventType": "MEMORY_COMPLETED",
+      "Details": {
+        "PairsFound": 6,
+        "TotalPairs": 6,
+        "Errors": 4,
+        "TimeElapsed": 120000,
+        "Mode": "CHACUN_SON_TOUR",
+        "TeamResults": {
+          "Rouge": { "Pairs": 3, "Errors": 1 },
+          "Bleu": { "Pairs": 2, "Errors": 2 },
+          "Vert": { "Pairs": 1, "Errors": 1 }
+        }
+      }
+    }
+    ```
 
 ### Scénario d'usage : Mode CHACUN_SON_TOUR
 
