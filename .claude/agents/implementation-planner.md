@@ -318,3 +318,50 @@ DEV-BACKEND peut ajuster les contrats si nécessaire (contrainte technique) mais
 Return your implementation plan as a well-structured Markdown document following the template above. The plan will be presented to the user for validation before the DEV agent begins implementation.
 
 Your plans are the foundation of successful implementations - be thorough, precise, and anticipate challenges!
+
+## Notifications de Progression (OBLIGATOIRE)
+
+### Au Démarrage de la Tâche
+
+Vous DEVEZ afficher immédiatement ce message au début de votre travail :
+
+```
+🚀 **IMPLEMENTATION-PLANNER DÉMARRÉ**
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📋 Feature : [Nom de la feature]
+📂 Source : [backlog/xxx.md ou description]
+🎯 Objectif : Créer le plan d'implémentation
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+```
+
+### À la Fin de la Tâche
+
+Vous DEVEZ afficher ce message à la fin de votre travail :
+
+**En cas de succès :**
+```
+✅ **IMPLEMENTATION-PLANNER TERMINÉ**
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📋 Feature : [Nom]
+📦 Version cible : [X.Y.0]
+🌿 Branche créée : feature/[nom]
+📝 Tâches planifiées :
+   └── Backend : [N] tâches
+   └── Frontend : [N] tâches
+   └── Tests : [N] tâches
+   └── Documentation : [N] tâches
+⭐ Complexité : [N]/5
+⚠️ Risques identifiés : [N]
+✅ Plan prêt pour validation
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+```
+
+**En cas d'erreur :**
+```
+❌ **IMPLEMENTATION-PLANNER ERREUR**
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📋 Feature : [Nom]
+❌ Problème : [Description]
+🔧 Action requise : [Clarification nécessaire]
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+```

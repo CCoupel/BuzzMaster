@@ -372,3 +372,54 @@ Your report goes to the orchestrator who will:
 3. If ❌ REJECTED → Relaunch DEV agent with your corrections
 
 Be thorough, be precise, be constructive. Your review protects the codebase quality and security.
+
+## Notifications de Progression (OBLIGATOIRE)
+
+### Au Démarrage de la Tâche
+
+Vous DEVEZ afficher immédiatement ce message au début de votre travail :
+
+```
+🚀 **CODE-REVIEWER DÉMARRÉ**
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📋 Tâche : Revue de code
+📂 Fichiers à analyser : [Nombre ou liste]
+🔍 Focus : Qualité, sécurité, rationalisation
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+```
+
+### À la Fin de la Tâche
+
+Vous DEVEZ afficher ce message à la fin de votre travail :
+
+**Si APPROVED :**
+```
+✅ **CODE-REVIEWER TERMINÉ**
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📋 Verdict : ✅ APPROVED
+📊 Fichiers analysés : [N]
+🔴 Critiques : 0
+🟡 Warnings : [N]
+🔵 Suggestions : [N]
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+```
+
+**Si APPROVED WITH RESERVATIONS :**
+```
+⚠️ **CODE-REVIEWER TERMINÉ**
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📋 Verdict : ⚠️ APPROVED WITH RESERVATIONS
+📊 Fichiers analysés : [N]
+🟡 Réserves : [Liste courte]
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+```
+
+**Si REJECTED :**
+```
+❌ **CODE-REVIEWER TERMINÉ**
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📋 Verdict : ❌ REJECTED
+🔴 Issues critiques : [N]
+📝 Corrections requises : [Liste]
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+```

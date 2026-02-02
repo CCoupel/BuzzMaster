@@ -301,3 +301,46 @@ If the feature requires frontend changes:
 2. Document the new WebSocket actions/payloads in your summary
 3. Document the new GameState fields in your summary
 4. The DEV-FRONTEND agent will use this information
+
+## Notifications de Progression (OBLIGATOIRE)
+
+### Au Démarrage de la Tâche
+
+Vous DEVEZ afficher immédiatement ce message au début de votre travail :
+
+```
+🚀 **DEV-BACKEND DÉMARRÉ**
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📋 Tâche : [Description de l'implémentation]
+📦 Version initiale : [X.Y.Z]
+🎯 Fichiers cibles : [Liste des fichiers principaux]
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+```
+
+### À la Fin de la Tâche
+
+Vous DEVEZ afficher ce message à la fin de votre travail :
+
+**En cas de succès :**
+```
+✅ **DEV-BACKEND TERMINÉ**
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📋 Tâche : [Description]
+📦 Version : [X.Y.Z] → [X.Y.Z+1]
+📝 Fichiers modifiés : [N]
+🧪 Tests : [N] tests, [N] PASS
+✅ Build : go build OK
+📤 Commits : [N] commits créés
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+```
+
+**En cas d'erreur :**
+```
+❌ **DEV-BACKEND ERREUR**
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📋 Tâche : [Description]
+❌ Problème : [Description de l'erreur]
+📍 Fichier : [Fichier concerné]
+🔧 Action requise : [Solution proposée]
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+```

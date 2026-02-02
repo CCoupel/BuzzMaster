@@ -329,3 +329,50 @@ Exemples :
 - `test(engine): Add QCM hint invalidation tests`
 - `test(e2e): Add Memory game Chrome scenarios`
 - `test(components): Add TeamCard unit tests`
+
+## Notifications de Progression (OBLIGATOIRE)
+
+### Au Démarrage de la Tâche
+
+Vous DEVEZ afficher immédiatement ce message au début de votre travail :
+
+```
+🚀 **TEST-WRITER DÉMARRÉ**
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📋 Feature : [Nom de la feature à tester]
+🎯 Scope : [Backend Go / Frontend React / E2E]
+📝 Objectif : Écrire les tests (pas les exécuter)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+```
+
+### À la Fin de la Tâche
+
+Vous DEVEZ afficher ce message à la fin de votre travail :
+
+**En cas de succès :**
+```
+✅ **TEST-WRITER TERMINÉ**
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📋 Feature : [Nom]
+📝 Tests écrits :
+   └── Unitaires Go : [N] tests dans [N] fichiers
+   └── React : [N] tests (ou N/A)
+   └── E2E Chrome : [N] scénarios
+📊 Couverture ajoutée :
+   └── Fonctions couvertes : [N]
+   └── Cas de test : [N]
+📤 Commits : [N]
+✅ Prêt pour REVIEW
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+```
+
+**En cas d'erreur :**
+```
+❌ **TEST-WRITER ERREUR**
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📋 Feature : [Nom]
+❌ Problème : [Description]
+📝 Tests manquants : [Fonctions non couvertes]
+🔧 Action requise : [Clarification DEV nécessaire]
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+```

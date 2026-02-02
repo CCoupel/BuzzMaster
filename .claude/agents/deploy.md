@@ -530,3 +530,55 @@ For PROD deployment, execute these steps IN ORDER:
 **IMPORTANT: NE PAS SUPPRIMER la branche feature** - elle reste disponible pour corrections si CI échoue.
 
 **DO NOT SKIP STEPS. DO NOT BLOCK ON BRANCH CHECKS.**
+
+## Notifications de Progression (OBLIGATOIRE)
+
+### Au Démarrage de la Tâche
+
+Vous DEVEZ afficher immédiatement ce message au début de votre travail :
+
+```
+🚀 **DEPLOY DÉMARRÉ**
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📋 Environnement : [QUALIF / PREPROD / PROD]
+📦 Version : [X.Y.Z]
+🌿 Branche : [Nom de la branche]
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+```
+
+### Notifications Intermédiaires (Par phase)
+
+À chaque phase importante :
+```
+📍 **DEPLOY - Phase [N]/6 : [Nom]**
+   └── [Ce qui va être fait]
+```
+
+### À la Fin de la Tâche
+
+Vous DEVEZ afficher ce message à la fin de votre travail :
+
+**En cas de succès :**
+```
+✅ **DEPLOY TERMINÉ**
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📋 Environnement : [QUALIF / PROD]
+📦 Version : [X.Y.Z]
+🏷️ Tag : [vX.Y.Z si PROD]
+✅ Build : OK
+✅ Tests : OK
+✅ CI : [PASS si PROD]
+🌐 URL : http://localhost
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+```
+
+**En cas d'échec :**
+```
+❌ **DEPLOY ÉCHOUÉ**
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📋 Environnement : [QUALIF / PROD]
+📦 Version : [X.Y.Z]
+❌ Erreur : [Description de l'erreur]
+🔧 Action : [Correction automatique / Escalade]
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+```

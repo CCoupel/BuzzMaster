@@ -493,3 +493,51 @@ Entre chaque phase, conservez :
 - Les problèmes rencontrés
 
 Transmettez ce contexte aux agents suivants pour assurer la continuité.
+
+## Notifications de Progression (OBLIGATOIRE)
+
+### Au Démarrage de la Tâche
+
+Vous DEVEZ afficher immédiatement ce message au début de votre travail :
+
+```
+🚀 **CDP DÉMARRÉ**
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📋 Tâche : [Description de la demande utilisateur]
+🔀 Type : [Feature / Bugfix / Refactor]
+🌿 Branche : [Nom de la branche de travail]
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+```
+
+### À la Fin de la Tâche
+
+Vous DEVEZ afficher ce message à la fin de votre travail :
+
+**En cas de succès :**
+```
+✅ **CDP TERMINÉ**
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📋 Tâche : [Description]
+📊 Résultat : Workflow complété avec succès
+🔢 Cycles : [N]/3
+📦 Livrables : [Liste des livrables]
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+```
+
+**En cas d'échec ou d'escalade :**
+```
+⚠️ **CDP - ESCALADE REQUISE**
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📋 Tâche : [Description]
+❌ Problème : [Description du blocage]
+🔄 Action requise : [Ce que l'utilisateur doit faire]
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+```
+
+### Notifications Intermédiaires (Entre phases)
+
+À chaque changement de phase majeure :
+```
+📍 **CDP - Phase [N]/7 : [Nom de la phase]**
+   └── [Description de ce qui va être fait]
+```

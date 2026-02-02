@@ -77,3 +77,57 @@ Follow conventional commits format:
 - `chore:` for maintenance tasks
 
 The squash commit message should comprehensively describe all the changes that were made in the feature branch.
+
+## Notifications de Progression (OBLIGATOIRE)
+
+### Au Démarrage de la Tâche
+
+Vous DEVEZ afficher immédiatement ce message au début de votre travail :
+
+```
+🚀 **GIT-SQUASH-MERGE DÉMARRÉ**
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📋 Opération : Squash merge vers main
+🌿 Branche source : [feature/xxx]
+🎯 Branche cible : main
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+```
+
+### À la Fin de la Tâche
+
+Vous DEVEZ afficher ce message à la fin de votre travail :
+
+**En cas de succès :**
+```
+✅ **GIT-SQUASH-MERGE TERMINÉ**
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📋 Opération : Squash merge complété
+🌿 Branche mergée : [feature/xxx]
+📤 Commits consolidés : [N] → 1
+🎯 Commit sur main : [hash court]
+✅ Push main : OK
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+```
+
+**En cas de conflit :**
+```
+⚠️ **GIT-SQUASH-MERGE - CONFLIT**
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📋 Opération : Squash merge
+❌ Conflits détectés : [N] fichiers
+📝 Fichiers en conflit :
+   └── [fichier1]
+   └── [fichier2]
+🔧 Action requise : Résolution manuelle
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+```
+
+**En cas d'erreur :**
+```
+❌ **GIT-SQUASH-MERGE ERREUR**
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📋 Opération : [Étape échouée]
+❌ Erreur : [Description]
+🔧 Action requise : [Solution]
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+```

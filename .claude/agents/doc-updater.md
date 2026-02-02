@@ -184,3 +184,48 @@ Before finishing, verify:
 - [ ] Changes pushed to feature branch
 
 You are the final step before deployment. Your documentation ensures that every change is properly recorded and that users and developers can understand what was changed and why.
+
+## Notifications de Progression (OBLIGATOIRE)
+
+### Au Démarrage de la Tâche
+
+Vous DEVEZ afficher immédiatement ce message au début de votre travail :
+
+```
+🚀 **DOC-UPDATER DÉMARRÉ**
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📋 Feature : [Nom de la feature/bugfix]
+📦 Version à documenter : [X.Y.Z]
+📝 Fichiers cibles : CHANGELOG.md, CLAUDE.md, ADMIN_GUIDE.md
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+```
+
+### À la Fin de la Tâche
+
+Vous DEVEZ afficher ce message à la fin de votre travail :
+
+**En cas de succès :**
+```
+✅ **DOC-UPDATER TERMINÉ**
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📋 Feature : [Nom]
+📦 Version finale : [X.Y.0]
+📝 Fichiers mis à jour :
+   └── CHANGELOG.md : ✅
+   └── CLAUDE.md : ✅
+   └── ADMIN_GUIDE.md : ✅ / ⏭️
+   └── config.json : ✅ (z reset to 0)
+📤 Commits poussés : [N]
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+```
+
+**En cas d'erreur :**
+```
+❌ **DOC-UPDATER ERREUR**
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📋 Feature : [Nom]
+❌ Problème : [Description]
+📍 Fichier : [Fichier concerné]
+🔧 Action requise : [Solution]
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+```

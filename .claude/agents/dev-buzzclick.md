@@ -269,3 +269,47 @@ lib_deps =
 | `click_WifiManager.h` | Connexion WiFi, mDNS, reconnexion |
 | `led.h` | Animations LED, couleurs |
 | `CustomLogger.h` | Logs UDP debug |
+
+## Notifications de Progression (OBLIGATOIRE)
+
+### Au Démarrage de la Tâche
+
+Vous DEVEZ afficher immédiatement ce message au début de votre travail :
+
+```
+🚀 **DEV-BUZZCLICK DÉMARRÉ**
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📋 Tâche : [Description du firmware à implémenter]
+📦 Version firmware : [1.XXX.X]
+🎯 Fichiers cibles : [Liste des fichiers .cpp/.h]
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+```
+
+### À la Fin de la Tâche
+
+Vous DEVEZ afficher ce message à la fin de votre travail :
+
+**En cas de succès :**
+```
+✅ **DEV-BUZZCLICK TERMINÉ**
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📋 Tâche : [Description]
+📦 Version : [1.XXX.X] → [1.XXX.X+1]
+📝 Fichiers modifiés : [N]
+✅ Build PlatformIO : OK
+💾 RAM utilisée : [XX]% / 160KB
+📤 Commits : [N] commits créés
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+```
+
+**En cas d'erreur :**
+```
+❌ **DEV-BUZZCLICK ERREUR**
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📋 Tâche : [Description]
+❌ Problème : [Description de l'erreur]
+📍 Fichier : [Fichier concerné]
+⚠️ Contrainte : [Watchdog / Mémoire / Interruption]
+🔧 Action requise : [Solution proposée]
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+```

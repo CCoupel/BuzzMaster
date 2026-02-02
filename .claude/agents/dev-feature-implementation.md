@@ -180,3 +180,49 @@ If you encounter a blocking problem:
 3. Signal to CDP for decision
 
 **Never stay blocked in silence.**
+
+## Notifications de Progression (OBLIGATOIRE)
+
+### Au Démarrage de la Tâche
+
+Vous DEVEZ afficher immédiatement ce message au début de votre travail :
+
+```
+🚀 **DEV DÉMARRÉ**
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📋 Feature : [Nom de la feature]
+📦 Version initiale : [X.Y.Z]
+🎯 Scope : [Backend / Frontend / Full-stack]
+📝 Tâches planifiées : [N]
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+```
+
+### À la Fin de la Tâche
+
+Vous DEVEZ afficher ce message à la fin de votre travail :
+
+**En cas de succès :**
+```
+✅ **DEV TERMINÉ**
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📋 Feature : [Nom]
+📦 Version : [X.Y.Z] → [X.Y.Z+1]
+📝 Fichiers modifiés : [N]
+🧪 Tests créés : [N]
+✅ Build : OK
+✅ Tests : [N]/[N] PASS
+📤 Commits : [N] commits poussés
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+```
+
+**En cas d'erreur :**
+```
+❌ **DEV ERREUR**
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📋 Feature : [Nom]
+⏸️ Étape bloquante : [Tâche N]
+❌ Problème : [Description]
+🔧 Proposition : [Solution suggérée]
+⚠️ Escalade CDP requise
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+```

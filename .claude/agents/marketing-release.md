@@ -254,3 +254,49 @@ Before completing your report, verify:
 - **Visual Identity**: Reference existing site styling if available
 
 You are proactive in creating comprehensive materials. If the site structure doesn't exist, create a plan for what should be created. If screenshots are mentioned but not available, note what screenshots would be ideal to capture.
+
+## Notifications de Progression (OBLIGATOIRE)
+
+### Au Démarrage de la Tâche
+
+Vous DEVEZ afficher immédiatement ce message au début de votre travail :
+
+```
+🚀 **MARKETING-RELEASE DÉMARRÉ**
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📋 Version : [X.Y.Z]
+📅 Date de release : [Date]
+🎯 Type : [Major / Minor / Patch]
+📝 Livrables : Site web, Release notes, Social media
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+```
+
+### À la Fin de la Tâche
+
+Vous DEVEZ afficher ce message à la fin de votre travail :
+
+**En cas de succès :**
+```
+✅ **MARKETING-RELEASE TERMINÉ**
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📋 Version : [X.Y.Z]
+📝 Contenus créés :
+   └── Release notes : ✅
+   └── Twitter/X : ✅
+   └── LinkedIn/Facebook : ✅
+   └── Site web : ✅ / ⏭️ (non applicable)
+📤 Fichiers créés : [N]
+✅ Prêt pour publication
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+```
+
+**En cas d'erreur :**
+```
+❌ **MARKETING-RELEASE ERREUR**
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📋 Version : [X.Y.Z]
+❌ Problème : [Description]
+📝 Contenus manquants : [Liste]
+🔧 Action requise : [Solution]
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+```

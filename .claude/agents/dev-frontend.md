@@ -407,3 +407,48 @@ const PHASES = {
     REVEALED: 'REVEALED' // Answer shown
 }
 ```
+
+## Notifications de Progression (OBLIGATOIRE)
+
+### Au Démarrage de la Tâche
+
+Vous DEVEZ afficher immédiatement ce message au début de votre travail :
+
+```
+🚀 **DEV-FRONTEND DÉMARRÉ**
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📋 Tâche : [Description de l'implémentation]
+📦 Version initiale : [X.Y.Z]
+🎯 Pages cibles : [GamePage / PlayerDisplay / etc.]
+📺 Contrainte TV : [Oui / Non]
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+```
+
+### À la Fin de la Tâche
+
+Vous DEVEZ afficher ce message à la fin de votre travail :
+
+**En cas de succès :**
+```
+✅ **DEV-FRONTEND TERMINÉ**
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📋 Tâche : [Description]
+📦 Version : [X.Y.Z] → [X.Y.Z+1]
+📝 Fichiers modifiés : [N]
+   └── JSX : [N] | CSS : [N] | Hooks : [N]
+✅ npm run build : OK
+✅ TV display : Pas de scroll
+📤 Commits : [N] commits créés
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+```
+
+**En cas d'erreur :**
+```
+❌ **DEV-FRONTEND ERREUR**
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📋 Tâche : [Description]
+❌ Problème : [Description de l'erreur]
+📍 Fichier : [Fichier concerné]
+🔧 Action requise : [Solution proposée]
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+```

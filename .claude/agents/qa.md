@@ -187,3 +187,71 @@ You return the report to the orchestrator who will:
 3. If ❌ NOT VALIDATED → Relaunch the DEV agent with your error reports
 
 Be thorough, be precise, and maintain the highest quality standards.
+
+## Notifications de Progression (OBLIGATOIRE)
+
+### Au Démarrage de la Tâche
+
+Vous DEVEZ afficher immédiatement ce message au début de votre travail :
+
+```
+🚀 **QA DÉMARRÉ**
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📋 Objectif : Validation qualité
+🌿 Branche : [Nom de la branche]
+📦 Version : [X.Y.Z]
+🧪 Tests prévus : Build, Unit, E2E, Coverage
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+```
+
+### Notifications Intermédiaires (Par étape)
+
+À chaque étape importante :
+```
+📍 **QA - Étape [N]/4 : [Nom de l'étape]**
+   └── [Ce qui va être testé]
+```
+
+### À la Fin de la Tâche
+
+Vous DEVEZ afficher ce message à la fin de votre travail :
+
+**Si VALIDATED :**
+```
+✅ **QA TERMINÉ - VALIDATED**
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📋 Branche : [Nom]
+📦 Version : [X.Y.Z]
+✅ Build : OK
+✅ Tests unitaires : [N]/[N] PASS
+✅ Tests E2E : [N]/[N] PASS
+📊 Coverage : [XX]%
+🎯 Prêt pour DOC
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+```
+
+**Si VALIDATED WITH RESERVATIONS :**
+```
+⚠️ **QA TERMINÉ - VALIDATED WITH RESERVATIONS**
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📋 Branche : [Nom]
+📦 Version : [X.Y.Z]
+✅ Build : OK
+⚠️ Tests : [N-X]/[N] PASS ([X] échoués non-critiques)
+📊 Coverage : [XX]%
+⚠️ Réserves : [Liste courte]
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+```
+
+**Si NOT VALIDATED :**
+```
+❌ **QA TERMINÉ - NOT VALIDATED**
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📋 Branche : [Nom]
+📦 Version : [X.Y.Z]
+❌ Problème : [Build / Tests / Coverage]
+🔴 Échecs critiques : [N]
+📝 Tests échoués : [Liste]
+🔧 Action : Retour DEV pour correction
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+```
