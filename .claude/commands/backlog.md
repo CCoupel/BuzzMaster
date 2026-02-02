@@ -8,6 +8,26 @@
 
 $ARGUMENTS
 
+## Mot-clé help
+
+`/backlog help` → Affiche :
+
+```
+## /backlog - Aide
+
+**Description** : Gestion du backlog (lire ou ajouter)
+
+**Usage** :
+  /backlog help                  Afficher cette aide
+  /backlog                       Afficher tableau synthétique TODO/En-Cours
+  /backlog "Description feature" Créer nouvelle entrée dans backlog/TODO/
+
+**Structure** :
+  backlog/TODO/     → Fonctionnalités planifiées
+  backlog/En-Cours/ → Implémentation en cours
+  backlog/DONE/     → Complétées (voir CHANGELOG.md)
+```
+
 ## Structure du backlog
 
 Le backlog est organisé en fichiers séparés dans le dossier `backlog/` :

@@ -6,6 +6,25 @@ Lance le sous-agent dev-frontend pour implémenter du code React selon un plan.
 
 $ARGUMENTS
 
+## Mot-clé help
+
+`/dev-frontend help` → Affiche :
+
+```
+## /dev-frontend - Aide
+
+**Description** : Implémenter du code frontend React
+
+**Usage** :
+  /dev-frontend help                 Afficher cette aide
+  /dev-frontend [plan]               Plan d'implémentation frontend
+  /dev-frontend fix "description"    Correction de bug frontend
+  /dev-frontend review "corrections" Corrections post-review
+
+**Ordre** : hooks → components → pages → PlayerDisplay → CSS
+**Contrainte** : TV STATIQUE (overflow: hidden, vh/vw)
+```
+
 **Formats possibles** :
 - `/dev-frontend [plan]` : Plan d'implémentation frontend
 - `/dev-frontend fix "description"` : Correction de bug frontend

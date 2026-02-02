@@ -203,6 +203,9 @@ Les commandes CDP reconnaissent des mots-clés spéciaux pour interroger ou repr
 ```
 Réception $ARGUMENTS
     │
+    ├── Premier mot = "help" ?
+    │   └── Afficher aide et mots-clés disponibles
+    │
     ├── Premier mot = "status" ?
     │   └── Afficher état workflow actuel
     │

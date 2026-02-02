@@ -428,6 +428,7 @@ Les commandes CDP (`/feature`, `/bugfix`, `/hotfix`, `/refactor`) reconnaissent 
 
 | Mot-clé | Description | Exemple |
 |---------|-------------|---------|
+| `help` | Affiche l'aide et les mots-clés disponibles | `/feature help` |
 | `status` | Affiche l'état actuel du workflow | `/feature status` |
 | `plan` | Affiche le plan sans exécuter | `/feature plan` |
 | `resume <phase>` | Reprend à une phase spécifique | `/feature resume qa` |
@@ -441,6 +442,29 @@ init → plan → dev → review → qa → doc → deploy
 ```
 
 ### 12.3 Comportement par Mot-Clé
+
+**`help`** :
+```markdown
+## /feature - Aide
+
+**Description** : Workflow complet de développement d'une feature
+
+**Usage** :
+  /feature <description>           Lancer une nouvelle feature
+  /feature help                    Afficher cette aide
+  /feature status                  État du workflow en cours
+  /feature plan                    Afficher le plan
+  /feature resume <phase>          Reprendre à une phase
+  /feature skip <phase>            Sauter une phase
+  /feature jumpto <tâche>          Aller à une tâche précise
+
+**Phases** : init → plan → dev → review → qa → doc → deploy
+
+**Exemples** :
+  /feature Ajouter mode Memory
+  /feature resume dev
+  /feature jumpto "Tests unitaires"
+```
 
 **`status`** :
 ```markdown
@@ -493,6 +517,7 @@ Le premier mot de `$ARGUMENTS` est vérifié contre cette liste. Si match :
 - Ne PAS lancer le workflow normal
 
 ```
+$ARGUMENTS = "help"             → Action: afficher aide commande
 $ARGUMENTS = "status"           → Action: afficher état
 $ARGUMENTS = "resume dev"       → Action: reprendre à DEV
 $ARGUMENTS = "jumpto API test"  → Action: chercher tâche "API test"

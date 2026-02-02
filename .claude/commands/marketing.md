@@ -6,6 +6,25 @@ Lance le sous-agent MARKETING pour créer les contenus de communication d'une no
 
 $ARGUMENTS
 
+## Mot-clé help
+
+`/marketing help` → Affiche :
+
+```
+## /marketing - Aide
+
+**Description** : Créer les contenus de communication d'une release
+
+**Usage** :
+  /marketing help                          Afficher cette aide
+  /marketing                               Auto-détecte la version
+  /marketing 2.40.0                        Version spécifique
+  /marketing 2.40.0 PROD                   Version + environnement
+  /marketing "Mode Memory multi-équipes"   Focus sur une feature
+
+**Livrables** : Release notes, posts réseaux sociaux, newsletter (major)
+```
+
 **Formats possibles** :
 - `/marketing` : Auto-détecte la version actuelle
 - `/marketing 2.40.0` : Version spécifique

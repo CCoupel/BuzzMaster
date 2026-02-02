@@ -6,6 +6,25 @@ Lance le sous-agent implementation-planner pour créer un plan d'implémentation
 
 $ARGUMENTS
 
+## Mot-clé help
+
+`/plan help` → Affiche l'aide ci-dessous :
+
+```
+## /plan - Aide
+
+**Description** : Créer un plan d'implémentation détaillé AVANT développement
+
+**Usage** :
+  /plan help                           Afficher cette aide
+  /plan backlog/<nom>.md               Depuis un backlog
+  /plan backlog/<nom>.md Phase X       Phase spécifique d'un backlog
+  /plan "Description de la feature"    Description libre
+  /plan bugfix "Description du bug"    Planification de bugfix
+
+**Output** : Plan structuré avec tâches Backend → Frontend → Tests → Docs
+```
+
 **Formats possibles** :
 - `/plan backlog/memory-game.md Phase 6` : Depuis un backlog
 - `/plan "Description de la feature"` : Description libre

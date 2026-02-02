@@ -18,6 +18,7 @@ Workflow pour le refactoring de code existant sans modification du comportement.
 **Référence :** Voir `context/COMMON.md` section 12
 
 ```
+/refactor help                → Afficher l'aide
 /refactor status              → État du workflow
 /refactor resume qa           → Reprendre aux tests
 /refactor jumpto "extraction" → Aller à une tâche précise

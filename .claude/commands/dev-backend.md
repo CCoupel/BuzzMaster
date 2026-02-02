@@ -6,6 +6,24 @@ Lance le sous-agent dev-backend pour implémenter du code Go selon un plan.
 
 $ARGUMENTS
 
+## Mot-clé help
+
+`/dev-backend help` → Affiche :
+
+```
+## /dev-backend - Aide
+
+**Description** : Implémenter du code backend Go
+
+**Usage** :
+  /dev-backend help                 Afficher cette aide
+  /dev-backend [plan]               Plan d'implémentation backend
+  /dev-backend fix "description"    Correction de bug backend
+  /dev-backend review "corrections" Corrections post-review
+
+**Ordre** : models → engine → tests → protocol → handlers
+```
+
 **Formats possibles** :
 - `/dev-backend [plan]` : Plan d'implémentation backend
 - `/dev-backend fix "description"` : Correction de bug backend

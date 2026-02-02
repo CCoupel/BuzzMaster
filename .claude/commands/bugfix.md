@@ -12,6 +12,7 @@ $ARGUMENTS
 
 | Mot-clé | Action |
 |---------|--------|
+| `help` | Affiche l'aide et les mots-clés disponibles |
 | `status` | Affiche l'état du workflow en cours |
 | `plan` | Affiche le plan sans exécuter |
 | `resume <phase>` | Reprend à une phase (init/dev/review/qa/doc/deploy) |

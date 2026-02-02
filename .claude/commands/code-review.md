@@ -6,6 +6,26 @@ Lance le sous-agent code-reviewer pour analyser le code récemment modifié.
 
 $ARGUMENTS
 
+## Mot-clé help
+
+`/code-review help` → Affiche :
+
+```
+## /code-review - Aide
+
+**Description** : Revue de code du code modifié
+
+**Usage** :
+  /code-review help             Afficher cette aide
+  /code-review                  Analyser fichiers modifiés depuis main
+  /code-review <fichier>        Analyser un fichier spécifique
+  /code-review security         Focus sécurité OWASP
+  /code-review performance      Focus performances
+  /code-review rationalization  Focus duplications/rationalisation
+
+**Verdicts** : APPROVED / APPROVED WITH RESERVATIONS / REJECTED
+```
+
 **Formats possibles** :
 - `/code-review` : Analyse les fichiers modifiés depuis main
 - `/code-review <fichier>` : Analyse un fichier spécifique

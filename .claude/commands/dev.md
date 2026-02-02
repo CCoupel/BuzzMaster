@@ -6,6 +6,27 @@ Lance les sous-agents DEV pour implémenter du code selon un plan d'implémentat
 
 $ARGUMENTS
 
+## Mot-clé help
+
+`/dev help` → Affiche l'aide ci-dessous :
+
+```
+## /dev - Aide
+
+**Description** : Implémenter du code selon un plan d'implémentation
+
+**Usage** :
+  /dev help                      Afficher cette aide
+  /dev                           Mode unifié (demande le plan)
+  /dev [plan]                    Dispatch automatique backend/frontend
+  /dev backend [plan]            Backend Go uniquement
+  /dev frontend [plan]           Frontend React uniquement
+  /dev fix "description"         Bugfix
+  /dev review "corrections"      Corrections post-review
+
+**Dispatch** : Analyse le plan → séquentiel ou parallèle
+```
+
 **Formats possibles** :
 - `/dev` : Demande le plan si absent
 - `/dev [plan]` : Plan fourni directement (dispatch automatique backend/frontend)

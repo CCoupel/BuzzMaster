@@ -6,6 +6,27 @@ Lance le sous-agent QA pour exécuter les tests et générer un rapport de quali
 
 $ARGUMENTS
 
+## Mot-clé help
+
+`/qa help` → Affiche :
+
+```
+## /qa - Aide
+
+**Description** : Exécuter les tests et générer un rapport de qualité
+
+**Usage** :
+  /qa help           Afficher cette aide
+  /qa                Suite complète (défaut)
+  /qa unit           Tests unitaires uniquement
+  /qa e2e            Tests E2E uniquement
+  /qa full           Suite complète explicite
+  /qa <package>      Tests d'un package spécifique
+
+**Différence** : /qa EXÉCUTE, /test-write ÉCRIT
+**Verdicts** : VALIDATED / VALIDATED WITH RESERVATIONS / NOT VALIDATED
+```
+
 ## Instructions
 
 Utilise le Task tool pour lancer le sous-agent QA avec les paramètres suivants :

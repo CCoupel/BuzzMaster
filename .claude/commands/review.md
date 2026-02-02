@@ -6,6 +6,25 @@ Orchestre un workflow autonome de revue de code pour améliorer la qualité, la 
 
 $ARGUMENTS
 
+## Mot-clé help
+
+`/review help` → Affiche :
+
+```
+## /review - Aide
+
+**Description** : Workflow de revue de code périodique
+
+**Usage** :
+  /review help            Afficher cette aide
+  /review                 Revue complète du codebase
+  /review security        Focus sur la sécurité
+  /review performance     Focus sur les performances
+  /review rationalization Focus sur la rationalisation/refactoring
+
+**Phases** : [Git] → PLAN → [Validation] → DEV → QA → DOC → DEPLOY(QUALIF)
+```
+
 **Formats possibles** :
 - `/review` : Revue complète du codebase
 - `/review security` : Focus sur la sécurité

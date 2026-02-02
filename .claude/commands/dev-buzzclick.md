@@ -13,6 +13,25 @@ Cette commande lance l'agent `dev-buzzclick` pour implementer du code firmware E
 /dev-buzzclick <description de la tache>
 ```
 
+## Mot-clé help
+
+`/dev-buzzclick help` → Affiche :
+
+```
+## /dev-buzzclick - Aide
+
+**Description** : Développement firmware BuzzClick (ESP32-C3)
+
+**Usage** :
+  /dev-buzzclick help                              Afficher cette aide
+  /dev-buzzclick <description>                     Implémenter une tâche
+  /dev-buzzclick Ajouter support OTA               Support mise à jour sans fil
+  /dev-buzzclick Corriger reconnexion WiFi         Avec backoff exponentiel
+  /dev-buzzclick Ajouter animation LED arc-en-ciel Pour phase COUNTDOWN
+
+**Fichiers** : src/BuzzClick/, src/Common/
+```
+
 ## Exemples
 
 ```

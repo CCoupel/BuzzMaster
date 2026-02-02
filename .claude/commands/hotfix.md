@@ -18,6 +18,7 @@ Workflow accelere pour les bugs critiques en production.
 **Référence :** Voir `context/COMMON.md` section 12
 
 ```
+/hotfix help                → Afficher l'aide
 /hotfix status              → État du workflow
 /hotfix resume deploy       → Reprendre au déploiement
 /hotfix jumpto "fix urgent" → Aller à une tâche précise

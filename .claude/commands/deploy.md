@@ -6,6 +6,26 @@ Arrête le serveur en cours puis redéploie vers l'environnement cible.
 
 $ARGUMENTS
 
+## Mot-clé help
+
+`/deploy help` → Affiche l'aide ci-dessous :
+
+```
+## /deploy - Aide
+
+**Description** : Arrêt et redéploiement vers QUALIF / PROD
+
+**Usage** :
+  /deploy help              Afficher cette aide
+  /deploy                   Déployer en QUALIF (défaut)
+  /deploy QUALIF            Build Windows, tests locaux
+  /deploy PREPROD           Build Windows + ARM64, validation finale
+  /deploy PROD              Build + squash merge + tag + release GitHub
+  /deploy hotfix            Mode urgence pour bugs critiques
+
+**Workflow** : QUALIF → PREPROD → PROD
+```
+
 **Format** : `/deploy [QUALIF|PREPROD|PROD|hotfix]`
 
 - **QUALIF** (défaut) : Build Windows, redémarrage local pour tests

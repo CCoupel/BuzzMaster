@@ -6,6 +6,25 @@ Lance l'agent **test-writer** pour écrire les tests (unitaires, E2E) sans les e
 
 $ARGUMENTS
 
+## Mot-clé help
+
+`/test-write help` → Affiche :
+
+```
+## /test-write - Aide
+
+**Description** : Écrire les tests (unitaires, E2E) SANS les exécuter
+
+**Usage** :
+  /test-write help       Afficher cette aide
+  /test-write            Écrire tests pour fichiers modifiés
+  /test-write <fichier>  Écrire tests pour un fichier spécifique
+  /test-write unit       Tests unitaires uniquement
+  /test-write e2e        Scénarios E2E Chrome uniquement
+
+**Différence** : /test-write ÉCRIT, /qa EXÉCUTE
+```
+
 **Formats possibles** :
 - `/test-write` : Analyse les fichiers modifiés et écrit les tests manquants
 - `/test-write <fichier>` : Écrit les tests pour un fichier spécifique
