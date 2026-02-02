@@ -162,8 +162,18 @@ Pour les workflows longs, notifier entre chaque phase majeure :
 ### Workflow Standard BuzzMaster
 
 ```
-PLAN → DEV → TEST-WRITER → REVIEW → QA → DOC → DEPLOY
+PLAN → ⏸️ → DEV → TEST-WRITER → REVIEW → QA → ⏸️ → DOC → DEPLOY → ⏸️
+       │                                       │                   │
+       └── Validation utilisateur (plan)       │                   │
+                                               └── Validation      │
+                                                   utilisateur     │
+                                                   (QA OK)         │
+                                                                   └── Validation
+                                                                       utilisateur
+                                                                       (QUALIF)
 ```
+
+**⏸️ = Points de validation utilisateur obligatoires**
 
 ### Transmission de Contexte
 
@@ -176,13 +186,15 @@ Chaque agent doit :
 
 | Agent | Validation produite | Destinataire |
 |-------|---------------------|--------------|
-| PLAN | Plan d'implémentation | DEV |
+| PLAN | Plan d'implémentation | ⏸️ **Utilisateur** |
 | DEV | Summary + commits | TEST-WRITER, REVIEW |
 | TEST-WRITER | Fichiers de tests | REVIEW, QA |
 | REVIEW | Review Report (APPROVED/REJECTED) | QA ou DEV |
-| QA | QA Report (VALIDATED/NOT VALIDATED) | DOC ou DEV |
+| QA | QA Report (VALIDATED/NOT VALIDATED) | ⏸️ **Utilisateur** |
 | DOC | Documentation finalisée | DEPLOY |
-| DEPLOY | Deployment Report | Utilisateur |
+| DEPLOY | Deployment Report | ⏸️ **Utilisateur** |
+
+**⏸️ = Validation utilisateur requise avant de continuer**
 
 ---
 

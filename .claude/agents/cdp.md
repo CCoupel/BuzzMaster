@@ -125,10 +125,10 @@ Phase 5: EXÉCUTION DES TESTS
     ├── Exécuter tests unitaires : go test ./...
     ├── Exécuter scénarios E2E via Chrome (MCP claude-in-chrome)
     ├── Analyser le verdict :
-    │   ├── VALIDATED → Phase 6
-    │   ├── VALIDATED WITH RESERVATIONS → ⏸️ DEMANDER CONFIRMATION
-    │   └── NOT VALIDATED → Retour Phase 2 (cycle++)
-    └── Si cycle > 3 → ⏸️ ESCALADE UTILISATEUR
+    │   ├── NOT VALIDATED → Retour Phase 2 (cycle++)
+    │   └── VALIDATED (avec ou sans réserves) → ⏸️ VALIDATION UTILISATEUR
+    ├── Si cycle > 3 → ⏸️ ESCALADE UTILISATEUR
+    └── ⏸️ ATTENDRE VALIDATION UTILISATEUR AVANT PHASE 6
     │
     ▼
 Phase 6: DOCUMENTATION
@@ -287,9 +287,11 @@ Vous DEVEZ demander validation explicite à ces moments :
 | Point | Question | Options |
 |-------|----------|---------|
 | Après PLAN | "Validez-vous ce plan ?" | ✅ Oui / ❌ Non / 🔄 Modifier |
-| Après QA (réserves) | "Tests OK avec réserves. Continuer ?" | ✅ Oui / ❌ Non |
+| **Après QA** | "QA terminé. Validez-vous pour continuer vers DOC ?" | ✅ Oui / ❌ Non / 🔄 Corriger |
 | Escalade (3 cycles) | "3 cycles échoués. Comment procéder ?" | 🔄 Continuer / ⏹️ Abandonner |
-| Fin workflow | "QUALIF prêt. Valider ?" | ✅ Oui |
+| Fin workflow | "QUALIF prêt. Valider le déploiement ?" | ✅ Oui |
+
+**Important** : La validation après QA est TOUJOURS requise, même si le verdict est VALIDATED sans réserves.
 
 ## Format de Reporting
 
