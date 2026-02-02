@@ -253,6 +253,55 @@ workflow_state:
   started_at: "2025-01-15T10:00:00"
 ```
 
+### État Global CDP
+
+Pour la commande `/cdp`, l'orchestrateur maintient un état global :
+
+```yaml
+cdp_state:
+  active_workflow:
+    type: FEATURE|BUGFIX|HOTFIX|REFACTOR
+    description: "..."
+    branch: feature/xxx
+    current_phase: dev
+    # ... (workflow_state ci-dessus)
+  context_additions:
+    - "Client utilise Safari"
+    - "API limite 100 req/min"
+  notes:
+    - "À discuter avec l'équipe"
+  priority: normal|high|low
+  paused: false
+  config:
+    max_cycles: 3
+    auto_commit: false
+    parallel_agents: true
+  history:
+    - {type: BUGFIX, description: "...", completed_at: "..."}
+```
+
+---
+
+## 10. Commande /cdp
+
+La commande `/cdp` permet le contrôle direct de l'orchestrateur :
+
+| Mot-clé | Action |
+|---------|--------|
+| `help` | Aide sur /cdp |
+| `status` | Vue globale (tous workflows) |
+| `abort` | Abandonner workflow actuel |
+| `pause` | Mettre en pause |
+| `resume` | Reprendre après pause |
+| `context "..."` | Ajouter contexte aux sous-agents |
+| `note "..."` | Ajouter note au rapport final |
+| `priority <level>` | Changer priorité (high/normal/low) |
+| `config` | Afficher configuration CDP |
+
+**Différence clé** :
+- `/feature status` → état du workflow FEATURE
+- `/cdp status` → vue globale de l'orchestrateur
+
 ---
 
 ## Usage
@@ -266,4 +315,5 @@ Dans les commandes CDP, référencer ce fichier :
 - Validation : section 5
 - Erreurs : section 6
 - Mots-clés contrôle : section 9
+- Commande /cdp : section 10
 ```
