@@ -118,6 +118,16 @@ Définissent **comment les équipes jouent** (ordre, tour, rotation).
 
 ### Implémentation
 
+- [ ] **Sélection des équipes participantes (GamePage - Prepare)**
+  - Lors du "Prepare" d'un jeu Memory multi-équipes, afficher la liste des équipes
+  - Cases à cocher pour sélectionner les équipes participantes
+  - Minimum 2 équipes requises pour les modes multi-équipes
+  - Ordre des équipes sélectionnées = ordre de rotation
+  - Possibilité de réordonner les équipes (drag & drop ou boutons ↑↓)
+  - Stocker dans GameState : `MemoryParticipatingTeams []string`
+  - Interface : section dépliable "Équipes participantes" avec checkboxes
+  - Validation : désactiver le bouton "Start" si < 2 équipes en mode multi
+
 - [ ] **Nouveau champ dans Question MEMORY**
   ```json
   {
