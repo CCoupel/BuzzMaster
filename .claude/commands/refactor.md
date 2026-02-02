@@ -13,6 +13,16 @@ Workflow pour le refactoring de code existant sans modification du comportement.
 /refactor <description du refactoring>
 ```
 
+## Mots-clés de contrôle
+
+**Référence :** Voir `context/COMMON.md` section 12
+
+```
+/refactor status              → État du workflow
+/refactor resume qa           → Reprendre aux tests
+/refactor jumpto "extraction" → Aller à une tâche précise
+```
+
 ## Références
 
 **Contexte projet :** Voir `context/COMMON.md` section 1

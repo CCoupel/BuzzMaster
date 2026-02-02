@@ -420,6 +420,87 @@ rm -f server.exe buzzcontrol buzzcontrol-arm6
 
 ---
 
+## 12. Mots-Clés Réservés (Contrôle de Workflow)
+
+Les commandes CDP (`/feature`, `/bugfix`, `/hotfix`, `/refactor`) reconnaissent des mots-clés spéciaux pour interroger ou reprendre un workflow.
+
+### 12.1 Mots-Clés Disponibles
+
+| Mot-clé | Description | Exemple |
+|---------|-------------|---------|
+| `status` | Affiche l'état actuel du workflow | `/feature status` |
+| `plan` | Affiche le plan sans exécuter | `/feature plan` |
+| `resume <phase>` | Reprend à une phase spécifique | `/feature resume qa` |
+| `skip <phase>` | Saute une phase | `/feature skip review` |
+| `jumpto <tâche>` | Démarre à une tâche précise du plan | `/feature jumpto "Créer endpoint API"` |
+
+### 12.2 Phases Valides pour resume/skip
+
+```
+init → plan → dev → review → qa → doc → deploy
+```
+
+### 12.3 Comportement par Mot-Clé
+
+**`status`** :
+```markdown
+## État du Workflow
+
+**Type** : FEATURE
+**Phase actuelle** : DEV (3/7)
+**Tâches** : 2/5 complétées
+**Prochaine étape** : Implémenter frontend
+
+[Reprendre] | [Voir plan] | [Abandonner]
+```
+
+**`plan`** :
+```markdown
+## Plan d'Implémentation
+
+- [x] Phase 1 : Init (branche créée)
+- [x] Phase 2 : Plan validé
+- [ ] Phase 3 : DEV ← en cours
+  - [x] Tâche 1 : Backend API
+  - [ ] Tâche 2 : Frontend composant
+  - [ ] Tâche 3 : Tests
+- [ ] Phase 4 : REVIEW
+- [ ] Phase 5 : QA
+- [ ] Phase 6 : DOC
+- [ ] Phase 7 : DEPLOY
+```
+
+**`resume <phase>`** :
+- Vérifie que les phases précédentes sont complètes
+- Si non, propose de compléter ou forcer
+- Reprend l'exécution à la phase spécifiée
+
+**`skip <phase>`** :
+- Marque la phase comme "skippée"
+- Continue à la phase suivante
+- Note dans le rapport final
+
+**`jumpto <tâche>`** :
+- Recherche la tâche par nom (fuzzy match)
+- Positionne le workflow à cette tâche
+- Affiche contexte pour confirmation
+
+### 12.4 Détection Automatique
+
+Le premier mot de `$ARGUMENTS` est vérifié contre cette liste. Si match :
+- Extraire le mot-clé et les paramètres
+- Exécuter l'action correspondante
+- Ne PAS lancer le workflow normal
+
+```
+$ARGUMENTS = "status"           → Action: afficher état
+$ARGUMENTS = "resume dev"       → Action: reprendre à DEV
+$ARGUMENTS = "jumpto API test"  → Action: chercher tâche "API test"
+$ARGUMENTS = "Ajouter mode X"   → Action: workflow normal (pas de mot-clé)
+```
+
+---
+
 ## Usage
 
 **Dans les commandes et agents**, au lieu de répéter le contexte projet :

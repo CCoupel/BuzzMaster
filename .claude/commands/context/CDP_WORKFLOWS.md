@@ -192,6 +192,66 @@ Si cycle > 3 → ESCALADE utilisateur
 
 ---
 
+## 9. Mots-Clés de Contrôle
+
+Les commandes CDP reconnaissent des mots-clés spéciaux pour interroger ou reprendre un workflow.
+
+**Référence complète :** Voir `context/COMMON.md` section 12
+
+### Handling des Mots-Clés
+
+```
+Réception $ARGUMENTS
+    │
+    ├── Premier mot = "status" ?
+    │   └── Afficher état workflow actuel
+    │
+    ├── Premier mot = "plan" ?
+    │   └── Afficher plan sans exécuter
+    │
+    ├── Premier mot = "resume" ?
+    │   └── Extraire <phase>, valider, reprendre
+    │
+    ├── Premier mot = "skip" ?
+    │   └── Extraire <phase>, marquer skippée, continuer
+    │
+    ├── Premier mot = "jumpto" ?
+    │   └── Extraire <tâche>, rechercher, positionner
+    │
+    └── Sinon → Workflow normal
+```
+
+### État Persistant
+
+Pour supporter `status`/`resume`/`jumpto`, le CDP maintient un état :
+
+```yaml
+workflow_state:
+  type: FEATURE|BUGFIX|HOTFIX|REFACTOR
+  description: "..."
+  branch: feature/xxx
+  current_phase: dev|review|qa|doc|deploy
+  phase_status:
+    init: completed
+    plan: completed
+    dev: in_progress
+    review: pending
+    qa: pending
+    doc: pending
+    deploy: pending
+  tasks:
+    - name: "Backend API"
+      status: completed
+    - name: "Frontend composant"
+      status: in_progress
+    - name: "Tests"
+      status: pending
+  cycles: 1
+  started_at: "2025-01-15T10:00:00"
+```
+
+---
+
 ## Usage
 
 Dans les commandes CDP, référencer ce fichier :
@@ -202,4 +262,5 @@ Dans les commandes CDP, référencer ce fichier :
 - Phases : section 3
 - Validation : section 5
 - Erreurs : section 6
+- Mots-clés contrôle : section 9
 ```

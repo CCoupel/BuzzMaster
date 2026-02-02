@@ -6,6 +6,21 @@ Orchestre le workflow simplifié de correction de bug via le **Chef De Projet (C
 
 $ARGUMENTS
 
+## Mots-clés de contrôle
+
+**Référence :** Voir `context/COMMON.md` section 12
+
+| Mot-clé | Action |
+|---------|--------|
+| `status` | Affiche l'état du workflow en cours |
+| `plan` | Affiche le plan sans exécuter |
+| `resume <phase>` | Reprend à une phase (init/dev/review/qa/doc/deploy) |
+| `skip <phase>` | Saute une phase |
+| `jumpto <tâche>` | Démarre à une tâche précise du plan |
+
+Si `$ARGUMENTS` commence par un mot-clé → exécuter l'action correspondante.
+Sinon → workflow normal.
+
 ## Workflow orchestré par CDP
 
 ```

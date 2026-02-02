@@ -6,6 +6,21 @@ Orchestre le workflow complet de développement d'une feature via le **Chef De P
 
 $ARGUMENTS
 
+## Mots-clés de contrôle
+
+**Référence :** Voir `context/COMMON.md` section 12
+
+| Mot-clé | Action |
+|---------|--------|
+| `status` | Affiche l'état du workflow en cours |
+| `plan` | Affiche le plan sans exécuter |
+| `resume <phase>` | Reprend à une phase (init/plan/dev/review/qa/doc/deploy) |
+| `skip <phase>` | Saute une phase |
+| `jumpto <tâche>` | Démarre à une tâche précise du plan |
+
+Si `$ARGUMENTS` commence par un mot-clé → exécuter l'action correspondante.
+Sinon → workflow normal.
+
 ## Workflow orchestré par CDP
 
 ```

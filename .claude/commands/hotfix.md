@@ -13,6 +13,16 @@ Workflow accelere pour les bugs critiques en production.
 /hotfix <description du bug critique>
 ```
 
+## Mots-clés de contrôle
+
+**Référence :** Voir `context/COMMON.md` section 12
+
+```
+/hotfix status              → État du workflow
+/hotfix resume deploy       → Reprendre au déploiement
+/hotfix jumpto "fix urgent" → Aller à une tâche précise
+```
+
 ## Références
 
 **Contexte projet :** Voir `context/COMMON.md` section 1
