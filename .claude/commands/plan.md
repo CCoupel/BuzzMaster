@@ -26,9 +26,9 @@ prompt: voir ci-dessous
 ```
 Crée un plan d'implémentation détaillé pour BuzzControl.
 
-**Contexte projet :** Voir `.claude/context/COMMON.md` section 1
-**Versionnement :** Voir `.claude/context/COMMON.md` section 5
-**Workflows :** Voir `.claude/context/COMMON.md` section 9
+**Contexte projet :** Voir `context/COMMON.md` section 1
+**Versionnement :** Voir `context/COMMON.md` section 5
+**Workflows :** Voir `context/COMMON.md` section 9
 
 **Références additionnelles :**
 - Backlog : backlog/*.md
@@ -45,7 +45,7 @@ Crée un plan d'implémentation détaillé pour BuzzControl.
    - Consulter CHANGELOG.md pour l'historique des versions
 
 2. **Créer la branche et incrémenter la version**
-   Voir `.claude/context/COMMON.md` section 6.1 pour la procédure complète.
+   Voir `context/COMMON.md` section 6.1 pour la procédure complète.
    # Incrémenter Y (minor) pour nouvelle feature
 
 3. **Produire le plan structuré**
@@ -79,7 +79,7 @@ Crée un plan d'implémentation détaillé pour BuzzControl.
 - NE PAS créer de breaking changes sans migration
 - L'affichage TV (/tv) est STATIQUE - pas de scroll
 
-**Versionnement :** Voir `.claude/context/COMMON.md` section 5.2
+**Versionnement :** Voir `context/COMMON.md` section 5.2
 - Y (minor) : Nouvelles features ← TU INCRÉMENTES CELUI-CI
 
 **Attendre validation utilisateur avant de passer au développement.**

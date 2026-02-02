@@ -90,18 +90,18 @@ prompt: [Tâches frontend]
 ```
 Implémente le code backend Go pour BuzzControl.
 
-**Contexte projet :** Voir `.claude/context/COMMON.md` section 1
-**Build :** Voir `.claude/context/COMMON.md` section 2
-**Versionnement :** Voir `.claude/context/COMMON.md` section 5
+**Contexte projet :** Voir `context/COMMON.md` section 1
+**Build :** Voir `context/COMMON.md` section 2
+**Versionnement :** Voir `context/COMMON.md` section 5
 
 **Plan backend :** $ARGUMENTS (partie backend)
 
 **Actions :**
-1. Incrémenter z dans config.json (voir COMMON.md section 5.2)
+1. Incrémenter z dans config.json (voir context/COMMON.md section 5.2)
 2. Implémenter : models → engine → tests → protocol → handlers
-3. Commits atomiques (voir COMMON.md section 6.2)
+3. Commits atomiques (voir context/COMMON.md section 6.2)
 4. Documenter nouvelles actions WebSocket et champs GameState
-5. Build complet (voir COMMON.md section 2.1)
+5. Build complet (voir context/COMMON.md section 2.1)
 6. Push
 ```
 
@@ -110,9 +110,9 @@ Implémente le code backend Go pour BuzzControl.
 ```
 Implémente le code frontend React pour BuzzControl.
 
-**Contexte projet :** Voir `.claude/context/COMMON.md` section 1
-**Build :** Voir `.claude/context/COMMON.md` section 2
-**Versionnement :** Voir `.claude/context/COMMON.md` section 5
+**Contexte projet :** Voir `context/COMMON.md` section 1
+**Build :** Voir `context/COMMON.md` section 2
+**Versionnement :** Voir `context/COMMON.md` section 5
 
 **Plan frontend :** $ARGUMENTS (partie frontend)
 
@@ -121,11 +121,11 @@ Implémente le code frontend React pour BuzzControl.
 - Nouveaux champs GameState : [liste]
 
 **Actions :**
-1. Incrémenter z dans config.json (voir COMMON.md section 5.2)
+1. Incrémenter z dans config.json (voir context/COMMON.md section 5.2)
 2. Implémenter : hooks → components → pages → PlayerDisplay → CSS
 3. Vérifier contrainte TV STATIQUE (overflow: hidden, unités vh/vw)
-4. Commits atomiques (voir COMMON.md section 6.2)
-5. Build complet (voir COMMON.md section 2.1)
+4. Commits atomiques (voir context/COMMON.md section 6.2)
+5. Build complet (voir context/COMMON.md section 2.1)
 6. Push
 ```
 

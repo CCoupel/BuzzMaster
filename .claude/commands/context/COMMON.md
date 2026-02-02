@@ -433,7 +433,7 @@ rm -f server.exe buzzcontrol buzzcontrol-arm6
 - Config version : server-go/config.json
 
 # Après (référence unique)
-**Contexte projet :** Voir `.claude/context/COMMON.md` section 1
-**Build :** Voir `.claude/context/COMMON.md` section 2
-**Tests :** Voir `.claude/context/COMMON.md` section 4
+**Contexte projet :** Voir `context/COMMON.md` section 1
+**Build :** Voir `context/COMMON.md` section 2
+**Tests :** Voir `context/COMMON.md` section 4
 ```

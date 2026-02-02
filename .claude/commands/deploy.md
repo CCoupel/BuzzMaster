@@ -28,10 +28,10 @@ prompt: voir ci-dessous
 ```
 Arrête et redéploie le serveur BuzzControl vers l'environnement cible.
 
-**Contexte projet :** Voir `.claude/context/COMMON.md` section 1
-**Contrôle serveur :** Voir `.claude/context/COMMON.md` section 3
-**Build :** Voir `.claude/context/COMMON.md` section 2
-**Checklists :** Voir `.claude/context/COMMON.md` section 7
+**Contexte projet :** Voir `context/COMMON.md` section 1
+**Contrôle serveur :** Voir `context/COMMON.md` section 3
+**Build :** Voir `context/COMMON.md` section 2
+**Checklists :** Voir `context/COMMON.md` section 7
 
 **Procédures détaillées :**
 - QUALIF : docs/QUALIF_PROCEDURE.md
@@ -44,7 +44,7 @@ Arrête et redéploie le serveur BuzzControl vers l'environnement cible.
 ## PHASE 1 : PRÉPARATION
 
 1. **Arrêter le serveur en cours**
-   Voir `.claude/context/COMMON.md` section 3.1 (Arrêt Gracieux)
+   Voir `context/COMMON.md` section 3.1 (Arrêt Gracieux)
 
 2. **Collecter les informations**
    - Version : lire server-go/config.json → champ "version"
@@ -85,12 +85,12 @@ Arrête et redéploie le serveur BuzzControl vers l'environnement cible.
 ## PHASE 3 : BUILD ET TEST LOCAL
 
 9. **Build Frontend + Backend**
-   Voir `.claude/context/COMMON.md` section 2.1 (Build Complet)
+   Voir `context/COMMON.md` section 2.1 (Build Complet)
 
    ⚠️ RÈGLE CRITIQUE : Frontend AVANT Backend (mode portable)
 
 10. **Build Go selon environnement**
-   Voir `.claude/context/COMMON.md` section 2.2 (Build Cross-Platform)
+   Voir `context/COMMON.md` section 2.2 (Build Cross-Platform)
 
    - QUALIF : Windows uniquement
    - PREPROD/PROD : Windows + ARM64
@@ -101,7 +101,7 @@ Arrête et redéploie le serveur BuzzControl vers l'environnement cible.
     - Le serveur reste actif après les tests
 
 12. **Vérification de la version (avec retry automatique)**
-    Voir `.claude/context/COMMON.md` section 3.3 (Vérification Post-Démarrage)
+    Voir `context/COMMON.md` section 3.3 (Vérification Post-Démarrage)
     et section 3.4 (Gestion Version Mismatch)
 
     - Maximum 2 tentatives de retry
@@ -316,7 +316,7 @@ PROD → Release (merge + tag + binaires prêts pour Raspberry Pi)
 ```
 
 **Règles critiques :**
-Voir `.claude/context/COMMON.md` sections 2-7 pour les règles détaillées.
+Voir `context/COMMON.md` sections 2-7 pour les règles détaillées.
 
 Résumé :
 - Build : Frontend AVANT Backend (mode portable) - COMMON.md 2.1
