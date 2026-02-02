@@ -22,6 +22,7 @@ backlog/
 | [metadata-binaires.md](TODO/metadata-binaires.md) | Métadonnées dans les binaires (nom, version, icône) |
 | [navbar-menu-connexion.md](TODO/navbar-menu-connexion.md) | Menu déroulant sur pastille de connexion (Config, Logs) |
 | [notification-nouvelle-version.md](TODO/notification-nouvelle-version.md) | Mise à jour automatique : téléchargement et redémarrage sur nouvelle version |
+| [vjoueur-qcm-multicolore.md](TODO/vjoueur-qcm-multicolore.md) | VJoueur valide pour les 4 couleurs QCM + buzz direct sur écran |
 
 ## En-Cours
 
