@@ -6,6 +6,26 @@ Lance le sous-agent code-reviewer pour analyser le code récemment modifié.
 
 $ARGUMENTS
 
+## Mot-clé help
+
+`/code-review help` → Affiche :
+
+```
+## /code-review - Aide
+
+**Description** : Revue de code du code modifié
+
+**Usage** :
+  /code-review help             Afficher cette aide
+  /code-review                  Analyser fichiers modifiés depuis main
+  /code-review <fichier>        Analyser un fichier spécifique
+  /code-review security         Focus sécurité OWASP
+  /code-review performance      Focus performances
+  /code-review rationalization  Focus duplications/rationalisation
+
+**Verdicts** : APPROVED / APPROVED WITH RESERVATIONS / REJECTED
+```
+
 **Formats possibles** :
 - `/code-review` : Analyse les fichiers modifiés depuis main
 - `/code-review <fichier>` : Analyse un fichier spécifique
@@ -28,56 +48,20 @@ prompt: voir ci-dessous
 ```
 Effectue une revue de code pour BuzzControl.
 
-**Contexte projet :**
-- Répertoire : /home/user/BuzzMaster
-- Serveur Go : server-go/
-- Frontend React : server-go/web/src/
-- Architecture : CLAUDE.md
+**Contexte projet :** Voir `context/COMMON.md` section 1
+**Framework Qualité :** Voir `context/QUALITY.md`
+- Framework review : section 4
+- Sévérités : section 3
+- Verdicts : section 5
+- Structure rapport : section 8
+- Règles : section 10
 
 **Input utilisateur :** $ARGUMENTS
 
-**Étapes à exécuter :**
-
-1. **Identifier les fichiers à analyser**
-   - Si aucun argument : `git diff main --name-only`
-   - Si fichier spécifié : analyser ce fichier uniquement
-   - Si focus spécifié : adapter l'analyse au focus
-
-2. **Analyser selon le framework de review**
-
-   | Catégorie | Vérifications |
-   |-----------|---------------|
-   | Qualité | Naming, fonctions courtes, comments, errors |
-   | Sécurité | Injection, XSS, secrets, validation |
-   | Performance | Boucles, re-renders, structures |
-   | Architecture | CLAUDE.md conformité, patterns |
-   | Rationalisation | Duplications, patterns répétés |
-
-3. **Produire le rapport structuré**
-
-   - 📊 Overview : Fichiers, lignes, statut global
-   - ✅ Points positifs
-   - ⚠️ Issues détectées (Critical / Warning / Rationalization / Suggestion)
-   - 🔒 Analyse sécurité
-   - 📈 Analyse performance
-   - 🏗️ Conformité architecture
-   - 🔄 Analyse rationalisation (duplications)
-   - 📝 Qualité des tests
-   - 🎯 Recommandations
-   - ✅ Décision finale : APPROVED / APPROVED WITH RESERVATIONS / REJECTED
-
-**Niveaux de sévérité :**
-- 🔴 Critical : Bloquant (sécurité, bug majeur, ne compile pas)
-- 🟡 Warning : Important mais non-bloquant
-- 🟠 Rationalization : Duplication > 70% ou pattern 3+ occurrences
-- 🔵 Suggestion : Amélioration optionnelle
-
-**Règles critiques :**
-- NE PAS approuver si issue critique de sécurité
-- NE PAS être trop laxiste (mieux vaut signaler un doute)
-- NE PAS corriger le code (tu ne fais que reviewer)
-- NE PAS oublier d'analyser les tests
-- NE PAS ignorer les duplications de code
+**Mode** :
+- Aucun argument : `git diff main --name-only`
+- Fichier : analyser ce fichier
+- Focus (security/performance/rationalization) : adapter l'analyse
 ```
 
 ## Action immédiate

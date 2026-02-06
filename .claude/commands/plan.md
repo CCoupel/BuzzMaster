@@ -6,6 +6,25 @@ Lance le sous-agent implementation-planner pour créer un plan d'implémentation
 
 $ARGUMENTS
 
+## Mot-clé help
+
+`/plan help` → Affiche l'aide ci-dessous :
+
+```
+## /plan - Aide
+
+**Description** : Créer un plan d'implémentation détaillé AVANT développement
+
+**Usage** :
+  /plan help                           Afficher cette aide
+  /plan backlog/<nom>.md               Depuis un backlog
+  /plan backlog/<nom>.md Phase X       Phase spécifique d'un backlog
+  /plan "Description de la feature"    Description libre
+  /plan bugfix "Description du bug"    Planification de bugfix
+
+**Output** : Plan structuré avec tâches Backend → Frontend → Tests → Docs
+```
+
 **Formats possibles** :
 - `/plan backlog/memory-game.md Phase 6` : Depuis un backlog
 - `/plan "Description de la feature"` : Description libre
@@ -26,11 +45,11 @@ prompt: voir ci-dessous
 ```
 Crée un plan d'implémentation détaillé pour BuzzControl.
 
-**Contexte projet :**
-- Répertoire : C:\Users\cyril\Documents\VScode\buzzcontrol
-- Serveur Go : server-go/
-- Frontend React : server-go/web/src/
-- Config version : server-go/config.json
+**Contexte projet :** Voir `context/COMMON.md` section 1
+**Versionnement :** Voir `context/COMMON.md` section 5
+**Workflows :** Voir `context/COMMON.md` section 9
+
+**Références additionnelles :**
 - Backlog : backlog/*.md
 - Procédure : docs/DEV_PROCEDURE.md
 
@@ -45,12 +64,8 @@ Crée un plan d'implémentation détaillé pour BuzzControl.
    - Consulter CHANGELOG.md pour l'historique des versions
 
 2. **Créer la branche et incrémenter la version**
-   git checkout main && git pull origin main
-   git checkout -b feature/<nom-court>
-   # Incrémenter y dans config.json : 2.39.0 → 2.40.0
-   git add server-go/config.json
-   git commit -m "chore(version): Start vX.Y.0 - <feature name>"
-   git push -u origin feature/<nom-court>
+   Voir `context/COMMON.md` section 6.1 pour la procédure complète.
+   # Incrémenter Y (minor) pour nouvelle feature
 
 3. **Produire le plan structuré**
 
@@ -83,10 +98,8 @@ Crée un plan d'implémentation détaillé pour BuzzControl.
 - NE PAS créer de breaking changes sans migration
 - L'affichage TV (/tv) est STATIQUE - pas de scroll
 
-**Versionnement :**
-- x (major) : Breaking changes
-- y (minor) : Nouvelles features ← TU INCRÉMENTES CELUI-CI
-- z (patch) : Bugfixes (géré par agent DEV)
+**Versionnement :** Voir `context/COMMON.md` section 5.2
+- Y (minor) : Nouvelles features ← TU INCRÉMENTES CELUI-CI
 
 **Attendre validation utilisateur avant de passer au développement.**
 ```

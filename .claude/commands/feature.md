@@ -6,6 +6,22 @@ Orchestre le workflow complet de développement d'une feature via le **Chef De P
 
 $ARGUMENTS
 
+## Mots-clés de contrôle
+
+**Référence :** Voir `context/COMMON.md` section 12
+
+| Mot-clé | Action |
+|---------|--------|
+| `help` | Affiche l'aide et les mots-clés disponibles |
+| `status` | Affiche l'état du workflow en cours |
+| `plan` | Affiche le plan sans exécuter |
+| `resume <phase>` | Reprend à une phase (init/plan/dev/review/qa/doc/deploy) |
+| `skip <phase>` | Saute une phase |
+| `jumpto <tâche>` | Démarre à une tâche précise du plan |
+
+Si `$ARGUMENTS` commence par un mot-clé → exécuter l'action correspondante.
+Sinon → workflow normal.
+
 ## Workflow orchestré par CDP
 
 ```
@@ -31,138 +47,32 @@ prompt: voir ci-dessous
 ### Prompt à transmettre au CDP
 
 ```
-Orchestre le workflow complet de développement d'une feature pour BuzzControl.
+Orchestre le workflow FEATURE pour BuzzControl.
 
-**Contexte projet :**
-- Répertoire : /home/user/BuzzMaster
-- Serveur Go : server-go/
-- Frontend React : server-go/web/src/
-- Config version : server-go/config.json
-- Backlog : backlog/*.md
-- Architecture : CLAUDE.md
+**Contexte projet :** Voir `context/COMMON.md` section 1
+**Workflow CDP :** Voir `context/CDP_WORKFLOWS.md`
+- Type : FEATURE
+- Phases : section 3 (workflow standard)
+- Dispatch DEV : section 4 (Phase Dev)
+- Validation : section 5
+- Erreurs : section 6
+- Règles : section 8 (FEATURE)
 
 **Demande utilisateur :** $ARGUMENTS
 
-**Type de workflow :** FEATURE (nouvelle fonctionnalité)
-
----
-
-## Phase 0 : Recherche Backlog
-
-1. Lire `backlog/README.md` pour lister les entrées
-2. Chercher une correspondance avec "$ARGUMENTS"
-3. Si trouvée : Demander confirmation à l'utilisateur
-4. Si confirmée : Utiliser le backlog pour le PLAN
-
-⏸️ VALIDATION : Confirmer l'entrée backlog
-
----
-
-## Phase 1 : Planification
-
-1. Lancer l'agent `implementation-planner`
-2. Créer branche `feature/<nom-court>`
-3. Incrémenter version mineure (y) : 2.40.0 → 2.41.0
-4. Commit initial et push
-5. Produire le plan structuré
-
-⏸️ VALIDATION : L'utilisateur doit valider le plan
-
----
-
-## Phase 2 : Développement
-
-Analyser le plan pour déterminer la stratégie :
-
-**Si dépendances backend → frontend :**
-1. Lancer `dev-backend` avec les tâches backend
-2. Attendre le résumé (nouvelles actions WS, champs GameState)
-3. Lancer `dev-frontend` avec les tâches frontend + résumé backend
-
-**Si indépendant :**
-1. Lancer `dev-backend` ET `dev-frontend` en parallèle
-
-**Si backend seul :**
-1. Lancer `dev-backend` uniquement
-
-**Si frontend seul :**
-1. Lancer `dev-frontend` uniquement
-
----
-
-## Phase 3 : Revue de Code
-
-1. Lancer l'agent `code-reviewer`
-2. Analyser le verdict :
-   - APPROVED → Phase 4
-   - APPROVED WITH RESERVATIONS → Phase 4 (noter réserves)
-   - REJECTED → Retour Phase 2 avec corrections (cycle++)
-
----
-
-## Phase 4 : Tests QA
-
-1. Lancer l'agent `QA`
-2. Analyser le verdict :
-   - VALIDATED → Phase 5
-   - VALIDATED WITH RESERVATIONS → ⏸️ Demander confirmation
-   - NOT VALIDATED → Retour Phase 2 avec erreurs (cycle++)
-
-Si cycle > 3 → ⏸️ ESCALADE utilisateur
-
----
-
-## Phase 5 : Documentation
-
-1. Lancer l'agent `doc-updater`
-2. Type : feature
-3. Finaliser version (reset z à 0)
-
----
-
-## Phase 6 : Déploiement QUALIF
-
-1. Lancer l'agent `deploy` avec target=QUALIF
-2. Build Windows + ARM64
-3. Créer archive QUALIF
-
----
-
-## Fin du workflow
-
-Produire le rapport final avec :
-- Durée totale
-- Cycles effectués
-- Livrables produits
-- Prochaines étapes (valider QUALIF, puis /deploy PROD)
+**Spécificités FEATURE :**
+- Incrémente Y : 2.40.0 → 2.41.0
+- Branche : `feature/<nom-court>`
+- Backlog : Rechercher dans backlog/*.md, demander confirmation
+- Scope large autorisé
+- Documentation complète requise
 ```
 
-## Points de validation CDP
+## Références CDP
 
-| Point | Qui décide | Options |
-|-------|------------|---------|
-| Backlog | Utilisateur | Confirmer / Refuser / Autre |
-| Plan | Utilisateur | Valider / Modifier / Refuser |
-| QA avec réserves | Utilisateur | Continuer / Corriger |
-| Escalade (3 cycles) | Utilisateur | Continuer / Abandonner |
-
-## Gestion des erreurs par CDP
-
-| Situation | Action CDP |
-|-----------|------------|
-| Backlog non trouvé | Proposer création ou continuer sans |
-| Plan refusé | Demander modifications |
-| Review rejetée | Retour DEV avec corrections |
-| QA échoue | Retour DEV avec erreurs |
-| Build échoue | Retour DEV avec erreur build |
-| 3 cycles atteints | Escalade utilisateur |
-
-## Avantages du CDP
-
-- **Décision intelligente** : Parallélise ou séquence selon les dépendances
-- **Gestion des cycles** : Automatique jusqu'à 3 cycles
-- **Reporting** : Progression en temps réel
-- **Moins d'intervention** : Validation uniquement aux points clés
+**Points de validation :** Voir `context/CDP_WORKFLOWS.md` section 5
+**Gestion erreurs :** Voir `context/CDP_WORKFLOWS.md` section 6
+**Rapport final :** Voir `context/CDP_WORKFLOWS.md` section 7
 
 ## Action immédiate
 
