@@ -45,6 +45,13 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
   const [cascadeHideStarted, setCascadeHideStarted] = useState(false) // True when cascade hide has been triggered
   const [localCountdown, setLocalCountdown] = useState(null) // Local countdown that starts after cascade reveal is done
 
+  // DEBUG: Log gameState
+  useEffect(() => {
+    console.log('[PlayerDisplay] gameState.question:', gameState.question)
+    console.log('[PlayerDisplay] gameState.phase:', gameState.phase)
+    console.log('[PlayerDisplay] gameState.remote:', gameState.remote)
+  }, [gameState.question, gameState.phase, gameState.remote])
+
   // Check if admin mode (for pair hints visibility)
   const isAdminPreview = useMemo(() => {
     const params = new URLSearchParams(window.location.search)
@@ -594,6 +601,15 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
     return color
   }
 
+  // Get team color by team name (for Memory matched pairs)
+  const getTeamColorByName = (teamName) => {
+    const team = Object.values(teams).find(t => t.NAME === teamName)
+    if (team && team.COLOR) {
+      return getRgbColor(team.COLOR)
+    }
+    return '#4CAF50' // Green by default (SOLO mode)
+  }
+
   // Neon effect configuration
   const neonConfig = useMemo(() => {
     return gameState?.neonEffect || {
@@ -618,9 +634,15 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
   }, [neonConfig.enabled, gameState?.phase])
 
   // Get category color for neon effect
+  // Priority: Memory team color > Category color > default
   const neonCategoryColor = useMemo(() => {
+    // If Memory multi-teams mode and a team is playing, use team color
+    if (gameState?.MEMORY_CURRENT_TEAM_COLOR && Array.isArray(gameState.MEMORY_CURRENT_TEAM_COLOR)) {
+      return `rgb(${gameState.MEMORY_CURRENT_TEAM_COLOR.join(',')})`
+    }
+    // Otherwise, use category color
     return getCategoryColor(gameState?.question?.CATEGORY)
-  }, [gameState?.question?.CATEGORY])
+  }, [gameState?.question?.CATEGORY, gameState?.MEMORY_CURRENT_TEAM_COLOR])
 
   // Neon style variables
   const neonStyle = useMemo(() => {
@@ -1352,7 +1374,16 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
             )}
 
             {/* MEMORY Game Content - unified block for READY through REVEALED */}
-            {isMemory && showMemoryGrid && gameState.question && (
+            {isMemory && showMemoryGrid && gameState.question && (() => {
+              // DEBUG logs
+              console.log('[PlayerDisplay] DEBUG:', {
+                QUESTION: gameState.question?.QUESTION,
+                MEMORY_CURRENT_TEAM: gameState.MEMORY_CURRENT_TEAM,
+                MEMORY_PAIR_OWNERS: gameState.MEMORY_PAIR_OWNERS,
+                MEMORY_TEAM_PAIRS: gameState.MEMORY_TEAM_PAIRS,
+                phase: gameState.phase
+              })
+              return (
               <div className="game-content-zones memory-game">
                 {/* Zone 1: Timer - only show during STARTED when cascade hide is done */}
                 <div className="zone-timer">
@@ -1477,6 +1508,20 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
                       const canClick = gameState.phase === 'STARTED' && !isMatched && !isFlipped && !isVPlayer
                       // Only show matched styling during gameplay phases (not before game starts)
                       const showMatchedStyle = isGameplayPhase && isMatched
+                      // Get team color for matched pairs (convert pairId to string for JSON key lookup)
+                      const ownerTeam = gameState.MEMORY_PAIR_OWNERS?.[String(cardData.pairId)]
+                      const teamColor = ownerTeam ? getTeamColorByName(ownerTeam) : '#4CAF50'
+
+                      // DEBUG: Log team color lookup for matched pairs
+                      if (isMatched && index === 0) {
+                        console.log('[PlayerDisplay] Pair color lookup:', {
+                          pairId: cardData.pairId,
+                          pairIdString: String(cardData.pairId),
+                          MEMORY_PAIR_OWNERS: gameState.MEMORY_PAIR_OWNERS,
+                          ownerTeam,
+                          teamColor
+                        })
+                      }
                       return (
                         <motion.div
                           key={cardData.id}
@@ -1485,7 +1530,10 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
                           animate={{ opacity: 1, scale: 1 }}
                           transition={{ delay: index * 0.05, duration: 0.3 }}
                           onClick={() => canClick && flipMemoryCard(cardData.id)}
-                          style={{ cursor: canClick ? 'pointer' : 'default' }}
+                          style={{
+                            cursor: canClick ? 'pointer' : 'default',
+                            '--matched-team-color': teamColor
+                          }}
                         >
                           <div className="memory-card-inner">
                             <div className="memory-card-front">
@@ -1506,27 +1554,70 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
                   </div>
                 </div>
 
-                {/* Zone 4: Memory stats during gameplay, answer during reveal */}
+                {/* Zone 4: Team indicators during gameplay, results during reveal */}
                 <div className="zone-answers">
-                  {/* Memory stats during STARTED/PAUSED */}
-                  {(gameState.phase === 'STARTED' || gameState.phase === 'PAUSED') && (
-                    <div className="memory-stats">
-                      <div className="memory-stat">
-                        <span className="memory-stat-label">Paires</span>
-                        <span className="memory-stat-value">
-                          {gameState.memoryMatchedPairs?.length || 0} / {gameState.question?.MEMORY_PAIRS?.length || 0}
-                        </span>
-                      </div>
-                      {(gameState.memoryErrors > 0 || gameState.question?.MEMORY_CONFIG?.ERROR_PENALTY > 0) && (
-                        <div className="memory-stat errors">
-                          <span className="memory-stat-label">Erreurs</span>
-                          <span className="memory-stat-value">{gameState.memoryErrors || 0}</span>
-                        </div>
-                      )}
+                  {/* During COUNTDOWN/STARTED/PAUSED: Show all participating teams, highlight current */}
+                  {['COUNTDOWN', 'STARTED', 'PAUSED'].includes(gameState.phase) &&
+                   gameState.MEMORY_PARTICIPATING_TEAMS && gameState.MEMORY_PARTICIPATING_TEAMS.length > 0 && (
+                    <div className="memory-team-bar">
+                      {gameState.MEMORY_PARTICIPATING_TEAMS.map((teamName) => {
+                        const teamData = teams[teamName]
+                        const teamColor = teamData?.COLOR
+                          ? (Array.isArray(teamData.COLOR) ? `rgb(${teamData.COLOR.join(',')})` : teamData.COLOR)
+                          : 'var(--gray-400)'
+                        const isActive = ['STARTED', 'PAUSED'].includes(gameState.phase) && teamName === gameState.MEMORY_CURRENT_TEAM
+                        return (
+                          <div
+                            key={teamName}
+                            className={`memory-team-chip ${isActive ? 'active' : 'inactive'}`}
+                            style={{
+                              backgroundColor: teamColor,
+                              '--team-color': teamColor
+                            }}
+                          >
+                            {isActive && <span className="team-play-icon">🎮</span>}
+                            <span className="team-name">{teamName}</span>
+                          </div>
+                        )
+                      })}
                     </div>
                   )}
-                  {/* Answer during REVEALED */}
-                  {showAnswer && (
+
+                  {/* During REVEALED: Show all teams with their results (pairs + errors) */}
+                  {/* Note: Don't show the "X paires" answer text for multi-team Memory - it's redundant */}
+                  {showAnswer && gameState.MEMORY_TEAM_PAIRS && Object.keys(gameState.MEMORY_TEAM_PAIRS).length > 0 && (
+                    <div className="memory-team-results">
+                      {Object.entries(gameState.MEMORY_TEAM_PAIRS)
+                        .sort(([,a], [,b]) => b - a) // Sort by pairs descending
+                        .map(([teamName, pairs], index) => {
+                          const teamData = teams[teamName]
+                          const teamColor = teamData?.COLOR
+                            ? (Array.isArray(teamData.COLOR) ? `rgb(${teamData.COLOR.join(',')})` : teamData.COLOR)
+                            : 'var(--gray-400)'
+                          const errors = gameState.MEMORY_TEAM_ERRORS?.[teamName] || 0
+                          return (
+                            <motion.div
+                              key={teamName}
+                              className={`memory-team-result ${index === 0 ? 'winner' : ''}`}
+                              style={{ backgroundColor: teamColor }}
+                              initial={{ opacity: 0, y: 20 }}
+                              animate={{ opacity: 1, y: 0 }}
+                              transition={{ delay: index * 0.1 }}
+                            >
+                              {index === 0 && <span className="winner-icon">🏆</span>}
+                              <span className="result-team-name">{teamName}</span>
+                              <div className="result-stats">
+                                <span className="result-pairs">✓ {pairs}</span>
+                                <span className="result-errors">✗ {errors}</span>
+                              </div>
+                            </motion.div>
+                          )
+                        })}
+                    </div>
+                  )}
+
+                  {/* Solo mode reveal (no teams) */}
+                  {showAnswer && (!gameState.MEMORY_TEAM_PAIRS || Object.keys(gameState.MEMORY_TEAM_PAIRS).length === 0) && (
                     <motion.div
                       className="answer-container memory-answer"
                       initial={{ opacity: 0, scale: 0.8, y: 20 }}
@@ -1537,7 +1628,8 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
                   )}
                 </div>
               </div>
-            )}
+              )
+            })()}
 
             {/* Non-QCM/Non-Memory Game Content - 4 vertical zones: Timer, Question, Media, Answers */}
             {!isQcm && !isMemory && showGameContent && gameState.question && (

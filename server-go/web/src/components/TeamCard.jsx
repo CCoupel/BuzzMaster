@@ -39,6 +39,7 @@ export default function TeamCard({
   waitingForBuzz = false,
   pointsTarget = null,  // PLAYER or TEAM - from current question
   qcmPenaltyConfig = null, // { penalty1: 0.67, penalty2: 0.33 } - for QCM penalty display
+  memoryStats = null, // { pairs, errors, totalPairs, pointsPerPair, errorPenalty, completionBonus }
 }) {
   const [showTooltip, setShowTooltip] = useState(false)
   const rgbColor = color ? `rgb(${color.join(',')})` : 'var(--primary-500)'
@@ -90,6 +91,16 @@ export default function TeamCard({
   // Calculate bumper total for tooltip
   const bumperTotal = buzzers.reduce((sum, b) => sum + (b.score || 0), 0)
 
+  // Calculate Memory acquired points (with completion bonus)
+  const memoryAcquiredPoints = useMemo(() => {
+    if (!memoryStats || memoryStats.pairs === undefined) return null
+    const isComplete = memoryStats.pairs === memoryStats.totalPairs && memoryStats.totalPairs > 0
+    let points = memoryStats.pairs * (memoryStats.pointsPerPair || 10) -
+                 (memoryStats.errors || 0) * (memoryStats.errorPenalty || 0)
+    if (isComplete) points += (memoryStats.completionBonus || 0)
+    return Math.max(0, points)
+  }, [memoryStats])
+
   // Handle team header click (for team points)
   const handleTeamClick = (e) => {
     e.stopPropagation()
@@ -121,7 +132,16 @@ export default function TeamCard({
           {rankBadge && <span className="rank-badge">{rankBadge}</span>}
           <h3 className="team-name">{name}</h3>
         </div>
-        {ready && (
+        {/* Memory acquired points badge replaces PRET badge */}
+        {memoryAcquiredPoints !== null && gamePhase === 'REVEALED' ? (
+          <motion.span
+            className="memory-acquired-badge"
+            initial={{ scale: 0 }}
+            animate={{ scale: 1 }}
+          >
+            +{memoryAcquiredPoints} pts
+          </motion.span>
+        ) : ready && (
           <motion.span
             className="ready-badge"
             initial={{ scale: 0 }}
@@ -148,7 +168,6 @@ export default function TeamCard({
         >
           {score} Pts
         </motion.span>
-
         {/* Score decomposition tooltip */}
         {showTooltip && (teamPoints > 0 || bumperTotal > 0) && (
           <div className="score-tooltip">

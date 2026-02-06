@@ -1,4 +1,4 @@
-﻿import { useState, useMemo } from 'react'
+﻿import { useState, useMemo, useEffect } from 'react'
 // AnimatePresence removed - layout animations handled by motion.div in TeamCard
 import { useGame } from '../hooks/GameContext'
 import Button from '../components/Button'
@@ -27,10 +27,13 @@ export default function GamePage() {
     forceReady,
     simulateButton,
     simulatePong,
+    sendMessage,
   } = useGame()
 
   const [timeInput, setTimeInput] = useState(30)
   const [pointsInput, setPointsInput] = useState(1)
+  // Memory team selection - always use backend state as source of truth
+  const selectedTeams = gameState.MEMORY_PARTICIPATING_TEAMS || []
 
   // Group bumpers by team and sort by timestamp
   const teamBumpers = useMemo(() => {
@@ -97,6 +100,29 @@ export default function GamePage() {
       return teamsList
     }
   }, [teams, teamBumpers, gameState.phase])
+
+  // Display-only sorting for Memory multi-team mode (by pairs found)
+  // This doesn't affect game logic, only the visual order in the Equipes column
+  const displayTeams = useMemo(() => {
+    // Only apply Memory sorting in multi-team mode during active phases
+    if (gameState.question?.TYPE === 'MEMORY' &&
+        gameState.question?.MEMORY_MODE &&
+        gameState.question.MEMORY_MODE !== 'SOLO' &&
+        ['STARTED', 'PAUSED', 'REVEALED', 'STOPPED'].includes(gameState.phase)) {
+      // Create a copy to avoid mutating sortedTeams
+      return [...sortedTeams].sort((a, b) => {
+        const pairsA = gameState.MEMORY_TEAM_PAIRS?.[a.name] || 0
+        const pairsB = gameState.MEMORY_TEAM_PAIRS?.[b.name] || 0
+        if (pairsB !== pairsA) return pairsB - pairsA  // More pairs first
+        // Tie-breaker: fewer errors first
+        const errorsA = gameState.MEMORY_TEAM_ERRORS?.[a.name] || 0
+        const errorsB = gameState.MEMORY_TEAM_ERRORS?.[b.name] || 0
+        return errorsA - errorsB
+      })
+    }
+    // For all other cases, use the standard sortedTeams order
+    return sortedTeams
+  }, [sortedTeams, gameState.question, gameState.phase, gameState.MEMORY_TEAM_PAIRS, gameState.MEMORY_TEAM_ERRORS])
 
   // Sort questions by ORDER if available, otherwise by ID
   const sortedQuestions = useMemo(() => {
@@ -173,13 +199,24 @@ export default function GamePage() {
         selectQuestion(question.ID)
         setTimeInput(parseInt(question.TIME) || 30)
         setPointsInput(parseInt(question.POINTS) || 1)
+        // Team selection is reset by backend in Ready()
         forceReady()
         return
       }
       selectQuestion(question.ID)
       setTimeInput(parseInt(question.TIME) || 30)
       setPointsInput(parseInt(question.POINTS) || 1)
+      // Team selection is reset by backend in Ready()
     }
+  }
+
+  const toggleTeam = (teamName) => {
+    // Calculate new selection based on current backend state
+    const newSelection = selectedTeams.includes(teamName)
+      ? selectedTeams.filter(t => t !== teamName)
+      : [...selectedTeams, teamName]
+    // Always send to server - server is source of truth
+    sendMessage('MEMORY_SET_TEAMS', { TEAMS: newSelection })
   }
 
   const handleBumperClick = (bumperMac, ctrlKey = false) => {
@@ -217,6 +254,12 @@ export default function GamePage() {
         }
       }
     }
+  }
+
+  const getRgbColor = (color) => {
+    if (!color) return 'var(--gray-400)'
+    if (Array.isArray(color)) return `rgb(${color.join(',')})`
+    return color
   }
 
   const isPlaying = gameState.phase === 'STARTED' || gameState.phase === 'PAUSED'
@@ -332,6 +375,33 @@ export default function GamePage() {
             </div>
           )}
         </Card>
+
+        {/* Memory Team Selection Bar - between TV display and timer */}
+        {(gameState.phase === 'PREPARE' || gameState.phase === 'READY') &&
+         gameState.question?.TYPE === 'MEMORY' &&
+         gameState.question?.MEMORY_MODE &&
+         gameState.question.MEMORY_MODE !== 'SOLO' && (
+          <div className="memory-team-selection-bar">
+            {sortedTeams.map(team => {
+              const isSelected = selectedTeams.includes(team.name)
+              const teamColor = getRgbColor(team.COLOR)
+              return (
+                <div
+                  key={team.name}
+                  className={`memory-team-chip ${isSelected ? 'selected' : 'deselected'}`}
+                  style={{
+                    backgroundColor: teamColor,
+                    '--team-color': teamColor
+                  }}
+                  onClick={() => toggleTeam(team.name)}
+                >
+                  <span className="team-name">{team.name}</span>
+                  {isSelected && <span className="team-check">✓</span>}
+                </div>
+              )
+            })}
+          </div>
+        )}
       </div>
 
       {/* Questions Panel - Left */}
@@ -452,7 +522,7 @@ export default function GamePage() {
         <div className="teams-section">
           <h2 className="section-title">Equipes</h2>
           <div className="teams-grid">
-              {sortedTeams.map((team, index) => (
+              {displayTeams.map((team, index) => (
                 <TeamCard
                   key={team.name}
                   name={team.name}
@@ -472,13 +542,39 @@ export default function GamePage() {
                     penalty1: gameState.question?.QCM_PENALTY_1 || 0.67,
                     penalty2: gameState.question?.QCM_PENALTY_2 || 0.33,
                   } : null}
+                  memoryStats={gameState.question?.TYPE === 'MEMORY' &&
+                               gameState.question?.MEMORY_MODE !== 'SOLO' &&
+                               gameState.MEMORY_TEAM_PAIRS?.[team.name] !== undefined ? {
+                    pairs: gameState.MEMORY_TEAM_PAIRS[team.name] || 0,
+                    errors: gameState.MEMORY_TEAM_ERRORS?.[team.name] || 0,
+                    totalPairs: gameState.question?.MEMORY_PAIRS?.length || 0,
+                    pointsPerPair: gameState.question?.MEMORY_CONFIG?.POINTS_PER_PAIR || 10,
+                    errorPenalty: gameState.question?.MEMORY_CONFIG?.ERROR_PENALTY || 0,
+                    completionBonus: gameState.question?.MEMORY_CONFIG?.COMPLETION_BONUS || 0,
+                  } : null}
                   onTeamClick={(teamName) => {
                     if (['STOPPED', 'REVEALED'].includes(gameState.phase)) {
-                      // For Memory questions, use calculated score
+                      // For Memory multi-team, calculate team-specific points
                       // For QCM with hints, use penalty-adjusted points
                       // Otherwise use pointsInput
                       let pointsToAward = pointsInput
-                      if (memoryScore) {
+                      if (gameState.question?.TYPE === 'MEMORY' &&
+                          gameState.question?.MEMORY_MODE !== 'SOLO' &&
+                          gameState.MEMORY_TEAM_PAIRS?.[teamName] !== undefined) {
+                        // Calculate team-specific Memory points
+                        const config = gameState.question?.MEMORY_CONFIG || {}
+                        const pairs = gameState.MEMORY_TEAM_PAIRS[teamName] || 0
+                        const errors = gameState.MEMORY_TEAM_ERRORS?.[teamName] || 0
+                        const totalPairs = gameState.question?.MEMORY_PAIRS?.length || 0
+                        const pointsPerPair = config.POINTS_PER_PAIR || 10
+                        const errorPenalty = config.ERROR_PENALTY || 0
+                        const completionBonus = config.COMPLETION_BONUS || 0
+                        const isComplete = pairs === totalPairs && totalPairs > 0
+                        pointsToAward = pairs * pointsPerPair - errors * errorPenalty
+                        if (isComplete) pointsToAward += completionBonus
+                        if (pointsToAward < 0) pointsToAward = 0
+                      } else if (memoryScore) {
+                        // Solo Memory mode - use global score
                         pointsToAward = memoryScore.score
                       } else if (qcmPenalty) {
                         pointsToAward = qcmPenalty.effectivePoints

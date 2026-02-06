@@ -3,6 +3,48 @@
 Historique des versions du projet BuzzControl.
 
 
+## [2.51.0] - 2026-02-06
+
+### Added
+- **[Memory]**: Modes de jeu multi-équipes (Phase 6)
+  - **Mode SOLO**: Une seule équipe joue (comportement par défaut, rétrocompatible)
+  - **Mode CHACUN_SON_TOUR**: Rotation stricte après chaque tentative (2 cartes), que la paire soit trouvée ou non
+  - **Mode TANT_QUE_JE_GAGNE**: L'équipe garde la main tant qu'elle trouve des paires valides, rotation uniquement sur erreur
+  - Sélection interactive des équipes participantes en phase PREPARE
+  - Synchronisation multi-admin de la sélection d'équipes via WebSocket
+  - Validation flexible: minimum 2 équipes requises au START (pas pendant la sélection)
+  - Indicateur visuel de l'équipe courante sur l'affichage TV (badge coloré)
+  - Mise en évidence de l'équipe courante uniquement en phase STARTED/PAUSED
+  - Tableau des scores par équipe en temps réel
+  - Tri automatique des équipes par performance (paires trouvées, puis erreurs)
+  - Attribution des points par équipe avec affichage individuel
+  - Bonus de complétion attribué à l'équipe qui trouve la dernière paire
+  - Reset complet de l'état Memory lors de la sélection d'une nouvelle question
+  - Badge "+X pts" remplaçant visuellement la pastille "PRET" en phase REVEALED
+
+### Technical
+- **Backend**:
+  - `models.go`: Type `MemoryMode` avec constantes (SOLO, CHACUN_SON_TOUR, TANT_QUE_JE_GAGNE)
+  - `models.go`: Nouveaux champs GameState (`MemoryCurrentTeam`, `MemoryTeamPairs`, `MemoryParticipatingTeams`)
+  - `messages.go`: Action WebSocket `MEMORY_SET_TEAMS` avec payload Teams
+  - `engine.go`: Fonction `SetMemoryParticipatingTeams()` avec validation
+  - `engine.go`: Fonction `rotateToNextTeam()` pour rotation circulaire
+  - `engine.go`: Logique de rotation conditionnelle dans `FlipMemoryCard()` selon le mode
+  - `engine.go`: Reset de l'état Memory dans `Ready()` lors du changement de question
+  - `engine.go`: Rotation d'équipe déplacée dans `ClearMemoryFlippedCards()` après masquage des cartes
+  - `main.go`: Handler `handleMemorySetTeams()` pour réception de la sélection d'équipes
+- **Frontend**:
+  - `PlayerDisplay.jsx`: Badge équipe courante avec couleur et animation
+  - `PlayerDisplay.jsx`: Tableau scores temps réel avec tri dynamique
+  - `PlayerDisplay.jsx`: Mise en évidence conditionnelle selon phase du jeu
+  - `GamePage.jsx`: Interface sélection équipes (checkboxes, drag & drop)
+  - `GamePage.jsx`: Synchronisation WebSocket de la sélection (serveur = source de vérité)
+  - `GamePage.jsx`: Tri des équipes pour affichage (hook `displayTeams`)
+  - `TeamCard.jsx`: Badge points Memory à la position du badge PRET
+  - `QuestionsPage.jsx`: Sélecteur mode Memory (radio buttons SOLO/CHACUN_SON_TOUR/TANT_QUE_JE_GAGNE)
+
+---
+
 ## [2.50.1] - 2026-02-01
 
 ### Fixed

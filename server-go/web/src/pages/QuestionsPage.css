@@ -1178,3 +1178,69 @@
   background: color-mix(in srgb, var(--warning) 10%, white);
   border-radius: var(--radius-md);
 }
+
+/* Memory Mode Selector */
+.memory-mode-selector {
+  margin: var(--space-4) 0;
+  padding: var(--space-3);
+  border: 1px solid var(--gray-200);
+  border-radius: var(--radius-md);
+  background: var(--gray-50);
+}
+
+.memory-mode-selector label {
+  display: block;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--gray-700);
+  margin-bottom: var(--space-2);
+}
+
+.memory-mode-options {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.memory-mode-option {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  padding: var(--space-2);
+  border: 1px solid var(--gray-200);
+  border-radius: var(--radius-md);
+  background: white;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.memory-mode-option:hover {
+  border-color: var(--primary-300);
+  background: var(--primary-50);
+}
+
+.memory-mode-option input[type="radio"] {
+  margin-top: 2px;
+  cursor: pointer;
+}
+
+.memory-mode-option input[type="radio"]:checked + .memory-mode-label {
+  color: var(--primary-700);
+}
+
+.memory-mode-label {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.memory-mode-label strong {
+  font-size: 0.875rem;
+  color: var(--gray-800);
+}
+
+.memory-mode-label small {
+  font-size: 0.75rem;
+  color: var(--gray-500);
+  font-weight: normal;
+}

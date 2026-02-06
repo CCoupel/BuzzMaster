@@ -17,6 +17,12 @@ export default function useWebSocket() {
     memoryFlippedCards: [], // Server-synchronized flipped Memory cards (max 2)
     memoryMatchedPairs: [], // Server-synchronized matched pair IDs (permanent)
     memoryErrors: 0, // Server-synchronized error count (non-matches)
+    MEMORY_CURRENT_TEAM: null, // Current team playing in multi-team Memory
+    MEMORY_CURRENT_TEAM_COLOR: null, // RGB color array of current team
+    MEMORY_PAIR_OWNERS: {}, // Map of pairId -> teamName for matched pairs
+    MEMORY_TEAM_PAIRS: {}, // Map of teamName -> pairCount
+    MEMORY_TEAM_ERRORS: {}, // Map of teamName -> errorCount
+    MEMORY_PARTICIPATING_TEAMS: [], // List of participating team names
     qcmInvalidated: [], // Server-synchronized invalidated QCM answers (e.g., ["RED", "YELLOW"])
     virtualPlayerCount: 0, // Server-synchronized virtual player count (ENROLL phase)
     virtualPlayerLimit: 20, // Server-synchronized virtual player limit
@@ -73,6 +79,17 @@ export default function useWebSocket() {
   const handleMessage = useCallback((data) => {
     const { ACTION, MSG, FSINFO, VERSION } = data
     console.log('[WS] Received:', ACTION, MSG)
+    // DEBUG: Log GAME state if present
+    if (MSG?.GAME) {
+      console.log('[WS DEBUG] GAME state:', {
+        QUESTION: MSG.GAME.QUESTION,
+        MEMORY_CURRENT_TEAM: MSG.GAME.MEMORY_CURRENT_TEAM,
+        MEMORY_CURRENT_TEAM_COLOR: MSG.GAME.MEMORY_CURRENT_TEAM_COLOR,
+        MEMORY_PAIR_OWNERS: MSG.GAME.MEMORY_PAIR_OWNERS,
+        MEMORY_TEAM_PAIRS: MSG.GAME.MEMORY_TEAM_PAIRS,
+        MEMORY_PARTICIPATING_TEAMS: MSG.GAME.MEMORY_PARTICIPATING_TEAMS,
+      })
+    }
 
     switch (ACTION) {
       case 'UPDATE':
@@ -91,6 +108,12 @@ export default function useWebSocket() {
             memoryFlippedCards: MSG.GAME.MEMORY_FLIPPED_CARDS || [],
             memoryMatchedPairs: MSG.GAME.MEMORY_MATCHED_PAIRS || [],
             memoryErrors: MSG.GAME.MEMORY_ERRORS || 0,
+            MEMORY_CURRENT_TEAM: MSG.GAME.MEMORY_CURRENT_TEAM ?? prev.MEMORY_CURRENT_TEAM,
+            MEMORY_CURRENT_TEAM_COLOR: MSG.GAME.MEMORY_CURRENT_TEAM_COLOR ?? prev.MEMORY_CURRENT_TEAM_COLOR,
+            MEMORY_PAIR_OWNERS: MSG.GAME.MEMORY_PAIR_OWNERS ?? prev.MEMORY_PAIR_OWNERS,
+            MEMORY_TEAM_PAIRS: MSG.GAME.MEMORY_TEAM_PAIRS ?? prev.MEMORY_TEAM_PAIRS,
+            MEMORY_TEAM_ERRORS: MSG.GAME.MEMORY_TEAM_ERRORS ?? prev.MEMORY_TEAM_ERRORS,
+            MEMORY_PARTICIPATING_TEAMS: MSG.GAME.MEMORY_PARTICIPATING_TEAMS ?? prev.MEMORY_PARTICIPATING_TEAMS,
             qcmInvalidated: MSG.GAME.QCM_INVALIDATED || [],
             virtualPlayerCount: MSG.GAME.VIRTUAL_PLAYER_COUNT ?? prev.virtualPlayerCount,
             virtualPlayerLimit: MSG.GAME.VIRTUAL_PLAYER_LIMIT ?? prev.virtualPlayerLimit,

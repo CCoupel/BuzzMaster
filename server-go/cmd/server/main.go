@@ -577,6 +577,9 @@ func (a *App) handleWebMessage(incoming *protocol.IncomingMessage) {
 	case protocol.ActionFlipMemoryCard:
 		a.handleFlipMemoryCard(msg)
 
+	case protocol.ActionMemorySetTeams:
+		a.handleMemorySetTeams(msg)
+
 	case protocol.ActionShowQRCode:
 		a.handleShowQRCode()
 
@@ -982,6 +985,30 @@ func (a *App) handleFlipMemoryCard(msg *protocol.Message) {
 		a.engine.Stop()
 		a.broadcastUpdate()
 	}
+}
+
+func (a *App) handleMemorySetTeams(msg *protocol.Message) {
+	var payload protocol.MemorySetTeamsPayload
+	if err := json.Unmarshal(msg.Msg, &payload); err != nil {
+		server.LogError(game.LogComponentApp, "Failed to parse MEMORY_SET_TEAMS: %v", err)
+		return
+	}
+
+	if len(payload.Teams) == 0 {
+		server.LogWarn(game.LogComponentApp, "MEMORY_SET_TEAMS: empty teams list")
+		return
+	}
+
+	server.LogInfo(game.LogComponentEngine, "MEMORY_SET_TEAMS: teams=%v", payload.Teams)
+
+	// Set participating teams
+	if err := a.engine.SetMemoryParticipatingTeams(payload.Teams); err != nil {
+		server.LogError(game.LogComponentEngine, "Failed to set memory teams: %v", err)
+		return
+	}
+
+	// Broadcast updated game state to all clients
+	a.broadcastUpdate()
 }
 
 func (a *App) handleBumperPoints(msg *protocol.Message) {

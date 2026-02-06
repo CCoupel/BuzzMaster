@@ -545,6 +545,14 @@ func (h *HTTPServer) handleUploadQuestion(w http.ResponseWriter, r *http.Request
 
 	// Handle Memory specific fields
 	if questionType == "MEMORY" {
+		// Memory mode (SOLO, CHACUN_SON_TOUR, TANT_QUE_JE_GAGNE)
+		memoryMode := r.FormValue("MEMORY_MODE")
+		if memoryMode != "" {
+			question["MEMORY_MODE"] = memoryMode
+		} else {
+			question["MEMORY_MODE"] = "SOLO" // Default
+		}
+
 		// Parse memory pairs JSON
 		if pairsStr := r.FormValue("memory_pairs"); pairsStr != "" {
 			var pairs []map[string]interface{}

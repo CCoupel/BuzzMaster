@@ -1,0 +1,18 @@
+{
+  "ANSWER": "Badminton",
+  "CATEGORY": "SPORTS",
+  "ID": "6",
+  "ORDER": 5,
+  "POINTS": "10",
+  "POINTS_TARGET": "TEAM",
+  "QCM_ANSWERS": {
+    "BLUE": "Ping-pong",
+    "GREEN": "Badminton",
+    "RED": "Tennis",
+    "YELLOW": "Squash"
+  },
+  "QCM_CORRECT": "GREEN",
+  "QUESTION": "Dans quel sport utilise-t-on un volant?",
+  "TIME": "20",
+  "TYPE": "QCM"
+}

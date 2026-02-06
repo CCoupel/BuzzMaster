@@ -59,6 +59,26 @@ Ce document décrit les protocoles de communication entre les différents compos
 | BUMPER_POINTS | Modify player score | `{ID: bumperMac, POINTS: delta}` |
 | REORDER_QUESTIONS | Reorder questions | `{ORDER: [questionId1, questionId2, ...]}` |
 
+### WebSocket Actions for Memory Game (v2.33.0+)
+
+| Action | Description | Payload | Version |
+|--------|-------------|---------|---------|
+| FLIP_MEMORY_CARD | Retourne une carte Memory | `{CARD_ID: "1-1"}` | v2.33.0 |
+| MEMORY_SET_TEAMS | Définit les équipes participantes (phase PREPARE) | `{TEAMS: ["Équipe Rouge", "Équipe Bleue"]}` | v2.51.0 |
+
+**FLIP_MEMORY_CARD :**
+- Phase : STARTED
+- Type question : MEMORY
+- CARD_ID format : "pairID-cardNum" (ex: "1-1" pour paire 1 carte 1, "3-2" pour paire 3 carte 2)
+- Validation : En mode multi-équipes, vérifie que l'action provient de l'équipe courante
+
+**MEMORY_SET_TEAMS :**
+- Phase : PREPARE
+- Type question : MEMORY avec MEMORY_MODE = "CHACUN_SON_TOUR" ou "TANT_QUE_JE_GAGNE"
+- Validation : Minimum 2 équipes requises pour modes multi-équipes, 1 pour mode SOLO
+- Effet : Initialise MEMORY_CURRENT_TEAM, MEMORY_TEAM_PAIRS, MEMORY_PARTICIPATING_TEAMS
+- Envoyé automatiquement avant START_GAME
+
 ### WebSocket Client Types (v2.47.0+)
 
 VJoueurs (joueurs virtuels) sont identifiés avec un type de client distinct via `SET_CLIENT_TYPE`.

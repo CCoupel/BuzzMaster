@@ -1604,9 +1604,15 @@
    Memory Game Grid & Cards
    ================================ */
 
-/* Memory game layout - hide answers zone, grid takes full space */
+/* Memory game layout - answers zone shows team indicators during gameplay */
 .memory-game .zone-answers {
-  display: none; /* No answer zone in Memory */
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: auto;
+  min-height: 10vh;
+  padding: var(--space-2);
 }
 
 .memory-game .zone-memory-grid {
@@ -1747,17 +1753,17 @@
   transform: rotateY(180deg);
 }
 
-/* Matched state - green glow with celebration animation */
+/* Matched state - team color glow with celebration animation */
 .memory-card.matched .memory-card-front {
-  background: linear-gradient(145deg, #d1fae5 0%, #a7f3d0 100%);
+  background: linear-gradient(145deg, color-mix(in srgb, var(--matched-team-color, #4CAF50) 30%, white) 0%, color-mix(in srgb, var(--matched-team-color, #4CAF50) 50%, white) 100%);
   box-shadow:
-    0 0 30px rgba(34, 197, 94, 0.5),
+    0 0 30px color-mix(in srgb, var(--matched-team-color, #4CAF50), transparent 50%),
     0 8px 32px rgba(0, 0, 0, 0.2);
-  border: 3px solid var(--success);
+  border: 3px solid var(--matched-team-color, #4CAF50);
 }
 
 .memory-card.matched .memory-card-text {
-  color: #065f46;
+  color: color-mix(in srgb, var(--matched-team-color, #4CAF50) 80%, black);
 }
 
 /* Match celebration animation - glow pulse on visible face (no transform to avoid 3D conflicts) */
@@ -1768,23 +1774,23 @@
 @keyframes memory-match-celebrate {
   0% {
     filter: brightness(1);
-    box-shadow: 0 0 30px rgba(34, 197, 94, 0.5), 0 8px 32px rgba(0, 0, 0, 0.2);
+    box-shadow: 0 0 30px color-mix(in srgb, var(--matched-team-color, #4CAF50), transparent 50%), 0 8px 32px rgba(0, 0, 0, 0.2);
   }
   25% {
     filter: brightness(1.4);
-    box-shadow: 0 0 60px rgba(34, 197, 94, 1), 0 0 100px rgba(34, 197, 94, 0.8), 0 8px 32px rgba(0, 0, 0, 0.2);
+    box-shadow: 0 0 60px var(--matched-team-color, #4CAF50), 0 0 100px color-mix(in srgb, var(--matched-team-color, #4CAF50), transparent 20%), 0 8px 32px rgba(0, 0, 0, 0.2);
   }
   50% {
     filter: brightness(1.2);
-    box-shadow: 0 0 80px rgba(34, 197, 94, 1), 0 0 120px rgba(34, 197, 94, 0.6), 0 8px 32px rgba(0, 0, 0, 0.2);
+    box-shadow: 0 0 80px var(--matched-team-color, #4CAF50), 0 0 120px color-mix(in srgb, var(--matched-team-color, #4CAF50), transparent 40%), 0 8px 32px rgba(0, 0, 0, 0.2);
   }
   75% {
     filter: brightness(1.3);
-    box-shadow: 0 0 50px rgba(34, 197, 94, 0.9), 0 0 80px rgba(34, 197, 94, 0.7), 0 8px 32px rgba(0, 0, 0, 0.2);
+    box-shadow: 0 0 50px color-mix(in srgb, var(--matched-team-color, #4CAF50), transparent 10%), 0 0 80px color-mix(in srgb, var(--matched-team-color, #4CAF50), transparent 30%), 0 8px 32px rgba(0, 0, 0, 0.2);
   }
   100% {
     filter: brightness(1);
-    box-shadow: 0 0 30px rgba(34, 197, 94, 0.5), 0 8px 32px rgba(0, 0, 0, 0.2);
+    box-shadow: 0 0 30px color-mix(in srgb, var(--matched-team-color, #4CAF50), transparent 50%), 0 8px 32px rgba(0, 0, 0, 0.2);
   }
 }
 
@@ -2164,4 +2170,112 @@
   .palmares-category-content {
     flex-direction: row;
   }
+}
+
+/* Memory Multi-Team Display (in answer zone) */
+
+/* Team bar during gameplay - shows all participating teams */
+.memory-team-bar {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.5rem 1rem;
+  width: 100%;
+}
+
+.memory-team-chip {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem 1.5rem;
+  border-radius: 2rem;
+  font-weight: 700;
+  font-size: 1.25rem;
+  color: white;
+  transition: all 0.3s ease;
+}
+
+.memory-team-chip.inactive {
+  opacity: 0.35;
+  transform: scale(0.85);
+  filter: grayscale(30%);
+}
+
+.memory-team-chip.active {
+  opacity: 1;
+  transform: scale(1.15);
+  box-shadow:
+    0 0 20px var(--team-color),
+    0 0 40px var(--team-color),
+    0 4px 15px rgba(0, 0, 0, 0.4);
+  animation: teamPulse 1.5s ease-in-out infinite;
+}
+
+@keyframes teamPulse {
+  0%, 100% { box-shadow: 0 0 20px var(--team-color), 0 0 40px var(--team-color), 0 4px 15px rgba(0, 0, 0, 0.4); }
+  50% { box-shadow: 0 0 30px var(--team-color), 0 0 60px var(--team-color), 0 4px 20px rgba(0, 0, 0, 0.5); }
+}
+
+.memory-team-chip .team-play-icon {
+  font-size: 1.5rem;
+  margin-right: 0.25rem;
+}
+
+.memory-team-chip .team-name {
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+}
+
+/* Team results during REVEALED phase */
+.memory-team-results {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 1.5rem;
+  padding: 0.5rem 1rem;
+  width: 100%;
+  margin-bottom: 1rem;
+}
+
+.memory-team-result {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.75rem 1.5rem;
+  border-radius: 1rem;
+  color: white;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+}
+
+.memory-team-result.winner {
+  transform: scale(1.15);
+  box-shadow: 0 0 20px gold, 0 4px 20px rgba(0, 0, 0, 0.4);
+}
+
+.memory-team-result .winner-icon {
+  font-size: 1.5rem;
+}
+
+.memory-team-result .result-team-name {
+  font-weight: 700;
+  font-size: 1.25rem;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+}
+
+.memory-team-result .result-stats {
+  display: flex;
+  gap: 0.75rem;
+  font-size: 1rem;
+  margin-top: 0.25rem;
+}
+
+.memory-team-result .result-pairs {
+  color: #4ade80; /* green */
+  font-weight: 600;
+}
+
+.memory-team-result .result-errors {
+  color: #f87171; /* red */
+  font-weight: 600;
 }

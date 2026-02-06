@@ -1,0 +1,84 @@
+{
+  "AA:BB:CC:DD:EE:01": {
+    "NAME": "Alice",
+    "TEAM": "Les Rouges",
+    "SCORE": 8,
+    "VERSION": "1.0.0",
+    "ANSWER_COLOR": "RED"
+  },
+  "AA:BB:CC:DD:EE:02": {
+    "NAME": "Bob",
+    "TEAM": "Les Rouges",
+    "SCORE": 7,
+    "VERSION": "1.0.0",
+    "ANSWER_COLOR": "GREEN"
+  },
+  "AA:BB:CC:DD:EE:03": {
+    "NAME": "Charlie",
+    "TEAM": "Les Bleus",
+    "SCORE": 6,
+    "VERSION": "1.0.0",
+    "ANSWER_COLOR": "YELLOW"
+  },
+  "AA:BB:CC:DD:EE:04": {
+    "NAME": "Diana",
+    "TEAM": "Les Bleus",
+    "SCORE": 6,
+    "VERSION": "1.0.0",
+    "ANSWER_COLOR": "BLUE"
+  },
+  "AA:BB:CC:DD:EE:05": {
+    "NAME": "Ethan",
+    "TEAM": "Les Verts",
+    "SCORE": 5,
+    "VERSION": "1.0.0",
+    "ANSWER_COLOR": "RED"
+  },
+  "AA:BB:CC:DD:EE:06": {
+    "NAME": "Fiona",
+    "TEAM": "Les Verts",
+    "SCORE": 3,
+    "VERSION": "1.0.0",
+    "ANSWER_COLOR": "GREEN"
+  },
+  "AA:BB:CC:DD:EE:07": {
+    "NAME": "George",
+    "TEAM": "Les Jaunes",
+    "SCORE": 7,
+    "VERSION": "1.0.0",
+    "ANSWER_COLOR": "YELLOW"
+  },
+  "AA:BB:CC:DD:EE:08": {
+    "NAME": "Hannah",
+    "TEAM": "Les Jaunes",
+    "SCORE": 3,
+    "VERSION": "1.0.0",
+    "ANSWER_COLOR": "BLUE"
+  },
+  "AA:BB:CC:DD:EE:09": {
+    "NAME": "Ivan",
+    "TEAM": "Les Violets",
+    "SCORE": 3,
+    "VERSION": "1.0.0"
+  },
+  "AA:BB:CC:DD:EE:10": {
+    "NAME": "Julia",
+    "TEAM": "Les Violets",
+    "SCORE": 2,
+    "VERSION": "1.0.0"
+  },
+  "AA:BB:CC:DD:EE:11": {
+    "NAME": "Kevin",
+    "TEAM": "Les Oranges",
+    "SCORE": 4,
+    "VERSION": "1.0.0",
+    "ANSWER_COLOR": "YELLOW"
+  },
+  "AA:BB:CC:DD:EE:12": {
+    "NAME": "Laura",
+    "TEAM": "Les Oranges",
+    "SCORE": 5,
+    "VERSION": "1.0.0",
+    "ANSWER_COLOR": "RED"
+  }
+}

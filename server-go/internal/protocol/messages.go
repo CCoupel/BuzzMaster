@@ -37,6 +37,7 @@ const (
 	ActionForceReady        = "FORCE_READY"
 	ActionBackgroundChange  = "BACKGROUND_CHANGE"
 	ActionFlipMemoryCard    = "FLIP_MEMORY_CARD"
+	ActionMemorySetTeams    = "MEMORY_SET_TEAMS"
 	ActionQCMHint           = "QCM_HINT"
 	// Virtual player enrollment actions
 	ActionShowQRCode           = "SHOW_QR_CODE"
@@ -158,6 +159,11 @@ type BackgroundChangePayload struct {
 // FlipMemoryCardPayload for FLIP_MEMORY_CARD action
 type FlipMemoryCardPayload struct {
 	CardID string `json:"CARD_ID"` // Card ID to flip (e.g., "1-1", "2-2")
+}
+
+// MemorySetTeamsPayload for MEMORY_SET_TEAMS action
+type MemorySetTeamsPayload struct {
+	Teams []string `json:"TEAMS"` // List of team names participating
 }
 
 // QCMHintPayload for QCM_HINT action

@@ -1,6 +1,8 @@
 # Type de jeu : Memory
 
-**Statut** : ✅ Complété (Phases 1-5), ⏳ Phases 6-7 à faire
+**Statut** : ✅ Complété (Phases 1-6), ⏳ Phase 7 à faire
+
+**Version implémentée** : v2.51.0 (2026-02-06)
 
 ## Description
 
@@ -81,7 +83,7 @@ Jeu de mémoire avec paires de cartes à retrouver.
 
 > **Note** : L'enregistrement dans l'historique est reporté à la Phase 6 pour inclure les informations multi-équipes dès le départ.
 
-## Phase 6 - Modes de jeu multi-équipes
+## Phase 6 - Modes de jeu multi-équipes ✅
 
 ### Concept
 
@@ -91,13 +93,13 @@ Ajout de plusieurs modes de jeu pour le Memory, permettant de faire jouer plusie
 
 Définissent **comment les équipes jouent** (ordre, tour, rotation).
 
-- [ ] **Mode SOLO** (mode actuel - par défaut)
+- [x] **Mode SOLO** (mode actuel - par défaut)
   - Une seule équipe joue
   - Tous les joueurs d'une équipe peuvent retourner les cartes
   - Points attribués à l'équipe à la fin du jeu
   - C'est le mode actuellement implémenté
 
-- [ ] **Mode CHACUN_SON_TOUR**
+- [x] **Mode CHACUN_SON_TOUR**
   - Multi-équipes
   - On change d'équipe à chaque retournement de paire (2 cartes)
   - Que la paire soit valide ou non, on passe à l'équipe suivante
@@ -105,7 +107,7 @@ Définissent **comment les équipes jouent** (ordre, tour, rotation).
   - Chaque équipe accumule ses propres paires trouvées
   - Points par paire attribués à l'équipe qui la trouve
 
-- [ ] **Mode TANT_QUE_JE_GAGNE**
+- [x] **Mode TANT_QUE_JE_GAGNE**
   - Multi-équipes
   - Une équipe continue de jouer tant qu'elle trouve des paires valides
   - Dès qu'une paire n'est pas valide (non-match), on passe à l'équipe suivante
@@ -116,7 +118,7 @@ Définissent **comment les équipes jouent** (ordre, tour, rotation).
 
 ### Implémentation
 
-- [ ] **Sélection des équipes participantes (GamePage - Prepare)**
+- [x] **Sélection des équipes participantes (GamePage - Prepare)**
   - Lors du "Prepare" d'un jeu Memory multi-équipes, afficher la liste des équipes
   - Cases à cocher pour sélectionner les équipes participantes
   - Minimum 2 équipes requises pour les modes multi-équipes
@@ -126,7 +128,7 @@ Définissent **comment les équipes jouent** (ordre, tour, rotation).
   - Interface : section dépliable "Équipes participantes" avec checkboxes
   - Validation : désactiver le bouton "Start" si < 2 équipes en mode multi
 
-- [ ] **Nouveau champ dans Question MEMORY**
+- [x] **Nouveau champ dans Question MEMORY**
   ```json
   {
     "TYPE": "MEMORY",
@@ -136,17 +138,17 @@ Définissent **comment les équipes jouent** (ordre, tour, rotation).
   }
   ```
 
-- [ ] **Structure GameState étendue**
+- [x] **Structure GameState étendue**
   ```go
   type GameState struct {
     // ... champs existants
     MemoryCurrentTeam   string  // Nom de l'équipe qui joue actuellement
     MemoryTeamPairs     map[string]int  // Nombre de paires trouvées par équipe
-    MemoryConsecutiveSuccess bool  // Pour mode TANT_QUE_JE_GAGNE
+    MemoryParticipatingTeams []string  // Liste des équipes participantes
   }
   ```
 
-- [ ] **Logique de changement d'équipe (engine.go)**
+- [x] **Logique de changement d'équipe (engine.go)**
 
   **Mode CHACUN_SON_TOUR** :
   - Après chaque tentative (2 cartes révélées), incrémenter vers l'équipe suivante
@@ -157,37 +159,37 @@ Définissent **comment les équipes jouent** (ordre, tour, rotation).
   - Si paire trouvée : attribuer à l'équipe courante, elle continue
   - Si non-match : incrémenter erreur globale, passer à l'équipe suivante
 
-- [ ] **Indicateur visuel équipe courante**
+- [x] **Indicateur visuel équipe courante**
   - Sur `/tv` : Afficher le nom de l'équipe qui joue en cours
   - Badge coloré avec la couleur de l'équipe
   - Position : Au-dessus de la grille Memory
-  - Message : "🎮 Au tour de : [Équipe]"
+  - Message : "Au tour de : [Équipe]"
   - Animation de transition lors du changement d'équipe
 
-- [ ] **Contrôle des cartes cliquables**
+- [x] **Contrôle des cartes cliquables**
   - En mode multi-équipes, seule l'équipe courante peut cliquer sur les cartes
   - Les autres équipes voient la grille mais les cartes sont non-cliquables
   - Grisage des cartes pour les équipes en attente
 
-- [ ] **Interface admin (QuestionsPage)**
+- [x] **Interface admin (QuestionsPage)**
   - Sélecteur de mode de jeu Memory :
     - Radio buttons : SOLO / CHACUN SON TOUR / TANT QUE JE GAGNE
     - Description courte de chaque mode
     - Mode SOLO par défaut pour compatibilité
 
-- [ ] **Calcul des points par équipe**
+- [x] **Calcul des points par équipe**
   - Chaque équipe a son propre compteur de paires trouvées
   - Points = `paires_trouvées_équipe × POINTS_PER_PAIR`
   - COMPLETION_BONUS : attribué à l'équipe qui trouve la dernière paire
-  - ERROR_PENALTY : global ou par équipe ? (à décider)
+  - ERROR_PENALTY : global (non par équipe)
 
-- [ ] **Affichage scores en temps réel**
+- [x] **Affichage scores en temps réel**
   - Tableau des scores pendant le jeu
   - Afficher le nombre de paires par équipe
   - Classement en direct
   - Mise à jour à chaque paire trouvée
 
-- [ ] **Enregistrement dans l'historique (MEMORY_COMPLETED)**
+- [x] **Enregistrement dans l'historique (MEMORY_COMPLETED)**
   - EventType: `"MEMORY_COMPLETED"` (remplace `"POINTS_AWARDED"`)
   - Détails de base : paires trouvées, total paires, erreurs, temps total
   - Détails multi-équipes : mode de jeu, résultats par équipe
@@ -269,27 +271,95 @@ Tour 5 - Équipe Bleu (encore) :
 ... et ainsi de suite
 ```
 
-### Questions ouvertes
+### Fichiers implémentés (v2.51.0)
 
-- [ ] **ERROR_PENALTY** : Global (toutes équipes) ou par équipe ?
-  - **Proposition** : Par équipe (chaque équipe a son compteur d'erreurs)
+| Fichier | Description |
+|---------|-------------|
+| **Backend** | |
+| `server-go/internal/game/models.go` | Type `MemoryMode`, champs GameState multi-équipes |
+| `server-go/internal/protocol/messages.go` | Action `MEMORY_SET_TEAMS`, payload `MemorySetTeamsPayload` |
+| `server-go/internal/game/engine.go` | Logique rotation équipes, validation, reset état Memory |
+| `server-go/cmd/server/main.go` | Handler WebSocket `handleMemorySetTeams()` |
+| **Frontend** | |
+| `server-go/web/src/pages/PlayerDisplay.jsx` | Badge équipe courante, tableau scores temps réel |
+| `server-go/web/src/pages/GamePage.jsx` | Interface sélection équipes, synchronisation WebSocket |
+| `server-go/web/src/components/TeamCard.jsx` | Badge points Memory position PRET |
+| `server-go/web/src/pages/QuestionsPage.jsx` | Sélecteur mode Memory (SOLO/CHACUN_SON_TOUR/TANT_QUE_JE_GAGNE) |
 
-- [ ] **Timer** : Continue ou par tour d'équipe ?
-  - **Option 1** : Timer global pour toute la partie
-  - **Option 2** : Timer par tour d'équipe (ex: 30s par tour)
-  - **Proposition** : Option 1 (timer global) pour garder la simplicité
+### Caractéristiques implémentées (v2.51.0)
 
-- [ ] **Ordre des équipes** : Comment déterminer l'ordre ?
-  - **Proposition** : Ordre d'affichage dans `/admin/teams` (de haut en bas)
+| Fonctionnalité | Statut | Notes |
+|----------------|--------|-------|
+| Mode SOLO | ✅ Implémenté | Comportement par défaut, rétrocompatible |
+| Mode CHACUN_SON_TOUR | ✅ Implémenté | Rotation stricte après chaque tentative |
+| Mode TANT_QUE_JE_GAGNE | ✅ Implémenté | Garde la main si match, rotation sur erreur |
+| Sélection équipes (PREPARE) | ✅ Implémenté | Checkboxes + synchronisation multi-admin |
+| Badge équipe courante (TV) | ✅ Implémenté | Coloré, animé, visible STARTED/PAUSED uniquement |
+| Tableau scores temps réel | ✅ Implémenté | Tri par paires puis erreurs |
+| Attribution points par équipe | ✅ Implémenté | Paires individuelles + bonus complétion |
+| Reset état Memory (nouvelle question) | ✅ Implémenté | Automatique lors du changement de question |
+| Rotation après masquage cartes | ✅ Implémenté | Dans `ClearMemoryFlippedCards()` |
 
-- [ ] **Équipe absente/déconnectée** : Comment gérer ?
-  - **Proposition** : Skip automatiquement, passer à l'équipe suivante
+### Choix et décisions (Phase 6)
+
+#### 1. Validation flexible de la sélection d'équipes
+**Spécification initiale**: Minimum 2 équipes pour modes multi-équipes.
+**Implémentation**: Validation déplacée au moment du START (pas pendant la sélection).
+**Raison**: Permet une sélection incrémentale sans erreurs intermédiaires. L'utilisateur peut ajouter/retirer des équipes librement en phase PREPARE.
+
+#### 2. Serveur = source unique de vérité
+**Spécification initiale**: Non précisé.
+**Implémentation**: Suppression de l'état local `selectedTeams` dans GamePage, utilisation directe de `gameState.MEMORY_PARTICIPATING_TEAMS`.
+**Raison**: Évite les désynchronisations entre administrateurs connectés simultanément. Chaque changement de sélection est immédiatement propagé via WebSocket.
+
+#### 3. Rotation d'équipe après masquage des cartes
+**Spécification initiale**: Rotation lors du traitement du match/erreur.
+**Implémentation**: Rotation dans `ClearMemoryFlippedCards()` après le délai de flip.
+**Raison**: Évite les bugs de synchronisation où l'équipe suivante pouvait cliquer avant que les cartes non-matchées soient cachées. Le timing est maintenant cohérent.
+
+#### 4. Mise en évidence conditionnelle de l'équipe courante (TV)
+**Spécification initiale**: Badge affiché en permanence.
+**Implémentation**: Badge visible uniquement en phase STARTED et PAUSED (pas en COUNTDOWN ou REVEALED).
+**Raison**: Évite la confusion pendant le compte à rebours initial ou la révélation finale. Le badge n'est pertinent que pendant le jeu actif.
+
+#### 5. Badge points Memory à la position PRET
+**Spécification initiale**: Non précisé.
+**Implémentation**: Le badge "+X pts" remplace visuellement la pastille "PRET" en phase REVEALED.
+**Raison**: Cohérence visuelle, pas de surcharge d'informations, position déjà établie pour les indicateurs d'état.
+
+#### 6. Attribution du bonus de complétion
+**Spécification initiale**: Non précisé pour les modes multi-équipes.
+**Implémentation**: Bonus attribué à l'équipe qui trouve la dernière paire.
+**Raison**: Récompense l'équipe qui termine le jeu. Cohérent avec le mode SOLO où une seule équipe reçoit le bonus.
+
+#### 7. Compteur d'erreurs global (non par équipe)
+**Décision**: ERROR_PENALTY reste global (toutes équipes).
+**Raison**: Simplification pour la Phase 6. La Phase 7 (modes de scoring) ajoutera des options de pénalité par équipe.
+
+#### 8. Timer global (non par tour)
+**Décision**: Timer continue pour toute la partie (pas de timer par tour).
+**Raison**: Simplicité et cohérence avec les autres types de jeu. Le mode SPEED_RUN (Phase 7) ajoutera un timer par tour si nécessaire.
+
+#### 9. Ordre des équipes
+**Décision**: Ordre défini par l'utilisateur lors de la sélection (possibilité de drag & drop).
+**Raison**: Flexibilité maximale pour l'administrateur. L'ordre peut refléter des choix stratégiques ou organisationnels.
+
+### Bugs corrigés (v2.51.1 à v2.51.10)
+
+| Version | Bug | Correction |
+|---------|-----|-----------|
+| 2.51.1 | Pas de tri visuel des équipes | Ajout du tri par paires/erreurs pour affichage |
+| 2.51.2 | Badge points Memory mal positionné | Déplacé à la position du badge PRET |
+| 2.51.3-6 | Désynchronisation sélection équipes multi-admin | Serveur = source unique de vérité |
+| 2.51.7-9 | État Memory non reset lors du changement de question | Reset dans `Ready()` |
+| 2.51.10 | Badge équipe visible en COUNTDOWN | Affichage conditionnel STARTED/PAUSED uniquement |
 
 ### Compatibilité
 
 - ✅ Rétrocompatible : Questions Memory existantes sans `MEMORY_MODE` utilisent "SOLO" par défaut
-- ✅ Mode SOLO identique au comportement actuel
+- ✅ Mode SOLO identique au comportement actuel (Phase 5)
 - ✅ Pas de modification nécessaire des questions existantes
+- ✅ Clients anciens continuent de fonctionner (champs optionnels dans GameState)
 
 ---
 

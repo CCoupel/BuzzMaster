@@ -48,6 +48,7 @@ export default function QuestionsPage() {
     qcmPenalty1: 0.67, // Points multiplier after 1 hint (67%)
     qcmPenalty2: 0.33, // Points multiplier after 2 hints (33%)
     // Memory game fields
+    memoryMode: 'SOLO', // SOLO, CHACUN_SON_TOUR, TANT_QUE_JE_GAGNE
     memoryPairs: [
       { id: 1, card1: { text: '', image: null, isImage: false }, card2: { text: '', image: null, isImage: false } },
       { id: 2, card1: { text: '', image: null, isImage: false }, card2: { text: '', image: null, isImage: false } },
@@ -300,6 +301,7 @@ export default function QuestionsPage() {
       qcmHintThreshold2: question.QCM_HINT_THRESHOLD_2 || 0.125,
       qcmPenalty1: question.QCM_PENALTY_1 || 0.67,
       qcmPenalty2: question.QCM_PENALTY_2 || 0.33,
+      memoryMode: question.MEMORY_MODE || 'SOLO',
       memoryPairs,
       memoryConfig,
       points: question.POINTS || '1',
@@ -332,6 +334,7 @@ export default function QuestionsPage() {
       qcmHintThreshold2: 0.125,
       qcmPenalty1: 0.67,
       qcmPenalty2: 0.33,
+      memoryMode: 'SOLO',
       memoryPairs: [
         { id: 1, card1: { text: '', image: null, isImage: false }, card2: { text: '', image: null, isImage: false } },
         { id: 2, card1: { text: '', image: null, isImage: false }, card2: { text: '', image: null, isImage: false } },
@@ -484,7 +487,9 @@ export default function QuestionsPage() {
         data.append('qcm_penalty_2', formData.qcmPenalty2.toString())
       }
     } else if (formData.type === 'MEMORY') {
-      // Memory mode - send pairs and config
+      // Memory mode - send pairs, config, and mode
+      data.append('MEMORY_MODE', formData.memoryMode)
+
       // Serialize pairs (convert File objects to flags, actual files uploaded separately)
       const serializedPairs = formData.memoryPairs.map(pair => ({
         ID: pair.id,
@@ -942,6 +947,52 @@ export default function QuestionsPage() {
                 {/* Memory Pairs Editor */}
                 {formData.type === 'MEMORY' && (
                   <div className="memory-section">
+                    {/* Memory Mode Selector */}
+                    <div className="memory-mode-selector">
+                      <label>Mode de jeu</label>
+                      <div className="memory-mode-options">
+                        <label className="memory-mode-option">
+                          <input
+                            type="radio"
+                            name="memoryMode"
+                            value="SOLO"
+                            checked={formData.memoryMode === 'SOLO'}
+                            onChange={(e) => handleInputChange('memoryMode', e.target.value)}
+                          />
+                          <span className="memory-mode-label">
+                            <strong>SOLO</strong>
+                            <small>Une équipe joue seule</small>
+                          </span>
+                        </label>
+                        <label className="memory-mode-option">
+                          <input
+                            type="radio"
+                            name="memoryMode"
+                            value="CHACUN_SON_TOUR"
+                            checked={formData.memoryMode === 'CHACUN_SON_TOUR'}
+                            onChange={(e) => handleInputChange('memoryMode', e.target.value)}
+                          />
+                          <span className="memory-mode-label">
+                            <strong>CHACUN SON TOUR</strong>
+                            <small>Rotation après chaque paire (match ou erreur)</small>
+                          </span>
+                        </label>
+                        <label className="memory-mode-option">
+                          <input
+                            type="radio"
+                            name="memoryMode"
+                            value="TANT_QUE_JE_GAGNE"
+                            checked={formData.memoryMode === 'TANT_QUE_JE_GAGNE'}
+                            onChange={(e) => handleInputChange('memoryMode', e.target.value)}
+                          />
+                          <span className="memory-mode-label">
+                            <strong>TANT QUE JE GAGNE</strong>
+                            <small>Garde la main si match, passe au suivant si erreur</small>
+                          </span>
+                        </label>
+                      </div>
+                    </div>
+
                     <label>Paires de cartes * ({formData.memoryPairs.length} paires)</label>
 
                     {/* Pairs List */}

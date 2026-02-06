@@ -688,6 +688,53 @@ Pour éviter le rate limiting GitHub (60 requêtes/heure pour IP publique) :
 
 ---
 
+## Jeu Memory - Modes multi-équipes
+
+### Sélection du mode de jeu
+
+Dans l'éditeur de question Memory (page Questions), vous pouvez choisir parmi 3 modes :
+
+1. **SOLO** (par défaut) : Une seule équipe joue, comportement classique
+2. **CHACUN SON TOUR** : Les équipes jouent à tour de rôle, rotation après chaque paire
+3. **TANT QUE JE GAGNE** : L'équipe continue tant qu'elle trouve des paires valides
+
+### Sélection des équipes participantes
+
+Pour les modes multi-équipes :
+1. En phase PREPARE, une interface de sélection apparaît
+2. Cochez les équipes qui participent (minimum 2)
+3. Cliquez sur "Valider équipes" avant de démarrer
+
+### Affichage TV
+
+- Badge "Au tour de : [Équipe]" en haut de la grille
+- Tableau des scores par équipe sous le badge
+- L'équipe active est mise en évidence (bordure dorée)
+
+### Modes de jeu détaillés
+
+#### Mode SOLO
+- Une seule équipe joue
+- Tous les joueurs de l'équipe peuvent retourner les cartes
+- Points attribués à l'équipe à la fin du jeu
+
+#### Mode CHACUN SON TOUR
+- Multi-équipes en rotation stricte
+- On change d'équipe à chaque retournement de paire (2 cartes)
+- Que la paire soit valide ou non, on passe à l'équipe suivante
+- Rotation : Équipe 1 → Équipe 2 → Équipe 3 → ... → Équipe 1
+- Chaque équipe accumule ses propres paires trouvées
+- Points par paire attribués à l'équipe qui la trouve
+
+#### Mode TANT QUE JE GAGNE
+- Multi-équipes avec garde de la main
+- Une équipe continue de jouer tant qu'elle trouve des paires valides
+- Dès qu'une paire n'est pas valide (non-match), on passe à l'équipe suivante
+- Chaque équipe accumule ses propres paires trouvées
+- Mode "hot potato" : celui qui se trompe perd la main
+
+---
+
 ## Bonnes pratiques
 
 1. **Sauvegardes regulieres** : Effectuer une sauvegarde avant chaque session de jeu

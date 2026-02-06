@@ -1,0 +1,18 @@
+{
+  "ANSWER": "Leonard de Vinci",
+  "CATEGORY": "ARTS",
+  "ID": "4",
+  "ORDER": 3,
+  "POINTS": "10",
+  "POINTS_TARGET": "TEAM",
+  "QCM_ANSWERS": {
+    "BLUE": "Botticelli",
+    "GREEN": "Leonard de Vinci",
+    "RED": "Michel-Ange",
+    "YELLOW": "Raphael"
+  },
+  "QCM_CORRECT": "GREEN",
+  "QUESTION": "Qui a peint la Joconde?",
+  "TIME": "20",
+  "TYPE": "QCM"
+}

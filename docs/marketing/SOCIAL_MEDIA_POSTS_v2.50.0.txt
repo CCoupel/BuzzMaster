@@ -1,0 +1,166 @@
+═══════════════════════════════════════════════════════════════
+  BUZZCONTROL v2.50.0 "Abeille Connectée" - POSTS RÉSEAUX SOCIAUX
+═══════════════════════════════════════════════════════════════
+
+Date de publication : 1er février 2026
+Version : 2.50.0
+Code name : "Abeille Connectée"
+
+
+───────────────────────────────────────────────────────────────
+📱 TWITTER / X (226/280 caractères) ✅
+───────────────────────────────────────────────────────────────
+
+🎉 BuzzControl v2.50.0 "Abeille Connectée" est disponible !
+
+⬆️ Mise à jour automatique en 1 clic
+🔔 Notifications des nouvelles versions
+🛡️ Backup auto + rollback de sécurité
+
+Fini les téléchargements manuels ! 🚀
+
+#BuzzControl #QuizGame #Update
+
+
+───────────────────────────────────────────────────────────────
+💼 LINKEDIN / FACEBOOK (Post long)
+───────────────────────────────────────────────────────────────
+
+🐝 Nouvelle version BuzzControl v2.50.0 - "Abeille Connectée"
+
+Nous sommes ravis d'annoncer une mise à jour majeure qui simplifie drastiquement la gestion de votre système de buzzers sans fil pour quiz !
+
+🎯 Nouveauté principale : Mise à jour automatique
+
+Fini les téléchargements manuels et les manipulations complexes. BuzzControl peut maintenant se mettre à jour tout seul :
+
+✅ Vérification automatique des nouvelles versions
+🔔 Badge de notification dans l'interface
+📋 Page dédiée avec liste de toutes les versions
+⬇️ Installation en un clic avec backup automatique
+🛡️ Rollback de sécurité si problème détecté
+🔄 Redémarrage automatique du serveur
+
+💡 Pourquoi c'est important ?
+
+Que vous soyez organisateur de quiz, animateur événementiel ou éducateur, vous voulez passer votre temps à créer de superbes soirées, pas à gérer des mises à jour logicielles.
+
+Avec cette fonctionnalité, vous êtes toujours à jour avec les dernières corrections et fonctionnalités, sans aucun effort technique.
+
+🚀 Comment ça marche ?
+
+Simple : un badge apparaît quand une nouvelle version est disponible. Vous cliquez, vous lisez les nouveautés, vous cliquez sur "Installer". 2 minutes plus tard, c'est fait !
+
+📖 Plus d'infos : [lien vers release notes]
+
+#BuzzControl #QuizGame #EventTech #Education #Innovation #AutoUpdate
+
+
+───────────────────────────────────────────────────────────────
+🎮 REDDIT / FORUM (Post communauté)
+───────────────────────────────────────────────────────────────
+
+**[Release] BuzzControl v2.50.0 - Auto-Update Feature**
+
+Hey BuzzControl community!
+
+We just released v2.50.0 "Abeille Connectée" with a feature many of you have requested: **automatic server updates**!
+
+**What's new:**
+
+- **One-click updates**: The server checks GitHub Releases and can download/install new versions automatically
+- **Notification badge**: A little badge appears in the navbar when a new version is available
+- **Dedicated updates page** (`/admin/updates`):
+  - See all available versions at a glance
+  - Status icons: ✅ current, ⬆️ newer, ⚠️ outdated
+  - Expandable release notes with Markdown rendering
+  - "Local version" badge for dev builds
+- **Safety first**: Automatic backup before update, rollback if something goes wrong
+- **Smart caching**: GitHub API results cached for 1 hour to avoid rate limiting
+
+**Technical details:**
+
+- New REST endpoints: `GET/POST /api/updates/*`
+- Minimum download size check (40 MB) to avoid corrupted files
+- Config option `auto_check_updates` (default: true) if you want to disable
+- Lightweight Markdown parser for release notes
+
+**How to update:**
+
+Either use the new auto-update feature (click the notification badge), or manually download from [GitHub Releases](https://github.com/cyril-repo/buzzcontrol/releases/tag/v2.50.0).
+
+**Feedback welcome!**
+
+This is a big feature and we'd love to hear your thoughts. Found a bug? Have suggestions? Let us know!
+
+Full changelog: [lien]
+
+Happy quizzing! 🐝
+
+
+───────────────────────────────────────────────────────────────
+📧 NEWSLETTER - OBJET EMAIL
+───────────────────────────────────────────────────────────────
+
+🎉 BuzzControl v2.50.0 - Mises à jour automatiques disponibles !
+
+
+───────────────────────────────────────────────────────────────
+✅ CHECKLIST DE PUBLICATION
+───────────────────────────────────────────────────────────────
+
+AVANT PUBLICATION :
+[ ] Remplacer [lien vers release notes] par l'URL réelle
+[ ] Remplacer [lien] changelog par l'URL réelle
+[ ] Vérifier que la v2.50.0 est bien publiée sur GitHub Releases
+[ ] Préparer screenshots si nécessaire
+
+PUBLICATIONS :
+[ ] Twitter/X - Copier le post ci-dessus
+[ ] LinkedIn - Copier le post ci-dessus (adapter si besoin)
+[ ] Facebook - Copier le post LinkedIn ci-dessus
+[ ] Reddit r/BuzzControl (si existe) - Copier le post communauté
+[ ] Forum officiel (si existe) - Copier le post communauté
+
+APRÈS PUBLICATION :
+[ ] Surveiller les commentaires et questions
+[ ] Répondre aux retours utilisateurs
+[ ] Noter les bugs reportés pour v2.50.1
+
+
+───────────────────────────────────────────────────────────────
+🔗 LIENS À PRÉPARER
+───────────────────────────────────────────────────────────────
+
+Release notes : C:\Users\cyril\Documents\VScode\buzzcontrol\docs\releases\v2.50.0.md
+Changelog : C:\Users\cyril\Documents\VScode\buzzcontrol\CHANGELOG.md#2500
+GitHub Release : https://github.com/cyril-repo/buzzcontrol/releases/tag/v2.50.0
+Documentation : C:\Users\cyril\Documents\VScode\buzzcontrol\docs\ADMIN_GUIDE.md
+
+
+───────────────────────────────────────────────────────────────
+💡 CONSEILS DE PUBLICATION
+───────────────────────────────────────────────────────────────
+
+TIMING :
+- Publier en semaine (mardi-jeudi) entre 10h-14h pour meilleur engagement
+- Éviter les week-ends et lundis matin
+
+ENGAGEMENT :
+- Répondre rapidement aux premiers commentaires
+- Encourager les retours d'expérience
+- Remercier les utilisateurs qui testent la nouvelle version
+
+IMAGES :
+- Ajouter screenshot de la page /admin/updates si possible
+- Utiliser le logo BuzzControl dans les posts LinkedIn/Facebook
+- GIF de démonstration serait un plus
+
+HASHTAGS :
+- Twitter : Maximum 3-4 hashtags
+- LinkedIn : 3-5 hashtags pertinents
+- Facebook : 1-2 hashtags suffisent
+
+═══════════════════════════════════════════════════════════════
+  FIN DU DOCUMENT - Prêt pour publication !
+═══════════════════════════════════════════════════════════════

@@ -153,7 +153,7 @@ if seuil1 - seuil2 < 1 || seuil2 < 1 {
 - Chaque joueur reçoit sa propre pénalité basée sur le nombre d'indices **au moment de son buzz**
 - `HINTS_AT_BUZZ` stocké dans le bumper lors de `ProcessButtonPress`
 
-## Question (MEMORY type) - v2.33.0
+## Question (MEMORY type) - v2.33.0, Multi-Teams v2.51.0
 
 ```json
 {
@@ -163,6 +163,7 @@ if seuil1 - seuil2 < 1 || seuil2 < 1 {
   "CATEGORY": "GEOGRAPHY",
   "TIME": 120,
   "POINTS_TARGET": "TEAM",
+  "MEMORY_MODE": "CHACUN_SON_TOUR",
   "MEMORY_PAIRS": [
     {"ID": 1, "CARD1": {"TEXT": "France", "IS_IMAGE": false}, "CARD2": {"TEXT": "Paris", "IS_IMAGE": false}},
     {"ID": 2, "CARD1": {"IMAGE": "/question/10/memory_2_1_4521.jpg", "IS_IMAGE": true}, "CARD2": {"TEXT": "Berlin", "IS_IMAGE": false}}
@@ -180,6 +181,10 @@ if seuil1 - seuil2 < 1 || seuil2 < 1 {
 
 **Champs MEMORY :**
 - `TYPE`: `"MEMORY"` pour les jeux de paires
+- `MEMORY_MODE`: Mode de jeu multi-équipes (v2.51.0, optionnel, défaut: "SOLO")
+  - `"SOLO"`: Une seule équipe joue (comportement par défaut, rétrocompatible)
+  - `"CHACUN_SON_TOUR"`: Rotation stricte après chaque tentative (2 cartes)
+  - `"TANT_QUE_JE_GAGNE"`: L'équipe garde la main tant qu'elle trouve des paires
 - `MEMORY_PAIRS`: Tableau de paires `[{ID, CARD1, CARD2}]`
   - Chaque carte : `TEXT` (string) OU `IMAGE` (chemin), avec `IS_IMAGE` (bool)
 - `MEMORY_CONFIG`: Configuration du gameplay (toutes les durées en secondes)
@@ -187,14 +192,23 @@ if seuil1 - seuil2 < 1 || seuil2 < 1 {
   - `REVEAL_DELAY`: Délai entre chaque paire révélée en fin de jeu (s, défaut: 0.5)
   - `POINTS_PER_PAIR`: Points par paire trouvée (défaut: 10)
   - `ERROR_PENALTY`: Pénalité par erreur (défaut: 0)
-  - `COMPLETION_BONUS`: Bonus si toutes trouvées (défaut: 0)
+  - `COMPLETION_BONUS`: Bonus si toutes trouvées (défaut: 0, attribué à l'équipe qui trouve la dernière paire)
   - `USE_TIMER`: true = timer global, false = illimité
   - `MEMORIZE_TIME`: Temps de mémorisation affiché (s, défaut: 5)
   - `SHOW_DURING_MEMORIZE`: Afficher les cartes pendant la mémorisation (défaut: true)
 
 **Calcul des points :**
+
+Mode SOLO (v2.33.0):
 ```
 Score = (paires_trouvées × POINTS_PER_PAIR) + COMPLETION_BONUS - (erreurs × ERROR_PENALTY)
+```
+
+Modes multi-équipes (v2.51.0):
+```
+Score_équipe = (paires_trouvées_par_équipe × POINTS_PER_PAIR)
+COMPLETION_BONUS → attribué à l'équipe qui trouve la dernière paire
+ERROR_PENALTY → global (non par équipe)
 ```
 
 ### Phase COUNTDOWN - Cascade Timing (v2.33.0)
@@ -219,6 +233,32 @@ Backend COUNTDOWN duration = cascade_reveal + MEMORIZE_TIME + cascade_hide
 const STAGGER_DELAY = 200      // ms entre chaque carte
 const FLIP_ANIMATION = 600     // ms durée animation flip
 ```
+
+### GameState Memory (v2.51.0)
+
+Champs ajoutés au GameState pour les modes multi-équipes:
+
+```json
+{
+  "MEMORY_CURRENT_TEAM": "Équipe Bleue",
+  "MEMORY_TEAM_PAIRS": {
+    "Équipe Rouge": 2,
+    "Équipe Bleue": 1,
+    "Équipe Verte": 3
+  },
+  "MEMORY_PARTICIPATING_TEAMS": ["Équipe Rouge", "Équipe Bleue", "Équipe Verte"]
+}
+```
+
+**Champs :**
+- `MEMORY_CURRENT_TEAM`: Nom de l'équipe qui joue actuellement (vide en mode SOLO)
+- `MEMORY_TEAM_PAIRS`: Map du nombre de paires trouvées par équipe
+- `MEMORY_PARTICIPATING_TEAMS`: Liste ordonnée des équipes sélectionnées pour la partie
+
+**Initialisation :**
+- Les champs sont vides/nil en mode SOLO ou si aucune équipe n'est sélectionnée
+- `MEMORY_SET_TEAMS` action WebSocket permet de définir les équipes avant le START
+- Reset automatique lors du changement de question (phase PREPARE)
 
 ## GameEvent (History)
 

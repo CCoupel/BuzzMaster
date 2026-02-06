@@ -1,0 +1,2 @@
+ce94093b481fe03d82ad1881806a37b51ab89d3ca75a6504c67f465806fda35a *buzzcontrol-v2.50.1-windows-amd64.exe
+feb62e8569f8aee7f261a4cb2345fc2bc742b5d51f4d6b44dd148790088e450b *buzzcontrol-v2.50.1-linux-arm64

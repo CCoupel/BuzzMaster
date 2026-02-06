@@ -124,6 +124,15 @@ type MemoryPair struct {
 	Card2 MemoryCard `json:"CARD2"`
 }
 
+// MemoryMode represents the gameplay mode for Memory game
+type MemoryMode string
+
+const (
+	MemoryModeSolo          MemoryMode = "SOLO"
+	MemoryModeChacunSonTour MemoryMode = "CHACUN_SON_TOUR"
+	MemoryModeTantQueJeGagne MemoryMode = "TANT_QUE_JE_GAGNE"
+)
+
 // MemoryConfig holds configuration for the Memory game
 type MemoryConfig struct {
 	FlipDelay          float64 `json:"FLIP_DELAY"`           // seconds before card flips back (default: 3)
@@ -152,8 +161,9 @@ type Question struct {
 	QCMPenalty1       float64          `json:"QCM_PENALTY_1,omitempty"`        // Point multiplier after 1 hint (default 0.67)
 	QCMPenalty2       float64          `json:"QCM_PENALTY_2,omitempty"`        // Point multiplier after 2 hints (default 0.33)
 	MemoryPairs       []MemoryPair     `json:"MEMORY_PAIRS,omitempty"`       // For Memory questions
-	MemoryConfig *MemoryConfig    `json:"MEMORY_CONFIG,omitempty"` // Memory game configuration
-	Points       string           `json:"POINTS"`                  // String to match JSON format
+	MemoryConfig      *MemoryConfig    `json:"MEMORY_CONFIG,omitempty"`      // Memory game configuration
+	MemoryMode        string           `json:"MEMORY_MODE,omitempty"`        // "SOLO", "CHACUN_SON_TOUR", "TANT_QUE_JE_GAGNE" (default SOLO)
+	Points            string           `json:"POINTS"`                       // String to match JSON format
 	Time         string           `json:"TIME"`                    // String to match JSON format
 	Order        int              `json:"ORDER,omitempty"`         // Display order (for drag and drop)
 	Media        string           `json:"MEDIA,omitempty"`         // Question media (shown during game)
@@ -179,10 +189,17 @@ type GameState struct {
 	Page                   string       `json:"REMOTE,omitempty"`
 	Backgrounds            []Background `json:"backgrounds,omitempty"`
 	CurrentBackgroundIndex int          `json:"CURRENT_BACKGROUND_INDEX"`       // Server-synchronized background index
-	MemoryFlippedCards     []string     `json:"MEMORY_FLIPPED_CARDS,omitempty"` // IDs of currently flipped Memory cards (max 2)
-	MemoryMatchedPairs     []int        `json:"MEMORY_MATCHED_PAIRS,omitempty"` // IDs of matched pairs (permanent)
-	MemoryErrors           int          `json:"MEMORY_ERRORS,omitempty"`        // Number of failed match attempts
-	QcmInvalidated         []string     `json:"QCM_INVALIDATED,omitempty"`      // Invalidated QCM answers (e.g., ["RED", "YELLOW"])
+	// Memory fields - NO omitempty so empty arrays are serialized for frontend reset
+	MemoryFlippedCards       []string       `json:"MEMORY_FLIPPED_CARDS"`                  // IDs of currently flipped Memory cards (max 2)
+	MemoryMatchedPairs       []int          `json:"MEMORY_MATCHED_PAIRS"`                  // IDs of matched pairs (permanent)
+	MemoryErrors             int            `json:"MEMORY_ERRORS"`                         // Number of failed match attempts
+	MemoryCurrentTeam        string         `json:"MEMORY_CURRENT_TEAM"`                   // Team currently playing (multi-team modes)
+	MemoryTeamPairs          map[string]int `json:"MEMORY_TEAM_PAIRS"`                     // Pairs found per team
+	MemoryTeamErrors         map[string]int `json:"MEMORY_TEAM_ERRORS"`                    // Errors per team (teamName → errorCount)
+	MemoryParticipatingTeams []string       `json:"MEMORY_PARTICIPATING_TEAMS"`            // Teams selected to play
+	MemoryPairOwners         map[int]string `json:"MEMORY_PAIR_OWNERS"`                    // pairID → teamName (tracks which team found each pair)
+	MemoryCurrentTeamColor   []int          `json:"MEMORY_CURRENT_TEAM_COLOR"`             // RGB color of current team
+	QcmInvalidated           []string       `json:"QCM_INVALIDATED"`                       // Invalidated QCM answers (e.g., ["RED", "YELLOW"])
 	VirtualPlayerCount     int          `json:"VIRTUAL_PLAYER_COUNT"`           // Number of enrolled virtual players
 	VirtualPlayerLimit     int          `json:"VIRTUAL_PLAYER_LIMIT"`           // Maximum number of virtual players allowed
 	EnrollmentActive       bool         `json:"ENROLLMENT_ACTIVE"`              // Whether player enrollment is active

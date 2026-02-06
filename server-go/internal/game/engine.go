@@ -195,6 +195,9 @@ func (e *Engine) Ready(questionID string, question *Question) {
 		return
 	}
 
+	// Check if this is a NEW question (different from current)
+	isNewQuestion := e.state.Question == nil || e.state.Question.ID != questionID
+
 	e.state.Phase = PhasePrepare
 	e.state.Question = question
 	e.setQuestionStatus(StatusPrepare)
@@ -216,13 +219,23 @@ func (e *Engine) Ready(questionID string, question *Question) {
 		team.Ready = false
 	}
 
-	// Reset Memory game state for new question
-	e.state.MemoryFlippedCards = nil
-	e.state.MemoryMatchedPairs = nil
-	e.state.MemoryErrors = 0
+	// Reset Memory game state ONLY for NEW question
+	// This allows team selection to persist during PREPARE→READY transition
+	if isNewQuestion {
+		// Use empty slices/maps instead of nil so they are serialized in JSON (not omitted)
+		e.state.MemoryFlippedCards = []string{}
+		e.state.MemoryMatchedPairs = []int{}
+		e.state.MemoryErrors = 0
+		e.state.MemoryCurrentTeam = ""
+		e.state.MemoryCurrentTeamColor = []int{}
+		e.state.MemoryTeamPairs = map[string]int{}
+		e.state.MemoryTeamErrors = map[string]int{}
+		e.state.MemoryParticipatingTeams = []string{}
+		e.state.MemoryPairOwners = map[int]string{}
 
-	// Reset QCM hints state for new question
-	e.state.QcmInvalidated = nil
+		// Reset QCM hints state for new question
+		e.state.QcmInvalidated = []string{}
+	}
 
 	log.Printf("[Engine] Game ready with question: %s", questionID)
 
@@ -1701,6 +1714,21 @@ func (e *Engine) FlipMemoryCard(cardID string) (isMatch bool, shouldFlipBack boo
 		e.state.MemoryMatchedPairs = append(e.state.MemoryMatchedPairs, firstPairID)
 		e.state.MemoryFlippedCards = nil
 
+		// Award pair to current team in multi-team mode
+		if e.state.MemoryCurrentTeam != "" && e.state.MemoryTeamPairs != nil {
+			e.state.MemoryTeamPairs[e.state.MemoryCurrentTeam]++
+			log.Printf("[Engine] Pair awarded to team %s (total: %d pairs)", e.state.MemoryCurrentTeam, e.state.MemoryTeamPairs[e.state.MemoryCurrentTeam])
+		}
+
+		// Track ownership of this pair
+		if e.state.MemoryCurrentTeam != "" {
+			if e.state.MemoryPairOwners == nil {
+				e.state.MemoryPairOwners = make(map[int]string)
+			}
+			e.state.MemoryPairOwners[firstPairID] = e.state.MemoryCurrentTeam
+			log.Printf("[Engine] Pair %d ownership: team %s", firstPairID, e.state.MemoryCurrentTeam)
+		}
+
 		// Check if all pairs are matched (game complete)
 		totalPairs := 0
 		if e.state.Question != nil && e.state.Question.MemoryPairs != nil {
@@ -1708,12 +1736,36 @@ func (e *Engine) FlipMemoryCard(cardID string) (isMatch bool, shouldFlipBack boo
 		}
 		isComplete = len(e.state.MemoryMatchedPairs) >= totalPairs && totalPairs > 0
 
+		// Handle team rotation based on memory mode
+		memoryMode := ""
+		if e.state.Question != nil {
+			memoryMode = e.state.Question.MemoryMode
+			if memoryMode == "" {
+				memoryMode = string(MemoryModeSolo)
+			}
+		}
+
+		// Rotate team after match (mode: CHACUN_SON_TOUR)
+		if memoryMode == string(MemoryModeChacunSonTour) {
+			e.rotateToNextTeam()
+		}
+		// Mode TANT_QUE_JE_GAGNE: team keeps playing, no rotation
+
 		log.Printf("[Engine] Memory MATCH! Pair %d found. Total matched: %d/%d. Complete: %v", firstPairID, len(e.state.MemoryMatchedPairs), totalPairs, isComplete)
 		return true, false, 0, isComplete
 	}
 
 	// No match - increment error counter, caller should schedule flip-back after delay
 	e.state.MemoryErrors++
+
+	// Track error for current team in multi-team mode
+	if e.state.MemoryCurrentTeam != "" && e.state.MemoryTeamErrors != nil {
+		e.state.MemoryTeamErrors[e.state.MemoryCurrentTeam]++
+	}
+
+	// NOTE: Team rotation will happen in ClearMemoryFlippedCards() AFTER cards are hidden
+	// This ensures players see which team made the error before the turn changes
+
 	log.Printf("[Engine] Memory NO MATCH (error #%d). Cards %s and %s will flip back after %dms", e.state.MemoryErrors, firstCardID, secondCardID, flipDelay)
 	return false, true, flipDelay, false
 }
@@ -1779,11 +1831,34 @@ func parseInt(s string) int {
 	return result
 }
 
-// ClearMemoryFlippedCards resets all flipped cards
+// ClearMemoryFlippedCards resets all flipped cards and rotates team if needed
+// This is called after the flip-back delay when cards are hidden
 func (e *Engine) ClearMemoryFlippedCards() {
 	e.mu.Lock()
 	defer e.mu.Unlock()
+
+	// Clear the flipped cards
+	wasFlipped := len(e.state.MemoryFlippedCards) > 0
 	e.state.MemoryFlippedCards = nil
+
+	// Rotate team AFTER cards are hidden (only if we had 2 cards that didn't match)
+	// This ensures the team rotation happens when cards are face-down, not while visible
+	if wasFlipped && len(e.state.MemoryParticipatingTeams) > 0 {
+		memoryMode := ""
+		if e.state.Question != nil {
+			memoryMode = e.state.Question.MemoryMode
+			if memoryMode == "" {
+				memoryMode = string(MemoryModeSolo)
+			}
+		}
+
+		// Rotate team after error (both CHACUN_SON_TOUR and TANT_QUE_JE_GAGNE)
+		// Only rotate in multi-team modes
+		if memoryMode == string(MemoryModeChacunSonTour) || memoryMode == string(MemoryModeTantQueJeGagne) {
+			e.rotateToNextTeam()
+		}
+	}
+
 	log.Printf("[Engine] Memory flipped cards cleared")
 }
 
@@ -2130,4 +2205,95 @@ func (e *Engine) GetEnrollmentStatus() bool {
 	e.mu.RLock()
 	defer e.mu.RUnlock()
 	return e.state.EnrollmentActive
+}
+
+// SetMemoryParticipatingTeams sets the teams participating in a Memory game
+func (e *Engine) SetMemoryParticipatingTeams(teams []string) error {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+
+	// Allow setting teams during PREPARE or READY phases (before game starts)
+	if e.state.Phase != PhasePrepare && e.state.Phase != PhaseReady {
+		return &MemoryError{Reason: "NOT_IN_PREPARE_OR_READY_PHASE"}
+	}
+
+	if e.state.Question == nil || e.state.Question.Type != QuestionTypeMemory {
+		return &MemoryError{Reason: "NOT_MEMORY_QUESTION"}
+	}
+
+	// Get memory mode (default to SOLO if empty)
+	memoryMode := e.state.Question.MemoryMode
+	if memoryMode == "" {
+		memoryMode = string(MemoryModeSolo)
+	}
+
+	// Note: We don't validate team count here - allow incremental selection
+	// The validation for minimum 2 teams happens at game START, not during selection
+
+	// Validate all teams exist
+	for _, teamName := range teams {
+		if _, exists := e.data.Teams[teamName]; !exists {
+			return &MemoryError{Reason: "TEAM_NOT_FOUND"}
+		}
+	}
+
+	// Initialize Memory multi-team state
+	e.state.MemoryParticipatingTeams = teams
+	if len(teams) > 0 {
+		e.state.MemoryCurrentTeam = teams[0]
+		// Set current team color
+		if team, exists := e.data.Teams[teams[0]]; exists {
+			e.state.MemoryCurrentTeamColor = team.Color
+		}
+	}
+	e.state.MemoryTeamPairs = make(map[string]int)
+	e.state.MemoryTeamErrors = make(map[string]int)
+	e.state.MemoryPairOwners = make(map[int]string)
+	for _, teamName := range teams {
+		e.state.MemoryTeamPairs[teamName] = 0
+		e.state.MemoryTeamErrors[teamName] = 0
+	}
+
+	log.Printf("[Engine] Memory participating teams set: %v, current team: %s, mode: %s", teams, e.state.MemoryCurrentTeam, memoryMode)
+	return nil
+}
+
+// rotateToNextTeam rotates to the next team in multi-team Memory mode
+// Must be called with lock held
+func (e *Engine) rotateToNextTeam() {
+	if len(e.state.MemoryParticipatingTeams) == 0 {
+		return
+	}
+
+	// Find current team index
+	currentIndex := -1
+	for i, team := range e.state.MemoryParticipatingTeams {
+		if team == e.state.MemoryCurrentTeam {
+			currentIndex = i
+			break
+		}
+	}
+
+	// Calculate next index (circular rotation)
+	nextIndex := (currentIndex + 1) % len(e.state.MemoryParticipatingTeams)
+	e.state.MemoryCurrentTeam = e.state.MemoryParticipatingTeams[nextIndex]
+
+	// Update current team color
+	if team, exists := e.data.Teams[e.state.MemoryCurrentTeam]; exists {
+		e.state.MemoryCurrentTeamColor = team.Color
+	}
+
+	log.Printf("[Engine] Memory team rotated: %s → %s (index %d)",
+		e.state.MemoryParticipatingTeams[currentIndex],
+		e.state.MemoryCurrentTeam,
+		nextIndex)
+}
+
+// MemoryError represents a Memory-specific error
+type MemoryError struct {
+	Reason string
+}
+
+func (e *MemoryError) Error() string {
+	return e.Reason
 }
