@@ -20,8 +20,6 @@ backlog/
 | [qcm-marqueurs-indices.md](TODO/qcm-marqueurs-indices.md) | Marqueurs d'indices sur la barre de temps |
 | [generateur-ia.md](TODO/generateur-ia.md) | Générateur de jeu complet via IA |
 | [metadata-binaires.md](TODO/metadata-binaires.md) | Métadonnées dans les binaires (nom, version, icône) |
-| [navbar-menu-connexion.md](TODO/navbar-menu-connexion.md) | Menu déroulant sur pastille de connexion (Config, Logs) |
-| [notification-nouvelle-version.md](TODO/notification-nouvelle-version.md) | Mise à jour automatique : téléchargement et redémarrage sur nouvelle version |
 | [vjoueur-qcm-multicolore.md](TODO/vjoueur-qcm-multicolore.md) | VJoueur valide pour les 4 couleurs QCM + buzz direct sur écran |
 
 ## En-Cours
@@ -46,6 +44,7 @@ backlog/
 | [affichage-tv.md](DONE/affichage-tv.md) | v2.30.0 | Synchronisation des fonds d'écran |
 | [timer-gameplay.md](DONE/timer-gameplay.md) | v2.29.0 | Décompte de préparation avant timer |
 | [debug-tests.md](DONE/debug-tests.md) | v2.28.0 | Fonctionnalités de test sans buzzers |
+| [navbar-menu-connexion.md](DONE/navbar-menu-connexion.md) | v2.49.0 | Menu déroulant abeille dans la navbar (Config, Logs, Backup, MAJ) |
 | [gestion-scores.md](DONE/gestion-scores.md) | v2.18.0 | Points d'équipe dissociés des points joueurs |
 
 ## Légende des statuts
@@ -156,6 +155,7 @@ mv backlog/En-Cours/qcm-marqueurs-indices.md backlog/DONE/
 
 ## Historique
 
+- 2026-02-06 : Completion navbar-menu-connexion (v2.49.0), suppression notification-nouvelle-version orpheline
 - 2026-02-01 : Ajout mise à jour automatique du serveur (téléchargement + redémarrage)
 - 2026-02-01 : Maintenance backlog - déplacement effet-neon-categorie vers DONE, suppression entrée bugfix-neon-effet-parametres inexistante
 - 2026-01-31 : Completion VJoueur WebSocket identification (v2.47.0)
