@@ -13,58 +13,39 @@ Workflow accelere pour les bugs critiques en production.
 /hotfix <description du bug critique>
 ```
 
+## Mots-clés de contrôle
+
+**Référence :** Voir `context/COMMON.md` section 12
+
+```
+/hotfix help                → Afficher l'aide
+/hotfix status              → État du workflow
+/hotfix resume deploy       → Reprendre au déploiement
+/hotfix jumpto "fix urgent" → Aller à une tâche précise
+```
+
+## Références
+
+**Contexte projet :** Voir `context/COMMON.md` section 1
+**Workflow CDP :** Voir `context/CDP_WORKFLOWS.md`
+- Type : HOTFIX (section 2)
+- Règles : section 8 (HOTFIX)
+- Comparaison types : section 2
+
 ## Quand utiliser
 
 - Bug bloquant en production
 - Probleme de securite urgent
 - Regression critique apres release
 
-## Workflow accelere
+## Spécificités HOTFIX
 
-```
-/hotfix
-    │
-    ├── 1. ANALYSE RAPIDE (pas de PLAN complet)
-    │   └── Identifier la cause et le fix minimal
-    │
-    ├── 2. DEV (agent approprie)
-    │   └── Fix minimal, pas de refactoring
-    │
-    ├── 3. TESTS CRITIQUES UNIQUEMENT
-    │   └── Tests de non-regression sur le bug
-    │
-    ├── 4. DEPLOY PROD DIRECT
-    │   └── Skip QUALIF si vraiment critique
-    │   └── Tag: v<version>-hotfix
-    │
-    └── 5. POST-MORTEM
-        └── Documenter l'incident
-```
+- Incrémente Z + suffix : 2.40.1 → 2.40.2-hotfix
+- Branche : `hotfix/<nom-court>`
+- QUALIF optionnel si vraiment critique
+- Post-mortem requis
 
-## Differences avec /bugfix
+## Agent utilisé
 
-| Aspect | /bugfix | /hotfix |
-|--------|---------|---------|
-| Workflow | CDP complet | Accelere |
-| QUALIF | Obligatoire | Optionnel |
-| Tests | Tous | Critiques seulement |
-| Tag | `vX.Y.Z` | `vX.Y.Z-hotfix` |
-| Documentation | Complete | Post-mortem |
-
-## Exemple
-
-```
-/hotfix Le serveur crash quand plus de 10 buzzers se connectent
-```
-
-## Regles critiques
-
-1. **Fix minimal** - Ne corriger QUE le bug, rien d'autre
-2. **Pas de refactoring** - Ce n'est pas le moment
-3. **Test de non-regression** - Obligatoire meme en urgence
-4. **Post-mortem** - Documenter apres coup
-5. **Suivi** - Creer un /bugfix pour fix propre si necessaire
-
-## Agent utilise
-
-Lance directement l'agent de developpement approprie (`dev-backend`, `dev-frontend`, `dev-buzzclick`) puis `deploy` en mode hotfix.
+Lance l'agent DEV approprié puis `deploy` en mode hotfix.
+Voir `context/DEVELOPMENT.md` section 2 pour le dispatch.

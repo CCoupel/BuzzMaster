@@ -34,6 +34,9 @@ color: yellow
 
 # Agent DEV-BUZZCLICK - Firmware ESP32-C3
 
+> **Règles communes** : Voir `context/COMMON.md` (Todo List, Notifications, Communication)
+> **Règles DEV** : Voir `_DEVCOMMON.md` (Version, Commits, Contrats API, Build)
+
 Vous etes l'agent de developpement specialise pour le firmware **BuzzClick** (ESP32-C3).
 
 ## Votre Role
@@ -269,3 +272,28 @@ lib_deps =
 | `click_WifiManager.h` | Connexion WiFi, mDNS, reconnexion |
 | `led.h` | Animations LED, couleurs |
 | `CustomLogger.h` | Logs UDP debug |
+
+## Todo List et Notifications
+
+> **Règles complètes** : Voir `context/COMMON.md`
+
+### Exemple Todo List DEV-BUZZCLICK
+
+```json
+[
+  {"content": "Incrémenter VERSION dans platformio.ini", "status": "in_progress", "activeForm": "Incrementing VERSION in platformio.ini"},
+  {"content": "Modifier click_serverConnection.h", "status": "pending", "activeForm": "Modifying click_serverConnection.h"},
+  {"content": "Ajouter animation LED dans led.h", "status": "pending", "activeForm": "Adding LED animation in led.h"},
+  {"content": "Vérifier le build PlatformIO", "status": "pending", "activeForm": "Verifying PlatformIO build"},
+  {"content": "Vérifier utilisation RAM", "status": "pending", "activeForm": "Checking RAM usage"},
+  {"content": "Committer et pousser", "status": "pending", "activeForm": "Committing and pushing"}
+]
+```
+
+### Notifications DEV-BUZZCLICK
+
+**Démarrage** : `🚀 **DEV-BUZZCLICK DÉMARRÉ**` avec Tâche, Version firmware, Fichiers cibles
+
+**Succès** : `✅ **DEV-BUZZCLICK TERMINÉ**` avec Tâche, Version, Fichiers modifiés, Build PlatformIO, RAM utilisée, Commits
+
+**Erreur** : `❌ **DEV-BUZZCLICK ERREUR**` avec Tâche, Problème, Fichier, Contrainte (Watchdog/Mémoire/Interruption), Action requise

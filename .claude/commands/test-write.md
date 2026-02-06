@@ -6,6 +6,25 @@ Lance l'agent **test-writer** pour écrire les tests (unitaires, E2E) sans les e
 
 $ARGUMENTS
 
+## Mot-clé help
+
+`/test-write help` → Affiche :
+
+```
+## /test-write - Aide
+
+**Description** : Écrire les tests (unitaires, E2E) SANS les exécuter
+
+**Usage** :
+  /test-write help       Afficher cette aide
+  /test-write            Écrire tests pour fichiers modifiés
+  /test-write <fichier>  Écrire tests pour un fichier spécifique
+  /test-write unit       Tests unitaires uniquement
+  /test-write e2e        Scénarios E2E Chrome uniquement
+
+**Différence** : /test-write ÉCRIT, /qa EXÉCUTE
+```
+
 **Formats possibles** :
 - `/test-write` : Analyse les fichiers modifiés et écrit les tests manquants
 - `/test-write <fichier>` : Écrit les tests pour un fichier spécifique
@@ -34,80 +53,20 @@ prompt: voir ci-dessous
 ```
 Écris les tests pour BuzzControl.
 
-**Contexte projet :**
-- Répertoire : /home/user/BuzzMaster
-- Serveur Go : server-go/
-- Tests Go : server-go/internal/**/*_test.go
-- Tests E2E : server-go/tests/e2e/
-- Frontend React : server-go/web/src/
+**Contexte projet :** Voir `context/COMMON.md` section 1
+**Framework Qualité :** Voir `context/QUALITY.md`
+- Matrice qualité : section 2 (test-writer ÉCRIT, QA EXÉCUTE)
+- Commandes test : section 7
+- Règles : section 10
 
 **Input utilisateur :** $ARGUMENTS
 
-**Actions :**
-
-1. **Analyser les fichiers modifiés**
-   - `git diff main --name-only` pour identifier les changements
-   - Identifier les nouvelles fonctions/méthodes
-
-2. **Écrire les tests unitaires Go**
-   - Fichiers `*_test.go` correspondants
-   - Pattern table-driven obligatoire
-   - Couvrir : nominal, limites, erreurs
-
-3. **Définir les scénarios E2E Chrome**
-   - Créer/modifier `tests/e2e/scenarios.md`
-   - Format : Étapes + Résultat attendu + Vérification Chrome
-   - Utiliser MCP claude-in-chrome pour l'exécution
-
-4. **Committer les tests**
-   - Format : `test(<scope>): <description>`
-
-**Types de tests à écrire :**
-
-| Type | Fichier | Obligatoire |
-|------|---------|-------------|
-| Unitaire Go | `*_test.go` | ✅ Oui |
-| Composant React | `*.test.jsx` | ⚠️ Si applicable |
-| E2E Chrome | `tests/e2e/*.md` | ✅ Oui pour features |
-
-**Rappel :**
-- Tu ÉCRIS les tests, tu ne les EXÉCUTES PAS
-- L'agent QA exécutera les tests ensuite
-- Les tests E2E utilisent Chrome via MCP claude-in-chrome
+**Rappel :** Tu ÉCRIS les tests, tu ne les EXÉCUTES PAS.
 ```
 
-## Tests E2E avec Chrome
+## Intégration workflow
 
-Les scénarios E2E sont définis en Markdown et exécutés via **MCP claude-in-chrome** :
-
-```markdown
-## Scénario : Nom du scénario
-
-### Prérequis
-- Serveur démarré sur http://localhost
-
-### Étapes
-1. Ouvrir http://localhost/admin dans Chrome
-2. Cliquer sur "Élément"
-3. Vérifier le résultat
-
-### Résultat attendu
-- Description du comportement attendu
-
-### Vérification Chrome (MCP)
-- Attendre élément : `.selector`
-- Vérifier texte : "contenu"
-- Vérifier absence : `.error`
-```
-
-## Intégration dans le workflow CDP
-
-```
-PLAN → DEV → TEST-WRITER → REVIEW → QA → DOC → DEPLOY
-              │
-              └── Écrit les tests AVANT la review
-                  pour que REVIEW vérifie aussi les tests
-```
+Voir `context/QUALITY.md` section 11 pour le workflow.
 
 ## Action immédiate
 
