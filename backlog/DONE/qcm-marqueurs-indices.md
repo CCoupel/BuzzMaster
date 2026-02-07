@@ -1,6 +1,6 @@
 # QCM - Marqueurs d'indices sur la barre de temps
 
-**Statut** : 📋 Planifié
+**Statut** : ✅ Terminé (v2.52.0)
 
 ## Description
 

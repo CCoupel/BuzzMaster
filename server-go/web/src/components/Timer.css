@@ -83,6 +83,52 @@
   overflow: hidden;
 }
 
+/* Allow hint markers to overflow the bar container */
+.timer-bar-container.has-hint-markers {
+  overflow: visible;
+  position: relative;
+}
+
+/* Hint Markers on Timer Bar */
+.hint-marker {
+  position: absolute;
+  top: -4px;
+  width: 3px;
+  height: calc(100% + 8px);
+  background: var(--warning);
+  opacity: 0.85;
+  z-index: 10;
+  border-radius: 1px;
+  pointer-events: none;
+  box-shadow: 0 0 6px rgba(234, 179, 8, 0.5);
+}
+
+.hint-marker.pulsing {
+  animation: hint-marker-pulse 0.8s ease-in-out infinite;
+}
+
+.hint-marker.triggered {
+  animation: hint-marker-fade 0.5s ease-out forwards;
+}
+
+@keyframes hint-marker-pulse {
+  0%, 100% {
+    opacity: 0.85;
+    box-shadow: 0 0 6px rgba(234, 179, 8, 0.5);
+  }
+  50% {
+    opacity: 1;
+    box-shadow: 0 0 12px rgba(234, 179, 8, 0.9);
+  }
+}
+
+@keyframes hint-marker-fade {
+  to {
+    opacity: 0;
+    transform: scaleY(0);
+  }
+}
+
 /* Animated shine effect on bar */
 .timer-bar::after {
   content: '';

@@ -3,6 +3,25 @@
 Historique des versions du projet BuzzControl.
 
 
+## [2.52.0] - 2026-02-06
+
+### Added
+- **[QCM]**: Marqueurs d'indices sur la barre de temps
+  - Traits verticaux orange/jaune positionnés sur la barre de progression du timer
+  - Indiquent visuellement quand les indices QCM (invalidation de mauvaises réponses) vont se déclencher
+  - Animation de pulsation quand le timer approche d'un seuil (15% avant)
+  - Animation de fade-out quand l'indice est déclenché
+  - Respect des contraintes de sécurité backend (seuil1 >= 2s, seuil2 >= 1s, écart >= 1s)
+  - Visible uniquement si `QCM_HINTS_ENABLED = true` sur la question
+
+### Technical
+- **Frontend**:
+  - `Timer.jsx`: Nouveau prop `hintMarkers` pour afficher des marqueurs sur la barre de temps
+  - `Timer.css`: Styles `.hint-marker`, animations `hint-marker-pulse` et `hint-marker-fade`
+  - `PlayerDisplay.jsx`: Calcul des positions des marqueurs via `useMemo` à partir de `QCM_HINT_THRESHOLD_1/2`
+
+---
+
 ## [2.51.0] - 2026-02-06
 
 ### Added

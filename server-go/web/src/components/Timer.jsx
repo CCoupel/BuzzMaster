@@ -9,6 +9,7 @@ export default function Timer({
   showBar = true,
   showPhase = true,
   className = '',
+  hintMarkers = null, // [{id, position, triggered, pulsing}]
 }) {
   const percentage = totalTime > 0 ? (currentTime / totalTime) * 100 : 100
   const minutes = Math.floor(currentTime / 60)
@@ -80,7 +81,7 @@ export default function Timer({
       </motion.div>
 
       {showBar && (
-        <div className="timer-bar-container">
+        <div className={`timer-bar-container ${hintMarkers && hintMarkers.length > 0 ? 'has-hint-markers' : ''}`}>
           <motion.div
             className={`timer-bar ${isUrgent ? 'urgent' : ''} ${isPaused ? 'paused' : ''}`}
             initial={false}
@@ -88,6 +89,13 @@ export default function Timer({
             transition={{ duration: 0.2 }}
             style={{ backgroundColor: getBarColor() }}
           />
+          {hintMarkers && hintMarkers.map(marker => (
+            <div
+              key={marker.id}
+              className={`hint-marker ${marker.triggered ? 'triggered' : ''} ${marker.pulsing ? 'pulsing' : ''}`}
+              style={{ left: marker.position }}
+            />
+          ))}
         </div>
       )}
 

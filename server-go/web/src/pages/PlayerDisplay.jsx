@@ -480,6 +480,63 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
   // QCM answer TEXT visible from COUNTDOWN (READY shows only colored zones with letters)
   const showQcmAnswerText = ['COUNTDOWN', 'STARTED', 'PAUSED', 'STOPPED', 'REVEALED'].includes(gameState.phase)
 
+  // Calculate QCM hint markers for the timer bar
+  const qcmHintMarkers = useMemo(() => {
+    if (!isQcm || !gameState.question?.QCM_HINTS_ENABLED) return null
+
+    const t1 = gameState.question.QCM_HINT_THRESHOLD_1 || 0.25
+    const t2 = gameState.question.QCM_HINT_THRESHOLD_2 || 0.125
+    const totalTime = gameState.totalTime || 0
+    const currentTime = gameState.timer || 0
+    const invalidated = gameState.qcmInvalidated || []
+
+    if (totalTime <= 0) return null
+
+    const markers = []
+
+    // Threshold values are fractions (0.25 = 25% of time remaining)
+    // The timer bar width = (currentTime/totalTime)*100%, shrinking from right
+    // Marker position from left = threshold * 100%
+    // When the bar edge reaches the marker, the hint triggers
+
+    // Check safety constraints (same as backend)
+    const t1Seconds = t1 * totalTime
+    const t2Seconds = t2 * totalTime
+    const canShowT1 = t1Seconds >= 2
+    const canShowT2 = canShowT1 && t2Seconds >= 1 && (t1Seconds - t2Seconds) >= 1
+
+    if (canShowT1) {
+      const t1Triggered = invalidated.length >= 1
+      const t1RemainingPercent = t1 * 100
+      const currentRemainingPercent = totalTime > 0 ? (currentTime / totalTime) * 100 : 100
+      // Pulsing when approaching the threshold (within 15% on the bar)
+      const t1Pulsing = !t1Triggered && currentRemainingPercent <= (t1RemainingPercent + 15) && currentRemainingPercent > t1RemainingPercent
+
+      markers.push({
+        id: 1,
+        position: `${t1RemainingPercent}%`,
+        triggered: t1Triggered,
+        pulsing: t1Pulsing,
+      })
+    }
+
+    if (canShowT2) {
+      const t2Triggered = invalidated.length >= 2
+      const t2RemainingPercent = t2 * 100
+      const currentRemainingPercent = totalTime > 0 ? (currentTime / totalTime) * 100 : 100
+      const t2Pulsing = !t2Triggered && invalidated.length >= 1 && currentRemainingPercent <= (t2RemainingPercent + 15) && currentRemainingPercent > t2RemainingPercent
+
+      markers.push({
+        id: 2,
+        position: `${t2RemainingPercent}%`,
+        triggered: t2Triggered,
+        pulsing: t2Pulsing,
+      })
+    }
+
+    return markers.length > 0 ? markers : null
+  }, [isQcm, gameState.question?.QCM_HINTS_ENABLED, gameState.question?.QCM_HINT_THRESHOLD_1, gameState.question?.QCM_HINT_THRESHOLD_2, gameState.totalTime, gameState.timer, gameState.qcmInvalidated])
+
   // Top 3 players for podium
   const topPlayers = useMemo(() => {
     return sortedPlayers.slice(0, 3).map(player => ({
@@ -1135,7 +1192,7 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
             {/* QCM Game Content - unified block for READY through REVEALED (no flash on transition) */}
             {isQcm && showQcmAnswers && gameState.question && (
               <div className="game-content-zones">
-                {/* Zone 1: Timer */}
+                {/* Zone 1: Timer with hint markers */}
                 <div className="zone-timer">
                   <Timer
                     currentTime={gameState.timer}
@@ -1143,6 +1200,7 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
                     phase={gameState.phase}
                     size="xl"
                     showPhase={false}
+                    hintMarkers={qcmHintMarkers}
                   />
                 </div>
 
