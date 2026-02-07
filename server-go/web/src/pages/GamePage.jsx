@@ -51,6 +51,7 @@ export default function GamePage() {
         active: bumper.TIME !== undefined && bumper.TIME > 0,
         answerColor: bumper.ANSWER_COLOR,
         hintsAtBuzz: bumper.HINTS_AT_BUZZ || 0, // QCM hints count when player buzzed
+        isVPlayer: bumper.IS_VPLAYER === true, // VPlayer flag for multicolor QCM
       })
     })
     // Sort bumpers by timestamp within each team
@@ -538,6 +539,7 @@ export default function GamePage() {
                   showResponseTime={['STARTED', 'PAUSED', 'REVEALED'].includes(gameState.phase)}
                   waitingForReady={['PREPARE', 'READY'].includes(gameState.phase)}
                   waitingForBuzz={['STARTED', 'PAUSED'].includes(gameState.phase)}
+                  questionType={gameState.question?.TYPE || null}
                   qcmPenaltyConfig={gameState.question?.TYPE === 'QCM' && gameState.question?.QCM_HINTS_ENABLED ? {
                     penalty1: gameState.question?.QCM_PENALTY_1 || 0.67,
                     penalty2: gameState.question?.QCM_PENALTY_2 || 0.33,

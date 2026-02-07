@@ -708,3 +708,606 @@ func TestEngine_SetBumpers_SyncsVirtualPlayerCount(t *testing.T) {
 	}
 }
 
+// TestEngine_QCM_VPlayerInvalidation tests that physical buzzers are invalidated
+// when a team has a VPlayer for QCM questions only
+func TestEngine_QCM_VPlayerInvalidation(t *testing.T) {
+	e := NewEngine()
+
+	// Setup teams
+	teams := map[string]*Team{
+		"red": {Name: "Team Red", Color: []int{255, 0, 0}},
+	}
+	e.SetTeams(teams)
+
+	// Setup bumpers: one VPlayer and one physical in the same team
+	bumpers := map[string]*Bumper{
+		"vplayer1": {Name: "VPlayer1", Team: "red", IsVirtual: true, IsVPlayer: true},
+		"buzzer1":  {Name: "Buzzer1", Team: "red", IsVirtual: false, IsVPlayer: false},
+	}
+	e.SetBumpers(bumpers)
+
+	// Setup QCM question
+	question := &Question{
+		ID:       "q1",
+		Question: "Test QCM?",
+		Type:     QuestionTypeQCM,
+		QCMAnswers: &QCMAnswers{
+			Red:    "Answer A",
+			Green:  "Answer B",
+			Yellow: "Answer C",
+			Blue:   "Answer D",
+		},
+		QCMCorrect: "RED",
+	}
+
+	// Start game with QCM question
+	e.Ready("q1", question)
+	e.StartImmediate(30)
+
+	// Physical buzzer tries to buzz - should be IGNORED (team has VPlayer)
+	e.ProcessButtonPress("buzzer1", time.Now().UnixMicro(), "A")
+
+	// Verify physical buzzer was NOT recorded
+	bumper := e.GetBumper("buzzer1")
+	if bumper.Time != 0 {
+		t.Errorf("Physical buzzer should be ignored when team has VPlayer, got Time=%d", bumper.Time)
+	}
+
+	// Verify team was NOT recorded either
+	team := e.GetTeam("red")
+	if team.Time != 0 {
+		t.Errorf("Team should not have Time set when physical buzzer ignored, got Time=%d", team.Time)
+	}
+
+	// Now VPlayer buzzes - should be ACCEPTED
+	e.ProcessButtonPress("vplayer1", time.Now().UnixMicro(), "RED")
+
+	// Verify VPlayer was recorded
+	vplayer := e.GetBumper("vplayer1")
+	if vplayer.Time == 0 {
+		t.Error("VPlayer should be accepted and have Time set")
+	}
+
+	// Verify team was recorded
+	team = e.GetTeam("red")
+	if team.Time == 0 {
+		t.Error("Team should have Time set when VPlayer buzzed")
+	}
+	if team.Bumper != "vplayer1" {
+		t.Errorf("Team should reference VPlayer, got Bumper=%s", team.Bumper)
+	}
+}
+
+// TestEngine_QCM_VPlayerInvalidation_NormalQuestion tests that physical buzzers
+// are NOT invalidated for NORMAL questions (only QCM)
+func TestEngine_QCM_VPlayerInvalidation_NormalQuestion(t *testing.T) {
+	e := NewEngine()
+
+	// Setup teams
+	teams := map[string]*Team{
+		"red": {Name: "Team Red", Color: []int{255, 0, 0}},
+	}
+	e.SetTeams(teams)
+
+	// Setup bumpers: one VPlayer and one physical in the same team
+	bumpers := map[string]*Bumper{
+		"vplayer1": {Name: "VPlayer1", Team: "red", IsVirtual: true, IsVPlayer: true},
+		"buzzer1":  {Name: "Buzzer1", Team: "red", IsVirtual: false, IsVPlayer: false},
+	}
+	e.SetBumpers(bumpers)
+
+	// Setup NORMAL question (not QCM)
+	question := &Question{
+		ID:       "q1",
+		Question: "Test Normal?",
+		Type:     QuestionTypeNormal,
+		Answer:   "42",
+	}
+
+	// Start game with NORMAL question
+	e.Ready("q1", question)
+	e.StartImmediate(30)
+
+	// Physical buzzer tries to buzz - should be ACCEPTED (not QCM question)
+	e.ProcessButtonPress("buzzer1", time.Now().UnixMicro(), "A")
+
+	// Verify physical buzzer WAS recorded
+	bumper := e.GetBumper("buzzer1")
+	if bumper.Time == 0 {
+		t.Error("Physical buzzer should be accepted for NORMAL question, got Time=0")
+	}
+
+	// Verify team WAS recorded
+	team := e.GetTeam("red")
+	if team.Time == 0 {
+		t.Error("Team should have Time set for NORMAL question")
+	}
+	if team.Bumper != "buzzer1" {
+		t.Errorf("Team should reference physical buzzer, got Bumper=%s", team.Bumper)
+	}
+}
+
+// TestEngine_QCM_VPlayerInvalidation_NoTeam tests that physical buzzers
+// without a team are NOT invalidated (no team = no VPlayer check)
+func TestEngine_QCM_VPlayerInvalidation_NoTeam(t *testing.T) {
+	e := NewEngine()
+
+	// Setup physical buzzer WITHOUT team
+	bumpers := map[string]*Bumper{
+		"buzzer1": {Name: "Buzzer1", Team: "", IsVirtual: false, IsVPlayer: false},
+	}
+	e.SetBumpers(bumpers)
+
+	// Setup QCM question
+	question := &Question{
+		ID:       "q1",
+		Question: "Test QCM?",
+		Type:     QuestionTypeQCM,
+		QCMAnswers: &QCMAnswers{
+			Red:    "Answer A",
+			Green:  "Answer B",
+			Yellow: "Answer C",
+			Blue:   "Answer D",
+		},
+		QCMCorrect: "RED",
+	}
+
+	// Start game with QCM question
+	e.Ready("q1", question)
+	e.StartImmediate(30)
+
+	// Physical buzzer WITHOUT team tries to buzz - should be ACCEPTED
+	e.ProcessButtonPress("buzzer1", time.Now().UnixMicro(), "A")
+
+	// Verify physical buzzer WAS recorded (no team = no invalidation)
+	bumper := e.GetBumper("buzzer1")
+	if bumper.Time == 0 {
+		t.Error("Physical buzzer without team should be accepted, got Time=0")
+	}
+}
+
+// TestEngine_QCM_VPlayerInvalidation_NoVPlayer tests that physical buzzers
+// are NOT invalidated when the team has no VPlayer
+func TestEngine_QCM_VPlayerInvalidation_NoVPlayer(t *testing.T) {
+	e := NewEngine()
+
+	// Setup teams
+	teams := map[string]*Team{
+		"red": {Name: "Team Red", Color: []int{255, 0, 0}},
+	}
+	e.SetTeams(teams)
+
+	// Setup bumpers: only physical buzzers (no VPlayer)
+	bumpers := map[string]*Bumper{
+		"buzzer1": {Name: "Buzzer1", Team: "red", IsVirtual: false, IsVPlayer: false},
+		"buzzer2": {Name: "Buzzer2", Team: "red", IsVirtual: false, IsVPlayer: false},
+	}
+	e.SetBumpers(bumpers)
+
+	// Setup QCM question
+	question := &Question{
+		ID:       "q1",
+		Question: "Test QCM?",
+		Type:     QuestionTypeQCM,
+		QCMAnswers: &QCMAnswers{
+			Red:    "Answer A",
+			Green:  "Answer B",
+			Yellow: "Answer C",
+			Blue:   "Answer D",
+		},
+		QCMCorrect: "RED",
+	}
+
+	// Start game with QCM question
+	e.Ready("q1", question)
+	e.StartImmediate(30)
+
+	// Physical buzzer tries to buzz - should be ACCEPTED (no VPlayer in team)
+	e.ProcessButtonPress("buzzer1", time.Now().UnixMicro(), "A")
+
+	// Verify physical buzzer WAS recorded
+	bumper := e.GetBumper("buzzer1")
+	if bumper.Time == 0 {
+		t.Error("Physical buzzer should be accepted when team has no VPlayer, got Time=0")
+	}
+
+	// Verify team WAS recorded
+	team := e.GetTeam("red")
+	if team.Time == 0 {
+		t.Error("Team should have Time set")
+	}
+	if team.Bumper != "buzzer1" {
+		t.Errorf("Team should reference physical buzzer, got Bumper=%s", team.Bumper)
+	}
+}
+
+// TestEngine_QCM_VPlayerInvalidation_MultipleVPlayers tests that physical buzzers
+// are invalidated even when multiple VPlayers exist in the team
+func TestEngine_QCM_VPlayerInvalidation_MultipleVPlayers(t *testing.T) {
+	e := NewEngine()
+
+	// Setup teams
+	teams := map[string]*Team{
+		"red": {Name: "Team Red", Color: []int{255, 0, 0}},
+	}
+	e.SetTeams(teams)
+
+	// Setup bumpers: multiple VPlayers and one physical in the same team
+	bumpers := map[string]*Bumper{
+		"vplayer1": {Name: "VPlayer1", Team: "red", IsVirtual: true, IsVPlayer: true},
+		"vplayer2": {Name: "VPlayer2", Team: "red", IsVirtual: true, IsVPlayer: true},
+		"buzzer1":  {Name: "Buzzer1", Team: "red", IsVirtual: false, IsVPlayer: false},
+	}
+	e.SetBumpers(bumpers)
+
+	// Setup QCM question
+	question := &Question{
+		ID:       "q1",
+		Question: "Test QCM?",
+		Type:     QuestionTypeQCM,
+		QCMAnswers: &QCMAnswers{
+			Red:    "Answer A",
+			Green:  "Answer B",
+			Yellow: "Answer C",
+			Blue:   "Answer D",
+		},
+		QCMCorrect: "RED",
+	}
+
+	// Start game with QCM question
+	e.Ready("q1", question)
+	e.StartImmediate(30)
+
+	// Physical buzzer tries to buzz - should be IGNORED (team has multiple VPlayers)
+	e.ProcessButtonPress("buzzer1", time.Now().UnixMicro(), "A")
+
+	// Verify physical buzzer was NOT recorded
+	bumper := e.GetBumper("buzzer1")
+	if bumper.Time != 0 {
+		t.Errorf("Physical buzzer should be ignored when team has multiple VPlayers, got Time=%d", bumper.Time)
+	}
+
+	// Verify team was NOT recorded
+	team := e.GetTeam("red")
+	if team.Time != 0 {
+		t.Errorf("Team should not have Time set, got Time=%d", team.Time)
+	}
+}
+
+// ============================================================================
+// Tests for VPlayer QCM Multicolor Feature (v2.53.0)
+// ============================================================================
+
+// TestVPlayerBumperCreation tests VPlayer bumper creation with correct flags
+func TestVPlayerBumperCreation(t *testing.T) {
+	e := NewEngine()
+
+	// Create a VPlayer bumper (virtual player with QCM multi-color capability)
+	bumpers := map[string]*Bumper{
+		"vplayer1": {
+			Name:      "TestVPlayer",
+			Team:      "red",
+			IsVirtual: true,
+			IsVPlayer: true,
+		},
+	}
+	e.SetBumpers(bumpers)
+
+	// Verify bumper was created correctly
+	vplayer := e.GetBumper("vplayer1")
+	if vplayer == nil {
+		t.Fatal("VPlayer bumper should exist")
+	}
+
+	// Verify IS_VPLAYER flag
+	if !vplayer.IsVPlayer {
+		t.Error("VPlayer should have IsVPlayer=true")
+	}
+
+	// Verify IS_VIRTUAL flag (VPlayers are also virtual)
+	if !vplayer.IsVirtual {
+		t.Error("VPlayer should have IsVirtual=true")
+	}
+
+	// Verify virtual player count
+	if e.GetVirtualPlayerCount() != 1 {
+		t.Errorf("Expected virtual player count 1, got %d", e.GetVirtualPlayerCount())
+	}
+}
+
+// TestVPlayerQCMBuzzAllColors tests that a VPlayer can buzz with all QCM colors
+func TestVPlayerQCMBuzzAllColors(t *testing.T) {
+	// Test all four QCM colors: RED, GREEN, YELLOW, BLUE
+	colors := []string{"RED", "GREEN", "YELLOW", "BLUE"}
+
+	for _, color := range colors {
+		t.Run("Color_"+color, func(t *testing.T) {
+			e := NewEngine()
+
+			// Setup team
+			teams := map[string]*Team{
+				"red": {Name: "Team Red", Color: []int{255, 0, 0}},
+			}
+			e.SetTeams(teams)
+
+			// Setup VPlayer bumper
+			bumpers := map[string]*Bumper{
+				"vplayer1": {
+					Name:      "TestVPlayer",
+					Team:      "red",
+					IsVirtual: true,
+					IsVPlayer: true,
+				},
+			}
+			e.SetBumpers(bumpers)
+
+			// Setup QCM question
+			question := &Question{
+				ID:       "q1",
+				Question: "Test QCM?",
+				Type:     QuestionTypeQCM,
+				QCMAnswers: &QCMAnswers{
+					Red:    "Answer A",
+					Green:  "Answer B",
+					Yellow: "Answer C",
+					Blue:   "Answer D",
+				},
+				QCMCorrect: "GREEN", // Doesn't matter for this test
+			}
+
+			// Start game with QCM question
+			e.Ready("q1", question)
+			e.StartImmediate(30)
+
+			// VPlayer buzzes with the color
+			pressTime := time.Now().UnixMicro()
+			e.ProcessButtonPress("vplayer1", pressTime, color)
+
+			// Verify VPlayer buzz was ACCEPTED
+			vplayer := e.GetBumper("vplayer1")
+			if vplayer.Time == 0 {
+				t.Errorf("VPlayer should be able to buzz with color %s, but Time=0", color)
+			}
+			if vplayer.Button != color {
+				t.Errorf("VPlayer button should be %s, got %s", color, vplayer.Button)
+			}
+
+			// Verify team was updated
+			team := e.GetTeam("red")
+			if team.Time == 0 {
+				t.Errorf("Team should have Time set when VPlayer buzzed with %s", color)
+			}
+			if team.Bumper != "vplayer1" {
+				t.Errorf("Team should reference VPlayer, got Bumper=%s", team.Bumper)
+			}
+		})
+	}
+}
+
+// TestPhysicalBuzzerInvalidatedWhenTeamHasVPlayer tests that physical buzzers
+// are ignored for QCM questions when the team has a VPlayer
+func TestPhysicalBuzzerInvalidatedWhenTeamHasVPlayer(t *testing.T) {
+	e := NewEngine()
+
+	// Setup team
+	teams := map[string]*Team{
+		"red": {Name: "Team Red", Color: []int{255, 0, 0}},
+	}
+	e.SetTeams(teams)
+
+	// Setup bumpers: one VPlayer and one physical in same team
+	bumpers := map[string]*Bumper{
+		"vplayer1": {
+			Name:      "VPlayer1",
+			Team:      "red",
+			IsVirtual: true,
+			IsVPlayer: true,
+		},
+		"buzzer1": {
+			Name:      "Buzzer1",
+			Team:      "red",
+			IsVirtual: false,
+			IsVPlayer: false,
+		},
+	}
+	e.SetBumpers(bumpers)
+
+	// Setup QCM question
+	question := &Question{
+		ID:       "q1",
+		Question: "Test QCM?",
+		Type:     QuestionTypeQCM,
+		QCMAnswers: &QCMAnswers{
+			Red:    "Answer A",
+			Green:  "Answer B",
+			Yellow: "Answer C",
+			Blue:   "Answer D",
+		},
+		QCMCorrect: "RED",
+	}
+
+	// Start game with QCM question
+	e.Ready("q1", question)
+	e.StartImmediate(30)
+
+	// Physical buzzer tries to buzz first - should be IGNORED
+	physicalPressTime := time.Now().UnixMicro()
+	e.ProcessButtonPress("buzzer1", physicalPressTime, "A")
+
+	// Verify physical buzzer was NOT recorded
+	buzzer := e.GetBumper("buzzer1")
+	if buzzer.Time != 0 {
+		t.Errorf("Physical buzzer should be ignored when team has VPlayer, got Time=%d", buzzer.Time)
+	}
+
+	// Verify team was NOT recorded yet
+	team := e.GetTeam("red")
+	if team.Time != 0 {
+		t.Errorf("Team should not have Time set when physical buzzer ignored, got Time=%d", team.Time)
+	}
+
+	// Now VPlayer buzzes - should be ACCEPTED
+	vplayerPressTime := time.Now().UnixMicro()
+	e.ProcessButtonPress("vplayer1", vplayerPressTime, "RED")
+
+	// Verify VPlayer was recorded
+	vplayer := e.GetBumper("vplayer1")
+	if vplayer.Time == 0 {
+		t.Error("VPlayer should be accepted and have Time set")
+	}
+	if vplayer.Button != "RED" {
+		t.Errorf("VPlayer button should be RED, got %s", vplayer.Button)
+	}
+
+	// Verify team was recorded with VPlayer
+	team = e.GetTeam("red")
+	if team.Time == 0 {
+		t.Error("Team should have Time set when VPlayer buzzed")
+	}
+	if team.Bumper != "vplayer1" {
+		t.Errorf("Team should reference VPlayer, got Bumper=%s", team.Bumper)
+	}
+}
+
+// TestPhysicalBuzzerNotInvalidatedForNonQCM tests that physical buzzers
+// work normally for non-QCM questions even when team has a VPlayer
+func TestPhysicalBuzzerNotInvalidatedForNonQCM(t *testing.T) {
+	e := NewEngine()
+
+	// Setup team
+	teams := map[string]*Team{
+		"red": {Name: "Team Red", Color: []int{255, 0, 0}},
+	}
+	e.SetTeams(teams)
+
+	// Setup bumpers: one VPlayer and one physical in same team
+	bumpers := map[string]*Bumper{
+		"vplayer1": {
+			Name:      "VPlayer1",
+			Team:      "red",
+			IsVirtual: true,
+			IsVPlayer: true,
+		},
+		"buzzer1": {
+			Name:      "Buzzer1",
+			Team:      "red",
+			IsVirtual: false,
+			IsVPlayer: false,
+		},
+	}
+	e.SetBumpers(bumpers)
+
+	// Setup NORMAL question (not QCM)
+	question := &Question{
+		ID:       "q1",
+		Question: "Test Normal?",
+		Type:     QuestionTypeNormal,
+		Answer:   "42",
+	}
+
+	// Start game with NORMAL question
+	e.Ready("q1", question)
+	e.StartImmediate(30)
+
+	// Physical buzzer tries to buzz - should be ACCEPTED (not QCM)
+	physicalPressTime := time.Now().UnixMicro()
+	e.ProcessButtonPress("buzzer1", physicalPressTime, "A")
+
+	// Verify physical buzzer WAS recorded
+	buzzer := e.GetBumper("buzzer1")
+	if buzzer.Time == 0 {
+		t.Error("Physical buzzer should be accepted for NORMAL question, got Time=0")
+	}
+	if buzzer.Button != "A" {
+		t.Errorf("Physical buzzer button should be A, got %s", buzzer.Button)
+	}
+
+	// Verify team WAS recorded with physical buzzer
+	team := e.GetTeam("red")
+	if team.Time == 0 {
+		t.Error("Team should have Time set for NORMAL question")
+	}
+	if team.Bumper != "buzzer1" {
+		t.Errorf("Team should reference physical buzzer, got Bumper=%s", team.Bumper)
+	}
+}
+
+// TestPhysicalBuzzerWorksWithoutVPlayer tests that physical buzzers
+// work normally for QCM questions when team has NO VPlayer
+func TestPhysicalBuzzerWorksWithoutVPlayer(t *testing.T) {
+	e := NewEngine()
+
+	// Setup team
+	teams := map[string]*Team{
+		"red": {Name: "Team Red", Color: []int{255, 0, 0}},
+	}
+	e.SetTeams(teams)
+
+	// Setup bumpers: only physical buzzers (no VPlayer)
+	bumpers := map[string]*Bumper{
+		"buzzer1": {
+			Name:      "Buzzer1",
+			Team:      "red",
+			IsVirtual: false,
+			IsVPlayer: false,
+		},
+		"buzzer2": {
+			Name:      "Buzzer2",
+			Team:      "red",
+			IsVirtual: false,
+			IsVPlayer: false,
+		},
+	}
+	e.SetBumpers(bumpers)
+
+	// Setup QCM question
+	question := &Question{
+		ID:       "q1",
+		Question: "Test QCM?",
+		Type:     QuestionTypeQCM,
+		QCMAnswers: &QCMAnswers{
+			Red:    "Answer A",
+			Green:  "Answer B",
+			Yellow: "Answer C",
+			Blue:   "Answer D",
+		},
+		QCMCorrect: "RED",
+	}
+
+	// Start game with QCM question
+	e.Ready("q1", question)
+	e.StartImmediate(30)
+
+	// Physical buzzer tries to buzz - should be ACCEPTED (no VPlayer in team)
+	physicalPressTime := time.Now().UnixMicro()
+	e.ProcessButtonPress("buzzer1", physicalPressTime, "A")
+
+	// Verify physical buzzer WAS recorded
+	buzzer := e.GetBumper("buzzer1")
+	if buzzer.Time == 0 {
+		t.Error("Physical buzzer should be accepted when team has no VPlayer, got Time=0")
+	}
+	if buzzer.Button != "A" {
+		t.Errorf("Physical buzzer button should be A, got %s", buzzer.Button)
+	}
+
+	// Verify team WAS recorded
+	team := e.GetTeam("red")
+	if team.Time == 0 {
+		t.Error("Team should have Time set when physical buzzer pressed")
+	}
+	if team.Bumper != "buzzer1" {
+		t.Errorf("Team should reference physical buzzer, got Bumper=%s", team.Bumper)
+	}
+
+	// Second physical buzzer tries to buzz - should be IGNORED (team already buzzed)
+	secondPressTime := time.Now().UnixMicro()
+	e.ProcessButtonPress("buzzer2", secondPressTime, "B")
+
+	// Verify second buzzer was NOT recorded
+	buzzer2 := e.GetBumper("buzzer2")
+	if buzzer2.Time != 0 {
+		t.Errorf("Second buzzer should be ignored (team already buzzed), got Time=%d", buzzer2.Time)
+	}
+}
+

@@ -283,6 +283,48 @@ Dans la section "Inscriptions" :
 - **Places max** : Nombre maximum de joueurs virtuels (configurable)
 - **Inscrits** : X/Y avec distinction 🎮 physiques / 📱 virtuels
 
+### Interface QCM tactile multicolore (v2.53.0)
+
+#### Présentation
+
+Les VJoueurs disposent d'une interface spéciale pour répondre aux questions QCM : ils peuvent toucher directement une des 4 couleurs (Rouge, Vert, Jaune, Bleu) sur leur écran au lieu d'utiliser un buzzer physique.
+
+#### Identification visuelle
+
+Les VJoueurs sont identifiés par un **badge multicolore** (4 quartiers colorés) affiché dans leur carte joueur sur l'interface admin :
+- Ce badge remplace le point de couleur unique des buzzers physiques
+- Il apparaît dans la colonne "Joueurs non assignés" et dans les cartes d'équipe
+
+#### Comportement en QCM
+
+Quand une question QCM est active (phase STARTED) :
+
+**Pour le VJoueur** :
+- 4 gros boutons colorés apparaissent sur son écran (`/player`)
+- Chaque bouton correspond à une réponse (Rouge, Vert, Jaune, Bleu)
+- Un seul clic suffit pour répondre (pas besoin de buzzer d'abord)
+- Feedback haptique + overlay vert "BUZZÉ !"
+
+**Pour les buzzers physiques de l'équipe** :
+- Si l'équipe possède un VJoueur actif, les buzzers physiques sont **automatiquement invalidés** pour cette question QCM
+- Les autres joueurs de l'équipe ne peuvent plus buzzer avec leur buzzer physique
+- Sur l'interface admin, les buzzers physiques apparaissent **grisés** avec l'indication "VJoueur actif"
+
+#### Pourquoi cette invalidation
+
+Cette limitation évite les conflits entre :
+- Un joueur qui buzz avec son buzzer physique (sans couleur)
+- Un VJoueur qui répond avec une couleur précise
+
+Seul le VJoueur peut répondre pour l'équipe en mode QCM, garantissant une réponse colorée valide.
+
+#### Comportement normal
+
+L'invalidation des buzzers physiques est **limitée au mode QCM** :
+- Pour les questions NORMAL, les buzzers physiques fonctionnent normalement
+- Le VJoueur peut aussi buzzer sur les questions NORMAL via son bouton "BUZZ !"
+- Pour les questions MEMORY, le VJoueur et les buzzers physiques sont tous deux bloqués (contrôle admin uniquement)
+
 ### Restrictions
 
 #### Questions MEMORY

@@ -27,7 +27,7 @@ const BUTTON_TO_QCM_COLOR = {
   'D': 'BLUE',
 }
 
-export default function PlayerDisplay({ playerName = null, playerNameColor = null, teamName = null, teamColor = null, isVPlayer = false, onMediaClick = null }) {
+export default function PlayerDisplay({ playerName = null, playerNameColor = null, teamName = null, teamColor = null, isVPlayer = false, onMediaClick = null, onQCMAnswer = null, vplayerHasBuzzed = false }) {
   const { gameState, teams, bumpers, flipMemoryCard, showQRCode } = useGame()
   const [previousRanking, setPreviousRanking] = useState({})
   const [changedTeams, setChangedTeams] = useState({})
@@ -1334,14 +1334,18 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
                       const teamsOnThisAnswer = teamsByQcmAnswer[colorKey] || []
                       const showTeamBadges = ['STOPPED', 'REVEALED'].includes(gameState.phase) && teamsOnThisAnswer.length > 0
 
+                      const isClickable = onQCMAnswer && gameState.phase === 'STARTED' && !isInvalidated && !vplayerHasBuzzed
+
                       return (
                         <motion.div
                           key={colorKey}
-                          className={`qcm-answer-item ${showAnswer ? (isCorrect ? 'correct' : 'wrong') : ''} ${isInvalidated ? 'invalidated' : ''}`}
+                          className={`qcm-answer-item ${showAnswer ? (isCorrect ? 'correct' : 'wrong') : ''} ${isInvalidated ? 'invalidated' : ''} ${isClickable ? 'clickable' : ''}`}
                           style={{
                             backgroundColor: isInvalidated ? '#374151' : (showAnswer && !isCorrect ? '#4b5563' : colorData.color),
-                            opacity: isInvalidated ? 0.35 : (showAnswer && !isCorrect ? 0.4 : 1)
+                            opacity: isInvalidated ? 0.35 : (showAnswer && !isCorrect ? 0.4 : 1),
+                            cursor: isClickable ? 'pointer' : undefined
                           }}
+                          onClick={isClickable ? () => onQCMAnswer(colorKey) : undefined}
                           animate={showAnswer && isCorrect ? {
                             scale: [1, 1.08, 1],
                             boxShadow: [

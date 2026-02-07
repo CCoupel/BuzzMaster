@@ -298,8 +298,8 @@ export default function TeamsPage() {
                         {teamBumpers.length > 0 ? (
                           <div className="team-members-list">
                             {teamBumpers.map(bumper => {
-                              // Use answer color if set, otherwise gray
-                              const avatarColor = bumper.ANSWER_COLOR && ANSWER_COLORS[bumper.ANSWER_COLOR]
+                              // Use answer color if set, otherwise gray (not for VPlayers)
+                              const avatarColor = !bumper.IS_VPLAYER && bumper.ANSWER_COLOR && ANSWER_COLORS[bumper.ANSWER_COLOR]
                                 ? ANSWER_COLORS[bumper.ANSWER_COLOR].color
                                 : 'var(--gray-400)'
                               return (
@@ -311,10 +311,22 @@ export default function TeamsPage() {
                                   onDragEnd={handleDragEnd}
                                 >
                                   <div
-                                    className="member-avatar"
-                                    style={{ backgroundColor: avatarColor }}
+                                    className={`member-avatar ${bumper.IS_VPLAYER ? 'vplayer-multicolor' : ''}`}
+                                    style={!bumper.IS_VPLAYER ? { backgroundColor: avatarColor } : {}}
                                   >
-                                    {(bumper.NAME || bumper.mac.slice(-6)).charAt(0).toUpperCase()}
+                                    {bumper.IS_VPLAYER ? (
+                                      <>
+                                        <svg className="vplayer-multicolor-badge" viewBox="0 0 24 24">
+                                          <path d="M 12,12 L 12,0 A 12,12 0 0,1 24,12 Z" fill={ANSWER_COLORS.RED.color} />
+                                          <path d="M 12,12 L 24,12 A 12,12 0 0,1 12,24 Z" fill={ANSWER_COLORS.GREEN.color} />
+                                          <path d="M 12,12 L 12,24 A 12,12 0 0,1 0,12 Z" fill={ANSWER_COLORS.YELLOW.color} />
+                                          <path d="M 12,12 L 0,12 A 12,12 0 0,1 12,0 Z" fill={ANSWER_COLORS.BLUE.color} />
+                                        </svg>
+                                        <span className="vplayer-initial">{(bumper.NAME || bumper.mac.slice(-6)).charAt(0).toUpperCase()}</span>
+                                      </>
+                                    ) : (
+                                      (bumper.NAME || bumper.mac.slice(-6)).charAt(0).toUpperCase()
+                                    )}
                                   </div>
                                   <div className="member-info">
                                     <input
@@ -327,10 +339,22 @@ export default function TeamsPage() {
                                     />
                                     <span className="member-mac">{bumper.mac}</span>
                                   </div>
-                                  {bumper.ANSWER_COLOR && ANSWER_COLORS[bumper.ANSWER_COLOR] && (
-                                    <span className="answer-color-badge" style={{ backgroundColor: ANSWER_COLORS[bumper.ANSWER_COLOR].color }}>
-                                      {ANSWER_COLORS[bumper.ANSWER_COLOR].letter}
-                                    </span>
+                                  {bumper.IS_VPLAYER ? (
+                                    <div className="buzzer-vplayer-multicolor">
+                                      <svg className="vplayer-multicolor-badge" viewBox="0 0 24 24">
+                                        <path d="M 12,12 L 12,0 A 12,12 0 0,1 24,12 Z" fill={ANSWER_COLORS.RED.color} />
+                                        <path d="M 12,12 L 24,12 A 12,12 0 0,1 12,24 Z" fill={ANSWER_COLORS.GREEN.color} />
+                                        <path d="M 12,12 L 12,24 A 12,12 0 0,1 0,12 Z" fill={ANSWER_COLORS.YELLOW.color} />
+                                        <path d="M 12,12 L 0,12 A 12,12 0 0,1 12,0 Z" fill={ANSWER_COLORS.BLUE.color} />
+                                      </svg>
+                                      <span className="vplayer-initial">{(bumper.NAME || bumper.mac.slice(-6)).charAt(0).toUpperCase()}</span>
+                                    </div>
+                                  ) : (
+                                    bumper.ANSWER_COLOR && ANSWER_COLORS[bumper.ANSWER_COLOR] && (
+                                      <span className="answer-color-badge" style={{ backgroundColor: ANSWER_COLORS[bumper.ANSWER_COLOR].color }}>
+                                        {ANSWER_COLORS[bumper.ANSWER_COLOR].letter}
+                                      </span>
+                                    )
                                   )}
                                   <span className="drag-handle">⋮⋮</span>
                                 </div>
@@ -444,28 +468,41 @@ export default function TeamsPage() {
                       </button>
                     </div>
 
-                    {/* Ligne 2: Pastille avatar + 4 couleurs */}
+                    {/* Ligne 2: Pastille avatar + 4 couleurs (ou camembert pour VPlayer) */}
                     <div className="bumper-row-colors">
                       <div
-                        className={`bumper-avatar ${bumper.ANSWER_COLOR ? 'has-color' : ''}`}
-                        style={bumper.ANSWER_COLOR && ANSWER_COLORS[bumper.ANSWER_COLOR]
+                        className={`bumper-avatar ${bumper.IS_VPLAYER ? 'vplayer-multicolor' : bumper.ANSWER_COLOR ? 'has-color' : ''}`}
+                        style={!bumper.IS_VPLAYER && bumper.ANSWER_COLOR && ANSWER_COLORS[bumper.ANSWER_COLOR]
                           ? { backgroundColor: ANSWER_COLORS[bumper.ANSWER_COLOR].color }
                           : {}
                         }
                       >
-                        {(bumper.NAME || bumper.mac.slice(-6)).charAt(0).toUpperCase()}
+                        {bumper.IS_VPLAYER ? (
+                          <>
+                            <svg className="vplayer-multicolor-badge" viewBox="0 0 24 24">
+                              <path d="M 12,12 L 12,0 A 12,12 0 0,1 24,12 Z" fill={ANSWER_COLORS.RED.color} />
+                              <path d="M 12,12 L 24,12 A 12,12 0 0,1 12,24 Z" fill={ANSWER_COLORS.GREEN.color} />
+                              <path d="M 12,12 L 12,24 A 12,12 0 0,1 0,12 Z" fill={ANSWER_COLORS.YELLOW.color} />
+                              <path d="M 12,12 L 0,12 A 12,12 0 0,1 12,0 Z" fill={ANSWER_COLORS.BLUE.color} />
+                            </svg>
+                            <span className="vplayer-initial">{(bumper.NAME || bumper.mac.slice(-6)).charAt(0).toUpperCase()}</span>
+                          </>
+                        ) : (
+                          (bumper.NAME || bumper.mac.slice(-6)).charAt(0).toUpperCase()
+                        )}
                       </div>
                       <div className="answer-color-selector">
                         {Object.entries(ANSWER_COLORS).map(([key, { color, letter }]) => (
                           <button
                             key={key}
-                            className={`answer-color-btn ${bumper.ANSWER_COLOR === key ? 'active' : ''}`}
+                            className={`answer-color-btn ${bumper.IS_VPLAYER ? 'active' : bumper.ANSWER_COLOR === key ? 'active' : ''} ${bumper.IS_VPLAYER ? 'locked' : ''}`}
                             style={{ backgroundColor: color }}
-                            onClick={(e) => {
+                            onClick={bumper.IS_VPLAYER ? undefined : (e) => {
                               e.stopPropagation()
                               handleBumperAnswerColorChange(bumper.mac, bumper.ANSWER_COLOR === key ? '' : key)
                             }}
-                            title={ANSWER_COLORS[key].label}
+                            title={bumper.IS_VPLAYER ? `VJoueur - ${ANSWER_COLORS[key].label}` : ANSWER_COLORS[key].label}
+                            disabled={bumper.IS_VPLAYER}
                           >
                             {letter}
                           </button>

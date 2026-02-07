@@ -893,6 +893,17 @@ func (e *Engine) ProcessButtonPress(bumperID string, pressTime int64, button str
 		return
 	}
 
+	// Phase 3: QCM VPlayer invalidation logic
+	// For QCM questions only, if the team has a VPlayer and this is a physical buzzer,
+	// ignore the buzz (VPlayer replaces physical buzzers for QCM)
+	if e.state.Question != nil && e.state.Question.Type == QuestionTypeQCM {
+		if !bumper.IsVPlayer && e.teamHasVPlayerUnsafe(teamID) {
+			log.Printf("[Engine] Buzz ignored: team %s has VPlayer, physical bumper %s cannot buzz on QCM", teamID, bumperID)
+			e.mu.Unlock()
+			return
+		}
+	}
+
 	// Check if team already has a press - only ONE player per team can buzz
 	if team.Time > 0 {
 		log.Printf("[Engine] Team %s already buzzed, ignoring bumper %s", teamID, bumperID)
@@ -904,6 +915,19 @@ func (e *Engine) ProcessButtonPress(bumperID string, pressTime int64, button str
 	bumper.Time = pressTime
 	bumper.Button = button
 	bumper.Status = "PAUSE"
+
+	// For QCM questions, map button to AnswerColor (A=RED, B=GREEN, C=YELLOW, D=BLUE)
+	if e.state.Question != nil && e.state.Question.Type == QuestionTypeQCM {
+		buttonToColor := map[string]AnswerColor{
+			"A": AnswerColorRed,
+			"B": AnswerColorGreen,
+			"C": AnswerColorYellow,
+			"D": AnswerColorBlue,
+		}
+		if color, ok := buttonToColor[button]; ok {
+			bumper.AnswerColor = color
+		}
+	}
 
 	// Store the number of QCM hints at buzz time for per-player penalty calculation
 	bumper.HintsAtBuzz = len(e.state.QcmInvalidated)
@@ -922,6 +946,17 @@ func (e *Engine) ProcessButtonPress(bumperID string, pressTime int64, button str
 	if callback != nil {
 		callback(bumperID, teamID, pressTime, button)
 	}
+}
+
+// teamHasVPlayerUnsafe checks if a team has at least one VPlayer (virtual player)
+// Caller must hold lock
+func (e *Engine) teamHasVPlayerUnsafe(teamID string) bool {
+	for _, bumper := range e.data.Bumpers {
+		if bumper.Team == teamID && bumper.IsVPlayer {
+			return true
+		}
+	}
+	return false
 }
 
 // UpdateScore updates bumper and team scores
@@ -2024,12 +2059,13 @@ func (e *Engine) CreateVirtualPlayer(name string) (string, *Bumper, error) {
 	// Generate unique ID
 	id := "vjoueur_" + name + "_" + time.Now().Format("20060102_150405")
 
-	// Create virtual bumper
+	// Create virtual bumper (VPlayer = true for virtual players, allows all QCM colors)
 	bumper := &Bumper{
 		Name:      name,
 		Team:      "",
 		Score:     0,
 		IsVirtual: true,
+		IsVPlayer: true, // VPlayer can answer all QCM colors
 		Status:    "READY",
 	}
 
@@ -2137,12 +2173,13 @@ func (e *Engine) HandleVirtualPlayerConnect(name, sessionID string) (string, *Bu
 		id = "vplayer_" + name + "_" + time.Now().Format("20060102_150405")
 	}
 
-	// Create virtual bumper
+	// Create virtual bumper (VPlayer = true for virtual players, allows all QCM colors)
 	bumper := &Bumper{
 		Name:      name,
 		Team:      "",
 		Score:     0,
 		IsVirtual: true,
+		IsVPlayer: true, // VPlayer can answer all QCM colors
 		Status:    "READY",
 	}
 
@@ -2188,11 +2225,14 @@ func (e *Engine) AssignVirtualPlayer(bumperID, team string, answerColor AnswerCo
 		return &EnrollmentError{Reason: "TEAM_NOT_FOUND"}
 	}
 
-	// Assign team and answer color
+	// Assign team and answer color (only physical buzzers get color, VPlayers respond to all)
 	bumper.Team = team
-	bumper.AnswerColor = answerColor
+	if !bumper.IsVPlayer {
+		bumper.AnswerColor = answerColor
+	}
+	// VPlayers keep AnswerColor empty (they respond to all colors)
 
-	log.Printf("[Engine] Virtual player assigned: id=%s, team=%s, color=%s", bumperID, team, answerColor)
+	log.Printf("[Engine] Virtual player assigned: id=%s, team=%s, color=%s, isVPlayer=%v", bumperID, team, answerColor, bumper.IsVPlayer)
 
 	// Save bumpers to disk
 	go e.SaveBumpers()

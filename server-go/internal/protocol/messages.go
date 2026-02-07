@@ -48,6 +48,8 @@ const (
 	ActionPlayerRejected       = "PLAYER_REJECTED"
 	ActionEnrollmentUpdate     = "ENROLLMENT_UPDATE"
 	ActionPlayerAssigned = "PLAYER_ASSIGNED"
+	// VPlayer QCM actions
+	ActionVPlayerQCMAnswer = "VPLAYER_QCM_ANSWER"
 	// Log actions (via dedicated /ws/logs WebSocket)
 	ActionLogHistory = "LOG_HISTORY"
 	ActionLogEntry   = "LOG_ENTRY"
@@ -212,6 +214,12 @@ type PlayerAssignedPayload struct {
 	ID          string `json:"ID"`           // Bumper ID
 	Team        string `json:"TEAM"`         // Team name
 	AnswerColor string `json:"ANSWER_COLOR"` // Assigned answer color (RED/GREEN/YELLOW/BLUE)
+}
+
+// VPlayerQCMAnswerPayload for VPLAYER_QCM_ANSWER action (VPlayer buzzes with color)
+type VPlayerQCMAnswerPayload struct {
+	ID          string `json:"ID"`           // Bumper ID (VPlayer MAC)
+	AnswerColor string `json:"ANSWER_COLOR"` // Color chosen (RED, GREEN, YELLOW, BLUE)
 }
 
 // LogHistoryPayload for LOG_HISTORY action (send log history to client)

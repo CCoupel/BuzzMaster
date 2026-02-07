@@ -68,6 +68,7 @@ type Bumper struct {
 	AnswerColor AnswerColor `json:"ANSWER_COLOR,omitempty"`
 	HintsAtBuzz int         `json:"HINTS_AT_BUZZ,omitempty"` // Number of QCM hints when player buzzed
 	IsVirtual   bool        `json:"IS_VIRTUAL,omitempty"`    // True for virtual players (mobile app)
+	IsVPlayer   bool        `json:"IS_VPLAYER,omitempty"`    // True for VPlayer (can answer all QCM colors)
 }
 
 // QuestionType represents the type of question

@@ -3,6 +3,30 @@
 Historique des versions du projet BuzzControl.
 
 
+## [2.53.0] - 2026-02-07
+
+### Added
+- **[VJoueur]**: Interface QCM tactile multicolore pour joueurs virtuels
+  - Les VJoueurs peuvent répondre aux questions QCM en touchant directement une des 4 couleurs (Rouge, Vert, Jaune, Bleu)
+  - Badge multicolore (4 quartiers colorés) affiché dans TeamCard pour identifier les VJoueurs
+  - Invalidation automatique des buzzers physiques d'une équipe quand elle a un VJoueur actif en mode QCM
+  - Indicateurs visuels (grisés) des buzzers physiques invalidés dans l'interface admin
+  - Nouvelle action WebSocket `VPLAYER_QCM_ANSWER` avec payload `{ANSWER_COLOR: "RED"|"GREEN"|"YELLOW"|"BLUE"}`
+  - Champ `IS_VPLAYER` ajouté au modèle Bumper pour différencier les joueurs virtuels des buzzers physiques
+
+### Technical
+- **Backend**:
+  - `models.go`: Nouveau champ `IS_VPLAYER bool` dans la structure Bumper
+  - `messages.go`: Action WebSocket `VPLAYER_QCM_ANSWER` pour réponses tactiles QCM
+  - `engine.go`: Logique d'invalidation des buzzers physiques si l'équipe a un VJoueur actif en QCM
+  - Tests unitaires: `TestVPlayerBumperCreation`, `TestVPlayerQCMBuzzAllColors`, `TestPhysicalBuzzerInvalidatedForQCM`, `TestPhysicalBuzzerNotInvalidatedForNonQCM`
+- **Frontend**:
+  - `TeamCard.jsx`: Badge SVG 4 quartiers pour VJoueurs
+  - `VPlayerPage.jsx`: Interface tactile 4 boutons colorés pendant les questions QCM STARTED
+  - `GamePage.jsx`: Indicateurs visuels (grisés) des buzzers physiques invalidés par VJoueur
+
+---
+
 ## [2.52.0] - 2026-02-06
 
 ### Added

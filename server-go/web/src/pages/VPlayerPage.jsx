@@ -127,16 +127,39 @@ export default function VPlayerPage() {
       return
     }
 
+    // Block buzz for QCM questions (use QCM buttons instead)
+    if (gameState.question?.TYPE === 'QCM') {
+      console.log('[VPlayer] Buzz blocked for QCM question - use QCM buttons')
+      return
+    }
+
     console.log('[VPlayer] Buzzing:', bumper.id)
 
     // Send BUTTON message with correct format
     sendMessage('BUTTON', { ID: bumper.id, button: 'A' })
   }
 
-  // Get player name color from ANSWER_COLOR
+  const handleQCMAnswer = (color) => {
+    if (!bumper || !bumper.id) return
+    if (gameState.phase !== 'STARTED') return
+    if (gameState.question?.TYPE !== 'QCM') return
+
+    console.log('[VPlayer] QCM answer:', color)
+
+    // Send VPLAYER_QCM_ANSWER message - wait for server confirmation
+    sendMessage('VPLAYER_QCM_ANSWER', { ID: bumper.id, ANSWER_COLOR: color })
+  }
+
+  // Get player name color - use team color (VPlayers have no dedicated ANSWER_COLOR)
   const getPlayerNameColor = () => {
-    if (!bumper || !bumper.ANSWER_COLOR) return null
-    return ANSWER_COLORS[bumper.ANSWER_COLOR] || null
+    if (bumper?.ANSWER_COLOR && ANSWER_COLORS[bumper.ANSWER_COLOR]) {
+      return ANSWER_COLORS[bumper.ANSWER_COLOR]
+    }
+    // Fallback to team color for VPlayers
+    if (team?.COLOR) {
+      return `rgb(${team.COLOR.join(',')})`
+    }
+    return null
   }
 
   // Get team color in rgb format
@@ -147,6 +170,9 @@ export default function VPlayerPage() {
 
   // Check if player has buzzed (TIME > 0)
   const hasBuzzed = bumper && bumper.TIME > 0
+
+  // Check if current question is QCM
+  const isQcmQuestion = gameState.question?.TYPE === 'QCM'
 
   // Show loading if no session or bumper not found yet
   if (!playerSession) {
@@ -160,17 +186,30 @@ export default function VPlayerPage() {
   return (
     <div className="vplayer-page">
       {/* Buzz confirmation overlay */}
-      {hasBuzzed && (
-        <div className="vplayer-buzz-overlay">
-          {/* Show checkmark and text only during STARTED and PAUSED */}
-          {(gameState.phase === 'STARTED' || gameState.phase === 'PAUSED') && (
-            <>
-              <div className="vplayer-buzz-checkmark">✓</div>
-              <div className="vplayer-buzz-text">BUZZÉ !</div>
-            </>
-          )}
-        </div>
-      )}
+      {hasBuzzed && (() => {
+        const answerColor = isQcmQuestion && bumper.ANSWER_COLOR ? ANSWER_COLORS[bumper.ANSWER_COLOR] : null
+        const answerLetter = isQcmQuestion && bumper.ANSWER_COLOR
+          ? ['A', 'B', 'C', 'D'][['RED', 'GREEN', 'YELLOW', 'BLUE'].indexOf(bumper.ANSWER_COLOR)]
+          : null
+        const answerText = isQcmQuestion && bumper.ANSWER_COLOR && gameState.question?.QCM_ANSWERS
+          ? gameState.question.QCM_ANSWERS[bumper.ANSWER_COLOR]
+          : null
+        return (
+          <div
+            className="vplayer-buzz-overlay"
+            style={answerColor ? { '--buzz-color': answerColor } : undefined}
+          >
+            {(gameState.phase === 'STARTED' || gameState.phase === 'PAUSED' || gameState.phase === 'REVEALED') && (
+              <>
+                <div className="vplayer-buzz-checkmark">✓</div>
+                <div className="vplayer-buzz-text">
+                  {answerLetter && answerText ? `${answerLetter} : ${answerText}` : answerLetter ? `${answerLetter} !` : 'BUZZÉ !'}
+                </div>
+              </>
+            )}
+          </div>
+        )
+      })()}
 
       <PlayerDisplay
         playerName={bumper?.NAME}
@@ -179,6 +218,8 @@ export default function VPlayerPage() {
         teamColor={getTeamColor()}
         isVPlayer={true}
         onMediaClick={handleBuzz}
+        onQCMAnswer={handleQCMAnswer}
+        vplayerHasBuzzed={hasBuzzed}
       />
     </div>
   )

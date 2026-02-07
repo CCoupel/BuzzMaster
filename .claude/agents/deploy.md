@@ -305,7 +305,13 @@ Always verify:
 - Server starts correctly
 - HTTP endpoint responds: `curl http://localhost/version`
 - Version matches config.json
+
+**QUALIF : Le serveur DOIT rester running à la fin du déploiement.**
+Le but du deploy QUALIF est de mettre le serveur à disposition de l'utilisateur pour ses tests de validation manuels. Ne JAMAIS arrêter le serveur en fin de QUALIF. Si un test de graceful shutdown est nécessaire, redémarrer le serveur immédiatement après.
+
+**PROD : Graceful shutdown testing** (uniquement PROD) :
 - Graceful shutdown works: `curl http://localhost/shutdown`
+- Puis redémarrer avec l'exécutable release GitHub
 
 ## Output Format
 
@@ -450,6 +456,7 @@ fi
 4. **NEVER** skip post-build tests
 5. **NEVER** delete the work branch after merge (keep for CI failure recovery)
 6. **NEVER** block deployment because you're on a feature branch (that's expected for PROD)
+7. **NEVER** leave the server stopped after QUALIF deployment (user needs it running for manual validation)
 7. **ALWAYS** finalize documentation BEFORE build (PROD only)
 8. **ALWAYS** set version z=0 for releases (e.g., 2.45.3 → 2.45.0)
 9. **ALWAYS** mark tasks as completed (TaskUpdate) before push (PROD only)

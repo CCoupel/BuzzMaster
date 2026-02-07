@@ -40,6 +40,7 @@ export default function TeamCard({
   pointsTarget = null,  // PLAYER or TEAM - from current question
   qcmPenaltyConfig = null, // { penalty1: 0.67, penalty2: 0.33 } - for QCM penalty display
   memoryStats = null, // { pairs, errors, totalPairs, pointsPerPair, errorPenalty, completionBonus }
+  questionType = null, // Question type (QCM, NORMAL, MEMORY)
 }) {
   const [showTooltip, setShowTooltip] = useState(false)
   const rgbColor = color ? `rgb(${color.join(',')})` : 'var(--primary-500)'
@@ -100,6 +101,11 @@ export default function TeamCard({
     if (isComplete) points += (memoryStats.completionBonus || 0)
     return Math.max(0, points)
   }, [memoryStats])
+
+  // Detect if team has an active VPlayer
+  const teamHasVPlayer = useMemo(() => {
+    return buzzers.some(b => b.isVPlayer === true)
+  }, [buzzers])
 
   // Handle team header click (for team points)
   const handleTeamClick = (e) => {
@@ -221,12 +227,14 @@ export default function TeamCard({
               ? getPenaltyPercent(buzzer.hintsAtBuzz, qcmPenaltyConfig)
               : 100
             const hasPenalty = penaltyPercent < 100
+            // Check if buzzer is invalidated by VPlayer during QCM
+            const isInvalidatedByVPlayer = questionType === 'QCM' && !buzzer.isVPlayer && teamHasVPlayer
             return (
               <motion.div
                 key={`${buzzer.mac}-${buzzer.timestamp}`}
                 layoutId={`buzzer-${buzzer.mac}`}
                 layout
-                className={`buzzer-mini ${buzzer.active ? 'active' : ''} ${buzzer.ready ? 'ready' : ''} ${answerColorData ? 'has-answer-color' : ''} ${buzzerWaitingBuzz ? 'waiting-buzz' : ''} ${buzzerWaitingPong ? 'waiting-pong' : ''} ${onPlayerClick ? 'clickable' : ''}`}
+                className={`buzzer-mini ${buzzer.active ? 'active' : ''} ${buzzer.ready ? 'ready' : ''} ${answerColorData ? 'has-answer-color' : ''} ${buzzerWaitingBuzz ? 'waiting-buzz' : ''} ${buzzerWaitingPong ? 'waiting-pong' : ''} ${onPlayerClick ? 'clickable' : ''} ${buzzer.isVPlayer ? 'is-vplayer' : ''} ${isInvalidatedByVPlayer ? 'invalidated-by-vplayer' : ''}`}
                 style={answerColorData ? { '--answer-color': answerColorData.color } : undefined}
                 initial={{ scale: 0.95, opacity: 0.8 }}
                 animate={{ scale: 1, opacity: 1 }}
@@ -234,7 +242,17 @@ export default function TeamCard({
                 onClick={handleBuzzerClick}
               >
                 <div className="buzzer-info">
-                  {answerColorData && (
+                  {buzzer.isVPlayer ? (
+                    <div className="buzzer-vplayer-multicolor">
+                      <svg className="vplayer-multicolor-badge" viewBox="0 0 24 24">
+                        <path d="M 12,12 L 12,0 A 12,12 0 0,1 24,12 Z" fill={ANSWER_COLORS.RED.color} />
+                        <path d="M 12,12 L 24,12 A 12,12 0 0,1 12,24 Z" fill={ANSWER_COLORS.GREEN.color} />
+                        <path d="M 12,12 L 12,24 A 12,12 0 0,1 0,12 Z" fill={ANSWER_COLORS.YELLOW.color} />
+                        <path d="M 12,12 L 0,12 A 12,12 0 0,1 12,0 Z" fill={ANSWER_COLORS.BLUE.color} />
+                      </svg>
+                      <span className="vplayer-initial">{(buzzer.name || '?').charAt(0).toUpperCase()}</span>
+                    </div>
+                  ) : answerColorData ? (
                     <div className={`buzzer-answer-color-wrapper ${hasPenalty ? 'has-penalty' : ''}`}>
                       <span
                         className="buzzer-answer-color"
@@ -265,8 +283,13 @@ export default function TeamCard({
                         <span className="penalty-badge">{penaltyPercent}%</span>
                       )}
                     </div>
-                  )}
+                  ) : null}
                   <span className="buzzer-name">{buzzer.name}</span>
+                  {isInvalidatedByVPlayer && (
+                    <span className="vplayer-invalidation-badge" title="Buzzer physique invalidé : VJoueur actif">
+                      🚫
+                    </span>
+                  )}
                 </div>
                 <div className="buzzer-right">
                   {buzzer.timestamp && gameTime && (

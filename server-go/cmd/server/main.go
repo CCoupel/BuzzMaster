@@ -592,6 +592,9 @@ func (a *App) handleWebMessage(incoming *protocol.IncomingMessage) {
 	case protocol.ActionPlayerConnect:
 		a.handlePlayerConnect(incoming.ClientID, msg)
 
+	case protocol.ActionVPlayerQCMAnswer:
+		a.handleVPlayerQCMAnswer(incoming.ClientID, msg)
+
 	default:
 		server.LogWarn(game.LogComponentApp, "Unknown web action: %s", msg.Action)
 	}
@@ -1255,6 +1258,93 @@ func (a *App) handlePlayerConnect(clientID string, msg *protocol.Message) {
 	a.broadcastUpdate()
 	// Broadcast enrollment count update
 	a.broadcastEnrollmentUpdate()
+}
+
+// handleVPlayerQCMAnswer processes a QCM answer from a VPlayer (WebSocket)
+func (a *App) handleVPlayerQCMAnswer(clientID string, msg *protocol.Message) {
+	var payload protocol.VPlayerQCMAnswerPayload
+	if err := json.Unmarshal(msg.Msg, &payload); err != nil {
+		server.LogError(game.LogComponentApp, "Error parsing VPLAYER_QCM_ANSWER payload: %v", err)
+		return
+	}
+
+	// Find the bumper associated with this WebSocket client
+	// In the current implementation, we need to identify the VPlayer by the clientID
+	// Since we don't have a direct mapping clientID -> bumperID, we need to find
+	// the VPlayer based on the WebSocket connection session
+	// For now, we'll use msg.ID if provided, or look through all bumpers
+
+	var bumperID string
+	var bumper *game.Bumper
+
+	// Get bumper ID from payload (inside MSG)
+	if payload.ID != "" {
+		bumperID = payload.ID
+		bumper = a.engine.GetBumper(bumperID)
+	}
+
+	// Fallback: try msg.ID (top-level) or clientID
+	if bumper == nil && msg.ID != "" {
+		bumperID = msg.ID
+		bumper = a.engine.GetBumper(bumperID)
+	}
+	if bumper == nil && clientID != "" {
+		bumper = a.engine.GetBumper(clientID)
+		if bumper != nil {
+			bumperID = clientID
+		}
+	}
+
+	if bumper == nil {
+		server.LogWarn(game.LogComponentApp, "VPLAYER_QCM_ANSWER: bumper not found for client %s", clientID)
+		return
+	}
+
+	// Verify this is a VPlayer
+	if !bumper.IsVPlayer {
+		server.LogWarn(game.LogComponentApp, "VPLAYER_QCM_ANSWER: bumper %s is not a VPlayer (IsVPlayer=false)", bumperID)
+		return
+	}
+
+	// Verify game is in STARTED phase
+	if a.engine.GetPhase() != game.PhaseStarted {
+		server.LogWarn(game.LogComponentApp, "VPLAYER_QCM_ANSWER: game not in STARTED phase (current: %s)", a.engine.GetPhase())
+		return
+	}
+
+	// Verify current question is QCM
+	state := a.engine.GetState()
+	if state.Question == nil || state.Question.Type != game.QuestionTypeQCM {
+		server.LogWarn(game.LogComponentApp, "VPLAYER_QCM_ANSWER: current question is not QCM")
+		return
+	}
+
+	// Map color to button (RED=A, GREEN=B, YELLOW=C, BLUE=D)
+	colorToButton := map[string]string{
+		"RED":    "A",
+		"GREEN":  "B",
+		"YELLOW": "C",
+		"BLUE":   "D",
+	}
+
+	button, ok := colorToButton[payload.AnswerColor]
+	if !ok {
+		server.LogWarn(game.LogComponentApp, "VPLAYER_QCM_ANSWER: invalid color %s", payload.AnswerColor)
+		return
+	}
+
+	// Use current time as timestamp (microseconds)
+	timestamp := time.Now().UnixMicro()
+
+	server.LogInfo(game.LogComponentEngine, "VPLAYER_QCM_ANSWER: VPlayer %s (%s) answered %s (button %s) at time %d",
+		bumperID, bumper.Name, payload.AnswerColor, button, timestamp)
+
+	// Process as a button press (same as physical buzzer or simulated button)
+	a.engine.ProcessButtonPress(bumperID, timestamp, button)
+
+	// Broadcast pause and update to all clients
+	a.broadcastPause(bumperID)
+	a.broadcastUpdate()
 }
 
 // Broadcast methods

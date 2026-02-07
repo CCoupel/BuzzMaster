@@ -20,7 +20,6 @@ backlog/
 | [qcm-marqueurs-indices.md](TODO/qcm-marqueurs-indices.md) | Marqueurs d'indices sur la barre de temps |
 | [generateur-ia.md](TODO/generateur-ia.md) | Générateur de jeu complet via IA |
 | [metadata-binaires.md](TODO/metadata-binaires.md) | Métadonnées dans les binaires (nom, version, icône) |
-| [vjoueur-qcm-multicolore.md](TODO/vjoueur-qcm-multicolore.md) | VJoueur valide pour les 4 couleurs QCM + buzz direct sur écran |
 
 ## En-Cours
 
@@ -33,6 +32,7 @@ backlog/
 
 | Fichier | Version | Description |
 |---------|---------|-------------|
+| [vjoueur-qcm-multicolore.md](DONE/vjoueur-qcm-multicolore.md) | v2.53.0 | VJoueur valide pour les 4 couleurs QCM + buzz direct sur écran |
 | [effet-neon-categorie.md](DONE/effet-neon-categorie.md) | v2.46.0 | Effet néon couleur catégorie sur TV et VJoueur |
 | [vjoueur-websocket-identification.md](DONE/vjoueur-websocket-identification.md) | v2.47.0 | Identification WebSocket des VJoueurs (type vplayer distinct) |
 | [tri-rapidite-reponse.md](DONE/tri-rapidite-reponse.md) | v2.44.1 | Tri équipes/joueurs par rapidité de buzz |
@@ -155,6 +155,7 @@ mv backlog/En-Cours/qcm-marqueurs-indices.md backlog/DONE/
 
 ## Historique
 
+- 2026-02-07 : Completion vjoueur-qcm-multicolore (v2.53.0)
 - 2026-02-06 : Completion navbar-menu-connexion (v2.49.0), suppression notification-nouvelle-version orpheline
 - 2026-02-01 : Ajout mise à jour automatique du serveur (téléchargement + redémarrage)
 - 2026-02-01 : Maintenance backlog - déplacement effet-neon-categorie vers DONE, suppression entrée bugfix-neon-effet-parametres inexistante
