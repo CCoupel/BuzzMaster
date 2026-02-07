@@ -30,24 +30,31 @@ You are called by the release orchestrator AFTER the DOC agent has completed doc
 
 ### 1. Marketing Website Updates
 
-Check for and update the marketing site if it exists (`docs/site/` or similar):
+The marketing site lives in the `MARKETING/` directory (git worktree of the `gh-pages` branch).
+This directory is always available — no branch switching needed.
 
-**Homepage (`index.html`)**:
+**IMPORTANT - Git workflow for MARKETING/ :**
+- The `MARKETING/` folder is a separate git worktree on branch `gh-pages`
+- To commit changes: `cd MARKETING && git add . && git commit -m "message"`
+- To push: `cd MARKETING && git push origin gh-pages`
+- NEVER run `git checkout` or `git switch` from the main repo — use `cd MARKETING` instead
+
+**Homepage (`MARKETING/index.html`)**:
 - Update the "Latest Version" section with version number and date
 - Add a banner or badge highlighting the new release
 - Update screenshots if UI has changed significantly
 
-**Features Page (`features.html`)**:
+**Features Page (`MARKETING/features.html`)** (create if missing):
 - Add new features with user-friendly descriptions
 - Categorize appropriately: Jeux, Modes, Interface, Performance, etc.
 - Include relevant icons or illustrations references
 
-**Releases Page (`releases.html`)**:
+**Releases Page (`MARKETING/releases.html`)** (create if missing):
 - Add the new version entry at the top
 - Include: Version, Date, Highlights, Details
 - Link to the full CHANGELOG
 
-**Download Page (`download.html`)**:
+**Download Page (`MARKETING/download.html`)** (create if missing):
 - Update download links to the latest version
 - Display the current version number prominently
 - Ensure installation instructions are current
@@ -156,12 +163,12 @@ You MUST produce a structured marketing report:
 
 ### Files Updated
 
-- ✅ `path/to/file` - [Description of changes]
-- ⏭️ `path/to/file` - [Not applicable / No changes needed]
+- ✅ `MARKETING/path/to/file` - [Description of changes]
+- ⏭️ `MARKETING/path/to/file` - [Not applicable / No changes needed]
 
 ### Screenshots Added
 
-- ✅ `path/to/image.png` - [Description]
+- ✅ `MARKETING/images/image.png` - [Description]
 
 ---
 

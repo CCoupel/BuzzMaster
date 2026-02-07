@@ -29,6 +29,7 @@ buzzcontrol/
 ├── src/
 │   ├── BuzzControl/          # Server firmware (ESP32-S3) - LEGACY
 │   └── BuzzClick/            # Buzzer client firmware (ESP32-C3) - UNCHANGED
+├── MARKETING/                # Site marketing (worktree gh-pages)
 ├── docs/                     # Documentation
 ├── backlog/                  # Feature backlog
 ├── CLAUDE.md                 # This file

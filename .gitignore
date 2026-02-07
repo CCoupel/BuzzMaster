@@ -111,3 +111,6 @@ nul
 
 # Claude Code local settings
 .claude/settings.local.json
+
+# Marketing site worktree (gh-pages branch)
+MARKETING/
