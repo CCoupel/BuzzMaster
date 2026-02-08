@@ -4,7 +4,9 @@
 
 ## Description
 
-Au démarrage d'un buzzer (BuzzClick ESP32-C3), permettre la configuration du réseau WiFi via **SmartConfig** au lieu d'avoir les credentials WiFi hardcodés dans le firmware. L'admin configure le SSID et le mot de passe dans l'interface ENROLL, puis envoie la configuration simultanément à tous les buzzers en mode écoute.
+Au démarrage d'un buzzer (BuzzClick ESP32-C3), permettre la configuration du réseau WiFi via **SmartConfig** au lieu d'avoir les credentials WiFi hardcodés dans le firmware. L'admin configure le SSID et le mot de passe dans la page d'admin, puis active le mode ENROLL. Le serveur active alors automatiquement le SmartConfig, permettant aux buzzers en mode écoute de recevoir la configuration WiFi.
+
+**Architecture backend** : Le serveur BuzzControl est **100% Go**, sans dépendances Python ou externes. Le protocole ESP-Touch est implémenté nativement en Go.
 
 ## Contexte
 
@@ -52,10 +54,13 @@ Les buzzers BuzzClick ont actuellement les credentials WiFi hardcodés dans le f
 ### Architecture
 
 ```
-Admin (Interface ENROLL)
-    ↓ Configure SSID + password
-Serveur BuzzControl
-    ↓ Envoie packets SmartConfig (UDP broadcast)
+Admin (Page Admin)
+    ↓ Configure SSID + password dans config.json
+Admin (Active mode ENROLL)
+    ↓ Mode ENROLL activé
+Serveur BuzzControl (Go natif)
+    ↓ Active automatiquement SmartConfig
+    ↓ Envoie packets ESP-Touch (UDP broadcast)
 Routeur/AP WiFi
     ↓ Diffuse trames WiFi dans l'air
 Buzzers en mode écoute (LED rouge clignotante)
@@ -63,7 +68,7 @@ Buzzers en mode écoute (LED rouge clignotante)
     ↓ Stockent en NVS, redémarrent
     ↓ Se connectent au WiFi
     ↓ Se connectent au serveur
-    ↓ Passent en phase ENROLL
+    ↓ Apparaissent dans la liste ENROLL
 ```
 
 ## Tâches
@@ -114,7 +119,9 @@ Le buzzer entre en mode SmartConfig si :
 
 ---
 
-### Phase 2 - Backend Go : Endpoint SmartConfig
+### Phase 2 - Backend Go : Implémentation ESP-Touch Native
+
+**IMPORTANT** : Le backend est **100% Go**, sans dépendances Python ou externes.
 
 - [ ] **Configuration WiFi dans config.json**
   ```json
@@ -128,64 +135,69 @@ Le buzzer entre en mode SmartConfig si :
 
 - [ ] **Endpoint GET `/api/config/wifi`**
   - Retourne la config WiFi actuelle (SSID + password)
-  - Utilisé pour pré-remplir l'interface ENROLL
+  - Utilisé pour pré-remplir l'interface admin
 
 - [ ] **Endpoint POST `/api/config/wifi`**
   - Met à jour SSID + password dans config.json
   - Validation des champs (SSID non vide, password min 8 caractères)
 
-- [ ] **Endpoint POST `/api/smartconfig/provision`**
-  - Reçoit SSID + password en JSON
-  - Appelle script Python `pyesptouch` ou bibliothèque Go
-  - Envoie packets SmartConfig pendant 30 secondes
-  - Retourne `{ "success": true/false, "devices_configured": N }`
+- [ ] **Implémentation Go native du protocole ESP-Touch**
+  - Package `internal/smartconfig/esptouch.go`
+  - Encodage des credentials dans les packets UDP
+  - Calcul CRC8 pour validation
+  - Broadcast UDP sur toutes les interfaces réseau
+  - Durée d'envoi : 30 secondes (garantit réception)
 
-- [ ] **Installation pyesptouch (Python)**
-  ```bash
-  pip install pyesptouch
-  ```
+- [ ] **Activation automatique en mode ENROLL**
+  - Quand l'admin active le mode ENROLL :
+    1. Le serveur démarre automatiquement le SmartConfig
+    2. Envoie les packets ESP-Touch en continu
+    3. Les buzzers en mode écoute reçoivent les credentials
+    4. Les buzzers se connectent et apparaissent dans la liste ENROLL
 
-- [ ] **Script helper `scripts/esptouch.py`**
-  ```python
-  from esptouch import esptouch
-  import sys
-
-  ssid = sys.argv[1]
-  password = sys.argv[2]
-  results = esptouch.esptouch(ssid, password, timeout=30)
-  print(f"{len(results)} device(s) configured")
-  ```
+- [ ] **Pas de bouton séparé "Configurer buzzers"**
+  - Le SmartConfig est **intégré** au mode ENROLL
+  - L'admin n'a qu'à activer ENROLL (workflow existant)
+  - Les buzzers et VJoueurs se déclarent automatiquement
 
 **Fichiers concernés** :
-- `cmd/server/smartconfig.go` : Handlers SmartConfig
+- `internal/smartconfig/esptouch.go` : Implémentation Go native ESP-Touch
+- `internal/smartconfig/encoder.go` : Encodage packets UDP
+- `internal/smartconfig/crc.go` : Calcul CRC8
 - `cmd/server/config.go` : Gestion config.json
-- `scripts/esptouch.py` : Script Python helper
-- `requirements.txt` : Dépendances Python
+- `internal/game/enroll.go` : Intégration SmartConfig dans mode ENROLL
 
 ---
 
-### Phase 3 - Interface ENROLL : Panneau SmartConfig + QR Codes
+### Phase 3 - Interface Admin et ENROLL
 
-#### Interface ENROLL unifiée (comme VJoueurs)
+#### Page Admin : Configuration WiFi
 
-- [ ] **Section 1 : Configuration réseau**
-  - Champs SSID + password
+- [ ] **Configuration réseau dans page Admin**
+  - Champs SSID + password (section dédiée)
   - Bouton "Enregistrer" → sauvegarde dans config.json
   - Validation : SSID obligatoire, password min 8 caractères
+  - Affichage de la config actuelle
 
-- [ ] **Section 2 : Buzzers (SmartConfig)**
+#### Page ENROLL : Activation automatique SmartConfig
+
+- [ ] **Workflow ENROLL simplifié**
+  - Quand l'admin active le mode ENROLL :
+    1. Le serveur démarre **automatiquement** le SmartConfig
+    2. Envoie les packets ESP-Touch en continu
+    3. Les buzzers en mode écoute reçoivent la config
+    4. Les buzzers apparaissent dans la liste ENROLL
+
+- [ ] **Section Buzzers**
   - Compteur : "X buzzers connectés"
-  - Instructions :
-    1. Allumez les buzzers (LED rouge = mode config)
-    2. OU maintenez le bouton 3s au boot pour reset
-    3. Cliquez sur "Configurer les buzzers WiFi"
-    4. Attendez 30 secondes
-  - Bouton : "📡 Configurer les buzzers WiFi"
-  - Barre de progression pendant l'envoi (30 sec)
-  - Message de succès : "✅ Configuration envoyée ! Les buzzers vont se connecter."
+  - Instructions simplifiées :
+    1. Allumez les buzzers neufs (LED rouge = mode SmartConfig)
+    2. OU maintenez le bouton 3s au boot pour reset factory
+    3. Les buzzers se connecteront automatiquement
+  - **Pas de bouton séparé** : le SmartConfig est activé automatiquement en mode ENROLL
   - Liste des buzzers connectés (mise à jour temps réel via WebSocket)
 
-- [ ] **Section 3 : VJoueurs (QR Codes)**
+- [ ] **Section VJoueurs + QR Codes**
   - Compteur : "X VJoueurs connectés"
   - **QR Code 1 : WiFi** (format standard)
     - `WIFI:T:WPA;S:MonReseau;P:password123;;`
@@ -194,12 +206,6 @@ Le buzzer entre en mode SmartConfig si :
     - `http://buzzcontrol.local/player`
     - Texte : "Scannez pour accéder à la page VJoueur"
   - Liste des VJoueurs connectés (mise à jour temps réel)
-
-- [ ] **Composant `SmartConfigPanel.jsx`**
-  - Gestion état : idle | sending | success | error
-  - Appel API `/api/smartconfig/provision`
-  - Animation de progression (30 secondes)
-  - Feedback visuel clair
 
 - [ ] **Composant `VPlayerPanel.jsx`**
   - Génération QR codes WiFi et URL
@@ -213,8 +219,8 @@ Le buzzer entre en mode SmartConfig si :
   ```
 
 **Fichiers concernés** :
-- `server-go/web/src/pages/EnrollPage.jsx` : Page principale
-- `server-go/web/src/components/SmartConfigPanel.jsx` : Panneau buzzers
+- `server-go/web/src/pages/ConfigPage.jsx` : Configuration WiFi
+- `server-go/web/src/pages/EnrollPage.jsx` : Page ENROLL (SmartConfig auto)
 - `server-go/web/src/components/VPlayerPanel.jsx` : Panneau VJoueurs + QR
 - `server-go/web/src/pages/EnrollPage.css` : Styles
 
@@ -281,8 +287,8 @@ Le buzzer entre en mode SmartConfig si :
   - Test stockage/lecture NVS
 
 - [ ] **Tests backend**
-  - Test endpoint `/api/smartconfig/provision`
-  - Test script `esptouch.py`
+  - Test implémentation Go native ESP-Touch
+  - Test encodage/CRC8 des packets UDP
   - Test avec 1 buzzer, puis 10 buzzers simultanés
   - Test avec serveur en WiFi vs Ethernet
 
@@ -303,19 +309,18 @@ Le buzzer entre en mode SmartConfig si :
 ### Scénario 1 : Premier démarrage de 10 buzzers neufs
 
 ```
-1. Admin ouvre la page ENROLL
+1. Admin ouvre la page Admin
 2. Configure SSID "MonReseau" + password "pass123"
 3. Clique sur "Enregistrer"
 
-4. Admin démarre 10 buzzers neufs
+4. Admin ouvre la page ENROLL et active le mode ENROLL
+   → Le serveur démarre automatiquement le SmartConfig
+
+5. Admin démarre 10 buzzers neufs
    → Tous passent en mode SmartConfig (LED rouge clignotante)
+   → Reçoivent automatiquement les credentials du serveur
 
-5. Admin clique sur "📡 Configurer les buzzers WiFi"
-   → Barre de progression : 0/30 sec... 15/30 sec... 30/30 sec
-   → Message : "✅ Configuration envoyée !"
-
-6. Les 10 buzzers reçoivent simultanément les credentials
-   → Stockent en NVS, redémarrent
+6. Les 10 buzzers stockent la config et redémarrent
    → LED jaune clignotante (connexion WiFi)
    → LED verte fixe (connecté au serveur)
 
@@ -338,7 +343,8 @@ Le buzzer entre en mode SmartConfig si :
 4. Après 3 secondes : LED rouge rapide (confirmation reset)
 5. Buzzer redémarre en mode SmartConfig (LED rouge clignotante)
 
-6. Admin dans ENROLL clique sur "Configurer les buzzers WiFi"
+6. Admin active le mode ENROLL (si pas déjà actif)
+   → Le serveur envoie automatiquement la config SmartConfig
 7. Buzzer reçoit la config, se connecte, apparaît dans la liste
 ```
 
@@ -406,9 +412,10 @@ Le buzzer entre en mode SmartConfig si :
 - 30 secondes nécessaires pour garantir la réception
 - Plus lent que BLE (5-10 sec) mais compense en configurant plusieurs buzzers
 
-### ⚠️ Dépendance Python
-- Nécessite `python3` + `pyesptouch` installés sur le serveur
-- Alternative : bibliothèque Go native (à développer, phase future)
+### ✅ Aucune dépendance externe
+- Serveur **100% Go** (pas de Python, pas de dépendances externes)
+- Protocole ESP-Touch implémenté nativement en Go
+- Binaire portable autonome
 
 ## Alternatives futures (non prioritaires)
 
@@ -434,14 +441,15 @@ Ces alternatives peuvent être ajoutées en Phase 6+ si besoin.
 | `src/BuzzClick/wifi_config.cpp` | C++ | SmartConfig, NVS, connexion WiFi |
 | `src/BuzzClick/led_control.cpp` | C++ | Indicateurs LED |
 | **Backend Go** | | |
-| `cmd/server/smartconfig.go` | Go | Endpoints SmartConfig |
+| `internal/smartconfig/esptouch.go` | Go | Implémentation native ESP-Touch |
+| `internal/smartconfig/encoder.go` | Go | Encodage packets UDP |
+| `internal/smartconfig/crc.go` | Go | Calcul CRC8 |
 | `cmd/server/config.go` | Go | Gestion config.json |
 | `internal/game/models.go` | Go | Type Client, ClientType |
-| `scripts/esptouch.py` | Python | Script helper SmartConfig |
-| `requirements.txt` | - | Dépendances Python |
+| `internal/game/enroll.go` | Go | Intégration SmartConfig en mode ENROLL |
 | **Frontend React** | | |
-| `web/src/pages/EnrollPage.jsx` | React | Page ENROLL unifiée |
-| `web/src/components/SmartConfigPanel.jsx` | React | Panneau buzzers SmartConfig |
+| `web/src/pages/ConfigPage.jsx` | React | Configuration WiFi (SSID + password) |
+| `web/src/pages/EnrollPage.jsx` | React | Page ENROLL (SmartConfig auto) |
 | `web/src/components/VPlayerPanel.jsx` | React | Panneau VJoueurs + QR codes |
 | `web/src/pages/EnrollPage.css` | CSS | Styles |
 | `web/package.json` | - | Ajout dépendance qrcode.react |
@@ -449,8 +457,7 @@ Ces alternatives peuvent être ajoutées en Phase 6+ si besoin.
 ## Dépendances techniques
 
 - **ESP32-C3** : Support SmartConfig natif (bibliothèque ESP-IDF) ✅
-- **Python 3** : Pour exécuter pyesptouch ✅
-- **pyesptouch** : `pip install pyesptouch` ✅
+- **Backend Go** : Implémentation native ESP-Touch (100% Go, pas de dépendances externes) ✅
 - **qrcode.react** : `npm install qrcode.react` ✅
 - **Réseau local** : Serveur et AP WiFi sur même LAN ✅
 
@@ -461,6 +468,6 @@ Ces alternatives peuvent être ajoutées en Phase 6+ si besoin.
 ## Références
 
 - [ESP32 SmartConfig Documentation](https://docs.espressif.com/projects/esp-idf/en/latest/esp32/api-reference/network/esp_smartconfig.html)
-- [pyesptouch GitHub](https://github.com/nekmo/pyesptouch)
+- [ESP-Touch Protocol Specification](https://www.espressif.com/sites/default/files/documentation/esp-touch_user_guide_en.pdf)
 - [QR Code WiFi Format](https://github.com/zxing/zxing/wiki/Barcode-Contents#wi-fi-network-config-android-ios-11)
 - [qrcode.react NPM](https://www.npmjs.com/package/qrcode.react)

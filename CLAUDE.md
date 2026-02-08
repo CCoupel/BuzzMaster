@@ -10,8 +10,10 @@
 ## Project Overview
 
 BuzzControl is a wireless buzzer system for quiz games. The system consists of:
-- **BuzzControl**: Central server (Go on Raspberry Pi / Windows)
+- **BuzzControl**: Central server (**100% Go**, Raspberry Pi / Windows) - Aucune dépendance Python ou externe
 - **BuzzClick**: Individual buzzer clients (ESP32-C3, unchanged)
+
+**Architecture backend** : Le serveur est entièrement développé en Go, sans dépendances Python, Node.js ou autres langages externes. Tous les protocoles (TCP, WebSocket, HTTP, UDP, DNS, SmartConfig ESP-Touch) sont implémentés nativement en Go.
 
 ## Repository Structure
 
