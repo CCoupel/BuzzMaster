@@ -1,6 +1,6 @@
 # Style des cartes joueurs - Page Admin Jeu
 
-**Statut** : 📋 Planifié
+**Statut** : ✅ Complété (v2.49.0)
 
 ## Description
 
@@ -8,16 +8,16 @@ Sur la page admin Jeu, les cartes des joueurs (dans la colonne Équipes) utilise
 
 ## Objectifs
 
-- [ ] Remplacer la couleur QCM du joueur par un gris clair neutre
-- [ ] Conserver les mêmes règles d'atténuation existantes (opacité selon état)
+- [x] Remplacer la couleur QCM du joueur par un gris clair neutre
+- [x] Conserver les mêmes règles d'atténuation existantes (opacité selon état)
 
 ## Tâches
 
 ### Phase 1 - Modification du style
 
-- [ ] Modifier `TeamCard.jsx` ou `TeamCard.css` pour utiliser un fond gris clair standard
-- [ ] Supprimer la référence à `ANSWER_COLOR` pour le fond des lignes joueur
-- [ ] Garder les atténuations existantes (opacité réduite pour inactifs, etc.)
+- [x] Modifier `TeamCard.jsx` ou `TeamCard.css` pour utiliser un fond gris clair standard
+- [x] Supprimer la référence à `ANSWER_COLOR` pour le fond des lignes joueur
+- [x] Garder les atténuations existantes (opacité réduite pour inactifs, etc.)
 
 ### Fichiers concernés
 
@@ -31,6 +31,6 @@ Sur la page admin Jeu, les cartes des joueurs (dans la colonne Équipes) utilise
 | Fond = couleur QCM du joueur (rouge, vert, jaune, bleu) | Fond = gris clair neutre |
 | Atténuation selon état (opacité) | Atténuation identique conservée |
 
-## Version cible
+## Version
 
-v2.48.0
+v2.49.0

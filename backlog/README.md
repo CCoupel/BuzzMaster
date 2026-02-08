@@ -17,7 +17,6 @@ backlog/
 | Fichier | Description |
 |---------|-------------|
 | [websocket-broadcast-filtre.md](TODO/websocket-broadcast-filtre.md) | Filtrage des broadcasts WebSocket par type de client |
-| [qcm-marqueurs-indices.md](TODO/qcm-marqueurs-indices.md) | Marqueurs d'indices sur la barre de temps |
 | [generateur-ia.md](TODO/generateur-ia.md) | Générateur de jeu complet via IA |
 | [metadata-binaires.md](TODO/metadata-binaires.md) | Métadonnées dans les binaires (nom, version, icône) |
 
@@ -25,14 +24,14 @@ backlog/
 
 | Fichier | Description |
 |---------|-------------|
-| [admin-joueur-card-style.md](En-Cours/admin-joueur-card-style.md) | Style neutre gris pour cartes joueurs (page admin Jeu) (v2.49.0) |
-| [memory-game.md](En-Cours/memory-game.md) | Jeu de mémoire avec paires (Phases 1-5 complétées, une tâche restante) |
+| [memory-game.md](En-Cours/memory-game.md) | Jeu de mémoire avec paires (Phases 1-6 complétées, Phase 7 restante) |
 
 ## DONE (Complété)
 
 | Fichier | Version | Description |
 |---------|---------|-------------|
 | [vjoueur-qcm-multicolore.md](DONE/vjoueur-qcm-multicolore.md) | v2.53.0 | VJoueur valide pour les 4 couleurs QCM + buzz direct sur écran |
+| [admin-joueur-card-style.md](DONE/admin-joueur-card-style.md) | v2.49.0 | Style neutre gris pour cartes joueurs (page admin Jeu) |
 | [effet-neon-categorie.md](DONE/effet-neon-categorie.md) | v2.46.0 | Effet néon couleur catégorie sur TV et VJoueur |
 | [vjoueur-websocket-identification.md](DONE/vjoueur-websocket-identification.md) | v2.47.0 | Identification WebSocket des VJoueurs (type vplayer distinct) |
 | [tri-rapidite-reponse.md](DONE/tri-rapidite-reponse.md) | v2.44.1 | Tri équipes/joueurs par rapidité de buzz |
@@ -155,6 +154,7 @@ mv backlog/En-Cours/qcm-marqueurs-indices.md backlog/DONE/
 
 ## Historique
 
+- 2026-02-08 : Completion admin-joueur-card-style (v2.49.0), suppression doublons TODO/En-Cours
 - 2026-02-07 : Completion vjoueur-qcm-multicolore (v2.53.0)
 - 2026-02-06 : Completion navbar-menu-connexion (v2.49.0), suppression notification-nouvelle-version orpheline
 - 2026-02-01 : Ajout mise à jour automatique du serveur (téléchargement + redémarrage)
