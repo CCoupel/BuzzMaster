@@ -19,6 +19,7 @@ backlog/
 | [websocket-broadcast-filtre.md](TODO/websocket-broadcast-filtre.md) | Filtrage des broadcasts WebSocket par type de client |
 | [generateur-ia.md](TODO/generateur-ia.md) | Générateur de jeu complet via IA |
 | [metadata-binaires.md](TODO/metadata-binaires.md) | Métadonnées dans les binaires (nom, version, icône) |
+| [buzzer-wifi-provisioning-smartconfig.md](TODO/buzzer-wifi-provisioning-smartconfig.md) | Provisionnement WiFi des buzzers via SmartConfig (intégré ENROLL) |
 
 ## En-Cours
 
@@ -154,6 +155,7 @@ mv backlog/En-Cours/qcm-marqueurs-indices.md backlog/DONE/
 
 ## Historique
 
+- 2026-02-08 : Ajout provisionnement WiFi buzzers via SmartConfig intégré ENROLL (v3.0.0 target)
 - 2026-02-08 : Completion admin-joueur-card-style (v2.49.0), suppression doublons TODO/En-Cours
 - 2026-02-07 : Completion vjoueur-qcm-multicolore (v2.53.0)
 - 2026-02-06 : Completion navbar-menu-connexion (v2.49.0), suppression notification-nouvelle-version orpheline
