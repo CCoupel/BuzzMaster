@@ -48,8 +48,54 @@ La documentation est organisée en fichiers thématiques :
 | [docs/REACT_INTERFACE.md](docs/REACT_INTERFACE.md) | Interface React, composants UI, VPlayer |
 | [docs/MIGRATION_FUTURE.md](docs/MIGRATION_FUTURE.md) | Améliorations futures, protocole v2, BuzzClick v2 |
 | [docs/DEV_COMMANDS.md](docs/DEV_COMMANDS.md) | Commandes de développement, versioning, tests |
+| [docs/FIRMWARE_UPDATE.md](docs/FIRMWARE_UPDATE.md) | Guide de mise à jour firmware BuzzClick |
 | [docs/GAME_STATE_MACHINE.md](docs/GAME_STATE_MACHINE.md) | Machine d'état du jeu |
 | [docs/ADMIN_GUIDE.md](docs/ADMIN_GUIDE.md) | Guide utilisateur |
+
+## CI/CD et Release Automatique
+
+Le projet utilise **GitHub Actions** pour automatiser la compilation et la publication des releases.
+
+### Pipeline de Release (`.github/workflows/release.yml`)
+
+**Déclenchement** : Push d'un tag Git `v*` (ex: `v2.54.0`)
+
+**Jobs** (en parallèle après vérification) :
+1. **🔍 Checking** (~10s)
+   - Vérifie cohérence versions : `config.json`, `package.json`, tag Git
+   - Extrait la version pour les jobs suivants
+
+2. **🔨 Compiling** (3 jobs en parallèle, ~1-2 min chacun)
+   - **Windows** : Build Go + React embedded → `buzzcontrol-vX.Y.0-windows-amd64.exe` (~8-9 MB)
+   - **Linux ARM64** : Build Go + React embedded → `buzzcontrol-vX.Y.0-linux-arm64` (~8 MB)
+   - **Firmware BuzzClick** : PlatformIO build ESP32-C3 → `buzzclick-vX.Y.0-firmware.bin` (~500KB-1MB)
+
+3. **🚀 Releasing** (~30s)
+   - Télécharge les 3 binaires depuis les artefacts
+   - Extrait les notes de release depuis `CHANGELOG.md`
+   - Crée la release GitHub avec les 3 binaires attachés
+
+**Durée totale** : ~3-4 minutes
+
+### Versioning Unifié (depuis v2.54.0)
+
+Le serveur et le firmware partagent désormais **le même numéro de version** :
+- Serveur : Version dans `server-go/config.json`
+- Firmware : Version injectée automatiquement dans `platformio.ini` par la CI
+- Tag Git : `vX.Y.0` déclenche le build de TOUS les composants
+
+**Compatibilité** : Les buzzers avec ancien firmware (1.209.3) continuent de fonctionner avec les nouveaux serveurs (rétrocompatibilité protocole TCP/UDP).
+
+### Artefacts de Release
+
+Chaque release GitHub contient 3 binaires prêts à déployer :
+```
+buzzcontrol-vX.Y.0-windows-amd64.exe    # Serveur Windows (portable)
+buzzcontrol-vX.Y.0-linux-arm64          # Serveur Raspberry Pi (portable)
+buzzclick-vX.Y.0-firmware.bin           # Firmware ESP32-C3 (flash via USB/OTA)
+```
+
+Tous les binaires sont **portables** et autonomes (pas de dépendances externes).
 
 ## Commandes Essentielles
 

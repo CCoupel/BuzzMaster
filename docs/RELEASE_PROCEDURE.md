@@ -214,30 +214,36 @@ Le pipeline s'exécute en 3 étapes :
 │  └─ Vérifie versions config/package/tag     │
 └─────────────────────┬───────────────────────┘
                       │
-        ┌─────────────┴─────────────┐
-        ▼                           ▼
-┌───────────────────┐   ┌───────────────────┐
-│ 🔨 Compile Windows│   │ 🔨 Compile Linux  │
-│    (~1-2 min)     │   │    (~1-2 min)     │
-│ ├─ npm ci/build   │   │ ├─ npm ci/build   │
-│ ├─ go build       │   │ ├─ go build       │
-│ └─ validate >5MB  │   │ └─ validate >5MB  │
-└─────────┬─────────┘   └─────────┬─────────┘
-          └───────────┬───────────┘
-                      ▼
+        ┌─────────────┼─────────────┐
+        ▼             ▼             ▼
+┌──────────────┐ ┌──────────────┐ ┌──────────────────┐
+│ 🔨 Compile   │ │ 🔨 Compile   │ │ 🔨 Compile       │
+│   Windows    │ │   Linux      │ │   Firmware       │
+│  (~1-2 min)  │ │  (~1-2 min)  │ │  (~1-2 min)      │
+│ ├─ npm build │ │ ├─ npm build │ │ ├─ install pio   │
+│ ├─ go build  │ │ ├─ go build  │ │ ├─ inject version│
+│ └─ validate  │ │ └─ validate  │ │ ├─ pio build     │
+│    >5MB      │ │    >5MB      │ │ └─ validate      │
+│              │ │              │ │    200KB-2MB     │
+└──────┬───────┘ └──────┬───────┘ └────────┬─────────┘
+       └────────────────┼──────────────────┘
+                        ▼
 ┌─────────────────────────────────────────────┐
 │  🚀 Releasing (~30s)                        │
-│  ├─ Télécharge les binaires                 │
+│  ├─ Télécharge les 3 binaires               │
+│  │  • buzzcontrol-windows-amd64.exe         │
+│  │  • buzzcontrol-linux-arm64               │
+│  │  • buzzclick-firmware.bin                │
 │  ├─ Extrait notes du CHANGELOG              │
 │  └─ Publie la release GitHub                │
 └─────────────────────────────────────────────┘
 ```
 
-**Durée totale** : ~2-3 minutes
+**Durée totale** : ~3-4 minutes (builds en parallèle)
 
 **Claude doit** :
-1. Attendre la fin complète du pipeline (~2-3 minutes)
-2. Vérifier que les 3 jobs sont verts (✅)
+1. Attendre la fin complète du pipeline (~3-4 minutes)
+2. Vérifier que les 4 jobs sont verts (✅) : checking, compiling x2, compiling-firmware
 3. En cas d'échec, analyser les logs et informer l'utilisateur
 
 **En cas d'échec** :
@@ -256,9 +262,10 @@ Le pipeline s'exécute en 3 étapes :
 
 **Claude doit vérifier** :
 1. La release `vX.Y.0` existe
-2. Les binaires sont attachés :
+2. Les 3 binaires sont attachés :
    - `buzzcontrol-vX.Y.0-windows-amd64.exe` (~8-9 MB)
    - `buzzcontrol-vX.Y.0-linux-arm64` (~8 MB)
+   - `buzzclick-vX.Y.0-firmware.bin` (~500KB-1MB)
 3. Les notes de release sont extraites du CHANGELOG
 4. Informer l'utilisateur du succès ou de l'échec
 

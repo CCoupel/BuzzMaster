@@ -147,13 +147,78 @@ jobs:
           path: buzzcontrol-v${{ needs.checking.outputs.version }}-${{ matrix.suffix }}
           retention-days: 1
 
+  compiling-firmware:
+    name: 🔨 Compile BuzzClick Firmware
+    runs-on: ubuntu-latest
+    needs: checking
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install PlatformIO
+        run: |
+          pip install --upgrade platformio
+          pio --version
+
+      - name: Inject version into platformio.ini
+        run: |
+          VERSION="${{ needs.checking.outputs.version }}"
+          echo "Injecting version $VERSION into platformio.ini..."
+          sed -i "s/-D VERSION='\"[^\"]*\"'/-D VERSION='\"$VERSION\"'/" platformio.ini
+          echo "✅ Version injected"
+
+      - name: Build BuzzClick firmware
+        run: |
+          echo "Building BuzzClick firmware..."
+          pio run -e buzzclick
+          echo "✅ Firmware build complete"
+
+      - name: Rename firmware binary
+        run: |
+          VERSION="${{ needs.checking.outputs.version }}"
+          cp .pio/build/buzzclick/firmware.bin buzzclick-v$VERSION-firmware.bin
+          echo "✅ Firmware renamed to buzzclick-v$VERSION-firmware.bin"
+
+      - name: Validate firmware binary
+        run: |
+          VERSION="${{ needs.checking.outputs.version }}"
+          FILE="buzzclick-v$VERSION-firmware.bin"
+          SIZE=$(stat -c%s "$FILE")
+          echo "Firmware binary: $SIZE bytes ($(numfmt --to=iec $SIZE))"
+
+          MIN_SIZE=204800   # 200 KB
+          MAX_SIZE=2097152  # 2 MB
+          if [ "$SIZE" -lt "$MIN_SIZE" ]; then
+            echo "❌ ERROR: Firmware too small ($SIZE < $MIN_SIZE)"
+            exit 1
+          fi
+          if [ "$SIZE" -gt "$MAX_SIZE" ]; then
+            echo "❌ ERROR: Firmware too large ($SIZE > $MAX_SIZE)"
+            exit 1
+          fi
+          echo "✅ Firmware validation passed"
+
+      - name: Upload firmware artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: firmware-buzzclick
+          path: buzzclick-v${{ needs.checking.outputs.version }}-firmware.bin
+          retention-days: 1
+
   # ============================================
   # STAGE 3: Releasing
   # ============================================
   releasing:
     name: 🚀 Releasing
     runs-on: ubuntu-latest
-    needs: [checking, compiling]
+    needs: [checking, compiling, compiling-firmware]
 
     steps:
       - name: Checkout code

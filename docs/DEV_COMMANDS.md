@@ -92,14 +92,70 @@ go build -o buzzcontrol.exe ./cmd/server
 GOOS=linux GOARCH=arm64 go build -o buzzcontrol ./cmd/server
 ```
 
-### ESP32 (legacy)
+### Firmware BuzzClick (ESP32-C3)
+
+#### Installation PlatformIO
 
 ```bash
-# Build and upload
-pio run -e buzzcontrol -t upload
+# Installer PlatformIO CLI
+pip install --upgrade platformio
 
-# Monitor serial
+# Vérifier l'installation
+pio --version
+```
+
+#### Build et Flash
+
+```bash
+# Build firmware BuzzClick uniquement
+pio run -e buzzclick
+
+# Build + Upload via USB
+pio run -e buzzclick -t upload
+
+# Build firmware BuzzControl (legacy ESP32-S3)
+pio run -e buzzcontrol -t upload
+```
+
+#### Monitoring et Debug
+
+```bash
+# Monitor série (baudrate 921600)
 pio device monitor -b 921600
+
+# Lister les ports série
+pio device list
+
+# Build + Upload + Monitor en une commande
+pio run -e buzzclick -t upload -t monitor
+```
+
+#### Flash manuel avec esptool
+
+```bash
+# Identifier le port
+pio device list
+
+# Flash le firmware (Windows)
+esptool.py --chip esp32c3 --port COM3 write_flash 0x0 .pio/build/buzzclick/firmware.bin
+
+# Flash le firmware (Linux/Mac)
+esptool.py --chip esp32c3 --port /dev/ttyUSB0 write_flash 0x0 .pio/build/buzzclick/firmware.bin
+```
+
+#### Versioning du firmware
+
+Depuis v2.54.0, le firmware suit le versioning du serveur.
+La version est injectée automatiquement par la CI lors du build de release.
+
+Pour injecter manuellement une version :
+```bash
+# Éditer platformio.ini
+# Remplacer : -D VERSION='"1.209.3"'
+# Par       : -D VERSION='"2.54.0"'
+
+# Puis rebuild
+pio run -e buzzclick
 ```
 
 ### Raspberry Pi Setup

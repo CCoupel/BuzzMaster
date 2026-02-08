@@ -3,6 +3,56 @@
 Historique des versions du projet BuzzControl.
 
 
+## [2.54.0] - 2026-02-08
+
+### Added
+- **[CI/CD]**: Compilation automatique du firmware BuzzClick dans GitHub Actions
+  - Nouveau job `compiling-firmware` s'exécutant en parallèle des builds Windows/Linux
+  - Versioning unifié : serveur et firmware partagent désormais le même numéro de version
+  - Injection automatique de la version dans `platformio.ini` via sed
+  - Validation de taille du binaire firmware (200KB-2MB)
+  - Chaque release GitHub contient désormais 3 binaires :
+    - `buzzcontrol-vX.Y.0-windows-amd64.exe` (serveur Windows, ~8-9 MB)
+    - `buzzcontrol-vX.Y.0-linux-arm64` (serveur Raspberry Pi, ~8 MB)
+    - `buzzclick-vX.Y.0-firmware.bin` (firmware ESP32-C3, ~500KB-1MB)
+- **[Documentation]**: Guide complet de mise à jour firmware
+  - `docs/FIRMWARE_UPDATE.md` : Guide utilisateur pour flasher les buzzers BuzzClick
+  - 3 méthodes documentées : GitHub Release (recommandé), build depuis sources, OTA (à venir)
+  - Troubleshooting détaillé pour problèmes courants de flash
+  - Tableau de compatibilité firmware/serveur
+
+### Modified
+- **[Documentation]**: Commandes PlatformIO étendues dans `docs/DEV_COMMANDS.md`
+  - Section "Firmware BuzzClick (ESP32-C3)" remplace "ESP32 (legacy)"
+  - Commandes d'installation PlatformIO CLI
+  - Build, flash manuel via esptool, monitoring série
+  - Instructions de versioning firmware
+- **[Documentation]**: Workflow CI/CD documenté dans `CLAUDE.md`
+  - Nouvelle section "CI/CD et Release Automatique"
+  - Description des 3 jobs de compilation (Windows, Linux ARM64, Firmware)
+  - Explication du versioning unifié depuis v2.54.0
+  - Durée totale du pipeline : ~3-4 minutes
+- **[Documentation]**: Diagramme CI mis à jour dans `docs/RELEASE_PROCEDURE.md`
+  - 3 jobs de compilation en parallèle au lieu de 2
+  - Vérification de 4 jobs (checking + 3 compiling) au lieu de 3
+  - Durée estimée ajustée : ~3-4 minutes au lieu de ~2-3 minutes
+
+### Technical
+- **CI/CD**:
+  - `.github/workflows/release.yml` : Job `compiling-firmware` ajouté
+  - Installation de Python 3.11 et PlatformIO CLI sur runner Ubuntu
+  - Cache pip pour accélérer les builds ultérieurs
+  - Validation binaire firmware (taille min 200KB, max 2MB)
+  - Artefact `firmware-buzzclick` uploadé pour le job `releasing`
+  - Job `releasing` dépend maintenant de `[checking, compiling, compiling-firmware]`
+
+### Notes
+- **Rétrocompatibilité** : Les buzzers avec firmware 1.209.3 (anciennes versions) continuent de fonctionner avec les nouveaux serveurs
+- **Protocole TCP/UDP** : Aucune modification du protocole de communication dans cette version
+- **Durée CI** : L'ajout du job firmware n'impacte pas significativement la durée totale grâce à l'exécution en parallèle
+
+---
+
 ## [2.53.0] - 2026-02-07
 
 ### Added
