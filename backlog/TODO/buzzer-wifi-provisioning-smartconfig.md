@@ -26,6 +26,7 @@ Les buzzers BuzzClick ont actuellement les credentials WiFi hardcodés dans le f
 ## Objectifs
 
 - [ ] Configuration WiFi via SmartConfig (ESP-Touch)
+- [ ] **Transmission de l'IP/hostname du serveur + ports utiles dans le message SmartConfig**
 - [ ] Interface simple dans la page ENROLL (comme VJoueurs)
 - [ ] Stockage sécurisé des credentials WiFi dans la mémoire NVS du buzzer
 - [ ] Reset factory via bouton (maintenu 3 secondes au boot)
@@ -40,10 +41,11 @@ Les buzzers BuzzClick ont actuellement les credentials WiFi hardcodés dans le f
 
 **Comment ça fonctionne :**
 1. Le buzzer en mode "SmartConfig listening" écoute passivement les trames WiFi dans l'air
-2. Le serveur envoie des packets UDP encodant le SSID + password
-3. Le buzzer décode les credentials depuis la longueur des packets WiFi
-4. Le buzzer se connecte au WiFi et au serveur BuzzControl
-5. Le buzzer passe automatiquement en phase ENROLL
+2. Le serveur envoie des packets UDP encodant le SSID + password + **IP du serveur (détectée auto) + ports (TCP, HTTP)**
+3. Le buzzer décode les credentials, l'IP du serveur et les ports depuis la longueur des packets WiFi
+4. Le buzzer se connecte au WiFi
+5. Le buzzer se connecte au serveur BuzzControl via l'IP:port reçu (ex: 192.168.1.84:1234)
+6. Le buzzer passe automatiquement en phase ENROLL
 
 **Avantages :**
 - ✅ Configuration simultanée de 10+ buzzers en 30 secondes
@@ -60,14 +62,16 @@ Admin (Active mode ENROLL)
     ↓ Mode ENROLL activé
 Serveur BuzzControl (Go natif)
     ↓ Active automatiquement SmartConfig
+    ↓ Détecte sa propre IP (ex: 192.168.1.84)
     ↓ Envoie packets ESP-Touch (UDP broadcast)
+    ↓ Contenu : SSID + password + IP serveur + ports (TCP:1234, HTTP:80)
 Routeur/AP WiFi
     ↓ Diffuse trames WiFi dans l'air
 Buzzers en mode écoute (LED rouge clignotante)
-    ↓ Captent trames WiFi, décodent credentials
-    ↓ Stockent en NVS, redémarrent
+    ↓ Captent trames WiFi, décodent credentials + IP serveur + ports
+    ↓ Stockent en NVS (WiFi + server_ip + tcp_port), redémarrent
     ↓ Se connectent au WiFi
-    ↓ Se connectent au serveur
+    ↓ Se connectent au serveur via IP:port reçu (ex: 192.168.1.84:1234)
     ↓ Apparaissent dans la liste ENROLL
 ```
 
@@ -93,16 +97,20 @@ Le buzzer entre en mode SmartConfig si :
   - LED rouge clignotante (mode configuration)
   - `WiFi.beginSmartConfig()` (bibliothèque ESP32)
   - Timeout 5 minutes → reboot si aucune config reçue
-  - Décoder SSID + password depuis packets
-  - Stocker en NVS (`Preferences` library)
+  - Décoder SSID + password + **server_ip** + **tcp_port** depuis packets
+  - Stocker en NVS (`Preferences` library) :
+    - `wifi_ssid` : SSID du réseau
+    - `wifi_password` : Mot de passe WiFi
+    - `server_ip` : IP du serveur BuzzControl (ex: "192.168.1.84")
+    - `server_tcp_port` : Port TCP pour connexion buzzers (ex: 1234)
   - Redémarrer automatiquement
 
 - [ ] **Connexion WiFi normale**
-  - Lire SSID + password depuis NVS
+  - Lire SSID + password + server_ip + server_tcp_port depuis NVS
   - LED jaune clignotante (connexion en cours)
   - Timeout 30 secondes → effacer config et reboot si échec
   - LED verte fixe (connecté)
-  - Connexion TCP au serveur BuzzControl (port 1234)
+  - Connexion TCP au serveur BuzzControl via server_ip:server_tcp_port
   - Passage en phase ENROLL
 
 - [ ] **Indicateurs LED**
@@ -129,9 +137,14 @@ Le buzzer entre en mode SmartConfig si :
     "wifi": {
       "ssid": "MonReseau",
       "password": "motdepasse123"
-    }
+    },
+    "tcp_port": 1234
   }
   ```
+  Note :
+  - L'IP du serveur est **détectée automatiquement** au démarrage (comme dans les logs : `http://192.168.1.84 (Wi-Fi)`)
+  - Lors du SmartConfig, le serveur transmet toujours l'IP détectée (pas de hostname)
+  - Le port TCP est configurable (défaut: 1234)
 
 - [ ] **Endpoint GET `/api/config/wifi`**
   - Retourne la config WiFi actuelle (SSID + password)
@@ -143,17 +156,24 @@ Le buzzer entre en mode SmartConfig si :
 
 - [ ] **Implémentation Go native du protocole ESP-Touch**
   - Package `internal/smartconfig/esptouch.go`
-  - Encodage des credentials dans les packets UDP
+  - Encodage des credentials dans les packets UDP :
+    - SSID du WiFi
+    - Password du WiFi
+    - **IP du serveur** (détectée automatiquement, ex: `192.168.1.84`)
+    - **Port TCP** pour connexion buzzers (ex: 1234)
   - Calcul CRC8 pour validation
   - Broadcast UDP sur toutes les interfaces réseau
   - Durée d'envoi : 30 secondes (garantit réception)
+  - **Détection automatique de l'IP** : Utiliser la même logique que l'affichage dans les logs (interface Wi-Fi prioritaire)
 
 - [ ] **Activation automatique en mode ENROLL**
   - Quand l'admin active le mode ENROLL :
     1. Le serveur démarre automatiquement le SmartConfig
-    2. Envoie les packets ESP-Touch en continu
-    3. Les buzzers en mode écoute reçoivent les credentials
-    4. Les buzzers se connectent et apparaissent dans la liste ENROLL
+    2. Détecte sa propre IP (même logique que les logs)
+    3. Envoie les packets ESP-Touch en continu (SSID + password + **IP serveur** + **port TCP**)
+    4. Les buzzers en mode écoute reçoivent les credentials + IP serveur + port
+    5. Les buzzers se connectent au WiFi puis au serveur via IP:port
+    6. Les buzzers apparaissent dans la liste ENROLL
 
 - [ ] **Pas de bouton séparé "Configurer buzzers"**
   - Le SmartConfig est **intégré** au mode ENROLL
@@ -175,9 +195,17 @@ Le buzzer entre en mode SmartConfig si :
 
 - [ ] **Configuration réseau dans page Admin**
   - Champs SSID + password (section dédiée)
+  - **Champ port TCP** (défaut: 1234, pour connexion buzzers)
+  - **Affichage de l'IP détectée** (lecture seule, ex: "IP serveur : 192.168.1.84")
   - Bouton "Enregistrer" → sauvegarde dans config.json
-  - Validation : SSID obligatoire, password min 8 caractères
+  - Validation :
+    - SSID obligatoire
+    - Password min 8 caractères
+    - Port TCP valide (1-65535)
   - Affichage de la config actuelle
+  - Info-bulles :
+    - "IP serveur : Cette adresse est détectée automatiquement au démarrage et sera transmise aux buzzers via SmartConfig"
+    - "Port TCP : Port utilisé par les buzzers pour se connecter au serveur (défaut: 1234)"
 
 #### Page ENROLL : Activation automatique SmartConfig
 
@@ -311,23 +339,27 @@ Le buzzer entre en mode SmartConfig si :
 ```
 1. Admin ouvre la page Admin
 2. Configure SSID "MonReseau" + password "pass123"
-3. Clique sur "Enregistrer"
+3. Configure port TCP 1234 (ou laisse le défaut)
+4. Clique sur "Enregistrer"
+   Note : L'IP du serveur (ex: 192.168.1.84) est détectée automatiquement et affichée
 
-4. Admin ouvre la page ENROLL et active le mode ENROLL
+5. Admin ouvre la page ENROLL et active le mode ENROLL
    → Le serveur démarre automatiquement le SmartConfig
+   → Envoie SSID + password + IP serveur (192.168.1.84) + port (1234)
 
-5. Admin démarre 10 buzzers neufs
+6. Admin démarre 10 buzzers neufs
    → Tous passent en mode SmartConfig (LED rouge clignotante)
-   → Reçoivent automatiquement les credentials du serveur
+   → Reçoivent automatiquement WiFi credentials + IP serveur + port
 
-6. Les 10 buzzers stockent la config et redémarrent
+7. Les 10 buzzers stockent la config en NVS et redémarrent
    → LED jaune clignotante (connexion WiFi)
+   → Connexion TCP à 192.168.1.84:1234
    → LED verte fixe (connecté au serveur)
 
-7. Les buzzers apparaissent dans la liste ENROLL
+8. Les buzzers apparaissent dans la liste ENROLL
    → Compteur : "10 buzzers connectés"
 
-8. Admin assigne les buzzers aux équipes (workflow ENROLL standard)
+9. Admin assigne les buzzers aux équipes (workflow ENROLL standard)
 ```
 
 ---
@@ -345,7 +377,8 @@ Le buzzer entre en mode SmartConfig si :
 
 6. Admin active le mode ENROLL (si pas déjà actif)
    → Le serveur envoie automatiquement la config SmartConfig
-7. Buzzer reçoit la config, se connecte, apparaît dans la liste
+   → Contenu : SSID + password + IP serveur + port TCP
+7. Buzzer reçoit la config complète, se connecte au WiFi puis à l'IP:port, apparaît dans la liste
 ```
 
 ---
@@ -395,6 +428,18 @@ Le buzzer entre en mode SmartConfig si :
 - SmartConfig natif ESP32
 - Bibliothèques bien testées (pyesptouch)
 - Fiabilité 80-95% selon environnement
+
+### ✅ Transmission de l'IP du serveur + port TCP (CRITIQUE)
+- **Pourquoi c'est essentiel :**
+  - Les buzzers doivent savoir **où se connecter** après avoir obtenu les credentials WiFi
+  - Sans cette information, ils devraient avoir l'IP/port hardcodés
+- **Avantages :**
+  - **IP détectée automatiquement** : Le serveur détecte sa propre IP au démarrage (DHCP compatible)
+  - **Pas besoin de mDNS** : Transmission directe de l'IP (plus simple et robuste)
+  - **Port TCP configurable** : permet déploiements avec configuration réseau spécifique
+  - Configuration complète en une seule opération
+  - Buzzers vraiment "génériques" (aucun hardcoding d'adresse ni de port)
+  - Pas de configuration manuelle d'IP nécessaire (détection automatique)
 
 ## Contraintes et limitations
 
