@@ -160,7 +160,6 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-          cache: 'pip'
 
       - name: Install PlatformIO
         run: |
@@ -172,7 +171,8 @@ jobs:
           VERSION="${{ needs.checking.outputs.version }}"
           echo "Injecting version $VERSION into platformio.ini..."
           sed -i "s/-D VERSION='\"[^\"]*\"'/-D VERSION='\"$VERSION\"'/" platformio.ini
-          echo "✅ Version injected"
+          sed -i "s/-D FIRMWARE_VERSION='\"[^\"]*\"'/-D FIRMWARE_VERSION='\"$VERSION\"'/" platformio.ini
+          echo "✅ Version injected (VERSION and FIRMWARE_VERSION)"
 
       - name: Build BuzzClick firmware
         run: |
