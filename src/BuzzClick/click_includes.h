@@ -6,8 +6,6 @@
   #include <ESPmDNS.h>
 #include "esp_log.h"
 
-#include <WiFiUDP.h>
-//#include <NTPClient.h>
 #include <ArduinoJson.h>
 
 // Définir le numéro de broche pour la LED intégrée
@@ -26,9 +24,6 @@ AsyncClient* client = new AsyncClient();
 const char* WIFI_SSID     = "buzzmaster";
 const char* WIFI_PASSWORD = "BuzzMaster";
 const int CONTROLER_PORT = 1234;
-
-// Créer une instance de la classe WiFiUDP
-  WiFiUDP bcast;
 
 JsonDocument buzzer;
 String jsonBuffer; // Tampon pour assembler les données JSON
