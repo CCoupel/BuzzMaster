@@ -118,14 +118,56 @@ Cette fonctionnalité sera disponible dans une future version.
 
 ---
 
-## Compatibilité Firmware / Serveur
+## Upgrade v3.0.0 : Support WebSocket Buzzers
 
-| Version Serveur | Version Firmware Compatible | Notes |
-|-----------------|----------------------------|-------|
-| 2.54.0+ | 2.54.0+ | Versioning unifié |
-| < 2.54.0 | 1.209.3 | Anciennes versions (hardcodé dans platformio.ini) |
+A partir de la version 3.0.0, le serveur BuzzControl supporte un **mode hybride TCP+WebSocket** pour les buzzers physiques.
 
-**Important** : Les buzzers avec un ancien firmware (1.209.3) continuent de fonctionner avec les nouveaux serveurs grâce à la rétrocompatibilité du protocole TCP/UDP.
+### Ce qui change
+
+| Aspect | Avant v3.0.0 | Depuis v3.0.0 |
+|--------|--------------|---------------|
+| Protocole buzzer | TCP port 1234 uniquement | TCP port 1234 + WebSocket `/ws/buzzer` |
+| Format messages | JSON + `\n\0` (null-terminated) | JSON standard (WebSocket) ou `\n\0` (TCP) |
+| Keep-alive | Aucun | Ping/Pong WebSocket natif (30s) |
+| Identification | MAC dans champ `ID` | MAC en query param ou champ `ID` |
+
+### Retrocompatibilite
+
+Les buzzers avec un ancien firmware (TCP) continuent de fonctionner avec le serveur v3.0.0. Aucune mise a jour firmware n'est requise.
+
+Le serveur detecte automatiquement le type de connexion (TCP ou WebSocket) et adapte la serialisation des messages.
+
+### Migration TCP vers WebSocket (firmware)
+
+Le firmware v3.0.0 inclut un client WebSocket pret a l'emploi (`click_websocketClient.h`), active par le flag de compilation `USE_WEBSOCKET`.
+
+Pour migrer un buzzer vers le protocole WebSocket :
+
+1. **Ajouter `-DUSE_WEBSOCKET`** dans `build_flags` de `platformio.ini`
+2. **Compiler et flasher** le firmware v3.0.0+
+3. Le buzzer se connecte automatiquement a `ws://<server_ip>/ws/buzzer`
+4. Le buzzer envoie un message HELLO en JSON standard (sans `\0`)
+5. Reconnexion automatique avec backoff exponentiel si deconnexion
+
+**Sans le flag** `USE_WEBSOCKET`, le buzzer utilise le protocole TCP (comportement par defaut, retrocompatible).
+
+La migration est transparente : le serveur gere les deux types de buzzers simultanement.
+
+### Specification protocole
+
+Voir [docs/WEBSOCKET_PROTOCOL.md](WEBSOCKET_PROTOCOL.md) pour la specification complete du protocole WebSocket buzzers.
+
+---
+
+## Compatibilite Firmware / Serveur
+
+| Version Serveur | Version Firmware Compatible | Protocole | Notes |
+|-----------------|----------------------------|-----------|-------|
+| 3.0.0+ | 3.0.0+ | TCP + WebSocket | Mode hybride, retrocompatible |
+| 2.54.0+ | 2.54.0+ | TCP | Versioning unifie |
+| < 2.54.0 | 1.209.3 | TCP | Anciennes versions (hardcode dans platformio.ini) |
+
+**Important** : Les buzzers avec un ancien firmware (1.209.3 ou 2.54.x) continuent de fonctionner avec le serveur v3.0.0 grace a la retrocompatibilite du protocole TCP/UDP. Le serveur supporte TCP et WebSocket simultanement.
 
 ---
 

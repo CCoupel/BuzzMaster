@@ -1,8 +1,8 @@
 {
   "server": {
-    "http_port": 0,
-    "tcp_port": 0,
-    "websocket_path": "",
+    "http_port": 80,
+    "tcp_port": 1234,
+    "websocket_path": "/ws",
     "auto_open_browsers": true,
     "debug": false,
     "auto_check_updates": true
@@ -12,10 +12,10 @@
     "password": ""
   },
   "game": {
-    "default_delay": 0
+    "default_delay": 30
   },
   "storage": {
-    "data_dir": "",
+    "data_dir": "./data",
     "questions_dir": "",
     "files_dir": ""
   },
@@ -32,5 +32,5 @@
     "glow_pulse_min": 50,
     "glow_pulse_max": 70
   },
-  "version": "2.54.0"
+  "version": "3.0.0"
 }

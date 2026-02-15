@@ -1,0 +1,456 @@
+# Protocole WebSocket Buzzers - BuzzControl v3.0.0
+
+Ce document specifie le protocole WebSocket pour la communication entre les buzzers physiques BuzzClick (ESP32-C3) et le serveur BuzzControl.
+
+---
+
+## Vue d'ensemble
+
+A partir de la version 3.0.0, le serveur BuzzControl supporte un **mode hybride** : les buzzers physiques peuvent se connecter soit via le protocole TCP historique (port 1234), soit via WebSocket (port 80, endpoint `/ws/buzzer`).
+
+### Architecture
+
+```
+Buzzers BuzzClick (ESP32-C3)
+    |
+    +-- TCP port 1234          (protocole v1, retrocompatible)
+    |   Messages null-terminated (\0)
+    |
+    +-- WebSocket port 80      (protocole v3, nouveau)
+        Endpoint: /ws/buzzer
+        Messages JSON standards
+    |
+Serveur BuzzControl (Go)
+    |
+    +-- WebSocket port 80 /ws       (clients web : Admin, TV, VJoueur)
+    +-- WebSocket port 80 /ws/logs  (logs temps reel)
+```
+
+### Differences TCP vs WebSocket
+
+| Aspect | TCP (v1) | WebSocket (v3) |
+|--------|----------|----------------|
+| Port | 1234 (custom) | 80 (HTTP standard) |
+| Endpoint | Connexion TCP directe | `/ws/buzzer` |
+| Format | JSON + `\n\0` (null-terminated) | JSON standard |
+| Keep-alive | Pas de heartbeat natif | Ping/Pong WebSocket (30s) |
+| Identification | MAC dans champ `ID` | MAC en query param ou champ `ID` |
+| Deconnexion | Detection par erreur TCP | Detection par Pong timeout (60s) |
+| Firewall | Port custom souvent bloque | Port 80 rarement bloque |
+
+---
+
+## Connexion
+
+### Endpoint
+
+```
+ws://<server_ip>/ws/buzzer
+```
+
+### Parametres de connexion (optionnels)
+
+| Parametre | Type | Description |
+|-----------|------|-------------|
+| `mac` | string | Adresse MAC du buzzer (ex: `AA:BB:CC:DD:EE:FF`) |
+
+Exemple avec MAC en query param :
+```
+ws://192.168.1.100/ws/buzzer?mac=AA:BB:CC:DD:EE:FF
+```
+
+Si le parametre `mac` n'est pas fourni dans l'URL, le buzzer peut s'identifier via le champ `ID` de son premier message HELLO.
+
+### Handshake
+
+1. Le buzzer ouvre une connexion WebSocket vers `/ws/buzzer`
+2. Le serveur upgrade la connexion HTTP en WebSocket
+3. Le buzzer envoie un message `HELLO` avec son adresse MAC et sa version firmware
+4. Le serveur enregistre le buzzer et repond avec l'etat du jeu
+
+---
+
+## Format des messages
+
+Tous les messages sont des objets JSON. Contrairement au protocole TCP, **il n'y a pas de terminateur null** (`\0`).
+
+### Structure generale
+
+```json
+{
+  "ACTION": "<action_name>",
+  "ID": "<mac_address>",
+  "MSG": { ... },
+  "TIME_EVENT": 1234567890,
+  "VERSION": "3.0.0",
+  "seq": 1
+}
+```
+
+| Champ | Type | Obligatoire | Description |
+|-------|------|-------------|-------------|
+| `ACTION` | string | Oui | Nom de l'action |
+| `ID` | string | Non | Adresse MAC du buzzer |
+| `MSG` | object | Non | Payload specifique a l'action |
+| `TIME_EVENT` | int64 | Non | Timestamp en microsecondes |
+| `VERSION` | string | Non | Version du firmware |
+| `seq` | int | Non | Numero de sequence |
+
+---
+
+## Messages Buzzer vers Serveur
+
+### HELLO (Enregistrement)
+
+Envoye a la connexion pour identifier le buzzer.
+
+```json
+{
+  "ACTION": "HELLO",
+  "ID": "AA:BB:CC:DD:EE:FF",
+  "MSG": {
+    "VERSION": "3.0.0",
+    "NAME": "Buzzer-1",
+    "PROTOCOL": "WS",
+    "IP": "192.168.1.50"
+  }
+}
+```
+
+| Champ MSG | Type | Description |
+|-----------|------|-------------|
+| `VERSION` | string | Version du firmware BuzzClick |
+| `NAME` | string | Nom du buzzer (optionnel) |
+| `PROTOCOL` | string | Protocole de connexion : `"WS"` pour WebSocket (le serveur stocke `"WebSocket"` dans le modele Bumper) |
+| `IP` | string | Adresse IP du buzzer (optionnel) |
+
+Le serveur injecte automatiquement le champ `PROTOCOL` ("TCP" ou "WebSocket") dans le modele Bumper en fonction de la source du message.
+
+**Reponse serveur** : Message `HELLO` avec l'etat courant du jeu.
+
+### BUTTON (Appui bouton)
+
+Envoye quand un joueur appuie sur le bouton du buzzer.
+
+```json
+{
+  "ACTION": "BUTTON",
+  "ID": "AA:BB:CC:DD:EE:FF",
+  "TIME_EVENT": 1708000123456789,
+  "MSG": {
+    "button": "A"
+  }
+}
+```
+
+| Champ MSG | Type | Description |
+|-----------|------|-------------|
+| `button` | string | Bouton appuye : `A`, `B`, `C`, ou `D` |
+
+Le `TIME_EVENT` est en microsecondes et sert au calcul du temps de reaction.
+
+### PONG (Reponse ready-check)
+
+Reponse au PING du serveur, indiquant que le buzzer est pret.
+
+```json
+{
+  "ACTION": "PONG",
+  "ID": "AA:BB:CC:DD:EE:FF"
+}
+```
+
+---
+
+## Messages Serveur vers Buzzer
+
+### HELLO (Bienvenue)
+
+Envoye en reponse au HELLO du buzzer avec l'etat du jeu.
+
+```json
+{
+  "ACTION": "HELLO",
+  "MSG": { ... }
+}
+```
+
+### START (Demarrage du jeu)
+
+Indique au buzzer que le jeu demarre et qu'il peut accepter les appuis.
+
+```json
+{
+  "ACTION": "START",
+  "MSG": {
+    "DELAY": 30,
+    "QUESTION": "question-id"
+  }
+}
+```
+
+### STOP (Arret du jeu)
+
+Indique au buzzer d'arreter d'accepter les appuis.
+
+```json
+{
+  "ACTION": "STOP",
+  "MSG": {}
+}
+```
+
+### PAUSE (Pause)
+
+Met le buzzer en pause.
+
+```json
+{
+  "ACTION": "PAUSE",
+  "MSG": {}
+}
+```
+
+### CONTINUE (Reprise)
+
+Reprend le jeu apres une pause.
+
+```json
+{
+  "ACTION": "CONTINUE",
+  "MSG": {}
+}
+```
+
+### PING (Ready-check)
+
+Demande au buzzer de confirmer qu'il est pret.
+
+```json
+{
+  "ACTION": "PING",
+  "MSG": {}
+}
+```
+
+### RESET (Reinitialisation)
+
+Reinitialise le buzzer.
+
+```json
+{
+  "ACTION": "RESET",
+  "MSG": {}
+}
+```
+
+### LED_ON / LED_OFF (Controle LED)
+
+Allume ou eteint la LED du buzzer.
+
+```json
+{
+  "ACTION": "LED_ON",
+  "MSG": {
+    "color": "green"
+  }
+}
+```
+
+```json
+{
+  "ACTION": "LED_OFF",
+  "MSG": {}
+}
+```
+
+Couleurs disponibles : `green`, `red`, `blue`, `yellow`, `orange`, `white`.
+
+---
+
+## Keep-alive
+
+Le serveur envoie un **ping WebSocket natif** toutes les **30 secondes**. Si le buzzer ne repond pas avec un pong dans les **60 secondes**, la connexion est consideree comme perdue et le client est deconnecte.
+
+| Parametre | Valeur |
+|-----------|--------|
+| Ping interval | 30 secondes |
+| Read deadline | 60 secondes |
+| Write deadline | 10 secondes |
+| Read limit | 65536 octets |
+
+---
+
+## Reconnexion
+
+En cas de deconnexion, le buzzer doit :
+
+1. Attendre un delai (backoff exponentiel recommande : 1s, 2s, 4s, 8s, max 30s)
+2. Se reconnecter a `/ws/buzzer`
+3. Renvoyer un message `HELLO` pour se reenregistrer
+
+Le serveur detecte automatiquement la deconnexion via le mecanisme de ping/pong WebSocket et nettoie les ressources associees.
+
+---
+
+## Suivi des protocoles
+
+### Champ PROTOCOL sur Bumper
+
+Le serveur stocke le protocole de connexion de chaque buzzer dans le champ `PROTOCOL` du modele `Bumper` :
+
+| Valeur | Description |
+|--------|-------------|
+| `"TCP"` | Buzzer connecte via TCP port 1234 (defaut, retrocompatible) |
+| `"WebSocket"` | Buzzer connecte via WebSocket `/ws/buzzer` |
+| `""` (vide) | Ancien buzzer sans protocole specifie (traite comme TCP) |
+
+### Broadcast CLIENTS
+
+Quand un buzzer se connecte ou se deconnecte, le serveur broadcast un message `CLIENTS` avec les compteurs mis a jour :
+
+```json
+{
+  "ACTION": "CLIENTS",
+  "MSG": {
+    "ADMIN_COUNT": 2,
+    "TV_COUNT": 1,
+    "VPLAYER_COUNT": 3,
+    "BUZZER_TCP_COUNT": 4,
+    "BUZZER_WS_COUNT": 2
+  }
+}
+```
+
+| Champ | Type | Description |
+|-------|------|-------------|
+| `ADMIN_COUNT` | int | Nombre de clients admin connectes |
+| `TV_COUNT` | int | Nombre d'ecrans TV connectes |
+| `VPLAYER_COUNT` | int | Nombre de joueurs virtuels connectes |
+| `BUZZER_TCP_COUNT` | int | Nombre de buzzers connectes via TCP |
+| `BUZZER_WS_COUNT` | int | Nombre de buzzers connectes via WebSocket |
+
+---
+
+## Architecture serveur
+
+### Hubs separes
+
+Le serveur utilise des hubs WebSocket distincts pour isoler les types de clients :
+
+| Hub | Endpoint | Clients |
+|-----|----------|---------|
+| `WebSocketHub` | `/ws` | Admin, TV, VJoueur |
+| `BuzzerWebSocketHub` | `/ws/buzzer` | Buzzers physiques |
+| `LogsWebSocketHub` | `/ws/logs` | Logs temps reel |
+
+### BuzzerWebSocketHub
+
+Le hub dedie aux buzzers gere :
+
+- **Enregistrement/desenregistrement** des clients buzzer
+- **Broadcast** de messages a tous les buzzers connectes
+- **Envoi cible** a un buzzer specifique (par MAC)
+- **Comptage** des buzzers connectes
+- **Callback** `OnBuzzerChange` quand un buzzer se connecte/deconnecte
+- **Canal Incoming** (capacite 100) pour les messages recus des buzzers
+
+### Flux de message
+
+```
+Buzzer ESP32 --[WebSocket]--> BuzzerWebSocketHub.readPump()
+    --> parse JSON (protocol.ParseSingle)
+    --> canal Incoming
+    --> Game Engine (handleHello, handleButton, handlePong)
+    --> resultat
+    --> BuzzerWebSocketHub.Broadcast() ou SendToClient()
+    --> writePump() --> Buzzer ESP32
+```
+
+---
+
+## Serialisation
+
+### WebSocket (v3)
+
+Les messages WebSocket utilisent `SerializeForWebSocket()` qui produit du JSON standard sans terminateur :
+
+```go
+func (m *Message) SerializeForWebSocket() ([]byte, error) {
+    return json.Marshal(m)
+}
+```
+
+### TCP (v1, retrocompatible)
+
+Les messages TCP utilisent `Serialize()` qui ajoute un terminateur `\n\0` :
+
+```go
+func (m *Message) Serialize() ([]byte, error) {
+    data, err := json.Marshal(m)
+    // ...
+    return append(data, '\n', 0), nil
+}
+```
+
+### ParseSingle (bidirectionnel)
+
+La fonction `ParseSingle()` gere les deux formats en nettoyant les terminateurs avant le parsing :
+
+```go
+func ParseSingle(data []byte) (*Message, error) {
+    data = bytes.TrimRight(data, "\x00\n\r ")
+    data = bytes.TrimSpace(data)
+    // ...
+    return &msg, json.Unmarshal(data, &msg)
+}
+```
+
+---
+
+## Guide de migration TCP vers WebSocket
+
+### Client firmware (click_websocketClient.h)
+
+Le firmware v3.0.0 inclut un client WebSocket pret a l'emploi dans `src/BuzzClick/click_websocketClient.h`. Il est active par le flag de compilation `USE_WEBSOCKET` dans `platformio.ini`.
+
+**Caracteristiques** :
+- Bibliotheque ArduinoWebsockets (~30KB Flash)
+- Connexion a `ws://<server_ip>:<port>/ws/buzzer`
+- Reconnexion automatique avec backoff exponentiel (1s, 2s, 4s, 8s max)
+- Messages JSON : HELLO, BUTTON, PONG
+- LED indicateurs : Vert (connecte), Jaune clignotant (reconnexion), Rouge (deconnecte)
+
+**Pour activer WebSocket sur un buzzer** :
+1. Ajouter `-DUSE_WEBSOCKET` dans `build_flags` de `platformio.ini`
+2. Compiler et flasher le firmware
+3. Le buzzer se connecte automatiquement en WebSocket au lieu de TCP
+
+### Pour le serveur
+
+Le serveur v3.0.0 gere deja les deux protocoles. Aucune modification serveur n'est necessaire lors de la migration des buzzers.
+
+### Ordre de migration recommande
+
+1. Mettre a jour le serveur vers v3.0.0 (supporte TCP + WebSocket)
+2. Flasher progressivement les buzzers avec le nouveau firmware WebSocket
+3. Verifier que tous les buzzers fonctionnent en WebSocket
+4. (Futur v4.0+) Deprecier le protocole TCP
+
+---
+
+## Contraintes ESP32-C3
+
+| Ressource | Disponible | Client WebSocket | Reste |
+|-----------|------------|------------------|-------|
+| RAM | ~400 KB | ~30-50 KB | ~350 KB |
+| Flash | 4 MB | ~50 KB | ~3.95 MB |
+| Latence | TCP: 10-30ms | WS: 15-40ms | +5-10ms acceptable |
+
+---
+
+## References
+
+- [RFC 6455 - WebSocket Protocol](https://datatracker.ietf.org/doc/html/rfc6455)
+- [ArduinoWebsockets Library](https://github.com/gilmaimon/ArduinoWebsockets)
+- [gorilla/websocket (Go)](https://github.com/gorilla/websocket)

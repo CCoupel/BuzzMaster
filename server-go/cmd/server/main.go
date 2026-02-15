@@ -32,6 +32,7 @@ type App struct {
 	udpBcast    *server.UDPBroadcaster
 	httpServer  *server.HTTPServer
 	wsHub       *server.WebSocketHub
+	buzzerHub   *server.BuzzerWebSocketHub
 	logsHub     *server.LogsWebSocketHub
 	mdnsServer  *server.MDNSServer
 	dnsServer   *server.DNSServer
@@ -135,8 +136,11 @@ func (a *App) init() {
 	a.engine.SetBumpersPath(filepath.Join(configDir, "bumpers.json"))
 	a.engine.SetStatusesPath(filepath.Join(configDir, "question_statuses.json"))
 
-	// WebSocket hub
+	// WebSocket hub (web clients: admin/TV/VPlayer)
 	a.wsHub = server.NewWebSocketHub()
+
+	// Buzzer WebSocket hub (physical buzzers via /ws/buzzer)
+	a.buzzerHub = server.NewBuzzerWebSocketHub()
 
 	// Logs WebSocket hub (dedicated for logs)
 	a.logsHub = server.NewLogsWebSocketHub(1000)
@@ -152,7 +156,7 @@ func (a *App) init() {
 	a.udpBcast = server.NewUDPBroadcaster(a.config.Server.TCPPort)
 
 	// HTTP server
-	a.httpServer = server.NewHTTPServer(a.config.Server.HTTPPort, a.engine, a.wsHub, a.logsHub)
+	a.httpServer = server.NewHTTPServer(a.config.Server.HTTPPort, a.engine, a.wsHub, a.buzzerHub, a.logsHub)
 
 	// Try embedded web files first, then fallback to filesystem
 	if embeddedFS, ok := web.GetEmbeddedFS(); ok {
@@ -191,6 +195,13 @@ func (a *App) setupCallbacks() {
 	go func() {
 		for msg := range a.wsHub.Incoming {
 			a.handleWebMessage(msg)
+		}
+	}()
+
+	// Handle WebSocket messages from buzzers (/ws/buzzer)
+	go func() {
+		for msg := range a.buzzerHub.Incoming {
+			a.handleBuzzerMessage(msg)
 		}
 	}()
 
@@ -273,7 +284,12 @@ func (a *App) setupCallbacks() {
 
 	// Handle client count changes (WebSocket connect/disconnect)
 	a.wsHub.OnClientChange = func(adminCount, tvCount, vplayerCount int) {
-		a.broadcastClientCounts(adminCount, tvCount, vplayerCount)
+		a.broadcastClientCounts()
+	}
+
+	// Handle buzzer WebSocket connect/disconnect
+	a.buzzerHub.OnBuzzerChange = func(buzzerCount int) {
+		a.broadcastClientCounts()
 	}
 
 	// Handle new log entries - broadcast to logs WebSocket clients
@@ -415,8 +431,11 @@ func (a *App) startBackgroundCycling() {
 }
 
 func (a *App) start() error {
-	// Start WebSocket hub
+	// Start WebSocket hub (web clients)
 	go a.wsHub.Run()
+
+	// Start Buzzer WebSocket hub (physical buzzers)
+	go a.buzzerHub.Run()
 
 	// Start Logs WebSocket hub
 	go a.logsHub.Run()
@@ -468,13 +487,13 @@ func (a *App) stop() {
 	a.udpBcast.Stop()
 }
 
-// handleBuzzerMessage processes messages from BuzzClick buzzers (TCP)
+// handleBuzzerMessage processes messages from BuzzClick buzzers (TCP or WebSocket)
 func (a *App) handleBuzzerMessage(incoming *protocol.IncomingMessage) {
 	msg := incoming.Data
 
 	switch msg.Action {
 	case protocol.ActionHello:
-		a.handleHello(incoming.ClientID, msg)
+		a.handleHello(incoming.ClientID, msg, incoming.Source)
 
 	case protocol.ActionButton:
 		a.handleButton(incoming.ClientID, msg, incoming.Timestamp.UnixMicro())
@@ -600,12 +619,19 @@ func (a *App) handleWebMessage(incoming *protocol.IncomingMessage) {
 	}
 }
 
-func (a *App) handleHello(clientID string, msg *protocol.Message) {
-	a.logger.Info(game.LogComponentTCP, "HELLO from buzzer: %s", clientID)
+func (a *App) handleHello(clientID string, msg *protocol.Message, source string) {
+	// Determine protocol from source
+	proto := "TCP"
+	if source == "WebSocket-Buzzer" {
+		proto = "WebSocket"
+	}
 
-	// Parse payload
+	a.logger.Info(game.LogComponentTCP, "HELLO from buzzer: %s (protocol: %s)", clientID, proto)
+
+	// Parse payload and inject protocol
 	var payload map[string]interface{}
 	if err := json.Unmarshal(msg.Msg, &payload); err == nil {
+		payload["PROTOCOL"] = proto
 		a.engine.UpdateBumper(clientID, payload)
 	}
 
@@ -1135,8 +1161,7 @@ func (a *App) handleSetClientType(clientID string, msg *protocol.Message) {
 	a.wsHub.SetClientType(clientID, clientType)
 
 	// Broadcast updated counts
-	adminCount, tvCount, vplayerCount := a.wsHub.GetClientCounts()
-	a.broadcastClientCounts(adminCount, tvCount, vplayerCount)
+	a.broadcastClientCounts()
 }
 
 func (a *App) handleShowQRCode() {
@@ -1352,12 +1377,13 @@ func (a *App) broadcast(action string, data json.RawMessage, viaTCP bool) {
 	msg, _ := protocol.NewMessage(action, nil)
 	msg.Msg = data
 
-	// WebSocket
+	// WebSocket (web clients)
 	a.wsHub.Broadcast(msg)
 
-	// UDP Broadcast (for buzzers)
+	// Buzzer-targeted broadcasts (UDP + WebSocket buzzers)
 	if viaTCP {
 		a.udpBcast.Broadcast(msg)
+		a.buzzerHub.Broadcast(msg)
 	}
 }
 
@@ -1365,6 +1391,7 @@ func (a *App) broadcastHello() {
 	msg, _ := protocol.NewMessage(protocol.ActionHello, map[string]interface{}{})
 	a.wsHub.Broadcast(msg)
 	a.udpBcast.Broadcast(msg)
+	a.buzzerHub.Broadcast(msg)
 }
 
 
@@ -1375,6 +1402,7 @@ func (a *App) broadcastUpdate() {
 	msg.Msg = data
 	msg.Version = a.config.Version
 	a.wsHub.Broadcast(msg)
+	a.buzzerHub.Broadcast(msg)
 }
 
 func (a *App) broadcastEnrollmentUpdate() {
@@ -1432,6 +1460,7 @@ func (a *App) broadcastCountdownUpdate(countdownTime int) {
 func (a *App) broadcastPing() {
 	msg, _ := protocol.NewMessage(protocol.ActionPing, map[string]interface{}{})
 	a.udpBcast.Broadcast(msg)
+	a.buzzerHub.Broadcast(msg)
 }
 
 func (a *App) broadcastReady() {
@@ -1448,6 +1477,7 @@ func (a *App) broadcastReset() {
 	msg, _ := protocol.NewMessage(protocol.ActionReset, map[string]interface{}{})
 	a.wsHub.Broadcast(msg)
 	a.udpBcast.Broadcast(msg)
+	a.buzzerHub.Broadcast(msg)
 
 	// Then send HELLO
 	a.broadcastHello()
@@ -1458,15 +1488,19 @@ func (a *App) broadcastRemote() {
 	a.broadcast(protocol.ActionRemote, data, false)
 }
 
-func (a *App) broadcastClientCounts(adminCount, tvCount, vplayerCount int) {
+func (a *App) broadcastClientCounts() {
+	adminCount, tvCount, vplayerCount := a.wsHub.GetClientCounts()
 	payload := protocol.ClientsPayload{
 		AdminCount:   adminCount,
 		TVCount:      tvCount,
 		VPlayerCount: vplayerCount,
+		BuzzerTCP:    a.tcpServer.ClientCount(),
+		BuzzerWS:     a.buzzerHub.BuzzerCount(),
 	}
 	data, _ := json.Marshal(payload)
 	a.broadcast(protocol.ActionClients, data, false)
-	server.LogDebug(game.LogComponentWebSocket, "Client counts: admin=%d, tv=%d, vplayer=%d", adminCount, tvCount, vplayerCount)
+	server.LogDebug(game.LogComponentWebSocket, "Client counts: admin=%d, tv=%d, vplayer=%d, buzzer_tcp=%d, buzzer_ws=%d",
+		adminCount, tvCount, vplayerCount, payload.BuzzerTCP, payload.BuzzerWS)
 }
 
 func (a *App) broadcastBackgroundChange(index int) {
@@ -1595,6 +1629,8 @@ func (a *App) sendStateToClient(clientID string) {
 		AdminCount:   adminCount,
 		TVCount:      tvCount,
 		VPlayerCount: vplayerCount,
+		BuzzerTCP:    a.tcpServer.ClientCount(),
+		BuzzerWS:     a.buzzerHub.BuzzerCount(),
 	}
 	cData, _ := json.Marshal(clientsPayload)
 	clientsMsg, _ := protocol.NewMessage(protocol.ActionClients, nil)

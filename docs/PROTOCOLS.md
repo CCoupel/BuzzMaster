@@ -35,6 +35,15 @@ Ce document décrit les protocoles de communication entre les différents compos
 | PING | Ready check | `{}` |
 | RESET | Full reset | `{}` |
 
+## WebSocket Protocol - Buzzers (v3.0.0+)
+
+- Endpoint: `/ws/buzzer`
+- Format: JSON standard (no null terminator)
+- Used by: Physical buzzers (BuzzClick ESP32-C3)
+- Documentation complete: [docs/WEBSOCKET_PROTOCOL.md](WEBSOCKET_PROTOCOL.md)
+
+**Mode hybride** : Le serveur supporte TCP (port 1234) et WebSocket (`/ws/buzzer`) simultanement. Les buzzers anciens (TCP) et nouveaux (WebSocket) coexistent sans conflit.
+
 ## WebSocket Protocol (Web clients <-> Server)
 
 - Endpoint: `/ws`

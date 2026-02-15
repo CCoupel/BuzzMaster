@@ -24,6 +24,7 @@ type HTTPServer struct {
 	port       int
 	engine     *game.Engine
 	wsHub      *WebSocketHub
+	buzzerHub  *BuzzerWebSocketHub
 	logsHub    *LogsWebSocketHub
 	dataDir    string
 	webDir     string
@@ -43,18 +44,19 @@ type HTTPServer struct {
 }
 
 // NewHTTPServer creates a new HTTP server
-func NewHTTPServer(port int, engine *game.Engine, wsHub *WebSocketHub, logsHub *LogsWebSocketHub) *HTTPServer {
+func NewHTTPServer(port int, engine *game.Engine, wsHub *WebSocketHub, buzzerHub *BuzzerWebSocketHub, logsHub *LogsWebSocketHub) *HTTPServer {
 	cfg := config.Get()
 	return &HTTPServer{
-		port:     port,
-		engine:   engine,
-		wsHub:    wsHub,
-		logsHub:  logsHub,
-		dataDir:  cfg.Storage.DataDir,
-		webDir:   cfg.Storage.DataDir,
-		reactDir: "", // Will be set if React build exists
-		mux:      http.NewServeMux(),
-		updater:  NewUpdater(cfg.Version),
+		port:      port,
+		engine:    engine,
+		wsHub:     wsHub,
+		buzzerHub: buzzerHub,
+		logsHub:   logsHub,
+		dataDir:   cfg.Storage.DataDir,
+		webDir:    cfg.Storage.DataDir,
+		reactDir:  "", // Will be set if React build exists
+		mux:       http.NewServeMux(),
+		updater:   NewUpdater(cfg.Version),
 	}
 }
 
@@ -177,6 +179,9 @@ func (h *HTTPServer) setupRoutes() {
 
 	// WebSocket
 	h.mux.HandleFunc("/ws", h.handleWebSocket)
+
+	// Buzzer WebSocket (dedicated endpoint for physical buzzers)
+	h.mux.HandleFunc("/ws/buzzer", h.handleBuzzerWebSocket)
 
 	// Logs WebSocket (dedicated)
 	h.mux.HandleFunc("/ws/logs", h.handleLogsWebSocket)
@@ -1657,6 +1662,10 @@ func (h *HTTPServer) downloadFile(url, destPath string) error {
 
 func (h *HTTPServer) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 	h.wsHub.HandleConnection(w, r)
+}
+
+func (h *HTTPServer) handleBuzzerWebSocket(w http.ResponseWriter, r *http.Request) {
+	h.buzzerHub.HandleConnection(w, r)
 }
 
 func (h *HTTPServer) handleLogsWebSocket(w http.ResponseWriter, r *http.Request) {

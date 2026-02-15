@@ -136,8 +136,11 @@ func (e *Engine) UpdateBumper(id string, data map[string]interface{}) {
 	if ip, ok := data["IP"].(string); ok {
 		bumper.IP = ip
 	}
+	if proto, ok := data["PROTOCOL"].(string); ok {
+		bumper.Protocol = proto
+	}
 
-	log.Printf("[Engine] Updated bumper %s: team=%s, name=%s", id, bumper.Team, bumper.Name)
+	log.Printf("[Engine] Updated bumper %s: team=%s, name=%s, protocol=%s", id, bumper.Team, bumper.Name, bumper.Protocol)
 	e.mu.Unlock()
 
 	// Auto-save bumpers to disk

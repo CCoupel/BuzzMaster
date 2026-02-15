@@ -1,16 +1,13 @@
 #pragma once
-//#include <gpio_viewer.h>
-//GPIOViewer gpio_viewer;
 
 #include "Common/CustomLogger.h"
 #include "Common/led.h"
+#include "click_nvsConfig.h"
 #include "click_serverConnection.h"
 #include "esp_task_wdt.h"
 
 #include <WiFi.h>
 
-//const char* WIFI_SSID = "votre_ssid";
-//const char* WIFI_PASSWORD = "votre_mot_de_passe";
 static const char* WIFI_TAG = "WIFI";
 
 const int WIFI_TIMEOUT_MS = 5000; // 5 secondes
@@ -24,11 +21,23 @@ void WiFiStationConnected(WiFiEvent_t event, WiFiEventInfo_t info){
 
 void WiFiGotIP(WiFiEvent_t event, WiFiEventInfo_t info){
   ESP_LOGI(WIFI_TAG,"Adresse IP obtenue %s", WiFi.localIP().toString());
-//    gpio_viewer.begin();
-    if (!getServerIP()) {
-        ESP_LOGE(WIFI_TAG, "Failed to get server IP. Restarting...");
-        ESP.restart();
+
+    BuzzClickConfig& cfg = nvsGetConfig();
+
+    // If server_ip is configured in NVS, use it directly
+    if (cfg.server_ip.length() > 0) {
+        serverIP = cfg.server_ip;
+        localUdpPort = cfg.server_tcp_port;
+        ESP_LOGI(WIFI_TAG, "Using NVS server: %s:%d", serverIP.c_str(), localUdpPort);
+    } else {
+        // Fallback: discover server via mDNS
+        if (!getServerIP()) {
+            ESP_LOGE(WIFI_TAG, "Failed to get server IP. Restarting...");
+            ESP.restart();
+        }
     }
+
+    // Yellow -> connecting to server
     setLedColor(128,128,0,true);
     resetGame();
     yield();
@@ -43,37 +52,56 @@ void WiFiGotIP(WiFiEvent_t event, WiFiEventInfo_t info){
         ESP.restart();
     }
     ESP_LOGI(WIFI_TAG, "READY");
-    setLedColor(0,0,0);
-    setLedIntensity(255);
+    // Green = connected
+    setLedColor(0, 255, 0, true);
 }
 
 void WiFiStationDisconnected(WiFiEvent_t event, WiFiEventInfo_t info){
   ESP_LOGI(WIFI_TAG,"Déconnecté du WiFi");
+  // Red = disconnected/error
+  setLedColor(255, 0, 0, true);
   WiFi.disconnect();
-//  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
   connectToWifi();
 }
 
 bool connectToWifi() {
-  ESP_LOGI(WIFI_TAG,"Tentative de connexion WiFi...");
+  BuzzClickConfig& cfg = nvsGetConfig();
+
+  // If NVS is empty (after factory reset), stay in USB-only mode (orange LED)
+  if (!cfg.valid) {
+    ESP_LOGI(WIFI_TAG, "No WiFi config in NVS, skipping WiFi connection (USB mode)");
+    // Orange = USB-only mode
+    setLedColor(255, 128, 0, true);
+    return false;
+  }
+
+  // Use NVS config for WiFi connection
+  const char* ssid = cfg.wifi_ssid.c_str();
+  const char* password = cfg.wifi_password.c_str();
+
+  ESP_LOGI(WIFI_TAG, "Connecting to WiFi SSID=%s (source=NVS)", ssid);
+
+  // Yellow = connecting
+  setLedColor(255, 200, 0, true);
+
   WiFi.mode(WIFI_STA);
-  //WiFi.begin(ssid, password);
-  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+  WiFi.begin(ssid, password);
   unsigned long startAttemptTime = millis();
 
   while (WiFi.status() != WL_CONNECTED && millis() - startAttemptTime < WIFI_TIMEOUT_MS) {
     esp_task_wdt_reset();
-
     delay(100);
     Serial.print(".");
   }
 
   if (WiFi.status() != WL_CONNECTED) {
-    ESP_LOGE(WIFI_TAG,"Échec de la connexion WiFi");
+    ESP_LOGE(WIFI_TAG, "WiFi connection failed to SSID=%s", ssid);
+    // Red = error
+    setLedColor(255, 0, 0, true);
     return false;
   }
 
-  ESP_LOGI(WIFI_TAG,"WiFi connecté %s", WiFi.localIP().toString());
+  ESP_LOGI(WIFI_TAG, "WiFi connecté %s", WiFi.localIP().toString());
   return true;
 }
 
@@ -89,11 +117,18 @@ void setupWifi() {
   static unsigned long lastAttemptTime = 0;
 
 void checkWifiStatus() {
+  BuzzClickConfig& cfg = nvsGetConfig();
+
+  // If NVS is empty (USB-only mode), don't attempt WiFi reconnection
+  if (!cfg.valid) {
+    return;
+  }
+
   if (WiFi.status() != WL_CONNECTED) {
     if (millis() - lastAttemptTime > WIFI_RECOVER_TIME_MS) {
-      ESP_LOGI(WIFI_TAG,"Tentative de reconnexion WiFi...");
+      ESP_LOGI(WIFI_TAG, "WiFi disconnected, attempting reconnection...");
       if (!connectToWifi()) {
-        ESP_LOGE(WIFI_TAG, "Failed to connect to WIFI. Restarting...");
+        ESP_LOGE(WIFI_TAG, "Failed to reconnect to WiFi. Restarting...");
         ESP.restart();
       }
       lastAttemptTime = millis();

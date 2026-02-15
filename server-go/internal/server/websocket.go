@@ -25,11 +25,13 @@ const (
 	ClientTypeAdmin   ClientType = "admin"
 	ClientTypeTV      ClientType = "tv"
 	ClientTypeVPlayer ClientType = "vplayer"
+	ClientTypeBuzzer  ClientType = "buzzer"
 )
 
 // WebSocketClient represents a connected WebSocket client
 type WebSocketClient struct {
 	ID       string
+	MAC      string // MAC address for buzzer clients (empty for web clients)
 	Type     ClientType
 	Conn     *websocket.Conn
 	Send     chan []byte

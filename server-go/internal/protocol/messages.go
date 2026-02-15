@@ -141,6 +141,8 @@ type ClientsPayload struct {
 	AdminCount   int `json:"ADMIN_COUNT"`
 	TVCount      int `json:"TV_COUNT"`
 	VPlayerCount int `json:"VPLAYER_COUNT"`
+	BuzzerTCP    int `json:"BUZZER_TCP_COUNT"`
+	BuzzerWS     int `json:"BUZZER_WS_COUNT"`
 }
 
 // SetClientTypePayload for SET_CLIENT_TYPE action

@@ -11,7 +11,7 @@
 
 BuzzControl is a wireless buzzer system for quiz games. The system consists of:
 - **BuzzControl**: Central server (**100% Go**, Raspberry Pi / Windows) - Aucune dépendance Python ou externe
-- **BuzzClick**: Individual buzzer clients (ESP32-C3, unchanged)
+- **BuzzClick**: Individual buzzer clients (ESP32-C3, WiFi configurable via USB depuis v3.0.0)
 
 **Architecture backend** : Le serveur est entièrement développé en Go, sans dépendances Python, Node.js ou autres langages externes. Tous les protocoles (TCP, WebSocket, HTTP, UDP, DNS, SmartConfig ESP-Touch) sont implémentés nativement en Go.
 
@@ -30,7 +30,7 @@ buzzcontrol/
 │   └── data/files/questions/ # Question storage
 ├── src/
 │   ├── BuzzControl/          # Server firmware (ESP32-S3) - LEGACY
-│   └── BuzzClick/            # Buzzer client firmware (ESP32-C3) - UNCHANGED
+│   └── BuzzClick/            # Buzzer client firmware (ESP32-C3) - WiFi USB config (v3.0.0)
 ├── MARKETING/                # Site marketing (worktree gh-pages)
 ├── docs/                     # Documentation
 ├── backlog/                  # Feature backlog
@@ -45,6 +45,7 @@ La documentation est organisée en fichiers thématiques :
 | Document | Description |
 |----------|-------------|
 | [docs/PROTOCOLS.md](docs/PROTOCOLS.md) | Protocoles de communication (TCP, WebSocket, HTTP REST API) |
+| [docs/WEBSOCKET_PROTOCOL.md](docs/WEBSOCKET_PROTOCOL.md) | Protocole WebSocket buzzers (v3.0.0, mode hybride TCP+WS) |
 | [docs/DATA_MODELS.md](docs/DATA_MODELS.md) | Modèles de données (Questions, Teams, Bumpers, QCM, Memory) |
 | [docs/GO_SERVER.md](docs/GO_SERVER.md) | Implémentation du serveur Go, persistance, build portable |
 | [docs/REACT_INTERFACE.md](docs/REACT_INTERFACE.md) | Interface React, composants UI, VPlayer |
@@ -118,12 +119,15 @@ cd server-go && ./build.ps1
 
 ## Ports Standards
 
-| Service | Port | Description |
-|---------|------|-------------|
-| HTTP | 80 | Web interface |
-| TCP | 1234 | BuzzClick buzzer protocol |
-| UDP | 1234 | Broadcast (same as TCP) |
-| DNS | 53 | Captive portal (optional) |
+| Service | Port | Endpoint | Description |
+|---------|------|----------|-------------|
+| HTTP | 80 | `/` | Web interface |
+| WebSocket | 80 | `/ws` | Admin, TV, VJoueur (clients web) |
+| WebSocket | 80 | `/ws/buzzer` | Buzzers physiques (v3.0.0+) |
+| WebSocket | 80 | `/ws/logs` | Logs temps reel |
+| TCP | 1234 | - | BuzzClick buzzer protocol (v1, retrocompatible) |
+| UDP | 1234 | - | Broadcast (same as TCP) |
+| DNS | 53 | - | Captive portal (optional) |
 
 ## Notes for Claude
 
@@ -152,15 +156,29 @@ Toutes les vues TV doivent tenir entièrement à l'écran sans défilement :
 
 ### Key Files
 - **Backend** : `server-go/cmd/server/main.go`, `internal/game/engine.go`, `internal/game/models.go`, `internal/updater/updater.go`
+- **WebSocket Buzzer (v3.0.0)** :
+  - `internal/server/websocket_buzzer.go` : Hub WebSocket dedie aux buzzers physiques (BuzzerWebSocketHub)
+  - `internal/server/websocket.go` : Hub WebSocket clients web + types clients (admin, tv, vplayer, buzzer)
+  - `internal/server/http.go` : Routes HTTP + handlers WebSocket (`/ws`, `/ws/buzzer`, `/ws/logs`)
+  - `internal/protocol/messages.go` : Serialisation JSON (SerializeForWebSocket, Serialize)
+  - `internal/protocol/parser.go` : Parsing JSON (ParseSingle pour WebSocket, Parse pour TCP)
 - **Frontend** :
   - `web/src/pages/GamePage.jsx` : Page admin principale (jeu en cours)
-  - `web/src/pages/QuestionsPage.jsx` : Gestion questions + fonds d'écran
-  - `web/src/pages/ConfigPage.jsx` : Configuration serveur (paramètres, effet néon)
-  - `web/src/pages/BackupPage.jsx` : Sauvegarde/Restauration/Réinitialisation
-  - `web/src/pages/UpdatePage.jsx` : Gestion des mises à jour automatiques
+  - `web/src/pages/QuestionsPage.jsx` : Gestion questions + fonds d'ecran
+  - `web/src/pages/ConfigPage.jsx` : Configuration serveur (parametres, effet neon, WiFi USB)
+  - `web/src/pages/BackupPage.jsx` : Sauvegarde/Restauration/Reinitialisation
+  - `web/src/pages/UpdatePage.jsx` : Gestion des mises a jour automatiques
   - `web/src/pages/PlayerDisplay.jsx` : Affichage TV (STATIQUE)
-  - `web/src/components/TeamCard.jsx` : Carte équipe/joueurs
+  - `web/src/components/TeamCard.jsx` : Carte equipe/joueurs
   - `web/src/components/Navbar.jsx` : Navigation + menu abeille (dropdown)
+  - `web/src/components/USBConfigModal.jsx` : Modale de configuration USB buzzers
+  - `web/src/hooks/useWebSerial.js` : Hook Web Serial API pour communication AT
+- **Firmware BuzzClick** :
+  - `src/BuzzClick/click_nvsConfig.h` : Stockage NVS (WiFi, IP serveur, port)
+  - `src/BuzzClick/click_usbConfig.h` : Protocole AT sur USB serie
+  - `src/BuzzClick/click_WifiManager.h` : Connexion WiFi (priorite NVS)
+  - `src/BuzzClick/click_websocketClient.h` : Client WebSocket buzzer (v3.0.0, flag USE_WEBSOCKET)
+  - `src/BuzzClick/click_MAIN.cpp` : Setup, factory reset, boucle AT
 - **Config** : `server-go/config.json`
 
 ### Organisation UI (v2.49.x)

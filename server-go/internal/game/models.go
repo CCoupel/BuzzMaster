@@ -64,6 +64,7 @@ type Bumper struct {
 	Status      string      `json:"STATUS,omitempty"`
 	Version     string      `json:"VERSION,omitempty"`
 	IP          string      `json:"IP,omitempty"`
+	Protocol    string      `json:"PROTOCOL,omitempty"` // Connection protocol: "TCP" or "WebSocket" (empty = TCP for backward compat)
 	Ready       bool        `json:"READY,omitempty"`
 	AnswerColor AnswerColor `json:"ANSWER_COLOR,omitempty"`
 	HintsAtBuzz int         `json:"HINTS_AT_BUZZ,omitempty"` // Number of QCM hints when player buzzed

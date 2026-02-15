@@ -3,6 +3,72 @@
 Historique des versions du projet BuzzControl.
 
 
+## [3.0.0] - 2026-02-15
+
+### Added
+- **[WebSocket Buzzer]**: Support protocole WebSocket pour buzzers physiques (mode hybride TCP+WS)
+  - Nouveau endpoint `/ws/buzzer` dedie aux connexions des buzzers physiques BuzzClick
+  - Hub `BuzzerWebSocketHub` separe du hub web (`WebSocketHub`) pour isolation des clients
+  - Identification des buzzers via adresse MAC (parametre query ou message HELLO)
+  - Messages JSON standards (HELLO, BUTTON, PONG) sans terminateur null (`\0`)
+  - Broadcast vers tous les buzzers WebSocket (LED_ON, LED_OFF, START, STOP, PING)
+  - Envoi cible a un buzzer specifique via adresse MAC
+  - Ping/pong WebSocket natif (keep-alive 30s) pour detection de deconnexion
+  - Read deadline 60s avec renouvellement automatique sur activite
+  - Canal de messages entrants buffered (capacite 100) avec drop gracieux si plein
+  - Gestion concurrente thread-safe (mutex RWLock sur la map clients)
+  - Nouveau type de client `buzzer` dans l'enum `ClientType`
+  - Champ `MAC` ajoute a la struct `WebSocketClient` pour identification des buzzers
+  - Champ `PROTOCOL` ajoute au modele `Bumper` pour identifier le protocole de connexion ("TCP" ou "WebSocket")
+  - Compteurs de buzzers dans le broadcast `CLIENTS` : `BUZZER_TCP_COUNT` et `BUZZER_WS_COUNT`
+  - Retrocompatibilite complete : le serveur TCP port 1234 reste actif en parallele
+  - Les buzzers anciens (TCP) et nouveaux (WebSocket) coexistent sans conflit
+- **[Firmware WebSocket]**: Client WebSocket pour BuzzClick (ESP32-C3)
+  - Classe `WebSocketBuzzerClient` dans `click_websocketClient.h` (active avec flag `USE_WEBSOCKET`)
+  - Connexion a `ws://<server_ip>/ws/buzzer` via bibliotheque ArduinoWebsockets
+  - Reconnexion automatique avec backoff exponentiel (1s, 2s, 4s, 8s max)
+  - Messages JSON : HELLO (enregistrement), BUTTON (buzz), PONG (ready-check)
+  - LED indicateur : Vert = connecte, Jaune clignotant = reconnexion, Rouge = deconnecte
+
+### Technical
+- **Backend** :
+  - `internal/server/websocket_buzzer.go` : Hub WebSocket dedie aux buzzers (BuzzerWebSocketHub)
+    - `HandleConnection()` : Upgrade HTTP, extraction MAC query param, creation client
+    - `readPump()` : Lecture messages, identification MAC, dispatch vers canal Incoming
+    - `writePump()` : Ecriture messages, ping keep-alive 30s, drain queue
+    - `Broadcast()` / `BroadcastRaw()` : Diffusion a tous les buzzers connectes
+    - `SendToClient()` : Envoi cible par MAC address
+    - `SetClientMAC()` / `GetClients()` / `BuzzerCount()` : Gestion des clients
+    - Callback `OnBuzzerChange` pour notification des changements de connexion
+  - `internal/server/websocket.go` : Ajout `ClientTypeBuzzer` et champ `MAC` sur `WebSocketClient`
+  - `internal/server/http.go` : Nouveau handler `/ws/buzzer`, injection `BuzzerWebSocketHub` dans HTTPServer
+  - `internal/game/models.go` : Champ `Protocol` sur struct `Bumper` ("TCP" ou "WebSocket")
+  - `internal/protocol/messages.go` : `SerializeForWebSocket()`, `ClientsPayload` avec `BUZZER_TCP_COUNT`/`BUZZER_WS_COUNT`
+  - `internal/protocol/parser.go` : Fonction `ParseSingle()` pour messages WebSocket individuels
+  - `cmd/server/main.go` : `handleHello()` injecte le protocole, `broadcastClientCounts()` unifie les compteurs
+- **Firmware** :
+  - `src/BuzzClick/click_websocketClient.h` : Client WebSocket avec ArduinoWebsockets
+    - Classe `WebSocketBuzzerClient` avec connect/loop/send/reconnect
+    - Backoff exponentiel (1s-8s)
+    - LED indicateurs selon etat de connexion
+    - Fonctions wrapper : `ws_sendBuzz()`, `ws_sendPong()`, `ws_isConnected()`, `ws_connect()`
+- **Tests** :
+  - `internal/server/websocket_buzzer_test.go` : 13 tests unitaires ciblant `BuzzerWebSocketHub` :
+    - Connexion/deconnexion buzzers (simple, multiple)
+    - Reception messages JSON (HELLO avec MAC, BUTTON avec payload, PONG)
+    - Broadcast et envoi cible (SendToClient par MAC)
+    - Identification MAC via message HELLO
+    - Acces concurrent (5 buzzers simultanes)
+    - Gestion canal Incoming plein
+
+### Notes
+- **Retrocompatibilite** : Les buzzers avec ancien firmware (TCP) continuent de fonctionner avec le serveur v3.0.0
+- **Mode hybride** : Le serveur supporte TCP (port 1234) ET WebSocket (port 80, `/ws/buzzer`) simultanement
+- **Firmware** : Client WebSocket disponible via flag de compilation `USE_WEBSOCKET` (TCP par defaut)
+- **Performance** : Latence WebSocket attendue entre 15-40ms (vs 10-30ms TCP), acceptable pour le jeu
+
+---
+
 ## [2.54.0] - 2026-02-08
 
 ### Added
