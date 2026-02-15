@@ -374,7 +374,172 @@ rm -f server.exe buzzcontrol buzzcontrol-arm6
 
 ---
 
-## 10. Dispatch Automatique Backend/Frontend
+## 10. Architecture d'Équipe - Team Leader Direct
+
+### 10.1 Principe Fondamental
+
+**Claude = Team Leader Direct** qui crée ET coordonne tous les agents.
+
+```
+Claude (Team Leader)
+    │
+    ├── TeamCreate("bugfix-xxx" / "feature-xxx" / "hotfix-xxx")
+    ├── Task(dev-backend) avec prompt GÉNÉRIQUE
+    ├── Task(dev-frontend) avec prompt GÉNÉRIQUE
+    ├── Task(test-writer) avec prompt GÉNÉRIQUE
+    ├── Task(code-reviewer) avec prompt GÉNÉRIQUE
+    ├── Task(QA) avec prompt GÉNÉRIQUE
+    ├── Task(doc-updater) avec prompt GÉNÉRIQUE
+    └── Task(deploy) avec prompt GÉNÉRIQUE
+    │
+    └── Coordination via TaskCreate + TaskUpdate + SendMessage
+```
+
+### 10.2 ⚠️ RÈGLE CRITIQUE : Création des Agents
+
+**OBLIGATOIRE** : Les agents doivent être créés avec des prompts **GÉNÉRIQUES** uniquement !
+
+#### Pattern CORRECT ✅
+
+```javascript
+// 1. Créer l'équipe
+TeamCreate({
+  team_name: "bugfix-wifi-config",
+  description: "Fix incomplete WiFi configuration",
+  agent_type: "team-lead"
+})
+
+// 2. Créer les agents avec prompts GÉNÉRIQUES (sans tâche spécifique)
+Task({
+  subagent_type: "dev-backend",
+  team_name: "bugfix-wifi-config",
+  name: "backend-dev",
+  description: "Backend Go developer",  // ✅ Description courte du rôle
+  prompt: "Tu es l'agent backend Go du projet BuzzControl. Tu travailles dans l'équipe \"bugfix-wifi-config\". Attends les tâches qui te seront assignées par le team leader via la task list. Quand une tâche te sera assignée, consulte-la avec TaskGet puis implémente le code Go demandé. Tu es prêt à commencer quand le team leader t'assignera du travail."
+})
+
+Task({
+  subagent_type: "test-writer",
+  team_name: "bugfix-wifi-config",
+  name: "test-writer",
+  description: "Test writer",  // ✅ Description courte du rôle
+  prompt: "Tu es l'agent test writer du projet BuzzControl. Tu travailles dans l'équipe \"bugfix-wifi-config\". Attends les tâches qui te seront assignées par le team leader via la task list. Quand une tâche te sera assignée, consulte-la avec TaskGet puis écris les tests demandés. Tu es prêt à commencer quand le team leader t'assignera du travail."
+})
+
+// 3. Créer les tâches dans la task list
+TaskCreate({
+  subject: "Implement WiFi config backend endpoints",
+  description: "Créer les endpoints REST API pour la config WiFi des buzzers dans server-go/internal/server/http.go. Ajouter GET /api/buzzers pour lister les buzzers connectés. Ajouter GET /api/buzzer/:mac/wifi-status pour le statut WiFi.",
+  activeForm: "Implementing backend WiFi config"
+})
+
+TaskCreate({
+  subject: "Write regression test for WiFi config",
+  description: "Écrire un test de non-régression dans server-go/internal/server/http_test.go pour vérifier que les endpoints WiFi config fonctionnent correctement.",
+  activeForm: "Writing regression tests"
+})
+
+// 4. Assigner les tâches aux agents
+TaskUpdate({ taskId: "1", owner: "backend-dev", status: "in_progress" })
+TaskUpdate({ taskId: "2", owner: "test-writer" })
+
+// 5. Coordination via SendMessage (corrections, questions)
+SendMessage({
+  recipient: "backend-dev",
+  content: "Corrections demandées suite à la review: ajouter validation des paramètres..."
+})
+```
+
+#### Pattern INTERDIT ❌
+
+```javascript
+// ❌ INTERDIT : Tâche spécifique dans le prompt de Task()
+Task({
+  subagent_type: "dev-backend",
+  team_name: "bugfix-wifi-config",
+  name: "backend-dev",
+  description: "Implement backend WiFi config",  // ❌ Trop spécifique !
+  prompt: "Tu dois implémenter les endpoints WiFi config dans http.go. Créer GET /api/buzzers et GET /api/buzzer/:mac/wifi-status..."  // ❌ Tâche spécifique !
+})
+```
+
+### 10.3 Pourquoi c'est critique
+
+| Raison | Explication |
+|--------|-------------|
+| **Réutilisabilité** | Un agent peut traiter plusieurs tâches sans respawn |
+| **Coordination** | TaskCreate + TaskUpdate = contrôle total du workflow |
+| **Séparation rôle/tâche** | Un agent = un RÔLE, pas une TÂCHE |
+| **Corrections** | SendMessage pour itérations sans recréer l'agent |
+| **Clarté** | Task list = vue d'ensemble du travail à faire |
+
+### 10.4 Workflow Correct (Étapes)
+
+```
+1. TeamCreate({ team_name, description, agent_type: "team-lead" })
+2. Task() × N agents avec prompts génériques (dev-backend, frontend, test-writer, QA, etc.)
+3. TaskCreate() × M tâches avec descriptions détaillées
+4. TaskUpdate({ taskId, owner, status: "in_progress" }) pour assigner
+5. Attendre messages automatiques des agents
+6. SendMessage() pour corrections/questions si nécessaire
+7. TaskUpdate({ taskId, status: "completed" }) quand terminé
+8. SendMessage({ type: "shutdown_request" }) à la fin
+9. TeamDelete() pour nettoyer
+```
+
+### 10.5 Template Prompt Générique par Type d'Agent
+
+#### dev-backend
+```
+Tu es l'agent backend Go du projet BuzzControl. Tu travailles dans l'équipe "{team_name}".
+Attends les tâches qui te seront assignées par le team leader via la task list. Quand une tâche te sera assignée, consulte-la avec TaskGet puis implémente le code Go demandé.
+Tu es prêt à commencer quand le team leader t'assignera du travail.
+```
+
+#### dev-frontend
+```
+Tu es l'agent frontend React du projet BuzzControl. Tu travailles dans l'équipe "{team_name}".
+Attends les tâches qui te seront assignées par le team leader via la task list. Quand une tâche te sera assignée, consulte-la avec TaskGet puis implémente le code React demandé.
+Tu es prêt à commencer quand le team leader t'assignera du travail.
+```
+
+#### dev-buzzclick
+```
+Tu es l'agent firmware ESP32-C3 du projet BuzzControl. Tu travailles dans l'équipe "{team_name}".
+Attends les tâches qui te seront assignées par le team leader via la task list. Quand une tâche te sera assignée, consulte-la avec TaskGet puis implémente ou vérifie le code firmware demandé.
+Tu es prêt à commencer quand le team leader t'assignera du travail.
+```
+
+#### test-writer / code-reviewer / QA / doc-updater / deploy
+```
+Tu es l'agent {role} du projet BuzzControl. Tu travailles dans l'équipe "{team_name}".
+Attends les tâches qui te seront assignées par le team leader via la task list. Quand une tâche te sera assignée, consulte-la avec TaskGet puis {action} demandé(e).
+Tu es prêt à commencer quand le team leader t'assignera du travail.
+```
+
+### 10.6 ⚠️ IMPORTANT : Mise à Jour de la Mémoire Claude
+
+**Quand cette section est modifiée, Claude DOIT mettre à jour sa mémoire personnelle :**
+
+```bash
+# Emplacement mémoire Claude
+~/.claude/projects/<projet>/memory/MEMORY.md
+```
+
+**Contenu à synchroniser dans MEMORY.md** :
+- Section "Architecture d'Équipe - Claude comme Chef de Projet Direct"
+- Pattern de création des agents avec prompts génériques
+- Workflow correct (TeamCreate → Task → TaskCreate → TaskUpdate)
+- Templates de prompts par type d'agent
+
+**Commande pour Claude** : Quand COMMON.md section 10 change, exécuter :
+```
+Write(~/.claude/memory/MEMORY.md) avec mise à jour de la section architecture
+```
+
+---
+
+## 11. Dispatch Automatique Backend/Frontend
 
 ### 10.1 Critères de Routage
 
