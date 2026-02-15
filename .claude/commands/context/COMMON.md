@@ -539,7 +539,238 @@ Write(~/.claude/memory/MEMORY.md) avec mise à jour de la section architecture
 
 ---
 
-## 11. Dispatch Automatique Backend/Frontend
+## 11. Contraintes Critiques Projet BuzzControl
+
+### 11.1 🚨 CONTRAINTE TV DISPLAY - CRITIQUE
+
+**L'affichage TV (`/tv`) est STATIQUE et ne permet PAS de scroll.**
+
+#### Règles OBLIGATOIRES pour toute vue TV
+
+| Règle | Contrainte |
+|-------|-----------|
+| **Overflow** | `overflow: hidden` (JAMAIS `auto` ou `scroll`) |
+| **Dimensionnement** | Unités viewport : `vh`, `vw`, `%` (JAMAIS `px` fixes) |
+| **Layout** | `flex` avec `min-height: 0` pour permettre rétrécissement |
+| **Contenu** | Limiter affichage (ex: top 3, max 6 catégories) |
+| **Scroll** | ❌ INTERDIT - tout doit tenir à l'écran |
+
+#### Exemple CSS Correct ✅
+
+```css
+.tv-container {
+  height: 100vh;
+  overflow: hidden;  /* ✅ OBLIGATOIRE */
+  display: flex;
+  flex-direction: column;
+}
+
+.tv-content {
+  flex: 1;
+  min-height: 0;  /* ✅ Permet rétrécissement */
+  display: flex;
+  flex-direction: column;
+}
+
+.tv-list {
+  max-height: 80vh;  /* ✅ Viewport units */
+  overflow: hidden;  /* ✅ Pas de scroll */
+}
+```
+
+#### Exemple CSS INTERDIT ❌
+
+```css
+.tv-container {
+  height: 100vh;
+  overflow: auto;  /* ❌ INTERDIT */
+}
+
+.tv-list {
+  height: 800px;  /* ❌ Pixels fixes */
+  overflow: scroll;  /* ❌ INTERDIT */
+}
+```
+
+#### Fichiers concernés
+
+- `web/src/pages/PlayerDisplay.jsx` (affichage TV principal)
+- Toute vue affichée sur `/tv` (PALMARES, QCM, MEMORY, etc.)
+
+### 11.2 🔄 Redémarrage Serveur - RÈGLE STRICTE
+
+**TOUJOURS utiliser l'API `/shutdown` pour redémarrer, JAMAIS de kill forcé.**
+
+#### Commande Standard ✅
+
+```bash
+# Redémarrage propre (OBLIGATOIRE)
+curl -s http://localhost/shutdown && sleep 2 && ./server.exe
+
+# Avec rebuild (après modifications code)
+curl -s http://localhost/shutdown && sleep 2 && \
+cd server-go/web && npm run build && cd .. && \
+go build -o server.exe ./cmd/server && ./server.exe
+```
+
+#### Commandes INTERDITES ❌
+
+```bash
+# ❌ JAMAIS kill forcé
+kill -9 $(pgrep server)
+taskkill /F /IM server.exe
+
+# ❌ JAMAIS redémarrage sans shutdown API
+./server.exe  # (alors qu'il tourne déjà)
+```
+
+#### Pourquoi c'est critique
+
+| Raison | Explication |
+|--------|-------------|
+| **Persistance** | Shutdown API sauvegarde l'état (scores, config) |
+| **WebSocket** | Ferme proprement les connexions WS/TCP |
+| **Port 80** | Libère le port correctement |
+| **Corruption** | Kill forcé = risque corruption données |
+
+### 11.3 🏗️ Architecture 100% Go - Zéro Dépendance
+
+**Le serveur BuzzControl est entièrement développé en Go.**
+
+#### Principes
+
+- ✅ **100% Go** : Aucune dépendance Python, Node.js, ou autre langage
+- ✅ **Protocoles natifs** : TCP, WebSocket, HTTP, UDP, DNS, SmartConfig implémentés en Go
+- ✅ **Binaire portable** : Frontend React embarqué dans le binaire Go (embed)
+- ✅ **Cross-platform** : Windows, Linux ARM64, Raspberry Pi
+
+#### Build Frontend → Backend (ORDRE CRITIQUE)
+
+```bash
+# ✅ CORRECT : Frontend AVANT Backend
+cd server-go/web && npm run build  # 1. Build React
+cd .. && go build -o server.exe ./cmd/server  # 2. Embarque frontend
+
+# ❌ INTERDIT : Backend avant Frontend
+cd server-go && go build -o server.exe ./cmd/server  # ❌ Frontend pas à jour !
+cd web && npm run build  # ❌ Trop tard, déjà build !
+```
+
+#### Pourquoi cet ordre
+
+| Étape | Raison |
+|-------|--------|
+| 1. `npm run build` | Génère `web/build/` avec assets React |
+| 2. `go build` | Embarque `web/build/` via `embed` dans binaire |
+| **Résultat** | Binaire autonome ~25MB (serveur + frontend) |
+
+### 11.4 📦 Versioning Unifié (depuis v2.54.0)
+
+**Le serveur Go et le firmware ESP32 partagent la même version.**
+
+#### Sources de Version
+
+| Fichier | Rôle | Format |
+|---------|------|--------|
+| `server-go/config.json` | **Source de vérité** | `"version": "2.54.0"` |
+| `server-go/web/package.json` | Synchronisé | `"version": "2.54.0"` |
+| `src/BuzzClick/platformio.ini` | Injecté par CI | `FIRMWARE_VERSION="2.54.0"` |
+
+#### CI/CD GitHub Actions
+
+```yaml
+# Tag Git déclenche build de TOUS les composants
+git tag v2.54.0 && git push origin v2.54.0
+
+# GitHub Actions build en parallèle :
+- buzzcontrol-v2.54.0-windows-amd64.exe   # Serveur Windows
+- buzzcontrol-v2.54.0-linux-arm64         # Serveur Raspberry
+- buzzclick-v2.54.0-firmware.bin          # Firmware ESP32-C3
+```
+
+#### Règles de Versionnement
+
+| Type | Incrémente | Exemple | Usage |
+|------|-----------|---------|-------|
+| BUGFIX | Z | 2.54.0 → 2.54.1 | Correction bug |
+| FEATURE | Y (reset Z) | 2.54.1 → 2.55.0 | Nouvelle feature |
+| BREAKING | X (reset Y,Z) | 2.55.0 → 3.0.0 | Breaking change |
+
+### 11.5 🔌 Mode Hybride TCP + WebSocket (v3.0.0+)
+
+**Les buzzers BuzzClick supportent TCP (v1) et WebSocket (v3.0.0+).**
+
+#### Endpoints Buzzers
+
+| Protocol | Endpoint | Port | Version | Usage |
+|----------|----------|------|---------|-------|
+| TCP | - | 1234 | v1.x (legacy) | Rétrocompatibilité |
+| WebSocket | `/ws/buzzer` | 80 | v3.0.0+ | Mode moderne |
+| UDP | - | 1234 | v1.x | Broadcast discovery |
+
+#### Rétrocompatibilité
+
+- ✅ Buzzers **anciens** (firmware 1.209.3) : TCP port 1234
+- ✅ Buzzers **nouveaux** (firmware 3.0.0+) : WebSocket `/ws/buzzer`
+- ✅ **Mixte** : Serveur accepte TCP ET WebSocket simultanément
+
+#### Configuration WiFi USB (v3.0.0+)
+
+```bash
+# Commandes AT via USB série (115200 baud)
+AT+WIFI_SSID=MonWiFi
+AT+WIFI_PASS=MotDePasse
+AT+SERVER_IP=192.168.1.100
+AT+SERVER_PORT=80
+AT+SAVE
+AT+RESTART
+```
+
+### 11.6 ⚠️ IMPORTANT : Mise à Jour de la Mémoire Claude
+
+**Quand cette section est modifiée, Claude DOIT mettre à jour sa mémoire personnelle :**
+
+```bash
+# Emplacement mémoire Claude
+~/.claude/projects/<projet>/memory/MEMORY.md
+```
+
+**Sections à synchroniser dans MEMORY.md** :
+
+1. **Contrainte TV Display** (section 11.1)
+   - Overflow hidden obligatoire
+   - Pas de scroll autorisé
+   - Viewport units (vh/vw/%)
+   - flex min-height: 0
+
+2. **Redémarrage Serveur** (section 11.2)
+   - TOUJOURS curl /shutdown
+   - JAMAIS kill forcé
+   - Ordre rebuild : frontend → backend
+
+3. **Architecture 100% Go** (section 11.3)
+   - Pas de dépendances externes
+   - Build frontend AVANT backend
+   - Frontend embarqué dans binaire
+
+4. **Versioning Unifié** (section 11.4)
+   - Serveur + Firmware même version
+   - config.json = source vérité
+   - CI injecte version automatiquement
+
+5. **Mode Hybride TCP+WS** (section 11.5)
+   - /ws/buzzer pour WebSocket v3.0.0+
+   - TCP 1234 rétrocompatible
+   - Config WiFi USB (AT commands)
+
+**Commande pour Claude** : Quand COMMON.md section 11 change, exécuter :
+```
+Write/Edit(~/.claude/memory/MEMORY.md) avec mise à jour des sections projet
+```
+
+---
+
+## 12. Dispatch Automatique Backend/Frontend
 
 ### 10.1 Critères de Routage
 
