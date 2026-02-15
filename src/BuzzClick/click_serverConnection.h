@@ -4,7 +4,17 @@
 #include "Common/led.h"
 
 #include <esp_timer.h>
+
+#ifdef USE_WEBSOCKET
+// Forward declarations for WebSocket wrapper functions
+// Defined in click_websocketClient.h, included after this header
+void ws_sendBuzz(const String& mac, const String& buttonName);
+void ws_sendPong(const String& mac);
+bool ws_isConnected();
+void ws_connect();
+#else
 #include <AsyncUDP.h>
+#endif
 
 JsonDocument myCompleteConfig;  // Store the complete configuration
 bool isConfigInitialized = false;
@@ -15,17 +25,24 @@ uint64_t lastNTPUpdate = 0;
 int64_t ntpOffset = 0;
 
 bool isGameStarted = false;
+bool hasTeamAssignment = false;
 
-//const int CONTROLER_PORT = 1234;
+// Gray rotation animation state
+static unsigned long lastRotationTime = 0;
+static int currentLedIndex = 0;
+const int ROTATION_INTERVAL_MS = 200;
 
+#ifndef USE_WEBSOCKET
 AsyncUDP udp;
 
 String BcastJsonBuffer = "";
-const size_t MAX_BUFFER_SIZE = 8192; // Taille maximale du buffer (ajustez selon vos besoins)
+const size_t MAX_BUFFER_SIZE = 8192;
+#endif
 
 
 /* SOCKET */
 
+#ifndef USE_WEBSOCKET
 bool connectSRV()
 {
   if (!client) {
@@ -61,6 +78,7 @@ bool connectSRV()
   ESP_LOGW(SRV_TAG, "Connected to server");
   return true;
 }
+#endif // !USE_WEBSOCKET
 
 
 bool getServerIP()
@@ -91,6 +109,7 @@ bool getServerIP()
   return false;
 }
 
+#ifndef USE_WEBSOCKET
 void onConnect(void* arg, AsyncClient* c) {
   ESP_LOGI(SRV_TAG, "Connected to server: %s:%d", c->remoteIP().toString().c_str(), c->remotePort());
   hello_bumper();
@@ -99,15 +118,6 @@ void onConnect(void* arg, AsyncClient* c) {
 void onData(void* arg, AsyncClient* c, void* data, size_t len) {
   String s_data = String((char*)data).substring(0, len);
   ESP_LOGE(SRV_TAG, "direct DATA received: %s", s_data.c_str());
-/*
-  jsonBuffer += s_data;
-  int endOfJson;
-  while ((endOfJson = jsonBuffer.indexOf('\n')) > 0) {
-    String jsonPart = jsonBuffer.substring(0, endOfJson);
-    jsonBuffer = jsonBuffer.substring(endOfJson + 1);
-    parseJSON(jsonPart, c);
-  }
-*/
 }
 
 void onDisconnect(void* arg, AsyncClient* c) {
@@ -123,7 +133,7 @@ void send_to_server(String msg)
 }
 
 void sendMSG(String msgType, String message)
-{ 
+{
   String msg = "\"ID\": \"" + WiFi.macAddress() + "\"";
   msg += ", \"VERSION\": \"" + String(VERSION) +"\"";
   msg += ", \"ACTION\": \"" + msgType + "\"";
@@ -132,7 +142,6 @@ void sendMSG(String msgType, String message)
 }
 
 /* BROADCAST */
-// Fonction pour réinitialiser le buffer de manière sécurisée
 void resetBcastBuffer() {
   if (BcastJsonBuffer.length() > MAX_BUFFER_SIZE || BcastJsonBuffer.indexOf('{') == -1) {
     ESP_LOGW(SRV_TAG, "Buffer reset: size=%d", BcastJsonBuffer.length());
@@ -148,39 +157,32 @@ void onDataBroadcast(AsyncUDPPacket packet) {
 
     String s_data = String((char*)packet.data(), packet.length());
     ESP_LOGI(SRV_TAG, "Broadcast data received from %s: %i => %s", packet.remoteIP().toString().c_str(), packet.length(), s_data.c_str());
-    
+
     BcastJsonBuffer += s_data;
-// Limiter la taille du buffer pour éviter les problèmes de mémoire
   if (BcastJsonBuffer.length() > MAX_BUFFER_SIZE) {
     ESP_LOGW(SRV_TAG, "Buffer overflow, truncating: %d bytes", BcastJsonBuffer.length());
     BcastJsonBuffer = BcastJsonBuffer.substring(BcastJsonBuffer.length() - MAX_BUFFER_SIZE);
   }
 
-  // Traitement des messages complets
   int startPos = 0;
   int endOfJson;
   while ((endOfJson = BcastJsonBuffer.indexOf('\0', startPos)) > 0) {
-    // Extraire un message JSON complet
     String jsonPart = BcastJsonBuffer.substring(startPos, endOfJson);
-    
-    // Vérifier que le message est un JSON valide (contient au moins { et })
+
     if (jsonPart.indexOf('{') >= 0 && jsonPart.indexOf('}') >= 0) {
       ESP_LOGI(SRV_TAG, "Processing complete broadcast message: %s", jsonPart.c_str());
       parseJSON(jsonPart, nullptr);
     } else {
       ESP_LOGW(SRV_TAG, "Invalid JSON fragment received: %s", jsonPart.c_str());
     }
-    
-    // Avancer dans le buffer
+
     startPos = endOfJson + 1;
   }
-  
-  // Conserver uniquement la partie non traitée du buffer
+
   if (startPos > 0) {
     BcastJsonBuffer = BcastJsonBuffer.substring(startPos);
   }
-  
-  // Vérifier périodiquement l'état du buffer
+
   resetBcastBuffer();
 }
 
@@ -200,7 +202,47 @@ bool initBroadcastUDP()
   ESP_LOGI(SRV_TAG, "Broadcast UDP initialized on port %d", CONTROLER_PORT);
   return true;
 }
+#endif // !USE_WEBSOCKET
 
+
+/* LED ANIMATION */
+void startGrayRotation() {
+    hasTeamAssignment = false;
+    lastRotationTime = 0;
+    currentLedIndex = 0;
+}
+
+void updateGrayRotation() {
+    if (millis() - lastRotationTime > ROTATION_INTERVAL_MS) {
+        // Clear all LEDs
+        for (int i = 0; i < NUMPIXELS; i++) {
+            strip_sk98.setPixelColor(i, 0, 0, 0);
+        }
+
+        // Light up 1 LED out of 3 in gray
+        for (int offset = 0; offset < NUMPIXELS; offset += 3) {
+            int ledIndex = (currentLedIndex + offset) % NUMPIXELS;
+            strip_sk98.setPixelColor(ledIndex, 64, 64, 64);
+        }
+
+        showPixels();
+
+        currentLedIndex = (currentLedIndex + 1) % 3;
+        lastRotationTime = millis();
+    }
+}
+
+void stopGrayRotation() {
+    hasTeamAssignment = true;
+
+    // Clear all LEDs before setting team color
+    for (int i = 0; i < NUMPIXELS; i++) {
+        strip_sk98.setPixelColor(i, 0, 0, 0);
+    }
+    strip_sk98.show();
+
+    ESP_LOGD(SRV_TAG, "Gray rotation stopped");
+}
 
 /* CORE */
 void startGame() {
@@ -320,27 +362,70 @@ void handleUpdateAction(JsonObject& message, const String& macAddress) {
   const char* t_name = "";
   if (buzzer.containsKey("TEAM")) {
     t_name = buzzer["TEAM"];
-    ESP_LOGI(SRV_TAG, "My team=%s", t_name);
-    
-    if (message.containsKey("teams") && message["teams"].containsKey(t_name)) {
-      team = message["teams"][t_name];
-      
-      // Store/update the team information in our complete config
-      myCompleteConfig["team"] = team;
-      
-      serializeJson(team, output);
-      ESP_LOGI(SRV_TAG, "    =>%s", output.c_str());
+    String teamName = String(t_name);
+
+    if (teamName.length() > 0) {
+      hasTeamAssignment = true;
+      ESP_LOGI(SRV_TAG, "My team=%s", t_name);
+
+      if (message.containsKey("teams") && message["teams"].containsKey(t_name)) {
+        team = message["teams"][t_name];
+
+        // Store/update the team information in our complete config
+        myCompleteConfig["team"] = team;
+
+        serializeJson(team, output);
+        ESP_LOGI(SRV_TAG, "    =>%s", output.c_str());
+      }
+    } else {
+      // TEAM field exists but is empty - buzzer removed from team
+      ESP_LOGI(SRV_TAG, "UPDATE - Team field empty, starting gray rotation");
+      startGrayRotation();
     }
+  } else {
+    // No TEAM field at all - buzzer not assigned to any team
+    ESP_LOGI(SRV_TAG, "UPDATE - No team assigned, starting gray rotation");
+    startGrayRotation();
   }
 
   team = myCompleteConfig["team"].as<JsonObject>();
 
-  // Extract color information
-  int r = 0, g = 0, b = 0;
+  // Extract color information and update LED
+  int r = 128, g = 128, b = 128;  // Default: gray (no team)
+
   if (team.containsKey("COLOR")) {
     colorArray = team["COLOR"].as<JsonArray>();
+    if (colorArray.size() >= 3) {
+      r = colorArray[0];
+      g = colorArray[1];
+      b = colorArray[2];
+      ESP_LOGI(SRV_TAG, "Team color: RGB(%d, %d, %d)", r, g, b);
+    }
   } else if (team.containsKey("color")) {
     colorArray = team["color"].as<JsonArray>();
+    if (colorArray.size() >= 3) {
+      r = colorArray[0];
+      g = colorArray[1];
+      b = colorArray[2];
+      ESP_LOGI(SRV_TAG, "Team color: RGB(%d, %d, %d)", r, g, b);
+    }
+  } else {
+    // No team assigned - start gray rotation
+    ESP_LOGI(SRV_TAG, "No team assigned - starting gray rotation");
+    startGrayRotation();
+  }
+
+  // Update buzzer LED to team color (skip if gray rotation active)
+  if (hasTeamAssignment) {
+    #ifdef USE_WEBSOCKET
+    if (ws_isConnected()) {
+      stopGrayRotation();
+      setLedColor(r, g, b, true);
+    }
+    #else
+    stopGrayRotation();
+    setLedColor(r, g, b, true);
+    #endif
   }
   
   if (colorArray.size() == 3) {
@@ -377,9 +462,65 @@ void handleUpdateAction(JsonObject& message, const String& macAddress) {
 }
 
 
+void handleReadyAction(JsonDocument& doc) {
+    ESP_LOGI(SRV_TAG, "Received READY - game state updated");
+
+    String myMAC = WiFi.macAddress();
+    JsonObject msg = doc["MSG"].as<JsonObject>();
+
+    // Check if buzzer is in bumpers list
+    if (msg.containsKey("bumpers") && msg["bumpers"].containsKey(myMAC)) {
+        JsonObject myBumper = msg["bumpers"][myMAC].as<JsonObject>();
+
+        if (myBumper.containsKey("TEAM")) {
+            String teamName = myBumper["TEAM"].as<String>();
+
+            if (teamName.length() > 0) {
+                // Get team color from teams list
+                if (msg.containsKey("teams") && msg["teams"].containsKey(teamName)) {
+                    JsonObject team = msg["teams"][teamName].as<JsonObject>();
+
+                    if (team.containsKey("COLOR")) {
+                        JsonArray colorArray = team["COLOR"].as<JsonArray>();
+                        int r = colorArray[0];
+                        int g = colorArray[1];
+                        int b = colorArray[2];
+
+                        ESP_LOGI(SRV_TAG, "READY - Team %s, color RGB(%d,%d,%d)",
+                                 teamName.c_str(), r, g, b);
+
+                        #ifdef USE_WEBSOCKET
+                        if (ws_isConnected()) {
+                            stopGrayRotation();
+                            setLedColor(r, g, b, true);
+                        }
+                        #else
+                        stopGrayRotation();
+                        setLedColor(r, g, b, true);
+                        #endif
+                    }
+                }
+            } else {
+                // TEAM field exists but is empty - buzzer removed from team
+                ESP_LOGI(SRV_TAG, "READY - Team field empty, starting gray rotation");
+                startGrayRotation();
+            }
+        } else {
+            // No TEAM field - buzzer not assigned to any team
+            ESP_LOGI(SRV_TAG, "READY - No team assigned, starting gray rotation");
+            startGrayRotation();
+        }
+    }
+}
+
 void hello_bumper()
 {
+#ifdef USE_WEBSOCKET
+  // In WS mode, HELLO/enroll is sent by wsClient on connect
+  ESP_LOGI(SRV_TAG, "hello_bumper: WS mode, enroll handled by wsClient");
+#else
   sendMSG("HELLO", myConfig);
+#endif
 }
 
 void resetGame() {
@@ -422,7 +563,11 @@ void parseJSON(const String& data, AsyncClient* c) {
     case hash("PING"):
       ESP_LOGI(SRV_TAG, "Replying PONG");
       resetGame();
+#ifdef USE_WEBSOCKET
+      ws_sendPong(WiFi.macAddress());
+#else
       sendMSG("PONG", "'" + WiFi.localIP().toString() + "'");
+#endif
       break;
       
     case hash("UPDATE"):
@@ -434,9 +579,20 @@ void parseJSON(const String& data, AsyncClient* c) {
       
     case hash("HELLO"):
       ESP_LOGI(SRV_TAG, "Send HELLO to Controller");
+#ifdef USE_WEBSOCKET
+      if (!ws_isConnected()) {
+        ws_connect();
+      }
+#else
       connectSRV();
+#endif
       break;
       
+    case hash("READY"):
+      ESP_LOGI(SRV_TAG, "Received READY state");
+      handleReadyAction(receivedData);
+      break;
+
     case hash("RESET"):
       ESP_LOGI(SRV_TAG, "Resetting Data");
       resetGame();
@@ -492,21 +648,25 @@ void attachButtons()
 void manageButtonMessages() {
   static const size_t BUTTON_COUNT = sizeof(buttonsInfo) / sizeof(ButtonInfo);
 
-  for (size_t id = 0; id < BUTTON_COUNT; id++) 
+  for (size_t id = 0; id < BUTTON_COUNT; id++)
   {
     if (buttonsInfo[id].pressed) {
-      JsonDocument doc;  // Adjust size as needed
+      ESP_LOGI(SRV_TAG, "Button pressed: %s", buttonsInfo[id].name.c_str());
+
+#ifdef USE_WEBSOCKET
+      ws_sendBuzz(WiFi.macAddress(), buttonsInfo[id].name);
+#else
+      JsonDocument doc;
       doc["button"] = buttonsInfo[id].name;
 
       String msg;
       if (serializeJson(doc, msg) == 0) {
         ESP_LOGE(SRV_TAG, "Failed to serialize JSON for button %zu", id);
-        continue;  // Skip to next iteration if serialization fails
+        continue;
       }
 
-      ESP_LOGI(SRV_TAG, "Button pressed: %s", msg.c_str()); 
-
       sendMSG("BUTTON", msg);
+#endif
 
       buttonsInfo[id].pressed=false;
     }
