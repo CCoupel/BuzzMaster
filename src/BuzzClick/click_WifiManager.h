@@ -6,7 +6,7 @@
 #include "click_serverConnection.h"
 
 #ifdef USE_WEBSOCKET
-#include "click_websocketClient.h"
+#include "click_websocket_espidf.h"
 #endif
 
 #include "esp_task_wdt.h"
@@ -21,6 +21,7 @@ bool connectToWifi();
 
 void WiFiStationConnected(WiFiEvent_t event, WiFiEventInfo_t info){
   ESP_LOGI(WIFI_TAG,"Connecté au WiFi");
+
 }
 
 void WiFiGotIP(WiFiEvent_t event, WiFiEventInfo_t info){
@@ -47,15 +48,13 @@ void WiFiGotIP(WiFiEvent_t event, WiFiEventInfo_t info){
     yield();
 
 #ifdef USE_WEBSOCKET
-    // WebSocket mode: connect directly to server via WebSocket
-    uint16_t wsPort = (localUdpPort > 0) ? localUdpPort : 80;
-    if (!connectWebSocket(serverIP, wsPort)) {
+    // WebSocket protocol
+    if (!connectWebSocket(serverIP, 80)) {
         ESP_LOGE(WIFI_TAG, "Failed to connect WebSocket. Restarting...");
         ESP.restart();
     }
-    ESP_LOGI(WIFI_TAG, "READY (WebSocket)");
 #else
-    // TCP mode: connect via raw TCP + UDP broadcast
+    // TCP/UDP legacy protocol
     if (!connectSRV()) {
         ESP_LOGE(WIFI_TAG, "Failed to connect to server. Restarting...");
         ESP.restart();
@@ -66,9 +65,9 @@ void WiFiGotIP(WiFiEvent_t event, WiFiEventInfo_t info){
         ESP_LOGE(WIFI_TAG, "Failed to listen to server. Restarting...");
         ESP.restart();
     }
-    ESP_LOGI(WIFI_TAG, "READY");
 #endif
 
+    ESP_LOGI(WIFI_TAG, "READY");
     // Green = connected
     setLedColor(0, 255, 0, true);
 }

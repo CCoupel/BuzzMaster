@@ -83,6 +83,10 @@ bool checkBootButton() {
         // FIX: Clear NVS config to persist factory reset
         nvsClearConfig();
 
+        ESP_LOGI(MAIN_TAG, "NVS cleared, rebooting to apply factory reset...");
+        delay(500);  // Let log flush before reboot
+        ESP.restart();  // Force immediate reboot to re-read empty NVS
+
         usbOnlyMode = true;
         setLedColor(255, 0, 255, true);  // Magenta = USB config mode
         return true;  // Caller handles WiFi.OFF + log suppression + USB_READY
@@ -166,11 +170,6 @@ void setup()
 
   CustomLogger::init(logPort);
   ESP_LOGI(MAIN_TAG, "BOOTING Version: %s", String(VERSION));
-#ifdef USE_WEBSOCKET
-  ESP_LOGI(MAIN_TAG, "Protocol: WebSocket");
-#else
-  ESP_LOGI(MAIN_TAG, "Protocol: TCP/UDP (legacy)");
-#endif
 
   for (int led=0; led<NUMPIXELS/4; led++) {
     setPixelColor(NUMPIXELS/4+led+1, 0, 0, 255);
@@ -207,11 +206,11 @@ void loop() {
     return;
   }
 
-#ifdef USE_WEBSOCKET
-  // WebSocket mode: poll for incoming messages and handle reconnection
-  pollWebSocket();
-  checkWebSocketConnection();
-#endif
-  // Handle button presses (both modes)
+  // If no team assigned, run gray rotation animation
+  if (!hasTeamAssignment) {
+    updateGrayRotation();
+  }
+
+  // Normal mode: manage button presses
   manageButtonMessages();
 }

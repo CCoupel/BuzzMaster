@@ -3,6 +3,64 @@
 Historique des versions du projet BuzzControl.
 
 
+## [3.0.7] - 2026-02-15
+
+### Fixed
+- **[BuzzClick Firmware]**: Fixed LED superposition when assigning team color
+  - Added `stopGrayRotation()` function to clear all gray LEDs and stop animation before displaying team color
+  - Prevents visual artifact where gray animation LEDs persisted when team color was applied
+  - Ensures clean transition from gray animation to team color display
+
+
+## [3.0.6] - 2026-02-15
+
+### Fixed
+- **[BuzzClick Firmware]**: Fixed gray LED animation not restarting when buzzer removed from team
+  - Enhanced team detection in `handleUpdateAction()` and `handleReadyAction()` to check for empty TEAM field
+  - Three cases handled: TEAM present+non-empty (show team color), TEAM present+empty (start gray animation), TEAM absent (start gray animation)
+  - Previously, when removing a buzzer from a team, the LED stayed on the last team color instead of restarting the gray rotation
+
+
+## [3.0.5] - 2026-02-15
+
+### Fixed
+- **[BuzzClick Firmware]**: Fixed WebSocket message fragmentation detection
+  - Replaced null-terminator detection (`\0`) with JSON brace counting algorithm
+  - Correctly detects complete JSON messages by counting `{` and `}` while respecting strings and escape sequences
+  - Parses message when brace count returns to 0, indicating complete JSON
+  - WebSocket protocol uses frame metadata (FIN bit), not null terminators like TCP
+  - Added 64KB buffer limit with overflow protection
+
+
+## [3.0.4] - 2026-02-15
+
+### Added
+- **[BuzzClick Firmware]**: Added ACTION READY support via WebSocket
+  - New `handleReadyAction()` function parses READY messages and extracts team color from BUMPER field
+  - Handles both UPDATE and READY actions for team assignment
+- **[BuzzClick Firmware]**: Added gray LED animation when no team assigned
+  - Displays 1 LED out of 3 in gray (RGB 64,64,64) rotating every 200ms
+  - Animation starts when buzzer not assigned to any team
+  - Functions: `startGrayRotation()`, `updateGrayRotation()` called from main loop
+
+### Fixed
+- **[BuzzClick Firmware]**: Initial WebSocket fragmentation handling attempt (later fixed in v3.0.5)
+  - Attempted null-terminator detection for message completion (incorrect approach)
+  - Added fragment buffer to accumulate partial WebSocket frames
+
+
+## [3.0.3] - 2026-02-15
+
+### Fixed
+- **[BuzzClick Firmware]**: Factory reset now persists after reboot
+  - Added `ESP.restart()` after `nvsClearConfig()` in `checkBootButton()` to force immediate reboot after clearing NVS
+  - Ensures empty WiFi config is reloaded on boot, preventing unwanted WiFi autostart
+  - Previously, the buzzer would reconnect to the old WiFi network after factory reset because the cleared NVS values were not re-read until the next power cycle
+- **[BuzzClick Firmware]**: Fixed build error when USE_WEBSOCKET=1
+  - Added conditional compilation guards in `WiFiGotIP()` to use `connectWebSocket()` for WebSocket mode, `connectSRV()`+`initBroadcastUDP()` for TCP mode
+  - Resolves declaration error for `initBroadcastUDP()` and `connectSRV()` when WebSocket protocol is enabled
+
+
 ## [3.0.0] - 2026-02-15
 
 ### Added

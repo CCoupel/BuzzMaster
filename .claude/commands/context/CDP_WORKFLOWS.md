@@ -45,7 +45,91 @@ Rôle: Orchestrer workflows multi-agents avec validation utilisateur
 
 ---
 
-## 4. Phases Communes
+## 4. Gestion des Agents - RÈGLE CRITIQUE
+
+### ⚠️ PRINCIPE : RÉUTILISATION DES AGENTS
+
+**INTERDIT** : Créer un nouvel agent pour chaque micro-tâche ou correction.
+
+**OBLIGATOIRE** : Réutiliser les agents existants via `SendMessage` et `TaskUpdate`.
+
+#### Pattern CORRECT ✅
+
+```javascript
+// 1. Créer les agents UNE SEULE FOIS au début
+Task({
+  subagent_type: "dev-backend",
+  name: "backend-dev",
+  team_name: "bugfix-xxx",
+  prompt: "Implémente le bugfix backend..."
+})
+
+Task({
+  subagent_type: "dev-buzzclick",
+  name: "buzzclick-dev",
+  team_name: "bugfix-xxx",
+  prompt: "Implémente le bugfix firmware..."
+})
+
+// 2. Pour les corrections/itérations : RÉUTILISER via SendMessage
+SendMessage({
+  type: "message",
+  recipient: "buzzclick-dev",  // ✅ Réutilisation du même agent
+  content: "Le test a révélé un bug de fragmentation. Corrige isCompleteJSON()...",
+  summary: "Correction v3.0.5"
+})
+
+// 3. Assigner nouvelle tâche via TaskUpdate
+TaskUpdate({
+  taskId: "42",
+  owner: "buzzclick-dev",  // ✅ Même agent, nouvelle tâche
+  status: "in_progress"
+})
+```
+
+#### Pattern INCORRECT ❌
+
+```javascript
+// NE JAMAIS FAIRE CECI :
+Task({ name: "buzzclick-dev", ... })          // v3.0.3
+Task({ name: "buzzclick-fix-ws", ... })       // v3.0.4 ❌ NOUVEAU agent
+Task({ name: "buzzclick-fix-frag", ... })     // v3.0.5 ❌ NOUVEAU agent
+Task({ name: "buzzclick-fix-anim", ... })     // v3.0.6 ❌ NOUVEAU agent
+```
+
+**Pourquoi c'est mauvais** :
+- ❌ Gaspillage de ressources (spawn multiples)
+- ❌ Perte de contexte entre itérations
+- ❌ Pollution de la task list
+- ❌ Contraire au pattern "équipe stable"
+
+#### Agents Standards à Réutiliser
+
+| Agent | Name | Réutilisation | Cas d'usage |
+|-------|------|---------------|-------------|
+| dev-backend | `backend-dev` | ✅ Toutes corrections Go | Modifications serveur Go |
+| dev-frontend | `frontend-dev` | ✅ Toutes corrections React | Modifications interface web |
+| dev-buzzclick | `buzzclick-dev` | ✅ Toutes corrections firmware | Modifications firmware ESP32 |
+| test-writer | `test-writer` | ✅ Tous nouveaux tests | Ajout tests unitaires/E2E |
+| code-reviewer | `reviewer` | ✅ Toutes revues | Analyse qualité code |
+| QA | `qa-tester` | ✅ Tous cycles QA | Exécution tests |
+| doc-updater | `doc-writer` | ✅ Toutes mises à jour doc | Changelog, CLAUDE.md |
+
+#### Workflow de Réutilisation
+
+```
+1️⃣ CRÉATION (une fois) : Task() crée l'agent
+2️⃣ TRAVAIL : Agent exécute sa tâche
+3️⃣ COMPLÉTION : TaskUpdate(status: "completed")
+4️⃣ ITÉRATION : SendMessage() + TaskUpdate(owner: "agent-name") ♻️
+5️⃣ Retour à l'étape 2️⃣ avec le MÊME agent
+```
+
+**Règle d'or** : Un agent par **rôle** dans l'équipe, pas un agent par **tâche**.
+
+---
+
+## 5. Phases Communes
 
 ### Phase Init (Git)
 
@@ -108,7 +192,7 @@ Si cycle > 3 → ESCALADE utilisateur
 
 ---
 
-## 5. Points de Validation Utilisateur
+## 6. Points de Validation Utilisateur
 
 | Point | Conditions | Options |
 |-------|------------|---------|
@@ -119,7 +203,7 @@ Si cycle > 3 → ESCALADE utilisateur
 
 ---
 
-## 6. Gestion des Erreurs CDP
+## 7. Gestion des Erreurs CDP
 
 | Situation | Action |
 |-----------|--------|
@@ -132,7 +216,7 @@ Si cycle > 3 → ESCALADE utilisateur
 
 ---
 
-## 7. Rapport Final CDP
+## 8. Rapport Final CDP
 
 ```markdown
 ## Rapport de Workflow [TYPE]
@@ -156,7 +240,7 @@ Si cycle > 3 → ESCALADE utilisateur
 
 ---
 
-## 8. Règles par Type
+## 9. Règles par Type
 
 ### FEATURE
 
@@ -192,7 +276,7 @@ Si cycle > 3 → ESCALADE utilisateur
 
 ---
 
-## 9. Mots-Clés de Contrôle
+## 10. Mots-Clés de Contrôle
 
 Les commandes CDP reconnaissent des mots-clés spéciaux pour interroger ou reprendre un workflow.
 
