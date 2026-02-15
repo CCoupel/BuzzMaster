@@ -21,6 +21,7 @@ backlog/
 | [metadata-binaires.md](TODO/metadata-binaires.md) | Métadonnées dans les binaires (nom, version, icône) |
 | [buzzer-wifi-provisioning-smartconfig.md](TODO/buzzer-wifi-provisioning-smartconfig.md) | Provisionnement WiFi des buzzers via SmartConfig (intégré ENROLL) |
 | [buzzer-protocol-websocket.md](TODO/buzzer-protocol-websocket.md) | Migration du protocole des buzzers physiques de TCP vers WebSocket |
+| [buzzer-firmware-ota-update.md](TODO/buzzer-firmware-ota-update.md) | Mise à jour OTA du firmware des buzzers (détection version, pastille obsolète, upload firmware) |
 
 ## En-Cours
 
