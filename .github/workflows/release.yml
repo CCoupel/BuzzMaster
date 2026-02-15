@@ -224,11 +224,18 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Download all artifacts
+      - name: Download server binaries
         uses: actions/download-artifact@v4
         with:
           path: artifacts
           pattern: binary-*
+          merge-multiple: true
+
+      - name: Download firmware
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          pattern: firmware-*
           merge-multiple: true
 
       - name: List artifacts
