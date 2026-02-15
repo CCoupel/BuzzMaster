@@ -166,6 +166,11 @@ void setup()
 
   CustomLogger::init(logPort);
   ESP_LOGI(MAIN_TAG, "BOOTING Version: %s", String(VERSION));
+#ifdef USE_WEBSOCKET
+  ESP_LOGI(MAIN_TAG, "Protocol: WebSocket");
+#else
+  ESP_LOGI(MAIN_TAG, "Protocol: TCP/UDP (legacy)");
+#endif
 
   for (int led=0; led<NUMPIXELS/4; led++) {
     setPixelColor(NUMPIXELS/4+led+1, 0, 0, 255);
@@ -202,6 +207,11 @@ void loop() {
     return;
   }
 
-  // Normal mode: manage button presses
+#ifdef USE_WEBSOCKET
+  // WebSocket mode: poll for incoming messages and handle reconnection
+  pollWebSocket();
+  checkWebSocketConnection();
+#endif
+  // Handle button presses (both modes)
   manageButtonMessages();
 }

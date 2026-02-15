@@ -4,6 +4,11 @@
 #include "Common/led.h"
 #include "click_nvsConfig.h"
 #include "click_serverConnection.h"
+
+#ifdef USE_WEBSOCKET
+#include "click_websocketClient.h"
+#endif
+
 #include "esp_task_wdt.h"
 
 #include <WiFi.h>
@@ -16,7 +21,6 @@ bool connectToWifi();
 
 void WiFiStationConnected(WiFiEvent_t event, WiFiEventInfo_t info){
   ESP_LOGI(WIFI_TAG,"Connecté au WiFi");
-
 }
 
 void WiFiGotIP(WiFiEvent_t event, WiFiEventInfo_t info){
@@ -41,6 +45,17 @@ void WiFiGotIP(WiFiEvent_t event, WiFiEventInfo_t info){
     setLedColor(128,128,0,true);
     resetGame();
     yield();
+
+#ifdef USE_WEBSOCKET
+    // WebSocket mode: connect directly to server via WebSocket
+    uint16_t wsPort = (localUdpPort > 0) ? localUdpPort : 80;
+    if (!connectWebSocket(serverIP, wsPort)) {
+        ESP_LOGE(WIFI_TAG, "Failed to connect WebSocket. Restarting...");
+        ESP.restart();
+    }
+    ESP_LOGI(WIFI_TAG, "READY (WebSocket)");
+#else
+    // TCP mode: connect via raw TCP + UDP broadcast
     if (!connectSRV()) {
         ESP_LOGE(WIFI_TAG, "Failed to connect to server. Restarting...");
         ESP.restart();
@@ -52,6 +67,8 @@ void WiFiGotIP(WiFiEvent_t event, WiFiEventInfo_t info){
         ESP.restart();
     }
     ESP_LOGI(WIFI_TAG, "READY");
+#endif
+
     // Green = connected
     setLedColor(0, 255, 0, true);
 }
