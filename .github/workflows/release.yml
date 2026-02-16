@@ -14,7 +14,7 @@ env:
 
 jobs:
   # ============================================
-  # STAGE 1: Checking
+  # STAGE 1: Checking (extract version from tag)
   # ============================================
   checking:
     name: 🔍 Checking
@@ -24,46 +24,13 @@ jobs:
       version: ${{ steps.version.outputs.VERSION }}
 
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
       - name: Get version from tag
         id: version
-        run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
-
-      - name: Verify config.json version
         run: |
-          CONFIG_VERSION=$(grep '"version"' server-go/config.json | sed 's/.*"version": "\([^"]*\)".*/\1/')
-          TAG_VERSION="${{ steps.version.outputs.VERSION }}"
-
-          echo "Config version: $CONFIG_VERSION"
-          echo "Tag version: $TAG_VERSION"
-
-          if [ "$CONFIG_VERSION" != "$TAG_VERSION" ]; then
-            echo "❌ ERROR: config.json version ($CONFIG_VERSION) does not match tag ($TAG_VERSION)"
-            exit 1
-          fi
-          echo "✅ config.json version matches"
-
-      - name: Verify package.json version
-        run: |
-          PACKAGE_VERSION=$(grep '"version"' server-go/web/package.json | sed 's/.*"version": "\([^"]*\)".*/\1/')
-          TAG_VERSION="${{ steps.version.outputs.VERSION }}"
-
-          echo "Package version: $PACKAGE_VERSION"
-          echo "Tag version: $TAG_VERSION"
-
-          if [ "$PACKAGE_VERSION" != "$TAG_VERSION" ]; then
-            echo "❌ ERROR: package.json version ($PACKAGE_VERSION) does not match tag ($TAG_VERSION)"
-            exit 1
-          fi
-          echo "✅ package.json version matches"
-
-      - name: Version check summary
-        run: |
+          VERSION="${GITHUB_REF#refs/tags/v}"
+          echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
           echo "=========================================="
-          echo "✅ All version checks passed!"
-          echo "   Release version: v${{ steps.version.outputs.VERSION }}"
+          echo "✅ Release version: v$VERSION"
           echo "=========================================="
 
   # ============================================
@@ -101,6 +68,25 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'npm'
           cache-dependency-path: server-go/web/package-lock.json
+
+      - name: Inject version from tag
+        run: |
+          VERSION="${{ needs.checking.outputs.version }}"
+          echo "Injecting version $VERSION into config files..."
+
+          # Inject into config.json (server)
+          sed -i "s/\"version\": \"[^\"]*\"/\"version\": \"$VERSION\"/" server-go/config.json
+          echo "  config.json: $(grep '"version"' server-go/config.json)"
+
+          # Inject into internal config.json copy
+          sed -i "s/\"version\": \"[^\"]*\"/\"version\": \"$VERSION\"/" server-go/internal/server/config.json
+          echo "  internal config.json: $(grep '"version"' server-go/internal/server/config.json)"
+
+          # Inject into package.json (frontend)
+          sed -i "s/\"version\": \"[^\"]*\"/\"version\": \"$VERSION\"/" server-go/web/package.json
+          echo "  package.json: $(grep '"version"' server-go/web/package.json | head -1)"
+
+          echo "✅ All versions set to $VERSION"
 
       - name: Install frontend dependencies
         working-directory: server-go/web
