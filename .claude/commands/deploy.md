@@ -253,16 +253,32 @@ Arrête et redéploie le serveur BuzzControl vers l'environnement cible.
     curl -s http://localhost/shutdown
     # Attendre 2 secondes
 
-16. **Télécharger l'exécutable GitHub Release (PROD uniquement)**
-    Télécharger le binaire Windows depuis la release GitHub :
+16. **Télécharger TOUS les binaires GitHub Release (PROD uniquement)**
+    Télécharger les 3 binaires depuis la release GitHub :
 
-    # PowerShell (Windows)
-    $version = "X.Y.0"
-    $url = "https://github.com/CCoupel/BuzzMaster/releases/download/v$version/buzzcontrol-v$version-windows-amd64.exe"
-    Invoke-WebRequest -Uri $url -OutFile "server-go/server.exe"
+    a) **Serveur Windows** :
+       # PowerShell (Windows)
+       $version = "X.Y.0"
+       $url = "https://github.com/CCoupel/BuzzMaster/releases/download/v$version/buzzcontrol-v$version-windows-amd64.exe"
+       Invoke-WebRequest -Uri $url -OutFile "server-go/server.exe"
 
-    # Ou avec curl
-    curl -L -o server-go/server.exe "https://github.com/CCoupel/BuzzMaster/releases/download/vX.Y.0/buzzcontrol-vX.Y.0-windows-amd64.exe"
+       # Ou avec curl
+       curl -L -o server-go/server.exe "https://github.com/CCoupel/BuzzMaster/releases/download/vX.Y.0/buzzcontrol-vX.Y.0-windows-amd64.exe"
+
+    b) **Serveur Linux ARM64** (Raspberry Pi) :
+       curl -L -o ./releases/vX.Y.0/buzzcontrol-vX.Y.0-linux-arm64 "https://github.com/CCoupel/BuzzMaster/releases/download/vX.Y.0/buzzcontrol-vX.Y.0-linux-arm64"
+       chmod +x ./releases/vX.Y.0/buzzcontrol-vX.Y.0-linux-arm64
+
+    c) **Firmware BuzzClick** (ESP32-C3) :
+       curl -L -o ./releases/vX.Y.0/buzzclick-vX.Y.0-firmware.bin "https://github.com/CCoupel/BuzzMaster/releases/download/vX.Y.0/buzzclick-vX.Y.0-firmware.bin"
+
+    **Créer le répertoire de release si nécessaire** :
+       mkdir -p ./releases/vX.Y.0
+
+    **Résultat attendu** :
+       - server-go/server.exe (exécutable Windows pour validation immédiate)
+       - ./releases/vX.Y.0/buzzcontrol-vX.Y.0-linux-arm64 (pour Raspberry Pi)
+       - ./releases/vX.Y.0/buzzclick-vX.Y.0-firmware.bin (pour flash buzzers)
 
 17. **Lancer le serveur dans une fenêtre visible (PROD uniquement)**
     L'utilisateur doit voir les logs dans la console :
@@ -300,8 +316,12 @@ Arrête et redéploie le serveur BuzzControl vers l'environnement cible.
     - Vérification version : Version attendue vs version serveur (DOIT MATCHER)
     - Retries : Nombre de tentatives si version mismatch (0 = succès direct)
     - Git (PROD) : Push, merge, tag
-    - CI GitHub : Statut validé par l'utilisateur
-    - Release GitHub : URL de la release, binaires téléchargés
+    - CI GitHub : Statut (success/failure), durée
+    - Release GitHub : URL de la release
+    - Binaires téléchargés (PROD) :
+      * server.exe (Windows) : Taille, chemin
+      * buzzcontrol-linux-arm64 (Raspberry Pi) : Taille, chemin
+      * buzzclick-firmware.bin (ESP32-C3) : Taille, chemin
     - Exécutable final : Source (GitHub Release), version validée
     - Décision : SUCCESS / FAILED
 
