@@ -3,6 +3,30 @@
 Historique des versions du projet BuzzControl.
 
 
+## [3.0.8] - 2026-02-16
+
+### Fixed
+- **[BuzzClick Firmware]**: Cycle gris 1/3 supprime pendant boot grace au flag `bootComplete`
+  - Le gray rotation s'executait des le boot et ecrasait tous les patterns LED
+  - Flag `bootComplete = false` initialise, mis a `true` apres Phase 6 (HELLO ack)
+  - Fichiers : `click_serverConnection.h`, `click_MAIN.cpp`
+- **[BuzzClick Firmware]**: Phase 3 orange 2/4 maintenant visible
+  - `resetGame()` et `connectWebSocket()` ecrasaient le pattern Phase 3
+  - Deplace `resetGame()` avant Phase 3, supprime yellow LED overwrite dans WebSocket
+  - Fichiers : `click_WifiManager.h`, `click_websocket_espidf.h`, `click_websocketClient.h`
+- **[BuzzClick Firmware]**: Delays 500ms ajoutes pour visibilite de toutes les phases boot
+  - Toutes les phases boot ont maintenant un `delay(500)` pour etre visibles
+
+### Changed
+- **[BuzzClick Firmware]**: Nouveau pattern LED boot (6 phases)
+  - Phase 1 : RED 1/2 (12 LEDs) - Boot start (RED 1/4 → 1/2)
+  - Phase 2 : RED 1/4 (6 LEDs) - WiFi connecting (ORANGE → RED)
+  - Phase 3 : ORANGE 1/4 (6 LEDs) - WiFi connected (ORANGE 2/4 → 1/4)
+  - Phase 4 : ORANGE 2/4 (12 LEDs) - WebSocket connecting (NOUVEAU)
+  - Phase 5 : GREEN 2/4 (12 LEDs) - WebSocket connected (inchange)
+  - Phase 6 : GREEN 3/4 (17 LEDs) - HELLO ack (inchange)
+
+
 ## [3.0.7] - 2026-02-15
 
 ### Fixed

@@ -9,12 +9,13 @@ import (
 
 // Config holds all server configuration
 type Config struct {
-	Server     ServerConfig     `json:"server"`
-	WiFi       WiFiConfig       `json:"wifi"`
-	Game       GameConfig       `json:"game"`
-	Storage    StorageConfig    `json:"storage"`
-	NeonEffect NeonEffectConfig `json:"neon_effect"`
-	Version    string           `json:"version"`
+	Server       ServerConfig       `json:"server"`
+	WiFi         WiFiConfig         `json:"wifi"`
+	Game         GameConfig         `json:"game"`
+	Storage      StorageConfig      `json:"storage"`
+	NeonEffect   NeonEffectConfig   `json:"neon_effect"`
+	WiFiDefaults WiFiDefaultsConfig `json:"wifi_defaults"`
+	Version      string             `json:"version"`
 }
 
 type ServerConfig struct {
@@ -29,6 +30,13 @@ type ServerConfig struct {
 type WiFiConfig struct {
 	SSID     string `json:"ssid"`
 	Password string `json:"password"`
+}
+
+type WiFiDefaultsConfig struct {
+	SSID       string `json:"ssid"`
+	Password   string `json:"password"`
+	ServerIP   string `json:"server_ip"`
+	ServerPort int    `json:"server_port"`
 }
 
 type GameConfig struct {
@@ -96,6 +104,11 @@ func Load(path string) (*Config, error) {
 	}
 	if cfg.Version == "" {
 		cfg.Version = "2.46.1"
+	}
+
+	// WiFiDefaults defaults
+	if cfg.WiFiDefaults.ServerPort == 0 {
+		cfg.WiFiDefaults.ServerPort = 80
 	}
 
 	// NeonEffect defaults

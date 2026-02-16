@@ -122,10 +122,11 @@ public:
         if (totalLen > 0) {
             Serial.write(logBuffer, totalLen);
             
-            if (initialized) {
-                udp.beginPacket(broadcastIP, logPort);
-                udp.write((const uint8_t*)logBuffer, totalLen);
-                udp.endPacket();
+            if (initialized && WiFi.status() == WL_CONNECTED) {
+                if (udp.beginPacket(broadcastIP, logPort)) {
+                    udp.write((const uint8_t*)logBuffer, totalLen);
+                    udp.endPacket();
+                }
             }
         }
 

@@ -101,8 +101,10 @@ static void ws_event_handler(void *handler_args, esp_event_base_t base, int32_t 
                 esp_websocket_client_send_text(wsClient, helloJson.c_str(), helloJson.length(), portMAX_DELAY);
             }
 
-            // Green LED = connected
-            setLedColor(0, 255, 0, true);
+            // === BOOT PHASE 5: GREEN 2/4 - WebSocket connected ===
+            setLedColor(0, 255, 0, true, 0, 2);
+            ESP_LOGI(WS_TAG, "Boot phase: GREEN 2/4 (WebSocket connected)");
+            delay(500);
             break;
 
         case WEBSOCKET_EVENT_DISCONNECTED:
@@ -166,9 +168,6 @@ bool connectWebSocket(const String& ip, uint16_t port) {
 
     ESP_LOGI(WS_TAG, "Connecting to WebSocket: %s", wsUrl.c_str());
 
-    // Yellow LED = connecting
-    setLedColor(255, 200, 0, true);
-
     // Configure WebSocket client
     esp_websocket_client_config_t ws_cfg = {};
     ws_cfg.uri = wsUrl.c_str();
@@ -182,6 +181,11 @@ bool connectWebSocket(const String& ip, uint16_t port) {
 
     // Register event handler
     esp_websocket_register_events(wsClient, WEBSOCKET_EVENT_ANY, ws_event_handler, NULL);
+
+    // === BOOT PHASE 4: ORANGE 2/4 - WebSocket connecting ===
+    setLedColor(255, 165, 0, true, 0, 2);
+    ESP_LOGI(WS_TAG, "Boot phase: ORANGE 2/4 (WebSocket connecting)");
+    delay(500);
 
     // Start WebSocket client
     esp_err_t err = esp_websocket_client_start(wsClient);

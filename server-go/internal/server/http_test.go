@@ -694,3 +694,295 @@ func TestHTTPServer_MemoryQuestionLoad(t *testing.T) {
 		t.Errorf("Expected Card1 text 'Paris', got '%v'", card1["TEXT"])
 	}
 }
+
+// ========================================
+// WiFi Config API Regression Tests
+// ========================================
+
+func TestHTTPServer_APIBuzzers_Empty(t *testing.T) {
+	server, _ := setupTestHTTPServer(t)
+
+	req := httptest.NewRequest("GET", "/api/buzzers", nil)
+	w := httptest.NewRecorder()
+
+	server.mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("Expected status 200, got %d", w.Code)
+	}
+
+	contentType := w.Header().Get("Content-Type")
+	if contentType != "application/json" {
+		t.Errorf("Expected Content-Type application/json, got %s", contentType)
+	}
+
+	var buzzers []interface{}
+	if err := json.Unmarshal(w.Body.Bytes(), &buzzers); err != nil {
+		t.Fatalf("Response is not valid JSON array: %v", err)
+	}
+
+	if len(buzzers) != 0 {
+		t.Errorf("Expected empty buzzers list, got %d", len(buzzers))
+	}
+}
+
+func TestHTTPServer_APIBuzzers_WithData(t *testing.T) {
+	server, _ := setupTestHTTPServer(t)
+
+	// Register buzzers with different protocols
+	server.engine.UpdateBumper("AA:BB:CC:DD:EE:01", map[string]interface{}{
+		"NAME":     "Buzzer1",
+		"TEAM":     "red",
+		"IP":       "192.168.1.10",
+		"VERSION":  "3.0.5",
+		"STATUS":   "PONG",
+		"PROTOCOL": "WebSocket",
+	})
+	server.engine.UpdateBumper("AA:BB:CC:DD:EE:02", map[string]interface{}{
+		"NAME":   "Buzzer2",
+		"TEAM":   "blue",
+		"IP":     "192.168.1.11",
+		"STATUS": "PONG",
+	})
+
+	req := httptest.NewRequest("GET", "/api/buzzers", nil)
+	w := httptest.NewRecorder()
+
+	server.mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("Expected status 200, got %d", w.Code)
+	}
+
+	var buzzers []map[string]interface{}
+	if err := json.Unmarshal(w.Body.Bytes(), &buzzers); err != nil {
+		t.Fatalf("Response is not valid JSON array: %v", err)
+	}
+
+	if len(buzzers) != 2 {
+		t.Fatalf("Expected 2 buzzers, got %d", len(buzzers))
+	}
+
+	// Build a lookup by MAC for order-independent assertions
+	buzzerByMAC := make(map[string]map[string]interface{})
+	for _, b := range buzzers {
+		mac, _ := b["mac"].(string)
+		buzzerByMAC[mac] = b
+	}
+
+	// Verify first buzzer (WebSocket protocol)
+	b1, ok := buzzerByMAC["AA:BB:CC:DD:EE:01"]
+	if !ok {
+		t.Fatal("Buzzer AA:BB:CC:DD:EE:01 not found in response")
+	}
+	if b1["name"] != "Buzzer1" {
+		t.Errorf("Expected name 'Buzzer1', got '%v'", b1["name"])
+	}
+	if b1["team"] != "red" {
+		t.Errorf("Expected team 'red', got '%v'", b1["team"])
+	}
+	if b1["protocol"] != "WebSocket" {
+		t.Errorf("Expected protocol 'WebSocket', got '%v'", b1["protocol"])
+	}
+	if b1["ip"] != "192.168.1.10" {
+		t.Errorf("Expected ip '192.168.1.10', got '%v'", b1["ip"])
+	}
+	if b1["version"] != "3.0.5" {
+		t.Errorf("Expected version '3.0.5', got '%v'", b1["version"])
+	}
+
+	// Verify second buzzer (TCP protocol - default)
+	b2, ok := buzzerByMAC["AA:BB:CC:DD:EE:02"]
+	if !ok {
+		t.Fatal("Buzzer AA:BB:CC:DD:EE:02 not found in response")
+	}
+	if b2["protocol"] != "TCP" {
+		t.Errorf("Expected protocol 'TCP' (default), got '%v'", b2["protocol"])
+	}
+}
+
+func TestHTTPServer_APIBuzzers_MethodNotAllowed(t *testing.T) {
+	server, _ := setupTestHTTPServer(t)
+
+	methods := []string{"POST", "PUT", "DELETE", "PATCH"}
+	for _, method := range methods {
+		req := httptest.NewRequest(method, "/api/buzzers", nil)
+		w := httptest.NewRecorder()
+
+		server.mux.ServeHTTP(w, req)
+
+		if w.Code != http.StatusMethodNotAllowed {
+			t.Errorf("%s /api/buzzers: Expected status 405, got %d", method, w.Code)
+		}
+	}
+}
+
+func TestHTTPServer_APIBuzzerStatus_Nominal(t *testing.T) {
+	server, _ := setupTestHTTPServer(t)
+
+	// Register a buzzer
+	mac := "AA:BB:CC:DD:EE:FF"
+	server.engine.UpdateBumper(mac, map[string]interface{}{
+		"NAME":     "TestBuzzer",
+		"TEAM":     "green",
+		"IP":       "192.168.1.42",
+		"VERSION":  "3.0.5",
+		"STATUS":   "PONG",
+		"PROTOCOL": "WebSocket",
+	})
+
+	req := httptest.NewRequest("GET", "/api/buzzer/"+mac+"/status", nil)
+	w := httptest.NewRecorder()
+
+	server.mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("Expected status 200, got %d", w.Code)
+	}
+
+	contentType := w.Header().Get("Content-Type")
+	if contentType != "application/json" {
+		t.Errorf("Expected Content-Type application/json, got %s", contentType)
+	}
+
+	var result map[string]interface{}
+	if err := json.Unmarshal(w.Body.Bytes(), &result); err != nil {
+		t.Fatalf("Response is not valid JSON: %v", err)
+	}
+
+	// Verify all expected fields
+	// Note: UpdateBumper does not set STATUS field, so it stays empty
+	tests := []struct {
+		field string
+		want  interface{}
+	}{
+		{"mac", mac},
+		{"name", "TestBuzzer"},
+		{"team", "green"},
+		{"protocol", "WebSocket"},
+		{"ip", "192.168.1.42"},
+		{"version", "3.0.5"},
+	}
+
+	for _, tt := range tests {
+		if result[tt.field] != tt.want {
+			t.Errorf("Field %s: expected '%v', got '%v'", tt.field, tt.want, result[tt.field])
+		}
+	}
+
+	// Verify score field exists (numeric)
+	if _, ok := result["score"]; !ok {
+		t.Error("Expected 'score' field in response")
+	}
+}
+
+func TestHTTPServer_APIBuzzerStatus_NotFound(t *testing.T) {
+	server, _ := setupTestHTTPServer(t)
+
+	req := httptest.NewRequest("GET", "/api/buzzer/FF:FF:FF:FF:FF:FF/status", nil)
+	w := httptest.NewRecorder()
+
+	server.mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusNotFound {
+		t.Errorf("Expected status 404, got %d", w.Code)
+	}
+}
+
+func TestHTTPServer_APIBuzzerStatus_EmptyMAC(t *testing.T) {
+	server, _ := setupTestHTTPServer(t)
+
+	// Path /api/buzzer//status gets normalized by Go's HTTP mux to /api/buzzer/status
+	// which results in a redirect (301) or bad request. Either is acceptable.
+	req := httptest.NewRequest("GET", "/api/buzzer//status", nil)
+	w := httptest.NewRecorder()
+
+	server.mux.ServeHTTP(w, req)
+
+	// Accept 301 (path cleanup redirect), 400 (bad request), or 404 (not found)
+	validCodes := map[int]bool{
+		http.StatusMovedPermanently: true,
+		http.StatusBadRequest:      true,
+		http.StatusNotFound:        true,
+	}
+	if !validCodes[w.Code] {
+		t.Errorf("Expected status 301, 400, or 404 for empty MAC, got %d", w.Code)
+	}
+}
+
+func TestHTTPServer_APIBuzzerStatus_MethodNotAllowed(t *testing.T) {
+	server, _ := setupTestHTTPServer(t)
+
+	methods := []string{"POST", "PUT", "DELETE"}
+	for _, method := range methods {
+		req := httptest.NewRequest(method, "/api/buzzer/AA:BB:CC:DD:EE:FF/status", nil)
+		w := httptest.NewRecorder()
+
+		server.mux.ServeHTTP(w, req)
+
+		if w.Code != http.StatusMethodNotAllowed {
+			t.Errorf("%s /api/buzzer/.../status: Expected status 405, got %d", method, w.Code)
+		}
+	}
+}
+
+func TestHTTPServer_APIBuzzerStatus_DefaultProtocol(t *testing.T) {
+	server, _ := setupTestHTTPServer(t)
+
+	// Register a buzzer without explicit protocol (legacy TCP)
+	mac := "AA:BB:CC:DD:EE:01"
+	server.engine.UpdateBumper(mac, map[string]interface{}{
+		"NAME":   "LegacyBuzzer",
+		"TEAM":   "red",
+		"STATUS": "PONG",
+	})
+
+	req := httptest.NewRequest("GET", "/api/buzzer/"+mac+"/status", nil)
+	w := httptest.NewRecorder()
+
+	server.mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("Expected status 200, got %d", w.Code)
+	}
+
+	var result map[string]interface{}
+	if err := json.Unmarshal(w.Body.Bytes(), &result); err != nil {
+		t.Fatalf("Response is not valid JSON: %v", err)
+	}
+
+	// Protocol should default to "TCP" when not set
+	if result["protocol"] != "TCP" {
+		t.Errorf("Expected default protocol 'TCP', got '%v'", result["protocol"])
+	}
+}
+
+func TestHTTPServer_APIBuzzerStatus_WithoutStatusSuffix(t *testing.T) {
+	server, _ := setupTestHTTPServer(t)
+
+	// Register a buzzer
+	mac := "AA:BB:CC:DD:EE:FF"
+	server.engine.UpdateBumper(mac, map[string]interface{}{
+		"NAME": "TestBuzzer",
+		"TEAM": "red",
+	})
+
+	// Test without /status suffix (handler should still work)
+	req := httptest.NewRequest("GET", "/api/buzzer/"+mac, nil)
+	w := httptest.NewRecorder()
+
+	server.mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("Expected status 200 for /api/buzzer/{mac}, got %d", w.Code)
+	}
+
+	var result map[string]interface{}
+	if err := json.Unmarshal(w.Body.Bytes(), &result); err != nil {
+		t.Fatalf("Response is not valid JSON: %v", err)
+	}
+
+	if result["mac"] != mac {
+		t.Errorf("Expected mac '%s', got '%v'", mac, result["mac"])
+	}
+}

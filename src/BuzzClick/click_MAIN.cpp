@@ -133,6 +133,10 @@ void setup()
   esp_log_level_set("*", ESP_LOG_INFO);
   ESP_LOGI(MAIN_TAG, "Starting up...");
 
+  // === BOOT PHASE 1: RED 1/2 - Boot start ===
+  setLedColor(255, 0, 0, true, 0, 2);
+  ESP_LOGI(MAIN_TAG, "Boot phase: RED 1/2 (boot start)");
+
   // 5. Load NVS config BEFORE watchdog - if NVS empty, enter USB mode
   //    without ever creating the watchdog task.
   bool hasNvsConfig = nvsLoadConfig();
@@ -160,10 +164,6 @@ void setup()
 
   ESP_LOGI(MAIN_TAG, "STARTING:");
   printPinInfo();
-  for (int led=0; led<NUMPIXELS/4; led++) {
-    setPixelColor(led+1, 255, 0, 0);
-  }
-  showPixels();
 
   setupWifi();
   yield();
@@ -171,16 +171,7 @@ void setup()
   CustomLogger::init(logPort);
   ESP_LOGI(MAIN_TAG, "BOOTING Version: %s", String(VERSION));
 
-  for (int led=0; led<NUMPIXELS/4; led++) {
-    setPixelColor(NUMPIXELS/4+led+1, 0, 0, 255);
-  }
-  showPixels();
-
   attachButtons();
-  for (int led=0; led<NUMPIXELS/4; led++) {
-    setPixelColor(2*NUMPIXELS/2+led+1, 0, 255, 0);
-  }
-  showPixels();
 }
 
 void loop() {
@@ -206,8 +197,9 @@ void loop() {
     return;
   }
 
-  // If no team assigned, run gray rotation animation
-  if (!hasTeamAssignment) {
+  // If no team assigned AND boot is complete, run gray rotation animation
+  // During boot, LED patterns are managed by the boot sequence
+  if (bootComplete && !hasTeamAssignment) {
     updateGrayRotation();
   }
 

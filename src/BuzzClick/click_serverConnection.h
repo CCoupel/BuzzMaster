@@ -26,6 +26,7 @@ int64_t ntpOffset = 0;
 
 bool isGameStarted = false;
 bool hasTeamAssignment = false;
+bool bootComplete = false;
 
 // Gray rotation animation state
 static unsigned long lastRotationTime = 0;
@@ -345,10 +346,17 @@ void handleUpdateAction(JsonObject& message, const String& macAddress) {
   if (message.containsKey("bumpers") && message["bumpers"].containsKey(macAddress)) {
     // Extract the bumper config for our device
     buzzer = message["bumpers"][macAddress].as<JsonObject>();
-    
-      myCompleteConfig["buzzer"] = buzzer;
-      isConfigInitialized = true;
-    
+
+    // === BOOT PHASE 6: GREEN 3/4 - Server acknowledged HELLO ===
+    if (!isConfigInitialized) {
+      setLedColorExclude(0, 255, 0, 4);
+      ESP_LOGI(SRV_TAG, "Boot phase: GREEN 3/4 (HELLO acknowledged)");
+      delay(500);
+      bootComplete = true;
+    }
+
+    myCompleteConfig["buzzer"] = buzzer;
+    isConfigInitialized = true;
   }
 
   buzzer = myCompleteConfig["buzzer"].as<JsonObject>();

@@ -2,7 +2,11 @@
 #include "Common/Constant.h"
 
   #include <WiFi.h>
+#ifdef USE_WEBSOCKET
+  class AsyncClient;  // Forward declaration only - no TCP client needed
+#else
   #include <AsyncTCP.h>
+#endif
   #include <ESPmDNS.h>
 #include "esp_log.h"
 
@@ -19,7 +23,9 @@ unsigned int localWWWpPort;  // Port d'écoute local
 String serverIP="";
 String serverPort="";
 
+#ifndef USE_WEBSOCKET
 AsyncClient* client = new AsyncClient();
+#endif
 
 const char* WIFI_SSID     = "buzzmaster";
 const char* WIFI_PASSWORD = "BuzzMaster";
@@ -60,20 +66,23 @@ int currentIntensity = 255;
 //void setLedColor(int red, int green, int blue, bool isApplyLedColor=false);
 //void setLedIntensity(int intensity);
 bool getServerIP();
-void sendPing();
-bool checkConnection();
-bool connectSRV();
-void sendMSG(String msgType, String message);
 void hello_bumper();
 void attachButtons();
 void detachButtons();
 void manageButtonMessages();
 void handleUpdateAction(JsonObject& message, const String& macAddress);
-bool wifiConnect();
 void parseJSON(const String& data, AsyncClient* c);
 
 /* *** INTERUPTION *** */
 void IRAM_ATTR buttonHandler(void *arg);
+
+#ifndef USE_WEBSOCKET
+void sendPing();
+bool checkConnection();
+bool connectSRV();
+void sendMSG(String msgType, String message);
+bool wifiConnect();
 void onConnect(void* arg, AsyncClient* c);
 void onData(void* arg, AsyncClient* c, void* data, size_t len);
 void onDisconnect(void* arg, AsyncClient* c);
+#endif

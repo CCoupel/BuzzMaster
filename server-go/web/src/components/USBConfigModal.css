@@ -1,0 +1,308 @@
+/* USB Config Modal */
+.usb-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.usb-modal {
+  background: white;
+  border-radius: var(--radius-xl);
+  width: 90%;
+  max-width: 600px;
+  max-height: 85vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: var(--shadow-xl);
+  overflow: hidden;
+}
+
+.usb-modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: var(--space-4) var(--space-6);
+  border-bottom: 1px solid var(--gray-200);
+}
+
+.usb-modal-header h2 {
+  font-family: var(--font-display);
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: var(--gray-800);
+  margin: 0;
+}
+
+.usb-modal-close {
+  background: none;
+  border: none;
+  font-size: 1.5rem;
+  color: var(--gray-400);
+  cursor: pointer;
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-md);
+  transition: all var(--transition-fast);
+  line-height: 1;
+}
+
+.usb-modal-close:hover {
+  background: var(--gray-100);
+  color: var(--gray-700);
+}
+
+.usb-modal-body {
+  padding: var(--space-4) var(--space-6);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+}
+
+/* Warning */
+.usb-warning {
+  background: color-mix(in srgb, var(--warning) 15%, white);
+  border: 1px solid var(--warning);
+  border-radius: var(--radius-lg);
+  padding: var(--space-3) var(--space-4);
+  font-size: 0.875rem;
+  color: var(--gray-800);
+}
+
+/* Sections */
+.usb-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.usb-section.disabled {
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+.usb-section h3 {
+  font-family: var(--font-display);
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--gray-700);
+  margin: 0;
+}
+
+.usb-section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+/* Connection status */
+.usb-status {
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--radius-full);
+  background: var(--gray-100);
+  color: var(--gray-500);
+}
+
+.usb-status.connected {
+  background: color-mix(in srgb, var(--success) 15%, white);
+  color: var(--success);
+}
+
+/* Port listing */
+.usb-port-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.usb-port-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: var(--space-2) var(--space-3);
+  background: var(--gray-50);
+  border: 2px solid var(--gray-200);
+  border-radius: var(--radius-lg);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.usb-port-item:hover {
+  border-color: var(--primary-300);
+  background: var(--primary-50);
+}
+
+.usb-port-item.selected {
+  border-color: var(--primary-500);
+  background: var(--primary-50);
+}
+
+.usb-port-label {
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--gray-700);
+  font-family: monospace;
+}
+
+.usb-port-selected-badge {
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--primary-600);
+  background: var(--primary-100);
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-full);
+}
+
+.usb-no-ports {
+  font-size: 0.875rem;
+  color: var(--gray-400);
+  font-style: italic;
+  padding: var(--space-2) 0;
+}
+
+.usb-port-actions {
+  display: flex;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+/* Config summary */
+.usb-config-summary {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  background: var(--gray-50);
+  border-radius: var(--radius-lg);
+}
+
+.usb-config-row {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.usb-config-label {
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--gray-500);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.usb-config-value {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--gray-800);
+  font-family: monospace;
+}
+
+.usb-form-actions {
+  display: flex;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+/* Quick actions */
+.usb-quick-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+/* Clear button */
+.usb-clear-btn {
+  background: none;
+  border: none;
+  font-size: 0.75rem;
+  color: var(--gray-400);
+  cursor: pointer;
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-sm);
+  transition: all var(--transition-fast);
+}
+
+.usb-clear-btn:hover {
+  background: var(--gray-100);
+  color: var(--gray-600);
+}
+
+/* Logs */
+.usb-logs {
+  background: var(--gray-900);
+  border-radius: var(--radius-lg);
+  padding: var(--space-3);
+  min-height: 120px;
+  max-height: 200px;
+  overflow-y: auto;
+  font-family: 'Courier New', monospace;
+  font-size: 0.8rem;
+  line-height: 1.5;
+}
+
+.usb-logs-empty {
+  color: var(--gray-500);
+  font-style: italic;
+}
+
+.usb-log {
+  color: var(--gray-300);
+}
+
+.usb-log-command {
+  color: var(--accent-cyan);
+}
+
+.usb-log-response {
+  color: var(--accent-green);
+}
+
+.usb-log-error {
+  color: var(--accent-red);
+}
+
+.usb-log-success {
+  color: var(--success);
+}
+
+/* ANSI color classes */
+.usb-logs .ansi-bold { font-weight: bold; }
+.usb-logs .ansi-black { color: #555; }
+.usb-logs .ansi-red { color: #f44336; }
+.usb-logs .ansi-green { color: #4caf50; }
+.usb-logs .ansi-yellow { color: #ffc107; }
+.usb-logs .ansi-blue { color: #2196f3; }
+.usb-logs .ansi-magenta { color: #e040fb; }
+.usb-logs .ansi-cyan { color: #00bcd4; }
+.usb-logs .ansi-white { color: #fafafa; }
+.usb-logs .ansi-gray { color: #9e9e9e; }
+
+/* Responsive */
+@media (max-width: 600px) {
+  .usb-modal {
+    width: 95%;
+    max-height: 90vh;
+  }
+
+  .usb-modal-body {
+    padding: var(--space-3) var(--space-4);
+  }
+
+  .usb-port-item {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--space-2);
+  }
+
+  .usb-config-summary {
+    grid-template-columns: 1fr;
+  }
+}

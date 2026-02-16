@@ -42,10 +42,13 @@ void WiFiGotIP(WiFiEvent_t event, WiFiEventInfo_t info){
         }
     }
 
-    // Yellow -> connecting to server
-    setLedColor(128,128,0,true);
     resetGame();
     yield();
+
+    // === BOOT PHASE 3: ORANGE 1/4 - WiFi connected ===
+    setLedColor(255, 165, 0, true, 0, 4);
+    ESP_LOGI(WIFI_TAG, "Boot phase: ORANGE 1/4 (WiFi connected)");
+    delay(500);
 
 #ifdef USE_WEBSOCKET
     // WebSocket protocol
@@ -59,7 +62,9 @@ void WiFiGotIP(WiFiEvent_t event, WiFiEventInfo_t info){
         ESP_LOGE(WIFI_TAG, "Failed to connect to server. Restarting...");
         ESP.restart();
     }
-    setLedColor(64,128,0,true);
+    // === BOOT PHASE 4: GREEN 2/4 - Server connected (TCP mode) ===
+    setLedColor(0, 255, 0, true, 0, 2);
+    ESP_LOGI(WIFI_TAG, "Boot phase: GREEN 2/4 (server connected)");
     yield();
     if (!initBroadcastUDP()) {
         ESP_LOGE(WIFI_TAG, "Failed to listen to server. Restarting...");
@@ -68,8 +73,6 @@ void WiFiGotIP(WiFiEvent_t event, WiFiEventInfo_t info){
 #endif
 
     ESP_LOGI(WIFI_TAG, "READY");
-    // Green = connected
-    setLedColor(0, 255, 0, true);
 }
 
 void WiFiStationDisconnected(WiFiEvent_t event, WiFiEventInfo_t info){
@@ -97,8 +100,9 @@ bool connectToWifi() {
 
   ESP_LOGI(WIFI_TAG, "Connecting to WiFi SSID=%s (source=NVS)", ssid);
 
-  // Yellow = connecting
-  setLedColor(255, 200, 0, true);
+  // === BOOT PHASE 2: RED 1/4 - WiFi connecting ===
+  setLedColor(255, 0, 0, true, 0, 4);
+  ESP_LOGI(WIFI_TAG, "Boot phase: RED 1/4 (WiFi connecting)");
 
   WiFi.mode(WIFI_STA);
   WiFi.begin(ssid, password);

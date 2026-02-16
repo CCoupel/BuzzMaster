@@ -3,6 +3,7 @@ import { motion } from 'framer-motion'
 import { useGame } from '../hooks/GameContext'
 import Button from '../components/Button'
 import Card from '../components/Card'
+import USBConfigModal from '../components/USBConfigModal'
 import './ConfigPage.css'
 
 export default function ConfigPage() {
@@ -26,6 +27,7 @@ export default function ConfigPage() {
   const [savingNeon, setSavingNeon] = useState(false)
 
   const [loadingDemo, setLoadingDemo] = useState(false)
+  const [showUSBModal, setShowUSBModal] = useState(false)
 
   // Server parameters
   const [serverParams, setServerParams] = useState({
@@ -33,6 +35,22 @@ export default function ConfigPage() {
     debug: false
   })
   const [savingParams, setSavingParams] = useState(false)
+
+  // WiFi config
+  const [wifiSsid, setWifiSsid] = useState('')
+  const [wifiPassword, setWifiPassword] = useState('')
+  const [wifiServerIp, setWifiServerIp] = useState('')
+  const [wifiServerPort, setWifiServerPort] = useState(80)
+  const [savingWifi, setSavingWifi] = useState(false)
+  const [wifiToast, setWifiToast] = useState(null)
+
+  // WiFi toast auto-hide
+  useEffect(() => {
+    if (wifiToast) {
+      const timer = setTimeout(() => setWifiToast(null), 3000)
+      return () => clearTimeout(timer)
+    }
+  }, [wifiToast])
 
   // Load neon config and server parameters from server on mount
   useEffect(() => {
@@ -56,6 +74,25 @@ export default function ConfigPage() {
       }
     }
     fetchConfig()
+  }, [])
+
+  // Load WiFi defaults on mount
+  useEffect(() => {
+    const fetchWifiDefaults = async () => {
+      try {
+        const res = await fetch('/api/wifi/defaults')
+        if (res.ok) {
+          const data = await res.json()
+          if (data.ssid) setWifiSsid(data.ssid)
+          if (data.password) setWifiPassword(data.password)
+          if (data.server_ip) setWifiServerIp(data.server_ip)
+          if (data.server_port) setWifiServerPort(data.server_port)
+        }
+      } catch (err) {
+        // Defaults not available
+      }
+    }
+    fetchWifiDefaults()
   }, [])
 
   // Update local state when gameState.neonEffect changes (from WebSocket)
@@ -113,6 +150,32 @@ export default function ConfigPage() {
   const handleResetScores = () => {
     if (!window.confirm('Remettre tous les scores a zero ?')) return
     sendMessage('RAZ', {})
+  }
+
+  const handleSaveWifiDefaults = async () => {
+    setSavingWifi(true)
+    try {
+      const res = await fetch('/api/wifi/defaults', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ssid: wifiSsid,
+          password: wifiPassword,
+          server_ip: wifiServerIp,
+          server_port: wifiServerPort
+        })
+      })
+      if (res.ok) {
+        setWifiToast({ message: 'Configuration WiFi sauvegardee', type: 'success' })
+      } else {
+        const text = await res.text()
+        setWifiToast({ message: 'Erreur: ' + text, type: 'error' })
+      }
+    } catch (err) {
+      setWifiToast({ message: 'Erreur: ' + err.message, type: 'error' })
+    } finally {
+      setSavingWifi(false)
+    }
   }
 
   const handleLoadDemo = async () => {
@@ -200,6 +263,65 @@ export default function ConfigPage() {
               <div className="config-section-actions">
                 <Button variant="primary" onClick={handleSaveServerParams} loading={savingParams}>
                   Enregistrer
+                </Button>
+              </div>
+            </div>
+
+            {/* WiFi Config Section */}
+            <div className="config-section">
+              <h3 className="config-section-title">Configuration du WiFi</h3>
+              <p className="config-section-hint">
+                Parametres WiFi par defaut pour les buzzers. Ces valeurs seront envoyees aux buzzers lors de la configuration USB.
+              </p>
+
+              <div className="wifi-form">
+                <label className="wifi-field">
+                  <span>SSID WiFi</span>
+                  <input
+                    type="text"
+                    value={wifiSsid}
+                    onChange={(e) => setWifiSsid(e.target.value)}
+                    placeholder="Nom du reseau WiFi"
+                    maxLength={32}
+                  />
+                </label>
+                <label className="wifi-field">
+                  <span>Mot de passe WiFi</span>
+                  <input
+                    type="password"
+                    value={wifiPassword}
+                    onChange={(e) => setWifiPassword(e.target.value)}
+                    placeholder="Mot de passe (min 8 car.)"
+                    maxLength={63}
+                  />
+                </label>
+                <label className="wifi-field">
+                  <span>IP Serveur</span>
+                  <input
+                    type="text"
+                    value={wifiServerIp}
+                    onChange={(e) => setWifiServerIp(e.target.value)}
+                    placeholder="ex: 192.168.1.100"
+                  />
+                </label>
+                <label className="wifi-field">
+                  <span>Port Serveur</span>
+                  <input
+                    type="number"
+                    value={wifiServerPort}
+                    onChange={(e) => setWifiServerPort(parseInt(e.target.value) || 0)}
+                    min={1}
+                    max={65535}
+                  />
+                </label>
+              </div>
+
+              <div className="config-section-actions">
+                <Button variant="primary" onClick={handleSaveWifiDefaults} loading={savingWifi}>
+                  Sauvegarder
+                </Button>
+                <Button variant="secondary" onClick={() => setShowUSBModal(true)}>
+                  Configuration via USB
                 </Button>
               </div>
             </div>
@@ -477,6 +599,19 @@ export default function ConfigPage() {
           </Card>
         </section>
       </div>
+
+      {showUSBModal && (
+        <USBConfigModal
+          onClose={() => setShowUSBModal(false)}
+          wifiConfig={{ ssid: wifiSsid, password: wifiPassword, serverIp: wifiServerIp, serverPort: wifiServerPort }}
+        />
+      )}
+
+      {wifiToast && (
+        <div className={`wifi-toast wifi-toast-${wifiToast.type}`}>
+          {wifiToast.message}
+        </div>
+      )}
     </div>
   )
 }

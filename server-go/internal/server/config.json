@@ -32,5 +32,11 @@
     "glow_pulse_min": 0,
     "glow_pulse_max": 0
   },
+  "wifi_defaults": {
+    "ssid": "",
+    "password": "",
+    "server_ip": "",
+    "server_port": 0
+  },
   "version": "2.46.0"
 }

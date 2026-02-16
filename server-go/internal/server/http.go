@@ -11,6 +11,7 @@ import (
 	"io/fs"
 	"log"
 	"math/rand"
+	"net"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -170,6 +171,13 @@ func (h *HTTPServer) setupRoutes() {
 
 	// Update (legacy route)
 	h.mux.HandleFunc("/update", h.handleUpdate)
+
+	// Buzzer API (WiFi config)
+	h.mux.HandleFunc("/api/buzzers", h.handleAPIBuzzers)
+	h.mux.HandleFunc("/api/buzzer/", h.handleAPIBuzzerStatus)
+
+	// WiFi defaults API
+	h.mux.HandleFunc("/api/wifi/defaults", h.handleAPIWiFiDefaults)
 
 	// Auto-update API
 	h.mux.HandleFunc("/api/updates", h.handleAPIUpdates)
@@ -1670,6 +1678,159 @@ func (h *HTTPServer) handleBuzzerWebSocket(w http.ResponseWriter, r *http.Reques
 
 func (h *HTTPServer) handleLogsWebSocket(w http.ResponseWriter, r *http.Request) {
 	h.logsHub.HandleConnection(w, r)
+}
+
+// Buzzer API handlers (WiFi config)
+
+func (h *HTTPServer) handleAPIBuzzers(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	data := h.engine.GetTeamsAndBumpers()
+	type BuzzerInfo struct {
+		MAC      string `json:"mac"`
+		Name     string `json:"name"`
+		Team     string `json:"team"`
+		Protocol string `json:"protocol"`
+		IP       string `json:"ip"`
+		Version  string `json:"version"`
+		Status   string `json:"status"`
+	}
+
+	var buzzers []BuzzerInfo
+	for mac, bumper := range data.Bumpers {
+		proto := bumper.Protocol
+		if proto == "" {
+			proto = "TCP"
+		}
+		buzzers = append(buzzers, BuzzerInfo{
+			MAC:      mac,
+			Name:     bumper.Name,
+			Team:     bumper.Team,
+			Protocol: proto,
+			IP:       bumper.IP,
+			Version:  bumper.Version,
+			Status:   bumper.Status,
+		})
+	}
+
+	if buzzers == nil {
+		buzzers = []BuzzerInfo{}
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(buzzers)
+}
+
+func (h *HTTPServer) handleAPIBuzzerStatus(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	// Extract MAC from path: /api/buzzer/{mac}/status or /api/buzzer/{mac}
+	path := strings.TrimPrefix(r.URL.Path, "/api/buzzer/")
+	path = strings.TrimSuffix(path, "/status")
+	mac := strings.TrimSuffix(path, "/")
+
+	if mac == "" {
+		http.Error(w, "MAC address required", http.StatusBadRequest)
+		return
+	}
+
+	bumper := h.engine.GetBumper(mac)
+	if bumper == nil {
+		http.Error(w, "Buzzer not found", http.StatusNotFound)
+		return
+	}
+
+	proto := bumper.Protocol
+	if proto == "" {
+		proto = "TCP"
+	}
+
+	result := map[string]interface{}{
+		"mac":      mac,
+		"name":     bumper.Name,
+		"team":     bumper.Team,
+		"protocol": proto,
+		"ip":       bumper.IP,
+		"version":  bumper.Version,
+		"status":   bumper.Status,
+		"score":    bumper.Score,
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(result)
+}
+
+// WiFi defaults API handlers
+
+func (h *HTTPServer) handleAPIWiFiDefaults(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		cfg := config.Get()
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(cfg.WiFiDefaults)
+
+	case http.MethodPost:
+		var defaults config.WiFiDefaultsConfig
+		if err := json.NewDecoder(r.Body).Decode(&defaults); err != nil {
+			http.Error(w, "Invalid JSON: "+err.Error(), http.StatusBadRequest)
+			return
+		}
+
+		// Validate SSID (max 32 chars)
+		if len(defaults.SSID) > 32 {
+			http.Error(w, "SSID must be 32 characters or less", http.StatusBadRequest)
+			return
+		}
+
+		// Validate password (min 8 chars if not empty)
+		if defaults.Password != "" && len(defaults.Password) < 8 {
+			http.Error(w, "Password must be at least 8 characters", http.StatusBadRequest)
+			return
+		}
+
+		// Validate IP address (if not empty)
+		if defaults.ServerIP != "" && net.ParseIP(defaults.ServerIP) == nil {
+			http.Error(w, "Invalid IP address", http.StatusBadRequest)
+			return
+		}
+
+		// Validate port (1-65535)
+		if defaults.ServerPort < 1 || defaults.ServerPort > 65535 {
+			http.Error(w, "Port must be between 1 and 65535", http.StatusBadRequest)
+			return
+		}
+
+		// Update config
+		cfg := config.Get()
+		cfg.WiFiDefaults = defaults
+
+		// Save to disk
+		validatedJSON, err := json.MarshalIndent(cfg, "", "  ")
+		if err != nil {
+			http.Error(w, "Failed to encode config", http.StatusInternalServerError)
+			return
+		}
+		if err := os.WriteFile("config.json", validatedJSON, 0644); err != nil {
+			http.Error(w, "Failed to save config", http.StatusInternalServerError)
+			return
+		}
+
+		config.SetInstance(cfg)
+		LogInfo(game.LogComponentHTTP, "WiFi defaults updated: ssid=%s, server_ip=%s, server_port=%d",
+			defaults.SSID, defaults.ServerIP, defaults.ServerPort)
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(defaults)
+
+	default:
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+	}
 }
 
 // Auto-update API handlers

@@ -32,5 +32,11 @@
     "glow_pulse_min": 50,
     "glow_pulse_max": 70
   },
-  "version": "3.0.1"
+  "wifi_defaults": {
+    "ssid": "CC-Home",
+    "password": "GenericPassword",
+    "server_ip": "192.168.1.84",
+    "server_port": 80
+  },
+  "version": "3.0.8"
 }

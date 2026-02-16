@@ -69,8 +69,10 @@ void onWsEvent(WebsocketsEvent event, String data) {
         ESP_LOGI(WS_TAG, "Sending HELLO: %s", helloJson.c_str());
         wsClient.send(helloJson);
 
-        // Green LED = connected
-        setLedColor(0, 255, 0, true);
+        // === BOOT PHASE 5: GREEN 2/4 - WebSocket connected ===
+        setLedColor(0, 255, 0, true, 0, 2);
+        ESP_LOGI(WS_TAG, "Boot phase: GREEN 2/4 (WebSocket connected)");
+        delay(500);
     }
     else if (event == WebsocketsEvent::ConnectionClosed) {
         ESP_LOGW(WS_TAG, "WebSocket Disconnected!");
@@ -97,8 +99,10 @@ bool connectWebSocket(const String& ip, uint16_t port) {
 
     ESP_LOGI(WS_TAG, "Connecting to WebSocket: %s", wsUrl.c_str());
 
-    // Yellow LED = connecting
-    setLedColor(255, 200, 0, true);
+    // === BOOT PHASE 4: ORANGE 2/4 - WebSocket connecting ===
+    setLedColor(255, 165, 0, true, 0, 2);
+    ESP_LOGI(WS_TAG, "Boot phase: ORANGE 2/4 (WebSocket connecting)");
+    delay(500);
 
     // Set callbacks
     wsClient.onMessage(onWsMessage);

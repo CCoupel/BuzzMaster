@@ -19,6 +19,8 @@ int currentRed = 0;
 int currentGreen = 0;
 int currentBlue = 0;
 int currentIntensity = 255;
+int currentOffset = 0;
+int currentPeriod = 1;
 
 //Adafruit_WS2801 strip_ws28 = Adafruit_WS2801(NUMPIXELS, DATAPIN_ws28, CLOCKPIN_ws28);
 Adafruit_DotStar strip_sk98 = Adafruit_DotStar(NUMPIXELS, DATAPIN_sk98, CLOCKPIN_sk98, DOTSTAR_BGR);
@@ -41,22 +43,49 @@ void applyLedColor() {
   int adjustedGreen = (currentGreen * currentIntensity) / 255;
   int adjustedBlue = (currentBlue * currentIntensity) / 255;
 
-  neopixelWrite(rgbPin,adjustedRed,adjustedGreen,adjustedBlue);
+  neopixelWrite(rgbPin, adjustedRed, adjustedGreen, adjustedBlue);
 
   for (int i = 0; i < NUMPIXELS; i++) {
-    setPixelColor(i, adjustedRed,adjustedGreen, adjustedBlue);
+    if (currentPeriod <= 1 || (i % currentPeriod == currentOffset % currentPeriod)) {
+      strip_sk98.setPixelColor(i, adjustedRed, adjustedGreen, adjustedBlue);
+    } else {
+      strip_sk98.setPixelColor(i, 0, 0, 0);
+    }
   }
   showPixels();
 }
 
-void setLedColor(int red, int green, int blue, bool isApplyLedColor = false) {
+void setLedColor(int red, int green, int blue, bool isApplyLedColor = false, int offset = 0, int period = 1) {
+  currentRed = red;
+  currentGreen = green;
+  currentBlue = blue;
+  currentOffset = offset;
+  currentPeriod = period;
+  if (isApplyLedColor) {
+    applyLedColor();
+  }
+}
+
+// Set LED color excluding every Nth LED (for 3/4 pattern: period=4 lights all except every 4th)
+void setLedColorExclude(int red, int green, int blue, int period) {
+  int adjustedRed = (red * currentIntensity) / 255;
+  int adjustedGreen = (green * currentIntensity) / 255;
+  int adjustedBlue = (blue * currentIntensity) / 255;
+
+  neopixelWrite(rgbPin, adjustedRed, adjustedGreen, adjustedBlue);
+
+  for (int i = 0; i < NUMPIXELS; i++) {
+    if (i % period != (period - 1)) {
+      strip_sk98.setPixelColor(i, adjustedRed, adjustedGreen, adjustedBlue);
+    } else {
+      strip_sk98.setPixelColor(i, 0, 0, 0);
+    }
+  }
+  showPixels();
 
   currentRed = red;
   currentGreen = green;
   currentBlue = blue;
-  if (isApplyLedColor) {
-    applyLedColor();
-  }
 }
 
 void setLedIntensity(int intensity) {

@@ -603,6 +603,80 @@
   }
 }
 
+/* WiFi Config Form */
+.wifi-form {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
+}
+
+.wifi-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.wifi-field span {
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: var(--gray-600);
+}
+
+.wifi-field input {
+  padding: var(--space-2) var(--space-3);
+  border: 2px solid var(--gray-200);
+  border-radius: var(--radius-lg);
+  font-size: 0.875rem;
+  transition: border-color var(--transition-fast);
+}
+
+.wifi-field input:focus {
+  outline: none;
+  border-color: var(--primary-400);
+}
+
+/* WiFi Toast */
+.wifi-toast {
+  position: fixed;
+  bottom: var(--space-6);
+  left: 50%;
+  transform: translateX(-50%);
+  padding: var(--space-3) var(--space-6);
+  border-radius: var(--radius-lg);
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: white;
+  box-shadow: var(--shadow-lg);
+  z-index: 1100;
+  animation: wifi-toast-in 0.3s ease;
+}
+
+.wifi-toast-success {
+  background: var(--success);
+}
+
+.wifi-toast-error {
+  background: var(--error);
+}
+
+@keyframes wifi-toast-in {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+}
+
+@media (max-width: 768px) {
+  .wifi-form {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* Neon Effect Configuration */
 .neon-toggle {
   margin-bottom: var(--space-4);
