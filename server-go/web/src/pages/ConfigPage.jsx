@@ -64,8 +64,9 @@ export default function ConfigPage() {
   const [broadcastingWifi, setBroadcastingWifi] = useState(false)
 
   // Firmware section
-  const [firmwareInfo, setFirmwareInfo] = useState(null) // { VERSION, FILENAME, SIZE, EXISTS }
+  const [firmwareInfo, setFirmwareInfo] = useState(null) // { VERSION, FILENAME, SIZE, EXISTS, EMBEDDED_VERSION }
   const [uploadingFirmware, setUploadingFirmware] = useState(false)
+  const [restoringEmbedded, setRestoringEmbedded] = useState(false)
   const [showOtaAllModal, setShowOtaAllModal] = useState(false)
   const [firmwareToast, setFirmwareToast] = useState(null) // { message, type }
   const firmwareFileRef = useRef(null)
@@ -315,6 +316,24 @@ export default function ConfigPage() {
     }
   }
 
+  const handleRestoreEmbedded = async () => {
+    setRestoringEmbedded(true)
+    try {
+      const res = await fetch('/api/firmware/buzzclick/restore-embedded', { method: 'POST' })
+      const data = await res.json()
+      if (res.ok && data.status === 'ok') {
+        setFirmwareInfo(prev => ({ ...prev, VERSION: data.version, SIZE: data.size, EXISTS: true, FILENAME: data.filename }))
+        setFirmwareToast({ message: `Firmware v${data.version} restaure (firmware embarque)`, type: 'success' })
+      } else {
+        setFirmwareToast({ message: 'Erreur: ' + (data.message || 'Restauration echouee'), type: 'error' })
+      }
+    } catch (err) {
+      setFirmwareToast({ message: 'Erreur reseau: ' + err.message, type: 'error' })
+    } finally {
+      setRestoringEmbedded(false)
+    }
+  }
+
   const handleUpdateAll = () => {
     setShowOtaAllModal(true)
   }
@@ -561,6 +580,12 @@ export default function ConfigPage() {
                     {firmwareInfo?.EXISTS ? 'Disponible' : firmwareInfo?.VERSION ? 'Non uploade' : 'Absent'}
                   </span>
                 </div>
+                {firmwareInfo?.EMBEDDED_VERSION && (
+                  <div className="firmware-info-item">
+                    <span className="firmware-info-label">Version embarquee</span>
+                    <span className="firmware-info-value">{firmwareInfo.EMBEDDED_VERSION}</span>
+                  </div>
+                )}
               </div>
 
               {/* File upload */}
@@ -585,6 +610,15 @@ export default function ConfigPage() {
                 >
                   Uploader le firmware
                 </Button>
+                {firmwareInfo?.EMBEDDED_VERSION && firmwareInfo?.VERSION !== firmwareInfo?.EMBEDDED_VERSION && (
+                  <Button
+                    variant="secondary"
+                    onClick={handleRestoreEmbedded}
+                    loading={restoringEmbedded}
+                  >
+                    Restaurer v{firmwareInfo.EMBEDDED_VERSION}
+                  </Button>
+                )}
                 <Button
                   variant="secondary"
                   onClick={handleUpdateAll}
