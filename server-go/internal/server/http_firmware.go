@@ -60,10 +60,11 @@ func (h *HTTPServer) handleAPIFirmwareVersion(w http.ResponseWriter, r *http.Req
 
 	version, filename, size, exists := h.firmwareManager.GetInfo()
 	payload := protocol.FirmwareVersionPayload{
-		Version:  version,
-		Filename: filename,
-		Size:     size,
-		Exists:   exists,
+		Version:         version,
+		Filename:        filename,
+		Size:            size,
+		Exists:          exists,
+		EmbeddedVersion: h.firmwareManager.GetEmbeddedVersion(),
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -200,10 +201,11 @@ func (h *HTTPServer) handleAPIFirmwareUpload(w http.ResponseWriter, r *http.Requ
 	versionInfo, filename, size, exists := h.firmwareManager.GetInfo()
 	LogInfo(game.LogComponentHTTP, "BuzzClick firmware uploaded: version=%s, size=%d bytes", versionInfo, len(data))
 	payload := protocol.FirmwareVersionPayload{
-		Version:  versionInfo,
-		Filename: filename,
-		Size:     size,
-		Exists:   exists,
+		Version:         versionInfo,
+		Filename:        filename,
+		Size:            size,
+		Exists:          exists,
+		EmbeddedVersion: h.firmwareManager.GetEmbeddedVersion(),
 	}
 	if msg, err := protocol.NewMessage(protocol.ActionFirmwareVersion, payload); err == nil {
 		h.wsHub.Broadcast(msg)
@@ -214,6 +216,67 @@ func (h *HTTPServer) handleAPIFirmwareUpload(w http.ResponseWriter, r *http.Requ
 		"status":   "ok",
 		"version":  versionInfo,
 		"size":     len(data),
+		"filename": filename,
+	})
+}
+
+// handleAPIFirmwareRestoreEmbedded handles POST /api/firmware/buzzclick/restore-embedded.
+// It restores the firmware embedded in the server binary, overwriting any previously uploaded firmware.
+// Returns 404 if no embedded firmware is available in this build.
+func (h *HTTPServer) handleAPIFirmwareRestoreEmbedded(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	if h.firmwareManager.GetEmbeddedVersion() == "" {
+		http.Error(w, `{"status":"error","message":"No embedded firmware available in this build"}`, http.StatusNotFound)
+		return
+	}
+
+	if err := h.firmwareManager.RestoreEmbedded(); err != nil {
+		LogError(game.LogComponentHTTP, "Firmware restore-embedded failed: %v", err)
+		http.Error(w, fmt.Sprintf(`{"status":"error","message":"%s"}`, err.Error()), http.StatusInternalServerError)
+		return
+	}
+
+	// Recalculate IS_OUTDATED for all physical WebSocket buzzers.
+	allData := h.engine.GetTeamsAndBumpers()
+	for mac, bumper := range allData.Bumpers {
+		if bumper.FirmwareVersion == "" {
+			continue
+		}
+		newOutdated := h.firmwareManager.IsOutdated(bumper.FirmwareVersion)
+		if newOutdated != bumper.IsOutdated {
+			h.engine.UpdateBumper(mac, map[string]interface{}{"IS_OUTDATED": newOutdated})
+		}
+	}
+
+	// Broadcast full state UPDATE so web clients see updated IS_OUTDATED flags immediately.
+	if stateMsg, err := protocol.NewMessage(protocol.ActionUpdate, nil); err == nil {
+		stateMsg.Msg = h.engine.GetGameJSON()
+		h.wsHub.Broadcast(stateMsg)
+	}
+
+	// Broadcast FIRMWARE_VERSION to all web clients so the UI can refresh.
+	versionInfo, filename, size, exists := h.firmwareManager.GetInfo()
+	LogInfo(game.LogComponentHTTP, "BuzzClick firmware restored from embedded: version=%s, size=%d bytes", versionInfo, size)
+	fwPayload := protocol.FirmwareVersionPayload{
+		Version:         versionInfo,
+		Filename:        filename,
+		Size:            size,
+		Exists:          exists,
+		EmbeddedVersion: h.firmwareManager.GetEmbeddedVersion(),
+	}
+	if msg, err := protocol.NewMessage(protocol.ActionFirmwareVersion, fwPayload); err == nil {
+		h.wsHub.Broadcast(msg)
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"status":   "ok",
+		"version":  versionInfo,
+		"size":     size,
 		"filename": filename,
 	})
 }

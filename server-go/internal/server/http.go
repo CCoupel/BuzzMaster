@@ -192,6 +192,7 @@ func (h *HTTPServer) setupRoutes() {
 	h.mux.HandleFunc("/api/firmware/buzzclick/latest.bin", h.handleAPIFirmwareDownload)
 	h.mux.HandleFunc("/api/firmware/buzzclick/merged.bin", h.handleAPIFirmwareMergedDownload)
 	h.mux.HandleFunc("/api/firmware/buzzclick/upload", h.handleAPIFirmwareUpload)
+	h.mux.HandleFunc("/api/firmware/buzzclick/restore-embedded", h.handleAPIFirmwareRestoreEmbedded)
 
 	// WiFi defaults API
 	h.mux.HandleFunc("/api/wifi/defaults", h.handleAPIWiFiDefaults)

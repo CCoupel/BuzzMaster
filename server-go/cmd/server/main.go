@@ -177,6 +177,8 @@ func (a *App) init() {
 	if err := a.httpServer.GetFirmwareManager().InitFromEmbedded(assets.FirmwareAssets); err != nil {
 		server.LogError(game.LogComponentApp, "Failed to init embedded firmware: %v", err)
 	}
+	// Store embedded FS reference so restore-embedded can re-extract it on demand.
+	a.httpServer.GetFirmwareManager().SetEmbeddedFS(assets.FirmwareAssets)
 
 	// Try embedded web files first, then fallback to filesystem
 	if embeddedFS, ok := web.GetEmbeddedFS(); ok {
