@@ -3,6 +3,51 @@
 Historique des versions du projet BuzzControl.
 
 
+## [3.1.1] - 2026-02-21
+
+### Added
+- **[OTA UI]**: Bouton "Restaurer firmware embarqué" dans ConfigPage
+  - Affiche le bouton uniquement quand un firmware embarqué est disponible dans le binaire serveur
+  - Masque automatiquement le bouton si aucun binaire embarqué n'est présent
+  - Endpoint `POST /api/firmware/buzzclick/restore-embedded` : restaure le firmware embarqué vers le stockage actif
+- **[OTA Backend]**: Endpoint POST /api/firmware/buzzclick/restore-embedded
+  - Extrait le firmware embarqué depuis les assets Go (`server-go/assets/firmware/buzzclick-latest.bin`)
+  - Copie le binaire embarqué vers `data/firmware/buzzclick-latest.bin` (stockage actif)
+  - Broadcast `FIRMWARE_VERSION` pour rafraîchissement automatique de l'UI
+  - Retourne 404 si aucun firmware embarqué n'est disponible dans le binaire
+- **[OTA Backend]**: Champ `EMBEDDED_VERSION` dans `FirmwareVersionPayload`
+  - Expose la version du firmware embarqué dans les assets Go
+  - Permet au frontend de savoir si une restauration est possible et quelle version sera restaurée
+- **[OTA Firmware]**: Progression OTA propagée via engine
+  - `OTA_PERCENT` propagé à travers le moteur de jeu pour un suivi centralisé
+  - Architecture améliorée pour la gestion des événements OTA
+
+### Fixed
+- **[OTA UI]**: Barres de progression restent orange jusqu'au reboot du buzzer
+  - `IS_OUTDATED` n'est plus remis à zéro lors de la réception de `OTA_PROGRESS done`
+  - Le badge firmware repasse au vert uniquement quand le buzzer reboot et envoie HELLO avec la nouvelle version
+- **[OTA UI]**: Badge firmware cliquable dans TeamsPage pour déclencher OTA individuel
+- **[OTA Firmware]**: BuzzClick construit l'URL OTA depuis l'IP serveur stockée en NVS
+  - Corrige la dépendance à une IP hardcodée pour le téléchargement OTA
+  - Utilise `server_ip` du NVS pour construire l'URL `http://<server_ip>/api/firmware/buzzclick/latest.bin`
+
+### Changed
+- **[OTA UI]**: "Tout mettre à jour" dans ConfigPage ouvre OtaAllModal au lieu de déclencher directement l'OTA
+
+### Technical
+- **Backend** :
+  - `internal/server/http_firmware.go` : Handler `handleRestoreEmbeddedFirmware()` (nouveau)
+  - `internal/server/http.go` : Route `POST /api/firmware/buzzclick/restore-embedded`
+  - `internal/protocol/messages.go` : Champ `EMBEDDED_VERSION` dans `FirmwareVersionPayload`
+  - `internal/server/firmware.go` : Lecture version depuis firmware embarqué
+- **Frontend** :
+  - `web/src/pages/ConfigPage.jsx` : Bouton restauration firmware embarqué + OtaAllModal
+  - `web/src/pages/TeamsPage.jsx` : Badge firmware cliquable pour OTA individuel
+- **Assets** :
+  - `server-go/assets/firmware/buzzclick-latest.bin` : Firmware BuzzClick embarqué dans le binaire serveur
+
+---
+
 ## [3.1.0] - 2026-02-21
 
 ### Added

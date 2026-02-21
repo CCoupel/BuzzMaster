@@ -146,42 +146,56 @@ cd server-go && ./build.ps1
 - BuzzClick uses MAC address as unique ID
 - mDNS service name is `_sock._tcp` for server discovery
 
-### OTA Firmware Endpoints (v3.1.0)
+### OTA Firmware Endpoints (v3.1.0+)
 
 ```
-GET  /api/firmware/buzzclick/version      → FirmwareVersionPayload (version, filename, size, exists)
-GET  /api/firmware/buzzclick/latest.bin   → Binaire firmware (octet-stream)
-POST /api/firmware/buzzclick/upload       → Upload .bin (multipart, champ "file", param "version")
-POST /api/buzzer/{mac}/update             → Declenche OTA sur buzzer specifique
-POST /api/buzzer/update-all               → OTA sur tous les buzzers obsoletes
-POST /api/buzzer/wifi-config              → Broadcast WIFI_CONFIG a tous les buzzers WS
+GET  /api/firmware/buzzclick/version           → FirmwareVersionPayload (version, filename, size, exists, embedded_version)
+GET  /api/firmware/buzzclick/latest.bin        → Binaire firmware (octet-stream)
+POST /api/firmware/buzzclick/upload            → Upload .bin (multipart, champ "file", param "version")
+POST /api/firmware/buzzclick/restore-embedded  → Restaure firmware embarqué vers stockage actif (v3.1.1)
+POST /api/buzzer/{mac}/update                  → Declenche OTA sur buzzer specifique
+POST /api/buzzer/update-all                    → OTA sur tous les buzzers obsoletes
+POST /api/buzzer/wifi-config                   → Broadcast WIFI_CONFIG a tous les buzzers WS
 ```
 
-Actions WebSocket OTA (v3.1.0) :
+Actions WebSocket OTA (v3.1.0+) :
 ```json
 // Server → Buzzer : declencher OTA
-{ "ACTION": "OTA_UPDATE", "MSG": { "URL": "http://...", "VERSION": "3.1.0", "SIZE": 512000 } }
+{ "ACTION": "OTA_UPDATE", "MSG": { "URL": "http://...", "VERSION": "3.1.1", "SIZE": 512000 } }
 
 // Buzzer → Server : progression
 { "ACTION": "OTA_PROGRESS", "MSG": { "STATUS": "downloading", "PERCENT": 42, "ERROR": "" } }
 
-// Server → Web : info firmware de reference
-{ "ACTION": "FIRMWARE_VERSION", "MSG": { "VERSION": "3.1.0", "FILENAME": "buzzclick-v3.1.0.bin", "SIZE": 512000, "EXISTS": true } }
+// Server → Web : info firmware de reference (v3.1.1 : + EMBEDDED_VERSION)
+{ "ACTION": "FIRMWARE_VERSION", "MSG": { "VERSION": "3.1.1", "FILENAME": "buzzclick-v3.1.1.bin", "SIZE": 512000, "EXISTS": true, "EMBEDDED_VERSION": "3.1.1" } }
 
 // Server → Buzzer : sync config WiFi
 { "ACTION": "WIFI_CONFIG", "MSG": { "SSID": "MyWifi", "PASS": "pass", "SERVER_IP": "192.168.1.84", "SERVER_PORT": 80, "SSID2": "Backup", "PASS2": "pass2" } }
 ```
+
+### Firmware embarque dans le binaire serveur (v3.1.1)
+
+Le serveur embarque le firmware BuzzClick directement dans son binaire Go :
+- **Asset** : `server-go/assets/firmware/buzzclick-latest.bin` (embarque via `//go:embed`)
+- **Endpoint restauration** : `POST /api/firmware/buzzclick/restore-embedded`
+  - Copie le firmware embarqué vers `data/firmware/buzzclick-latest.bin`
+  - Retourne 404 si pas de firmware embarqué
+  - Broadcast `FIRMWARE_VERSION` apres restauration
+- **`EMBEDDED_VERSION`** : Exposé dans `FirmwareVersionPayload` pour que le frontend affiche le bouton de restauration uniquement si une version embarquée est disponible
 
 ### Modele Bumper enrichi (v3.1.0)
 
 ```json
 {
   "ID": "AA:BB:CC:DD:EE:FF",
-  "FIRMWARE_VERSION": "3.1.0",
+  "FIRMWARE_VERSION": "3.1.1",
   "IS_OUTDATED": false,
   "OTA_STATUS": ""
 }
 ```
+
+**IS_OUTDATED** : Remis a false uniquement au reboot du buzzer (reception HELLO avec nouvelle version).
+Ne change pas sur `OTA_PROGRESS done` - le badge reste orange jusqu'au reboot confirme.
 
 ### Contrainte Affichage TV - IMPORTANT
 **L'affichage TV (`/tv`) est STATIQUE et ne permet PAS de scroll.**
