@@ -285,10 +285,11 @@ type OTAProgressPayload struct {
 // FirmwareVersionPayload for FIRMWARE_VERSION action (server → web: firmware info)
 // JSON keys use UPPERCASE to match the frontend React convention (targetVersion?.EXISTS, etc.).
 type FirmwareVersionPayload struct {
-	Version  string `json:"VERSION"`  // Firmware version string (e.g. "3.1.0")
-	Filename string `json:"FILENAME"` // Firmware filename (e.g. "buzzclick-v3.1.0.bin")
-	Size     int64  `json:"SIZE"`     // Firmware file size in bytes
-	Exists   bool   `json:"EXISTS"`   // Whether firmware file exists on server
+	Version         string `json:"VERSION"`                    // Firmware version string (e.g. "3.1.0")
+	Filename        string `json:"FILENAME"`                   // Firmware filename (e.g. "buzzclick-v3.1.0.bin")
+	Size            int64  `json:"SIZE"`                       // Firmware file size in bytes
+	Exists          bool   `json:"EXISTS"`                     // Whether firmware file exists on server
+	EmbeddedVersion string `json:"EMBEDDED_VERSION,omitempty"` // Version embedded in server binary (v3.1.1+)
 }
 
 // WifiConfigPayload for WIFI_CONFIG action (server → buzzer: sync WiFi credentials)

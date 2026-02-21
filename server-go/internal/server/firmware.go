@@ -68,14 +68,51 @@ func (fm *FirmwareManager) GetAppFirmware() ([]byte, error) {
 // FirmwareManager handles storage and versioning of BuzzClick firmware files.
 // Firmware files are stored in {dataDir}/firmware/.
 type FirmwareManager struct {
-	dataDir       string
-	serverVersion string // fallback reference version when no firmware binary is stored
+	dataDir         string
+	serverVersion   string // fallback reference version when no firmware binary is stored
+	embeddedFS      fs.FS  // embedded filesystem containing firmware/buzzclick-latest.bin and firmware/version.txt
+	embeddedVersion string // version read from embeddedFS firmware/version.txt
 }
 
 // NewFirmwareManager creates a new FirmwareManager using the given data directory
 // and the server version as a fallback reference for outdated checks.
 func NewFirmwareManager(dataDir, serverVersion string) *FirmwareManager {
 	return &FirmwareManager{dataDir: dataDir, serverVersion: serverVersion}
+}
+
+// SetEmbeddedFS stores the embedded filesystem reference and reads the embedded firmware version.
+// The version is read from firmware/version.txt within the provided FS.
+func (fm *FirmwareManager) SetEmbeddedFS(embFS fs.FS) {
+	fm.embeddedFS = embFS
+	data, err := fs.ReadFile(embFS, "firmware/version.txt")
+	if err != nil {
+		return
+	}
+	v := strings.TrimSpace(string(data))
+	if v != "" && v != "0.0.0" {
+		fm.embeddedVersion = v
+	}
+}
+
+// GetEmbeddedVersion returns the version of the firmware embedded in the server binary.
+// Returns an empty string if no embedded firmware is available or it is a dev placeholder.
+func (fm *FirmwareManager) GetEmbeddedVersion() string {
+	return fm.embeddedVersion
+}
+
+// RestoreEmbedded restores the firmware embedded in the server binary to the data directory.
+// It reads firmware/buzzclick-latest.bin from the embedded FS and calls SaveFirmware.
+// Unlike InitFromEmbedded, it always overwrites the stored firmware regardless of version.
+// Returns an error if no embedded firmware is available or the embedded FS is not set.
+func (fm *FirmwareManager) RestoreEmbedded() error {
+	if fm.embeddedFS == nil || fm.embeddedVersion == "" {
+		return fmt.Errorf("no embedded firmware available")
+	}
+	binData, err := fs.ReadFile(fm.embeddedFS, "firmware/buzzclick-latest.bin")
+	if err != nil {
+		return fmt.Errorf("failed to read embedded firmware binary: %w", err)
+	}
+	return fm.SaveFirmware(binData, fm.embeddedVersion)
 }
 
 // firmwareDir returns the path to the firmware storage directory.
