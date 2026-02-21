@@ -62,6 +62,7 @@ void onWsEvent(WebsocketsEvent event, String data) {
         JsonObject msg = helloDoc["MSG"].to<JsonObject>();
         msg["IP"] = ipAddr;
         msg["VERSION"] = String(VERSION);
+        msg["firmware_version"] = String(FIRMWARE_VERSION);
 
         String helloJson;
         serializeJson(helloDoc, helloJson);

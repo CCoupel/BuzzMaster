@@ -139,6 +139,19 @@ func (e *Engine) UpdateBumper(id string, data map[string]interface{}) {
 	if proto, ok := data["PROTOCOL"].(string); ok {
 		bumper.Protocol = proto
 	}
+	// OTA firmware fields (v3.1.0+)
+	if fwVersion, ok := data["FIRMWARE_VERSION"].(string); ok {
+		bumper.FirmwareVersion = fwVersion
+	}
+	if isOutdated, ok := data["IS_OUTDATED"].(bool); ok {
+		bumper.IsOutdated = isOutdated
+	}
+	if otaStatus, ok := data["OTA_STATUS"].(string); ok {
+		bumper.OTAStatus = otaStatus
+	}
+	if otaPercent, ok := data["OTA_PERCENT"].(int); ok {
+		bumper.OTAPercent = otaPercent
+	}
 
 	log.Printf("[Engine] Updated bumper %s: team=%s, name=%s, protocol=%s", id, bumper.Team, bumper.Name, bumper.Protocol)
 	e.mu.Unlock()

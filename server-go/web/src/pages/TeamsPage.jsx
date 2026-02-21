@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { useGame } from '../hooks/GameContext'
 import Button from '../components/Button'
 import Card from '../components/Card'
+import { OtaModal } from '../components/TeamCard'
 import './TeamsPage.css'
 
 const PRESET_COLORS = [
@@ -30,6 +31,7 @@ export default function TeamsPage() {
   const [draggedBumper, setDraggedBumper] = useState(null)
   const [dragOverTarget, setDragOverTarget] = useState(null)
   const [maxPlayers, setMaxPlayers] = useState(10)
+  const [otaMac, setOtaMac] = useState(null)
 
   // Count physical vs virtual bumpers from server-synchronized data
   const physicalBumperCount = useMemo(() => {
@@ -514,7 +516,16 @@ export default function TeamsPage() {
                     {/* Ligne 3: Infos techniques (MAC + version) */}
                     <div className="bumper-row-tech">
                       <span className="bumper-mac">{bumper.mac}</span>
-                      {bumper.VERSION && <span className="bumper-version">v{bumper.VERSION}</span>}
+                      {bumper.FIRMWARE_VERSION && (
+                        <span
+                          className={`bumper-version${bumper.IS_OUTDATED ? ' outdated' : ''}`}
+                          title={bumper.IS_OUTDATED ? 'Cliquer pour mettre à jour' : `v${bumper.FIRMWARE_VERSION}`}
+                          onClick={bumper.IS_OUTDATED ? (e) => { e.stopPropagation(); setOtaMac(bumper.mac) } : undefined}
+                          style={bumper.IS_OUTDATED ? { cursor: 'pointer' } : undefined}
+                        >
+                          v{bumper.FIRMWARE_VERSION}
+                        </span>
+                      )}
                     </div>
                   </Card>
                 </motion.div>
@@ -536,6 +547,19 @@ export default function TeamsPage() {
           </div>
         </section>
       </div>
+
+      {/* OTA Update Modal - opened when clicking an outdated firmware badge */}
+      {otaMac && (() => {
+        const b = bumpers[otaMac] || {}
+        const otaBuzzer = {
+          mac: otaMac,
+          name: b.NAME || otaMac,
+          firmwareVersion: b.FIRMWARE_VERSION || '',
+          otaStatus: b.OTA_STATUS || '',
+          otaPercent: b.OTA_PERCENT || 0,
+        }
+        return <OtaModal buzzer={otaBuzzer} onClose={() => setOtaMac(null)} />
+      })()}
     </div>
   )
 }

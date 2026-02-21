@@ -1,14 +1,30 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import { motion } from 'framer-motion'
 import { useGame } from '../hooks/GameContext'
 import Button from '../components/Button'
 import Card from '../components/Card'
 import USBConfigModal from '../components/USBConfigModal'
+import { OtaAllModal } from '../components/TeamCard'
+import useEspFlash from '../hooks/useEspFlash'
 import './ConfigPage.css'
 
+function getPortLabel(port, index) {
+  const info = port.getInfo()
+  if (info.usbVendorId) {
+    return `Port USB #${index + 1} (VID:${info.usbVendorId.toString(16).toUpperCase()} PID:${info.usbProductId?.toString(16).toUpperCase() || '?'})`
+  }
+  return `Port serie #${index + 1}`
+}
+
 export default function ConfigPage() {
-  const { teams, bumpers, gameState, updateConfig, sendMessage, version } = useGame()
+  const { teams, bumpers, gameState, updateConfig, sendMessage, version, firmwareInfo: wsFirmwareInfo } = useGame()
   const dualRangeTrackRef = useRef(null)
+
+  // Count outdated physical WebSocket buzzers only (those with FIRMWARE_VERSION set).
+  // Excludes TCP-only/simulated bumpers (no FIRMWARE_VERSION) and VJoueurs.
+  const outdatedCount = useMemo(() =>
+    Object.values(bumpers).filter(b => b.IS_OUTDATED === true && b.FIRMWARE_VERSION).length
+  , [bumpers])
 
   // Neon effect configuration
   const [neonConfig, setNeonConfig] = useState({
@@ -39,10 +55,25 @@ export default function ConfigPage() {
   // WiFi config
   const [wifiSsid, setWifiSsid] = useState('')
   const [wifiPassword, setWifiPassword] = useState('')
+  const [wifiSsid2, setWifiSsid2] = useState('')
+  const [wifiPassword2, setWifiPassword2] = useState('')
   const [wifiServerIp, setWifiServerIp] = useState('')
   const [wifiServerPort, setWifiServerPort] = useState(80)
   const [savingWifi, setSavingWifi] = useState(false)
   const [wifiToast, setWifiToast] = useState(null)
+  const [broadcastingWifi, setBroadcastingWifi] = useState(false)
+
+  // Firmware section
+  const [firmwareInfo, setFirmwareInfo] = useState(null) // { VERSION, FILENAME, SIZE, EXISTS }
+  const [uploadingFirmware, setUploadingFirmware] = useState(false)
+  const [showOtaAllModal, setShowOtaAllModal] = useState(false)
+  const [firmwareToast, setFirmwareToast] = useState(null) // { message, type }
+  const firmwareFileRef = useRef(null)
+
+  // USB Flash section
+  const [flashPorts, setFlashPorts] = useState([])
+  const [selectedFlashPortIdx, setSelectedFlashPortIdx] = useState(null)
+  const { flashing, flashProgress, flashLogs, flashFirmware, clearFlashLogs } = useEspFlash()
 
   // WiFi toast auto-hide
   useEffect(() => {
@@ -51,6 +82,14 @@ export default function ConfigPage() {
       return () => clearTimeout(timer)
     }
   }, [wifiToast])
+
+  // Firmware toast auto-hide
+  useEffect(() => {
+    if (firmwareToast) {
+      const timer = setTimeout(() => setFirmwareToast(null), 4000)
+      return () => clearTimeout(timer)
+    }
+  }, [firmwareToast])
 
   // Load neon config and server parameters from server on mount
   useEffect(() => {
@@ -85,6 +124,8 @@ export default function ConfigPage() {
           const data = await res.json()
           if (data.ssid) setWifiSsid(data.ssid)
           if (data.password) setWifiPassword(data.password)
+          if (data.ssid2) setWifiSsid2(data.ssid2)
+          if (data.password2) setWifiPassword2(data.password2)
           if (data.server_ip) setWifiServerIp(data.server_ip)
           if (data.server_port) setWifiServerPort(data.server_port)
         }
@@ -94,6 +135,36 @@ export default function ConfigPage() {
     }
     fetchWifiDefaults()
   }, [])
+
+  // Load authorized USB ports for the flash section on mount
+  useEffect(() => {
+    if ('serial' in navigator) {
+      navigator.serial.getPorts().then(setFlashPorts).catch(() => {})
+    }
+  }, [])
+
+  // Fetch firmware info on mount
+  useEffect(() => {
+    const fetchFirmwareInfo = async () => {
+      try {
+        const res = await fetch('/api/firmware/buzzclick/version')
+        if (res.ok) {
+          const data = await res.json()
+          setFirmwareInfo(data)
+        }
+      } catch {
+        // Firmware endpoint not available (ignore)
+      }
+    }
+    fetchFirmwareInfo()
+  }, [])
+
+  // Update firmware info from WebSocket broadcast (after upload)
+  useEffect(() => {
+    if (wsFirmwareInfo) {
+      setFirmwareInfo(wsFirmwareInfo)
+    }
+  }, [wsFirmwareInfo])
 
   // Update local state when gameState.neonEffect changes (from WebSocket)
   useEffect(() => {
@@ -161,6 +232,8 @@ export default function ConfigPage() {
         body: JSON.stringify({
           ssid: wifiSsid,
           password: wifiPassword,
+          ssid2: wifiSsid2,
+          password2: wifiPassword2,
           server_ip: wifiServerIp,
           server_port: wifiServerPort
         })
@@ -176,6 +249,98 @@ export default function ConfigPage() {
     } finally {
       setSavingWifi(false)
     }
+  }
+
+  const handleBroadcastWifi = async () => {
+    setBroadcastingWifi(true)
+    try {
+      const res = await fetch('/api/buzzer/wifi-config', {
+        method: 'POST'
+      })
+      if (res.ok) {
+        const data = await res.json()
+        setWifiToast({ message: `Config WiFi envoyee a ${data.count} buzzer(s)`, type: 'success' })
+      } else {
+        const text = await res.text()
+        setWifiToast({ message: 'Erreur: ' + text, type: 'error' })
+      }
+    } catch (err) {
+      setWifiToast({ message: 'Erreur: ' + err.message, type: 'error' })
+    } finally {
+      setBroadcastingWifi(false)
+    }
+  }
+
+  const handleFirmwareUpload = async () => {
+    const file = firmwareFileRef.current?.files?.[0]
+    if (!file) {
+      setFirmwareToast({ message: 'Veuillez selectionner un fichier .bin', type: 'error' })
+      return
+    }
+    // Client-side validation
+    if (!file.name.endsWith('.bin')) {
+      setFirmwareToast({ message: 'Le fichier doit etre au format .bin', type: 'error' })
+      return
+    }
+    const sizeMB = file.size / (1024 * 1024)
+    if (file.size < 200 * 1024) {
+      setFirmwareToast({ message: 'Fichier trop petit (minimum 200 Ko)', type: 'error' })
+      return
+    }
+    if (sizeMB > 2) {
+      setFirmwareToast({ message: 'Fichier trop grand (maximum 2 Mo)', type: 'error' })
+      return
+    }
+
+    setUploadingFirmware(true)
+    try {
+      const formData = new FormData()
+      formData.append('file', file)
+      const res = await fetch('/api/firmware/buzzclick/upload', {
+        method: 'POST',
+        body: formData,
+      })
+      const data = await res.json()
+      if (res.ok && data.status === 'ok') {
+        setFirmwareInfo({ VERSION: data.version, SIZE: data.size, EXISTS: true, FILENAME: file.name })
+        setFirmwareToast({ message: `Firmware ${data.version} uploade avec succes`, type: 'success' })
+        if (firmwareFileRef.current) firmwareFileRef.current.value = ''
+      } else {
+        setFirmwareToast({ message: 'Erreur: ' + (data.message || 'Upload echoue'), type: 'error' })
+      }
+    } catch (err) {
+      setFirmwareToast({ message: 'Erreur reseau: ' + err.message, type: 'error' })
+    } finally {
+      setUploadingFirmware(false)
+    }
+  }
+
+  const handleUpdateAll = () => {
+    setShowOtaAllModal(true)
+  }
+
+  const refreshFlashPorts = async () => {
+    if (!('serial' in navigator)) return
+    try {
+      const ports = await navigator.serial.getPorts()
+      setFlashPorts(ports)
+      setSelectedFlashPortIdx(null)
+    } catch (_) {}
+  }
+
+  const handleRequestFlashPort = async () => {
+    if (!('serial' in navigator)) return
+    try {
+      await navigator.serial.requestPort()
+      await refreshFlashPorts()
+    } catch (_) {}
+  }
+
+  const handleFlashViaUSB = async () => {
+    if (selectedFlashPortIdx === null || !flashPorts[selectedFlashPortIdx]) return
+    if (!firmwareInfo?.EXISTS) return
+    clearFlashLogs()
+    await flashFirmware(flashPorts[selectedFlashPortIdx])
   }
 
   const handleLoadDemo = async () => {
@@ -316,6 +481,32 @@ export default function ConfigPage() {
                 </label>
               </div>
 
+              <div className="wifi-fallback-section">
+                <h4 className="wifi-fallback-title">WiFi de secours (optionnel)</h4>
+                <div className="wifi-form">
+                  <label className="wifi-field">
+                    <span>SSID WiFi 2 (optionnel)</span>
+                    <input
+                      type="text"
+                      value={wifiSsid2}
+                      onChange={(e) => setWifiSsid2(e.target.value)}
+                      placeholder="Nom du reseau WiFi secondaire"
+                      maxLength={32}
+                    />
+                  </label>
+                  <label className="wifi-field">
+                    <span>Mot de passe WiFi 2</span>
+                    <input
+                      type="password"
+                      value={wifiPassword2}
+                      onChange={(e) => setWifiPassword2(e.target.value)}
+                      placeholder="Mot de passe (min 8 car.)"
+                      maxLength={63}
+                    />
+                  </label>
+                </div>
+              </div>
+
               <div className="config-section-actions">
                 <Button variant="primary" onClick={handleSaveWifiDefaults} loading={savingWifi}>
                   Sauvegarder
@@ -323,6 +514,144 @@ export default function ConfigPage() {
                 <Button variant="secondary" onClick={() => setShowUSBModal(true)}>
                   Configuration via USB
                 </Button>
+              </div>
+
+              <div className="wifi-broadcast-section">
+                <div className="wifi-broadcast-warning">
+                  <span className="warning-icon">⚠️</span>
+                  <span>Les buzzers qui changent de reseau WiFi vont redemarrer automatiquement.</span>
+                </div>
+                <Button variant="secondary" onClick={handleBroadcastWifi} loading={broadcastingWifi}>
+                  Appliquer a tous les buzzers connectes
+                </Button>
+              </div>
+            </div>
+
+            {/* Firmware Buzzers Section */}
+            <div className="config-section">
+              <h3 className="config-section-title">Firmware Buzzers</h3>
+              <p className="config-section-hint">
+                Gerez le firmware des buzzers BuzzClick. Uploadez un fichier .bin de reference
+                et lancez les mises a jour OTA sur les buzzers connectes.
+              </p>
+
+              {/* Current firmware info */}
+              <div className="firmware-info-grid">
+                <div className="firmware-info-item">
+                  <span className="firmware-info-label">Version de reference</span>
+                  <span className="firmware-info-value">
+                    {firmwareInfo?.VERSION || <span className="firmware-none">aucune</span>}
+                  </span>
+                </div>
+                <div className="firmware-info-item">
+                  <span className="firmware-info-label">Fichier</span>
+                  <span className="firmware-info-value firmware-filename">
+                    {firmwareInfo?.FILENAME || '-'}
+                  </span>
+                </div>
+                <div className="firmware-info-item">
+                  <span className="firmware-info-label">Taille</span>
+                  <span className="firmware-info-value">
+                    {firmwareInfo?.EXISTS ? `${Math.round(firmwareInfo.SIZE / 1024)} Ko` : '—'}
+                  </span>
+                </div>
+                <div className="firmware-info-item">
+                  <span className="firmware-info-label">Etat</span>
+                  <span className={`firmware-status-badge ${firmwareInfo?.EXISTS ? 'exists' : firmwareInfo?.VERSION ? 'pending' : 'missing'}`}>
+                    {firmwareInfo?.EXISTS ? 'Disponible' : firmwareInfo?.VERSION ? 'Non uploade' : 'Absent'}
+                  </span>
+                </div>
+              </div>
+
+              {/* File upload */}
+              <div className="firmware-upload-row">
+                <input
+                  ref={firmwareFileRef}
+                  type="file"
+                  accept=".bin"
+                  className="firmware-file-input"
+                  id="firmware-file-input"
+                />
+                <label htmlFor="firmware-file-input" className="firmware-file-label">
+                  Choisir un fichier .bin (200 Ko - 2 Mo)
+                </label>
+              </div>
+
+              <div className="config-section-actions">
+                <Button
+                  variant="primary"
+                  onClick={handleFirmwareUpload}
+                  loading={uploadingFirmware}
+                >
+                  Uploader le firmware
+                </Button>
+                <Button
+                  variant="secondary"
+                  onClick={handleUpdateAll}
+                  disabled={!firmwareInfo?.EXISTS || outdatedCount === 0}
+                >
+                  {outdatedCount > 0
+                    ? `Mettre a jour les ${outdatedCount} buzzer${outdatedCount > 1 ? 's' : ''} obsoletes`
+                    : 'Mettre a jour les buzzers obsoletes'}
+                </Button>
+              </div>
+
+              {/* Flash via USB */}
+              <div className="firmware-flash-usb">
+                <h4 className="firmware-flash-title">Flash via USB</h4>
+                {'serial' in navigator ? (
+                  <>
+                    <div className="firmware-flash-ports">
+                      {flashPorts.length === 0 ? (
+                        <div className="firmware-flash-no-ports">Aucun port USB autorise</div>
+                      ) : (
+                        flashPorts.map((port, i) => (
+                          <div
+                            key={i}
+                            className={`firmware-flash-port-item ${selectedFlashPortIdx === i ? 'selected' : ''}`}
+                            onClick={() => setSelectedFlashPortIdx(i)}
+                          >
+                            {getPortLabel(port, i)}
+                          </div>
+                        ))
+                      )}
+                    </div>
+                    <div className="firmware-flash-port-actions">
+                      <Button variant="secondary" size="sm" onClick={handleRequestFlashPort}>
+                        Ajouter un port
+                      </Button>
+                      <Button variant="secondary" size="sm" onClick={refreshFlashPorts}>
+                        Rafraichir
+                      </Button>
+                    </div>
+                    <div className="config-section-actions">
+                      <Button
+                        variant="warning"
+                        onClick={handleFlashViaUSB}
+                        disabled={selectedFlashPortIdx === null || flashing || !firmwareInfo?.EXISTS}
+                        loading={flashing}
+                      >
+                        {flashing ? `Flash en cours... ${flashProgress}%` : 'Flasher via USB'}
+                      </Button>
+                    </div>
+                    {flashing && (
+                      <div className="firmware-flash-progress">
+                        <div className="firmware-flash-progress-bar" style={{ width: `${flashProgress}%` }} />
+                      </div>
+                    )}
+                    {flashLogs.length > 0 && (
+                      <div className="firmware-flash-logs">
+                        {flashLogs.map((line, i) => (
+                          <div key={i} className="firmware-flash-log">{line}</div>
+                        ))}
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <p className="firmware-flash-unavailable">
+                    Web Serial non disponible. Utilisez Chrome/Edge sur localhost.
+                  </p>
+                )}
               </div>
             </div>
 
@@ -611,6 +940,19 @@ export default function ConfigPage() {
         <div className={`wifi-toast wifi-toast-${wifiToast.type}`}>
           {wifiToast.message}
         </div>
+      )}
+
+      {firmwareToast && (
+        <div className={`wifi-toast wifi-toast-${firmwareToast.type}`}>
+          {firmwareToast.message}
+        </div>
+      )}
+
+      {showOtaAllModal && (
+        <OtaAllModal
+          bumpers={bumpers}
+          onClose={() => setShowOtaAllModal(false)}
+        />
       )}
     </div>
   )

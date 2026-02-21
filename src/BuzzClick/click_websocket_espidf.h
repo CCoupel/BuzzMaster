@@ -93,6 +93,7 @@ static void ws_event_handler(void *handler_args, esp_event_base_t base, int32_t 
                 JsonObject msg = helloDoc["MSG"].to<JsonObject>();
                 msg["IP"] = ipAddr;
                 msg["VERSION"] = String(VERSION);
+                msg["firmware_version"] = String(FIRMWARE_VERSION);
 
                 String helloJson;
                 serializeJson(helloDoc, helloJson);
@@ -292,6 +293,15 @@ void ws_connect() {
     if (!wsServerIP.isEmpty()) {
         connectWebSocket(wsServerIP, wsServerPort);
     }
+}
+
+// Send raw JSON string via WebSocket (used by OTA manager and other modules)
+void ws_sendRaw(const String& json) {
+    if (!wsConnected || !wsClient) {
+        ESP_LOGW(WS_TAG, "Cannot send message - not connected");
+        return;
+    }
+    esp_websocket_client_send_text(wsClient, json.c_str(), json.length(), portMAX_DELAY);
 }
 
 // Close WebSocket connection

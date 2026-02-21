@@ -643,6 +643,13 @@
   color: var(--gray-500);
 }
 
+.bumper-version.outdated {
+  background: #ef4444 !important;
+  color: #fff !important;
+  font-weight: 600;
+  cursor: default;
+}
+
 .bumper-controls {
   display: flex;
   align-items: center;

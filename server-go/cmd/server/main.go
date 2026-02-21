@@ -1,4 +1,4 @@
-package main
+﻿package main
 
 import (
 	"buzzcontrol/assets"
@@ -89,6 +89,21 @@ func main() {
 		app.engine.RecalculateAllTeamScores()
 	}
 
+	// Recalculate IS_OUTDATED for bumpers loaded from disk.
+	// Use FirmwareVersion if available; fall back to Version (older buzzers store only VERSION).
+	if bumpersLoaded {
+		fm := app.httpServer.GetFirmwareManager()
+		for id, bumper := range app.engine.GetTeamsAndBumpers().Bumpers {
+			vToCheck := bumper.FirmwareVersion
+			if vToCheck == "" {
+				vToCheck = bumper.Version
+			}
+			if vToCheck != "" {
+				app.engine.UpdateBumper(id, map[string]interface{}{"IS_OUTDATED": fm.IsOutdated(vToCheck)})
+			}
+		}
+	}
+
 	// Synchronize virtual player count with actual bumper count
 	app.engine.SyncVirtualPlayerCount()
 
@@ -157,6 +172,11 @@ func (a *App) init() {
 
 	// HTTP server
 	a.httpServer = server.NewHTTPServer(a.config.Server.HTTPPort, a.engine, a.wsHub, a.buzzerHub, a.logsHub)
+
+	// Extract embedded firmware (CI builds only - skipped when version.txt is "0.0.0")
+	if err := a.httpServer.GetFirmwareManager().InitFromEmbedded(assets.FirmwareAssets); err != nil {
+		server.LogError(game.LogComponentApp, "Failed to init embedded firmware: %v", err)
+	}
 
 	// Try embedded web files first, then fallback to filesystem
 	if embeddedFS, ok := web.GetEmbeddedFS(); ok {
@@ -277,6 +297,12 @@ func (a *App) setupCallbacks() {
 	// Config update handler
 	a.httpServer.OnConfigUpdate = func() {
 		a.broadcastConfigUpdate()
+	}
+
+	// WiFi config broadcast handler (triggered by POST /api/buzzer/wifi-config)
+	a.httpServer.OnBuzzerWifiConfig = func() int {
+		a.broadcastWifiConfig()
+		return a.buzzerHub.ConnectedCount()
 	}
 
 	// Detect existing backgrounds on startup
@@ -501,6 +527,9 @@ func (a *App) handleBuzzerMessage(incoming *protocol.IncomingMessage) {
 	case protocol.ActionPong:
 		a.handlePong(incoming.ClientID, msg)
 
+	case protocol.ActionOTAProgress:
+		a.handleOTAProgress(incoming.ClientID, msg)
+
 	default:
 		server.LogWarn(game.LogComponentApp, "Unknown buzzer action: %s", msg.Action)
 	}
@@ -632,10 +661,76 @@ func (a *App) handleHello(clientID string, msg *protocol.Message, source string)
 	var payload map[string]interface{}
 	if err := json.Unmarshal(msg.Msg, &payload); err == nil {
 		payload["PROTOCOL"] = proto
+
+		// Reset OTA_STATUS on reconnect: after a successful OTA the buzzer reboots and
+		// sends a new HELLO. Clearing the status here prevents stale "done" state from
+		// remaining visible in the UI after reconnection.
+		payload["OTA_STATUS"] = ""
+
+		// Extract firmware version: prefer firmware_version field (v3.1.0+ BuzzClick),
+		// fall back to VERSION for older buzzers (< v3.1.0) that only send VERSION.
+		fwVersion := ""
+		if v, ok := payload["firmware_version"].(string); ok && v != "" {
+			fwVersion = v
+		} else if v, ok := payload["VERSION"].(string); ok && v != "" {
+			fwVersion = v // Older buzzers send VERSION only
+		}
+		if fwVersion != "" {
+			payload["FIRMWARE_VERSION"] = fwVersion
+			fm := a.httpServer.GetFirmwareManager()
+			isOutdated := fm.IsOutdated(fwVersion)
+			payload["IS_OUTDATED"] = isOutdated
+			if isOutdated {
+				a.logger.Info(game.LogComponentApp, "Buzzer %s firmware %s is outdated", clientID, fwVersion)
+			}
+		}
+
 		a.engine.UpdateBumper(clientID, payload)
 	}
 
 	// Send current state to all
+	a.broadcastUpdate()
+
+	// Auto-sync WiFi config to newly connected buzzer (WebSocket only; TCP buzzers ignore unknown messages)
+	if source == "WebSocket-Buzzer" {
+		a.sendWifiConfigToBuzzer(clientID)
+	}
+}
+
+// handleOTAProgress processes OTA_PROGRESS messages from buzzers during firmware update.
+func (a *App) handleOTAProgress(clientID string, msg *protocol.Message) {
+	var progress protocol.OTAProgressPayload
+	if err := json.Unmarshal(msg.Msg, &progress); err != nil {
+		server.LogError(game.LogComponentApp, "Failed to parse OTA_PROGRESS from %s: %v", clientID, err)
+		return
+	}
+
+	// Use clientID as MAC if progress.MAC is empty
+	mac := progress.MAC
+	if mac == "" {
+		mac = clientID
+	}
+
+	server.LogInfo(game.LogComponentApp, "OTA_PROGRESS from %s: status=%s, percent=%d%%", mac, progress.Status, progress.Percent)
+
+	// Update bumper OTA status and progress percentage
+	updates := map[string]interface{}{
+		"OTA_STATUS":  progress.Status,
+		"OTA_PERCENT": progress.Percent,
+	}
+
+	if progress.Status == "done" {
+		// Firmware transfer complete. Do NOT clear IS_OUTDATED here — the buzzer
+		// will reboot and send a HELLO with its new FIRMWARE_VERSION, at which point
+		// the HELLO handler recalculates IS_OUTDATED based on the actual version.
+		// Clearing it here causes the frontend progress bar to turn green before the
+		// buzzer has actually rebooted and confirmed its version.
+		server.LogInfo(game.LogComponentApp, "Buzzer %s OTA transfer complete, awaiting reboot", mac)
+	}
+
+	a.engine.UpdateBumper(mac, updates)
+
+	// Broadcast updated state to web clients
 	a.broadcastUpdate()
 }
 
@@ -1568,6 +1663,49 @@ func (a *App) broadcastConfigUpdate() {
 		cfg.NeonEffect.Enabled, cfg.NeonEffect.Mode, cfg.NeonEffect.ArcWidth, cfg.NeonEffect.IntensityGap, cfg.NeonEffect.RotationSpeed, cfg.NeonEffect.GlowPulseSpeed, cfg.NeonEffect.GlowPulseMax, cfg.NeonEffect.BarOffset, cfg.NeonEffect.BarThickness, cfg.NeonEffect.ArcBlur)
 }
 
+// sendWifiConfigToBuzzer sends the current WiFi defaults config to a specific buzzer via WebSocket.
+func (a *App) sendWifiConfigToBuzzer(clientID string) {
+	cfg := a.config.WiFiDefaults
+	payload := protocol.WifiConfigPayload{
+		SSID:       cfg.SSID,
+		Pass:       cfg.Password,
+		ServerIP:   cfg.ServerIP,
+		ServerPort: cfg.ServerPort,
+		SSID2:      cfg.SSID2,
+		Pass2:      cfg.Password2,
+	}
+	msg, err := protocol.NewMessage(protocol.ActionWifiConfig, payload)
+	if err != nil {
+		server.LogError(game.LogComponentApp, "Failed to create WIFI_CONFIG message: %v", err)
+		return
+	}
+	if err := a.buzzerHub.SendToClient(clientID, msg); err != nil {
+		server.LogError(game.LogComponentApp, "Failed to send WIFI_CONFIG to %s: %v", clientID, err)
+		return
+	}
+	server.LogInfo(game.LogComponentApp, "Sent WIFI_CONFIG to buzzer %s", clientID)
+}
+
+// broadcastWifiConfig broadcasts the current WiFi defaults config to all connected buzzers.
+func (a *App) broadcastWifiConfig() {
+	cfg := a.config.WiFiDefaults
+	payload := protocol.WifiConfigPayload{
+		SSID:       cfg.SSID,
+		Pass:       cfg.Password,
+		ServerIP:   cfg.ServerIP,
+		ServerPort: cfg.ServerPort,
+		SSID2:      cfg.SSID2,
+		Pass2:      cfg.Password2,
+	}
+	msg, err := protocol.NewMessage(protocol.ActionWifiConfig, payload)
+	if err != nil {
+		server.LogError(game.LogComponentApp, "Failed to create WIFI_CONFIG broadcast message: %v", err)
+		return
+	}
+	a.buzzerHub.Broadcast(msg)
+	server.LogInfo(game.LogComponentApp, "Broadcast WIFI_CONFIG to all connected buzzers (%d)", a.buzzerHub.ConnectedCount())
+}
+
 func (a *App) broadcastQuestions() {
 	// Load questions from storage
 	questions := a.loadQuestions()
@@ -1753,9 +1891,9 @@ func (a *App) loadQuestions() map[string]map[string]interface{} {
 // displayAndOpenURLs shows all accessible URLs and opens the browser
 func displayAndOpenURLs(httpPort int, autoOpen bool, debug bool) {
 	log.Println("")
-	log.Println("╔════════════════════════════════════════════════════════════╗")
-	log.Println("║                    WEB INTERFACE URLs                      ║")
-	log.Println("╠════════════════════════════════════════════════════════════╣")
+	log.Println("â•”â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•—")
+	log.Println("â•‘                    WEB INTERFACE URLs                      â•‘")
+	log.Println("â• â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•£")
 
 	var primaryURL string
 
@@ -1767,7 +1905,7 @@ func displayAndOpenURLs(httpPort int, autoOpen bool, debug bool) {
 			if httpPort == 80 {
 				url = fmt.Sprintf("http://%s", iface.IP)
 			}
-			log.Printf("║  %-56s  ║", fmt.Sprintf("%s (%s)", url, iface.Name))
+			log.Printf("â•‘  %-56s  â•‘", fmt.Sprintf("%s (%s)", url, iface.Name))
 
 			// Use first non-virtual interface as primary
 			if primaryURL == "" && !strings.Contains(strings.ToLower(iface.Name), "virtual") &&
@@ -1783,9 +1921,9 @@ func displayAndOpenURLs(httpPort int, autoOpen bool, debug bool) {
 	if httpPort == 80 {
 		localhostURL = "http://localhost"
 	}
-	log.Printf("║  %-56s  ║", localhostURL+" (localhost)")
+	log.Printf("â•‘  %-56s  â•‘", localhostURL+" (localhost)")
 
-	log.Println("╚════════════════════════════════════════════════════════════╝")
+	log.Println("â•šâ•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•")
 	log.Println("")
 
 	// Use localhost if no primary found
@@ -2793,10 +2931,10 @@ func checkBonjourSupport() {
 	output, err := cmd.Output()
 	if err != nil {
 		// Service not found or error
-		log.Println("[mDNS] ⚠ Bonjour is NOT installed")
-		log.Println("[mDNS]   → mDNS hostname resolution (buzzcontrol.local) will NOT work")
-		log.Println("[mDNS]   → BuzzClick service discovery will still work")
-		log.Println("[mDNS]   → To enable hostname resolution, install Bonjour:")
+		log.Println("[mDNS] âš  Bonjour is NOT installed")
+		log.Println("[mDNS]   â†’ mDNS hostname resolution (buzzcontrol.local) will NOT work")
+		log.Println("[mDNS]   â†’ BuzzClick service discovery will still work")
+		log.Println("[mDNS]   â†’ To enable hostname resolution, install Bonjour:")
 		log.Println("[mDNS]     https://support.apple.com/kb/DL999")
 		return
 	}
@@ -2804,13 +2942,13 @@ func checkBonjourSupport() {
 	// Check if service is running
 	outputStr := string(output)
 	if strings.Contains(outputStr, "RUNNING") {
-		log.Println("[mDNS] ✓ Bonjour service is running")
-		log.Println("[mDNS]   → mDNS hostname resolution (buzzcontrol.local) should work")
+		log.Println("[mDNS] âœ“ Bonjour service is running")
+		log.Println("[mDNS]   â†’ mDNS hostname resolution (buzzcontrol.local) should work")
 	} else if strings.Contains(outputStr, "STOPPED") {
-		log.Println("[mDNS] ⚠ Bonjour service is installed but STOPPED")
-		log.Println("[mDNS]   → Start the service: sc start \"Bonjour Service\"")
+		log.Println("[mDNS] âš  Bonjour service is installed but STOPPED")
+		log.Println("[mDNS]   â†’ Start the service: sc start \"Bonjour Service\"")
 	} else {
-		log.Println("[mDNS] ⚠ Bonjour service status unknown")
-		log.Printf("[mDNS]   → Output: %s", strings.TrimSpace(outputStr))
+		log.Println("[mDNS] âš  Bonjour service status unknown")
+		log.Printf("[mDNS]   â†’ Output: %s", strings.TrimSpace(outputStr))
 	}
 }

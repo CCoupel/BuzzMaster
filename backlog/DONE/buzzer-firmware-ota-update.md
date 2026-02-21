@@ -1,6 +1,6 @@
 # Mise à jour OTA du firmware des buzzers
 
-**Statut** : 📋 Planifié
+**Statut** : DONE - v3.1.0 (2026-02-20)
 
 ## Description
 

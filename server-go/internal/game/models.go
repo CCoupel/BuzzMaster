@@ -70,6 +70,11 @@ type Bumper struct {
 	HintsAtBuzz int         `json:"HINTS_AT_BUZZ,omitempty"` // Number of QCM hints when player buzzed
 	IsVirtual   bool        `json:"IS_VIRTUAL,omitempty"`    // True for virtual players (mobile app)
 	IsVPlayer   bool        `json:"IS_VPLAYER,omitempty"`    // True for VPlayer (can answer all QCM colors)
+	// OTA firmware update fields (added in v3.1.0)
+	FirmwareVersion string `json:"FIRMWARE_VERSION,omitempty"` // BuzzClick firmware version reported via HELLO
+	IsOutdated      bool   `json:"IS_OUTDATED,omitempty"`      // True if firmware is older than server-stored firmware
+	OTAStatus       string `json:"OTA_STATUS,omitempty"`       // OTA status: "", "downloading", "flashing", "done", "error"
+	OTAPercent      int    `json:"OTA_PERCENT,omitempty"`      // OTA progress percentage (0-100)
 }
 
 // QuestionType represents the type of question

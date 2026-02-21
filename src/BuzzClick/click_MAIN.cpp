@@ -8,6 +8,7 @@
 
 #include "esp_task_wdt.h"
 #include "click_serverConnection.h"
+#include "click_otaManager.h"
 
 static const char* MAIN_TAG = "MAIN";
 const uint16_t logPort = 8889;  // Port UDP pour les logs

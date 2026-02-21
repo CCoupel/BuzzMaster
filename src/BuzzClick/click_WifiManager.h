@@ -115,10 +115,36 @@ bool connectToWifi() {
   }
 
   if (WiFi.status() != WL_CONNECTED) {
-    ESP_LOGE(WIFI_TAG, "WiFi connection failed to SSID=%s", ssid);
-    // Red = error
-    setLedColor(255, 0, 0, true);
-    return false;
+    ESP_LOGW(WIFI_TAG, "WiFi primary failed (SSID=%s)", ssid);
+
+    // Try fallback WiFi if configured
+    if (cfg.wifi_ssid2.length() > 0) {
+      ESP_LOGI(WIFI_TAG, "Trying fallback WiFi SSID2=%s", cfg.wifi_ssid2.c_str());
+      setLedColor(255, 165, 0, true, 0, 4);  // orange = trying fallback
+
+      WiFi.disconnect();
+      WiFi.begin(cfg.wifi_ssid2.c_str(), cfg.wifi_pass2.c_str());
+      startAttemptTime = millis();
+
+      while (WiFi.status() != WL_CONNECTED && millis() - startAttemptTime < WIFI_TIMEOUT_MS) {
+        esp_task_wdt_reset();
+        delay(100);
+        Serial.print(".");
+      }
+
+      if (WiFi.status() != WL_CONNECTED) {
+        ESP_LOGE(WIFI_TAG, "WiFi fallback also failed (SSID2=%s)", cfg.wifi_ssid2.c_str());
+        setLedColor(255, 0, 0, true);
+        return false;
+      }
+
+      ESP_LOGI(WIFI_TAG, "Connected via fallback WiFi (SSID2=%s) IP=%s",
+               cfg.wifi_ssid2.c_str(), WiFi.localIP().toString().c_str());
+    } else {
+      ESP_LOGE(WIFI_TAG, "WiFi connection failed and no fallback configured");
+      setLedColor(255, 0, 0, true);
+      return false;
+    }
   }
 
   ESP_LOGI(WIFI_TAG, "WiFi connecté %s", WiFi.localIP().toString());

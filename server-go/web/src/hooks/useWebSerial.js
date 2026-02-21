@@ -11,6 +11,7 @@ export default function useWebSerial() {
   const writerRef = useRef(null)
   const readLoopRef = useRef(false)
   const mountedRef = useRef(true)
+  const inputDoneRef = useRef(null)
 
   // Track mounted state to avoid state updates after unmount
   useEffect(() => {
@@ -25,6 +26,7 @@ export default function useWebSerial() {
   const readLoop = useCallback(async () => {
     const decoder = new TextDecoderStream()
     const inputDone = portRef.current.readable.pipeTo(decoder.writable)
+    inputDoneRef.current = inputDone
     const reader = decoder.readable.getReader()
     readerRef.current = reader
     readLoopRef.current = true
@@ -52,6 +54,7 @@ export default function useWebSerial() {
     } finally {
       try { reader.releaseLock() } catch (_) {}
       try { await inputDone } catch (_) {}
+      inputDoneRef.current = null
     }
   }, [addLog])
 
@@ -107,6 +110,7 @@ export default function useWebSerial() {
     const port = portRef.current
     const writer = writerRef.current
     const reader = readerRef.current
+    const inputDone = inputDoneRef.current
 
     // Signal read loop to stop
     readLoopRef.current = false
@@ -115,6 +119,7 @@ export default function useWebSerial() {
     portRef.current = null
     writerRef.current = null
     readerRef.current = null
+    inputDoneRef.current = null
 
     try {
       // 1. Close writer stream
@@ -126,9 +131,14 @@ export default function useWebSerial() {
       if (reader) {
         try { await reader.cancel() } catch (_) {}
       }
-      // 3. Close the actual serial port — small delay to let streams settle
+      // 3. Wait for the readable pipeline to release its lock on port.readable.
+      //    pipeTo() holds a lock on port.readable until the pipeline settles.
+      //    Without this await, port.close() may fail silently (lock still held).
+      if (inputDone) {
+        try { await inputDone } catch (_) {}
+      }
+      // 4. Close the actual serial port
       if (port) {
-        await new Promise(r => setTimeout(r, 50))
         try { await port.close() } catch (_) {}
       }
     } catch (err) {
@@ -153,6 +163,8 @@ export default function useWebSerial() {
     setLogs([])
   }, [])
 
+  const getPort = useCallback(() => portRef.current, [])
+
   return {
     connected,
     connecting,
@@ -161,6 +173,7 @@ export default function useWebSerial() {
     connectToPort,
     disconnect,
     sendCommand,
-    clearLogs
+    clearLogs,
+    getPort,
   }
 }

@@ -146,6 +146,43 @@ cd server-go && ./build.ps1
 - BuzzClick uses MAC address as unique ID
 - mDNS service name is `_sock._tcp` for server discovery
 
+### OTA Firmware Endpoints (v3.1.0)
+
+```
+GET  /api/firmware/buzzclick/version      → FirmwareVersionPayload (version, filename, size, exists)
+GET  /api/firmware/buzzclick/latest.bin   → Binaire firmware (octet-stream)
+POST /api/firmware/buzzclick/upload       → Upload .bin (multipart, champ "file", param "version")
+POST /api/buzzer/{mac}/update             → Declenche OTA sur buzzer specifique
+POST /api/buzzer/update-all               → OTA sur tous les buzzers obsoletes
+POST /api/buzzer/wifi-config              → Broadcast WIFI_CONFIG a tous les buzzers WS
+```
+
+Actions WebSocket OTA (v3.1.0) :
+```json
+// Server → Buzzer : declencher OTA
+{ "ACTION": "OTA_UPDATE", "MSG": { "URL": "http://...", "VERSION": "3.1.0", "SIZE": 512000 } }
+
+// Buzzer → Server : progression
+{ "ACTION": "OTA_PROGRESS", "MSG": { "STATUS": "downloading", "PERCENT": 42, "ERROR": "" } }
+
+// Server → Web : info firmware de reference
+{ "ACTION": "FIRMWARE_VERSION", "MSG": { "VERSION": "3.1.0", "FILENAME": "buzzclick-v3.1.0.bin", "SIZE": 512000, "EXISTS": true } }
+
+// Server → Buzzer : sync config WiFi
+{ "ACTION": "WIFI_CONFIG", "MSG": { "SSID": "MyWifi", "PASS": "pass", "SERVER_IP": "192.168.1.84", "SERVER_PORT": 80, "SSID2": "Backup", "PASS2": "pass2" } }
+```
+
+### Modele Bumper enrichi (v3.1.0)
+
+```json
+{
+  "ID": "AA:BB:CC:DD:EE:FF",
+  "FIRMWARE_VERSION": "3.1.0",
+  "IS_OUTDATED": false,
+  "OTA_STATUS": ""
+}
+```
+
 ### Contrainte Affichage TV - IMPORTANT
 **L'affichage TV (`/tv`) est STATIQUE et ne permet PAS de scroll.**
 Toutes les vues TV doivent tenir entièrement à l'écran sans défilement :
@@ -162,22 +199,29 @@ Toutes les vues TV doivent tenir entièrement à l'écran sans défilement :
   - `internal/server/http.go` : Routes HTTP + handlers WebSocket (`/ws`, `/ws/buzzer`, `/ws/logs`)
   - `internal/protocol/messages.go` : Serialisation JSON (SerializeForWebSocket, Serialize)
   - `internal/protocol/parser.go` : Parsing JSON (ParseSingle pour WebSocket, Parse pour TCP)
+- **OTA Firmware (v3.1.0)** :
+  - `internal/server/firmware.go` : FirmwareManager (stockage, versioning, comparaison semver)
+  - `internal/server/http_firmware.go` : Handlers OTA (`/api/firmware/*`, `/api/buzzer/*/update`)
+  - `src/BuzzClick/click_otaManager.h` : Module OTA ESP32-C3 (download HTTP + flash partition)
 - **Frontend** :
   - `web/src/pages/GamePage.jsx` : Page admin principale (jeu en cours)
   - `web/src/pages/QuestionsPage.jsx` : Gestion questions + fonds d'ecran
-  - `web/src/pages/ConfigPage.jsx` : Configuration serveur (parametres, effet neon, WiFi USB)
+  - `web/src/pages/ConfigPage.jsx` : Configuration serveur (parametres, effet neon, WiFi USB, OTA firmware)
   - `web/src/pages/BackupPage.jsx` : Sauvegarde/Restauration/Reinitialisation
   - `web/src/pages/UpdatePage.jsx` : Gestion des mises a jour automatiques
   - `web/src/pages/PlayerDisplay.jsx` : Affichage TV (STATIQUE)
-  - `web/src/components/TeamCard.jsx` : Carte equipe/joueurs
+  - `web/src/components/TeamCard.jsx` : Carte equipe/joueurs (+ badge firmware + modal OTA)
   - `web/src/components/Navbar.jsx` : Navigation + menu abeille (dropdown)
-  - `web/src/components/USBConfigModal.jsx` : Modale de configuration USB buzzers
+  - `web/src/components/USBConfigModal.jsx` : Modale de configuration USB buzzers (+ flash firmware)
   - `web/src/hooks/useWebSerial.js` : Hook Web Serial API pour communication AT
+  - `web/src/hooks/useEspFlash.js` : Hook flash firmware via esptool-js (v3.1.0)
 - **Firmware BuzzClick** :
-  - `src/BuzzClick/click_nvsConfig.h` : Stockage NVS (WiFi, IP serveur, port)
+  - `src/BuzzClick/click_nvsConfig.h` : Stockage NVS (WiFi, IP serveur, port, ssid2/pass2)
   - `src/BuzzClick/click_usbConfig.h` : Protocole AT sur USB serie
   - `src/BuzzClick/click_WifiManager.h` : Connexion WiFi (priorite NVS)
   - `src/BuzzClick/click_websocketClient.h` : Client WebSocket buzzer (v3.0.0, flag USE_WEBSOCKET)
+  - `src/BuzzClick/click_serverConnection.h` : Handlers messages serveur (OTA_UPDATE, WIFI_CONFIG)
+  - `src/BuzzClick/click_otaManager.h` : OTA manager (download + flash, v3.1.0)
   - `src/BuzzClick/click_MAIN.cpp` : Setup, factory reset, boucle AT
 - **Config** : `server-go/config.json`
 
@@ -192,7 +236,7 @@ Toutes les vues TV doivent tenir entièrement à l'écran sans défilement :
 |------|-----------------|
 | `/admin/game` | Contrôle du jeu, affichage équipes, timer |
 | `/admin/questions` | CRUD questions + **gestion fonds d'écran** |
-| `/admin/config` | Paramètres serveur, effet néon, mode démo |
+| `/admin/config` | Paramètres serveur, effet néon, mode démo, **WiFi defaults + SSID2**, **OTA firmware buzzer** |
 | `/admin/backup` | Sauvegarde, restauration, réinitialisation |
 | `/admin/logs` | Logs serveur en temps réel |
 | `/admin/updates` | Vérification et installation mises à jour |

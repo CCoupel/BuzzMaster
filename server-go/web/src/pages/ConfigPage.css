@@ -677,6 +677,274 @@
   }
 }
 
+/* WiFi Fallback Section */
+.wifi-fallback-section {
+  margin-top: var(--space-4);
+  padding-top: var(--space-4);
+  border-top: 1px dashed var(--gray-300);
+}
+
+.wifi-fallback-title {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--gray-600);
+  margin: 0 0 var(--space-3) 0;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+/* WiFi Broadcast Section */
+.wifi-broadcast-section {
+  margin-top: var(--space-4);
+  padding: var(--space-3);
+  background: var(--gray-50);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--gray-200);
+}
+
+.wifi-broadcast-warning {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  background: color-mix(in srgb, var(--warning) 10%, white);
+  border-left: 3px solid var(--warning);
+  border-radius: var(--radius-md);
+  font-size: 0.875rem;
+  color: var(--gray-700);
+  margin-bottom: var(--space-3);
+}
+
+.warning-icon {
+  font-size: 1.125rem;
+  line-height: 1;
+}
+
+/* =========================================
+   Firmware Buzzers Section
+   ========================================= */
+
+.firmware-info-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
+  padding: var(--space-3);
+  background: var(--gray-50);
+  border-radius: var(--radius-md);
+}
+
+.firmware-info-item {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.firmware-info-label {
+  font-size: 0.7rem;
+  color: var(--gray-500);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.firmware-info-value {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--gray-800);
+  font-family: var(--font-display);
+}
+
+.firmware-filename {
+  font-family: monospace;
+  font-size: 0.75rem;
+  font-weight: 400;
+  color: var(--gray-600);
+  word-break: break-all;
+}
+
+.firmware-none {
+  font-style: italic;
+  color: var(--gray-400);
+  font-weight: 400;
+}
+
+.firmware-status-badge {
+  display: inline-block;
+  padding: 2px var(--space-2);
+  border-radius: var(--radius-full);
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.firmware-status-badge.exists {
+  background: color-mix(in srgb, var(--success) 15%, white);
+  color: var(--success, #22c55e);
+}
+
+.firmware-status-badge.pending {
+  background: color-mix(in srgb, var(--warning) 15%, white);
+  color: var(--warning, #f59e0b);
+}
+
+.firmware-status-badge.missing {
+  background: color-mix(in srgb, var(--danger, #ef4444) 15%, white);
+  color: var(--danger, #ef4444);
+}
+
+.firmware-upload-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin-bottom: var(--space-3);
+  flex-wrap: wrap;
+}
+
+.firmware-file-input {
+  /* Hide the default file input */
+  width: 0.1px;
+  height: 0.1px;
+  opacity: 0;
+  overflow: hidden;
+  position: absolute;
+  z-index: -1;
+}
+
+.firmware-file-label {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-4);
+  background: white;
+  border: 2px dashed var(--gray-300);
+  border-radius: var(--radius-lg);
+  font-size: 0.875rem;
+  color: var(--gray-600);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  flex: 1;
+  min-width: 200px;
+  text-align: center;
+  justify-content: center;
+}
+
+.firmware-file-label:hover {
+  border-color: var(--primary-400);
+  color: var(--primary-600);
+  background: color-mix(in srgb, var(--primary-400) 5%, white);
+}
+
+/* When a file is selected, show feedback via the label being focused */
+.firmware-file-input:focus + .firmware-file-label {
+  border-color: var(--primary-500);
+  outline: 2px solid var(--primary-200);
+}
+
+@media (max-width: 768px) {
+  .firmware-info-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Firmware Flash USB */
+.firmware-flash-usb {
+  margin-top: var(--space-5);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--gray-200);
+}
+
+.firmware-flash-title {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--gray-700);
+  margin: 0 0 var(--space-3) 0;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.firmware-flash-ports {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin-bottom: var(--space-3);
+}
+
+.firmware-flash-no-ports {
+  font-size: 0.8125rem;
+  color: var(--gray-400);
+  font-style: italic;
+  padding: var(--space-2) 0;
+}
+
+.firmware-flash-port-item {
+  padding: var(--space-2) var(--space-3);
+  border: 2px solid var(--gray-200);
+  border-radius: var(--radius-md);
+  font-size: 0.8125rem;
+  color: var(--gray-700);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.firmware-flash-port-item:hover {
+  border-color: var(--primary-300);
+  background: color-mix(in srgb, var(--primary-400) 5%, white);
+}
+
+.firmware-flash-port-item.selected {
+  border-color: var(--primary-500);
+  background: color-mix(in srgb, var(--primary-400) 10%, white);
+  color: var(--primary-700);
+  font-weight: 600;
+}
+
+.firmware-flash-port-actions {
+  display: flex;
+  gap: var(--space-2);
+  margin-bottom: var(--space-3);
+}
+
+.firmware-flash-progress {
+  height: 6px;
+  background: var(--gray-100);
+  border-radius: var(--radius-full);
+  overflow: hidden;
+  margin-top: var(--space-3);
+}
+
+.firmware-flash-progress-bar {
+  height: 100%;
+  background: linear-gradient(90deg, var(--primary-400), var(--primary-600));
+  border-radius: var(--radius-full);
+  transition: width 0.3s ease;
+}
+
+.firmware-flash-logs {
+  margin-top: var(--space-3);
+  background: var(--gray-900);
+  border-radius: var(--radius-md);
+  padding: var(--space-3);
+  max-height: 160px;
+  overflow-y: auto;
+  font-family: monospace;
+}
+
+.firmware-flash-log {
+  font-size: 0.75rem;
+  color: var(--gray-300);
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.firmware-flash-unavailable {
+  font-size: 0.8125rem;
+  color: var(--gray-400);
+  font-style: italic;
+  margin: 0;
+}
+
 /* Neon Effect Configuration */
 .neon-toggle {
   margin-bottom: var(--space-4);

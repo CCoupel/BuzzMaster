@@ -52,6 +52,9 @@ export default function GamePage() {
         answerColor: bumper.ANSWER_COLOR,
         hintsAtBuzz: bumper.HINTS_AT_BUZZ || 0, // QCM hints count when player buzzed
         isVPlayer: bumper.IS_VPLAYER === true, // VPlayer flag for multicolor QCM
+        firmwareVersion: bumper.FIRMWARE_VERSION || '',
+        isOutdated: bumper.IS_OUTDATED === true,
+        otaStatus: bumper.OTA_STATUS || '',
       })
     })
     // Sort bumpers by timestamp within each team

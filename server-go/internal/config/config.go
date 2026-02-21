@@ -37,6 +37,8 @@ type WiFiDefaultsConfig struct {
 	Password   string `json:"password"`
 	ServerIP   string `json:"server_ip"`
 	ServerPort int    `json:"server_port"`
+	SSID2      string `json:"ssid2,omitempty"`
+	Password2  string `json:"password2,omitempty"`
 }
 
 type GameConfig struct {

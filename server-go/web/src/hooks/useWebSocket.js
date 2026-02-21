@@ -36,6 +36,7 @@ export default function useWebSocket() {
   const [version, setVersion] = useState(null)
   const [clientCounts, setClientCounts] = useState({ admin: 0, tv: 0, vplayer: 0 })
   const [logs, setLogs] = useState([])
+  const [firmwareInfo, setFirmwareInfo] = useState(null) // { VERSION, FILENAME, SIZE, EXISTS }
 
   const wsRef = useRef(null)
   const logCallbackRef = useRef(null)
@@ -320,6 +321,19 @@ export default function useWebSocket() {
         }
         break
 
+      case 'FIRMWARE_VERSION':
+        // Received after firmware upload: update firmware info for all clients
+        if (MSG) {
+          console.log('[WS] FIRMWARE_VERSION:', MSG)
+          setFirmwareInfo({
+            VERSION: MSG.VERSION,
+            FILENAME: MSG.FILENAME,
+            SIZE: MSG.SIZE,
+            EXISTS: MSG.EXISTS,
+          })
+        }
+        break
+
       default:
         console.log('Unknown action:', ACTION)
     }
@@ -463,6 +477,7 @@ export default function useWebSocket() {
     fsInfo,
     version,
     clientCounts,
+    firmwareInfo,
     // Actions
     sendMessage,
     startGame,

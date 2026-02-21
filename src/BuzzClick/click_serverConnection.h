@@ -7,11 +7,15 @@
 
 #ifdef USE_WEBSOCKET
 // Forward declarations for WebSocket wrapper functions
-// Defined in click_websocketClient.h, included after this header
+// Defined in click_websocket_espidf.h, included after this header via click_WifiManager.h
 void ws_sendBuzz(const String& mac, const String& buttonName);
 void ws_sendPong(const String& mac);
 bool ws_isConnected();
 void ws_connect();
+
+// Forward declaration for OTA manager
+// Defined in click_otaManager.h, included after click_WifiManager.h in click_MAIN.cpp
+void performOTA(const String& url, const String& expectedVersion);
 #else
 #include <AsyncUDP.h>
 #endif
@@ -605,7 +609,68 @@ void parseJSON(const String& data, AsyncClient* c) {
       ESP_LOGI(SRV_TAG, "Resetting Data");
       resetGame();
       break;
-      
+
+#ifdef USE_WEBSOCKET
+    case hash("OTA_UPDATE"):
+      {
+        const char* version = message["VERSION"] | "";
+        // Build firmware URL from NVS server_ip + fixed port 80 (HTTP/WS port).
+        // The buzzer already knows the server IP from its NVS config; using it here
+        // avoids localhost resolution issues when the admin UI runs on the same machine.
+        String otaUrl = "http://" + currentConfig.server_ip + "/api/firmware/buzzclick/latest.bin";
+        ESP_LOGI(SRV_TAG, "Received OTA_UPDATE: version=%s url=%s", version, otaUrl.c_str());
+        if (strlen(version) > 0) {
+            performOTA(otaUrl, String(version));
+        } else {
+            ESP_LOGW(SRV_TAG, "OTA_UPDATE ignored: missing version");
+        }
+      }
+      break;
+
+    case hash("WIFI_CONFIG"):
+      {
+        const char* ssid  = message["SSID"]       | "";
+        const char* pass  = message["PASS"]       | "";
+        const char* ip    = message["SERVER_IP"]  | "";
+        int port          = message["SERVER_PORT"] | 0;
+        const char* ssid2 = message["SSID2"]      | "";
+        const char* pass2 = message["PASS2"]      | "";
+
+        ESP_LOGI(SRV_TAG, "WIFI_CONFIG received: SSID=%s IP=%s PORT=%d SSID2=%s",
+                 ssid, ip, port, ssid2);
+
+        if (strlen(ssid) == 0 || strlen(ip) == 0) {
+            ESP_LOGW(SRV_TAG, "WIFI_CONFIG ignored: empty SSID or IP");
+            break;
+        }
+
+        BuzzClickConfig& cfg = nvsGetConfig();
+        bool changed = (cfg.wifi_ssid != ssid)
+                    || (cfg.wifi_password != pass)
+                    || (cfg.server_ip != ip)
+                    || (port > 0 && cfg.server_tcp_port != (uint16_t)port)
+                    || (cfg.wifi_ssid2 != ssid2)
+                    || (cfg.wifi_pass2 != pass2);
+
+        cfg.wifi_ssid = ssid;
+        cfg.wifi_password = pass;
+        cfg.server_ip = ip;
+        if (port > 0) cfg.server_tcp_port = (uint16_t)port;
+        cfg.wifi_ssid2 = ssid2;
+        cfg.wifi_pass2 = pass2;
+        nvsSaveConfig();
+
+        if (changed) {
+            ESP_LOGI(SRV_TAG, "WIFI_CONFIG: config changed, rebooting in 3s...");
+            delay(3000);
+            ESP.restart();
+        } else {
+            ESP_LOGI(SRV_TAG, "WIFI_CONFIG: config unchanged, no reboot needed");
+        }
+      }
+      break;
+#endif
+
     default:
       ESP_LOGW(SRV_TAG, "Unknown action: %s", action);
       break;

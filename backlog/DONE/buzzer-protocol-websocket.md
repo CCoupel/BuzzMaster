@@ -1,6 +1,6 @@
 # Migration du protocole des buzzers physiques vers WebSocket
 
-**Statut** : 📋 Planifié
+**Statut** : ✅ Complété (v3.0.0)
 
 ## Description
 

@@ -3,6 +3,7 @@ package server
 import (
 	"buzzcontrol/internal/game"
 	"buzzcontrol/internal/protocol"
+	"fmt"
 	"net/http"
 	"sync"
 	"time"
@@ -90,6 +91,11 @@ func (h *BuzzerWebSocketHub) BuzzerCount() int {
 	return len(h.clients)
 }
 
+// ConnectedCount returns the number of connected buzzer clients (alias for BuzzerCount).
+func (h *BuzzerWebSocketHub) ConnectedCount() int {
+	return h.BuzzerCount()
+}
+
 // Broadcast sends a message to all connected buzzer clients
 func (h *BuzzerWebSocketHub) Broadcast(msg *protocol.Message) {
 	data, err := msg.SerializeForWebSocket()
@@ -121,7 +127,7 @@ func (h *BuzzerWebSocketHub) SendToClient(mac string, msg *protocol.Message) err
 			case client.Send <- data:
 				return nil
 			default:
-				return nil
+				return fmt.Errorf("send channel full for buzzer %s, message dropped", mac)
 			}
 		}
 	}
@@ -139,6 +145,18 @@ func (h *BuzzerWebSocketHub) SetClientMAC(clientID string, mac string) {
 			return
 		}
 	}
+}
+
+// IsClientConnected returns true if a buzzer with the given MAC address is currently connected.
+func (h *BuzzerWebSocketHub) IsClientConnected(mac string) bool {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	for client := range h.clients {
+		if client.MAC == mac || client.ID == mac {
+			return true
+		}
+	}
+	return false
 }
 
 // GetClients returns list of connected buzzer MAC addresses

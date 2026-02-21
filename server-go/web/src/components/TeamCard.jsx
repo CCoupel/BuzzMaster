@@ -1,5 +1,5 @@
 import { motion } from 'framer-motion'
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import './TeamCard.css'
 
 // QCM answer colors - same as TeamsPage
@@ -16,6 +16,350 @@ const getPenaltyPercent = (hintsAtBuzz, penaltyConfig) => {
   if (hintsAtBuzz === 1) return Math.round(penaltyConfig.penalty1 * 100)
   if (hintsAtBuzz >= 2) return Math.round(penaltyConfig.penalty2 * 100)
   return 100
+}
+
+// OTA Update Modal - shown when clicking a red (outdated) firmware version
+export function OtaModal({ buzzer, onClose }) {
+  const [targetVersion, setTargetVersion] = useState(null)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState(null)
+
+  // Fetch the reference firmware version when modal opens
+  useEffect(() => {
+    fetch('/api/firmware/buzzclick/version')
+      .then(r => r.json())
+      .then(data => setTargetVersion(data))
+      .catch(() => setError('Impossible de recuperer la version de reference'))
+  }, [])
+
+  const handleLaunchOta = async () => {
+    setLoading(true)
+    setError(null)
+    try {
+      const mac = encodeURIComponent(buzzer.mac)
+      const res = await fetch(`/api/buzzer/${mac}/update`, { method: 'POST' })
+      const data = await res.json()
+      if (data.status !== 'ok') {
+        setError(data.message || 'Erreur lors du lancement de la mise a jour')
+        setLoading(false)
+      }
+      // Modal stays open to show live OTA_STATUS progress via props
+    } catch (err) {
+      setError('Erreur reseau: ' + err.message)
+      setLoading(false)
+    }
+  }
+
+
+  const isInProgress = buzzer.otaStatus === 'downloading' || buzzer.otaStatus === 'flashing'
+  const isDone = buzzer.otaStatus === 'done'
+  const isError = buzzer.otaStatus === 'error'
+  const hasProgress = isInProgress || isDone
+
+  // Determine progress bar percentage and phase
+  const percent = isDone ? 100 : (buzzer.otaPercent || 0)
+  const phaseClass = isDone ? 'done' : (buzzer.otaStatus || 'downloading')
+  // Use indeterminate animation if server sends 0% (buzzer doesn't report percent yet)
+  const indeterminate = isInProgress && percent === 0
+
+  const phaseLabel = {
+    downloading: 'Téléchargement',
+    flashing: 'Flashage',
+    done: 'Terminé',
+    error: 'Erreur OTA',
+  }[buzzer.otaStatus] || ''
+
+  return (
+    <div className="ota-modal-overlay" onClick={onClose}>
+      <div className="ota-modal" onClick={e => e.stopPropagation()}>
+        <div className="ota-modal-header">
+          <h3>Mise a jour firmware</h3>
+          <button className="ota-modal-close" onClick={onClose} aria-label="Fermer">x</button>
+        </div>
+
+        <div className="ota-modal-body">
+          <div className="ota-info-row">
+            <span className="ota-info-label">Buzzer</span>
+            <span className="ota-info-value">{buzzer.name}</span>
+          </div>
+          <div className="ota-info-row">
+            <span className="ota-info-label">MAC</span>
+            <span className="ota-info-value ota-mac">{buzzer.mac}</span>
+          </div>
+          <div className="ota-info-row">
+            <span className="ota-info-label">Version actuelle</span>
+            <span className="ota-info-value ota-version-current">{buzzer.firmwareVersion || '?'}</span>
+          </div>
+          <div className="ota-info-row">
+            <span className="ota-info-label">Version cible</span>
+            <span className="ota-info-value ota-version-target">
+              {targetVersion ? targetVersion.VERSION : '...'}
+            </span>
+          </div>
+
+          {/* Progress bar - shown during and after OTA */}
+          {hasProgress && (
+            <div className="ota-progress-container">
+              <div className="ota-progress-label">
+                <span className={`ota-progress-phase ${phaseClass}`}>{phaseLabel}</span>
+                {!indeterminate && <span>{percent}%</span>}
+              </div>
+              <div className="ota-progress-track">
+                <div
+                  className={`ota-progress-fill ${phaseClass}${indeterminate ? ' indeterminate' : ''}`}
+                  style={indeterminate ? undefined : { width: `${percent}%` }}
+                />
+              </div>
+            </div>
+          )}
+
+          {/* Error states */}
+          {isError && (
+            <div className="ota-status ota-status-error">Erreur OTA</div>
+          )}
+          {error && (
+            <div className="ota-status ota-status-error">{error}</div>
+          )}
+        </div>
+
+        <div className="ota-modal-footer">
+          <button
+            className="ota-btn ota-btn-secondary"
+            onClick={onClose}
+            disabled={isInProgress}
+          >
+            Annuler
+          </button>
+          <button
+            className="ota-btn ota-btn-primary"
+            onClick={handleLaunchOta}
+            disabled={loading || isInProgress || isDone || !targetVersion?.EXISTS}
+          >
+            {isInProgress ? (
+              <><span className="ota-spinner" /> En cours...</>
+            ) : isDone ? (
+              'Termine'
+            ) : (
+              'Lancer la mise a jour OTA'
+            )}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// OTA Update All Modal - shown when clicking "Mettre à jour tous les buzzers obsolètes"
+// bumpers: full bumpers object from useGame() (keyed by MAC)
+export function OtaAllModal({ bumpers: allBumpers, onClose }) {
+  const [targetVersion, setTargetVersion] = useState(null)
+  const [launched, setLaunched] = useState(false)
+  const [error, setError] = useState(null)
+  // Local snapshot: once a buzzer reaches done/error, keep its final status/percent
+  // even if the server resets OTA_STATUS after the buzzer reboots.
+  const [doneSnapshot, setDoneSnapshot] = useState({}) // mac → { status, percent }
+  // Frozen list of buzzers at launch time: prevents bars from disappearing when
+  // IS_OUTDATED flips to false after a successful OTA + reboot.
+  const [frozenEntries, setFrozenEntries] = useState(null) // [[mac, {NAME, FIRMWARE_VERSION}]]
+
+  // Fetch reference firmware version
+  useEffect(() => {
+    fetch('/api/firmware/buzzclick/version')
+      .then(r => r.json())
+      .then(data => setTargetVersion(data))
+      .catch(() => setError('Impossible de recuperer la version de reference'))
+  }, [])
+
+  // Pre-launch: live list of outdated physical buzzers.
+  const outdatedEntries = useMemo(
+    () => Object.entries(allBumpers).filter(([, b]) => b.IS_OUTDATED && b.FIRMWARE_VERSION),
+    [allBumpers]
+  )
+
+  // Post-launch: frozen list (name/version from launch time) + live OTA_STATUS/OTA_PERCENT.
+  // Using frozenEntries ensures bars stay visible even when IS_OUTDATED → false after reboot.
+  const workingEntries = useMemo(() => {
+    if (!frozenEntries) return outdatedEntries
+    return frozenEntries.map(([mac, frozen]) => {
+      const live = allBumpers[mac] || {}
+      return [mac, { ...frozen, OTA_STATUS: live.OTA_STATUS, OTA_PERCENT: live.OTA_PERCENT }]
+    })
+  }, [frozenEntries, allBumpers, outdatedEntries])
+
+  // Snapshot buzzer progress the moment it reaches done/error.
+  // After the buzzer reboots, the server clears OTA_STATUS — the snapshot
+  // preserves the completed state so the progress bar stays at 100%.
+  useEffect(() => {
+    if (!launched) return
+    workingEntries.forEach(([mac, b]) => {
+      const terminal = b.OTA_STATUS === 'done' || b.OTA_STATUS === 'error'
+      if (terminal && !doneSnapshot[mac]) {
+        setDoneSnapshot(prev => ({
+          ...prev,
+          [mac]: { status: b.OTA_STATUS, percent: b.OTA_STATUS === 'done' ? 100 : (b.OTA_PERCENT || 0) },
+        }))
+      }
+    })
+  }, [launched, workingEntries, doneSnapshot])
+
+  const handleLaunch = async () => {
+    setError(null)
+    // Freeze the current outdated list before launching so bars persist after reboot
+    setFrozenEntries(
+      Object.entries(allBumpers)
+        .filter(([, b]) => b.IS_OUTDATED && b.FIRMWARE_VERSION)
+        .map(([mac, b]) => [mac, { NAME: b.NAME, FIRMWARE_VERSION: b.FIRMWARE_VERSION }])
+    )
+    setLaunched(true)
+    try {
+      const res = await fetch('/api/buzzer/update-all', { method: 'POST' })
+      const data = await res.json()
+      if (!res.ok || data.status !== 'ok') {
+        setError(data.message || 'Erreur lors du lancement')
+      }
+    } catch (err) {
+      setError('Erreur reseau: ' + err.message)
+    }
+  }
+
+  // Global progress: average OTA_PERCENT across all buzzers (each capped at 100 when done/error)
+  // Uses doneSnapshot so buzzers that rebooted (clearing OTA_STATUS) still count as 100%.
+  const totalCount = workingEntries.length
+  const finishedCount = workingEntries.filter(([mac, b]) => {
+    const status = doneSnapshot[mac]?.status || b.OTA_STATUS
+    return status === 'done' || status === 'error'
+  }).length
+  const globalPercent = totalCount > 0
+    ? Math.round(
+        workingEntries.reduce((sum, [mac, b]) => {
+          const snap = doneSnapshot[mac]
+          const status = snap ? snap.status : b.OTA_STATUS
+          const pct = status === 'done' || status === 'error'
+            ? 100
+            : (b.OTA_PERCENT || 0)
+          return sum + pct
+        }, 0) / totalCount
+      )
+    : 0
+  const allFinished = launched && totalCount > 0 && finishedCount === totalCount
+  const allSuccess = allFinished && workingEntries.every(([mac, b]) => {
+    const status = doneSnapshot[mac]?.status || b.OTA_STATUS
+    return status === 'done'
+  })
+  // allConfirmed: all transfers done AND all buzzers rebooted with correct version
+  const allConfirmed = allSuccess && workingEntries.every(([mac]) =>
+    allBumpers[mac] && !allBumpers[mac].IS_OUTDATED
+  )
+
+
+  return (
+    <div className="ota-modal-overlay" onClick={onClose}>
+      <div className="ota-modal ota-all-modal" onClick={e => e.stopPropagation()}>
+        <div className="ota-modal-header">
+          <h3>Mise a jour de tous les buzzers</h3>
+          <button className="ota-modal-close" onClick={onClose} aria-label="Fermer">×</button>
+        </div>
+
+        <div className="ota-modal-body">
+          {/* Target version info */}
+          <div className="ota-info-row">
+            <span className="ota-info-label">Version cible</span>
+            <span className="ota-info-value ota-version-target">
+              {targetVersion ? targetVersion.VERSION : '...'}
+            </span>
+          </div>
+
+          {/* Global progress bar */}
+          {launched && (
+            <div className="ota-progress-container ota-global-progress">
+              <div className="ota-progress-label">
+                <span className={`ota-progress-phase ${allConfirmed ? 'confirmed' : 'downloading'}`}>
+                  {allConfirmed ? 'Tous confirmés' : 'Progression globale'}
+                </span>
+                <span>{globalPercent}%</span>
+              </div>
+              <div className="ota-progress-track">
+                <div
+                  className={`ota-progress-fill ${allConfirmed ? 'confirmed' : 'downloading'}`}
+                  style={{ width: `${globalPercent}%` }}
+                />
+              </div>
+            </div>
+          )}
+
+          {/* Per-buzzer list */}
+          <div className="ota-all-list">
+            {workingEntries.map(([mac, b]) => {
+              // Use snapshot if buzzer already completed (server may have reset OTA_STATUS after reboot)
+              const snap = doneSnapshot[mac]
+              const otaStatus = snap ? snap.status : (b.OTA_STATUS || '')
+              const otaPercent = snap ? snap.percent : (b.OTA_PERCENT || 0)
+              const isDone = otaStatus === 'done'
+              const isError = otaStatus === 'error'
+              // confirmed: transfer done AND buzzer rebooted with correct version (IS_OUTDATED=false)
+              const isConfirmed = isDone && allBumpers[mac] && !allBumpers[mac].IS_OUTDATED
+              const isInProgress = otaStatus === 'downloading' || otaStatus === 'flashing'
+              const percent = isDone ? 100 : otaPercent
+              const phaseClass = isConfirmed ? 'confirmed' : isDone ? 'done' : isError ? 'error' : (otaStatus || '')
+              const indeterminate = isInProgress && percent === 0
+
+              return (
+                <div key={mac} className="ota-all-row">
+                  <div className="ota-all-row-header">
+                    <span className="ota-all-name">{b.NAME || mac}</span>
+                    <div className="ota-all-row-right">
+                      <span className="ota-all-version">{b.FIRMWARE_VERSION}</span>
+                      {launched && (
+                        <span className={`ota-all-status-badge ${phaseClass}`}>
+                          {isDone ? '✓' : isError ? '✗' : isInProgress ? `${percent > 0 ? percent + '%' : '…'}` : '—'}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  {launched && (
+                    <div className="ota-progress-track ota-progress-track-small">
+                      <div
+                        className={`ota-progress-fill ${phaseClass}${indeterminate ? ' indeterminate' : ''}`}
+                        style={indeterminate ? undefined : { width: `${percent}%` }}
+                      />
+                    </div>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+
+          {error && <div className="ota-status ota-status-error">{error}</div>}
+        </div>
+
+        <div className="ota-modal-footer">
+          {!launched ? (
+            <>
+              <button className="ota-btn ota-btn-secondary" onClick={onClose}>Annuler</button>
+              <button
+                className="ota-btn ota-btn-primary"
+                onClick={handleLaunch}
+                disabled={totalCount === 0 || !targetVersion?.EXISTS}
+              >
+                Lancer ({totalCount} buzzer{totalCount > 1 ? 's' : ''})
+              </button>
+            </>
+          ) : allFinished ? (
+            <>
+              <span className={`ota-finished-label ${allSuccess ? 'success' : 'error'}`}>
+                {allSuccess ? '✓ Mises à jour terminées' : '⚠ Terminé avec erreurs'}
+              </span>
+              <button className="ota-btn ota-btn-primary" onClick={onClose}>Fermer</button>
+            </>
+          ) : (
+            <span className="ota-in-progress-label">
+              <span className="ota-spinner" /> Mise à jour en cours...
+            </span>
+          )}
+        </div>
+      </div>
+    </div>
+  )
 }
 
 export default function TeamCard({
@@ -43,6 +387,7 @@ export default function TeamCard({
   questionType = null, // Question type (QCM, NORMAL, MEMORY)
 }) {
   const [showTooltip, setShowTooltip] = useState(false)
+  const [otaBuzzer, setOtaBuzzer] = useState(null) // buzzer object for OTA modal
   const rgbColor = color ? `rgb(${color.join(',')})` : 'var(--primary-500)'
   const reactionTime = timestamp && gameTime
     ? ((timestamp - gameTime) / 1000000).toFixed(3)
@@ -118,6 +463,7 @@ export default function TeamCard({
   }
 
   return (
+    <>
     <motion.div
       layoutId={`team-${name}`}
       layout
@@ -241,7 +587,7 @@ export default function TeamCard({
                 transition={{ type: 'spring', stiffness: 300, damping: 30 }}
                 onClick={handleBuzzerClick}
               >
-                <div className="buzzer-info">
+                <div className="buzzer-info" style={{ flexWrap: 'wrap' }}>
                   {buzzer.isVPlayer ? (
                     <div className="buzzer-vplayer-multicolor">
                       <svg className="vplayer-multicolor-badge" viewBox="0 0 24 24">
@@ -290,6 +636,25 @@ export default function TeamCard({
                       🚫
                     </span>
                   )}
+                  {/* Firmware version indicator */}
+                  {buzzer.firmwareVersion && !buzzer.isVPlayer && (
+                    <span
+                      className={`buzzer-fw-version ${buzzer.isOutdated ? 'outdated' : ''}`}
+                      title={buzzer.isOutdated ? 'Cliquer pour mettre a jour' : `Firmware ${buzzer.firmwareVersion}`}
+                      onClick={buzzer.isOutdated ? (e) => { e.stopPropagation(); setOtaBuzzer(buzzer) } : undefined}
+                    >
+                      fw: {buzzer.firmwareVersion}
+                    </span>
+                  )}
+                  {/* OTA inline status (downloading / flashing / done / error) */}
+                  {buzzer.otaStatus && buzzer.otaStatus !== '' && !buzzer.isVPlayer && (
+                    <span className={`buzzer-ota-status buzzer-ota-status-${buzzer.otaStatus}`}>
+                      {(buzzer.otaStatus === 'downloading' || buzzer.otaStatus === 'flashing') && (
+                        <span className="ota-spinner-inline" />
+                      )}
+                      {buzzer.otaStatus}
+                    </span>
+                  )}
                 </div>
                 <div className="buzzer-right">
                   {buzzer.timestamp && gameTime && (
@@ -314,5 +679,13 @@ export default function TeamCard({
         />
       )}
     </motion.div>
+    {/* OTA Modal - rendered outside the card to avoid overflow clipping */}
+    {otaBuzzer && (
+      <OtaModal
+        buzzer={sortedBuzzers.find(b => b.mac === otaBuzzer.mac) || otaBuzzer}
+        onClose={() => setOtaBuzzer(null)}
+      />
+    )}
+    </>
   )
 }

@@ -33,32 +33,41 @@ type HTTPServer struct {
 	embeddedFS fs.FS  // Embedded web filesystem (takes priority over reactDir)
 	mux        *http.ServeMux
 	server     *http.Server
-	updater    *Updater // Auto-update handler
+	updater    *Updater         // Auto-update handler
+	firmwareManager *FirmwareManager // OTA firmware manager (v3.1.0+)
 
 	// Callbacks
-	OnAction           func(action string, data json.RawMessage)
-	OnQuestionUpload   func() // Called after question upload to broadcast update
-	OnBackgroundChange func(path string) // Called after background upload/delete
-	OnShutdown         func() // Called before server shutdown for cleanup
-	OnLoadDemo         func() // Called to load demo data
-	OnConfigUpdate     func() // Called after config update to broadcast to clients
+	OnAction              func(action string, data json.RawMessage)
+	OnQuestionUpload      func() // Called after question upload to broadcast update
+	OnBackgroundChange    func(path string) // Called after background upload/delete
+	OnShutdown            func() // Called before server shutdown for cleanup
+	OnLoadDemo            func() // Called to load demo data
+	OnConfigUpdate        func() // Called after config update to broadcast to clients
+	OnBuzzerWifiConfig    func() int // Called to broadcast WiFi config to all buzzers; returns connected buzzer count
 }
 
 // NewHTTPServer creates a new HTTP server
 func NewHTTPServer(port int, engine *game.Engine, wsHub *WebSocketHub, buzzerHub *BuzzerWebSocketHub, logsHub *LogsWebSocketHub) *HTTPServer {
 	cfg := config.Get()
 	return &HTTPServer{
-		port:      port,
-		engine:    engine,
-		wsHub:     wsHub,
-		buzzerHub: buzzerHub,
-		logsHub:   logsHub,
-		dataDir:   cfg.Storage.DataDir,
-		webDir:    cfg.Storage.DataDir,
-		reactDir:  "", // Will be set if React build exists
-		mux:       http.NewServeMux(),
-		updater:   NewUpdater(cfg.Version),
+		port:            port,
+		engine:          engine,
+		wsHub:           wsHub,
+		buzzerHub:       buzzerHub,
+		logsHub:         logsHub,
+		dataDir:         cfg.Storage.DataDir,
+		webDir:          cfg.Storage.DataDir,
+		reactDir:        "", // Will be set if React build exists
+		mux:             http.NewServeMux(),
+		updater:         NewUpdater(cfg.Version),
+		firmwareManager: NewFirmwareManager(cfg.Storage.DataDir, cfg.Version),
 	}
+}
+
+// GetFirmwareManager returns the firmware manager instance.
+// This allows main.go to access it for OTA_PROGRESS handling.
+func (h *HTTPServer) GetFirmwareManager() *FirmwareManager {
+	return h.firmwareManager
 }
 
 // SetReactDir sets the directory for React build files
@@ -172,9 +181,17 @@ func (h *HTTPServer) setupRoutes() {
 	// Update (legacy route)
 	h.mux.HandleFunc("/update", h.handleUpdate)
 
-	// Buzzer API (WiFi config)
+	// Buzzer API (WiFi config + OTA)
 	h.mux.HandleFunc("/api/buzzers", h.handleAPIBuzzers)
-	h.mux.HandleFunc("/api/buzzer/", h.handleAPIBuzzerStatus)
+	h.mux.HandleFunc("/api/buzzer/wifi-config", h.handleAPIBuzzerWifiConfig)
+	h.mux.HandleFunc("/api/buzzer/update-all", h.handleAPIBuzzerUpdateAll)
+	h.mux.HandleFunc("/api/buzzer/", h.handleAPIBuzzerRouter)
+
+	// Firmware OTA API (v3.1.0+)
+	h.mux.HandleFunc("/api/firmware/buzzclick/version", h.handleAPIFirmwareVersion)
+	h.mux.HandleFunc("/api/firmware/buzzclick/latest.bin", h.handleAPIFirmwareDownload)
+	h.mux.HandleFunc("/api/firmware/buzzclick/merged.bin", h.handleAPIFirmwareMergedDownload)
+	h.mux.HandleFunc("/api/firmware/buzzclick/upload", h.handleAPIFirmwareUpload)
 
 	// WiFi defaults API
 	h.mux.HandleFunc("/api/wifi/defaults", h.handleAPIWiFiDefaults)
@@ -1724,19 +1741,40 @@ func (h *HTTPServer) handleAPIBuzzers(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(buzzers)
 }
 
-func (h *HTTPServer) handleAPIBuzzerStatus(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-
-	// Extract MAC from path: /api/buzzer/{mac}/status or /api/buzzer/{mac}
+// handleAPIBuzzerRouter routes /api/buzzer/{mac}/... to the appropriate handler.
+// Supported sub-paths: /status (GET), /update (POST).
+func (h *HTTPServer) handleAPIBuzzerRouter(w http.ResponseWriter, r *http.Request) {
+	// Extract the portion after /api/buzzer/
 	path := strings.TrimPrefix(r.URL.Path, "/api/buzzer/")
-	path = strings.TrimSuffix(path, "/status")
-	mac := strings.TrimSuffix(path, "/")
+	path = strings.TrimSuffix(path, "/")
+
+	// Determine MAC and optional suffix
+	// Pattern: /api/buzzer/{mac} or /api/buzzer/{mac}/status or /api/buzzer/{mac}/update
+	parts := strings.SplitN(path, "/", 2)
+	mac := parts[0]
+	suffix := ""
+	if len(parts) > 1 {
+		suffix = parts[1]
+	}
 
 	if mac == "" {
 		http.Error(w, "MAC address required", http.StatusBadRequest)
+		return
+	}
+
+	switch suffix {
+	case "update":
+		h.handleAPIBuzzerUpdate(mac, w, r)
+	default:
+		// Default to status handler
+		h.handleAPIBuzzerStatus(mac, w, r)
+	}
+}
+
+// handleAPIBuzzerStatus returns status information for a specific buzzer by MAC.
+func (h *HTTPServer) handleAPIBuzzerStatus(mac string, w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
 
@@ -1752,14 +1790,17 @@ func (h *HTTPServer) handleAPIBuzzerStatus(w http.ResponseWriter, r *http.Reques
 	}
 
 	result := map[string]interface{}{
-		"mac":      mac,
-		"name":     bumper.Name,
-		"team":     bumper.Team,
-		"protocol": proto,
-		"ip":       bumper.IP,
-		"version":  bumper.Version,
-		"status":   bumper.Status,
-		"score":    bumper.Score,
+		"mac":              mac,
+		"name":             bumper.Name,
+		"team":             bumper.Team,
+		"protocol":         proto,
+		"ip":               bumper.IP,
+		"version":          bumper.Version,
+		"status":           bumper.Status,
+		"score":            bumper.Score,
+		"firmware_version": bumper.FirmwareVersion,
+		"is_outdated":      bumper.IsOutdated,
+		"ota_status":       bumper.OTAStatus,
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -1831,6 +1872,28 @@ func (h *HTTPServer) handleAPIWiFiDefaults(w http.ResponseWriter, r *http.Reques
 	default:
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 	}
+}
+
+// handleAPIBuzzerWifiConfig broadcasts current WiFi defaults config to all connected buzzers.
+// POST /api/buzzer/wifi-config
+func (h *HTTPServer) handleAPIBuzzerWifiConfig(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	count := 0
+	if h.OnBuzzerWifiConfig != nil {
+		count = h.OnBuzzerWifiConfig()
+	}
+
+	LogInfo(game.LogComponentHTTP, "POST /api/buzzer/wifi-config: broadcasted to %d connected buzzers", count)
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"status": "ok",
+		"count":  count,
+	})
 }
 
 // Auto-update API handlers

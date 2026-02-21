@@ -12,6 +12,9 @@ Ce document decrit les fonctionnalites d'administration du systeme BuzzControl.
 - [Joueurs Virtuels (VPlayer)](#joueurs-virtuels-vplayer)
 - [Configuration Effet Neon](#configuration-effet-neon)
 - [Mises a jour automatiques](#mises-a-jour-automatiques)
+- [Mise a jour firmware OTA des buzzers](#mise-a-jour-firmware-ota-des-buzzers-v310)
+- [Configuration WiFi des buzzers](#configuration-wifi-des-buzzers-v310)
+- [Jeu Memory - Modes multi-equipes](#jeu-memory---modes-multi-equipes)
 
 ---
 
@@ -712,6 +715,131 @@ Pour éviter le rate limiting GitHub (60 requêtes/heure pour IP publique) :
 
 ---
 
+## Mise a jour firmware OTA des buzzers (v3.1.0)
+
+### Presentation
+
+La fonctionnalite OTA (Over-The-Air) permet de mettre a jour le firmware des buzzers BuzzClick directement depuis l'interface admin, sans cable USB. Le serveur stocke un firmware de reference et peut le deployer sur tous les buzzers connectes en WiFi.
+
+### Acces a la gestion firmware
+
+1. Ouvrir la page Configuration (`/admin/config`)
+2. Section "Gestion Firmware" en bas de la page
+3. Le serveur affiche la version de reference actuellement stockee
+
+### Etape 1 : Uploader le firmware de reference
+
+1. Dans la section "Gestion Firmware", cliquer sur "Choisir un fichier"
+2. Selectionner le fichier `.bin` (ex : `buzzclick-v3.1.0.bin`)
+3. Cliquer sur "Uploader"
+4. Le serveur valide le fichier (taille 200 KB - 2 MB, extension .bin)
+5. La version de reference s'affiche apres upload
+
+**Nommage recommande** : `buzzclick-vX.Y.Z.bin` — la version est extraite automatiquement du nom de fichier.
+
+### Etape 2 : Identifier les buzzers obsoletes
+
+Sur la page Jeu (`/admin/game`), les buzzers dont le firmware est plus ancien que la reference affichent un badge rouge :
+
+```
+fw: 3.0.8   ← rouge = obsolete, clic pour mettre a jour
+fw: 3.1.0   ← gris = a jour
+```
+
+### Etape 3a : Mettre a jour un buzzer individuel
+
+1. Cliquer sur le badge rouge du buzzer
+2. Une modal s'ouvre avec la version actuelle et la version de reference
+3. Cliquer sur "Lancer la mise a jour OTA"
+4. Le statut s'affiche en direct : `downloading → flashing → done`
+5. Le buzzer redemarrera automatiquement apres le flash
+
+### Etape 3b : Mettre a jour tous les buzzers obsoletes
+
+1. Dans la section "Gestion Firmware" de ConfigPage
+2. Cliquer sur "Mettre a jour tous"
+3. Confirmer la mise a jour en masse
+4. L'interface affiche le nombre de buzzers declenches / ignores
+
+**Important** : Seuls les buzzers connectes via WebSocket peuvent recevoir l'OTA. Les buzzers TCP (ancien firmware) ne sont pas eligibles.
+
+### Duree et indicateurs
+
+| Phase | Duree estimee | Indicateur |
+|-------|---------------|------------|
+| Telechargement | 10-30 secondes | `downloading` (pourcentage) |
+| Flash | 10-20 secondes | `flashing` |
+| Redemarrage | 5-10 secondes | Deconnexion puis reconnexion |
+| Succes | - | Badge `fw: X.Y.Z` gris |
+| Echec | - | Badge `error` rouge |
+
+### Flash firmware via USB
+
+En alternative a l'OTA WiFi, vous pouvez flasher le firmware via cable USB depuis la modal de configuration USB :
+
+1. Connecter le buzzer via cable USB-C
+2. Cliquer sur "Config USB" (icone USB dans l'interface)
+3. Selectionner le port serie du buzzer
+4. Aller dans l'onglet "Flash Firmware"
+5. Cliquer sur "Flash"
+6. La barre de progression et les logs s'affichent en temps reel
+
+**Prerequis** : Chrome ou Edge 89+, navigateur sur localhost, firmware uploade au prealable sur le serveur.
+
+### Rollback automatique
+
+Le firmware ESP32-C3 dispose d'un mecanisme de rollback automatique :
+- Si le nouveau firmware ne demarre pas correctement, l'ESP32 restaure automatiquement l'ancienne version
+- En cas d'erreur OTA, le buzzer reste operationnel avec son ancien firmware
+
+---
+
+## Configuration WiFi des buzzers (v3.1.0)
+
+### Presentation
+
+La fonctionnalite de diffusion WiFi permet d'envoyer la configuration reseau (SSID, mot de passe, IP serveur) a tous les buzzers connectes simultanement, sans repasser par la configuration USB individuelle.
+
+### Acces a la configuration WiFi
+
+1. Ouvrir la page Configuration (`/admin/config`)
+2. Section "Configuration WiFi par defaut"
+3. Les champs affichent la configuration actuellement sauvegardee
+
+### Parametres disponibles
+
+| Champ | Description |
+|-------|-------------|
+| **SSID** | Nom du reseau WiFi principal |
+| **Mot de passe** | Mot de passe du reseau WiFi principal |
+| **SSID 2** | Nom du reseau WiFi de secours (optionnel) |
+| **Mot de passe 2** | Mot de passe du reseau WiFi de secours (optionnel) |
+| **IP du serveur** | Adresse IP du serveur BuzzControl |
+| **Port** | Port du serveur (defaut : 80) |
+
+### Diffuser la configuration
+
+1. Remplir les champs de configuration WiFi
+2. Cliquer sur "Enregistrer la configuration" pour sauvegarder
+3. Cliquer sur "Diffuser config WiFi" pour envoyer aux buzzers connectes
+
+**Comportement sur le buzzer** :
+- Si la configuration a change : sauvegarde en NVS + redemarrage automatique dans 3 secondes
+- Si la configuration est identique : aucune action (pas de redemarrage inutile)
+
+### Auto-sync a la connexion
+
+Chaque fois qu'un buzzer se connecte via WebSocket, le serveur lui envoie automatiquement la configuration WiFi de reference. Cela garantit que les buzzers sont toujours synchronises avec la configuration serveur apres un redemarrage.
+
+### Reseau de secours (SSID2)
+
+Le champ SSID2/Mot de passe 2 permet de configurer un reseau WiFi de secours :
+- Le buzzer tentera de se connecter au SSID principal en priorite
+- En cas d'echec, il basculera automatiquement sur le SSID2
+- Utile pour les installations avec deux points d'acces WiFi
+
+---
+
 ## Resume des endpoints admin
 
 | Methode | Endpoint | Description |
@@ -727,6 +855,12 @@ Pour éviter le rate limiting GitHub (60 requêtes/heure pour IP publique) :
 | GET | `/api/updates/check` | Vérifier les mises à jour disponibles |
 | POST | `/api/updates/download` | Télécharger une mise à jour |
 | POST | `/api/updates/apply` | Installer et redémarrer |
+| GET | `/api/firmware/buzzclick/version` | Info firmware de reference (v3.1.0) |
+| GET | `/api/firmware/buzzclick/latest.bin` | Telechargement firmware (v3.1.0) |
+| POST | `/api/firmware/buzzclick/upload` | Upload firmware .bin (v3.1.0) |
+| POST | `/api/buzzer/{mac}/update` | OTA individuelle par MAC (v3.1.0) |
+| POST | `/api/buzzer/update-all` | OTA en masse buzzers obsoletes (v3.1.0) |
+| POST | `/api/buzzer/wifi-config` | Broadcast config WiFi aux buzzers (v3.1.0) |
 
 ---
 

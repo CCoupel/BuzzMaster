@@ -3,6 +3,114 @@
 Historique des versions du projet BuzzControl.
 
 
+## [3.1.0] - 2026-02-21
+
+### Added
+- **[OTA Buzzer]**: Mise a jour firmware OTA des buzzers BuzzClick directement depuis l'interface admin
+  - Backend : `FirmwareManager` stocke le firmware de reference dans `data/firmware/`
+  - Stockage versionne : `buzzclick-vX.Y.Z.bin` + `buzzclick-latest.bin` + `version.txt`
+  - Endpoint `GET /api/firmware/buzzclick/version` : info firmware de reference (version, filename, size)
+  - Endpoint `GET /api/firmware/buzzclick/latest.bin` : telechargement binaire pour les buzzers
+  - Endpoint `POST /api/firmware/buzzclick/upload` : upload firmware .bin via multipart form
+  - Endpoint `POST /api/buzzer/{mac}/update` : declenchement OTA individuel par adresse MAC
+  - Endpoint `POST /api/buzzer/update-all` : OTA en masse sur tous les buzzers obsoletes
+  - Validation taille firmware : 200 KB minimum, 2 MB maximum
+  - Validation extension : seuls les fichiers `.bin` sont acceptes
+  - Sanitisation version : prevention injection de chemin (path traversal)
+  - Broadcast `FIRMWARE_VERSION` apres upload pour rafraichissement UI automatique
+- **[OTA Buzzer]**: Detection et affichage des buzzers avec firmware obsolete
+  - Champ `FIRMWARE_VERSION` ajoute au modele `Bumper` (version reportee via HELLO)
+  - Champ `IS_OUTDATED` calcule automatiquement par comparaison semver
+  - Champ `OTA_STATUS` pour suivi de progression ("downloading", "flashing", "done", "error")
+  - Reset de `OTA_STATUS` automatique lors de la reconnexion (HELLO)
+  - Action WebSocket `FIRMWARE_VERSION` pour mise a jour UI en temps reel
+  - Action WebSocket `OTA_UPDATE` (server -> buzzer) : declenchement avec URL + version + taille
+  - Action WebSocket `OTA_PROGRESS` (buzzer -> server) : progression en pourcentage + statut
+- **[OTA Firmware]**: Support OTA dans le firmware BuzzClick (ESP32-C3)
+  - Module `click_otaManager.h` : telechargement HTTP et flash sur partition OTA
+  - Reception commande `OTA_UPDATE` via WebSocket avec URL du firmware
+  - Progression reportee via `OTA_PROGRESS` (downloading 0-100%, flashing, done, error)
+  - Rollback automatique ESP32 si le nouveau firmware ne demarre pas
+  - `firmware_version` inclus dans le message HELLO pour identification automatique
+- **[OTA UI]**: Interface admin pour gestion OTA dans ConfigPage
+  - Section "Gestion Firmware" : affichage version de reference, filename, taille, statut
+  - Upload firmware .bin avec validation et feedback toast
+  - Bouton "Mettre a jour tous" (buzzers obsoletes uniquement)
+  - Modal OTA par buzzer : version actuelle vs reference, bouton "Lancer la mise a jour OTA"
+  - Statut OTA inline sur chaque buzzer dans TeamCard
+- **[OTA UI]**: Indicateurs visuels firmware dans TeamCard
+  - Badge `fw: X.Y.Z` rouge si buzzer obsolete, gris si a jour
+  - Clic sur badge rouge ouvre la modal OTA
+  - Statut OTA inline (downloading / flashing / done / error)
+- **[USB Flash]**: Flash firmware via USB depuis la modal de configuration USB
+  - Nouvel onglet/section "Flash Firmware" dans `USBConfigModal`
+  - Hook `useEspFlash` : telechargement firmware depuis serveur + flash via `esptool-js`
+  - Barre de progression + logs de flash en temps reel
+  - Arret automatique de la connexion AT avant le flash (liberation du port serie)
+- **[WiFi Config Broadcast]**: Diffusion configuration WiFi aux buzzers connectes
+  - Nouveau champ `ssid2` / `password2` dans `WiFiDefaultsConfig` (reseau WiFi de secours)
+  - Endpoint `POST /api/buzzer/wifi-config` : broadcast WIFI_CONFIG a tous les buzzers WS
+  - Methode `ConnectedCount()` ajoutee a `BuzzerWebSocketHub`
+  - Action WebSocket `WIFI_CONFIG` (server -> buzzer) avec SSID, PASS, SERVER_IP, PORT, SSID2, PASS2
+  - Auto-sync : envoi WIFI_CONFIG automatique a chaque nouveau buzzer qui se connecte
+  - Firmware BuzzClick : reception WIFI_CONFIG, sauvegarde NVS, reboot si config changee
+  - Support SSID2/PASS2 dans le NVS du firmware pour reseau WiFi de secours
+- **[WiFi Config UI]**: Champs SSID2/Password2 et bouton broadcast dans ConfigPage
+  - Deux nouveaux champs "Reseau WiFi 2" (SSID + mot de passe de secours)
+  - Bouton "Diffuser config WiFi" (envoie aux buzzers WebSocket connectes)
+  - Chargement depuis `config.json` au montage de la page
+
+### Technical
+- **Backend** :
+  - `internal/server/firmware.go` : `FirmwareManager` (GetInfo, SaveFirmware, IsOutdated, compareSemver)
+  - `internal/server/http_firmware.go` : Handlers OTA (version, download, upload, update, update-all)
+  - `internal/server/http.go` : Routes `/api/firmware/*`, `/api/buzzer/{mac}/update`, `/api/buzzer/update-all`, `/api/buzzer/wifi-config`
+  - `internal/protocol/messages.go` : Actions OTA_UPDATE, OTA_PROGRESS, FIRMWARE_VERSION, WIFI_CONFIG + payloads
+  - `internal/game/models.go` : Champs Bumper.FirmwareVersion, Bumper.IsOutdated, Bumper.OTAStatus
+  - `internal/config/config.go` : Champs WiFiDefaultsConfig.SSID2, WiFiDefaultsConfig.Password2
+  - `internal/server/websocket_buzzer.go` : Methode ConnectedCount()
+  - `cmd/server/main.go` : sendWifiConfigToBuzzer(), broadcastWifiConfig(), OTA_PROGRESS handler
+- **Frontend** :
+  - `web/src/hooks/useEspFlash.js` : Hook flash firmware via esptool-js (nouveau fichier)
+  - `web/src/components/USBConfigModal.jsx` : Section flash firmware USB
+  - `web/src/components/TeamCard.jsx` : Badge firmware version + modal OTA + statut inline
+  - `web/src/pages/ConfigPage.jsx` : Section firmware OTA + champs WiFi2 + bouton broadcast
+  - `web/src/hooks/useWebSocket.js` : Handler FIRMWARE_VERSION
+- **Firmware** :
+  - `src/BuzzClick/click_otaManager.h` : Module OTA HTTP download + flash (nouveau fichier)
+  - `src/BuzzClick/click_serverConnection.h` : Handler OTA_UPDATE, handler WIFI_CONFIG
+  - `src/BuzzClick/click_websocketClient.h` : Inclusion firmware_version dans HELLO
+  - `src/BuzzClick/click_nvsConfig.h` : Champs wifi_ssid2, wifi_pass2 dans BuzzClickConfig
+- **Tests** :
+  - `internal/server/firmware_test.go` : Tests FirmwareManager (SaveFirmware, GetInfo, IsOutdated, compareSemver)
+  - `internal/server/firmware_http_test.go` : Tests HTTP integration endpoints firmware
+
+### Fixed
+- **[OTA UI]**: Barres de progression restent orange jusqu'au reboot du buzzer (pas de passage prématuré au vert)
+- **[OTA UI]**: Barres de progression conservées par buzzer après reboot dans OtaAllModal
+- **[OTA UI]**: Fermeture manuelle des modals (suppression de l'auto-close)
+- **[OTA Firmware]**: URL backward-compatible dans OTA_UPDATE pour firmware < 3.1.2
+- **[OTA Firmware]**: IS_OUTDATED restreint aux buzzers physiques WebSocket uniquement (pas les clients web)
+- **[OTA Firmware]**: Fallback IS_OUTDATED + version firmware de référence + comptage buzzers obsolètes
+- **[OTA UI]**: Affichage version firmware + support firmware embarqué
+- **[OTA Backend]**: Retourne version sanitisée dans la réponse upload, suppression route morte
+- **[OTA Backend]**: Reset OTA_STATUS lors de la reconnexion buzzer (HELLO)
+- **[OTA Backend]**: Clés JSON majuscules dans FirmwareVersionPayload pour cohérence frontend
+- **[Security]**: Sanitisation de la chaîne de version dans SaveFirmware (prévention path traversal)
+- **[UI]**: Synchronisation firmwareInfo depuis WebSocket dans ConfigPage (utilisation hook property)
+- **[Firmware]**: Flash USB via binaire merged + snapshot progression OTA done
+- **[OTA UI]**: Barres de progression orange jusqu'au reboot, vert sur reboot confirmé
+
+### Notes
+- OTA requiert une connexion WiFi stable (~500KB-1MB par buzzer)
+- Duree OTA estimee : 30-60 secondes par buzzer
+- Rollback automatique ESP32 si le firmware ne demarre pas apres flash
+- WIFI_CONFIG necessite que le buzzer soit connecte via WebSocket (pas TCP)
+- Flash USB via esptool-js requiert Chrome/Edge 89+ sur localhost
+- Flash USB supporte le binaire merged (bootloader + partition table + app)
+
+---
+
 ## [3.0.8] - 2026-02-16
 
 ### Fixed

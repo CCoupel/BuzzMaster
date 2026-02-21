@@ -55,6 +55,12 @@ const (
 	ActionLogEntry   = "LOG_ENTRY"
 	// Config update action
 	ActionConfigUpdate = "CONFIG_UPDATE"
+	// OTA firmware update actions (added in v3.1.0)
+	ActionOTAUpdate      = "OTA_UPDATE"      // Server → Buzzer: trigger OTA update
+	ActionOTAProgress    = "OTA_PROGRESS"    // Buzzer → Server: OTA progress update
+	ActionFirmwareVersion = "FIRMWARE_VERSION" // Server → Web: firmware version info
+	// WiFi config sync (added in v3.1.3)
+	ActionWifiConfig = "WIFI_CONFIG" // Server → Buzzer: sync WiFi credentials
 )
 
 // FSInfo represents file storage information
@@ -92,10 +98,11 @@ type ButtonPayload struct {
 
 // HelloPayload for HELLO action from buzzer
 type HelloPayload struct {
-	IP      string `json:"IP,omitempty"`
-	Version string `json:"VERSION,omitempty"`
-	Name    string `json:"NAME,omitempty"`
-	Team    string `json:"TEAM,omitempty"`
+	IP              string `json:"IP,omitempty"`
+	Version         string `json:"VERSION,omitempty"`
+	Name            string `json:"NAME,omitempty"`
+	Team            string `json:"TEAM,omitempty"`
+	FirmwareVersion string `json:"firmware_version,omitempty"` // BuzzClick firmware version (v3.1.0+, optional for backward compat)
 }
 
 // StartPayload for START action
@@ -255,6 +262,43 @@ type NeonEffectPayload struct {
 	GlowPulseSpeed float64 `json:"glow_pulse_speed"` // 0.5-5 seconds
 	GlowPulseMin   int     `json:"glow_pulse_min"`   // 0-100%
 	GlowPulseMax   int     `json:"glow_pulse_max"`   // 0-100%
+}
+
+// OTAUpdatePayload for OTA_UPDATE action (server → buzzer: trigger OTA update).
+// URL is included for backward compatibility with firmware < 3.1.2 which reads
+// the URL from the message. Newer firmware (>= 3.1.2) ignores URL and constructs
+// it from its stored server IP. The endpoint is always /api/firmware/buzzclick/latest.bin.
+type OTAUpdatePayload struct {
+	Version string `json:"VERSION"` // Target firmware version
+	Size    int64  `json:"SIZE"`    // Firmware file size in bytes
+	URL     string `json:"URL"`     // Firmware download URL (backward compat with firmware < 3.1.2)
+}
+
+// OTAProgressPayload for OTA_PROGRESS action (buzzer → server: progress update)
+type OTAProgressPayload struct {
+	MAC     string `json:"MAC"`               // Buzzer MAC address
+	Status  string `json:"STATUS"`             // "downloading", "flashing", "done", "error"
+	Percent int    `json:"PERCENT"`            // Progress percentage (0-100)
+	Error   string `json:"ERROR,omitempty"`    // Error message if status == "error"
+}
+
+// FirmwareVersionPayload for FIRMWARE_VERSION action (server → web: firmware info)
+// JSON keys use UPPERCASE to match the frontend React convention (targetVersion?.EXISTS, etc.).
+type FirmwareVersionPayload struct {
+	Version  string `json:"VERSION"`  // Firmware version string (e.g. "3.1.0")
+	Filename string `json:"FILENAME"` // Firmware filename (e.g. "buzzclick-v3.1.0.bin")
+	Size     int64  `json:"SIZE"`     // Firmware file size in bytes
+	Exists   bool   `json:"EXISTS"`   // Whether firmware file exists on server
+}
+
+// WifiConfigPayload for WIFI_CONFIG action (server → buzzer: sync WiFi credentials)
+type WifiConfigPayload struct {
+	SSID       string `json:"SSID"`
+	Pass       string `json:"PASS"`
+	ServerIP   string `json:"SERVER_IP"`
+	ServerPort int    `json:"SERVER_PORT"`
+	SSID2      string `json:"SSID2,omitempty"`
+	Pass2      string `json:"PASS2,omitempty"`
 }
 
 // NewMessage creates a new outgoing message

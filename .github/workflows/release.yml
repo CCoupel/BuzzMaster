@@ -39,7 +39,7 @@ jobs:
   compiling:
     name: 🔨 Compile ${{ matrix.target }}
     runs-on: ubuntu-latest
-    needs: checking
+    needs: [checking, compiling-firmware]
 
     strategy:
       matrix:
@@ -100,6 +100,28 @@ jobs:
         run: |
           rm -rf server-go/cmd/server/dist
           cp -r server-go/web/dist server-go/cmd/server/dist
+
+      - name: Download firmware artifact for embedding
+        uses: actions/download-artifact@v4
+        with:
+          name: firmware-buzzclick
+          path: firmware-artifact
+
+      - name: Embed firmware into server assets
+        run: |
+          VERSION="${{ needs.checking.outputs.version }}"
+          # The merged binary is the primary artifact: supports both USB flash and OTA.
+          # The server auto-detects the format and extracts the app portion for OTA.
+          cp firmware-artifact/buzzclick-v$VERSION-merged.bin server-go/assets/firmware/buzzclick-latest.bin
+          echo -n "$VERSION" > server-go/assets/firmware/version.txt
+          # Also embed merged binary for USB flash of new/dead buzzers
+          if [ -f "firmware-artifact/buzzclick-v$VERSION-merged.bin" ]; then
+            cp firmware-artifact/buzzclick-v$VERSION-merged.bin server-go/assets/firmware/buzzclick-merged.bin
+            echo "✅ Merged firmware v$VERSION embedded (USB flash support)"
+          else
+            echo "⚠️ No merged firmware found, USB flash will be unavailable"
+          fi
+          echo "✅ Firmware v$VERSION embedded into server assets"
 
       - name: Build ${{ matrix.target }}
         working-directory: server-go
@@ -166,21 +188,45 @@ jobs:
           pio run -e buzzclick
           echo "✅ Firmware build complete"
 
-      - name: Rename firmware binary
+      - name: Generate merged firmware binary
         run: |
           VERSION="${{ needs.checking.outputs.version }}"
-          cp .pio/build/buzzclick/firmware.bin buzzclick-v$VERSION-firmware.bin
-          echo "✅ Firmware renamed to buzzclick-v$VERSION-firmware.bin"
+          echo "Generating merged firmware binary (bootloader + partitions + boot_app0 + app)..."
+
+          # Use esptool from PlatformIO packages
+          ESPTOOL=$(find $HOME/.platformio/packages/tool-esptoolpy -name "esptool.py" 2>/dev/null | head -1)
+          if [ -z "$ESPTOOL" ]; then
+            ESPTOOL="python -m esptool"
+          else
+            ESPTOOL="python $ESPTOOL"
+          fi
+
+          # boot_app0.bin: standard Arduino-ESP32 file that initializes OTA data to boot from ota_0
+          BOOT_APP0=$(find $HOME/.platformio/packages/framework-arduinoespressif32*/tools/partitions/boot_app0.bin 2>/dev/null | head -1)
+          if [ -z "$BOOT_APP0" ]; then
+            echo "❌ ERROR: boot_app0.bin not found in PlatformIO packages"
+            exit 1
+          fi
+
+          $ESPTOOL --chip esp32c3 merge_bin \
+            -o buzzclick-v$VERSION-merged.bin \
+            0x0     .pio/build/buzzclick/bootloader.bin \
+            0x8000  .pio/build/buzzclick/partitions.bin \
+            0xe000  $BOOT_APP0 \
+            0x10000 .pio/build/buzzclick/firmware.bin
+
+          echo "✅ Merged binary: buzzclick-v$VERSION-merged.bin ($(numfmt --to=iec $(stat -c%s buzzclick-v$VERSION-merged.bin)))"
 
       - name: Validate firmware binary
         run: |
           VERSION="${{ needs.checking.outputs.version }}"
-          FILE="buzzclick-v$VERSION-firmware.bin"
+          # Validate the merged binary (contains bootloader + app, so larger than app-only)
+          FILE="buzzclick-v$VERSION-merged.bin"
           SIZE=$(stat -c%s "$FILE")
-          echo "Firmware binary: $SIZE bytes ($(numfmt --to=iec $SIZE))"
+          echo "Merged firmware binary: $SIZE bytes ($(numfmt --to=iec $SIZE))"
 
           MIN_SIZE=204800   # 200 KB
-          MAX_SIZE=2097152  # 2 MB
+          MAX_SIZE=3145728  # 3 MB
           if [ "$SIZE" -lt "$MIN_SIZE" ]; then
             echo "❌ ERROR: Firmware too small ($SIZE < $MIN_SIZE)"
             exit 1
@@ -195,7 +241,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: firmware-buzzclick
-          path: buzzclick-v${{ needs.checking.outputs.version }}-firmware.bin
+          # The merged binary is the primary artifact: supports both USB flash and OTA.
+          # The server auto-detects the format and extracts the app portion for OTA.
+          path: buzzclick-v${{ needs.checking.outputs.version }}-merged.bin
           retention-days: 1
 
   # ============================================
