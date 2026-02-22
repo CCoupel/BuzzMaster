@@ -421,6 +421,11 @@ body {
     text-transform: uppercase;
 }
 
+.badge-available {
+    background: var(--success);
+    color: #fff;
+}
+
 .component-card p {
     color: var(--text-muted);
     margin-bottom: 1.5rem;
