@@ -484,7 +484,7 @@ Task({
 6. SendMessage() pour corrections/questions si nécessaire
 7. TaskUpdate({ taskId, status: "completed" }) quand terminé
 8. SendMessage({ type: "shutdown_request" }) à la fin
-9. TeamDelete() pour nettoyer
+9. **Proposer** TeamDelete à l'utilisateur — jamais supprimer sans confirmation explicite
 ```
 
 ### 10.5 Template Prompt Générique par Type d'Agent
