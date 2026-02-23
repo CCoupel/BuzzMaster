@@ -9,6 +9,7 @@ backlog/
 ├── TODO/           # Fonctionnalités planifiées, pas encore démarrées
 ├── En-Cours/       # Implémentation en cours
 ├── DONE/           # Fonctionnalités complétées et livrées
+├── REMOVED/        # Fonctionnalités abandonnées (gardées pour mémoire)
 └── README.md       # Ce fichier
 ```
 
@@ -19,8 +20,6 @@ backlog/
 | [websocket-broadcast-filtre.md](TODO/websocket-broadcast-filtre.md) | Filtrage des broadcasts WebSocket par type de client |
 | [generateur-ia.md](TODO/generateur-ia.md) | Générateur de jeu complet via IA |
 | [metadata-binaires.md](TODO/metadata-binaires.md) | Métadonnées dans les binaires (nom, version, icône) |
-| [buzzer-wifi-provisioning-smartconfig.md](TODO/buzzer-wifi-provisioning-smartconfig.md) | Provisionnement WiFi des buzzers via SmartConfig (intégré ENROLL) |
-| [buzzer-firmware-ota-update.md](TODO/buzzer-firmware-ota-update.md) | Mise à jour OTA du firmware des buzzers (détection version, pastille obsolète, upload firmware) |
 
 ## En-Cours
 
@@ -32,6 +31,7 @@ backlog/
 
 | Fichier | Version | Description |
 |---------|---------|-------------|
+| [buzzer-firmware-ota-update.md](DONE/buzzer-firmware-ota-update.md) | v3.1.0 | Mise à jour OTA du firmware des buzzers (détection version, pastille obsolète, upload + restore embarqué) |
 | [buzzer-protocol-websocket.md](DONE/buzzer-protocol-websocket.md) | v3.0.0 | Migration protocole buzzers TCP → WebSocket (hub dédié /ws/buzzer) |
 | [vjoueur-qcm-multicolore.md](DONE/vjoueur-qcm-multicolore.md) | v2.53.0 | VJoueur valide pour les 4 couleurs QCM + buzz direct sur écran |
 | [admin-joueur-card-style.md](DONE/admin-joueur-card-style.md) | v2.49.0 | Style neutre gris pour cartes joueurs (page admin Jeu) |
@@ -49,11 +49,18 @@ backlog/
 | [navbar-menu-connexion.md](DONE/navbar-menu-connexion.md) | v2.49.0 | Menu déroulant abeille dans la navbar (Config, Logs, Backup, MAJ) |
 | [gestion-scores.md](DONE/gestion-scores.md) | v2.18.0 | Points d'équipe dissociés des points joueurs |
 
+## REMOVED (Abandonné)
+
+| Fichier | Raison |
+|---------|--------|
+| [buzzer-wifi-provisioning-smartconfig.md](REMOVED/buzzer-wifi-provisioning-smartconfig.md) | Remplacé par config WiFi directe USB depuis l'Admin (v3.0.x) |
+
 ## Légende des statuts
 
 - **TODO** : Spécification validée, pas encore démarré
 - **En-Cours** : Implémentation en cours
 - **DONE** : Fonctionnalité implémentée et livrée
+- **REMOVED** : Fonctionnalité abandonnée (spécification conservée pour mémoire)
 
 ## Contribution
 
@@ -95,6 +102,9 @@ vX.Y.Z
 ```
 TODO/ ──────────► En-Cours/ ──────────► DONE/
        Démarrage            Mise en prod
+  │
+  └──────────────────────────────────► REMOVED/
+                          Abandon (spec conservée)
 ```
 
 ### 1. Nouvelle fonctionnalité
@@ -157,6 +167,8 @@ mv backlog/En-Cours/qcm-marqueurs-indices.md backlog/DONE/
 
 ## Historique
 
+- 2026-02-23 : Abandon buzzer-wifi-provisioning-smartconfig (remplacé par config WiFi USB directe v3.0.x)
+- 2026-02-23 : Completion buzzer-firmware-ota-update (v3.1.0/3.1.1)
 - 2026-02-17 : Completion buzzer-protocol-websocket (v3.0.0)
 - 2026-02-08 : Ajout migration protocole buzzers TCP vers WebSocket (v3.0.0 target)
 - 2026-02-08 : Ajout provisionnement WiFi buzzers via SmartConfig intégré ENROLL (v3.0.0 target)
