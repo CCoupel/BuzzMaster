@@ -330,6 +330,8 @@ export default function useWebSocket() {
             FILENAME: MSG.FILENAME,
             SIZE: MSG.SIZE,
             EXISTS: MSG.EXISTS,
+            IS_MERGED: MSG.IS_MERGED === true,
+            EMBEDDED_VERSION: MSG.EMBEDDED_VERSION || '',
           })
         }
         break

@@ -25,9 +25,8 @@ export default function useEspFlash() {
       // Fetch merged firmware binary from server.
       // The merged binary contains: bootloader (0x0) + partitions (0x8000)
       // + boot_app0/otadata (0xE000) + app firmware (0x10000).
-      // Writing from 0x0 as a single operation avoids the silent write failures
-      // that occur when esptool-js starts a write directly at an app partition
-      // address (0x10000 or 0x150000). This mirrors the WLED web installer approach.
+      // Writing from 0x0 as a single operation mirrors the WLED web installer
+      // approach and is the correct way to fully re-flash an ESP32-C3.
       addFlashLog('Téléchargement du firmware depuis le serveur...')
       const response = await fetch('/api/firmware/buzzclick/merged.bin')
       if (!response.ok) {
@@ -67,8 +66,8 @@ export default function useEspFlash() {
 
       // Flash the merged binary at address 0x0.
       // A single contiguous write from 0x0 through the end of the app partition
-      // is reliably handled by the esptool-js stub, unlike writes that start
-      // directly at app partition addresses (0x10000 / 0x150000).
+      // is the correct approach for a full re-flash (bootloader + partitions +
+      // otadata + app). This is what WLED web installer does.
       addFlashLog('Flash en cours (0x0)...')
       await loader.writeFlash({
         fileArray: [{ data: binaryString, address: 0x0 }],
@@ -82,8 +81,28 @@ export default function useEspFlash() {
         },
       })
 
+      // Verify the app partition was actually written by reading back the first
+      // 8 bytes of app0 and comparing them byte-for-byte with what we wrote.
+      // The stub is still running after writeFlash so we can call readFlash.
+      // Unlike checking only the magic byte (0xE9 is the same for any firmware),
+      // this comparison catches the case where the old image is still present.
+      try {
+        const readBack = await loader.readFlash(0x10000, 8)
+        const expected = uint8.slice(0x10000, 0x10008)
+        const match = readBack.every((b, i) => b === expected[i])
+        if (match) {
+          addFlashLog('✓ Flash vérifié — app0 identique au fichier source')
+        } else {
+          addFlashLog('⚠ Flash suspect — contenu app0 différent du fichier source')
+          addFlashLog('  Lu:      ' + Array.from(readBack).map(b => b.toString(16).padStart(2, '0')).join(' '))
+          addFlashLog('  Attendu: ' + Array.from(expected).map(b => b.toString(16).padStart(2, '0')).join(' '))
+        }
+      } catch (verifyErr) {
+        addFlashLog('Vérification flash: ' + verifyErr.message)
+      }
+
       // Tell the stub to leave flash mode and reboot into user code.
-      // usingUsbOtg=true → UsbJtagSerialReset (CDC break) for ESP32-C3 native USB.
+      // usingUsbOtg=true → UsbJtagSerialReset for ESP32-C3 native USB.
       addFlashLog('Redémarrage du buzzer...')
       try {
         await loader.after('hard_reset', true)
@@ -91,7 +110,7 @@ export default function useEspFlash() {
       try {
         await transport.disconnect()
       } catch (_) {}
-      addFlashLog('Flash terminé ! Le buzzer redémarre.')
+      addFlashLog('Flash terminé.')
       return true
     } catch (err) {
       addFlashLog('Erreur: ' + err.message)
@@ -101,5 +120,5 @@ export default function useEspFlash() {
     }
   }, [addFlashLog])
 
-  return { flashing, flashProgress, flashLogs, flashFirmware, clearFlashLogs }
+  return { flashing, flashProgress, flashLogs, pushFlashLog: addFlashLog, flashFirmware, clearFlashLogs }
 }

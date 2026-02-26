@@ -99,6 +99,13 @@
   box-shadow: var(--shadow-lg), 0 0 30px rgba(234, 179, 8, 0.5);
 }
 
+.btn-warning:disabled {
+  background: var(--gray-300);
+  color: var(--gray-500);
+  box-shadow: none;
+  opacity: 1;
+}
+
 .btn-ghost {
   background: transparent;
   color: var(--gray-600);

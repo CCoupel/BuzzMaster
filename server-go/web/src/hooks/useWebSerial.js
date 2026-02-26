@@ -12,6 +12,7 @@ export default function useWebSerial() {
   const readLoopRef = useRef(false)
   const mountedRef = useRef(true)
   const inputDoneRef = useRef(null)
+  const responseWaitersRef = useRef([])
 
   // Track mounted state to avoid state updates after unmount
   useEffect(() => {
@@ -44,6 +45,10 @@ export default function useWebSerial() {
           if (trimmed) {
             const isError = trimmed.startsWith('ERROR')
             addLog(trimmed, isError ? 'error' : 'response')
+            if (responseWaitersRef.current.length > 0) {
+              const waiter = responseWaitersRef.current.shift()
+              waiter(trimmed)
+            }
           }
         }
       }
@@ -159,6 +164,39 @@ export default function useWebSerial() {
     await writerRef.current.write(cmd + '\n')
   }, [addLog])
 
+  // sendCommandAndWait: sends cmd and waits for the first response line matching matchFn
+  // (or first line if matchFn is null). Re-registers the waiter on non-matching lines so
+  // multi-line AT responses (debug + actual value) are handled correctly.
+  const sendCommandAndWait = useCallback(async (cmd, timeout = 2000, matchFn = null) => {
+    if (!writerRef.current) return null
+    const responsePromise = new Promise((resolve) => {
+      let settled = false
+      let handler
+      const timer = setTimeout(() => {
+        if (settled) return
+        settled = true
+        const idx = responseWaitersRef.current.indexOf(handler)
+        if (idx >= 0) responseWaitersRef.current.splice(idx, 1)
+        resolve(null)
+      }, timeout)
+      handler = (value) => {
+        if (settled) return
+        if (!matchFn || matchFn(value)) {
+          settled = true
+          clearTimeout(timer)
+          resolve(value)
+        } else {
+          // Line doesn't match yet — re-register for the next line
+          responseWaitersRef.current.push(handler)
+        }
+      }
+      responseWaitersRef.current.push(handler)
+    })
+    addLog('> ' + cmd, 'command')
+    await writerRef.current.write(cmd + '\n')
+    return responsePromise
+  }, [addLog])
+
   const clearLogs = useCallback(() => {
     setLogs([])
   }, [])
@@ -173,6 +211,7 @@ export default function useWebSerial() {
     connectToPort,
     disconnect,
     sendCommand,
+    sendCommandAndWait,
     clearLogs,
     getPort,
   }

@@ -321,10 +321,21 @@
   height: 100%;
   background: var(--warning);
   border-radius: 4px;
-  transition: width 0.3s ease;
+  transition: width 0.3s ease, background 0.5s ease;
+}
+
+.usb-flash-progress-bar.verified {
+  background: var(--success, #22c55e);
 }
 
 .usb-flash-logs {
   margin-top: var(--space-2);
   max-height: 120px;
+}
+
+.usb-flash-unavailable {
+  font-size: 0.875rem;
+  color: var(--gray-400);
+  font-style: italic;
+  margin: 0;
 }

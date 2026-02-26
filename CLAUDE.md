@@ -226,7 +226,7 @@ Toutes les vues TV doivent tenir entièrement à l'écran sans défilement :
   - `web/src/pages/PlayerDisplay.jsx` : Affichage TV (STATIQUE)
   - `web/src/components/TeamCard.jsx` : Carte equipe/joueurs (+ badge firmware + modal OTA)
   - `web/src/components/Navbar.jsx` : Navigation + menu abeille (dropdown)
-  - `web/src/components/USBConfigModal.jsx` : Modale de configuration USB buzzers (+ flash firmware)
+  - `web/src/components/USBConfigModal.jsx` : Modale USB unifiee — point d'entree unique pour config WiFi AT et flash firmware (v3.1.2)
   - `web/src/hooks/useWebSerial.js` : Hook Web Serial API pour communication AT
   - `web/src/hooks/useEspFlash.js` : Hook flash firmware via esptool-js (v3.1.0)
 - **Firmware BuzzClick** :

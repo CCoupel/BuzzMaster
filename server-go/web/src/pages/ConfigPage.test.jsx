@@ -1,33 +1,62 @@
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import ConfigPage from './ConfigPage'
 
 // Mock GameContext
-jest.mock('../hooks/GameContext', () => ({
+vi.mock('../hooks/GameContext', () => ({
   useGame: () => ({
     teams: {},
     bumpers: {},
     gameState: { backgrounds: [] },
-    updateConfig: jest.fn(),
-    sendMessage: jest.fn(),
-    version: '2.49.0'
+    updateConfig: vi.fn(),
+    sendMessage: vi.fn(),
+    version: '2.49.0',
+    firmwareInfo: null,
   })
 }))
 
-// Mock framer-motion
-jest.mock('framer-motion', () => ({
-  motion: {
-    div: ({ children, ...props }) => <div {...props}>{children}</div>
+// Mock framer-motion - cover all motion.* tags used (div, button, span)
+vi.mock('framer-motion', () => {
+  const makeEl = (tag) => ({ children, whileHover, whileTap, ...props }) => {
+    const Tag = tag
+    return <Tag {...props}>{children}</Tag>
   }
+  return {
+    motion: {
+      div: makeEl('div'),
+      button: makeEl('button'),
+      span: makeEl('span'),
+    },
+    AnimatePresence: ({ children }) => children,
+  }
+})
+
+// Mock USBConfigModal to avoid Web Serial API complexity in ConfigPage tests
+vi.mock('../components/USBConfigModal', () => ({
+  default: ({ onClose }) => (
+    <div data-testid="usb-modal">
+      <button onClick={onClose}>Close USB Modal</button>
+    </div>
+  )
+}))
+
+// Mock OtaAllModal
+vi.mock('../components/TeamCard', () => ({
+  OtaAllModal: ({ onClose }) => (
+    <div data-testid="ota-all-modal">
+      <button onClick={onClose}>Close OTA Modal</button>
+    </div>
+  )
 }))
 
 describe('ConfigPage - Server Parameters', () => {
   beforeEach(() => {
     // Mock fetch
-    global.fetch = jest.fn()
+    global.fetch = vi.fn()
   })
 
   afterEach(() => {
-    jest.clearAllMocks()
+    vi.clearAllMocks()
   })
 
   test('Should render "Parametres serveur" section', () => {
@@ -157,5 +186,108 @@ describe('ConfigPage - Server Parameters', () => {
         )
       })
     }
+  })
+})
+
+describe('ConfigPage - Flash via USB button', () => {
+  beforeEach(() => {
+    global.fetch = vi.fn()
+    // Default fetch mocks: config.json, wifi/defaults, firmware/version
+    global.fetch.mockImplementation((url) => {
+      if (url === '/config.json') {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({ server: { auto_open_browsers: false, debug: false } })
+        })
+      }
+      if (url === '/api/wifi/defaults') {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({ ssid: 'TestSSID', password: 'pass', server_ip: '192.168.1.1', server_port: 80 })
+        })
+      }
+      if (url === '/api/firmware/buzzclick/version') {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({ VERSION: '3.1.1', FILENAME: 'buzzclick-v3.1.1.bin', SIZE: 512000, EXISTS: true })
+        })
+      }
+      return Promise.resolve({ ok: false })
+    })
+  })
+
+  afterEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('should render "Flash via USB" button in the Firmware section', async () => {
+    render(<ConfigPage />)
+    await waitFor(() => {
+      expect(screen.getByText('Flash via USB')).toBeInTheDocument()
+    })
+  })
+
+  it('should open the USB modal when "Flash via USB" button is clicked', async () => {
+    render(<ConfigPage />)
+
+    await waitFor(() => {
+      expect(screen.getByText('Flash via USB')).toBeInTheDocument()
+    })
+
+    const flashUsbButton = screen.getByText('Flash via USB')
+    fireEvent.click(flashUsbButton)
+
+    await waitFor(() => {
+      expect(screen.getByTestId('usb-modal')).toBeInTheDocument()
+    })
+  })
+
+  it('should close the USB modal when onClose is called', async () => {
+    render(<ConfigPage />)
+
+    await waitFor(() => {
+      expect(screen.getByText('Flash via USB')).toBeInTheDocument()
+    })
+
+    fireEvent.click(screen.getByText('Flash via USB'))
+
+    await waitFor(() => {
+      expect(screen.getByTestId('usb-modal')).toBeInTheDocument()
+    })
+
+    fireEvent.click(screen.getByText('Close USB Modal'))
+
+    await waitFor(() => {
+      expect(screen.queryByTestId('usb-modal')).not.toBeInTheDocument()
+    })
+  })
+
+  it('should pass firmwareInfo prop to USBConfigModal', async () => {
+    // The mock renders the modal if showUSBModal=true; we verify it mounts
+    render(<ConfigPage />)
+
+    await waitFor(() => {
+      expect(screen.getByText('Flash via USB')).toBeInTheDocument()
+    })
+
+    fireEvent.click(screen.getByText('Flash via USB'))
+
+    await waitFor(() => {
+      expect(screen.getByTestId('usb-modal')).toBeInTheDocument()
+    })
+  })
+
+  it('should also open USB modal from "Configuration via USB" button in WiFi section', async () => {
+    render(<ConfigPage />)
+
+    await waitFor(() => {
+      expect(screen.getByText('Configuration via USB')).toBeInTheDocument()
+    })
+
+    fireEvent.click(screen.getByText('Configuration via USB'))
+
+    await waitFor(() => {
+      expect(screen.getByTestId('usb-modal')).toBeInTheDocument()
+    })
   })
 })

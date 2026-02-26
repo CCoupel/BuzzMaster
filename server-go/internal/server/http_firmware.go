@@ -64,6 +64,7 @@ func (h *HTTPServer) handleAPIFirmwareVersion(w http.ResponseWriter, r *http.Req
 		Filename:        filename,
 		Size:            size,
 		Exists:          exists,
+		IsMerged:        h.firmwareManager.IsMerged(),
 		EmbeddedVersion: h.firmwareManager.GetEmbeddedVersion(),
 	}
 
@@ -205,6 +206,7 @@ func (h *HTTPServer) handleAPIFirmwareUpload(w http.ResponseWriter, r *http.Requ
 		Filename:        filename,
 		Size:            size,
 		Exists:          exists,
+		IsMerged:        h.firmwareManager.IsMerged(),
 		EmbeddedVersion: h.firmwareManager.GetEmbeddedVersion(),
 	}
 	if msg, err := protocol.NewMessage(protocol.ActionFirmwareVersion, payload); err == nil {
@@ -213,10 +215,11 @@ func (h *HTTPServer) handleAPIFirmwareUpload(w http.ResponseWriter, r *http.Requ
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{
-		"status":   "ok",
-		"version":  versionInfo,
-		"size":     len(data),
-		"filename": filename,
+		"status":    "ok",
+		"version":   versionInfo,
+		"size":      len(data),
+		"filename":  filename,
+		"is_merged": h.firmwareManager.IsMerged(),
 	})
 }
 
@@ -266,6 +269,7 @@ func (h *HTTPServer) handleAPIFirmwareRestoreEmbedded(w http.ResponseWriter, r *
 		Filename:        filename,
 		Size:            size,
 		Exists:          exists,
+		IsMerged:        h.firmwareManager.IsMerged(),
 		EmbeddedVersion: h.firmwareManager.GetEmbeddedVersion(),
 	}
 	if msg, err := protocol.NewMessage(protocol.ActionFirmwareVersion, fwPayload); err == nil {

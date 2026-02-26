@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
 import useWebSerial from '../hooks/useWebSerial'
+import useEspFlash from '../hooks/useEspFlash'
 import Button from './Button'
 import './USBConfigModal.css'
 
@@ -78,14 +79,17 @@ function getPortLabel(port, index) {
   return `Port serie #${index + 1}`
 }
 
-export default function USBConfigModal({ onClose, wifiConfig }) {
-  const { connected, connecting, logs, connectToPort, disconnect, sendCommand, clearLogs } = useWebSerial()
+export default function USBConfigModal({ onClose, wifiConfig, firmwareInfo }) {
+  const { connected, connecting, logs, connectToPort, disconnect, sendCommand, sendCommandAndWait, clearLogs } = useWebSerial()
+  const { flashing, flashProgress, flashLogs, pushFlashLog, flashFirmware, clearFlashLogs } = useEspFlash()
 
   const [sending, setSending] = useState(false)
   const [ports, setPorts] = useState([])
   const [selectedPortIndex, setSelectedPortIndex] = useState(null)
+  const [flashVerified, setFlashVerified] = useState(false)
 
   const logsEndRef = useRef(null)
+  const flashLogsEndRef = useRef(null)
 
   // List already-authorized ports on mount
   useEffect(() => {
@@ -97,6 +101,10 @@ export default function USBConfigModal({ onClose, wifiConfig }) {
   useEffect(() => {
     logsEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [logs])
+
+  useEffect(() => {
+    flashLogsEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }, [flashLogs])
 
   // Disconnect serial port on unmount (modal close)
   useEffect(() => {
@@ -176,6 +184,50 @@ export default function USBConfigModal({ onClose, wifiConfig }) {
     if (window.confirm('Reinitialiser le buzzer aux parametres usine ? Le buzzer va redemarrer.')) {
       sendCommand('AT+FACTORY')
     }
+  }
+
+  const handleFlash = async () => {
+    if (connected) {
+      await disconnect()
+      await new Promise(r => setTimeout(r, 100))
+    }
+    setFlashVerified(false)
+    clearFlashLogs()
+    const ok = await flashFirmware(ports[selectedPortIndex])
+    if (!ok) return
+
+    // Post-flash: verify firmware version using useWebSerial's proven connection path
+    const expectedVersion = firmwareInfo?.VERSION
+    const MAX_ATTEMPTS = 5
+    let verified = false
+    pushFlashLog('Vérification de la version firmware...')
+    for (let attempt = 1; attempt <= MAX_ATTEMPTS && !verified; attempt++) {
+      pushFlashLog(`Tentative ${attempt}/${MAX_ATTEMPTS}`)
+      // Give device extra time on first attempt (fresh reboot after flash)
+      await new Promise(r => setTimeout(r, attempt === 1 ? 1000 : 500))
+      const portOk = await connectToPort(ports[selectedPortIndex])
+      if (!portOk) { pushFlashLog('Reconnexion échouée, nouvelle tentative...'); continue }
+      // Wait for AT command processor to initialise (USB subsystem ready ~2s after boot)
+      await new Promise(r => setTimeout(r, 2000))
+      const response = await sendCommandAndWait('AT+VERSION', 3000, line => /\d+\.\d+\.\d+/.test(line))
+      await disconnect()
+      if (!response) { pushFlashLog('Pas de réponse, nouvelle tentative...'); continue }
+      const versionMatch = response.match(/(\d+\.\d+\.\d+)/)
+      if (versionMatch) {
+        const flashedVersion = versionMatch[1]
+        if (expectedVersion && flashedVersion === expectedVersion) {
+          pushFlashLog(`✓ Version vérifiée : ${flashedVersion}`)
+        } else if (expectedVersion) {
+          pushFlashLog(`⚠ Version lue : ${flashedVersion} (attendu : ${expectedVersion})`)
+        } else {
+          pushFlashLog(`Version firmware : ${flashedVersion}`)
+        }
+        verified = true
+        setFlashVerified(true)
+      }
+    }
+    if (!verified) pushFlashLog(`⚠ Version non vérifiée après ${MAX_ATTEMPTS} tentatives`)
+    pushFlashLog(verified ? '✓ Flash terminé avec succès !' : 'Flash terminé.')
   }
 
   const isWebSerialSupported = 'serial' in navigator
@@ -290,6 +342,47 @@ export default function USBConfigModal({ onClose, wifiConfig }) {
                 Envoyer et configurer
               </Button>
             </div>
+          </div>
+
+          {/* Flash Firmware */}
+          <div className="usb-section">
+            <h3>Flash Firmware via USB</h3>
+            <div className="usb-form-actions">
+              <Button
+                variant="warning"
+                onClick={handleFlash}
+                disabled={!firmwareInfo?.IS_MERGED || flashing || selectedPortIndex === null}
+                loading={flashing}
+              >
+                {flashing ? `Flash en cours... ${flashProgress}%` : 'Flasher via USB'}
+              </Button>
+            </div>
+            {(flashing || flashLogs.length > 0) && (
+              <div className="usb-flash-progress">
+                <div
+                  className={`usb-flash-progress-bar${flashVerified ? ' verified' : ''}`}
+                  style={{ width: `${flashProgress}%` }}
+                />
+              </div>
+            )}
+            {flashLogs.length > 0 && (
+              <div className="usb-logs usb-flash-logs">
+                {flashLogs.map((line, i) => (
+                  <div key={i} className="usb-log">{line}</div>
+                ))}
+                <div ref={flashLogsEndRef} />
+              </div>
+            )}
+            {firmwareInfo !== null && !firmwareInfo?.EXISTS && (
+              <p className="usb-flash-unavailable">
+                Aucun firmware disponible sur le serveur. Uploadez un fichier .bin dans la section Firmware.
+              </p>
+            )}
+            {firmwareInfo !== null && firmwareInfo?.EXISTS && !firmwareInfo?.IS_MERGED && (
+              <p className="usb-flash-unavailable">
+                Le firmware stocké est un binaire app-only (non merged). Le flash USB nécessite un binaire merged (bootloader + partitions + app). Uploadez un firmware issu d&apos;une release CI.
+              </p>
+            )}
           </div>
 
           {/* Quick actions */}

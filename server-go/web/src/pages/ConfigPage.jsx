@@ -1,20 +1,10 @@
-import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
-import { motion } from 'framer-motion'
+import { useState, useRef, useEffect, useMemo } from 'react'
 import { useGame } from '../hooks/GameContext'
 import Button from '../components/Button'
 import Card from '../components/Card'
 import USBConfigModal from '../components/USBConfigModal'
 import { OtaAllModal } from '../components/TeamCard'
-import useEspFlash from '../hooks/useEspFlash'
 import './ConfigPage.css'
-
-function getPortLabel(port, index) {
-  const info = port.getInfo()
-  if (info.usbVendorId) {
-    return `Port USB #${index + 1} (VID:${info.usbVendorId.toString(16).toUpperCase()} PID:${info.usbProductId?.toString(16).toUpperCase() || '?'})`
-  }
-  return `Port serie #${index + 1}`
-}
 
 export default function ConfigPage() {
   const { teams, bumpers, gameState, updateConfig, sendMessage, version, firmwareInfo: wsFirmwareInfo } = useGame()
@@ -70,11 +60,6 @@ export default function ConfigPage() {
   const [showOtaAllModal, setShowOtaAllModal] = useState(false)
   const [firmwareToast, setFirmwareToast] = useState(null) // { message, type }
   const firmwareFileRef = useRef(null)
-
-  // USB Flash section
-  const [flashPorts, setFlashPorts] = useState([])
-  const [selectedFlashPortIdx, setSelectedFlashPortIdx] = useState(null)
-  const { flashing, flashProgress, flashLogs, flashFirmware, clearFlashLogs } = useEspFlash()
 
   // WiFi toast auto-hide
   useEffect(() => {
@@ -135,13 +120,6 @@ export default function ConfigPage() {
       }
     }
     fetchWifiDefaults()
-  }, [])
-
-  // Load authorized USB ports for the flash section on mount
-  useEffect(() => {
-    if ('serial' in navigator) {
-      navigator.serial.getPorts().then(setFlashPorts).catch(() => {})
-    }
   }, [])
 
   // Fetch firmware info on mount
@@ -303,7 +281,7 @@ export default function ConfigPage() {
       })
       const data = await res.json()
       if (res.ok && data.status === 'ok') {
-        setFirmwareInfo({ VERSION: data.version, SIZE: data.size, EXISTS: true, FILENAME: file.name })
+        setFirmwareInfo(prev => ({ ...prev, VERSION: data.version, SIZE: data.size, EXISTS: true, FILENAME: file.name, IS_MERGED: data.is_merged === true }))
         setFirmwareToast({ message: `Firmware ${data.version} uploade avec succes`, type: 'success' })
         if (firmwareFileRef.current) firmwareFileRef.current.value = ''
       } else {
@@ -336,30 +314,6 @@ export default function ConfigPage() {
 
   const handleUpdateAll = () => {
     setShowOtaAllModal(true)
-  }
-
-  const refreshFlashPorts = async () => {
-    if (!('serial' in navigator)) return
-    try {
-      const ports = await navigator.serial.getPorts()
-      setFlashPorts(ports)
-      setSelectedFlashPortIdx(null)
-    } catch (_) {}
-  }
-
-  const handleRequestFlashPort = async () => {
-    if (!('serial' in navigator)) return
-    try {
-      await navigator.serial.requestPort()
-      await refreshFlashPorts()
-    } catch (_) {}
-  }
-
-  const handleFlashViaUSB = async () => {
-    if (selectedFlashPortIdx === null || !flashPorts[selectedFlashPortIdx]) return
-    if (!firmwareInfo?.EXISTS) return
-    clearFlashLogs()
-    await flashFirmware(flashPorts[selectedFlashPortIdx])
   }
 
   const handleLoadDemo = async () => {
@@ -576,9 +530,16 @@ export default function ConfigPage() {
                 </div>
                 <div className="firmware-info-item">
                   <span className="firmware-info-label">Etat</span>
-                  <span className={`firmware-status-badge ${firmwareInfo?.EXISTS ? 'exists' : firmwareInfo?.VERSION ? 'pending' : 'missing'}`}>
-                    {firmwareInfo?.EXISTS ? 'Disponible' : firmwareInfo?.VERSION ? 'Non uploade' : 'Absent'}
-                  </span>
+                  <div className="firmware-status-row">
+                    <span className={`firmware-status-badge ${firmwareInfo?.EXISTS ? 'exists' : firmwareInfo?.VERSION ? 'pending' : 'missing'}`}>
+                      {firmwareInfo?.EXISTS ? 'Disponible' : firmwareInfo?.VERSION ? 'Non uploade' : 'Absent'}
+                    </span>
+                    {firmwareInfo?.EXISTS && (
+                      <span className={`firmware-type-badge ${firmwareInfo.IS_MERGED ? 'merged' : 'app-only'}`}>
+                        {firmwareInfo.IS_MERGED ? 'Full (merged)' : 'App only'}
+                      </span>
+                    )}
+                  </div>
                 </div>
                 {firmwareInfo?.EMBEDDED_VERSION && (
                   <div className="firmware-info-item">
@@ -628,65 +589,15 @@ export default function ConfigPage() {
                     ? `Mettre a jour les ${outdatedCount} buzzer${outdatedCount > 1 ? 's' : ''} obsoletes`
                     : 'Mettre a jour les buzzers obsoletes'}
                 </Button>
+                <Button
+                  variant="secondary"
+                  onClick={() => setShowUSBModal(true)}
+                  disabled={!firmwareInfo?.IS_MERGED}
+                >
+                  Flash via USB
+                </Button>
               </div>
 
-              {/* Flash via USB */}
-              <div className="firmware-flash-usb">
-                <h4 className="firmware-flash-title">Flash via USB</h4>
-                {'serial' in navigator ? (
-                  <>
-                    <div className="firmware-flash-ports">
-                      {flashPorts.length === 0 ? (
-                        <div className="firmware-flash-no-ports">Aucun port USB autorise</div>
-                      ) : (
-                        flashPorts.map((port, i) => (
-                          <div
-                            key={i}
-                            className={`firmware-flash-port-item ${selectedFlashPortIdx === i ? 'selected' : ''}`}
-                            onClick={() => setSelectedFlashPortIdx(i)}
-                          >
-                            {getPortLabel(port, i)}
-                          </div>
-                        ))
-                      )}
-                    </div>
-                    <div className="firmware-flash-port-actions">
-                      <Button variant="secondary" size="sm" onClick={handleRequestFlashPort}>
-                        Ajouter un port
-                      </Button>
-                      <Button variant="secondary" size="sm" onClick={refreshFlashPorts}>
-                        Rafraichir
-                      </Button>
-                    </div>
-                    <div className="config-section-actions">
-                      <Button
-                        variant="warning"
-                        onClick={handleFlashViaUSB}
-                        disabled={selectedFlashPortIdx === null || flashing || !firmwareInfo?.EXISTS}
-                        loading={flashing}
-                      >
-                        {flashing ? `Flash en cours... ${flashProgress}%` : 'Flasher via USB'}
-                      </Button>
-                    </div>
-                    {flashing && (
-                      <div className="firmware-flash-progress">
-                        <div className="firmware-flash-progress-bar" style={{ width: `${flashProgress}%` }} />
-                      </div>
-                    )}
-                    {flashLogs.length > 0 && (
-                      <div className="firmware-flash-logs">
-                        {flashLogs.map((line, i) => (
-                          <div key={i} className="firmware-flash-log">{line}</div>
-                        ))}
-                      </div>
-                    )}
-                  </>
-                ) : (
-                  <p className="firmware-flash-unavailable">
-                    Web Serial non disponible. Utilisez Chrome/Edge sur localhost.
-                  </p>
-                )}
-              </div>
             </div>
 
             {/* Demo Section */}
@@ -967,6 +878,7 @@ export default function ConfigPage() {
         <USBConfigModal
           onClose={() => setShowUSBModal(false)}
           wifiConfig={{ ssid: wifiSsid, password: wifiPassword, serverIp: wifiServerIp, serverPort: wifiServerPort }}
+          firmwareInfo={firmwareInfo}
         />
       )}
 

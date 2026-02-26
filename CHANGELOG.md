@@ -3,6 +3,38 @@
 Historique des versions du projet BuzzControl.
 
 
+## [3.1.2] - 2026-02-26
+
+### Added
+- **[USB UI]**: `USBConfigModal` unifiee — config WiFi AT et flash firmware reunis dans une seule modale
+  - Point d'entree unique pour toutes les operations USB buzzer (remplace les deux interfaces separees)
+  - Selection de port USB unifiee : une seule connexion serie pour config WiFi ET flash firmware
+  - Bouton "Flash via USB" repositionne dans la section Firmware de ConfigPage
+- **[Firmware UI]**: Badge firmware type dans ConfigPage (Full merged / App only)
+  - Indique si le firmware de reference est un build complet ou uniquement l'application
+
+### Fixed
+- **[USB UI]**: Bouton "Flash via USB" desactive automatiquement quand firmware app-only (IS_MERGED=false)
+  - Evite les flashs incorrects avec un firmware partiel
+- **[OTA Backend]**: Champ `IS_MERGED` propage via WebSocket dans le handler `FIRMWARE_VERSION`
+  - Le frontend recoit correctement le type de firmware (complet vs app-only) en temps reel
+- **[USB Flash]**: Correction flash USB via esptool-js
+  - Ecriture depuis l'adresse 0x0 (au lieu de 0x10000) pour un flash complet
+  - Ajout hard_reset apres le flash pour redemarrage automatique du buzzer
+  - Verification AT+VERSION post-flash pour confirmer le succes de la mise a jour
+
+### Changed
+- **[USB UI]**: La section "Flash via USB" de ConfigPage migree dans `USBConfigModal`
+  - Coherence UI — une seule modale pour toutes les operations USB
+
+### Technical
+- **Frontend**:
+  - `web/src/components/USBConfigModal.jsx` : Modale unifiee config WiFi AT + flash firmware (nouveau composant)
+  - `web/src/pages/ConfigPage.jsx` : Badge IS_MERGED + integration USBConfigModal
+  - `web/src/hooks/useEspFlash.js` : Correction write 0x0 + hard_reset + verification AT+VERSION
+
+---
+
 ## [3.1.1] - 2026-02-21
 
 ### Added

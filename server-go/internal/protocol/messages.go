@@ -289,6 +289,7 @@ type FirmwareVersionPayload struct {
 	Filename        string `json:"FILENAME"`                   // Firmware filename (e.g. "buzzclick-v3.1.0.bin")
 	Size            int64  `json:"SIZE"`                       // Firmware file size in bytes
 	Exists          bool   `json:"EXISTS"`                     // Whether firmware file exists on server
+	IsMerged        bool   `json:"IS_MERGED"`                  // Whether stored firmware is a merged binary (USB flash capable)
 	EmbeddedVersion string `json:"EMBEDDED_VERSION,omitempty"` // Version embedded in server binary (v3.1.1+)
 }
 

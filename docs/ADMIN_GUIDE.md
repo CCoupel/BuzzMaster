@@ -773,16 +773,24 @@ fw: 3.1.0   ← gris = a jour
 | Succes | - | Badge `fw: X.Y.Z` gris |
 | Echec | - | Badge `error` rouge |
 
-### Flash firmware via USB
+### Flash firmware via USB (v3.1.2)
 
-En alternative a l'OTA WiFi, vous pouvez flasher le firmware via cable USB depuis la modal de configuration USB :
+En alternative a l'OTA WiFi, vous pouvez flasher le firmware via cable USB depuis la modale USB unifiee. Cette modale regroupe la configuration WiFi AT et le flash firmware dans une seule interface.
 
-1. Connecter le buzzer via cable USB-C
-2. Cliquer sur "Config USB" (icone USB dans l'interface)
-3. Selectionner le port serie du buzzer
+**Acces depuis ConfigPage** :
+1. Aller dans la section "Gestion Firmware" de ConfigPage (`/admin/config`)
+2. Cliquer sur "Flash via USB" (bouton au meme niveau que "Uploader le firmware" et "Mettre a jour les buzzers")
+3. La modale USB s'ouvre — selectionner le port serie du buzzer
 4. Aller dans l'onglet "Flash Firmware"
 5. Cliquer sur "Flash"
 6. La barre de progression et les logs s'affichent en temps reel
+
+**Acces depuis l'icone USB** :
+1. Cliquer sur l'icone USB dans l'interface
+2. Selectionner le port serie du buzzer
+3. L'onglet "Config WiFi" ou "Flash Firmware" selon l'operation souhaitee
+
+**Avantage v3.1.2** : Le port USB est selectionne une seule fois dans la modale, quel que soit l'onglet utilise (config AT ou flash). Plus besoin de gerer deux points d'entree distincts.
 
 **Prerequis** : Chrome ou Edge 89+, navigateur sur localhost, firmware uploade au prealable sur le serveur.
 
