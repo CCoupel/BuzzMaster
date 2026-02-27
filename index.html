@@ -29,12 +29,133 @@
     </header>
 
     <!-- Hero Section -->
+    <style>
+        /* ---- Hero fun enhancements ---- */
+        @keyframes hero-float {
+            0%, 100% { transform: translateY(0); }
+            50%       { transform: translateY(-10px); }
+        }
+        @keyframes hero-pulse-ring {
+            0%   { transform: scale(1);   opacity: 0.7; }
+            100% { transform: scale(1.6); opacity: 0; }
+        }
+        @keyframes hero-badge-glow {
+            0%, 100% { box-shadow: 0 0 8px rgba(245,158,11,0.3); }
+            50%       { box-shadow: 0 0 24px rgba(245,158,11,0.7); }
+        }
+        @keyframes hero-emoji-spin {
+            0%   { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        @keyframes hero-shake {
+            0%, 100% { transform: translateX(0); }
+            20%       { transform: translateX(-4px) rotate(-5deg); }
+            40%       { transform: translateX(4px) rotate(5deg); }
+            60%       { transform: translateX(-3px) rotate(-3deg); }
+            80%       { transform: translateX(3px) rotate(3deg); }
+        }
+
+        .hero-emoji-bar {
+            font-size: 2rem;
+            margin-bottom: 1.25rem;
+            display: flex;
+            justify-content: center;
+            gap: 0.75rem;
+            flex-wrap: wrap;
+        }
+        .hero-emoji-bar span {
+            display: inline-block;
+            animation: hero-float 3s ease-in-out infinite;
+        }
+        .hero-emoji-bar span:nth-child(1) { animation-delay: 0s; }
+        .hero-emoji-bar span:nth-child(2) { animation-delay: 0.4s; }
+        .hero-emoji-bar span:nth-child(3) { animation-delay: 0.8s; }
+        .hero-emoji-bar span:nth-child(4) { animation-delay: 1.2s; }
+        .hero-emoji-bar span:nth-child(5) { animation-delay: 1.6s; }
+
+        .hero-tagline {
+            font-size: 1rem;
+            font-weight: 600;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+            color: var(--accent);
+            margin-bottom: 0.75rem;
+        }
+
+        .hero-subtitle-fun {
+            font-size: 1.1rem;
+            color: var(--primary);
+            font-weight: 600;
+            margin-top: 0.5rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .version-badge {
+            animation: hero-badge-glow 2.5s ease-in-out infinite;
+        }
+
+        .hero-btn-wrap {
+            position: relative;
+            display: inline-block;
+        }
+        .hero-btn-wrap::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            border-radius: 8px;
+            background: var(--gradient);
+            animation: hero-pulse-ring 1.8s ease-out infinite;
+            pointer-events: none;
+        }
+
+        .hero-icons-row {
+            display: flex;
+            justify-content: center;
+            gap: 2rem;
+            margin-top: 2.5rem;
+            flex-wrap: wrap;
+        }
+        .hero-icon-item {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 0.35rem;
+            font-size: 0.8rem;
+            color: var(--text-muted);
+        }
+        .hero-icon-item span.icon {
+            font-size: 2rem;
+            display: inline-block;
+            animation: hero-float 4s ease-in-out infinite;
+        }
+        .hero-icon-item:nth-child(1) span.icon { animation-delay: 0s; }
+        .hero-icon-item:nth-child(2) span.icon { animation-delay: 0.6s; }
+        .hero-icon-item:nth-child(3) span.icon { animation-delay: 1.2s; }
+        .hero-icon-item:nth-child(4) span.icon { animation-delay: 1.8s; }
+        .hero-icon-item:nth-child(5) span.icon { animation-delay: 2.4s; }
+
+        .hero-icon-item:hover span.icon {
+            animation: hero-shake 0.5s ease-in-out;
+        }
+    </style>
+
     <section class="hero">
         <div class="container">
-            <h1>Animez vos Quiz comme un Pro</h1>
+            <div class="hero-emoji-bar" aria-hidden="true">
+                <span>🔴</span>
+                <span>🐝</span>
+                <span>🎯</span>
+                <span>⚡</span>
+                <span>🏆</span>
+            </div>
+            <p class="hero-tagline">Le buzzer, reinvente</p>
+            <h1>Animez vos Quiz comme un Pro !</h1>
             <p class="hero-subtitle">
                 Systeme complet de buzzers sans fil pour quiz d'entreprise,
                 team buildings et soirees entre amis.
+            </p>
+            <p class="hero-subtitle-fun">
+                Appuie le premier. Gagne le point. Recommence.
             </p>
             <div class="version-badge">
                 <span class="version-label">Version actuelle</span>
@@ -42,8 +163,32 @@
                 <span class="version-date">26 fevrier 2026</span>
             </div>
             <div class="hero-buttons">
-                <a href="#download" class="btn btn-primary">Telecharger</a>
+                <span class="hero-btn-wrap">
+                    <a href="#download" class="btn btn-primary">Telecharger gratuitement</a>
+                </span>
                 <a href="https://github.com/CCoupel/BuzzMaster" class="btn btn-secondary" target="_blank">Voir sur GitHub</a>
+            </div>
+            <div class="hero-icons-row" aria-hidden="true">
+                <div class="hero-icon-item">
+                    <span class="icon">📡</span>
+                    <span>Sans fil</span>
+                </div>
+                <div class="hero-icon-item">
+                    <span class="icon">⚡</span>
+                    <span>Temps reel</span>
+                </div>
+                <div class="hero-icon-item">
+                    <span class="icon">🎮</span>
+                    <span>3 modes de jeu</span>
+                </div>
+                <div class="hero-icon-item">
+                    <span class="icon">👥</span>
+                    <span>Multi-equipes</span>
+                </div>
+                <div class="hero-icon-item">
+                    <span class="icon">📱</span>
+                    <span>Smartphone OK</span>
+                </div>
             </div>
         </div>
     </section>
