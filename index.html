@@ -9,6 +9,9 @@
     <link rel="icon" href="images/favicon.ico" type="image/x-icon">
     <link rel="icon" href="images/favicon.svg" type="image/svg+xml">
     <link rel="shortcut icon" href="images/favicon.ico">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;600;700&family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
 </head>
 <body>
     <!-- Header -->
@@ -30,168 +33,659 @@
 
     <!-- Hero Section -->
     <style>
-        /* ---- Hero fun enhancements ---- */
-        @keyframes hero-float {
-            0%, 100% { transform: translateY(0); }
-            50%       { transform: translateY(-10px); }
+        /* =============================================
+           HERO FUN REDESIGN - BuzzControl Game Spirit
+           ============================================= */
+
+        /* --- Keyframes --- */
+        @keyframes hero-bg-shift {
+            0%   { background-position: 0% 50%; }
+            50%  { background-position: 100% 50%; }
+            100% { background-position: 0% 50%; }
         }
-        @keyframes hero-pulse-ring {
-            0%   { transform: scale(1);   opacity: 0.7; }
-            100% { transform: scale(1.6); opacity: 0; }
+        @keyframes hero-rainbow-text {
+            0%   { background-position: 0% 50%; }
+            50%  { background-position: 100% 50%; }
+            100% { background-position: 0% 50%; }
+        }
+        @keyframes hero-float {
+            0%, 100% { transform: translateY(0px) rotate(0deg); }
+            33%       { transform: translateY(-12px) rotate(-3deg); }
+            66%       { transform: translateY(-6px) rotate(3deg); }
+        }
+        @keyframes hero-buzz-press {
+            0%   { transform: scale(1);    box-shadow: 0 12px 0 #c0392b, 0 14px 20px rgba(0,0,0,0.5); }
+            40%  { transform: scale(0.93); box-shadow: 0 4px 0 #c0392b,  0 6px 10px rgba(0,0,0,0.5); }
+            60%  { transform: scale(0.96); box-shadow: 0 7px 0 #c0392b,  0 9px 15px rgba(0,0,0,0.5); }
+            100% { transform: scale(1);    box-shadow: 0 12px 0 #c0392b, 0 14px 20px rgba(0,0,0,0.5); }
+        }
+        @keyframes hero-buzz-press-2 {
+            0%   { transform: scale(1);    box-shadow: 0 12px 0 #1565c0, 0 14px 20px rgba(0,0,0,0.5); }
+            40%  { transform: scale(0.93); box-shadow: 0 4px 0 #1565c0,  0 6px 10px rgba(0,0,0,0.5); }
+            60%  { transform: scale(0.96); box-shadow: 0 7px 0 #1565c0,  0 9px 15px rgba(0,0,0,0.5); }
+            100% { transform: scale(1);    box-shadow: 0 12px 0 #1565c0, 0 14px 20px rgba(0,0,0,0.5); }
+        }
+        @keyframes hero-buzz-press-3 {
+            0%   { transform: scale(1);    box-shadow: 0 12px 0 #1b5e20, 0 14px 20px rgba(0,0,0,0.5); }
+            40%  { transform: scale(0.93); box-shadow: 0 4px 0 #1b5e20,  0 6px 10px rgba(0,0,0,0.5); }
+            60%  { transform: scale(0.96); box-shadow: 0 7px 0 #1b5e20,  0 9px 15px rgba(0,0,0,0.5); }
+            100% { transform: scale(1);    box-shadow: 0 12px 0 #1b5e20, 0 14px 20px rgba(0,0,0,0.5); }
+        }
+        @keyframes hero-ripple {
+            0%   { transform: scale(0.8); opacity: 0.9; }
+            100% { transform: scale(2.8); opacity: 0; }
+        }
+        @keyframes hero-score-pop {
+            0%   { transform: translateY(0) scale(0.5);   opacity: 0; }
+            20%  { transform: translateY(-10px) scale(1.3); opacity: 1; }
+            70%  { transform: translateY(-40px) scale(1);   opacity: 1; }
+            100% { transform: translateY(-70px) scale(0.8); opacity: 0; }
         }
         @keyframes hero-badge-glow {
-            0%, 100% { box-shadow: 0 0 8px rgba(245,158,11,0.3); }
-            50%       { box-shadow: 0 0 24px rgba(245,158,11,0.7); }
+            0%, 100% { box-shadow: 0 0 15px rgba(245,158,11,0.4), 0 0 30px rgba(245,158,11,0.2); }
+            50%       { box-shadow: 0 0 30px rgba(245,158,11,0.8), 0 0 60px rgba(245,158,11,0.4); }
         }
-        @keyframes hero-emoji-spin {
-            0%   { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
+        @keyframes hero-btn-bounce {
+            0%, 100% { transform: scale(1); }
+            50%       { transform: scale(1.05); }
+        }
+        @keyframes hero-btn-press {
+            0%   { transform: scale(1) translateY(0); }
+            50%  { transform: scale(0.96) translateY(3px); }
+            100% { transform: scale(1) translateY(0); }
+        }
+        @keyframes hero-subtitle-in {
+            0%   { opacity: 0; transform: translateY(20px); }
+            100% { opacity: 1; transform: translateY(0); }
         }
         @keyframes hero-shake {
-            0%, 100% { transform: translateX(0); }
-            20%       { transform: translateX(-4px) rotate(-5deg); }
-            40%       { transform: translateX(4px) rotate(5deg); }
-            60%       { transform: translateX(-3px) rotate(-3deg); }
-            80%       { transform: translateX(3px) rotate(3deg); }
+            0%, 100% { transform: translateX(0) rotate(0deg); }
+            20%       { transform: translateX(-5px) rotate(-8deg); }
+            40%       { transform: translateX(5px) rotate(8deg); }
+            60%       { transform: translateX(-3px) rotate(-4deg); }
+            80%       { transform: translateX(3px) rotate(4deg); }
+        }
+        @keyframes hero-icon-float {
+            0%, 100% { transform: translateY(0); }
+            50%       { transform: translateY(-8px); }
         }
 
-        .hero-emoji-bar {
-            font-size: 2rem;
-            margin-bottom: 1.25rem;
+        /* --- Hero container --- */
+        .hero {
+            position: relative;
+            min-height: 100vh;
             display: flex;
+            align-items: center;
             justify-content: center;
-            gap: 0.75rem;
-            flex-wrap: wrap;
+            text-align: center;
+            padding-top: 70px;
+            overflow: hidden;
+            /* Animated gradient background */
+            background: linear-gradient(
+                -45deg,
+                #1a0533,
+                #0d1f6e,
+                #0a3d2e,
+                #1a0533,
+                #2d0a4e,
+                #0d2b6e
+            );
+            background-size: 400% 400%;
+            animation: hero-bg-shift 12s ease infinite;
         }
-        .hero-emoji-bar span {
-            display: inline-block;
-            animation: hero-float 3s ease-in-out infinite;
-        }
-        .hero-emoji-bar span:nth-child(1) { animation-delay: 0s; }
-        .hero-emoji-bar span:nth-child(2) { animation-delay: 0.4s; }
-        .hero-emoji-bar span:nth-child(3) { animation-delay: 0.8s; }
-        .hero-emoji-bar span:nth-child(4) { animation-delay: 1.2s; }
-        .hero-emoji-bar span:nth-child(5) { animation-delay: 1.6s; }
 
+        /* Canvas for confetti/particles */
+        #hero-canvas {
+            position: absolute;
+            inset: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        /* Content above canvas */
+        .hero .container {
+            position: relative;
+            z-index: 1;
+        }
+
+        /* --- Title --- */
+        .hero h1 {
+            font-family: 'Fredoka', 'Nunito', sans-serif !important;
+            font-size: clamp(2.8rem, 7vw, 5rem) !important;
+            font-weight: 700 !important;
+            line-height: 1.1 !important;
+            margin-bottom: 1rem !important;
+            /* Animated rainbow gradient on text */
+            background: linear-gradient(
+                90deg,
+                #ff6b6b, #ffd93d, #6bcb77, #4d96ff,
+                #ff6b6b, #ffd93d, #6bcb77, #4d96ff
+            ) !important;
+            background-size: 300% auto !important;
+            -webkit-background-clip: text !important;
+            -webkit-text-fill-color: transparent !important;
+            background-clip: text !important;
+            animation: hero-rainbow-text 4s linear infinite !important;
+            text-shadow: none !important;
+            filter: drop-shadow(0 0 20px rgba(255, 107, 107, 0.3));
+        }
+
+        /* --- Tagline --- */
         .hero-tagline {
-            font-size: 1rem;
-            font-weight: 600;
-            letter-spacing: 0.12em;
+            font-family: 'Nunito', sans-serif;
+            font-size: 0.95rem;
+            font-weight: 800;
+            letter-spacing: 0.18em;
             text-transform: uppercase;
-            color: var(--accent);
+            color: #ffd93d;
             margin-bottom: 0.75rem;
+            text-shadow: 0 0 20px rgba(255, 217, 61, 0.6);
+        }
+
+        /* --- Subtitle --- */
+        .hero-subtitle {
+            font-family: 'Nunito', sans-serif !important;
+            font-size: 1.2rem !important;
+            color: rgba(255,255,255,0.85) !important;
+            font-weight: 600 !important;
+            max-width: 580px;
+            margin: 0 auto 0.75rem !important;
+            animation: hero-subtitle-in 0.8s ease 0.3s both;
         }
 
         .hero-subtitle-fun {
-            font-size: 1.1rem;
-            color: var(--primary);
+            font-family: 'Fredoka', sans-serif;
+            font-size: 1.3rem;
+            color: #6bcb77;
             font-weight: 600;
-            margin-top: 0.5rem;
+            margin-top: 0.25rem;
             margin-bottom: 1.5rem;
+            text-shadow: 0 0 15px rgba(107, 203, 119, 0.5);
+            animation: hero-subtitle-in 0.8s ease 0.5s both;
         }
 
+        /* --- Version badge --- */
         .version-badge {
-            animation: hero-badge-glow 2.5s ease-in-out infinite;
+            display: inline-flex !important;
+            flex-direction: column;
+            align-items: center;
+            gap: 0.25rem;
+            padding: 0.75rem 1.75rem;
+            margin: 0 auto 2rem;
+            background: rgba(255, 255, 255, 0.08);
+            border: 2px solid rgba(255, 217, 61, 0.5);
+            border-radius: 16px;
+            backdrop-filter: blur(12px);
+            animation: hero-badge-glow 2.5s ease-in-out infinite !important;
         }
 
-        .hero-btn-wrap {
-            position: relative;
-            display: inline-block;
-        }
-        .hero-btn-wrap::before {
-            content: '';
-            position: absolute;
-            inset: 0;
-            border-radius: 8px;
-            background: var(--gradient);
-            animation: hero-pulse-ring 1.8s ease-out infinite;
-            pointer-events: none;
+        .version-label {
+            font-size: 0.7rem;
+            color: rgba(255,255,255,0.6);
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            font-family: 'Nunito', sans-serif;
         }
 
-        .hero-icons-row {
+        .version-number {
+            font-family: 'Fredoka', sans-serif;
+            font-size: 1.6rem;
+            font-weight: 700;
+            color: #ffd93d;
+        }
+
+        .version-date {
+            font-size: 0.8rem;
+            color: rgba(255,255,255,0.5);
+        }
+
+        /* --- CTA Buttons --- */
+        .hero-buttons {
+            display: flex;
+            gap: 1.25rem;
+            justify-content: center;
+            flex-wrap: wrap;
+            margin-bottom: 2.5rem;
+        }
+
+        .hero-btn-primary {
+            font-family: 'Fredoka', 'Nunito', sans-serif;
+            font-size: 1.2rem;
+            font-weight: 600;
+            padding: 1rem 2.5rem;
+            border-radius: 50px;
+            background: linear-gradient(135deg, #ff6b6b, #ffd93d, #ff6b6b);
+            background-size: 200% auto;
+            color: #1a0533;
+            text-decoration: none;
+            border: none;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            box-shadow: 0 8px 25px rgba(255, 107, 107, 0.5), 0 0 40px rgba(255, 107, 107, 0.2);
+            animation: hero-rainbow-text 3s linear infinite, hero-btn-bounce 2s ease-in-out infinite;
+            transition: transform 0.1s, box-shadow 0.1s;
+            letter-spacing: 0.02em;
+        }
+        .hero-btn-primary:hover {
+            box-shadow: 0 12px 35px rgba(255, 107, 107, 0.7), 0 0 60px rgba(255, 107, 107, 0.3);
+            animation: hero-rainbow-text 3s linear infinite;
+        }
+        .hero-btn-primary:active {
+            animation: hero-btn-press 0.15s ease, hero-rainbow-text 3s linear infinite;
+        }
+
+        .hero-btn-secondary {
+            font-family: 'Fredoka', 'Nunito', sans-serif;
+            font-size: 1.15rem;
+            font-weight: 600;
+            padding: 1rem 2.2rem;
+            border-radius: 50px;
+            background: rgba(255,255,255,0.08);
+            color: #fff;
+            text-decoration: none;
+            border: 2px solid rgba(255,255,255,0.3);
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            backdrop-filter: blur(8px);
+            transition: all 0.3s;
+        }
+        .hero-btn-secondary:hover {
+            background: rgba(255,255,255,0.18);
+            border-color: rgba(255,255,255,0.6);
+            transform: translateY(-3px);
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+        }
+
+        /* --- Virtual Buzzers --- */
+        .hero-buzzers {
             display: flex;
             justify-content: center;
-            gap: 2rem;
-            margin-top: 2.5rem;
+            align-items: flex-end;
+            gap: 2.5rem;
+            margin: 0 auto 2.5rem;
             flex-wrap: wrap;
         }
-        .hero-icon-item {
+
+        .hero-buzzer-wrap {
             display: flex;
             flex-direction: column;
             align-items: center;
-            gap: 0.35rem;
-            font-size: 0.8rem;
-            color: var(--text-muted);
+            gap: 0.6rem;
         }
-        .hero-icon-item span.icon {
-            font-size: 2rem;
-            display: inline-block;
-            animation: hero-float 4s ease-in-out infinite;
-        }
-        .hero-icon-item:nth-child(1) span.icon { animation-delay: 0s; }
-        .hero-icon-item:nth-child(2) span.icon { animation-delay: 0.6s; }
-        .hero-icon-item:nth-child(3) span.icon { animation-delay: 1.2s; }
-        .hero-icon-item:nth-child(4) span.icon { animation-delay: 1.8s; }
-        .hero-icon-item:nth-child(5) span.icon { animation-delay: 2.4s; }
 
-        .hero-icon-item:hover span.icon {
-            animation: hero-shake 0.5s ease-in-out;
+        .hero-buzzer-label {
+            font-family: 'Nunito', sans-serif;
+            font-size: 0.8rem;
+            font-weight: 700;
+            color: rgba(255,255,255,0.7);
+            letter-spacing: 0.05em;
+        }
+
+        .hero-buzzer {
+            position: relative;
+            width: 80px;
+            height: 80px;
+            border-radius: 50%;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.6rem;
+            transition: transform 0.08s, box-shadow 0.08s;
+            user-select: none;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        .hero-buzzer.red {
+            background: radial-gradient(circle at 35% 30%, #ff8a80, #e53935);
+            box-shadow: 0 12px 0 #c0392b, 0 14px 20px rgba(0,0,0,0.5);
+            animation: hero-buzz-press 2.2s ease-in-out 0s infinite;
+        }
+        .hero-buzzer.blue {
+            background: radial-gradient(circle at 35% 30%, #82b1ff, #1e88e5);
+            box-shadow: 0 12px 0 #1565c0, 0 14px 20px rgba(0,0,0,0.5);
+            animation: hero-buzz-press-2 2.2s ease-in-out 0.7s infinite;
+        }
+        .hero-buzzer.green {
+            background: radial-gradient(circle at 35% 30%, #b9f6ca, #43a047);
+            box-shadow: 0 12px 0 #1b5e20, 0 14px 20px rgba(0,0,0,0.5);
+            animation: hero-buzz-press-3 2.2s ease-in-out 1.4s infinite;
+        }
+
+        /* Buzzer ripple effect */
+        .hero-buzzer-ripple {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            border-radius: 50%;
+            pointer-events: none;
+            border: 3px solid currentColor;
+            animation: hero-ripple 2.2s ease-out infinite;
+            opacity: 0;
+        }
+        .hero-buzzer.red  .hero-buzzer-ripple { color: #ff8a80; animation-delay: 0s; }
+        .hero-buzzer.blue .hero-buzzer-ripple { color: #82b1ff; animation-delay: 0.7s; }
+        .hero-buzzer.green .hero-buzzer-ripple { color: #b9f6ca; animation-delay: 1.4s; }
+
+        /* Score pop-ups */
+        .hero-score-pop {
+            position: absolute;
+            top: -10px;
+            left: 50%;
+            transform: translateX(-50%);
+            font-family: 'Fredoka', sans-serif;
+            font-size: 1.1rem;
+            font-weight: 700;
+            color: #ffd93d;
+            text-shadow: 0 2px 8px rgba(0,0,0,0.6);
+            animation: hero-score-pop 2.2s ease-out infinite;
+            pointer-events: none;
+            white-space: nowrap;
+        }
+        .hero-score-pop.red-score   { animation-delay: 0s; }
+        .hero-score-pop.blue-score  { animation-delay: 0.7s; color: #82b1ff; }
+        .hero-score-pop.green-score { animation-delay: 1.4s; color: #b9f6ca; }
+
+        /* --- Bottom stats row --- */
+        .hero-stats-row {
+            display: flex;
+            justify-content: center;
+            gap: 2.5rem;
+            margin-top: 0.5rem;
+            flex-wrap: wrap;
+        }
+        .hero-stat-item {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 0.3rem;
+        }
+        .hero-stat-icon {
+            font-size: 1.8rem;
+            display: inline-block;
+            animation: hero-icon-float 3s ease-in-out infinite;
+        }
+        .hero-stat-item:nth-child(1) .hero-stat-icon { animation-delay: 0s; }
+        .hero-stat-item:nth-child(2) .hero-stat-icon { animation-delay: 0.5s; }
+        .hero-stat-item:nth-child(3) .hero-stat-icon { animation-delay: 1s; }
+        .hero-stat-item:nth-child(4) .hero-stat-icon { animation-delay: 1.5s; }
+        .hero-stat-item:nth-child(5) .hero-stat-icon { animation-delay: 2s; }
+
+        .hero-stat-label {
+            font-family: 'Nunito', sans-serif;
+            font-size: 0.75rem;
+            font-weight: 700;
+            color: rgba(255,255,255,0.65);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+        .hero-stat-item:hover .hero-stat-icon {
+            animation: hero-shake 0.45s ease-in-out;
+        }
+
+        /* --- Responsive --- */
+        @media (max-width: 600px) {
+            .hero h1 { font-size: 2.4rem !important; }
+            .hero-buzzers { gap: 1.5rem; }
+            .hero-buzzer { width: 64px; height: 64px; font-size: 1.3rem; }
+            .hero-btn-primary, .hero-btn-secondary { font-size: 1rem; padding: 0.85rem 1.75rem; }
+            .hero-stats-row { gap: 1.5rem; }
         }
     </style>
 
     <section class="hero">
+        <!-- Animated canvas: confetti particles -->
+        <canvas id="hero-canvas" aria-hidden="true"></canvas>
+
         <div class="container">
-            <div class="hero-emoji-bar" aria-hidden="true">
-                <span>🔴</span>
-                <span>🐝</span>
-                <span>🎯</span>
-                <span>⚡</span>
-                <span>🏆</span>
-            </div>
-            <p class="hero-tagline">Le buzzer, reinvente</p>
-            <h1>Animez vos Quiz comme un Pro !</h1>
+            <!-- Tagline -->
+            <p class="hero-tagline">Le buzzer, reinvente !</p>
+
+            <!-- Rainbow animated title -->
+            <h1>Animez vos Quiz<br>comme jamais !</h1>
+
+            <!-- Subtitle -->
             <p class="hero-subtitle">
-                Systeme complet de buzzers sans fil pour quiz d'entreprise,
-                team buildings et soirees entre amis.
+                Buzzers sans fil, scores en direct, 3 modes de jeu.
+                La salle va exploser.
             </p>
             <p class="hero-subtitle-fun">
-                Appuie le premier. Gagne le point. Recommence.
+                Appuie le premier. Gagne le point. Recommence !
             </p>
+
+            <!-- Virtual Buzzers with animations -->
+            <div class="hero-buzzers" aria-hidden="true">
+                <div class="hero-buzzer-wrap">
+                    <div class="hero-buzzer red" id="bzRed" title="Buzzer rouge">
+                        <div class="hero-buzzer-ripple"></div>
+                        <span class="hero-score-pop red-score">+10 pts !</span>
+                        🔴
+                    </div>
+                    <span class="hero-buzzer-label">Equipe 1</span>
+                </div>
+                <div class="hero-buzzer-wrap">
+                    <div class="hero-buzzer blue" id="bzBlue" title="Buzzer bleu">
+                        <div class="hero-buzzer-ripple"></div>
+                        <span class="hero-score-pop blue-score">+10 pts !</span>
+                        🔵
+                    </div>
+                    <span class="hero-buzzer-label">Equipe 2</span>
+                </div>
+                <div class="hero-buzzer-wrap">
+                    <div class="hero-buzzer green" id="bzGreen" title="Buzzer vert">
+                        <div class="hero-buzzer-ripple"></div>
+                        <span class="hero-score-pop green-score">+10 pts !</span>
+                        🟢
+                    </div>
+                    <span class="hero-buzzer-label">Equipe 3</span>
+                </div>
+            </div>
+
+            <!-- Version badge -->
             <div class="version-badge">
                 <span class="version-label">Version actuelle</span>
                 <span class="version-number">v3.1.2</span>
                 <span class="version-date">26 fevrier 2026</span>
             </div>
+
+            <!-- CTA Buttons -->
             <div class="hero-buttons">
-                <span class="hero-btn-wrap">
-                    <a href="#download" class="btn btn-primary">Telecharger gratuitement</a>
-                </span>
-                <a href="https://github.com/CCoupel/BuzzMaster" class="btn btn-secondary" target="_blank">Voir sur GitHub</a>
+                <a href="#download" class="hero-btn-primary">
+                    <span>Telecharger gratuitement</span>
+                </a>
+                <a href="https://github.com/CCoupel/BuzzMaster" class="hero-btn-secondary" target="_blank">
+                    <span>Voir sur GitHub</span>
+                </a>
             </div>
-            <div class="hero-icons-row" aria-hidden="true">
-                <div class="hero-icon-item">
-                    <span class="icon">📡</span>
-                    <span>Sans fil</span>
+
+            <!-- Stats row -->
+            <div class="hero-stats-row" aria-hidden="true">
+                <div class="hero-stat-item">
+                    <span class="hero-stat-icon">📡</span>
+                    <span class="hero-stat-label">Sans fil</span>
                 </div>
-                <div class="hero-icon-item">
-                    <span class="icon">⚡</span>
-                    <span>Temps reel</span>
+                <div class="hero-stat-item">
+                    <span class="hero-stat-icon">⚡</span>
+                    <span class="hero-stat-label">Temps reel</span>
                 </div>
-                <div class="hero-icon-item">
-                    <span class="icon">🎮</span>
-                    <span>3 modes de jeu</span>
+                <div class="hero-stat-item">
+                    <span class="hero-stat-icon">🎮</span>
+                    <span class="hero-stat-label">3 modes</span>
                 </div>
-                <div class="hero-icon-item">
-                    <span class="icon">👥</span>
-                    <span>Multi-equipes</span>
+                <div class="hero-stat-item">
+                    <span class="hero-stat-icon">👥</span>
+                    <span class="hero-stat-label">Multi-equipes</span>
                 </div>
-                <div class="hero-icon-item">
-                    <span class="icon">📱</span>
-                    <span>Smartphone OK</span>
+                <div class="hero-stat-item">
+                    <span class="hero-stat-icon">📱</span>
+                    <span class="hero-stat-label">Smartphone OK</span>
                 </div>
             </div>
         </div>
     </section>
+
+    <script>
+    /* =====================================================
+       Hero canvas: confetti / floating particles
+       ===================================================== */
+    (function() {
+        var canvas = document.getElementById('hero-canvas');
+        if (!canvas) return;
+        var ctx = canvas.getContext('2d');
+        var W, H;
+        var particles = [];
+        var COLORS = [
+            '#ff6b6b', '#ffd93d', '#6bcb77', '#4d96ff',
+            '#ff922b', '#f06595', '#74c0fc', '#a9e34b',
+            '#ff8787', '#ffe066', '#8ce99a', '#74c0fc'
+        ];
+        var NUM_CONFETTI  = 60;
+        var NUM_CIRCLES   = 25;
+        var NUM_SPARKLES  = 20;
+
+        function resize() {
+            W = canvas.width  = canvas.offsetWidth;
+            H = canvas.height = canvas.offsetHeight;
+        }
+
+        function randomBetween(a, b) { return a + Math.random() * (b - a); }
+
+        function makeParticle() {
+            var type = Math.random() < 0.55 ? 'confetti'
+                     : Math.random() < 0.6  ? 'circle'
+                     : 'sparkle';
+            return {
+                type:  type,
+                x:     randomBetween(0, W),
+                y:     randomBetween(-H, H),
+                w:     type === 'confetti' ? randomBetween(7, 18) : 0,
+                h:     type === 'confetti' ? randomBetween(4, 10) : 0,
+                r:     type !== 'confetti' ? randomBetween(3, 10) : 0,
+                color: COLORS[Math.floor(Math.random() * COLORS.length)],
+                vx:    randomBetween(-0.8, 0.8),
+                vy:    randomBetween(0.5, 2.2),
+                angle: randomBetween(0, Math.PI * 2),
+                spin:  randomBetween(-0.06, 0.06),
+                alpha: randomBetween(0.6, 1.0),
+                fade:  randomBetween(0.002, 0.006),
+                swing: randomBetween(0.3, 1.2),
+                swingSpeed: randomBetween(0.01, 0.04),
+                swingOffset: randomBetween(0, Math.PI * 2),
+                t: 0
+            };
+        }
+
+        function initParticles() {
+            particles = [];
+            var total = NUM_CONFETTI + NUM_CIRCLES + NUM_SPARKLES;
+            for (var i = 0; i < total; i++) {
+                particles.push(makeParticle());
+            }
+        }
+
+        function drawParticle(p) {
+            ctx.save();
+            ctx.globalAlpha = Math.max(0, p.alpha);
+            ctx.fillStyle   = p.color;
+            ctx.strokeStyle = p.color;
+
+            if (p.type === 'confetti') {
+                ctx.translate(p.x, p.y);
+                ctx.rotate(p.angle);
+                ctx.beginPath();
+                ctx.rect(-p.w / 2, -p.h / 2, p.w, p.h);
+                ctx.fill();
+            } else if (p.type === 'circle') {
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+                ctx.fill();
+            } else {
+                /* sparkle: 4-point star */
+                ctx.translate(p.x, p.y);
+                ctx.rotate(p.angle);
+                ctx.beginPath();
+                var s = p.r;
+                ctx.moveTo(0, -s);
+                ctx.lineTo(s * 0.25, -s * 0.25);
+                ctx.lineTo(s, 0);
+                ctx.lineTo(s * 0.25, s * 0.25);
+                ctx.lineTo(0, s);
+                ctx.lineTo(-s * 0.25, s * 0.25);
+                ctx.lineTo(-s, 0);
+                ctx.lineTo(-s * 0.25, -s * 0.25);
+                ctx.closePath();
+                ctx.fill();
+            }
+            ctx.restore();
+        }
+
+        function update() {
+            ctx.clearRect(0, 0, W, H);
+            for (var i = 0; i < particles.length; i++) {
+                var p = particles[i];
+                p.t   += 1;
+                p.x   += p.vx + Math.sin(p.t * p.swingSpeed + p.swingOffset) * p.swing;
+                p.y   += p.vy;
+                p.angle += p.spin;
+                p.alpha -= p.fade;
+
+                drawParticle(p);
+
+                /* Reset particle when it exits or fades */
+                if (p.y > H + 20 || p.alpha <= 0) {
+                    particles[i] = makeParticle();
+                    particles[i].y = randomBetween(-30, -10);
+                }
+            }
+            requestAnimationFrame(update);
+        }
+
+        window.addEventListener('resize', function() {
+            resize();
+            initParticles();
+        });
+
+        resize();
+        initParticles();
+        update();
+
+        /* --- Interactive buzz on click --- */
+        var buzzers = [
+            { el: document.getElementById('bzRed'),   color: '#ff6b6b' },
+            { el: document.getElementById('bzBlue'),  color: '#4d96ff' },
+            { el: document.getElementById('bzGreen'), color: '#6bcb77' }
+        ];
+        buzzers.forEach(function(b) {
+            if (!b.el) return;
+            b.el.addEventListener('click', function() {
+                /* Burst confetti from buzzer position */
+                var rect = b.el.getBoundingClientRect();
+                var heroRect = canvas.getBoundingClientRect();
+                var cx = rect.left - heroRect.left + rect.width  / 2;
+                var cy = rect.top  - heroRect.top  + rect.height / 2;
+                for (var k = 0; k < 18; k++) {
+                    var p = makeParticle();
+                    p.color = b.color;
+                    p.x  = cx;
+                    p.y  = cy;
+                    p.vx = randomBetween(-5, 5);
+                    p.vy = randomBetween(-7, -1);
+                    p.alpha = 1.0;
+                    p.fade  = 0.02;
+                    particles.push(p);
+                }
+                /* Keep pool size reasonable */
+                if (particles.length > 200) particles.splice(0, 20);
+            });
+        });
+    })();
+    </script>
 
     <!-- Demo Section -->
     <section id="demo" class="demo">
