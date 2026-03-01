@@ -43,10 +43,7 @@ Execute the following steps in order:
 6. Push main: `git push origin main`
 
 ### Step 5: Cleanup (Optional - Ask User)
-1. Ask the user if they want to delete the feature branch
-2. If yes:
-   - Delete local branch: `git branch -d <branch-name>`
-   - Delete remote branch: `git push origin --delete <branch-name>`
+1. **Ne pas supprimer la branche** — conservée pour rollback CI (règle deploy)
 
 ## Safety Rules
 

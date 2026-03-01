@@ -12,8 +12,8 @@ Ce fichier centralise les éléments répétés dans les définitions de command
 
 ```yaml
 Projet: BuzzControl
-Répertoire: /home/user/BuzzMaster
-Repository: https://github.com/CCoupel/BuzzMaster
+Répertoire: C:/Users/cyril/Documents/VScode/GITHUB/buzzcontrol
+Repository: https://github.com/CCoupel/buzzcontrol
 
 Structure:
   Serveur Go: server-go/
@@ -791,7 +791,7 @@ Write/Edit(~/.claude/memory/MEMORY.md) avec mise à jour des sections projet
 
 ---
 
-## 11. Référence Rapide
+## 13. Référence Rapide
 
 ### Commandes Essentielles
 
@@ -816,7 +816,7 @@ Write/Edit(~/.claude/memory/MEMORY.md) avec mise à jour des sections projet
 
 ---
 
-## 12. Mots-Clés Réservés (Contrôle de Workflow)
+## 14. Mots-Clés Réservés (Contrôle de Workflow)
 
 Les commandes CDP (`/feature`, `/bugfix`, `/hotfix`, `/refactor`) reconnaissent des mots-clés spéciaux pour interroger ou reprendre un workflow.
 
@@ -929,7 +929,7 @@ $ARGUMENTS = "Ajouter mode X"   → Action: workflow normal (pas de mot-clé)
 ```markdown
 # Avant (répété 17+ fois)
 **Contexte projet :**
-- Répertoire : /home/user/BuzzMaster
+- Répertoire : C:/Users/cyril/Documents/VScode/GITHUB/buzzcontrol
 - Serveur Go : server-go/
 - Frontend React : server-go/web/src/
 - Config version : server-go/config.json

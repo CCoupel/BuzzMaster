@@ -1,29 +1,25 @@
 # Commande /feature - Workflow Feature Complet
 
-Orchestre le workflow complet de développement d'une feature. **TU** (Claude) es le team leader direct qui coordonne tous les agents.
+Déclenche le workflow complet de développement d'une feature. **Le CDP** (agent cdp) est le team leader qui coordonne tous les agents. Claude est l'interface utilisateur.
 
 ## Argument reçu
 
 $ARGUMENTS
 
-## Architecture Team Leader Direct
+## Architecture CDP
 
 ```
-TU (Claude) = Team Leader
-    │
-    ├── TeamCreate("feature-xxx")
-    ├── Task(implementation-planner)
-    ├── Task(dev-backend/frontend/buzzclick)
-    ├── Task(test-writer)
-    ├── Task(code-reviewer)
-    ├── Task(QA)
-    ├── Task(doc-updater)
-    └── Task(deploy)
-    │
-    └── Coordination via TaskUpdate + SendMessage
+Claude (interface) → SendMessage(cdp, "Feature: xxx")
+                          │
+                     CDP (Team Leader)
+                          │
+    ┌──────────┬──────────┼──────────┬──────────┐
+planner  backend-dev  frontend-dev  test-writer  ...
+                          │
+               Coordination via TaskUpdate + SendMessage
 ```
 
-**IMPORTANT** : TU ne lances PAS d'agent CDP. TU es le chef de projet direct.
+**IMPORTANT** : Claude délègue au CDP. Le CDP est le chef de projet — Claude est uniquement l'interface utilisateur.
 
 ## Workflow FEATURE
 
@@ -111,7 +107,7 @@ Phase 6: REVUE (code-reviewer)
     ▼
 Phase 7: QUALITÉ (QA)
     │
-    ├── Assigner via TaskUpdate(owner: "qa-tester")
+    ├── Assigner via TaskUpdate(owner: "qa")
     ├── Exécuter tests unitaires + E2E Chrome
     ├── Analyser le verdict :
     │   ├── NOT VALIDATED → Retour Phase 4 (cycle++)
@@ -252,27 +248,31 @@ if cycle >= MAX_CYCLES:
 Valider en QUALIF puis `/deploy PROD`
 ```
 
-## Règles Critiques pour TOI (Team Leader)
+## Règles Critiques
 
-### ✅ TU DOIS
+### ✅ Claude DOIT
+- Analyser la demande et la transmettre au CDP avec contexte
+- Relayer fidèlement les messages CDP ↔ utilisateur
+- Communiquer les validations utilisateur au CDP
+
+### ❌ Claude NE DOIT PAS
+- Coordonner les agents directement
+- Écrire du code lui-même
+- Créer de nouvelles équipes (le CDP le fait si nécessaire)
+
+### ✅ Le CDP DOIT (référence)
 - Analyser la demande et vérifier le backlog
-- Créer l'équipe avec TeamCreate
-- Créer TOUS les agents nécessaires
-- Demander validation du plan (après planner)
+- Créer les tâches et assigner aux agents
 - Coordonner via TaskUpdate + SendMessage
 - Gérer les cycles (max 3)
-- Demander validation utilisateur après QA
+- Demander validations utilisateur à Claude
 - Reporter la progression
-- Shutdown l'équipe à la fin
 
-### ❌ TU NE DOIS PAS
-- Lancer un agent CDP (TU es le leader)
-- Écrire du code toi-même
-- Exécuter des tests toi-même
-- Sauter la phase planification
-- Sauter la validation utilisateur (plan et QA)
+### ❌ Le CDP NE DOIT PAS
+- Écrire du code lui-même
+- Exécuter des tests lui-même
+- Sauter les validations utilisateur
 - Dépasser 3 cycles sans escalade
-- Déployer en PROD (seulement QUALIF)
 
 ## Agents que TU coordonnes
 
@@ -290,14 +290,13 @@ Valider en QUALIF puis `/deploy PROD`
 
 ## Action immédiate
 
-**TU** dois maintenant :
+**TU** (Claude) dois maintenant :
 
-1. **Analyser** la demande : `$ARGUMENTS`
-2. **Vérifier** backlog/ pour une spec existante
-3. **Identifier** la portée (backend/frontend/firmware)
-4. **Créer** la branche `feature/<nom-court>`
-5. **TeamCreate** pour créer l'équipe
-6. **Spawner** tous les agents nécessaires
-7. **Orchestrer** le workflow en tant que team leader
+1. **Analyser** brièvement la demande : `$ARGUMENTS`
+2. **Transmettre** au CDP avec contexte complet :
+   ```
+   SendMessage(recipient: "cdp", content: "Démarre un workflow FEATURE: [description complète + portée identifiée (backend/frontend/firmware)]", summary: "Feature: [titre court]")
+   ```
+3. **Relayer** tous les messages et validations du CDP vers l'utilisateur
 
-**Commence maintenant !**
+**Le CDP prend en charge l'intégralité du workflow depuis cette étape.**

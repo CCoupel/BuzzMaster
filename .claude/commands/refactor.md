@@ -1,25 +1,25 @@
 # Commande /refactor - Refactoring de Code
 
-Workflow pour le refactoring de code existant sans modification du comportement. **TU** (Claude) es le team leader direct qui coordonne tous les agents.
+Déclenche le workflow de refactoring de code existant sans modification du comportement. **Le CDP** (agent cdp) est le team leader qui coordonne tous les agents. Claude est l'interface utilisateur.
 
 ## Argument reçu
 
 $ARGUMENTS
 
-## Architecture Team Leader Direct
+## Architecture CDP
 
 ```
-TU (Claude) = Team Leader
-    │
-    ├── TeamCreate("refactor-xxx")
-    ├── Task(dev-backend/frontend/buzzclick)
-    ├── Task(code-reviewer)
-    └── Task(QA)
-    │
-    └── Coordination via TaskUpdate + SendMessage
+Claude (interface) → SendMessage(cdp, "Refactor: xxx")
+                          │
+                     CDP (Team Leader)
+                          │
+              ┌───────────┼───────────┐
+           qa (avant)  backend-dev  code-reviewer
+                          │
+                       qa (après)
 ```
 
-**IMPORTANT** : TU ne lances PAS d'agent CDP. TU es le chef de projet direct.
+**IMPORTANT** : Claude délègue au CDP. Le CDP est le chef de projet — Claude est uniquement l'interface utilisateur.
 
 ## Workflow REFACTOR
 
@@ -46,7 +46,7 @@ TU (Claude) = Team Leader
 - **PAS** de deploy (pas de nouvelle version)
 
 ### Phase 2: TESTS AVANT (QA)
-- Assigner via TaskUpdate(owner: "qa-tester")
+- Assigner via TaskUpdate(owner: "qa")
 - Exécuter les tests AVANT le refactoring
 - **OBLIGATOIRE** : Tous les tests doivent passer
 - Si tests échouent → BLOQUER le refactoring
@@ -64,7 +64,7 @@ TU (Claude) = Team Leader
 - Si comportement modifié → REJETER
 
 ### Phase 5: TESTS APRÈS (QA)
-- Assigner via TaskUpdate(owner: "qa-tester")
+- Assigner via TaskUpdate(owner: "qa")
 - Exécuter les MÊMES tests qu'avant
 - **OBLIGATOIRE** : Tous les tests doivent passer
 - **OBLIGATOIRE** : Résultats identiques à avant
@@ -111,20 +111,23 @@ TESTS_AVANT == TESTS_APRÈS
 
 Si les résultats diffèrent → Le refactoring est **INVALIDE**.
 
-## Règles Critiques pour TOI (Team Leader)
+## Règles Critiques
 
-### ✅ TU DOIS
+### ✅ Claude DOIT
+- Transmettre le refactoring au CDP avec contexte
+- Relayer fidèlement les messages CDP ↔ utilisateur
+
+### ❌ Claude NE DOIT PAS
+- Coordonner les agents directement
+- Écrire du code lui-même
+
+### ✅ Le CDP DOIT (référence)
 - Vérifier que des tests existent AVANT de commencer
-- Créer l'équipe avec TeamCreate
 - Exécuter les tests AVANT le refactoring
 - Coordonner via TaskUpdate + SendMessage
-- Exécuter les tests APRÈS le refactoring
-- Comparer les résultats (doivent être identiques)
-- Shutdown l'équipe à la fin
+- Exécuter les tests APRÈS et comparer les résultats
 
-### ❌ TU NE DOIS PAS
-- Lancer un agent CDP (TU es le leader)
-- Écrire du code toi-même
+### ❌ Le CDP NE DOIT PAS
 - Autoriser un changement de comportement
 - Créer une nouvelle version
 - Mettre à jour la documentation
@@ -142,17 +145,13 @@ Si les résultats diffèrent → Le refactoring est **INVALIDE**.
 
 ## Action immédiate
 
-**TU** dois maintenant :
+**TU** (Claude) dois maintenant :
 
-1. **Analyser** le refactoring demandé : `$ARGUMENTS`
-2. **Vérifier** que des tests existent pour le code concerné
-3. **Créer** la branche `refactor/<nom-court>`
-4. **TeamCreate** pour créer l'équipe
-5. **Spawner** les agents nécessaires
-6. **Exécuter** les tests AVANT (QA)
-7. **Orchestrer** le refactoring (DEV)
-8. **Vérifier** la qualité (REVIEW)
-9. **Exécuter** les tests APRÈS (QA)
-10. **Comparer** les résultats
+1. **Analyser** brièvement le refactoring : `$ARGUMENTS`
+2. **Transmettre** au CDP avec contexte :
+   ```
+   SendMessage(recipient: "cdp", content: "Démarre un workflow REFACTOR: [description + portée + code concerné]", summary: "Refactor: [titre court]")
+   ```
+3. **Relayer** tous les messages et validations du CDP vers l'utilisateur
 
-**Commence maintenant !**
+**Le CDP prend en charge l'intégralité du workflow depuis cette étape.**

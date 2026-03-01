@@ -1,28 +1,25 @@
 # Commande /bugfix - Workflow Correction de Bug
 
-Orchestre le workflow de correction de bug. **TU** (Claude) es le team leader direct qui coordonne tous les agents.
+Déclenche le workflow de correction de bug. **Le CDP** (agent cdp) est le team leader qui coordonne tous les agents. Claude est l'interface utilisateur.
 
 ## Argument reçu
 
 $ARGUMENTS
 
-## Architecture Team Leader Direct
+## Architecture CDP
 
 ```
-TU (Claude) = Team Leader
-    │
-    ├── TeamCreate("bugfix-xxx")
-    ├── Task(dev-backend/frontend/buzzclick)
-    ├── Task(test-writer)
-    ├── Task(code-reviewer)
-    ├── Task(QA)
-    ├── Task(doc-updater)
-    └── Task(deploy)
-    │
-    └── Coordination via TaskUpdate + SendMessage
+Claude (interface) → SendMessage(cdp, "Bugfix: xxx")
+                          │
+                     CDP (Team Leader)
+                          │
+    ┌──────────┬──────────┼──────────┬──────────┐
+backend-dev  frontend-dev  test-writer  code-reviewer  ...
+                          │
+               Coordination via TaskUpdate + SendMessage
 ```
 
-**IMPORTANT** : TU ne lances PAS d'agent CDP. TU es le chef de projet direct.
+**IMPORTANT** : Claude délègue au CDP. Le CDP est le chef de projet — Claude est uniquement l'interface utilisateur.
 
 ## Workflow BUGFIX
 
@@ -88,7 +85,7 @@ Phase 4: REVUE (code-reviewer)
     ▼
 Phase 5: QUALITÉ (QA)
     │
-    ├── Assigner via TaskUpdate(owner: "qa-tester")
+    ├── Assigner via TaskUpdate(owner: "qa")
     ├── Exécuter tests unitaires + E2E
     ├── Analyser le verdict :
     │   ├── NOT VALIDATED → Retour Phase 2 (cycle++)
@@ -220,26 +217,29 @@ if cycle >= MAX_CYCLES:
 Valider en QUALIF puis `/deploy PROD`
 ```
 
-## Règles Critiques pour TOI (Team Leader)
+## Règles Critiques
 
-### ✅ TU DOIS
-- Analyser le bug avant de créer l'équipe
-- Créer l'équipe avec TeamCreate
-- Créer TOUS les agents nécessaires
+### ✅ Claude DOIT
+- Analyser le bug et le transmettre au CDP avec contexte
+- Relayer fidèlement les messages CDP ↔ utilisateur
+- Communiquer les validations utilisateur au CDP
+
+### ❌ Claude NE DOIT PAS
+- Coordonner les agents directement
+- Écrire du code lui-même
+
+### ✅ Le CDP DOIT (référence)
+- Analyser le bug et sa portée
+- Créer les tâches et assigner aux agents
 - Coordonner via TaskUpdate + SendMessage
+- Exiger un test de non-régression OBLIGATOIRE
 - Gérer les cycles (max 3)
-- Demander validation utilisateur après QA
-- Reporter la progression
-- Shutdown l'équipe à la fin
+- Demander validation après QA
 
-### ❌ TU NE DOIS PAS
-- Lancer un agent CDP (TU es le leader)
-- Écrire du code toi-même
-- Exécuter des tests toi-même
-- Sauter la validation utilisateur après QA
-- Dépasser 3 cycles sans escalade
+### ❌ Le CDP NE DOIT PAS
+- Écrire du code lui-même
 - Autoriser du refactoring
-- Déployer en PROD (seulement QUALIF)
+- Dépasser 3 cycles sans escalade
 
 ## Agents que TU coordonnes
 
@@ -256,13 +256,13 @@ Valider en QUALIF puis `/deploy PROD`
 
 ## Action immédiate
 
-**TU** dois maintenant :
+**TU** (Claude) dois maintenant :
 
-1. **Analyser** la description du bug : `$ARGUMENTS`
-2. **Identifier** la portée (backend/frontend/firmware)
-3. **Créer** la branche `bugfix/<nom-court>`
-4. **TeamCreate** pour créer l'équipe
-5. **Spawner** les agents nécessaires
-6. **Orchestrer** le workflow en tant que team leader
+1. **Analyser** brièvement le bug : `$ARGUMENTS`
+2. **Transmettre** au CDP avec contexte complet :
+   ```
+   SendMessage(recipient: "cdp", content: "Démarre un workflow BUGFIX: [description bug + portée identifiée (backend/frontend/firmware)]", summary: "Bugfix: [titre court]")
+   ```
+3. **Relayer** tous les messages et validations du CDP vers l'utilisateur
 
-**Commence maintenant !**
+**Le CDP prend en charge l'intégralité du workflow depuis cette étape.**

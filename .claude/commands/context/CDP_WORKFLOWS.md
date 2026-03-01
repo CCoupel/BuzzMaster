@@ -7,9 +7,10 @@ Ce fichier centralise les patterns partagés par les commandes `/feature`, `/bug
 ## 1. Contexte CDP
 
 ```yaml
-Agent: CDP (Chef De Projet)
-Modèle: haiku (rapide pour orchestration)
+Agent: CDP (Chef De Projet) — type `cdp` dans la team myTEAM
+Interface: Claude reçoit les demandes utilisateur et les transmet au CDP via SendMessage
 Rôle: Orchestrer workflows multi-agents avec validation utilisateur
+Reporting: CDP → SendMessage(Claude) → utilisateur
 ```
 
 ---
@@ -46,6 +47,13 @@ Rôle: Orchestrer workflows multi-agents avec validation utilisateur
 ---
 
 ## 4. Gestion des Agents - RÈGLE CRITIQUE
+
+### Architecture de communication
+```
+Utilisateur ↔ Claude (interface) ↔ CDP (team leader) ↔ Agents spécialisés
+```
+
+Claude transmet les demandes au CDP. Le CDP coordonne les agents. Claude relaie les retours.
 
 ### ⚠️ PRINCIPE : RÉUTILISATION DES AGENTS
 
@@ -112,7 +120,7 @@ Task({ name: "buzzclick-fix-anim", ... })     // v3.0.6 ❌ NOUVEAU agent
 | dev-buzzclick | `buzzclick-dev` | ✅ Toutes corrections firmware | Modifications firmware ESP32 |
 | test-writer | `test-writer` | ✅ Tous nouveaux tests | Ajout tests unitaires/E2E |
 | code-reviewer | `reviewer` | ✅ Toutes revues | Analyse qualité code |
-| QA | `qa-tester` | ✅ Tous cycles QA | Exécution tests |
+| QA | `qa` | ✅ Tous cycles QA | Exécution tests |
 | doc-updater | `doc-writer` | ✅ Toutes mises à jour doc | Changelog, CLAUDE.md |
 
 #### Workflow de Réutilisation

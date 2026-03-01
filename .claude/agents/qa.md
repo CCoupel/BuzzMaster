@@ -25,7 +25,7 @@ You must follow the exact workflow defined in the project's test procedures:
 > **Build order** : Voir `context/PROJECT_CONTEXT.md` - TOUJOURS frontend avant backend.
 
 ```bash
-cd /home/user/BuzzMaster/server-go/web && npm run build && cd .. && go build -o server.exe ./cmd/server
+cd server-go/web && npm run build && cd .. && go build -o server.exe ./cmd/server
 ```
 
 Verify: Build succeeds, executable generated, web files embedded.
@@ -35,19 +35,19 @@ Verify: Build succeeds, executable generated, web files embedded.
 - Restart the server
 - Verify with Chrome:
   - `/` opens the player page correctly
-  - `/anim` opens the administration page correctly
+  - `/admin/game` opens the administration page correctly
   - `/tv` opens the TV display page correctly
 
 **Step 2: Go Unit Tests**
 ```bash
-cd /home/user/BuzzMaster/server-go
+cd server-go
 go test ./... -v -cover
 ```
 Verify: All tests pass (PASS), coverage > 80% ideally, no failures (FAIL), no panics.
 
 **Step 3: E2E Tests**
 ```bash
-cd /home/user/BuzzMaster/server-go
+cd server-go
 go test ./internal/server -v -run TestE2E
 ```
 Verify: Complete workflow tested, no network errors, no timeouts.
@@ -134,7 +134,7 @@ You must generate a comprehensive, structured report in Markdown format containi
 
 ```bash
 # S'assurer que le serveur est démarré
-cd /home/user/BuzzMaster/server-go
+cd server-go
 ./server.exe &
 
 # Vérifier qu'il répond
@@ -142,7 +142,7 @@ sleep 2
 VERSION=$(curl -s http://localhost/version)
 echo "✅ Serveur actif - Version: $VERSION"
 echo "   → http://localhost/ (Player)"
-echo "   → http://localhost/anim (Admin)"
+echo "   → http://localhost/admin/game (Admin)"
 echo "   → http://localhost/tv (TV Display)"
 ```
 
@@ -151,7 +151,7 @@ echo "   → http://localhost/tv (TV Display)"
 ## 🖥️ Serveur
 - **Status** : ✅ Actif
 - **Version** : X.Y.Z
-- **URLs** : http://localhost/, /anim, /tv
+- **URLs** : http://localhost/, /admin/game, /tv
 ```
 
 ## Synthèse pour l'Utilisateur (OBLIGATOIRE)
@@ -179,7 +179,7 @@ echo "   → http://localhost/tv (TV Display)"
 
 ### 🧪 Comment Tester Manuellement (2-3 étapes)
 
-1. **[Action 1]** : [Description courte - ex: "Aller sur /anim et cliquer sur 'Nouvelle Partie'"]
+1. **[Action 1]** : [Description courte - ex: "Aller sur /admin/game et cliquer sur 'Nouvelle Partie'"]
 2. **[Action 2]** : [Description courte - ex: "Sélectionner le mode QCM et lancer"]
 3. **[Action 3]** : [Description courte - ex: "Vérifier que les hints s'affichent sur /tv"]
 
@@ -211,7 +211,7 @@ qui s'affichent barrées sur l'écran TV.
 
 ### 🧪 Comment Tester Manuellement
 
-1. **Lancer une partie QCM** : /anim → Nouvelle Partie → Mode QCM
+1. **Lancer une partie QCM** : /admin/game → Nouvelle Partie → Mode QCM
 2. **Invalider une réponse** : Cliquer sur une couleur incorrecte dans le panneau admin
 3. **Vérifier l'affichage** : Sur /tv, la réponse doit apparaître barrée
 

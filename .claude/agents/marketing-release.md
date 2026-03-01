@@ -63,7 +63,7 @@ This directory is always available — no branch switching needed.
 
 Create user-friendly release notes that differ from the technical CHANGELOG:
 
-**Location**: `docs/releases/v[X.Y.Z].md`
+**Location**: `releases/vX.Y.Z/`
 
 **Structure**:
 ```markdown
@@ -176,7 +176,7 @@ You MUST produce a structured marketing report:
 
 ### File Created
 
-- ✅ `docs/releases/v[X.Y.Z].md`
+- ✅ `releases/vX.Y.Z/`
 
 ### Content Summary
 

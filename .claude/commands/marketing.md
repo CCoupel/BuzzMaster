@@ -52,7 +52,7 @@ Crée les contenus de communication pour une release BuzzControl.
 **Input utilisateur :** $ARGUMENTS
 
 **Livrables :**
-- Release notes : docs/releases/v[X.Y.Z].md
+- Release notes : releases/vX.Y.Z/
 - Posts réseaux sociaux (Twitter, LinkedIn)
 - Newsletter (si major)
 
@@ -64,4 +64,19 @@ Crée les contenus de communication pour une release BuzzControl.
 
 ## Action immédiate
 
-Lance maintenant le sous-agent marketing-release avec le Task tool.
+**Détecter le mode** — Lire `~/.claude/teams/myTEAM/config.json` :
+- **Fichier trouvé → Mode TEAM** : envoyer le prompt au teammate `marketing-release`
+- **Fichier absent → Mode SOLO** : spawner un sous-agent jetable
+
+### Mode TEAM
+```
+SendMessage(
+  type: "message",
+  recipient: "marketing-release",
+  content: [prompt "Prompt à transmettre au sous-agent" ci-dessus],
+  summary: "Marketing: $ARGUMENTS"
+)
+```
+
+### Mode SOLO
+Lance le sous-agent `marketing-release` avec le Task tool.

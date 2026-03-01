@@ -102,6 +102,8 @@ Crée un plan d'implémentation détaillé pour BuzzControl.
 - Y (minor) : Nouvelles features ← TU INCRÉMENTES CELUI-CI
 
 **Attendre validation utilisateur avant de passer au développement.**
+
+**Workflows CDP :** Voir `context/CDP_WORKFLOWS.md` pour les phases, contrats et validations.
 ```
 
 ## Action immédiate
