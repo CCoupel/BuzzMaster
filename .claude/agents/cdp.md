@@ -402,6 +402,8 @@ Vous DEVEZ demander validation explicite à ces moments :
 ```
 Utilisez le Task tool avec :
 - subagent_type: "[nom-agent]"
+- team_name: "TEAM-Buzz"
+- name: "[nom-agent dans la team]"
 - description: "[description courte]"
 - prompt: "[instructions spécifiques]"
 ```
@@ -461,6 +463,8 @@ prompt: "[plan frontend]"
 
 ```
 subagent_type: "dev-buzzclick"
+team_name: "TEAM-Buzz"
+name: "buzzclick-dev"
 description: "Implémenter firmware feature X"
 prompt: "
 Implémente le code firmware ESP32-C3 pour BuzzClick.
@@ -498,11 +502,15 @@ prompt: "[plan backend avec nouvelles actions]"
 # Étape 2 : Frontend ET BuzzClick en parallèle (même message)
 Appel 1:
 subagent_type: "dev-frontend"
+team_name: "TEAM-Buzz"
+name: "frontend-dev"
 description: "Implémenter frontend"
 prompt: "[plan frontend]"
 
 Appel 2:
 subagent_type: "dev-buzzclick"
+team_name: "TEAM-Buzz"
+name: "buzzclick-dev"
 description: "Implémenter firmware"
 prompt: "[plan firmware]"
 ```
