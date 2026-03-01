@@ -62,15 +62,15 @@ Implémente le code backend Go pour BuzzControl.
 ## Action immédiate
 
 **Détecter le mode** — Lire `~/.claude/teams/myTEAM/config.json` :
-- **Fichier trouvé → Mode TEAM** : envoyer le prompt au teammate `backend-dev`
+- **Fichier trouvé → Mode TEAM** : transmettre au CDP pour dispatch
 - **Fichier absent → Mode SOLO** : spawner un sous-agent jetable
 
 ### Mode TEAM
 ```
 SendMessage(
   type: "message",
-  recipient: "backend-dev",
-  content: [prompt "Prompt à transmettre au sous-agent" ci-dessus],
+  recipient: "cdp",
+  content: "Développement backend demandé: $ARGUMENTS",
   summary: "Dev backend: $ARGUMENTS"
 )
 ```

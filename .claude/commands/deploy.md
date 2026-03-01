@@ -53,15 +53,15 @@ Environnement cible : $ARGUMENTS (QUALIF par défaut si vide)
 ## Action immédiate
 
 **Détecter le mode** — Lire `~/.claude/teams/myTEAM/config.json` :
-- **Fichier trouvé → Mode TEAM** : envoyer le prompt au teammate `deployer`
+- **Fichier trouvé → Mode TEAM** : transmettre au CDP pour dispatch
 - **Fichier absent → Mode SOLO** : spawner un sous-agent jetable
 
 ### Mode TEAM
 ```
 SendMessage(
   type: "message",
-  recipient: "deployer",
-  content: [prompt "Prompt à transmettre au sous-agent" ci-dessus],
+  recipient: "cdp",
+  content: "Déploiement demandé: $ARGUMENTS (QUALIF par défaut si vide)",
   summary: "Deploy: $ARGUMENTS"
 )
 ```

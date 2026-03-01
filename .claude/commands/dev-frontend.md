@@ -64,15 +64,15 @@ Implémente le code frontend React pour BuzzControl.
 ## Action immédiate
 
 **Détecter le mode** — Lire `~/.claude/teams/myTEAM/config.json` :
-- **Fichier trouvé → Mode TEAM** : envoyer le prompt au teammate `frontend-dev`
+- **Fichier trouvé → Mode TEAM** : transmettre au CDP pour dispatch
 - **Fichier absent → Mode SOLO** : spawner un sous-agent jetable
 
 ### Mode TEAM
 ```
 SendMessage(
   type: "message",
-  recipient: "frontend-dev",
-  content: [prompt "Prompt à transmettre au sous-agent" ci-dessus],
+  recipient: "cdp",
+  content: "Développement frontend demandé: $ARGUMENTS",
   summary: "Dev frontend: $ARGUMENTS"
 )
 ```

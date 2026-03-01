@@ -71,15 +71,15 @@ Voir `context/QUALITY.md` section 11 pour le workflow.
 ## Action immédiate
 
 **Détecter le mode** — Lire `~/.claude/teams/myTEAM/config.json` :
-- **Fichier trouvé → Mode TEAM** : envoyer le prompt au teammate `test-writer`
+- **Fichier trouvé → Mode TEAM** : transmettre au CDP pour dispatch
 - **Fichier absent → Mode SOLO** : spawner un sous-agent jetable
 
 ### Mode TEAM
 ```
 SendMessage(
   type: "message",
-  recipient: "test-writer",
-  content: [prompt "Prompt à transmettre au sous-agent" ci-dessus],
+  recipient: "cdp",
+  content: "Écriture de tests demandée: $ARGUMENTS",
   summary: "Tests: $ARGUMENTS"
 )
 ```

@@ -68,15 +68,15 @@ Mets à jour la documentation pour BuzzControl.
 ## Action immédiate
 
 **Détecter le mode** — Lire `~/.claude/teams/myTEAM/config.json` :
-- **Fichier trouvé → Mode TEAM** : envoyer le prompt au teammate `doc-updater`
+- **Fichier trouvé → Mode TEAM** : transmettre au CDP pour dispatch
 - **Fichier absent → Mode SOLO** : spawner un sous-agent jetable
 
 ### Mode TEAM
 ```
 SendMessage(
   type: "message",
-  recipient: "doc-updater",
-  content: [prompt "Prompt à transmettre au sous-agent" ci-dessus],
+  recipient: "cdp",
+  content: "Mise à jour documentation demandée: $ARGUMENTS",
   summary: "Doc: $ARGUMENTS"
 )
 ```

@@ -108,15 +108,20 @@ Si on n'est **pas** déjà sur `main` :
 
 2. ⏸️ **ATTENDRE CONFIRMATION UTILISATEUR**
 
-3. Si confirmé → Lancer le sous-agent **git-squash-merge** :
-   ```
-   subagent_type: "git-squash-merge"
-   description: "Squash merge vers main"
-   prompt:
-     Committe les changements en cours, pousse la branche, puis squash-merge dans main.
-     Message de commit squash : "feat: <titre feature depuis backlog/DONE>" (ou "fix:" si bugfix)
-     Version : vX.Y.Z (depuis config.json)
-   ```
+3. Si confirmé →
+   - **Mode TEAM** (myTEAM actif) :
+     ```
+     SendMessage(recipient: "cdp", content: "Squash merge vers main. Message: feat/fix: <titre>. Version: vX.Y.Z", summary: "Merge: main")
+     ```
+   - **Mode SOLO** : Lancer le sous-agent **git-squash-merge** :
+     ```
+     subagent_type: "git-squash-merge"
+     description: "Squash merge vers main"
+     prompt:
+       Committe les changements en cours, pousse la branche, puis squash-merge dans main.
+       Message de commit squash : "feat: <titre feature depuis backlog/DONE>" (ou "fix:" si bugfix)
+       Version : vX.Y.Z (depuis config.json)
+     ```
 
 Si déjà sur `main` → commit + push des changements de documentation/backlog non encore commités.
 
@@ -124,26 +129,29 @@ Si déjà sur `main` → commit + push des changements de documentation/backlog 
 
 ### Phase 5 — Site marketing
 
-Lancer le sous-agent **marketing-release** :
+- **Mode TEAM** (myTEAM actif) :
+  ```
+  SendMessage(recipient: "cdp", content: "Communication marketing demandée pour la release vX.Y.Z (auto-détectée depuis config.json)", summary: "Marketing: release")
+  ```
+- **Mode SOLO** : Lancer le sous-agent **marketing-release** :
+  ```
+  subagent_type: "marketing-release"
+  description: "Mise à jour site marketing"
+  prompt:
+    Crée les contenus de communication pour la release BuzzControl.
+    Auto-détecte la version depuis server-go/config.json.
+    Livrables :
+    - Mise à jour du site marketing (MARKETING/)
+    - Release notes : releases/vX.Y.Z/
+    - Posts réseaux sociaux
+    - Newsletter si version majeure (Y incrémenté)
+    Ton selon type de version :
+    - Major (x.0.0) : Très enthousiaste
+    - Minor (x.y.0) : Modéré
+    - Patch (x.y.z) : Calme, rassurant
+  ```
 
-```
-subagent_type: "marketing-release"
-description: "Mise à jour site marketing"
-prompt:
-  Crée les contenus de communication pour la release BuzzControl.
-  Auto-détecte la version depuis server-go/config.json.
-  Livrables :
-  - Mise à jour du site marketing (MARKETING/)
-  - Release notes : releases/vX.Y.Z/
-  - Posts réseaux sociaux
-  - Newsletter si version majeure (Y incrémenté)
-  Ton selon type de version :
-  - Major (x.0.0) : Très enthousiaste
-  - Minor (x.y.0) : Modéré
-  - Patch (x.y.z) : Calme, rassurant
-```
-
-Attendre la complétion du sous-agent.
+Attendre la complétion.
 
 ---
 

@@ -161,37 +161,25 @@ Implémente le code frontend React pour BuzzControl.
 ## Action immédiate
 
 **Détecter le mode** — Lire `~/.claude/teams/myTEAM/config.json` :
-- **Fichier trouvé → Mode TEAM** : envoyer les prompts aux teammates
-- **Fichier absent → Mode SOLO** : spawner des sous-agents jetables
-
-### Dispatch (identique dans les deux modes)
-
-1. **Si argument contient `backend`** → Cibler uniquement `backend-dev` / `dev-backend`
-2. **Si argument contient `frontend`** → Cibler uniquement `frontend-dev` / `dev-frontend`
-3. **Sinon** → Analyser le plan, dispatcher vers backend et/ou frontend selon les dépendances
+- **Fichier trouvé → Mode TEAM** : transmettre au CDP pour dispatch
+- **Fichier absent → Mode SOLO** : dispatcher directement vers les sous-agents
 
 ### Mode TEAM
 
-**Backend seul :**
 ```
-SendMessage(recipient: "backend-dev", content: [prompt backend ci-dessus], summary: "Dev backend: $ARGUMENTS")
-```
-
-**Frontend seul :**
-```
-SendMessage(recipient: "frontend-dev", content: [prompt frontend ci-dessus], summary: "Dev frontend: $ARGUMENTS")
-```
-
-**Backend → Frontend (séquentiel) :**
-```
-SendMessage(recipient: "backend-dev", ...) → attendre → SendMessage(recipient: "frontend-dev", ...)
+SendMessage(
+  type: "message",
+  recipient: "cdp",
+  content: "Développement demandé: $ARGUMENTS",
+  summary: "Dev: $ARGUMENTS"
+)
 ```
 
-**Backend ║ Frontend (parallèle) :**
-```
-SendMessage(recipient: "backend-dev", ...) + SendMessage(recipient: "frontend-dev", ...)  # même message
-```
+Le CDP analyse le plan et dispatche aux bons agents (backend-dev, frontend-dev, buzzclick-dev) selon les dépendances.
 
 ### Mode SOLO
 
-Utiliser les Task tool calls comme décrit en section "Étape 3 : Lancer les agents" ci-dessus.
+Analyser le plan et dispatcher directement :
+1. **Si argument contient `backend`** → Cibler uniquement `dev-backend`
+2. **Si argument contient `frontend`** → Cibler uniquement `dev-frontend`
+3. **Sinon** → Utiliser les Task tool calls comme décrit en section "Étape 3 : Lancer les agents" ci-dessus.

@@ -1,27 +1,25 @@
 # Commande /hotfix - Correction Urgente en Production
 
-Workflow accéléré pour les bugs critiques en production. **TU** (Claude) es le team leader direct qui coordonne tous les agents.
+Déclenche le workflow accéléré pour les bugs critiques en production. **Le CDP** (agent cdp) est le team leader qui coordonne tous les agents. Claude est l'interface utilisateur.
 
 ## Argument reçu
 
 $ARGUMENTS
 
-## Architecture Team Leader Direct
+## Architecture CDP
 
 ```
-TU (Claude) = Team Leader
-    │
-    ├── TeamCreate("hotfix-xxx")
-    ├── Task(dev-backend/frontend/buzzclick)
-    ├── Task(test-writer) [optionnel si vraiment urgent]
-    ├── Task(QA) [optionnel si vraiment urgent]
-    ├── Task(doc-updater)
-    └── Task(deploy)
-    │
-    └── Coordination via TaskUpdate + SendMessage
+Claude (interface) → SendMessage(cdp, "HOTFIX URGENT: xxx")
+                          │
+                     CDP (Team Leader)
+                          │
+    ┌──────────┬──────────┼──────────┬──────────┐
+backend-dev  [test-writer]  [qa]   doc-updater  deployer
+                          │
+               Coordination via TaskUpdate + SendMessage
 ```
 
-**IMPORTANT** : TU ne lances PAS d'agent CDP. TU es le chef de projet direct.
+**IMPORTANT** : Claude délègue au CDP. Le CDP est le chef de projet — Claude est uniquement l'interface utilisateur.
 
 ## Workflow HOTFIX (Accéléré)
 
@@ -132,23 +130,27 @@ TU (Claude) = Team Leader
 - [ ] Mettre à jour documentation
 ```
 
-## Règles Critiques pour TOI (Team Leader)
+## Règles Critiques
 
-### ✅ TU DOIS
-- Vérifier que c'est vraiment CRITIQUE
-- Créer l'équipe avec TeamCreate
-- Coordonner via TaskUpdate + SendMessage
+### ✅ Claude DOIT
+- Vérifier que c'est vraiment CRITIQUE avant de déléguer
+- Transmettre au CDP avec le contexte d'urgence
+- Relayer fidèlement les messages CDP ↔ utilisateur
+
+### ❌ Claude NE DOIT PAS
+- Coordonner les agents directement
+- Écrire du code lui-même
+
+### ✅ Le CDP DOIT (référence)
+- Utiliser les agents MINIMAUX nécessaires
 - Documenter ce qui a été skippé
 - Créer le post-mortem OBLIGATOIRE
 - Surveiller le déploiement
-- Shutdown l'équipe à la fin
 
-### ❌ TU NE DOIS PAS
-- Lancer un agent CDP (TU es le leader)
-- Écrire du code toi-même
+### ❌ Le CDP NE DOIT PAS
+- Écrire du code lui-même
 - Skip le post-mortem
 - Autoriser du refactoring
-- Attendre QUALIF si vraiment critique
 
 ## Agents que TU coordonnes
 
@@ -164,14 +166,14 @@ TU (Claude) = Team Leader
 
 ## Action immédiate
 
-**TU** dois maintenant :
+**TU** (Claude) dois maintenant :
 
 1. **Analyser** la criticité : `$ARGUMENTS`
 2. **Vérifier** que c'est vraiment un HOTFIX (sinon → /bugfix)
-3. **Créer** la branche `hotfix/<nom-court>`
-4. **TeamCreate** pour créer l'équipe
-5. **Spawner** les agents MINIMAUX nécessaires
-6. **Orchestrer** le workflow accéléré
-7. **Créer** le post-mortem
+3. **Transmettre** au CDP avec contexte d'urgence :
+   ```
+   SendMessage(recipient: "cdp", content: "HOTFIX URGENT: [description + criticité + portée]. Workflow accéléré requis.", summary: "Hotfix urgent: [titre court]")
+   ```
+4. **Relayer** tous les messages et validations du CDP vers l'utilisateur
 
-**Commence maintenant !**
+**Le CDP prend en charge l'intégralité du workflow depuis cette étape.**
