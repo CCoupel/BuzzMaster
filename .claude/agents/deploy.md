@@ -248,10 +248,10 @@ git push origin --delete v<version>
 # 4. Retourner sur la branche feature
 git checkout feature/<name>
 
-# 5. Analyser l'erreur et lancer l'agent de correction approprié
-#    - Erreur Go (build/test) → dev-backend agent
-#    - Erreur React (build/lint) → dev-frontend agent
-#    - Erreur mixte → les deux agents
+# 5. Analyser l'erreur et notifier le CDP pour correction
+#    - Erreur Go (build/test) → correction backend requise
+#    - Erreur React (build/lint) → correction frontend requise
+#    - Erreur mixte → corrections backend et frontend requises
 
 # 6. Après correction, incrémenter z et relancer /deploy PROD
 ```
@@ -259,7 +259,7 @@ git checkout feature/<name>
 **Processus de correction automatique :**
 1. **Récupérer les logs CI** via API GitHub (`/actions/runs/{id}/jobs`)
 2. **Identifier le type d'erreur** : build Go, build npm, test, lint
-3. **Lancer l'agent approprié** avec le message d'erreur comme contexte
+3. **Notifier le CDP** avec le type d'erreur pour coordination de la correction
 4. **Vérifier la correction** localement (rebuild + tests)
 5. **Relancer le déploiement** avec version incrémentée
 6. **Maximum 3 tentatives** - après 3 échecs, escalader à l'utilisateur
@@ -526,7 +526,7 @@ For PROD deployment, execute these steps IN ORDER:
 17. **If tag exists**: INCREMENT version based on release type (feature → y+1, bugfix → z+1), update config.json + package.json + CHANGELOG.md, commit, rebuild all, then continue
 18. **Git tag**: `git tag -a v<version> -m "..." && git push origin v<version>`
 19. **Verify CI automatically**: Poll GitHub API every 30s (max 10 min), check status/conclusion
-20. **If CI failed**: AUTOMATIC FIX - analyze error, launch correction agent, increment version, retry (max 3 attempts)
+20. **If CI failed**: AUTOMATIC FIX - analyze error, notify CDP for correction, increment version, retry (max 3 attempts)
 
 ### Phase 5: Validation Release GitHub
 21. **Stop local server**: `curl -s http://localhost/shutdown`
