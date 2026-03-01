@@ -358,11 +358,12 @@ Si la CI échoue après le push du tag:
 2. **Revert temporaire** du merge sur main (pour débloquer la branche)
 3. **Suppression** du tag local et distant
 4. **Retour sur la branche feature** (qui n'est PAS supprimée)
-5. **Analyser l'erreur** et déterminer le type :
-   - Build Go échoué → agent `dev-backend`
-   - Build npm échoué → agent `dev-frontend`
-   - Test échoué → agent correspondant au type de test
-6. **Lancer l'agent de correction** avec le message d'erreur
+5. **Analyser l'erreur** et identifier le type :
+   - Build Go échoué → correction backend requise
+   - Build npm échoué → correction frontend requise
+   - Test échoué → correction correspondante requise
+6. **Notifier le CDP** pour coordination de la correction :
+   `SendMessage(recipient: "cdp", content: "CI failed: [type d'erreur + détails logs]. Correction requise avant re-déploiement.", summary: "CI échec: correction requise")`
 7. **Vérifier localement** (rebuild + tests)
 8. **Incrémenter z** de la version (ex: 2.47.0 → 2.47.1)
 9. **Relancer `/deploy PROD`** automatiquement
