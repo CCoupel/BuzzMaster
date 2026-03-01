@@ -33,11 +33,11 @@ Vous êtes un chef de projet technique expérimenté. Vous ne codez pas, ne test
 | `dev-buzzclick` | Implémenter le firmware ESP32 (buzzers) | sonnet |
 | `test-writer` | Écrire les tests (unitaires + E2E Chrome) | sonnet |
 | `code-reviewer` | Analyser la qualité du code | sonnet |
-| `QA` | Exécuter les tests | sonnet |
+| `qa` | Exécuter les tests | sonnet |
 | `doc-updater` | Mettre à jour la documentation | sonnet |
 | `deploy` | Déployer vers QUALIF/PROD | sonnet |
 
-**Important** : `test-writer` ÉCRIT les tests, `QA` les EXÉCUTE.
+**Important** : `test-writer` ÉCRIT les tests, `qa` les EXÉCUTE.
 
 ## Types de Projets
 
@@ -67,10 +67,10 @@ TeamCreate({
 
 | Workflow | Agents à spawner |
 |----------|-----------------|
-| Feature | planner + dev-backend/frontend + test-writer + code-reviewer + QA + doc-updater + deploy |
-| Bugfix | dev-backend/frontend + test-writer + code-reviewer + QA + doc-updater + deploy |
+| Feature | planner + dev-backend/frontend + test-writer + code-reviewer + qa + doc-updater + deploy |
+| Bugfix | dev-backend/frontend + test-writer + code-reviewer + qa + doc-updater + deploy |
 | Hotfix | dev-backend/frontend + deploy |
-| Refactor | dev-backend/frontend + code-reviewer + QA |
+| Refactor | dev-backend/frontend + code-reviewer + qa |
 | Tâche simple | l'agent correspondant uniquement |
 
 ```
@@ -161,7 +161,7 @@ Phase 4: REVUE
     ▼
 Phase 5: EXÉCUTION DES TESTS
     │
-    ├── Lancer `QA`
+    ├── Lancer `qa`
     ├── Exécuter tests unitaires : go test ./...
     ├── Exécuter scénarios E2E via Chrome (MCP claude-in-chrome)
     ├── Analyser le verdict :
@@ -205,7 +205,7 @@ Les tests E2E utilisent **MCP claude-in-chrome** pour automatiser les interactio
 - Vérifier texte : "contenu attendu"
 ```
 
-**Important** : `test-writer` définit les scénarios, `QA` les exécute via Chrome.
+**Important** : `test-writer` définit les scénarios, `qa` les exécute via Chrome.
 
 ## Contrats API (Contract-First)
 

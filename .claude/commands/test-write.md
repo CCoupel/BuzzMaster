@@ -36,7 +36,7 @@ $ARGUMENTS
 | Commande | Action | Agent |
 |----------|--------|-------|
 | `/test-write` | **Écrit** les fichiers de tests | `test-writer` |
-| `/qa` | **Exécute** les tests existants | `QA` |
+| `/qa` | **Exécute** les tests existants | `qa` |
 
 ## Action immédiate
 

@@ -29,7 +29,7 @@ Lis `.claude/memory/MEMORY.md` (source de vérité unique, versionnée dans le r
    | `buzzclick-dev` | `dev-buzzclick` | Firmware ESP32-C3 |
    | `test-writer` | `test-writer` | Rédaction des tests |
    | `code-reviewer` | `code-reviewer` | Revue de code |
-   | `qa` | `QA` | Tests et validation |
+   | `qa` | `qa` | Tests et validation |
    | `doc-updater` | `doc-updater` | Documentation |
    | `deployer` | `deploy` | Déploiement QUALIF/PROD |
 

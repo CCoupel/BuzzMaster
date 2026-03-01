@@ -161,7 +161,7 @@ backend-dev  [test-writer]  [qa]   doc-updater  deployer
 | Frontend Dev | `dev-frontend` | Si bug React/CSS |
 | Firmware Dev | `dev-buzzclick` | Si bug ESP32 |
 | Test Writer | `test-writer` | Optionnel |
-| QA Tester | `QA` | Optionnel |
+| QA Tester | `qa` | Optionnel |
 | Doc Updater | `doc-updater` | Toujours (post-mortem) |
 | Deployer | `deploy` | Toujours (PROD direct) |
 

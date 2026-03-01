@@ -141,7 +141,7 @@ Si les résultats diffèrent → Le refactoring est **INVALIDE**.
 | Frontend Dev | `dev-frontend` | Si refactor React/CSS |
 | Firmware Dev | `dev-buzzclick` | Si refactor ESP32 |
 | Code Reviewer | `code-reviewer` | Vérifier comportement identique |
-| QA Tester | `QA` | Tests avant ET après |
+| QA Tester | `qa` | Tests avant ET après |
 
 ## Action immédiate
 

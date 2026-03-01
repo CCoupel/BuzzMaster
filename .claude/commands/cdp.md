@@ -70,7 +70,7 @@ Claude n'est PAS le team leader. Son rôle est :
 | `buzzclick-dev` | `dev-buzzclick` | Firmware ESP32-C3 |
 | `test-writer` | `test-writer` | Tests unitaires + E2E |
 | `code-reviewer` | `code-reviewer` | Revue de code |
-| `qa` | `QA` | Exécution des tests |
+| `qa` | `qa` | Exécution des tests |
 | `doc-updater` | `doc-updater` | Documentation |
 | `deployer` | `deploy` | Déploiement QUALIF/PROD |
 

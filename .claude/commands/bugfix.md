@@ -247,7 +247,7 @@ Valider en QUALIF puis `/deploy PROD`
 | Firmware Dev | `dev-buzzclick` | Corriger bug ESP32 |
 | Test Writer | `test-writer` | Écrire test régression |
 | Code Reviewer | `code-reviewer` | Analyser qualité |
-| QA Tester | `QA` | Exécuter tests |
+| QA Tester | `qa` | Exécuter tests |
 | Doc Updater | `doc-updater` | Mettre à jour docs |
 | Deployer | `deploy` | Déployer QUALIF |
 
