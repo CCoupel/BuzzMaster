@@ -38,41 +38,11 @@ $ARGUMENTS
 | `/test-write` | **Écrit** les fichiers de tests | `test-writer` |
 | `/qa` | **Exécute** les tests existants | `QA` |
 
-## Instructions
-
-Lance le sous-agent **test-writer** via Task tool :
-
-```
-subagent_type: "test-writer"
-description: "Écrire les tests"
-prompt: voir ci-dessous
-```
-
-### Prompt à transmettre au sous-agent
-
-```
-Écris les tests pour BuzzControl.
-
-**Contexte projet :** Voir `context/COMMON.md` section 1
-**Framework Qualité :** Voir `context/QUALITY.md`
-- Matrice qualité : section 2 (test-writer ÉCRIT, QA EXÉCUTE)
-- Commandes test : section 7
-- Règles : section 10
-
-**Input utilisateur :** $ARGUMENTS
-
-**Rappel :** Tu ÉCRIS les tests, tu ne les EXÉCUTES PAS.
-```
-
-## Intégration workflow
-
-Voir `context/QUALITY.md` section 11 pour le workflow.
-
 ## Action immédiate
 
 **Détecter le mode** — Lire `~/.claude/teams/myTEAM/config.json` :
-- **Fichier trouvé → Mode TEAM** : transmettre au CDP pour dispatch
-- **Fichier absent → Mode SOLO** : spawner un sous-agent jetable
+- **Fichier trouvé → Mode TEAM** : transmettre au CDP existant
+- **Fichier absent** : spawner le CDP — il orchestrera les agents nécessaires
 
 ### Mode TEAM
 ```
@@ -84,5 +54,9 @@ SendMessage(
 )
 ```
 
-### Mode SOLO
-Lance le sous-agent `test-writer` avec le Task tool.
+### Sans TEAM
+```
+subagent_type: "cdp"
+description: "Écriture tests"
+prompt: Écriture de tests demandée: $ARGUMENTS
+```

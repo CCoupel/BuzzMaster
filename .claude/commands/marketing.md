@@ -31,42 +31,11 @@ $ARGUMENTS
 - `/marketing 2.40.0 PROD` : Version + environnement
 - `/marketing "Mode Memory multi-équipes"` : Focus sur une feature
 
-## Instructions
-
-Utilise le Task tool pour lancer le sous-agent marketing-release avec les paramètres suivants :
-
-```
-subagent_type: "marketing-release"
-description: "Créer contenus marketing"
-prompt: voir ci-dessous
-```
-
-### Prompt à transmettre au sous-agent
-
-```
-Crée les contenus de communication pour une release BuzzControl.
-
-**Contexte projet :** Voir `context/COMMON.md` section 1
-**Versionnement :** Voir `context/COMMON.md` section 5
-
-**Input utilisateur :** $ARGUMENTS
-
-**Livrables :**
-- Release notes : releases/vX.Y.Z/
-- Posts réseaux sociaux (Twitter, LinkedIn)
-- Newsletter (si major)
-
-**Ton par type :**
-- Major (x.0.0) : Très enthousiaste
-- Minor (x.y.0) : Modéré
-- Patch (x.y.z) : Calme, rassurant
-```
-
 ## Action immédiate
 
 **Détecter le mode** — Lire `~/.claude/teams/myTEAM/config.json` :
-- **Fichier trouvé → Mode TEAM** : transmettre au CDP pour dispatch
-- **Fichier absent → Mode SOLO** : spawner un sous-agent jetable
+- **Fichier trouvé → Mode TEAM** : transmettre au CDP existant
+- **Fichier absent** : spawner le CDP — il orchestrera les agents nécessaires
 
 ### Mode TEAM
 ```
@@ -78,5 +47,9 @@ SendMessage(
 )
 ```
 
-### Mode SOLO
-Lance le sous-agent `marketing-release` avec le Task tool.
+### Sans TEAM
+```
+subagent_type: "cdp"
+description: "Marketing release"
+prompt: Communication marketing demandée: $ARGUMENTS
+```

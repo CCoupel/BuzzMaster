@@ -68,8 +68,8 @@ Workflow complet de revue périodique. Voir `context/QUALITY.md` section 11.
 ## Action immédiate
 
 **Détecter le mode** — Lire `~/.claude/teams/myTEAM/config.json` :
-- **Fichier trouvé → Mode TEAM** : transmettre au CDP pour orchestration
-- **Fichier absent → Mode SOLO** : exécuter les phases directement
+- **Fichier trouvé → Mode TEAM** : transmettre au CDP existant
+- **Fichier absent** : spawner le CDP — il orchestrera les agents nécessaires
 
 ### Mode TEAM
 ```
@@ -81,6 +81,9 @@ SendMessage(
 )
 ```
 
-### Mode SOLO
-
-Lancer Phase 0 (vérifications Git).
+### Sans TEAM
+```
+subagent_type: "cdp"
+description: "Workflow review"
+prompt: Démarre un workflow REVIEW: $ARGUMENTS
+```

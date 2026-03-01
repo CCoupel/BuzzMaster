@@ -33,28 +33,11 @@ $ARGUMENTS
 - **PROD** : Build Windows + ARM64 + squash merge + tag + release GitHub
 - **hotfix** : Mode urgence pour bugs critiques
 
-## Instructions
-
-Utilise le Task tool pour lancer le sous-agent deploy avec les paramètres suivants :
-
-```
-subagent_type: "deploy"
-description: "Redéploiement [ENV]"
-prompt: voir ci-dessous
-```
-
-### Prompt à transmettre au sous-agent
-
-```
-Arrête et redéploie le serveur BuzzControl.
-Environnement cible : $ARGUMENTS (QUALIF par défaut si vide)
-```
-
 ## Action immédiate
 
 **Détecter le mode** — Lire `~/.claude/teams/myTEAM/config.json` :
-- **Fichier trouvé → Mode TEAM** : transmettre au CDP pour dispatch
-- **Fichier absent → Mode SOLO** : spawner un sous-agent jetable
+- **Fichier trouvé → Mode TEAM** : transmettre au CDP existant
+- **Fichier absent** : spawner le CDP — il orchestrera les agents nécessaires
 
 ### Mode TEAM
 ```
@@ -66,5 +49,9 @@ SendMessage(
 )
 ```
 
-### Mode SOLO
-Lance le sous-agent `deploy` avec le Task tool.
+### Sans TEAM
+```
+subagent_type: "cdp"
+description: "Déploiement"
+prompt: Déploiement demandé: $ARGUMENTS (QUALIF par défaut si vide)
+```

@@ -51,8 +51,8 @@ Cette commande lance l'agent `dev-buzzclick` pour implementer du code firmware E
 ## Action immédiate
 
 **Détecter le mode** — Lire `~/.claude/teams/myTEAM/config.json` :
-- **Fichier trouvé → Mode TEAM** : transmettre au CDP pour dispatch
-- **Fichier absent → Mode SOLO** : spawner un sous-agent jetable
+- **Fichier trouvé → Mode TEAM** : transmettre au CDP existant
+- **Fichier absent** : spawner le CDP — il orchestrera les agents nécessaires
 
 ### Mode TEAM
 ```
@@ -64,16 +64,11 @@ SendMessage(
 )
 ```
 
-### Mode SOLO
-Lance le sous-agent `dev-buzzclick` avec le Task tool :
+### Sans TEAM
 ```
-subagent_type: "dev-buzzclick"
-description: "Implémenter firmware BuzzClick"
-prompt:
-  Implémente la tâche BuzzClick suivante pour BuzzControl.
-  Contexte projet : voir context/COMMON.md section 1
-  Workflow DEV : voir context/DEVELOPMENT.md sections 7-8
-  Tâche : $ARGUMENTS
+subagent_type: "cdp"
+description: "Dev BuzzClick"
+prompt: Développement firmware BuzzClick demandé: $ARGUMENTS
 ```
 
 ## Quand utiliser

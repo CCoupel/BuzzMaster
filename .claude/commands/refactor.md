@@ -155,3 +155,11 @@ Si les résultats diffèrent → Le refactoring est **INVALIDE**.
 3. **Relayer** tous les messages et validations du CDP vers l'utilisateur
 
 **Le CDP prend en charge l'intégralité du workflow depuis cette étape.**
+
+
+### Sans TEAM (pas de myTEAM actif)
+```
+subagent_type: "cdp"
+description: "Workflow refactor"
+prompt: Démarre un workflow REFACTOR: $ARGUMENTS
+```

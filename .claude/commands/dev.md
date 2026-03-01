@@ -161,8 +161,8 @@ Implémente le code frontend React pour BuzzControl.
 ## Action immédiate
 
 **Détecter le mode** — Lire `~/.claude/teams/myTEAM/config.json` :
-- **Fichier trouvé → Mode TEAM** : transmettre au CDP pour dispatch
-- **Fichier absent → Mode SOLO** : dispatcher directement vers les sous-agents
+- **Fichier trouvé → Mode TEAM** : transmettre au CDP existant
+- **Fichier absent** : spawner le CDP — il orchestrera les agents nécessaires
 
 ### Mode TEAM
 
@@ -175,11 +175,10 @@ SendMessage(
 )
 ```
 
-Le CDP analyse le plan et dispatche aux bons agents (backend-dev, frontend-dev, buzzclick-dev) selon les dépendances.
+### Sans TEAM
 
-### Mode SOLO
-
-Analyser le plan et dispatcher directement :
-1. **Si argument contient `backend`** → Cibler uniquement `dev-backend`
-2. **Si argument contient `frontend`** → Cibler uniquement `dev-frontend`
-3. **Sinon** → Utiliser les Task tool calls comme décrit en section "Étape 3 : Lancer les agents" ci-dessus.
+```
+subagent_type: "cdp"
+description: "Développement"
+prompt: Développement demandé: $ARGUMENTS
+```

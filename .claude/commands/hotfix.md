@@ -177,3 +177,11 @@ backend-dev  [test-writer]  [qa]   doc-updater  deployer
 4. **Relayer** tous les messages et validations du CDP vers l'utilisateur
 
 **Le CDP prend en charge l'intégralité du workflow depuis cette étape.**
+
+
+### Sans TEAM (pas de myTEAM actif)
+```
+subagent_type: "cdp"
+description: "Workflow hotfix urgent"
+prompt: HOTFIX URGENT: $ARGUMENTS. Workflow accéléré requis.
+```

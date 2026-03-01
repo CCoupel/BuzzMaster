@@ -31,45 +31,11 @@ $ARGUMENTS
 - `/doc bugfix "description"` : Bugfix
 - `/doc breaking "description"` : Breaking change
 
-## Instructions
-
-Utilise le Task tool pour lancer le sous-agent doc-updater avec les paramètres suivants :
-
-```
-subagent_type: "doc-updater"
-description: "Mettre à jour documentation"
-prompt: voir ci-dessous
-```
-
-### Prompt à transmettre au sous-agent
-
-```
-Mets à jour la documentation pour BuzzControl.
-
-**Contexte projet :** Voir `context/COMMON.md` section 1
-**Versionnement :** Voir `context/COMMON.md` section 5
-**Checklists :** Voir `context/COMMON.md` section 7
-
-**Input utilisateur :** $ARGUMENTS
-
-**Fichiers à mettre à jour :**
-- CHANGELOG.md (format Keep a Changelog)
-- CLAUDE.md (sections impactées)
-- docs/ADMIN_GUIDE.md (si applicable)
-- backlog/*.md (statut, items, choix)
-- config.json (finaliser version)
-
-**Règle versionnement :**
-- Feature : z=0 (2.40.3 → 2.40.0)
-- Bugfix : garder z
-- Breaking : x++
-```
-
 ## Action immédiate
 
 **Détecter le mode** — Lire `~/.claude/teams/myTEAM/config.json` :
-- **Fichier trouvé → Mode TEAM** : transmettre au CDP pour dispatch
-- **Fichier absent → Mode SOLO** : spawner un sous-agent jetable
+- **Fichier trouvé → Mode TEAM** : transmettre au CDP existant
+- **Fichier absent** : spawner le CDP — il orchestrera les agents nécessaires
 
 ### Mode TEAM
 ```
@@ -81,5 +47,9 @@ SendMessage(
 )
 ```
 
-### Mode SOLO
-Lance le sous-agent `doc-updater` avec le Task tool.
+### Sans TEAM
+```
+subagent_type: "cdp"
+description: "Documentation"
+prompt: Mise à jour documentation demandée: $ARGUMENTS
+```
