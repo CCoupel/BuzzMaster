@@ -106,4 +106,19 @@ Crée un plan d'implémentation détaillé pour BuzzControl.
 
 ## Action immédiate
 
-Lance maintenant le sous-agent implementation-planner avec le Task tool.
+**Détecter le mode** — Lire `~/.claude/teams/myTEAM/config.json` :
+- **Fichier trouvé → Mode TEAM** : envoyer le prompt au teammate `planner`
+- **Fichier absent → Mode SOLO** : spawner un sous-agent jetable
+
+### Mode TEAM
+```
+SendMessage(
+  type: "message",
+  recipient: "planner",
+  content: [prompt "Prompt à transmettre au sous-agent" ci-dessus],
+  summary: "Plan: $ARGUMENTS"
+)
+```
+
+### Mode SOLO
+Lance le sous-agent `implementation-planner` avec le Task tool.

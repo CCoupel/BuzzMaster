@@ -160,6 +160,38 @@ Implémente le code frontend React pour BuzzControl.
 
 ## Action immédiate
 
-1. **Si argument contient `backend`** → Lancer uniquement dev-backend
-2. **Si argument contient `frontend`** → Lancer uniquement dev-frontend
-3. **Sinon** → Analyser le plan, dispatcher vers backend et/ou frontend
+**Détecter le mode** — Lire `~/.claude/teams/myTEAM/config.json` :
+- **Fichier trouvé → Mode TEAM** : envoyer les prompts aux teammates
+- **Fichier absent → Mode SOLO** : spawner des sous-agents jetables
+
+### Dispatch (identique dans les deux modes)
+
+1. **Si argument contient `backend`** → Cibler uniquement `backend-dev` / `dev-backend`
+2. **Si argument contient `frontend`** → Cibler uniquement `frontend-dev` / `dev-frontend`
+3. **Sinon** → Analyser le plan, dispatcher vers backend et/ou frontend selon les dépendances
+
+### Mode TEAM
+
+**Backend seul :**
+```
+SendMessage(recipient: "backend-dev", content: [prompt backend ci-dessus], summary: "Dev backend: $ARGUMENTS")
+```
+
+**Frontend seul :**
+```
+SendMessage(recipient: "frontend-dev", content: [prompt frontend ci-dessus], summary: "Dev frontend: $ARGUMENTS")
+```
+
+**Backend → Frontend (séquentiel) :**
+```
+SendMessage(recipient: "backend-dev", ...) → attendre → SendMessage(recipient: "frontend-dev", ...)
+```
+
+**Backend ║ Frontend (parallèle) :**
+```
+SendMessage(recipient: "backend-dev", ...) + SendMessage(recipient: "frontend-dev", ...)  # même message
+```
+
+### Mode SOLO
+
+Utiliser les Task tool calls comme décrit en section "Étape 3 : Lancer les agents" ci-dessus.

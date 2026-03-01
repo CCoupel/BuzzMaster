@@ -66,4 +66,19 @@ Effectue une revue de code pour BuzzControl.
 
 ## Action immédiate
 
-Lance maintenant le sous-agent code-reviewer avec le Task tool.
+**Détecter le mode** — Lire `~/.claude/teams/myTEAM/config.json` :
+- **Fichier trouvé → Mode TEAM** : envoyer le prompt au teammate `code-reviewer`
+- **Fichier absent → Mode SOLO** : spawner un sous-agent jetable
+
+### Mode TEAM
+```
+SendMessage(
+  type: "message",
+  recipient: "code-reviewer",
+  content: [prompt "Prompt à transmettre au sous-agent" ci-dessus],
+  summary: "Review: $ARGUMENTS"
+)
+```
+
+### Mode SOLO
+Lance le sous-agent `code-reviewer` avec le Task tool.

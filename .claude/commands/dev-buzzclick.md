@@ -48,9 +48,33 @@ Cette commande lance l'agent `dev-buzzclick` pour implementer du code firmware E
 - Standards ESP32 : section 7
 - Règles : section 8
 
-## Agent lancé
+## Action immédiate
 
-Lance directement l'agent `dev-buzzclick` avec le contexte projet.
+**Détecter le mode** — Lire `~/.claude/teams/myTEAM/config.json` :
+- **Fichier trouvé → Mode TEAM** : envoyer le prompt au teammate `buzzclick-dev`
+- **Fichier absent → Mode SOLO** : spawner un sous-agent jetable
+
+### Mode TEAM
+```
+SendMessage(
+  type: "message",
+  recipient: "buzzclick-dev",
+  content: "Implémente la tâche BuzzClick suivante.\n\n**Contexte projet :** Voir context/COMMON.md section 1\n**Workflow DEV :** Voir context/DEVELOPMENT.md sections 7-8\n\n**Tâche :** $ARGUMENTS",
+  summary: "Dev BuzzClick: $ARGUMENTS"
+)
+```
+
+### Mode SOLO
+Lance le sous-agent `dev-buzzclick` avec le Task tool :
+```
+subagent_type: "dev-buzzclick"
+description: "Implémenter firmware BuzzClick"
+prompt:
+  Implémente la tâche BuzzClick suivante pour BuzzControl.
+  Contexte projet : voir context/COMMON.md section 1
+  Workflow DEV : voir context/DEVELOPMENT.md sections 7-8
+  Tâche : $ARGUMENTS
+```
 
 ## Quand utiliser
 

@@ -1,7 +1,7 @@
 # Règles Communes aux Agents DEV
 
 > **Ce fichier contient les règles communes à tous les agents de développement.**
-> Agents concernés : `dev-backend`, `dev-frontend`, `dev-feature-implementation`, `dev-buzzclick`
+> Agents concernés : `dev-backend`, `dev-frontend`, `dev-buzzclick`
 >
 > **Prérequis** : Respecter `context/COMMON.md` (règles générales) et `context/PROJECT_CONTEXT.md` (contexte technique)
 
@@ -59,7 +59,6 @@
 | dev-backend | `engine`, `protocol`, `http`, `websocket`, `tcp`, `models` |
 | dev-frontend | `admin`, `tv`, `components`, `hooks`, `css` |
 | dev-buzzclick | `buzzclick`, `led`, `wifi`, `tcp` |
-| dev-feature-implementation | Tous les scopes |
 
 ### Exemples
 
@@ -131,11 +130,11 @@ Si vous devez modifier un contrat, documentez-le dans votre summary :
 
 | Vérification | Commande | Agent |
 |--------------|----------|-------|
-| Build Go | `go build ./cmd/server` | backend, feature |
-| Build npm | `npm run build` | frontend, feature |
+| Build Go | `go build ./cmd/server` | backend |
+| Build npm | `npm run build` | frontend |
 | Build PlatformIO | `pio run -e buzzclick` | buzzclick |
-| Tests Go | `go test ./...` | backend, feature |
-| **Validation serveur** | `./server.exe` + `curl /version` | backend, frontend, feature |
+| Tests Go | `go test ./...` | backend |
+| **Validation serveur** | `./server.exe` + `curl /version` | backend, frontend |
 | Pas de scroll TV | Vérification visuelle 1920x1080 | frontend |
 
 ### Ordre de Build (Mode Portable)

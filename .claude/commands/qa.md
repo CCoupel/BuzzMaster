@@ -60,4 +60,19 @@ Exécute la procédure de tests QA complète pour BuzzControl.
 
 ## Action immédiate
 
-Lance maintenant le sous-agent QA avec le Task tool.
+**Détecter le mode** — Lire `~/.claude/teams/myTEAM/config.json` :
+- **Fichier trouvé → Mode TEAM** : envoyer le prompt au teammate `qa`
+- **Fichier absent → Mode SOLO** : spawner un sous-agent jetable
+
+### Mode TEAM
+```
+SendMessage(
+  type: "message",
+  recipient: "qa",
+  content: [prompt "Prompt à transmettre au sous-agent" ci-dessus],
+  summary: "QA: $ARGUMENTS"
+)
+```
+
+### Mode SOLO
+Lance le sous-agent `QA` avec le Task tool.

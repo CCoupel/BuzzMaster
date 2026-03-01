@@ -63,4 +63,19 @@ Implémente le code frontend React pour BuzzControl.
 
 ## Action immédiate
 
-Lance maintenant le sous-agent dev-frontend avec le Task tool.
+**Détecter le mode** — Lire `~/.claude/teams/myTEAM/config.json` :
+- **Fichier trouvé → Mode TEAM** : envoyer le prompt au teammate `frontend-dev`
+- **Fichier absent → Mode SOLO** : spawner un sous-agent jetable
+
+### Mode TEAM
+```
+SendMessage(
+  type: "message",
+  recipient: "frontend-dev",
+  content: [prompt "Prompt à transmettre au sous-agent" ci-dessus],
+  summary: "Dev frontend: $ARGUMENTS"
+)
+```
+
+### Mode SOLO
+Lance le sous-agent `dev-frontend` avec le Task tool.

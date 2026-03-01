@@ -70,4 +70,19 @@ Voir `context/QUALITY.md` section 11 pour le workflow.
 
 ## Action immédiate
 
-Lance maintenant le sous-agent **test-writer** avec le Task tool.
+**Détecter le mode** — Lire `~/.claude/teams/myTEAM/config.json` :
+- **Fichier trouvé → Mode TEAM** : envoyer le prompt au teammate `test-writer`
+- **Fichier absent → Mode SOLO** : spawner un sous-agent jetable
+
+### Mode TEAM
+```
+SendMessage(
+  type: "message",
+  recipient: "test-writer",
+  content: [prompt "Prompt à transmettre au sous-agent" ci-dessus],
+  summary: "Tests: $ARGUMENTS"
+)
+```
+
+### Mode SOLO
+Lance le sous-agent `test-writer` avec le Task tool.
