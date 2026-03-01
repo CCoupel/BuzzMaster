@@ -1,6 +1,6 @@
 # Règles Communes à Tous les Agents
 
-> **Ce fichier contient les règles obligatoires pour TOUS les agents BuzzMaster.**
+> **Ce fichier contient les règles obligatoires pour TOUS les agents BuzzControl.**
 > Chaque agent doit référencer ce fichier : `@import COMMON.md`
 >
 > **Contexte projet** : Voir `context/PROJECT_CONTEXT.md` pour le stack technique, la structure et les commandes.
@@ -159,7 +159,7 @@ Pour les workflows longs, notifier entre chaque phase majeure :
 
 ## Coordination Inter-Agents
 
-### Workflow Standard BuzzMaster
+### Workflow Standard BuzzControl
 
 ```
 PLAN → ⏸️ → DEV → TEST-WRITER → REVIEW → QA → ⏸️ → DOC → DEPLOY → ⏸️
@@ -198,7 +198,7 @@ Chaque agent doit :
 
 ---
 
-## Références Projet BuzzMaster
+## Références Projet BuzzControl
 
 > **Détails complets** : Voir `context/PROJECT_CONTEXT.md`
 

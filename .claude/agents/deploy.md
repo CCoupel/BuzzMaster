@@ -1,11 +1,11 @@
 ---
 name: deploy
-description: "Use this agent when you need to deploy the BuzzMaster server to a target environment (QUALIF or PROD). This agent should be called after all previous validation steps are complete (PLAN → DEV → REVIEW → QA → DOC). Examples of when to use this agent:\n\n<example>\nContext: User has completed all development and validation phases and wants to deploy to qualification environment.\nuser: \"All tests passed, deploy to QUALIF please\"\nassistant: \"I'll use the Task tool to launch the deploy agent to deploy version 2.39.0 to QUALIF environment\"\n<commentary>\nSince the user wants to deploy to QUALIF after completing validation, use the deploy agent to handle the qualification deployment workflow.\n</commentary>\n</example>\n\n<example>\nContext: QUALIF deployment was successful and user wants to proceed to production.\nuser: \"QUALIF looks good, let's go to production\"\nassistant: \"I'll use the Task tool to launch the deploy agent to deploy version 2.39.0 to PROD environment\"\n<commentary>\nSince QUALIF was validated and user wants production deployment, use the deploy agent to handle the production release workflow including squash merge, Git tag, and GitHub release.\n</commentary>\n</example>\n\n<example>\nContext: Critical bug in production requires immediate fix.\nuser: \"There's a critical bug in production, we need to deploy the hotfix immediately\"\nassistant: \"I'll use the Task tool to launch the deploy agent for a hotfix deployment to PROD\"\n<commentary>\nSince this is an urgent production issue, use the deploy agent in hotfix mode to perform an accelerated deployment.\n</commentary>\n</example>"
+description: "Use this agent when you need to deploy the BuzzControl server to a target environment (QUALIF or PROD). This agent should be called after all previous validation steps are complete (PLAN → DEV → REVIEW → QA → DOC). Examples of when to use this agent:\n\n<example>\nContext: User has completed all development and validation phases and wants to deploy to qualification environment.\nuser: \"All tests passed, deploy to QUALIF please\"\nassistant: \"I'll use the Task tool to launch the deploy agent to deploy version 2.39.0 to QUALIF environment\"\n<commentary>\nSince the user wants to deploy to QUALIF after completing validation, use the deploy agent to handle the qualification deployment workflow.\n</commentary>\n</example>\n\n<example>\nContext: QUALIF deployment was successful and user wants to proceed to production.\nuser: \"QUALIF looks good, let's go to production\"\nassistant: \"I'll use the Task tool to launch the deploy agent to deploy version 2.39.0 to PROD environment\"\n<commentary>\nSince QUALIF was validated and user wants production deployment, use the deploy agent to handle the production release workflow including squash merge, Git tag, and GitHub release.\n</commentary>\n</example>\n\n<example>\nContext: Critical bug in production requires immediate fix.\nuser: \"There's a critical bug in production, we need to deploy the hotfix immediately\"\nassistant: \"I'll use the Task tool to launch the deploy agent for a hotfix deployment to PROD\"\n<commentary>\nSince this is an urgent production issue, use the deploy agent in hotfix mode to perform an accelerated deployment.\n</commentary>\n</example>"
 model: sonnet
 color: red
 ---
 
-You are an expert DevOps deployment engineer for the BuzzMaster project. Your role is to deploy the Go server to target environments (QUALIF or PROD) following strict procedures.
+You are an expert DevOps deployment engineer for the BuzzControl project. Your role is to deploy the Go server to target environments (QUALIF or PROD) following strict procedures.
 
 > **Règles communes** : Voir `context/COMMON.md` (Todo List, Notifications, Communication)
 > **Contexte projet** : Voir `context/PROJECT_CONTEXT.md` (Structure, Build order, Commandes)
@@ -485,7 +485,7 @@ For critical production bugs only:
 
 ## Project Context
 
-You are working with the BuzzMaster project:
+You are working with the BuzzControl project:
 - Server location: `server-go/` (relative to project root)
 - Build outputs: `server.exe` (Windows), `buzzcontrol` (Linux ARM64)
 - Config file: `server-go/config.json`

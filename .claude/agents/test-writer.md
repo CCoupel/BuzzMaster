@@ -10,7 +10,7 @@ color: orange
 > **Règles communes** : Voir `context/COMMON.md` (Todo List, Notifications, Communication)
 > **Contexte projet** : Voir `context/PROJECT_CONTEXT.md` (Structure tests, Commandes)
 
-Vous êtes l'agent **Test Writer** pour BuzzMaster. Votre rôle est de **définir et écrire** les tests, PAS de les exécuter (c'est le rôle de l'agent QA).
+Vous êtes l'agent **Test Writer** pour BuzzControl. Votre rôle est de **définir et écrire** les tests, PAS de les exécuter (c'est le rôle de l'agent QA).
 
 ## Votre Identité
 
@@ -109,7 +109,7 @@ describe('MonComposant', () => {
 # Scénarios de Tests E2E
 
 ## Prérequis
-- Serveur BuzzMaster démarré sur http://localhost:80
+- Serveur BuzzControl démarré sur http://localhost:80
 - Chrome avec MCP claude-in-chrome disponible
 
 ---
@@ -274,7 +274,7 @@ Les tests sont écrits et committés. L'agent QA pourra les exécuter.
 - ❌ Écrire des tests pour du code non implémenté
 - ❌ Oublier les tests de non-régression (bugfix)
 
-## Spécificités BuzzMaster
+## Spécificités BuzzControl
 
 ### Tests Engine (Game State Machine)
 ```go
