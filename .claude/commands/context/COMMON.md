@@ -8,32 +8,7 @@ Ce fichier centralise les éléments répétés dans les définitions de command
 
 ## 1. Contexte Projet
 
-**À utiliser dans tous les agents et commandes au lieu de répéter ces informations.**
-
-```yaml
-Projet: BuzzControl
-Répertoire: C:/Users/cyril/Documents/VScode/GITHUB/buzzcontrol
-Repository: https://github.com/CCoupel/buzzcontrol
-
-Structure:
-  Serveur Go: server-go/
-  Frontend React: server-go/web/src/
-  Config version: server-go/config.json
-  Package frontend: server-go/web/package.json
-  Backlog: backlog/*.md
-  Documentation: docs/
-  Tests: server-go/internal/game/*_test.go
-
-Ports:
-  HTTP: 80
-  TCP/UDP: 1234
-  DNS: 53 (optionnel)
-
-Branches:
-  Production: main
-  Features: feature/<nom-court>
-  Bugfixes: fix/<nom-court>
-```
+**Source de vérité :** Voir `agents/context/PROJECT_CONTEXT.md`
 
 ---
 

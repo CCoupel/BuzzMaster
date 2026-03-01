@@ -1,6 +1,6 @@
-# Contexte Projet BuzzMaster
+# Contexte Projet BuzzControl
 
-> **Ce fichier contient le contexte technique du projet BuzzMaster.**
+> **Ce fichier contient le contexte technique du projet BuzzControl.**
 > Référencé par `context/COMMON.md` pour tous les agents.
 
 ---
