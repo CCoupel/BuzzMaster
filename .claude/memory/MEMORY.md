@@ -5,7 +5,8 @@
 
 ## Démarrage de session
 
-Utiliser `/session` pour démarrer chaque session : sync MEMORY + création optionnelle de la TEAM.
+Utiliser `/start-session` pour démarrer chaque session : crée la TEAM de travail.
+Source de vérité MEMORY : `.claude/memory/MEMORY.md` uniquement (versionné Git).
 Le hook SessionStart a été supprimé — plus de démarrage automatique.
 
 ## Corrections comportementales
@@ -14,8 +15,9 @@ Le hook SessionStart a été supprimé — plus de démarrage automatique.
 - **Team par feature/bugfix** : créer une nouvelle team à chaque nouvelle demande, pas réutiliser
 - **Agents** : prompts génériques uniquement (rôle, pas tâche) — tâches via TaskCreate + TaskUpdate
 - **Corrections intra-feature** : SendMessage vers l'agent existant, jamais créer un nouvel agent
-- **Création team** : lire `cdp.md` pour la liste complète, puis spawner TOUS les teammates avec instruction d'attendre les ordres. Liste complète (9 agents) : planner (`implementation-planner`), dev-backend, dev-frontend, buzzclick-dev (`dev-buzzclick`), test-writer, code-reviewer, QA, doc-updater, deployer (`deploy`)
-- **Commande /session** : créer la TEAM **directement sans demander** confirmation ni sujet. Le nom de la TEAM est **toujours `myTEAM`**, quelle que soit la session.
+- **Création team** : Liste complète (10 agents) : cdp (`cdp`) = **team leader**, planner (`implementation-planner`), dev-backend, dev-frontend, buzzclick-dev (`dev-buzzclick`), test-writer, code-reviewer, QA, doc-updater, deployer (`deploy`)
+- **Commande /start-session** : créer la TEAM **directement sans demander** confirmation ni sujet. Le nom de la TEAM est **toujours `myTEAM`**, quelle que soit la session.
+- **Architecture team** : le CDP est le team leader. Claude est l'interface utilisateur. Pour `/feature`, `/bugfix`, `/hotfix`, `/refactor` : Claude transmet au CDP via `SendMessage` puis relaie les retours. Claude ne coordonne pas les agents directement.
 
 # currentDate
-Today's date is 2026-02-23.
+Today's date is 2026-03-01.
