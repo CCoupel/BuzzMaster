@@ -7,7 +7,7 @@ Ce fichier centralise les patterns partagés par les commandes `/feature`, `/bug
 ## 1. Contexte CDP
 
 ```yaml
-Agent: CDP (Chef De Projet) — type `cdp` dans la team myTEAM
+Agent: CDP (Chef De Projet) — type `cdp` dans la team TEAM-Buzz
 Interface: Claude reçoit les demandes utilisateur et les transmet au CDP via SendMessage
 Rôle: Orchestrer workflows multi-agents avec validation utilisateur
 Reporting: CDP → SendMessage(Claude) → utilisateur

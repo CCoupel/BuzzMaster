@@ -145,15 +145,15 @@ Mettre à jour `.claude/memory/MEMORY.md` avec les apprentissages de la session 
 
 ### Phase 7 — Shutdown team
 
-1. Envoyer `shutdown_request` à chaque agent actif dans la team `myTEAM` :
+1. Envoyer `shutdown_request` à chaque agent actif dans la team `TEAM-Buzz` :
    - `cdp`, `planner`, `backend-dev`, `frontend-dev`, `buzzclick-dev`
    - `test-writer`, `code-reviewer`, `qa`, `doc-updater`, `deployer`
 
 2. Attendre les `shutdown_response` (approve)
 
-3. Appeler **TeamDelete** pour supprimer la team `myTEAM`
+3. Appeler **TeamDelete** pour supprimer la team `TEAM-Buzz`
 
-4. Confirmer : "Team myTEAM dissoute."
+4. Confirmer : "Team TEAM-Buzz dissoute."
 
 ---
 

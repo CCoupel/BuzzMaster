@@ -51,13 +51,13 @@ Vous êtes un chef de projet technique expérimenté. Vous ne codez pas, ne test
 
 ## Mode Bootstrap (Sans TEAM)
 
-Si vous êtes lancé via Task tool **sans équipe existante** (pas de myTEAM active), vous devez créer l'équipe et spawner les agents nécessaires AVANT d'exécuter le workflow :
+Si vous êtes lancé via Task tool **sans équipe existante** (pas de TEAM-Buzz active), vous devez créer l'équipe et spawner les agents nécessaires AVANT d'exécuter le workflow :
 
 ### Étape 1 — Créer l'équipe
 
 ```
 TeamCreate({
-  team_name: "myTEAM",
+  team_name: "TEAM-Buzz",
   description: "BuzzControl development team",
   agent_type: "cdp"
 })
@@ -76,10 +76,10 @@ TeamCreate({
 ```
 Task({
   subagent_type: "dev-backend",
-  team_name: "myTEAM",       ← OBLIGATOIRE pour la coordination SendMessage
+  team_name: "TEAM-Buzz",       ← OBLIGATOIRE pour la coordination SendMessage
   name: "backend-dev",
   description: "Backend Go developer",
-  prompt: "Tu es l'agent backend Go du projet BuzzControl. Tu travailles dans l'équipe \"myTEAM\"..."
+  prompt: "Tu es l'agent backend Go du projet BuzzControl. Tu travailles dans l'équipe \"TEAM-Buzz\"..."
 })
 ```
 
@@ -410,7 +410,7 @@ Utilisez le Task tool avec :
 
 ```
 subagent_type: "dev-backend"
-team_name: "myTEAM"              ← inclure si myTEAM existe (mode bootstrap ou session)
+team_name: "TEAM-Buzz"              ← inclure si TEAM-Buzz existe (mode bootstrap ou session)
 name: "backend-dev"
 description: "Implémenter backend feature X"
 prompt: "
@@ -444,14 +444,14 @@ Implémente le code backend Go pour BuzzControl.
 
 Appel 1:
 subagent_type: "dev-backend"
-team_name: "myTEAM"
+team_name: "TEAM-Buzz"
 name: "backend-dev"
 description: "Implémenter backend"
 prompt: "[plan backend]"
 
 Appel 2:
 subagent_type: "dev-frontend"
-team_name: "myTEAM"
+team_name: "TEAM-Buzz"
 name: "frontend-dev"
 description: "Implémenter frontend"
 prompt: "[plan frontend]"
@@ -490,7 +490,7 @@ Implémente le code firmware ESP32-C3 pour BuzzClick.
 ```
 # Étape 1 : Backend d'abord (séquentiel)
 subagent_type: "dev-backend"
-team_name: "myTEAM"
+team_name: "TEAM-Buzz"
 name: "backend-dev"
 description: "Implémenter backend"
 prompt: "[plan backend avec nouvelles actions]"

@@ -16,7 +16,7 @@ Lis `.claude/memory/MEMORY.md` (source de vérité unique, versionnée dans le r
 
 **Sans demander à l'utilisateur**, créer immédiatement la TEAM :
 
-1. **TeamCreate** avec le nom **`myTEAM`** (toujours ce nom, quelle que soit la session)
+1. **TeamCreate** avec le nom **`TEAM-Buzz`** (toujours ce nom, quelle que soit la session)
 
 2. **Spawner TOUS les agents** en parallèle (un seul message avec 10 Task tool calls) :
 
@@ -62,5 +62,5 @@ Lis `.claude/memory/MEMORY.md` (source de vérité unique, versionnée dans le r
 
 - La MEMORY projet (`.claude/memory/MEMORY.md`) est la **seule source de vérité**
 - La TEAM est **toujours créée** — ne jamais demander à l'utilisateur si elle doit être créée
-- Le nom de la TEAM est **toujours `myTEAM`** — ne jamais utiliser un autre nom
+- Le nom de la TEAM est **toujours `TEAM-Buzz`** — ne jamais utiliser un autre nom
 - Le `cdp` est **toujours le premier agent spawné** (team leader)

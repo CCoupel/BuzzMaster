@@ -25,7 +25,7 @@ User → /workflow → Claude (interface) → SendMessage(cdp, "Démarre: xxx")
 
 ## Rôle du CDP
 
-Le CDP est un **agent spécialisé** de type `cdp` dans la team `myTEAM`. Il est la seule entité qui orchestre le workflow.
+Le CDP est un **agent spécialisé** de type `cdp` dans la team `TEAM-Buzz`. Il est la seule entité qui orchestre le workflow.
 
 ### Ce que le CDP FAIT
 - Analyser la demande et identifier le type de workflow

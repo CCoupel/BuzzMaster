@@ -36,12 +36,12 @@ Phase 0: ANALYSE (TOI)
     └── Créer la branche bugfix/<nom-court>
     │
     ▼
-Phase 1: TEAM SETUP (TOI — uniquement si myTEAM absente)
+Phase 1: TEAM SETUP (TOI — uniquement si TEAM-Buzz absente)
     │
-    ├── Si myTEAM active → teammates déjà disponibles, passer à Phase 2
+    ├── Si TEAM-Buzz active → teammates déjà disponibles, passer à Phase 2
     └── Si bootstrap (aucune team) :
-        ├── TeamCreate({ team_name: "myTEAM", agent_type: "cdp" })
-        ├── Spawner les agents nécessaires (team_name: "myTEAM") :
+        ├── TeamCreate({ team_name: "TEAM-Buzz", agent_type: "cdp" })
+        ├── Spawner les agents nécessaires (team_name: "TEAM-Buzz") :
         │   ├── dev-backend / dev-frontend / dev-buzzclick (selon portée)
         │   ├── test-writer (OBLIGATOIRE - test régression)
         │   ├── code-reviewer, QA, doc-updater, deploy
@@ -265,7 +265,7 @@ Valider en QUALIF puis `/deploy PROD`
 **Le CDP prend en charge l'intégralité du workflow depuis cette étape.**
 
 
-### Sans TEAM (pas de myTEAM actif)
+### Sans TEAM (pas de TEAM-Buzz actif)
 ```
 subagent_type: "cdp"
 description: "Workflow bugfix"

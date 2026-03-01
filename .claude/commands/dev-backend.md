@@ -31,7 +31,7 @@ $ARGUMENTS
 
 ## Action immédiate
 
-**Détecter le mode** — Lire `~/.claude/teams/myTEAM/config.json` :
+**Détecter le mode** — Lire `~/.claude/teams/TEAM-Buzz/config.json` :
 - **Fichier trouvé → Mode TEAM** : transmettre au CDP existant
 - **Fichier absent** : spawner le CDP — il orchestrera les agents nécessaires
 

@@ -16,7 +16,7 @@ Le hook SessionStart a été supprimé — plus de démarrage automatique.
 - **Agents** : prompts génériques uniquement (rôle, pas tâche) — tâches via TaskCreate + TaskUpdate
 - **Corrections intra-feature** : SendMessage vers l'agent existant, jamais créer un nouvel agent
 - **Création team** : Liste complète (10 agents) : cdp (`cdp`) = **team leader**, planner (`implementation-planner`), dev-backend, dev-frontend, buzzclick-dev (`dev-buzzclick`), test-writer, code-reviewer, QA, doc-updater, deployer (`deploy`)
-- **Commande /start-session** : créer la TEAM **directement sans demander** confirmation ni sujet. Le nom de la TEAM est **toujours `myTEAM`**, quelle que soit la session.
+- **Commande /start-session** : créer la TEAM **directement sans demander** confirmation ni sujet. Le nom de la TEAM est **toujours `TEAM-Buzz`**, quelle que soit la session.
 - **Architecture team** : le CDP est le team leader. Claude est l'interface utilisateur. Pour `/feature`, `/bugfix`, `/hotfix`, `/refactor` : Claude transmet au CDP via `SendMessage` puis relaie les retours. Claude ne coordonne pas les agents directement.
 
 # currentDate

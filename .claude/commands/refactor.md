@@ -35,11 +35,11 @@ Claude (interface) → SendMessage(cdp, "Refactor: xxx")
 - Vérifier qu'il y a des tests existants
 - Créer la branche `refactor/<nom-court>`
 
-### Phase 1: TEAM SETUP (TOI — uniquement si myTEAM absente)
-- Si myTEAM active → teammates déjà disponibles, passer à Phase 2
+### Phase 1: TEAM SETUP (TOI — uniquement si TEAM-Buzz absente)
+- Si TEAM-Buzz active → teammates déjà disponibles, passer à Phase 2
 - Si bootstrap (aucune team) :
-  - TeamCreate({ team_name: "myTEAM", agent_type: "cdp" })
-  - Spawner agents (team_name: "myTEAM") :
+  - TeamCreate({ team_name: "TEAM-Buzz", agent_type: "cdp" })
+  - Spawner agents (team_name: "TEAM-Buzz") :
     - dev-backend/frontend/buzzclick (selon portée)
     - code-reviewer (toujours), QA (toujours)
   - **PAS** de test-writer, doc-updater, deploy (refactoring = pas de nouvelle feature)
@@ -157,7 +157,7 @@ Si les résultats diffèrent → Le refactoring est **INVALIDE**.
 **Le CDP prend en charge l'intégralité du workflow depuis cette étape.**
 
 
-### Sans TEAM (pas de myTEAM actif)
+### Sans TEAM (pas de TEAM-Buzz actif)
 ```
 subagent_type: "cdp"
 description: "Workflow refactor"

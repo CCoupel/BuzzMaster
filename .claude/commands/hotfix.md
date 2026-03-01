@@ -36,11 +36,11 @@ backend-dev  [test-writer]  [qa]   doc-updater  deployer
 - Estimer l'urgence réelle
 - Créer la branche `hotfix/<nom-court>`
 
-### Phase 1: TEAM SETUP (TOI — uniquement si myTEAM absente)
-- Si myTEAM active → teammates déjà disponibles, passer à Phase 2
+### Phase 1: TEAM SETUP (TOI — uniquement si TEAM-Buzz absente)
+- Si TEAM-Buzz active → teammates déjà disponibles, passer à Phase 2
 - Si bootstrap (aucune team) :
-  - TeamCreate({ team_name: "myTEAM", agent_type: "cdp" })
-  - Spawner agents MINIMAUX (team_name: "myTEAM") :
+  - TeamCreate({ team_name: "TEAM-Buzz", agent_type: "cdp" })
+  - Spawner agents MINIMAUX (team_name: "TEAM-Buzz") :
     - dev-backend/frontend/buzzclick (selon portée)
     - test-writer (si possible), QA (si possible)
     - doc-updater (toujours), deploy (toujours - PROD direct)
@@ -180,7 +180,7 @@ backend-dev  [test-writer]  [qa]   doc-updater  deployer
 **Le CDP prend en charge l'intégralité du workflow depuis cette étape.**
 
 
-### Sans TEAM (pas de myTEAM actif)
+### Sans TEAM (pas de TEAM-Buzz actif)
 ```
 subagent_type: "cdp"
 description: "Workflow hotfix urgent"

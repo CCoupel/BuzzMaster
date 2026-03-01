@@ -358,24 +358,24 @@ Le **CDP est le Team Leader** qui crée et coordonne les agents. Claude est l'in
 ```
 Claude (interface utilisateur)
     │
-    ├── Si myTEAM active → SendMessage(cdp, "Demande")
-    └── Si pas de myTEAM → Task(subagent_type: "cdp") → CDP bootstrap
+    ├── Si TEAM-Buzz active → SendMessage(cdp, "Demande")
+    └── Si pas de TEAM-Buzz → Task(subagent_type: "cdp") → CDP bootstrap
 
 CDP (Team Leader)
     │
-    ├── TeamCreate("myTEAM")          ← en mode bootstrap uniquement
-    ├── Task(dev-backend, team_name: "myTEAM") avec prompt GÉNÉRIQUE
-    ├── Task(dev-frontend, team_name: "myTEAM") avec prompt GÉNÉRIQUE
-    ├── Task(test-writer, team_name: "myTEAM") avec prompt GÉNÉRIQUE
-    ├── Task(code-reviewer, team_name: "myTEAM") avec prompt GÉNÉRIQUE
-    ├── Task(QA, team_name: "myTEAM") avec prompt GÉNÉRIQUE
-    ├── Task(doc-updater, team_name: "myTEAM") avec prompt GÉNÉRIQUE
-    └── Task(deploy, team_name: "myTEAM") avec prompt GÉNÉRIQUE
+    ├── TeamCreate("TEAM-Buzz")          ← en mode bootstrap uniquement
+    ├── Task(dev-backend, team_name: "TEAM-Buzz") avec prompt GÉNÉRIQUE
+    ├── Task(dev-frontend, team_name: "TEAM-Buzz") avec prompt GÉNÉRIQUE
+    ├── Task(test-writer, team_name: "TEAM-Buzz") avec prompt GÉNÉRIQUE
+    ├── Task(code-reviewer, team_name: "TEAM-Buzz") avec prompt GÉNÉRIQUE
+    ├── Task(QA, team_name: "TEAM-Buzz") avec prompt GÉNÉRIQUE
+    ├── Task(doc-updater, team_name: "TEAM-Buzz") avec prompt GÉNÉRIQUE
+    └── Task(deploy, team_name: "TEAM-Buzz") avec prompt GÉNÉRIQUE
     │
     └── Coordination via TaskCreate + TaskUpdate + SendMessage
 ```
 
-**Note** : `/start-session` crée la team complète (10 agents pré-warmés). En "Sans TEAM", le CDP crée myTEAM et ne spawne que les agents nécessaires.
+**Note** : `/start-session` crée la team complète (10 agents pré-warmés). En "Sans TEAM", le CDP crée TEAM-Buzz et ne spawne que les agents nécessaires.
 
 ### 10.2 ⚠️ RÈGLE CRITIQUE : Création des Agents
 
@@ -386,27 +386,27 @@ CDP (Team Leader)
 ```javascript
 // 1. Créer l'équipe (CDP bootstrap uniquement — /start-session le fait pour la session complète)
 TeamCreate({
-  team_name: "myTEAM",
+  team_name: "TEAM-Buzz",
   description: "BuzzControl development team",
   agent_type: "cdp"
 })
 
 // 2. Créer les agents avec prompts GÉNÉRIQUES (sans tâche spécifique)
-//    TOUJOURS inclure team_name: "myTEAM" pour la coordination SendMessage
+//    TOUJOURS inclure team_name: "TEAM-Buzz" pour la coordination SendMessage
 Task({
   subagent_type: "dev-backend",
-  team_name: "myTEAM",
+  team_name: "TEAM-Buzz",
   name: "backend-dev",
   description: "Backend Go developer",  // ✅ Description courte du rôle
-  prompt: "Tu es l'agent backend Go du projet BuzzControl. Tu travailles dans l'équipe \"myTEAM\". Attends les tâches qui te seront assignées par le team leader via la task list. Quand une tâche te sera assignée, consulte-la avec TaskGet puis implémente le code Go demandé. Tu es prêt à commencer quand le team leader t'assignera du travail."
+  prompt: "Tu es l'agent backend Go du projet BuzzControl. Tu travailles dans l'équipe \"TEAM-Buzz\". Attends les tâches qui te seront assignées par le team leader via la task list. Quand une tâche te sera assignée, consulte-la avec TaskGet puis implémente le code Go demandé. Tu es prêt à commencer quand le team leader t'assignera du travail."
 })
 
 Task({
   subagent_type: "test-writer",
-  team_name: "myTEAM",
+  team_name: "TEAM-Buzz",
   name: "test-writer",
   description: "Test writer",  // ✅ Description courte du rôle
-  prompt: "Tu es l'agent test writer du projet BuzzControl. Tu travailles dans l'équipe \"myTEAM\". Attends les tâches qui te seront assignées par le team leader via la task list. Quand une tâche te sera assignée, consulte-la avec TaskGet puis écris les tests demandés. Tu es prêt à commencer quand le team leader t'assignera du travail."
+  prompt: "Tu es l'agent test writer du projet BuzzControl. Tu travailles dans l'équipe \"TEAM-Buzz\". Attends les tâches qui te seront assignées par le team leader via la task list. Quand une tâche te sera assignée, consulte-la avec TaskGet puis écris les tests demandés. Tu es prêt à commencer quand le team leader t'assignera du travail."
 })
 
 // 3. Créer les tâches dans la task list
