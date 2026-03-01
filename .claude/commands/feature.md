@@ -44,20 +44,16 @@ Phase 1: BACKLOG (TOI)
     └── Créer la branche feature/<nom-court>
     │
     ▼
-Phase 2: TEAM SETUP (TOI)
+Phase 2: TEAM SETUP (TOI — uniquement si myTEAM absente)
     │
-    ├── TeamCreate({ team_name: "feature-xxx", agent_type: "team-lead" })
-    ├── Créer les agents nécessaires :
-    │   ├── implementation-planner (toujours - créer le plan)
-    │   ├── dev-backend (si serveur Go)
-    │   ├── dev-frontend (si React/CSS)
-    │   ├── dev-buzzclick (si firmware ESP32)
-    │   ├── test-writer (toujours)
-    │   ├── code-reviewer (toujours)
-    │   ├── QA (toujours)
-    │   ├── doc-updater (toujours)
-    │   └── deploy (toujours - QUALIF)
-    └── Créer la task list avec TaskCreate
+    ├── Si myTEAM active → teammates déjà disponibles, passer à Phase 3
+    └── Si bootstrap (aucune team) :
+        ├── TeamCreate({ team_name: "myTEAM", agent_type: "cdp" })
+        ├── Spawner les agents nécessaires (team_name: "myTEAM") :
+        │   ├── implementation-planner (toujours)
+        │   ├── dev-backend / dev-frontend / dev-buzzclick (selon portée)
+        │   ├── test-writer, code-reviewer, QA, doc-updater, deploy
+        └── Voir "Mode Bootstrap" dans agents/cdp.md
     │
     ▼
 Phase 3: PLANIFICATION (implementation-planner)

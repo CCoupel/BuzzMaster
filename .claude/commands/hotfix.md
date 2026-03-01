@@ -36,14 +36,15 @@ backend-dev  [test-writer]  [qa]   doc-updater  deployer
 - Estimer l'urgence réelle
 - Créer la branche `hotfix/<nom-court>`
 
-### Phase 1: TEAM SETUP (TOI)
-- TeamCreate({ team_name: "hotfix-xxx", agent_type: "team-lead" })
-- Créer les agents MINIMAUX :
-  - dev-backend/frontend/buzzclick (selon portée)
-  - test-writer (si possible)
-  - QA (si possible)
-  - doc-updater (toujours)
-  - deploy (toujours - PROD direct)
+### Phase 1: TEAM SETUP (TOI — uniquement si myTEAM absente)
+- Si myTEAM active → teammates déjà disponibles, passer à Phase 2
+- Si bootstrap (aucune team) :
+  - TeamCreate({ team_name: "myTEAM", agent_type: "cdp" })
+  - Spawner agents MINIMAUX (team_name: "myTEAM") :
+    - dev-backend/frontend/buzzclick (selon portée)
+    - test-writer (si possible), QA (si possible)
+    - doc-updater (toujours), deploy (toujours - PROD direct)
+  - Voir "Mode Bootstrap" dans agents/cdp.md
 
 ### Phase 2: DÉVELOPPEMENT (Agents DEV)
 - Assigner via TaskUpdate(owner: "dev-xxx")

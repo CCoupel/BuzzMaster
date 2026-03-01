@@ -36,19 +36,16 @@ Phase 0: ANALYSE (TOI)
     └── Créer la branche bugfix/<nom-court>
     │
     ▼
-Phase 1: TEAM SETUP (TOI)
+Phase 1: TEAM SETUP (TOI — uniquement si myTEAM absente)
     │
-    ├── TeamCreate({ team_name: "bugfix-xxx", agent_type: "team-lead" })
-    ├── Créer les agents nécessaires selon la portée :
-    │   ├── dev-backend (si bug serveur Go)
-    │   ├── dev-frontend (si bug React/CSS)
-    │   ├── dev-buzzclick (si bug firmware ESP32)
-    │   ├── test-writer (toujours - test régression OBLIGATOIRE)
-    │   ├── code-reviewer (toujours)
-    │   ├── QA (toujours)
-    │   ├── doc-updater (toujours)
-    │   └── deploy (toujours - QUALIF)
-    └── Créer la task list avec TaskCreate
+    ├── Si myTEAM active → teammates déjà disponibles, passer à Phase 2
+    └── Si bootstrap (aucune team) :
+        ├── TeamCreate({ team_name: "myTEAM", agent_type: "cdp" })
+        ├── Spawner les agents nécessaires (team_name: "myTEAM") :
+        │   ├── dev-backend / dev-frontend / dev-buzzclick (selon portée)
+        │   ├── test-writer (OBLIGATOIRE - test régression)
+        │   ├── code-reviewer, QA, doc-updater, deploy
+        └── Voir "Mode Bootstrap" dans agents/cdp.md
     │
     ▼
 Phase 2: DÉVELOPPEMENT (Agents DEV)

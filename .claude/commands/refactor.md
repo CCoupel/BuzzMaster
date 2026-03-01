@@ -35,15 +35,15 @@ Claude (interface) → SendMessage(cdp, "Refactor: xxx")
 - Vérifier qu'il y a des tests existants
 - Créer la branche `refactor/<nom-court>`
 
-### Phase 1: TEAM SETUP (TOI)
-- TeamCreate({ team_name: "refactor-xxx", agent_type: "team-lead" })
-- Créer les agents nécessaires :
-  - dev-backend/frontend/buzzclick (selon portée)
-  - code-reviewer (toujours)
-  - QA (toujours)
-- **PAS** de test-writer (tests déjà existants)
-- **PAS** de doc-updater (pas de nouvelle feature)
-- **PAS** de deploy (pas de nouvelle version)
+### Phase 1: TEAM SETUP (TOI — uniquement si myTEAM absente)
+- Si myTEAM active → teammates déjà disponibles, passer à Phase 2
+- Si bootstrap (aucune team) :
+  - TeamCreate({ team_name: "myTEAM", agent_type: "cdp" })
+  - Spawner agents (team_name: "myTEAM") :
+    - dev-backend/frontend/buzzclick (selon portée)
+    - code-reviewer (toujours), QA (toujours)
+  - **PAS** de test-writer, doc-updater, deploy (refactoring = pas de nouvelle feature)
+  - Voir "Mode Bootstrap" dans agents/cdp.md
 
 ### Phase 2: TESTS AVANT (QA)
 - Assigner via TaskUpdate(owner: "qa")
