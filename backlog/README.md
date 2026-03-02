@@ -17,6 +17,7 @@ backlog/
 
 | Fichier | Description |
 |---------|-------------|
+| [udp-broadcast-server-discovery.md](TODO/udp-broadcast-server-discovery.md) | Découverte automatique de l'IP serveur via UDP heartbeat (DHCP friendly, LED boot sequence enrichie) |
 | [usb-modal-layout-compact.md](TODO/usb-modal-layout-compact.md) | Réorganisation modale USB : sans scroll, bouton Flash USB sur même ligne que "Envoyer et configurer" |
 | [websocket-broadcast-filtre.md](TODO/websocket-broadcast-filtre.md) | Filtrage des broadcasts WebSocket par type de client |
 | [generateur-ia.md](TODO/generateur-ia.md) | Générateur de jeu complet via IA |
@@ -168,6 +169,7 @@ mv backlog/En-Cours/qcm-marqueurs-indices.md backlog/DONE/
 
 ## Historique
 
+- 2026-03-02 : Ajout UDP broadcast server discovery (v3.2.0 target, résout DHCP IP change problem)
 - 2026-02-23 : Abandon buzzer-wifi-provisioning-smartconfig (remplacé par config WiFi USB directe v3.0.x)
 - 2026-02-23 : Completion buzzer-firmware-ota-update (v3.1.0/3.1.1)
 - 2026-02-17 : Completion buzzer-protocol-websocket (v3.0.0)
