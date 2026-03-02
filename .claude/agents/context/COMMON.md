@@ -100,6 +100,56 @@ Pour les workflows longs, notifier entre chaque phase majeure :
 
 ---
 
+## Reporting de Progression vers le CDP (OBLIGATOIRE pour tous les agents)
+
+Chaque agent DOIT envoyer des mises à jour régulières au CDP via `SendMessage` pour éviter l'effet tunnel.
+
+### Format Barre de Progression
+
+Utiliser ce format dans chaque message de progression :
+
+```
+[NOM-AGENT] [████████░░] 80% | Step 4/5 : [Nom de l'étape en cours]
+```
+
+Construction de la barre :
+- Longueur totale : 10 caractères
+- `█` = étapes complétées, `░` = étapes restantes
+- Calculer : `n_complet = round(step_actuel / total_steps * 10)`
+
+**Exemples :**
+```
+[BACKEND-DEV] [██░░░░░░░░] 20% | Step 1/5 : Lecture des fichiers existants
+[BACKEND-DEV] [████░░░░░░] 40% | Step 2/5 : Implémentation BroadcasterManager
+[BACKEND-DEV] [██████░░░░] 60% | Step 3/5 : Tests unitaires
+[BACKEND-DEV] [████████░░] 80% | Step 4/5 : Commit des changements
+[BACKEND-DEV] [██████████] 100% | Step 5/5 : ✅ Terminé
+```
+
+### Règles de Fréquence
+
+| Durée estimée | Fréquence minimum |
+|---------------|-------------------|
+| < 2 min | Début + Fin |
+| 2–5 min | Début + chaque étape majeure + Fin |
+| > 5 min | Toutes les 2 étapes ou toutes les 2 minutes |
+
+### Format du SendMessage
+
+```
+type: "message"
+recipient: "cdp"
+content: "[NOM-AGENT] [████████░░] 80% | Step 4/5 : [Description]\n→ [Détail optionnel]"
+summary: "[NOM-AGENT] Step 4/5 - [Description courte]"
+```
+
+**Événements obligatoires :**
+- Démarrage de la tâche (Step 0)
+- Chaque étape majeure (dépend de l'agent)
+- Fin de tâche avec statut (✅ / ⚠️ / ❌)
+
+---
+
 ## Règles de Communication
 
 ### Langue

@@ -17,7 +17,6 @@ backlog/
 
 | Fichier | Description |
 |---------|-------------|
-| [udp-broadcast-server-discovery.md](TODO/udp-broadcast-server-discovery.md) | Découverte automatique de l'IP serveur via UDP heartbeat (DHCP friendly, LED boot sequence enrichie) |
 | [usb-modal-layout-compact.md](TODO/usb-modal-layout-compact.md) | Réorganisation modale USB : sans scroll, bouton Flash USB sur même ligne que "Envoyer et configurer" |
 | [websocket-broadcast-filtre.md](TODO/websocket-broadcast-filtre.md) | Filtrage des broadcasts WebSocket par type de client |
 | [generateur-ia.md](TODO/generateur-ia.md) | Générateur de jeu complet via IA |
@@ -33,6 +32,7 @@ backlog/
 
 | Fichier | Version | Description |
 |---------|---------|-------------|
+| [udp-broadcast-server-discovery.md](DONE/udp-broadcast-server-discovery.md) | v3.2.0 | Découverte automatique de l'IP serveur via UDP heartbeat (DHCP friendly, LED boot sequence enrichie) |
 | [buzzer-firmware-ota-update.md](DONE/buzzer-firmware-ota-update.md) | v3.1.0 | Mise à jour OTA du firmware des buzzers (détection version, pastille obsolète, upload + restore embarqué) |
 | [buzzer-protocol-websocket.md](DONE/buzzer-protocol-websocket.md) | v3.0.0 | Migration protocole buzzers TCP → WebSocket (hub dédié /ws/buzzer) |
 | [vjoueur-qcm-multicolore.md](DONE/vjoueur-qcm-multicolore.md) | v2.53.0 | VJoueur valide pour les 4 couleurs QCM + buzz direct sur écran |
@@ -169,6 +169,7 @@ mv backlog/En-Cours/qcm-marqueurs-indices.md backlog/DONE/
 
 ## Historique
 
+- 2026-03-02 : Completion UDP broadcast server discovery (v3.2.0)
 - 2026-03-02 : Ajout UDP broadcast server discovery (v3.2.0 target, résout DHCP IP change problem)
 - 2026-02-23 : Abandon buzzer-wifi-provisioning-smartconfig (remplacé par config WiFi USB directe v3.0.x)
 - 2026-02-23 : Completion buzzer-firmware-ota-update (v3.1.0/3.1.1)

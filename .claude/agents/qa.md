@@ -38,18 +38,58 @@ Verify: Build succeeds, executable generated, web files embedded.
   - `/admin/game` opens the administration page correctly
   - `/tv` opens the TV display page correctly
 
-**Step 2: Go Unit Tests**
+**Step 2: Go Unit Tests — avec progression par package**
+
+Exécuter les tests **package par package** pour pouvoir reporter la progression en temps réel.
+
 ```bash
 cd server-go
-go test ./... -v -cover
+
+# 1. Compter le total de tests (estimation)
+TOTAL=$(go test ./... -list '.*' 2>/dev/null | grep -v '^ok' | grep -v '^?' | grep -v '^#' | wc -l)
+
+# 2. Lister les packages à tester
+PACKAGES=$(go list ./...)
+
+# 3. Exécuter package par package
+PASS=0; FAIL=0
+for PKG in $PACKAGES; do
+  OUTPUT=$(go test $PKG -v -cover 2>&1)
+  PKG_PASS=$(echo "$OUTPUT" | grep -c "^--- PASS:")
+  PKG_FAIL=$(echo "$OUTPUT" | grep -c "^--- FAIL:")
+  PASS=$((PASS + PKG_PASS))
+  FAIL=$((FAIL + PKG_FAIL))
+  # → Envoyer une mise à jour CDP ici (voir ci-dessous)
+done
 ```
+
+**Après chaque package**, envoyer un `SendMessage` au CDP :
+
+```
+[QA] Tests [████████░░] 42/52 | ✅ 40 PASS  ❌ 2 FAIL | pkg: internal/game
+```
+
+Format de la barre de tests :
+- Longueur : 10 chars, calculée sur `(PASS+FAIL) / TOTAL * 10`
+- Mettre à jour à chaque package terminé
+- Si TOTAL inconnu (estimation 0), afficher `[████████░░] 42 tests | ✅ 40 PASS  ❌ 2 FAIL`
+
+**Fréquence** : un message par package (ou regrouper si > 10 packages).
+
 Verify: All tests pass (PASS), coverage > 80% ideally, no failures (FAIL), no panics.
 
-**Step 3: E2E Tests**
+**Step 3: E2E Tests — avec progression par scénario**
 ```bash
 cd server-go
 go test ./internal/server -v -run TestE2E
 ```
+
+Parser la sortie pour compter les scénarios `--- PASS: TestE2E` et envoyer au CDP :
+
+```
+[QA] E2E [██████░░░░] 3/5 scénarios | ✅ TestE2EBuzz  ✅ TestE2EGame  ✅ TestE2EOTA
+```
+
 Verify: Complete workflow tested, no network errors, no timeouts.
 
 **Step 4: Regression Tests (when applicable)**
@@ -306,3 +346,29 @@ gofmt -l .
 **VALIDATED** : `✅ **QA TERMINÉ - VALIDATED**` avec Branche, Version, Build, Tests, Coverage, Serveur actif (URLs)
 **WITH RESERVATIONS** : `⚠️ **QA TERMINÉ - VALIDATED WITH RESERVATIONS**` avec Branche, Version, Tests, Réserves, Serveur actif
 **NOT VALIDATED** : `❌ **QA TERMINÉ - NOT VALIDATED**` avec Branche, Version, Problème, Échecs, Action, Serveur actif
+
+### Progression vers CDP (OBLIGATOIRE)
+
+> **Règle globale** : Voir `context/COMMON.md` — section "Reporting de Progression vers le CDP"
+
+Étapes QA : 2 niveaux de barre de progression.
+
+**Niveau 1 — Étapes globales (5 steps) :**
+
+| Step | Étape | Barre |
+|------|-------|-------|
+| 0/5 | Démarrage | `[QA] [░░░░░░░░░░] 0% \| Step 0/5` |
+| 1/5 | Build OK/FAIL | `[QA] [██░░░░░░░░] 20% \| Step 1/5 : Build` |
+| 2/5 | Serveur actif | `[QA] [████░░░░░░] 40% \| Step 2/5 : Serveur` |
+| 3/5 | Tests unitaires (progression par package) | `[QA] [██████░░░░] 60% \| Step 3/5 : Tests` |
+| 4/5 | Tests E2E (progression par scénario) | `[QA] [████████░░] 80% \| Step 4/5 : E2E` |
+| 5/5 | Rapport final + verdict | `[QA] [██████████] 100% \| Step 5/5 : Rapport` |
+
+**Niveau 2 — Progression des tests (dans les steps 3 et 4) :**
+
+Pendant l'exécution des tests, envoyer des updates avec la barre au niveau des tests :
+
+```
+[QA] Tests [████████░░] 42/52 | ✅ 40 PASS  ❌ 2 FAIL | pkg: internal/game
+[QA] E2E   [██████░░░░] 3/5   | ✅ TestE2EBuzz  ✅ TestE2EGame  ❌ TestE2EOTA
+```

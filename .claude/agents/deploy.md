@@ -44,7 +44,8 @@ These are ADVISORY checks. If the user requests deployment, PROCEED unless there
 ### 3. Follow Environment-Specific Procedures
 
 **For QUALIF:**
-- Build Windows binary only
+- Détecter les composants modifiés depuis `main` (voir "QUALIF Build Workflow" ci-dessous)
+- Rebuilder **uniquement les composants modifiés** : frontend, backend Windows, et/ou firmware
 - Run post-build tests
 - DO NOT create Git tags
 - DO NOT merge to main
@@ -496,6 +497,101 @@ You are working with the BuzzControl project:
 - GitHub repo: https://github.com/CCoupel/BuzzMaster
 - GitHub Actions: https://github.com/CCoupel/BuzzMaster/actions
 
+## QUALIF Deployment Workflow Summary
+
+### Phase 1 : Détection des composants modifiés
+
+Avant tout build, détecter automatiquement ce qui a changé depuis `main` :
+
+```bash
+# Comparaison feature branch vs main
+DIFF=$(git diff main...HEAD --name-only)
+
+# Frontend modifié ?
+FRONTEND_CHANGED=$(echo "$DIFF" | grep -q "^server-go/web/" && echo "yes" || echo "no")
+
+# Backend modifié ?
+BACKEND_CHANGED=$(echo "$DIFF" | grep -qE "^server-go/(cmd|internal|go\.|config\.json)" && echo "yes" || echo "no")
+
+# Firmware modifié ?
+FIRMWARE_CHANGED=$(echo "$DIFF" | grep -q "^src/BuzzClick/" && echo "yes" || echo "no")
+
+echo "Frontend: $FRONTEND_CHANGED | Backend: $BACKEND_CHANGED | Firmware: $FIRMWARE_CHANGED"
+```
+
+**Notifier le CDP du résultat de la détection :**
+```
+[DEPLOY] Composants modifiés détectés :
+  Frontend  : yes/no
+  Backend   : yes/no  (ou forcé si Frontend=yes ou Firmware=yes)
+  Firmware  : yes/no
+→ Ordre de build : firmware → frontend → backend
+→ Build sélectif en cours...
+```
+
+**Règle de cascade** : le backend doit TOUJOURS être rebuildé si l'un des composants qu'il embarque a changé :
+- `FRONTEND_CHANGED=yes` → `BACKEND_CHANGED=yes` (assets React embarqués)
+- `FIRMWARE_CHANGED=yes` → `BACKEND_CHANGED=yes` (firmware embarqué via `//go:embed`)
+
+### Phase 2 : Build sélectif (QUALIF = Windows only)
+
+**2a. Frontend** — si `FRONTEND_CHANGED=yes` :
+```bash
+cd server-go/web && npm run build
+```
+> **OBLIGATOIRE avant le backend** si les deux sont modifiés (le backend embarque le frontend).
+
+**2b. Firmware BuzzClick** — si `FIRMWARE_CHANGED=yes` :
+```bash
+cd <racine projet>
+pio run -e esp32c3
+# Binaire généré : .pio/build/esp32c3/firmware.bin
+
+# Récupérer la version depuis config.json
+VERSION=$(grep '"version"' server-go/config.json | sed 's/.*"\([0-9.]*\)".*/\1/')
+
+# Copier vers l'asset embarqué (go:embed) avec nom versionné
+cp .pio/build/esp32c3/firmware.bin "server-go/assets/firmware/buzzclick-latest.bin"
+
+echo "✅ Firmware copié vers server-go/assets/firmware/buzzclick-latest.bin"
+```
+> Requiert PlatformIO (`pio`). Si indisponible localement, noter dans le rapport — le backend sera quand même buildé avec l'ancien firmware embarqué (ou sans firmware si absent).
+>
+> **Ce step DOIT être exécuté AVANT le build backend** (le backend embarque le `.bin` via `//go:embed`).
+
+**2c. Backend Windows** — si `BACKEND_CHANGED=yes` OU `FRONTEND_CHANGED=yes` OU `FIRMWARE_CHANGED=yes` :
+```bash
+cd server-go && go build -o server.exe ./cmd/server
+```
+
+Cas déclenchants :
+- Frontend changé → le backend embarque les nouveaux assets React
+- Backend changé → code modifié
+- Firmware changé → le backend embarque le nouveau `.bin` (via `assets/firmware/buzzclick-latest.bin`)
+
+> **Ordre obligatoire** : `firmware copy` → `npm run build` → `go build`
+
+### Phase 3 : Tests post-build et démarrage serveur
+
+```bash
+cd server-go
+./server.exe &
+sleep 2
+curl http://localhost/version  # Doit correspondre à config.json
+```
+
+Le serveur DOIT rester actif après le déploiement QUALIF pour les tests manuels.
+
+### Phase 4 : Rapport QUALIF
+
+Inclure dans le rapport :
+- Composants détectés comme modifiés
+- Builds effectués / ignorés (avec raison)
+- Version confirmée
+- URLs de test : http://localhost/, /admin/game, /tv
+
+---
+
 ## PROD Deployment Workflow Summary
 
 For PROD deployment, execute these steps IN ORDER:
@@ -551,7 +647,11 @@ For PROD deployment, execute these steps IN ORDER:
 ```json
 [
   {"content": "Vérifier la branche et version", "status": "in_progress", "activeForm": "Checking branch and version"},
-  {"content": "Builder le binaire Windows", "status": "pending", "activeForm": "Building Windows binary"},
+  {"content": "Détecter les composants modifiés (git diff main...HEAD)", "status": "pending", "activeForm": "Detecting modified components"},
+  {"content": "Builder le firmware si modifié (pio run)", "status": "pending", "activeForm": "Building firmware (if changed)"},
+  {"content": "Copier le firmware vers assets/firmware/ si modifié", "status": "pending", "activeForm": "Copying firmware to assets (if changed)"},
+  {"content": "Builder le frontend si modifié (npm run build)", "status": "pending", "activeForm": "Building frontend (if changed)"},
+  {"content": "Builder le backend Windows si modifié ou forcé (go build)", "status": "pending", "activeForm": "Building Windows binary (if changed or forced)"},
   {"content": "Exécuter les tests post-build", "status": "pending", "activeForm": "Running post-build tests"},
   {"content": "Arrêter le serveur actuel", "status": "pending", "activeForm": "Stopping current server"},
   {"content": "Démarrer le nouveau serveur", "status": "pending", "activeForm": "Starting new server"},
