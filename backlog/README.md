@@ -17,6 +17,7 @@ backlog/
 
 | Fichier | Description |
 |---------|-------------|
+| [usb-modal-layout-compact.md](TODO/usb-modal-layout-compact.md) | Réorganisation modale USB : sans scroll, bouton Flash USB sur même ligne que "Envoyer et configurer" |
 | [websocket-broadcast-filtre.md](TODO/websocket-broadcast-filtre.md) | Filtrage des broadcasts WebSocket par type de client |
 | [generateur-ia.md](TODO/generateur-ia.md) | Générateur de jeu complet via IA |
 | [metadata-binaires.md](TODO/metadata-binaires.md) | Métadonnées dans les binaires (nom, version, icône) |
