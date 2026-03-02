@@ -4,6 +4,7 @@
 #include "Common/led.h"
 #include "click_nvsConfig.h"
 #include "click_serverConnection.h"
+#include "click_broadcaster.h"
 
 #ifdef USE_WEBSOCKET
 #include "click_websocket_espidf.h"
@@ -24,23 +25,30 @@ void WiFiStationConnected(WiFiEvent_t event, WiFiEventInfo_t info){
 
 }
 
-void WiFiGotIP(WiFiEvent_t event, WiFiEventInfo_t info){
-  ESP_LOGI(WIFI_TAG,"Adresse IP obtenue %s", WiFi.localIP().toString());
+// Try connecting to a server IP via WebSocket or TCP.
+// Returns true on success, sets serverIP and localUdpPort globals.
+bool tryConnectToServer(const String& ip, uint16_t port) {
+    ESP_LOGI(WIFI_TAG, "Trying server %s:%d", ip.c_str(), port);
+    serverIP = ip;
+    localUdpPort = port;
 
-    BuzzClickConfig& cfg = nvsGetConfig();
-
-    // If server_ip is configured in NVS, use it directly
-    if (cfg.server_ip.length() > 0) {
-        serverIP = cfg.server_ip;
-        localUdpPort = cfg.server_tcp_port;
-        ESP_LOGI(WIFI_TAG, "Using NVS server: %s:%d", serverIP.c_str(), localUdpPort);
-    } else {
-        // Fallback: discover server via mDNS
-        if (!getServerIP()) {
-            ESP_LOGE(WIFI_TAG, "Failed to get server IP. Restarting...");
-            ESP.restart();
-        }
+#ifdef USE_WEBSOCKET
+    if (connectWebSocket(ip, port)) {
+        ESP_LOGI(WIFI_TAG, "WebSocket connected to %s:%d", ip.c_str(), port);
+        return true;
     }
+#else
+    if (connectSRV()) {
+        ESP_LOGI(WIFI_TAG, "TCP connected to %s:%d", ip.c_str(), port);
+        return true;
+    }
+#endif
+    ESP_LOGW(WIFI_TAG, "Failed to connect to %s:%d", ip.c_str(), port);
+    return false;
+}
+
+void WiFiGotIP(WiFiEvent_t event, WiFiEventInfo_t info){
+    ESP_LOGI(WIFI_TAG, "Adresse IP obtenue %s", WiFi.localIP().toString());
 
     resetGame();
     yield();
@@ -50,19 +58,108 @@ void WiFiGotIP(WiFiEvent_t event, WiFiEventInfo_t info){
     ESP_LOGI(WIFI_TAG, "Boot phase: ORANGE 1/4 (WiFi connected)");
     delay(500);
 
-#ifdef USE_WEBSOCKET
-    // WebSocket protocol
-    if (!connectWebSocket(serverIP, 80)) {
-        ESP_LOGE(WIFI_TAG, "Failed to connect WebSocket. Restarting...");
-        ESP.restart();
+    // Start UDP broadcast listener for server discovery
+    resetBroadcastDiscovery();
+    if (!startBroadcastListener(CONTROLER_PORT)) {
+        ESP_LOGE(WIFI_TAG, "Failed to start broadcast listener");
     }
-#else
-    // TCP/UDP legacy protocol
-    if (!connectSRV()) {
-        ESP_LOGE(WIFI_TAG, "Failed to connect to server. Restarting...");
-        ESP.restart();
+
+    // === BOOT PHASE 4: YELLOW PULSING - Waiting for broadcast ===
+    ESP_LOGI(WIFI_TAG, "Boot phase: YELLOW pulsing (waiting for broadcast)");
+    bool connected = false;
+    const unsigned long BROADCAST_TIMEOUT_MS = 30000; // 30s max wait
+    unsigned long waitStart = millis();
+
+    while (!connected) {
+        // Yellow pulsing while waiting for broadcast
+        bool pulseState = false;
+        while (!hasBroadcastDiscovery()) {
+            esp_task_wdt_reset();
+
+            // Yellow pulsing at 2Hz
+            pulseState = !pulseState;
+            if (pulseState) {
+                setLedColor(255, 200, 0, true);
+            } else {
+                setLedColor(64, 50, 0, true);
+            }
+            delay(250);
+
+            // Timeout: fall back to NVS or mDNS
+            if (millis() - waitStart > BROADCAST_TIMEOUT_MS) {
+                ESP_LOGW(WIFI_TAG, "Broadcast timeout after %d ms, trying fallback", BROADCAST_TIMEOUT_MS);
+                break;
+            }
+        }
+
+        if (hasBroadcastDiscovery()) {
+            // === BOOT PHASE 5: BLUE RAPID - Trying all IPs ===
+            ESP_LOGI(WIFI_TAG, "Boot phase: BLUE rapid (trying %d IPs)", getBroadcastDiscovery().ipCount);
+            const BroadcastDiscovery& disc = getBroadcastDiscovery();
+
+            for (int i = 0; i < disc.ipCount; i++) {
+                esp_task_wdt_reset();
+
+                // Blue rapid blink for each attempt
+                setLedColor(0, 0, 255, true);
+                delay(100);
+                setLedColor(0, 0, 64, true);
+                delay(100);
+
+                if (tryConnectToServer(disc.ips[i], disc.serverPort)) {
+                    connected = true;
+                    break;
+                }
+            }
+
+            if (!connected) {
+                ESP_LOGW(WIFI_TAG, "All broadcast IPs failed, waiting for next heartbeat...");
+                resetBroadcastDiscovery();
+                waitStart = millis(); // reset timeout for next round
+                continue;
+            }
+        } else {
+            // Broadcast timeout: try NVS server_ip or mDNS as fallback
+            BuzzClickConfig& cfg = nvsGetConfig();
+
+            if (cfg.server_ip.length() > 0) {
+                ESP_LOGI(WIFI_TAG, "Fallback: using NVS server %s:%d", cfg.server_ip.c_str(), cfg.server_tcp_port);
+                setLedColor(0, 0, 255, true);
+                delay(200);
+
+                if (tryConnectToServer(cfg.server_ip, cfg.server_tcp_port)) {
+                    connected = true;
+                } else {
+                    ESP_LOGW(WIFI_TAG, "NVS server failed, retrying broadcast...");
+                    resetBroadcastDiscovery();
+                    waitStart = millis();
+                    continue;
+                }
+            } else {
+                // Last resort: mDNS discovery
+                ESP_LOGI(WIFI_TAG, "Fallback: trying mDNS discovery");
+                if (getServerIP()) {
+                    BuzzClickConfig& cfg2 = nvsGetConfig();
+                    if (tryConnectToServer(serverIP, cfg2.server_tcp_port > 0 ? cfg2.server_tcp_port : 80)) {
+                        connected = true;
+                    }
+                }
+
+                if (!connected) {
+                    ESP_LOGW(WIFI_TAG, "mDNS fallback failed, retrying broadcast...");
+                    resetBroadcastDiscovery();
+                    waitStart = millis();
+                    continue;
+                }
+            }
+        }
     }
-    // === BOOT PHASE 4: GREEN 2/4 - Server connected (TCP mode) ===
+
+    // Stop broadcast listener once connected (no longer needed during active session)
+    stopBroadcastListener();
+
+#ifndef USE_WEBSOCKET
+    // TCP legacy mode: also set up game broadcast UDP listener
     setLedColor(0, 255, 0, true, 0, 2);
     ESP_LOGI(WIFI_TAG, "Boot phase: GREEN 2/4 (server connected)");
     yield();

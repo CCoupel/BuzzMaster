@@ -188,8 +188,12 @@ func TestE2E_SingleBuzzerGameFlow(t *testing.T) {
 		t.Error("Game should be in READY phase")
 	}
 
-	// Start the game
+	// Start the game (Start() launches a 3s countdown goroutine before entering STARTED)
 	engine.Start(30)
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) && !engine.IsGameStarted() {
+		time.Sleep(50 * time.Millisecond)
+	}
 	if !engine.IsGameStarted() {
 		t.Error("Game should be started")
 	}
@@ -331,8 +335,12 @@ func TestE2E_GameStateMachine(t *testing.T) {
 		t.Error("Should be in READY phase")
 	}
 
-	// READY -> START
+	// READY -> START (Start() launches a 3s countdown goroutine before entering STARTED)
 	engine.Start(10)
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) && !engine.IsGameStarted() {
+		time.Sleep(50 * time.Millisecond)
+	}
 	if !engine.IsGameStarted() {
 		t.Error("Should be in START phase")
 	}
@@ -355,13 +363,15 @@ func TestE2E_GameStateMachine(t *testing.T) {
 		t.Error("Should be in STOP phase")
 	}
 
-	// Verify state change sequence
+	// Verify state change sequence.
+	// Start() emits COUNTDOWN immediately, then STARTED when the countdown goroutine finishes.
 	expectedSequence := []game.GamePhase{
 		game.PhasePrepare,
 		game.PhaseReady,
 		game.PhaseCountdown,
+		game.PhaseStarted, // emitted by actualStart() after countdown
 		game.PhasePaused,
-		game.PhaseStarted,
+		game.PhaseStarted, // emitted by Continue()
 		game.PhaseStopped,
 	}
 

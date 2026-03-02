@@ -524,8 +524,13 @@ func TestEngine_ClearBumpers(t *testing.T) {
 		t.Error("Bumper should be cleared")
 	}
 
-	if e.GetTeam("red") != nil {
-		t.Error("Team should be cleared")
+	// ClearBumpers keeps teams intact (only clears bumper references from teams)
+	if e.GetTeam("red") == nil {
+		t.Error("Team should be kept after ClearBumpers")
+	}
+	// Team's bumper reference should be reset
+	if e.GetTeam("red").Bumper != "" {
+		t.Error("Team's bumper reference should be cleared")
 	}
 }
 
@@ -562,8 +567,10 @@ func TestEngine_Reveal(t *testing.T) {
 		t.Errorf("Expected empty answer with no question, got %s", answer)
 	}
 
-	// With question
+	// With question: Reveal requires STOPPED or PAUSED phase.
+	// Ready() sets phase to PREPARE, so we must stop first.
 	e.Ready("q1", &Question{ID: "q1", Answer: "42"})
+	e.Stop()
 	answer = e.Reveal()
 
 	if answer != "42" {

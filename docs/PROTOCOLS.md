@@ -233,6 +233,67 @@ Matches ESP32 format exactly:
 }
 ```
 
+## UDP Broadcast Server Discovery (v3.2.0)
+
+The server sends periodic UDP heartbeat messages so BuzzClick buzzers can discover the server IP automatically, without requiring manual configuration of a static server address.
+
+### Heartbeat Format
+
+```
+BUZZ_SERVER|<IP1>|<IP2>|...|<PORT>\0
+```
+
+- Null-terminated (`\0`) for consistency with the existing TCP/UDP protocol convention
+- The server includes **all active IPv4 addresses** (one per network interface), excluding loopback (127.x.x.x) and link-local (169.254.x.x)
+- `PORT` is the HTTP server port (default: 80; use 443 for HTTPS)
+
+**Examples:**
+
+```
+BUZZ_SERVER|192.168.1.50|80\0                              # Single interface
+BUZZ_SERVER|192.168.1.50|10.0.0.50|80\0                   # Two interfaces
+BUZZ_SERVER|192.168.1.50|192.168.4.1|10.0.0.50|443\0      # Three interfaces, HTTPS
+```
+
+### Server Side (BroadcasterManager)
+
+- Sends heartbeats via UDP broadcast to all active network interface broadcast addresses (e.g. `192.168.1.255`, `10.0.0.255`)
+- Falls back to `192.168.4.255` if no interfaces are found
+- **Normal mode**: heartbeat every **5 seconds**
+- **Enrollment mode**: heartbeat every **1 second** (triggered during buzzer pairing)
+- Sends an immediate heartbeat at startup so buzzers connect quickly
+- Implemented in `server-go/internal/server/broadcaster.go` (`BroadcasterManager`)
+- UDP socket for sending is managed by `server-go/internal/server/udp.go` (`UDPBroadcaster`)
+
+### Buzzer Side (BuzzClick Firmware v3.2.0)
+
+The buzzer listens for heartbeats on port 1234 (AsyncUDP) immediately after obtaining a WiFi IP address.
+
+**Multi-IP failover**: when a heartbeat is received, the buzzer tries each IP in order until one connects successfully. If all IPs fail, it resets and waits for the next heartbeat.
+
+**Fallback chain** (in order):
+1. **UDP Broadcast** — primary method, IPs from heartbeat (30s timeout)
+2. **NVS stored IP** — uses `server_ip` saved in flash from previous session
+3. **mDNS** — last resort, queries `_sock._tcp` service
+4. If all fallbacks fail: reset discovery and retry broadcast
+
+Implemented in:
+- `src/BuzzClick/click_broadcaster.h` — UDP listener, heartbeat parser, discovery state
+- `src/BuzzClick/click_WifiManager.h` — boot sequence integration, fallback chain
+
+### Boot Sequence LED Indicators (v3.2.0)
+
+| Phase | LED | Condition |
+|-------|-----|-----------|
+| 1 | White 1/4 | Power on / init |
+| 2 | Red 1/4 | WiFi connecting |
+| 3 | Orange 1/4 | WiFi connected, IP obtained |
+| **4** | **Yellow pulsing (2 Hz)** | **Waiting for UDP broadcast heartbeat** |
+| **5** | **Blue rapid blink** | **Trying each discovered IP** |
+| 6 | Green 2/4 (TCP mode only) | Server connected |
+
+Phases 4 and 5 are new in v3.2.0. Phase 4 pulses between bright yellow (`255,200,0`) and dim yellow (`64,50,0`). Phase 5 blinks between bright blue (`0,0,255`) and dim blue (`0,0,64`) for each connection attempt.
+
 ## Network Configuration
 
 ### Current (ESP32)
@@ -255,5 +316,5 @@ Same network configuration, implemented via:
 |---------|------|-------------|
 | HTTP | 80 | Web interface |
 | TCP | 1234 | BuzzClick buzzer protocol |
-| UDP | 1234 | Broadcast (same as TCP) |
+| UDP | 1234 | Broadcast server discovery heartbeat + game broadcast |
 | DNS | 53 | Captive portal (optional) |

@@ -1,4 +1,4 @@
-﻿package main
+package main
 
 import (
 	"buzzcontrol/assets"
@@ -30,6 +30,7 @@ type App struct {
 	engine      *game.Engine
 	tcpServer   *server.TCPServer
 	udpBcast    *server.UDPBroadcaster
+	broadcaster *server.BroadcasterManager
 	httpServer  *server.HTTPServer
 	wsHub       *server.WebSocketHub
 	buzzerHub   *server.BuzzerWebSocketHub
@@ -169,6 +170,9 @@ func (a *App) init() {
 
 	// UDP broadcaster
 	a.udpBcast = server.NewUDPBroadcaster(a.config.Server.TCPPort)
+
+	// BroadcasterManager: periodic BUZZ_SERVER heartbeat for automatic IP discovery
+	a.broadcaster = server.NewBroadcasterManager(a.udpBcast, a.config.Server.HTTPPort)
 
 	// HTTP server
 	a.httpServer = server.NewHTTPServer(a.config.Server.HTTPPort, a.engine, a.wsHub, a.buzzerHub, a.logsHub)
@@ -480,6 +484,10 @@ func (a *App) start() error {
 	}
 	a.logger.Info(game.LogComponentUDP, "UDP broadcaster started on port %d", a.config.Server.TCPPort)
 
+	// Start BUZZ_SERVER heartbeat broadcasts for automatic IP discovery
+	a.broadcaster.Start()
+	a.logger.Info(game.LogComponentUDP, "BroadcasterManager started (interval=5s, http_port=%d)", a.config.Server.HTTPPort)
+
 	// Start HTTP server
 	if err := a.httpServer.Start(); err != nil {
 		return err
@@ -511,6 +519,7 @@ func (a *App) stop() {
 	a.dnsServer.Stop()
 	a.mdnsServer.Stop()
 	a.httpServer.Stop()
+	a.broadcaster.Stop()
 	a.tcpServer.Stop()
 	a.udpBcast.Stop()
 }
@@ -1271,6 +1280,8 @@ func (a *App) handleShowQRCode() {
 
 	a.engine.StartEnrollment(limit)
 	a.engine.SetPhase(game.PhaseEnroll)
+	// Switch UDP broadcast to fast mode (1s) so new devices discover the server quickly
+	a.broadcaster.SetEnrollmentMode(true)
 	server.LogInfo(game.LogComponentApp, "Entering ENROLL phase - QR code displayed, limit: %d", limit)
 	a.broadcastUpdate()
 	a.broadcastEnrollmentUpdate()
@@ -1279,6 +1290,8 @@ func (a *App) handleShowQRCode() {
 func (a *App) handleHideQRCode() {
 	a.engine.StopEnrollment()
 	a.engine.SetPhase(game.PhaseStopped)
+	// Restore normal UDP broadcast interval (5s)
+	a.broadcaster.SetEnrollmentMode(false)
 	server.LogInfo(game.LogComponentApp, "Exiting ENROLL phase - %d virtual players enrolled", a.engine.GetVirtualPlayerCount())
 	a.broadcastUpdate()
 	a.broadcastEnrollmentUpdate()

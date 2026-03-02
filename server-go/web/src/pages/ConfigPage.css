@@ -720,6 +720,26 @@
   line-height: 1;
 }
 
+/* UDP Discovery Info Banner */
+.udp-discovery-info {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  background: color-mix(in srgb, var(--accent-cyan, #00c8c8) 10%, white);
+  border-left: 3px solid var(--accent-cyan, #00c8c8);
+  border-radius: var(--radius-md);
+  font-size: 0.875rem;
+  color: var(--gray-700);
+  margin-bottom: var(--space-4);
+}
+
+.udp-discovery-icon {
+  font-size: 1.125rem;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
 /* =========================================
    Firmware Buzzers Section
    ========================================= */

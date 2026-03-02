@@ -118,6 +118,45 @@ Cette fonctionnalité sera disponible dans une future version.
 
 ---
 
+## Upgrade v3.2.0 : UDP Broadcast Server Discovery
+
+A partir de la version 3.2.0, les buzzers BuzzClick **découvrent automatiquement l'adresse IP du serveur** via des heartbeats UDP, sans configuration manuelle requise.
+
+### Ce qui change
+
+| Aspect | Avant v3.2.0 | Depuis v3.2.0 |
+|--------|--------------|---------------|
+| Découverte serveur | IP statique en NVS ou mDNS | UDP broadcast (primaire) → NVS → mDNS |
+| Séquence LED au boot | 4 phases | 6 phases (2 nouvelles : jaune + bleu) |
+| Configuration IP serveur | Requise manuellement | Automatique via broadcast |
+| Multi-interfaces serveur | Non supporté | Oui (jusqu'à 8 IPs en failover) |
+
+### Séquence LED complète (v3.2.0)
+
+| Phase | LED | Signification |
+|-------|-----|---------------|
+| 1 | Blanc 1/4 | Démarrage / init |
+| 2 | Rouge 1/4 | Connexion WiFi en cours |
+| 3 | Orange 1/4 | WiFi connecté, IP obtenue |
+| **4** | **Jaune pulsant (2 Hz)** | **Attente du heartbeat UDP du serveur (max 30s)** |
+| **5** | **Bleu clignotant rapide** | **Tentative de connexion sur chaque IP découverte** |
+| 6 | Vert 2/4 (mode TCP uniquement) | Connecté au serveur |
+
+### Chaîne de fallback (v3.2.0)
+
+Si aucun heartbeat n'est reçu après 30 secondes, le buzzer tente les méthodes suivantes dans l'ordre :
+
+1. **UDP Broadcast** — méthode principale (timeout 30s)
+2. **IP NVS** — utilise `server_ip` stockée en flash lors d'une session précédente
+3. **mDNS** — interroge le service `_sock._tcp`
+4. En cas d'échec total : réinitialise et réessaie le broadcast
+
+### Retrocompatibilite
+
+Les buzzers avec un ancien firmware (< 3.2.0) continuent de fonctionner avec le serveur v3.2.0. Aucune mise a jour obligatoire — la découverte automatique est un ajout, pas un remplacement du protocole existant.
+
+---
+
 ## Upgrade v3.0.0 : Support WebSocket Buzzers
 
 A partir de la version 3.0.0, le serveur BuzzControl supporte un **mode hybride TCP+WebSocket** pour les buzzers physiques.
@@ -163,6 +202,7 @@ Voir [docs/WEBSOCKET_PROTOCOL.md](WEBSOCKET_PROTOCOL.md) pour la specification c
 
 | Version Serveur | Version Firmware Compatible | Protocole | Notes |
 |-----------------|----------------------------|-----------|-------|
+| 3.2.0+ | 3.2.0+ | TCP + WebSocket | UDP broadcast discovery, LED phases 4-5 |
 | 3.0.0+ | 3.0.0+ | TCP + WebSocket | Mode hybride, retrocompatible |
 | 2.54.0+ | 2.54.0+ | TCP | Versioning unifie |
 | < 2.54.0 | 1.209.3 | TCP | Anciennes versions (hardcode dans platformio.ini) |

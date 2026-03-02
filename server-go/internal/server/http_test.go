@@ -103,13 +103,19 @@ func TestHTTPServer_Questions_Empty(t *testing.T) {
 		t.Errorf("Expected status 200, got %d", w.Code)
 	}
 
-	var questions []interface{}
+	// /questions returns an object (ESP32-compatible format with FSINFO key), not an array
+	var questions map[string]interface{}
 	if err := json.Unmarshal(w.Body.Bytes(), &questions); err != nil {
 		t.Errorf("Response is not valid JSON: %v", err)
 	}
 
-	if len(questions) != 0 {
-		t.Errorf("Expected empty questions list, got %d", len(questions))
+	// Only FSINFO key should be present when there are no questions
+	if _, ok := questions["FSINFO"]; !ok {
+		t.Error("Expected FSINFO key in response")
+	}
+	// No question entries (only FSINFO)
+	if len(questions) != 1 {
+		t.Errorf("Expected 1 key (FSINFO only), got %d", len(questions))
 	}
 }
 
@@ -133,13 +139,18 @@ func TestHTTPServer_Questions_WithData(t *testing.T) {
 
 	server.mux.ServeHTTP(w, req)
 
-	var questions []map[string]interface{}
+	// /questions returns an object (ESP32-compatible format with FSINFO key)
+	var questions map[string]interface{}
 	if err := json.Unmarshal(w.Body.Bytes(), &questions); err != nil {
 		t.Errorf("Response is not valid JSON: %v", err)
 	}
 
-	if len(questions) != 1 {
-		t.Errorf("Expected 1 question, got %d", len(questions))
+	// Should have 1 question entry + FSINFO = 2 keys
+	if len(questions) != 2 {
+		t.Errorf("Expected 2 keys (1 question + FSINFO), got %d", len(questions))
+	}
+	if _, ok := questions["/files/questions/1"]; !ok {
+		t.Error("Expected question key /files/questions/1")
 	}
 }
 
@@ -434,9 +445,13 @@ func TestHTTPServer_Backup(t *testing.T) {
 
 	server.mux.ServeHTTP(w, req)
 
-	// Currently not implemented
-	if w.Code != http.StatusNotImplemented {
-		t.Errorf("Expected 501 Not Implemented, got %d", w.Code)
+	// /backup redirects to /fs-backup
+	if w.Code != http.StatusFound {
+		t.Errorf("Expected 302 redirect, got %d", w.Code)
+	}
+	loc := w.Header().Get("Location")
+	if loc != "/fs-backup" {
+		t.Errorf("Expected redirect to /fs-backup, got %s", loc)
 	}
 }
 
@@ -448,9 +463,9 @@ func TestHTTPServer_Restore(t *testing.T) {
 
 	server.mux.ServeHTTP(w, req)
 
-	// Currently not implemented
-	if w.Code != http.StatusNotImplemented {
-		t.Errorf("Expected 501 Not Implemented, got %d", w.Code)
+	// /restore is implemented: returns 400 when no multipart body is provided
+	if w.Code == http.StatusNotFound {
+		t.Errorf("Expected /restore to be implemented, got 404")
 	}
 }
 

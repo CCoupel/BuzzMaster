@@ -412,6 +412,11 @@ export default function ConfigPage() {
                 Parametres WiFi par defaut pour les buzzers. Ces valeurs seront envoyees aux buzzers lors de la configuration USB.
               </p>
 
+              <div className="udp-discovery-info">
+                <span className="udp-discovery-icon">📡</span>
+                <span>L'adresse IP du serveur est decouverte automatiquement par les buzzers via UDP broadcast.</span>
+              </div>
+
               <div className="wifi-form">
                 <label className="wifi-field">
                   <span>SSID WiFi</span>
@@ -431,25 +436,6 @@ export default function ConfigPage() {
                     onChange={(e) => setWifiPassword(e.target.value)}
                     placeholder="Mot de passe (min 8 car.)"
                     maxLength={63}
-                  />
-                </label>
-                <label className="wifi-field">
-                  <span>IP Serveur</span>
-                  <input
-                    type="text"
-                    value={wifiServerIp}
-                    onChange={(e) => setWifiServerIp(e.target.value)}
-                    placeholder="ex: 192.168.1.100"
-                  />
-                </label>
-                <label className="wifi-field">
-                  <span>Port Serveur</span>
-                  <input
-                    type="number"
-                    value={wifiServerPort}
-                    onChange={(e) => setWifiServerPort(parseInt(e.target.value) || 0)}
-                    min={1}
-                    max={65535}
                   />
                 </label>
               </div>
@@ -877,7 +863,7 @@ export default function ConfigPage() {
       {showUSBModal && (
         <USBConfigModal
           onClose={() => setShowUSBModal(false)}
-          wifiConfig={{ ssid: wifiSsid, password: wifiPassword, serverIp: wifiServerIp, serverPort: wifiServerPort }}
+          wifiConfig={{ ssid: wifiSsid, password: wifiPassword }}
           firmwareInfo={firmwareInfo}
         />
       )}

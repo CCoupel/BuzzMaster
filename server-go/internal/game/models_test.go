@@ -276,7 +276,7 @@ func TestFullGameState_ToJSON(t *testing.T) {
 	}
 
 	// Should have GameState fields at root level
-	if decoded["PHASE"] != "START" {
+	if decoded["PHASE"] != "STARTED" {
 		t.Errorf("PHASE mismatch: %v", decoded["PHASE"])
 	}
 }

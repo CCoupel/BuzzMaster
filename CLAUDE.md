@@ -146,6 +146,37 @@ cd server-go && ./build.ps1
 - BuzzClick uses MAC address as unique ID
 - mDNS service name is `_sock._tcp` for server discovery
 
+### UDP Broadcast Server Discovery (v3.2.0)
+
+Le serveur envoie des heartbeats UDP periodiques pour que les buzzers BuzzClick puissent decouvrir automatiquement l'IP du serveur sans configuration manuelle.
+
+**Format heartbeat** : `BUZZ_SERVER|IP1|IP2|...|PORT\0` (null-termine)
+
+```go
+// BroadcasterManager — server-go/internal/server/broadcaster.go
+// Intervalle normal : 5s | Enrollment mode : 1s
+// Envoie un heartbeat immediat au demarrage
+bm := NewBroadcasterManager(udpBroadcaster, httpPort)
+bm.Start()
+bm.SetEnrollmentMode(true)  // accelère pendant l'appairage
+```
+
+**Chaine de fallback firmware** (click_WifiManager.h) :
+1. UDP Broadcast (timeout 30s) → IPs du heartbeat, essai dans l'ordre
+2. IP NVS (`server_ip` en flash)
+3. mDNS (`_sock._tcp`)
+4. Retry broadcast
+
+**Phases LED nouvelles (boot sequence)** :
+- Phase 4 : Jaune pulsant 2 Hz — attente heartbeat UDP
+- Phase 5 : Bleu clignotant rapide — tentative connexion sur chaque IP
+
+**Fichiers cles** :
+- `server-go/internal/server/broadcaster.go` : `BroadcasterManager`, `BuildHeartbeat`, `GetServerIPs`
+- `server-go/internal/server/udp.go` : `UDPBroadcaster` (envoi multi-interfaces)
+- `src/BuzzClick/click_broadcaster.h` : UDP listener AsyncUDP, parser, etat decouverte
+- `src/BuzzClick/click_WifiManager.h` : Integration boot sequence + fallback chain
+
 ### OTA Firmware Endpoints (v3.1.0+)
 
 ```
@@ -232,7 +263,8 @@ Toutes les vues TV doivent tenir entièrement à l'écran sans défilement :
 - **Firmware BuzzClick** :
   - `src/BuzzClick/click_nvsConfig.h` : Stockage NVS (WiFi, IP serveur, port, ssid2/pass2)
   - `src/BuzzClick/click_usbConfig.h` : Protocole AT sur USB serie
-  - `src/BuzzClick/click_WifiManager.h` : Connexion WiFi (priorite NVS)
+  - `src/BuzzClick/click_WifiManager.h` : Connexion WiFi, boot sequence + fallback chain UDP (v3.2.0)
+  - `src/BuzzClick/click_broadcaster.h` : UDP listener AsyncUDP, parser BUZZ_SERVER, etat decouverte (v3.2.0)
   - `src/BuzzClick/click_websocketClient.h` : Client WebSocket buzzer (v3.0.0, flag USE_WEBSOCKET)
   - `src/BuzzClick/click_serverConnection.h` : Handlers messages serveur (OTA_UPDATE, WIFI_CONFIG)
   - `src/BuzzClick/click_otaManager.h` : OTA manager (download + flash, v3.1.0)

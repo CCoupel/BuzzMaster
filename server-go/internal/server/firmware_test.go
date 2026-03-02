@@ -122,8 +122,8 @@ func TestFirmwareManager_TooLarge(t *testing.T) {
 	dir := t.TempDir()
 	fm := NewFirmwareManager(dir, "3.1.0")
 
-	// 3 MB – above the 2 MB maximum
-	data := makeFirmwareData(3 * 1024 * 1024)
+	// FirmwareMaxSize + 1 byte – strictly above the maximum
+	data := makeFirmwareData(FirmwareMaxSize + 1)
 	err := fm.SaveFirmware(data, "3.1.0")
 	if err == nil {
 		t.Error("Expected error for firmware that is too large, got nil")

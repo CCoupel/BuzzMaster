@@ -3,6 +3,43 @@
 Historique des versions du projet BuzzControl.
 
 
+## [3.2.0] - 2026-03-02
+
+### Added
+- **[Backend]**: `BroadcasterManager` — envoi de heartbeats UDP periodiques pour la decouverte automatique du serveur
+  - Format : `BUZZ_SERVER|IP1|IP2|...|PORT\0` (multi-interfaces, null-termine)
+  - Intervalle normal : 5 secondes ; mode enrollment : 1 seconde
+  - Heartbeat immediat au demarrage pour connexion rapide des buzzers
+  - Detection automatique de toutes les IPs IPv4 actives du serveur (hors loopback et link-local)
+  - Broadcast sur toutes les adresses de broadcast des interfaces reseau actives
+- **[Firmware]**: `click_broadcaster.h` — listener UDP AsyncUDP pour reception des heartbeats serveur
+  - Parsing du format `BUZZ_SERVER|IP1|IP2|...|PORT` (jusqu'a 8 IPs)
+  - Stockage RAM uniquement (stateless, mis a jour a chaque heartbeat)
+  - Fonctions : `startBroadcastListener`, `parseBroadcastHeartbeat`, `hasBroadcastDiscovery`, `getBroadcastDiscovery`
+- **[Firmware]**: Failover multi-IPs dans `click_WifiManager.h`
+  - Chaine de fallback : broadcast → IP NVS → mDNS → retry broadcast
+  - Timeout broadcast : 30 secondes avant passage au fallback
+  - Essai de chaque IP decouverte dans l'ordre jusqu'a connexion reussie
+- **[Firmware]**: Nouvelles phases LED dans la sequence de boot (phases 4 et 5)
+  - Phase 4 — Jaune pulsant 2 Hz : attente du heartbeat UDP (en cours de recherche serveur)
+  - Phase 5 — Bleu clignotant rapide : tentative de connexion sur chaque IP decouverte
+
+### Changed
+- **[Frontend]**: Suppression des champs IP serveur et Port de la section WiFi de ConfigPage
+  - La configuration IP serveur n'est plus necessaire — decouverte automatique via UDP broadcast
+  - Simplification de l'interface de configuration buzzer
+
+### Technical
+- **Backend** :
+  - `server-go/internal/server/broadcaster.go` : `BroadcasterManager` (nouveau)
+  - `server-go/internal/server/udp.go` : `UDPBroadcaster`, `BroadcastRaw`, detection broadcast multi-interfaces
+  - `server-go/cmd/server/main.go` : Integration `BroadcasterManager` dans le cycle de vie du serveur
+- **Firmware** :
+  - `src/BuzzClick/click_broadcaster.h` : UDP listener, parser, etat de decouverte (nouveau)
+  - `src/BuzzClick/click_WifiManager.h` : Boot sequence enrichie (phases 4-5), chaine de fallback
+
+---
+
 ## [3.1.2] - 2026-02-26
 
 ### Added
