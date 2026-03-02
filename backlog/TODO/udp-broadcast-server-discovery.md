@@ -12,12 +12,13 @@ Découverte automatique de l'adresse IP du serveur par les buzzers via un heartb
 
 ## Objectifs
 
-- [ ] Serveur Go envoie heartbeat UDP broadcast avec **toutes ses IPs** (startup automatique)
-- [ ] Buzzers écoutent et mettent à jour la **liste d'IPs** en RAM
+- [ ] Formulaire USB simplifié : supprimer champs IP et port serveur
+- [ ] Serveur Go envoie heartbeat UDP broadcast avec **toutes ses IPs et le port** (startup automatique)
+- [ ] Buzzers écoutent et mettent à jour la **liste d'IPs et le port** en RAM
 - [ ] Buzzers essaient chaque IP jusqu'à succès lors de TCP connection
 - [ ] LED boot sequence intègre l'étape "waiting for broadcast"
 - [ ] Tests unitaires et E2E
-- [ ] Documentation du protocole
+- [ ] Documentation du protocole et du formulaire USB simplifié
 
 ## Architecture
 
@@ -31,9 +32,14 @@ Découverte automatique de l'adresse IP du serveur par les buzzers via un heartb
   - Exemple : `BUZZ_SERVER|192.168.1.50|10.0.0.50|80`
 - Log chaque broadcast envoyé avec la liste des IPs
 
-### Frontend (React)
+### Frontend (React) - Simplification formulaire USB
 
-N/A - Le broadcast est transparent pour l'interface (démarrage automatique au startup serveur)
+**USBConfigModal.jsx** (mise à jour) :
+- Supprimer les champs **"IP du serveur"** et **"Port du serveur"** (plus nécessaires)
+- Garder uniquement : SSID1, Password1, SSID2, Password2
+- Ajouter note explicative : "L'IP du serveur est découverte automatiquement via UDP broadcast"
+- Simplifier le formulaire AT : `AT+WIFI="SSID1","PASS1","SSID2","PASS2"`
+- Utiliser ports par défaut : **80 (HTTP)** ou **443 (HTTPS)** selon configuration serveur
 
 ### Firmware (ESP32-C3)
 
@@ -60,12 +66,20 @@ N/A - Le broadcast est transparent pour l'interface (démarrage automatique au s
 
 ## Tâches
 
+### Phase 0 : Frontend - Simplification formulaire USB
+- [ ] Supprimer champs "IP du serveur" et "Port du serveur" de `USBConfigModal.jsx`
+- [ ] Garder uniquement : SSID1, Password1, SSID2, Password2
+- [ ] Simplifier protocole AT : `AT+WIFI="SSID1","PASS1","SSID2","PASS2"`
+- [ ] Ajouter note explicative : "L'adresse IP du serveur est découverte automatiquement via UDP broadcast"
+- [ ] Compacter le formulaire visuel (moins de champs = modale plus petite)
+- [ ] Tests : vérifier que la modale tient sans scroll sur 1280×720 et 1920×1080
+
 ### Phase 1 : Backend (Go)
 - [ ] Implémenter `BroadcasterManager` dans `internal/server/broadcaster.go`
 - [ ] Détecter toutes les IPs actives du serveur (net.Interfaces, exclure localhost)
-- [ ] Émettre UDP broadcast toutes les Xs au startup serveur
+- [ ] Émettre UDP broadcast toutes les Xs au startup serveur avec port (80 ou 443)
 - [ ] Format : `BUZZ_SERVER|IP1|IP2|...|PORT`
-- [ ] Tests unitaires (détection IPs, format broadcast)
+- [ ] Tests unitaires (détection IPs, format broadcast, ports HTTP/HTTPS)
 
 ### Phase 2 : Firmware (ESP32-C3)
 - [ ] Créer `click_broadcaster.h` avec UDP listener (port 1234)
@@ -97,9 +111,14 @@ v3.2.0
 ## Notes d'implémentation
 
 - **Port UDP** : 1234 (partagé avec TCP buzzer protocol, même pour toutes les IPs)
+- **Ports HTTP/HTTPS par défaut** :
+  - **80** (HTTP standard) - utilisé par défaut si pas de configuration HTTPS
+  - **443** (HTTPS) - utiliser si le serveur est configuré en HTTPS
+  - Le port broadcasté dans le message UDP correspond au port du serveur
 - **Intervalle** : 5s en mode normal, 1s pendant enrollment (flag à définir)
 - **Format** : `BUZZ_SERVER|IP1|IP2|...|PORT` (plaintext, null-terminated)
-  - Exemple : `BUZZ_SERVER|192.168.1.50|10.0.0.50|80\0`
+  - Exemple : `BUZZ_SERVER|192.168.1.50|10.0.0.50|80\0` (HTTP)
+  - Exemple : `BUZZ_SERVER|192.168.1.50|10.0.0.50|443\0` (HTTPS)
   - Max 3-4 IPs recommandé pour tenir dans MTU (~1500 bytes)
 - **Détection IPs serveur** : `net.Interfaces()` en Go, exclure localhost/loopback
 - **Stockage buzzer** : RAM uniquement (liste d'IPs, stateless, mise à jour continue)
@@ -109,7 +128,10 @@ v3.2.0
   - Étape 4 "Waiting for broadcast" : Attente continue (LED jaune). Dès réception → passe à étape 5
   - Étape 5 "Trying IPs" : Essaie chaque IP jusqu'à succès. Si aucune IP répond → retour étape 4
 - **Logging buzzer** : Détaillé (heartbeat reçu, IPs, résultats TCP) pour débugage
-- **Logging serveur** : Au startup, affiche les IPs qui seront broadcastées
+- **Logging serveur** : Au startup, affiche les IPs qui seront broadcastées et le port utilisé
+- **Formulaire USB simplifié** : Plus de champs IP/Port à demander à l'utilisateur
+  - Message AT réduit : `AT+WIFI="SSID1","PASS1","SSID2","PASS2"`
+  - Les buzzers découvrent automatiquement l'IP du serveur via UDP broadcast
 
 ## Dépendances
 
