@@ -1627,7 +1627,8 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
                         const teamColor = teamData?.COLOR
                           ? (Array.isArray(teamData.COLOR) ? `rgb(${teamData.COLOR.join(',')})` : teamData.COLOR)
                           : 'var(--gray-400)'
-                        const isActive = ['STARTED', 'PAUSED'].includes(gameState.phase) && teamName === gameState.MEMORY_CURRENT_TEAM
+                        // Highlight current team during COUNTDOWN/STARTED/PAUSED
+                        const isActive = ['COUNTDOWN', 'STARTED', 'PAUSED'].includes(gameState.phase) && teamName === gameState.MEMORY_CURRENT_TEAM
                         return (
                           <div
                             key={teamName}

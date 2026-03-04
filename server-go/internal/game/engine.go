@@ -470,6 +470,33 @@ func (e *Engine) actualStart() {
 	e.state.MemoryMatchedPairs = nil
 	e.state.MemoryErrors = 0
 
+	// Auto-initialize Memory participating teams if not already set
+	// This handles SOLO mode where admin doesn't select teams explicitly
+	if e.state.Question != nil && e.state.Question.Type == QuestionTypeMemory &&
+		(e.state.MemoryParticipatingTeams == nil || len(e.state.MemoryParticipatingTeams) == 0) {
+		// Get all teams for auto-initialization
+		allTeams := make([]string, 0, len(e.data.Teams))
+		for teamName := range e.data.Teams {
+			allTeams = append(allTeams, teamName)
+		}
+		// Initialize with all teams
+		e.state.MemoryParticipatingTeams = allTeams
+		if len(allTeams) > 0 {
+			e.state.MemoryCurrentTeam = allTeams[0]
+			if team, exists := e.data.Teams[allTeams[0]]; exists {
+				e.state.MemoryCurrentTeamColor = team.Color
+			}
+		}
+		e.state.MemoryTeamPairs = make(map[string]int)
+		e.state.MemoryTeamErrors = make(map[string]int)
+		e.state.MemoryPairOwners = make(map[int]string)
+		for _, teamName := range allTeams {
+			e.state.MemoryTeamPairs[teamName] = 0
+			e.state.MemoryTeamErrors[teamName] = 0
+		}
+		log.Printf("[Engine] Auto-initialized Memory participating teams: %v", allTeams)
+	}
+
 	// Reset QCM hints state for fresh start
 	e.state.QcmInvalidated = nil
 
