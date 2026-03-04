@@ -1566,8 +1566,10 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
                       // Cards are flipped (face up) during: cascading COUNTDOWN reveal, still hiding after countdown, progressive REVEAL, matched pairs, or player clicked
                       const isFlipped = isInCountdownCascade || isStillVisibleInCascade || (isGameplayPhase && (isProgressivelyRevealed || isMatched || isPlayerFlipped))
                       const isJustMatched = justMatchedPairs.includes(cardData.pairId)
-                      // VPlayer cannot flip cards - only admin can
-                      const canClick = gameState.phase === 'STARTED' && !isMatched && !isFlipped && !isVPlayer
+                      // VPlayer can flip cards only if in active team (Memory multi-team mode)
+                      // Admin TV can always flip, VPlayer can flip only if in MEMORY_CURRENT_TEAM
+                      const isVPlayerInActiveTeam = isVPlayer && teamName && gameState.MEMORY_CURRENT_TEAM && teamName === gameState.MEMORY_CURRENT_TEAM
+                      const canClick = gameState.phase === 'STARTED' && !isMatched && !isFlipped && (!isVPlayer || isVPlayerInActiveTeam)
                       // Only show matched styling during gameplay phases (not before game starts)
                       const showMatchedStyle = isGameplayPhase && isMatched
                       // Get team color for matched pairs (convert pairId to string for JSON key lookup)
