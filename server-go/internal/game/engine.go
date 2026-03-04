@@ -235,6 +235,9 @@ func (e *Engine) Ready(questionID string, question *Question) {
 		team.Ready = false
 	}
 
+	// Always reset QCM hints state at PREPARE (new question or same question re-PREPARED)
+	e.state.QcmInvalidated = []string{}
+
 	// Reset Memory game state ONLY for NEW question
 	// This allows team selection to persist during PREPARE→READY transition
 	if isNewQuestion {
@@ -248,9 +251,6 @@ func (e *Engine) Ready(questionID string, question *Question) {
 		e.state.MemoryTeamErrors = map[string]int{}
 		e.state.MemoryParticipatingTeams = []string{}
 		e.state.MemoryPairOwners = map[int]string{}
-
-		// Reset QCM hints state for new question
-		e.state.QcmInvalidated = []string{}
 	}
 
 	log.Printf("[Engine] Game ready with question: %s", questionID)

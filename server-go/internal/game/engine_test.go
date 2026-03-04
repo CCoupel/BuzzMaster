@@ -1318,3 +1318,161 @@ func TestPhysicalBuzzerWorksWithoutVPlayer(t *testing.T) {
 	}
 }
 
+// ============================================================================
+// Tests for QCM hints reset at PREPARE (bugfix v3.2.1)
+// ============================================================================
+
+func makeQCMQuestion(id string) *Question {
+	return &Question{
+		ID:       id,
+		Question: "Test QCM?",
+		Type:     QuestionTypeQCM,
+		QCMAnswers: &QCMAnswers{
+			Red:    "Answer A",
+			Green:  "Answer B",
+			Yellow: "Answer C",
+			Blue:   "Answer D",
+		},
+		QCMCorrect:        "RED",
+		QCMHintsEnabled:   true,
+		QCMHintThreshold1: 0.25,
+		QCMHintThreshold2: 0.125,
+		Points:            "10",
+		Time:              "30",
+	}
+}
+
+// TestQCMHints_ResetOnNewQuestion verifies hints reset when a NEW question is PREPAREd
+func TestQCMHints_ResetOnNewQuestion(t *testing.T) {
+	e := NewEngine()
+
+	// Inject invalidated hints manually (simulates hints revealed during previous round)
+	e.mu.Lock()
+	e.state.QcmInvalidated = []string{"YELLOW", "BLUE"}
+	e.mu.Unlock()
+
+	// PREPARE a new question
+	e.Ready("q2", makeQCMQuestion("q2"))
+
+	state := e.GetState()
+	if len(state.QcmInvalidated) != 0 {
+		t.Errorf("QcmInvalidated should be empty after PREPARE of new question, got %v", state.QcmInvalidated)
+	}
+}
+
+// TestQCMHints_ResetOnSameQuestionRePrepared verifies hints reset when the SAME question is re-PREPAREd
+// This is the core bugfix: previously hints were NOT reset in this case.
+func TestQCMHints_ResetOnSameQuestionRePrepared(t *testing.T) {
+	e := NewEngine()
+	q := makeQCMQuestion("q1")
+
+	// First PREPARE cycle
+	e.Ready("q1", q)
+	e.StartImmediate(30)
+
+	// Inject invalidated hints (simulates timer triggering hints during gameplay)
+	e.mu.Lock()
+	e.state.QcmInvalidated = []string{"YELLOW", "BLUE"}
+	e.mu.Unlock()
+
+	// STOP then PREPARE the SAME question again
+	e.Stop()
+	e.Ready("q1", q)
+
+	state := e.GetState()
+	if len(state.QcmInvalidated) != 0 {
+		t.Errorf("QcmInvalidated should be empty after re-PREPARE of same question, got %v", state.QcmInvalidated)
+	}
+}
+
+// TestQCMHints_ResetAfterReveal verifies hints reset when PREPARE is called after REVEAL on same question
+func TestQCMHints_ResetAfterReveal(t *testing.T) {
+	e := NewEngine()
+
+	// Setup a team and bumper so ProcessButtonPress can advance state
+	e.SetTeams(map[string]*Team{
+		"red": {Name: "Red", Color: []int{255, 0, 0}},
+	})
+	e.SetBumpers(map[string]*Bumper{
+		"b1": {Name: "Buzzer1", Team: "red"},
+	})
+
+	q := makeQCMQuestion("q1")
+
+	// First cycle: PREPARE → START → STOP → REVEAL
+	e.Ready("q1", q)
+	e.StartImmediate(30)
+
+	// Inject hints mid-game
+	e.mu.Lock()
+	e.state.QcmInvalidated = []string{"BLUE"}
+	e.mu.Unlock()
+
+	// Stop then Reveal (Reveal requires STOPPED or PAUSED phase)
+	e.Stop()
+	e.Reveal()
+
+	// Verify hints still present after REVEAL (Reveal does not clear them)
+	stateBefore := e.GetState()
+	if len(stateBefore.QcmInvalidated) == 0 {
+		t.Log("Warning: QcmInvalidated was already empty before re-PREPARE (hint cleared by Stop/Reveal)")
+	}
+
+	// Re-PREPARE the SAME question (this is the bug scenario)
+	e.Ready("q1", q)
+
+	state := e.GetState()
+	if len(state.QcmInvalidated) != 0 {
+		t.Errorf("QcmInvalidated should be empty after re-PREPARE (same question after REVEAL), got %v", state.QcmInvalidated)
+	}
+}
+
+// TestQCMHints_AlwaysResetRegardlessOfIsNewQuestion verifies the fix across multiple cycles
+func TestQCMHints_AlwaysResetRegardlessOfIsNewQuestion(t *testing.T) {
+	e := NewEngine()
+	q := makeQCMQuestion("q1")
+
+	tests := []struct {
+		name            string
+		initialHints    []string
+		questionID      string
+		expectEmptyHints bool
+	}{
+		{
+			name:            "new question clears hints",
+			initialHints:    []string{"RED", "GREEN"},
+			questionID:      "q1",
+			expectEmptyHints: true,
+		},
+		{
+			name:            "same question re-prepared clears hints",
+			initialHints:    []string{"YELLOW"},
+			questionID:      "q1",
+			expectEmptyHints: true,
+		},
+		{
+			name:            "no hints — stays empty",
+			initialHints:    []string{},
+			questionID:      "q1",
+			expectEmptyHints: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Inject initial hint state
+			e.mu.Lock()
+			e.state.QcmInvalidated = tt.initialHints
+			e.mu.Unlock()
+
+			e.Ready(tt.questionID, q)
+
+			state := e.GetState()
+			isEmpty := len(state.QcmInvalidated) == 0
+			if isEmpty != tt.expectEmptyHints {
+				t.Errorf("QcmInvalidated empty=%v, want %v (got %v)", isEmpty, tt.expectEmptyHints, state.QcmInvalidated)
+			}
+		})
+	}
+}
+

@@ -3,6 +3,18 @@
 Historique des versions du projet BuzzControl.
 
 
+## [3.2.1] - 2026-03-04
+
+### Fixed
+- **[QCM Engine]**: Les hints QCM ne sont plus réinitialisés correctement lors d'un PREPARE sur la même question
+  - `QcmInvalidated` etait remis a zero uniquement quand `isNewQuestion == true`
+  - Quand une meme question etait re-PREPAREe (ex: apres REVEAL), les hints revelés du cycle precedent restaient visibles
+  - Correction : le reset est deplace en dehors du guard `isNewQuestion` pour garantir un etat propre a chaque PREPARE
+  - Fichier : `server-go/internal/game/engine.go`
+  - Tests : `server-go/internal/game/engine_test.go` (158 lignes de tests ajoutees)
+
+---
+
 ## [3.2.0] - 2026-03-02
 
 ### Added
