@@ -293,12 +293,12 @@ export default function useWebSocket() {
 
       case 'CONFIG_UPDATE':
         console.log('[WS] CONFIG_UPDATE:', MSG)
-        if (MSG?.neon_effect) {
-          setGameState(prev => ({
-            ...prev,
-            neonEffect: MSG.neon_effect,
-          }))
-        }
+        setGameState(prev => {
+          const updates = {}
+          if (MSG?.neon_effect !== undefined) updates.neonEffect = MSG.neon_effect
+          if (MSG?.default_question_image_is_custom !== undefined) updates.defaultQuestionImageIsCustom = MSG.default_question_image_is_custom
+          return Object.keys(updates).length > 0 ? { ...prev, ...updates } : prev
+        })
         break
 
       case 'LOG_HISTORY':

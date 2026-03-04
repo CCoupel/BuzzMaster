@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="200" height="200">
+  <!-- Background circle -->
+  <circle cx="100" cy="100" r="95" fill="#1a1a2e" stroke="#e94560" stroke-width="4"/>
+  <!-- Buzzer body -->
+  <rect x="55" y="110" width="90" height="55" rx="12" ry="12" fill="#e94560"/>
+  <!-- Buzzer button dome -->
+  <ellipse cx="100" cy="108" rx="45" ry="28" fill="#ff6b35"/>
+  <ellipse cx="100" cy="103" rx="38" ry="22" fill="#ff8c42"/>
+  <!-- Button highlight -->
+  <ellipse cx="88" cy="97" rx="14" ry="8" fill="#ffb347" opacity="0.5"/>
+  <!-- Base legs -->
+  <rect x="65" y="160" width="16" height="14" rx="4" fill="#c73652"/>
+  <rect x="119" y="160" width="16" height="14" rx="4" fill="#c73652"/>
+  <!-- Question mark -->
+  <text x="100" y="145" font-family="Arial, sans-serif" font-size="28" font-weight="bold" fill="#1a1a2e" text-anchor="middle">?</text>
+  <!-- Stars -->
+  <text x="30" y="55" font-size="18" fill="#ffb347">&#9733;</text>
+  <text x="155" y="45" font-size="14" fill="#e94560">&#9733;</text>
+  <text x="165" y="75" font-size="10" fill="#ff8c42">&#9733;</text>
+</svg>

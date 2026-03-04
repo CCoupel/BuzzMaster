@@ -52,6 +52,9 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
     console.log('[PlayerDisplay] gameState.remote:', gameState.remote)
   }, [gameState.question, gameState.phase, gameState.remote])
 
+  // Default question image path - always valid (backend serves custom or embedded SVG fallback)
+  const defaultQuestionImage = '/api/config/default-image'
+
   // Check if admin mode (for pair hints visibility)
   const isAdminPreview = useMemo(() => {
     const params = new URLSearchParams(window.location.search)
@@ -1310,12 +1313,12 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
                       animate={{ opacity: 1, scale: 1 }}
                       transition={{ delay: 0.2 }}
                     />
-                  ) : gameState.question.MEDIA ? (
+                  ) : (gameState.question.MEDIA || defaultQuestionImage) ? (
                     <motion.img
                       key="question-media"
-                      src={gameState.question.MEDIA}
+                      src={gameState.question.MEDIA || defaultQuestionImage}
                       alt=""
-                      className="question-media"
+                      className={`question-media${!gameState.question.MEDIA && defaultQuestionImage ? ' default-question-image' : ''}`}
                       initial={{ opacity: 0, y: 20 }}
                       animate={{ opacity: 1, y: 0 }}
                       transition={{ delay: 0.2 }}
@@ -1736,12 +1739,12 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
                       animate={{ opacity: 1, scale: 1 }}
                       transition={{ delay: 0.2 }}
                     />
-                  ) : gameState.question.MEDIA ? (
+                  ) : (gameState.question.MEDIA || defaultQuestionImage) ? (
                     <motion.img
                       key="question-media"
-                      src={gameState.question.MEDIA}
+                      src={gameState.question.MEDIA || defaultQuestionImage}
                       alt=""
-                      className="question-media"
+                      className={`question-media${!gameState.question.MEDIA && defaultQuestionImage ? ' default-question-image' : ''}`}
                       initial={{ opacity: 0, y: 20 }}
                       animate={{ opacity: 1, y: 0 }}
                       transition={{ delay: 0.2 }}

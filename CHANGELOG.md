@@ -3,6 +3,28 @@
 Historique des versions du projet BuzzControl.
 
 
+## [3.2.3] - 2026-03-04
+
+### Added
+- **[Backend]**: Image par defaut pour les questions sans media (`/api/config/default-image`)
+  - `GET /api/config/default-image` : sert l'image personnalisee ou le SVG embarque en fallback
+  - `POST /api/config/default-image` : upload d'une image personnalisee (jpg, png, gif, webp, svg)
+  - `DELETE /api/config/default-image` : supprime l'image personnalisee, retour au SVG embarque
+  - Asset embarque : `server-go/assets/default-question-image.svg` (icone buzzer SVG)
+  - Broadcast `CONFIG_UPDATE` apres upload/suppression avec champ `default_question_image_is_custom`
+- **[Frontend/TV]**: Affichage TV (`PlayerDisplay`) — image par defaut pour questions NORMAL et QCM sans media
+  - Utilise `/api/config/default-image` comme fallback — toujours valide (custom ou SVG embarque)
+- **[Frontend/Config]**: Section "Image par defaut" dans ConfigPage
+  - Apercu de l'image courante avec cache-busting (`?t=timestamp`) apres upload/suppression
+  - Bouton upload et bouton de suppression (affiche uniquement si image personnalisee active)
+  - Synchronisation en temps reel via `CONFIG_UPDATE` WebSocket
+
+### Fixed
+- **[Backend]**: Initialisation de `defaultImageIsCustom` a la connexion WebSocket
+  - L'etat de l'image par defaut est correctement envoye aux nouveaux clients a leur connexion
+
+---
+
 ## [3.2.1] - 2026-03-04
 
 ### Fixed

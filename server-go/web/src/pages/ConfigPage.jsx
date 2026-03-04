@@ -61,6 +61,14 @@ export default function ConfigPage() {
   const [firmwareToast, setFirmwareToast] = useState(null) // { message, type }
   const firmwareFileRef = useRef(null)
 
+  // Default question image
+  const [defaultImageIsCustom, setDefaultImageIsCustom] = useState(false) // true = custom uploaded, false = embedded fallback
+  const [defaultImageCacheBuster, setDefaultImageCacheBuster] = useState(() => Date.now())
+  const [uploadingDefaultImage, setUploadingDefaultImage] = useState(false)
+  const [deletingDefaultImage, setDeletingDefaultImage] = useState(false)
+  const [defaultImageToast, setDefaultImageToast] = useState(null)
+  const defaultImageFileRef = useRef(null)
+
   // WiFi toast auto-hide
   useEffect(() => {
     if (wifiToast) {
@@ -76,6 +84,14 @@ export default function ConfigPage() {
       return () => clearTimeout(timer)
     }
   }, [firmwareToast])
+
+  // Default image toast auto-hide
+  useEffect(() => {
+    if (defaultImageToast) {
+      const timer = setTimeout(() => setDefaultImageToast(null), 3000)
+      return () => clearTimeout(timer)
+    }
+  }, [defaultImageToast])
 
   // Load neon config and server parameters from server on mount
   useEffect(() => {
@@ -137,6 +153,13 @@ export default function ConfigPage() {
     }
     fetchFirmwareInfo()
   }, [])
+
+  // Sync defaultImageIsCustom from gameState (CONFIG_UPDATE broadcasts it)
+  useEffect(() => {
+    if (gameState?.defaultQuestionImageIsCustom !== undefined) {
+      setDefaultImageIsCustom(gameState.defaultQuestionImageIsCustom)
+    }
+  }, [gameState?.defaultQuestionImageIsCustom])
 
   // Update firmware info from WebSocket broadcast (after upload)
   useEffect(() => {
@@ -333,6 +356,58 @@ export default function ConfigPage() {
       alert('Erreur: ' + error.message)
     } finally {
       setLoadingDemo(false)
+    }
+  }
+
+  const handleDefaultImageUpload = async () => {
+    const file = defaultImageFileRef.current?.files?.[0]
+    if (!file) {
+      setDefaultImageToast({ message: 'Veuillez selectionner une image', type: 'error' })
+      return
+    }
+    const allowed = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.svg']
+    const ext = '.' + file.name.split('.').pop().toLowerCase()
+    if (!allowed.includes(ext)) {
+      setDefaultImageToast({ message: 'Format non supporte. Utilisez jpg, png, gif, webp ou svg', type: 'error' })
+      return
+    }
+    setUploadingDefaultImage(true)
+    try {
+      const formData = new FormData()
+      formData.append('file', file)
+      const res = await fetch('/api/config/default-image', { method: 'POST', body: formData })
+      const data = await res.json()
+      if (res.ok && data.is_custom) {
+        setDefaultImageIsCustom(true)
+        setDefaultImageCacheBuster(Date.now())
+        setDefaultImageToast({ message: 'Image par defaut enregistree', type: 'success' })
+        if (defaultImageFileRef.current) defaultImageFileRef.current.value = ''
+      } else {
+        setDefaultImageToast({ message: 'Erreur lors de l\'upload', type: 'error' })
+      }
+    } catch (err) {
+      setDefaultImageToast({ message: 'Erreur reseau: ' + err.message, type: 'error' })
+    } finally {
+      setUploadingDefaultImage(false)
+    }
+  }
+
+  const handleDefaultImageDelete = async () => {
+    if (!window.confirm('Supprimer l\'image personnalisee ? L\'image par defaut embarquee sera utilisee.')) return
+    setDeletingDefaultImage(true)
+    try {
+      const res = await fetch('/api/config/default-image', { method: 'DELETE' })
+      if (res.ok) {
+        setDefaultImageIsCustom(false)
+        setDefaultImageCacheBuster(Date.now())
+        setDefaultImageToast({ message: 'Image personnalisee supprimee', type: 'success' })
+      } else {
+        setDefaultImageToast({ message: 'Erreur lors de la suppression', type: 'error' })
+      }
+    } catch (err) {
+      setDefaultImageToast({ message: 'Erreur reseau: ' + err.message, type: 'error' })
+    } finally {
+      setDeletingDefaultImage(false)
     }
   }
 
@@ -584,6 +659,49 @@ export default function ConfigPage() {
                 </Button>
               </div>
 
+            </div>
+
+            {/* Default Question Image Section */}
+            <div className="config-section">
+              <h3 className="config-section-title">Image par defaut</h3>
+              <p className="config-section-hint">
+                Image affichee sur l'ecran TV pour les questions sans image. Une image SVG est embarquee par defaut ; vous pouvez la remplacer par votre propre image.
+              </p>
+
+              <div className="default-image-preview">
+                <img
+                  src={`/api/config/default-image?t=${defaultImageCacheBuster}`}
+                  alt="Image par defaut"
+                  className="default-image-thumbnail"
+                />
+                <span className="default-image-filename">
+                  {defaultImageIsCustom ? 'Image personnalisee' : 'Image embarquee (defaut)'}
+                </span>
+              </div>
+
+              <div className="firmware-upload-row">
+                <input
+                  ref={defaultImageFileRef}
+                  type="file"
+                  accept=".jpg,.jpeg,.png,.gif,.webp,.svg"
+                  className="firmware-file-input"
+                  id="default-image-file-input"
+                />
+                <label htmlFor="default-image-file-input" className="firmware-file-label">
+                  Choisir une image (jpg, png, gif, webp, svg)
+                </label>
+              </div>
+
+              <div className="config-section-actions">
+                <Button variant="primary" onClick={handleDefaultImageUpload} loading={uploadingDefaultImage}>
+                  Enregistrer
+                </Button>
+                {defaultImageIsCustom && (
+                  <Button variant="secondary" onClick={handleDefaultImageDelete} loading={deletingDefaultImage}>
+                    Restaurer l'image embarquee
+                  </Button>
+                )}
+              </div>
             </div>
 
             {/* Demo Section */}
@@ -866,6 +984,12 @@ export default function ConfigPage() {
           wifiConfig={{ ssid: wifiSsid, password: wifiPassword }}
           firmwareInfo={firmwareInfo}
         />
+      )}
+
+      {defaultImageToast && (
+        <div className={`wifi-toast wifi-toast-${defaultImageToast.type}`}>
+          {defaultImageToast.message}
+        </div>
       )}
 
       {wifiToast && (

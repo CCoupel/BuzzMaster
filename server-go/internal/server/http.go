@@ -35,6 +35,7 @@ type HTTPServer struct {
 	server     *http.Server
 	updater    *Updater         // Auto-update handler
 	firmwareManager *FirmwareManager // OTA firmware manager (v3.1.0+)
+	defaultQuestionImageAsset []byte // Embedded fallback image (v3.2.2)
 
 	// Callbacks
 	OnAction              func(action string, data json.RawMessage)
@@ -68,6 +69,11 @@ func NewHTTPServer(port int, engine *game.Engine, wsHub *WebSocketHub, buzzerHub
 // This allows main.go to access it for OTA_PROGRESS handling.
 func (h *HTTPServer) GetFirmwareManager() *FirmwareManager {
 	return h.firmwareManager
+}
+
+// SetDefaultQuestionImageAsset sets the embedded fallback image used when no custom image is uploaded.
+func (h *HTTPServer) SetDefaultQuestionImageAsset(data []byte) {
+	h.defaultQuestionImageAsset = data
 }
 
 // SetReactDir sets the directory for React build files
@@ -196,6 +202,9 @@ func (h *HTTPServer) setupRoutes() {
 
 	// WiFi defaults API
 	h.mux.HandleFunc("/api/wifi/defaults", h.handleAPIWiFiDefaults)
+
+	// Default question image API (v3.2.2)
+	h.mux.HandleFunc("/api/config/default-image", h.handleAPIDefaultQuestionImage)
 
 	// Auto-update API
 	h.mux.HandleFunc("/api/updates", h.handleAPIUpdates)
@@ -1929,4 +1938,146 @@ func (h *HTTPServer) handleAPIUpdatesApply(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	h.updater.HandleApplyUpdate(w, r)
+}
+
+// Default question image API (v3.2.2)
+// GET    /api/config/default-image → serves image binary (custom data/files/ first, embedded SVG fallback)
+// POST   /api/config/default-image → multipart upload (field "file"), saves to data/files/default-question-image.<ext>
+// DELETE /api/config/default-image → removes custom image (reverts to embedded fallback)
+
+const defaultQuestionImageBaseName = "default-question-image"
+
+// defaultQuestionImageExts lists supported extensions in search priority order.
+var defaultQuestionImageExts = []string{".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg"}
+
+// getCustomDefaultQuestionImagePath returns the filesystem path of the custom default question image,
+// or "" if none has been uploaded.
+func (h *HTTPServer) getCustomDefaultQuestionImagePath() string {
+	filesDir := filepath.Join(h.dataDir, "files")
+	for _, ext := range defaultQuestionImageExts {
+		candidate := filepath.Join(filesDir, defaultQuestionImageBaseName+ext)
+		if _, err := os.Stat(candidate); err == nil {
+			return candidate
+		}
+	}
+	return ""
+}
+
+// HasCustomDefaultQuestionImage returns true if a custom image has been uploaded.
+func (h *HTTPServer) HasCustomDefaultQuestionImage() bool {
+	return h.getCustomDefaultQuestionImagePath() != ""
+}
+
+func (h *HTTPServer) handleAPIDefaultQuestionImage(w http.ResponseWriter, r *http.Request) {
+	filesDir := filepath.Join(h.dataDir, "files")
+
+	switch r.Method {
+	case http.MethodGet:
+		// Serve custom image if it exists, otherwise serve embedded fallback
+		customPath := h.getCustomDefaultQuestionImagePath()
+		if customPath != "" {
+			ext := strings.ToLower(filepath.Ext(customPath))
+			contentType := "image/jpeg"
+			switch ext {
+			case ".png":
+				contentType = "image/png"
+			case ".gif":
+				contentType = "image/gif"
+			case ".webp":
+				contentType = "image/webp"
+			case ".svg":
+				contentType = "image/svg+xml"
+			}
+			w.Header().Set("Content-Type", contentType)
+			http.ServeFile(w, r, customPath)
+			return
+		}
+		// Serve embedded fallback SVG
+		if len(h.defaultQuestionImageAsset) > 0 {
+			w.Header().Set("Content-Type", "image/svg+xml")
+			w.Header().Set("Cache-Control", "public, max-age=3600")
+			w.Write(h.defaultQuestionImageAsset)
+			return
+		}
+		http.NotFound(w, r)
+
+	case http.MethodPost:
+		if err := r.ParseMultipartForm(10 << 20); err != nil {
+			http.Error(w, "Failed to parse form: "+err.Error(), http.StatusBadRequest)
+			return
+		}
+		file, header, err := r.FormFile("file")
+		if err != nil {
+			http.Error(w, "No file uploaded: "+err.Error(), http.StatusBadRequest)
+			return
+		}
+		defer file.Close()
+
+		ext := strings.ToLower(filepath.Ext(header.Filename))
+		if ext == "" {
+			ext = ".png"
+		}
+		allowed := map[string]bool{".jpg": true, ".jpeg": true, ".png": true, ".gif": true, ".webp": true, ".svg": true}
+		if !allowed[ext] {
+			http.Error(w, "Unsupported file type: "+ext, http.StatusBadRequest)
+			return
+		}
+
+		// Remove any existing custom default question image (all extensions)
+		for _, oldExt := range defaultQuestionImageExts {
+			os.Remove(filepath.Join(filesDir, defaultQuestionImageBaseName+oldExt))
+		}
+
+		os.MkdirAll(filesDir, 0755)
+		destPath := filepath.Join(filesDir, defaultQuestionImageBaseName+ext)
+		dst, err := os.Create(destPath)
+		if err != nil {
+			http.Error(w, "Failed to save file", http.StatusInternalServerError)
+			return
+		}
+		defer dst.Close()
+		if _, err := io.Copy(dst, file); err != nil {
+			http.Error(w, "Failed to write file", http.StatusInternalServerError)
+			return
+		}
+
+		LogInfo(game.LogComponentHTTP, "Default question image uploaded: %s", destPath)
+
+		if h.OnConfigUpdate != nil {
+			h.OnConfigUpdate()
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"path":       "/api/config/default-image",
+			"is_custom":  true,
+		})
+
+	case http.MethodDelete:
+		removed := false
+		for _, ext := range defaultQuestionImageExts {
+			candidate := filepath.Join(filesDir, defaultQuestionImageBaseName+ext)
+			if err := os.Remove(candidate); err == nil {
+				removed = true
+				LogInfo(game.LogComponentHTTP, "Default question image deleted: %s", candidate)
+			}
+		}
+		if !removed {
+			http.Error(w, "No custom default question image found", http.StatusNotFound)
+			return
+		}
+
+		if h.OnConfigUpdate != nil {
+			h.OnConfigUpdate()
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"path":       "/api/config/default-image",
+			"is_custom":  false,
+		})
+
+	default:
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+	}
 }

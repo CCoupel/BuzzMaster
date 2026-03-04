@@ -177,6 +177,27 @@ bm.SetEnrollmentMode(true)  // accelère pendant l'appairage
 - `src/BuzzClick/click_broadcaster.h` : UDP listener AsyncUDP, parser, etat decouverte
 - `src/BuzzClick/click_WifiManager.h` : Integration boot sequence + fallback chain
 
+### Default Question Image Endpoints (v3.2.3)
+
+Image affichee sur la TV pour les questions NORMAL et QCM sans media associe.
+
+```
+GET    /api/config/default-image  → Sert l'image (custom data/files/ ou SVG embarque en fallback)
+POST   /api/config/default-image  → Upload image personnalisee (multipart, champ "file", formats: jpg/png/gif/webp/svg)
+DELETE /api/config/default-image  → Supprime l'image personnalisee, retour au SVG embarque
+```
+
+Action WebSocket (CONFIG_UPDATE enrichi) :
+```json
+// Server → Web : apres upload ou suppression
+{ "ACTION": "CONFIG_UPDATE", "MSG": { "...", "default_question_image_is_custom": true } }
+```
+
+- **Asset embarque** : `server-go/assets/default-question-image.svg` (via `//go:embed`)
+- `default_question_image_is_custom` : `true` si image personnalisee active, `false` si SVG fallback
+- Envoye aux nouveaux clients a la connexion WebSocket ET broadcast apres chaque changement
+- Cache-busting cote frontend : `?t=timestamp` pour forcer le rechargement de l'apercu
+
 ### OTA Firmware Endpoints (v3.1.0+)
 
 ```

@@ -1211,3 +1211,46 @@
 .dual-range-max::-moz-range-thumb {
   background: var(--accent-cyan);
 }
+
+/* Default Question Image */
+.default-image-preview {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin-bottom: var(--space-3);
+  padding: var(--space-3);
+  background: var(--gray-50);
+  border: 1px solid var(--gray-200);
+  border-radius: var(--radius-md);
+}
+
+.default-image-thumbnail {
+  width: 80px;
+  height: 60px;
+  object-fit: cover;
+  border-radius: var(--radius-sm);
+  flex-shrink: 0;
+}
+
+.default-image-filename {
+  font-size: 0.875rem;
+  color: var(--gray-600);
+  word-break: break-all;
+}
+
+.default-image-empty {
+  font-size: 0.875rem;
+  color: var(--gray-400);
+  font-style: italic;
+  margin-bottom: var(--space-3);
+  padding: var(--space-3);
+  background: var(--gray-50);
+  border: 1px dashed var(--gray-300);
+  border-radius: var(--radius-md);
+  text-align: center;
+}
+
+/* TV display: default image styling (lower opacity to distinguish from question-specific images) */
+.default-question-image {
+  opacity: 0.75;
+}

@@ -184,6 +184,9 @@ func (a *App) init() {
 	// Store embedded FS reference so restore-embedded can re-extract it on demand.
 	a.httpServer.GetFirmwareManager().SetEmbeddedFS(assets.FirmwareAssets)
 
+	// Set embedded default question image (SVG fallback when no custom image uploaded)
+	a.httpServer.SetDefaultQuestionImageAsset(assets.DefaultQuestionImage)
+
 	// Try embedded web files first, then fallback to filesystem
 	if embeddedFS, ok := web.GetEmbeddedFS(); ok {
 		server.LogInfo(game.LogComponentHTTP, "Using embedded web files (portable mode)")
@@ -1671,6 +1674,7 @@ func (a *App) broadcastConfigUpdate() {
 			GlowPulseMin:   cfg.NeonEffect.GlowPulseMin,
 			GlowPulseMax:   cfg.NeonEffect.GlowPulseMax,
 		},
+		DefaultQuestionImageIsCustom: a.httpServer.HasCustomDefaultQuestionImage(),
 	}
 	data, _ := json.Marshal(payload)
 	a.broadcast(protocol.ActionConfigUpdate, data, false)
@@ -1806,6 +1810,7 @@ func (a *App) sendStateToClient(clientID string) {
 			GlowPulseMin:   cfg.NeonEffect.GlowPulseMin,
 			GlowPulseMax:   cfg.NeonEffect.GlowPulseMax,
 		},
+		DefaultQuestionImageIsCustom: a.httpServer.HasCustomDefaultQuestionImage(),
 	}
 	neonData, _ := json.Marshal(neonPayload)
 	neonMsg, _ := protocol.NewMessage(protocol.ActionConfigUpdate, nil)

@@ -246,7 +246,8 @@ type LogEntryPayload struct {
 
 // ConfigUpdatePayload for CONFIG_UPDATE action (broadcast config changes)
 type ConfigUpdatePayload struct {
-	NeonEffect NeonEffectPayload `json:"neon_effect"`
+	NeonEffect                    NeonEffectPayload `json:"neon_effect"`
+	DefaultQuestionImageIsCustom  bool              `json:"default_question_image_is_custom"` // true if custom image uploaded, false = embedded fallback
 }
 
 // NeonEffectPayload represents neon effect configuration
