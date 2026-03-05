@@ -690,14 +690,14 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
   // Show neon effect during game phases
   const showNeon = useMemo(() => {
     return neonConfig.enabled &&
-      ['READY', 'COUNTDOWN', 'STARTED', 'PAUSED'].includes(gameState?.phase)
+      ['PREPARE', 'READY', 'COUNTDOWN', 'STARTED', 'PAUSED'].includes(gameState?.phase)
   }, [neonConfig.enabled, gameState?.phase])
 
   // Get category color for neon effect
   // Priority: Memory team color > Category color > default
   const neonCategoryColor = useMemo(() => {
     // If Memory multi-teams mode and a team is playing, use team color
-    if (gameState?.MEMORY_CURRENT_TEAM_COLOR && Array.isArray(gameState.MEMORY_CURRENT_TEAM_COLOR)) {
+    if (Array.isArray(gameState?.MEMORY_CURRENT_TEAM_COLOR) && gameState.MEMORY_CURRENT_TEAM_COLOR.length === 3) {
       return `rgb(${gameState.MEMORY_CURRENT_TEAM_COLOR.join(',')})`
     }
     // Otherwise, use category color
@@ -1319,8 +1319,8 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
                       src={gameState.question.MEDIA || defaultQuestionImage}
                       alt=""
                       className={`question-media${!gameState.question.MEDIA && defaultQuestionImage ? ' default-question-image' : ''}`}
-                      initial={{ opacity: 0, y: 20 }}
-                      animate={{ opacity: 1, y: 0 }}
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
                       transition={{ delay: 0.2 }}
                     />
                   ) : null}
@@ -1745,8 +1745,8 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
                       src={gameState.question.MEDIA || defaultQuestionImage}
                       alt=""
                       className={`question-media${!gameState.question.MEDIA && defaultQuestionImage ? ' default-question-image' : ''}`}
-                      initial={{ opacity: 0, y: 20 }}
-                      animate={{ opacity: 1, y: 0 }}
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
                       transition={{ delay: 0.2 }}
                     />
                   ) : null}

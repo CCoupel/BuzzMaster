@@ -164,65 +164,90 @@ Dès que le workflow est détecté, **NOTIFIER L'UTILISATEUR** avec un message v
 - Status: in_progress
 ```
 
-**Étape 2 - Attendre que le workflow SE TERMINE :**
+**Étape 2 - Attendre que le workflow SE TERMINE avec barre de progression :**
+
+Après chaque poll, envoyer un **SendMessage** vers `team-lead` avec la barre de progression.
+
 ```bash
 # Poll le status du workflow spécifique (max 10 minutes, intervalle 30s)
-echo "⏳ Waiting for CI workflow $RUN_ID to complete..."
+# 20 tentatives × 30s = 10 minutes max
 CI_SUCCESS=false
+MAX=20
 
-for i in $(seq 1 20); do
+for i in $(seq 1 $MAX); do
     RESPONSE=$(curl -s "https://api.github.com/repos/CCoupel/BuzzMaster/actions/runs/$RUN_ID")
 
-    # Extraire status et conclusion avec sed (compatible Windows/MINGW)
     STATUS=$(echo "$RESPONSE" | sed -n 's/.*"status": *"\([^"]*\)".*/\1/p' | head -1)
     CONCLUSION=$(echo "$RESPONSE" | sed -n 's/.*"conclusion": *"\([^"]*\)".*/\1/p' | head -1)
 
-    echo "   Attempt $i/20 - Status: $STATUS, Conclusion: $CONCLUSION"
-
     if [ "$STATUS" = "completed" ]; then
         if [ "$CONCLUSION" = "success" ]; then
-            echo "✅ CI passed successfully!"
-            echo "   URL: https://github.com/CCoupel/BuzzMaster/actions/runs/$RUN_ID"
             CI_SUCCESS=true
             break
         else
-            echo "❌ CI failed with conclusion: $CONCLUSION"
-            echo "   View logs: https://github.com/CCoupel/BuzzMaster/actions/runs/$RUN_ID"
-            exit 1
+            break  # Échec → traitement après la boucle
         fi
     fi
+
     sleep 30
 done
-
-# Vérifier si on a atteint le timeout
-if [ "$CI_SUCCESS" != "true" ]; then
-    echo "⚠️ WARNING: CI did not complete within 10 minutes"
-    echo "   Current status: $STATUS"
-    echo "   Check manually: https://github.com/CCoupel/BuzzMaster/actions/runs/$RUN_ID"
-    exit 1
-fi
 ```
+
+**Après chaque poll, envoyer une mise à jour de progression via SendMessage :**
+
+```
+SendMessage({
+  type: "message",
+  recipient: "team-lead",
+  content: "⏳ **CI en cours** — Run #{RUN_ID}\n\n[{BARRE}] {PCT}% — {STATUS}\nÉtape {i}/{MAX} · {ELAPSED}s écoulées\nhttps://github.com/CCoupel/BuzzMaster/actions/runs/{RUN_ID}",
+  summary: "CI {PCT}% — {STATUS}"
+})
+```
+
+**Format barre de progression** (20 caractères) :
+```
+i=1  → [█░░░░░░░░░░░░░░░░░░░]  5%
+i=4  → [████░░░░░░░░░░░░░░░░] 20%
+i=10 → [██████████░░░░░░░░░░] 50%
+i=16 → [████████████████░░░░] 80%
+i=20 → [████████████████████] 100%
+```
+
+Calcul : `filled = round(i / MAX * 20)`, `bar = "█" * filled + "░" * (20 - filled)`, `pct = round(i / MAX * 100)`
+
+**Fréquence** : envoyer le SendMessage **à chaque itération** (toutes les 30s).
 
 **IMPORTANT - Notification utilisateur (Étape 2) :**
 Dès que le workflow est terminé, **NOTIFIER L'UTILISATEUR** avec un message visible :
 
 Si succès :
 ```
-✅ **CI TERMINÉE AVEC SUCCÈS**
-- Run ID: {RUN_ID}
-- Status: completed
-- Conclusion: success
-- URL: https://github.com/CCoupel/BuzzMaster/actions/runs/{RUN_ID}
+SendMessage({
+  type: "message",
+  recipient: "team-lead",
+  content: "✅ **CI TERMINÉE AVEC SUCCÈS**\n\n[████████████████████] 100%\n- Run ID: {RUN_ID}\n- Durée : ~{ELAPSED}s\n- Conclusion : success\n- URL: https://github.com/CCoupel/BuzzMaster/actions/runs/{RUN_ID}",
+  summary: "CI 100% — SUCCESS"
+})
 ```
 
 Si échec :
 ```
-❌ **CI ÉCHOUÉE**
-- Run ID: {RUN_ID}
-- Status: completed
-- Conclusion: {conclusion}
-- URL: https://github.com/CCoupel/BuzzMaster/actions/runs/{RUN_ID}
-→ Lancement de la procédure de correction automatique...
+SendMessage({
+  type: "message",
+  recipient: "team-lead",
+  content: "❌ **CI ÉCHOUÉE**\n\n[{BARRE}] {PCT}%\n- Run ID: {RUN_ID}\n- Conclusion : {CONCLUSION}\n- URL: https://github.com/CCoupel/BuzzMaster/actions/runs/{RUN_ID}\n→ Lancement procédure correction automatique...",
+  summary: "CI ÉCHOUÉE — correction en cours"
+})
+```
+
+Si timeout (20 tentatives épuisées) :
+```
+SendMessage({
+  type: "message",
+  recipient: "team-lead",
+  content: "⚠️ **CI TIMEOUT** — 10 minutes écoulées\n\n[████████████████████] 100% (timeout)\n- Run ID: {RUN_ID}\n- Statut actuel : {STATUS}\n- Vérifier manuellement : https://github.com/CCoupel/BuzzMaster/actions/runs/{RUN_ID}",
+  summary: "CI timeout — vérification manuelle requise"
+})
 ```
 
 - Wait until `status` = "completed"

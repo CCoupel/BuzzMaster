@@ -3,6 +3,16 @@
 Historique des versions du projet BuzzControl.
 
 
+## [3.2.4] - 2026-03-05
+
+### Fixed
+- **[TV Display]**: Effets neon/halo restaures sur le PlayerDisplay
+  - Le CSS `.default-question-image` etait incorrectement place dans `ConfigPage.css` au lieu de `PlayerDisplay.css`, ce qui empechait son application sur la TV
+  - Suppression de la transformation `y: 20` dans l'animation Framer Motion — evite la creation d'un layer GPU composite qui masquait le pseudo-element `::after` de l'effet neon (conflit z-index)
+  - Remplacement de `opacity: 0.75` par `filter: brightness(0.7)` : `opacity` cree un stacking context qui bloque l'effet neon, `filter` preservele rendu visuel sans bloquer le pseudo-element
+
+---
+
 ## [3.2.3] - 2026-03-04
 
 ### Added

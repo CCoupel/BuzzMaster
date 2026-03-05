@@ -191,8 +191,8 @@ Lancer code-reviewer
 
 ```
 Lancer QA
-├── VALIDATED → Phase Doc
-├── VALIDATED WITH RESERVATIONS → Demander confirmation utilisateur
+├── VALIDATED → Phase Doc (automatique, sans validation utilisateur)
+├── VALIDATED WITH RESERVATIONS → Phase Doc (automatique, noter réserves)
 └── NOT VALIDATED → Retour Phase Dev (cycle++)
 
 Si cycle > 3 → ESCALADE utilisateur
@@ -202,12 +202,17 @@ Si cycle > 3 → ESCALADE utilisateur
 
 ## 6. Points de Validation Utilisateur
 
+4 points de validation, pas plus :
+
 | Point | Conditions | Options |
 |-------|------------|---------|
-| Backlog | FEATURE uniquement | Confirmer / Refuser / Autre |
-| Plan | Si création plan | Valider / Modifier / Refuser |
-| QA réserves | Réserves mineures | Continuer / Corriger |
+| **Démarrage workflow** | Toujours | Confirmer / Modifier / Refuser |
+| **Plan** | Si création plan | Valider / Modifier / Refuser |
+| **Après deploy QUALIF** | Toujours | Validé (→ PROD) / Bug trouvé (→ correction) |
+| **Après deploy PROD** | Toujours | Confirmer clôture |
 | Escalade | 3 cycles atteints | Continuer / Abandonner |
+
+**Automatique (sans validation)** : DEV → REVIEW → QA → DOC → DEPLOY QUALIF
 
 ---
 

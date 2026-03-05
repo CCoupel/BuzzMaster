@@ -178,10 +178,4 @@
   to { --rotation-angle: 360deg; }
 }
 
-/* Fallback for browsers without @property support */
-@supports not (background: conic-gradient(red, blue)) {
-  .neon-border.neon-mode-bar::after,
-  .neon-border.neon-mode-halo::after {
-    display: none;
-  }
-}
+/* Note: conic-gradient and @property are required (Chrome 85+, supported in all target browsers) */

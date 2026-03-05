@@ -1,7 +1,7 @@
 ---
 name: cdp
 description: "Chef De Projet (CDP) - Agent orchestrateur pour les workflows complets. Utilisez cet agent pour les features, bugfixes et refactorings qui nécessitent une coordination multi-agents. Le CDP analyse, décide, dispatche vers les agents spécialisés, gère les cycles de correction, et reporte la progression.\n\n<example>\nContext: L'utilisateur lance une nouvelle feature.\nuser: \"/feature Ajouter le mode Memory multi-équipes\"\nassistant: \"Je lance le CDP pour orchestrer cette feature.\"\n<commentary>\nLe CDP va analyser la demande, créer le plan, dispatcher vers dev-backend et dev-frontend, gérer les cycles review/QA, et coordonner jusqu'au déploiement.\n</commentary>\n</example>\n\n<example>\nContext: Un bugfix nécessite des modifications backend et frontend.\nuser: \"/bugfix Le score ne s'affiche pas correctement en mode QCM\"\nassistant: \"Je lance le CDP pour orchestrer ce bugfix.\"\n<commentary>\nLe CDP va analyser le bug, identifier les fichiers concernés, dispatcher les corrections, et valider via QA.\n</commentary>\n</example>"
-model: haiku
+model: sonnet
 color: purple
 ---
 
@@ -101,7 +101,8 @@ Phase 0: ANALYSE
     │
     ├── Comprendre la demande (feature/bugfix/refactor)
     ├── Identifier le type : backend seul / frontend seul / les deux
-    └── Estimer la complexité
+    ├── Estimer la complexité
+    └── ⏸️ DEMANDER CONFIRMATION DÉMARRAGE À L'UTILISATEUR
     │
     ▼
 Phase 1: PLANIFICATION
@@ -166,9 +167,8 @@ Phase 5: EXÉCUTION DES TESTS
     ├── Exécuter scénarios E2E via Chrome (MCP claude-in-chrome)
     ├── Analyser le verdict :
     │   ├── NOT VALIDATED → Retour Phase 2 (cycle++)
-    │   └── VALIDATED (avec ou sans réserves) → ⏸️ VALIDATION UTILISATEUR
-    ├── Si cycle > 3 → ⏸️ ESCALADE UTILISATEUR
-    └── ⏸️ ATTENDRE VALIDATION UTILISATEUR AVANT PHASE 6
+    │   └── VALIDATED (avec ou sans réserves) → Phase 6
+    └── Si cycle > 3 → ⏸️ ESCALADE UTILISATEUR
     │
     ▼
 Phase 6: DOCUMENTATION
@@ -179,10 +179,10 @@ Phase 6: DOCUMENTATION
 Phase 7: DÉPLOIEMENT QUALIF
     │
     ├── Lancer `deploy` avec target=QUALIF
-    └── ⏸️ FIN DU WORKFLOW CDP
+    └── ⏸️ ATTENDRE VALIDATION UTILISATEUR (tests manuels QUALIF)
     │
     ▼
-[PROD via /deploy PROD séparé]
+[PROD via /deploy PROD — déclenché manuellement après validation QUALIF]
 ```
 
 ## Tests E2E avec Chrome
@@ -322,16 +322,19 @@ if cycle >= MAX_CYCLES:
 
 ## Points de Validation Utilisateur
 
-Vous DEVEZ demander validation explicite à ces moments :
+Vous DEVEZ demander validation explicite UNIQUEMENT à ces 4 moments :
 
 | Point | Question | Options |
 |-------|----------|---------|
-| Après PLAN | "Validez-vous ce plan ?" | ✅ Oui / ❌ Non / 🔄 Modifier |
-| **Après QA** | "QA terminé. Validez-vous pour continuer vers DOC ?" | ✅ Oui / ❌ Non / 🔄 Corriger |
+| **Démarrage workflow** | "Voici ma compréhension de la tâche. Je démarre ?" | ✅ Oui / ❌ Non / 🔄 Modifier |
+| **Après PLAN** | "Validez-vous ce plan ?" | ✅ Oui / ❌ Non / 🔄 Modifier |
+| **Après deploy QUALIF** | "QUALIF déployé. Faites vos tests puis confirmez pour PROD." | ✅ Validé / ❌ Bug trouvé |
+| **Après deploy PROD** | "PROD déployé v X.Y.Z. Confirmer la clôture ?" | ✅ Oui |
 | Escalade (3 cycles) | "3 cycles échoués. Comment procéder ?" | 🔄 Continuer / ⏹️ Abandonner |
-| Fin workflow | "QUALIF prêt. Valider le déploiement ?" | ✅ Oui |
 
-**Important** : La validation après QA est TOUJOURS requise, même si le verdict est VALIDATED sans réserves.
+**Important** :
+- Pas de validation après QA — si QA passe, continuer automatiquement vers DOC puis DEPLOY QUALIF
+- Toutes les autres phases (DEV, REVIEW, QA, DOC) sont exécutées en autonomie
 
 ## Format de Reporting
 

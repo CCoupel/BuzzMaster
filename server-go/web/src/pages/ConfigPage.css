@@ -1250,7 +1250,3 @@
   text-align: center;
 }
 
-/* TV display: default image styling (lower opacity to distinguish from question-specific images) */
-.default-question-image {
-  opacity: 0.75;
-}

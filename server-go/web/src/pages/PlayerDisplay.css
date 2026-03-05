@@ -1438,6 +1438,12 @@
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
 }
 
+/* Default image (no question-specific media) - visually distinct, no opacity to preserve stacking context */
+.zone-media .question-media.default-question-image {
+  max-width: 40%;
+  filter: brightness(0.7);
+}
+
 /* Answer media highlight - green border on the image itself */
 .zone-media .question-media.answer-media-highlight {
   border: 4px solid var(--success);
