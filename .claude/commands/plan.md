@@ -17,8 +17,10 @@ $ARGUMENTS
 
 **Usage** :
   /plan help                           Afficher cette aide
-  /plan backlog/<nom>.md               Depuis un backlog
-  /plan backlog/<nom>.md Phase X       Phase spécifique d'un backlog
+  /plan #N                             Depuis une issue GitHub
+  /plan #N Phase X                     Phase spécifique d'une issue
+  /plan backlog/<nom>.md               Depuis un fichier de spec
+  /plan backlog/<nom>.md Phase X       Phase spécifique d'un fichier de spec
   /plan "Description de la feature"    Description libre
   /plan bugfix "Description du bug"    Planification de bugfix
 
@@ -26,7 +28,9 @@ $ARGUMENTS
 ```
 
 **Formats possibles** :
-- `/plan backlog/memory-game.md Phase 6` : Depuis un backlog
+- `/plan #5` : Depuis une issue GitHub
+- `/plan #5 Phase 7` : Phase spécifique d'une issue GitHub
+- `/plan backlog/memory-game.md Phase 6` : Depuis un fichier de spec
 - `/plan "Description de la feature"` : Description libre
 - `/plan bugfix "Description du bug"` : Planification de bugfix
 

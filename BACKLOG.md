@@ -6,58 +6,49 @@ Fonctionnalités à implémenter pour le projet BuzzMaster.
 
 ## Organisation
 
-Le backlog est organisé en fichiers individuels dans le dossier `backlog/`, classés par statut :
+Le backlog est désormais géré via **GitHub Issues** avec le label `backlog` :
+
+- **Issues ouvertes** : Fonctionnalités TODO et En-Cours
+- **Issues fermées** : Fonctionnalités complétées (DONE) ou abandonnées (REMOVED)
+
+👉 **[Voir les issues backlog](https://github.com/CCoupel/BuzzMaster/issues?q=label%3Abacklog)**
+
+### Labels de statut
+
+| Label | Description |
+|-------|-------------|
+| `TODO` | Fonctionnalité planifiée, pas encore démarrée |
+| `En-Cours` | Implémentation en cours |
+| `DONE` | Fonctionnalité complétée (issue fermée) |
+| `REMOVED` | Fonctionnalité abandonnée (issue fermée, "not planned") |
+
+### Labels techniques
+
+| Label | Description |
+|-------|-------------|
+| `backend` | Serveur Go |
+| `frontend` | Interface React |
+| `firmware` | Firmware BuzzClick ESP32 |
+| `ci-cd` | CI/CD et workflows |
+| `memory-game` | Jeu Memory |
+| `ai` | Intelligence artificielle |
+
+---
+
+## Spécifications détaillées
+
+Les fichiers de spécification détaillées restent dans le dossier `backlog/` pour référence :
 
 ```
 backlog/
-├── TODO/           # Fonctionnalités planifiées
-├── En-Cours/       # Implémentation en cours
-├── DONE/           # Fonctionnalités complétées
-└── README.md       # Structure complète
+├── TODO/           # Specs des fonctionnalités planifiées
+├── En-Cours/       # Specs des fonctionnalités en cours
+├── DONE/           # Specs des fonctionnalités complétées
+├── REMOVED/        # Specs des fonctionnalités abandonnées
+└── README.md       # Index des spécifications
 ```
 
-### Voir [backlog/README.md](backlog/README.md) pour la structure complète
-
----
-
-## Fonctionnalités par statut
-
-### ✅ Complétées (DONE/)
-
-| Fonctionnalité | Version | Fichier |
-|----------------|---------|---------|
-| Tri par rapidité de buzz | v2.44.1 | [tri-rapidite-reponse.md](backlog/DONE/tri-rapidite-reponse.md) |
-| Page Joueur (/player) | v2.45.0 | [page-joueur.md](backlog/DONE/page-joueur.md) |
-| Page Logs | v2.43.0 | [page-logs.md](backlog/DONE/page-logs.md) |
-| Mode Demo | v2.40.0 | [mode-demo.md](backlog/DONE/mode-demo.md) |
-| QCM - Indices et pénalités | v2.38.0 | [qcm-indices-penalites.md](backlog/DONE/qcm-indices-penalites.md) |
-| Catégories de questions | v2.34.0 | [categories-questions.md](backlog/DONE/categories-questions.md) |
-| Memory game | v2.33.0 | [memory-game.md](backlog/En-Cours/memory-game.md) |
-| Affichage TV | v2.30.0 | [affichage-tv.md](backlog/DONE/affichage-tv.md) |
-| Timer et gameplay | v2.29.0 | [timer-gameplay.md](backlog/DONE/timer-gameplay.md) |
-| Debug et tests | v2.28.0 | [debug-tests.md](backlog/DONE/debug-tests.md) |
-| Gestion des scores | v2.18.0 | [gestion-scores.md](backlog/DONE/gestion-scores.md) |
-
-### ⏳ En cours (En-Cours/)
-
-| Fonctionnalité | Fichier |
-|----------------|---------|
-| Memory game (tâche restante) | [memory-game.md](backlog/En-Cours/memory-game.md) |
-
-### 📋 Planifiées (TODO/)
-
-| Fonctionnalité | Fichier |
-|----------------|---------|
-| QCM - Marqueurs d'indices | [qcm-marqueurs-indices.md](backlog/TODO/qcm-marqueurs-indices.md) |
-| Générateur de jeu via IA | [generateur-ia.md](backlog/TODO/generateur-ia.md) |
-
----
-
-## Priorités actuelles
-
-1. **Memory game** : Tâche restante (affichage nom équipe sur TV)
-2. **QCM Marqueurs** : Visualisation des seuils d'indices
-3. **Générateur IA** : MVP Phase 1
+Chaque issue GitHub contient un lien vers la spécification complète dans `backlog/`.
 
 ---
 
@@ -65,7 +56,13 @@ backlog/
 
 Pour proposer une nouvelle fonctionnalité :
 
-1. Créer un fichier dans `backlog/TODO/`
-2. Suivre le template du [backlog/README.md](backlog/README.md)
-3. Mettre à jour ce fichier et le README du backlog
-4. Soumettre via pull request
+1. Créer une issue GitHub avec le label `enhancement` et `backlog`
+2. Optionnellement, créer un fichier de spécification détaillée dans `backlog/TODO/`
+3. Lier le fichier de spec dans l'issue GitHub
+
+---
+
+## Migration depuis fichiers backlog
+
+Le script `scripts/create-github-issues.sh` transpose les fichiers backlog en issues GitHub.
+Prérequis : `gh auth login` (GitHub CLI authentifié).
