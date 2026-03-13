@@ -1,5 +1,8 @@
 # Backlog BuzzMaster
 
+> **Suivi via GitHub Issues** : Le backlog est désormais suivi via [GitHub Issues (label `backlog`)](https://github.com/CCoupel/BuzzMaster/issues?q=label%3Abacklog).
+> Ce dossier contient les **spécifications détaillées** référencées par les issues.
+
 Ce dossier contient les spécifications détaillées de toutes les fonctionnalités du projet BuzzMaster, organisées par statut.
 
 ## Structure
@@ -67,6 +70,12 @@ backlog/
 ## Contribution
 
 Pour ajouter une nouvelle fonctionnalité au backlog :
+
+1. Créer une issue GitHub avec les labels `enhancement` et `backlog`
+2. Optionnellement, créer un fichier de spécification détaillée dans `TODO/`
+3. Lier le fichier de spec dans l'issue GitHub
+
+### Template de spécification (optionnel)
 
 1. Créer un nouveau fichier `.md` dans le dossier `TODO/`
 2. Utiliser le template suivant :

@@ -21,7 +21,7 @@ Exécute les phases suivantes **dans l'ordre**, en t'arrêtant aux points de val
 ### Phase 1 — Bilan de session
 
 **Lire** l'état actuel :
-1. `backlog/En-Cours/` → identifier la feature active
+1. GitHub Issues (label `En-Cours`) ou `backlog/En-Cours/` → identifier la feature active
 2. `git log --oneline -10` → détecter les commits récents (doc déjà faite ?)
 3. `server-go/config.json` → version actuelle
 4. `git status` → commits non pushés
@@ -35,7 +35,7 @@ Exécute les phases suivantes **dans l'ordre**, en t'arrêtant aux points de val
 ```
 ## Bilan de session
 
-**Feature active** : [nom backlog/En-Cours/ ou "aucune"]
+**Feature active** : [issue GitHub #N ou nom backlog/En-Cours/ ou "aucune"]
 **Branche** : [nom branche actuelle]
 **Version** : [X.Y.Z depuis config.json]
 **Commits non pushés** : [N ou aucun]
@@ -72,18 +72,29 @@ Si déjà produite → Afficher "Documentation déjà à jour (produite par le w
 
 ### Phase 3 — Archivage backlog
 
-Si un fichier existe dans `backlog/En-Cours/` :
+**GitHub Issues (prioritaire)** :
+Si `gh` est disponible et authentifié :
+1. Chercher l'issue En-Cours : `gh issue list --repo CCoupel/BuzzMaster --label "En-Cours" --state open`
+2. Si trouvée :
+   - Retirer le label `En-Cours`, ajouter le label `DONE`
+   - Fermer l'issue avec un commentaire : "Complété en vX.Y.Z"
+   ```bash
+   gh issue edit <N> --repo CCoupel/BuzzMaster --remove-label "En-Cours" --add-label "DONE"
+   gh issue close <N> --repo CCoupel/BuzzMaster --comment "Complété en vX.Y.Z"
+   ```
+3. Confirmer : "Issue #N fermée et étiquetée DONE"
 
-1. Lire le fichier pour identifier la feature et la version cible
-2. Déplacer le fichier : `backlog/En-Cours/<nom>.md` → `backlog/DONE/<nom>.md`
-3. Modifier le statut dans le fichier déplacé :
+**Fichiers locaux (en complément)** :
+Si un fichier existe dans `backlog/En-Cours/` :
+1. Déplacer le fichier : `backlog/En-Cours/<nom>.md` → `backlog/DONE/<nom>.md`
+2. Modifier le statut dans le fichier déplacé :
    ```markdown
    **Statut** : ✅ DONE — vX.Y.Z
    ```
-4. Mettre à jour `backlog/README.md` : retirer de la section En-Cours, ajouter en DONE avec version
-5. Confirmer : "Feature `<nom>` archivée dans `backlog/DONE/`"
+3. Mettre à jour `backlog/README.md` : retirer de la section En-Cours, ajouter en DONE avec version
+4. Confirmer : "Feature `<nom>` archivée dans `backlog/DONE/`"
 
-Si **aucune** feature En-Cours → passer à la phase suivante sans message d'erreur.
+Si **aucune** feature En-Cours (ni issue, ni fichier) → passer à la phase suivante sans message d'erreur.
 
 ---
 
@@ -107,7 +118,7 @@ Si on n'est **pas** déjà sur `main` :
      ```
      subagent_type: "cdp"
      description: "Squash merge"
-     prompt: Squash merge vers main. Message: feat/fix: <titre depuis backlog/DONE>. Version: vX.Y.Z (depuis config.json)
+     prompt: Squash merge vers main. Message: feat/fix: <titre depuis issue GitHub ou backlog/DONE>. Version: vX.Y.Z (depuis config.json)
      ```
 
 Si déjà sur `main` → commit + push des changements de documentation/backlog non encore commités.

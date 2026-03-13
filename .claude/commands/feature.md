@@ -33,12 +33,13 @@ Phase 0: ANALYSE (TOI)
     ├── Analyser la demande utilisateur
     ├── Identifier la portée (backend/frontend/firmware)
     ├── Estimer la complexité
-    └── Vérifier le backlog/
+    └── Vérifier les GitHub Issues (label backlog) et backlog/
     │
     ▼
 Phase 1: BACKLOG (TOI)
     │
-    ├── Chercher dans backlog/*.md si feature existe
+    ├── Chercher dans GitHub Issues (gh issue list --label backlog) si feature existe
+    ├── Fallback : chercher dans backlog/*.md si gh indisponible
     ├── Si trouvée → Proposer à l'utilisateur
     ├── Si validée → Utiliser comme spécification
     └── Créer la branche feature/<nom-court>
@@ -139,7 +140,7 @@ Phase 9: DÉPLOIEMENT QUALIF (deploy)
 | **Versioning** | Incrémente Y : 2.40.0 → 2.41.0 |
 | **Branche** | `feature/<nom-court>` (ex: feature/memory-modes) |
 | **Scope** | Large autorisé - nouvelle fonctionnalité complète |
-| **Backlog** | Vérifier backlog/*.md, proposer si trouvé |
+| **Backlog** | Vérifier GitHub Issues (label backlog), fallback backlog/*.md |
 | **Plan** | Obligatoire via implementation-planner |
 | **Tests** | Unitaires + E2E Chrome obligatoires |
 | **Documentation** | Complète (CHANGELOG, CLAUDE.md, ADMIN_GUIDE.md) |

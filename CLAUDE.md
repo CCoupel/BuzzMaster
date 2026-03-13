@@ -33,7 +33,7 @@ buzzcontrol/
 │   └── BuzzClick/            # Buzzer client firmware (ESP32-C3) - WiFi USB config (v3.0.0)
 ├── MARKETING/                # Site marketing (worktree gh-pages)
 ├── docs/                     # Documentation
-├── backlog/                  # Feature backlog
+├── backlog/                  # Feature backlog (specs détaillées, voir GitHub Issues pour le suivi)
 ├── CLAUDE.md                 # This file
 └── CHANGELOG.md              # Version history
 ```

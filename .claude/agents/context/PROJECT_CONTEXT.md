@@ -44,7 +44,7 @@ buzzcontrol/
 ├── src/
 │   └── BuzzClick/            # Firmware buzzer (ESP32-C3)
 ├── docs/                     # Documentation
-├── backlog/                  # Feature backlog
+├── backlog/                  # Feature backlog (specs détaillées, suivi via GitHub Issues)
 ├── contracts/                # Contrats API
 ├── CLAUDE.md                 # Architecture complète
 └── CHANGELOG.md              # Historique versions
