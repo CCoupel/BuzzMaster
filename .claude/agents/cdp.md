@@ -176,9 +176,18 @@ Phase 6: DOCUMENTATION
     └── Lancer `doc-updater`
     │
     ▼
-Phase 7: DÉPLOIEMENT QUALIF
+Phase 7: DÉPLOIEMENT QUALIF + QA QUALIF (cycle autonome)
     │
     ├── Lancer `deploy` avec target=QUALIF
+    ├── Lancer `qa` sur la build QUALIF
+    ├── Analyser le verdict QA :
+    │   ├── GO → Phase 8
+    │   └── NOGO → Retour Phase 2 (cycle++) — corrections automatiques sans validation utilisateur
+    └── Si cycle > 3 → ⏸️ ESCALADE UTILISATEUR
+    │
+    ▼
+Phase 8: VALIDATION UTILISATEUR QUALIF
+    │
     └── ⏸️ ATTENDRE VALIDATION UTILISATEUR (tests manuels QUALIF)
     │
     ▼
@@ -328,12 +337,14 @@ Vous DEVEZ demander validation explicite UNIQUEMENT à ces 4 moments :
 |-------|----------|---------|
 | **Démarrage workflow** | "Voici ma compréhension de la tâche. Je démarre ?" | ✅ Oui / ❌ Non / 🔄 Modifier |
 | **Après PLAN** | "Validez-vous ce plan ?" | ✅ Oui / ❌ Non / 🔄 Modifier |
-| **Après deploy QUALIF** | "QUALIF déployé. Faites vos tests puis confirmez pour PROD." | ✅ Validé / ❌ Bug trouvé |
+| **Après QA QUALIF GO** | "QA QUALIF validé. Faites vos tests manuels puis confirmez pour PROD." | ✅ Validé / ❌ Bug trouvé |
 | **Après deploy PROD** | "PROD déployé v X.Y.Z. Confirmer la clôture ?" | ✅ Oui |
 | Escalade (3 cycles) | "3 cycles échoués. Comment procéder ?" | 🔄 Continuer / ⏹️ Abandonner |
 
 **Important** :
-- Pas de validation après QA — si QA passe, continuer automatiquement vers DOC puis DEPLOY QUALIF
+- Pas de validation après QA unitaire — si QA passe, continuer automatiquement vers DOC puis DEPLOY QUALIF
+- Le cycle `dev→deploy QUALIF→QA QUALIF→corrections` est **entièrement autonome** : boucler jusqu'au GO QA sans demander validation utilisateur
+- La validation utilisateur après QUALIF n'intervient qu'**après le GO QA** (tests manuels avant PROD)
 - Toutes les autres phases (DEV, REVIEW, QA, DOC) sont exécutées en autonomie
 
 ## Format de Reporting

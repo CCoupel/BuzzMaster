@@ -63,18 +63,20 @@ for PKG in $PACKAGES; do
 done
 ```
 
-**Après chaque package**, envoyer un `SendMessage` au CDP :
+**Après chaque test individuel**, envoyer un `SendMessage` au CDP :
 
 ```
-[QA] Tests [████████░░] 42/52 | ✅ 40 PASS  ❌ 2 FAIL | pkg: internal/game
+Nb Total=52 | Réalisé=43 | Echecs=2 | dernier test: OK
+Nb Total=52 | Réalisé=44 | Echecs=2 | dernier test: KO
+Nb Total=52 | Réalisé=45 | Echecs=3 | dernier test: BLOCKING
 ```
 
-Format de la barre de tests :
-- Longueur : 10 chars, calculée sur `(PASS+FAIL) / TOTAL * 10`
-- Mettre à jour à chaque package terminé
-- Si TOTAL inconnu (estimation 0), afficher `[████████░░] 42 tests | ✅ 40 PASS  ❌ 2 FAIL`
+Valeurs du statut `dernier test` :
+- **OK** : test passé avec succès
+- **KO** : test échoué (non bloquant — la suite continue)
+- **BLOCKING** : test critique échoué qui bloque l'exécution (ex: build fail, panic, compilation error)
 
-**Fréquence** : un message par package (ou regrouper si > 10 packages).
+**Fréquence** : un message par test individuel (`--- PASS:` / `--- FAIL:`). Pour les suites > 50 tests, regrouper par tranches de 5 pour éviter le flood.
 
 Verify: All tests pass (PASS), coverage > 80% ideally, no failures (FAIL), no panics.
 
@@ -314,11 +316,25 @@ gofmt -l .
 
 > **Workflow détaillé** : Voir `context/VALIDATION_COMMON.md`
 
-| Verdict | Action |
-|---------|--------|
-| ✅ VALIDATED | → DOC agent |
-| ⚠️ WITH RESERVATIONS | → Continue avec monitoring |
-| ❌ NOT VALIDATED | → DEV agent avec rapport d'erreurs |
+### Rapport GO/NOGO final au CDP (OBLIGATOIRE)
+
+À la fin du QA, envoyer **obligatoirement** le verdict final au CDP via `SendMessage` :
+
+```
+[QA] GO | Tests: 52/52 PASS | Coverage: 84% | Build: OK
+```
+ou
+```
+[QA] NOGO | Tests: 49/52 PASS | 3 FAIL (2 critiques) | Build: OK | Action requise: corriger engine_test.go:TestScoreCalc
+```
+
+Format : `[QA] GO|NOGO | [résumé en une ligne]`
+
+| Verdict | Action CDP |
+|---------|-----------|
+| ✅ VALIDATED → GO | CDP continue automatiquement |
+| ⚠️ WITH RESERVATIONS → GO (avec réserves notées) | CDP continue automatiquement |
+| ❌ NOT VALIDATED → NOGO | CDP retourne en DEV avec le rapport d'erreurs |
 
 ## Todo List et Notifications
 
@@ -366,9 +382,15 @@ gofmt -l .
 
 **Niveau 2 — Progression des tests (dans les steps 3 et 4) :**
 
-Pendant l'exécution des tests, envoyer des updates avec la barre au niveau des tests :
+Pendant l'exécution des tests, envoyer un message par test individuel au CDP :
 
 ```
-[QA] Tests [████████░░] 42/52 | ✅ 40 PASS  ❌ 2 FAIL | pkg: internal/game
-[QA] E2E   [██████░░░░] 3/5   | ✅ TestE2EBuzz  ✅ TestE2EGame  ❌ TestE2EOTA
+Nb Total=52 | Réalisé=43 | Echecs=2 | dernier test: OK
+Nb Total=52 | Réalisé=44 | Echecs=2 | dernier test: KO
+Nb Total=52 | Réalisé=45 | Echecs=3 | dernier test: BLOCKING
+```
+
+Pour les tests E2E :
+```
+Nb Total=5 | Réalisé=3 | Echecs=0 | dernier test: OK
 ```
