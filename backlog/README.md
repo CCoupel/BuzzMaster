@@ -1,6 +1,6 @@
 # Backlog BuzzMaster
 
-> **Suivi via GitHub Issues** : Le backlog est désormais suivi via [GitHub Issues (label `backlog`)](https://github.com/CCoupel/BuzzMaster/issues?q=label%3Abacklog).
+> **Suivi via GitHub Issues** : Le backlog est suivi via [GitHub Issues (label `backlog`)](https://github.com/CCoupel/BuzzMaster/issues?q=label%3Abacklog).
 > Ce dossier contient les **spécifications détaillées** référencées par les issues.
 
 Ce dossier contient les spécifications détaillées de toutes les fonctionnalités du projet BuzzMaster, organisées par statut.
@@ -9,10 +9,10 @@ Ce dossier contient les spécifications détaillées de toutes les fonctionnalit
 
 ```
 backlog/
-├── TODO/           # Fonctionnalités planifiées, pas encore démarrées
-├── En-Cours/       # Implémentation en cours
-├── DONE/           # Fonctionnalités complétées et livrées
-├── REMOVED/        # Fonctionnalités abandonnées (gardées pour mémoire)
+├── TODO/           # Spécifications des fonctionnalités planifiées
+├── En-Cours/       # Spécifications des fonctionnalités en cours
+├── DONE/           # Spécifications des fonctionnalités complétées
+├── REMOVED/        # Spécifications des fonctionnalités abandonnées (gardées pour mémoire)
 └── README.md       # Ce fichier
 ```
 
@@ -71,139 +71,38 @@ backlog/
 
 Pour ajouter une nouvelle fonctionnalité au backlog :
 
-1. Créer une issue GitHub avec les labels `enhancement` et `backlog`
-2. Optionnellement, créer un fichier de spécification détaillée dans `TODO/`
+1. Créer une issue GitHub avec les labels `enhancement`, `backlog` et `TODO`
+   ```bash
+   gh issue create --repo CCoupel/BuzzMaster \
+       --title "<Titre>" \
+       --label "enhancement,backlog,TODO"
+   ```
+2. Optionnellement, créer un fichier de spécification détaillée dans `backlog/TODO/`
 3. Lier le fichier de spec dans l'issue GitHub
-
-### Template de spécification (optionnel)
-
-1. Créer un nouveau fichier `.md` dans le dossier `TODO/`
-2. Utiliser le template suivant :
-
-```markdown
-# Nom de la fonctionnalité
-
-**Statut** : TODO
-
-## Description
-
-[Description générale de la fonctionnalité]
-
-## Objectifs
-
-- [ ] Objectif 1
-- [ ] Objectif 2
-
-## Tâches
-
-### Phase 1
-- [ ] Tâche 1
-- [ ] Tâche 2
-
-## Version cible
-
-vX.Y.Z
-```
-
-3. Mettre à jour ce README avec la référence au nouveau fichier
-4. Committer les changements
 
 ## Cycle de vie d'une fonctionnalité
 
+Le cycle de vie est géré via **GitHub Issues** :
+
 ```
-TODO/ ──────────► En-Cours/ ──────────► DONE/
-       Démarrage            Mise en prod
+[TODO] ──► [En-Cours] ──► [DONE] (issue fermée)
   │
-  └──────────────────────────────────► REMOVED/
-                          Abandon (spec conservée)
+  └──────────────────────► [REMOVED] (issue fermée, "not planned")
 ```
 
-### 1. Nouvelle fonctionnalité
+### Labels GitHub
 
-**Action** : Créer le fichier dans `TODO/`
+| Action | Labels à modifier |
+|--------|-----------------|
+| Démarrage | Retirer `TODO`, ajouter `En-Cours` |
+| Completion | Retirer `En-Cours`, ajouter `DONE`, fermer l'issue |
+| Abandon | Retirer tous labels de statut, ajouter `REMOVED`, fermer "not planned" |
 
-**Statut dans le fichier** :
+### Fichiers de spécification (optionnels)
+
+Les fichiers dans `backlog/` sont des spécifications de référence. Ils ne sont pas le tracker principal.
+Si un fichier existe, mettre à jour le champ `**Statut**` en cohérence avec l'issue GitHub :
+
 ```markdown
-**Statut** : 📋 Planifié
+**Statut** : ✅ Complété (vX.Y.Z)
 ```
-
-### 2. Démarrage de l'implémentation
-
-**Action** : Déplacer de `TODO/` vers `En-Cours/`
-
-```bash
-mv backlog/TODO/ma-feature.md backlog/En-Cours/
-```
-
-**Mise à jour du fichier** :
-```markdown
-**Statut** : ⏳ En cours (vX.Y.Z)
-```
-
-**Mise à jour des README** :
-- Ce fichier : déplacer la ligne de la section TODO vers En-Cours
-- `BACKLOG.md` : mettre à jour le lien
-
-### 3. Feature complète et mise en production
-
-**Action** : Déplacer de `En-Cours/` vers `DONE/`
-
-```bash
-mv backlog/En-Cours/ma-feature.md backlog/DONE/
-```
-
-**Mise à jour du fichier** :
-```markdown
-**Statut** : ✅ Complété (vX.Y.0)
-```
-
-**Mise à jour des README** :
-- Ce fichier : déplacer la ligne vers DONE avec la version
-- `BACKLOG.md` : mettre à jour le lien et ajouter la version
-
-### Exemple complet
-
-```bash
-# 1. Démarrage de "QCM Marqueurs" pour v2.46.0
-mv backlog/TODO/qcm-marqueurs-indices.md backlog/En-Cours/
-# → Éditer le fichier : **Statut** : ⏳ En cours (v2.46.0)
-# → Mettre à jour README.md et BACKLOG.md
-
-# 2. Après /deploy PROD de v2.46.0
-mv backlog/En-Cours/qcm-marqueurs-indices.md backlog/DONE/
-# → Éditer le fichier : **Statut** : ✅ Complété (v2.46.0)
-# → Mettre à jour README.md et BACKLOG.md
-# → Commit : "docs(backlog): Move qcm-marqueurs-indices to DONE (v2.46.0)"
-```
-
-## Historique
-
-- 2026-03-02 : Completion UDP broadcast server discovery (v3.2.0)
-- 2026-03-02 : Ajout UDP broadcast server discovery (v3.2.0 target, résout DHCP IP change problem)
-- 2026-02-23 : Abandon buzzer-wifi-provisioning-smartconfig (remplacé par config WiFi USB directe v3.0.x)
-- 2026-02-23 : Completion buzzer-firmware-ota-update (v3.1.0/3.1.1)
-- 2026-02-17 : Completion buzzer-protocol-websocket (v3.0.0)
-- 2026-02-08 : Ajout migration protocole buzzers TCP vers WebSocket (v3.0.0 target)
-- 2026-02-08 : Ajout provisionnement WiFi buzzers via SmartConfig intégré ENROLL (v3.0.0 target)
-- 2026-02-08 : Completion admin-joueur-card-style (v2.49.0), suppression doublons TODO/En-Cours
-- 2026-02-07 : Completion vjoueur-qcm-multicolore (v2.53.0)
-- 2026-02-06 : Completion navbar-menu-connexion (v2.49.0), suppression notification-nouvelle-version orpheline
-- 2026-02-01 : Ajout mise à jour automatique du serveur (téléchargement + redémarrage)
-- 2026-02-01 : Maintenance backlog - déplacement effet-neon-categorie vers DONE, suppression entrée bugfix-neon-effet-parametres inexistante
-- 2026-01-31 : Completion VJoueur WebSocket identification (v2.47.0)
-- 2026-01-31 : Ajout menu déroulant navbar (pastille connexion)
-- 2026-01-31 : Ajout bugfix paramètres effet néon non appliqués
-- 2026-01-31 : Ajout filtrage broadcasts WebSocket par type de client
-- 2026-01-30 : Ajout effet néon catégorie sur TV et VJoueur
-- 2026-01-30 : Réorganisation du backlog en 3 dossiers (TODO, En-Cours, DONE)
-- 2026-01-30 : Completion tri équipes/joueurs par rapidité de buzz (v2.44.1)
-- 2026-01-26 : WebSocket dédiée pour logs (v2.43.0)
-- 2026-01-26 : Completion page logs (v2.42.0)
-- 2026-01-25 : Ajout tri équipes/joueurs par rapidité de buzz
-- 2026-01-25 : Ajout marqueurs indices QCM sur barre de temps
-- 2026-01-25 : Ajout de la page logs
-- 2026-01-25 : Complétion page joueur (v2.41.0)
-- 2026-01-23 : Ajout du mode demo (v2.40.0)
-- 2026-01-20 : Création de la structure de backlog modulaire
-- 2026-01-20 : Ajout du générateur IA
-- 2026-01-20 : Ajout de la page joueur (/player)
