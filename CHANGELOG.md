@@ -3,6 +3,18 @@
 Historique des versions du projet BuzzControl.
 
 
+## [3.3.0] - 2026-03-28
+
+### Added
+- **[CI/CD]**: Metadonnees Windows PE dans le binaire `buzzcontrol.exe` via `goversioninfo`
+  - Proprietes Windows visibles (clic droit > Proprietes > Details) : Nom du produit `BuzzControl`, Version, Description, Copyright
+  - Nouveau fichier `server-go/cmd/server/versioninfo.json` — template metadonnees PE (maintenu en phase avec la version courante)
+  - Nouvelle icone `server-go/assets/icon.ico` integree au binaire Windows
+  - Step CI `Generate Windows PE metadata` dans le job Windows de `.github/workflows/release.yml` — genere `versioninfo.json` dynamiquement depuis le tag, puis compile le `.syso` via `goversioninfo`
+  - Step `build.ps1` — genere le `.syso` avant `go build` pour les builds locaux Windows
+
+---
+
 ## [3.2.4] - 2026-03-05
 
 ### Fixed

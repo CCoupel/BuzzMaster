@@ -46,7 +46,7 @@ git status
 
 ### 3. Mise à Jour de la Version
 
-**IMPORTANT** : Les deux fichiers doivent avoir la même version.
+**IMPORTANT** : Les trois fichiers doivent avoir la même version.
 
 **Fichier 1** : `server-go/config.json`
 ```json
@@ -63,6 +63,25 @@ git status
   ...
 }
 ```
+
+**Fichier 3** : `server-go/cmd/server/versioninfo.json` (métadonnées Windows PE)
+
+Ce fichier doit être maintenu en phase avec la version courante. Mettre à jour les champs suivants :
+```json
+{
+  "FixedFileInfo": {
+    "FileVersion":    { "Major": x, "Minor": y, "Patch": 0, "Build": 0 },
+    "ProductVersion": { "Major": x, "Minor": y, "Patch": 0, "Build": 0 }
+  },
+  "StringFileInfo": {
+    "FileVersion":    "x.y.0.0",
+    "ProductVersion": "x.y.0"
+  }
+}
+```
+
+> **Note** : La CI (job Windows) régénère `versioninfo.json` automatiquement depuis le tag.
+> La mise à jour manuelle du fichier sert uniquement pour les builds locaux via `build.ps1`.
 
 **Règles de versionnement** :
 - **x** (majeur) : Changement d'architecture ou breaking change
@@ -302,7 +321,7 @@ curl -s http://localhost/version
 ```
 [ ] 1.  Validation utilisateur obtenue
 [ ] 2.  Fichiers temporaires nettoyés
-[ ] 3.  Version mise à jour (config.json + package.json)
+[ ] 3.  Version mise à jour (config.json + package.json + versioninfo.json)
 [ ] 4.  CHANGELOG.md mis à jour
 [ ] 5.  CLAUDE.md mis à jour (documentation technique)
 [ ] 6.  README.md mis à jour (si nécessaire)

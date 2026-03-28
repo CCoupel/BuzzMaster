@@ -55,7 +55,7 @@ Document user-facing changes with:
 - Concrete examples
 - Important notes and warnings
 
-### 4. Finalize Version in config.json
+### 4. Finalize Version in config.json + versioninfo.json
 
 **Critical versioning rule**: Reset z to 0 for the final documented version.
 
@@ -64,13 +64,29 @@ Document user-facing changes with:
 
 The z increments during development are for internal tracking only. The official release always has `z = 0` for new features.
 
+**Mandatory**: Also update `server-go/cmd/server/versioninfo.json` (Windows PE metadata):
+```json
+{
+  "FixedFileInfo": {
+    "FileVersion":    { "Major": x, "Minor": y, "Patch": 0, "Build": 0 },
+    "ProductVersion": { "Major": x, "Minor": y, "Patch": 0, "Build": 0 }
+  },
+  "StringFileInfo": {
+    "FileVersion":    "x.y.0.0",
+    "ProductVersion": "x.y.0"
+  }
+}
+```
+
+This file must always stay in sync with `config.json`. The `.syso` file it generates must NOT be committed.
+
 ### 5. Git Workflow
 
 You are responsible for committing and pushing documentation:
 
 ```bash
 # 1. Finalize version
-git add server-go/config.json
+git add server-go/config.json server-go/web/package.json server-go/cmd/server/versioninfo.json
 git commit -m "docs(version): Finalize vX.Y.0"
 
 # 2. Commit documentation
@@ -107,8 +123,9 @@ Return a structured summary:
 ### ADMIN_GUIDE.md
 - Section **[Name]**: [What was documented]
 
-### config.json
+### config.json + versioninfo.json
 - Version updated: `X.Y.Z` → `X.Y.0`
+- versioninfo.json: FileVersion + ProductVersion synchronized
 
 ## 📝 Content Added
 
@@ -182,6 +199,7 @@ Before finishing, verify:
 - [ ] CLAUDE.md updated for all impacted sections
 - [ ] ADMIN_GUIDE.md updated if user-facing changes exist
 - [ ] config.json version finalized (z reset to 0)
+- [ ] versioninfo.json updated (FileVersion + ProductVersion in sync with config.json)
 - [ ] No typos or Markdown errors
 - [ ] Git commits created with proper messages
 - [ ] Changes pushed to feature branch

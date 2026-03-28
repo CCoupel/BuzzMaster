@@ -84,8 +84,12 @@ Le projet utilise **GitHub Actions** pour automatiser la compilation et la publi
 
 Le serveur et le firmware partagent désormais **le même numéro de version** :
 - Serveur : Version dans `server-go/config.json`
+- Frontend : Version dans `server-go/web/package.json`
 - Firmware : Version injectée automatiquement dans `platformio.ini` par la CI
+- **Métadonnées Windows PE** : `server-go/cmd/server/versioninfo.json` — à mettre à jour manuellement à chaque release (champs `FileVersion`, `ProductVersion`)
 - Tag Git : `vX.Y.0` déclenche le build de TOUS les composants
+
+> **Note versioninfo.json** : La CI régénère ce fichier automatiquement pour le build Windows. La mise à jour manuelle est requise uniquement pour les builds locaux (`build.ps1`). Le `.syso` généré ne doit PAS être commité (voir `.gitignore`).
 
 **Compatibilité** : Les buzzers avec ancien firmware (1.209.3) continuent de fonctionner avec les nouveaux serveurs (rétrocompatibilité protocole TCP/UDP).
 

@@ -21,8 +21,23 @@ $configJson = Get-Content "config.json" | ConvertFrom-Json
 $version = $configJson.version
 Write-Host "Version: $version" -ForegroundColor Cyan
 
-# Step 3: Build Go executable with embedded version
-Write-Host "`n[3/3] Building Go executable..." -ForegroundColor Yellow
+# Step 3: Generate Windows PE metadata (.syso) via goversioninfo
+Write-Host "`n[3/4] Generating Windows PE metadata..." -ForegroundColor Yellow
+$goversioninfo = Get-Command goversioninfo -ErrorAction SilentlyContinue
+if (-not $goversioninfo) {
+    Write-Host "Installing goversioninfo..." -ForegroundColor Yellow
+    go install github.com/josephspurrier/goversioninfo/cmd/goversioninfo@latest
+}
+Push-Location cmd/server
+goversioninfo -o resource_windows_amd64.syso
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "goversioninfo failed! Continuing without Windows metadata." -ForegroundColor Yellow
+}
+Pop-Location
+Write-Host "Windows PE metadata generated." -ForegroundColor Green
+
+# Step 4: Build Go executable with embedded version
+Write-Host "`n[4/4] Building Go executable..." -ForegroundColor Yellow
 $ldflags = "-X main.Version=$version"
 go build -ldflags "$ldflags" -o server.exe ./cmd/server
 if ($LASTEXITCODE -ne 0) {

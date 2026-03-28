@@ -123,6 +123,52 @@ jobs:
           fi
           echo "✅ Firmware v$VERSION embedded into server assets"
 
+      - name: Install goversioninfo (Windows only)
+        if: matrix.goos == 'windows'
+        run: go install github.com/josephspurrier/goversioninfo/cmd/goversioninfo@latest
+
+      - name: Generate Windows PE metadata (Windows only)
+        if: matrix.goos == 'windows'
+        env:
+          VERSION: ${{ needs.checking.outputs.version }}
+        run: |
+          IFS='.' read -r MAJOR MINOR PATCH <<< "$VERSION"
+          echo "Generating versioninfo.json for v$VERSION..."
+          cat > server-go/cmd/server/versioninfo.json <<EOF
+{
+  "FixedFileInfo": {
+    "FileVersion": { "Major": ${MAJOR}, "Minor": ${MINOR}, "Patch": ${PATCH}, "Build": 0 },
+    "ProductVersion": { "Major": ${MAJOR}, "Minor": ${MINOR}, "Patch": ${PATCH}, "Build": 0 },
+    "FileFlagsMask": "3f",
+    "FileFlags": "00",
+    "FileOS": "040004",
+    "FileType": "01",
+    "FileSubType": "00"
+  },
+  "StringFileInfo": {
+    "Comments": "",
+    "CompanyName": "CCoupel",
+    "FileDescription": "Wireless Buzzer System for Quiz Games",
+    "FileVersion": "${MAJOR}.${MINOR}.${PATCH}.0",
+    "InternalName": "buzzcontrol",
+    "LegalCopyright": "2026 CCoupel",
+    "LegalTrademarks": "",
+    "OriginalFilename": "buzzcontrol.exe",
+    "PrivateBuild": "",
+    "ProductName": "BuzzControl",
+    "ProductVersion": "${VERSION}",
+    "SpecialBuild": ""
+  },
+  "VarFileInfo": {
+    "Translation": { "LangID": "0409", "CharsetID": "04B0" }
+  },
+  "IconPath": "../../assets/icon.ico",
+  "ManifestPath": ""
+}
+EOF
+          cd server-go/cmd/server && goversioninfo -o resource_windows_amd64.syso
+          echo "✅ Windows PE metadata generated (resource_windows_amd64.syso)"
+
       - name: Build ${{ matrix.target }}
         working-directory: server-go
         env:
