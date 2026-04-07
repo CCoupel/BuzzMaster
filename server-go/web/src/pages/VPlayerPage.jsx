@@ -1,7 +1,8 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useGame } from '../hooks/GameContext'
 import PlayerDisplay from './PlayerDisplay'
+import NoSleep from 'nosleep.js'
 import './VPlayerPage.css'
 
 // QCM answer colors mapping
@@ -19,6 +20,9 @@ export default function VPlayerPage() {
   const [playerSession, setPlayerSession] = useState(null)
   const [bumper, setBumper] = useState(null)
   const [team, setTeam] = useState(null)
+  const [isFullscreen, setIsFullscreen] = useState(false)
+  const [showFullscreenHint, setShowFullscreenHint] = useState(false)
+  const noSleepRef = useRef(null)
 
   // Load session from localStorage on mount
   useEffect(() => {
@@ -115,6 +119,43 @@ export default function VPlayerPage() {
     sendMessage('PONG', { ID: bumper.id })
   }, [gameState.phase, bumper, sendMessage])
 
+  // NoSleep — requires user gesture to enable (called on fullscreen tap or first buzz)
+  const activateNoSleep = useCallback(() => {
+    if (!noSleepRef.current) noSleepRef.current = new NoSleep()
+    if (!noSleepRef.current.isEnabled) noSleepRef.current.enable()
+  }, [])
+
+  useEffect(() => {
+    return () => { if (noSleepRef.current?.isEnabled) noSleepRef.current.disable() }
+  }, [])
+
+  // Auto-fullscreen on mount; show hint if browser rejects (e.g. reconnect without user gesture)
+  useEffect(() => {
+    const el = document.documentElement
+    const fn = el.requestFullscreen || el.webkitRequestFullscreen || el.mozRequestFullScreen
+    if (fn) {
+      fn.call(el).catch(() => setShowFullscreenHint(true))
+    } else {
+      setShowFullscreenHint(true)
+    }
+    const onChange = () => setIsFullscreen(!!(document.fullscreenElement || document.webkitFullscreenElement))
+    document.addEventListener('fullscreenchange', onChange)
+    document.addEventListener('webkitfullscreenchange', onChange)
+    return () => {
+      document.removeEventListener('fullscreenchange', onChange)
+      document.removeEventListener('webkitfullscreenchange', onChange)
+    }
+  }, [])
+
+  // Tap on fullscreen hint: enter fullscreen + activate NoSleep (user gesture)
+  const handleFullscreenTap = useCallback(() => {
+    setShowFullscreenHint(false)
+    const el = document.documentElement
+    const fn = el.requestFullscreen || el.webkitRequestFullscreen
+    if (fn) fn.call(el).catch(() => {})
+    activateNoSleep()
+  }, [activateNoSleep])
+
   const handleBuzz = () => {
     if (!bumper || !bumper.id) return
 
@@ -134,8 +175,7 @@ export default function VPlayerPage() {
     }
 
     console.log('[VPlayer] Buzzing:', bumper.id)
-
-    // Send BUTTON message with correct format
+    activateNoSleep()
     sendMessage('BUTTON', { ID: bumper.id, button: 'A' })
   }
 
@@ -185,6 +225,14 @@ export default function VPlayerPage() {
 
   return (
     <div className="vplayer-page">
+      {/* Fullscreen hint — shown when auto-fullscreen failed (reconnect without user gesture) */}
+      {showFullscreenHint && (
+        <div className="vplayer-fullscreen-hint" onClick={handleFullscreenTap}>
+          <span className="vplayer-fullscreen-hint-icon">⛶</span>
+          <span className="vplayer-fullscreen-hint-text">Appuyez pour le plein écran</span>
+        </div>
+      )}
+
       {/* Buzz confirmation overlay */}
       {hasBuzzed && (() => {
         const answerColor = isQcmQuestion && bumper.ANSWER_COLOR ? ANSWER_COLORS[bumper.ANSWER_COLOR] : null

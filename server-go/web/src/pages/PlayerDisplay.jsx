@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, useCallback, useRef } from 'react'
+import NoSleep from 'nosleep.js'
 import { motion, AnimatePresence } from 'framer-motion'
 import confetti from 'canvas-confetti'
 import { useGame } from '../hooks/GameContext'
@@ -43,6 +44,9 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
   const [cascadeRevealDone, setCascadeRevealDone] = useState(false) // True when all cards are revealed in cascade
   const [cascadeHideDone, setCascadeHideDone] = useState(false) // True when all cards are hidden after cascade
   const [cascadeHideStarted, setCascadeHideStarted] = useState(false) // True when cascade hide has been triggered
+  const [isFullscreen, setIsFullscreen] = useState(false)
+  const tvWakeLockRef = useRef(null)
+  const tvNoSleepRef = useRef(null)
   const [localCountdown, setLocalCountdown] = useState(null) // Local countdown that starts after cascade reveal is done
 
   // DEBUG: Log gameState
@@ -728,8 +732,56 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
   // Neon mode class
   const neonModeClass = neonConfig.mode === 'halo' ? 'neon-mode-halo' : 'neon-mode-bar'
 
+  // TV page: auto-fullscreen + wake lock on mount (skip for admin preview and vplayer)
+  const toggleTvFullscreen = useCallback(() => {
+    const isFull = !!(document.fullscreenElement || document.webkitFullscreenElement)
+    if (!isFull) {
+      const el = document.documentElement
+      const fn = el.requestFullscreen || el.webkitRequestFullscreen
+      if (fn) fn.call(el).catch(() => {})
+    } else {
+      const fn = document.exitFullscreen || document.webkitExitFullscreen
+      if (fn) fn.call(document).catch(() => {})
+    }
+  }, [])
+
+  useEffect(() => {
+    if (isVPlayer || isAdminPreview) return
+
+    // Auto-fullscreen on mount
+    const el = document.documentElement
+    const fn = el.requestFullscreen || el.webkitRequestFullscreen
+    if (fn) fn.call(el).catch(() => {})
+
+    // Track fullscreen state
+    const onChange = () => setIsFullscreen(!!(document.fullscreenElement || document.webkitFullscreenElement))
+    document.addEventListener('fullscreenchange', onChange)
+    document.addEventListener('webkitfullscreenchange', onChange)
+
+    // Wake lock: native (HTTPS) or NoSleep.js (HTTP, uses user gesture from click)
+    const startWakeLock = async () => {
+      if ('wakeLock' in navigator) {
+        try { tvWakeLockRef.current = await navigator.wakeLock.request('screen'); return } catch (_) {}
+      }
+      if (!tvNoSleepRef.current) tvNoSleepRef.current = new NoSleep()
+      if (!tvNoSleepRef.current.isEnabled) tvNoSleepRef.current.enable()
+    }
+    startWakeLock()
+
+    return () => {
+      document.removeEventListener('fullscreenchange', onChange)
+      document.removeEventListener('webkitfullscreenchange', onChange)
+      if (tvWakeLockRef.current) { tvWakeLockRef.current.release(); tvWakeLockRef.current = null }
+      if (tvNoSleepRef.current?.isEnabled) { tvNoSleepRef.current.disable(); tvNoSleepRef.current = null }
+    }
+  }, [isVPlayer, isAdminPreview])
+
   return (
     <div className={`player-display ${showNeon ? `neon-border ${neonModeClass}` : ''}`} style={neonStyle}>
+      {/* TV fullscreen fallback button — only if auto-fullscreen failed and not admin preview */}
+      {!isVPlayer && !isAdminPreview && !isFullscreen && (
+        <button className="tv-fullscreen-btn" onClick={toggleTvFullscreen} title="Plein écran">⛶</button>
+      )}
       {/* Background Images with Crossfade */}
       <div className="background-container">
         <AnimatePresence mode="sync">

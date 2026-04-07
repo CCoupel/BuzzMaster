@@ -3,6 +3,22 @@
 Historique des versions du projet BuzzControl.
 
 
+## [3.3.1] - 2026-04-07
+
+### Fixed
+- **[VPlayer/Fullscreen]**: Ajout d'un bouton plein ecran discret sur la page joueur (`/vplayer`)
+  - Support cross-browser avec vendor prefixes (`webkit`, `moz`)
+  - Icone toggle : `⛶` pour entrer, `⊠` pour sortir du plein ecran
+  - Sur iOS Safari : la Fullscreen API n'est pas supportee sur `documentElement` (limitation plateforme) — le bouton est sans effet mais n'errore pas
+  - Bouton fade-out apres 3s, reapparait au survol/tap
+- **[VPlayer/WakeLock]**: Prevention de la mise en veille du telephone via Screen Wake Lock API
+  - Guard `'wakeLock' in navigator` pour les navigateurs sans support (iOS Safari)
+  - Reacquisition automatique du wake lock apres retour d'onglet (`visibilitychange`)
+  - Liberation propre au demontage du composant
+- **[VPlayer/Blink]**: Clignotement du buzz ralenti de 3s a 1.5s par cycle (animation `buzz-pulse`)
+
+---
+
 ## [3.3.0] - 2026-03-28
 
 ### Added

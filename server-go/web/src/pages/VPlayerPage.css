@@ -115,19 +115,17 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
+  background: rgba(0, 0, 0, 0.72);
   border: 8px solid var(--buzz-color);
   animation: buzz-pulse 1.5s ease-in-out infinite;
-  pointer-events: none;
+  pointer-events: auto;
 }
 
 .vplayer-buzz-checkmark {
   font-size: clamp(4rem, 15vw, 8rem);
   color: var(--buzz-color);
   font-weight: 900;
-  text-shadow:
-    0 4px 8px rgba(0, 0, 0, 0.8),
-    0 0 40px currentColor;
-  animation: buzz-checkmark-pop 0.6s ease-out;
+  animation: buzz-checkmark-pop 0.6s ease-out, buzz-text-glow 1.5s ease-in-out 0.6s infinite;
 }
 
 .vplayer-buzz-text {
@@ -135,10 +133,8 @@
   font-size: clamp(2rem, 6vw, 3.5rem);
   font-weight: 700;
   color: var(--buzz-color);
-  text-shadow:
-    0 2px 4px rgba(0, 0, 0, 0.8),
-    0 0 30px currentColor;
   letter-spacing: 2px;
+  animation: buzz-text-glow 1.5s ease-in-out infinite;
 }
 
 .vplayer-buzz-answer-text {
@@ -155,18 +151,29 @@
 
 @keyframes buzz-pulse {
   0%, 100% {
-    opacity: 1;
     box-shadow:
-      inset 0 0 40px currentColor,
-      0 0 60px currentColor;
+      inset 0 0 40px var(--buzz-color),
+      0 0 40px var(--buzz-color);
   }
   50% {
-    opacity: 0.7;
     box-shadow:
-      inset 0 0 60px currentColor,
-      0 0 80px currentColor;
+      inset 0 0 90px var(--buzz-color),
+      0 0 80px var(--buzz-color);
   }
 }
+
+@keyframes buzz-text-glow {
+  0%, 100% {
+    opacity: 0.85;
+    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.8), 0 0 20px currentColor;
+  }
+  50% {
+    opacity: 1;
+    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.8), 0 0 60px currentColor, 0 0 100px currentColor;
+  }
+}
+
+/* Reduced blink speed: 1.5s cycle (was too fast before) */
 
 @keyframes buzz-checkmark-pop {
   0% {
@@ -180,6 +187,41 @@
     transform: scale(1);
     opacity: 1;
   }
+}
+
+/* Fullscreen hint banner — shown only when auto-fullscreen failed (reconnect) */
+.vplayer-fullscreen-hint {
+  position: fixed;
+  bottom: 2rem;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 100;
+  background: rgba(0, 0, 0, 0.75);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 2rem;
+  padding: 0.6rem 1.4rem;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  cursor: pointer;
+  animation: hint-fade-in 0.4s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.vplayer-fullscreen-hint-icon {
+  font-size: 1.3rem;
+  color: white;
+}
+
+.vplayer-fullscreen-hint-text {
+  font-size: 0.95rem;
+  color: rgba(255, 255, 255, 0.9);
+  white-space: nowrap;
+}
+
+@keyframes hint-fade-in {
+  from { opacity: 0; transform: translateX(-50%) translateY(10px); }
+  to { opacity: 1; transform: translateX(-50%) translateY(0); }
 }
 
 /* Mobile responsiveness */
