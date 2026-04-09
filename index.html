@@ -487,11 +487,11 @@
                 </div>
             </div>
 
-            <!-- Version badge -->
+            <!-- Version badge (populated dynamically by js/main.js via GitHub Releases API) -->
             <div class="version-badge">
                 <span class="version-label">Version actuelle</span>
-                <span class="version-number">v3.3.0</span>
-                <span class="version-date">28 mars 2026</span>
+                <span class="version-number" id="hero-version">v3.3.3</span>
+                <span class="version-date" id="hero-version-date">9 avril 2026</span>
             </div>
 
             <!-- CTA Buttons -->
@@ -832,13 +832,14 @@
         <div class="container">
             <h2>Telecharger</h2>
             <p class="download-subtitle">Executables portables, prets a l'emploi. Aucune installation requise.</p>
+            <!-- Download buttons (href populated dynamically by js/main.js via GitHub Releases API) -->
             <div class="download-buttons">
-                <a href="https://github.com/CCoupel/BuzzMaster/releases/latest" class="download-card" target="_blank">
+                <a href="https://github.com/CCoupel/BuzzMaster/releases/latest" class="download-card" id="dl-windows" target="_blank">
                     <span class="download-icon">🪟</span>
                     <span class="download-os">Windows</span>
                     <span class="download-arch">AMD64</span>
                 </a>
-                <a href="https://github.com/CCoupel/BuzzMaster/releases/latest" class="download-card" target="_blank">
+                <a href="https://github.com/CCoupel/BuzzMaster/releases/latest" class="download-card" id="dl-linux" target="_blank">
                     <span class="download-icon">🍓</span>
                     <span class="download-os">Raspberry Pi</span>
                     <span class="download-arch">ARM64</span>
