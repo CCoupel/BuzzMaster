@@ -3,6 +3,15 @@
 Historique des versions du projet BuzzControl.
 
 
+## [3.3.3] - 2026-04-09
+
+### Fixed
+- **[Updater]**: Correction du seuil `MinBinarySize` et du timeout de telechargement (fixes #38)
+  - Le seuil de taille minimale du binaire etait trop eleve, rejetant des binaires valides lors de la mise a jour automatique
+  - Le timeout de telechargement etait trop court pour les connexions lentes, causant des echecs d'update
+
+---
+
 ## [3.3.2] - 2026-04-09
 
 ### Fixed
