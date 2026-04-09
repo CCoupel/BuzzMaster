@@ -104,6 +104,12 @@
   box-shadow: 0 0 6px color-mix(in srgb, var(--accent-green) 50%, transparent);
 }
 
+/* QCM acquired points badge - blue variant for QCM correct answers */
+.qcm-acquired-badge {
+  background: var(--primary-500);
+  box-shadow: 0 0 6px color-mix(in srgb, var(--primary-500) 50%, transparent);
+}
+
 /* Points target badge - shows if points go to player or team */
 .points-target-badge {
   display: flex;
