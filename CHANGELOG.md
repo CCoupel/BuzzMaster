@@ -3,6 +3,22 @@
 Historique des versions du projet BuzzControl.
 
 
+## [3.3.2] - 2026-04-09
+
+### Fixed
+- **[QCM/Scoring]**: Correction du calcul de penalite QCM — la penalite est desormais basee sur `HINTS_AT_BUZZ` du buzzer individuel (nombre d'indices reveles au moment precis du buzz), et non sur le nombre d'indices actuels du jeu au moment du clic admin
+  - Avant : un joueur ayant buzze avant tout indice pouvait etre penalise si l'admin attribuait les points apres qu'un indice ait ete revele
+  - Apres : chaque joueur conserve son contexte d'indices au moment de son buzz, independamment de ce qui se passe ensuite
+  - Correction dans `handleBumperClick` (clic joueur) et `onTeamClick` (clic equipe)
+- **[QCM/UI]**: Nouveau badge "+X pts" en phase `REVEALED` sur les cartes equipes ayant repondu correctement
+  - Symetrique au badge Memory existant (meme emplacement, meme animation scale 0→1)
+  - Variante bleue (vs vert pour Memory) pour distinguer les deux types
+  - Affiche les points calcules avec la penalite individuelle (basee sur `HINTS_AT_BUZZ`)
+  - N'apparait que pour les equipes dont au moins un buzzer a la bonne `ANSWER_COLOR`
+  - Disparait automatiquement a la transition PREPARE (nouvelle question)
+
+---
+
 ## [3.3.1] - 2026-04-07
 
 ### Fixed
