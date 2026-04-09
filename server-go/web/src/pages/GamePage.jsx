@@ -157,7 +157,21 @@ export default function GamePage() {
     return { score, matchedPairs, totalPairs, errors, isComplete, pointsPerPair, errorPenalty, completionBonus }
   }, [gameState.question, gameState.memoryMatchedPairs, gameState.memoryErrors])
 
-  // Calculate QCM penalty based on invalidated answers (hints given)
+  // Calculate QCM penalty for a given hintsAtBuzz count (per-player)
+  // Returns { multiplier, effectivePoints, penaltyPercent } or null if no penalty config
+  const calcQcmPenaltyForHints = (hintsAtBuzz) => {
+    if (gameState.question?.TYPE !== 'QCM' || !gameState.question?.QCM_HINTS_ENABLED) return null
+    const penalty1 = gameState.question?.QCM_PENALTY_1 || 0.67
+    const penalty2 = gameState.question?.QCM_PENALTY_2 || 0.33
+    let multiplier = 1
+    if (hintsAtBuzz === 1) multiplier = penalty1
+    else if (hintsAtBuzz >= 2) multiplier = penalty2
+    const effectivePoints = Math.max(1, Math.round(pointsInput * multiplier))
+    const penaltyPercent = Math.round(multiplier * 100)
+    return { multiplier, effectivePoints, penaltyPercent }
+  }
+
+  // Calculate QCM penalty based on current invalidated count (used for UI display in score input)
   const qcmPenalty = useMemo(() => {
     // Only apply for QCM questions with hints enabled
     if (gameState.question?.TYPE !== 'QCM' || !gameState.question?.QCM_HINTS_ENABLED) return null
@@ -179,6 +193,29 @@ export default function GamePage() {
 
     return { invalidatedCount, multiplier, effectivePoints, penaltyPercent }
   }, [gameState.question, gameState.qcmInvalidated, pointsInput])
+
+  // Calculate per-team QCM acquired points for the REVEALED badge
+  // Only for teams with a buzzer that answered correctly
+  const qcmTeamAcquiredPoints = useMemo(() => {
+    if (gameState.question?.TYPE !== 'QCM' || gameState.phase !== 'REVEALED') return {}
+    const correctColor = gameState.question?.QCM_CORRECT
+    if (!correctColor) return {}
+    const result = {}
+    Object.entries(bumpers).forEach(([, bumper]) => {
+      if (!bumper.TEAM || !bumper.TIME || bumper.TIME === 0) return
+      if (bumper.ANSWER_COLOR !== correctColor) return
+      // This bumper answered correctly — compute their points with per-player penalty
+      const hints = bumper.HINTS_AT_BUZZ || 0
+      const penalty = calcQcmPenaltyForHints(hints)
+      const pts = penalty ? penalty.effectivePoints : pointsInput
+      // Keep the best (highest) points among correct buzzers of this team
+      if (result[bumper.TEAM] === undefined || pts > result[bumper.TEAM]) {
+        result[bumper.TEAM] = pts
+      }
+    })
+    return result
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [gameState.question, gameState.phase, bumpers, pointsInput])
 
   const handleStartStop = () => {
     if (gameState.phase === 'READY') {
@@ -239,13 +276,14 @@ export default function GamePage() {
       const bumper = bumpers[bumperMac]
       if (bumper?.TIME && bumper.TIME > 0) {
         // For Memory questions, use calculated score
-        // For QCM with hints, use penalty-adjusted points
+        // For QCM with hints, use per-player penalty based on hints at buzz time (not current hints)
         // Otherwise use pointsInput
         let pointsToAward = pointsInput
         if (memoryScore) {
           pointsToAward = memoryScore.score
-        } else if (qcmPenalty) {
-          pointsToAward = qcmPenalty.effectivePoints
+        } else if (gameState.question?.TYPE === 'QCM' && gameState.question?.QCM_HINTS_ENABLED) {
+          const perPlayerPenalty = calcQcmPenaltyForHints(bumper.HINTS_AT_BUZZ || 0)
+          if (perPlayerPenalty) pointsToAward = perPlayerPenalty.effectivePoints
         }
         // Check POINTS_TARGET: if TEAM, give points to team instead of player
         if (gameState.question?.POINTS_TARGET === 'TEAM') {
@@ -547,6 +585,7 @@ export default function GamePage() {
                     penalty1: gameState.question?.QCM_PENALTY_1 || 0.67,
                     penalty2: gameState.question?.QCM_PENALTY_2 || 0.33,
                   } : null}
+                  qcmAcquiredPoints={qcmTeamAcquiredPoints[team.name] !== undefined ? qcmTeamAcquiredPoints[team.name] : null}
                   memoryStats={gameState.question?.TYPE === 'MEMORY' &&
                                gameState.question?.MEMORY_MODE !== 'SOLO' &&
                                gameState.MEMORY_TEAM_PAIRS?.[team.name] !== undefined ? {
@@ -581,8 +620,14 @@ export default function GamePage() {
                       } else if (memoryScore) {
                         // Solo Memory mode - use global score
                         pointsToAward = memoryScore.score
-                      } else if (qcmPenalty) {
-                        pointsToAward = qcmPenalty.effectivePoints
+                      } else if (gameState.question?.TYPE === 'QCM' && gameState.question?.QCM_HINTS_ENABLED) {
+                        // QCM: use pre-calculated team points (based on first correct buzzer's HINTS_AT_BUZZ)
+                        // Falls back to global qcmPenalty if no correct buzzer found for this team
+                        if (qcmTeamAcquiredPoints[teamName] !== undefined) {
+                          pointsToAward = qcmTeamAcquiredPoints[teamName]
+                        } else if (qcmPenalty) {
+                          pointsToAward = qcmPenalty.effectivePoints
+                        }
                       }
                       setTeamPoints(teamName, pointsToAward)
                     }

@@ -1476,3 +1476,159 @@ func TestQCMHints_AlwaysResetRegardlessOfIsNewQuestion(t *testing.T) {
 	}
 }
 
+// TestEngine_QCM_HintsAtBuzz_NoHints tests that HINTS_AT_BUZZ is 0 when buzzer
+// presses before any QCM hint has been revealed.
+func TestEngine_QCM_HintsAtBuzz_NoHints(t *testing.T) {
+	e := NewEngine()
+	e.SetTeams(map[string]*Team{
+		"teamA": {Name: "Team A", Color: []int{255, 0, 0}},
+	})
+	e.SetBumpers(map[string]*Bumper{
+		"buzzer1": {Name: "Player1", Team: "teamA"},
+	})
+
+	question := &Question{
+		ID:       "q1",
+		Question: "QCM test?",
+		Type:     QuestionTypeQCM,
+		QCMAnswers: &QCMAnswers{
+			Red: "A", Green: "B", Yellow: "C", Blue: "D",
+		},
+		QCMCorrect:      "RED",
+		QCMHintsEnabled: true,
+	}
+	e.Ready("q1", question)
+	e.StartImmediate(30)
+
+	// No hints given yet — buzz immediately
+	e.ProcessButtonPress("buzzer1", time.Now().UnixMicro(), "A")
+
+	bumper := e.GetBumper("buzzer1")
+	if bumper.HintsAtBuzz != 0 {
+		t.Errorf("HintsAtBuzz should be 0 before any hint, got %d", bumper.HintsAtBuzz)
+	}
+}
+
+// TestEngine_QCM_HintsAtBuzz_WithHints tests that HINTS_AT_BUZZ captures the
+// number of hints already revealed at the moment the buzzer presses.
+func TestEngine_QCM_HintsAtBuzz_WithHints(t *testing.T) {
+	e := NewEngine()
+	e.SetTeams(map[string]*Team{
+		"teamA": {Name: "Team A", Color: []int{255, 0, 0}},
+	})
+	e.SetBumpers(map[string]*Bumper{
+		"buzzer1": {Name: "Player1", Team: "teamA"},
+	})
+
+	question := &Question{
+		ID:       "q1",
+		Question: "QCM test hints?",
+		Type:     QuestionTypeQCM,
+		QCMAnswers: &QCMAnswers{
+			Red: "A", Green: "B", Yellow: "C", Blue: "D",
+		},
+		QCMCorrect:        "RED",
+		QCMHintsEnabled:   true,
+		QCMHintThreshold1: 0.25,
+		QCMHintThreshold2: 0.125,
+	}
+	e.Ready("q1", question)
+	e.StartImmediate(30)
+
+	// Simulate 1 hint already given by injecting QcmInvalidated directly
+	e.mu.Lock()
+	e.state.QcmInvalidated = []string{"GREEN"}
+	e.mu.Unlock()
+
+	// Buzzer presses after 1 hint
+	e.ProcessButtonPress("buzzer1", time.Now().UnixMicro(), "A")
+
+	bumper := e.GetBumper("buzzer1")
+	if bumper.HintsAtBuzz != 1 {
+		t.Errorf("HintsAtBuzz should be 1 after 1 hint, got %d", bumper.HintsAtBuzz)
+	}
+}
+
+// TestEngine_QCM_HintsAtBuzz_TwoHints tests that HINTS_AT_BUZZ captures 2 hints
+// when two hints have been revealed before the buzz.
+func TestEngine_QCM_HintsAtBuzz_TwoHints(t *testing.T) {
+	e := NewEngine()
+	e.SetTeams(map[string]*Team{
+		"teamA": {Name: "Team A", Color: []int{255, 0, 0}},
+	})
+	e.SetBumpers(map[string]*Bumper{
+		"buzzer1": {Name: "Player1", Team: "teamA"},
+	})
+
+	question := &Question{
+		ID:       "q1",
+		Question: "QCM 2 hints?",
+		Type:     QuestionTypeQCM,
+		QCMAnswers: &QCMAnswers{
+			Red: "A", Green: "B", Yellow: "C", Blue: "D",
+		},
+		QCMCorrect:      "RED",
+		QCMHintsEnabled: true,
+	}
+	e.Ready("q1", question)
+	e.StartImmediate(30)
+
+	// Simulate 2 hints already given
+	e.mu.Lock()
+	e.state.QcmInvalidated = []string{"GREEN", "YELLOW"}
+	e.mu.Unlock()
+
+	e.ProcessButtonPress("buzzer1", time.Now().UnixMicro(), "A")
+
+	bumper := e.GetBumper("buzzer1")
+	if bumper.HintsAtBuzz != 2 {
+		t.Errorf("HintsAtBuzz should be 2 after 2 hints, got %d", bumper.HintsAtBuzz)
+	}
+}
+
+// TestEngine_QCM_HintsAtBuzz_ResetOnPrepare tests that HINTS_AT_BUZZ is cleared
+// when the engine transitions to PREPARE for a new question.
+func TestEngine_QCM_HintsAtBuzz_ResetOnPrepare(t *testing.T) {
+	e := NewEngine()
+	e.SetTeams(map[string]*Team{
+		"teamA": {Name: "Team A", Color: []int{255, 0, 0}},
+	})
+	e.SetBumpers(map[string]*Bumper{
+		"buzzer1": {Name: "Player1", Team: "teamA"},
+	})
+
+	question := &Question{
+		ID:       "q1",
+		Question: "QCM reset?",
+		Type:     QuestionTypeQCM,
+		QCMAnswers: &QCMAnswers{
+			Red: "A", Green: "B", Yellow: "C", Blue: "D",
+		},
+		QCMCorrect:      "RED",
+		QCMHintsEnabled: true,
+	}
+	e.Ready("q1", question)
+	e.StartImmediate(30)
+
+	// Simulate 2 hints and buzz
+	e.mu.Lock()
+	e.state.QcmInvalidated = []string{"GREEN", "YELLOW"}
+	e.mu.Unlock()
+	e.ProcessButtonPress("buzzer1", time.Now().UnixMicro(), "A")
+
+	// Verify hints stored
+	bumper := e.GetBumper("buzzer1")
+	if bumper.HintsAtBuzz != 2 {
+		t.Fatalf("Pre-condition: HintsAtBuzz should be 2, got %d", bumper.HintsAtBuzz)
+	}
+
+	// Stop the game first, then move to PREPARE — HintsAtBuzz should be reset
+	e.Stop()
+	e.Ready("q1", question)
+
+	bumperAfter := e.GetBumper("buzzer1")
+	if bumperAfter.HintsAtBuzz != 0 {
+		t.Errorf("HintsAtBuzz should be 0 after PREPARE, got %d", bumperAfter.HintsAtBuzz)
+	}
+}
+

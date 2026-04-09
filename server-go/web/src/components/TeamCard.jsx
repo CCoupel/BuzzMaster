@@ -383,6 +383,7 @@ export default function TeamCard({
   waitingForBuzz = false,
   pointsTarget = null,  // PLAYER or TEAM - from current question
   qcmPenaltyConfig = null, // { penalty1: 0.67, penalty2: 0.33 } - for QCM penalty display
+  qcmAcquiredPoints = null, // Points earned by this team on a QCM question (null = did not answer correctly)
   memoryStats = null, // { pairs, errors, totalPairs, pointsPerPair, errorPenalty, completionBonus }
   questionType = null, // Question type (QCM, NORMAL, MEMORY)
 }) {
@@ -485,6 +486,7 @@ export default function TeamCard({
           <h3 className="team-name">{name}</h3>
         </div>
         {/* Memory acquired points badge replaces PRET badge */}
+        {/* QCM acquired points badge (correct answer in REVEALED phase) */}
         {memoryAcquiredPoints !== null && gamePhase === 'REVEALED' ? (
           <motion.span
             className="memory-acquired-badge"
@@ -492,6 +494,14 @@ export default function TeamCard({
             animate={{ scale: 1 }}
           >
             +{memoryAcquiredPoints} pts
+          </motion.span>
+        ) : qcmAcquiredPoints !== null && gamePhase === 'REVEALED' ? (
+          <motion.span
+            className="memory-acquired-badge qcm-acquired-badge"
+            initial={{ scale: 0 }}
+            animate={{ scale: 1 }}
+          >
+            +{qcmAcquiredPoints} pts
           </motion.span>
         ) : ready && (
           <motion.span
