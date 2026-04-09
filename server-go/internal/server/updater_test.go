@@ -133,6 +133,17 @@ func TestNewUpdater(t *testing.T) {
 	}
 }
 
+func TestMinBinarySize(t *testing.T) {
+	// BuzzControl binaries are ~8-9MB on Windows, ~8MB on Linux ARM64.
+	// MinBinarySize must be below actual binary sizes to avoid false rejections.
+	const actualBinarySize = 8 * 1024 * 1024 // 8MB conservative lower bound
+
+	if MinBinarySize >= actualBinarySize {
+		t.Errorf("MinBinarySize (%d bytes) is >= actual binary size (%d bytes); downloads will always be rejected",
+			MinBinarySize, actualBinarySize)
+	}
+}
+
 func TestExtractTitle(t *testing.T) {
 	tests := []struct {
 		name     string

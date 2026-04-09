@@ -18,8 +18,9 @@ import (
 )
 
 const (
-	// MinBinarySize is the minimum expected size for a valid BuzzControl binary (40MB)
-	MinBinarySize = 40 * 1024 * 1024
+	// MinBinarySize is the minimum expected size for a valid BuzzControl binary (5MB)
+	// BuzzControl binaries (Go + embedded React) are ~8-9MB on Windows, ~8MB on Linux ARM64
+	MinBinarySize = 5 * 1024 * 1024
 
 	// GitHub repository details
 	GitHubOwner = "CCoupel"
@@ -502,7 +503,8 @@ func (u *Updater) performRestart(currentExe, newExe string) {
 // Helper functions
 
 func (u *Updater) downloadFile(url, destPath string) error {
-	resp, err := http.Get(url)
+	client := &http.Client{Timeout: 5 * time.Minute}
+	resp, err := client.Get(url)
 	if err != nil {
 		return fmt.Errorf("failed to download: %w", err)
 	}
