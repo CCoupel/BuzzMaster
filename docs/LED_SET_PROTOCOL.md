@@ -1,0 +1,145 @@
+# LED_SET Protocol — Server-Driven LED Control (v3.4.0)
+
+## 1. Motivation
+
+Avant v3.4.0, le firmware calculait l'état LED depuis l'état de jeu reçu dans chaque message `UPDATE`. Cette approche posait plusieurs problèmes :
+
+- **Bugs de timing** : `UPDATE_TIMER` était émis ~10 fois par seconde. À chaque UPDATE, le firmware recalculait l'état LED, causant des flashs parasites (ex: retour bref à la couleur équipe pendant un QCM actif entre deux UPDATE).
+- **Logique dupliquée** : La logique LED était implémentée à la fois dans le firmware (calcul depuis UPDATE) et dans le serveur (envoi des actions spécialisées `QCM_COLOR`, `QCM_DIM`, etc.), créant des divergences.
+- **Couplage fort** : Tout ajout d'effet ou de phase de jeu nécessitait un OTA firmware, rendant les évolutions lentes et risquées.
+
+## 2. Principe
+
+Le serveur est l'unique source de vérité pour l'état LED pendant le jeu.
+
+- **Firmware** : applique l'action `LED_SET` reçue du serveur. Conserve uniquement les animations autonomes qui ne dépendent pas de l'état de jeu : boot sequence (phases 1-6) et grey rotation (buzzer sans équipe assignée).
+- **Serveur** : calcule et envoie `LED_SET` à chaque changement d'état pertinent (transition de phase, buzz, révélation, etc.). N'envoie plus de `UPDATE_TIMER` comme déclencheur LED.
+
+## 3. Action LED_SET
+
+```
+Server → Buzzer (WebSocket /ws/buzzer, per-buzzer ou broadcast)
+```
+
+Payload JSON :
+```json
+{
+  "COLOR": [255, 0, 0],
+  "INTENSITY": 100,
+  "EFFECT": "SOLID"
+}
+```
+
+Champs :
+
+- `COLOR` : `[R, G, B]` entiers 0-255
+- `INTENSITY` : entier 0-255 (255 = pleine intensité)
+- `EFFECT` : `"SOLID"` | `"BLINK"` | `"DIM"`
+  - `SOLID` : steady, intensité exacte
+  - `BLINK` : 100%↔25% à 400ms (ex: bonne réponse QCM)
+  - `DIM` : steady à l'intensité donnée (alias sémantique de SOLID, utilisé pour indiquer une atténuation intentionnelle)
+
+## 4. Suppression des actions spécialisées
+
+Les actions LED dédiées sont supprimées et remplacées par `LED_SET` :
+
+| Action supprimée | Remplacement LED_SET |
+|------------------|----------------------|
+| `QCM_COLOR` | `LED_SET` SOLID 100% couleur réponse |
+| `QCM_DIM` | `LED_SET` DIM 25% couleur réponse |
+| `QCM_REVEAL` correct | `LED_SET` BLINK couleur réponse |
+| `QCM_REVEAL` wrong buzzed | `LED_SET` SOLID 100% couleur réponse |
+| `QCM_REVEAL` not buzzed | `LED_SET` DIM 10% couleur réponse |
+| `QCM_RESET` | `LED_SET` SOLID 100% couleur équipe |
+
+## 5. Règle d'acceptation des buzz
+
+Un appui buzzer n'est pris en compte par le serveur **que si la phase est `STARTED`** (timer en cours).
+
+En phase `READY`, `COUNTDOWN`, `PAUSED`, `REVEALED` ou `STOPPED`, le serveur ignore les messages `BUTTON` entrants. Le firmware ne filtre pas — le filtrage est exclusivement serveur-side.
+
+## 6. Tables des états LED
+
+> Voir **[BUZZER_LED_STATE_MACHINE.md](BUZZER_LED_STATE_MACHINE.md)** pour les tables complètes par type de jeu (NORMAL, QCM, MEMORY) et état de buzz.
+
+## 7. Persistance d'état et reconnexion
+
+Le serveur maintient un `bumperLEDState map[string]LEDSetPayload` (mac → état courant).
+
+Mise à jour : à chaque appel à `sendLEDSet(mac, payload)` ou `broadcastLEDSet(payload)`, l'état est enregistré dans la map.
+
+Reconnexion : à la réception d'un message `HELLO` d'un buzzer en cours de partie, le serveur renvoie immédiatement le dernier état LED connu pour ce buzzer via `resendLEDOnReconnect(mac)`. Si aucun état n'est connu (premier HELLO de la session), le serveur calcule l'état courant depuis la phase de jeu active.
+
+## 8. Architecture Go
+
+```go
+// protocol/messages.go
+ActionLEDSet = "LED_SET"
+
+type LEDSetPayload struct {
+    Color     [3]int `json:"COLOR"`
+    Intensity int    `json:"INTENSITY"`
+    Effect    string `json:"EFFECT"`  // "SOLID", "BLINK", "DIM"
+}
+
+// app (main.go ou engine_leds.go)
+type App struct {
+    // ...
+    bumperLEDState map[string]protocol.LEDSetPayload  // mac → current LED state
+}
+
+func (a *App) sendLEDSet(mac string, payload protocol.LEDSetPayload)
+func (a *App) broadcastLEDSet(payload protocol.LEDSetPayload)  // tous les buzzers
+func (a *App) resendLEDOnReconnect(mac string)                  // appelé sur HELLO
+```
+
+## 9. Architecture Firmware (BuzzClick)
+
+### Supprimé
+
+Variables d'état QCM :
+- `qcmActive`, `qcmR`, `qcmG`, `qcmB`, `qcmDimmed`, `qcmBuzzed`, `qcmCorrect`, `qcmBlinking`
+
+Fonctions :
+- `manageLeds()` — calcul LED depuis état UPDATE
+- `manageLedQCMBlink()` — animation blink spécifique QCM
+
+Handlers de messages :
+- `QCM_COLOR`, `QCM_DIM`, `QCM_REVEAL`, `QCM_RESET`
+
+### Ajouté dans `parseJSON()`
+
+```cpp
+case hash("LED_SET"):
+{
+    JsonArray colorArr = message["COLOR"].as<JsonArray>();
+    int intensity = message["INTENSITY"] | 255;
+    const char* effect = message["EFFECT"] | "SOLID";
+
+    int r = colorArr[0]; int g = colorArr[1]; int b = colorArr[2];
+    setLedColor(r, g, b);
+    setLedIntensity(intensity);
+
+    ledBlinking = (strcmp(effect, "BLINK") == 0);
+    if (ledBlinking) { ledBlinkOn = true; ledLastBlink = millis(); }
+}
+```
+
+### Ajouté dans `loop()`
+
+`manageLedBlink()` — remplace `manageLedQCMBlink()`, générique (déclenché si `ledBlinking == true`)
+
+### Conservé firmware-side
+
+- Boot sequence phases 1-6 (autonome, avant connexion serveur)
+- Grey rotation (buzzer sans équipe assignée, calculé localement)
+- Feedback LED connexion/déconnexion WebSocket
+
+## 10. Impact réseau
+
+| Métrique | Avant | Après |
+|----------|-------|-------|
+| Déclencheur LED | UPDATE_TIMER ~10/s | Event-driven (changement d'état) |
+| Fréquence LED msgs | ~10/s | ~5-10/partie |
+| Payload LED | ~800 bytes (UPDATE complet) | ~50 bytes (LED_SET) |
+| Charge totale | Élevée | Réduite |

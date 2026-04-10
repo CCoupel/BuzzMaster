@@ -425,54 +425,104 @@
   color: var(--warning-light, #fcd34d);
 }
 
-/* Memory Team Selection Bar - horizontal inline */
-.memory-team-selection-bar {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: var(--space-2);
-  padding: var(--space-2);
+/* Memory Team Selector - row layout */
+.memory-team-selector {
   background: var(--gray-100);
   border-radius: var(--radius-md);
-  flex-wrap: wrap;
+  padding: var(--space-2);
+  border: 1px solid var(--gray-200);
 }
 
-.memory-team-selection-bar .memory-team-chip {
+.memory-selector-label {
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--gray-500);
+  margin-bottom: var(--space-1);
+}
+
+.memory-team-selector.solo-mode .memory-selector-label {
+  color: var(--accent-orange);
+}
+
+.memory-team-selector.multi-mode .memory-selector-label {
+  color: var(--primary-500);
+}
+
+.memory-chips-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.memory-chips-divider {
+  color: var(--gray-300);
+  font-size: 1rem;
+  margin: 0 2px;
+  user-select: none;
+}
+
+/* Team chip shared styles */
+.memory-team-selector .memory-team-chip {
   display: flex;
   align-items: center;
   gap: var(--space-1);
-  padding: var(--space-2) var(--space-3);
-  border-radius: 2rem;
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-md);
   color: white;
   font-weight: 600;
-  font-size: 0.875rem;
+  font-size: 0.8rem;
   cursor: pointer;
-  transition: all 0.2s ease;
-  border: 3px solid transparent;
+  transition: all 0.15s ease;
+  border: 2px solid transparent;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+  overflow: hidden;
 }
 
-.memory-team-selection-bar .memory-team-chip.selected {
+.memory-team-selector .memory-team-chip.selected {
+  border-color: rgba(255, 255, 255, 0.8);
+  box-shadow: 0 0 8px var(--team-color), 0 2px 6px rgba(0, 0, 0, 0.25);
+}
+
+.memory-team-selector .memory-team-chip.available {
+  opacity: 0.55;
+  filter: grayscale(30%);
+}
+
+.memory-team-selector .memory-team-chip:hover {
   opacity: 1;
-  border-color: white;
+  filter: none;
+  transform: scale(1.02);
   box-shadow: 0 0 10px var(--team-color), 0 2px 8px rgba(0, 0, 0, 0.3);
-  transform: scale(1.05);
 }
 
-.memory-team-selection-bar .memory-team-chip.deselected {
-  opacity: 0.4;
-  filter: grayscale(40%);
-  transform: scale(0.95);
+.chip-order {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 16px;
+  height: 16px;
+  font-size: 0.6rem;
+  font-weight: 800;
+  background: rgba(255, 255, 255, 0.3);
+  border-radius: var(--radius-full);
+  flex-shrink: 0;
 }
 
-.memory-team-selection-bar .memory-team-chip:hover {
-  transform: scale(1.08);
+.chip-name {
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
 }
 
-.memory-team-selection-bar .memory-team-chip .team-check {
-  font-size: 0.75rem;
-  margin-left: var(--space-1);
-}
-
-.memory-team-selection-bar .memory-validate-btn {
-  margin-left: var(--space-2);
+.chip-action {
+  font-size: 0.9rem;
+  font-weight: 700;
+  opacity: 0.8;
+  flex-shrink: 0;
+  line-height: 1;
 }

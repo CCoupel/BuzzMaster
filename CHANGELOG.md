@@ -3,6 +3,62 @@
 Historique des versions du projet BuzzControl.
 
 
+## [3.4.5] - 2026-04-10
+
+### Added
+- **[GamePage/Memory]**: Sélecteur d'équipes Memory visible en phase PREPARE/READY pour les questions Memory
+  - Layout en ligne : équipes sélectionnées à gauche, séparateur `|`, équipes disponibles à droite
+  - Mode SOLO (`MEMORY_MODE` vide ou `"SOLO"`) : sélection d'une seule équipe à la fois, chip active colorée sans ×, chips disponibles avec +
+  - Mode `CHACUN_SON_TOUR` : label "Chacun son tour", sélection multiple ordonnée avec numéros et ×
+  - Mode `TANT_QUE_JE_GAGNE` : label "Tant que je gagne", sélection multiple ordonnée avec numéros et ×
+
+### Fixed
+- **[GamePage/Memory]**: Correction du bug d'invisibilité du sélecteur quand `MEMORY_MODE` est absent du payload (`omitempty`) — la valeur vide est désormais traitée comme `"SOLO"`
+
+---
+
+## [3.4.4] - 2026-04-10
+
+### Fixed
+- **[LED/BuzzState]**: Implementation correcte des machines a etat LED selon `docs/BUZZER_LED_STATE_MACHINE.md`
+  - Ajout du type `BuzzState` (NONE/MOI/EQUIPE/AUTRE) dans `game/models.go`
+  - Tracking `bumperBuzzState` par buzzer dans `App` — reset au READY, mis a jour a chaque buzz
+  - **Filtre BUTTON** : les messages `BUTTON` sont desormais silencieusement ignores en dehors de la phase `STARTED` (READY, COUNTDOWN, PAUSED, REVEALED, STOPPED)
+  - **NORMAL** : STARTED/PAUSED/REVEALED : MOI=BLINK 100%, EQUIPE=SOLID 100%, NONE/AUTRE=DIM 25%
+  - **QCM** : STARTED/PAUSED : MOI/EQUIPE=couleur equipe SOLID 100% (cache la reponse), AUTRE/NONE=couleur reponse SOLID 100% ; REVEALED : correct+1er=BLINK, correct+pas1er=SOLID 100%, mauvais/non-buzze=DIM 25%
+  - **MEMORY SOLO** : STARTED actif=SOLID 100%, inactif=DIM 25% ; PAUSED toutes=DIM 25%
+  - **MEMORY multi-equipes** : STARTED actif=SOLID 100%, prochain=SOLID 50% (INTENSITY=128), autres participants=DIM 25%, non-selectionnes=OFF ; PAUSED toutes=DIM 25%
+  - `broadcastContinue` envoie desormais un `LED_SET` apres reprise de jeu (etait manquant)
+  - Les intensites sont uniformisees : DIM 25% = intensity 64 (25% de 255)
+
+### Technical
+- Remplacement des fonctions LED monolithiques par une architecture par type de jeu (`sendLEDSetForBuzzerNormal/QCM/Memory`)
+- `isFirstBuzzTeam` : determine si une equipe est la premiere a avoir buzze via les timestamps engine
+- `sendLEDSetForBuzzerQCMReveal` : gestion precise BLINK/SOLID/DIM au REVEALED QCM
+- `nextMemoryTeam` : calcul de l'equipe suivante dans la rotation multi-equipes
+- 18 nouveaux tests unitaires couvrant toutes les transitions LED
+
+---
+
+## [3.4.0] - 2026-04-10
+
+### Added
+- **[LED/Server-Driven]**: Refonte complete du pilotage LED — approche server-driven avec action `LED_SET`
+  - Le serveur calcule et envoie l'etat LED exact (couleur, intensite, effet) a chaque changement d'etat pertinent
+  - Le firmware applique simplement ce qu'il recoit — aucune logique LED locale cote buzzer
+  - Nouveau payload `LED_SET` : `{"COLOR": [R,G,B], "INTENSITY": 0-255, "EFFECT": "SOLID"|"BLINK"|"DIM"}`
+  - Suppression des 4 actions QCM-LED precedentes (`QCM_COLOR`, `QCM_DIM`, `QCM_REVEAL`, `QCM_RESET`)
+  - Suppression de `manageLeds()` et de toute la machine d'etat LED cote firmware
+  - `bumperLEDState` : le serveur memorise le dernier etat LED par buzzer pour le reenvoyer au reconnect (`HELLO`)
+  - Couverture : QCM READY/START (couleur reponse SOLID 100%), PAUSE (DIM 25% QCM / 100% buzzer actif + 2% autres en NORMAL), STOP (couleur equipe SOLID 100%), REVEALED (BLINK correct / SOLID wrong / DIM 10% non-buzze), Memory (actif 100% / inactif 25%)
+  - Correction du flash visible a chaque `UPDATE_TIMER` : `handleUpdateAction()` ne modifie plus les LEDs
+
+### Changed
+- **[Protocol]**: Remplacement de `ActionQCMColor/QCMDim/QCMReveal/QCMReset` par `ActionLEDSet = "LED_SET"`
+- **[Firmware BuzzClick]**: `manageLedQCMBlink()` → `manageLedBlink()` (generique, pilote par LED_SET EFFECT=BLINK)
+
+---
+
 ## [3.3.3] - 2026-04-09
 
 ### Fixed

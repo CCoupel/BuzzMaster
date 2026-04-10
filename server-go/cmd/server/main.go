@@ -26,18 +26,25 @@ var Version = "dev"
 
 // App holds all server components
 type App struct {
-	config      *config.Config
-	engine      *game.Engine
-	tcpServer   *server.TCPServer
-	udpBcast    *server.UDPBroadcaster
-	broadcaster *server.BroadcasterManager
-	httpServer  *server.HTTPServer
-	wsHub       *server.WebSocketHub
-	buzzerHub   *server.BuzzerWebSocketHub
-	logsHub     *server.LogsWebSocketHub
-	mdnsServer  *server.MDNSServer
-	dnsServer   *server.DNSServer
-	logger      *server.BroadcastLogger
+	config         *config.Config
+	engine         *game.Engine
+	tcpServer      *server.TCPServer
+	udpBcast       *server.UDPBroadcaster
+	broadcaster    *server.BroadcasterManager
+	httpServer     *server.HTTPServer
+	wsHub          *server.WebSocketHub
+	buzzerHub      *server.BuzzerWebSocketHub
+	logsHub        *server.LogsWebSocketHub
+	mdnsServer     *server.MDNSServer
+	dnsServer      *server.DNSServer
+	logger         *server.BroadcastLogger
+	// bumperLEDState tracks the last LED_SET payload sent to each buzzer (by MAC).
+	// Used by resendLEDOnReconnect to restore LED state when a buzzer reconnects.
+	bumperLEDState map[string]protocol.LEDSetPayload
+
+	// bumperBuzzState tracks the BuzzState (NONE/MOI/EQUIPE/AUTRE) for each buzzer
+	// within the current question round. Reset on READY/PREPARE; updated on each buzz.
+	bumperBuzzState map[string]game.BuzzState
 }
 
 func main() {
@@ -66,7 +73,9 @@ func main() {
 
 	// Create app
 	app := &App{
-		config: cfg,
+		config:          cfg,
+		bumperLEDState:  make(map[string]protocol.LEDSetPayload),
+		bumperBuzzState: make(map[string]game.BuzzState),
 	}
 
 	// Initialize components
@@ -705,6 +714,11 @@ func (a *App) handleHello(clientID string, msg *protocol.Message, source string)
 	// Send current state to all
 	a.broadcastUpdate()
 
+	// Re-send last known LED state to the reconnected buzzer (server-driven LEDs)
+	if source == "WebSocket-Buzzer" {
+		a.resendLEDOnReconnect(clientID)
+	}
+
 	// Auto-sync WiFi config to newly connected buzzer (WebSocket only; TCP buzzers ignore unknown messages)
 	if source == "WebSocket-Buzzer" {
 		a.sendWifiConfigToBuzzer(clientID)
@@ -755,10 +769,20 @@ func (a *App) handleButton(clientID string, msg *protocol.Message, timestamp int
 		return
 	}
 
+	// Filter: only accept BUTTON in STARTED phase (spec §"Règle d'acceptation des buzz").
+	// READY, COUNTDOWN, PAUSED, REVEALED, STOPPED → ignore silently.
+	if a.engine.GetPhase() != game.PhaseStarted {
+		server.LogInfo(game.LogComponentTCP, "BUTTON from %s ignored (phase=%s, not STARTED)", clientID, a.engine.GetPhase())
+		return
+	}
+
 	server.LogInfo(game.LogComponentTCP, "BUTTON from %s: %s", clientID, payload.Button)
 
 	// Process in engine
 	a.engine.ProcessButtonPress(clientID, timestamp, payload.Button)
+
+	// Update BuzzState tracking after the engine has recorded the press
+	a.updateBuzzStates(clientID)
 
 	// Broadcast pause to all
 	a.broadcastPause(clientID)
@@ -794,6 +818,9 @@ func (a *App) handleSimulatedButton(msg *protocol.Message) {
 
 	// Process in engine (same as real button press)
 	a.engine.ProcessButtonPress(payload.ID, timestamp, button)
+
+	// Update BuzzState tracking after the engine has recorded the press
+	a.updateBuzzStates(payload.ID)
 
 	// Broadcast pause to all
 	a.broadcastPause(payload.ID)
@@ -846,6 +873,8 @@ func (a *App) handleFullUpdate(msg *protocol.Message) {
 		a.engine.SetBumpers(data.Bumpers)
 	}
 	a.broadcastUpdate()
+	// Refresh LED state on all buzzers after team/bumper changes
+	a.sendLEDSetAllBuzzers()
 }
 
 func (a *App) handleUpdate(msg *protocol.Message) {
@@ -1110,11 +1139,13 @@ func (a *App) handleFlipMemoryCard(msg *protocol.Message) {
 			a.engine.ClearMemoryFlippedCards()
 			server.LogInfo(game.LogComponentEngine, "Memory auto-flip-back after %dms", flipDelay)
 			a.broadcastUpdate()
+			a.sendLEDSetAllBuzzers()
 		}()
 	}
 
 	if isMatch {
 		server.LogInfo(game.LogComponentEngine, "Memory MATCH found!")
+		a.sendLEDSetAllBuzzers()
 	}
 
 	// If all pairs matched, automatically stop the game
@@ -1122,6 +1153,7 @@ func (a *App) handleFlipMemoryCard(msg *protocol.Message) {
 		server.LogInfo(game.LogComponentEngine, "Memory game COMPLETE! All pairs matched.")
 		a.engine.Stop()
 		a.broadcastUpdate()
+		a.sendLEDSetAllBuzzers()
 	}
 }
 
@@ -1147,6 +1179,7 @@ func (a *App) handleMemorySetTeams(msg *protocol.Message) {
 
 	// Broadcast updated game state to all clients
 	a.broadcastUpdate()
+	a.sendLEDSetAllBuzzers()
 }
 
 func (a *App) handleBumperPoints(msg *protocol.Message) {
@@ -1480,6 +1513,9 @@ func (a *App) handleVPlayerQCMAnswer(clientID string, msg *protocol.Message) {
 	// Process as a button press (same as physical buzzer or simulated button)
 	a.engine.ProcessButtonPress(bumperID, timestamp, button)
 
+	// Update BuzzState tracking after the engine has recorded the press
+	a.updateBuzzStates(bumperID)
+
 	// Broadcast pause and update to all clients
 	a.broadcastPause(bumperID)
 	a.broadcastUpdate()
@@ -1537,26 +1573,31 @@ func (a *App) broadcastGameState(phase string) {
 func (a *App) broadcastStart() {
 	data := a.engine.GetGameJSON()
 	a.broadcast(protocol.ActionStart, data, true)
+	a.sendLEDSetAllBuzzers()
 }
 
 func (a *App) broadcastStop() {
 	data := a.engine.GetGameJSON()
 	a.broadcast(protocol.ActionStop, data, true)
+	a.sendLEDSetStop()
 }
 
 func (a *App) broadcastPause(bumperID string) {
 	data := a.engine.GetGameJSON()
 	a.broadcast(protocol.ActionPause, data, true)
+	a.sendLEDSetPause(bumperID)
 }
 
 func (a *App) broadcastPauseAll() {
 	data := a.engine.GetGameJSON()
 	a.broadcast(protocol.ActionPause, data, true)
+	a.sendLEDSetPauseAll()
 }
 
 func (a *App) broadcastContinue() {
 	data := a.engine.GetGameJSON()
 	a.broadcast(protocol.ActionContinue, data, true)
+	a.sendLEDSetContinue()
 }
 
 func (a *App) broadcastTimerUpdate(currentTime int) {
@@ -1577,13 +1618,500 @@ func (a *App) broadcastPing() {
 }
 
 func (a *App) broadcastReady() {
+	// Reset BuzzState for all buzzers at the start of each question round
+	a.resetBuzzStates()
 	data := a.engine.GetTeamsAndBumpersJSON()
 	a.broadcast(protocol.ActionReady, data, true)
+	a.sendLEDSetAllBuzzers()
 }
 
 func (a *App) broadcastReveal(answer string) {
 	data, _ := json.Marshal(answer)
 	a.broadcast(protocol.ActionReveal, data, true)
+	a.sendLEDSetReveal(answer)
+}
+
+// answerColorToRGB maps a QCM AnswerColor to an [R, G, B] array for buzzer LED.
+func answerColorToRGB(color game.AnswerColor) [3]int {
+	switch color {
+	case game.AnswerColorRed:
+		return [3]int{255, 0, 0}
+	case game.AnswerColorGreen:
+		return [3]int{0, 255, 0}
+	case game.AnswerColorYellow:
+		return [3]int{255, 255, 0}
+	case game.AnswerColorBlue:
+		return [3]int{0, 0, 255}
+	default:
+		return [3]int{0, 0, 0}
+	}
+}
+
+// teamColorToRGB returns the RGB color for a bumper's team, or gray [128,128,128] if no team.
+func (a *App) teamColorToRGB(bumper *game.Bumper) [3]int {
+	if bumper.Team == "" {
+		return [3]int{128, 128, 128}
+	}
+	team := a.engine.GetTeam(bumper.Team)
+	if team == nil || len(team.Color) < 3 {
+		return [3]int{128, 128, 128}
+	}
+	return [3]int{team.Color[0], team.Color[1], team.Color[2]}
+}
+
+// sendLEDSet sends a LED_SET message to a specific buzzer and stores the state for reconnect.
+func (a *App) sendLEDSet(mac string, payload protocol.LEDSetPayload) {
+	a.bumperLEDState[mac] = payload
+	if !a.buzzerHub.IsClientConnected(mac) {
+		return
+	}
+	msg, err := protocol.NewMessage(protocol.ActionLEDSet, payload)
+	if err != nil {
+		server.LogError(game.LogComponentApp, "Failed to create LED_SET message for %s: %v", mac, err)
+		return
+	}
+	if err := a.buzzerHub.SendToClient(mac, msg); err != nil {
+		server.LogWarn(game.LogComponentApp, "Failed to send LED_SET to buzzer %s: %v", mac, err)
+	} else {
+		server.LogInfo(game.LogComponentApp, "LED_SET sent to %s: RGB(%d,%d,%d) intensity=%d effect=%s",
+			mac, payload.Color[0], payload.Color[1], payload.Color[2], payload.Intensity, payload.Effect)
+	}
+}
+
+// broadcastLEDSet sends the same LED_SET payload to all connected buzzers.
+func (a *App) broadcastLEDSet(payload protocol.LEDSetPayload) {
+	tb := a.engine.GetTeamsAndBumpers()
+	if tb == nil {
+		return
+	}
+	for mac, bumper := range tb.Bumpers {
+		if bumper.IsVPlayer {
+			continue
+		}
+		a.sendLEDSet(mac, payload)
+	}
+}
+
+// resendLEDOnReconnect re-sends the last known LED state to a buzzer that just reconnected (HELLO).
+func (a *App) resendLEDOnReconnect(mac string) {
+	payload, ok := a.bumperLEDState[mac]
+	if !ok {
+		// No stored state — derive from current game state
+		a.sendLEDSetForBuzzer(mac)
+		return
+	}
+	msg, err := protocol.NewMessage(protocol.ActionLEDSet, payload)
+	if err != nil {
+		return
+	}
+	if err := a.buzzerHub.SendToClient(mac, msg); err != nil {
+		server.LogWarn(game.LogComponentApp, "Failed to resend LED_SET to %s: %v", mac, err)
+	} else {
+		server.LogInfo(game.LogComponentApp, "LED_SET resent on reconnect to %s", mac)
+	}
+}
+
+// resetBuzzStates resets BuzzState to NONE for all known buzzers.
+// Called at the start of each question round (READY phase).
+func (a *App) resetBuzzStates() {
+	tb := a.engine.GetTeamsAndBumpers()
+	if tb == nil {
+		return
+	}
+	for mac := range tb.Bumpers {
+		a.bumperBuzzState[mac] = game.BuzzStateNone
+	}
+}
+
+// updateBuzzStates updates BuzzState for all buzzers after buzzingMAC has pressed.
+//
+// Rules (from BUZZER_LED_STATE_MACHINE.md):
+//   - The buzzing bumper becomes MOI (first buzz of its team).
+//   - All other bumpers of the same team become EQUIPE.
+//   - Bumpers of other teams that had no buzz yet become AUTRE.
+//   - Existing MOI/EQUIPE/AUTRE states of already-buzzed teams are preserved.
+func (a *App) updateBuzzStates(buzzingMAC string) {
+	buzzingBumper := a.engine.GetBumper(buzzingMAC)
+	if buzzingBumper == nil {
+		return
+	}
+	buzzingTeam := buzzingBumper.Team
+
+	tb := a.engine.GetTeamsAndBumpers()
+	if tb == nil {
+		return
+	}
+
+	for mac, bumper := range tb.Bumpers {
+		if bumper.IsVPlayer {
+			continue
+		}
+		current := a.bumperBuzzState[mac]
+
+		if mac == buzzingMAC {
+			// The buzzing bumper itself: MOI (first of its team)
+			a.bumperBuzzState[mac] = game.BuzzStateMoi
+		} else if bumper.Team == buzzingTeam {
+			// Same team as the buzzer: EQUIPE (unless already MOI — impossible here
+			// since the engine only allows one buzz per team, but defensive check)
+			if current != game.BuzzStateMoi {
+				a.bumperBuzzState[mac] = game.BuzzStateEquipe
+			}
+		} else {
+			// Different team: promote to AUTRE only if still NONE
+			if current == game.BuzzStateNone {
+				a.bumperBuzzState[mac] = game.BuzzStateAutre
+			}
+			// If already MOI/EQUIPE/AUTRE, leave unchanged (their team buzzed earlier)
+		}
+	}
+}
+
+// buzzStateFor returns the current BuzzState for a given buzzer MAC.
+// Defaults to NONE if not tracked yet.
+func (a *App) buzzStateFor(mac string) game.BuzzState {
+	if bs, ok := a.bumperBuzzState[mac]; ok {
+		return bs
+	}
+	return game.BuzzStateNone
+}
+
+// sendLEDSetForBuzzer derives and sends the correct LED state for one buzzer based on current game phase.
+// Used on reconnect when no stored LED state is available.
+func (a *App) sendLEDSetForBuzzer(mac string) {
+	bumper := a.engine.GetBumper(mac)
+	if bumper == nil || bumper.IsVPlayer {
+		return
+	}
+
+	state := a.engine.GetState()
+	phase := a.engine.GetPhase()
+
+	switch {
+	case state.Question != nil && state.Question.Type == game.QuestionTypeQCM:
+		a.sendLEDSetForBuzzerQCM(mac, bumper, phase, state)
+	case state.Question != nil && state.Question.Type == game.QuestionTypeMemory:
+		a.sendLEDSetForBuzzerMemory(mac, bumper, phase, state)
+	default:
+		a.sendLEDSetForBuzzerNormal(mac, bumper, phase)
+	}
+}
+
+func (a *App) sendLEDSetForBuzzerNormal(mac string, bumper *game.Bumper, phase game.GamePhase) {
+	rgb := a.teamColorToRGB(bumper)
+	bs := a.buzzStateFor(mac)
+	switch phase {
+	case game.PhaseStopped, game.PhasePrepare, game.PhaseReady, game.PhaseCountdown:
+		a.sendLEDSet(mac, protocol.LEDSetPayload{Color: rgb, Intensity: 255, Effect: "SOLID"})
+	case game.PhaseStarted:
+		switch bs {
+		case game.BuzzStateMoi:
+			a.sendLEDSet(mac, protocol.LEDSetPayload{Color: rgb, Intensity: 255, Effect: "BLINK"})
+		case game.BuzzStateEquipe:
+			a.sendLEDSet(mac, protocol.LEDSetPayload{Color: rgb, Intensity: 255, Effect: "SOLID"})
+		default: // NONE or AUTRE
+			a.sendLEDSet(mac, protocol.LEDSetPayload{Color: rgb, Intensity: 64, Effect: "DIM"})
+		}
+	case game.PhasePaused:
+		switch bs {
+		case game.BuzzStateMoi:
+			a.sendLEDSet(mac, protocol.LEDSetPayload{Color: rgb, Intensity: 255, Effect: "BLINK"})
+		case game.BuzzStateEquipe:
+			a.sendLEDSet(mac, protocol.LEDSetPayload{Color: rgb, Intensity: 255, Effect: "SOLID"})
+		default: // NONE or AUTRE
+			a.sendLEDSet(mac, protocol.LEDSetPayload{Color: rgb, Intensity: 64, Effect: "DIM"})
+		}
+	case game.PhaseRevealed:
+		switch bs {
+		case game.BuzzStateMoi:
+			a.sendLEDSet(mac, protocol.LEDSetPayload{Color: rgb, Intensity: 255, Effect: "BLINK"})
+		case game.BuzzStateEquipe:
+			a.sendLEDSet(mac, protocol.LEDSetPayload{Color: rgb, Intensity: 255, Effect: "SOLID"})
+		default: // NONE or AUTRE
+			a.sendLEDSet(mac, protocol.LEDSetPayload{Color: rgb, Intensity: 64, Effect: "DIM"})
+		}
+	default:
+		a.sendLEDSet(mac, protocol.LEDSetPayload{Color: rgb, Intensity: 255, Effect: "SOLID"})
+	}
+}
+
+func (a *App) sendLEDSetForBuzzerQCM(mac string, bumper *game.Bumper, phase game.GamePhase, state game.GameState) {
+	answerRGB := answerColorToRGB(bumper.AnswerColor)
+	teamRGB := a.teamColorToRGB(bumper)
+	bs := a.buzzStateFor(mac)
+
+	switch phase {
+	case game.PhaseStopped, game.PhasePrepare:
+		a.sendLEDSet(mac, protocol.LEDSetPayload{Color: teamRGB, Intensity: 255, Effect: "SOLID"})
+	case game.PhaseReady, game.PhaseCountdown:
+		a.sendLEDSet(mac, protocol.LEDSetPayload{Color: answerRGB, Intensity: 255, Effect: "SOLID"})
+	case game.PhaseStarted:
+		if bs == game.BuzzStateMoi || bs == game.BuzzStateEquipe {
+			// My team buzzed → show team color (hides the answer)
+			a.sendLEDSet(mac, protocol.LEDSetPayload{Color: teamRGB, Intensity: 255, Effect: "SOLID"})
+		} else {
+			// NONE or AUTRE → show answer color
+			a.sendLEDSet(mac, protocol.LEDSetPayload{Color: answerRGB, Intensity: 255, Effect: "SOLID"})
+		}
+	case game.PhasePaused:
+		if bs == game.BuzzStateMoi || bs == game.BuzzStateEquipe {
+			a.sendLEDSet(mac, protocol.LEDSetPayload{Color: teamRGB, Intensity: 255, Effect: "SOLID"})
+		} else {
+			a.sendLEDSet(mac, protocol.LEDSetPayload{Color: answerRGB, Intensity: 255, Effect: "SOLID"})
+		}
+	case game.PhaseRevealed:
+		// Revealed logic uses firstBuzzTeam from engine state (team.Time > 0 && team.Bumper == mac or same team)
+		a.sendLEDSetForBuzzerQCMReveal(mac, bumper, state)
+	default:
+		a.sendLEDSet(mac, protocol.LEDSetPayload{Color: teamRGB, Intensity: 255, Effect: "SOLID"})
+	}
+}
+
+// sendLEDSetForBuzzerQCMReveal handles the REVEALED phase LED for a single QCM buzzer.
+func (a *App) sendLEDSetForBuzzerQCMReveal(mac string, bumper *game.Bumper, state game.GameState) {
+	answerRGB := answerColorToRGB(bumper.AnswerColor)
+	bs := a.buzzStateFor(mac)
+	myTeamBuzzed := bs == game.BuzzStateMoi || bs == game.BuzzStateEquipe
+
+	if !myTeamBuzzed {
+		// No buzz from my team: DIM 25% answer color
+		a.sendLEDSet(mac, protocol.LEDSetPayload{Color: answerRGB, Intensity: 64, Effect: "DIM"})
+		return
+	}
+
+	// My team buzzed — determine correct answer from current question
+	correctAnswer := ""
+	if state.Question != nil {
+		correctAnswer = state.Question.QCMCorrect
+	}
+	myAnswerCorrect := correctAnswer != "" && string(bumper.AnswerColor) == correctAnswer
+
+	if !myAnswerCorrect {
+		// Wrong answer (or no correct defined): DIM 25%
+		a.sendLEDSet(mac, protocol.LEDSetPayload{Color: answerRGB, Intensity: 64, Effect: "DIM"})
+		return
+	}
+
+	// Correct answer — check if my team was the first to buzz (team.Time == smallest among buzzed teams)
+	isFirstBuzz := a.isFirstBuzzTeam(bumper.Team)
+	if isFirstBuzz {
+		// Good answer + first buzz: BLINK
+		a.sendLEDSet(mac, protocol.LEDSetPayload{Color: answerRGB, Intensity: 255, Effect: "BLINK"})
+	} else {
+		// Good answer + not first buzz: SOLID 100%
+		a.sendLEDSet(mac, protocol.LEDSetPayload{Color: answerRGB, Intensity: 255, Effect: "SOLID"})
+	}
+}
+
+// isFirstBuzzTeam returns true if the given team was the first team to buzz in this round.
+// Uses bumper.Time values stored by the engine to find the earliest buzz.
+func (a *App) isFirstBuzzTeam(teamName string) bool {
+	if teamName == "" {
+		return false
+	}
+	tb := a.engine.GetTeamsAndBumpers()
+	if tb == nil {
+		return false
+	}
+
+	// Find the earliest buzz time across all teams
+	var minTime int64 = 0
+	teamEarliestTime := int64(0)
+
+	for _, bumper := range tb.Bumpers {
+		if bumper.IsVPlayer || bumper.Time <= 0 {
+			continue
+		}
+		if minTime == 0 || bumper.Time < minTime {
+			minTime = bumper.Time
+		}
+		if bumper.Team == teamName {
+			if teamEarliestTime == 0 || bumper.Time < teamEarliestTime {
+				teamEarliestTime = bumper.Time
+			}
+		}
+	}
+
+	return teamEarliestTime > 0 && teamEarliestTime == minTime
+}
+
+func (a *App) sendLEDSetForBuzzerMemory(mac string, bumper *game.Bumper, phase game.GamePhase, state game.GameState) {
+	rgb := a.teamColorToRGB(bumper)
+	memoryMode := ""
+	if state.Question != nil {
+		memoryMode = state.Question.MemoryMode
+	}
+
+	switch phase {
+	case game.PhaseStopped, game.PhasePrepare, game.PhaseReady, game.PhaseRevealed:
+		a.sendLEDSet(mac, protocol.LEDSetPayload{Color: rgb, Intensity: 255, Effect: "SOLID"})
+	case game.PhasePaused:
+		a.sendLEDSet(mac, protocol.LEDSetPayload{Color: rgb, Intensity: 64, Effect: "DIM"})
+	case game.PhaseStarted:
+		if memoryMode == string(game.MemoryModeSolo) || memoryMode == "" {
+			// SOLO: active team = SOLID 100%, inactive = DIM 25%
+			if bumper.Team == state.MemoryCurrentTeam {
+				a.sendLEDSet(mac, protocol.LEDSetPayload{Color: rgb, Intensity: 255, Effect: "SOLID"})
+			} else {
+				a.sendLEDSet(mac, protocol.LEDSetPayload{Color: rgb, Intensity: 64, Effect: "DIM"})
+			}
+		} else {
+			// Multi-team modes: active=SOLID 100%, next=SOLID 50%, others participating=DIM 25%, not selected=OFF
+			a.sendLEDSetMemoryMultiTeam(mac, bumper, state)
+		}
+	default:
+		a.sendLEDSet(mac, protocol.LEDSetPayload{Color: rgb, Intensity: 255, Effect: "SOLID"})
+	}
+}
+
+// sendLEDSetMemoryMultiTeam computes the LED for a buzzer in a multi-team Memory round.
+func (a *App) sendLEDSetMemoryMultiTeam(mac string, bumper *game.Bumper, state game.GameState) {
+	rgb := a.teamColorToRGB(bumper)
+
+	// Not in participating teams → OFF
+	participating := false
+	for _, t := range state.MemoryParticipatingTeams {
+		if t == bumper.Team {
+			participating = true
+			break
+		}
+	}
+	if !participating {
+		a.sendLEDSet(mac, protocol.LEDSetPayload{Color: [3]int{0, 0, 0}, Intensity: 0, Effect: "SOLID"})
+		return
+	}
+
+	// Active team
+	if bumper.Team == state.MemoryCurrentTeam {
+		a.sendLEDSet(mac, protocol.LEDSetPayload{Color: rgb, Intensity: 255, Effect: "SOLID"})
+		return
+	}
+
+	// Determine "next" team
+	nextTeam := a.nextMemoryTeam(state)
+	if nextTeam != "" && bumper.Team == nextTeam {
+		// Next team: SOLID 50% (INTENSITY=128)
+		a.sendLEDSet(mac, protocol.LEDSetPayload{Color: rgb, Intensity: 128, Effect: "SOLID"})
+		return
+	}
+
+	// Other participating teams: DIM 25%
+	a.sendLEDSet(mac, protocol.LEDSetPayload{Color: rgb, Intensity: 64, Effect: "DIM"})
+}
+
+// nextMemoryTeam returns the name of the team that plays after MemoryCurrentTeam,
+// cycling through MemoryParticipatingTeams in order.
+func (a *App) nextMemoryTeam(state game.GameState) string {
+	teams := state.MemoryParticipatingTeams
+	if len(teams) < 2 {
+		return ""
+	}
+	for i, t := range teams {
+		if t == state.MemoryCurrentTeam {
+			return teams[(i+1)%len(teams)]
+		}
+	}
+	return ""
+}
+
+// sendLEDSetAllBuzzers sends per-buzzer LED_SET based on current game state (READY/START/STOPPED phase).
+// Called after READY, START, and FULL updates.
+func (a *App) sendLEDSetAllBuzzers() {
+	tb := a.engine.GetTeamsAndBumpers()
+	if tb == nil {
+		return
+	}
+	state := a.engine.GetState()
+	phase := a.engine.GetPhase()
+
+	for mac, bumper := range tb.Bumpers {
+		if bumper.IsVPlayer {
+			continue
+		}
+		switch {
+		case state.Question != nil && state.Question.Type == game.QuestionTypeQCM:
+			a.sendLEDSetForBuzzerQCM(mac, bumper, phase, state)
+		case state.Question != nil && state.Question.Type == game.QuestionTypeMemory:
+			a.sendLEDSetForBuzzerMemory(mac, bumper, phase, state)
+		default:
+			a.sendLEDSetForBuzzerNormal(mac, bumper, phase)
+		}
+	}
+}
+
+// sendLEDSetStop broadcasts team color SOLID 100% to all buzzers (game stopped/prepare).
+func (a *App) sendLEDSetStop() {
+	tb := a.engine.GetTeamsAndBumpers()
+	if tb == nil {
+		return
+	}
+	for mac, bumper := range tb.Bumpers {
+		if bumper.IsVPlayer {
+			continue
+		}
+		rgb := a.teamColorToRGB(bumper)
+		a.sendLEDSet(mac, protocol.LEDSetPayload{Color: rgb, Intensity: 255, Effect: "SOLID"})
+	}
+}
+
+// sendLEDSetPause sends per-buzzer LED state when a specific buzzer has buzzed (PAUSED phase).
+// Uses BuzzState to determine each buzzer's LED.
+func (a *App) sendLEDSetPause(bumperID string) {
+	tb := a.engine.GetTeamsAndBumpers()
+	if tb == nil {
+		return
+	}
+	state := a.engine.GetState()
+	phase := a.engine.GetPhase()
+
+	for mac, bumper := range tb.Bumpers {
+		if bumper.IsVPlayer {
+			continue
+		}
+		switch {
+		case state.Question != nil && state.Question.Type == game.QuestionTypeQCM:
+			a.sendLEDSetForBuzzerQCM(mac, bumper, phase, state)
+		case state.Question != nil && state.Question.Type == game.QuestionTypeMemory:
+			a.sendLEDSetForBuzzerMemory(mac, bumper, phase, state)
+		default:
+			a.sendLEDSetForBuzzerNormal(mac, bumper, phase)
+		}
+	}
+}
+
+// sendLEDSetPauseAll sends LED state for PAUSE ALL (admin-initiated pause, no specific buzzer).
+func (a *App) sendLEDSetPauseAll() {
+	a.sendLEDSetPause("")
+}
+
+// sendLEDSetContinue sends LED state after the game resumes from pause (back to STARTED).
+// Uses the same per-buzzer state machine as sendLEDSetAllBuzzers but preserves BuzzStates.
+func (a *App) sendLEDSetContinue() {
+	a.sendLEDSetAllBuzzers()
+}
+
+// sendLEDSetReveal sends per-buzzer LED feedback at REVEALED phase.
+func (a *App) sendLEDSetReveal(correctAnswer string) {
+	tb := a.engine.GetTeamsAndBumpers()
+	if tb == nil {
+		return
+	}
+	state := a.engine.GetState()
+	phase := a.engine.GetPhase()
+
+	for mac, bumper := range tb.Bumpers {
+		if bumper.IsVPlayer {
+			continue
+		}
+		switch {
+		case state.Question != nil && state.Question.Type == game.QuestionTypeQCM:
+			a.sendLEDSetForBuzzerQCM(mac, bumper, phase, state)
+		case state.Question != nil && state.Question.Type == game.QuestionTypeMemory:
+			a.sendLEDSetForBuzzerMemory(mac, bumper, phase, state)
+		default:
+			a.sendLEDSetForBuzzerNormal(mac, bumper, phase)
+		}
+	}
 }
 
 func (a *App) broadcastReset() {

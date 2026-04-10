@@ -253,6 +253,33 @@ Le serveur embarque le firmware BuzzClick directement dans son binaire Go :
 **IS_OUTDATED** : Remis a false uniquement au reboot du buzzer (reception HELLO avec nouvelle version).
 Ne change pas sur `OTA_PROGRESS done` - le badge reste orange jusqu'au reboot confirme.
 
+### Server-Driven LED Control (v3.4.0)
+
+Le serveur pilote les LEDs des buzzers via une action unique `LED_SET`. Le firmware applique simplement ce qu'il recoit — aucune logique LED locale.
+
+**Protocole** :
+```json
+// Server → Buzzer (per-buzzer via buzzerHub.SendToClient ou broadcast)
+{ "ACTION": "LED_SET", "MSG": { "COLOR": [255, 0, 0], "INTENSITY": 255, "EFFECT": "SOLID" } }
+```
+
+Effects : `"SOLID"` (fixe), `"BLINK"` (100%<->25% a 400ms), `"DIM"` (fixe attenue)
+
+**Logique serveur par phase** :
+- `READY`/`START` QCM : couleur reponse SOLID 100% (per-buzzer)
+- `READY`/`START` NORMAL/MEMORY : couleur equipe SOLID 100% (Memory actif=100%, inactif=25%)
+- `PAUSE` (buzzer presse) QCM : couleur reponse DIM 64 ; NORMAL : buzzer actif=SOLID 255, autres=DIM 5
+- `PAUSE ALL` : couleur equipe DIM 64 pour tous
+- `STOP` : couleur equipe SOLID 100% pour tous
+- `REVEALED` QCM : correct=BLINK, wrong-buzzed=SOLID 100%, non-buzze=DIM 25
+- Reconnect HELLO : `resendLEDOnReconnect()` renvoie le dernier etat connu (`bumperLEDState` map)
+
+**Fichiers cles** :
+- `server-go/cmd/server/main.go` : `sendLEDSet`, `broadcastLEDSet`, `resendLEDOnReconnect`, `sendLEDSetAllBuzzers`, `sendLEDSetStop`, `sendLEDSetPause`, `sendLEDSetReveal`
+- `server-go/internal/protocol/messages.go` : `ActionLEDSet`, `LEDSetPayload`
+- `src/BuzzClick/click_serverConnection.h` : handler `LED_SET` dans `parseJSON()`, `manageLedBlink()` (EFFECT=BLINK)
+- `src/BuzzClick/click_MAIN.cpp` : `manageLedBlink()` dans `loop()`
+
 ### Contrainte Affichage TV - IMPORTANT
 **L'affichage TV (`/tv`) est STATIQUE et ne permet PAS de scroll.**
 Toutes les vues TV doivent tenir entièrement à l'écran sans défilement :

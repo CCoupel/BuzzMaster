@@ -252,11 +252,19 @@ export default function GamePage() {
   }
 
   const toggleTeam = (teamName) => {
-    // Calculate new selection based on current backend state
-    const newSelection = selectedTeams.includes(teamName)
-      ? selectedTeams.filter(t => t !== teamName)
-      : [...selectedTeams, teamName]
-    // Always send to server - server is source of truth
+    const memoryMode = gameState.question?.MEMORY_MODE
+    const isSolo = !memoryMode || memoryMode === 'SOLO'
+    let newSelection
+    if (isSolo) {
+      // SOLO: replace current selection with the clicked team
+      // If already selected, deselect (empty)
+      newSelection = selectedTeams.includes(teamName) ? [] : [teamName]
+    } else {
+      // Multi: toggle add/remove
+      newSelection = selectedTeams.includes(teamName)
+        ? selectedTeams.filter(t => t !== teamName)
+        : [...selectedTeams, teamName]
+    }
     sendMessage('MEMORY_SET_TEAMS', { TEAMS: newSelection })
   }
 
@@ -418,32 +426,57 @@ export default function GamePage() {
           )}
         </Card>
 
-        {/* Memory Team Selection Bar - between TV display and timer */}
+        {/* Memory Team Selection - row layout */}
         {(gameState.phase === 'PREPARE' || gameState.phase === 'READY') &&
-         gameState.question?.TYPE === 'MEMORY' &&
-         gameState.question?.MEMORY_MODE &&
-         gameState.question.MEMORY_MODE !== 'SOLO' && (
-          <div className="memory-team-selection-bar">
-            {sortedTeams.map(team => {
-              const isSelected = selectedTeams.includes(team.name)
-              const teamColor = getRgbColor(team.COLOR)
-              return (
-                <div
-                  key={team.name}
-                  className={`memory-team-chip ${isSelected ? 'selected' : 'deselected'}`}
-                  style={{
-                    backgroundColor: teamColor,
-                    '--team-color': teamColor
-                  }}
-                  onClick={() => toggleTeam(team.name)}
-                >
-                  <span className="team-name">{team.name}</span>
-                  {isSelected && <span className="team-check">✓</span>}
-                </div>
-              )
-            })}
-          </div>
-        )}
+         gameState.question?.TYPE === 'MEMORY' && (() => {
+          // MEMORY_MODE is empty string for default SOLO (omitempty), treat empty as SOLO
+          const isSolo = !gameState.question.MEMORY_MODE || gameState.question.MEMORY_MODE === 'SOLO'
+          const selected = sortedTeams.filter(t => selectedTeams.includes(t.name))
+          const available = sortedTeams.filter(t => !selectedTeams.includes(t.name))
+          return (
+            <div className={`memory-team-selector ${isSolo ? 'solo-mode' : 'multi-mode'}`}>
+              <div className="memory-selector-label">
+                {isSolo ? 'Mode SOLO' : gameState.question.MEMORY_MODE === 'CHACUN_SON_TOUR' ? 'Chacun son tour' : 'Tant que je gagne'}
+              </div>
+              <div className="memory-chips-row">
+                {selected.map((team, idx) => {
+                  const teamColor = getRgbColor(team.COLOR)
+                  return (
+                    <div
+                      key={team.name}
+                      className={`memory-team-chip selected${isSolo ? ' solo-active' : ''}`}
+                      style={{ backgroundColor: teamColor, '--team-color': teamColor }}
+                      onClick={!isSolo ? () => toggleTeam(team.name) : undefined}
+                      title={!isSolo ? 'Cliquer pour retirer' : undefined}
+                    >
+                      {!isSolo && <span className="chip-order">{idx + 1}</span>}
+                      <span className="chip-name">{team.name}</span>
+                      {!isSolo && <span className="chip-action">×</span>}
+                    </div>
+                  )
+                })}
+                {selected.length > 0 && available.length > 0 && (
+                  <span className="memory-chips-divider">|</span>
+                )}
+                {available.map(team => {
+                  const teamColor = getRgbColor(team.COLOR)
+                  return (
+                    <div
+                      key={team.name}
+                      className="memory-team-chip available"
+                      style={{ backgroundColor: teamColor, '--team-color': teamColor }}
+                      onClick={() => toggleTeam(team.name)}
+                      title="Cliquer pour ajouter"
+                    >
+                      <span className="chip-name">{team.name}</span>
+                      <span className="chip-action">+</span>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )
+        })()}
       </div>
 
       {/* Questions Panel - Left */}

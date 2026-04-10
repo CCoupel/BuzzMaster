@@ -61,6 +61,10 @@ const (
 	ActionFirmwareVersion = "FIRMWARE_VERSION" // Server → Web: firmware version info
 	// WiFi config sync (added in v3.1.3)
 	ActionWifiConfig = "WIFI_CONFIG" // Server → Buzzer: sync WiFi credentials
+	// Server-driven LED control (added in v3.4.0)
+	// Replaces per-action QCM LED messages (QCM_COLOR/QCM_DIM/QCM_REVEAL/QCM_RESET).
+	// The server sends LED_SET at each relevant game state change; the firmware applies it directly.
+	ActionLEDSet = "LED_SET" // Server → Buzzer (per-buzzer or broadcast): set LED color/intensity/effect
 )
 
 // FSInfo represents file storage information
@@ -292,6 +296,14 @@ type FirmwareVersionPayload struct {
 	Exists          bool   `json:"EXISTS"`                     // Whether firmware file exists on server
 	IsMerged        bool   `json:"IS_MERGED"`                  // Whether stored firmware is a merged binary (USB flash capable)
 	EmbeddedVersion string `json:"EMBEDDED_VERSION,omitempty"` // Version embedded in server binary (v3.1.1+)
+}
+
+// LEDSetPayload for LED_SET action (server → buzzer: set LED color/intensity/effect).
+// Effect values: "SOLID" (steady), "BLINK" (100%↔25% at 400ms), "DIM" (steady dimmed).
+type LEDSetPayload struct {
+	Color     [3]int `json:"COLOR"`     // RGB values [0-255]
+	Intensity int    `json:"INTENSITY"` // 0-255 (applied to all pixels)
+	Effect    string `json:"EFFECT"`    // "SOLID", "BLINK", or "DIM"
 }
 
 // WifiConfigPayload for WIFI_CONFIG action (server → buzzer: sync WiFi credentials)

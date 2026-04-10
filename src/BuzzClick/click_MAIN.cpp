@@ -204,6 +204,15 @@ void loop() {
     updateGrayRotation();
   }
 
+  // LED blink animation (server-driven LED_SET with EFFECT="BLINK")
+  manageLedBlink();
+
+#ifdef USE_WEBSOCKET
+  // Poll WebSocket incoming messages and reconnect if disconnected
+  pollWebSocket();
+  checkWebSocketConnection();
+#endif
+
   // Normal mode: manage button presses
   manageButtonMessages();
 }

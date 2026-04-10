@@ -77,6 +77,21 @@ type Bumper struct {
 	OTAPercent      int    `json:"OTA_PERCENT,omitempty"`      // OTA progress percentage (0-100)
 }
 
+// BuzzState represents the buzz state of a buzzer relative to the current round.
+// The server tracks this per-buzzer to drive the LED state machine.
+type BuzzState string
+
+const (
+	// BuzzStateNone means nobody has buzzed yet (or the round was reset).
+	BuzzStateNone BuzzState = "NONE"
+	// BuzzStateMoi means this buzzer is the first buzz of its team.
+	BuzzStateMoi BuzzState = "MOI"
+	// BuzzStateEquipe means a team-mate buzzed first; this buzzer came after.
+	BuzzStateEquipe BuzzState = "EQUIPE"
+	// BuzzStateAutre means at least one other team has buzzed, but not this buzzer's team.
+	BuzzStateAutre BuzzState = "AUTRE"
+)
+
 // QuestionType represents the type of question
 type QuestionType string
 

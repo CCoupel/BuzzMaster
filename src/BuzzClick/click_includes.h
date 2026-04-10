@@ -41,7 +41,7 @@ const int pin_gnd=5;
 struct ButtonInfo {
   int pin;
   String name;
-  bool pressed;
+  volatile bool pressed;  // volatile: written in ISR, read in main loop
   String time;
 };
 
