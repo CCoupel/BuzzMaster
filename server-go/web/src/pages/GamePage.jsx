@@ -135,6 +135,19 @@ export default function GamePage() {
       .sort((a, b) => { const orderA = a.ORDER !== undefined ? parseInt(a.ORDER) : parseInt(a.ID); const orderB = b.ORDER !== undefined ? parseInt(b.ORDER) : parseInt(b.ID); return orderA - orderB })
   }, [questions])
 
+  // Next unplayed question after current one (for "Question suivante" button)
+  const nextUnplayedQuestion = useMemo(() => {
+    if (!['STOPPED', 'REVEALED', 'PREPARE', 'READY', 'STARTED', 'PAUSED', 'COUNTDOWN', 'ENROLL'].includes(gameState.phase)) return null
+    const currentId = gameState.question?.ID
+    if (!currentId) return null
+    const currentIndex = sortedQuestions.findIndex(q => q.ID === currentId)
+    for (let i = currentIndex + 1; i < sortedQuestions.length; i++) {
+      const q = sortedQuestions[i]
+      if (!['STOPPED', 'REVEALED', 'PLAYED'].includes(q.STATUS)) return q
+    }
+    return null
+  }, [sortedQuestions, gameState.phase, gameState.question])
+
   // Calculate Memory score based on matched pairs, errors, and config
   const memoryScore = useMemo(() => {
     if (gameState.question?.TYPE !== 'MEMORY') return null
@@ -371,7 +384,28 @@ export default function GamePage() {
             {gameState.phase === 'PREPARE' && <span className="phase-badge phase-prepare">PREPARATION</span>}
             {gameState.phase === 'READY' && <span className="phase-badge phase-ready">PRET</span>}
             {gameState.phase === 'REVEALED' && <span className="phase-badge phase-revealed">REPONSE</span>}
+            {gameState.phase === 'COUNTDOWN' && <span className="phase-badge phase-countdown">COMPTE A REBOURS</span>}
+            {gameState.phase === 'ENROLL' && <span className="phase-badge phase-enroll">INSCRIPTION</span>}
           </div>
+          {nextUnplayedQuestion && (
+            <button
+              className="next-question-btn"
+              onClick={() => handleQuestionSelect(nextUnplayedQuestion)}
+              title={`Aller à la question #${nextUnplayedQuestion.ID}`}
+              style={['STARTED', 'PAUSED', 'COUNTDOWN', 'ENROLL'].includes(gameState.phase) ? { opacity: 0.5, pointerEvents: 'none' } : undefined}
+            >
+              <span className="nq-label">à suivre : #{nextUnplayedQuestion.ID}</span>
+              {nextUnplayedQuestion.CATEGORY && CATEGORIES[nextUnplayedQuestion.CATEGORY] && (
+                <span className="nq-badge nq-badge-cat" style={{ backgroundColor: CATEGORIES[nextUnplayedQuestion.CATEGORY].color }}>
+                  {CATEGORIES[nextUnplayedQuestion.CATEGORY].icon}
+                </span>
+              )}
+              <span className="nq-badge nq-badge-type">{nextUnplayedQuestion.TYPE || 'NORMAL'}</span>
+              <span className="nq-title">
+                {(nextUnplayedQuestion.QUESTION || '').substring(0, 30)}{(nextUnplayedQuestion.QUESTION || '').length > 30 ? '…' : ''}
+              </span>
+            </button>
+          )}
           <div className="question-indicators">
             {gameState.question?.CATEGORY && CATEGORIES[gameState.question.CATEGORY] && (
               <div
@@ -483,18 +517,24 @@ export default function GamePage() {
       <div className="questions-panel">
         <h2 className="panel-title">Questions</h2>
         <div className="questions-list">
-          {sortedQuestions.map((question) => (
-            <QuestionCard
-              key={question.ID}
-              question={question}
-              selected={gameState.question?.ID === question.ID}
-              compact
-              showStatus
-              showTarget
-              canSelect={canSelectQuestion}
-              onClick={handleQuestionSelect}
-            />
-          ))}
+          {sortedQuestions.map((question) => {
+            const isCurrentQuestion = gameState.question?.ID === question.ID
+            const isUnplayed = !['STOPPED', 'REVEALED', 'PLAYED'].includes(question.STATUS)
+            const dimmed = !isCurrentQuestion && isUnplayed && ['STARTED', 'PAUSED', 'COUNTDOWN', 'ENROLL'].includes(gameState.phase)
+            return (
+              <div key={question.ID} style={dimmed ? { opacity: 0.5 } : undefined}>
+                <QuestionCard
+                  question={question}
+                  selected={isCurrentQuestion}
+                  compact
+                  showStatus
+                  showTarget
+                  canSelect={canSelectQuestion}
+                  onClick={handleQuestionSelect}
+                />
+              </div>
+            )
+          })}
         </div>
       </div>
 

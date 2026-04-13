@@ -50,6 +50,61 @@
   padding: var(--space-2) var(--space-4);
 }
 
+.next-question-btn {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  background: var(--color-primary, #4a90d9);
+  color: white;
+  border: none;
+  border-radius: 6px;
+  padding: 4px 10px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: opacity 0.15s;
+  flex-shrink: 0;
+  max-width: 420px;
+}
+
+.next-question-btn:hover {
+  opacity: 0.85;
+}
+
+.nq-label {
+  flex-shrink: 0;
+}
+
+.nq-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  padding: 1px 5px;
+  font-size: 0.65rem;
+  font-weight: 700;
+  flex-shrink: 0;
+  opacity: 0.9;
+}
+
+.nq-badge-cat {
+  font-size: 0.8rem;
+  padding: 1px 3px;
+}
+
+.nq-badge-type {
+  background: rgba(0,0,0,0.25);
+  letter-spacing: 0.02em;
+}
+
+.nq-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  opacity: 0.85;
+  font-weight: 400;
+}
+
 .display-card .toggle-label {
   font-size: 0.85rem;
   color: var(--gray-600);
@@ -98,6 +153,8 @@
 .display-card .phase-prepare { background: var(--accent-orange); color: white; }
 .display-card .phase-ready { background: var(--accent-cyan); color: white; }
 .display-card .phase-revealed { background: var(--gray-400); color: white; }
+.display-card .phase-countdown { background: var(--accent-orange); color: white; }
+.display-card .phase-enroll { background: var(--accent-cyan); color: white; }
 
 /* Row 2 - Side Panels (shared styles for Questions and Equipes) */
 .questions-panel,

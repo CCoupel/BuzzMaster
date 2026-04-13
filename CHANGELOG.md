@@ -3,6 +3,24 @@
 Historique des versions du projet BuzzControl.
 
 
+## [3.5.0] - 2026-04-13
+
+### Added
+- **[GamePage]**: Bouton "à suivre" affichant la prochaine question non jouée dans le bandeau admin (fixes #39)
+  - Format : `à suivre : #ID | catégorie | TYPE | titre` — à droite du badge d'état
+  - Visible dans toutes les phases actives, avec deux comportements selon la phase :
+    - `STOPPED` / `REVEALED` / `PREPARE` / `READY` : opacité 100%, cliquable
+    - `STARTED` / `PAUSED` / `COUNTDOWN` / `ENROLL` : opacité 50%, non cliquable
+  - Logique de sélection : première question après la courante avec STATUS différent de `STOPPED`, `REVEALED`, `PLAYED`
+  - Au clic : sélectionne directement la prochaine question non jouée
+- **[GamePage]**: Badges de phase `COUNTDOWN` et `ENROLL` ajoutés dans le bandeau admin
+
+### Changed
+- **[GamePage]**: Opacité 50% sur les questions non jouées dans la liste admin pendant les phases `STARTED` / `PAUSED` / `COUNTDOWN` / `ENROLL`
+  - La question courante et les questions jouées restent à pleine opacité
+
+---
+
 ## [3.4.5] - 2026-04-10
 
 ### Added
