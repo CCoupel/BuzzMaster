@@ -2210,13 +2210,27 @@ func (a *App) broadcastConfigUpdate() {
 		cfg.NeonEffect.Enabled, cfg.NeonEffect.Mode, cfg.NeonEffect.ArcWidth, cfg.NeonEffect.IntensityGap, cfg.NeonEffect.RotationSpeed, cfg.NeonEffect.GlowPulseSpeed, cfg.NeonEffect.GlowPulseMax, cfg.NeonEffect.BarOffset, cfg.NeonEffect.BarThickness, cfg.NeonEffect.ArcBlur)
 }
 
+// resolveServerIP returns the actual server IP to send to buzzers.
+// It uses the first IP from GetServerIPs() (same source as UDP broadcast heartbeats)
+// so that buzzers always receive the current server IP regardless of what is stored in config.json.
+// Falls back to cfg.ServerIP if no active interface is found.
+func resolveServerIP(cfgServerIP string) string {
+	ips := server.GetServerIPs()
+	if len(ips) > 0 {
+		server.LogInfo(game.LogComponentApp, "resolveServerIP: using detected IP %s (GetServerIPs=%v)", ips[0], ips)
+		return ips[0]
+	}
+	server.LogInfo(game.LogComponentApp, "resolveServerIP: no detected IP, falling back to config value %q", cfgServerIP)
+	return cfgServerIP
+}
+
 // sendWifiConfigToBuzzer sends the current WiFi defaults config to a specific buzzer via WebSocket.
 func (a *App) sendWifiConfigToBuzzer(clientID string) {
 	cfg := a.config.WiFiDefaults
 	payload := protocol.WifiConfigPayload{
 		SSID:       cfg.SSID,
 		Pass:       cfg.Password,
-		ServerIP:   cfg.ServerIP,
+		ServerIP:   resolveServerIP(cfg.ServerIP),
 		ServerPort: cfg.ServerPort,
 		SSID2:      cfg.SSID2,
 		Pass2:      cfg.Password2,
@@ -2239,7 +2253,7 @@ func (a *App) broadcastWifiConfig() {
 	payload := protocol.WifiConfigPayload{
 		SSID:       cfg.SSID,
 		Pass:       cfg.Password,
-		ServerIP:   cfg.ServerIP,
+		ServerIP:   resolveServerIP(cfg.ServerIP),
 		ServerPort: cfg.ServerPort,
 		SSID2:      cfg.SSID2,
 		Pass2:      cfg.Password2,

@@ -650,8 +650,8 @@ export default function TeamCard({
                   {buzzer.firmwareVersion && !buzzer.isVPlayer && (
                     <span
                       className={`buzzer-fw-version ${buzzer.isOutdated ? 'outdated' : ''}`}
-                      title={buzzer.isOutdated ? 'Cliquer pour mettre a jour' : `Firmware ${buzzer.firmwareVersion}`}
-                      onClick={buzzer.isOutdated ? (e) => { e.stopPropagation(); setOtaBuzzer(buzzer) } : undefined}
+                      title={buzzer.isOutdated ? 'Cliquer pour mettre a jour' : `Firmware ${buzzer.firmwareVersion} — Ctrl+clic pour forcer la mise a jour`}
+                      onClick={(e) => { if (buzzer.isOutdated || e.ctrlKey) { e.stopPropagation(); setOtaBuzzer(buzzer) } }}
                     >
                       fw: {buzzer.firmwareVersion}
                     </span>

@@ -47,7 +47,7 @@ export default function ConfigPage() {
   const [wifiPassword, setWifiPassword] = useState('')
   const [wifiSsid2, setWifiSsid2] = useState('')
   const [wifiPassword2, setWifiPassword2] = useState('')
-  const [wifiServerIp, setWifiServerIp] = useState('')
+  const [wifiServerIp, setWifiServerIp] = useState(window.location.hostname)
   const [wifiServerPort, setWifiServerPort] = useState(80)
   const [savingWifi, setSavingWifi] = useState(false)
   const [wifiToast, setWifiToast] = useState(null)
@@ -981,7 +981,7 @@ export default function ConfigPage() {
       {showUSBModal && (
         <USBConfigModal
           onClose={() => setShowUSBModal(false)}
-          wifiConfig={{ ssid: wifiSsid, password: wifiPassword }}
+          wifiConfig={{ ssid: wifiSsid, password: wifiPassword, serverIp: wifiServerIp, serverPort: wifiServerPort }}
           firmwareInfo={firmwareInfo}
         />
       )}

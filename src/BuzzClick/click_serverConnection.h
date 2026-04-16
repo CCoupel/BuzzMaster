@@ -538,9 +538,15 @@ void parseJSON(const String& data, AsyncClient* c) {
       {
         const char* version = message["VERSION"] | "";
         // Build firmware URL from NVS server_ip + fixed port 80 (HTTP/WS port).
-        // The buzzer already knows the server IP from its NVS config; using it here
-        // avoids localhost resolution issues when the admin UI runs on the same machine.
-        String otaUrl = "http://" + currentConfig.server_ip + "/api/firmware/buzzclick/latest.bin";
+        // If NVS server_ip is empty (e.g. after a full USB flash that wipes NVS),
+        // fall back to the URL field provided in the OTA_UPDATE message.
+        String otaUrl;
+        if (currentConfig.server_ip.length() > 0) {
+            otaUrl = "http://" + currentConfig.server_ip + "/api/firmware/buzzclick/latest.bin";
+        } else {
+            otaUrl = String(message["URL"] | "");
+            ESP_LOGW(SRV_TAG, "NVS server_ip empty, using URL from message: %s", otaUrl.c_str());
+        }
         ESP_LOGI(SRV_TAG, "Received OTA_UPDATE: version=%s url=%s", version, otaUrl.c_str());
         if (strlen(version) > 0) {
             performOTA(otaUrl, String(version));

@@ -3,13 +3,13 @@
     "FileVersion": {
       "Major": 3,
       "Minor": 5,
-      "Patch": 1,
+      "Patch": 2,
       "Build": 0
     },
     "ProductVersion": {
       "Major": 3,
       "Minor": 5,
-      "Patch": 1,
+      "Patch": 2,
       "Build": 0
     },
     "FileFlagsMask": "3f",
@@ -22,14 +22,14 @@
     "Comments": "",
     "CompanyName": "CCoupel",
     "FileDescription": "Wireless Buzzer System for Quiz Games",
-    "FileVersion": "3.5.1.0",
+    "FileVersion": "3.5.2.0",
     "InternalName": "buzzcontrol",
     "LegalCopyright": "2026 CCoupel",
     "LegalTrademarks": "",
     "OriginalFilename": "buzzcontrol.exe",
     "PrivateBuild": "",
     "ProductName": "BuzzControl",
-    "ProductVersion": "3.5.1",
+    "ProductVersion": "3.5.2",
     "SpecialBuild": ""
   },
   "VarFileInfo": {

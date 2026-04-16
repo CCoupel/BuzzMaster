@@ -3,6 +3,17 @@
 Historique des versions du projet BuzzControl.
 
 
+## [3.5.2] - 2026-04-16
+
+### Fixed
+- **[BuzzClick/OTA]**: Handler `OTA_UPDATE` — fallback sur l'URL du message si `server_ip` NVS est vide (cas d'un flash USB complet qui efface le NVS), évite l'échec silencieux de l'OTA après première configuration
+- **[Server/resolveServerIP]**: Ajout de logs diagnostics (`LogInfo`) pour tracer l'IP retournée par `GetServerIPs()` — facilite le débogage des problèmes d'IP serveur envoyée aux buzzers
+- **[ConfigPage]**: `wifiServerIp` initialisé à `window.location.hostname` au lieu de `''` — l'IP serveur dans `USBConfigModal` est désormais correcte dès l'ouverture même si `config.json` ne contient pas de valeur
+- **[TeamCard]**: Ctrl+clic sur le badge firmware ouvre la modale OTA même si `IS_OUTDATED=false` — permet de forcer un reflash sur un buzzer à jour
+- **[TeamsPage]**: Même correctif Ctrl+clic que `TeamCard` pour cohérence entre les deux vues buzzer
+
+---
+
 ## [3.5.1] - 2026-04-16
 
 ### Fixed
