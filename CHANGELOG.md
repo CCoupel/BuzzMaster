@@ -3,6 +3,16 @@
 Historique des versions du projet BuzzControl.
 
 
+## [3.5.1] - 2026-04-16
+
+### Fixed
+- **[Server/WIFI_CONFIG]**: `resolveServerIP()` utilise désormais `server.GetServerIPs()` (IP dynamique) au lieu de `cfg.ServerIP` (valeur statique config.json) — les buzzers reçoivent l'IP réelle du serveur
+- **[ConfigPage/USBConfigModal]**: Ajout des props `serverIp` et `serverPort` manquantes dans `wifiConfig` — affichait "(non défini)" au lieu des valeurs réelles
+- **[TeamCard]**: Ctrl+clic sur le badge firmware ouvre la modale OTA même si le buzzer n'est pas marqué `IS_OUTDATED`
+- **[TeamsPage]**: Même correctif Ctrl+clic que TeamCard pour cohérence entre les deux vues
+
+---
+
 ## [3.5.0] - 2026-04-13
 
 ### Added
