@@ -519,9 +519,9 @@ export default function TeamsPage() {
                       {bumper.FIRMWARE_VERSION && (
                         <span
                           className={`bumper-version${bumper.IS_OUTDATED ? ' outdated' : ''}`}
-                          title={bumper.IS_OUTDATED ? 'Cliquer pour mettre à jour' : `v${bumper.FIRMWARE_VERSION}`}
-                          onClick={bumper.IS_OUTDATED ? (e) => { e.stopPropagation(); setOtaMac(bumper.mac) } : undefined}
-                          style={bumper.IS_OUTDATED ? { cursor: 'pointer' } : undefined}
+                          title={bumper.IS_OUTDATED ? 'Cliquer pour mettre à jour' : `v${bumper.FIRMWARE_VERSION} — Ctrl+clic pour forcer la mise à jour`}
+                          onClick={(e) => { if (bumper.IS_OUTDATED || e.ctrlKey) { e.stopPropagation(); setOtaMac(bumper.mac) } }}
+                          style={(bumper.IS_OUTDATED || true) ? { cursor: 'pointer' } : undefined}
                         >
                           v{bumper.FIRMWARE_VERSION}
                         </span>
