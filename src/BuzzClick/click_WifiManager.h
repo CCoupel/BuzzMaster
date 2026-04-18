@@ -114,6 +114,18 @@ void WiFiGotIP(WiFiEvent_t event, WiFiEventInfo_t info){
 
             if (!connected) {
                 ESP_LOGW(WIFI_TAG, "All broadcast IPs failed, waiting for next heartbeat...");
+                // Defense-in-depth only: ws_safe_destroy() in connectWebSocket() is
+                // authoritative and already performs the full teardown (generation
+                // bump + graceful close + stop + drain + destroy). The plain
+                // assignments below do NOT bump wsGeneration on purpose — they are
+                // a safety net covering a hypothetical code path where destroy is
+                // skipped. A stale callback during this window still hits the
+                // wsClient==NULL guard in ws_event_handler and exits safely.
+#ifdef USE_WEBSOCKET
+                wsClient = NULL;
+                wsConnected = false;
+#endif
+                delay(100);  // extra drain time before starting a new connection round
                 resetBroadcastDiscovery();
                 waitStart = millis(); // reset timeout for next round
                 continue;
@@ -131,6 +143,16 @@ void WiFiGotIP(WiFiEvent_t event, WiFiEventInfo_t info){
                     connected = true;
                 } else {
                     ESP_LOGW(WIFI_TAG, "NVS server failed, retrying broadcast...");
+                    // Defense-in-depth only — ws_safe_destroy() in connectWebSocket()
+                    // is the authoritative teardown (with generation bump). These
+                    // assignments are a safety net for hypothetical paths that skip
+                    // destroy; a stale callback during this NVS→broadcast transition
+                    // hits the NULL guard in ws_event_handler and exits.
+#ifdef USE_WEBSOCKET
+                    wsClient = NULL;
+                    wsConnected = false;
+#endif
+                    delay(100);
                     resetBroadcastDiscovery();
                     waitStart = millis();
                     continue;
@@ -147,6 +169,14 @@ void WiFiGotIP(WiFiEvent_t event, WiFiEventInfo_t info){
 
                 if (!connected) {
                     ESP_LOGW(WIFI_TAG, "mDNS fallback failed, retrying broadcast...");
+                    // Defense-in-depth only (see comment on broadcast-retry branch
+                    // above) — ws_safe_destroy() already performed authoritative
+                    // teardown with generation bump inside connectWebSocket().
+#ifdef USE_WEBSOCKET
+                    wsClient = NULL;
+                    wsConnected = false;
+#endif
+                    delay(100);
                     resetBroadcastDiscovery();
                     waitStart = millis();
                     continue;

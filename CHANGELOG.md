@@ -3,6 +3,18 @@
 Historique des versions du projet BuzzControl.
 
 
+## [3.5.5] - 2026-04-18
+
+### Fixed
+- **[Firmware BuzzClick]**: Instruction access fault (MCAUSE=0x1, MEPC=0x00010000) après timeout WebSocket dans la transition NVS→broadcast
+  - Generation counter sur les event handlers ESP-IDF pour invalider les callbacks stale après `destroy()`
+  - `volatile` sur `wsClient`/`wsConnected`/`wsGeneration` pour visibilité cross-task FreeRTOS
+  - Graceful close (`esp_websocket_client_close()` + drain 200ms) avant `destroy()`
+  - Fix resource leak si `esp_websocket_client_start()` échoue
+  - Defense-in-depth dans `click_WifiManager.h` (ré-assertion NULL + delay 100ms avant retry)
+
+---
+
 ## [3.5.4] - 2026-04-18
 
 ### Fixed
