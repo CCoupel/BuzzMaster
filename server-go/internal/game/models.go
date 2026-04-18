@@ -245,8 +245,8 @@ func NewTeamsAndBumpers() *TeamsAndBumpers {
 // GameData combines game state with teams/bumpers for messages
 type GameData struct {
 	Game             *GameState                `json:"GAME,omitempty"`
-	Teams            map[string]*Team          `json:"teams,omitempty"`
-	Bumpers          map[string]*Bumper        `json:"bumpers,omitempty"`
+	Teams            map[string]*Team          `json:"teams"`
+	Bumpers          map[string]*Bumper        `json:"bumpers"`
 	QuestionStatuses map[string]QuestionStatus `json:"-"` // Not serialized, internal tracking
 }
 

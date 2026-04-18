@@ -1277,10 +1277,19 @@ func (e *Engine) GetGameJSON() json.RawMessage {
 	e.mu.RLock()
 	defer e.mu.RUnlock()
 
+	bumpers := e.data.Bumpers
+	if bumpers == nil {
+		bumpers = make(map[string]*Bumper)
+	}
+	teams := e.data.Teams
+	if teams == nil {
+		teams = make(map[string]*Team)
+	}
+
 	data := &GameData{
 		Game:    &e.state,
-		Teams:   e.data.Teams,
-		Bumpers: e.data.Bumpers,
+		Teams:   teams,
+		Bumpers: bumpers,
 	}
 
 	result, _ := json.Marshal(data)
