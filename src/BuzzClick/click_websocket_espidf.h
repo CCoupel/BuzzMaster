@@ -161,6 +161,13 @@ static void ws_event_handler(void *handler_args, esp_event_base_t base, int32_t 
 
 // Connect to WebSocket server
 bool connectWebSocket(const String& ip, uint16_t port) {
+    if (wsClient != NULL) {
+        esp_websocket_client_stop(wsClient);
+        esp_websocket_client_destroy(wsClient);
+        wsClient = NULL;
+        wsConnected = false;
+    }
+
     wsServerIP = ip;
     wsServerPort = port;
 
@@ -207,6 +214,7 @@ bool connectWebSocket(const String& ip, uint16_t port) {
     if (!wsConnected) {
         ESP_LOGE(WS_TAG, "WebSocket connection timeout!");
         setLedColor(255, 0, 0, true);
+        esp_websocket_client_stop(wsClient);
         esp_websocket_client_destroy(wsClient);
         wsClient = NULL;
         return false;
