@@ -212,8 +212,8 @@ export default function useWebSocket() {
           console.log('[WS] Setting remote to:', MSG.GAME.REMOTE)
           setGameState(prev => ({ ...prev, remote: MSG.GAME.REMOTE }))
         }
-        if (MSG?.teams) setTeams(MSG.teams)
-        if (MSG?.bumpers) setBumpers(MSG.bumpers)
+        if (MSG?.teams !== undefined) setTeams(MSG.teams ?? {})
+        if (MSG?.bumpers !== undefined) setBumpers(MSG.bumpers ?? {})
         break
 
       case 'CLIENTS':
