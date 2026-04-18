@@ -3,6 +3,14 @@
 Historique des versions du projet BuzzControl.
 
 
+## [3.5.3] - 2026-04-18
+
+### Fixed
+- **[ConfigPage]**: Le champ IP Serveur dans la page Config n'est plus pré-rempli avec le hostname du navigateur (`window.location.hostname`). Initialisé à vide (`''`), il est renseigné uniquement si une IP est sauvegardée côté serveur. Depuis v3.2.0, l'IP est optionnelle (découverte automatique via UDP broadcast) — un hostname transmis au firmware causait l'erreur "ERROR:Invalid IP format" dans le handler AT. (`ConfigPage.jsx`, commit `eb8b635`)
+- **[Firmware BuzzClick]**: Correction d'un crash Guru Meditation Error (Load access fault) survenant lors d'un timeout de connexion WebSocket. `esp_websocket_client_destroy()` était appelé sans `esp_websocket_client_stop()` préalable, laissant la tâche interne ESP-IDF accéder à un handle détruit. Ajout du `stop()` avant `destroy()` dans le path timeout et nettoyage défensif de tout client existant en début de `connectWebSocket()`. (`click_websocket_espidf.h`, commit `f0bd596`)
+
+---
+
 ## [3.5.2] - 2026-04-16
 
 ### Fixed
