@@ -3,6 +3,16 @@
 Historique des versions du projet BuzzControl.
 
 
+## [3.5.4] - 2026-04-18
+
+### Fixed
+- **[Game/WebSocket]**: Suppression d'un buzzer non reflétée dans l'UI en temps réel
+  - Cause : `GameData.Bumpers` et `GameData.Teams` avaient le tag `omitempty` — une map vide `{}` était omise du JSON broadcasté, empêchant le frontend de recevoir la mise à jour
+  - Fix backend : suppression de `omitempty` sur `Teams` et `Bumpers` dans `GameData`, nil-guard dans `GetGameJSON()` (`models.go`, `engine.go`)
+  - Fix frontend : checks d'existence explicites dans les handlers WebSocket `UPDATE`, `BUMPER` et `REMOTE` (`useWebSocket.js`)
+
+---
+
 ## [3.5.3] - 2026-04-18
 
 ### Fixed

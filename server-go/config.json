@@ -33,10 +33,12 @@
     "glow_pulse_max": 70
   },
   "wifi_defaults": {
-    "ssid": "CC-Home",
-    "password": "GenericPassword",
+    "ssid": "BuzzMaster",
+    "password": "BuzzMaster",
     "server_ip": "192.168.1.84",
-    "server_port": 80
+    "server_port": 80,
+    "ssid2": "CC-Home",
+    "password2": "GenericPassword"
   },
-  "version": "3.5.3"
+  "version": "3.5.4"
 }
