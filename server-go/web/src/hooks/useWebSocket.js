@@ -122,8 +122,8 @@ export default function useWebSocket() {
             showQRCode: MSG.GAME.SHOW_QR_CODE ?? prev.showQRCode,
           }))
         }
-        if (MSG?.teams) setTeams(MSG.teams)
-        if (MSG?.bumpers) setBumpers(MSG.bumpers)
+        if (MSG?.teams !== undefined) setTeams(MSG.teams ?? {})
+        if (MSG?.bumpers !== undefined) setBumpers(MSG.bumpers ?? {})
         if (VERSION) setVersion(VERSION)
         break
 
@@ -174,8 +174,8 @@ export default function useWebSocket() {
         break
 
       case 'BUMPER':
-        if (MSG?.teams) setTeams(MSG.teams)
-        if (MSG?.bumpers) setBumpers(MSG.bumpers)
+        if (MSG?.teams !== undefined) setTeams(MSG.teams ?? {})
+        if (MSG?.bumpers !== undefined) setBumpers(MSG.bumpers ?? {})
         break
 
       case 'QUESTIONS':
