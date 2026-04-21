@@ -468,8 +468,10 @@ export default function GamePage() {
          gameState.question?.TYPE === 'MEMORY' && (() => {
           // MEMORY_MODE is empty string for default SOLO (omitempty), treat empty as SOLO
           const isSolo = !gameState.question.MEMORY_MODE || gameState.question.MEMORY_MODE === 'SOLO'
-          const selected = sortedTeams.filter(t => selectedTeams.includes(t.name))
-          const available = sortedTeams.filter(t => !selectedTeams.includes(t.name))
+          // Only show teams with at least one player (consistent with main display filter, #45)
+          const teamsWithBuzzers = sortedTeams.filter(t => t.buzzers && t.buzzers.length > 0)
+          const selected = teamsWithBuzzers.filter(t => selectedTeams.includes(t.name))
+          const available = teamsWithBuzzers.filter(t => !selectedTeams.includes(t.name))
           return (
             <div className={`memory-team-selector ${isSolo ? 'solo-mode' : 'multi-mode'}`}>
               <div className="memory-selector-label">
