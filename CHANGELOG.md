@@ -16,6 +16,14 @@ Historique des versions du projet BuzzControl.
   - Bouton "Appliquer" désactivé pendant le chargement pour prévenir les double-clics
 - **[GamePage]**: Les équipes sans joueur sont masquées sur `/admin/game` (fixes #45)
 
+### Added
+- **[Firmware BuzzClick]**: Différenciation visuelle des états d'erreur LED (fixes #49)
+  - WiFi échec → rouge clignotant lent (1 Hz)
+  - WebSocket déconnectée → rouge clignotant rapide (4 Hz)
+  - WebSocket timeout définitif → rouge pulsant lent
+  - OTA erreur → rouge + flash blanc
+  - Nouveau module `click_ledErrorPatterns.h` — state machine non-bloquante
+
 ### Changed
 - **[Firmware BuzzClick]**: `CORE_DEBUG_LEVEL` passé de 4 (DEBUG) à 3 (INFO) — les logs mémoire WATCHDOG ne sont plus compilés en production, réduisant l'overhead (fixes #46)
 - **[Firmware BuzzClick]**: Logs Broadcaster enrichis avec l'IP source du heartbeat reçu et l'IP locale d'écoute — facilite le diagnostic de découverte serveur (fixes #47)
