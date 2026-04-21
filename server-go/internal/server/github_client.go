@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"os"
 	"runtime"
 	"strings"
 	"sync"
@@ -34,23 +35,33 @@ type GitHubClient struct {
 	RepoOwner string
 	RepoName  string
 	Client    *http.Client
+	token     string // Optional GitHub auth token (GITHUB_TOKEN env var) to avoid rate limiting
 	cache     *releasesCache
 }
 
 // releasesCache stores cached releases with TTL
 type releasesCache struct {
-	mu         sync.RWMutex
-	releases   []GitHubRelease
-	fetchedAt  time.Time
-	ttl        time.Duration
+	mu        sync.RWMutex
+	releases  []GitHubRelease
+	fetchedAt time.Time
+	ttl       time.Duration
 }
 
-// NewGitHubClient creates a new GitHub API client
+// NewGitHubClient creates a new GitHub API client.
+// If the GITHUB_TOKEN environment variable is set, it is used for authentication
+// to avoid the 60 req/hour unauthenticated rate limit.
 func NewGitHubClient(owner, repo string) *GitHubClient {
+	token := os.Getenv("GITHUB_TOKEN")
+	if token != "" {
+		LogInfo(game.LogComponentUpdater, "GitHub client initialized with auth token (rate limit: 5000 req/h)")
+	} else {
+		LogInfo(game.LogComponentUpdater, "GitHub client initialized without auth token (rate limit: 60 req/h)")
+	}
 	return &GitHubClient{
 		RepoOwner: owner,
 		RepoName:  repo,
 		Client:    &http.Client{Timeout: 10 * time.Second},
+		token:     token,
 		cache: &releasesCache{
 			ttl: 1 * time.Hour,
 		},
@@ -77,6 +88,11 @@ func (gc *GitHubClient) GetReleases() ([]GitHubRelease, error) {
 	// Add User-Agent header (required by GitHub API)
 	req.Header.Set("User-Agent", "BuzzControl-Server")
 	req.Header.Set("Accept", "application/vnd.github+json")
+
+	// Add auth token if available to avoid rate limiting (60 → 5000 req/h)
+	if gc.token != "" {
+		req.Header.Set("Authorization", "Bearer "+gc.token)
+	}
 
 	resp, err := gc.Client.Do(req)
 	if err != nil {

@@ -301,6 +301,7 @@ export default function UpdatePage() {
                                                         <button
                                                             className="btn-apply"
                                                             onClick={() => handleApply(v.version, downloadProgress.path)}
+                                                            disabled={loading}
                                                         >
                                                             Appliquer
                                                         </button>

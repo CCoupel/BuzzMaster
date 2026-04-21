@@ -24,6 +24,7 @@ export default defineConfig({
         target: 'ws://localhost:80',
         ws: true,
       },
+      '/api': 'http://localhost:80',
       '/questions': 'http://localhost:80',
       '/backup': 'http://localhost:80',
       '/config.json': 'http://localhost:80',

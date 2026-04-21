@@ -321,6 +321,130 @@ describe('GamePage - Opacité questions non jouées', () => {
 })
 
 // ---------------------------------------------------------------------------
+// Describe : filtre équipes sans joueurs (displayTeams — issue #45)
+// ---------------------------------------------------------------------------
+
+describe('GamePage - Filtre équipes sans joueurs (displayTeams)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  // Test 1 : Une équipe sans bumper ne doit PAS être affichée
+  it('équipe avec buzzers vides ([]) n\'est pas affichée', () => {
+    useGame.mockReturnValue(makeGameMock({
+      gameState: {
+        phase: 'STOPPED',
+        question: { ID: '1', STATUS: 'STOPPED' },
+        remote: 'GAME',
+        timer: 0,
+        totalTime: 30,
+        MEMORY_PARTICIPATING_TEAMS: [],
+      },
+      teams: { 'Equipe Vide': { SCORE: 0 } },
+      bumpers: {}, // Aucun bumper → teamBumpers['Equipe Vide'] = undefined → buzzers: []
+    }))
+
+    render(<GamePage />)
+    // La TeamCard pour "Equipe Vide" ne doit pas être rendue
+    expect(screen.queryByTestId('team-card-Equipe Vide')).toBeNull()
+  })
+
+  // Test 2 : Une équipe avec au moins un bumper DOIT être affichée
+  it('équipe avec un bumper assigné est affichée normalement', () => {
+    useGame.mockReturnValue(makeGameMock({
+      gameState: {
+        phase: 'STOPPED',
+        question: { ID: '1', STATUS: 'STOPPED' },
+        remote: 'GAME',
+        timer: 0,
+        totalTime: 30,
+        MEMORY_PARTICIPATING_TEAMS: [],
+      },
+      teams: { 'Equipe Pleine': { SCORE: 10 } },
+      bumpers: {
+        'AA:BB:CC:DD:EE:FF': { TEAM: 'Equipe Pleine', NAME: 'Player1', SCORE: 0, READY: false },
+      },
+    }))
+
+    render(<GamePage />)
+    expect(screen.getByTestId('team-card-Equipe Pleine')).toBeInTheDocument()
+  })
+
+  // Test 3 : Filtre sélectif — une équipe avec joueurs visible, une sans joueurs masquée
+  it('filtre sélectif : équipe avec joueurs visible, sans joueurs masquée', () => {
+    useGame.mockReturnValue(makeGameMock({
+      gameState: {
+        phase: 'STOPPED',
+        question: { ID: '1', STATUS: 'STOPPED' },
+        remote: 'GAME',
+        timer: 0,
+        totalTime: 30,
+        MEMORY_PARTICIPATING_TEAMS: [],
+      },
+      teams: {
+        'Equipe Avec': { SCORE: 5 },
+        'Equipe Sans': { SCORE: 0 },
+      },
+      bumpers: {
+        'AA:BB:CC:DD:EE:FF': { TEAM: 'Equipe Avec', NAME: 'Player1', SCORE: 0, READY: false },
+        // Aucun bumper pour 'Equipe Sans'
+      },
+    }))
+
+    render(<GamePage />)
+    expect(screen.getByTestId('team-card-Equipe Avec')).toBeInTheDocument()
+    expect(screen.queryByTestId('team-card-Equipe Sans')).toBeNull()
+  })
+
+  // Test 4 : Toutes les équipes ont des joueurs → toutes affichées, pas de crash
+  it('toutes les équipes avec joueurs sont affichées sans crash', () => {
+    useGame.mockReturnValue(makeGameMock({
+      gameState: {
+        phase: 'STOPPED',
+        question: { ID: '1', STATUS: 'STOPPED' },
+        remote: 'GAME',
+        timer: 0,
+        totalTime: 30,
+        MEMORY_PARTICIPATING_TEAMS: [],
+      },
+      teams: {
+        'Rouge': { SCORE: 10 },
+        'Bleu': { SCORE: 8 },
+        'Vert': { SCORE: 6 },
+      },
+      bumpers: {
+        'AA:BB:CC:DD:EE:FF': { TEAM: 'Rouge', NAME: 'Player1', SCORE: 0, READY: false },
+        'BB:CC:DD:EE:FF:00': { TEAM: 'Bleu', NAME: 'Player2', SCORE: 0, READY: false },
+        'CC:DD:EE:FF:00:11': { TEAM: 'Vert', NAME: 'Player3', SCORE: 0, READY: false },
+      },
+    }))
+
+    render(<GamePage />)
+    expect(screen.getByTestId('team-card-Rouge')).toBeInTheDocument()
+    expect(screen.getByTestId('team-card-Bleu')).toBeInTheDocument()
+    expect(screen.getByTestId('team-card-Vert')).toBeInTheDocument()
+  })
+
+  // Test 5 : Aucune équipe du tout → rendu sans erreur (teams vide)
+  it('teams vide → aucune TeamCard rendue, pas de crash', () => {
+    useGame.mockReturnValue(makeGameMock({
+      gameState: {
+        phase: 'STOPPED',
+        question: { ID: '1', STATUS: 'STOPPED' },
+        remote: 'GAME',
+        timer: 0,
+        totalTime: 30,
+        MEMORY_PARTICIPATING_TEAMS: [],
+      },
+      teams: {},
+      bumpers: {},
+    }))
+
+    expect(() => render(<GamePage />)).not.toThrow()
+  })
+})
+
+// ---------------------------------------------------------------------------
 // Tests existants (logique pure, pas de rendu)
 // ---------------------------------------------------------------------------
 

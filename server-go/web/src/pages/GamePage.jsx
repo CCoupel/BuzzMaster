@@ -108,13 +108,16 @@ export default function GamePage() {
   // Display-only sorting for Memory multi-team mode (by pairs found)
   // This doesn't affect game logic, only the visual order in the Equipes column
   const displayTeams = useMemo(() => {
+    // Only show teams that have at least one player (bumper) assigned — empty teams are hidden (#45)
+    const teamsWithPlayers = sortedTeams.filter(team => team.buzzers && team.buzzers.length > 0)
+
     // Only apply Memory sorting in multi-team mode during active phases
     if (gameState.question?.TYPE === 'MEMORY' &&
         gameState.question?.MEMORY_MODE &&
         gameState.question.MEMORY_MODE !== 'SOLO' &&
         ['STARTED', 'PAUSED', 'REVEALED', 'STOPPED'].includes(gameState.phase)) {
       // Create a copy to avoid mutating sortedTeams
-      return [...sortedTeams].sort((a, b) => {
+      return [...teamsWithPlayers].sort((a, b) => {
         const pairsA = gameState.MEMORY_TEAM_PAIRS?.[a.name] || 0
         const pairsB = gameState.MEMORY_TEAM_PAIRS?.[b.name] || 0
         if (pairsB !== pairsA) return pairsB - pairsA  // More pairs first
@@ -124,8 +127,8 @@ export default function GamePage() {
         return errorsA - errorsB
       })
     }
-    // For all other cases, use the standard sortedTeams order
-    return sortedTeams
+    // For all other cases, use the standard sortedTeams order (filtered)
+    return teamsWithPlayers
   }, [sortedTeams, gameState.question, gameState.phase, gameState.MEMORY_TEAM_PAIRS, gameState.MEMORY_TEAM_ERRORS])
 
   // Sort questions by ORDER if available, otherwise by ID

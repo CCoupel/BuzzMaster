@@ -3,6 +3,25 @@
 Historique des versions du projet BuzzControl.
 
 
+## [3.6.0] - 2026-04-21
+
+### Fixed
+- **[UpdatePage]**: Boutons Télécharger et Appliquer non fonctionnels (fixes #44)
+  - CORS corrigé : suppression du header `Access-Control-Allow-Credentials: true` incompatible avec les origines wildcard
+  - Codes HTTP sémantiques sur les endpoints `/api/updates/*` (400/404/503/500) au lieu de 200 systématique
+  - Support de la variable d'environnement `GITHUB_TOKEN` pour éviter le rate limiting de l'API GitHub
+  - Remplacement atomique du binaire Windows via rename (évite le verrou OS sur l'exécutable en cours)
+  - Proxy Vite `/api` ajouté pour le mode développement (`vite.config.js`)
+  - Validation anti path-traversal renforcée dans `HandleApplyUpdate`
+  - Bouton "Appliquer" désactivé pendant le chargement pour prévenir les double-clics
+- **[GamePage]**: Les équipes sans joueur sont masquées sur `/admin/game` (fixes #45)
+
+### Changed
+- **[Firmware BuzzClick]**: `CORE_DEBUG_LEVEL` passé de 4 (DEBUG) à 3 (INFO) — les logs mémoire WATCHDOG ne sont plus compilés en production, réduisant l'overhead (fixes #46)
+- **[Firmware BuzzClick]**: Logs Broadcaster enrichis avec l'IP source du heartbeat reçu et l'IP locale d'écoute — facilite le diagnostic de découverte serveur (fixes #47)
+
+---
+
 ## [3.5.5] - 2026-04-18
 
 ### Fixed

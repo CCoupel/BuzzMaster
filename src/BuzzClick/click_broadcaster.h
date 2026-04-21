@@ -26,7 +26,8 @@ static AsyncUDP broadcastUdp;
 
 // Parse BUZZ_SERVER|IP1|IP2|...|PORT format
 // Returns true if parsing succeeded
-bool parseBroadcastHeartbeat(const char* data, size_t len) {
+// sourceIp is the IP address of the UDP packet sender (for logging)
+bool parseBroadcastHeartbeat(const char* data, size_t len, const IPAddress& sourceIp) {
     // Remove trailing null if present
     String msg;
     if (len > 0 && data[len - 1] == '\0') {
@@ -85,7 +86,8 @@ bool parseBroadcastHeartbeat(const char* data, size_t len) {
     discovery.received = true;
     discovery.lastReceived = millis();
 
-    ESP_LOGI(BCAST_TAG, "Heartbeat received: %d IPs, port=%d", discovery.ipCount, discovery.serverPort);
+    ESP_LOGI(BCAST_TAG, "Heartbeat received from %s — %d IPs, port=%d",
+             sourceIp.toString().c_str(), discovery.ipCount, discovery.serverPort);
     for (int i = 0; i < discovery.ipCount; i++) {
         ESP_LOGI(BCAST_TAG, "  IP[%d]: %s", i, discovery.ips[i].c_str());
     }
@@ -108,11 +110,12 @@ bool startBroadcastListener(uint16_t port) {
 
         // Only process BUZZ_SERVER messages (ignore other UDP traffic on this port)
         if (len >= 12 && strncmp(data, "BUZZ_SERVER", 11) == 0) {
-            parseBroadcastHeartbeat(data, len);
+            parseBroadcastHeartbeat(data, len, packet.remoteIP());
         }
     });
 
-    ESP_LOGI(BCAST_TAG, "UDP broadcast listener started on port %d", port);
+    ESP_LOGI(BCAST_TAG, "Listening on %s:%d",
+             WiFi.localIP().toString().c_str(), port);
     return true;
 }
 

@@ -230,6 +230,19 @@ func (u *Updater) HandleCheckUpdates(w http.ResponseWriter, r *http.Request) {
 	LogInfo(game.LogComponentUpdater, "Check result: current=%s, latest=%s, available=%v", u.currentVer, latestVersion, updateAvailable)
 }
 
+// writeJSONError writes a JSON error response with the given HTTP status code.
+func writeJSONError(w http.ResponseWriter, status int, response interface{}) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	json.NewEncoder(w).Encode(response)
+}
+
+// writeJSON writes a successful JSON response (200 OK).
+func writeJSON(w http.ResponseWriter, response interface{}) {
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(response)
+}
+
 // HandleDownloadUpdate handles POST /api/updates/download
 func (u *Updater) HandleDownloadUpdate(w http.ResponseWriter, r *http.Request) {
 	LogInfo(game.LogComponentUpdater, "POST /api/updates/download")
@@ -237,8 +250,13 @@ func (u *Updater) HandleDownloadUpdate(w http.ResponseWriter, r *http.Request) {
 	var req DownloadRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		LogError(game.LogComponentUpdater, "Invalid request body: %v", err)
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(DownloadResponse{Success: false, Error: "Invalid request body"})
+		writeJSONError(w, http.StatusBadRequest, DownloadResponse{Success: false, Error: "Invalid request body"})
+		return
+	}
+
+	if req.Version == "" {
+		LogError(game.LogComponentUpdater, "Missing version in request")
+		writeJSONError(w, http.StatusBadRequest, DownloadResponse{Success: false, Error: "version is required"})
 		return
 	}
 
@@ -248,8 +266,7 @@ func (u *Updater) HandleDownloadUpdate(w http.ResponseWriter, r *http.Request) {
 	releases, err := u.githubClient.GetReleases()
 	if err != nil {
 		LogError(game.LogComponentUpdater, "Failed to get releases: %v", err)
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(DownloadResponse{Success: false, Error: "Failed to fetch releases"})
+		writeJSONError(w, http.StatusServiceUnavailable, DownloadResponse{Success: false, Error: fmt.Sprintf("Failed to fetch releases: %v", err)})
 		return
 	}
 
@@ -265,9 +282,8 @@ func (u *Updater) HandleDownloadUpdate(w http.ResponseWriter, r *http.Request) {
 
 		asset := FindAssetForPlatform(release, platform)
 		if asset == nil {
-			LogError(game.LogComponentUpdater, "No asset found for platform %s", platform)
-			w.Header().Set("Content-Type", "application/json")
-			json.NewEncoder(w).Encode(DownloadResponse{Success: false, Error: "Invalid platform"})
+			LogError(game.LogComponentUpdater, "No asset found for platform %s in release %s", platform, release.TagName)
+			writeJSONError(w, http.StatusNotFound, DownloadResponse{Success: false, Error: fmt.Sprintf("No binary available for platform %s", platform)})
 			return
 		}
 
@@ -277,8 +293,7 @@ func (u *Updater) HandleDownloadUpdate(w http.ResponseWriter, r *http.Request) {
 
 	if downloadURL == "" {
 		LogError(game.LogComponentUpdater, "Version not found: %s", req.Version)
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(DownloadResponse{Success: false, Error: "Version not found"})
+		writeJSONError(w, http.StatusNotFound, DownloadResponse{Success: false, Error: fmt.Sprintf("Version %s not found", req.Version)})
 		return
 	}
 
@@ -294,8 +309,8 @@ func (u *Updater) HandleDownloadUpdate(w http.ResponseWriter, r *http.Request) {
 
 	if err := u.downloadFile(downloadURL, destPath); err != nil {
 		LogError(game.LogComponentUpdater, "Download failed: %v", err)
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(DownloadResponse{Success: false, Error: fmt.Sprintf("Download failed: %v", err)})
+		os.Remove(destPath)
+		writeJSONError(w, http.StatusInternalServerError, DownloadResponse{Success: false, Error: fmt.Sprintf("Download failed: %v", err)})
 		return
 	}
 
@@ -304,16 +319,14 @@ func (u *Updater) HandleDownloadUpdate(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		LogError(game.LogComponentUpdater, "Failed to stat downloaded file: %v", err)
 		os.Remove(destPath)
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(DownloadResponse{Success: false, Error: "File verification failed"})
+		writeJSONError(w, http.StatusInternalServerError, DownloadResponse{Success: false, Error: "File verification failed"})
 		return
 	}
 
 	if fileInfo.Size() < MinBinarySize {
 		LogError(game.LogComponentUpdater, "Downloaded file too small: %d bytes (min %d)", fileInfo.Size(), MinBinarySize)
 		os.Remove(destPath)
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(DownloadResponse{Success: false, Error: "File too small"})
+		writeJSONError(w, http.StatusInternalServerError, DownloadResponse{Success: false, Error: fmt.Sprintf("Downloaded file too small (%d bytes), may be corrupted", fileInfo.Size())})
 		return
 	}
 
@@ -331,16 +344,13 @@ func (u *Updater) HandleDownloadUpdate(w http.ResponseWriter, r *http.Request) {
 
 	LogInfo(game.LogComponentUpdater, "Download complete: %d bytes (min: %d), checksum=%s", fileInfo.Size(), MinBinarySize, checksum)
 
-	response := DownloadResponse{
+	writeJSON(w, DownloadResponse{
 		Success:  true,
 		Version:  req.Version,
 		Path:     destPath,
 		Size:     fileInfo.Size(),
 		Checksum: checksum,
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(response)
+	})
 }
 
 // HandleApplyUpdate handles POST /api/updates/apply
@@ -350,18 +360,43 @@ func (u *Updater) HandleApplyUpdate(w http.ResponseWriter, r *http.Request) {
 	var req ApplyRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		LogError(game.LogComponentUpdater, "Invalid request body: %v", err)
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(ApplyResponse{Success: false, Error: "Invalid request body"})
+		writeJSONError(w, http.StatusBadRequest, ApplyResponse{Success: false, Error: "Invalid request body"})
+		return
+	}
+
+	if req.Version == "" || req.Path == "" {
+		LogError(game.LogComponentUpdater, "Missing version or path in request")
+		writeJSONError(w, http.StatusBadRequest, ApplyResponse{Success: false, Error: "version and path are required"})
 		return
 	}
 
 	LogInfo(game.LogComponentUpdater, "Applying update: version=%s, path=%s", req.Version, req.Path)
 
-	// Verify file exists
-	if _, err := os.Stat(req.Path); os.IsNotExist(err) {
-		LogError(game.LogComponentUpdater, "File not found: %s", req.Path)
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(ApplyResponse{Success: false, Error: "Invalid path"})
+	// Verify downloaded file exists and is valid
+	fileInfo, err := os.Stat(req.Path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			LogError(game.LogComponentUpdater, "Downloaded file not found: %s", req.Path)
+			writeJSONError(w, http.StatusNotFound, ApplyResponse{Success: false, Error: "Downloaded file not found — please download again"})
+		} else {
+			LogError(game.LogComponentUpdater, "Cannot access downloaded file: %v", err)
+			writeJSONError(w, http.StatusInternalServerError, ApplyResponse{Success: false, Error: fmt.Sprintf("Cannot access file: %v", err)})
+		}
+		return
+	}
+
+	if fileInfo.Size() < MinBinarySize {
+		LogError(game.LogComponentUpdater, "Downloaded file too small to apply: %d bytes", fileInfo.Size())
+		writeJSONError(w, http.StatusBadRequest, ApplyResponse{Success: false, Error: "Downloaded file appears corrupted — please download again"})
+		return
+	}
+
+	// Verify the path is inside the expected temp directory (security: prevent path traversal)
+	absPath, err := filepath.Abs(req.Path)
+	sep := string(os.PathSeparator)
+	if err != nil || (!strings.HasPrefix(absPath, u.tempDir+sep) && absPath != u.tempDir) {
+		LogError(game.LogComponentUpdater, "Suspicious path rejected: %s (expected prefix: %s)", req.Path, u.tempDir)
+		writeJSONError(w, http.StatusBadRequest, ApplyResponse{Success: false, Error: "Invalid file path"})
 		return
 	}
 
@@ -369,8 +404,7 @@ func (u *Updater) HandleApplyUpdate(w http.ResponseWriter, r *http.Request) {
 	exe, err := os.Executable()
 	if err != nil {
 		LogError(game.LogComponentUpdater, "Failed to get executable path: %v", err)
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(ApplyResponse{Success: false, Error: "Failed to determine executable path"})
+		writeJSONError(w, http.StatusInternalServerError, ApplyResponse{Success: false, Error: "Failed to determine executable path"})
 		return
 	}
 
@@ -378,19 +412,16 @@ func (u *Updater) HandleApplyUpdate(w http.ResponseWriter, r *http.Request) {
 	exe, err = filepath.EvalSymlinks(exe)
 	if err != nil {
 		LogError(game.LogComponentUpdater, "Failed to resolve symlinks: %v", err)
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(ApplyResponse{Success: false, Error: "Failed to resolve executable path"})
+		writeJSONError(w, http.StatusInternalServerError, ApplyResponse{Success: false, Error: "Failed to resolve executable path"})
 		return
 	}
 
-	// Send success response BEFORE restarting
-	response := ApplyResponse{
+	// Send success response BEFORE restarting (client must receive this before the server dies)
+	writeJSON(w, ApplyResponse{
 		Success:          true,
 		Message:          fmt.Sprintf("Server restarting with version %s...", req.Version),
 		RestartInSeconds: 3,
-	}
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(response)
+	})
 
 	LogInfo(game.LogComponentUpdater, "Response sent, scheduling restart in 3 seconds...")
 
@@ -401,101 +432,122 @@ func (u *Updater) HandleApplyUpdate(w http.ResponseWriter, r *http.Request) {
 	}()
 }
 
-// performRestart performs the actual restart operation
-// NOTE: This function uses a copy-based approach instead of atomic rename
-// because Windows does not allow renaming an executable while it's running.
-// To minimize the risk of inconsistent state:
-// 1. Backup is created BEFORE any modification
-// 2. Each step is verified before proceeding
-// 3. Backup is restored on any failure
-// RISK: If the process crashes between backup creation and new file copy,
-// the system will be in an inconsistent state. The backup can be manually
-// restored in this scenario.
+// performRestart performs the actual restart operation.
+//
+// Strategy per OS:
+//   - Linux/Mac: chmod + overwrite via copyFile (allowed while running)
+//   - Windows: rename current→.bak, rename new→current (os.Rename works on running EXEs
+//     because it only modifies the directory entry, not the file content)
+//
+// If any step fails, the backup is restored and the process does NOT exit.
 func (u *Updater) performRestart(currentExe, newExe string) {
-	LogInfo(game.LogComponentUpdater, "Starting restart procedure...")
+	LogInfo(game.LogComponentUpdater, "Starting restart procedure (OS: %s)", runtime.GOOS)
 	LogInfo(game.LogComponentUpdater, "Current exe: %s", currentExe)
 	LogInfo(game.LogComponentUpdater, "New exe: %s", newExe)
 
-	// Step 1: Verify new executable exists
+	// Step 1: Verify new executable exists and has valid size
 	newInfo, err := os.Stat(newExe)
 	if err != nil {
-		LogError(game.LogComponentUpdater, "Failed to stat new executable: %v", err)
+		LogError(game.LogComponentUpdater, "Step 1/5 FAILED: Cannot stat new executable: %v", err)
+		return
+	}
+	if newInfo.Size() < MinBinarySize {
+		LogError(game.LogComponentUpdater, "Step 1/5 FAILED: New executable too small (%d bytes)", newInfo.Size())
 		return
 	}
 	LogInfo(game.LogComponentUpdater, "Step 1/5: New executable verified (%d bytes)", newInfo.Size())
 
-	// Step 2: Create backup BEFORE any modification
 	backup := getBackupPath(currentExe)
-	LogInfo(game.LogComponentUpdater, "Step 2/5: Creating backup: %s -> %s", currentExe, backup)
 
-	// Remove old backup if exists
-	if _, err := os.Stat(backup); err == nil {
-		LogInfo(game.LogComponentUpdater, "Removing old backup: %s", backup)
-		os.Remove(backup)
-	}
-
-	// Copy current exe to backup (safer than rename on Windows as exe is running)
-	if err := copyFile(currentExe, backup); err != nil {
-		LogError(game.LogComponentUpdater, "CRITICAL: Failed to create backup: %v", err)
-		return
-	}
-
-	// Verify backup was created successfully
-	if _, err := os.Stat(backup); err != nil {
-		LogError(game.LogComponentUpdater, "CRITICAL: Backup verification failed: %v", err)
-		return
-	}
-	LogInfo(game.LogComponentUpdater, "Step 2/5: Backup created successfully")
-
-	// Step 3: Make new binary executable (Unix only)
+	// Step 2: Make new binary executable (Unix only), or set up rename approach for Windows
 	if runtime.GOOS != "windows" {
-		LogInfo(game.LogComponentUpdater, "Step 3/5: Setting executable permissions")
+		LogInfo(game.LogComponentUpdater, "Step 2/5: Setting executable permissions on new binary")
 		if err := os.Chmod(newExe, 0755); err != nil {
-			LogError(game.LogComponentUpdater, "Failed to make binary executable: %v", err)
+			LogError(game.LogComponentUpdater, "Step 2/5 FAILED: Cannot chmod new binary: %v", err)
 			return
 		}
 	} else {
-		LogInfo(game.LogComponentUpdater, "Step 3/5: Skipped (Windows)")
+		LogInfo(game.LogComponentUpdater, "Step 2/5: Skipped chmod (Windows)")
 	}
 
-	// Step 4: Replace current executable
-	// WARNING: Non-atomic operation - if process crashes here, manual restore needed
-	LogInfo(game.LogComponentUpdater, "Step 4/5: Replacing executable: %s <- %s", currentExe, newExe)
-	if err := copyFile(newExe, currentExe); err != nil {
-		LogError(game.LogComponentUpdater, "CRITICAL: Failed to replace executable: %v", err)
-		// Try to restore backup
-		LogInfo(game.LogComponentUpdater, "Attempting to restore backup...")
-		if restoreErr := copyFile(backup, currentExe); restoreErr != nil {
-			LogError(game.LogComponentUpdater, "FATAL: Failed to restore backup: %v", restoreErr)
+	// Step 3: Back up current executable
+	LogInfo(game.LogComponentUpdater, "Step 3/5: Creating backup: %s -> %s", currentExe, backup)
+	os.Remove(backup) // Remove stale backup if any
+
+	if runtime.GOOS == "windows" {
+		// On Windows, os.Rename works on running executables (directory entry rename)
+		if err := os.Rename(currentExe, backup); err != nil {
+			LogError(game.LogComponentUpdater, "Step 3/5 FAILED: Cannot rename current exe to backup: %v", err)
+			return
+		}
+	} else {
+		// On Unix, copyFile is fine since we can overwrite a running binary
+		if err := copyFile(currentExe, backup); err != nil {
+			LogError(game.LogComponentUpdater, "Step 3/5 FAILED: Cannot copy current exe to backup: %v", err)
+			return
+		}
+	}
+	LogInfo(game.LogComponentUpdater, "Step 3/5: Backup created successfully")
+
+	// Step 4: Place new executable at current path
+	LogInfo(game.LogComponentUpdater, "Step 4/5: Installing new executable at %s", currentExe)
+
+	var replaceErr error
+	if runtime.GOOS == "windows" {
+		// On Windows, use rename (atomic directory operation, works since backup freed the name)
+		replaceErr = os.Rename(newExe, currentExe)
+	} else {
+		// On Unix, overwrite in place
+		replaceErr = copyFile(newExe, currentExe)
+	}
+
+	if replaceErr != nil {
+		LogError(game.LogComponentUpdater, "Step 4/5 FAILED: Cannot install new executable: %v", replaceErr)
+		// Restore backup
+		if runtime.GOOS == "windows" {
+			if restoreErr := os.Rename(backup, currentExe); restoreErr != nil {
+				LogError(game.LogComponentUpdater, "FATAL: Restore backup also failed: %v — manual restore needed from %s", restoreErr, backup)
+			} else {
+				LogInfo(game.LogComponentUpdater, "Backup restored successfully")
+			}
 		} else {
-			LogInfo(game.LogComponentUpdater, "Backup restored successfully")
+			if restoreErr := copyFile(backup, currentExe); restoreErr != nil {
+				LogError(game.LogComponentUpdater, "FATAL: Restore backup also failed: %v", restoreErr)
+			} else {
+				LogInfo(game.LogComponentUpdater, "Backup restored successfully")
+			}
 		}
 		return
 	}
-	LogInfo(game.LogComponentUpdater, "Step 4/5: Executable replaced successfully")
+	LogInfo(game.LogComponentUpdater, "Step 4/5: New executable installed successfully")
 
-	// Step 5: Start new executable
-	LogInfo(game.LogComponentUpdater, "Step 5/5: Starting new executable: %s", currentExe)
+	// Step 5: Start new process then exit
+	LogInfo(game.LogComponentUpdater, "Step 5/5: Launching new process: %s", currentExe)
 	cmd := exec.Command(currentExe)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 
 	if err := cmd.Start(); err != nil {
-		LogError(game.LogComponentUpdater, "CRITICAL: Failed to start new executable: %v", err)
+		LogError(game.LogComponentUpdater, "Step 5/5 FAILED: Cannot start new process: %v", err)
 		// Restore backup
-		LogInfo(game.LogComponentUpdater, "Attempting to restore backup...")
-		if restoreErr := copyFile(backup, currentExe); restoreErr != nil {
-			LogError(game.LogComponentUpdater, "FATAL: Failed to restore backup: %v", restoreErr)
+		if runtime.GOOS == "windows" {
+			os.Remove(currentExe)
+			if restoreErr := os.Rename(backup, currentExe); restoreErr != nil {
+				LogError(game.LogComponentUpdater, "FATAL: Restore backup also failed: %v — manual restore needed from %s", restoreErr, backup)
+			} else {
+				LogInfo(game.LogComponentUpdater, "Backup restored successfully")
+			}
 		} else {
-			LogInfo(game.LogComponentUpdater, "Backup restored successfully")
+			if restoreErr := copyFile(backup, currentExe); restoreErr != nil {
+				LogError(game.LogComponentUpdater, "FATAL: Restore backup also failed: %v", restoreErr)
+			} else {
+				LogInfo(game.LogComponentUpdater, "Backup restored successfully")
+			}
 		}
 		return
 	}
 
-	LogInfo(game.LogComponentUpdater, "New server started with PID %d", cmd.Process.Pid)
-	LogInfo(game.LogComponentUpdater, "Exiting old server in 1 second...")
-
-	// Exit current process
+	LogInfo(game.LogComponentUpdater, "New server started with PID %d — exiting current process in 1s", cmd.Process.Pid)
 	time.Sleep(1 * time.Second)
 	os.Exit(0)
 }

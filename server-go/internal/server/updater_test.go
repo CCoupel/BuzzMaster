@@ -1,9 +1,14 @@
 package server
 
 import (
+	"encoding/json"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 )
 
@@ -195,5 +200,245 @@ Some description`,
 				t.Errorf("extractTitle() = %q, want %q", result, tt.expected)
 			}
 		})
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Tests HTTP sémantiques — HandleDownloadUpdate et HandleApplyUpdate
+// Issues #44 : codes 400/404/503/500 et validation path-traversal
+// ---------------------------------------------------------------------------
+
+// TestHandleAPIUpdatesDownload_MethodNotAllowed vérifie que GET /api/updates/download
+// retourne 405 Method Not Allowed (le check méthode est dans le wrapper http.go).
+func TestHandleAPIUpdatesDownload_MethodNotAllowed(t *testing.T) {
+	server, _ := setupTestHTTPServer(t)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/updates/download", nil)
+	w := httptest.NewRecorder()
+
+	server.mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusMethodNotAllowed {
+		t.Errorf("GET /api/updates/download: expected 405, got %d", w.Code)
+	}
+}
+
+// TestHandleAPIUpdatesApply_MethodNotAllowed vérifie que GET /api/updates/apply
+// retourne 405 Method Not Allowed.
+func TestHandleAPIUpdatesApply_MethodNotAllowed(t *testing.T) {
+	server, _ := setupTestHTTPServer(t)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/updates/apply", nil)
+	w := httptest.NewRecorder()
+
+	server.mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusMethodNotAllowed {
+		t.Errorf("GET /api/updates/apply: expected 405, got %d", w.Code)
+	}
+}
+
+// TestHandleDownloadUpdate_InvalidBody vérifie que POST avec un body JSON invalide
+// retourne 400 Bad Request.
+func TestHandleDownloadUpdate_InvalidBody(t *testing.T) {
+	updater := NewUpdater("3.5.5")
+
+	req := httptest.NewRequest(http.MethodPost, "/api/updates/download", strings.NewReader("{invalid json"))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	updater.HandleDownloadUpdate(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("Invalid JSON body: expected 400, got %d; body: %s", w.Code, w.Body.String())
+	}
+
+	var resp DownloadResponse
+	if err := json.NewDecoder(w.Body).Decode(&resp); err == nil {
+		if resp.Success {
+			t.Error("Expected success=false for invalid JSON body")
+		}
+	}
+}
+
+// TestHandleDownloadUpdate_EmptyVersion vérifie que POST avec version vide
+// retourne 400 Bad Request.
+func TestHandleDownloadUpdate_EmptyVersion(t *testing.T) {
+	updater := NewUpdater("3.5.5")
+
+	req := httptest.NewRequest(http.MethodPost, "/api/updates/download", strings.NewReader(`{"version":""}`))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	updater.HandleDownloadUpdate(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("Empty version: expected 400, got %d; body: %s", w.Code, w.Body.String())
+	}
+}
+
+// TestHandleDownloadUpdate_VersionNotFound vérifie que POST avec une version inexistante
+// retourne 404 Not Found. On pré-peuple le cache GitHub pour éviter tout appel réseau.
+func TestHandleDownloadUpdate_VersionNotFound(t *testing.T) {
+	updater := NewUpdater("3.5.5")
+
+	// Pré-peupler le cache avec une version différente (v1.0.0 seulement)
+	// afin d'éviter tout appel réseau et tester le chemin "version introuvable"
+	platform := GetPlatformString()
+	updater.githubClient.cache.set([]GitHubRelease{
+		{
+			TagName: "v1.0.0",
+			Assets: []GitHubAsset{
+				{
+					Name: fmt.Sprintf("buzzcontrol-v1.0.0-%s.exe", platform),
+					Size: 10 * 1024 * 1024, // 10 MB, bien au-dessus du minimum
+				},
+			},
+		},
+	})
+
+	// Demander une version inexistante
+	body := strings.NewReader(`{"version":"9.9.9"}`)
+	req := httptest.NewRequest(http.MethodPost, "/api/updates/download", body)
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	updater.HandleDownloadUpdate(w, req)
+
+	if w.Code != http.StatusNotFound {
+		t.Errorf("Version not found: expected 404, got %d; body: %s", w.Code, w.Body.String())
+	}
+
+	var resp DownloadResponse
+	if err := json.NewDecoder(w.Body).Decode(&resp); err == nil {
+		if resp.Success {
+			t.Error("Expected success=false for unknown version")
+		}
+	}
+}
+
+// TestHandleApplyUpdate_PathTraversal vérifie que POST avec un path hors tempDir
+// retourne 400 Bad Request (protection contre path traversal).
+func TestHandleApplyUpdate_PathTraversal(t *testing.T) {
+	updater := NewUpdater("3.5.5")
+
+	// Créer un fichier suffisamment grand dans un répertoire HORS du tempDir de l'updater.
+	// Le tempDir de l'updater est os.TempDir()+"/buzzcontrol-updates".
+	// t.TempDir() crée quelque chose comme os.TempDir()+"/TestXXXX/001" qui ne
+	// commence pas par "buzzcontrol-updates", déclenchant ainsi le refus path-traversal.
+	outsideDir := t.TempDir()
+	maliciousFile := filepath.Join(outsideDir, "malicious.bin")
+
+	f, err := os.Create(maliciousFile)
+	if err != nil {
+		t.Fatalf("Cannot create test file: %v", err)
+	}
+	// Utiliser Truncate pour créer un fichier sparse >= MinBinarySize sans écrire les données
+	if err := f.Truncate(MinBinarySize + 1); err != nil {
+		f.Close()
+		t.Fatalf("Cannot resize test file to MinBinarySize+1: %v", err)
+	}
+	f.Close()
+
+	body := strings.NewReader(fmt.Sprintf(`{"version":"3.6.0","path":%q}`, maliciousFile))
+	req := httptest.NewRequest(http.MethodPost, "/api/updates/apply", body)
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	updater.HandleApplyUpdate(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("Path traversal: expected 400, got %d; body: %s", w.Code, w.Body.String())
+	}
+
+	var resp ApplyResponse
+	if err := json.NewDecoder(w.Body).Decode(&resp); err == nil {
+		if resp.Success {
+			t.Error("Expected success=false for path traversal attempt")
+		}
+		if !strings.Contains(resp.Error, "Invalid file path") {
+			t.Errorf("Expected 'Invalid file path' error, got: %q", resp.Error)
+		}
+	}
+}
+
+// TestHandleApplyUpdate_PathTraversal_AdjacentPrefix vérifie que la protection
+// path-traversal rejette un répertoire dont le nom commence par le même préfixe
+// que tempDir (ex: buzzcontrol-updates-adjacent ne doit pas passer).
+// Ce cas aurait été accepté par l'ancien check `strings.HasPrefix(absPath, tempDir)`
+// sans séparateur de chemin.
+func TestHandleApplyUpdate_PathTraversal_AdjacentPrefix(t *testing.T) {
+	updater := NewUpdater("3.5.5")
+
+	// Construire un répertoire adjacent : même base mais suffixe additionnel.
+	// Ex: /tmp/buzzcontrol-updates-adjacent
+	adjacentDir := updater.tempDir + "-adjacent"
+	if err := os.MkdirAll(adjacentDir, 0755); err != nil {
+		t.Fatalf("Cannot create adjacent dir: %v", err)
+	}
+	defer os.RemoveAll(adjacentDir)
+
+	// Créer un fichier dans ce répertoire adjacent
+	maliciousFile := filepath.Join(adjacentDir, "malicious.bin")
+	f, err := os.Create(maliciousFile)
+	if err != nil {
+		t.Fatalf("Cannot create malicious file: %v", err)
+	}
+	// Fichier sparse >= MinBinarySize pour dépasser la validation de taille
+	if err := f.Truncate(MinBinarySize + 1); err != nil {
+		f.Close()
+		t.Fatalf("Cannot resize malicious file: %v", err)
+	}
+	f.Close()
+
+	body := strings.NewReader(fmt.Sprintf(`{"version":"3.6.0","path":%q}`, maliciousFile))
+	req := httptest.NewRequest(http.MethodPost, "/api/updates/apply", body)
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	updater.HandleApplyUpdate(w, req)
+
+	// Le path /tmp/buzzcontrol-updates-adjacent/malicious.bin commence par
+	// /tmp/buzzcontrol-updates mais PAS par /tmp/buzzcontrol-updates/ (avec sep).
+	// Le handler doit retourner 400 Bad Request.
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("Adjacent prefix directory: expected 400, got %d; body: %s", w.Code, w.Body.String())
+	}
+
+	var resp ApplyResponse
+	if err := json.NewDecoder(w.Body).Decode(&resp); err == nil {
+		if resp.Success {
+			t.Error("Expected success=false for adjacent prefix path traversal")
+		}
+		if !strings.Contains(resp.Error, "Invalid file path") {
+			t.Errorf("Expected 'Invalid file path' error, got: %q", resp.Error)
+		}
+	}
+}
+
+// TestHandleApplyUpdate_FileNotFound vérifie que POST avec un path de fichier inexistant
+// retourne 404 Not Found.
+func TestHandleApplyUpdate_FileNotFound(t *testing.T) {
+	updater := NewUpdater("3.5.5")
+
+	// Path à l'intérieur du tempDir mais le fichier n'existe pas
+	nonExistentPath := filepath.Join(updater.tempDir, "buzzcontrol-v9.9.9-linux-amd64")
+
+	body := strings.NewReader(fmt.Sprintf(`{"version":"9.9.9","path":%q}`, nonExistentPath))
+	req := httptest.NewRequest(http.MethodPost, "/api/updates/apply", body)
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	updater.HandleApplyUpdate(w, req)
+
+	if w.Code != http.StatusNotFound {
+		t.Errorf("File not found: expected 404, got %d; body: %s", w.Code, w.Body.String())
+	}
+
+	var resp ApplyResponse
+	if err := json.NewDecoder(w.Body).Decode(&resp); err == nil {
+		if resp.Success {
+			t.Error("Expected success=false for non-existent file")
+		}
 	}
 }
