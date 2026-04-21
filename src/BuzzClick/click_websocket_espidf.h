@@ -6,6 +6,7 @@
 #include <ArduinoJson.h>
 #include "Common/CustomLogger.h"
 #include "Common/led.h"
+#include "click_ledErrorPatterns.h"
 #include "esp_task_wdt.h"
 #include "esp_websocket_client.h"
 
@@ -109,6 +110,10 @@ static void ws_event_handler(void *handler_args, esp_event_base_t base, int32_t 
             ESP_LOGI(WS_TAG, "WebSocket CONNECTED!");
             wsConnected = true;
 
+            // Link restored — drop any WS_DISCONNECTED / WS_TIMEOUT error
+            // pattern so the boot-phase GREEN set below is actually visible.
+            clearLedError();
+
             // Send HELLO message immediately
             {
                 String macAddr = WiFi.macAddress();
@@ -141,8 +146,8 @@ static void ws_event_handler(void *handler_args, esp_event_base_t base, int32_t 
             ESP_LOGW(WS_TAG, "WebSocket DISCONNECTED!");
             wsConnected = false;
 
-            // Red LED = disconnected
-            setLedColor(255, 0, 0, true);
+            // Red blinking 4 Hz = WS disconnected / reconnect in progress (issue #49).
+            setLedError(LedErrorPattern::WS_DISCONNECTED);
             break;
 
         case WEBSOCKET_EVENT_DATA:
@@ -179,7 +184,8 @@ static void ws_event_handler(void *handler_args, esp_event_base_t base, int32_t 
         case WEBSOCKET_EVENT_ERROR:
             ESP_LOGE(WS_TAG, "WebSocket ERROR!");
             wsConnected = false;
-            setLedColor(255, 0, 0, true);
+            // Red blinking 4 Hz = WS error, reconnect cycle expected (issue #49).
+            setLedError(LedErrorPattern::WS_DISCONNECTED);
             break;
 
         default:
@@ -257,7 +263,8 @@ bool connectWebSocket(const String& ip, uint16_t port) {
     wsClient = esp_websocket_client_init(&ws_cfg);
     if (!wsClient) {
         ESP_LOGE(WS_TAG, "Failed to initialize WebSocket client!");
-        setLedColor(255, 0, 0, true);
+        // Red blinking 4 Hz = WS init failure, reconnect pending (issue #49).
+        setLedError(LedErrorPattern::WS_DISCONNECTED);
         return false;
     }
 
@@ -283,7 +290,8 @@ bool connectWebSocket(const String& ip, uint16_t port) {
     esp_err_t err = esp_websocket_client_start((esp_websocket_client_handle_t)wsClient);
     if (err != ESP_OK) {
         ESP_LOGE(WS_TAG, "WebSocket client start failed: %d", err);
-        setLedColor(255, 0, 0, true);
+        // Red blinking 4 Hz = WS start failure, reconnect pending (issue #49).
+        setLedError(LedErrorPattern::WS_DISCONNECTED);
         // Release the initialized (but unstarted) handle — otherwise wsClient
         // stays non-NULL and leaks on the ESP32-C3 heap across retries.
         ws_safe_destroy();
@@ -300,7 +308,9 @@ bool connectWebSocket(const String& ip, uint16_t port) {
 
     if (!wsConnected) {
         ESP_LOGE(WS_TAG, "WebSocket connection timeout!");
-        setLedColor(255, 0, 0, true);
+        // Red pulsing = WS full-window timeout reached (distinct from the
+        // faster blink used for DISCONNECTED events — issue #49).
+        setLedError(LedErrorPattern::WS_TIMEOUT);
         ws_safe_destroy();  // safe: sets wsClient=NULL before destroy to drain stale events
         return false;
     }

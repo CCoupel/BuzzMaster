@@ -5,6 +5,7 @@
 
 #include "Common/CustomLogger.h"
 #include "Common/led.h"
+#include "click_ledErrorPatterns.h"
 
 #include "esp_task_wdt.h"
 #include "click_serverConnection.h"
@@ -201,6 +202,12 @@ void loop() {
 
   // LED blink animation (server-driven LED_SET with EFFECT="BLINK")
   manageLedBlink();
+
+  // Differentiated error LED patterns (issue #49). Must run AFTER the other
+  // LED animations so that an active error pattern visually overrides them.
+  // Clearing the error via clearLedError() lets the next tick restore the
+  // regular game LED state (gray rotation or server LED_SET).
+  manageLedError();
 
 #ifdef USE_WEBSOCKET
   // Poll WebSocket incoming messages and reconnect if disconnected

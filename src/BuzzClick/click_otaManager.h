@@ -7,6 +7,7 @@
 #include <WiFi.h>
 #include <ArduinoJson.h>
 #include "Common/led.h"
+#include "click_ledErrorPatterns.h"
 #include "esp_log.h"
 
 static const char* OTA_TAG = "OTA";
@@ -65,8 +66,8 @@ void performOTA(const String& url, const String& expectedVersion) {
         String errMsg = "HTTP error: " + String(httpCode);
         ESP_LOGE(OTA_TAG, "%s", errMsg.c_str());
         sendOTAProgress("error", 0, errMsg);
-        // Red LED = error
-        setLedColor(255, 0, 0, true);
+        // Red + white flash = OTA failure (issue #49).
+        setLedError(LedErrorPattern::OTA_ERROR);
         http.end();
         return;
     }
@@ -76,7 +77,8 @@ void performOTA(const String& url, const String& expectedVersion) {
         String errMsg = "Invalid content length: " + String(contentLength);
         ESP_LOGE(OTA_TAG, "%s", errMsg.c_str());
         sendOTAProgress("error", 0, errMsg);
-        setLedColor(255, 0, 0, true);
+        // Red + white flash = OTA failure (issue #49).
+        setLedError(LedErrorPattern::OTA_ERROR);
         http.end();
         return;
     }
@@ -88,7 +90,8 @@ void performOTA(const String& url, const String& expectedVersion) {
         String errMsg = String("Update.begin failed: ") + Update.errorString();
         ESP_LOGE(OTA_TAG, "%s", errMsg.c_str());
         sendOTAProgress("error", 0, errMsg);
-        setLedColor(255, 0, 0, true);
+        // Red + white flash = OTA failure (issue #49).
+        setLedError(LedErrorPattern::OTA_ERROR);
         http.end();
         return;
     }
@@ -114,7 +117,8 @@ void performOTA(const String& url, const String& expectedVersion) {
                     String errMsg = String("Write mismatch: ") + Update.errorString();
                     ESP_LOGE(OTA_TAG, "%s", errMsg.c_str());
                     sendOTAProgress("error", 0, errMsg);
-                    setLedColor(255, 0, 0, true);
+                    // Red + white flash = OTA failure (issue #49).
+                    setLedError(LedErrorPattern::OTA_ERROR);
                     http.end();
                     return;
                 }
@@ -149,7 +153,8 @@ void performOTA(const String& url, const String& expectedVersion) {
         String errMsg = "Incomplete download: got " + String(written) + "/" + String(contentLength);
         ESP_LOGE(OTA_TAG, "%s", errMsg.c_str());
         sendOTAProgress("error", 0, errMsg);
-        setLedColor(255, 0, 0, true);
+        // Red + white flash = OTA failure (issue #49).
+        setLedError(LedErrorPattern::OTA_ERROR);
         return;
     }
 
@@ -162,7 +167,8 @@ void performOTA(const String& url, const String& expectedVersion) {
         ESP_LOGE(OTA_TAG, "%s", errMsg.c_str());
         sendOTAProgress("error", 0, errMsg);
         // Rollback is automatic on error - do NOT restart
-        setLedColor(255, 0, 0, true);
+        // Red + white flash = OTA failure (issue #49).
+        setLedError(LedErrorPattern::OTA_ERROR);
         return;
     }
 
@@ -171,7 +177,8 @@ void performOTA(const String& url, const String& expectedVersion) {
         ESP_LOGE(OTA_TAG, "%s", errMsg.c_str());
         sendOTAProgress("error", 0, errMsg);
         // Rollback is automatic on error - do NOT restart
-        setLedColor(255, 0, 0, true);
+        // Red + white flash = OTA failure (issue #49).
+        setLedError(LedErrorPattern::OTA_ERROR);
         return;
     }
 
@@ -180,6 +187,8 @@ void performOTA(const String& url, const String& expectedVersion) {
     // Signal success
     sendOTAProgress("done", 100);
 
+    // Clear any prior OTA error pattern before flashing success color.
+    clearLedError();
     // Green LED = success
     setLedColor(0, 255, 0, true);
 

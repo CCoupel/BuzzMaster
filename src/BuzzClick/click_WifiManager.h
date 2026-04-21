@@ -2,6 +2,7 @@
 
 #include "Common/CustomLogger.h"
 #include "Common/led.h"
+#include "click_ledErrorPatterns.h"
 #include "click_nvsConfig.h"
 #include "click_serverConnection.h"
 #include "click_broadcaster.h"
@@ -49,6 +50,10 @@ bool tryConnectToServer(const String& ip, uint16_t port) {
 
 void WiFiGotIP(WiFiEvent_t event, WiFiEventInfo_t info){
     ESP_LOGI(WIFI_TAG, "Adresse IP obtenue %s", WiFi.localIP().toString());
+
+    // WiFi link restored — any pending WIFI_FAILED error pattern is no longer
+    // relevant. Clear it so the boot phase LED (set just below) is visible.
+    clearLedError();
 
     resetGame();
     yield();
@@ -204,8 +209,8 @@ void WiFiGotIP(WiFiEvent_t event, WiFiEventInfo_t info){
 
 void WiFiStationDisconnected(WiFiEvent_t event, WiFiEventInfo_t info){
   ESP_LOGI(WIFI_TAG,"Déconnecté du WiFi");
-  // Red = disconnected/error
-  setLedColor(255, 0, 0, true);
+  // Red blinking 1 Hz = WiFi association lost (issue #49).
+  setLedError(LedErrorPattern::WIFI_FAILED);
   WiFi.disconnect();
   connectToWifi();
 }
@@ -261,7 +266,8 @@ bool connectToWifi() {
 
       if (WiFi.status() != WL_CONNECTED) {
         ESP_LOGE(WIFI_TAG, "WiFi fallback also failed (SSID2=%s)", cfg.wifi_ssid2.c_str());
-        setLedColor(255, 0, 0, true);
+        // Red blinking 1 Hz = WiFi fallback exhausted (issue #49).
+        setLedError(LedErrorPattern::WIFI_FAILED);
         return false;
       }
 
@@ -269,7 +275,8 @@ bool connectToWifi() {
                cfg.wifi_ssid2.c_str(), WiFi.localIP().toString().c_str());
     } else {
       ESP_LOGE(WIFI_TAG, "WiFi connection failed and no fallback configured");
-      setLedColor(255, 0, 0, true);
+      // Red blinking 1 Hz = WiFi association failed, no fallback (issue #49).
+      setLedError(LedErrorPattern::WIFI_FAILED);
       return false;
     }
   }
