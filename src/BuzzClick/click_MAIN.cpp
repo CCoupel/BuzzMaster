@@ -33,17 +33,12 @@ void printPinInfo() {
 }
 
 void watchdogTask(void *pvParameters) {
-    // Configurer le watchdog avec un délai plus long si nécessaire
-    esp_task_wdt_init(30, true); // 10 secondes de délai
-    esp_task_wdt_add(NULL);      // S'enregistrer auprès du watchdog
+    // Anti-freeze watchdog: 30s timeout — if the task stops feeding it, the chip reboots
+    esp_task_wdt_init(30, true);
+    esp_task_wdt_add(NULL);
 
     for (;;) {
-        // Réinitialiser le watchdog
         esp_task_wdt_reset();
-
-        // Surveillance du système
-        ESP_LOGD("WATCHDOG", "Memory: %u bytes free", ESP.getFreeHeap());
-
         vTaskDelay(pdMS_TO_TICKS(1000));
     }
 }
