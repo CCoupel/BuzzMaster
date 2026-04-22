@@ -537,15 +537,21 @@ void parseJSON(const String& data, AsyncClient* c) {
     case hash("OTA_UPDATE"):
       {
         const char* version = message["VERSION"] | "";
-        // Build firmware URL from NVS server_ip + fixed port 80 (HTTP/WS port).
-        // If NVS server_ip is empty (e.g. after a full USB flash that wipes NVS),
-        // fall back to the URL field provided in the OTA_UPDATE message.
+        // Build firmware URL from the server we are actually connected to.
+        // serverIP + localUdpPort are set by tryConnectToServer() and reflect the
+        // real connection (UDP broadcast heartbeat, NVS fallback, or mDNS).
+        // The broadcasted PORT must be honored — servers may run on non-default
+        // ports (e.g. 8080) where hardcoding port 80 would make OTA fail.
         String otaUrl;
-        if (currentConfig.server_ip.length() > 0) {
-            otaUrl = "http://" + currentConfig.server_ip + "/api/firmware/buzzclick/latest.bin";
+        if (serverIP.length() > 0 && localUdpPort > 0) {
+            otaUrl = "http://" + serverIP + ":" + String(localUdpPort) + "/api/firmware/buzzclick/latest.bin";
+        } else if (currentConfig.server_ip.length() > 0) {
+            uint16_t port = currentConfig.server_tcp_port > 0 ? currentConfig.server_tcp_port : 80;
+            otaUrl = "http://" + currentConfig.server_ip + ":" + String(port) + "/api/firmware/buzzclick/latest.bin";
+            ESP_LOGW(SRV_TAG, "Using NVS fallback for OTA URL: %s", otaUrl.c_str());
         } else {
             otaUrl = String(message["URL"] | "");
-            ESP_LOGW(SRV_TAG, "NVS server_ip empty, using URL from message: %s", otaUrl.c_str());
+            ESP_LOGW(SRV_TAG, "No connected server known, using URL from message: %s", otaUrl.c_str());
         }
         ESP_LOGI(SRV_TAG, "Received OTA_UPDATE: version=%s url=%s", version, otaUrl.c_str());
         if (strlen(version) > 0) {
