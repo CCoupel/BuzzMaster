@@ -3,6 +3,16 @@
 Historique des versions du projet BuzzControl.
 
 
+## [3.6.1] - 2026-04-22
+
+### Fixed
+- **[Firmware BuzzClick]**: OTA échoue quand le serveur tourne sur un port non-standard (fixes #50)
+  - L'URL OTA était construite avec le port 80 en dur (`http://IP/api/firmware/...`), causant un échec HTTP quand le serveur écoute sur un autre port (ex: 8080)
+  - Le port est désormais pris depuis la connexion active (`serverIP` + `localUdpPort` positionnés par `tryConnectToServer()`) — couvre les trois chemins de découverte : UDP broadcast heartbeat, fallback NVS, et mDNS
+  - Chaîne de fallback : port de la connexion active → `server_tcp_port` NVS → URL du message `OTA_UPDATE` (rétrocompatibilité)
+
+---
+
 ## [3.6.0] - 2026-04-21
 
 ### Fixed
