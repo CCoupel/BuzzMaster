@@ -1,6 +1,6 @@
 {
   "server": {
-    "http_port": 80,
+    "http_port": 8080,
     "tcp_port": 1234,
     "websocket_path": "/ws",
     "auto_open_browsers": true,
@@ -33,12 +33,10 @@
     "glow_pulse_max": 70
   },
   "wifi_defaults": {
-    "ssid": "BuzzMaster",
-    "password": "BuzzMaster",
+    "ssid": "CC-Home",
+    "password": "GenericPassword",
     "server_ip": "192.168.1.84",
-    "server_port": 80,
-    "ssid2": "CC-Home",
-    "password2": "GenericPassword"
+    "server_port": 80
   },
-  "version": "3.6.0"
+  "version": "3.6.1"
 }
