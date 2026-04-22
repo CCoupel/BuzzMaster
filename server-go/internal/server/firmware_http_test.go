@@ -217,6 +217,69 @@ func TestHandleAPIFirmwareUpload_WrongExtension(t *testing.T) {
 	}
 }
 
+// TestBuildFirmwareURL_Format verifies that buildFirmwareURL returns a well-formed
+// HTTP URL pointing to the expected firmware download path.
+// Non-regression for issue #50: the URL must always be a reachable HTTP endpoint
+// so that firmware < 3.1.2 (which reads URL from the OTA_UPDATE message) can
+// fall back to it.
+func TestBuildFirmwareURL_Format(t *testing.T) {
+	url := buildFirmwareURL()
+
+	if !strings.HasPrefix(url, "http://") {
+		t.Errorf("expected URL to start with 'http://', got %q", url)
+	}
+	if !strings.HasSuffix(url, "/api/firmware/buzzclick/latest.bin") {
+		t.Errorf("expected URL to end with '/api/firmware/buzzclick/latest.bin', got %q", url)
+	}
+	// Must have a non-empty host segment (not just "http:///api/...")
+	trimmed := strings.TrimPrefix(url, "http://")
+	if strings.HasPrefix(trimmed, "/") {
+		t.Errorf("expected a host in the URL, got empty host: %q", url)
+	}
+}
+
+// TestHandleAPIBuzzerUpdate_NotConnected_JSONError verifies that POST /api/buzzer/{mac}/update
+// returns a well-formed JSON error (HTTP 200) when the target buzzer is not connected via
+// WebSocket, rather than panicking or returning a malformed response.
+// Non-regression for issue #50: the handler must remain stable even when OTA cannot be
+// triggered (buzzer offline). The OTA URL is only built when the buzzer IS connected.
+func TestHandleAPIBuzzerUpdate_NotConnected_JSONError(t *testing.T) {
+	server, _ := setupTestHTTPServer(t)
+
+	// Upload valid firmware (so the handler does not fail on missing firmware).
+	firmwareData := makeFirmwareData(300 * 1024)
+	if err := server.firmwareManager.SaveFirmware(firmwareData, "3.6.1"); err != nil {
+		t.Fatalf("SaveFirmware failed: %v", err)
+	}
+
+	// Target a MAC that is not connected.
+	mac := "AA:BB:CC:DD:EE:FF"
+	req := httptest.NewRequest(http.MethodPost, "/api/buzzer/"+mac+"/update", nil)
+	req.Host = "localhost"
+	w := httptest.NewRecorder()
+
+	server.mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		bodyBytes, _ := io.ReadAll(w.Body)
+		t.Fatalf("expected status 200, got %d: %s", w.Code, string(bodyBytes))
+	}
+
+	var result map[string]interface{}
+	if err := json.Unmarshal(w.Body.Bytes(), &result); err != nil {
+		t.Fatalf("response is not valid JSON: %v", err)
+	}
+
+	// Handler must return status=error with a descriptive message (not a crash or empty body).
+	if result["status"] != "error" {
+		t.Errorf("expected status=error for disconnected buzzer, got: %v", result["status"])
+	}
+	msg, hasMsg := result["message"].(string)
+	if !hasMsg || msg == "" {
+		t.Errorf("expected non-empty 'message' field in error response, got: %v", result)
+	}
+}
+
 // TestHandleAPIBuzzerUpdateAll_NoBuzzers verifies that POST /api/buzzer/update-all
 // returns triggered=0 when no buzzers are registered (even with firmware available).
 func TestHandleAPIBuzzerUpdateAll_NoBuzzers(t *testing.T) {
