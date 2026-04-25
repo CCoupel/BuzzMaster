@@ -247,9 +247,13 @@ export default function UpdatePage() {
                     <div className="versions-table">
                         {versions.map(v => {
                             const isDownloading = downloadProgress?.version === v.version && downloadProgress?.status === 'downloading'
-                            const isDownloaded = downloadProgress?.version === v.version && downloadProgress?.status === 'completed'
+                            const justDownloaded = downloadProgress?.version === v.version && downloadProgress?.status === 'completed'
                             const downloadFailed = downloadProgress?.version === v.version && downloadProgress?.status === 'error'
                             const isExpanded = expandedNotes[v.version]
+
+                            // A version is ready to apply if it was downloaded this session OR was already on disk
+                            const isDownloaded = justDownloaded || v.downloaded
+                            const applyPath = justDownloaded ? downloadProgress.path : v.local_path
 
                             const versionStatus = getVersionStatus(v.version)
                             const statusIcon = getStatusIcon(versionStatus)
@@ -265,6 +269,9 @@ export default function UpdatePage() {
                                                     {v.title && <span className="version-title-text"> - {v.title}</span>}
                                                 </span>
                                                 {v.current && <span className="badge badge-current">Actuelle</span>}
+                                                {!v.current && v.downloaded && !justDownloaded && (
+                                                    <span className="badge badge-downloaded">✓ Téléchargé</span>
+                                                )}
                                             </div>
                                             <span className="version-date">{formatDate(v.date)}</span>
                                             <span className="version-size">{formatBytes(v.size)}</span>
@@ -300,7 +307,7 @@ export default function UpdatePage() {
                                                     {isDownloaded && (
                                                         <button
                                                             className="btn-apply"
-                                                            onClick={() => handleApply(v.version, downloadProgress.path)}
+                                                            onClick={() => handleApply(v.version, applyPath)}
                                                             disabled={loading}
                                                         >
                                                             Appliquer

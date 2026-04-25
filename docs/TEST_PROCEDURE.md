@@ -309,6 +309,15 @@ grep -c "FAIL" test-report-*.txt
 # Doit retourner 0
 ```
 
+#### Arrêt du serveur de test
+
+> **Pourquoi** : `go test ./...` démarre un serveur réel sur le port **8080** pendant les tests d'intégration (`e2e_test.go`). Ce serveur reste actif après la fin des tests et bloque le port, empêchant le lancement du serveur Windows (`build.ps1`).
+
+```bash
+# Libérer le port 8080 après les tests
+curl -s http://localhost:8080/shutdown
+```
+
 ### Étape 3 : Démarrer Serveur
 
 ```bash

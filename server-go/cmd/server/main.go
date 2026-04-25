@@ -114,6 +114,20 @@ func main() {
 		}
 	}
 
+	// Reset CONNECTED=false for all bumpers loaded from disk (v3.6.7).
+	// After a server restart, no buzzer is physically connected yet, even if
+	// CONNECTED=true was persisted from the previous session.
+	if bumpersLoaded {
+		for id := range app.engine.GetTeamsAndBumpers().Bumpers {
+			app.engine.UpdateBumper(id, map[string]interface{}{"CONNECTED": false})
+		}
+	}
+
+	// Initialize broadcaster frequency based on persisted bumpers: any bumper loaded
+	// from disk is by definition not yet connected (server just started), so we activate
+	// high-frequency mode immediately to help them rediscover the server quickly.
+	app.updateBroadcasterFrequency()
+
 	// Synchronize virtual player count with actual bumper count
 	app.engine.SyncVirtualPlayerCount()
 
@@ -331,9 +345,23 @@ func (a *App) setupCallbacks() {
 		a.broadcastClientCounts()
 	}
 
-	// Handle buzzer WebSocket connect/disconnect
+	// Handle buzzer WebSocket connect/disconnect (count-based)
 	a.buzzerHub.OnBuzzerChange = func(buzzerCount int) {
 		a.broadcastClientCounts()
+	}
+
+	// Handle individual buzzer disconnection (v3.6.5): set CONNECTED=false and
+	// adjust broadcaster frequency so disconnected buzzers rediscover faster.
+	// Guard: if the buzzer already reconnected (same MAC, new WS connection), skip
+	// the CONNECTED=false to avoid a badge flash caused by the zombie connection
+	// timing out after the new connection is live.
+	a.buzzerHub.OnBuzzerDisconnected = func(mac string) {
+		if a.buzzerHub.IsClientConnected(mac) {
+			return
+		}
+		a.engine.UpdateBumper(mac, map[string]interface{}{"CONNECTED": false})
+		a.broadcastUpdate()
+		a.updateBroadcasterFrequency()
 	}
 
 	// Handle new log entries - broadcast to logs WebSocket clients
@@ -685,6 +713,10 @@ func (a *App) handleHello(clientID string, msg *protocol.Message, source string)
 	if err := json.Unmarshal(msg.Msg, &payload); err == nil {
 		payload["PROTOCOL"] = proto
 
+		// Mark buzzer as connected (v3.6.5): CONNECTED has no omitempty so false is
+		// propagated to the frontend when the buzzer disconnects.
+		payload["CONNECTED"] = true
+
 		// Reset OTA_STATUS on reconnect: after a successful OTA the buzzer reboots and
 		// sends a new HELLO. Clearing the status here prevents stale "done" state from
 		// remaining visible in the UI after reconnection.
@@ -713,6 +745,10 @@ func (a *App) handleHello(clientID string, msg *protocol.Message, source string)
 
 	// Send current state to all
 	a.broadcastUpdate()
+
+	// Update broadcaster frequency: a newly connected buzzer may reduce the
+	// number of disconnected buzzers, so we may be able to slow the interval back.
+	a.updateBroadcasterFrequency()
 
 	// Re-send last known LED state to the reconnected buzzer (server-driven LEDs)
 	if source == "WebSocket-Buzzer" {
@@ -871,6 +907,8 @@ func (a *App) handleFullUpdate(msg *protocol.Message) {
 	}
 	if data.Bumpers != nil {
 		a.engine.SetBumpers(data.Bumpers)
+		// Bumpers were replaced — recompute broadcaster frequency.
+		a.updateBroadcasterFrequency()
 	}
 	a.broadcastUpdate()
 	// Refresh LED state on all buzzers after team/bumper changes
@@ -1045,6 +1083,8 @@ func (a *App) handleDeleteBumper(msg *protocol.Message) {
 
 	// Broadcast updated state
 	a.broadcastUpdate()
+	// A bumper was removed — recompute broadcaster frequency.
+	a.updateBroadcasterFrequency()
 }
 
 func (a *App) handleReorderQuestions(msg *protocol.Message) {
@@ -1552,6 +1592,23 @@ func (a *App) broadcastUpdate() {
 	msg.Version = a.config.Version
 	a.wsHub.Broadcast(msg)
 	a.buzzerHub.Broadcast(msg)
+}
+
+// updateBroadcasterFrequency adjusts the UDP heartbeat interval based on whether
+// any known physical buzzer is currently disconnected. When at least one physical
+// buzzer is disconnected, we broadcast at 500ms so it can rediscover the server
+// quickly. When all are connected (or no physical buzzers exist), we revert to the
+// normal 5s interval (enrollment mode overrides both).
+func (a *App) updateBroadcasterFrequency() {
+	bumpers := a.engine.GetTeamsAndBumpers().Bumpers
+	hasDisconnected := false
+	for _, b := range bumpers {
+		if !b.IsVirtual && !b.IsVPlayer && !b.Connected {
+			hasDisconnected = true
+			break
+		}
+	}
+	a.broadcaster.SetHighFrequency(hasDisconnected)
 }
 
 func (a *App) broadcastEnrollmentUpdate() {

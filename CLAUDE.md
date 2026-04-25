@@ -158,12 +158,15 @@ Le serveur envoie des heartbeats UDP periodiques pour que les buzzers BuzzClick 
 
 ```go
 // BroadcasterManager — server-go/internal/server/broadcaster.go
-// Intervalle normal : 5s | Enrollment mode : 1s
+// Intervalle normal : 5s | Enrollment mode : 1s | High-freq : 500ms (v3.6.6)
 // Envoie un heartbeat immediat au demarrage
 bm := NewBroadcasterManager(udpBroadcaster, httpPort)
 bm.Start()
-bm.SetEnrollmentMode(true)  // accelère pendant l'appairage
+bm.SetEnrollmentMode(true)   // accelère pendant l'appairage
+bm.SetHighFrequency(true)    // 500ms si ≥1 buzzer physique déconnecté (v3.6.6)
 ```
+
+Depuis v3.6.6 : `SetHighFrequency(bool)` passe en mode 500 ms si ≥1 buzzer physique est déconnecté (vs 5 s normal). Priorité des intervalles : enrollment (1 s) > high-freq (500 ms) > normal (5 s). Appelé automatiquement par `updateBroadcasterFrequency()` sur connect/disconnect/delete buzzer et au démarrage du serveur.
 
 **Chaine de fallback firmware** (click_WifiManager.h) :
 1. UDP Broadcast (timeout 30s) → IPs du heartbeat, essai dans l'ordre
@@ -246,12 +249,24 @@ Le serveur embarque le firmware BuzzClick directement dans son binaire Go :
   "ID": "AA:BB:CC:DD:EE:FF",
   "FIRMWARE_VERSION": "3.1.1",
   "IS_OUTDATED": false,
-  "OTA_STATUS": ""
+  "OTA_STATUS": "",
+  "CONNECTED": true
 }
 ```
 
 **IS_OUTDATED** : Remis a false uniquement au reboot du buzzer (reception HELLO avec nouvelle version).
 Ne change pas sur `OTA_PROGRESS done` - le badge reste orange jusqu'au reboot confirme.
+
+**CONNECTED** (v3.6.6) : `true` à la connexion WebSocket (`handleHello`), `false` à la déconnexion (`OnBuzzerDisconnected`). Toujours sérialisé (sans `omitempty`) — le frontend affiche un badge ⚠ jaune quand `CONNECTED === false` (condition stricte : `!IS_VIRTUAL && !IS_VPLAYER`). La déconnexion déclenche aussi le mode haute-fréquence UDP (500 ms) dans `BroadcasterManager` pour accélérer la redécouverte serveur par le buzzer.
+
+**Reconnexion rapide (v3.6.8)** : `OnBuzzerDisconnected` vérifie `IsClientConnected(mac)` avant de poser `CONNECTED=false`. Si le buzzer a déjà reconnecté (nouvelle connexion WS active pour le même MAC), le callback de l'ancienne connexion zombie est ignoré — la reconnexion < 5 s est transparente, aucun badge ne clignote.
+
+Pages frontend affichant le badge ⚠ :
+- `TeamCard.jsx` : inline dans la row du buzzer (v3.6.6)
+- `TeamsPage.jsx` : dans les rows membres et buzzers non assignés (v3.6.8)
+- Style inline React (`background:#f59e0b`, SVG `stroke:white`) — pas de classe CSS pour éviter les problèmes de chargement (v3.6.8)
+
+**Initialisation au démarrage (v3.6.7)** : Lors du chargement des bumpers depuis le disque, `CONNECTED` est réinitialisé à `false` pour tous les bumpers, car aucun buzzer n'est physiquement connecté après un redémarrage serveur. Cela évite que les bumpers persistés avec `CONNECTED=true` masquent le badge ⚠.
 
 ### Server-Driven LED Control (v3.4.0)
 
@@ -274,11 +289,24 @@ Effects : `"SOLID"` (fixe), `"BLINK"` (100%<->25% a 400ms), `"DIM"` (fixe attenu
 - `REVEALED` QCM : correct=BLINK, wrong-buzzed=SOLID 100%, non-buzze=DIM 25
 - Reconnect HELLO : `resendLEDOnReconnect()` renvoie le dernier etat connu (`bumperLEDState` map)
 
+**Patterns d'erreur LED locaux** (firmware-side, quand le serveur est injoignable) :
+
+| Pattern | Visuel | Déclencheur |
+|---------|--------|-------------|
+| `WIFI_FAILED` | Rouge clignotant 1 Hz | WiFi non associé / fallback épuisé |
+| `WS_DISCONNECTED` | Rouge clignotant 4 Hz | (réservé, non utilisé depuis v3.6.3) |
+| `WS_TIMEOUT` | Rouge pulsant lent ~0.5 Hz | Timeout connexion initiale au boot |
+| `WS_RECONNECTING` | 1 pixel blanc tournant 100ms/step (~2.3s/tour) | Dès DISCONNECTED/ERROR — ring préservé |
+| `OTA_ERROR` | Rouge fixe + flash blanc 2s | Échec download/flash OTA |
+
+`WS_RECONNECTING` : delta-update — seuls 2 pixels modifiés par tick (restauration du pixel précédent au fond + avance du pixel blanc). Pas de réécriture complète du buffer → la couleur d'équipe (LED_SET) et la rotation grise restent intactes. Vitesse : 100 ms/step → ~2.3 s/tour. `manageLedError()` est appelé dans la boucle d'attente de `connectWebSocket()` pour maintenir l'animation pendant que `loop()` est bloqué (jusqu'à 10 s). Un seul `showPixels()` par tick. **Freeze pendant `ws_safe_destroy()` éliminé (v3.6.4)** : `stop()+destroy()` sont déchargés sur une tâche FreeRTOS temporaire (`ws_destroy_task`, 4 KB, prio 5) — `loop()` continue d'animer via `manageLedError()` pendant le teardown.
+
 **Fichiers cles** :
 - `server-go/cmd/server/main.go` : `sendLEDSet`, `broadcastLEDSet`, `resendLEDOnReconnect`, `sendLEDSetAllBuzzers`, `sendLEDSetStop`, `sendLEDSetPause`, `sendLEDSetReveal`
 - `server-go/internal/protocol/messages.go` : `ActionLEDSet`, `LEDSetPayload`
 - `src/BuzzClick/click_serverConnection.h` : handler `LED_SET` dans `parseJSON()`, `manageLedBlink()` (EFFECT=BLINK)
 - `src/BuzzClick/click_MAIN.cpp` : `manageLedBlink()` dans `loop()`
+- `src/BuzzClick/click_ledErrorPatterns.h` : patterns animés, `manageLedError()` dans `loop()`
 
 ### Contrainte Affichage TV - IMPORTANT
 **L'affichage TV (`/tv`) est STATIQUE et ne permet PAS de scroll.**
@@ -291,8 +319,8 @@ Toutes les vues TV doivent tenir entièrement à l'écran sans défilement :
 ### Key Files
 - **Backend** : `server-go/cmd/server/main.go`, `internal/game/engine.go`, `internal/game/models.go`, `internal/updater/updater.go`
 - **WebSocket Buzzer (v3.0.0)** :
-  - `internal/server/websocket_buzzer.go` : Hub WebSocket dedie aux buzzers physiques (BuzzerWebSocketHub)
-  - `internal/server/websocket.go` : Hub WebSocket clients web + types clients (admin, tv, vplayer, buzzer)
+  - `internal/server/websocket_buzzer.go` : Hub WebSocket dedie aux buzzers physiques (BuzzerWebSocketHub) — ping ticker 3 s, ReadDeadline 5 s, detection ≤ 5 s (v3.6.8)
+  - `internal/server/websocket.go` : Hub WebSocket clients web + types clients (admin, tv, vplayer, buzzer) — ping ticker 3 s, ReadDeadline 5 s (v3.6.8)
   - `internal/server/http.go` : Routes HTTP + handlers WebSocket (`/ws`, `/ws/buzzer`, `/ws/logs`)
   - `internal/protocol/messages.go` : Serialisation JSON (SerializeForWebSocket, Serialize)
   - `internal/protocol/parser.go` : Parsing JSON (ParseSingle pour WebSocket, Parse pour TCP)
@@ -307,7 +335,9 @@ Toutes les vues TV doivent tenir entièrement à l'écran sans défilement :
   - `web/src/pages/BackupPage.jsx` : Sauvegarde/Restauration/Reinitialisation
   - `web/src/pages/UpdatePage.jsx` : Gestion des mises a jour automatiques
   - `web/src/pages/PlayerDisplay.jsx` : Affichage TV (STATIQUE)
-  - `web/src/components/TeamCard.jsx` : Carte equipe/joueurs (+ badge firmware + modal OTA)
+  - `web/src/components/TeamCard.jsx` : Carte equipe/joueurs (+ badge firmware + modal OTA + badge ⚠ CONNECTED)
+  - `web/src/pages/TeamsPage.jsx` : Gestion equipes/membres (+ badge ⚠ CONNECTED v3.6.8)
+  - `web/src/styles/badges.css` : CSS partagé (présent mais badge CONNECTED utilise styles inline React depuis v3.6.8)
   - `web/src/components/Navbar.jsx` : Navigation + menu abeille (dropdown)
   - `web/src/components/USBConfigModal.jsx` : Modale USB unifiee — point d'entree unique pour config WiFi AT et flash firmware (v3.1.2)
   - `web/src/hooks/useWebSerial.js` : Hook Web Serial API pour communication AT
@@ -317,7 +347,7 @@ Toutes les vues TV doivent tenir entièrement à l'écran sans défilement :
   - `src/BuzzClick/click_usbConfig.h` : Protocole AT sur USB serie
   - `src/BuzzClick/click_WifiManager.h` : Connexion WiFi, boot sequence + fallback chain UDP (v3.2.0)
   - `src/BuzzClick/click_broadcaster.h` : UDP listener AsyncUDP, parser BUZZ_SERVER, etat decouverte (v3.2.0)
-  - `src/BuzzClick/click_websocketClient.h` : Client WebSocket buzzer (v3.0.0, flag USE_WEBSOCKET)
+  - `src/BuzzClick/click_websocket_espidf.h` : Client WebSocket ESP-IDF (v3.5.3+, flag USE_WEBSOCKET) — variables `volatile` cross-task (wsClient, wsConnected, wsGeneration, wsConnecting), generation counter pour callbacks stales, `ws_safe_destroy()` + flag `wsConnecting` pour race condition FreeRTOS (v3.6.3) ; `ws_destroy_task` FreeRTOS pour teardown non-bloquant (v3.6.4)
   - `src/BuzzClick/click_serverConnection.h` : Handlers messages serveur (OTA_UPDATE, WIFI_CONFIG)
   - `src/BuzzClick/click_otaManager.h` : OTA manager (download + flash, v3.1.0)
   - `src/BuzzClick/click_MAIN.cpp` : Setup, factory reset, boucle AT

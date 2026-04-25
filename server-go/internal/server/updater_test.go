@@ -12,6 +12,13 @@ import (
 	"testing"
 )
 
+// newTestUpdater creates an Updater with a temporary dataDir suitable for tests.
+// NewUpdater now requires (version, dataDir) — this helper avoids repeating t.TempDir().
+func newTestUpdater(t *testing.T, version string) *Updater {
+	t.Helper()
+	return NewUpdater(version, t.TempDir())
+}
+
 func TestGetBackupPath(t *testing.T) {
 	tests := []struct {
 		exePath  string
@@ -77,7 +84,7 @@ func TestCopyFile(t *testing.T) {
 }
 
 func TestUpdater_CalculateChecksum(t *testing.T) {
-	updater := NewUpdater("2.50.0")
+	updater := newTestUpdater(t, "2.50.0")
 
 	// Create temp file
 	tmpDir := os.TempDir()
@@ -114,7 +121,7 @@ func TestUpdater_CalculateChecksum(t *testing.T) {
 
 func TestNewUpdater(t *testing.T) {
 	version := "2.50.0"
-	updater := NewUpdater(version)
+	updater := newTestUpdater(t, version)
 
 	if updater == nil {
 		t.Fatal("NewUpdater returned nil")
@@ -128,13 +135,13 @@ func TestNewUpdater(t *testing.T) {
 		t.Error("githubClient should not be nil")
 	}
 
-	if updater.tempDir == "" {
-		t.Error("tempDir should not be empty")
+	if updater.updatesDir == "" {
+		t.Error("updatesDir should not be empty")
 	}
 
-	// Verify temp directory was created
-	if _, err := os.Stat(updater.tempDir); os.IsNotExist(err) {
-		t.Errorf("Temp directory was not created: %s", updater.tempDir)
+	// Verify updates directory was created
+	if _, err := os.Stat(updater.updatesDir); os.IsNotExist(err) {
+		t.Errorf("Updates directory was not created: %s", updater.updatesDir)
 	}
 }
 
@@ -241,7 +248,7 @@ func TestHandleAPIUpdatesApply_MethodNotAllowed(t *testing.T) {
 // TestHandleDownloadUpdate_InvalidBody vérifie que POST avec un body JSON invalide
 // retourne 400 Bad Request.
 func TestHandleDownloadUpdate_InvalidBody(t *testing.T) {
-	updater := NewUpdater("3.5.5")
+	updater := newTestUpdater(t, "3.5.5")
 
 	req := httptest.NewRequest(http.MethodPost, "/api/updates/download", strings.NewReader("{invalid json"))
 	req.Header.Set("Content-Type", "application/json")
@@ -264,7 +271,7 @@ func TestHandleDownloadUpdate_InvalidBody(t *testing.T) {
 // TestHandleDownloadUpdate_EmptyVersion vérifie que POST avec version vide
 // retourne 400 Bad Request.
 func TestHandleDownloadUpdate_EmptyVersion(t *testing.T) {
-	updater := NewUpdater("3.5.5")
+	updater := newTestUpdater(t, "3.5.5")
 
 	req := httptest.NewRequest(http.MethodPost, "/api/updates/download", strings.NewReader(`{"version":""}`))
 	req.Header.Set("Content-Type", "application/json")
@@ -280,7 +287,7 @@ func TestHandleDownloadUpdate_EmptyVersion(t *testing.T) {
 // TestHandleDownloadUpdate_VersionNotFound vérifie que POST avec une version inexistante
 // retourne 404 Not Found. On pré-peuple le cache GitHub pour éviter tout appel réseau.
 func TestHandleDownloadUpdate_VersionNotFound(t *testing.T) {
-	updater := NewUpdater("3.5.5")
+	updater := newTestUpdater(t, "3.5.5")
 
 	// Pré-peupler le cache avec une version différente (v1.0.0 seulement)
 	// afin d'éviter tout appel réseau et tester le chemin "version introuvable"
@@ -320,7 +327,7 @@ func TestHandleDownloadUpdate_VersionNotFound(t *testing.T) {
 // TestHandleApplyUpdate_PathTraversal vérifie que POST avec un path hors tempDir
 // retourne 400 Bad Request (protection contre path traversal).
 func TestHandleApplyUpdate_PathTraversal(t *testing.T) {
-	updater := NewUpdater("3.5.5")
+	updater := newTestUpdater(t, "3.5.5")
 
 	// Créer un fichier suffisamment grand dans un répertoire HORS du tempDir de l'updater.
 	// Le tempDir de l'updater est os.TempDir()+"/buzzcontrol-updates".
@@ -368,11 +375,11 @@ func TestHandleApplyUpdate_PathTraversal(t *testing.T) {
 // Ce cas aurait été accepté par l'ancien check `strings.HasPrefix(absPath, tempDir)`
 // sans séparateur de chemin.
 func TestHandleApplyUpdate_PathTraversal_AdjacentPrefix(t *testing.T) {
-	updater := NewUpdater("3.5.5")
+	updater := newTestUpdater(t, "3.5.5")
 
 	// Construire un répertoire adjacent : même base mais suffixe additionnel.
 	// Ex: /tmp/buzzcontrol-updates-adjacent
-	adjacentDir := updater.tempDir + "-adjacent"
+	adjacentDir := updater.updatesDir + "-adjacent"
 	if err := os.MkdirAll(adjacentDir, 0755); err != nil {
 		t.Fatalf("Cannot create adjacent dir: %v", err)
 	}
@@ -419,10 +426,10 @@ func TestHandleApplyUpdate_PathTraversal_AdjacentPrefix(t *testing.T) {
 // TestHandleApplyUpdate_FileNotFound vérifie que POST avec un path de fichier inexistant
 // retourne 404 Not Found.
 func TestHandleApplyUpdate_FileNotFound(t *testing.T) {
-	updater := NewUpdater("3.5.5")
+	updater := newTestUpdater(t, "3.5.5")
 
-	// Path à l'intérieur du tempDir mais le fichier n'existe pas
-	nonExistentPath := filepath.Join(updater.tempDir, "buzzcontrol-v9.9.9-linux-amd64")
+	// Path à l'intérieur du updatesDir mais le fichier n'existe pas
+	nonExistentPath := filepath.Join(updater.updatesDir, "buzzcontrol-v9.9.9-linux-amd64")
 
 	body := strings.NewReader(fmt.Sprintf(`{"version":"9.9.9","path":%q}`, nonExistentPath))
 	req := httptest.NewRequest(http.MethodPost, "/api/updates/apply", body)

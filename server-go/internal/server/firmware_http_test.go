@@ -320,3 +320,202 @@ func TestHandleAPIBuzzerUpdateAll_NoBuzzers(t *testing.T) {
 		t.Errorf("expected triggered=0, got %v", triggered)
 	}
 }
+
+// ---------------------------------------------------------------------------
+// Non-regression tests: merged binary — firmware download endpoint (issue #63)
+// ---------------------------------------------------------------------------
+
+// TestHandleAPIFirmwareDownload_AppOnly_ServesFullContent verifies that
+// GET /api/firmware/buzzclick/latest.bin serves the complete binary unchanged
+// when the stored firmware is an app-only binary (no merged binary magic).
+// Non-regression: app-only OTA must not be truncated or altered.
+func TestHandleAPIFirmwareDownload_AppOnly_ServesFullContent(t *testing.T) {
+	server, _ := setupTestHTTPServer(t)
+
+	firmwareData := makeFirmwareData(300 * 1024) // 300 KB app-only binary
+	if err := server.firmwareManager.SaveFirmware(firmwareData, "3.6.2"); err != nil {
+		t.Fatalf("SaveFirmware failed: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/firmware/buzzclick/latest.bin", nil)
+	w := httptest.NewRecorder()
+
+	server.mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", w.Code)
+	}
+
+	// Content-Type must be octet-stream
+	ct := w.Header().Get("Content-Type")
+	if ct != "application/octet-stream" {
+		t.Errorf("Content-Type = %q, want %q", ct, "application/octet-stream")
+	}
+
+	// Served content must be identical to the original app-only binary
+	body := w.Body.Bytes()
+	if len(body) != len(firmwareData) {
+		t.Errorf("response body size = %d bytes, want %d (full app-only size)", len(body), len(firmwareData))
+	}
+	if !bytes.Equal(body, firmwareData) {
+		t.Error("response body differs from the uploaded app-only firmware")
+	}
+
+	// Content-Length header must match the body length
+	cl := w.Header().Get("Content-Length")
+	if cl != fmt.Sprintf("%d", len(firmwareData)) {
+		t.Errorf("Content-Length = %q, want %d", cl, len(firmwareData))
+	}
+}
+
+// TestHandleAPIFirmwareDownload_Merged_ServesAppOnly verifies that
+// GET /api/firmware/buzzclick/latest.bin serves ONLY the app portion (from offset 0x10000)
+// when the stored firmware is a merged binary.
+// Non-regression for issue #63: buzzers must receive only the app partition for OTA;
+// sending the full merged binary causes the OTA to fail because the buzzer expects an
+// app image but receives a bootloader header at offset 0.
+func TestHandleAPIFirmwareDownload_Merged_ServesAppOnly(t *testing.T) {
+	server, _ := setupTestHTTPServer(t)
+
+	appSize := 500 * 1024 // 500 KB app portion
+	mergedData := makeMergedBinaryData(appSize)
+	if err := server.firmwareManager.SaveFirmware(mergedData, "3.6.2"); err != nil {
+		t.Fatalf("SaveFirmware failed: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/firmware/buzzclick/latest.bin", nil)
+	w := httptest.NewRecorder()
+
+	server.mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", w.Code)
+	}
+
+	body := w.Body.Bytes()
+
+	// The served content must be app-only size, NOT the full merged binary size
+	if len(body) == len(mergedData) {
+		t.Errorf("response body = full merged binary size (%d bytes) — server is serving merged binary to buzzer instead of app-only portion", len(body))
+	}
+	if len(body) != appSize {
+		t.Errorf("response body size = %d bytes, want %d (app-only size, not merged size %d)", len(body), appSize, len(mergedData))
+	}
+
+	// The app portion must match exactly what is at offset 0x10000 in the merged binary
+	expectedAppData := mergedData[appPartitionOffset:]
+	if !bytes.Equal(body, expectedAppData) {
+		t.Error("response body differs from expected app portion of merged binary")
+	}
+
+	// Content-Length header must advertise the app-only size (not merged binary size)
+	cl := w.Header().Get("Content-Length")
+	if cl != fmt.Sprintf("%d", appSize) {
+		t.Errorf("Content-Length = %q, want %d (app-only size — merged size would be %d)", cl, appSize, len(mergedData))
+	}
+}
+
+// TestHandleAPIFirmwareVersion_IsMergedFlag verifies that
+// GET /api/firmware/buzzclick/version returns IS_MERGED=true for a merged binary
+// and IS_MERGED=false for an app-only binary.
+// Non-regression: the frontend uses IS_MERGED to show/hide the USB flash button.
+func TestHandleAPIFirmwareVersion_IsMergedFlag(t *testing.T) {
+	tests := []struct {
+		name       string
+		firmware   []byte
+		wantMerged bool
+	}{
+		{
+			name:       "app-only binary — IS_MERGED=false",
+			firmware:   makeFirmwareData(300 * 1024),
+			wantMerged: false,
+		},
+		{
+			name:       "merged binary — IS_MERGED=true",
+			firmware:   makeMergedBinaryData(500 * 1024),
+			wantMerged: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			server, _ := setupTestHTTPServer(t)
+			if err := server.firmwareManager.SaveFirmware(tt.firmware, "3.6.2"); err != nil {
+				t.Fatalf("SaveFirmware failed: %v", err)
+			}
+
+			req := httptest.NewRequest(http.MethodGet, "/api/firmware/buzzclick/version", nil)
+			w := httptest.NewRecorder()
+			server.mux.ServeHTTP(w, req)
+
+			if w.Code != http.StatusOK {
+				t.Fatalf("expected status 200, got %d", w.Code)
+			}
+
+			var payload map[string]interface{}
+			if err := json.Unmarshal(w.Body.Bytes(), &payload); err != nil {
+				t.Fatalf("response is not valid JSON: %v", err)
+			}
+
+			isMerged, ok := payload["IS_MERGED"].(bool)
+			if !ok {
+				t.Fatalf("expected 'IS_MERGED' field to be a bool, got %T (%v)", payload["IS_MERGED"], payload["IS_MERGED"])
+			}
+			if isMerged != tt.wantMerged {
+				t.Errorf("IS_MERGED = %v, want %v", isMerged, tt.wantMerged)
+			}
+		})
+	}
+}
+
+// TestHandleAPIFirmwareMergedDownload_AppOnly_Returns404 verifies that
+// GET /api/firmware/buzzclick/merged.bin returns 404 when the stored firmware is app-only.
+// The merged download endpoint is only available for merged binaries.
+func TestHandleAPIFirmwareMergedDownload_AppOnly_Returns404(t *testing.T) {
+	server, _ := setupTestHTTPServer(t)
+
+	// Store an app-only binary — merged endpoint must return 404
+	firmwareData := makeFirmwareData(300 * 1024)
+	if err := server.firmwareManager.SaveFirmware(firmwareData, "3.6.2"); err != nil {
+		t.Fatalf("SaveFirmware failed: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/firmware/buzzclick/merged.bin", nil)
+	w := httptest.NewRecorder()
+
+	server.mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusNotFound {
+		t.Errorf("expected status 404 for merged.bin when firmware is app-only, got %d", w.Code)
+	}
+}
+
+// TestHandleAPIFirmwareMergedDownload_Merged_ServesFullBinary verifies that
+// GET /api/firmware/buzzclick/merged.bin serves the full merged binary (all bytes)
+// when the stored firmware is a merged binary.
+// Non-regression: the USB flash endpoint must serve the complete merged binary
+// (not just the app portion) for correct esptool-js flashing from address 0x0.
+func TestHandleAPIFirmwareMergedDownload_Merged_ServesFullBinary(t *testing.T) {
+	server, _ := setupTestHTTPServer(t)
+
+	appSize := 500 * 1024
+	mergedData := makeMergedBinaryData(appSize)
+	if err := server.firmwareManager.SaveFirmware(mergedData, "3.6.2"); err != nil {
+		t.Fatalf("SaveFirmware failed: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/firmware/buzzclick/merged.bin", nil)
+	w := httptest.NewRecorder()
+
+	server.mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected status 200 for merged.bin, got %d", w.Code)
+	}
+
+	// The merged download serves via http.ServeFile, so body length should match
+	body := w.Body.Bytes()
+	if len(body) != len(mergedData) {
+		t.Errorf("merged.bin response size = %d, want %d (full merged binary)", len(body), len(mergedData))
+	}
+}

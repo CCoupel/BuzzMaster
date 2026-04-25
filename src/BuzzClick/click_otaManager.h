@@ -12,6 +12,8 @@
 
 static const char* OTA_TAG = "OTA";
 
+volatile bool otaInProgress = false;
+
 // Forward declaration - ws_sendRaw is defined in click_websocket_espidf.h
 // which is included before click_otaManager.h in click_MAIN.cpp
 void ws_sendRaw(const String& json);
@@ -49,6 +51,8 @@ void performOTA(const String& url, const String& expectedVersion) {
     ESP_LOGI(OTA_TAG, "Starting OTA update to version %s from: %s",
              expectedVersion.c_str(), url.c_str());
 
+    otaInProgress = true;
+
     // Signal start of download phase
     sendOTAProgress("downloading", 0);
 
@@ -67,6 +71,7 @@ void performOTA(const String& url, const String& expectedVersion) {
         ESP_LOGE(OTA_TAG, "%s", errMsg.c_str());
         sendOTAProgress("error", 0, errMsg);
         // Red + white flash = OTA failure (issue #49).
+        otaInProgress = false;
         setLedError(LedErrorPattern::OTA_ERROR);
         http.end();
         return;
@@ -78,6 +83,7 @@ void performOTA(const String& url, const String& expectedVersion) {
         ESP_LOGE(OTA_TAG, "%s", errMsg.c_str());
         sendOTAProgress("error", 0, errMsg);
         // Red + white flash = OTA failure (issue #49).
+        otaInProgress = false;
         setLedError(LedErrorPattern::OTA_ERROR);
         http.end();
         return;
@@ -91,6 +97,7 @@ void performOTA(const String& url, const String& expectedVersion) {
         ESP_LOGE(OTA_TAG, "%s", errMsg.c_str());
         sendOTAProgress("error", 0, errMsg);
         // Red + white flash = OTA failure (issue #49).
+        otaInProgress = false;
         setLedError(LedErrorPattern::OTA_ERROR);
         http.end();
         return;
@@ -118,6 +125,7 @@ void performOTA(const String& url, const String& expectedVersion) {
                     ESP_LOGE(OTA_TAG, "%s", errMsg.c_str());
                     sendOTAProgress("error", 0, errMsg);
                     // Red + white flash = OTA failure (issue #49).
+                    otaInProgress = false;
                     setLedError(LedErrorPattern::OTA_ERROR);
                     http.end();
                     return;
@@ -154,6 +162,7 @@ void performOTA(const String& url, const String& expectedVersion) {
         ESP_LOGE(OTA_TAG, "%s", errMsg.c_str());
         sendOTAProgress("error", 0, errMsg);
         // Red + white flash = OTA failure (issue #49).
+        otaInProgress = false;
         setLedError(LedErrorPattern::OTA_ERROR);
         return;
     }
@@ -168,6 +177,7 @@ void performOTA(const String& url, const String& expectedVersion) {
         sendOTAProgress("error", 0, errMsg);
         // Rollback is automatic on error - do NOT restart
         // Red + white flash = OTA failure (issue #49).
+        otaInProgress = false;
         setLedError(LedErrorPattern::OTA_ERROR);
         return;
     }
@@ -178,6 +188,7 @@ void performOTA(const String& url, const String& expectedVersion) {
         sendOTAProgress("error", 0, errMsg);
         // Rollback is automatic on error - do NOT restart
         // Red + white flash = OTA failure (issue #49).
+        otaInProgress = false;
         setLedError(LedErrorPattern::OTA_ERROR);
         return;
     }

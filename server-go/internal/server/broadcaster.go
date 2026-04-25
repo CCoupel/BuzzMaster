@@ -18,6 +18,10 @@ const (
 
 	// BroadcastIntervalEnrollment is the heartbeat interval during buzzer enrollment
 	BroadcastIntervalEnrollment = 1 * time.Second
+
+	// BroadcastIntervalHighFrequency is the heartbeat interval when at least one
+	// known buzzer is disconnected — helps it rediscover the server quickly (v3.6.5)
+	BroadcastIntervalHighFrequency = 500 * time.Millisecond
 )
 
 // BroadcasterManager sends periodic UDP heartbeats so BuzzClick buzzers
@@ -29,6 +33,7 @@ type BroadcasterManager struct {
 	udp        *UDPBroadcaster
 	httpPort   int
 	enrollment bool
+	highFreq   bool // true when at least one known buzzer is disconnected (v3.6.5)
 	mu         sync.RWMutex
 	stopCh     chan struct{}
 	wg         sync.WaitGroup
@@ -62,6 +67,15 @@ func (b *BroadcasterManager) Stop() {
 func (b *BroadcasterManager) SetEnrollmentMode(active bool) {
 	b.mu.Lock()
 	b.enrollment = active
+	b.mu.Unlock()
+}
+
+// SetHighFrequency switches to a 500ms heartbeat interval when at least one known
+// buzzer is disconnected, so it can rediscover the server quickly after reconnect.
+// Enrollment mode takes priority over high-frequency mode.
+func (b *BroadcasterManager) SetHighFrequency(active bool) {
+	b.mu.Lock()
+	b.highFreq = active
 	b.mu.Unlock()
 }
 
@@ -161,12 +175,16 @@ func (b *BroadcasterManager) loop() {
 	}
 }
 
-// interval returns the current heartbeat interval based on enrollment mode.
+// interval returns the current heartbeat interval.
+// Priority: enrollment (1s) > high-frequency (500ms) > normal (5s).
 func (b *BroadcasterManager) interval() time.Duration {
 	b.mu.RLock()
 	defer b.mu.RUnlock()
 	if b.enrollment {
 		return BroadcastIntervalEnrollment
+	}
+	if b.highFreq {
+		return BroadcastIntervalHighFrequency
 	}
 	return BroadcastIntervalNormal
 }

@@ -23,8 +23,15 @@ type BuzzerWebSocketHub struct {
 	// Channel for incoming messages from buzzers
 	Incoming chan *protocol.IncomingMessage
 
-	// Callback when buzzer connects/disconnects
+	// Callback when buzzer connects/disconnects (count-based, legacy)
 	OnBuzzerChange func(buzzerCount int)
+
+	// Callbacks for individual buzzer connect/disconnect (MAC-based, v3.6.5).
+	// OnBuzzerConnected is reserved for future use — CONNECTED=true is handled in
+	// handleHello() (main.go) because the MAC is only reliably known after HELLO.
+	// OnBuzzerDisconnected fires immediately on WebSocket close with the buzzer MAC.
+	OnBuzzerConnected    func(mac string) // reserved for future use
+	OnBuzzerDisconnected func(mac string)
 }
 
 // NewBuzzerWebSocketHub creates a new buzzer WebSocket hub
@@ -57,6 +64,14 @@ func (h *BuzzerWebSocketHub) Run() {
 			}
 			h.mu.Unlock()
 			LogInfo(game.LogComponentWebSocket, "Buzzer disconnected from WebSocket: %s (MAC: %s)", client.ID, client.MAC)
+			// Notify with MAC address so main.go can update CONNECTED=false
+			mac := client.MAC
+			if mac == "" {
+				mac = client.ID
+			}
+			if h.OnBuzzerDisconnected != nil && mac != "" {
+				h.OnBuzzerDisconnected(mac)
+			}
 			h.notifyBuzzerChange()
 
 		case message := <-h.broadcast:
@@ -215,9 +230,9 @@ func (h *BuzzerWebSocketHub) readPump(c *WebSocketClient) {
 	}()
 
 	c.Conn.SetReadLimit(65536)
-	c.Conn.SetReadDeadline(time.Now().Add(60 * time.Second))
+	c.Conn.SetReadDeadline(time.Now().Add(5 * time.Second))
 	c.Conn.SetPongHandler(func(string) error {
-		c.Conn.SetReadDeadline(time.Now().Add(60 * time.Second))
+		c.Conn.SetReadDeadline(time.Now().Add(5 * time.Second))
 		return nil
 	})
 
@@ -270,7 +285,7 @@ func (h *BuzzerWebSocketHub) readPump(c *WebSocketClient) {
 }
 
 func (h *BuzzerWebSocketHub) writePump(c *WebSocketClient) {
-	ticker := time.NewTicker(30 * time.Second)
+	ticker := time.NewTicker(3 * time.Second)
 	defer func() {
 		ticker.Stop()
 		c.Conn.Close()
@@ -279,7 +294,7 @@ func (h *BuzzerWebSocketHub) writePump(c *WebSocketClient) {
 	for {
 		select {
 		case message, ok := <-c.Send:
-			c.Conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
+			c.Conn.SetWriteDeadline(time.Now().Add(3 * time.Second))
 			if !ok {
 				c.Conn.WriteMessage(websocket.CloseMessage, []byte{})
 				return
@@ -299,7 +314,7 @@ func (h *BuzzerWebSocketHub) writePump(c *WebSocketClient) {
 			}
 
 		case <-ticker.C:
-			c.Conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
+			c.Conn.SetWriteDeadline(time.Now().Add(3 * time.Second))
 			if err := c.Conn.WriteMessage(websocket.PingMessage, nil); err != nil {
 				return
 			}

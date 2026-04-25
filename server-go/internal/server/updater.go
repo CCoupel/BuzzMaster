@@ -39,6 +39,8 @@ type UpdateInfo struct {
 	DownloadURL string `json:"download_url"`
 	Current     bool   `json:"current"`
 	Size        int64  `json:"size"`
+	Downloaded  bool   `json:"downloaded"`
+	LocalPath   string `json:"local_path,omitempty"`
 }
 
 // UpdatesResponse is the response for GET /api/updates
@@ -85,20 +87,21 @@ type ApplyResponse struct {
 
 // Updater handles update operations
 type Updater struct {
-	githubClient  *GitHubClient
-	currentVer    string
-	tempDir       string
+	githubClient *GitHubClient
+	currentVer   string
+	updatesDir   string
 }
 
-// NewUpdater creates a new updater
-func NewUpdater(currentVersion string) *Updater {
-	tempDir := filepath.Join(os.TempDir(), "buzzcontrol-updates")
-	os.MkdirAll(tempDir, 0755)
+// NewUpdater creates a new updater. Downloaded binaries are stored persistently
+// in {dataDir}/updates/ so they survive server restarts and can be applied later.
+func NewUpdater(currentVersion, dataDir string) *Updater {
+	updatesDir := filepath.Join(dataDir, "updates")
+	os.MkdirAll(updatesDir, 0755)
 
 	return &Updater{
 		githubClient: NewGitHubClient(GitHubOwner, GitHubRepo),
 		currentVer:   currentVersion,
-		tempDir:      tempDir,
+		updatesDir:   updatesDir,
 	}
 }
 
@@ -156,7 +159,19 @@ func (u *Updater) HandleGetUpdates(w http.ResponseWriter, r *http.Request) {
 			title = release.Name // fallback
 		}
 
-		versions = append(versions, UpdateInfo{
+		// Check if this version is already downloaded locally
+		ext := ""
+		if runtime.GOOS == "windows" {
+			ext = ".exe"
+		}
+		localFilename := fmt.Sprintf("buzzcontrol-v%s-%s%s", version, platform, ext)
+		localPath := filepath.Join(u.updatesDir, localFilename)
+		downloaded := false
+		if info, err := os.Stat(localPath); err == nil && info.Size() >= MinBinarySize {
+			downloaded = true
+		}
+
+		info := UpdateInfo{
 			Version:     version,
 			Title:       title,
 			Date:        release.CreatedAt.Format(time.RFC3339),
@@ -164,7 +179,12 @@ func (u *Updater) HandleGetUpdates(w http.ResponseWriter, r *http.Request) {
 			DownloadURL: asset.DownloadURL,
 			Current:     isCurrent,
 			Size:        asset.Size,
-		})
+			Downloaded:  downloaded,
+		}
+		if downloaded {
+			info.LocalPath = localPath
+		}
+		versions = append(versions, info)
 	}
 
 	response := UpdatesResponse{Versions: versions}
@@ -303,7 +323,7 @@ func (u *Updater) HandleDownloadUpdate(w http.ResponseWriter, r *http.Request) {
 		ext = ".exe"
 	}
 	filename := fmt.Sprintf("buzzcontrol-v%s-%s%s", req.Version, platform, ext)
-	destPath := filepath.Join(u.tempDir, filename)
+	destPath := filepath.Join(u.updatesDir, filename)
 
 	LogInfo(game.LogComponentUpdater, "Downloading from %s to %s", downloadURL, destPath)
 
@@ -394,8 +414,8 @@ func (u *Updater) HandleApplyUpdate(w http.ResponseWriter, r *http.Request) {
 	// Verify the path is inside the expected temp directory (security: prevent path traversal)
 	absPath, err := filepath.Abs(req.Path)
 	sep := string(os.PathSeparator)
-	if err != nil || (!strings.HasPrefix(absPath, u.tempDir+sep) && absPath != u.tempDir) {
-		LogError(game.LogComponentUpdater, "Suspicious path rejected: %s (expected prefix: %s)", req.Path, u.tempDir)
+	if err != nil || (!strings.HasPrefix(absPath, u.updatesDir+sep) && absPath != u.updatesDir) {
+		LogError(game.LogComponentUpdater, "Suspicious path rejected: %s (expected prefix: %s)", req.Path, u.updatesDir)
 		writeJSONError(w, http.StatusBadRequest, ApplyResponse{Success: false, Error: "Invalid file path"})
 		return
 	}

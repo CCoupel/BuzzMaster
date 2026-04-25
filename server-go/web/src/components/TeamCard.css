@@ -1,3 +1,5 @@
+@import '../styles/badges.css';
+
 /* TeamCard Component - Same style as question-preview */
 .team-card {
   --team-color: var(--primary-500);
@@ -1013,3 +1015,7 @@
 }
 .ota-finished-label.success { color: var(--green-600, #16a34a); }
 .ota-finished-label.error   { color: var(--red-500, #ef4444); }
+
+/* =========================================
+   Disconnection warning badge (inline, per-buzzer row)
+   ========================================= */

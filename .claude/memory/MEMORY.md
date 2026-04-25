@@ -11,6 +11,12 @@ Le hook SessionStart a été supprimé — plus de démarrage automatique.
 
 ## Corrections comportementales
 
+- **GitHub Issues/PR** : ne jamais fermer/rouvrir/commenter une issue ou PR sans validation explicite de l'utilisateur — voir [feedback_github_actions.md](feedback_github_actions.md)
+- **Crash agents tmux** : CDP et backend-dev crashent (bun) après ~4-5MB contexte — re-spawner entre versions, garder messages courts — voir [feedback_agent_context_crash.md](feedback_agent_context_crash.md)
+- **QA → DOC → QUALIF** : pas besoin de validation utilisateur entre ces phases — lancer directement — voir [feedback_qa_workflow.md](feedback_qa_workflow.md)
+- **Binaire Windows obligatoire** : toujours builder le .exe Windows AVANT de demander validation QUALIF (l'utilisateur teste depuis Windows) — voir [feedback_windows_binary.md](feedback_windows_binary.md)
+
+
 - **TeamDelete** : proposer à l'utilisateur après PROD validé, **jamais supprimer automatiquement**
 - **Team par feature/bugfix** : créer une nouvelle team à chaque nouvelle demande, pas réutiliser
 - **Agents** : prompts génériques uniquement (rôle, pas tâche) — tâches via TaskCreate + TaskUpdate

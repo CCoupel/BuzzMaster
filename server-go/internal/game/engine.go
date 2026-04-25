@@ -152,6 +152,10 @@ func (e *Engine) UpdateBumper(id string, data map[string]interface{}) {
 	if otaPercent, ok := data["OTA_PERCENT"].(int); ok {
 		bumper.OTAPercent = otaPercent
 	}
+	// Connection status (v3.6.5)
+	if connected, ok := data["CONNECTED"].(bool); ok {
+		bumper.Connected = connected
+	}
 
 	log.Printf("[Engine] Updated bumper %s: team=%s, name=%s, protocol=%s", id, bumper.Team, bumper.Name, bumper.Protocol)
 	e.mu.Unlock()
@@ -277,11 +281,27 @@ func (e *Engine) SetBumperReady(bumperID string) {
 	}
 }
 
-func (e *Engine) updateTeamsReady() {
-	// For each team, check if all bumpers are ready
-	teamBumperCount := make(map[string]int)
-	teamReadyCount := make(map[string]int)
+// getActiveTeams returns teams that have at least one buzzer assigned.
+// Must be called with e.mu held (read or write).
+func (e *Engine) getActiveTeams() map[string]*Team {
+	hasBumper := make(map[string]bool)
+	for _, bumper := range e.data.Bumpers {
+		if bumper.Team != "" {
+			hasBumper[bumper.Team] = true
+		}
+	}
+	active := make(map[string]*Team, len(hasBumper))
+	for id, team := range e.data.Teams {
+		if hasBumper[id] {
+			active[id] = team
+		}
+	}
+	return active
+}
 
+func (e *Engine) updateTeamsReady() {
+	teamReadyCount := make(map[string]int)
+	teamBumperCount := make(map[string]int)
 	for _, bumper := range e.data.Bumpers {
 		if bumper.Team != "" {
 			teamBumperCount[bumper.Team]++
@@ -290,24 +310,23 @@ func (e *Engine) updateTeamsReady() {
 			}
 		}
 	}
-
 	for teamID, team := range e.data.Teams {
 		total := teamBumperCount[teamID]
-		ready := teamReadyCount[teamID]
-		team.Ready = total > 0 && total == ready
+		team.Ready = total > 0 && total == teamReadyCount[teamID]
 	}
 }
 
-// AreAllTeamsReady checks if all teams are ready
+// AreAllTeamsReady returns true when every active team (≥1 buzzer assigned) is ready.
+// Empty teams are ignored, matching the frontend display filter.
 func (e *Engine) AreAllTeamsReady() bool {
 	e.mu.RLock()
 	defer e.mu.RUnlock()
 
-	if len(e.data.Teams) == 0 {
+	active := e.getActiveTeams()
+	if len(active) == 0 {
 		return false
 	}
-
-	for _, team := range e.data.Teams {
+	for _, team := range active {
 		if !team.Ready {
 			return false
 		}
@@ -474,9 +493,9 @@ func (e *Engine) actualStart() {
 	// This handles SOLO mode where admin doesn't select teams explicitly
 	if e.state.Question != nil && e.state.Question.Type == QuestionTypeMemory &&
 		(e.state.MemoryParticipatingTeams == nil || len(e.state.MemoryParticipatingTeams) == 0) {
-		// Get all teams for auto-initialization
+		// Get active teams (with buzzers) for auto-initialization
 		allTeams := make([]string, 0, len(e.data.Teams))
-		for teamName := range e.data.Teams {
+		for teamName := range e.getActiveTeams() {
 			allTeams = append(allTeams, teamName)
 		}
 		// Initialize with all teams

@@ -88,6 +88,45 @@ func TestEngine_UpdateBumper_Partial(t *testing.T) {
 	}
 }
 
+// TestEngine_UpdateBumper_Connected verifies that UpdateBumper correctly
+// sets and clears the Connected field. This test would have caught the missing
+// case in UpdateBumper() where CONNECTED was not mapped to bumper.Connected.
+func TestEngine_UpdateBumper_Connected(t *testing.T) {
+	e := NewEngine()
+	e.UpdateBumper("b1", map[string]interface{}{"NAME": "BuzzerTest", "TEAM": "red"})
+
+	// Default: Connected should be false (zero value)
+	bumper := e.GetBumper("b1")
+	if bumper == nil {
+		t.Fatal("Bumper b1 should exist")
+	}
+	if bumper.Connected {
+		t.Error("Connected should be false by default")
+	}
+
+	// Set CONNECTED=true
+	e.UpdateBumper("b1", map[string]interface{}{"CONNECTED": true})
+	bumper = e.GetBumper("b1")
+	if !bumper.Connected {
+		t.Error("Connected should be true after UpdateBumper with CONNECTED=true")
+	}
+
+	// Set CONNECTED=false — must be honoured (false is a meaningful value)
+	e.UpdateBumper("b1", map[string]interface{}{"CONNECTED": false})
+	bumper = e.GetBumper("b1")
+	if bumper.Connected {
+		t.Error("Connected should be false after UpdateBumper with CONNECTED=false")
+	}
+
+	// Other fields must be preserved across CONNECTED updates
+	if bumper.Name != "BuzzerTest" {
+		t.Errorf("Name should be preserved, got %s", bumper.Name)
+	}
+	if bumper.Team != "red" {
+		t.Errorf("Team should be preserved, got %s", bumper.Team)
+	}
+}
+
 func TestEngine_SetTeams(t *testing.T) {
 	e := NewEngine()
 
@@ -198,6 +237,26 @@ func TestEngine_AreAllTeamsReady(t *testing.T) {
 	e.SetBumperReady("b2")
 	if !e.AreAllTeamsReady() {
 		t.Error("Should be ready when all teams are ready")
+	}
+}
+
+func TestEngine_AreAllTeamsReady_EmptyTeamsIgnored(t *testing.T) {
+	e := NewEngine()
+
+	// One active team (with buzzer) + one empty team (no buzzer)
+	e.SetTeams(map[string]*Team{
+		"red":   {Name: "Team Red"},
+		"empty": {Name: "Team Empty"},
+	})
+	e.UpdateBumper("b1", map[string]interface{}{"TEAM": "red"})
+	// "empty" team has no bumper assigned
+
+	e.Ready("q1", nil)
+	e.SetBumperReady("b1")
+
+	// Empty team must not block: only active team (red) is ready → should be ready
+	if !e.AreAllTeamsReady() {
+		t.Error("Empty team should be ignored: active team is ready so AreAllTeamsReady should return true")
 	}
 }
 
@@ -1583,6 +1642,67 @@ func TestEngine_QCM_HintsAtBuzz_TwoHints(t *testing.T) {
 	bumper := e.GetBumper("buzzer1")
 	if bumper.HintsAtBuzz != 2 {
 		t.Errorf("HintsAtBuzz should be 2 after 2 hints, got %d", bumper.HintsAtBuzz)
+	}
+}
+
+// TestEngine_StartupConnectedReset verifies that bumpers loaded from disk with
+// CONNECTED=true are correctly reset to false by iterating and calling
+// UpdateBumper(id, {"CONNECTED": false}) — exactly as main.go does on startup.
+// This is the non-regression test for bug #48.
+func TestEngine_StartupConnectedReset(t *testing.T) {
+	e := NewEngine()
+
+	// Simulate bumpers persisted with CONNECTED=true (state from a previous session)
+	persistedBumpers := map[string]*Bumper{
+		"AA:BB:CC:DD:EE:01": {Name: "Buzzer1", Team: "red", Connected: true},
+		"AA:BB:CC:DD:EE:02": {Name: "Buzzer2", Team: "blue", Connected: true},
+		"AA:BB:CC:DD:EE:03": {Name: "Buzzer3", Team: "red", Connected: false}, // already false
+	}
+	e.SetBumpers(persistedBumpers)
+
+	// Pre-condition: two bumpers have Connected=true
+	if b := e.GetBumper("AA:BB:CC:DD:EE:01"); !b.Connected {
+		t.Fatal("Pre-condition: Buzzer1 should have Connected=true before reset")
+	}
+	if b := e.GetBumper("AA:BB:CC:DD:EE:02"); !b.Connected {
+		t.Fatal("Pre-condition: Buzzer2 should have Connected=true before reset")
+	}
+
+	// Simulate the startup reset loop from main.go:
+	//   for id := range engine.GetTeamsAndBumpers().Bumpers {
+	//       engine.UpdateBumper(id, map[string]interface{}{"CONNECTED": false})
+	//   }
+	for id := range e.GetTeamsAndBumpers().Bumpers {
+		e.UpdateBumper(id, map[string]interface{}{"CONNECTED": false})
+	}
+
+	// All bumpers must now have Connected=false
+	tests := []struct {
+		id   string
+		name string
+	}{
+		{"AA:BB:CC:DD:EE:01", "Buzzer1"},
+		{"AA:BB:CC:DD:EE:02", "Buzzer2"},
+		{"AA:BB:CC:DD:EE:03", "Buzzer3"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			b := e.GetBumper(tt.id)
+			if b == nil {
+				t.Fatalf("Bumper %s should exist", tt.id)
+			}
+			if b.Connected {
+				t.Errorf("Bumper %s: Connected should be false after startup reset, got true", tt.id)
+			}
+		})
+	}
+
+	// Other fields must be preserved across the reset
+	if b := e.GetBumper("AA:BB:CC:DD:EE:01"); b.Name != "Buzzer1" {
+		t.Errorf("Buzzer1 Name should be preserved, got %q", b.Name)
+	}
+	if b := e.GetBumper("AA:BB:CC:DD:EE:01"); b.Team != "red" {
+		t.Errorf("Buzzer1 Team should be preserved, got %q", b.Team)
 	}
 }
 

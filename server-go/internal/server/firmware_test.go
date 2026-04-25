@@ -239,3 +239,238 @@ func TestCompareSemver(t *testing.T) {
 		}
 	}
 }
+
+// makeMergedBinaryData creates a fake merged firmware binary with the correct structure:
+// - Magic bytes 0xAA 0x50 at offset partitionTableOffset (0x8000)
+// - App data starting at offset appPartitionOffset (0x10000), filled with a repeating pattern
+// The total binary size is appPartitionOffset + appSize.
+// appSize must be large enough so that the total >= FirmwareMinSize (200KB).
+func makeMergedBinaryData(appSize int) []byte {
+	total := appPartitionOffset + appSize
+	data := make([]byte, total)
+	// Partition table magic
+	data[partitionTableOffset] = 0xAA
+	data[partitionTableOffset+1] = 0x50
+	// App payload — distinct pattern from the leading zeros so it's identifiable
+	for i := 0; i < appSize; i++ {
+		data[appPartitionOffset+i] = byte((i + 1) % 256)
+	}
+	return data
+}
+
+// ---------------------------------------------------------------------------
+// Tests for IsMergedBinary (non-regression: merged binary detection)
+// ---------------------------------------------------------------------------
+
+func TestIsMergedBinary(t *testing.T) {
+	// Partition table magic bytes at offset 0x8000
+	appSize := 300 * 1024
+	mergedData := makeMergedBinaryData(appSize)
+
+	// App-only binary — no magic at 0x8000
+	appOnlyData := makeFirmwareData(300 * 1024)
+
+	tests := []struct {
+		name string
+		data []byte
+		want bool
+	}{
+		{
+			name: "merged binary — magic 0xAA 0x50 at 0x8000",
+			data: mergedData,
+			want: true,
+		},
+		{
+			name: "app-only binary — no magic at 0x8000",
+			data: appOnlyData,
+			want: false,
+		},
+		{
+			name: "empty data",
+			data: []byte{},
+			want: false,
+		},
+		{
+			name: "data shorter than partitionTableOffset+2",
+			data: make([]byte, partitionTableOffset),
+			want: false,
+		},
+		{
+			name: "data exactly at partitionTableOffset+1 (second magic byte missing)",
+			data: func() []byte {
+				d := make([]byte, partitionTableOffset+1)
+				d[partitionTableOffset] = 0xAA
+				return d
+			}(),
+			want: false,
+		},
+		{
+			name: "first magic byte matches but second does not",
+			data: func() []byte {
+				d := make([]byte, partitionTableOffset+2)
+				d[partitionTableOffset] = 0xAA
+				d[partitionTableOffset+1] = 0x51 // wrong
+				return d
+			}(),
+			want: false,
+		},
+		{
+			name: "nil data",
+			data: nil,
+			want: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := IsMergedBinary(tt.data)
+			if got != tt.want {
+				t.Errorf("IsMergedBinary() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Tests for GetAppFirmware (non-regression: app extraction from merged binary)
+// ---------------------------------------------------------------------------
+
+func TestFirmwareManager_GetAppFirmware_AppOnly(t *testing.T) {
+	dir := t.TempDir()
+	fm := NewFirmwareManager(dir, "3.6.2")
+
+	appData := makeFirmwareData(300 * 1024)
+	if err := fm.SaveFirmware(appData, "3.6.2"); err != nil {
+		t.Fatalf("SaveFirmware failed: %v", err)
+	}
+
+	got, err := fm.GetAppFirmware()
+	if err != nil {
+		t.Fatalf("GetAppFirmware() unexpected error: %v", err)
+	}
+	if len(got) != len(appData) {
+		t.Errorf("GetAppFirmware() returned %d bytes, want %d (full app-only content)", len(got), len(appData))
+	}
+	if !bytes.Equal(got, appData) {
+		t.Error("GetAppFirmware() content differs from original app-only data")
+	}
+}
+
+func TestFirmwareManager_GetAppFirmware_Merged(t *testing.T) {
+	dir := t.TempDir()
+	fm := NewFirmwareManager(dir, "3.6.2")
+
+	appSize := 300 * 1024 // 300 KB app portion
+	mergedData := makeMergedBinaryData(appSize)
+	if err := fm.SaveFirmware(mergedData, "3.6.2"); err != nil {
+		t.Fatalf("SaveFirmware failed: %v", err)
+	}
+
+	got, err := fm.GetAppFirmware()
+	if err != nil {
+		t.Fatalf("GetAppFirmware() unexpected error: %v", err)
+	}
+
+	// Must return only the app portion (from offset 0x10000 onwards)
+	wantSize := appSize
+	if len(got) != wantSize {
+		t.Errorf("GetAppFirmware() returned %d bytes, want %d (app-only size)", len(got), wantSize)
+	}
+
+	// The returned data must equal the app portion of the merged binary
+	wantAppData := mergedData[appPartitionOffset:]
+	if !bytes.Equal(got, wantAppData) {
+		t.Error("GetAppFirmware() content differs from expected app portion of merged binary")
+	}
+
+	// The returned data must NOT start with the merged binary header (no 0xAA 0x50 at 0x8000)
+	if len(got) > partitionTableOffset+1 &&
+		got[partitionTableOffset] == 0xAA && got[partitionTableOffset+1] == 0x50 {
+		t.Error("GetAppFirmware() returned data still looks like a merged binary (partition table magic found)")
+	}
+}
+
+func TestFirmwareManager_GetAppFirmware_MergedTooSmall(t *testing.T) {
+	dir := t.TempDir()
+	fm := NewFirmwareManager(dir, "3.6.2")
+
+	// Manually write a "merged binary" that is smaller than appPartitionOffset (0x10000)
+	// — bypassing SaveFirmware size checks.
+	firmwareDir := filepath.Join(dir, "firmware")
+	if err := os.MkdirAll(firmwareDir, 0755); err != nil {
+		t.Fatalf("failed to create firmware dir: %v", err)
+	}
+	// Build a small binary that has the partition table magic but no app data
+	tinyMerged := make([]byte, partitionTableOffset+2)
+	tinyMerged[partitionTableOffset] = 0xAA
+	tinyMerged[partitionTableOffset+1] = 0x50
+	if err := os.WriteFile(fm.GetFirmwarePath(), tinyMerged, 0644); err != nil {
+		t.Fatalf("failed to write tiny merged binary: %v", err)
+	}
+
+	_, err := fm.GetAppFirmware()
+	if err == nil {
+		t.Error("GetAppFirmware() expected error for merged binary with no app data, got nil")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Tests for SaveFirmware with merged binaries (non-regression: 3MB size limit)
+// ---------------------------------------------------------------------------
+
+func TestFirmwareManager_SaveFirmware_MergedBinary(t *testing.T) {
+	dir := t.TempDir()
+	fm := NewFirmwareManager(dir, "3.6.2")
+
+	// Typical merged binary: ~1MB total (bootloader + partitions + app)
+	appSize := 500 * 1024
+	mergedData := makeMergedBinaryData(appSize)
+
+	if err := fm.SaveFirmware(mergedData, "3.6.2"); err != nil {
+		t.Fatalf("SaveFirmware() should accept a ~%dKB merged binary, got error: %v", len(mergedData)/1024, err)
+	}
+
+	// IsMerged() must return true after saving
+	if !fm.IsMerged() {
+		t.Error("IsMerged() = false after saving a merged binary")
+	}
+
+	// GetInfo size must reflect the full merged binary size (not app-only)
+	_, _, storedSize, exists := fm.GetInfo()
+	if !exists {
+		t.Fatal("firmware should exist after SaveFirmware")
+	}
+	if storedSize != int64(len(mergedData)) {
+		t.Errorf("GetInfo() size = %d, want %d (full merged binary size)", storedSize, len(mergedData))
+	}
+}
+
+func TestFirmwareManager_SaveFirmware_MergedBinaryAtMaxSize(t *testing.T) {
+	dir := t.TempDir()
+	fm := NewFirmwareManager(dir, "3.6.2")
+
+	// FirmwareMaxSize is exactly 3MB — must be accepted
+	data := makeFirmwareData(FirmwareMaxSize)
+	// Inject partition table magic to simulate a merged binary of max size
+	data[partitionTableOffset] = 0xAA
+	data[partitionTableOffset+1] = 0x50
+
+	if err := fm.SaveFirmware(data, "3.6.2"); err != nil {
+		t.Errorf("SaveFirmware() should accept firmware at exactly FirmwareMaxSize (%d bytes), got: %v", FirmwareMaxSize, err)
+	}
+}
+
+func TestFirmwareManager_SaveFirmware_MergedBinaryExceedsMaxSize(t *testing.T) {
+	dir := t.TempDir()
+	fm := NewFirmwareManager(dir, "3.6.2")
+
+	// FirmwareMaxSize + 1 byte must be rejected even for merged binaries
+	data := makeFirmwareData(FirmwareMaxSize + 1)
+	data[partitionTableOffset] = 0xAA
+	data[partitionTableOffset+1] = 0x50
+
+	err := fm.SaveFirmware(data, "3.6.2")
+	if err == nil {
+		t.Error("SaveFirmware() should reject firmware larger than FirmwareMaxSize (3MB), got nil error")
+	}
+}

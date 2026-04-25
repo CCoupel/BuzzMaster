@@ -298,6 +298,55 @@ func TestBroadcasterManager_ConcurrentEnrollmentToggle(t *testing.T) {
 	<-done
 }
 
+// ---- SetHighFrequency tests (v3.6.5) ------------------------------------
+
+// TestBroadcasterManager_HighFrequency verifies that SetHighFrequency(true)
+// makes interval() return BroadcastIntervalHighFrequency (500ms).
+func TestBroadcasterManager_HighFrequency(t *testing.T) {
+	bm := NewBroadcasterManager(nil, 80)
+
+	// Default: normal interval
+	if got := bm.interval(); got != BroadcastIntervalNormal {
+		t.Errorf("expected normal interval %s, got %s", BroadcastIntervalNormal, got)
+	}
+
+	// Switch to high-frequency
+	bm.SetHighFrequency(true)
+	if got := bm.interval(); got != BroadcastIntervalHighFrequency {
+		t.Errorf("expected high-frequency interval %s, got %s", BroadcastIntervalHighFrequency, got)
+	}
+
+	// Switch back
+	bm.SetHighFrequency(false)
+	if got := bm.interval(); got != BroadcastIntervalNormal {
+		t.Errorf("expected normal interval after disabling high-frequency, got %s", got)
+	}
+}
+
+// TestBroadcasterManager_HighFrequencyPriorityBelowEnrollment verifies that
+// enrollment mode takes priority over high-frequency mode: when both are active
+// the interval must be BroadcastIntervalEnrollment (1s), not 500ms.
+func TestBroadcasterManager_HighFrequencyPriorityBelowEnrollment(t *testing.T) {
+	bm := NewBroadcasterManager(nil, 80)
+
+	bm.SetEnrollmentMode(true)
+	bm.SetHighFrequency(true)
+
+	if got := bm.interval(); got != BroadcastIntervalEnrollment {
+		t.Errorf("enrollment must take priority over high-frequency: expected %s, got %s",
+			BroadcastIntervalEnrollment, got)
+	}
+}
+
+// TestBroadcasterManager_HighFrequencyIsLowerThanNormal verifies that the
+// high-frequency interval constant is strictly less than the normal interval.
+func TestBroadcasterManager_HighFrequencyIsLowerThanNormal(t *testing.T) {
+	if BroadcastIntervalHighFrequency >= BroadcastIntervalNormal {
+		t.Errorf("expected high-frequency interval (%s) < normal interval (%s)",
+			BroadcastIntervalHighFrequency, BroadcastIntervalNormal)
+	}
+}
+
 func TestBroadcasterManager_StopIsIdempotent(t *testing.T) {
 	udp := NewUDPBroadcaster(9994)
 	if err := udp.Start(); err != nil {

@@ -15,10 +15,10 @@ int rgbPin = RGB_BUILTIN;
 
 #define NUMPIXELS 23
 
-int currentRed = 0;
-int currentGreen = 0;
-int currentBlue = 0;
-int currentIntensity = 255;
+volatile int currentRed = 0;
+volatile int currentGreen = 0;
+volatile int currentBlue = 0;
+volatile int currentIntensity = 255;
 int currentOffset = 0;
 int currentPeriod = 1;
 
@@ -38,7 +38,10 @@ void setPixelColor(int led, int r, int g, int b)
   showPixels();
 }
 
-void applyLedColor() {
+// Populate the LED buffer with the current background colour without calling
+// showPixels(). Use before overlay operations so the intermediate full-background
+// state is never pushed to the hardware (avoids a visible flash on each tick).
+void applyLedColorToBuffer() {
   int adjustedRed = (currentRed * currentIntensity) / 255;
   int adjustedGreen = (currentGreen * currentIntensity) / 255;
   int adjustedBlue = (currentBlue * currentIntensity) / 255;
@@ -52,6 +55,10 @@ void applyLedColor() {
       strip_sk98.setPixelColor(i, 0, 0, 0);
     }
   }
+}
+
+void applyLedColor() {
+  applyLedColorToBuffer();
   showPixels();
 }
 

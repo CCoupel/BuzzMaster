@@ -55,6 +55,8 @@ export default function GamePage() {
         firmwareVersion: bumper.FIRMWARE_VERSION || '',
         isOutdated: bumper.IS_OUTDATED === true,
         otaStatus: bumper.OTA_STATUS || '',
+        connected: bumper.CONNECTED === true, // strict — undefined does NOT trigger disconnected badge
+        isVirtual: bumper.IS_VIRTUAL === true, // virtual players (VJoueurs) never show disconnected badge
       })
     })
     // Sort bumpers by timestamp within each team

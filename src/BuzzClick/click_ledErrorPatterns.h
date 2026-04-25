@@ -8,9 +8,10 @@
 // subsystem is failing.
 //
 // Patterns:
-//   WIFI_FAILED     — red blinking 1 Hz        (WiFi association / fallback exhausted)
-//   WS_DISCONNECTED — red blinking 4 Hz        (WS disconnect or reconnect cycle in progress)
-//   WS_TIMEOUT      — red pulsing ~0.5 Hz      (connection timeout after full reconnect window)
+//   WIFI_FAILED     — red blinking 1 Hz           (WiFi association / fallback exhausted)
+//   WS_DISCONNECTED — red blinking 4 Hz           (WS disconnect or reconnect cycle in progress)
+//   WS_TIMEOUT      — red pulsing ~0.5 Hz         (connection timeout after full reconnect window)
+//   WS_RECONNECTING — white pixel 100 ms/step (~2.3 s/turn, delta update, preserves ring state)
 //   OTA_ERROR       — red solid + brief white flash every 2 s (OTA download/flash failure)
 //
 // Usage:
@@ -29,12 +30,13 @@ enum class LedErrorPattern : uint8_t {
     WIFI_FAILED,
     WS_DISCONNECTED,
     WS_TIMEOUT,
+    WS_RECONNECTING,  // white pixel 100 ms/step, ~2.3 s/turn — active reconnect attempt in progress
     OTA_ERROR
 };
 
 static volatile LedErrorPattern g_ledErrorPattern = LedErrorPattern::NONE;
-static unsigned long g_ledErrorLastStep = 0;
-static uint8_t g_ledErrorStepIdx = 0;
+static volatile unsigned long g_ledErrorLastStep = 0;
+static volatile uint8_t g_ledErrorStepIdx = 0;
 
 // Enter a specific error pattern (or NONE to clear). Applies the initial
 // visual state immediately so there is no lag before manageLedError() runs.
@@ -56,6 +58,9 @@ inline void setLedError(LedErrorPattern p) {
         case LedErrorPattern::WS_TIMEOUT:
             setLedIntensity(255);
             setLedColor(255, 0, 0, true);
+            break;
+        case LedErrorPattern::WS_RECONNECTING:
+            // Preserve current LED state — spinner overlays on first manageLedError() tick.
             break;
     }
 }
@@ -112,6 +117,35 @@ inline void manageLedError() {
                 // Keep color red; only intensity changes.
                 setLedColor(255, 0, 0, false);
                 setLedIntensity(intensity);
+                g_ledErrorLastStep = now;
+            }
+            break;
+        }
+        case LedErrorPattern::WS_RECONNECTING: {
+            // Delta-update: only 2 pixels touched per tick.
+            //   1. Restore the previous pixel to the background colour.
+            //   2. Advance the white pixel to the next position.
+            // This avoids rewriting the full 23-pixel buffer (no applyLedColorToBuffer
+            // call) so the rest of the ring — including any team colour set via LED_SET
+            // or the gray-rotation state — is left intact between ticks.
+            // Speed: 100 ms per step → ~2.3 s per full revolution (23 LEDs).
+            // loop() may be blocked up to 10 s inside connectWebSocket() — the boucle
+            // wait loop there calls manageLedError() each 100 ms so the spinner remains
+            // animated even while the main loop is suspended.
+            // White is used so the spinner is visible on any background colour.
+            if (now - g_ledErrorLastStep >= 100) {
+                // Restore previous pixel to current background
+                const uint8_t prevPos = g_ledErrorStepIdx;
+                const uint8_t adj_r = (uint8_t)((currentRed   * currentIntensity) / 255);
+                const uint8_t adj_g = (uint8_t)((currentGreen * currentIntensity) / 255);
+                const uint8_t adj_b = (uint8_t)((currentBlue  * currentIntensity) / 255);
+                strip_sk98.setPixelColor(prevPos, adj_r, adj_g, adj_b);
+
+                // Advance white pixel
+                g_ledErrorStepIdx = (g_ledErrorStepIdx + 1) % NUMPIXELS;
+                strip_sk98.setPixelColor(g_ledErrorStepIdx, 255, 255, 255);
+
+                showPixels();
                 g_ledErrorLastStep = now;
             }
             break;

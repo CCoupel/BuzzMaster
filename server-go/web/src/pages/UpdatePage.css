@@ -131,6 +131,11 @@
     color: white;
 }
 
+.badge-downloaded {
+    background: #27ae60;
+    color: white;
+}
+
 .release-link {
     color: var(--primary-500);
     text-decoration: none;

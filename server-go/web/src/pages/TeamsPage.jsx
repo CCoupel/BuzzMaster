@@ -358,6 +358,9 @@ export default function TeamsPage() {
                                       </span>
                                     )
                                   )}
+                                  {bumper.CONNECTED === false && !bumper.IS_VIRTUAL && !bumper.IS_VPLAYER && (
+                                    <span style={{display:'inline-flex',alignItems:'center',justifyContent:'center',width:'18px',height:'18px',borderRadius:'50%',background:'#f59e0b',flexShrink:0,boxShadow:'0 1px 4px rgba(245,158,11,0.5)'}} title="Buzzer déconnecté"><svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="1" y1="1" x2="23" y2="23"/><path d="M16.72 11.06A10.94 10.94 0 0 1 19 12.55"/><path d="M5 12.55a10.94 10.94 0 0 1 5.17-2.39"/><path d="M10.71 5.05A16 16 0 0 1 22.56 9"/><path d="M1.42 9a15.91 15.91 0 0 1 4.7-2.88"/><path d="M8.53 16.11a6 6 0 0 1 6.95 0"/><line x1="12" y1="20" x2="12.01" y2="20"/></svg></span>
+                                  )}
                                   <span className="drag-handle">⋮⋮</span>
                                 </div>
                               )
@@ -457,6 +460,9 @@ export default function TeamsPage() {
                       )}
                       {bumper.READY === 'TRUE' && (
                         <span className="ready-badge">PRET</span>
+                      )}
+                      {bumper.CONNECTED === false && !bumper.IS_VIRTUAL && !bumper.IS_VPLAYER && (
+                        <span style={{display:'inline-flex',alignItems:'center',justifyContent:'center',width:'18px',height:'18px',borderRadius:'50%',background:'#f59e0b',flexShrink:0,boxShadow:'0 1px 4px rgba(245,158,11,0.5)'}} title="Buzzer déconnecté"><svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="1" y1="1" x2="23" y2="23"/><path d="M16.72 11.06A10.94 10.94 0 0 1 19 12.55"/><path d="M5 12.55a10.94 10.94 0 0 1 5.17-2.39"/><path d="M10.71 5.05A16 16 0 0 1 22.56 9"/><path d="M1.42 9a15.91 15.91 0 0 1 4.7-2.88"/><path d="M8.53 16.11a6 6 0 0 1 6.95 0"/><line x1="12" y1="20" x2="12.01" y2="20"/></svg></span>
                       )}
                       <button
                         className="bumper-delete-btn"

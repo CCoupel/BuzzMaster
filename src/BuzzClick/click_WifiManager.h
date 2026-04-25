@@ -51,14 +51,31 @@ bool tryConnectToServer(const String& ip, uint16_t port) {
 void WiFiGotIP(WiFiEvent_t event, WiFiEventInfo_t info){
     ESP_LOGI(WIFI_TAG, "Adresse IP obtenue %s", WiFi.localIP().toString());
 
-    // WiFi link restored — any pending WIFI_FAILED error pattern is no longer
-    // relevant. Clear it so the boot phase LED (set just below) is visible.
+    // WiFi link restored — any pending WIFI_FAILED error pattern is no longer relevant.
     clearLedError();
 
     resetGame();
     yield();
 
-    // === BOOT PHASE 3: ORANGE 1/4 - WiFi connected ===
+#ifdef USE_WEBSOCKET
+    // WiFi reconnect (not initial boot): wsServerIP already known from a prior
+    // connectWebSocket() call.  Skip the full boot/discovery sequence — it would
+    // show boot-phase LEDs (ORANGE 1/4, ORANGE 2/4) inappropriately.
+    // checkWebSocketConnection() in loop() will retry wsServerIP with isReconnect=true
+    // and display the WS_RECONNECTING spinner throughout.
+    if (!wsServerIP.isEmpty()) {
+        ESP_LOGI(WIFI_TAG, "WiFi reconnected — resuming WS reconnect for %s:%d (boot phases skipped)",
+                 wsServerIP.c_str(), (int)wsServerPort);
+        setLedError(LedErrorPattern::WS_RECONNECTING);
+        // Reset reconnect state machine: cancel any UDP wait, trigger immediate attempt.
+        wsWaitingForBroadcast = false;
+        wsDisconnectedImmediate = true;
+        stopBroadcastListener();
+        return;
+    }
+#endif
+
+    // === BOOT PHASE 3: ORANGE 1/4 - WiFi connected (first boot only) ===
     setLedColor(255, 165, 0, true, 0, 4);
     ESP_LOGI(WIFI_TAG, "Boot phase: ORANGE 1/4 (WiFi connected)");
     delay(500);

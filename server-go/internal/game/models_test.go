@@ -281,6 +281,63 @@ func TestFullGameState_ToJSON(t *testing.T) {
 	}
 }
 
+// TestBumperConnectedField_DefaultFalse verifies that the CONNECTED field is always
+// serialized in JSON — including when false — because the frontend relies on it to
+// display a disconnection badge.  The field must NOT have omitempty.
+func TestBumperConnectedField_DefaultFalse(t *testing.T) {
+	bumper := &Bumper{
+		Name: "TestBuzzer",
+		Team: "red",
+	}
+	// zero value must be false
+	if bumper.Connected {
+		t.Fatal("Connected zero value should be false")
+	}
+
+	data, err := json.Marshal(bumper)
+	if err != nil {
+		t.Fatalf("Marshal failed: %v", err)
+	}
+
+	var decoded map[string]interface{}
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		t.Fatalf("Unmarshal failed: %v", err)
+	}
+
+	// CONNECTED must be present even when false (no omitempty)
+	v, ok := decoded["CONNECTED"]
+	if !ok {
+		t.Fatal("CONNECTED field must be present in JSON even when false (no omitempty)")
+	}
+	if v.(bool) != false {
+		t.Errorf("CONNECTED should be false, got %v", v)
+	}
+}
+
+// TestBumperConnectedField_TrueIsSerialized verifies that CONNECTED=true is also
+// correctly serialized and deserialized.
+func TestBumperConnectedField_TrueIsSerialized(t *testing.T) {
+	bumper := &Bumper{
+		Name:      "TestBuzzer",
+		Team:      "red",
+		Connected: true,
+	}
+
+	data, err := json.Marshal(bumper)
+	if err != nil {
+		t.Fatalf("Marshal failed: %v", err)
+	}
+
+	var decoded Bumper
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		t.Fatalf("Unmarshal failed: %v", err)
+	}
+
+	if !decoded.Connected {
+		t.Error("CONNECTED should round-trip as true")
+	}
+}
+
 func TestTeam_OmitEmpty(t *testing.T) {
 	team := &Team{
 		Name:  "Team Red",

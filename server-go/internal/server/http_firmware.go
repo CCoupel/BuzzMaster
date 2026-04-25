@@ -305,7 +305,7 @@ func (h *HTTPServer) handleAPIBuzzerUpdate(mac string, w http.ResponseWriter, r 
 	}
 
 	// Get firmware info
-	version, _, size, exists := h.firmwareManager.GetInfo()
+	version, _, _, exists := h.firmwareManager.GetInfo()
 	if !exists {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]interface{}{
@@ -314,6 +314,17 @@ func (h *HTTPServer) handleAPIBuzzerUpdate(mac string, w http.ResponseWriter, r 
 		})
 		return
 	}
+
+	// Advertise the app-only size (what the buzzer actually downloads from /latest.bin).
+	// When storage holds a merged binary, GetInfo() returns the merged size (~1MB),
+	// but the server only serves the app portion (~500KB) — broadcasting the merged
+	// size would make the buzzer expect more bytes than it receives and abort the OTA.
+	appData, err := h.firmwareManager.GetAppFirmware()
+	if err != nil {
+		http.Error(w, "Failed to read firmware: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	size := int64(len(appData))
 
 	// Build OTA payload with firmware URL.
 	// URL is included for backward compatibility: firmware < 3.1.2 reads the URL from the message.
@@ -355,7 +366,7 @@ func (h *HTTPServer) handleAPIBuzzerUpdateAll(w http.ResponseWriter, r *http.Req
 	}
 
 	// Get firmware info
-	version, _, size, exists := h.firmwareManager.GetInfo()
+	version, _, _, exists := h.firmwareManager.GetInfo()
 	if !exists {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]interface{}{
@@ -364,6 +375,14 @@ func (h *HTTPServer) handleAPIBuzzerUpdateAll(w http.ResponseWriter, r *http.Req
 		})
 		return
 	}
+
+	// Advertise the app-only size (same rationale as handleAPIBuzzerUpdate).
+	appData, err := h.firmwareManager.GetAppFirmware()
+	if err != nil {
+		http.Error(w, "Failed to read firmware: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	size := int64(len(appData))
 
 	// Build OTA payload with firmware URL (backward compat with firmware < 3.1.2).
 	firmwareURL := buildFirmwareURL()

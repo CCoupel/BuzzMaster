@@ -60,7 +60,7 @@ func NewHTTPServer(port int, engine *game.Engine, wsHub *WebSocketHub, buzzerHub
 		webDir:          cfg.Storage.DataDir,
 		reactDir:        "", // Will be set if React build exists
 		mux:             http.NewServeMux(),
-		updater:         NewUpdater(cfg.Version),
+		updater:         NewUpdater(cfg.Version, cfg.Storage.DataDir),
 		firmwareManager: NewFirmwareManager(cfg.Storage.DataDir, cfg.Version),
 	}
 }

@@ -3,6 +3,152 @@
 Historique des versions du projet BuzzControl.
 
 
+## [3.6.9] - 2026-04-25
+
+### Fixed
+- **[Backend]**: Les équipes vides (sans buzzer assigné) ne bloquent plus le passage en READY/START
+  - `AreAllTeamsReady()` ignorait toutes les équipes sans exception — une équipe sans buzzer (`Ready=false` permanent) empêchait le `START` même si toutes les équipes actives étaient prêtes
+  - Refactoring : nouveau helper privé `getActiveTeams()` — retourne uniquement les équipes ayant ≥1 buzzer assigné
+  - `AreAllTeamsReady()`, `updateTeamsReady()` et l'auto-init Memory utilisent désormais `getActiveTeams()` — cohérence avec le filtre d'affichage frontend (`buzzers.length > 0`)
+  - Test de non-régression : `TestEngine_AreAllTeamsReady_EmptyTeamsIgnored`
+
+---
+
+## [3.6.8] - 2026-04-25
+
+### Fixed
+- **[Backend]**: Détection déconnexion WebSocket réduite à ≤ 5 s (buzzers physiques et clients admin)
+  - `pingPeriod` : 30 s → 3 s ; `ReadDeadline` (pongWait) : 25 s / 60 s → 5 s ; `WriteDeadline` : 10 s → 3 s
+  - Les buzzers qui perdent la connexion sans TCP FIN (coupure alimentation, chute WiFi) sont détectés en ≤ 5 s
+  - Formule : pongWait (5 s) > pingPeriod (3 s) garantit un ping envoyé avant l'expiration — aucun faux positif
+  - Appliqué sur `websocket_buzzer.go` (buzzers physiques) et `websocket.go` (clients admin/TV)
+- **[Backend]**: Reconnexion rapide (< 5 s) transparente — aucun flash de badge
+  - Race condition : si un buzzer reconnectait avant que le serveur détecte la déconnexion de l'ancienne connexion, le callback `OnBuzzerDisconnected` de la connexion zombie posait `CONNECTED=false` après la reconnexion
+  - Fix : `OnBuzzerDisconnected` vérifie `IsClientConnected(mac)` avant d'agir — ignore le timeout de la connexion zombie si une nouvelle connexion active existe pour ce MAC
+- **[Frontend]**: Badge déconnexion buzzer en style inline (cercle jaune + icône wifi-off SVG)
+  - Remplacement de la classe CSS `.buzzer-disconnected-badge` par des styles React inline (`background:#f59e0b`, `stroke:white`) pour garantir le rendu indépendamment du chargement CSS
+  - Appliqué sur `TeamCard.jsx` et `TeamsPage.jsx` (2 emplacements : buzzers assignés + non assignés)
+- **[Frontend]**: Badge ⚠ buzzer déconnecté étendu à la page Équipes (`TeamsPage.jsx`)
+  - Affiché dans les rows membres (draggable) et dans la section buzzers non assignés
+  - Condition stricte identique à TeamCard : `CONNECTED === false && !IS_VIRTUAL && !IS_VPLAYER`
+  - 7 tests Vitest/RTL ajoutés dans `TeamsPage.test.jsx` (dont cas buzzer firmware pre-v3.6.6 sans champ CONNECTED)
+
+---
+
+## [3.6.7] - 2026-04-23
+
+### Fixed
+- **[Backend]**: Champ `CONNECTED` persisté sur disque — buzzers affichés comme connectés après redémarrage serveur (fixes #48)
+  - `CONNECTED=true` était sérialisé dans le JSON de persistance et rechargé au démarrage — les buzzers apparaissaient connectés sur TeamCard même sans connexion physique active
+  - Fix : au démarrage du moteur (`NewEngine`), tous les bumpers chargés depuis le disque ont leur champ `CONNECTED` explicitement réinitialisé à `false` avant d'accepter des connexions
+  - Test de non-régression : `TestEngine_StartupConnectedReset`
+
+---
+
+## [3.6.6] - 2026-04-23
+
+### Added
+- **[Backend + Frontend]**: Indicateur de déconnexion buzzer en temps réel — badge ⚠ sur TeamCard (fixes #48)
+  - Nouveau champ `CONNECTED bool` dans le modèle `Bumper` (sans `omitempty` — `false` toujours sérialisé en JSON)
+  - `handleHello()` : positionne `CONNECTED=true` à la connexion WebSocket
+  - `OnBuzzerDisconnected` callback dans `BuzzerWebSocketHub` : positionne `CONNECTED=false` à la déconnexion et broadcast `UPDATE`
+  - `UpdateBumper()` dans le moteur : gère le cas `CONNECTED` pour propager la mise à jour d'état
+  - Frontend `TeamCard.jsx` : badge ⚠ jaune inline dans la row du buzzer déconnecté (conditions strictes : `!isVPlayer && !isVirtual && connected === false`)
+  - Tests de non-régression : `TestEngine_UpdateBumper_Connected`
+  - Au redémarrage serveur : tous les buzzers chargés depuis le disque ont `CONNECTED=false` → badge ⚠ affiché jusqu'à réception du HELLO (fix introduit en v3.6.7)
+- **[Backend]**: Mode haute-fréquence UDP broadcaster quand un buzzer est déconnecté (fixes #64)
+  - `SetHighFrequency()` dans `BroadcasterManager` : active un intervalle de 500 ms (vs 5 s normal) pour accélérer la redécouverte serveur par le buzzer déconnecté
+  - Priorité des intervalles : enrollment (1 s) > haute-fréquence (500 ms) > normal (5 s)
+  - `updateBroadcasterFrequency()` dans `main.go` : orchestre le passage en haute-fréquence si au moins un buzzer physique est déconnecté, retour au mode normal quand tous sont reconnectés
+  - Appelé aux points clés : `handleHello()`, `OnBuzzerDisconnected`, `handleDeleteBumper()`, `handleFullUpdate()`, démarrage serveur
+
+---
+
+## [3.6.4] - 2026-04-23
+
+### Fixed
+- **[Firmware BuzzClick]**: Spinner `WS_RECONNECTING` gelé pendant le teardown WebSocket (`ws_safe_destroy`)
+  - `ws_safe_destroy()` bloquait jusqu'à 700 ms (close timeout 500 ms + delay 200 ms) — le spinner était figé pendant toute la durée du teardown
+  - Fix : close timeout réduit à 0 ms (non-bloquant, fire-and-forget — le pair peut être injoignable), delay réduit à 50 ms, appel `manageLedError()` avant le delay pour maintenir l'animation pendant le teardown
+- **[Firmware BuzzClick]**: Spinner `WS_RECONNECTING` gelé ~4 s pendant `esp_websocket_client_stop()` (suite)
+  - Cause racine : `stop()` bloque jusqu'à l'arrêt complet de la tâche réseau interne du SDK (~4 s quand le serveur est injoignable) — `manageLedError()` ne tourne plus pendant ce temps
+  - Fix : `stop()` + `destroy()` déchargés sur une tâche FreeRTOS temporaire (`ws_destroy_task`, 4 KB stack, priorité 5) ; `loop()` entre dans une boucle 100 ms tick — `manageLedError()` + `esp_task_wdt_reset()` — jusqu'à completion ; `wsGeneration` incrémenté et `wsClient=NULL` avant le spawn pour invalider tout callback stale
+  - `network_timeout_ms` revert : champ inexistant dans cette version du SDK ESP32-C3 (seul `pingpong_timeout_sec` est disponible) — le freeze est désormais résolu côté tâche FreeRTOS, sans modifier les timeouts SDK
+- **[Firmware BuzzClick]**: Patterns LED `manageLedBlink()` et `updateGrayRotation()` non isolés pendant OTA
+  - Ces fonctions appelées dans `loop()` pouvaient écraser le blue-blink OTA ou le pattern `OTA_ERROR` malgré le guard `otaInProgress` déjà en place sur `LED_SET`
+  - Fix : guard `if (otaInProgress) return;` ajouté dans `updateGrayRotation()` et `manageLedBlink()` — isolation OTA LED complète (fixes #62 suite)
+- **[Firmware BuzzClick]**: `volatile` manquant sur `otaInProgress` — conflit de déclaration `extern`
+  - `otaInProgress` était défini sans `volatile` dans `click_otaManager.h` mais l'`extern` dans `click_serverConnection.h` attendait `volatile bool` → erreur de compilation (conflicting-declaration)
+  - Fix : `volatile bool otaInProgress` dans les deux fichiers, aligné sur la convention `wsConnected/wsConnecting/wsGeneration`
+- **[Firmware BuzzClick]**: Reconnexion WebSocket avec intervalle fixe 10 s après déconnexion
+  - `checkWebSocketConnection()` attendait systématiquement 10 s entre chaque tentative — l'utilisateur voyait le spinner tourner pendant 10 s sans tentative de reconnexion
+  - Fix — machine à 3 états :
+    - **IMMEDIATE** (`wsDisconnectedImmediate=true`) : tente une reconnexion dès le prochain tick `loop()` après `DISCONNECTED`/`ERROR`
+    - **WAIT_UDP** (`wsWaitingForBroadcast=true`) : si la tentative immédiate échoue, attend un heartbeat UDP du broadcaster serveur ; essaie chaque IP reçue dans l'ordre
+    - **IDLE** : `wsConnected=true`, les deux flags sont à `false`
+  - `WiFiGotIP()` (reconnect après coupure WiFi) reset `wsWaitingForBroadcast=false` + `wsDisconnectedImmediate=true` pour re-entrer en état IMMEDIATE
+
+---
+
+## [3.6.3] - 2026-04-22
+
+### Fixed
+- **[Firmware BuzzClick]**: Race condition au boot — `esp_websocket_client_start()` retournait ESP_FAIL (-1) sur l'ESP32-C3 (fixes #59)
+  - Deux tâches FreeRTOS concurrentes (`WiFiGotIP` event task et `loop()`) pouvaient appeler `connectWebSocket` ou `checkWebSocketConnection` simultanément, provoquant un double `start()` sur le même handle
+  - Ajout du flag `volatile bool wsConnecting` : positionné à `true` à l'entrée de `connectWebSocket()`, remis à `false` sur toutes les branches de sortie
+  - `checkWebSocketConnection()` retourne immédiatement si `wsConnecting == true`
+- **[Firmware BuzzClick]**: Reconnexion WebSocket bloquée après timeout (fixes #42)
+  - Après un timeout, `wsClient` était mis à `NULL` par `ws_safe_destroy()` — `checkWebSocketConnection()` ne relançait plus jamais de tentative (condition `wsClient != NULL`)
+  - La condition est remplacée par `!wsServerIP.isEmpty()` : reconnexion infinie tant que le serveur est connu
+- **[Firmware BuzzClick]**: Régressions LED team color et spinner WS_RECONNECTING invisible causées par réécriture complète du buffer (commit 8ea9614)
+  - La réécriture complète écrasait la couleur d'équipe posée par `LED_SET` à chaque tick du spinner
+  - Corrigé par delta-update : seuls 2 pixels modifiés par tick via `applyLedColorToBuffer()` — fond de couleur intégralement préservé
+- **[Firmware BuzzClick]**: Spinner WS_RECONNECTING gelé pendant la boucle de reconnexion
+  - `manageLedError()` n'était appelé que dans `loop()`, mais `connectWebSocket()` peut bloquer jusqu'à 10 s
+  - `manageLedError()` est désormais appelé dans la boucle d'attente interne de `connectWebSocket()` — animation maintenue pendant toute la tentative
+- **[Firmware BuzzClick]**: Thread-safety FreeRTOS — variables LED cross-task déclarées `volatile`
+  - Variables `currentRed`, `currentGreen`, `currentBlue`, `currentIntensity`, `g_ledErrorStepIdx`, `g_ledErrorLastStep` rendues `volatile` pour garantir la cohérence entre les tâches FreeRTOS (event task + `loop()`)
+- **[Firmware BuzzClick]**: Replay des phases boot LED sur reconnexion WiFi (ORANGE 1/4 et 2/4)
+  - `WiFiGotIP()` rejouait les phases LED de boot si `wsServerIP` était déjà connu (reconnexion après coupure WiFi)
+  - Ajout d'un early return dans `WiFiGotIP()` si `wsServerIP` n'est pas vide — évite l'interruption du spinner WS_RECONNECTING
+- **[Firmware BuzzClick]**: Commandes `LED_SET` serveur appliquées pendant une mise à jour OTA (fixes #62)
+  - Les messages `LED_SET` reçus pendant l'OTA écrasaient les patterns d'avancement — risque d'état LED incohérent
+  - Guard `otaInProgress` ajouté dans le handler `LED_SET` de `parseJSON()` : les messages sont ignorés si une OTA est en cours
+- **[Tests Go]**: Alignement `updater_test.go` avec la signature `NewUpdater(version, dataDir)` (fixes #44)
+  - Les tests appelaient l'ancienne signature sans `dataDir`, provoquant des erreurs de compilation
+  - Tests mis à jour pour passer le répertoire de données en second argument
+
+### Added
+- **[Firmware BuzzClick]**: Indicateur visuel de reconnexion WebSocket non-intrusif (fixes #42)
+  - Nouveau pattern LED `WS_RECONNECTING` : 1 pixel blanc se déplace sur l'anneau (23 LEDs × 100ms = ~2.3s/tour)
+  - Delta-update : seuls 2 pixels modifiés par tick (restauration du pixel précédent au fond + avance du pixel blanc) via `applyLedColorToBuffer()`
+  - Pattern `[bg][WHITE][bg]` — pas de voisins éteints, fond de couleur préservé intégralement
+  - Déclenché immédiatement sur `WEBSOCKET_EVENT_DISCONNECTED` / `WEBSOCKET_EVENT_ERROR` — pas d'étape rouge fixe intermédiaire
+  - La couleur d'équipe ou de réponse reste visible sur toutes les autres LEDs (overlay non-intrusif)
+  - Au retour du serveur : `clearLedError()` + `resendLEDOnReconnect()` restaure l'état complet
+- **[Tests Go]**: Tests de non-régression pour la détection merged binary et le serving OTA (commit 1b067e9)
+  - `IsMergedBinary()` : 7 cas (magic présent/absent, longueurs limites, nil)
+  - `GetAppFirmware()` : identité app-only, extraction merged à 0x10000, erreur merged-too-small
+  - `SaveFirmware()` : merged ≤ 3 MB accepté, rejet au-delà de `FirmwareMaxSize`
+  - `handleAPIFirmwareDownload` : app-only servie intacte, merged sert uniquement l'app ; `Content-Length` annonce la taille app-only pour OTA
+  - Endpoint `merged.bin` : 404 pour app-only, binaire complet pour merged ; flag `IS_MERGED` dans `/api/firmware/buzzclick/version`
+- **[UpdatePage]**: Persistance des téléchargements entre redémarrages (fixes #44)
+  - Les binaires téléchargés sont stockés dans `data/updates/` avec leur numéro de version (ex: `buzzcontrol-v3.6.3-windows-amd64.exe`) au lieu du dossier temp OS
+  - L'API `/api/updates` retourne `downloaded: true` + `local_path` si le binaire est déjà présent localement
+  - Badge "✓ Téléchargé" affiché sur les versions déjà présentes — le bouton "Appliquer" est disponible sans re-téléchargement
+
+---
+
+## [3.6.2] - 2026-04-22
+
+### Fixed
+- **[CI/CD + Firmware]**: Le firmware publié en release et embarqué dans l'exe était app-only, empêchant le flash USB direct via esptool
+  - Le pipeline génère désormais un merged binary (bootloader + partitions + boot_app0 + app) via `esptool merge_bin`
+  - Le serveur auto-détecte le format et extrait l'app-only pour l'OTA (transparent pour les buzzers)
+  - Fix SIZE mismatch dans `OTA_UPDATE` : le serveur annoncait la taille du merged mais servait l'app-only, causant un abandon OTA firmware-side
+
+---
+
 ## [3.6.1] - 2026-04-22
 
 ### Fixed
@@ -12,6 +158,7 @@ Historique des versions du projet BuzzControl.
   - Chaîne de fallback : port de la connexion active → `server_tcp_port` NVS → URL du message `OTA_UPDATE` (rétrocompatibilité)
 
 ---
+
 
 ## [3.6.0] - 2026-04-21
 
@@ -33,6 +180,7 @@ Historique des versions du projet BuzzControl.
   - WebSocket timeout définitif → rouge pulsant lent
   - OTA erreur → rouge + flash blanc
   - Nouveau module `click_ledErrorPatterns.h` — state machine non-bloquante
+
 
 ### Changed
 - **[Firmware BuzzClick]**: `CORE_DEBUG_LEVEL` passé de 4 (DEBUG) à 3 (INFO) — les logs mémoire WATCHDOG ne sont plus compilés en production, réduisant l'overhead (fixes #46)

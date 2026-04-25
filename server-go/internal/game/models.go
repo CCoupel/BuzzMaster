@@ -75,6 +75,8 @@ type Bumper struct {
 	IsOutdated      bool   `json:"IS_OUTDATED,omitempty"`      // True if firmware is older than server-stored firmware
 	OTAStatus       string `json:"OTA_STATUS,omitempty"`       // OTA status: "", "downloading", "flashing", "done", "error"
 	OTAPercent      int    `json:"OTA_PERCENT,omitempty"`      // OTA progress percentage (0-100)
+	// Connection status (added in v3.6.5) — NO omitempty: false is a meaningful value for the frontend
+	Connected bool `json:"CONNECTED"` // true if buzzer is currently connected via WebSocket
 }
 
 // BuzzState represents the buzz state of a buzzer relative to the current round.

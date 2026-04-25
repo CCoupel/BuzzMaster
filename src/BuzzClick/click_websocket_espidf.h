@@ -7,6 +7,7 @@
 #include "Common/CustomLogger.h"
 #include "Common/led.h"
 #include "click_ledErrorPatterns.h"
+#include "click_broadcaster.h"
 #include "esp_task_wdt.h"
 #include "esp_websocket_client.h"
 
@@ -23,6 +24,18 @@ volatile bool wsConnected = false;
 // a previously destroyed client are discarded even if a new client has
 // been created in the meantime (wsClient would otherwise look "valid").
 volatile uint32_t wsGeneration = 0;
+// Set true while connectWebSocket() is executing to prevent the main-loop
+// checkWebSocketConnection() from triggering a concurrent reconnect.
+// Race condition: loop() task and WiFi event task run concurrently on ESP32.
+// Without this guard, checkWebSocketConnection() sees !wsConnected && wsClient!=NULL
+// during init and calls esp_websocket_client_start() on an already-started handle.
+volatile bool wsConnecting = false;
+// Reconnect state machine for checkWebSocketConnection():
+//   wsDisconnectedImmediate=true  → attempt reconnect on next loop() tick (no interval)
+//   wsWaitingForBroadcast=true    → immediate reconnect failed; wait for UDP heartbeat
+// Both flags are cleared when wsConnected goes true again.
+volatile bool wsDisconnectedImmediate = false;
+volatile bool wsWaitingForBroadcast = false;
 String wsServerIP = "";
 uint16_t wsServerPort = 80;
 
@@ -145,9 +158,11 @@ static void ws_event_handler(void *handler_args, esp_event_base_t base, int32_t 
         case WEBSOCKET_EVENT_DISCONNECTED:
             ESP_LOGW(WS_TAG, "WebSocket DISCONNECTED!");
             wsConnected = false;
+            wsDisconnectedImmediate = true;
+            wsWaitingForBroadcast = false;
 
-            // Red blinking 4 Hz = WS disconnected / reconnect in progress (issue #49).
-            setLedError(LedErrorPattern::WS_DISCONNECTED);
+            // Spinner overlay on current game colour — immediate, non-intrusive.
+            setLedError(LedErrorPattern::WS_RECONNECTING);
             break;
 
         case WEBSOCKET_EVENT_DATA:
@@ -184,8 +199,9 @@ static void ws_event_handler(void *handler_args, esp_event_base_t base, int32_t 
         case WEBSOCKET_EVENT_ERROR:
             ESP_LOGE(WS_TAG, "WebSocket ERROR!");
             wsConnected = false;
-            // Red blinking 4 Hz = WS error, reconnect cycle expected (issue #49).
-            setLedError(LedErrorPattern::WS_DISCONNECTED);
+            wsDisconnectedImmediate = true;
+            wsWaitingForBroadcast = false;
+            setLedError(LedErrorPattern::WS_RECONNECTING);
             break;
 
         default:
@@ -209,6 +225,28 @@ static void ws_event_handler(void *handler_args, esp_event_base_t base, int32_t 
 // Fix: generation counter invalidates stale events from any previous client,
 // regardless of wsClient pointer state. Plus graceful close (esp_websocket_
 // client_close) waits for the internal task to drain before stop()/destroy().
+// Flag set by ws_destroy_task when stop()+destroy() have completed.
+static volatile bool wsDestroyComplete = false;
+
+// Background FreeRTOS task: performs the blocking stop()+destroy() teardown so
+// the calling task (loop()) can keep animating the spinner via manageLedError().
+// Root cause: esp_websocket_client_stop() blocks until the internal ESP-IDF WS
+// task exits its network poll loop — up to `network_timeout_ms` ms (default 10s,
+// observed ~4s) when the server is unreachable. Running it on a separate task
+// lets loop() continue executing while the TCP stack times out.
+// Safety: generation counter + wsClient=NULL are set BEFORE spawning the task, so
+// the event handler ignores any late callbacks. The destroy task only calls ESP-IDF
+// WS/TCP functions — it never touches the SPI LED bus (no concurrency issue).
+static void ws_destroy_task(void* pvParam) {
+    esp_websocket_client_handle_t handle = (esp_websocket_client_handle_t)pvParam;
+    esp_websocket_client_stop(handle);
+    // Brief drain so FreeRTOS event loop flushes residual dispatches before free.
+    vTaskDelay(pdMS_TO_TICKS(50));
+    esp_websocket_client_destroy(handle);
+    wsDestroyComplete = true;
+    vTaskDelete(NULL);
+}
+
 static void ws_safe_destroy() {
     if (wsClient == NULL) return;
 
@@ -224,26 +262,29 @@ static void ws_safe_destroy() {
     wsConnected = false;
     wsClient = NULL;
 
-    // 3. Graceful close — sends CLOSE frame and waits for the internal task
-    //    to acknowledge. This drains pending events cleanly, unlike stop()
-    //    which may leave events queued in the event loop.
-    esp_websocket_client_close(handle, pdMS_TO_TICKS(500));
+    // 3. Graceful close — sends CLOSE frame. Timeout 0 = non-blocking fire-and-forget;
+    //    we do NOT wait for the ACK since the peer may already be gone.
+    esp_websocket_client_close(handle, pdMS_TO_TICKS(0));
 
-    // 4. Ensure the client task has fully exited.
-    esp_websocket_client_stop(handle);
+    // 4. Offload blocking stop()+destroy() to a background task so loop() can keep
+    //    animating the spinner while the TCP stack drains (avoids 4s freeze).
+    wsDestroyComplete = false;
+    xTaskCreate(ws_destroy_task, "ws_destroy", 4096, (void*)handle, 5, NULL);
 
-    // 5. Let the FreeRTOS event loop drain any residual dispatches before
-    //    we free the handle memory. 200ms is conservative but cheap — this
-    //    path runs only on connection failure, not on the hot path.
-    delay(200);
+    // 5. Animate spinner while background teardown runs (100ms ticks).
+    while (!wsDestroyComplete) {
+        manageLedError();
+        delay(100);
+        esp_task_wdt_reset();
+    }
 
-    // 6. Destroy the handle.
-    esp_websocket_client_destroy(handle);
     ESP_LOGD(WS_TAG, "ws_safe_destroy: client destroyed (gen=%u)", (unsigned)wsGeneration);
 }
 
-// Connect to WebSocket server
-bool connectWebSocket(const String& ip, uint16_t port) {
+// Connect to WebSocket server.
+// isReconnect=true: skip boot-phase LEDs, use WS_RECONNECTING spinner instead.
+bool connectWebSocket(const String& ip, uint16_t port, bool isReconnect = false) {
+    wsConnecting = true;
     if (wsClient != NULL) {
         ws_safe_destroy();
     }
@@ -263,8 +304,8 @@ bool connectWebSocket(const String& ip, uint16_t port) {
     wsClient = esp_websocket_client_init(&ws_cfg);
     if (!wsClient) {
         ESP_LOGE(WS_TAG, "Failed to initialize WebSocket client!");
-        // Red blinking 4 Hz = WS init failure, reconnect pending (issue #49).
-        setLedError(LedErrorPattern::WS_DISCONNECTED);
+        setLedError(isReconnect ? LedErrorPattern::WS_RECONNECTING : LedErrorPattern::WS_DISCONNECTED);
+        wsConnecting = false;
         return false;
     }
 
@@ -281,41 +322,47 @@ bool connectWebSocket(const String& ip, uint16_t port) {
                                   ws_event_handler,
                                   (void *)generationArg);
 
-    // === BOOT PHASE 4: ORANGE 2/4 - WebSocket connecting ===
-    setLedColor(255, 165, 0, true, 0, 2);
-    ESP_LOGI(WS_TAG, "Boot phase: ORANGE 2/4 (WebSocket connecting)");
-    delay(500);
+    if (!isReconnect) {
+        // === BOOT PHASE 4: ORANGE 2/4 - WebSocket connecting ===
+        setLedColor(255, 165, 0, true, 0, 2);
+        ESP_LOGI(WS_TAG, "Boot phase: ORANGE 2/4 (WebSocket connecting)");
+        delay(500);
+    }
 
     // Start WebSocket client
     esp_err_t err = esp_websocket_client_start((esp_websocket_client_handle_t)wsClient);
     if (err != ESP_OK) {
         ESP_LOGE(WS_TAG, "WebSocket client start failed: %d", err);
-        // Red blinking 4 Hz = WS start failure, reconnect pending (issue #49).
-        setLedError(LedErrorPattern::WS_DISCONNECTED);
-        // Release the initialized (but unstarted) handle — otherwise wsClient
-        // stays non-NULL and leaks on the ESP32-C3 heap across retries.
+        setLedError(isReconnect ? LedErrorPattern::WS_RECONNECTING : LedErrorPattern::WS_DISCONNECTED);
         ws_safe_destroy();
+        wsConnecting = false;
         return false;
     }
 
-    // Wait for connection (up to 10 seconds)
+    // Wait for connection (up to 10 seconds).
+    // manageLedError() is called each iteration so the WS_RECONNECTING spinner
+    // keeps animating while loop() is blocked here.
     int attempts = 0;
     while (!wsConnected && attempts < 100) {
         delay(100);
+        manageLedError();
         attempts++;
         esp_task_wdt_reset();
     }
 
     if (!wsConnected) {
         ESP_LOGE(WS_TAG, "WebSocket connection timeout!");
-        // Red pulsing = WS full-window timeout reached (distinct from the
-        // faster blink used for DISCONNECTED events — issue #49).
-        setLedError(LedErrorPattern::WS_TIMEOUT);
-        ws_safe_destroy();  // safe: sets wsClient=NULL before destroy to drain stale events
+        // Reconnect attempts keep the spinner — checkWebSocketConnection() will
+        // retry indefinitely. Boot-time timeout uses the slow pulse (WS_TIMEOUT)
+        // which is distinct but will also clear once the reconnect loop kicks in.
+        setLedError(isReconnect ? LedErrorPattern::WS_RECONNECTING : LedErrorPattern::WS_TIMEOUT);
+        ws_safe_destroy();
+        wsConnecting = false;
         return false;
     }
 
     ESP_LOGI(WS_TAG, "WebSocket connected successfully!");
+    wsConnecting = false;
     return true;
 }
 
@@ -324,23 +371,73 @@ void pollWebSocket() {
     // Nothing to do - ESP-IDF client handles this internally
 }
 
-// Check WebSocket connection and reconnect if needed
+// Check WebSocket connection and reconnect if needed.
+//
+// Reconnect state machine (3 states):
+//   1. IMMEDIATE (wsDisconnectedImmediate=true):
+//      Fires on the loop() tick after a DISCONNECTED/ERROR event.
+//      Attempts one reconnect to the last known server immediately.
+//      → success: clear flags, done.
+//      → failure: enter WAIT_UDP (start UDP broadcast listener).
+//
+//   2. WAIT_UDP (wsWaitingForBroadcast=true):
+//      Waits for a UDP heartbeat from the server broadcaster.
+//      No periodic retry — the spinner keeps running via manageLedError().
+//      → heartbeat arrives: try each IP from heartbeat in order.
+//        success: clear flags, done.
+//        all fail: reset discovery, keep waiting for next heartbeat.
+//
+//   3. IDLE (both flags false, wsConnected=true): nothing to do.
+//
+// WiFiGotIP (reconnect path) resets both flags and sets wsDisconnectedImmediate=true
+// so that a WiFi drop+reconnect also re-enters state 1.
 void checkWebSocketConnection() {
-    static unsigned long lastReconnectAttempt = 0;
-    const unsigned long RECONNECT_INTERVAL = 10000; // 10 seconds
+    if (wsConnecting) return;
 
-    if (!wsConnected && wsClient != NULL) {
-        unsigned long now = millis();
-        if (now - lastReconnectAttempt > RECONNECT_INTERVAL) {
-            ESP_LOGW(WS_TAG, "WebSocket disconnected, attempting reconnect...");
-            lastReconnectAttempt = now;
+    if (wsConnected) {
+        wsDisconnectedImmediate = false;
+        wsWaitingForBroadcast = false;
+        return;
+    }
 
-            ws_safe_destroy();  // safe teardown before reconnect
+    if (wsServerIP.isEmpty()) return;
 
-            if (!wsServerIP.isEmpty()) {
-                connectWebSocket(wsServerIP, wsServerPort);
+    if (wsDisconnectedImmediate) {
+        wsDisconnectedImmediate = false;
+        ESP_LOGW(WS_TAG, "WS disconnected — immediate reconnect attempt to %s:%d",
+                 wsServerIP.c_str(), (int)wsServerPort);
+        setLedError(LedErrorPattern::WS_RECONNECTING);
+        if (wsClient != NULL) ws_safe_destroy();
+        if (connectWebSocket(wsServerIP, wsServerPort, true)) {
+            return;  // reconnected — flags cleared on next call via wsConnected=true
+        }
+        // Immediate attempt failed — fall back to UDP broadcast discovery.
+        ESP_LOGW(WS_TAG, "Immediate reconnect failed — waiting for UDP broadcast");
+        wsWaitingForBroadcast = true;
+        resetBroadcastDiscovery();
+        stopBroadcastListener();
+        startBroadcastListener(CONTROLER_PORT);
+        return;
+    }
+
+    if (wsWaitingForBroadcast) {
+        if (!hasBroadcastDiscovery()) return;  // keep spinner, wait for heartbeat
+        // New server IPs received — try each one.
+        stopBroadcastListener();
+        const BroadcastDiscovery& disc = getBroadcastDiscovery();
+        for (int i = 0; i < disc.ipCount; i++) {
+            ESP_LOGI(WS_TAG, "Broadcast reconnect: trying %s:%d",
+                     disc.ips[i].c_str(), disc.serverPort);
+            if (connectWebSocket(disc.ips[i], disc.serverPort, true)) {
+                wsWaitingForBroadcast = false;
+                return;
             }
         }
+        // All IPs failed — reset discovery and wait for next heartbeat.
+        ESP_LOGW(WS_TAG, "All broadcast IPs failed — waiting for next heartbeat");
+        resetBroadcastDiscovery();
+        startBroadcastListener(CONTROLER_PORT);
+        return;
     }
 }
 

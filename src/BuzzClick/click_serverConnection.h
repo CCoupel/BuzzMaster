@@ -32,6 +32,9 @@ bool isGameStarted = false;
 bool hasTeamAssignment = false;
 bool bootComplete = false;
 
+// Declared in click_otaManager.h; guarded here so LED_SET is ignored during OTA flash.
+extern volatile bool otaInProgress;
+
 // LED state driven by server LED_SET action (v3.4.0)
 // The server sends LED_SET at each relevant game state change; the firmware applies it directly.
 // No local LED state machine — the server is the single source of truth.
@@ -226,6 +229,7 @@ void startGrayRotation() {
 }
 
 void updateGrayRotation() {
+    if (otaInProgress) return;
     if (millis() - lastRotationTime > ROTATION_INTERVAL_MS) {
         // Clear all LEDs
         for (int i = 0; i < NUMPIXELS; i++) {
@@ -271,6 +275,7 @@ void pauseGame() {
 // manageLedBlink — called from loop() to animate the BLINK effect (LED_SET with EFFECT="BLINK").
 // Toggles between 100% and 25% intensity at 400ms interval.
 void manageLedBlink() {
+  if (otaInProgress) return;
   if (!ledBlinking) return;
   const unsigned long BLINK_INTERVAL_MS = 400;
   if (millis() - ledLastBlink >= BLINK_INTERVAL_MS) {
@@ -516,6 +521,7 @@ void parseJSON(const String& data, AsyncClient* c) {
       {
         // Server-driven LED control (v3.4.0).
         // MSG: { "COLOR": [R, G, B], "INTENSITY": 0-255, "EFFECT": "SOLID"|"BLINK"|"DIM" }
+        if (otaInProgress) break;  // OTA controls LEDs directly; ignore server overrides.
         JsonArray colorArr = message["COLOR"].as<JsonArray>();
         int intensity = message["INTENSITY"] | 255;
         const char* effect = message["EFFECT"] | "SOLID";
