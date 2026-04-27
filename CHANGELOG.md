@@ -3,6 +3,51 @@
 Historique des versions du projet BuzzControl.
 
 
+## [3.7.0] - 2026-04-26
+
+### Fixed
+- **[Frontend]**: Filtres catégories dans la barre Équilibre (fixes #57)
+  - Les catégories dans la barre d'équilibre de `GamePage` sont désormais cliquables pour filtrer les questions affichées
+  - Multi-sélection : cumuler plusieurs catégories actives, clic re-sélectionne/désélectionne
+- **[Backend + Firmware]**: Couleurs LEDs buzzers sélectionnées par teinte (hue-based) pour cohérence palette (fixes #61)
+  - Nouveau helper `nearestPaletteColorByHue()` — sélectionne la couleur palette la plus proche par distance de teinte HSL
+  - Évite les mélanges visuellement incohérents sur les buzzers quand la couleur d'équipe est proche de plusieurs entrées palette
+  - Remplace le calcul RGB direct par une approche HSL plus fidèle à la perception humaine
+- **[Firmware BuzzClick]**: Race condition OTA — `performOTA()` déplacé dans tâche FreeRTOS séparée
+  - La fonction OTA bloquait la tâche WebSocket, provoquant une déconnexion à ~20% du téléchargement et un échec silencieux
+  - Fix : `performOTA()` exécuté dans `ota_task` (FreeRTOS, 16 KB stack) — la connexion WebSocket reste active pendant le téléchargement et le flash
+- **[Firmware BuzzClick]**: Stack overflow `websocket_task` — taille augmentée 4096 → 8192 bytes
+  - Stack insuffisant provoquait des crashes aléatoires lors de la réception de messages WebSocket de taille importante
+- **[Firmware BuzzClick]**: VERSION dans `platformio.ini` corrigée de 3.6.6 → 3.7.0
+  - Le firmware était compilé avec un numéro de version incorrect — le badge firmware sur l'interface admin affichait une version erronée après flash
+
+### Added
+- **[Frontend]**: Badge version cliquable dans la Navbar — redirige vers `/admin/updates` (fixes #63)
+  - Le numéro de version affiché dans la navbar est désormais un lien direct vers la page des mises à jour
+  - Permet un accès rapide depuis n'importe quelle page
+- **[Frontend]**: Page d'enrollment VJoueur améliorée — double QR code et barre de progression (fixes #43)
+  - Deux QR codes côte à côte sur la vue TV d'inscription (`/tv` en phase ENROLLMENT) :
+    - **QR code WiFi** : permet aux joueurs de rejoindre le bon réseau avant de s'inscrire
+    - **QR code VJoueur** : URL d'inscription avec port correct (`window.location.host`)
+  - Barre de progression en temps réel : nombre de joueurs inscrits / max visible sur l'affichage TV
+- **[Frontend]**: QR codes TV d'enrollment redessinés pour projection (fixes #51)
+  - Affichage redessiné avec meilleure lisibilité, contraste optimisé pour projection TV grande distance
+- **[Frontend]**: Filtres questions par catégories multi-sélection dans la barre Équilibre (fixes #40)
+  - Sur `GamePage`, la barre d'équilibre des catégories permet de filtrer les questions visibles par catégorie
+  - Indicateur visuel sur les catégories actives (surlignage coloré)
+- **[Backend]**: Noms de fichiers de sauvegarde versionnés avec horodatage (fixes #44)
+  - Les archives téléchargées incluent désormais la version serveur et la date dans leur nom
+  - Format : `buzzcontrol-full-backup-v3.7.0_2026-04-26.tar` (complet) et `buzzcontrol-backup-v3.7.0_2026-04-26.tar` (sélectif)
+  - Facilite la gestion et l'identification temporelle de multiples sauvegardes
+- **[Backend + Firmware]**: Animation COMET lors de l'attribution de points — couleur dynamique (fixes #50)
+  - Nouvelle action serveur `sendLEDSetComet` : envoie `EFFECT: "COMET"` avec champ `COMET_COLOR` calculé dynamiquement
+  - `COMET_COLOR` : serveur choisit or (`[255,215,0]`) ou blanc (`[255,255,255]`) selon le contraste avec la couleur d'équipe (dist² euclidien < 8000 → blanc pour lisibilité)
+  - Firmware : state machine `manageLedComet()` — bande rotative 23 LEDs APA102, 2 tours (~3.3 s), utilise `cometR/G/B` du payload (plus de gold hardcodé)
+  - Déclenchée automatiquement à chaque attribution de points (`TEAM_POINTS`, `BUMPER_POINTS`)
+  - Retour automatique à l'état LED précédent après l'animation
+
+---
+
 ## [3.6.9] - 2026-04-25
 
 ### Fixed

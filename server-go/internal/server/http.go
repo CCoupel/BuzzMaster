@@ -1002,12 +1002,16 @@ func (h *HTTPServer) handleBackupRedirect(w http.ResponseWriter, r *http.Request
 }
 
 func (h *HTTPServer) handleFSBackup(w http.ResponseWriter, r *http.Request) {
-	h.createTARBackup(w, r, h.dataDir, "buzzcontrol-full-backup")
+	cfg := config.Get()
+	prefix := fmt.Sprintf("buzzcontrol-full-backup-v%s", cfg.Version)
+	h.createTARBackup(w, r, h.dataDir, prefix)
 }
 
 func (h *HTTPServer) handleGameBackup(w http.ResponseWriter, r *http.Request) {
 	filesDir := filepath.Join(h.dataDir, "files")
-	h.createTARBackup(w, r, filesDir, "buzzcontrol-game-backup")
+	cfg := config.Get()
+	prefix := fmt.Sprintf("buzzcontrol-game-backup-v%s", cfg.Version)
+	h.createTARBackup(w, r, filesDir, prefix)
 }
 
 // handleBackupSelect creates a selective backup based on query parameters
@@ -1032,8 +1036,9 @@ func (h *HTTPServer) handleBackupSelect(w http.ResponseWriter, r *http.Request) 
 		includeQuestions, includeTeams, includeBumpers, includeHistory, includeBackgrounds)
 
 	// Set headers for TAR download
+	cfg := config.Get()
 	timestamp := time.Now().Format("2006-01-02_15-04-05")
-	filename := fmt.Sprintf("buzzcontrol-backup_%s.tar", timestamp)
+	filename := fmt.Sprintf("buzzcontrol-backup-v%s_%s.tar", cfg.Version, timestamp)
 	w.Header().Set("Content-Type", "application/x-tar")
 	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"", filename))
 

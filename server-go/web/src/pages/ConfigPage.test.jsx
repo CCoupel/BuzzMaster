@@ -11,25 +11,27 @@ vi.mock('../hooks/GameContext', () => ({
     updateConfig: vi.fn(),
     sendMessage: vi.fn(),
     version: '2.49.0',
-    firmwareInfo: null,
+    // IS_MERGED: true requis pour que le bouton "Flash via USB" ne soit pas disabled
+    firmwareInfo: { EXISTS: true, IS_MERGED: true, VERSION: '3.1.1', FILENAME: 'buzzclick-v3.1.1.bin', SIZE: 512000 },
   })
 }))
 
-// Mock framer-motion - cover all motion.* tags used (div, button, span)
-vi.mock('framer-motion', () => {
-  const makeEl = (tag) => ({ children, whileHover, whileTap, ...props }) => {
-    const Tag = tag
-    return <Tag {...props}>{children}</Tag>
-  }
-  return {
-    motion: {
-      div: makeEl('div'),
-      button: makeEl('button'),
-      span: makeEl('span'),
-    },
-    AnimatePresence: ({ children }) => children,
-  }
-})
+// Note: framer-motion is globally aliased via vite.config.js test.alias → src/mocks/framer-motion.jsx
+
+// Mock lightweight UI primitives to reduce JSDOM memory footprint
+vi.mock('../components/Button', () => ({
+  default: ({ children, onClick, disabled, ...rest }) => (
+    <button onClick={onClick} disabled={disabled} {...rest}>{children}</button>
+  ),
+}))
+
+vi.mock('../components/Card', () => ({
+  default: ({ children, className, ...rest }) => (
+    <div className={className} {...rest}>{children}</div>
+  ),
+}))
+
+vi.mock('./ConfigPage.css', () => ({}))
 
 // Mock USBConfigModal to avoid Web Serial API complexity in ConfigPage tests
 vi.mock('../components/USBConfigModal', () => ({

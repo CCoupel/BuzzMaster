@@ -46,7 +46,8 @@ vi.mock('../hooks/useEspFlash', () => ({
 const defaultProps = {
   onClose: vi.fn(),
   wifiConfig: { ssid: 'TestSSID', password: 'testpass', serverIp: '192.168.1.1', serverPort: 80 },
-  firmwareInfo: { EXISTS: true, VERSION: '3.1.1', FILENAME: 'buzzclick-v3.1.1.bin', SIZE: 512000 },
+  // IS_MERGED: true requis pour que le bouton "Flasher via USB" ne soit pas disabled
+  firmwareInfo: { EXISTS: true, IS_MERGED: true, VERSION: '3.1.1', FILENAME: 'buzzclick-v3.1.1.bin', SIZE: 512000 },
 }
 
 function setupNavigatorSerial(ports = []) {

@@ -276,9 +276,14 @@ Le serveur pilote les LEDs des buzzers via une action unique `LED_SET`. Le firmw
 ```json
 // Server → Buzzer (per-buzzer via buzzerHub.SendToClient ou broadcast)
 { "ACTION": "LED_SET", "MSG": { "COLOR": [255, 0, 0], "INTENSITY": 255, "EFFECT": "SOLID" } }
+
+// COMET : champ COMET_COLOR optionnel — couleur de la comète (v3.7.0)
+{ "ACTION": "LED_SET", "MSG": { "COLOR": [255, 0, 0], "INTENSITY": 255, "EFFECT": "COMET", "COMET_COLOR": [255, 215, 0] } }
 ```
 
-Effects : `"SOLID"` (fixe), `"BLINK"` (100%<->25% a 400ms), `"DIM"` (fixe attenue)
+Effects : `"SOLID"` (fixe), `"BLINK"` (100%<->25% a 400ms), `"DIM"` (fixe attenue), `"COMET"` (bande rotative 23 LEDs, 2 tours ~3.3 s — v3.7.0)
+
+**COMET_COLOR** (v3.7.0) : champ optionnel dans `LEDSetPayload` — serveur calcule or `[255,215,0]` ou blanc `[255,255,255]` selon contraste avec la couleur d'équipe (dist² euclidien RGB < 8000 → blanc). Firmware utilise `cometR/G/B` du payload au lieu du gold hardcodé.
 
 **Logique serveur par phase** :
 - `READY`/`START` QCM : couleur reponse SOLID 100% (per-buzzer)
@@ -288,6 +293,8 @@ Effects : `"SOLID"` (fixe), `"BLINK"` (100%<->25% a 400ms), `"DIM"` (fixe attenu
 - `STOP` : couleur equipe SOLID 100% pour tous
 - `REVEALED` QCM : correct=BLINK, wrong-buzzed=SOLID 100%, non-buzze=DIM 25
 - Reconnect HELLO : `resendLEDOnReconnect()` renvoie le dernier etat connu (`bumperLEDState` map)
+- Attribution de points (`TEAM_POINTS`/`BUMPER_POINTS`) : `sendLEDSetComet()` → COMET avec `COMET_COLOR` dynamique sur les buzzers de l'équipe (~3.3 s, 2 tours) (v3.7.0)
+- Sélection couleur LED par teinte : `nearestPaletteColorByHue()` — helper RGB→HSL, distance de teinte HSL pour cohérence palette (v3.7.0)
 
 **Patterns d'erreur LED locaux** (firmware-side, quand le serveur est injoignable) :
 
@@ -302,10 +309,10 @@ Effects : `"SOLID"` (fixe), `"BLINK"` (100%<->25% a 400ms), `"DIM"` (fixe attenu
 `WS_RECONNECTING` : delta-update — seuls 2 pixels modifiés par tick (restauration du pixel précédent au fond + avance du pixel blanc). Pas de réécriture complète du buffer → la couleur d'équipe (LED_SET) et la rotation grise restent intactes. Vitesse : 100 ms/step → ~2.3 s/tour. `manageLedError()` est appelé dans la boucle d'attente de `connectWebSocket()` pour maintenir l'animation pendant que `loop()` est bloqué (jusqu'à 10 s). Un seul `showPixels()` par tick. **Freeze pendant `ws_safe_destroy()` éliminé (v3.6.4)** : `stop()+destroy()` sont déchargés sur une tâche FreeRTOS temporaire (`ws_destroy_task`, 4 KB, prio 5) — `loop()` continue d'animer via `manageLedError()` pendant le teardown.
 
 **Fichiers cles** :
-- `server-go/cmd/server/main.go` : `sendLEDSet`, `broadcastLEDSet`, `resendLEDOnReconnect`, `sendLEDSetAllBuzzers`, `sendLEDSetStop`, `sendLEDSetPause`, `sendLEDSetReveal`
-- `server-go/internal/protocol/messages.go` : `ActionLEDSet`, `LEDSetPayload`
-- `src/BuzzClick/click_serverConnection.h` : handler `LED_SET` dans `parseJSON()`, `manageLedBlink()` (EFFECT=BLINK)
-- `src/BuzzClick/click_MAIN.cpp` : `manageLedBlink()` dans `loop()`
+- `server-go/cmd/server/main.go` : `sendLEDSet`, `broadcastLEDSet`, `resendLEDOnReconnect`, `sendLEDSetAllBuzzers`, `sendLEDSetStop`, `sendLEDSetPause`, `sendLEDSetReveal`, `sendLEDSetComet` (v3.7.0)
+- `server-go/internal/protocol/messages.go` : `ActionLEDSet`, `LEDSetPayload` (champ `CometColor [3]int` — v3.7.0), `nearestPaletteColorByHue()` (v3.7.0)
+- `src/BuzzClick/click_serverConnection.h` : handler `LED_SET` dans `parseJSON()`, `manageLedBlink()` (EFFECT=BLINK), `manageLedComet()` (EFFECT=COMET, v3.7.0)
+- `src/BuzzClick/click_MAIN.cpp` : `manageLedBlink()`, `manageLedComet()` dans `loop()` (v3.7.0)
 - `src/BuzzClick/click_ledErrorPatterns.h` : patterns animés, `manageLedError()` dans `loop()`
 
 ### Contrainte Affichage TV - IMPORTANT
@@ -327,7 +334,7 @@ Toutes les vues TV doivent tenir entièrement à l'écran sans défilement :
 - **OTA Firmware (v3.1.0)** :
   - `internal/server/firmware.go` : FirmwareManager (stockage, versioning, comparaison semver)
   - `internal/server/http_firmware.go` : Handlers OTA (`/api/firmware/*`, `/api/buzzer/*/update`)
-  - `src/BuzzClick/click_otaManager.h` : Module OTA ESP32-C3 (download HTTP + flash partition)
+  - `src/BuzzClick/click_otaManager.h` : Module OTA ESP32-C3 (download HTTP + flash partition) — `performOTA()` exécuté dans `ota_task` FreeRTOS (16 KB stack) depuis v3.7.0 (évite déconnexion WebSocket à ~20% download)
 - **Frontend** :
   - `web/src/pages/GamePage.jsx` : Page admin principale (jeu en cours)
   - `web/src/pages/QuestionsPage.jsx` : Gestion questions + fonds d'ecran
@@ -342,15 +349,16 @@ Toutes les vues TV doivent tenir entièrement à l'écran sans défilement :
   - `web/src/components/USBConfigModal.jsx` : Modale USB unifiee — point d'entree unique pour config WiFi AT et flash firmware (v3.1.2)
   - `web/src/hooks/useWebSerial.js` : Hook Web Serial API pour communication AT
   - `web/src/hooks/useEspFlash.js` : Hook flash firmware via esptool-js (v3.1.0)
+  - `web/src/utils/colorUtils.js` : Helpers couleurs équipes (v3.7.0) — `boostTeamColor(hex)` (RGB→HSL→RGB, saturation/luminosité TV), `nearestPaletteColorByHue()` (sélection palette par distance de teinte HSL)
 - **Firmware BuzzClick** :
   - `src/BuzzClick/click_nvsConfig.h` : Stockage NVS (WiFi, IP serveur, port, ssid2/pass2)
   - `src/BuzzClick/click_usbConfig.h` : Protocole AT sur USB serie
   - `src/BuzzClick/click_WifiManager.h` : Connexion WiFi, boot sequence + fallback chain UDP (v3.2.0)
   - `src/BuzzClick/click_broadcaster.h` : UDP listener AsyncUDP, parser BUZZ_SERVER, etat decouverte (v3.2.0)
-  - `src/BuzzClick/click_websocket_espidf.h` : Client WebSocket ESP-IDF (v3.5.3+, flag USE_WEBSOCKET) — variables `volatile` cross-task (wsClient, wsConnected, wsGeneration, wsConnecting), generation counter pour callbacks stales, `ws_safe_destroy()` + flag `wsConnecting` pour race condition FreeRTOS (v3.6.3) ; `ws_destroy_task` FreeRTOS pour teardown non-bloquant (v3.6.4)
-  - `src/BuzzClick/click_serverConnection.h` : Handlers messages serveur (OTA_UPDATE, WIFI_CONFIG)
-  - `src/BuzzClick/click_otaManager.h` : OTA manager (download + flash, v3.1.0)
-  - `src/BuzzClick/click_MAIN.cpp` : Setup, factory reset, boucle AT
+  - `src/BuzzClick/click_websocket_espidf.h` : Client WebSocket ESP-IDF (v3.5.3+, flag USE_WEBSOCKET) — variables `volatile` cross-task (wsClient, wsConnected, wsGeneration, wsConnecting), generation counter pour callbacks stales, `ws_safe_destroy()` + flag `wsConnecting` pour race condition FreeRTOS (v3.6.3) ; `ws_destroy_task` FreeRTOS pour teardown non-bloquant (v3.6.4) ; `websocket_task` stack 8192 bytes depuis v3.7.0 (était 4096 — stack overflow sur messages larges)
+  - `src/BuzzClick/click_serverConnection.h` : Handlers messages serveur (OTA_UPDATE, WIFI_CONFIG) — `manageLedComet()` (EFFECT=COMET, v3.7.0)
+  - `src/BuzzClick/click_otaManager.h` : OTA manager (download + flash, v3.1.0) — `performOTA()` dans `ota_task` FreeRTOS 16 KB depuis v3.7.0
+  - `src/BuzzClick/click_MAIN.cpp` : Setup, factory reset, boucle AT — `manageLedBlink()`, `manageLedComet()` dans `loop()` (v3.7.0)
 - **Config** : `server-go/config.json`
 
 ### Organisation UI (v2.49.x)

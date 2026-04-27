@@ -1,6 +1,8 @@
 ﻿import { useState, useMemo, useEffect } from 'react'
 // AnimatePresence removed - layout animations handled by motion.div in TeamCard
 import { useGame } from '../hooks/GameContext'
+import { useCategoryFilter } from '../hooks/useCategoryFilter'
+import { getRgbColor } from '../utils/colorUtils'
 import Button from '../components/Button'
 import Card from '../components/Card'
 import Timer from '../components/Timer'
@@ -139,6 +141,9 @@ export default function GamePage() {
       .filter(q => q && q.ID)
       .sort((a, b) => { const orderA = a.ORDER !== undefined ? parseInt(a.ORDER) : parseInt(a.ID); const orderB = b.ORDER !== undefined ? parseInt(b.ORDER) : parseInt(b.ID); return orderA - orderB })
   }, [questions])
+
+  // Category filter (shared hook)
+  const { selectedCategories, availableCategories, filteredQuestions, toggleCategoryFilter, clearCategoryFilters } = useCategoryFilter(sortedQuestions)
 
   // Next unplayed question after current one (for "Question suivante" button)
   const nextUnplayedQuestion = useMemo(() => {
@@ -322,12 +327,6 @@ export default function GamePage() {
         }
       }
     }
-  }
-
-  const getRgbColor = (color) => {
-    if (!color) return 'var(--gray-400)'
-    if (Array.isArray(color)) return `rgb(${color.join(',')})`
-    return color
   }
 
   const isPlaying = gameState.phase === 'STARTED' || gameState.phase === 'PAUSED'
@@ -523,8 +522,39 @@ export default function GamePage() {
       {/* Questions Panel - Left */}
       <div className="questions-panel">
         <h2 className="panel-title">Questions</h2>
+
+        {/* Category filter bar */}
+        {availableCategories.length > 0 && (
+          <div className="category-filter-bar">
+            {availableCategories.map(catKey => {
+              const cat = CATEGORIES[catKey]
+              const isActive = selectedCategories.has(catKey)
+              return (
+                <button
+                  key={catKey}
+                  className={`category-filter-pill${isActive ? ' active' : ''}`}
+                  style={{ '--cat-color': cat.color }}
+                  onClick={() => toggleCategoryFilter(catKey)}
+                  title={cat.label}
+                >
+                  <span className="cat-pill-icon">{cat.icon}</span>
+                </button>
+              )
+            })}
+            {selectedCategories.size > 0 && (
+              <button
+                className="category-filter-reset"
+                onClick={clearCategoryFilters}
+                title="Reinitialiser les filtres"
+              >
+                ×
+              </button>
+            )}
+          </div>
+        )}
+
         <div className="questions-list">
-          {sortedQuestions.map((question) => {
+          {filteredQuestions.map((question) => {
             const isCurrentQuestion = gameState.question?.ID === question.ID
             const isUnplayed = !['STOPPED', 'REVEALED', 'PLAYED'].includes(question.STATUS)
             const dimmed = !isCurrentQuestion && isUnplayed && ['STARTED', 'PAUSED', 'COUNTDOWN', 'ENROLL'].includes(gameState.phase)
@@ -542,6 +572,11 @@ export default function GamePage() {
               </div>
             )
           })}
+          {filteredQuestions.length === 0 && selectedCategories.size > 0 && (
+            <div className="category-filter-empty">
+              Aucune question dans cette categorie.
+            </div>
+          )}
         </div>
       </div>
 

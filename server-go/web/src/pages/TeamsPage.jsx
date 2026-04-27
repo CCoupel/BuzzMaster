@@ -4,6 +4,7 @@ import { useGame } from '../hooks/GameContext'
 import Button from '../components/Button'
 import Card from '../components/Card'
 import { OtaModal } from '../components/TeamCard'
+import { getRgbColor } from '../utils/colorUtils'
 import './TeamsPage.css'
 
 const PRESET_COLORS = [
@@ -186,12 +187,6 @@ export default function TeamsPage() {
     }
     setDragOverTarget(null)
     setDraggedBumper(null)
-  }
-
-  const getRgbColor = (color) => {
-    if (!color) return 'var(--gray-400)'
-    if (Array.isArray(color)) return `rgb(${color.join(',')})`
-    return color
   }
 
   const handleStartEnrollment = () => {

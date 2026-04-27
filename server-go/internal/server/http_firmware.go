@@ -90,8 +90,14 @@ func (h *HTTPServer) handleAPIFirmwareDownload(w http.ResponseWriter, r *http.Re
 		return
 	}
 
+	fwVersion, _, _, _ := h.firmwareManager.GetInfo()
+	downloadName := "buzzclick-latest.bin"
+	if fwVersion != "" && fwVersion != "unknown" {
+		downloadName = fmt.Sprintf("buzzclick-v%s.bin", fwVersion)
+	}
+
 	w.Header().Set("Content-Type", "application/octet-stream")
-	w.Header().Set("Content-Disposition", `attachment; filename="buzzclick-latest.bin"`)
+	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, downloadName))
 	w.Header().Set("Content-Length", fmt.Sprintf("%d", len(appData)))
 	w.Write(appData) //nolint:errcheck
 }
@@ -109,9 +115,13 @@ func (h *HTTPServer) handleAPIFirmwareMergedDownload(w http.ResponseWriter, r *h
 		return
 	}
 
-	_, _, size, _ := h.firmwareManager.GetInfo()
+	fwVersion, _, size, _ := h.firmwareManager.GetInfo()
+	mergedName := "buzzclick-merged.bin"
+	if fwVersion != "" && fwVersion != "unknown" {
+		mergedName = fmt.Sprintf("buzzclick-v%s-merged.bin", fwVersion)
+	}
 	w.Header().Set("Content-Type", "application/octet-stream")
-	w.Header().Set("Content-Disposition", `attachment; filename="buzzclick-merged.bin"`)
+	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, mergedName))
 	w.Header().Set("Content-Length", fmt.Sprintf("%d", size))
 	http.ServeFile(w, r, h.firmwareManager.GetFirmwarePath())
 }

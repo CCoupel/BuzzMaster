@@ -567,43 +567,55 @@ cd server-go/web && npm run build
 > **OBLIGATOIRE avant le backend** si les deux sont modifiés (le backend embarque le frontend).
 
 **2b. Firmware BuzzClick** — si `FIRMWARE_CHANGED=yes` :
+
+WSL exécute les binaires Windows nativement. PlatformIO installé sur Windows est accessible depuis WSL via l'interop :
+
 ```bash
 cd <racine projet>
-pio run -e esp32c3
+
+# Tenter via interop Windows (PlatformIO installé sur Windows)
+pio.exe run -e esp32c3 2>/dev/null || pio run -e esp32c3
+
 # Binaire généré : .pio/build/esp32c3/firmware.bin
-
-# Récupérer la version depuis config.json
-VERSION=$(grep '"version"' server-go/config.json | sed 's/.*"\([0-9.]*\)".*/\1/')
-
-# Copier vers l'asset embarqué (go:embed) avec nom versionné
 cp .pio/build/esp32c3/firmware.bin "server-go/assets/firmware/buzzclick-latest.bin"
 
-echo "✅ Firmware copié vers server-go/assets/firmware/buzzclick-latest.bin"
+# Mettre à jour version.txt
+VERSION=$(grep '"version"' server-go/config.json | sed 's/.*"\([0-9.]*\)".*/\1/')
+echo "$VERSION" > server-go/assets/firmware/version.txt
+
+echo "✅ Firmware v$VERSION copié vers server-go/assets/firmware/buzzclick-latest.bin"
 ```
-> Requiert PlatformIO (`pio`). Si indisponible localement, noter dans le rapport — le backend sera quand même buildé avec l'ancien firmware embarqué (ou sans firmware si absent).
+
+> **OBLIGATOIRE** : ne jamais skipper silencieusement ce step si le firmware a changé. Si `pio.exe` et `pio` échouent tous les deux → bloquer et signaler à l'utilisateur. Le backend embarque le `.bin` via `//go:embed` — un firmware obsolète sera déployé sinon.
 >
-> **Ce step DOIT être exécuté AVANT le build backend** (le backend embarque le `.bin` via `//go:embed`).
+> **Ce step DOIT être exécuté AVANT le build backend.**
 
 **2c. Backend Windows** — si `BACKEND_CHANGED=yes` OU `FRONTEND_CHANGED=yes` OU `FIRMWARE_CHANGED=yes` :
+
 ```bash
-cd server-go && go build -o server.exe ./cmd/server
+cd server-go && GOOS=windows GOARCH=amd64 go build -o server.exe ./cmd/server
 ```
+
+> **Un seul binaire Windows suffit** : WSL exécute nativement les `.exe` Windows via l'interop. `server.exe` peut être lancé directement depuis WSL pour la QA locale ET depuis Windows pour les tests utilisateur.
 
 Cas déclenchants :
 - Frontend changé → le backend embarque les nouveaux assets React
 - Backend changé → code modifié
 - Firmware changé → le backend embarque le nouveau `.bin` (via `assets/firmware/buzzclick-latest.bin`)
 
-> **Ordre obligatoire** : `firmware copy` → `npm run build` → `go build`
+> **Ordre obligatoire** : `firmware copy` → `npm run build` → `go build` (Windows)
 
 ### Phase 3 : Tests post-build et démarrage serveur
 
 ```bash
+# WSL exécute nativement les .exe Windows — lancer server.exe directement depuis WSL
 cd server-go
 ./server.exe &
 sleep 2
 curl http://localhost/version  # Doit correspondre à config.json
 ```
+
+Le même `server.exe` peut aussi être lancé depuis Windows sans étape supplémentaire.
 
 Le serveur DOIT rester actif après le déploiement QUALIF pour les tests manuels.
 
@@ -676,7 +688,7 @@ For PROD deployment, execute these steps IN ORDER:
   {"content": "Builder le firmware si modifié (pio run)", "status": "pending", "activeForm": "Building firmware (if changed)"},
   {"content": "Copier le firmware vers assets/firmware/ si modifié", "status": "pending", "activeForm": "Copying firmware to assets (if changed)"},
   {"content": "Builder le frontend si modifié (npm run build)", "status": "pending", "activeForm": "Building frontend (if changed)"},
-  {"content": "Builder le backend Windows si modifié ou forcé (go build)", "status": "pending", "activeForm": "Building Windows binary (if changed or forced)"},
+  {"content": "Builder le backend Windows si modifié ou forcé (GOOS=windows GOARCH=amd64 go build → server.exe)", "status": "pending", "activeForm": "Building Windows binary (WSL runs .exe natively)"},
   {"content": "Exécuter les tests post-build", "status": "pending", "activeForm": "Running post-build tests"},
   {"content": "Arrêter le serveur actuel", "status": "pending", "activeForm": "Stopping current server"},
   {"content": "Démarrer le nouveau serveur", "status": "pending", "activeForm": "Starting new server"},

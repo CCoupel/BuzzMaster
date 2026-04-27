@@ -43,6 +43,32 @@ static unsigned long ledLastBlink = 0;
 static bool ledBlinkOn = true;
 bool ledSetReceived = false;  // true once the server has sent at least one LED_SET — skips boot LED overrides
 
+// COMET animation state (v3.7.0) — triggered by LED_SET with EFFECT="COMET"
+// Non-blocking state machine: called from loop() via manageLedComet().
+// Visual: dense gold band (~14-15 LEDs) rotates around the 23-LED ring; background shows team colour.
+static const uint8_t COMET_MAX_LAPS = 2;     // 2 full revolutions
+static const unsigned long COMET_STEP_MS = 100; // 100 ms per step
+static volatile bool cometActive    = false;
+static uint8_t cometR        = 255;
+static uint8_t cometG        = 215;
+static uint8_t cometB        = 0;
+static int16_t cometPos      = 0;   // current head position (0..NUMPIXELS-1)
+static uint16_t cometLaps    = 0;   // completed full revolutions
+static unsigned long cometLastTime = 0;
+
+// SPINNER animation state (v3.7.0) — triggered by LED_SET with EFFECT="SPINNER"
+// Non-blocking state machine: called from loop() via manageLedSpinner().
+// Visual: single bright pixel orbiting the 23-LED ring at 100 ms/step (~2.3 s/turn).
+// Delta-update identical to WS_RECONNECTING: only 2 pixels touched per tick.
+// Runs until the next LED_SET cancels it (server-controlled duration).
+#define SPINNER_STEP_MS 100
+static volatile bool spinnerActive = false;
+static uint8_t spinnerR      = 255;
+static uint8_t spinnerG      = 215;
+static uint8_t spinnerB      = 0;
+static int16_t spinnerPos    = 0;   // current pixel position (0..NUMPIXELS-1)
+static unsigned long spinnerLastTime = 0;
+
 // Gray rotation animation state
 static unsigned long lastRotationTime = 0;
 static int currentLedIndex = 0;
@@ -283,6 +309,84 @@ void manageLedBlink() {
     setLedIntensity(ledBlinkOn ? 255 : 64);
     ledLastBlink = millis();
   }
+}
+
+// manageLedComet — called from loop() to animate the COMET band effect.
+// Visual: a dense gold band (14/23 LEDs) rotates around the ring at 100ms/step.
+// Background (9 LEDs) shows team colour. Auto-stops after COMET_MAX_LAPS revolutions.
+void manageLedComet() {
+  if (otaInProgress) return;
+  if (!cometActive)  return;
+
+  const unsigned long now = millis();
+  if (now - cometLastTime < COMET_STEP_MS) return;
+  cometLastTime = now;
+
+  // 23-element pattern: 1 = gold, 0 = team colour
+  // Dense gold centre band with sparse team-colour gaps at edges
+  static const uint8_t kPattern[NUMPIXELS] = {
+    0,1,0,0,1,0,1,0,1,1,1,1,1,1,1,1,1,1,1,0,1,0,0
+  };
+
+  // Compute team background colour at current intensity
+  const uint8_t bg_r = (uint8_t)((currentRed   * currentIntensity) / 255);
+  const uint8_t bg_g = (uint8_t)((currentGreen * currentIntensity) / 255);
+  const uint8_t bg_b = (uint8_t)((currentBlue  * currentIntensity) / 255);
+
+  // Band colour from COMET_COLOR (set by server for contrast, default gold)
+  const uint8_t band_r = (uint8_t)((cometR * currentIntensity) / 255);
+  const uint8_t band_g = (uint8_t)((cometG * currentIntensity) / 255);
+  const uint8_t band_b = (uint8_t)((cometB * currentIntensity) / 255);
+
+  // Paint all 23 LEDs based on rotated pattern
+  for (int i = 0; i < NUMPIXELS; i++) {
+    const uint8_t patIdx = (uint8_t)((i + (int)cometPos) % NUMPIXELS);
+    if (kPattern[patIdx]) {
+      strip_sk98.setPixelColor((int16_t)i, band_r, band_g, band_b);
+    } else {
+      strip_sk98.setPixelColor((int16_t)i, bg_r, bg_g, bg_b);
+    }
+  }
+  showPixels();
+
+  // Advance position
+  cometPos = (uint8_t)((cometPos + 1) % NUMPIXELS);
+
+  // Count completed laps
+  if (cometPos == 0) {
+    cometLaps++;
+    if (cometLaps >= COMET_MAX_LAPS) {
+      cometActive = false;
+      applyLedColor();
+      ESP_LOGI(SRV_TAG, "COMET animation complete (%d laps)", COMET_MAX_LAPS);
+    }
+  }
+}
+
+// manageLedSpinner — called from loop() to animate the SPINNER effect (LED_SET with EFFECT="SPINNER").
+// Non-blocking state machine: each call advances the animation by at most one step.
+// Visual: a single bright pixel orbits the 23-LED ring; background pixels are restored via delta-update.
+// Identical mechanism to WS_RECONNECTING in click_ledErrorPatterns.h but server-color driven.
+// Runs until the next LED_SET from the server sets spinnerActive = false.
+void manageLedSpinner() {
+  if (otaInProgress) return;
+  if (!spinnerActive) return;
+
+  const unsigned long now = millis();
+  if (now - spinnerLastTime < SPINNER_STEP_MS) return;
+
+  // Restore previous pixel to current background colour (adjusted for intensity)
+  const uint8_t adj_r = (uint8_t)((currentRed   * currentIntensity) / 255);
+  const uint8_t adj_g = (uint8_t)((currentGreen * currentIntensity) / 255);
+  const uint8_t adj_b = (uint8_t)((currentBlue  * currentIntensity) / 255);
+  strip_sk98.setPixelColor((int16_t)spinnerPos, adj_r, adj_g, adj_b);
+
+  // Advance and light the next pixel with the spinner colour at full intensity
+  spinnerPos = (spinnerPos + 1) % NUMPIXELS;
+  strip_sk98.setPixelColor((int16_t)spinnerPos, spinnerR, spinnerG, spinnerB);
+
+  showPixels();
+  spinnerLastTime = now;
 }
 
 void handleUpdateAction(JsonObject& message, const String& macAddress) {
@@ -527,12 +631,51 @@ void parseJSON(const String& data, AsyncClient* c) {
         const char* effect = message["EFFECT"] | "SOLID";
         if (colorArr.size() == 3) {
           int r = colorArr[0]; int g = colorArr[1]; int b = colorArr[2];
-          setLedColor(r, g, b);
-          setLedIntensity(intensity);
-          ledBlinking = (strcmp(effect, "BLINK") == 0);
-          if (ledBlinking) { ledBlinkOn = true; ledLastBlink = millis(); }
-          ledSetReceived = true;
-          ESP_LOGI(SRV_TAG, "LED_SET: RGB(%d,%d,%d) intensity=%d effect=%s", r, g, b, intensity, effect);
+          if (strcmp(effect, "COMET") == 0) {
+            // COMET: COLOR = background (team color), COMET_COLOR = band color (gold or white).
+            // COMET_COLOR is chosen by the server for contrast; defaults to gold if absent.
+            setLedColor(r, g, b);
+            setLedIntensity(intensity);
+            JsonArray cometColorArr = message["COMET_COLOR"].as<JsonArray>();
+            if (cometColorArr.size() == 3) {
+              cometR = (uint8_t)(int)cometColorArr[0];
+              cometG = (uint8_t)(int)cometColorArr[1];
+              cometB = (uint8_t)(int)cometColorArr[2];
+            } else {
+              cometR = 255; cometG = 215; cometB = 0;  // default gold
+            }
+            cometPos      = 0;
+            cometLaps     = 0;
+            cometLastTime = millis();
+            cometActive   = true;
+            ledBlinking   = false;
+            spinnerActive = false;  // cancel any running spinner
+            ledSetReceived = true;
+            ESP_LOGI(SRV_TAG, "LED_SET: COMET bg=RGB(%d,%d,%d) band=RGB(%d,%d,%d)", r, g, b, cometR, cometG, cometB);
+          } else if (strcmp(effect, "SPINNER") == 0) {
+            // SPINNER: single bright pixel orbiting the ring at 100 ms/step.
+            // Background colour is preserved (delta-update) — the server controls duration
+            // by sending the next LED_SET to stop it.
+            spinnerR = (uint8_t)r;
+            spinnerG = (uint8_t)g;
+            spinnerB = (uint8_t)b;
+            spinnerPos      = 0;
+            spinnerLastTime = millis();
+            spinnerActive   = true;
+            ledBlinking     = false;  // cancel any running blink
+            cometActive     = false;  // cancel any running comet
+            ledSetReceived  = true;
+            ESP_LOGI(SRV_TAG, "LED_SET: SPINNER RGB(%d,%d,%d)", r, g, b);
+          } else {
+            setLedColor(r, g, b);
+            setLedIntensity(intensity);
+            ledBlinking = (strcmp(effect, "BLINK") == 0);
+            if (ledBlinking) { ledBlinkOn = true; ledLastBlink = millis(); }
+            cometActive   = false;  // cancel any running comet
+            spinnerActive = false;  // cancel any running spinner
+            ledSetReceived = true;
+            ESP_LOGI(SRV_TAG, "LED_SET: RGB(%d,%d,%d) intensity=%d effect=%s", r, g, b, intensity, effect);
+          }
         } else {
           ESP_LOGW(SRV_TAG, "LED_SET: invalid COLOR array (size=%d)", colorArr.size());
         }
@@ -560,10 +703,25 @@ void parseJSON(const String& data, AsyncClient* c) {
             ESP_LOGW(SRV_TAG, "No connected server known, using URL from message: %s", otaUrl.c_str());
         }
         ESP_LOGI(SRV_TAG, "Received OTA_UPDATE: version=%s url=%s", version, otaUrl.c_str());
-        if (strlen(version) > 0) {
-            performOTA(otaUrl, String(version));
-        } else {
+        if (strlen(version) == 0) {
             ESP_LOGW(SRV_TAG, "OTA_UPDATE ignored: missing version");
+        } else if (otaInProgress) {
+            ESP_LOGW(SRV_TAG, "OTA_UPDATE ignored: OTA already in progress");
+        } else {
+            // Launch OTA in a separate FreeRTOS task so the WebSocket event loop
+            // is not blocked — otherwise the server's ReadDeadline (5 s) fires
+            // during download (no pong response possible) and closes the socket,
+            // causing ws_sendRaw(portMAX_DELAY) inside performOTA to deadlock and
+            // the HTTP download to time out (~20 % failure).
+            String* params = new String[2];
+            params[0] = otaUrl;
+            params[1] = String(version);
+            xTaskCreate([](void* p) {
+                String* args = static_cast<String*>(p);
+                performOTA(args[0], args[1]);
+                delete[] args;
+                vTaskDelete(NULL);
+            }, "ota_task", 16384, params, 5, nullptr);
         }
       }
       break;

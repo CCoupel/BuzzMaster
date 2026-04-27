@@ -300,6 +300,7 @@ bool connectWebSocket(const String& ip, uint16_t port, bool isReconnect = false)
     // Configure WebSocket client
     esp_websocket_client_config_t ws_cfg = {};
     ws_cfg.uri = wsUrl.c_str();
+    ws_cfg.task_stack = 8192;  // default 4096 overflows when ota_task sends concurrently
 
     wsClient = esp_websocket_client_init(&ws_cfg);
     if (!wsClient) {

@@ -44,12 +44,14 @@ describe('BackupPage', () => {
     })
 
     it('should render all backup checkboxes', () => {
+      // Les labels "Questions", "Equipes", etc. apparaissent deux fois (backup + reset)
+      // On vérifie leur présence via getAllByLabelText (plusieurs résultats attendus)
       renderBackupPage()
-      expect(screen.getByLabelText('Questions')).toBeInTheDocument()
-      expect(screen.getByLabelText('Equipes')).toBeInTheDocument()
-      expect(screen.getByLabelText('Joueurs')).toBeInTheDocument()
-      expect(screen.getByLabelText('Historique')).toBeInTheDocument()
-      expect(screen.getByLabelText('Fonds')).toBeInTheDocument()
+      expect(screen.getAllByLabelText('Questions').length).toBeGreaterThanOrEqual(1)
+      expect(screen.getAllByLabelText('Equipes').length).toBeGreaterThanOrEqual(1)
+      expect(screen.getAllByLabelText('Joueurs').length).toBeGreaterThanOrEqual(1)
+      expect(screen.getAllByLabelText('Historique').length).toBeGreaterThanOrEqual(1)
+      expect(screen.getAllByLabelText('Fonds').length).toBeGreaterThanOrEqual(1)
     })
 
     it('should render all reset checkboxes', () => {
@@ -124,8 +126,12 @@ describe('BackupPage', () => {
 
   describe('File Input', () => {
     it('should have tar file input for restore', () => {
-      renderBackupPage()
-      const fileInput = screen.getByRole('button', { name: /selectionner un fichier/i }).parentElement.querySelector('input[type="file"]')
+      // "Selectionner un fichier" est un <label> wrappant un <Button as="span"> + <input type="file" hidden>
+      // On recherche l'input file directement via le conteneur de la section restore
+      const { container } = renderBackupPage()
+      const restoreSection = container.querySelector('.restore-section')
+      const fileInput = restoreSection.querySelector('input[type="file"]')
+      expect(fileInput).not.toBeNull()
       expect(fileInput).toHaveAttribute('accept', '.tar')
     })
   })

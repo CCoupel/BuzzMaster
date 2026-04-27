@@ -298,12 +298,23 @@ type FirmwareVersionPayload struct {
 	EmbeddedVersion string `json:"EMBEDDED_VERSION,omitempty"` // Version embedded in server binary (v3.1.1+)
 }
 
+// LED effect constants for LEDSetPayload.Effect.
+const (
+	LEDEffectSolid   = "SOLID"   // Steady color at given intensity
+	LEDEffectBlink   = "BLINK"   // Blinks 100%↔25% at 400 ms
+	LEDEffectDim     = "DIM"     // Steady dimmed color
+	LEDEffectComet   = "COMET"   // Rotating band animation: COLOR=background, COMET_COLOR=band
+	LEDEffectSpinner = "SPINNER" // 1 gold pixel rotating around the ring (firmware-side, ~2 s point-award)
+)
+
 // LEDSetPayload for LED_SET action (server → buzzer: set LED color/intensity/effect).
-// Effect values: "SOLID" (steady), "BLINK" (100%↔25% at 400ms), "DIM" (steady dimmed).
+// Effect values: "SOLID" (steady), "BLINK" (100%↔25% at 400ms), "DIM" (steady dimmed), "SPINNER" (rotating pixel).
+// For COMET: COLOR=background team color, COMET_COLOR=band color (gold or white for contrast).
 type LEDSetPayload struct {
-	Color     [3]int `json:"COLOR"`     // RGB values [0-255]
-	Intensity int    `json:"INTENSITY"` // 0-255 (applied to all pixels)
-	Effect    string `json:"EFFECT"`    // "SOLID", "BLINK", or "DIM"
+	Color      [3]int  `json:"COLOR"`                 // RGB background [0-255]
+	Intensity  int     `json:"INTENSITY"`              // 0-255
+	Effect     string  `json:"EFFECT"`                 // "SOLID", "BLINK", "DIM", "COMET", "SPINNER"
+	CometColor *[3]int `json:"COMET_COLOR,omitempty"`  // COMET band color (nil = firmware default gold)
 }
 
 // WifiConfigPayload for WIFI_CONFIG action (server → buzzer: sync WiFi credentials)

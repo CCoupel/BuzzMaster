@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"math"
 	"net"
 	"os"
 	"os/exec"
@@ -931,6 +932,15 @@ func (a *App) handlePoints(msg *protocol.Message) {
 	server.LogInfo(game.LogComponentEngine, "Points: bumper=%s, +%d, bumperScore=%d, teamScore=%d",
 		payload.BumperID, payload.Points, bumperScore, teamScore)
 
+	// Send COMET LED effect to the team that received points (if points > 0)
+	if payload.Points > 0 {
+		teamID := ""
+		if bumper := a.engine.GetBumper(payload.BumperID); bumper != nil {
+			teamID = bumper.Team
+		}
+		a.sendLEDSetComet(teamID)
+	}
+
 	a.broadcastUpdate()
 }
 
@@ -1233,6 +1243,15 @@ func (a *App) handleBumperPoints(msg *protocol.Message) {
 	server.LogInfo(game.LogComponentEngine, "Bumper points: id=%s, points=%+d, newScore=%d",
 		payload.ID, payload.Points, newScore)
 
+	// Send COMET LED effect to the team that received points (if points > 0)
+	if payload.Points > 0 {
+		teamID := ""
+		if b := a.engine.GetBumper(payload.ID); b != nil {
+			teamID = b.Team
+		}
+		a.sendLEDSetComet(teamID)
+	}
+
 	// Record event to history
 	state := a.engine.GetState()
 	bumper := a.engine.GetBumper(payload.ID)
@@ -1289,6 +1308,11 @@ func (a *App) handleTeamPoints(msg *protocol.Message) {
 	newScore := a.engine.UpdateTeamScore(payload.Team, payload.Points)
 	server.LogInfo(game.LogComponentEngine, "Team points: team=%s, points=%+d, newScore=%d",
 		payload.Team, payload.Points, newScore)
+
+	// Send COMET LED effect to the team that received points (if points > 0)
+	if payload.Points > 0 {
+		a.sendLEDSetComet(payload.Team)
+	}
 
 	// Record event to history
 	state := a.engine.GetState()
@@ -1704,16 +1728,133 @@ func answerColorToRGB(color game.AnswerColor) [3]int {
 	}
 }
 
-// teamColorToRGB returns the RGB color for a bumper's team, or gray [128,128,128] if no team.
+// teamColorPalette maps well-known color names (French and English) to vivid RGB values
+// suitable for physical buzzer LEDs. Used by teamColorToRGB when a team has a ColorName set.
+var teamColorPalette = map[string][3]int{
+	"rouge":  {255, 0, 0},
+	"red":    {255, 0, 0},
+	"vert":   {0, 200, 0},
+	"green":  {0, 200, 0},
+	"bleu":   {0, 0, 255},
+	"blue":   {0, 0, 255},
+	"jaune":  {255, 200, 0},
+	"yellow": {255, 200, 0},
+	"orange": {255, 100, 0},
+	"violet": {180, 0, 255},
+	"purple": {180, 0, 255},
+	"blanc":  {255, 255, 255},
+	"white":  {255, 255, 255},
+	"rose":   {255, 0, 150},
+	"pink":   {255, 0, 150},
+	"cyan":   {0, 200, 200},
+}
+
+// rgbToHue converts an RGB color (0-255 per channel) to a hue angle in degrees [0, 360).
+// Returns -1 for achromatic colors (delta < 0.01).
+func rgbToHue(r, g, b int) float64 {
+	rf := float64(r) / 255.0
+	gf := float64(g) / 255.0
+	bf := float64(b) / 255.0
+	max := math.Max(rf, math.Max(gf, bf))
+	min := math.Min(rf, math.Min(gf, bf))
+	delta := max - min
+	if delta < 0.01 {
+		return -1 // achromatic
+	}
+	var h float64
+	switch max {
+	case rf:
+		h = (gf - bf) / delta
+		if gf < bf {
+			h += 6
+		}
+	case gf:
+		h = (bf-rf)/delta + 2
+	default:
+		h = (rf-gf)/delta + 4
+	}
+	return h * 60
+}
+
+// rgbSaturation returns the HSL saturation (0.0–1.0) for the given RGB.
+func rgbSaturation(r, g, b int) float64 {
+	rf := float64(r) / 255.0
+	gf := float64(g) / 255.0
+	bf := float64(b) / 255.0
+	max := math.Max(rf, math.Max(gf, bf))
+	min := math.Min(rf, math.Min(gf, bf))
+	l := (max + min) / 2
+	if l == 0 || l == 1 {
+		return 0
+	}
+	return (max - min) / (1 - math.Abs(2*l-1))
+}
+
+// nearestPaletteColorByHue returns the teamColorPalette entry whose hue angle is closest
+// to (r,g,b) using circular hue distance. For achromatic inputs (saturation < 0.15)
+// returns white. Hue-based matching is more robust than Euclidean RGB distance for
+// distinguishing orange/red, blue/violet, etc., and prevents two teams with the same
+// raw RGB from mapping to the same palette entry.
+func nearestPaletteColorByHue(r, g, b int) [3]int {
+	if rgbSaturation(r, g, b) < 0.15 {
+		return [3]int{255, 255, 255} // achromatic → white
+	}
+	hue := rgbToHue(r, g, b)
+	if hue < 0 {
+		return [3]int{255, 255, 255}
+	}
+	type entry struct {
+		rgb [3]int
+		hue float64
+	}
+	ordered := []entry{
+		{[3]int{255, 0, 0}, 0},     // rouge
+		{[3]int{255, 100, 0}, 24},  // orange
+		{[3]int{255, 200, 0}, 47},  // jaune
+		{[3]int{0, 200, 0}, 120},   // vert
+		{[3]int{0, 200, 200}, 180}, // cyan
+		{[3]int{0, 0, 255}, 240},   // bleu
+		{[3]int{180, 0, 255}, 276}, // violet
+		{[3]int{255, 0, 150}, 324}, // rose
+	}
+	best := ordered[0].rgb
+	minDist := 361.0
+	for _, e := range ordered {
+		d := math.Abs(hue - e.hue)
+		if d > 180 {
+			d = 360 - d // circular hue distance
+		}
+		if d < minDist {
+			minDist = d
+			best = e.rgb
+		}
+	}
+	return best
+}
+
+// teamColorToRGB returns the LED RGB color for a bumper's team, or gray [128,128,128] if no team.
+// Resolution order:
+//  1. team.ColorName (explicit name set by frontend) → direct palette lookup
+//  2. Hue-based nearest palette color (more robust than Euclidean distance)
 func (a *App) teamColorToRGB(bumper *game.Bumper) [3]int {
 	if bumper.Team == "" {
 		return [3]int{128, 128, 128}
 	}
 	team := a.engine.GetTeam(bumper.Team)
-	if team == nil || len(team.Color) < 3 {
+	if team == nil {
 		return [3]int{128, 128, 128}
 	}
-	return [3]int{team.Color[0], team.Color[1], team.Color[2]}
+	// 1. Named color lookup (explicit, highest priority)
+	if team.ColorName != "" {
+		if rgb, ok := teamColorPalette[strings.ToLower(team.ColorName)]; ok {
+			return rgb
+		}
+	}
+	// 2. Hue-based nearest palette color
+	if len(team.Color) < 3 {
+		return [3]int{128, 128, 128}
+	}
+	return nearestPaletteColorByHue(team.Color[0], team.Color[1], team.Color[2])
 }
 
 // sendLEDSet sends a LED_SET message to a specific buzzer and stores the state for reconnect.
@@ -2169,6 +2310,68 @@ func (a *App) sendLEDSetReveal(correctAnswer string) {
 			a.sendLEDSetForBuzzerNormal(mac, bumper, phase)
 		}
 	}
+}
+
+// sendLEDSetToTeam sends a LED_SET payload to all physical buzzers belonging to teamID.
+// If teamID is empty, sends to ALL physical buzzers (excluding VPlayers).
+func (a *App) sendLEDSetToTeam(teamID string, payload protocol.LEDSetPayload) {
+	tb := a.engine.GetTeamsAndBumpers()
+	if tb == nil {
+		return
+	}
+	for mac, bumper := range tb.Bumpers {
+		if bumper.IsVPlayer {
+			continue
+		}
+		if teamID != "" && bumper.Team != teamID {
+			continue
+		}
+		a.sendLEDSet(mac, payload)
+	}
+}
+
+// cometBandColor returns the best-contrasting band color for a COMET animation over bgColor.
+// Uses gold [255,215,0] by default; switches to white [255,255,255] when the background is
+// too close to gold (squared Euclidean distance < 8000, ~89 units).
+func cometBandColor(bg [3]int) [3]int {
+	gold := [3]int{255, 215, 0}
+	dr := bg[0] - gold[0]
+	dg := bg[1] - gold[1]
+	db := bg[2] - gold[2]
+	if dr*dr+dg*dg+db*db < 8000 {
+		return [3]int{255, 255, 255} // white for yellow/gold teams
+	}
+	return gold
+}
+
+// sendLEDSetComet sends a COMET LED effect to all physical buzzers of the given team.
+// COLOR = team background color; COMET_COLOR = contrasting band color (gold or white).
+// Duration: 2 laps × 23 steps × 100 ms = 4600 ms + 200 ms margin = 4800 ms.
+func (a *App) sendLEDSetComet(teamID string) {
+	tb := a.engine.GetTeamsAndBumpers()
+	if tb == nil {
+		return
+	}
+	for mac, bumper := range tb.Bumpers {
+		if bumper.IsVPlayer {
+			continue
+		}
+		if teamID != "" && bumper.Team != teamID {
+			continue
+		}
+		teamColor := a.teamColorToRGB(bumper)
+		band := cometBandColor(teamColor)
+		a.sendLEDSet(mac, protocol.LEDSetPayload{
+			Color:      teamColor,
+			Intensity:  255,
+			Effect:     protocol.LEDEffectComet,
+			CometColor: &band,
+		})
+	}
+	// Restore normal LED state after firmware COMET animation completes.
+	time.AfterFunc(4800*time.Millisecond, func() {
+		a.sendLEDSetAllBuzzers()
+	})
 }
 
 func (a *App) broadcastReset() {

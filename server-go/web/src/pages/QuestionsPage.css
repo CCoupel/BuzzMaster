@@ -1244,3 +1244,87 @@
   color: var(--gray-500);
   font-weight: normal;
 }
+
+/* ── Category filter bar (#40) ── */
+.questions-page-filter-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  margin-bottom: var(--space-4);
+  padding: var(--space-3) 0;
+  border-bottom: 1px solid var(--gray-100);
+}
+
+.questions-page-filter-bar .category-filter-pill {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  width: auto;
+  height: auto;
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--radius-full);
+  border: 2px solid transparent;
+  background: var(--gray-100);
+  font-size: 0.82rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.questions-page-filter-bar .category-filter-pill:hover {
+  background: color-mix(in srgb, var(--cat-color) 20%, white);
+  border-color: var(--cat-color);
+  transform: scale(1.03);
+}
+
+.questions-page-filter-bar .category-filter-pill.active {
+  background: var(--cat-color);
+  border-color: var(--cat-color);
+  color: white;
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--cat-color) 35%, transparent);
+}
+
+.questions-page-filter-bar .cat-pill-icon {
+  font-size: 1rem;
+  line-height: 1;
+}
+
+.questions-page-filter-bar .cat-pill-label {
+  line-height: 1;
+}
+
+.questions-page-filter-bar .category-filter-reset {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: var(--radius-full);
+  border: none;
+  background: var(--gray-300);
+  color: var(--gray-700);
+  font-size: 0.95rem;
+  font-weight: 700;
+  cursor: pointer;
+  line-height: 1;
+  transition: all 0.15s ease;
+  padding: 0;
+  margin-left: var(--space-1);
+}
+
+.questions-page-filter-bar .category-filter-reset:hover {
+  background: var(--error);
+  color: white;
+}
+
+.category-filter-empty {
+  text-align: center;
+  color: var(--gray-400);
+  font-size: 0.85rem;
+  font-style: italic;
+  padding: var(--space-6);
+  grid-column: 1 / -1;
+}

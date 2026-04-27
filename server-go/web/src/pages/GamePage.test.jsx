@@ -97,8 +97,8 @@ describe('GamePage - Bouton "Question suivante"', () => {
     vi.clearAllMocks()
   })
 
-  // Test 1 : phase STARTED → nextUnplayedQuestion = null → bouton absent
-  it('bouton absent quand phase est STARTED', () => {
+  // Test 1 : phase STARTED → bouton présent mais grisé (opacity 0.5, pointerEvents none)
+  it('bouton présent mais grisé quand phase est STARTED', () => {
     useGame.mockReturnValue(makeGameMock({
       gameState: {
         phase: 'STARTED',
@@ -111,7 +111,10 @@ describe('GamePage - Bouton "Question suivante"', () => {
     }))
 
     render(<GamePage />)
-    expect(screen.queryByText(/Question suivante/i)).toBeNull()
+    // Le bouton "à suivre" est présent mais visuellement désactivé (opacity 0.5, pointerEvents none)
+    const btn = screen.queryByTitle(/Aller à la question/)
+    expect(btn).toBeInTheDocument()
+    expect(btn).toHaveStyle({ opacity: 0.5, pointerEvents: 'none' })
   })
 
   // Test 2 : phase STOPPED mais toutes les questions suivantes sont jouées → bouton absent
@@ -134,7 +137,7 @@ describe('GamePage - Bouton "Question suivante"', () => {
     }))
 
     render(<GamePage />)
-    expect(screen.queryByText(/Question suivante/i)).toBeNull()
+    expect(screen.queryByTitle(/Aller à la question/)).toBeNull()
   })
 
   // Test 3 : phase STOPPED avec question suivante disponible → bouton visible avec "#ID"
@@ -152,7 +155,8 @@ describe('GamePage - Bouton "Question suivante"', () => {
     }))
 
     render(<GamePage />)
-    expect(screen.getByText(/Question suivante.*#3/i)).toBeInTheDocument()
+    // Le bouton "à suivre" a un title="Aller à la question #N"
+    expect(screen.getByTitle('Aller à la question #3')).toBeInTheDocument()
   })
 
   // Test 4 : phase REVEALED avec question suivante disponible → bouton visible
@@ -169,7 +173,7 @@ describe('GamePage - Bouton "Question suivante"', () => {
     }))
 
     render(<GamePage />)
-    expect(screen.getByText(/Question suivante.*#3/i)).toBeInTheDocument()
+    expect(screen.getByTitle('Aller à la question #3')).toBeInTheDocument()
   })
 
   // Test 5 : clic sur le bouton → selectQuestion appelé avec le bon ID
@@ -188,7 +192,7 @@ describe('GamePage - Bouton "Question suivante"', () => {
     }))
 
     render(<GamePage />)
-    const btn = screen.getByText(/Question suivante.*#3/i)
+    const btn = screen.getByTitle('Aller à la question #3')
     fireEvent.click(btn)
 
     expect(mockSelectQuestion).toHaveBeenCalledWith('3')
@@ -212,7 +216,7 @@ describe('GamePage - Bouton "Question suivante"', () => {
     }))
 
     render(<GamePage />)
-    expect(screen.getByText(/Question suivante.*#2/i)).toBeInTheDocument()
+    expect(screen.getByTitle('Aller à la question #2')).toBeInTheDocument()
   })
 
   // Test 7 : question avec STATUS='READY' → considérée non jouée → bouton visible
@@ -233,7 +237,7 @@ describe('GamePage - Bouton "Question suivante"', () => {
     }))
 
     render(<GamePage />)
-    expect(screen.getByText(/Question suivante.*#2/i)).toBeInTheDocument()
+    expect(screen.getByTitle('Aller à la question #2')).toBeInTheDocument()
   })
 
   // Test 8 : saute les questions jouées pour trouver la vraie prochaine disponible
@@ -256,7 +260,7 @@ describe('GamePage - Bouton "Question suivante"', () => {
 
     render(<GamePage />)
     // Doit pointer vers #3 (saute #2 qui est PLAYED)
-    expect(screen.getByText(/Question suivante.*#3/i)).toBeInTheDocument()
+    expect(screen.getByTitle('Aller à la question #3')).toBeInTheDocument()
   })
 })
 

@@ -23,6 +23,8 @@ export default function VPlayerPage() {
   const [isFullscreen, setIsFullscreen] = useState(false)
   const [showFullscreenHint, setShowFullscreenHint] = useState(false)
   const noSleepRef = useRef(null)
+  // Ref to always have the latest bumper value in async callbacks (avoids stale closure)
+  const bumperRef = useRef(null)
 
   // Load session from localStorage on mount
   useEffect(() => {
@@ -52,7 +54,9 @@ export default function VPlayerPage() {
 
     if (foundBumper) {
       const [bumperId, bumperData] = foundBumper
-      setBumper({ id: bumperId, ...bumperData })
+      const newBumper = { id: bumperId, ...bumperData }
+      setBumper(newBumper)
+      bumperRef.current = newBumper
 
       // Find team if assigned
       if (bumperData.TEAM && teams[bumperData.TEAM]) {
@@ -60,6 +64,9 @@ export default function VPlayerPage() {
       } else {
         setTeam(null)
       }
+    } else {
+      // Bumper not found in current state — reset ref so reconnect logic can fire
+      bumperRef.current = null
     }
   }, [playerSession, bumpers, teams])
 
@@ -93,21 +100,26 @@ export default function VPlayerPage() {
     }
   }, [bumpers, playerSession, status, navigate])
 
-  // Auto-reconnect if session exists but bumper not found
+  // Auto-reconnect if session exists but bumper not found after initial state sync
+  // Uses bumperRef (not bumper state) to read the latest value inside the timeout callback,
+  // preventing the stale closure bug that caused PLAYER_CONNECT to be sent even when the
+  // bumper was already found (which could create duplicate VJoueur entries on the server).
   useEffect(() => {
-    if (!playerSession || bumper || status !== 'connected') return
+    if (!playerSession || status !== 'connected') return
+    // If we already found the bumper, no need to reconnect
+    if (bumperRef.current) return
 
-    // Wait a bit for initial state sync
+    // Wait for initial state sync before attempting reconnect
     const timeoutId = setTimeout(() => {
-      if (!bumper) {
-        // Try reconnecting by sending PLAYER_CONNECT again
+      // Check ref (latest value) rather than closure-captured bumper
+      if (!bumperRef.current) {
         console.log('[VPlayer] Reconnecting with name:', playerSession.name)
         sendMessage('PLAYER_CONNECT', { NAME: playerSession.name })
       }
     }, 2000)
 
     return () => clearTimeout(timeoutId)
-  }, [playerSession, bumper, status, sendMessage])
+  }, [playerSession, status, sendMessage])
 
   // Auto-respond to PREPARE phase with PONG
   useEffect(() => {

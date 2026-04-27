@@ -1,11 +1,12 @@
 import { useState, useRef, useEffect } from 'react'
-import { NavLink, useLocation } from 'react-router-dom'
+import { NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { useUpdates } from '../hooks/useUpdates'
 import './Navbar.css'
 
 export default function Navbar({ connectionStatus = 'disconnected', clientCounts = { admin: 0, tv: 0, vplayer: 0 }, serverVersion = '' }) {
   const location = useLocation()
+  const navigate = useNavigate()
   const [isMenuOpen, setIsMenuOpen] = useState(false)
   const menuRef = useRef(null)
   const buttonRef = useRef(null)
@@ -129,7 +130,14 @@ export default function Navbar({ connectionStatus = 'disconnected', clientCounts
         </div>
 
         <span className="brand-text">BuzzControl</span>
-        <span className="version-badge" title="Version BuzzControl">
+        <span
+          className="version-badge version-badge-clickable"
+          title={updateInfo?.update_available ? 'Mise à jour disponible — cliquer pour accéder' : 'Version BuzzControl — cliquer pour les mises à jour'}
+          onClick={() => navigate(getFullPath('updates'))}
+          role="button"
+          tabIndex={0}
+          onKeyDown={e => e.key === 'Enter' && navigate(getFullPath('updates'))}
+        >
           v{serverVersion || '...'}
           {updateInfo?.update_available && (
             <span className="update-badge-version" title="Mise à jour disponible">!</span>

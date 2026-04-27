@@ -9,6 +9,7 @@ import QRCodeOverlay from '../components/QRCodeOverlay'
 import QRCodeDisplay from '../components/QRCodeDisplay'
 import { CATEGORIES } from './QuestionsPage'
 import { getCategoryColor } from '../constants/colors'
+import { getRgbColor } from '../utils/colorUtils'
 import './PlayerDisplay.css'
 import '../styles/neon.css'
 
@@ -48,6 +49,18 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
   const tvWakeLockRef = useRef(null)
   const tvNoSleepRef = useRef(null)
   const [localCountdown, setLocalCountdown] = useState(null) // Local countdown that starts after cascade reveal is done
+  const [wifiConfig, setWifiConfig] = useState(null) // { ssid, password } for enrollment WiFi QR code
+
+  // Fetch WiFi config for enrollment QR code (#51) — always set, even if SSID empty
+  useEffect(() => {
+    if (gameState.phase !== 'ENROLL' || isVPlayer) return
+    fetch('/api/wifi/defaults')
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        setWifiConfig({ ssid: data?.ssid || '', password: data?.password || '' })
+      })
+      .catch(() => { setWifiConfig({ ssid: '', password: '' }) })
+  }, [gameState.phase, isVPlayer])
 
   // DEBUG: Log gameState
   useEffect(() => {
@@ -659,12 +672,6 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
   const currentBackground = currentBg?.path || null
   const currentOpacity = (currentBg?.opacity ?? 100) / 100
 
-  const getRgbColor = (color) => {
-    if (!color) return 'var(--gray-400)'
-    if (Array.isArray(color)) return `rgb(${color.join(',')})`
-    return color
-  }
-
   // Get team color by team name (for Memory matched pairs)
   const getTeamColorByName = (teamName) => {
     const team = Object.values(teams).find(t => t.NAME === teamName)
@@ -814,9 +821,33 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
               <h1>📱 INSCRIPTION DES JOUEURS</h1>
             </div>
 
-            <div className="enroll-qr-zone">
-              <QRCodeDisplay url={`http://${window.location.hostname}/player`} size={400} />
-              <p className="enroll-instruction">Scannez ce code avec votre smartphone</p>
+            {/* Two QR codes side by side: WiFi (left, blue) + VJoueur URL (right, green) (#51) */}
+            <div className="enroll-qr-row">
+              <div className="enroll-qr-card">
+                <div className="enroll-qr-title">1. Rejoindre le WiFi</div>
+                <QRCodeDisplay
+                  url={wifiConfig?.ssid
+                    ? `WIFI:T:${wifiConfig.password ? 'WPA' : 'nopass'};S:${wifiConfig.ssid};P:${wifiConfig.password};;`
+                    : 'https://buzzcontrol.local/no-wifi-configured'}
+                  size={260}
+                  fgColor="#1d4ed8"
+                  logo="📶"
+                  label={null}
+                />
+                <div className="enroll-qr-subtitle">
+                  {wifiConfig?.ssid ? `Réseau : ${wifiConfig.ssid}` : 'Non configuré'}
+                </div>
+              </div>
+              <div className="enroll-qr-card enroll-qr-card-main">
+                <div className="enroll-qr-title">2. Rejoindre le jeu</div>
+                <QRCodeDisplay
+                  url={`http://${window.location.host}/player`}
+                  size={260}
+                  fgColor="#15803d"
+                  logo="👤"
+                />
+                <div className="enroll-qr-subtitle">{window.location.host}/player</div>
+              </div>
             </div>
 
             <div className="enroll-progress">
@@ -1856,8 +1887,8 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
         )}
       </AnimatePresence>
 
-      {/* QR Code Overlay for player enrollment */}
-      <QRCodeOverlay show={gameState.showQRCode || false} />
+      {/* QR Code Overlay — suppressed during ENROLL (dedicated two-QR view handles it) */}
+      <QRCodeOverlay show={(gameState.showQRCode || false) && gameState.phase !== 'ENROLL'} />
     </div>
   )
 }

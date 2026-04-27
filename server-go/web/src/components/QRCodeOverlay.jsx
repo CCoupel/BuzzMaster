@@ -5,8 +5,8 @@ import { useGame } from '../hooks/GameContext'
 export default function QRCodeOverlay({ show }) {
   const { gameState } = useGame()
 
-  // Build enrollment URL
-  const enrollUrl = `http://${window.location.hostname}/`
+  // Build enrollment URL — use window.location.host (includes port if non-standard)
+  const enrollUrl = `http://${window.location.host}/`
 
   return (
     <AnimatePresence>
@@ -45,7 +45,7 @@ export default function QRCodeOverlay({ show }) {
             }}
           >
             <h2 style={{ margin: '0 0 1.5rem 0', fontSize: '2rem', color: '#333' }}>
-              Scannez pour rejoindre
+              Scannez pour participer
             </h2>
             <QRCodeDisplay url={enrollUrl} size={300} />
           </motion.div>

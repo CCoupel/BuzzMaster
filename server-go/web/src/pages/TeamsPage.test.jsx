@@ -72,9 +72,9 @@ describe('TeamsPage — badge ⚠ buzzer déconnecté', () => {
 
     render(<TeamsPage />)
 
+    // Le badge est implémenté en SVG (pas de texte), on vérifie sa présence via le title
     const badge = screen.getByTitle('Buzzer déconnecté')
     expect(badge).toBeInTheDocument()
-    expect(badge.textContent).toBe('⚠')
   })
 
   // Test 2 : badge absent quand CONNECTED=true
@@ -123,9 +123,9 @@ describe('TeamsPage — badge ⚠ buzzer déconnecté', () => {
 
     render(<TeamsPage />)
 
+    // Le badge est implémenté en SVG (pas de texte), on vérifie sa présence via le title
     const badge = screen.getByTitle('Buzzer déconnecté')
     expect(badge).toBeInTheDocument()
-    expect(badge.textContent).toBe('⚠')
   })
 
   // Test 6 : plusieurs buzzers — seuls les déconnectés physiques ont le badge

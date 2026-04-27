@@ -1,7 +1,15 @@
 import { useEffect, useRef } from 'react'
 import QRCode from 'qrcode'
 
-export default function QRCodeDisplay({ url, size = 200, label }) {
+/**
+ * QRCodeDisplay — renders a QR code canvas with optional color tint and center logo.
+ * @param {string}  url      — Content to encode
+ * @param {number}  size     — Canvas size in px (default 200)
+ * @param {string}  label    — Optional text below canvas
+ * @param {string}  fgColor  — QR foreground color (default '#000000')
+ * @param {string}  logo     — Optional emoji/text overlaid at center (default null)
+ */
+export default function QRCodeDisplay({ url, size = 200, label, fgColor = '#000000', logo = null }) {
   const canvasRef = useRef(null)
 
   useEffect(() => {
@@ -11,22 +19,44 @@ export default function QRCodeDisplay({ url, size = 200, label }) {
       width: size,
       margin: 2,
       color: {
-        dark: '#000000',
+        dark: fgColor,
         light: '#FFFFFF',
       },
     }, (error) => {
       if (error) console.error('QR Code generation error:', error)
     })
-  }, [url, size])
+  }, [url, size, fgColor])
+
+  const logoSize = Math.round(size * 0.18) // ~18% of QR size
 
   return (
     <div style={{
       display: 'flex',
       flexDirection: 'column',
       alignItems: 'center',
-      gap: '0.5rem'
+      gap: '0.5rem',
     }}>
-      <canvas ref={canvasRef} />
+      <div style={{ position: 'relative', display: 'inline-block' }}>
+        <canvas ref={canvasRef} style={{ borderRadius: '0.75rem', display: 'block' }} />
+        {logo && (
+          <div style={{
+            position: 'absolute',
+            top: '50%',
+            left: '50%',
+            transform: 'translate(-50%, -50%)',
+            background: 'white',
+            borderRadius: '8px',
+            padding: '4px 5px',
+            fontSize: `${logoSize}px`,
+            lineHeight: 1,
+            boxShadow: '0 0 0 3px white',
+            pointerEvents: 'none',
+            userSelect: 'none',
+          }}>
+            {logo}
+          </div>
+        )}
+      </div>
       {label && <span style={{ fontSize: '0.9rem', color: '#666', fontWeight: 600 }}>{label}</span>}
     </div>
   )

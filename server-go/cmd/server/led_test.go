@@ -161,8 +161,10 @@ func TestLEDSet_BroadcastStop(t *testing.T) {
 	if !ok {
 		t.Fatal("Expected LED state for bumper AA:BB:CC:DD:EE:01")
 	}
-	if state.Color != [3]int{200, 100, 50} {
-		t.Errorf("STOP color: got %v, want [200,100,50]", state.Color)
+	// No ColorName → nearestPaletteColorByHue maps [200,100,50] to the closest hue entry
+	wantColor := nearestPaletteColorByHue(200, 100, 50)
+	if state.Color != wantColor {
+		t.Errorf("STOP color: got %v, want nearest-hue-palette %v (from [200,100,50])", state.Color, wantColor)
 	}
 	if state.Intensity != 255 {
 		t.Errorf("STOP intensity: got %d, want 255", state.Intensity)

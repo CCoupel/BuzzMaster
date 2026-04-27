@@ -15,6 +15,8 @@ Ce document decrit les fonctionnalites d'administration du systeme BuzzControl.
 - [Mise a jour firmware OTA des buzzers](#mise-a-jour-firmware-ota-des-buzzers-v310)
 - [Configuration WiFi des buzzers](#configuration-wifi-des-buzzers-v310)
 - [Jeu Memory - Modes multi-equipes](#jeu-memory---modes-multi-equipes)
+- [Filtres categories dans GamePage](#filtres-categories-dans-gamepage-v370)
+- [Double QR code enrollment TV](#double-qr-code-enrollment-tv-v370)
 
 ---
 
@@ -925,3 +927,57 @@ Pour les modes multi-équipes :
 2. **Historique intact** : Ne pas reinitialiser l'historique sauf si necessaire
 3. **Restauration** : Toujours verifier le contenu de l'archive avant restauration
 4. **Scores** : Utiliser POINTS_TARGET adapte au type de question
+
+---
+
+## Filtres categories dans GamePage (v3.7.0)
+
+### Presentation
+
+Sur la page de jeu (`/admin/game`), la barre d'equilibre des categories affiche les categories disponibles dans votre banque de questions. Depuis la v3.7.0, ces categories sont **cliquables** pour filtrer les questions affichees.
+
+### Utilisation
+
+1. Dans `GamePage`, reperer la barre d'equilibre des categories en haut
+2. Cliquer sur une categorie pour l'activer comme filtre — seules les questions de cette categorie s'affichent
+3. Cliquer sur plusieurs categories pour cumuler les filtres (multi-selection)
+4. Cliquer sur une categorie active pour la desactiver
+
+### Indicateurs visuels
+
+- **Categorie inactive** : apparence normale
+- **Categorie active (filtre)** : surlignage visuel (badge colore)
+- **Aucun filtre actif** : toutes les questions sont affichees (comportement par defaut)
+
+### Cas d'usage
+
+- Preparer une manche thematique (ex : uniquement les questions Geographie)
+- Equilibrer le jeu en alternant les categories manuellement
+- Masquer temporairement des categories deja jouees
+
+---
+
+## Double QR code enrollment TV (v3.7.0)
+
+### Presentation
+
+Lors de la phase d'inscription VJoueur, l'affichage TV (`/tv`) montre desormais **deux QR codes cote a cote** pour faciliter la connexion des joueurs depuis leur smartphone.
+
+### Les deux QR codes
+
+| QR code | Contenu | Usage |
+|---------|---------|-------|
+| **WiFi** | SSID + mot de passe du reseau | Le joueur se connecte d'abord au bon reseau WiFi |
+| **VJoueur** | URL d'inscription (`http://[host]/`) | Le joueur scanne pour rejoindre la partie |
+
+### Workflow recommande
+
+1. Lancer les inscriptions depuis `/admin/teams` (bouton "Lancer Inscriptions")
+2. L'affichage TV passe en vue enrollment avec les deux QR codes
+3. Les joueurs commencent par scanner le **QR WiFi** pour rejoindre le bon reseau
+4. Puis ils scannent le **QR VJoueur** pour s'inscrire avec leur pseudo
+5. Une fois tous inscrits, fermer les inscriptions depuis `/admin/teams`
+
+### Note
+
+Le QR code WiFi utilise la configuration WiFi enregistree dans `config.json` (SSID principal). Si aucun SSID n'est configure, seul le QR code VJoueur s'affiche.

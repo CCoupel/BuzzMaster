@@ -203,6 +203,13 @@ void loop() {
   // LED blink animation (server-driven LED_SET with EFFECT="BLINK")
   manageLedBlink();
 
+  // COMET animation (server-driven LED_SET with EFFECT="COMET", v3.7.0)
+  manageLedComet();
+
+  // SPINNER animation (server-driven LED_SET with EFFECT="SPINNER", v3.7.0)
+  // Single bright pixel orbiting the ring; server controls duration via next LED_SET.
+  manageLedSpinner();
+
   // Differentiated error LED patterns (issue #49). Must run AFTER the other
   // LED animations so that an active error pattern visually overrides them.
   // Clearing the error via clearLedError() lets the next tick restore the

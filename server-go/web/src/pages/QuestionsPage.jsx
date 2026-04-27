@@ -1,6 +1,7 @@
 import { useState, useRef, useMemo } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { useGame } from '../hooks/GameContext'
+import { useCategoryFilter } from '../hooks/useCategoryFilter'
 import Button from '../components/Button'
 import Card, { CardHeader, CardBody } from '../components/Card'
 import CategoryBalance from '../components/CategoryBalance'
@@ -81,6 +82,9 @@ export default function QuestionsPage() {
         return orderA - orderB
       })
   }, [questions])
+
+  // Category filter (shared hook)
+  const { selectedCategories, availableCategories, filteredQuestions, toggleCategoryFilter, clearCategoryFilters } = useCategoryFilter(sortedQuestions)
 
   // Background handlers
   const handleBackgroundUpload = async (e) => {
@@ -583,7 +587,11 @@ export default function QuestionsPage() {
     <div className="questions-page page">
       <header className="page-header">
         <h1 className="page-title">Gestion des Questions</h1>
-        <p className="page-subtitle">{sortedQuestions.length} questions disponibles</p>
+        <p className="page-subtitle">
+          {filteredQuestions.length !== sortedQuestions.length
+            ? `${filteredQuestions.length} / ${sortedQuestions.length} questions`
+            : `${sortedQuestions.length} questions disponibles`}
+        </p>
       </header>
 
       {/* Background Section */}
@@ -682,12 +690,43 @@ export default function QuestionsPage() {
       {/* Category Balance Visualization */}
       <CategoryBalance questions={sortedQuestions} />
 
+      {/* Category filter bar (#40) */}
+      {availableCategories.length > 0 && (
+        <div className="category-filter-bar questions-page-filter-bar">
+          {availableCategories.map(catKey => {
+            const cat = CATEGORIES[catKey]
+            const isActive = selectedCategories.has(catKey)
+            return (
+              <button
+                key={catKey}
+                className={`category-filter-pill${isActive ? ' active' : ''}`}
+                style={{ '--cat-color': cat.color }}
+                onClick={() => toggleCategoryFilter(catKey)}
+                title={cat.label}
+              >
+                <span className="cat-pill-icon">{cat.icon}</span>
+                <span className="cat-pill-label">{cat.label}</span>
+              </button>
+            )
+          })}
+          {selectedCategories.size > 0 && (
+            <button
+              className="category-filter-reset"
+              onClick={clearCategoryFilters}
+              title="Réinitialiser les filtres"
+            >
+              ×
+            </button>
+          )}
+        </div>
+      )}
+
       <div className="questions-layout">
         {/* Questions List */}
         <section className="questions-list-section">
           <div className="questions-grid">
             <AnimatePresence>
-              {sortedQuestions.map((question, index) => (
+              {filteredQuestions.map((question, index) => (
                 <QuestionCard
                   key={question.ID}
                   question={question}
@@ -709,6 +748,11 @@ export default function QuestionsPage() {
                 />
               ))}
             </AnimatePresence>
+            {filteredQuestions.length === 0 && selectedCategories.size > 0 && (
+              <div className="category-filter-empty">
+                Aucune question dans cette catégorie.
+              </div>
+            )}
           </div>
         </section>
 

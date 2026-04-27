@@ -1001,3 +1001,87 @@ func TestHTTPServer_APIBuzzerStatus_WithoutStatusSuffix(t *testing.T) {
 		t.Errorf("Expected mac '%s', got '%v'", mac, result["mac"])
 	}
 }
+
+// ========================================
+// Issue #44 — Versioned download filenames
+// ========================================
+
+// TestHTTPServer_FSBackup_VersionedFilename verifies that the full-backup endpoint
+// includes the server version in the Content-Disposition filename.
+func TestHTTPServer_FSBackup_VersionedFilename(t *testing.T) {
+	server, dataDir := setupTestHTTPServer(t)
+
+	// Create minimal data directory so TAR walk has something
+	os.MkdirAll(filepath.Join(dataDir, "files"), 0755)
+
+	req := httptest.NewRequest("GET", "/fs-backup", nil)
+	w := httptest.NewRecorder()
+
+	server.mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("Expected 200, got %d", w.Code)
+	}
+
+	cd := w.Header().Get("Content-Disposition")
+	// Config version is "2.0.0-test" (set in setupTestHTTPServer)
+	if !strings.Contains(cd, "v2.0.0-test") {
+		t.Errorf("Content-Disposition should contain version 'v2.0.0-test', got: %s", cd)
+	}
+	if !strings.Contains(cd, "buzzcontrol-full-backup") {
+		t.Errorf("Content-Disposition should contain 'buzzcontrol-full-backup', got: %s", cd)
+	}
+	if !strings.HasSuffix(strings.Trim(cd, "\""), ".tar\"") && !strings.Contains(cd, ".tar") {
+		t.Errorf("Content-Disposition should reference a .tar file, got: %s", cd)
+	}
+}
+
+// TestHTTPServer_GameBackup_VersionedFilename verifies that the game-backup endpoint
+// includes the server version in the Content-Disposition filename.
+func TestHTTPServer_GameBackup_VersionedFilename(t *testing.T) {
+	server, dataDir := setupTestHTTPServer(t)
+
+	os.MkdirAll(filepath.Join(dataDir, "files"), 0755)
+
+	req := httptest.NewRequest("GET", "/game-backup", nil)
+	w := httptest.NewRecorder()
+
+	server.mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("Expected 200, got %d", w.Code)
+	}
+
+	cd := w.Header().Get("Content-Disposition")
+	if !strings.Contains(cd, "v2.0.0-test") {
+		t.Errorf("Content-Disposition should contain version 'v2.0.0-test', got: %s", cd)
+	}
+	if !strings.Contains(cd, "buzzcontrol-game-backup") {
+		t.Errorf("Content-Disposition should contain 'buzzcontrol-game-backup', got: %s", cd)
+	}
+}
+
+// TestHTTPServer_BackupSelect_VersionedFilename verifies that the selective-backup endpoint
+// includes the server version in the Content-Disposition filename.
+func TestHTTPServer_BackupSelect_VersionedFilename(t *testing.T) {
+	server, dataDir := setupTestHTTPServer(t)
+
+	os.MkdirAll(filepath.Join(dataDir, "files"), 0755)
+
+	req := httptest.NewRequest("GET", "/backup-select?questions=true", nil)
+	w := httptest.NewRecorder()
+
+	server.mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("Expected 200, got %d", w.Code)
+	}
+
+	cd := w.Header().Get("Content-Disposition")
+	if !strings.Contains(cd, "v2.0.0-test") {
+		t.Errorf("Content-Disposition should contain version 'v2.0.0-test', got: %s", cd)
+	}
+	if !strings.Contains(cd, "buzzcontrol-backup") {
+		t.Errorf("Content-Disposition should contain 'buzzcontrol-backup', got: %s", cd)
+	}
+}

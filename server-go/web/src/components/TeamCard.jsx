@@ -1,5 +1,6 @@
 import { motion } from 'framer-motion'
 import { useState, useMemo, useEffect } from 'react'
+import { boostTeamColor } from '../utils/colorUtils'
 import './TeamCard.css'
 
 // QCM answer colors - same as TeamsPage
@@ -389,7 +390,8 @@ export default function TeamCard({
 }) {
   const [showTooltip, setShowTooltip] = useState(false)
   const [otaBuzzer, setOtaBuzzer] = useState(null) // buzzer object for OTA modal
-  const rgbColor = color ? `rgb(${color.join(',')})` : 'var(--primary-500)'
+  // Use boosted color for display intensity (#61); falls back to raw rgb if boost unavailable
+  const rgbColor = (color && boostTeamColor(color)) || (color ? `rgb(${color.join(',')})` : 'var(--primary-500)')
   const reactionTime = timestamp && gameTime
     ? ((timestamp - gameTime) / 1000000).toFixed(3)
     : null

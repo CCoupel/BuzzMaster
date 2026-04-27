@@ -35,8 +35,9 @@ const (
 type Team struct {
 	Name       string `json:"NAME"`
 	Color      []int  `json:"COLOR"`
-	Score      int    `json:"SCORE"`       // Calculated: TeamPoints + sum(bumpers)
-	TeamPoints int    `json:"TEAM_POINTS"` // Independent team points
+	ColorName  string `json:"COLOR_NAME,omitempty"` // Named color key for LED lookup (e.g. "rouge", "bleu")
+	Score      int    `json:"SCORE"`                // Calculated: TeamPoints + sum(bumpers)
+	TeamPoints int    `json:"TEAM_POINTS"`           // Independent team points
 	Time       int64  `json:"TIME,omitempty"`
 	Status     string `json:"STATUS,omitempty"`
 	Bumper     string `json:"BUMPER,omitempty"`
