@@ -45,6 +45,10 @@ type HTTPServer struct {
 	OnLoadDemo            func() // Called to load demo data
 	OnConfigUpdate        func() // Called after config update to broadcast to clients
 	OnBuzzerWifiConfig    func() int // Called to broadcast WiFi config to all buzzers; returns connected buzzer count
+	// OnPriorityMessageSent is called after a priority message (OTA_UPDATE, WIFI_CONFIG) is sent to a buzzer.
+	// mac is the buzzer MAC, msgID is the generated MSG_ID, action is the protocol action string.
+	// The callback registers the message for ACK tracking and sets AckPending on the bumper (v3.8.0).
+	OnPriorityMessageSent func(mac, msgID, action string)
 }
 
 // NewHTTPServer creates a new HTTP server
@@ -214,8 +218,13 @@ func (h *HTTPServer) setupRoutes() {
 	h.mux.HandleFunc("/api/updates/download", h.handleAPIUpdatesDownload)
 	h.mux.HandleFunc("/api/updates/apply", h.handleAPIUpdatesApply)
 
-	// WebSocket
+	// WebSocket — legacy endpoint (alias for /ws/admin, retro-compat)
 	h.mux.HandleFunc("/ws", h.handleWebSocket)
+
+	// WebSocket — dedicated endpoints by client type (v3.8.0)
+	h.mux.HandleFunc("/ws/admin", h.handleWebSocketAdmin)
+	h.mux.HandleFunc("/ws/tv", h.handleWebSocketTV)
+	h.mux.HandleFunc("/ws/player", h.handleWebSocketPlayer)
 
 	// Buzzer WebSocket (dedicated endpoint for physical buzzers)
 	h.mux.HandleFunc("/ws/buzzer", h.handleBuzzerWebSocket)
@@ -1702,8 +1711,24 @@ func (h *HTTPServer) downloadFile(url, destPath string) error {
 	return err
 }
 
+// handleWebSocket is the legacy /ws endpoint — alias for /ws/admin for retro-compat.
 func (h *HTTPServer) handleWebSocket(w http.ResponseWriter, r *http.Request) {
-	h.wsHub.HandleConnection(w, r)
+	h.wsHub.HandleConnectionWithType(w, r, ClientTypeAdmin)
+}
+
+// handleWebSocketAdmin handles /ws/admin — administration interface.
+func (h *HTTPServer) handleWebSocketAdmin(w http.ResponseWriter, r *http.Request) {
+	h.wsHub.HandleConnectionWithType(w, r, ClientTypeAdmin)
+}
+
+// handleWebSocketTV handles /ws/tv — TV/scoreboard display.
+func (h *HTTPServer) handleWebSocketTV(w http.ResponseWriter, r *http.Request) {
+	h.wsHub.HandleConnectionWithType(w, r, ClientTypeTV)
+}
+
+// handleWebSocketPlayer handles /ws/player — virtual player (VPlayer/enrollment).
+func (h *HTTPServer) handleWebSocketPlayer(w http.ResponseWriter, r *http.Request) {
+	h.wsHub.HandleConnectionWithType(w, r, ClientTypeVPlayer)
 }
 
 func (h *HTTPServer) handleBuzzerWebSocket(w http.ResponseWriter, r *http.Request) {

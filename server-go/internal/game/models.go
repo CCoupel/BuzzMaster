@@ -78,6 +78,8 @@ type Bumper struct {
 	OTAPercent      int    `json:"OTA_PERCENT,omitempty"`      // OTA progress percentage (0-100)
 	// Connection status (added in v3.6.5) — NO omitempty: false is a meaningful value for the frontend
 	Connected bool `json:"CONNECTED"` // true if buzzer is currently connected via WebSocket
+	// ACK pending flag (added in v3.8.0) — omitempty: absent = false (retro-compat)
+	AckPending bool `json:"ACK_PENDING,omitempty"` // true while server awaits an ACK from the buzzer
 }
 
 // BuzzState represents the buzz state of a buzzer relative to the current round.

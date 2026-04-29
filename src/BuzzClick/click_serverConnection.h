@@ -10,6 +10,7 @@
 // Defined in click_websocket_espidf.h, included after this header via click_WifiManager.h
 void ws_sendBuzz(const String& mac, const String& buttonName);
 void ws_sendPong(const String& mac);
+void ws_sendAck(const String& mac, const String& ackAction, const String& ackId);  // ACK v3.8.0 #54
 bool ws_isConnected();
 void ws_connect();
 
@@ -565,7 +566,20 @@ void parseJSON(const String& data, AsyncClient* c) {
   const char* action = receivedData["ACTION"];
   JsonObject message = receivedData["MSG"];
   ESP_LOGD(SRV_TAG, "Parsing ACTION=%s", action);
- // Utiliser un switch case avec hash pour un traitement plus rapide et plus propre
+
+#ifdef USE_WEBSOCKET
+  // ACK protocol (v3.8.0 — #54): send ACK immediately before applying action.
+  // MSG_ID is optional (omitempty on server) — old firmware ignores it, new firmware ACKs it.
+  // ws_sendAck() is non-blocking (timeout=0) — safe to call from event handler context.
+  if (receivedData.containsKey("MSG_ID")) {
+    const char* msgId = receivedData["MSG_ID"] | "";
+    if (strlen(msgId) > 0) {
+      ws_sendAck(WiFi.macAddress(), String(action), String(msgId));
+    }
+  }
+#endif
+
+  // Utiliser un switch case avec hash pour un traitement plus rapide et plus propre
   switch (hash(action)) {
     case hash("START"):
     case hash("CONTINUE"):

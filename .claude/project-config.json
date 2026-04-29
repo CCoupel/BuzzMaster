@@ -1,0 +1,47 @@
+{
+  "name": "BuzzControl",
+  "team_name": "TEAM-Buzz",
+  "org": "CCoupel",
+  "project": "BuzzMaster",
+  "description": "Système de buzzers sans fil pour jeux de quiz — serveur Go + frontend React + firmware ESP32-C3",
+  "version": "3.7.0",
+  "initialized_at": "2026-04-28",
+  "initialized_from": "analysis",
+  "stack": {
+    "backend": { "language": "go", "framework": null },
+    "frontend": { "language": "javascript", "framework": "react" },
+    "mobile": null,
+    "firmware": { "platform": "esp32-c3", "framework": "platformio" },
+    "database": null
+  },
+  "infrastructure": {
+    "cicd": "github-actions",
+    "deploy": "bare-metal"
+  },
+  "testing": {
+    "backend": ["go-test"],
+    "frontend": ["vitest"],
+    "e2e": ["manual"]
+  },
+  "security": {
+    "concerns": []
+  },
+  "commands": {
+    "build": "cd server-go && go build ./cmd/server",
+    "test": "cd server-go && go test ./...",
+    "lint": "cd server-go && go vet ./...",
+    "audit": "cd server-go && govulncheck ./...",
+    "typecheck": ""
+  },
+  "extended_commands": {
+    "repo_url": "https://github.com/CCoupel/BuzzMaster",
+    "src_dir": "server-go/",
+    "version_file": "server-go/config.json",
+    "build_validate": "ls -la server-go/server 2>/dev/null || echo 'Binary not found'",
+    "server_stop": "curl -s http://localhost/shutdown",
+    "server_restart": "curl -s http://localhost/shutdown && sleep 2 && cd server-go && ./server",
+    "server_verify": "curl -s http://localhost/api/version",
+    "coverage": "cd server-go && go test ./... -coverprofile=coverage.out && go tool cover -html=coverage.out",
+    "version_read": "cat server-go/config.json | python3 -c \"import json,sys; d=json.load(sys.stdin); print(d['version'])\""
+  }
+}

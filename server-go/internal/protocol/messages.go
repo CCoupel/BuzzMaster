@@ -65,6 +65,10 @@ const (
 	// Replaces per-action QCM LED messages (QCM_COLOR/QCM_DIM/QCM_REVEAL/QCM_RESET).
 	// The server sends LED_SET at each relevant game state change; the firmware applies it directly.
 	ActionLEDSet = "LED_SET" // Server → Buzzer (per-buzzer or broadcast): set LED color/intensity/effect
+	// ACK protocol (added in v3.8.0)
+	// Firmware sends ACK in response to priority messages (LED_SET, OTA_UPDATE, WIFI_CONFIG).
+	// Server uses MSG_ID field (omitempty) on outgoing messages to enable ACK tracking.
+	ActionACK = "ACK" // Buzzer → Server: acknowledge receipt of a priority message
 )
 
 // FSInfo represents file storage information
@@ -85,6 +89,9 @@ type Message struct {
 	Msg       json.RawMessage `json:"MSG,omitempty"`
 	FSInfo    *FSInfo         `json:"FSINFO,omitempty"`
 	TimeEvent int64           `json:"TIME_EVENT,omitempty"`
+	// MsgID is a 12-char hex identifier added to priority messages (LED_SET, OTA_UPDATE, WIFI_CONFIG).
+	// omitempty ensures backward compat: firmwares < v3.8.0 that don't support ACK ignore this field.
+	MsgID string `json:"MSG_ID,omitempty"`
 }
 
 // IncomingMessage from TCP/WebSocket clients
@@ -317,6 +324,14 @@ type LEDSetPayload struct {
 	CometColor *[3]int `json:"COMET_COLOR,omitempty"`  // COMET band color (nil = firmware default gold)
 }
 
+// AckPayload for ACK action (buzzer → server: acknowledge receipt of a priority message).
+// The buzzer sends this immediately upon receiving a message with a MSG_ID field,
+// before applying the action (LED_SET, OTA_UPDATE, WIFI_CONFIG).
+type AckPayload struct {
+	AckAction string `json:"ack_action"` // Action being acknowledged (e.g. "LED_SET")
+	AckID     string `json:"ack_id"`     // Value of the MSG_ID being acknowledged
+}
+
 // WifiConfigPayload for WIFI_CONFIG action (server → buzzer: sync WiFi credentials)
 type WifiConfigPayload struct {
 	SSID       string `json:"SSID"`
@@ -361,6 +376,154 @@ func (m *Message) Serialize() ([]byte, error) {
 // SerializeForWebSocket converts message to JSON bytes (no null terminator)
 func (m *Message) SerializeForWebSocket() ([]byte, error) {
 	return json.Marshal(m)
+}
+
+// SerializeForAdmin returns the full JSON payload, identical to SerializeForWebSocket.
+// Admin clients receive all fields including FIRMWARE_VERSION, IS_OUTDATED, OTA_STATUS
+// and ACK_PENDING so the admin UI can display OTA badges and ACK spinners.
+func (m *Message) SerializeForAdmin() ([]byte, error) {
+	return json.Marshal(m)
+}
+
+// SerializeForWebClient returns the payload with admin-only fields stripped from
+// bumpers on UPDATE messages. TV and VPlayer clients do not need firmware/OTA/ACK
+// metadata, so stripping them reduces the payload size for these high-frequency broadcasts.
+//
+// Fields stripped per bumper on UPDATE: FIRMWARE_VERSION, IS_OUTDATED, OTA_STATUS,
+// OTA_PERCENT, ACK_PENDING. The top-level "config" key is also removed (server-side
+// config is not needed by TV/VPlayer clients).
+//
+// The format produced by GetGameJSON() (GameData struct) uses lowercase map keys:
+//   - "bumpers" → map[mac]*Bumper  (not "BUMPERS" / slice)
+//   - "teams"   → map[name]*Team   (not "TEAMS"   / slice)
+//   - "GAME"    → GameState node
+//
+// All other actions are serialised identically to SerializeForWebSocket.
+func (m *Message) SerializeForWebClient() ([]byte, error) {
+	if m.Action != ActionUpdate {
+		return json.Marshal(m)
+	}
+
+	var raw map[string]interface{}
+	if err := json.Unmarshal(m.Msg, &raw); err != nil {
+		// Fallback to full serialisation — never silently drop updates
+		return json.Marshal(m)
+	}
+
+	// "bumpers" is a map[mac]bumper in GetGameJSON() — lowercase key, map not slice
+	if bumpers, ok := raw["bumpers"].(map[string]interface{}); ok {
+		for _, b := range bumpers {
+			if bumper, ok := b.(map[string]interface{}); ok {
+				delete(bumper, "FIRMWARE_VERSION")
+				delete(bumper, "IS_OUTDATED")
+				delete(bumper, "OTA_STATUS")
+				delete(bumper, "OTA_PERCENT")
+				delete(bumper, "ACK_PENDING")
+			}
+		}
+	}
+	// "config" is a server-side key not needed by TV/VPlayer clients
+	delete(raw, "config")
+
+	stripped, err := json.Marshal(raw)
+	if err != nil {
+		return json.Marshal(m)
+	}
+	out := *m
+	out.Msg = stripped
+	return json.Marshal(&out)
+}
+
+// buzzerBumperKeys lists the Bumper fields that physical buzzers actually need.
+// Note: "ID" is intentionally absent — in GetGameJSON() the bumper MAC is the
+// map key, not a field inside the bumper object (Bumper struct has no ID field).
+// All other fields (firmware, OTA, QCM answer colour, etc.) are stripped to
+// minimise payload size on UPDATE messages sent to buzzer clients.
+var buzzerBumperKeys = []string{
+	"NAME", "TEAM", "CONNECTED", "IS_VIRTUAL", "TIME", "BUTTON", "STATUS", "SCORE",
+}
+
+// buzzerTeamKeys lists the Team fields that physical buzzers actually need.
+var buzzerTeamKeys = []string{"NAME", "COLOR", "STATUS", "SCORE"}
+
+// SerializeForBuzzer returns a minimal UPDATE payload for physical buzzer clients.
+// Buzzers only need a small subset of the game state to drive their LED animations and
+// local state machine, so stripping unused fields keeps the WebSocket frames small.
+//
+// On UPDATE: PHASE/TIME/CURRENT_TIME are extracted from the "GAME" node and forwarded
+// at the top level; bumpers and teams are reduced to their respective key whitelists and
+// emitted as maps (preserving the lowercase map-keyed structure of GetGameJSON()).
+//
+// The format produced by GetGameJSON() (GameData struct) uses lowercase map keys:
+//   - "bumpers" → map[mac]*Bumper
+//   - "teams"   → map[name]*Team
+//   - "GAME"    → GameState node (contains PHASE, TIME, CURRENT_TIME, etc.)
+//
+// All other actions are serialised identically to SerializeForWebSocket.
+func (m *Message) SerializeForBuzzer() ([]byte, error) {
+	if m.Action != ActionUpdate {
+		return json.Marshal(m)
+	}
+
+	var full map[string]interface{}
+	if err := json.Unmarshal(m.Msg, &full); err != nil {
+		return json.Marshal(m)
+	}
+
+	minimal := make(map[string]interface{}, 8)
+
+	// PHASE / TIME / CURRENT_TIME live inside the "GAME" node in GetGameJSON()
+	if gameNode, ok := full["GAME"].(map[string]interface{}); ok {
+		for _, key := range []string{"PHASE", "TIME", "CURRENT_TIME"} {
+			if v, ok := gameNode[key]; ok {
+				minimal[key] = v
+			}
+		}
+	}
+
+	// Reduce bumpers to minimal fields.
+	// "bumpers" is a map[mac]bumper — lowercase key, map not slice.
+	if bumpers, ok := full["bumpers"].(map[string]interface{}); ok {
+		minBumpers := make(map[string]interface{}, len(bumpers))
+		for mac, b := range bumpers {
+			if bumper, ok := b.(map[string]interface{}); ok {
+				minBumper := make(map[string]interface{}, len(buzzerBumperKeys))
+				for _, key := range buzzerBumperKeys {
+					if v, ok := bumper[key]; ok {
+						minBumper[key] = v
+					}
+				}
+				minBumpers[mac] = minBumper
+			}
+		}
+		minimal["bumpers"] = minBumpers
+	}
+
+	// Reduce teams to minimal fields.
+	// "teams" is a map[name]team — lowercase key, map not slice.
+	if teams, ok := full["teams"].(map[string]interface{}); ok {
+		minTeams := make(map[string]interface{}, len(teams))
+		for name, t := range teams {
+			if team, ok := t.(map[string]interface{}); ok {
+				minTeam := make(map[string]interface{}, len(buzzerTeamKeys))
+				for _, key := range buzzerTeamKeys {
+					if v, ok := team[key]; ok {
+						minTeam[key] = v
+					}
+				}
+				minTeams[name] = minTeam
+			}
+		}
+		minimal["teams"] = minTeams
+	}
+
+	stripped, err := json.Marshal(minimal)
+	if err != nil {
+		return json.Marshal(m)
+	}
+	out := *m
+	out.Msg = stripped
+	return json.Marshal(&out)
 }
 
 // ParseButtonPayload extracts button info from message

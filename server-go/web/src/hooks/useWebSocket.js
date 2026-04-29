@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 
 const RECONNECT_INTERVAL = 5000
 
-export default function useWebSocket() {
+export default function useWebSocket(endpoint = '/ws/admin') {
   const [status, setStatus] = useState('disconnected')
   const [gameState, setGameState] = useState({
     phase: 'STOPPED',
@@ -46,7 +46,7 @@ export default function useWebSocket() {
     if (wsRef.current?.readyState === WebSocket.OPEN) return
 
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-    const wsUrl = `${protocol}//${window.location.host}/ws`
+    const wsUrl = `${protocol}//${window.location.host}${endpoint}`
 
     setStatus('connecting')
     const ws = new WebSocket(wsUrl)
@@ -75,7 +75,7 @@ export default function useWebSocket() {
         console.error('Failed to parse message:', error)
       }
     }
-  }, [])
+  }, [endpoint])
 
   const handleMessage = useCallback((data) => {
     const { ACTION, MSG, FSINFO, VERSION } = data

@@ -1,17 +1,18 @@
-# DEVELOPMENT.md - Patterns de Développement
+# DEVELOPMENT.md - Patterns de Developpement
 
-Ce fichier centralise les patterns partagés par les commandes `/dev`, `/dev-backend`, `/dev-frontend`, et `/dev-buzzclick`.
+Ce fichier centralise les patterns partages par les commandes de developpement (`/dev`, `/dev-backend`, `/dev-frontend`, etc.).
 
 ---
 
-## 1. Agents de Développement
+## 1. Agents de Developpement
 
 | Commande | Agent | Scope |
 |----------|-------|-------|
-| `/dev` | Dispatch | Backend + Frontend |
-| `/dev-backend` | dev-backend | Go uniquement |
-| `/dev-frontend` | dev-frontend | React uniquement |
-| `/dev-buzzclick` | dev-buzzclick | ESP32 firmware |
+| `/dev` | Dispatch | Multi-agent |
+| `/dev-backend` | dev-backend | Backend uniquement |
+| `/dev-frontend` | dev-frontend | Frontend uniquement |
+
+> **Note** : D'autres agents DEV peuvent etre ajoutes selon le projet (firmware, mobile, etc.)
 
 ---
 
@@ -19,189 +20,120 @@ Ce fichier centralise les patterns partagés par les commandes `/dev`, `/dev-bac
 
 ```
 Analyser les fichiers du plan :
-├── *.go, internal/, cmd/ → dev-backend
-├── *.jsx, *.css, web/src/ → dev-frontend
-├── *.cpp, *.h, src/BuzzClick/ → dev-buzzclick
-└── Mixte → Voir section 3
+|-- Fichiers backend -> dev-backend
+|-- Fichiers frontend -> dev-frontend
+|-- Fichiers firmware -> dev-firmware (si applicable)
+|-- Mixte -> Voir section 3
 ```
 
 ---
 
-## 3. Stratégie Multi-Agent
+## 3. Strategie Multi-Agent
 
-### Séquentiel Obligatoire (Backend → Frontend)
+### Sequentiel Obligatoire (Backend -> Frontend)
 
-Si le backend crée des éléments utilisés par le frontend :
-- Nouvelles actions WebSocket
-- Nouveaux champs GameState
-- Nouveaux endpoints HTTP
+Si le backend cree des elements utilises par le frontend :
+- Nouvelles APIs ou endpoints
+- Nouveaux modeles de donnees
+- Nouveaux evenements temps-reel
 
 ```
 1. Lancer dev-backend
-2. Récupérer le résumé (actions WS, champs)
-3. Lancer dev-frontend avec le résumé
+2. Recuperer le resume (APIs, modeles)
+3. Lancer dev-frontend avec le resume
 ```
 
-### Parallèle Autorisé
+### Parallele Autorise
 
-Si modifications isolées :
-- Refactoring CSS isolé
-- Tests unitaires isolés
-- Composants sans nouvelles données
+Si modifications isolees :
+- Refactoring CSS isole
+- Tests unitaires isoles
+- Composants sans nouvelles donnees
 
 ```
-Lancer dev-backend ET dev-frontend en parallèle (2 Task tools)
+Lancer dev-backend ET dev-frontend en parallele (2 Task tools)
 ```
 
 ---
 
 ## 4. Workflow Commun
 
-### Étape 1 : Collecte Contexte
+### Etape 1 : Collecte Contexte
 
 ```bash
 # Version actuelle
-cat server-go/config.json | grep '"version"'
+{VERSION_READ_CMD}
 
 # Branche courante
 git branch --show-current
 ```
 
-### Étape 2 : Incrémenter Version (OBLIGATOIRE)
+### Etape 2 : Incrementer Version (OBLIGATOIRE)
 
 ```bash
-# AVANT tout code, incrémenter z
-# 2.40.1 → 2.40.2
-git add server-go/config.json
+# AVANT tout code, incrementer z
+# X.Y.Z -> X.Y.Z+1
+git add {VERSION_FILE}
 git commit -m "chore(version): Bump to X.Y.Z"
 ```
 
-### Étape 3 : Implémenter
+### Etape 3 : Implementer
 
-Voir ordre par agent (sections 5-7).
+Voir ordre par agent dans `context/PROJECT_CONTEXT.md`.
 
-### Étape 4 : Build Final
+### Etape 4 : Build Final
 
 ```bash
-# ORDRE CRITIQUE : Frontend AVANT Backend (mode portable)
-cd server-go/web && npm run build && cd .. && go build -o server.exe ./cmd/server
+cd server-go && go build ./cmd/server
 ```
 
-### Étape 5 : Vérifications
+### Etape 5 : Verifications
 
 ```bash
 # Tests
-go test ./... -v
+cd server-go && go test ./...
 
 # Push
 git push origin <branche>
 ```
 
-### Étape 6 : Générer Résumé
+### Etape 6 : Generer Resume
 
 ```markdown
-## Résumé DEV
+## Resume DEV
 
-**Fichiers modifiés :**
+**Fichiers modifies :**
 - [liste]
 
-**Tests créés :**
+**Tests crees :**
 - [liste]
 
 **Commits :**
 - [liste]
 
 **Pour Frontend (si backend) :**
-- Actions WebSocket : [liste]
-- Champs GameState : [liste]
+- APIs : [liste]
+- Modeles : [liste]
 ```
 
 ---
 
-## 5. Ordre Backend (Go)
+## 5. Regles Critiques
 
-| Étape | Fichier | Actions |
-|-------|---------|---------|
-| 1 | internal/game/models.go | Structs, champs, JSON tags |
-| 2 | internal/game/engine.go | Logique métier, mutex |
-| 3 | internal/game/engine_test.go | Tests unitaires |
-| 4 | internal/protocol/messages.go | Actions, payloads |
-| 5 | cmd/server/main.go | Handlers WebSocket |
-| 6 | internal/server/http.go | Endpoints REST |
-
-### Standards Go
-
-- PascalCase exports, camelCase privé
-- Error handling obligatoire
-- Thread-safety avec mutex
-- Tests table-driven
-
----
-
-## 6. Ordre Frontend (React)
-
-| Étape | Fichier | Actions |
-|-------|---------|---------|
-| 1 | hooks/useWebSocket.js | Nouveaux handlers |
-| 2 | components/*.jsx | Composants réutilisables |
-| 3 | pages/*Page.jsx | Pages admin |
-| 4 | pages/PlayerDisplay.jsx | Affichage TV (STATIQUE!) |
-| 5 | pages/*.css | Styles |
-
-### Standards React
-
-- Composants fonctionnels + hooks
-- useMemo/useCallback pour optimisation
-- CSS variables (pas de hardcoded)
-- PropTypes si nécessaire
-
-### Contrainte TV STATIQUE
-
-```css
-/* PlayerDisplay.jsx - OBLIGATOIRE */
-overflow: hidden;  /* JAMAIS auto ou scroll */
-/* Utiliser vh, vw, % - pas de px fixes */
-/* Tester à 1920x1080 */
-```
-
----
-
-## 7. Ordre BuzzClick (ESP32)
-
-| Étape | Fichier | Actions |
-|-------|---------|---------|
-| 1 | src/BuzzClick/config.h | Constantes |
-| 2 | src/BuzzClick/network.cpp | WiFi, TCP |
-| 3 | src/BuzzClick/protocol.cpp | Messages |
-| 4 | src/BuzzClick/main.cpp | Logique principale |
-
-### Standards ESP32
-
-- C++17
-- Gestion mémoire (pas de memory leak)
-- Reconnexion WiFi avec backoff
-- Économie batterie
-
----
-
-## 8. Règles Critiques
-
-| Règle | Détail |
+| Regle | Detail |
 |-------|--------|
-| Version first | Incrémenter z AVANT tout code |
-| Scope strict | Backend ne touche pas JSX, Frontend ne touche pas Go |
-| Build order | Frontend AVANT Backend (mode portable) |
+| Version first | Incrementer z AVANT tout code |
+| Scope strict | Chaque agent reste dans son domaine |
 | Tests | Chaque fonction publique = tests |
-| Commits | Atomiques, 1 commit par tâche logique |
-| TV statique | Jamais de scroll sur PlayerDisplay |
+| Commits | Atomiques, 1 commit par tache logique |
 
 ---
 
-## 9. Modes d'Appel
+## 6. Modes d'Appel
 
 ```bash
 # Plan complet
-/dev [plan détaillé]
+/dev [plan detaille]
 
 # Backend seul
 /dev backend [plan backend]
@@ -213,23 +145,20 @@ overflow: hidden;  /* JAMAIS auto ou scroll */
 
 # Bugfix
 /dev fix "description du bug"
-/dev-backend fix "bug backend"
-/dev-frontend fix "bug frontend"
 
 # Post-review
-/dev review "corrections demandées"
+/dev review "corrections demandees"
 ```
 
 ---
 
 ## Usage
 
-Dans les commandes DEV, référencer ce fichier :
+Dans les commandes DEV, referencer ce fichier :
 
 ```markdown
 **Contexte DEV :** Voir `context/DEVELOPMENT.md`
 - Workflow : section 4
-- Ordre backend : section 5
-- Ordre frontend : section 6
-- Règles : section 8
+- Regles : section 5
+- Modes d'appel : section 6
 ```

@@ -59,6 +59,7 @@ export default function GamePage() {
         otaStatus: bumper.OTA_STATUS || '',
         connected: bumper.CONNECTED === true, // strict — undefined does NOT trigger disconnected badge
         isVirtual: bumper.IS_VIRTUAL === true, // virtual players (VJoueurs) never show disconnected badge
+        ackPending: bumper.ACK_PENDING === true, // strict — undefined does NOT trigger ACK badge
       })
     })
     // Sort bumpers by timestamp within each team

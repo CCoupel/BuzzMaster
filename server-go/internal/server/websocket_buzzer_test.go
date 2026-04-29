@@ -1038,3 +1038,187 @@ func TestBuzzerParseSingle_InvalidJSON(t *testing.T) {
 		})
 	}
 }
+
+// ============================================================================
+// Tests: BroadcastIfRelevant — Buzzer Payload Whitelist (#41)
+// ============================================================================
+
+// TestBuzzerActionWhitelist verifies the whitelist contains exactly the right actions.
+func TestBuzzerActionWhitelist(t *testing.T) {
+	// Actions that MUST be in the whitelist (buzzers need game-state + control actions).
+	expectedAllowed := []string{
+		// Game-state actions — buzzer state machine synchronisation
+		protocol.ActionPing,
+		protocol.ActionUpdate,
+		protocol.ActionUpdateTimer,
+		protocol.ActionStart,
+		protocol.ActionContinue,
+		protocol.ActionStop,
+		protocol.ActionPause,
+		protocol.ActionReady,
+		protocol.ActionReset,
+		// Control actions
+		protocol.ActionHello,
+		protocol.ActionLEDSet,
+		protocol.ActionOTAUpdate,
+		protocol.ActionWifiConfig,
+	}
+	for _, action := range expectedAllowed {
+		if !buzzerActionWhitelist[action] {
+			t.Errorf("action %q should be in buzzer whitelist", action)
+		}
+	}
+
+	// Actions that must NOT reach physical buzzers (web-client / admin-only messages).
+	expectedBlocked := []string{
+		protocol.ActionReveal,
+		protocol.ActionQuestions,
+		protocol.ActionClients,
+		protocol.ActionFirmwareVersion,
+		protocol.ActionRemote,
+		protocol.ActionBackgroundChange,
+		protocol.ActionConfigUpdate,
+	}
+	for _, action := range expectedBlocked {
+		if buzzerActionWhitelist[action] {
+			t.Errorf("action %q should NOT be in buzzer whitelist", action)
+		}
+	}
+}
+
+// TestBroadcastIfRelevant_DropsNonWhitelisted verifies that non-whitelisted actions
+// are silently dropped and never queued on the broadcast channel.
+func TestBroadcastIfRelevant_DropsNonWhitelisted(t *testing.T) {
+	droppedActions := []string{
+		protocol.ActionReveal,
+		protocol.ActionQuestions,
+		protocol.ActionClients,
+		protocol.ActionBackgroundChange,
+		protocol.ActionConfigUpdate,
+	}
+
+	for _, action := range droppedActions {
+		t.Run("drops_"+action, func(t *testing.T) {
+			hub := NewBuzzerWebSocketHub()
+			msg, _ := protocol.NewMessage(action, nil)
+
+			hub.BroadcastIfRelevant(msg)
+
+			// broadcast channel must remain empty
+			select {
+			case <-hub.broadcast:
+				t.Errorf("action %q should have been dropped but was queued", action)
+			default:
+				// correct: nothing queued
+			}
+		})
+	}
+}
+
+// ============================================================================
+// Tests: BroadcastRawIfRelevant — pre-serialized bytes, whitelist filtered (#41)
+// ============================================================================
+
+// TestBroadcastRawIfRelevant_DropsNonWhitelisted verifies that non-whitelisted actions
+// cause BroadcastRawIfRelevant to silently drop the raw payload.
+func TestBroadcastRawIfRelevant_DropsNonWhitelisted(t *testing.T) {
+	droppedActions := []string{
+		protocol.ActionReveal,
+		protocol.ActionQuestions,
+		protocol.ActionClients,
+		protocol.ActionFirmwareVersion,
+		protocol.ActionBackgroundChange,
+	}
+
+	for _, action := range droppedActions {
+		t.Run("drops_raw_"+action, func(t *testing.T) {
+			hub := NewBuzzerWebSocketHub()
+			rawData := []byte(`{"ACTION":"` + action + `","MSG":{}}`)
+
+			hub.BroadcastRawIfRelevant(action, rawData)
+
+			select {
+			case <-hub.broadcast:
+				t.Errorf("raw action %q should have been dropped but was queued", action)
+			default:
+				// correct: nothing queued
+			}
+		})
+	}
+}
+
+// TestBroadcastRawIfRelevant_AllowsWhitelisted verifies that whitelisted actions
+// cause the raw payload to be queued on the broadcast channel.
+func TestBroadcastRawIfRelevant_AllowsWhitelisted(t *testing.T) {
+	allowedActions := []string{
+		protocol.ActionUpdate,
+		protocol.ActionUpdateTimer,
+		protocol.ActionStart,
+		protocol.ActionContinue,
+		protocol.ActionStop,
+		protocol.ActionPause,
+		protocol.ActionReady,
+		protocol.ActionReset,
+		protocol.ActionLEDSet,
+		protocol.ActionOTAUpdate,
+		protocol.ActionWifiConfig,
+		protocol.ActionHello,
+	}
+
+	for _, action := range allowedActions {
+		t.Run("allows_raw_"+action, func(t *testing.T) {
+			hub := NewBuzzerWebSocketHub()
+			rawData := []byte(`{"ACTION":"` + action + `","MSG":{}}`)
+
+			hub.BroadcastRawIfRelevant(action, rawData)
+
+			select {
+			case got := <-hub.broadcast:
+				if string(got) != string(rawData) {
+					t.Errorf("raw action %q: expected %s, got %s", action, rawData, got)
+				}
+			default:
+				t.Errorf("raw action %q should have been queued but was dropped", action)
+			}
+		})
+	}
+}
+
+// TestBroadcastIfRelevant_AllowsWhitelisted verifies that whitelisted actions
+// are forwarded to the broadcast channel.
+func TestBroadcastIfRelevant_AllowsWhitelisted(t *testing.T) {
+	allowedActions := []string{
+		// Game-state actions
+		protocol.ActionUpdate,
+		protocol.ActionUpdateTimer,
+		protocol.ActionStart,
+		protocol.ActionContinue,
+		protocol.ActionStop,
+		protocol.ActionPause,
+		protocol.ActionReady,
+		protocol.ActionReset,
+		// Control actions
+		protocol.ActionLEDSet,
+		protocol.ActionOTAUpdate,
+		protocol.ActionWifiConfig,
+		protocol.ActionHello,
+	}
+
+	for _, action := range allowedActions {
+		t.Run("allows_"+action, func(t *testing.T) {
+			hub := NewBuzzerWebSocketHub()
+			msg, _ := protocol.NewMessage(action, map[string]interface{}{})
+
+			hub.BroadcastIfRelevant(msg)
+
+			select {
+			case data := <-hub.broadcast:
+				if len(data) == 0 {
+					t.Errorf("action %q: expected non-empty serialized message", action)
+				}
+			default:
+				t.Errorf("action %q should have been queued but was dropped", action)
+			}
+		})
+	}
+}

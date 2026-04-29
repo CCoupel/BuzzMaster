@@ -1,0 +1,24 @@
+# Fichiers TEMPLATE — fetches depuis GitHub a chaque /init-project
+# Ne pas modifier manuellement, ils seront ecrases lors de la prochaine sync
+#
+# IMPORTANT : Ce fichier est copie par /init-project en tant que .gitignore
+# a la racine du projet cible. Il n'est PAS actif dans le template repo lui-meme.
+
+# Repertoire source du template (fetch depuis GitHub)
+TEMPLATE_claude/
+
+# Commandes generees depuis TEMPLATE_claude/ (sauf init-project.md = point d'entree)
+.claude/commands/
+!.claude/commands/init-project.md
+
+# Agents template generes depuis TEMPLATE_claude/
+.claude/agents/*.template.md
+.claude/agents/context/
+
+# Fichiers PROJET — toujours git trackes (ne pas ajouter ici)
+# .claude/CLAUDE.md
+# .claude/project-config.json
+# .claude/memory/
+# .claude/agents/dev-backend.md
+# .claude/agents/dev-frontend.md
+# .claude/agents/dev-firmware.md

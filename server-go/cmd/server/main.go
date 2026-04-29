@@ -7,6 +7,7 @@ import (
 	"buzzcontrol/internal/protocol"
 	"buzzcontrol/internal/server"
 	"buzzcontrol/web"
+	"context"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -39,6 +40,9 @@ type App struct {
 	mdnsServer     *server.MDNSServer
 	dnsServer      *server.DNSServer
 	logger         *server.BroadcastLogger
+	ackManager     *server.AckManager    // ACK tracking for priority buzzer messages (v3.8.0)
+	ctx            context.Context       // Application-lifetime context
+	cancelCtx      context.CancelFunc    // Cancels ctx on shutdown
 	// bumperLEDState tracks the last LED_SET payload sent to each buzzer (by MAC).
 	// Used by resendLEDOnReconnect to restore LED state when a buzzer reconnects.
 	bumperLEDState map[string]protocol.LEDSetPayload
@@ -72,11 +76,14 @@ func main() {
 	log.Printf("HTTP Port: %d", cfg.Server.HTTPPort)
 	log.Printf("TCP Port: %d", cfg.Server.TCPPort)
 
-	// Create app
+	// Create app with an application-lifetime context
+	appCtx, appCancel := context.WithCancel(context.Background())
 	app := &App{
 		config:          cfg,
 		bumperLEDState:  make(map[string]protocol.LEDSetPayload),
 		bumperBuzzState: make(map[string]game.BuzzState),
+		ctx:             appCtx,
+		cancelCtx:       appCancel,
 	}
 
 	// Initialize components
@@ -226,6 +233,30 @@ func (a *App) init() {
 		}
 	}
 
+	// ACK manager for priority buzzer messages (v3.8.0)
+	a.ackManager = server.NewAckManager(&a.config.Server)
+	a.ackManager.OnRetry = func(mac, msgID string) {
+		// Resend the LED payload with the ORIGINAL msgID so the buzzer can confirm the right entry.
+		// Never call sendLEDSet() here — that generates a new msgID, leaving the original entry
+		// permanently unconfirmable and cascading into AckMaxRetries² slots at most.
+		if payload, ok := a.bumperLEDState[mac]; ok {
+			msg, err := protocol.NewMessage(protocol.ActionLEDSet, payload)
+			if err != nil {
+				server.LogError(game.LogComponentApp, "AckManager retry: failed to create LED_SET for %s: %v", mac, err)
+				return
+			}
+			msg.MsgID = msgID // Original msgID, not a new one
+			if err := a.buzzerHub.SendToClient(mac, msg); err != nil {
+				server.LogWarn(game.LogComponentApp, "AckManager retry: failed to resend LED_SET to %s: %v", mac, err)
+			}
+		}
+	}
+	a.ackManager.OnExpired = func(mac, msgID string) {
+		// Clear AckPending flag after max retries exhausted
+		a.engine.UpdateBumper(mac, map[string]interface{}{"ACK_PENDING": false})
+		a.broadcastUpdate()
+	}
+
 	// mDNS server (advertise buzzcontrol.local)
 	a.mdnsServer = server.NewMDNSServer("buzzcontrol", a.config.Server.HTTPPort, a.config.Server.TCPPort)
 
@@ -338,6 +369,13 @@ func (a *App) setupCallbacks() {
 		return a.buzzerHub.ConnectedCount()
 	}
 
+	// ACK callback for priority OTA_UPDATE messages sent from http_firmware.go (v3.8.0)
+	a.httpServer.OnPriorityMessageSent = func(mac, msgID, action string) {
+		a.ackManager.Register(mac, msgID, action)
+		a.engine.UpdateBumper(mac, map[string]interface{}{"ACK_PENDING": true})
+		a.broadcastUpdate()
+	}
+
 	// Detect existing backgrounds on startup
 	a.loadBackgrounds()
 
@@ -360,7 +398,12 @@ func (a *App) setupCallbacks() {
 		if a.buzzerHub.IsClientConnected(mac) {
 			return
 		}
-		a.engine.UpdateBumper(mac, map[string]interface{}{"CONNECTED": false})
+		a.engine.UpdateBumper(mac, map[string]interface{}{"CONNECTED": false, "ACK_PENDING": false})
+		// Clean up any pending ACK entries for this buzzer to avoid stale retries
+		cleared := a.ackManager.ClearByMAC(mac)
+		if cleared > 0 {
+			server.LogInfo(game.LogComponentApp, "AckManager: cleared %d pending ACK(s) for disconnected buzzer %s", cleared, mac)
+		}
 		a.broadcastUpdate()
 		a.updateBroadcasterFrequency()
 	}
@@ -513,6 +556,9 @@ func (a *App) start() error {
 	// Start Logs WebSocket hub
 	go a.logsHub.Run()
 
+	// Start ACK manager background goroutine (v3.8.0); uses app context for clean shutdown.
+	go a.ackManager.Start(a.ctx)
+
 	// Start TCP server
 	if err := a.tcpServer.Start(); err != nil {
 		return err
@@ -557,6 +603,10 @@ func (a *App) start() error {
 }
 
 func (a *App) stop() {
+	// Cancel the application context — stops the AckManager goroutine and any other ctx-aware components.
+	if a.cancelCtx != nil {
+		a.cancelCtx()
+	}
 	a.dnsServer.Stop()
 	a.mdnsServer.Stop()
 	a.httpServer.Stop()
@@ -582,9 +632,43 @@ func (a *App) handleBuzzerMessage(incoming *protocol.IncomingMessage) {
 	case protocol.ActionOTAProgress:
 		a.handleOTAProgress(incoming.ClientID, msg)
 
+	case protocol.ActionACK:
+		a.handleBuzzerACK(incoming.ClientID, msg)
+
 	default:
 		server.LogWarn(game.LogComponentApp, "Unknown buzzer action: %s", msg.Action)
 	}
+}
+
+// handleBuzzerACK processes an ACK message from a buzzer.
+// The buzzer sends this after receiving a priority message with a MSG_ID.
+func (a *App) handleBuzzerACK(clientID string, msg *protocol.Message) {
+	var payload protocol.AckPayload
+	if err := json.Unmarshal(msg.Msg, &payload); err != nil {
+		server.LogWarn(game.LogComponentApp, "ACK from %s: failed to parse payload: %v", clientID, err)
+		return
+	}
+	if payload.AckID == "" {
+		server.LogWarn(game.LogComponentApp, "ACK from %s: empty ack_id", clientID)
+		return
+	}
+
+	mac := msg.ID
+	if mac == "" {
+		mac = clientID
+	}
+
+	confirmed := a.ackManager.Confirm(payload.AckID)
+	if !confirmed {
+		server.LogDebug(game.LogComponentApp, "ACK from %s for msgID=%s: not found (already confirmed or expired)", mac, payload.AckID)
+		return
+	}
+
+	server.LogDebug(game.LogComponentApp, "ACK received from %s: action=%s msgID=%s", mac, payload.AckAction, payload.AckID)
+
+	// Clear the AckPending flag on the bumper
+	a.engine.UpdateBumper(mac, map[string]interface{}{"ACK_PENDING": false})
+	a.broadcastUpdate()
 }
 
 // handleWebMessage processes messages from web clients (WebSocket)
@@ -1586,36 +1670,63 @@ func (a *App) handleVPlayerQCMAnswer(clientID string, msg *protocol.Message) {
 }
 
 // Broadcast methods
-func (a *App) broadcast(action string, data json.RawMessage, viaTCP bool) {
+
+// broadcastFiltered sends a WebSocket message only to clients of the specified types.
+// It is a thin wrapper around wsHub.BroadcastToTypes and is used by all broadcastXxx()
+// helpers to implement the filtering table from the v3.8.0 WS endpoints contract.
+func (a *App) broadcastFiltered(msg *protocol.Message, types ...server.ClientType) {
+	a.wsHub.BroadcastToTypes(msg, types...)
+}
+
+func (a *App) broadcast(action string, data json.RawMessage, viaTCP bool, types ...server.ClientType) {
 	msg, _ := protocol.NewMessage(action, nil)
 	msg.Msg = data
 
-	// WebSocket (web clients)
-	a.wsHub.Broadcast(msg)
+	// WebSocket (web clients) — filtered by type, or all if no types specified
+	if len(types) == 0 {
+		a.wsHub.Broadcast(msg)
+	} else {
+		a.wsHub.BroadcastToTypes(msg, types...)
+	}
 
-	// Buzzer-targeted broadcasts (UDP + WebSocket buzzers)
+	// Buzzer-targeted broadcasts (UDP only — buzzer WS clients receive LED_SET directly)
 	if viaTCP {
 		a.udpBcast.Broadcast(msg)
-		a.buzzerHub.Broadcast(msg)
 	}
 }
 
 func (a *App) broadcastHello() {
 	msg, _ := protocol.NewMessage(protocol.ActionHello, map[string]interface{}{})
-	a.wsHub.Broadcast(msg)
+	a.wsHub.BroadcastToTypes(msg, server.ClientTypeAdmin)
 	a.udpBcast.Broadcast(msg)
-	a.buzzerHub.Broadcast(msg)
+	a.buzzerHub.Broadcast(msg) // HELLO is in buzzer whitelist — sent to physical buzzers
 }
 
 
 func (a *App) broadcastUpdate() {
+	if a.wsHub == nil {
+		return // Guard for unit tests that construct a minimal App without a wsHub
+	}
 	data := a.engine.GetGameJSON()
 	server.LogDebug(game.LogComponentApp, "Broadcasting UPDATE: %s", string(data)[:min(200, len(data))])
 	msg, _ := protocol.NewMessage(protocol.ActionUpdate, nil)
 	msg.Msg = data
 	msg.Version = a.config.Version
-	a.wsHub.Broadcast(msg)
-	a.buzzerHub.Broadcast(msg)
+
+	// Admin clients receive the full payload (all firmware/OTA/ACK fields).
+	if dataAdmin, err := msg.SerializeForAdmin(); err == nil {
+		a.wsHub.BroadcastRawToTypes(dataAdmin, server.ClientTypeAdmin)
+	}
+
+	// TV and VPlayer clients receive a stripped payload (no firmware/OTA/ACK metadata).
+	if dataWeb, err := msg.SerializeForWebClient(); err == nil {
+		a.wsHub.BroadcastRawToTypes(dataWeb, server.ClientTypeTV, server.ClientTypeVPlayer)
+	}
+
+	// Physical buzzer WS clients receive a minimal payload (PHASE/TIMER + slim bumper/team slices).
+	if dataBuzzer, err := msg.SerializeForBuzzer(); err == nil {
+		a.buzzerHub.BroadcastRawIfRelevant(protocol.ActionUpdate, dataBuzzer)
+	}
 }
 
 // updateBroadcasterFrequency adjusts the UDP heartbeat interval based on whether
@@ -1643,58 +1754,65 @@ func (a *App) broadcastEnrollmentUpdate() {
 		EnrollmentActive:   state.EnrollmentActive,
 	}
 	msg, _ := protocol.NewMessage(protocol.ActionEnrollmentUpdate, payload)
-	a.wsHub.Broadcast(msg)
+	a.wsHub.BroadcastToTypes(msg, server.ClientTypeAdmin, server.ClientTypeTV, server.ClientTypeVPlayer)
 	server.LogDebug(game.LogComponentApp, "Broadcasting ENROLLMENT_UPDATE: %d/%d players", state.VirtualPlayerCount, state.VirtualPlayerLimit)
 }
 func (a *App) broadcastGameState(phase string) {
 	data := a.engine.GetGameJSON()
-	a.broadcast(protocol.ActionUpdate, data, false)
+	a.broadcast(protocol.ActionUpdate, data, false,
+		server.ClientTypeAdmin, server.ClientTypeTV, server.ClientTypeVPlayer)
 }
 
 func (a *App) broadcastStart() {
 	data := a.engine.GetGameJSON()
-	a.broadcast(protocol.ActionStart, data, true)
+	a.broadcast(protocol.ActionStart, data, true,
+		server.ClientTypeAdmin, server.ClientTypeTV, server.ClientTypeVPlayer)
 	a.sendLEDSetAllBuzzers()
 }
 
 func (a *App) broadcastStop() {
 	data := a.engine.GetGameJSON()
-	a.broadcast(protocol.ActionStop, data, true)
+	a.broadcast(protocol.ActionStop, data, true,
+		server.ClientTypeAdmin, server.ClientTypeTV, server.ClientTypeVPlayer)
 	a.sendLEDSetStop()
 }
 
 func (a *App) broadcastPause(bumperID string) {
 	data := a.engine.GetGameJSON()
-	a.broadcast(protocol.ActionPause, data, true)
+	a.broadcast(protocol.ActionPause, data, true,
+		server.ClientTypeAdmin, server.ClientTypeTV, server.ClientTypeVPlayer)
 	a.sendLEDSetPause(bumperID)
 }
 
 func (a *App) broadcastPauseAll() {
 	data := a.engine.GetGameJSON()
-	a.broadcast(protocol.ActionPause, data, true)
+	a.broadcast(protocol.ActionPause, data, true,
+		server.ClientTypeAdmin, server.ClientTypeTV, server.ClientTypeVPlayer)
 	a.sendLEDSetPauseAll()
 }
 
 func (a *App) broadcastContinue() {
 	data := a.engine.GetGameJSON()
-	a.broadcast(protocol.ActionContinue, data, true)
+	a.broadcast(protocol.ActionContinue, data, true,
+		server.ClientTypeAdmin, server.ClientTypeTV, server.ClientTypeVPlayer)
 	a.sendLEDSetContinue()
 }
 
 func (a *App) broadcastTimerUpdate(currentTime int) {
 	data := a.engine.GetGameJSON()
-	a.broadcast(protocol.ActionUpdateTimer, data, true)
+	a.broadcast(protocol.ActionUpdateTimer, data, true,
+		server.ClientTypeAdmin, server.ClientTypeTV, server.ClientTypeVPlayer)
 }
 
 func (a *App) broadcastCountdownUpdate(countdownTime int) {
 	data := a.engine.GetGameJSON()
 	server.LogDebug(game.LogComponentApp, "Broadcasting countdown: %d", countdownTime)
-	a.broadcast(protocol.ActionUpdateTimer, data, true)
+	a.broadcast(protocol.ActionUpdateTimer, data, true,
+		server.ClientTypeAdmin, server.ClientTypeTV, server.ClientTypeVPlayer)
 }
 
 func (a *App) broadcastPing() {
 	msg, _ := protocol.NewMessage(protocol.ActionPing, map[string]interface{}{})
-	a.udpBcast.Broadcast(msg)
 	a.buzzerHub.Broadcast(msg)
 }
 
@@ -1702,13 +1820,15 @@ func (a *App) broadcastReady() {
 	// Reset BuzzState for all buzzers at the start of each question round
 	a.resetBuzzStates()
 	data := a.engine.GetTeamsAndBumpersJSON()
-	a.broadcast(protocol.ActionReady, data, true)
+	a.broadcast(protocol.ActionReady, data, true,
+		server.ClientTypeAdmin, server.ClientTypeTV)
 	a.sendLEDSetAllBuzzers()
 }
 
 func (a *App) broadcastReveal(answer string) {
 	data, _ := json.Marshal(answer)
-	a.broadcast(protocol.ActionReveal, data, true)
+	a.broadcast(protocol.ActionReveal, data, true,
+		server.ClientTypeAdmin, server.ClientTypeTV, server.ClientTypeVPlayer)
 	a.sendLEDSetReveal(answer)
 }
 
@@ -1858,6 +1978,7 @@ func (a *App) teamColorToRGB(bumper *game.Bumper) [3]int {
 }
 
 // sendLEDSet sends a LED_SET message to a specific buzzer and stores the state for reconnect.
+// A MSG_ID is attached so the buzzer can ACK receipt (v3.8.0 ACK protocol).
 func (a *App) sendLEDSet(mac string, payload protocol.LEDSetPayload) {
 	a.bumperLEDState[mac] = payload
 	if !a.buzzerHub.IsClientConnected(mac) {
@@ -1868,11 +1989,20 @@ func (a *App) sendLEDSet(mac string, payload protocol.LEDSetPayload) {
 		server.LogError(game.LogComponentApp, "Failed to create LED_SET message for %s: %v", mac, err)
 		return
 	}
+	// Attach MSG_ID for ACK tracking
+	msgID := server.GenerateMsgID()
+	msg.MsgID = msgID
+
 	if err := a.buzzerHub.SendToClient(mac, msg); err != nil {
 		server.LogWarn(game.LogComponentApp, "Failed to send LED_SET to buzzer %s: %v", mac, err)
 	} else {
-		server.LogInfo(game.LogComponentApp, "LED_SET sent to %s: RGB(%d,%d,%d) intensity=%d effect=%s",
-			mac, payload.Color[0], payload.Color[1], payload.Color[2], payload.Intensity, payload.Effect)
+		server.LogInfo(game.LogComponentApp, "LED_SET sent to %s (msgID=%s): RGB(%d,%d,%d) intensity=%d effect=%s",
+			mac, msgID, payload.Color[0], payload.Color[1], payload.Color[2], payload.Intensity, payload.Effect)
+		// Register for ACK tracking; set AckPending on bumper.
+		// NOTE: broadcastUpdate() is intentionally NOT called here — callers are responsible for
+		// a single broadcast after the full loop completes, avoiding N redundant UPDATE messages.
+		a.ackManager.Register(mac, msgID, protocol.ActionLEDSet)
+		a.engine.UpdateBumper(mac, map[string]interface{}{"ACK_PENDING": true})
 	}
 }
 
@@ -1888,6 +2018,8 @@ func (a *App) broadcastLEDSet(payload protocol.LEDSetPayload) {
 		}
 		a.sendLEDSet(mac, payload)
 	}
+	// One broadcast for all AckPending state changes set by the loop above.
+	a.broadcastUpdate()
 }
 
 // resendLEDOnReconnect re-sends the last known LED state to a buzzer that just reconnected (HELLO).
@@ -2235,6 +2367,8 @@ func (a *App) sendLEDSetAllBuzzers() {
 			a.sendLEDSetForBuzzerNormal(mac, bumper, phase)
 		}
 	}
+	// One broadcast for all AckPending state changes set by the loop above.
+	a.broadcastUpdate()
 }
 
 // sendLEDSetStop broadcasts team color SOLID 100% to all buzzers (game stopped/prepare).
@@ -2250,6 +2384,8 @@ func (a *App) sendLEDSetStop() {
 		rgb := a.teamColorToRGB(bumper)
 		a.sendLEDSet(mac, protocol.LEDSetPayload{Color: rgb, Intensity: 255, Effect: "SOLID"})
 	}
+	// One broadcast for all AckPending changes.
+	a.broadcastUpdate()
 }
 
 // sendLEDSetPause sends per-buzzer LED state when a specific buzzer has buzzed (PAUSED phase).
@@ -2275,6 +2411,8 @@ func (a *App) sendLEDSetPause(bumperID string) {
 			a.sendLEDSetForBuzzerNormal(mac, bumper, phase)
 		}
 	}
+	// One broadcast for all AckPending changes.
+	a.broadcastUpdate()
 }
 
 // sendLEDSetPauseAll sends LED state for PAUSE ALL (admin-initiated pause, no specific buzzer).
@@ -2310,6 +2448,8 @@ func (a *App) sendLEDSetReveal(correctAnswer string) {
 			a.sendLEDSetForBuzzerNormal(mac, bumper, phase)
 		}
 	}
+	// One broadcast for all AckPending changes.
+	a.broadcastUpdate()
 }
 
 // sendLEDSetToTeam sends a LED_SET payload to all physical buzzers belonging to teamID.
@@ -2328,6 +2468,8 @@ func (a *App) sendLEDSetToTeam(teamID string, payload protocol.LEDSetPayload) {
 		}
 		a.sendLEDSet(mac, payload)
 	}
+	// One broadcast for all AckPending changes.
+	a.broadcastUpdate()
 }
 
 // cometBandColor returns the best-contrasting band color for a COMET animation over bgColor.
@@ -2368,6 +2510,8 @@ func (a *App) sendLEDSetComet(teamID string) {
 			CometColor: &band,
 		})
 	}
+	// One broadcast for all AckPending changes from the loop above.
+	a.broadcastUpdate()
 	// Restore normal LED state after firmware COMET animation completes.
 	time.AfterFunc(4800*time.Millisecond, func() {
 		a.sendLEDSetAllBuzzers()
@@ -2376,9 +2520,9 @@ func (a *App) sendLEDSetComet(teamID string) {
 
 func (a *App) broadcastReset() {
 	msg, _ := protocol.NewMessage(protocol.ActionReset, map[string]interface{}{})
-	a.wsHub.Broadcast(msg)
+	a.wsHub.BroadcastToTypes(msg, server.ClientTypeAdmin, server.ClientTypeTV, server.ClientTypeVPlayer)
 	a.udpBcast.Broadcast(msg)
-	a.buzzerHub.Broadcast(msg)
+	// Note: RESET not sent to buzzer WS — HELLO below re-establishes buzzer state
 
 	// Then send HELLO
 	a.broadcastHello()
@@ -2386,7 +2530,8 @@ func (a *App) broadcastReset() {
 
 func (a *App) broadcastRemote() {
 	data := a.engine.GetGameJSON()
-	a.broadcast(protocol.ActionRemote, data, false)
+	a.broadcast(protocol.ActionRemote, data, false,
+		server.ClientTypeAdmin, server.ClientTypeTV)
 }
 
 func (a *App) broadcastClientCounts() {
@@ -2399,7 +2544,7 @@ func (a *App) broadcastClientCounts() {
 		BuzzerWS:     a.buzzerHub.BuzzerCount(),
 	}
 	data, _ := json.Marshal(payload)
-	a.broadcast(protocol.ActionClients, data, false)
+	a.broadcast(protocol.ActionClients, data, false, server.ClientTypeAdmin)
 	server.LogDebug(game.LogComponentWebSocket, "Client counts: admin=%d, tv=%d, vplayer=%d, buzzer_tcp=%d, buzzer_ws=%d",
 		adminCount, tvCount, vplayerCount, payload.BuzzerTCP, payload.BuzzerWS)
 }
@@ -2409,7 +2554,8 @@ func (a *App) broadcastBackgroundChange(index int) {
 		Index: index,
 	}
 	data, _ := json.Marshal(payload)
-	a.broadcast(protocol.ActionBackgroundChange, data, false)
+	a.broadcast(protocol.ActionBackgroundChange, data, false,
+		server.ClientTypeAdmin, server.ClientTypeTV)
 	server.LogDebug(game.LogComponentApp, "Background change: index=%d", index)
 }
 
@@ -2419,7 +2565,8 @@ func (a *App) broadcastQCMHint(invalidatedColor string, remainingAnswers int) {
 		Remaining: remainingAnswers,
 	}
 	data, _ := json.Marshal(payload)
-	a.broadcast(protocol.ActionQCMHint, data, false)
+	a.broadcast(protocol.ActionQCMHint, data, false,
+		server.ClientTypeAdmin, server.ClientTypeTV, server.ClientTypeVPlayer)
 	server.LogInfo(game.LogComponentEngine, "QCM hint: invalidated=%s, remaining=%d", invalidatedColor, remainingAnswers)
 
 	// Also broadcast full update so clients receive the updated QcmInvalidated state
@@ -2432,7 +2579,8 @@ func (a *App) broadcastShowQRCode() {
 		Show: true,
 	}
 	data, _ := json.Marshal(payload)
-	a.broadcast(protocol.ActionShowQRCode, data, false)
+	a.broadcast(protocol.ActionShowQRCode, data, false,
+		server.ClientTypeAdmin, server.ClientTypeTV)
 	server.LogInfo(game.LogComponentApp, "QR Code enrollment activated")
 }
 
@@ -2442,7 +2590,8 @@ func (a *App) broadcastHideQRCode() {
 		Show: false,
 	}
 	data, _ := json.Marshal(payload)
-	a.broadcast(protocol.ActionHideQRCode, data, false)
+	a.broadcast(protocol.ActionHideQRCode, data, false,
+		server.ClientTypeAdmin, server.ClientTypeTV)
 	server.LogInfo(game.LogComponentApp, "QR Code enrollment deactivated")
 }
 
@@ -2465,7 +2614,8 @@ func (a *App) broadcastConfigUpdate() {
 		DefaultQuestionImageIsCustom: a.httpServer.HasCustomDefaultQuestionImage(),
 	}
 	data, _ := json.Marshal(payload)
-	a.broadcast(protocol.ActionConfigUpdate, data, false)
+	a.broadcast(protocol.ActionConfigUpdate, data, false,
+		server.ClientTypeAdmin, server.ClientTypeTV)
 	server.LogInfo(game.LogComponentApp, "Config update broadcast (neon: enabled=%v, mode=%s, arc=%d, intensity=%d, speed=%.1f, pulsing=%.1f-%d%%, offset=%d, thickness=%d, blur=%d)",
 		cfg.NeonEffect.Enabled, cfg.NeonEffect.Mode, cfg.NeonEffect.ArcWidth, cfg.NeonEffect.IntensityGap, cfg.NeonEffect.RotationSpeed, cfg.NeonEffect.GlowPulseSpeed, cfg.NeonEffect.GlowPulseMax, cfg.NeonEffect.BarOffset, cfg.NeonEffect.BarThickness, cfg.NeonEffect.ArcBlur)
 }
@@ -2485,6 +2635,7 @@ func resolveServerIP(cfgServerIP string) string {
 }
 
 // sendWifiConfigToBuzzer sends the current WiFi defaults config to a specific buzzer via WebSocket.
+// A MSG_ID is attached so the buzzer can ACK receipt (v3.8.0 ACK protocol).
 func (a *App) sendWifiConfigToBuzzer(clientID string) {
 	cfg := a.config.WiFiDefaults
 	payload := protocol.WifiConfigPayload{
@@ -2500,14 +2651,24 @@ func (a *App) sendWifiConfigToBuzzer(clientID string) {
 		server.LogError(game.LogComponentApp, "Failed to create WIFI_CONFIG message: %v", err)
 		return
 	}
+	// Attach MSG_ID for ACK tracking (v3.8.0)
+	msgID := server.GenerateMsgID()
+	msg.MsgID = msgID
+
 	if err := a.buzzerHub.SendToClient(clientID, msg); err != nil {
 		server.LogError(game.LogComponentApp, "Failed to send WIFI_CONFIG to %s: %v", clientID, err)
 		return
 	}
-	server.LogInfo(game.LogComponentApp, "Sent WIFI_CONFIG to buzzer %s", clientID)
+	server.LogInfo(game.LogComponentApp, "Sent WIFI_CONFIG to buzzer %s (msgID=%s)", clientID, msgID)
+	// Register for ACK tracking; set AckPending on bumper
+	a.ackManager.Register(clientID, msgID, protocol.ActionWifiConfig)
+	a.engine.UpdateBumper(clientID, map[string]interface{}{"ACK_PENDING": true})
+	a.broadcastUpdate()
 }
 
-// broadcastWifiConfig broadcasts the current WiFi defaults config to all connected buzzers.
+// broadcastWifiConfig sends the current WiFi defaults config to each connected buzzer individually.
+// Each buzzer receives a unique MSG_ID for ACK tracking (v3.8.0); Broadcast() is avoided so that
+// each message has a distinct MSG_ID.
 func (a *App) broadcastWifiConfig() {
 	cfg := a.config.WiFiDefaults
 	payload := protocol.WifiConfigPayload{
@@ -2518,13 +2679,30 @@ func (a *App) broadcastWifiConfig() {
 		SSID2:      cfg.SSID2,
 		Pass2:      cfg.Password2,
 	}
-	msg, err := protocol.NewMessage(protocol.ActionWifiConfig, payload)
-	if err != nil {
-		server.LogError(game.LogComponentApp, "Failed to create WIFI_CONFIG broadcast message: %v", err)
-		return
+
+	macs := a.buzzerHub.GetClients()
+	sent := 0
+	for _, mac := range macs {
+		msg, err := protocol.NewMessage(protocol.ActionWifiConfig, payload)
+		if err != nil {
+			server.LogError(game.LogComponentApp, "Failed to create WIFI_CONFIG message for %s: %v", mac, err)
+			continue
+		}
+		msgID := server.GenerateMsgID()
+		msg.MsgID = msgID
+
+		if err := a.buzzerHub.SendToClient(mac, msg); err != nil {
+			server.LogWarn(game.LogComponentApp, "Failed to send WIFI_CONFIG to %s: %v", mac, err)
+			continue
+		}
+		a.ackManager.Register(mac, msgID, protocol.ActionWifiConfig)
+		a.engine.UpdateBumper(mac, map[string]interface{}{"ACK_PENDING": true})
+		sent++
 	}
-	a.buzzerHub.Broadcast(msg)
-	server.LogInfo(game.LogComponentApp, "Broadcast WIFI_CONFIG to all connected buzzers (%d)", a.buzzerHub.ConnectedCount())
+	if sent > 0 {
+		a.broadcastUpdate()
+	}
+	server.LogInfo(game.LogComponentApp, "Sent WIFI_CONFIG to %d connected buzzer(s)", sent)
 }
 
 func (a *App) broadcastQuestions() {
@@ -2550,8 +2728,8 @@ func (a *App) broadcastQuestions() {
 	msg.FSInfo = fsInfo
 	msg.Version = a.config.Version
 
-	// Broadcast via WebSocket only (not to buzzers)
-	a.wsHub.Broadcast(msg)
+	// Broadcast via WebSocket to admin clients only (TV/VPlayer do not need questions list)
+	a.wsHub.BroadcastToTypes(msg, server.ClientTypeAdmin)
 }
 
 // sendStateToClient sends the full state to a specific client (used on HELLO)

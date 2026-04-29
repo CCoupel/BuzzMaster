@@ -1,188 +1,178 @@
-# Commande /hotfix - Correction Urgente en Production
+# Commande /hotfix
 
-Déclenche le workflow accéléré pour les bugs critiques en production. **Le CDP** (agent cdp) est le team leader qui coordonne tous les agents. Claude est l'interface utilisateur.
+Workflow accelere pour les corrections critiques en production.
 
-## Argument reçu
+## Usage
+
+```
+/hotfix <description du probleme critique>
+```
+
+## Argument recu
 
 $ARGUMENTS
 
-## Architecture CDP
+## Mots-cles de controle
+
+**Reference :** Voir `context/COMMON.md` section 12
+
+| Mot-cle | Action |
+|---------|--------|
+| `help` | Affiche l'aide et les mots-cles disponibles |
+| `status` | Affiche l'etat du workflow en cours |
+| `plan` | Affiche le plan sans executer |
+| `resume <phase>` | Reprend a une phase |
+| `skip <phase>` | Saute une phase |
+| `jumpto <tache>` | Demarre a une tache precise du plan |
+
+Si `$ARGUMENTS` commence par un mot-cle -> executer l'action correspondante.
+Sinon -> workflow normal.
+
+## Quand utiliser
+
+- Production cassee ou degradee
+- Faille de securite active
+- Perte de donnees en cours
+- Impact business majeur
+
+## Workflow Accelere
 
 ```
-Claude (interface) → SendMessage(cdp, "HOTFIX URGENT: xxx")
-                          │
-                     CDP (Team Leader)
-                          │
-    ┌──────────┬──────────┼──────────┬──────────┐
-backend-dev  [test-writer]  [qa]   doc-updater  deployer
-                          │
-               Coordination via TaskUpdate + SendMessage
+/hotfix <description>
+    |
+    v
+[ANALYSE RAPIDE] --> Identification immediate
+    |                 (pas de plan detaille)
+    v
+[FIX] --> Correction minimale
+    |
+    v
+[TESTS CRITIQUES] --> Uniquement les tests essentiels
+    |
+    v
+[DEPLOY PROD] --> Deploiement direct
+    |
+    v
+[POST-MORTEM] --> Documentation de l'incident
 ```
 
-**IMPORTANT** : Claude délègue au CDP. Le CDP est le chef de projet — Claude est uniquement l'interface utilisateur.
+## Etapes Detaillees
 
-## Workflow HOTFIX (Accéléré)
+### 1. ANALYSE RAPIDE (max 15 min)
 
+- Identifier le symptome exact
+- Localiser le code responsable
+- Determiner le fix minimal
+
+**Pas de plan detaille** - On agit vite.
+
+### 2. FIX
+
+- Correction la plus simple possible
+- Un seul commit
+- Pas de refactoring
+- Pas de features supplementaires
+
+### 3. TESTS CRITIQUES
+
+Uniquement :
+- Test du scenario casse
+- Smoke tests de base
+- Build OK
+
+**Pas de suite complete** - Sera fait apres.
+
+### 4. DEPLOY PROD
+
+Deploiement direct en production :
+
+```bash
+# Branche depuis main
+git checkout -b hotfix/<name> main
+
+# Fix + commit
+git commit -m "fix: <description>"
+
+# Merge et tag
+git checkout main
+git merge --no-ff hotfix/<name>
+git tag v<version>-hotfix
+git push origin main --tags
 ```
-┌─────────────────────────────────────────────────────────────┐
-│  ANALYSE → DEV → [TESTS]* → [QA]* → DOC → DEPLOY(PROD)     │
-└─────────────────────────────────────────────────────────────┘
-* = Optionnel si vraiment critique
-```
 
-### Phase 0: ANALYSE (TOI)
-- Analyser la criticité du bug (sécurité, bloquant, régression)
-- Identifier la portée (backend/frontend/firmware)
-- Estimer l'urgence réelle
-- Créer la branche `hotfix/<nom-court>`
+### 5. POST-MORTEM
 
-### Phase 1: TEAM SETUP (TOI — uniquement si TEAM-Buzz absente)
-- Si TEAM-Buzz active → teammates déjà disponibles, passer à Phase 2
-- Si bootstrap (aucune team) :
-  - TeamCreate({ team_name: "TEAM-Buzz", agent_type: "cdp" })
-  - Spawner agents MINIMAUX (team_name: "TEAM-Buzz") :
-    - dev-backend/frontend/buzzclick (selon portée)
-    - test-writer (si possible), QA (si possible)
-    - doc-updater (toujours), deploy (toujours - PROD direct)
-  - Voir "Mode Bootstrap" dans agents/cdp.md
-
-### Phase 2: DÉVELOPPEMENT (Agents DEV)
-- Assigner via TaskUpdate(owner: "dev-xxx")
-- Correction MINIMALE uniquement
-- Commits atomiques avec "hotfix:"
-
-### Phase 3: TESTS (test-writer) [OPTIONNEL]
-- Si temps disponible : test de non-régression
-- Sinon : skip et noter dans post-mortem
-
-### Phase 4: QA (qa-tester) [OPTIONNEL]
-- Si temps disponible : tests de base
-- Sinon : skip et noter dans post-mortem
-
-### Phase 5: DOCUMENTATION (doc-updater)
-- Incrémenter Z + suffix : 2.40.1 → 2.40.2-hotfix
-- CHANGELOG : section Fixed
-- Post-mortem OBLIGATOIRE
-
-### Phase 6: DÉPLOIEMENT PROD (deploy)
-- **QUALIF OPTIONNEL** si vraiment critique
-- Build et déploiement PROD direct
-- Monitoring actif après déploiement
-
-## Spécificités HOTFIX
-
-| Règle | Contrainte |
-|-------|-----------|
-| **Versioning** | Incrémente Z + suffix : 2.40.1 → 2.40.2-hotfix |
-| **Branche** | `hotfix/<nom-court>` |
-| **Scope** | MINIMAL absolu - corriger UNIQUEMENT le bug critique |
-| **QUALIF** | OPTIONNEL si vraiment critique |
-| **Tests** | Optionnel si urgence vraie (noter dans post-mortem) |
-| **Post-mortem** | OBLIGATOIRE (cause, impact, prévention) |
-| **Commits** | Atomiques avec "hotfix:" |
-
-## Quand utiliser /hotfix
-
-| Situation | Action |
-|-----------|--------|
-| Bug bloquant en production | ✅ /hotfix |
-| Problème de sécurité urgent | ✅ /hotfix |
-| Régression critique après release | ✅ /hotfix |
-| Bug gênant mais non bloquant | ❌ Utiliser /bugfix |
-| Amélioration urgente | ❌ Utiliser /feature |
-
-## Post-mortem OBLIGATOIRE
-
-À la fin du hotfix, créer `docs/postmortem/hotfix-vX.Y.Z.md` :
+Apres le fix, documenter :
 
 ```markdown
-# Post-mortem Hotfix vX.Y.Z
+## Incident Report
 
-## Résumé
-[Description du bug critique]
+**Date** : YYYY-MM-DD HH:MM
+**Duree** : X heures
+**Impact** : Description de l'impact
 
-## Chronologie
-- HH:MM - Bug détecté
-- HH:MM - Hotfix démarré
-- HH:MM - Correction déployée
+### Chronologie
+- HH:MM - Detection du probleme
+- HH:MM - Debut d'investigation
+- HH:MM - Fix deploye
+- HH:MM - Service restaure
 
-## Cause racine
-[Pourquoi ce bug est apparu]
+### Cause Racine
+Description technique de la cause.
 
-## Impact
-- Utilisateurs affectés : [nombre/tous]
-- Durée : [minutes]
-- Données perdues : [oui/non]
+### Fix Applique
+Description du fix.
 
-## Correction
-[Description de la correction appliquée]
+### Actions Preventives
+- [ ] Action 1
+- [ ] Action 2
 
-## Tests skippés
-- [ ] Tests unitaires (raison: urgence)
-- [ ] QA E2E (raison: urgence)
-- [ ] QUALIF (raison: urgence)
-
-## Prévention future
-[Actions pour éviter ce type de bug]
-
-## Actions post-déploiement
-- [ ] Surveiller logs pendant 1h
-- [ ] Ajouter tests de non-régression
-- [ ] Mettre à jour documentation
+### Lecons Apprises
+- Point 1
+- Point 2
 ```
 
-## Règles Critiques
+## Exemples
 
-### ✅ Claude DOIT
-- Vérifier que c'est vraiment CRITIQUE avant de déléguer
-- Transmettre au CDP avec le contexte d'urgence
-- Relayer fidèlement les messages CDP ↔ utilisateur
-
-### ❌ Claude NE DOIT PAS
-- Coordonner les agents directement
-- Écrire du code lui-même
-
-### ✅ Le CDP DOIT (référence)
-- Utiliser les agents MINIMAUX nécessaires
-- Documenter ce qui a été skippé
-- Créer le post-mortem OBLIGATOIRE
-- Surveiller le déploiement
-
-### ❌ Le CDP NE DOIT PAS
-- Écrire du code lui-même
-- Skip le post-mortem
-- Autoriser du refactoring
-
-## Agents que TU coordonnes
-
-| Agent | Subagent Type | Usage HOTFIX |
-|-------|---------------|--------------|
-| Backend Dev | `dev-backend` | Si bug serveur Go |
-| Frontend Dev | `dev-frontend` | Si bug React/CSS |
-| Firmware Dev | `dev-buzzclick` | Si bug ESP32 |
-| Test Writer | `test-writer` | Optionnel |
-| QA Tester | `qa` | Optionnel |
-| Doc Updater | `doc-updater` | Toujours (post-mortem) |
-| Deployer | `deploy` | Toujours (PROD direct) |
-
-## Action immédiate
-
-**TU** (Claude) dois maintenant :
-
-1. **Analyser** la criticité : `$ARGUMENTS`
-2. **Vérifier** que c'est vraiment un HOTFIX (sinon → /bugfix)
-3. **Transmettre** au CDP avec contexte d'urgence :
-   ```
-   SendMessage(recipient: "cdp", content: "HOTFIX URGENT: [description + criticité + portée]. Workflow accéléré requis.", summary: "Hotfix urgent: [titre court]")
-   ```
-4. **Relayer** tous les messages et validations du CDP vers l'utilisateur
-
-**Le CDP prend en charge l'intégralité du workflow depuis cette étape.**
-
-
-### Sans TEAM (pas de TEAM-Buzz actif)
 ```
-subagent_type: "cdp"
-description: "Workflow hotfix urgent"
-prompt: HOTFIX URGENT: $ARGUMENTS. Workflow accéléré requis.
+/hotfix Base de donnees saturee, requetes timeout
+/hotfix Faille XSS sur le formulaire de login
+/hotfix Crash API suite au dernier deploy
+/hotfix Certificat SSL expire
 ```
+
+## Apres le Hotfix
+
+1. **Tests complets** en background
+2. **Revue de code** post-mortem
+3. **Backport** vers les branches de dev si necessaire
+4. **Communication** a l'equipe
+
+## Regles Critiques
+
+1. **Fix minimal** - Pas le moment d'ameliorer
+2. **Un seul probleme** - Un hotfix = un bug
+3. **Documenter** - Pour ne pas reproduire
+4. **Communiquer** - Equipe informee
+5. **Valider** - Monitoring post-deploy
+
+## Prompt a transmettre au CDP
+
+Orchestre le workflow HOTFIX pour BuzzControl.
+
+**Contexte projet :** Voir `context/COMMON.md` section 1
+**Workflow CDP :** Voir `context/CDP_WORKFLOWS.md`
+- Type : HOTFIX
+- Phases : section 3
+- Dispatch DEV : section 4
+- Validation : section 5
+- Erreurs : section 6
+- Regles : section 8
+
+**Contexte DEV :** Voir `context/DEVELOPMENT.md`
+
+**Demande utilisateur :** $ARGUMENTS
+
+## Agent
+
+Mode special du CDP avec etapes reduites.

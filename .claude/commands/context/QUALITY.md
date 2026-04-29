@@ -1,23 +1,23 @@
-# QUALITY.md - Patterns de Qualité
+# QUALITY.md - Patterns de Qualite
 
-Ce fichier centralise les patterns partagés par les commandes `/code-review`, `/qa`, `/test-write`, et `/review`.
+Ce fichier centralise les patterns partages par les commandes `/code-review`, `/qa`, `/test-write`, et `/review`.
 
 ---
 
-## 1. Agents de Qualité
+## 1. Agents de Qualite
 
-| Commande | Agent | Rôle |
+| Commande | Agent | Role |
 |----------|-------|------|
 | `/code-review` | code-reviewer | Analyser le code |
-| `/qa` | QA | Exécuter les tests |
-| `/test-write` | test-writer | Écrire les tests |
-| `/review` | Workflow | Revue périodique complète |
+| `/qa` | QA | Executer les tests |
+| `/test-write` | test-writer | Ecrire les tests |
+| `/review` | Workflow | Revue periodique complete |
 
 ---
 
-## 2. Matrice Qualité
+## 2. Matrice Qualite
 
-| Commande | Écrit tests | Exécute tests | Analyse code | Workflow |
+| Commande | Ecrit tests | Execute tests | Analyse code | Workflow |
 |----------|-------------|---------------|--------------|----------|
 | `/test-write` | Oui | Non | Non | Non |
 | `/qa` | Non | Oui | Non | Non |
@@ -26,35 +26,35 @@ Ce fichier centralise les patterns partagés par les commandes `/code-review`, `
 
 ---
 
-## 3. Niveaux de Sévérité
+## 3. Niveaux de Severite
 
 | Niveau | Symbole | Description | Action |
 |--------|---------|-------------|--------|
-| Critical | 🔴 | Bloquant (sécurité, bug majeur) | Rejet obligatoire |
-| Warning | 🟡 | Important mais non-bloquant | Signaler |
-| Rationalization | 🟠 | Duplication > 70% | Recommander |
-| Suggestion | 🔵 | Amélioration optionnelle | Proposer |
+| Critical | CRITICAL | Bloquant (securite, bug majeur) | Rejet obligatoire |
+| Warning | WARNING | Important mais non-bloquant | Signaler |
+| Rationalization | RATIONALIZATION | Duplication > 70% | Recommander |
+| Suggestion | SUGGESTION | Amelioration optionnelle | Proposer |
 
 ---
 
 ## 4. Framework de Review
 
-### Catégories d'Analyse
+### Categories d'Analyse
 
-| Catégorie | Vérifications |
+| Categorie | Verifications |
 |-----------|---------------|
-| Qualité | Naming, fonctions courtes, comments, errors |
-| Sécurité | Injection, XSS, secrets, validation |
+| Qualite | Naming, fonctions courtes, comments, errors |
+| Securite | Injection, XSS, secrets, validation |
 | Performance | Boucles, re-renders, structures |
-| Architecture | CLAUDE.md conformité, patterns |
-| Rationalisation | Duplications, patterns répétés |
+| Architecture | Conformite aux patterns du projet |
+| Rationalisation | Duplications, patterns repetes |
 
-### Focus Spécialisés
+### Focus Specialises
 
 ```bash
-/code-review security      # OWASP Top 10
-/code-review performance   # Optimisations
-/code-review rationalization  # Duplications
+/code-review security         # OWASP Top 10
+/code-review performance      # Optimisations
+/code-review rationalization   # Duplications
 ```
 
 ---
@@ -65,23 +65,23 @@ Ce fichier centralise les patterns partagés par les commandes `/code-review`, `
 
 | Verdict | Signification | Suite |
 |---------|---------------|-------|
-| APPROVED | Code prêt | → QA |
-| APPROVED WITH RESERVATIONS | Mineur à noter | → QA (noter) |
-| REJECTED | Issues critiques | → Retour DEV |
+| APPROVED | Code pret | -> QA |
+| APPROVED WITH RESERVATIONS | Mineur a noter | -> QA (noter) |
+| REJECTED | Issues critiques | -> Retour DEV |
 
 ### QA
 
 | Verdict | Signification | Suite |
 |---------|---------------|-------|
-| VALIDATED | Tests OK | → DOC |
-| VALIDATED WITH RESERVATIONS | Mineurs échoués | → Confirmation |
-| NOT VALIDATED | Tests critiques KO | → Retour DEV |
+| VALIDATED | Tests OK | -> DOC |
+| VALIDATED WITH RESERVATIONS | Mineurs echoues | -> Confirmation |
+| NOT VALIDATED | Tests critiques KO | -> Retour DEV |
 
 ---
 
-## 6. Critères de Validation QA
+## 6. Criteres de Validation QA
 
-| Critère | VALIDATED | RESERVATIONS | NOT VALIDATED |
+| Critere | VALIDATED | RESERVATIONS | NOT VALIDATED |
 |---------|-----------|--------------|---------------|
 | Tests | 100% pass | 1-2 non-critiques KO | >2 KO ou critiques KO |
 | Coverage | > 70% | 60-70% | < 60% |
@@ -95,27 +95,10 @@ Ce fichier centralise les patterns partagés par les commandes `/code-review`, `
 
 ```bash
 # Tous les tests
-go test ./... -v -cover
+cd server-go && go test ./...
 
-# Package spécifique
-go test ./internal/game/... -v
-
-# Avec race detector
-go test -race ./...
-
-# Couverture HTML
-go test ./... -coverprofile=coverage.out
-go tool cover -html=coverage.out -o coverage.html
-```
-
-### Tests E2E
-
-```bash
-# Tests E2E complets
-go test ./internal/server -v -run TestE2E
-
-# Tests E2E Chrome (nécessite Playwright)
-cd server-go/web && npm run test:e2e
+# Avec couverture
+{COVERAGE_CMD}
 ```
 
 ---
@@ -125,39 +108,39 @@ cd server-go/web && npm run test:e2e
 ```markdown
 ## Rapport de Revue de Code
 
-📊 **Overview**
-- Fichiers analysés : [nombre]
+**Overview**
+- Fichiers analyses : [nombre]
 - Lignes de code : [nombre]
 - Statut global : [APPROVED|RESERVATIONS|REJECTED]
 
-✅ **Points positifs**
+**Points positifs**
 - [liste]
 
-⚠️ **Issues détectées**
-- 🔴 Critical : [liste]
-- 🟡 Warning : [liste]
-- 🟠 Rationalization : [liste]
-- 🔵 Suggestion : [liste]
+**Issues detectees**
+- CRITICAL : [liste]
+- WARNING : [liste]
+- RATIONALIZATION : [liste]
+- SUGGESTION : [liste]
 
-🔒 **Sécurité**
+**Securite**
 - [analyse OWASP]
 
-📈 **Performance**
+**Performance**
 - [analyse]
 
-🏗️ **Architecture**
-- [conformité CLAUDE.md]
+**Architecture**
+- [conformite projet]
 
-🔄 **Rationalisation**
-- [duplications détectées]
+**Rationalisation**
+- [duplications detectees]
 
-📝 **Tests**
-- [qualité des tests]
+**Tests**
+- [qualite des tests]
 
-🎯 **Recommandations**
+**Recommandations**
 - [liste prioritaire]
 
-✅ **Décision** : [VERDICT]
+**Decision** : [VERDICT]
 ```
 
 ---
@@ -167,70 +150,69 @@ cd server-go/web && npm run test:e2e
 ```markdown
 ## Rapport QA
 
-📊 **Résumé**
+**Resume**
 - Date : [date]
 - Branche : [branche]
 - Version : [X.Y.Z]
 - Statut : [VALIDATED|RESERVATIONS|NOT VALIDATED]
 
-🧪 **Tests Unitaires**
+**Tests Unitaires**
 - Total : [nombre]
-- Passés : [nombre]
-- Échoués : [nombre]
+- Passes : [nombre]
+- Echoues : [nombre]
 - Coverage : [%]
 
-🔗 **Tests E2E**
-- Scénarios : [nombre]
-- Passés : [nombre]
-- Échoués : [nombre]
+**Tests E2E**
+- Scenarios : [nombre]
+- Passes : [nombre]
+- Echoues : [nombre]
 
-📦 **Build**
+**Build**
 - Statut : [OK|KO]
-- Taille : [MB]
 
-❌ **Échecs détaillés**
+**Echecs detailles**
 - [liste avec messages d'erreur]
 
-✅ **Décision** : [VERDICT]
+**Decision** : [VERDICT]
 ```
 
 ---
 
-## 10. Règles Critiques
+## 10. Regles Critiques
 
-| Agent | Règle |
+| Agent | Regle |
 |-------|-------|
 | code-reviewer | NE PAS corriger le code (juste reviewer) |
-| code-reviewer | NE PAS approuver si issue critique sécurité |
+| code-reviewer | NE PAS approuver si issue critique securite |
 | QA | NE PAS modifier de code (juste tester) |
-| test-writer | NE PAS exécuter les tests (juste écrire) |
+| test-writer | NE PAS executer les tests (juste ecrire) |
 | Tous | NE PAS ignorer les duplications |
 
 ---
 
-## 11. Workflow /review (Revue Périodique)
+## 11. Workflow /review (Revue Periodique)
 
 ```
-[Vérifications] → PLAN → [Validation] → DEV → QA → [Validation] → DOC → DEPLOY(QUALIF)
+[Verifications] -> PLAN -> [Validation] -> DEV -> QA -> [Validation] -> DOC -> DEPLOY(QUALIF)
 ```
 
-### Étapes
+### Etapes
 
 1. **Analyse initiale** : code-reviewer sur codebase
-2. **Plan** : Créer plan de corrections/améliorations
+2. **Plan** : Creer plan de corrections/ameliorations
 3. **Validation utilisateur** : Confirmer le plan
-4. **Développement** : Appliquer les corrections
+4. **Developpement** : Appliquer les corrections
 5. **QA** : Valider les changements
-6. **Documentation** : Mettre à jour si nécessaire
+6. **Documentation** : Mettre a jour si necessaire
 
 ---
 
 ## Usage
 
-Dans les commandes Qualité, référencer ce fichier :
+Dans les commandes Qualite, referencer ce fichier :
 
 ```markdown
-**Contexte Qualité :** Voir `context/QUALITY.md`
+**Contexte Qualite :** Voir `context/QUALITY.md`
 - Framework review : section 4
 - Verdicts : section 5
 - Tests : section 7

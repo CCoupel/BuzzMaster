@@ -205,10 +205,10 @@ func (h *HTTPServer) handleAPIFirmwareUpload(w http.ResponseWriter, r *http.Requ
 	// Broadcast full state UPDATE so web clients see updated IS_OUTDATED flags immediately.
 	if stateMsg, err := protocol.NewMessage(protocol.ActionUpdate, nil); err == nil {
 		stateMsg.Msg = h.engine.GetGameJSON()
-		h.wsHub.Broadcast(stateMsg)
+		h.wsHub.BroadcastToTypes(stateMsg, ClientTypeAdmin, ClientTypeTV, ClientTypeVPlayer)
 	}
 
-	// Broadcast FIRMWARE_VERSION to all web clients so the UI can refresh
+	// Broadcast FIRMWARE_VERSION to admin clients only (TV/VPlayer do not need firmware info)
 	versionInfo, filename, size, exists := h.firmwareManager.GetInfo()
 	LogInfo(game.LogComponentHTTP, "BuzzClick firmware uploaded: version=%s, size=%d bytes", versionInfo, len(data))
 	payload := protocol.FirmwareVersionPayload{
@@ -220,7 +220,7 @@ func (h *HTTPServer) handleAPIFirmwareUpload(w http.ResponseWriter, r *http.Requ
 		EmbeddedVersion: h.firmwareManager.GetEmbeddedVersion(),
 	}
 	if msg, err := protocol.NewMessage(protocol.ActionFirmwareVersion, payload); err == nil {
-		h.wsHub.Broadcast(msg)
+		h.wsHub.BroadcastToTypes(msg, ClientTypeAdmin)
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -268,10 +268,10 @@ func (h *HTTPServer) handleAPIFirmwareRestoreEmbedded(w http.ResponseWriter, r *
 	// Broadcast full state UPDATE so web clients see updated IS_OUTDATED flags immediately.
 	if stateMsg, err := protocol.NewMessage(protocol.ActionUpdate, nil); err == nil {
 		stateMsg.Msg = h.engine.GetGameJSON()
-		h.wsHub.Broadcast(stateMsg)
+		h.wsHub.BroadcastToTypes(stateMsg, ClientTypeAdmin, ClientTypeTV, ClientTypeVPlayer)
 	}
 
-	// Broadcast FIRMWARE_VERSION to all web clients so the UI can refresh.
+	// Broadcast FIRMWARE_VERSION to admin clients only.
 	versionInfo, filename, size, exists := h.firmwareManager.GetInfo()
 	LogInfo(game.LogComponentHTTP, "BuzzClick firmware restored from embedded: version=%s, size=%d bytes", versionInfo, size)
 	fwPayload := protocol.FirmwareVersionPayload{
@@ -283,7 +283,7 @@ func (h *HTTPServer) handleAPIFirmwareRestoreEmbedded(w http.ResponseWriter, r *
 		EmbeddedVersion: h.firmwareManager.GetEmbeddedVersion(),
 	}
 	if msg, err := protocol.NewMessage(protocol.ActionFirmwareVersion, fwPayload); err == nil {
-		h.wsHub.Broadcast(msg)
+		h.wsHub.BroadcastToTypes(msg, ClientTypeAdmin)
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -352,12 +352,21 @@ func (h *HTTPServer) handleAPIBuzzerUpdate(mac string, w http.ResponseWriter, r 
 		return
 	}
 
+	// Attach MSG_ID for ACK tracking (v3.8.0)
+	msgID := GenerateMsgID()
+	msg.MsgID = msgID
+
 	if err := h.buzzerHub.SendToClient(mac, msg); err != nil {
 		http.Error(w, "Failed to send OTA message: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	LogInfo(game.LogComponentHTTP, "OTA update triggered for buzzer %s: version=%s url=%s", mac, version, firmwareURL)
+	LogInfo(game.LogComponentHTTP, "OTA update triggered for buzzer %s: version=%s url=%s msgID=%s", mac, version, firmwareURL, msgID)
+
+	// Notify main for ACK registration
+	if h.OnPriorityMessageSent != nil {
+		h.OnPriorityMessageSent(mac, msgID, protocol.ActionOTAUpdate)
+	}
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{
@@ -427,12 +436,21 @@ func (h *HTTPServer) handleAPIBuzzerUpdateAll(w http.ResponseWriter, r *http.Req
 			skipped++
 			continue
 		}
+		// Generate a per-buzzer MSG_ID so each ACK can be tracked individually (v3.8.0)
+		msgID := GenerateMsgID()
+		msg.MsgID = msgID
+
 		if err := h.buzzerHub.SendToClient(mac, msg); err != nil {
 			LogError(game.LogComponentHTTP, "Failed to send OTA to buzzer %s: %v", mac, err)
 			skipped++
 			continue
 		}
-		LogInfo(game.LogComponentHTTP, "OTA update triggered for outdated buzzer %s: version=%s", mac, version)
+		LogInfo(game.LogComponentHTTP, "OTA update triggered for outdated buzzer %s: version=%s msgID=%s", mac, version, msgID)
+
+		// Notify main for ACK registration (per-buzzer)
+		if h.OnPriorityMessageSent != nil {
+			h.OnPriorityMessageSent(mac, msgID, protocol.ActionOTAUpdate)
+		}
 		triggered++
 	}
 

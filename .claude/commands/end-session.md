@@ -1,196 +1,153 @@
-# Commande /end-session - Fin de Session
+# Commande /end-session
 
-Commande de clôture de session : archive, communique, nettoie et shutdown la team.
+Cloturer proprement la session de travail : archivage, mise a jour de la memoire,
+verification de l'etat du projet.
 
-> **Périmètre** : Cette commande couvre uniquement ce que les workflows `/feature`, `/bugfix`, `/hotfix`
-> **ne font pas** : archivage backlog, merge main, marketing, MEMORY et shutdown team.
-> La documentation est déjà produite par ces workflows — elle n'est relancée que si absente.
-
-## Argument reçu (optionnel)
-
-$ARGUMENTS
-
----
-
-## Instructions
-
-Exécute les phases suivantes **dans l'ordre**, en t'arrêtant aux points de validation utilisateur.
-
----
-
-### Phase 1 — Bilan de session
-
-**Lire** l'état actuel :
-1. GitHub Issues (label `En-Cours`) → identifier la feature active
-2. `git log --oneline -10` → détecter les commits récents (doc déjà faite ?)
-3. `server-go/config.json` → version actuelle
-4. `git status` → commits non pushés
-
-**Détecter si la documentation a déjà été produite** :
-- Chercher dans les 10 derniers commits un commit de type `docs:` ou `chore:` récent
-- Vérifier que `CHANGELOG.md` mentionne la version actuelle de `config.json`
-
-**Afficher le bilan** :
+## Usage
 
 ```
-## Bilan de session
-
-**Feature active** : [issue GitHub #N ou "aucune"]
-**Branche** : [nom branche actuelle]
-**Version** : [X.Y.Z depuis config.json]
-**Commits non pushés** : [N ou aucun]
-**Documentation** : [✅ déjà produite par le workflow | ⚠️ absente — sera relancée]
-
-### Livrables détectés
-- [fichiers modifiés significatifs depuis git]
-
-Continuer la clôture ? (oui / préciser si incomplet)
+/end-session
 ```
 
-⏸️ **ATTENDRE CONFIRMATION UTILISATEUR** avant de continuer.
+## Quand l'utiliser
 
----
+- En fin de session de travail
+- Avant une longue interruption
+- Apres une release majeure
+- Quand on change de contexte de travail
 
-### Phase 2 — Documentation (CONDITIONNELLE)
+## Workflow
 
-**Condition** : Lancer uniquement si la documentation N'a PAS été produite par le workflow courant
-(pas de commit docs récent, ou CHANGELOG.md ne mentionne pas la version actuelle).
+```
+/end-session
+    |
+    v
+[ETAT] --> Verifier l'etat du projet
+    |
+    v
+[DOC] --> Mettre a jour la documentation
+    |
+    v
+[MEMOIRE] --> Mettre a jour .claude/memory/MEMORY.md
+    |
+    v
+[GIT] --> S'assurer que tout est commite/pousse
+    |
+    v
+[TEAM] --> Dissoudre la team (TeamDelete)
+    |
+    v
+[RAPPORT] --> Rapport de session
+```
 
-Si absente → envoyer au CDP (TEAM) ou spawner le CDP (sans TEAM) :
+## Etapes Detaillees
 
-- **Mode TEAM** : `SendMessage(recipient: "cdp", content: "Mise à jour documentation demandée: auto-détecte depuis git", summary: "Doc: fin session")`
-- **Sans TEAM** :
-  ```
-  subagent_type: "cdp"
-  description: "Documentation fin session"
-  prompt: Mise à jour documentation demandée: auto-détecte les changements depuis git et mets à jour CHANGELOG.md, CLAUDE.md, config.json
-  ```
+### 1. ETAT — Verification du Projet
 
-Si déjà produite → Afficher "Documentation déjà à jour (produite par le workflow)" et passer à la suite.
+```bash
+# Etat git
+git status
+git log --oneline -5
 
----
+# Tests (si applicable)
+cd server-go && go test ./...
 
-### Phase 3 — Archivage backlog
+# Build (si applicable)
+cd server-go && go build ./cmd/server
+```
 
-1. Chercher l'issue En-Cours : `gh issue list --repo CCoupel/BuzzMaster --label "En-Cours" --state open`
-2. Si trouvée :
-   - Retirer le label `En-Cours`, ajouter le label `DONE`
-   - Fermer l'issue avec un commentaire : "Complété en vX.Y.Z"
-   ```bash
-   gh issue edit <N> --repo CCoupel/BuzzMaster --remove-label "En-Cours" --add-label "DONE"
-   gh issue close <N> --repo CCoupel/BuzzMaster --comment "Complété en vX.Y.Z"
-   ```
-3. Optionnellement : si un fichier `backlog/En-Cours/<nom>.md` existe, mettre à jour son champ `**Statut**` :
-   ```markdown
-   **Statut** : ✅ Complété (vX.Y.Z)
-   ```
-4. Confirmer : "Issue #N fermée et étiquetée DONE"
+Verifier :
+- Pas de changements non commites non intentionnels
+- Tests passent
+- Build OK
 
-Si **aucune** issue En-Cours → passer à la phase suivante sans message d'erreur.
+### 2. DOC — Documentation
 
----
+Mettre a jour si necessaire :
+- `CHANGELOG.md` : ajouter les changements de la session si pas encore fait
+- `docs/` : mettre a jour les docs techniques impactees
+- `README.md` : si des fonctionnalites majeures ont change
 
-### Phase 4 — Merge vers main
+### 3. MEMOIRE — Mise a jour de `.claude/memory/MEMORY.md`
 
-Si on n'est **pas** déjà sur `main` :
+Mettre a jour les sections pertinentes :
+- Version courante
+- Travail en cours (phase actuelle)
+- Decisions techniques prises pendant la session
+- Issues GitHub ouvertes / fermees
+- Points de contexte importants pour la prochaine session
 
-1. Afficher le plan :
-   ```
-   Branche actuelle : feature/xxx (ou bugfix/xxx)
-   Action : squash merge vers main, puis push
+### 4. GIT — Verification Git
 
-   Confirmer le merge ? (oui / non)
-   ```
+```bash
+# S'assurer que tout est pousse
+git status
+git push origin <branche-courante>
 
-2. ⏸️ **ATTENDRE CONFIRMATION UTILISATEUR**
+# Verifier qu'il n'y a pas de travail en attente
+git stash list
+```
 
-3. Si confirmé →
-   - **Mode TEAM** : `SendMessage(recipient: "cdp", content: "Squash merge vers main. Message: feat/fix: <titre>. Version: vX.Y.Z", summary: "Merge: main")`
-   - **Sans TEAM** :
-     ```
-     subagent_type: "cdp"
-     description: "Squash merge"
-     prompt: Squash merge vers main. Message: feat/fix: <titre depuis issue GitHub>. Version: vX.Y.Z (depuis config.json)
-     ```
+Si des changements non commites existent :
+- Demander confirmation : commiter, stasher, ou laisser ?
 
-Si déjà sur `main` → commit + push des changements de documentation/backlog non encore commités.
+### 5. TEAM — Dissolution de la Team
 
----
+Si une team est active (verifier dans CLAUDE.md la valeur de `TEAM-Buzz`) :
 
-### Phase 5 — Site marketing
+1. Envoyer un message de cloture a chaque agent via **SendMessage** :
+   > "Session terminee. Merci pour la session. En attente de la prochaine."
+2. Appeler **TeamDelete** avec le nom `TEAM-Buzz` pour dissoudre la team
 
-- **Mode TEAM** : `SendMessage(recipient: "cdp", content: "Communication marketing demandée: auto-détecte la version depuis config.json", summary: "Marketing: release")`
-- **Sans TEAM** :
-  ```
-  subagent_type: "cdp"
-  description: "Marketing release"
-  prompt: Communication marketing demandée: auto-détecte la version depuis config.json
-  ```
+Si aucune team n'est active, passer cette etape.
 
-Attendre la complétion.
-
----
-
-### Phase 6 — Mise à jour MEMORY projet
-
-Mettre à jour `.claude/memory/MEMORY.md` avec les apprentissages de la session :
-
-1. Lire `.claude/memory/MEMORY.md`
-2. Identifier les informations nouvelles à mémoriser :
-   - Patterns ou conventions confirmés durant la session
-   - Décisions d'architecture prises
-   - Problèmes rencontrés et solutions trouvées
-   - Préférences utilisateur exprimées
-3. Mettre à jour via Edit (ne pas dupliquer les entrées existantes)
-4. Confirmer : "MEMORY mise à jour"
-
----
-
-### Phase 7 — Shutdown team
-
-1. Envoyer `shutdown_request` à chaque agent actif dans la team `TEAM-Buzz` :
-   - `cdp`, `planner`, `backend-dev`, `frontend-dev`, `buzzclick-dev`
-   - `test-writer`, `code-reviewer`, `qa`, `doc-updater`, `deployer`
-
-2. Attendre les `shutdown_response` (approve)
-
-3. Appeler **TeamDelete** pour supprimer la team `TEAM-Buzz`
-
-4. Confirmer : "Team TEAM-Buzz dissoute."
-
----
-
-### Phase 8 — Résumé final
+### 6. RAPPORT — Rapport de Session
 
 ```markdown
-## Session terminée
+## Rapport de Session — <date>
 
-**Feature** : <nom>
-**Version** : vX.Y.Z
-**Branche** : mergée sur main
+**Duree** : [estimation]
+**Branche** : <branche>
+**Version** : <version courante>
 
-### Livrables
-- Code : X fichiers modifiés
-- Documentation : [déjà produite par workflow | produite en Phase 2]
-- Backlog : <nom> → DONE
-- Marketing : site mis à jour, release notes créées
-- MEMORY : mise à jour
+### Ce qui a ete fait
+- <tache 1> ✅
+- <tache 2> ✅
+- <tache 3> 🔄 (en cours)
 
-### Prochaine étape
-- Valider en QUALIF : `/deploy QUALIF`
-- Ou déployer directement : `/deploy PROD`
+### Decisions techniques
+- <decision 1> — <raison>
+- <decision 2> — <raison>
+
+### Pour la prochaine session
+- <point d'attention 1>
+- <prochaine etape>
+
+### Etat du projet
+- Tests : [PASS|FAIL|N/A]
+- Build : [OK|KO|N/A]
+- Deploy : [PROD vX.Y.Z|staging|non deploye]
 ```
 
----
+## Exemple
 
-## Règles
+```
+/end-session
 
-| Règle | Détail |
-|-------|--------|
-| **Phase 1 toujours en premier** | Bilan avant toute action |
-| **Phase 2 conditionnelle** | Skip si doc déjà produite par feature/bugfix/hotfix |
-| **Phase 3 après Phase 2** | Version finale doit être dans config.json |
-| **Phases 5 et 6 parallélisables** | Peuvent tourner en parallèle après le merge (Phase 4) |
-| **Phase 7 en dernier** | Jamais avant que marketing et MEMORY soient terminés |
-| **Pas de feature En-Cours** | Sauter Phase 3 silencieusement |
-| **Déjà sur main** | Sauter la confirmation de merge en Phase 4 |
+[ETAT] Git : 0 modifications non commitees ✅
+[ETAT] Tests : 47/47 passes ✅
+[DOC] CHANGELOG.md : a jour ✅
+[MEMOIRE] MEMORY.md mis a jour ✅
+[GIT] Tout est pousse sur origin/feature/auth ✅
+[TEAM] TeamDelete my-project-team ✅
+
+--- Rapport de Session ---
+Branche : feature/auth
+Travail : Implementation OAuth2 (phases PLAN + DEV completees)
+Prochaine etape : /review puis /qa
+```
+
+## Agent
+
+Execution directe — pas de delegation a un agent specialise.
+Coordonne les mises a jour de documentation et de memoire.

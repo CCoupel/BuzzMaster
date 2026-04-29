@@ -156,6 +156,10 @@ func (e *Engine) UpdateBumper(id string, data map[string]interface{}) {
 	if connected, ok := data["CONNECTED"].(bool); ok {
 		bumper.Connected = connected
 	}
+	// ACK pending flag (v3.8.0)
+	if ackPending, ok := data["ACK_PENDING"].(bool); ok {
+		bumper.AckPending = ackPending
+	}
 
 	log.Printf("[Engine] Updated bumper %s: team=%s, name=%s, protocol=%s", id, bumper.Team, bumper.Name, bumper.Protocol)
 	e.mu.Unlock()

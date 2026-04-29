@@ -1,273 +1,146 @@
-# Commande /bugfix - Workflow Correction de Bug
+# Commande /bugfix
 
-Déclenche le workflow de correction de bug. **Le CDP** (agent cdp) est le team leader qui coordonne tous les agents. Claude est l'interface utilisateur.
+Workflow pour la correction d'un bug.
 
-## Argument reçu
+## Usage
+
+```
+/bugfix <description du bug>
+```
+
+## Argument recu
 
 $ARGUMENTS
 
-## Architecture CDP
+## Mots-cles de controle
+
+**Reference :** Voir `context/COMMON.md` section 12
+
+| Mot-cle | Action |
+|---------|--------|
+| `help` | Affiche l'aide et les mots-cles disponibles |
+| `status` | Affiche l'etat du workflow en cours |
+| `plan` | Affiche le plan sans executer |
+| `resume <phase>` | Reprend a une phase |
+| `skip <phase>` | Saute une phase |
+| `jumpto <tache>` | Demarre a une tache precise du plan |
+
+Si `$ARGUMENTS` commence par un mot-cle -> executer l'action correspondante.
+Sinon -> workflow normal.
+
+## Workflow
 
 ```
-Claude (interface) → SendMessage(cdp, "Bugfix: xxx")
-                          │
-                     CDP (Team Leader)
-                          │
-    ┌──────────┬──────────┼──────────┬──────────┐
-backend-dev  frontend-dev  test-writer  code-reviewer  ...
-                          │
-               Coordination via TaskUpdate + SendMessage
+/bugfix <description>
+    |
+    v
+[CLARIFICATION] --> Etude spec + issues GitHub + questions si besoin
+    |
+    v
+[ANALYSE] --> Identifier la cause racine
+    |
+    v
+[PLAN] --> Plan de correction (si complexe)
+    |
+    v
+[DEV] --> Implementation du fix
+    |           |
+    v           v
+[REVIEW]   [TEST-WRITER] --> test de regression (en parallele)
+    \           /
+     v         v
+      [QA] --> Execution + procedure manuelle
+    |
+    v
+[DOC] --> CHANGELOG (Fixed)
 ```
 
-**IMPORTANT** : Claude délègue au CDP. Le CDP est le chef de projet — Claude est uniquement l'interface utilisateur.
+## Etapes Detaillees
 
-## Workflow BUGFIX
+### 1. ANALYSE
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│  ANALYSE → GIT → DEV → TEST-WRITER → REVIEW → QA → DOC → DEPLOY│
-└─────────────────────────────────────────────────────────────────┘
+- Explorer le code pour comprendre le probleme
+- Identifier le(s) fichier(s) concerne(s)
+- Reproduire le bug si possible
+- Determiner la cause racine
 
-Phase 0: ANALYSE (TOI)
-    │
-    ├── Analyser la description du bug
-    ├── Identifier la portée (backend/frontend/firmware)
-    ├── Déterminer la complexité
-    └── Créer la branche bugfix/<nom-court>
-    │
-    ▼
-Phase 1: TEAM SETUP (TOI — uniquement si TEAM-Buzz absente)
-    │
-    ├── Si TEAM-Buzz active → teammates déjà disponibles, passer à Phase 2
-    └── Si bootstrap (aucune team) :
-        ├── TeamCreate({ team_name: "TEAM-Buzz", agent_type: "cdp" })
-        ├── Spawner les agents nécessaires (team_name: "TEAM-Buzz") :
-        │   ├── dev-backend / dev-frontend / dev-buzzclick (selon portée)
-        │   ├── test-writer (OBLIGATOIRE - test régression)
-        │   ├── code-reviewer, QA, doc-updater, deploy
-        └── Voir "Mode Bootstrap" dans agents/cdp.md
-    │
-    ▼
-Phase 2: DÉVELOPPEMENT (Agents DEV)
-    │
-    ├── Assigner les tâches dev via TaskUpdate(owner: "agent-name")
-    ├── Attendre résultats via messages automatiques
-    ├── Stratégie :
-    │   ├── Backend seul → dev-backend
-    │   ├── Frontend seul → dev-frontend
-    │   ├── Firmware seul → dev-buzzclick
-    │   ├── Backend + Frontend (dépendance) → séquentiel
-    │   └── Backend + Frontend (indépendant) → parallèle
-    └── Vérifier que le scope est MINIMAL (pas de refactoring)
-    │
-    ▼
-Phase 3: TESTS (test-writer)
-    │
-    ├── Assigner via TaskUpdate(owner: "test-writer")
-    ├── OBLIGATOIRE : Test de non-régression
-    ├── Écrire tests unitaires Go (*_test.go)
-    ├── Définir scénarios E2E si applicable
-    └── Attendre message de complétion
-    │
-    ▼
-Phase 4: REVUE (code-reviewer)
-    │
-    ├── Assigner via TaskUpdate(owner: "code-reviewer")
-    ├── Analyser le verdict :
-    │   ├── APPROVED → Phase 5
-    │   ├── APPROVED WITH RESERVATIONS → Phase 5 (noter)
-    │   └── REJECTED → Retour Phase 2 (cycle++)
-    └── Si cycle > 3 → Escalade utilisateur
-    │
-    ▼
-Phase 5: QUALITÉ (QA)
-    │
-    ├── Assigner via TaskUpdate(owner: "qa")
-    ├── Exécuter tests unitaires + E2E
-    ├── Analyser le verdict :
-    │   ├── NOT VALIDATED → Retour Phase 2 (cycle++)
-    │   └── VALIDATED → Attendre validation utilisateur
-    ├── Si cycle > 3 → Escalade utilisateur
-    └── ⏸️ VALIDATION UTILISATEUR REQUISE
-    │
-    ▼
-Phase 6: DOCUMENTATION (doc-updater)
-    │
-    ├── Assigner via TaskUpdate(owner: "doc-updater")
-    ├── Incrémenter Z : 2.40.0 → 2.40.1
-    ├── CHANGELOG : section "Fixed" uniquement
-    ├── Mettre à jour CLAUDE.md si nécessaire
-    └── Finaliser config.json
-    │
-    ▼
-Phase 7: DÉPLOIEMENT QUALIF (deploy)
-    │
-    ├── Assigner via TaskUpdate(owner: "deploy-qualif")
-    ├── Build frontend + backend
-    ├── Si firmware modifié : build + validation
-    ├── Test server startup
-    ├── Générer rapport QUALIF_REPORT_vX.Y.Z.md
-    └── ⏸️ FIN - PROD via /deploy PROD séparé
-```
+### 2. PLAN (optionnel)
 
-## Spécificités BUGFIX
+Pour les bugs complexes uniquement :
+- Plusieurs fichiers impactes
+- Risque de regression
+- Changement d'architecture
 
-| Règle | Contrainte |
-|-------|-----------|
-| **Versioning** | Incrémente Z : 2.40.0 → 2.40.1 |
-| **Branche** | `bugfix/<nom-court>` (ex: bugfix/wifi-autostart) |
-| **Scope** | MINIMAL - corriger UNIQUEMENT le bug |
-| **Test** | Non-régression OBLIGATOIRE |
-| **Refactoring** | INTERDIT - pas de nettoyage de code |
-| **CHANGELOG** | Section "Fixed" uniquement |
-| **Commits** | Atomiques, message clair avec "fix:" |
+### 3. DEV
 
-## Gestion des Cycles
+- Correction minimale et ciblee
+- Eviter les changements non lies au bug
+- Ajouter des commentaires si logique complexe
 
-```
-MAX_CYCLES = 3
-cycle = 0
+### 4. TEST-WRITER (parallele avec REVIEW)
 
-while cycle < MAX_CYCLES:
-    dev_result = await agents_dev()
-    review_result = await code_reviewer()
+**Obligatoire** : Test de non-regression ecrit par test-writer
+- Script qui reproduit le bug avant le fix (red) et passe apres (green)
+- Procedure manuelle dans `tests/procedures/` pour que QA valide le scenario
+- Execute en parallele avec le code-reviewer — independants l'un de l'autre
 
-    if review_result == REJECTED:
-        cycle++
-        SendMessage(recipient: "dev-xxx", content: corrections)
-        continue
+### 5. REVIEW
 
-    qa_result = await QA()
-    if qa_result == NOT_VALIDATED:
-        cycle++
-        SendMessage(recipient: "dev-xxx", content: erreurs)
-        continue
+- Verification que le fix est correct
+- Pas d'effets de bord
+- Code propre et maintenable
 
-    break  # Succès
+### 6. QA
 
-if cycle >= MAX_CYCLES:
-    ESCALADE_UTILISATEUR
-```
+- Execution de tous les tests
+- Verification specifique du scenario du bug
+- Build OK
 
-## Points de Validation Utilisateur
+### 7. DOC
 
-| Point | Question |
-|-------|----------|
-| **Après QA** | "QA terminé (VALIDATED). Continuer vers DOC ?" |
-| **Escalade 3 cycles** | "3 cycles échoués. Continuer ou abandonner ?" |
-| **Fin QUALIF** | "QUALIF prêt. Déployer ?" |
-
-## Format de Reporting (TOI)
-
-### Pendant le workflow
-
+Mise a jour CHANGELOG.md :
 ```markdown
-## 📊 Bugfix en cours
-
-**Bug** : [Description courte]
-**Branche** : bugfix/xxx
-**Phase** : [X/7 - Nom]
-**Cycle** : [N/3]
-
-### Progression
-- [x] Analyse
-- [x] Team setup
-- [x] Développement backend
-- [ ] Tests (en cours...)
-- [ ] Revue
-- [ ] QA
-- [ ] Documentation
-- [ ] Déploiement QUALIF
-
-### Agents actifs
-- dev-backend : ✅ Terminé
-- test-writer : 🔄 En cours
+### Fixed
+- Description du bug corrige (#issue)
 ```
 
-### Rapport final
+## Exemples
 
-```markdown
-## ✅ Bugfix Terminé
-
-**Bug** : [Description]
-**Version** : 2.40.Z
-**Durée** : XX min
-**Cycles** : N
-
-### Agents utilisés
-| Agent | Durée | Statut |
-|-------|-------|--------|
-| dev-backend | 5 min | ✅ |
-| test-writer | 3 min | ✅ |
-| code-reviewer | 2 min | ✅ |
-| QA | 4 min | ✅ |
-| doc-updater | 2 min | ✅ |
-| deploy | 3 min | ✅ |
-
-### Livrables
-- Code : X fichiers modifiés
-- Tests : Test régression + X tests existants
-- Documentation : CHANGELOG.md (Fixed)
-- QUALIF : Prêt pour validation
-
-### Prochaine étape
-Valider en QUALIF puis `/deploy PROD`
+```
+/bugfix Le score ne s'affiche pas apres une partie
+/bugfix Crash au demarrage sur iOS 15
+/bugfix L'API retourne 500 sur /users sans parametres
+/bugfix Le bouton submit reste desactive apres erreur
 ```
 
-## Règles Critiques
+## Differences avec /hotfix
 
-### ✅ Claude DOIT
-- Analyser le bug et le transmettre au CDP avec contexte
-- Relayer fidèlement les messages CDP ↔ utilisateur
-- Communiquer les validations utilisateur au CDP
+| Aspect | /bugfix | /hotfix |
+|--------|---------|---------|
+| Urgence | Normal | Critique (prod down) |
+| Tests | Complets | Critiques uniquement |
+| Review | Standard | Acceleree |
+| Deploy | Via workflow normal | Direct PROD |
 
-### ❌ Claude NE DOIT PAS
-- Coordonner les agents directement
-- Écrire du code lui-même
+## Prompt a transmettre au CDP
 
-### ✅ Le CDP DOIT (référence)
-- Analyser le bug et sa portée
-- Créer les tâches et assigner aux agents
-- Coordonner via TaskUpdate + SendMessage
-- Exiger un test de non-régression OBLIGATOIRE
-- Gérer les cycles (max 3)
-- Demander validation après QA
+Orchestre le workflow BUGFIX pour BuzzControl.
 
-### ❌ Le CDP NE DOIT PAS
-- Écrire du code lui-même
-- Autoriser du refactoring
-- Dépasser 3 cycles sans escalade
+**Contexte projet :** Voir `context/COMMON.md` section 1
+**Workflow CDP :** Voir `context/CDP_WORKFLOWS.md`
+- Type : BUGFIX
+- Phases : section 3
+- Clarification : section 4
+- Dispatch DEV : section 5
+- Validation : section 6
+- Erreurs : section 7
+- Regles : section 9
 
-## Agents que TU coordonnes
+**Contexte DEV :** Voir `context/DEVELOPMENT.md`
+**Contexte Qualite :** Voir `context/QUALITY.md`
 
-| Agent | Subagent Type | Rôle |
-|-------|---------------|------|
-| Backend Dev | `dev-backend` | Corriger bug serveur Go |
-| Frontend Dev | `dev-frontend` | Corriger bug React/CSS |
-| Firmware Dev | `dev-buzzclick` | Corriger bug ESP32 |
-| Test Writer | `test-writer` | Écrire test régression |
-| Code Reviewer | `code-reviewer` | Analyser qualité |
-| QA Tester | `qa` | Exécuter tests |
-| Doc Updater | `doc-updater` | Mettre à jour docs |
-| Deployer | `deploy` | Déployer QUALIF |
+**Demande utilisateur :** $ARGUMENTS
 
-## Action immédiate
+## Agent
 
-**TU** (Claude) dois maintenant :
-
-1. **Analyser** brièvement le bug : `$ARGUMENTS`
-2. **Transmettre** au CDP avec contexte complet :
-   ```
-   SendMessage(recipient: "cdp", content: "Démarre un workflow BUGFIX: [description bug + portée identifiée (backend/frontend/firmware)]", summary: "Bugfix: [titre court]")
-   ```
-3. **Relayer** tous les messages et validations du CDP vers l'utilisateur
-
-**Le CDP prend en charge l'intégralité du workflow depuis cette étape.**
-
-
-### Sans TEAM (pas de TEAM-Buzz actif)
-```
-subagent_type: "cdp"
-description: "Workflow bugfix"
-prompt: Démarre un workflow BUGFIX: $ARGUMENTS
-```
+Delegue au CDP (`cdp.md`) avec mode bugfix.

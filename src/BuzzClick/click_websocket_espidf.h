@@ -482,6 +482,42 @@ void ws_sendPong(const String& mac) {
     esp_websocket_client_send_text((esp_websocket_client_handle_t)wsClient, pongJson.c_str(), pongJson.length(), portMAX_DELAY);
 }
 
+// Send ACK response for a received message with MSG_ID (v3.8.0 — #54).
+// Called from parseJSON() which executes inside the WebSocket event handler task.
+// MUST be non-blocking: portMAX_DELAY would deadlock (event task waiting for itself).
+// Timeout 0 = non-blocking fire-and-forget; drops silently if send queue is full.
+// The server handles non-acknowledgement via AckManager retry/expiry.
+void ws_sendAck(const String& mac, const String& ackAction, const String& ackId) {
+    if (!wsConnected || !wsClient) {
+        ESP_LOGD(WS_TAG, "ws_sendAck: not connected, dropping ACK for %s", ackId.c_str());
+        return;
+    }
+
+    JsonDocument ackDoc;
+    ackDoc["ID"] = mac;
+    ackDoc["ACTION"] = "ACK";
+    JsonObject ackMsg = ackDoc["MSG"].to<JsonObject>();
+    ackMsg["ack_action"] = ackAction;
+    ackMsg["ack_id"] = ackId;
+
+    String ackJson;
+    serializeJson(ackDoc, ackJson);
+
+    // timeout=0: non-blocking — drops if the internal WS send ring-buffer is full.
+    // Safe to call from the WS event handler task (parseJSON context).
+    esp_err_t err = esp_websocket_client_send_text(
+        (esp_websocket_client_handle_t)wsClient,
+        ackJson.c_str(),
+        ackJson.length(),
+        0
+    );
+    if (err == ESP_OK) {
+        ESP_LOGI(WS_TAG, "ACK sent: action=%s id=%s", ackAction.c_str(), ackId.c_str());
+    } else {
+        ESP_LOGW(WS_TAG, "ACK send failed (err=%d) action=%s id=%s", err, ackAction.c_str(), ackId.c_str());
+    }
+}
+
 // Check if WebSocket is connected
 bool ws_isConnected() {
     return wsConnected && wsClient != NULL;

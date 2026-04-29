@@ -2,6 +2,7 @@ package server
 
 import (
 	"testing"
+	"time"
 )
 
 func TestGetPlatformString(t *testing.T) {
@@ -96,8 +97,11 @@ func TestFindAssetForPlatform(t *testing.T) {
 }
 
 func TestReleasesCache(t *testing.T) {
+	// Use a large TTL so the cache does not expire during the test.
+	// 100 ns was too short: by the time set() returns and get() is called,
+	// more than 100 ns has elapsed on any modern machine.
 	cache := &releasesCache{
-		ttl: 100, // 100 nanoseconds for testing
+		ttl: 1 * time.Minute,
 	}
 
 	releases := []GitHubRelease{
@@ -112,7 +116,7 @@ func TestReleasesCache(t *testing.T) {
 	// Set cache
 	cache.set(releases)
 
-	// Immediately get - should be valid
+	// Immediately get - should be valid (TTL is 1 minute, so it can't expire yet)
 	result, valid := cache.get()
 	if !valid {
 		t.Error("Fresh cache should be valid")
@@ -121,11 +125,7 @@ func TestReleasesCache(t *testing.T) {
 		t.Errorf("Expected 1 release, got %d", len(result))
 	}
 
-	// Wait for expiration (using very short TTL)
-	// Note: In real tests, you might want to use a mock timer
-	// For now, we just test the logic
-
-	// getExpired should always return data
+	// getExpired should always return data regardless of TTL
 	expired := cache.getExpired()
 	if len(expired) != 1 {
 		t.Errorf("getExpired should return cached data, got %d releases", len(expired))

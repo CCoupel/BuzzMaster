@@ -199,8 +199,16 @@ func (h *WebSocketHub) ClientCount() int {
 	return len(h.clients)
 }
 
-// HandleConnection upgrades HTTP to WebSocket and handles the connection
+// HandleConnection upgrades HTTP to WebSocket and handles the connection.
+// The client type defaults to ClientTypeAdmin (legacy /ws endpoint).
 func (h *WebSocketHub) HandleConnection(w http.ResponseWriter, r *http.Request) {
+	h.HandleConnectionWithType(w, r, ClientTypeAdmin)
+}
+
+// HandleConnectionWithType upgrades HTTP to WebSocket and fixes the client type at connection time.
+// Used by dedicated endpoints (/ws/admin, /ws/tv, /ws/player) so the type is known immediately
+// without waiting for a SET_CLIENT_TYPE message.
+func (h *WebSocketHub) HandleConnectionWithType(w http.ResponseWriter, r *http.Request, clientType ClientType) {
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		LogError(game.LogComponentWebSocket, "Upgrade error: %v", err)
@@ -209,6 +217,7 @@ func (h *WebSocketHub) HandleConnection(w http.ResponseWriter, r *http.Request) 
 
 	client := &WebSocketClient{
 		ID:       r.RemoteAddr,
+		Type:     clientType,
 		Conn:     conn,
 		Send:     make(chan []byte, 256),
 		Hub:      h,
@@ -219,6 +228,76 @@ func (h *WebSocketHub) HandleConnection(w http.ResponseWriter, r *http.Request) 
 
 	go client.writePump()
 	go client.readPump()
+}
+
+// BroadcastToTypes sends a message only to connected clients whose type matches one of the
+// given types. The message is serialized once and the same bytes are sent to all matching
+// clients (efficient for high-frequency updates like UPDATE_TIMER).
+// Thread-safe: uses RLock for the client map iteration.
+func (h *WebSocketHub) BroadcastToTypes(msg *protocol.Message, types ...ClientType) {
+	if len(types) == 0 {
+		return
+	}
+
+	data, err := msg.SerializeForWebSocket()
+	if err != nil {
+		LogError(game.LogComponentWebSocket, "BroadcastToTypes: failed to serialize message: %v", err)
+		return
+	}
+
+	// Build a fast lookup set for the requested types
+	typeSet := make(map[ClientType]bool, len(types))
+	for _, t := range types {
+		typeSet[t] = true
+	}
+
+	// Use a single WLock so that close(client.Send) and delete(h.clients, client)
+	// are atomic with respect to concurrent BroadcastToTypes calls.
+	// A two-phase RLock+WLock upgrade would allow two goroutines to both close the same
+	// channel between the RUnlock and the WLock, causing a "close of closed channel" panic.
+	h.mu.Lock()
+	for client := range h.clients {
+		if !typeSet[client.Type] {
+			continue
+		}
+		select {
+		case client.Send <- data:
+		default:
+			close(client.Send)
+			delete(h.clients, client)
+		}
+	}
+	h.mu.Unlock()
+}
+
+// BroadcastRawToTypes sends pre-serialized bytes only to connected clients whose type
+// matches one of the given types. Analogous to BroadcastToTypes but avoids the extra
+// serialization round-trip when the caller has already prepared type-specific payloads
+// (e.g. SerializeForWebClient / SerializeForBuzzer).
+// Thread-safe: uses a single WLock so close(client.Send)+delete(h.clients, client) are atomic.
+func (h *WebSocketHub) BroadcastRawToTypes(data []byte, types ...ClientType) {
+	if len(types) == 0 {
+		return
+	}
+
+	typeSet := make(map[ClientType]bool, len(types))
+	for _, t := range types {
+		typeSet[t] = true
+	}
+
+	h.mu.Lock()
+	for client := range h.clients {
+		if !typeSet[client.Type] {
+			continue
+		}
+		select {
+		case client.Send <- data:
+		default:
+			close(client.Send)
+			delete(h.clients, client)
+		}
+	}
+	h.mu.Unlock()
 }
 
 func (c *WebSocketClient) readPump() {

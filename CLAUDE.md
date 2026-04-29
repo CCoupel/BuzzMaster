@@ -126,8 +126,11 @@ cd server-go && ./build.ps1
 | Service | Port | Endpoint | Description |
 |---------|------|----------|-------------|
 | HTTP | 80 | `/` | Web interface |
-| WebSocket | 80 | `/ws` | Admin, TV, VJoueur (clients web) |
-| WebSocket | 80 | `/ws/buzzer` | Buzzers physiques (v3.0.0+) |
+| WebSocket | 80 | `/ws` | Admin client (alias vers `/ws/admin`, legacy rétrocompatible) |
+| WebSocket | 80 | `/ws/admin` | Admin web client — ALL messages (v3.8.0+) |
+| WebSocket | 80 | `/ws/tv` | TV display client — game state + enrollment (v3.8.0+) |
+| WebSocket | 80 | `/ws/player` | VPlayer client — player enrollment + game state (v3.8.0+) |
+| WebSocket | 80 | `/ws/buzzer` | Buzzers physiques (v3.0.0+) — whitelist: LED_SET, OTA_UPDATE, WIFI_CONFIG, HELLO |
 | WebSocket | 80 | `/ws/logs` | Logs temps reel |
 | TCP | 1234 | - | BuzzClick buzzer protocol (v1, retrocompatible) |
 | UDP | 1234 | - | Broadcast (same as TCP) |
@@ -242,6 +245,52 @@ Le serveur embarque le firmware BuzzClick directement dans son binaire Go :
   - Broadcast `FIRMWARE_VERSION` apres restauration
 - **`EMBEDDED_VERSION`** : Exposé dans `FirmwareVersionPayload` pour que le frontend affiche le bouton de restauration uniquement si une version embarquée est disponible
 
+### WebSocket Endpoints dédiés (v3.8.0)
+
+Le serveur offre trois endpoints WebSocket spécialisés avec routage intelligent des messages par type de client. Chaque endpoint filtre les actions envoyées au client selon sa fonction.
+
+**Architecture** :
+```
+/ws/admin    → Admin web client (AccessAll)
+/ws/tv       → TV display client (TV seulement) — serialized via SerializeForWebClient()
+/ws/player   → VPlayer web client (VPlayer seulement) — serialized via SerializeForWebClient()
+/ws (legacy) → Alias vers /ws/admin (rétrocompatibilité)
+/ws/buzzer   → Buzzers physiques (whitelist : UPDATE, UPDATE_TIMER, START, CONTINUE, STOP, PAUSE, READY, RESET, HELLO, LED_SET, OTA_UPDATE, WIFI_CONFIG) — serialized via SerializeForBuzzer()
+```
+
+**Table de routage des actions** :
+
+| Action | Admin | TV | VPlayer | Buzzer |
+|--------|-------|----|---------|----|
+| ALL, UPDATE, START, STOP, PAUSE, CONTINUE, REVEAL, RESET, QCM_HINT, ENROLLMENT_UPDATE | ✓ (full) | ✓ (web) | ✓ (web) | ✓ (buzzer) |
+| UPDATE_TIMER | ✓ (full) | ✓ (web) | ✓ (web) | ✓ (buzzer) |
+| READY, REMOTE, BACKGROUND_CHANGE, CONFIG_UPDATE, SHOW_QR_CODE, HIDE_QR_CODE, FULL, MEMORY_* | ✓ (full) | ✓ (web) | - | - |
+| QUESTIONS, CLIENTS, FIRMWARE_VERSION | ✓ (full) | - | - | - |
+| PLAYER_REJECTED, PLAYER_CONNECTED, PLAYER_ASSIGNED | ✓ (full) | - | ✓ (web) | - |
+| LED_SET, OTA_UPDATE, WIFI_CONFIG, HELLO | ✓ (full) | - | - | ✓ (buzzer) |
+
+**Sérialisation par client (v3.8.0)** :
+- **SerializeForAdmin()** : full payload — tout (bumpers avec FIRMWARE_VERSION, OTA_STATUS, ACK_PENDING, config, etc.)
+- **SerializeForWebClient()** : réduit pour TV/VPlayer — strips FIRMWARE_VERSION, IS_OUTDATED, OTA_STATUS, OTA_PERCENT, ACK_PENDING, config info (réduit volume ~40-60%)
+- **SerializeForBuzzer()** : minimal pour buzzers physiques — phase, timer, bumpers (ID, NAME, TEAM, CONNECTED), teams (NAME, COLOR, STATUS)
+
+**Implémentation côté backend** :
+- `websocket.go` : `HandleConnectionWithType(w, r, clientType)`, `SetClientType()`, `BroadcastToTypes(msg, ...ClientType)` — acheminement par type
+- `http.go` : routes `/ws/admin`, `/ws/tv`, `/ws/player` instancient la connexion avec le type approprié
+- `cmd/server/main.go` : tous les `broadcastXxx()` calls remplacés par `BroadcastToTypes(...ClientType)` selon la table
+- Backward compat : `/ws` route remains, forwards vers `/ws/admin` (ClientTypeAdmin)
+
+**Implémentation côté frontend** :
+- `useWebSocket.js` : ajout paramètre `endpoint` — l'URL WS peut cibler un endpoint spécifique
+- `GameProvider` : accepte prop `endpoint = '/ws/admin'` (v3.8.0) — transmis à `useWebSocket()` pour routing multi-rôle
+- `App.jsx` routing des endpoints :
+  - `/admin/*` → `GameProvider` avec défaut (`/ws/admin`)
+  - `/tv` → `GameProvider` avec `endpoint="/ws/tv"` (TV display)
+  - `/player` et `/enroll` → `GameProvider` avec `endpoint="/ws/player"` (VPlayer client)
+- Permet l'évolution future (ex: TV + admin en iframe simultanément)
+- `PlayerDisplay.jsx` : `/ws/tv` — la connexion TV est indépendante de l'admin
+- `EnrollPage.jsx`, `VPlayerPage.jsx` : `/ws/player` — connexion dédiée VPlayer
+
 ### Modele Bumper enrichi (v3.1.0)
 
 ```json
@@ -250,7 +299,8 @@ Le serveur embarque le firmware BuzzClick directement dans son binaire Go :
   "FIRMWARE_VERSION": "3.1.1",
   "IS_OUTDATED": false,
   "OTA_STATUS": "",
-  "CONNECTED": true
+  "CONNECTED": true,
+  "ACK_PENDING": false
 }
 ```
 
@@ -267,6 +317,13 @@ Pages frontend affichant le badge ⚠ :
 - Style inline React (`background:#f59e0b`, SVG `stroke:white`) — pas de classe CSS pour éviter les problèmes de chargement (v3.6.8)
 
 **Initialisation au démarrage (v3.6.7)** : Lors du chargement des bumpers depuis le disque, `CONNECTED` est réinitialisé à `false` pour tous les bumpers, car aucun buzzer n'est physiquement connecté après un redémarrage serveur. Cela évite que les bumpers persistés avec `CONNECTED=true` masquent le badge ⚠.
+
+**ACK_PENDING (v3.8.0)** : `true` quand le serveur attend confirmation (ACK) du buzzer pour un message prioritaire (LED_SET, OTA_UPDATE, WIFI_CONFIG). Positionné par `AckManager` à la génération du message, remis à `false` à la réception de l'ACK ou après expiry (max retries). Toujours sérialisé (sans `omitempty`). Badge ⚠ horloge (SVG, fond amber `#f59e0b`) affiché quand `ACK_PENDING === true` (condition stricte : `!IS_VIRTUAL && !IS_VPLAYER`).
+
+Pages frontend affichant le badge ⚠ ACK_PENDING :
+- `TeamCard.jsx` : inline dans la row du buzzer
+- `TeamsPage.jsx` : dans les rows membres et buzzers non assignés
+- Style inline React identique au badge CONNECTED (icône SVG horloge, `background:#f59e0b`, `stroke:white`)
 
 ### Server-Driven LED Control (v3.4.0)
 
@@ -308,10 +365,53 @@ Effects : `"SOLID"` (fixe), `"BLINK"` (100%<->25% a 400ms), `"DIM"` (fixe attenu
 
 `WS_RECONNECTING` : delta-update — seuls 2 pixels modifiés par tick (restauration du pixel précédent au fond + avance du pixel blanc). Pas de réécriture complète du buffer → la couleur d'équipe (LED_SET) et la rotation grise restent intactes. Vitesse : 100 ms/step → ~2.3 s/tour. `manageLedError()` est appelé dans la boucle d'attente de `connectWebSocket()` pour maintenir l'animation pendant que `loop()` est bloqué (jusqu'à 10 s). Un seul `showPixels()` par tick. **Freeze pendant `ws_safe_destroy()` éliminé (v3.6.4)** : `stop()+destroy()` sont déchargés sur une tâche FreeRTOS temporaire (`ws_destroy_task`, 4 KB, prio 5) — `loop()` continue d'animer via `manageLedError()` pendant le teardown.
 
+**Protocole ACK v3.8.0** :
+```json
+// Server → Buzzer : LED_SET avec MSG_ID (génération + enregistrement AckManager)
+{ "ACTION": "LED_SET", "MSG_ID": "a1b2c3d4e5f6", "MSG": { "COLOR": [255, 0, 0], "INTENSITY": 255, "EFFECT": "SOLID" } }
+
+// Buzzer → Server : ACK avant d'appliquer l'action
+{ "ACTION": "ACK", "MSG": { "ack_action": "LED_SET", "ack_id": "a1b2c3d4e5f6" } }
+
+// Server → Web : ACK_PENDING cleared, AckPending=false broadcast via UPDATE
+{ "ACTION": "UPDATE", "MSG": { "bumpers": [{ "ID": "...", "ACK_PENDING": false }] } }
+```
+
+- `AckManager` : registre des MSG_ID en attente, retry automatique + expiry après `ack_max_retries` tentatives (default 3, timeout 2000ms)
+- `MSG_ID` optionnel (omitempty) — anciens firmwares sans support ACK restent compatibles
+- ACK envoyé BEFORE action apply (côté firmware) — minimise latence de confirmation
+- Non-réception d'ACK détectée par expiry → message rebroadcasted via `OnRetry`, puis après max retries `OnExpired` clears AckPending
+
+### Payload Serializers — Client-Specific Reduction (v3.8.0)
+
+Le serveur génère 3 variantes de sérialisation pour optimiser le volume de données selon le type de client.
+
+**Trois sérialiseurs** :
+```go
+// internal/protocol/messages.go
+SerializeForAdmin()      // Full payload : tous les champs (bumpers + config + firmware + ACK_PENDING)
+SerializeForWebClient()  // Réduit pour TV/VPlayer : strips FIRMWARE_VERSION, IS_OUTDATED, OTA_STATUS, OTA_PERCENT, ACK_PENDING, config
+SerializeForBuzzer()     // Minimal pour buzzers physiques : phase, timer, bumpers (ID, NAME, TEAM, CONNECTED), teams (NAME, COLOR, STATUS)
+```
+
+**Allocation de sérialisation par endpoint (websocket.go)** :
+- `/ws/admin` → `SerializeForAdmin()` (full)
+- `/ws/tv`, `/ws/player` → `SerializeForWebClient()` (réduit ~40-60% moins de données)
+- `/ws/buzzer` → `SerializeForBuzzer()` (minimal, optimisé pour faible bande passante)
+
+**Broadcast implementation (main.go)** :
+- `BroadcastRawToTypes()` applique le sérialiser approprié selon le type de chaque client
+- Réduction bande passante significative : TV/VPlayer n'envoient pas les infos sensibles/inutiles
+- Buzzers reçoivent exactement ce dont ils ont besoin pour afficher l'état du jeu
+
 **Fichiers cles** :
-- `server-go/cmd/server/main.go` : `sendLEDSet`, `broadcastLEDSet`, `resendLEDOnReconnect`, `sendLEDSetAllBuzzers`, `sendLEDSetStop`, `sendLEDSetPause`, `sendLEDSetReveal`, `sendLEDSetComet` (v3.7.0)
-- `server-go/internal/protocol/messages.go` : `ActionLEDSet`, `LEDSetPayload` (champ `CometColor [3]int` — v3.7.0), `nearestPaletteColorByHue()` (v3.7.0)
-- `src/BuzzClick/click_serverConnection.h` : handler `LED_SET` dans `parseJSON()`, `manageLedBlink()` (EFFECT=BLINK), `manageLedComet()` (EFFECT=COMET, v3.7.0)
+- `server-go/cmd/server/main.go` : `sendLEDSet`, `broadcastLEDSet`, `resendLEDOnReconnect`, `sendLEDSetAllBuzzers`, `sendLEDSetStop`, `sendLEDSetPause`, `sendLEDSetReveal`, `sendLEDSetComet` (v3.7.0) + ACK wiring (v3.8.0) + `BroadcastRawToTypes()` (v3.8.0)
+- `server-go/internal/protocol/messages.go` : `ActionLEDSet`, `LEDSetPayload` (champ `CometColor [3]int` — v3.7.0), `Message.MsgID` (v3.8.0, omitempty), `ActionACK`, `AckPayload` (v3.8.0), `nearestPaletteColorByHue()` (v3.7.0) ; `SerializeForAdmin()`, `SerializeForWebClient()`, `SerializeForBuzzer()` (v3.8.0)
+- `server-go/internal/game/models.go` : `Bumper.AckPending bool` (v3.8.0)
+- `server-go/internal/server/ack_manager.go` : ACK registre + retry/expiry logic (v3.8.0, NEW)
+- `server-go/internal/config/config.go` : `ServerConfig.AckTimeoutMs`, `AckMaxRetries` (v3.8.0)
+- `src/BuzzClick/click_websocket_espidf.h` : `ws_sendAck()` function (v3.8.0)
+- `src/BuzzClick/click_serverConnection.h` : handler `LED_SET` dans `parseJSON()`, MSG_ID check + ACK send before action (v3.8.0), `manageLedBlink()` (EFFECT=BLINK), `manageLedComet()` (EFFECT=COMET, v3.7.0)
 - `src/BuzzClick/click_MAIN.cpp` : `manageLedBlink()`, `manageLedComet()` dans `loop()` (v3.7.0)
 - `src/BuzzClick/click_ledErrorPatterns.h` : patterns animés, `manageLedError()` dans `loop()`
 
@@ -326,11 +426,16 @@ Toutes les vues TV doivent tenir entièrement à l'écran sans défilement :
 ### Key Files
 - **Backend** : `server-go/cmd/server/main.go`, `internal/game/engine.go`, `internal/game/models.go`, `internal/updater/updater.go`
 - **WebSocket Buzzer (v3.0.0)** :
-  - `internal/server/websocket_buzzer.go` : Hub WebSocket dedie aux buzzers physiques (BuzzerWebSocketHub) — ping ticker 3 s, ReadDeadline 5 s, detection ≤ 5 s (v3.6.8)
-  - `internal/server/websocket.go` : Hub WebSocket clients web + types clients (admin, tv, vplayer, buzzer) — ping ticker 3 s, ReadDeadline 5 s (v3.6.8)
-  - `internal/server/http.go` : Routes HTTP + handlers WebSocket (`/ws`, `/ws/buzzer`, `/ws/logs`)
-  - `internal/protocol/messages.go` : Serialisation JSON (SerializeForWebSocket, Serialize)
+  - `internal/server/websocket_buzzer.go` : Hub WebSocket dedie aux buzzers physiques (BuzzerWebSocketHub) — ping ticker 3 s, ReadDeadline 5 s, detection ≤ 5 s (v3.6.8) ; whitelist (12 actions) + `BroadcastIfRelevant()` (v3.8.0)
+  - `internal/server/websocket.go` : Hub WebSocket clients web + routing par ClientType — `HandleConnectionWithType(w, r, clientType)`, `BroadcastToTypes(msg, ...ClientType)`, `BroadcastRawToTypes()` (sérialiseurs), `SetClientType()` (v3.8.0) ; ping ticker 3 s, ReadDeadline 5 s (v3.6.8)
+  - `internal/server/http.go` : Routes HTTP + handlers WebSocket (`/ws` alias /ws/admin, `/ws/admin`, `/ws/tv`, `/ws/player`, `/ws/buzzer`, `/ws/logs`) (v3.8.0)
+  - `internal/protocol/messages.go` : Serialisation JSON (SerializeForWebSocket, Serialize) ; `SerializeForAdmin()`, `SerializeForWebClient()`, `SerializeForBuzzer()` (v3.8.0) ; MSG_ID + ACK protocol (v3.8.0)
   - `internal/protocol/parser.go` : Parsing JSON (ParseSingle pour WebSocket, Parse pour TCP)
+- **ACK Buzzer Protocol (v3.8.0)** :
+  - `internal/server/ack_manager.go` : AckManager registre — GenerateMsgID, Register, Confirm, ClearByMAC, PendingCount, Start, tick loop (NEW)
+  - `internal/config/config.go` : AckTimeoutMs, AckMaxRetries config params
+  - `internal/game/models.go` : Bumper.AckPending field
+  - `cmd/server/main.go` : Full ACK wiring — sendLEDSet/sendWifiConfigToBuzzer MSG_ID generation, handleBuzzerACK parsing, OnRetry/OnExpired callbacks
 - **OTA Firmware (v3.1.0)** :
   - `internal/server/firmware.go` : FirmwareManager (stockage, versioning, comparaison semver)
   - `internal/server/http_firmware.go` : Handlers OTA (`/api/firmware/*`, `/api/buzzer/*/update`)
@@ -341,12 +446,14 @@ Toutes les vues TV doivent tenir entièrement à l'écran sans défilement :
   - `web/src/pages/ConfigPage.jsx` : Configuration serveur (parametres, effet neon, WiFi USB, OTA firmware)
   - `web/src/pages/BackupPage.jsx` : Sauvegarde/Restauration/Reinitialisation
   - `web/src/pages/UpdatePage.jsx` : Gestion des mises a jour automatiques
-  - `web/src/pages/PlayerDisplay.jsx` : Affichage TV (STATIQUE)
-  - `web/src/components/TeamCard.jsx` : Carte equipe/joueurs (+ badge firmware + modal OTA + badge ⚠ CONNECTED)
-  - `web/src/pages/TeamsPage.jsx` : Gestion equipes/membres (+ badge ⚠ CONNECTED v3.6.8)
+  - `web/src/pages/PlayerDisplay.jsx` : Affichage TV (STATIQUE) ; utilise `/ws/tv` endpoint (v3.8.0)
+  - `web/src/components/TeamCard.jsx` : Carte equipe/joueurs (+ badge firmware + modal OTA + badge ⚠ CONNECTED + badge ⚠ ACK_PENDING horloge)
+  - `web/src/pages/TeamsPage.jsx` : Gestion equipes/membres (+ badge ⚠ CONNECTED v3.6.8 + badge ⚠ ACK_PENDING horloge v3.8.0)
   - `web/src/styles/badges.css` : CSS partagé (présent mais badge CONNECTED utilise styles inline React depuis v3.6.8)
   - `web/src/components/Navbar.jsx` : Navigation + menu abeille (dropdown)
   - `web/src/components/USBConfigModal.jsx` : Modale USB unifiee — point d'entree unique pour config WiFi AT et flash firmware (v3.1.2)
+  - `web/src/hooks/useWebSocket.js` : Hook WebSocket client ; ajout paramètre `endpoint = '/ws/admin'` pour routing par ClientType (v3.8.0)
+  - `web/src/hooks/GameContext.jsx` : GameProvider wrapper — accepte prop `endpoint` (default `/ws/admin`) transmis à `useWebSocket()` pour endpoint-specific routing (v3.8.0) ; App.jsx routes : `/admin/*` défaut, `/tv` → `/ws/tv`, `/player`/`/enroll` → `/ws/player`
   - `web/src/hooks/useWebSerial.js` : Hook Web Serial API pour communication AT
   - `web/src/hooks/useEspFlash.js` : Hook flash firmware via esptool-js (v3.1.0)
   - `web/src/utils/colorUtils.js` : Helpers couleurs équipes (v3.7.0) — `boostTeamColor(hex)` (RGB→HSL→RGB, saturation/luminosité TV), `nearestPaletteColorByHue()` (sélection palette par distance de teinte HSL)

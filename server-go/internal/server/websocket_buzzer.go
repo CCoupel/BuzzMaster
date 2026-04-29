@@ -111,11 +111,53 @@ func (h *BuzzerWebSocketHub) ConnectedCount() int {
 	return h.BuzzerCount()
 }
 
+// buzzerActionWhitelist defines the set of actions that are relevant for physical buzzers.
+// All other actions are silently dropped by BroadcastIfRelevant / BroadcastRawIfRelevant.
+// Physical buzzers need:
+//   - Game-state actions (UPDATE, UPDATE_TIMER, START, CONTINUE, STOP, PAUSE, READY, RESET)
+//     to synchronise their local state machine and drive their LED logic.
+//   - Control actions (HELLO, LED_SET, OTA_UPDATE, WIFI_CONFIG) for identification and
+//     hardware control.
+var buzzerActionWhitelist = map[string]bool{
+	protocol.ActionPing:        true,
+	protocol.ActionUpdate:      true,
+	protocol.ActionUpdateTimer: true,
+	protocol.ActionStart:       true,
+	protocol.ActionContinue:    true,
+	protocol.ActionStop:        true,
+	protocol.ActionPause:       true,
+	protocol.ActionReady:       true,
+	protocol.ActionReset:       true,
+	protocol.ActionHello:       true,
+	protocol.ActionLEDSet:      true,
+	protocol.ActionOTAUpdate:   true,
+	protocol.ActionWifiConfig:  true,
+}
+
 // Broadcast sends a message to all connected buzzer clients
 func (h *BuzzerWebSocketHub) Broadcast(msg *protocol.Message) {
 	data, err := msg.SerializeForWebSocket()
 	if err != nil {
 		LogError(game.LogComponentWebSocket, "Failed to serialize buzzer message: %v", err)
+		return
+	}
+	h.broadcast <- data
+}
+
+// BroadcastIfRelevant sends a message to all connected buzzer clients only if the
+// action is in the buzzer whitelist. All other actions are silently dropped.
+func (h *BuzzerWebSocketHub) BroadcastIfRelevant(msg *protocol.Message) {
+	if !buzzerActionWhitelist[msg.Action] {
+		return
+	}
+	h.Broadcast(msg)
+}
+
+// BroadcastRawIfRelevant sends pre-serialized bytes to all buzzer clients only if the
+// action is in the buzzer whitelist. Used by broadcastUpdate() to avoid re-serializing
+// a payload that has already been prepared for buzzer clients.
+func (h *BuzzerWebSocketHub) BroadcastRawIfRelevant(action string, data []byte) {
+	if !buzzerActionWhitelist[action] {
 		return
 	}
 	h.broadcast <- data

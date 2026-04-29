@@ -15,7 +15,7 @@ const ANSWER_COLORS = {
 
 export default function VPlayerPage() {
   const navigate = useNavigate()
-  const { sendMessage, gameState, bumpers, teams, status, setClientType } = useGame()
+  const { sendMessage, gameState, bumpers, teams, status } = useGame()
 
   const [playerSession, setPlayerSession] = useState(null)
   const [bumper, setBumper] = useState(null)
@@ -69,15 +69,6 @@ export default function VPlayerPage() {
       bumperRef.current = null
     }
   }, [playerSession, bumpers, teams])
-
-  // Identify as vplayer IMMEDIATELY on connection (before any other action)
-  // This must happen first, before checking session or bumper
-  useEffect(() => {
-    if (status === 'connected') {
-      console.log('[VPlayer] Setting client type to vplayer')
-      setClientType('vplayer')
-    }
-  }, [status, setClientType])
 
   // Detect if bumper was deleted by admin - redirect to enrollment page
   useEffect(() => {

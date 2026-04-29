@@ -3,6 +3,58 @@
 Historique des versions du projet BuzzControl.
 
 
+## [3.8.0] - 2026-04-28
+
+### Added
+- **[#11 Backend]**: Endpoints WebSocket dédiés `/ws/admin`, `/ws/tv`, `/ws/player` — filtrage intelligent des messages par type de client
+  - Trois endpoints spécialisés remplacent le broadcast global — chaque client reçoit uniquement les messages pertinents à son rôle
+  - Table de filtrage : 25 actions distribuées selon le type client (Admin, TV, VPlayer)
+  - Exemples : UPDATE/START/STOP/PAUSE → Admin+TV+VPlayer ; QUESTIONS/CLIENTS → Admin only ; PLAYER_REJECTED → VPlayer only
+  - Rétrocompatibilité : `/ws` conservé comme alias vers `/ws/admin`
+  - `ClientType` dans le modèle de connexion WebSocket — enforcé au moment de la création (pas de `setClientType` dynamique)
+- **[#41 Backend + Frontend]**: Réduction payload WebSocket buzzers — whitelist d'actions
+  - Buzzer physiques reçoivent uniquement : UPDATE, UPDATE_TIMER, START, CONTINUE, STOP, PAUSE, READY, RESET, HELLO, LED_SET, OTA_UPDATE, WIFI_CONFIG (12 actions) — game state jamais transmis aux buzzers
+  - Nouveau helper `BroadcastIfRelevant()` dans `websocket_buzzer.go` — filtre intelligemment les payloads par type d'action
+  - Réduit bande passante et latence WebSocket pour les buzzers
+- **[#54 Backend + Frontend + Firmware]**: Protocole ACK buzzer — confirmation de réception des messages prioritaires
+  - Messages LED_SET, OTA_UPDATE, WIFI_CONFIG générés avec `MSG_ID` unique (12-char hex, optionnel omitempty)
+  - Firmware BuzzClick répond avec `ACK` avant d'appliquer l'action (minimise latence de confirmation)
+  - AckManager côté serveur : registre, retry configurable (`ack_timeout_ms`, `ack_max_retries`) et expiry automatique
+  - Nouveau champ `ACK_PENDING` dans le modèle Bumper — badge ⚠ horloge quand buzzer attend confirmation
+  - Badge ACK_PENDING visible dans TeamCard et TeamsPage (style inline React, fond amber `#f59e0b`, icône horloge)
+- **[#11 Backend + Frontend]**: Sérialiseurs payload différenciés par type de client
+  - `SerializeForAdmin()` : payload complet (toutes les infos) pour l'admin web
+  - `SerializeForWebClient()` : payload réduit pour TV et VPlayer — élimine FIRMWARE_VERSION, IS_OUTDATED, OTA_STATUS, OTA_PERCENT, ACK_PENDING et infos serveur (config)
+  - `SerializeForBuzzer()` : payload minimal pour buzzers physiques (phase, timer, bumpers avec ID-NAME-TEAM-CONNECTED, teams avec NAME-COLOR-STATUS)
+  - `BroadcastRawToTypes()` dans `websocket.go` — achemine les payloads sérialisés correctement selon le type client
+  - Réduction de 40-60% du volume de données WebSocket pour TV/VPlayer
+- **[#11 Frontend]**: `GameProvider` accepte un prop `endpoint` pour routing multi-rôle
+  - `GameProvider({ endpoint='/ws/admin' })` — transmis à `useWebSocket()` pour ciblage de l'endpoint WS
+  - Routes : `/admin/*` → défaut (`/ws/admin`) ; `/tv` → `endpoint="/ws/tv"` ; `/player` et `/enroll` → `endpoint="/ws/player"`
+  - Permet l'évolution future vers plusieurs instances GameProvider avec endpoints différents (ex: TV + admin simultanées dans iframe)
+- **[Firmware BuzzClick v3.8.0]**: Implémentation ACK côté firmware
+  - `ws_sendAck()` dans `click_websocket_espidf.h` — envoi non-bloquant de réponses ACK
+  - Handler MSG_ID dans `parseJSON()` — ACK envoyé AVANT d'appliquer l'action (LED_SET, OTA_UPDATE, WIFI_CONFIG)
+  - Version firmware alignée avec serveur : 3.8.0
+
+### Changed
+- **[#41 Backend]**: Whitelist buzzer étendue pour support état du jeu partiel
+  - Whitelist précédente (v3.8.0 initial) : LED_SET, OTA_UPDATE, WIFI_CONFIG, HELLO (4 actions)
+  - Whitelist étendue : UPDATE, UPDATE_TIMER, START, CONTINUE, STOP, PAUSE, READY, RESET, HELLO, LED_SET, OTA_UPDATE, WIFI_CONFIG (12 actions)
+  - Permet aux buzzers physiques de recevoir et afficher l'état du jeu (phase, timer, listes équipes/joueurs) sans informations sensibles (config, firmware)
+  - Utilise `SerializeForBuzzer()` pour la sérialisation minimale
+- **[#11 Backend]**: Détails de routage WebSocket par endpoint
+  - `/ws/admin` : Admin web client — reçoit ALL, UPDATE, START, STOP, PAUSE, CONTINUE, REVEAL, RESET, QCM_HINT, ENROLLMENT_UPDATE, READY, REMOTE, BACKGROUND_CHANGE, CONFIG_UPDATE, SHOW|HIDE_QR_CODE, FULL, MEMORY_*, QUESTIONS, CLIENTS, FIRMWARE_VERSION, PLAYER_CONNECTED, PLAYER_ASSIGNED
+  - `/ws/tv` : TV display client — reçoit UPDATE, START, STOP, PAUSE, CONTINUE, REVEAL, RESET, QCM_HINT, ENROLLMENT_UPDATE, READY, REMOTE, BACKGROUND_CHANGE, CONFIG_UPDATE, SHOW|HIDE_QR_CODE, FULL, MEMORY_* (serialized via `SerializeForWebClient()`)
+  - `/ws/player` : VPlayer web client — reçoit UPDATE, START, STOP, PAUSE, CONTINUE, REVEAL, RESET, QCM_HINT, ENROLLMENT_UPDATE, PLAYER_REJECTED, PLAYER_CONNECTED, PLAYER_ASSIGNED (serialized via `SerializeForWebClient()`)
+- **[#54 Frontend]**: Migration des pages TV/VPlayer vers endpoints dédiés
+  - `PlayerDisplay.jsx` (TV) : utilise `/ws/tv` au lieu de l'endpoint admin
+  - `EnrollPage.jsx`, `VPlayerPage.jsx` (VPlayer) : utilisent `/ws/player` — suppression du `setClientType` dynamique
+  - `GameContext.jsx` : spécifie explicitement `/ws/admin` — architecture à connexion unique par rôle
+  - `GameProvider` accepte prop `endpoint` transmis au hook `useWebSocket()`
+
+---
+
 ## [3.7.0] - 2026-04-26
 
 ### Fixed

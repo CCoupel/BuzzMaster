@@ -3,8 +3,8 @@ import useWebSocket from './useWebSocket'
 
 const GameContext = createContext(null)
 
-export function GameProvider({ children }) {
-  const websocket = useWebSocket()
+export function GameProvider({ children, endpoint = '/ws/admin' }) {
+  const websocket = useWebSocket(endpoint)
 
   return (
     <GameContext.Provider value={websocket}>

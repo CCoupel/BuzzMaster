@@ -19,12 +19,15 @@ type Config struct {
 }
 
 type ServerConfig struct {
-	HTTPPort         int  `json:"http_port"`
-	TCPPort          int  `json:"tcp_port"`
+	HTTPPort         int    `json:"http_port"`
+	TCPPort          int    `json:"tcp_port"`
 	WebSocketPath    string `json:"websocket_path"`
-	AutoOpenBrowsers bool `json:"auto_open_browsers"` // Auto-open browsers on startup
-	Debug            bool `json:"debug"`               // Enable debug mode (includes /logs)
-	AutoCheckUpdates bool `json:"auto_check_updates"`  // Auto-check for updates on startup
+	AutoOpenBrowsers bool   `json:"auto_open_browsers"` // Auto-open browsers on startup
+	Debug            bool   `json:"debug"`               // Enable debug mode (includes /logs)
+	AutoCheckUpdates bool   `json:"auto_check_updates"`  // Auto-check for updates on startup
+	// ACK protocol settings (added in v3.8.0)
+	AckTimeoutMs  int `json:"ack_timeout_ms"`  // Milliseconds before retrying an unacknowledged message (default 2000)
+	AckMaxRetries int `json:"ack_max_retries"` // Maximum retry attempts before giving up (default 3)
 }
 
 type WiFiConfig struct {
@@ -106,6 +109,14 @@ func Load(path string) (*Config, error) {
 	}
 	if cfg.Version == "" {
 		cfg.Version = "2.46.1"
+	}
+
+	// ACK protocol defaults (v3.8.0)
+	if cfg.Server.AckTimeoutMs == 0 {
+		cfg.Server.AckTimeoutMs = 2000
+	}
+	if cfg.Server.AckMaxRetries == 0 {
+		cfg.Server.AckMaxRetries = 3
 	}
 
 	// WiFiDefaults defaults

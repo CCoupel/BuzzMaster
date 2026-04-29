@@ -152,3 +152,99 @@ describe('TeamsPage — badge ⚠ buzzer déconnecté', () => {
     expect(screen.queryByTitle('Buzzer déconnecté')).toBeNull()
   })
 })
+
+// ---------------------------------------------------------------------------
+// Describe : badge ⏱ ACK_PENDING dans TeamsPage (v3.8.0 #54)
+// ---------------------------------------------------------------------------
+
+describe('TeamsPage — badge ACK_PENDING (v3.8.0 #54)', () => {
+
+  // Test 1 : badge présent pour un buzzer physique non assigné avec ACK_PENDING=true
+  it('badge ACK_PENDING visible quand ACK_PENDING=true sur buzzer physique non assigné', () => {
+    useGame.mockReturnValue(makeGameMock({
+      'AA:BB:CC:DD:EE:10': { NAME: 'Buzzer10', ACK_PENDING: true },
+    }))
+
+    render(<TeamsPage />)
+
+    const badge = screen.getByTitle('En attente de confirmation')
+    expect(badge).toBeInTheDocument()
+  })
+
+  // Test 2 : badge absent quand ACK_PENDING=false
+  it('badge ACK_PENDING absent quand ACK_PENDING=false', () => {
+    useGame.mockReturnValue(makeGameMock({
+      'AA:BB:CC:DD:EE:11': { NAME: 'Buzzer11', ACK_PENDING: false },
+    }))
+
+    render(<TeamsPage />)
+
+    expect(screen.queryByTitle('En attente de confirmation')).toBeNull()
+  })
+
+  // Test 3 : badge absent quand ACK_PENDING absent (firmware pré-v3.8.0)
+  it('badge ACK_PENDING absent quand ACK_PENDING est undefined (firmware pré-v3.8.0)', () => {
+    useGame.mockReturnValue(makeGameMock({
+      'AA:BB:CC:DD:EE:12': { NAME: 'OldFirmware' },
+    }))
+
+    render(<TeamsPage />)
+
+    expect(screen.queryByTitle('En attente de confirmation')).toBeNull()
+  })
+
+  // Test 4 : badge absent pour buzzer IS_VIRTUAL même si ACK_PENDING=true
+  it('badge ACK_PENDING absent quand IS_VIRTUAL=true même si ACK_PENDING=true', () => {
+    useGame.mockReturnValue(makeGameMock({
+      'AA:BB:CC:DD:EE:13': { NAME: 'Virtual1', ACK_PENDING: true, IS_VIRTUAL: true },
+    }))
+
+    render(<TeamsPage />)
+
+    expect(screen.queryByTitle('En attente de confirmation')).toBeNull()
+  })
+
+  // Test 5 : badge absent pour IS_VPLAYER=true même si ACK_PENDING=true
+  it('badge ACK_PENDING absent quand IS_VPLAYER=true même si ACK_PENDING=true', () => {
+    useGame.mockReturnValue(makeGameMock({
+      'AA:BB:CC:DD:EE:14': { NAME: 'VPlayer1', ACK_PENDING: true, IS_VPLAYER: true },
+    }))
+
+    render(<TeamsPage />)
+
+    expect(screen.queryByTitle('En attente de confirmation')).toBeNull()
+  })
+
+  // Test 6 : badge présent dans la section équipe (buzzer assigné)
+  it('badge ACK_PENDING visible dans la section équipe pour buzzer assigné', () => {
+    useGame.mockReturnValue(makeGameMock(
+      {
+        'AA:BB:CC:DD:EE:15': { NAME: 'Buzzer15', TEAM: 'blue', ACK_PENDING: true },
+      },
+      {
+        blue: { NAME: 'Équipe Bleue', COLOR: [99, 102, 241] },
+      }
+    ))
+
+    render(<TeamsPage />)
+
+    const badge = screen.getByTitle('En attente de confirmation')
+    expect(badge).toBeInTheDocument()
+  })
+
+  // Test 7 : plusieurs buzzers — seul le buzzer pending a le badge
+  it('badge ACK_PENDING uniquement sur les buzzers physiques en attente', () => {
+    useGame.mockReturnValue(makeGameMock({
+      'AA:BB:CC:DD:EE:01': { NAME: 'Normal',   ACK_PENDING: false },
+      'AA:BB:CC:DD:EE:02': { NAME: 'Pending',  ACK_PENDING: true },
+      'AA:BB:CC:DD:EE:03': { NAME: 'Virtual',  ACK_PENDING: true, IS_VIRTUAL: true },
+      'AA:BB:CC:DD:EE:04': { NAME: 'VPlayer',  ACK_PENDING: true, IS_VPLAYER: true },
+    }))
+
+    render(<TeamsPage />)
+
+    // Un seul badge (Pending uniquement — virtual et vplayer exclus)
+    const badges = screen.getAllByTitle('En attente de confirmation')
+    expect(badges).toHaveLength(1)
+  })
+})

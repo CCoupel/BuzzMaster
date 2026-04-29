@@ -31,42 +31,25 @@ const adminRoutes = [
 ]
 
 function AppContent() {
-  const { status, clientCounts, setClientType, version, subscribeLogs, unsubscribeLogs, logs } = useGame()
+  const { status, clientCounts, version } = useGame()
   const location = useLocation()
 
   // Show navbar only on admin pages (/admin/* or /anim/*)
   const isAdminRoute = location.pathname.startsWith('/admin') || location.pathname.startsWith('/anim')
   const hideNavbar = !isAdminRoute
 
-  // Set client type based on route (TV display vs admin)
-  // VPlayer routes (/ and /player) handle their own type, don't override
-  React.useEffect(() => {
-    if (status === 'connected') {
-      const isVPlayerRoute = location.pathname === '/' || location.pathname === '/player'
-      if (isVPlayerRoute) {
-        // VPlayer pages set their own type (vplayer), don't override here
-        return
-      }
-      if (location.pathname === '/tv') {
-        setClientType('tv')
-      } else {
-        setClientType('admin')
-      }
-    }
-  }, [location.pathname, setClientType, status])
-
   return (
     <div className="app">
       {!hideNavbar && <Navbar connectionStatus={status} clientCounts={clientCounts} serverVersion={version} />}
       <main className={`main-content ${hideNavbar ? 'fullscreen' : ''}`}>
         <Routes>
-          {/* Player enrollment page */}
+          {/* Player enrollment page — connected via GameProvider endpoint="/ws/player" */}
           <Route path="/" element={<EnrollPage />} />
 
-          {/* Virtual player page */}
+          {/* Virtual player page — connected via GameProvider endpoint="/ws/player" */}
           <Route path="/player" element={<VPlayerPage />} />
 
-          {/* TV display */}
+          {/* TV display — connected via GameProvider endpoint="/ws/tv" */}
           <Route path="/tv" element={<PlayerDisplay />} />
 
           {/* Admin root routes (without trailing slash) */}
@@ -92,14 +75,8 @@ function AppContent() {
           ))}
 
           {/* Logs page (dedicated WebSocket) */}
-          <Route
-            path="/admin/logs"
-            element={<LogsPage />}
-          />
-          <Route
-            path="/anim/logs"
-            element={<LogsPage />}
-          />
+          <Route path="/admin/logs" element={<LogsPage />} />
+          <Route path="/anim/logs" element={<LogsPage />} />
         </Routes>
       </main>
     </div>
@@ -107,8 +84,14 @@ function AppContent() {
 }
 
 export default function App() {
+  const location = useLocation()
+  const isAdminRoute = location.pathname.startsWith('/admin') || location.pathname.startsWith('/anim')
+  const isTvRoute = location.pathname === '/tv'
+  // All other routes (/, /player, /enroll) use /ws/player
+  const endpoint = isAdminRoute ? '/ws/admin' : isTvRoute ? '/ws/tv' : '/ws/player'
+
   return (
-    <GameProvider>
+    <GameProvider endpoint={endpoint}>
       <AppContent />
     </GameProvider>
   )

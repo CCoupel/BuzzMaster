@@ -43,21 +43,48 @@ rm -f *.bak web/src/pages/*.bak
 
 ### 1.2 Rebuild complet
 
-**⚠️ IMPORTANT : TOUJOURS rebuilder le frontend AVANT le backend Go.**
+**⚠️ IMPORTANT : Respecter impérativement l'ordre suivant.**
 
 ```bash
-cd server-go
+# Depuis la racine du projet (pas server-go/)
+cd /mnt/c/Users/cyril/Documents/VScode/GITHUB/BuzzMaster
 
-# 1. Frontend d'abord (OBLIGATOIRE)
-cd web
-npm run build
-cd ..
+# ── Étape 1 : Firmware BuzzClick (OBLIGATOIRE, TOUJOURS en premier) ──────────
+# On produit le binaire MERGED (bootloader + partitions + boot_app0 + app),
+# identique à ce que fait la CI/CD → garantit le BORE QUALIF ↔ PROD.
 
-# 2. Backend Go ensuite (embarque les fichiers web)
-go build -o server.exe ./cmd/server
+# 1a. Compiler le firmware
+powershell.exe -NoProfile -Command "& 'C:\Users\cyril\.platformio\penv\Scripts\pio.exe' run -e buzzclick"
+
+# 1b. Merger les blocs (fichier unique flashable USB + OTA)
+powershell.exe -NoProfile -Command "
+  python 'C:\Users\cyril\.platformio\packages\tool-esptoolpy\esptool.py' --chip esp32c3 merge_bin \`
+    -o buzzclick-merged.bin \`
+    0x0     .pio\build\buzzclick\bootloader.bin \`
+    0x8000  .pio\build\buzzclick\partitions.bin \`
+    0xe000  'C:\Users\cyril\.platformio\packages\framework-arduinoespressif32\tools\partitions\boot_app0.bin' \`
+    0x10000 .pio\build\buzzclick\firmware.bin
+"
+
+# 1c. Intégrer dans les assets Go (merged binary + version)
+VERSION=$(grep '"version"' server-go/config.json | sed 's/.*"\([0-9.]*\)".*/\1/')
+cp buzzclick-merged.bin server-go/assets/firmware/buzzclick-latest.bin
+echo -n "$VERSION" > server-go/assets/firmware/version.txt
+rm buzzclick-merged.bin
+
+# ── Étape 2 : Frontend React ──────────────────────────────────────────────────
+cd server-go/web && npm run build && cd ..
+
+# ── Étape 3 : Backend Go — cross-compilation Windows (embarque web/dist/ + assets/firmware/) ───
+export PATH="$PATH:/usr/local/go/bin"
+GOOS=windows GOARCH=amd64 CGO_ENABLED=0 \
+  go build -ldflags="-s -w" -o buzzcontrol-qualif-amd64.exe ./cmd/server
 ```
 
-**Note** : Le serveur Go embarque automatiquement les fichiers `web/dist/`. Si vous inversez l'ordre, les modifications frontend ne seront pas prises en compte.
+**Règle BORE** : `buzzclick-latest.bin` est TOUJOURS le merged binary (bootloader + partitions + boot_app0 + app). Cela permet :
+- Flash USB de buzzers neufs/morts depuis l'interface admin
+- OTA via le serveur (le serveur extrait la partition app du merged)
+- Cohérence totale avec le binaire produit par la CI/CD PROD
 
 ### 1.3 Démarrer le serveur
 

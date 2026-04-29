@@ -1,7 +1,7 @@
-# Règles Communes à Tous les Agents
+# Regles Communes a Tous les Agents
 
-> **Ce fichier contient les règles obligatoires pour TOUS les agents BuzzControl.**
-> Chaque agent doit référencer ce fichier : `@import COMMON.md`
+> **Ce fichier contient les regles obligatoires pour TOUS les agents BuzzControl.**
+> Chaque agent doit referencer ce fichier : `@import COMMON.md`
 >
 > **Contexte projet** : Voir `context/PROJECT_CONTEXT.md` pour le stack technique, la structure et les commandes.
 
@@ -9,179 +9,156 @@
 
 ## Gestion de la Todo List (OBLIGATOIRE)
 
-Vous DEVEZ utiliser le tool `TodoWrite` pour suivre votre progression de manière visible.
+Vous DEVEZ utiliser le tool `TodoWrite` pour suivre votre progression de maniere visible.
 
-### Au Démarrage
+### Au Demarrage
 
-1. **Créer une todo list** avec toutes les étapes de votre travail
-2. Chaque tâche doit avoir :
-   - `content` : Description de la tâche (forme impérative)
-   - `status` : `pending` (ou `in_progress` pour la première)
+1. **Creer une todo list** avec toutes les etapes de votre travail
+2. Chaque tache doit avoir :
+   - `content` : Description de la tache (forme imperative)
+   - `status` : `pending` (ou `in_progress` pour la premiere)
    - `activeForm` : Description en forme progressive (anglais)
 
 ### Structure d'une Todo List
 
 ```json
 [
-  {"content": "Description en français", "status": "in_progress", "activeForm": "English description"},
-  {"content": "Deuxième tâche", "status": "pending", "activeForm": "Second task"},
+  {"content": "Description en francais", "status": "in_progress", "activeForm": "English description"},
+  {"content": "Deuxieme tache", "status": "pending", "activeForm": "Second task"},
   ...
 ]
 ```
 
 ### Affichage Attendu
 
-Pendant l'exécution, afficher visuellement la progression :
+Pendant l'execution, afficher visuellement la progression :
 
 ```
-📍 Tâche [N]/[Total] : [Description]
-   └── [Détail de ce qui est en cours...]
+Tache [N]/[Total] : [Description]
+   -- [Detail de ce qui est en cours...]
 
-✅ Tâche [N]/[Total] terminée
-   └── [Résumé du résultat]
+Tache [N]/[Total] terminee
+   -- [Resume du resultat]
 ```
 
-### Règles Strictes
+### Regles Strictes
 
-| Règle | Description |
+| Regle | Description |
 |-------|-------------|
-| **Une seule tâche `in_progress`** | Jamais plus d'une tâche en cours à la fois |
-| **Mise à jour immédiate** | Mettre à jour la todo list après CHAQUE changement |
-| **Affichage visuel** | Toujours afficher la progression à l'utilisateur |
-| **Jamais continuer sans MAJ** | Ne jamais passer à la tâche suivante sans avoir mis à jour le statut |
+| **Une seule tache `in_progress`** | Jamais plus d'une tache en cours a la fois |
+| **Mise a jour immediate** | Mettre a jour la todo list apres CHAQUE changement |
+| **Affichage visuel** | Toujours afficher la progression a l'utilisateur |
+| **Jamais continuer sans MAJ** | Ne jamais passer a la tache suivante sans avoir mis a jour le statut |
+
+---
+
+## Affichage du Plan de Taches (OBLIGATOIRE)
+
+### Au Demarrage
+
+Afficher le plan COMPLET avec les icones de statut :
+
+```
+## Plan de Taches
+
+1. [pending] Premiere tache
+2. [pending] Deuxieme tache
+3. [pending] Troisieme tache
+```
+
+### A Chaque Changement de Statut
+
+Re-afficher le plan complet avec la progression :
+
+```
+## Plan de Taches [2/5]
+
+1. [completed] Premiere tache
+2. [in_progress] Deuxieme tache
+3. [pending] Troisieme tache
+4. [pending] Quatrieme tache
+5. [pending] Cinquieme tache
+```
+
+### Icones de Statut
+
+| Icone | Statut | Signification |
+|-------|--------|---------------|
+| `[pending]` | pending | En attente |
+| `[in_progress]` | in_progress | En cours |
+| `[completed]` | completed | Termine |
+| `[failed]` | failed | Echoue |
 
 ---
 
 ## Notifications de Progression (OBLIGATOIRE)
 
-### Au Démarrage de la Tâche
+### Au Demarrage de la Tache
 
-Vous DEVEZ afficher immédiatement un message de démarrage avec ce format :
+Envoyer immediatement via SendMessage au CDP :
 
 ```
-🚀 **[NOM-AGENT] DÉMARRÉ**
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-📋 [Champ principal] : [Valeur]
-📦 [Champ secondaire] : [Valeur]
-🎯 [Champ tertiaire] : [Valeur]
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+[NOM-AGENT] EN COURS — 0% — demarrage [description courte]
 ```
 
-### À la Fin de la Tâche
+### A la Fin de la Tache
 
-**En cas de succès :**
+**En cas de succes :**
 ```
-✅ **[NOM-AGENT] TERMINÉ**
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-📋 [Champ principal] : [Valeur]
-📝 [Résultat 1] : [Valeur]
-📊 [Résultat 2] : [Valeur]
-✅ [Statut final] : [OK / Prêt pour X]
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+[NOM-AGENT] DONE
+Fichiers : chemin/fichier1, chemin/fichier2
+SHA : <commit-sha>
 ```
 
 **En cas d'erreur :**
 ```
-❌ **[NOM-AGENT] ERREUR**
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-📋 [Champ principal] : [Valeur]
-❌ Problème : [Description]
-🔧 Action requise : [Solution proposée]
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+[NOM-AGENT] FAILED
+Raison : [une ligne — cause technique precise]
+Action requise : [ce dont j'ai besoin]
 ```
 
-### Notifications Intermédiaires (optionnel selon agent)
+> **REGLE** : Jamais de contenu de code, de diff, ni d'extraits de fichiers dans les messages SendMessage.
+> Les messages vers le CDP sont des metadonnees (statut, fichiers, SHA), pas des rapports techniques.
 
-Pour les workflows longs, notifier entre chaque phase majeure :
+### Notifications Intermediaires (workflows longs uniquement)
+
 ```
-📍 **[NOM-AGENT] - Phase [N]/[Total] : [Nom de la phase]**
-   └── [Ce qui va être fait]
+[NOM-AGENT] EN COURS — X% — [etape courante en < 10 mots]
 ```
 
 ---
 
-## Reporting de Progression vers le CDP (OBLIGATOIRE pour tous les agents)
-
-Chaque agent DOIT envoyer des mises à jour régulières au CDP via `SendMessage` pour éviter l'effet tunnel.
-
-### Format Barre de Progression
-
-Utiliser ce format dans chaque message de progression :
-
-```
-[NOM-AGENT] [████████░░] 80% | Step 4/5 : [Nom de l'étape en cours]
-```
-
-Construction de la barre :
-- Longueur totale : 10 caractères
-- `█` = étapes complétées, `░` = étapes restantes
-- Calculer : `n_complet = round(step_actuel / total_steps * 10)`
-
-**Exemples :**
-```
-[BACKEND-DEV] [██░░░░░░░░] 20% | Step 1/5 : Lecture des fichiers existants
-[BACKEND-DEV] [████░░░░░░] 40% | Step 2/5 : Implémentation BroadcasterManager
-[BACKEND-DEV] [██████░░░░] 60% | Step 3/5 : Tests unitaires
-[BACKEND-DEV] [████████░░] 80% | Step 4/5 : Commit des changements
-[BACKEND-DEV] [██████████] 100% | Step 5/5 : ✅ Terminé
-```
-
-### Règles de Fréquence
-
-| Durée estimée | Fréquence minimum |
-|---------------|-------------------|
-| < 2 min | Début + Fin |
-| 2–5 min | Début + chaque étape majeure + Fin |
-| > 5 min | Toutes les 2 étapes ou toutes les 2 minutes |
-
-### Format du SendMessage
-
-```
-type: "message"
-recipient: "cdp"
-content: "[NOM-AGENT] [████████░░] 80% | Step 4/5 : [Description]\n→ [Détail optionnel]"
-summary: "[NOM-AGENT] Step 4/5 - [Description courte]"
-```
-
-**Événements obligatoires :**
-- Démarrage de la tâche (Step 0)
-- Chaque étape majeure (dépend de l'agent)
-- Fin de tâche avec statut (✅ / ⚠️ / ❌)
-
----
-
-## Règles de Communication
+## Regles de Communication
 
 ### Langue
 
-- **Français** : Préféré pour les messages utilisateur et la documentation
+- **Francais** : Prefere pour les messages utilisateur et la documentation
 - **Anglais** : Pour le code, les commits, et les champs techniques (`activeForm`)
 
 ### Format des Messages
 
-- Utiliser les emojis de manière cohérente (voir tableau ci-dessous)
-- Utiliser les box drawing characters (`━`) pour les bordures
+- Utiliser les box drawing characters pour les bordures
 - Garder les messages concis mais informatifs
 
 ### Emojis Standards
 
 | Emoji | Signification |
 |-------|---------------|
-| 🚀 | Démarrage |
-| ✅ | Succès / Terminé |
-| ❌ | Erreur / Échec |
-| ⚠️ | Avertissement / Réserves |
-| 📍 | Tâche en cours |
-| 📋 | Information principale |
-| 📝 | Fichiers / Documentation |
-| 📦 | Version / Package |
-| 📊 | Statistiques / Métriques |
-| 🎯 | Objectif / Cible |
-| 🔧 | Action requise / Fix |
-| 🌿 | Branche Git |
-| 📤 | Push / Export |
-| 🧪 | Tests |
-| 💾 | Sauvegarde / Mémoire |
+| Demarrage | Lancement d'une tache |
+| Succes | Tache terminee |
+| Erreur | Tache echouee |
+| Avertissement | Reserves ou attention |
+| En cours | Tache en progression |
+| Information | Detail principal |
+| Documentation | Fichiers modifies |
+| Version | Package ou release |
+| Statistiques | Metriques |
+| Objectif | Cible atteinte |
+| Fix | Action corrective requise |
+| Branche | Operations Git |
+| Push | Export ou envoi |
+| Tests | Execution de tests |
+| Sauvegarde | Persistance |
 
 ---
 
@@ -191,88 +168,63 @@ summary: "[NOM-AGENT] Step 4/5 - [Description courte]"
 
 1. **Documenter** l'erreur dans le rapport/summary
 2. **Proposer** une solution si possible
-3. **Signaler** au CDP/orchestrateur pour décision
-4. **Ne jamais rester bloqué en silence**
+3. **Signaler** au CDP/orchestrateur pour decision
+4. **Ne jamais rester bloque en silence**
 
 ### Format de Signalement
 
 ```markdown
-## ⚠️ Problème Rencontré
+## Probleme Rencontre
 
 **Type** : [Build / Test / Git / Autre]
-**Description** : [Détail du problème]
+**Description** : [Detail du probleme]
 **Impact** : [Critique / Important / Mineur]
-**Solution proposée** : [Si applicable]
+**Solution proposee** : [Si applicable]
 ```
 
 ---
 
 ## Coordination Inter-Agents
 
-### Workflow Standard BuzzControl
+### Workflow Standard
 
 ```
-PLAN → ⏸️ → DEV → TEST-WRITER → REVIEW → QA → ⏸️ → DOC → DEPLOY → ⏸️
-       │                                       │                   │
-       └── Validation utilisateur (plan)       │                   │
-                                               └── Validation      │
-                                                   utilisateur     │
-                                                   (QA OK)         │
-                                                                   └── Validation
-                                                                       utilisateur
-                                                                       (QUALIF)
+PLAN -> [validation] -> DEV -> [REVIEW ∥ TEST-WRITER] -> QA -> [validation] -> DOC -> DEPLOY -> [validation]
 ```
 
-**⏸️ = Points de validation utilisateur obligatoires**
+**[validation] = Points de validation utilisateur obligatoires**
+**[REVIEW ∥ TEST-WRITER] = executes en parallele apres DEV**
 
 ### Transmission de Contexte
 
 Chaque agent doit :
-1. Lire le **résumé de l'agent précédent**
-2. Produire un **résumé structuré** pour l'agent suivant
-3. Documenter les **décisions prises** et **problèmes rencontrés**
+1. Lire le **resume de l'agent precedent**
+2. Produire un **resume structure** pour l'agent suivant
+3. Documenter les **decisions prises** et **problemes rencontres**
 
 ### Points de Validation
 
 | Agent | Validation produite | Destinataire |
 |-------|---------------------|--------------|
-| PLAN | Plan d'implémentation | ⏸️ **Utilisateur** |
-| DEV | Summary + commits | TEST-WRITER, REVIEW |
-| TEST-WRITER | Fichiers de tests | REVIEW, QA |
+| PLAN | Plan d'implementation | **Utilisateur** |
+| DEV | Summary + commits | TEST-WRITER + REVIEW (en parallele) |
+| TEST-WRITER | Scripts de tests + procedures manuelles | QA |
 | REVIEW | Review Report (APPROVED/REJECTED) | QA ou DEV |
-| QA | QA Report (VALIDATED/NOT VALIDATED) | ⏸️ **Utilisateur** |
-| DOC | Documentation finalisée | DEPLOY |
-| DEPLOY | Deployment Report | ⏸️ **Utilisateur** |
-
-**⏸️ = Validation utilisateur requise avant de continuer**
+| QA | QA Report (VALIDATED/NOT VALIDATED) | **Utilisateur** |
+| DOC | Documentation finalisee | DEPLOY |
+| DEPLOY | Deployment Report | **Utilisateur** |
 
 ---
 
-## Références Projet BuzzControl
+## References Projet
 
-> **Détails complets** : Voir `context/PROJECT_CONTEXT.md`
+> **Details complets** : Voir `context/PROJECT_CONTEXT.md`
 
 ### Fichiers Essentiels
 
 | Fichier | Description |
 |---------|-------------|
-| `CLAUDE.md` | Architecture complète |
+| `CLAUDE.md` | Architecture complete |
 | `CHANGELOG.md` | Historique des versions |
-| `server-go/config.json` | Version actuelle |
+| `{VERSION_FILE}` | Version actuelle |
 | `contracts/*.md` | Contrats API |
-
-### Build Order (CRITIQUE)
-
-**TOUJOURS rebuilder le frontend AVANT le backend Go.**
-
-```bash
-cd server-go/web && npm run build && cd .. && go build -o server.exe ./cmd/server
-```
-
-### Contrainte TV (CRITIQUE)
-
-**L'affichage TV (`/tv`) est STATIQUE - pas de scroll autorisé.**
-
-```css
-.container { height: 100vh; overflow: hidden; }
-```

@@ -1,165 +1,171 @@
-# Commande /refactor - Refactoring de Code
+# Commande /refactor
 
-Déclenche le workflow de refactoring de code existant sans modification du comportement. **Le CDP** (agent cdp) est le team leader qui coordonne tous les agents. Claude est l'interface utilisateur.
+Workflow pour le refactoring de code sans changement fonctionnel.
 
-## Argument reçu
+## Usage
+
+```
+/refactor <description du refactoring>
+```
+
+## Argument recu
 
 $ARGUMENTS
 
-## Architecture CDP
+## Mots-cles de controle
+
+**Reference :** Voir `context/COMMON.md` section 12
+
+| Mot-cle | Action |
+|---------|--------|
+| `help` | Affiche l'aide et les mots-cles disponibles |
+| `status` | Affiche l'etat du workflow en cours |
+| `plan` | Affiche le plan sans executer |
+| `resume <phase>` | Reprend a une phase |
+| `skip <phase>` | Saute une phase |
+| `jumpto <tache>` | Demarre a une tache precise du plan |
+
+Si `$ARGUMENTS` commence par un mot-cle -> executer l'action correspondante.
+Sinon -> workflow normal.
+
+## Quand utiliser
+
+- Simplification de code complexe
+- Extraction de fonctions/composants
+- Renommage pour meilleure lisibilite
+- Elimination de duplication
+- Amelioration de la structure
+- Migration technique (ex: class -> hooks)
+
+## Workflow
 
 ```
-Claude (interface) → SendMessage(cdp, "Refactor: xxx")
-                          │
-                     CDP (Team Leader)
-                          │
-              ┌───────────┼───────────┐
-           qa (avant)  backend-dev  code-reviewer
-                          │
-                       qa (après)
+/refactor <description>
+    |
+    v
+[ANALYSE] --> Identifier le code concerne
+    |         Verifier la couverture de tests
+    v
+[PLAN] --> Pour refactorings complexes uniquement
+    |
+    v
+[DEV] --> Refactoring incremental
+    |       Tests entre chaque etape
+    v
+[REVIEW] --> Verification absence de regression
+    |
+    v
+[QA] --> Tests complets
 ```
 
-**IMPORTANT** : Claude délègue au CDP. Le CDP est le chef de projet — Claude est uniquement l'interface utilisateur.
+## Etapes Detaillees
 
-## Workflow REFACTOR
+### 1. ANALYSE
 
-```
-┌──────────────────────────────────────────────────┐
-│  ANALYSE → TESTS AVANT → DEV → REVIEW → QA      │
-└──────────────────────────────────────────────────┘
-```
+**Obligatoire avant tout changement :**
+- Identifier tous les fichiers concernes
+- Verifier la couverture de tests existante
+- Comprendre le comportement actuel
+- Lister les dependances
 
-### Phase 0: ANALYSE (TOI)
-- Analyser le code à refactorer
-- Identifier la portée (backend/frontend/firmware)
-- Vérifier qu'il y a des tests existants
-- Créer la branche `refactor/<nom-court>`
+**Si couverture insuffisante** : Ecrire les tests AVANT le refactoring.
 
-### Phase 1: TEAM SETUP (TOI — uniquement si TEAM-Buzz absente)
-- Si TEAM-Buzz active → teammates déjà disponibles, passer à Phase 2
-- Si bootstrap (aucune team) :
-  - TeamCreate({ team_name: "TEAM-Buzz", agent_type: "cdp" })
-  - Spawner agents (team_name: "TEAM-Buzz") :
-    - dev-backend/frontend/buzzclick (selon portée)
-    - code-reviewer (toujours), QA (toujours)
-  - **PAS** de test-writer, doc-updater, deploy (refactoring = pas de nouvelle feature)
-  - Voir "Mode Bootstrap" dans agents/cdp.md
+### 2. PLAN (optionnel)
 
-### Phase 2: TESTS AVANT (QA)
-- Assigner via TaskUpdate(owner: "qa")
-- Exécuter les tests AVANT le refactoring
-- **OBLIGATOIRE** : Tous les tests doivent passer
-- Si tests échouent → BLOQUER le refactoring
+Pour refactorings complexes :
+- Plusieurs modules impactes
+- Changement de structure majeur
+- Risque de regression eleve
 
-### Phase 3: DÉVELOPPEMENT (Agents DEV)
-- Assigner via TaskUpdate(owner: "dev-xxx")
-- Refactoring du code (extraction, renommage, simplification)
-- **INTERDIT** : Changer le comportement
-- Commits atomiques avec "refactor:"
+### 3. DEV
 
-### Phase 4: REVUE (code-reviewer)
-- Assigner via TaskUpdate(owner: "code-reviewer")
-- Vérifier que le comportement n'a PAS changé
-- Vérifier la qualité du refactoring
-- Si comportement modifié → REJETER
-
-### Phase 5: TESTS APRÈS (QA)
-- Assigner via TaskUpdate(owner: "qa")
-- Exécuter les MÊMES tests qu'avant
-- **OBLIGATOIRE** : Tous les tests doivent passer
-- **OBLIGATOIRE** : Résultats identiques à avant
-
-## Spécificités REFACTOR
-
-| Règle | Contrainte |
-|-------|-----------|
-| **Versioning** | **INCHANGÉ** - pas de nouvelle version |
-| **Branche** | `refactor/<nom-court>` |
-| **Comportement** | STRICTEMENT IDENTIQUE (tests prouvent) |
-| **Tests avant** | OBLIGATOIRE - doivent tous passer |
-| **Tests après** | OBLIGATOIRE - mêmes résultats qu'avant |
-| **Documentation** | Aucune (pas de nouvelle feature) |
-| **Commits** | Atomiques avec "refactor:" |
-
-## Quand utiliser /refactor
-
-| Situation | Action |
-|-----------|--------|
-| Simplifier code complexe | ✅ /refactor |
-| Extraire fonctions/composants | ✅ /refactor |
-| Renommer pour meilleure lisibilité | ✅ /refactor |
-| Éliminer duplication | ✅ /refactor |
-| Améliorer performance | ❌ /feature (si mesurable) |
-| Corriger un bug | ❌ /bugfix |
-| Ajouter fonctionnalité | ❌ /feature |
-
-## Types de Refactoring
-
-| Type | Exemple |
-|------|---------|
-| **Extraction** | Extraire fonction, méthode, composant |
-| **Renommage** | Renommer variable, fonction pour clarté |
-| **Simplification** | Réduire complexité cyclomatique |
-| **Élimination duplication** | DRY (Don't Repeat Yourself) |
-| **Réorganisation** | Déplacer code vers bon fichier |
-
-## Règle d'Or du Refactoring
+**Approche incrementale :**
 
 ```
-TESTS_AVANT == TESTS_APRÈS
+Etape 1 --> Tests OK --> Commit
+    |
+Etape 2 --> Tests OK --> Commit
+    |
+Etape 3 --> Tests OK --> Commit
+    |
+    v
+Refactoring complet
 ```
 
-Si les résultats diffèrent → Le refactoring est **INVALIDE**.
+**Regles :**
+- Un commit par changement logique
+- Tests apres chaque etape
+- Si tests cassent : rollback et recommencer plus petit
 
-## Règles Critiques
+### 4. REVIEW
 
-### ✅ Claude DOIT
-- Transmettre le refactoring au CDP avec contexte
-- Relayer fidèlement les messages CDP ↔ utilisateur
+Focus sur :
+- Comportement identique
+- Pas de regression
+- Code plus lisible/maintenable
+- Performance equivalente ou meilleure
 
-### ❌ Claude NE DOIT PAS
-- Coordonner les agents directement
-- Écrire du code lui-même
+### 5. QA
 
-### ✅ Le CDP DOIT (référence)
-- Vérifier que des tests existent AVANT de commencer
-- Exécuter les tests AVANT le refactoring
-- Coordonner via TaskUpdate + SendMessage
-- Exécuter les tests APRÈS et comparer les résultats
+- Suite de tests complete
+- Comparaison avant/apres si possible
+- Verification des performances
 
-### ❌ Le CDP NE DOIT PAS
-- Autoriser un changement de comportement
-- Créer une nouvelle version
-- Mettre à jour la documentation
-- Déployer (merge dans main suffit)
+## Exemples
 
-## Agents que TU coordonnes
-
-| Agent | Subagent Type | Usage REFACTOR |
-|-------|---------------|----------------|
-| Backend Dev | `dev-backend` | Si refactor serveur Go |
-| Frontend Dev | `dev-frontend` | Si refactor React/CSS |
-| Firmware Dev | `dev-buzzclick` | Si refactor ESP32 |
-| Code Reviewer | `code-reviewer` | Vérifier comportement identique |
-| QA Tester | `qa` | Tests avant ET après |
-
-## Action immédiate
-
-**TU** (Claude) dois maintenant :
-
-1. **Analyser** brièvement le refactoring : `$ARGUMENTS`
-2. **Transmettre** au CDP avec contexte :
-   ```
-   SendMessage(recipient: "cdp", content: "Démarre un workflow REFACTOR: [description + portée + code concerné]", summary: "Refactor: [titre court]")
-   ```
-3. **Relayer** tous les messages et validations du CDP vers l'utilisateur
-
-**Le CDP prend en charge l'intégralité du workflow depuis cette étape.**
-
-
-### Sans TEAM (pas de TEAM-Buzz actif)
 ```
-subagent_type: "cdp"
-description: "Workflow refactor"
-prompt: Démarre un workflow REFACTOR: $ARGUMENTS
+/refactor Extraire la logique de validation dans un helper
+/refactor Convertir UserList de class component en hooks
+/refactor Renommer handleClick en handleSubmitForm
+/refactor Deplacer les constantes dans un fichier dedie
+/refactor Simplifier le switch/case dans le router
+/refactor Eliminer la duplication entre UserCard et AdminCard
 ```
+
+## Ce que /refactor n'est PAS
+
+| Refactor | Pas Refactor (utiliser /feature ou /bugfix) |
+|----------|---------------------------------------------|
+| Renommer variable | Ajouter nouvelle fonctionnalite |
+| Extraire fonction | Corriger un bug |
+| Reorganiser code | Changer le comportement |
+| Simplifier logique | Ajouter validation |
+| Supprimer duplication | Optimiser performances |
+
+## Regles Critiques
+
+1. **Tests AVANT** - Verifier la couverture existante
+2. **Comportement identique** - Aucun changement fonctionnel
+3. **Incremental** - Petits changements, tests frequents
+4. **Commits atomiques** - Un commit par etape
+5. **Rollback facile** - Si ca casse, on revient en arriere
+
+## Anti-patterns
+
+- Refactorer sans tests
+- Melanger refactoring et nouvelle feature
+- Tout changer d'un coup
+- Ne pas commiter entre les etapes
+- Ignorer les tests qui cassent
+
+## Prompt a transmettre au CDP
+
+Orchestre le workflow REFACTOR pour BuzzControl.
+
+**Contexte projet :** Voir `context/COMMON.md` section 1
+**Workflow CDP :** Voir `context/CDP_WORKFLOWS.md`
+- Type : REFACTOR
+- Phases : section 3
+- Dispatch DEV : section 4
+- Validation : section 5
+- Erreurs : section 6
+- Regles : section 8
+
+**Contexte DEV :** Voir `context/DEVELOPMENT.md`
+**Contexte Qualite :** Voir `context/QUALITY.md`
+
+**Demande utilisateur :** $ARGUMENTS
+
+## Agent
+
+Delegue au CDP en mode refactor (pas de DOC, focus sur tests).
