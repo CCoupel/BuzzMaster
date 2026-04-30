@@ -351,6 +351,20 @@ func (a *App) setupCallbacks() {
 		a.broadcastUpdate()
 	}
 
+	// NEW_GAME background change handler (v4.0.4)
+	a.httpServer.OnNewGameBackgroundChange = func(action string) {
+		if action == "save" {
+			// Config was updated via PUT, just save
+			a.saveNewGameBackgroundsConfig()
+		} else {
+			// Files changed (upload/delete), reload from disk
+			a.loadNewGameBackgrounds()
+			a.saveNewGameBackgroundsConfig()
+		}
+		a.broadcastUpdate()
+		a.broadcastConfigUpdate()
+	}
+
 	// Load demo handler
 	a.httpServer.OnLoadDemo = func() {
 		a.loadDemoData()
@@ -378,6 +392,7 @@ func (a *App) setupCallbacks() {
 
 	// Detect existing backgrounds on startup
 	a.loadBackgrounds()
+	a.loadNewGameBackgrounds()
 
 	// Handle client count changes (WebSocket connect/disconnect)
 	a.wsHub.OnClientChange = func(adminCount, tvCount, vplayerCount int) {
@@ -518,6 +533,87 @@ func (a *App) saveBackgroundsConfig() {
 		server.LogError(game.LogComponentApp, "Failed to save backgrounds config: %v", err)
 	} else {
 		server.LogDebug(game.LogComponentApp, "Saved backgrounds config")
+	}
+}
+
+// loadNewGameBackgrounds scans data/files/new-game-backgrounds/ and loads config (v4.0.4)
+func (a *App) loadNewGameBackgrounds() {
+	filesDir := a.config.Storage.FilesDir
+	if filesDir == "" {
+		filesDir = "./data/files"
+	}
+	bgDir := filepath.Join(filesDir, "new-game-backgrounds")
+	configPath := filepath.Join(bgDir, "backgrounds.json")
+
+	// Try to load existing config
+	var savedConfig []game.Background
+	if data, err := os.ReadFile(configPath); err == nil {
+		json.Unmarshal(data, &savedConfig)
+	}
+
+	// Build a map of saved configs by path
+	savedMap := make(map[string]game.Background)
+	for _, bg := range savedConfig {
+		savedMap[bg.Path] = bg
+	}
+
+	backgrounds := []game.Background{}
+
+	// Scan new-game-backgrounds directory
+	entries, err := os.ReadDir(bgDir)
+	if err == nil {
+		for _, entry := range entries {
+			if entry.IsDir() || entry.Name() == "backgrounds.json" {
+				continue
+			}
+			ext := strings.ToLower(filepath.Ext(entry.Name()))
+			if ext == ".jpg" || ext == ".jpeg" || ext == ".png" || ext == ".gif" || ext == ".webp" {
+				bgPath := "/files/new-game-backgrounds/" + entry.Name()
+				if saved, ok := savedMap[bgPath]; ok {
+					if saved.Opacity == 0 {
+						saved.Opacity = 100
+					}
+					backgrounds = append(backgrounds, saved)
+					delete(savedMap, bgPath)
+				} else {
+					backgrounds = append(backgrounds, game.Background{
+						Path:     bgPath,
+						Duration: 10,
+						Opacity:  100,
+					})
+				}
+			}
+		}
+	}
+
+	a.engine.SetNewGameBackgrounds(backgrounds)
+	if len(backgrounds) > 0 {
+		server.LogInfo(game.LogComponentApp, "Loaded %d new-game-background(s)", len(backgrounds))
+	}
+}
+
+// saveNewGameBackgroundsConfig persists backgrounds.json for new-game-backgrounds (v4.0.4)
+func (a *App) saveNewGameBackgroundsConfig() {
+	filesDir := a.config.Storage.FilesDir
+	if filesDir == "" {
+		filesDir = "./data/files"
+	}
+	bgDir := filepath.Join(filesDir, "new-game-backgrounds")
+	configPath := filepath.Join(bgDir, "backgrounds.json")
+
+	os.MkdirAll(bgDir, 0755)
+
+	backgrounds := a.engine.GetNewGameBackgrounds()
+	data, err := json.MarshalIndent(backgrounds, "", "  ")
+	if err != nil {
+		server.LogError(game.LogComponentApp, "Failed to marshal new-game-backgrounds config: %v", err)
+		return
+	}
+
+	if err := os.WriteFile(configPath, data, 0644); err != nil {
+		server.LogError(game.LogComponentApp, "Failed to save new-game-backgrounds config: %v", err)
+	} else {
+		server.LogDebug(game.LogComponentApp, "Saved new-game-backgrounds config")
 	}
 }
 
@@ -778,6 +874,25 @@ func (a *App) handleWebMessage(incoming *protocol.IncomingMessage) {
 
 	case protocol.ActionVPlayerQCMAnswer:
 		a.handleVPlayerQCMAnswer(incoming.ClientID, msg)
+
+	case protocol.ActionNewGame:
+		if a.engine.GetPhase() != game.PhaseStopped {
+			server.LogWarn(game.LogComponentApp, "NEW_GAME rejected: current phase %s is not STOPPED", a.engine.GetPhase())
+			return
+		}
+		a.logger.Info(game.LogComponentEngine, "NEW_GAME — reset scores, history, statuses")
+		a.engine.InitGame()
+		a.broadcastQuestions() // push refreshed AVAILABLE statuses to all clients
+		a.broadcastUpdate()
+
+	case protocol.ActionUpdateQuizMeta:
+		var payload protocol.QuizMetaPayload
+		if err := json.Unmarshal(msg.Msg, &payload); err != nil {
+			server.LogWarn(game.LogComponentApp, "Failed to parse UPDATE_QUIZ_META payload: %v", err)
+			return
+		}
+		a.engine.SetQuizMeta(payload.Name, payload.Theme, payload.Notes)
+		a.broadcastUpdate()
 
 	default:
 		server.LogWarn(game.LogComponentApp, "Unknown web action: %s", msg.Action)
@@ -2612,6 +2727,7 @@ func (a *App) broadcastConfigUpdate() {
 			GlowPulseMax:   cfg.NeonEffect.GlowPulseMax,
 		},
 		DefaultQuestionImageIsCustom: a.httpServer.HasCustomDefaultQuestionImage(),
+		NewGameBackgrounds:           a.engine.GetNewGameBackgrounds(),
 	}
 	data, _ := json.Marshal(payload)
 	a.broadcast(protocol.ActionConfigUpdate, data, false,
@@ -2791,6 +2907,7 @@ func (a *App) sendStateToClient(clientID string) {
 			GlowPulseMax:   cfg.NeonEffect.GlowPulseMax,
 		},
 		DefaultQuestionImageIsCustom: a.httpServer.HasCustomDefaultQuestionImage(),
+		NewGameBackgrounds:           a.engine.GetNewGameBackgrounds(),
 	}
 	neonData, _ := json.Marshal(neonPayload)
 	neonMsg, _ := protocol.NewMessage(protocol.ActionConfigUpdate, nil)

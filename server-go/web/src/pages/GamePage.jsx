@@ -29,6 +29,7 @@ export default function GamePage() {
     forceReady,
     simulateButton,
     simulatePong,
+    newGame,
     sendMessage,
   } = useGame()
 
@@ -148,7 +149,7 @@ export default function GamePage() {
 
   // Next unplayed question after current one (for "Question suivante" button)
   const nextUnplayedQuestion = useMemo(() => {
-    if (!['STOPPED', 'REVEALED', 'PREPARE', 'READY', 'STARTED', 'PAUSED', 'COUNTDOWN', 'ENROLL'].includes(gameState.phase)) return null
+    if (!['STOPPED', 'REVEALED', 'PREPARE', 'READY', 'STARTED', 'PAUSED', 'COUNTDOWN', 'ENROLL', 'NEW_GAME'].includes(gameState.phase)) return null
     const currentId = gameState.question?.ID
     if (!currentId) return null
     const currentIndex = sortedQuestions.findIndex(q => q.ID === currentId)
@@ -258,7 +259,7 @@ export default function GamePage() {
   }
 
   const handleQuestionSelect = (question, ctrlKey = false) => {
-    if (['STOPPED', 'REVEALED', 'PREPARE', 'READY'].includes(gameState.phase)) {
+    if (['STOPPED', 'REVEALED', 'PREPARE', 'READY', 'NEW_GAME'].includes(gameState.phase)) {
       if (ctrlKey) {
         // Ctrl+click: select and force to READY (debug)
         selectQuestion(question.ID)
@@ -331,7 +332,7 @@ export default function GamePage() {
   }
 
   const isPlaying = gameState.phase === 'STARTED' || gameState.phase === 'PAUSED'
-  const canSelectQuestion = ['STOPPED', 'REVEALED', 'PREPARE', 'READY'].includes(gameState.phase)
+  const canSelectQuestion = ['STOPPED', 'REVEALED', 'PREPARE', 'READY', 'NEW_GAME'].includes(gameState.phase)
   // REPONSE button active only in STOPPED phase after a question was played
   const canReveal = gameState.phase === 'STOPPED' && gameState.question?.STATUS === 'STOPPED'
   // START button only active in READY phase
@@ -391,6 +392,7 @@ export default function GamePage() {
             {gameState.phase === 'REVEALED' && <span className="phase-badge phase-revealed">REPONSE</span>}
             {gameState.phase === 'COUNTDOWN' && <span className="phase-badge phase-countdown">COMPTE A REBOURS</span>}
             {gameState.phase === 'ENROLL' && <span className="phase-badge phase-enroll">INSCRIPTION</span>}
+            {gameState.phase === 'NEW_GAME' && <span className="phase-badge phase-new-game">NOUVELLE PARTIE</span>}
           </div>
           {nextUnplayedQuestion && (
             <button
@@ -666,6 +668,17 @@ export default function GamePage() {
             >
               REPONSE
             </Button>
+
+            {gameState.phase === 'STOPPED' && (
+              <Button
+                variant="fun"
+                size="md"
+                onClick={newGame}
+                title="Réinitialiser le jeu et préparer une nouvelle partie"
+              >
+                NOUVELLE PARTIE
+              </Button>
+            )}
           </div>
         </Card>
       </div>

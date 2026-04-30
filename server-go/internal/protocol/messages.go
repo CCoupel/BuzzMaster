@@ -3,6 +3,8 @@ package protocol
 import (
 	"encoding/json"
 	"time"
+
+	"buzzcontrol/internal/game"
 )
 
 // Actions constants - matching ESP32 protocol
@@ -17,7 +19,9 @@ const (
 	ActionContinue    = "CONTINUE"
 	ActionUpdate      = "UPDATE"
 	ActionUpdateTimer = "UPDATE_TIMER"
-	ActionReset       = "RESET"
+	ActionReset           = "RESET"
+	ActionNewGame         = "NEW_GAME"          // Web → Server: reset game (scores, history, statuses) and enter NEW_GAME phase
+	ActionUpdateQuizMeta  = "UPDATE_QUIZ_META"  // Web → Server: set quiz name/theme/notes metadata
 	ActionReady       = "READY"
 	ActionReveal      = "REVEAL"
 	ActionQuestions   = "QUESTIONS"
@@ -178,6 +182,13 @@ type BackgroundChangePayload struct {
 	Index int `json:"INDEX"` // Current background index (0-based)
 }
 
+// QuizMetaPayload for UPDATE_QUIZ_META action (v4.0.0)
+type QuizMetaPayload struct {
+	Name  string `json:"NAME"`
+	Theme string `json:"THEME"`
+	Notes string `json:"NOTES"`
+}
+
 // FlipMemoryCardPayload for FLIP_MEMORY_CARD action
 type FlipMemoryCardPayload struct {
 	CardID string `json:"CARD_ID"` // Card ID to flip (e.g., "1-1", "2-2")
@@ -257,8 +268,9 @@ type LogEntryPayload struct {
 
 // ConfigUpdatePayload for CONFIG_UPDATE action (broadcast config changes)
 type ConfigUpdatePayload struct {
-	NeonEffect                    NeonEffectPayload `json:"neon_effect"`
-	DefaultQuestionImageIsCustom  bool              `json:"default_question_image_is_custom"` // true if custom image uploaded, false = embedded fallback
+	NeonEffect                   NeonEffectPayload `json:"neon_effect"`
+	DefaultQuestionImageIsCustom bool              `json:"default_question_image_is_custom"`  // true if custom image uploaded, false = embedded fallback
+	NewGameBackgrounds           []game.Background `json:"new_game_backgrounds"`              // NEW_GAME screen backgrounds (v4.0.4)
 }
 
 // NeonEffectPayload represents neon effect configuration

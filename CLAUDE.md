@@ -291,6 +291,63 @@ Le serveur offre trois endpoints WebSocket spécialisés avec routage intelligen
 - `PlayerDisplay.jsx` : `/ws/tv` — la connexion TV est indépendante de l'admin
 - `EnrollPage.jsx`, `VPlayerPage.jsx` : `/ws/player` — connexion dédiée VPlayer
 
+### Game Init — Nouvelle Partie (v4.0.4)
+
+**Phase NEW_GAME** : état transitoire déclenché par le bouton "NOUVELLE PARTIE" (admin, phase STOPPED uniquement).
+- Reset : scores teams + joueurs à 0, historique vide, tous les statuts de questions → AVAILABLE, question sélectionnée → nil
+- Transition : `NEW_GAME → PREPARE` automatique à la sélection de la première question
+- TV (`/tv`) : affiche l'écran "NOUVELLE PARTIE À VENIR" avec les métadonnées du quiz
+
+**Métadonnées de quiz** (v4.0.1) :
+- `QUIZ_NAME`, `QUIZ_THEME`, `QUIZ_NOTES` — champs de `GameState`, toujours sérialisés (sans omitempty)
+- Persistés dans le GameState, inclus dans sauvegardes/restaurations
+- Mis à jour via action WS `UPDATE_QUIZ_META` (payload : `NAME`, `THEME`, `NOTES`)
+- Affichés sur l'écran TV phase NEW_GAME
+
+**Fonds d'écran NEW_GAME** (v4.0.4) :
+- Stockés dans `data/files/new-game-backgrounds/` + `backgrounds.json` — array `[]Background{Path, Duration, Opacity}`
+- API REST :
+  - `POST /new-game-backgrounds` — upload image (multipart, champ "file", formats: jpg/png/gif/webp/svg)
+  - `PUT /new-game-backgrounds` — mise à jour configuration (ordre, durée, opacité)
+  - `DELETE /new-game-backgrounds?file=xxx` — suppression image spécifique ou tous les fonds (sans paramètre)
+  - `GET /files/new-game-backgrounds/{name}` — serve l'image (handler générique statique)
+- Sérialisation WebSocket :
+  - `new_game_backgrounds []Background` champ dans `GameState` et `ConfigUpdatePayload`
+  - Jamais `omitempty` — toujours présent dans CONFIG_UPDATE broadcast même si vide (évite bug UI admin lors de suppression)
+- Rotation client-side TV (`PlayerDisplay.jsx`) :
+  - `setTimeout` par durée d'image — transition en fonction de la durée stockée
+  - Overlay absolu (z-index: 0) indépendant de l'opacité du texte et effets (z-index: 1)
+- Fallback dégradé animé :
+  - Si aucune image configurée, affichage du dégradé multicolore (violet→bleu→cyan→rose→ambre, 9s infini)
+  - Titre avec glow-pulse, étoiles scintillantes (mix-blend-mode: screen)
+
+**Actions WebSocket (v4.0.1)** :
+```json
+// Admin → Server : déclencher NOUVELLE PARTIE
+{ "ACTION": "NEW_GAME", "MSG": {} }
+
+// Admin → Server : mettre à jour métadonnées quiz
+{ "ACTION": "UPDATE_QUIZ_META", "MSG": { "NAME": "Mon Quiz", "THEME": "Science", "NOTES": "Questions variées" } }
+
+// Server → Web : broadcast NEW_GAME
+{ "ACTION": "ALL", "MSG": { "phase": "NEW_GAME", "quiz_name": "Mon Quiz", "quiz_theme": "Science", "quiz_notes": "Questions variées" } }
+```
+
+**Refus NEW_GAME** : serveur retourne `REMOTE` avec error si phase ≠ STOPPED ou `MESSAGE` si erreur, ex :
+```json
+{ "ACTION": "REMOTE", "MSG": { "error": "Cannot start NEW_GAME: current phase is PREPARE, expected STOPPED" } }
+```
+
+**Fichiers clés** :
+- `server-go/internal/game/engine.go` : `InitGame()` (reset), détection phase `NEW_GAME` → `PREPARE`
+- `server-go/internal/game/models.go` : champs `GameState.QuizName`, `GameState.QuizTheme`, `GameState.QuizNotes`, `GameState.NewGameBackgrounds` (v4.0.4)
+- `server-go/cmd/server/main.go` : handlers `NEW_GAME` et `UPDATE_QUIZ_META`, broadcast après reset ; `loadNewGameBackgrounds()`, `saveNewGameBackgroundsConfig()`, callback `OnNewGameBackgroundChange` (v4.0.4)
+- `server-go/internal/protocol/messages.go` : `ActionNewGame`, `ActionUpdateQuizMeta`, sérialisation NEW_GAME ; `Background` struct (v4.0.4)
+- `server-go/internal/server/http.go` : `handleNewGameBackground()` — POST/PUT/DELETE `/new-game-backgrounds` (v4.0.4)
+- `web/src/pages/GamePage.jsx` : bouton "NOUVELLE PARTIE" (condition phase === STOPPED)
+- `web/src/pages/QuestionsPage.jsx` (renommée QuestionsPage vers QuizPage) : Zone Quiz (3 champs métadonnées + upload fonds) + Zone Ambiance + Zone Questions (v4.0.4)
+- `web/src/pages/PlayerDisplay.jsx` : écran NEW_GAME (100vw×100vh, statique) — affichage nom quiz + thème + notes ; rotation fonds d'écran + fallback dégradé (v4.0.4)
+
 ### Modele Bumper enrichi (v3.1.0)
 
 ```json
@@ -441,12 +498,12 @@ Toutes les vues TV doivent tenir entièrement à l'écran sans défilement :
   - `internal/server/http_firmware.go` : Handlers OTA (`/api/firmware/*`, `/api/buzzer/*/update`)
   - `src/BuzzClick/click_otaManager.h` : Module OTA ESP32-C3 (download HTTP + flash partition) — `performOTA()` exécuté dans `ota_task` FreeRTOS (16 KB stack) depuis v3.7.0 (évite déconnexion WebSocket à ~20% download)
 - **Frontend** :
-  - `web/src/pages/GamePage.jsx` : Page admin principale (jeu en cours)
-  - `web/src/pages/QuestionsPage.jsx` : Gestion questions + fonds d'ecran
+  - `web/src/pages/GamePage.jsx` : Page admin principale (jeu en cours) — bouton "NOUVELLE PARTIE" en phase STOPPED (v4.0.1)
+  - `web/src/pages/QuestionsPage.jsx` : Page Quiz (ex-QuestionsPage) — 3 zones : Quiz (métadonnées NAME/THEME/NOTES), Ambiance (fonds d'écran), Questions (liste) (v4.0.1)
   - `web/src/pages/ConfigPage.jsx` : Configuration serveur (parametres, effet neon, WiFi USB, OTA firmware)
   - `web/src/pages/BackupPage.jsx` : Sauvegarde/Restauration/Reinitialisation
   - `web/src/pages/UpdatePage.jsx` : Gestion des mises a jour automatiques
-  - `web/src/pages/PlayerDisplay.jsx` : Affichage TV (STATIQUE) ; utilise `/ws/tv` endpoint (v3.8.0)
+  - `web/src/pages/PlayerDisplay.jsx` : Affichage TV (STATIQUE) ; utilise `/ws/tv` endpoint (v3.8.0) — écran "NOUVELLE PARTIE À VENIR" en phase NEW_GAME avec quiz metadata (v4.0.1)
   - `web/src/components/TeamCard.jsx` : Carte equipe/joueurs (+ badge firmware + modal OTA + badge ⚠ CONNECTED + badge ⚠ ACK_PENDING horloge)
   - `web/src/pages/TeamsPage.jsx` : Gestion equipes/membres (+ badge ⚠ CONNECTED v3.6.8 + badge ⚠ ACK_PENDING horloge v3.8.0)
   - `web/src/styles/badges.css` : CSS partagé (présent mais badge CONNECTED utilise styles inline React depuis v3.6.8)
@@ -471,21 +528,22 @@ Toutes les vues TV doivent tenir entièrement à l'écran sans défilement :
 ### Organisation UI (v2.49.x)
 
 **Menu principal (Navbar)** :
-- Liens directs : Jeu, Scores, Équipes, Questions, Historique, Palmarès
+- Liens directs : Jeu, Scores, Équipes, Quiz, Historique, Palmarès (v4.0.1 : "Questions" → "Quiz")
 - Menu abeille (🐝 dropdown) : Config, Backup/Restaure, Logs, Mises à jour
 
 **Répartition des fonctionnalités** :
 | Page | Fonctionnalités |
 |------|-----------------|
-| `/admin/game` | Contrôle du jeu, affichage équipes, timer |
-| `/admin/questions` | CRUD questions + **gestion fonds d'écran** |
+| `/admin/game` | Contrôle du jeu, affichage équipes, timer — bouton "NOUVELLE PARTIE" en phase STOPPED (v4.0.1) |
+| `/admin/quiz` | **Zone Quiz** (métadonnées Nom/Thème/Notes) + **Zone Ambiance** (fonds d'écran) + **Zone Questions** (CRUD + équilibre) (v4.0.1) |
 | `/admin/config` | Paramètres serveur, effet néon, mode démo, **WiFi defaults + SSID2**, **OTA firmware buzzer** |
 | `/admin/backup` | Sauvegarde, restauration, réinitialisation |
 | `/admin/logs` | Logs serveur en temps réel |
 | `/admin/updates` | Vérification et installation mises à jour |
 
-**Décisions d'architecture (v2.49.x)** :
-- Fonds d'écran déplacés de ConfigPage vers QuestionsPage (cohérence : médias avec questions)
-- Backup/Restore extrait vers page dédiée (menu secondaire, moins fréquent)
-- Paramètres serveur (auto_open, debug) exposés dans ConfigPage
-- Cartes joueurs en gris neutre (plus de couleur QCM)
+**Décisions d'architecture (v4.0.1)** :
+- Métadonnées du quiz (Nom/Thème/Notes) centralisées dans Zone Quiz de la page `/admin/quiz` (v4.0.1)
+- Fonds d'écran gérés dans Zone Ambiance (ancien comportement conservé)
+- Questions et filtres dans Zone Questions (ancien comportement conservé)
+- Label "Questions" → "Quiz" pour clarifier le scope du module (v4.0.1)
+- Bouton "NOUVELLE PARTIE" déclenche la phase `NEW_GAME` avec reset complet (v4.0.1)

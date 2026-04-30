@@ -28,6 +28,10 @@ export default function useWebSocket(endpoint = '/ws/admin') {
     virtualPlayerLimit: 20, // Server-synchronized virtual player limit
     enrollmentActive: false, // Whether enrollment is currently open
     showQRCode: false, // Whether QR code should be displayed on TV
+    quizName: '', // Quiz name (v4.0.0)
+    quizTheme: '', // Quiz theme (v4.0.0)
+    quizNotes: '', // Quiz free-text notes (v4.0.0)
+    newGameBackgrounds: [], // Multi-image backgrounds for NEW_GAME screen (v4.0.4)
   })
   const [teams, setTeams] = useState({})
   const [bumpers, setBumpers] = useState({})
@@ -102,7 +106,7 @@ export default function useWebSocket(endpoint = '/ws/admin') {
             totalTime: MSG.GAME.DELAY ?? prev.totalTime,
             countdownTime: MSG.GAME.COUNTDOWN_TIME ?? prev.countdownTime,
             gameTime: MSG.GAME.TIME ?? prev.gameTime,
-            question: MSG.GAME.QUESTION || prev.question,
+            question: MSG.GAME.PHASE === 'NEW_GAME' ? null : (MSG.GAME.QUESTION || prev.question),
             remote: MSG.GAME.REMOTE || prev.remote,
             backgrounds: MSG.GAME.backgrounds || prev.backgrounds,
             currentBackgroundIndex: MSG.GAME.CURRENT_BACKGROUND_INDEX ?? prev.currentBackgroundIndex,
@@ -120,6 +124,9 @@ export default function useWebSocket(endpoint = '/ws/admin') {
             virtualPlayerLimit: MSG.GAME.VIRTUAL_PLAYER_LIMIT ?? prev.virtualPlayerLimit,
             enrollmentActive: MSG.GAME.ENROLLMENT_ACTIVE ?? prev.enrollmentActive,
             showQRCode: MSG.GAME.SHOW_QR_CODE ?? prev.showQRCode,
+            quizName: MSG.GAME.QUIZ_NAME !== undefined ? MSG.GAME.QUIZ_NAME : prev.quizName,
+            quizTheme: MSG.GAME.QUIZ_THEME !== undefined ? MSG.GAME.QUIZ_THEME : prev.quizTheme,
+            quizNotes: MSG.GAME.QUIZ_NOTES !== undefined ? MSG.GAME.QUIZ_NOTES : prev.quizNotes,
           }))
         }
         if (MSG?.teams !== undefined) setTeams(MSG.teams ?? {})
@@ -297,6 +304,7 @@ export default function useWebSocket(endpoint = '/ws/admin') {
           const updates = {}
           if (MSG?.neon_effect !== undefined) updates.neonEffect = MSG.neon_effect
           if (MSG?.default_question_image_is_custom !== undefined) updates.defaultQuestionImageIsCustom = MSG.default_question_image_is_custom
+          if (MSG?.new_game_backgrounds !== undefined) updates.newGameBackgrounds = MSG.new_game_backgrounds ?? []
           return Object.keys(updates).length > 0 ? { ...prev, ...updates } : prev
         })
         break
@@ -440,6 +448,16 @@ export default function useWebSocket(endpoint = '/ws/admin') {
     sendMessage('SET_VIRTUAL_PLAYER_LIMIT', { LIMIT: limit })
   }, [sendMessage])
 
+  // New game: trigger full reset and transition to NEW_GAME phase
+  const newGame = useCallback(() => {
+    sendMessage('NEW_GAME', {})
+  }, [sendMessage])
+
+  // Quiz metadata: update name, theme, notes
+  const updateQuizMeta = useCallback((name, theme, notes) => {
+    sendMessage('UPDATE_QUIZ_META', { NAME: name, THEME: theme, NOTES: notes })
+  }, [sendMessage])
+
   // Logs: Subscribe to log updates
   const subscribeLogs = useCallback((callback = null) => {
     logCallbackRef.current = callback
@@ -498,6 +516,9 @@ export default function useWebSocket(endpoint = '/ws/admin') {
     simulateButton,
     simulatePong,
     flipMemoryCard,
+    // New game / Quiz meta
+    newGame,
+    updateQuizMeta,
     // VPlayer enrollment
     showQRCode,
     hideQRCode,

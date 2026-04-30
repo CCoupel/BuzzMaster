@@ -48,7 +48,7 @@ export default function Navbar({ connectionStatus = 'disconnected', clientCounts
   // Zone Config: configuration et gestion (sans Config et Logs qui sont dans le menu)
   const configItems = [
     { path: 'teams', label: 'Joueurs', icon: '👥' },
-    { path: 'quiz', label: 'Questions', icon: '❓' },
+    { path: 'quiz', label: 'Quiz', icon: '❓' },
   ]
 
   // Zone TV: affichage TV et joueurs

@@ -210,9 +210,10 @@ func (e *Engine) SetBumpers(bumpers map[string]*Bumper) {
 func (e *Engine) Ready(questionID string, question *Question) {
 	e.mu.Lock()
 
-	// Allow from: STOPPED, REVEALED, PREPARE, READY
+	// Allow from: STOPPED, REVEALED, PREPARE, READY, NEW_GAME
 	allowedPhases := e.state.Phase == PhaseStopped || e.state.Phase == PhaseRevealed ||
-		e.state.Phase == PhasePrepare || e.state.Phase == PhaseReady
+		e.state.Phase == PhasePrepare || e.state.Phase == PhaseReady ||
+		e.state.Phase == PhaseNewGame
 	if !allowedPhases {
 		log.Printf("[Engine] Cannot ready game from phase %s", e.state.Phase)
 		e.mu.Unlock()
@@ -1139,6 +1140,57 @@ func (e *Engine) RecalculateAllTeamScores() {
 	log.Printf("[Engine] All team scores recalculated")
 }
 
+// InitGame resets the game completely: scores, history, question statuses, and sets phase to NEW_GAME.
+// This is the implementation of issue #66 — Bouton Start GAME.
+func (e *Engine) InitGame() {
+	e.mu.Lock()
+
+	// Reset all bumper scores and times
+	for _, bumper := range e.data.Bumpers {
+		bumper.Score = 0
+		bumper.Time = 0
+	}
+
+	// Reset all team scores
+	for _, team := range e.data.Teams {
+		team.Score = 0
+		team.TeamPoints = 0
+		team.Time = 0
+	}
+
+	// Clear history
+	e.history = nil
+
+	// Reset all question statuses
+	e.questionStatuses = make(map[string]QuestionStatus)
+
+	// Clear current question so admin UI doesn't show a stale selection
+	e.state.Question = nil
+
+	// Set phase to NEW_GAME
+	e.state.Phase = PhaseNewGame
+
+	log.Printf("[Engine] Game initialized: scores, history, question statuses reset")
+	e.mu.Unlock()
+
+	// Persist async
+	go e.SaveHistory()
+	go e.SaveTeams()
+	go e.SaveBumpers()
+	go e.SaveStatuses()
+}
+
+// SetQuizMeta sets the quiz metadata (name, theme, notes) on the game state.
+// This is the implementation of issue #67 — Change QUESTIONS en QUIZ.
+func (e *Engine) SetQuizMeta(name, theme, notes string) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.state.QuizName = name
+	e.state.QuizTheme = theme
+	e.state.QuizNotes = notes
+	log.Printf("[Engine] Quiz meta set: name=%q, theme=%q", name, theme)
+}
+
 // RAZScores resets all scores to zero
 func (e *Engine) RAZScores() {
 	e.mu.Lock()
@@ -1223,6 +1275,20 @@ func (e *Engine) GetBackgrounds() []Background {
 	e.mu.RLock()
 	defer e.mu.RUnlock()
 	return e.state.Backgrounds
+}
+
+// SetNewGameBackgrounds sets all NEW_GAME screen backgrounds (v4.0.4)
+func (e *Engine) SetNewGameBackgrounds(backgrounds []Background) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.state.NewGameBackgrounds = backgrounds
+}
+
+// GetNewGameBackgrounds returns all NEW_GAME screen backgrounds (v4.0.4)
+func (e *Engine) GetNewGameBackgrounds() []Background {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	return e.state.NewGameBackgrounds
 }
 
 // AddBackground adds a background

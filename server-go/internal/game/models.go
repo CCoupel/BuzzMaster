@@ -15,7 +15,8 @@ const (
 	PhaseStarted   GamePhase = "STARTED"
 	PhasePaused    GamePhase = "PAUSED"
 	PhaseRevealed  GamePhase = "REVEALED"
-	PhaseEnroll    GamePhase = "ENROLL" // Player enrollment phase (virtual players)
+	PhaseEnroll    GamePhase = "ENROLL"    // Player enrollment phase (virtual players)
+	PhaseNewGame   GamePhase = "NEW_GAME" // Game reset — scores/history cleared, ready to start fresh
 )
 
 // QuestionStatus represents question state (synced with GamePhase)
@@ -216,6 +217,7 @@ type GameState struct {
 	Page                   string       `json:"REMOTE,omitempty"`
 	Backgrounds            []Background `json:"backgrounds,omitempty"`
 	CurrentBackgroundIndex int          `json:"CURRENT_BACKGROUND_INDEX"`       // Server-synchronized background index
+	NewGameBackgrounds     []Background `json:"new_game_backgrounds,omitempty"` // NEW_GAME screen backgrounds (v4.0.4)
 	// Memory fields - NO omitempty so empty arrays are serialized for frontend reset
 	MemoryFlippedCards       []string       `json:"MEMORY_FLIPPED_CARDS"`                  // IDs of currently flipped Memory cards (max 2)
 	MemoryMatchedPairs       []int          `json:"MEMORY_MATCHED_PAIRS"`                  // IDs of matched pairs (permanent)
@@ -231,6 +233,10 @@ type GameState struct {
 	VirtualPlayerLimit     int          `json:"VIRTUAL_PLAYER_LIMIT"`           // Maximum number of virtual players allowed
 	EnrollmentActive       bool         `json:"ENROLLMENT_ACTIVE"`              // Whether player enrollment is active
 	ShowQRCode             bool         `json:"SHOW_QR_CODE"`                   // Whether to display QR code on TV
+	// Quiz metadata (v4.0.0) — no omitempty so empty strings clear the field on clients
+	QuizName  string `json:"QUIZ_NAME"`
+	QuizTheme string `json:"QUIZ_THEME"`
+	QuizNotes string `json:"QUIZ_NOTES"`
 }
 
 // TeamsAndBumpers holds all teams and bumpers data

@@ -1,4 +1,4 @@
-import { useState, useRef, useMemo } from 'react'
+import { useState, useRef, useMemo, useEffect } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { useGame } from '../hooks/GameContext'
 import { useCategoryFilter } from '../hooks/useCategoryFilter'
@@ -28,6 +28,11 @@ export default function QuestionsPage() {
   const fileAnswerInputRef = useRef(null)
   const [draggedId, setDraggedId] = useState(null)
   const [dragOverId, setDragOverId] = useState(null)
+
+  // NEW_GAME backgrounds management state (multi-images, mirrors Zone Ambiance)
+  const [uploadingNgBg, setUploadingNgBg] = useState(false)
+  const ngBgInputRef = useRef(null)
+  const [draggedNgBgIndex, setDraggedNgBgIndex] = useState(null)
 
   // Background management state
   const [uploadingBg, setUploadingBg] = useState(false)
@@ -71,6 +76,101 @@ export default function QuestionsPage() {
     mediaAnswer: null,
     existingMediaAnswer: null,
   })
+
+  // Quiz metadata form state
+  const [quizName, setQuizName] = useState(gameState.quizName || '')
+  const [quizTheme, setQuizTheme] = useState(gameState.quizTheme || '')
+  const [quizNotes, setQuizNotes] = useState(gameState.quizNotes || '')
+  const [quizSaved, setQuizSaved] = useState(false)
+
+  // Sync quiz form with gameState (populated from WS after mount)
+  useEffect(() => {
+    setQuizName(gameState.quizName || '')
+    setQuizTheme(gameState.quizTheme || '')
+    setQuizNotes(gameState.quizNotes || '')
+  }, [gameState.quizName, gameState.quizTheme, gameState.quizNotes])
+
+  const handleSaveQuizMeta = (e) => {
+    e.preventDefault()
+    sendMessage('UPDATE_QUIZ_META', { NAME: quizName, THEME: quizTheme, NOTES: quizNotes })
+    setQuizSaved(true)
+    setTimeout(() => setQuizSaved(false), 2000)
+  }
+
+  // NEW_GAME backgrounds handlers (mirror Zone Ambiance, endpoint: /new-game-backgrounds)
+  const handleNgBackgroundUpload = async (e) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setUploadingNgBg(true)
+    const fd = new FormData()
+    fd.append('file', file)
+    try {
+      const response = await fetch('/new-game-backgrounds', { method: 'POST', body: fd })
+      if (response.ok) {
+        window.location.reload()
+      } else {
+        const text = await response.text()
+        alert('Erreur: ' + text)
+      }
+    } catch (error) {
+      console.error('NG background upload failed:', error)
+      alert('Erreur: ' + error.message)
+    } finally {
+      setUploadingNgBg(false)
+      if (ngBgInputRef.current) ngBgInputRef.current.value = ''
+    }
+  }
+
+  const handleRemoveNgBackground = async (bgPath) => {
+    if (!window.confirm('Supprimer cette image de fond Nouvelle Partie ?')) return
+    try {
+      const filename = bgPath.split('/').pop()
+      await fetch(`/new-game-backgrounds?file=${encodeURIComponent(filename)}`, { method: 'DELETE' })
+    } catch (error) {
+      console.error('Remove NG background failed:', error)
+    }
+  }
+
+  const handleRemoveAllNgBackgrounds = async () => {
+    if (!window.confirm('Supprimer toutes les images de fond Nouvelle Partie ?')) return
+    try {
+      await fetch('/new-game-backgrounds', { method: 'DELETE' })
+    } catch (error) {
+      console.error('Remove all NG backgrounds failed:', error)
+    }
+  }
+
+  const handleNgDurationChange = async (index, newDuration) => {
+    const backgrounds = [...(gameState?.newGameBackgrounds || [])]
+    backgrounds[index] = { ...backgrounds[index], duration: parseInt(newDuration) || 10 }
+    await saveNgBackgrounds(backgrounds)
+  }
+
+  const handleNgOpacityChange = async (index, newOpacity) => {
+    const backgrounds = [...(gameState?.newGameBackgrounds || [])]
+    backgrounds[index] = { ...backgrounds[index], opacity: Math.max(0, Math.min(100, parseInt(newOpacity) || 100)) }
+    await saveNgBackgrounds(backgrounds)
+  }
+
+  const handleNgMoveBackground = async (fromIndex, toIndex) => {
+    if (fromIndex === toIndex) return
+    const backgrounds = [...(gameState?.newGameBackgrounds || [])]
+    const [moved] = backgrounds.splice(fromIndex, 1)
+    backgrounds.splice(toIndex, 0, moved)
+    await saveNgBackgrounds(backgrounds)
+  }
+
+  const saveNgBackgrounds = async (backgrounds) => {
+    try {
+      await fetch('/new-game-backgrounds', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(backgrounds)
+      })
+    } catch (error) {
+      console.error('Save NG backgrounds failed:', error)
+    }
+  }
 
   const sortedQuestions = useMemo(() => {
     return Object.values(questions)
@@ -594,7 +694,145 @@ export default function QuestionsPage() {
         </p>
       </header>
 
-      {/* Background Section */}
+      {/* Zone 1 — Quiz */}
+      <section className="quiz-meta-section">
+        <Card padding="lg">
+          <CardHeader>
+            <div className="section-header">
+              <h3 className="section-title">Quiz</h3>
+            </div>
+          </CardHeader>
+          <CardBody>
+            <form onSubmit={handleSaveQuizMeta} className="quiz-meta-form">
+              <div className="form-group">
+                <label htmlFor="quiz-name">Nom du quiz</label>
+                <input
+                  id="quiz-name"
+                  type="text"
+                  value={quizName}
+                  onChange={e => setQuizName(e.target.value)}
+                  placeholder="Ex : Quiz Science et Nature"
+                />
+              </div>
+              <div className="form-group">
+                <label htmlFor="quiz-theme">Thème général</label>
+                <input
+                  id="quiz-theme"
+                  type="text"
+                  value={quizTheme}
+                  onChange={e => setQuizTheme(e.target.value)}
+                  placeholder="Ex : Culture générale"
+                />
+              </div>
+              <div className="form-group">
+                <label htmlFor="quiz-notes">Texte libre</label>
+                <textarea
+                  id="quiz-notes"
+                  value={quizNotes}
+                  onChange={e => setQuizNotes(e.target.value)}
+                  placeholder="Notes, règles, anecdotes..."
+                  rows={3}
+                />
+              </div>
+              <Button type="submit" variant="primary" size="sm">
+                {quizSaved ? 'Enregistré ✓' : 'Enregistrer'}
+              </Button>
+            </form>
+
+            {/* Image(s) de fond — écran "Nouvelle Partie" */}
+            <div className="new-game-bg-section">
+              <div className="new-game-bg-header">
+                <h4 className="new-game-bg-title">Image(s) de fond — Nouvelle Partie</h4>
+                <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
+                  <label className="upload-bg-btn">
+                    <input
+                      type="file"
+                      ref={ngBgInputRef}
+                      accept="image/*"
+                      onChange={handleNgBackgroundUpload}
+                      style={{ display: 'none' }}
+                    />
+                    <Button variant="primary" size="sm" as="span" loading={uploadingNgBg}>
+                      + Image
+                    </Button>
+                  </label>
+                  {gameState?.newGameBackgrounds?.length > 0 && (
+                    <Button variant="ghost" size="sm" onClick={handleRemoveAllNgBackgrounds}>
+                      Tout supprimer
+                    </Button>
+                  )}
+                </div>
+              </div>
+              <p className="new-game-bg-hint">
+                Images affichees en rotation sur l'ecran TV lors de la phase "Nouvelle Partie". Par defaut, un degrade anime est utilise.
+              </p>
+              <p className="section-hint">Glissez-deposez pour changer l'ordre.</p>
+              <div className="backgrounds-grid">
+                {gameState?.newGameBackgrounds?.length > 0 ? (
+                  gameState.newGameBackgrounds.map((bg, index) => (
+                    <motion.div
+                      key={bg.path}
+                      className={`background-item ${draggedNgBgIndex === index ? 'dragging' : ''}`}
+                      initial={{ opacity: 0, scale: 0.9 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      transition={{ delay: index * 0.05 }}
+                      draggable
+                      onDragStart={() => setDraggedNgBgIndex(index)}
+                      onDragEnd={() => setDraggedNgBgIndex(null)}
+                      onDragOver={(e) => e.preventDefault()}
+                      onDrop={() => {
+                        if (draggedNgBgIndex !== null) {
+                          handleNgMoveBackground(draggedNgBgIndex, index)
+                        }
+                      }}
+                    >
+                      <img src={bg.path} alt={`Nouvelle Partie fond ${index + 1}`} className="bg-thumb" />
+                      <button
+                        className="bg-delete-btn"
+                        onClick={() => handleRemoveNgBackground(bg.path)}
+                        title="Supprimer"
+                      >
+                        ×
+                      </button>
+                      <span className="bg-index">{index + 1}</span>
+                      <div className="bg-controls">
+                        <div className="bg-duration">
+                          <input
+                            type="number"
+                            min="1"
+                            max="300"
+                            value={bg.duration || 10}
+                            onChange={(e) => handleNgDurationChange(index, e.target.value)}
+                            className="duration-input"
+                          />
+                          <span className="duration-label">s</span>
+                        </div>
+                        <div className="bg-opacity">
+                          <input
+                            type="range"
+                            min="0"
+                            max="100"
+                            value={bg.opacity ?? 100}
+                            onChange={(e) => handleNgOpacityChange(index, e.target.value)}
+                            className="opacity-slider"
+                          />
+                          <span className="opacity-value">{bg.opacity ?? 100}%</span>
+                        </div>
+                      </div>
+                    </motion.div>
+                  ))
+                ) : (
+                  <div className="backgrounds-empty">
+                    <p className="empty-state">Aucune image (degrade anime par defaut)</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          </CardBody>
+        </Card>
+      </section>
+
+      {/* Zone 2 — Ambiance (fonds d'écran) */}
       <section className="background-section">
         <Card padding="lg">
           <CardHeader>
@@ -687,39 +925,41 @@ export default function QuestionsPage() {
         </Card>
       </section>
 
-      {/* Category Balance Visualization */}
-      <CategoryBalance questions={sortedQuestions} />
+      {/* Category Balance + Filters — div unique pour alignement parfait */}
+      <div className="category-filter-group">
+        <CategoryBalance questions={sortedQuestions} />
 
-      {/* Category filter bar (#40) */}
-      {availableCategories.length > 0 && (
-        <div className="category-filter-bar questions-page-filter-bar">
-          {availableCategories.map(catKey => {
-            const cat = CATEGORIES[catKey]
-            const isActive = selectedCategories.has(catKey)
-            return (
+        {/* Category filter bar (#40) */}
+        {availableCategories.length > 0 && (
+          <div className="category-filter-bar questions-page-filter-bar">
+            {availableCategories.map(catKey => {
+              const cat = CATEGORIES[catKey]
+              const isActive = selectedCategories.has(catKey)
+              return (
+                <button
+                  key={catKey}
+                  className={`category-filter-pill${isActive ? ' active' : ''}`}
+                  style={{ '--cat-color': cat.color }}
+                  onClick={() => toggleCategoryFilter(catKey)}
+                  title={cat.label}
+                >
+                  <span className="cat-pill-icon">{cat.icon}</span>
+                  <span className="cat-pill-label">{cat.label}</span>
+                </button>
+              )
+            })}
+            {selectedCategories.size > 0 && (
               <button
-                key={catKey}
-                className={`category-filter-pill${isActive ? ' active' : ''}`}
-                style={{ '--cat-color': cat.color }}
-                onClick={() => toggleCategoryFilter(catKey)}
-                title={cat.label}
+                className="category-filter-reset"
+                onClick={clearCategoryFilters}
+                title="Réinitialiser les filtres"
               >
-                <span className="cat-pill-icon">{cat.icon}</span>
-                <span className="cat-pill-label">{cat.label}</span>
+                ×
               </button>
-            )
-          })}
-          {selectedCategories.size > 0 && (
-            <button
-              className="category-filter-reset"
-              onClick={clearCategoryFilters}
-              title="Réinitialiser les filtres"
-            >
-              ×
-            </button>
-          )}
-        </div>
-      )}
+            )}
+          </div>
+        )}
+      </div>
 
       <div className="questions-layout">
         {/* Questions List */}
@@ -1456,6 +1696,7 @@ export default function QuestionsPage() {
           </Card>
         </aside>
       </div>
+
     </div>
   )
 }

@@ -3,6 +3,55 @@
   min-height: calc(100vh - 120px);
 }
 
+/* Quiz metadata section */
+.quiz-meta-section {
+  margin-bottom: var(--space-4);
+}
+
+/* NEW_GAME backgrounds sub-section (multi-images, mirrors Zone Ambiance) */
+.new-game-bg-section {
+  margin-top: var(--space-5);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--gray-200);
+}
+
+.new-game-bg-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--space-2);
+}
+
+.new-game-bg-title {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.new-game-bg-hint {
+  font-size: 0.8rem;
+  color: var(--gray-500);
+  margin: 0 0 var(--space-2) 0;
+}
+
+.quiz-meta-form {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr auto;
+  gap: var(--space-4);
+  align-items: end;
+}
+
+.quiz-meta-form .form-group {
+  margin-bottom: 0;
+}
+
+@media (max-width: 900px) {
+  .quiz-meta-form {
+    grid-template-columns: 1fr;
+  }
+}
+
 .questions-layout {
   display: grid;
   grid-template-columns: 1fr 380px;
@@ -1245,6 +1294,21 @@
   font-weight: normal;
 }
 
+/* ── Category balance + filter — div unique, bloc cohérent ── */
+.category-filter-group {
+  display: flex;
+  flex-direction: column;
+  margin-bottom: var(--space-4);
+}
+
+/* Supprimer la marge et les radius bas du composant balance — soudé aux filtres */
+.category-filter-group .category-balance {
+  margin-bottom: 0;
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
+  border-bottom: none;
+}
+
 /* ── Category filter bar (#40) ── */
 .questions-page-filter-bar {
   display: flex;
@@ -1254,6 +1318,18 @@
   margin-bottom: var(--space-4);
   padding: var(--space-3) 0;
   border-bottom: 1px solid var(--gray-100);
+}
+
+/* Quand le filter bar est dans le groupe : collé sous la card, même bords */
+.category-filter-group .questions-page-filter-bar {
+  margin-bottom: 0;
+  padding: var(--space-2) var(--space-4);
+  border-bottom: none;
+  background: white;
+  border-radius: 0 0 var(--radius-lg) var(--radius-lg);
+  border: 1px solid var(--gray-200);
+  border-top: 1px solid var(--gray-100);
+  box-shadow: var(--shadow-sm);
 }
 
 .questions-page-filter-bar .category-filter-pill {

@@ -38,13 +38,14 @@ type HTTPServer struct {
 	defaultQuestionImageAsset []byte // Embedded fallback image (v3.2.2)
 
 	// Callbacks
-	OnAction              func(action string, data json.RawMessage)
-	OnQuestionUpload      func() // Called after question upload to broadcast update
-	OnBackgroundChange    func(path string) // Called after background upload/delete
-	OnShutdown            func() // Called before server shutdown for cleanup
-	OnLoadDemo            func() // Called to load demo data
-	OnConfigUpdate        func() // Called after config update to broadcast to clients
-	OnBuzzerWifiConfig    func() int // Called to broadcast WiFi config to all buzzers; returns connected buzzer count
+	OnAction                    func(action string, data json.RawMessage)
+	OnQuestionUpload            func() // Called after question upload to broadcast update
+	OnBackgroundChange          func(path string) // Called after background upload/delete
+	OnNewGameBackgroundChange   func(action string) // Called after NEW_GAME background upload/delete (v4.0.4)
+	OnShutdown                  func() // Called before server shutdown for cleanup
+	OnLoadDemo                  func() // Called to load demo data
+	OnConfigUpdate              func() // Called after config update to broadcast to clients
+	OnBuzzerWifiConfig          func() int // Called to broadcast WiFi config to all buzzers; returns connected buzzer count
 	// OnPriorityMessageSent is called after a priority message (OTA_UPDATE, WIFI_CONFIG) is sent to a buzzer.
 	// mac is the buzzer MAC, msgID is the generated MSG_ID, action is the protocol action string.
 	// The callback registers the message for ACK tracking and sets AckPending on the bumper (v3.8.0).
@@ -211,6 +212,9 @@ func (h *HTTPServer) setupRoutes() {
 
 	// Default question image API (v3.2.2)
 	h.mux.HandleFunc("/api/config/default-image", h.handleAPIDefaultQuestionImage)
+
+	// NEW_GAME background images API (v4.0.4) — multi-image, same pattern as /background
+	h.mux.HandleFunc("/new-game-backgrounds", h.handleNewGameBackground)
 
 	// Auto-update API
 	h.mux.HandleFunc("/api/updates", h.handleAPIUpdates)
@@ -2108,6 +2112,117 @@ func (h *HTTPServer) handleAPIDefaultQuestionImage(w http.ResponseWriter, r *htt
 			"path":       "/api/config/default-image",
 			"is_custom":  false,
 		})
+
+	default:
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+	}
+}
+
+// NEW_GAME background images API (v4.0.4)
+// Mirrors /background handler — multi-image, stored in data/files/new-game-backgrounds/.
+//
+// POST   /new-game-backgrounds              → upload image (multipart "file")
+// PUT    /new-game-backgrounds              → update config (order, duration, opacity)
+// DELETE /new-game-backgrounds              → delete all images
+// DELETE /new-game-backgrounds?file=xxx     → delete specific image
+// GET    /files/new-game-backgrounds/{name} → served automatically by /files/ handler
+
+func (h *HTTPServer) handleNewGameBackground(w http.ResponseWriter, r *http.Request) {
+	LogDebug(game.LogComponentHTTP, "NewGameBackground request: method=%s, content-type=%s", r.Method, r.Header.Get("Content-Type"))
+	bgDir := filepath.Join(h.dataDir, "files", "new-game-backgrounds")
+
+	switch r.Method {
+	case "POST":
+		// Parse multipart form (max 10MB)
+		if err := r.ParseMultipartForm(10 << 20); err != nil {
+			LogError(game.LogComponentHTTP, "Failed to parse multipart form: %v", err)
+			http.Error(w, "Failed to parse form: "+err.Error(), http.StatusBadRequest)
+			return
+		}
+
+		file, header, err := r.FormFile("file")
+		if err != nil {
+			LogError(game.LogComponentHTTP, "FormFile error: %v", err)
+			http.Error(w, "No file uploaded: "+err.Error(), http.StatusBadRequest)
+			return
+		}
+		defer file.Close()
+
+		os.MkdirAll(bgDir, 0755)
+
+		// Generate unique filename with timestamp
+		ext := filepath.Ext(header.Filename)
+		if ext == "" {
+			ext = ".jpg"
+		}
+		timestamp := time.Now().UnixMilli()
+		fileName := fmt.Sprintf("ng_%d%s", timestamp, ext)
+		destPath := filepath.Join(bgDir, fileName)
+
+		dst, err := os.Create(destPath)
+		if err != nil {
+			http.Error(w, "Failed to save file", http.StatusInternalServerError)
+			return
+		}
+		defer dst.Close()
+
+		if _, err := io.Copy(dst, file); err != nil {
+			http.Error(w, "Failed to write file", http.StatusInternalServerError)
+			return
+		}
+
+		bgPath := "/files/new-game-backgrounds/" + fileName
+		LogInfo(game.LogComponentHTTP, "NEW_GAME background image uploaded: %s", destPath)
+
+		if h.OnNewGameBackgroundChange != nil {
+			h.OnNewGameBackgroundChange("reload")
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{"status": "ok", "path": "` + bgPath + `"}`))
+
+	case "PUT":
+		// Update new-game-backgrounds config (order, duration, opacity)
+		var backgrounds []game.Background
+		if err := json.NewDecoder(r.Body).Decode(&backgrounds); err != nil {
+			LogError(game.LogComponentHTTP, "Failed to decode new-game-backgrounds config: %v", err)
+			http.Error(w, "Invalid JSON: "+err.Error(), http.StatusBadRequest)
+			return
+		}
+
+		h.engine.SetNewGameBackgrounds(backgrounds)
+		log.Printf("[HTTP] New-game-backgrounds config updated: %d items", len(backgrounds))
+
+		if h.OnNewGameBackgroundChange != nil {
+			h.OnNewGameBackgroundChange("save")
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{"status": "ok"}`))
+
+	case "DELETE":
+		// Check if deleting specific file or all
+		filename := r.URL.Query().Get("file")
+		if filename != "" {
+			// Delete specific file
+			filePath := filepath.Join(bgDir, filepath.Base(filename))
+			if err := os.Remove(filePath); err != nil {
+				log.Printf("[HTTP] Failed to delete new-game-background: %v", err)
+			} else {
+				log.Printf("[HTTP] New-game-background deleted: %s", filePath)
+			}
+		} else {
+			// Delete all new-game-backgrounds
+			os.RemoveAll(bgDir)
+			log.Printf("[HTTP] All new-game-backgrounds removed")
+		}
+
+		if h.OnNewGameBackgroundChange != nil {
+			h.OnNewGameBackgroundChange("reload")
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{"status": "ok"}`))
 
 	default:
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)

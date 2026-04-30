@@ -155,6 +155,7 @@
 .display-card .phase-revealed { background: var(--gray-400); color: white; }
 .display-card .phase-countdown { background: var(--accent-orange); color: white; }
 .display-card .phase-enroll { background: var(--accent-cyan); color: white; }
+.display-card .phase-new-game { background: var(--primary-500); color: white; }
 
 /* Row 2 - Side Panels (shared styles for Questions and Equipes) */
 .questions-panel,

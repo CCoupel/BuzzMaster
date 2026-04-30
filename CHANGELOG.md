@@ -3,6 +3,55 @@
 Historique des versions du projet BuzzControl.
 
 
+## [4.0.4] - 2026-04-30
+
+### Added
+- **Fonds d'écran NEW_GAME multi-images** : système de rotation automatique pour l'écran TV phase NEW_GAME
+  - Upload multiple d'images dans la Zone Quiz de la page `/admin/quiz` (formats: jpg/png/gif/webp/svg)
+  - Configuration par image : durée d'affichage (ms), opacité (0-100%)
+  - Rotation client-side côté TV : `setTimeout` basé sur la durée de chaque image
+  - Overlay absolu (z-index: 0) indépendant de l'opacité du texte et effets (z-index: 1)
+  - Fallback automatique : dégradé animé multicolore (violet→bleu→cyan→rose→ambre, 9s infini) si aucune image
+  - Persistance : stockage dans `data/files/new-game-backgrounds/` + `backgrounds.json`
+  - API REST : `POST /new-game-backgrounds` (upload), `PUT /new-game-backgrounds` (config ordre/durée/opacité), `DELETE /new-game-backgrounds?file=xxx` (suppression)
+  - Broadcast CONFIG_UPDATE : champ `new_game_backgrounds: []Background` (jamais `omitempty` — toujours présent)
+
+### Changed
+- **Écran TV NEW_GAME amélioré** : nouveau système visuel de fonds d'écran multi-images avec fallback dégradé
+  - Titre dynamique (clamp 4rem→8vw), weight 900, text-shadow pour lisibilité
+  - Étoiles scintillantes (mix-blend-mode: screen)
+  - Soutien pour images dynamiques ou dégradé statique selon configuration admin
+
+### Fixed
+- **CONFIG_UPDATE sérialisation** : champ `new_game_backgrounds` non `omitempty` pour éviter que l'UI admin manque les mises à jour lors de suppression (v4.0.4)
+  - Correction du bug qui empêchait la TV et l'UI admin de se mettre à jour lorsque l'utilisateur supprimait toutes les images
+
+### Closes
+- Closes #66 (NEW_GAME multi-image backgrounds)
+- Closes #67 (fonds d'écran dynamiques)
+
+---
+
+## [4.0.1] - 2026-04-30
+
+### Added
+- **NOUVELLE PARTIE** : bouton dans GamePage (phase STOPPED uniquement) → reset complet (scores, historique, questions) + phase `NEW_GAME`
+- **Écran TV "NOUVELLE PARTIE À VENIR"** : affichage plein écran statique sur `/tv` pendant la phase `NEW_GAME`, avec nom du quiz, thème et texte libre
+- **Métadonnées de quiz** : champs Nom du quiz / Thème général / Texte libre stockés dans le GameState et inclus dans les sauvegardes/restaurations
+- **Action `NEW_GAME`** (WebSocket) : déclenche `InitGame()` — reset scores teams+joueurs, historique, statuts questions, question sélectionnée
+- **Action `UPDATE_QUIZ_META`** (WebSocket) : met à jour les métadonnées du quiz en temps réel
+- **Phase `NEW_GAME`** : nouvelle phase de machine d'état — transitoire jusqu'à la sélection de la première question
+
+### Changed
+- **Menu "Questions" → "Quiz"** : label Navbar et URL `/admin/quiz`
+- **Page Quiz** (ex-QuestionsPage) réorganisée en 3 zones : Quiz (métadonnées) / Ambiance (fonds d'écran) / Questions (liste)
+
+### Closes
+- Closes #66 — Bouton Start GAME
+- Closes #67 — Change QUESTIONS en QUIZ
+
+---
+
 ## [3.8.0] - 2026-04-28
 
 ### Added

@@ -50,6 +50,7 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
   const tvNoSleepRef = useRef(null)
   const [localCountdown, setLocalCountdown] = useState(null) // Local countdown that starts after cascade reveal is done
   const [wifiConfig, setWifiConfig] = useState(null) // { ssid, password } for enrollment WiFi QR code
+  const [ngBgIndex, setNgBgIndex] = useState(0) // Current index for NEW_GAME background rotation
 
   // Fetch WiFi config for enrollment QR code (#51) — always set, even if SSID empty
   useEffect(() => {
@@ -61,6 +62,18 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
       })
       .catch(() => { setWifiConfig({ ssid: '', password: '' }) })
   }, [gameState.phase, isVPlayer])
+
+  // NEW_GAME backgrounds rotation (client-side, based on each image's duration)
+  const newGameBgs = gameState.newGameBackgrounds || []
+  useEffect(() => {
+    if (newGameBgs.length <= 1) return
+    const current = newGameBgs[ngBgIndex] || newGameBgs[0]
+    const duration = (current?.duration || 10) * 1000
+    const timer = setTimeout(() => {
+      setNgBgIndex(i => (i + 1) % newGameBgs.length)
+    }, duration)
+    return () => clearTimeout(timer)
+  }, [ngBgIndex, newGameBgs])
 
   // DEBUG: Log gameState
   useEffect(() => {
@@ -861,6 +874,83 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
                 {gameState.virtualPlayerCount || 0} / {gameState.virtualPlayerLimit || 20} joueurs
               </span>
             </div>
+          </motion.div>
+        ) : gameState.phase === 'NEW_GAME' ? (
+          /* New Game Phase — full-screen announcement */
+          <motion.div
+            key="new-game"
+            className="new-game-phase"
+            initial={{ opacity: 0, scale: 0.8 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.8 }}
+            transition={{ duration: 0.6, ease: 'easeOut' }}
+          >
+            {/* Background image overlay (shown over gradient when images available) */}
+            {newGameBgs.length > 0 && (
+              <div
+                className="new-game-bg-overlay"
+                style={{
+                  backgroundImage: `url('${newGameBgs[ngBgIndex]?.path}')`,
+                  backgroundSize: 'cover',
+                  backgroundPosition: 'center',
+                  opacity: (newGameBgs[ngBgIndex]?.opacity ?? 100) / 100,
+                }}
+              />
+            )}
+            {/* Étoiles décoratives */}
+            <div className="new-game-stars" aria-hidden="true">
+              {[...Array(12)].map((_, i) => (
+                <div key={i} className={`new-game-star star-${i + 1}`} />
+              ))}
+            </div>
+
+            <motion.h1
+              className="new-game-title"
+              animate={{ textShadow: [
+                '0 0 30px rgba(255,255,255,0.9), 0 0 80px #a855f7, 0 0 120px #a855f7, 0 2px 4px rgba(0,0,0,0.9)',
+                '0 0 30px rgba(255,255,255,0.9), 0 0 80px #06b6d4, 0 0 120px #06b6d4, 0 2px 4px rgba(0,0,0,0.9)',
+                '0 0 30px rgba(255,255,255,0.9), 0 0 80px #a855f7, 0 0 120px #a855f7, 0 2px 4px rgba(0,0,0,0.9)',
+              ] }}
+              transition={{ duration: 3, repeat: Infinity, ease: 'easeInOut' }}
+            >
+              NOUVELLE PARTIE À VENIR
+            </motion.h1>
+
+            {/* Sous-titre accroche */}
+            <motion.p
+              className="new-game-subtitle"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.2 }}
+            >
+              Préparez-vous !
+            </motion.p>
+
+            {(gameState.quizName || gameState.quizTheme) && (
+              <motion.div
+                className="new-game-meta"
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.35 }}
+              >
+                {gameState.quizName && (
+                  <div className="new-game-quiz-name">{gameState.quizName}</div>
+                )}
+                {gameState.quizTheme && (
+                  <div className="new-game-quiz-theme">{gameState.quizTheme}</div>
+                )}
+              </motion.div>
+            )}
+            {gameState.quizNotes && (
+              <motion.div
+                className="new-game-notes"
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.5 }}
+              >
+                {gameState.quizNotes}
+              </motion.div>
+            )}
           </motion.div>
         ) : isShowingScores ? (
           /* Team Scores View */

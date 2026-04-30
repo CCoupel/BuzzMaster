@@ -1706,6 +1706,181 @@ func TestEngine_StartupConnectedReset(t *testing.T) {
 	}
 }
 
+// ============================================================================
+// Tests for InitGame and SetQuizMeta (v4.0.0 — milestone game-init)
+// ============================================================================
+
+// TestInitGame_ResetsScores verifies that InitGame clears all bumper and team scores,
+// including TeamPoints accumulated via TEAM_POINTS actions.
+func TestInitGame_ResetsScores(t *testing.T) {
+	e := NewEngine()
+
+	e.SetTeams(map[string]*Team{
+		"red":  {Name: "Team Red"},
+		"blue": {Name: "Team Blue"},
+	})
+	e.UpdateBumper("b1", map[string]interface{}{"TEAM": "red"})
+	e.UpdateBumper("b2", map[string]interface{}{"TEAM": "blue"})
+	e.UpdateScore("b1", 100)
+	e.UpdateScore("b2", 50)
+	// Also set TeamPoints directly to test that field is also cleared
+	e.mu.Lock()
+	e.data.Teams["red"].TeamPoints = 30
+	e.data.Teams["blue"].TeamPoints = 10
+	e.mu.Unlock()
+
+	// Pre-condition: scores must be non-zero before reset
+	if e.GetBumper("b1").Score == 0 {
+		t.Fatal("Pre-condition: bumper b1 score should be > 0 before InitGame")
+	}
+
+	e.InitGame()
+
+	b1 := e.GetBumper("b1")
+	if b1.Score != 0 {
+		t.Errorf("Bumper b1 Score should be 0 after InitGame, got %d", b1.Score)
+	}
+
+	b2 := e.GetBumper("b2")
+	if b2.Score != 0 {
+		t.Errorf("Bumper b2 Score should be 0 after InitGame, got %d", b2.Score)
+	}
+
+	red := e.GetTeam("red")
+	if red.Score != 0 {
+		t.Errorf("Red team Score should be 0 after InitGame, got %d", red.Score)
+	}
+	if red.TeamPoints != 0 {
+		t.Errorf("Red team TeamPoints should be 0 after InitGame, got %d", red.TeamPoints)
+	}
+
+	blue := e.GetTeam("blue")
+	if blue.Score != 0 {
+		t.Errorf("Blue team Score should be 0 after InitGame, got %d", blue.Score)
+	}
+	if blue.TeamPoints != 0 {
+		t.Errorf("Blue team TeamPoints should be 0 after InitGame, got %d", blue.TeamPoints)
+	}
+}
+
+// TestInitGame_ClearsHistory verifies that InitGame empties the game event history.
+func TestInitGame_ClearsHistory(t *testing.T) {
+	e := NewEngine()
+
+	e.AddGameEvent(GameEvent{EventType: "POINTS_AWARDED", WinnerName: "Player1", Points: 10})
+	e.AddGameEvent(GameEvent{EventType: "POINTS_AWARDED", WinnerName: "Team Red", Points: 20})
+
+	// Pre-condition: 2 events in history
+	if len(e.GetHistory()) != 2 {
+		t.Fatalf("Pre-condition: expected 2 events in history, got %d", len(e.GetHistory()))
+	}
+
+	e.InitGame()
+
+	history := e.GetHistory()
+	if len(history) != 0 {
+		t.Errorf("History should be empty after InitGame, got %d events", len(history))
+	}
+}
+
+// TestInitGame_ResetsQuestionStatuses verifies that InitGame clears all question statuses,
+// making previously seen questions AVAILABLE again.
+func TestInitGame_ResetsQuestionStatuses(t *testing.T) {
+	e := NewEngine()
+
+	q := &Question{ID: "q1", Question: "test?", Points: "10", Time: "30"}
+
+	// Ready() sets status to StatusPrepare
+	e.Ready("q1", q)
+
+	// Pre-condition: status should be PREPARE (not AVAILABLE)
+	statusBefore := e.GetQuestionStatus("q1")
+	if statusBefore == StatusAvailable {
+		t.Fatal("Pre-condition: question status should not be AVAILABLE after Ready()")
+	}
+
+	e.InitGame()
+
+	statusAfter := e.GetQuestionStatus("q1")
+	if statusAfter != StatusAvailable {
+		t.Errorf("Question status should be AVAILABLE after InitGame, got %s", statusAfter)
+	}
+}
+
+// TestInitGame_SetsPhaseNewGame verifies that InitGame transitions the engine to PhaseNewGame.
+func TestInitGame_SetsPhaseNewGame(t *testing.T) {
+	e := NewEngine()
+
+	// Engine starts in STOPPED — pre-condition
+	if e.GetPhase() != PhaseStopped {
+		t.Fatalf("Pre-condition: expected initial phase STOPPED, got %s", e.GetPhase())
+	}
+
+	e.InitGame()
+
+	if e.GetPhase() != PhaseNewGame {
+		t.Errorf("Phase should be NEW_GAME after InitGame, got %s", e.GetPhase())
+	}
+}
+
+// TestSetQuizMeta verifies that SetQuizMeta stores name, theme and notes in GameState.
+func TestSetQuizMeta(t *testing.T) {
+	e := NewEngine()
+
+	e.SetQuizMeta("Mon Quiz", "Sciences", "Un quiz éducatif")
+
+	state := e.GetState()
+	if state.QuizName != "Mon Quiz" {
+		t.Errorf("QuizName should be 'Mon Quiz', got %q", state.QuizName)
+	}
+	if state.QuizTheme != "Sciences" {
+		t.Errorf("QuizTheme should be 'Sciences', got %q", state.QuizTheme)
+	}
+	if state.QuizNotes != "Un quiz éducatif" {
+		t.Errorf("QuizNotes should be 'Un quiz éducatif', got %q", state.QuizNotes)
+	}
+}
+
+// TestSetQuizMeta_OverwritesPreviousValues verifies that calling SetQuizMeta twice
+// fully replaces the previous values.
+func TestSetQuizMeta_OverwritesPreviousValues(t *testing.T) {
+	e := NewEngine()
+
+	e.SetQuizMeta("Quiz v1", "Histoire", "")
+	e.SetQuizMeta("Quiz v2", "Géographie", "Nouveau quiz")
+
+	state := e.GetState()
+	if state.QuizName != "Quiz v2" {
+		t.Errorf("QuizName should be 'Quiz v2', got %q", state.QuizName)
+	}
+	if state.QuizTheme != "Géographie" {
+		t.Errorf("QuizTheme should be 'Géographie', got %q", state.QuizTheme)
+	}
+	if state.QuizNotes != "Nouveau quiz" {
+		t.Errorf("QuizNotes should be 'Nouveau quiz', got %q", state.QuizNotes)
+	}
+}
+
+// TestReady_AllowedFromPhaseNewGame verifies that Ready() accepts PhaseNewGame as a
+// starting phase and correctly transitions the engine to PhasePrepare.
+func TestReady_AllowedFromPhaseNewGame(t *testing.T) {
+	e := NewEngine()
+
+	// Force engine into PhaseNewGame (state set by InitGame)
+	e.SetPhase(PhaseNewGame)
+
+	if e.GetPhase() != PhaseNewGame {
+		t.Fatalf("Pre-condition: expected phase NEW_GAME, got %s", e.GetPhase())
+	}
+
+	q := &Question{ID: "q1", Question: "test?", Points: "10", Time: "30"}
+	e.Ready("q1", q)
+
+	if e.GetPhase() != PhasePrepare {
+		t.Errorf("Phase should be PREPARE after Ready() from NEW_GAME, got %s", e.GetPhase())
+	}
+}
+
 // TestEngine_QCM_HintsAtBuzz_ResetOnPrepare tests that HINTS_AT_BUZZ is cleared
 // when the engine transitions to PREPARE for a new question.
 func TestEngine_QCM_HintsAtBuzz_ResetOnPrepare(t *testing.T) {
