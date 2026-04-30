@@ -107,7 +107,7 @@ export function useUpdates() {
      * POST /api/updates/apply
      * Le serveur redémarre automatiquement
      */
-    const applyUpdate = useCallback(async (version, path) => {
+    const applyUpdate = useCallback(async (version) => {
         setLoading(true)
         setError(null)
 
@@ -115,7 +115,7 @@ export function useUpdates() {
             const response = await fetch('/api/updates/apply', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ version, path })
+                body: JSON.stringify({ version })
             })
 
             if (!response.ok) {

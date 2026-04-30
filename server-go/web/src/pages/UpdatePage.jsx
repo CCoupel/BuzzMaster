@@ -32,18 +32,18 @@ export default function UpdatePage() {
         await downloadUpdate(version)
     }
 
-    const handleApply = async (version, path) => {
+    const handleApply = async (version) => {
         const isGameRunning = !['STOPPED', 'NEW_GAME'].includes(gameState?.phase)
         if (isGameRunning) {
-            setShowConfirm({ version, path })
+            setShowConfirm({ version })
         } else {
-            await executeApply(version, path)
+            await executeApply(version)
         }
     }
 
-    const executeApply = async (version, path) => {
+    const executeApply = async (version) => {
         setShowConfirm(null)
-        const result = await applyUpdate(version, path)
+        const result = await applyUpdate(version)
         if (result?.success) {
             setRestarting(true)
         }
@@ -253,7 +253,6 @@ export default function UpdatePage() {
 
                             // A version is ready to apply if it was downloaded this session OR was already on disk
                             const isDownloaded = justDownloaded || v.downloaded
-                            const applyPath = justDownloaded ? downloadProgress.path : v.local_path
 
                             const versionStatus = getVersionStatus(v.version)
                             const statusIcon = getStatusIcon(versionStatus)
@@ -307,7 +306,7 @@ export default function UpdatePage() {
                                                     {isDownloaded && (
                                                         <button
                                                             className="btn-apply"
-                                                            onClick={() => handleApply(v.version, applyPath)}
+                                                            onClick={() => handleApply(v.version)}
                                                             disabled={loading}
                                                         >
                                                             Appliquer
@@ -357,7 +356,7 @@ export default function UpdatePage() {
                             </button>
                             <button
                                 className="btn-confirm"
-                                onClick={() => executeApply(showConfirm.version, showConfirm.path)}
+                                onClick={() => executeApply(showConfirm.version)}
                             >
                                 Appliquer quand même
                             </button>

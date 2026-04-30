@@ -74,7 +74,6 @@ type DownloadResponse struct {
 // ApplyRequest is the request for POST /api/updates/apply
 type ApplyRequest struct {
 	Version string `json:"version"`
-	Path    string `json:"path"`
 }
 
 // ApplyResponse is the response for POST /api/updates/apply
@@ -96,6 +95,11 @@ type Updater struct {
 // in {dataDir}/updates/ so they survive server restarts and can be applied later.
 func NewUpdater(currentVersion, dataDir string) *Updater {
 	updatesDir := filepath.Join(dataDir, "updates")
+	// Resolve to absolute path so security check in HandleApplyUpdate works
+	// regardless of whether dataDir was relative or absolute.
+	if absDir, err := filepath.Abs(updatesDir); err == nil {
+		updatesDir = absDir
+	}
 	os.MkdirAll(updatesDir, 0755)
 
 	return &Updater{
@@ -384,19 +388,28 @@ func (u *Updater) HandleApplyUpdate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if req.Version == "" || req.Path == "" {
-		LogError(game.LogComponentUpdater, "Missing version or path in request")
-		writeJSONError(w, http.StatusBadRequest, ApplyResponse{Success: false, Error: "version and path are required"})
+	if req.Version == "" {
+		LogError(game.LogComponentUpdater, "Missing version in request")
+		writeJSONError(w, http.StatusBadRequest, ApplyResponse{Success: false, Error: "version is required"})
 		return
 	}
 
-	LogInfo(game.LogComponentUpdater, "Applying update: version=%s, path=%s", req.Version, req.Path)
+	// Reconstruct file path from version — the server owns the naming convention
+	ext := ""
+	if runtime.GOOS == "windows" {
+		ext = ".exe"
+	}
+	platform := GetPlatformString()
+	filename := fmt.Sprintf("buzzcontrol-v%s-%s%s", req.Version, platform, ext)
+	filePath := filepath.Join(u.updatesDir, filename)
+
+	LogInfo(game.LogComponentUpdater, "Applying update: version=%s, path=%s", req.Version, filePath)
 
 	// Verify downloaded file exists and is valid
-	fileInfo, err := os.Stat(req.Path)
+	fileInfo, err := os.Stat(filePath)
 	if err != nil {
 		if os.IsNotExist(err) {
-			LogError(game.LogComponentUpdater, "Downloaded file not found: %s", req.Path)
+			LogError(game.LogComponentUpdater, "Downloaded file not found: %s", filePath)
 			writeJSONError(w, http.StatusNotFound, ApplyResponse{Success: false, Error: "Downloaded file not found — please download again"})
 		} else {
 			LogError(game.LogComponentUpdater, "Cannot access downloaded file: %v", err)
@@ -408,15 +421,6 @@ func (u *Updater) HandleApplyUpdate(w http.ResponseWriter, r *http.Request) {
 	if fileInfo.Size() < MinBinarySize {
 		LogError(game.LogComponentUpdater, "Downloaded file too small to apply: %d bytes", fileInfo.Size())
 		writeJSONError(w, http.StatusBadRequest, ApplyResponse{Success: false, Error: "Downloaded file appears corrupted — please download again"})
-		return
-	}
-
-	// Verify the path is inside the expected temp directory (security: prevent path traversal)
-	absPath, err := filepath.Abs(req.Path)
-	sep := string(os.PathSeparator)
-	if err != nil || (!strings.HasPrefix(absPath, u.updatesDir+sep) && absPath != u.updatesDir) {
-		LogError(game.LogComponentUpdater, "Suspicious path rejected: %s (expected prefix: %s)", req.Path, u.updatesDir)
-		writeJSONError(w, http.StatusBadRequest, ApplyResponse{Success: false, Error: "Invalid file path"})
 		return
 	}
 
@@ -448,7 +452,7 @@ func (u *Updater) HandleApplyUpdate(w http.ResponseWriter, r *http.Request) {
 	// Schedule restart in a goroutine
 	go func() {
 		time.Sleep(3 * time.Second)
-		u.performRestart(exe, req.Path)
+		u.performRestart(exe, filePath)
 	}()
 }
 
