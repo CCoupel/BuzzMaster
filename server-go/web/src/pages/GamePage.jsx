@@ -29,7 +29,6 @@ export default function GamePage() {
     forceReady,
     simulateButton,
     simulatePong,
-    newGame,
     sendMessage,
   } = useGame()
 
@@ -669,16 +668,6 @@ export default function GamePage() {
               REPONSE
             </Button>
 
-            {gameState.phase === 'STOPPED' && (
-              <Button
-                variant="fun"
-                size="md"
-                onClick={newGame}
-                title="Réinitialiser le jeu et préparer une nouvelle partie"
-              >
-                NOUVELLE PARTIE
-              </Button>
-            )}
           </div>
         </Card>
       </div>
