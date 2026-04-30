@@ -876,10 +876,6 @@ func (a *App) handleWebMessage(incoming *protocol.IncomingMessage) {
 		a.handleVPlayerQCMAnswer(incoming.ClientID, msg)
 
 	case protocol.ActionNewGame:
-		if a.engine.GetPhase() != game.PhaseStopped {
-			server.LogWarn(game.LogComponentApp, "NEW_GAME rejected: current phase %s is not STOPPED", a.engine.GetPhase())
-			return
-		}
 		a.logger.Info(game.LogComponentEngine, "NEW_GAME — reset scores, history, statuses")
 		a.engine.InitGame()
 		a.broadcastQuestions() // push refreshed AVAILABLE statuses to all clients

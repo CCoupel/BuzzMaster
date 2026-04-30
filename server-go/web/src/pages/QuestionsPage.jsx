@@ -21,7 +21,7 @@ const QCM_COLORS = {
 export { CATEGORIES }
 
 export default function QuestionsPage() {
-  const { questions, fsInfo, deleteQuestion, sendMessage, gameState } = useGame()
+  const { questions, fsInfo, deleteQuestion, sendMessage, gameState, newGame } = useGame()
   const [isUploading, setIsUploading] = useState(false)
   const [editingId, setEditingId] = useState(null)
   const fileInputRef = useRef(null)
@@ -700,6 +700,9 @@ export default function QuestionsPage() {
           <CardHeader>
             <div className="section-header">
               <h3 className="section-title">Quiz</h3>
+              <Button variant="fun" size="sm" onClick={newGame} title="Réinitialiser le jeu et préparer une nouvelle partie">
+                NOUVELLE PARTIE
+              </Button>
             </div>
           </CardHeader>
           <CardBody>
