@@ -33,7 +33,7 @@ export default function UpdatePage() {
     }
 
     const handleApply = async (version, path) => {
-        const isGameRunning = gameState?.PHASE !== 'STOP'
+        const isGameRunning = !['STOPPED', 'NEW_GAME'].includes(gameState?.phase)
         if (isGameRunning) {
             setShowConfirm({ version, path })
         } else {
