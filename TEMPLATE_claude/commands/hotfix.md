@@ -175,4 +175,4 @@ Orchestre le workflow HOTFIX pour {PROJECT_NAME}.
 
 ## Agent
 
-Mode special du CDP avec etapes reduites.
+Délègue au Claude principal (main) (`teamleader.md`) en mode hotfix (étapes réduites).

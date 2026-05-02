@@ -50,10 +50,10 @@ Les agents de validation **analysent** le code sans le modifier. Ils produisent 
 
 Avant d'envoyer le rapport DONE au CDP :
 
-1. Ecrire le rapport complet dans `.claude/reports/[agent]-[YYYYMMDD-HHmmss].md`
+1. Ecrire le rapport complet dans `_work/reports/[agent]-[YYYYMMDD-HHmmss].md`
 2. **Relire le fichier ecrit** et verifier qu'il repond bien a la demande recue du CDP
 3. Si incoherence detectee : corriger le fichier avant d'envoyer le DONE
-4. Envoyer au CDP uniquement la reference : `Rapport : .claude/reports/[filename]`
+4. Envoyer au CDP uniquement la reference : `Rapport : _work/reports/[filename]`
 
 > Le CDP lira lui-meme le fichier pour valider la conformite. S'il juge le livrable
 > non conforme, il le renverra pour correction — sans comptabiliser un cycle DEV.

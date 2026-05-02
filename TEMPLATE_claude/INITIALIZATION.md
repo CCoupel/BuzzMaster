@@ -358,17 +358,35 @@ Les placeholders `{{...}}` sont remplaces avec les vraies valeurs :
 | Deploiement | Docker |
 ```
 
-### 4. Commandes personnalisees
+### 4. Commandes et agents déployés
 
-Les fichiers sont copies directement depuis `TEMPLATE_claude/` vers `.claude/` :
+Les fichiers sont déployés depuis `TEMPLATE_claude/` vers `.claude/` :
 
 ```
-commands/feature.md → .claude/commands/feature.md
-agents/cdp.md       → .claude/agents/cdp.md
+commands/feature.md → .claude/commands/feature.md        (invocable /feature)
+agents/cdp.md       → .claude/agents/cdp.template.md     (immutable)
 ...
 ```
 
-## Reinitialisation
+#### Convention template / projet
+
+**Commandes** : déployées en `*.md`, directement invocables (`/feature`, `/bugfix`...).
+Ne pas les éditer — elles sont écrasées à chaque sync. Pour adapter une commande,
+écrire dans les fichiers `context/` qu'elle référence.
+
+**Agents** : déployés en `*.template.md`, avec un fichier compagnon `*.md` optionnel :
+
+```
+.claude/agents/cdp.template.md   ← template (sync automatique, ne jamais éditer)
+.claude/agents/cdp.md            ← adaptations projet (tracké git, jamais écrasé)
+```
+
+Claude lit les deux à chaque invocation. Pour adapter un agent, créer le fichier
+`*.md` correspondant avec uniquement les règles spécifiques.
+
+Les projets sans adaptation n'ont pas besoin de créer de fichier `*.md`.
+
+## Reinitialisation et synchronisation
 
 Si `/init-project` est execute sur un projet deja initialise :
 
@@ -379,7 +397,8 @@ Voulez-vous :
 a) Reconfigurer completement (ecrase la config actuelle)
 b) Mettre a jour certains parametres
 c) Re-analyser le code (detecter les changements)
-d) Annuler
+d) Synchroniser le template depuis GitHub (fetch + appliquer)
+e) Annuler
 ```
 
 ### Option b : Mise a jour partielle
@@ -400,6 +419,22 @@ h) Retour
 
 Utile si le projet a evolue (nouveau framework ajoute, migration, etc.).
 Claude re-analyse et propose les mises a jour.
+
+### Option d : Synchronisation du template
+
+Fetche la derniere version de `TEMPLATE_claude/` depuis GitHub et met a jour
+tous les fichiers `*.template.md` sans jamais toucher aux fichiers `*.md` projet.
+
+Après le déploiement, une **analyse de dérive** est effectuée automatiquement :
+
+| Signal | Signification |
+|--------|---------------|
+| `[↓]` DERIVE-TEMPLATE | Le template couvre maintenant votre customisation → simplification possible |
+| `[↑]` DERIVE-PROJET | Votre `.md` a grossi depuis la derniere sync → verifier l'intentionnalite |
+| `[=]` IDENTIQUE | Le `.md` duplique le template sans rien ajouter → peut etre supprime |
+| `[*]` PROPRE | Contenu projet uniquement, rien a faire |
+
+Cette analyse est silencieuse si aucun fichier compagnon `*.md` n'existe ou si tout est propre.
 
 ## Validation Finale
 
@@ -424,6 +459,45 @@ Commandes disponibles :
 
 Confirmer et generer ? (o/n)
 ```
+
+## Comportements intrinsèques
+
+Ces comportements sont natifs au template — aucune configuration requise.
+
+### Déploiement PROD avec suivi CI actif
+
+`/deploy prod` ne se limite pas à pousser un tag. Le deployer surveille la CI jusqu'à
+complétion et gère les échecs de façon autonome :
+
+```
+merge → push tag → surveille CI (gh run watch)
+                        ↓
+              succès : release notes + milestone
+              échec  :
+                ├── lire logs → classifier (CODE / FLAKY / CONFIG / INFRA)
+                ├── rollback adapté :
+                │     CODE/FLAKY  → revert merge + suppression du tag
+                │     CONFIG/INFRA → suppression du tag uniquement
+                └── rapport à main → main route vers l'agent responsable
+```
+
+Le deployer ne corrige jamais lui-même — il remonte les faits, `main` décide du routing.
+
+### Séparation template / adaptations projet
+
+**Commandes** (`*.md`) : directement invocables, gérées par sync, ne pas éditer.
+Personnalisation via les fichiers `context/` (ex: `context/COMMON.md`).
+
+**Agents** : pattern template + compagnon projet optionnel :
+
+```
+.claude/agents/cdp.template.md   ← géré par sync, jamais édité
+.claude/agents/cdp.md            ← adaptations projet, tracké git
+```
+
+Claude lit les deux automatiquement. À chaque sync, une analyse de dérive détecte :
+- Le template qui a rattrapé une customisation projet (`[↓]` simplification possible)
+- Un fichier projet qui a grossi (`[↑]` vérifier l'intentionnalité)
 
 ## Post-Initialisation
 

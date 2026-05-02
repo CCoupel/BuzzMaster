@@ -19,12 +19,10 @@ Le hook SessionStart a été supprimé — plus de démarrage automatique.
 
 
 - **TeamDelete** : proposer à l'utilisateur après PROD validé, **jamais supprimer automatiquement**
-- **Team par feature/bugfix** : créer une nouvelle team à chaque nouvelle demande, pas réutiliser
 - **Agents** : prompts génériques uniquement (rôle, pas tâche) — tâches via TaskCreate + TaskUpdate
 - **Corrections intra-feature** : SendMessage vers l'agent existant, jamais créer un nouvel agent
-- **Création team** : Liste complète (10 agents) : cdp (`cdp`) = **team leader**, planner (`implementation-planner`), dev-backend, dev-frontend, buzzclick-dev (`dev-buzzclick`), test-writer, code-reviewer, QA, doc-updater, deployer (`deploy`)
 - **Commande /start-session** : créer la TEAM **directement sans demander** confirmation ni sujet. Le nom de la TEAM est **toujours `TEAM-Buzz`**, quelle que soit la session.
-- **Architecture team** : le CDP est le team leader. Claude est l'interface utilisateur. Pour `/feature`, `/bugfix`, `/hotfix`, `/refactor` : Claude transmet au CDP via `SendMessage` puis relaie les retours. Claude ne coordonne pas les agents directement.
+- **Architecture team (v2026-04-30)** : Claude principal (`main`) est l'orchestrateur — pas d'agent CDP séparé. Les agents spécialisés (planner, dev-*, qa...) sont spawnes par `main` au démarrage de chaque workflow, pas au /start-session. Rapports inter-agents vers `main` (plus vers `cdp`). Chemins rapports : `_work/reports/` (plus `.claude/reports/`).
 
 # currentDate
 Today's date is 2026-03-01.

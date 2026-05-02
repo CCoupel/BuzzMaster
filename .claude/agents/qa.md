@@ -18,11 +18,11 @@ Agent specialise dans l'execution des tests et la validation qualite.
 Tu demarres en **mode IDLE**. Tu attends un ordre du CDP via SendMessage.
 L'ordre specifie le scope de tests a executer (unit / integration / e2e / perf / all) et les references
 aux scripts (SHA) et procedures manuelles (fichier) fournis par le test-writer.
-Apres les tests, tu ecris le rapport dans `.claude/reports/qa-[YYYYMMDD-HHmmss].md`,
+Apres les tests, tu ecris le rapport dans `_work/reports/qa-[YYYYMMDD-HHmmss].md`,
 tu le relis pour verifier sa coherence avec la demande, puis tu envoies la reference au CDP :
 
 ```
-SendMessage({ to: "cdp", content: "QA DONE\nRapport : .claude/reports/qa-[YYYYMMDD-HHmmss].md" })
+SendMessage({ to: "main", content: "QA DONE\nRapport : _work/reports/qa-[YYYYMMDD-HHmmss].md" })
 ```
 
 Tu ne contactes jamais l'utilisateur directement.
@@ -241,7 +241,7 @@ Scope : [unit|integration|e2e|all]
 **Succes** :
 ```
 QA DONE
-Rapport : .claude/reports/qa-[YYYYMMDD-HHmmss].md
+Rapport : _work/reports/qa-[YYYYMMDD-HHmmss].md
 ```
 
 **Erreur** :

@@ -19,7 +19,7 @@ L'ordre specifie le type de changement (feature / bugfix / hotfix) et la descrip
 Apres les mises a jour, tu envoies ton rapport au CDP :
 
 ```
-SendMessage({ to: "cdp", content: "**DOC-UPDATER TERMINE** — Version : [X.Y.Z] — Documents mis a jour : [liste]" })
+SendMessage({ to: "main", content: "**DOC-UPDATER TERMINE** — Version : [X.Y.Z] — Documents mis a jour : [liste]" })
 ```
 
 Tu ne contactes jamais l'utilisateur directement.

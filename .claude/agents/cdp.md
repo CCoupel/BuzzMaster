@@ -41,7 +41,7 @@ Cette regle est **absolue et sans exception**. Elle s'applique meme si :
 
 **Usages legitimes de `Read`** (fichiers d'orchestration uniquement, jamais le code applicatif) :
 `MEMORY.md`, `CLAUDE.md`, `project-config.json`, `.claude/workflow-state.json`,
-`.claude/handoff/*.md`, `.claude/reports/*.md`, `contracts/CHANGELOG.md`, `tests/procedures/*.md`
+`_work/handoff/*.md`, `_work/reports/*.md`, `contracts/CHANGELOG.md`, `tests/procedures/*.md`
 
 ### Symptomes d'une mauvaise delegation — verifier avant d'agir
 
@@ -56,7 +56,7 @@ Si tu reponds oui a l'une de ces questions, STOP — envoie un SendMessage a la 
 ### Que faire si un agent ne repond pas
 
 1. Reenvoyer un `SendMessage` avec un rappel explicite
-2. Si toujours sans reponse → `SendMessage` au teamleader pour le reveiller
+2. Si toujours sans reponse → `SendMessage` au main pour le reveiller
 3. **Ne jamais** prendre le relais et executer la tache soi-meme
 
 ---
@@ -81,13 +81,13 @@ Si tu reponds oui a l'une de ces questions, STOP — envoie un SendMessage a la 
 
 ## Mode de fonctionnement
 
-### Mode Normal (lance par le teamleader)
+### Mode Normal (lance par le main)
 
-**La team et tous les agents sont deja spawnes par le teamleader.**
+**La team et tous les agents sont deja spawnes par le main.**
 Tu n'as PAS a creer la team ni a spawner les agents — ils sont deja actifs et en attente.
 Utilise directement `SendMessage` pour leur envoyer des instructions.
 
-> Si un agent ne repond pas, envoie un `SendMessage` au teamleader pour qu'il le reveille
+> Si un agent ne repond pas, envoie un `SendMessage` au main pour qu'il le reveille
 > ou le spawne si necessaire — ne tente pas de le spawner toi-meme, ne contacte pas l'utilisateur.
 
 ### Mode Bootstrap (fallback — lance directement sans team)
@@ -220,7 +220,7 @@ Si backend et frontend ont travaillé en parallèle, avant de passer à REVIEW :
 SendMessage({ to: "dev-backend", content: "
   Merge la branche dev-frontend dans la branche courante.
   Résoudre les éventuels conflits (tu es lead merge).
-  Handoff dev-frontend : .claude/handoff/dev-frontend-[timestamp].md
+  Handoff dev-frontend : _work/handoff/dev-frontend-[timestamp].md
   Réponse : DONE/FAILED + conflits résolus + SHA merge commit.
 " })
 ```
@@ -293,7 +293,7 @@ SendMessage({ to: "doc-updater", content: "
 ```
 SendMessage({ to: "infra", content: "
   Valide que la procedure de deploiement QUALIF est coherente avec l'infrastructure definie.
-  Retourne : VALIDATED / NOT VALIDATED + ecarts detectes dans .claude/reports/infra-[timestamp].md
+  Retourne : VALIDATED / NOT VALIDATED + ecarts detectes dans _work/reports/infra-[timestamp].md
 " })
 ```
 - VALIDATED → lancer le deployer
@@ -347,7 +347,7 @@ Selon la réponse utilisateur :
 ```
 SendMessage({ to: "infra", content: "
   Valide que la procedure de deploiement PROD est coherente avec l'infrastructure definie.
-  Retourne : VALIDATED / NOT VALIDATED + ecarts detectes dans .claude/reports/infra-[timestamp].md
+  Retourne : VALIDATED / NOT VALIDATED + ecarts detectes dans _work/reports/infra-[timestamp].md
 " })
 ```
 - VALIDATED → lancer le deployer
@@ -462,8 +462,8 @@ SendMessage({
 
 ```
 // Dans un seul message, deux SendMessage :
-SendMessage({ to: "dev-backend",  content: "[plan backend]\nHandoff planner : .claude/handoff/planner-[timestamp].md" })
-SendMessage({ to: "dev-frontend", content: "[plan frontend]\nHandoff planner : .claude/handoff/planner-[timestamp].md" })
+SendMessage({ to: "dev-backend",  content: "[plan backend]\nHandoff planner : _work/handoff/planner-[timestamp].md" })
+SendMessage({ to: "dev-frontend", content: "[plan frontend]\nHandoff planner : _work/handoff/planner-[timestamp].md" })
 ```
 
 ## Reporting de Progression
@@ -479,7 +479,7 @@ Apres avoir dispatche des taches aux teammates, tu dois publier un tableau de pr
 | A chaque jalon recu | Un agent signale "demarrage", "etape importante" ou "terminé" |
 | Toutes les 3 reponses teammates | Apres avoir recu 3 messages d'agents depuis le dernier rapport |
 | A chaque transition de phase | Fin de DEV → REVIEW, fin de REVIEW → QA, etc. |
-| Sur /progression | Quand l'utilisateur ou le teamleader invoque la commande |
+| Sur /progression | Quand l'utilisateur ou le main invoque la commande |
 
 > **Regle** : l'utilisateur ne doit jamais avoir a demander ou en est l'equipe.
 > Si tu enchaînes plusieurs reponses de teammates sans publier de tableau, c'est un bug.
@@ -515,7 +515,7 @@ SendMessage({ to: "dev-frontend",  content: "Statut — format: [AGENT] | [STATU
 **Points d'attention** : [blocages ou retards — ou "RAS"]
 ```
 
-3. Si un agent ne repond pas : le marquer `⚠️ Sans reponse` et envoyer un SendMessage au teamleader
+3. Si un agent ne repond pas : le marquer `⚠️ Sans reponse` et envoyer un SendMessage au main
    pour le reveiller. **Ne pas prendre le relais soi-meme.**
 
 ## État Persistant du Workflow

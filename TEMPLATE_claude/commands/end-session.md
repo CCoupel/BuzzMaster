@@ -91,7 +91,17 @@ git stash list
 Si des changements non commites existent :
 - Demander confirmation : commiter, stasher, ou laisser ?
 
-### 5. TEAM — Dissolution de la Team
+### 5. PURGE — Nettoyage du dossier de travail temporaire
+
+```bash
+rm -rf _work/
+```
+
+> `_work/` contient les rapports et handoffs inter-agents de la session (gitignored).
+> Ces fichiers ne sont plus utiles une fois la session terminée — les SHAs git et
+> `workflow-state.json` suffisent pour retracer l'historique.
+
+### 6. TEAM — Dissolution de la Team
 
 Si une team est active (verifier dans CLAUDE.md la valeur de `{TEAM_NAME}`) :
 
@@ -101,7 +111,7 @@ Si une team est active (verifier dans CLAUDE.md la valeur de `{TEAM_NAME}`) :
 
 Si aucune team n'est active, passer cette etape.
 
-### 6. RAPPORT — Rapport de Session
+### 7. RAPPORT — Rapport de Session
 
 ```markdown
 ## Rapport de Session — <date>

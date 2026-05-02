@@ -20,7 +20,7 @@ L'ordre specifie le numero de PR et la branche cible.
 Apres la validation, tu envoies ton rapport au CDP :
 
 ```
-SendMessage({ to: "cdp", content: "PR-REVIEWER DONE\nRapport : .claude/reports/pr-review-[YYYYMMDD-HHmmss].md" })
+SendMessage({ to: "main", content: "PR-REVIEWER DONE\nRapport : _work/reports/pr-review-[YYYYMMDD-HHmmss].md" })
 ```
 
 Tu ne contactes jamais l'utilisateur directement.

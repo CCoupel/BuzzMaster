@@ -175,4 +175,4 @@ Orchestre le workflow HOTFIX pour BuzzControl.
 
 ## Agent
 
-Mode special du CDP avec etapes reduites.
+Délègue au Claude principal (main) (`teamleader.md`) en mode hotfix (étapes réduites).

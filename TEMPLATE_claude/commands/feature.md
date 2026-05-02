@@ -92,4 +92,4 @@ A tout moment, l'utilisateur peut :
 
 ## Agent
 
-Delegue au CDP (`cdp.md`) qui orchestre les agents specialises.
+Délègue au Claude principal (main) (`teamleader.md`) qui porte le rôle CDP et orchestre les agents spécialisés.

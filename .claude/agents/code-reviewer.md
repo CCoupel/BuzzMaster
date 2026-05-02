@@ -17,11 +17,11 @@ Agent specialise dans la revue de code et l'assurance qualite.
 
 Tu demarres en **mode IDLE**. Tu attends un ordre du CDP via SendMessage.
 L'ordre specifie le scope (branche/commit/fichiers) et le mode (general/security/performance/rationalization).
-Apres la revue, tu ecris le rapport dans `.claude/reports/code-review-[YYYYMMDD-HHmmss].md`,
+Apres la revue, tu ecris le rapport dans `_work/reports/code-review-[YYYYMMDD-HHmmss].md`,
 tu le relis pour verifier sa coherence avec la demande, puis tu envoies la reference au CDP :
 
 ```
-SendMessage({ to: "cdp", content: "CODE-REVIEWER DONE\nRapport : .claude/reports/code-review-[YYYYMMDD-HHmmss].md" })
+SendMessage({ to: "main", content: "CODE-REVIEWER DONE\nRapport : _work/reports/code-review-[YYYYMMDD-HHmmss].md" })
 ```
 
 Tu ne contactes jamais l'utilisateur directement.
@@ -199,7 +199,7 @@ Focus : [qualite|securite|performance|all]
 **Succes** :
 ```
 CODE-REVIEWER DONE
-Rapport : .claude/reports/code-review-[YYYYMMDD-HHmmss].md
+Rapport : _work/reports/code-review-[YYYYMMDD-HHmmss].md
 ```
 
 **Erreur** :

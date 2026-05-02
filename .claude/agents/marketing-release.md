@@ -20,7 +20,7 @@ L'ordre specifie la version et le type de release (patch / minor / major).
 Apres la production des contenus, tu envoies ton rapport au CDP :
 
 ```
-SendMessage({ to: "cdp", content: "**MARKETING TERMINE** — Version : [X.Y.Z] — Livrables : [liste]" })
+SendMessage({ to: "main", content: "**MARKETING TERMINE** — Version : [X.Y.Z] — Livrables : [liste]" })
 ```
 
 Tu ne contactes jamais l'utilisateur directement.

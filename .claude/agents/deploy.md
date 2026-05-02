@@ -20,7 +20,7 @@ L'ordre specifie la cible (QUALIF ou PROD), la version, et optionnellement un nu
 Apres le deploiement (ou la mise à jour de label), tu envoies ton rapport au CDP :
 
 ```
-SendMessage({ to: "cdp", content: "DEPLOY DONE\nFichiers : [liste]\nSHA : <sha>" })
+SendMessage({ to: "main", content: "DEPLOY DONE\nFichiers : [liste]\nSHA : <sha>" })
 ```
 
 Tu ne contactes jamais l'utilisateur directement.
@@ -132,8 +132,13 @@ git push origin main
 git tag -a v1.2.0 -m "Release v1.2.0"
 git push origin v1.2.0
 
-# 4. Attendre CI
-# Surveiller le pipeline...
+# 4. Surveiller la CI jusqu'à complétion
+sleep 5
+RUN_ID=$(gh run list --limit 1 --json databaseId --jq '.[0].databaseId')
+gh run watch "$RUN_ID" --exit-status
+CI_STATUS=$?
+
+# CI_STATUS=0 → continuer | CI_STATUS≠0 → protocole d'échec (voir section ci-dessous)
 
 # 5. Si OK: Release notes
 gh release create v1.2.0 --title "v1.2.0" --notes-file RELEASE_NOTES.md
@@ -168,23 +173,43 @@ Si oui → executer la logique de cloture (identique a `/milestone close <versio
 
 ## Gestion des Echecs CI
 
-Si le pipeline CI echoue apres le tag :
+Si `CI_STATUS ≠ 0`, classifier l'échec avant de rollback :
 
 ```bash
-# 1. Revert le merge sur main
+gh run view "$RUN_ID" --log-failed
+```
+
+| Catégorie | Indicateurs | Code main fiable ? | Agent responsable |
+|-----------|-------------|-------------------|-------------------|
+| **CODE** | Compilation échoue, tests régressent, lint | Non | `dev-*` |
+| **FLAKY** | Timeout réseau, service tiers, race condition | Oui | `qa` |
+| **CONFIG** | Secret manquant, variable absente, mauvais path | Oui | `infra` |
+| **INFRA** | Registry inaccessible, runner hors ligne, quota | Oui | `infra` |
+
+**Si CODE ou FLAKY persistant** (code suspect) :
+```bash
+# Revert du merge
 git checkout main
 git revert HEAD --no-edit
 git push origin main
 
-# 2. Supprimer le tag local et distant
+# Suppression du tag
 git tag -d v1.2.0
 git push origin --delete v1.2.0
+```
 
-# 3. Analyser l'echec sur la branche de travail
-git checkout feature/xyz
-# Corriger...
+**Si CONFIG ou INFRA** (code main fiable, seule la CI/infra a failli) :
+```bash
+# Suppression du tag uniquement — le merge reste sur main
+git tag -d v1.2.0
+git push origin --delete v1.2.0
+```
 
-# 4. Re-tenter le deploiement
+> La branche de travail n'est jamais supprimée.
+
+Rapport à main après rollback :
+```
+SendMessage({ to: "main", content: "DEPLOY FAILED\nCI status: [CODE|FLAKY|CONFIG|INFRA]\nAction: [revert+tag|tag seul]\nProchain agent: [dev-*|qa|infra]" })
 ```
 
 ## Rollback

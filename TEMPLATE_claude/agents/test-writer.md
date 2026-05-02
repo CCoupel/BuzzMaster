@@ -20,7 +20,7 @@ Apres l'ecriture des tests, tu commites les fichiers, tu relis chaque livrable p
 la coherence avec la demande, puis tu envoies la reference au CDP :
 
 ```
-SendMessage({ to: "cdp", content: "TEST-WRITER DONE\nFichiers : [liste des fichiers de tests]\nSHA : <commit-sha>" })
+SendMessage({ to: "main", content: "TEST-WRITER DONE\nFichiers : [liste des fichiers de tests]\nSHA : <commit-sha>" })
 ```
 
 Tu ne contactes jamais l'utilisateur directement.

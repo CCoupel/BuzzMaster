@@ -11,25 +11,26 @@ Au demarrage, chaque agent :
 
 ```
 1. Lit ce fichier (TEAMMATES_PROTOCOL.md)
-2. Lit son propre fichier de spec (.claude/agents/<nom>.md)
-3. Attend les instructions du CDP
+2. Lit son propre fichier de spec (.claude/agents/<nom>.template.md)
+   puis .claude/agents/<nom>.md si ce fichier existe (adaptations projet)
+3. Attend les instructions du Claude principal
 ```
 
-**REGLE ABSOLUE** : Rester en mode IDLE jusqu'a recevoir un ordre explicite du CDP.
+**REGLE ABSOLUE** : Rester en mode IDLE jusqu'a recevoir un ordre explicite du Claude principal.
 Ne pas verifier la TaskList. Ne pas prendre d'initiative. Attendre.
 
 **REGLE DE CONFIRMATION** : Si tu souhaites confirmer ton demarrage, envoie
-`SendMessage({to: "cdp", content: "[NOM-AGENT] DEMARRE — en attente d'ordres"})` — jamais a Claude directement.
+`SendMessage({to: "main", content: "[NOM-AGENT] DEMARRE — en attente d'ordres"})` — jamais a Claude directement.
 
 ---
 
 ## 2. Reception d'un Ordre
 
 Le CDP active un agent en lui envoyant un message via `SendMessage`.
-Quand un agent recoit un message du CDP :
+Quand un agent recoit un message du Claude principal :
 
 ```
-Recevoir l'ordre du CDP
+Recevoir l'ordre du Claude principal
     |
     v
 Lire et comprendre la tache
@@ -54,7 +55,7 @@ Retourner en mode IDLE
 
 ### Regles absolues
 
-- **Jamais d'initiative** — attendre l'ordre du CDP
+- **Jamais d'initiative** — attendre l'ordre du Claude principal
 - **Jamais de communication directe** avec l'utilisateur — tout passe par le CDP
 - **Jamais de contact entre agents** — chaque agent ne parle qu'au CDP
 - **Texte naturel uniquement** — pas de JSON structure dans les messages
@@ -68,16 +69,16 @@ Avant d'envoyer le rapport DONE, ecrire le livrable dans le bon emplacement :
 | Type d'agent | Livrable | Emplacement |
 |-------------|----------|-------------|
 | dev-*, test-writer | Code commite | Reference par SHA uniquement |
-| planner, code-reviewer, qa, security | Rapport d'analyse | `.claude/reports/[agent]-[YYYYMMDD-HHmmss].md` |
+| planner, code-reviewer, qa, security | Rapport d'analyse | `_work/reports/[agent]-[YYYYMMDD-HHmmss].md` |
 
 Le message au CDP ne contient que la reference, jamais le contenu :
 ```
-Rapport : .claude/reports/[filename]
+Rapport : _work/reports/[filename]
 ```
 
 ### Handoff — Transmission de Contexte
 
-Avant d'envoyer le DONE, chaque agent écrit son handoff dans `.claude/handoff/[agent]-[YYYYMMDD-HHmmss].md` :
+Avant d'envoyer le DONE, chaque agent écrit son handoff dans `_work/handoff/[agent]-[YYYYMMDD-HHmmss].md` :
 
 ```markdown
 # Handoff — [Agent]
@@ -100,7 +101,7 @@ Avant d'envoyer le DONE, chaque agent écrit son handoff dans `.claude/handoff/[
 
 Le CDP passe la référence du handoff dans le SendMessage au prochain agent :
 ```
-Handoff [agent précédent] : .claude/handoff/[agent]-[timestamp].md
+Handoff [agent précédent] : _work/handoff/[agent]-[timestamp].md
 ```
 
 **Règle** : un agent qui reçoit une référence handoff doit la lire avant de commencer son travail.
@@ -109,7 +110,7 @@ Handoff [agent précédent] : .claude/handoff/[agent]-[timestamp].md
 
 ```
 SendMessage({
-  to: "cdp",
+  to: "main",
   content: "[rapport minimaliste — voir formats ci-dessous]"
 })
 ```
@@ -146,7 +147,7 @@ Quand le CDP demande un statut de progression, repondre avec ce format exact :
 Agent de code (dev-*, test-writer) :
 ```
 [NOM-AGENT] DONE
-Handoff : .claude/handoff/[agent]-[YYYYMMDD-HHmmss].md
+Handoff : _work/handoff/[agent]-[YYYYMMDD-HHmmss].md
 Fichiers : chemin/fichier1, chemin/fichier2
 SHA : <commit-sha>
 ```
@@ -154,8 +155,8 @@ SHA : <commit-sha>
 Agent d'analyse (planner, code-reviewer, qa, security) :
 ```
 [NOM-AGENT] DONE
-Handoff : .claude/handoff/[agent]-[YYYYMMDD-HHmmss].md
-Rapport : .claude/reports/[agent]-[YYYYMMDD-HHmmss].md
+Handoff : _work/handoff/[agent]-[YYYYMMDD-HHmmss].md
+Rapport : _work/reports/[agent]-[YYYYMMDD-HHmmss].md
 ```
 
 En cas d'echec :
@@ -181,7 +182,7 @@ Quand le CDP envoie un `shutdown_request` :
 
 ```
 SendMessage({
-  to: "cdp",
+  to: "main",
   content: "shutdown_response approve: true"
 })
 ```
@@ -194,7 +195,7 @@ SendMessage({
 2. **Un travail a la fois** — terminer une tache avant d'en accepter une autre
 3. **Rapport systematique** — toujours envoyer un rapport au CDP apres chaque tache
 4. **Push proactif** — signaler demarrage, jalons importants, blocages sans attendre d'etre sollicite
-5. **Pas d'initiative** — ne jamais commencer un travail sans ordre du CDP
+5. **Pas d'initiative** — ne jamais commencer un travail sans ordre du Claude principal
 6. **Pas de communication directe** — l'utilisateur parle via le CDP, pas directement
 7. **Texte naturel** — les messages sont lisibles, pas en JSON
 
@@ -205,16 +206,16 @@ SendMessage({
 ```
 [AGENT DEMARRE]
 → Lit TEAMMATES_PROTOCOL.md ✓
-→ Lit .claude/agents/[nom].md ✓
-→ MODE IDLE — en attente d'un ordre du CDP
+→ Lit .claude/agents/[nom].template.md ✓ (puis [nom].md si présent)
+→ MODE IDLE — en attente d'un ordre du Claude principal
 
 [CDP envoie un ordre via SendMessage]
 → "Implemente l'endpoint POST /api/auth avec JWT. Voir contracts/http-endpoints.md."
-→ SendMessage(cdp, "DEV-BACKEND EN COURS — 0% — demarrage implementation /api/auth")
+→ SendMessage(main, "DEV-BACKEND EN COURS — 0% — demarrage implementation /api/auth")
 → [Travail effectue...]
-→ SendMessage(cdp, "DEV-BACKEND DONE\nFichiers : internal/auth/handler.go, internal/auth/handler_test.go\nSHA : a3f1c2d")
+→ SendMessage(main, "DEV-BACKEND DONE\nFichiers : internal/auth/handler.go, internal/auth/handler_test.go\nSHA : a3f1c2d")
 → MODE IDLE — en attente du prochain ordre
 
 [CDP envoie shutdown_request]
-→ SendMessage(cdp, "shutdown_response approve: true")
+→ SendMessage(main, "shutdown_response approve: true")
 ```

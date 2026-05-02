@@ -71,8 +71,8 @@ puis deploiera les commandes et agents dans `.claude/`.
 | Categorie | Emplacement | Comportement |
 |-----------|-------------|--------------|
 | **TEMPLATE** | `TEMPLATE_claude/` (racine projet) | Fetche depuis GitHub, gitignore, jamais edite manuellement |
-| **COMMANDES** | `.claude/commands/` | Depuis `TEMPLATE_claude/commands/*.md`, copie directe — gitignore (sauf `init-project.md`) |
-| **AGENTS TEMPLATE** | `.claude/agents/*.md` + `.claude/agents/context/` | Depuis `TEMPLATE_claude/agents/*.md`, copie directe — gitignore |
+| **COMMANDES** | `.claude/commands/*.md` | Depuis `TEMPLATE_claude/commands/*.md`, déployé en `*.md` — gitignore |
+| **AGENTS TEMPLATE** | `.claude/agents/*.template.md` + `.claude/agents/context/` | Depuis `TEMPLATE_claude/agents/*.md`, déployé en `*.template.md` — gitignore |
 | **PROJET** | `.claude/CLAUDE.md`, `project-config.json`, `memory/`, `agents/dev-*.md` | Trackes dans git, jamais ecrases |
 
 ---
@@ -137,25 +137,27 @@ gh api repos/$TEMPLATE_REPO/git/trees/$TEMPLATE_BRANCH?recursive=1 \
 
 #### 4. Deployer dans .claude/
 
-Les fichiers source sont nommés directement `feature.md`, `cdp.md`, etc.
-La copie est directe — aucun renommage nécessaire.
+Les commandes sont déployées en `*.md` — directement invocables comme `/xxx`, jamais éditées manuellement.
+Les agents sont déployés en `*.template.md` — les adaptations projet vont dans des fichiers `*.md` compagnons (voir COMMON.md §13).
 
 ```bash
 mkdir -p .claude/commands .claude/agents
 
-# Commandes : copie directe
+# Commandes : déployé en *.md (invocables directement comme /xxx)
 for src in TEMPLATE_claude/commands/*.md; do
-  cp "$src" ".claude/commands/$(basename $src)"
-  echo "  ✓ .claude/commands/$(basename $src)"
+  dest=".claude/commands/$(basename $src)"
+  cp "$src" "$dest"
+  echo "  ✓ $dest"
 done
 
-# Agents : copie directe
+# Agents : déployé en *.template.md
 for src in TEMPLATE_claude/agents/*.md; do
-  cp "$src" ".claude/agents/$(basename $src)"
-  echo "  ✓ .claude/agents/$(basename $src)"
+  dest=".claude/agents/$(basename $src .md).template.md"
+  cp "$src" "$dest"
+  echo "  ✓ $dest"
 done
 
-# Contextes partagés
+# Contextes partagés (restent en *.md — lus directement, pas de convention template/projet)
 cp -r TEMPLATE_claude/agents/context .claude/agents/context
 ```
 
@@ -216,11 +218,26 @@ Migration requise. Continuer ? [O/n]
 
 Executer la procedure "Fetch du Template depuis GitHub" ci-dessus.
 
+### Etape M1b — Migration : renommer les commandes legacy *.template.md → *.md
+
+Les commandes etaient deployees en `*.template.md` avant la v2.9.7. Les renommer avant de nettoyer le cache git.
+
+```bash
+for f in .claude/commands/*.template.md; do
+  [[ -f "$f" ]] || continue
+  mv "$f" "${f/.template.md/.md}"
+  echo "  ✓ migration commande : $(basename $f) → $(basename ${f/.template.md/.md})"
+done
+```
+
 ### Etape M2 — Nettoyer .claude/ des anciens fichiers template
 
 ```bash
-git rm --cached -r .claude/commands/ 2>/dev/null || true
+git rm --cached .claude/commands/*.template.md 2>/dev/null || true
+git rm --cached .claude/commands/*.md 2>/dev/null || true
+# Note : après migration v3, les commandes sont en *.md (gitignored)
 git rm --cached -r .claude/agents/context/ 2>/dev/null || true
+git rm --cached .claude/agents/*.template.md 2>/dev/null || true
 git rm --cached .claude/agents/*.md 2>/dev/null || true
 git rm --cached -r .claude/templates/ 2>/dev/null || true
 git rm --cached .claude/.template-source.json 2>/dev/null || true
@@ -616,7 +633,7 @@ et remplacer les placeholders :
 
 | Placeholder | Exemple |
 |-------------|---------|
-| `{PROJECT_NAME}` | `MyApp` |
+| `BuzzControl` | `MyApp` |
 | `{BINARY_NAME}` | `myapp` |
 | `{BACKEND_DIR}` | `backend` |
 | `{FRONTEND_DIR}` | `frontend` |
@@ -660,21 +677,18 @@ TYPECHECK_CMD_ESC=$(escape_sed "$TYPECHECK_CMD")
 Appliquer la substitution sur les fichiers deployes (commandes + agents generiques) :
 
 ```bash
-for f in .claude/commands/*.md .claude/agents/*.md; do
+for f in .claude/commands/*.md .claude/agents/*.template.md; do
   name=$(basename "$f")
-  # Ne pas toucher aux fichiers projet
-  [[ "$name" == "init-project.md" ]] && continue
-  [[ "$name" =~ ^dev- ]]             && continue
   sed -i \
-    -e "s|{PROJECT_NAME}|${PROJECT_NAME}|g" \
-    -e "s|{TEAM_NAME}|${TEAM_NAME}|g"       \
-    -e "s|{ORG}|${ORG}|g"                   \
-    -e "s|{PROJECT}|${PROJECT}|g"            \
-    -e "s|{BUILD_CMD}|${BUILD_CMD_ESC}|g"        \
-    -e "s|{TEST_CMD}|${TEST_CMD_ESC}|g"          \
-    -e "s|{LINT_CMD}|${LINT_CMD_ESC}|g"          \
-    -e "s|{AUDIT_CMD}|${AUDIT_CMD_ESC}|g"        \
-    -e "s|{TYPECHECK_CMD}|${TYPECHECK_CMD_ESC}|g" \
+    -e "s|BuzzControl|$BuzzControl|g" \
+    -e "s|TEAM-Buzz|$TEAM-Buzz|g"       \
+    -e "s|CCoupel|$CCoupel|g"                   \
+    -e "s|BuzzMaster|$BuzzMaster|g"            \
+    -e "s|cd server-go && go build ./cmd/server|${BUILD_CMD_ESC}|g"        \
+    -e "s|cd server-go && go test ./...|${TEST_CMD_ESC}|g"          \
+    -e "s|cd server-go && go vet ./...|${LINT_CMD_ESC}|g"          \
+    -e "s|cd server-go && govulncheck ./...|${AUDIT_CMD_ESC}|g"        \
+    -e "s||${TYPECHECK_CMD_ESC}|g" \
     "$f"
   echo "  ✓ placeholders appliques dans $name"
 done
@@ -690,6 +704,21 @@ cp TEMPLATE_claude/CLAUDE_TEMPLATE.md .claude/CLAUDE.md
 # .gitignore projet
 cp TEMPLATE_claude/gitignore-for-projects .gitignore
 ```
+
+#### Labels GitHub de suivi de phase
+
+Créer les labels de phase sur le repo GitHub (idempotent — `--force` met à jour si déjà existant) :
+
+```bash
+gh label create "PLANNING"  --color "0075ca" --description "Issue en cours de planification" --force
+gh label create "EN COURS"  --color "e4e669" --description "Issue en cours de développement" --force
+gh label create "EN REVIEW" --color "d876e3" --description "Issue en cours de revue de code"  --force
+gh label create "EN QA"     --color "f9d0c4" --description "Issue en cours de tests QA"       --force
+gh label create "DONE"      --color "0e8a16" --description "Issue livrée et validée"           --force
+```
+
+> Si le repo n'a pas encore de remote GitHub configuré, sauter cette étape et noter dans
+> le Message de Fin : "Labels GitHub à créer manuellement ou relancer /init-project après `git remote add`."
 
 ---
 
@@ -734,13 +763,17 @@ Ne pas fetcher GitHub a ce stade — utiliser le template local tel qu'il est.
 Calculer le statut de chaque fichier (NOUVEAU / MODIFIE / INCHANGE / RELIQUAT) selon
 la meme logique que l'etape d3 ci-dessous, puis afficher la synthese :
 
+Pour chaque fichier MODIFIE, lire les deux versions et generer une explication courte
+(1 ligne max) decrivant ce qui a change.
+
 ```
 Ce projet est deja initialise (config du YYYY-MM-DD).
 Template local : CCoupel/claude_project_template — dernier sync : <date> (<commit>)
 
 Changements disponibles (template local) :
   [+] feature, hotfix                   ← 2 nouveaux
-  [~] cdp, bugfix                       ← 2 modifies
+  [~] cdp       — <explication courte du changement>
+  [~] bugfix    — <explication courte du changement>
   [!] old-command                       ← 1 reliquat
   (12 fichiers inchanges)
 
@@ -763,16 +796,17 @@ e) Annuler
 
 Executer la procedure "Fetch du Template depuis GitHub" pour mettre a jour `TEMPLATE_claude/`.
 
-#### Etape d1b — Migration : renommer les fichiers legacy *.template.md
+#### Etape d1b — Migration : renommer les commandes legacy *.template.md → *.md
 
-Avant tout calcul, renommer tous les fichiers `*.template.md` residuels
-dans `.claude/commands/` et `.claude/agents/` (deployes avant la v2.4.0).
+Avant tout calcul, renommer les commandes `*.template.md` residuelles dans `.claude/commands/`
+(déployées avant la v2.9.7 où les commandes étaient encore en `*.template.md`).
+Les agents gardent leur extension `*.template.md` — ne pas les toucher.
 
 ```bash
-for f in .claude/commands/*.template.md .claude/agents/*.template.md; do
+for f in .claude/commands/*.template.md; do
   [[ -f "$f" ]] || continue
   mv "$f" "${f/.template.md/.md}"
-  echo "  ✓ migration : $(basename $f) → $(basename ${f/.template.md/.md})"
+  echo "  ✓ migration commande : $(basename $f) → $(basename ${f/.template.md/.md})"
 done
 ```
 
@@ -793,15 +827,18 @@ done)
 #### Etape d3 — Comparer avec les fichiers deployes
 
 ```bash
-# Commandes actuellement deployees (hors init-project.md)
-DEPLOYED_COMMANDS=$(ls .claude/commands/*.md 2>/dev/null \
-  | xargs -I{} basename {} .md \
-  | grep -v "^init-project$")
+# Commandes template déployées (*.md ou *.template.md legacy — hors context/)
+DEPLOYED_COMMANDS=$(
+  { ls .claude/commands/*.md 2>/dev/null; ls .claude/commands/*.template.md 2>/dev/null; } \
+  | grep -v '/context/' \
+  | xargs -I{} basename {} \
+  | sed 's/\.template\.md$//' | sed 's/\.md$//' \
+  | sort -u
+)
 
-# Agents deployes (hors dev-* qui sont des fichiers projet)
-DEPLOYED_AGENTS=$(ls .claude/agents/*.md 2>/dev/null \
-  | xargs -I{} basename {} .md \
-  | grep -v "^dev-")
+# Agents template déployés (*.template.md uniquement — les *.md et dev-*.md sont des fichiers projet)
+DEPLOYED_AGENTS=$(ls .claude/agents/*.template.md 2>/dev/null \
+  | xargs -I{} basename {} .template.md)
 ```
 
 Pour chaque fichier compare, determiner le statut :
@@ -815,6 +852,9 @@ Pour chaque fichier compare, determiner le statut :
 
 #### Etape d4 — Presenter le rapport
 
+Pour chaque fichier MODIFIE, lire les deux versions et generer une explication courte
+(1 ligne max) decrivant ce qui a change (nouvelle regle, section ajoutee, comportement modifie...).
+
 ```
 Synchronisation depuis github.com/<repo>
 
@@ -822,15 +862,15 @@ Synchronisation depuis github.com/<repo>
   Dernier commit : def5678  (2026-04-16)
 
   Commandes :
-  [+] feature          ← nouveau
-  [~] bugfix           ← modifie
-  [=] backlog          ← inchange (x12...)
-  [!] old-command      ← RELIQUAT (absent du nouveau template)
+  [+] feature                            ← nouveau
+  [~] bugfix    — <explication courte>   ← modifie
+  [=] backlog                            ← inchange (x12...)
+  [!] old-command                        ← RELIQUAT (absent du nouveau template)
 
   Agents :
-  [~] cdp              ← modifie
-  [=] code-reviewer    ← inchange (x7...)
-  [!] old-agent        ← RELIQUAT (absent du nouveau template)
+  [~] cdp       — <explication courte>   ← modifie
+  [=] code-reviewer                      ← inchange (x7...)
+  [!] old-agent                          ← RELIQUAT (absent du nouveau template)
 
   Nouveaux   : N
   Modifies   : N
@@ -857,10 +897,10 @@ for src in TEMPLATE_claude/commands/*.md; do
 done
 
 for src in TEMPLATE_claude/agents/*.md; do
-  dest=".claude/agents/$(basename $src)"
+  dest=".claude/agents/$(basename $src .md).template.md"
   if ! cmp -s "$src" "$dest" 2>/dev/null; then
     cp "$src" "$dest"
-    echo "  ✓ agents/$(basename $src) mis a jour"
+    echo "  ✓ agents/$(basename $src .md).template.md mis a jour"
   fi
 done
 
@@ -869,7 +909,7 @@ cp -r TEMPLATE_claude/agents/context .claude/agents/context
 
 **Etape systematique — Appliquer les placeholders sur TOUS les fichiers deployes :**
 
-Scanner l'integralite de `.claude/commands/` et `.claude/agents/` et appliquer
+Scanner l'integralite de `.claude/commands/*.md` (hors `context/`) et `.claude/agents/*.template.md` et appliquer
 la procedure "Application des placeholders" (section 4 ci-dessus) sur tous les fichiers,
 en lisant les valeurs depuis `.claude/project-config.json` existant.
 
@@ -887,13 +927,121 @@ done
 # Supprimer les agents reliquats
 for name in $DEPLOYED_AGENTS; do
   if ! echo "$EXPECTED_AGENTS" | grep -q "^${name}$"; then
-    rm ".claude/agents/${name}.md"
-    echo "  ✗ .claude/agents/${name}.md supprime (reliquat)"
+    rm ".claude/agents/${name}.template.md"
+    echo "  ✗ .claude/agents/${name}.template.md supprime (reliquat)"
   fi
 done
 ```
 
-#### Etape d6 — Rapport final
+#### Etape d5b — Détection de dérive template/projet
+
+Exécutée à **chaque sync** pour détecter les dérives dans les deux sens.
+Silencieuse si aucun `*.md` compagnon n'existe ou si tout est propre.
+
+**Détection des fichiers compagnons :**
+
+```bash
+COMPANIONS=()
+for tmpl in .claude/agents/*.template.md; do
+  base=$(basename "$tmpl" .template.md)
+  dir=$(dirname "$tmpl")
+  companion="$dir/$base.md"
+  [[ -f "$companion" ]] && COMPANIONS+=("$companion")
+done
+```
+
+Si `COMPANIONS` est vide → sauter cette étape silencieusement.
+
+**Analyse de chaque fichier compagnon :**
+
+Pour chaque `xxx.md`, lire les deux fichiers et détecter les dérives dans les **deux sens** :
+
+| Statut | Critère | Signal |
+|--------|---------|--------|
+| `IDENTIQUE` | `xxx.md` quasiment identique au template | Duplication inutile — peut être supprimé |
+| `DERIVE-TEMPLATE` | Contenu de `xxx.md` couvert par le nouveau template | Template a rattrapé le projet — simplification possible |
+| `DERIVE-PROJET` | Contenu ajouté dans `xxx.md` non présent dans le template | Dérive projet — vérifier que c'est intentionnel |
+| `PROPRE` | `xxx.md` contient uniquement du contenu spécifique, sans overlap | Aucune action requise |
+
+> **`DERIVE-TEMPLATE`** : une mise à jour du template intègre nativement ce que le projet
+> avait customisé → la règle dans `xxx.md` est devenue redondante.
+>
+> **`DERIVE-PROJET`** : `xxx.md` a grossi depuis la dernière sync → vérifier que les ajouts
+> sont intentionnels et non des duplications accidentelles.
+
+**Rapport (affiché uniquement si au moins un fichier non-PROPRE) :**
+
+```
+Analyse drift template/projet :
+
+  Commandes :
+  [=] feature.md      — identique au template → peut être supprimé
+  [↓] bugfix.md       — le template couvre maintenant "règle X" → simplification possible
+  [↑] deploy.md       — 2 sections ajoutées depuis la dernière sync → vérifier intentionnel
+  [*] backlog.md      — propre (contenu projet uniquement)
+
+  Agents :
+  [↓] cdp.md          — le template couvre maintenant "phase CLARIFICATION" → simplification possible
+  [↑] qa.md           — 1 section ajoutée → vérifier intentionnel
+
+  [=] N identiques  [↓] N simplifiables  [↑] N à vérifier  [*] N propres
+```
+
+**Actions proposées :**
+
+```
+  [N] Nettoyer automatiquement (supprimer IDENTIQUES, extraire DERIVE-PROJET vers xxx.md épuré)
+  [I] Inspecter fichier par fichier
+  [S] Ignorer — continuer sans modification
+```
+
+**Option N — Nettoyage automatique :**
+
+Pour chaque fichier `IDENTIQUE` :
+```bash
+rm "$companion"
+echo "  ✗ $(basename $companion) supprimé (identique au template)"
+```
+
+Pour chaque fichier `DERIVE-PROJET` ou `MIXTE` :
+- Lire `xxx.md` (agent projet) et `xxx.template.md` (agent template)
+- Identifier les blocs présents dans `xxx.md` mais absents du template
+  (diff sémantique : sections ajoutées, règles supplémentaires, surcharges)
+- Réécrire `xxx.md` avec uniquement ces blocs
+- Confirmer : `"  ✓ $(basename $companion) — N blocs projet conservés"`
+
+Pour chaque fichier `DERIVE-TEMPLATE` :
+- Afficher la règle/section devenue redondante
+- Proposer de la retirer de `xxx.md` avec confirmation
+
+**Option I — Fichier par fichier :**
+
+Pour chaque fichier non-PROPRE, afficher le diff annoté et proposer l'action :
+```
+[xxx.md] — dérive détectée
+
+  [↓] Section "Règle X" — couverte par le template mis à jour → retirer ?
+  [↑] Section "Règle Y" — ajout projet non présent dans le template → conserver ?
+
+  [R] Retirer les redondances  [C] Conserver tel quel  [E] Editer manuellement
+```
+
+> Le système fonctionne correctement quelle que soit l'action choisie.
+> La dérive est un signal de maintenance, pas une erreur bloquante.
+
+#### Etape d6 — Vérifier et créer les labels GitHub de phase
+
+S'assurer que les labels de suivi existent sur le repo (même commande que l'init, idempotent) :
+
+```bash
+gh label create "PLANNING"  --color "0075ca" --description "Issue en cours de planification" --force
+gh label create "EN COURS"  --color "e4e669" --description "Issue en cours de développement" --force
+gh label create "EN REVIEW" --color "d876e3" --description "Issue en cours de revue de code"  --force
+gh label create "EN QA"     --color "f9d0c4" --description "Issue en cours de tests QA"       --force
+gh label create "DONE"      --color "0e8a16" --description "Issue livrée et validée"           --force
+```
+
+#### Etape d7 — Rapport final
 
 ```
 Synchronisation terminee.
@@ -901,6 +1049,7 @@ Synchronisation terminee.
   Commandes mises a jour : N
   Agents mis a jour      : N
   Reliquats supprimes    : N
+  Labels GitHub          : vérifiés (PLANNING, EN COURS, EN REVIEW, EN QA, DONE)
 
   Fichiers PROJET preserves (non touches) :
     ✓ .claude/CLAUDE.md

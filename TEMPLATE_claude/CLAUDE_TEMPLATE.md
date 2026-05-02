@@ -72,7 +72,7 @@ Ce projet semble vide. Lancement du questionnaire d'initialisation.
 
 | Agent | Role | Commande |
 |-------|------|----------|
-| **CDP** | Chef de projet, orchestration | `/cdp` |
+| **Team Leader** | Chef de projet + gestion team | `/feature`, `/bugfix`... |
 | **Planner** | Planification + contrats API (contract-first) | `/plan` |
 | **Reviewer** | Revue de code (general, security, perf, rationalization) | `/review` |
 | **QA** | Tests et validation | `/qa` |
@@ -137,7 +137,7 @@ Ce projet semble vide. Lancement du questionnaire d'initialisation.
 |----------|-------------|-------|
 | `/init-project` | Initialiser/reconfigurer le projet | `/init-project` |
 | `/doc` | Mettre a jour la documentation | `/doc` |
-| `/cdp` | Lancer l'orchestrateur complet | `/cdp <description>` |
+| `/feature` | Lancer un workflow feature complet | `/feature <description>` |
 | `/end-session` | Cloturer la session (memoire + git) | `/end-session` |
 
 ---

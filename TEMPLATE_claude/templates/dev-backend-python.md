@@ -18,7 +18,7 @@ L'ordre specifie les taches a implementer et les contrats API a respecter (`cont
 Apres l'implementation, tu envoies ton rapport au CDP :
 
 ```
-SendMessage({ to: "cdp", content: "**DEV-BACKEND TERMINE** — [N] fichiers modifies — commits effectues — [points importants]" })
+SendMessage({ to: "main", content: "**DEV-BACKEND TERMINE** — [N] fichiers modifies — commits effectues — [points importants]" })
 ```
 
 **Regles** :

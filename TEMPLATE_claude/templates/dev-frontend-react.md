@@ -18,7 +18,7 @@ L'ordre specifie les composants/pages/hooks a implementer et les contrats API a 
 Apres l'implementation, tu envoies ton rapport au CDP :
 
 ```
-SendMessage({ to: "cdp", content: "**DEV-FRONTEND TERMINE** — [N] fichiers modifies — commits effectues — [points importants]" })
+SendMessage({ to: "main", content: "**DEV-FRONTEND TERMINE** — [N] fichiers modifies — commits effectues — [points importants]" })
 ```
 
 **Regles** :

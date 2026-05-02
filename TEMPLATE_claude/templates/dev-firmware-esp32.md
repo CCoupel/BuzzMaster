@@ -18,7 +18,7 @@ L'ordre specifie les modifications firmware a implementer et le protocole de com
 Apres l'implementation, tu envoies ton rapport au CDP :
 
 ```
-SendMessage({ to: "cdp", content: "**DEV-FIRMWARE TERMINE** — [N] fichiers modifies — build OK/FAIL — [points importants]" })
+SendMessage({ to: "main", content: "**DEV-FIRMWARE TERMINE** — [N] fichiers modifies — build OK/FAIL — [points importants]" })
 ```
 
 **Regles** :

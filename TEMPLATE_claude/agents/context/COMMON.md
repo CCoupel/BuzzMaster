@@ -216,6 +216,14 @@ Chaque agent doit :
 
 ---
 
+## Adaptations Projet
+
+Chaque agent `xxx.template.md` peut avoir un fichier compagnon `xxx.md` dans le même dossier.
+**Si ce fichier existe, le lire après le fichier `.template.md`** — il contient les règles et adaptations spécifiques au projet.
+Pour toute modification du comportement de cet agent, écrire dans `xxx.md` (jamais dans `xxx.template.md`).
+
+---
+
 ## References Projet
 
 > **Details complets** : Voir `context/PROJECT_CONTEXT.md`

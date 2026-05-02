@@ -47,7 +47,16 @@ Si mise a jour disponible, afficher **avant de continuer** :
 - Si **non** → stopper ici, l'utilisateur lance `/init-project`
 - Si **oui** → continuer avec les etapes suivantes
 
-### Etape 2 — Lecture de la memoire projet
+### Etape 2 — Purge du dossier de travail temporaire
+
+```bash
+rm -rf _work/
+```
+
+> Supprime les rapports et handoffs d'une session précédente éventuellement non clôturée.
+> Sans risque : `_work/` est gitignored et jamais lu avant le démarrage d'un workflow.
+
+### Etape 3 — Lecture de la memoire projet
 
 Lire `.claude/memory/MEMORY.md` (source de verite unique).
 
@@ -57,55 +66,16 @@ Extraire :
 - Regles critiques du projet
 - Corrections de comportement a appliquer
 
-### Etape 3 — Creation de la TEAM
+### Etape 4 — Creation de la TEAM
 
 **Sans demander confirmation**, creer immediatement la team :
 
 1. **TeamCreate** avec le nom `{TEAM_NAME}` (defini dans CLAUDE.md)
 
-2. **Spawner TOUS les agents en parallele** (un seul message avec N appels Task) :
+> Le Claude principal (`main`) est l'orchestrateur de la team — pas d'agent supplémentaire à spawner.
+> Les agents spécialisés (planner, dev-*, qa...) seront spawnes par `main` au démarrage de chaque workflow.
 
-| Nom agent | Type (subagent_type) | Role | Modele |
-|-----------|---------------------|------|--------|
-| `cdp` | `cdp` | Chef de Projet — Team Leader | sonnet |
-| `planner` | `implementation-planner` | Planification + contrats API | sonnet |
-| `dev-backend` | `dev-backend` | Backend (stack detectee) | sonnet |
-| `dev-frontend` | `dev-frontend` | Frontend (stack detectee) | sonnet |
-| `code-reviewer` | `code-reviewer` | Revue de code | sonnet |
-| `qa` | `qa` | Tests et validation | sonnet |
-| `security` | `security` | Audit securite | sonnet |
-| `doc-updater` | `doc-updater` | Documentation | sonnet |
-| `deployer` | `deploy` | Deploiement QUALIF/PROD | sonnet |
-| `infra` | `infra` | Infrastructure Docker/Helm/CI | sonnet |
-| `marketing` | `marketing-release` | Communication de release | sonnet |
-
-> **Adapter la liste** selon la stack du projet (definie dans `project-config.json`) :
-> - Pas de frontend → ne pas spawner `dev-frontend`
-> - Firmware → ajouter `dev-firmware` (subagent_type: `dev-firmware`)
-> - Pas de K8s/Docker → `infra` optionnel
-
-**Prompt pour `cdp`** (team leader) :
-
-```
-Lis .claude/agents/cdp.md et applique ces instructions pour toute la session.
-
-Tu es le Chef de Projet de {PROJECT_NAME} dans la team {TEAM_NAME}.
-Memoire projet : .claude/memory/MEMORY.md
-
-Attends les instructions de l'utilisateur avant de demarrer un workflow.
-```
-
-**Prompt pour tous les autres agents** :
-
-```
-Lis .claude/agents/context/TEAMMATES_PROTOCOL.md puis .claude/agents/[nom].md,
-et applique ces instructions pour toute la session.
-
-Tu fais partie de la team {TEAM_NAME} sur le projet {PROJECT_NAME}.
-Reste en mode IDLE et attends les ordres du CDP avant de commencer tout travail.
-```
-
-### Etape 4 — Etat du backlog GitHub
+### Etape 5 — Etat du backlog GitHub
 
 Executer les deux requetes en parallele :
 
@@ -124,7 +94,7 @@ gh issue list --state open --limit 50 \
   --jq 'sort_by(.milestone.title, .number) | .[] | [.number, .title, ([.labels[].name] | join(",")), (.milestone.title // "—"), ([.assignees[].login] | join(",") | if . == "" then "-" else . end), .updatedAt[:10]] | @tsv'
 ```
 
-### Etape 5 — Confirmation a l'utilisateur
+### Etape 6 — Confirmation a l'utilisateur
 
 
 
@@ -153,11 +123,7 @@ _(Si aucune issue ouverte : "Aucune issue ouverte.")_
 
 ---
 
-**Agents actifs (IDLE)** :
-- cdp (Chef de Projet — interlocuteur principal)
-- planner / dev-backend / dev-frontend
-- code-reviewer / qa / security
-- doc-updater / deployer / infra / marketing
+**Orchestrateur** : Claude principal (`main`) — les agents spécialisés seront spawnes au démarrage de chaque workflow
 
 **Commandes disponibles** :
 - `/feature <description>` — Nouvelle feature complete
@@ -175,6 +141,6 @@ _(Si aucune issue ouverte : "Aucune issue ouverte.")_
 - La MEMORY projet est la **seule source de verite** au demarrage
 - La TEAM est **toujours creee** sans demander confirmation
 - Le nom de la TEAM est **toujours** `{TEAM_NAME}` (defini dans CLAUDE.md)
-- Le CDP est **toujours le premier agent spawne** (team leader)
-- Tous les autres agents demarrent en **mode IDLE strict** — ils attendent
-  un ordre explicite du CDP via SendMessage, sans verifier la TaskList
+- Le Claude principal (`main`) est l'orchestrateur — aucun agent n'est spawne au démarrage
+- Les agents spécialisés demarrent en **mode IDLE strict** — ils attendent
+  un ordre explicite de `main` via SendMessage, sans verifier la TaskList

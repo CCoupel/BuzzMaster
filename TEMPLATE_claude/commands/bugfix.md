@@ -143,4 +143,4 @@ Orchestre le workflow BUGFIX pour {PROJECT_NAME}.
 
 ## Agent
 
-Delegue au CDP (`cdp.md`) avec mode bugfix.
+Délègue au Claude principal (main) (`teamleader.md`) en mode bugfix.

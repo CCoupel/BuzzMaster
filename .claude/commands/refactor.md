@@ -168,4 +168,4 @@ Orchestre le workflow REFACTOR pour BuzzControl.
 
 ## Agent
 
-Delegue au CDP en mode refactor (pas de DOC, focus sur tests).
+Délègue au Claude principal (main) (`teamleader.md`) en mode refactor (pas de DOC, focus sur tests).
