@@ -179,6 +179,8 @@ func Get() *Config {
 					AutoOpenBrowsers: true,  // Default: enabled
 					Debug:            false, // Default: disabled
 					AutoCheckUpdates: true,  // Default: enabled
+					AckTimeoutMs:     2000,
+					AckMaxRetries:    3,
 				},
 				Game: GameConfig{
 					DefaultDelay: 30,

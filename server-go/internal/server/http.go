@@ -6,6 +6,7 @@ import (
 	"buzzcontrol/internal/config"
 	"buzzcontrol/internal/game"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"io/fs"
@@ -109,12 +110,27 @@ func (h *HTTPServer) Start() error {
 
 	LogInfo(game.LogComponentHTTP, "Server starting on port %d", h.port)
 	go func() {
-		if err := h.server.ListenAndServe(); err != http.ErrServerClosed {
+		for {
+			err := h.server.ListenAndServe()
+			if errors.Is(err, http.ErrServerClosed) {
+				return
+			}
+			if isPortInUse(err) {
+				LogWarn(game.LogComponentHTTP, "Port %d busy, retrying in 500ms...", h.port)
+				time.Sleep(500 * time.Millisecond)
+				continue
+			}
 			LogError(game.LogComponentHTTP, "Server error: %v", err)
+			return
 		}
 	}()
 
 	return nil
+}
+
+func isPortInUse(err error) bool {
+	return strings.Contains(err.Error(), "address already in use") ||
+		strings.Contains(err.Error(), "Only one usage")
 }
 
 // Stop shuts down the HTTP server

@@ -456,118 +456,65 @@ func (u *Updater) HandleApplyUpdate(w http.ResponseWriter, r *http.Request) {
 	}()
 }
 
-// performRestart performs the actual restart operation.
+// performRestart performs the actual restart operation using the copy-and-launch strategy.
 //
-// Strategy per OS:
-//   - Linux/Mac: chmod + overwrite via copyFile (allowed while running)
-//   - Windows: rename current→.bak, rename new→current (os.Rename works on running EXEs
-//     because it only modifies the directory entry, not the file content)
+// The current binary is NEVER modified or replaced. The new versioned binary is
+// copied alongside the current executable, made executable (Unix), launched as a
+// new process, and then the current process exits cleanly.
 //
-// If any step fails, the backup is restored and the process does NOT exit.
+// If any step fails before launch, the copied binary is removed and the current
+// process keeps running — there is nothing to roll back.
 func (u *Updater) performRestart(currentExe, newExe string) {
 	LogInfo(game.LogComponentUpdater, "Starting restart procedure (OS: %s)", runtime.GOOS)
 	LogInfo(game.LogComponentUpdater, "Current exe: %s", currentExe)
 	LogInfo(game.LogComponentUpdater, "New exe: %s", newExe)
 
-	// Step 1: Verify new executable exists and has valid size
+	// Step 1/4: Verify new executable exists and has valid size
 	newInfo, err := os.Stat(newExe)
 	if err != nil {
-		LogError(game.LogComponentUpdater, "Step 1/5 FAILED: Cannot stat new executable: %v", err)
+		LogError(game.LogComponentUpdater, "Step 1/4 FAILED: Cannot stat new executable: %v", err)
 		return
 	}
 	if newInfo.Size() < MinBinarySize {
-		LogError(game.LogComponentUpdater, "Step 1/5 FAILED: New executable too small (%d bytes)", newInfo.Size())
+		LogError(game.LogComponentUpdater, "Step 1/4 FAILED: New executable too small (%d bytes)", newInfo.Size())
 		return
 	}
-	LogInfo(game.LogComponentUpdater, "Step 1/5: New executable verified (%d bytes)", newInfo.Size())
+	LogInfo(game.LogComponentUpdater, "Step 1/4: New executable verified (%d bytes)", newInfo.Size())
 
-	backup := getBackupPath(currentExe)
+	// Step 2/4: Copy versioned binary alongside the current exe
+	exeDir := filepath.Dir(currentExe)
+	destName := filepath.Base(newExe) // versioned name, e.g. buzzcontrol-v4.0.11-windows-amd64.exe
+	destPath := filepath.Join(exeDir, destName)
+	LogInfo(game.LogComponentUpdater, "Step 2/4: Copying new binary to %s", destPath)
+	if err := copyFile(newExe, destPath); err != nil {
+		LogError(game.LogComponentUpdater, "Step 2/4 FAILED: Cannot copy new binary: %v", err)
+		os.Remove(destPath)
+		return
+	}
+	LogInfo(game.LogComponentUpdater, "Step 2/4: New binary copied successfully")
 
-	// Step 2: Make new binary executable (Unix only), or set up rename approach for Windows
+	// Step 3/4: Set executable permissions (Unix only)
 	if runtime.GOOS != "windows" {
-		LogInfo(game.LogComponentUpdater, "Step 2/5: Setting executable permissions on new binary")
-		if err := os.Chmod(newExe, 0755); err != nil {
-			LogError(game.LogComponentUpdater, "Step 2/5 FAILED: Cannot chmod new binary: %v", err)
+		LogInfo(game.LogComponentUpdater, "Step 3/4: Setting executable permissions on %s", destPath)
+		if err := os.Chmod(destPath, 0755); err != nil {
+			LogError(game.LogComponentUpdater, "Step 3/4 FAILED: Cannot chmod new binary: %v", err)
+			os.Remove(destPath)
 			return
 		}
+		LogInfo(game.LogComponentUpdater, "Step 3/4: Permissions set successfully")
 	} else {
-		LogInfo(game.LogComponentUpdater, "Step 2/5: Skipped chmod (Windows)")
+		LogInfo(game.LogComponentUpdater, "Step 3/4: Skipped chmod (Windows)")
 	}
 
-	// Step 3: Back up current executable
-	LogInfo(game.LogComponentUpdater, "Step 3/5: Creating backup: %s -> %s", currentExe, backup)
-	os.Remove(backup) // Remove stale backup if any
-
-	if runtime.GOOS == "windows" {
-		// On Windows, os.Rename works on running executables (directory entry rename)
-		if err := os.Rename(currentExe, backup); err != nil {
-			LogError(game.LogComponentUpdater, "Step 3/5 FAILED: Cannot rename current exe to backup: %v", err)
-			return
-		}
-	} else {
-		// On Unix, copyFile is fine since we can overwrite a running binary
-		if err := copyFile(currentExe, backup); err != nil {
-			LogError(game.LogComponentUpdater, "Step 3/5 FAILED: Cannot copy current exe to backup: %v", err)
-			return
-		}
-	}
-	LogInfo(game.LogComponentUpdater, "Step 3/5: Backup created successfully")
-
-	// Step 4: Place new executable at current path
-	LogInfo(game.LogComponentUpdater, "Step 4/5: Installing new executable at %s", currentExe)
-
-	var replaceErr error
-	if runtime.GOOS == "windows" {
-		// On Windows, use rename (atomic directory operation, works since backup freed the name)
-		replaceErr = os.Rename(newExe, currentExe)
-	} else {
-		// On Unix, overwrite in place
-		replaceErr = copyFile(newExe, currentExe)
-	}
-
-	if replaceErr != nil {
-		LogError(game.LogComponentUpdater, "Step 4/5 FAILED: Cannot install new executable: %v", replaceErr)
-		// Restore backup
-		if runtime.GOOS == "windows" {
-			if restoreErr := os.Rename(backup, currentExe); restoreErr != nil {
-				LogError(game.LogComponentUpdater, "FATAL: Restore backup also failed: %v — manual restore needed from %s", restoreErr, backup)
-			} else {
-				LogInfo(game.LogComponentUpdater, "Backup restored successfully")
-			}
-		} else {
-			if restoreErr := copyFile(backup, currentExe); restoreErr != nil {
-				LogError(game.LogComponentUpdater, "FATAL: Restore backup also failed: %v", restoreErr)
-			} else {
-				LogInfo(game.LogComponentUpdater, "Backup restored successfully")
-			}
-		}
-		return
-	}
-	LogInfo(game.LogComponentUpdater, "Step 4/5: New executable installed successfully")
-
-	// Step 5: Start new process then exit
-	LogInfo(game.LogComponentUpdater, "Step 5/5: Launching new process: %s", currentExe)
-	cmd := exec.Command(currentExe)
+	// Step 4/4: Launch new process then exit — current binary is never modified
+	LogInfo(game.LogComponentUpdater, "Step 4/4: Launching new process: %s", destPath)
+	cmd := exec.Command(destPath)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 
 	if err := cmd.Start(); err != nil {
-		LogError(game.LogComponentUpdater, "Step 5/5 FAILED: Cannot start new process: %v", err)
-		// Restore backup
-		if runtime.GOOS == "windows" {
-			os.Remove(currentExe)
-			if restoreErr := os.Rename(backup, currentExe); restoreErr != nil {
-				LogError(game.LogComponentUpdater, "FATAL: Restore backup also failed: %v — manual restore needed from %s", restoreErr, backup)
-			} else {
-				LogInfo(game.LogComponentUpdater, "Backup restored successfully")
-			}
-		} else {
-			if restoreErr := copyFile(backup, currentExe); restoreErr != nil {
-				LogError(game.LogComponentUpdater, "FATAL: Restore backup also failed: %v", restoreErr)
-			} else {
-				LogInfo(game.LogComponentUpdater, "Backup restored successfully")
-			}
-		}
+		LogError(game.LogComponentUpdater, "Step 4/4 FAILED: Cannot start new process: %v", err)
+		os.Remove(destPath)
 		return
 	}
 
@@ -613,13 +560,6 @@ func (u *Updater) calculateChecksum(filePath string) (string, error) {
 	}
 
 	return hex.EncodeToString(hasher.Sum(nil)), nil
-}
-
-func getBackupPath(exePath string) string {
-	if runtime.GOOS == "windows" {
-		return exePath + ".bak"
-	}
-	return exePath + ".old"
 }
 
 func copyFile(src, dst string) error {

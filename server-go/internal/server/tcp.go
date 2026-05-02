@@ -40,19 +40,25 @@ func NewTCPServer(port int) *TCPServer {
 	}
 }
 
-// Start begins listening for TCP connections
+// Start begins listening for TCP connections.
+// Retries every 500ms if the port is busy (self-update race condition).
 func (s *TCPServer) Start() error {
 	addr := fmt.Sprintf(":%d", s.port)
-	listener, err := net.Listen("tcp", addr)
-	if err != nil {
+	for {
+		listener, err := net.Listen("tcp", addr)
+		if err == nil {
+			s.listener = listener
+			log.Printf("[TCP] Server started on port %d", s.port)
+			go s.acceptLoop()
+			return nil
+		}
+		if isPortInUse(err) {
+			log.Printf("[TCP] Port %d busy, retrying in 500ms...", s.port)
+			time.Sleep(500 * time.Millisecond)
+			continue
+		}
 		return fmt.Errorf("failed to start TCP server: %w", err)
 	}
-
-	s.listener = listener
-	log.Printf("[TCP] Server started on port %d", s.port)
-
-	go s.acceptLoop()
-	return nil
 }
 
 // Stop closes the TCP server

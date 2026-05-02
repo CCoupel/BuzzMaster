@@ -44,7 +44,15 @@ type AckManager struct {
 }
 
 // NewAckManager creates a new AckManager with the given server config.
+// A zero or negative AckTimeoutMs is normalized to 2000ms to prevent
+// time.NewTicker panics when config.json is absent or malformed.
 func NewAckManager(cfg *config.ServerConfig) *AckManager {
+	if cfg.AckTimeoutMs <= 0 {
+		cfg.AckTimeoutMs = 2000
+	}
+	if cfg.AckMaxRetries <= 0 {
+		cfg.AckMaxRetries = 3
+	}
 	return &AckManager{
 		pendingAcks: make(map[string]AckEntry),
 		cfg:         cfg,

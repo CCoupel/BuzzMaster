@@ -7,7 +7,6 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"testing"
 )
@@ -19,32 +18,6 @@ func newTestUpdater(t *testing.T, version string) *Updater {
 	return NewUpdater(version, t.TempDir())
 }
 
-func TestGetBackupPath(t *testing.T) {
-	tests := []struct {
-		exePath  string
-		expected string
-	}{
-		{"/usr/bin/buzzcontrol", "/usr/bin/buzzcontrol.old"},
-		{"C:\\Program Files\\buzzcontrol.exe", "C:\\Program Files\\buzzcontrol.exe.bak"},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.exePath, func(t *testing.T) {
-			result := getBackupPath(tt.exePath)
-
-			// Check suffix based on platform
-			if runtime.GOOS == "windows" {
-				if filepath.Ext(result) != ".bak" {
-					t.Errorf("Windows backup should end with .bak, got %s", result)
-				}
-			} else {
-				if filepath.Ext(result) != ".old" {
-					t.Errorf("Unix backup should end with .old, got %s", result)
-				}
-			}
-		})
-	}
-}
 
 func TestCopyFile(t *testing.T) {
 	// Create temp directory

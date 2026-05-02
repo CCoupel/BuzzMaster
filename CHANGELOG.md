@@ -3,6 +3,34 @@
 Historique des versions du projet BuzzControl.
 
 
+## [4.0.11] - 2026-05-02
+
+### Changed
+- **Self-update : stratégie copy-and-launch** : `performRestart()` ne modifie plus jamais le binaire courant. Le nouveau binaire versionné est copié dans le répertoire courant, lancé (attend les ports via retry loop), puis l'ancien processus se termine. Suppression de la logique backup/restore. (#70)
+
+---
+
+## [4.0.10] - 2026-05-02
+
+### Fixed
+- **Port TCP occupé lors du self-update** : le serveur TCP (port 1234) échouait immédiatement au démarrage si l'ancien processus tenait encore le port, causant un crash fatal. Fix : retry loop 500ms dans `TCPServer.Start()`, identique au fix HTTP du port 80 (#69)
+
+---
+
+## [4.0.9] - 2026-05-02
+
+### Fixed
+- **Panic au démarrage si config.json absent** : `AckManager.Start()` appelait `time.NewTicker(0)` quand `config.json` était introuvable, causant un crash immédiat. Fix : normalisation dans `NewAckManager()` (valeur ≤ 0 → 2000 ms) + fallback `config.Get()` initialisé avec `AckTimeoutMs: 2000, AckMaxRetries: 3` (#68)
+
+---
+
+## [4.0.8] - 2026-05-02
+
+### Fixed
+- Port HTTP occupé au démarrage lors d'un self-update : le nouveau processus retente désormais la liaison toutes les 500 ms (avec log d'avertissement) jusqu'à ce que le port soit libéré par l'ancien processus, au lieu d'échouer silencieusement (`server-go/internal/server/http.go`)
+
+---
+
 ## [4.0.4] - 2026-04-30
 
 ### Added
