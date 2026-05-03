@@ -604,6 +604,11 @@ func (e *Engine) StartImmediate(delay int) {
 	e.state.MemoryErrors = 0
 	e.state.QcmInvalidated = nil
 
+	// Initialize MEMOTION card states (mirrors actualStart — StartImmediate bypasses it)
+	if e.state.Question != nil && e.state.Question.Type == QuestionTypeMemotion {
+		e.initMotionStateUnsafe()
+	}
+
 	// Reset bumper times
 	for _, bumper := range e.data.Bumpers {
 		bumper.Time = 0
