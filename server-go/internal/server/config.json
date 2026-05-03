@@ -5,7 +5,9 @@
     "websocket_path": "",
     "auto_open_browsers": false,
     "debug": false,
-    "auto_check_updates": false
+    "auto_check_updates": false,
+    "ack_timeout_ms": 0,
+    "ack_max_retries": 0
   },
   "wifi": {
     "ssid": "",
