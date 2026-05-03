@@ -59,6 +59,12 @@ export default function QuestionsPage() {
       { id: 1, card1: { text: '', image: null, isImage: false }, card2: { text: '', image: null, isImage: false } },
       { id: 2, card1: { text: '', image: null, isImage: false }, card2: { text: '', image: null, isImage: false } },
     ],
+    // MEMOTION fields (v5.0.0)
+    motionMode: 'SOLO',
+    motionCards: [
+      { id: 'mc-1', rectoTheme: '', rectoImage: null, difficulty: 1, questionText: '', questionImage: null, answerText: '', answerImage: null },
+      { id: 'mc-2', rectoTheme: '', rectoImage: null, difficulty: 1, questionText: '', questionImage: null, answerText: '', answerImage: null },
+    ],
     memoryConfig: {
       flipDelay: 3,
       pointsPerPair: 10,
@@ -320,8 +326,8 @@ export default function QuestionsPage() {
       const updates = { [field]: value }
       // Auto-set pointsTarget when type changes
       if (field === 'type') {
-        // QCM and MEMORY default to TEAM, NORMAL defaults to PLAYER
-        updates.pointsTarget = (value === 'QCM' || value === 'MEMORY') ? 'TEAM' : 'PLAYER'
+        // QCM, MEMORY and MEMOTION default to TEAM, NORMAL defaults to PLAYER
+        updates.pointsTarget = (value === 'QCM' || value === 'MEMORY' || value === 'MEMOTION') ? 'TEAM' : 'PLAYER'
       }
       return { ...prev, ...updates }
     })
@@ -392,6 +398,24 @@ export default function QuestionsPage() {
       }
     }
 
+    // Load MEMOTION cards from question data
+    let motionCards = [
+      { id: 'mc-1', rectoTheme: '', rectoImage: null, difficulty: 1, questionText: '', questionImage: null, answerText: '', answerImage: null },
+      { id: 'mc-2', rectoTheme: '', rectoImage: null, difficulty: 1, questionText: '', questionImage: null, answerText: '', answerImage: null },
+    ]
+    if (question.MOTION_CARDS && Array.isArray(question.MOTION_CARDS)) {
+      motionCards = question.MOTION_CARDS.map(card => ({
+        id: card.ID,
+        rectoTheme: card.RECTO_THEME || '',
+        rectoImage: card.RECTO_IMAGE || null,
+        difficulty: card.DIFFICULTY || 1,
+        questionText: card.QUESTION_TEXT || '',
+        questionImage: card.QUESTION_IMAGE || null,
+        answerText: card.ANSWER_TEXT || '',
+        answerImage: card.ANSWER_IMAGE || null,
+      }))
+    }
+
     setFormData({
       question: question.QUESTION || '',
       answer: question.ANSWER || '',
@@ -408,6 +432,8 @@ export default function QuestionsPage() {
       memoryMode: question.MEMORY_MODE || 'SOLO',
       memoryPairs,
       memoryConfig,
+      motionMode: question.MOTION_MODE || 'SOLO',
+      motionCards,
       points: question.POINTS || '1',
       time: question.TIME || '30',
       media: null,
@@ -453,6 +479,11 @@ export default function QuestionsPage() {
         showDuringMemorize: true,
         revealDelay: 0.5,
       },
+      motionMode: 'SOLO',
+      motionCards: [
+        { id: 'mc-1', rectoTheme: '', rectoImage: null, difficulty: 1, questionText: '', questionImage: null, answerText: '', answerImage: null },
+        { id: 'mc-2', rectoTheme: '', rectoImage: null, difficulty: 1, questionText: '', questionImage: null, answerText: '', answerImage: null },
+      ],
       points: '1',
       time: '30',
       media: null,
@@ -541,6 +572,36 @@ export default function QuestionsPage() {
     return 6
   }
 
+  // MEMOTION handlers
+  const handleAddMotionCard = () => {
+    setFormData(prev => {
+      if (prev.motionCards.length >= 12) return prev // Max 12 cards
+      const idx = prev.motionCards.length + 1
+      const newId = `mc-${Date.now()}`
+      return {
+        ...prev,
+        motionCards: [
+          ...prev.motionCards,
+          { id: newId, rectoTheme: '', rectoImage: null, difficulty: 1, questionText: '', questionImage: null, answerText: '', answerImage: null },
+        ]
+      }
+    })
+  }
+
+  const handleRemoveMotionCard = (cardId) => {
+    setFormData(prev => {
+      if (prev.motionCards.length <= 2) return prev // Min 2 cards
+      return { ...prev, motionCards: prev.motionCards.filter(c => c.id !== cardId) }
+    })
+  }
+
+  const handleMotionCardChange = (cardId, field, value) => {
+    setFormData(prev => ({
+      ...prev,
+      motionCards: prev.motionCards.map(c => c.id !== cardId ? c : { ...c, [field]: value })
+    }))
+  }
+
   const handleSubmit = async (e) => {
     e.preventDefault()
     // For normal questions, need question and answer
@@ -557,6 +618,11 @@ export default function QuestionsPage() {
         return card1Valid && card2Valid
       })
       if (validPairs.length < 2) return
+    }
+    if (formData.type === 'MEMOTION') {
+      // Validate at least 2 cards with theme
+      const validCards = formData.motionCards.filter(c => c.rectoTheme.trim())
+      if (validCards.length < 2) return
     }
 
     setIsUploading(true)
@@ -635,6 +701,31 @@ export default function QuestionsPage() {
 
       // Set answer to number of pairs for display
       data.append('answer', `${formData.memoryPairs.length} paires`)
+    } else if (formData.type === 'MEMOTION') {
+      // MEMOTION mode — serialize cards and mode
+      data.append('MOTION_MODE', formData.motionMode)
+
+      const serializedCards = formData.motionCards.map(card => ({
+        ID: card.id,
+        RECTO_THEME: card.rectoTheme,
+        RECTO_IMAGE: typeof card.rectoImage === 'string' ? card.rectoImage : '',
+        DIFFICULTY: card.difficulty,
+        QUESTION_TEXT: card.questionText,
+        QUESTION_IMAGE: typeof card.questionImage === 'string' ? card.questionImage : '',
+        ANSWER_TEXT: card.answerText,
+        ANSWER_IMAGE: typeof card.answerImage === 'string' ? card.answerImage : '',
+      }))
+      data.append('motion_cards', JSON.stringify(serializedCards))
+
+      // Append image files (per face, per card)
+      formData.motionCards.forEach(card => {
+        if (card.rectoImage instanceof File) data.append(`motion_card_${card.id}_recto`, card.rectoImage)
+        if (card.questionImage instanceof File) data.append(`motion_card_${card.id}_question`, card.questionImage)
+        if (card.answerImage instanceof File) data.append(`motion_card_${card.id}_answer`, card.answerImage)
+      })
+
+      // Set answer to number of cards for display
+      data.append('answer', `${formData.motionCards.length} cartes`)
     }
 
     if (formData.media) {
@@ -1054,6 +1145,13 @@ export default function QuestionsPage() {
                       onClick={() => handleInputChange('type', 'MEMORY')}
                     >
                       Memory
+                    </button>
+                    <button
+                      type="button"
+                      className={`type-btn memotion ${formData.type === 'MEMOTION' ? 'active' : ''}`}
+                      onClick={() => handleInputChange('type', 'MEMOTION')}
+                    >
+                      Memotion
                     </button>
                   </div>
                 </div>
@@ -1576,9 +1674,181 @@ export default function QuestionsPage() {
                   </div>
                 )}
 
+                {/* MEMOTION Cards Editor */}
+                {formData.type === 'MEMOTION' && (
+                  <div className="memotion-section">
+                    {/* Mode Selector */}
+                    <div className="memory-mode-selector">
+                      <label>Mode de jeu</label>
+                      <div className="memory-mode-options">
+                        {[
+                          { value: 'SOLO', label: 'SOLO', desc: 'Une equipe joue seule' },
+                          { value: 'CHACUN_SON_TOUR', label: 'CHACUN SON TOUR', desc: 'Rotation apres chaque carte' },
+                          { value: 'TANT_QUE_JE_GAGNE', label: 'TANT QUE JE GAGNE', desc: 'Garde la main si bonne reponse' },
+                        ].map(mode => (
+                          <label key={mode.value} className="memory-mode-option">
+                            <input
+                              type="radio"
+                              name="motionMode"
+                              value={mode.value}
+                              checked={formData.motionMode === mode.value}
+                              onChange={(e) => handleInputChange('motionMode', e.target.value)}
+                            />
+                            <span className="memory-mode-label">
+                              <strong>{mode.label}</strong>
+                              <small>{mode.desc}</small>
+                            </span>
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+
+                    <label>Cartes MEMOTION * ({formData.motionCards.length} cartes)</label>
+
+                    {/* Cards List */}
+                    <div className="memotion-cards-list">
+                      {formData.motionCards.map((card, index) => (
+                        <div key={card.id} className="memotion-card-item">
+                          <div className="memory-pair-header">
+                            <span className="memory-pair-number">Carte {index + 1}</span>
+                            {formData.motionCards.length > 2 && (
+                              <button
+                                type="button"
+                                className="memory-remove-btn"
+                                onClick={() => handleRemoveMotionCard(card.id)}
+                                title="Supprimer cette carte"
+                              >
+                                ×
+                              </button>
+                            )}
+                          </div>
+
+                          {/* RECTO face */}
+                          <div className="memotion-face-section">
+                            <div className="memotion-face-label memotion-face-recto">RECTO</div>
+                            <div className="form-group" style={{ marginBottom: '0.5rem' }}>
+                              <input
+                                type="text"
+                                value={card.rectoTheme}
+                                onChange={(e) => handleMotionCardChange(card.id, 'rectoTheme', e.target.value)}
+                                placeholder="Theme / Titre..."
+                                className="memory-card-text-input"
+                                required
+                              />
+                            </div>
+                            {/* Difficulty selector */}
+                            <div className="memotion-difficulty-row">
+                              <span className="memotion-diff-label">Difficulte :</span>
+                              {[1, 2, 3].map(d => (
+                                <button
+                                  key={d}
+                                  type="button"
+                                  className={`memotion-diff-btn ${card.difficulty === d ? 'active' : ''}`}
+                                  onClick={() => handleMotionCardChange(card.id, 'difficulty', d)}
+                                  title={d === 1 ? '1 point' : d === 2 ? '3 points' : '5 points'}
+                                >
+                                  {'★'.repeat(d)}
+                                  <span className="memotion-diff-pts">{d === 1 ? '1pt' : d === 2 ? '3pts' : '5pts'}</span>
+                                </button>
+                              ))}
+                            </div>
+                            {/* Recto image (optional) */}
+                            <div className="memotion-img-row">
+                              {card.rectoImage ? (
+                                <div className="memory-card-image-preview">
+                                  <img
+                                    src={card.rectoImage instanceof File ? URL.createObjectURL(card.rectoImage) : card.rectoImage}
+                                    alt="Recto"
+                                  />
+                                  <button type="button" className="memory-card-remove-img" onClick={() => handleMotionCardChange(card.id, 'rectoImage', null)}>×</button>
+                                </div>
+                              ) : (
+                                <label className="memory-card-upload">
+                                  <input type="file" accept="image/*" onChange={(e) => { const f = e.target.files?.[0]; if (f) handleMotionCardChange(card.id, 'rectoImage', f) }} />
+                                  <span>+ Image recto</span>
+                                </label>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* VERSO face */}
+                          <div className="memotion-face-section">
+                            <div className="memotion-face-label memotion-face-verso">VERSO (Question)</div>
+                            <div className="form-group" style={{ marginBottom: '0.5rem' }}>
+                              <textarea
+                                value={card.questionText}
+                                onChange={(e) => handleMotionCardChange(card.id, 'questionText', e.target.value)}
+                                placeholder="Texte de la question..."
+                                rows={2}
+                                className="memory-card-text-input"
+                              />
+                            </div>
+                            <div className="memotion-img-row">
+                              {card.questionImage ? (
+                                <div className="memory-card-image-preview">
+                                  <img
+                                    src={card.questionImage instanceof File ? URL.createObjectURL(card.questionImage) : card.questionImage}
+                                    alt="Question"
+                                  />
+                                  <button type="button" className="memory-card-remove-img" onClick={() => handleMotionCardChange(card.id, 'questionImage', null)}>×</button>
+                                </div>
+                              ) : (
+                                <label className="memory-card-upload">
+                                  <input type="file" accept="image/*" onChange={(e) => { const f = e.target.files?.[0]; if (f) handleMotionCardChange(card.id, 'questionImage', f) }} />
+                                  <span>+ Image question</span>
+                                </label>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* REVEAL face */}
+                          <div className="memotion-face-section">
+                            <div className="memotion-face-label memotion-face-reveal">REVEAL (Reponse)</div>
+                            <div className="form-group" style={{ marginBottom: '0.5rem' }}>
+                              <textarea
+                                value={card.answerText}
+                                onChange={(e) => handleMotionCardChange(card.id, 'answerText', e.target.value)}
+                                placeholder="Texte de la reponse..."
+                                rows={2}
+                                className="memory-card-text-input"
+                              />
+                            </div>
+                            <div className="memotion-img-row">
+                              {card.answerImage ? (
+                                <div className="memory-card-image-preview">
+                                  <img
+                                    src={card.answerImage instanceof File ? URL.createObjectURL(card.answerImage) : card.answerImage}
+                                    alt="Reponse"
+                                  />
+                                  <button type="button" className="memory-card-remove-img" onClick={() => handleMotionCardChange(card.id, 'answerImage', null)}>×</button>
+                                </div>
+                              ) : (
+                                <label className="memory-card-upload">
+                                  <input type="file" accept="image/*" onChange={(e) => { const f = e.target.files?.[0]; if (f) handleMotionCardChange(card.id, 'answerImage', f) }} />
+                                  <span>+ Image reponse</span>
+                                </label>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+
+                    {formData.motionCards.length < 12 && (
+                      <button type="button" className="memory-add-btn" onClick={handleAddMotionCard}>
+                        + Ajouter une carte
+                      </button>
+                    )}
+
+                    {formData.motionCards.filter(c => c.rectoTheme.trim()).length < 2 && (
+                      <p className="memory-hint">Remplissez le theme d'au moins 2 cartes</p>
+                    )}
+                  </div>
+                )}
+
                 <div className="form-row">
-                  {/* Hide Points for MEMORY - calculated per pair */}
-                  {formData.type !== 'MEMORY' && (
+                  {/* Hide Points for MEMORY and MEMOTION - calculated per pair/card */}
+                  {formData.type !== 'MEMORY' && formData.type !== 'MEMOTION' && (
                     <div className="form-group">
                       <label htmlFor="points-input">Points</label>
                       <input
@@ -1604,8 +1874,8 @@ export default function QuestionsPage() {
                   </div>
                 </div>
 
-                {/* Hide Image question/answer for MEMORY - images are in pairs */}
-                {formData.type !== 'MEMORY' && (
+                {/* Hide Image question/answer for MEMORY/MEMOTION - images are in pairs/cards */}
+                {formData.type !== 'MEMORY' && formData.type !== 'MEMOTION' && (
                   <>
                     <div className="form-group">
                       <label htmlFor="media-input">Image question (optionnel)</label>

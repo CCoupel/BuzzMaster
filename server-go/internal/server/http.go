@@ -683,6 +683,74 @@ func (h *HTTPServer) handleUploadQuestion(w http.ResponseWriter, r *http.Request
 		}
 	}
 
+	// Handle MEMOTION specific fields
+	if questionType == "MEMOTION" {
+		// Motion mode (SOLO, CHACUN_SON_TOUR, TANT_QUE_JE_GAGNE)
+		motionMode := r.FormValue("MOTION_MODE")
+		if motionMode != "" {
+			question["MOTION_MODE"] = motionMode
+		} else {
+			question["MOTION_MODE"] = "SOLO" // Default
+		}
+
+		// Parse motion cards JSON
+		if cardsStr := r.FormValue("motion_cards"); cardsStr != "" {
+			var cards []map[string]interface{}
+			if err := json.Unmarshal([]byte(cardsStr), &cards); err == nil {
+				// Process each card to handle per-face image uploads
+				for i, card := range cards {
+					cardID, _ := card["ID"].(string)
+					if cardID == "" {
+						continue
+					}
+
+					// Handle recto image upload
+					rectoField := fmt.Sprintf("motion_card_%s_recto", cardID)
+					if file, header, err := r.FormFile(rectoField); err == nil {
+						defer file.Close()
+						randomNum := rand.Intn(9000) + 1000
+						fileName := fmt.Sprintf("motion_%s_recto_%d%s", cardID, randomNum, filepath.Ext(header.Filename))
+						filePath := filepath.Join(questionsDir, fileName)
+						if dst, err := os.Create(filePath); err == nil {
+							io.Copy(dst, file)
+							dst.Close()
+							cards[i]["RECTO_IMAGE"] = "/question/" + id + "/" + fileName
+						}
+					}
+
+					// Handle question image upload
+					questionField := fmt.Sprintf("motion_card_%s_question", cardID)
+					if file, header, err := r.FormFile(questionField); err == nil {
+						defer file.Close()
+						randomNum := rand.Intn(9000) + 1000
+						fileName := fmt.Sprintf("motion_%s_q_%d%s", cardID, randomNum, filepath.Ext(header.Filename))
+						filePath := filepath.Join(questionsDir, fileName)
+						if dst, err := os.Create(filePath); err == nil {
+							io.Copy(dst, file)
+							dst.Close()
+							cards[i]["QUESTION_IMAGE"] = "/question/" + id + "/" + fileName
+						}
+					}
+
+					// Handle answer image upload
+					answerField := fmt.Sprintf("motion_card_%s_answer", cardID)
+					if file, header, err := r.FormFile(answerField); err == nil {
+						defer file.Close()
+						randomNum := rand.Intn(9000) + 1000
+						fileName := fmt.Sprintf("motion_%s_ans_%d%s", cardID, randomNum, filepath.Ext(header.Filename))
+						filePath := filepath.Join(questionsDir, fileName)
+						if dst, err := os.Create(filePath); err == nil {
+							io.Copy(dst, file)
+							dst.Close()
+							cards[i]["ANSWER_IMAGE"] = "/question/" + id + "/" + fileName
+						}
+					}
+				}
+				question["MOTION_CARDS"] = cards
+			}
+		}
+	}
+
 	// Handle question media upload
 	file, header, err := r.FormFile("file")
 	if err == nil {

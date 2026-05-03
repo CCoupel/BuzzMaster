@@ -506,6 +506,7 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
   const showAnswer = gameState.phase === 'REVEALED'
   const isQcm = gameState.question?.TYPE === 'QCM'
   const isMemory = gameState.question?.TYPE === 'MEMORY'
+  const isMemotion = gameState.question?.TYPE === 'MEMOTION'
   // QCM answers visible from READY through REVEALED (no re-render on transition)
   const showQcmAnswers = ['READY', 'COUNTDOWN', 'STARTED', 'PAUSED', 'STOPPED', 'REVEALED'].includes(gameState.phase)
   // Memory grid visible from READY (cards face down during countdown) through REVEALED
@@ -718,15 +719,19 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
   }, [neonConfig.enabled, gameState?.phase])
 
   // Get category color for neon effect
-  // Priority: Memory team color > Category color > default
+  // Priority: MEMOTION team color > Memory team color > Category color > default
   const neonCategoryColor = useMemo(() => {
-    // If Memory multi-teams mode and a team is playing, use team color
+    // MEMOTION: use current team color
+    if (Array.isArray(gameState?.MEMOTION_CURRENT_TEAM_COLOR) && gameState.MEMOTION_CURRENT_TEAM_COLOR.length === 3) {
+      return `rgb(${gameState.MEMOTION_CURRENT_TEAM_COLOR.join(',')})`
+    }
+    // Memory multi-teams mode: use team color
     if (Array.isArray(gameState?.MEMORY_CURRENT_TEAM_COLOR) && gameState.MEMORY_CURRENT_TEAM_COLOR.length === 3) {
       return `rgb(${gameState.MEMORY_CURRENT_TEAM_COLOR.join(',')})`
     }
     // Otherwise, use category color
     return getCategoryColor(gameState?.question?.CATEGORY)
-  }, [gameState?.question?.CATEGORY, gameState?.MEMORY_CURRENT_TEAM_COLOR])
+  }, [gameState?.question?.CATEGORY, gameState?.MEMORY_CURRENT_TEAM_COLOR, gameState?.MEMOTION_CURRENT_TEAM_COLOR])
 
   // Neon style variables
   const neonStyle = useMemo(() => {
@@ -1239,7 +1244,7 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
             )}
 
             {/* COUNTDOWN State - Timer + Category animates to question zone + Big countdown number */}
-            {showCountdown && !isQcm && !isMemory && (
+            {showCountdown && !isQcm && !isMemory && !isMemotion && (
               <div className="game-content-zones">
                 {/* Zone 1: Timer */}
                 <div className="zone-timer">
@@ -1296,7 +1301,7 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
             )}
 
             {/* READY State - Non-QCM, Non-Memory: Timer + centered message (same layout as QCM) */}
-            {showReady && !isQcm && !isMemory && (
+            {showReady && !isQcm && !isMemory && !isMemotion && (
               <div className="game-content-zones">
                 {/* Zone 1: Timer */}
                 <div className="zone-timer">
@@ -1872,8 +1877,183 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
               )
             })()}
 
-            {/* Non-QCM/Non-Memory Game Content - 4 vertical zones: Timer, Question, Media, Answers */}
-            {!isQcm && !isMemory && showGameContent && gameState.question && (
+            {/* MEMOTION Game Content — TV display, 3 subphases: GRID / QUESTION / REVEAL */}
+            {isMemotion && showGameContent && gameState.question && (() => {
+              const subphase = gameState.MEMOTION_SUBPHASE
+              const cardStates = gameState.MEMOTION_CARD_STATES || {}
+              const cardTeams = gameState.MEMOTION_CARD_TEAMS || {}
+              const currentTeam = gameState.MEMOTION_CURRENT_TEAM
+              const currentTeamColor = gameState.MEMOTION_CURRENT_TEAM_COLOR
+              const currentTeamCss = Array.isArray(currentTeamColor) && currentTeamColor.length === 3
+                ? `rgb(${currentTeamColor.join(',')})`
+                : undefined
+              const motionCards = gameState.question?.MOTION_CARDS || []
+              const selectedId = gameState.MEMOTION_SELECTED
+              const selectedCard = motionCards.find(c => c.ID === selectedId) || null
+              const diffPts = d => d === 3 ? 5 : d === 2 ? 3 : 1
+
+              /* ---------- GRID subphase ---------- */
+              if (!subphase || subphase === 'GRID') {
+                // Determine grid columns (aim for square-ish)
+                const count = motionCards.length
+                const cols = count <= 3 ? count : count <= 6 ? 3 : count <= 8 ? 4 : count <= 12 ? 4 : 5
+                return (
+                  <div className="memotion-tv-grid-view">
+                    {currentTeam && (
+                      <div className="memotion-tv-current-team" style={{ color: currentTeamCss, borderColor: currentTeamCss }}>
+                        {currentTeam}
+                      </div>
+                    )}
+                    <div
+                      className="memotion-tv-card-grid"
+                      style={{ '--memotion-cols': cols }}
+                    >
+                      {motionCards.map(card => {
+                        const state = cardStates[card.ID] || 'HIDDEN'
+                        const isDone = state === 'DONE'
+                        const isSelected = card.ID === selectedId
+                        const winnerTeam = isDone ? cardTeams[card.ID] : null
+                        const winnerTeamData = winnerTeam ? teams[winnerTeam] : null
+                        const winnerColor = winnerTeamData ? getRgbColor(winnerTeamData.COLOR) : null
+                        const diff = card.DIFFICULTY || 1
+                        return (
+                          <motion.div
+                            key={card.ID}
+                            className={`memotion-tv-card ${state.toLowerCase()} ${isSelected ? 'selected' : ''}`}
+                            style={isDone && winnerColor ? { borderColor: winnerColor, '--winner-color': winnerColor } : undefined}
+                            initial={{ opacity: 0, scale: 0.8 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            transition={{ delay: motionCards.indexOf(card) * 0.05 }}
+                          >
+                            {isDone ? (
+                              <div className="memotion-tv-card-done">
+                                <span className="memotion-tv-card-check">✓</span>
+                                {winnerTeam && (
+                                  <span className="memotion-tv-card-winner" style={{ color: winnerColor || undefined }}>
+                                    {winnerTeam}
+                                  </span>
+                                )}
+                                {!winnerTeam && cardTeams[card.ID] === '' && (
+                                  <span className="memotion-tv-card-nowinner">–</span>
+                                )}
+                              </div>
+                            ) : (
+                              <div className="memotion-tv-card-recto">
+                                {card.RECTO_IMAGE && (
+                                  <img src={card.RECTO_IMAGE} alt="" className="memotion-tv-card-img" />
+                                )}
+                                <span className="memotion-tv-card-theme">{card.RECTO_THEME}</span>
+                                <span className="memotion-tv-card-diff">{'★'.repeat(diff)}</span>
+                                <span className="memotion-tv-card-pts">{diffPts(diff)}pt</span>
+                              </div>
+                            )}
+                          </motion.div>
+                        )
+                      })}
+                    </div>
+                    {/* Timer bar at bottom */}
+                    <div className="memotion-tv-timer-row">
+                      <Timer
+                        currentTime={gameState.timer}
+                        totalTime={gameState.totalTime}
+                        phase={gameState.phase}
+                        size="md"
+                        showPhase={false}
+                      />
+                    </div>
+                  </div>
+                )
+              }
+
+              /* ---------- QUESTION subphase ---------- */
+              if (subphase === 'QUESTION' && selectedCard) {
+                const diff = selectedCard.DIFFICULTY || 1
+                return (
+                  <div className="memotion-tv-fullscreen">
+                    <div className="memotion-tv-fs-header">
+                      <span className="memotion-tv-fs-theme">{selectedCard.RECTO_THEME}</span>
+                      <span className="memotion-tv-fs-diff">{'★'.repeat(diff)}</span>
+                      <span className="memotion-tv-fs-pts">{diffPts(diff)}pt</span>
+                      {currentTeam && (
+                        <span className="memotion-tv-fs-team" style={{ color: currentTeamCss }}>
+                          {currentTeam}
+                        </span>
+                      )}
+                    </div>
+                    <div className="memotion-tv-fs-body">
+                      {selectedCard.QUESTION_IMAGE && (
+                        <motion.img
+                          src={selectedCard.QUESTION_IMAGE}
+                          alt=""
+                          className="memotion-tv-fs-img"
+                          initial={{ opacity: 0, scale: 0.9 }}
+                          animate={{ opacity: 1, scale: 1 }}
+                        />
+                      )}
+                      {selectedCard.QUESTION_TEXT && (
+                        <motion.p
+                          className="memotion-tv-fs-text"
+                          initial={{ opacity: 0, y: 20 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          transition={{ delay: 0.1 }}
+                        >
+                          {selectedCard.QUESTION_TEXT}
+                        </motion.p>
+                      )}
+                    </div>
+                    <div className="memotion-tv-fs-timer">
+                      <Timer
+                        currentTime={gameState.timer}
+                        totalTime={gameState.totalTime}
+                        phase={gameState.phase}
+                        size="lg"
+                        showPhase={false}
+                      />
+                    </div>
+                  </div>
+                )
+              }
+
+              /* ---------- REVEAL subphase ---------- */
+              if (subphase === 'REVEAL' && selectedCard) {
+                const diff = selectedCard.DIFFICULTY || 1
+                return (
+                  <div className="memotion-tv-fullscreen memotion-tv-reveal">
+                    <div className="memotion-tv-fs-header">
+                      <span className="memotion-tv-fs-theme">{selectedCard.RECTO_THEME}</span>
+                      <span className="memotion-tv-fs-diff">{'★'.repeat(diff)}</span>
+                      <span className="memotion-tv-fs-pts">{diffPts(diff)}pt</span>
+                    </div>
+                    <div className="memotion-tv-fs-body">
+                      {selectedCard.ANSWER_IMAGE && (
+                        <motion.img
+                          src={selectedCard.ANSWER_IMAGE}
+                          alt=""
+                          className="memotion-tv-fs-img"
+                          initial={{ opacity: 0, scale: 0.9 }}
+                          animate={{ opacity: 1, scale: 1 }}
+                        />
+                      )}
+                      {selectedCard.ANSWER_TEXT && (
+                        <motion.p
+                          className="memotion-tv-fs-text memotion-tv-answer-text"
+                          initial={{ opacity: 0, y: 20 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          transition={{ delay: 0.1 }}
+                        >
+                          {selectedCard.ANSWER_TEXT}
+                        </motion.p>
+                      )}
+                    </div>
+                  </div>
+                )
+              }
+
+              return null
+            })()}
+
+            {/* Non-QCM/Non-Memory/Non-Memotion Game Content - 4 vertical zones: Timer, Question, Media, Answers */}
+            {!isQcm && !isMemory && !isMemotion && showGameContent && gameState.question && (
               <div className="game-content-zones">
                 {/* Zone 1: Timer */}
                 <div className="zone-timer">
