@@ -727,30 +727,34 @@
   opacity: 1;
 }
 
-.memotion-admin-card-theme {
+/* Admin context: override cqmin-based sizes from shared memotion-card-* classes */
+.memotion-admin-card .memotion-card-theme {
   font-size: 0.6rem;
-  font-weight: 600;
+  font-weight: 700;
   color: var(--text-primary);
   line-height: 1.2;
   max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  text-shadow: none;
 }
 
-.memotion-admin-card-diff {
+.memotion-admin-card .memotion-card-stars {
   font-size: 0.55rem;
   color: var(--warning);
+  text-shadow: none;
 }
 
-.memotion-admin-card-pts {
-  font-size: 0.55rem;
+.memotion-admin-card .memotion-card-pts {
+  font-size: 0.5rem;
   color: var(--text-secondary);
 }
 
-.memotion-admin-card-done {
+.memotion-admin-card .memotion-card-check {
   font-size: 1rem;
   color: var(--success);
+  text-shadow: none;
 }
 
 .memotion-admin-card-info {

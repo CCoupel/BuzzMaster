@@ -1894,72 +1894,112 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
 
               /* ---------- GRID subphase ---------- */
               if (!subphase || subphase === 'GRID') {
-                // Determine grid columns (aim for square-ish)
                 const count = motionCards.length
-                const cols = count <= 3 ? count : count <= 6 ? 3 : count <= 8 ? 4 : count <= 12 ? 4 : 5
+                const motionCols = count <= 4 ? 2 : count <= 6 ? 3 : count <= 12 ? 4 : 5
+                const motionRows = Math.ceil(count / motionCols)
+                const participatingTeams = gameState.MEMOTION_PARTICIPATING_TEAMS || []
                 return (
-                  <div className="memotion-tv-grid-view">
-                    {currentTeam && (
-                      <div className="memotion-tv-current-team" style={{ color: currentTeamCss, borderColor: currentTeamCss }}>
-                        {currentTeam}
-                      </div>
-                    )}
-                    <div
-                      className="memotion-tv-card-grid"
-                      style={{ '--memotion-cols': cols }}
-                    >
-                      {motionCards.map(card => {
-                        const state = cardStates[card.ID] || 'HIDDEN'
-                        const isDone = state === 'DONE'
-                        const isSelected = card.ID === selectedId
-                        const winnerTeam = isDone ? cardTeams[card.ID] : null
-                        const winnerTeamData = winnerTeam ? teams[winnerTeam] : null
-                        const winnerColor = winnerTeamData ? getRgbColor(winnerTeamData.COLOR) : null
-                        const diff = card.DIFFICULTY || 1
-                        return (
-                          <motion.div
-                            key={card.ID}
-                            className={`memotion-tv-card ${state.toLowerCase()} ${isSelected ? 'selected' : ''}`}
-                            style={isDone && winnerColor ? { borderColor: winnerColor, '--winner-color': winnerColor } : undefined}
-                            initial={{ opacity: 0, scale: 0.8 }}
-                            animate={{ opacity: 1, scale: 1 }}
-                            transition={{ delay: motionCards.indexOf(card) * 0.05 }}
-                          >
-                            {isDone ? (
-                              <div className="memotion-tv-card-done">
-                                <span className="memotion-tv-card-check">✓</span>
-                                {winnerTeam && (
-                                  <span className="memotion-tv-card-winner" style={{ color: winnerColor || undefined }}>
-                                    {winnerTeam}
-                                  </span>
-                                )}
-                                {!winnerTeam && (
-                                  <span className="memotion-tv-card-nowinner">–</span>
-                                )}
-                              </div>
-                            ) : (
-                              <div className="memotion-tv-card-recto">
-                                {card.RECTO_IMAGE && (
-                                  <img src={card.RECTO_IMAGE} alt="" className="memotion-tv-card-img" />
-                                )}
-                                <span className="memotion-tv-card-theme">{card.RECTO_THEME}</span>
-                                <span className="memotion-tv-card-diff">{'★'.repeat(diff)}</span>
-                                <span className="memotion-tv-card-pts">{diffPts(diff)}pt</span>
-                              </div>
-                            )}
-                          </motion.div>
-                        )
-                      })}
-                    </div>
-                    {/* Timer bar at bottom */}
-                    <div className="memotion-tv-timer-row">
+                  <div className="game-content-zones memory-game memotion-game">
+                    {/* Zone 1: Timer */}
+                    <div className="zone-timer">
                       <Timer
                         currentTime={gameState.timer}
                         totalTime={gameState.totalTime}
                         phase={gameState.phase}
-                        size="md"
+                        size="xl"
                         showPhase={false}
                       />
+                    </div>
+
+                    {/* Zone 2: Current team */}
+                    <div className="zone-question">
+                      {currentTeam ? (
+                        <motion.div
+                          className="memotion-current-team-label"
+                          style={{ color: currentTeamCss, borderColor: currentTeamCss }}
+                          initial={{ opacity: 0, y: -10 }}
+                          animate={{ opacity: 1, y: 0 }}
+                        >
+                          {currentTeam}
+                        </motion.div>
+                      ) : (
+                        <div className="zone-question-placeholder" />
+                      )}
+                    </div>
+
+                    {/* Zone 3: Card grid — reuses memory-grid + memory-card system */}
+                    <div className="zone-media zone-memory-grid">
+                      <div
+                        className="memory-grid"
+                        style={{ '--memory-cols': motionCols, '--memory-rows': motionRows }}
+                      >
+                        {motionCards.map((card, index) => {
+                          const state = cardStates[card.ID] || 'UNPLAYED'
+                          const isDone = state === 'DONE'
+                          const isSelected = !isDone && card.ID === selectedId
+                          const winnerTeam = isDone ? (cardTeams[card.ID] || null) : null
+                          const matchedColor = winnerTeam
+                            ? getTeamColorByName(winnerTeam)
+                            : 'rgba(255,255,255,0.4)'
+                          const diff = card.DIFFICULTY || 1
+                          return (
+                            <motion.div
+                              key={card.ID}
+                              className={`memory-card memotion-card${isDone ? ' flipped matched' : ''}${isSelected ? ' selected' : ''}`}
+                              style={isDone ? { '--matched-team-color': matchedColor } : undefined}
+                              initial={{ opacity: 0, scale: 0.8 }}
+                              animate={{ opacity: 1, scale: 1 }}
+                              transition={{ delay: index * 0.05 }}
+                            >
+                              <div className="memory-card-inner">
+                                {/* Front: shown when DONE (flipped) */}
+                                <div className="memory-card-front">
+                                  <span className="memotion-card-check">✓</span>
+                                  {winnerTeam ? (
+                                    <span className="memotion-card-winner">{winnerTeam}</span>
+                                  ) : (
+                                    <span className="memotion-card-nowinner">–</span>
+                                  )}
+                                </div>
+                                {/* Back: shown by default (UNPLAYED / in-progress) */}
+                                <div className="memory-card-back">
+                                  {card.RECTO_IMAGE && (
+                                    <img src={card.RECTO_IMAGE} alt="" className="memotion-card-img" />
+                                  )}
+                                  <span className="memotion-card-theme">{card.RECTO_THEME}</span>
+                                  <span className="memotion-card-stars">{'★'.repeat(diff)}</span>
+                                  <span className="memotion-card-pts">{diffPts(diff)}pt</span>
+                                </div>
+                              </div>
+                            </motion.div>
+                          )
+                        })}
+                      </div>
+                    </div>
+
+                    {/* Zone 4: Participating teams bar — reuses memory-team-bar */}
+                    <div className="zone-answers">
+                      {participatingTeams.length > 0 && (
+                        <div className="memory-team-bar">
+                          {participatingTeams.map((tName) => {
+                            const teamData = teams[tName]
+                            const tColor = teamData?.COLOR
+                              ? (Array.isArray(teamData.COLOR) ? `rgb(${teamData.COLOR.join(',')})` : teamData.COLOR)
+                              : 'var(--gray-400)'
+                            const isActive = tName === currentTeam
+                            return (
+                              <div
+                                key={tName}
+                                className={`memory-team-chip ${isActive ? 'active' : 'inactive'}`}
+                                style={{ backgroundColor: tColor, '--team-color': tColor }}
+                              >
+                                {isActive && <span className="team-play-icon">🎮</span>}
+                                <span className="team-name">{tName}</span>
+                              </div>
+                            )
+                          })}
+                        </div>
+                      )}
                     </div>
                   </div>
                 )

@@ -754,12 +754,12 @@ export default function GamePage() {
                           title={isDone ? (winnerTeam || 'Sans vainqueur') : card.RECTO_THEME}
                         >
                           {isDone ? (
-                            <span className="memotion-admin-card-done">✓</span>
+                            <span className="memotion-card-check">✓</span>
                           ) : (
                             <>
-                              <span className="memotion-admin-card-theme">{card.RECTO_THEME || '?'}</span>
-                              <span className="memotion-admin-card-diff">{'★'.repeat(diff)}</span>
-                              <span className="memotion-admin-card-pts">{diffPts(diff)}pt</span>
+                              <span className="memotion-card-theme">{card.RECTO_THEME || '?'}</span>
+                              <span className="memotion-card-stars">{'★'.repeat(diff)}</span>
+                              <span className="memotion-card-pts">{diffPts(diff)}pt</span>
                             </>
                           )}
                         </button>
