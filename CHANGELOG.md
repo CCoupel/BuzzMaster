@@ -3,6 +3,55 @@
 Historique des versions du projet BuzzControl.
 
 
+## [5.0.0] - 2026-05-03
+
+### Added
+- **[Nouveau type de jeu MEMOTION]** : Grille de cartes à 3 faces (RECTO / VERSO / REVEAL)
+  - RECTO : thème + image optionnelle + difficulté (1★/2★★/3★★★ → 1pt/3pt/5pt)
+  - VERSO : question (texte + image) affichée en plein écran
+  - REVEAL : réponse (texte + image) affichée en plein écran
+  - Flow : Admin sélectionne carte → timer per-carte → Admin clique RÉVÉLER → attribution points → carte retournée avec couleur équipe
+  - 3 modes de jeu : SOLO, CHACUN_SON_TOUR, TANT_QUE_JE_GAGNE (mêmes règles que MEMORY)
+- **[#XX WebSocket Actions]** : 4 nouvelles actions pour MEMOTION
+  - `MEMOTION_SELECT` → `{ CARD_ID: string }` — sélectionne une carte
+  - `MEMOTION_REVEAL` → `{}` — révèle la réponse
+  - `MEMOTION_DONE` → `{ CARD_ID: string, WINNER_TEAM?: string }` — marque la carte comme jouée
+  - `MEMOTION_SET_TEAMS` → `{ TEAMS: string[] }` — configure les équipes participantes
+- **[GameState enrichi pour MEMOTION]** : 7 nouveaux champs
+  - `MEMOTION_SUBPHASE` : sous-phase du jeu MEMOTION (GRID, QUESTION, REVEAL, DONE)
+  - `MEMOTION_SELECTED` : ID de la carte sélectionnée
+  - `MEMOTION_CARD_STATES` : états des cartes (map CARD_ID → state)
+  - `MEMOTION_CARD_TEAMS` : assignation équipes par carte (map CARD_ID → TEAM)
+  - `MEMOTION_CURRENT_TEAM` : équipe actuelle en mode CHACUN_SON_TOUR
+  - `MEMOTION_PARTICIPATING_TEAMS` : liste des équipes participantes
+  - `MEMOTION_CURRENT_TEAM_COLOR` : couleur RGB de l'équipe actuelle
+- **[Interface Admin pour MEMOTION]** : Zone MEMOTION dans page Quiz
+  - Upload images cartes (RECTO + VERSO + REVEAL par carte)
+  - Édition grille (sélection cartes, ordre, difficultés)
+  - Prévisualisation RECTO/VERSO/REVEAL
+- **[Interface TV pour MEMOTION]** : Affichage STATIQUE per-subphase
+  - GRID : grille de cartes avec images RECTO
+  - QUESTION : question VERSO (100vw×100vh)
+  - REVEAL : réponse REVEAL (100vw×100vh)
+  - DONE : carte retournée avec couleur équipe
+
+### Files Modified
+**Backend** :
+  - `server-go/internal/game/models.go` : struct `MotionCard`, champs `GameState.MEMOTION_*`
+  - `server-go/internal/game/engine.go` : logic MEMOTION_SELECT/REVEAL/DONE, timer per-carte
+  - `server-go/internal/protocol/messages.go` : actions `MEMOTION_SELECT`, `MEMOTION_REVEAL`, `MEMOTION_DONE`, `MEMOTION_SET_TEAMS`
+  - `server-go/cmd/server/main.go` : handlers et broadcast MEMOTION
+  - `server-go/internal/server/http.go` : endpoints MEMOTION (CRUD cartes)
+
+**Frontend** :
+  - `web/src/pages/GamePage.jsx` : affichage équipes, timer per-carte
+  - `web/src/pages/QuizPage.jsx` (ex-QuestionsPage) : Zone MEMOTION (CRUD cartes)
+  - `web/src/pages/PlayerDisplay.jsx` : écrans TV phase GRID/QUESTION/REVEAL
+  - `web/src/components/QuestionCard.jsx` : composant affichage MEMOTION card
+  - `web/src/hooks/useWebSocket.js` : handling actions MEMOTION_*
+
+---
+
 ## [4.0.11] - 2026-05-02
 
 ### Changed

@@ -368,6 +368,96 @@ Système d'effet néon rotatif autour de l'écran TV et VPlayer avec couleur de 
    └─► revealGame() ─► Show answer
 ```
 
+## Question (MEMOTION type) - v5.0.0
+
+Nouveau type de jeu : grille de cartes à 3 faces (RECTO / VERSO / REVEAL).
+
+```json
+{
+  "ID": "memotion_set_1",
+  "QUESTION": "Quiz Couleurs",
+  "TYPE": "MEMOTION",
+  "MEMOTION_MODE": "CHACUN_SON_TOUR",
+  "TIME": 30,
+  "MEMOTION_CARDS": [
+    {
+      "ID": "card_1",
+      "RECTO": {
+        "TEXT": "Couleur du ciel",
+        "IMAGE": "/files/memotion/card_1_recto.jpg"
+      },
+      "VERSO": {
+        "TEXT": "Quel est le drapeau bleu, blanc, rouge?",
+        "IMAGE": "/files/memotion/card_1_verso.jpg"
+      },
+      "REVEAL": {
+        "TEXT": "France",
+        "IMAGE": "/files/memotion/card_1_reveal.jpg"
+      },
+      "DIFFICULTY": 2
+    },
+    {
+      "ID": "card_2",
+      "RECTO": {
+        "TEXT": "Fruit rouge",
+        "IMAGE": "/files/memotion/card_2_recto.jpg"
+      },
+      "VERSO": {
+        "TEXT": "Quel fruit granuleux et sucré ?",
+        "IMAGE": "/files/memotion/card_2_verso.jpg"
+      },
+      "REVEAL": {
+        "TEXT": "Fraise",
+        "IMAGE": "/files/memotion/card_2_reveal.jpg"
+      },
+      "DIFFICULTY": 1
+    }
+  ]
+}
+```
+
+**Champs MEMOTION :**
+- `TYPE`: `"MEMOTION"` pour les jeux de cartes
+- `MEMOTION_MODE`: Mode de jeu multi-équipes (optionnel, défaut: "SOLO")
+  - `"SOLO"`: Une seule équipe joue, points à l'équipe
+  - `"CHACUN_SON_TOUR"`: Rotation stricte après chaque carte
+  - `"TANT_QUE_JE_GAGNE"`: L'équipe garde la main tant qu'elle gagne (points = difficulté)
+- `MEMOTION_CARDS`: Tableau de cartes
+  - `ID`: identifiant unique de la carte
+  - `RECTO`: face 1 affichée en grille (TEXT + IMAGE optionnelle)
+  - `VERSO`: face 2 question/énigme (TEXT + IMAGE optionnelle)
+  - `REVEAL`: face 3 réponse (TEXT + IMAGE optionnelle)
+  - `DIFFICULTY`: niveau de difficulté (1, 2, ou 3) → points attribués (1, 3, 5)
+- `TIME`: durée timer per-carte (secondes, défaut: 30)
+
+**Structure GameState MEMOTION** :
+```json
+{
+  "PHASE": "MEMORY|PREPARE|READY|START|PAUSE|STOP",
+  "MEMOTION_SUBPHASE": "GRID|QUESTION|REVEAL|DONE",
+  "MEMOTION_SELECTED": "card_1",
+  "MEMOTION_CARD_STATES": {
+    "card_1": "DONE",
+    "card_2": "AVAILABLE",
+    "card_3": "AVAILABLE"
+  },
+  "MEMOTION_CARD_TEAMS": {
+    "card_1": "team_A"
+  },
+  "MEMOTION_CURRENT_TEAM": "team_B",
+  "MEMOTION_PARTICIPATING_TEAMS": ["team_A", "team_B"],
+  "MEMOTION_CURRENT_TEAM_COLOR": [255, 0, 0]
+}
+```
+
+**Card States :**
+| État | Description |
+|------|-------------|
+| `AVAILABLE` | Carte non jouée, face RECTO visible en grille |
+| `SELECTED` | Admin a cliqué la carte, passage en subphase QUESTION |
+| `PLAYING` | Carte en cours (QUESTION ou REVEAL), timer actif |
+| `DONE` | Carte jouée et retournée, couleur équipe appliquée |
+
 ## Question Status Values
 
 | Statut | Description | Couleur UI |

@@ -2,6 +2,55 @@
 
 ---
 
+## [20260503] — v5.0.0 : Nouveau type de jeu MEMOTION
+
+### Contrats créés
+
+- **[NEW]** `contracts/memotion-game.md` — Type de jeu MEMOTION : structure MotionCard, subphases, modes équipe (v5.0.0)
+
+### Changements de l'API WebSocket
+
+- **[NEW]** `ACTION: "MEMOTION_SELECT"` — sélectionner une carte en phase GRID
+- **[NEW]** `ACTION: "MEMOTION_REVEAL"` — révéler la réponse (passer QUESTION → REVEAL)
+- **[NEW]** `ACTION: "MEMOTION_DONE"` — terminer la carte (passer REVEAL → DONE, attribuer points)
+- **[NEW]** `ACTION: "MEMOTION_SET_TEAMS"` — configurer équipes participantes
+
+### Changements de GameState
+
+- **[NEW]** `GameState.MEMOTION_SUBPHASE` (string) — sous-phase du jeu MEMOTION (GRID|QUESTION|REVEAL|DONE)
+- **[NEW]** `GameState.MEMOTION_SELECTED` (string) — ID de la carte sélectionnée
+- **[NEW]** `GameState.MEMOTION_CARD_STATES` (map[string]CardState) — états cartes (AVAILABLE|SELECTED|PLAYING|DONE)
+- **[NEW]** `GameState.MEMOTION_CARD_TEAMS` (map[string]string) — assignation équipes par carte
+- **[NEW]** `GameState.MEMOTION_CURRENT_TEAM` (string) — équipe actuelle (mode CHACUN_SON_TOUR/TANT_QUE_JE_GAGNE)
+- **[NEW]** `GameState.MEMOTION_PARTICIPATING_TEAMS` ([]string) — liste équipes
+- **[NEW]** `GameState.MEMOTION_CURRENT_TEAM_COLOR` ([3]int) — couleur RGB équipe actuelle
+
+### Changements de structures Question
+
+- **[NEW]** Question type `"MEMOTION"`
+- **[NEW]** Champ `MEMOTION_CARDS` — tableau struct `MotionCard` avec RECTO/VERSO/REVEAL + DIFFICULTY
+- **[NEW]** Champ `MEMOTION_MODE` — mode de jeu (SOLO|CHACUN_SON_TOUR|TANT_QUE_JE_GAGNE)
+- **[NEW]** Champ `TIME` — timer per-carte (secondes)
+
+### Changements de l'API REST
+
+- **[NEW]** `POST /api/memotion/questions` — créer set MEMOTION
+- **[NEW]** `GET /api/memotion/questions` — lister sets MEMOTION
+- **[NEW]** `GET /api/memotion/questions/{setId}` — récupérer set détail
+- **[NEW]** `PUT /api/memotion/questions/{setId}` — mettre à jour set
+- **[NEW]** `DELETE /api/memotion/questions/{setId}` — supprimer set
+- **[NEW]** `POST /api/memotion/questions/{setId}/cards` — ajouter carte au set
+- **[NEW]** `PUT /api/memotion/questions/{setId}/cards/{cardId}` — mettre à jour carte
+- **[NEW]** `DELETE /api/memotion/questions/{setId}/cards/{cardId}` — supprimer carte
+
+### Notes de compatibilité
+
+- **Rétrocompatibilité WebSocket** : Actions MEMOTION_* n'affectent que les jeux type MEMOTION — pas de breaking pour questions NORMAL/QCM/MEMORY existantes
+- **Rétrocompatibilité GameState** : Nouveaux champs MEMOTION_* posés à nil/empty quand phase ≠ MEMORY (MEMOTION est une spécialisation de MEMORY)
+- **Timer per-carte** : Structure identique à MEMORY mais appliquée à chaque carte individuellement, pas au jeu global
+
+---
+
 ## [20260428] — v3.8.0 : WebSocket endpoints dédiés + ACK buzzer + payload buzzer
 
 ### Contrats créés
