@@ -42,6 +42,11 @@ const (
 	ActionBackgroundChange  = "BACKGROUND_CHANGE"
 	ActionFlipMemoryCard    = "FLIP_MEMORY_CARD"
 	ActionMemorySetTeams    = "MEMORY_SET_TEAMS"
+	// MEMOTION actions (v5.0.0)
+	ActionMotionSelect   = "MEMOTION_SELECT"   // Admin → Server: select a card from the grid
+	ActionMotionReveal   = "MEMOTION_REVEAL"   // Admin → Server: flip card to REVEAL face
+	ActionMotionDone     = "MEMOTION_DONE"     // Admin → Server: mark card played + optional winner team
+	ActionMotionSetTeams = "MEMOTION_SET_TEAMS" // Admin → Server: set participating teams
 	ActionQCMHint           = "QCM_HINT"
 	// Virtual player enrollment actions
 	ActionShowQRCode           = "SHOW_QR_CODE"
@@ -198,6 +203,20 @@ type FlipMemoryCardPayload struct {
 type MemorySetTeamsPayload struct {
 	Teams []string `json:"TEAMS"` // List of team names participating
 }
+
+// MotionSelectPayload for MEMOTION_SELECT action (Admin → Server)
+type MotionSelectPayload struct {
+	CardID string `json:"CARD_ID"` // ID of the card to select (e.g. "mc-1")
+}
+
+// MotionDonePayload for MEMOTION_DONE action (Admin → Server)
+type MotionDonePayload struct {
+	CardID     string `json:"CARD_ID"`              // ID of the card being closed
+	WinnerTeam string `json:"WINNER_TEAM,omitempty"` // Team name if a winner, "" if none
+}
+
+// MotionSetTeamsPayload is an alias for MemorySetTeamsPayload — same {TEAMS: [...]} structure
+type MotionSetTeamsPayload = MemorySetTeamsPayload
 
 // QCMHintPayload for QCM_HINT action
 type QCMHintPayload struct {

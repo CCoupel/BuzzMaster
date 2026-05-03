@@ -1,7 +1,7 @@
 {
   "name": "buzzcontrol-web",
   "private": true,
-  "version": "4.0.11",
+  "version": "5.0.0",
   "type": "module",
   "scripts": {
     "dev": "vite",

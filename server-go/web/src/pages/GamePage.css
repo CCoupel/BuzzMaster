@@ -659,3 +659,182 @@
   font-style: italic;
   padding: var(--space-4);
 }
+
+/* ============================================================
+   MEMOTION Admin Controls (v5.0.0)
+   ============================================================ */
+
+.memotion-admin-panel {
+  background: var(--bg-tertiary);
+  border-radius: var(--radius-md);
+  padding: var(--space-3);
+  margin-bottom: var(--space-3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.memotion-admin-label {
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-secondary);
+}
+
+.memotion-admin-current-team {
+  font-weight: 700;
+}
+
+.memotion-admin-card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(70px, 1fr));
+  gap: var(--space-1);
+}
+
+.memotion-admin-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  padding: var(--space-2) var(--space-1);
+  background: var(--bg-secondary);
+  border: 2px solid var(--gray-600);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  min-height: 60px;
+  text-align: center;
+}
+
+.memotion-admin-card:hover:not(:disabled) {
+  border-color: var(--primary-500);
+  background: color-mix(in srgb, var(--primary-500) 10%, var(--bg-secondary));
+}
+
+.memotion-admin-card:disabled,
+.memotion-admin-card.done,
+.memotion-admin-card.question,
+.memotion-admin-card.revealed {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.memotion-admin-card.done {
+  background: color-mix(in srgb, var(--success) 15%, var(--bg-secondary));
+  border-color: var(--success);
+  opacity: 1;
+}
+
+/* Admin context: override cqmin-based sizes from shared memotion-card-* classes */
+.memotion-admin-card .memotion-card-theme {
+  font-size: 0.6rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  line-height: 1.2;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-shadow: none;
+}
+
+.memotion-admin-card .memotion-card-stars {
+  font-size: 0.55rem;
+  color: var(--warning);
+  text-shadow: none;
+}
+
+.memotion-admin-card .memotion-card-pts {
+  font-size: 0.5rem;
+  color: var(--text-secondary);
+}
+
+.memotion-admin-card .memotion-card-check {
+  font-size: 1rem;
+  color: var(--success);
+  text-shadow: none;
+}
+
+.memotion-admin-card-info {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.memotion-admin-theme {
+  font-weight: 700;
+  font-size: 0.9rem;
+  color: var(--text-primary);
+}
+
+.memotion-admin-diff {
+  font-size: 0.75rem;
+  color: var(--warning);
+}
+
+.memotion-admin-qtext {
+  font-size: 0.85rem;
+  color: var(--text-primary);
+  line-height: 1.4;
+  margin: 0;
+  padding: var(--space-2);
+  background: var(--bg-secondary);
+  border-radius: var(--radius-sm);
+}
+
+.memotion-admin-img {
+  max-width: 100%;
+  max-height: 80px;
+  border-radius: var(--radius-sm);
+  object-fit: contain;
+}
+
+.memotion-admin-actions {
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.memotion-admin-winner-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin: 0;
+}
+
+.memotion-winner-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+}
+
+.memotion-winner-chip {
+  padding: var(--space-1) var(--space-2);
+  border: none;
+  border-radius: var(--radius-sm);
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: white;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  text-shadow: 0 1px 2px rgba(0,0,0,0.4);
+}
+
+.memotion-winner-chip:hover {
+  filter: brightness(1.2);
+  transform: scale(1.05);
+}
+
+.memotion-winner-chip.none {
+  background: var(--gray-600);
+  color: var(--text-secondary);
+  text-shadow: none;
+}
+
+.memotion-winner-chip.none:hover {
+  background: var(--gray-500);
+}

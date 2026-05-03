@@ -219,6 +219,17 @@
   letter-spacing: 0.5px;
 }
 
+.qcard-memotion-badge {
+  font-size: 0.55rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  padding: 2px 5px;
+  background: linear-gradient(135deg, #f97316, #eab308);
+  color: white;
+  border-radius: var(--radius-sm);
+  letter-spacing: 0.5px;
+}
+
 .qcard-normal-badge {
   font-size: 0.55rem;
   font-weight: 700;

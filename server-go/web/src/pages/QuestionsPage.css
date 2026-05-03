@@ -1404,3 +1404,130 @@
   padding: var(--space-6);
   grid-column: 1 / -1;
 }
+
+/* ============================================================
+   MEMOTION Question Editor (v5.0.0)
+   ============================================================ */
+
+.memotion-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  border-top: 1px solid var(--gray-700);
+  padding-top: var(--space-3);
+  margin-top: var(--space-2);
+}
+
+.memotion-cards-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.memotion-card-item {
+  background: var(--bg-secondary);
+  border: 1px solid var(--gray-700);
+  border-radius: var(--radius-md);
+  padding: var(--space-3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.memotion-face-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-2);
+  border-radius: var(--radius-sm);
+  background: var(--bg-tertiary);
+  border: 1px solid var(--gray-700);
+}
+
+.memotion-face-label {
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+  align-self: flex-start;
+}
+
+.memotion-face-recto {
+  background: rgba(59,130,246,0.15);
+  color: #60a5fa;
+}
+
+.memotion-face-verso {
+  background: rgba(168,85,247,0.15);
+  color: #c084fc;
+}
+
+.memotion-face-reveal {
+  background: rgba(34,197,94,0.15);
+  color: #4ade80;
+}
+
+.memotion-difficulty-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.memotion-diff-label {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+}
+
+.memotion-diff-btn {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-1) var(--space-2);
+  background: var(--bg-secondary);
+  border: 2px solid var(--gray-600);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  transition: all 0.15s ease;
+}
+
+.memotion-diff-btn:hover {
+  border-color: var(--warning);
+  color: var(--warning);
+}
+
+.memotion-diff-btn.active {
+  border-color: var(--warning);
+  background: color-mix(in srgb, var(--warning) 15%, var(--bg-secondary));
+  color: var(--warning);
+  font-weight: 700;
+}
+
+.memotion-diff-pts {
+  font-size: 0.65rem;
+  opacity: 0.8;
+}
+
+.memotion-img-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+/* Reuse the .type-btn.memotion for the type selector */
+.type-btn.memotion {
+  background: linear-gradient(135deg, rgba(249,115,22,0.1), rgba(234,179,8,0.1));
+  border-color: #f97316;
+  color: #f97316;
+}
+
+.type-btn.memotion.active {
+  background: linear-gradient(135deg, #f97316, #eab308);
+  border-color: transparent;
+  color: white;
+  font-weight: 700;
+}

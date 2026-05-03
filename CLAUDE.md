@@ -348,6 +348,117 @@ Le serveur offre trois endpoints WebSocket spécialisés avec routage intelligen
 - `web/src/pages/QuestionsPage.jsx` (renommée QuestionsPage vers QuizPage) : Zone Quiz (3 champs métadonnées + upload fonds) + Zone Ambiance + Zone Questions (v4.0.4)
 - `web/src/pages/PlayerDisplay.jsx` : écran NEW_GAME (100vw×100vh, statique) — affichage nom quiz + thème + notes ; rotation fonds d'écran + fallback dégradé (v4.0.4)
 
+### Game Init — MEMOTION (v5.0.0)
+
+**Type de jeu MEMOTION** : Jeu de cartes à 3 faces avec grille interactive, difficulté configurable et mode équipe.
+
+**Structure MotionCard** :
+```json
+{
+  "ID": "card_1",
+  "RECTO": {
+    "TEXT": "Thème de la carte",
+    "IMAGE": "/files/memotion/card_1_recto.jpg",
+    "DIFFICULTY": 2
+  },
+  "VERSO": {
+    "TEXT": "Question ou énigme",
+    "IMAGE": "/files/memotion/card_1_verso.jpg"
+  },
+  "REVEAL": {
+    "TEXT": "Réponse ou explication",
+    "IMAGE": "/files/memotion/card_1_reveal.jpg"
+  }
+}
+```
+
+**Points par difficulté** :
+- ★ (DIFFICULTY=1) → 1 point
+- ★★ (DIFFICULTY=2) → 3 points
+- ★★★ (DIFFICULTY=3) → 5 points
+
+**Subphases MEMOTION** :
+- `GRID` : affichage grille cartes, clickable RECTO faces visibles
+- `QUESTION` : carte sélectionnée, affichage VERSO (question) plein écran 100vw×100vh, timer per-carte
+- `REVEAL` : admin clique bouton RÉVÉLER, affichage REVEAL (réponse) plein écran, admin attribue points via UI
+- `DONE` : carte retournée dans grille avec couleur équipe winner, grille reste interactive
+
+**Champs GameState** (v5.0.0) :
+- `MEMOTION_SUBPHASE` : string (GRID|QUESTION|REVEAL|DONE)
+- `MEMOTION_SELECTED` : string (ID carte sélectionnée, nil en GRID)
+- `MEMOTION_CARD_STATES` : map[string]CardState (par CARD_ID) — states : AVAILABLE, SELECTED, PLAYING, DONE
+- `MEMOTION_CARD_TEAMS` : map[string]string (CARD_ID → TEAM_ID quand DONE)
+- `MEMOTION_CURRENT_TEAM` : string (équipe active en CHACUN_SON_TOUR mode, nil en SOLO)
+- `MEMOTION_PARTICIPATING_TEAMS` : []string (liste équipes participant au jeu)
+- `MEMOTION_CURRENT_TEAM_COLOR` : [3]int (RGB couleur équipe actuelle, pour LED)
+
+**Modes de jeu MEMOTION** (même logique que MEMORY) :
+- `SOLO` : aucune rotation équipe, une seule équipe joue, points directement à l'équipe
+- `CHACUN_SON_TOUR` : rotation entre équipes après chaque carte révélée (WINNER_TEAM champ MEMOTION_DONE)
+- `TANT_QUE_JE_GAGNE` : équipe conserve tour tant qu'elle gagne (points = difficulté), équipe suivante si mauvaise réponse
+
+**Actions WebSocket (v5.0.0)** :
+```json
+// Admin → Server : sélectionner une carte en phase GRID
+{ "ACTION": "MEMOTION_SELECT", "MSG": { "CARD_ID": "card_1" } }
+
+// Admin → Server : révéler la réponse (passer QUESTION → REVEAL)
+{ "ACTION": "MEMOTION_REVEAL", "MSG": {} }
+
+// Admin → Server : terminer la carte (passer REVEAL → DONE, attribuer points)
+{ "ACTION": "MEMOTION_DONE", "MSG": { "CARD_ID": "card_1", "WINNER_TEAM": "team_A" } }
+
+// Admin → Server : configurer équipes participantes
+{ "ACTION": "MEMOTION_SET_TEAMS", "MSG": { "TEAMS": ["team_A", "team_B"] } }
+
+// Server → Web : broadcast état MEMOTION
+{ "ACTION": "UPDATE", "MSG": { "memotion_subphase": "QUESTION", "memotion_selected": "card_1", "memotion_current_team": "team_A" } }
+```
+
+**Timer par carte** :
+- Démarre à la sélection (GRID → QUESTION)
+- Durée configurable per-carte (défaut 30s, configurable lors de l'édition)
+- Affiché sur TV (centré sous ou sur VERSO)
+- `REVEAL` n'a pas de timer automatique — admin contrôle le timing
+- `DONE` valide la carte et passe à l'équipe suivante (CHACUN_SON_TOUR/TANT_QUE_JE_GAGNE)
+
+**API REST MEMOTION** :
+```
+POST   /api/memotion/questions              → Créer set de cartes MEMOTION
+GET    /api/memotion/questions              → Lister sets MEMOTION
+GET    /api/memotion/questions/{setId}      → Récupérer set détail
+PUT    /api/memotion/questions/{setId}      → Mettre à jour set
+DELETE /api/memotion/questions/{setId}      → Supprimer set
+POST   /api/memotion/questions/{setId}/cards → Ajouter carte au set
+PUT    /api/memotion/questions/{setId}/cards/{cardId} → Mettre à jour carte
+DELETE /api/memotion/questions/{setId}/cards/{cardId} → Supprimer carte
+```
+
+**Interface Admin** :
+- Zone MEMOTION dans page `/admin/quiz` (nouvelle section)
+- Upload RECTO/VERSO/REVEAL images per-carte (drag-and-drop ou file picker)
+- Éditeur grille : ordre cartes, difficulté, aperçu RECTO
+- Prévisualisation VERSO/REVEAL en modal
+- Sélecteur « Mode de jeu » : SOLO / CHACUN_SON_TOUR / TANT_QUE_JE_GAGNE
+
+**Interface TV** :
+- Subphase GRID : grille responsive 3×4 ou 4×5 (configurable), cartes avec images RECTO, clickable via admin WebSocket
+- Subphase QUESTION : VERSO full-screen (100vw×100vh), timer en bas center, "RECTO theme" petit texte en haut
+- Subphase REVEAL : REVEAL full-screen (100vw×100vh), difficulté badge (★/★★/★★★) en coin, "QUESTION text" petit contexte
+- Subphase DONE : retour à GRID, carte avec couleur équipe winner + badge "✓"
+
+**Fichiers clés** :
+- `server-go/internal/game/models.go` : struct `MotionCard`, struct `CardState`, champs `GameState.MEMOTION_*` (v5.0.0)
+- `server-go/internal/game/engine.go` : handlers `handleMemotionSelect()`, `handleMemotionReveal()`, `handleMemotionDone()`, `handleMemotionSetTeams()` ; logique subphase transitions, timer per-carte (v5.0.0)
+- `server-go/internal/protocol/messages.go` : actions `ActionMemotionSelect`, `ActionMemotionReveal`, `ActionMemotionDone`, `ActionMemotionSetTeams` avec payloads (v5.0.0)
+- `server-go/cmd/server/main.go` : handlers WebSocket + broadcast MEMOTION actions ; LED logic MEMOTION (couleur équipe active en CHACUN_SON_TOUR) (v5.0.0)
+- `server-go/internal/server/http.go` : endpoints REST MEMOTION (CRUD sets + cartes) (v5.0.0)
+- `web/src/pages/GamePage.jsx` : affichage équipes, timer per-carte, mode démo intégration MEMOTION (v5.0.0)
+- `web/src/pages/QuizPage.jsx` (ex-QuestionsPage) : Zone MEMOTION (upload images, éditeur grille, aperçu cartes) (v5.0.0)
+- `web/src/pages/PlayerDisplay.jsx` : subphases GRID/QUESTION/REVEAL/DONE rendering (100vw×100vh constraints, STATIQUE) (v5.0.0)
+- `web/src/components/QuestionCard.jsx` : composant `<MotionCard>` pour affichage grille + aperçus (v5.0.0)
+- `web/src/hooks/useWebSocket.js` : handling actions `MEMOTION_*`, state updates (v5.0.0)
+
 ### Modele Bumper enrichi (v3.1.0)
 
 ```json

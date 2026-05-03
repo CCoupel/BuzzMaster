@@ -23,6 +23,14 @@ export default function useWebSocket(endpoint = '/ws/admin') {
     MEMORY_TEAM_PAIRS: {}, // Map of teamName -> pairCount
     MEMORY_TEAM_ERRORS: {}, // Map of teamName -> errorCount
     MEMORY_PARTICIPATING_TEAMS: [], // List of participating team names
+    // MEMOTION fields (v5.0.0)
+    MEMOTION_SUBPHASE: '', // 'GRID' | 'QUESTION' | 'REVEAL' | ''
+    MEMOTION_SELECTED: '', // ID of active card
+    MEMOTION_CARD_STATES: {}, // Map of cardID -> 'UNPLAYED'|'QUESTION'|'REVEALED'|'DONE'
+    MEMOTION_CARD_TEAMS: {}, // Map of cardID -> teamName (winner)
+    MEMOTION_CURRENT_TEAM: '', // Currently playing team
+    MEMOTION_CURRENT_TEAM_COLOR: [], // RGB array of current team
+    MEMOTION_PARTICIPATING_TEAMS: [], // Selected participating teams
     qcmInvalidated: [], // Server-synchronized invalidated QCM answers (e.g., ["RED", "YELLOW"])
     virtualPlayerCount: 0, // Server-synchronized virtual player count (ENROLL phase)
     virtualPlayerLimit: 20, // Server-synchronized virtual player limit
@@ -119,6 +127,14 @@ export default function useWebSocket(endpoint = '/ws/admin') {
             MEMORY_TEAM_PAIRS: MSG.GAME.MEMORY_TEAM_PAIRS ?? prev.MEMORY_TEAM_PAIRS,
             MEMORY_TEAM_ERRORS: MSG.GAME.MEMORY_TEAM_ERRORS ?? prev.MEMORY_TEAM_ERRORS,
             MEMORY_PARTICIPATING_TEAMS: MSG.GAME.MEMORY_PARTICIPATING_TEAMS ?? prev.MEMORY_PARTICIPATING_TEAMS,
+            // MEMOTION fields (v5.0.0)
+            MEMOTION_SUBPHASE: MSG.GAME.MEMOTION_SUBPHASE !== undefined ? MSG.GAME.MEMOTION_SUBPHASE : prev.MEMOTION_SUBPHASE,
+            MEMOTION_SELECTED: MSG.GAME.MEMOTION_SELECTED !== undefined ? MSG.GAME.MEMOTION_SELECTED : prev.MEMOTION_SELECTED,
+            MEMOTION_CARD_STATES: MSG.GAME.MEMOTION_CARD_STATES ?? prev.MEMOTION_CARD_STATES,
+            MEMOTION_CARD_TEAMS: MSG.GAME.MEMOTION_CARD_TEAMS ?? prev.MEMOTION_CARD_TEAMS,
+            MEMOTION_CURRENT_TEAM: MSG.GAME.MEMOTION_CURRENT_TEAM !== undefined ? MSG.GAME.MEMOTION_CURRENT_TEAM : prev.MEMOTION_CURRENT_TEAM,
+            MEMOTION_CURRENT_TEAM_COLOR: MSG.GAME.MEMOTION_CURRENT_TEAM_COLOR ?? prev.MEMOTION_CURRENT_TEAM_COLOR,
+            MEMOTION_PARTICIPATING_TEAMS: MSG.GAME.MEMOTION_PARTICIPATING_TEAMS ?? prev.MEMOTION_PARTICIPATING_TEAMS,
             qcmInvalidated: MSG.GAME.QCM_INVALIDATED || [],
             virtualPlayerCount: MSG.GAME.VIRTUAL_PLAYER_COUNT ?? prev.virtualPlayerCount,
             virtualPlayerLimit: MSG.GAME.VIRTUAL_PLAYER_LIMIT ?? prev.virtualPlayerLimit,

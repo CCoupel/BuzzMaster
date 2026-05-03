@@ -36,6 +36,8 @@ export default function GamePage() {
   const [pointsInput, setPointsInput] = useState(1)
   // Memory team selection - always use backend state as source of truth
   const selectedTeams = gameState.MEMORY_PARTICIPATING_TEAMS || []
+  // MEMOTION team selection
+  const selectedMotionTeams = gameState.MEMOTION_PARTICIPATING_TEAMS || []
 
   // Group bumpers by team and sort by timestamp
   const teamBumpers = useMemo(() => {
@@ -158,6 +160,15 @@ export default function GamePage() {
     }
     return null
   }, [sortedQuestions, gameState.phase, gameState.question])
+
+  // MEMOTION: selected card data (from MOTION_CARDS array matching MEMOTION_SELECTED)
+  const selectedMotionCard = useMemo(() => {
+    const selectedId = gameState.MEMOTION_SELECTED
+    if (!selectedId) return null
+    const cards = gameState.question?.MOTION_CARDS
+    if (!cards || !Array.isArray(cards)) return null
+    return cards.find(c => c.ID === selectedId) || null
+  }, [gameState.MEMOTION_SELECTED, gameState.question])
 
   // Calculate Memory score based on matched pairs, errors, and config
   const memoryScore = useMemo(() => {
@@ -290,6 +301,20 @@ export default function GamePage() {
         : [...selectedTeams, teamName]
     }
     sendMessage('MEMORY_SET_TEAMS', { TEAMS: newSelection })
+  }
+
+  const toggleMotionTeam = (teamName) => {
+    const motionMode = gameState.question?.MOTION_MODE
+    const isSolo = !motionMode || motionMode === 'SOLO'
+    let newSelection
+    if (isSolo) {
+      newSelection = selectedMotionTeams.includes(teamName) ? [] : [teamName]
+    } else {
+      newSelection = selectedMotionTeams.includes(teamName)
+        ? selectedMotionTeams.filter(t => t !== teamName)
+        : [...selectedMotionTeams, teamName]
+    }
+    sendMessage('MEMOTION_SET_TEAMS', { TEAMS: newSelection })
   }
 
   const handleBumperClick = (bumperMac, ctrlKey = false) => {
@@ -519,6 +544,58 @@ export default function GamePage() {
             </div>
           )
         })()}
+        {/* MEMOTION Team Selection - same pattern as Memory */}
+        {(gameState.phase === 'PREPARE' || gameState.phase === 'READY') &&
+         gameState.question?.TYPE === 'MEMOTION' && (() => {
+          const motionMode = gameState.question?.MOTION_MODE
+          const isSolo = !motionMode || motionMode === 'SOLO'
+          const teamsWithBuzzers = sortedTeams.filter(t => t.buzzers && t.buzzers.length > 0)
+          const selected = teamsWithBuzzers.filter(t => selectedMotionTeams.includes(t.name))
+          const available = teamsWithBuzzers.filter(t => !selectedMotionTeams.includes(t.name))
+          return (
+            <div className={`memory-team-selector ${isSolo ? 'solo-mode' : 'multi-mode'}`}>
+              <div className="memory-selector-label">
+                🃏 MEMOTION · {isSolo ? 'Mode SOLO' : motionMode === 'CHACUN_SON_TOUR' ? 'Chacun son tour' : 'Tant que je gagne'}
+              </div>
+              <div className="memory-chips-row">
+                {selected.map((team, idx) => {
+                  const teamColor = getRgbColor(team.COLOR)
+                  return (
+                    <div
+                      key={team.name}
+                      className={`memory-team-chip selected${isSolo ? ' solo-active' : ''}`}
+                      style={{ backgroundColor: teamColor, '--team-color': teamColor }}
+                      onClick={!isSolo ? () => toggleMotionTeam(team.name) : undefined}
+                      title={!isSolo ? 'Cliquer pour retirer' : undefined}
+                    >
+                      {!isSolo && <span className="chip-order">{idx + 1}</span>}
+                      <span className="chip-name">{team.name}</span>
+                      {!isSolo && <span className="chip-action">×</span>}
+                    </div>
+                  )
+                })}
+                {selected.length > 0 && available.length > 0 && (
+                  <span className="memory-chips-divider">|</span>
+                )}
+                {available.map(team => {
+                  const teamColor = getRgbColor(team.COLOR)
+                  return (
+                    <div
+                      key={team.name}
+                      className="memory-team-chip available"
+                      style={{ backgroundColor: teamColor, '--team-color': teamColor }}
+                      onClick={() => toggleMotionTeam(team.name)}
+                      title="Cliquer pour ajouter"
+                    >
+                      <span className="chip-name">{team.name}</span>
+                      <span className="chip-action">+</span>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )
+        })()}
       </div>
 
       {/* Questions Panel - Left */}
@@ -637,6 +714,133 @@ export default function GamePage() {
               )}
             </div>
           </div>
+
+          {/* MEMOTION subphase controls — shown when MEMOTION question is STARTED */}
+          {gameState.question?.TYPE === 'MEMOTION' && gameState.phase === 'STARTED' && (() => {
+            const subphase = gameState.MEMOTION_SUBPHASE
+            const cardStates = gameState.MEMOTION_CARD_STATES || {}
+            const cardTeams = gameState.MEMOTION_CARD_TEAMS || {}
+            const currentTeamColor = gameState.MEMOTION_CURRENT_TEAM_COLOR
+            const currentTeam = gameState.MEMOTION_CURRENT_TEAM
+            const motionCards = gameState.question?.MOTION_CARDS || []
+            const diffPts = d => d === 3 ? 5 : d === 2 ? 3 : 1
+
+            if (subphase === 'GRID') {
+              return (
+                <div className="memotion-admin-panel">
+                  <div className="memotion-admin-label">
+                    Sélectionner une carte
+                    {currentTeam && (
+                      <span
+                        className="memotion-admin-current-team"
+                        style={{ color: currentTeamColor?.length ? `rgb(${currentTeamColor.join(',')})` : undefined }}
+                      > · {currentTeam}</span>
+                    )}
+                  </div>
+                  <div className="memotion-admin-card-grid">
+                    {motionCards.map(card => {
+                      const state = cardStates[card.ID] || 'UNPLAYED'
+                      const isDone = state === 'DONE'
+                      const winnerTeam = isDone ? cardTeams[card.ID] : null
+                      const winnerColor = winnerTeam ? getRgbColor(teams[winnerTeam]?.COLOR) : null
+                      const diff = card.DIFFICULTY || 1
+                      return (
+                        <button
+                          key={card.ID}
+                          className={`memotion-admin-card ${state.toLowerCase()}`}
+                          onClick={() => state === 'UNPLAYED' && sendMessage('MEMOTION_SELECT', { CARD_ID: card.ID })}
+                          disabled={state !== 'UNPLAYED'}
+                          style={isDone && winnerColor ? { borderColor: winnerColor } : undefined}
+                          title={isDone ? (winnerTeam || 'Sans vainqueur') : card.RECTO_THEME}
+                        >
+                          {isDone ? (
+                            <span className="memotion-card-check">✓</span>
+                          ) : (
+                            <>
+                              <span className="memotion-card-theme">{card.RECTO_THEME || '?'}</span>
+                              <span className="memotion-card-stars">{'★'.repeat(diff)}</span>
+                              <span className="memotion-card-pts">{diffPts(diff)}pt</span>
+                            </>
+                          )}
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+              )
+            }
+
+            if (subphase === 'QUESTION' && selectedMotionCard) {
+              const diff = selectedMotionCard.DIFFICULTY || 1
+              return (
+                <div className="memotion-admin-panel">
+                  <div className="memotion-admin-label">Question</div>
+                  <div className="memotion-admin-card-info">
+                    <span className="memotion-admin-theme">{selectedMotionCard.RECTO_THEME}</span>
+                    <span className="memotion-admin-diff">{'★'.repeat(diff)} · {diffPts(diff)}pt</span>
+                  </div>
+                  {selectedMotionCard.QUESTION_TEXT && (
+                    <p className="memotion-admin-qtext">{selectedMotionCard.QUESTION_TEXT}</p>
+                  )}
+                  {selectedMotionCard.QUESTION_IMAGE && (
+                    <img src={selectedMotionCard.QUESTION_IMAGE} alt="Question" className="memotion-admin-img" />
+                  )}
+                  <div className="memotion-admin-actions">
+                    <Button variant="primary" size="md" onClick={() => sendMessage('MEMOTION_REVEAL', {})}>
+                      RÉVÉLER
+                    </Button>
+                    <Button variant="ghost" size="sm" onClick={() => sendMessage('MEMOTION_DONE', { CARD_ID: gameState.MEMOTION_SELECTED, WINNER_TEAM: '' })}>
+                      SANS VAINQUEUR
+                    </Button>
+                  </div>
+                </div>
+              )
+            }
+
+            if (subphase === 'REVEAL' && selectedMotionCard) {
+              const diff = selectedMotionCard.DIFFICULTY || 1
+              const teamsWithBuzzers = sortedTeams.filter(t => t.buzzers && t.buzzers.length > 0)
+              return (
+                <div className="memotion-admin-panel">
+                  <div className="memotion-admin-label">Réponse</div>
+                  <div className="memotion-admin-card-info">
+                    <span className="memotion-admin-theme">{selectedMotionCard.RECTO_THEME}</span>
+                    <span className="memotion-admin-diff">{'★'.repeat(diff)} · {diffPts(diff)}pt</span>
+                  </div>
+                  {selectedMotionCard.ANSWER_TEXT && (
+                    <p className="memotion-admin-qtext">{selectedMotionCard.ANSWER_TEXT}</p>
+                  )}
+                  {selectedMotionCard.ANSWER_IMAGE && (
+                    <img src={selectedMotionCard.ANSWER_IMAGE} alt="Reponse" className="memotion-admin-img" />
+                  )}
+                  <p className="memotion-admin-winner-label">Qui a bien répondu ?</p>
+                  <div className="memotion-winner-chips">
+                    {teamsWithBuzzers.map(team => {
+                      const teamColor = getRgbColor(team.COLOR)
+                      return (
+                        <button
+                          key={team.name}
+                          className="memotion-winner-chip"
+                          style={{ backgroundColor: teamColor }}
+                          onClick={() => sendMessage('MEMOTION_DONE', { CARD_ID: gameState.MEMOTION_SELECTED, WINNER_TEAM: team.name })}
+                        >
+                          {team.name}
+                        </button>
+                      )
+                    })}
+                    <button
+                      className="memotion-winner-chip none"
+                      onClick={() => sendMessage('MEMOTION_DONE', { CARD_ID: gameState.MEMOTION_SELECTED, WINNER_TEAM: '' })}
+                    >
+                      Aucun
+                    </button>
+                  </div>
+                </div>
+              )
+            }
+
+            return null
+          })()}
 
           <div className="control-buttons">
             <div className="control-buttons-row">

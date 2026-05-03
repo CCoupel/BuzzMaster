@@ -55,6 +55,7 @@ export default function QuestionCard({
   const status = question.STATUS?.toLowerCase() || 'available'
   const isQCM = question.TYPE === 'QCM'
   const isMemory = question.TYPE === 'MEMORY'
+  const isMemotion = question.TYPE === 'MEMOTION'
   const qcmColor = isQCM && question.QCM_CORRECT ? QCM_COLORS[question.QCM_CORRECT] : null
   const memoryPairCount = isMemory && question.MEMORY_PAIRS ? question.MEMORY_PAIRS.length : 0
 
@@ -65,6 +66,15 @@ export default function QuestionCard({
   ) : 0
   const memoryPointsPerPair = memoryConfig?.POINTS_PER_PAIR || 10
   const memoryErrorPenalty = memoryConfig?.ERROR_PENALTY || 0
+
+  // Calculate max points for MEMOTION questions (difficulty: 1→1pt, 2→3pt, 3→5pt)
+  const motionCards = isMemotion && question.MOTION_CARDS ? question.MOTION_CARDS : []
+  const motionCardCount = motionCards.length
+  const motionMaxPoints = motionCards.reduce((sum, c) => {
+    const d = c.DIFFICULTY || 1
+    return sum + (d === 3 ? 5 : d === 2 ? 3 : 1)
+  }, 0)
+  const motionMode = isMemotion ? (question.MOTION_MODE || 'SOLO') : null
 
   const handleClick = (e) => {
     if (onClick && canSelect) {
@@ -111,7 +121,8 @@ export default function QuestionCard({
 
         {isQCM && <span className="qcard-qcm-badge">QCM</span>}
         {isMemory && <span className="qcard-memory-badge">MEMORY</span>}
-        {!isQCM && !isMemory && <span className="qcard-normal-badge">Normal</span>}
+        {isMemotion && <span className="qcard-memotion-badge">MEMOTION</span>}
+        {!isQCM && !isMemory && !isMemotion && <span className="qcard-normal-badge">Normal</span>}
 
         <span
           className={`qcard-target-badge ${(question.POINTS_TARGET || 'PLAYER').toLowerCase()}`}
@@ -134,11 +145,13 @@ export default function QuestionCard({
 
         <span className="qcard-meta">
           <span className="qcard-time">{question.TIME}s</span>
-          <span className="qcard-points">{isMemory ? memoryMaxPoints : question.POINTS}pt</span>
+          <span className="qcard-points">
+            {isMemory ? memoryMaxPoints : isMemotion ? motionMaxPoints : question.POINTS}pt
+          </span>
         </span>
       </div>
 
-      {/* Fixed media zone - for Memory shows config, for others shows images */}
+      {/* Fixed media zone - for Memory shows config, for Memotion shows card count, for others shows images */}
       <div className="qcard-media-zone">
         {isMemory ? (
           <>
@@ -149,6 +162,19 @@ export default function QuestionCard({
             <div className={`qcard-memory-config-slot ${memoryErrorPenalty > 0 ? 'penalty' : 'no-penalty'}`}>
               <span className="qcard-memory-config-value">{memoryErrorPenalty > 0 ? `-${memoryErrorPenalty}` : '0'}</span>
               <span className="qcard-memory-config-label">/ erreur</span>
+            </div>
+          </>
+        ) : isMemotion ? (
+          <>
+            <div className="qcard-memory-config-slot">
+              <span className="qcard-memory-config-value">{motionCardCount}</span>
+              <span className="qcard-memory-config-label">cartes</span>
+            </div>
+            <div className="qcard-memory-config-slot">
+              <span className="qcard-memory-config-value" style={{ fontSize: '0.65rem' }}>
+                {motionMode === 'TANT_QUE_JE_GAGNE' ? 'TQJG' : motionMode === 'CHACUN_SON_TOUR' ? 'CST' : 'SOLO'}
+              </span>
+              <span className="qcard-memory-config-label">mode</span>
             </div>
           </>
         ) : (
@@ -182,6 +208,11 @@ export default function QuestionCard({
           <p className="qcard-answer qcard-answer-memory">
             <span className="qcard-memory-icon">🎴</span>
             {memoryPairCount} paires
+          </p>
+        ) : isMemotion ? (
+          <p className="qcard-answer qcard-answer-memory">
+            <span className="qcard-memory-icon">🃏</span>
+            {motionCardCount} cartes · {motionMaxPoints}pts max
           </p>
         ) : qcmColor ? (
           <p className="qcard-answer qcard-answer-qcm" style={{ backgroundColor: qcmColor.color }}>
