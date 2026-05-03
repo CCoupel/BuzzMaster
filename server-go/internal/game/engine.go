@@ -44,6 +44,11 @@ func NewEngine() *Engine {
 			CurrentTime:        0,
 			Page:               "GAME",
 			VirtualPlayerLimit: 20, // Default limit
+			// MEMOTION: initialize with empty (not nil) so JSON serializes [] and {} (not null)
+			MotionCardStates:         make(map[string]string),
+			MotionCardTeams:          make(map[string]string),
+			MotionParticipatingTeams: []string{},
+			MotionCurrentTeamColor:   []int{},
 		},
 		data:             NewTeamsAndBumpers(),
 		questionStatuses: make(map[string]QuestionStatus),
@@ -260,6 +265,21 @@ func (e *Engine) Ready(questionID string, question *Question) {
 		e.state.MemoryTeamErrors = map[string]int{}
 		e.state.MemoryParticipatingTeams = []string{}
 		e.state.MemoryPairOwners = map[int]string{}
+
+		// Reset MEMOTION state for new question (same pattern as Memory)
+		e.state.MotionSubPhase = ""
+		e.state.MotionSelected = ""
+		e.state.MotionCardStates = make(map[string]string)
+		e.state.MotionCardTeams = make(map[string]string)
+		e.state.MotionCurrentTeam = ""
+		e.state.MotionCurrentTeamColor = []int{}
+		e.state.MotionParticipatingTeams = []string{}
+
+		// For MEMOTION questions, also pre-populate card states so the frontend
+		// can display UNPLAYED cards during the PREPARE phase (before START).
+		if question != nil && question.Type == QuestionTypeMemotion {
+			e.initMotionStateUnsafe()
+		}
 	}
 
 	log.Printf("[Engine] Game ready with question: %s", questionID)
@@ -372,7 +392,12 @@ func (e *Engine) Start(delay int) {
 
 	// Determine countdown duration
 	countdownDuration := 3 // default for normal/QCM questions
-	if e.state.Question != nil && e.state.Question.Type == QuestionTypeMemory {
+
+	// MEMOTION: no countdown — grid is displayed immediately after START
+	if e.state.Question != nil && e.state.Question.Type == QuestionTypeMemotion {
+		countdownDuration = 0
+		log.Printf("[Engine] MEMOTION: no countdown, starting immediately")
+	} else if e.state.Question != nil && e.state.Question.Type == QuestionTypeMemory {
 		memorizeTime := 5 // default
 		if e.state.Question.MemoryConfig != nil && e.state.Question.MemoryConfig.MemorizeTime > 0 {
 			memorizeTime = e.state.Question.MemoryConfig.MemorizeTime
@@ -521,6 +546,12 @@ func (e *Engine) actualStart() {
 		log.Printf("[Engine] Auto-initialized Memory participating teams: %v", allTeams)
 	}
 
+	// Initialize MEMOTION card states for fresh start
+	if e.state.Question != nil && e.state.Question.Type == QuestionTypeMemotion {
+		e.initMotionStateUnsafe()
+		log.Printf("[Engine] MEMOTION: grid initialized with %d cards", len(e.state.MotionCardStates))
+	}
+
 	// Reset QCM hints state for fresh start
 	e.state.QcmInvalidated = nil
 
@@ -540,8 +571,10 @@ func (e *Engine) actualStart() {
 
 	log.Printf("[Engine] Countdown finished, game started with delay %d", e.pendingDelay)
 
-	// Start main timer
-	e.startTimer()
+	// Start main timer — MEMOTION uses per-card timers (StartMotionCardTimer), not a global one
+	if e.state.Question == nil || e.state.Question.Type != QuestionTypeMemotion {
+		e.startTimer()
+	}
 
 	// Release lock BEFORE calling callback to avoid deadlock
 	callback := e.OnStateChange
@@ -930,6 +963,13 @@ func (e *Engine) ProcessButtonPress(bumperID string, pressTime int64, button str
 		return
 	}
 
+	// Ignore buzz for MEMOTION questions - admin controls the card selection
+	if e.state.Question != nil && e.state.Question.Type == QuestionTypeMemotion {
+		log.Printf("[Engine] Ignoring buzz for MEMOTION question from %s", bumperID)
+		e.mu.Unlock()
+		return
+	}
+
 	bumper, ok := e.data.Bumpers[bumperID]
 	if !ok {
 		log.Printf("[Engine] Unknown bumper: %s", bumperID)
@@ -1169,6 +1209,15 @@ func (e *Engine) InitGame() {
 
 	// Set phase to NEW_GAME
 	e.state.Phase = PhaseNewGame
+
+	// Reset MEMOTION state completely
+	e.state.MotionSubPhase = ""
+	e.state.MotionSelected = ""
+	e.state.MotionCardStates = make(map[string]string)
+	e.state.MotionCardTeams = make(map[string]string)
+	e.state.MotionCurrentTeam = ""
+	e.state.MotionCurrentTeamColor = []int{}
+	e.state.MotionParticipatingTeams = []string{}
 
 	log.Printf("[Engine] Game initialized: scores, history, question statuses reset")
 	e.mu.Unlock()
@@ -2476,5 +2525,353 @@ type MemoryError struct {
 }
 
 func (e *MemoryError) Error() string {
+	return e.Reason
+}
+
+// ============================================================
+// MEMOTION — v5.0.0
+// ============================================================
+
+// motionDifficultyPoints maps card difficulty (1|2|3) to points awarded.
+var motionDifficultyPoints = map[int]int{
+	1: 1,
+	2: 3,
+	3: 5,
+}
+
+// initMotionStateUnsafe initialises MEMOTION card states for the current question.
+// All cards are set to "UNPLAYED" and MotionSubPhase is reset to "GRID".
+// Must be called with e.mu held (write).
+func (e *Engine) initMotionStateUnsafe() {
+	e.state.MotionSubPhase = "GRID"
+	e.state.MotionSelected = ""
+	e.state.MotionCardStates = make(map[string]string)
+	if e.state.Question != nil {
+		for _, card := range e.state.Question.MotionCards {
+			e.state.MotionCardStates[card.ID] = "UNPLAYED"
+		}
+	}
+}
+
+// InitMotionState initialises MEMOTION card states (exported for direct use in tests).
+func (e *Engine) InitMotionState() {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.initMotionStateUnsafe()
+}
+
+// SelectMotionCard transitions a card from UNPLAYED to QUESTION and sets the sub-phase.
+// Preconditions: Phase==STARTED, MotionSubPhase=="GRID", card must be UNPLAYED.
+func (e *Engine) SelectMotionCard(cardID string) error {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+
+	if e.state.Phase != PhaseStarted {
+		return &MotionError{Reason: "NOT_STARTED"}
+	}
+	if e.state.MotionSubPhase != "GRID" {
+		return &MotionError{Reason: "NOT_IN_GRID_SUBPHASE"}
+	}
+	st, exists := e.state.MotionCardStates[cardID]
+	if !exists {
+		return &MotionError{Reason: "CARD_NOT_FOUND"}
+	}
+	if st != "UNPLAYED" {
+		return &MotionError{Reason: "CARD_NOT_UNPLAYED"}
+	}
+
+	e.state.MotionCardStates[cardID] = "QUESTION"
+	e.state.MotionSelected = cardID
+	e.state.MotionSubPhase = "QUESTION"
+
+	log.Printf("[Engine] MEMOTION SelectMotionCard: cardID=%s → QUESTION", cardID)
+	return nil
+}
+
+// RevealMotionCard transitions the current card from QUESTION to REVEAL.
+// Preconditions: Phase==STARTED, MotionSubPhase=="QUESTION".
+func (e *Engine) RevealMotionCard() error {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+
+	if e.state.Phase != PhaseStarted {
+		return &MotionError{Reason: "NOT_STARTED"}
+	}
+	if e.state.MotionSubPhase != "QUESTION" {
+		return &MotionError{Reason: "NOT_IN_QUESTION_SUBPHASE"}
+	}
+
+	cardID := e.state.MotionSelected
+	if cardID != "" {
+		e.state.MotionCardStates[cardID] = "REVEALED"
+	}
+	e.state.MotionSubPhase = "REVEAL"
+
+	log.Printf("[Engine] MEMOTION RevealMotionCard: cardID=%s → REVEAL", cardID)
+	return nil
+}
+
+// DoneMotionCard marks the active card as DONE, optionally awards points to winnerTeam,
+// rotates the team if needed, and returns to the GRID sub-phase.
+// Returns (pointsAwarded, isComplete, error).
+func (e *Engine) DoneMotionCard(cardID string, winnerTeam string) (int, bool, error) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+
+	if e.state.Phase != PhaseStarted {
+		return 0, false, &MotionError{Reason: "NOT_STARTED"}
+	}
+	if e.state.MotionSubPhase != "QUESTION" && e.state.MotionSubPhase != "REVEAL" {
+		return 0, false, &MotionError{Reason: "INVALID_SUBPHASE"}
+	}
+
+	// Validate card exists
+	if _, exists := e.state.MotionCardStates[cardID]; !exists {
+		return 0, false, &MotionError{Reason: "CARD_NOT_FOUND"}
+	}
+
+	// Mark card as DONE
+	e.state.MotionCardStates[cardID] = "DONE"
+
+	// Award points and record winner if winnerTeam is provided
+	points := 0
+	if winnerTeam != "" {
+		// Find card difficulty to calculate points
+		if e.state.Question != nil {
+			for _, card := range e.state.Question.MotionCards {
+				if card.ID == cardID {
+					pts, ok := motionDifficultyPoints[card.Difficulty]
+					if ok {
+						points = pts
+					}
+					break
+				}
+			}
+		}
+		if points > 0 {
+			// UpdateTeamScore requires mu.Lock — we hold it here, so use unsafe version
+			team, ok := e.data.Teams[winnerTeam]
+			if ok {
+				team.TeamPoints += points
+				e.recalculateTeamScoreUnsafe(winnerTeam)
+				log.Printf("[Engine] MEMOTION DoneMotionCard: team=%s +%dpts (difficulty-based)", winnerTeam, points)
+			}
+		}
+		e.state.MotionCardTeams[cardID] = winnerTeam
+	}
+
+	// Team rotation based on question mode
+	motionMode := ""
+	if e.state.Question != nil {
+		motionMode = e.state.Question.MotionMode
+		if motionMode == "" {
+			motionMode = string(MemoryModeSolo)
+		}
+	}
+
+	switch motionMode {
+	case string(MemoryModeChacunSonTour):
+		// Rotate after every card regardless of outcome
+		e.rotateMotionTeam()
+	case string(MemoryModeTantQueJeGagne):
+		// Rotate if no winner; keep if winner
+		if winnerTeam == "" {
+			e.rotateMotionTeam()
+		}
+	// MemoryModeSolo: no rotation
+	}
+
+	// Return to grid
+	e.state.MotionSubPhase = "GRID"
+	e.state.MotionSelected = ""
+
+	// Check if all cards are DONE
+	isComplete := true
+	for _, st := range e.state.MotionCardStates {
+		if st != "DONE" {
+			isComplete = false
+			break
+		}
+	}
+	if len(e.state.MotionCardStates) == 0 {
+		isComplete = false
+	}
+
+	log.Printf("[Engine] MEMOTION DoneMotionCard: cardID=%s winner=%s pts=%d complete=%v",
+		cardID, winnerTeam, points, isComplete)
+	return points, isComplete, nil
+}
+
+// SetMotionParticipatingTeams sets the teams participating in a MEMOTION game.
+// Mirrors SetMemoryParticipatingTeams — allowed during PREPARE or READY phases.
+func (e *Engine) SetMotionParticipatingTeams(teams []string) error {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+
+	if e.state.Phase != PhasePrepare && e.state.Phase != PhaseReady {
+		return &MotionError{Reason: "NOT_IN_PREPARE_OR_READY_PHASE"}
+	}
+	if e.state.Question == nil || e.state.Question.Type != QuestionTypeMemotion {
+		return &MotionError{Reason: "NOT_MEMOTION_QUESTION"}
+	}
+
+	// Validate all teams exist
+	for _, teamName := range teams {
+		if _, exists := e.data.Teams[teamName]; !exists {
+			return &MotionError{Reason: "TEAM_NOT_FOUND"}
+		}
+	}
+
+	e.state.MotionParticipatingTeams = teams
+	if len(teams) > 0 {
+		e.state.MotionCurrentTeam = teams[0]
+		if team, exists := e.data.Teams[teams[0]]; exists {
+			e.state.MotionCurrentTeamColor = team.Color
+		}
+	} else {
+		e.state.MotionCurrentTeam = ""
+		e.state.MotionCurrentTeamColor = []int{}
+	}
+
+	log.Printf("[Engine] MEMOTION SetMotionParticipatingTeams: teams=%v currentTeam=%s",
+		teams, e.state.MotionCurrentTeam)
+	return nil
+}
+
+// rotateMotionTeam advances MotionCurrentTeam to the next team in MotionParticipatingTeams.
+// Must be called with e.mu held (write).
+func (e *Engine) rotateMotionTeam() {
+	if len(e.state.MotionParticipatingTeams) == 0 {
+		return
+	}
+
+	// Find current team index
+	currentIndex := -1
+	for i, team := range e.state.MotionParticipatingTeams {
+		if team == e.state.MotionCurrentTeam {
+			currentIndex = i
+			break
+		}
+	}
+
+	// Circular rotation
+	nextIndex := (currentIndex + 1) % len(e.state.MotionParticipatingTeams)
+	prev := e.state.MotionCurrentTeam
+	e.state.MotionCurrentTeam = e.state.MotionParticipatingTeams[nextIndex]
+
+	// Update current team color
+	if team, exists := e.data.Teams[e.state.MotionCurrentTeam]; exists {
+		e.state.MotionCurrentTeamColor = team.Color
+	}
+
+	log.Printf("[Engine] MEMOTION team rotated: %s → %s (index %d)", prev, e.state.MotionCurrentTeam, nextIndex)
+}
+
+// StartMotionCardTimer starts a per-card countdown for MEMOTION.
+// Unlike startTimer(), expiry does NOT stop the game — the admin can still act.
+// If delay <= 0, no timer is started.
+func (e *Engine) StartMotionCardTimer(delay int) {
+	e.mu.Lock()
+
+	if delay <= 0 {
+		log.Printf("[Engine] MEMOTION StartMotionCardTimer: delay<=0, no timer started")
+		e.mu.Unlock()
+		return
+	}
+
+	// Stop any existing timer goroutine first (reuse same infrastructure as startTimer)
+	if e.stopCh != nil {
+		select {
+		case <-e.stopCh:
+			// Already closed
+		default:
+			close(e.stopCh)
+		}
+		e.stopCh = nil
+	}
+	if e.timer != nil {
+		e.timer.Stop()
+		e.timer = nil
+	}
+
+	// Set timer values
+	e.state.CurrentTime = delay
+	e.state.Delay = delay
+
+	// Create new stop channel and ticker
+	e.stopCh = make(chan struct{})
+	e.timer = time.NewTicker(1 * time.Second)
+
+	ticker := e.timer
+	stopCh := e.stopCh
+
+	log.Printf("[Engine] MEMOTION StartMotionCardTimer: delay=%ds", delay)
+	e.mu.Unlock()
+
+	go func() {
+		for {
+			select {
+			case <-ticker.C:
+				e.mu.Lock()
+				// Guard: exit if game state changed unexpectedly
+				if e.state.Phase != PhaseStarted || e.state.MotionSubPhase != "QUESTION" {
+					e.mu.Unlock()
+					ticker.Stop()
+					return
+				}
+				e.state.CurrentTime--
+				currentTime := e.state.CurrentTime
+				e.mu.Unlock()
+
+				if e.OnTimerTick != nil {
+					e.OnTimerTick(currentTime)
+				}
+
+				if currentTime <= 0 {
+					// Timer expired — do NOT call e.Stop(). Phase stays STARTED.
+					ticker.Stop()
+					log.Printf("[Engine] MEMOTION card timer expired — phase stays STARTED, admin must act")
+					return
+				}
+			case <-stopCh:
+				ticker.Stop()
+				return
+			}
+		}
+	}()
+}
+
+// StopMotionCardTimer stops the per-card timer without changing the game phase.
+// Resets CurrentTime to 0. Safe to call even if no timer is running.
+func (e *Engine) StopMotionCardTimer() {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+
+	if e.stopCh != nil {
+		select {
+		case <-e.stopCh:
+			// Already closed
+		default:
+			close(e.stopCh)
+		}
+		e.stopCh = nil
+	}
+	if e.timer != nil {
+		e.timer.Stop()
+		e.timer = nil
+	}
+
+	// Reset timer display without changing game phase
+	e.state.CurrentTime = 0
+
+	log.Printf("[Engine] MEMOTION StopMotionCardTimer: timer stopped, CURRENT_TIME=0")
+}
+
+// MotionError represents a MEMOTION-specific error
+type MotionError struct {
+	Reason string
+}
+
+func (e *MotionError) Error() string {
 	return e.Reason
 }
