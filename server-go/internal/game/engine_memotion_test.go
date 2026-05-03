@@ -1,16 +1,10 @@
-//go:build memotion
-
 // Tests for MEMOTION game mode (v5.0.0) — Issues #71/#72
 //
-// Build tag "memotion" is present because this feature branch is in active development.
-// All types and methods are implemented — the tag prevents double-run in default CI until
-// this branch merges into main.
+// Run: go test ./internal/game/... -v -run TestInitMotionState\|TestSelect\|TestReveal\|TestDoneMotion\|TestSetMotion\|TestProcessButtonPress_Ignores\|TestQuestionType\|TestMotionCard\|TestInitGame_Reset
 //
-// Run: go test -tags=memotion ./internal/game/... -v -run TestInitMotionState\|TestSelect\|TestReveal\|TestDoneMotion\|TestSetMotion\|TestProcessButtonPress_Ignores\|TestQuestionType\|TestMotionCard\|TestInitGame_Reset
-//
-// NOTE: StartImmediate() bypasses actualStart() and therefore skips initMotionStateUnsafe().
-// Tests must call e.InitMotionState() explicitly after StartImmediate() to mimic the
-// production startup sequence (Ready → Start → actualStart → initMotionStateUnsafe).
+// NOTE: Ready() calls initMotionStateUnsafe() for MEMOTION questions, so card states
+// are initialized before StartImmediate(). Tests using setupMotionEngine() have cards
+// in "UNPLAYED" state after setup, ready for SelectMotionCard().
 
 package game
 
