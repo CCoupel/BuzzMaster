@@ -102,9 +102,10 @@ const (
 type QuestionType string
 
 const (
-	QuestionTypeNormal QuestionType = "NORMAL"
-	QuestionTypeQCM    QuestionType = "QCM"
-	QuestionTypeMemory QuestionType = "MEMORY"
+	QuestionTypeNormal   QuestionType = "NORMAL"
+	QuestionTypeQCM      QuestionType = "QCM"
+	QuestionTypeMemory   QuestionType = "MEMORY"
+	QuestionTypeMemotion QuestionType = "MEMOTION" // NEW (v5.0.0): grid of cards with 3 faces
 )
 
 // PointsTarget represents who receives points for a question
@@ -161,6 +162,18 @@ const (
 	MemoryModeTantQueJeGagne MemoryMode = "TANT_QUE_JE_GAGNE"
 )
 
+// MotionCard represents one card in a MEMOTION grid (3 faces: RECTO, VERSO, REVEAL)
+type MotionCard struct {
+	ID            string `json:"ID"`                        // Unique identifier (e.g. "mc-1")
+	RectoTheme    string `json:"RECTO_THEME"`               // Theme/title shown on front face
+	RectoImage    string `json:"RECTO_IMAGE,omitempty"`     // Optional image on front face (data/files/ path)
+	Difficulty    int    `json:"DIFFICULTY"`                // 1 | 2 | 3 → 1pt | 3pt | 5pt
+	QuestionText  string `json:"QUESTION_TEXT,omitempty"`   // Question text (VERSO face)
+	QuestionImage string `json:"QUESTION_IMAGE,omitempty"`  // Optional question image
+	AnswerText    string `json:"ANSWER_TEXT,omitempty"`     // Answer text (REVEAL face)
+	AnswerImage   string `json:"ANSWER_IMAGE,omitempty"`    // Optional answer image
+}
+
 // MemoryConfig holds configuration for the Memory game
 type MemoryConfig struct {
 	FlipDelay          float64 `json:"FLIP_DELAY"`           // seconds before card flips back (default: 3)
@@ -191,6 +204,8 @@ type Question struct {
 	MemoryPairs       []MemoryPair     `json:"MEMORY_PAIRS,omitempty"`       // For Memory questions
 	MemoryConfig      *MemoryConfig    `json:"MEMORY_CONFIG,omitempty"`      // Memory game configuration
 	MemoryMode        string           `json:"MEMORY_MODE,omitempty"`        // "SOLO", "CHACUN_SON_TOUR", "TANT_QUE_JE_GAGNE" (default SOLO)
+	MotionCards       []MotionCard     `json:"MOTION_CARDS,omitempty"`       // Cards for MEMOTION questions (v5.0.0)
+	MotionMode        string           `json:"MOTION_MODE,omitempty"`        // "SOLO", "CHACUN_SON_TOUR", "TANT_QUE_JE_GAGNE" (default SOLO)
 	Points            string           `json:"POINTS"`                       // String to match JSON format
 	Time         string           `json:"TIME"`                    // String to match JSON format
 	Order        int              `json:"ORDER,omitempty"`         // Display order (for drag and drop)
@@ -229,6 +244,14 @@ type GameState struct {
 	MemoryPairOwners         map[int]string `json:"MEMORY_PAIR_OWNERS"`                    // pairID → teamName (tracks which team found each pair)
 	MemoryCurrentTeamColor   []int          `json:"MEMORY_CURRENT_TEAM_COLOR"`             // RGB color of current team
 	QcmInvalidated           []string       `json:"QCM_INVALIDATED"`                       // Invalidated QCM answers (e.g., ["RED", "YELLOW"])
+	// MEMOTION fields — NO omitempty: maps/slices/strings must be serialized even when empty for frontend reset (v5.0.0)
+	MotionSubPhase          string            `json:"MEMOTION_SUBPHASE"`            // "GRID" | "QUESTION" | "REVEAL" | ""
+	MotionSelected          string            `json:"MEMOTION_SELECTED"`            // ID of active card, "" when on grid
+	MotionCardStates        map[string]string `json:"MEMOTION_CARD_STATES"`         // cardID → "UNPLAYED"|"QUESTION"|"REVEALED"|"DONE"
+	MotionCardTeams         map[string]string `json:"MEMOTION_CARD_TEAMS"`          // cardID → teamName (winner)
+	MotionCurrentTeam       string            `json:"MEMOTION_CURRENT_TEAM"`        // Team currently playing
+	MotionParticipatingTeams []string         `json:"MEMOTION_PARTICIPATING_TEAMS"` // Teams selected to play
+	MotionCurrentTeamColor  []int             `json:"MEMOTION_CURRENT_TEAM_COLOR"`  // RGB color of current team
 	VirtualPlayerCount     int          `json:"VIRTUAL_PLAYER_COUNT"`           // Number of enrolled virtual players
 	VirtualPlayerLimit     int          `json:"VIRTUAL_PLAYER_LIMIT"`           // Maximum number of virtual players allowed
 	EnrollmentActive       bool         `json:"ENROLLMENT_ACTIVE"`              // Whether player enrollment is active
