@@ -860,6 +860,18 @@ func (a *App) handleWebMessage(incoming *protocol.IncomingMessage) {
 	case protocol.ActionMemorySetTeams:
 		a.handleMemorySetTeams(msg)
 
+	case protocol.ActionMotionSelect:
+		a.handleMotionSelect(msg)
+
+	case protocol.ActionMotionReveal:
+		a.handleMotionReveal(msg)
+
+	case protocol.ActionMotionDone:
+		a.handleMotionDone(msg)
+
+	case protocol.ActionMotionSetTeams:
+		a.handleMotionSetTeams(msg)
+
 	case protocol.ActionShowQRCode:
 		a.handleShowQRCode()
 
@@ -1423,6 +1435,153 @@ func (a *App) handleMemorySetTeams(msg *protocol.Message) {
 	}
 
 	// Broadcast updated game state to all clients
+	a.broadcastUpdate()
+	a.sendLEDSetAllBuzzers()
+}
+
+// ============================================================
+// MEMOTION handlers — v5.0.0
+// ============================================================
+
+// handleMotionSelect processes MEMOTION_SELECT: picks a card from the grid.
+func (a *App) handleMotionSelect(msg *protocol.Message) {
+	var payload protocol.MotionSelectPayload
+	if err := json.Unmarshal(msg.Msg, &payload); err != nil {
+		server.LogError(game.LogComponentApp, "Failed to parse MEMOTION_SELECT: %v", err)
+		return
+	}
+	if payload.CardID == "" {
+		server.LogWarn(game.LogComponentApp, "MEMOTION_SELECT: empty card ID")
+		return
+	}
+
+	server.LogInfo(game.LogComponentEngine, "MEMOTION_SELECT: cardID=%s", payload.CardID)
+
+	if err := a.engine.SelectMotionCard(payload.CardID); err != nil {
+		server.LogWarn(game.LogComponentEngine, "MEMOTION_SELECT error: %v", err)
+		return
+	}
+
+	// Start per-card timer if Question.Time > 0
+	state := a.engine.GetState()
+	if state.Question != nil && state.Question.Time != "" && state.Question.Time != "0" {
+		var delay int
+		if _, err2 := fmt.Sscanf(state.Question.Time, "%d", &delay); err2 == nil && delay > 0 {
+			a.engine.StartMotionCardTimer(delay)
+		}
+	}
+
+	a.broadcastUpdate()
+}
+
+// handleMotionReveal processes MEMOTION_REVEAL: flip the active card to its answer face.
+func (a *App) handleMotionReveal(msg *protocol.Message) {
+	server.LogInfo(game.LogComponentEngine, "MEMOTION_REVEAL")
+
+	// Stop timer (if running) before revealing
+	a.engine.StopMotionCardTimer()
+
+	if err := a.engine.RevealMotionCard(); err != nil {
+		server.LogWarn(game.LogComponentEngine, "MEMOTION_REVEAL error: %v", err)
+		return
+	}
+
+	a.broadcastUpdate()
+}
+
+// handleMotionDone processes MEMOTION_DONE: closes a card, awards points, rotates team.
+func (a *App) handleMotionDone(msg *protocol.Message) {
+	var payload protocol.MotionDonePayload
+	if err := json.Unmarshal(msg.Msg, &payload); err != nil {
+		server.LogError(game.LogComponentApp, "Failed to parse MEMOTION_DONE: %v", err)
+		return
+	}
+	if payload.CardID == "" {
+		server.LogWarn(game.LogComponentApp, "MEMOTION_DONE: empty card ID")
+		return
+	}
+
+	server.LogInfo(game.LogComponentEngine, "MEMOTION_DONE: cardID=%s winner=%s",
+		payload.CardID, payload.WinnerTeam)
+
+	// Stop per-card timer if still running
+	a.engine.StopMotionCardTimer()
+
+	points, isComplete, err := a.engine.DoneMotionCard(payload.CardID, payload.WinnerTeam)
+	if err != nil {
+		server.LogWarn(game.LogComponentEngine, "MEMOTION_DONE error: %v", err)
+		return
+	}
+
+	// Award LED comet effect to winning team
+	if points > 0 && payload.WinnerTeam != "" {
+		a.sendLEDSetComet(payload.WinnerTeam)
+	}
+
+	// Record event to history
+	if points > 0 && payload.WinnerTeam != "" {
+		state := a.engine.GetState()
+		questionID := ""
+		questionText := payload.CardID // Use cardID as fallback
+		questionCategory := ""
+		if state.Question != nil {
+			questionID = state.Question.ID
+			questionCategory = string(state.Question.Category)
+			// Use RectoTheme of the card as event context
+			for _, card := range state.Question.MotionCards {
+				if card.ID == payload.CardID {
+					questionText = card.RectoTheme
+					break
+				}
+			}
+		}
+		var teamColor []int
+		if team := a.engine.GetTeam(payload.WinnerTeam); team != nil {
+			teamColor = team.Color
+		}
+		event := game.GameEvent{
+			Timestamp:        time.Now().UnixMicro(),
+			QuestionID:       questionID,
+			QuestionText:     questionText,
+			QuestionCategory: questionCategory,
+			EventType:        "POINTS_AWARDED",
+			WinnerID:         payload.WinnerTeam,
+			WinnerName:       payload.WinnerTeam,
+			WinnerType:       "TEAM",
+			TeamName:         payload.WinnerTeam,
+			TeamColor:        teamColor,
+			Points:           points,
+		}
+		a.engine.AddGameEvent(event)
+		server.LogInfo(game.LogComponentEngine, "MEMOTION: %d pts → team %s", points, payload.WinnerTeam)
+	}
+
+	// Auto-stop when all cards are done
+	if isComplete {
+		server.LogInfo(game.LogComponentEngine, "MEMOTION game COMPLETE! All cards played.")
+		a.engine.Stop()
+		a.broadcastUpdate()
+		a.sendLEDSetAllBuzzers()
+	}
+
+	a.broadcastUpdate()
+}
+
+// handleMotionSetTeams processes MEMOTION_SET_TEAMS: sets participating teams.
+func (a *App) handleMotionSetTeams(msg *protocol.Message) {
+	var payload protocol.MotionSetTeamsPayload
+	if err := json.Unmarshal(msg.Msg, &payload); err != nil {
+		server.LogError(game.LogComponentApp, "Failed to parse MEMOTION_SET_TEAMS: %v", err)
+		return
+	}
+
+	server.LogInfo(game.LogComponentEngine, "MEMOTION_SET_TEAMS: teams=%v", payload.Teams)
+
+	if err := a.engine.SetMotionParticipatingTeams(payload.Teams); err != nil {
+		server.LogError(game.LogComponentEngine, "MEMOTION_SET_TEAMS error: %v", err)
+		return
+	}
+
 	a.broadcastUpdate()
 	a.sendLEDSetAllBuzzers()
 }
@@ -2233,6 +2392,9 @@ func (a *App) sendLEDSetForBuzzer(mac string) {
 		a.sendLEDSetForBuzzerQCM(mac, bumper, phase, state)
 	case state.Question != nil && state.Question.Type == game.QuestionTypeMemory:
 		a.sendLEDSetForBuzzerMemory(mac, bumper, phase, state)
+	case state.Question != nil && state.Question.Type == game.QuestionTypeMemotion:
+		// MEMOTION: buzzers display team color (same as NORMAL stopped state)
+		a.sendLEDSetForBuzzerNormal(mac, bumper, phase)
 	default:
 		a.sendLEDSetForBuzzerNormal(mac, bumper, phase)
 	}
@@ -2474,6 +2636,9 @@ func (a *App) sendLEDSetAllBuzzers() {
 			a.sendLEDSetForBuzzerQCM(mac, bumper, phase, state)
 		case state.Question != nil && state.Question.Type == game.QuestionTypeMemory:
 			a.sendLEDSetForBuzzerMemory(mac, bumper, phase, state)
+		case state.Question != nil && state.Question.Type == game.QuestionTypeMemotion:
+			// MEMOTION: buzzers display team color (same as NORMAL)
+			a.sendLEDSetForBuzzerNormal(mac, bumper, phase)
 		default:
 			a.sendLEDSetForBuzzerNormal(mac, bumper, phase)
 		}
