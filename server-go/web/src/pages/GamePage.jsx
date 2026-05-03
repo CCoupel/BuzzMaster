@@ -739,7 +739,7 @@ export default function GamePage() {
                   </div>
                   <div className="memotion-admin-card-grid">
                     {motionCards.map(card => {
-                      const state = cardStates[card.ID] || 'HIDDEN'
+                      const state = cardStates[card.ID] || 'UNPLAYED'
                       const isDone = state === 'DONE'
                       const winnerTeam = isDone ? cardTeams[card.ID] : null
                       const winnerColor = winnerTeam ? getRgbColor(teams[winnerTeam]?.COLOR) : null
@@ -748,8 +748,8 @@ export default function GamePage() {
                         <button
                           key={card.ID}
                           className={`memotion-admin-card ${state.toLowerCase()}`}
-                          onClick={() => state === 'HIDDEN' && sendMessage('MEMOTION_SELECT', { CARD_ID: card.ID })}
-                          disabled={state !== 'HIDDEN'}
+                          onClick={() => state === 'UNPLAYED' && sendMessage('MEMOTION_SELECT', { CARD_ID: card.ID })}
+                          disabled={state !== 'UNPLAYED'}
                           style={isDone && winnerColor ? { borderColor: winnerColor } : undefined}
                           title={isDone ? (winnerTeam || 'Sans vainqueur') : card.RECTO_THEME}
                         >
@@ -789,7 +789,7 @@ export default function GamePage() {
                     <Button variant="primary" size="md" onClick={() => sendMessage('MEMOTION_REVEAL', {})}>
                       RÉVÉLER
                     </Button>
-                    <Button variant="ghost" size="sm" onClick={() => sendMessage('MEMOTION_DONE', { WINNER: '' })}>
+                    <Button variant="ghost" size="sm" onClick={() => sendMessage('MEMOTION_DONE', { CARD_ID: gameState.MEMOTION_SELECTED, WINNER_TEAM: '' })}>
                       SANS VAINQUEUR
                     </Button>
                   </div>
@@ -822,7 +822,7 @@ export default function GamePage() {
                           key={team.name}
                           className="memotion-winner-chip"
                           style={{ backgroundColor: teamColor }}
-                          onClick={() => sendMessage('MEMOTION_DONE', { WINNER: team.name })}
+                          onClick={() => sendMessage('MEMOTION_DONE', { CARD_ID: gameState.MEMOTION_SELECTED, WINNER_TEAM: team.name })}
                         >
                           {team.name}
                         </button>
@@ -830,7 +830,7 @@ export default function GamePage() {
                     })}
                     <button
                       className="memotion-winner-chip none"
-                      onClick={() => sendMessage('MEMOTION_DONE', { WINNER: '' })}
+                      onClick={() => sendMessage('MEMOTION_DONE', { CARD_ID: gameState.MEMOTION_SELECTED, WINNER_TEAM: '' })}
                     >
                       Aucun
                     </button>

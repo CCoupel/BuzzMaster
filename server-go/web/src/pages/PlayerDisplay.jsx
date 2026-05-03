@@ -1933,7 +1933,7 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
                                     {winnerTeam}
                                   </span>
                                 )}
-                                {!winnerTeam && cardTeams[card.ID] === '' && (
+                                {!winnerTeam && (
                                   <span className="memotion-tv-card-nowinner">–</span>
                                 )}
                               </div>
