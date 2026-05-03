@@ -1560,7 +1560,6 @@ func (a *App) handleMotionDone(msg *protocol.Message) {
 	if isComplete {
 		server.LogInfo(game.LogComponentEngine, "MEMOTION game COMPLETE! All cards played.")
 		a.engine.Stop()
-		a.broadcastUpdate()
 		a.sendLEDSetAllBuzzers()
 	}
 
