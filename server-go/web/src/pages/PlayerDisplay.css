@@ -2648,6 +2648,11 @@
   text-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
 }
 
+/* Disable CSS transition on inner — framer-motion drives rotateY directly */
+.memotion-card .memory-card-inner {
+  transition: none;
+}
+
 /* Override memory-card-back for MEMOTION: shows RECTO content */
 .memotion-card .memory-card-back {
   background: linear-gradient(145deg, #1e1b4b 0%, #312e81 50%, #4c1d95 100%);

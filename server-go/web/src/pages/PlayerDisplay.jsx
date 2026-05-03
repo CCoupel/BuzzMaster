@@ -1945,14 +1945,26 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
                           return (
                             <motion.div
                               key={card.ID}
-                              className={`memory-card memotion-card${isDone ? ' flipped matched' : ''}${isSelected ? ' selected' : ''}`}
+                              className={`memory-card memotion-card${isDone ? ' matched' : ''}${isSelected ? ' selected' : ''}`}
                               style={isDone ? { '--matched-team-color': matchedColor } : undefined}
                               initial={{ opacity: 0, scale: 0.8 }}
                               animate={{ opacity: 1, scale: 1 }}
-                              transition={{ delay: index * 0.05 }}
+                              transition={{ delay: index * 0.05, duration: 0.3 }}
                             >
-                              <div className="memory-card-inner">
-                                {/* Front: shown when DONE (flipped) */}
+                              {/* Use motion.div on inner so framer-motion drives the 3D flip
+                                  (CSS .flipped class is not used — framer-motion owns rotateY) */}
+                              <motion.div
+                                className="memory-card-inner"
+                                initial={{ rotateY: 0 }}
+                                animate={{ rotateY: isDone ? 180 : 0 }}
+                                transition={{
+                                  duration: 0.6,
+                                  ease: [0.4, 0, 0.2, 1],
+                                  delay: isDone ? (index * 0.05 + 0.15) : 0
+                                }}
+                                style={{ transformStyle: 'preserve-3d' }}
+                              >
+                                {/* Front: shown when DONE (rotated 180° by framer-motion) */}
                                 <div className="memory-card-front">
                                   <span className="memotion-card-check">✓</span>
                                   {winnerTeam ? (
@@ -1970,7 +1982,7 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
                                   <span className="memotion-card-stars">{'★'.repeat(diff)}</span>
                                   <span className="memotion-card-pts">{diffPts(diff)}pt</span>
                                 </div>
-                              </div>
+                              </motion.div>
                             </motion.div>
                           )
                         })}
@@ -2009,7 +2021,14 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
               if (subphase === 'QUESTION' && selectedCard) {
                 const diff = selectedCard.DIFFICULTY || 1
                 return (
-                  <div className="memotion-tv-fullscreen">
+                  /* Flip-in from right: perspective + rotateY 90°→0° */
+                  <motion.div
+                    className="memotion-tv-fullscreen"
+                    initial={{ rotateY: 90, opacity: 0 }}
+                    animate={{ rotateY: 0, opacity: 1 }}
+                    transition={{ duration: 0.5, ease: [0.4, 0, 0.2, 1] }}
+                    style={{ perspective: '1200px' }}
+                  >
                     <div className="memotion-tv-fs-header">
                       <span className="memotion-tv-fs-theme">{selectedCard.RECTO_THEME}</span>
                       <span className="memotion-tv-fs-diff">{'★'.repeat(diff)}</span>
@@ -2028,6 +2047,7 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
                           className="memotion-tv-fs-img"
                           initial={{ opacity: 0, scale: 0.9 }}
                           animate={{ opacity: 1, scale: 1 }}
+                          transition={{ delay: 0.3 }}
                         />
                       )}
                       {selectedCard.QUESTION_TEXT && (
@@ -2035,7 +2055,7 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
                           className="memotion-tv-fs-text"
                           initial={{ opacity: 0, y: 20 }}
                           animate={{ opacity: 1, y: 0 }}
-                          transition={{ delay: 0.1 }}
+                          transition={{ delay: 0.35 }}
                         >
                           {selectedCard.QUESTION_TEXT}
                         </motion.p>
@@ -2050,7 +2070,7 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
                         showPhase={false}
                       />
                     </div>
-                  </div>
+                  </motion.div>
                 )
               }
 
@@ -2058,7 +2078,14 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
               if (subphase === 'REVEAL' && selectedCard) {
                 const diff = selectedCard.DIFFICULTY || 1
                 return (
-                  <div className="memotion-tv-fullscreen memotion-tv-reveal">
+                  /* Flip-in from left (opposite direction to QUESTION): rotateY -90°→0° */
+                  <motion.div
+                    className="memotion-tv-fullscreen memotion-tv-reveal"
+                    initial={{ rotateY: -90, opacity: 0 }}
+                    animate={{ rotateY: 0, opacity: 1 }}
+                    transition={{ duration: 0.5, ease: [0.4, 0, 0.2, 1] }}
+                    style={{ perspective: '1200px' }}
+                  >
                     <div className="memotion-tv-fs-header">
                       <span className="memotion-tv-fs-theme">{selectedCard.RECTO_THEME}</span>
                       <span className="memotion-tv-fs-diff">{'★'.repeat(diff)}</span>
@@ -2072,6 +2099,7 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
                           className="memotion-tv-fs-img"
                           initial={{ opacity: 0, scale: 0.9 }}
                           animate={{ opacity: 1, scale: 1 }}
+                          transition={{ delay: 0.3 }}
                         />
                       )}
                       {selectedCard.ANSWER_TEXT && (
@@ -2079,13 +2107,13 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
                           className="memotion-tv-fs-text memotion-tv-answer-text"
                           initial={{ opacity: 0, y: 20 }}
                           animate={{ opacity: 1, y: 0 }}
-                          transition={{ delay: 0.1 }}
+                          transition={{ delay: 0.35 }}
                         >
                           {selectedCard.ANSWER_TEXT}
                         </motion.p>
                       )}
                     </div>
-                  </div>
+                  </motion.div>
                 )
               }
 
