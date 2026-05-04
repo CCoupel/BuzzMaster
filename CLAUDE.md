@@ -355,20 +355,14 @@ Le serveur offre trois endpoints WebSocket spécialisés avec routage intelligen
 **Structure MotionCard** :
 ```json
 {
-  "ID": "card_1",
-  "RECTO": {
-    "TEXT": "Thème de la carte",
-    "IMAGE": "/files/memotion/card_1_recto.jpg",
-    "DIFFICULTY": 2
-  },
-  "VERSO": {
-    "TEXT": "Question ou énigme",
-    "IMAGE": "/files/memotion/card_1_verso.jpg"
-  },
-  "REVEAL": {
-    "TEXT": "Réponse ou explication",
-    "IMAGE": "/files/memotion/card_1_reveal.jpg"
-  }
+  "ID": "mc-1",
+  "RECTO_THEME": "Thème de la carte",
+  "RECTO_IMAGE": "/files/questions/img_recto.jpg",
+  "DIFFICULTY": 2,
+  "QUESTION_TEXT": "Question ou énigme",
+  "QUESTION_IMAGE": "/files/questions/img_question.jpg",
+  "ANSWER_TEXT": "Réponse ou explication",
+  "ANSWER_IMAGE": "/files/questions/img_answer.jpg"
 }
 ```
 
@@ -377,87 +371,105 @@ Le serveur offre trois endpoints WebSocket spécialisés avec routage intelligen
 - ★★ (DIFFICULTY=2) → 3 points
 - ★★★ (DIFFICULTY=3) → 5 points
 
+**Flux de jeu MEMOTION (9 étapes)** :
+1. Admin clique sur une carte dans la grille → `MEMOTION_SELECT` → subphase `SELECTED`
+2. TV : la carte sélectionnée zoome en plein écran (animation) affichant RECTO (thème + difficulté + points). Pas de timer.
+3. Admin clique à nouveau (ou bouton "Démarrer") → `MEMOTION_FLIP` → subphase `QUESTION` + timer démarre
+4. TV : flip 3D de la carte → affichage VERSO (question + image). Timer visible.
+5. Timer s'écoule OU admin clique "STOP TIMER" → `MEMOTION_STOP_TIMER` → timer s'arrête, subphase reste `QUESTION`
+6. Admin clique "RÉVÉLER" → `MEMOTION_REVEAL` → subphase `REVEAL`
+7. TV : flip 3D → affichage REVEAL (réponse + image) plein écran.
+8. Admin clique sur l'équipe gagnante (ou "Aucun") → `MEMOTION_DONE` → carte retourne en grille avec couleur équipe
+9. TV : zoom retour en grille + carte marquée DONE avec couleur d'équipe. Équipe suivante sélectionnée.
+
 **Subphases MEMOTION** :
-- `GRID` : affichage grille cartes, clickable RECTO faces visibles
-- `QUESTION` : carte sélectionnée, affichage VERSO (question) plein écran 100vw×100vh, timer per-carte
-- `REVEAL` : admin clique bouton RÉVÉLER, affichage REVEAL (réponse) plein écran, admin attribue points via UI
-- `DONE` : carte retournée dans grille avec couleur équipe winner, grille reste interactive
+- `GRID` : grille de cartes affichée, faces RECTO visibles, prêtes à être sélectionnées
+- `SELECTED` : carte sélectionnée zoomée en plein écran (RECTO thème + points), admin peut flipper ou annuler. **Pas de timer.**
+- `QUESTION` : flip 3D → face VERSO (question) plein écran 100vw×100vh, timer per-carte actif
+- `REVEAL` : flip 3D → face REVEAL (réponse) plein écran, admin attribue points via UI
 
 **Champs GameState** (v5.0.0) :
-- `MEMOTION_SUBPHASE` : string (GRID|QUESTION|REVEAL|DONE)
-- `MEMOTION_SELECTED` : string (ID carte sélectionnée, nil en GRID)
-- `MEMOTION_CARD_STATES` : map[string]CardState (par CARD_ID) — states : AVAILABLE, SELECTED, PLAYING, DONE
-- `MEMOTION_CARD_TEAMS` : map[string]string (CARD_ID → TEAM_ID quand DONE)
-- `MEMOTION_CURRENT_TEAM` : string (équipe active en CHACUN_SON_TOUR mode, nil en SOLO)
-- `MEMOTION_PARTICIPATING_TEAMS` : []string (liste équipes participant au jeu)
-- `MEMOTION_CURRENT_TEAM_COLOR` : [3]int (RGB couleur équipe actuelle, pour LED)
+- `MEMOTION_SUBPHASE` : string (`"GRID"` | `"SELECTED"` | `"QUESTION"` | `"REVEAL"` | `""`)
+- `MEMOTION_SELECTED` : string (ID carte sélectionnée, `""` quand en GRID)
+- `MEMOTION_CARD_STATES` : map[string]string (CARD_ID → `"UNPLAYED"` | `"SELECTED"` | `"QUESTION"` | `"REVEALED"` | `"DONE"`)
+- `MEMOTION_CARD_TEAMS` : map[string]string (CARD_ID → teamName quand DONE)
+- `MEMOTION_CURRENT_TEAM` : string (équipe active)
+- `MEMOTION_PARTICIPATING_TEAMS` : []string (équipes participant au jeu)
+- `MEMOTION_CURRENT_TEAM_COLOR` : [3]int (RGB couleur équipe actuelle)
+- **Règle** : aucun de ces champs n'utilise `omitempty` — toujours sérialisés même si vides (évite réinitialisations manquées côté frontend)
 
 **Modes de jeu MEMOTION** (même logique que MEMORY) :
-- `SOLO` : aucune rotation équipe, une seule équipe joue, points directement à l'équipe
-- `CHACUN_SON_TOUR` : rotation entre équipes après chaque carte révélée (WINNER_TEAM champ MEMOTION_DONE)
-- `TANT_QUE_JE_GAGNE` : équipe conserve tour tant qu'elle gagne (points = difficulté), équipe suivante si mauvaise réponse
+- `SOLO` : aucune rotation équipe, une seule équipe joue
+- `CHACUN_SON_TOUR` : rotation entre équipes après chaque carte
+- `TANT_QUE_JE_GAGNE` : équipe conserve tour si elle gagne, passe sinon
 
 **Actions WebSocket (v5.0.0)** :
 ```json
-// Admin → Server : sélectionner une carte en phase GRID
-{ "ACTION": "MEMOTION_SELECT", "MSG": { "CARD_ID": "card_1" } }
+// Admin → Server : étape 1 — sélectionner une carte de la grille (→ SELECTED, pas de timer)
+{ "ACTION": "MEMOTION_SELECT", "MSG": { "CARD_ID": "mc-1" } }
 
-// Admin → Server : révéler la réponse (passer QUESTION → REVEAL)
+// Admin → Server : étape 3 — flipper la carte sélectionnée (→ QUESTION + timer démarre)
+{ "ACTION": "MEMOTION_FLIP", "MSG": {} }
+
+// Admin → Server : étape 5 — arrêter le timer manuellement (subphase reste QUESTION)
+{ "ACTION": "MEMOTION_STOP_TIMER", "MSG": {} }
+
+// Admin → Server : étape 6 — révéler la réponse (→ REVEAL, timer arrêté)
 { "ACTION": "MEMOTION_REVEAL", "MSG": {} }
 
-// Admin → Server : terminer la carte (passer REVEAL → DONE, attribuer points)
-{ "ACTION": "MEMOTION_DONE", "MSG": { "CARD_ID": "card_1", "WINNER_TEAM": "team_A" } }
+// Admin → Server : étape 8 — terminer la carte (→ DONE, retour GRID, points attribués)
+{ "ACTION": "MEMOTION_DONE", "MSG": { "CARD_ID": "mc-1", "WINNER_TEAM": "team_A" } }
+// WINNER_TEAM="" → pas de vainqueur, pas de points
 
-// Admin → Server : configurer équipes participantes
+// Admin → Server : configurer équipes participantes (pendant PREPARE ou READY)
 { "ACTION": "MEMOTION_SET_TEAMS", "MSG": { "TEAMS": ["team_A", "team_B"] } }
 
-// Server → Web : broadcast état MEMOTION
-{ "ACTION": "UPDATE", "MSG": { "memotion_subphase": "QUESTION", "memotion_selected": "card_1", "memotion_current_team": "team_A" } }
+// Server → Web : broadcast état complet
+{ "ACTION": "UPDATE", "MSG": { "MEMOTION_SUBPHASE": "QUESTION", "MEMOTION_SELECTED": "mc-1", "MEMOTION_CURRENT_TEAM": "team_A", ... } }
 ```
 
 **Timer par carte** :
-- Démarre à la sélection (GRID → QUESTION)
-- Durée configurable per-carte (défaut 30s, configurable lors de l'édition)
-- Affiché sur TV (centré sous ou sur VERSO)
-- `REVEAL` n'a pas de timer automatique — admin contrôle le timing
-- `DONE` valide la carte et passe à l'équipe suivante (CHACUN_SON_TOUR/TANT_QUE_JE_GAGNE)
+- Démarre au FLIP (subphase SELECTED → QUESTION via `MEMOTION_FLIP`)
+- Durée configurée dans le champ `Time` de la Question (format "30" pour 30s, "0" = pas de timer)
+- Affiché sur TV (composant `<Timer>`) pendant la subphase QUESTION
+- Timer expiré → CurrentTime reste à 0, subphase reste QUESTION — admin doit agir (STOP ou REVEAL)
+- `MEMOTION_STOP_TIMER` : arrêt manuel du timer, subphase reste QUESTION
+- `MEMOTION_REVEAL` : arrête aussi le timer (via `StopMotionCardTimer()`) avant de passer à REVEAL
 
-**API REST MEMOTION** :
-```
-POST   /api/memotion/questions              → Créer set de cartes MEMOTION
-GET    /api/memotion/questions              → Lister sets MEMOTION
-GET    /api/memotion/questions/{setId}      → Récupérer set détail
-PUT    /api/memotion/questions/{setId}      → Mettre à jour set
-DELETE /api/memotion/questions/{setId}      → Supprimer set
-POST   /api/memotion/questions/{setId}/cards → Ajouter carte au set
-PUT    /api/memotion/questions/{setId}/cards/{cardId} → Mettre à jour carte
-DELETE /api/memotion/questions/{setId}/cards/{cardId} → Supprimer carte
-```
+**Annulation depuis SELECTED** :
+- `MEMOTION_DONE` avec `WINNER_TEAM=""` depuis SELECTED : annule la sélection, carte retourne à UNPLAYED, grille restaurée
+- DoneMotionCard accepte `SELECTED` comme subphase valide (annulation propre)
 
-**Interface Admin** :
-- Zone MEMOTION dans page `/admin/quiz` (nouvelle section)
-- Upload RECTO/VERSO/REVEAL images per-carte (drag-and-drop ou file picker)
-- Éditeur grille : ordre cartes, difficulté, aperçu RECTO
-- Prévisualisation VERSO/REVEAL en modal
-- Sélecteur « Mode de jeu » : SOLO / CHACUN_SON_TOUR / TANT_QUE_JE_GAGNE
+**Interface Admin (GamePage)** — panneaux par subphase :
+- `GRID` : grille de boutons (un par carte), click → `MEMOTION_SELECT`, cartes DONE désactivées avec couleur équipe
+- `SELECTED` : affiche thème + difficulté, bouton "DÉMARRER" → `MEMOTION_FLIP`, bouton "RETOUR" → `MEMOTION_DONE` vide (cancel)
+- `QUESTION` : affiche texte question, timer actif, bouton "STOP TIMER" (si timer>0) → `MEMOTION_STOP_TIMER`, bouton "RÉVÉLER" → `MEMOTION_REVEAL`
+- `REVEAL` : affiche réponse, chips équipes → `MEMOTION_DONE` avec WINNER_TEAM, bouton "Aucun" → DONE vide
 
-**Interface TV** :
-- Subphase GRID : grille responsive 3×4 ou 4×5 (configurable), cartes avec images RECTO, clickable via admin WebSocket
-- Subphase QUESTION : VERSO full-screen (100vw×100vh), timer en bas center, "RECTO theme" petit texte en haut
-- Subphase REVEAL : REVEAL full-screen (100vw×100vh), difficulté badge (★/★★/★★★) en coin, "QUESTION text" petit contexte
-- Subphase DONE : retour à GRID, carte avec couleur équipe winner + badge "✓"
+**Interface TV (PlayerDisplay)** — vues par subphase :
+- `GRID` : grille responsive (motionCols calculé selon nb cartes), cards avec framer-motion `layoutId={mc-${card.ID}}`, DONE cards retournées
+- `SELECTED` : la carte sélectionnée zoome depuis sa position grille vers plein écran via `layoutId` framer-motion — affiche RECTO (thème + image + difficulté + points)
+- `QUESTION` : AnimatePresence flip rotateY -90→0, affiche VERSO (question text/image) + Timer
+- `REVEAL` : AnimatePresence flip rotateY 90→0 (direction opposée), affiche réponse text/image
+- **Contrainte TV** : `overflow: hidden`, dimensions viewport — voir section Contrainte Affichage TV
+
+**Animations framer-motion** :
+- GRID → SELECTED : `layoutId` sur chaque card dans la grille + même `layoutId` sur overlay fullscreen → zoom automatique depuis la grille
+- Carte en grille cachée (visibility: hidden) quand c'est la carte selected/active (évite doublon visuel)
+- SELECTED → QUESTION : `AnimatePresence` key="selected"→"question", `initial={{ rotateY: -90 }}`
+- QUESTION → REVEAL : `AnimatePresence` key="question"→"reveal", `initial={{ rotateY: 90 }}` (direction opposée)
+- DONE → GRID : `layoutId` anime le retour de la carte fullscreen vers sa position grille
 
 **Fichiers clés** :
-- `server-go/internal/game/models.go` : struct `MotionCard`, struct `CardState`, champs `GameState.MEMOTION_*` (v5.0.0)
-- `server-go/internal/game/engine.go` : handlers `handleMemotionSelect()`, `handleMemotionReveal()`, `handleMemotionDone()`, `handleMemotionSetTeams()` ; logique subphase transitions, timer per-carte (v5.0.0)
-- `server-go/internal/protocol/messages.go` : actions `ActionMemotionSelect`, `ActionMemotionReveal`, `ActionMemotionDone`, `ActionMemotionSetTeams` avec payloads (v5.0.0)
-- `server-go/cmd/server/main.go` : handlers WebSocket + broadcast MEMOTION actions ; LED logic MEMOTION (couleur équipe active en CHACUN_SON_TOUR) (v5.0.0)
-- `server-go/internal/server/http.go` : endpoints REST MEMOTION (CRUD sets + cartes) (v5.0.0)
-- `web/src/pages/GamePage.jsx` : affichage équipes, timer per-carte, mode démo intégration MEMOTION (v5.0.0)
-- `web/src/pages/QuizPage.jsx` (ex-QuestionsPage) : Zone MEMOTION (upload images, éditeur grille, aperçu cartes) (v5.0.0)
-- `web/src/pages/PlayerDisplay.jsx` : subphases GRID/QUESTION/REVEAL/DONE rendering (100vw×100vh constraints, STATIQUE) (v5.0.0)
-- `web/src/components/QuestionCard.jsx` : composant `<MotionCard>` pour affichage grille + aperçus (v5.0.0)
-- `web/src/hooks/useWebSocket.js` : handling actions `MEMOTION_*`, state updates (v5.0.0)
+- `server-go/internal/game/models.go` : struct `MotionCard`, champs `GameState.Motion*` (NO omitempty), `QuestionTypeMemotion` (v5.0.0)
+- `server-go/internal/game/engine.go` : `SelectMotionCard()` (→SELECTED), `FlipMotionCard()` (→QUESTION+timer), `RevealMotionCard()`, `DoneMotionCard()` (accepte SELECTED pour annulation), `SetMotionParticipatingTeams()`, `StartMotionCardTimer()`, `StopMotionCardTimer()` (v5.0.0)
+- `server-go/internal/game/engine_memotion_test.go` : tests unitaires MEMOTION (v5.0.0)
+- `server-go/internal/protocol/messages.go` : `ActionMotionSelect`, `ActionMotionFlip`, `ActionMotionStopTimer`, `ActionMotionReveal`, `ActionMotionDone`, `ActionMotionSetTeams` (v5.0.0)
+- `server-go/cmd/server/main.go` : `handleMotionSelect`, `handleMotionFlip`, `handleMotionStopTimer`, `handleMotionReveal`, `handleMotionDone`, `handleMotionSetTeams` (v5.0.0)
+- `web/src/pages/GamePage.jsx` : panneaux admin MEMOTION (GRID/SELECTED/QUESTION/REVEAL subphase controls) (v5.0.0)
+- `web/src/pages/QuestionsPage.jsx` : Zone MEMOTION — éditeur grille, upload images, difficulté (v5.0.0)
+- `web/src/pages/PlayerDisplay.jsx` : vues TV GRID/SELECTED/QUESTION/REVEAL, framer-motion layoutId + AnimatePresence flip (v5.0.0)
+- `web/src/pages/PlayerDisplay.css` : classes `.memotion-*` pour TV (plein écran, flip 3D, grille)
 
 ### Modele Bumper enrichi (v3.1.0)
 
