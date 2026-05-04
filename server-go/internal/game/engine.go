@@ -2660,9 +2660,10 @@ func (e *Engine) DoneMotionCard(cardID string, winnerTeam string) (int, bool, er
 		return 0, false, &MotionError{Reason: "INVALID_SUBPHASE"}
 	}
 
-	// Cancellation from SELECTED subphase: reset card to UNPLAYED, return to GRID
+	// Cancellation from SELECTED subphase: reset card to UNPLAYED, return to GRID.
+	// Use e.state.MotionSelected (server-authoritative) rather than client-supplied cardID.
 	if e.state.MotionSubPhase == "SELECTED" {
-		e.state.MotionCardStates[cardID] = "UNPLAYED"
+		e.state.MotionCardStates[e.state.MotionSelected] = "UNPLAYED"
 		e.state.MotionSelected = ""
 		e.state.MotionSubPhase = "GRID"
 		log.Printf("[Engine] MEMOTION DoneMotionCard: SELECTED → cancelled, cardID=%s back to UNPLAYED", cardID)
