@@ -863,6 +863,12 @@ func (a *App) handleWebMessage(incoming *protocol.IncomingMessage) {
 	case protocol.ActionMotionSelect:
 		a.handleMotionSelect(msg)
 
+	case protocol.ActionMotionFlip:
+		a.handleMotionFlip(msg)
+
+	case protocol.ActionMotionStopTimer:
+		a.handleMotionStopTimer(msg)
+
 	case protocol.ActionMotionReveal:
 		a.handleMotionReveal(msg)
 
@@ -1443,7 +1449,7 @@ func (a *App) handleMemorySetTeams(msg *protocol.Message) {
 // MEMOTION handlers — v5.0.0
 // ============================================================
 
-// handleMotionSelect processes MEMOTION_SELECT: picks a card from the grid.
+// handleMotionSelect processes MEMOTION_SELECT: picks a card from the grid (→ SELECTED subphase, no timer).
 func (a *App) handleMotionSelect(msg *protocol.Message) {
 	var payload protocol.MotionSelectPayload
 	if err := json.Unmarshal(msg.Msg, &payload); err != nil {
@@ -1462,6 +1468,18 @@ func (a *App) handleMotionSelect(msg *protocol.Message) {
 		return
 	}
 
+	a.broadcastUpdate()
+}
+
+// handleMotionFlip processes MEMOTION_FLIP: transitions selected card to QUESTION face and starts timer.
+func (a *App) handleMotionFlip(msg *protocol.Message) {
+	server.LogInfo(game.LogComponentEngine, "MEMOTION_FLIP")
+
+	if err := a.engine.FlipMotionCard(); err != nil {
+		server.LogWarn(game.LogComponentEngine, "MEMOTION_FLIP error: %v", err)
+		return
+	}
+
 	// Start per-card timer if Question.Time > 0
 	state := a.engine.GetState()
 	if state.Question != nil && state.Question.Time != "" && state.Question.Time != "0" {
@@ -1471,6 +1489,13 @@ func (a *App) handleMotionSelect(msg *protocol.Message) {
 		}
 	}
 
+	a.broadcastUpdate()
+}
+
+// handleMotionStopTimer processes MEMOTION_STOP_TIMER: stops the per-card timer without changing subphase.
+func (a *App) handleMotionStopTimer(msg *protocol.Message) {
+	server.LogInfo(game.LogComponentEngine, "MEMOTION_STOP_TIMER")
+	a.engine.StopMotionCardTimer()
 	a.broadcastUpdate()
 }
 
