@@ -2565,7 +2565,8 @@ func (e *Engine) InitMotionState() {
 	e.initMotionStateUnsafe()
 }
 
-// SelectMotionCard transitions a card from UNPLAYED to QUESTION and sets the sub-phase.
+// SelectMotionCard transitions a card from UNPLAYED to SELECTED and sets the sub-phase to SELECTED.
+// The card is displayed fullscreen (RECTO face) on the TV, no timer starts here.
 // Preconditions: Phase==STARTED, MotionSubPhase=="GRID", card must be UNPLAYED.
 func (e *Engine) SelectMotionCard(cardID string) error {
 	e.mu.Lock()
@@ -2585,11 +2586,40 @@ func (e *Engine) SelectMotionCard(cardID string) error {
 		return &MotionError{Reason: "CARD_NOT_UNPLAYED"}
 	}
 
-	e.state.MotionCardStates[cardID] = "QUESTION"
+	e.state.MotionCardStates[cardID] = "SELECTED"
 	e.state.MotionSelected = cardID
+	e.state.MotionSubPhase = "SELECTED"
+
+	log.Printf("[Engine] MEMOTION SelectMotionCard: cardID=%s → SELECTED", cardID)
+	return nil
+}
+
+// FlipMotionCard transitions the selected card from SELECTED to QUESTION.
+// Preconditions: Phase==STARTED, MotionSubPhase=="SELECTED".
+// The caller (main.go) is responsible for starting the per-card timer after this call.
+func (e *Engine) FlipMotionCard() error {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+
+	if e.state.Phase != PhaseStarted {
+		return &MotionError{Reason: "NOT_STARTED"}
+	}
+	if e.state.MotionSubPhase != "SELECTED" {
+		return &MotionError{Reason: "NOT_IN_SELECTED_SUBPHASE"}
+	}
+
+	cardID := e.state.MotionSelected
+	if cardID == "" {
+		return &MotionError{Reason: "NO_CARD_SELECTED"}
+	}
+	if e.state.MotionCardStates[cardID] != "SELECTED" {
+		return &MotionError{Reason: "CARD_NOT_IN_SELECTED_STATE"}
+	}
+
+	e.state.MotionCardStates[cardID] = "QUESTION"
 	e.state.MotionSubPhase = "QUESTION"
 
-	log.Printf("[Engine] MEMOTION SelectMotionCard: cardID=%s → QUESTION", cardID)
+	log.Printf("[Engine] MEMOTION FlipMotionCard: cardID=%s → QUESTION", cardID)
 	return nil
 }
 
@@ -2626,8 +2656,17 @@ func (e *Engine) DoneMotionCard(cardID string, winnerTeam string) (int, bool, er
 	if e.state.Phase != PhaseStarted {
 		return 0, false, &MotionError{Reason: "NOT_STARTED"}
 	}
-	if e.state.MotionSubPhase != "QUESTION" && e.state.MotionSubPhase != "REVEAL" {
+	if e.state.MotionSubPhase != "QUESTION" && e.state.MotionSubPhase != "REVEAL" && e.state.MotionSubPhase != "SELECTED" {
 		return 0, false, &MotionError{Reason: "INVALID_SUBPHASE"}
+	}
+
+	// Cancellation from SELECTED subphase: reset card to UNPLAYED, return to GRID
+	if e.state.MotionSubPhase == "SELECTED" {
+		e.state.MotionCardStates[cardID] = "UNPLAYED"
+		e.state.MotionSelected = ""
+		e.state.MotionSubPhase = "GRID"
+		log.Printf("[Engine] MEMOTION DoneMotionCard: SELECTED → cancelled, cardID=%s back to UNPLAYED", cardID)
+		return 0, false, nil
 	}
 
 	// Validate card exists
