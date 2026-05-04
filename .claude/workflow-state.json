@@ -1,20 +1,20 @@
 {
   "type": "FEATURE",
   "description": "MEMOTION — nouveau type de jeu grille de cartes recto/verso/reveal",
-  "branch": "feature/memotion",
-  "version": "5.0.0",
+  "branch": "main",
+  "version": "5.0.1",
   "started_at": "2026-05-03T14:00:00Z",
   "cycles": 2,
   "plan": "_work/reports/plan-20260503-120000.md",
   "phases": {
     "clarification": { "status": "completed", "skipped": false },
     "plan":          { "status": "completed", "report": "_work/reports/plan-20260503-120000.md" },
-    "dev-backend":   { "status": "in_progress", "note": "cycle 2: SELECTED subphase + MEMOTION_FLIP/STOP_TIMER actions" },
-    "dev-frontend":  { "status": "in_progress", "note": "cycle 2: SELECTED zoom layoutId + GamePage SELECTED/QUESTION panels" },
-    "test-writer":   { "status": "in_progress" },
-    "review":        { "status": "pending" },
-    "qa":            { "status": "pending" },
-    "doc":           { "status": "in_progress", "note": "CLAUDE.md updated with 9-step flow" },
+    "dev-backend":   { "status": "completed", "note": "cycle 2: SELECTED subphase + MEMOTION_FLIP/STOP_TIMER, 148 tests PASS" },
+    "dev-frontend":  { "status": "completed", "note": "cycle 2: SELECTED zoom layoutId + GamePage SELECTED/QUESTION panels, build OK" },
+    "test-writer":   { "status": "completed" },
+    "review":        { "status": "completed", "verdict": "APPROUVÉ AVEC RÉSERVES", "note": "1 minor fixed: server-authoritative MotionSelected on cancel" },
+    "qa":            { "status": "in_progress" },
+    "doc":           { "status": "completed", "note": "CLAUDE.md updated with 9-step flow + file keys" },
     "deploy-qualif": { "status": "pending" },
     "deploy-prod":   { "status": "pending" }
   }

@@ -3,6 +3,22 @@
 Historique des versions du projet BuzzControl.
 
 
+## [5.0.1] - 2026-05-04
+
+### Changed
+- **[MEMOTION — subphase SELECTED]** : Nouveau step entre la sélection et la question
+  - `MEMOTION_SELECT` → subphase `SELECTED` (carte zoomée en plein écran, RECTO visible, pas de timer)
+  - `MEMOTION_FLIP` (nouvelle action) → subphase `QUESTION` + démarrage timer per-carte
+  - `MEMOTION_STOP_TIMER` (nouvelle action) → arrêt manuel du timer, subphase reste `QUESTION`
+  - Admin : panneau SELECTED avec boutons "DÉMARRER" (FLIP) et "ANNULER" ; bouton "STOP TIMER" en phase QUESTION
+  - TV : animation zoom framer-motion `layoutId` depuis la grille vers fullscreen (SELECTED) → flip rotateY (QUESTION/REVEAL)
+  - Annulation depuis SELECTED : `MEMOTION_DONE` vide ramène la carte à `UNPLAYED`
+
+### Fixed
+- `DoneMotionCard` cancel-from-SELECTED utilise désormais `e.state.MotionSelected` (authoritative serveur) au lieu du `cardID` client
+
+---
+
 ## [5.0.0] - 2026-05-03
 
 ### Added
