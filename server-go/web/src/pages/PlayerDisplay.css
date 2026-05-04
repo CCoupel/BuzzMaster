@@ -2737,6 +2737,29 @@
   color: rgba(255, 255, 255, 0.35);
 }
 
+/* MEMOTION — grille dimmed quand fullscreen actif */
+.memotion-grid-dimmed {
+  pointer-events: none;
+  opacity: 0.25;
+}
+
+/* MEMOTION — SELECTED fullscreen (face RECTO) */
+.memotion-tv-selected {
+  background: #1a1a2e;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2vh;
+}
+
+.memotion-tv-selected .memotion-tv-fs-body {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 1;
+}
+
 /* --- QUESTION / REVEAL subphases (fullscreen) --- */
 .memotion-tv-fullscreen {
   display: flex;

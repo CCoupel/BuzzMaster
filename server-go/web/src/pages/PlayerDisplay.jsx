@@ -1877,7 +1877,7 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
               )
             })()}
 
-            {/* MEMOTION Game Content — TV display, 3 subphases: GRID / QUESTION / REVEAL */}
+            {/* MEMOTION Game Content — TV display, 4 subphases: GRID / SELECTED / QUESTION / REVEAL */}
             {isMemotion && showGameContent && gameState.question && (() => {
               const subphase = gameState.MEMOTION_SUBPHASE
               const cardStates = gameState.MEMOTION_CARD_STATES || {}
@@ -1892,232 +1892,288 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
               const selectedCard = motionCards.find(c => c.ID === selectedId) || null
               const diffPts = d => d === 3 ? 5 : d === 2 ? 3 : 1
 
-              /* ---------- GRID subphase ---------- */
-              if (!subphase || subphase === 'GRID') {
-                const count = motionCards.length
-                const motionCols = count <= 4 ? 2 : count <= 6 ? 3 : count <= 12 ? 4 : 5
-                const motionRows = Math.ceil(count / motionCols)
-                const participatingTeams = gameState.MEMOTION_PARTICIPATING_TEAMS || []
-                return (
-                  <div className="game-content-zones memory-game memotion-game">
-                    {/* Zone 1: Timer */}
-                    <div className="zone-timer">
-                      <Timer
-                        currentTime={gameState.timer}
-                        totalTime={gameState.totalTime}
-                        phase={gameState.phase}
-                        size="xl"
-                        showPhase={false}
-                      />
-                    </div>
+              /* ---- Calcul grille ---- */
+              const count = motionCards.length
+              const motionCols = count <= 4 ? 2 : count <= 6 ? 3 : count <= 12 ? 4 : 5
+              const motionRows = Math.ceil(count / motionCols)
+              const participatingTeams = gameState.MEMOTION_PARTICIPATING_TEAMS || []
 
-                    {/* Zone 2: Current team */}
-                    <div className="zone-question">
-                      {currentTeam ? (
-                        <motion.div
-                          className="memotion-current-team-label"
-                          style={{ color: currentTeamCss, borderColor: currentTeamCss }}
-                          initial={{ opacity: 0, y: -10 }}
-                          animate={{ opacity: 1, y: 0 }}
-                        >
-                          {currentTeam}
-                        </motion.div>
-                      ) : (
-                        <div className="zone-question-placeholder" />
-                      )}
-                    </div>
+              /* ---- isMotionFullscreen : grille visible mais dimmed ---- */
+              const isMotionFullscreen = subphase === 'SELECTED' || subphase === 'QUESTION' || subphase === 'REVEAL'
 
-                    {/* Zone 3: Card grid — reuses memory-grid + memory-card system */}
-                    <div className="zone-media zone-memory-grid">
-                      <div
-                        className="memory-grid"
-                        style={{ '--memory-cols': motionCols, '--memory-rows': motionRows }}
+              /* ---- Grille (toujours rendue pour que layoutId fonctionne) ---- */
+              const gridView = (
+                <div className={`game-content-zones memory-game memotion-game${isMotionFullscreen ? ' memotion-grid-dimmed' : ''}`}>
+                  {/* Zone 1: Timer */}
+                  <div className="zone-timer">
+                    <Timer
+                      currentTime={gameState.timer}
+                      totalTime={gameState.totalTime}
+                      phase={gameState.phase}
+                      size="xl"
+                      showPhase={false}
+                    />
+                  </div>
+
+                  {/* Zone 2: Current team */}
+                  <div className="zone-question">
+                    {currentTeam ? (
+                      <motion.div
+                        className="memotion-current-team-label"
+                        style={{ color: currentTeamCss, borderColor: currentTeamCss }}
+                        initial={{ opacity: 0, y: -10 }}
+                        animate={{ opacity: 1, y: 0 }}
                       >
-                        {motionCards.map((card, index) => {
-                          const state = cardStates[card.ID] || 'UNPLAYED'
-                          const isDone = state === 'DONE'
-                          const isSelected = !isDone && card.ID === selectedId
-                          const winnerTeam = isDone ? (cardTeams[card.ID] || null) : null
-                          const matchedColor = winnerTeam
-                            ? getTeamColorByName(winnerTeam)
-                            : 'rgba(255,255,255,0.4)'
-                          const diff = card.DIFFICULTY || 1
-                          return (
+                        {currentTeam}
+                      </motion.div>
+                    ) : (
+                      <div className="zone-question-placeholder" />
+                    )}
+                  </div>
+
+                  {/* Zone 3: Card grid — reuses memory-grid + memory-card system */}
+                  <div className="zone-media zone-memory-grid">
+                    <div
+                      className="memory-grid"
+                      style={{ '--memory-cols': motionCols, '--memory-rows': motionRows }}
+                    >
+                      {motionCards.map((card, index) => {
+                        const state = cardStates[card.ID] || 'UNPLAYED'
+                        const isDone = state === 'DONE'
+                        const isActiveCard = !isDone && card.ID === selectedId
+                        const winnerTeam = isDone ? (cardTeams[card.ID] || null) : null
+                        const matchedColor = winnerTeam
+                          ? getTeamColorByName(winnerTeam)
+                          : 'rgba(255,255,255,0.4)'
+                        const diff = card.DIFFICULTY || 1
+                        return (
+                          <motion.div
+                            key={card.ID}
+                            layoutId={`memotion-card-${card.ID}`}
+                            className={`memory-card memotion-card${isDone ? ' matched' : ''}${isActiveCard ? ' selected' : ''}`}
+                            style={{
+                              ...(isDone ? { '--matched-team-color': matchedColor } : undefined),
+                              visibility: isActiveCard && isMotionFullscreen ? 'hidden' : 'visible',
+                            }}
+                            initial={{ opacity: 0, scale: 0.8 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            transition={{ delay: index * 0.05, duration: 0.3 }}
+                          >
+                            {/* Use motion.div on inner so framer-motion drives the 3D flip
+                                (CSS .flipped class is not used — framer-motion owns rotateY) */}
                             <motion.div
-                              key={card.ID}
-                              className={`memory-card memotion-card${isDone ? ' matched' : ''}${isSelected ? ' selected' : ''}`}
-                              style={isDone ? { '--matched-team-color': matchedColor } : undefined}
-                              initial={{ opacity: 0, scale: 0.8 }}
-                              animate={{ opacity: 1, scale: 1 }}
-                              transition={{ delay: index * 0.05, duration: 0.3 }}
+                              className="memory-card-inner"
+                              initial={{ rotateY: 0 }}
+                              animate={{ rotateY: isDone ? 180 : 0 }}
+                              transition={{
+                                duration: 0.6,
+                                ease: [0.4, 0, 0.2, 1],
+                                delay: isDone ? (index * 0.05 + 0.15) : 0
+                              }}
+                              style={{ transformStyle: 'preserve-3d' }}
                             >
-                              {/* Use motion.div on inner so framer-motion drives the 3D flip
-                                  (CSS .flipped class is not used — framer-motion owns rotateY) */}
-                              <motion.div
-                                className="memory-card-inner"
-                                initial={{ rotateY: 0 }}
-                                animate={{ rotateY: isDone ? 180 : 0 }}
-                                transition={{
-                                  duration: 0.6,
-                                  ease: [0.4, 0, 0.2, 1],
-                                  delay: isDone ? (index * 0.05 + 0.15) : 0
-                                }}
-                                style={{ transformStyle: 'preserve-3d' }}
-                              >
-                                {/* Front: shown when DONE (rotated 180° by framer-motion) */}
-                                <div className="memory-card-front">
-                                  <span className="memotion-card-check">✓</span>
-                                  {winnerTeam ? (
-                                    <span className="memotion-card-winner">{winnerTeam}</span>
-                                  ) : (
-                                    <span className="memotion-card-nowinner">–</span>
-                                  )}
-                                </div>
-                                {/* Back: shown by default (UNPLAYED / in-progress) */}
-                                <div className="memory-card-back">
-                                  {card.RECTO_IMAGE && (
-                                    <img src={card.RECTO_IMAGE} alt="" className="memotion-card-img" />
-                                  )}
-                                  <span className="memotion-card-theme">{card.RECTO_THEME}</span>
-                                  <span className="memotion-card-stars">{'★'.repeat(diff)}</span>
-                                  <span className="memotion-card-pts">{diffPts(diff)}pt</span>
-                                </div>
-                              </motion.div>
+                              {/* Front: shown when DONE (rotated 180° by framer-motion) */}
+                              <div className="memory-card-front">
+                                <span className="memotion-card-check">✓</span>
+                                {winnerTeam ? (
+                                  <span className="memotion-card-winner">{winnerTeam}</span>
+                                ) : (
+                                  <span className="memotion-card-nowinner">–</span>
+                                )}
+                              </div>
+                              {/* Back: shown by default (UNPLAYED / in-progress) */}
+                              <div className="memory-card-back">
+                                {card.RECTO_IMAGE && (
+                                  <img src={card.RECTO_IMAGE} alt="" className="memotion-card-img" />
+                                )}
+                                <span className="memotion-card-theme">{card.RECTO_THEME}</span>
+                                <span className="memotion-card-stars">{'★'.repeat(diff)}</span>
+                                <span className="memotion-card-pts">{diffPts(diff)}pt</span>
+                              </div>
                             </motion.div>
+                          </motion.div>
+                        )
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Zone 4: Participating teams bar — reuses memory-team-bar */}
+                  <div className="zone-answers">
+                    {participatingTeams.length > 0 && (
+                      <div className="memory-team-bar">
+                        {participatingTeams.map((tName) => {
+                          const teamData = teams[tName]
+                          const tColor = teamData?.COLOR
+                            ? (Array.isArray(teamData.COLOR) ? `rgb(${teamData.COLOR.join(',')})` : teamData.COLOR)
+                            : 'var(--gray-400)'
+                          const isActive = tName === currentTeam
+                          return (
+                            <div
+                              key={tName}
+                              className={`memory-team-chip ${isActive ? 'active' : 'inactive'}`}
+                              style={{ backgroundColor: tColor, '--team-color': tColor }}
+                            >
+                              {isActive && <span className="team-play-icon">🎮</span>}
+                              <span className="team-name">{tName}</span>
+                            </div>
                           )
                         })}
                       </div>
-                    </div>
-
-                    {/* Zone 4: Participating teams bar — reuses memory-team-bar */}
-                    <div className="zone-answers">
-                      {participatingTeams.length > 0 && (
-                        <div className="memory-team-bar">
-                          {participatingTeams.map((tName) => {
-                            const teamData = teams[tName]
-                            const tColor = teamData?.COLOR
-                              ? (Array.isArray(teamData.COLOR) ? `rgb(${teamData.COLOR.join(',')})` : teamData.COLOR)
-                              : 'var(--gray-400)'
-                            const isActive = tName === currentTeam
-                            return (
-                              <div
-                                key={tName}
-                                className={`memory-team-chip ${isActive ? 'active' : 'inactive'}`}
-                                style={{ backgroundColor: tColor, '--team-color': tColor }}
-                              >
-                                {isActive && <span className="team-play-icon">🎮</span>}
-                                <span className="team-name">{tName}</span>
-                              </div>
-                            )
-                          })}
-                        </div>
-                      )}
-                    </div>
+                    )}
                   </div>
+                </div>
+              )
+
+              /* ---- SELECTED: carte sélectionnée zoome vers fullscreen via layoutId ---- */
+              if (subphase === 'SELECTED' && selectedCard) {
+                const diff = selectedCard.DIFFICULTY || 1
+                return (
+                  <>
+                    {gridView}
+                    <motion.div
+                      layoutId={`memotion-card-${selectedId}`}
+                      className="memotion-tv-fullscreen memotion-tv-selected"
+                      style={{ position: 'fixed', inset: 0, zIndex: 10, transformStyle: 'preserve-3d' }}
+                    >
+                      <div className="memotion-tv-fs-header">
+                        <span className="memotion-tv-fs-theme">{selectedCard.RECTO_THEME}</span>
+                        <span className="memotion-tv-fs-diff">{'★'.repeat(diff)}</span>
+                        <span className="memotion-tv-fs-pts">{diffPts(diff)}pt</span>
+                        {currentTeam && (
+                          <span className="memotion-tv-fs-team" style={{ color: currentTeamCss }}>
+                            {currentTeam}
+                          </span>
+                        )}
+                      </div>
+                      <div className="memotion-tv-fs-body">
+                        {selectedCard.RECTO_IMAGE && (
+                          <motion.img
+                            src={selectedCard.RECTO_IMAGE}
+                            alt=""
+                            className="memotion-tv-fs-img"
+                            initial={{ opacity: 0, scale: 0.9 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            transition={{ delay: 0.25 }}
+                          />
+                        )}
+                      </div>
+                    </motion.div>
+                  </>
                 )
               }
 
-              /* ---------- QUESTION subphase ---------- */
+              /* ---- QUESTION: flip depuis SELECTED vers question ---- */
               if (subphase === 'QUESTION' && selectedCard) {
                 const diff = selectedCard.DIFFICULTY || 1
                 return (
-                  /* Flip-in from right: perspective + rotateY 90°→0° */
-                  <motion.div
-                    className="memotion-tv-fullscreen"
-                    initial={{ rotateY: 90, opacity: 0 }}
-                    animate={{ rotateY: 0, opacity: 1 }}
-                    transition={{ duration: 0.5, ease: [0.4, 0, 0.2, 1] }}
-                    style={{ perspective: '1200px' }}
-                  >
-                    <div className="memotion-tv-fs-header">
-                      <span className="memotion-tv-fs-theme">{selectedCard.RECTO_THEME}</span>
-                      <span className="memotion-tv-fs-diff">{'★'.repeat(diff)}</span>
-                      <span className="memotion-tv-fs-pts">{diffPts(diff)}pt</span>
-                      {currentTeam && (
-                        <span className="memotion-tv-fs-team" style={{ color: currentTeamCss }}>
-                          {currentTeam}
-                        </span>
-                      )}
-                    </div>
-                    <div className="memotion-tv-fs-body">
-                      {selectedCard.QUESTION_IMAGE && (
-                        <motion.img
-                          src={selectedCard.QUESTION_IMAGE}
-                          alt=""
-                          className="memotion-tv-fs-img"
-                          initial={{ opacity: 0, scale: 0.9 }}
-                          animate={{ opacity: 1, scale: 1 }}
-                          transition={{ delay: 0.3 }}
-                        />
-                      )}
-                      {selectedCard.QUESTION_TEXT && (
-                        <motion.p
-                          className="memotion-tv-fs-text"
-                          initial={{ opacity: 0, y: 20 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          transition={{ delay: 0.35 }}
-                        >
-                          {selectedCard.QUESTION_TEXT}
-                        </motion.p>
-                      )}
-                    </div>
-                    <div className="memotion-tv-fs-timer">
-                      <Timer
-                        currentTime={gameState.timer}
-                        totalTime={gameState.totalTime}
-                        phase={gameState.phase}
-                        size="lg"
-                        showPhase={false}
-                      />
-                    </div>
-                  </motion.div>
+                  <>
+                    {gridView}
+                    <AnimatePresence mode="wait">
+                      <motion.div
+                        key="memotion-question"
+                        className="memotion-tv-fullscreen"
+                        initial={{ rotateY: -90, opacity: 0 }}
+                        animate={{ rotateY: 0, opacity: 1 }}
+                        transition={{ duration: 0.5, ease: [0.4, 0, 0.2, 1] }}
+                        style={{ position: 'fixed', inset: 0, zIndex: 10, perspective: '1200px' }}
+                      >
+                        <div className="memotion-tv-fs-header">
+                          <span className="memotion-tv-fs-theme">{selectedCard.RECTO_THEME}</span>
+                          <span className="memotion-tv-fs-diff">{'★'.repeat(diff)}</span>
+                          <span className="memotion-tv-fs-pts">{diffPts(diff)}pt</span>
+                          {currentTeam && (
+                            <span className="memotion-tv-fs-team" style={{ color: currentTeamCss }}>
+                              {currentTeam}
+                            </span>
+                          )}
+                        </div>
+                        <div className="memotion-tv-fs-body">
+                          {selectedCard.QUESTION_IMAGE && (
+                            <motion.img
+                              src={selectedCard.QUESTION_IMAGE}
+                              alt=""
+                              className="memotion-tv-fs-img"
+                              initial={{ opacity: 0, scale: 0.9 }}
+                              animate={{ opacity: 1, scale: 1 }}
+                              transition={{ delay: 0.3 }}
+                            />
+                          )}
+                          {selectedCard.QUESTION_TEXT && (
+                            <motion.p
+                              className="memotion-tv-fs-text"
+                              initial={{ opacity: 0, y: 20 }}
+                              animate={{ opacity: 1, y: 0 }}
+                              transition={{ delay: 0.35 }}
+                            >
+                              {selectedCard.QUESTION_TEXT}
+                            </motion.p>
+                          )}
+                        </div>
+                        <div className="memotion-tv-fs-timer">
+                          <Timer
+                            currentTime={gameState.timer}
+                            totalTime={gameState.totalTime}
+                            phase={gameState.phase}
+                            size="lg"
+                            showPhase={false}
+                          />
+                        </div>
+                      </motion.div>
+                    </AnimatePresence>
+                  </>
                 )
               }
 
-              /* ---------- REVEAL subphase ---------- */
+              /* ---- REVEAL: flip depuis QUESTION vers réponse ---- */
               if (subphase === 'REVEAL' && selectedCard) {
                 const diff = selectedCard.DIFFICULTY || 1
                 return (
-                  /* Flip-in from left (opposite direction to QUESTION): rotateY -90°→0° */
-                  <motion.div
-                    className="memotion-tv-fullscreen memotion-tv-reveal"
-                    initial={{ rotateY: -90, opacity: 0 }}
-                    animate={{ rotateY: 0, opacity: 1 }}
-                    transition={{ duration: 0.5, ease: [0.4, 0, 0.2, 1] }}
-                    style={{ perspective: '1200px' }}
-                  >
-                    <div className="memotion-tv-fs-header">
-                      <span className="memotion-tv-fs-theme">{selectedCard.RECTO_THEME}</span>
-                      <span className="memotion-tv-fs-diff">{'★'.repeat(diff)}</span>
-                      <span className="memotion-tv-fs-pts">{diffPts(diff)}pt</span>
-                    </div>
-                    <div className="memotion-tv-fs-body">
-                      {selectedCard.ANSWER_IMAGE && (
-                        <motion.img
-                          src={selectedCard.ANSWER_IMAGE}
-                          alt=""
-                          className="memotion-tv-fs-img"
-                          initial={{ opacity: 0, scale: 0.9 }}
-                          animate={{ opacity: 1, scale: 1 }}
-                          transition={{ delay: 0.3 }}
-                        />
-                      )}
-                      {selectedCard.ANSWER_TEXT && (
-                        <motion.p
-                          className="memotion-tv-fs-text memotion-tv-answer-text"
-                          initial={{ opacity: 0, y: 20 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          transition={{ delay: 0.35 }}
-                        >
-                          {selectedCard.ANSWER_TEXT}
-                        </motion.p>
-                      )}
-                    </div>
-                  </motion.div>
+                  <>
+                    {gridView}
+                    <AnimatePresence mode="wait">
+                      <motion.div
+                        key="memotion-reveal"
+                        className="memotion-tv-fullscreen memotion-tv-reveal"
+                        initial={{ rotateY: 90, opacity: 0 }}
+                        animate={{ rotateY: 0, opacity: 1 }}
+                        transition={{ duration: 0.5, ease: [0.4, 0, 0.2, 1] }}
+                        style={{ position: 'fixed', inset: 0, zIndex: 10, perspective: '1200px' }}
+                      >
+                        <div className="memotion-tv-fs-header">
+                          <span className="memotion-tv-fs-theme">{selectedCard.RECTO_THEME}</span>
+                          <span className="memotion-tv-fs-diff">{'★'.repeat(diff)}</span>
+                          <span className="memotion-tv-fs-pts">{diffPts(diff)}pt</span>
+                        </div>
+                        <div className="memotion-tv-fs-body">
+                          {selectedCard.ANSWER_IMAGE && (
+                            <motion.img
+                              src={selectedCard.ANSWER_IMAGE}
+                              alt=""
+                              className="memotion-tv-fs-img"
+                              initial={{ opacity: 0, scale: 0.9 }}
+                              animate={{ opacity: 1, scale: 1 }}
+                              transition={{ delay: 0.3 }}
+                            />
+                          )}
+                          {selectedCard.ANSWER_TEXT && (
+                            <motion.p
+                              className="memotion-tv-fs-text memotion-tv-answer-text"
+                              initial={{ opacity: 0, y: 20 }}
+                              animate={{ opacity: 1, y: 0 }}
+                              transition={{ delay: 0.35 }}
+                            >
+                              {selectedCard.ANSWER_TEXT}
+                            </motion.p>
+                          )}
+                        </div>
+                      </motion.div>
+                    </AnimatePresence>
+                  </>
                 )
               }
 
-              return null
+              /* GRID (subphase null, "GRID", or unknown) */
+              return gridView
             })()}
 
             {/* Non-QCM/Non-Memory/Non-Memotion Game Content - 4 vertical zones: Timer, Question, Media, Answers */}

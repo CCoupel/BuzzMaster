@@ -770,6 +770,27 @@ export default function GamePage() {
               )
             }
 
+            if (subphase === 'SELECTED' && selectedMotionCard) {
+              const diff = selectedMotionCard.DIFFICULTY || 1
+              return (
+                <div className="memotion-admin-panel">
+                  <div className="memotion-admin-label">Carte sélectionnée</div>
+                  <div className="memotion-admin-card-info">
+                    <span className="memotion-admin-theme">{selectedMotionCard.RECTO_THEME}</span>
+                    <span className="memotion-admin-diff">{'★'.repeat(diff)} · {diffPts(diff)}pt</span>
+                  </div>
+                  <div className="memotion-admin-actions">
+                    <Button variant="primary" size="md" onClick={() => sendMessage('MEMOTION_FLIP', {})}>
+                      ▶ DÉMARRER
+                    </Button>
+                    <Button variant="ghost" size="sm" onClick={() => sendMessage('MEMOTION_DONE', { CARD_ID: gameState.MEMOTION_SELECTED, WINNER_TEAM: '' })}>
+                      ANNULER
+                    </Button>
+                  </div>
+                </div>
+              )
+            }
+
             if (subphase === 'QUESTION' && selectedMotionCard) {
               const diff = selectedMotionCard.DIFFICULTY || 1
               return (
@@ -786,6 +807,11 @@ export default function GamePage() {
                     <img src={selectedMotionCard.QUESTION_IMAGE} alt="Question" className="memotion-admin-img" />
                   )}
                   <div className="memotion-admin-actions">
+                    {gameState.timer > 0 && (
+                      <Button variant="warning" size="sm" onClick={() => sendMessage('MEMOTION_STOP_TIMER', {})}>
+                        STOP TIMER
+                      </Button>
+                    )}
                     <Button variant="primary" size="md" onClick={() => sendMessage('MEMOTION_REVEAL', {})}>
                       RÉVÉLER
                     </Button>
