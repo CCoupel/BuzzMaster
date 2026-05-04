@@ -245,9 +245,9 @@ type GameState struct {
 	MemoryCurrentTeamColor   []int          `json:"MEMORY_CURRENT_TEAM_COLOR"`             // RGB color of current team
 	QcmInvalidated           []string       `json:"QCM_INVALIDATED"`                       // Invalidated QCM answers (e.g., ["RED", "YELLOW"])
 	// MEMOTION fields — NO omitempty: maps/slices/strings must be serialized even when empty for frontend reset (v5.0.0)
-	MotionSubPhase          string            `json:"MEMOTION_SUBPHASE"`            // "GRID" | "QUESTION" | "REVEAL" | ""
+	MotionSubPhase          string            `json:"MEMOTION_SUBPHASE"`            // "GRID" | "SELECTED" | "QUESTION" | "REVEAL" | ""
 	MotionSelected          string            `json:"MEMOTION_SELECTED"`            // ID of active card, "" when on grid
-	MotionCardStates        map[string]string `json:"MEMOTION_CARD_STATES"`         // cardID → "UNPLAYED"|"QUESTION"|"REVEALED"|"DONE"
+	MotionCardStates        map[string]string `json:"MEMOTION_CARD_STATES"`         // cardID → "UNPLAYED"|"SELECTED"|"QUESTION"|"REVEALED"|"DONE"
 	MotionCardTeams         map[string]string `json:"MEMOTION_CARD_TEAMS"`          // cardID → teamName (winner)
 	MotionCurrentTeam       string            `json:"MEMOTION_CURRENT_TEAM"`        // Team currently playing
 	MotionParticipatingTeams []string         `json:"MEMOTION_PARTICIPATING_TEAMS"` // Teams selected to play

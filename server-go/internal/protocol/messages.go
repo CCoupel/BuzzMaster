@@ -43,9 +43,11 @@ const (
 	ActionFlipMemoryCard    = "FLIP_MEMORY_CARD"
 	ActionMemorySetTeams    = "MEMORY_SET_TEAMS"
 	// MEMOTION actions (v5.0.0)
-	ActionMotionSelect   = "MEMOTION_SELECT"   // Admin → Server: select a card from the grid
-	ActionMotionReveal   = "MEMOTION_REVEAL"   // Admin → Server: flip card to REVEAL face
-	ActionMotionDone     = "MEMOTION_DONE"     // Admin → Server: mark card played + optional winner team
+	ActionMotionSelect   = "MEMOTION_SELECT"    // Admin → Server: select a card from the grid (→ SELECTED subphase, no timer)
+	ActionMotionFlip     = "MEMOTION_FLIP"      // Admin → Server: flip selected card to QUESTION face + start timer
+	ActionMotionStopTimer = "MEMOTION_STOP_TIMER" // Admin → Server: stop per-card timer (subphase stays QUESTION)
+	ActionMotionReveal   = "MEMOTION_REVEAL"    // Admin → Server: flip card to REVEAL face
+	ActionMotionDone     = "MEMOTION_DONE"      // Admin → Server: mark card played + optional winner team
 	ActionMotionSetTeams = "MEMOTION_SET_TEAMS" // Admin → Server: set participating teams
 	ActionQCMHint           = "QCM_HINT"
 	// Virtual player enrollment actions
