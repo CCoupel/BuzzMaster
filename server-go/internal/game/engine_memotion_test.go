@@ -63,6 +63,20 @@ func startMEMOTION(t *testing.T, e *Engine, id string, q *Question) {
 	e.InitMotionState() // populate MotionCardStates + set SubPhase=GRID
 }
 
+// setupMotionEngineAtQuestion brings the engine to QUESTION subphase for the given card.
+// It calls startMEMOTION, then SelectMotionCard, then FlipMotionCard.
+// Use this in tests that need the engine in QUESTION state (skipping the SELECTED step).
+func setupMotionEngineAtQuestion(t *testing.T, e *Engine, id string, q *Question, cardID string) {
+	t.Helper()
+	startMEMOTION(t, e, id, q)
+	if err := e.SelectMotionCard(cardID); err != nil {
+		t.Fatalf("setupMotionEngineAtQuestion: SelectMotionCard(%s) failed: %v", cardID, err)
+	}
+	if err := e.FlipMotionCard(); err != nil {
+		t.Fatalf("setupMotionEngineAtQuestion: FlipMotionCard() failed: %v", err)
+	}
+}
+
 // ============================================================================
 // InitMotionState — exported method
 // ============================================================================
@@ -133,7 +147,7 @@ func TestInitMotionState_EmptyMapsNotNil(t *testing.T) {
 // ============================================================================
 
 // TestSelectMotionCard_Valid verifies the nominal selection flow:
-// SubPhase → QUESTION, card state → QUESTION, MotionSelected = cardID.
+// SubPhase → SELECTED, card state → SELECTED, MotionSelected = cardID (no timer starts).
 func TestSelectMotionCard_Valid(t *testing.T) {
 	e := NewEngine()
 	q := makeMotionQuestion("mq1", defaultMotionCards(), "SOLO")
@@ -146,32 +160,32 @@ func TestSelectMotionCard_Valid(t *testing.T) {
 	}
 
 	state := e.GetState()
-	if state.MotionSubPhase != "QUESTION" {
-		t.Errorf("MotionSubPhase should be QUESTION after select, got %q", state.MotionSubPhase)
+	if state.MotionSubPhase != "SELECTED" {
+		t.Errorf("MotionSubPhase should be SELECTED after select, got %q", state.MotionSubPhase)
 	}
 	if state.MotionSelected != "mc-1" {
 		t.Errorf("MotionSelected should be mc-1, got %q", state.MotionSelected)
 	}
-	if state.MotionCardStates["mc-1"] != "QUESTION" {
-		t.Errorf("Card mc-1 state should be QUESTION, got %q", state.MotionCardStates["mc-1"])
+	if state.MotionCardStates["mc-1"] != "SELECTED" {
+		t.Errorf("Card mc-1 state should be SELECTED, got %q", state.MotionCardStates["mc-1"])
 	}
 }
 
 // TestSelectMotionCard_ErrorWhenSubPhaseNotGrid verifies that selecting a card
-// when SubPhase is already QUESTION (another card selected) returns an error.
+// when SubPhase is already SELECTED (another card selected) returns an error.
 func TestSelectMotionCard_ErrorWhenSubPhaseNotGrid(t *testing.T) {
 	e := NewEngine()
 	q := makeMotionQuestion("mq1", defaultMotionCards(), "SOLO")
 	startMEMOTION(t, e, "mq1", q)
 	defer e.Stop()
 
-	// First selection puts us in QUESTION sub-phase
+	// First selection puts us in SELECTED sub-phase
 	_ = e.SelectMotionCard("mc-1")
 
-	// Second selection — SubPhase is QUESTION, not GRID → must fail
+	// Second selection — SubPhase is SELECTED, not GRID → must fail
 	err := e.SelectMotionCard("mc-2")
 	if err == nil {
-		t.Error("SelectMotionCard should return error when SubPhase is not GRID (already in QUESTION)")
+		t.Error("SelectMotionCard should return error when SubPhase is not GRID (already in SELECTED)")
 	}
 }
 
@@ -185,6 +199,7 @@ func TestSelectMotionCard_ErrorWhenCardDone(t *testing.T) {
 
 	// Play mc-1 to completion
 	_ = e.SelectMotionCard("mc-1")
+	_ = e.FlipMotionCard()
 	_ = e.RevealMotionCard()
 	_, _, _ = e.DoneMotionCard("mc-1", "")
 
@@ -236,6 +251,7 @@ func TestRevealMotionCard_Valid(t *testing.T) {
 	defer e.Stop()
 
 	_ = e.SelectMotionCard("mc-1")
+	_ = e.FlipMotionCard()
 
 	err := e.RevealMotionCard()
 	if err != nil {
@@ -275,6 +291,7 @@ func TestRevealMotionCard_ErrorWhenSubPhaseReveal(t *testing.T) {
 	defer e.Stop()
 
 	_ = e.SelectMotionCard("mc-1")
+	_ = e.FlipMotionCard()
 	_ = e.RevealMotionCard() // First reveal — OK
 
 	// Second reveal — SubPhase is REVEAL, not QUESTION → must fail
@@ -311,6 +328,7 @@ func TestDoneMotionCard_DifficultyPoints(t *testing.T) {
 			defer e.Stop()
 
 			_ = e.SelectMotionCard("mc-1")
+			_ = e.FlipMotionCard()
 			_ = e.RevealMotionCard()
 
 			points, _, err := e.DoneMotionCard("mc-1", "red")
@@ -334,6 +352,7 @@ func TestDoneMotionCard_Difficulty1_1Point(t *testing.T) {
 	defer e.Stop()
 
 	_ = e.SelectMotionCard("mc-1")
+	_ = e.FlipMotionCard()
 	_ = e.RevealMotionCard()
 
 	points, _, err := e.DoneMotionCard("mc-1", "red")
@@ -354,6 +373,7 @@ func TestDoneMotionCard_Difficulty2_3Points(t *testing.T) {
 	defer e.Stop()
 
 	_ = e.SelectMotionCard("mc-1")
+	_ = e.FlipMotionCard()
 	_ = e.RevealMotionCard()
 
 	points, _, err := e.DoneMotionCard("mc-1", "red")
@@ -374,6 +394,7 @@ func TestDoneMotionCard_Difficulty3_5Points(t *testing.T) {
 	defer e.Stop()
 
 	_ = e.SelectMotionCard("mc-1")
+	_ = e.FlipMotionCard()
 	_ = e.RevealMotionCard()
 
 	points, _, err := e.DoneMotionCard("mc-1", "red")
@@ -394,6 +415,7 @@ func TestDoneMotionCard_NoWinner_ZeroPoints(t *testing.T) {
 	defer e.Stop()
 
 	_ = e.SelectMotionCard("mc-2")
+	_ = e.FlipMotionCard()
 	_ = e.RevealMotionCard()
 
 	points, _, err := e.DoneMotionCard("mc-2", "") // empty winner
@@ -426,6 +448,7 @@ func TestDoneMotionCard_CardBecomeDoneReturnsGrid(t *testing.T) {
 	defer e.Stop()
 
 	_ = e.SelectMotionCard("mc-2")
+	_ = e.FlipMotionCard()
 	_ = e.RevealMotionCard()
 
 	_, _, err := e.DoneMotionCard("mc-2", "red")
@@ -458,6 +481,7 @@ func TestDoneMotionCard_TeamScoreUpdated(t *testing.T) {
 	defer e.Stop()
 
 	_ = e.SelectMotionCard("mc-1")
+	_ = e.FlipMotionCard()
 	_ = e.RevealMotionCard()
 	_, _, _ = e.DoneMotionCard("mc-1", "red")
 
@@ -480,6 +504,7 @@ func TestDoneMotionCard_IsComplete_AllCardsDone(t *testing.T) {
 	defer e.Stop()
 
 	_ = e.SelectMotionCard("mc-1")
+	_ = e.FlipMotionCard()
 	_ = e.RevealMotionCard()
 
 	_, isComplete, err := e.DoneMotionCard("mc-1", "red")
@@ -501,6 +526,7 @@ func TestDoneMotionCard_IsNotComplete_CardsRemaining(t *testing.T) {
 	defer e.Stop()
 
 	_ = e.SelectMotionCard("mc-1")
+	_ = e.FlipMotionCard()
 	_ = e.RevealMotionCard()
 
 	_, isComplete, err := e.DoneMotionCard("mc-1", "red")
@@ -523,6 +549,7 @@ func TestDoneMotionCard_FromQuestionSubPhase(t *testing.T) {
 	defer e.Stop()
 
 	_ = e.SelectMotionCard("mc-1")
+	_ = e.FlipMotionCard()
 	// SubPhase = QUESTION — skip RevealMotionCard
 
 	_, _, err := e.DoneMotionCard("mc-1", "red")
@@ -557,6 +584,7 @@ func TestDoneMotionCard_Rotation_ChacunSonTour_Win(t *testing.T) {
 
 	// red is current team, red wins
 	_ = e.SelectMotionCard("mc-1")
+	_ = e.FlipMotionCard()
 	_ = e.RevealMotionCard()
 	_, _, _ = e.DoneMotionCard("mc-1", "red")
 
@@ -583,6 +611,7 @@ func TestDoneMotionCard_Rotation_ChacunSonTour_NoWin(t *testing.T) {
 	defer e.Stop()
 
 	_ = e.SelectMotionCard("mc-1")
+	_ = e.FlipMotionCard()
 	_ = e.RevealMotionCard()
 	_, _, _ = e.DoneMotionCard("mc-1", "") // no winner
 
@@ -610,11 +639,13 @@ func TestDoneMotionCard_Rotation_ChacunSonTour_Circular(t *testing.T) {
 
 	// Card 1: red → blue
 	_ = e.SelectMotionCard("mc-1")
+	_ = e.FlipMotionCard()
 	_ = e.RevealMotionCard()
 	_, _, _ = e.DoneMotionCard("mc-1", "")
 
 	// Card 2: blue → red (wrap-around)
 	_ = e.SelectMotionCard("mc-2")
+	_ = e.FlipMotionCard()
 	_ = e.RevealMotionCard()
 	_, _, _ = e.DoneMotionCard("mc-2", "")
 
@@ -642,6 +673,7 @@ func TestDoneMotionCard_Rotation_TantQueJeGagne_Win(t *testing.T) {
 
 	// red wins → should keep the hand
 	_ = e.SelectMotionCard("mc-1")
+	_ = e.FlipMotionCard()
 	_ = e.RevealMotionCard()
 	_, _, _ = e.DoneMotionCard("mc-1", "red")
 
@@ -669,6 +701,7 @@ func TestDoneMotionCard_Rotation_TantQueJeGagne_NoWin(t *testing.T) {
 
 	// no winner → rotate
 	_ = e.SelectMotionCard("mc-1")
+	_ = e.FlipMotionCard()
 	_ = e.RevealMotionCard()
 	_, _, _ = e.DoneMotionCard("mc-1", "")
 
@@ -693,10 +726,12 @@ func TestDoneMotionCard_Rotation_Solo_NoRotation(t *testing.T) {
 
 	// Complete two cards — SOLO should never change currentTeam
 	_ = e.SelectMotionCard("mc-1")
+	_ = e.FlipMotionCard()
 	_ = e.RevealMotionCard()
 	_, _, _ = e.DoneMotionCard("mc-1", "red")
 
 	_ = e.SelectMotionCard("mc-2")
+	_ = e.FlipMotionCard()
 	_ = e.RevealMotionCard()
 	_, _, _ = e.DoneMotionCard("mc-2", "")
 
@@ -994,5 +1029,123 @@ func TestMotionCard_Fields(t *testing.T) {
 	}
 	if card.AnswerText != "A force" {
 		t.Errorf("AnswerText should be 'A force', got %q", card.AnswerText)
+	}
+}
+
+// ============================================================================
+// FlipMotionCard — new action (v5.0.1)
+// ============================================================================
+
+// TestSelectMotionCard_SetsSelectedSubphase verifies that SelectMotionCard sets the
+// card state to "SELECTED" and subphase to "SELECTED" (not QUESTION) — no timer starts.
+func TestSelectMotionCard_SetsSelectedSubphase(t *testing.T) {
+	e := NewEngine()
+	q := makeMotionQuestion("mq1", defaultMotionCards(), "SOLO")
+	startMEMOTION(t, e, "mq1", q)
+	defer e.Stop()
+
+	err := e.SelectMotionCard("mc-1")
+	if err != nil {
+		t.Fatalf("SelectMotionCard should succeed, got: %v", err)
+	}
+
+	state := e.GetState()
+	if state.MotionSubPhase != "SELECTED" {
+		t.Errorf("MotionSubPhase should be SELECTED after SelectMotionCard, got %q", state.MotionSubPhase)
+	}
+	if state.MotionCardStates["mc-1"] != "SELECTED" {
+		t.Errorf("Card mc-1 state should be SELECTED, got %q", state.MotionCardStates["mc-1"])
+	}
+	if state.MotionSelected != "mc-1" {
+		t.Errorf("MotionSelected should be mc-1, got %q", state.MotionSelected)
+	}
+}
+
+// TestFlipMotionCard_SetsQuestionSubphase verifies the full two-step flow:
+// SelectMotionCard (SELECTED) → FlipMotionCard (QUESTION).
+func TestFlipMotionCard_SetsQuestionSubphase(t *testing.T) {
+	e := NewEngine()
+	q := makeMotionQuestion("mq1", defaultMotionCards(), "SOLO")
+	startMEMOTION(t, e, "mq1", q)
+	defer e.Stop()
+
+	_ = e.SelectMotionCard("mc-1") // → SELECTED
+	err := e.FlipMotionCard()      // → QUESTION
+	if err != nil {
+		t.Fatalf("FlipMotionCard should succeed after SelectMotionCard, got: %v", err)
+	}
+
+	state := e.GetState()
+	if state.MotionSubPhase != "QUESTION" {
+		t.Errorf("MotionSubPhase should be QUESTION after FlipMotionCard, got %q", state.MotionSubPhase)
+	}
+	if state.MotionCardStates["mc-1"] != "QUESTION" {
+		t.Errorf("Card mc-1 state should be QUESTION after flip, got %q", state.MotionCardStates["mc-1"])
+	}
+	if state.MotionSelected != "mc-1" {
+		t.Errorf("MotionSelected should still be mc-1, got %q", state.MotionSelected)
+	}
+}
+
+// TestFlipMotionCard_PreconditionNotSelected verifies that FlipMotionCard returns an error
+// when called from GRID subphase (no card selected).
+func TestFlipMotionCard_PreconditionNotSelected(t *testing.T) {
+	e := NewEngine()
+	q := makeMotionQuestion("mq1", defaultMotionCards(), "SOLO")
+	startMEMOTION(t, e, "mq1", q)
+	defer e.Stop()
+
+	// SubPhase is GRID — no card selected
+	err := e.FlipMotionCard()
+	if err == nil {
+		t.Error("FlipMotionCard should return error when SubPhase is not SELECTED (is GRID)")
+	}
+
+	// Also fails when already in QUESTION
+	_ = e.SelectMotionCard("mc-1")
+	_ = e.FlipMotionCard() // first flip — OK
+	err = e.FlipMotionCard() // second flip — should fail (subphase is QUESTION)
+	if err == nil {
+		t.Error("FlipMotionCard should return error when SubPhase is already QUESTION")
+	}
+}
+
+// TestDoneMotionCard_CancelFromSelected verifies that calling DoneMotionCard while in
+// SELECTED subphase cancels the selection: card returns to UNPLAYED, subphase → GRID,
+// returns (0, false, nil).
+func TestDoneMotionCard_CancelFromSelected(t *testing.T) {
+	e := NewEngine()
+	q := makeMotionQuestion("mq1", defaultMotionCards(), "SOLO")
+	startMEMOTION(t, e, "mq1", q)
+	defer e.Stop()
+
+	_ = e.SelectMotionCard("mc-2") // → SELECTED
+
+	points, isComplete, err := e.DoneMotionCard("mc-2", "") // cancel
+	if err != nil {
+		t.Fatalf("DoneMotionCard from SELECTED should succeed (cancel), got error: %v", err)
+	}
+	if points != 0 {
+		t.Errorf("Cancellation should award 0 points, got %d", points)
+	}
+	if isComplete {
+		t.Error("isComplete should be false after cancellation")
+	}
+
+	state := e.GetState()
+	if state.MotionSubPhase != "GRID" {
+		t.Errorf("SubPhase should return to GRID after cancellation, got %q", state.MotionSubPhase)
+	}
+	if state.MotionSelected != "" {
+		t.Errorf("MotionSelected should be empty after cancellation, got %q", state.MotionSelected)
+	}
+	if state.MotionCardStates["mc-2"] != "UNPLAYED" {
+		t.Errorf("Card mc-2 should be UNPLAYED after cancellation, got %q", state.MotionCardStates["mc-2"])
+	}
+
+	// Card should be re-selectable after cancellation
+	err = e.SelectMotionCard("mc-2")
+	if err != nil {
+		t.Errorf("Card mc-2 should be re-selectable after cancellation, got error: %v", err)
 	}
 }
