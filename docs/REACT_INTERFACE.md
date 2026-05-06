@@ -319,3 +319,40 @@ Les styles de GamePage utilisent des sélecteurs plus spécifiques pour éviter 
 .game-page .team-card .team-buzzers { display: flex !important; ... }
 .game-page .team-card .buzzer-mini { display: flex !important; ... }
 ```
+
+---
+
+## Organisation UI (v4.0.1+)
+
+**Navbar** :
+- Liens directs : Jeu, Scores, Équipes, Quiz, Historique, Palmarès
+- Menu 🐝 dropdown : Config, Backup/Restaure, Logs, Mises à jour
+
+**Pages admin** :
+| Route | Fonctionnalités |
+|-------|-----------------|
+| `/admin/game` | Contrôle jeu, équipes, timer — bouton "NOUVELLE PARTIE" en phase STOPPED |
+| `/admin/quiz` | Zone Quiz (Nom/Thème/Notes) + Zone Ambiance (fonds d'écran) + Zone Questions (CRUD) |
+| `/admin/config` | Paramètres serveur, effet néon, WiFi defaults + SSID2, OTA firmware |
+| `/admin/backup` | Sauvegarde, restauration, réinitialisation |
+| `/admin/logs` | Logs serveur temps réel |
+| `/admin/updates` | Vérification et installation mises à jour |
+
+**WebSocket routing par page** (v3.8.0) :
+- `/admin/*` → `GameProvider` endpoint `/ws/admin`
+- `/tv` → `GameProvider` endpoint `/ws/tv`
+- `/player`, `/enroll` → `GameProvider` endpoint `/ws/player`
+
+**Contrainte TV** : affichage STATIQUE sans scroll — `overflow: hidden`, unités viewport, `flex + min-height: 0`.
+
+**Décisions d'architecture** :
+- Label "Questions" → "Quiz" (v4.0.1) — scope élargi (métadonnées + fonds + questions)
+- Bouton "NOUVELLE PARTIE" déclenche `NEW_GAME` avec reset complet depuis STOPPED uniquement
+- Métadonnées quiz dans Zone Quiz (centralisées), pas sur GamePage
+
+**Fichiers clés** :
+- `GamePage.jsx` : bouton NOUVELLE PARTIE + panneaux MEMOTION GRID/SELECTED/QUESTION/REVEAL
+- `QuestionsPage.jsx` : 3 zones Quiz/Ambiance/Questions + éditeur MEMOTION
+- `PlayerDisplay.jsx` : TV toutes phases (STATIQUE) — NEW_GAME, jeu normal, MEMOTION
+- `GameContext.jsx` : GameProvider prop `endpoint`, routing WS
+- `colorUtils.js` : `boostTeamColor()` (saturation TV), `nearestPaletteColorByHue()` (palette LED)

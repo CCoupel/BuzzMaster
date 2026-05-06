@@ -317,4 +317,69 @@ Same network configuration, implemented via:
 | HTTP | 80 | Web interface |
 | TCP | 1234 | BuzzClick buzzer protocol |
 | UDP | 1234 | Broadcast server discovery heartbeat + game broadcast |
+
+---
+
+## UDP Broadcast — Server Discovery (v3.2.0)
+
+**Format heartbeat** : `BUZZ_SERVER|IP1|IP2|...|PORT\0` (null-terminé, multi-interfaces)
+
+Intervalles : enrollment (1 s) > high-freq (500 ms si ≥1 buzzer déconnecté) > normal (5 s).
+
+```go
+// server-go/internal/server/broadcaster.go
+bm := NewBroadcasterManager(udpBroadcaster, httpPort)
+bm.SetEnrollmentMode(true)  // 1s pendant appairage
+bm.SetHighFrequency(true)   // 500ms si buzzer déconnecté (v3.6.6)
+```
+
+**Chaîne fallback firmware** (`click_WifiManager.h`) :
+1. UDP Broadcast (timeout 30 s) → IPs du heartbeat
+2. IP NVS (`server_ip` en flash)
+3. mDNS (`_sock._tcp`)
+4. Retry broadcast
+
+Phases LED boot : phase 4 = jaune pulsant (attente heartbeat), phase 5 = bleu clignotant (tentative connexion).
+
+---
+
+## Default Question Image (v3.2.3)
+
+Image affichée sur TV pour les questions NORMAL/QCM sans média.
+
+```
+GET    /api/config/default-image  → Sert l'image (custom ou SVG embarqué fallback)
+POST   /api/config/default-image  → Upload (multipart, champ "file", jpg/png/gif/webp/svg)
+DELETE /api/config/default-image  → Supprime custom, retour SVG embarqué
+```
+
+- Asset embarqué : `server-go/assets/default-question-image.svg` (via `//go:embed`)
+- `CONFIG_UPDATE` broadcast : `default_question_image_is_custom: true/false`
+- Cache-busting frontend : `?t=timestamp`
+
+---
+
+## OTA Firmware Endpoints (v3.1.0+)
+
+```
+GET  /api/firmware/buzzclick/version           → FirmwareVersionPayload
+GET  /api/firmware/buzzclick/latest.bin        → Binaire firmware
+POST /api/firmware/buzzclick/upload            → Upload .bin (multipart, champ "file")
+POST /api/firmware/buzzclick/restore-embedded  → Restaure firmware embarqué (v3.1.1)
+POST /api/buzzer/{mac}/update                  → Déclenche OTA sur buzzer spécifique
+POST /api/buzzer/update-all                    → OTA sur tous les buzzers obsolètes
+POST /api/buzzer/wifi-config                   → Broadcast WIFI_CONFIG à tous les buzzers WS
+```
+
+**Firmware embarqué** : `server-go/assets/firmware/buzzclick-latest.bin` (`//go:embed`). `EMBEDDED_VERSION` exposé dans `FirmwareVersionPayload`.
+
+Actions WebSocket OTA :
+```json
+{ "ACTION": "OTA_UPDATE",    "MSG": { "URL": "...", "VERSION": "3.1.1", "SIZE": 512000 } }
+{ "ACTION": "OTA_PROGRESS",  "MSG": { "STATUS": "downloading", "PERCENT": 42, "ERROR": "" } }
+{ "ACTION": "FIRMWARE_VERSION", "MSG": { "VERSION": "3.1.1", "EXISTS": true, "EMBEDDED_VERSION": "3.1.1" } }
+{ "ACTION": "WIFI_CONFIG",   "MSG": { "SSID": "...", "PASS": "...", "SERVER_IP": "...", "SERVER_PORT": 80 } }
+```
+
+Fichiers : `internal/server/firmware.go` (FirmwareManager), `internal/server/http_firmware.go` (handlers), `src/BuzzClick/click_otaManager.h` (`performOTA()` dans FreeRTOS task 16 KB).
 | DNS | 53 | Captive portal (optional) |

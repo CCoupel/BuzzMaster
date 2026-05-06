@@ -149,3 +149,116 @@ Le chronomètre affiche différents états visuels :
 | 2.9.1 | 2026-01 | Fix deadlock callbacks, cohérence noms phases frontend/backend |
 | 2.9.0 | 2026-01 | Ajout transitions PREPARE→PREPARE et READY→PREPARE pour changer de question |
 | 2.8.0 | 2026-01 | Refonte complète de la machine à états |
+
+---
+
+## Phase NEW_GAME (v4.0.1 / v4.0.4)
+
+**Phase NEW_GAME** : état transitoire déclenché par le bouton "NOUVELLE PARTIE" (admin, phase STOPPED uniquement).
+- Reset : scores teams + joueurs à 0, historique vide, tous statuts questions → AVAILABLE, question sélectionnée → nil
+- Transition : `NEW_GAME → PREPARE` automatique à la sélection de la première question
+- TV (`/tv`) : affiche l'écran "NOUVELLE PARTIE À VENIR" avec métadonnées du quiz
+
+**Métadonnées de quiz** (v4.0.1) :
+- `quiz_name`, `quiz_theme`, `quiz_notes` — champs GameState, sans `omitempty`, persistés
+- Mis à jour via `UPDATE_QUIZ_META` (payload : `NAME`, `THEME`, `NOTES`)
+
+**Fonds d'écran NEW_GAME** (v4.0.4) :
+- Stockés dans `data/files/new-game-backgrounds/` + `backgrounds.json` — `[]Background{Path, Duration, Opacity}`
+- `POST /new-game-backgrounds` | `PUT /new-game-backgrounds` | `DELETE /new-game-backgrounds?file=xxx`
+- Sérialisé en `new_game_backgrounds` dans GameState et CONFIG_UPDATE (jamais `omitempty`)
+- Fallback : dégradé animé (violet→bleu→cyan→rose→ambre, 9s infini)
+
+**Actions WebSocket** :
+```json
+{ "ACTION": "NEW_GAME", "MSG": {} }
+{ "ACTION": "UPDATE_QUIZ_META", "MSG": { "NAME": "Mon Quiz", "THEME": "Science", "NOTES": "..." } }
+```
+
+Refus NEW_GAME si phase ≠ STOPPED : `{ "ACTION": "REMOTE", "MSG": { "error": "..." } }`
+
+**Fichiers clés** : `engine.go` (`InitGame()`), `models.go` (champs QuizName/Theme/Notes/NewGameBackgrounds), `main.go` (handlers + loadNewGameBackgrounds), `PlayerDisplay.jsx` (écran TV NEW_GAME)
+
+---
+
+## Type de jeu MEMOTION (v5.0.0)
+
+Jeu de cartes à 3 faces avec grille interactive, difficulté configurable et mode équipe.
+
+### Structure MotionCard
+```json
+{
+  "ID": "mc-1",
+  "RECTO_THEME": "Thème de la carte",
+  "RECTO_IMAGE": "/files/questions/img_recto.jpg",
+  "DIFFICULTY": 2,
+  "QUESTION_TEXT": "Question ou énigme",
+  "QUESTION_IMAGE": "/files/questions/img_question.jpg",
+  "ANSWER_TEXT": "Réponse ou explication",
+  "ANSWER_IMAGE": "/files/questions/img_answer.jpg"
+}
+```
+
+Points par difficulté : ★ (1) → 1 pt | ★★ (2) → 3 pts | ★★★ (3) → 5 pts
+
+### Subphases MEMOTION
+| Subphase | Description |
+|----------|-------------|
+| `GRID` | Grille de cartes RECTO, prêtes à sélectionner |
+| `SELECTED` | Carte zoomée plein écran (RECTO thème + points). Pas de timer. |
+| `QUESTION` | Face VERSO (question) plein écran, timer actif |
+| `REVEAL` | Face REVEAL (réponse) plein écran, admin attribue points |
+
+### Champs GameState MEMOTION (sans omitempty)
+- `MEMOTION_SUBPHASE` : `"GRID"` | `"SELECTED"` | `"QUESTION"` | `"REVEAL"` | `""`
+- `MEMOTION_SELECTED` : ID carte sélectionnée (`""` en GRID)
+- `MEMOTION_CARD_STATES` : map[string]string → `"UNPLAYED"` | `"SELECTED"` | `"QUESTION"` | `"REVEALED"` | `"DONE"`
+- `MEMOTION_CARD_TEAMS` : map[string]string → teamName quand DONE
+- `MEMOTION_CURRENT_TEAM` : équipe active
+- `MEMOTION_PARTICIPATING_TEAMS` : []string
+- `MEMOTION_CURRENT_TEAM_COLOR` : [3]int RGB
+
+### Flux de jeu (9 étapes)
+1. Admin click carte → `MEMOTION_SELECT` → SELECTED (zoom plein écran, RECTO)
+2. Admin click "Démarrer" → `MEMOTION_FLIP` → QUESTION + timer démarre
+3. Timer expire ou admin "STOP TIMER" → `MEMOTION_STOP_TIMER` → timer stop, reste QUESTION
+4. Admin "RÉVÉLER" → `MEMOTION_REVEAL` → REVEAL (timer arrêté)
+5. Admin click équipe gagnante → `MEMOTION_DONE` → retour GRID + carte DONE colorée
+
+**Annulation depuis SELECTED** : `MEMOTION_DONE` avec `WINNER_TEAM=""` → carte retourne UNPLAYED.
+
+### Modes de jeu
+- `SOLO` : une seule équipe joue
+- `CHACUN_SON_TOUR` : rotation après chaque carte
+- `TANT_QUE_JE_GAGNE` : conserve le tour si victoire
+
+### Actions WebSocket
+```json
+{ "ACTION": "MEMOTION_SELECT",    "MSG": { "CARD_ID": "mc-1" } }
+{ "ACTION": "MEMOTION_FLIP",      "MSG": {} }
+{ "ACTION": "MEMOTION_STOP_TIMER","MSG": {} }
+{ "ACTION": "MEMOTION_REVEAL",    "MSG": {} }
+{ "ACTION": "MEMOTION_DONE",      "MSG": { "CARD_ID": "mc-1", "WINNER_TEAM": "team_A" } }
+{ "ACTION": "MEMOTION_SET_TEAMS", "MSG": { "TEAMS": ["team_A", "team_B"] } }
+```
+
+### Timer par carte
+- Démarre au `MEMOTION_FLIP` (durée = champ `Time` de la Question)
+- `MEMOTION_STOP_TIMER` : arrêt manuel, subphase reste QUESTION
+- `MEMOTION_REVEAL` : arrête aussi le timer via `StopMotionCardTimer()`
+
+### Animations TV (framer-motion)
+- GRID→SELECTED : `layoutId` shared → zoom automatique depuis position grille
+- Carte en grille masquée (`visibility: hidden`) quand sélectionnée (évite doublon)
+- SELECTED→QUESTION : `AnimatePresence` `initial={{ rotateY: -90 }}`
+- QUESTION→REVEAL : `AnimatePresence` `initial={{ rotateY: 90 }}` (direction opposée)
+- DONE→GRID : `layoutId` anime le retour vers la grille
+
+### Fichiers clés
+- `engine.go` : `SelectMotionCard`, `FlipMotionCard`, `RevealMotionCard`, `DoneMotionCard`, `StopMotionCardTimer`
+- `models.go` : struct `MotionCard`, champs `GameState.Motion*`, `QuestionTypeMemotion`
+- `messages.go` : `ActionMotionSelect/Flip/StopTimer/Reveal/Done/SetTeams`
+- `main.go` : handlers `handleMotion*`
+- `GamePage.jsx` : panneaux admin GRID/SELECTED/QUESTION/REVEAL
+- `PlayerDisplay.jsx` : vues TV + framer-motion layoutId + AnimatePresence flip
+- `PlayerDisplay.css` : classes `.memotion-*`

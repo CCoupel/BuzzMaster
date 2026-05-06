@@ -434,7 +434,7 @@ Nouveau type de jeu : grille de cartes à 3 faces (RECTO / VERSO / REVEAL).
 ```json
 {
   "PHASE": "MEMORY|PREPARE|READY|START|PAUSE|STOP",
-  "MEMOTION_SUBPHASE": "GRID|QUESTION|REVEAL|DONE",
+  "MEMOTION_SUBPHASE": "GRID|SELECTED|QUESTION|REVEAL",
   "MEMOTION_SELECTED": "card_1",
   "MEMOTION_CARD_STATES": {
     "card_1": "DONE",
@@ -450,13 +450,36 @@ Nouveau type de jeu : grille de cartes à 3 faces (RECTO / VERSO / REVEAL).
 }
 ```
 
-**Card States :**
+**Card States (MEMOTION_CARD_STATES) :**
 | État | Description |
 |------|-------------|
-| `AVAILABLE` | Carte non jouée, face RECTO visible en grille |
-| `SELECTED` | Admin a cliqué la carte, passage en subphase QUESTION |
-| `PLAYING` | Carte en cours (QUESTION ou REVEAL), timer actif |
+| `UNPLAYED` | Carte non jouée, face RECTO visible en grille |
+| `SELECTED` | Carte sélectionnée, subphase SELECTED (plein écran RECTO, pas de timer) |
+| `QUESTION` | Carte en cours, face VERSO (question), timer actif |
+| `REVEALED` | Face REVEAL affichée, admin attribue points |
 | `DONE` | Carte jouée et retournée, couleur équipe appliquée |
+
+**Note** : `MEMOTION_SUBPHASE` décrit l'état de la session (GRID/SELECTED/QUESTION/REVEAL) — toujours sérialisé sans `omitempty`. `MEMOTION_CARD_STATES` décrit l'état individuel de chaque carte.
+
+## Bumper enrichi (v3.1.0+)
+
+```json
+{
+  "ID": "AA:BB:CC:DD:EE:FF",
+  "FIRMWARE_VERSION": "3.1.1",
+  "IS_OUTDATED": false,
+  "OTA_STATUS": "",
+  "CONNECTED": true,
+  "ACK_PENDING": false
+}
+```
+
+- **IS_OUTDATED** : remis à `false` uniquement au reboot (réception HELLO avec nouvelle version). Ne change pas sur `OTA_PROGRESS done`.
+- **CONNECTED** (v3.6.6) : `true` à la connexion WS, `false` à la déconnexion. Sans `omitempty`. Badge ⚠ jaune si `!IS_VIRTUAL && !IS_VPLAYER && !CONNECTED`. Au démarrage serveur, tous les bumpers chargés depuis disque ont `CONNECTED=false`.
+- **Reconnexion rapide (v3.6.8)** : `OnBuzzerDisconnected` vérifie `IsClientConnected(mac)` avant de poser `CONNECTED=false` — reconnexion < 5 s transparente.
+- **ACK_PENDING** (v3.8.0) : `true` quand le serveur attend l'ACK du buzzer (LED_SET, OTA_UPDATE, WIFI_CONFIG). Sans `omitempty`. Badge ⚠ horloge si `!IS_VIRTUAL && !IS_VPLAYER && ACK_PENDING`.
+
+Badges frontend : `TeamCard.jsx` + `TeamsPage.jsx` (style inline React `background:#f59e0b`, SVG stroke:white).
 
 ## Question Status Values
 

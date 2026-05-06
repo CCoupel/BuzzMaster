@@ -270,6 +270,22 @@ Page de visualisation des logs serveur en temps réel.
 | TAR | `archive/tar` (stdlib) |
 | Config | JSON file |
 
+## CI/CD et Release (depuis v2.54.0)
+
+Pipeline GitHub Actions (`.github/workflows/release.yml`) déclenché sur push `v*`.
+
+**Jobs** :
+1. **Checking** (~10s) — cohérence versions `config.json`, `package.json`, tag Git
+2. **Compiling** (3 jobs parallèles, ~1-2 min) :
+   - Windows amd64 : Go + React → `buzzcontrol-vX.Y.0-windows-amd64.exe`
+   - Linux ARM64 : Go + React → `buzzcontrol-vX.Y.0-linux-arm64`
+   - Firmware : PlatformIO ESP32-C3 → `buzzclick-vX.Y.0-firmware.bin`
+3. **Releasing** (~30s) — release GitHub avec 3 binaires + notes depuis CHANGELOG.md
+
+**Versioning unifié** : serveur (`config.json`), frontend (`package.json`), firmware (injecté dans `platformio.ini` par CI).
+
+> `versioninfo.json` : CI régénère automatiquement pour Windows PE metadata. Le `.syso` généré **ne doit pas** être commité (`.gitignore`). Mise à jour manuelle uniquement pour builds locaux (`build.ps1`).
+
 ## Cross-compilation
 
 ```bash

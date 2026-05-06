@@ -439,6 +439,51 @@ Le serveur v3.0.0 gere deja les deux protocoles. Aucune modification serveur n'e
 
 ---
 
+---
+
+## Endpoints WebSocket dédiés (v3.8.0)
+
+| Endpoint | Type client | Sérialiseur |
+|----------|-------------|-------------|
+| `/ws/admin` | Admin web | `SerializeForAdmin()` — full payload |
+| `/ws/tv` | TV display | `SerializeForWebClient()` — réduit ~40-60% |
+| `/ws/player` | VPlayer | `SerializeForWebClient()` — réduit |
+| `/ws` | Legacy alias | → `/ws/admin` (rétrocompat) |
+| `/ws/buzzer` | Buzzers physiques | `SerializeForBuzzer()` — minimal |
+
+**Table de routage des actions** :
+
+| Action | Admin | TV | VPlayer | Buzzer |
+|--------|-------|----|---------|----|
+| ALL, UPDATE, START, STOP, PAUSE, CONTINUE, REVEAL, RESET, QCM_HINT, ENROLLMENT_UPDATE | ✓ | ✓ | ✓ | ✓ |
+| UPDATE_TIMER | ✓ | ✓ | ✓ | ✓ |
+| READY, REMOTE, BACKGROUND_CHANGE, CONFIG_UPDATE, SHOW_QR_CODE, HIDE_QR_CODE, FULL, MEMORY_*, MEMOTION_* | ✓ | ✓ | - | - |
+| QUESTIONS, CLIENTS, FIRMWARE_VERSION | ✓ | - | - | - |
+| PLAYER_REJECTED, PLAYER_CONNECTED, PLAYER_ASSIGNED | ✓ | - | ✓ | - |
+| LED_SET, OTA_UPDATE, WIFI_CONFIG, HELLO | ✓ | - | - | ✓ |
+
+**Sérialiseurs** :
+- `SerializeForAdmin()` : full (bumpers avec FIRMWARE_VERSION, OTA_STATUS, ACK_PENDING, config)
+- `SerializeForWebClient()` : strips FIRMWARE_VERSION, IS_OUTDATED, OTA_STATUS, OTA_PERCENT, ACK_PENDING, config
+- `SerializeForBuzzer()` : phase, timer, bumpers (ID, NAME, TEAM, CONNECTED), teams (NAME, COLOR, STATUS)
+
+**Backend** : `websocket.go` — `HandleConnectionWithType()`, `BroadcastToTypes()`, `BroadcastRawToTypes()`.
+**Frontend** : `GameProvider` accepte prop `endpoint` (défaut `/ws/admin`), transmis à `useWebSocket()`. App.jsx : `/tv` → `/ws/tv`, `/player`/`/enroll` → `/ws/player`.
+
+---
+
+## Protocole ACK Buzzer (v3.8.0)
+
+```json
+{ "ACTION": "LED_SET", "MSG_ID": "a1b2c3d4e5f6", "MSG": { ... } }
+{ "ACTION": "ACK", "MSG": { "ack_action": "LED_SET", "ack_id": "a1b2c3d4e5f6" } }
+```
+
+- `AckManager` : registre MSG_ID, retry auto + expiry après `ack_max_retries` (défaut 3, timeout 2000ms)
+- `MSG_ID` : `omitempty` — anciens firmwares sans ACK restent compatibles
+- ACK envoyé BEFORE action apply (firmware) — minimise latence
+- Fichier : `internal/server/ack_manager.go`
+
 ## Contraintes ESP32-C3
 
 | Ressource | Disponible | Client WebSocket | Reste |

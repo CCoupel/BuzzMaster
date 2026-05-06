@@ -143,3 +143,58 @@ case hash("LED_SET"):
 | Fréquence LED msgs | ~10/s | ~5-10/partie |
 | Payload LED | ~800 bytes (UPDATE complet) | ~50 bytes (LED_SET) |
 | Charge totale | Élevée | Réduite |
+
+---
+
+## 11. Effet COMET (v3.7.0)
+
+Bande lumineuse rotative sur 23 LEDs, 2 tours ~3.3 s. Déclenché sur attribution de points (`TEAM_POINTS`/`BUMPER_POINTS`).
+
+```json
+{ "ACTION": "LED_SET", "MSG": { "COLOR": [255, 0, 0], "INTENSITY": 255, "EFFECT": "COMET", "COMET_COLOR": [255, 215, 0] } }
+```
+
+- `COMET_COLOR` : optionnel — or `[255,215,0]` ou blanc `[255,255,255]` selon contraste avec couleur équipe (dist² euclidien RGB < 8000 → blanc)
+- Sélection couleur LED par teinte : `nearestPaletteColorByHue()` — distance HSL pour cohérence palette
+- Firmware : `manageLedComet()` dans `loop()` (`click_serverConnection.h`)
+
+**Logique serveur par phase** :
+| Phase | LED envoyée |
+|-------|-------------|
+| READY/START QCM | couleur réponse SOLID 100% (per-buzzer) |
+| READY/START NORMAL/MEMORY | couleur équipe SOLID 100% |
+| PAUSE (buzz QCM) | buzzer actif DIM 64, autres inchangés |
+| PAUSE ALL | couleur équipe DIM 64 pour tous |
+| STOP | couleur équipe SOLID 100% pour tous |
+| REVEALED QCM | correct=BLINK, wrong-buzzed=SOLID, non-buzzé=DIM 25 |
+| Attribution points | COMET avec COMET_COLOR dynamique sur buzzers de l'équipe |
+
+**Patterns d'erreur LED locaux** (firmware, serveur injoignable) :
+| Pattern | Visuel | Déclencheur |
+|---------|--------|-------------|
+| `WIFI_FAILED` | Rouge clignotant 1 Hz | WiFi non associé |
+| `WS_TIMEOUT` | Rouge pulsant ~0.5 Hz | Timeout connexion boot |
+| `WS_RECONNECTING` | 1 pixel blanc tournant 100ms/step | Reconnexion en cours |
+| `OTA_ERROR` | Rouge fixe + flash blanc 2s | Échec OTA |
+
+`WS_RECONNECTING` : delta-update 2 pixels/tick, préserve ring couleur équipe. Teardown non-bloquant via `ws_destroy_task` FreeRTOS (v3.6.4).
+
+---
+
+## 12. Protocole ACK pour LED_SET (v3.8.0)
+
+Le serveur inclut un `MSG_ID` dans les `LED_SET` critiques. Le buzzer ACK avant d'appliquer.
+
+```json
+// Server → Buzzer
+{ "ACTION": "LED_SET", "MSG_ID": "a1b2c3d4e5f6", "MSG": { "COLOR": [255,0,0], "INTENSITY": 255, "EFFECT": "SOLID" } }
+
+// Buzzer → Server
+{ "ACTION": "ACK", "MSG": { "ack_action": "LED_SET", "ack_id": "a1b2c3d4e5f6" } }
+```
+
+- `AckManager` : retry auto + expiry après 3 tentatives (timeout 2000ms par défaut)
+- `MSG_ID` avec `omitempty` → rétrocompatible anciens firmwares
+- `Bumper.ACK_PENDING` : `true` pendant attente, `false` sur ACK ou expiry
+
+Fichier : `internal/server/ack_manager.go`, `src/BuzzClick/click_websocket_espidf.h` (`ws_sendAck()`)
