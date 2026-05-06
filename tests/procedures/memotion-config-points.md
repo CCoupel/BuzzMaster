@@ -1,6 +1,6 @@
 # Procédure de Test — MEMOTION Points Configurables par Difficulté
 
-**Version** : 5.0.5
+**Version** : 5.0.6
 **Date** : 2026-05-06
 **Testeur** : QA
 
@@ -106,6 +106,64 @@ lors d'un redémarrage du serveur.
 
 ---
 
+---
+
+### Scénario A — Sélecteur de difficulté sans points hardcodés (fix v5.0.6)
+
+**Objectif** : Vérifier que les boutons de difficulté affichent uniquement les étoiles,
+sans libellé de points hardcodés (ex: "1pt", "3pts", "5pts").
+
+| Étape | Action | Résultat Attendu | Résultat Obtenu | OK ? |
+|-------|--------|------------------|----------------|------|
+| 1 | Ouvrir l'éditeur de questions (`/questions`) | Page de liste des questions | | |
+| 2 | Créer ou éditer une question MEMOTION | Formulaire MEMOTION visible | | |
+| 3 | Observer les boutons de sélection de difficulté | Boutons affichent **uniquement** ★ / ★★ / ★★★ (aucun "1pt", "3pts", "5pts") | | |
+| 4 | Modifier le champ "Points 1★" (ex: saisir 10) | Les boutons de difficulté restent inchangés (toujours ★ sans points) | | |
+| 5 | Modifier le champ "Points 2★" (ex: saisir 20) | Les boutons de difficulté restent inchangés (toujours ★★ sans points) | | |
+| 6 | Modifier le champ "Points 3★" (ex: saisir 30) | Les boutons de difficulté restent inchangés (toujours ★★★ sans points) | | |
+| 7 | Ajouter une carte et sélectionner chaque difficulté tour à tour | Chaque bouton sélectionné se met en surbrillance sans afficher de pts | | |
+
+**Verdict** : [ ] PASS  [ ] FAIL
+
+---
+
+### Scénario B — Champ Temps positionné en haut du formulaire MEMOTION (fix v5.0.6)
+
+**Objectif** : Vérifier que le champ "Temps (s)" apparaît dans le bloc supérieur
+(avec les points de difficulté) et qu'il n'existe pas de second champ Temps en bas.
+
+| Étape | Action | Résultat Attendu | Résultat Obtenu | OK ? |
+|-------|--------|------------------|----------------|------|
+| 1 | Ouvrir l'éditeur et créer/éditer une question MEMOTION | Formulaire MEMOTION affiché | | |
+| 2 | Observer la structure du formulaire | Le champ "Temps (s)" apparaît **en haut**, dans le même bloc que les points de difficulté (★/★★/★★★) | | |
+| 3 | Faire défiler jusqu'en bas du formulaire | Aucun second champ "Temps" visible dans la zone générique du bas | | |
+| 4 | Saisir une valeur dans le champ Temps (ex: 45) | La valeur est acceptée | | |
+| 5 | Sauvegarder la question | Sauvegarde sans erreur | | |
+| 6 | Rouvrir la question en édition | Le champ Temps affiche **45** (valeur persistée correctement) | | |
+
+**Verdict** : [ ] PASS  [ ] FAIL
+
+---
+
+### Scénario C — Non-régression : champ Temps des autres types de questions (fix v5.0.6)
+
+**Objectif** : Vérifier que le masquage du champ Temps générique pour MEMOTION
+n'affecte pas les autres types de questions (NORMAL, QCM, MEMORY).
+
+| Étape | Action | Résultat Attendu | Résultat Obtenu | OK ? |
+|-------|--------|------------------|----------------|------|
+| 1 | Ouvrir l'éditeur et créer/éditer une question de type **NORMAL** | Formulaire NORMAL affiché | | |
+| 2 | Observer la présence du champ "Temps (s)" | Champ Temps visible **en bas** du formulaire (comportement inchangé) | | |
+| 3 | Ouvrir une question de type **QCM** | Formulaire QCM affiché | | |
+| 4 | Observer la présence du champ "Temps (s)" | Champ Temps visible **en bas** du formulaire (comportement inchangé) | | |
+| 5 | Ouvrir une question de type **MEMORY** | Formulaire MEMORY affiché | | |
+| 6 | Observer la présence du champ "Temps (s)" | Champ Temps visible **en bas** du formulaire (comportement inchangé) | | |
+| 7 | Modifier le temps d'une question QCM et sauvegarder | Valeur persistée correctement à la réouverture | | |
+
+**Verdict** : [ ] PASS  [ ] FAIL
+
+---
+
 ## Critères de Validation
 
 - [ ] Tous les scénarios nominaux (1, 2, 3) passent avec les points attendus
@@ -113,6 +171,9 @@ lors d'un redémarrage du serveur.
 - [ ] La persistance JSON (scénario 5) préserve la configuration après redémarrage
 - [ ] Aucune régression sur les questions MEMOTION sans MotionConfig (scénario 2)
 - [ ] Les valeurs 0 dans MotionConfig déclenchent bien le fallback (scénario 3)
+- [ ] **[v5.0.6]** Les boutons de difficulté MEMOTION n'affichent aucun libellé de points (scénario A)
+- [ ] **[v5.0.6]** Le champ Temps MEMOTION est positionné en haut, aucun doublon en bas (scénario B)
+- [ ] **[v5.0.6]** Le champ Temps des types NORMAL / QCM / MEMORY reste en bas, inchangé (scénario C)
 
 ## Notes QA
 
