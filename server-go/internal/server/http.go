@@ -749,6 +749,14 @@ func (h *HTTPServer) handleUploadQuestion(w http.ResponseWriter, r *http.Request
 				question["MOTION_CARDS"] = cards
 			}
 		}
+
+		// Parse motion config JSON
+		if configStr := r.FormValue("motion_config"); configStr != "" {
+			var config map[string]interface{}
+			if err := json.Unmarshal([]byte(configStr), &config); err == nil {
+				question["MOTION_CONFIG"] = config
+			}
+		}
 	}
 
 	// Handle question media upload
