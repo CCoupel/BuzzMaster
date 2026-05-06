@@ -3,6 +3,16 @@
 Historique des versions du projet BuzzControl.
 
 
+## [5.0.6] - 2026-05-06
+
+### Added
+- MEMOTION : points par niveau de difficulté configurables depuis l'éditeur (★=1pt / ★★=3pt / ★★★=5pt par défaut, modifiables par question)
+
+### Fixed
+- MEMOTION : inputs points difficulté — valeur minimale 1 (min="0" permettait de saisir 0 ignoré silencieusement)
+
+---
+
 ## [5.0.5] - 2026-05-06
 
 ### Fixed

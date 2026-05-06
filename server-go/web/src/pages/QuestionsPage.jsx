@@ -1726,7 +1726,7 @@ export default function QuestionsPage() {
                         <span className="memotion-points-star">★</span>
                         <input
                           type="number"
-                          min="0"
+                          min="1"
                           className="memotion-points-input"
                           value={formData.motionConfig?.points1 ?? 1}
                           onChange={e => setFormData(p => ({ ...p, motionConfig: { ...p.motionConfig, points1: e.target.value } }))}
@@ -1734,7 +1734,7 @@ export default function QuestionsPage() {
                         <span className="memotion-points-star">★★</span>
                         <input
                           type="number"
-                          min="0"
+                          min="1"
                           className="memotion-points-input"
                           value={formData.motionConfig?.points2 ?? 3}
                           onChange={e => setFormData(p => ({ ...p, motionConfig: { ...p.motionConfig, points2: e.target.value } }))}
@@ -1742,7 +1742,7 @@ export default function QuestionsPage() {
                         <span className="memotion-points-star">★★★</span>
                         <input
                           type="number"
-                          min="0"
+                          min="1"
                           className="memotion-points-input"
                           value={formData.motionConfig?.points3 ?? 5}
                           onChange={e => setFormData(p => ({ ...p, motionConfig: { ...p.motionConfig, points3: e.target.value } }))}
