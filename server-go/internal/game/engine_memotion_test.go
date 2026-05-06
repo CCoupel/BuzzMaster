@@ -9,6 +9,7 @@
 package game
 
 import (
+	"encoding/json"
 	"fmt"
 	"testing"
 )
@@ -1147,5 +1148,250 @@ func TestDoneMotionCard_CancelFromSelected(t *testing.T) {
 	err = e.SelectMotionCard("mc-2")
 	if err != nil {
 		t.Errorf("Card mc-2 should be re-selectable after cancellation, got error: %v", err)
+	}
+}
+
+// ============================================================================
+// motionCardPoints — configurable points par difficulté (v5.0.5)
+// ============================================================================
+
+// TestMotionCardPoints_DefaultFallback verifies that without MotionConfig,
+// motionCardPoints returns the built-in defaults: 1★→1pt, 2★→3pts, 3★→5pts.
+func TestMotionCardPoints_DefaultFallback(t *testing.T) {
+	tests := []struct {
+		difficulty int
+		expected   int
+	}{
+		{1, 1},
+		{2, 3},
+		{3, 5},
+	}
+
+	e := NewEngine()
+	q := makeMotionQuestion("mq1", defaultMotionCards(), "SOLO")
+	// q.MotionConfig is nil — no custom config
+	e.Ready("mq1", q)
+
+	for _, tt := range tests {
+		t.Run(fmt.Sprintf("Difficulty%d", tt.difficulty), func(t *testing.T) {
+			got := e.motionCardPoints(tt.difficulty)
+			if got != tt.expected {
+				t.Errorf("motionCardPoints(%d) without config = %d, want %d",
+					tt.difficulty, got, tt.expected)
+			}
+		})
+	}
+}
+
+// TestMotionCardPoints_CustomConfig verifies that a fully configured MotionConfig
+// overrides all default values: 1★→2pts, 2★→6pts, 3★→10pts.
+func TestMotionCardPoints_CustomConfig(t *testing.T) {
+	tests := []struct {
+		difficulty int
+		expected   int
+	}{
+		{1, 2},
+		{2, 6},
+		{3, 10},
+	}
+
+	e := NewEngine()
+	q := makeMotionQuestion("mq1", defaultMotionCards(), "SOLO")
+	q.MotionConfig = &MotionConfig{Points1Star: 2, Points2Star: 6, Points3Star: 10}
+	e.Ready("mq1", q)
+
+	for _, tt := range tests {
+		t.Run(fmt.Sprintf("Difficulty%d", tt.difficulty), func(t *testing.T) {
+			got := e.motionCardPoints(tt.difficulty)
+			if got != tt.expected {
+				t.Errorf("motionCardPoints(%d) with config(2/6/10) = %d, want %d",
+					tt.difficulty, got, tt.expected)
+			}
+		})
+	}
+}
+
+// TestMotionCardPoints_PartialConfig verifies that a zero value in MotionConfig
+// is treated as "not configured" and falls back to the default for that difficulty.
+// MotionConfig{Points1Star:5, Points2Star:0, Points3Star:0} →
+//   1★=5pts (configured), 2★=3pts (fallback), 3★=5pts (fallback).
+func TestMotionCardPoints_PartialConfig(t *testing.T) {
+	tests := []struct {
+		difficulty int
+		expected   int
+		desc       string
+	}{
+		{1, 5, "custom (Points1Star=5 > 0)"},
+		{2, 3, "fallback (Points2Star=0 → default 3)"},
+		{3, 5, "fallback (Points3Star=0 → default 5)"},
+	}
+
+	e := NewEngine()
+	q := makeMotionQuestion("mq1", defaultMotionCards(), "SOLO")
+	q.MotionConfig = &MotionConfig{Points1Star: 5, Points2Star: 0, Points3Star: 0}
+	e.Ready("mq1", q)
+
+	for _, tt := range tests {
+		t.Run(fmt.Sprintf("Difficulty%d_%s", tt.difficulty, tt.desc), func(t *testing.T) {
+			got := e.motionCardPoints(tt.difficulty)
+			if got != tt.expected {
+				t.Errorf("motionCardPoints(%d) [%s]: got %d, want %d",
+					tt.difficulty, tt.desc, got, tt.expected)
+			}
+		})
+	}
+}
+
+// TestMotionConfig_JSONSerialization verifies that MotionConfig round-trips cleanly
+// through JSON marshal/unmarshal with all fields preserved.
+func TestMotionConfig_JSONSerialization(t *testing.T) {
+	cfg := MotionConfig{
+		Points1Star: 2,
+		Points2Star: 6,
+		Points3Star: 10,
+	}
+
+	data, err := json.Marshal(cfg)
+	if err != nil {
+		t.Fatalf("Marshal failed: %v", err)
+	}
+
+	var decoded MotionConfig
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		t.Fatalf("Unmarshal failed: %v", err)
+	}
+
+	if decoded.Points1Star != 2 {
+		t.Errorf("Points1Star mismatch: expected 2, got %d", decoded.Points1Star)
+	}
+	if decoded.Points2Star != 6 {
+		t.Errorf("Points2Star mismatch: expected 6, got %d", decoded.Points2Star)
+	}
+	if decoded.Points3Star != 10 {
+		t.Errorf("Points3Star mismatch: expected 10, got %d", decoded.Points3Star)
+	}
+
+	// JSON keys must match contract: POINTS_1_STAR / POINTS_2_STAR / POINTS_3_STAR
+	var raw map[string]interface{}
+	if err := json.Unmarshal(data, &raw); err != nil {
+		t.Fatalf("Unmarshal to raw map failed: %v", err)
+	}
+	for _, key := range []string{"POINTS_1_STAR", "POINTS_2_STAR", "POINTS_3_STAR"} {
+		if _, ok := raw[key]; !ok {
+			t.Errorf("JSON key %q missing from MotionConfig serialization", key)
+		}
+	}
+}
+
+// TestMotionConfig_JSONSerialization_InQuestion verifies that MotionConfig is
+// properly embedded in a MEMOTION Question and round-trips through JSON.
+func TestMotionConfig_JSONSerialization_InQuestion(t *testing.T) {
+	q := makeMotionQuestion("mq1", defaultMotionCards(), "SOLO")
+	q.MotionConfig = &MotionConfig{Points1Star: 2, Points2Star: 6, Points3Star: 10}
+
+	data, err := json.Marshal(q)
+	if err != nil {
+		t.Fatalf("Marshal failed: %v", err)
+	}
+
+	var decoded Question
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		t.Fatalf("Unmarshal failed: %v", err)
+	}
+
+	if decoded.MotionConfig == nil {
+		t.Fatal("MotionConfig should not be nil after round-trip")
+	}
+	if decoded.MotionConfig.Points1Star != 2 {
+		t.Errorf("Points1Star mismatch: expected 2, got %d", decoded.MotionConfig.Points1Star)
+	}
+	if decoded.MotionConfig.Points2Star != 6 {
+		t.Errorf("Points2Star mismatch: expected 6, got %d", decoded.MotionConfig.Points2Star)
+	}
+	if decoded.MotionConfig.Points3Star != 10 {
+		t.Errorf("Points3Star mismatch: expected 10, got %d", decoded.MotionConfig.Points3Star)
+	}
+}
+
+// TestDoneMotionCard_WithMotionConfig is an integration test that verifies the full
+// DoneMotionCard flow with a custom MotionConfig: the team receives the configured
+// points (not the defaults) and the return value matches the configuration.
+func TestDoneMotionCard_WithMotionConfig(t *testing.T) {
+	tests := []struct {
+		desc           string
+		difficulty     int
+		config         *MotionConfig
+		expectedPoints int
+	}{
+		{
+			desc:           "1★ config(2/6/10) → 2pts",
+			difficulty:     1,
+			config:         &MotionConfig{Points1Star: 2, Points2Star: 6, Points3Star: 10},
+			expectedPoints: 2,
+		},
+		{
+			desc:           "2★ config(2/6/10) → 6pts",
+			difficulty:     2,
+			config:         &MotionConfig{Points1Star: 2, Points2Star: 6, Points3Star: 10},
+			expectedPoints: 6,
+		},
+		{
+			desc:           "3★ config(2/6/10) → 10pts",
+			difficulty:     3,
+			config:         &MotionConfig{Points1Star: 2, Points2Star: 6, Points3Star: 10},
+			expectedPoints: 10,
+		},
+		{
+			desc:           "3★ config(0/0/0) → fallback 5pts",
+			difficulty:     3,
+			config:         &MotionConfig{Points1Star: 0, Points2Star: 0, Points3Star: 0},
+			expectedPoints: 5,
+		},
+		{
+			desc:           "1★ partial config(5/0/0) → 5pts (custom 1★)",
+			difficulty:     1,
+			config:         &MotionConfig{Points1Star: 5, Points2Star: 0, Points3Star: 0},
+			expectedPoints: 5,
+		},
+		{
+			desc:           "2★ partial config(5/0/0) → 3pts (fallback 2★)",
+			difficulty:     2,
+			config:         &MotionConfig{Points1Star: 5, Points2Star: 0, Points3Star: 0},
+			expectedPoints: 3,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.desc, func(t *testing.T) {
+			e := NewEngine()
+			e.SetTeams(map[string]*Team{
+				"blue": {Name: "Team Blue", Color: []int{0, 0, 255}},
+			})
+			q := singleCardMotion("mq1", "mc-1", tt.difficulty)
+			q.MotionConfig = tt.config
+			startMEMOTION(t, e, "mq1", q)
+			defer e.Stop()
+
+			_ = e.SelectMotionCard("mc-1")
+			_ = e.FlipMotionCard()
+			_ = e.RevealMotionCard()
+
+			points, _, err := e.DoneMotionCard("mc-1", "blue")
+			if err != nil {
+				t.Fatalf("DoneMotionCard failed: %v", err)
+			}
+			if points != tt.expectedPoints {
+				t.Errorf("DoneMotionCard returned %d points, want %d", points, tt.expectedPoints)
+			}
+
+			// Verify the team's score was updated with the configured points
+			team := e.GetTeam("blue")
+			if team == nil {
+				t.Fatal("Team 'blue' should exist")
+			}
+			if team.TeamPoints != tt.expectedPoints {
+				t.Errorf("team.TeamPoints = %d, want %d", team.TeamPoints, tt.expectedPoints)
+			}
+		})
 	}
 }
