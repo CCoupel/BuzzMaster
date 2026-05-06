@@ -1518,6 +1518,62 @@
   gap: var(--space-2);
 }
 
+/* MEMOTION — Points par difficulté */
+.memotion-points-config {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-2) var(--space-3);
+  background: var(--bg-tertiary);
+  border: 1px solid var(--gray-700);
+  border-radius: var(--radius-md);
+}
+
+.memotion-points-config > label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.memotion-points-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.memotion-points-star {
+  font-size: 0.8rem;
+  color: #eab308;
+  min-width: 1.5rem;
+  text-align: right;
+}
+
+.memotion-points-input {
+  width: 52px;
+  text-align: center;
+  padding: 2px var(--space-1);
+  background: var(--bg-secondary);
+  border: 1px solid var(--gray-600);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-size: 0.85rem;
+}
+
+.memotion-points-input:focus {
+  outline: none;
+  border-color: #f97316;
+  box-shadow: 0 0 0 2px rgba(249, 115, 22, 0.2);
+}
+
+.memotion-points-unit {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  margin-left: var(--space-1);
+}
+
 /* Reuse the .type-btn.memotion for the type selector */
 .type-btn.memotion {
   background: linear-gradient(135deg, rgba(249,115,22,0.1), rgba(234,179,8,0.1));

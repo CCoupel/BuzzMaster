@@ -723,7 +723,15 @@ export default function GamePage() {
             const currentTeamColor = gameState.MEMOTION_CURRENT_TEAM_COLOR
             const currentTeam = gameState.MEMOTION_CURRENT_TEAM
             const motionCards = gameState.question?.MOTION_CARDS || []
-            const diffPts = d => d === 3 ? 5 : d === 2 ? 3 : 1
+            const motionCfg = gameState.question?.MOTION_CONFIG
+            const diffPts = d => {
+              if (motionCfg) {
+                if (d === 1) return motionCfg.POINTS_1_STAR ?? 1
+                if (d === 2) return motionCfg.POINTS_2_STAR ?? 3
+                if (d === 3) return motionCfg.POINTS_3_STAR ?? 5
+              }
+              return d === 3 ? 5 : d === 2 ? 3 : 1
+            }
 
             if (subphase === 'GRID') {
               return (

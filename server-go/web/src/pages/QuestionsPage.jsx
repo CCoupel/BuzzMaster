@@ -65,6 +65,7 @@ export default function QuestionsPage() {
       { id: 'mc-1', rectoTheme: '', rectoImage: null, difficulty: 1, questionText: '', questionImage: null, answerText: '', answerImage: null },
       { id: 'mc-2', rectoTheme: '', rectoImage: null, difficulty: 1, questionText: '', questionImage: null, answerText: '', answerImage: null },
     ],
+    motionConfig: { points1: 1, points2: 3, points3: 5 },
     memoryConfig: {
       flipDelay: 3,
       pointsPerPair: 10,
@@ -416,6 +417,14 @@ export default function QuestionsPage() {
       }))
     }
 
+    // Load MEMOTION points config from question data
+    const mc = question.MOTION_CONFIG
+    const motionConfig = {
+      points1: mc?.POINTS_1_STAR ?? 1,
+      points2: mc?.POINTS_2_STAR ?? 3,
+      points3: mc?.POINTS_3_STAR ?? 5,
+    }
+
     setFormData({
       question: question.QUESTION || '',
       answer: question.ANSWER || '',
@@ -434,6 +443,7 @@ export default function QuestionsPage() {
       memoryConfig,
       motionMode: question.MOTION_MODE || 'SOLO',
       motionCards,
+      motionConfig,
       points: question.POINTS || '1',
       time: question.TIME || '30',
       media: null,
@@ -484,6 +494,7 @@ export default function QuestionsPage() {
         { id: 'mc-1', rectoTheme: '', rectoImage: null, difficulty: 1, questionText: '', questionImage: null, answerText: '', answerImage: null },
         { id: 'mc-2', rectoTheme: '', rectoImage: null, difficulty: 1, questionText: '', questionImage: null, answerText: '', answerImage: null },
       ],
+      motionConfig: { points1: 1, points2: 3, points3: 5 },
       points: '1',
       time: '30',
       media: null,
@@ -716,6 +727,11 @@ export default function QuestionsPage() {
         ANSWER_IMAGE: typeof card.answerImage === 'string' ? card.answerImage : '',
       }))
       data.append('motion_cards', JSON.stringify(serializedCards))
+      data.append('motion_config', JSON.stringify({
+        POINTS_1_STAR: parseInt(formData.motionConfig?.points1) || 1,
+        POINTS_2_STAR: parseInt(formData.motionConfig?.points2) || 3,
+        POINTS_3_STAR: parseInt(formData.motionConfig?.points3) || 5,
+      }))
 
       // Append image files (per face, per card)
       formData.motionCards.forEach(card => {
@@ -1700,6 +1716,38 @@ export default function QuestionsPage() {
                             </span>
                           </label>
                         ))}
+                      </div>
+                    </div>
+
+                    {/* MEMOTION — Points par difficulté */}
+                    <div className="memotion-points-config">
+                      <label>Points par difficulté</label>
+                      <div className="memotion-points-row">
+                        <span className="memotion-points-star">★</span>
+                        <input
+                          type="number"
+                          min="0"
+                          className="memotion-points-input"
+                          value={formData.motionConfig?.points1 ?? 1}
+                          onChange={e => setFormData(p => ({ ...p, motionConfig: { ...p.motionConfig, points1: e.target.value } }))}
+                        />
+                        <span className="memotion-points-star">★★</span>
+                        <input
+                          type="number"
+                          min="0"
+                          className="memotion-points-input"
+                          value={formData.motionConfig?.points2 ?? 3}
+                          onChange={e => setFormData(p => ({ ...p, motionConfig: { ...p.motionConfig, points2: e.target.value } }))}
+                        />
+                        <span className="memotion-points-star">★★★</span>
+                        <input
+                          type="number"
+                          min="0"
+                          className="memotion-points-input"
+                          value={formData.motionConfig?.points3 ?? 5}
+                          onChange={e => setFormData(p => ({ ...p, motionConfig: { ...p.motionConfig, points3: e.target.value } }))}
+                        />
+                        <span className="memotion-points-unit">pts</span>
                       </div>
                     </div>
 
