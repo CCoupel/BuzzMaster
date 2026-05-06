@@ -2544,6 +2544,29 @@ var motionDifficultyPoints = map[int]int{
 	3: 5,
 }
 
+// motionCardPoints returns the points for a card difficulty.
+// It uses MotionConfig from the current question if configured, otherwise falls back to motionDifficultyPoints.
+func (e *Engine) motionCardPoints(difficulty int) int {
+	if e.state.Question != nil && e.state.Question.MotionConfig != nil {
+		cfg := e.state.Question.MotionConfig
+		switch difficulty {
+		case 1:
+			if cfg.Points1Star > 0 {
+				return cfg.Points1Star
+			}
+		case 2:
+			if cfg.Points2Star > 0 {
+				return cfg.Points2Star
+			}
+		case 3:
+			if cfg.Points3Star > 0 {
+				return cfg.Points3Star
+			}
+		}
+	}
+	return motionDifficultyPoints[difficulty]
+}
+
 // initMotionStateUnsafe initialises MEMOTION card states for the current question.
 // All cards are set to "UNPLAYED" and MotionSubPhase is reset to "GRID".
 // Must be called with e.mu held (write).
@@ -2685,7 +2708,8 @@ func (e *Engine) DoneMotionCard(cardID string, winnerTeam string) (int, bool, er
 		if e.state.Question != nil {
 			for _, card := range e.state.Question.MotionCards {
 				if card.ID == cardID {
-					pts, ok := motionDifficultyPoints[card.Difficulty]
+					pts := e.motionCardPoints(card.Difficulty)
+					ok := pts > 0
 					if ok {
 						points = pts
 					}
