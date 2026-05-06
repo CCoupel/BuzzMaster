@@ -10,6 +10,8 @@ Historique des versions du projet BuzzControl.
 
 ### Fixed
 - MEMOTION : inputs points difficulté — valeur minimale 1 (min="0" permettait de saisir 0 ignoré silencieusement)
+- MEMOTION éditeur : sélecteur de difficulté affiche uniquement les étoiles (★/★★/★★★), sans les points qui n'étaient pas mis à jour dynamiquement
+- MEMOTION éditeur : champ "Temps" remonté dans le bloc configuration en haut du formulaire (avec les points de difficulté)
 
 ---
 
