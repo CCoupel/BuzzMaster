@@ -2170,6 +2170,15 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
                     transition={{ duration: 0.5, ease: [0.4, 0, 0.2, 1] }}
                     style={{ position: 'fixed', inset: 0, zIndex: 10, perspective: '1200px' }}
                   >
+                    <div className="memotion-tv-fs-timer">
+                      <Timer
+                        currentTime={gameState.timer}
+                        totalTime={gameState.totalTime}
+                        phase={gameState.phase}
+                        size="lg"
+                        showPhase={false}
+                      />
+                    </div>
                     <div className="memotion-tv-fs-header">
                       <span className="memotion-tv-fs-theme">{selectedCard.RECTO_THEME}</span>
                       <span className="memotion-tv-fs-diff">{'★'.repeat(diff)}</span>
@@ -2201,15 +2210,6 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
                           {selectedCard.QUESTION_TEXT}
                         </motion.p>
                       )}
-                    </div>
-                    <div className="memotion-tv-fs-timer">
-                      <Timer
-                        currentTime={gameState.timer}
-                        totalTime={gameState.totalTime}
-                        phase={gameState.phase}
-                        size="lg"
-                        showPhase={false}
-                      />
                     </div>
                   </motion.div>
                 )
