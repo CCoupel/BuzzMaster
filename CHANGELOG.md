@@ -3,6 +3,17 @@
 Historique des versions du projet BuzzControl.
 
 
+## [5.0.5] - 2026-05-06
+
+### Fixed
+- MEMOTION TV: cartes rectangulaires qui remplissent toute la zone de jeu (override `.memotion-game .memory-grid` avec `1fr`, sans algo carré MEMORY)
+- MEMOTION TV: animation zoom clip-path fiable lors de la sélection d'une carte (getBoundingClientRect au rendu, remplace layoutId incompatible avec overflow:hidden)
+- MEMOTION TV: animation zoom arrière vers la grille après attribution des points (DONE)
+- MEMOTION TV: REVEAL — ancrage clipPath pour permettre l'interpolation CSS exit vers position grille
+- MEMOTION TV: correction du padding de la grille pour couverture totale de la zone
+
+---
+
 ## [5.0.4] - 2026-05-06
 
 ### Fixed
