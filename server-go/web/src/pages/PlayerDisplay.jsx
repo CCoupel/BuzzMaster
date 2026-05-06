@@ -2068,7 +2068,6 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
                     layoutId={`memotion-card-${selectedId}`}
                     className="memotion-tv-fullscreen memotion-tv-selected"
                     style={{ position: 'fixed', inset: 0, zIndex: 10 }}
-                    exit={{ rotateY: 90, transition: { duration: 0.35 } }}
                   >
                     <div className="memotion-tv-fs-header">
                       <span className="memotion-tv-fs-theme">{selectedCard.RECTO_THEME}</span>
