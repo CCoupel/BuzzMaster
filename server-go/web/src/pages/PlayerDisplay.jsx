@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, useCallback, useRef } from 'react'
 import NoSleep from 'nosleep.js'
-import { motion, AnimatePresence, LayoutGroup } from 'framer-motion'
+import { motion, AnimatePresence } from 'framer-motion'
 import confetti from 'canvas-confetti'
 import { useGame } from '../hooks/GameContext'
 import Timer from '../components/Timer'
@@ -48,6 +48,8 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
   const [isFullscreen, setIsFullscreen] = useState(false)
   const tvWakeLockRef = useRef(null)
   const tvNoSleepRef = useRef(null)
+  const motionCardRefs = useRef({})
+  const motionSelectedRectRef = useRef(null)
   const [localCountdown, setLocalCountdown] = useState(null) // Local countdown that starts after cascade reveal is done
   const [wifiConfig, setWifiConfig] = useState(null) // { ssid, password } for enrollment WiFi QR code
   const [ngBgIndex, setNgBgIndex] = useState(0) // Current index for NEW_GAME background rotation
@@ -800,6 +802,16 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
       if (tvNoSleepRef.current?.isEnabled) { tvNoSleepRef.current.disable(); tvNoSleepRef.current = null }
     }
   }, [isVPlayer, isAdminPreview])
+
+  // Capture bounding rect of selected MEMOTION card for clip-path zoom animation
+  useEffect(() => {
+    if (gameState.MEMOTION_SUBPHASE === 'SELECTED' && gameState.MEMOTION_SELECTED) {
+      const el = motionCardRefs.current[gameState.MEMOTION_SELECTED]
+      if (el) {
+        motionSelectedRectRef.current = el.getBoundingClientRect()
+      }
+    }
+  }, [gameState.MEMOTION_SUBPHASE, gameState.MEMOTION_SELECTED])
 
   return (
     <div className={`player-display ${showNeon ? `neon-border ${neonModeClass}` : ''}`} style={neonStyle}>
@@ -1970,7 +1982,7 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
                         return (
                           <motion.div
                             key={card.ID}
-                            layoutId={`memotion-card-${card.ID}`}
+                            ref={el => { if (el) motionCardRefs.current[card.ID] = el }}
                             className={`memory-card memotion-card${isDone ? ' matched' : ''}${isActiveCard ? ' selected' : ''}`}
                             style={{
                               ...(isDone ? { '--matched-team-color': matchedColor } : undefined),
@@ -2094,15 +2106,24 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
               /* Build fullscreen overlay — shared AnimatePresence enables SELECTED→QUESTION exit animation */
               let motionOverlay = null
 
-              /* ---- SELECTED: carte sélectionnée zoome vers fullscreen via layoutId ---- */
+              /* ---- SELECTED: carte sélectionnée zoome vers fullscreen via clip-path ---- */
               if (subphase === 'SELECTED' && selectedCard) {
                 const diff = selectedCard.DIFFICULTY || 1
+                const rect = motionSelectedRectRef.current
+                const W = typeof window !== 'undefined' ? window.innerWidth : 1920
+                const H = typeof window !== 'undefined' ? window.innerHeight : 1080
+                const clipStart = rect
+                  ? `inset(${rect.top}px ${W - rect.right}px ${H - rect.bottom}px ${rect.left}px round 8px)`
+                  : 'inset(40% 40% 40% 40% round 8px)'
+                const clipEnd = 'inset(0px 0px 0px 0px round 0px)'
                 motionOverlay = (
                   <motion.div
                     key={`memotion-selected-${selectedId}`}
-                    layoutId={`memotion-card-${selectedId}`}
                     className="memotion-tv-fullscreen memotion-tv-selected"
                     style={{ position: 'fixed', inset: 0, zIndex: 10 }}
+                    initial={{ clipPath: clipStart }}
+                    animate={{ clipPath: clipEnd }}
+                    transition={{ duration: 0.45, ease: [0.4, 0, 0.2, 1] }}
                   >
                     <div className="memotion-tv-fs-header">
                       <span className="memotion-tv-fs-theme">{selectedCard.RECTO_THEME}</span>
@@ -2198,13 +2219,19 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
               /* ---- REVEAL: flip depuis QUESTION vers réponse ---- */
               } else if (subphase === 'REVEAL' && selectedCard) {
                 const diff = selectedCard.DIFFICULTY || 1
+                const rect = motionSelectedRectRef.current
+                const W = typeof window !== 'undefined' ? window.innerWidth : 1920
+                const H = typeof window !== 'undefined' ? window.innerHeight : 1080
+                const clipBack = rect
+                  ? `inset(${rect.top}px ${W - rect.right}px ${H - rect.bottom}px ${rect.left}px round 8px)`
+                  : 'inset(50% 50% 50% 50%)'
                 motionOverlay = (
                   <motion.div
                     key="memotion-reveal"
-                    layoutId={`memotion-card-${selectedId}`}
                     className="memotion-tv-fullscreen memotion-tv-reveal"
                     initial={{ rotateY: -90 }}
                     animate={{ rotateY: 0 }}
+                    exit={{ clipPath: clipBack, transition: { duration: 0.4, ease: [0, 0.2, 0.4, 1] } }}
                     transition={{ duration: 0.5, ease: [0.4, 0, 0.2, 1] }}
                     style={{ position: 'fixed', inset: 0, zIndex: 10, perspective: '1200px' }}
                   >
@@ -2241,12 +2268,12 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
 
               /* GRID (subphase null, "GRID", or unknown): motionOverlay stays null */
               return (
-                <LayoutGroup>
+                <>
                   {gridView}
                   <AnimatePresence mode="wait">
                     {motionOverlay}
                   </AnimatePresence>
-                </LayoutGroup>
+                </>
               )
             })()}
 

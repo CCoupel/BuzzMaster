@@ -2632,6 +2632,19 @@
   padding: var(--space-2);
 }
 
+/* MEMOTION: cartes rectangulaires — remplissent toute la zone grille */
+.memotion-game .memory-grid {
+  --memotion-card-w: calc((var(--available-width) - var(--total-gap-width)) / var(--cols));
+  --memotion-card-h: calc((var(--available-height) - var(--total-gap-height)) / var(--rows));
+  grid-template-columns: repeat(var(--cols), var(--memotion-card-w));
+  grid-template-rows: repeat(var(--rows), var(--memotion-card-h));
+}
+
+/* MEMOTION: inner adapté à la hauteur variable */
+.memotion-card .memory-card-back {
+  height: 100%;
+}
+
 /* Current team label in zone-question */
 .memotion-current-team-label {
   display: inline-flex;
@@ -2679,11 +2692,10 @@
 }
 
 .memotion-card-img {
-  flex: 1 1 0;
-  min-height: 0;
+  height: 70%;
   width: 100%;
-  max-height: none;
   object-fit: cover;
+  flex: none;
   border-radius: 0;
   display: block;
 }
