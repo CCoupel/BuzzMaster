@@ -1719,8 +1719,19 @@ export default function QuestionsPage() {
                       </div>
                     </div>
 
-                    {/* MEMOTION — Points par difficulté */}
+                    {/* MEMOTION — Temps + Points par difficulté */}
                     <div className="memotion-points-config">
+                      <div className="memotion-time-row">
+                        <label htmlFor="memotion-time-input">Temps (s)</label>
+                        <input
+                          id="memotion-time-input"
+                          type="number"
+                          value={formData.time}
+                          onChange={e => handleInputChange('time', e.target.value)}
+                          min="5"
+                          max="300"
+                        />
+                      </div>
                       <label>Points par difficulté</label>
                       <div className="memotion-points-row">
                         <span className="memotion-points-star">★</span>
@@ -1793,10 +1804,8 @@ export default function QuestionsPage() {
                                   type="button"
                                   className={`memotion-diff-btn ${card.difficulty === d ? 'active' : ''}`}
                                   onClick={() => handleMotionCardChange(card.id, 'difficulty', d)}
-                                  title={d === 1 ? '1 point' : d === 2 ? '3 points' : '5 points'}
                                 >
                                   {'★'.repeat(d)}
-                                  <span className="memotion-diff-pts">{d === 1 ? '1pt' : d === 2 ? '3pts' : '5pts'}</span>
                                 </button>
                               ))}
                             </div>
@@ -1909,17 +1918,19 @@ export default function QuestionsPage() {
                       />
                     </div>
                   )}
-                  <div className="form-group">
-                    <label htmlFor="time-input">Temps (s)</label>
-                    <input
-                      id="time-input"
-                      type="number"
-                      value={formData.time}
-                      onChange={(e) => handleInputChange('time', e.target.value)}
-                      min="5"
-                      max="300"
-                    />
-                  </div>
+                  {formData.type !== 'MEMOTION' && (
+                    <div className="form-group">
+                      <label htmlFor="time-input">Temps (s)</label>
+                      <input
+                        id="time-input"
+                        type="number"
+                        value={formData.time}
+                        onChange={(e) => handleInputChange('time', e.target.value)}
+                        min="5"
+                        max="300"
+                      />
+                    </div>
+                  )}
                 </div>
 
                 {/* Hide Image question/answer for MEMORY/MEMOTION - images are in pairs/cards */}
