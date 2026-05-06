@@ -1507,18 +1507,33 @@
   font-weight: 700;
 }
 
-.memotion-diff-pts {
-  font-size: 0.65rem;
-  opacity: 0.8;
-}
-
 .memotion-img-row {
   display: flex;
   align-items: center;
   gap: var(--space-2);
 }
 
-/* MEMOTION — Points par difficulté */
+/* MEMOTION — Temps + Points par difficulté */
+.memotion-time-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-bottom: var(--space-1);
+}
+
+.memotion-time-row label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  white-space: nowrap;
+}
+
+.memotion-time-row input {
+  width: 80px;
+}
+
 .memotion-points-config {
   display: flex;
   flex-direction: column;
