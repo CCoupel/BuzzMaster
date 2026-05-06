@@ -2024,156 +2024,162 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
                 </div>
               )
 
+              /* Build fullscreen overlay — shared AnimatePresence enables SELECTED→QUESTION exit animation */
+              let motionOverlay = null
+
               /* ---- SELECTED: carte sélectionnée zoome vers fullscreen via layoutId ---- */
               if (subphase === 'SELECTED' && selectedCard) {
                 const diff = selectedCard.DIFFICULTY || 1
-                return (
-                  <>
-                    {gridView}
-                    <motion.div
-                      layoutId={`memotion-card-${selectedId}`}
-                      className="memotion-tv-fullscreen memotion-tv-selected"
-                      style={{ position: 'fixed', inset: 0, zIndex: 10, transformStyle: 'preserve-3d' }}
-                    >
-                      <div className="memotion-tv-fs-header">
-                        <span className="memotion-tv-fs-theme">{selectedCard.RECTO_THEME}</span>
-                        <span className="memotion-tv-fs-diff">{'★'.repeat(diff)}</span>
-                        <span className="memotion-tv-fs-pts">{diffPts(diff)}pt</span>
-                        {currentTeam && (
-                          <span className="memotion-tv-fs-team" style={{ color: currentTeamCss }}>
-                            {currentTeam}
-                          </span>
-                        )}
-                      </div>
-                      <div className="memotion-tv-fs-body">
-                        {selectedCard.RECTO_IMAGE && (
-                          <motion.img
-                            src={selectedCard.RECTO_IMAGE}
-                            alt=""
-                            className="memotion-tv-fs-img"
-                            initial={{ opacity: 0, scale: 0.9 }}
-                            animate={{ opacity: 1, scale: 1 }}
-                            transition={{ delay: 0.25 }}
-                          />
-                        )}
-                      </div>
-                    </motion.div>
-                  </>
+                motionOverlay = (
+                  <motion.div
+                    key={`memotion-selected-${selectedId}`}
+                    layoutId={`memotion-card-${selectedId}`}
+                    className="memotion-tv-fullscreen memotion-tv-selected"
+                    style={{ position: 'fixed', inset: 0, zIndex: 10, transformStyle: 'preserve-3d' }}
+                    exit={{ rotateY: 90, opacity: 0, transition: { duration: 0.35 } }}
+                  >
+                    <div className="memotion-tv-fs-header">
+                      <span className="memotion-tv-fs-theme">{selectedCard.RECTO_THEME}</span>
+                      <span className="memotion-tv-fs-diff">{'★'.repeat(diff)}</span>
+                      <span className="memotion-tv-fs-pts">{diffPts(diff)}pt</span>
+                      {currentTeam && (
+                        <span className="memotion-tv-fs-team" style={{ color: currentTeamCss }}>
+                          {currentTeam}
+                        </span>
+                      )}
+                    </div>
+                    <div className="memotion-tv-fs-body">
+                      {selectedCard.RECTO_IMAGE ? (
+                        <motion.img
+                          src={selectedCard.RECTO_IMAGE}
+                          alt=""
+                          className="memotion-tv-fs-img"
+                          initial={{ opacity: 0, scale: 0.9 }}
+                          animate={{ opacity: 1, scale: 1 }}
+                          transition={{ delay: 0.25 }}
+                        />
+                      ) : (
+                        <motion.p
+                          className="memotion-tv-fs-text"
+                          initial={{ opacity: 0 }}
+                          animate={{ opacity: 1 }}
+                          transition={{ delay: 0.25 }}
+                        >
+                          {selectedCard.RECTO_THEME}
+                        </motion.p>
+                      )}
+                    </div>
+                  </motion.div>
                 )
-              }
 
               /* ---- QUESTION: flip depuis SELECTED vers question ---- */
-              if (subphase === 'QUESTION' && selectedCard) {
+              } else if (subphase === 'QUESTION' && selectedCard) {
                 const diff = selectedCard.DIFFICULTY || 1
-                return (
-                  <>
-                    {gridView}
-                    <AnimatePresence mode="wait">
-                      <motion.div
-                        key="memotion-question"
-                        className="memotion-tv-fullscreen"
-                        initial={{ rotateY: -90, opacity: 0 }}
-                        animate={{ rotateY: 0, opacity: 1 }}
-                        transition={{ duration: 0.5, ease: [0.4, 0, 0.2, 1] }}
-                        style={{ position: 'fixed', inset: 0, zIndex: 10, perspective: '1200px' }}
-                      >
-                        <div className="memotion-tv-fs-header">
-                          <span className="memotion-tv-fs-theme">{selectedCard.RECTO_THEME}</span>
-                          <span className="memotion-tv-fs-diff">{'★'.repeat(diff)}</span>
-                          <span className="memotion-tv-fs-pts">{diffPts(diff)}pt</span>
-                          {currentTeam && (
-                            <span className="memotion-tv-fs-team" style={{ color: currentTeamCss }}>
-                              {currentTeam}
-                            </span>
-                          )}
-                        </div>
-                        <div className="memotion-tv-fs-body">
-                          {selectedCard.QUESTION_IMAGE && (
-                            <motion.img
-                              src={selectedCard.QUESTION_IMAGE}
-                              alt=""
-                              className="memotion-tv-fs-img"
-                              initial={{ opacity: 0, scale: 0.9 }}
-                              animate={{ opacity: 1, scale: 1 }}
-                              transition={{ delay: 0.3 }}
-                            />
-                          )}
-                          {selectedCard.QUESTION_TEXT && (
-                            <motion.p
-                              className="memotion-tv-fs-text"
-                              initial={{ opacity: 0, y: 20 }}
-                              animate={{ opacity: 1, y: 0 }}
-                              transition={{ delay: 0.35 }}
-                            >
-                              {selectedCard.QUESTION_TEXT}
-                            </motion.p>
-                          )}
-                        </div>
-                        <div className="memotion-tv-fs-timer">
-                          <Timer
-                            currentTime={gameState.timer}
-                            totalTime={gameState.totalTime}
-                            phase={gameState.phase}
-                            size="lg"
-                            showPhase={false}
-                          />
-                        </div>
-                      </motion.div>
-                    </AnimatePresence>
-                  </>
+                motionOverlay = (
+                  <motion.div
+                    key="memotion-question"
+                    className="memotion-tv-fullscreen"
+                    initial={{ rotateY: -90, opacity: 0 }}
+                    animate={{ rotateY: 0, opacity: 1 }}
+                    transition={{ duration: 0.5, ease: [0.4, 0, 0.2, 1] }}
+                    style={{ position: 'fixed', inset: 0, zIndex: 10, perspective: '1200px' }}
+                  >
+                    <div className="memotion-tv-fs-header">
+                      <span className="memotion-tv-fs-theme">{selectedCard.RECTO_THEME}</span>
+                      <span className="memotion-tv-fs-diff">{'★'.repeat(diff)}</span>
+                      <span className="memotion-tv-fs-pts">{diffPts(diff)}pt</span>
+                      {currentTeam && (
+                        <span className="memotion-tv-fs-team" style={{ color: currentTeamCss }}>
+                          {currentTeam}
+                        </span>
+                      )}
+                    </div>
+                    <div className="memotion-tv-fs-body">
+                      {selectedCard.QUESTION_IMAGE && (
+                        <motion.img
+                          src={selectedCard.QUESTION_IMAGE}
+                          alt=""
+                          className="memotion-tv-fs-img"
+                          initial={{ opacity: 0, scale: 0.9 }}
+                          animate={{ opacity: 1, scale: 1 }}
+                          transition={{ delay: 0.3 }}
+                        />
+                      )}
+                      {selectedCard.QUESTION_TEXT && (
+                        <motion.p
+                          className="memotion-tv-fs-text"
+                          initial={{ opacity: 0, y: 20 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          transition={{ delay: 0.35 }}
+                        >
+                          {selectedCard.QUESTION_TEXT}
+                        </motion.p>
+                      )}
+                    </div>
+                    <div className="memotion-tv-fs-timer">
+                      <Timer
+                        currentTime={gameState.timer}
+                        totalTime={gameState.totalTime}
+                        phase={gameState.phase}
+                        size="lg"
+                        showPhase={false}
+                      />
+                    </div>
+                  </motion.div>
                 )
-              }
 
               /* ---- REVEAL: flip depuis QUESTION vers réponse ---- */
-              if (subphase === 'REVEAL' && selectedCard) {
+              } else if (subphase === 'REVEAL' && selectedCard) {
                 const diff = selectedCard.DIFFICULTY || 1
-                return (
-                  <>
-                    {gridView}
-                    <AnimatePresence mode="wait">
-                      <motion.div
-                        key="memotion-reveal"
-                        className="memotion-tv-fullscreen memotion-tv-reveal"
-                        initial={{ rotateY: 90, opacity: 0 }}
-                        animate={{ rotateY: 0, opacity: 1 }}
-                        transition={{ duration: 0.5, ease: [0.4, 0, 0.2, 1] }}
-                        style={{ position: 'fixed', inset: 0, zIndex: 10, perspective: '1200px' }}
-                      >
-                        <div className="memotion-tv-fs-header">
-                          <span className="memotion-tv-fs-theme">{selectedCard.RECTO_THEME}</span>
-                          <span className="memotion-tv-fs-diff">{'★'.repeat(diff)}</span>
-                          <span className="memotion-tv-fs-pts">{diffPts(diff)}pt</span>
-                        </div>
-                        <div className="memotion-tv-fs-body">
-                          {selectedCard.ANSWER_IMAGE && (
-                            <motion.img
-                              src={selectedCard.ANSWER_IMAGE}
-                              alt=""
-                              className="memotion-tv-fs-img"
-                              initial={{ opacity: 0, scale: 0.9 }}
-                              animate={{ opacity: 1, scale: 1 }}
-                              transition={{ delay: 0.3 }}
-                            />
-                          )}
-                          {selectedCard.ANSWER_TEXT && (
-                            <motion.p
-                              className="memotion-tv-fs-text memotion-tv-answer-text"
-                              initial={{ opacity: 0, y: 20 }}
-                              animate={{ opacity: 1, y: 0 }}
-                              transition={{ delay: 0.35 }}
-                            >
-                              {selectedCard.ANSWER_TEXT}
-                            </motion.p>
-                          )}
-                        </div>
-                      </motion.div>
-                    </AnimatePresence>
-                  </>
+                motionOverlay = (
+                  <motion.div
+                    key="memotion-reveal"
+                    className="memotion-tv-fullscreen memotion-tv-reveal"
+                    initial={{ rotateY: 90, opacity: 0 }}
+                    animate={{ rotateY: 0, opacity: 1 }}
+                    transition={{ duration: 0.5, ease: [0.4, 0, 0.2, 1] }}
+                    style={{ position: 'fixed', inset: 0, zIndex: 10, perspective: '1200px' }}
+                  >
+                    <div className="memotion-tv-fs-header">
+                      <span className="memotion-tv-fs-theme">{selectedCard.RECTO_THEME}</span>
+                      <span className="memotion-tv-fs-diff">{'★'.repeat(diff)}</span>
+                      <span className="memotion-tv-fs-pts">{diffPts(diff)}pt</span>
+                    </div>
+                    <div className="memotion-tv-fs-body">
+                      {selectedCard.ANSWER_IMAGE && (
+                        <motion.img
+                          src={selectedCard.ANSWER_IMAGE}
+                          alt=""
+                          className="memotion-tv-fs-img"
+                          initial={{ opacity: 0, scale: 0.9 }}
+                          animate={{ opacity: 1, scale: 1 }}
+                          transition={{ delay: 0.3 }}
+                        />
+                      )}
+                      {selectedCard.ANSWER_TEXT && (
+                        <motion.p
+                          className="memotion-tv-fs-text memotion-tv-answer-text"
+                          initial={{ opacity: 0, y: 20 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          transition={{ delay: 0.35 }}
+                        >
+                          {selectedCard.ANSWER_TEXT}
+                        </motion.p>
+                      )}
+                    </div>
+                  </motion.div>
                 )
               }
 
-              /* GRID (subphase null, "GRID", or unknown) */
-              return gridView
+              /* GRID (subphase null, "GRID", or unknown): motionOverlay stays null */
+              return (
+                <>
+                  {gridView}
+                  <AnimatePresence mode="wait">
+                    {motionOverlay}
+                  </AnimatePresence>
+                </>
+              )
             })()}
 
             {/* Non-QCM/Non-Memory/Non-Memotion Game Content - 4 vertical zones: Timer, Question, Media, Answers */}

@@ -2661,6 +2661,7 @@
     inset 0 1px 0 rgba(255, 255, 255, 0.15);
   border: 2px solid rgba(255, 255, 255, 0.25);
   flex-direction: column;
+  justify-content: flex-start;
   gap: 0.3em;
   padding: 0.5em;
 }
@@ -2677,28 +2678,31 @@
 }
 
 .memotion-card-img {
-  max-width: 80%;
-  max-height: 35%;
+  flex: 1 1 0;
+  min-height: 0;
+  max-width: 100%;
+  max-height: 75%;
   object-fit: contain;
   border-radius: var(--radius-sm);
-  flex-shrink: 0;
 }
 
 .memotion-card-theme {
   font-family: var(--font-display);
-  font-size: clamp(0.55rem, 1.4cqmin, 1rem);
+  font-size: clamp(0.7rem, 1.8cqmin, 1.3rem);
   font-weight: 800;
   color: white;
   text-align: center;
   word-break: break-word;
   line-height: 1.2;
   text-shadow: 0 1px 4px rgba(0, 0, 0, 0.6);
+  flex-shrink: 0;
 }
 
 .memotion-card-stars {
   font-size: clamp(0.45rem, 1.1cqmin, 0.8rem);
   color: #eab308;
   text-shadow: 0 0 6px rgba(234, 179, 8, 0.7);
+  margin-top: auto;
 }
 
 .memotion-card-pts {
@@ -2758,6 +2762,11 @@
   align-items: center;
   justify-content: center;
   flex: 1;
+}
+
+/* SELECTED fullscreen: give image more room (70% vs default 50%) */
+.memotion-tv-selected .memotion-tv-fs-img {
+  max-height: 70%;
 }
 
 /* --- QUESTION / REVEAL subphases (fullscreen) --- */
