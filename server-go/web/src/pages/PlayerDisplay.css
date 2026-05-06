@@ -2632,12 +2632,20 @@
   padding: var(--space-2);
 }
 
-/* MEMOTION: cartes rectangulaires — remplissent toute la zone grille */
+/* MEMOTION: disable container queries on the grid zone
+   → enables accurate getBoundingClientRect() for clip-path zoom animation */
+.memotion-game .zone-memory-grid {
+  container-type: normal;
+}
+
+/* MEMOTION: cartes rectangulaires — remplissent toute la zone grille via 1fr */
 .memotion-game .memory-grid {
-  --memotion-card-w: calc((var(--available-width) - var(--total-gap-width)) / var(--cols));
-  --memotion-card-h: calc((var(--available-height) - var(--total-gap-height)) / var(--rows));
-  grid-template-columns: repeat(var(--cols), var(--memotion-card-w));
-  grid-template-rows: repeat(var(--rows), var(--memotion-card-h));
+  --gap: clamp(4px, 0.8vmin, 12px); /* Use vmin instead of cqmin (container queries disabled) */
+  display: grid;
+  grid-template-columns: repeat(var(--cols), 1fr);
+  grid-template-rows: repeat(var(--rows), 1fr);
+  width: 100%;
+  height: 100%;
 }
 
 /* MEMOTION: inner adapté à la hauteur variable */
