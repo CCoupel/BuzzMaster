@@ -3,6 +3,18 @@
 Historique des versions du projet BuzzControl.
 
 
+## [5.0.3] - 2026-05-06
+
+### Fixed
+- MEMOTION : affichage "PRÉPAREZ-VOUS" ajouté en phase READY (grille visible + animation)
+- MEMOTION : mise en page des cartes dans la grille — image couvre la carte (object-fit: cover), thème en footer ; sans image, thème centré grand
+- MEMOTION : effet zoom de sélection rendu visible — suppression du `transformStyle: preserve-3d` qui bloquait l'animation layoutId framer-motion
+- MEMOTION : cartes QUESTION et REVEAL opaques pendant le flip — ajout background `#1a1a2e` sur fullscreen, suppression opacity des animations
+- MEMOTION : flip QUESTION→REVEAL coordonné (même direction que SELECTED→QUESTION)
+- MEMOTION : retour à la grille animé par zoom inverse (suppression exit rotateY sur SELECTED, layoutId gère le reverse)
+
+---
+
 ## [5.0.2] - 2026-05-06
 
 ### Fixed
