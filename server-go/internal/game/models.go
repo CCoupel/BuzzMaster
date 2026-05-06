@@ -186,6 +186,13 @@ type MemoryConfig struct {
 	RevealDelay        float64 `json:"REVEAL_DELAY"`         // seconds between each pair reveal at end (default: 0.5)
 }
 
+// MotionConfig holds configuration for the MEMOTION game
+type MotionConfig struct {
+	Points1Star int `json:"POINTS_1_STAR"` // points for 1-star cards (default: 1)
+	Points2Star int `json:"POINTS_2_STAR"` // points for 2-star cards (default: 3)
+	Points3Star int `json:"POINTS_3_STAR"` // points for 3-star cards (default: 5)
+}
+
 // Question represents a quiz question
 type Question struct {
 	ID           string           `json:"ID"`
@@ -206,6 +213,7 @@ type Question struct {
 	MemoryMode        string           `json:"MEMORY_MODE,omitempty"`        // "SOLO", "CHACUN_SON_TOUR", "TANT_QUE_JE_GAGNE" (default SOLO)
 	MotionCards       []MotionCard     `json:"MOTION_CARDS,omitempty"`       // Cards for MEMOTION questions (v5.0.0)
 	MotionMode        string           `json:"MOTION_MODE,omitempty"`        // "SOLO", "CHACUN_SON_TOUR", "TANT_QUE_JE_GAGNE" (default SOLO)
+	MotionConfig      *MotionConfig    `json:"MOTION_CONFIG,omitempty"`      // MEMOTION configuration (v5.0.x)
 	Points            string           `json:"POINTS"`                       // String to match JSON format
 	Time         string           `json:"TIME"`                    // String to match JSON format
 	Order        int              `json:"ORDER,omitempty"`         // Display order (for drag and drop)
