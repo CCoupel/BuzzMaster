@@ -3,6 +3,15 @@
 Historique des versions du projet BuzzControl.
 
 
+## [5.0.2] - 2026-05-06
+
+### Fixed
+- MEMOTION : image/texte des cartes dans la grille agrandis — flex layout (image flex: 1, max-height 75%, thème plus grand, étoiles/points poussés en bas)
+- MEMOTION : animation flip 3D coordonnée SELECTED → QUESTION (exit rotateY:90 + enter rotateY:-90 dans AnimatePresence partagée)
+- MEMOTION : image plein écran sous-phase SELECTED agrandie à 70% ; fallback texte si pas d'image
+
+---
+
 ## [5.0.1] - 2026-05-04
 
 ### Changed
