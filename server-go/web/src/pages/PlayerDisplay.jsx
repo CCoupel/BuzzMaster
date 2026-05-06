@@ -49,7 +49,6 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
   const tvWakeLockRef = useRef(null)
   const tvNoSleepRef = useRef(null)
   const motionCardRefs = useRef({})
-  const motionSelectedRectRef = useRef(null)
   const [localCountdown, setLocalCountdown] = useState(null) // Local countdown that starts after cascade reveal is done
   const [wifiConfig, setWifiConfig] = useState(null) // { ssid, password } for enrollment WiFi QR code
   const [ngBgIndex, setNgBgIndex] = useState(0) // Current index for NEW_GAME background rotation
@@ -802,16 +801,6 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
       if (tvNoSleepRef.current?.isEnabled) { tvNoSleepRef.current.disable(); tvNoSleepRef.current = null }
     }
   }, [isVPlayer, isAdminPreview])
-
-  // Capture bounding rect of selected MEMOTION card for clip-path zoom animation
-  useEffect(() => {
-    if (gameState.MEMOTION_SUBPHASE === 'SELECTED' && gameState.MEMOTION_SELECTED) {
-      const el = motionCardRefs.current[gameState.MEMOTION_SELECTED]
-      if (el) {
-        motionSelectedRectRef.current = el.getBoundingClientRect()
-      }
-    }
-  }, [gameState.MEMOTION_SUBPHASE, gameState.MEMOTION_SELECTED])
 
   return (
     <div className={`player-display ${showNeon ? `neon-border ${neonModeClass}` : ''}`} style={neonStyle}>
@@ -1982,7 +1971,7 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
                         return (
                           <motion.div
                             key={card.ID}
-                            ref={el => { if (el) motionCardRefs.current[card.ID] = el }}
+                            ref={el => { if (el) motionCardRefs.current[card.ID] = el; else delete motionCardRefs.current[card.ID] }}
                             className={`memory-card memotion-card${isDone ? ' matched' : ''}${isActiveCard ? ' selected' : ''}`}
                             style={{
                               ...(isDone ? { '--matched-team-color': matchedColor } : undefined),
@@ -2109,12 +2098,13 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
               /* ---- SELECTED: carte sélectionnée zoome vers fullscreen via clip-path ---- */
               if (subphase === 'SELECTED' && selectedCard) {
                 const diff = selectedCard.DIFFICULTY || 1
-                const rect = motionSelectedRectRef.current
-                const W = typeof window !== 'undefined' ? window.innerWidth : 1920
-                const H = typeof window !== 'undefined' ? window.innerHeight : 1080
+                const selectedEl = motionCardRefs.current[selectedId]
+                const rect = selectedEl ? selectedEl.getBoundingClientRect() : null
+                const W = window.innerWidth || 1920
+                const H = window.innerHeight || 1080
                 const clipStart = rect
                   ? `inset(${rect.top}px ${W - rect.right}px ${H - rect.bottom}px ${rect.left}px round 8px)`
-                  : 'inset(40% 40% 40% 40% round 8px)'
+                  : 'inset(40% 30% 40% 30% round 8px)'
                 const clipEnd = 'inset(0px 0px 0px 0px round 0px)'
                 motionOverlay = (
                   <motion.div
@@ -2219,19 +2209,20 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
               /* ---- REVEAL: flip depuis QUESTION vers réponse ---- */
               } else if (subphase === 'REVEAL' && selectedCard) {
                 const diff = selectedCard.DIFFICULTY || 1
-                const rect = motionSelectedRectRef.current
-                const W = typeof window !== 'undefined' ? window.innerWidth : 1920
-                const H = typeof window !== 'undefined' ? window.innerHeight : 1080
-                const clipBack = rect
+                const selectedEl = motionCardRefs.current[selectedId]
+                const rect = selectedEl ? selectedEl.getBoundingClientRect() : null
+                const W = window.innerWidth || 1920
+                const H = window.innerHeight || 1080
+                const clipStart = rect
                   ? `inset(${rect.top}px ${W - rect.right}px ${H - rect.bottom}px ${rect.left}px round 8px)`
-                  : 'inset(50% 50% 50% 50%)'
+                  : 'inset(40% 30% 40% 30% round 8px)'
                 motionOverlay = (
                   <motion.div
-                    key="memotion-reveal"
+                    key="memotion-reveal-overlay"
                     className="memotion-tv-fullscreen memotion-tv-reveal"
-                    initial={{ rotateY: -90 }}
-                    animate={{ rotateY: 0 }}
-                    exit={{ clipPath: clipBack, transition: { duration: 0.4, ease: [0, 0.2, 0.4, 1] } }}
+                    initial={{ clipPath: 'inset(0px 0px 0px 0px round 0px)', rotateY: -90 }}
+                    animate={{ clipPath: 'inset(0px 0px 0px 0px round 0px)', rotateY: 0 }}
+                    exit={{ clipPath: clipStart, transition: { duration: 0.35, ease: 'easeIn' } }}
                     transition={{ duration: 0.5, ease: [0.4, 0, 0.2, 1] }}
                     style={{ position: 'fixed', inset: 0, zIndex: 10, perspective: '1200px' }}
                   >
