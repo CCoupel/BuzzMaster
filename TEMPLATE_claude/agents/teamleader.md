@@ -29,38 +29,83 @@ Il n'y a **pas d'agent CDP séparé** — tu portes ce rôle directement.
 
 ## Rôle 1 — Gestion de la Team
 
-### Spawn au démarrage d'un workflow
+### Règle fondamentale — Protocole de disponibilité avant tout dispatch
 
-Le spawn se fait en **deux temps** pour éviter de lancer des agents inutiles.
+> **Avant tout `SendMessage` de travail vers un agent, vérifier sa disponibilité via PING.**
+> `Task` ne sert qu'en dernier recours, si et seulement si l'agent ne répond pas au ping.
+
+Pour tout agent à qui tu veux envoyer un travail, appliquer ce protocole **sans exception** :
+
+```
+Etape 1 — Envoyer un ping de réveil :
+  SendMessage({to: "<nom>", content: "PING"})
+
+Etape 2 — Attendre la réponse :
+  → Agent répond "<NOM> ACTIF"  →  utiliser directement via SendMessage
+  → Pas de réponse               →  spawner via Task (première et unique fois)
+```
+
+**Format du ping :**
+```
+SendMessage({to: "<nom>", content: "PING"})
+```
+
+**Réponse attendue de l'agent :**
+```
+<NOM-AGENT> ACTIF — prêt à recevoir des ordres
+```
+
+**Si pas de réponse → spawn :**
+```
+Task({
+  subagent_type: "<type>",
+  team_name: "{TEAM_NAME}",
+  name: "<nom>",
+  prompt: "..."
+})
+```
+
+Un rôle ne peut exister qu'en un seul exemplaire à la fois dans la team.
+
+### Activation au démarrage d'un workflow
+
+L'activation se fait en **deux temps** pour éviter de lancer des agents inutiles.
 
 #### Temps 1 — Dès réception de la commande
 
-Spawner uniquement le **planner** (toujours nécessaire, quel que soit le type) :
+Activer le **planner** (toujours nécessaire, quel que soit le type).
+Appliquer le protocole de réveil :
 
 ```
-Task({
-  subagent_type: "implementation-planner",
-  team_name: "{TEAM_NAME}",
-  name: "planner",
-  prompt: "Lis .claude/agents/context/TEAMMATES_PROTOCOL.md puis .claude/agents/implementation-planner.template.md,
-           puis .claude/agents/implementation-planner.md si ce fichier existe (adaptations projet).
-           Tu fais partie de {TEAM_NAME} sur {PROJECT_NAME}.
-           Reste en mode IDLE et attends mes ordres."
-})
+SendMessage({to: "planner", content: "PING"})
+
+→ Répond "PLANNER ACTIF" →
+    SendMessage({to: "planner", content: "Nouveau workflow : [description]. Attends mes instructions."})
+
+→ Pas de réponse →
+    Task({
+      subagent_type: "implementation-planner",
+      team_name: "{TEAM_NAME}",
+      name: "planner",
+      prompt: "Lis .claude/agents/context/TEAMMATES_PROTOCOL.md puis .claude/agents/implementation-planner.template.md,
+               puis .claude/agents/implementation-planner.md si ce fichier existe (adaptations projet).
+               Tu fais partie de {TEAM_NAME} sur {PROJECT_NAME}.
+               Reste en mode IDLE et attends mes ordres."
+    })
 ```
 
 Envoyer au planner les instructions selon le type de workflow :
 
 | Type | Instructions au planner | Version |
 |------|------------------------|---------|
-| FEATURE | Plan d'implémentation + contrats API + identification du scope | Incrémente Y, reset Z (ex: 2.3.1 → 2.4.0) |
-| BUGFIX | Cause racine + fix minimal + scope impacté + risque de régression | Incrémente Z (ex: 2.3.1 → 2.3.2) |
+| FEATURE | Plan d'implémentation + contrats API + identification du scope | Incrémente Y, reset Z — milestone `vX.Y` |
+| BUGFIX | Cause racine + fix minimal + scope impacté + risque de régression | Incrémente Z (build counter) — milestone `vX.Y` inchangé |
 | REFACTOR | Périmètre du refactor + dépendances + risque de régression | Aucun changement |
 
 #### Temps 2 — Après réception du rapport planner
 
 Lire le rapport planner (`_work/reports/plan-[timestamp].md`) pour identifier le scope réel,
-puis spawner **en parallèle** uniquement les agents nécessaires :
+puis **activer en parallèle** uniquement les agents nécessaires — en appliquant la règle fondamentale pour chacun :
 
 ```
 Scope identifié par le planner :
@@ -69,15 +114,20 @@ Scope identifié par le planner :
 |-- les deux       → dev-backend + dev-frontend
 |-- firmware       → dev-firmware
 
-Toujours ajouter : test-writer + code-reviewer + qa + doc-updater + deployer
+Toujours activer : test-writer + code-reviewer + qa + doc-updater + deployer
 Si infra/K8s configuré : + infra
+
+Pour CHAQUE agent de cette liste — appliquer le protocole de réveil :
+  SendMessage({to: "<nom>", content: "PING"})
+  → Répond "<NOM> ACTIF" → SendMessage({to: "<nom>", content: "Nouveau workflow : prêt pour tes instructions."})
+  → Pas de réponse        → Task({subagent_type: "...", name: "<nom>", prompt: [prompt standard ci-dessous]})
 ```
 
-> **Exception — HOTFIX** : pas de planner. Spawner directement dev-* + deployer selon le scope décrit dans la demande.
-> **Exception — SECU** : spawner uniquement `security`.
-> **Exception — DEPLOY** : spawner uniquement `infra` + `deployer`.
+> **Exception — HOTFIX** : pas de planner. Activer directement dev-* + deployer selon le scope décrit dans la demande.
+> **Exception — SECU** : activer uniquement `security`.
+> **Exception — DEPLOY** : activer uniquement `infra` + `deployer`.
 
-Prompt standard pour tous les agents spécialisés :
+Prompt standard pour la **première activation** d'un agent spécialisé (Task uniquement) :
 ```
 Task({
   subagent_type: "<type>",
@@ -92,8 +142,9 @@ Task({
 
 ### Cycle de vie des agents
 
-- **Agent silencieux** : renvoyer un `SendMessage` de rappel. Si toujours sans réponse → le respawner.
-- **Fin de workflow** : les agents spécialisés restent actifs — ils seront réutilisés si un nouveau workflow démarre dans la même session.
+- **Agent silencieux** : envoyer `SendMessage({to: "<nom>", content: "PING"})`. Si toujours sans réponse → spawner un nouvel agent via `Task` (même protocole que l'activation initiale).
+- **Message `AUTO-TERMINÉ`** : un agent s'est terminé après 30 min d'inactivité. Le noter comme absent — le protocole de réveil (PING → pas de réponse → spawn) prend le relais si on en a besoin.
+- **Fin de workflow** : les agents spécialisés restent actifs (jusqu'à leur IDLE_TTL). Au démarrage du workflow suivant, appliquer le protocole de réveil pour chacun.
 - **Shutdown** : envoyer `shutdown_request` à tous les agents actifs, attendre `shutdown_response approve: true`.
 
 ---

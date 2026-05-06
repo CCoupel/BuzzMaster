@@ -71,7 +71,7 @@ puis deploiera les commandes et agents dans `.claude/`.
 | Categorie | Emplacement | Comportement |
 |-----------|-------------|--------------|
 | **TEMPLATE** | `TEMPLATE_claude/` (racine projet) | Fetche depuis GitHub, gitignore, jamais edite manuellement |
-| **COMMANDES** | `.claude/commands/*.md` | Depuis `TEMPLATE_claude/commands/*.md`, déployé en `*.md` — gitignore |
+| **COMMANDES** | `.claude/commands/*.md` + `.claude/commands/context/` | Depuis `TEMPLATE_claude/commands/*.md` et `commands/context/`, déployé en `*.md` — gitignore |
 | **AGENTS TEMPLATE** | `.claude/agents/*.template.md` + `.claude/agents/context/` | Depuis `TEMPLATE_claude/agents/*.md`, déployé en `*.template.md` — gitignore |
 | **PROJET** | `.claude/CLAUDE.md`, `project-config.json`, `memory/`, `agents/dev-*.md` | Trackes dans git, jamais ecrases |
 
@@ -159,6 +159,7 @@ done
 
 # Contextes partagés (restent en *.md — lus directement, pas de convention template/projet)
 cp -r TEMPLATE_claude/agents/context .claude/agents/context
+cp -r TEMPLATE_claude/commands/context .claude/commands/context
 ```
 
 #### 5. Mettre a jour TEMPLATE_claude/.template-source.json
@@ -220,14 +221,35 @@ Executer la procedure "Fetch du Template depuis GitHub" ci-dessus.
 
 ### Etape M1b — Migration : renommer les commandes legacy *.template.md → *.md
 
+> ⚠ **SCOPE STRICT** : uniquement `.claude/commands/` — ne jamais appliquer aux `.claude/agents/`.
+> Les `*.template.md` agents sont des templates gitignorés ; les `*.md` agents sont des customisations trackées.
+> Appliquer cette logique aux agents écraserait les fichiers projet.
+
 Les commandes etaient deployees en `*.template.md` avant la v2.9.7. Les renommer avant de nettoyer le cache git.
+Avant chaque renommage, détecter si le fichier contient des customisations (contenu différent du template).
 
 ```bash
+CUSTOMIZED_COMMANDS=()
 for f in .claude/commands/*.template.md; do
   [[ -f "$f" ]] || continue
-  mv "$f" "${f/.template.md/.md}"
-  echo "  ✓ migration commande : $(basename $f) → $(basename ${f/.template.md/.md})"
+  name=$(basename "$f" .template.md)
+  dest="${f/.template.md/.md}"
+  template="TEMPLATE_claude/commands/${name}.md"
+  # Détecter si customisé — différent du template source
+  if [[ -f "$template" ]] && ! cmp -s "$f" "$template"; then
+    CUSTOMIZED_COMMANDS+=("$name")
+    echo "  ⚠ commande customisée détectée : ${name} (sera préservée, non écrasée par le template)"
+  fi
+  mv "$f" "$dest"
+  echo "  ✓ migration commande : $(basename $f) → $(basename $dest)"
 done
+```
+
+Si `CUSTOMIZED_COMMANDS[]` non vide → informer l'utilisateur :
+```
+⚠ Commandes modifiées localement (non écrasées par le template) :
+  - [nom] : diff détecté avec le template source
+Pour rétablir le template, supprimer le fichier .claude/commands/[nom].md et relancer /init-project.
 ```
 
 ### Etape M2 — Nettoyer .claude/ des anciens fichiers template
@@ -237,6 +259,7 @@ git rm --cached .claude/commands/*.template.md 2>/dev/null || true
 git rm --cached .claude/commands/*.md 2>/dev/null || true
 # Note : après migration v3, les commandes sont en *.md (gitignored)
 git rm --cached -r .claude/agents/context/ 2>/dev/null || true
+git rm --cached -r .claude/commands/context/ 2>/dev/null || true
 git rm --cached .claude/agents/*.template.md 2>/dev/null || true
 git rm --cached .claude/agents/*.md 2>/dev/null || true
 git rm --cached -r .claude/templates/ 2>/dev/null || true
@@ -255,13 +278,24 @@ cp TEMPLATE_claude/gitignore-for-projects .gitignore
 
 ### Etape M4 — Commiter la migration
 
+M2 a désindexé les `*.md` agents via `git rm --cached`. Re-tracker les fichiers compagnons agents
+qui existent sur disque (customisations projet à préserver) avant de commiter.
+
 ```bash
 git add .gitignore TEMPLATE_claude/.template-source.json
+# Re-tracker les companions agents désindexés par M2 (hors dev-* et *.template.md)
+for f in .claude/agents/*.md; do
+  [[ -f "$f" ]] || continue
+  name=$(basename "$f")
+  [[ "$name" == dev-*.md ]] && continue  # dev-* gérés séparément
+  git add "$f" 2>/dev/null && echo "  ✓ re-tracking companion agent : $name"
+done
 git commit -m "chore(claude): Migrate to v3 template architecture (TEMPLATE_claude/)
 
 - TEMPLATE_claude/ fetched from GitHub, gitignored at root
 - .claude/ now contains only project-specific files
-- Untracked legacy template files from .claude/"
+- Untracked legacy template files from .claude/
+- Agent companion files re-tracked after cache cleanup"
 ```
 
 ### Etape M5 — Rapport
@@ -593,6 +627,10 @@ A la fin du workshop, generer `CLAUDE.md` complet, `project-config.json`, et les
     "lint": "<LINT_CMD>",
     "audit": "<AUDIT_CMD>",
     "typecheck": "<TYPECHECK_CMD>"
+  },
+  "agents": {
+    "idle_ttl_minutes": 30,
+    "idle_warning_minutes": 5
   }
 }
 ```
@@ -798,16 +836,37 @@ Executer la procedure "Fetch du Template depuis GitHub" pour mettre a jour `TEMP
 
 #### Etape d1b — Migration : renommer les commandes legacy *.template.md → *.md
 
+> ⚠ **SCOPE STRICT** : uniquement `.claude/commands/` — ne jamais appliquer aux `.claude/agents/`.
+> Les `*.template.md` agents sont des templates gitignorés ; les `*.md` agents sont des customisations trackées.
+> Appliquer cette logique aux agents écraserait les fichiers projet.
+
 Avant tout calcul, renommer les commandes `*.template.md` residuelles dans `.claude/commands/`
 (déployées avant la v2.9.7 où les commandes étaient encore en `*.template.md`).
-Les agents gardent leur extension `*.template.md` — ne pas les toucher.
+Avant chaque renommage, détecter si le fichier contient des customisations pour éviter
+que d5 ne les écrase silencieusement.
 
 ```bash
+CUSTOMIZED_COMMANDS=()
 for f in .claude/commands/*.template.md; do
   [[ -f "$f" ]] || continue
-  mv "$f" "${f/.template.md/.md}"
-  echo "  ✓ migration commande : $(basename $f) → $(basename ${f/.template.md/.md})"
+  name=$(basename "$f" .template.md)
+  dest="${f/.template.md/.md}"
+  template="TEMPLATE_claude/commands/${name}.md"
+  # Détecter si customisé — différent du template source
+  if [[ -f "$template" ]] && ! cmp -s "$f" "$template"; then
+    CUSTOMIZED_COMMANDS+=("$name")
+    echo "  ⚠ commande customisée détectée : ${name} (sera préservée, non écrasée par d5)"
+  fi
+  mv "$f" "$dest"
+  echo "  ✓ migration commande : $(basename $f) → $(basename $dest)"
 done
+```
+
+Si `CUSTOMIZED_COMMANDS[]` non vide → informer l'utilisateur avant de continuer vers d5 :
+```
+⚠ Commandes modifiées localement (non écrasées par le template) :
+  - [nom] : diff détecté avec le template source
+Pour rétablir le template, supprimer le fichier .claude/commands/[nom].md et relancer l'option d.
 ```
 
 #### Etape d2 — Calculer les noms deployes attendus
@@ -839,6 +898,22 @@ DEPLOYED_COMMANDS=$(
 # Agents template déployés (*.template.md uniquement — les *.md et dev-*.md sont des fichiers projet)
 DEPLOYED_AGENTS=$(ls .claude/agents/*.template.md 2>/dev/null \
   | xargs -I{} basename {} .template.md)
+
+# Contextes partagés (agents/context/ et commands/context/)
+# Comparer chaque fichier source avec le fichier déployé
+for src in TEMPLATE_claude/agents/context/*.md TEMPLATE_claude/commands/context/*.md; do
+  [ -f "$src" ] || continue
+  subdir=$(echo "$src" | grep -o 'agents/context\|commands/context')
+  dest=".claude/${subdir}/$(basename $src)"
+  if [ ! -f "$dest" ]; then
+    statut="NOUVEAU"
+  elif ! cmp -s "$src" "$dest"; then
+    statut="MODIFIE"
+  else
+    statut="INCHANGE"
+  fi
+  # stocker dans CONTEXT_STATUS associatif : clé = "subdir/basename", valeur = statut
+done
 ```
 
 Pour chaque fichier compare, determiner le statut :
@@ -872,6 +947,10 @@ Synchronisation depuis github.com/<repo>
   [=] code-reviewer                      ← inchange (x7...)
   [!] old-agent                          ← RELIQUAT (absent du nouveau template)
 
+  Contextes (agents/context/ et commands/context/) :
+  [~] TEAMMATES_PROTOCOL — <explication courte>   ← modifie
+  [=] COMMON, DEV_COMMON, GITHUB, VALIDATION_COMMON, CDP_WORKFLOWS, DEVELOPMENT, QUALITY (7 inchangés)
+
   Nouveaux   : N
   Modifies   : N
   Inchanges  : N
@@ -890,6 +969,12 @@ Actions :
 ```bash
 for src in TEMPLATE_claude/commands/*.md; do
   dest=".claude/commands/$(basename $src)"
+  name=$(basename "$src" .md)
+  # Préserver les commandes customisées détectées en d1b
+  if printf '%s\n' "${CUSTOMIZED_COMMANDS[@]}" | grep -q "^${name}$"; then
+    echo "  [C] $(basename $src) — customisé localement, préservé (supprimer pour réinitialiser)"
+    continue
+  fi
   if ! cmp -s "$src" "$dest" 2>/dev/null; then
     cp "$src" "$dest"
     echo "  ✓ $(basename $src) mis a jour"
@@ -904,12 +989,22 @@ for src in TEMPLATE_claude/agents/*.md; do
   fi
 done
 
-cp -r TEMPLATE_claude/agents/context .claude/agents/context
+# Contextes partagés — copier fichier par fichier pour reporter les changements
+for src in TEMPLATE_claude/agents/context/*.md TEMPLATE_claude/commands/context/*.md; do
+  [ -f "$src" ] || continue
+  subdir=$(echo "$src" | grep -o 'agents/context\|commands/context')
+  dest=".claude/${subdir}/$(basename $src)"
+  mkdir -p ".claude/${subdir}"
+  if ! cmp -s "$src" "$dest" 2>/dev/null; then
+    cp "$src" "$dest"
+    echo "  ✓ ${subdir}/$(basename $src) mis a jour"
+  fi
+done
 ```
 
 **Etape systematique — Appliquer les placeholders sur TOUS les fichiers deployes :**
 
-Scanner l'integralite de `.claude/commands/*.md` (hors `context/`) et `.claude/agents/*.template.md` et appliquer
+Scanner l'integralite de `.claude/commands/*.md`, `.claude/commands/context/*.md`, `.claude/agents/*.template.md` et `.claude/agents/context/*.md` et appliquer
 la procedure "Application des placeholders" (section 4 ci-dessus) sur tous les fichiers,
 en lisant les valeurs depuis `.claude/project-config.json` existant.
 

@@ -3,6 +3,7 @@
 > **Ce fichier contient les regles obligatoires pour TOUS les agents BuzzControl.**
 > Chaque agent doit referencer ce fichier : `@import COMMON.md`
 >
+> **Protocole teammates** : Voir `context/TEAMMATES_PROTOCOL.md` — PING/PONG, IDLE, progression, rapports, shutdown. À lire obligatoirement au démarrage.
 > **Contexte projet** : Voir `context/PROJECT_CONTEXT.md` pour le stack technique, la structure et les commandes.
 
 ---
@@ -213,6 +214,14 @@ Chaque agent doit :
 | QA | QA Report (VALIDATED/NOT VALIDATED) | **Utilisateur** |
 | DOC | Documentation finalisee | DEPLOY |
 | DEPLOY | Deployment Report | **Utilisateur** |
+
+---
+
+## Adaptations Projet
+
+Chaque agent `xxx.template.md` peut avoir un fichier compagnon `xxx.md` dans le même dossier.
+**Si ce fichier existe, le lire après le fichier `.template.md`** — il contient les règles et adaptations spécifiques au projet.
+Pour toute modification du comportement de cet agent, écrire dans `xxx.md` (jamais dans `xxx.template.md`).
 
 ---
 

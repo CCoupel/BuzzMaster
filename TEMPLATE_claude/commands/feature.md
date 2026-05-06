@@ -64,7 +64,9 @@ Orchestre le workflow FEATURE pour {PROJECT_NAME}.
 - Type : FEATURE
 - Phases : section 3
 - Clarification : section 4
-- Dispatch DEV : section 5
+- Labels GitHub : section 5 (Labels GitHub — Suivi de Phase) — appliquer les MCP calls à chaque transition de phase
+- Dispatch PLAN : section 5 (Phase Plan) — déléguer au planner via SendMessage, ne jamais rédiger le plan soi-même
+- Dispatch DEV : section 5 (Phase Dev)
 - Validation : section 6
 - Erreurs : section 7
 - Regles : section 9

@@ -367,6 +367,14 @@ $ARGUMENTS = "Ajouter mode X"  -> Action: workflow normal (pas de mot-cle)
 
 ---
 
+## 13. Adaptations Projet
+
+Chaque commande `xxx.md` est gérée par le template — ne pas l'éditer directement (elle sera écrasée à la prochaine sync).
+Pour personnaliser le comportement d'une commande, écrire dans les fichiers `context/` qu'elle référence (ex: `context/COMMON.md`).
+Pour les agents, `xxx.template.md` (template) peut avoir un fichier compagnon `xxx.md` pour les adaptations projet.
+
+---
+
 ## Usage
 
 **Dans les commandes et agents**, au lieu de repeter le contexte projet :

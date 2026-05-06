@@ -11,6 +11,7 @@ TEMPLATE_claude/
 # Les commandes sont directement invocables comme /xxx — pas de fichier compagnon projet
 .claude/commands/*.md
 .claude/commands/*.template.md
+.claude/commands/context/
 
 # Agents template générés depuis TEMPLATE_claude/ (*.template.md — jamais édités manuellement)
 # Les *.md dans agents/ (hors dev-*) sont des adaptations projet — trackés dans git

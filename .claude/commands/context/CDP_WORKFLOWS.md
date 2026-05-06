@@ -58,16 +58,34 @@ Si des zones d'ombre existent → les lister et attendre la validation utilisate
 ```
 1. Lire $ARGUMENTS (description utilisateur)
 
-2. Rechercher les issues GitHub liées :
-   gh issue list --search "<mots-clés>" --json number,title,body,labels,milestone
-   Si numéro d'issue dans $ARGUMENTS → gh issue view <N> --json body,comments
+2. Construire ISSUE_NUMS[] (issues à suivre tout au long du workflow) :
+   a. Extraire les numéros explicites dans $ARGUMENTS (pattern #\d+) :
+      pour chaque #N trouvé :
+        gh issue view <N> --json number,title,body,labels,milestone
+        → ajouter à ISSUE_NUMS[]
+        → si l'issue est liée à un milestone → MILESTONE_NUM = ce milestone
 
-3. Vérifier le milestone si mentionné :
-   gh api repos/{owner}/{repo}/milestones
+   b. Rechercher les issues liées par mots-clés (si ISSUE_NUMS[] toujours vide) :
+      gh issue list --search "<mots-clés>" --json number,title,body,labels,milestone
+      → si résultats pertinents → ajouter les numéros à ISSUE_NUMS[]
 
-4. Évaluer la complétude de la spec (critères ci-dessous)
+3. Détecter et résoudre le milestone :
+   a. Si "milestone:" ou un nom de milestone est mentionné dans $ARGUMENTS :
+      gh api repos/{owner}/{repo}/milestones
+      → identifier le milestone correspondant → MILESTONE_NUM
 
-5. Décision :
+   b. Si MILESTONE_NUM détecté (via étape 2 ou 3a) :
+      gh issue list --milestone "<title>" --state open \
+        --json number,title,labels
+      → ajouter toutes les issues ouvertes du milestone à ISSUE_NUMS[] (dédupliquer)
+
+4. Persister dans workflow-state.json :
+   issue_nums: ISSUE_NUMS[]
+   milestone_num: MILESTONE_NUM (ou null si aucun)
+
+5. Évaluer la complétude de la spec (critères ci-dessous)
+
+6. Décision :
    |-- Spec complète → continuer sans interruption
    |-- Gaps détectés → afficher les questions, attendre réponse utilisateur
                     → puis continuer avec la spec enrichie
@@ -94,15 +112,12 @@ Si des zones d'ombre existent → les lister et attendre la validation utilisate
 
 ### Format de sortie si questions nécessaires
 
-Relayer au team-leader via SendMessage :
+Présenter directement à l'utilisateur :
 
-```
-SendMessage({
-  to: "teamleader",
-  content: "
+```markdown
 ## Clarification requise avant de démarrer
 
-J'ai analysé la demande [+ issue #N si trouvée]. Avant de lancer le développement,
+J'ai analysé votre demande [+ issue #N si trouvée]. Avant de lancer le développement,
 j'ai besoin de précisions sur les points suivants :
 
 **1. [Titre du point ambigu]**
@@ -111,29 +126,74 @@ j'ai besoin de précisions sur les points suivants :
 **2. [Titre du point ambigu]**
 [Question ciblée et concise]
 
-_Transmettre les réponses pour que je lance immédiatement le workflow._
-  "
-})
+_Une fois ces points clarifiés, je lance immédiatement le workflow._
 ```
 
-Attendre la réponse du team-leader (qui relaie la réponse utilisateur) avant de continuer.
+Attendre la réponse de l'utilisateur avant de continuer.
 
 ### Format de sortie si spec complète
 
-Relayer au team-leader via SendMessage :
-
-```
-SendMessage({
-  to: "teamleader",
-  content: "✓ Spec suffisamment claire — lancement du workflow [FEATURE|BUGFIX]."
-})
+```markdown
+✓ Spec suffisamment claire — lancement du workflow.
 ```
 
-Puis enchaîner directement sur la phase suivante sans autre attente.
+Enchaîner directement sur la phase suivante sans autre attente.
 
 ---
 
 ## 5. Phases Communes
+
+### Labels GitHub — Suivi de Phase
+
+> **Condition** : s'applique si `ISSUE_NUMS[]` est non vide (construit en CLARIFICATION).
+> **Règle** : chaque transition de phase met à jour le label de **toutes** les issues suivies. Un seul label actif à la fois par issue.
+
+| Transition | Label à ajouter | Labels à retirer |
+|------------|----------------|-----------------|
+| Entrée Phase Plan (FEATURE) | `PLANNING` | `EN COURS`, `EN REVIEW`, `EN QA`, `DONE` |
+| Entrée Phase Dev | `EN COURS` | `PLANNING`, `EN REVIEW`, `EN QA`, `DONE` |
+| Retour Phase Dev (cycle REVIEW ou QA) | `EN COURS` | `EN REVIEW`, `EN QA` |
+| Entrée Phase Review | `EN REVIEW` | `EN COURS`, `PLANNING`, `EN QA`, `DONE` |
+| Entrée Phase QA | `EN QA` | `EN REVIEW`, `EN COURS`, `PLANNING`, `DONE` |
+| QA VALIDATED | `DONE` | `EN QA`, `EN REVIEW`, `EN COURS`, `PLANNING` |
+| Deploy PROD confirmé (GATE 4) | — (issues fermées) | — |
+
+Appel MCP pour chaque transition — boucler sur toutes les issues suivies :
+```
+pour chaque issue_num dans ISSUE_NUMS[] :
+  mcp__plugin_github_github__issue_write({
+    owner: <owner>, repo: <repo>, issue_number: issue_num,
+    labels: { add: ["<label>"], remove: ["<labels à retirer>"] }
+  })
+```
+
+Deploy PROD confirmé — fermer toutes les issues suivies :
+```
+pour chaque issue_num dans ISSUE_NUMS[] :
+  mcp__plugin_github_github__add_issue_comment({
+    issue_number: issue_num,
+    body: "✅ Livré — QA OK — documentation mise à jour"
+  })
+  mcp__plugin_github_github__issue_write({
+    issue_number: issue_num, state: "closed"
+  })
+```
+
+> **BUGFIX** : pas de phase Plan → pas de label `PLANNING`. Démarre directement à `EN COURS` lors de la Phase Dev.
+> **HOTFIX / REFACTOR** : pas de gestion de labels (ISSUE_NUMS[] vide en règle générale).
+
+### Milestone — Suivi de Complétion
+
+> **Condition** : s'applique si `MILESTONE_NUM` est défini (construit en CLARIFICATION).
+> **Nommage** : le titre du milestone est `vX.Y` (sans Z). Voir "Convention Milestone" ci-dessus.
+
+| Moment | Action |
+|--------|--------|
+| Deploy PROD OK (tag `vX.Y.0`) | `gh issue list --milestone "<title>" --state open --json number,title` |
+| Milestone à 100% (liste vide) | Fermer : `mcp__plugin_github_github__issue_write` (milestone state: closed) + informer l'utilisateur |
+| Issues encore ouvertes | Alerter l'utilisateur avec la liste des issues restantes et leur label actuel |
+
+---
 
 ### Phase Init (Git)
 
@@ -160,11 +220,62 @@ git checkout -b refactor/<nom-court>
 | Type | Action | Exemple |
 |------|--------|---------|
 | FEATURE | Incremente Y, reset Z | 2.40.3 -> 2.41.0 |
-| BUGFIX | Incremente Z | 2.40.0 -> 2.40.1 |
-| HOTFIX | Incremente Z + suffix | 2.40.1 -> 2.40.2-hotfix |
-| REFACTOR | Aucun | 2.40.1 (inchange) |
+| BUGFIX | Incremente Z (build counter) | 2.41.0 -> 2.41.1 |
+| HOTFIX | Incremente Z + suffix | 2.41.1 -> 2.41.2-hotfix |
+| REFACTOR | Aucun | 2.41.1 (inchange) |
+
+#### Convention Z — compteur de build / reset PROD
+
+- **Z** est le compteur de build : incrémenté à chaque BUGFIX ou build intermédiaire durant le cycle.
+- **Deploy PROD** : Z est **toujours remis à 0**. Le tag de release est `vX.Y.0`.
+  - Exemple : si le cycle a produit `v2.41.1`, `v2.41.2`… le tag PROD est `v2.41.0`.
+
+#### Convention Milestone — nommage `vX.Y`
+
+Le titre du milestone correspond à la version cible **sans Z** : `vX.Y`.
+- Exemple : milestone `v2.41` regroupe toutes les issues de la release Y=41, quel que soit Z.
+- Le milestone se clôture lors du deploy PROD → tag `vX.Y.0`.
+
+### Phase Plan
+
+> Applicable : **FEATURE** (obligatoire) — **BUGFIX** (si complexe : plusieurs fichiers, risque de régression, changement d'architecture)
+
+**→ Appliquer label `PLANNING`** sur toutes les issues de `ISSUE_NUMS[]` si non vide (FEATURE uniquement) :
+
+```
+pour chaque issue_num dans ISSUE_NUMS[] :
+  mcp__plugin_github_github__issue_write({ owner: <owner>, repo: <repo>, issue_number: issue_num,
+    labels: { add: ["PLANNING"], remove: ["EN COURS", "EN REVIEW", "EN QA", "DONE"] } })
+```
+
+> **Le CDP ne rédige jamais le plan lui-même.** C'est le rôle exclusif du planner.
+
+```
+SendMessage({ to: "planner", content: "
+  Crée un plan d'implémentation pour : [description]
+  Type : [FEATURE|BUGFIX]
+  [FEATURE] Contrats API à créer dans contracts/ si nouveaux endpoints.
+  [BUGFIX] Identifier la cause racine, le fix minimal, le scope impacté et le risque de régression.
+  Retourne le plan structuré avec : tâches ordonnées, dépendances, risques.
+" })
+```
+
+Recevoir le plan → lire intégralement, vérifier cohérence et complétude.
+Lire `contracts/CHANGELOG.md` si FEATURE — signaler tout changement BREAKING lors du GATE 2.
+
+**Présenter le plan validé à l'utilisateur et demander validation** ← GATE 2
+
+---
 
 ### Phase Dev (Dispatch)
+
+**→ Appliquer label `EN COURS`** sur toutes les issues de `ISSUE_NUMS[]` si non vide :
+
+```
+pour chaque issue_num dans ISSUE_NUMS[] :
+  mcp__plugin_github_github__issue_write({ owner: <owner>, repo: <repo>, issue_number: issue_num,
+    labels: { add: ["EN COURS"], remove: ["PLANNING", "EN REVIEW", "EN QA", "DONE"] } })
+```
 
 ```
 Analyser le scope :
@@ -176,6 +287,14 @@ Analyser le scope :
 
 ### Phase Review
 
+**→ Appliquer label `EN REVIEW`** sur toutes les issues de `ISSUE_NUMS[]` si non vide :
+
+```
+pour chaque issue_num dans ISSUE_NUMS[] :
+  mcp__plugin_github_github__issue_write({ owner: <owner>, repo: <repo>, issue_number: issue_num,
+    labels: { add: ["EN REVIEW"], remove: ["EN COURS", "PLANNING", "EN QA", "DONE"] } })
+```
+
 ```
 Lancer code-reviewer (+ test-writer en parallele)
 |-- Recevoir DONE + ref fichier rapport
@@ -184,11 +303,20 @@ Lancer code-reviewer (+ test-writer en parallele)
     |-- Conforme :
         |-- APPROVED            -> Phase QA
         |-- APPROVED WITH RESERVATIONS -> Phase QA (noter reserves)
-        |-- REJECTED            -> Retour Phase Dev (cycle++)
+        |-- REJECTED            -> Retour Phase Dev (cycle++) :
+                                   mcp__plugin_github_github__issue_write( labels: add ["EN COURS"], remove ["EN REVIEW", "EN QA"] )
                                    relancer code-reviewer + test-writer
 ```
 
 ### Phase QA
+
+**→ Appliquer label `EN QA`** sur toutes les issues de `ISSUE_NUMS[]` si non vide :
+
+```
+pour chaque issue_num dans ISSUE_NUMS[] :
+  mcp__plugin_github_github__issue_write({ owner: <owner>, repo: <repo>, issue_number: issue_num,
+    labels: { add: ["EN QA"], remove: ["EN REVIEW", "EN COURS", "PLANNING", "DONE"] } })
+```
 
 ```
 Lancer QA (avec ref scripts SHA + procedures test-writer)
@@ -196,9 +324,12 @@ Lancer QA (avec ref scripts SHA + procedures test-writer)
 |-- CDP lit le rapport et valide la conformite
     |-- Non conforme -> renvoyer pour correction (hors cycle)
     |-- Conforme :
-        |-- VALIDATED                   -> Phase Doc (automatique)
-        |-- VALIDATED WITH RESERVATIONS -> Phase Doc (noter reserves, continuer)
-        |-- NOT VALIDATED               -> Retour Phase Dev (cycle++)
+        |-- VALIDATED                   -> Phase Doc (automatique) :
+                                           mcp__plugin_github_github__issue_write( labels: add ["DONE"], remove ["EN QA", "EN REVIEW", "EN COURS", "PLANNING"] )
+        |-- VALIDATED WITH RESERVATIONS -> Phase Doc (noter reserves, continuer) :
+                                           mcp__plugin_github_github__issue_write( labels: add ["DONE"], remove ["EN QA", "EN REVIEW", "EN COURS", "PLANNING"] )
+        |-- NOT VALIDATED               -> Retour Phase Dev (cycle++) :
+                                           mcp__plugin_github_github__issue_write( labels: add ["EN COURS"], remove ["EN QA", "EN REVIEW"] )
                                            relancer code-reviewer + test-writer
 
 Si cycle > 3 -> ESCALADE utilisateur
@@ -416,13 +547,15 @@ Ce fichier est la source de vérité pour les commandes `status`, `resume`, `ski
   "version": "X.Y.Z",
   "started_at": "2026-04-26T14:30:00Z",
   "cycles": 1,
+  "issue_nums": [123, 456],
+  "milestone_num": 5,
   "phases": {
     "clarification":{ "status": "completed", "skipped": false },
-    "plan":         { "status": "completed", "report": ".claude/reports/plan-xxx.md", "timestamp": "..." },
-    "dev-backend":  { "status": "completed", "sha": "abc123", "handoff": ".claude/handoff/dev-backend-xxx.md" },
-    "dev-frontend": { "status": "completed", "sha": "def456", "handoff": ".claude/handoff/dev-frontend-xxx.md" },
-    "test-writer":  { "status": "completed", "sha": "ghi789", "handoff": ".claude/handoff/test-writer-xxx.md" },
-    "review":       { "status": "completed", "report": ".claude/reports/code-review-xxx.md" },
+    "plan":         { "status": "completed", "report": "_work/reports/plan-xxx.md", "timestamp": "..." },
+    "dev-backend":  { "status": "completed", "sha": "abc123", "handoff": "_work/handoff/dev-backend-xxx.md" },
+    "dev-frontend": { "status": "completed", "sha": "def456", "handoff": "_work/handoff/dev-frontend-xxx.md" },
+    "test-writer":  { "status": "completed", "sha": "ghi789", "handoff": "_work/handoff/test-writer-xxx.md" },
+    "review":       { "status": "completed", "report": "_work/reports/code-review-xxx.md" },
     "qa":           { "status": "in_progress", "report": null },
     "doc":          { "status": "pending" },
     "deploy-qualif":{ "status": "pending" },
@@ -459,6 +592,8 @@ Dans les commandes CDP, referencer ce fichier :
 - Type : FEATURE|BUGFIX|HOTFIX|REFACTOR
 - Phases : section 3
 - Clarification : section 4
+- Labels GitHub + Milestone : section 5 (Labels GitHub — Suivi de Phase)
+- Phases communes : section 5
 - Validation : section 6
 - Erreurs : section 7
 - Regles : section 9

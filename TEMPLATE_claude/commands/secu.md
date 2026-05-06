@@ -83,4 +83,8 @@ Le rapport inclut :
 
 ## Agent
 
-Lance l'agent `security` defini dans `.claude/agents/security.md`
+Activer `security` via le teamleader — appliquer la règle SendMessage-first :
+- Déjà actif dans la team → `SendMessage({to: "security", content: ...})`
+- Première activation → `Task({subagent_type: "security", name: "security", ...})`
+
+Spec : `.claude/agents/security.md`

@@ -87,4 +87,8 @@ En cas de probleme :
 
 ## Agent
 
-Lance l'agent `deploy` defini dans `.claude/agents/deploy.md`
+Activer `deployer` via le teamleader — appliquer la règle SendMessage-first :
+- Déjà actif dans la team → `SendMessage({to: "deployer", content: ...})`
+- Première activation → `Task({subagent_type: "deploy", name: "deployer", ...})`
+
+Spec : `.claude/agents/deploy.md`

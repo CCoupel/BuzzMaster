@@ -70,4 +70,8 @@ Le rapport QA inclut :
 
 ## Agent
 
-Lance l'agent `qa` defini dans `.claude/agents/qa.md`
+Activer `qa` via le teamleader — appliquer la règle SendMessage-first :
+- Déjà actif dans la team → `SendMessage({to: "qa", content: ...})`
+- Première activation → `Task({subagent_type: "qa", name: "qa", ...})`
+
+Spec : `.claude/agents/qa.md`

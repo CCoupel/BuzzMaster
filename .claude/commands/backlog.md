@@ -1,204 +1,188 @@
 # Commande /backlog
 
-Consulter et traiter les issues du backlog du repo Git.
+Consulter le backlog ou créer une nouvelle entrée (issue) dans le repo GitHub.
+L'implémentation se fait via `/feature` ou `/bugfix` — `/backlog` gère uniquement les issues.
 
 ## Usage
 
 ```
 /backlog                        # Lister toutes les issues ouvertes
-/backlog <description>          # Rechercher les issues correspondantes et lancer le workflow
+/backlog <description>          # Créer une nouvelle issue dans le backlog
 ```
 
-## Argument recu
+## Argument reçu
 
 $ARGUMENTS
 
 ---
 
-## Mode 1 : Liste (sans argument)
+Si `$ARGUMENTS` est vide ou est un filtre (`label:`, `@me`, `milestone:`) → Mode 1 (liste).
+Sinon → Mode 2 (création).
 
-Si `$ARGUMENTS` est vide -> afficher les issues ouvertes.
+---
+
+## Mode 1 : Liste (sans argument ou filtre)
 
 ### Etapes
 
-1. Executer `gh issue list --state open --limit 50`
+1. Exécuter `gh issue list --state open --limit 50` avec les flags adaptés au filtre
 2. Afficher sous forme de tableau :
 
 ```markdown
-## Backlog - Issues ouvertes
+## Backlog — Issues ouvertes
 
 | # | Titre | Labels | Milestone | Assignee | Maj |
 |---|-------|--------|-----------|----------|-----|
-| 42 | Ajouter auth OAuth2 | feature | v1.2.0 | - | 2025-01-10 |
-| 38 | Crash au demarrage iOS | bug | v1.2.0 | @user | 2025-01-08 |
+| 42 | Ajouter auth OAuth2 | feature | v1.2 | - | 2025-01-10 |
+| 38 | Crash au démarrage iOS | bug | v1.2 | @user | 2025-01-08 |
 | 35 | Refactor module auth | refactor | — | - | 2025-01-05 |
 ```
 
 3. Proposer les actions disponibles :
 
 ```
-Pour traiter une issue :
-  /backlog <titre ou #numero>    Rechercher et lancer le workflow
-  /backlog #42                   Traiter directement l'issue #42
+Pour créer une issue :
+  /backlog <description>         Créer une nouvelle entrée dans le backlog
+
+Pour implémenter une issue existante :
+  /feature #42                   Lancer le workflow feature sur l'issue #42
+  /bugfix #38                    Lancer le workflow bugfix sur l'issue #38
 ```
 
 ### Filtres disponibles
-
-L'utilisateur peut affiner avec des mots-cles :
 
 | Syntaxe | Effet |
 |---------|-------|
 | `/backlog` | Toutes les issues ouvertes |
 | `/backlog label:bug` | Issues avec le label "bug" |
 | `/backlog label:feature` | Issues avec le label "feature" |
-| `/backlog @me` | Issues qui me sont assignees |
+| `/backlog @me` | Issues qui me sont assignées |
 | `/backlog milestone:<nom>` | Issues d'un milestone |
 
-**Implementation des filtres :**
-- Detecter si `$ARGUMENTS` correspond a un filtre (`label:`, `@me`, `milestone:`)
-- Traduire en flags `gh issue list` correspondants (`--label`, `--assignee @me`, `--milestone`)
-- Sinon -> Mode recherche (voir Mode 2)
+**Implémentation des filtres :**
+Détecter si `$ARGUMENTS` correspond à un filtre (`label:`, `@me`, `milestone:`)
+et traduire en flags `gh issue list` correspondants (`--label`, `--assignee @me`, `--milestone`).
 
 ---
 
-## Mode 2 : Recherche et Workflow (avec description)
+## Mode 2 : Création d'une issue
 
-Si `$ARGUMENTS` est non vide et n'est pas un filtre -> mode recherche.
-
-### Etapes
-
-#### 1. Recherche
+### Etape 0 — Vérifier les doublons et contradictions
 
 ```bash
-gh issue list --state open --search "<$ARGUMENTS>" --limit 10
+gh issue list --state open --search "<mots-clés extraits de $ARGUMENTS>" --limit 10 \
+  --json number,title,labels,state
 ```
 
-Afficher les resultats :
+Analyser les résultats :
 
-```markdown
-## Issues correspondantes a "<description>"
+| Situation | Action |
+|-----------|--------|
+| Aucune issue similaire | Continuer vers Etape 1 |
+| Issue(s) similaire(s) trouvée(s) | Afficher et demander confirmation |
+| Issue contradictoire trouvée | Signaler et demander comment procéder |
 
-1. #42 - Ajouter l'authentification OAuth2  [feature]
-2. #38 - Auth: crash au login avec compte Google  [bug]
-3. #31 - Refactorer le module d'authentification  [refactor]
+**Si similaire(s) détectée(s) :**
+```
+⚠ Des issues existantes ressemblent à votre demande :
 
-Entrez le numero de l'issue a traiter (ou 0 pour annuler) :
+  #42 — Ajouter auth OAuth2  [feature]
+  #51 — Support login Google  [feature]
+
+C'est une nouvelle issue distincte, ou l'une de ces issues couvre déjà le besoin ?
+  1. C'est distinct — créer une nouvelle issue
+  2. #42 couvre le besoin — utiliser cette issue
+  3. #51 couvre le besoin — utiliser cette issue
 ```
 
-Si aucune issue trouvee :
-```markdown
-Aucune issue ne correspond a "<description>".
-
-Options :
-- Modifier la recherche
-- Lancer directement le workflow sans issue liee :
-  → /feature <description>
-  → /bugfix <description>
+Si l'utilisateur choisit une issue existante → afficher la confirmation et s'arrêter :
+```
+Issue existante sélectionnée : #<numero> — <titre>
+Pour l'implémenter : /feature #<numero>   ou   /bugfix #<numero>
 ```
 
-#### 2. Selection
+**Si contradiction détectée** (ex : demande de supprimer quelque chose qu'une autre issue demande d'ajouter) :
+```
+⚠ Contradiction détectée avec une issue existante :
 
-- L'utilisateur selectionne une issue par son numero dans la liste
-- Ou entre directement `#<numero>` pour cibler une issue precise
+  #38 — Ajouter le module de cache Redis  [feature, in-progress]
 
-#### 3. Chargement de l'issue
+Votre demande semble en conflit avec cette issue. Comment procéder ?
+  1. Créer quand même la nouvelle issue
+  2. Commenter sur #38 pour signaler le conflit
+  3. Annuler
+```
 
+Si l'utilisateur choisit 2 → ajouter un commentaire :
 ```bash
-gh issue view <numero> --json number,title,body,labels,assignees,milestone
+gh issue comment 38 --body "⚠ Conflit potentiel avec : <$ARGUMENTS>"
 ```
 
-Afficher le resume :
+### Etape 1 — Inférer le type (bug ou feature)
 
-```markdown
-## Issue #<numero> - <titre>
+Analyser `$ARGUMENTS` pour détecter le type :
 
-**Labels :** feature, priority:high
-**Assignee :** @user
-**Milestone :** v2.5.0
+| Indices dans la description | Type inféré |
+|-----------------------------|-------------|
+| "crash", "erreur", "bug", "ne fonctionne pas", "broken", "fix" | `bug` |
+| "ajouter", "nouveau", "feature", "améliorer", "implémenter", "support" | `feature` |
+| Ambigu ou aucun indice clair | Demander |
 
-**Description :**
-<body de l'issue>
+Si ambigu :
 ```
+Cette issue est un bug ou une feature ?
+  1. feature
+  2. bug
+```
+Attendre la réponse avant de continuer.
 
-#### 3b. Association au milestone actif
+### Etape 2 — Associer à un milestone
 
-Si l'issue n'est pas encore associee a un milestone, verifier s'il existe un milestone actif :
+Récupérer les milestones ouverts :
 
 ```bash
 gh api repos/{owner}/{repo}/milestones \
-  --jq '[.[] | select(.state=="open")] | .[0] | {title, open_issues, closed_issues}'
+  --jq '.[] | select(.state=="open") | {number, title, open_issues, closed_issues}'
 ```
 
-Si un milestone actif existe et que l'issue n'y est pas liee :
+Afficher et demander :
 
 ```
-Un milestone actif existe : <version> (<N> issues, <X>% complete)
-Assigner cette issue au milestone <version> ? [O/n]
+Milestones disponibles :
+  1. v1.2  (3 issues ouvertes)
+  2. v1.3  (0 issues ouvertes)
+  3. Aucun milestone
+
+Associer cette issue à quel milestone ? [1/2/3]
 ```
 
-Si oui :
-```bash
-gh issue edit <numero> --milestone "<version>"
+Si aucun milestone ouvert :
+```
+Aucun milestone actif. Créer un milestone d'abord avec /milestone new <version>, ou continuer sans.
+Continuer sans milestone ? [O/n]
 ```
 
-#### 4. Detection du type de workflow
-
-Analyser les labels de l'issue pour determiner le workflow adapte :
-
-| Labels detectes | Workflow lance |
-|-----------------|----------------|
-| `bug`, `fix`, `defect` | `/bugfix` |
-| `hotfix`, `urgent`, `critical` | `/hotfix` |
-| `refactor`, `tech-debt`, `cleanup` | `/refactor` |
-| `security`, `vulnerability` | `/secu` |
-| `feature`, `enhancement`, `new` | `/feature` |
-| (aucun label reconnu) | Demander a l'utilisateur |
-
-Si aucun label ne permet de determiner le type :
-```markdown
-Quel type de workflow lancer pour cette issue ?
-
-1. /feature  - Nouvelle fonctionnalite
-2. /bugfix   - Correction de bug
-3. /hotfix   - Correctif urgent
-4. /refactor - Refactoring
-5. /secu     - Audit securite
-
-Votre choix :
-```
-
-#### 5. Lancement du workflow
-
-Construire la description a partir du titre et du corps de l'issue :
-
-```
-<description> = "#<numero> - <titre>"
-```
-
-Puis dispatcher vers le workflow correspondant avec cette description :
-
-```
-/feature "#42 - Ajouter l'authentification OAuth2"
-/bugfix  "#38 - Crash au login avec compte Google"
-```
-
-Le workflow demarre avec la description enrichie de l'issue, ce qui permet
-au CDP de referencer l'issue dans les commits et le CHANGELOG.
-
----
-
-## Format des Commits
-
-Lors du workflow lance depuis `/backlog`, les commits doivent referencer l'issue :
+### Etape 3 — Créer l'issue
 
 ```bash
-# Format recommande
-feat(auth): Implémenter OAuth2 (#42)
-fix(auth): Corriger crash login Google (#38)
+gh issue create \
+  --title "<$ARGUMENTS>" \
+  --label "<bug|feature>" \
+  --milestone "<version>" \   # omis si aucun milestone sélectionné
+  --body ""
 ```
 
-Le CDP prend en compte le numero d'issue dans `$ARGUMENTS` pour formater
-automatiquement les messages de commit.
+### Etape 4 — Confirmation
+
+```
+✅ Issue créée : #<numero> — <titre>
+   Label     : <bug|feature>
+   Milestone : <version ou "aucun">
+   URL       : https://github.com/{owner}/{repo}/issues/<numero>
+
+Pour l'implémenter :
+  /feature #<numero>   ou   /bugfix #<numero>
+```
 
 ---
 
@@ -206,35 +190,24 @@ automatiquement les messages de commit.
 
 ```bash
 /backlog                              # Lister toutes les issues ouvertes
-/backlog label:bug                    # Lister les issues tagees "bug"
-/backlog @me                          # Lister les issues qui me sont assignees
-/backlog authentification             # Rechercher les issues liees a l'auth
-/backlog #42                          # Traiter directement l'issue #42
-/backlog OAuth Google connexion       # Recherche multi-mots
+/backlog label:bug                    # Lister les issues taguées "bug"
+/backlog @me                          # Lister les issues qui me sont assignées
+/backlog milestone:v1.2               # Lister les issues du milestone v1.2
+/backlog Ajouter authentification OAuth2    # Créer une issue feature
+/backlog Crash au login avec Google         # Créer une issue bug
 ```
 
 ---
 
-## Prerequis
+## Prérequis
 
-**Reference** : Voir `context/GITHUB.md` sections 1 (auth), 2 (issues), 3 (milestones)
+**Référence** : Voir `context/GITHUB.md` sections 1 (auth), 2 (issues), 3 (milestones)
 
-- CLI GitHub (`gh`) installe et authentifie (`gh auth login`)
-- Le projet doit etre un repo GitHub (remote `origin` pointe vers GitHub)
-
-Si `gh` n'est pas disponible :
-```markdown
-La commande /backlog necessite le CLI GitHub (gh).
-- Installation : https://cli.github.com
-- Authentification : gh auth login
-
-Alternative : consulter les issues directement sur GitHub.
-```
+- CLI GitHub (`gh`) installé et authentifié (`gh auth login`)
+- Le projet doit être un repo GitHub (remote `origin` pointe vers GitHub)
 
 ---
 
 ## Agent
 
-Execution directe sans delegation — utilise `gh` pour interroger l'API GitHub,
-puis dispatch vers le workflow approprie (`/feature`, `/bugfix`, `/hotfix`,
-`/refactor`, ou `/secu`) en fonction des labels de l'issue selectionnee.
+Exécution directe sans délégation — utilise `gh` pour interagir avec l'API GitHub Issues et Milestones.
