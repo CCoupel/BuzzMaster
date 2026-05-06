@@ -1878,7 +1878,7 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
             })()}
 
             {/* MEMOTION Game Content — TV display, 4 subphases: GRID / SELECTED / QUESTION / REVEAL */}
-            {isMemotion && showGameContent && gameState.question && (() => {
+            {isMemotion && (showGameContent || showReady) && gameState.question && (() => {
               const subphase = gameState.MEMOTION_SUBPHASE
               const cardStates = gameState.MEMOTION_CARD_STATES || {}
               const cardTeams = gameState.MEMOTION_CARD_TEAMS || {}
@@ -1915,7 +1915,7 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
                     />
                   </div>
 
-                  {/* Zone 2: Current team */}
+                  {/* Zone 2: Current team or READY message */}
                   <div className="zone-question">
                     {currentTeam ? (
                       <motion.div
@@ -1925,6 +1925,27 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
                         animate={{ opacity: 1, y: 0 }}
                       >
                         {currentTeam}
+                      </motion.div>
+                    ) : showReady ? (
+                      <motion.div
+                        className="ready-state"
+                        initial={{ opacity: 0, scale: 0.8 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                      >
+                        <motion.span
+                          className="ready-emoji"
+                          animate={{ scale: [1, 1.3, 1] }}
+                          transition={{ duration: 0.4, repeat: Infinity }}
+                        >
+                          ✋
+                        </motion.span>
+                        <motion.span
+                          className="ready-text"
+                          animate={{ opacity: [1, 0.2, 1] }}
+                          transition={{ duration: 0.6, repeat: Infinity }}
+                        >
+                          PREPAREZ-VOUS
+                        </motion.span>
                       </motion.div>
                     ) : (
                       <div className="zone-question-placeholder" />
@@ -1983,12 +2004,23 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
                               </div>
                               {/* Back: shown by default (UNPLAYED / in-progress) */}
                               <div className="memory-card-back">
-                                {card.RECTO_IMAGE && (
-                                  <img src={card.RECTO_IMAGE} alt="" className="memotion-card-img" />
-                                )}
-                                <span className="memotion-card-theme">{card.RECTO_THEME}</span>
-                                <span className="memotion-card-stars">{'★'.repeat(diff)}</span>
-                                <span className="memotion-card-pts">{diffPts(diff)}pt</span>
+                                {card.RECTO_IMAGE
+                                  ? <>
+                                      <img src={card.RECTO_IMAGE} alt="" className="memotion-card-img" />
+                                      <div className="memotion-card-footer">
+                                        <span className="memotion-card-theme">{card.RECTO_THEME}</span>
+                                        <span className="memotion-card-stars">{'★'.repeat(diff)}</span>
+                                        <span className="memotion-card-pts">{diffPts(diff)}pt</span>
+                                      </div>
+                                    </>
+                                  : <>
+                                      <span className="memotion-card-theme memotion-card-theme-solo">{card.RECTO_THEME}</span>
+                                      <div className="memotion-card-footer">
+                                        <span className="memotion-card-stars">{'★'.repeat(diff)}</span>
+                                        <span className="memotion-card-pts">{diffPts(diff)}pt</span>
+                                      </div>
+                                    </>
+                                }
                               </div>
                             </motion.div>
                           </motion.div>
@@ -2035,8 +2067,8 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
                     key={`memotion-selected-${selectedId}`}
                     layoutId={`memotion-card-${selectedId}`}
                     className="memotion-tv-fullscreen memotion-tv-selected"
-                    style={{ position: 'fixed', inset: 0, zIndex: 10, transformStyle: 'preserve-3d' }}
-                    exit={{ rotateY: 90, opacity: 0, transition: { duration: 0.35 } }}
+                    style={{ position: 'fixed', inset: 0, zIndex: 10 }}
+                    exit={{ rotateY: 90, transition: { duration: 0.35 } }}
                   >
                     <div className="memotion-tv-fs-header">
                       <span className="memotion-tv-fs-theme">{selectedCard.RECTO_THEME}</span>
@@ -2079,8 +2111,9 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
                   <motion.div
                     key="memotion-question"
                     className="memotion-tv-fullscreen"
-                    initial={{ rotateY: -90, opacity: 0 }}
-                    animate={{ rotateY: 0, opacity: 1 }}
+                    initial={{ rotateY: -90 }}
+                    animate={{ rotateY: 0 }}
+                    exit={{ rotateY: 90, transition: { duration: 0.35 } }}
                     transition={{ duration: 0.5, ease: [0.4, 0, 0.2, 1] }}
                     style={{ position: 'fixed', inset: 0, zIndex: 10, perspective: '1200px' }}
                   >
@@ -2135,8 +2168,8 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
                   <motion.div
                     key="memotion-reveal"
                     className="memotion-tv-fullscreen memotion-tv-reveal"
-                    initial={{ rotateY: 90, opacity: 0 }}
-                    animate={{ rotateY: 0, opacity: 1 }}
+                    initial={{ rotateY: -90 }}
+                    animate={{ rotateY: 0 }}
                     transition={{ duration: 0.5, ease: [0.4, 0, 0.2, 1] }}
                     style={{ position: 'fixed', inset: 0, zIndex: 10, perspective: '1200px' }}
                   >
