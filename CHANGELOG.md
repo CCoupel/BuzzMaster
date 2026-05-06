@@ -3,6 +3,18 @@
 Historique des versions du projet BuzzControl.
 
 
+## [5.0.4] - 2026-05-06
+
+### Fixed
+- MEMOTION : phase READY affiche uniquement "PRÉPAREZ-VOUS" + barre d'équipes, sans la grille de cartes
+- MEMOTION : footer des cartes équilibré — thème tronqué si long, étoiles et points clairement secondaires
+- MEMOTION : effet de zoom sélection rendu visible grâce au LayoutGroup framer-motion (scale retiré de l'animation d'entrée des cartes)
+- MEMOTION : fond opaque (#1a1a2e) sur la sous-phase REVEAL (gradient transparent remplacé)
+- MEMOTION : bouton RÉVÉLER masqué tant que le timer est actif (admin)
+- MEMOTION : animation zoom retour vers la grille après attribution des points (layoutId sur REVEAL)
+
+---
+
 ## [5.0.3] - 2026-05-06
 
 ### Fixed
