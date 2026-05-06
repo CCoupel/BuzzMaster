@@ -2693,20 +2693,22 @@
   align-items: center;
   gap: 0.3em;
   flex-shrink: 0;
-  padding: 0.25em 0.4em;
-  background: rgba(0, 0, 0, 0.35);
+  padding: 0.2em 0.4em;
+  background: rgba(0, 0, 0, 0.45);
+  width: 100%;
+  box-sizing: border-box;
+  justify-content: space-between;
 }
 
 .memotion-card-theme {
-  font-family: var(--font-display);
-  font-size: clamp(0.55rem, 1.4cqmin, 0.9rem);
-  font-weight: 800;
+  font-size: clamp(0.45rem, 1.1cqmin, 0.8rem);
+  font-weight: 700;
   color: white;
-  text-align: center;
-  word-break: break-word;
-  line-height: 1.2;
-  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.6);
-  flex-shrink: 0;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.6);
 }
 
 /* Solo (no image): theme fills the entire card body */
@@ -2715,22 +2717,28 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: clamp(0.9rem, 2.8cqmin, 2rem);
+  font-family: var(--font-display);
+  font-size: clamp(0.7rem, 2.2cqmin, 1.5rem);
   font-weight: 900;
-  padding: 0.3em;
+  color: white;
   text-align: center;
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.6);
+  padding: 0.3em;
+  line-height: 1.2;
+  word-break: break-word;
 }
 
 .memotion-card-stars {
-  font-size: clamp(0.45rem, 1.1cqmin, 0.8rem);
+  font-size: clamp(0.35rem, 0.9cqmin, 0.65rem);
   color: #eab308;
-  text-shadow: 0 0 6px rgba(234, 179, 8, 0.7);
+  flex-shrink: 0;
 }
 
 .memotion-card-pts {
-  font-size: clamp(0.4rem, 0.9cqmin, 0.65rem);
-  color: rgba(255, 255, 255, 0.45);
+  font-size: clamp(0.3rem, 0.75cqmin, 0.55rem);
+  color: rgba(255, 255, 255, 0.4);
   font-weight: 600;
+  flex-shrink: 0;
 }
 
 /* Override memory-card-front for MEMOTION: shows DONE content (✓ + winner) */
@@ -2872,7 +2880,7 @@
 }
 
 .memotion-tv-reveal {
-  background: radial-gradient(ellipse at center, rgba(74,222,128,0.08) 0%, transparent 70%);
+  background: #1a1a2e;
 }
 
 .memotion-tv-fs-timer {

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, useCallback, useRef } from 'react'
 import NoSleep from 'nosleep.js'
-import { motion, AnimatePresence } from 'framer-motion'
+import { motion, AnimatePresence, LayoutGroup } from 'framer-motion'
 import confetti from 'canvas-confetti'
 import { useGame } from '../hooks/GameContext'
 import Timer from '../components/Timer'
@@ -1976,8 +1976,8 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
                               ...(isDone ? { '--matched-team-color': matchedColor } : undefined),
                               visibility: isActiveCard && isMotionFullscreen ? 'hidden' : 'visible',
                             }}
-                            initial={{ opacity: 0, scale: 0.8 }}
-                            animate={{ opacity: 1, scale: 1 }}
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
                             transition={{ delay: index * 0.05, duration: 0.3 }}
                           >
                             {/* Use motion.div on inner so framer-motion drives the 3D flip
@@ -2055,6 +2055,41 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
                   </div>
                 </div>
               )
+
+              /* ---- READY: message PRÉPAREZ-VOUS sans la grille de cartes ---- */
+              if (showReady) {
+                return (
+                  <div className="game-content-zones memory-game memotion-game">
+                    <div className="zone-timer">
+                      <Timer currentTime={gameState.timer} totalTime={gameState.totalTime} phase={gameState.phase} size="xl" showPhase={false} />
+                    </div>
+                    <div className="zone-question"><div className="zone-question-placeholder" /></div>
+                    <div className="zone-media">
+                      <motion.div className="ready-state" initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }}>
+                        <motion.span className="ready-emoji" animate={{ scale: [1, 1.3, 1] }} transition={{ duration: 0.4, repeat: Infinity }}>✋</motion.span>
+                        <motion.span className="ready-text" animate={{ opacity: [1, 0.2, 1] }} transition={{ duration: 0.6, repeat: Infinity }}>PRÉPAREZ-VOUS</motion.span>
+                      </motion.div>
+                    </div>
+                    <div className="zone-answers">
+                      {participatingTeams.length > 0 && (
+                        <div className="memory-team-bar">
+                          {participatingTeams.map((tName) => {
+                            const teamData = teams[tName]
+                            const tColor = teamData?.COLOR
+                              ? (Array.isArray(teamData.COLOR) ? `rgb(${teamData.COLOR.join(',')})` : teamData.COLOR)
+                              : 'var(--gray-400)'
+                            return (
+                              <div key={tName} className="memory-team-chip inactive" style={{ backgroundColor: tColor, '--team-color': tColor }}>
+                                <span className="team-name">{tName}</span>
+                              </div>
+                            )
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )
+              }
 
               /* Build fullscreen overlay — shared AnimatePresence enables SELECTED→QUESTION exit animation */
               let motionOverlay = null
@@ -2166,6 +2201,7 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
                 motionOverlay = (
                   <motion.div
                     key="memotion-reveal"
+                    layoutId={`memotion-card-${selectedId}`}
                     className="memotion-tv-fullscreen memotion-tv-reveal"
                     initial={{ rotateY: -90 }}
                     animate={{ rotateY: 0 }}
@@ -2205,12 +2241,12 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
 
               /* GRID (subphase null, "GRID", or unknown): motionOverlay stays null */
               return (
-                <>
+                <LayoutGroup>
                   {gridView}
                   <AnimatePresence mode="wait">
                     {motionOverlay}
                   </AnimatePresence>
-                </>
+                </LayoutGroup>
               )
             })()}
 

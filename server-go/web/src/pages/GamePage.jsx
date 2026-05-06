@@ -812,9 +812,11 @@ export default function GamePage() {
                         STOP TIMER
                       </Button>
                     )}
-                    <Button variant="primary" size="md" onClick={() => sendMessage('MEMOTION_REVEAL', {})}>
-                      RÉVÉLER
-                    </Button>
+                    {!(gameState.timer > 0) && (
+                      <Button variant="primary" size="md" onClick={() => sendMessage('MEMOTION_REVEAL', {})}>
+                        RÉVÉLER
+                      </Button>
+                    )}
                     <Button variant="ghost" size="sm" onClick={() => sendMessage('MEMOTION_DONE', { CARD_ID: gameState.MEMOTION_SELECTED, WINNER_TEAM: '' })}>
                       SANS VAINQUEUR
                     </Button>
