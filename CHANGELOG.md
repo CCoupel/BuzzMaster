@@ -3,6 +3,16 @@
 Historique des versions du projet BuzzControl.
 
 
+## [5.1.0] - 2026-05-08
+
+### Changed
+- MEMOTION TV : layout constant des cartes en 3 zones fixes — header (titre/thème), body (image, flex-grow), footer (étoiles + points) ; supprime l'ancienne logique conditionnelle image/no-image (#77)
+- MEMOTION : sélection de carte depuis la preview TV en subphase GRID — clic direct sur `PlayerDisplay` en mode `isAdminPreview` pour toute carte `UNPLAYED` (#78)
+- MEMOTION admin : panneau GRID simplifié — mini-grille supprimée, remplacée par un label informatif (#78)
+- MEMOTION admin : subphase REVEAL — affiche uniquement le bouton de l'équipe courante + "Perdu" (remplace l'affichage de toutes les équipes avec buzzers) ; renommage "Aucun" → "Perdu" (#79)
+
+---
+
 ## [5.0.6] - 2026-05-06
 
 ### Added

@@ -30,7 +30,7 @@ const BUTTON_TO_QCM_COLOR = {
 }
 
 export default function PlayerDisplay({ playerName = null, playerNameColor = null, teamName = null, teamColor = null, isVPlayer = false, onMediaClick = null, onQCMAnswer = null, vplayerHasBuzzed = false }) {
-  const { gameState, teams, bumpers, flipMemoryCard, showQRCode } = useGame()
+  const { gameState, teams, bumpers, flipMemoryCard, showQRCode, selectMotionCard } = useGame()
   const [previousRanking, setPreviousRanking] = useState({})
   const [changedTeams, setChangedTeams] = useState({})
   const [history, setHistory] = useState([]) // For PALMARES view
@@ -1976,6 +1976,7 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
                           ? getTeamColorByName(winnerTeam)
                           : 'rgba(255,255,255,0.4)'
                         const diff = card.DIFFICULTY || 1
+                        const canSelectCard = isAdminPreview && subphase === 'GRID' && state === 'UNPLAYED'
                         return (
                           <motion.div
                             key={card.ID}
@@ -1984,10 +1985,12 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
                             style={{
                               ...(isDone ? { '--matched-team-color': matchedColor } : undefined),
                               visibility: isActiveCard && isMotionFullscreen ? 'hidden' : 'visible',
+                              cursor: canSelectCard ? 'pointer' : 'default',
                             }}
                             initial={{ opacity: 0 }}
                             animate={{ opacity: 1 }}
                             transition={{ delay: index * 0.05, duration: 0.3 }}
+                            onClick={() => canSelectCard && selectMotionCard(card.ID)}
                           >
                             {/* Use motion.div on inner so framer-motion drives the 3D flip
                                 (CSS .flipped class is not used — framer-motion owns rotateY) */}
@@ -2013,23 +2016,21 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
                               </div>
                               {/* Back: shown by default (UNPLAYED / in-progress) */}
                               <div className="memory-card-back">
-                                {card.RECTO_IMAGE
-                                  ? <>
-                                      <img src={card.RECTO_IMAGE} alt="" className="memotion-card-img" />
-                                      <div className="memotion-card-footer">
-                                        <span className="memotion-card-theme">{card.RECTO_THEME}</span>
-                                        <span className="memotion-card-stars">{'★'.repeat(diff)}</span>
-                                        <span className="memotion-card-pts">{diffPts(diff)}pt</span>
-                                      </div>
-                                    </>
-                                  : <>
-                                      <span className="memotion-card-theme memotion-card-theme-solo">{card.RECTO_THEME}</span>
-                                      <div className="memotion-card-footer">
-                                        <span className="memotion-card-stars">{'★'.repeat(diff)}</span>
-                                        <span className="memotion-card-pts">{diffPts(diff)}pt</span>
-                                      </div>
-                                    </>
-                                }
+                                {/* Header — titre toujours en haut */}
+                                <div className="memotion-card-header">
+                                  <span className="memotion-card-title">{card.RECTO_THEME}</span>
+                                </div>
+                                {/* Corps — image si disponible, sinon vide */}
+                                <div className="memotion-card-body">
+                                  {card.RECTO_IMAGE && (
+                                    <img src={card.RECTO_IMAGE} alt="" className="memotion-card-img" />
+                                  )}
+                                </div>
+                                {/* Footer — étoiles + pts */}
+                                <div className="memotion-card-footer">
+                                  <span className="memotion-card-stars">{'★'.repeat(diff)}</span>
+                                  <span className="memotion-card-pts">{diffPts(diff)}pt</span>
+                                </div>
                               </div>
                             </motion.div>
                           </motion.div>

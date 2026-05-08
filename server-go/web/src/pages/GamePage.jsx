@@ -737,42 +737,13 @@ export default function GamePage() {
               return (
                 <div className="memotion-admin-panel">
                   <div className="memotion-admin-label">
-                    Sélectionner une carte
+                    Sélectionner une carte sur la preview TV
                     {currentTeam && (
                       <span
                         className="memotion-admin-current-team"
                         style={{ color: currentTeamColor?.length ? `rgb(${currentTeamColor.join(',')})` : undefined }}
                       > · {currentTeam}</span>
                     )}
-                  </div>
-                  <div className="memotion-admin-card-grid">
-                    {motionCards.map(card => {
-                      const state = cardStates[card.ID] || 'UNPLAYED'
-                      const isDone = state === 'DONE'
-                      const winnerTeam = isDone ? cardTeams[card.ID] : null
-                      const winnerColor = winnerTeam ? getRgbColor(teams[winnerTeam]?.COLOR) : null
-                      const diff = card.DIFFICULTY || 1
-                      return (
-                        <button
-                          key={card.ID}
-                          className={`memotion-admin-card ${state.toLowerCase()}`}
-                          onClick={() => state === 'UNPLAYED' && sendMessage('MEMOTION_SELECT', { CARD_ID: card.ID })}
-                          disabled={state !== 'UNPLAYED'}
-                          style={isDone && winnerColor ? { borderColor: winnerColor } : undefined}
-                          title={isDone ? (winnerTeam || 'Sans vainqueur') : card.RECTO_THEME}
-                        >
-                          {isDone ? (
-                            <span className="memotion-card-check">✓</span>
-                          ) : (
-                            <>
-                              <span className="memotion-card-theme">{card.RECTO_THEME || '?'}</span>
-                              <span className="memotion-card-stars">{'★'.repeat(diff)}</span>
-                              <span className="memotion-card-pts">{diffPts(diff)}pt</span>
-                            </>
-                          )}
-                        </button>
-                      )
-                    })}
                   </div>
                 </div>
               )
@@ -835,7 +806,8 @@ export default function GamePage() {
 
             if (subphase === 'REVEAL' && selectedMotionCard) {
               const diff = selectedMotionCard.DIFFICULTY || 1
-              const teamsWithBuzzers = sortedTeams.filter(t => t.buzzers && t.buzzers.length > 0)
+              const currentTeamData = sortedTeams.find(t => t.name === currentTeam)
+              const currentTeamChipColor = currentTeamData ? getRgbColor(currentTeamData.COLOR) : undefined
               return (
                 <div className="memotion-admin-panel">
                   <div className="memotion-admin-label">Réponse</div>
@@ -851,24 +823,20 @@ export default function GamePage() {
                   )}
                   <p className="memotion-admin-winner-label">Qui a bien répondu ?</p>
                   <div className="memotion-winner-chips">
-                    {teamsWithBuzzers.map(team => {
-                      const teamColor = getRgbColor(team.COLOR)
-                      return (
-                        <button
-                          key={team.name}
-                          className="memotion-winner-chip"
-                          style={{ backgroundColor: teamColor }}
-                          onClick={() => sendMessage('MEMOTION_DONE', { CARD_ID: gameState.MEMOTION_SELECTED, WINNER_TEAM: team.name })}
-                        >
-                          {team.name}
-                        </button>
-                      )
-                    })}
+                    {currentTeam && (
+                      <button
+                        className="memotion-winner-chip"
+                        style={{ backgroundColor: currentTeamChipColor }}
+                        onClick={() => sendMessage('MEMOTION_DONE', { CARD_ID: gameState.MEMOTION_SELECTED, WINNER_TEAM: currentTeam })}
+                      >
+                        {currentTeam}
+                      </button>
+                    )}
                     <button
                       className="memotion-winner-chip none"
                       onClick={() => sendMessage('MEMOTION_DONE', { CARD_ID: gameState.MEMOTION_SELECTED, WINNER_TEAM: '' })}
                     >
-                      Aucun
+                      Perdu
                     </button>
                   </div>
                 </div>

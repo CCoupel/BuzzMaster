@@ -444,6 +444,11 @@ export default function useWebSocket(endpoint = '/ws/admin') {
     sendMessage('FLIP_MEMORY_CARD', { CARD_ID: cardId })
   }, [sendMessage])
 
+  // MEMOTION: Select a card from the grid (admin preview mode)
+  const selectMotionCard = useCallback((cardId) => {
+    sendMessage('MEMOTION_SELECT', { CARD_ID: cardId })
+  }, [sendMessage])
+
   // VPlayer enrollment: Show QR code
   const showQRCode = useCallback(() => {
     sendMessage('SHOW_QR_CODE', {})
@@ -532,6 +537,7 @@ export default function useWebSocket(endpoint = '/ws/admin') {
     simulateButton,
     simulatePong,
     flipMemoryCard,
+    selectMotionCard,
     // New game / Quiz meta
     newGame,
     updateQuizMeta,

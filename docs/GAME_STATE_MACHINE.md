@@ -219,11 +219,11 @@ Points par difficulté : ★ (1) → 1 pt | ★★ (2) → 3 pts | ★★★ (3)
 - `MEMOTION_CURRENT_TEAM_COLOR` : [3]int RGB
 
 ### Flux de jeu (9 étapes)
-1. Admin click carte → `MEMOTION_SELECT` → SELECTED (zoom plein écran, RECTO)
+1. Admin sélectionne une carte depuis la preview TV (clic sur carte `UNPLAYED` en subphase GRID) → `MEMOTION_SELECT` → SELECTED (zoom plein écran, RECTO)
 2. Admin click "Démarrer" → `MEMOTION_FLIP` → QUESTION + timer démarre
 3. Timer expire ou admin "STOP TIMER" → `MEMOTION_STOP_TIMER` → timer stop, reste QUESTION
 4. Admin "RÉVÉLER" → `MEMOTION_REVEAL` → REVEAL (timer arrêté)
-5. Admin click équipe gagnante → `MEMOTION_DONE` → retour GRID + carte DONE colorée
+5. Admin click "Perdu" ou bouton équipe courante → `MEMOTION_DONE` → retour GRID + carte DONE colorée (seule l'équipe courante peut gagner)
 
 **Annulation depuis SELECTED** : `MEMOTION_DONE` avec `WINNER_TEAM=""` → carte retourne UNPLAYED.
 

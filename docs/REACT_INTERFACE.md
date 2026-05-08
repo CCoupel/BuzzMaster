@@ -356,3 +356,18 @@ Les styles de GamePage utilisent des sélecteurs plus spécifiques pour éviter 
 - `PlayerDisplay.jsx` : TV toutes phases (STATIQUE) — NEW_GAME, jeu normal, MEMOTION
 - `GameContext.jsx` : GameProvider prop `endpoint`, routing WS
 - `colorUtils.js` : `boostTeamColor()` (saturation TV), `nearestPaletteColorByHue()` (palette LED)
+
+### Panneaux Admin MEMOTION (v5.1.0)
+
+| Subphase | Panneau Admin (`GamePage.jsx`) | Affichage TV (`PlayerDisplay.jsx`) |
+|----------|-------------------------------|-------------------------------------|
+| `GRID` | Label informatif (mini-grille supprimée) — sélection via clic sur preview TV | Grille de cartes ; clic sur carte `UNPLAYED` en mode `isAdminPreview` envoie `MEMOTION_SELECT` |
+| `SELECTED` | Boutons "DÉMARRER" (FLIP) et "ANNULER" | Carte zoomée plein écran (layoutId framer-motion) |
+| `QUESTION` | Bouton "STOP TIMER" | Face VERSO plein écran + timer |
+| `REVEAL` | Bouton équipe courante uniquement + bouton "Perdu" (remplace la liste de toutes les équipes) | Face REVEAL plein écran |
+
+**Layout MotionCard TV (3 zones fixes — v5.1.0)** :
+- `.memotion-card-header` : titre et thème (hauteur fixe, haut de la carte)
+- `.memotion-card-body` : image (flex-grow, couvre l'espace central)
+- Footer : étoiles + points (bas de la carte)
+Supprime l'ancienne logique conditionnelle image/no-image.
