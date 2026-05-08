@@ -20,7 +20,6 @@ type Config struct {
 
 type ServerConfig struct {
 	HTTPPort         int    `json:"http_port"`
-	TCPPort          int    `json:"tcp_port"`
 	WebSocketPath    string `json:"websocket_path"`
 	AutoOpenBrowsers bool   `json:"auto_open_browsers"` // Auto-open browsers on startup
 	Debug            bool   `json:"debug"`               // Enable debug mode (includes /logs)
@@ -89,9 +88,6 @@ func Load(path string) (*Config, error) {
 	// Set defaults if not specified
 	if cfg.Server.HTTPPort == 0 {
 		cfg.Server.HTTPPort = 80
-	}
-	if cfg.Server.TCPPort == 0 {
-		cfg.Server.TCPPort = 1234
 	}
 	if cfg.Server.WebSocketPath == "" {
 		cfg.Server.WebSocketPath = "/ws"
@@ -174,7 +170,6 @@ func Get() *Config {
 			instance = &Config{
 				Server: ServerConfig{
 					HTTPPort:         80,
-					TCPPort:          1234,
 					WebSocketPath:    "/ws",
 					AutoOpenBrowsers: true,  // Default: enabled
 					Debug:            false, // Default: disabled

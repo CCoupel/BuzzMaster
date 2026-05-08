@@ -59,8 +59,7 @@ cd server-go && ./build.ps1  # Build portable Windows/Linux
 | WebSocket | 80 | `/ws/player` | VPlayer (v3.8.0) |
 | WebSocket | 80 | `/ws/buzzer` | Buzzers physiques (v3.0.0) |
 | WebSocket | 80 | `/ws/logs` | Logs temps réel |
-| TCP | 1234 | - | BuzzClick protocol v1 (rétrocompatible) |
-| UDP | 1234 | - | Broadcast heartbeat |
+| UDP | 1234 | - | Broadcast heartbeat (BuzzerDiscoveryPort) |
 | DNS | 53 | - | Captive portal (optionnel) |
 
 ## Notes for Claude

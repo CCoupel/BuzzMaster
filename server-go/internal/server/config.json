@@ -1,7 +1,6 @@
 {
   "server": {
     "http_port": 0,
-    "tcp_port": 0,
     "websocket_path": "",
     "auto_open_browsers": false,
     "debug": false,

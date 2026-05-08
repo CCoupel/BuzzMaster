@@ -30,7 +30,6 @@ var Version = "dev"
 type App struct {
 	config         *config.Config
 	engine         *game.Engine
-	tcpServer      *server.TCPServer
 	udpBcast       *server.UDPBroadcaster
 	broadcaster    *server.BroadcasterManager
 	httpServer     *server.HTTPServer
@@ -74,7 +73,6 @@ func main() {
 
 	log.Printf("Version: %s (embedded: %s)", cfg.Version, Version)
 	log.Printf("HTTP Port: %d", cfg.Server.HTTPPort)
-	log.Printf("TCP Port: %d", cfg.Server.TCPPort)
 
 	// Create app with an application-lifetime context
 	appCtx, appCancel := context.WithCancel(context.Background())
@@ -158,7 +156,6 @@ func main() {
 	}
 
 	server.LogInfo(game.LogComponentApp, "Server started successfully")
-	server.LogInfo(game.LogComponentTCP, "TCP server (buzzers): port %d", cfg.Server.TCPPort)
 
 	// Display all accessible URLs and open browser if enabled
 	displayAndOpenURLs(cfg.Server.HTTPPort, cfg.Server.AutoOpenBrowsers, cfg.Server.Debug)
@@ -196,11 +193,8 @@ func (a *App) init() {
 	a.logger = server.InitLogger(1000)
 	a.logger.SetDebugEnabled(a.config.Server.Debug)
 
-	// TCP server for buzzers
-	a.tcpServer = server.NewTCPServer(a.config.Server.TCPPort)
-
 	// UDP broadcaster
-	a.udpBcast = server.NewUDPBroadcaster(a.config.Server.TCPPort)
+	a.udpBcast = server.NewUDPBroadcaster()
 
 	// BroadcasterManager: periodic BUZZ_SERVER heartbeat for automatic IP discovery
 	a.broadcaster = server.NewBroadcasterManager(a.udpBcast, a.config.Server.HTTPPort)
@@ -258,7 +252,7 @@ func (a *App) init() {
 	}
 
 	// mDNS server (advertise buzzcontrol.local)
-	a.mdnsServer = server.NewMDNSServer("buzzcontrol", a.config.Server.HTTPPort, a.config.Server.TCPPort)
+	a.mdnsServer = server.NewMDNSServer("buzzcontrol", a.config.Server.HTTPPort, server.BuzzerDiscoveryPort)
 
 	// DNS server (captive portal - redirects all DNS to this server)
 	a.dnsServer = server.NewDNSServer(53, nil)
@@ -268,13 +262,6 @@ func (a *App) init() {
 }
 
 func (a *App) setupCallbacks() {
-	// Handle TCP messages from buzzers
-	go func() {
-		for msg := range a.tcpServer.Incoming {
-			a.handleBuzzerMessage(msg)
-		}
-	}()
-
 	// Handle WebSocket messages from web clients
 	go func() {
 		for msg := range a.wsHub.Incoming {
@@ -655,17 +642,11 @@ func (a *App) start() error {
 	// Start ACK manager background goroutine (v3.8.0); uses app context for clean shutdown.
 	go a.ackManager.Start(a.ctx)
 
-	// Start TCP server
-	if err := a.tcpServer.Start(); err != nil {
-		return err
-	}
-	a.logger.Info(game.LogComponentTCP, "TCP server started on port %d", a.config.Server.TCPPort)
-
 	// Start UDP broadcaster
 	if err := a.udpBcast.Start(); err != nil {
 		return err
 	}
-	a.logger.Info(game.LogComponentUDP, "UDP broadcaster started on port %d", a.config.Server.TCPPort)
+	a.logger.Info(game.LogComponentUDP, "UDP broadcaster started on port %d", server.BuzzerDiscoveryPort)
 
 	// Start BUZZ_SERVER heartbeat broadcasts for automatic IP discovery
 	a.broadcaster.Start()
@@ -707,11 +688,10 @@ func (a *App) stop() {
 	a.mdnsServer.Stop()
 	a.httpServer.Stop()
 	a.broadcaster.Stop()
-	a.tcpServer.Stop()
 	a.udpBcast.Stop()
 }
 
-// handleBuzzerMessage processes messages from BuzzClick buzzers (TCP or WebSocket)
+// handleBuzzerMessage processes messages from BuzzClick buzzers (WebSocket)
 func (a *App) handleBuzzerMessage(incoming *protocol.IncomingMessage) {
 	msg := incoming.Data
 
@@ -914,13 +894,10 @@ func (a *App) handleWebMessage(incoming *protocol.IncomingMessage) {
 }
 
 func (a *App) handleHello(clientID string, msg *protocol.Message, source string) {
-	// Determine protocol from source
-	proto := "TCP"
-	if source == "WebSocket-Buzzer" {
-		proto = "WebSocket"
-	}
+	// All buzzers now connect via WebSocket
+	proto := "WebSocket"
 
-	a.logger.Info(game.LogComponentTCP, "HELLO from buzzer: %s (protocol: %s)", clientID, proto)
+	a.logger.Info(game.LogComponentWebSocket, "HELLO from buzzer: %s (protocol: %s)", clientID, proto)
 
 	// Parse payload and inject protocol
 	var payload map[string]interface{}
@@ -969,7 +946,7 @@ func (a *App) handleHello(clientID string, msg *protocol.Message, source string)
 		a.resendLEDOnReconnect(clientID)
 	}
 
-	// Auto-sync WiFi config to newly connected buzzer (WebSocket only; TCP buzzers ignore unknown messages)
+	// Auto-sync WiFi config to newly connected buzzer
 	if source == "WebSocket-Buzzer" {
 		a.sendWifiConfigToBuzzer(clientID)
 	}
@@ -1022,11 +999,11 @@ func (a *App) handleButton(clientID string, msg *protocol.Message, timestamp int
 	// Filter: only accept BUTTON in STARTED phase (spec §"Règle d'acceptation des buzz").
 	// READY, COUNTDOWN, PAUSED, REVEALED, STOPPED → ignore silently.
 	if a.engine.GetPhase() != game.PhaseStarted {
-		server.LogInfo(game.LogComponentTCP, "BUTTON from %s ignored (phase=%s, not STARTED)", clientID, a.engine.GetPhase())
+		server.LogInfo(game.LogComponentWebSocket, "BUTTON from %s ignored (phase=%s, not STARTED)", clientID, a.engine.GetPhase())
 		return
 	}
 
-	server.LogInfo(game.LogComponentTCP, "BUTTON from %s: %s", clientID, payload.Button)
+	server.LogInfo(game.LogComponentWebSocket, "BUTTON from %s: %s", clientID, payload.Button)
 
 	// Process in engine
 	a.engine.ProcessButtonPress(clientID, timestamp, payload.Button)
@@ -1077,9 +1054,9 @@ func (a *App) handleSimulatedButton(msg *protocol.Message) {
 	a.broadcastUpdate()
 }
 
-// handlePong processes PONG from buzzer (TCP) or web client (WebSocket simulation)
+// handlePong processes PONG from buzzer or web client (WebSocket simulation)
 func (a *App) handlePong(clientID string, msg *protocol.Message) {
-	// If ID in payload, use it (web simulation), otherwise use clientID (TCP buzzer)
+	// If ID in payload, use it (web simulation), otherwise use clientID (buzzer MAC)
 	bumperID := clientID
 
 	var payload struct {
@@ -1089,7 +1066,7 @@ func (a *App) handlePong(clientID string, msg *protocol.Message) {
 		bumperID = payload.ID
 	}
 
-	server.LogInfo(game.LogComponentTCP, "PONG from %s", bumperID)
+	server.LogInfo(game.LogComponentWebSocket, "PONG from %s", bumperID)
 
 	if a.engine.IsGamePrepare() {
 		a.engine.SetBumperReady(bumperID)
@@ -2840,13 +2817,12 @@ func (a *App) broadcastClientCounts() {
 		AdminCount:   adminCount,
 		TVCount:      tvCount,
 		VPlayerCount: vplayerCount,
-		BuzzerTCP:    a.tcpServer.ClientCount(),
 		BuzzerWS:     a.buzzerHub.BuzzerCount(),
 	}
 	data, _ := json.Marshal(payload)
 	a.broadcast(protocol.ActionClients, data, false, server.ClientTypeAdmin)
-	server.LogDebug(game.LogComponentWebSocket, "Client counts: admin=%d, tv=%d, vplayer=%d, buzzer_tcp=%d, buzzer_ws=%d",
-		adminCount, tvCount, vplayerCount, payload.BuzzerTCP, payload.BuzzerWS)
+	server.LogDebug(game.LogComponentWebSocket, "Client counts: admin=%d, tv=%d, vplayer=%d, buzzer_ws=%d",
+		adminCount, tvCount, vplayerCount, payload.BuzzerWS)
 }
 
 func (a *App) broadcastBackgroundChange(index int) {
@@ -3067,7 +3043,6 @@ func (a *App) sendStateToClient(clientID string) {
 		AdminCount:   adminCount,
 		TVCount:      tvCount,
 		VPlayerCount: vplayerCount,
-		BuzzerTCP:    a.tcpServer.ClientCount(),
 		BuzzerWS:     a.buzzerHub.BuzzerCount(),
 	}
 	cData, _ := json.Marshal(clientsPayload)

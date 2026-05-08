@@ -3,6 +3,14 @@
 Historique des versions du projet BuzzControl.
 
 
+## [5.1.1] - 2026-05-08
+
+### Fixed
+- Suppression du TCPServer legacy (port 1234 TCP) — dead code depuis v3.0.0 qui bloquait le démarrage sur Windows (#80)
+- Port UDP 1234 (discovery firmware BuzzClick) découplé du champ config `tcp_port` via constante `BuzzerDiscoveryPort`
+
+---
+
 ## [5.1.0] - 2026-05-08
 
 ### Changed

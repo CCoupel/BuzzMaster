@@ -7,6 +7,10 @@ import (
 	"net"
 )
 
+// BuzzerDiscoveryPort is the fixed UDP port used by BuzzClick firmware
+// for server discovery. This is independent of any TCP configuration.
+const BuzzerDiscoveryPort = 1234
+
 // UDPBroadcaster handles UDP broadcast messages to BuzzClick buzzers
 type UDPBroadcaster struct {
 	port int
@@ -14,9 +18,9 @@ type UDPBroadcaster struct {
 }
 
 // NewUDPBroadcaster creates a new UDP broadcaster
-func NewUDPBroadcaster(port int) *UDPBroadcaster {
+func NewUDPBroadcaster() *UDPBroadcaster {
 	return &UDPBroadcaster{
-		port: port,
+		port: BuzzerDiscoveryPort,
 	}
 }
 
