@@ -7,7 +7,7 @@ import (
 )
 
 func TestUDPBroadcaster_StartStop(t *testing.T) {
-	udp := NewUDPBroadcaster(1234)
+	udp := NewUDPBroadcaster()
 
 	if err := udp.Start(); err != nil {
 		t.Fatalf("Failed to start: %v", err)
@@ -17,7 +17,7 @@ func TestUDPBroadcaster_StartStop(t *testing.T) {
 }
 
 func TestUDPBroadcaster_Broadcast(t *testing.T) {
-	udp := NewUDPBroadcaster(9999) // Use high port
+	udp := NewUDPBroadcaster()
 
 	if err := udp.Start(); err != nil {
 		t.Fatalf("Failed to start: %v", err)
@@ -32,7 +32,7 @@ func TestUDPBroadcaster_Broadcast(t *testing.T) {
 }
 
 func TestUDPBroadcaster_BroadcastNotStarted(t *testing.T) {
-	udp := NewUDPBroadcaster(1234)
+	udp := NewUDPBroadcaster()
 	// Don't call Start()
 
 	msg, _ := protocol.NewMessage(protocol.ActionHello, nil)
@@ -43,7 +43,7 @@ func TestUDPBroadcaster_BroadcastNotStarted(t *testing.T) {
 }
 
 func TestUDPBroadcaster_BroadcastRaw(t *testing.T) {
-	udp := NewUDPBroadcaster(9999)
+	udp := NewUDPBroadcaster()
 
 	if err := udp.Start(); err != nil {
 		t.Fatalf("Failed to start: %v", err)
@@ -57,7 +57,7 @@ func TestUDPBroadcaster_BroadcastRaw(t *testing.T) {
 }
 
 func TestUDPBroadcaster_BroadcastRawNotStarted(t *testing.T) {
-	udp := NewUDPBroadcaster(1234)
+	udp := NewUDPBroadcaster()
 
 	err := udp.BroadcastRaw([]byte("test"))
 	if err == nil {
