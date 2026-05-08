@@ -2,38 +2,16 @@
 
 Ce document décrit les protocoles de communication entre les différents composants du système BuzzControl.
 
-## TCP Protocol (Buzzers <-> Server)
+## TCP Protocol (Buzzers <-> Server) — **DEPRECATED (v5.1.1+)**
 
-- Port: Configurable via `configManager.getControllerPort()`
+⚠️ **SUPPRIMÉ depuis v5.1.1** — Le TCPServer legacy (port 1234 TCP) a été supprimé car c'était du dead code depuis v3.0.0. Tous les BuzzClick utilisent désormais WebSocket (`/ws/buzzer`). Le TCPServer bloquait le démarrage sur Windows (WSAEADDRINUSE). **Veuillez utiliser WebSocket** (voir section suivante).
+
+**Historique** (pour référence) :
+- Port: 1234 (TCP) — **SUPPRIMÉ**
 - Format: JSON messages terminated by null byte (`\0`)
 - Direction: Bidirectional
 
-**Message structure:**
-```json
-{
-  "ACTION": "HELLO|BUTTON|PING|PONG|...",
-  "ID": "bumper_id",
-  "MSG": { /* action-specific payload */ }
-}
-```
-
-**Actions from BuzzClick to Server:**
-| Action | Description | Payload |
-|--------|-------------|---------|
-| HELLO | Buzzer registration | `{VERSION, TEAM, NAME, ...}` |
-| BUTTON | Button pressed | `{button: "A|B|C|D"}` |
-| PONG | Response to PING | `{}` |
-
-**Actions from Server to BuzzClick:**
-| Action | Description | Payload |
-|--------|-------------|---------|
-| HELLO | Welcome/config | Game state |
-| START | Game started | `{delay, question}` |
-| STOP | Game stopped | `{}` |
-| PAUSE | Pause buzzer | `{}` |
-| CONTINUE | Resume game | `{}` |
-| PING | Ready check | `{}` |
-| RESET | Full reset | `{}` |
+Les buzzers modernes utilisent **WebSocket Protocol - Buzzers** (v3.0.0+) ci-dessous.
 
 ## WebSocket Protocol - Buzzers (v3.0.0+)
 

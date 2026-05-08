@@ -16,9 +16,8 @@ server-go/
 │   │   ├── http.go           # HTTP + static files + question upload
 │   │   ├── http_test.go
 │   │   ├── websocket.go      # WebSocket server for web clients
-│   │   ├── tcp.go            # TCP server for buzzers (null-terminated JSON)
-│   │   ├── tcp_test.go
-│   │   ├── udp.go            # UDP broadcast for time-critical messages
+│   │   ├── websocket_buzzer.go # WebSocket server for buzzers
+│   │   ├── udp.go            # UDP broadcast for time-critical messages (BuzzerDiscoveryPort)
 │   │   ├── udp_test.go
 │   │   ├── dns.go            # Captive portal DNS server
 │   │   ├── mdns.go           # mDNS service discovery
@@ -34,7 +33,7 @@ server-go/
 │   └── protocol/
 │       ├── messages.go       # Message types (ACTION, MSG structure)
 │       ├── messages_test.go
-│       ├── parser.go         # Null-terminated JSON parsing
+│       ├── parser.go         # JSON parsing
 │       └── parser_test.go
 ├── data/
 │   └── files/
@@ -49,8 +48,8 @@ server-go/
 |---------|--------|-------|
 | HTTP server (port 80) | OK | Static files, REST API |
 | WebSocket server (/ws) | OK | Web client communication |
-| TCP server (port 1234) | OK | BuzzClick buzzer protocol |
-| UDP broadcast (port 1234) | OK | Time-critical messages |
+| WebSocket server (/ws/buzzer) | OK | BuzzClick buzzer protocol (v3.0.0+) |
+| UDP broadcast (port 1234) | OK | Firmware discovery via BuzzerDiscoveryPort |
 | DNS server (port 53) | OK | Captive portal |
 | mDNS (_sock._tcp) | OK | Service discovery |
 | Questions CRUD | OK | Upload, list, delete |
