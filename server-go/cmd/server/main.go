@@ -691,7 +691,7 @@ func (a *App) stop() {
 	a.udpBcast.Stop()
 }
 
-// handleBuzzerMessage processes messages from BuzzClick buzzers (TCP or WebSocket)
+// handleBuzzerMessage processes messages from BuzzClick buzzers (WebSocket)
 func (a *App) handleBuzzerMessage(incoming *protocol.IncomingMessage) {
 	msg := incoming.Data
 
@@ -946,7 +946,7 @@ func (a *App) handleHello(clientID string, msg *protocol.Message, source string)
 		a.resendLEDOnReconnect(clientID)
 	}
 
-	// Auto-sync WiFi config to newly connected buzzer (WebSocket only; TCP buzzers ignore unknown messages)
+	// Auto-sync WiFi config to newly connected buzzer
 	if source == "WebSocket-Buzzer" {
 		a.sendWifiConfigToBuzzer(clientID)
 	}
@@ -1054,9 +1054,9 @@ func (a *App) handleSimulatedButton(msg *protocol.Message) {
 	a.broadcastUpdate()
 }
 
-// handlePong processes PONG from buzzer (TCP) or web client (WebSocket simulation)
+// handlePong processes PONG from buzzer or web client (WebSocket simulation)
 func (a *App) handlePong(clientID string, msg *protocol.Message) {
-	// If ID in payload, use it (web simulation), otherwise use clientID (TCP buzzer)
+	// If ID in payload, use it (web simulation), otherwise use clientID (buzzer MAC)
 	bumperID := clientID
 
 	var payload struct {

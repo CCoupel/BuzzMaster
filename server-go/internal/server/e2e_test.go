@@ -93,10 +93,6 @@ func TestE2E_WebSocketClient(t *testing.T) {
 	}
 }
 
-// NOTE: Multi-buzzer race condition test skipped because TCP server
-// removes duplicate IP connections (all localhost connections appear as same IP).
-// This test would require real network devices or a modified TCP server for testing.
-
 // E2E Test: Game state machine flow
 func TestE2E_GameStateMachine(t *testing.T) {
 	engine := game.NewEngine()
