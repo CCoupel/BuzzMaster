@@ -101,7 +101,7 @@ func TestGetServerIPs_NoEmptyStrings(t *testing.T) {
 // ---- BroadcasterManager lifecycle tests ----------------------------------
 
 func TestBroadcasterManager_StartStop(t *testing.T) {
-	udp := NewUDPBroadcaster(9998)
+	udp := NewUDPBroadcaster()
 	if err := udp.Start(); err != nil {
 		t.Fatalf("failed to start UDP broadcaster: %v", err)
 	}
@@ -117,7 +117,7 @@ func TestBroadcasterManager_StartStop(t *testing.T) {
 }
 
 func TestBroadcasterManager_EnrollmentMode(t *testing.T) {
-	udp := NewUDPBroadcaster(9997)
+	udp := NewUDPBroadcaster()
 	if err := udp.Start(); err != nil {
 		t.Fatalf("failed to start UDP broadcaster: %v", err)
 	}
@@ -144,7 +144,7 @@ func TestBroadcasterManager_EnrollmentMode(t *testing.T) {
 }
 
 func TestBroadcasterManager_SendNow(t *testing.T) {
-	udp := NewUDPBroadcaster(9996)
+	udp := NewUDPBroadcaster()
 	if err := udp.Start(); err != nil {
 		t.Fatalf("failed to start UDP broadcaster: %v", err)
 	}
@@ -271,7 +271,7 @@ func TestGetServerIPs_NoPrivateRangeExclusions(t *testing.T) {
 // ---- BroadcasterManager concurrent tests --------------------------------
 
 func TestBroadcasterManager_ConcurrentEnrollmentToggle(t *testing.T) {
-	udp := NewUDPBroadcaster(9995)
+	udp := NewUDPBroadcaster()
 	if err := udp.Start(); err != nil {
 		t.Fatalf("failed to start UDP broadcaster: %v", err)
 	}
@@ -348,7 +348,7 @@ func TestBroadcasterManager_HighFrequencyIsLowerThanNormal(t *testing.T) {
 }
 
 func TestBroadcasterManager_StopIsIdempotent(t *testing.T) {
-	udp := NewUDPBroadcaster(9994)
+	udp := NewUDPBroadcaster()
 	if err := udp.Start(); err != nil {
 		t.Fatalf("failed to start UDP broadcaster: %v", err)
 	}
@@ -363,7 +363,7 @@ func TestBroadcasterManager_StopIsIdempotent(t *testing.T) {
 }
 
 func TestBroadcasterManager_SendNowAfterStart(t *testing.T) {
-	udp := NewUDPBroadcaster(9993)
+	udp := NewUDPBroadcaster()
 	if err := udp.Start(); err != nil {
 		t.Fatalf("failed to start UDP broadcaster: %v", err)
 	}
