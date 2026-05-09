@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"buzzcontrol/internal/config"
 	"buzzcontrol/internal/game"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -136,7 +137,9 @@ func isPortInUse(err error) bool {
 // Stop shuts down the HTTP server
 func (h *HTTPServer) Stop() {
 	if h.server != nil {
-		h.server.Close()
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		defer cancel()
+		h.server.Shutdown(ctx) //nolint:errcheck
 	}
 }
 
