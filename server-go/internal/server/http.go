@@ -139,7 +139,9 @@ func (h *HTTPServer) Stop() {
 	if h.server != nil {
 		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 		defer cancel()
-		h.server.Shutdown(ctx) //nolint:errcheck
+		if err := h.server.Shutdown(ctx); err != nil {
+			LogWarn(game.LogComponentHTTP, "graceful shutdown incomplete: %v", err)
+		}
 	}
 }
 

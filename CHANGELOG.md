@@ -3,6 +3,17 @@
 Historique des versions du projet BuzzControl.
 
 
+## [5.1.2] - 2026-05-09
+
+### Changed
+- MEMOTION fullscreen (SELECTED / QUESTION / REVEAL) : layout CSS grid `1fr 4fr 1fr` — header thème en row 1 (1/6), image en row 2 (4/6), timer en row 3 (1/6) pour la sous-phase QUESTION ; placement explicite via `grid-row` indépendant de l'ordre DOM (#77)
+- MEMOTION fullscreen : textes agrandis pour lisibilité TV — thème `4rem`, étoiles `3rem`, texte question/réponse `4.5rem`
+
+### Fixed
+- HTTPServer graceful shutdown: replaced `Close()` with `Shutdown(ctx)` (3s timeout) to eliminate TCP TIME_WAIT port-busy errors on restart (#81)
+
+---
+
 ## [5.1.1] - 2026-05-08
 
 ### Fixed
