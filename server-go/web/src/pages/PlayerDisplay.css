@@ -2675,6 +2675,11 @@
   transition: none;
 }
 
+/* Container size pour cqh sur titre et étoiles */
+.memotion-card {
+  container-type: size;
+}
+
 /* Override memory-card-back for MEMOTION: shows RECTO content */
 .memotion-card .memory-card-back {
   background: linear-gradient(145deg, #1e1b4b 0%, #312e81 50%, #4c1d95 100%);
@@ -2682,8 +2687,9 @@
     0 4px 16px rgba(49, 46, 129, 0.5),
     inset 0 1px 0 rgba(255, 255, 255, 0.15);
   border: 2px solid rgba(255, 255, 255, 0.25);
-  flex-direction: column;
-  justify-content: flex-start;
+  display: grid;
+  grid-template-rows: 1fr 4fr 1fr;
+  align-items: stretch;
   gap: 0;
   padding: 0;
   overflow: hidden;
@@ -2701,18 +2707,19 @@
 }
 
 .memotion-card-header {
-  flex-shrink: 0;
-  padding: 0.25em 0.4em;
+  grid-row: 1;
+  padding: 0 0.4em;
   background: rgba(0, 0, 0, 0.5);
   width: 100%;
   box-sizing: border-box;
   display: flex;
   align-items: center;
-  min-height: 1.6em;
+  overflow: hidden;
+  min-height: 0;
 }
 
 .memotion-card-title {
-  font-size: clamp(0.45rem, 1.1cqmin, 0.8rem);
+  font-size: clamp(0.5rem, 13cqh, 2.5rem);
   font-weight: 700;
   color: white;
   overflow: hidden;
@@ -2723,7 +2730,7 @@
 }
 
 .memotion-card-body {
-  flex: 1;
+  grid-row: 2;
   min-height: 0;
   display: flex;
   align-items: center;
@@ -2734,22 +2741,22 @@
 .memotion-card-img {
   width: 100%;
   height: 100%;
-  object-fit: cover;
-  flex: none;
-  border-radius: 0;
+  object-fit: contain;
   display: block;
 }
 
 .memotion-card-footer {
+  grid-row: 3;
   display: flex;
   align-items: center;
   gap: 0.3em;
-  flex-shrink: 0;
-  padding: 0.2em 0.4em;
+  padding: 0 0.4em;
   background: rgba(0, 0, 0, 0.45);
   width: 100%;
   box-sizing: border-box;
   justify-content: center;
+  overflow: hidden;
+  min-height: 0;
 }
 
 /* Legacy — kept for GamePage.css admin panel (do not remove) */
@@ -2782,13 +2789,13 @@
 }
 
 .memotion-card-stars {
-  font-size: clamp(0.35rem, 0.9cqmin, 0.65rem);
+  font-size: clamp(0.5rem, 13cqh, 2.5rem);
   color: #eab308;
   flex-shrink: 0;
 }
 
 .memotion-card-pts {
-  font-size: clamp(0.3rem, 0.75cqmin, 0.55rem);
+  font-size: clamp(0.4rem, 9cqh, 1.8rem);
   color: rgba(255, 255, 255, 0.4);
   font-weight: 600;
   flex-shrink: 0;
@@ -2830,95 +2837,80 @@
   opacity: 0.25;
 }
 
-/* MEMOTION — SELECTED fullscreen (face RECTO) */
+/* MEMOTION — SELECTED fullscreen: hérite du grid de memotion-tv-fullscreen */
 .memotion-tv-selected {
   background: #1a1a2e;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 2vh;
 }
 
-.memotion-tv-selected .memotion-tv-fs-body {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex: 1;
-}
-
-/* SELECTED fullscreen: give image more room (70% vs default 50%) */
-.memotion-tv-selected .memotion-tv-fs-img {
-  max-height: 70%;
-}
-
-/* --- QUESTION / REVEAL subphases (fullscreen) --- */
+/* --- SELECTED / QUESTION / REVEAL subphases (fullscreen) --- */
+/* Grid 3 lignes : 1/6 header + 4/6 body + 1/6 (timer ou vide) */
 .memotion-tv-fullscreen {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-rows: 1fr 4fr 1fr;
   width: 100%;
   height: 100%;
   overflow: hidden;
-  padding: 2vh 4vw;
-  gap: 2vh;
+  padding: 1vh 3vw;
+  gap: 0;
   background: #1a1a2e;
+  box-sizing: border-box;
 }
 
 .memotion-tv-fs-header {
+  grid-row: 1;
   display: flex;
   align-items: center;
+  align-self: center;
   gap: 1.5vw;
-  flex-shrink: 0;
   flex-wrap: wrap;
+  overflow: hidden;
+  min-height: 0;
 }
 
 .memotion-tv-fs-theme {
-  font-size: clamp(1.5rem, 4vw, 3rem);
+  font-size: clamp(2rem, 5vw, 4rem);
   font-weight: 900;
   color: white;
   text-shadow: 0 2px 8px rgba(0,0,0,0.5);
 }
 
 .memotion-tv-fs-diff {
-  font-size: clamp(1.2rem, 2.5vw, 2rem);
+  font-size: clamp(1.8rem, 3.5vw, 3rem);
   color: #eab308;
   text-shadow: 0 0 12px rgba(234,179,8,0.6);
 }
 
 .memotion-tv-fs-pts {
-  font-size: clamp(1rem, 2vw, 1.5rem);
+  font-size: clamp(1.2rem, 2vw, 2rem);
   font-weight: 700;
   color: rgba(255,255,255,0.6);
 }
 
 .memotion-tv-fs-team {
-  font-size: clamp(1rem, 2.5vw, 2rem);
+  font-size: clamp(1.5rem, 3vw, 2.5rem);
   font-weight: 800;
   margin-left: auto;
   text-shadow: 0 2px 8px rgba(0,0,0,0.5);
 }
 
 .memotion-tv-fs-body {
-  flex: 1;
-  min-height: 0;
+  grid-row: 2;
   display: flex;
-  flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 2vh;
   overflow: hidden;
+  min-height: 0;
 }
 
 .memotion-tv-fs-img {
   max-width: 100%;
-  max-height: 50%;
+  max-height: 100%;
   object-fit: contain;
   border-radius: 1rem;
-  flex-shrink: 0;
 }
 
 .memotion-tv-fs-text {
-  font-size: clamp(1.5rem, 4vw, 3.5rem);
+  font-size: clamp(2rem, 5vw, 4.5rem);
   font-weight: 700;
   color: white;
   text-align: center;
@@ -2937,6 +2929,8 @@
 }
 
 .memotion-tv-fs-timer {
+  grid-row: 3;
+  max-width: 10vw;
   flex-shrink: 0;
   display: flex;
   justify-content: center;

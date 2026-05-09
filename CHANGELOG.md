@@ -11,6 +11,7 @@ Historique des versions du projet BuzzControl.
 
 ### Fixed
 - HTTPServer graceful shutdown: replaced `Close()` with `Shutdown(ctx)` (3s timeout) to eliminate TCP TIME_WAIT port-busy errors on restart (#81)
+- MEMOTION grid cards: layout 1/6 header + 4/6 body + 1/6 footer (CSS grid), fonts filling zone height via `cqh` units, images `object-fit: contain` to preserve aspect ratio (#77)
 
 ---
 
