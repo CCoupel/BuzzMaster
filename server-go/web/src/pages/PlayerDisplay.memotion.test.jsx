@@ -488,4 +488,65 @@ describe('PlayerDisplay — MEMOTION layout (bugfix SC1–SC6)', () => {
       expect(container.querySelector('.memotion-tv-fullscreen')).toBeNull()
     })
   })
+
+  // -------------------------------------------------------------------------
+  // SC7 — Non-régression bugfix UI cartes MEMOTION
+  //        • Suppression du span .memotion-card-pts dans le footer
+  //        • Structure header : un seul enfant (.memotion-card-title)
+  // -------------------------------------------------------------------------
+
+  describe('SC7 — Bugfix UI carte MEMOTION (suppression pts + structure header)', () => {
+    beforeEach(() => {
+      useGame.mockReturnValue(makeMemotionMock('GRID'))
+    })
+
+    // --- Footer : suppression de .memotion-card-pts ---
+
+    it('ne rend PAS .memotion-card-pts dans le footer des cartes (régression)', () => {
+      const { container } = renderTV()
+      // Avant le fix, un <span class="memotion-card-pts"> était présent dans chaque footer.
+      // Après le fix, seul .memotion-card-stars subsiste.
+      expect(container.querySelector('.memotion-card-pts')).toBeNull()
+    })
+
+    it('chaque footer ne contient que .memotion-card-stars (aucun autre span nommé)', () => {
+      const { container } = renderTV()
+      const footers = container.querySelectorAll('.memotion-card-footer')
+      expect(footers.length).toBeGreaterThan(0)
+      footers.forEach(footer => {
+        expect(footer.querySelector('.memotion-card-stars')).not.toBeNull()
+        expect(footer.querySelector('.memotion-card-pts')).toBeNull()
+      })
+    })
+
+    it('le footer affiche les étoiles sans texte supplémentaire (pas de "pts")', () => {
+      const { container } = renderTV()
+      const footers = container.querySelectorAll('.memotion-card-footer')
+      footers.forEach(footer => {
+        // Le contenu textuel du footer ne doit contenir que des étoiles ★
+        expect(footer.textContent).toMatch(/^★+$/)
+      })
+    })
+
+    // --- Header : structure centrage (un seul enfant : .memotion-card-title) ---
+
+    it('chaque header contient exactement un enfant direct (.memotion-card-title)', () => {
+      const { container } = renderTV()
+      const headers = container.querySelectorAll('.memotion-card-header')
+      expect(headers.length).toBeGreaterThan(0)
+      headers.forEach(header => {
+        // Après le fix : le header ne contient que le span .memotion-card-title.
+        // Un header avec plusieurs enfants aurait empêché le centrage flex correct.
+        expect(header.children.length).toBe(1)
+        expect(header.children[0].classList.contains('memotion-card-title')).toBe(true)
+      })
+    })
+
+    it('.memotion-card-title contient le RECTO_THEME (et rien d\'autre)', () => {
+      const { container } = renderTV()
+      const titles = container.querySelectorAll('.memotion-card-title')
+      expect(titles[0].textContent).toBe('Thème Star Wars')
+      expect(titles[1].textContent).toBe('Thème Littérature')
+    })
+  })
 })
