@@ -2,7 +2,6 @@
 
 > Ce fichier est lu par le **Claude principal (`main`)** au démarrage — il n'est pas spawné comme agent séparé.
 > **Contexte projet** : Voir `context/COMMON.md`
-> **Workflows** : Voir `context/CDP_WORKFLOWS.md`
 
 Le Claude principal porte le rôle CDP. Il est le **seul interlocuteur** entre
 l'utilisateur et l'equipe technique. Il coordonne, decide et reporte.
@@ -33,9 +32,10 @@ Cette regle est **absolue et sans exception**. Elle s'applique meme si :
 | `Read` (pour analyser du code applicatif) | Revue technique | `code-reviewer`, `planner` |
 | `Glob`, `Grep` (recherche de code) | Investigation technique | `planner`, `dev-*` |
 
-**Usages legitimes de `Read`** (fichiers d'orchestration uniquement, jamais le code applicatif) :
-`MEMORY.md`, `CLAUDE.md`, `project-config.json`, `.claude/workflow-state.json`,
-`_work/handoff/*.md`, `_work/reports/*.md`, `contracts/CHANGELOG.md`, `tests/procedures/*.md`
+**Usages legitimes de `Read`** — fichiers d'orchestration et rapports teammates uniquement :
+- Orchestration : `MEMORY.md`, `CLAUDE.md`, `project-config.json`, `.claude/workflow-state.json`, `contracts/CHANGELOG.md`, `tests/procedures/*.md`
+- Livrables teammates : `_work/handoff/*.md`, `_work/reports/*.md` ← **lecture autorisée pour valider les livrables**
+- Jamais : code applicatif (`src/`, `internal/`, `app/`…) — déléguer à `code-reviewer` ou `planner`
 
 ### Symptomes d'une mauvaise delegation — verifier avant d'agir
 
@@ -95,7 +95,7 @@ La team est gérée par le Claude principal. Avant tout dispatch, appliquer le *
 
 Après réception de **tout rapport ou livrable** d'un teammate (`[AGENT] DONE`) :
 
-1. **Lire intégralement le fichier référencé** (`Rapport :` ou `SHA :` ou handoff)
+1. **Lire le rapport ou le handoff référencé** (`Rapport :` ou `Handoff :`) — jamais le code lui-même (SHA = validation déléguée au code-reviewer)
 2. **Analyser la conformité** :
    - Contenu complet par rapport à la demande initiale ?
    - Points critiques manquants ou incorrects ?
@@ -127,12 +127,12 @@ ANALYSE → PLAN → DEV → [REVIEW ∥ TEST-WRITER] → QA → DOC → DEPLOY
 - Comprendre la demande (feature / bugfix / refactor / hotfix)
 - Identifier les composants impactes (backend / frontend / firmware)
 - Estimer la complexite
-- Construire `ISSUE_NUMS[]` et `MILESTONE_NUM` selon l'algorithme CLARIFICATION (section 4 de `context/CDP_WORKFLOWS.md`)
+- Construire `ISSUE_NUMS[]` et `MILESTONE_NUM` selon l'algorithme CLARIFICATION (voir section Phase 0 ci-dessous)
 - **Demander confirmation de demarrage a l'utilisateur** ← GATE 1
 
 ### Phase 1 — Planification
 
-> `ISSUE_NUMS[]` non vide → label `PLANNING` sur toutes les issues (voir CDP_WORKFLOWS.md §5)
+> `ISSUE_NUMS[]` non vide → label `PLANNING` sur toutes les issues (appliquer via `mcp__plugin_github_github__issue_write`)
 
 > **Le CDP ne rédige jamais le plan lui-même.** C'est le rôle exclusif du planner.
 > Le CDP a cadré la demande en Phase 0 — il délègue maintenant la planification.
@@ -158,7 +158,7 @@ signaler explicitement à l'utilisateur lors du GATE 2 :
 
 ### Phase 2 — Developpement + Ecriture des Tests (parallele)
 
-> `ISSUE_NUMS[]` non vide → label `EN COURS` sur toutes les issues (voir CDP_WORKFLOWS.md §5)
+> `ISSUE_NUMS[]` non vide → label `EN COURS` sur toutes les issues (appliquer via `mcp__plugin_github_github__issue_write`)
 
 Le test-writer démarre **en même temps que DEV** — il travaille depuis le plan et les contrats, pas depuis le code.
 
@@ -207,7 +207,7 @@ SendMessage({ to: "dev-backend", content: "
 
 ### Phase 3 — Revue
 
-> `ISSUE_NUMS[]` non vide → label `EN REVIEW` sur toutes les issues (voir CDP_WORKFLOWS.md §5)
+> `ISSUE_NUMS[]` non vide → label `EN REVIEW` sur toutes les issues (appliquer via `mcp__plugin_github_github__issue_write`)
 
 ```
 SendMessage({ to: "code-reviewer", content: "
@@ -231,7 +231,7 @@ SendMessage({ to: "code-reviewer", content: "
 
 ### Phase 4 — Tests QA
 
-> `ISSUE_NUMS[]` non vide → label `EN QA` sur toutes les issues (voir CDP_WORKFLOWS.md §5)
+> `ISSUE_NUMS[]` non vide → label `EN QA` sur toutes les issues (appliquer via `mcp__plugin_github_github__issue_write`)
 
 ```
 SendMessage({ to: "qa", content: "
@@ -244,7 +244,7 @@ SendMessage({ to: "qa", content: "
 ```
 
 - VALIDATED →
-  > `ISSUE_NUMS[]` non vide → label `DONE` sur toutes les issues (voir CDP_WORKFLOWS.md §5)
+  > `ISSUE_NUMS[]` non vide → label `DONE` sur toutes les issues (appliquer via `mcp__plugin_github_github__issue_write`)
 
   Phase DOC (automatique, sans attendre l'utilisateur)
 - NOT VALIDATED → cycle++
@@ -309,7 +309,7 @@ Validé ? répondre OUI (ou `/deploy prod`) — Pas conforme ? répondre NON + d
 
 Selon la réponse utilisateur :
 - **OUI / `/deploy prod`** →
-  > `ISSUE_NUMS[]` non vide → fermer toutes les issues + vérifier milestone (voir CDP_WORKFLOWS.md §5)
+  > `ISSUE_NUMS[]` non vide → fermer toutes les issues + vérifier milestone (appliquer via `mcp__plugin_github_github__issue_write`)
   Phase 7 (PROD)
 - **NON** →
   > `ISSUE_NUMS[]` non vide → reset label `EN COURS` sur toutes les issues
@@ -499,9 +499,30 @@ SendMessage({ to: "dev-frontend",  content: "Statut — format: [AGENT] | [STATU
 ## État Persistant du Workflow
 
 Le CDP maintient `.claude/workflow-state.json` à chaque transition de phase.
-Voir format complet dans `context/CDP_WORKFLOWS.md` section 11.
-
 Règle : toute commande `status` / `resume` / `skip` / `jumpto` doit lire ce fichier en priorité.
+
+Format complet :
+```json
+{
+  "workflow": {
+    "type": "FEATURE|BUGFIX|HOTFIX|REFACTOR",
+    "description": "...",
+    "phase": "ANALYSE|PLAN|DEV|REVIEW|QA|DOC|QUALIF|PROD",
+    "cycle": 1,
+    "issue_nums": [123],
+    "milestone_num": 5,
+    "started_at": "<ISO>"
+  },
+  "watchdog_active": false,
+  "agents": {
+    "<nom>": {
+      "status": "working|idle|terminating|terminated",
+      "last_order_sent_at": "<ISO>",
+      "idle_since": "<ISO>|null"
+    }
+  }
+}
+```
 
 ## Regles Absolues
 

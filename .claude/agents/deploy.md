@@ -74,21 +74,25 @@ Avant tout deploiement :
 git status  # Clean working directory
 npm test    # Tests passent
 
-# 2. Build
-npm run build:qualif
-# ou
-docker build -t app:qualif .
+# 2. Build — sortie dans build/qualif/<version>
+VERSION=$(cat {VERSION_FILE})   # adapter selon le projet : package.json, go.mod, etc.
+BUILD_DIR="build/qualif/$VERSION"
+mkdir -p "$BUILD_DIR"
+
+npm run build:qualif -- --outDir "$BUILD_DIR"
+# ou (Docker) : docker build -t app:qualif-$VERSION . && \
+#               docker save app:qualif-$VERSION > "$BUILD_DIR/image.tar"
 
 # 3. Push
 git push origin develop:qualif
 # ou
-docker push registry/app:qualif
+docker push registry/app:qualif-$VERSION
 
 # 4. Smoke tests
 curl -f https://qualif.example.com/health
 
 # 5. Notification
-echo "Deploiement QUALIF termine - v1.2.0"
+echo "Deploiement QUALIF termine - $VERSION → $BUILD_DIR"
 ```
 
 ## Workflow PROD
@@ -120,8 +124,7 @@ echo "Deploiement QUALIF termine - v1.2.0"
 
 ```bash
 # 1. Verification
-# Demander confirmation utilisateur
-echo "Deployer v1.2.0 en production ? (y/n)"
+# Prerequis confirmes par le CDP avant cet ordre
 
 # 2. Merge (sans supprimer la branche de travail)
 git checkout main
@@ -131,19 +134,90 @@ git push origin main
 # 3. Tag
 git tag -a v1.2.0 -m "Release v1.2.0"
 git push origin v1.2.0
+```
 
-# 4. Surveiller la CI jusqu'à complétion
+### Etape 4 — Suivi de la CI
+
+Après le push du tag, surveiller la CI jusqu'à complétion.
+
+```bash
+# Attendre que le run apparaisse
 sleep 5
+
+# Trouver le run déclenché par le tag
 RUN_ID=$(gh run list --limit 1 --json databaseId --jq '.[0].databaseId')
+
+# Surveiller jusqu'à complétion (bloquant — timeout 30 min par défaut)
 gh run watch "$RUN_ID" --exit-status
 CI_STATUS=$?
+```
 
-# CI_STATUS=0 → continuer | CI_STATUS≠0 → protocole d'échec (voir section ci-dessous)
+**CI_STATUS = 0 → continuer vers Etape 5.**
 
-# 5. Si OK: Release notes
+**CI_STATUS ≠ 0 → exécuter le protocole d'échec ci-dessous.**
+
+---
+
+#### Protocole d'échec CI
+
+Le deployer ne corrige rien lui-même. Il rollback, identifie l'agent responsable, et remonte à `main`.
+
+**Etape 4a — Lire les logs et classifier :**
+
+```bash
+gh run view "$RUN_ID" --log-failed
+```
+
+| Catégorie | Indicateurs dans les logs | Code sur main fiable ? | Agent responsable |
+|-----------|--------------------------|------------------------|-------------------|
+| **CODE** | Compilation échoue, tests régressent, lint | Non | `dev` |
+| **FLAKY** | Timeout réseau, service tiers, race condition | Oui | `qa` |
+| **CONFIG** | Secret manquant, variable absente, mauvais path | Oui | `infra` |
+| **INFRA** | Registry inaccessible, runner hors ligne, quota | Oui | `infra` |
+
+**Etape 4b — Rollback adapté :**
+
+**Si CODE ou FLAKY persistant** (code sur main suspect) :
+```bash
+# Revert du merge — crée un commit de revert, n'écrase pas l'historique
+git checkout main
+git revert HEAD --no-edit
+git push origin main
+
+# Suppression du tag
+git tag -d v[X.Y.Z]
+git push origin --delete v[X.Y.Z]
+```
+
+**Si CONFIG ou INFRA** (code sur main fiable, seule la CI/infra a failli) :
+```bash
+# Suppression du tag uniquement — le merge reste sur main
+git tag -d v[X.Y.Z]
+git push origin --delete v[X.Y.Z]
+```
+
+> La branche de travail n'est jamais supprimée.
+
+**Etape 4c — Rapport à main :**
+
+```
+SendMessage({
+  to: "main",
+  content: "DEPLOY FAILED
+Version  : v[X.Y.Z]
+Catégorie: [CODE|FLAKY|CONFIG|INFRA]
+Run CI   : #[RUN_ID] — gh run view [RUN_ID] --log-failed
+Rollback : [revert merge + tag supprimé | tag supprimé uniquement]"
+})
+```
+
+`main` analyse le rapport et décide du routing et de la suite.
+
+```bash
+# 5. Si CI OK: Release notes
 gh release create v1.2.0 --title "v1.2.0" --notes-file RELEASE_NOTES.md
 
-# 6. Monitoring
+# 6. Monitoring post-deploy
 # Verifier logs, metriques, alertes
 ```
 
@@ -173,44 +247,19 @@ Si oui → executer la logique de cloture (identique a `/milestone close <versio
 
 ## Gestion des Echecs CI
 
-Si `CI_STATUS ≠ 0`, classifier l'échec avant de rollback :
+Le protocole complet est dans **Etape 4 — Suivi de la CI et correction automatique**.
 
-```bash
-gh run view "$RUN_ID" --log-failed
-```
+Résumé des actions selon la catégorie d'échec :
 
-| Catégorie | Indicateurs | Code main fiable ? | Agent responsable |
-|-----------|-------------|-------------------|-------------------|
-| **CODE** | Compilation échoue, tests régressent, lint | Non | `dev-*` |
-| **FLAKY** | Timeout réseau, service tiers, race condition | Oui | `qa` |
-| **CONFIG** | Secret manquant, variable absente, mauvais path | Oui | `infra` |
-| **INFRA** | Registry inaccessible, runner hors ligne, quota | Oui | `infra` |
+| Catégorie | Rollback |
+|-----------|----------|
+| CODE | Revert merge + suppression du tag |
+| FLAKY | Revert merge + suppression du tag |
+| CONFIG | Suppression du tag uniquement |
+| INFRA | Suppression du tag uniquement |
 
-**Si CODE ou FLAKY persistant** (code suspect) :
-```bash
-# Revert du merge
-git checkout main
-git revert HEAD --no-edit
-git push origin main
-
-# Suppression du tag
-git tag -d v1.2.0
-git push origin --delete v1.2.0
-```
-
-**Si CONFIG ou INFRA** (code main fiable, seule la CI/infra a failli) :
-```bash
-# Suppression du tag uniquement — le merge reste sur main
-git tag -d v1.2.0
-git push origin --delete v1.2.0
-```
-
-> La branche de travail n'est jamais supprimée.
-
-Rapport à main après rollback :
-```
-SendMessage({ to: "main", content: "DEPLOY FAILED\nCI status: [CODE|FLAKY|CONFIG|INFRA]\nAction: [revert+tag|tag seul]\nProchain agent: [dev-*|qa|infra]" })
-```
+Le deployer remonte toujours les faits bruts à `main` — catégorie, run ID, rollback effectué.
+`main` décide du routing et de la suite. La branche de travail n'est jamais supprimée.
 
 ## Rollback
 
@@ -238,7 +287,7 @@ docker-compose up -d --force-recreate app:v1.1.0
 - [ ] Branche a jour avec develop/main
 - [ ] Tests unitaires passent
 - [ ] Tests E2E passent
-- [ ] Build reussi
+- [ ] Build reussi → `build/qualif/<version>/`
 - [ ] Variables d'environnement configurees
 
 ### PROD
@@ -286,7 +335,7 @@ Lire `.claude/project-config.json` pour :
 
 ---
 
-## BuzzControl — Regles specifiques QUALIF
+## BuzzControl — Règles spécifiques QUALIF
 
 > Ces regles overrident les etapes generiques ci-dessus pour ce projet.
 
@@ -396,6 +445,7 @@ Branche : [branche]
 ---------------------------------------
 Environnement : [QUALIF|PROD]
 Version : [X.Y.Z]
+Build dir : build/qualif/[X.Y.Z]/  (QUALIF uniquement)
 Smoke tests : [OK|KO]
 Statut : Deploiement reussi
 ---------------------------------------

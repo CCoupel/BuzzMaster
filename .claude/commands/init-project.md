@@ -517,6 +517,20 @@ A la fin du workshop, generer `CLAUDE.md` complet, `project-config.json`, et les
 
 ---
 
+## Etape 5b : Plugin (optionnel)
+
+```
+6b. Ton projet inclut-il un plugin pour une plateforme existante ?
+    a) VS Code Extension
+    b) Obsidian Plugin
+    c) WordPress Plugin
+    d) Browser Extension (Chrome/Firefox)
+    e) Plugin applicatif maison (preciser la plateforme)
+    f) Pas de plugin
+```
+
+---
+
 ## Etape 6 : Base de Donnees
 
 ```
@@ -607,6 +621,7 @@ A la fin du workshop, generer `CLAUDE.md` complet, `project-config.json`, et les
     "frontend": { "language": "typescript", "framework": "react" },
     "mobile": null,
     "firmware": null,
+    "plugin": { "platform": "VS Code Extension" },
     "database": { "primary": "postgresql", "orm": "prisma" }
   },
   "infrastructure": {
@@ -629,8 +644,8 @@ A la fin du workshop, generer `CLAUDE.md` complet, `project-config.json`, et les
     "typecheck": "<TYPECHECK_CMD>"
   },
   "agents": {
-    "idle_ttl_minutes": 30,
-    "idle_warning_minutes": 5
+    "idle_ttl_minutes": 15,
+    "idle_warning_interval_minutes": 5
   }
 }
 ```
@@ -658,6 +673,7 @@ Valeurs a deriver si elles ne sont pas fournies explicitement :
 | React | `TEMPLATE_claude/templates/dev-frontend-react.md` | `.claude/agents/dev-frontend.md` |
 | Vue.js | `TEMPLATE_claude/templates/dev-frontend-vue.md` | `.claude/agents/dev-frontend.md` |
 | ESP32 | `TEMPLATE_claude/templates/dev-firmware-esp32.md` | `.claude/agents/dev-firmware.md` |
+| Plugin (toute plateforme) | `TEMPLATE_claude/templates/dev-plugin.md` | `.claude/agents/dev-plugin.md` |
 
 ### 3. Workflow CI/CD
 
@@ -698,6 +714,7 @@ TEST_CMD=$(jq -r '.commands.test      // ""'         .claude/project-config.json
 LINT_CMD=$(jq -r '.commands.lint      // ""'         .claude/project-config.json)
 AUDIT_CMD=$(jq -r '.commands.audit    // ""'         .claude/project-config.json)
 TYPECHECK_CMD=$(jq -r '.commands.typecheck // ""'    .claude/project-config.json)
+PLUGIN_PLATFORM=$(jq -r '.stack.plugin.platform // ""' .claude/project-config.json)
 ```
 
 Echapper les caracteres speciaux sed (`&`, `\`, `|`) dans les valeurs de commandes
@@ -727,6 +744,7 @@ for f in .claude/commands/*.md .claude/agents/*.template.md; do
     -e "s|cd server-go && go vet ./...|${LINT_CMD_ESC}|g"          \
     -e "s|cd server-go && govulncheck ./...|${AUDIT_CMD_ESC}|g"        \
     -e "s||${TYPECHECK_CMD_ESC}|g" \
+    -e "s||$|g" \
     "$f"
   echo "  ✓ placeholders appliques dans $name"
 done
@@ -735,9 +753,19 @@ done
 ### 5. Finalisation
 
 ```bash
-# CLAUDE.md depuis le template
-cp TEMPLATE_claude/CLAUDE_TEMPLATE.md .claude/CLAUDE.md
-# (remplacer les placeholders {{...}} avec les valeurs reelles)
+# CLAUDE.md depuis le template (remplacer les placeholders)
+sed \
+  -e "s|BuzzControl|$PROJECT_NAME|g" \
+  -e "s|TEAM-Buzz|$TEAM_NAME|g" \
+  -e "s|CCoupel|$ORG|g" \
+  -e "s|BuzzMaster|$PROJECT|g" \
+  -e "s|{BACKEND_TECH}|$BACKEND_TECH|g" \
+  -e "s|{FRONTEND_TECH}|$FRONTEND_TECH|g" \
+  -e "s|{DATABASE}|$DATABASE|g" \
+  -e "s|cd server-go && go build ./cmd/server|$BUILD_CMD|g" \
+  -e "s|cd server-go && go test ./...|$TEST_CMD|g" \
+  TEMPLATE_claude/CLAUDE_TEMPLATE.md > CLAUDE.md
+echo "✓ CLAUDE.md généré"
 
 # .gitignore projet
 cp TEMPLATE_claude/gitignore-for-projects .gitignore
@@ -757,6 +785,41 @@ gh label create "DONE"      --color "0e8a16" --description "Issue livrée et val
 
 > Si le repo n'a pas encore de remote GitHub configuré, sauter cette étape et noter dans
 > le Message de Fin : "Labels GitHub à créer manuellement ou relancer /init-project après `git remote add`."
+
+#### Hooks Claude Code (PreCompact + UserPromptSubmit — restauration post-compactage)
+
+Les règles critiques du teamleader sont dans `CLAUDE.md` (bloc `TEAMLEADER_PROTOCOL`) — elles survivent aux compactages nativement.  
+Les hooks gèrent la restauration de `workflow-state.json` (état des agents actifs — éphémère, non tracké dans git) :
+
+- **PreCompact** : affiche `workflow-state.json` dans le résumé + pose le marqueur `.post-compact`
+- **UserPromptSubmit** : si `.post-compact` existe → ré-injecte `workflow-state.json` au premier prompt post-compactage → supprime le marqueur
+
+Ce mécanisme garantit que le teamleader retrouve la liste de ses teammates après un compactage de contexte.
+
+Déployer `TEMPLATE_claude/settings.json` dans `.claude/settings.json`.
+Si `.claude/settings.json` existe déjà, merger uniquement la clé `hooks` sans dupliquer les entrées existantes :
+
+```bash
+if [ ! -f .claude/settings.json ]; then
+  cp TEMPLATE_claude/settings.json .claude/settings.json
+  echo "✓ .claude/settings.json créé"
+else
+  jq -s '
+    .[0] as $base | .[1] as $tmpl |
+    reduce ($tmpl.hooks // {} | to_entries[]) as $e (
+      $base;
+      .hooks[$e.key] = (
+        ((.hooks[$e.key] // []) | map(.hooks[0].command)) as $existing_cmds |
+        (.hooks[$e.key] // []) +
+        ($e.value | map(select(.hooks[0].command as $c | $existing_cmds | index($c) == null)))
+      )
+    )
+  ' .claude/settings.json TEMPLATE_claude/settings.json \
+    > .claude/settings.json.tmp \
+    && mv .claude/settings.json.tmp .claude/settings.json
+  echo "✓ .claude/settings.json — hooks PreCompact + UserPromptSubmit ajoutés"
+fi
+```
 
 ---
 
@@ -1124,7 +1187,57 @@ Pour chaque fichier non-PROPRE, afficher le diff annoté et proposer l'action :
 > Le système fonctionne correctement quelle que soit l'action choisie.
 > La dérive est un signal de maintenance, pas une erreur bloquante.
 
-#### Etape d6 — Vérifier et créer les labels GitHub de phase
+#### Etape d6 — Mettre à jour le bloc TEAMLEADER_PROTOCOL dans CLAUDE.md
+
+Le bloc entre `<!-- BEGIN TEAMLEADER_PROTOCOL -->` et `<!-- END TEAMLEADER_PROTOCOL -->` est maintenu par le template.  
+Le remplacer par le contenu actuel de `TEMPLATE_claude/CLAUDE_TEMPLATE.md` (sans toucher au reste du `CLAUDE.md` projet) :
+
+```bash
+# Extraire le bloc du template vers un fichier temporaire
+awk '/<!-- BEGIN TEAMLEADER_PROTOCOL/,/<!-- END TEAMLEADER_PROTOCOL -->/' \
+  TEMPLATE_claude/CLAUDE_TEMPLATE.md > .claude/.protocol-block.tmp
+
+# Remplacer le bloc dans CLAUDE.md
+awk '
+  /<!-- BEGIN TEAMLEADER_PROTOCOL/ { in_block=1; while((getline line < ".claude/.protocol-block.tmp") > 0) print line; next }
+  /<!-- END TEAMLEADER_PROTOCOL -->/ { in_block=0; next }
+  !in_block { print }
+' CLAUDE.md > CLAUDE.md.tmp && mv CLAUDE.md.tmp CLAUDE.md
+
+rm -f .claude/.protocol-block.tmp
+echo "✓ CLAUDE.md — bloc TEAMLEADER_PROTOCOL mis à jour"
+```
+
+> Si `CLAUDE.md` ne contient pas encore les marqueurs (projet initialisé avant cette version du template) :
+> ajouter manuellement la section entre marqueurs ou relancer `/init-project` option a (réinitialisation).
+
+#### Etape d6b — Synchroniser les hooks PreCompact + UserPromptSubmit
+
+Merger `TEMPLATE_claude/settings.json` dans `.claude/settings.json` (même logique qu'à l'init, sans duplication) :
+
+```bash
+if [ ! -f .claude/settings.json ]; then
+  cp TEMPLATE_claude/settings.json .claude/settings.json
+  echo "✓ .claude/settings.json créé"
+else
+  jq -s '
+    .[0] as $base | .[1] as $tmpl |
+    reduce ($tmpl.hooks // {} | to_entries[]) as $e (
+      $base;
+      .hooks[$e.key] = (
+        ((.hooks[$e.key] // []) | map(.hooks[0].command)) as $existing_cmds |
+        (.hooks[$e.key] // []) +
+        ($e.value | map(select(.hooks[0].command as $c | $existing_cmds | index($c) == null)))
+      )
+    )
+  ' .claude/settings.json TEMPLATE_claude/settings.json \
+    > .claude/settings.json.tmp \
+    && mv .claude/settings.json.tmp .claude/settings.json
+  echo "✓ .claude/settings.json — hooks mis à jour (sans duplication)"
+fi
+```
+
+#### Etape d7 — Vérifier et créer les labels GitHub de phase
 
 S'assurer que les labels de suivi existent sur le repo (même commande que l'init, idempotent) :
 
@@ -1136,18 +1249,19 @@ gh label create "EN QA"     --color "f9d0c4" --description "Issue en cours de te
 gh label create "DONE"      --color "0e8a16" --description "Issue livrée et validée"           --force
 ```
 
-#### Etape d7 — Rapport final
+#### Etape d8 — Rapport final
 
 ```
 Synchronisation terminee.
 
-  Commandes mises a jour : N
-  Agents mis a jour      : N
-  Reliquats supprimes    : N
-  Labels GitHub          : vérifiés (PLANNING, EN COURS, EN REVIEW, EN QA, DONE)
+  Commandes mises a jour            : N
+  Agents mis a jour                 : N
+  Reliquats supprimes               : N
+  CLAUDE.md bloc TEAMLEADER_PROTOCOL : mis à jour
+  Labels GitHub                     : vérifiés (PLANNING, EN COURS, EN REVIEW, EN QA, DONE)
 
   Fichiers PROJET preserves (non touches) :
-    ✓ .claude/CLAUDE.md
+    ✓ CLAUDE.md (hors bloc TEAMLEADER_PROTOCOL)
     ✓ .claude/project-config.json
     ✓ .claude/memory/
     ✓ .claude/agents/dev-*.md

@@ -28,3 +28,6 @@ TEMPLATE_claude/
 
 # Dossier de travail inter-agents (rapports et handoffs temporaires)
 _work/
+
+# Build artifacts (qualif : build/qualif/<version>/)
+build/

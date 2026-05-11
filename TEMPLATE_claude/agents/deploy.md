@@ -74,21 +74,25 @@ Avant tout deploiement :
 git status  # Clean working directory
 npm test    # Tests passent
 
-# 2. Build
-npm run build:qualif
-# ou
-docker build -t app:qualif .
+# 2. Build — sortie dans build/qualif/<version>
+VERSION=$(cat {VERSION_FILE})   # adapter selon le projet : package.json, go.mod, etc.
+BUILD_DIR="build/qualif/$VERSION"
+mkdir -p "$BUILD_DIR"
+
+npm run build:qualif -- --outDir "$BUILD_DIR"
+# ou (Docker) : docker build -t app:qualif-$VERSION . && \
+#               docker save app:qualif-$VERSION > "$BUILD_DIR/image.tar"
 
 # 3. Push
 git push origin develop:qualif
 # ou
-docker push registry/app:qualif
+docker push registry/app:qualif-$VERSION
 
 # 4. Smoke tests
 curl -f https://qualif.example.com/health
 
 # 5. Notification
-echo "Deploiement QUALIF termine - v1.2.0"
+echo "Deploiement QUALIF termine - $VERSION → $BUILD_DIR"
 ```
 
 ## Workflow PROD
@@ -283,7 +287,7 @@ docker-compose up -d --force-recreate app:v1.1.0
 - [ ] Branche a jour avec develop/main
 - [ ] Tests unitaires passent
 - [ ] Tests E2E passent
-- [ ] Build reussi
+- [ ] Build reussi → `build/qualif/<version>/`
 - [ ] Variables d'environnement configurees
 
 ### PROD
@@ -365,6 +369,7 @@ Branche : [branche]
 ---------------------------------------
 Environnement : [QUALIF|PROD]
 Version : [X.Y.Z]
+Build dir : build/qualif/[X.Y.Z]/  (QUALIF uniquement)
 Smoke tests : [OK|KO]
 Statut : Deploiement reussi
 ---------------------------------------

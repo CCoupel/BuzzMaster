@@ -47,7 +47,7 @@ Si mise a jour disponible, afficher **avant de continuer** :
 - Si **non** → stopper ici, l'utilisateur lance `/init-project`
 - Si **oui** → continuer avec les etapes suivantes
 
-### Etape 2 — Purge du dossier de travail temporaire
+### Etape 2 — Purge et réinitialisation
 
 ```bash
 rm -rf _work/
@@ -55,6 +55,12 @@ rm -rf _work/
 
 > Supprime les rapports et handoffs d'une session précédente éventuellement non clôturée.
 > Sans risque : `_work/` est gitignored et jamais lu avant le démarrage d'un workflow.
+
+Initialiser `workflow-state.json` (état propre — aucun agent actif) :
+
+```bash
+echo '{"watchdog_active":false,"agents":{}}' > .claude/workflow-state.json
+```
 
 ### Etape 3 — Lecture de la memoire projet
 
@@ -134,6 +140,7 @@ _(Si aucune issue ouverte : "Aucune issue ouverte.")_
 - `/secu [scope]` — Audit securite
 - `/deploy qualif|prod` — Deployer
 - `/context-audit [scope]` — Audit doc projet (doublons, refs cassées, optimisation contexte agents)
+- `/team-status` — État de la team et fermeture des agents inactifs
 - `/end-session` — Cloturer la session
 ```
 

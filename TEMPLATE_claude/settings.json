@@ -1,0 +1,24 @@
+{
+  "hooks": {
+    "PreCompact": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo '=== workflow-state.json (NE PAS PERDRE — état agents actifs) ===' && cat .claude/workflow-state.json 2>/dev/null || echo '{\"watchdog_active\":false,\"agents\":{}}' ; touch .claude/.post-compact"
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "[ -f .claude/.post-compact ] && echo '=== RESTAURATION POST-COMPACTAGE — état agents actifs ===' && cat .claude/workflow-state.json 2>/dev/null && rm -f .claude/.post-compact || true"
+          }
+        ]
+      }
+    ]
+  }
+}

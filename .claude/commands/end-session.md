@@ -128,25 +128,35 @@ git stash list
 Si des changements non commites existent :
 - Demander confirmation : commiter, stasher, ou laisser ?
 
-### 5. PURGE — Nettoyage du dossier de travail temporaire
+### 5. TEAM — Dissolution de la Team
+
+Lire `workflow-state.json` pour identifier les agents actifs (`status: "working"` ou `"idle"`).
+
+Pour chaque agent actif :
+1. `SendMessage({to: "<agent>", content: "shutdown_request"})`
+2. Mettre `status: "pending_delete"` dans `workflow-state.json` — écrire immédiatement
+
+Attendre **30 secondes** les `shutdown_response` :
+- À chaque `shutdown_response` reçu → supprimer l'entrée de `workflow-state.json`
+- Après 30s, pour tout agent encore `"pending_delete"` → `TaskStop(<agent>)` + supprimer l'entrée
+
+Réinitialiser le fichier d'état :
+```bash
+echo '{"watchdog_active":false,"agents":{}}' > .claude/workflow-state.json
+```
+
+Appeler **TeamDelete** avec le nom `TEAM-Buzz` pour dissoudre la team.
+
+Si aucune team n'est active, passer cette etape.
+
+### 6. PURGE — Nettoyage du dossier de travail temporaire
 
 ```bash
 rm -rf _work/
 ```
 
 > `_work/` contient les rapports et handoffs inter-agents de la session (gitignored).
-> Ces fichiers ne sont plus utiles une fois la session terminée — les SHAs git et
-> `workflow-state.json` suffisent pour retracer l'historique.
-
-### 6. TEAM — Dissolution de la Team
-
-Si une team est active (verifier dans CLAUDE.md la valeur de `TEAM-Buzz`) :
-
-1. Envoyer un message de cloture a chaque agent via **SendMessage** :
-   > "Session terminee. Merci pour la session. En attente de la prochaine."
-2. Appeler **TeamDelete** avec le nom `TEAM-Buzz` pour dissoudre la team
-
-Si aucune team n'est active, passer cette etape.
+> Ces fichiers ne sont plus utiles une fois la session terminée.
 
 ### 7. RAPPORT — Rapport de Session
 

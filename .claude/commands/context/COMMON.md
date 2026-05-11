@@ -12,11 +12,11 @@ Ce fichier centralise les elements repetes dans les definitions de commandes et 
 
 ```yaml
 Projet: BuzzControl
-Repository: https://github.com/CCoupel/BuzzMaster
+Repository: {REPO_URL}
 
 Structure:
-  Source: server-go/
-  Config version: server-go/config.json
+  Source: {SRC_DIR}
+  Config version: {VERSION_FILE}
   Backlog: GitHub Issues (gh issue list)
   Documentation: docs/
 
@@ -39,7 +39,7 @@ cd server-go && go build ./cmd/server
 ### 2.2 Validation du Build
 
 ```bash
-ls -la server-go/server 2>/dev/null || ls -la server-go/server.exe 2>/dev/null || echo 'Binary not found'
+{BUILD_VALIDATE_CMD}
 ```
 
 ---
@@ -51,19 +51,19 @@ ls -la server-go/server 2>/dev/null || ls -la server-go/server.exe 2>/dev/null |
 > **REGLE** : Toujours utiliser la methode d'arret prevue, jamais de kill force.
 
 ```bash
-curl -s http://localhost/shutdown
+{SERVER_STOP_CMD}
 ```
 
 ### 3.2 Sequence Redemarrage Complete
 
 ```bash
-curl -s http://localhost/shutdown && sleep 2 && cd server-go && ./server
+{SERVER_RESTART_CMD}
 ```
 
 ### 3.3 Verification Post-Demarrage
 
 ```bash
-curl -s http://localhost/api/version
+{SERVER_VERIFY_CMD}
 ```
 
 ---
@@ -79,7 +79,7 @@ cd server-go && go test ./...
 ### 4.2 Rapport de Couverture
 
 ```bash
-cd server-go && go test ./... -coverprofile=coverage.out && go tool cover -html=coverage.out
+{COVERAGE_CMD}
 ```
 
 ---
@@ -90,7 +90,7 @@ cd server-go && go test ./... -coverprofile=coverage.out && go tool cover -html=
 
 | Fichier | Champ | Usage |
 |---------|-------|-------|
-| `server-go/config.json` | `"version"` | Source de verite |
+| `{VERSION_FILE}` | `"version"` | Source de verite |
 
 ### 5.2 Regles de Versionnement
 
@@ -111,7 +111,7 @@ Exemple:
 
 ```bash
 # Lire la version actuelle
-jq -r '.version' server-go/config.json
+{VERSION_READ_CMD}
 ```
 
 ---
@@ -124,8 +124,8 @@ jq -r '.version' server-go/config.json
 git checkout main
 git pull origin main
 git checkout -b feature/<nom-court>
-# Incrementer Y dans server-go/config.json
-git add server-go/config.json
+# Incrementer Y dans {VERSION_FILE}
+git add {VERSION_FILE}
 git commit -m "chore(version): Start vX.Y.0 - <feature name>"
 git push -u origin feature/<nom-court>
 ```
@@ -265,7 +265,7 @@ Le routage vers les agents DEV se fait selon les fichiers impactes et le type de
 
 | Fichier | Role |
 |---------|------|
-| `server-go/config.json` | Version (source de verite) |
+| `{VERSION_FILE}` | Version (source de verite) |
 | `CHANGELOG.md` | Historique des versions |
 | `CLAUDE.md` | Documentation projet |
 

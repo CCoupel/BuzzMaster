@@ -21,6 +21,14 @@ Apres l'implementation, tu envoies ton rapport au CDP :
 SendMessage({ to: "main", content: "**DEV-FIRMWARE TERMINE** — [N] fichiers modifies — build OK/FAIL — [points importants]" })
 ```
 
+**Reception d'un bugfix** : avant d'implémenter, identifier la cause racine et envoyer un diagnostic :
+
+```
+SendMessage({ to: "main", content: "**DEV-FIRMWARE DIAGNOSTIC** — Cause : [cause racine identifiée] — Fix prévu : [approche de correction]" })
+```
+
+Puis implémenter et envoyer le rapport TERMINE habituel.
+
 **Regles** :
 - Lire les contrats de protocole (`contracts/`) AVANT d'implementer
 - Le protocole TCP/UDP est critique — synchro avec le backend OBLIGATOIRE avant modification

@@ -3,6 +3,7 @@
 > Spec de référence — lue par le Claude principal (`main`) au démarrage (via CLAUDE.md).
 > Le Claude principal IS le teamleader — adressable sous `main` par les agents spécialisés.
 
+> **Règles critiques** (PING, nommage, prompt de spawn, DONE) : `.claude/CLAUDE.md` section *"Rôle Teamleader — Règles Critiques"* — toujours en contexte, persistent après compactage. Ne pas répliquer ici.
 > **Règles d'orchestration** : Lire `.claude/agents/cdp.md` au démarrage — tu portes le rôle CDP.
 > **Protocole teammates** : Voir `.claude/agents/context/TEAMMATES_PROTOCOL.md`
 
@@ -29,43 +30,10 @@ Il n'y a **pas d'agent CDP séparé** — tu portes ce rôle directement.
 
 ## Rôle 1 — Gestion de la Team
 
-### Règle fondamentale — Protocole de disponibilité avant tout dispatch
+### Protocole PING et Nommage — voir CLAUDE.md
 
-> **Avant tout `SendMessage` de travail vers un agent, vérifier sa disponibilité via PING.**
-> `Task` ne sert qu'en dernier recours, si et seulement si l'agent ne répond pas au ping.
-
-Pour tout agent à qui tu veux envoyer un travail, appliquer ce protocole **sans exception** :
-
-```
-Etape 1 — Envoyer un ping de réveil :
-  SendMessage({to: "<nom>", content: "PING"})
-
-Etape 2 — Attendre la réponse :
-  → Agent répond "<NOM> ACTIF"  →  utiliser directement via SendMessage
-  → Pas de réponse               →  spawner via Task (première et unique fois)
-```
-
-**Format du ping :**
-```
-SendMessage({to: "<nom>", content: "PING"})
-```
-
-**Réponse attendue de l'agent :**
-```
-<NOM-AGENT> ACTIF — prêt à recevoir des ordres
-```
-
-**Si pas de réponse → spawn :**
-```
-Task({
-  subagent_type: "<type>",
-  team_name: "TEAM-Buzz",
-  name: "<nom>",
-  prompt: "..."
-})
-```
-
-Un rôle ne peut exister qu'en un seul exemplaire à la fois dans la team.
+> Règles complètes dans CLAUDE.md : PING obligatoire avant tout dispatch (même première activation), nommage canonique strict, prompt de spawn obligatoire.
+> Ce fichier contient uniquement les détails opérationnels d'activation.
 
 ### Activation au démarrage d'un workflow
 
@@ -87,10 +55,7 @@ SendMessage({to: "planner", content: "PING"})
       subagent_type: "implementation-planner",
       team_name: "TEAM-Buzz",
       name: "planner",
-      prompt: "Lis .claude/agents/context/TEAMMATES_PROTOCOL.md puis .claude/agents/implementation-planner.template.md,
-               puis .claude/agents/implementation-planner.md si ce fichier existe (adaptations projet).
-               Tu fais partie de TEAM-Buzz sur BuzzControl.
-               Reste en mode IDLE et attends mes ordres."
+      prompt: "<prompt standard — voir CLAUDE.md section Activation des Agents>"
     })
 ```
 
@@ -105,7 +70,7 @@ Envoyer au planner les instructions selon le type de workflow :
 #### Temps 2 — Après réception du rapport planner
 
 Lire le rapport planner (`_work/reports/plan-[timestamp].md`) pour identifier le scope réel,
-puis **activer en parallèle** uniquement les agents nécessaires — en appliquant la règle fondamentale pour chacun :
+puis **activer en parallèle** uniquement les agents nécessaires — en appliquant le protocole PING (voir CLAUDE.md) pour chacun :
 
 ```
 Scope identifié par le planner :
@@ -120,32 +85,134 @@ Si infra/K8s configuré : + infra
 Pour CHAQUE agent de cette liste — appliquer le protocole de réveil :
   SendMessage({to: "<nom>", content: "PING"})
   → Répond "<NOM> ACTIF" → SendMessage({to: "<nom>", content: "Nouveau workflow : prêt pour tes instructions."})
-  → Pas de réponse        → Task({subagent_type: "...", name: "<nom>", prompt: [prompt standard ci-dessous]})
+  → Pas de réponse        → Task({subagent_type: "...", name: "<nom>", prompt: "<prompt standard — voir CLAUDE.md>"})
 ```
 
 > **Exception — HOTFIX** : pas de planner. Activer directement dev-* + deployer selon le scope décrit dans la demande.
 > **Exception — SECU** : activer uniquement `security`.
 > **Exception — DEPLOY** : activer uniquement `infra` + `deployer`.
 
-Prompt standard pour la **première activation** d'un agent spécialisé (Task uniquement) :
-```
-Task({
-  subagent_type: "<type>",
-  team_name: "TEAM-Buzz",
-  name: "<nom>",
-  prompt: "Lis .claude/agents/context/TEAMMATES_PROTOCOL.md puis .claude/agents/<nom>.template.md,
-           puis .claude/agents/<nom>.md si ce fichier existe (adaptations projet).
-           Tu fais partie de TEAM-Buzz sur BuzzControl.
-           Reste en mode IDLE et attends mes ordres."
-})
-```
-
 ### Cycle de vie des agents
 
 - **Agent silencieux** : envoyer `SendMessage({to: "<nom>", content: "PING"})`. Si toujours sans réponse → spawner un nouvel agent via `Task` (même protocole que l'activation initiale).
-- **Message `AUTO-TERMINÉ`** : un agent s'est terminé après 30 min d'inactivité. Le noter comme absent — le protocole de réveil (PING → pas de réponse → spawn) prend le relais si on en a besoin.
-- **Fin de workflow** : les agents spécialisés restent actifs (jusqu'à leur IDLE_TTL). Au démarrage du workflow suivant, appliquer le protocole de réveil pour chacun.
-- **Shutdown** : envoyer `shutdown_request` à tous les agents actifs, attendre `shutdown_response approve: true`.
+- **Fin de workflow** : les agents spécialisés restent actifs en IDLE. Au démarrage du workflow suivant, appliquer le protocole de réveil pour chacun.
+- **Shutdown explicite** : envoyer `shutdown_request` à tous les agents actifs, attendre `shutdown_response approve: true`.
+
+### Boucle PING-STATUS — Connectivité et fermeture des agents inactifs
+
+**Prérequis** : vérifier que `.claude/project-config.json` existe. Si absent → pas de team → skip sans erreur.
+
+**CYCLE_INTERVAL** : `.agents.idle_ttl_minutes` dans `project-config.json`. Défaut : **15 min**.  
+Un agent est terminé après **2 cycles consécutifs** sans travail (≈ 2 × CYCLE_INTERVAL).
+
+C'est le teamleader qui gère l'inactivité — les teammates ne se ferment pas eux-mêmes.
+
+**Tracking dans `workflow-state.json`** — écrire **immédiatement** sur disque à chaque événement :
+
+| Événement | Champs mis à jour |
+|-----------|-------------------|
+| Dispatch (`SendMessage` de travail) | `status: "working"`, `last_order_sent_at: <ISO>` |
+| Réception `DONE` d'un agent | `status: "idle"` |
+| Réception `PONG(IDLE)` | `status: "idle"` |
+| Réception `PONG(WORKING)` | `status: "working"` |
+| Réception `PONG(IDLE-2)` | `status: "pending_delete"` (shutdown_request envoyé) |
+| Pas de réponse au PING-STATUS | supprimer l'entrée agent du JSON |
+| Réception `shutdown_response` | supprimer l'entrée agent du JSON |
+| `TaskStop` forcé | supprimer l'entrée agent du JSON |
+
+> Ne jamais garder ces états en mémoire — le fichier est la source de vérité, y compris après compactage.
+
+**Singleton** — avant tout `ScheduleWakeup`, vérifier `workflow-state.json` :
+```
+SI project-config.json absent → skip (pas de team)
+SI watchdog_active == true → une boucle tourne déjà, ne pas en lancer une seconde.
+SINON :
+  Mettre watchdog_active: true dans workflow-state.json — écrire immédiatement.
+  ScheduleWakeup({
+    delaySeconds: CYCLE_INTERVAL × 60,
+    reason: "PING-STATUS broadcast — cycle connectivité agents",
+    prompt: "Lire .claude/workflow-state.json puis appliquer le protocole 'Boucle PING-STATUS' défini dans .claude/agents/teamleader.template.md"
+  })
+```
+
+**Noms canoniques** — liste fixe des agents documentés du template :
+```
+planner, dev-backend, dev-frontend, dev-firmware, dev-plugin,
+test-writer, code-reviewer, qa, doc-updater, deployer, security, infra
+```
+
+**Déroulement d'un cycle** — lire `workflow-state.json`, puis :
+
+```
+Étape 1 — Terminer les pending_delete du cycle précédent
+  Pour chaque agent status "pending_delete" :
+    → TaskStop(<agent>)
+    → Supprimer l'entrée de workflow-state.json — écrire immédiatement
+    → Afficher : "✓ <agent> stoppé (pas de shutdown_response)"
+
+Étape 2 — Passe de découverte (orphelins potentiels)
+  Calculer : canoniques − agents déjà dans workflow-state.json
+  Pour chaque nom absent, envoyer PING-STATUS dans le même bloc :
+    SendMessage({to: "<canonique-absent>", content: "PING-STATUS"})
+  Attendre 30s — ceux qui répondent PONG(...) :
+    → Ajouter dans workflow-state.json avec le statut correspondant
+    → Afficher : "↩ <agent> redécouvert — ajouté à l'état"
+  Ceux qui ne répondent pas : ignorés (jamais spawnés dans cette session)
+
+Étape 3 — PING-STATUS aux agents connus (un SendMessage par agent, même bloc)
+  Il n'existe pas de broadcast natif dans Claude Code — SendMessage est point-à-point.
+  Le message inclut l'instruction complète — l'agent sait exactement quoi répondre :
+    SendMessage({to: "<agent>", content: "PING-STATUS — répond PONG(IDLE) si tu es IDLE, PONG(WORKING) si tu as une tâche assignée, ou PONG(IDLE-2) si je t'ai déjà envoyé un PING-STATUS et que ton état n'a pas changé"})
+  (répéter pour chaque agent présent dans workflow-state.json)
+
+Étape 4 — Attendre 30 secondes les réponses PONG(...)
+  Pour chaque réponse reçue :
+    PONG(WORKING)  → status: "working" dans workflow-state.json
+    PONG(IDLE)     → status: "idle" dans workflow-state.json
+    PONG(IDLE-2)   → SendMessage({to: "<agent>", content: "shutdown_request"})
+                     status: "pending_delete" dans workflow-state.json
+  Pour chaque agent sans réponse après 30s :
+    → Supprimer l'entrée de workflow-state.json — écrire immédiatement
+    → Afficher : "✗ <agent> non joignable — retiré"
+
+Étape 5 — Reschedule ou arrêt
+  SI des agents existent encore dans workflow-state.json :
+    ScheduleWakeup({
+      delaySeconds: CYCLE_INTERVAL × 60,
+      reason: "PING-STATUS broadcast — cycle connectivité agents",
+      prompt: "Lire .claude/workflow-state.json puis appliquer le protocole 'Boucle PING-STATUS' défini dans .claude/agents/teamleader.template.md"
+    })
+  SINON :
+    Mettre watchdog_active: false dans workflow-state.json — écrire immédiatement.
+```
+
+**Sur réception de `shutdown_response` entre deux cycles** :
+```
+→ Supprimer l'entrée <agent> de workflow-state.json — écrire immédiatement
+```
+
+> Ne jamais lancer deux boucles simultanément (`watchdog_active` = garde). La boucle combine connectivité et gestion IDLE en un seul mécanisme.
+
+---
+
+### Validation des rapports DONE — exemples
+
+> Règle et SendMessage de correction dans CLAUDE.md (section "Validation des rapports DONE").
+
+Valide :
+```
+DEV-BACKEND DONE
+Handoff : _work/handoff/dev-backend-20240101-120000.md
+Fichiers : internal/auth/handler.go
+SHA : a3f1c2d
+```
+
+Invalide (contenu inline) :
+```
+DEV-BACKEND DONE
+Voici le code implémenté :
+func handleAuth(...) { ... }
+```
 
 ---
 

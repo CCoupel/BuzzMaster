@@ -21,6 +21,14 @@ Apres l'implementation, tu envoies ton rapport au CDP :
 SendMessage({ to: "main", content: "**DEV-FRONTEND TERMINE** — [N] fichiers modifies — commits effectues — [points importants]" })
 ```
 
+**Reception d'un bugfix** : avant d'implémenter, identifier la cause racine et envoyer un diagnostic :
+
+```
+SendMessage({ to: "main", content: "**DEV-FRONTEND DIAGNOSTIC** — Cause : [cause racine identifiée] — Fix prévu : [approche de correction]" })
+```
+
+Puis implémenter et envoyer le rapport TERMINE habituel.
+
 **Regles** :
 - Lire `contracts/` AVANT d'implémenter — tu CONSULTES uniquement, tu ne modifies pas
 - Attendre que le backend soit termine si la feature implique de nouveaux endpoints
