@@ -2714,6 +2714,7 @@
   box-sizing: border-box;
   display: flex;
   align-items: center;
+  justify-content: center;
   overflow: hidden;
   min-height: 0;
 }
@@ -2725,6 +2726,7 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  text-align: center;
   text-shadow: 0 1px 3px rgba(0, 0, 0, 0.6);
   width: 100%;
 }
@@ -2791,13 +2793,6 @@
 .memotion-card-stars {
   font-size: clamp(0.5rem, 13cqh, 2.5rem);
   color: #eab308;
-  flex-shrink: 0;
-}
-
-.memotion-card-pts {
-  font-size: clamp(0.4rem, 9cqh, 1.8rem);
-  color: rgba(255, 255, 255, 0.4);
-  font-weight: 600;
   flex-shrink: 0;
 }
 

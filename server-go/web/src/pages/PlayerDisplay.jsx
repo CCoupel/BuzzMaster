@@ -2026,10 +2026,9 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
                                     <img src={card.RECTO_IMAGE} alt="" className="memotion-card-img" />
                                   )}
                                 </div>
-                                {/* Footer — étoiles + pts */}
+                                {/* Footer — étoiles */}
                                 <div className="memotion-card-footer">
                                   <span className="memotion-card-stars">{'★'.repeat(diff)}</span>
-                                  <span className="memotion-card-pts">{diffPts(diff)}pt</span>
                                 </div>
                               </div>
                             </motion.div>
