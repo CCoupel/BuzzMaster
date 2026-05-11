@@ -22,6 +22,9 @@ verification de l'etat du projet.
 /end-session
     |
     v
+[DOC-CHECK] --> Détecter les changements documentaires → proposer /context-audit
+    |
+    v
 [ETAT] --> Verifier l'etat du projet
     |
     v
@@ -41,6 +44,40 @@ verification de l'etat du projet.
 ```
 
 ## Etapes Detaillees
+
+### 0. DOC-CHECK — Changements documentaires
+
+**Première action, avant tout le reste.**
+
+Détecter si des fichiers de définition projet ont changé depuis le dernier commit sur main :
+
+```bash
+# Fichiers de définition modifiés (commités ou non)
+git diff --name-only main...HEAD -- \
+  'CLAUDE.md' '.claude/agents/' '.claude/commands/' 'TEMPLATE_claude/' \
+  2>/dev/null
+
+git status --short | grep -E '(CLAUDE\.md|\.claude/(agents|commands)|TEMPLATE_claude/)'
+```
+
+Si des changements sont détectés, afficher **avant de continuer** :
+
+```
+⚠️  Changements documentaires détectés :
+   - .claude/commands/context-audit.md  (nouveau)
+   - .claude/agents/qa.md               (modifié)
+   - CLAUDE.md                          (modifié)
+
+   Recommandé : lancer /context-audit pour vérifier cohérence et
+   optimisation avant de clôturer.
+
+   Lancer /context-audit maintenant ? [O/n]
+```
+
+- Si **oui** → suspendre end-session, exécuter `/context-audit`, puis reprendre à l'étape 1
+- Si **non** → continuer end-session normalement
+
+Si aucun changement documentaire → passer directement à l'étape 1 sans message.
 
 ### 1. ETAT — Verification du Projet
 

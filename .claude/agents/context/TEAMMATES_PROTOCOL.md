@@ -78,7 +78,6 @@ Retourner en mode IDLE
 
 - **Jamais d'initiative** — attendre l'ordre du Claude principal
 - **Jamais de communication directe** avec l'utilisateur — tout passe par le CDP
-- **Jamais de contact entre agents** — chaque agent ne parle qu'au CDP
 - **Texte naturel uniquement** — pas de JSON structure dans les messages
 
 ### Livrables — Regle Fondamentale
@@ -232,8 +231,8 @@ SendMessage({
 
 ## 7. Timeout d'inactivité — Auto-terminaison
 
-**IDLE_TTL** : lire `.agents.idle_ttl_minutes` dans `.claude/project-config.json`. Défaut : **30 minutes**.
-**IDLE_WARNING** : lire `.agents.idle_warning_minutes` dans `.claude/project-config.json`. Défaut : **5 minutes**.
+**IDLE_TTL** : lire `.agents.idle_ttl_minutes` dans `.claude/project-config.json`. Défaut : **15 minutes**.
+**IDLE_WARNING_INTERVAL** : lire `.agents.idle_warning_interval_minutes` dans `.claude/project-config.json`. Défaut : **5 minutes**.
 
 Après avoir envoyé le rapport `DONE` et être retourné en IDLE :
 
@@ -241,11 +240,12 @@ Après avoir envoyé le rapport `DONE` et être retourné en IDLE :
 Démarrer le compteur d'inactivité.
 Afficher dans le terminal : "💤 [NOM-AGENT] IDLE — fermeture automatique dans [IDLE_TTL]min si aucun ordre"
 
-Si un ordre arrive avant IDLE_TTL → réinitialiser le compteur, traiter l'ordre.
+Si un ordre arrive → réinitialiser le compteur, traiter l'ordre.
 
-Si (IDLE_TTL - IDLE_WARNING) expire sans ordre :
-  → Afficher : "⏳ [NOM-AGENT] IDLE — fermeture dans [IDLE_WARNING]min"
-  → SendMessage({to: "main", content: "<NOM-AGENT> IDLE — fermeture dans [IDLE_WARNING]min si aucun ordre"})
+Toutes les [IDLE_WARNING_INTERVAL] minutes sans ordre :
+  → remaining = IDLE_TTL - temps_écoulé
+  → Afficher : "⏳ [NOM-AGENT] IDLE — fermeture dans [remaining]min"
+  → SendMessage({to: "main", content: "<NOM-AGENT> IDLE — fermeture dans [remaining]min si aucun ordre"})
   → Continuer à attendre.
 
 Si IDLE_TTL expire sans ordre :
@@ -262,12 +262,12 @@ Le protocole de réveil (PING → pas de réponse → spawn) gère le cas où l'
 
 1. **IDLE par defaut** — l'etat de repos est l'attente, pas le polling
 2. **Un travail a la fois** — terminer une tache avant d'en accepter une autre
-3. **Rapport systematique** — toujours envoyer un rapport au CDP apres chaque tache
+3. **Rapport systematique** — toujours envoyer un rapport DONE au CDP après chaque tâche
 4. **Push proactif** — signaler démarrage (avec M total), EN COURS à chaque étape (N/M + X%), blocages, fin — sans attendre d'être sollicité
 5. **Pas d'initiative** — ne jamais commencer un travail sans ordre du Claude principal
 6. **Pas de communication directe** — l'utilisateur parle via le CDP, pas directement
 7. **Texte naturel** — les messages sont lisibles, pas en JSON
-8. **Auto-terminaison** — se terminer après 30 min d'inactivité (voir §7)
+8. **Auto-terminaison** — se terminer après 15 min d'inactivité (voir §7)
 
 ---
 
@@ -277,7 +277,7 @@ Le protocole de réveil (PING → pas de réponse → spawn) gère le cas où l'
 [AGENT DEMARRE]
 → Lit TEAMMATES_PROTOCOL.md ✓
 → Lit .claude/agents/[nom].template.md ✓ (puis [nom].md si présent)
-→ MODE IDLE — démarre le compteur d'inactivité (IDLE_TTL = 30 min)
+→ MODE IDLE — démarre le compteur d'inactivité (IDLE_TTL = 15 min)
 
 [Teamleader envoie PING via SendMessage]
 → Répondre IMMÉDIATEMENT : SendMessage({to: "main", content: "DEV-BACKEND ACTIF — prêt à recevoir des ordres"})
@@ -294,14 +294,18 @@ Le protocole de réveil (PING → pas de réponse → spawn) gère le cas où l'
 → SendMessage(main, "DEV-BACKEND EN COURS — étape 6/6 — commit atomique — 100%")
 → SendMessage(main, "DEV-BACKEND DONE\nHandoff : _work/handoff/dev-backend-20240101-120000.md\nFichiers : internal/auth/handler.go, internal/auth/handler_test.go\nSHA : a3f1c2d")
 → MODE IDLE — réinitialise le compteur d'inactivité
-→ Affiche : "💤 DEV-BACKEND IDLE — fermeture automatique dans 30min si aucun ordre"
+→ Affiche : "💤 DEV-BACKEND IDLE — fermeture automatique dans 15min si aucun ordre"
 
-[IDLE_WARNING atteint (TTL - 5min) sans nouvel ordre]
+[5min sans nouvel ordre]
+→ Affiche : "⏳ DEV-BACKEND IDLE — fermeture dans 10min"
+→ SendMessage(main, "DEV-BACKEND IDLE — fermeture dans 10min si aucun ordre")
+
+[10min sans nouvel ordre]
 → Affiche : "⏳ DEV-BACKEND IDLE — fermeture dans 5min"
 → SendMessage(main, "DEV-BACKEND IDLE — fermeture dans 5min si aucun ordre")
 
-[IDLE_TTL expire sans nouvel ordre]
-→ SendMessage(main, "DEV-BACKEND AUTO-TERMINÉ — inactivité > 30min")
+[IDLE_TTL (15min) expire sans nouvel ordre]
+→ SendMessage(main, "DEV-BACKEND AUTO-TERMINÉ — inactivité > 15min")
 → Termine la Task
 
 [CDP envoie shutdown_request (si agent encore actif)]

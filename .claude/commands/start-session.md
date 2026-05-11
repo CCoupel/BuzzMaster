@@ -133,6 +133,7 @@ _(Si aucune issue ouverte : "Aucune issue ouverte.")_
 - `/review [scope] [mode]` — Revue de code
 - `/secu [scope]` — Audit securite
 - `/deploy qualif|prod` — Deployer
+- `/context-audit [scope]` — Audit doc projet (doublons, refs cassées, optimisation contexte agents)
 - `/end-session` — Cloturer la session
 ```
 

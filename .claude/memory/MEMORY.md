@@ -19,10 +19,8 @@ Le hook SessionStart a été supprimé — plus de démarrage automatique.
 
 
 - **TeamDelete** : proposer à l'utilisateur après PROD validé, **jamais supprimer automatiquement**
-- **Agents** : prompts génériques uniquement (rôle, pas tâche) — tâches via TaskCreate + TaskUpdate
+- **Spawn agents** : pattern PING → spawn (general-purpose + IDLE) → SendMessage tâche — voir CDP_WORKFLOWS.md §2.bis. Ne jamais mettre la tâche dans le prompt de spawn.
 - **Corrections intra-feature** : SendMessage vers l'agent existant, jamais créer un nouvel agent
 - **Commande /start-session** : créer la TEAM **directement sans demander** confirmation ni sujet. Le nom de la TEAM est **toujours `TEAM-Buzz`**, quelle que soit la session.
 - **Architecture team (v2026-04-30)** : Claude principal (`main`) est l'orchestrateur — pas d'agent CDP séparé. Les agents spécialisés (planner, dev-*, qa...) sont spawnes par `main` au démarrage de chaque workflow, pas au /start-session. Rapports inter-agents vers `main` (plus vers `cdp`). Chemins rapports : `_work/reports/` (plus `.claude/reports/`).
 
-# currentDate
-Today's date is 2026-03-01.

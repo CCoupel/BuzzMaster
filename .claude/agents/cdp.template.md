@@ -283,9 +283,11 @@ SendMessage({ to: "deployer", content: "
 Lire `tests/procedures/[feature].md` (ecrit par le test-writer) et presenter a l'utilisateur :
 
 ```markdown
-## QUALIF prete — Validation manuelle requise
+## ✅ QUALIF deployee — Validation manuelle requise avant PROD
 
 **Version** : [X.Y.Z]   **Branche** : [branche]   **URL** : [url qualif]
+
+> QUALIF est déployée. Tester les scénarios ci-dessous, puis répondre OUI pour lancer le PROD.
 
 ### Ce qu'il faut valider
 

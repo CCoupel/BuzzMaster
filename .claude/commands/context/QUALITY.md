@@ -98,7 +98,7 @@ Ce fichier centralise les patterns partages par les commandes `/code-review`, `/
 cd server-go && go test ./...
 
 # Avec couverture
-{COVERAGE_CMD}
+cd server-go && go test ./... -coverprofile=coverage.out && go tool cover -html=coverage.out
 ```
 
 ---

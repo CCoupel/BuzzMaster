@@ -62,7 +62,7 @@ Lancer dev-backend ET dev-frontend en parallele (2 Task tools)
 
 ```bash
 # Version actuelle
-{VERSION_READ_CMD}
+jq -r '.version' server-go/config.json
 
 # Branche courante
 git branch --show-current
@@ -73,7 +73,7 @@ git branch --show-current
 ```bash
 # AVANT tout code, incrementer z
 # X.Y.Z -> X.Y.Z+1
-git add {VERSION_FILE}
+git add server-go/config.json
 git commit -m "chore(version): Bump to X.Y.Z"
 ```
 
