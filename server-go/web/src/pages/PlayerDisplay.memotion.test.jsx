@@ -490,6 +490,193 @@ describe('PlayerDisplay — MEMOTION layout (bugfix SC1–SC6)', () => {
   })
 
   // -------------------------------------------------------------------------
+  // SC8 — Non-régression bugfix layout fullscreen (1/6 header + 4/6 body + 1/6 timer)
+  //
+  // Bug corrigé : les cards MEMOTION plein écran ne respectaient pas le layout
+  // standard 1/6 + 4/6 + 1/6. Le fix applique un CSS grid `1fr 4fr 1fr` sur
+  // `.memotion-tv-fullscreen` avec header→row1, body→row2, timer→row3.
+  //
+  // Ces tests vérifient la structure DOM qui conditionne le bon fonctionnement
+  // du CSS grid : header, body et timer doivent être des enfants directs du
+  // container `.memotion-tv-fullscreen`.
+  // -------------------------------------------------------------------------
+
+  describe('SC8 — Régression layout fullscreen 1/6-4/6-1/6 (SELECTED)', () => {
+    beforeEach(() => {
+      useGame.mockReturnValue(makeMemotionMock('SELECTED', 'card-1'))
+    })
+
+    it('le container fullscreen a exactement 2 enfants directs (header + body, pas de timer)', () => {
+      const { container } = renderTV()
+      const overlay = container.querySelector('.memotion-tv-fullscreen')
+      expect(overlay).not.toBeNull()
+      // SELECTED = header (row1 CSS grid) + body (row2 CSS grid) — pas de timer
+      expect(overlay.children.length).toBe(2)
+    })
+
+    it('le 1er enfant direct du fullscreen est le header (.memotion-tv-fs-header)', () => {
+      const { container } = renderTV()
+      const overlay = container.querySelector('.memotion-tv-fullscreen')
+      expect(overlay.children[0].classList.contains('memotion-tv-fs-header')).toBe(true)
+    })
+
+    it('le 2e enfant direct du fullscreen est le body (.memotion-tv-fs-body)', () => {
+      const { container } = renderTV()
+      const overlay = container.querySelector('.memotion-tv-fullscreen')
+      expect(overlay.children[1].classList.contains('memotion-tv-fs-body')).toBe(true)
+    })
+
+    it('.memotion-tv-fs-header est enfant DIRECT du fullscreen (pas imbriqué)', () => {
+      const { container } = renderTV()
+      const overlay = container.querySelector('.memotion-tv-fullscreen')
+      // Sélection directe par querySelector puis vérification du parentElement
+      const header = container.querySelector('.memotion-tv-fs-header')
+      expect(header).not.toBeNull()
+      expect(header.parentElement).toBe(overlay)
+    })
+
+    it('.memotion-tv-fs-body est enfant DIRECT du fullscreen (pas imbriqué)', () => {
+      const { container } = renderTV()
+      const overlay = container.querySelector('.memotion-tv-fullscreen')
+      const body = container.querySelector('.memotion-tv-fs-body')
+      expect(body).not.toBeNull()
+      expect(body.parentElement).toBe(overlay)
+    })
+
+    it('SELECTED ne contient PAS de .memotion-tv-fs-timer (zone 1/6 timer absente)', () => {
+      const { container } = renderTV()
+      const overlay = container.querySelector('.memotion-tv-fullscreen')
+      expect(overlay.querySelector('.memotion-tv-fs-timer')).toBeNull()
+    })
+
+    it("l'image dans le body porte la classe memotion-tv-fs-img (object-fit: contain)", () => {
+      const { container } = renderTV()
+      const body = container.querySelector('.memotion-tv-fs-body')
+      const img = body.querySelector('img')
+      expect(img).not.toBeNull()
+      expect(img.classList.contains('memotion-tv-fs-img')).toBe(true)
+    })
+  })
+
+  describe('SC8 — Régression layout fullscreen 1/6-4/6-1/6 (QUESTION)', () => {
+    beforeEach(() => {
+      useGame.mockReturnValue(makeMemotionMock('QUESTION', 'card-1'))
+    })
+
+    it('le container fullscreen a exactement 3 enfants directs (timer + header + body)', () => {
+      const { container } = renderTV()
+      const overlay = container.querySelector('.memotion-tv-fullscreen')
+      expect(overlay).not.toBeNull()
+      // QUESTION = timer (row3 CSS grid) + header (row1) + body (row2)
+      expect(overlay.children.length).toBe(3)
+    })
+
+    it('le 1er enfant DOM du fullscreen est le timer (.memotion-tv-fs-timer)', () => {
+      // Le timer est rendu en premier dans le DOM mais placé en row3 par le CSS grid.
+      // Tout changement d'ordre ici indiquerait une régression sur la structure DOM.
+      const { container } = renderTV()
+      const overlay = container.querySelector('.memotion-tv-fullscreen')
+      expect(overlay.children[0].classList.contains('memotion-tv-fs-timer')).toBe(true)
+    })
+
+    it('le 2e enfant DOM du fullscreen est le header (.memotion-tv-fs-header)', () => {
+      const { container } = renderTV()
+      const overlay = container.querySelector('.memotion-tv-fullscreen')
+      expect(overlay.children[1].classList.contains('memotion-tv-fs-header')).toBe(true)
+    })
+
+    it('le 3e enfant DOM du fullscreen est le body (.memotion-tv-fs-body)', () => {
+      const { container } = renderTV()
+      const overlay = container.querySelector('.memotion-tv-fullscreen')
+      expect(overlay.children[2].classList.contains('memotion-tv-fs-body')).toBe(true)
+    })
+
+    it('.memotion-tv-fs-timer est enfant DIRECT du fullscreen (pas dans le header)', () => {
+      const { container } = renderTV()
+      const overlay = container.querySelector('.memotion-tv-fullscreen')
+      const timer = container.querySelector('.memotion-tv-fs-timer')
+      expect(timer).not.toBeNull()
+      expect(timer.parentElement).toBe(overlay)
+    })
+
+    it('.memotion-tv-fs-header est enfant DIRECT du fullscreen (pas imbriqué)', () => {
+      const { container } = renderTV()
+      const overlay = container.querySelector('.memotion-tv-fullscreen')
+      const header = container.querySelector('.memotion-tv-fs-header')
+      expect(header.parentElement).toBe(overlay)
+    })
+
+    it('.memotion-tv-fs-body est enfant DIRECT du fullscreen (pas imbriqué)', () => {
+      const { container } = renderTV()
+      const overlay = container.querySelector('.memotion-tv-fullscreen')
+      const body = container.querySelector('.memotion-tv-fs-body')
+      expect(body.parentElement).toBe(overlay)
+    })
+
+    it("l'image dans le body porte la classe memotion-tv-fs-img (object-fit: contain)", () => {
+      const { container } = renderTV()
+      const body = container.querySelector('.memotion-tv-fs-body')
+      const img = body.querySelector('img')
+      expect(img).not.toBeNull()
+      expect(img.classList.contains('memotion-tv-fs-img')).toBe(true)
+    })
+  })
+
+  describe('SC8 — Régression layout fullscreen 1/6-4/6-1/6 (REVEAL)', () => {
+    beforeEach(() => {
+      useGame.mockReturnValue(makeMemotionMock('REVEAL', 'card-1'))
+    })
+
+    it('le container fullscreen a exactement 2 enfants directs (header + body, pas de timer)', () => {
+      const { container } = renderTV()
+      const overlay = container.querySelector('.memotion-tv-fullscreen')
+      expect(overlay).not.toBeNull()
+      // REVEAL = header (row1 CSS grid) + body (row2 CSS grid) — pas de timer
+      expect(overlay.children.length).toBe(2)
+    })
+
+    it('le 1er enfant direct du fullscreen est le header (.memotion-tv-fs-header)', () => {
+      const { container } = renderTV()
+      const overlay = container.querySelector('.memotion-tv-fullscreen')
+      expect(overlay.children[0].classList.contains('memotion-tv-fs-header')).toBe(true)
+    })
+
+    it('le 2e enfant direct du fullscreen est le body (.memotion-tv-fs-body)', () => {
+      const { container } = renderTV()
+      const overlay = container.querySelector('.memotion-tv-fullscreen')
+      expect(overlay.children[1].classList.contains('memotion-tv-fs-body')).toBe(true)
+    })
+
+    it('REVEAL ne contient PAS de .memotion-tv-fs-timer (zone 1/6 timer absente)', () => {
+      const { container } = renderTV()
+      const overlay = container.querySelector('.memotion-tv-fullscreen')
+      expect(overlay.querySelector('.memotion-tv-fs-timer')).toBeNull()
+    })
+
+    it('.memotion-tv-fs-header est enfant DIRECT du fullscreen (pas imbriqué)', () => {
+      const { container } = renderTV()
+      const overlay = container.querySelector('.memotion-tv-fullscreen')
+      const header = container.querySelector('.memotion-tv-fs-header')
+      expect(header.parentElement).toBe(overlay)
+    })
+
+    it('.memotion-tv-fs-body est enfant DIRECT du fullscreen (pas imbriqué)', () => {
+      const { container } = renderTV()
+      const overlay = container.querySelector('.memotion-tv-fullscreen')
+      const body = container.querySelector('.memotion-tv-fs-body')
+      expect(body.parentElement).toBe(overlay)
+    })
+
+    it("l'image dans le body porte la classe memotion-tv-fs-img (object-fit: contain)", () => {
+      const { container } = renderTV()
+      const body = container.querySelector('.memotion-tv-fs-body')
+      const img = body.querySelector('img')
+      expect(img).not.toBeNull()
+      expect(img.classList.contains('memotion-tv-fs-img')).toBe(true)
+    })
+  })
+
+  // -------------------------------------------------------------------------
   // SC7 — Non-régression bugfix UI cartes MEMOTION
   //        • Suppression du span .memotion-card-pts dans le footer
   //        • Structure header : un seul enfant (.memotion-card-title)
