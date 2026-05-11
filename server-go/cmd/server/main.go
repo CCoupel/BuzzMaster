@@ -9,6 +9,7 @@ import (
 	"buzzcontrol/web"
 	"context"
 	"encoding/json"
+	"flag"
 	"fmt"
 	"log"
 	"math"
@@ -51,9 +52,22 @@ type App struct {
 	bumperBuzzState map[string]game.BuzzState
 }
 
+// resolvePort returns the effective HTTP port.
+// If flagPort > 0 it takes precedence over configPort (--port CLI flag).
+func resolvePort(configPort, flagPort int) int {
+	if flagPort > 0 {
+		return flagPort
+	}
+	return configPort
+}
+
 func main() {
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
 	log.Println("=== BuzzControl Server (Go) ===")
+
+	// Parse CLI flags — must happen before any flag.Xxx() call
+	portFlag := flag.Int("port", 0, "HTTP port to listen on (overrides config.json)")
+	flag.Parse()
 
 	// Check for Bonjour/mDNS support
 	checkBonjourSupport()
@@ -64,6 +78,9 @@ func main() {
 		log.Printf("Using default configuration: %v", err)
 		cfg = config.Get()
 	}
+
+	// --port flag overrides config.json when provided
+	cfg.Server.HTTPPort = resolvePort(cfg.Server.HTTPPort, *portFlag)
 
 	// Override version with embedded value (set via -ldflags at build time)
 	if Version != "dev" {
