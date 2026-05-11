@@ -291,13 +291,13 @@ describe('PlayerDisplay — MEMOTION layout (bugfix SC1–SC6)', () => {
   })
 
   // -------------------------------------------------------------------------
-  // SC4 — QUESTION : timer sibling du header, image + texte dans body
+  // SC4 — QUESTION : overlay démarre à top:10vh — timer visible dans zone-timer au-dessus
   //
   // Structure JSX réelle (QUESTION) :
-  //   .memotion-tv-fullscreen
-  //     .memotion-tv-fs-timer   ← row 1 CSS grid (Timer)
-  //     .memotion-tv-fs-header  ← row 2 CSS grid (thème + étoiles + équipe)
-  //     .memotion-tv-fs-body    ← row 3 CSS grid (QUESTION_IMAGE + QUESTION_TEXT)
+  //   .memotion-tv-fullscreen  [position: fixed, top: 10vh]
+  //     .memotion-tv-fs-header  ← thème + étoiles + pts + équipe
+  //     .memotion-tv-fs-body    ← QUESTION_IMAGE + QUESTION_TEXT
+  //   (timer dans .zone-timer de la grille, au-dessus de l'overlay — non dimmed)
   // -------------------------------------------------------------------------
 
   describe('SC4 — QUESTION subphase', () => {
@@ -310,14 +310,15 @@ describe('PlayerDisplay — MEMOTION layout (bugfix SC1–SC6)', () => {
       expect(container.querySelector('.memotion-tv-fullscreen')).not.toBeNull()
     })
 
-    it('le timer est un sibling direct dans .memotion-tv-fullscreen (.memotion-tv-fs-timer)', () => {
+    it("le timer n'est PAS à l'intérieur de l'overlay — il reste dans zone-timer au-dessus", () => {
+      // Le timer est rendu dans .zone-timer de la grille sous-jacente (non dimmed).
+      // L'overlay débute à top:10vh pour laisser le timer visible.
       const { container } = renderTV()
       const overlay = container.querySelector('.memotion-tv-fullscreen')
       expect(overlay).not.toBeNull()
-      // .memotion-tv-fs-timer est un enfant direct du fullscreen (pas dans le header)
-      const timerWrapper = overlay.querySelector('.memotion-tv-fs-timer')
-      expect(timerWrapper).not.toBeNull()
-      expect(timerWrapper.querySelector('[data-testid="timer"]')).not.toBeNull()
+      expect(overlay.querySelector('.memotion-tv-fs-timer')).toBeNull()
+      // Le Timer est quand même rendu quelque part dans la page (dans zone-timer)
+      expect(container.querySelector('[data-testid="timer"]')).not.toBeNull()
     })
 
     it('le header ne contient PAS de timer (contrairement à une version antérieure)', () => {
@@ -359,12 +360,13 @@ describe('PlayerDisplay — MEMOTION layout (bugfix SC1–SC6)', () => {
   })
 
   // -------------------------------------------------------------------------
-  // SC5 — REVEAL : header thème sans timer, image + texte vert dans body
+  // SC5 — REVEAL : header thème, body image (ou texte fallback), footer texte si image+texte
   //
   // Structure JSX réelle (REVEAL) :
-  //   .memotion-tv-fullscreen.memotion-tv-reveal
+  //   .memotion-tv-fullscreen.memotion-tv-reveal  [position: fixed, top: 10vh]
   //     .memotion-tv-fs-header  ← thème + étoiles + pts (pas d'équipe, pas de timer)
-  //     .memotion-tv-fs-body    ← ANSWER_IMAGE + ANSWER_TEXT (.memotion-tv-answer-text)
+  //     .memotion-tv-fs-body    ← ANSWER_IMAGE si dispo, sinon ANSWER_TEXT (fallback texte seul)
+  //     .memotion-tv-fs-footer  ← ANSWER_TEXT uniquement si ANSWER_IMAGE && ANSWER_TEXT coexistent
   // -------------------------------------------------------------------------
 
   describe('SC5 — REVEAL subphase', () => {
@@ -398,12 +400,12 @@ describe('PlayerDisplay — MEMOTION layout (bugfix SC1–SC6)', () => {
       expect(img.getAttribute('src')).toBe('/files/a1.jpg')
     })
 
-    it('le body fullscreen affiche l\'ANSWER_TEXT avec la classe memotion-tv-answer-text (vert)', () => {
+    it('quand ANSWER_IMAGE est présente, le body contient l\'image et PAS le texte réponse', () => {
+      // card-1 a ANSWER_IMAGE → body = image uniquement; ANSWER_TEXT est dans le footer
       const { container } = renderTV()
       const body = container.querySelector('.memotion-tv-fs-body')
-      const answerText = body.querySelector('.memotion-tv-answer-text')
-      expect(answerText).not.toBeNull()
-      expect(answerText.textContent).toBe("L'Empire contre-attaque (Épisode V)")
+      expect(body.querySelector('img.memotion-tv-fs-img')).not.toBeNull()
+      expect(body.querySelector('.memotion-tv-answer-text')).toBeNull()
     })
 
     it('le body ne contient pas de texte si ANSWER_TEXT est absent', () => {
@@ -412,6 +414,34 @@ describe('PlayerDisplay — MEMOTION layout (bugfix SC1–SC6)', () => {
       const { container } = renderTV()
       const body = container.querySelector('.memotion-tv-fs-body')
       expect(body.querySelector('.memotion-tv-fs-text')).toBeNull()
+    })
+
+    // --- Footer (.memotion-tv-fs-footer) ---
+
+    it('quand ANSWER_IMAGE && ANSWER_TEXT, le footer est présent et contient le texte réponse', () => {
+      // card-1 a les deux → footer visible avec ANSWER_TEXT
+      const { container } = renderTV()
+      const footer = container.querySelector('.memotion-tv-fs-footer')
+      expect(footer).not.toBeNull()
+      expect(footer.textContent).toBe("L'Empire contre-attaque (Épisode V)")
+    })
+
+    it('quand ANSWER_IMAGE sans ANSWER_TEXT, le footer est absent', () => {
+      const cardImgOnly = { ...CARD_WITH_IMG, ANSWER_TEXT: undefined }
+      useGame.mockReturnValue(makeMemotionMock('REVEAL', 'card-1', [cardImgOnly, CARD_NO_IMG]))
+      const { container } = renderTV()
+      expect(container.querySelector('.memotion-tv-fs-footer')).toBeNull()
+    })
+
+    it('quand ANSWER_TEXT sans ANSWER_IMAGE, le texte réponse est dans le body (fallback) et pas de footer', () => {
+      // card-2 n'a pas d'ANSWER_IMAGE → texte fallback dans body via .memotion-tv-answer-text
+      useGame.mockReturnValue(makeMemotionMock('REVEAL', 'card-2'))
+      const { container } = renderTV()
+      const body = container.querySelector('.memotion-tv-fs-body')
+      const textEl = body.querySelector('.memotion-tv-answer-text')
+      expect(textEl).not.toBeNull()
+      expect(textEl.textContent).toBe('Victor Hugo')
+      expect(container.querySelector('.memotion-tv-fs-footer')).toBeNull()
     })
   })
 
@@ -563,40 +593,37 @@ describe('PlayerDisplay — MEMOTION layout (bugfix SC1–SC6)', () => {
       useGame.mockReturnValue(makeMemotionMock('QUESTION', 'card-1'))
     })
 
-    it('le container fullscreen a exactement 3 enfants directs (timer + header + body)', () => {
+    it('le container fullscreen a exactement 2 enfants directs (header + body)', () => {
       const { container } = renderTV()
       const overlay = container.querySelector('.memotion-tv-fullscreen')
       expect(overlay).not.toBeNull()
-      // QUESTION = timer (row3 CSS grid) + header (row1) + body (row2)
-      expect(overlay.children.length).toBe(3)
+      // QUESTION = header + body — le timer est dans zone-timer au-dessus de l'overlay (top:10vh)
+      expect(overlay.children.length).toBe(2)
     })
 
-    it('le 1er enfant DOM du fullscreen est le timer (.memotion-tv-fs-timer)', () => {
-      // Le timer est rendu en premier dans le DOM mais placé en row3 par le CSS grid.
-      // Tout changement d'ordre ici indiquerait une régression sur la structure DOM.
+    it('le 1er enfant DOM du fullscreen est le header (.memotion-tv-fs-header)', () => {
       const { container } = renderTV()
       const overlay = container.querySelector('.memotion-tv-fullscreen')
-      expect(overlay.children[0].classList.contains('memotion-tv-fs-timer')).toBe(true)
+      expect(overlay.children[0].classList.contains('memotion-tv-fs-header')).toBe(true)
     })
 
-    it('le 2e enfant DOM du fullscreen est le header (.memotion-tv-fs-header)', () => {
+    it('le 2e enfant DOM du fullscreen est le body (.memotion-tv-fs-body)', () => {
       const { container } = renderTV()
       const overlay = container.querySelector('.memotion-tv-fullscreen')
-      expect(overlay.children[1].classList.contains('memotion-tv-fs-header')).toBe(true)
+      expect(overlay.children[1].classList.contains('memotion-tv-fs-body')).toBe(true)
     })
 
-    it('le 3e enfant DOM du fullscreen est le body (.memotion-tv-fs-body)', () => {
+    it("l'overlay QUESTION ne contient PAS de .memotion-tv-fs-timer", () => {
+      // Le timer est dans zone-timer de la grille, au-dessus de l'overlay (top:10vh) — non dimmed.
       const { container } = renderTV()
       const overlay = container.querySelector('.memotion-tv-fullscreen')
-      expect(overlay.children[2].classList.contains('memotion-tv-fs-body')).toBe(true)
+      expect(overlay.querySelector('.memotion-tv-fs-timer')).toBeNull()
     })
 
-    it('.memotion-tv-fs-timer est enfant DIRECT du fullscreen (pas dans le header)', () => {
+    it("le timer global [data-testid='timer'] est quand même rendu dans la page (zone-timer)", () => {
+      // Régression : le timer ne doit pas disparaître — juste ne plus être dans l'overlay.
       const { container } = renderTV()
-      const overlay = container.querySelector('.memotion-tv-fullscreen')
-      const timer = container.querySelector('.memotion-tv-fs-timer')
-      expect(timer).not.toBeNull()
-      expect(timer.parentElement).toBe(overlay)
+      expect(container.querySelector('[data-testid="timer"]')).not.toBeNull()
     })
 
     it('.memotion-tv-fs-header est enfant DIRECT du fullscreen (pas imbriqué)', () => {
@@ -627,12 +654,12 @@ describe('PlayerDisplay — MEMOTION layout (bugfix SC1–SC6)', () => {
       useGame.mockReturnValue(makeMemotionMock('REVEAL', 'card-1'))
     })
 
-    it('le container fullscreen a exactement 2 enfants directs (header + body, pas de timer)', () => {
+    it('le container fullscreen a exactement 3 enfants directs (header + body + footer) quand image + texte', () => {
       const { container } = renderTV()
       const overlay = container.querySelector('.memotion-tv-fullscreen')
       expect(overlay).not.toBeNull()
-      // REVEAL = header (row1 CSS grid) + body (row2 CSS grid) — pas de timer
-      expect(overlay.children.length).toBe(2)
+      // card-1 a ANSWER_IMAGE && ANSWER_TEXT → header + body (image) + footer (texte) = 3 enfants
+      expect(overlay.children.length).toBe(3)
     })
 
     it('le 1er enfant direct du fullscreen est le header (.memotion-tv-fs-header)', () => {
