@@ -2832,23 +2832,36 @@
   opacity: 0.25;
 }
 
+/* MEMOTION — wrapper du contenu grille (hors zone-timer) : dimmed séparément */
+.memotion-grid-body {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  width: 100%;
+  align-items: center;
+}
+
 /* MEMOTION — SELECTED fullscreen: hérite du grid de memotion-tv-fullscreen */
 .memotion-tv-selected {
   background: #1a1a2e;
 }
 
-/* --- SELECTED / QUESTION / REVEAL subphases (fullscreen) --- */
-/* Grid 3 lignes : 1/6 header + 4/6 body + 1/6 (timer ou vide) */
+/* --- SELECTED / QUESTION / REVEAL subphases (fullscreen) ---
+   Overlay positionné via style inline: top: 10vh, left/right/bottom: 0
+   → chronomètre (zone-timer 10vh) reste visible au-dessus.
+   Grid 3 lignes : 1/6 header (question) + 4/6 body (image) + 1/6 footer (réponse) */
 .memotion-tv-fullscreen {
   display: grid;
   grid-template-rows: 1fr 4fr 1fr;
   width: 100%;
-  height: 100%;
   overflow: hidden;
   padding: 1vh 3vw;
   gap: 0;
   background: #1a1a2e;
   box-sizing: border-box;
+  container-type: size;
 }
 
 .memotion-tv-fs-header {
@@ -2863,26 +2876,26 @@
 }
 
 .memotion-tv-fs-theme {
-  font-size: clamp(2rem, 5vw, 4rem);
+  font-size: clamp(1.5rem, 7cqh, 4rem);
   font-weight: 900;
   color: white;
   text-shadow: 0 2px 8px rgba(0,0,0,0.5);
 }
 
 .memotion-tv-fs-diff {
-  font-size: clamp(1.8rem, 3.5vw, 3rem);
+  font-size: clamp(1.2rem, 5cqh, 3rem);
   color: #eab308;
   text-shadow: 0 0 12px rgba(234,179,8,0.6);
 }
 
 .memotion-tv-fs-pts {
-  font-size: clamp(1.2rem, 2vw, 2rem);
+  font-size: clamp(0.8rem, 3cqh, 2rem);
   font-weight: 700;
   color: rgba(255,255,255,0.6);
 }
 
 .memotion-tv-fs-team {
-  font-size: clamp(1.5rem, 3vw, 2.5rem);
+  font-size: clamp(1rem, 5cqh, 2.5rem);
   font-weight: 800;
   margin-left: auto;
   text-shadow: 0 2px 8px rgba(0,0,0,0.5);
@@ -2905,7 +2918,7 @@
 }
 
 .memotion-tv-fs-text {
-  font-size: clamp(2rem, 5vw, 4.5rem);
+  font-size: clamp(1.5rem, 10cqh, 4.5rem);
   font-weight: 700;
   color: white;
   text-align: center;
@@ -2923,10 +2936,19 @@
   background: #1a1a2e;
 }
 
-.memotion-tv-fs-timer {
+/* Footer (row 3) — affiche la réponse en phase REVEAL */
+.memotion-tv-fs-footer {
   grid-row: 3;
-  max-width: 10vw;
-  flex-shrink: 0;
   display: flex;
+  align-items: center;
   justify-content: center;
+  overflow: hidden;
+  min-height: 0;
+  padding: 0.5vh 2vw;
+  font-size: clamp(1.2rem, 7cqh, 3.5rem);
+  font-weight: 800;
+  color: #4ade80;
+  text-shadow: 0 2px 16px rgba(74,222,128,0.4);
+  text-align: center;
+  line-height: 1.2;
 }

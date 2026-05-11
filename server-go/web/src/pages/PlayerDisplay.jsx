@@ -1912,8 +1912,8 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
 
               /* ---- Grille (toujours rendue pour que layoutId fonctionne) ---- */
               const gridView = (
-                <div className={`game-content-zones memory-game memotion-game${isMotionFullscreen ? ' memotion-grid-dimmed' : ''}`}>
-                  {/* Zone 1: Timer */}
+                <div className="game-content-zones memory-game memotion-game">
+                  {/* Zone 1: Timer — reste visible (non dimmed) quand fullscreen overlay actif */}
                   <div className="zone-timer">
                     <Timer
                       currentTime={gameState.timer}
@@ -1923,6 +1923,9 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
                       showPhase={false}
                     />
                   </div>
+
+                  {/* Zones 2-4: contenu grille — dimmed séparément quand overlay actif */}
+                  <div className={`memotion-grid-body${isMotionFullscreen ? ' memotion-grid-dimmed' : ''}`}>
 
                   {/* Zone 2: Current team or READY message */}
                   <div className="zone-question">
@@ -2062,6 +2065,8 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
                       </div>
                     )}
                   </div>
+
+                  </div>{/* /memotion-grid-body */}
                 </div>
               )
 
@@ -2110,15 +2115,17 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
                 const rect = selectedEl ? selectedEl.getBoundingClientRect() : null
                 const W = window.innerWidth || 1920
                 const H = window.innerHeight || 1080
+                // overlay starts at top: 10vh → inset top is relative to overlay top edge
+                const timerH = H * 0.1
                 const clipStart = rect
-                  ? `inset(${rect.top}px ${W - rect.right}px ${H - rect.bottom}px ${rect.left}px round 8px)`
+                  ? `inset(${Math.max(0, rect.top - timerH)}px ${W - rect.right}px ${H - rect.bottom}px ${rect.left}px round 8px)`
                   : 'inset(40% 30% 40% 30% round 8px)'
                 const clipEnd = 'inset(0px 0px 0px 0px round 0px)'
                 motionOverlay = (
                   <motion.div
                     key={`memotion-selected-${selectedId}`}
                     className="memotion-tv-fullscreen memotion-tv-selected"
-                    style={{ position: 'fixed', inset: 0, zIndex: 10 }}
+                    style={{ position: 'fixed', top: '10vh', left: 0, right: 0, bottom: 0, zIndex: 10 }}
                     initial={{ clipPath: clipStart }}
                     animate={{ clipPath: clipEnd }}
                     transition={{ duration: 0.45, ease: [0.4, 0, 0.2, 1] }}
@@ -2168,17 +2175,8 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
                     animate={{ rotateY: 0 }}
                     exit={{ rotateY: 90, transition: { duration: 0.35 } }}
                     transition={{ duration: 0.5, ease: [0.4, 0, 0.2, 1] }}
-                    style={{ position: 'fixed', inset: 0, zIndex: 10, perspective: '1200px' }}
+                    style={{ position: 'fixed', top: '10vh', left: 0, right: 0, bottom: 0, zIndex: 10, perspective: '1200px' }}
                   >
-                    <div className="memotion-tv-fs-timer">
-                      <Timer
-                        currentTime={gameState.timer}
-                        totalTime={gameState.totalTime}
-                        phase={gameState.phase}
-                        size="lg"
-                        showPhase={false}
-                      />
-                    </div>
                     <div className="memotion-tv-fs-header">
                       <span className="memotion-tv-fs-theme">{selectedCard.RECTO_THEME}</span>
                       <span className="memotion-tv-fs-diff">{'★'.repeat(diff)}</span>
@@ -2221,8 +2219,10 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
                 const rect = selectedEl ? selectedEl.getBoundingClientRect() : null
                 const W = window.innerWidth || 1920
                 const H = window.innerHeight || 1080
+                // overlay starts at top: 10vh → inset top is relative to overlay top edge
+                const timerH = H * 0.1
                 const clipStart = rect
-                  ? `inset(${rect.top}px ${W - rect.right}px ${H - rect.bottom}px ${rect.left}px round 8px)`
+                  ? `inset(${Math.max(0, rect.top - timerH)}px ${W - rect.right}px ${H - rect.bottom}px ${rect.left}px round 8px)`
                   : 'inset(40% 30% 40% 30% round 8px)'
                 motionOverlay = (
                   <motion.div
@@ -2232,15 +2232,16 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
                     animate={{ clipPath: 'inset(0px 0px 0px 0px round 0px)', rotateY: 0 }}
                     exit={{ clipPath: clipStart, transition: { duration: 0.35, ease: 'easeIn' } }}
                     transition={{ duration: 0.5, ease: [0.4, 0, 0.2, 1] }}
-                    style={{ position: 'fixed', inset: 0, zIndex: 10, perspective: '1200px' }}
+                    style={{ position: 'fixed', top: '10vh', left: 0, right: 0, bottom: 0, zIndex: 10, perspective: '1200px' }}
                   >
                     <div className="memotion-tv-fs-header">
                       <span className="memotion-tv-fs-theme">{selectedCard.RECTO_THEME}</span>
                       <span className="memotion-tv-fs-diff">{'★'.repeat(diff)}</span>
                       <span className="memotion-tv-fs-pts">{diffPts(diff)}pt</span>
                     </div>
+                    {/* Body: image réponse si dispo, sinon texte réponse (fallback) */}
                     <div className="memotion-tv-fs-body">
-                      {selectedCard.ANSWER_IMAGE && (
+                      {selectedCard.ANSWER_IMAGE ? (
                         <motion.img
                           src={selectedCard.ANSWER_IMAGE}
                           alt=""
@@ -2249,8 +2250,7 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
                           animate={{ opacity: 1, scale: 1 }}
                           transition={{ delay: 0.3 }}
                         />
-                      )}
-                      {selectedCard.ANSWER_TEXT && (
+                      ) : selectedCard.ANSWER_TEXT ? (
                         <motion.p
                           className="memotion-tv-fs-text memotion-tv-answer-text"
                           initial={{ opacity: 0, y: 20 }}
@@ -2259,8 +2259,19 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
                         >
                           {selectedCard.ANSWER_TEXT}
                         </motion.p>
-                      )}
+                      ) : null}
                     </div>
+                    {/* Footer: texte réponse quand image + texte coexistent */}
+                    {selectedCard.ANSWER_IMAGE && selectedCard.ANSWER_TEXT && (
+                      <motion.div
+                        className="memotion-tv-fs-footer"
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: 0.45 }}
+                      >
+                        {selectedCard.ANSWER_TEXT}
+                      </motion.div>
+                    )}
                   </motion.div>
                 )
               }
