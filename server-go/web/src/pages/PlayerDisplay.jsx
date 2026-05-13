@@ -2123,7 +2123,7 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
                   <motion.div
                     key={`memotion-selected-${selectedId}`}
                     className="memotion-tv-fullscreen memotion-tv-selected"
-                    style={{ position: 'fixed', top: '10vh', left: 0, right: 0, bottom: 0, zIndex: 10 }}
+                    style={{ position: 'absolute', top: '10vh', left: 0, right: 0, bottom: 0, zIndex: 10 }}
                     initial={{ clipPath: clipStart }}
                     animate={{ clipPath: clipEnd }}
                     transition={{ duration: 0.45, ease: [0.4, 0, 0.2, 1] }}
@@ -2172,7 +2172,7 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
                     animate={{ rotateY: 0 }}
                     exit={{ rotateY: 90, transition: { duration: 0.35 } }}
                     transition={{ duration: 0.5, ease: [0.4, 0, 0.2, 1] }}
-                    style={{ position: 'fixed', top: '10vh', left: 0, right: 0, bottom: 0, zIndex: 10, perspective: '1200px' }}
+                    style={{ position: 'absolute', top: '10vh', left: 0, right: 0, bottom: 0, zIndex: 10, perspective: '1200px' }}
                   >
                     {/* Row 1 : Texte de la question */}
                     <div className="memotion-tv-fs-header memotion-tv-fs-recto-zone">
@@ -2225,7 +2225,7 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
                     animate={{ clipPath: 'inset(0px 0px 0px 0px round 0px)', rotateY: 0 }}
                     exit={{ clipPath: clipStart, transition: { duration: 0.35, ease: 'easeIn' } }}
                     transition={{ duration: 0.5, ease: [0.4, 0, 0.2, 1] }}
-                    style={{ position: 'fixed', top: '10vh', left: 0, right: 0, bottom: 0, zIndex: 10, perspective: '1200px' }}
+                    style={{ position: 'absolute', top: '10vh', left: 0, right: 0, bottom: 0, zIndex: 10, perspective: '1200px' }}
                   >
                     {/* Row 1 : Rappel de la question */}
                     <div className="memotion-tv-fs-header memotion-tv-fs-recto-zone">

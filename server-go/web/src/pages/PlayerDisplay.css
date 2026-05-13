@@ -2867,11 +2867,18 @@
 }
 
 /* MEMOTION : supprime le padding game-display pour aligner zone-timer (10vh)
-   avec l'overlay fullscreen (position: fixed; top: 10vh).
+   avec l'overlay fullscreen (position: absolute; top: 10vh).
    Sans ce reset, le padding 0.5rem de game-display décale zone-timer vers le bas
    et l'overlay recouvre les 0.5rem inférieurs du chronomètre. */
 .game-display:has(.memotion-game) {
   padding: 0;
+}
+
+/* MEMOTION : zone-timer toujours au-dessus des overlays fullscreen (zIndex: 10).
+   position: relative requis pour que z-index soit pris en compte. */
+.memotion-game .zone-timer {
+  position: relative;
+  z-index: 20;
 }
 
 /* MEMOTION — SELECTED fullscreen: hérite du grid de memotion-tv-fullscreen */
