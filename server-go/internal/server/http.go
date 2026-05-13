@@ -99,11 +99,34 @@ func (h *HTTPServer) SetWebDir(dir string) {
 	h.webDir = dir
 }
 
+// lingerListener wraps a net.Listener and sets SO_LINGER(0) on every accepted
+// connection. With linger=0 the kernel sends a TCP RST instead of the normal
+// FIN/ACK sequence when the connection is closed, which prevents the socket
+// from entering TIME_WAIT. This lets the server port be reused immediately
+// after a restart on all platforms (Linux and Windows).
+type lingerListener struct{ net.Listener }
+
+func newLingerListener(l net.Listener) *lingerListener { return &lingerListener{l} }
+
+func (l *lingerListener) Accept() (net.Conn, error) {
+	conn, err := l.Listener.Accept()
+	if err != nil {
+		return nil, err
+	}
+	if tc, ok := conn.(*net.TCPConn); ok {
+		_ = tc.SetLinger(0) // RST on close → no TIME_WAIT
+	}
+	return conn, nil
+}
+
 // Start begins the HTTP server.
 //
-// The listener is created with SO_REUSEADDR so the server can immediately
-// rebind after a forceful process termination (e.g. console window closed on
-// Windows), even if the previous socket is still in TIME_WAIT.
+// Two layers of defense against port-busy on restart:
+//  1. newReuseAddrListener sets SO_REUSEADDR so the server can bind
+//     immediately even if the port is still in TIME_WAIT.
+//  2. lingerListener sets SO_LINGER(0) on every accepted connection so
+//     that closing it sends RST instead of FIN, eliminating TIME_WAIT
+//     for client connections on both Linux and Windows.
 func (h *HTTPServer) Start() error {
 	h.setupRoutes()
 
@@ -116,8 +139,6 @@ func (h *HTTPServer) Start() error {
 	LogInfo(game.LogComponentHTTP, "Server starting on port %d", h.port)
 	go func() {
 		for {
-			// newReuseAddrListener sets SO_REUSEADDR on the socket so we can
-			// bind immediately even if the port is in TIME_WAIT.
 			ln, err := newReuseAddrListener("tcp", addr)
 			if err != nil {
 				if isPortInUse(err) {
@@ -128,7 +149,7 @@ func (h *HTTPServer) Start() error {
 				LogError(game.LogComponentHTTP, "Server error (listener): %v", err)
 				return
 			}
-			err = h.server.Serve(ln)
+			err = h.server.Serve(newLingerListener(ln))
 			if errors.Is(err, http.ErrServerClosed) {
 				return
 			}
