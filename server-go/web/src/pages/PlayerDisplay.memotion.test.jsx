@@ -293,10 +293,11 @@ describe('PlayerDisplay — MEMOTION layout (bugfix SC1–SC6)', () => {
   // -------------------------------------------------------------------------
   // SC4 — QUESTION : overlay démarre à top:10vh — timer visible dans zone-timer au-dessus
   //
-  // Structure JSX réelle (QUESTION) :
+  // Structure JSX réelle (QUESTION) — post bugfix #77 :
   //   .memotion-tv-fullscreen  [position: fixed, top: 10vh]
-  //     .memotion-tv-fs-header  ← thème + étoiles + pts + équipe
-  //     .memotion-tv-fs-body    ← QUESTION_IMAGE + QUESTION_TEXT
+  //     .memotion-tv-fs-header  ← QUESTION_TEXT via .memotion-tv-fs-question-text (row1)
+  //     .memotion-tv-fs-body    ← QUESTION_IMAGE uniquement (row2)
+  //     .memotion-tv-fs-footer  ← vide (row3 toujours présent — grille CSS 1fr 4fr 1fr)
   //   (timer dans .zone-timer de la grille, au-dessus de l'overlay — non dimmed)
   // -------------------------------------------------------------------------
 
@@ -328,10 +329,12 @@ describe('PlayerDisplay — MEMOTION layout (bugfix SC1–SC6)', () => {
       expect(header.querySelector('.memotion-tv-fs-timer')).toBeNull()
     })
 
-    it('le header fullscreen contient le RECTO_THEME', () => {
+    it('le header fullscreen contient le QUESTION_TEXT — bugfix #77 (RECTO_THEME déplacé)', () => {
+      // Avant fix : header affichait RECTO_THEME + étoiles + pts + équipe.
+      // Après fix : header affiche QUESTION_TEXT via .memotion-tv-fs-question-text (row1).
       const { container } = renderTV()
       const header = container.querySelector('.memotion-tv-fs-header')
-      expect(header.textContent).toContain('Thème Star Wars')
+      expect(header.textContent).toContain('Dans quel épisode Dark Vador révèle-t-il sa filiation ?')
     })
 
     it('le body fullscreen contient la QUESTION_IMAGE', () => {
@@ -342,10 +345,12 @@ describe('PlayerDisplay — MEMOTION layout (bugfix SC1–SC6)', () => {
       expect(img.getAttribute('src')).toBe('/files/q1.jpg')
     })
 
-    it('le body fullscreen contient le QUESTION_TEXT', () => {
+    it('le header contient .memotion-tv-fs-question-text — QUESTION_TEXT en row1, bugfix #77', () => {
+      // Avant fix : QUESTION_TEXT était dans le body (.memotion-tv-fs-text dans .memotion-tv-fs-body).
+      // Après fix : QUESTION_TEXT est dans le header via .memotion-tv-fs-question-text (row1).
       const { container } = renderTV()
-      const body = container.querySelector('.memotion-tv-fs-body')
-      const text = body.querySelector('.memotion-tv-fs-text')
+      const header = container.querySelector('.memotion-tv-fs-header')
+      const text = header.querySelector('.memotion-tv-fs-question-text')
       expect(text).not.toBeNull()
       expect(text.textContent).toBe('Dans quel épisode Dark Vador révèle-t-il sa filiation ?')
     })
@@ -360,13 +365,13 @@ describe('PlayerDisplay — MEMOTION layout (bugfix SC1–SC6)', () => {
   })
 
   // -------------------------------------------------------------------------
-  // SC5 — REVEAL : header thème, body image (ou texte fallback), footer texte si image+texte
+  // SC5 — REVEAL : rappel question en row1, image réponse en row2, texte réponse en row3
   //
-  // Structure JSX réelle (REVEAL) :
+  // Structure JSX réelle (REVEAL) — post bugfix #77 :
   //   .memotion-tv-fullscreen.memotion-tv-reveal  [position: fixed, top: 10vh]
-  //     .memotion-tv-fs-header  ← thème + étoiles + pts (pas d'équipe, pas de timer)
+  //     .memotion-tv-fs-header  ← QUESTION_TEXT rappel (.memotion-tv-fs-recall, opacity réduite)
   //     .memotion-tv-fs-body    ← ANSWER_IMAGE si dispo, sinon ANSWER_TEXT (fallback texte seul)
-  //     .memotion-tv-fs-footer  ← ANSWER_TEXT uniquement si ANSWER_IMAGE && ANSWER_TEXT coexistent
+  //     .memotion-tv-fs-footer  ← ANSWER_TEXT si image+texte coexistent, sinon vide (toujours présent)
   // -------------------------------------------------------------------------
 
   describe('SC5 — REVEAL subphase', () => {
@@ -379,11 +384,15 @@ describe('PlayerDisplay — MEMOTION layout (bugfix SC1–SC6)', () => {
       expect(container.querySelector('.memotion-tv-reveal')).not.toBeNull()
     })
 
-    it('le header fullscreen contient le RECTO_THEME', () => {
+    it('le header fullscreen contient le QUESTION_TEXT en rappel — bugfix #77 (RECTO_THEME éliminé)', () => {
+      // Avant fix : header REVEAL affichait RECTO_THEME + étoiles + pts.
+      // Après fix : header affiche QUESTION_TEXT avec classe .memotion-tv-fs-recall (atténué, row1).
       const { container } = renderTV()
       const header = container.querySelector('.memotion-tv-fs-header')
       expect(header).not.toBeNull()
-      expect(header.textContent).toContain('Thème Star Wars')
+      const recall = header.querySelector('.memotion-tv-fs-recall')
+      expect(recall).not.toBeNull()
+      expect(recall.textContent).toContain('Dans quel épisode Dark Vador révèle-t-il sa filiation ?')
     })
 
     it('le header REVEAL ne contient PAS de timer (différence avec QUESTION)', () => {
@@ -426,22 +435,29 @@ describe('PlayerDisplay — MEMOTION layout (bugfix SC1–SC6)', () => {
       expect(footer.textContent).toBe("L'Empire contre-attaque (Épisode V)")
     })
 
-    it('quand ANSWER_IMAGE sans ANSWER_TEXT, le footer est absent', () => {
+    it('quand ANSWER_IMAGE sans ANSWER_TEXT, le footer est présent mais vide — bugfix #77', () => {
+      // Avant fix : footer absent si ANSWER_TEXT manquant.
+      // Après fix : footer toujours présent (row3 vide — structure CSS 1fr 4fr 1fr garantie).
       const cardImgOnly = { ...CARD_WITH_IMG, ANSWER_TEXT: undefined }
       useGame.mockReturnValue(makeMemotionMock('REVEAL', 'card-1', [cardImgOnly, CARD_NO_IMG]))
       const { container } = renderTV()
-      expect(container.querySelector('.memotion-tv-fs-footer')).toBeNull()
+      const footer = container.querySelector('.memotion-tv-fs-footer')
+      expect(footer).not.toBeNull()
+      expect(footer.textContent.trim()).toBe('')
     })
 
-    it('quand ANSWER_TEXT sans ANSWER_IMAGE, le texte réponse est dans le body (fallback) et pas de footer', () => {
+    it('quand ANSWER_TEXT sans ANSWER_IMAGE, le texte réponse est dans le body et le footer est vide — bugfix #77', () => {
       // card-2 n'a pas d'ANSWER_IMAGE → texte fallback dans body via .memotion-tv-answer-text
+      // Avant fix : footer absent. Après fix : footer présent mais vide (row3 garantie).
       useGame.mockReturnValue(makeMemotionMock('REVEAL', 'card-2'))
       const { container } = renderTV()
       const body = container.querySelector('.memotion-tv-fs-body')
       const textEl = body.querySelector('.memotion-tv-answer-text')
       expect(textEl).not.toBeNull()
       expect(textEl.textContent).toBe('Victor Hugo')
-      expect(container.querySelector('.memotion-tv-fs-footer')).toBeNull()
+      const footer = container.querySelector('.memotion-tv-fs-footer')
+      expect(footer).not.toBeNull()
+      expect(footer.textContent.trim()).toBe('')
     })
   })
 
@@ -527,7 +543,7 @@ describe('PlayerDisplay — MEMOTION layout (bugfix SC1–SC6)', () => {
   // `.memotion-tv-fullscreen` avec header→row1, body→row2, timer→row3.
   //
   // Ces tests vérifient la structure DOM qui conditionne le bon fonctionnement
-  // du CSS grid : header, body et timer doivent être des enfants directs du
+  // du CSS grid : header, body et footer doivent être des enfants directs du
   // container `.memotion-tv-fullscreen`.
   // -------------------------------------------------------------------------
 
@@ -536,12 +552,12 @@ describe('PlayerDisplay — MEMOTION layout (bugfix SC1–SC6)', () => {
       useGame.mockReturnValue(makeMemotionMock('SELECTED', 'card-1'))
     })
 
-    it('le container fullscreen a exactement 2 enfants directs (header + body, pas de timer)', () => {
+    it('le container fullscreen a exactement 3 enfants directs (header + body + footer, bugfix #77)', () => {
       const { container } = renderTV()
       const overlay = container.querySelector('.memotion-tv-fullscreen')
       expect(overlay).not.toBeNull()
-      // SELECTED = header (row1 CSS grid) + body (row2 CSS grid) — pas de timer
-      expect(overlay.children.length).toBe(2)
+      // SELECTED = header (row1 titre) + body (row2 image) + footer (row3 étoiles) — layout 1fr 4fr 1fr
+      expect(overlay.children.length).toBe(3)
     })
 
     it('le 1er enfant direct du fullscreen est le header (.memotion-tv-fs-header)', () => {
@@ -593,12 +609,12 @@ describe('PlayerDisplay — MEMOTION layout (bugfix SC1–SC6)', () => {
       useGame.mockReturnValue(makeMemotionMock('QUESTION', 'card-1'))
     })
 
-    it('le container fullscreen a exactement 2 enfants directs (header + body)', () => {
+    it('le container fullscreen a exactement 3 enfants directs (header + body + footer vide, bugfix #77)', () => {
       const { container } = renderTV()
       const overlay = container.querySelector('.memotion-tv-fullscreen')
       expect(overlay).not.toBeNull()
-      // QUESTION = header + body — le timer est dans zone-timer au-dessus de l'overlay (top:10vh)
-      expect(overlay.children.length).toBe(2)
+      // QUESTION = header (row1 question text) + body (row2 image) + footer vide (row3) — layout 1fr 4fr 1fr
+      expect(overlay.children.length).toBe(3)
     })
 
     it('le 1er enfant DOM du fullscreen est le header (.memotion-tv-fs-header)', () => {
