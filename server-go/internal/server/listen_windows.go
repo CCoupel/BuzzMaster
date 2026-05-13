@@ -2,36 +2,24 @@
 
 package server
 
-// newReuseAddrListener creates a TCP listener with SO_REUSEADDR explicitly
-// set on the underlying socket.
+// newReuseAddrListener creates a TCP listener using plain net.Listen.
 //
-// On Windows, net.Listen does NOT set SO_REUSEADDR by default (unlike Linux).
-// Without it, if the previous server process was forcefully terminated (e.g.
-// console window closed), the port can remain bound in TIME_WAIT state for up
-// to 4 minutes, causing the next launch to fail with WSAEADDRINUSE.
+// # Why SO_REUSEADDR is NOT set on Windows
 //
-// Setting SO_REUSEADDR on Windows allows binding to a port that is in
-// TIME_WAIT, so the next server launch succeeds immediately.
+// On Linux, Go's net.Listen already calls setDefaultListenerSockopts which
+// sets SO_REUSEADDR. On Windows that function sets SO_EXCLUSIVEADDRUSE=1
+// instead (anti-port-hijacking). Setting SO_REUSEADDR on a socket that also
+// has SO_EXCLUSIVEADDRUSE causes WSAEACCES (bind forbidden) even on a
+// completely free port — so we must not call setsockopt(SO_REUSEADDR) on
+// Windows at all.
 //
-// golang.org/x/sys is already an indirect dependency of this module, so no
-// new dependency is introduced.
+// Port-busy situations after a forceful process kill are handled by the
+// 500 ms retry loop inside HTTPServer.Start(), combined with the graceful
+// Shutdown(ctx, 3 s) in Stop() which cleanly releases the listening socket
+// without leaving it in TIME_WAIT.
 
-import (
-	"context"
-	"net"
-	"syscall"
-
-	"golang.org/x/sys/windows"
-)
+import "net"
 
 func newReuseAddrListener(network, addr string) (net.Listener, error) {
-	lc := net.ListenConfig{
-		Control: func(network, address string, c syscall.RawConn) error {
-			return c.Control(func(fd uintptr) {
-				// SO_REUSEADDR allows immediate rebind even on a TIME_WAIT socket.
-				_ = windows.SetsockoptInt(windows.Handle(fd), windows.SOL_SOCKET, windows.SO_REUSEADDR, 1)
-			})
-		},
-	}
-	return lc.Listen(context.Background(), network, addr)
+	return net.Listen(network, addr)
 }
