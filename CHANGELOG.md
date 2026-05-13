@@ -3,6 +3,15 @@
 Historique des versions du projet BuzzControl.
 
 
+## [5.1.4] - 2026-05-11
+
+### Fixed
+- [MEMOTION] Layout fullscreen cards : chronomètre visible (hors overlay), header 1/6 + body 4/6 + footer 1/6 de la zone de jeu, réponse en footer (REVEAL), polices cqh
+- [Server] Port TCP libéré immédiatement après arrêt (Linux + Windows) — SO_LINGER(0) sur chaque connexion acceptée via `lingerListener` wrapper → RST au lieu de FIN/ACK, no TIME_WAIT (#83)
+- [Server] SO_REUSEADDR posé explicitement sur le socket listen via `net.ListenConfig.Control` (Linux : listen_posix.go, Windows : listen_windows.go)
+
+---
+
 ## [5.1.2] - 2026-05-09
 
 ### Changed
