@@ -2,24 +2,52 @@
 
 package server
 
-// newReuseAddrListener creates a TCP listener using plain net.Listen.
+// newReuseAddrListener creates a TCP listener that can immediately rebind a
+// port in TIME_WAIT state — the Windows equivalent of Linux SO_REUSEADDR.
 //
-// # Why SO_REUSEADDR is NOT set on Windows
+// # Why the two-step setsockopt sequence
 //
-// On Linux, Go's net.Listen already calls setDefaultListenerSockopts which
-// sets SO_REUSEADDR. On Windows that function sets SO_EXCLUSIVEADDRUSE=1
-// instead (anti-port-hijacking). Setting SO_REUSEADDR on a socket that also
-// has SO_EXCLUSIVEADDRUSE causes WSAEACCES (bind forbidden) even on a
-// completely free port — so we must not call setsockopt(SO_REUSEADDR) on
-// Windows at all.
+// Go's net.Listen calls setDefaultListenerSockopts which sets
+// SO_EXCLUSIVEADDRUSE=1 after socket() but before bind(). This flag prevents
+// binding to a port that another socket holds exclusively, even in TIME_WAIT.
 //
-// Port-busy situations after a forceful process kill are handled by the
-// 500 ms retry loop inside HTTPServer.Start(), combined with the graceful
-// Shutdown(ctx, 3 s) in Stop() which cleanly releases the listening socket
-// without leaving it in TIME_WAIT.
+// The Control callback is invoked after socket() but BEFORE bind(), so it can
+// override those options while the socket is still unbound:
+//
+//  1. Clear SO_EXCLUSIVEADDRUSE (set to 0) — removes Go's exclusive lock.
+//  2. Set SO_REUSEADDR (set to 1) — allows rebind on TIME_WAIT sockets.
+//
+// Without step 1, setting SO_REUSEADDR while SO_EXCLUSIVEADDRUSE=1 is active
+// causes WSAEACCES (bind forbidden) even on a completely free port.
+//
+// SO_EXCLUSIVEADDRUSE is not exported by golang.org/x/sys/windows; its value
+// is ((int)(~SO_REUSEADDR)) per ws2def.h — 0xFFFFFFFB = -5 as int32.
 
-import "net"
+import (
+	"context"
+	"net"
+	"syscall"
+
+	"golang.org/x/sys/windows"
+)
+
+// soExclusiveAddrUse is SO_EXCLUSIVEADDRUSE from ws2def.h.
+// Defined as ((int)(~SO_REUSEADDR)) = ~4 = 0xFFFFFFFB = -5 as int32.
+// Not exported by golang.org/x/sys/windows, so we define it locally.
+// The literal -5 equals int32(0xFFFFFFFB), the correct Windows bit pattern.
+const soExclusiveAddrUse = -5
 
 func newReuseAddrListener(network, addr string) (net.Listener, error) {
-	return net.Listen(network, addr)
+	lc := net.ListenConfig{
+		Control: func(network, address string, c syscall.RawConn) error {
+			return c.Control(func(fd uintptr) {
+				h := windows.Handle(fd)
+				// Step 1: clear SO_EXCLUSIVEADDRUSE set internally by Go.
+				_ = windows.SetsockoptInt(h, windows.SOL_SOCKET, soExclusiveAddrUse, 0)
+				// Step 2: allow rebind on TIME_WAIT sockets.
+				_ = windows.SetsockoptInt(h, windows.SOL_SOCKET, windows.SO_REUSEADDR, 1)
+			})
+		},
+	}
+	return lc.Listen(context.Background(), network, addr)
 }
