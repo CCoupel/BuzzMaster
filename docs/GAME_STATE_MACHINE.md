@@ -209,6 +209,42 @@ Points par difficulté : ★ (1) → 1 pt | ★★ (2) → 3 pts | ★★★ (3)
 | `QUESTION` | Face VERSO (question) plein écran, timer actif |
 | `REVEAL` | Face REVEAL (réponse) plein écran, admin attribue points |
 
+### États visuels des cards MEMOTION
+
+Structure commune à tous les jeux :
+- `zone-timer` : 10vh (chronomètre + barre de progression)
+- Zone de jeu : 90vh restants
+
+**État 1 — RECTO UNPLAYED/SELECTED** (carte sur la grille, non jouée ou sélectionnée)
+- Layout grid : 1/6 titre | 4/6 image | 1/6 étoiles
+- Titre (RECTO_THEME) : centré horizontalement, 1/6 hauteur carte
+- Image (RECTO_IMAGE) : 4/6 hauteur carte, object-fit: contain
+- Étoiles (DIFFICULTY) : centrées horizontalement, 1/6 hauteur carte
+- Fond : dégradé violet foncé
+- Carte selected : pulsing glow blanc
+
+**État 2 — SELECTED fullscreen** (carte sélectionnée, zoom plein écran avant flip)
+- Même layout que RECTO (1/6 | 4/6 | 1/6)
+- Même contenu : RECTO_THEME + RECTO_IMAGE + étoiles
+- Occupe 90vh sous le timer (top: 10vh → bottom: 0)
+- Fond : même violet que la carte
+
+**État 3 — VERSO QUESTION** (plein écran, après flip)
+- Zone question (1/6 × 90vh = ~15vh) : QUESTION_TEXT
+- Zone media (4/6 × 90vh = ~60vh) : QUESTION_IMAGE
+- Zone réponses (1/6 × 90vh = ~15vh) : vide
+
+**État 4 — VERSO RÉPONSE** (plein écran, après révélation)
+- Zone question (1/6) : QUESTION_TEXT (rappel)
+- Zone media (4/6) : ANSWER_IMAGE (ou ANSWER_TEXT si pas d'image)
+- Zone réponses (1/6) : ANSWER_TEXT (si image présente) ou vide
+
+**État 5 — RECTO DONE** (carte jouée, retour sur la grille)
+- Même layout que RECTO (1/6 | 4/6 | 1/6)
+- Fond : couleur de l'équipe gagnante (au lieu de violet)
+- Footer : étoiles + nom de l'équipe côte à côte
+- Taille : 80% (scale 0.8) pour indiquer que la carte a été jouée
+
 ### Champs GameState MEMOTION (sans omitempty)
 - `MEMOTION_SUBPHASE` : `"GRID"` | `"SELECTED"` | `"QUESTION"` | `"REVEAL"` | `""`
 - `MEMOTION_SELECTED` : ID carte sélectionnée (`""` en GRID)

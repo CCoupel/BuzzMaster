@@ -12,6 +12,13 @@ Historique des versions du projet BuzzControl.
 
 ---
 
+## [5.1.5] - 2026-05-13
+
+### Fixed
+- [#77] MEMOTION : refonte des 5 états visuels des cards (SELECTED fullscreen fond violet layout RECTO 1/6|4/6|1/6, VERSO QUESTION texte+image+vide, VERSO RÉPONSE rappel+answer+texte, RECTO DONE fond équipe+scale 80%+étoiles+nom équipe)
+
+---
+
 ## [5.1.2] - 2026-05-09
 
 ### Changed
