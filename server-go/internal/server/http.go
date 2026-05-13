@@ -99,7 +99,11 @@ func (h *HTTPServer) SetWebDir(dir string) {
 	h.webDir = dir
 }
 
-// Start begins the HTTP server
+// Start begins the HTTP server.
+//
+// The listener is created with SO_REUSEADDR so the server can immediately
+// rebind after a forceful process termination (e.g. console window closed on
+// Windows), even if the previous socket is still in TIME_WAIT.
 func (h *HTTPServer) Start() error {
 	h.setupRoutes()
 
@@ -112,14 +116,21 @@ func (h *HTTPServer) Start() error {
 	LogInfo(game.LogComponentHTTP, "Server starting on port %d", h.port)
 	go func() {
 		for {
-			err := h.server.ListenAndServe()
-			if errors.Is(err, http.ErrServerClosed) {
+			// newReuseAddrListener sets SO_REUSEADDR on the socket so we can
+			// bind immediately even if the port is in TIME_WAIT.
+			ln, err := newReuseAddrListener("tcp", addr)
+			if err != nil {
+				if isPortInUse(err) {
+					LogWarn(game.LogComponentHTTP, "Port %d busy, retrying in 500ms...", h.port)
+					time.Sleep(500 * time.Millisecond)
+					continue
+				}
+				LogError(game.LogComponentHTTP, "Server error (listener): %v", err)
 				return
 			}
-			if isPortInUse(err) {
-				LogWarn(game.LogComponentHTTP, "Port %d busy, retrying in 500ms...", h.port)
-				time.Sleep(500 * time.Millisecond)
-				continue
+			err = h.server.Serve(ln)
+			if errors.Is(err, http.ErrServerClosed) {
+				return
 			}
 			LogError(game.LogComponentHTTP, "Server error: %v", err)
 			return

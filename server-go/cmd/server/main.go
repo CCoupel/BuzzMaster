@@ -177,9 +177,11 @@ func main() {
 	// Display all accessible URLs and open browser if enabled
 	displayAndOpenURLs(cfg.Server.HTTPPort, cfg.Server.AutoOpenBrowsers, cfg.Server.Debug)
 
-	// Wait for shutdown signal
+	// Wait for shutdown signal.
+	// os.Interrupt catches CTRL_CLOSE_EVENT on Windows (console window closed)
+	// in addition to the standard SIGINT / SIGTERM.
 	sigCh := make(chan os.Signal, 1)
-	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
+	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM, os.Interrupt)
 	<-sigCh
 
 	server.LogInfo(game.LogComponentApp, "Shutting down...")
