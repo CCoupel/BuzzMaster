@@ -390,18 +390,26 @@ GOOS=windows GOARCH=amd64 CGO_ENABLED=0 \
 
 ### Smoke tests QUALIF BuzzControl
 
+Le serveur QUALIF est lancé sur le **port 9090** pour éviter toute interférence avec un serveur de production tournant sur le port 80.
+
 ```bash
-# Verifier version serveur
-curl -s http://localhost/api/version
+# Depuis server-go/ — lancer le binaire QUALIF sur port 9090 (flag --port, v5.1.3+)
+./buzzcontrol-qualif-amd64.exe --port 9090 &
+QUALIF_PID=$!
+sleep 2  # attendre démarrage
 
-# Verifier firmware embarque
-curl -s http://localhost/api/firmware/buzzclick/version | jq .EMBEDDED_VERSION
+BASE="http://localhost:9090"
 
-# Verifier WebSocket endpoints
-# - /ws/admin  → admin
-# - /ws/tv     → tv
-# - /ws/player → vplayer
-# - /ws/buzzer → buzzers physiques
+# Smoke tests
+curl -sf $BASE/api/version           # version
+curl -sf $BASE/                      # page principale
+curl -sf $BASE/api/firmware          # firmware endpoint
+curl -sf $BASE/questions             # questions
+curl -sf $BASE/api/listGame          # liste des jeux
+curl -sf $BASE/tv                    # affichage TV
+
+# Arrêt propre
+kill $QUALIF_PID
 ```
 
 ### Artefact QUALIF
