@@ -2866,12 +2866,17 @@
   align-items: center;
 }
 
-/* MEMOTION : supprime le padding game-display pour aligner zone-timer (10vh)
-   avec l'overlay fullscreen (position: absolute; top: 10vh).
-   Sans ce reset, le padding 0.5rem de game-display décale zone-timer vers le bas
-   et l'overlay recouvre les 0.5rem inférieurs du chronomètre. */
+/* MEMOTION : contraintes de confinement des overlays absolus.
+   - padding: 0      → zone-timer (10vh) commence exactement en top:0 du conteneur,
+                       son bas tombe exactement à top:10vh = bord haut de l'overlay
+   - overflow: hidden → l'overlay (position:absolute; top:10vh; bottom:0) ne peut
+                        pas déborder ni vers le haut ni vers le bas hors du conteneur
+   - height: 100%    → game-display remplit exactement 100vh (hérité, rappelé ici)
+   game-display est le containing block (position:relative) pour les overlays absolus. */
 .game-display:has(.memotion-game) {
   padding: 0;
+  overflow: hidden;
+  height: 100%;
 }
 
 /* MEMOTION : zone-timer toujours au-dessus des overlays fullscreen (zIndex: 10).
