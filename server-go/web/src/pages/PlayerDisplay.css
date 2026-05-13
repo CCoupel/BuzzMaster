@@ -2706,6 +2706,14 @@
   50%       { box-shadow: 0 0 28px rgba(255, 255, 255, 0.6), 0 4px 16px rgba(49, 46, 129, 0.5); }
 }
 
+/* État DONE : fond couleur équipe gagnante */
+.memotion-card.matched .memory-card-back {
+  background: var(--matched-team-color, rgba(100, 100, 200, 0.6));
+  box-shadow: 0 4px 16px color-mix(in srgb, var(--matched-team-color, #4CAF50) 40%, transparent);
+  border-color: color-mix(in srgb, var(--matched-team-color, #4CAF50) 60%, white);
+  animation: none;
+}
+
 .memotion-card-header {
   grid-row: 1;
   padding: 0 0.4em;
@@ -2796,6 +2804,21 @@
   flex-shrink: 0;
 }
 
+/* Nom équipe gagnante dans le footer de la carte DONE */
+.memotion-card-done-team {
+  font-family: var(--font-display);
+  font-size: clamp(0.4rem, 11cqh, 2rem);
+  font-weight: 800;
+  color: white;
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.6);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 60%;
+  text-align: center;
+  margin-left: 0.3em;
+}
+
 /* Override memory-card-front for MEMOTION: shows DONE content (✓ + winner) */
 .memotion-card .memory-card-front {
   flex-direction: column;
@@ -2845,7 +2868,7 @@
 
 /* MEMOTION — SELECTED fullscreen: hérite du grid de memotion-tv-fullscreen */
 .memotion-tv-selected {
-  background: #1a1a2e;
+  background: linear-gradient(145deg, #1e1b4b 0%, #312e81 50%, #4c1d95 100%);
 }
 
 /* --- SELECTED / QUESTION / REVEAL subphases (fullscreen) ---
@@ -2873,6 +2896,11 @@
   flex-wrap: wrap;
   overflow: hidden;
   min-height: 0;
+}
+
+/* Zone titre/étoiles dans SELECTED fullscreen — centré (override flex-start) */
+.memotion-tv-fs-recto-zone {
+  justify-content: center;
 }
 
 .memotion-tv-fs-theme {
@@ -2930,6 +2958,28 @@
 .memotion-tv-answer-text {
   color: #4ade80;
   text-shadow: 0 2px 16px rgba(74,222,128,0.4);
+}
+
+/* Texte question en row 1 (états QUESTION et REVEAL) */
+.memotion-tv-fs-question-text {
+  font-size: clamp(1rem, 8cqh, 3.5rem);
+  font-weight: 700;
+  color: white;
+  text-align: center;
+  text-shadow: 0 2px 8px rgba(0,0,0,0.5);
+  line-height: 1.3;
+  margin: 0;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  width: 100%;
+}
+
+/* Rappel question (row 1 REVEAL) — légèrement atténué */
+.memotion-tv-fs-recall {
+  opacity: 0.65;
+  font-size: clamp(0.9rem, 6cqh, 2.8rem);
 }
 
 .memotion-tv-reveal {

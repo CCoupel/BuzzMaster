@@ -1990,22 +1990,17 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
                               visibility: isActiveCard && isMotionFullscreen ? 'hidden' : 'visible',
                               cursor: canSelectCard ? 'pointer' : 'default',
                             }}
-                            initial={{ opacity: 0 }}
-                            animate={{ opacity: 1 }}
-                            transition={{ delay: index * 0.05, duration: 0.3 }}
+                            initial={{ opacity: 0, scale: 1 }}
+                            animate={{ opacity: 1, scale: isDone ? 0.8 : 1 }}
+                            transition={{ delay: index * 0.05, duration: isDone ? 0.4 : 0.3 }}
                             onClick={() => canSelectCard && selectMotionCard(card.ID)}
                           >
                             {/* Use motion.div on inner so framer-motion drives the 3D flip
                                 (CSS .flipped class is not used — framer-motion owns rotateY) */}
                             <motion.div
                               className="memory-card-inner"
-                              initial={{ rotateY: 0 }}
-                              animate={{ rotateY: isDone ? 180 : 0 }}
-                              transition={{
-                                duration: 0.6,
-                                ease: [0.4, 0, 0.2, 1],
-                                delay: isDone ? (index * 0.05 + 0.15) : 0
-                              }}
+                              animate={{ rotateY: 0 }}
+                              transition={{ duration: 0 }}
                               style={{ transformStyle: 'preserve-3d' }}
                             >
                               {/* Front: shown when DONE (rotated 180° by framer-motion) */}
@@ -2029,9 +2024,12 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
                                     <img src={card.RECTO_IMAGE} alt="" className="memotion-card-img" />
                                   )}
                                 </div>
-                                {/* Footer — étoiles */}
+                                {/* Footer — étoiles + nom équipe gagnante (si DONE) */}
                                 <div className="memotion-card-footer">
                                   <span className="memotion-card-stars">{'★'.repeat(diff)}</span>
+                                  {isDone && winnerTeam && (
+                                    <span className="memotion-card-done-team">{winnerTeam}</span>
+                                  )}
                                 </div>
                               </div>
                             </motion.div>
@@ -2130,16 +2128,11 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
                     animate={{ clipPath: clipEnd }}
                     transition={{ duration: 0.45, ease: [0.4, 0, 0.2, 1] }}
                   >
-                    <div className="memotion-tv-fs-header">
+                    {/* Row 1 : Titre (RECTO_THEME) */}
+                    <div className="memotion-tv-fs-header memotion-tv-fs-recto-zone">
                       <span className="memotion-tv-fs-theme">{selectedCard.RECTO_THEME}</span>
-                      <span className="memotion-tv-fs-diff">{'★'.repeat(diff)}</span>
-                      <span className="memotion-tv-fs-pts">{diffPts(diff)}pt</span>
-                      {currentTeam && (
-                        <span className="memotion-tv-fs-team" style={{ color: currentTeamCss }}>
-                          {currentTeam}
-                        </span>
-                      )}
                     </div>
+                    {/* Row 2 : Image RECTO (ou texte thème si pas d'image) */}
                     <div className="memotion-tv-fs-body">
                       {selectedCard.RECTO_IMAGE ? (
                         <motion.img
@@ -2161,6 +2154,10 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
                         </motion.p>
                       )}
                     </div>
+                    {/* Row 3 : Étoiles */}
+                    <div className="memotion-tv-fs-footer memotion-tv-fs-recto-zone">
+                      <span className="memotion-tv-fs-diff">{'★'.repeat(diff)}</span>
+                    </div>
                   </motion.div>
                 )
 
@@ -2177,16 +2174,20 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
                     transition={{ duration: 0.5, ease: [0.4, 0, 0.2, 1] }}
                     style={{ position: 'fixed', top: '10vh', left: 0, right: 0, bottom: 0, zIndex: 10, perspective: '1200px' }}
                   >
-                    <div className="memotion-tv-fs-header">
-                      <span className="memotion-tv-fs-theme">{selectedCard.RECTO_THEME}</span>
-                      <span className="memotion-tv-fs-diff">{'★'.repeat(diff)}</span>
-                      <span className="memotion-tv-fs-pts">{diffPts(diff)}pt</span>
-                      {currentTeam && (
-                        <span className="memotion-tv-fs-team" style={{ color: currentTeamCss }}>
-                          {currentTeam}
-                        </span>
+                    {/* Row 1 : Texte de la question */}
+                    <div className="memotion-tv-fs-header memotion-tv-fs-recto-zone">
+                      {selectedCard.QUESTION_TEXT && (
+                        <motion.p
+                          className="memotion-tv-fs-question-text"
+                          initial={{ opacity: 0, y: -10 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          transition={{ delay: 0.3 }}
+                        >
+                          {selectedCard.QUESTION_TEXT}
+                        </motion.p>
                       )}
                     </div>
+                    {/* Row 2 : Image de la question */}
                     <div className="memotion-tv-fs-body">
                       {selectedCard.QUESTION_IMAGE && (
                         <motion.img
@@ -2198,17 +2199,9 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
                           transition={{ delay: 0.3 }}
                         />
                       )}
-                      {selectedCard.QUESTION_TEXT && (
-                        <motion.p
-                          className="memotion-tv-fs-text"
-                          initial={{ opacity: 0, y: 20 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          transition={{ delay: 0.35 }}
-                        >
-                          {selectedCard.QUESTION_TEXT}
-                        </motion.p>
-                      )}
                     </div>
+                    {/* Row 3 : Vide (zone réponses — libre) */}
+                    <div className="memotion-tv-fs-footer" />
                   </motion.div>
                 )
 
@@ -2234,12 +2227,15 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
                     transition={{ duration: 0.5, ease: [0.4, 0, 0.2, 1] }}
                     style={{ position: 'fixed', top: '10vh', left: 0, right: 0, bottom: 0, zIndex: 10, perspective: '1200px' }}
                   >
-                    <div className="memotion-tv-fs-header">
-                      <span className="memotion-tv-fs-theme">{selectedCard.RECTO_THEME}</span>
-                      <span className="memotion-tv-fs-diff">{'★'.repeat(diff)}</span>
-                      <span className="memotion-tv-fs-pts">{diffPts(diff)}pt</span>
+                    {/* Row 1 : Rappel de la question */}
+                    <div className="memotion-tv-fs-header memotion-tv-fs-recto-zone">
+                      {selectedCard.QUESTION_TEXT && (
+                        <p className="memotion-tv-fs-question-text memotion-tv-fs-recall">
+                          {selectedCard.QUESTION_TEXT}
+                        </p>
+                      )}
                     </div>
-                    {/* Body: image réponse si dispo, sinon texte réponse (fallback) */}
+                    {/* Row 2 : Image réponse (ou texte si pas d'image) */}
                     <div className="memotion-tv-fs-body">
                       {selectedCard.ANSWER_IMAGE ? (
                         <motion.img
@@ -2261,8 +2257,8 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
                         </motion.p>
                       ) : null}
                     </div>
-                    {/* Footer: texte réponse quand image + texte coexistent */}
-                    {selectedCard.ANSWER_IMAGE && selectedCard.ANSWER_TEXT && (
+                    {/* Row 3 : Texte réponse si image + texte coexistent */}
+                    {selectedCard.ANSWER_IMAGE && selectedCard.ANSWER_TEXT ? (
                       <motion.div
                         className="memotion-tv-fs-footer"
                         initial={{ opacity: 0, y: 10 }}
@@ -2271,6 +2267,8 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
                       >
                         {selectedCard.ANSWER_TEXT}
                       </motion.div>
+                    ) : (
+                      <div className="memotion-tv-fs-footer" />
                     )}
                   </motion.div>
                 )
