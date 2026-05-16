@@ -370,6 +370,22 @@ body {
     color: var(--text-muted);
 }
 
+.feature-card--new {
+    border: 1px solid rgba(245, 158, 11, 0.35);
+    background: linear-gradient(135deg, #1e293b 70%, rgba(245, 158, 11, 0.07));
+}
+
+.feature-card-top {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    margin-bottom: 0.5rem;
+}
+
+.feature-card-top .feature-icon {
+    margin-bottom: 0;
+}
+
 /* ============================================
    Components Section
    ============================================ */
@@ -424,6 +440,17 @@ body {
 .badge-available {
     background: var(--success);
     color: #fff;
+}
+
+.badge-new {
+    background: linear-gradient(135deg, #f59e0b, #ef4444);
+    color: #fff;
+    animation: badge-pulse 2s ease-in-out infinite;
+}
+
+@keyframes badge-pulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.4); }
+    50%       { box-shadow: 0 0 0 6px rgba(245, 158, 11, 0); }
 }
 
 .component-card p {
