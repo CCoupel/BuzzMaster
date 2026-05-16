@@ -204,10 +204,26 @@ Points par difficulté : ★ (1) → 1 pt | ★★ (2) → 3 pts | ★★★ (3)
 ### Subphases MEMOTION
 | Subphase | Description |
 |----------|-------------|
-| `GRID` | Grille de cartes RECTO, prêtes à sélectionner |
+| `MEMORIZE` | *(Secret Mode)* Toutes les cartes RECTO visibles + timer décompte. Sélection impossible. |
+| `GRID` | Grille de cartes RECTO (ou coordonnées en Secret Mode), prêtes à sélectionner |
 | `SELECTED` | Carte zoomée plein écran (RECTO thème + points). Pas de timer. |
 | `QUESTION` | Face VERSO (question) plein écran, timer actif |
 | `REVEAL` | Face REVEAL (réponse) plein écran, admin attribue points |
+
+### Secret Mode — Subphase MEMORIZE (v5.5.0)
+
+Activé si `MOTION_MEMORIZE_DURATION > 0` sur la question MEMOTION.
+
+**Machine d'états Secret Mode :**
+```
+STARTED → MEMORIZE (timer MOTION_MEMORIZE_DURATION s) → [timer expiré] → GRID → SELECTED → QUESTION → REVEAL → GRID
+```
+
+**Comportement :**
+- `MEMORIZE` : toutes les cartes affichées face RECTO, timer `CURRENT_TIME` décrémente (même format que QUESTION), sélection de carte refusée (`NOT_IN_GRID_SUBPHASE`)
+- Transition `MEMORIZE → GRID` : automatique à expiration, aucune action admin requise
+- Phase `GRID` en Secret Mode : coordonnées (A1, B2…) remplacent les thèmes sur les cartes verso ; l'admin voit la liste coordonnée↔thème pour guider les joueurs
+- Rétrocompatibilité : `MOTION_MEMORIZE_DURATION = 0` (ou absent) → démarrage direct en `GRID` (comportement v5.0+)
 
 ### États visuels des cards MEMOTION
 
@@ -246,7 +262,7 @@ Structure commune à tous les jeux :
 - Taille : 80% (scale 0.8) pour indiquer que la carte a été jouée
 
 ### Champs GameState MEMOTION (sans omitempty)
-- `MEMOTION_SUBPHASE` : `"GRID"` | `"SELECTED"` | `"QUESTION"` | `"REVEAL"` | `""`
+- `MEMOTION_SUBPHASE` : `""` | `"MEMORIZE"` | `"GRID"` | `"SELECTED"` | `"QUESTION"` | `"REVEAL"` — `MEMORIZE` ajouté en v5.5.0 (Secret Mode)
 - `MEMOTION_SELECTED` : ID carte sélectionnée (`""` en GRID)
 - `MEMOTION_CARD_STATES` : map[string]string → `"UNPLAYED"` | `"SELECTED"` | `"QUESTION"` | `"REVEALED"` | `"DONE"`
 - `MEMOTION_CARD_TEAMS` : map[string]string → teamName quand DONE
@@ -291,10 +307,12 @@ Structure commune à tous les jeux :
 - DONE→GRID : `layoutId` anime le retour vers la grille
 
 ### Fichiers clés
-- `engine.go` : `SelectMotionCard`, `FlipMotionCard`, `RevealMotionCard`, `DoneMotionCard`, `StopMotionCardTimer`
-- `models.go` : struct `MotionCard`, champs `GameState.Motion*`, `QuestionTypeMemotion`
+- `engine.go` : `SelectMotionCard`, `FlipMotionCard`, `RevealMotionCard`, `DoneMotionCard`, `StopMotionCardTimer`, `StartMotionMemorizeTimer` (v5.5.0), `StopMotionMemorizeTimer` (v5.5.0)
+- `models.go` : struct `MotionCard`, champs `GameState.Motion*`, `QuestionTypeMemotion`, `Question.MOTION_MEMORIZE_DURATION` (v5.5.0)
 - `messages.go` : `ActionMotionSelect/Flip/StopTimer/Reveal/Done/SetTeams`
+- `http.go` : parser `MOTION_MEMORIZE_DURATION` (v5.5.0)
 - `main.go` : handlers `handleMotion*`
-- `GamePage.jsx` : panneaux admin GRID/SELECTED/QUESTION/REVEAL
-- `PlayerDisplay.jsx` : vues TV + framer-motion layoutId + AnimatePresence flip
-- `PlayerDisplay.css` : classes `.memotion-*`
+- `GamePage.jsx` : panneaux admin GRID/SELECTED/QUESTION/REVEAL + MEMORIZE status + liste coordonnées (v5.5.0)
+- `PlayerDisplay.jsx` : vues TV + framer-motion layoutId + AnimatePresence flip + bannière MEMORIZE + coordonnées Secret Mode (v5.5.0)
+- `PlayerDisplay.css` : classes `.memotion-*`, `.memotion-memorize-active`, `.memotion-memorize-banner` (v5.5.0)
+- `QuestionsPage.jsx` : champ "Durée mémorisation (s)" dans éditeur MEMOTION (v5.5.0)

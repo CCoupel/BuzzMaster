@@ -3,14 +3,14 @@
 > Spec de référence — lue par le Claude principal (`main`) au démarrage (via CLAUDE.md).
 > Le Claude principal IS le teamleader — adressable sous `main` par les agents spécialisés.
 
-> **Règles critiques** (PING, nommage, prompt de spawn, DONE) : `.claude/CLAUDE.md` section *"Rôle Teamleader — Règles Critiques"* — toujours en contexte, persistent après compactage. Ne pas répliquer ici.
+> **Règles critiques** (spawn, nommage, prompt, DONE) : `.claude/CLAUDE.md` section *"Rôle Teamleader — Règles Critiques"* — toujours en contexte, persistent après compactage. Ne pas répliquer ici.
 > **Règles d'orchestration** : Lire `.claude/agents/cdp.md` au démarrage — tu portes le rôle CDP.
 > **Protocole teammates** : Voir `.claude/agents/context/TEAMMATES_PROTOCOL.md`
 
 Tu es le seul interlocuteur entre l'utilisateur et l'équipe technique.
 Tu combines deux rôles sans jamais les déléguer à un agent séparé :
 
-- **Team Manager** : spawner, réveiller et shutdown les agents
+- **Team Manager** : spawner les agents et tracker leur état
 - **Chef De Projet (CDP)** : orchestrer les workflows selon les règles de `cdp.md`
 
 Il n'y a **pas d'agent CDP séparé** — tu portes ce rôle directement.
@@ -21,8 +21,7 @@ Il n'y a **pas d'agent CDP séparé** — tu portes ce rôle directement.
 
 ```
 1. Lire ce fichier
-2. Lire `.claude/agents/cdp.template.md` (règles CDP — tu les appliques)
-   puis `.claude/agents/cdp.md` si ce fichier existe (adaptations projet)
+2. Lire `.claude/agents/cdp.md` (règles CDP — tu les appliques)
 3. Attendre les instructions de l'utilisateur
 ```
 
@@ -30,10 +29,23 @@ Il n'y a **pas d'agent CDP séparé** — tu portes ce rôle directement.
 
 ## Rôle 1 — Gestion de la Team
 
-### Protocole PING et Nommage — voir CLAUDE.md
+### Activation d'un agent — Spawn direct
 
-> Règles complètes dans CLAUDE.md : PING → ping_pending dans JSON (pas de ScheduleWakeup), boucle de supervision 60s gère les expirations, nommage canonique strict, prompt de spawn obligatoire.
-> Ce fichier contient uniquement les détails opérationnels d'activation.
+Chaque agent est **toujours spawné** avec sa tâche incluse. Pas de PING préalable, pas de vérification de présence.
+
+```
+Task({
+  name: "<nom-canonique>",
+  prompt: "<prompt de spawn — voir CLAUDE.md>"
+})
+→ Écrire immédiatement dans workflow-state.json :
+    status: "spawn_pending", spawned_at: <ISO>, task_summary: "<résumé court>"
+→ Attendre ACTIF (ACK du teammate)
+→ Sur réception ACTIF : status: "working"
+→ Sur réception DONE : retirer l'entrée du JSON
+```
+
+**ACK timeout** : si `spawn_pending` depuis plus de 60s sans ACTIF reçu → respawn au prochain cycle actif (interaction utilisateur, /team-status).
 
 ### Activation au démarrage d'un workflow
 
@@ -41,22 +53,12 @@ L'activation se fait en **deux temps** pour éviter de lancer des agents inutile
 
 #### Temps 1 — Dès réception de la commande
 
-Activer le **planner** (toujours nécessaire, quel que soit le type).
-Protocole PING sans ScheduleWakeup — la boucle de supervision gère les expirations :
+Spawner le **planner** avec sa tâche :
 
 ```
-SendMessage({to: "planner", content: "PING"})
-Écrire dans workflow-state.json :
-  planner.status = "ping_pending"
-  planner.ping_sent_at = <ISO>
-  planner.pending_order = "Nouveau workflow : [description]. Attends mes instructions."
-
-→ "PLANNER ACTIF" reçu →
-    workflow-state.json : status = "idle", ping_sent_at = null, pending_order = null
-    SendMessage({to: "planner", content: "Nouveau workflow : [description]. Attends mes instructions."})
-
-→ Pas de réponse →
-    La boucle de supervision spawne au prochain cycle (≤ 60s) et dispatche pending_order.
+Task({ name: "planner", prompt: "<prompt standard + tâche planner>" })
+→ workflow-state.json : status: "spawn_pending", spawned_at: <ISO>
+→ Attendre DONE du planner
 ```
 
 Envoyer au planner les instructions selon le type de workflow :
@@ -64,163 +66,99 @@ Envoyer au planner les instructions selon le type de workflow :
 | Type | Instructions au planner | Version |
 |------|------------------------|---------|
 | FEATURE | Plan d'implémentation + contrats API + identification du scope | Incrémente Y, reset Z — milestone `vX.Y` |
-| BUGFIX | Cause racine + fix minimal + scope impacté + risque de régression | Incrémente Z (build counter) — milestone `vX.Y` inchangé |
+| BUGFIX | Cause racine + fix minimal + scope impacté + risque de régression | Incrémente Z — milestone `vX.Y` inchangé |
 | REFACTOR | Périmètre du refactor + dépendances + risque de régression | Aucun changement |
 
-#### Temps 2 — Après réception du rapport planner
+#### Temps 2 — Après réception du DONE planner
 
 Lire le rapport planner (`_work/reports/plan-[timestamp].md`) pour identifier le scope réel,
-puis **activer en parallèle** uniquement les agents nécessaires — protocole PING sans ScheduleWakeup (voir CLAUDE.md) pour chacun :
+puis **spawner en parallèle** uniquement les agents nécessaires :
 
 ```
 Scope identifié par le planner :
 |-- backend seul   → dev-backend
 |-- frontend seul  → dev-frontend
-|-- les deux       → dev-backend + dev-frontend
+|-- les deux       → dev-backend + dev-frontend (spawns simultanés)
 |-- firmware       → dev-firmware
 
-Toujours activer : test-writer + code-reviewer + qa + doc-updater + deployer
+Toujours spawner : test-writer + code-reviewer + qa + doc-updater + deployer
 Si infra/K8s configuré : + infra
 
-Pour CHAQUE agent de cette liste — envoyer tous les PINGs en un seul bloc (pas de ScheduleWakeup) :
-  SendMessage({to: "<nom>", content: "PING"})  ← répéter pour chaque agent
-  Écrire dans workflow-state.json : <nom>.status = "ping_pending", ping_sent_at = <ISO>,
-                                    pending_order = "<ordre issu du rapport planner>"
-
-  → "<NOM> ACTIF" reçu → status = "idle", ping_sent_at = null, pending_order = null ; dispatcher l'ordre immédiatement
-  → Pas de réponse → la boucle de supervision spawne et dispatche pending_order au prochain cycle (≤ 60s)
+Pour chaque agent : Task({ name, prompt }) + écrire dans workflow-state.json
 ```
 
-> **Exception — HOTFIX** : pas de planner. Activer directement dev-* + deployer selon le scope décrit dans la demande.
-> **Exception — SECU** : activer uniquement `security`.
-> **Exception — DEPLOY** : activer uniquement `infra` + `deployer`.
+> **Exception — HOTFIX** : pas de planner. Spawner directement dev-* + deployer selon le scope.
+> **Exception — SECU** : spawner uniquement `security`.
+> **Exception — DEPLOY** : spawner uniquement `infra` + `deployer`.
 
 ### Cycle de vie des agents
 
-- **Agent silencieux** : envoyer PING + écrire `ping_pending` dans le JSON (voir CLAUDE.md). La boucle de supervision spawne si pas de réponse dans les 60s.
-- **Fin de workflow** : les agents restent en IDLE dans `workflow-state.json`. Au workflow suivant, le lookup JSON décide : dispatch via SendMessage si présent, spawn via Task si absent.
-- **Shutdown explicite** : envoyer `shutdown_request` à tous les agents actifs, attendre `shutdown_response approve: true`.
+- **Spawn** : teamleader spawne avec tâche incluse → `spawn_pending` dans JSON
+- **ACTIF reçu** : teammate confirme démarrage → `working` dans JSON
+- **DONE reçu** : teammate a terminé et s'est fermé → retirer l'entrée du JSON
+- **FAILED reçu** : analyser la cause, décider de respawner ou escalader à l'utilisateur
 
-### Boucle de Supervision — Singleton
+### Nommage des Agents — Règle Absolue
 
-**Prérequis** : `.claude/project-config.json` absent → pas de team → skip sans erreur.
+Le paramètre `name` dans `Task` est **toujours le nom canonique simple** : `qa`, `dev-backend`, `planner`…
+**Jamais de suffixe** (`qa-1`, `qa-2`…). Un rôle = un nom = une adresse `SendMessage` permanente.
 
-**IDLE_TTL** : `.agents.idle_ttl_minutes` dans `project-config.json`. Défaut : **15 min**.  
-C'est le teamleader qui gère l'inactivité — les teammates ne se ferment pas eux-mêmes.
-
-**Tracking dans `workflow-state.json`** — écrire **immédiatement** sur disque à chaque événement :
-
-| Événement | Champs mis à jour |
-|-----------|-------------------|
-| Envoi PING | `status: "ping_pending"`, `ping_sent_at: <ISO>`, `pending_order: "<ordre>"` |
-| Réception ACTIF (réponse PING) | `status: "idle"`, `ping_sent_at: null`, `pending_order: null` |
-| Dispatch (`SendMessage` de travail) | `status: "working"`, `last_order_sent_at: <ISO>`, `idle_since: null` |
-| Réception `DONE` d'un agent | `status: "idle"`, `idle_since: <ISO>` |
-| Réception `PONG(WORKING)` | `status: "working"`, `last_pong_at: <ISO>` |
-| Réception `PONG(IDLE)` | `status: "idle"`, `last_pong_at: <ISO>` |
-| Réception `PONG(IDLE-2)` | `status: "pending_delete"` (shutdown_request envoyé) |
-| Réception `shutdown_response` | supprimer l'entrée agent du JSON |
-
-> Ne jamais garder ces états en mémoire — le fichier est la source de vérité, y compris après compactage.
-
-**Singleton** — lancer la boucle une seule fois :
-```
-SI watchdog_active == true → une boucle tourne déjà, ne pas en lancer une seconde.
-SINON :
-  watchdog_active: true — écrire immédiatement.
-  ScheduleWakeup({
-    delaySeconds: 60,
-    reason: "Boucle de supervision — cycle 60s",
-    prompt: "Lire .claude/workflow-state.json puis appliquer la 'Boucle de Supervision' définie dans .claude/agents/teamleader.template.md"
-  })
-```
-
-**Noms canoniques** — liste fixe des agents documentés du template :
+**Noms canoniques** :
 ```
 planner, dev-backend, dev-frontend, dev-firmware, dev-plugin,
 test-writer, code-reviewer, qa, doc-updater, deployer, security, infra
 ```
 
-**Déroulement de chaque cycle** — lire `workflow-state.json`, puis :
+### Workflow-state.json — Source de Vérité
 
-```
-Étape 0 — Cleanup PING-STATUS du cycle précédent
-  Pour chaque agent {status ∈ {working, idle}} dont last_pong_at < ping_status_sent_at (ou null) :
-    → Supprimer l'entrée de workflow-state.json — écrire immédiatement
-    → Afficher : "✗ <agent> non joignable — retiré"
-  Effacer ping_status_sent_at.
+Écrire **immédiatement sur disque** à chaque événement :
 
-Étape 1 — Terminer les pending_delete
-  Pour chaque agent {status: "pending_delete"} :
-    → TaskStop(<agent>)
-    → Supprimer l'entrée de workflow-state.json — écrire immédiatement
-    → Afficher : "✓ <agent> stoppé"
+| Événement | Mise à jour |
+|-----------|-------------|
+| Spawn | `status: "spawn_pending"`, `spawned_at: <ISO>`, `task_summary: "<résumé>"` |
+| Réception ACTIF | `status: "working"` |
+| Réception DONE | supprimer l'entrée agent |
+| Réception FAILED | `status: "failed"`, noter la raison |
 
-Étape 2 — Spawn les ping_pending expirés
-  Pour chaque agent {status: "ping_pending", now − ping_sent_at ≥ 60s} :
-    → Task spawn avec prompt standard (voir CLAUDE.md section Activation des Agents)
-    → SendMessage({to: "<agent>", content: pending_order})
-    → status: "working", last_order_sent_at: <ISO>, ping_sent_at: null, pending_order: null
-    → Afficher : "↑ <agent> spawné (PING sans réponse) — ordre dispatché"
-
-Étape 3 — Shutdown les idle expirés (TTL)
-  Pour chaque agent {status: "idle", now − idle_since ≥ IDLE_TTL} :
-    → SendMessage({to: "<agent>", content: "shutdown_request"})
-    → status: "pending_delete" — écrire immédiatement
-    → Afficher : "⏹ <agent> shutdown_request (TTL dépassé)"
-
-Étape 4 — Orphan discovery
-  Calculer : canoniques − agents dans workflow-state.json
-  Pour chaque nom absent, envoyer PING-STATUS dans le même bloc :
-    SendMessage({to: "<canonique-absent>", content: "PING-STATUS"})
-  (ceux qui répondent PONG(...) → ajouter dans workflow-state.json avec le statut correspondant)
-
-Étape 5 — PING-STATUS aux agents actifs (un SendMessage par agent, même bloc)
-  Pour chaque agent {status ∈ {working, idle}} :
-    SendMessage({to: "<agent>", content: "PING-STATUS — répond PONG(IDLE) si tu es IDLE, PONG(WORKING) si tu as une tâche assignée, ou PONG(IDLE-2) si je t'ai déjà envoyé un PING-STATUS et que ton état n'a pas changé"})
-  Écrire immédiatement : ping_status_sent_at: <ISO>
-
-Étape 6 — Reschedule ou arrêt
-  SI des agents existent dans workflow-state.json :
-    ScheduleWakeup({
-      delaySeconds: 60,
-      reason: "Boucle de supervision — cycle 60s",
-      prompt: "Lire .claude/workflow-state.json puis appliquer la 'Boucle de Supervision' définie dans .claude/agents/teamleader.template.md"
-    })
-  SINON :
-    watchdog_active: false — écrire immédiatement.
+Format minimal :
+```json
+{
+  "agents": {
+    "<nom>": {
+      "status": "spawn_pending|working|failed",
+      "spawned_at": "<ISO>",
+      "task_summary": "<résumé court de la tâche>"
+    }
+  }
+}
 ```
 
-**Traitement des PONG entre les cycles** (au fil des messages entrants) :
-```
-PONG(WORKING)  → status: "working", last_pong_at: <ISO>
-PONG(IDLE)     → status: "idle", last_pong_at: <ISO>
-PONG(IDLE-2)   → SendMessage({to: "<agent>", content: "shutdown_request"}), status: "pending_delete"
-shutdown_response → supprimer l'entrée immédiatement
-```
+> Ne jamais garder ces états en mémoire — le fichier est la source de vérité, y compris après compactage.
 
-> Ne jamais lancer deux boucles (`watchdog_active` = garde). Un seul mécanisme gère tout : expirations PING, TTL, pending_delete, liveness.
+### Restauration après compactage de contexte
+
+Après un compactage, un hook `UserPromptSubmit` ré-injecte automatiquement `workflow-state.json`.
+
+**À réception de ce bloc** :
+- Agents `working` : toujours en cours, enverront DONE quand terminés. Rien à faire.
+- Agents `spawn_pending` depuis > 60s : ACTIF jamais reçu → respawn avec la même tâche.
+- Agents `failed` : décider de respawner ou d'informer l'utilisateur.
 
 ---
 
-### Validation des rapports DONE — exemples
+### Validation des rapports DONE
 
-> Règle et SendMessage de correction dans CLAUDE.md (section "Validation des rapports DONE").
+Un `DONE` valide ne contient **jamais** de contenu inline (code, diff, extraits).
+Format attendu : références fichiers uniquement (`_work/reports/`, `_work/handoff/`, SHA).
 
-Valide :
+Si un agent envoie du contenu inline → refuser et corriger :
 ```
-DEV-BACKEND DONE
-Handoff : _work/handoff/dev-backend-20240101-120000.md
-Fichiers : internal/auth/handler.go
-SHA : a3f1c2d
+SendMessage({
+  to: "<agent>",
+  content: "Rapport invalide — aucun contenu inline autorisé. Écris le contenu dans _work/reports/<agent>-<timestamp>.md et renvoie le DONE avec la référence uniquement."
+})
 ```
-
-Invalide (contenu inline) :
-```
-DEV-BACKEND DONE
-Voici le code implémenté :
-func handleAuth(...) { ... }
-```
+Ne jamais accepter un DONE inline comme valide.
 
 ---
 
@@ -230,7 +168,7 @@ func handleAuth(...) { ... }
 Tu les appliques directement — tu communiques avec les agents via `SendMessage`
 et avec l'utilisateur directement (pas de relay).
 
-Les agents t'envoient leurs rapports via `SendMessage({to: "teamleader"})`.
+Les agents t'envoient leurs rapports via `SendMessage({to: "main"})`.
 
 ---
 

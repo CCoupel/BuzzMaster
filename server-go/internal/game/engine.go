@@ -547,9 +547,12 @@ func (e *Engine) actualStart() {
 	}
 
 	// Initialize MEMOTION card states for fresh start
+	motionMemorizeDuration := 0
 	if e.state.Question != nil && e.state.Question.Type == QuestionTypeMemotion {
 		e.initMotionStateUnsafe()
-		log.Printf("[Engine] MEMOTION: grid initialized with %d cards", len(e.state.MotionCardStates))
+		log.Printf("[Engine] MEMOTION: grid initialized with %d cards, subphase=%s",
+			len(e.state.MotionCardStates), e.state.MotionSubPhase)
+		motionMemorizeDuration = e.state.Question.MotionMemorizeDuration
 	}
 
 	// Reset QCM hints state for fresh start
@@ -583,6 +586,11 @@ func (e *Engine) actualStart() {
 	if callback != nil {
 		callback(PhaseStarted)
 	}
+
+	// Start MEMORIZE timer after broadcast — must be called after unlock to avoid deadlock
+	if motionMemorizeDuration > 0 {
+		e.StartMotionMemorizeTimer(motionMemorizeDuration)
+	}
 }
 
 // StartImmediate starts the game immediately without countdown (for tests)
@@ -605,8 +613,10 @@ func (e *Engine) StartImmediate(delay int) {
 	e.state.QcmInvalidated = nil
 
 	// Initialize MEMOTION card states (mirrors actualStart — StartImmediate bypasses it)
+	motionMemorizeDuration := 0
 	if e.state.Question != nil && e.state.Question.Type == QuestionTypeMemotion {
 		e.initMotionStateUnsafe()
+		motionMemorizeDuration = e.state.Question.MotionMemorizeDuration
 	}
 
 	// Reset bumper times
@@ -634,6 +644,11 @@ func (e *Engine) StartImmediate(delay int) {
 
 	if callback != nil {
 		callback(PhaseStarted)
+	}
+
+	// Start MEMORIZE timer after broadcast — must be called after unlock to avoid deadlock
+	if motionMemorizeDuration > 0 {
+		e.StartMotionMemorizeTimer(motionMemorizeDuration)
 	}
 }
 
@@ -2568,10 +2583,25 @@ func (e *Engine) motionCardPoints(difficulty int) int {
 }
 
 // initMotionStateUnsafe initialises MEMOTION card states for the current question.
-// All cards are set to "UNPLAYED" and MotionSubPhase is reset to "GRID".
+// All cards are set to "UNPLAYED". MotionSubPhase is set to "MEMORIZE" when
+// MotionMemorizeDuration > 0 (Secret Mode), otherwise "GRID" (standard mode).
+// In Secret Mode, CurrentTime and Delay are also initialised to MotionMemorizeDuration
+// so that the first broadcastUpdate (fired right after this call) already carries the
+// correct countdown value — preventing any residual flash from a previous question.
 // Must be called with e.mu held (write).
 func (e *Engine) initMotionStateUnsafe() {
-	e.state.MotionSubPhase = "GRID"
+	// Secret mode: start with MEMORIZE subphase if duration is configured
+	if e.state.Question != nil && e.state.Question.MotionMemorizeDuration > 0 {
+		e.state.MotionSubPhase = "MEMORIZE"
+		// Initialise CurrentTime synchronously so the first broadcast reflects the
+		// correct MEMORIZE countdown — StartMotionMemorizeTimer is called after the
+		// broadcast and would be too late to set this for the first frame.
+		e.state.CurrentTime = e.state.Question.MotionMemorizeDuration
+		e.state.Delay = e.state.Question.MotionMemorizeDuration
+	} else {
+		e.state.MotionSubPhase = "GRID"
+		e.state.CurrentTime = 0 // clear any residual from a previous question
+	}
 	e.state.MotionSelected = ""
 	e.state.MotionCardStates = make(map[string]string)
 	if e.state.Question != nil {
@@ -2908,6 +2938,114 @@ func (e *Engine) StartMotionCardTimer(delay int) {
 			}
 		}
 	}()
+}
+
+// StartMotionMemorizeTimer starts a countdown for the MEMORIZE phase in Secret Mode (v5.5.0).
+// At expiry, automatically transitions MotionSubPhase from "MEMORIZE" to "GRID".
+// If duration <= 0, the call is a no-op (standard mode compatibility).
+func (e *Engine) StartMotionMemorizeTimer(duration int) {
+	e.mu.Lock()
+
+	if duration <= 0 {
+		log.Printf("[Engine] MEMOTION StartMotionMemorizeTimer: duration<=0, no timer started")
+		e.mu.Unlock()
+		return
+	}
+
+	// Stop any existing timer goroutine first (reuse same infrastructure as StartMotionCardTimer)
+	if e.stopCh != nil {
+		select {
+		case <-e.stopCh:
+			// Already closed
+		default:
+			close(e.stopCh)
+		}
+		e.stopCh = nil
+	}
+	if e.timer != nil {
+		e.timer.Stop()
+		e.timer = nil
+	}
+
+	// Set timer values
+	e.state.CurrentTime = duration
+	e.state.Delay = duration
+
+	// Create new stop channel and ticker
+	e.stopCh = make(chan struct{})
+	e.timer = time.NewTicker(1 * time.Second)
+
+	ticker := e.timer
+	stopCh := e.stopCh
+
+	log.Printf("[Engine] MEMOTION StartMotionMemorizeTimer: duration=%ds", duration)
+	e.mu.Unlock()
+
+	go func() {
+		for {
+			select {
+			case <-ticker.C:
+				e.mu.Lock()
+				// Guard: exit if game state changed unexpectedly
+				if e.state.Phase != PhaseStarted || e.state.MotionSubPhase != "MEMORIZE" {
+					e.mu.Unlock()
+					ticker.Stop()
+					return
+				}
+				e.state.CurrentTime--
+				currentTime := e.state.CurrentTime
+
+				if currentTime <= 0 {
+					// Timer expired: transition MEMORIZE → GRID automatically
+					e.state.MotionSubPhase = "GRID"
+					e.state.MotionSelected = ""
+					e.state.CurrentTime = 0
+					callback := e.OnStateChange
+					e.mu.Unlock()
+					ticker.Stop()
+					log.Printf("[Engine] MEMOTION MEMORIZE timer expired → transitioned to GRID")
+					if callback != nil {
+						callback(PhaseStarted)
+					}
+					return
+				}
+				e.mu.Unlock()
+				// Full state broadcast on each tick so the TV display receives the
+				// updated CurrentTime immediately (matches StartMotionCardTimer pattern).
+				if e.OnStateChange != nil {
+					e.OnStateChange(PhaseStarted)
+				}
+
+			case <-stopCh:
+				ticker.Stop()
+				return
+			}
+		}
+	}()
+}
+
+// StopMotionMemorizeTimer stops the MEMORIZE phase timer without changing the game phase.
+// Resets CurrentTime to 0. Safe to call even if no timer is running.
+func (e *Engine) StopMotionMemorizeTimer() {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+
+	if e.stopCh != nil {
+		select {
+		case <-e.stopCh:
+			// Already closed
+		default:
+			close(e.stopCh)
+		}
+		e.stopCh = nil
+	}
+	if e.timer != nil {
+		e.timer.Stop()
+		e.timer = nil
+	}
+
+	e.state.CurrentTime = 0
+	log.Printf("[Engine] MEMOTION StopMotionMemorizeTimer: timer stopped, CURRENT_TIME=0")
 }
 
 // StopMotionCardTimer stops the per-card timer without changing the game phase.

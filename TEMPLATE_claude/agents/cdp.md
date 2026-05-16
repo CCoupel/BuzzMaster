@@ -48,11 +48,10 @@ Si tu reponds oui a l'une de ces questions, STOP — envoie un SendMessage a la 
 - Je vais lire le code pour comprendre → Non. `SendMessage(planner, "Analyse [scope] et retourne [info]")`
 - **Je vais produire le plan d'implémentation → Non.** `SendMessage(planner, "Crée le plan pour [description]")` — Le CDP cadre la demande (Phase 0), le planner planifie (Phase 1). Sans exception.
 
-### Que faire si un agent ne repond pas au PING
+### Que faire si un agent ne répond pas (spawn_pending > 60s)
 
-1. Envoyer un second PING : `SendMessage({to: "<nom>", content: "PING"})`
-2. Si toujours sans réponse → le teamleader spawne un nouvel agent via `Task` (protocole de réveil)
-3. **Ne jamais** prendre le relais et executer la tache soi-meme
+1. Respawner via `Task` avec la même tâche incluse dans le prompt
+2. **Ne jamais** prendre le relais et executer la tache soi-meme
 
 ---
 
@@ -76,7 +75,7 @@ Si tu reponds oui a l'une de ces questions, STOP — envoie un SendMessage a la 
 
 ## Agents selon le Workflow
 
-La team est gérée par le Claude principal. Avant tout dispatch, appliquer le **protocole de disponibilité** (teamleader.md) : PING → ACTIF via SendMessage → dispatcher | pas de réponse → Task spawn. Agents à activer selon le workflow :
+La team est gérée par le Claude principal. Chaque agent est **spawné directement** avec sa tâche incluse (teamleader.md). Agents à activer selon le workflow :
 
 | Workflow | Agents |
 |----------|--------|
@@ -513,12 +512,11 @@ Format complet :
     "milestone_num": 5,
     "started_at": "<ISO>"
   },
-  "watchdog_active": false,
   "agents": {
     "<nom>": {
-      "status": "working|idle|terminating|terminated",
-      "last_order_sent_at": "<ISO>",
-      "idle_since": "<ISO>|null"
+      "status": "spawn_pending|working|failed",
+      "spawned_at": "<ISO>",
+      "task_summary": "<résumé court>"
     }
   }
 }

@@ -26,29 +26,27 @@ Role: Orchestrer workflows multi-agents avec validation utilisateur
 
 ## 2.bis Spawn d'un Teammate
 
-Avant tout `SendMessage`, le teammate doit exister dans la team. Un `Agent` one-shot sans `name` ne peut pas recevoir de `SendMessage` — il termine et disparaît.
+Chaque agent est **toujours spawné** avec sa tâche incluse directement dans le prompt.
+Les agents se ferment seuls après avoir envoyé DONE — il n'y a jamais d'agent "en attente" à réutiliser.
 
-### Pattern standard : PING → Spawn → Ordre
+### Pattern standard : Spawn direct
 
 ```
-1. Vérifier si l'agent est déjà actif :
-   SendMessage({ to: "<nom>", content: "PING" })
-   → Réponse "<NOM> ACTIF" dans le délai → passer directement à l'étape 3
-   → Pas de réponse (ou agent inexistant) → étape 2
-
-2. Spawner le teammate :
-   Agent({
-     team_name: <valeur dans project-config.json → team_name>,
-     name: "<nom>",               // ex: "planner", "dev-backend", "qa"
-     subagent_type: "general-purpose",
-     prompt: "Lis TEAMMATES_PROTOCOL.md (.claude/agents/context/TEAMMATES_PROTOCOL.md)
-              puis .claude/agents/<nom>.md.
-              Mode IDLE — attends les ordres du Claude principal."
-   })
-
-3. Envoyer la tâche :
-   SendMessage({ to: "<nom>", content: "..." })
+Agent({
+  team_name: <valeur dans project-config.json → team_name>,
+  name: "<nom>",               // ex: "planner", "dev-backend", "qa"
+  subagent_type: "general-purpose",
+  prompt: "Lis .claude/agents/context/TEAMMATES_PROTOCOL.md puis .claude/agents/<nom>.md.
+           Tu fais partie de {TEAM_NAME} sur {PROJECT_NAME}.
+           Ta tâche : <description complète de la tâche>
+           Commence dès que tu as envoyé ACTIF."
+})
+→ workflow-state.json : status: "spawn_pending", spawned_at: <ISO>, task_summary: "<résumé>"
+→ Attendre ACTIF (ACK) → status: "working"
+→ Attendre DONE → supprimer l'entrée
 ```
+
+Si pas d'ACTIF dans les 60s → respawn avec la même tâche.
 
 ### Agents par phase
 
@@ -62,8 +60,6 @@ Avant tout `SendMessage`, le teammate doit exister dans la team. Un `Agent` one-
 | QA | `qa` |
 | Doc | `doc-updater` |
 | Deploy QUALIF / PROD | `deploy` |
-
-> **Règle** : ne jamais supposer qu'un agent est actif sans avoir reçu son PING-ACTIF. Le PING est systématique en début de phase, même si l'agent était actif à la phase précédente (il peut s'être auto-terminé).
 
 ---
 
@@ -294,27 +290,19 @@ pour chaque issue_num dans ISSUE_NUMS[] :
 > **Le CDP ne rédige jamais le plan lui-même.** C'est le rôle exclusif du planner.
 
 ```
-// Étape 1 — PING (vérifier si planner est déjà actif)
-SendMessage({ to: "planner", content: "PING" })
-→ Réponse "PLANNER ACTIF" → passer à l'étape 3
-→ Pas de réponse → étape 2
-
-// Étape 2 — Spawn
 Agent({
   team_name: <team_name>,
   name: "planner",
   subagent_type: "general-purpose",
-  prompt: "Lis TEAMMATES_PROTOCOL.md puis .claude/agents/planner.md. Mode IDLE — attends les ordres du Claude principal."
+  prompt: "Lis .claude/agents/context/TEAMMATES_PROTOCOL.md puis .claude/agents/planner.md.
+           Tu fais partie de {TEAM_NAME} sur {PROJECT_NAME}.
+           Ta tâche : Crée un plan d'implémentation pour : [description]
+           Type : [FEATURE|BUGFIX]
+           [FEATURE] Contrats API à créer dans contracts/ si nouveaux endpoints.
+           [BUGFIX] Identifier la cause racine, le fix minimal, le scope impacté et le risque de régression.
+           Retourne le plan structuré avec : tâches ordonnées, dépendances, risques.
+           Commence dès que tu as envoyé ACTIF."
 })
-
-// Étape 3 — Envoyer la tâche
-SendMessage({ to: "planner", content: "
-  Crée un plan d'implémentation pour : [description]
-  Type : [FEATURE|BUGFIX]
-  [FEATURE] Contrats API à créer dans contracts/ si nouveaux endpoints.
-  [BUGFIX] Identifier la cause racine, le fix minimal, le scope impacté et le risque de régression.
-  Retourne le plan structuré avec : tâches ordonnées, dépendances, risques.
-" })
 ```
 
 Recevoir le plan → lire intégralement, vérifier cohérence et complétude.
@@ -335,31 +323,27 @@ pour chaque issue_num dans ISSUE_NUMS[] :
 ```
 
 ```
-Analyser le scope, puis pour chaque agent (pattern §2.bis : PING → Spawn → Ordre) :
+Analyser le scope, puis spawner les agents concernés (pattern §2.bis) :
 
 |-- Backend seul ->
-|     SendMessage({to:"dev-backend", content:"PING"})
-|     → ACTIF → SendMessage({to:"dev-backend", content:"[tâche + handoff planner si dispo]"})
-|     → Pas de réponse →
-|         Agent({team_name, name:"dev-backend", subagent_type:"general-purpose",
-|                prompt:"Lis TEAMMATES_PROTOCOL.md puis .claude/agents/dev-backend.md. Mode IDLE."})
-|         SendMessage({to:"dev-backend", content:"[tâche + handoff planner si dispo]"})
+|     Agent({team_name, name:"dev-backend", subagent_type:"general-purpose",
+|            prompt:"Lis TEAMMATES_PROTOCOL.md puis .claude/agents/dev-backend.md.
+|                    Tu fais partie de {TEAM_NAME} sur {PROJECT_NAME}.
+|                    Ta tâche : [tâche + handoff planner si dispo]
+|                    Commence dès que tu as envoyé ACTIF."})
 |
 |-- Frontend seul ->
-|     SendMessage({to:"dev-frontend", content:"PING"})
-|     → ACTIF → SendMessage({to:"dev-frontend", content:"[tâche + handoff planner si dispo]"})
-|     → Pas de réponse →
-|         Agent({team_name, name:"dev-frontend", subagent_type:"general-purpose",
-|                prompt:"Lis TEAMMATES_PROTOCOL.md puis .claude/agents/dev-frontend.md. Mode IDLE."})
-|         SendMessage({to:"dev-frontend", content:"[tâche + handoff planner si dispo]"})
+|     Agent({team_name, name:"dev-frontend", subagent_type:"general-purpose",
+|            prompt:"Lis TEAMMATES_PROTOCOL.md puis .claude/agents/dev-frontend.md.
+|                    Tu fais partie de {TEAM_NAME} sur {PROJECT_NAME}.
+|                    Ta tâche : [tâche + handoff planner si dispo]
+|                    Commence dès que tu as envoyé ACTIF."})
 |
 |-- Les deux (dépendants) ->
-|     PING + Spawn si nécessaire dev-backend → SendMessage tâche → attendre DONE
-|     PING + Spawn si nécessaire dev-frontend → SendMessage tâche avec handoff dev-backend
+|     Spawner dev-backend → attendre DONE → spawner dev-frontend avec handoff dev-backend
 |
 |-- Les deux (indépendants) ->
-|     PING + Spawn si nécessaire dev-backend et dev-frontend (en parallèle)
-|     SendMessage les tâches respectives
+|     Spawner dev-backend et dev-frontend en parallèle
 |     Attendre les deux DONE
 ```
 
@@ -374,18 +358,17 @@ pour chaque issue_num dans ISSUE_NUMS[] :
 ```
 
 ```
-// PING code-reviewer + test-writer en parallèle (pattern §2.bis)
-SendMessage({to:"code-reviewer", content:"PING"})
-SendMessage({to:"test-writer",   content:"PING"})
-→ Pour chaque agent sans réponse → spawn :
-    Agent({team_name, name:"code-reviewer", subagent_type:"general-purpose",
-           prompt:"Lis TEAMMATES_PROTOCOL.md puis .claude/agents/code-reviewer.md. Mode IDLE."})
-    Agent({team_name, name:"test-writer", subagent_type:"general-purpose",
-           prompt:"Lis TEAMMATES_PROTOCOL.md puis .claude/agents/test-writer.md. Mode IDLE."})
-
-// Envoyer les tâches
-SendMessage({to:"code-reviewer", content:"[tâche + handoffs dev]"})
-SendMessage({to:"test-writer",   content:"[tâche + handoffs dev]"})
+// Spawner code-reviewer + test-writer en parallèle (pattern §2.bis)
+Agent({team_name, name:"code-reviewer", subagent_type:"general-purpose",
+       prompt:"Lis TEAMMATES_PROTOCOL.md puis .claude/agents/code-reviewer.md.
+               Tu fais partie de {TEAM_NAME} sur {PROJECT_NAME}.
+               Ta tâche : [tâche + handoffs dev]
+               Commence dès que tu as envoyé ACTIF."})
+Agent({team_name, name:"test-writer", subagent_type:"general-purpose",
+       prompt:"Lis TEAMMATES_PROTOCOL.md puis .claude/agents/test-writer.md.
+               Tu fais partie de {TEAM_NAME} sur {PROJECT_NAME}.
+               Ta tâche : [tâche + handoffs dev]
+               Commence dès que tu as envoyé ACTIF."})
 
 |-- Recevoir DONE + ref fichier rapport
 |-- CDP lit le rapport et valide la conformite
@@ -409,15 +392,12 @@ pour chaque issue_num dans ISSUE_NUMS[] :
 ```
 
 ```
-// PING qa (pattern §2.bis)
-SendMessage({to:"qa", content:"PING"})
-→ Réponse "QA ACTIF" → passer à l'envoi de tâche
-→ Pas de réponse →
-    Agent({team_name, name:"qa", subagent_type:"general-purpose",
-           prompt:"Lis TEAMMATES_PROTOCOL.md puis .claude/agents/qa.md. Mode IDLE."})
-
-// Envoyer la tâche
-SendMessage({to:"qa", content:"[tâche + ref scripts SHA + handoffs review]"})
+// Spawner qa (pattern §2.bis)
+Agent({team_name, name:"qa", subagent_type:"general-purpose",
+       prompt:"Lis TEAMMATES_PROTOCOL.md puis .claude/agents/qa.md.
+               Tu fais partie de {TEAM_NAME} sur {PROJECT_NAME}.
+               Ta tâche : [tâche + ref scripts SHA + handoffs review]
+               Commence dès que tu as envoyé ACTIF."})
 
 |-- Recevoir DONE + ref fichier rapport
 |-- CDP lit le rapport et valide la conformite
@@ -439,22 +419,17 @@ Si cycle > 3 -> ESCALADE utilisateur
 > Applicable : **FEATURE** (obligatoire) — **BUGFIX** (si majeur) — **HOTFIX** (post-mortem) — **REFACTOR** (non)
 
 ```
-// PING doc-updater (pattern §2.bis)
-SendMessage({to:"doc-updater", content:"PING"})
-→ Réponse "DOC-UPDATER ACTIF" → passer à l'envoi de tâche
-→ Pas de réponse →
-    Agent({team_name, name:"doc-updater", subagent_type:"general-purpose",
-           prompt:"Lis TEAMMATES_PROTOCOL.md puis .claude/agents/doc-updater.md. Mode IDLE."})
-
-// Envoyer la tâche
-SendMessage({to:"doc-updater", content:"
-  Mets à jour la documentation pour : [description]
-  Type : [FEATURE|BUGFIX|HOTFIX]
-  SHA dev : [sha]
-  Handoff dev : _work/handoff/dev-[timestamp].md
-  Handoff QA  : _work/handoff/qa-[timestamp].md
-  Fichiers modifiés : [liste]
-"})
+// Spawner doc-updater (pattern §2.bis)
+Agent({team_name, name:"doc-updater", subagent_type:"general-purpose",
+       prompt:"Lis TEAMMATES_PROTOCOL.md puis .claude/agents/doc-updater.md.
+               Tu fais partie de {TEAM_NAME} sur {PROJECT_NAME}.
+               Ta tâche : Mets à jour la documentation pour : [description]
+               Type : [FEATURE|BUGFIX|HOTFIX]
+               SHA dev : [sha]
+               Handoff dev : _work/handoff/dev-[timestamp].md
+               Handoff QA  : _work/handoff/qa-[timestamp].md
+               Fichiers modifiés : [liste]
+               Commence dès que tu as envoyé ACTIF."})
 
 |-- Recevoir DONE + ref handoff
 |-- CDP valide la conformité
@@ -465,20 +440,15 @@ SendMessage({to:"doc-updater", content:"
 ### Phase Deploy QUALIF
 
 ```
-// PING deploy (pattern §2.bis)
-SendMessage({to:"deploy", content:"PING"})
-→ Réponse "DEPLOY ACTIF" → passer à l'envoi de tâche
-→ Pas de réponse →
-    Agent({team_name, name:"deploy", subagent_type:"general-purpose",
-           prompt:"Lis TEAMMATES_PROTOCOL.md puis .claude/agents/deploy.md. Mode IDLE."})
-
-// Envoyer la tâche
-SendMessage({to:"deploy", content:"
-  Déployer en QUALIF.
-  Branche : [branche]
-  Version : [X.Y.Z]
-  Handoff doc : _work/handoff/doc-updater-[timestamp].md
-"})
+// Spawner deploy (pattern §2.bis)
+Agent({team_name, name:"deploy", subagent_type:"general-purpose",
+       prompt:"Lis TEAMMATES_PROTOCOL.md puis .claude/agents/deploy.md.
+               Tu fais partie de {TEAM_NAME} sur {PROJECT_NAME}.
+               Ta tâche : Déployer en QUALIF.
+               Branche : [branche]
+               Version : [X.Y.Z]
+               Handoff doc : _work/handoff/doc-updater-[timestamp].md
+               Commence dès que tu as envoyé ACTIF."})
 
 |-- Recevoir DONE + rapport de déploiement
 |-- CDP informe l'utilisateur : QUALIF déployée, scénarios de validation fournis

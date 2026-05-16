@@ -730,6 +730,13 @@ func (h *HTTPServer) handleUploadQuestion(w http.ResponseWriter, r *http.Request
 			question["MOTION_MODE"] = "SOLO" // Default
 		}
 
+		// Parse MOTION_MEMORIZE_DURATION (Secret Mode — v5.5.0 #76): 0 = standard mode
+		if durStr := r.FormValue("MOTION_MEMORIZE_DURATION"); durStr != "" {
+			if dur, err := strconv.Atoi(durStr); err == nil && dur >= 0 {
+				question["MOTION_MEMORIZE_DURATION"] = dur
+			}
+		}
+
 		// Parse motion cards JSON
 		if cardsStr := r.FormValue("motion_cards"); cardsStr != "" {
 			var cards []map[string]interface{}

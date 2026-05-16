@@ -12,11 +12,11 @@ Ce fichier centralise les elements repetes dans les definitions de commandes et 
 
 ```yaml
 Projet: BuzzControl
-Repository: {REPO_URL}
+Repository: https://github.com/CCoupel/BuzzMaster
 
 Structure:
-  Source: {SRC_DIR}
-  Config version: {VERSION_FILE}
+  Source: server-go/
+  Config version: server-go/config.json
   Backlog: GitHub Issues (gh issue list)
   Documentation: docs/
 
@@ -79,7 +79,7 @@ cd server-go && go test ./...
 ### 4.2 Rapport de Couverture
 
 ```bash
-{COVERAGE_CMD}
+cd server-go && go test ./... -coverprofile=coverage.out && go tool cover -html=coverage.out
 ```
 
 ---
@@ -90,7 +90,7 @@ cd server-go && go test ./...
 
 | Fichier | Champ | Usage |
 |---------|-------|-------|
-| `{VERSION_FILE}` | `"version"` | Source de verite |
+| `server-go/config.json` | `"version"` | Source de verite |
 
 ### 5.2 Regles de Versionnement
 
@@ -111,7 +111,7 @@ Exemple:
 
 ```bash
 # Lire la version actuelle
-{VERSION_READ_CMD}
+cat server-go/config.json | python3 -c "import json,sys; d=json.load(sys.stdin); print(d['version'])"
 ```
 
 ---
@@ -124,8 +124,8 @@ Exemple:
 git checkout main
 git pull origin main
 git checkout -b feature/<nom-court>
-# Incrementer Y dans {VERSION_FILE}
-git add {VERSION_FILE}
+# Incrementer Y dans server-go/config.json
+git add server-go/config.json
 git commit -m "chore(version): Start vX.Y.0 - <feature name>"
 git push -u origin feature/<nom-court>
 ```
@@ -265,7 +265,7 @@ Le routage vers les agents DEV se fait selon les fichiers impactes et le type de
 
 | Fichier | Role |
 |---------|------|
-| `{VERSION_FILE}` | Version (source de verite) |
+| `server-go/config.json` | Version (source de verite) |
 | `CHANGELOG.md` | Historique des versions |
 | `CLAUDE.md` | Documentation projet |
 

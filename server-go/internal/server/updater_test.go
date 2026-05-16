@@ -297,30 +297,12 @@ func TestHandleDownloadUpdate_VersionNotFound(t *testing.T) {
 	}
 }
 
-// TestHandleApplyUpdate_PathTraversal vérifie que POST avec un path hors tempDir
-// retourne 400 Bad Request (protection contre path traversal).
-func TestHandleApplyUpdate_PathTraversal(t *testing.T) {
-	updater := newTestUpdater(t, "3.5.5")
+// TestHandleApplyUpdate_PathTraversal_DotDot verifies that a version containing ".."
+// is rejected with 400 Bad Request and "Invalid file path" error (security fix #82).
+func TestHandleApplyUpdate_PathTraversal_DotDot(t *testing.T) {
+	updater := newTestUpdater(t, "5.5.1")
 
-	// Créer un fichier suffisamment grand dans un répertoire HORS du tempDir de l'updater.
-	// Le tempDir de l'updater est os.TempDir()+"/buzzcontrol-updates".
-	// t.TempDir() crée quelque chose comme os.TempDir()+"/TestXXXX/001" qui ne
-	// commence pas par "buzzcontrol-updates", déclenchant ainsi le refus path-traversal.
-	outsideDir := t.TempDir()
-	maliciousFile := filepath.Join(outsideDir, "malicious.bin")
-
-	f, err := os.Create(maliciousFile)
-	if err != nil {
-		t.Fatalf("Cannot create test file: %v", err)
-	}
-	// Utiliser Truncate pour créer un fichier sparse >= MinBinarySize sans écrire les données
-	if err := f.Truncate(MinBinarySize + 1); err != nil {
-		f.Close()
-		t.Fatalf("Cannot resize test file to MinBinarySize+1: %v", err)
-	}
-	f.Close()
-
-	body := strings.NewReader(fmt.Sprintf(`{"version":"3.6.0","path":%q}`, maliciousFile))
+	body := strings.NewReader(`{"version":"../../../etc/secret"}`)
 	req := httptest.NewRequest(http.MethodPost, "/api/updates/apply", body)
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
@@ -328,71 +310,46 @@ func TestHandleApplyUpdate_PathTraversal(t *testing.T) {
 	updater.HandleApplyUpdate(w, req)
 
 	if w.Code != http.StatusBadRequest {
-		t.Errorf("Path traversal: expected 400, got %d; body: %s", w.Code, w.Body.String())
+		t.Errorf("Path traversal (dot-dot): expected 400, got %d; body: %s", w.Code, w.Body.String())
 	}
 
 	var resp ApplyResponse
-	if err := json.NewDecoder(w.Body).Decode(&resp); err == nil {
-		if resp.Success {
-			t.Error("Expected success=false for path traversal attempt")
-		}
-		if !strings.Contains(resp.Error, "Invalid file path") {
-			t.Errorf("Expected 'Invalid file path' error, got: %q", resp.Error)
-		}
+	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+		t.Fatalf("Failed to decode response: %v", err)
+	}
+	if resp.Success {
+		t.Error("Expected success=false for path traversal (dot-dot)")
+	}
+	if !strings.Contains(resp.Error, "Invalid file path") {
+		t.Errorf("Expected error containing 'Invalid file path', got: %q", resp.Error)
 	}
 }
 
-// TestHandleApplyUpdate_PathTraversal_AdjacentPrefix vérifie que la protection
-// path-traversal rejette un répertoire dont le nom commence par le même préfixe
-// que tempDir (ex: buzzcontrol-updates-adjacent ne doit pas passer).
-// Ce cas aurait été accepté par l'ancien check `strings.HasPrefix(absPath, tempDir)`
-// sans séparateur de chemin.
-func TestHandleApplyUpdate_PathTraversal_AdjacentPrefix(t *testing.T) {
-	updater := newTestUpdater(t, "3.5.5")
+// TestHandleApplyUpdate_PathTraversal_AbsolutePath verifies that a version containing
+// "/" is rejected with 400 Bad Request and "Invalid file path" error (security fix #82).
+func TestHandleApplyUpdate_PathTraversal_AbsolutePath(t *testing.T) {
+	updater := newTestUpdater(t, "5.5.1")
 
-	// Construire un répertoire adjacent : même base mais suffixe additionnel.
-	// Ex: /tmp/buzzcontrol-updates-adjacent
-	adjacentDir := updater.updatesDir + "-adjacent"
-	if err := os.MkdirAll(adjacentDir, 0755); err != nil {
-		t.Fatalf("Cannot create adjacent dir: %v", err)
-	}
-	defer os.RemoveAll(adjacentDir)
-
-	// Créer un fichier dans ce répertoire adjacent
-	maliciousFile := filepath.Join(adjacentDir, "malicious.bin")
-	f, err := os.Create(maliciousFile)
-	if err != nil {
-		t.Fatalf("Cannot create malicious file: %v", err)
-	}
-	// Fichier sparse >= MinBinarySize pour dépasser la validation de taille
-	if err := f.Truncate(MinBinarySize + 1); err != nil {
-		f.Close()
-		t.Fatalf("Cannot resize malicious file: %v", err)
-	}
-	f.Close()
-
-	body := strings.NewReader(fmt.Sprintf(`{"version":"3.6.0","path":%q}`, maliciousFile))
+	body := strings.NewReader(`{"version":"5.5.0/../../etc"}`)
 	req := httptest.NewRequest(http.MethodPost, "/api/updates/apply", body)
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 
 	updater.HandleApplyUpdate(w, req)
 
-	// Le path /tmp/buzzcontrol-updates-adjacent/malicious.bin commence par
-	// /tmp/buzzcontrol-updates mais PAS par /tmp/buzzcontrol-updates/ (avec sep).
-	// Le handler doit retourner 400 Bad Request.
 	if w.Code != http.StatusBadRequest {
-		t.Errorf("Adjacent prefix directory: expected 400, got %d; body: %s", w.Code, w.Body.String())
+		t.Errorf("Path traversal (slash): expected 400, got %d; body: %s", w.Code, w.Body.String())
 	}
 
 	var resp ApplyResponse
-	if err := json.NewDecoder(w.Body).Decode(&resp); err == nil {
-		if resp.Success {
-			t.Error("Expected success=false for adjacent prefix path traversal")
-		}
-		if !strings.Contains(resp.Error, "Invalid file path") {
-			t.Errorf("Expected 'Invalid file path' error, got: %q", resp.Error)
-		}
+	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+		t.Fatalf("Failed to decode response: %v", err)
+	}
+	if resp.Success {
+		t.Error("Expected success=false for path traversal (absolute path)")
+	}
+	if !strings.Contains(resp.Error, "Invalid file path") {
+		t.Errorf("Expected error containing 'Invalid file path', got: %q", resp.Error)
 	}
 }
 

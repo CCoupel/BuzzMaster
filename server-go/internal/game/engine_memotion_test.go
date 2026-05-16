@@ -12,6 +12,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"testing"
+	"time"
 )
 
 // ============================================================================
@@ -1394,4 +1395,292 @@ func TestDoneMotionCard_WithMotionConfig(t *testing.T) {
 			}
 		})
 	}
+}
+
+// ============================================================================
+// Secret Mode — MEMORIZE subphase tests (v5.5.0 #76)
+// ============================================================================
+
+// TestInitMotionState_SecretMode_SubPhaseMemorize verifies that initMotionStateUnsafe
+// sets MotionSubPhase to "MEMORIZE" when MotionMemorizeDuration > 0.
+func TestInitMotionState_SecretMode_SubPhaseMemorize(t *testing.T) {
+	e := NewEngine()
+	q := makeMotionQuestion("q1", defaultMotionCards(), "SOLO")
+	q.MotionMemorizeDuration = 10
+	e.Ready("q1", q)
+
+	// InitMotionState acquires the lock and calls initMotionStateUnsafe
+	e.InitMotionState()
+
+	if e.state.MotionSubPhase != "MEMORIZE" {
+		t.Errorf("expected MotionSubPhase=MEMORIZE when MotionMemorizeDuration>0, got %q", e.state.MotionSubPhase)
+	}
+	// Cards should still be initialized
+	if len(e.state.MotionCardStates) != len(defaultMotionCards()) {
+		t.Errorf("expected %d card states, got %d", len(defaultMotionCards()), len(e.state.MotionCardStates))
+	}
+}
+
+// TestInitMotionState_SecretMode_CurrentTimeSetBeforeBroadcast verifies that
+// initMotionStateUnsafe initialises CurrentTime = MotionMemorizeDuration synchronously,
+// so the first broadcastUpdate (fired right after initMotionStateUnsafe but BEFORE
+// StartMotionMemorizeTimer) already carries the correct countdown value.
+// Regression guard: prevents residual CurrentTime flash on TV at MEMORIZE start (#76).
+func TestInitMotionState_SecretMode_CurrentTimeSetBeforeBroadcast(t *testing.T) {
+	const duration = 10
+
+	e := NewEngine()
+	q := makeMotionQuestion("q1", defaultMotionCards(), "SOLO")
+	q.MotionMemorizeDuration = duration
+	e.Ready("q1", q)
+
+	// Simulate residual state from a previous question (e.g., CurrentTime=30)
+	e.mu.Lock()
+	e.state.CurrentTime = 30
+	e.state.Delay = 30
+	e.mu.Unlock()
+
+	// initMotionStateUnsafe is what actualStart/StartImmediate call under lock
+	// before releasing the lock and calling callback(PhaseStarted).
+	e.InitMotionState()
+
+	// The first broadcast would read state at this point — verify CurrentTime == duration.
+	e.mu.RLock()
+	currentTime := e.state.CurrentTime
+	delay := e.state.Delay
+	subphase := e.state.MotionSubPhase
+	e.mu.RUnlock()
+
+	if subphase != "MEMORIZE" {
+		t.Errorf("expected MotionSubPhase=MEMORIZE, got %q", subphase)
+	}
+	if currentTime != duration {
+		t.Errorf("expected CurrentTime=%d before first broadcast, got %d (residual flash bug)", duration, currentTime)
+	}
+	if delay != duration {
+		t.Errorf("expected Delay=%d before first broadcast, got %d", duration, delay)
+	}
+}
+
+// TestInitMotionState_StandardMode_CurrentTimeCleared verifies that initMotionStateUnsafe
+// resets CurrentTime to 0 for standard mode (MotionMemorizeDuration == 0),
+// preventing residual values from a previous question from being broadcast.
+func TestInitMotionState_StandardMode_CurrentTimeCleared(t *testing.T) {
+	e := NewEngine()
+	q := makeMotionQuestion("q1", defaultMotionCards(), "SOLO")
+	// MotionMemorizeDuration == 0 → standard GRID mode
+	e.Ready("q1", q)
+
+	// Simulate residual CurrentTime from a previous question
+	e.mu.Lock()
+	e.state.CurrentTime = 30
+	e.mu.Unlock()
+
+	e.InitMotionState()
+
+	e.mu.RLock()
+	currentTime := e.state.CurrentTime
+	subphase := e.state.MotionSubPhase
+	e.mu.RUnlock()
+
+	if subphase != "GRID" {
+		t.Errorf("expected MotionSubPhase=GRID, got %q", subphase)
+	}
+	if currentTime != 0 {
+		t.Errorf("expected CurrentTime=0 for standard mode, got %d (residual flash bug)", currentTime)
+	}
+}
+
+// TestInitMotionState_StandardMode_SubPhaseGrid verifies that initMotionStateUnsafe
+// sets MotionSubPhase to "GRID" when MotionMemorizeDuration == 0 (regression test).
+func TestInitMotionState_StandardMode_SubPhaseGrid(t *testing.T) {
+	e := NewEngine()
+	q := makeMotionQuestion("q1", defaultMotionCards(), "SOLO")
+	// MotionMemorizeDuration defaults to 0 — standard mode
+	e.Ready("q1", q)
+
+	e.InitMotionState()
+
+	if e.state.MotionSubPhase != "GRID" {
+		t.Errorf("expected MotionSubPhase=GRID when MotionMemorizeDuration==0, got %q", e.state.MotionSubPhase)
+	}
+}
+
+// TestSelectMotionCard_ErrorWhenSubPhaseMemorize verifies that card selection is
+// rejected during the MEMORIZE subphase with NOT_IN_GRID_SUBPHASE.
+func TestSelectMotionCard_ErrorWhenSubPhaseMemorize(t *testing.T) {
+	e := NewEngine()
+	q := makeMotionQuestion("q1", defaultMotionCards(), "SOLO")
+	q.MotionMemorizeDuration = 10
+	e.Ready("q1", q)
+	e.StartImmediate(0)
+	// InitMotionState resets subphase based on MotionMemorizeDuration → "MEMORIZE"
+	e.InitMotionState()
+
+	err := e.SelectMotionCard("mc-1")
+	if err == nil {
+		t.Fatal("expected error when selecting card in MEMORIZE subphase, got nil")
+	}
+
+	motionErr, ok := err.(*MotionError)
+	if !ok {
+		t.Fatalf("expected *MotionError, got %T: %v", err, err)
+	}
+	if motionErr.Reason != "NOT_IN_GRID_SUBPHASE" {
+		t.Errorf("expected reason NOT_IN_GRID_SUBPHASE, got %q", motionErr.Reason)
+	}
+}
+
+// TestStartMotionMemorizeTimer_ZeroDuration_NoOp verifies that StartMotionMemorizeTimer
+// with duration=0 is a no-op (subphase unchanged, no goroutine started).
+func TestStartMotionMemorizeTimer_ZeroDuration_NoOp(t *testing.T) {
+	e := NewEngine()
+	q := makeMotionQuestion("q1", defaultMotionCards(), "SOLO")
+	e.Ready("q1", q)
+	e.StartImmediate(0)
+	e.InitMotionState() // subphase = GRID (MotionMemorizeDuration == 0)
+
+	e.StartMotionMemorizeTimer(0) // no-op
+
+	if e.state.MotionSubPhase != "GRID" {
+		t.Errorf("expected MotionSubPhase=GRID after no-op timer call, got %q", e.state.MotionSubPhase)
+	}
+}
+
+// TestStartMotionMemorizeTimer_TransitionsToGrid verifies that after StartMotionMemorizeTimer(1),
+// MotionSubPhase transitions from "MEMORIZE" to "GRID" after ~1 second.
+func TestStartMotionMemorizeTimer_TransitionsToGrid(t *testing.T) {
+	e := NewEngine()
+	q := makeMotionQuestion("q1", defaultMotionCards(), "SOLO")
+	q.MotionMemorizeDuration = 1
+	e.Ready("q1", q)
+
+	// Manually set engine to STARTED + MEMORIZE to avoid startTimer side effects
+	e.mu.Lock()
+	e.state.Phase = PhaseStarted
+	e.state.MotionSubPhase = "MEMORIZE"
+	e.mu.Unlock()
+
+	e.StartMotionMemorizeTimer(1)
+
+	// Wait for timer to fire (1s tick + buffer)
+	time.Sleep(1500 * time.Millisecond)
+
+	e.mu.RLock()
+	subphase := e.state.MotionSubPhase
+	currentTime := e.state.CurrentTime
+	e.mu.RUnlock()
+
+	if subphase != "GRID" {
+		t.Errorf("expected MotionSubPhase=GRID after timer expiry, got %q", subphase)
+	}
+	if currentTime != 0 {
+		t.Errorf("expected CurrentTime=0 after timer expiry, got %d", currentTime)
+	}
+}
+
+// TestStartMotionMemorizeTimer_TransitionsToGrid_MotionSelectedCleared verifies that
+// the automatic MEMORIZE→GRID transition clears MotionSelected (prevents stale selection).
+func TestStartMotionMemorizeTimer_TransitionsToGrid_MotionSelectedCleared(t *testing.T) {
+	e := NewEngine()
+	q := makeMotionQuestion("q1", defaultMotionCards(), "SOLO")
+	q.MotionMemorizeDuration = 1
+	e.Ready("q1", q)
+
+	// Manually set engine state — same pattern as TestStartMotionMemorizeTimer_TransitionsToGrid
+	e.mu.Lock()
+	e.state.Phase = PhaseStarted
+	e.state.MotionSubPhase = "MEMORIZE"
+	e.state.MotionSelected = "mc-1" // defensive: ensure field is cleared by transition
+	e.mu.Unlock()
+
+	e.StartMotionMemorizeTimer(1)
+
+	// Wait for timer to fire (1s tick + buffer)
+	time.Sleep(1500 * time.Millisecond)
+
+	e.mu.RLock()
+	subphase := e.state.MotionSubPhase
+	selected := e.state.MotionSelected
+	e.mu.RUnlock()
+
+	if subphase != "GRID" {
+		t.Errorf("expected MotionSubPhase=GRID after timer expiry, got %q", subphase)
+	}
+	if selected != "" {
+		t.Errorf("expected MotionSelected=\"\" after MEMORIZE→GRID transition, got %q", selected)
+	}
+}
+
+// TestStopGame_DuringMEMORIZE_NoPanic verifies that calling Stop() while the MEMORIZE
+// timer goroutine is active terminates the goroutine cleanly without panic.
+// Regression guard: goroutine must not continue writing to state after Stop().
+func TestStopGame_DuringMEMORIZE_NoPanic(t *testing.T) {
+	e := NewEngine()
+	q := makeMotionQuestion("q1", defaultMotionCards(), "SOLO")
+	q.MotionMemorizeDuration = 5 // long timer — would not expire during test
+	e.Ready("q1", q)
+
+	// StartImmediate sets MotionSubPhase=MEMORIZE and launches the goroutine
+	e.StartImmediate(0)
+
+	// Immediately stop — stopCh close must signal goroutine exit
+	e.Stop()
+
+	// Brief sleep to let goroutine observe the closed channel
+	time.Sleep(100 * time.Millisecond)
+
+	e.mu.RLock()
+	phase := e.state.Phase
+	subphase := e.state.MotionSubPhase
+	e.mu.RUnlock()
+
+	if phase != PhaseStopped {
+		t.Errorf("expected Phase=STOPPED after Stop(), got %q", phase)
+	}
+	// Timer was cut short at 5s — subphase must NOT have transitioned to GRID
+	if subphase == "GRID" {
+		t.Errorf("MotionSubPhase must not transition to GRID when Stop() is called before timer expiry, got %q", subphase)
+	}
+
+	// Double-stop must not panic (idempotent)
+	e.Stop()
+}
+
+// TestStartImmediate_SecretMode_StartsMemorizeTimer verifies the end-to-end integration:
+// StartImmediate() with MotionMemorizeDuration > 0 sets MotionSubPhase=MEMORIZE immediately,
+// then automatically transitions to GRID after the timer expires — same as actualStart().
+func TestStartImmediate_SecretMode_StartsMemorizeTimer(t *testing.T) {
+	e := NewEngine()
+	q := makeMotionQuestion("q1", defaultMotionCards(), "SOLO")
+	q.MotionMemorizeDuration = 1
+	e.Ready("q1", q)
+
+	e.StartImmediate(0)
+
+	// Immediately after StartImmediate: subphase must be MEMORIZE
+	e.mu.RLock()
+	immediateSubphase := e.state.MotionSubPhase
+	e.mu.RUnlock()
+
+	if immediateSubphase != "MEMORIZE" {
+		t.Errorf("expected MotionSubPhase=MEMORIZE immediately after StartImmediate, got %q", immediateSubphase)
+	}
+
+	// After ~1.5s: timer fires, automatic transition to GRID
+	time.Sleep(1500 * time.Millisecond)
+
+	e.mu.RLock()
+	subphase := e.state.MotionSubPhase
+	currentTime := e.state.CurrentTime
+	e.mu.RUnlock()
+
+	if subphase != "GRID" {
+		t.Errorf("expected MotionSubPhase=GRID after timer expiry, got %q", subphase)
+	}
+	if currentTime != 0 {
+		t.Errorf("expected CurrentTime=0 after timer expiry, got %d", currentTime)
+	}
+
+	e.Stop()
 }

@@ -213,8 +213,9 @@ type Question struct {
 	MemoryMode        string           `json:"MEMORY_MODE,omitempty"`        // "SOLO", "CHACUN_SON_TOUR", "TANT_QUE_JE_GAGNE" (default SOLO)
 	MotionCards       []MotionCard     `json:"MOTION_CARDS,omitempty"`       // Cards for MEMOTION questions (v5.0.0)
 	MotionMode        string           `json:"MOTION_MODE,omitempty"`        // "SOLO", "CHACUN_SON_TOUR", "TANT_QUE_JE_GAGNE" (default SOLO)
-	MotionConfig      *MotionConfig    `json:"MOTION_CONFIG,omitempty"`      // MEMOTION configuration (v5.0.x)
-	Points            string           `json:"POINTS"`                       // String to match JSON format
+	MotionConfig           *MotionConfig    `json:"MOTION_CONFIG,omitempty"`            // MEMOTION configuration (v5.0.x)
+	MotionMemorizeDuration int              `json:"MOTION_MEMORIZE_DURATION,omitempty"` // Seconds for MEMORIZE phase; 0 = standard mode (v5.5.0)
+	Points                 string           `json:"POINTS"`                             // String to match JSON format
 	Time         string           `json:"TIME"`                    // String to match JSON format
 	Order        int              `json:"ORDER,omitempty"`         // Display order (for drag and drop)
 	Media        string           `json:"MEDIA,omitempty"`         // Question media (shown during game)

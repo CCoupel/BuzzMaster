@@ -75,7 +75,7 @@ git status  # Clean working directory
 npm test    # Tests passent
 
 # 2. Build — sortie dans build/qualif/<version>
-VERSION=$(cat {VERSION_FILE})   # adapter selon le projet : package.json, go.mod, etc.
+VERSION=$(cat server-go/config.json)   # adapter selon le projet : package.json, go.mod, etc.
 BUILD_DIR="build/qualif/$VERSION"
 mkdir -p "$BUILD_DIR"
 

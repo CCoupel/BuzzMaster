@@ -394,6 +394,13 @@ func (u *Updater) HandleApplyUpdate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Guard: reject versions with path separators or dot-dot sequences
+	if strings.Contains(req.Version, "..") || strings.ContainsAny(req.Version, "/\\") {
+		LogError(game.LogComponentUpdater, "Invalid version path: %s", req.Version)
+		writeJSONError(w, http.StatusBadRequest, ApplyResponse{Success: false, Error: "Invalid file path"})
+		return
+	}
+
 	// Reconstruct file path from version — the server owns the naming convention
 	ext := ""
 	if runtime.GOOS == "windows" {

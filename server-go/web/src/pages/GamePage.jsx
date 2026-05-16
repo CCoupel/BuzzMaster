@@ -733,11 +733,28 @@ export default function GamePage() {
               return d === 3 ? 5 : d === 2 ? 3 : 1
             }
 
+            if (subphase === 'MEMORIZE') {
+              return (
+                <div className="memotion-admin-panel">
+                  <div className="memotion-memorize-status">
+                    <span>Phase mémorisation en cours...</span>
+                    <span className="memotion-memorize-timer">{gameState.timer}s</span>
+                  </div>
+                </div>
+              )
+            }
+
+            const isSecretMode = (gameState.question?.MOTION_MEMORIZE_DURATION || 0) > 0
+            const motionCount = motionCards.length
+            const motionCols = motionCount <= 4 ? 2 : motionCount <= 6 ? 3 : motionCount <= 12 ? 4 : 5
+            const getCoord = (idx, cols) => `${String.fromCharCode(65 + Math.floor(idx / cols))}${(idx % cols) + 1}`
+
             if (subphase === 'GRID') {
               return (
                 <div className="memotion-admin-panel">
                   <div className="memotion-admin-label">
                     Sélectionner une carte sur la preview TV
+                    {isSecretMode && <span className="memotion-admin-secret-label"> (mode SECRET)</span>}
                     {currentTeam && (
                       <span
                         className="memotion-admin-current-team"
@@ -745,6 +762,32 @@ export default function GamePage() {
                       > · {currentTeam}</span>
                     )}
                   </div>
+                  {isSecretMode && (
+                    <div
+                      className="memotion-admin-recto-grid"
+                      style={{ '--motion-cols': motionCols }}
+                    >
+                      {motionCards.map((card, idx) => {
+                        const isDone = (cardStates[card.ID] || 'UNPLAYED') === 'DONE'
+                        return (
+                          <div
+                            key={card.ID}
+                            className={`memotion-admin-recto-card${isDone ? ' done' : ''}`}
+                          >
+                            <div className="memotion-admin-recto-coord">{getCoord(idx, motionCols)}</div>
+                            {card.RECTO_IMAGE && (
+                              <img
+                                src={card.RECTO_IMAGE}
+                                alt={card.RECTO_THEME}
+                                className="memotion-admin-recto-img"
+                              />
+                            )}
+                            <div className="memotion-admin-recto-theme">{card.RECTO_THEME}</div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )}
                 </div>
               )
             }

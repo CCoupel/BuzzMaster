@@ -135,9 +135,17 @@ interface Question {
   // Memory
   MEMORY_PAIRS?: MemoryPair[]
   MEMORY_CONFIG?: MemoryConfig
+
+  // MEMOTION (v5.0.0+)
+  MEMOTION_CARDS?: MotionCard[]
+  MEMOTION_MODE?: "SOLO" | "CHACUN_SON_TOUR" | "TANT_QUE_JE_GAGNE"
+  MOTION_MEMORIZE_DURATION?: number  // Seconds for MEMORIZE phase in Secret Mode. 0 = standard mode (no memorization). (v5.5.0)
 }
 
-type QuestionType = "NORMAL" | "QCM" | "MEMORY"
+type QuestionType = "NORMAL" | "QCM" | "MEMORY" | "MEMOTION"
+
+// Subphases du jeu MEMOTION — MEMORIZE ajouté en v5.5.0 (Secret Mode)
+type MotionSubPhase = "" | "MEMORIZE" | "GRID" | "SELECTED" | "QUESTION" | "REVEAL"
 
 type PointsTarget = "PLAYER" | "TEAM"
 

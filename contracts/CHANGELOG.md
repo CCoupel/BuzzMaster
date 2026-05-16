@@ -2,6 +2,13 @@
 
 ---
 
+## [20260515] — MEMOTION Secret Mode v5.5.0
+
+- **[NEW]** `Question.MOTION_MEMORIZE_DURATION` int — durée phase MEMORIZE en secondes. 0 = mode standard (omitempty, rétrocompatible)
+- **[CHANGED]** `GameState.MEMOTION_SUBPHASE` — nouvelle valeur `"MEMORIZE"` ajoutée (additive, pas de breaking change)
+
+---
+
 ## [20260503] — v5.0.0 : Nouveau type de jeu MEMOTION
 
 ### Contrats créés

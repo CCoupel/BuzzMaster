@@ -59,7 +59,7 @@ rm -rf _work/
 Initialiser `workflow-state.json` (état propre — aucun agent actif) :
 
 ```bash
-echo '{"watchdog_active":false,"agents":{}}' > .claude/workflow-state.json
+echo '{"agents":{}}' > .claude/workflow-state.json
 ```
 
 ### Etape 3 — Lecture de la memoire projet

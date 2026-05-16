@@ -3,6 +3,24 @@
 Historique des versions du projet BuzzControl.
 
 
+## [5.5.0] — MEMOTION Secret Mode + Security Fix
+
+### Added
+- **MEMOTION Secret Mode** (#76) : nouveau paramètre `MOTION_MEMORIZE_DURATION` (secondes) sur les questions MEMOTION
+  - Phase MEMORIZE : toutes les cartes visibles face RECTO + timer décompte sur TV
+  - Transition automatique MEMORIZE → GRID à expiration
+  - Phase GRID en mode SECRET : coordonnées (A1, B2…) remplacent les thèmes sur les cartes
+  - Sélection par coordonnée via clic admin — flash RECTO 0.5s → VERSO question (flow standard)
+  - Compatible tous modes de jeu (SOLO, CHACUN_SON_TOUR, TANT_QUE_JE_GAGNE)
+  - Rétrocompatible : MOTION_MEMORIZE_DURATION absent/0 → mode standard inchangé
+  - Éditeur QuestionsPage : champ "Durée mémorisation (s)" dans la section MEMOTION
+  - Admin GamePage : statut MEMORIZE + liste coordonnées↔thèmes pendant phase GRID
+
+### Fixed
+- **Security** (#82) : garde path traversal dans `HandleApplyUpdate` — rejette les versions contenant `../` ou séparateurs de chemin → 400 Bad Request
+
+---
+
 ## [5.1.4] - 2026-05-11
 
 ### Fixed

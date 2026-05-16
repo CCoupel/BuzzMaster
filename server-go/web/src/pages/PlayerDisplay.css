@@ -2706,6 +2706,40 @@
   50%       { box-shadow: 0 0 28px rgba(255, 255, 255, 0.6), 0 4px 16px rgba(49, 46, 129, 0.5); }
 }
 
+/* ---- MEMOTION Secret Mode ---- */
+
+/* Coordinate label on cards during GRID in secret mode */
+.memotion-card-coord {
+  font-size: clamp(1.2rem, 6cqw, 2.5rem);
+  font-weight: 900;
+  color: var(--gray-200, #e5e7eb);
+  letter-spacing: 0.05em;
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+  text-align: center;
+}
+
+/* Timer pulse during memorize phase */
+@keyframes memotion-timer-pulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.6; }
+}
+
+.memotion-memorize-active .zone-timer {
+  animation: memotion-timer-pulse 1s ease-in-out infinite;
+}
+
+/* Memorize phase banner in zone-question */
+.memotion-memorize-banner {
+  text-align: center;
+  font-size: clamp(0.9rem, 3vh, 1.4rem);
+  font-weight: 700;
+  color: var(--gold, #f5c518);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  padding: 0.5rem;
+  text-shadow: 0 2px 12px rgba(245, 197, 24, 0.4);
+}
+
 /* État DONE : fond couleur équipe gagnante */
 .memotion-card.matched .memory-card-back {
   background: var(--matched-team-color, rgba(100, 100, 200, 0.6));

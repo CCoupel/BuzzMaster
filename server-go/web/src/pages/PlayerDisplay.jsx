@@ -1901,6 +1901,10 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
                 return d === 3 ? 5 : d === 2 ? 3 : 1
               }
 
+              /* ---- Secret mode ---- */
+              const isSecretMode = (gameState.question?.MOTION_MEMORIZE_DURATION || 0) > 0
+              const getCoord = (idx, cols) => `${String.fromCharCode(65 + Math.floor(idx / cols))}${(idx % cols) + 1}`
+
               /* ---- Calcul grille ---- */
               const count = motionCards.length
               const motionCols = count <= 4 ? 2 : count <= 6 ? 3 : count <= 12 ? 4 : 5
@@ -1912,7 +1916,7 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
 
               /* ---- Grille (toujours rendue pour que layoutId fonctionne) ---- */
               const gridView = (
-                <div className="game-content-zones memory-game memotion-game">
+                <div className={`game-content-zones memory-game memotion-game${subphase === 'MEMORIZE' ? ' memotion-memorize-active' : ''}`}>
                   {/* Zone 1: Timer — reste visible (non dimmed) quand fullscreen overlay actif */}
                   <div className="zone-timer">
                     <Timer
@@ -1927,9 +1931,17 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
                   {/* Zones 2-4: contenu grille — dimmed séparément quand overlay actif */}
                   <div className={`memotion-grid-body${isMotionFullscreen ? ' memotion-grid-dimmed' : ''}`}>
 
-                  {/* Zone 2: Current team or READY message */}
+                  {/* Zone 2: Current team or READY message or MEMORIZE banner */}
                   <div className="zone-question">
-                    {currentTeam ? (
+                    {subphase === 'MEMORIZE' ? (
+                      <motion.div
+                        className="memotion-memorize-banner"
+                        initial={{ opacity: 0, y: -10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                      >
+                        🧠 MÉMORISEZ !
+                      </motion.div>
+                    ) : currentTeam ? (
                       <motion.div
                         className="memotion-current-team-label"
                         style={{ color: currentTeamCss, borderColor: currentTeamCss }}
@@ -2014,23 +2026,34 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
                               </div>
                               {/* Back: shown by default (UNPLAYED / in-progress) */}
                               <div className="memory-card-back">
-                                {/* Header — titre toujours en haut */}
-                                <div className="memotion-card-header">
-                                  <span className="memotion-card-title">{card.RECTO_THEME}</span>
-                                </div>
-                                {/* Corps — image si disponible, sinon vide */}
-                                <div className="memotion-card-body">
-                                  {card.RECTO_IMAGE && (
-                                    <img src={card.RECTO_IMAGE} alt="" className="memotion-card-img" />
-                                  )}
-                                </div>
-                                {/* Footer — étoiles + nom équipe gagnante (si DONE) */}
-                                <div className="memotion-card-footer">
-                                  <span className="memotion-card-stars">{'★'.repeat(diff)}</span>
-                                  {isDone && winnerTeam && (
-                                    <span className="memotion-card-done-team">{winnerTeam}</span>
-                                  )}
-                                </div>
+                                {isSecretMode && subphase === 'GRID' ? (
+                                  /* Secret mode GRID: coordinate only — no stars (reveals difficulty) */
+                                  <>
+                                    <div className="memotion-card-header" />
+                                    <div className="memotion-card-body">
+                                      <span className="memotion-card-coord">{getCoord(index, motionCols)}</span>
+                                    </div>
+                                    <div className="memotion-card-footer" />
+                                  </>
+                                ) : (
+                                  /* Standard / MEMORIZE: show RECTO_THEME + image */
+                                  <>
+                                    <div className="memotion-card-header">
+                                      <span className="memotion-card-title">{card.RECTO_THEME}</span>
+                                    </div>
+                                    <div className="memotion-card-body">
+                                      {card.RECTO_IMAGE && (
+                                        <img src={card.RECTO_IMAGE} alt="" className="memotion-card-img" />
+                                      )}
+                                    </div>
+                                    <div className="memotion-card-footer">
+                                      <span className="memotion-card-stars">{'★'.repeat(diff)}</span>
+                                      {isDone && winnerTeam && (
+                                        <span className="memotion-card-done-team">{winnerTeam}</span>
+                                      )}
+                                    </div>
+                                  </>
+                                )}
                               </div>
                             </motion.div>
                           </motion.div>

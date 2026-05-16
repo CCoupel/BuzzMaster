@@ -66,6 +66,7 @@ export default function QuestionsPage() {
       { id: 'mc-2', rectoTheme: '', rectoImage: null, difficulty: 1, questionText: '', questionImage: null, answerText: '', answerImage: null },
     ],
     motionConfig: { points1: 1, points2: 3, points3: 5 },
+    motionMemorizeDuration: 0,
     memoryConfig: {
       flipDelay: 3,
       pointsPerPair: 10,
@@ -444,6 +445,7 @@ export default function QuestionsPage() {
       motionMode: question.MOTION_MODE || 'SOLO',
       motionCards,
       motionConfig,
+      motionMemorizeDuration: question.MOTION_MEMORIZE_DURATION || 0,
       points: question.POINTS || '1',
       time: question.TIME || '30',
       media: null,
@@ -495,6 +497,7 @@ export default function QuestionsPage() {
         { id: 'mc-2', rectoTheme: '', rectoImage: null, difficulty: 1, questionText: '', questionImage: null, answerText: '', answerImage: null },
       ],
       motionConfig: { points1: 1, points2: 3, points3: 5 },
+      motionMemorizeDuration: 0,
       points: '1',
       time: '30',
       media: null,
@@ -732,6 +735,7 @@ export default function QuestionsPage() {
         POINTS_2_STAR: parseInt(formData.motionConfig?.points2) || 3,
         POINTS_3_STAR: parseInt(formData.motionConfig?.points3) || 5,
       }))
+      data.append('MOTION_MEMORIZE_DURATION', String(formData.motionMemorizeDuration || 0))
 
       // Append image files (per face, per card)
       formData.motionCards.forEach(card => {
@@ -1760,6 +1764,18 @@ export default function QuestionsPage() {
                         />
                         <span className="memotion-points-unit">pts</span>
                       </div>
+                    </div>
+
+                    {/* MEMOTION — Mode SECRET : durée mémorisation */}
+                    <div className="memotion-memorize-row">
+                      <label htmlFor="memotion-memorize-input">Mode SECRET — Durée mémorisation (s)</label>
+                      <input
+                        id="memotion-memorize-input"
+                        type="number" min="0" max="120" step="5"
+                        value={formData.motionMemorizeDuration ?? 0}
+                        onChange={e => handleInputChange('motionMemorizeDuration', parseInt(e.target.value) || 0)}
+                      />
+                      <span className="memotion-memorize-hint">0 = mode standard</span>
                     </div>
 
                     <label>Cartes MEMOTION * ({formData.motionCards.length} cartes)</label>

@@ -130,19 +130,13 @@ Si des changements non commites existent :
 
 ### 5. TEAM — Dissolution de la Team
 
-Lire `workflow-state.json` pour identifier les agents actifs (`status: "working"` ou `"idle"`).
+Lire `workflow-state.json` pour identifier les agents actifs (`status: "working"` ou `"spawn_pending"`).
 
-Pour chaque agent actif :
-1. `SendMessage({to: "<agent>", content: "shutdown_request"})`
-2. Mettre `status: "pending_delete"` dans `workflow-state.json` — écrire immédiatement
-
-Attendre **30 secondes** les `shutdown_response` :
-- À chaque `shutdown_response` reçu → supprimer l'entrée de `workflow-state.json`
-- Après 30s, pour tout agent encore `"pending_delete"` → `TaskStop(<agent>)` + supprimer l'entrée
+Pour chaque agent actif → `TaskStop(<agent>)` (les teammates qui ont fini se sont déjà auto-fermés).
 
 Réinitialiser le fichier d'état :
 ```bash
-echo '{"watchdog_active":false,"agents":{}}' > .claude/workflow-state.json
+echo '{"agents":{}}' > .claude/workflow-state.json
 ```
 
 Appeler **TeamDelete** avec le nom `TEAM-Buzz` pour dissoudre la team.
