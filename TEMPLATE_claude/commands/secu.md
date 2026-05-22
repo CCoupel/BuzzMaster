@@ -83,8 +83,7 @@ Le rapport inclut :
 
 ## Agent
 
-Activer `security` via le teamleader — appliquer la règle SendMessage-first :
-- Déjà actif dans la team → `SendMessage({to: "security", content: ...})`
-- Première activation → `Task({subagent_type: "security", name: "security", ...})`
+Dispatcher via `SendMessage` (teammate en IDLE depuis `/start-session`) :
+`SendMessage({to: "security", content: ...})`
 
 Spec : `.claude/agents/security.md`

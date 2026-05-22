@@ -56,12 +56,6 @@ rm -rf _work/
 > Supprime les rapports et handoffs d'une session précédente éventuellement non clôturée.
 > Sans risque : `_work/` est gitignored et jamais lu avant le démarrage d'un workflow.
 
-Initialiser `workflow-state.json` (état propre — aucun agent actif) :
-
-```bash
-echo '{"agents":{}}' > .claude/workflow-state.json
-```
-
 ### Etape 3 — Lecture de la memoire projet
 
 Lire `.claude/memory/MEMORY.md` (source de verite unique).
@@ -72,14 +66,27 @@ Extraire :
 - Regles critiques du projet
 - Corrections de comportement a appliquer
 
-### Etape 4 — Creation de la TEAM
+### Etape 4 — Creation de la TEAM et spawn de tous les teammates
 
-**Sans demander confirmation**, creer immediatement la team :
+**Sans demander confirmation** :
 
 1. **TeamCreate** avec le nom `{TEAM_NAME}` (defini dans CLAUDE.md)
 
-> Le Claude principal (`main`) est l'orchestrateur de la team — pas d'agent supplémentaire à spawner.
-> Les agents spécialisés (planner, dev-*, qa...) seront spawnes par `main` au démarrage de chaque workflow.
+2. **Spawner tous les teammates du projet en parallèle** — lire la liste dans CLAUDE.md section "Agents Disponibles" :
+
+```
+Pour chaque agent listé :
+Task({
+  name: "<nom-canonique>",
+  prompt: "Lis .claude/agents/context/TEAMMATES_PROTOCOL.md puis .claude/agents/<nom>.md.
+           Tu fais partie de {TEAM_NAME} sur {PROJECT_NAME}.
+           Mets-toi en IDLE après avoir envoyé ACTIF — le teamleader t'enverra ta tâche."
+})
+```
+
+3. **Attendre les ACTIF de tous les teammates** avant de continuer.
+
+> Après cette étape, le teamleader n'utilise plus que `SendMessage` — aucun nouveau spawn pendant la session.
 
 ### Etape 5 — Etat du backlog GitHub
 
@@ -129,7 +136,7 @@ _(Si aucune issue ouverte : "Aucune issue ouverte.")_
 
 ---
 
-**Orchestrateur** : Claude principal (`main`) — les agents spécialisés seront spawnes au démarrage de chaque workflow
+**Team** : tous les teammates sont en IDLE et prêts à recevoir des tâches
 
 **Commandes disponibles** :
 - `/feature <description>` — Nouvelle feature complete
@@ -149,6 +156,6 @@ _(Si aucune issue ouverte : "Aucune issue ouverte.")_
 - La MEMORY projet est la **seule source de verite** au demarrage
 - La TEAM est **toujours creee** sans demander confirmation
 - Le nom de la TEAM est **toujours** `{TEAM_NAME}` (defini dans CLAUDE.md)
-- Le Claude principal (`main`) est l'orchestrateur — aucun agent n'est spawne au démarrage
-- Les agents spécialisés demarrent en **mode IDLE strict** — ils attendent
-  un ordre explicite de `main` via SendMessage, sans verifier la TaskList
+- Tous les teammates sont spawned au démarrage et passent en IDLE
+- Pendant la session : **uniquement SendMessage** — aucun nouveau spawn
+- Les teammates attendent un ordre explicite de `main` via SendMessage

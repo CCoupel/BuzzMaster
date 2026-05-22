@@ -3,6 +3,43 @@
 Historique des versions du projet BuzzControl.
 
 
+## [5.6.0] - 2026-05-22
+
+### Added
+- **Mode ARDOISE** (#86, #87) : nouveau type de question avec clavier AZERTY/NUMPAD sur VPlayer
+  - Modèle `ArdoiseAnswer` : texte + timestamp soumission
+  - GameState.ARDOISE_ANSWERS : dictionnaire équipe → réponse saisie
+  - Éditeur QuestionsPage : sélection type ARDOISE + champ réponse attendue (ANSWER) + sélecteur clavier AZERTY/NUMPAD
+  - Engine `SetArdoiseAnswer()` avec guards FSM
+  - Action WebSocket `ARDOISE_INPUT` (endpoint `/ws/player`)
+
+- **Clavier Virtuel ARDOISE** (#88) : composant ArdoiseKeyboard avec touche DEL
+  - Affichage automatique dès que question.TYPE === "ARDOISE"
+  - **Actif** (saisie traitée) : phase STARTED uniquement
+  - **Verrouillé** : STOP, PAUSE, REVEALED
+  - Envoi temps réel throttlé 200ms
+  - Saisie locale immédiate (affichage sans attendre le serveur)
+
+- **Affichage réponses équipes — zone admin** (#89) : panneau réponses en temps réel (pattern MEMORY)
+  - Phase STARTED/STOPPED/REVEALED : affichage des réponses ARDOISE saisies
+
+- **TV REVEAL ARDOISE** (#90) : bonne réponse + cartes équipes en grid (footer 50/50)
+  - Affichage texte réponses avec contraintes statiques (overflow:hidden, vh/vw)
+  - Bonne réponse visible en REVEALED
+
+### Fixed
+- VPlayer identification via 3-pass lookup (#91) : payload.ID → msg.ID → clientID
+- Mapping ARDOISE_ANSWERS dans useWebSocket.js (#92)
+- Reset clavier à la phase PREPARE (#93)
+- Badge type "Ardoise" coloré sur QuestionCard (#94)
+- Régression zone-media NORMAL/QCM — media zone (width/height 100% + object-fit:contain)
+
+### UI
+- Badges colorés par type de question (Normal/QCM/Memory/Memotion/Ardoise)
+- Filtres type sur 2 lignes dans QuestionsPage (Normal·QCM·Memory / Memotion·Ardoise)
+
+---
+
 ## [5.5.0] — MEMOTION Secret Mode + Security Fix
 
 ### Added

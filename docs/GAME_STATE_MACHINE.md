@@ -181,6 +181,71 @@ Refus NEW_GAME si phase ≠ STOPPED : `{ "ACTION": "REMOTE", "MSG": { "error": "
 
 ---
 
+## Type de question ARDOISE (v5.6.0 / Milestone v5.6.x)
+
+**Type de question** : `ARDOISE` — réponse libre au clavier (joueur virtuel VPlayer)
+
+### Comportement de la machine d'états
+
+La machine d'états ARDOISE suit le **même cycle que QUIZ** avec le discriminant `question.TYPE === "ARDOISE"`.
+
+**Cycle ARDOISE** :
+1. Admin sélectionne question ARDOISE → `PREPARE` : VPlayer envoie PING
+2. Tous PONGs reçus → `READY`
+3. Admin clique START → `STARTED` : clavier VPlayer **actif** (inputs traités + envoyés)
+4. Admin clique STOP ou timer expire → `STOPPED`
+5. Admin clique REPONSE → `REVEALED` : affiche réponses équipes + bonne réponse
+
+### Affichage TV et clavier VPlayer
+
+| Phase | Affichage question | Clavier VPlayer | État inputs |
+|-------|-------------------|-----------------|------------|
+| **PREPARE** | "PREPAREZ-VOUS" | Affiché | Verrouillé (phase ≠ STARTED) |
+| **READY** | "PREPAREZ-VOUS" clignote | Affiché | Verrouillé (phase ≠ STARTED) |
+| **STARTED** | Question ARDOISE texte + média | Affiché | **Actif** (inputs traités + envoyés) |
+| **PAUSED** | Question + chronomètre clignotant | Affiché | Verrouillé (phase ≠ STARTED) |
+| **STOPPED** | Question + chronomètre arrêté (SANS réponse) | Affiché | Verrouillé (phase ≠ STARTED) |
+| **REVEALED** | Question + **BONNE RÉPONSE** + réponses équipes | Masqué | Verrouillé |
+
+**Règle clavier VPlayer** :
+- Clavier **toujours affiché** dès que `question.TYPE === "ARDOISE"` (y compris PREPARE/READY/countdown)
+- Clavier **actif** (inputs acceptés + envoyés au serveur) **uniquement** lors de `phase === "STARTED"`
+- Clavier **verrouillé** (inputs ignorés localement) dès que phase quitte STARTED (STOP, PAUSE, REVEALED)
+
+### Nouveau champ GameState : ARDOISE_ANSWERS
+
+Dictionnaire équipe → réponse saisie.
+
+```go
+ARDOISE_ANSWERS map[string]ArdoiseAnswer
+
+type ArdoiseAnswer struct {
+    TEXT        string // Texte saisi par l'équipe
+    SUBMITTED_AT int64  // Timestamp microseconde (µs), moment du dernier input envoyé
+}
+```
+
+**Sérialisation** : **Jamais `omitempty`** — toujours présent dans GameState (évite réinitialisations manquées côté frontend).
+
+**Initialisation** : 
+- À chaque nouvelle question (dans `Ready()`) : reset `ARDOISE_ANSWERS = {}`
+- Rempli au fur et à mesure des `ARDOISE_INPUT` reçus du serveur
+
+### Actions WebSocket ARDOISE
+
+```json
+{ "ACTION": "ARDOISE_INPUT", "MSG": { "TEXT": "Paris" } }
+```
+
+**Envoi VPlayer** (throttling + flush forcé) :
+- **Throttlé 200ms** : texte complet envoyé toutes les 200ms
+- **Flush forcé** sur STOP/PAUSE : dès que le serveur envoie STOP ou PAUSE, l'input en cours est envoyé immédiatement au serveur
+- **Verrouillage** : aucun envoi post-REVEALED
+
+Voir `WEBSOCKET_PROTOCOL.md` pour détails complets.
+
+---
+
 ## Type de jeu MEMOTION (v5.0.0)
 
 Jeu de cartes à 3 faces avec grille interactive, difficulté configurable et mode équipe.

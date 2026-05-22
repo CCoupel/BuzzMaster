@@ -260,6 +260,83 @@ Champs ajoutés au GameState pour les modes multi-équipes:
 - `MEMORY_SET_TEAMS` action WebSocket permet de définir les équipes avant le START
 - Reset automatique lors du changement de question (phase PREPARE)
 
+## Question (ARDOISE type) - v5.6.0
+
+```json
+{
+  "ID": "q-ardoise-1",
+  "QUESTION": "Quel est la capitale de la Belgique?",
+  "ANSWER": "Bruxelles",
+  "TYPE": "ARDOISE",
+  "ARDOISE_KEYBOARD_TYPE": "AZERTY",
+  "POINTS": 10,
+  "TIME": 60,
+  "MEDIA": "/question/q-ardoise-1/image.jpg",
+  "ORDER": 1
+}
+```
+
+**Champs ARDOISE :**
+- `TYPE`: `"ARDOISE"` pour les questions réponse libre au clavier
+- `ARDOISE_KEYBOARD_TYPE`: Type de clavier virtuel — `"AZERTY"` ou `"NUMPAD"` (défaut: "AZERTY")
+- `ANSWER`: Réponse attendue (affichée en REVEALED, permet la correction manuelle)
+- `TIME`: Durée du timer (secondes)
+- `MEDIA`: Image/vidéo de la question (optionnel)
+
+### GameState ARDOISE (v5.6.0)
+
+Champs ajoutés au GameState pour les questions ARDOISE :
+
+```json
+{
+  "ARDOISE_ANSWERS": {
+    "Équipe Bleue": {
+      "TEXT": "Bruxelles",
+      "SUBMITTED_AT": 1716394800123456
+    },
+    "Équipe Rouge": {
+      "TEXT": "Amsterdam",
+      "SUBMITTED_AT": 1716394801000000
+    }
+  }
+}
+```
+
+**Champs :**
+- `ARDOISE_ANSWERS`: Dictionnaire `map[string]ArdoiseAnswer`
+  - Clé : nom de l'équipe
+  - Valeur : `ArdoiseAnswer` struct
+
+**Structure ArdoiseAnswer :**
+```go
+type ArdoiseAnswer struct {
+    TEXT        string // Réponse saisie par l'équipe
+    SUBMITTED_AT int64  // Timestamp microseconde (µs) du dernier envoi
+}
+```
+
+**Sérialisation :**
+- **Jamais `omitempty`** — le champ est toujours présent dans le GameState JSON (même si vide)
+- Évite les réinitialisations manquées côté frontend
+
+**Initialisation :**
+- Reset à `{}` (dictionnaire vide) lors de la transition vers `READY` (nouvelle question)
+- Rempli progressivement au fur et à mesure des actions `ARDOISE_INPUT` reçues du serveur
+
+**Action WebSocket associée :**
+```json
+{
+  "ACTION": "ARDOISE_INPUT",
+  "MSG": {
+    "TEXT": "Bruxelles"
+  }
+}
+```
+
+Voir `WEBSOCKET_PROTOCOL.md` pour comportement complet (throttling 200ms, flush STOP/PAUSE).
+
+---
+
 ## GameEvent (History)
 
 ```go

@@ -48,9 +48,9 @@ Si tu reponds oui a l'une de ces questions, STOP — envoie un SendMessage a la 
 - Je vais lire le code pour comprendre → Non. `SendMessage(planner, "Analyse [scope] et retourne [info]")`
 - **Je vais produire le plan d'implémentation → Non.** `SendMessage(planner, "Crée le plan pour [description]")` — Le CDP cadre la demande (Phase 0), le planner planifie (Phase 1). Sans exception.
 
-### Que faire si un agent ne répond pas (spawn_pending > 60s)
+### Que faire si un teammate ne répond pas
 
-1. Respawner via `Task` avec la même tâche incluse dans le prompt
+1. Respawner via `Task` (premier spawn) ou relancer via `SendMessage` (déjà spawned)
 2. **Ne jamais** prendre le relais et executer la tache soi-meme
 
 ---
@@ -417,8 +417,7 @@ Si cycle >= MAX_CYCLES → ESCALADE UTILISATEUR
 ## Dispatcher une Tache — Syntaxe
 
 > **Le CDP ne spawne JAMAIS d'agents.** Le spawn (Task) est géré exclusivement par le teamleader.
-> **Avant chaque dispatch**, vérifier la disponibilité via PING (voir teamleader.md "Protocole de disponibilité avant tout dispatch").
-> Ne jamais envoyer un `SendMessage` de travail sans avoir reçu `<NOM> ACTIF` en réponse au PING.
+> Tous les teammates sont en IDLE depuis `/start-session`. Dispatch = `SendMessage` uniquement — jamais de spawn pendant la session.
 
 ### Agent simple
 
@@ -511,13 +510,6 @@ Format complet :
     "issue_nums": [123],
     "milestone_num": 5,
     "started_at": "<ISO>"
-  },
-  "agents": {
-    "<nom>": {
-      "status": "spawn_pending|working|failed",
-      "spawned_at": "<ISO>",
-      "task_summary": "<résumé court>"
-    }
   }
 }
 ```

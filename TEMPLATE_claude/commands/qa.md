@@ -70,8 +70,7 @@ Le rapport QA inclut :
 
 ## Agent
 
-Activer `qa` via le teamleader — appliquer la règle SendMessage-first :
-- Déjà actif dans la team → `SendMessage({to: "qa", content: ...})`
-- Première activation → `Task({subagent_type: "qa", name: "qa", ...})`
+Dispatcher via `SendMessage` (teammate en IDLE depuis `/start-session`) :
+`SendMessage({to: "qa", content: ...})`
 
 Spec : `.claude/agents/qa.md`

@@ -24,29 +24,20 @@ Role: Orchestrer workflows multi-agents avec validation utilisateur
 
 ---
 
-## 2.bis Spawn d'un Teammate
+## 2.bis Dispatch d'un Teammate
 
-Chaque agent est **toujours spawné** avec sa tâche incluse directement dans le prompt.
-Les agents se ferment seuls après avoir envoyé DONE — il n'y a jamais d'agent "en attente" à réutiliser.
-
-### Pattern standard : Spawn direct
+Tous les teammates sont en IDLE depuis `/start-session`. Dispatch = uniquement `SendMessage`.
 
 ```
-Agent({
-  team_name: <valeur dans project-config.json → team_name>,
-  name: "<nom>",               // ex: "planner", "dev-backend", "qa"
-  subagent_type: "general-purpose",
-  prompt: "Lis .claude/agents/context/TEAMMATES_PROTOCOL.md puis .claude/agents/<nom>.md.
-           Tu fais partie de TEAM-Buzz sur BuzzControl.
-           Ta tâche : <description complète de la tâche>
-           Commence dès que tu as envoyé ACTIF."
-})
-→ workflow-state.json : status: "spawn_pending", spawned_at: <ISO>, task_summary: "<résumé>"
-→ Attendre ACTIF (ACK) → status: "working"
-→ Attendre DONE → supprimer l'entrée
+SendMessage({ to: "<nom>", content: "<tâche complète>" })
+→ Attendre ACTIF + DONE
 ```
 
-Si pas d'ACTIF dans les 60s → respawn avec la même tâche.
+Plusieurs en parallèle — même message :
+```
+SendMessage({ to: "dev-backend",  content: "<tâche>" })
+SendMessage({ to: "dev-frontend", content: "<tâche>" })
+```
 
 ### Agents par phase
 

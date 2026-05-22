@@ -244,6 +244,54 @@ Reinitialise le buzzer.
 }
 ```
 
+---
+
+## Messages VPlayer vers Serveur (v5.6.0 - ARDOISE)
+
+### ARDOISE_INPUT (Saisie ARDOISE)
+
+Envoye par un joueur virtuel (VPlayer) saisissant une réponse libre en ARDOISE.
+
+**Endpoint** : `/ws/player`
+
+**Phase valide** : `STARTED` uniquement — le serveur ignore les entrées en dehors de cette phase.
+
+**Payload** :
+```json
+{
+  "ACTION": "ARDOISE_INPUT",
+  "MSG": {
+    "TEXT": "Paris"
+  }
+}
+```
+
+| Champ MSG | Type | Description |
+|-----------|------|-------------|
+| `TEXT` | string | Réponse saisie par le joueur |
+
+**Comportement serveur** :
+
+1. **Guard phase** : Si phase ≠ `STARTED` ou question.TYPE ≠ `ARDOISE`, ignorer silencieusement
+2. **Identification équipe** : Via protocole natif VPlayer — le serveur connaît déjà l'équipe du joueur
+3. **Mise à jour GameState** : 
+   ```go
+   GameState.ARDOISE_ANSWERS[teamName] = ArdoiseAnswer{
+       TEXT: "Paris",
+       SUBMITTED_AT: timeNowMicroseconds()
+   }
+   ```
+4. **Broadcast UPDATE** : Envoie un message `UPDATE` avec `ARDOISE_ANSWERS` à tous les clients web (`/ws`, `/ws/admin`, `/ws/tv`)
+
+**Stratégie d'envoi côté VPlayer** :
+
+- **Affichage local immédiat** : L'input apparaît dans le champ de saisie sans attendre la réponse du serveur
+- **Throttling ~200ms** : Envoyer le texte complet au serveur tous les ~200ms (pas de delta, texte entier)
+- **Envoi forcé sur STOP/PAUSE** : Dès que le serveur envoie `STOP` ou `PAUSE`, forcer un envoi immédiat du texte en cours
+- **Aucun envoi post-REVEALED** : Une fois `REVEALED` reçu du serveur, ne plus envoyer d'inputs (clavier verrouillé)
+
+---
+
 ### LED_ON / LED_OFF (Controle LED)
 
 Allume ou eteint la LED du buzzer.
@@ -461,6 +509,7 @@ Le serveur v3.0.0 gere deja les deux protocoles. Aucune modification serveur n'e
 | QUESTIONS, CLIENTS, FIRMWARE_VERSION | ✓ | - | - | - |
 | PLAYER_REJECTED, PLAYER_CONNECTED, PLAYER_ASSIGNED | ✓ | - | ✓ | - |
 | LED_SET, OTA_UPDATE, WIFI_CONFIG, HELLO | ✓ | - | - | ✓ |
+| ARDOISE_INPUT | - | - | ✓ (send) | - |
 
 **Sérialiseurs** :
 - `SerializeForAdmin()` : full (bumpers avec FIRMWARE_VERSION, OTA_STATUS, ACK_PENDING, config)

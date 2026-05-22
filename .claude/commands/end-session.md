@@ -130,16 +130,7 @@ Si des changements non commites existent :
 
 ### 5. TEAM — Dissolution de la Team
 
-Lire `workflow-state.json` pour identifier les agents actifs (`status: "working"` ou `"spawn_pending"`).
-
-Pour chaque agent actif → `TaskStop(<agent>)` (les teammates qui ont fini se sont déjà auto-fermés).
-
-Réinitialiser le fichier d'état :
-```bash
-echo '{"agents":{}}' > .claude/workflow-state.json
-```
-
-Appeler **TeamDelete** avec le nom `TEAM-Buzz` pour dissoudre la team.
+Appeler **TeamDelete** avec le nom `TEAM-Buzz` — le harness arrête tous les teammates.
 
 Si aucune team n'est active, passer cette etape.
 

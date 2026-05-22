@@ -106,8 +106,7 @@ Le rapport inclut :
 
 ## Agent
 
-Activer `code-reviewer` via le teamleader — appliquer la règle SendMessage-first :
-- Déjà actif dans la team → `SendMessage({to: "code-reviewer", content: ...})`
-- Première activation → `Task({subagent_type: "code-reviewer", name: "code-reviewer", ...})`
+Dispatcher via `SendMessage` (teammate en IDLE depuis `/start-session`) :
+`SendMessage({to: "code-reviewer", content: ...})`
 
 Spec : `.claude/agents/code-reviewer.md`
