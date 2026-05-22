@@ -177,6 +177,7 @@
 .tv-preview-container {
   grid-column: 2;
   grid-row: 2;
+  position: relative;
   display: flex;
   align-items: stretch;
   justify-content: center;
@@ -915,4 +916,233 @@
   width: 100%;
   text-align: center;
   line-height: 1.1;
+}
+
+/* ============================================================
+   ARDOISE admin panel — real-time answers display (#89)
+   ============================================================ */
+
+.ardoise-answers-panel {
+  background: var(--bg-secondary);
+  border: 1px solid rgba(99, 102, 241, 0.35);
+  border-radius: var(--radius-md);
+  padding: 0.75rem 1rem;
+  margin-bottom: 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.ardoise-panel-header {
+  display: flex;
+  align-items: baseline;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.ardoise-panel-title {
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: rgba(99, 102, 241, 0.9);
+  flex-shrink: 0;
+}
+
+.ardoise-correct-answer {
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+  background: rgba(99, 102, 241, 0.12);
+  border-radius: 4px;
+  padding: 0.15rem 0.5rem;
+  font-style: italic;
+}
+
+.ardoise-correct-answer strong {
+  color: var(--text-primary);
+  font-style: normal;
+}
+
+.ardoise-answers-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.ardoise-team-answer {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.3rem 0.5rem;
+  border-radius: var(--radius-sm);
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid transparent;
+  transition: border-color 0.15s;
+  min-height: 2rem;
+}
+
+.ardoise-team-answer:hover {
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+.ardoise-team-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.ardoise-team-name {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  min-width: 7rem;
+  max-width: 10rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.ardoise-team-text {
+  flex: 1;
+  font-size: 0.85rem;
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.ardoise-team-text.has-answer {
+  color: var(--text-primary);
+}
+
+.ardoise-team-text.no-answer {
+  color: var(--text-secondary);
+  font-style: italic;
+  opacity: 0.6;
+}
+
+.ardoise-points-btn {
+  flex-shrink: 0;
+  background: rgba(99, 102, 241, 0.18);
+  border: 1px solid rgba(99, 102, 241, 0.4);
+  border-radius: var(--radius-sm);
+  color: rgba(99, 102, 241, 0.95);
+  font-size: 0.75rem;
+  font-weight: 700;
+  padding: 0.2rem 0.5rem;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+  white-space: nowrap;
+}
+
+.ardoise-points-btn:hover {
+  background: rgba(99, 102, 241, 0.32);
+  border-color: rgba(99, 102, 241, 0.65);
+  color: white;
+}
+
+/* ── ARDOISE zone réponses équipes (pattern Memory team zone) ── */
+
+.ardoise-team-zone {
+  background: var(--gray-100);
+  border-radius: var(--radius-md);
+  padding: var(--space-2);
+  border: 1px solid rgba(99, 102, 241, 0.25);
+}
+
+.ardoise-answers-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.ardoise-answer-row {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  padding: 0.3rem 0.4rem;
+  border-radius: var(--radius-sm);
+  background: var(--bg-primary);
+  border: 1px solid var(--gray-200);
+}
+
+.ardoise-answer-team-name {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.ardoise-team-dot {
+  width: 0.6rem;
+  height: 0.6rem;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.ardoise-answer-text-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding-left: 1rem;
+}
+
+.ardoise-answer-text {
+  font-size: 0.85rem;
+  color: var(--text-primary);
+  word-break: break-word;
+}
+
+.ardoise-answer-text.no-answer {
+  color: var(--text-secondary);
+  font-style: italic;
+}
+
+/* Individual admin card (kept for potential reuse) */
+.ardoise-admin-card {
+  border: 2px solid;
+  border-radius: 0.5rem;
+  overflow: hidden;
+  background: rgba(15, 20, 40, 0.85);
+}
+
+.ardoise-admin-card-header {
+  padding: 0.25rem 0.5rem;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: #ffffff;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.6);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ardoise-admin-card-body {
+  padding: 0.4rem 0.5rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  gap: 0.25rem;
+  font-size: 1rem;
+  font-weight: 500;
+  color: #ffffff;
+  background: rgba(0, 0, 0, 0.75);
+  word-break: break-word;
+}
+
+.ardoise-admin-card.no-answer .ardoise-admin-card-body span {
+  color: var(--text-secondary);
+  font-style: italic;
+}
+
+.ardoise-admin-card-body .ardoise-points-btn {
+  align-self: flex-end;
+  margin-top: 0.15rem;
 }

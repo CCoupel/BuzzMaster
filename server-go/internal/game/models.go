@@ -106,7 +106,22 @@ const (
 	QuestionTypeQCM      QuestionType = "QCM"
 	QuestionTypeMemory   QuestionType = "MEMORY"
 	QuestionTypeMemotion QuestionType = "MEMOTION" // NEW (v5.0.0): grid of cards with 3 faces
+	QuestionTypeArdoise  QuestionType = "ARDOISE"  // NEW (v5.6.0): free-text answer via virtual keyboard
 )
+
+// KeyboardType represents the virtual keyboard layout for ARDOISE questions
+type KeyboardType string
+
+const (
+	KeyboardTypeAZERTY KeyboardType = "AZERTY"
+	KeyboardTypeNumpad KeyboardType = "NUMPAD"
+)
+
+// ArdoiseAnswer holds a team's free-text answer for an ARDOISE question
+type ArdoiseAnswer struct {
+	Text        string `json:"TEXT"`         // Current answer text
+	SubmittedAt int64  `json:"SUBMITTED_AT"` // Timestamp in microseconds (last update)
+}
 
 // PointsTarget represents who receives points for a question
 type PointsTarget string
@@ -215,6 +230,8 @@ type Question struct {
 	MotionMode        string           `json:"MOTION_MODE,omitempty"`        // "SOLO", "CHACUN_SON_TOUR", "TANT_QUE_JE_GAGNE" (default SOLO)
 	MotionConfig           *MotionConfig    `json:"MOTION_CONFIG,omitempty"`            // MEMOTION configuration (v5.0.x)
 	MotionMemorizeDuration int              `json:"MOTION_MEMORIZE_DURATION,omitempty"` // Seconds for MEMORIZE phase; 0 = standard mode (v5.5.0)
+	// ARDOISE fields (v5.6.0)
+	ArdoiseKeyboardType KeyboardType `json:"ARDOISE_KEYBOARD_TYPE,omitempty"` // Virtual keyboard layout: "AZERTY" | "NUMPAD"
 	Points                 string           `json:"POINTS"`                             // String to match JSON format
 	Time         string           `json:"TIME"`                    // String to match JSON format
 	Order        int              `json:"ORDER,omitempty"`         // Display order (for drag and drop)
@@ -265,6 +282,8 @@ type GameState struct {
 	VirtualPlayerLimit     int          `json:"VIRTUAL_PLAYER_LIMIT"`           // Maximum number of virtual players allowed
 	EnrollmentActive       bool         `json:"ENROLLMENT_ACTIVE"`              // Whether player enrollment is active
 	ShowQRCode             bool         `json:"SHOW_QR_CODE"`                   // Whether to display QR code on TV
+	// ARDOISE answers (v5.6.0) — NO omitempty: always serialized so frontend resets on new question
+	ArdoiseAnswers map[string]ArdoiseAnswer `json:"ARDOISE_ANSWERS"`
 	// Quiz metadata (v4.0.0) — no omitempty so empty strings clear the field on clients
 	QuizName  string `json:"QUIZ_NAME"`
 	QuizTheme string `json:"QUIZ_THEME"`

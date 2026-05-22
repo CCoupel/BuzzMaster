@@ -138,6 +138,23 @@ export default function GamePage() {
     return teamsWithPlayers
   }, [sortedTeams, gameState.question, gameState.phase, gameState.MEMORY_TEAM_PAIRS, gameState.MEMORY_TEAM_ERRORS])
 
+  // Teams that have at least one VJoueur (ARDOISE panel filter #93)
+  const vplayerTeamNames = useMemo(() =>
+    new Set(
+      Object.values(bumpers)
+        .filter(b => b.IS_VPLAYER)
+        .map(b => b.TEAM)
+        .filter(Boolean)
+    ),
+    [bumpers]
+  )
+
+  // Full team objects for VJoueur teams (tv-preview overlay)
+  const vplayerTeams = useMemo(() =>
+    displayTeams.filter(team => vplayerTeamNames.has(team.name)),
+    [displayTeams, vplayerTeamNames]
+  )
+
   // Sort questions by ORDER if available, otherwise by ID
   const sortedQuestions = useMemo(() => {
     return Object.values(questions)
@@ -596,6 +613,44 @@ export default function GamePage() {
             </div>
           )
         })()}
+
+        {/* ARDOISE — zone réponses équipes (pattern Memory team zone) */}
+        {gameState.question?.TYPE === 'ARDOISE' &&
+         ['STARTED', 'STOPPED', 'REVEALED'].includes(gameState.phase) && (
+          <div className="ardoise-team-zone">
+            <div className="memory-selector-label">Réponses ARDOISE</div>
+            <div className="ardoise-answers-list">
+              {vplayerTeams.map((team) => {
+                const teamName = team.NAME || team.name
+                const answer = (gameState.ARDOISE_ANSWERS || {})[teamName]
+                const teamColor = getRgbColor(team.COLOR)
+                const defaultPts = parseInt(gameState.question?.POINTS) || pointsInput
+                return (
+                  <div key={teamName} className={`ardoise-answer-row ${answer ? 'has-answer' : 'no-answer'}`}>
+                    <div className="ardoise-answer-team-name">
+                      <span className="ardoise-team-dot" style={{ background: teamColor }} />
+                      <span style={{ color: teamColor }}>{teamName}</span>
+                    </div>
+                    <div className="ardoise-answer-text-row">
+                      <span className={`ardoise-answer-text ${answer ? 'has-answer' : 'no-answer'}`}>
+                        {answer?.TEXT || '—'}
+                      </span>
+                      {gameState.phase === 'REVEALED' && (
+                        <button
+                          className="ardoise-points-btn"
+                          onClick={() => setTeamPoints(teamName, defaultPts)}
+                          title={`Attribuer ${defaultPts} pts à ${teamName}`}
+                        >
+                          +{defaultPts} pts
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Questions Panel - Left */}

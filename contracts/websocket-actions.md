@@ -773,3 +773,44 @@ Définit la limite de VPlayers.
 | Champ | Type | Description |
 |-------|------|-------------|
 | LIMIT | int | Nombre max de VPlayers |
+
+---
+
+### ARDOISE_INPUT ✨ (v5.6.0)
+
+Mise à jour de la réponse texte d'une équipe pour une question ARDOISE.
+Envoyé par le VPlayer (throttlé ~200ms). Envoi forcé sur réception STOP/PAUSE.
+
+| Propriété | Valeur |
+|-----------|--------|
+| Direction | `VPlayer → Server` |
+| Endpoint  | `/ws/player` |
+| Phase     | `STARTED` |
+| Type question | `ARDOISE` |
+
+#### Payload
+
+| Champ | Type | Description |
+|-------|------|-------------|
+| TEXT | string | Texte complet saisi (pas un delta) |
+
+#### Exemple
+
+```json
+{
+  "ACTION": "ARDOISE_INPUT",
+  "MSG": {
+    "TEXT": "Paris"
+  }
+}
+```
+
+#### Comportement serveur
+
+1. **Guard phase** : ignore silencieusement si `phase ≠ STARTED`
+2. **Guard type** : ignore silencieusement si `question.TYPE ≠ "ARDOISE"`
+3. **Résolution équipe** : `clientID → bumper → bumper.Team` (protocole natif, aucun champ TEAM dans le payload)
+4. Mise à jour `GameState.ARDOISE_ANSWERS[teamName] = { TEXT, SUBMITTED_AT }`
+5. Broadcast `UPDATE` immédiat vers admin/TV
+
+**Fire-and-forget** : aucune réponse du serveur vers le VPlayer.

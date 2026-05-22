@@ -803,6 +803,15 @@ func (h *HTTPServer) handleUploadQuestion(w http.ResponseWriter, r *http.Request
 		}
 	}
 
+	// Handle ARDOISE specific fields (v5.6.0)
+	if questionType == "ARDOISE" {
+		// Keyboard layout: "AZERTY" (default) or "NUMPAD"
+		if kbType := r.FormValue("ardoise_keyboard_type"); kbType == "AZERTY" || kbType == "NUMPAD" {
+			question["ARDOISE_KEYBOARD_TYPE"] = kbType
+		}
+		// If not provided or invalid, omit the field (frontend defaults to AZERTY)
+	}
+
 	// Handle question media upload
 	file, header, err := r.FormFile("file")
 	if err == nil {

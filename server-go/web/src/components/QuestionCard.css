@@ -197,49 +197,21 @@
   color: white;
 }
 
-.qcard-qcm-badge {
+.qcard-type-badge {
   font-size: 0.55rem;
   font-weight: 700;
   text-transform: uppercase;
   padding: 2px 5px;
-  background: linear-gradient(135deg, #ef4444, #3b82f6);
-  color: white;
+  color: #fff;
   border-radius: var(--radius-sm);
   letter-spacing: 0.5px;
 }
 
-.qcard-memory-badge {
-  font-size: 0.55rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  padding: 2px 5px;
-  background: linear-gradient(135deg, #a855f7, #ec4899);
-  color: white;
-  border-radius: var(--radius-sm);
-  letter-spacing: 0.5px;
-}
-
-.qcard-memotion-badge {
-  font-size: 0.55rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  padding: 2px 5px;
-  background: linear-gradient(135deg, #f97316, #eab308);
-  color: white;
-  border-radius: var(--radius-sm);
-  letter-spacing: 0.5px;
-}
-
-.qcard-normal-badge {
-  font-size: 0.55rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  padding: 2px 5px;
-  background: var(--gray-400);
-  color: white;
-  border-radius: var(--radius-sm);
-  letter-spacing: 0.5px;
-}
+.qcard-type-badge.type-normal   { background: #6b7280; }
+.qcard-type-badge.type-qcm      { background: #3b82f6; }
+.qcard-type-badge.type-memory   { background: #8b5cf6; }
+.qcard-type-badge.type-memotion { background: #f59e0b; }
+.qcard-type-badge.type-ardoise  { background: #10b981; }
 
 .qcard-target-badge {
   display: flex;

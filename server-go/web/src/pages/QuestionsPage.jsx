@@ -59,6 +59,8 @@ export default function QuestionsPage() {
       { id: 1, card1: { text: '', image: null, isImage: false }, card2: { text: '', image: null, isImage: false } },
       { id: 2, card1: { text: '', image: null, isImage: false }, card2: { text: '', image: null, isImage: false } },
     ],
+    // ARDOISE fields (v5.6.0)
+    ardoiseKeyboardType: 'AZERTY',
     // MEMOTION fields (v5.0.0)
     motionMode: 'SOLO',
     motionCards: [
@@ -328,8 +330,8 @@ export default function QuestionsPage() {
       const updates = { [field]: value }
       // Auto-set pointsTarget when type changes
       if (field === 'type') {
-        // QCM, MEMORY and MEMOTION default to TEAM, NORMAL defaults to PLAYER
-        updates.pointsTarget = (value === 'QCM' || value === 'MEMORY' || value === 'MEMOTION') ? 'TEAM' : 'PLAYER'
+        // QCM, MEMORY, MEMOTION and ARDOISE default to TEAM, NORMAL defaults to PLAYER
+        updates.pointsTarget = (value === 'QCM' || value === 'MEMORY' || value === 'MEMOTION' || value === 'ARDOISE') ? 'TEAM' : 'PLAYER'
       }
       return { ...prev, ...updates }
     })
@@ -353,7 +355,7 @@ export default function QuestionsPage() {
     setEditingId(question.ID)
     const qType = question.TYPE || 'NORMAL'
     // Default pointsTarget based on type if not set
-    const defaultTarget = (qType === 'QCM' || qType === 'MEMORY') ? 'TEAM' : 'PLAYER'
+    const defaultTarget = (qType === 'QCM' || qType === 'MEMORY' || qType === 'ARDOISE') ? 'TEAM' : 'PLAYER'
 
     // Load memory pairs from question data
     let memoryPairs = [
@@ -446,6 +448,8 @@ export default function QuestionsPage() {
       motionCards,
       motionConfig,
       motionMemorizeDuration: question.MOTION_MEMORIZE_DURATION || 0,
+      // ARDOISE fields
+      ardoiseKeyboardType: question.ARDOISE_KEYBOARD_TYPE || 'AZERTY',
       points: question.POINTS || '1',
       time: question.TIME || '30',
       media: null,
@@ -498,6 +502,8 @@ export default function QuestionsPage() {
       ],
       motionConfig: { points1: 1, points2: 3, points3: 5 },
       motionMemorizeDuration: 0,
+      // ARDOISE fields
+      ardoiseKeyboardType: 'AZERTY',
       points: '1',
       time: '30',
       media: null,
@@ -623,6 +629,7 @@ export default function QuestionsPage() {
     // For Memory, need question and at least 2 valid pairs
     if (!formData.question) return
     if (formData.type === 'NORMAL' && !formData.answer) return
+    if (formData.type === 'ARDOISE' && !formData.answer) return
     if (formData.type === 'QCM' && (!formData.qcmCorrect || !formData.qcmAnswers[formData.qcmCorrect])) return
     if (formData.type === 'MEMORY') {
       // Validate at least 2 pairs with all cards filled
@@ -656,6 +663,10 @@ export default function QuestionsPage() {
 
     if (formData.type === 'NORMAL') {
       data.append('answer', formData.answer)
+    } else if (formData.type === 'ARDOISE') {
+      // ARDOISE mode — store answer (correct response, shown to admin only) and keyboard type
+      data.append('answer', formData.answer)
+      data.append('ardoise_keyboard_type', formData.ardoiseKeyboardType || 'AZERTY')
     } else if (formData.type === 'QCM') {
       // QCM mode - send QCM answers and correct answer
       data.append('qcm_answers', JSON.stringify(formData.qcmAnswers))
@@ -1144,35 +1155,46 @@ export default function QuestionsPage() {
                 {/* Question Type Selector */}
                 <div className="form-group">
                   <label>Type de question</label>
-                  <div className="type-selector">
-                    <button
-                      type="button"
-                      className={`type-btn ${formData.type === 'NORMAL' ? 'active' : ''}`}
-                      onClick={() => handleInputChange('type', 'NORMAL')}
-                    >
-                      Normal
-                    </button>
-                    <button
-                      type="button"
-                      className={`type-btn qcm ${formData.type === 'QCM' ? 'active' : ''}`}
-                      onClick={() => handleInputChange('type', 'QCM')}
-                    >
-                      QCM
-                    </button>
-                    <button
-                      type="button"
-                      className={`type-btn memory ${formData.type === 'MEMORY' ? 'active' : ''}`}
-                      onClick={() => handleInputChange('type', 'MEMORY')}
-                    >
-                      Memory
-                    </button>
-                    <button
-                      type="button"
-                      className={`type-btn memotion ${formData.type === 'MEMOTION' ? 'active' : ''}`}
-                      onClick={() => handleInputChange('type', 'MEMOTION')}
-                    >
-                      Memotion
-                    </button>
+                  <div className="type-filter-grid">
+                    <div className="type-filter-row">
+                      <button
+                        type="button"
+                        className={`type-btn ${formData.type === 'NORMAL' ? 'active' : ''}`}
+                        onClick={() => handleInputChange('type', 'NORMAL')}
+                      >
+                        Normal
+                      </button>
+                      <button
+                        type="button"
+                        className={`type-btn qcm ${formData.type === 'QCM' ? 'active' : ''}`}
+                        onClick={() => handleInputChange('type', 'QCM')}
+                      >
+                        QCM
+                      </button>
+                      <button
+                        type="button"
+                        className={`type-btn memory ${formData.type === 'MEMORY' ? 'active' : ''}`}
+                        onClick={() => handleInputChange('type', 'MEMORY')}
+                      >
+                        Memory
+                      </button>
+                    </div>
+                    <div className="type-filter-row">
+                      <button
+                        type="button"
+                        className={`type-btn memotion ${formData.type === 'MEMOTION' ? 'active' : ''}`}
+                        onClick={() => handleInputChange('type', 'MEMOTION')}
+                      >
+                        Memotion
+                      </button>
+                      <button
+                        type="button"
+                        className={`type-btn ardoise ${formData.type === 'ARDOISE' ? 'active' : ''}`}
+                        onClick={() => handleInputChange('type', 'ARDOISE')}
+                      >
+                        ⌨️ Ardoise
+                      </button>
+                    </div>
                   </div>
                 </div>
 
@@ -1234,15 +1256,17 @@ export default function QuestionsPage() {
                 </div>
 
                 {/* Normal Answer */}
-                {formData.type === 'NORMAL' && (
+                {(formData.type === 'NORMAL' || formData.type === 'ARDOISE') && (
                   <div className="form-group">
-                    <label htmlFor="answer-input">Reponse *</label>
+                    <label htmlFor="answer-input">
+                      {formData.type === 'ARDOISE' ? 'Bonne réponse * (animateur)' : 'Reponse *'}
+                    </label>
                     <input
                       id="answer-input"
                       type="text"
                       value={formData.answer}
                       onChange={(e) => handleInputChange('answer', e.target.value)}
-                      placeholder="Entrez la reponse..."
+                      placeholder={formData.type === 'ARDOISE' ? 'Réponse attendue (visible animateur seulement)...' : 'Entrez la reponse...'}
                       required
                     />
                   </div>
@@ -1919,6 +1943,38 @@ export default function QuestionsPage() {
                   </div>
                 )}
 
+                {/* ARDOISE Keyboard Selector */}
+                {formData.type === 'ARDOISE' && (
+                  <div className="ardoise-section">
+                    <div className="form-group">
+                      <label>Type de clavier</label>
+                      <div className="ardoise-keyboard-selector">
+                        <button
+                          type="button"
+                          className={`ardoise-keyboard-btn ${formData.ardoiseKeyboardType === 'AZERTY' ? 'active' : ''}`}
+                          onClick={() => handleInputChange('ardoiseKeyboardType', 'AZERTY')}
+                        >
+                          <span className="ardoise-keyboard-icon">⌨️</span>
+                          <span className="ardoise-keyboard-label">AZERTY</span>
+                          <span className="ardoise-keyboard-desc">Clavier texte complet</span>
+                        </button>
+                        <button
+                          type="button"
+                          className={`ardoise-keyboard-btn ${formData.ardoiseKeyboardType === 'NUMPAD' ? 'active' : ''}`}
+                          onClick={() => handleInputChange('ardoiseKeyboardType', 'NUMPAD')}
+                        >
+                          <span className="ardoise-keyboard-icon">🔢</span>
+                          <span className="ardoise-keyboard-label">Pavé numérique</span>
+                          <span className="ardoise-keyboard-desc">Chiffres uniquement</span>
+                        </button>
+                      </div>
+                    </div>
+                    <p className="ardoise-info">
+                      💡 La bonne réponse est stockée et visible uniquement par l'animateur lors de la révélation.
+                    </p>
+                  </div>
+                )}
+
                 <div className="form-row">
                   {/* Hide Points for MEMORY and MEMOTION - calculated per pair/card */}
                   {formData.type !== 'MEMORY' && formData.type !== 'MEMOTION' && (
@@ -1949,7 +2005,7 @@ export default function QuestionsPage() {
                   )}
                 </div>
 
-                {/* Hide Image question/answer for MEMORY/MEMOTION - images are in pairs/cards */}
+                {/* Hide Image question/answer for MEMORY/MEMOTION only — ARDOISE supports images (#94) */}
                 {formData.type !== 'MEMORY' && formData.type !== 'MEMOTION' && (
                   <>
                     <div className="form-group">

@@ -586,6 +586,17 @@
   gap: var(--space-2);
 }
 
+.type-filter-grid {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.type-filter-row {
+  display: flex;
+  gap: var(--space-2);
+}
+
 .type-btn {
   flex: 1;
   padding: var(--space-2) var(--space-3);
@@ -1601,4 +1612,97 @@
   border-color: transparent;
   color: white;
   font-weight: 700;
+}
+
+/* ============================================================
+   ARDOISE Question Editor (v5.6.0)
+   ============================================================ */
+
+/* Type button ARDOISE — indigo/violet */
+.type-btn.ardoise {
+  background: linear-gradient(135deg, rgba(99,102,241,0.1), rgba(168,85,247,0.1));
+  border-color: #6366f1;
+  color: #6366f1;
+}
+
+.type-btn.ardoise.active {
+  background: linear-gradient(135deg, #6366f1, #a855f7);
+  border-color: transparent;
+  color: white;
+  font-weight: 700;
+}
+
+/* ARDOISE section container */
+.ardoise-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  border-top: 1px solid var(--gray-200);
+  padding-top: var(--space-3);
+  margin-top: var(--space-1);
+}
+
+/* ARDOISE keyboard selector — two large option buttons */
+.ardoise-keyboard-selector {
+  display: flex;
+  gap: var(--space-3);
+}
+
+.ardoise-keyboard-btn {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-3) var(--space-2);
+  border: 2px solid var(--gray-200);
+  border-radius: var(--radius-lg);
+  background: white;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  text-align: center;
+}
+
+.ardoise-keyboard-btn:hover {
+  border-color: #6366f1;
+  background: rgba(99,102,241,0.05);
+}
+
+.ardoise-keyboard-btn.active {
+  border-color: #6366f1;
+  background: linear-gradient(135deg, rgba(99,102,241,0.12), rgba(168,85,247,0.12));
+  box-shadow: 0 0 0 3px rgba(99,102,241,0.15);
+}
+
+.ardoise-keyboard-icon {
+  font-size: 1.5rem;
+  line-height: 1;
+}
+
+.ardoise-keyboard-label {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--gray-700);
+}
+
+.ardoise-keyboard-btn.active .ardoise-keyboard-label {
+  color: #6366f1;
+}
+
+.ardoise-keyboard-desc {
+  font-size: 0.7rem;
+  color: var(--gray-400);
+  font-weight: normal;
+}
+
+/* ARDOISE info note */
+.ardoise-info {
+  font-size: 0.78rem;
+  color: var(--gray-500);
+  background: rgba(99,102,241,0.06);
+  border: 1px solid rgba(99,102,241,0.15);
+  border-radius: var(--radius-md);
+  padding: var(--space-2) var(--space-3);
+  margin: 0;
+  line-height: 1.5;
 }

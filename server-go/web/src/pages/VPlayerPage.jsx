@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useGame } from '../hooks/GameContext'
 import PlayerDisplay from './PlayerDisplay'
+import ArdoiseKeyboard from '../components/ArdoiseKeyboard'
 import NoSleep from 'nosleep.js'
 import './VPlayerPage.css'
 
@@ -25,6 +26,11 @@ export default function VPlayerPage() {
   const noSleepRef = useRef(null)
   // Ref to always have the latest bumper value in async callbacks (avoids stale closure)
   const bumperRef = useRef(null)
+
+  // ARDOISE: local text state + throttle ref
+  const [ardoiseText, setArdoiseText] = useState('')
+  const ardoiseThrottleRef = useRef(null)
+  const prevPhaseRef = useRef(null)
 
   // Load session from localStorage on mount
   useEffect(() => {
@@ -122,6 +128,40 @@ export default function VPlayerPage() {
     sendMessage('PONG', { ID: bumper.id })
   }, [gameState.phase, bumper, sendMessage])
 
+  // ARDOISE: reset text on question change
+  useEffect(() => {
+    setArdoiseText('')
+    if (ardoiseThrottleRef.current) clearTimeout(ardoiseThrottleRef.current)
+  }, [gameState.question?.ID])
+
+  // ARDOISE: reset on PREPARE (covers replaying the same question + race conditions)
+  useEffect(() => {
+    if (gameState.phase !== 'PREPARE') return
+    setArdoiseText('')
+    if (ardoiseThrottleRef.current) clearTimeout(ardoiseThrottleRef.current)
+  }, [gameState.phase])
+
+  // ARDOISE: forced flush on phase change from STARTED → anything else
+  useEffect(() => {
+    const currentPhase = gameState.phase
+    const prev = prevPhaseRef.current
+    prevPhaseRef.current = currentPhase
+    if (prev === 'STARTED' && currentPhase !== 'STARTED' && ardoiseText) {
+      // Cancel pending throttle and send immediately
+      if (ardoiseThrottleRef.current) clearTimeout(ardoiseThrottleRef.current)
+      sendMessage('ARDOISE_INPUT', { TEXT: ardoiseText, ID: bumper?.id })
+    }
+  }, [gameState.phase, ardoiseText, sendMessage, bumper])
+
+  // ARDOISE: handle key input — update local state + throttled send
+  const handleArdoiseChange = useCallback((text) => {
+    setArdoiseText(text)
+    if (ardoiseThrottleRef.current) clearTimeout(ardoiseThrottleRef.current)
+    ardoiseThrottleRef.current = setTimeout(() => {
+      sendMessage('ARDOISE_INPUT', { TEXT: text, ID: bumper?.id })
+    }, 200)
+  }, [sendMessage, bumper])
+
   // NoSleep — requires user gesture to enable (called on fullscreen tap or first buzz)
   const activateNoSleep = useCallback(() => {
     if (!noSleepRef.current) noSleepRef.current = new NoSleep()
@@ -177,6 +217,12 @@ export default function VPlayerPage() {
       return
     }
 
+    // Block buzz for ARDOISE questions (use keyboard instead)
+    if (gameState.question?.TYPE === 'ARDOISE') {
+      console.log('[VPlayer] Buzz blocked for ARDOISE question - use keyboard')
+      return
+    }
+
     console.log('[VPlayer] Buzzing:', bumper.id)
     activateNoSleep()
     sendMessage('BUTTON', { ID: bumper.id, button: 'A' })
@@ -216,6 +262,9 @@ export default function VPlayerPage() {
 
   // Check if current question is QCM
   const isQcmQuestion = gameState.question?.TYPE === 'QCM'
+
+  // Check if current question is ARDOISE
+  const isArdoiseQuestion = gameState.question?.TYPE === 'ARDOISE'
 
   // Show loading if no session or bumper not found yet
   if (!playerSession) {
@@ -272,6 +321,18 @@ export default function VPlayerPage() {
         onQCMAnswer={handleQCMAnswer}
         vplayerHasBuzzed={hasBuzzed}
       />
+
+      {/* ARDOISE keyboard overlay — shown for all ARDOISE phases, active only during STARTED */}
+      {isArdoiseQuestion && (
+        <div className="vplayer-ardoise-container">
+          <ArdoiseKeyboard
+            keyboardType={gameState.question?.ARDOISE_KEYBOARD_TYPE || 'AZERTY'}
+            value={ardoiseText}
+            onChange={handleArdoiseChange}
+            disabled={gameState.phase !== 'STARTED'}
+          />
+        </div>
+      )}
     </div>
   )
 }

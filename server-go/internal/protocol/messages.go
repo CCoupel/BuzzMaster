@@ -61,6 +61,8 @@ const (
 	ActionPlayerAssigned = "PLAYER_ASSIGNED"
 	// VPlayer QCM actions
 	ActionVPlayerQCMAnswer = "VPLAYER_QCM_ANSWER"
+	// ARDOISE actions (v5.6.0)
+	ActionArdoiseInput = "ARDOISE_INPUT" // VPlayer → Server: free-text answer update (throttled)
 	// Log actions (via dedicated /ws/logs WebSocket)
 	ActionLogHistory = "LOG_HISTORY"
 	ActionLogEntry   = "LOG_ENTRY"
@@ -271,6 +273,15 @@ type PlayerAssignedPayload struct {
 type VPlayerQCMAnswerPayload struct {
 	ID          string `json:"ID"`           // Bumper ID (VPlayer MAC)
 	AnswerColor string `json:"ANSWER_COLOR"` // Color chosen (RED, GREEN, YELLOW, BLUE)
+}
+
+// ArdoiseInputPayload for ARDOISE_INPUT action (VPlayer → Server)
+// Sent throttled (~200ms) during STARTED phase with TYPE=ARDOISE question.
+// Team identification is resolved server-side via ID → bumper → bumper.Team (3-pass pattern,
+// identical to VPlayerQCMAnswerPayload).
+type ArdoiseInputPayload struct {
+	ID   string `json:"ID,omitempty"` // Bumper ID (VPlayer MAC) — explicit, same as VPLAYER_QCM_ANSWER
+	Text string `json:"TEXT"`         // Current answer text (full content, not delta)
 }
 
 // LogHistoryPayload for LOG_HISTORY action (send log history to client)

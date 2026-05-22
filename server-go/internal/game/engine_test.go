@@ -1927,3 +1927,227 @@ func TestEngine_QCM_HintsAtBuzz_ResetOnPrepare(t *testing.T) {
 	}
 }
 
+// ─── ARDOISE tests (v5.6.0) ──────────────────────────────────────────────────
+
+// TestSetArdoiseAnswer_InStartedPhase verifies that answers are stored
+// correctly when the engine is in STARTED phase with TYPE=ARDOISE question.
+func TestSetArdoiseAnswer_InStartedPhase(t *testing.T) {
+	e := NewEngine()
+	e.SetTeams(map[string]*Team{
+		"teamA": {Name: "teamA", Color: []int{255, 0, 0}},
+	})
+	e.SetBumpers(map[string]*Bumper{
+		"b1": {Name: "Player1", Team: "teamA"},
+	})
+
+	q := &Question{
+		ID:       "aq1",
+		Question: "What is the capital?",
+		Answer:   "Paris",
+		Type:     QuestionTypeArdoise,
+		Points:   "10",
+		Time:     "30",
+	}
+	e.Ready("aq1", q)
+	e.StartImmediate(30)
+
+	ok := e.SetArdoiseAnswer("teamA", "Paris")
+	if !ok {
+		t.Fatal("SetArdoiseAnswer should return true in STARTED phase with ARDOISE question")
+	}
+
+	state := e.GetState()
+	answer, exists := state.ArdoiseAnswers["teamA"]
+	if !exists {
+		t.Fatal("ArdoiseAnswers should contain teamA after SetArdoiseAnswer")
+	}
+	if answer.Text != "Paris" {
+		t.Errorf("Expected answer text 'Paris', got %q", answer.Text)
+	}
+	if answer.SubmittedAt <= 0 {
+		t.Errorf("SubmittedAt should be > 0, got %d", answer.SubmittedAt)
+	}
+}
+
+// TestSetArdoiseAnswer_OutsideStartedPhase verifies that answers are ignored
+// when the engine is not in STARTED phase (STOPPED, PREPARE, READY, etc.).
+func TestSetArdoiseAnswer_OutsideStartedPhase(t *testing.T) {
+	phases := []GamePhase{PhaseStopped, PhasePrepare, PhaseReady, PhasePaused, PhaseRevealed}
+
+	q := &Question{
+		ID:     "aq1",
+		Type:   QuestionTypeArdoise,
+		Points: "10",
+		Time:   "30",
+	}
+
+	for _, phase := range phases {
+		t.Run(string(phase), func(t *testing.T) {
+			e := NewEngine()
+			e.SetPhase(phase)
+			// Manually set a question so type guard would pass if phase were OK
+			e.mu.Lock()
+			e.state.Question = q
+			e.mu.Unlock()
+
+			ok := e.SetArdoiseAnswer("teamA", "some text")
+			if ok {
+				t.Errorf("SetArdoiseAnswer should return false in phase %s", phase)
+			}
+
+			state := e.GetState()
+			if len(state.ArdoiseAnswers) != 0 {
+				t.Errorf("ArdoiseAnswers should be empty in phase %s, got %v", phase, state.ArdoiseAnswers)
+			}
+		})
+	}
+}
+
+// TestSetArdoiseAnswer_NonArdoiseQuestion verifies that answers are ignored
+// when the current question type is not ARDOISE.
+func TestSetArdoiseAnswer_NonArdoiseQuestion(t *testing.T) {
+	nonArdoiseTypes := []QuestionType{QuestionTypeNormal, QuestionTypeQCM, QuestionTypeMemory, QuestionTypeMemotion}
+
+	for _, qType := range nonArdoiseTypes {
+		t.Run(string(qType), func(t *testing.T) {
+			e := NewEngine()
+			e.SetTeams(map[string]*Team{
+				"teamA": {Name: "teamA", Color: []int{255, 0, 0}},
+			})
+			e.SetBumpers(map[string]*Bumper{
+				"b1": {Name: "Player1", Team: "teamA"},
+			})
+
+			q := &Question{
+				ID:     "q1",
+				Type:   qType,
+				Points: "10",
+				Time:   "30",
+			}
+			e.Ready("q1", q)
+			e.StartImmediate(30)
+
+			ok := e.SetArdoiseAnswer("teamA", "my answer")
+			if ok {
+				t.Errorf("SetArdoiseAnswer should return false for question type %s", qType)
+			}
+
+			state := e.GetState()
+			if len(state.ArdoiseAnswers) != 0 {
+				t.Errorf("ArdoiseAnswers should be empty for type %s, got %v", qType, state.ArdoiseAnswers)
+			}
+		})
+	}
+}
+
+// TestArdoiseAnswers_ResetOnReady verifies that ArdoiseAnswers is cleared
+// when a new question is prepared via Ready().
+func TestArdoiseAnswers_ResetOnReady(t *testing.T) {
+	e := NewEngine()
+	e.SetTeams(map[string]*Team{
+		"teamA": {Name: "teamA", Color: []int{255, 0, 0}},
+	})
+	e.SetBumpers(map[string]*Bumper{
+		"b1": {Name: "Player1", Team: "teamA"},
+	})
+
+	q1 := &Question{ID: "aq1", Type: QuestionTypeArdoise, Points: "10", Time: "30"}
+	e.Ready("aq1", q1)
+	e.StartImmediate(30)
+
+	// Populate some answers
+	e.SetArdoiseAnswer("teamA", "First answer")
+	state := e.GetState()
+	if len(state.ArdoiseAnswers) == 0 {
+		t.Fatal("Pre-condition: ArdoiseAnswers should contain teamA answer")
+	}
+
+	// Move to a new question — ArdoiseAnswers must be reset
+	e.Stop()
+	q2 := &Question{ID: "aq2", Type: QuestionTypeArdoise, Points: "10", Time: "30"}
+	e.Ready("aq2", q2)
+
+	stateAfter := e.GetState()
+	if len(stateAfter.ArdoiseAnswers) != 0 {
+		t.Errorf("ArdoiseAnswers should be empty after Ready() with new question, got %v", stateAfter.ArdoiseAnswers)
+	}
+}
+
+// TestArdoiseAnswers_ResetOnInitGame verifies that ArdoiseAnswers is cleared
+// when InitGame() (NEW_GAME action) resets the game.
+func TestArdoiseAnswers_ResetOnInitGame(t *testing.T) {
+	e := NewEngine()
+	e.SetTeams(map[string]*Team{
+		"teamA": {Name: "teamA", Color: []int{255, 0, 0}},
+	})
+	e.SetBumpers(map[string]*Bumper{
+		"b1": {Name: "Player1", Team: "teamA"},
+	})
+
+	q := &Question{ID: "aq1", Type: QuestionTypeArdoise, Points: "10", Time: "30"}
+	e.Ready("aq1", q)
+	e.StartImmediate(30)
+	e.SetArdoiseAnswer("teamA", "Some answer")
+
+	// Verify answer is stored
+	state := e.GetState()
+	if len(state.ArdoiseAnswers) == 0 {
+		t.Fatal("Pre-condition: ArdoiseAnswers should contain answer before InitGame")
+	}
+
+	// InitGame resets everything
+	e.InitGame()
+
+	stateAfter := e.GetState()
+	if len(stateAfter.ArdoiseAnswers) != 0 {
+		t.Errorf("ArdoiseAnswers should be empty after InitGame(), got %v", stateAfter.ArdoiseAnswers)
+	}
+}
+
+// TestArdoiseAnswers_SerializedAsEmptyMapNotNull verifies that ArdoiseAnswers
+// serializes as {} (empty JSON object) rather than null when no answers exist.
+// This is critical: the frontend relies on the field never being null to reset state.
+func TestArdoiseAnswers_SerializedAsEmptyMapNotNull(t *testing.T) {
+	e := NewEngine()
+	state := e.GetState()
+
+	data, err := json.Marshal(state)
+	if err != nil {
+		t.Fatalf("Failed to marshal GameState: %v", err)
+	}
+
+	// Must contain "ARDOISE_ANSWERS":{} (not "ARDOISE_ANSWERS":null)
+	jsonStr := string(data)
+	if !contains(jsonStr, `"ARDOISE_ANSWERS":{}`) {
+		t.Errorf("Expected ARDOISE_ANSWERS to serialize as {}, got: %s", jsonStr)
+	}
+}
+
+// TestNewEngine_ArdoiseAnswersInitialized verifies that NewEngine initializes
+// ArdoiseAnswers as an empty (non-nil) map.
+func TestNewEngine_ArdoiseAnswersInitialized(t *testing.T) {
+	e := NewEngine()
+	state := e.GetState()
+
+	if state.ArdoiseAnswers == nil {
+		t.Error("ArdoiseAnswers should be initialized (non-nil) in NewEngine()")
+	}
+	if len(state.ArdoiseAnswers) != 0 {
+		t.Errorf("ArdoiseAnswers should be empty in NewEngine(), got %v", state.ArdoiseAnswers)
+	}
+}
+
+// contains is a simple string containment helper for JSON assertions.
+func contains(s, substr string) bool {
+	return len(s) >= len(substr) && (s == substr || len(s) > 0 && containsAt(s, substr))
+}
+
+func containsAt(s, substr string) bool {
+	for i := 0; i <= len(s)-len(substr); i++ {
+		if s[i:i+len(substr)] == substr {
+			return true
+		}
+	}
+	return false
+}
+

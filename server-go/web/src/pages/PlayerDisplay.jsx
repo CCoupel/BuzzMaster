@@ -508,6 +508,7 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
   const isQcm = gameState.question?.TYPE === 'QCM'
   const isMemory = gameState.question?.TYPE === 'MEMORY'
   const isMemotion = gameState.question?.TYPE === 'MEMOTION'
+  const isArdoise = gameState.question?.TYPE === 'ARDOISE'
   // QCM answers visible from READY through REVEALED (no re-render on transition)
   const showQcmAnswers = ['READY', 'COUNTDOWN', 'STARTED', 'PAUSED', 'STOPPED', 'REVEALED'].includes(gameState.phase)
   // Memory grid visible from READY (cards face down during countdown) through REVEALED
@@ -2309,7 +2310,8 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
             })()}
 
             {/* Non-QCM/Non-Memory/Non-Memotion Game Content - 4 vertical zones: Timer, Question, Media, Answers */}
-            {!isQcm && !isMemory && !isMemotion && showGameContent && gameState.question && (
+            {/* ARDOISE TV reveal handled separately below — exclude from this block during REVEALED non-VPlayer */}
+            {!isQcm && !isMemory && !isMemotion && !(isArdoise && showAnswer && !isVPlayer) && showGameContent && gameState.question && (
               <div className="game-content-zones">
                 {/* Zone 1: Timer */}
                 <div className="zone-timer">
@@ -2374,6 +2376,100 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
                   )}
                 </div>
 
+              </div>
+            )}
+
+            {/* ARDOISE TV Reveal — standard zone layout (#90 #92 #93 #94) */}
+            {isArdoise && showAnswer && !isVPlayer && gameState.question && (
+              <div className="game-content-zones">
+
+                {/* Zone 1: Question text */}
+                <motion.div
+                  className="zone-question"
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.1 }}
+                >
+                  <p className="question-text">{gameState.question.QUESTION}</p>
+                </motion.div>
+
+                {/* Zone 2: Media — MEDIA_ANSWER in REVEALED (highlighted), question MEDIA otherwise (#94) */}
+                {(gameState.question.MEDIA_ANSWER || gameState.question.MEDIA) && (
+                  <div className="zone-media">
+                    {gameState.question.MEDIA_ANSWER ? (
+                      <motion.img
+                        key="ardoise-answer-media"
+                        src={gameState.question.MEDIA_ANSWER}
+                        alt=""
+                        className="question-media answer-media-highlight"
+                        initial={{ opacity: 0, scale: 0.9 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        transition={{ delay: 0.15 }}
+                      />
+                    ) : (
+                      <motion.img
+                        key="ardoise-question-media"
+                        src={gameState.question.MEDIA}
+                        alt=""
+                        className="question-media"
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        transition={{ delay: 0.15 }}
+                      />
+                    )}
+                  </div>
+                )}
+
+                {/* Zone 3: 2 equal sub-zones — correct answer (top) + team cards (bottom) */}
+                <motion.div
+                  className="zone-answers"
+                  initial={{ opacity: 0, scale: 0.9 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  transition={{ delay: 0.2 }}
+                >
+                  {/* Sub-zone 1/2 — correct answer (QUIZZ style) */}
+                  <div className="ardoise-footer-top">
+                    <motion.div
+                      className="answer-container"
+                      initial={{ opacity: 0, scale: 0.8, y: 20 }}
+                      animate={{ opacity: 1, scale: 1, y: 0 }}
+                    >
+                      <p className="answer-text ardoise-correct-answer">✓ {gameState.question.ANSWER}</p>
+                    </motion.div>
+                  </div>
+
+                  {/* Sub-zone 2/2 — team cards grid (only VJoueur teams, max 8, static) */}
+                  <div className="ardoise-footer-bottom">
+                    <div className="ardoise-teams-grid">
+                      {Object.values(teams)
+                        .filter(team => Object.values(bumpers).some(b => b.IS_VPLAYER && b.TEAM === team.NAME))
+                        .slice(0, 8)
+                        .map((team, idx) => {
+                          const answer = (gameState.ARDOISE_ANSWERS || {})[team.NAME]
+                          const teamColor = getRgbColor(team.COLOR)
+                          return (
+                            <motion.div
+                              key={team.NAME}
+                              className={`ardoise-team-card ${answer ? 'has-answer' : 'no-answer'}`}
+                              initial={{ opacity: 0, y: 15 }}
+                              animate={{ opacity: 1, y: 0 }}
+                              transition={{ delay: 0.3 + idx * 0.05 }}
+                            >
+                              <div
+                                className="ardoise-team-card-header"
+                                style={{ backgroundColor: teamColor }}
+                              >
+                                {team.NAME}
+                              </div>
+                              <div className="ardoise-team-card-answer">
+                                {answer?.TEXT || '—'}
+                              </div>
+                            </motion.div>
+                          )
+                        })}
+                    </div>
+                  </div>
+                </motion.div>
               </div>
             )}
 

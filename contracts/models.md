@@ -307,3 +307,42 @@ Les catégories sont des chaînes libres. Catégories suggérées :
 | GREEN | `"GREEN"` | B | #22c55e |
 | YELLOW | `"YELLOW"` | C | #eab308 |
 | BLUE | `"BLUE"` | D | #3b82f6 |
+
+---
+
+## ARDOISE — Types et Structures (v5.6.0)
+
+### KeyboardType
+
+```typescript
+type KeyboardType = "AZERTY" | "NUMPAD"
+```
+
+### ArdoiseAnswer
+
+```typescript
+interface ArdoiseAnswer {
+  TEXT: string         // Texte saisi par l'équipe (full content, pas delta)
+  SUBMITTED_AT: number // Timestamp en microsecondes (dernière mise à jour)
+}
+```
+
+### Question.ARDOISE_KEYBOARD_TYPE
+
+Champ optionnel dans `Question` pour les questions de type `ARDOISE` :
+
+| Champ | Type | Obligatoire | Description |
+|-------|------|-------------|-------------|
+| ARDOISE_KEYBOARD_TYPE | KeyboardType | ❌ | Layout clavier : `"AZERTY"` (défaut) ou `"NUMPAD"` |
+
+### QuestionType
+
+Valeurs valides pour `TYPE` :
+
+| Type | Description |
+|------|-------------|
+| `"NORMAL"` | Question standard |
+| `"QCM"` | Choix multiple 4 couleurs |
+| `"MEMORY"` | Jeu de mémoire |
+| `"MEMOTION"` | Grille de cartes animées |
+| `"ARDOISE"` | ✨ Saisie libre via clavier virtuel (v5.6.0) |

@@ -1,0 +1,182 @@
+/* ============================================================
+   ArdoiseKeyboard — Virtual keyboard for ARDOISE question type
+   v5.6.0
+   ============================================================ */
+
+.ardoise-keyboard {
+  display: flex;
+  flex-direction: column;
+  gap: clamp(0.3rem, 1vh, 0.6rem);
+  width: 100%;
+  position: relative;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* ── Text display ── */
+.ardoise-keyboard-display {
+  display: flex;
+  align-items: center;
+  min-height: clamp(2.5rem, 6vh, 3.5rem);
+  background: rgba(0, 0, 0, 0.4);
+  border: 2px solid rgba(255, 255, 255, 0.2);
+  border-radius: clamp(6px, 1.5vh, 10px);
+  padding: 0 clamp(0.5rem, 2vw, 1rem);
+  gap: 0.5rem;
+}
+
+.ardoise-keyboard-text {
+  flex: 1;
+  font-size: clamp(1rem, 3vh, 1.6rem);
+  font-weight: 600;
+  color: white;
+  letter-spacing: 0.5px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ardoise-keyboard-placeholder {
+  color: rgba(255, 255, 255, 0.35);
+  font-weight: 400;
+  font-style: italic;
+}
+
+.ardoise-keyboard-clear {
+  background: rgba(255, 255, 255, 0.15);
+  border: none;
+  border-radius: 50%;
+  width: clamp(1.5rem, 4vh, 2rem);
+  height: clamp(1.5rem, 4vh, 2rem);
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 0.75rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: background 0.15s;
+}
+
+.ardoise-keyboard-clear:hover {
+  background: rgba(239, 68, 68, 0.5);
+  color: white;
+}
+
+/* ── Rows ── */
+.ardoise-keyboard-rows {
+  display: flex;
+  flex-direction: column;
+  gap: clamp(0.2rem, 0.8vh, 0.4rem);
+}
+
+.ardoise-keyboard-row {
+  display: flex;
+  gap: clamp(0.2rem, 0.5vw, 0.4rem);
+  justify-content: center;
+}
+
+/* ── Key base ── */
+.ardoise-key {
+  flex: 1;
+  min-width: clamp(2rem, 4vw, 3rem);
+  min-height: clamp(2.5rem, 6vh, 3.5rem);
+  max-width: 4rem;
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: clamp(4px, 1vh, 8px);
+  color: white;
+  font-size: clamp(0.85rem, 2.2vh, 1.1rem);
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.1s, transform 0.05s;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+.ardoise-key:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.22);
+}
+
+.ardoise-key:active:not(:disabled) {
+  background: rgba(99, 102, 241, 0.5);
+  transform: scale(0.94);
+}
+
+/* NUMPAD — wider keys */
+.ardoise-keyboard.numpad .ardoise-key {
+  min-height: clamp(3rem, 8vh, 4.5rem);
+  font-size: clamp(1.1rem, 3vh, 1.6rem);
+  max-width: 5rem;
+}
+
+/* Special keys */
+.ardoise-key.key-backspace {
+  flex: 1.4;
+  max-width: 5rem;
+  background: rgba(239, 68, 68, 0.2);
+  border-color: rgba(239, 68, 68, 0.4);
+  font-size: clamp(1rem, 2.5vh, 1.3rem);
+}
+
+.ardoise-key.key-backspace:hover:not(:disabled) {
+  background: rgba(239, 68, 68, 0.35);
+}
+
+.ardoise-key.key-backspace:active:not(:disabled) {
+  background: rgba(239, 68, 68, 0.6);
+}
+
+.ardoise-key.key-space {
+  flex: 3;
+  max-width: 8rem;
+}
+
+/* ── Disabled state ── */
+.ardoise-keyboard.disabled .ardoise-key {
+  opacity: 0.35;
+  pointer-events: none;
+  cursor: not-allowed;
+}
+
+.ardoise-keyboard.disabled .ardoise-keyboard-display {
+  border-color: rgba(255, 255, 255, 0.1);
+  background: rgba(0, 0, 0, 0.25);
+}
+
+/* Overlay message when disabled */
+.ardoise-keyboard-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  z-index: 2;
+}
+
+.ardoise-keyboard-overlay-text {
+  background: rgba(0, 0, 0, 0.65);
+  color: rgba(255, 255, 255, 0.9);
+  font-size: clamp(0.9rem, 2.5vh, 1.2rem);
+  font-weight: 600;
+  padding: 0.4rem 1rem;
+  border-radius: 2rem;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  letter-spacing: 0.5px;
+}
+
+/* NUMPAD — center rows */
+.ardoise-keyboard.numpad .ardoise-keyboard-row {
+  justify-content: center;
+  max-width: 16rem;
+  margin: 0 auto;
+  width: 100%;
+}

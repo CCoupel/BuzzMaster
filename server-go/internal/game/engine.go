@@ -49,6 +49,8 @@ func NewEngine() *Engine {
 			MotionCardTeams:          make(map[string]string),
 			MotionParticipatingTeams: []string{},
 			MotionCurrentTeamColor:   []int{},
+			// ARDOISE: initialize empty map so JSON serializes {} (not null)
+			ArdoiseAnswers: make(map[string]ArdoiseAnswer),
 		},
 		data:             NewTeamsAndBumpers(),
 		questionStatuses: make(map[string]QuestionStatus),
@@ -280,6 +282,9 @@ func (e *Engine) Ready(questionID string, question *Question) {
 		if question != nil && question.Type == QuestionTypeMemotion {
 			e.initMotionStateUnsafe()
 		}
+
+		// Reset ARDOISE answers for new question (v5.6.0)
+		e.state.ArdoiseAnswers = make(map[string]ArdoiseAnswer)
 	}
 
 	log.Printf("[Engine] Game ready with question: %s", questionID)
@@ -1238,6 +1243,9 @@ func (e *Engine) InitGame() {
 	e.state.MotionCurrentTeam = ""
 	e.state.MotionCurrentTeamColor = []int{}
 	e.state.MotionParticipatingTeams = []string{}
+
+	// Reset ARDOISE answers (v5.6.0)
+	e.state.ArdoiseAnswers = make(map[string]ArdoiseAnswer)
 
 	log.Printf("[Engine] Game initialized: scores, history, question statuses reset")
 	e.mu.Unlock()
@@ -2244,6 +2252,32 @@ func (e *Engine) SetVirtualPlayerLimit(limit int) {
 	}
 	e.state.VirtualPlayerLimit = limit
 	log.Printf("[Engine] Virtual player limit set to: %d", limit)
+}
+
+// SetArdoiseAnswer updates the free-text answer for a team during an ARDOISE question.
+// It validates that the game is in STARTED phase and the current question is ARDOISE.
+// Returns false (silently) if the guard conditions are not met, following the plan's
+// "ignore silently" specification.
+func (e *Engine) SetArdoiseAnswer(teamName string, text string) bool {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+
+	// Phase guard: only accept answers during STARTED phase
+	if e.state.Phase != PhaseStarted {
+		return false
+	}
+
+	// Type guard: only accept answers for ARDOISE questions
+	if e.state.Question == nil || e.state.Question.Type != QuestionTypeArdoise {
+		return false
+	}
+
+	// Store answer with microsecond timestamp
+	e.state.ArdoiseAnswers[teamName] = ArdoiseAnswer{
+		Text:        text,
+		SubmittedAt: time.Now().UnixMicro(),
+	}
+	return true
 }
 
 // CreateVirtualPlayer creates a new virtual player (bumper) during enrollment

@@ -2,6 +2,19 @@
 
 ---
 
+## [20260520] — Mode ARDOISE v5.6.0
+
+- **[NEW]** `QuestionType "ARDOISE"` — nouveau type de question saisie libre via clavier virtuel
+- **[NEW]** `KeyboardType "AZERTY" | "NUMPAD"` — layout clavier pour ARDOISE
+- **[NEW]** `ArdoiseAnswer { TEXT: string, SUBMITTED_AT: number }` — structure réponse équipe
+- **[NEW]** `Question.ARDOISE_KEYBOARD_TYPE?: KeyboardType` — layout clavier (omitempty, rétrocompatible)
+- **[NEW]** `GameState.ARDOISE_ANSWERS: map[string]ArdoiseAnswer` — réponses par équipe (jamais null)
+- **[NEW]** `ACTION: "ARDOISE_INPUT"` (VPlayer→Server) — mise à jour réponse texte (throttlé, fire-and-forget)
+
+> Aucune breaking change — `ARDOISE_ANSWERS` est initialisé à `{}` et toujours sérialisé.
+
+---
+
 ## [20260515] — MEMOTION Secret Mode v5.5.0
 
 - **[NEW]** `Question.MOTION_MEMORIZE_DURATION` int — durée phase MEMORIZE en secondes. 0 = mode standard (omitempty, rétrocompatible)

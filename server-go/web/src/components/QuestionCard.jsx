@@ -4,6 +4,15 @@ import './QuestionCard.css'
 // Export motion for pages that need AnimatePresence
 export { motion }
 
+// Type display labels
+const TYPE_LABELS = {
+  'NORMAL':   'Normal',
+  'QCM':      'QCM',
+  'MEMORY':   'Memory',
+  'MEMOTION': 'Memotion',
+  'ARDOISE':  'Ardoise',
+}
+
 // QCM answer colors
 const QCM_COLORS = {
   RED: { label: 'Rouge', color: '#ef4444', letter: 'A' },
@@ -56,6 +65,7 @@ export default function QuestionCard({
   const isQCM = question.TYPE === 'QCM'
   const isMemory = question.TYPE === 'MEMORY'
   const isMemotion = question.TYPE === 'MEMOTION'
+  const isArdoise = question.TYPE === 'ARDOISE'
   const qcmColor = isQCM && question.QCM_CORRECT ? QCM_COLORS[question.QCM_CORRECT] : null
   const memoryPairCount = isMemory && question.MEMORY_PAIRS ? question.MEMORY_PAIRS.length : 0
 
@@ -119,10 +129,9 @@ export default function QuestionCard({
           </span>
         )}
 
-        {isQCM && <span className="qcard-qcm-badge">QCM</span>}
-        {isMemory && <span className="qcard-memory-badge">MEMORY</span>}
-        {isMemotion && <span className="qcard-memotion-badge">MEMOTION</span>}
-        {!isQCM && !isMemory && !isMemotion && <span className="qcard-normal-badge">Normal</span>}
+        <span className={`qcard-type-badge type-${(question.TYPE || 'normal').toLowerCase()}`}>
+          {TYPE_LABELS[question.TYPE] ?? 'Normal'}
+        </span>
 
         <span
           className={`qcard-target-badge ${(question.POINTS_TARGET || 'PLAYER').toLowerCase()}`}

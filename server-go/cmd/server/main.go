@@ -892,6 +892,9 @@ func (a *App) handleWebMessage(incoming *protocol.IncomingMessage) {
 	case protocol.ActionVPlayerQCMAnswer:
 		a.handleVPlayerQCMAnswer(incoming.ClientID, msg)
 
+	case protocol.ActionArdoiseInput:
+		a.handleArdoiseInput(incoming.ClientID, msg)
+
 	case protocol.ActionNewGame:
 		a.logger.Info(game.LogComponentEngine, "NEW_GAME — reset scores, history, statuses")
 		a.engine.InitGame()
@@ -1956,6 +1959,62 @@ func (a *App) handleVPlayerQCMAnswer(clientID string, msg *protocol.Message) {
 
 	// Broadcast pause and update to all clients
 	a.broadcastPause(bumperID)
+	a.broadcastUpdate()
+}
+
+// handleArdoiseInput processes a free-text answer update from a VPlayer during an ARDOISE question.
+// The handler follows the "ignore silently" specification: guard failures produce only a log warning.
+// Team identification uses the same protocol-native pattern as handleVPlayerQCMAnswer:
+// clientID → bumper lookup → bumper.Team.
+func (a *App) handleArdoiseInput(clientID string, msg *protocol.Message) {
+	var payload protocol.ArdoiseInputPayload
+	if err := json.Unmarshal(msg.Msg, &payload); err != nil {
+		server.LogError(game.LogComponentApp, "ARDOISE_INPUT: error parsing payload: %v", err)
+		return
+	}
+
+	// Resolve bumper — 3-pass pattern identical to handleVPlayerQCMAnswer
+	var bumperID string
+	var bumper *game.Bumper
+
+	// Pass 1: payload.ID (explicit bumper ID sent by VPlayer in MSG, same as VPLAYER_QCM_ANSWER)
+	if payload.ID != "" {
+		bumperID = payload.ID
+		bumper = a.engine.GetBumper(bumperID)
+	}
+	// Pass 2: msg.ID (top-level field)
+	if bumper == nil && msg.ID != "" {
+		bumperID = msg.ID
+		bumper = a.engine.GetBumper(bumperID)
+	}
+	// Pass 3: clientID fallback (IP:port — may not match bumper key for VPlayers)
+	if bumper == nil && clientID != "" {
+		bumper = a.engine.GetBumper(clientID)
+		if bumper != nil {
+			bumperID = clientID
+		}
+	}
+
+	if bumper == nil {
+		server.LogWarn(game.LogComponentApp, "ARDOISE_INPUT: bumper not found for client %s", clientID)
+		return
+	}
+
+	teamName := bumper.Team
+	if teamName == "" {
+		server.LogWarn(game.LogComponentApp, "ARDOISE_INPUT: bumper %s has no team assigned", bumperID)
+		return
+	}
+
+	// SetArdoiseAnswer applies phase + type guards and returns false if conditions not met
+	if !a.engine.SetArdoiseAnswer(teamName, payload.Text) {
+		server.LogWarn(game.LogComponentApp, "ARDOISE_INPUT: ignored (phase=%s or question type mismatch)", a.engine.GetPhase())
+		return
+	}
+
+	server.LogInfo(game.LogComponentApp, "ARDOISE_INPUT: team=%s text=%q (from client %s)", teamName, payload.Text, clientID)
+
+	// Broadcast immediate UPDATE so admin sees answers in real-time
 	a.broadcastUpdate()
 }
 

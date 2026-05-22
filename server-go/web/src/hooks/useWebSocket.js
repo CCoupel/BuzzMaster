@@ -40,6 +40,8 @@ export default function useWebSocket(endpoint = '/ws/admin') {
     quizTheme: '', // Quiz theme (v4.0.0)
     quizNotes: '', // Quiz free-text notes (v4.0.0)
     newGameBackgrounds: [], // Multi-image backgrounds for NEW_GAME screen (v4.0.4)
+    // ARDOISE fields (v5.6.0)
+    ARDOISE_ANSWERS: {}, // Map of teamName -> { TEXT, SUBMITTED_AT }
   })
   const [teams, setTeams] = useState({})
   const [bumpers, setBumpers] = useState({})
@@ -135,6 +137,8 @@ export default function useWebSocket(endpoint = '/ws/admin') {
             MEMOTION_CURRENT_TEAM: MSG.GAME.MEMOTION_CURRENT_TEAM !== undefined ? MSG.GAME.MEMOTION_CURRENT_TEAM : prev.MEMOTION_CURRENT_TEAM,
             MEMOTION_CURRENT_TEAM_COLOR: MSG.GAME.MEMOTION_CURRENT_TEAM_COLOR ?? prev.MEMOTION_CURRENT_TEAM_COLOR,
             MEMOTION_PARTICIPATING_TEAMS: MSG.GAME.MEMOTION_PARTICIPATING_TEAMS ?? prev.MEMOTION_PARTICIPATING_TEAMS,
+            // ARDOISE fields (v5.6.0)
+            ARDOISE_ANSWERS: MSG.GAME.ARDOISE_ANSWERS !== undefined ? MSG.GAME.ARDOISE_ANSWERS : prev.ARDOISE_ANSWERS,
             qcmInvalidated: MSG.GAME.QCM_INVALIDATED || [],
             virtualPlayerCount: MSG.GAME.VIRTUAL_PLAYER_COUNT ?? prev.virtualPlayerCount,
             virtualPlayerLimit: MSG.GAME.VIRTUAL_PLAYER_LIMIT ?? prev.virtualPlayerLimit,

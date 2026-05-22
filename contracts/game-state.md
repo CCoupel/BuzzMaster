@@ -250,6 +250,29 @@ interface Background {
 
 ---
 
+## ARDOISE_ANSWERS (v5.6.0)
+
+Réponses texte libres des équipes pour les questions de type `ARDOISE`.
+
+| Propriété | Type | Valeur par défaut | Notes |
+|-----------|------|-------------------|-------|
+| ARDOISE_ANSWERS | `{ [teamName: string]: ArdoiseAnswer }` | `{}` | **Jamais null** — toujours sérialisé |
+
+```typescript
+interface ArdoiseAnswer {
+  TEXT: string         // Texte saisi par l'équipe
+  SUBMITTED_AT: number // Timestamp microsecondes (dernière mise à jour)
+}
+```
+
+**Règles** :
+- Reset à `{}` à chaque nouvelle question (`Ready()`)
+- Reset à `{}` sur `InitGame()` (NEW_GAME)
+- Mise à jour en temps réel via `ARDOISE_INPUT` (broadcast UPDATE immédiat)
+- `SUBMITTED_AT` = timestamp microsecondes de la dernière modification
+
+---
+
 ## Utilisation Frontend
 
 ### Hook useWebSocket
@@ -261,6 +284,8 @@ const { gameState, teams, bumpers } = useWebSocket()
 const phase = gameState.PHASE
 const question = gameState.QUESTION
 const invalidatedColors = gameState.QcmInvalidated || []
+// ARDOISE answers (v5.6.0)
+const ardoiseAnswers = gameState.ARDOISE_ANSWERS || {}
 ```
 
 ### Affichage conditionnel par phase
@@ -272,5 +297,10 @@ const invalidatedColors = gameState.QcmInvalidated || []
 
 {gameState.PHASE === 'REVEALED' && (
   <Answer text={gameState.QUESTION?.ANSWER} />
+)}
+
+{/* ARDOISE: afficher réponses équipes */}
+{gameState.QUESTION?.TYPE === 'ARDOISE' && (
+  <ArdoiseAnswersPanel answers={gameState.ARDOISE_ANSWERS} teams={teams} />
 )}
 ```
