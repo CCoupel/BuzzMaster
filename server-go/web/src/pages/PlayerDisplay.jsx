@@ -865,6 +865,7 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
                   url={`http://${window.location.host}/`}
                   size={260}
                   fgColor="#15803d"
+                  logo="👤"
                 />
                 <div className="enroll-qr-subtitle">{window.location.host}/</div>
               </div>
