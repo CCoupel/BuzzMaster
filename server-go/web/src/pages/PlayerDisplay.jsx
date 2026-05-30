@@ -13,6 +13,11 @@ import { getRgbColor } from '../utils/colorUtils'
 import './PlayerDisplay.css'
 import '../styles/neon.css'
 
+// Escape special characters in WiFi QR strings (;, ", \)
+function escapeWifiString(str) {
+  return str.replace(/[\\;,"]/g, c => '\\' + c)
+}
+
 // QCM answer colors
 const QCM_COLORS = {
   RED: { label: 'Rouge', color: '#ef4444', letter: 'A' },
@@ -847,7 +852,7 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
                 <div className="enroll-qr-title">1. Rejoindre le WiFi</div>
                 <QRCodeDisplay
                   url={wifiConfig?.ssid
-                    ? `WIFI:T:${wifiConfig.password ? 'WPA' : 'nopass'};S:${wifiConfig.ssid};P:${wifiConfig.password};;`
+                    ? `WIFI:T:${wifiConfig.password ? 'WPA' : 'nopass'};S:${escapeWifiString(wifiConfig.ssid)};P:${escapeWifiString(wifiConfig.password || '')};;`
                     : 'https://buzzcontrol.local/no-wifi-configured'}
                   size={260}
                   fgColor="#1d4ed8"
@@ -861,12 +866,12 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
               <div className="enroll-qr-card enroll-qr-card-main">
                 <div className="enroll-qr-title">2. Rejoindre le jeu</div>
                 <QRCodeDisplay
-                  url={`http://${window.location.host}/player`}
+                  url={`http://${window.location.host}/`}
                   size={260}
                   fgColor="#15803d"
                   logo="👤"
                 />
-                <div className="enroll-qr-subtitle">{window.location.host}/player</div>
+                <div className="enroll-qr-subtitle">{window.location.host}/</div>
               </div>
             </div>
 
