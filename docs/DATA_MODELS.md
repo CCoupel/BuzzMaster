@@ -337,6 +337,27 @@ Voir `WEBSOCKET_PROTOCOL.md` pour comportement complet (throttling 200ms, flush 
 
 ---
 
+## GameState — Champs réseau (v5.7.0)
+
+### NETWORK_ONLY_LOCALHOST
+
+Indique que le serveur n'est accessible que depuis `localhost` (aucune interface réseau externe active).
+
+```json
+{
+  "NETWORK_ONLY_LOCALHOST": true
+}
+```
+
+**Champ :**
+- `NETWORK_ONLY_LOCALHOST`: `bool` — `true` si le serveur ne répond que sur 127.0.0.1, `false` sinon
+- Vérifié toutes les 30 s via goroutine dédiée (network watchdog)
+- Pushé via WebSocket à chaque changement d'état
+- Affiché comme bandeau rouge dans l'interface admin (GamePage)
+- Jamais `omitempty` — toujours présent dans le GameState JSON
+
+---
+
 ## GameEvent (History)
 
 ```go

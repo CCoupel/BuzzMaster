@@ -552,3 +552,26 @@ describe('GamePage - Tri par rapidité de réponse', () => {
     expect(result[2].mac).toBe('c')  // 0ms (pas buzzé)
   })
 })
+
+// ---------------------------------------------------------------------------
+// NetworkWarningBanner — visibilité conditionnelle (#96)
+// La logique show/hide est dans GamePage : {gameState.NETWORK_ONLY_LOCALHOST && <NetworkWarningBanner />}
+// ---------------------------------------------------------------------------
+
+describe('GamePage — NetworkWarningBanner (#96)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('banner is absent when NETWORK_ONLY_LOCALHOST is false', () => {
+    useGame.mockReturnValue(makeGameMock({ gameState: { NETWORK_ONLY_LOCALHOST: false } }))
+    const { container } = render(<GamePage />)
+    expect(container.querySelector('.network-warning-banner')).toBeNull()
+  })
+
+  it('banner is absent when NETWORK_ONLY_LOCALHOST is undefined (backward compat)', () => {
+    useGame.mockReturnValue(makeGameMock({ gameState: {} }))
+    const { container } = render(<GamePage />)
+    expect(container.querySelector('.network-warning-banner')).toBeNull()
+  })
+})

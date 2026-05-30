@@ -400,6 +400,10 @@ func (a *App) setupCallbacks() {
 	a.loadBackgrounds()
 	a.loadNewGameBackgrounds()
 
+	// Ensure categories directory exists and detect initial network state
+	a.ensureCategoriesDir()
+	a.updateNetworkState()
+
 	// Handle client count changes (WebSocket connect/disconnect)
 	a.wsHub.OnClientChange = func(adminCount, tvCount, vplayerCount int) {
 		a.broadcastClientCounts()
@@ -623,6 +627,43 @@ func (a *App) saveNewGameBackgroundsConfig() {
 	}
 }
 
+// ensureCategoriesDir creates data/files/categories/ if it does not exist (v5.6.2 — #95)
+func (a *App) ensureCategoriesDir() {
+	filesDir := a.config.Storage.FilesDir
+	if filesDir == "" {
+		filesDir = "./data/files"
+	}
+	catDir := filepath.Join(filesDir, "categories")
+	if err := os.MkdirAll(catDir, 0755); err != nil {
+		server.LogWarn(game.LogComponentApp, "Failed to create categories dir: %v", err)
+	}
+}
+
+// updateNetworkState detects whether only loopback interfaces are active and updates the engine (v5.6.2 — #96)
+func (a *App) updateNetworkState() {
+	ips := server.GetServerIPs()
+	onlyLocal := len(ips) == 0
+	if onlyLocal != a.engine.GetNetworkOnlyLocalhost() {
+		a.engine.SetNetworkOnlyLocalhost(onlyLocal)
+		a.broadcastUpdate()
+		server.LogInfo(game.LogComponentApp, "Network state updated: NETWORK_ONLY_LOCALHOST=%v (IPs=%v)", onlyLocal, ips)
+	}
+}
+
+// networkWatchdog re-checks network state every 30s and broadcasts changes (v5.6.2 — #96)
+func (a *App) networkWatchdog() {
+	ticker := time.NewTicker(30 * time.Second)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ticker.C:
+			a.updateNetworkState()
+		case <-a.ctx.Done():
+			return
+		}
+	}
+}
+
 // startBackgroundCycling manages server-synchronized background image cycling
 func (a *App) startBackgroundCycling() {
 	server.LogDebug(game.LogComponentApp, "Starting background cycling goroutine")
@@ -692,6 +733,9 @@ func (a *App) start() error {
 
 	// Start background cycling goroutine
 	go a.startBackgroundCycling()
+
+	// Start network watchdog goroutine (re-checks every 30s)
+	go a.networkWatchdog()
 
 	a.logger.Info(game.LogComponentApp, "BuzzControl server v%s started successfully", a.config.Version)
 

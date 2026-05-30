@@ -282,6 +282,8 @@ type GameState struct {
 	VirtualPlayerLimit     int          `json:"VIRTUAL_PLAYER_LIMIT"`           // Maximum number of virtual players allowed
 	EnrollmentActive       bool         `json:"ENROLLMENT_ACTIVE"`              // Whether player enrollment is active
 	ShowQRCode             bool         `json:"SHOW_QR_CODE"`                   // Whether to display QR code on TV
+	// Network state (v5.6.2) — NO omitempty: always serialized so frontend receives updates
+	NetworkOnlyLocalhost bool `json:"NETWORK_ONLY_LOCALHOST"`
 	// ARDOISE answers (v5.6.0) — NO omitempty: always serialized so frontend resets on new question
 	ArdoiseAnswers map[string]ArdoiseAnswer `json:"ARDOISE_ANSWERS"`
 	// Quiz metadata (v4.0.0) — no omitempty so empty strings clear the field on clients

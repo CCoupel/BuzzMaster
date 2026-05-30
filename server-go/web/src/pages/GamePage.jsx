@@ -9,6 +9,7 @@ import Timer from '../components/Timer'
 import TeamCard from '../components/TeamCard'
 import QuestionPreview from '../components/QuestionPreview'
 import QuestionCard, { CATEGORIES } from '../components/QuestionCard'
+import NetworkWarningBanner from '../components/NetworkWarningBanner'
 import './GamePage.css'
 
 export default function GamePage() {
@@ -380,7 +381,9 @@ export default function GamePage() {
   const canStart = gameState.phase === 'READY'
 
   return (
-    <div className="game-page page">
+    <>
+      {gameState.NETWORK_ONLY_LOCALHOST && <NetworkWarningBanner />}
+      <div className="game-page page">
       {/* Timer + Display Section (stacked vertically) */}
       <div className="timer-display-section">
         <Card variant="elevated" padding="md" className="timer-card">
@@ -1067,6 +1070,7 @@ export default function GamePage() {
         </div>
       </div>
     </div>
+    </>
   )
 }
 

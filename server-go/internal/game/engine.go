@@ -1368,6 +1368,20 @@ func (e *Engine) GetNewGameBackgrounds() []Background {
 	return e.state.NewGameBackgrounds
 }
 
+// SetNetworkOnlyLocalhost sets whether the server has no non-loopback network interface active (v5.6.2)
+func (e *Engine) SetNetworkOnlyLocalhost(v bool) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.state.NetworkOnlyLocalhost = v
+}
+
+// GetNetworkOnlyLocalhost returns whether the server has no non-loopback network interface active (v5.6.2)
+func (e *Engine) GetNetworkOnlyLocalhost() bool {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	return e.state.NetworkOnlyLocalhost
+}
+
 // AddBackground adds a background
 func (e *Engine) AddBackground(bg Background) {
 	e.mu.Lock()

@@ -2137,6 +2137,52 @@ func TestNewEngine_ArdoiseAnswersInitialized(t *testing.T) {
 	}
 }
 
+// ========================================
+// #96 — NETWORK_ONLY_LOCALHOST
+// ========================================
+
+func TestSetNetworkOnlyLocalhost(t *testing.T) {
+	e := NewEngine()
+
+	if e.GetNetworkOnlyLocalhost() != false {
+		t.Error("Expected GetNetworkOnlyLocalhost() to return false by default")
+	}
+
+	e.SetNetworkOnlyLocalhost(true)
+	if !e.GetNetworkOnlyLocalhost() {
+		t.Error("Expected GetNetworkOnlyLocalhost() to return true after SetNetworkOnlyLocalhost(true)")
+	}
+
+	e.SetNetworkOnlyLocalhost(false)
+	if e.GetNetworkOnlyLocalhost() {
+		t.Error("Expected GetNetworkOnlyLocalhost() to return false after SetNetworkOnlyLocalhost(false)")
+	}
+}
+
+func TestGameStateSerializationNetworkField(t *testing.T) {
+	e := NewEngine()
+
+	// false case — field must always be present (no omitempty)
+	e.SetNetworkOnlyLocalhost(false)
+	data, err := json.Marshal(e.GetState())
+	if err != nil {
+		t.Fatalf("Failed to marshal GameState: %v", err)
+	}
+	if !contains(string(data), `"NETWORK_ONLY_LOCALHOST":false`) {
+		t.Errorf("NETWORK_ONLY_LOCALHOST:false missing from JSON; got: %s", string(data))
+	}
+
+	// true case
+	e.SetNetworkOnlyLocalhost(true)
+	data, err = json.Marshal(e.GetState())
+	if err != nil {
+		t.Fatalf("Failed to marshal GameState: %v", err)
+	}
+	if !contains(string(data), `"NETWORK_ONLY_LOCALHOST":true`) {
+		t.Errorf("NETWORK_ONLY_LOCALHOST:true missing from JSON; got: %s", string(data))
+	}
+}
+
 // contains is a simple string containment helper for JSON assertions.
 func contains(s, substr string) bool {
 	return len(s) >= len(substr) && (s == substr || len(s) > 0 && containsAt(s, substr))

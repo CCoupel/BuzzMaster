@@ -1,4 +1,22 @@
-﻿/* Game Page - Grid Layout:
+﻿/* Network warning banner (#96) */
+.network-warning-banner {
+  position: relative;
+  background: #dc2626;
+  color: #fff;
+  text-align: center;
+  padding: var(--space-2) var(--space-4);
+  font-size: 0.9rem;
+  font-weight: 600;
+  z-index: 1000;
+  animation: pulse-warning 2s ease-in-out infinite;
+}
+
+@keyframes pulse-warning {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.75; }
+}
+
+/* Game Page - Grid Layout:
  * Row 1: [Controls 300px] [Timer + Display stacked, spans cols 2-3]
  * Row 2: [Questions 300px] [Preview flex] [Equipes 300px]
  */

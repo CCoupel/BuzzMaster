@@ -1,10 +1,13 @@
 package server
 
 import (
+	"archive/tar"
+	"bytes"
 	"buzzcontrol/internal/config"
 	"buzzcontrol/internal/game"
 	"encoding/json"
 	"io"
+	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -1083,5 +1086,279 @@ func TestHTTPServer_BackupSelect_VersionedFilename(t *testing.T) {
 	}
 	if !strings.Contains(cd, "buzzcontrol-backup") {
 		t.Errorf("Content-Disposition should contain 'buzzcontrol-backup', got: %s", cd)
+	}
+}
+
+// ========================================
+// #95 — GET /api/categories tests
+// ========================================
+
+type categoryItem struct {
+	Key      string `json:"key"`
+	Name     string `json:"name"`
+	ImageURL string `json:"imageURL"`
+	IsCustom bool   `json:"isCustom"`
+}
+
+// TestGetCategoriesEmptyDir verifies that an empty categories directory returns
+// only the hardcoded categories (none marked isCustom).
+func TestGetCategoriesEmptyDir(t *testing.T) {
+	server, dataDir := setupTestHTTPServer(t)
+
+	categoriesDir := filepath.Join(dataDir, "files", "categories")
+	os.MkdirAll(categoriesDir, 0755)
+
+	req := httptest.NewRequest("GET", "/api/categories", nil)
+	w := httptest.NewRecorder()
+	server.mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("Expected 200, got %d", w.Code)
+	}
+
+	var items []categoryItem
+	if err := json.NewDecoder(w.Body).Decode(&items); err != nil {
+		t.Fatalf("Failed to decode response: %v", err)
+	}
+
+	if len(items) == 0 {
+		t.Error("Expected at least hardcoded categories, got empty list")
+	}
+	for _, item := range items {
+		if item.IsCustom {
+			t.Errorf("Expected only hardcoded categories (isCustom=false) in empty dir, got isCustom=true for key=%s", item.Key)
+		}
+	}
+}
+
+// TestGetCategoriesWithPNG verifies that a PNG file in the categories directory
+// produces the correct custom category entry in the response.
+func TestGetCategoriesWithPNG(t *testing.T) {
+	server, dataDir := setupTestHTTPServer(t)
+
+	categoriesDir := filepath.Join(dataDir, "files", "categories")
+	os.MkdirAll(categoriesDir, 0755)
+	os.WriteFile(filepath.Join(categoriesDir, "Sport Extreme.png"), []byte("fake"), 0644)
+
+	req := httptest.NewRequest("GET", "/api/categories", nil)
+	w := httptest.NewRecorder()
+	server.mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("Expected 200, got %d", w.Code)
+	}
+
+	var items []categoryItem
+	if err := json.NewDecoder(w.Body).Decode(&items); err != nil {
+		t.Fatalf("Failed to decode response: %v", err)
+	}
+
+	var found *categoryItem
+	for i := range items {
+		if items[i].Key == "SPORT_EXTREME" {
+			found = &items[i]
+			break
+		}
+	}
+	if found == nil {
+		t.Fatal("Expected SPORT_EXTREME category in response, not found")
+	}
+	if found.Name != "Sport Extreme" {
+		t.Errorf("Expected Name='Sport Extreme', got '%s'", found.Name)
+	}
+	// imageURL may be percent-encoded or literal — both are valid for web serving
+	if found.ImageURL != "/files/categories/Sport%20Extreme.png" && found.ImageURL != "/files/categories/Sport Extreme.png" {
+		t.Errorf("Expected ImageURL for Sport Extreme.png, got '%s'", found.ImageURL)
+	}
+	if !found.IsCustom {
+		t.Error("Expected IsCustom=true for SPORT_EXTREME")
+	}
+}
+
+// TestGetCategoriesFormatsSupported verifies that only .png/.jpg/.jpeg/.webp
+// files are included, while .gif/.txt/.svg are silently ignored.
+func TestGetCategoriesFormatsSupported(t *testing.T) {
+	server, dataDir := setupTestHTTPServer(t)
+
+	categoriesDir := filepath.Join(dataDir, "files", "categories")
+	os.MkdirAll(categoriesDir, 0755)
+
+	for _, name := range []string{"Alpha.png", "Beta.jpg", "Gamma.jpeg", "Delta.webp"} {
+		os.WriteFile(filepath.Join(categoriesDir, name), []byte("x"), 0644)
+	}
+	for _, name := range []string{"Ignored.gif", "Ignored.txt", "Ignored.svg"} {
+		os.WriteFile(filepath.Join(categoriesDir, name), []byte("x"), 0644)
+	}
+
+	req := httptest.NewRequest("GET", "/api/categories", nil)
+	w := httptest.NewRecorder()
+	server.mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("Expected 200, got %d", w.Code)
+	}
+
+	var items []categoryItem
+	if err := json.NewDecoder(w.Body).Decode(&items); err != nil {
+		t.Fatalf("Failed to decode response: %v", err)
+	}
+
+	supported := map[string]bool{"ALPHA": false, "BETA": false, "GAMMA": false, "DELTA": false}
+	for _, item := range items {
+		if _, ok := supported[item.Key]; ok {
+			supported[item.Key] = true
+		}
+		if item.Key == "IGNORED" {
+			t.Error("IGNORED (gif/txt/svg) should not appear in categories response")
+		}
+	}
+	for k, found := range supported {
+		if !found {
+			t.Errorf("Expected category %s (supported format) in response", k)
+		}
+	}
+}
+
+// TestGetCategoriesKeyConflict verifies that a custom file whose derived key
+// matches a hardcoded category does not override the hardcoded entry.
+func TestGetCategoriesKeyConflict(t *testing.T) {
+	server, dataDir := setupTestHTTPServer(t)
+
+	categoriesDir := filepath.Join(dataDir, "files", "categories")
+	os.MkdirAll(categoriesDir, 0755)
+	// GEOGRAPHY is a hardcoded key — custom file with same name must lose
+	os.WriteFile(filepath.Join(categoriesDir, "GEOGRAPHY.png"), []byte("x"), 0644)
+
+	req := httptest.NewRequest("GET", "/api/categories", nil)
+	w := httptest.NewRecorder()
+	server.mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("Expected 200, got %d", w.Code)
+	}
+
+	var items []categoryItem
+	if err := json.NewDecoder(w.Body).Decode(&items); err != nil {
+		t.Fatalf("Failed to decode response: %v", err)
+	}
+
+	count := 0
+	for _, item := range items {
+		if item.Key == "GEOGRAPHY" {
+			count++
+			if item.IsCustom {
+				t.Error("GEOGRAPHY must remain hardcoded (isCustom=false) when a custom file conflicts")
+			}
+		}
+	}
+	if count != 1 {
+		t.Errorf("Expected exactly one GEOGRAPHY entry, got %d", count)
+	}
+}
+
+// ========================================
+// #95 — Backup/Restore with categories
+// ========================================
+
+// TestBackupIncludesCategories verifies that /backup-select?backgrounds=true
+// includes the files/categories/ directory in the TAR archive.
+func TestBackupIncludesCategories(t *testing.T) {
+	server, dataDir := setupTestHTTPServer(t)
+
+	categoriesDir := filepath.Join(dataDir, "files", "categories")
+	os.MkdirAll(categoriesDir, 0755)
+	os.WriteFile(filepath.Join(categoriesDir, "test.png"), []byte("fake-image"), 0644)
+
+	req := httptest.NewRequest("GET", "/backup-select?backgrounds=true", nil)
+	w := httptest.NewRecorder()
+	server.mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("Expected 200, got %d", w.Code)
+	}
+
+	tr := tar.NewReader(bytes.NewReader(w.Body.Bytes()))
+	found := false
+	for {
+		header, err := tr.Next()
+		if err != nil {
+			break
+		}
+		if strings.Contains(filepath.ToSlash(header.Name), "files/categories/test.png") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Error("Expected files/categories/test.png in backup TAR (backgrounds=true), not found")
+	}
+}
+
+// TestRestoreCategories verifies that a TAR containing files/categories/ is
+// correctly extracted by /restore.
+func TestRestoreCategories(t *testing.T) {
+	server, dataDir := setupTestHTTPServer(t)
+
+	var tarBuf bytes.Buffer
+	tw := tar.NewWriter(&tarBuf)
+	content := []byte("fake-image")
+	_ = tw.WriteHeader(&tar.Header{
+		Name: "files/categories/custom.png",
+		Mode: 0644,
+		Size: int64(len(content)),
+	})
+	tw.Write(content)
+	tw.Close()
+
+	var body bytes.Buffer
+	mw := multipart.NewWriter(&body)
+	fw, _ := mw.CreateFormFile("file", "backup.tar")
+	fw.Write(tarBuf.Bytes())
+	mw.Close()
+
+	req := httptest.NewRequest("POST", "/restore", &body)
+	req.Header.Set("Content-Type", mw.FormDataContentType())
+	w := httptest.NewRecorder()
+	server.mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("Expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	restoredPath := filepath.Join(dataDir, "files", "categories", "custom.png")
+	if _, err := os.Stat(restoredPath); os.IsNotExist(err) {
+		t.Error("Expected files/categories/custom.png to be restored, but file not found")
+	}
+}
+
+// TestRestoreWithoutCategories verifies that a TAR without files/categories/
+// is handled gracefully — no error, non-breaking.
+func TestRestoreWithoutCategories(t *testing.T) {
+	server, _ := setupTestHTTPServer(t)
+
+	var tarBuf bytes.Buffer
+	tw := tar.NewWriter(&tarBuf)
+	content := []byte(`{"question":"test"}`)
+	_ = tw.WriteHeader(&tar.Header{
+		Name: "files/questions/1/data.json",
+		Mode: 0644,
+		Size: int64(len(content)),
+	})
+	tw.Write(content)
+	tw.Close()
+
+	var body bytes.Buffer
+	mw := multipart.NewWriter(&body)
+	fw, _ := mw.CreateFormFile("file", "backup.tar")
+	fw.Write(tarBuf.Bytes())
+	mw.Close()
+
+	req := httptest.NewRequest("POST", "/restore", &body)
+	req.Header.Set("Content-Type", mw.FormDataContentType())
+	w := httptest.NewRecorder()
+	server.mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("Expected 200 (no error when categories absent from TAR), got %d: %s", w.Code, w.Body.String())
 	}
 }

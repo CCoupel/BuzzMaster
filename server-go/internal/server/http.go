@@ -15,6 +15,7 @@ import (
 	"math/rand"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -246,6 +247,9 @@ func (h *HTTPServer) setupRoutes() {
 
 	// Update (legacy route)
 	h.mux.HandleFunc("/update", h.handleUpdate)
+
+	// Categories API (v5.6.2 — #95)
+	h.mux.HandleFunc("/api/categories", h.handleAPICategories)
 
 	// Buzzer API (WiFi config + OTA)
 	h.mux.HandleFunc("/api/buzzers", h.handleAPIBuzzers)
@@ -1172,6 +1176,80 @@ func (h *HTTPServer) handleGameBackup(w http.ResponseWriter, r *http.Request) {
 	h.createTARBackup(w, r, filesDir, prefix)
 }
 
+// CategoryInfo is the JSON response for GET /api/categories
+type CategoryInfo struct {
+	Key      string `json:"key"`
+	Name     string `json:"name"`
+	ImageURL string `json:"imageURL"`
+	IsCustom bool   `json:"isCustom"`
+}
+
+// hardcodedCategories lists built-in categories in display order (v5.6.2 — #95)
+var hardcodedCategories = []CategoryInfo{
+	{Key: "GEOGRAPHY", Name: "Geographie", ImageURL: "", IsCustom: false},
+	{Key: "ENTERTAINMENT", Name: "Divertissement", ImageURL: "", IsCustom: false},
+	{Key: "HISTORY", Name: "Histoire", ImageURL: "", IsCustom: false},
+	{Key: "ARTS", Name: "Arts", ImageURL: "", IsCustom: false},
+	{Key: "SCIENCE", Name: "Science", ImageURL: "", IsCustom: false},
+	{Key: "SPORTS", Name: "Sports", ImageURL: "", IsCustom: false},
+	{Key: "FOOD", Name: "Gastronomie", ImageURL: "", IsCustom: false},
+	{Key: "ANIMALS", Name: "Animaux", ImageURL: "", IsCustom: false},
+}
+
+// toUpperSnakeCase converts a filename stem to UPPER_SNAKE_CASE (spaces/hyphens → underscore, upper-case).
+func toUpperSnakeCase(s string) string {
+	s = strings.ReplaceAll(s, "-", "_")
+	s = strings.ReplaceAll(s, " ", "_")
+	return strings.ToUpper(s)
+}
+
+// handleAPICategories returns the merged list of hardcoded + custom categories (v5.6.2 — #95)
+func (h *HTTPServer) handleAPICategories(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	// Build a set of hardcoded keys for dedup
+	hardcodedKeys := make(map[string]struct{}, len(hardcodedCategories))
+	for _, c := range hardcodedCategories {
+		hardcodedKeys[c.Key] = struct{}{}
+	}
+
+	catDir := filepath.Join(h.dataDir, "files", "categories")
+	entries, _ := os.ReadDir(catDir)
+
+	var custom []CategoryInfo
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+		ext := strings.ToLower(filepath.Ext(entry.Name()))
+		if ext != ".png" && ext != ".jpg" && ext != ".jpeg" && ext != ".webp" {
+			continue
+		}
+		stem := strings.TrimSuffix(entry.Name(), filepath.Ext(entry.Name()))
+		key := toUpperSnakeCase(stem)
+		if _, exists := hardcodedKeys[key]; exists {
+			log.Printf("[HTTP] Categories: custom file %q conflicts with hardcoded key %s — skipped", entry.Name(), key)
+			continue
+		}
+		custom = append(custom, CategoryInfo{
+			Key:      key,
+			Name:     stem,
+			ImageURL: "/files/categories/" + url.PathEscape(entry.Name()),
+			IsCustom: true,
+		})
+	}
+
+	result := make([]CategoryInfo, 0, len(hardcodedCategories)+len(custom))
+	result = append(result, hardcodedCategories...)
+	result = append(result, custom...)
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(result)
+}
+
 // handleBackupSelect creates a selective backup based on query parameters
 // Query params: questions=true, teams=true, bumpers=true, history=true, backgrounds=true
 func (h *HTTPServer) handleBackupSelect(w http.ResponseWriter, r *http.Request) {
@@ -1252,6 +1330,10 @@ func (h *HTTPServer) handleBackupSelect(w http.ResponseWriter, r *http.Request) 
 		backgroundsDir := filepath.Join(filesDir, "backgrounds")
 		if _, err := os.Stat(backgroundsDir); err == nil {
 			h.addDirToTAR(tw, backgroundsDir, "files/backgrounds")
+		}
+		categoriesDir := filepath.Join(filesDir, "categories")
+		if _, err := os.Stat(categoriesDir); err == nil {
+			h.addDirToTAR(tw, categoriesDir, "files/categories")
 		}
 	}
 
@@ -1402,6 +1484,12 @@ func (h *HTTPServer) handleResetSelect(w http.ResponseWriter, r *http.Request) {
 			result["backgrounds"] = true
 			log.Printf("[HTTP] Reset: Backgrounds cleared")
 		}
+		categoriesDir := filepath.Join(filesDir, "categories")
+		if err := os.RemoveAll(categoriesDir); err == nil {
+			os.MkdirAll(categoriesDir, 0755)
+			result["categories"] = true
+			log.Printf("[HTTP] Reset: Categories cleared")
+		}
 	}
 
 	// Notify clients of changes
@@ -1551,6 +1639,11 @@ func (h *HTTPServer) handleRestore(w http.ResponseWriter, r *http.Request) {
 				targetPath = filepath.Join(h.dataDir, tarPath)
 				allowed = true
 			}
+		case strings.HasPrefix(tarPath, "files/categories/"):
+			if detected["categories"] {
+				targetPath = filepath.Join(h.dataDir, tarPath)
+				allowed = true
+			}
 		case tarPath == "config/teams.json":
 			if detected["teams"] {
 				targetPath = filepath.Join(configDir, "teams.json")
@@ -1669,6 +1762,7 @@ func (h *HTTPServer) detectTARContents(data []byte) map[string]bool {
 		"bumpers":     false,
 		"history":     false,
 		"backgrounds": false,
+		"categories":  false,
 	}
 
 	tr := tar.NewReader(bytes.NewReader(data))
@@ -1685,6 +1779,8 @@ func (h *HTTPServer) detectTARContents(data []byte) map[string]bool {
 			detected["questions"] = true
 		case strings.HasPrefix(tarPath, "files/backgrounds/") || strings.HasPrefix(tarPath, "backgrounds/"):
 			detected["backgrounds"] = true
+		case strings.HasPrefix(tarPath, "files/categories/"):
+			detected["categories"] = true
 		case tarPath == "config/teams.json" || tarPath == "teams.json":
 			detected["teams"] = true
 		case tarPath == "config/bumpers.json" || tarPath == "bumpers.json":

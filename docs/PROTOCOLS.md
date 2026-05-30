@@ -156,6 +156,30 @@ The server centralizes background image cycling to ensure all TV displays show t
 | GET | `/reset` | Factory reset |
 | GET | `/shutdown` | Graceful server shutdown |
 
+### Categories API (v5.7.0)
+
+```
+GET /api/categories
+```
+
+Retourne la liste fusionnée des catégories hardcodées et des catégories personnalisées déposées dans `data/files/categories/`.
+
+**Response :**
+```json
+[
+  { "key": "GEOGRAPHY",     "label": "Geography",     "custom": false },
+  { "key": "SPORT_EXTREME", "label": "Sport Extreme",  "custom": true, "image": "/files/categories/Sport Extreme.png" }
+]
+```
+
+**Règles de nommage (catégories custom) :**
+- Fichier `Sport Extreme.png` → clé `SPORT_EXTREME` (espaces → `_`, uppercase)
+- Formats acceptés : PNG, JPG, JPEG, WEBP
+- Répertoire : `data/files/categories/`
+- Inclus dans le backup/restore via le flag `backgrounds`
+
+---
+
 ### Selective Backup (`/backup-select`)
 
 Query parameters (all boolean, default: `true` if none specified):

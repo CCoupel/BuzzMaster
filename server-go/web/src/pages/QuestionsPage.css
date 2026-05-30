@@ -573,6 +573,24 @@
   font-size: 1.25rem;
 }
 
+.category-img {
+  width: 32px;
+  height: 32px;
+  object-fit: cover;
+  border-radius: var(--radius-sm);
+}
+
+.category-btn--custom.active .category-img {
+  opacity: 0.9;
+}
+
+.cat-pill-img {
+  width: 20px;
+  height: 20px;
+  object-fit: cover;
+  border-radius: 3px;
+}
+
 .category-label {
   display: block;
   font-size: 0.75rem;

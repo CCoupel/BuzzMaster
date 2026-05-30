@@ -2,10 +2,11 @@ import { useState, useRef, useMemo, useEffect } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { useGame } from '../hooks/GameContext'
 import { useCategoryFilter } from '../hooks/useCategoryFilter'
+import { useCategories } from '../hooks/useCategories'
 import Button from '../components/Button'
 import Card, { CardHeader, CardBody } from '../components/Card'
 import CategoryBalance from '../components/CategoryBalance'
-import QuestionCard, { CATEGORIES } from '../components/QuestionCard'
+import QuestionCard, { CATEGORIES, categoryMeta } from '../components/QuestionCard'
 import './QuestionsPage.css'
 import './ConfigPage.css'
 
@@ -193,8 +194,12 @@ export default function QuestionsPage() {
       })
   }, [questions])
 
-  // Category filter (shared hook)
-  const { selectedCategories, availableCategories, filteredQuestions, toggleCategoryFilter, clearCategoryFilters } = useCategoryFilter(sortedQuestions)
+  // Custom categories from API (#95)
+  const { categories: apiCategories } = useCategories()
+  const customCategories = useMemo(() => apiCategories.filter(c => c.isCustom), [apiCategories])
+
+  // Category filter (shared hook) — passes custom categories for filter support
+  const { selectedCategories, availableCategories, filteredQuestions, toggleCategoryFilter, clearCategoryFilters } = useCategoryFilter(sortedQuestions, customCategories)
 
   // Background handlers
   const handleBackgroundUpload = async (e) => {
@@ -1054,22 +1059,27 @@ export default function QuestionsPage() {
       <div className="category-filter-group">
         <CategoryBalance questions={sortedQuestions} />
 
-        {/* Category filter bar (#40) */}
+        {/* Category filter bar (#40) — supports custom categories */}
         {availableCategories.length > 0 && (
           <div className="category-filter-bar questions-page-filter-bar">
             {availableCategories.map(catKey => {
-              const cat = CATEGORIES[catKey]
+              const meta = categoryMeta(catKey, customCategories)
+              if (!meta) return null
               const isActive = selectedCategories.has(catKey)
               return (
                 <button
                   key={catKey}
                   className={`category-filter-pill${isActive ? ' active' : ''}`}
-                  style={{ '--cat-color': cat.color }}
+                  style={{ '--cat-color': meta.color }}
                   onClick={() => toggleCategoryFilter(catKey)}
-                  title={cat.label}
+                  title={meta.label}
                 >
-                  <span className="cat-pill-icon">{cat.icon}</span>
-                  <span className="cat-pill-label">{cat.label}</span>
+                  {meta.isCustom ? (
+                    <img src={meta.imageURL} alt={meta.label} className="cat-pill-img" />
+                  ) : (
+                    <span className="cat-pill-icon">{meta.icon}</span>
+                  )}
+                  <span className="cat-pill-label">{meta.label}</span>
                 </button>
               )
             })}
@@ -1198,7 +1208,7 @@ export default function QuestionsPage() {
                   </div>
                 </div>
 
-                {/* Category Selector */}
+                {/* Category Selector — hardcoded + custom (#95) */}
                 <div className="form-group">
                   <label>Categorie</label>
                   <div className="category-selector">
@@ -1214,12 +1224,28 @@ export default function QuestionsPage() {
                         <span className="category-icon">{icon}</span>
                       </button>
                     ))}
+                    {customCategories.map(({ key, name, imageURL, color = '#6b7280' }) => (
+                      <button
+                        key={key}
+                        type="button"
+                        className={`category-btn category-btn--custom ${formData.category === key ? 'active' : ''}`}
+                        style={{ '--cat-color': color }}
+                        onClick={() => handleInputChange('category', formData.category === key ? '' : key)}
+                        title={name}
+                      >
+                        <img src={imageURL} alt={name} className="category-img" />
+                      </button>
+                    ))}
                   </div>
-                  {formData.category && (
-                    <span className="category-label" style={{ color: CATEGORIES[formData.category]?.color }}>
-                      {CATEGORIES[formData.category]?.label}
-                    </span>
-                  )}
+                  {formData.category && (() => {
+                    const meta = categoryMeta(formData.category, customCategories)
+                    if (!meta) return null
+                    return (
+                      <span className="category-label" style={{ color: meta.color }}>
+                        {meta.label || meta.name}
+                      </span>
+                    )
+                  })()}
                 </div>
 
                 {/* Points Target Selector */}

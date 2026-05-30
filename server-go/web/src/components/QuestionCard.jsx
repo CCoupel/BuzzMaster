@@ -34,6 +34,18 @@ export const CATEGORIES = {
 }
 
 /**
+ * Returns metadata for a category key.
+ * Looks up hardcoded first, then custom list.
+ * Returns null if not found.
+ */
+export function categoryMeta(key, customCategories = []) {
+  if (CATEGORIES[key]) return { ...CATEGORIES[key], isCustom: false }
+  const custom = customCategories.find(c => c.key === key)
+  if (custom) return { label: custom.name, imageURL: custom.imageURL, color: '#6b7280', isCustom: true }
+  return null
+}
+
+/**
  * QuestionCard - Shared component for displaying question cards
  *
  * @param {Object} question - Question data
@@ -57,6 +69,7 @@ export default function QuestionCard({
   showTarget = false,
   compact = false,
   canSelect = true,
+  customCategories = [],
   onClick,
   onDelete,
   dragHandlers = {},
@@ -119,15 +132,27 @@ export default function QuestionCard({
 
       {/* Header row 2: Category, type, target, time, points */}
       <div className="qcard-header-row2">
-        {question.CATEGORY && CATEGORIES[question.CATEGORY] && (
-          <span
-            className="qcard-category-badge"
-            style={{ backgroundColor: CATEGORIES[question.CATEGORY].color }}
-            title={CATEGORIES[question.CATEGORY].label}
-          >
-            {CATEGORIES[question.CATEGORY].icon}
-          </span>
-        )}
+        {question.CATEGORY && (() => {
+          const meta = categoryMeta(question.CATEGORY, customCategories)
+          if (!meta) return null
+          return meta.isCustom ? (
+            <span
+              className="qcard-category-badge qcard-category-badge--custom"
+              style={{ backgroundColor: meta.color }}
+              title={meta.label}
+            >
+              <img src={meta.imageURL} alt={meta.label} className="qcard-category-img" />
+            </span>
+          ) : (
+            <span
+              className="qcard-category-badge"
+              style={{ backgroundColor: meta.color }}
+              title={meta.label}
+            >
+              {meta.icon}
+            </span>
+          )
+        })()}
 
         <span className={`qcard-type-badge type-${(question.TYPE || 'normal').toLowerCase()}`}>
           {TYPE_LABELS[question.TYPE] ?? 'Normal'}

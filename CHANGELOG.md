@@ -3,6 +3,22 @@
 Historique des versions du projet BuzzControl.
 
 
+## [5.7.0] - 2026-05-30
+
+### Added
+- **Catégories personnalisées** (#95) : dépôt d'images dans `data/files/categories/` pour créer ses propres catégories
+  - Endpoint `GET /api/categories` : fusion catégories hardcodées + customs
+  - Formats acceptés : PNG, JPG, JPEG, WEBP
+  - Clé auto-générée : `Sport Extreme.png` → `SPORT_EXTREME`
+  - Backup/restore inclus via le flag `backgrounds`
+  - UI QuestionsPage : sélecteur étendu avec badge image sur QuestionCard
+- **Avertissement réseau** (#96) : bandeau d'alerte quand le serveur n'est accessible qu'en localhost
+  - Champ `NETWORK_ONLY_LOCALHOST` dans GameState (WebSocket push)
+  - Détection Go toutes les 30 s via goroutine dédiée
+  - Bandeau rouge dans l'interface admin (GamePage)
+
+---
+
 ## [5.6.1] - 2026-05-30
 
 ### Fixed

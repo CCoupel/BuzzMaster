@@ -17,6 +17,7 @@ Ce document decrit les fonctionnalites d'administration du systeme BuzzControl.
 - [Jeu Memory - Modes multi-equipes](#jeu-memory---modes-multi-equipes)
 - [Filtres categories dans GamePage](#filtres-categories-dans-gamepage-v370)
 - [Double QR code enrollment TV](#double-qr-code-enrollment-tv-v370)
+- [Catégories personnalisées](#catégories-personnalisées-v570)
 
 ---
 
@@ -954,6 +955,54 @@ Sur la page de jeu (`/admin/game`), la barre d'equilibre des categories affiche 
 - Preparer une manche thematique (ex : uniquement les questions Geographie)
 - Equilibrer le jeu en alternant les categories manuellement
 - Masquer temporairement des categories deja jouees
+
+---
+
+## Catégories personnalisées (v5.7.0)
+
+### Présentation
+
+Depuis la v5.7.0, vous pouvez créer vos propres catégories de questions en déposant des images dans le dossier `data/files/categories/`. Ces catégories apparaissent dans le sélecteur de l'éditeur de questions et sur les badges des QuestionCard.
+
+### Workflow
+
+1. Préparer une image (PNG, JPG, JPEG ou WEBP) représentant la catégorie
+2. La nommer de manière descriptive : ex. `Sport Extreme.png`
+3. La déposer dans `data/files/categories/` (créer le dossier si absent)
+4. La catégorie apparaît automatiquement dans l'interface (pas de redémarrage requis)
+
+### Convention de nommage
+
+Le nom du fichier devient la clé de la catégorie :
+
+| Fichier | Clé générée |
+|---------|-------------|
+| `Sport Extreme.png` | `SPORT_EXTREME` |
+| `Cinéma-Classique.jpg` | `CINÉMA-CLASSIQUE` |
+| `sciences.webp` | `SCIENCES` |
+
+La transformation appliquée : espaces → `_`, tout en majuscules, extension supprimée.
+
+### Catégories hardcodées
+
+Les catégories standard restent disponibles même sans fichier image :
+`GEOGRAPHY`, `ENTERTAINMENT`, `HISTORY`, `SCIENCE`, `SPORTS`, `ARTS`, `CULTURE`, `OTHER`
+
+### Endpoint API
+
+```
+GET /api/categories
+```
+
+Retourne la liste fusionnée (hardcodées + custom) avec `"custom": true` pour les catégories personnalisées.
+
+### Backup / Restore
+
+Les catégories personnalisées sont incluses dans le backup/restore via le flag `backgrounds` :
+```
+GET /backup-select?backgrounds=true
+POST /restore  (archive contenant files/categories/)
+```
 
 ---
 

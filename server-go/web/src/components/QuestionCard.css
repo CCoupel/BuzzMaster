@@ -197,6 +197,13 @@
   color: white;
 }
 
+.qcard-category-img {
+  width: 16px;
+  height: 16px;
+  object-fit: cover;
+  border-radius: 2px;
+}
+
 .qcard-type-badge {
   font-size: 0.55rem;
   font-weight: 700;
