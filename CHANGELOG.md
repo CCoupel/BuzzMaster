@@ -3,6 +3,18 @@
 Historique des versions du projet BuzzControl.
 
 
+## [5.6.1] - 2026-05-30
+
+### Fixed
+- QR code "Rejoindre le jeu" illisible sur TV ENROLL : logo emoji obstruait les modules de données → passage au niveau de correction d'erreur H (30%) et réduction du logo 18%→15% de la surface (#85)
+- URL encodée dans le QR jeu corrigée : `/player` → `/` (EnrollPage directe, sans redirect superflu) (#85)
+- Escaping des caractères spéciaux (`;`, `,`, `"`, `\`) dans les champs SSID/password du QR WiFi, conformément à la spec ZXing (#85)
+
+### Refactor
+- `escapeWifiString` extraite vers `src/utils/wifiUtils.js` pour testabilité
+
+---
+
 ## [5.6.0] - 2026-05-22
 
 ### Added
