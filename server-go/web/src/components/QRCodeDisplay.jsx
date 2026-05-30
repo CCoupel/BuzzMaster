@@ -18,6 +18,7 @@ export default function QRCodeDisplay({ url, size = 200, label, fgColor = '#0000
     QRCode.toCanvas(canvasRef.current, url, {
       width: size,
       margin: 2,
+      errorCorrectionLevel: logo ? 'H' : 'M', // H (30%) required when a logo is overlaid
       color: {
         dark: fgColor,
         light: '#FFFFFF',
@@ -27,7 +28,7 @@ export default function QRCodeDisplay({ url, size = 200, label, fgColor = '#0000
     })
   }, [url, size, fgColor])
 
-  const logoSize = Math.round(size * 0.18) // ~18% of QR size
+  const logoSize = Math.round(size * 0.15) // ~15% of QR size (safe under H correction level)
 
   return (
     <div style={{
