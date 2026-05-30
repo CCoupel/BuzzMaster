@@ -26,7 +26,7 @@ export default function QRCodeDisplay({ url, size = 200, label, fgColor = '#0000
     }, (error) => {
       if (error) console.error('QR Code generation error:', error)
     })
-  }, [url, size, fgColor])
+  }, [url, size, fgColor, logo])
 
   const logoSize = Math.round(size * 0.15) // ~15% of QR size (safe under H correction level)
 

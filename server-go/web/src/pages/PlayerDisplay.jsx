@@ -10,13 +10,9 @@ import QRCodeDisplay from '../components/QRCodeDisplay'
 import { CATEGORIES } from './QuestionsPage'
 import { getCategoryColor } from '../constants/colors'
 import { getRgbColor } from '../utils/colorUtils'
+import { escapeWifiString } from '../utils/wifiUtils'
 import './PlayerDisplay.css'
 import '../styles/neon.css'
-
-// Escape special characters in WiFi QR strings (;, ", \)
-function escapeWifiString(str) {
-  return str.replace(/[\\;,"]/g, c => '\\' + c)
-}
 
 // QCM answer colors
 const QCM_COLORS = {
