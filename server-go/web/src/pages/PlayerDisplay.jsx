@@ -510,7 +510,10 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
   const showGameContent = ['STARTED', 'PAUSED', 'STOPPED', 'REVEALED'].includes(gameState.phase)
   const showAnswer = gameState.phase === 'REVEALED'
   const isQcm = gameState.question?.TYPE === 'QCM'
-  const isMemory = gameState.question?.TYPE === 'MEMORY'
+  // isMemory: question.TYPE primary source; fallback on MEMORY_PARTICIPATING_TEAMS when question
+  // is temporarily null (e.g. TV connects between PREPARE→READY transition before UPDATE arrives)
+  const isMemory = gameState.question?.TYPE === 'MEMORY' ||
+    (!gameState.question && (gameState.MEMORY_PARTICIPATING_TEAMS?.length ?? 0) > 0 && showMemoryGrid)
   const isMemotion = gameState.question?.TYPE === 'MEMOTION'
   const isArdoise = gameState.question?.TYPE === 'ARDOISE'
   // QCM answers visible from READY through REVEALED (no re-render on transition)
@@ -1651,13 +1654,15 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
             )}
 
             {/* MEMORY Game Content - unified block for READY through REVEALED */}
-            {isMemory && showMemoryGrid && gameState.question && (() => {
+            {isMemory && showMemoryGrid && (() => {
               // DEBUG logs
               console.log('[PlayerDisplay] DEBUG:', {
                 QUESTION: gameState.question?.QUESTION,
+                CATEGORY: gameState.question?.CATEGORY,
                 MEMORY_CURRENT_TEAM: gameState.MEMORY_CURRENT_TEAM,
                 MEMORY_PAIR_OWNERS: gameState.MEMORY_PAIR_OWNERS,
                 MEMORY_TEAM_PAIRS: gameState.MEMORY_TEAM_PAIRS,
+                MEMORY_PARTICIPATING_TEAMS: gameState.MEMORY_PARTICIPATING_TEAMS,
                 phase: gameState.phase
               })
               return (
