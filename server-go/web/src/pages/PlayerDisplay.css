@@ -355,6 +355,16 @@
 .category-badge-icon {
   font-size: 2rem;
   line-height: 1;
+  flex-shrink: 0;
+}
+
+/* Custom category image inside inline badge — same fixed size as emoji icon */
+.category-badge-inline .ready-category-img {
+  width: 2rem;
+  height: 2rem;
+  object-fit: cover;
+  border-radius: var(--radius-sm);
+  flex-shrink: 0;
 }
 
 .category-badge-label {
@@ -373,6 +383,11 @@
 
 .category-badge-large .category-badge-icon {
   font-size: 3rem;
+}
+
+.category-badge-inline.category-badge-large .ready-category-img {
+  width: 3rem;
+  height: 3rem;
 }
 
 .category-badge-large .category-badge-label {
