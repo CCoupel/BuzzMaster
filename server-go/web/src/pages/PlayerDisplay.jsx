@@ -33,78 +33,84 @@ const BUTTON_TO_QCM_COLOR = {
 
 // Renders category badge (icon+label or image+label) OR ✋ PRÉPAREZ-VOUS fallback.
 // Used by all game types in READY phase — single source of truth for READY display.
-function ReadyCategoryDisplay({ catKey, customCategories, variant }) {
+function ReadyCategoryDisplay({ catKey, customCategories, variant, gameType }) {
   const catMeta = categoryMeta(catKey, customCategories)
 
+  // Icône unifiée : image ou emoji — l'animation est portée par le wrapper motion.div
+  const iconInner = catMeta ? (
+    catMeta.imageURL
+      ? <img src={catMeta.imageURL} alt={catMeta.label} className="ready-category-img" />
+      : <span className={variant === 'memory' ? 'category-badge-icon' : 'ready-category-icon'}>{catMeta.icon}</span>
+  ) : null
+
+  const iconWrapper = iconInner ? (
+    <motion.div
+      className="ready-category-icon-wrapper"
+      animate={{ scale: [1, 1.3, 1] }}
+      transition={{ duration: 0.4, repeat: Infinity }}
+    >
+      {iconInner}
+    </motion.div>
+  ) : null
+
   if (variant === 'memory') {
-    return catMeta ? (
-      <motion.div
-        className="category-badge-inline category-badge-large"
-        style={{ backgroundColor: catMeta.color }}
-        animate={{ scale: [1, 1.05, 1] }}
-        transition={{ duration: 0.6, repeat: Infinity }}
-      >
-        {catMeta.imageURL
-          ? <motion.img src={catMeta.imageURL} alt={catMeta.label} className="ready-category-img" animate={{ scale: [1, 1.3, 1] }} transition={{ duration: 0.4, repeat: Infinity }} />
-          : (
-            <motion.span
-              className="category-badge-icon"
-              animate={{ scale: [1, 1.3, 1] }}
-              transition={{ duration: 0.4, repeat: Infinity }}
-            >
-              {catMeta.icon}
-            </motion.span>
-          )
-        }
-        <span className="category-badge-label">{catMeta.label}</span>
-      </motion.div>
-    ) : (
-      <>
-        <span className="prepare-emoji">🔔</span>
-        <span className="prepare-text">PREPAREZ-VOUS</span>
-      </>
+    return (
+      <div className="ready-category-display">
+        {gameType && <span className="ready-game-type">{gameType}</span>}
+        {catMeta ? (
+          <motion.div
+            className="category-badge-inline category-badge-large"
+            style={{ backgroundColor: catMeta.color }}
+            animate={{ scale: [1, 1.05, 1] }}
+            transition={{ duration: 0.6, repeat: Infinity }}
+          >
+            {iconWrapper}
+            <span className="category-badge-label">{catMeta.label}</span>
+          </motion.div>
+        ) : (
+          <>
+            <span className="prepare-emoji">🔔</span>
+            <span className="prepare-text">PREPAREZ-VOUS</span>
+          </>
+        )}
+      </div>
     )
   }
 
-  return catMeta ? (
-    <>
-      {catMeta.imageURL ? (
-        <motion.img src={catMeta.imageURL} alt={catMeta.label} className="ready-category-img" animate={{ scale: [1, 1.3, 1] }} transition={{ duration: 0.4, repeat: Infinity }} />
+  return (
+    <div className="ready-category-display">
+      {gameType && <span className="ready-game-type">{gameType}</span>}
+      {catMeta ? (
+        <>
+          {iconWrapper}
+          <motion.span
+            className="ready-category-name"
+            style={{ backgroundColor: catMeta.color }}
+            animate={{ opacity: [1, 0.7, 1] }}
+            transition={{ duration: 0.6, repeat: Infinity }}
+          >
+            {catMeta.label}
+          </motion.span>
+        </>
       ) : (
-        <motion.span
-          className="ready-category-icon"
-          animate={{ scale: [1, 1.3, 1] }}
-          transition={{ duration: 0.4, repeat: Infinity }}
-        >
-          {catMeta.icon}
-        </motion.span>
+        <>
+          <motion.span
+            className="ready-emoji"
+            animate={{ scale: [1, 1.3, 1] }}
+            transition={{ duration: 0.4, repeat: Infinity }}
+          >
+            ✋
+          </motion.span>
+          <motion.span
+            className="ready-text"
+            animate={{ opacity: [1, 0.7, 1] }}
+            transition={{ duration: 0.6, repeat: Infinity }}
+          >
+            PRÉPAREZ-VOUS
+          </motion.span>
+        </>
       )}
-      <motion.span
-        className="ready-category-name"
-        style={{ backgroundColor: catMeta.color }}
-        animate={{ opacity: [1, 0.7, 1] }}
-        transition={{ duration: 0.6, repeat: Infinity }}
-      >
-        {catMeta.label}
-      </motion.span>
-    </>
-  ) : (
-    <>
-      <motion.span
-        className="ready-emoji"
-        animate={{ scale: [1, 1.3, 1] }}
-        transition={{ duration: 0.4, repeat: Infinity }}
-      >
-        ✋
-      </motion.span>
-      <motion.span
-        className="ready-text"
-        animate={{ opacity: [1, 0.7, 1] }}
-        transition={{ duration: 0.6, repeat: Infinity }}
-      >
-        PRÉPAREZ-VOUS
-      </motion.span>
-    </>
+    </div>
   )
 }
 
@@ -1419,7 +1425,7 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
                     initial={{ opacity: 0, scale: 0.8 }}
                     animate={{ opacity: 1, scale: 1 }}
                   >
-                    <ReadyCategoryDisplay catKey={gameState.question?.CATEGORY} customCategories={customCategories} />
+                    <ReadyCategoryDisplay catKey={gameState.question?.CATEGORY} customCategories={customCategories} gameType={gameState.question?.TYPE} />
                   </motion.div>
                 </div>
 
@@ -1509,7 +1515,7 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
                       animate={{ opacity: 1, scale: 1 }}
                       exit={{ opacity: 0, scale: 0.8 }}
                     >
-                      <ReadyCategoryDisplay catKey={gameState.question?.CATEGORY} customCategories={customCategories} />
+                      <ReadyCategoryDisplay catKey={gameState.question?.CATEGORY} customCategories={customCategories} gameType="QCM" />
                     </motion.div>
                   ) : (showAnswer && gameState.question.MEDIA_ANSWER) ? (
                     <motion.img
@@ -1730,7 +1736,7 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
                       initial={{ opacity: 0, scale: 0.9 }}
                       animate={{ opacity: 1, scale: 1 }}
                     >
-                      <ReadyCategoryDisplay catKey={gameState.question?.CATEGORY} customCategories={customCategories} variant="memory" />
+                      <ReadyCategoryDisplay catKey={gameState.question?.CATEGORY} customCategories={customCategories} variant="memory" gameType="MEMORY" />
                     </motion.div>
                   )}
                 </div>
@@ -1972,7 +1978,7 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
                         initial={{ opacity: 0, scale: 0.8 }}
                         animate={{ opacity: 1, scale: 1 }}
                       >
-                        <ReadyCategoryDisplay catKey={gameState.question?.CATEGORY} customCategories={customCategories} />
+                        <ReadyCategoryDisplay catKey={gameState.question?.CATEGORY} customCategories={customCategories} gameType="MEMOTION" />
                       </motion.div>
                     ) : (
                       <div className="zone-question-placeholder" />
@@ -2104,7 +2110,7 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
                     <div className="zone-question"><div className="zone-question-placeholder" /></div>
                     <div className="zone-media">
                       <motion.div className="ready-state" initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }}>
-                        <ReadyCategoryDisplay catKey={gameState.question?.CATEGORY} customCategories={customCategories} />
+                        <ReadyCategoryDisplay catKey={gameState.question?.CATEGORY} customCategories={customCategories} gameType="MEMOTION" />
                       </motion.div>
                     </div>
                     <div className="zone-answers">
