@@ -1108,6 +1108,7 @@ export default function QuestionsPage() {
                   selected={editingId === question.ID}
                   draggable
                   showDelete
+                  customCategories={customCategories}
                   onClick={() => handleQuestionClick(question)}
                   onDelete={handleDeleteQuestion}
                   dragHandlers={{

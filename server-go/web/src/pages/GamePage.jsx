@@ -2,13 +2,14 @@
 // AnimatePresence removed - layout animations handled by motion.div in TeamCard
 import { useGame } from '../hooks/GameContext'
 import { useCategoryFilter } from '../hooks/useCategoryFilter'
+import { useCategories } from '../hooks/useCategories'
 import { getRgbColor } from '../utils/colorUtils'
 import Button from '../components/Button'
 import Card from '../components/Card'
 import Timer from '../components/Timer'
 import TeamCard from '../components/TeamCard'
 import QuestionPreview from '../components/QuestionPreview'
-import QuestionCard, { CATEGORIES } from '../components/QuestionCard'
+import QuestionCard, { CATEGORIES, categoryMeta } from '../components/QuestionCard'
 import NetworkWarningBanner from '../components/NetworkWarningBanner'
 import './GamePage.css'
 
@@ -163,8 +164,12 @@ export default function GamePage() {
       .sort((a, b) => { const orderA = a.ORDER !== undefined ? parseInt(a.ORDER) : parseInt(a.ID); const orderB = b.ORDER !== undefined ? parseInt(b.ORDER) : parseInt(b.ID); return orderA - orderB })
   }, [questions])
 
-  // Category filter (shared hook)
-  const { selectedCategories, availableCategories, filteredQuestions, toggleCategoryFilter, clearCategoryFilters } = useCategoryFilter(sortedQuestions)
+  // Custom categories from API (#95)
+  const { categories: apiCategories } = useCategories()
+  const customCategories = useMemo(() => apiCategories.filter(c => c.isCustom), [apiCategories])
+
+  // Category filter (shared hook) — passes custom categories for filter support
+  const { selectedCategories, availableCategories, filteredQuestions, toggleCategoryFilter, clearCategoryFilters } = useCategoryFilter(sortedQuestions, customCategories)
 
   // Next unplayed question after current one (for "Question suivante" button)
   const nextUnplayedQuestion = useMemo(() => {
@@ -664,17 +669,18 @@ export default function GamePage() {
         {availableCategories.length > 0 && (
           <div className="category-filter-bar">
             {availableCategories.map(catKey => {
-              const cat = CATEGORIES[catKey]
+              const meta = categoryMeta(catKey, customCategories)
+              if (!meta) return null
               const isActive = selectedCategories.has(catKey)
               return (
                 <button
                   key={catKey}
                   className={`category-filter-pill${isActive ? ' active' : ''}`}
-                  style={{ '--cat-color': cat.color }}
+                  style={{ '--cat-color': meta.color }}
                   onClick={() => toggleCategoryFilter(catKey)}
-                  title={cat.label}
+                  title={meta.label}
                 >
-                  <span className="cat-pill-icon">{cat.icon}</span>
+                  <span className="cat-pill-icon">{meta.isCustom ? '🏷️' : meta.icon}</span>
                 </button>
               )
             })}
@@ -703,6 +709,7 @@ export default function GamePage() {
                   compact
                   showStatus
                   showTarget
+                  customCategories={customCategories}
                   canSelect={canSelectQuestion}
                   onClick={handleQuestionSelect}
                 />
