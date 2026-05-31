@@ -325,11 +325,13 @@
 }
 
 .ready-game-type {
-  font-size: 1.2rem;
+  font-size: clamp(1.4rem, 3vw, 2rem);
+  font-weight: 800;
   text-transform: uppercase;
-  letter-spacing: 0.2em;
-  color: rgba(255, 255, 255, 0.6);
-  font-weight: 600;
+  letter-spacing: 0.25em;
+  color: #fff;
+  text-shadow: 0 0 18px rgba(255, 255, 255, 0.6), 0 0 40px rgba(180, 120, 255, 0.4);
+  display: block;
 }
 
 .ready-category-icon-wrapper {

@@ -56,7 +56,15 @@ function ReadyCategoryDisplay({ catKey, customCategories, variant, gameType }) {
   if (variant === 'memory') {
     return (
       <div className="ready-category-display">
-        {gameType && <span className="ready-game-type">{gameType}</span>}
+        {gameType && (
+        <motion.span
+          className="ready-game-type"
+          animate={{ scale: [1, 1.08, 1], opacity: [0.85, 1, 0.85] }}
+          transition={{ duration: 1.2, repeat: Infinity, ease: 'easeInOut' }}
+        >
+          {gameType}
+        </motion.span>
+      )}
         {catMeta ? (
           <motion.div
             className="category-badge-inline category-badge-large"
@@ -79,7 +87,15 @@ function ReadyCategoryDisplay({ catKey, customCategories, variant, gameType }) {
 
   return (
     <div className="ready-category-display">
-      {gameType && <span className="ready-game-type">{gameType}</span>}
+      {gameType && (
+        <motion.span
+          className="ready-game-type"
+          animate={{ scale: [1, 1.08, 1], opacity: [0.85, 1, 0.85] }}
+          transition={{ duration: 1.2, repeat: Infinity, ease: 'easeInOut' }}
+        >
+          {gameType}
+        </motion.span>
+      )}
       {catMeta ? (
         <>
           {iconWrapper}
@@ -1736,7 +1752,7 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
                       initial={{ opacity: 0, scale: 0.9 }}
                       animate={{ opacity: 1, scale: 1 }}
                     >
-                      <ReadyCategoryDisplay catKey={gameState.question?.CATEGORY} customCategories={customCategories} variant="memory" gameType="MEMORY" />
+                      <ReadyCategoryDisplay catKey={gameState.question?.CATEGORY} customCategories={customCategories} variant="memory" />
                     </motion.div>
                   )}
                 </div>
