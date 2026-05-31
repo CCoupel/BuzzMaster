@@ -3,19 +3,32 @@
 Historique des versions du projet BuzzControl.
 
 
-## [5.7.0] - 2026-05-30
+## [5.7.0] - 2026-05-31
 
 ### Added
 - **Catégories personnalisées** (#95) : dépôt d'images dans `data/files/categories/` pour créer ses propres catégories
   - Endpoint `GET /api/categories` : fusion catégories hardcodées + customs
   - Formats acceptés : PNG, JPG, JPEG, WEBP
   - Clé auto-générée : `Sport Extreme.png` → `SPORT_EXTREME`
-  - Backup/restore inclus via le flag `backgrounds`
-  - UI QuestionsPage : sélecteur étendu avec badge image sur QuestionCard
-- **Avertissement réseau** (#96) : bandeau d'alerte quand le serveur n'est accessible qu'en localhost
+  - Backup / restore / reset inclus via le flag `backgrounds`
+  - UI : composant `CategoryBadge` unifié (QuestionsPage, GamePage, TV) ; utilitaire `categoryUtils.js`
+- **Avertissement réseau** (#96) : bandeau rouge en admin quand le serveur n'est accessible qu'en localhost
   - Champ `NETWORK_ONLY_LOCALHOST` dans GameState (WebSocket push)
-  - Détection Go toutes les 30 s via goroutine dédiée
+  - Détection Go toutes les 30 s via goroutine dédiée (network watchdog)
   - Bandeau rouge dans l'interface admin (GamePage)
+
+### Changed
+- **Affichage TV — phase READY** : toutes les phases READY (NORMAL, ARDOISE, QCM, MEMORY, MEMOTION) affichent la catégorie courante (standard ou custom)
+  - Composant `ReadyCategoryDisplay` rationalisé : code unique standard/custom, animations Framer Motion
+  - Type de jeu affiché au-dessus du badge catégorie (NORMAL / ARDOISE / QCM / MEMOTION) avec couleur signature par type (bleu / jaune / vert / rose), animation d'entrée et idle néon
+  - Icône catégorie : spring d'entrée + wobble idle
+  - MEMORY : pas de label type de jeu (contexte visuel suffisant)
+
+### Fixed
+- Badge catégorie dans `QuestionCard` unifié via `CategoryBadge` (cohérence visuelle)
+- Filtre catégorie dans `GamePage` propagé aux catégories custom
+- MEMORY READY : détection via `MEMORY_PARTICIPATING_TEAMS` (fix timing WebSocket — la phase READY arrivait avant le push des équipes)
+- Image catégorie custom : `url.PathEscape` sur le nom de fichier (support des noms avec espaces)
 
 ---
 
