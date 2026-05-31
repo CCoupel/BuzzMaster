@@ -45,7 +45,7 @@ function ReadyCategoryDisplay({ catKey, customCategories, variant }) {
         transition={{ duration: 0.6, repeat: Infinity }}
       >
         {catMeta.imageURL
-          ? <img src={catMeta.imageURL} alt={catMeta.label} className="ready-category-img" />
+          ? <motion.img src={catMeta.imageURL} alt={catMeta.label} className="ready-category-img" animate={{ scale: [1, 1.3, 1] }} transition={{ duration: 0.4, repeat: Infinity }} />
           : (
             <motion.span
               className="category-badge-icon"
@@ -69,7 +69,7 @@ function ReadyCategoryDisplay({ catKey, customCategories, variant }) {
   return catMeta ? (
     <>
       {catMeta.imageURL ? (
-        <img src={catMeta.imageURL} alt={catMeta.label} className="ready-category-img" />
+        <motion.img src={catMeta.imageURL} alt={catMeta.label} className="ready-category-img" animate={{ scale: [1, 1.3, 1] }} transition={{ duration: 0.4, repeat: Infinity }} />
       ) : (
         <motion.span
           className="ready-category-icon"
