@@ -33,23 +33,38 @@ const BUTTON_TO_QCM_COLOR = {
 
 // Renders category badge (icon+label or image+label) OR ✋ PRÉPAREZ-VOUS fallback.
 // Used by all game types in READY phase — single source of truth for READY display.
+const GAME_TYPE_COLORS = {
+  NORMAL:   { color: '#60a5fa', shadow: 'rgba(96,165,250,0.6)' },
+  ARDOISE:  { color: '#fcd34d', shadow: 'rgba(252,211,77,0.6)' },
+  QCM:      { color: '#34d399', shadow: 'rgba(52,211,153,0.6)' },
+  MEMOTION: { color: '#f472b6', shadow: 'rgba(244,114,182,0.6)' },
+}
+
 function ReadyCategoryDisplay({ catKey, customCategories, variant, gameType }) {
   const catMeta = categoryMeta(catKey, customCategories)
+  const typeStyle = GAME_TYPE_COLORS[gameType] ?? { color: '#fff', shadow: 'rgba(255,255,255,0.5)' }
 
-  // Icône unifiée : image ou emoji — l'animation est portée par le wrapper motion.div
+  // Icône unifiée : image ou emoji
   const iconInner = catMeta ? (
     catMeta.imageURL
       ? <img src={catMeta.imageURL} alt={catMeta.label} className="ready-category-img" />
       : <span className={variant === 'memory' ? 'category-badge-icon' : 'ready-category-icon'}>{catMeta.icon}</span>
   ) : null
 
+  // Deux motion.div imbriqués : entrée spring (une fois) + idle wobble (boucle)
   const iconWrapper = iconInner ? (
     <motion.div
-      className="ready-category-icon-wrapper"
-      animate={{ scale: [1, 1.3, 1] }}
-      transition={{ duration: 0.4, repeat: Infinity }}
+      initial={{ scale: 0, rotate: -15 }}
+      animate={{ scale: 1, rotate: 0 }}
+      transition={{ type: 'spring', stiffness: 250, damping: 12 }}
     >
-      {iconInner}
+      <motion.div
+        className="ready-category-icon-wrapper"
+        animate={{ scale: [1, 1.25, 1], rotate: [0, 5, -5, 0] }}
+        transition={{ duration: 1.8, repeat: Infinity, ease: 'easeInOut' }}
+      >
+        {iconInner}
+      </motion.div>
     </motion.div>
   ) : null
 
@@ -59,8 +74,10 @@ function ReadyCategoryDisplay({ catKey, customCategories, variant, gameType }) {
         {gameType && (
         <motion.span
           className="ready-game-type"
-          animate={{ scale: [1, 1.08, 1], opacity: [0.85, 1, 0.85] }}
-          transition={{ duration: 1.2, repeat: Infinity, ease: 'easeInOut' }}
+          style={{ color: typeStyle.color, textShadow: `0 0 20px ${typeStyle.shadow}, 0 0 50px ${typeStyle.shadow}` }}
+          initial={{ opacity: 0, y: -24, scale: 0.7 }}
+          animate={{ opacity: [null, 1, 0.85, 1], y: 0, scale: [null, 1.2, 1, 1.06, 1] }}
+          transition={{ duration: 1.6, times: [0, 0.2, 0.6, 0.8, 1], repeat: Infinity, repeatDelay: 0.8 }}
         >
           {gameType}
         </motion.span>
@@ -90,8 +107,10 @@ function ReadyCategoryDisplay({ catKey, customCategories, variant, gameType }) {
       {gameType && (
         <motion.span
           className="ready-game-type"
-          animate={{ scale: [1, 1.08, 1], opacity: [0.85, 1, 0.85] }}
-          transition={{ duration: 1.2, repeat: Infinity, ease: 'easeInOut' }}
+          style={{ color: typeStyle.color, textShadow: `0 0 20px ${typeStyle.shadow}, 0 0 50px ${typeStyle.shadow}` }}
+          initial={{ opacity: 0, y: -24, scale: 0.7 }}
+          animate={{ opacity: [null, 1, 0.85, 1], y: 0, scale: [null, 1.2, 1, 1.06, 1] }}
+          transition={{ duration: 1.6, times: [0, 0.2, 0.6, 0.8, 1], repeat: Infinity, repeatDelay: 0.8 }}
         >
           {gameType}
         </motion.span>
@@ -102,8 +121,9 @@ function ReadyCategoryDisplay({ catKey, customCategories, variant, gameType }) {
           <motion.span
             className="ready-category-name"
             style={{ backgroundColor: catMeta.color }}
-            animate={{ opacity: [1, 0.7, 1] }}
-            transition={{ duration: 0.6, repeat: Infinity }}
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: [null, 1, 0.75, 1], y: 0 }}
+            transition={{ duration: 1.4, repeat: Infinity, repeatDelay: 0.5 }}
           >
             {catMeta.label}
           </motion.span>
