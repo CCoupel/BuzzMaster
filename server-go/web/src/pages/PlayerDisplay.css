@@ -386,12 +386,16 @@
 }
 
 .category-badge-inline.category-badge-large .ready-category-img {
-  width: 3rem;
-  height: 3rem;
+  width: auto;
+  height: auto;
+  max-height: 10vh;
+  max-width: 20vw;
+  object-fit: contain;
+  border-radius: var(--radius-lg);
 }
 
 .category-badge-large .category-badge-label {
-  font-size: 2rem;
+  font-size: 2.5rem;
 }
 
 /* QCM answers in ready mode */

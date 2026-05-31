@@ -1748,7 +1748,15 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
                           >
                             {catMeta.imageURL
                               ? <img src={catMeta.imageURL} alt={catMeta.label} className="ready-category-img" />
-                              : <span className="category-badge-icon">{catMeta.icon}</span>
+                              : (
+                                <motion.span
+                                  className="category-badge-icon"
+                                  animate={{ scale: [1, 1.3, 1] }}
+                                  transition={{ duration: 0.4, repeat: Infinity }}
+                                >
+                                  {catMeta.icon}
+                                </motion.span>
+                              )
                             }
                             <span className="category-badge-label">{catMeta.label}</span>
                           </motion.div>
@@ -1994,57 +2002,28 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
                       >
                         {currentTeam}
                       </motion.div>
-                    ) : showReady ? (() => {
-                      const catMeta = categoryMeta(gameState.question?.CATEGORY, customCategories)
-                      return catMeta ? (
-                        <motion.div
-                          className="ready-state"
-                          initial={{ opacity: 0, scale: 0.8 }}
-                          animate={{ opacity: 1, scale: 1 }}
+                    ) : showReady ? (
+                      <motion.div
+                        className="ready-state"
+                        initial={{ opacity: 0, scale: 0.8 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                      >
+                        <motion.span
+                          className="ready-emoji"
+                          animate={{ scale: [1, 1.3, 1] }}
+                          transition={{ duration: 0.4, repeat: Infinity }}
                         >
-                          {catMeta.imageURL ? (
-                            <img src={catMeta.imageURL} alt={catMeta.label} className="ready-category-img" />
-                          ) : (
-                            <motion.span
-                              className="ready-category-icon"
-                              animate={{ scale: [1, 1.3, 1] }}
-                              transition={{ duration: 0.4, repeat: Infinity }}
-                            >
-                              {catMeta.icon}
-                            </motion.span>
-                          )}
-                          <motion.span
-                            className="ready-category-name"
-                            style={{ backgroundColor: catMeta.color }}
-                            animate={{ opacity: [1, 0.7, 1] }}
-                            transition={{ duration: 0.6, repeat: Infinity }}
-                          >
-                            {catMeta.label}
-                          </motion.span>
-                        </motion.div>
-                      ) : (
-                        <motion.div
-                          className="ready-state"
-                          initial={{ opacity: 0, scale: 0.8 }}
-                          animate={{ opacity: 1, scale: 1 }}
+                          ✋
+                        </motion.span>
+                        <motion.span
+                          className="ready-text"
+                          animate={{ opacity: [1, 0.7, 1] }}
+                          transition={{ duration: 0.6, repeat: Infinity }}
                         >
-                          <motion.span
-                            className="ready-emoji"
-                            animate={{ scale: [1, 1.3, 1] }}
-                            transition={{ duration: 0.4, repeat: Infinity }}
-                          >
-                            ✋
-                          </motion.span>
-                          <motion.span
-                            className="ready-text"
-                            animate={{ opacity: [1, 0.2, 1] }}
-                            transition={{ duration: 0.6, repeat: Infinity }}
-                          >
-                            PREPAREZ-VOUS
-                          </motion.span>
-                        </motion.div>
-                      )
-                    })() : (
+                          PRÉPAREZ-VOUS
+                        </motion.span>
+                      </motion.div>
+                    ) : (
                       <div className="zone-question-placeholder" />
                     )}
                   </div>
