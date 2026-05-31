@@ -401,11 +401,11 @@ sleep 2  # attendre démarrage
 BASE="http://localhost:9090"
 
 # Smoke tests
-curl -sf $BASE/api/version           # version
+curl -sf $BASE/version               # version
 curl -sf $BASE/                      # page principale
-curl -sf $BASE/api/firmware          # firmware endpoint
+curl -sf $BASE/api/firmware/buzzclick/version  # firmware endpoint
 curl -sf $BASE/questions             # questions
-curl -sf $BASE/api/listGame          # liste des jeux
+curl -sf $BASE/listGame              # liste des jeux
 curl -sf $BASE/tv                    # affichage TV
 
 # Arrêt propre

@@ -4,7 +4,7 @@
 > Chaque agent doit referencer ce fichier : `@import COMMON.md`
 >
 > **Protocole teammates** : Voir `context/TEAMMATES_PROTOCOL.md` — ACK, progression, rapports, IDLE. À lire obligatoirement au démarrage.
-> **Contexte projet** : Voir `context/PROJECT_CONTEXT.md` pour le stack technique, la structure et les commandes.
+> **Contexte projet** : Voir `CLAUDE.md` pour le stack technique, la structure et les commandes.
 
 ---
 
@@ -187,26 +187,13 @@ Action requise : [ce dont j'ai besoin]
 
 ## Coordination Inter-Agents
 
-### Workflow Standard
+**Protocole teammates** : Voir `context/TEAMMATES_PROTOCOL.md`
+**Workflow CDP complet** : Voir `commands/context/CDP_WORKFLOWS.md`
 
-```
-PLAN -> [validation] -> DEV -> [REVIEW ∥ TEST-WRITER] -> QA -> [validation] -> DOC -> DEPLOY -> [validation]
-```
+### Livrables par Agent
 
-**[validation] = Points de validation utilisateur obligatoires**
-**[REVIEW ∥ TEST-WRITER] = executes en parallele apres DEV**
-
-### Transmission de Contexte
-
-Chaque agent doit :
-1. Lire le **resume de l'agent precedent**
-2. Produire un **resume structure** pour l'agent suivant
-3. Documenter les **decisions prises** et **problemes rencontres**
-
-### Points de Validation
-
-| Agent | Validation produite | Destinataire |
-|-------|---------------------|--------------|
+| Agent | Livrable | Destinataire |
+|-------|---------|--------------|
 | PLAN | Plan d'implementation | **Utilisateur** |
 | DEV | Summary + commits | TEST-WRITER + REVIEW (en parallele) |
 | TEST-WRITER | Scripts de tests + procedures manuelles | QA |
@@ -227,7 +214,7 @@ Pour toute modification du comportement de cet agent, écrire dans `xxx.md` (jam
 
 ## References Projet
 
-> **Details complets** : Voir `context/PROJECT_CONTEXT.md`
+> **Details complets** : Voir `CLAUDE.md`
 
 ### Fichiers Essentiels
 

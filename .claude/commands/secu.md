@@ -83,7 +83,19 @@ Le rapport inclut :
 
 ## Agent
 
-Dispatcher via `SendMessage` (teammate en IDLE depuis `/start-session`) :
+Agent ponctuel — non spawné au `/start-session`, spawné à la demande :
+
+```
+Task({
+  name: "security",
+  prompt: "Lis .claude/agents/context/TEAMMATES_PROTOCOL.md puis .claude/agents/security.md. Tu fais partie de TEAM-Buzz sur BuzzControl. Mets-toi en IDLE après avoir envoyé ACTIF — le teamleader t'enverra ta tâche."
+})
+```
+
+Attendre ACTIF, puis envoyer la tâche :
 `SendMessage({to: "security", content: ...})`
+
+À réception du DONE, fermer l'agent :
+`TaskStop("security")`
 
 Spec : `.claude/agents/security.md`

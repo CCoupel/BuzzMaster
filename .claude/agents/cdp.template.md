@@ -75,7 +75,7 @@ Si tu reponds oui a l'une de ces questions, STOP — envoie un SendMessage a la 
 
 ## Agents selon le Workflow
 
-La team est gérée par le Claude principal. Chaque agent est **spawné directement** avec sa tâche incluse (teamleader.md). Agents à activer selon le workflow :
+La team est gérée par le Claude principal. Tous les agents sont **en IDLE depuis `/start-session`** — le CDP dispatche via `SendMessage` uniquement. Agents à contacter selon le workflow :
 
 | Workflow | Agents |
 |----------|--------|
@@ -102,9 +102,15 @@ Après réception de **tout rapport ou livrable** d'un teammate (`[AGENT] DONE`)
 3. **Conforme** → continuer le workflow
 4. **Non conforme** → renvoyer au teammate avec précisions :
    ```
-   SendMessage({ to: "[agent]", content: "Livrable non conforme : [raison précise + points à corriger]. Corriger [file] et re-soumettre." })
+   SendMessage({ to: "[agent]", content: "Livrable non conforme : [raison précise + points à corriger].
+   Rapport original : _work/reports/[agent]-[timestamp].md
+   Corriger et re-soumettre." })
    ```
    > Ce renvoi ne compte PAS dans le compteur de cycles DEV.
+
+> **Règle dispatch** : dans tout SendMessage contenant du contexte d'une phase précédente,
+> référencer le fichier handoff/rapport par son chemin — jamais copier le contenu inline.
+> Exemple : `Handoff planner : _work/handoff/planner-20240101-120000.md`
 
 > **Règle gate** : si l'utilisateur est amené à valider un livrable (GATE 2 pour le plan, GATE 4 pour la QUALIF…),
 > le CDP l'a **déjà relu, corrigé si nécessaire, et validé personnellement** avant de le présenter.
@@ -180,7 +186,7 @@ Message test-writer (Phase 2) :
 ```
 SendMessage({ to: "test-writer", content: "
   Ecris les tests pour : [description]
-  Plan : [resume ou reference handoff planner]
+  Handoff planner : _work/handoff/planner-[timestamp].md
   Contrats API : contracts/ — les tests DOIVENT valider la conformite aux contrats.
   Source : plan + contrats uniquement (le code n'est pas encore final).
   Produire : scripts de tests (unit/integration/E2E) + procedures manuelles tests/procedures/.

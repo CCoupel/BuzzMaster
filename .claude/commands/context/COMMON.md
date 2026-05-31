@@ -39,7 +39,7 @@ cd server-go && go build ./cmd/server
 ### 2.2 Validation du Build
 
 ```bash
-{BUILD_VALIDATE_CMD}
+ls -la server-go/server 2>/dev/null || echo 'Binary not found'
 ```
 
 ---
@@ -51,19 +51,19 @@ cd server-go && go build ./cmd/server
 > **REGLE** : Toujours utiliser la methode d'arret prevue, jamais de kill force.
 
 ```bash
-{SERVER_STOP_CMD}
+curl -s http://localhost/shutdown
 ```
 
 ### 3.2 Sequence Redemarrage Complete
 
 ```bash
-{SERVER_RESTART_CMD}
+curl -s http://localhost/shutdown && sleep 2 && cd server-go && ./server
 ```
 
 ### 3.3 Verification Post-Demarrage
 
 ```bash
-{SERVER_VERIFY_CMD}
+curl -s http://localhost/version
 ```
 
 ---

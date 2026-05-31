@@ -3,7 +3,7 @@
 > **Ce fichier contient les regles communes a tous les agents de developpement.**
 > Agents concernes : tous les agents `dev-*`
 >
-> **Prerequis** : Respecter `context/COMMON.md` (regles generales) et `context/PROJECT_CONTEXT.md` (contexte technique)
+> **Prerequis** : Respecter `context/COMMON.md` (regles generales) et `CLAUDE.md` (contexte technique)
 
 ---
 
@@ -11,7 +11,7 @@
 
 **AVANT TOUT CHANGEMENT DE CODE**, vous DEVEZ :
 
-1. **Lire** la version actuelle depuis `{VERSION_FILE}`
+1. **Lire** la version actuelle depuis `server-go/config.json`
 2. **Incrementer** le numero z (patch) : `X.Y.Z` -> `X.Y.Z+1`
 3. **Committer** : `chore(version): Bump to X.Y.Z+1`
 

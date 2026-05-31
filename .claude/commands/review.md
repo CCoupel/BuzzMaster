@@ -106,7 +106,9 @@ Le rapport inclut :
 
 ## Agent
 
-Dispatcher via `SendMessage` (teammate en IDLE depuis `/start-session`) :
+Agent permanent — spawné au `/start-session`, toujours en IDLE.
+
+Envoyer la tâche directement :
 `SendMessage({to: "code-reviewer", content: ...})`
 
 Spec : `.claude/agents/code-reviewer.md`

@@ -41,8 +41,8 @@ SendMessage({ to: "dev-frontend", content: "<tâche>" })
 
 ### Agents par phase
 
-| Phase | Agent(s) à spawner |
-|-------|--------------------|
+| Phase | Agent(s) à dispatcher |
+|-------|----------------------|
 | Plan | `planner` |
 | Dev — Backend seul | `dev-backend` |
 | Dev — Frontend seul | `dev-frontend` |
@@ -50,7 +50,7 @@ SendMessage({ to: "dev-frontend", content: "<tâche>" })
 | Review | `code-reviewer` + `test-writer` (parallèle) |
 | QA | `qa` |
 | Doc | `doc-updater` |
-| Deploy QUALIF / PROD | `deploy` |
+| Deploy QUALIF / PROD | `deployer` |
 
 ---
 
@@ -281,19 +281,13 @@ pour chaque issue_num dans ISSUE_NUMS[] :
 > **Le CDP ne rédige jamais le plan lui-même.** C'est le rôle exclusif du planner.
 
 ```
-Agent({
-  team_name: <team_name>,
-  name: "planner",
-  subagent_type: "general-purpose",
-  prompt: "Lis .claude/agents/context/TEAMMATES_PROTOCOL.md puis .claude/agents/planner.md.
-           Tu fais partie de {TEAM_NAME} sur {PROJECT_NAME}.
-           Ta tâche : Crée un plan d'implémentation pour : [description]
-           Type : [FEATURE|BUGFIX]
-           [FEATURE] Contrats API à créer dans contracts/ si nouveaux endpoints.
-           [BUGFIX] Identifier la cause racine, le fix minimal, le scope impacté et le risque de régression.
-           Retourne le plan structuré avec : tâches ordonnées, dépendances, risques.
-           Commence dès que tu as envoyé ACTIF."
-})
+SendMessage({ to: "planner", content: "
+  Crée un plan d'implémentation pour : [description]
+  Type : [FEATURE|BUGFIX]
+  [FEATURE] Contrats API à créer dans contracts/ si nouveaux endpoints.
+  [BUGFIX] Identifier la cause racine, le fix minimal, le scope impacté et le risque de régression.
+  Retourne le plan structuré avec : tâches ordonnées, dépendances, risques.
+" })
 ```
 
 Recevoir le plan → lire intégralement, vérifier cohérence et complétude.
@@ -314,27 +308,28 @@ pour chaque issue_num dans ISSUE_NUMS[] :
 ```
 
 ```
-Analyser le scope, puis spawner les agents concernés (pattern §2.bis) :
+Analyser le scope, puis dispatcher les agents concernés via SendMessage :
 
 |-- Backend seul ->
-|     Agent({team_name, name:"dev-backend", subagent_type:"general-purpose",
-|            prompt:"Lis TEAMMATES_PROTOCOL.md puis .claude/agents/dev-backend.md.
-|                    Tu fais partie de {TEAM_NAME} sur {PROJECT_NAME}.
-|                    Ta tâche : [tâche + handoff planner si dispo]
-|                    Commence dès que tu as envoyé ACTIF."})
+|     SendMessage({ to: "dev-backend", content: "
+|       [description de la tâche]
+|       Handoff planner : _work/handoff/planner-[timestamp].md
+|     " })
 |
 |-- Frontend seul ->
-|     Agent({team_name, name:"dev-frontend", subagent_type:"general-purpose",
-|            prompt:"Lis TEAMMATES_PROTOCOL.md puis .claude/agents/dev-frontend.md.
-|                    Tu fais partie de {TEAM_NAME} sur {PROJECT_NAME}.
-|                    Ta tâche : [tâche + handoff planner si dispo]
-|                    Commence dès que tu as envoyé ACTIF."})
+|     SendMessage({ to: "dev-frontend", content: "
+|       [description de la tâche]
+|       Handoff planner : _work/handoff/planner-[timestamp].md
+|     " })
 |
 |-- Les deux (dépendants) ->
-|     Spawner dev-backend → attendre DONE → spawner dev-frontend avec handoff dev-backend
+|     SendMessage dev-backend → attendre DONE →
+|     SendMessage dev-frontend :
+|       Handoff planner     : _work/handoff/planner-[timestamp].md
+|       Handoff dev-backend : _work/handoff/dev-backend-[timestamp].md
 |
 |-- Les deux (indépendants) ->
-|     Spawner dev-backend et dev-frontend en parallèle
+|     SendMessage dev-backend + dev-frontend dans le même tour
 |     Attendre les deux DONE
 ```
 
@@ -349,17 +344,22 @@ pour chaque issue_num dans ISSUE_NUMS[] :
 ```
 
 ```
-// Spawner code-reviewer + test-writer en parallèle (pattern §2.bis)
-Agent({team_name, name:"code-reviewer", subagent_type:"general-purpose",
-       prompt:"Lis TEAMMATES_PROTOCOL.md puis .claude/agents/code-reviewer.md.
-               Tu fais partie de {TEAM_NAME} sur {PROJECT_NAME}.
-               Ta tâche : [tâche + handoffs dev]
-               Commence dès que tu as envoyé ACTIF."})
-Agent({team_name, name:"test-writer", subagent_type:"general-purpose",
-       prompt:"Lis TEAMMATES_PROTOCOL.md puis .claude/agents/test-writer.md.
-               Tu fais partie de {TEAM_NAME} sur {PROJECT_NAME}.
-               Ta tâche : [tâche + handoffs dev]
-               Commence dès que tu as envoyé ACTIF."})
+// Dispatcher code-reviewer + test-writer en parallèle (même tour)
+SendMessage({ to: "code-reviewer", content: "
+  Revue du code sur [branche].
+  Handoff dev-backend  : _work/handoff/dev-backend-[timestamp].md  (si applicable)
+  Handoff dev-frontend : _work/handoff/dev-frontend-[timestamp].md (si applicable)
+  Retourne : APPROVED / APPROVED WITH RESERVATIONS / REJECTED + rapport.
+" })
+SendMessage({ to: "test-writer", content: "
+  Écris les tests pour : [description]
+  SHA dev : [sha]
+  Handoff planner      : _work/handoff/planner-[timestamp].md       (si applicable)
+  Handoff dev-backend  : _work/handoff/dev-backend-[timestamp].md   (si applicable)
+  Handoff dev-frontend : _work/handoff/dev-frontend-[timestamp].md  (si applicable)
+  Contrats API : contracts/ — valider la conformité aux contrats.
+  Produire : scripts de tests + procédures manuelles tests/procedures/.
+" })
 
 |-- Recevoir DONE + ref fichier rapport
 |-- CDP lit le rapport et valide la conformite
@@ -383,12 +383,14 @@ pour chaque issue_num dans ISSUE_NUMS[] :
 ```
 
 ```
-// Spawner qa (pattern §2.bis)
-Agent({team_name, name:"qa", subagent_type:"general-purpose",
-       prompt:"Lis TEAMMATES_PROTOCOL.md puis .claude/agents/qa.md.
-               Tu fais partie de {TEAM_NAME} sur {PROJECT_NAME}.
-               Ta tâche : [tâche + ref scripts SHA + handoffs review]
-               Commence dès que tu as envoyé ACTIF."})
+// Dispatcher qa
+SendMessage({ to: "qa", content: "
+  Execute les tests sur [branche].
+  Scripts de tests : SHA [sha] (commités par test-writer).
+  Procédures manuelles : tests/procedures/[feature].md
+  Rapport code-reviewer : _work/reports/code-reviewer-[timestamp].md
+  Retourne : VALIDATED / NOT VALIDATED + rapport.
+" })
 
 |-- Recevoir DONE + ref fichier rapport
 |-- CDP lit le rapport et valide la conformite
@@ -410,17 +412,15 @@ Si cycle > 3 -> ESCALADE utilisateur
 > Applicable : **FEATURE** (obligatoire) — **BUGFIX** (si majeur) — **HOTFIX** (post-mortem) — **REFACTOR** (non)
 
 ```
-// Spawner doc-updater (pattern §2.bis)
-Agent({team_name, name:"doc-updater", subagent_type:"general-purpose",
-       prompt:"Lis TEAMMATES_PROTOCOL.md puis .claude/agents/doc-updater.md.
-               Tu fais partie de {TEAM_NAME} sur {PROJECT_NAME}.
-               Ta tâche : Mets à jour la documentation pour : [description]
-               Type : [FEATURE|BUGFIX|HOTFIX]
-               SHA dev : [sha]
-               Handoff dev : _work/handoff/dev-[timestamp].md
-               Handoff QA  : _work/handoff/qa-[timestamp].md
-               Fichiers modifiés : [liste]
-               Commence dès que tu as envoyé ACTIF."})
+// Dispatcher doc-updater
+SendMessage({ to: "doc-updater", content: "
+  Mets à jour la documentation pour : [description]
+  Type : [FEATURE|BUGFIX|HOTFIX]
+  SHA dev : [sha]
+  Handoff dev : _work/handoff/dev-[timestamp].md
+  Handoff QA  : _work/handoff/qa-[timestamp].md
+  Fichiers modifiés : [liste]
+" })
 
 |-- Recevoir DONE + ref handoff
 |-- CDP valide la conformité
@@ -431,15 +431,13 @@ Agent({team_name, name:"doc-updater", subagent_type:"general-purpose",
 ### Phase Deploy QUALIF
 
 ```
-// Spawner deploy (pattern §2.bis)
-Agent({team_name, name:"deploy", subagent_type:"general-purpose",
-       prompt:"Lis TEAMMATES_PROTOCOL.md puis .claude/agents/deploy.md.
-               Tu fais partie de {TEAM_NAME} sur {PROJECT_NAME}.
-               Ta tâche : Déployer en QUALIF.
-               Branche : [branche]
-               Version : [X.Y.Z]
-               Handoff doc : _work/handoff/doc-updater-[timestamp].md
-               Commence dès que tu as envoyé ACTIF."})
+// Dispatcher deployer
+SendMessage({ to: "deployer", content: "
+  Déploie en QUALIF.
+  Branche : [branche]
+  Version : [X.Y.Z]
+  Handoff doc : _work/handoff/doc-updater-[timestamp].md
+" })
 
 |-- Recevoir DONE + rapport de déploiement
 |-- CDP informe l'utilisateur : QUALIF déployée, scénarios de validation fournis

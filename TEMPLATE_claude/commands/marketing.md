@@ -256,4 +256,19 @@ c) Regenerer la roadmap uniquement
 
 ## Agent
 
-Lance l'agent `marketing-release` defini dans `.claude/agents/marketing-release.md`
+Agent ponctuel — non spawné au `/start-session`, spawné à la demande :
+
+```
+Task({
+  name: "marketing-release",
+  prompt: "Lis .claude/agents/context/TEAMMATES_PROTOCOL.md puis .claude/agents/marketing-release.md. Tu fais partie de {TEAM_NAME} sur {PROJECT_NAME}. Mets-toi en IDLE après avoir envoyé ACTIF — le teamleader t'enverra ta tâche."
+})
+```
+
+Attendre ACTIF, puis envoyer la tâche :
+`SendMessage({to: "marketing-release", content: ...})`
+
+À réception du DONE, fermer l'agent :
+`TaskStop("marketing-release")`
+
+Spec : `.claude/agents/marketing-release.md`
