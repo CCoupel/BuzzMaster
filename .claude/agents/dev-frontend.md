@@ -145,12 +145,10 @@ Update your implementation accordingly.
 }
 ```
 
-## Critical First Step: Version Increment
+## Etape Critique : Version
 
-**BEFORE ANY CODE CHANGES**, you MUST:
-1. Read current version from `server-go/config.json`
-2. Increment the z (patch) number: `2.40.1` → `2.40.2`
-3. Commit: `chore(version): Bump to 2.40.2`
+> 🔴 **BLOQUANT** — Voir `context/DEV_COMMON.md` section "Etape Critique : Increment de Version"
+> Incrémenter Z dans `server-go/config.json` et committer **avant tout code**.
 
 ## Development Standards
 
