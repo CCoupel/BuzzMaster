@@ -3,11 +3,12 @@ import NoSleep from 'nosleep.js'
 import { motion, AnimatePresence } from 'framer-motion'
 import confetti from 'canvas-confetti'
 import { useGame } from '../hooks/GameContext'
+import { useCategories } from '../hooks/useCategories'
+import { CATEGORIES, categoryMeta } from '../utils/categoryUtils'
 import Timer from '../components/Timer'
 import Podium from '../components/Podium'
 import QRCodeOverlay from '../components/QRCodeOverlay'
 import QRCodeDisplay from '../components/QRCodeDisplay'
-import { CATEGORIES } from './QuestionsPage'
 import { getCategoryColor } from '../constants/colors'
 import { getRgbColor } from '../utils/colorUtils'
 import { escapeWifiString } from '../utils/wifiUtils'
@@ -32,6 +33,8 @@ const BUTTON_TO_QCM_COLOR = {
 
 export default function PlayerDisplay({ playerName = null, playerNameColor = null, teamName = null, teamColor = null, isVPlayer = false, onMediaClick = null, onQCMAnswer = null, vplayerHasBuzzed = false }) {
   const { gameState, teams, bumpers, flipMemoryCard, showQRCode, selectMotionCard } = useGame()
+  const { categories: apiCategories } = useCategories()
+  const customCategories = useMemo(() => apiCategories.filter(c => c.isCustom), [apiCategories])
   const [previousRanking, setPreviousRanking] = useState({})
   const [changedTeams, setChangedTeams] = useState({})
   const [history, setHistory] = useState([]) // For PALMARES view
@@ -1262,18 +1265,25 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
 
                 {/* Zone 2: Category badge animates from center to question zone */}
                 <div className="zone-question">
-                  {gameState.question?.CATEGORY && CATEGORIES[gameState.question.CATEGORY] && (
-                    <motion.div
-                      className="category-badge-inline"
-                      style={{ backgroundColor: CATEGORIES[gameState.question.CATEGORY].color }}
-                      initial={{ opacity: 0, y: 150, scale: 1.5 }}
-                      animate={{ opacity: 1, y: 0, scale: 1 }}
-                      transition={{ duration: 0.5, ease: 'easeOut' }}
-                    >
-                      <span className="category-badge-icon">{CATEGORIES[gameState.question.CATEGORY].icon}</span>
-                      <span className="category-badge-label">{CATEGORIES[gameState.question.CATEGORY].label}</span>
-                    </motion.div>
-                  )}
+                  {(() => {
+                    const catMeta = categoryMeta(gameState.question?.CATEGORY, customCategories)
+                    if (!catMeta) return null
+                    return (
+                      <motion.div
+                        className="category-badge-inline"
+                        style={{ backgroundColor: catMeta.color }}
+                        initial={{ opacity: 0, y: 150, scale: 1.5 }}
+                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                        transition={{ duration: 0.5, ease: 'easeOut' }}
+                      >
+                        {catMeta.imageURL
+                          ? <img src={catMeta.imageURL} alt={catMeta.label} className="ready-category-img" />
+                          : <span className="category-badge-icon">{catMeta.icon}</span>
+                        }
+                        <span className="category-badge-label">{catMeta.label}</span>
+                      </motion.div>
+                    )
+                  })()}
                 </div>
 
                 {/* Zone 3: Big countdown number */}
@@ -1329,25 +1339,31 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
                     initial={{ opacity: 0, scale: 0.8 }}
                     animate={{ opacity: 1, scale: 1 }}
                   >
-                    {gameState.question?.CATEGORY && CATEGORIES[gameState.question.CATEGORY] ? (
-                      <>
-                        <motion.span
-                          className="ready-category-icon"
-                          animate={{ scale: [1, 1.3, 1] }}
-                          transition={{ duration: 0.4, repeat: Infinity }}
-                        >
-                          {CATEGORIES[gameState.question.CATEGORY].icon}
-                        </motion.span>
-                        <motion.span
-                          className="ready-category-name"
-                          style={{ backgroundColor: CATEGORIES[gameState.question.CATEGORY].color }}
-                          animate={{ opacity: [1, 0.7, 1] }}
-                          transition={{ duration: 0.6, repeat: Infinity }}
-                        >
-                          {CATEGORIES[gameState.question.CATEGORY].label}
-                        </motion.span>
-                      </>
-                    ) : (
+                    {(() => {
+                      const catMeta = categoryMeta(gameState.question?.CATEGORY, customCategories)
+                      return catMeta ? (
+                        <>
+                          {catMeta.imageURL ? (
+                            <img src={catMeta.imageURL} alt={catMeta.label} className="ready-category-img" />
+                          ) : (
+                            <motion.span
+                              className="ready-category-icon"
+                              animate={{ scale: [1, 1.3, 1] }}
+                              transition={{ duration: 0.4, repeat: Infinity }}
+                            >
+                              {catMeta.icon}
+                            </motion.span>
+                          )}
+                          <motion.span
+                            className="ready-category-name"
+                            style={{ backgroundColor: catMeta.color }}
+                            animate={{ opacity: [1, 0.7, 1] }}
+                            transition={{ duration: 0.6, repeat: Infinity }}
+                          >
+                            {catMeta.label}
+                          </motion.span>
+                        </>
+                      ) : (
                       <>
                         <motion.span
                           className="ready-emoji"
@@ -1364,7 +1380,8 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
                           PREPAREZ-VOUS
                         </motion.span>
                       </>
-                    )}
+                    )
+                  })()}
                   </motion.div>
                 </div>
 
@@ -1399,18 +1416,25 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
                     >
                       {gameState.question.QUESTION}
                     </motion.p>
-                  ) : showCountdown && gameState.question?.CATEGORY && CATEGORIES[gameState.question.CATEGORY] ? (
-                    <motion.div
-                      className="category-badge-inline"
-                      style={{ backgroundColor: CATEGORIES[gameState.question.CATEGORY].color }}
-                      initial={{ opacity: 0, y: 150, scale: 1.5 }}
-                      animate={{ opacity: 1, y: 0, scale: 1 }}
-                      transition={{ duration: 0.5, ease: 'easeOut' }}
-                    >
-                      <span className="category-badge-icon">{CATEGORIES[gameState.question.CATEGORY].icon}</span>
-                      <span className="category-badge-label">{CATEGORIES[gameState.question.CATEGORY].label}</span>
-                    </motion.div>
-                  ) : (
+                  ) : showCountdown ? (() => {
+                    const catMeta = categoryMeta(gameState.question?.CATEGORY, customCategories)
+                    if (!catMeta) return <div className="zone-question-placeholder" />
+                    return (
+                      <motion.div
+                        className="category-badge-inline"
+                        style={{ backgroundColor: catMeta.color }}
+                        initial={{ opacity: 0, y: 150, scale: 1.5 }}
+                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                        transition={{ duration: 0.5, ease: 'easeOut' }}
+                      >
+                        {catMeta.imageURL
+                          ? <img src={catMeta.imageURL} alt={catMeta.label} className="ready-category-img" />
+                          : <span className="category-badge-icon">{catMeta.icon}</span>
+                        }
+                        <span className="category-badge-label">{catMeta.label}</span>
+                      </motion.div>
+                    )
+                  })() : (
                     <div className="zone-question-placeholder" />
                   )}
                 </div>
@@ -1447,25 +1471,31 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
                       animate={{ opacity: 1, scale: 1 }}
                       exit={{ opacity: 0, scale: 0.8 }}
                     >
-                      {gameState.question?.CATEGORY && CATEGORIES[gameState.question.CATEGORY] ? (
-                        <>
-                          <motion.span
-                            className="ready-category-icon"
-                            animate={{ scale: [1, 1.3, 1] }}
-                            transition={{ duration: 0.4, repeat: Infinity }}
-                          >
-                            {CATEGORIES[gameState.question.CATEGORY].icon}
-                          </motion.span>
-                          <motion.span
-                            className="ready-category-name"
-                            style={{ backgroundColor: CATEGORIES[gameState.question.CATEGORY].color }}
-                            animate={{ opacity: [1, 0.7, 1] }}
-                            transition={{ duration: 0.6, repeat: Infinity }}
-                          >
-                            {CATEGORIES[gameState.question.CATEGORY].label}
-                          </motion.span>
-                        </>
-                      ) : (
+                      {(() => {
+                        const catMeta = categoryMeta(gameState.question?.CATEGORY, customCategories)
+                        return catMeta ? (
+                          <>
+                            {catMeta.imageURL ? (
+                              <img src={catMeta.imageURL} alt={catMeta.label} className="ready-category-img" />
+                            ) : (
+                              <motion.span
+                                className="ready-category-icon"
+                                animate={{ scale: [1, 1.3, 1] }}
+                                transition={{ duration: 0.4, repeat: Infinity }}
+                              >
+                                {catMeta.icon}
+                              </motion.span>
+                            )}
+                            <motion.span
+                              className="ready-category-name"
+                              style={{ backgroundColor: catMeta.color }}
+                              animate={{ opacity: [1, 0.7, 1] }}
+                              transition={{ duration: 0.6, repeat: Infinity }}
+                            >
+                              {catMeta.label}
+                            </motion.span>
+                          </>
+                        ) : (
                         <>
                           <motion.span
                             className="ready-emoji"
@@ -1482,7 +1512,8 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
                             PREPAREZ-VOUS
                           </motion.span>
                         </>
-                      )}
+                        )
+                      })()}
                     </motion.div>
                   ) : (showAnswer && gameState.question.MEDIA_ANSWER) ? (
                     <motion.img
@@ -1701,22 +1732,28 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
                       initial={{ opacity: 0, scale: 0.9 }}
                       animate={{ opacity: 1, scale: 1 }}
                     >
-                      {gameState.question?.CATEGORY && CATEGORIES[gameState.question.CATEGORY] ? (
-                        <motion.div
-                          className="category-badge-inline category-badge-large"
-                          style={{ backgroundColor: CATEGORIES[gameState.question.CATEGORY].color }}
-                          animate={{ scale: [1, 1.05, 1] }}
-                          transition={{ duration: 0.6, repeat: Infinity }}
-                        >
-                          <span className="category-badge-icon">{CATEGORIES[gameState.question.CATEGORY].icon}</span>
-                          <span className="category-badge-label">{CATEGORIES[gameState.question.CATEGORY].label}</span>
-                        </motion.div>
-                      ) : (
-                        <>
-                          <span className="prepare-emoji">🔔</span>
-                          <span className="prepare-text">PREPAREZ-VOUS</span>
-                        </>
-                      )}
+                      {(() => {
+                        const catMeta = categoryMeta(gameState.question?.CATEGORY, customCategories)
+                        return catMeta ? (
+                          <motion.div
+                            className="category-badge-inline category-badge-large"
+                            style={{ backgroundColor: catMeta.color }}
+                            animate={{ scale: [1, 1.05, 1] }}
+                            transition={{ duration: 0.6, repeat: Infinity }}
+                          >
+                            {catMeta.imageURL
+                              ? <img src={catMeta.imageURL} alt={catMeta.label} className="ready-category-img" />
+                              : <span className="category-badge-icon">{catMeta.icon}</span>
+                            }
+                            <span className="category-badge-label">{catMeta.label}</span>
+                          </motion.div>
+                        ) : (
+                          <>
+                            <span className="prepare-emoji">🔔</span>
+                            <span className="prepare-text">PREPAREZ-VOUS</span>
+                          </>
+                        )
+                      })()}
                     </motion.div>
                   )}
                 </div>
@@ -1952,28 +1989,57 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
                       >
                         {currentTeam}
                       </motion.div>
-                    ) : showReady ? (
-                      <motion.div
-                        className="ready-state"
-                        initial={{ opacity: 0, scale: 0.8 }}
-                        animate={{ opacity: 1, scale: 1 }}
-                      >
-                        <motion.span
-                          className="ready-emoji"
-                          animate={{ scale: [1, 1.3, 1] }}
-                          transition={{ duration: 0.4, repeat: Infinity }}
+                    ) : showReady ? (() => {
+                      const catMeta = categoryMeta(gameState.question?.CATEGORY, customCategories)
+                      return catMeta ? (
+                        <motion.div
+                          className="ready-state"
+                          initial={{ opacity: 0, scale: 0.8 }}
+                          animate={{ opacity: 1, scale: 1 }}
                         >
-                          ✋
-                        </motion.span>
-                        <motion.span
-                          className="ready-text"
-                          animate={{ opacity: [1, 0.2, 1] }}
-                          transition={{ duration: 0.6, repeat: Infinity }}
+                          {catMeta.imageURL ? (
+                            <img src={catMeta.imageURL} alt={catMeta.label} className="ready-category-img" />
+                          ) : (
+                            <motion.span
+                              className="ready-category-icon"
+                              animate={{ scale: [1, 1.3, 1] }}
+                              transition={{ duration: 0.4, repeat: Infinity }}
+                            >
+                              {catMeta.icon}
+                            </motion.span>
+                          )}
+                          <motion.span
+                            className="ready-category-name"
+                            style={{ backgroundColor: catMeta.color }}
+                            animate={{ opacity: [1, 0.7, 1] }}
+                            transition={{ duration: 0.6, repeat: Infinity }}
+                          >
+                            {catMeta.label}
+                          </motion.span>
+                        </motion.div>
+                      ) : (
+                        <motion.div
+                          className="ready-state"
+                          initial={{ opacity: 0, scale: 0.8 }}
+                          animate={{ opacity: 1, scale: 1 }}
                         >
-                          PREPAREZ-VOUS
-                        </motion.span>
-                      </motion.div>
-                    ) : (
+                          <motion.span
+                            className="ready-emoji"
+                            animate={{ scale: [1, 1.3, 1] }}
+                            transition={{ duration: 0.4, repeat: Infinity }}
+                          >
+                            ✋
+                          </motion.span>
+                          <motion.span
+                            className="ready-text"
+                            animate={{ opacity: [1, 0.2, 1] }}
+                            transition={{ duration: 0.6, repeat: Infinity }}
+                          >
+                            PREPAREZ-VOUS
+                          </motion.span>
+                        </motion.div>
+                      )
+                    })() : (
                       <div className="zone-question-placeholder" />
                     )}
                   </div>

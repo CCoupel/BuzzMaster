@@ -322,6 +322,14 @@
   line-height: 1;
 }
 
+/* Custom category image in READY state — TV safe */
+.ready-category-img {
+  max-height: 10vh;
+  max-width: 20vw;
+  object-fit: contain;
+  border-radius: var(--radius-lg);
+}
+
 .ready-category-name {
   font-family: var(--font-display);
   font-size: 2.5rem;
