@@ -135,21 +135,13 @@ export default function QuestionCard({
         {question.CATEGORY && (() => {
           const meta = categoryMeta(question.CATEGORY, customCategories)
           if (!meta) return null
-          return meta.isCustom ? (
-            <span
-              className="qcard-category-badge qcard-category-badge--custom"
-              style={{ backgroundColor: meta.color }}
-              title={meta.label}
-            >
-              <img src={meta.imageURL} alt={meta.label} className="qcard-category-img" />
-            </span>
-          ) : (
+          return (
             <span
               className="qcard-category-badge"
               style={{ backgroundColor: meta.color }}
               title={meta.label}
             >
-              {meta.icon}
+              {meta.isCustom ? '🏷️' : meta.icon}
             </span>
           )
         })()}
