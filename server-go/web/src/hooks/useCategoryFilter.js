@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react'
-import { CATEGORIES } from '../components/QuestionCard'
+import { CATEGORIES } from '../utils/categoryUtils'
 
 /**
  * useCategoryFilter — shared category filter logic for question lists.

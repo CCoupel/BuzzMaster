@@ -3,10 +3,12 @@ import { AnimatePresence, motion } from 'framer-motion'
 import { useGame } from '../hooks/GameContext'
 import { useCategoryFilter } from '../hooks/useCategoryFilter'
 import { useCategories } from '../hooks/useCategories'
+import { CATEGORIES, categoryMeta } from '../utils/categoryUtils'
 import Button from '../components/Button'
 import Card, { CardHeader, CardBody } from '../components/Card'
 import CategoryBalance from '../components/CategoryBalance'
-import QuestionCard, { CATEGORIES, categoryMeta } from '../components/QuestionCard'
+import CategoryBadge from '../components/CategoryBadge'
+import QuestionCard from '../components/QuestionCard'
 import './QuestionsPage.css'
 import './ConfigPage.css'
 
@@ -1074,11 +1076,7 @@ export default function QuestionsPage() {
                   onClick={() => toggleCategoryFilter(catKey)}
                   title={meta.label}
                 >
-                  {meta.isCustom ? (
-                    <img src={meta.imageURL} alt={meta.label} className="cat-pill-img" />
-                  ) : (
-                    <span className="cat-pill-icon">{meta.icon}</span>
-                  )}
+                  <CategoryBadge catKey={catKey} customCategories={customCategories} size="md" chip={false} />
                   <span className="cat-pill-label">{meta.label}</span>
                 </button>
               )
@@ -1209,43 +1207,31 @@ export default function QuestionsPage() {
                   </div>
                 </div>
 
-                {/* Category Selector — hardcoded + custom (#95) */}
+                {/* Category Selector — boucle unifiée hardcoded + custom (#95) */}
                 <div className="form-group">
                   <label>Categorie</label>
                   <div className="category-selector">
-                    {Object.entries(CATEGORIES).map(([key, { label, icon, color }]) => (
-                      <button
-                        key={key}
-                        type="button"
-                        className={`category-btn ${formData.category === key ? 'active' : ''}`}
-                        style={{ '--cat-color': color }}
-                        onClick={() => handleInputChange('category', formData.category === key ? '' : key)}
-                        title={label}
-                      >
-                        <span className="category-icon">{icon}</span>
-                      </button>
-                    ))}
-                    {customCategories.map(({ key, name, imageURL, color = '#6b7280' }) => (
-                      <button
-                        key={key}
-                        type="button"
-                        className={`category-btn category-btn--custom ${formData.category === key ? 'active' : ''}`}
-                        style={{ '--cat-color': color }}
-                        onClick={() => handleInputChange('category', formData.category === key ? '' : key)}
-                        title={name}
-                      >
-                        <img src={imageURL} alt={name} className="category-img" />
-                      </button>
-                    ))}
+                    {[...Object.keys(CATEGORIES), ...customCategories.map(c => c.key)].map(key => {
+                      const meta = categoryMeta(key, customCategories)
+                      if (!meta) return null
+                      return (
+                        <button
+                          key={key}
+                          type="button"
+                          className={`category-btn ${formData.category === key ? 'active' : ''}`}
+                          style={{ '--cat-color': meta.color }}
+                          onClick={() => handleInputChange('category', formData.category === key ? '' : key)}
+                          title={meta.label}
+                        >
+                          <CategoryBadge catKey={key} customCategories={customCategories} size="lg" chip={false} />
+                        </button>
+                      )
+                    })}
                   </div>
                   {formData.category && (() => {
                     const meta = categoryMeta(formData.category, customCategories)
                     if (!meta) return null
-                    return (
-                      <span className="category-label" style={{ color: meta.color }}>
-                        {meta.label || meta.name}
-                      </span>
-                    )
+                    return <span className="category-label" style={{ color: meta.color }}>{meta.label}</span>
                   })()}
                 </div>
 

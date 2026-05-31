@@ -1,8 +1,12 @@
 import { motion } from 'framer-motion'
+import CategoryBadge from './CategoryBadge'
 import './QuestionCard.css'
 
 // Export motion for pages that need AnimatePresence
 export { motion }
+
+// Re-export from utils for backward compat
+export { CATEGORIES, categoryMeta } from '../utils/categoryUtils'
 
 // Type display labels
 const TYPE_LABELS = {
@@ -21,29 +25,6 @@ const QCM_COLORS = {
   BLUE: { label: 'Bleu', color: '#3b82f6', letter: 'D' },
 }
 
-// Question categories
-export const CATEGORIES = {
-  GEOGRAPHY: { label: 'Geographie', icon: '🌍', color: '#3b82f6' },
-  ENTERTAINMENT: { label: 'Divertissement', icon: '🎭', color: '#ec4899' },
-  HISTORY: { label: 'Histoire', icon: '📜', color: '#eab308' },
-  ARTS: { label: 'Arts & Litterature', icon: '🎨', color: '#a855f7' },
-  SCIENCE: { label: 'Sciences & Nature', icon: '🔬', color: '#22c55e' },
-  SPORTS: { label: 'Sports & Loisirs', icon: '⚽', color: '#f97316' },
-  FOOD: { label: 'Gastronomie', icon: '🍽️', color: '#991b1b' },
-  ANIMALS: { label: 'Animaux', icon: '🐾', color: '#78716c' },
-}
-
-/**
- * Returns metadata for a category key.
- * Looks up hardcoded first, then custom list.
- * Returns null if not found.
- */
-export function categoryMeta(key, customCategories = []) {
-  if (CATEGORIES[key]) return { ...CATEGORIES[key], isCustom: false }
-  const custom = customCategories.find(c => c.key === key)
-  if (custom) return { label: custom.name, imageURL: custom.imageURL, color: '#6b7280', isCustom: true }
-  return null
-}
 
 /**
  * QuestionCard - Shared component for displaying question cards
@@ -132,19 +113,9 @@ export default function QuestionCard({
 
       {/* Header row 2: Category, type, target, time, points */}
       <div className="qcard-header-row2">
-        {question.CATEGORY && (() => {
-          const meta = categoryMeta(question.CATEGORY, customCategories)
-          if (!meta) return null
-          return (
-            <span
-              className="qcard-category-badge"
-              style={{ backgroundColor: meta.color }}
-              title={meta.label}
-            >
-              {meta.isCustom ? '🏷️' : meta.icon}
-            </span>
-          )
-        })()}
+        {question.CATEGORY && (
+          <CategoryBadge catKey={question.CATEGORY} customCategories={customCategories} size="sm" />
+        )}
 
         <span className={`qcard-type-badge type-${(question.TYPE || 'normal').toLowerCase()}`}>
           {TYPE_LABELS[question.TYPE] ?? 'Normal'}

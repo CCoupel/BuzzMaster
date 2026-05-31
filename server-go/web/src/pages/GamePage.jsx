@@ -3,13 +3,15 @@
 import { useGame } from '../hooks/GameContext'
 import { useCategoryFilter } from '../hooks/useCategoryFilter'
 import { useCategories } from '../hooks/useCategories'
+import { categoryMeta } from '../utils/categoryUtils'
 import { getRgbColor } from '../utils/colorUtils'
 import Button from '../components/Button'
 import Card from '../components/Card'
 import Timer from '../components/Timer'
 import TeamCard from '../components/TeamCard'
 import QuestionPreview from '../components/QuestionPreview'
-import QuestionCard, { CATEGORIES, categoryMeta } from '../components/QuestionCard'
+import CategoryBadge from '../components/CategoryBadge'
+import QuestionCard from '../components/QuestionCard'
 import NetworkWarningBanner from '../components/NetworkWarningBanner'
 import './GamePage.css'
 
@@ -451,11 +453,15 @@ export default function GamePage() {
               style={['STARTED', 'PAUSED', 'COUNTDOWN', 'ENROLL'].includes(gameState.phase) ? { opacity: 0.5, pointerEvents: 'none' } : undefined}
             >
               <span className="nq-label">à suivre : #{nextUnplayedQuestion.ID}</span>
-              {nextUnplayedQuestion.CATEGORY && CATEGORIES[nextUnplayedQuestion.CATEGORY] && (
-                <span className="nq-badge nq-badge-cat" style={{ backgroundColor: CATEGORIES[nextUnplayedQuestion.CATEGORY].color }}>
-                  {CATEGORIES[nextUnplayedQuestion.CATEGORY].icon}
-                </span>
-              )}
+              {nextUnplayedQuestion.CATEGORY && (() => {
+                const catMeta = categoryMeta(nextUnplayedQuestion.CATEGORY, customCategories)
+                if (!catMeta) return null
+                return (
+                  <span className="nq-badge nq-badge-cat" style={{ backgroundColor: catMeta.color }}>
+                    <CategoryBadge catKey={nextUnplayedQuestion.CATEGORY} customCategories={customCategories} size="sm" chip={false} />
+                  </span>
+                )
+              })()}
               <span className="nq-badge nq-badge-type">{nextUnplayedQuestion.TYPE || 'NORMAL'}</span>
               <span className="nq-title">
                 {(nextUnplayedQuestion.QUESTION || '').substring(0, 30)}{(nextUnplayedQuestion.QUESTION || '').length > 30 ? '…' : ''}
@@ -463,15 +469,15 @@ export default function GamePage() {
             </button>
           )}
           <div className="question-indicators">
-            {gameState.question?.CATEGORY && CATEGORIES[gameState.question.CATEGORY] && (
-              <div
-                className="category-indicator"
-                style={{ backgroundColor: CATEGORIES[gameState.question.CATEGORY].color }}
-                title={CATEGORIES[gameState.question.CATEGORY].label}
-              >
-                <span>{CATEGORIES[gameState.question.CATEGORY].icon}</span>
-              </div>
-            )}
+            {gameState.question?.CATEGORY && (() => {
+              const catMeta = categoryMeta(gameState.question.CATEGORY, customCategories)
+              if (!catMeta) return null
+              return (
+                <div className="category-indicator" style={{ backgroundColor: catMeta.color }} title={catMeta.label}>
+                  <CategoryBadge catKey={gameState.question.CATEGORY} customCategories={customCategories} size="sm" chip={false} />
+                </div>
+              )
+            })()}
             {gameState.question?.POINTS_TARGET && (
               <div className={`points-target-indicator ${gameState.question.POINTS_TARGET.toLowerCase()}`} title={gameState.question.POINTS_TARGET === 'TEAM' ? 'Points à l\'équipe' : 'Points au joueur'}>
                 {gameState.question.POINTS_TARGET === 'TEAM' ? (
@@ -680,7 +686,7 @@ export default function GamePage() {
                   onClick={() => toggleCategoryFilter(catKey)}
                   title={meta.label}
                 >
-                  <span className="cat-pill-icon">{meta.isCustom ? '🏷️' : meta.icon}</span>
+                  <CategoryBadge catKey={catKey} customCategories={customCategories} size="md" chip={false} />
                 </button>
               )
             })}
