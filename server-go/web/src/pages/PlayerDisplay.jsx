@@ -2002,28 +2002,57 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
                       >
                         {currentTeam}
                       </motion.div>
-                    ) : showReady ? (
-                      <motion.div
-                        className="ready-state"
-                        initial={{ opacity: 0, scale: 0.8 }}
-                        animate={{ opacity: 1, scale: 1 }}
-                      >
-                        <motion.span
-                          className="ready-emoji"
-                          animate={{ scale: [1, 1.3, 1] }}
-                          transition={{ duration: 0.4, repeat: Infinity }}
+                    ) : showReady ? (() => {
+                      const catMeta = categoryMeta(gameState.question?.CATEGORY, customCategories)
+                      return catMeta ? (
+                        <motion.div
+                          className="ready-state"
+                          initial={{ opacity: 0, scale: 0.8 }}
+                          animate={{ opacity: 1, scale: 1 }}
                         >
-                          ✋
-                        </motion.span>
-                        <motion.span
-                          className="ready-text"
-                          animate={{ opacity: [1, 0.7, 1] }}
-                          transition={{ duration: 0.6, repeat: Infinity }}
+                          {catMeta.imageURL ? (
+                            <img src={catMeta.imageURL} alt={catMeta.label} className="ready-category-img" />
+                          ) : (
+                            <motion.span
+                              className="ready-category-icon"
+                              animate={{ scale: [1, 1.3, 1] }}
+                              transition={{ duration: 0.4, repeat: Infinity }}
+                            >
+                              {catMeta.icon}
+                            </motion.span>
+                          )}
+                          <motion.span
+                            className="ready-category-name"
+                            style={{ backgroundColor: catMeta.color }}
+                            animate={{ opacity: [1, 0.7, 1] }}
+                            transition={{ duration: 0.6, repeat: Infinity }}
+                          >
+                            {catMeta.label}
+                          </motion.span>
+                        </motion.div>
+                      ) : (
+                        <motion.div
+                          className="ready-state"
+                          initial={{ opacity: 0, scale: 0.8 }}
+                          animate={{ opacity: 1, scale: 1 }}
                         >
-                          PRÉPAREZ-VOUS
-                        </motion.span>
-                      </motion.div>
-                    ) : (
+                          <motion.span
+                            className="ready-emoji"
+                            animate={{ scale: [1, 1.3, 1] }}
+                            transition={{ duration: 0.4, repeat: Infinity }}
+                          >
+                            ✋
+                          </motion.span>
+                          <motion.span
+                            className="ready-text"
+                            animate={{ opacity: [1, 0.7, 1] }}
+                            transition={{ duration: 0.6, repeat: Infinity }}
+                          >
+                            PRÉPAREZ-VOUS
+                          </motion.span>
+                        </motion.div>
+                      )
+                    })() : (
                       <div className="zone-question-placeholder" />
                     )}
                   </div>
