@@ -3,6 +3,30 @@
 Historique des versions du projet BuzzControl.
 
 
+## [5.7.1] - 2026-06-07
+
+### Added
+- **Création de catégories depuis l'UI** (#97) : nouveau endpoint `POST /api/categories` pour créer une catégorie texte-only directement depuis QuestionsPage
+  - Bouton "+" dans la zone filtres catégories (QuestionsPage)
+  - Dialog modal pour saisie du nom
+  - Catégorie créée immédiatement visible dans les filtres et badges
+
+### Changed
+- **Renommage NORMAL → SPEEDY** (#98) : migration rétrocompatible du type de question
+  - Frontend : affichage "Speedy" au lieu de "Normal"
+  - Backend : détection version fichier, conversion silencieuse NORMAL → SPEEDY à la lecture
+  - Fichiers existants NORMAL lus sans erreur (backward compatible)
+  - TV : affichage type "Speedy" au lieu de "Normal" en phase READY
+
+### Fixed
+- **Backup sélectif** (#99) : paramètre `backgrounds` renommé en `medias`
+  - Endpoints `/backup-select`, `/reset-select`, `/backup-restore`
+  - Query param : `backgrounds=true` → `medias=true`
+  - Répertoire : `files/backgrounds/` renommé en `files/medias/`
+  - Catégories personnalisées sauvegardées sous `medias` au lieu de `backgrounds`
+
+---
+
 ## [5.7.0] - 2026-05-31
 
 ### Added

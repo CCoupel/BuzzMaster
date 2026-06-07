@@ -1362,3 +1362,500 @@ func TestRestoreWithoutCategories(t *testing.T) {
 		t.Fatalf("Expected 200 (no error when categories absent from TAR), got %d: %s", w.Code, w.Body.String())
 	}
 }
+
+// ========================================
+// v5.7.1 — #97 POST /api/categories
+// ========================================
+
+// TestPostCategory_Valid verifies that a valid POST /api/categories request creates
+// the category file on disk and returns the correct CategoryInfo JSON.
+func TestPostCategory_Valid(t *testing.T) {
+	server, dataDir := setupTestHTTPServer(t)
+
+	os.MkdirAll(filepath.Join(dataDir, "files", "categories"), 0755)
+
+	body := strings.NewReader(`{"name": "Ma Categorie"}`)
+	req := httptest.NewRequest("POST", "/api/categories", body)
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	server.mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("Expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var cat categoryItem
+	if err := json.NewDecoder(w.Body).Decode(&cat); err != nil {
+		t.Fatalf("Failed to decode response: %v", err)
+	}
+
+	if cat.Key != "MA_CATEGORIE" {
+		t.Errorf("Expected key 'MA_CATEGORIE', got '%s'", cat.Key)
+	}
+	if cat.Name != "Ma Categorie" {
+		t.Errorf("Expected name 'Ma Categorie', got '%s'", cat.Name)
+	}
+	if !cat.IsCustom {
+		t.Error("Expected IsCustom=true for custom category")
+	}
+	if cat.ImageURL != "" {
+		t.Errorf("Expected empty imageURL for text-only category, got '%s'", cat.ImageURL)
+	}
+
+	// Verify the JSON file was created on disk
+	filePath := filepath.Join(dataDir, "files", "categories", "MA_CATEGORIE.json")
+	if _, err := os.Stat(filePath); os.IsNotExist(err) {
+		t.Error("Expected MA_CATEGORIE.json to be created on disk, file not found")
+	}
+}
+
+// TestPostCategory_EmptyName verifies that POST /api/categories with an empty name returns 400.
+func TestPostCategory_EmptyName(t *testing.T) {
+	server, dataDir := setupTestHTTPServer(t)
+	os.MkdirAll(filepath.Join(dataDir, "files", "categories"), 0755)
+
+	tests := []struct {
+		name string
+		body string
+	}{
+		{"empty name field", `{"name": ""}`},
+		{"missing name field", `{}`},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := httptest.NewRequest("POST", "/api/categories", strings.NewReader(tt.body))
+			req.Header.Set("Content-Type", "application/json")
+			w := httptest.NewRecorder()
+			server.mux.ServeHTTP(w, req)
+
+			if w.Code != http.StatusBadRequest {
+				t.Errorf("%s: Expected 400, got %d", tt.name, w.Code)
+			}
+		})
+	}
+}
+
+// TestPostCategory_NameTooLong verifies that POST /api/categories with a name > 50 chars returns 400.
+func TestPostCategory_NameTooLong(t *testing.T) {
+	server, dataDir := setupTestHTTPServer(t)
+	os.MkdirAll(filepath.Join(dataDir, "files", "categories"), 0755)
+
+	longName := strings.Repeat("A", 51) // 51 chars — above the 50-char limit
+	body := `{"name": "` + longName + `"}`
+
+	req := httptest.NewRequest("POST", "/api/categories", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	server.mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("Expected 400 for name too long, got %d", w.Code)
+	}
+}
+
+// TestPostCategory_NameExactlyFiftyChars verifies that a 50-char name is accepted (boundary).
+func TestPostCategory_NameExactlyFiftyChars(t *testing.T) {
+	server, dataDir := setupTestHTTPServer(t)
+	os.MkdirAll(filepath.Join(dataDir, "files", "categories"), 0755)
+
+	exactName := strings.Repeat("A", 50) // exactly 50 chars — at the limit
+	body := `{"name": "` + exactName + `"}`
+
+	req := httptest.NewRequest("POST", "/api/categories", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	server.mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("Expected 200 for name exactly 50 chars, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+// TestPostCategory_ConflictHardcoded verifies that POST /api/categories returns 409
+// when the derived key matches a hardcoded category (e.g. "Geographie" → GEOGRAPHY).
+func TestPostCategory_ConflictHardcoded(t *testing.T) {
+	server, dataDir := setupTestHTTPServer(t)
+	os.MkdirAll(filepath.Join(dataDir, "files", "categories"), 0755)
+
+	// "Geographie" derives to "GEOGRAPHIE" — but "GEOGRAPHY" is hardcoded.
+	// Let's use "Science" → "SCIENCE" which is hardcoded.
+	body := strings.NewReader(`{"name": "Science"}`)
+	req := httptest.NewRequest("POST", "/api/categories", body)
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	server.mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusConflict {
+		t.Errorf("Expected 409 conflict for hardcoded category key, got %d", w.Code)
+	}
+}
+
+// TestPostCategory_ConflictExistingCustom verifies that POST /api/categories returns 409
+// when a custom category with the same derived key already exists.
+func TestPostCategory_ConflictExistingCustom(t *testing.T) {
+	server, dataDir := setupTestHTTPServer(t)
+	os.MkdirAll(filepath.Join(dataDir, "files", "categories"), 0755)
+
+	// First POST — should succeed
+	body1 := strings.NewReader(`{"name": "Mon Quiz"}`)
+	req1 := httptest.NewRequest("POST", "/api/categories", body1)
+	req1.Header.Set("Content-Type", "application/json")
+	w1 := httptest.NewRecorder()
+	server.mux.ServeHTTP(w1, req1)
+	if w1.Code != http.StatusOK {
+		t.Fatalf("First POST should succeed, got %d", w1.Code)
+	}
+
+	// Second POST with same key — should return 409
+	body2 := strings.NewReader(`{"name": "Mon Quiz"}`)
+	req2 := httptest.NewRequest("POST", "/api/categories", body2)
+	req2.Header.Set("Content-Type", "application/json")
+	w2 := httptest.NewRecorder()
+	server.mux.ServeHTTP(w2, req2)
+
+	if w2.Code != http.StatusConflict {
+		t.Errorf("Expected 409 conflict for duplicate custom category, got %d", w2.Code)
+	}
+}
+
+// TestPostCategory_AppearsInGetCategories verifies that a newly created custom category
+// is returned by the subsequent GET /api/categories request.
+func TestPostCategory_AppearsInGetCategories(t *testing.T) {
+	server, dataDir := setupTestHTTPServer(t)
+	os.MkdirAll(filepath.Join(dataDir, "files", "categories"), 0755)
+
+	// Create a custom category
+	body := strings.NewReader(`{"name": "Super Quiz"}`)
+	req := httptest.NewRequest("POST", "/api/categories", body)
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	server.mux.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("POST failed with %d", w.Code)
+	}
+
+	// Now GET the categories list
+	req2 := httptest.NewRequest("GET", "/api/categories", nil)
+	w2 := httptest.NewRecorder()
+	server.mux.ServeHTTP(w2, req2)
+
+	var items []categoryItem
+	if err := json.NewDecoder(w2.Body).Decode(&items); err != nil {
+		t.Fatalf("Failed to decode GET response: %v", err)
+	}
+
+	found := false
+	for _, item := range items {
+		if item.Key == "SUPER_QUIZ" {
+			found = true
+			if !item.IsCustom {
+				t.Error("Expected IsCustom=true for SUPER_QUIZ")
+			}
+			if item.Name != "Super Quiz" {
+				t.Errorf("Expected name 'Super Quiz', got '%s'", item.Name)
+			}
+		}
+	}
+	if !found {
+		t.Error("Expected SUPER_QUIZ to appear in GET /api/categories after POST")
+	}
+}
+
+// TestAPICategories_MethodNotAllowed verifies that PUT and DELETE on /api/categories return 405.
+func TestAPICategories_MethodNotAllowed(t *testing.T) {
+	server, _ := setupTestHTTPServer(t)
+
+	for _, method := range []string{"PUT", "DELETE", "PATCH"} {
+		req := httptest.NewRequest(method, "/api/categories", nil)
+		w := httptest.NewRecorder()
+		server.mux.ServeHTTP(w, req)
+
+		if w.Code != http.StatusMethodNotAllowed {
+			t.Errorf("%s /api/categories: Expected 405, got %d", method, w.Code)
+		}
+	}
+}
+
+// ========================================
+// v5.7.1 — #98 NORMAL → SPEEDY migration
+// ========================================
+
+// TestHTTPServer_Questions_NormalToSpeedy verifies that a question.json containing
+// the legacy TYPE "NORMAL" is served with TYPE "SPEEDY" by GET /questions.
+func TestHTTPServer_Questions_NormalToSpeedy(t *testing.T) {
+	server, dataDir := setupTestHTTPServer(t)
+
+	// Create a question on disk with the legacy "NORMAL" type
+	questionsDir := filepath.Join(dataDir, "files", "questions", "42")
+	os.MkdirAll(questionsDir, 0755)
+
+	questionData := map[string]interface{}{
+		"ID":       "42",
+		"QUESTION": "Legacy normal question",
+		"ANSWER":   "Answer",
+		"TYPE":     "NORMAL", // legacy value — should be migrated to SPEEDY on read
+		"POINTS":   "10",
+		"TIME":     "30",
+	}
+	data, _ := json.Marshal(questionData)
+	os.WriteFile(filepath.Join(questionsDir, "question.json"), data, 0644)
+
+	req := httptest.NewRequest("GET", "/questions", nil)
+	w := httptest.NewRecorder()
+	server.mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("Expected 200, got %d", w.Code)
+	}
+
+	var response map[string]interface{}
+	if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
+		t.Fatalf("Failed to parse response: %v", err)
+	}
+
+	var q map[string]interface{}
+	for key, val := range response {
+		if key != "FSINFO" {
+			q, _ = val.(map[string]interface{})
+		}
+	}
+	if q == nil {
+		t.Fatal("No question found in response")
+	}
+
+	// The key assertion: legacy "NORMAL" must be normalized to "SPEEDY" on read
+	if q["TYPE"] != "SPEEDY" {
+		t.Errorf("Expected TYPE 'SPEEDY' (migrated from NORMAL), got '%v'", q["TYPE"])
+	}
+}
+
+// TestHTTPServer_QuestionUpload_DefaultIsSpeedy verifies that POSTing a question
+// without a type field results in TYPE=SPEEDY in the saved file.
+func TestHTTPServer_QuestionUpload_DefaultIsSpeedy(t *testing.T) {
+	server, dataDir := setupTestHTTPServer(t)
+
+	questionsDir := filepath.Join(dataDir, "files", "questions")
+	os.MkdirAll(questionsDir, 0755)
+
+	// POST without "type" field — default should be SPEEDY
+	body := strings.NewReader("--boundary\r\n" +
+		"Content-Disposition: form-data; name=\"question\"\r\n\r\n" +
+		"What is the capital of France?\r\n" +
+		"--boundary\r\n" +
+		"Content-Disposition: form-data; name=\"answer\"\r\n\r\n" +
+		"Paris\r\n" +
+		"--boundary--\r\n")
+
+	req := httptest.NewRequest("POST", "/questions", body)
+	req.Header.Set("Content-Type", "multipart/form-data; boundary=boundary")
+	w := httptest.NewRecorder()
+	server.mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("Expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	// Read the saved question from disk
+	entries, _ := os.ReadDir(questionsDir)
+	if len(entries) == 0 {
+		t.Fatal("Expected question directory to be created")
+	}
+	questionFile := filepath.Join(questionsDir, entries[0].Name(), "question.json")
+	fileData, err := os.ReadFile(questionFile)
+	if err != nil {
+		t.Fatalf("Failed to read question.json: %v", err)
+	}
+
+	var saved map[string]interface{}
+	if err := json.Unmarshal(fileData, &saved); err != nil {
+		t.Fatalf("Failed to parse saved question: %v", err)
+	}
+
+	if saved["TYPE"] != "SPEEDY" {
+		t.Errorf("Expected saved TYPE='SPEEDY' (default), got '%v'", saved["TYPE"])
+	}
+}
+
+// TestHTTPServer_QuestionUpload_NormalMigratedToSpeedy verifies that POSTing a question
+// with type=NORMAL (legacy client) results in TYPE=SPEEDY in the saved file.
+func TestHTTPServer_QuestionUpload_NormalMigratedToSpeedy(t *testing.T) {
+	server, dataDir := setupTestHTTPServer(t)
+
+	questionsDir := filepath.Join(dataDir, "files", "questions")
+	os.MkdirAll(questionsDir, 0755)
+
+	// POST with explicit "NORMAL" type (simulates old client)
+	body := strings.NewReader("--boundary\r\n" +
+		"Content-Disposition: form-data; name=\"question\"\r\n\r\n" +
+		"Old normal question\r\n" +
+		"--boundary\r\n" +
+		"Content-Disposition: form-data; name=\"answer\"\r\n\r\n" +
+		"Answer\r\n" +
+		"--boundary\r\n" +
+		"Content-Disposition: form-data; name=\"type\"\r\n\r\n" +
+		"NORMAL\r\n" +
+		"--boundary--\r\n")
+
+	req := httptest.NewRequest("POST", "/questions", body)
+	req.Header.Set("Content-Type", "multipart/form-data; boundary=boundary")
+	w := httptest.NewRecorder()
+	server.mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("Expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	entries, _ := os.ReadDir(questionsDir)
+	if len(entries) == 0 {
+		t.Fatal("Expected question directory to be created")
+	}
+	questionFile := filepath.Join(questionsDir, entries[0].Name(), "question.json")
+	fileData, err := os.ReadFile(questionFile)
+	if err != nil {
+		t.Fatalf("Failed to read question.json: %v", err)
+	}
+
+	var saved map[string]interface{}
+	if err := json.Unmarshal(fileData, &saved); err != nil {
+		t.Fatalf("Failed to parse saved question: %v", err)
+	}
+
+	// Legacy "NORMAL" must be normalized to "SPEEDY" on write
+	if saved["TYPE"] != "SPEEDY" {
+		t.Errorf("Expected saved TYPE='SPEEDY' (migrated from NORMAL), got '%v'", saved["TYPE"])
+	}
+}
+
+// ========================================
+// v5.7.1 — #99 medias param (backup-select + reset-select)
+// ========================================
+
+// TestBackupSelectWithMediasParam verifies that GET /backup-select?medias=true
+// includes both files/backgrounds/ and files/categories/ in the TAR archive.
+func TestBackupSelectWithMediasParam(t *testing.T) {
+	server, dataDir := setupTestHTTPServer(t)
+
+	// Create backgrounds and categories files
+	bgDir := filepath.Join(dataDir, "files", "backgrounds")
+	catDir := filepath.Join(dataDir, "files", "categories")
+	os.MkdirAll(bgDir, 0755)
+	os.MkdirAll(catDir, 0755)
+	os.WriteFile(filepath.Join(bgDir, "bg1.jpg"), []byte("fake-bg"), 0644)
+	os.WriteFile(filepath.Join(catDir, "custom.png"), []byte("fake-cat"), 0644)
+
+	req := httptest.NewRequest("GET", "/backup-select?medias=true", nil)
+	w := httptest.NewRecorder()
+	server.mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("Expected 200, got %d", w.Code)
+	}
+
+	// Verify Content-Disposition header
+	cd := w.Header().Get("Content-Disposition")
+	if !strings.Contains(cd, "buzzcontrol-backup") {
+		t.Errorf("Expected Content-Disposition with 'buzzcontrol-backup', got: %s", cd)
+	}
+
+	// Parse TAR and verify both backgrounds and categories are included
+	tr := tar.NewReader(bytes.NewReader(w.Body.Bytes()))
+	foundBg := false
+	foundCat := false
+	for {
+		header, err := tr.Next()
+		if err != nil {
+			break
+		}
+		name := filepath.ToSlash(header.Name)
+		if strings.Contains(name, "files/backgrounds/bg1.jpg") {
+			foundBg = true
+		}
+		if strings.Contains(name, "files/categories/custom.png") {
+			foundCat = true
+		}
+	}
+	if !foundBg {
+		t.Error("Expected files/backgrounds/bg1.jpg in TAR when medias=true, not found")
+	}
+	if !foundCat {
+		t.Error("Expected files/categories/custom.png in TAR when medias=true, not found")
+	}
+}
+
+// TestBackupSelectMediasExcludesQuestions verifies that /backup-select?medias=true
+// does NOT include questions (i.e. params are truly selective).
+func TestBackupSelectMediasExcludesQuestions(t *testing.T) {
+	server, dataDir := setupTestHTTPServer(t)
+
+	catDir := filepath.Join(dataDir, "files", "categories")
+	qDir := filepath.Join(dataDir, "files", "questions", "1")
+	os.MkdirAll(catDir, 0755)
+	os.MkdirAll(qDir, 0755)
+	os.WriteFile(filepath.Join(catDir, "custom.png"), []byte("x"), 0644)
+	os.WriteFile(filepath.Join(qDir, "question.json"), []byte(`{"ID":"1"}`), 0644)
+
+	req := httptest.NewRequest("GET", "/backup-select?medias=true", nil)
+	w := httptest.NewRecorder()
+	server.mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("Expected 200, got %d", w.Code)
+	}
+
+	tr := tar.NewReader(bytes.NewReader(w.Body.Bytes()))
+	for {
+		header, err := tr.Next()
+		if err != nil {
+			break
+		}
+		if strings.Contains(filepath.ToSlash(header.Name), "files/questions/") {
+			t.Errorf("Questions should NOT be in TAR when only medias=true, found: %s", header.Name)
+		}
+	}
+}
+
+// TestResetSelectWithMediasParam verifies that GET /reset-select?medias=true
+// resets backgrounds + categories and returns result["medias"]=true in the JSON response.
+func TestResetSelectWithMediasParam(t *testing.T) {
+	server, dataDir := setupTestHTTPServer(t)
+
+	// Create backgrounds and categories directories with content
+	bgDir := filepath.Join(dataDir, "files", "backgrounds")
+	catDir := filepath.Join(dataDir, "files", "categories")
+	os.MkdirAll(bgDir, 0755)
+	os.MkdirAll(catDir, 0755)
+	os.WriteFile(filepath.Join(bgDir, "bg.jpg"), []byte("fake"), 0644)
+	os.WriteFile(filepath.Join(catDir, "cat.png"), []byte("fake"), 0644)
+
+	req := httptest.NewRequest("GET", "/reset-select?medias=true", nil)
+	w := httptest.NewRecorder()
+	server.mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("Expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var result map[string]interface{}
+	if err := json.NewDecoder(w.Body).Decode(&result); err != nil {
+		t.Fatalf("Failed to decode response: %v", err)
+	}
+
+	if result["status"] != "ok" {
+		t.Errorf("Expected status 'ok', got %v", result["status"])
+	}
+
+	resetMap, ok := result["reset"].(map[string]interface{})
+	if !ok {
+		t.Fatal("Expected 'reset' object in response")
+	}
+
+	if resetMap["medias"] != true {
+		t.Errorf("Expected reset.medias=true, got %v", resetMap["medias"])
+	}
+
+	// Verify categories were cleared (directory recreated empty)
+	entries, _ := os.ReadDir(catDir)
+	if len(entries) != 0 {
+		t.Errorf("Expected categories dir to be empty after reset, found %d files", len(entries))
+	}
+}

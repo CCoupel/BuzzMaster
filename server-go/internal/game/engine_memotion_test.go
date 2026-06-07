@@ -885,7 +885,7 @@ func TestProcessButtonPress_IgnoresMEMOTIONQuestion(t *testing.T) {
 }
 
 // TestProcessButtonPress_IgnoresMEMOTION_AllowsNormal verifies that after switching
-// from MEMOTION to a NORMAL question, buzzes are accepted normally.
+// from MEMOTION to a SPEEDY question, buzzes are accepted normally.
 func TestProcessButtonPress_IgnoresMEMOTION_AllowsNormal(t *testing.T) {
 	e := NewEngine()
 	e.SetTeams(map[string]*Team{
@@ -893,11 +893,11 @@ func TestProcessButtonPress_IgnoresMEMOTION_AllowsNormal(t *testing.T) {
 	})
 	e.UpdateBumper("b1", map[string]interface{}{"TEAM": "red"})
 
-	// NORMAL question — buzz should be accepted
+	// SPEEDY question — buzz should be accepted
 	normalQ := &Question{
 		ID:       "n1",
 		Question: "Normal question",
-		Type:     QuestionTypeNormal,
+		Type:     QuestionTypeSpeedy,
 		Answer:   "42",
 		Points:   "10",
 		Time:     "30",
@@ -910,7 +910,7 @@ func TestProcessButtonPress_IgnoresMEMOTION_AllowsNormal(t *testing.T) {
 
 	bumper := e.GetBumper("b1")
 	if bumper.Time == 0 {
-		t.Error("Buzz should be accepted for NORMAL questions (not MEMOTION)")
+		t.Error("Buzz should be accepted for SPEEDY questions (not MEMOTION)")
 	}
 }
 
@@ -989,8 +989,8 @@ func TestInitGame_ResetsMEMOTION_NotNilMaps(t *testing.T) {
 // TestQuestionTypeMemotion_Defined verifies that QuestionTypeMemotion is defined
 // and distinct from existing question types.
 func TestQuestionTypeMemotion_Defined(t *testing.T) {
-	if QuestionTypeMemotion == QuestionTypeNormal {
-		t.Error("QuestionTypeMemotion should not equal QuestionTypeNormal")
+	if QuestionTypeMemotion == QuestionTypeSpeedy {
+		t.Error("QuestionTypeMemotion should not equal QuestionTypeSpeedy")
 	}
 	if QuestionTypeMemotion == QuestionTypeQCM {
 		t.Error("QuestionTypeMemotion should not equal QuestionTypeQCM")

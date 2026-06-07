@@ -1,7 +1,7 @@
 # Endpoints HTTP
 
 > **Base URL** : `http://localhost` (port 80)
-> **Dernière mise à jour** : 2026-01-27
+> **Dernière mise à jour** : 2026-06-07
 
 ---
 
@@ -169,12 +169,12 @@ Sauvegarde sélective.
 | teams | bool | true | Inclure équipes |
 | bumpers | bool | true | Inclure joueurs |
 | history | bool | true | Inclure historique |
-| backgrounds | bool | true | Inclure fonds |
+| medias | bool | true | Inclure fonds & catégories (**renommé depuis `backgrounds` en v5.7.1**) |
 
 #### Exemple
 
 ```
-GET /backup-select?questions=true&history=true
+GET /backup-select?questions=true&history=true&medias=true
 ```
 
 ---
@@ -208,7 +208,72 @@ Reset sélectif.
 | teams | bool | Vider équipes |
 | bumpers | bool | Vider joueurs |
 | history | bool | Vider historique |
-| backgrounds | bool | Supprimer fonds |
+| medias | bool | Supprimer fonds & catégories (**renommé depuis `backgrounds` en v5.7.1**) |
+
+---
+
+## Catégories
+
+### GET /api/categories
+
+Liste les catégories disponibles (hardcodées + custom).
+
+| Propriété | Valeur |
+|-----------|--------|
+| Auth      | Aucune |
+| Response  | application/json |
+
+#### Response 200
+
+```json
+[
+  { "key": "GEOGRAPHY",    "name": "Geographie",     "imageURL": "", "isCustom": false },
+  { "key": "ENTERTAINMENT","name": "Divertissement",  "imageURL": "", "isCustom": false },
+  { "key": "MA_CATEGORIE", "name": "Ma Categorie",    "imageURL": "", "isCustom": true }
+]
+```
+
+---
+
+### POST /api/categories
+
+Crée une nouvelle catégorie custom. (v5.7.1 — #97)
+
+| Propriété | Valeur |
+|-----------|--------|
+| Auth      | Aucune |
+| Content-Type | application/json |
+
+#### Request body
+
+```json
+{ "name": "Ma Categorie" }
+```
+
+| Champ | Type | Obligatoire | Description |
+|-------|------|-------------|-------------|
+| name  | string | ✅ | Nom affiché de la catégorie (max 50 caractères) |
+
+> La clé est calculée automatiquement : `toUpperSnakeCase(name)` (espaces et tirets → underscore, MAJUSCULES).
+
+#### Response 200
+
+```json
+{
+  "key": "MA_CATEGORIE",
+  "name": "Ma Categorie",
+  "imageURL": "",
+  "isCustom": true
+}
+```
+
+#### Errors
+
+| Code | Raison |
+|------|--------|
+| 400  | `name` vide ou invalide |
+| 405  | Méthode non autorisée |
+| 409  | Clé déjà existante (catégorie hardcodée ou custom) |
 
 ---
 

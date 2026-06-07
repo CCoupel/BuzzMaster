@@ -21,6 +21,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
 )
 
 // HTTPServer handles HTTP requests
@@ -513,6 +514,10 @@ func (h *HTTPServer) handleQuestions(w http.ResponseWriter, r *http.Request) {
 				if err := json.Unmarshal(data, &q); err != nil {
 					continue
 				}
+				// Migration: "NORMAL" is the legacy name for SPEEDY — normalize on load
+				if qType, _ := q["TYPE"].(string); qType == "NORMAL" {
+					q["TYPE"] = "SPEEDY"
+				}
 				// Set default POINTS_TARGET if not present
 				if _, ok := q["POINTS_TARGET"]; !ok {
 					qType, _ := q["TYPE"].(string)
@@ -586,17 +591,21 @@ func (h *HTTPServer) handleUploadQuestion(w http.ResponseWriter, r *http.Request
 		question["ORDER"] = order
 	}
 
-	// Handle question type (NORMAL or QCM)
+	// Handle question type (SPEEDY or QCM) — "NORMAL" accepted as alias for backward compatibility
 	questionType := r.FormValue("type")
 	if questionType == "" {
-		questionType = "NORMAL"
+		questionType = string(game.QuestionTypeSpeedy)
+	}
+	// Migration: "NORMAL" is the legacy name for SPEEDY — normalize on write
+	if questionType == "NORMAL" {
+		questionType = string(game.QuestionTypeSpeedy)
 	}
 	question["TYPE"] = questionType
 
 	// Handle points target (PLAYER or TEAM)
 	pointsTarget := r.FormValue("points_target")
 	if pointsTarget == "" {
-		// Default: NORMAL questions -> PLAYER, QCM questions -> TEAM
+		// Default: SPEEDY questions -> PLAYER, QCM questions -> TEAM
 		if questionType == "QCM" {
 			pointsTarget = "TEAM"
 		} else {
@@ -1204,12 +1213,21 @@ func toUpperSnakeCase(s string) string {
 }
 
 // handleAPICategories returns the merged list of hardcoded + custom categories (v5.6.2 — #95)
+// GET: returns hardcoded + custom (images and JSON text-only)
+// POST: creates a new text-only custom category (v5.7.1 — #97)
 func (h *HTTPServer) handleAPICategories(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
+	switch r.Method {
+	case http.MethodGet:
+		h.handleGetCategories(w, r)
+	case http.MethodPost:
+		h.handlePostCategory(w, r)
+	default:
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
 	}
+}
 
+// handleGetCategories returns the merged list of hardcoded + custom categories
+func (h *HTTPServer) handleGetCategories(w http.ResponseWriter, r *http.Request) {
 	// Build a set of hardcoded keys for dedup
 	hardcodedKeys := make(map[string]struct{}, len(hardcodedCategories))
 	for _, c := range hardcodedCategories {
@@ -1219,7 +1237,11 @@ func (h *HTTPServer) handleAPICategories(w http.ResponseWriter, r *http.Request)
 	catDir := filepath.Join(h.dataDir, "files", "categories")
 	entries, _ := os.ReadDir(catDir)
 
+	// Track custom keys to avoid image+JSON duplicates (image wins)
+	customKeys := make(map[string]struct{})
 	var custom []CategoryInfo
+
+	// First pass: image files (higher priority)
 	for _, entry := range entries {
 		if entry.IsDir() {
 			continue
@@ -1234,10 +1256,49 @@ func (h *HTTPServer) handleAPICategories(w http.ResponseWriter, r *http.Request)
 			log.Printf("[HTTP] Categories: custom file %q conflicts with hardcoded key %s — skipped", entry.Name(), key)
 			continue
 		}
+		customKeys[key] = struct{}{}
 		custom = append(custom, CategoryInfo{
 			Key:      key,
 			Name:     stem,
 			ImageURL: "/files/categories/" + url.PathEscape(entry.Name()),
+			IsCustom: true,
+		})
+	}
+
+	// Second pass: JSON text-only files (lower priority than images)
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+		ext := strings.ToLower(filepath.Ext(entry.Name()))
+		if ext != ".json" {
+			continue
+		}
+		stem := strings.TrimSuffix(entry.Name(), filepath.Ext(entry.Name()))
+		key := toUpperSnakeCase(stem)
+		// Skip if conflicts with hardcoded or already has an image
+		if _, exists := hardcodedKeys[key]; exists {
+			continue
+		}
+		if _, exists := customKeys[key]; exists {
+			continue // image takes priority
+		}
+		// Read JSON to get display name
+		data, err := os.ReadFile(filepath.Join(catDir, entry.Name()))
+		if err != nil {
+			continue
+		}
+		var meta struct {
+			Name string `json:"name"`
+		}
+		if err := json.Unmarshal(data, &meta); err != nil || meta.Name == "" {
+			continue
+		}
+		customKeys[key] = struct{}{}
+		custom = append(custom, CategoryInfo{
+			Key:      key,
+			Name:     meta.Name,
+			ImageURL: "",
 			IsCustom: true,
 		})
 	}
@@ -1250,26 +1311,96 @@ func (h *HTTPServer) handleAPICategories(w http.ResponseWriter, r *http.Request)
 	json.NewEncoder(w).Encode(result)
 }
 
+// handlePostCategory creates a new text-only custom category (v5.7.1 — #97)
+func (h *HTTPServer) handlePostCategory(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Name string `json:"name"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.Name == "" {
+		http.Error(w, `{"error":"name is required"}`, http.StatusBadRequest)
+		return
+	}
+	if len(body.Name) > 50 {
+		http.Error(w, `{"error":"name is too long (max 50 chars)"}`, http.StatusBadRequest)
+		return
+	}
+	// Security: reject any character that is not alphanumeric, space, hyphen or underscore
+	// to prevent path traversal and filesystem injection.
+	for _, ch := range body.Name {
+		if !unicode.IsLetter(ch) && !unicode.IsDigit(ch) && ch != ' ' && ch != '-' && ch != '_' {
+			http.Error(w, `{"error":"name contains invalid characters"}`, http.StatusBadRequest)
+			return
+		}
+	}
+
+	key := toUpperSnakeCase(body.Name)
+
+	// Check conflict with hardcoded categories
+	for _, c := range hardcodedCategories {
+		if c.Key == key {
+			http.Error(w, `{"error":"key already exists"}`, http.StatusConflict)
+			return
+		}
+	}
+
+	catDir := filepath.Join(h.dataDir, "files", "categories")
+	if err := os.MkdirAll(catDir, 0755); err != nil {
+		http.Error(w, `{"error":"failed to create category directory"}`, http.StatusInternalServerError)
+		return
+	}
+
+	// Check conflict with existing custom categories (image or JSON)
+	entries, _ := os.ReadDir(catDir)
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+		stem := strings.TrimSuffix(entry.Name(), filepath.Ext(entry.Name()))
+		if toUpperSnakeCase(stem) == key {
+			http.Error(w, `{"error":"key already exists"}`, http.StatusConflict)
+			return
+		}
+	}
+
+	// Write JSON file
+	jsonData, _ := json.Marshal(map[string]string{"name": body.Name})
+	filePath := filepath.Join(catDir, key+".json")
+	if err := os.WriteFile(filePath, jsonData, 0644); err != nil {
+		log.Printf("[HTTP] Categories POST: failed to write %s: %v", filePath, err)
+		http.Error(w, `{"error":"failed to create category"}`, http.StatusInternalServerError)
+		return
+	}
+
+	log.Printf("[HTTP] Categories POST: created category key=%s name=%q", key, body.Name)
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(CategoryInfo{
+		Key:      key,
+		Name:     body.Name,
+		ImageURL: "",
+		IsCustom: true,
+	})
+}
+
 // handleBackupSelect creates a selective backup based on query parameters
-// Query params: questions=true, teams=true, bumpers=true, history=true, backgrounds=true
+// Query params: questions=true, teams=true, bumpers=true, history=true, medias=true
 func (h *HTTPServer) handleBackupSelect(w http.ResponseWriter, r *http.Request) {
 	includeQuestions := r.URL.Query().Get("questions") == "true"
 	includeTeams := r.URL.Query().Get("teams") == "true"
 	includeBumpers := r.URL.Query().Get("bumpers") == "true"
 	includeHistory := r.URL.Query().Get("history") == "true"
-	includeBackgrounds := r.URL.Query().Get("backgrounds") == "true"
+	includeMedias := r.URL.Query().Get("medias") == "true"
 
 	// If nothing selected, include everything
-	if !includeQuestions && !includeTeams && !includeBumpers && !includeHistory && !includeBackgrounds {
+	if !includeQuestions && !includeTeams && !includeBumpers && !includeHistory && !includeMedias {
 		includeQuestions = true
 		includeTeams = true
 		includeBumpers = true
 		includeHistory = true
-		includeBackgrounds = true
+		includeMedias = true
 	}
 
-	log.Printf("[HTTP] Selective backup: questions=%v, teams=%v, bumpers=%v, history=%v, backgrounds=%v",
-		includeQuestions, includeTeams, includeBumpers, includeHistory, includeBackgrounds)
+	log.Printf("[HTTP] Selective backup: questions=%v, teams=%v, bumpers=%v, history=%v, medias=%v",
+		includeQuestions, includeTeams, includeBumpers, includeHistory, includeMedias)
 
 	// Set headers for TAR download
 	cfg := config.Get()
@@ -1325,8 +1456,8 @@ func (h *HTTPServer) handleBackupSelect(w http.ResponseWriter, r *http.Request) 
 		}
 	}
 
-	// Add backgrounds
-	if includeBackgrounds {
+	// Add medias (backgrounds + categories)
+	if includeMedias {
 		backgroundsDir := filepath.Join(filesDir, "backgrounds")
 		if _, err := os.Stat(backgroundsDir); err == nil {
 			h.addDirToTAR(tw, backgroundsDir, "files/backgrounds")
@@ -1408,13 +1539,13 @@ func (h *HTTPServer) addDirToTAR(tw *tar.Writer, sourceDir, tarPrefix string) er
 }
 
 // handleResetSelect performs selective reset based on query parameters
-// Query params: questions=true, teams=true, bumpers=true, history=true, backgrounds=true, all=true
+// Query params: questions=true, teams=true, bumpers=true, history=true, medias=true, all=true
 func (h *HTTPServer) handleResetSelect(w http.ResponseWriter, r *http.Request) {
 	resetQuestions := r.URL.Query().Get("questions") == "true"
 	resetTeams := r.URL.Query().Get("teams") == "true"
 	resetBumpers := r.URL.Query().Get("bumpers") == "true"
 	resetHistory := r.URL.Query().Get("history") == "true"
-	resetBackgrounds := r.URL.Query().Get("backgrounds") == "true"
+	resetMedias := r.URL.Query().Get("medias") == "true"
 	resetAll := r.URL.Query().Get("all") == "true"
 
 	// "all" means reset everything
@@ -1423,11 +1554,11 @@ func (h *HTTPServer) handleResetSelect(w http.ResponseWriter, r *http.Request) {
 		resetTeams = true
 		resetBumpers = true
 		resetHistory = true
-		resetBackgrounds = true
+		resetMedias = true
 	}
 
-	log.Printf("[HTTP] Selective reset: questions=%v, teams=%v, bumpers=%v, history=%v, backgrounds=%v",
-		resetQuestions, resetTeams, resetBumpers, resetHistory, resetBackgrounds)
+	log.Printf("[HTTP] Selective reset: questions=%v, teams=%v, bumpers=%v, history=%v, medias=%v",
+		resetQuestions, resetTeams, resetBumpers, resetHistory, resetMedias)
 
 	result := make(map[string]bool)
 	configDir := filepath.Join(h.dataDir, "config")
@@ -1475,20 +1606,24 @@ func (h *HTTPServer) handleResetSelect(w http.ResponseWriter, r *http.Request) {
 		log.Printf("[HTTP] Reset: History cleared")
 	}
 
-	// Reset backgrounds (delete backgrounds directory)
-	if resetBackgrounds {
+	// Reset medias (backgrounds + categories)
+	if resetMedias {
+		mediasOk := false
 		backgroundsDir := filepath.Join(filesDir, "backgrounds")
 		if err := os.RemoveAll(backgroundsDir); err == nil {
 			os.MkdirAll(backgroundsDir, 0755)
 			h.engine.ClearBackgrounds()
-			result["backgrounds"] = true
+			mediasOk = true
 			log.Printf("[HTTP] Reset: Backgrounds cleared")
 		}
 		categoriesDir := filepath.Join(filesDir, "categories")
 		if err := os.RemoveAll(categoriesDir); err == nil {
 			os.MkdirAll(categoriesDir, 0755)
-			result["categories"] = true
+			mediasOk = true
 			log.Printf("[HTTP] Reset: Categories cleared")
+		}
+		if mediasOk {
+			result["medias"] = true
 		}
 	}
 

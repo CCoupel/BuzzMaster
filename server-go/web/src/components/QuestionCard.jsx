@@ -10,7 +10,7 @@ export { CATEGORIES, categoryMeta } from '../utils/categoryUtils'
 
 // Type display labels
 const TYPE_LABELS = {
-  'NORMAL':   'Normal',
+  'SPEEDY':   'Speedy',
   'QCM':      'QCM',
   'MEMORY':   'Memory',
   'MEMOTION': 'Memotion',
@@ -118,7 +118,7 @@ export default function QuestionCard({
         )}
 
         <span className={`qcard-type-badge type-${(question.TYPE || 'normal').toLowerCase()}`}>
-          {TYPE_LABELS[question.TYPE] ?? 'Normal'}
+          {TYPE_LABELS[question.TYPE] ?? 'Speedy'}
         </span>
 
         <span

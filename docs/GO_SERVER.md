@@ -203,7 +203,7 @@ Le mode démo charge des données de démonstration pour présenter toutes les f
 |------|----------|---------|
 | Équipes | 6 | Avec TeamPoints pré-remplis |
 | Joueurs | 24 | 4 par équipe, toutes couleurs QCM (A/B/C/D) |
-| Questions | 10 | QCM (avec indices), MEMORY, NORMAL |
+| Questions | 10 | QCM (avec indices), MEMORY, SPEEDY |
 | Catégories | 8 | GEOGRAPHY, ENTERTAINMENT, HISTORY, etc. |
 | Historique | 10 | Événements pour vue PALMARES |
 | Fonds | 3 | Opacités variées (100%, 80%, 60%) |

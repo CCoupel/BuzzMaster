@@ -462,7 +462,7 @@ export default function GamePage() {
                   </span>
                 )
               })()}
-              <span className="nq-badge nq-badge-type">{nextUnplayedQuestion.TYPE || 'NORMAL'}</span>
+              <span className="nq-badge nq-badge-type">{nextUnplayedQuestion.TYPE || 'SPEEDY'}</span>
               <span className="nq-title">
                 {(nextUnplayedQuestion.QUESTION || '').substring(0, 30)}{(nextUnplayedQuestion.QUESTION || '').length > 30 ? '…' : ''}
               </span>

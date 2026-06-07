@@ -102,7 +102,7 @@ const (
 type QuestionType string
 
 const (
-	QuestionTypeNormal   QuestionType = "NORMAL"
+	QuestionTypeSpeedy   QuestionType = "SPEEDY"
 	QuestionTypeQCM      QuestionType = "QCM"
 	QuestionTypeMemory   QuestionType = "MEMORY"
 	QuestionTypeMemotion QuestionType = "MEMOTION" // NEW (v5.0.0): grid of cards with 3 faces
@@ -213,7 +213,7 @@ type Question struct {
 	ID           string           `json:"ID"`
 	Question     string           `json:"QUESTION"`
 	Answer       string           `json:"ANSWER"`                  // For normal questions
-	Type         QuestionType     `json:"TYPE,omitempty"`          // "NORMAL", "QCM", or "MEMORY" (default NORMAL)
+	Type         QuestionType     `json:"TYPE,omitempty"`          // "SPEEDY", "QCM", "MEMORY", "MEMOTION", "ARDOISE" (default SPEEDY)
 	Category     QuestionCategory `json:"CATEGORY,omitempty"`      // Question category
 	PointsTarget PointsTarget     `json:"POINTS_TARGET,omitempty"` // "PLAYER" or "TEAM" (default based on type)
 	QCMAnswers        *QCMAnswers      `json:"QCM_ANSWERS,omitempty"`        // For QCM questions

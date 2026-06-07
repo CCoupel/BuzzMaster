@@ -51,7 +51,7 @@ describe('BackupPage', () => {
       expect(screen.getAllByLabelText('Equipes').length).toBeGreaterThanOrEqual(1)
       expect(screen.getAllByLabelText('Joueurs').length).toBeGreaterThanOrEqual(1)
       expect(screen.getAllByLabelText('Historique').length).toBeGreaterThanOrEqual(1)
-      expect(screen.getAllByLabelText('Fonds').length).toBeGreaterThanOrEqual(1)
+      expect(screen.getAllByLabelText('Médias & Catégories').length).toBeGreaterThanOrEqual(1)
     })
 
     it('should render all reset checkboxes', () => {

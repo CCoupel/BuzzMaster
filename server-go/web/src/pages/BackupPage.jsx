@@ -14,7 +14,7 @@ export default function BackupPage() {
     teams: true,
     bumpers: true,
     history: true,
-    backgrounds: true,
+    medias: true,
   })
 
   // Reset options
@@ -23,7 +23,7 @@ export default function BackupPage() {
     teams: false,
     bumpers: false,
     history: false,
-    backgrounds: false,
+    medias: false,
   })
 
   const handleBackup = async () => {
@@ -34,7 +34,7 @@ export default function BackupPage() {
       if (backupOptions.teams) params.append('teams', 'true')
       if (backupOptions.bumpers) params.append('bumpers', 'true')
       if (backupOptions.history) params.append('history', 'true')
-      if (backupOptions.backgrounds) params.append('backgrounds', 'true')
+      if (backupOptions.medias) params.append('medias', 'true')
 
       const response = await fetch(`/backup-select?${params.toString()}`)
       const blob = await response.blob()
@@ -64,7 +64,7 @@ export default function BackupPage() {
       teams: 'Equipes',
       bumpers: 'Joueurs',
       history: 'Historique',
-      backgrounds: 'Fonds'
+      medias: 'Médias & Catégories'
     }
     const selectedLabels = selected.map(k => labels[k]).join(', ')
 
@@ -132,7 +132,7 @@ export default function BackupPage() {
                 teams: 'Equipes',
                 bumpers: 'Joueurs',
                 history: 'Historique',
-                backgrounds: 'Fonds'
+                medias: 'Médias & Catégories'
               }).map(([key, label]) => (
                 <label key={key} className="checkbox-item">
                   <input
@@ -208,7 +208,7 @@ export default function BackupPage() {
                 teams: 'Equipes',
                 bumpers: 'Joueurs',
                 history: 'Historique',
-                backgrounds: 'Fonds'
+                medias: 'Médias & Catégories'
               }).map(([key, label]) => (
                 <label key={key} className="checkbox-item">
                   <input

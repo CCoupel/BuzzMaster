@@ -54,20 +54,22 @@ Ce document décrit les structures de données utilisées par le serveur BuzzCon
 }
 ```
 
-## Question (NORMAL type)
+## Question (SPEEDY type)
 
 ```json
 {
   "ID": "1",
   "QUESTION": "What is 2+2?",
   "ANSWER": "4",
-  "TYPE": "NORMAL",
+  "TYPE": "SPEEDY",
   "POINTS": 10,
   "TIME": 30,
   "MEDIA": "/question/1/image.jpg",
   "MEDIA_ANSWER": "/question/1/answer.jpg"
 }
 ```
+
+> **Note**: Type `NORMAL` est renommé `SPEEDY` depuis v5.7.1. Les fichiers existants avec `"TYPE": "NORMAL"` sont convertis automatiquement à la lecture.
 
 ## Question (QCM type)
 

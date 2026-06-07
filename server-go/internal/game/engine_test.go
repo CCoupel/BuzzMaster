@@ -845,7 +845,7 @@ func TestEngine_QCM_VPlayerInvalidation(t *testing.T) {
 }
 
 // TestEngine_QCM_VPlayerInvalidation_NormalQuestion tests that physical buzzers
-// are NOT invalidated for NORMAL questions (only QCM)
+// are NOT invalidated for SPEEDY questions (only QCM)
 func TestEngine_QCM_VPlayerInvalidation_NormalQuestion(t *testing.T) {
 	e := NewEngine()
 
@@ -862,15 +862,15 @@ func TestEngine_QCM_VPlayerInvalidation_NormalQuestion(t *testing.T) {
 	}
 	e.SetBumpers(bumpers)
 
-	// Setup NORMAL question (not QCM)
+	// Setup SPEEDY question (not QCM)
 	question := &Question{
 		ID:       "q1",
 		Question: "Test Normal?",
-		Type:     QuestionTypeNormal,
+		Type:     QuestionTypeSpeedy,
 		Answer:   "42",
 	}
 
-	// Start game with NORMAL question
+	// Start game with SPEEDY question
 	e.Ready("q1", question)
 	e.StartImmediate(30)
 
@@ -880,13 +880,13 @@ func TestEngine_QCM_VPlayerInvalidation_NormalQuestion(t *testing.T) {
 	// Verify physical buzzer WAS recorded
 	bumper := e.GetBumper("buzzer1")
 	if bumper.Time == 0 {
-		t.Error("Physical buzzer should be accepted for NORMAL question, got Time=0")
+		t.Error("Physical buzzer should be accepted for SPEEDY question, got Time=0")
 	}
 
 	// Verify team WAS recorded
 	team := e.GetTeam("red")
 	if team.Time == 0 {
-		t.Error("Team should have Time set for NORMAL question")
+		t.Error("Team should have Time set for SPEEDY question")
 	}
 	if team.Bumper != "buzzer1" {
 		t.Errorf("Team should reference physical buzzer, got Bumper=%s", team.Bumper)
@@ -1263,15 +1263,15 @@ func TestPhysicalBuzzerNotInvalidatedForNonQCM(t *testing.T) {
 	}
 	e.SetBumpers(bumpers)
 
-	// Setup NORMAL question (not QCM)
+	// Setup SPEEDY question (not QCM)
 	question := &Question{
 		ID:       "q1",
 		Question: "Test Normal?",
-		Type:     QuestionTypeNormal,
+		Type:     QuestionTypeSpeedy,
 		Answer:   "42",
 	}
 
-	// Start game with NORMAL question
+	// Start game with SPEEDY question
 	e.Ready("q1", question)
 	e.StartImmediate(30)
 
@@ -1282,7 +1282,7 @@ func TestPhysicalBuzzerNotInvalidatedForNonQCM(t *testing.T) {
 	// Verify physical buzzer WAS recorded
 	buzzer := e.GetBumper("buzzer1")
 	if buzzer.Time == 0 {
-		t.Error("Physical buzzer should be accepted for NORMAL question, got Time=0")
+		t.Error("Physical buzzer should be accepted for SPEEDY question, got Time=0")
 	}
 	if buzzer.Button != "A" {
 		t.Errorf("Physical buzzer button should be A, got %s", buzzer.Button)
@@ -1291,7 +1291,7 @@ func TestPhysicalBuzzerNotInvalidatedForNonQCM(t *testing.T) {
 	// Verify team WAS recorded with physical buzzer
 	team := e.GetTeam("red")
 	if team.Time == 0 {
-		t.Error("Team should have Time set for NORMAL question")
+		t.Error("Team should have Time set for SPEEDY question")
 	}
 	if team.Bumper != "buzzer1" {
 		t.Errorf("Team should reference physical buzzer, got Bumper=%s", team.Bumper)
@@ -2006,7 +2006,7 @@ func TestSetArdoiseAnswer_OutsideStartedPhase(t *testing.T) {
 // TestSetArdoiseAnswer_NonArdoiseQuestion verifies that answers are ignored
 // when the current question type is not ARDOISE.
 func TestSetArdoiseAnswer_NonArdoiseQuestion(t *testing.T) {
-	nonArdoiseTypes := []QuestionType{QuestionTypeNormal, QuestionTypeQCM, QuestionTypeMemory, QuestionTypeMemotion}
+	nonArdoiseTypes := []QuestionType{QuestionTypeSpeedy, QuestionTypeQCM, QuestionTypeMemory, QuestionTypeMemotion}
 
 	for _, qType := range nonArdoiseTypes {
 		t.Run(string(qType), func(t *testing.T) {

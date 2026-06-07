@@ -390,14 +390,14 @@ func TestBuzzState_UpdateBuzzStates_TwoTeams(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// NORMAL mode LED state machine tests (v3.4.4)
+// SPEEDY mode LED state machine tests (v3.4.4)
 // ---------------------------------------------------------------------------
 
 // TestLEDNormal_Started_NONE verifies that STARTED+NONE = DIM 25%.
 func TestLEDNormal_Started_NONE(t *testing.T) {
 	app := newTestApp(t)
 
-	question := &game.Question{ID: "q1", Type: game.QuestionTypeNormal}
+	question := &game.Question{ID: "q1", Type: game.QuestionTypeSpeedy}
 	app.engine.Ready("q1", question)
 	app.engine.SetBumpers(map[string]*game.Bumper{
 		"MAC:A1": {Team: "TeamA"},
@@ -423,7 +423,7 @@ func TestLEDNormal_Started_NONE(t *testing.T) {
 func TestLEDNormal_Started_MOI(t *testing.T) {
 	app := newTestApp(t)
 
-	question := &game.Question{ID: "q1", Type: game.QuestionTypeNormal}
+	question := &game.Question{ID: "q1", Type: game.QuestionTypeSpeedy}
 	app.engine.Ready("q1", question)
 	app.engine.SetBumpers(map[string]*game.Bumper{
 		"MAC:A1": {Team: "TeamA"},
@@ -454,7 +454,7 @@ func TestLEDNormal_Started_MOI(t *testing.T) {
 func TestLEDNormal_Started_EQUIPE(t *testing.T) {
 	app := newTestApp(t)
 
-	question := &game.Question{ID: "q1", Type: game.QuestionTypeNormal}
+	question := &game.Question{ID: "q1", Type: game.QuestionTypeSpeedy}
 	app.engine.Ready("q1", question)
 	app.engine.SetBumpers(map[string]*game.Bumper{
 		"MAC:A1": {Team: "TeamA"},
@@ -484,7 +484,7 @@ func TestLEDNormal_Started_EQUIPE(t *testing.T) {
 func TestLEDNormal_Paused_MOI(t *testing.T) {
 	app := newTestApp(t)
 
-	question := &game.Question{ID: "q1", Type: game.QuestionTypeNormal}
+	question := &game.Question{ID: "q1", Type: game.QuestionTypeSpeedy}
 	app.engine.Ready("q1", question)
 	app.engine.SetBumpers(map[string]*game.Bumper{
 		"MAC:A1": {Team: "TeamA"},
@@ -505,7 +505,7 @@ func TestLEDNormal_Paused_MOI(t *testing.T) {
 func TestLEDNormal_Revealed_AUTRE(t *testing.T) {
 	app := newTestApp(t)
 
-	question := &game.Question{ID: "q1", Type: game.QuestionTypeNormal}
+	question := &game.Question{ID: "q1", Type: game.QuestionTypeSpeedy}
 	app.engine.Ready("q1", question)
 	app.engine.SetBumpers(map[string]*game.Bumper{
 		"MAC:B1": {Team: "TeamB"},

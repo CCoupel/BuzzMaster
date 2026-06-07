@@ -34,7 +34,7 @@ const BUTTON_TO_QCM_COLOR = {
 // Renders category badge (icon+label or image+label) OR ✋ PRÉPAREZ-VOUS fallback.
 // Used by all game types in READY phase — single source of truth for READY display.
 const GAME_TYPE_COLORS = {
-  NORMAL:   { color: '#60a5fa', shadow: 'rgba(96,165,250,0.6)' },
+  SPEEDY:   { color: '#60a5fa', shadow: 'rgba(96,165,250,0.6)' },
   ARDOISE:  { color: '#fcd34d', shadow: 'rgba(252,211,77,0.6)' },
   QCM:      { color: '#34d399', shadow: 'rgba(52,211,153,0.6)' },
   MEMOTION: { color: '#f472b6', shadow: 'rgba(244,114,182,0.6)' },

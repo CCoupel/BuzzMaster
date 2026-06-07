@@ -1,9 +1,10 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 
 export function useCategories() {
   const [categories, setCategories] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
+  const [fetchTick, setFetchTick] = useState(0)
 
   useEffect(() => {
     let cancelled = false
@@ -26,7 +27,9 @@ export function useCategories() {
         }
       })
     return () => { cancelled = true }
-  }, [])
+  }, [fetchTick])
 
-  return { categories, loading, error }
+  const refetch = useCallback(() => setFetchTick(t => t + 1), [])
+
+  return { categories, loading, error, refetch }
 }

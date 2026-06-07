@@ -42,11 +42,16 @@ export default function QuestionsPage() {
   const bgInputRef = useRef(null)
   const [draggedBgIndex, setDraggedBgIndex] = useState(null)
 
+  // Add category inline form state (#97)
+  const [showAddCategory, setShowAddCategory] = useState(false)
+  const [newCategoryName, setNewCategoryName] = useState('')
+  const [addCategoryError, setAddCategoryError] = useState('')
+
   // Form state
   const [formData, setFormData] = useState({
     question: '',
     answer: '',
-    type: 'NORMAL',
+    type: 'SPEEDY',
     category: '', // Question category
     pointsTarget: 'PLAYER', // PLAYER or TEAM
     qcmAnswers: { RED: '', GREEN: '', YELLOW: '', BLUE: '' },
@@ -197,7 +202,7 @@ export default function QuestionsPage() {
   }, [questions])
 
   // Custom categories from API (#95)
-  const { categories: apiCategories } = useCategories()
+  const { categories: apiCategories, refetch: refetchCategories } = useCategories()
   const customCategories = useMemo(() => apiCategories.filter(c => c.isCustom), [apiCategories])
 
   // Category filter (shared hook) — passes custom categories for filter support
@@ -337,7 +342,7 @@ export default function QuestionsPage() {
       const updates = { [field]: value }
       // Auto-set pointsTarget when type changes
       if (field === 'type') {
-        // QCM, MEMORY, MEMOTION and ARDOISE default to TEAM, NORMAL defaults to PLAYER
+        // QCM, MEMORY, MEMOTION and ARDOISE default to TEAM, SPEEDY defaults to PLAYER
         updates.pointsTarget = (value === 'QCM' || value === 'MEMORY' || value === 'MEMOTION' || value === 'ARDOISE') ? 'TEAM' : 'PLAYER'
       }
       return { ...prev, ...updates }
@@ -360,7 +365,7 @@ export default function QuestionsPage() {
 
   const handleQuestionClick = (question) => {
     setEditingId(question.ID)
-    const qType = question.TYPE || 'NORMAL'
+    const qType = question.TYPE || 'SPEEDY'
     // Default pointsTarget based on type if not set
     const defaultTarget = (qType === 'QCM' || qType === 'MEMORY' || qType === 'ARDOISE') ? 'TEAM' : 'PLAYER'
 
@@ -477,7 +482,7 @@ export default function QuestionsPage() {
     setFormData({
       question: '',
       answer: '',
-      type: 'NORMAL',
+      type: 'SPEEDY',
       category: '',
       pointsTarget: 'PLAYER',
       qcmAnswers: { RED: '', GREEN: '', YELLOW: '', BLUE: '' },
@@ -635,7 +640,7 @@ export default function QuestionsPage() {
     // For QCM, need question and at least the correct answer filled
     // For Memory, need question and at least 2 valid pairs
     if (!formData.question) return
-    if (formData.type === 'NORMAL' && !formData.answer) return
+    if (formData.type === 'SPEEDY' && !formData.answer) return
     if (formData.type === 'ARDOISE' && !formData.answer) return
     if (formData.type === 'QCM' && (!formData.qcmCorrect || !formData.qcmAnswers[formData.qcmCorrect])) return
     if (formData.type === 'MEMORY') {
@@ -668,7 +673,7 @@ export default function QuestionsPage() {
     data.append('points', formData.points)
     data.append('time', formData.time)
 
-    if (formData.type === 'NORMAL') {
+    if (formData.type === 'SPEEDY') {
       data.append('answer', formData.answer)
     } else if (formData.type === 'ARDOISE') {
       // ARDOISE mode — store answer (correct response, shown to admin only) and keyboard type
@@ -1168,10 +1173,10 @@ export default function QuestionsPage() {
                     <div className="type-filter-row">
                       <button
                         type="button"
-                        className={`type-btn ${formData.type === 'NORMAL' ? 'active' : ''}`}
-                        onClick={() => handleInputChange('type', 'NORMAL')}
+                        className={`type-btn ${formData.type === 'SPEEDY' ? 'active' : ''}`}
+                        onClick={() => handleInputChange('type', 'SPEEDY')}
                       >
-                        Normal
+                        Speedy
                       </button>
                       <button
                         type="button"
@@ -1207,7 +1212,7 @@ export default function QuestionsPage() {
                   </div>
                 </div>
 
-                {/* Category Selector — boucle unifiée hardcoded + custom (#95) */}
+                {/* Category Selector — boucle unifiée hardcoded + custom (#95) + bouton + (#97) */}
                 <div className="form-group">
                   <label>Categorie</label>
                   <div className="category-selector">
@@ -1227,7 +1232,73 @@ export default function QuestionsPage() {
                         </button>
                       )
                     })}
+                    {/* Bouton + pour créer une catégorie (#97) */}
+                    {!showAddCategory && (
+                      <button
+                        type="button"
+                        className="category-btn category-btn--add"
+                        title="Créer une catégorie"
+                        onClick={() => { setShowAddCategory(true); setAddCategoryError('') }}
+                      >
+                        +
+                      </button>
+                    )}
                   </div>
+                  {/* Formulaire inline ajout catégorie (#97) */}
+                  {showAddCategory && (
+                    <div className="add-category-inline">
+                      <input
+                        type="text"
+                        className="add-category-input"
+                        placeholder="Nom de la catégorie..."
+                        value={newCategoryName}
+                        maxLength={50}
+                        onChange={(e) => { setNewCategoryName(e.target.value); setAddCategoryError('') }}
+                        onKeyDown={(e) => { if (e.key === 'Escape') { setShowAddCategory(false); setNewCategoryName('') } }}
+                        autoFocus
+                      />
+                      <div className="add-category-actions">
+                        <button
+                          type="button"
+                          className="add-category-validate"
+                          onClick={async () => {
+                            if (!newCategoryName.trim()) { setAddCategoryError('Nom invalide'); return }
+                            try {
+                              const res = await fetch('/api/categories', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ name: newCategoryName.trim() })
+                              })
+                              if (res.ok) {
+                                const created = await res.json()
+                                setShowAddCategory(false)
+                                setNewCategoryName('')
+                                setAddCategoryError('')
+                                await refetchCategories()
+                                handleInputChange('category', created.key)
+                              } else if (res.status === 409) {
+                                setAddCategoryError('Cette catégorie existe déjà')
+                              } else {
+                                setAddCategoryError('Nom invalide')
+                              }
+                            } catch {
+                              setAddCategoryError('Erreur réseau')
+                            }
+                          }}
+                        >
+                          Valider
+                        </button>
+                        <button
+                          type="button"
+                          className="add-category-cancel"
+                          onClick={() => { setShowAddCategory(false); setNewCategoryName(''); setAddCategoryError('') }}
+                        >
+                          Annuler
+                        </button>
+                      </div>
+                      {addCategoryError && <p className="add-category-error">{addCategoryError}</p>}
+                    </div>
+                  )}
                   {formData.category && (() => {
                     const meta = categoryMeta(formData.category, customCategories)
                     if (!meta) return null
@@ -1269,7 +1340,7 @@ export default function QuestionsPage() {
                 </div>
 
                 {/* Normal Answer */}
-                {(formData.type === 'NORMAL' || formData.type === 'ARDOISE') && (
+                {(formData.type === 'SPEEDY' || formData.type === 'ARDOISE') && (
                   <div className="form-group">
                     <label htmlFor="answer-input">
                       {formData.type === 'ARDOISE' ? 'Bonne réponse * (animateur)' : 'Reponse *'}

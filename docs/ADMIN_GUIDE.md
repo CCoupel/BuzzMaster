@@ -68,7 +68,7 @@ La section **Sauvegarde** permet de choisir quoi inclure dans l'archive :
 #### Sauvegarde selective
 
 ```
-GET /backup-select?questions=true&teams=true&bumpers=true&history=true&backgrounds=true
+GET /backup-select?questions=true&teams=true&bumpers=true&history=true&medias=true
 ```
 
 Retourne un fichier TAR contenant uniquement les elements selectionnes.
@@ -92,7 +92,7 @@ Body: file=<archive.tar>
 Le serveur detecte automatiquement le contenu de l'archive et restaure uniquement les elements presents :
 - Detecte les dossiers `questions/`
 - Detecte les fichiers `teams.json`, `bumpers.json`, `history.json`
-- Detecte les fichiers `backgrounds/`
+- Detecte les fichiers `medias/`
 
 Apres restauration, les donnees sont rechargees en memoire.
 
@@ -115,7 +115,7 @@ La section **Reinitialisation** permet de choisir quoi remettre a zero :
 ### Endpoint API
 
 ```
-POST /reset-select?questions=true&teams=true&bumpers=true&history=true&backgrounds=true
+POST /reset-select?questions=true&teams=true&bumpers=true&history=true&medias=true
 ```
 
 Reinitialise uniquement les elements selectionnes.
@@ -163,7 +163,7 @@ Chaque question definit a qui les points sont attribues :
 
 | Valeur | Description | Defaut pour |
 |--------|-------------|-------------|
-| `PLAYER` | Points au joueur qui repond | Questions NORMAL |
+| `PLAYER` | Points au joueur qui repond | Questions SPEEDY |
 | `TEAM` | Points a l'equipe | Questions QCM |
 
 ---
@@ -327,8 +327,8 @@ Seul le VJoueur peut répondre pour l'équipe en mode QCM, garantissant une rép
 #### Comportement normal
 
 L'invalidation des buzzers physiques est **limitée au mode QCM** :
-- Pour les questions NORMAL, les buzzers physiques fonctionnent normalement
-- Le VJoueur peut aussi buzzer sur les questions NORMAL via son bouton "BUZZ !"
+- Pour les questions SPEEDY, les buzzers physiques fonctionnent normalement
+- Le VJoueur peut aussi buzzer sur les questions SPEEDY via son bouton "BUZZ !"
 - Pour les questions MEMORY, le VJoueur et les buzzers physiques sont tous deux bloqués (contrôle admin uniquement)
 
 ### Restrictions
@@ -998,9 +998,9 @@ Retourne la liste fusionnée (hardcodées + custom) avec `"custom": true` pour l
 
 ### Backup / Restore
 
-Les catégories personnalisées sont incluses dans le backup/restore via le flag `backgrounds` :
+Les catégories personnalisées sont incluses dans le backup/restore via le flag `medias` :
 ```
-GET /backup-select?backgrounds=true
+GET /backup-select?medias=true
 POST /restore  (archive contenant files/categories/)
 ```
 

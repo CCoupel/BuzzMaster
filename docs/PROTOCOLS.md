@@ -125,12 +125,12 @@ The server centralizes background image cycling to ensure all TV displays show t
 
 **BACKGROUND_CHANGE payload:**
 ```json
-{ "INDEX": 0 }  // 0-based index into backgrounds array
+{ "INDEX": 0 }  // 0-based index into medias array
 ```
 
 **How it works:**
 - Server maintains `CurrentBackgroundIndex` in GameState
-- Goroutine cycles through backgrounds based on each image's duration
+- Goroutine cycles through medias based on each image's duration
 - On each cycle, server broadcasts `BACKGROUND_CHANGE` to all clients
 - Clients use the server-provided index instead of local cycling
 
@@ -176,7 +176,7 @@ Retourne la liste fusionnée des catégories hardcodées et des catégories pers
 - Fichier `Sport Extreme.png` → clé `SPORT_EXTREME` (espaces → `_`, uppercase)
 - Formats acceptés : PNG, JPG, JPEG, WEBP
 - Répertoire : `data/files/categories/`
-- Inclus dans le backup/restore via le flag `backgrounds`
+- Inclus dans le backup/restore via le flag `medias`
 
 ---
 
@@ -187,7 +187,7 @@ Query parameters (all boolean, default: `true` if none specified):
 - `teams=true` - Include teams.json
 - `bumpers=true` - Include bumpers.json
 - `history=true` - Include history.json
-- `backgrounds=true` - Include backgrounds directory
+- `medias=true` - Include medias directory
 
 Example: `/backup-select?questions=true&history=true`
 
@@ -199,7 +199,7 @@ Query parameters (all boolean):
 - `teams=true` - Clear teams data
 - `bumpers=true` - Clear bumpers data
 - `history=true` - Clear history
-- `backgrounds=true` - Delete backgrounds
+- `medias=true` - Delete medias
 
 Example: `/reset-select?history=true&bumpers=true`
 
@@ -210,7 +210,7 @@ The restore endpoint now automatically detects what's in the TAR archive and res
 - Detects `config/teams.json` → loads teams into engine
 - Detects `config/bumpers.json` → loads bumpers into engine
 - Detects `config/history.json` → loads history and recalculates scores
-- Detects `files/backgrounds/*` → restores backgrounds
+- Detects `files/medias/*` → restores medias
 
 ### HTTP /questions Response Format
 
@@ -347,7 +347,7 @@ Phases LED boot : phase 4 = jaune pulsant (attente heartbeat), phase 5 = bleu cl
 
 ## Default Question Image (v3.2.3)
 
-Image affichée sur TV pour les questions NORMAL/QCM sans média.
+Image affichée sur TV pour les questions SPEEDY/QCM sans média.
 
 ```
 GET    /api/config/default-image  → Sert l'image (custom ou SVG embarqué fallback)

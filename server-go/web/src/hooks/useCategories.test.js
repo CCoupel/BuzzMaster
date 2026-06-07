@@ -77,3 +77,88 @@ describe('useCategories — issue #95', () => {
     expect(result.current.loading).toBe(false)
   })
 })
+
+// ---------------------------------------------------------------------------
+// v5.7.1 — #97 : refetch après création de catégorie custom
+// ---------------------------------------------------------------------------
+
+describe('useCategories — refetch (v5.7.1 #97)', () => {
+  beforeEach(() => {
+    vi.stubGlobal('fetch', vi.fn())
+  })
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
+    vi.clearAllMocks()
+  })
+
+  it('expose une fonction refetch dans le retour du hook', async () => {
+    fetch.mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve(MOCK_CATEGORIES),
+    })
+
+    const { result } = renderHook(() => useCategories())
+    await act(async () => {})
+
+    expect(typeof result.current.refetch).toBe('function')
+  })
+
+  it('appeler refetch déclenche un nouveau fetch GET /api/categories', async () => {
+    fetch
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve(MOCK_CATEGORIES),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve([
+          ...MOCK_CATEGORIES,
+          { key: 'NEW_CAT', name: 'New Cat', imageURL: '', isCustom: true },
+        ]),
+      })
+
+    const { result } = renderHook(() => useCategories())
+    await act(async () => {})
+
+    expect(result.current.categories).toHaveLength(2)
+    expect(fetch).toHaveBeenCalledTimes(1)
+
+    // Déclencher refetch
+    await act(async () => {
+      result.current.refetch()
+    })
+
+    expect(fetch).toHaveBeenCalledTimes(2)
+    expect(result.current.categories).toHaveLength(3)
+  })
+
+  it('après refetch, la nouvelle catégorie créée est dans la liste', async () => {
+    const categoriesAfterPost = [
+      ...MOCK_CATEGORIES,
+      { key: 'MA_CATEGORIE', name: 'Ma Categorie', imageURL: '', isCustom: true },
+    ]
+
+    fetch
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve(MOCK_CATEGORIES),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve(categoriesAfterPost),
+      })
+
+    const { result } = renderHook(() => useCategories())
+    await act(async () => {})
+
+    expect(result.current.categories).toHaveLength(2)
+
+    await act(async () => {
+      result.current.refetch()
+    })
+
+    const keys = result.current.categories.map(c => c.key)
+    expect(keys).toContain('MA_CATEGORIE')
+  })
+})

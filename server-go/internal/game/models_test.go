@@ -584,12 +584,12 @@ func TestQuestion_MemoryType_JSONSerialization(t *testing.T) {
 }
 
 func TestQuestion_MemoryOmitEmpty(t *testing.T) {
-	// NORMAL question should not have MEMORY_PAIRS or MEMORY_CONFIG
+	// SPEEDY question should not have MEMORY_PAIRS or MEMORY_CONFIG
 	question := &Question{
 		ID:       "1",
 		Question: "Normal question",
 		Answer:   "Answer",
-		Type:     QuestionTypeNormal,
+		Type:     QuestionTypeSpeedy,
 		Points:   "10",
 		Time:     "30",
 	}
@@ -605,9 +605,9 @@ func TestQuestion_MemoryOmitEmpty(t *testing.T) {
 	}
 
 	if _, ok := decoded["MEMORY_PAIRS"]; ok {
-		t.Error("MEMORY_PAIRS should be omitted for NORMAL question")
+		t.Error("MEMORY_PAIRS should be omitted for SPEEDY question")
 	}
 	if _, ok := decoded["MEMORY_CONFIG"]; ok {
-		t.Error("MEMORY_CONFIG should be omitted for NORMAL question")
+		t.Error("MEMORY_CONFIG should be omitted for SPEEDY question")
 	}
 }

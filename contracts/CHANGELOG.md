@@ -2,6 +2,17 @@
 
 ---
 
+## [20260607] — Milestone v5.7.1 (#97, #98, #99)
+
+- **[NEW]** `POST /api/categories` — créer une catégorie custom (body: `{ "name": "..." }`, response: `CategoryInfo`)
+- **[BREAKING]** `/backup-select` — paramètre query `backgrounds` renommé `medias` (couvre backgrounds + categories)
+- **[BREAKING]** `/reset-select` — paramètre query `backgrounds` renommé `medias`
+- **[BREAKING]** `QuestionType "NORMAL"` → `"SPEEDY"` — la constante et la valeur JSON changent ; fallback en lecture (`"NORMAL"` lu comme `"SPEEDY"` pour rétrocompatibilité des fichiers existants)
+
+> **Note rétrocompatibilité SPEEDY** : le serveur normalise `"NORMAL"` → `"SPEEDY"` à la lecture des fichiers disque et à la réception d'une requête POST /questions. Les anciens clients qui envoient TYPE=NORMAL continuent de fonctionner.
+
+---
+
 ## [20260520] — Mode ARDOISE v5.6.0
 
 - **[NEW]** `QuestionType "ARDOISE"` — nouveau type de question saisie libre via clavier virtuel
