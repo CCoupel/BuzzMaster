@@ -153,10 +153,9 @@ function ReadyCategoryDisplay({ catKey, customCategories, variant, gameType }) {
 export default function PlayerDisplay({ playerName = null, playerNameColor = null, teamName = null, teamColor = null, isVPlayer = false, onMediaClick = null, onQCMAnswer = null, vplayerHasBuzzed = false }) {
   const { gameState, teams, bumpers, flipMemoryCard, showQRCode, selectMotionCard } = useGame()
   const { categories: apiCategories } = useCategories()
-  const customCategories = useMemo(() => apiCategories.filter(c => c.isCustom), [apiCategories])
   const [previousRanking, setPreviousRanking] = useState({})
   const [changedTeams, setChangedTeams] = useState({})
-  const [history, setHistory] = useState([]) // For PALMARES view
+  const [palmares, setPalmares] = useState([]) // For PALMARES view (v5.7.10 — GET /palmares)
   const [previousPlayerScores, setPreviousPlayerScores] = useState({})
   const [changedPlayers, setChangedPlayers] = useState({})
   const [pointsAnimation, setPointsAnimation] = useState(null) // {name, points, color}
@@ -215,101 +214,26 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
     return params.get('admin') === 'true'
   }, [])
 
-  // Fetch history for PALMARES view
+  // Fetch palmares for PALMARES view (v5.7.10 — single endpoint, no client-side join)
   useEffect(() => {
     if (gameState.remote !== 'PALMARES') return
 
-    const fetchHistory = async () => {
+    const fetchPalmares = async () => {
       try {
-        const response = await fetch('/history')
+        const response = await fetch('/palmares')
         if (response.ok) {
           const data = await response.json()
-          setHistory(data || [])
+          setPalmares(data || [])
         }
       } catch (error) {
-        console.error('Failed to fetch history:', error)
+        console.error('Failed to fetch palmares:', error)
       }
     }
 
-    fetchHistory()
-    const interval = setInterval(fetchHistory, 5000)
+    fetchPalmares()
+    const interval = setInterval(fetchPalmares, 5000)
     return () => clearInterval(interval)
   }, [gameState.remote])
-
-  // Aggregate history by category for PALMARES view
-  const categoryStats = useMemo(() => {
-    const stats = {}
-
-    history.forEach(event => {
-      const category = event.QUESTION_CATEGORY || 'UNKNOWN'
-
-      if (!stats[category]) {
-        stats[category] = {
-          teams: {},
-          players: {},
-          totalTeamPoints: 0,
-          totalPlayerPoints: 0,
-        }
-      }
-
-      if (event.WINNER_TYPE === 'TEAM' && event.TEAM_NAME) {
-        if (!stats[category].teams[event.TEAM_NAME]) {
-          stats[category].teams[event.TEAM_NAME] = {
-            name: event.TEAM_NAME,
-            color: event.TEAM_COLOR,
-            points: 0,
-          }
-        }
-        stats[category].teams[event.TEAM_NAME].points += event.POINTS
-        stats[category].totalTeamPoints += event.POINTS
-      } else if (event.WINNER_TYPE === 'PLAYER' && event.PLAYER_NAME) {
-        const key = `${event.TEAM_NAME}|${event.PLAYER_NAME}`
-        if (!stats[category].players[key]) {
-          stats[category].players[key] = {
-            name: event.PLAYER_NAME,
-            team: event.TEAM_NAME,
-            teamColor: event.TEAM_COLOR,
-            points: 0,
-          }
-        }
-        stats[category].players[key].points += event.POINTS
-        stats[category].totalPlayerPoints += event.POINTS
-      }
-    })
-
-    // Convert to arrays and sort
-    Object.keys(stats).forEach(category => {
-      const sortedTeams = Object.values(stats[category].teams)
-        .sort((a, b) => b.points - a.points)
-      let currentRank = 1
-      stats[category].sortedTeams = sortedTeams.map((team, index) => {
-        if (index > 0 && sortedTeams[index - 1].points === team.points) {
-          return { ...team, rank: currentRank }
-        }
-        currentRank = index + 1
-        return { ...team, rank: currentRank }
-      })
-
-      const sortedPlayers = Object.values(stats[category].players)
-        .sort((a, b) => b.points - a.points)
-      currentRank = 1
-      stats[category].sortedPlayers = sortedPlayers.map((player, index) => {
-        if (index > 0 && sortedPlayers[index - 1].points === player.points) {
-          return { ...player, rank: currentRank }
-        }
-        currentRank = index + 1
-        return { ...player, rank: currentRank }
-      })
-    })
-
-    return Object.entries(stats)
-      .filter(([_, data]) => data.sortedTeams.length > 0 || data.sortedPlayers.length > 0)
-      .sort((a, b) => {
-        const totalA = a[1].totalTeamPoints + a[1].totalPlayerPoints
-        const totalB = b[1].totalTeamPoints + b[1].totalPlayerPoints
-        return totalB - totalA
-      })
-  }, [history])
 
   // Sort teams by score for scoreboard with rank calculation
   const sortedTeams = useMemo(() => {
@@ -1254,30 +1178,60 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
             <h1 className="scores-title">Palmares par Categorie</h1>
 
             <div className="palmares-categories">
-              {categoryStats.length === 0 ? (
+              {palmares.length === 0 ? (
                 <div className="palmares-empty">
                   <p>Aucun evenement enregistre</p>
                 </div>
               ) : (
-                categoryStats.slice(0, 6).map(([category, data], index) => { // Max 6 categories for TV (3x2 grid)
-                  const catInfo = CATEGORIES[category] || { label: category, icon: '❓', color: '#6b7280' }
-                  const hasTeams = data.sortedTeams.length > 0
-                  const hasPlayers = data.sortedPlayers.length > 0
+                // v5.7.10: PalmaresEntry pré-assemblé par le backend — accès direct, zéro lookup
+                palmares.slice(0, 6).map((entry, index) => {
+                  const catLabel    = entry.name
+                    || (entry.category === 'UNKNOWN'
+                      ? 'Inconnue'
+                      : entry.category.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, c => c.toUpperCase()))
+                  const catImageURL = entry.imageURL || null
+                  const catColor    = entry.color || '#6b7280'
+                  const hasTeams    = entry.teams.length > 0
+                  const hasPlayers  = entry.players.length > 0
+
+                  // Rank calculation with tie handling (items sorted desc by backend)
+                  const addRanks = (items) => items.slice(0, 3).reduce((acc, item, idx) => {
+                    const rank = idx === 0 ? 1 : (acc[idx - 1].points === item.points ? acc[idx - 1].rank : idx + 1)
+                    acc.push({ ...item, rank })
+                    return acc
+                  }, [])
+                  const rankedTeams   = addRanks(entry.teams)
+                  const rankedPlayers = addRanks(entry.players)
+
+                  // Team color lookup for player rows
+                  const teamColorMap = Object.fromEntries(entry.teams.map(t => [t.name, t.color]))
+
+                  const totalTeamPoints   = entry.teams.reduce((s, t) => s + t.points, 0)
+                  const totalPlayerPoints = entry.players.reduce((s, p) => s + p.points, 0)
 
                   return (
                     <motion.div
-                      key={category}
+                      key={entry.category}
                       className="palmares-category"
                       initial={{ opacity: 0, y: 20 }}
                       animate={{ opacity: 1, y: 0 }}
                       transition={{ delay: index * 0.1 }}
                     >
-                      <div className="palmares-category-header" style={{ backgroundColor: catInfo.color }}>
-                        <span className="palmares-category-icon">{catInfo.icon}</span>
-                        <span className="palmares-category-name">{catInfo.label}</span>
+                      <div className="palmares-category-header" style={{ backgroundColor: catColor }}>
+                        {catImageURL
+                          ? <img
+                              src={catImageURL}
+                              alt={catLabel}
+                              style={{ width: '2rem', height: '2rem', objectFit: 'cover', borderRadius: '0.25rem', flexShrink: 0 }}
+                            />
+                          : <span className="palmares-category-icon" style={{ color: catColor }}>
+                              {CATEGORIES[entry.category]?.icon ?? '📷'}
+                            </span>
+                        }
+                        <span className="palmares-category-name">{catLabel}</span>
                         <div className="palmares-category-stats">
-                          {hasTeams && <span className="palmares-stat">👥 {data.totalTeamPoints} pts</span>}
-                          {hasPlayers && <span className="palmares-stat">👤 {data.totalPlayerPoints} pts</span>}
+                          {hasTeams && <span className="palmares-stat">👥 {totalTeamPoints} pts</span>}
+                          {hasPlayers && <span className="palmares-stat">👤 {totalPlayerPoints} pts</span>}
                         </div>
                       </div>
 
@@ -1286,7 +1240,7 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
                           <div className="palmares-ranking">
                             <h3 className="palmares-ranking-title">Equipes</h3>
                             <div className="palmares-ranking-list">
-                              {data.sortedTeams.slice(0, 3).map((team, idx) => (
+                              {rankedTeams.map((team) => (
                                 <div
                                   key={team.name}
                                   className={`palmares-ranking-item rank-${team.rank}`}
@@ -1307,11 +1261,11 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
                           <div className="palmares-ranking">
                             <h3 className="palmares-ranking-title">Joueurs</h3>
                             <div className="palmares-ranking-list">
-                              {data.sortedPlayers.slice(0, 3).map((player, idx) => (
+                              {rankedPlayers.map((player) => (
                                 <div
                                   key={`${player.team}|${player.name}`}
                                   className={`palmares-ranking-item rank-${player.rank}`}
-                                  style={{ '--team-color': player.teamColor ? `rgb(${player.teamColor.join(',')})` : '#6b7280' }}
+                                  style={{ '--team-color': teamColorMap[player.team] ? `rgb(${teamColorMap[player.team].join(',')})` : '#6b7280' }}
                                 >
                                   <span className="palmares-rank-medal">
                                     {player.rank === 1 ? '🥇' : player.rank === 2 ? '🥈' : '🥉'}
@@ -1388,7 +1342,7 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
                 {/* Zone 2: Category badge animates from center to question zone */}
                 <div className="zone-question">
                   {(() => {
-                    const catMeta = categoryMeta(gameState.question?.CATEGORY, customCategories)
+                    const catMeta = categoryMeta(gameState.question?.CATEGORY, apiCategories)
                     if (!catMeta) return null
                     return (
                       <motion.div
@@ -1461,7 +1415,7 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
                     initial={{ opacity: 0, scale: 0.8 }}
                     animate={{ opacity: 1, scale: 1 }}
                   >
-                    <ReadyCategoryDisplay catKey={gameState.question?.CATEGORY} customCategories={customCategories} gameType={gameState.question?.TYPE} />
+                    <ReadyCategoryDisplay catKey={gameState.question?.CATEGORY} customCategories={apiCategories} gameType={gameState.question?.TYPE} />
                   </motion.div>
                 </div>
 
@@ -1497,7 +1451,7 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
                       {gameState.question.QUESTION}
                     </motion.p>
                   ) : showCountdown ? (() => {
-                    const catMeta = categoryMeta(gameState.question?.CATEGORY, customCategories)
+                    const catMeta = categoryMeta(gameState.question?.CATEGORY, apiCategories)
                     if (!catMeta) return <div className="zone-question-placeholder" />
                     return (
                       <motion.div
@@ -1551,7 +1505,7 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
                       animate={{ opacity: 1, scale: 1 }}
                       exit={{ opacity: 0, scale: 0.8 }}
                     >
-                      <ReadyCategoryDisplay catKey={gameState.question?.CATEGORY} customCategories={customCategories} gameType="QCM" />
+                      <ReadyCategoryDisplay catKey={gameState.question?.CATEGORY} customCategories={apiCategories} gameType="QCM" />
                     </motion.div>
                   ) : (showAnswer && gameState.question.MEDIA_ANSWER) ? (
                     <motion.img
@@ -1772,7 +1726,7 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
                       initial={{ opacity: 0, scale: 0.9 }}
                       animate={{ opacity: 1, scale: 1 }}
                     >
-                      <ReadyCategoryDisplay catKey={gameState.question?.CATEGORY} customCategories={customCategories} variant="memory" />
+                      <ReadyCategoryDisplay catKey={gameState.question?.CATEGORY} customCategories={apiCategories} variant="memory" />
                     </motion.div>
                   )}
                 </div>
@@ -2014,7 +1968,7 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
                         initial={{ opacity: 0, scale: 0.8 }}
                         animate={{ opacity: 1, scale: 1 }}
                       >
-                        <ReadyCategoryDisplay catKey={gameState.question?.CATEGORY} customCategories={customCategories} gameType="MEMOTION" />
+                        <ReadyCategoryDisplay catKey={gameState.question?.CATEGORY} customCategories={apiCategories} gameType="MEMOTION" />
                       </motion.div>
                     ) : (
                       <div className="zone-question-placeholder" />
@@ -2146,7 +2100,7 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
                     <div className="zone-question"><div className="zone-question-placeholder" /></div>
                     <div className="zone-media">
                       <motion.div className="ready-state" initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }}>
-                        <ReadyCategoryDisplay catKey={gameState.question?.CATEGORY} customCategories={customCategories} gameType="MEMOTION" />
+                        <ReadyCategoryDisplay catKey={gameState.question?.CATEGORY} customCategories={apiCategories} gameType="MEMOTION" />
                       </motion.div>
                     </div>
                     <div className="zone-answers">

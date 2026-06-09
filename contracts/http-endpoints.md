@@ -216,7 +216,7 @@ Reset sélectif.
 
 ### GET /api/categories
 
-Liste les catégories disponibles (hardcodées + custom).
+Liste les catégories disponibles (hardcodées + custom images).
 
 | Propriété | Valeur |
 |-----------|--------|
@@ -227,34 +227,55 @@ Liste les catégories disponibles (hardcodées + custom).
 
 ```json
 [
-  { "key": "GEOGRAPHY",    "name": "Geographie",     "imageURL": "", "isCustom": false },
-  { "key": "ENTERTAINMENT","name": "Divertissement",  "imageURL": "", "isCustom": false },
-  { "key": "MA_CATEGORIE", "name": "Ma Categorie",    "imageURL": "", "isCustom": true }
+  { "key": "GEOGRAPHY",    "name": "Geographie",     "imageURL": "",                                  "color": "#3b82f6", "isCustom": false },
+  { "key": "ENTERTAINMENT","name": "Divertissement",  "imageURL": "",                                  "color": "#f59e0b", "isCustom": false },
+  { "key": "MA_CATEGORIE", "name": "Ma Catégorie",    "imageURL": "/files/categories/MA_CATEGORIE.png","color": "#6b7280", "isCustom": true }
 ]
 ```
+
+**Champs** :
+- `key` : identifiant unique (MAJUSCULES_UNDERSCORES)
+- `name` : nom affiché (pour custom : nom original saisi lors de la création depuis v5.7.7, sinon stem du fichier)
+- `imageURL` : URL image (vide pour hardcodées sans image, URL pour custom)
+- `color` : couleur accent hex (couleur prédéfinie pour hardcodées, `#6b7280` fallback pour custom)
+- `isCustom` : `true` si catégorie custom uploadée, `false` si hardcodée
+
+> Les catégories custom sont des fichiers image dans `data/files/categories/`. 
+> Le champ `color` est ajouté en v5.7.6.
+> Depuis v5.7.7, le nom original est persiste en sidecar JSON (`<KEY>.json` aux côtés de `<KEY>.<ext>`). Les catégories créées avant v5.7.7 affichent leur nom technique (stem du fichier).
 
 ---
 
 ### POST /api/categories
 
-Crée une nouvelle catégorie custom. (v5.7.1 — #97)
+Crée une nouvelle catégorie custom avec image. (v5.7.2 — #100)
+
+**⚠️ BREAKING depuis v5.7.1** : remplace le body JSON par multipart/form-data (nom + image obligatoire).
 
 | Propriété | Valeur |
 |-----------|--------|
 | Auth      | Aucune |
-| Content-Type | application/json |
+| Content-Type | multipart/form-data |
 
-#### Request body
-
-```json
-{ "name": "Ma Categorie" }
-```
+#### Request fields
 
 | Champ | Type | Obligatoire | Description |
 |-------|------|-------------|-------------|
-| name  | string | ✅ | Nom affiché de la catégorie (max 50 caractères) |
+| name  | string (form field) | ✅ | Nom de la catégorie (max 50 chars, alphanumérique/espace/tiret/underscore) |
+| file  | file (image)        | ✅ | Image PNG, JPG, JPEG ou WebP |
 
 > La clé est calculée automatiquement : `toUpperSnakeCase(name)` (espaces et tirets → underscore, MAJUSCULES).
+> L'image est sauvegardée comme `<KEY>.<ext>` dans `data/files/categories/`.
+> Depuis v5.7.7, le nom original est persiste en sidecar JSON : `<KEY>.json` contient `{ "name": "Ma Catégorie" }`.
+
+#### Exemple fetch (ne pas définir Content-Type manuellement)
+
+```js
+const fd = new FormData()
+fd.append('name', 'Ma Categorie')
+fd.append('file', imageFile)
+fetch('/api/categories', { method: 'POST', body: fd })
+```
 
 #### Response 200
 
@@ -262,7 +283,7 @@ Crée une nouvelle catégorie custom. (v5.7.1 — #97)
 {
   "key": "MA_CATEGORIE",
   "name": "Ma Categorie",
-  "imageURL": "",
+  "imageURL": "/files/categories/MA_CATEGORIE.png",
   "isCustom": true
 }
 ```
@@ -271,7 +292,7 @@ Crée une nouvelle catégorie custom. (v5.7.1 — #97)
 
 | Code | Raison |
 |------|--------|
-| 400  | `name` vide ou invalide |
+| 400  | `name` vide, trop long (>50), caractères invalides, `file` manquant, ou extension non autorisée |
 | 405  | Méthode non autorisée |
 | 409  | Clé déjà existante (catégorie hardcodée ou custom) |
 
@@ -298,10 +319,71 @@ Récupère l'historique des événements.
     "TeamColor": [239, 68, 68],
     "PlayerName": "Alice",
     "PlayerColor": "GREEN",
-    "Points": 10
+    "Points": 10,
+    "CATEGORY_NAME": "Géographie",
+    "CATEGORY_IMAGE_URL": "/files/categories/GEOGRAPHY.png",
+    "CATEGORY_COLOR": "#3b82f6"
   }
 ]
 ```
+
+**Champs catégorie (v5.7.9, `omitempty`)** :
+
+| Champ | Type | Description |
+|-------|------|-------------|
+| `CATEGORY_NAME` | string | Nom affiché de la catégorie (ex: `"Sciences & Nature"`) |
+| `CATEGORY_IMAGE_URL` | string | URL de l'image (ex: `"/files/categories/MON_JEU.png"`) — absent si aucune image |
+| `CATEGORY_COLOR` | string | Couleur accent (ex: `"#22c55e"`) — absent pour catégories custom |
+
+> Ces champs sont absents des anciens événements (avant v5.7.9). Le frontend doit gérer le fallback via `/api/categories`.
+
+---
+
+### GET /palmares
+
+Retourne le palmarès de la partie en cours, pré-assemblé côté serveur. (v5.7.10)
+
+**Réponse** : `PalmaresEntry[]` triée par `totalPoints` décroissant. `[]` si aucun événement.
+
+#### Response 200
+
+```json
+[
+  {
+    "category": "GEOGRAPHY",
+    "name": "Géographie",
+    "imageURL": "/files/categories/GEOGRAPHY.png",
+    "color": "#3b82f6",
+    "totalPoints": 150,
+    "teams": [
+      { "name": "Les Rouges", "color": [239, 68, 68], "points": 100 },
+      { "name": "Les Bleus", "color": [59, 130, 246], "points": 50 }
+    ],
+    "players": [
+      { "name": "Alice", "team": "Les Rouges", "points": 60 },
+      { "name": "Bob", "team": "Les Rouges", "points": 40 },
+      { "name": "Charlie", "team": "Les Bleus", "points": 50 }
+    ]
+  }
+]
+```
+
+**Champs `PalmaresEntry`** :
+
+| Champ | Type | Description |
+|-------|------|-------------|
+| `category` | string | Clé catégorie (ex: `"SCIENCE"`, `"MON_JEU"`) |
+| `name` | string | Nom affiché résolu (ex: `"Sciences & Nature"`) |
+| `imageURL` | string | URL image (ex: `"/files/categories/MON_JEU.png"`) — `""` si aucune |
+| `color` | string | Couleur accent hex (ex: `"#22c55e"`) — `""` pour catégories custom |
+| `totalPoints` | int | Total des points attribués pour cette catégorie |
+| `teams` | `TeamScore[]` | Scores par équipe, triés desc |
+| `players` | `PlayerScore[]` | Scores par joueur, triés desc |
+
+**`TeamScore`** : `{ name: string, color: [int, int, int], points: int }`  
+**`PlayerScore`** : `{ name: string, team: string, points: int }`
+
+> Cet endpoint agrège automatiquement `/history` sans double-comptage (clé composite `team|player`). Aucune race condition possible.
 
 ---
 

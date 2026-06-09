@@ -208,6 +208,8 @@
   letter-spacing: 0.5px;
 }
 
+/* type-normal conservé comme alias rétrocompat pour fichiers JSON non-migrés */
+.qcard-type-badge.type-speedy,
 .qcard-type-badge.type-normal   { background: #6b7280; }
 .qcard-type-badge.type-qcm      { background: #3b82f6; }
 .qcard-type-badge.type-memory   { background: #8b5cf6; }

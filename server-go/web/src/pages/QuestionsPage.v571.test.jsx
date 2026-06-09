@@ -240,7 +240,47 @@ describe('QuestionsPage — Bouton + catégorie (#97)', () => {
     })
   })
 
+  // Helper : sélectionner un fichier image dans le formulaire inline
+  // Nécessaire depuis v5.7.2 — le champ file est obligatoire (BREAKING #100)
+  const selectCategoryFile = (container, filename = 'photo.png') => {
+    const fileInput = container.querySelector('.add-category-inline input[type="file"]')
+    if (!fileInput) return
+    const file = new File(['fake-image'], filename, { type: 'image/png' })
+    fireEvent.change(fileInput, { target: { files: [file] } })
+  }
+
+  it('sans image sélectionnée, le formulaire affiche "Image requise" (v5.7.2 #100)', async () => {
+    const { container } = render(<QuestionsPage />)
+    const addBtn = container.querySelector('.category-btn--add')
+    fireEvent.click(addBtn)
+
+    const input = container.querySelector('.add-category-input')
+    fireEvent.change(input, { target: { value: 'Bonne Catégorie' } })
+
+    // Cliquer Valider sans sélectionner de fichier
+    const validateBtn = container.querySelector('.add-category-validate')
+    fireEvent.click(validateBtn)
+
+    await waitFor(() => {
+      const errorEl = container.querySelector('.add-category-error')
+      expect(errorEl).not.toBeNull()
+      expect(errorEl.textContent).toMatch(/image requise/i)
+    })
+  })
+
+  it('le formulaire contient un input file acceptant les images (v5.7.2 #100)', () => {
+    const { container } = render(<QuestionsPage />)
+    const addBtn = container.querySelector('.category-btn--add')
+    fireEvent.click(addBtn)
+
+    const fileInput = container.querySelector('.add-category-inline input[type="file"]')
+    expect(fileInput).not.toBeNull()
+    expect(fileInput.getAttribute('accept')).toContain('.png')
+    expect(fileInput.getAttribute('accept')).toContain('.jpg')
+  })
+
   it('une erreur 409 (conflit) affiche "Cette catégorie existe déjà"', async () => {
+    // v5.7.2 BREAKING: POST /api/categories requiert multipart + fichier image obligatoire
     global.fetch = vi.fn().mockResolvedValueOnce({
       ok: false,
       status: 409,
@@ -253,6 +293,9 @@ describe('QuestionsPage — Bouton + catégorie (#97)', () => {
     const input = container.querySelector('.add-category-input')
     fireEvent.change(input, { target: { value: 'Geography' } })
 
+    // Sélectionner un fichier (obligatoire depuis v5.7.2)
+    selectCategoryFile(container)
+
     const validateBtn = container.querySelector('.add-category-validate')
     fireEvent.click(validateBtn)
 
@@ -264,6 +307,7 @@ describe('QuestionsPage — Bouton + catégorie (#97)', () => {
   })
 
   it('un POST réussi ferme le formulaire et appelle refetch', async () => {
+    // v5.7.2 BREAKING: POST /api/categories requiert multipart + fichier image obligatoire
     const mockRefetch = vi.fn()
     useCategories.mockReturnValue(makeCategoriesMock({ refetch: mockRefetch }))
 
@@ -272,7 +316,7 @@ describe('QuestionsPage — Bouton + catégorie (#97)', () => {
       json: () => Promise.resolve({
         key: 'MA_CATEGORIE',
         name: 'Ma Categorie',
-        imageURL: '',
+        imageURL: '/files/categories/MA_CATEGORIE.png',
         isCustom: true,
       }),
     })
@@ -284,6 +328,9 @@ describe('QuestionsPage — Bouton + catégorie (#97)', () => {
     const input = container.querySelector('.add-category-input')
     fireEvent.change(input, { target: { value: 'Ma Categorie' } })
 
+    // Sélectionner un fichier (obligatoire depuis v5.7.2)
+    selectCategoryFile(container, 'ma-categorie.png')
+
     const validateBtn = container.querySelector('.add-category-validate')
     fireEvent.click(validateBtn)
 
@@ -294,5 +341,105 @@ describe('QuestionsPage — Bouton + catégorie (#97)', () => {
     })
 
     expect(mockRefetch).toHaveBeenCalledTimes(1)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// #101 — Couleurs boutons type = couleurs badges (classes CSS)
+// ---------------------------------------------------------------------------
+
+describe('QuestionsPage — Couleurs boutons type (#101)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    useGame.mockReturnValue(makeQPageMock())
+    useCategories.mockReturnValue(makeCategoriesMock())
+    global.fetch = vi.fn()
+  })
+
+  afterEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('le bouton SPEEDY possède la classe CSS "speedy" (pour ciblage couleur)', () => {
+    render(<QuestionsPage />)
+    const speedyBtn = screen.getByText('Speedy').closest('button')
+    expect(speedyBtn).toHaveClass('speedy')
+    expect(speedyBtn).toHaveClass('type-btn')
+  })
+
+  it('le bouton QCM possède la classe CSS "qcm"', () => {
+    render(<QuestionsPage />)
+    const qcmBtn = screen.getByText(/qcm/i).closest('button')
+    expect(qcmBtn).toHaveClass('qcm')
+    expect(qcmBtn).toHaveClass('type-btn')
+  })
+
+  it('le bouton MEMORY possède la classe CSS "memory"', () => {
+    render(<QuestionsPage />)
+    const memoryBtn = screen.getByText(/memory/i).closest('button')
+    expect(memoryBtn).toHaveClass('memory')
+    expect(memoryBtn).toHaveClass('type-btn')
+  })
+
+  it('le bouton MEMOTION possède la classe CSS "memotion"', () => {
+    render(<QuestionsPage />)
+    const memotionBtn = screen.getByText(/memotion/i).closest('button')
+    expect(memotionBtn).toHaveClass('memotion')
+    expect(memotionBtn).toHaveClass('type-btn')
+  })
+
+  it('le bouton ARDOISE possède la classe CSS "ardoise"', () => {
+    render(<QuestionsPage />)
+    const ardoiseBtn = screen.getByText(/ardoise/i).closest('button')
+    expect(ardoiseBtn).toHaveClass('ardoise')
+    expect(ardoiseBtn).toHaveClass('type-btn')
+  })
+
+  it('chaque bouton type actif possède uniquement sa propre classe "active"', () => {
+    render(<QuestionsPage />)
+
+    // Cliquer QCM
+    const qcmBtn = screen.getByText(/qcm/i).closest('button')
+    fireEvent.click(qcmBtn)
+    expect(qcmBtn).toHaveClass('active')
+
+    // Les autres ne doivent pas être actifs
+    const speedyBtn = screen.getByText('Speedy').closest('button')
+    expect(speedyBtn).not.toHaveClass('active')
+  })
+})
+
+// ---------------------------------------------------------------------------
+// #103 — État non-sélectionné = couleur badge subtile (classes CSS)
+// Vérifie que les boutons MEMOTION et ARDOISE conservent leur classe de type
+// même lorsqu'ils ne sont pas actifs (nécessaire pour le ciblage CSS couleur badge).
+// ---------------------------------------------------------------------------
+
+describe('QuestionsPage — État non-sélectionné (#103)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    useGame.mockReturnValue(makeQPageMock())
+    useCategories.mockReturnValue(makeCategoriesMock())
+    global.fetch = vi.fn()
+  })
+
+  afterEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('bouton MEMOTION non-sélectionné conserve la classe "memotion" (CSS couleur badge)', () => {
+    render(<QuestionsPage />)
+    // Par défaut, Speedy est actif → Memotion n'est PAS actif
+    const memotionBtn = screen.getByText(/memotion/i).closest('button')
+    expect(memotionBtn).not.toHaveClass('active')
+    expect(memotionBtn).toHaveClass('memotion')
+  })
+
+  it('bouton ARDOISE non-sélectionné conserve la classe "ardoise" (CSS couleur badge)', () => {
+    render(<QuestionsPage />)
+    // Par défaut, Speedy est actif → Ardoise n'est PAS actif
+    const ardoiseBtn = screen.getByText(/ardoise/i).closest('button')
+    expect(ardoiseBtn).not.toHaveClass('active')
+    expect(ardoiseBtn).toHaveClass('ardoise')
   })
 })

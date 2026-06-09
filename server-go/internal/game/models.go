@@ -367,8 +367,11 @@ type GameEvent struct {
 	Timestamp        int64  `json:"TIMESTAMP"`                   // Server timestamp in microseconds
 	QuestionID       string `json:"QUESTION_ID"`                 // Question ID
 	QuestionText     string `json:"QUESTION_TEXT"`               // Question text for display
-	QuestionCategory string `json:"QUESTION_CATEGORY,omitempty"` // Question category (GEOGRAPHY, etc.)
-	EventType        string `json:"EVENT_TYPE"`                  // "POINTS_AWARDED", "BUZZ", etc.
+	QuestionCategory    string `json:"QUESTION_CATEGORY,omitempty"`   // Question category key (GEOGRAPHY, etc.)
+	CategoryDisplayName string `json:"CATEGORY_NAME,omitempty"`       // Resolved display name (v5.7.9)
+	CategoryImageURL    string `json:"CATEGORY_IMAGE_URL,omitempty"`  // Resolved image URL (v5.7.9)
+	CategoryColor       string `json:"CATEGORY_COLOR,omitempty"`      // Resolved accent color (v5.7.9)
+	EventType           string `json:"EVENT_TYPE"`                    // "POINTS_AWARDED", "BUZZ", etc.
 	WinnerID         string `json:"WINNER_ID"`                   // MAC bumper or team name
 	WinnerName       string `json:"WINNER_NAME"`                 // Display name (player or team)
 	WinnerType       string `json:"WINNER_TYPE"`                 // "PLAYER" or "TEAM"

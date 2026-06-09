@@ -1607,18 +1607,22 @@ func (a *App) handleMotionDone(msg *protocol.Message) {
 		if team := a.engine.GetTeam(payload.WinnerTeam); team != nil {
 			teamColor = team.Color
 		}
+		catName, catImageURL, catColor := a.httpServer.ResolveCategoryMeta(questionCategory)
 		event := game.GameEvent{
-			Timestamp:        time.Now().UnixMicro(),
-			QuestionID:       questionID,
-			QuestionText:     questionText,
-			QuestionCategory: questionCategory,
-			EventType:        "POINTS_AWARDED",
-			WinnerID:         payload.WinnerTeam,
-			WinnerName:       payload.WinnerTeam,
-			WinnerType:       "TEAM",
-			TeamName:         payload.WinnerTeam,
-			TeamColor:        teamColor,
-			Points:           points,
+			Timestamp:           time.Now().UnixMicro(),
+			QuestionID:          questionID,
+			QuestionText:        questionText,
+			QuestionCategory:    questionCategory,
+			CategoryDisplayName: catName,
+			CategoryImageURL:    catImageURL,
+			CategoryColor:       catColor,
+			EventType:           "POINTS_AWARDED",
+			WinnerID:            payload.WinnerTeam,
+			WinnerName:          payload.WinnerTeam,
+			WinnerType:          "TEAM",
+			TeamName:            payload.WinnerTeam,
+			TeamColor:           teamColor,
+			Points:              points,
 		}
 		a.engine.AddGameEvent(event)
 		server.LogInfo(game.LogComponentEngine, "MEMOTION: %d pts → team %s", points, payload.WinnerTeam)
@@ -1699,20 +1703,24 @@ func (a *App) handleBumperPoints(msg *protocol.Message) {
 		questionText = state.Question.Question
 		questionCategory = string(state.Question.Category)
 	}
+	catName, catImageURL, catColor := a.httpServer.ResolveCategoryMeta(questionCategory)
 	event := game.GameEvent{
-		Timestamp:        time.Now().UnixMicro(),
-		QuestionID:       questionID,
-		QuestionText:     questionText,
-		QuestionCategory: questionCategory,
-		EventType:        "POINTS_AWARDED",
-		WinnerID:         payload.ID,
-		WinnerName:       bumperName,
-		WinnerType:       "PLAYER",
-		TeamName:         teamName,
-		TeamColor:        teamColor,
-		PlayerName:       bumperName,
-		PlayerColor:      playerColor,
-		Points:           payload.Points,
+		Timestamp:           time.Now().UnixMicro(),
+		QuestionID:          questionID,
+		QuestionText:        questionText,
+		QuestionCategory:    questionCategory,
+		CategoryDisplayName: catName,
+		CategoryImageURL:    catImageURL,
+		CategoryColor:       catColor,
+		EventType:           "POINTS_AWARDED",
+		WinnerID:            payload.ID,
+		WinnerName:          bumperName,
+		WinnerType:          "PLAYER",
+		TeamName:            teamName,
+		TeamColor:           teamColor,
+		PlayerName:          bumperName,
+		PlayerColor:         playerColor,
+		Points:              payload.Points,
 	}
 	a.engine.AddGameEvent(event)
 
@@ -1749,18 +1757,22 @@ func (a *App) handleTeamPoints(msg *protocol.Message) {
 		questionText = state.Question.Question
 		questionCategory = string(state.Question.Category)
 	}
+	catName, catImageURL, catColor := a.httpServer.ResolveCategoryMeta(questionCategory)
 	event := game.GameEvent{
-		Timestamp:        time.Now().UnixMicro(),
-		QuestionID:       questionID,
-		QuestionText:     questionText,
-		QuestionCategory: questionCategory,
-		EventType:        "POINTS_AWARDED",
-		WinnerID:         payload.Team,
-		WinnerName:       payload.Team,
-		WinnerType:       "TEAM",
-		TeamName:         payload.Team,
-		TeamColor:        teamColor,
-		Points:           payload.Points,
+		Timestamp:           time.Now().UnixMicro(),
+		QuestionID:          questionID,
+		QuestionText:        questionText,
+		QuestionCategory:    questionCategory,
+		CategoryDisplayName: catName,
+		CategoryImageURL:    catImageURL,
+		CategoryColor:       catColor,
+		EventType:           "POINTS_AWARDED",
+		WinnerID:            payload.Team,
+		WinnerName:          payload.Team,
+		WinnerType:          "TEAM",
+		TeamName:            payload.Team,
+		TeamColor:           teamColor,
+		Points:              payload.Points,
 	}
 	a.engine.AddGameEvent(event)
 
@@ -4307,6 +4319,13 @@ func (a *App) createDemoHistory() {
 		},
 	}
 
+	// Enrich each demo event with resolved category metadata (v5.7.9)
+	for i := range events {
+		catName, catImageURL, catColor := a.httpServer.ResolveCategoryMeta(events[i].QuestionCategory)
+		events[i].CategoryDisplayName = catName
+		events[i].CategoryImageURL = catImageURL
+		events[i].CategoryColor = catColor
+	}
 	for _, event := range events {
 		a.engine.AddGameEvent(event)
 	}

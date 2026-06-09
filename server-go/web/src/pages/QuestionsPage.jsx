@@ -42,9 +42,10 @@ export default function QuestionsPage() {
   const bgInputRef = useRef(null)
   const [draggedBgIndex, setDraggedBgIndex] = useState(null)
 
-  // Add category inline form state (#97)
+  // Add category inline form state (#97 + #100)
   const [showAddCategory, setShowAddCategory] = useState(false)
   const [newCategoryName, setNewCategoryName] = useState('')
+  const [newCategoryFile, setNewCategoryFile] = useState(null)
   const [addCategoryError, setAddCategoryError] = useState('')
 
   // Form state
@@ -1173,7 +1174,7 @@ export default function QuestionsPage() {
                     <div className="type-filter-row">
                       <button
                         type="button"
-                        className={`type-btn ${formData.type === 'SPEEDY' ? 'active' : ''}`}
+                        className={`type-btn speedy ${formData.type === 'SPEEDY' ? 'active' : ''}`}
                         onClick={() => handleInputChange('type', 'SPEEDY')}
                       >
                         Speedy
@@ -1254,32 +1255,45 @@ export default function QuestionsPage() {
                         value={newCategoryName}
                         maxLength={50}
                         onChange={(e) => { setNewCategoryName(e.target.value); setAddCategoryError('') }}
-                        onKeyDown={(e) => { if (e.key === 'Escape') { setShowAddCategory(false); setNewCategoryName('') } }}
+                        onKeyDown={(e) => { if (e.key === 'Escape') { setShowAddCategory(false); setNewCategoryName(''); setNewCategoryFile(null) } }}
                         autoFocus
                       />
+                      <label className="add-category-file-label">
+                        <input
+                          type="file"
+                          accept=".png,.jpg,.jpeg,.webp"
+                          style={{ display: 'none' }}
+                          onChange={(e) => { setNewCategoryFile(e.target.files[0] || null); setAddCategoryError('') }}
+                        />
+                        <span className="add-category-file-btn">
+                          {newCategoryFile ? '✓ ' + newCategoryFile.name : '📁 Choisir une image…'}
+                        </span>
+                      </label>
                       <div className="add-category-actions">
                         <button
                           type="button"
                           className="add-category-validate"
                           onClick={async () => {
                             if (!newCategoryName.trim()) { setAddCategoryError('Nom invalide'); return }
+                            if (!newCategoryFile) { setAddCategoryError('Image requise'); return }
                             try {
-                              const res = await fetch('/api/categories', {
-                                method: 'POST',
-                                headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({ name: newCategoryName.trim() })
-                              })
+                              const fd = new FormData()
+                              fd.append('name', newCategoryName.trim())
+                              fd.append('file', newCategoryFile)
+                              // Ne PAS définir Content-Type — le browser gère le boundary
+                              const res = await fetch('/api/categories', { method: 'POST', body: fd })
                               if (res.ok) {
                                 const created = await res.json()
                                 setShowAddCategory(false)
                                 setNewCategoryName('')
+                                setNewCategoryFile(null)
                                 setAddCategoryError('')
                                 await refetchCategories()
                                 handleInputChange('category', created.key)
                               } else if (res.status === 409) {
                                 setAddCategoryError('Cette catégorie existe déjà')
                               } else {
-                                setAddCategoryError('Nom invalide')
+                                setAddCategoryError('Nom invalide ou image non supportée')
                               }
                             } catch {
                               setAddCategoryError('Erreur réseau')
@@ -1291,7 +1305,7 @@ export default function QuestionsPage() {
                         <button
                           type="button"
                           className="add-category-cancel"
-                          onClick={() => { setShowAddCategory(false); setNewCategoryName(''); setAddCategoryError('') }}
+                          onClick={() => { setShowAddCategory(false); setNewCategoryName(''); setNewCategoryFile(null); setAddCategoryError('') }}
                         >
                           Annuler
                         </button>

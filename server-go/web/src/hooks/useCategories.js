@@ -16,7 +16,7 @@ export function useCategories() {
       })
       .then(data => {
         if (!cancelled) {
-          setCategories(data)
+          setCategories(data ?? [])
           setLoading(false)
         }
       })

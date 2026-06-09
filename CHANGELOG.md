@@ -3,6 +3,103 @@
 Historique des versions du projet BuzzControl.
 
 
+## [5.7.10] - 2026-06-08
+
+### Fixed
+- **PALMARES** : fix définitif — endpoint dédié `GET /palmares` retourne le palmarès complet pré-assemblé côté backend (catégorie + nom + imageURL + couleur + points équipes/joueurs). Plus aucune race condition possible : le frontend n'a qu'un seul fetch à faire. (#107)
+- **Dev** : proxies Vite `/history` et `/palmares` ajoutés — PALMARES testable en mode développement.
+
+### Technical
+- Nouvel endpoint `GET /palmares` : agrégation sans double-comptage (clé composite `team|player`), `ResolveCategoryMeta` O(K catégories distinctes), tri desc par `totalPoints`, réponse `[]` garantie si historique vide
+- Frontend : suppression du `categoryStats` useMemo (~80 lignes) — rendu direct depuis `PalmaresEntry.name / .imageURL / .color / .teams / .players`
+
+---
+
+## [5.7.9] - 2026-06-08
+
+### Fixed
+- **PALMARES** : race condition définitivement supprimée — `/history` retourne désormais `CATEGORY_NAME`, `CATEGORY_IMAGE_URL`, `CATEGORY_COLOR` dans chaque événement (résolu côté backend au moment de l'enregistrement). PALMARES n'a plus besoin de synchroniser deux fetches REST indépendants. (#108)
+- **PALMARES** : `catKnown` — catégorie avec nom embarqué mais sans image affiche correctement l'icône emoji (pas `❓`). (#108)
+
+### Technical
+- `GameEvent` : 3 nouveaux champs `omitempty` (`CATEGORY_NAME`, `CATEGORY_IMAGE_URL`, `CATEGORY_COLOR`) — rétrocompatibles avec l'historique existant
+- `ResolveCategoryMeta(key)` : résolution des métadonnées catégorie (hardcodées + custom avec sidecar) utilisée aux 3 sites d'enregistrement d'événements
+
+---
+
+## [5.7.8] - 2026-06-07
+
+### Fixed
+- **PALMARES — race condition catégories** : suppression de `refetchCategories()` dans l'effet PALMARES — cet appel annulait le fetch initial de `useCategories` (cleanup fetchTick 0→1), empêchant les catégories custom d'apparaître. Le fetch initial de mount suffit, les catégories étant disponibles bien avant la fin de partie.
+- **`useCategories` — null guard** : `setCategories(data ?? [])` protège contre une réponse API `null` (cas défensif).
+
+---
+
+## [5.7.7] - 2026-06-07
+
+### Fixed
+- **PALMARES — race condition catégories custom** : le bloc PALMARES ne s'affiche plus avant que `GET /api/categories` ait répondu (loading guard). Élimine le `❓` persistant en cas de chargement lent ou d'ouverture du TV pendant PALMARES.
+- **PALMARES — retry automatique** : si `GET /api/categories` échoue silencieusement, un retry automatique est déclenché 2 secondes après, sans action utilisateur.
+- **PALMARES — nom original des catégories custom** : le backend persiste maintenant le nom original saisi lors de la création (sidecar JSON). `GET /api/categories` retourne `"Sport Extrême"` au lieu de `"SPORT_EXTREME"`. Rétrocompatible (les catégories créées avant v5.7.7 continuent d'afficher leur nom technique).
+- **PALMARES — normalize défensif sur les clés** : le lookup de catégorie tolère les variations de casse entre l'historique de jeu et les clés API.
+
+---
+
+## [5.7.6] - 2026-06-07
+
+### Fixed
+- **#106** — Palmarès : image et couleur des catégories. Le bloc PALMARES utilise désormais un lookup direct sur `apiCategories` (`GET /api/categories`) au lieu de `categoryMeta()`. Le backend est la seule source de vérité pour `name`, `imageURL` et `color`.
+  - Frontend ne distingue plus custom vs hardcoded
+  - `CategoryInfo` expose désormais un champ `color` (8 couleurs accent pour catégories hardcodées)
+  - Noms de 3 catégories hardcodées enrichis : `Arts & Littérature`, `Sciences & Nature`, `Sports & Loisirs`
+  - Refetch automatique des catégories à l'entrée en PALMARES pour garantir données fraîches
+  - Icône emoji correcte par catégorie hardcodée (via dict `CATEGORIES`) en l'absence d'image uploadée
+  - Fallback couleur `#6b7280` correctement appliqué aux catégories custom (chaîne vide `""` traitée par `||`)
+
+---
+
+## [5.7.5] - 2026-06-07
+
+### Fixed
+- **#105** — Palmarès et vues TV (READY, QCM, MEMORY, MEMOTION) : les catégories custom n'étaient jamais résolues en production car le filtre `isCustom` retournait toujours une liste vide (champ absent de la réponse API). Correction : passage direct de `apiCategories` complet à `categoryMeta()`, suppression de la variable `customCategories` basée sur `isCustom`.
+
+---
+
+## [5.7.4] - 2026-06-07
+
+### Fixed
+- **#104** — Palmarès : l'image des catégories custom est désormais affichée (vignette 2rem×2rem) à la place de l'icône générique. Les catégories hardcodées conservent leur icône emoji.
+
+---
+
+## [5.7.3] - 2026-06-07
+
+### Fixed
+- **#102** — Palmarès : les catégories custom créées via le bouton '+' affichent désormais leur nom au lieu de "UNKNOWN". Résolution via `categoryMeta(key, customCategories)` ; fallback en Title Case pour les clés non reconnues.
+- **#103** — Boutons mode de jeu (page Quiz/Anim) : l'état non-sélectionné affiche maintenant la couleur du badge en version subtile (bordure + fond 10% opacité), cohérent avec l'état actif (50% opacité). MEMOTION et ARDOISE alignés sur la palette badge (amber / emerald).
+
+---
+
+## [5.7.2] - 2026-06-07
+
+### Fixed
+- **#100** — Bouton '+' catégorie : l'ajout d'une catégorie requiert désormais un nom **et** une image (multipart/form-data). Supprime la création JSON texte-only de v5.7.1.
+  - `POST /api/categories` accepte désormais `multipart/form-data` avec champs `name` + `file` (image obligatoire)
+  - `GET /api/categories` ne scanne plus les fichiers `.json` ; seules les images (`png/jpg/jpeg/webp`) sont retournées comme catégories custom
+  - Limitation de taille : `http.MaxBytesReader(10 MB)` pour uploads d'images
+  - Clé auto-générée toujours via `toUpperSnakeCase(name)`, image sauvegardée comme `<KEY>.<ext>`
+- **#101** — Couleurs boutons mode de jeu (SPEEDY, QCM, MEMORY, MEMOTION, ARDOISE) alignées sur les couleurs de badge des cartes de questions
+  - Bordure : 100% couleur badge
+  - Fond : 50% opacité couleur badge
+  - Alias CSS `.type-speedy` introduit pour cohérence avec renommage NORMAL → SPEEDY
+
+### Changements techniques (BREAKING)
+
+- `POST /api/categories` : body JSON → `multipart/form-data` (champs `name` + `file` obligatoire). Voir `contracts/http-endpoints.md`.
+- `GET /api/categories` : suppression du scan des fichiers `.json` (uniquement images désormais).
+
+---
+
 ## [5.7.1] - 2026-06-07
 
 ### Added

@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import Card, { CardHeader, CardBody } from '../components/Card'
 import Podium from '../components/Podium'
@@ -6,119 +6,39 @@ import { CATEGORIES } from '../components/QuestionCard'
 import './CategoryPalmaresPage.css'
 
 export default function CategoryPalmaresPage() {
-  const [history, setHistory] = useState([])
+  // v5.7.10 : GET /palmares retourne tout pré-assemblé (name/imageURL/color/teams/players)
+  const [palmares, setPalmares] = useState([])
   const [loading, setLoading] = useState(true)
   const [expandedCategories, setExpandedCategories] = useState({})
 
-  // Fetch history from server
+  // Fetch pre-assembled palmares from server (v5.7.10)
   useEffect(() => {
-    const fetchHistory = async () => {
+    const fetchPalmares = async () => {
       try {
-        const response = await fetch('/history')
+        const response = await fetch('/palmares')
         if (response.ok) {
           const data = await response.json()
-          setHistory(data || [])
+          setPalmares(data || [])
         }
       } catch (error) {
-        console.error('Failed to fetch history:', error)
+        console.error('Failed to fetch palmares:', error)
       } finally {
         setLoading(false)
       }
     }
 
-    fetchHistory()
+    fetchPalmares()
     // Refresh every 5 seconds
-    const interval = setInterval(fetchHistory, 5000)
+    const interval = setInterval(fetchPalmares, 5000)
     return () => clearInterval(interval)
   }, [])
 
-  // Aggregate stats by category
-  const categoryStats = useMemo(() => {
-    const stats = {}
-
-    history.forEach(event => {
-      const category = event.QUESTION_CATEGORY || 'UNKNOWN'
-
-      if (!stats[category]) {
-        stats[category] = {
-          teams: {},
-          players: {},
-          totalTeamPoints: 0,
-          totalPlayerPoints: 0,
-          eventCount: 0,
-        }
-      }
-
-      stats[category].eventCount++
-
-      if (event.WINNER_TYPE === 'TEAM' && event.TEAM_NAME) {
-        // Points awarded to team
-        if (!stats[category].teams[event.TEAM_NAME]) {
-          stats[category].teams[event.TEAM_NAME] = {
-            name: event.TEAM_NAME,
-            color: event.TEAM_COLOR,
-            points: 0,
-          }
-        }
-        stats[category].teams[event.TEAM_NAME].points += event.POINTS
-        stats[category].totalTeamPoints += event.POINTS
-      } else if (event.WINNER_TYPE === 'PLAYER' && event.PLAYER_NAME) {
-        // Points awarded to player
-        const key = `${event.TEAM_NAME}|${event.PLAYER_NAME}`
-        if (!stats[category].players[key]) {
-          stats[category].players[key] = {
-            name: event.PLAYER_NAME,
-            team: event.TEAM_NAME,
-            teamColor: event.TEAM_COLOR,
-            playerColor: event.PLAYER_COLOR,
-            points: 0,
-          }
-        }
-        stats[category].players[key].points += event.POINTS
-        stats[category].totalPlayerPoints += event.POINTS
-      }
-    })
-
-    // Convert to arrays, sort and calculate ranks
-    Object.keys(stats).forEach(category => {
-      // Sort teams by points
-      const sortedTeams = Object.values(stats[category].teams)
-        .sort((a, b) => b.points - a.points)
-
-      // Calculate team ranks with ties
-      let currentRank = 1
-      stats[category].sortedTeams = sortedTeams.map((team, index) => {
-        if (index > 0 && sortedTeams[index - 1].points === team.points) {
-          return { ...team, rank: currentRank }
-        }
-        currentRank = index + 1
-        return { ...team, rank: currentRank }
-      })
-
-      // Sort players by points
-      const sortedPlayers = Object.values(stats[category].players)
-        .sort((a, b) => b.points - a.points)
-
-      // Calculate player ranks with ties
-      currentRank = 1
-      stats[category].sortedPlayers = sortedPlayers.map((player, index) => {
-        if (index > 0 && sortedPlayers[index - 1].points === player.points) {
-          return { ...player, rank: currentRank }
-        }
-        currentRank = index + 1
-        return { ...player, rank: currentRank }
-      })
-    })
-
-    // Filter out categories with no events and sort by total points
-    return Object.entries(stats)
-      .filter(([_, data]) => data.eventCount > 0)
-      .sort((a, b) => {
-        const totalA = a[1].totalTeamPoints + a[1].totalPlayerPoints
-        const totalB = b[1].totalTeamPoints + b[1].totalPlayerPoints
-        return totalB - totalA
-      })
-  }, [history])
+  // Add ranks to a sorted list (ties get the same rank)
+  const addRanks = (items) => items.reduce((acc, item, idx) => {
+    const rank = idx === 0 ? 1 : (acc[idx - 1].points === item.points ? acc[idx - 1].rank : idx + 1)
+    acc.push({ ...item, rank })
+    return acc
+  }, [])
 
   const toggleCategory = (category) => {
     setExpandedCategories(prev => ({
@@ -129,7 +49,7 @@ export default function CategoryPalmaresPage() {
 
   const expandAll = () => {
     const allExpanded = {}
-    categoryStats.forEach(([cat]) => allExpanded[cat] = true)
+    palmares.forEach(entry => allExpanded[entry.category] = true)
     setExpandedCategories(allExpanded)
   }
 
@@ -144,17 +64,17 @@ export default function CategoryPalmaresPage() {
   }
 
   // Transform for Podium component (expects { name, score, color })
-  const transformForPodium = (items, isTeam = true) => {
+  const transformForPodium = (items, teamColorMap = {}) => {
     return items.map(item => ({
       name: item.name,
       score: item.points,
-      color: isTeam ? item.color : item.teamColor,
+      color: item.color || teamColorMap[item.team] || null,
       rank: item.rank,
     }))
   }
 
-  const totalEvents = history.length
-  const totalCategories = categoryStats.length
+  const totalCategories = palmares.length
+  const totalPoints = palmares.reduce((s, e) => s + e.totalPoints, 0)
 
   if (loading) {
     return (
@@ -174,10 +94,10 @@ export default function CategoryPalmaresPage() {
           <div>
             <h1 className="page-title">Palmares par Categorie</h1>
             <p className="page-subtitle">
-              {totalCategories} categorie{totalCategories !== 1 ? 's' : ''} &bull; {totalEvents} evenement{totalEvents !== 1 ? 's' : ''}
+              {totalCategories} categorie{totalCategories !== 1 ? 's' : ''} &bull; {totalPoints} point{totalPoints !== 1 ? 's' : ''}
             </p>
           </div>
-          {categoryStats.length > 0 && (
+          {palmares.length > 0 && (
             <div className="header-actions">
               <button className="action-btn" onClick={expandAll}>Tout ouvrir</button>
               <button className="action-btn" onClick={collapseAll}>Tout fermer</button>
@@ -186,7 +106,7 @@ export default function CategoryPalmaresPage() {
         </div>
       </header>
 
-      {categoryStats.length === 0 ? (
+      {palmares.length === 0 ? (
         <Card className="empty-state">
           <CardBody>
             <p className="empty-message">Aucun evenement enregistre</p>
@@ -196,15 +116,33 @@ export default function CategoryPalmaresPage() {
       ) : (
         <div className="categories-grid">
           <AnimatePresence>
-            {categoryStats.map(([category, data], index) => {
-              const isExpanded = expandedCategories[category]
-              const catInfo = CATEGORIES[category] || { label: category, icon: '❓', color: 'var(--gray-400)' }
-              const hasTeams = data.sortedTeams.length > 0
-              const hasPlayers = data.sortedPlayers.length > 0
+            {/* v5.7.10 : PalmaresEntry pré-assemblé — name/imageURL/color/teams/players directs */}
+            {palmares.map((entry, index) => {
+              const isExpanded = expandedCategories[entry.category]
+              // v5.7.10 : name et color viennent directement de l'entry (backend résout)
+              // Plus de fallback ❓ — si catégorie inconnue, backend retourne name vide et on titre-case la clé
+              const catLabel = entry.name
+                || (entry.category === 'UNKNOWN' ? 'Inconnue' : entry.category.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, c => c.toUpperCase()))
+              const catIcon  = entry.imageURL
+                ? <img src={entry.imageURL} alt={catLabel} style={{ width: '1.25rem', height: '1.25rem', objectFit: 'cover', borderRadius: '0.125rem' }} />
+                : (CATEGORIES[entry.category]?.icon ?? '📷')
+              const catColor = entry.color || CATEGORIES[entry.category]?.color || 'var(--gray-400)'
+              const hasTeams   = entry.teams.length > 0
+              const hasPlayers = entry.players.length > 0
+
+              // ranks (items sorted desc by backend)
+              const rankedTeams   = addRanks(entry.teams)
+              const rankedPlayers = addRanks(entry.players)
+
+              // team color lookup for player rows
+              const teamColorMap = Object.fromEntries(entry.teams.map(t => [t.name, t.color]))
+
+              const totalTeamPoints   = entry.teams.reduce((s, t) => s + t.points, 0)
+              const totalPlayerPoints = entry.players.reduce((s, p) => s + p.points, 0)
 
               return (
                 <motion.div
-                  key={category}
+                  key={entry.category}
                   initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: -20 }}
@@ -212,28 +150,28 @@ export default function CategoryPalmaresPage() {
                   className="category-card-wrapper"
                 >
                   <Card className={`category-card ${isExpanded ? 'expanded' : 'collapsed'}`}>
-                    <CardHeader onClick={() => toggleCategory(category)} className="clickable category-header">
+                    <CardHeader onClick={() => toggleCategory(entry.category)} className="clickable category-header">
                       <div className="category-header-content">
                         <span
                           className="category-icon-badge"
-                          style={{ backgroundColor: catInfo.color }}
+                          style={{ backgroundColor: catColor }}
                         >
-                          {catInfo.icon}
+                          {catIcon}
                         </span>
-                        <span className="category-name">{catInfo.label}</span>
+                        <span className="category-name">{catLabel}</span>
                         <span className={`collapse-icon ${isExpanded ? 'open' : ''}`}>▶</span>
                       </div>
                       <div className="category-stats">
                         {hasTeams && (
                           <span className="stat-badge team-stat" title="Points equipes">
                             <span className="stat-icon">👥</span>
-                            <span className="stat-value">{data.totalTeamPoints} pts</span>
+                            <span className="stat-value">{totalTeamPoints} pts</span>
                           </span>
                         )}
                         {hasPlayers && (
                           <span className="stat-badge player-stat" title="Points joueurs">
                             <span className="stat-icon">👤</span>
-                            <span className="stat-value">{data.totalPlayerPoints} pts</span>
+                            <span className="stat-value">{totalPlayerPoints} pts</span>
                           </span>
                         )}
                       </div>
@@ -258,13 +196,13 @@ export default function CategoryPalmaresPage() {
                                   </h3>
                                   <div className="podium-container">
                                     <Podium
-                                      teams={transformForPodium(data.sortedTeams.slice(0, 3), true)}
+                                      teams={transformForPodium(rankedTeams.slice(0, 3))}
                                       variant="compact"
                                     />
                                   </div>
-                                  {data.sortedTeams.length > 3 && (
+                                  {rankedTeams.length > 3 && (
                                     <div className="ranking-list">
-                                      {data.sortedTeams.slice(3).map((team, idx) => (
+                                      {rankedTeams.slice(3).map((team) => (
                                         <div key={team.name} className="ranking-item">
                                           <span className="ranking-position">{team.rank}</span>
                                           <span
@@ -289,18 +227,18 @@ export default function CategoryPalmaresPage() {
                                   </h3>
                                   <div className="podium-container">
                                     <Podium
-                                      teams={transformForPodium(data.sortedPlayers.slice(0, 3), false)}
+                                      teams={transformForPodium(rankedPlayers.slice(0, 3), teamColorMap)}
                                       variant="compact"
                                     />
                                   </div>
-                                  {data.sortedPlayers.length > 3 && (
+                                  {rankedPlayers.length > 3 && (
                                     <div className="ranking-list">
-                                      {data.sortedPlayers.slice(3).map((player, idx) => (
+                                      {rankedPlayers.slice(3).map((player) => (
                                         <div key={`${player.team}|${player.name}`} className="ranking-item">
                                           <span className="ranking-position">{player.rank}</span>
                                           <span
                                             className="ranking-dot"
-                                            style={{ backgroundColor: getRgbColor(player.teamColor) }}
+                                            style={{ backgroundColor: getRgbColor(teamColorMap[player.team]) }}
                                           />
                                           <span className="ranking-name">{player.name}</span>
                                           <span className="ranking-team">({player.team})</span>
@@ -332,7 +270,7 @@ export default function CategoryPalmaresPage() {
                             <div className="summary-row">
                               <span className="summary-label">Top equipe:</span>
                               <div className="summary-badges">
-                                {data.sortedTeams.slice(0, 3).map((team, idx) => (
+                                {rankedTeams.slice(0, 3).map((team, idx) => (
                                   <span
                                     key={team.name}
                                     className="summary-badge"
@@ -354,14 +292,14 @@ export default function CategoryPalmaresPage() {
                             <div className="summary-row">
                               <span className="summary-label">Top joueur:</span>
                               <div className="summary-badges">
-                                {data.sortedPlayers.slice(0, 3).map((player, idx) => (
+                                {rankedPlayers.slice(0, 3).map((player, idx) => (
                                   <span
                                     key={`${player.team}|${player.name}`}
                                     className="summary-badge"
                                     style={{
-                                      backgroundColor: `${getRgbColor(player.teamColor)}20`,
-                                      borderColor: getRgbColor(player.teamColor),
-                                      color: getRgbColor(player.teamColor),
+                                      backgroundColor: `${getRgbColor(teamColorMap[player.team])}20`,
+                                      borderColor: getRgbColor(teamColorMap[player.team]),
+                                      color: getRgbColor(teamColorMap[player.team]),
                                     }}
                                   >
                                     <span className="badge-rank">{idx + 1}</span>

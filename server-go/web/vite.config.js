@@ -26,6 +26,8 @@ export default defineConfig({
       },
       '/api': 'http://localhost:80',
       '/questions': 'http://localhost:80',
+      '/history': 'http://localhost:80',
+      '/palmares': 'http://localhost:80',
       '/backup': 'http://localhost:80',
       '/config.json': 'http://localhost:80',
       '/files': 'http://localhost:80',

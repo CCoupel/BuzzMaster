@@ -1367,16 +1367,42 @@ func TestRestoreWithoutCategories(t *testing.T) {
 // v5.7.1 — #97 POST /api/categories
 // ========================================
 
-// TestPostCategory_Valid verifies that a valid POST /api/categories request creates
-// the category file on disk and returns the correct CategoryInfo JSON.
+// minimalPNG is a valid 1x1 PNG used as test image content (v5.7.2 — #100)
+var minimalPNG = []byte{
+	0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A,
+	0x00, 0x00, 0x00, 0x0D, 0x49, 0x48, 0x44, 0x52,
+	0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01,
+	0x08, 0x02, 0x00, 0x00, 0x00, 0x90, 0x77, 0x53,
+	0xDE, 0x00, 0x00, 0x00, 0x0C, 0x49, 0x44, 0x41,
+	0x54, 0x08, 0xD7, 0x63, 0xF8, 0xCF, 0xC0, 0x00,
+	0x00, 0x00, 0x02, 0x00, 0x01, 0xE2, 0x21, 0xBC,
+	0x33, 0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4E,
+	0x44, 0xAE, 0x42, 0x60, 0x82,
+}
+
+// newMultipartCategoryRequest builds a multipart/form-data POST request for /api/categories.
+// If filename is empty, no "file" field is included (tests missing-file validation).
+func newMultipartCategoryRequest(name, filename string, fileContent []byte) *http.Request {
+	body := &bytes.Buffer{}
+	writer := multipart.NewWriter(body)
+	_ = writer.WriteField("name", name)
+	if filename != "" {
+		part, _ := writer.CreateFormFile("file", filename)
+		part.Write(fileContent)
+	}
+	writer.Close()
+	req := httptest.NewRequest("POST", "/api/categories", body)
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+	return req
+}
+
+// TestPostCategory_Valid verifies that a valid multipart POST /api/categories creates
+// the image file on disk and returns the correct CategoryInfo JSON (v5.7.2 — #100).
 func TestPostCategory_Valid(t *testing.T) {
 	server, dataDir := setupTestHTTPServer(t)
-
 	os.MkdirAll(filepath.Join(dataDir, "files", "categories"), 0755)
 
-	body := strings.NewReader(`{"name": "Ma Categorie"}`)
-	req := httptest.NewRequest("POST", "/api/categories", body)
-	req.Header.Set("Content-Type", "application/json")
+	req := newMultipartCategoryRequest("Ma Categorie", "image.png", minimalPNG)
 	w := httptest.NewRecorder()
 	server.mux.ServeHTTP(w, req)
 
@@ -1398,14 +1424,14 @@ func TestPostCategory_Valid(t *testing.T) {
 	if !cat.IsCustom {
 		t.Error("Expected IsCustom=true for custom category")
 	}
-	if cat.ImageURL != "" {
-		t.Errorf("Expected empty imageURL for text-only category, got '%s'", cat.ImageURL)
+	if cat.ImageURL == "" {
+		t.Error("Expected non-empty imageURL for image category")
 	}
 
-	// Verify the JSON file was created on disk
-	filePath := filepath.Join(dataDir, "files", "categories", "MA_CATEGORIE.json")
+	// Verify the image file was created on disk
+	filePath := filepath.Join(dataDir, "files", "categories", "MA_CATEGORIE.png")
 	if _, err := os.Stat(filePath); os.IsNotExist(err) {
-		t.Error("Expected MA_CATEGORIE.json to be created on disk, file not found")
+		t.Error("Expected MA_CATEGORIE.png to be created on disk, file not found")
 	}
 }
 
@@ -1415,23 +1441,51 @@ func TestPostCategory_EmptyName(t *testing.T) {
 	os.MkdirAll(filepath.Join(dataDir, "files", "categories"), 0755)
 
 	tests := []struct {
-		name string
-		body string
+		label    string
+		name     string
+		filename string
 	}{
-		{"empty name field", `{"name": ""}`},
-		{"missing name field", `{}`},
+		{"empty name field", "", "image.png"},
+		{"missing name field (empty string)", "", "image.png"},
 	}
 	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			req := httptest.NewRequest("POST", "/api/categories", strings.NewReader(tt.body))
-			req.Header.Set("Content-Type", "application/json")
+		t.Run(tt.label, func(t *testing.T) {
+			req := newMultipartCategoryRequest(tt.name, tt.filename, minimalPNG)
 			w := httptest.NewRecorder()
 			server.mux.ServeHTTP(w, req)
-
 			if w.Code != http.StatusBadRequest {
-				t.Errorf("%s: Expected 400, got %d", tt.name, w.Code)
+				t.Errorf("%s: Expected 400, got %d", tt.label, w.Code)
 			}
 		})
+	}
+}
+
+// TestPostCategory_MissingFile verifies that POST /api/categories without a file returns 400.
+func TestPostCategory_MissingFile(t *testing.T) {
+	server, dataDir := setupTestHTTPServer(t)
+	os.MkdirAll(filepath.Join(dataDir, "files", "categories"), 0755)
+
+	// No filename → no "file" field in form
+	req := newMultipartCategoryRequest("Ma Categorie", "", nil)
+	w := httptest.NewRecorder()
+	server.mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("Expected 400 when file field is missing, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+// TestPostCategory_InvalidFileType verifies that POST /api/categories with a non-image file returns 400.
+func TestPostCategory_InvalidFileType(t *testing.T) {
+	server, dataDir := setupTestHTTPServer(t)
+	os.MkdirAll(filepath.Join(dataDir, "files", "categories"), 0755)
+
+	req := newMultipartCategoryRequest("Ma Categorie", "document.pdf", []byte("%PDF-"))
+	w := httptest.NewRecorder()
+	server.mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("Expected 400 for invalid file type, got %d: %s", w.Code, w.Body.String())
 	}
 }
 
@@ -1441,10 +1495,7 @@ func TestPostCategory_NameTooLong(t *testing.T) {
 	os.MkdirAll(filepath.Join(dataDir, "files", "categories"), 0755)
 
 	longName := strings.Repeat("A", 51) // 51 chars — above the 50-char limit
-	body := `{"name": "` + longName + `"}`
-
-	req := httptest.NewRequest("POST", "/api/categories", strings.NewReader(body))
-	req.Header.Set("Content-Type", "application/json")
+	req := newMultipartCategoryRequest(longName, "image.png", minimalPNG)
 	w := httptest.NewRecorder()
 	server.mux.ServeHTTP(w, req)
 
@@ -1459,10 +1510,7 @@ func TestPostCategory_NameExactlyFiftyChars(t *testing.T) {
 	os.MkdirAll(filepath.Join(dataDir, "files", "categories"), 0755)
 
 	exactName := strings.Repeat("A", 50) // exactly 50 chars — at the limit
-	body := `{"name": "` + exactName + `"}`
-
-	req := httptest.NewRequest("POST", "/api/categories", strings.NewReader(body))
-	req.Header.Set("Content-Type", "application/json")
+	req := newMultipartCategoryRequest(exactName, "image.png", minimalPNG)
 	w := httptest.NewRecorder()
 	server.mux.ServeHTTP(w, req)
 
@@ -1472,16 +1520,13 @@ func TestPostCategory_NameExactlyFiftyChars(t *testing.T) {
 }
 
 // TestPostCategory_ConflictHardcoded verifies that POST /api/categories returns 409
-// when the derived key matches a hardcoded category (e.g. "Geographie" → GEOGRAPHY).
+// when the derived key matches a hardcoded category.
 func TestPostCategory_ConflictHardcoded(t *testing.T) {
 	server, dataDir := setupTestHTTPServer(t)
 	os.MkdirAll(filepath.Join(dataDir, "files", "categories"), 0755)
 
-	// "Geographie" derives to "GEOGRAPHIE" — but "GEOGRAPHY" is hardcoded.
-	// Let's use "Science" → "SCIENCE" which is hardcoded.
-	body := strings.NewReader(`{"name": "Science"}`)
-	req := httptest.NewRequest("POST", "/api/categories", body)
-	req.Header.Set("Content-Type", "application/json")
+	// "Science" → "SCIENCE" which is a hardcoded category key.
+	req := newMultipartCategoryRequest("Science", "image.png", minimalPNG)
 	w := httptest.NewRecorder()
 	server.mux.ServeHTTP(w, req)
 
@@ -1497,19 +1542,15 @@ func TestPostCategory_ConflictExistingCustom(t *testing.T) {
 	os.MkdirAll(filepath.Join(dataDir, "files", "categories"), 0755)
 
 	// First POST — should succeed
-	body1 := strings.NewReader(`{"name": "Mon Quiz"}`)
-	req1 := httptest.NewRequest("POST", "/api/categories", body1)
-	req1.Header.Set("Content-Type", "application/json")
+	req1 := newMultipartCategoryRequest("Mon Quiz", "image.png", minimalPNG)
 	w1 := httptest.NewRecorder()
 	server.mux.ServeHTTP(w1, req1)
 	if w1.Code != http.StatusOK {
-		t.Fatalf("First POST should succeed, got %d", w1.Code)
+		t.Fatalf("First POST should succeed, got %d: %s", w1.Code, w1.Body.String())
 	}
 
-	// Second POST with same key — should return 409
-	body2 := strings.NewReader(`{"name": "Mon Quiz"}`)
-	req2 := httptest.NewRequest("POST", "/api/categories", body2)
-	req2.Header.Set("Content-Type", "application/json")
+	// Second POST with same derived key "MON_QUIZ" — should return 409
+	req2 := newMultipartCategoryRequest("Mon Quiz", "photo.jpg", minimalPNG)
 	w2 := httptest.NewRecorder()
 	server.mux.ServeHTTP(w2, req2)
 
@@ -1519,19 +1560,17 @@ func TestPostCategory_ConflictExistingCustom(t *testing.T) {
 }
 
 // TestPostCategory_AppearsInGetCategories verifies that a newly created custom category
-// is returned by the subsequent GET /api/categories request.
+// is returned by the subsequent GET /api/categories request with a non-empty imageURL.
 func TestPostCategory_AppearsInGetCategories(t *testing.T) {
 	server, dataDir := setupTestHTTPServer(t)
 	os.MkdirAll(filepath.Join(dataDir, "files", "categories"), 0755)
 
 	// Create a custom category
-	body := strings.NewReader(`{"name": "Super Quiz"}`)
-	req := httptest.NewRequest("POST", "/api/categories", body)
-	req.Header.Set("Content-Type", "application/json")
+	req := newMultipartCategoryRequest("Super Quiz", "image.png", minimalPNG)
 	w := httptest.NewRecorder()
 	server.mux.ServeHTTP(w, req)
 	if w.Code != http.StatusOK {
-		t.Fatalf("POST failed with %d", w.Code)
+		t.Fatalf("POST failed with %d: %s", w.Code, w.Body.String())
 	}
 
 	// Now GET the categories list
@@ -1551,13 +1590,121 @@ func TestPostCategory_AppearsInGetCategories(t *testing.T) {
 			if !item.IsCustom {
 				t.Error("Expected IsCustom=true for SUPER_QUIZ")
 			}
+			// Name must be the original display name (v5.7.7 sidecar JSON)
 			if item.Name != "Super Quiz" {
-				t.Errorf("Expected name 'Super Quiz', got '%s'", item.Name)
+				t.Errorf("Expected Name=%q, got %q", "Super Quiz", item.Name)
+			}
+			if item.ImageURL == "" {
+				t.Error("Expected non-empty imageURL for SUPER_QUIZ after multipart POST")
 			}
 		}
 	}
 	if !found {
 		t.Error("Expected SUPER_QUIZ to appear in GET /api/categories after POST")
+	}
+}
+
+// TestPostCategory_SidecarNamePersisted verifies that the original display name
+// is persisted in a sidecar JSON and retrieved by GET /api/categories (v5.7.7).
+func TestPostCategory_SidecarNamePersisted(t *testing.T) {
+	server, dataDir := setupTestHTTPServer(t)
+	catDir := filepath.Join(dataDir, "files", "categories")
+	os.MkdirAll(catDir, 0755)
+
+	// Create category with a display name different from the key
+	req := newMultipartCategoryRequest("Mon Super Jeu", "image.webp", minimalPNG)
+	w := httptest.NewRecorder()
+	server.mux.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("POST failed with %d: %s", w.Code, w.Body.String())
+	}
+
+	// Verify sidecar JSON was created on disk
+	sidecarPath := filepath.Join(catDir, "MON_SUPER_JEU.json")
+	data, err := os.ReadFile(sidecarPath)
+	if err != nil {
+		t.Fatalf("Sidecar JSON not found at %s: %v", sidecarPath, err)
+	}
+	var meta struct {
+		Name string `json:"name"`
+	}
+	if err := json.Unmarshal(data, &meta); err != nil {
+		t.Fatalf("Failed to parse sidecar JSON: %v", err)
+	}
+	if meta.Name != "Mon Super Jeu" {
+		t.Errorf("Sidecar name = %q, want %q", meta.Name, "Mon Super Jeu")
+	}
+
+	// GET /api/categories must return original name
+	req2 := httptest.NewRequest("GET", "/api/categories", nil)
+	w2 := httptest.NewRecorder()
+	server.mux.ServeHTTP(w2, req2)
+
+	var items []categoryItem
+	if err := json.NewDecoder(w2.Body).Decode(&items); err != nil {
+		t.Fatalf("Failed to decode GET response: %v", err)
+	}
+
+	found := false
+	for _, item := range items {
+		if item.Key == "MON_SUPER_JEU" {
+			found = true
+			if item.Name != "Mon Super Jeu" {
+				t.Errorf("GET name = %q, want %q", item.Name, "Mon Super Jeu")
+			}
+		}
+	}
+	if !found {
+		t.Error("MON_SUPER_JEU not found in GET /api/categories")
+	}
+}
+
+// TestGetCategories_SidecarFallback verifies that when a custom category image exists
+// without a sidecar JSON, GET /api/categories returns the raw file stem as the name (v5.7.7).
+// This is the fallback path when sidecar is missing (e.g. categories created before v5.7.7).
+func TestGetCategories_SidecarFallback(t *testing.T) {
+	server, dataDir := setupTestHTTPServer(t)
+	catDir := filepath.Join(dataDir, "files", "categories")
+	os.MkdirAll(catDir, 0755)
+
+	// Write only the image file — no sidecar JSON alongside it
+	imgPath := filepath.Join(catDir, "MON_JEU.png")
+	if err := os.WriteFile(imgPath, minimalPNG, 0644); err != nil {
+		t.Fatalf("Failed to write test image: %v", err)
+	}
+	// Deliberately no MON_JEU.json sidecar
+
+	req := httptest.NewRequest("GET", "/api/categories", nil)
+	w := httptest.NewRecorder()
+	server.mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("GET /api/categories returned %d: %s", w.Code, w.Body.String())
+	}
+
+	var items []categoryItem
+	if err := json.NewDecoder(w.Body).Decode(&items); err != nil {
+		t.Fatalf("Failed to decode GET response: %v", err)
+	}
+
+	found := false
+	for _, item := range items {
+		if item.Key == "MON_JEU" {
+			found = true
+			// Without sidecar, Name falls back to the raw file stem
+			if item.Name != "MON_JEU" {
+				t.Errorf("Without sidecar: Name = %q, want raw stem %q", item.Name, "MON_JEU")
+			}
+			if item.ImageURL == "" {
+				t.Error("Expected non-empty imageURL for MON_JEU")
+			}
+			if !item.IsCustom {
+				t.Error("Expected IsCustom=true for MON_JEU")
+			}
+		}
+	}
+	if !found {
+		t.Error("MON_JEU not found in GET /api/categories without sidecar")
 	}
 }
 
@@ -1857,5 +2004,438 @@ func TestResetSelectWithMediasParam(t *testing.T) {
 	entries, _ := os.ReadDir(catDir)
 	if len(entries) != 0 {
 		t.Errorf("Expected categories dir to be empty after reset, found %d files", len(entries))
+	}
+}
+
+// ---------------------------------------------------------------------------
+// ResolveCategoryMeta tests (v5.7.9)
+// ---------------------------------------------------------------------------
+
+// TestResolveCategoryMeta_Hardcoded verifies that hardcoded categories return
+// the correct name and color, and an empty imageURL.
+func TestResolveCategoryMeta_Hardcoded(t *testing.T) {
+	server, _ := setupTestHTTPServer(t)
+
+	tests := []struct {
+		key       string
+		wantName  string
+		wantColor string
+	}{
+		{"GEOGRAPHY", "Geographie", "#3b82f6"},
+		{"SCIENCE", "Sciences & Nature", "#22c55e"},
+		{"ARTS", "Arts & Litterature", "#a855f7"},
+		{"SPORTS", "Sports & Loisirs", "#f97316"},
+		{"FOOD", "Gastronomie", "#991b1b"},
+		{"ANIMALS", "Animaux", "#78716c"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.key, func(t *testing.T) {
+			name, imageURL, color := server.ResolveCategoryMeta(tt.key)
+			if name != tt.wantName {
+				t.Errorf("name = %q, want %q", name, tt.wantName)
+			}
+			if imageURL != "" {
+				t.Errorf("imageURL = %q, want empty for hardcoded", imageURL)
+			}
+			if color != tt.wantColor {
+				t.Errorf("color = %q, want %q", color, tt.wantColor)
+			}
+		})
+	}
+}
+
+// TestResolveCategoryMeta_Custom verifies that a custom category created on disk
+// returns a non-empty imageURL and the original display name from the sidecar.
+func TestResolveCategoryMeta_Custom(t *testing.T) {
+	srv, dataDir := setupTestHTTPServer(t)
+	catDir := filepath.Join(dataDir, "files", "categories")
+	os.MkdirAll(catDir, 0755)
+
+	// Simulate a custom category created by POST /api/categories:
+	// image file + sidecar JSON
+	os.WriteFile(filepath.Join(catDir, "MON_JEU.png"), minimalPNG, 0644)
+	os.WriteFile(filepath.Join(catDir, "MON_JEU.json"),
+		[]byte(`{"name":"Mon Jeu"}`), 0644)
+
+	name, imageURL, color := srv.ResolveCategoryMeta("MON_JEU")
+
+	if name != "Mon Jeu" {
+		t.Errorf("name = %q, want %q", name, "Mon Jeu")
+	}
+	if imageURL == "" {
+		t.Errorf("imageURL is empty, expected non-empty for custom category")
+	}
+	if color != "" {
+		t.Errorf("color = %q, want empty for custom category", color)
+	}
+}
+
+// TestResolveCategoryMeta_Unknown verifies that an unknown key returns empty strings
+// without panicking.
+func TestResolveCategoryMeta_Unknown(t *testing.T) {
+	srv, _ := setupTestHTTPServer(t)
+
+	name, imageURL, color := srv.ResolveCategoryMeta("DOES_NOT_EXIST")
+	if name != "" || imageURL != "" || color != "" {
+		t.Errorf("Expected all empty for unknown key, got name=%q imageURL=%q color=%q", name, imageURL, color)
+	}
+
+	// Empty key should also be safe
+	name, imageURL, color = srv.ResolveCategoryMeta("")
+	if name != "" || imageURL != "" || color != "" {
+		t.Errorf("Expected all empty for empty key, got name=%q imageURL=%q color=%q", name, imageURL, color)
+	}
+}
+
+// TestHistory_CategoryMetaFields verifies that /history serializes
+// CATEGORY_NAME, CATEGORY_IMAGE_URL, CATEGORY_COLOR fields when present.
+func TestHistory_CategoryMetaFields(t *testing.T) {
+	srv, _ := setupTestHTTPServer(t)
+
+	// Add an event with resolved metadata directly (as main.go would after ResolveCategoryMeta)
+	srv.engine.AddGameEvent(game.GameEvent{
+		Timestamp:           1000000,
+		QuestionID:          "q1",
+		QuestionText:        "Symbole de l'or?",
+		QuestionCategory:    "SCIENCE",
+		CategoryDisplayName: "Sciences & Nature",
+		CategoryImageURL:    "",
+		CategoryColor:       "#22c55e",
+		EventType:           "POINTS_AWARDED",
+		WinnerType:          "TEAM",
+		TeamName:            "Les Bleus",
+		TeamColor:           []int{59, 130, 246},
+		Points:              10,
+	})
+
+	req := httptest.NewRequest("GET", "/history", nil)
+	w := httptest.NewRecorder()
+	srv.mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("GET /history: status %d", w.Code)
+	}
+
+	var events []map[string]interface{}
+	if err := json.NewDecoder(w.Body).Decode(&events); err != nil {
+		t.Fatalf("decode error: %v", err)
+	}
+	if len(events) != 1 {
+		t.Fatalf("expected 1 event, got %d", len(events))
+	}
+
+	ev := events[0]
+	if ev["CATEGORY_NAME"] != "Sciences & Nature" {
+		t.Errorf("CATEGORY_NAME = %v, want %q", ev["CATEGORY_NAME"], "Sciences & Nature")
+	}
+	if ev["CATEGORY_COLOR"] != "#22c55e" {
+		t.Errorf("CATEGORY_COLOR = %v, want %q", ev["CATEGORY_COLOR"], "#22c55e")
+	}
+	// CATEGORY_IMAGE_URL is omitempty and empty → should be absent
+	if _, ok := ev["CATEGORY_IMAGE_URL"]; ok {
+		t.Errorf("CATEGORY_IMAGE_URL should be absent (omitempty) when empty")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// GET /palmares tests (v5.7.10)
+// ---------------------------------------------------------------------------
+
+// TestPalmares_EmptyHistory verifies that GET /palmares returns [] when there are no events.
+func TestPalmares_EmptyHistory(t *testing.T) {
+	srv, _ := setupTestHTTPServer(t)
+
+	req := httptest.NewRequest("GET", "/palmares", nil)
+	w := httptest.NewRecorder()
+	srv.mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("GET /palmares: status %d", w.Code)
+	}
+
+	var entries []map[string]interface{}
+	if err := json.NewDecoder(w.Body).Decode(&entries); err != nil {
+		t.Fatalf("decode error: %v", err)
+	}
+	if len(entries) != 0 {
+		t.Errorf("Expected empty array, got %d entries", len(entries))
+	}
+}
+
+// TestPalmares_WithEvents verifies that GET /palmares returns correct category metadata,
+// team/player aggregation and descending totalPoints sort.
+func TestPalmares_WithEvents(t *testing.T) {
+	srv, _ := setupTestHTTPServer(t)
+
+	// SCIENCE: team 10pts + player 5pts = 15pts total
+	// GEOGRAPHY: team 20pts = 20pts total
+	// Expected order: GEOGRAPHY (20) > SCIENCE (15)
+	events := []game.GameEvent{
+		{
+			Timestamp: 1000, QuestionCategory: "SCIENCE",
+			EventType: "POINTS_AWARDED", WinnerType: "TEAM",
+			TeamName: "Les Bleus", TeamColor: []int{59, 130, 246}, Points: 10,
+		},
+		{
+			Timestamp: 2000, QuestionCategory: "SCIENCE",
+			EventType: "POINTS_AWARDED", WinnerType: "PLAYER",
+			PlayerName: "Alice", TeamName: "Les Rouges", TeamColor: []int{239, 68, 68}, Points: 5,
+		},
+		{
+			Timestamp: 3000, QuestionCategory: "GEOGRAPHY",
+			EventType: "POINTS_AWARDED", WinnerType: "TEAM",
+			TeamName: "Les Verts", TeamColor: []int{34, 197, 94}, Points: 20,
+		},
+	}
+	for _, ev := range events {
+		srv.engine.AddGameEvent(ev)
+	}
+
+	req := httptest.NewRequest("GET", "/palmares", nil)
+	w := httptest.NewRecorder()
+	srv.mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("GET /palmares: status %d — body: %s", w.Code, w.Body.String())
+	}
+
+	var entries []map[string]interface{}
+	if err := json.NewDecoder(w.Body).Decode(&entries); err != nil {
+		t.Fatalf("decode error: %v", err)
+	}
+
+	if len(entries) != 2 {
+		t.Fatalf("Expected 2 entries, got %d", len(entries))
+	}
+
+	// First entry must be GEOGRAPHY (most points)
+	first := entries[0]
+	if first["category"] != "GEOGRAPHY" {
+		t.Errorf("First entry category = %v, want GEOGRAPHY", first["category"])
+	}
+	if first["totalPoints"] != float64(20) {
+		t.Errorf("First entry totalPoints = %v, want 20", first["totalPoints"])
+	}
+	if first["name"] == "" || first["name"] == nil {
+		t.Errorf("First entry name should not be empty (hardcoded GEOGRAPHY)")
+	}
+	if first["color"] == "" || first["color"] == nil {
+		t.Errorf("First entry color should not be empty (hardcoded GEOGRAPHY)")
+	}
+
+	// Second entry must be SCIENCE
+	second := entries[1]
+	if second["category"] != "SCIENCE" {
+		t.Errorf("Second entry category = %v, want SCIENCE", second["category"])
+	}
+	if second["totalPoints"] != float64(15) {
+		t.Errorf("Second entry totalPoints = %v, want 15", second["totalPoints"])
+	}
+	sciName, _ := second["name"].(string)
+	if sciName != "Sciences & Nature" {
+		t.Errorf("SCIENCE name = %q, want %q", sciName, "Sciences & Nature")
+	}
+	sciColor, _ := second["color"].(string)
+	if sciColor != "#22c55e" {
+		t.Errorf("SCIENCE color = %q, want %q", sciColor, "#22c55e")
+	}
+
+	// SCIENCE should have 1 team + 1 player
+	teams, _ := second["teams"].([]interface{})
+	players, _ := second["players"].([]interface{})
+	if len(teams) != 1 {
+		t.Errorf("SCIENCE teams: expected 1, got %d", len(teams))
+	}
+	if len(players) != 1 {
+		t.Errorf("SCIENCE players: expected 1, got %d", len(players))
+	}
+}
+
+// TestPalmares_CategoryMetaResolved verifies that a custom category with an image
+// has a non-empty imageURL in GET /palmares.
+func TestPalmares_CategoryMetaResolved(t *testing.T) {
+	srv, dataDir := setupTestHTTPServer(t)
+	catDir := filepath.Join(dataDir, "files", "categories")
+	os.MkdirAll(catDir, 0755)
+
+	// Create custom category files (image + sidecar)
+	os.WriteFile(filepath.Join(catDir, "MON_JEU.png"), minimalPNG, 0644)
+	os.WriteFile(filepath.Join(catDir, "MON_JEU.json"), []byte(`{"name":"Mon Jeu"}`), 0644)
+
+	srv.engine.AddGameEvent(game.GameEvent{
+		Timestamp: 1000, QuestionCategory: "MON_JEU",
+		EventType: "POINTS_AWARDED", WinnerType: "TEAM",
+		TeamName: "Les Bleus", TeamColor: []int{59, 130, 246}, Points: 15,
+	})
+
+	req := httptest.NewRequest("GET", "/palmares", nil)
+	w := httptest.NewRecorder()
+	srv.mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("GET /palmares: status %d", w.Code)
+	}
+
+	var entries []map[string]interface{}
+	if err := json.NewDecoder(w.Body).Decode(&entries); err != nil {
+		t.Fatalf("decode error: %v", err)
+	}
+	if len(entries) != 1 {
+		t.Fatalf("Expected 1 entry, got %d", len(entries))
+	}
+
+	entry := entries[0]
+	if entry["name"] != "Mon Jeu" {
+		t.Errorf("Custom name = %v, want %q", entry["name"], "Mon Jeu")
+	}
+	if entry["imageURL"] == "" || entry["imageURL"] == nil {
+		t.Errorf("Custom imageURL should be non-empty for category with image")
+	}
+}
+
+// TestPalmares_SameTeamMultipleEvents verifies that multiple POINTS_AWARDED events
+// for the same team in the same category are aggregated — no double-counting.
+// Each team name appears exactly once; points are summed.
+func TestPalmares_SameTeamMultipleEvents(t *testing.T) {
+	srv, _ := setupTestHTTPServer(t)
+
+	// Same team, two separate events — should appear once with aggregated points
+	events := []game.GameEvent{
+		{
+			Timestamp:        1000,
+			QuestionCategory: "SCIENCE",
+			EventType:        "POINTS_AWARDED",
+			WinnerType:       "TEAM",
+			TeamName:         "Les Bleus",
+			TeamColor:        []int{59, 130, 246},
+			Points:           10,
+		},
+		{
+			Timestamp:        2000,
+			QuestionCategory: "SCIENCE",
+			EventType:        "POINTS_AWARDED",
+			WinnerType:       "TEAM",
+			TeamName:         "Les Bleus",
+			TeamColor:        []int{59, 130, 246},
+			Points:           15,
+		},
+	}
+	for _, ev := range events {
+		srv.engine.AddGameEvent(ev)
+	}
+
+	req := httptest.NewRequest("GET", "/palmares", nil)
+	w := httptest.NewRecorder()
+	srv.mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("GET /palmares: status %d", w.Code)
+	}
+
+	var entries []map[string]interface{}
+	if err := json.NewDecoder(w.Body).Decode(&entries); err != nil {
+		t.Fatalf("decode error: %v", err)
+	}
+	if len(entries) != 1 {
+		t.Fatalf("Expected 1 entry, got %d", len(entries))
+	}
+
+	entry := entries[0]
+	// totalPoints = 10 + 15 = 25
+	if entry["totalPoints"] != float64(25) {
+		t.Errorf("totalPoints = %v, want 25", entry["totalPoints"])
+	}
+
+	teams, _ := entry["teams"].([]interface{})
+	// Same team name → aggregated into 1 entry (no double-counting)
+	if len(teams) != 1 {
+		t.Errorf("teams count = %d, want 1 (no double-counting for same team name)", len(teams))
+	}
+	team0, _ := teams[0].(map[string]interface{})
+	if team0["points"] != float64(25) {
+		t.Errorf("team points = %v, want 25", team0["points"])
+	}
+}
+
+// TestPalmares_UnknownCategory verifies that events with an empty QuestionCategory
+// are mapped to the "UNKNOWN" category key in the palmares response.
+func TestPalmares_UnknownCategory(t *testing.T) {
+	srv, _ := setupTestHTTPServer(t)
+
+	// Empty category → should be keyed as "UNKNOWN"
+	srv.engine.AddGameEvent(game.GameEvent{
+		Timestamp:        1000,
+		QuestionCategory: "",
+		EventType:        "POINTS_AWARDED",
+		WinnerType:       "TEAM",
+		TeamName:         "Les Bleus",
+		TeamColor:        []int{59, 130, 246},
+		Points:           10,
+	})
+
+	req := httptest.NewRequest("GET", "/palmares", nil)
+	w := httptest.NewRecorder()
+	srv.mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("GET /palmares: status %d", w.Code)
+	}
+
+	var entries []map[string]interface{}
+	if err := json.NewDecoder(w.Body).Decode(&entries); err != nil {
+		t.Fatalf("decode error: %v", err)
+	}
+	if len(entries) != 1 {
+		t.Fatalf("Expected 1 entry, got %d", len(entries))
+	}
+
+	entry := entries[0]
+	if entry["category"] != "UNKNOWN" {
+		t.Errorf("category = %v, want UNKNOWN (empty QuestionCategory should map to UNKNOWN)", entry["category"])
+	}
+}
+
+// TestHistory_OldEventNoMetaFields verifies that old events without category metadata
+// fields don't cause any errors (graceful zero-value / omitempty behaviour).
+func TestHistory_OldEventNoMetaFields(t *testing.T) {
+	srv, _ := setupTestHTTPServer(t)
+
+	// Old-style event — no Category* fields
+	srv.engine.AddGameEvent(game.GameEvent{
+		Timestamp:        2000000,
+		QuestionID:       "q2",
+		QuestionText:     "Ancienne question",
+		QuestionCategory: "HISTORY",
+		EventType:        "POINTS_AWARDED",
+		WinnerType:       "TEAM",
+		TeamName:         "Les Rouges",
+		TeamColor:        []int{239, 68, 68},
+		Points:           5,
+	})
+
+	req := httptest.NewRequest("GET", "/history", nil)
+	w := httptest.NewRecorder()
+	srv.mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("GET /history: status %d", w.Code)
+	}
+
+	var events []map[string]interface{}
+	if err := json.NewDecoder(w.Body).Decode(&events); err != nil {
+		t.Fatalf("decode error: %v", err)
+	}
+
+	if len(events) != 1 {
+		t.Fatalf("expected 1 event, got %d", len(events))
+	}
+
+	// The 3 new fields should be absent (omitempty with empty string)
+	ev := events[0]
+	for _, field := range []string{"CATEGORY_NAME", "CATEGORY_IMAGE_URL", "CATEGORY_COLOR"} {
+		if _, ok := ev[field]; ok {
+			t.Errorf("Old event should not have %s field (omitempty), but it does: %v", field, ev[field])
+		}
 	}
 }

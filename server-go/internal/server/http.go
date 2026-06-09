@@ -18,6 +18,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -225,6 +226,7 @@ func (h *HTTPServer) setupRoutes() {
 	h.mux.HandleFunc("/listFiles", h.handleListFiles)
 	h.mux.HandleFunc("/questions", h.handleQuestions)
 	h.mux.HandleFunc("/history", h.handleHistory)
+	h.mux.HandleFunc("/palmares", h.handlePalmares) // pre-assembled leaderboard (v5.7.10 — #107)
 	h.mux.HandleFunc("/config.json", h.handleConfig)
 
 	// Actions
@@ -467,6 +469,110 @@ func (h *HTTPServer) handleHistory(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	history := h.engine.GetHistory()
 	json.NewEncoder(w).Encode(history)
+}
+
+// handlePalmares builds the complete PALMARES leaderboard from game history
+// and returns it as a single JSON response — no frontend joining required (v5.7.10 — #107).
+//
+// GET /palmares → []PalmaresEntry sorted by TotalPoints desc.
+// Returns [] when history is empty.
+func (h *HTTPServer) handlePalmares(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	history := h.engine.GetHistory()
+
+	type catAccum struct {
+		name        string
+		imageURL    string
+		color       string
+		totalPoints int
+		teams       map[string]*TeamScore
+		players     map[string]*PlayerScore
+	}
+
+	catMap := make(map[string]*catAccum)
+
+	for _, event := range history {
+		if event.EventType != "POINTS_AWARDED" || event.Points <= 0 {
+			continue
+		}
+		key := event.QuestionCategory
+		if key == "" {
+			key = "UNKNOWN"
+		}
+
+		acc, exists := catMap[key]
+		if !exists {
+			catName, catImageURL, catColor := h.ResolveCategoryMeta(key)
+			acc = &catAccum{
+				name:    catName,
+				imageURL: catImageURL,
+				color:   catColor,
+				teams:   make(map[string]*TeamScore),
+				players: make(map[string]*PlayerScore),
+			}
+			catMap[key] = acc
+		}
+		acc.totalPoints += event.Points
+
+		switch event.WinnerType {
+		case "TEAM":
+			if event.TeamName != "" {
+				ts, ok := acc.teams[event.TeamName]
+				if !ok {
+					ts = &TeamScore{Name: event.TeamName, Color: event.TeamColor}
+					acc.teams[event.TeamName] = ts
+				}
+				ts.Points += event.Points
+			}
+		case "PLAYER":
+			if event.PlayerName != "" {
+				playerKey := event.TeamName + "|" + event.PlayerName
+				ps, ok := acc.players[playerKey]
+				if !ok {
+					ps = &PlayerScore{Name: event.PlayerName, Team: event.TeamName}
+					acc.players[playerKey] = ps
+				}
+				ps.Points += event.Points
+			}
+		}
+	}
+
+	// Build sorted entries
+	entries := make([]PalmaresEntry, 0, len(catMap))
+	for key, acc := range catMap {
+		entry := PalmaresEntry{
+			Category:    key,
+			Name:        acc.name,
+			ImageURL:    acc.imageURL,
+			Color:       acc.color,
+			TotalPoints: acc.totalPoints,
+			Teams:       make([]TeamScore, 0, len(acc.teams)),
+			Players:     make([]PlayerScore, 0, len(acc.players)),
+		}
+		for _, ts := range acc.teams {
+			entry.Teams = append(entry.Teams, *ts)
+		}
+		sort.Slice(entry.Teams, func(i, j int) bool {
+			return entry.Teams[i].Points > entry.Teams[j].Points
+		})
+		for _, ps := range acc.players {
+			entry.Players = append(entry.Players, *ps)
+		}
+		sort.Slice(entry.Players, func(i, j int) bool {
+			return entry.Players[i].Points > entry.Players[j].Points
+		})
+		entries = append(entries, entry)
+	}
+	sort.Slice(entries, func(i, j int) bool {
+		return entries[i].TotalPoints > entries[j].TotalPoints
+	})
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(entries)
 }
 
 func (h *HTTPServer) handleListFiles(w http.ResponseWriter, r *http.Request) {
@@ -1191,18 +1297,91 @@ type CategoryInfo struct {
 	Name     string `json:"name"`
 	ImageURL string `json:"imageURL"`
 	IsCustom bool   `json:"isCustom"`
+	Color    string `json:"color"` // accent color for PALMARES headers; "" for custom categories
 }
 
 // hardcodedCategories lists built-in categories in display order (v5.6.2 — #95)
 var hardcodedCategories = []CategoryInfo{
-	{Key: "GEOGRAPHY", Name: "Geographie", ImageURL: "", IsCustom: false},
-	{Key: "ENTERTAINMENT", Name: "Divertissement", ImageURL: "", IsCustom: false},
-	{Key: "HISTORY", Name: "Histoire", ImageURL: "", IsCustom: false},
-	{Key: "ARTS", Name: "Arts", ImageURL: "", IsCustom: false},
-	{Key: "SCIENCE", Name: "Science", ImageURL: "", IsCustom: false},
-	{Key: "SPORTS", Name: "Sports", ImageURL: "", IsCustom: false},
-	{Key: "FOOD", Name: "Gastronomie", ImageURL: "", IsCustom: false},
-	{Key: "ANIMALS", Name: "Animaux", ImageURL: "", IsCustom: false},
+	{Key: "GEOGRAPHY", Name: "Geographie", ImageURL: "", IsCustom: false, Color: "#3b82f6"},
+	{Key: "ENTERTAINMENT", Name: "Divertissement", ImageURL: "", IsCustom: false, Color: "#ec4899"},
+	{Key: "HISTORY", Name: "Histoire", ImageURL: "", IsCustom: false, Color: "#eab308"},
+	{Key: "ARTS", Name: "Arts & Litterature", ImageURL: "", IsCustom: false, Color: "#a855f7"},
+	{Key: "SCIENCE", Name: "Sciences & Nature", ImageURL: "", IsCustom: false, Color: "#22c55e"},
+	{Key: "SPORTS", Name: "Sports & Loisirs", ImageURL: "", IsCustom: false, Color: "#f97316"},
+	{Key: "FOOD", Name: "Gastronomie", ImageURL: "", IsCustom: false, Color: "#991b1b"},
+	{Key: "ANIMALS", Name: "Animaux", ImageURL: "", IsCustom: false, Color: "#78716c"},
+}
+
+// PalmaresEntry is a single category row in the GET /palmares response (v5.7.10).
+type PalmaresEntry struct {
+	Category    string        `json:"category"`    // technical key, e.g. "SCIENCE"
+	Name        string        `json:"name"`        // display name, e.g. "Sciences & Nature"
+	ImageURL    string        `json:"imageURL"`    // "/files/categories/..." or ""
+	Color       string        `json:"color"`       // accent hex color or ""
+	TotalPoints int           `json:"totalPoints"` // sum of all points for this category
+	Teams       []TeamScore   `json:"teams"`       // per-team scores, sorted desc
+	Players     []PlayerScore `json:"players"`     // per-player scores, sorted desc
+}
+
+// TeamScore aggregates points for one team in a PALMARES category row.
+type TeamScore struct {
+	Name   string `json:"name"`
+	Color  []int  `json:"color"`  // RGB triplet, same format as GameState
+	Points int    `json:"points"`
+}
+
+// PlayerScore aggregates points for one player in a PALMARES category row.
+type PlayerScore struct {
+	Name   string `json:"name"`
+	Team   string `json:"team"`
+	Points int    `json:"points"`
+}
+
+// ResolveCategoryMeta returns the display name, image URL and accent color for a category key.
+// It first checks hardcoded categories, then scans custom image files on disk.
+// Used at GameEvent recording time to embed resolved metadata in history (v5.7.9).
+func (h *HTTPServer) ResolveCategoryMeta(key string) (name, imageURL, color string) {
+	// Check hardcoded categories
+	for _, c := range hardcodedCategories {
+		if c.Key == key {
+			return c.Name, c.ImageURL, c.Color
+		}
+	}
+	if key == "" {
+		return
+	}
+	// Check custom categories on disk
+	catDir := filepath.Join(h.dataDir, "files", "categories")
+	entries, _ := os.ReadDir(catDir)
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+		ext := strings.ToLower(filepath.Ext(entry.Name()))
+		if ext != ".png" && ext != ".jpg" && ext != ".jpeg" && ext != ".webp" {
+			continue
+		}
+		stem := strings.TrimSuffix(entry.Name(), filepath.Ext(entry.Name()))
+		if toUpperSnakeCase(stem) == key {
+			imageURL = "/files/categories/" + url.PathEscape(entry.Name())
+			// Prefer sidecar JSON name, fall back to stem
+			metaPath := filepath.Join(catDir, key+".json")
+			if data, err := os.ReadFile(metaPath); err == nil {
+				var meta struct {
+					Name string `json:"name"`
+				}
+				if json.Unmarshal(data, &meta) == nil && meta.Name != "" {
+					name = meta.Name
+				} else {
+					name = stem
+				}
+			} else {
+				name = stem
+			}
+			return
+		}
+	}
+	return
 }
 
 // toUpperSnakeCase converts a filename stem to UPPER_SNAKE_CASE (spaces/hyphens → underscore, upper-case).
@@ -1213,8 +1392,8 @@ func toUpperSnakeCase(s string) string {
 }
 
 // handleAPICategories returns the merged list of hardcoded + custom categories (v5.6.2 — #95)
-// GET: returns hardcoded + custom (images and JSON text-only)
-// POST: creates a new text-only custom category (v5.7.1 — #97)
+// GET: returns hardcoded + custom image categories
+// POST: creates a new category with name + image (multipart/form-data) (v5.7.2 — #100)
 func (h *HTTPServer) handleAPICategories(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
@@ -1226,7 +1405,7 @@ func (h *HTTPServer) handleAPICategories(w http.ResponseWriter, r *http.Request)
 	}
 }
 
-// handleGetCategories returns the merged list of hardcoded + custom categories
+// handleGetCategories returns the merged list of hardcoded + custom image categories
 func (h *HTTPServer) handleGetCategories(w http.ResponseWriter, r *http.Request) {
 	// Build a set of hardcoded keys for dedup
 	hardcodedKeys := make(map[string]struct{}, len(hardcodedCategories))
@@ -1237,11 +1416,10 @@ func (h *HTTPServer) handleGetCategories(w http.ResponseWriter, r *http.Request)
 	catDir := filepath.Join(h.dataDir, "files", "categories")
 	entries, _ := os.ReadDir(catDir)
 
-	// Track custom keys to avoid image+JSON duplicates (image wins)
+	// Track custom keys to deduplicate within image files
 	customKeys := make(map[string]struct{})
 	var custom []CategoryInfo
 
-	// First pass: image files (higher priority)
 	for _, entry := range entries {
 		if entry.IsDir() {
 			continue
@@ -1256,49 +1434,27 @@ func (h *HTTPServer) handleGetCategories(w http.ResponseWriter, r *http.Request)
 			log.Printf("[HTTP] Categories: custom file %q conflicts with hardcoded key %s — skipped", entry.Name(), key)
 			continue
 		}
-		customKeys[key] = struct{}{}
-		custom = append(custom, CategoryInfo{
-			Key:      key,
-			Name:     stem,
-			ImageURL: "/files/categories/" + url.PathEscape(entry.Name()),
-			IsCustom: true,
-		})
-	}
-
-	// Second pass: JSON text-only files (lower priority than images)
-	for _, entry := range entries {
-		if entry.IsDir() {
-			continue
-		}
-		ext := strings.ToLower(filepath.Ext(entry.Name()))
-		if ext != ".json" {
-			continue
-		}
-		stem := strings.TrimSuffix(entry.Name(), filepath.Ext(entry.Name()))
-		key := toUpperSnakeCase(stem)
-		// Skip if conflicts with hardcoded or already has an image
-		if _, exists := hardcodedKeys[key]; exists {
-			continue
-		}
 		if _, exists := customKeys[key]; exists {
-			continue // image takes priority
-		}
-		// Read JSON to get display name
-		data, err := os.ReadFile(filepath.Join(catDir, entry.Name()))
-		if err != nil {
-			continue
-		}
-		var meta struct {
-			Name string `json:"name"`
-		}
-		if err := json.Unmarshal(data, &meta); err != nil || meta.Name == "" {
-			continue
+			continue // deduplicate same key with different extension
 		}
 		customKeys[key] = struct{}{}
+
+		// Resolve display name: prefer sidecar <KEY>.json, fall back to stem
+		displayName := stem
+		metaPath := filepath.Join(catDir, key+".json")
+		if data, err := os.ReadFile(metaPath); err == nil {
+			var meta struct {
+				Name string `json:"name"`
+			}
+			if json.Unmarshal(data, &meta) == nil && meta.Name != "" {
+				displayName = meta.Name
+			}
+		}
+
 		custom = append(custom, CategoryInfo{
 			Key:      key,
-			Name:     meta.Name,
-			ImageURL: "",
+			Name:     displayName,
+			ImageURL: "/files/categories/" + url.PathEscape(entry.Name()),
 			IsCustom: true,
 		})
 	}
@@ -1311,29 +1467,52 @@ func (h *HTTPServer) handleGetCategories(w http.ResponseWriter, r *http.Request)
 	json.NewEncoder(w).Encode(result)
 }
 
-// handlePostCategory creates a new text-only custom category (v5.7.1 — #97)
+// handlePostCategory creates a new custom category with name + image upload (v5.7.2 — #100)
+// Expects multipart/form-data with fields: name (string) + file (image: png/jpg/jpeg/webp)
 func (h *HTTPServer) handlePostCategory(w http.ResponseWriter, r *http.Request) {
-	var body struct {
-		Name string `json:"name"`
+	// Enforce 10 MB hard limit on the request body before parsing
+	r.Body = http.MaxBytesReader(w, r.Body, 10<<20)
+	// Parse multipart form (max 10 MB)
+	if err := r.ParseMultipartForm(10 << 20); err != nil {
+		http.Error(w, `{"error":"invalid multipart form"}`, http.StatusBadRequest)
+		return
 	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.Name == "" {
+
+	name := r.FormValue("name")
+	if name == "" {
 		http.Error(w, `{"error":"name is required"}`, http.StatusBadRequest)
 		return
 	}
-	if len(body.Name) > 50 {
+	if len(name) > 50 {
 		http.Error(w, `{"error":"name is too long (max 50 chars)"}`, http.StatusBadRequest)
 		return
 	}
 	// Security: reject any character that is not alphanumeric, space, hyphen or underscore
 	// to prevent path traversal and filesystem injection.
-	for _, ch := range body.Name {
+	for _, ch := range name {
 		if !unicode.IsLetter(ch) && !unicode.IsDigit(ch) && ch != ' ' && ch != '-' && ch != '_' {
 			http.Error(w, `{"error":"name contains invalid characters"}`, http.StatusBadRequest)
 			return
 		}
 	}
 
-	key := toUpperSnakeCase(body.Name)
+	// Read uploaded image file
+	file, header, err := r.FormFile("file")
+	if err != nil {
+		http.Error(w, `{"error":"file is required"}`, http.StatusBadRequest)
+		return
+	}
+	defer file.Close()
+
+	// Validate image extension
+	ext := strings.ToLower(filepath.Ext(header.Filename))
+	allowedExt := map[string]bool{".png": true, ".jpg": true, ".jpeg": true, ".webp": true}
+	if !allowedExt[ext] {
+		http.Error(w, `{"error":"invalid file type, allowed: png, jpg, jpeg, webp"}`, http.StatusBadRequest)
+		return
+	}
+
+	key := toUpperSnakeCase(name)
 
 	// Check conflict with hardcoded categories
 	for _, c := range hardcodedCategories {
@@ -1349,7 +1528,7 @@ func (h *HTTPServer) handlePostCategory(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	// Check conflict with existing custom categories (image or JSON)
+	// Check conflict with existing custom categories (any image extension)
 	entries, _ := os.ReadDir(catDir)
 	for _, entry := range entries {
 		if entry.IsDir() {
@@ -1362,21 +1541,39 @@ func (h *HTTPServer) handlePostCategory(w http.ResponseWriter, r *http.Request) 
 		}
 	}
 
-	// Write JSON file
-	jsonData, _ := json.Marshal(map[string]string{"name": body.Name})
-	filePath := filepath.Join(catDir, key+".json")
-	if err := os.WriteFile(filePath, jsonData, 0644); err != nil {
-		log.Printf("[HTTP] Categories POST: failed to write %s: %v", filePath, err)
-		http.Error(w, `{"error":"failed to create category"}`, http.StatusInternalServerError)
+	// Save image file
+	filePath := filepath.Join(catDir, key+ext)
+	outFile, err := os.Create(filePath)
+	if err != nil {
+		log.Printf("[HTTP] Categories POST: failed to create %s: %v", filePath, err)
+		http.Error(w, `{"error":"failed to save image"}`, http.StatusInternalServerError)
+		return
+	}
+	defer outFile.Close()
+	if _, err := io.Copy(outFile, file); err != nil {
+		log.Printf("[HTTP] Categories POST: failed to write image %s: %v", filePath, err)
+		http.Error(w, `{"error":"failed to save image"}`, http.StatusInternalServerError)
 		return
 	}
 
-	log.Printf("[HTTP] Categories POST: created category key=%s name=%q", key, body.Name)
+	// Save sidecar JSON to persist the original display name (v5.7.7)
+	metaPath := filepath.Join(catDir, key+".json")
+	if metaFile, err := os.Create(metaPath); err == nil {
+		_ = json.NewEncoder(metaFile).Encode(struct {
+			Name string `json:"name"`
+		}{Name: name})
+		metaFile.Close()
+	} else {
+		log.Printf("[HTTP] Categories POST: warning — could not save sidecar metadata %s: %v", metaPath, err)
+	}
+
+	imageURL := "/files/categories/" + url.PathEscape(key+ext)
+	log.Printf("[HTTP] Categories POST: created category key=%s name=%q file=%s", key, name, key+ext)
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(CategoryInfo{
 		Key:      key,
-		Name:     body.Name,
-		ImageURL: "",
+		Name:     name,
+		ImageURL: imageURL,
 		IsCustom: true,
 	})
 }

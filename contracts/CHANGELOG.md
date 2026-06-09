@@ -2,6 +2,16 @@
 
 ---
 
+## [20260607] — Bugfix v5.7.2 (#100)
+
+- **[BREAKING]** `POST /api/categories` — remplace le body JSON par **multipart/form-data** : champ `name` (string) + champ `file` (image PNG/JPG/JPEG/WebP, obligatoire)
+- **[BREAKING]** `POST /api/categories` — `imageURL` dans la réponse est désormais toujours non-vide (ex: `"/files/categories/MA_CATEGORIE.png"`)
+- **[CHANGED]** `GET /api/categories` — suppression du scan des fichiers `.json` ; seuls les fichiers image (`png/jpg/jpeg/webp`) dans `data/files/categories/` sont retournés comme catégories custom
+
+> **Migration** : les clients qui appellent `POST /api/categories` avec un body JSON doivent migrer vers multipart/form-data avec le champ `file` (image obligatoire).
+
+---
+
 ## [20260607] — Milestone v5.7.1 (#97, #98, #99)
 
 - **[NEW]** `POST /api/categories` — créer une catégorie custom (body: `{ "name": "..." }`, response: `CategoryInfo`)

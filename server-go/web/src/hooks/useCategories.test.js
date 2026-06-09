@@ -76,6 +76,29 @@ describe('useCategories — issue #95', () => {
     expect(result.current.categories).toEqual([])
     expect(result.current.loading).toBe(false)
   })
+
+  // ---------------------------------------------------------------------------
+  // v5.7.8 — #108 : null guard — setCategories(data ?? [])
+  // Si l'API retourne null (au lieu d'un tableau), categories doit rester []
+  // et ne pas crasher les consommateurs qui font .map() ou .find().
+  // ---------------------------------------------------------------------------
+
+  it('null guard — réponse API null → categories reste [] (v5.7.8 #108)', async () => {
+    // Le backend pourrait retourner null si la sérialisation JSON est absente
+    fetch.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve(null),
+    })
+
+    const { result } = renderHook(() => useCategories())
+
+    await act(async () => {})
+
+    // data ?? [] → categories = [] et non null
+    expect(result.current.categories).toEqual([])
+    expect(result.current.loading).toBe(false)
+    expect(result.current.error).toBeNull()
+  })
 })
 
 // ---------------------------------------------------------------------------
