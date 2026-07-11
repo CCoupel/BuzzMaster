@@ -2197,3 +2197,83 @@ func containsAt(s, substr string) bool {
 	return false
 }
 
+// ============================================================================
+// Tests: CreateVirtualPlayer — Connected state (#109 — icône de déconnexion
+// absente pour les VPlayers). Voir plan _work/reports/plan-20260711-160927.md,
+// Phase 2 tâche 5 : le VJoueur vient d'ouvrir sa session WS au moment de
+// l'enrôlement, il doit donc être marqué Connected=true dès sa création.
+// ============================================================================
+
+// TestEngine_CreateVirtualPlayer_ConnectedTrue verifies that a freshly created
+// VPlayer bumper is marked Connected=true immediately.
+func TestEngine_CreateVirtualPlayer_ConnectedTrue(t *testing.T) {
+	e := NewEngine()
+	e.SetPhase(PhaseEnroll)
+
+	id, bumper, err := e.CreateVirtualPlayer("Alice")
+	if err != nil {
+		t.Fatalf("Unexpected error creating virtual player: %v", err)
+	}
+	if bumper == nil {
+		t.Fatal("Expected a non-nil bumper")
+	}
+	if !bumper.Connected {
+		t.Error("Expected Connected=true for a freshly created VPlayer")
+	}
+
+	// Non-regression: the field must also be true when re-read via GetBumper
+	// (not just on the pointer returned synchronously by CreateVirtualPlayer).
+	stored := e.GetBumper(id)
+	if stored == nil {
+		t.Fatal("Bumper should be retrievable via GetBumper")
+	}
+	if !stored.Connected {
+		t.Error("Expected Connected=true on the stored bumper retrieved via GetBumper")
+	}
+}
+
+// TestEngine_CreateVirtualPlayer_MultipleCallsAllConnected verifies that
+// Connected=true is set for every VPlayer created, not just the first one.
+func TestEngine_CreateVirtualPlayer_MultipleCallsAllConnected(t *testing.T) {
+	e := NewEngine()
+	e.SetPhase(PhaseEnroll)
+
+	names := []string{"Alice", "Bob", "Carla"}
+	for _, name := range names {
+		_, bumper, err := e.CreateVirtualPlayer(name)
+		if err != nil {
+			t.Fatalf("Unexpected error creating virtual player %s: %v", name, err)
+		}
+		if !bumper.Connected {
+			t.Errorf("Expected Connected=true for VPlayer %s", name)
+		}
+	}
+}
+
+// TestEngine_CreateVirtualPlayer_ConnectedTrue_PreservesExistingFlags is a
+// non-regression check: adding Connected=true must not alter the other
+// invariants of a virtual bumper (IsVirtual/IsVPlayer/Status), which were
+// already relied upon by existing frontend/backend logic before this fix.
+func TestEngine_CreateVirtualPlayer_ConnectedTrue_PreservesExistingFlags(t *testing.T) {
+	e := NewEngine()
+	e.SetPhase(PhaseEnroll)
+
+	_, bumper, err := e.CreateVirtualPlayer("Dan")
+	if err != nil {
+		t.Fatalf("Unexpected error creating virtual player: %v", err)
+	}
+
+	if !bumper.IsVirtual {
+		t.Error("Expected IsVirtual=true (unchanged invariant)")
+	}
+	if !bumper.IsVPlayer {
+		t.Error("Expected IsVPlayer=true (unchanged invariant)")
+	}
+	if bumper.Status != "READY" {
+		t.Errorf("Expected Status=READY (unchanged invariant), got %s", bumper.Status)
+	}
+	if !bumper.Connected {
+		t.Error("Expected Connected=true (new invariant introduced by #109)")
+	}
+}
+
