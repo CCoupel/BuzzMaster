@@ -33,9 +33,9 @@ A partir du **plan d'implementation et des contrats API** (avant que le code soi
 
 ## Declenchement
 
-- Appele par le CDP **en parallele avec DEV** (approche TDD — les tests sont definis avant/pendant l'implementation)
+- **Phase DEV (TDD)** : appele par le CDP en parallele avec les agents dev — les tests sont definis avant/pendant l'implementation
+- **Phase Review** : appele en parallele avec `code-reviewer` une fois le code commite — valide la conformite aux contrats
 - Re-declenche uniquement si un changement de scope est documente dans `contracts/CHANGELOG.md` (BREAKING ou CHANGED)
-- Commande directe `/test-writer`
 
 ## Regles Non-Regression
 

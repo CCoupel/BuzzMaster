@@ -63,7 +63,7 @@ curl -s http://localhost/shutdown && sleep 2 && cd server-go && ./server
 ### 3.3 Verification Post-Demarrage
 
 ```bash
-curl -s http://localhost/version
+curl -s http://localhost/api/version
 ```
 
 ---
@@ -250,7 +250,7 @@ rm -f coverage.out coverage.html
 
 ### 10.1 Criteres de Routage
 
-Le routage vers les agents DEV se fait selon les fichiers impactes et le type de modification. Chaque projet definit ses propres criteres dans `context/PROJECT_CONTEXT.md`.
+Le routage vers les agents DEV se fait selon les fichiers impactes et le type de modification. Chaque projet definit ses propres criteres dans `CLAUDE.md`.
 
 ### 10.2 Ordre d'Execution
 

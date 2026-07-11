@@ -187,13 +187,26 @@ Action requise : [ce dont j'ai besoin]
 
 ## Coordination Inter-Agents
 
-**Protocole teammates** : Voir `context/TEAMMATES_PROTOCOL.md`
-**Workflow CDP complet** : Voir `commands/context/CDP_WORKFLOWS.md`
+### Workflow Standard
 
-### Livrables par Agent
+```
+PLAN -> [validation] -> DEV -> [REVIEW ∥ TEST-WRITER] -> QA -> [validation] -> DOC -> DEPLOY -> [validation]
+```
 
-| Agent | Livrable | Destinataire |
-|-------|---------|--------------|
+**[validation] = Points de validation utilisateur obligatoires**
+**[REVIEW ∥ TEST-WRITER] = executes en parallele apres DEV**
+
+### Transmission de Contexte
+
+Chaque agent doit :
+1. Lire le **resume de l'agent precedent**
+2. Produire un **resume structure** pour l'agent suivant
+3. Documenter les **decisions prises** et **problemes rencontres**
+
+### Points de Validation
+
+| Agent | Validation produite | Destinataire |
+|-------|---------------------|--------------|
 | PLAN | Plan d'implementation | **Utilisateur** |
 | DEV | Summary + commits | TEST-WRITER + REVIEW (en parallele) |
 | TEST-WRITER | Scripts de tests + procedures manuelles | QA |

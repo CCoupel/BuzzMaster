@@ -619,7 +619,29 @@ cdp_state:
 
 ---
 
-## 11. État Persistant du Workflow
+## 11. Commande /cdp
+
+La commande `/cdp` permet le controle direct de l'orchestrateur :
+
+| Mot-cle | Action |
+|---------|--------|
+| `help` | Aide sur /cdp |
+| `status` | Vue globale (tous workflows) |
+| `abort` | Abandonner workflow actuel |
+| `pause` | Mettre en pause |
+| `resume` | Reprendre apres pause |
+| `context "..."` | Ajouter contexte aux sous-agents |
+| `note "..."` | Ajouter note au rapport final |
+| `priority <level>` | Changer priorite (high/normal/low) |
+| `config` | Afficher configuration CDP |
+
+**Difference cle** :
+- `/feature status` -> etat du workflow FEATURE
+- `/cdp status` -> vue globale de l'orchestrateur
+
+---
+
+## 12. État Persistant du Workflow
 
 Le CDP maintient `.claude/workflow-state.json` mis à jour à chaque transition de phase.
 Ce fichier est la source de vérité pour les commandes `status`, `resume`, `skip`, `jumpto`.
@@ -685,5 +707,6 @@ Dans les commandes CDP, referencer ce fichier :
 - Erreurs : section 7
 - Regles : section 9
 - Mots-cles controle : section 10
-- Etat persistant : section 11
+- Commande /cdp : section 11
+- Etat persistant : section 12
 ```

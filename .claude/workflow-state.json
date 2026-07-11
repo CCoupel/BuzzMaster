@@ -1,22 +1,22 @@
 {
   "type": "FEATURE",
-  "description": "Mode ARDOISE — réponses libres au clavier",
-  "branch": "feature/ardoise",
-  "version": "5.6.0",
-  "started_at": "2026-05-20T09:21:00Z",
-  "cycles": 2,
-  "issue_nums": [86, 87, 88, 89, 90],
-  "milestone_num": 13,
+  "description": "Milestone v5.7.1 — #97 bouton+ catégorie, #98 NORMAL→SPEEDY, #99 backgrounds→medias",
+  "branch": "feature/v5.7.1",
+  "version": "5.8.0",
+  "started_at": "2026-06-07T10:00:00Z",
+  "cycles": 1,
+  "issue_nums": [97, 98, 99],
+  "milestone_num": 15,
   "phases": {
     "clarification": { "status": "completed", "skipped": false },
-    "plan":          { "status": "completed", "report": "_work/reports/plan-ardoise-20260520-093500.md" },
-    "dev-backend":   { "status": "completed", "sha": "cf7b7a9", "handoff": "_work/handoff/dev-backend-20260520-120000.md" },
-    "dev-frontend":  { "status": "completed", "sha": "585681d", "handoff": "_work/handoff/dev-frontend-889090-20260520-1100.md" },
-    "test-writer":   { "status": "completed", "sha": "d81cecc", "handoff": "_work/handoff/dev-testfix2-20260520-1540.md", "cycles": 3 },
-    "review":        { "status": "completed", "report": "_work/reports/code-review-ardoise-20260520-113000.md", "verdict": "APPROUVÉ" },
-    "qa":            { "status": "validated", "report": "_work/reports/qa-centrage2-20260521-001200.md", "cycles": 17 },
-    "doc":           { "status": "completed", "report": "_work/reports/doc-updater-20260520-093700.md", "note": "pre-DEV contract-first + CHANGELOG post-QA" },
-    "deploy-qualif": { "status": "validated", "report": "_work/reports/qualif-ardoise-v5.6.0-cycle17-20260522-120900.md", "sha": "c1f0ab8" },
-    "deploy-prod":   { "status": "deployed", "report": "_work/reports/deploy-prod-v5.6.0-20260522-141500.md", "sha": "705a165", "tag": "v5.6.0" }
+    "plan":          { "status": "in_progress", "report": null },
+    "dev-backend":   { "status": "pending" },
+    "dev-frontend":  { "status": "pending" },
+    "test-writer":   { "status": "pending" },
+    "review":        { "status": "pending" },
+    "qa":            { "status": "pending" },
+    "doc":           { "status": "pending" },
+    "deploy-qualif": { "status": "pending" },
+    "deploy-prod":   { "status": "pending" }
   }
 }

@@ -72,10 +72,10 @@ Extraire :
 
 1. **TeamCreate** avec le nom `{TEAM_NAME}` (defini dans CLAUDE.md)
 
-2. **Spawner tous les teammates du projet en parallèle** — lire la liste dans CLAUDE.md section "Agents Disponibles" :
+2. **Spawner les teammates permanents en parallèle** — lire la liste dans CLAUDE.md section "Agents Disponibles", colonne `Spawn = permanent` :
 
 ```
-Pour chaque agent listé :
+Pour chaque agent avec Spawn = permanent :
 Task({
   name: "<nom-canonique>",
   prompt: "Lis .claude/agents/context/TEAMMATES_PROTOCOL.md puis .claude/agents/<nom>.md.
@@ -83,6 +83,8 @@ Task({
            Mets-toi en IDLE après avoir envoyé ACTIF — le teamleader t'enverra ta tâche."
 })
 ```
+
+> Les agents `ponctuel` (ex: `security`, `infra`) sont spawned à la demande par leur commande dédiée — ne pas les inclure ici.
 
 3. **Attendre les ACTIF de tous les teammates** avant de continuer.
 

@@ -79,7 +79,7 @@ git commit -m "chore(version): Bump to X.Y.Z"
 
 ### Etape 3 : Implementer
 
-Voir ordre par agent dans `context/PROJECT_CONTEXT.md`.
+Voir ordre par agent dans `CLAUDE.md`.
 
 ### Etape 4 : Build Final
 

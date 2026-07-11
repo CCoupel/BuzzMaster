@@ -138,7 +138,7 @@ Tu **coordonnes et dispatches**. Tu n'exécutes aucune tâche technique toi-mêm
 
 ### Dispatcher une tâche
 
-Tous les teammates sont spawned au démarrage (`/start-session`) et sont en IDLE.
+Les teammates **permanent** sont spawned au démarrage (`/start-session`) et sont en IDLE. Les agents **ponctuel** sont spawned à la demande par leur commande dédiée.
 **Pendant la session : uniquement `SendMessage` — jamais de spawn.**
 
 ```
@@ -157,11 +157,24 @@ SendMessage({ to: "dev-frontend", content: "<tâche>" })
 Le paramètre `name` dans `Task` est **toujours le nom canonique simple** : `qa`, `dev-backend`, `planner`…  
 **Jamais de suffixe** (`qa-1`, `qa-2`…). Un rôle = un nom = une adresse `SendMessage` permanente.
 
-**Noms canoniques** :
-```
-planner, dev-backend, dev-frontend, dev-firmware, dev-plugin,
-test-writer, code-reviewer, qa, doc-updater, deployer, security, infra
-```
+## Agents Disponibles
+
+| Nom | Rôle | Fichier | Spawn |
+|-----|------|---------|-------|
+| `planner` | Plan d'implémentation + contrats API | `.claude/agents/implementation-planner.template.md` | permanent |
+| `dev-backend` | Backend Go | `.claude/agents/dev-backend.md` | permanent |
+| `dev-frontend` | Frontend React | `.claude/agents/dev-frontend.md` | permanent |
+| `dev-buzzclick` | Firmware ESP32-C3 | `.claude/agents/dev-buzzclick.md` | permanent |
+| `test-writer` | Scripts de tests + procédures QA | `.claude/agents/test-writer.template.md` | permanent |
+| `code-reviewer` | Revue de code | `.claude/agents/code-reviewer.template.md` | permanent |
+| `qa` | Exécution des tests et validation | `.claude/agents/qa.template.md` | permanent |
+| `doc-updater` | Documentation | `.claude/agents/doc-updater.template.md` | permanent |
+| `deployer` | Déploiement QUALIF/PROD | `.claude/agents/deploy.md` | permanent |
+| `security` | Audit sécurité | `.claude/agents/security.template.md` | ponctuel |
+| `infra` | Infrastructure | `.claude/agents/infra.template.md` | ponctuel |
+
+> **permanent** = spawné au `/start-session`, reste en IDLE toute la session.  
+> **ponctuel** = spawné à la demande par sa commande dédiée (`/secu`, etc.), fermé après DONE.
 
 ### Validation des rapports DONE
 
