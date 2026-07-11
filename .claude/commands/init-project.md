@@ -975,6 +975,48 @@ Pour chaque fichier compare, determiner le statut :
 | `INCHANGE` | Present dans les deux, contenu identique |
 | `RELIQUAT` | Present dans DEPLOYED, absent de EXPECTED |
 
+#### Etape d3b — Comparer la table "Agents Disponibles" (teammates)
+
+> ⚠ **SCOPE STRICT** : cette comparaison (et sa mise à jour en d5c) ne porte que sur le
+> *texte* de la table `## Agents Disponibles` dans `CLAUDE.md`. Elle ne crée, ne supprime
+> et ne modifie **jamais** `.claude/agents/*.md` ni `.claude/agents/*.template.md` — la liste
+> réelle des agents déployés pour le projet n'est jamais changée par cette étape. Un
+> `RELIQUAT` ou un `NOUVEAU` ici signale un écart de *documentation*, pas une action sur
+> les agents eux-mêmes.
+
+**Calculer les lignes attendues**, selon la stack déjà configurée dans `project-config.json`
+(les agents génériques sont toujours attendus, les agents `dev-*` seulement si la stack
+correspondante est configurée) :
+
+```bash
+BACKEND_LANG=$(jq -r '.stack.backend.language // ""'   .claude/project-config.json)
+FRONTEND_LANG=$(jq -r '.stack.frontend.language // ""' .claude/project-config.json)
+FRONTEND_FW=$(jq -r '.stack.frontend.framework // ""'  .claude/project-config.json)
+PLUGIN_PLATFORM=$(jq -r '.stack.plugin.platform // ""' .claude/project-config.json)
+BACKEND_TECH="$BACKEND_LANG"
+FRONTEND_TECH="${FRONTEND_FW:-$FRONTEND_LANG}"
+
+# Toujours attendus, independants de la stack
+EXPECTED_TEAMMATES=(planner test-writer code-reviewer qa doc-updater deployer security infra)
+[[ -n "$BACKEND_LANG"    ]] && EXPECTED_TEAMMATES+=(dev-backend)
+[[ -n "$FRONTEND_LANG"   ]] && EXPECTED_TEAMMATES+=(dev-frontend)
+[[ -n "$PLUGIN_PLATFORM" ]] && EXPECTED_TEAMMATES+=(dev-plugin)
+```
+
+**Lire la table courante** dans le `CLAUDE.md` du projet (section entre `## Agents Disponibles`
+et le prochain `---`) et la table source dans `TEMPLATE_claude/CLAUDE_TEMPLATE.md` (même
+section, avec `{BACKEND_TECH}`/`{FRONTEND_TECH}`/`{PLUGIN_PLATFORM}` substitués par les
+valeurs ci-dessus).
+
+Pour chaque agent, determiner le statut :
+
+| Statut | Critere |
+|--------|---------|
+| `NOUVEAU` | Dans `EXPECTED_TEAMMATES`, absent de la table du projet |
+| `MODIFIE` | Present dans les deux, mais Rôle/Fichier/Spawn different de l'attendu |
+| `INCHANGE` | Present dans les deux, ligne identique |
+| `RELIQUAT` | Present dans la table du projet, absent de `EXPECTED_TEAMMATES` (stack retiree, ou agent qui n'existe plus dans le template) |
+
 #### Etape d4 — Presenter le rapport
 
 Pour chaque fichier MODIFIE, lire les deux versions et generer une explication courte
@@ -1000,6 +1042,12 @@ Synchronisation depuis github.com/<repo>
   Contextes (agents/context/ et commands/context/) :
   [~] TEAMMATES_PROTOCOL — <explication courte>   ← modifie
   [=] COMMON, DEV_COMMON, GITHUB, VALIDATION_COMMON, CDP_WORKFLOWS, DEVELOPMENT, QUALITY (7 inchangés)
+
+  Teammates (table "Agents Disponibles" — documentation uniquement, agents non touchés) :
+  [+] dev-plugin                          ← nouveau (stack plugin configurée, absente de la table)
+  [~] dev-backend  — tech passée de Node.js à Go
+  [!] dev-firmware                        ← RELIQUAT (stack firmware retirée du projet)
+  [=] planner, test-writer, code-reviewer, qa, doc-updater, deployer, security, infra (8 inchangés)
 
   Nouveaux   : N
   Modifies   : N
@@ -1190,6 +1238,35 @@ Pour chaque fichier non-PROPRE, afficher le diff annoté et proposer l'action :
 > Le système fonctionne correctement quelle que soit l'action choisie.
 > La dérive est un signal de maintenance, pas une erreur bloquante.
 
+#### Etape d5c — Mettre à jour la table "Agents Disponibles" dans CLAUDE.md
+
+> ⚠ **SCOPE STRICT** : identique au rappel de l'étape d3b — cette étape réécrit uniquement
+> le texte de la table `## Agents Disponibles` dans `CLAUDE.md`. Elle ne touche jamais
+> `.claude/agents/*.md` ni `.claude/agents/*.template.md`.
+
+Exécutée quand l'utilisateur choisit **A** ou **B** en d4 (jamais sous **C — Annuler**),
+à partir du statut calculé en d3b :
+
+- `NOUVEAU` → ajouter la ligne dans la table (Rôle/Fichier/Spawn attendus)
+- `MODIFIE` → remplacer la ligne existante par la version attendue
+- `INCHANGE` → ne rien faire
+- `RELIQUAT` → retirer la ligne uniquement sous **Option A** ; la conserver sous **Option B**
+
+```bash
+# Extraire la table courante (entre le titre et le prochain "---")
+awk '/^## Agents Disponibles/,/^---$/' CLAUDE.md > .claude/.teammates-table.tmp
+```
+
+Reconstruire la table ligne par ligne selon les statuts ci-dessus, puis réinjecter le
+résultat dans `CLAUDE.md` à la même position (même mécanique que l'étape d6 pour le bloc
+`TEAMLEADER_PROTOCOL`, mais bornée par le titre `## Agents Disponibles` et le `---` suivant
+plutôt que par des marqueurs HTML) :
+
+```bash
+rm -f .claude/.teammates-table.tmp
+echo "✓ CLAUDE.md — table Agents Disponibles mise à jour"
+```
+
 #### Etape d6 — Mettre à jour le bloc TEAMLEADER_PROTOCOL dans CLAUDE.md
 
 Le bloc entre `<!-- BEGIN TEAMLEADER_PROTOCOL -->` et `<!-- END TEAMLEADER_PROTOCOL -->` est maintenu par le template.  
@@ -1248,11 +1325,12 @@ Synchronisation terminee.
   Agents mis a jour                 : N
   Reliquats supprimes               : N
   CLAUDE.md bloc TEAMLEADER_PROTOCOL : mis à jour
+  CLAUDE.md table Agents Disponibles : mis à jour (N lignes — documentation uniquement)
   Labels GitHub                     : vérifiés (PLANNING, EN COURS, EN REVIEW, EN QA, DONE)
 
   Fichiers PROJET preserves (non touches) :
-    ✓ CLAUDE.md (hors bloc TEAMLEADER_PROTOCOL)
+    ✓ CLAUDE.md (hors bloc TEAMLEADER_PROTOCOL et hors table Agents Disponibles)
     ✓ .claude/project-config.json
     ✓ .claude/memory/
-    ✓ .claude/agents/dev-*.md
+    ✓ .claude/agents/dev-*.md   (jamais modifiés par la sync de la table Agents Disponibles)
 ```

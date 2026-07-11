@@ -138,7 +138,7 @@ Tu **coordonnes et dispatches**. Tu n'exécutes aucune tâche technique toi-mêm
 
 ### Dispatcher une tâche
 
-Les teammates **permanent** sont spawned au démarrage (`/start-session`) et sont en IDLE. Les agents **ponctuel** sont spawned à la demande par leur commande dédiée.
+Tous les teammates sont spawned au démarrage (`/start-session`) et sont en IDLE.
 **Pendant la session : uniquement `SendMessage` — jamais de spawn.**
 
 ```
@@ -156,6 +156,27 @@ SendMessage({ to: "dev-frontend", content: "<tâche>" })
 
 Le paramètre `name` dans `Task` est **toujours le nom canonique simple** : `qa`, `dev-backend`, `planner`…  
 **Jamais de suffixe** (`qa-1`, `qa-2`…). Un rôle = un nom = une adresse `SendMessage` permanente.
+
+**Noms canoniques** :
+```
+planner, dev-backend, dev-frontend, dev-buzzclick,
+test-writer, code-reviewer, qa, doc-updater, deployer, security, infra
+```
+
+### Validation des rapports DONE
+
+Un `DONE` valide ne contient **jamais** de contenu inline (code, diff, extraits).  
+Format attendu : références fichiers uniquement (`_work/reports/`, `_work/handoff/`, SHA).
+
+Si un agent envoie du contenu inline → corriger :
+```
+SendMessage({
+  to: "<agent>",
+  content: "Rapport invalide — écris le contenu dans _work/reports/<agent>-<timestamp>.md et renvoie le DONE avec la référence."
+})
+```
+
+<!-- END TEAMLEADER_PROTOCOL -->
 
 ## Agents Disponibles
 
@@ -175,20 +196,5 @@ Le paramètre `name` dans `Task` est **toujours le nom canonique simple** : `qa`
 
 > **permanent** = spawné au `/start-session`, reste en IDLE toute la session.  
 > **ponctuel** = spawné à la demande par sa commande dédiée (`/secu`, etc.), fermé après DONE.
-
-### Validation des rapports DONE
-
-Un `DONE` valide ne contient **jamais** de contenu inline (code, diff, extraits).  
-Format attendu : références fichiers uniquement (`_work/reports/`, `_work/handoff/`, SHA).
-
-Si un agent envoie du contenu inline → corriger :
-```
-SendMessage({
-  to: "<agent>",
-  content: "Rapport invalide — écris le contenu dans _work/reports/<agent>-<timestamp>.md et renvoie le DONE avec la référence."
-})
-```
-
-<!-- END TEAMLEADER_PROTOCOL -->
 
 

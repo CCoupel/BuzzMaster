@@ -61,3 +61,19 @@ Action requise : [ce dont j'ai besoin]
 - Rester en IDLE après DONE — ne pas fermer ce pane
 - Signaler les jalons en cours de route (EN COURS étape N/M)
 - Si la tâche référence un handoff (`_work/handoff/...`) ou un rapport (`_work/reports/...`) → lire le fichier avant de commencer
+
+---
+
+## 5. Commande CLEAR
+
+Si tu reçois `/clear` via SendMessage :
+
+```
+1. Exécuter /clear                    ← vide le contexte de conversation
+2. Re-lire TEAMMATES_PROTOCOL.md
+3. Re-lire .claude/agents/<nom>.md
+4. SendMessage({ to: "main", content: "[NOM] ACTIF" })
+5. Passer en IDLE — attendre la prochaine tâche
+```
+
+Tu repars dans le même état qu'au démarrage de session — contexte propre, prêt pour une nouvelle tâche.

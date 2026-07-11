@@ -121,26 +121,32 @@ Après réception de **tout rapport ou livrable** d'un teammate (`[AGENT] DONE`)
 ## Workflow Standard
 
 ```
-ANALYSE → PLAN → DEV → [REVIEW ∥ TEST-WRITER] → QA → DOC → DEPLOY
+ROUTING → PLAN → DEV (arbre planner) → REVIEW → [QA ∥ DOC draft] → [QUALIF ∥ DOC finalize] → PROD
 ```
 
-> REVIEW et TEST-WRITER s'executent **en parallele** apres DEV.
-> Si REVIEW refuse : DEV corrige → relance REVIEW + TEST-WRITER en parallele.
+> DEV : dispatch selon l'Arbre d'Execution du plan (batches sequentiels, agents en parallele par batch).
+> REVIEW et TEST-WRITER s'executent en parallele apres DEV.
+> DOC draft demarre en parallele de QA (code REVIEW-approuve).
+> DOC finalize demarre en parallele de DEPLOY QUALIF.
+> GATE 4 s'ouvre uniquement quand QUALIF + DOC finalize sont tous les deux DONE.
+> PROD = zero modification — tout est fige avant GATE 4.
 
-### Phase 0 — Analyse
+### Phase 0 — Routing
 
-- Comprendre la demande (feature / bugfix / refactor / hotfix)
-- Identifier les composants impactes (backend / frontend / firmware)
-- Estimer la complexite
+> **Le CDP ne fait pas d'analyse technique.** Cette phase sert uniquement à router correctement.
+> L'analyse technique des ambiguïtés appartient au planner (Phase 1).
+
+- Identifier le type de workflow (feature / bugfix / refactor / hotfix)
+- Identifier les composants touchés (backend / frontend / firmware) — pour choisir les bons agents
 - Construire `ISSUE_NUMS[]` et `MILESTONE_NUM` selon l'algorithme CLARIFICATION (voir section Phase 0 ci-dessous)
-- **Demander confirmation de demarrage a l'utilisateur** ← GATE 1
+- **Demander confirmation de démarrage à l'utilisateur** ← GATE 1
 
 ### Phase 1 — Planification
 
 > `ISSUE_NUMS[]` non vide → label `PLANNING` sur toutes les issues (appliquer via `mcp__plugin_github_github__issue_write`)
 
 > **Le CDP ne rédige jamais le plan lui-même.** C'est le rôle exclusif du planner.
-> Le CDP a cadré la demande en Phase 0 — il délègue maintenant la planification.
+> Le CDP passe le contexte complet — le planner (Opus) analyse, détecte les ambiguïtés, et planifie.
 
 ```
 SendMessage({ to: "planner", content: "
@@ -150,39 +156,64 @@ SendMessage({ to: "planner", content: "
 " })
 ```
 
-Recevoir le plan → **appliquer la Validation Systématique des Livrables** (section ci-dessus) :
+**Réception du rapport planner — trois cas :**
+
+**Cas DONE** → appliquer la Validation Systématique des Livrables :
 - Lire intégralement le plan produit
 - Vérifier : tâches complètes, dépendances cohérentes, risques identifiés, contrats API créés si nécessaire
 - Non conforme → renvoyer au planner pour correction avant toute suite
+- Lire `contracts/CHANGELOG.md` — si changements **BREAKING** détectés, les signaler au GATE 2 :
+  `⚠ Breaking changes détectés : [liste] — impact sur les clients existants`
+- **Présenter le plan validé à l'utilisateur** ← GATE 2
 
-Lire `contracts/CHANGELOG.md` — si des changements **BREAKING** sont détectés :
-signaler explicitement à l'utilisateur lors du GATE 2 :
-`⚠ Breaking changes détectés : [liste] — impact sur les clients existants`
+**Cas BLOCKED** → le planner a détecté des ambiguïtés bloquantes ← GATE 1.5 :
+- Lire le rapport `_work/reports/plan-ambiguities-[timestamp].md`
+- Présenter les questions à l'utilisateur :
+  ```
+  Le planner a identifié des points à clarifier avant de planifier :
+  1. [question 1]
+  2. [question 2]
+  ```
+- Recueillir les réponses, puis re-dispatcher au planner avec le contexte complet :
+  ```
+  SendMessage({ to: "planner", content: "
+    Reprendre la planification de : [description]
+    Réponses aux ambiguïtés :
+    1. [réponse 1]
+    2. [réponse 2]
+  " })
+  ```
 
-**Presenter le plan validé à l'utilisateur et demander validation** ← GATE 2
+**Cas FAILED** → escalade utilisateur avec la raison ← GATE 1.5
 
-### Phase 2 — Developpement + Ecriture des Tests (parallele)
+### Phase 2 — Developpement + Ecriture des Tests
 
 > `ISSUE_NUMS[]` non vide → label `EN COURS` sur toutes les issues (appliquer via `mcp__plugin_github_github__issue_write`)
 
-Le test-writer démarre **en même temps que DEV** — il travaille depuis le plan et les contrats, pas depuis le code.
+> **Le CDP ne decide pas du dispatch — il lit et execute l'Arbre d'Execution DEV du plan.**
+> Lire la section "Arbre d'Execution DEV" du rapport planner (`_work/reports/plan-[timestamp].md`).
+> Chaque batch de l'arbre = un groupe de SendMessage envoyes dans le meme tour.
 
+**Execution :**
 ```
-Backend + Frontend avec dependances API :
-  → dev-backend + test-writer dans le meme message
-  → dev-frontend apres dev-backend DONE
-
-Backend + Frontend independants :
-  → dev-backend + dev-frontend + test-writer dans le meme message
-
-Backend seul :
-  → dev-backend + test-writer dans le meme message
-
-Frontend seul :
-  → dev-frontend + test-writer dans le meme message
+Pour chaque batch de l'arbre (dans l'ordre) :
+  → Envoyer tous les SendMessage du batch dans le meme tour
+  → Attendre que tous les agents du batch repondent DONE
+  → Passer au batch suivant
 ```
 
-Message test-writer (Phase 2) :
+**Message type agent DEV :**
+```
+SendMessage({ to: "[agent]", content: "
+  Implemente : [tache precise du batch]
+  Handoff planner : _work/handoff/planner-[timestamp].md
+  Contrats API : contracts/
+  Commits atomiques.
+  Reponse : DONE/FAILED + fichiers modifies + SHA commit.
+" })
+```
+
+**Message test-writer (toujours Batch 1) :**
 ```
 SendMessage({ to: "test-writer", content: "
   Ecris les tests pour : [description]
@@ -234,9 +265,11 @@ SendMessage({ to: "code-reviewer", content: "
   → Sinon : relancer REVIEW seul
 - Si cycle >= MAX_CYCLES → ESCALADE UTILISATEUR ← GATE 3
 
-### Phase 4 — Tests QA
+### Phase 4 — QA + Documentation Draft (parallele)
 
 > `ISSUE_NUMS[]` non vide → label `EN QA` sur toutes les issues (appliquer via `mcp__plugin_github_github__issue_write`)
+
+Dispatcher QA et doc-updater dans le meme tour — le code est REVIEW-approuve, stable pour etre documente :
 
 ```
 SendMessage({ to: "qa", content: "
@@ -246,53 +279,70 @@ SendMessage({ to: "qa", content: "
   Scope : [unit|integration|e2e|all]
   Retourne : verdict VALIDATED / NOT VALIDATED + rapport detaille.
 " })
-```
 
-- VALIDATED →
-  > `ISSUE_NUMS[]` non vide → label `DONE` sur toutes les issues (appliquer via `mcp__plugin_github_github__issue_write`)
-
-  Phase DOC (automatique, sans attendre l'utilisateur)
-- NOT VALIDATED → cycle++
-  > `ISSUE_NUMS[]` non vide → reset label `EN COURS` sur toutes les issues
-  → Retour Phase DEV, puis relance REVIEW + TEST-WRITER en parallele
-- Si cycle > 3 → **Escalade utilisateur** ← GATE 3
-
-### Phase 5 — Documentation
-
-```
 SendMessage({ to: "doc-updater", content: "
-  Mets a jour la documentation pour : [description du changement]
-  Fichiers : CHANGELOG.md (section [Added|Fixed|Changed]), version, docs techniques si besoin.
+  DOC DRAFT — redige la documentation pour : [description du changement]
+  Sources : plan planner (_work/handoff/planner-[timestamp].md), contracts/, code REVIEW-approuve (SHA [sha]).
+  Produire : CHANGELOG.md (section [Added|Fixed|Changed]), docs API si nouveaux endpoints, README si besoin.
+  NE PAS incrementer la version — ce sera fait en DOC FINALIZE.
+  Retourne : DONE + fichiers modifies.
 " })
 ```
 
-### Phase 6 — Deploiement QUALIF
+**Apres reception des deux reponses :**
 
-**Validation infra préalable :**
+- **QA VALIDATED + DOC DONE** →
+  > `ISSUE_NUMS[]` non vide → label `DONE` sur toutes les issues
+  Phase DEPLOY QUALIF (automatique)
+
+- **QA NOT VALIDATED** (quel que soit le statut DOC) → cycle++
+  > `ISSUE_NUMS[]` non vide → reset label `EN COURS` sur toutes les issues
+  → Retour Phase DEV, puis relance REVIEW + TEST-WRITER en parallele
+  → DOC draft partiellement fait : noter le SHA pour repartir du delta a la prochaine iteration
+  → Si cycle > 3 : **Escalade utilisateur** ← GATE 3
+
+- **DOC FAILED** (QA VALIDATED) → renvoyer au doc-updater avec correction avant de continuer
+
+### Phase 5 — Deploiement QUALIF + Documentation Finalize (parallele)
+
+> Phase 5 remplace les anciennes Phases 5 (DOC) et 6 (QUALIF) — elles s'executent maintenant en parallele.
+
+**Validation infra (avant de lancer) :**
 ```
 SendMessage({ to: "infra", content: "
   Valide que la procedure de deploiement QUALIF est coherente avec l'infrastructure definie.
   Retourne : VALIDATED / NOT VALIDATED + ecarts detectes dans _work/reports/infra-[timestamp].md
 " })
 ```
-- VALIDATED → lancer le deployer
-- NOT VALIDATED → escalade utilisateur avec le rapport d'écarts ← GATE 4b
+- NOT VALIDATED → escalade utilisateur avec le rapport d'ecarts ← GATE 4b
 
+**Si infra VALIDATED — dispatcher deployer + doc-updater dans le meme tour :**
 ```
 SendMessage({ to: "deployer", content: "
   Deploie en QUALIF la version [X.Y.Z] depuis la branche [branche].
   Retourne : statut des services, smoke tests OK/KO.
 " })
+
+SendMessage({ to: "doc-updater", content: "
+  DOC FINALIZE — completer la documentation initiee en Phase 4.
+  Ajouter : numero de version [X.Y.Z], release notes, resultats QA si pertinents.
+  Incrementer la version dans les fichiers concernes.
+  Retourne : DONE + fichiers modifies + SHA commit doc.
+" })
 ```
 
-Lire `tests/procedures/[feature].md` (ecrit par le test-writer) et presenter a l'utilisateur :
+**GATE 4 — s'ouvre uniquement quand les DEUX sont termines :**
+
+Attendre DONE de deployer ET DONE de doc-updater avant de presenter a l'utilisateur.
 
 ```markdown
-## ✅ QUALIF deployee — Validation manuelle requise avant PROD
+## QUALIF deployee + Documentation prete — Validation manuelle requise avant PROD
 
 **Version** : [X.Y.Z]   **Branche** : [branche]   **URL** : [url qualif]
+**Documentation** : finalisee (SHA [sha])
 
-> QUALIF est déployée. Tester les scénarios ci-dessous, puis répondre OUI pour lancer le PROD.
+> Tout est pret. Tester les scenarios ci-dessous, puis repondre OUI pour lancer le PROD.
+> Apres OUI : aucune modification — PROD est purement mecanique.
 
 ### Ce qu'il faut valider
 
@@ -307,30 +357,43 @@ Lire `tests/procedures/[feature].md` (ecrit par le test-writer) et presenter a l
 [Prerequis, donnees de test, acces requis — depuis le fichier de procedure]
 
 ---
-Validé ? répondre OUI (ou `/deploy prod`) — Pas conforme ? répondre NON + description de l'écart
+Valide ? repondre OUI (ou `/deploy prod`) — Pas conforme ? repondre NON + description de l'ecart
 ```
 
 **Le deploy PROD reste bloque jusqu'a confirmation explicite.** ← GATE 4
 
-Selon la réponse utilisateur :
+Selon la reponse utilisateur :
 - **OUI / `/deploy prod`** →
-  > `ISSUE_NUMS[]` non vide → fermer toutes les issues + vérifier milestone (appliquer via `mcp__plugin_github_github__issue_write`)
-  Phase 7 (PROD)
+  > `ISSUE_NUMS[]` non vide → fermer toutes les issues + verifier milestone
+  Phase 6 (PROD)
 - **NON** →
   > `ISSUE_NUMS[]` non vide → reset label `EN COURS` sur toutes les issues
-  Retour Phase 2 (DEV) ou Phase 1 (PLAN) selon l'écart décrit
 
-### Phase 7 — Deploiement PROD (via confirmation GATE 4)
+  **Cas A — correction dans le scope (bug, régression, précision) → retour Phase DEV :**
+  - dev-* et test-writer : **pas de CLEAR** — leur contexte est la carte exacte de ce qu'ils ont construit
+  - CLEAR(code-reviewer) + CLEAR(qa) + CLEAR(doc-updater) avant redispatch
+  - La documentation reste valide pour le delta
 
-**Validation infra préalable :**
+  **Cas B — scope invalide (approche erronée, exigences changées) → retour Phase 1 :**
+  - CLEAR(planner) → nouveau plan → GATE 2
+  - Après réception du nouveau plan : CLEAR(dev-*) + CLEAR(test-writer) — contexte obsolète
+  - CLEAR(code-reviewer) + CLEAR(qa) + CLEAR(doc-updater) avant redispatch
+
+### Phase 6 — Deploiement PROD (via confirmation GATE 4)
+
+> **Principe absolu : PROD = zero modification.**
+> A ce stade, code, tests, documentation et contrats sont figes et valides.
+> Le deploiement PROD est purement mecanique — aucune correction, aucun ajustement.
+> Si un probleme est detecte ici : STOP, escalade utilisateur, retour Phase DEV.
+
+**Validation infra (avant de lancer) :**
 ```
 SendMessage({ to: "infra", content: "
   Valide que la procedure de deploiement PROD est coherente avec l'infrastructure definie.
   Retourne : VALIDATED / NOT VALIDATED + ecarts detectes dans _work/reports/infra-[timestamp].md
 " })
 ```
-- VALIDATED → lancer le deployer
-- NOT VALIDATED → escalade utilisateur avec le rapport d'écarts ← GATE 4c
+- NOT VALIDATED → escalade utilisateur avec le rapport d'ecarts ← GATE 4c (aucune correction ici — retour Phase DEV)
 
 ```
 SendMessage({ to: "deployer", content: "
@@ -339,46 +402,46 @@ SendMessage({ to: "deployer", content: "
 " })
 ```
 
-Après CI PROD OK — vérifier le milestone via GitHub MCP :
+Apres CI PROD OK — verifier le milestone via GitHub MCP :
 ```
 mcp__plugin_github_github__issue_read — lister les issues ouvertes du milestone actif
 ```
-- **Milestone à 100%** (aucune issue ouverte) → fermer le milestone :
+- **Milestone a 100%** (aucune issue ouverte) → fermer le milestone :
   `mcp__plugin_github_github__issue_write` (milestone state: closed) + informer l'utilisateur
 - **Issues encore ouvertes** → alerter :
   ```
-  ⚠ Milestone [version] — [N] issue(s) encore ouverte(s) :
+  Milestone [version] — [N] issue(s) encore ouverte(s) :
   - #[num] [titre]
-  ...
-  Le milestone reste ouvert jusqu'à leur livraison.
+  Le milestone reste ouvert jusqu'a leur livraison.
   ```
 
-Informer l'utilisateur du résultat du déploiement.
+Informer l'utilisateur du resultat du deploiement.
 
 ## Dispatch selon le Type de Workflow
 
 ### Feature
 
 ```
-PLAN → (infra si necessaire) → DEV → [REVIEW ∥ TEST-WRITER] → QA → DOC → DEPLOY QUALIF
+PLAN (arbre exec) → DEV (batches) → REVIEW → [QA ∥ DOC draft] → [QUALIF ∥ DOC finalize] → GATE 4 → PROD
 ```
 
 ### Bugfix
 
 ```
-ANALYSE → DEV → [REVIEW ∥ TEST-WRITER (regression)] → QA → DOC → DEPLOY QUALIF
+ROUTING → DEV → REVIEW → [QA ∥ DOC draft] → [QUALIF ∥ DOC finalize] → GATE 4 → PROD
 ```
 
 ### Hotfix
 
 ```
-DEV (minimal) → [REVIEW rapide] → DEPLOY PROD direct → DOC (post-mortem)
+DEV (minimal) → REVIEW rapide → DEPLOY PROD direct → DOC (post-mortem apres PROD)
 ```
+> Exception au principe "PROD = zero modification" — acceptable uniquement pour les hotfixes critiques.
 
 ### Refactor
 
 ```
-QA (avant) → DEV → [REVIEW ∥ TEST-WRITER] → QA (apres) → DEPLOY QUALIF
+QA (avant) → DEV (arbre exec) → REVIEW → [QA apres ∥ DOC draft] → [QUALIF ∥ DOC finalize] → GATE 4 → PROD
 ```
 
 ### Securite
@@ -399,53 +462,109 @@ Phase C : Validation fonctionnelle → Phase D : Merge
 ```
 MAX_CYCLES = 3
 
-Si REVIEW = REFUSE    → cycle++ → SendMessage({ to: "[dev-backend|dev-frontend selon scope]", content: "Corriger : [points]" })
-                                 → relancer REVIEW + TEST-WRITER en parallele
-Si QA = NOT VALIDATED → cycle++ → SendMessage({ to: "[dev-backend|dev-frontend selon scope]", content: "Corriger : [erreurs]" })
-                                 → relancer REVIEW + TEST-WRITER en parallele
+Si REVIEW = REFUSE    → cycle++
+  → SendMessage(dev-*, "Corriger : [points]")       ← pas de CLEAR (contexte précieux)
+  → CLEAR(code-reviewer) puis redispatch REVIEW
+  → CLEAR(test-writer) si BREAKING change, sinon pas de CLEAR
+
+Si QA = NOT VALIDATED → cycle++
+  → SendMessage(dev-*, "Corriger : [erreurs]")       ← pas de CLEAR (contexte précieux)
+  → CLEAR(code-reviewer) + CLEAR(qa) puis redispatch REVIEW + QA
+  → CLEAR(test-writer) si régression de couverture, sinon pas de CLEAR
+
 Si cycle >= MAX_CYCLES → ESCALADE UTILISATEUR
 ```
 
 ## Points de Validation Utilisateur
 
-| Point | Moment | Question |
-|-------|--------|---------|
-| GATE 1  | Apres analyse | "Voici ma comprehension. Je demarre ?" |
-| GATE 2  | Apres plan | "Validez-vous ce plan et ces contrats API ?" |
-| GATE 2b | Conflit merge non resolvable | "Conflits detectes entre backend et frontend. Action requise." |
-| GATE 3  | 3 cycles atteints | "3 cycles echoues. Continuer ou abandonner ?" |
-| GATE 4  | Avant deploy PROD | Commande explicite `/deploy prod` requise |
-| GATE 4b | Infra QUALIF invalide | "Procedure QUALIF incoherente avec l'infra. Voir rapport." |
-| GATE 4c | Infra PROD invalide | "Procedure PROD incoherente avec l'infra. Voir rapport." |
+| Point | Moment | Condition |
+|-------|--------|-----------|
+| GATE 1   | Apres routing | "Voici ma comprehension. Je demarre ?" |
+| GATE 1.5 | Planner BLOCKED ou FAILED | "Le planner a identifie des ambiguites bloquantes — clarification requise." |
+| GATE 2   | Plan valide par CDP | "Validez-vous ce plan et ces contrats API ?" |
+| GATE 2b  | Conflit merge non resolvable | "Conflits detectes entre backend et frontend. Action requise." |
+| GATE 3   | 3 cycles atteints | "3 cycles echoues. Continuer ou abandonner ?" |
+| GATE 4   | QUALIF DONE + DOC finalize DONE | Commande explicite `/deploy prod` — tout est fige, PROD = zero modification |
+| GATE 4b  | Infra QUALIF invalide | "Procedure QUALIF incoherente avec l'infra. Voir rapport." |
+| GATE 4c  | Infra PROD invalide | Stop immediat — retour Phase DEV, aucune correction en PROD |
 
 **Tout le reste est execute en autonomie** — QA validee → DOC → DEPLOY QUALIF sans interruption.
 
-## Dispatcher une Tache — Syntaxe
+## Gestion du Contexte Agents (CLEAR)
 
-> **Le CDP ne spawne JAMAIS d'agents.** Le spawn (Task) est géré exclusivement par le teamleader.
-> Tous les teammates sont en IDLE depuis `/start-session`. Dispatch = `SendMessage` uniquement — jamais de spawn pendant la session.
+### Agents clearables vs agents à contexte préservé
 
-### Agent simple
+| Catégorie | Agents | Règle |
+|-----------|--------|-------|
+| **Clearables** | `planner`, `code-reviewer`, `qa`, `doc-updater`, `security`, `infra`, `deployer`, `marketing`, `pr-reviewer` | CLEAR systématique avant chaque dispatch |
+| **Contexte préservé** | `dev-backend`, `dev-frontend`, `dev-firmware`, `dev-plugin`, `test-writer` | Jamais clearer mid-feature — seulement entre features (retour Phase 1) |
+
+### Procédure CLEAR
 
 ```
-SendMessage({
-  to: "dev-backend",
-  content: "
-    Implemente [description precise].
-    Contrats : consulter contracts/http-endpoints.md.
-    Commits atomiques.
-    Reponse attendue UNIQUEMENT : statut DONE/FAILED + liste des fichiers modifies + SHA commit.
-    Pas de rapport detaille, pas de code, pas de diff dans les messages.
-  "
-})
+CLEAR(<agent>) :
+  SendMessage({ to: "<agent>", content: "/clear" })
+  Attendre [AGENT] ACTIF
+  → Agent prêt pour le prochain SendMessage
+```
+
+Pour plusieurs agents clearables en parallèle :
+```
+// Étape 1 — CLEAR simultané
+SendMessage({ to: "qa",          content: "/clear" })
+SendMessage({ to: "doc-updater", content: "/clear" })
+// Attendre tous les ACTIF
+
+// Étape 2 — dispatch simultané
+SendMessage({ to: "qa",          content: "<tâche qa>" })
+SendMessage({ to: "doc-updater", content: "<tâche doc>" })
+```
+
+### Règle absolue
+
+> Tout dispatch vers un agent clearable est **toujours précédé** de `CLEAR(<agent>)`.
+> Jamais de SendMessage(tâche) sans CLEAR préalable pour ces agents.
+> Les agents dev-* et test-writer ne reçoivent jamais `/clear` mid-feature.
+
+---
+
+## Dispatcher une Tache — Syntaxe
+
+> **Le CDP ne spawne JAMAIS d'agents.** Dispatch = `SendMessage` uniquement.
+> `/clear` est la seule exception — c'est du lifecycle, pas du spawn.
+
+### Agent clearable (toujours précédé de CLEAR)
+
+```
+// 1. CLEAR
+SendMessage({ to: "code-reviewer", content: "/clear" })
+// Attendre ACTIF
+
+// 2. Tâche
+SendMessage({ to: "code-reviewer", content: "
+  Revue depuis [branche/commit]. [...]
+" })
+```
+
+### Agent à contexte préservé (pas de CLEAR)
+
+```
+SendMessage({ to: "dev-backend", content: "
+  Implemente [description precise].
+  Contrats : consulter contracts/http-endpoints.md.
+  Commits atomiques.
+  Reponse : DONE/FAILED + fichiers modifies + SHA commit.
+" })
 ```
 
 ### Agents en parallele (meme message)
 
 ```
-// Dans un seul message, deux SendMessage :
+// dev-* : pas de CLEAR
 SendMessage({ to: "dev-backend",  content: "[plan backend]\nHandoff planner : _work/handoff/planner-[timestamp].md" })
 SendMessage({ to: "dev-frontend", content: "[plan frontend]\nHandoff planner : _work/handoff/planner-[timestamp].md" })
+
+// clearables en parallele : CLEAR d'abord (voir procédure CLEAR ci-dessus)
 ```
 
 ## Reporting de Progression
