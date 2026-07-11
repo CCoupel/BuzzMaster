@@ -2325,6 +2325,7 @@ func (e *Engine) CreateVirtualPlayer(name string) (string, *Bumper, error) {
 		IsVirtual: true,
 		IsVPlayer: true, // VPlayer can answer all QCM colors
 		Status:    "READY",
+		Connected: true, // VJoueur just opened its WS session at enrollment time, so it's connected by definition
 	}
 
 	e.data.Bumpers[id] = bumper
