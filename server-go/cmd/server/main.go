@@ -433,6 +433,18 @@ func (a *App) setupCallbacks() {
 		a.updateBroadcasterFrequency()
 	}
 
+	// Handle individual VPlayer disconnection (#109): set CONNECTED=false when a VJoueur's
+	// WebSocket closes. Guard: if the VJoueur already reconnected (same PlayerID, new WS
+	// connection) before this fires, skip the CONNECTED=false to avoid a badge flash caused
+	// by the zombie connection unregistering after the new connection is live.
+	a.wsHub.OnPlayerDisconnected = func(playerID string) {
+		if a.wsHub.IsPlayerIDConnected(playerID) {
+			return // zombie disconnect: a reconnection already took over
+		}
+		a.engine.UpdateBumper(playerID, map[string]interface{}{"CONNECTED": false})
+		a.broadcastUpdate()
+	}
+
 	// Handle new log entries - broadcast to logs WebSocket clients
 	a.logger.SetOnNewEntry(func(entry game.LogEntry) {
 		payload := protocol.LogEntryPayload{
@@ -1887,6 +1899,12 @@ func (a *App) handlePlayerConnect(clientID string, msg *protocol.Message) {
 		connectedMsg, _ := protocol.NewMessage(protocol.ActionPlayerConnected, connectedPayload)
 		a.wsHub.SendToClient(clientID, connectedMsg)
 
+		// Link this WS client to its VJoueur bumper ID (used by OnPlayerDisconnected / anti-zombie guard)
+		a.wsHub.SetClientPlayerID(clientID, existingBumperID)
+
+		// Mark the VJoueur as connected again (#109: fixes missing disconnect/reconnect icon)
+		a.engine.UpdateBumper(existingBumperID, map[string]interface{}{"CONNECTED": true})
+
 		// Broadcast UPDATE to all clients (to notify of reconnection)
 		a.broadcastUpdate()
 		return
@@ -1921,6 +1939,9 @@ func (a *App) handlePlayerConnect(clientID string, msg *protocol.Message) {
 	connectedMsg, _ := protocol.NewMessage(protocol.ActionPlayerConnected, connectedPayload)
 	a.wsHub.SendToClient(clientID, connectedMsg)
 	server.LogInfo(game.LogComponentWebSocket, "PLAYER_CONNECT: player connected: id=%s, name=%s", bumperID, bumper.Name)
+
+	// Link this WS client to its VJoueur bumper ID (used by OnPlayerDisconnected / anti-zombie guard)
+	a.wsHub.SetClientPlayerID(clientID, bumperID)
 
 	// Broadcast UPDATE to all clients (teams/bumpers updated)
 	a.broadcastUpdate()
