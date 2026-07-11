@@ -2,6 +2,12 @@
 
 Historique des versions du projet BuzzControl.
 
+## [Unreleased]
+
+### Fixed
+- Icône de déconnexion absente pour les VJoueurs (VPlayers) lors de la perte WebSocket `/ws/player` — comportement désormais identique aux buzzers physiques (#109)
+
+---
 
 ## [5.7.10] - 2026-06-08
 
