@@ -88,26 +88,32 @@ describe('TeamsPage — badge ⚠ buzzer déconnecté', () => {
     expect(screen.queryByTitle('Buzzer déconnecté')).toBeNull()
   })
 
-  // Test 3 : badge absent quand CONNECTED=false mais IS_VIRTUAL=true
-  it('badge ⚠ absent quand IS_VIRTUAL=true même si CONNECTED=false', () => {
+  // Test 3 (mis à jour #109 — commit a4716ff) : le badge est maintenant VISIBLE
+  // même si IS_VIRTUAL=true. Avant #109, l'icône de déconnexion excluait volontairement
+  // les bumpers IS_VIRTUAL, masquant à tort la déconnexion des VJoueurs — c'était le bug.
+  // Le fix retire cette exclusion : seul CONNECTED fait foi, comme pour un buzzer physique.
+  // Voir plan _work/reports/plan-20260711-160927.md (tâche 10) et commit a4716ff.
+  it('badge ⚠ visible même quand IS_VIRTUAL=true si CONNECTED=false (#109)', () => {
     useGame.mockReturnValue(makeGameMock({
       'AA:BB:CC:DD:EE:03': { NAME: 'Virtual1', CONNECTED: false, IS_VIRTUAL: true },
     }))
 
     render(<TeamsPage />)
 
-    expect(screen.queryByTitle('Buzzer déconnecté')).toBeNull()
+    expect(screen.getByTitle('Buzzer déconnecté')).toBeInTheDocument()
   })
 
-  // Test 4 : badge absent quand CONNECTED=false mais IS_VPLAYER=true
-  it('badge ⚠ absent quand IS_VPLAYER=true même si CONNECTED=false', () => {
+  // Test 4 (mis à jour #109 — commit a4716ff) : le badge est maintenant VISIBLE
+  // même si IS_VPLAYER=true. C'est le coeur du bug #109 : un VJoueur déconnecté doit
+  // afficher la même icône qu'un buzzer physique déconnecté.
+  it('badge ⚠ visible même quand IS_VPLAYER=true si CONNECTED=false (#109)', () => {
     useGame.mockReturnValue(makeGameMock({
       'AA:BB:CC:DD:EE:04': { NAME: 'VPlayer1', CONNECTED: false, IS_VPLAYER: true },
     }))
 
     render(<TeamsPage />)
 
-    expect(screen.queryByTitle('Buzzer déconnecté')).toBeNull()
+    expect(screen.getByTitle('Buzzer déconnecté')).toBeInTheDocument()
   })
 
   // Test 5 : badge présent dans la section équipe (buzzer assigné à une équipe)
@@ -128,8 +134,10 @@ describe('TeamsPage — badge ⚠ buzzer déconnecté', () => {
     expect(badge).toBeInTheDocument()
   })
 
-  // Test 6 : plusieurs buzzers — seuls les déconnectés physiques ont le badge
-  it('badge ⚠ uniquement sur les buzzers physiques déconnectés (plusieurs buzzers)', () => {
+  // Test 6 (mis à jour #109 — commit a4716ff) : tous les bumpers CONNECTED=false
+  // affichent désormais le badge, quel que soit leur type (plus d'exclusion
+  // IS_VIRTUAL/IS_VPLAYER sur ce badge précis).
+  it('badge ⚠ sur tous les bumpers déconnectés quel que soit leur type (plusieurs buzzers, #109)', () => {
     useGame.mockReturnValue(makeGameMock({
       'AA:BB:CC:DD:EE:01': { NAME: 'Connected',     CONNECTED: true },
       'AA:BB:CC:DD:EE:02': { NAME: 'Disconnected',  CONNECTED: false },
@@ -139,9 +147,9 @@ describe('TeamsPage — badge ⚠ buzzer déconnecté', () => {
 
     render(<TeamsPage />)
 
-    // Un seul badge attendu (Disconnected uniquement)
+    // Trois badges attendus : Disconnected + Virtual + VPlayer (tous CONNECTED=false)
     const badges = screen.getAllByTitle('Buzzer déconnecté')
-    expect(badges).toHaveLength(1)
+    expect(badges).toHaveLength(3)
   })
 
   it('badge absent quand CONNECTED est undefined (firmware pré-v3.6.6)', () => {
@@ -150,6 +158,60 @@ describe('TeamsPage — badge ⚠ buzzer déconnecté', () => {
     }))
     render(<TeamsPage />)
     expect(screen.queryByTitle('Buzzer déconnecté')).toBeNull()
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Describe : icône de déconnexion pour les VJoueurs — couverture dédiée (#109)
+// Complète la describe ci-dessus avec des scénarios explicitement centrés sur
+// les champs bruts CONNECTED/IS_VPLAYER, y compris en section équipe assignée.
+// ---------------------------------------------------------------------------
+
+describe('TeamsPage — icône de déconnexion pour les VJoueurs (#109)', () => {
+
+  it('badge visible pour un VJoueur assigné à une équipe et déconnecté (IS_VPLAYER + CONNECTED=false)', () => {
+    useGame.mockReturnValue(makeGameMock(
+      {
+        vjoueur_alice: { NAME: 'Alice', TEAM: 'red', CONNECTED: false, IS_VPLAYER: true, IS_VIRTUAL: true },
+      },
+      {
+        red: { NAME: 'Équipe Rouge', COLOR: [255, 0, 0] },
+      }
+    ))
+
+    render(<TeamsPage />)
+
+    expect(screen.getByTitle('Buzzer déconnecté')).toBeInTheDocument()
+  })
+
+  it('badge absent pour un VJoueur connecté (IS_VPLAYER=true, CONNECTED=true)', () => {
+    useGame.mockReturnValue(makeGameMock({
+      vjoueur_bob: { NAME: 'Bob', CONNECTED: true, IS_VPLAYER: true, IS_VIRTUAL: true },
+    }))
+
+    render(<TeamsPage />)
+
+    expect(screen.queryByTitle('Buzzer déconnecté')).toBeNull()
+  })
+
+  it('non-régression : badge toujours présent pour un buzzer physique déconnecté après le fix #109', () => {
+    useGame.mockReturnValue(makeGameMock({
+      'AA:BB:CC:DD:EE:20': { NAME: 'Physique', CONNECTED: false },
+    }))
+
+    render(<TeamsPage />)
+
+    expect(screen.getByTitle('Buzzer déconnecté')).toBeInTheDocument()
+  })
+
+  it('non-régression : badge ACK_PENDING reste exclu pour un VJoueur (comportement inchangé, hors scope #109)', () => {
+    useGame.mockReturnValue(makeGameMock({
+      vjoueur_carla: { NAME: 'Carla', ACK_PENDING: true, IS_VPLAYER: true, IS_VIRTUAL: true },
+    }))
+
+    render(<TeamsPage />)
+
+    expect(screen.queryByTitle('En attente de confirmation')).toBeNull()
   })
 })
 

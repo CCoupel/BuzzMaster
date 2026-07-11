@@ -132,3 +132,85 @@ describe('TeamCard — badge ACK_PENDING (v3.8.0 #54)', () => {
     expect(badges).toHaveLength(1)
   })
 })
+
+// ---------------------------------------------------------------------------
+// Tests : icône de déconnexion pour les VJoueurs (#109 — commit a4716ff)
+//
+// Avant #109, le badge "Buzzer déconnecté" excluait volontairement les buzzers
+// isVPlayer/isVirtual, masquant à tort la déconnexion d'un VJoueur. Le fix retire
+// cette exclusion : seul buzzer.connected fait foi, comme pour un buzzer physique.
+// Voir plan _work/reports/plan-20260711-160927.md (tâche 9).
+// ---------------------------------------------------------------------------
+
+describe('TeamCard — icône de déconnexion pour les VJoueurs (#109)', () => {
+
+  it('badge "Buzzer déconnecté" visible pour un VJoueur déconnecté (isVPlayer=true, connected=false)', () => {
+    renderWithBuzzer({ isVPlayer: true, isVirtual: true, connected: false })
+
+    expect(screen.getByTitle('Buzzer déconnecté')).toBeInTheDocument()
+  })
+
+  it('badge "Buzzer déconnecté" absent pour un VJoueur connecté (isVPlayer=true, connected=true)', () => {
+    renderWithBuzzer({ isVPlayer: true, isVirtual: true, connected: true })
+
+    expect(screen.queryByTitle('Buzzer déconnecté')).toBeNull()
+  })
+
+  it('classe CSS "disconnected" appliquée au conteneur du VJoueur déconnecté', () => {
+    const { container } = renderWithBuzzer({ isVPlayer: true, isVirtual: true, connected: false })
+
+    const buzzerMini = container.querySelector('.buzzer-mini')
+    expect(buzzerMini).not.toBeNull()
+    expect(buzzerMini.className).toContain('disconnected')
+  })
+
+  it('classe CSS "disconnected" absente pour un VJoueur connecté', () => {
+    const { container } = renderWithBuzzer({ isVPlayer: true, isVirtual: true, connected: true })
+
+    const buzzerMini = container.querySelector('.buzzer-mini')
+    expect(buzzerMini.className).not.toContain('disconnected')
+  })
+
+  // --- Non-régression : le comportement du buzzer physique reste inchangé ---
+
+  it('non-régression : badge toujours visible pour un buzzer physique déconnecté (isVPlayer=false)', () => {
+    renderWithBuzzer({ isVPlayer: false, isVirtual: false, connected: false })
+
+    expect(screen.getByTitle('Buzzer déconnecté')).toBeInTheDocument()
+  })
+
+  it('non-régression : badge toujours absent pour un buzzer physique connecté', () => {
+    renderWithBuzzer({ isVPlayer: false, isVirtual: false, connected: true })
+
+    expect(screen.queryByTitle('Buzzer déconnecté')).toBeNull()
+  })
+
+  // --- Plusieurs buzzers dans la même équipe (mix physique + VJoueur) ---
+
+  it('badge affiché uniquement sur les buzzers déconnectés (mix physique + VJoueur)', () => {
+    render(
+      <TeamCard
+        name="Équipe Mixte"
+        color={[59, 130, 246]}
+        score={0}
+        buzzers={[
+          makeBuzzer({ mac: 'AA:BB:CC:DD:EE:01', name: 'PhysiqueConnecte', isVPlayer: false, connected: true }),
+          makeBuzzer({ mac: 'vjoueur_Alice', name: 'Alice', isVPlayer: true, isVirtual: true, connected: false }),
+          makeBuzzer({ mac: 'AA:BB:CC:DD:EE:02', name: 'PhysiqueDeconnecte', isVPlayer: false, connected: false }),
+        ]}
+      />
+    )
+
+    // Two disconnected buzzers (one physical, one VPlayer) => two badges
+    const badges = screen.getAllByTitle('Buzzer déconnecté')
+    expect(badges).toHaveLength(2)
+  })
+
+  // --- Non-régression : le badge ACK_PENDING reste exclu pour les VJoueurs (hors scope #109) ---
+
+  it('non-régression : badge ACK_PENDING reste absent pour un VJoueur (comportement inchangé)', () => {
+    renderWithBuzzer({ isVPlayer: true, isVirtual: true, ackPending: true })
+
+    expect(screen.queryByTitle('En attente de confirmation')).toBeNull()
+  })
+})
