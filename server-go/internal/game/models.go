@@ -2,6 +2,7 @@ package game
 
 import (
 	"encoding/json"
+	"time"
 )
 
 // GamePhase represents the current game state
@@ -85,6 +86,13 @@ type Bumper struct {
 	// "" (hidden) must always be serialized so the frontend never falls back to a stale value.
 	// Driven by engine.TransitionConn; see ConnState* constants and contracts/websocket-actions.md.
 	ConnState string `json:"CONN_STATE"` // "" (hidden) | "orange" | "red" | "green"
+
+	// --- Internal bookkeeping for the CONN_STATE "green" minimum display window
+	// (D2/D3, added in v5.7.14, #109 Phase 2). Unexported: encoding/json only
+	// serializes exported fields, so these never reach the wire regardless of tags.
+	greenSince     time.Time // when this bumper last transitioned to "green" (Reconnect)
+	confirmPending bool      // a DeliveryConfirmed arrived early; engine.ConfirmDelivery
+	//                          scheduled a timer to apply it once the window closes.
 }
 
 // ConnState values for Bumper.ConnState — connection badge state machine (v5.7.13, #109).

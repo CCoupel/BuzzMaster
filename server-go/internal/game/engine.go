@@ -61,11 +61,12 @@ func NewEngine() *Engine {
 
 // ConnEvent drives the Bumper.ConnState transition table (see TransitionConn).
 // See contracts/websocket-actions.md and the connection-badge plan (§2) for the
-// full table. Phase 1 (#109) wires Disconnect/Reconnect at the 6 connection
-// call sites; MessageLost/DeliveryConfirmed call sites (buzzer LED_SET/OTA/WIFI
-// send, ACK, VJoueur broadcast, VJoueur bidirectional confirm) and the minimum
-// 2s "green" display window are Phase 2 work — the table below already supports
-// them so Phase 2 only needs to add call sites + the timer.
+// full table. Phase 1 (#109) wired Disconnect/Reconnect at the 6 connection
+// call sites. Phase 2 (#109) wires MessageLost (buzzer LED_SET/OTA/WIFI send,
+// VJoueur broadcast) and DeliveryConfirmed (buzzer ACK, VJoueur bidirectional
+// confirm) at their real sources, plus the minimum 2s "green" display window
+// (D2/D3) — see ConfirmDelivery, which is the gated entry point production
+// code should call for DeliveryConfirmed instead of TransitionConn directly.
 type ConnEvent string
 
 const (
@@ -93,6 +94,13 @@ func transitionConnUnsafe(b *Bumper, event ConnEvent) {
 	case ConnEventReconnect:
 		if b.ConnState == ConnStateOrange || b.ConnState == ConnStateRed {
 			b.ConnState = ConnStateGreen
+			// Start the D2/D3 minimum display window: a DeliveryConfirmed arriving
+			// before greenMinDuration has elapsed must not hide the badge immediately
+			// (see ConfirmDelivery). Only meaningful for real, timestamped Reconnects —
+			// harmless for bare TransitionConn() calls in tests, which never call
+			// ConfirmDelivery and so never consult these fields.
+			b.greenSince = time.Now()
+			b.confirmPending = false
 		}
 	case ConnEventMessageLost:
 		if b.ConnState == ConnStateOrange {
@@ -146,6 +154,102 @@ func (e *Engine) TransitionConn(bumperID string, event ConnEvent) {
 	applyConnEventUnsafe(bumper, event)
 }
 
+// connGreenMinDuration is the minimum time (D2/D3, plan §2) a bumper's badge
+// stays "green" after reconnecting before a DeliveryConfirmed signal is
+// allowed to hide it. A package variable (not a const) so tests can shrink it
+// instead of sleeping for real time.
+var connGreenMinDuration = 2 * time.Second
+
+// ConfirmDelivery is the production entry point for the DELIVERY_CONFIRMED
+// event (#109 Phase 2, D2/D3): unlike a raw TransitionConn(id,
+// ConnEventDeliveryConfirmed) call, it honors the minimum "green" display
+// window. If the bumper reconnected less than connGreenMinDuration ago, the
+// HIDDEN transition is deferred to fire automatically once the window
+// elapses, instead of applying immediately. Bumpers not currently "green"
+// (nothing to gate) fall through to the plain, immediate transition.
+//
+// TransitionConn itself is intentionally left untouched by this window logic
+// (used as-is by tests exercising the pure table, e.g. TestTransitionConn_Table)
+// — only real call sites (buzzer ACK, VJoueur broadcast/message) should call
+// ConfirmDelivery.
+func (e *Engine) ConfirmDelivery(bumperID string) {
+	e.mu.Lock()
+
+	bumper, exists := e.data.Bumpers[bumperID]
+	if !exists {
+		e.mu.Unlock()
+		return
+	}
+	if bumper.ConnState != ConnStateGreen {
+		applyConnEventUnsafe(bumper, ConnEventDeliveryConfirmed)
+		e.mu.Unlock()
+		return
+	}
+
+	elapsed := time.Since(bumper.greenSince)
+	if elapsed >= connGreenMinDuration {
+		applyConnEventUnsafe(bumper, ConnEventDeliveryConfirmed)
+		e.mu.Unlock()
+		return
+	}
+
+	if bumper.confirmPending {
+		// Already scheduled for this green period — nothing more to do.
+		e.mu.Unlock()
+		return
+	}
+	bumper.confirmPending = true
+	scheduledFor := bumper.greenSince
+	remaining := connGreenMinDuration - elapsed
+	e.mu.Unlock()
+
+	time.AfterFunc(remaining, func() {
+		e.mu.Lock()
+		defer e.mu.Unlock()
+		b, ok := e.data.Bumpers[bumperID]
+		if !ok {
+			return
+		}
+		b.confirmPending = false
+		// Re-validate under lock: only apply if still green AND still the same
+		// green period we scheduled for (a re-disconnect + fresh reconnect in the
+		// meantime must not be short-circuited by this now-stale timer).
+		if b.ConnState == ConnStateGreen && b.greenSince.Equal(scheduledFor) {
+			applyConnEventUnsafe(b, ConnEventDeliveryConfirmed)
+		}
+	})
+}
+
+// ApplyVPlayerBroadcastConnEvents evaluates the connection-badge machine for
+// every participant VJoueur against a GameState broadcast that is about to go
+// out (#109 Phase 2, D4): per the user-validated "no restricted list" design,
+// a disconnected participant VJoueur counts this broadcast as a lost message
+// (MessageLost); a connected one counts it as a successful delivery (D3),
+// eligible to close the green window via ConfirmDelivery. Intended to be
+// called once per GameState broadcast (see main.go broadcastUpdate()).
+func (e *Engine) ApplyVPlayerBroadcastConnEvents() {
+	e.mu.Lock()
+	var toConfirm []string
+	for id, b := range e.data.Bumpers {
+		if !b.IsVPlayer || b.Team == "" {
+			continue
+		}
+		if b.Connected {
+			toConfirm = append(toConfirm, id)
+		} else {
+			applyConnEventUnsafe(b, ConnEventMessageLost)
+		}
+	}
+	e.mu.Unlock()
+
+	// ConfirmDelivery manages its own locking (and may schedule a timer via
+	// time.AfterFunc), so it must run after releasing the lock above to avoid a
+	// self-deadlock / re-entrant lock on e.mu.
+	for _, id := range toConfirm {
+		e.ConfirmDelivery(id)
+	}
+}
+
 // GetState returns current game state
 func (e *Engine) GetState() GameState {
 	e.mu.RLock()
@@ -183,10 +287,24 @@ func (e *Engine) GetTeam(id string) *Team {
 }
 
 // GetBumper returns a specific bumper
+// GetBumper returns a snapshot copy of the bumper identified by id (nil if
+// unknown). Returns a COPY, not the live map entry (#109 Phase 2): since
+// ConfirmDelivery may schedule a background timer (time.AfterFunc) that
+// mutates a bumper's ConnState/greenSince/confirmPending fields asynchronously
+// under e.mu, any caller reading fields off a *live* pointer after this
+// function had already released the lock would race against that timer. All
+// production callers only read fields from the result (never mutate through
+// it — mutations always go through UpdateBumper/AssignVirtualPlayer/etc.), so
+// this is a safe, behavior-preserving change.
 func (e *Engine) GetBumper(id string) *Bumper {
 	e.mu.RLock()
 	defer e.mu.RUnlock()
-	return e.data.Bumpers[id]
+	b, ok := e.data.Bumpers[id]
+	if !ok || b == nil {
+		return nil
+	}
+	snapshot := *b
+	return &snapshot
 }
 
 // GetQuestionStatus returns the status of a question by ID
@@ -322,6 +440,11 @@ func (e *Engine) SetBumpers(bumpers map[string]*Bumper) {
 		if old, ok := oldBumpers[id]; ok && old != nil {
 			oldTeam = old.Team
 			newBumper.ConnState = old.ConnState
+			// Also carry over the green-window bookkeeping (#109 Phase 2) — losing
+			// greenSince here would zero it out, making the next ConfirmDelivery
+			// think the window elapsed ages ago and hide the badge prematurely.
+			newBumper.greenSince = old.greenSince
+			newBumper.confirmPending = old.confirmPending
 		}
 		if oldTeam != newBumper.Team {
 			e.syncConnStateForTeamChangeUnsafe(newBumper, oldTeam)
