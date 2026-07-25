@@ -234,7 +234,13 @@ type SetVirtualPlayerLimitPayload struct {
 
 // PlayerConnectPayload for PLAYER_CONNECT action (virtual player enrollment)
 type PlayerConnectPayload struct {
-	Name string `json:"NAME"` // Player name
+	Name string `json:"NAME"`         // Player name
+	ID   string `json:"ID,omitempty"` // Bumper ID from a prior PLAYER_CONNECTED (fix R1, #109) —
+	// omitted on first enrollment. When present and it resolves to an existing
+	// VJoueur bumper, the reconnection is unambiguous and never rejected/merged
+	// by name. Omitempty keeps old clients (that never send it) working as a
+	// name-based enrollment attempt (rejected with NAME_TAKEN if the name is
+	// already in use — see PlayerRejectedPayload).
 }
 
 // PlayerConnectedPayload for PLAYER_CONNECTED action (enrollment accepted)
@@ -246,7 +252,10 @@ type PlayerConnectedPayload struct {
 
 // PlayerRejectedPayload for PLAYER_REJECTED action (enrollment rejected)
 type PlayerRejectedPayload struct {
-	Reason string `json:"REASON"` // Rejection reason (LIMIT, CLOSED, INVALID_NAME)
+	Reason string `json:"REASON"` // Rejection reason: ENROLLMENT_CLOSED, LIMIT_REACHED,
+	// INVALID_NAME, or NAME_TAKEN (fix R1, #109 — no ID provided/resolvable and
+	// the name is already used by another VJoueur, connected or not; never
+	// merged/replaced, the client must pick a different name).
 }
 
 // QRCodePayload for SHOW_QR_CODE/HIDE_QR_CODE actions
