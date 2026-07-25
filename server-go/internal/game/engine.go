@@ -1467,10 +1467,24 @@ func (e *Engine) RecalculateAllTeamScores() {
 func (e *Engine) InitGame() {
 	e.mu.Lock()
 
-	// Reset all bumper scores and times
-	for _, bumper := range e.data.Bumpers {
+	// Reset all bumper scores/times; purge VJoueurs entirely (fix R1 follow-up
+	// — product invariant: a new game always starts with a clean VJoueur
+	// roster, there is no such thing as a "legacy" VJoueur from a prior
+	// session). Physical buzzers are persistent hardware and are kept, just
+	// with their score/time reset like before.
+	purgedVPlayers := 0
+	for id, bumper := range e.data.Bumpers {
+		if bumper.IsVirtual {
+			delete(e.data.Bumpers, id)
+			purgedVPlayers++
+			continue
+		}
 		bumper.Score = 0
 		bumper.Time = 0
+	}
+	if purgedVPlayers > 0 {
+		e.state.VirtualPlayerCount = e.countVirtualPlayersUnsafe()
+		log.Printf("[Engine] InitGame: purged %d virtual player(s) — fresh VJoueur roster for the new game", purgedVPlayers)
 	}
 
 	// Reset all team scores
@@ -2717,22 +2731,14 @@ func (e *Engine) StartEnrollment(maxPlayers int) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 
-	// Purge disconnected VJoueurs (fix R1, D-R1b — operational hygiene, NOT
-	// the fix itself: NAME_TAKEN rejection alone already prevents any
-	// merge/data-loss on a legacy name collision). Keeps the "name taken"
-	// pool from being clogged by absent players from a previous session.
-	purged := 0
-	for id, b := range e.data.Bumpers {
-		if b != nil && b.IsVirtual && !b.Connected {
-			delete(e.data.Bumpers, id)
-			purged++
-		}
-	}
-	if purged > 0 {
-		e.state.VirtualPlayerCount = e.countVirtualPlayersUnsafe()
-		log.Printf("[Engine] StartEnrollment: purged %d disconnected virtual player(s)", purged)
-		go e.SaveBumpers()
-	}
+	// No VJoueur purge here (fix R1 follow-up): a product invariant now holds
+	// that a game session is always started clean (see InitGame, which purges
+	// the entire VJoueur roster on NEW_GAME) — there is no such thing as a
+	// "legacy" VJoueur to clean up here. StartEnrollment can legitimately be
+	// re-opened mid-session (e.g. to invite more people), and purging
+	// disconnected VJoueurs at that point would evict a temporarily-dropped
+	// active player instead of a stale one — NAME_TAKEN rejection alone
+	// already fully prevents any collision-related data loss regardless.
 
 	e.state.EnrollmentActive = true
 	e.state.ShowQRCode = true

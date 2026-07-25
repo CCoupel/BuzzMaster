@@ -972,6 +972,9 @@ func (a *App) handleWebMessage(incoming *protocol.IncomingMessage) {
 		a.engine.InitGame()
 		a.broadcastQuestions() // push refreshed AVAILABLE statuses to all clients
 		a.broadcastUpdate()
+		// InitGame purges the whole VJoueur roster (fix R1 follow-up) — refresh
+		// the enrollment counter so clients don't show a stale VirtualPlayerCount.
+		a.broadcastEnrollmentUpdate()
 
 	case protocol.ActionUpdateQuizMeta:
 		var payload protocol.QuizMetaPayload
