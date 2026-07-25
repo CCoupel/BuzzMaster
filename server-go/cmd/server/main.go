@@ -259,6 +259,11 @@ func (a *App) init() {
 				return
 			}
 			msg.MsgID = msgID // Original msgID, not a new one
+			if !a.buzzerHub.IsClientConnected(mac) {
+				// #109 Phase 2 (D4): an unacknowledged LED_SET being retried against a
+				// now-disconnected buzzer is itself a lost message.
+				a.engine.TransitionConn(mac, game.ConnEventMessageLost)
+			}
 			if err := a.buzzerHub.SendToClient(mac, msg); err != nil {
 				server.LogWarn(game.LogComponentApp, "AckManager retry: failed to resend LED_SET to %s: %v", mac, err)
 			}
@@ -819,12 +824,23 @@ func (a *App) handleBuzzerACK(clientID string, msg *protocol.Message) {
 
 	// Clear the AckPending flag on the bumper
 	a.engine.UpdateBumper(mac, map[string]interface{}{"ACK_PENDING": false})
+	// #109 Phase 2 (D1/D3): a real ACK is the buzzer's fidèle delivery confirmation —
+	// closes the connection-badge "green" window (min. duration honored internally).
+	a.engine.ConfirmDelivery(mac)
 	a.broadcastUpdate()
 }
 
 // handleWebMessage processes messages from web clients (WebSocket)
 func (a *App) handleWebMessage(incoming *protocol.IncomingMessage) {
 	msg := incoming.Data
+
+	// #109 Phase 2 (D2/D3): any message received from an already-identified VJoueur
+	// counts as a successful round-trip ("delivery confirmed", either direction) —
+	// closes the connection-badge "green" window (min. duration honored internally).
+	// No-op for admin/TV/not-yet-identified clients (GetClientPlayerID returns ok=false).
+	if playerID, ok := a.wsHub.GetClientPlayerID(incoming.ClientID); ok {
+		a.engine.ConfirmDelivery(playerID)
+	}
 
 	switch msg.Action {
 	case protocol.ActionHello:
@@ -2113,6 +2129,11 @@ func (a *App) broadcastUpdate() {
 	if a.wsHub == nil {
 		return // Guard for unit tests that construct a minimal App without a wsHub
 	}
+	// #109 Phase 2 (D4): this GameState broadcast is the "message" VJoueur
+	// participants should receive — evaluate MessageLost/DeliveryConfirmed for
+	// each of them before serializing, so the resulting CONN_STATE is reflected
+	// in this very broadcast rather than lagging one cycle behind.
+	a.engine.ApplyVPlayerBroadcastConnEvents()
 	data := a.engine.GetGameJSON()
 	server.LogDebug(game.LogComponentApp, "Broadcasting UPDATE: %s", string(data)[:min(200, len(data))])
 	msg, _ := protocol.NewMessage(protocol.ActionUpdate, nil)
@@ -2388,6 +2409,9 @@ func (a *App) teamColorToRGB(bumper *game.Bumper) [3]int {
 func (a *App) sendLEDSet(mac string, payload protocol.LEDSetPayload) {
 	a.bumperLEDState[mac] = payload
 	if !a.buzzerHub.IsClientConnected(mac) {
+		// #109 Phase 2 (D4): a LED_SET that should have reached this buzzer while
+		// it's disconnected counts as a lost message (orange -> red).
+		a.engine.TransitionConn(mac, game.ConnEventMessageLost)
 		return
 	}
 	msg, err := protocol.NewMessage(protocol.ActionLEDSet, payload)
@@ -3067,6 +3091,10 @@ func (a *App) sendWifiConfigToBuzzer(clientID string) {
 	msgID := server.GenerateMsgID()
 	msg.MsgID = msgID
 
+	if !a.buzzerHub.IsClientConnected(clientID) {
+		// #109 Phase 2 (D4): WIFI_CONFIG emitted to an already-known-disconnected buzzer.
+		a.engine.TransitionConn(clientID, game.ConnEventMessageLost)
+	}
 	if err := a.buzzerHub.SendToClient(clientID, msg); err != nil {
 		server.LogError(game.LogComponentApp, "Failed to send WIFI_CONFIG to %s: %v", clientID, err)
 		return
