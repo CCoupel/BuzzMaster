@@ -81,7 +81,21 @@ type Bumper struct {
 	Connected bool `json:"CONNECTED"` // true if buzzer is currently connected via WebSocket
 	// ACK pending flag (added in v3.8.0) — omitempty: absent = false (retro-compat)
 	AckPending bool `json:"ACK_PENDING,omitempty"` // true while server awaits an ACK from the buzzer
+	// Connection badge state machine (added in v5.7.13, #109 Phase 1) — NO omitempty:
+	// "" (hidden) must always be serialized so the frontend never falls back to a stale value.
+	// Driven by engine.TransitionConn; see ConnState* constants and contracts/websocket-actions.md.
+	ConnState string `json:"CONN_STATE"` // "" (hidden) | "orange" | "red" | "green"
 }
+
+// ConnState values for Bumper.ConnState — connection badge state machine (v5.7.13, #109).
+// Scope: only participants (Team != "") ever carry a non-hidden value; see
+// engine.TransitionConn / engine.ConnEvent for the transition table.
+const (
+	ConnStateHidden = ""       // no connection issue to show (or non-participant / never connected)
+	ConnStateOrange = "orange" // disconnected, no message lost yet
+	ConnStateRed    = "red"    // disconnected AND at least one message was missed while down
+	ConnStateGreen  = "green"  // just reconnected — minimum display window (timer added in Phase 2)
+)
 
 // BuzzState represents the buzz state of a buzzer relative to the current round.
 // The server tracks this per-buzzer to drive the LED state machine.
