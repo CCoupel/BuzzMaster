@@ -439,16 +439,9 @@ func (a *App) setupCallbacks() {
 	}
 
 	// Handle individual VPlayer disconnection (#109): set CONNECTED=false when a VJoueur's
-	// WebSocket closes. Guard: if the VJoueur already reconnected (same PlayerID, new WS
-	// connection) before this fires, skip the CONNECTED=false to avoid a badge flash caused
-	// by the zombie connection unregistering after the new connection is live.
-	a.wsHub.OnPlayerDisconnected = func(playerID string) {
-		if a.wsHub.IsPlayerIDConnected(playerID) {
-			return // zombie disconnect: a reconnection already took over
-		}
-		a.engine.UpdateBumper(playerID, map[string]interface{}{"CONNECTED": false})
-		a.broadcastUpdate()
-	}
+	// WebSocket closes. Extracted as a named method (rather than inlined here) so it can be
+	// unit-tested directly — see onPlayerDisconnected below.
+	a.wsHub.OnPlayerDisconnected = a.onPlayerDisconnected
 
 	// Handle new log entries - broadcast to logs WebSocket clients
 	a.logger.SetOnNewEntry(func(entry game.LogEntry) {
@@ -460,6 +453,31 @@ func (a *App) setupCallbacks() {
 		}
 		a.logsHub.BroadcastLogEntry(payload)
 	})
+}
+
+// onPlayerDisconnected handles an individual VJoueur's WebSocket closing
+// (#109): sets CONNECTED=false so the connection badge reflects it.
+//
+// Guard 1 (anti-zombie, #109): if the VJoueur already reconnected (same
+// PlayerID, new WS connection) before this fires, skip the CONNECTED=false to
+// avoid a badge flash caused by the zombie connection unregistering after the
+// new connection is already live.
+//
+// Guard 2 (ghost bumper, code-review finding after the NEW_GAME purge fix):
+// if the bumper no longer exists — e.g. it was purged by NEW_GAME while this
+// VJoueur was still connected, and its WebSocket only closes later — do
+// nothing. UpdateBumper creates an empty bumper for any unknown ID (generic
+// behavior meant for physical buzzer self-registration by MAC); without this
+// guard it would resurrect a persisted, empty ghost bumper here.
+func (a *App) onPlayerDisconnected(playerID string) {
+	if a.wsHub.IsPlayerIDConnected(playerID) {
+		return
+	}
+	if a.engine.GetBumper(playerID) == nil {
+		return
+	}
+	a.engine.UpdateBumper(playerID, map[string]interface{}{"CONNECTED": false})
+	a.broadcastUpdate()
 }
 
 func (a *App) loadBackgrounds() {
