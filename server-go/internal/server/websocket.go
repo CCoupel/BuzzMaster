@@ -177,6 +177,22 @@ func (h *WebSocketHub) SetClientPlayerID(clientID, playerID string) {
 	h.mu.Unlock()
 }
 
+// GetClientPlayerID returns the VJoueur bumper ID linked to clientID (via
+// SetClientPlayerID), if any. ok is false if the client is unknown or not yet
+// identified as a VJoueur (e.g. admin/TV, or a VPlayer before PLAYER_CONNECT
+// completes). Used to fire the DELIVERY_CONFIRMED connection-badge event (#109
+// Phase 2, D3) when a message is received from an identified VJoueur.
+func (h *WebSocketHub) GetClientPlayerID(clientID string) (playerID string, ok bool) {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	for client := range h.clients {
+		if client.ID == clientID {
+			return client.PlayerID, client.PlayerID != ""
+		}
+	}
+	return "", false
+}
+
 // IsPlayerIDConnected returns true if a ClientTypeVPlayer client with the given PlayerID
 // is currently connected. Used as an anti-zombie guard before marking a VJoueur disconnected,
 // same principle as BuzzerWebSocketHub.IsClientConnected.
