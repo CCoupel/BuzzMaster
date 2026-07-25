@@ -93,6 +93,7 @@ export default function VPlayerPage() {
       console.log('[VPlayer] Bumper deleted by admin, redirecting to enrollment')
       localStorage.removeItem('vplayer_name')
       localStorage.removeItem('vplayer_session')
+      localStorage.removeItem('vplayer_id')
       navigate('/')
     }
   }, [bumpers, playerSession, status, navigate])
@@ -110,8 +111,15 @@ export default function VPlayerPage() {
     const timeoutId = setTimeout(() => {
       // Check ref (latest value) rather than closure-captured bumper
       if (!bumperRef.current) {
-        console.log('[VPlayer] Reconnecting with name:', playerSession.name)
-        sendMessage('PLAYER_CONNECT', { NAME: playerSession.name })
+        // Fix R1 (#109) : renvoyer l'ID capturé au précédent PLAYER_CONNECTED
+        // pour une reconnexion sans ambiguïté (lookup par ID côté backend,
+        // plus par nom — évite qu'un nouvel enrôlement homonyme ne vole la
+        // session). Omis si absent (jamais connecté depuis cet appareil).
+        const storedId = localStorage.getItem('vplayer_id')
+        console.log('[VPlayer] Reconnecting with name:', playerSession.name, 'id:', storedId)
+        sendMessage('PLAYER_CONNECT', storedId
+          ? { NAME: playerSession.name, ID: storedId }
+          : { NAME: playerSession.name })
       }
     }, 2000)
 
