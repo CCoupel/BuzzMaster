@@ -483,7 +483,7 @@ func (m *Message) SerializeForWebClient() ([]byte, error) {
 // All other fields (firmware, OTA, QCM answer colour, etc.) are stripped to
 // minimise payload size on UPDATE messages sent to buzzer clients.
 var buzzerBumperKeys = []string{
-	"NAME", "TEAM", "CONNECTED", "IS_VIRTUAL", "TIME", "BUTTON", "STATUS", "SCORE",
+	"NAME", "TEAM", "CONNECTED", "CONN_STATE", "IS_VIRTUAL", "TIME", "BUTTON", "STATUS", "SCORE",
 }
 
 // buzzerTeamKeys lists the Team fields that physical buzzers actually need.
