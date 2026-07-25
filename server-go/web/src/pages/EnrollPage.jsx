@@ -1,18 +1,9 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useGame } from '../hooks/GameContext'
+import { REJECTION_MESSAGES, DEFAULT_REJECTION_MESSAGE } from '../utils/playerConnectMessages'
 import './EnrollPage.css'
 
-// Fix R1 (#109) : messages affichés selon la raison de rejet renvoyée par le
-// serveur (PLAYER_REJECTED.REASON). NAME_TAKEN = nouveau motif (lookup par ID,
-// voir contracts/websocket-actions.md).
-const REJECTION_MESSAGES = {
-  NAME_TAKEN: 'Ce pseudo est déjà utilisé, choisis-en un autre',
-  INVALID_NAME: 'Pseudo invalide, choisis-en un autre',
-  ENROLLMENT_CLOSED: 'Les inscriptions sont fermées',
-  LIMIT_REACHED: 'Nombre maximum de joueurs atteint',
-}
-const DEFAULT_REJECTION_MESSAGE = 'Connexion refusée, réessaie avec un autre pseudo'
 // Le serveur ne répond jamais (perte réseau, etc.) — ne pas rester bloqué sur "Connexion..."
 const CONNECT_TIMEOUT_MS = 5000
 
