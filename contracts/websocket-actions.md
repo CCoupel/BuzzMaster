@@ -346,6 +346,29 @@ Broadcast l'état complet du jeu.
 | bumpers | object | Map des joueurs |
 | VERSION | string | Version du serveur |
 
+#### CONN_STATE (v5.7.13, #109)
+
+Chaque bumper dans `bumpers` porte désormais `CONN_STATE` (voir `contracts/models.md`),
+propagé sur les 3 endpoints (`/ws/admin`, `/ws/tv`, `/ws/player`) ainsi qu'aux buzzers
+physiques (`/ws/buzzer`, whitelist `buzzerBumperKeys`). Valeurs : `""`/`"orange"`/`"red"`/`"green"`.
+Seuls les bumpers participants (`TEAM != ""`) portent un état visible.
+
+Table de transitions (`engine.TransitionConn(bumperID, event)`), `event` ∈ `DISCONNECT` |
+`RECONNECT` | `MESSAGE_LOST` | `DELIVERY_CONFIRMED` :
+
+| État courant | DISCONNECT | RECONNECT | MESSAGE_LOST | DELIVERY_CONFIRMED |
+|---|---|---|---|---|
+| `""` (HIDDEN) | → `orange` | (n/a) | → `""` | → `""` |
+| `orange` | `orange` | → `green` | → `red` | (n/a) |
+| `red` | `red` | → `green` | `red` | (n/a) |
+| `green` | → `orange` | `green` | (n/a) | → `""` |
+
+> **Phase 1 (#109, v5.7.13)** : `DISCONNECT`/`RECONNECT` sont câblés sur les 6 sites de
+> connexion existants (buzzer HELLO/déco, VJoueur reco/déco, reset boot, création VJoueur).
+> **Phase 2** (à venir) : câblage `MESSAGE_LOST` (LED_SET/OTA/WIFI pour buzzer, broadcast pour
+> VJoueur) et `DELIVERY_CONFIRMED` (ACK buzzer, signal bidirectionnel VJoueur) + fenêtre
+> minimale de 2s sur l'état `green` avant retour à `""`.
+
 ---
 
 ### QUESTIONS

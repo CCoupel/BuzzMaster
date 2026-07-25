@@ -2,6 +2,24 @@
 
 ---
 
+## [20260725] — Badge de connexion 4 états (#109 Phase 1)
+
+- **[NEW]** `Bumper.CONN_STATE` (string `""`/`"orange"`/`"red"`/`"green"`, **sans omitempty**) —
+  badge de connexion enrichi, propagé sur les 4 endpoints WebSocket (admin/tv/player/buzzer).
+  Périmètre : uniquement les bumpers participants (`TEAM != ""`) ; `""` sinon.
+- **[NEW]** Backend : `type ConnEvent string` + `engine.TransitionConn(bumperID string, event ConnEvent)`
+  — table de transitions complète (voir `contracts/websocket-actions.md`). Câblé sur
+  `DISCONNECT`/`RECONNECT` (Phase 1) ; `MESSAGE_LOST`/`DELIVERY_CONFIRMED` + fenêtre 2s sur
+  `green` en Phase 2.
+- **[FIX]** Bumper fantôme VJoueur (R1, root cause #109) : la reconnexion par nom
+  (`handlePlayerConnect`) est désormais atomique côté moteur (`engine.ReconnectOrCreateVirtualPlayer`,
+  matching trim + insensible à la casse) et consolide automatiquement les doublons existants —
+  élimine la course qui pouvait laisser un second bumper bloqué en badge déconnecté.
+
+> Aucune breaking change — `CONN_STATE` est additif, `CONNECTED` (bool) est conservé tel quel.
+
+---
+
 ## [20260607] — Bugfix v5.7.2 (#100)
 
 - **[BREAKING]** `POST /api/categories` — remplace le body JSON par **multipart/form-data** : champ `name` (string) + champ `file` (image PNG/JPG/JPEG/WebP, obligatoire)
