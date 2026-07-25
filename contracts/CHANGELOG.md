@@ -23,8 +23,15 @@
   rejetée au lieu d'être silencieusement acceptée — comportement voulu (règle produit).
 - **[FIX]** `engine.ReconnectOrCreateVirtualPlayer` ne supprime plus jamais de bumper. L'atomicité
   (verrou unique, corrige la course TOCTOU #109 d'origine) est conservée.
-- **[NEW]** Purge des VJoueurs déconnectés à `StartEnrollment` (hygiène opérationnelle, pas requis
-  pour la correction elle-même — `NAME_TAKEN` seul suffit à éviter toute perte de données).
+- **[CHANGED]** (suite, même jour) Purge des VJoueurs déplacée de `StartEnrollment` vers
+  `InitGame`/`NEW_GAME`, et rendue **inconditionnelle** (tous les VJoueurs, connectés ou non —
+  auparavant limitée aux déconnectés). Précision produit : une partie démarre toujours avec des
+  données vierges, il n'existe pas de VJoueur « legacy » à nettoyer entre deux ouvertures
+  d'enrôlement au sein d'une même partie ; `NEW_GAME` est la vraie limite de fraîcheur.
+  `StartEnrollment` peut être rouvert en cours de partie (inviter plus de monde) sans jamais
+  toucher au roster existant. Les buzzers physiques ne sont jamais purgés (matériel persistant),
+  seul leur score est remis à zéro comme avant. Toujours une hygiène de confort — `NAME_TAKEN`
+  seul suffit à éviter toute perte/fusion de données sur collision de nom.
 
 ---
 
