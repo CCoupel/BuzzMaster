@@ -6,6 +6,7 @@ import (
 	"math/rand"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 )
@@ -56,6 +57,93 @@ func NewEngine() *Engine {
 		questionStatuses: make(map[string]QuestionStatus),
 		stopCh:           make(chan struct{}),
 	}
+}
+
+// ConnEvent drives the Bumper.ConnState transition table (see TransitionConn).
+// See contracts/websocket-actions.md and the connection-badge plan (§2) for the
+// full table. Phase 1 (#109) wires Disconnect/Reconnect at the 6 connection
+// call sites; MessageLost/DeliveryConfirmed call sites (buzzer LED_SET/OTA/WIFI
+// send, ACK, VJoueur broadcast, VJoueur bidirectional confirm) and the minimum
+// 2s "green" display window are Phase 2 work — the table below already supports
+// them so Phase 2 only needs to add call sites + the timer.
+type ConnEvent string
+
+const (
+	ConnEventDisconnect        ConnEvent = "DISCONNECT"
+	ConnEventReconnect         ConnEvent = "RECONNECT"
+	ConnEventMessageLost       ConnEvent = "MESSAGE_LOST"
+	ConnEventDeliveryConfirmed ConnEvent = "DELIVERY_CONFIRMED"
+)
+
+// transitionConnUnsafe applies the CONN_STATE transition table to a single
+// bumper, without the participants-only filter (see applyConnEventUnsafe for
+// the filtered entry point used everywhere else). Caller must hold e.mu.
+//
+//	Current  | Disconnect | Reconnect | MessageLost | DeliveryConfirmed
+//	HIDDEN   | -> orange  | (n/a)     | -> HIDDEN   | -> HIDDEN
+//	orange   | orange     | -> green  | -> red      | (n/a)
+//	red      | red        | -> green  | red         | (n/a)
+//	green    | -> orange  | green     | (n/a)       | -> HIDDEN
+func transitionConnUnsafe(b *Bumper, event ConnEvent) {
+	switch event {
+	case ConnEventDisconnect:
+		if b.ConnState == ConnStateHidden || b.ConnState == ConnStateGreen {
+			b.ConnState = ConnStateOrange
+		}
+	case ConnEventReconnect:
+		if b.ConnState == ConnStateOrange || b.ConnState == ConnStateRed {
+			b.ConnState = ConnStateGreen
+		}
+	case ConnEventMessageLost:
+		if b.ConnState == ConnStateOrange {
+			b.ConnState = ConnStateRed
+		}
+	case ConnEventDeliveryConfirmed:
+		if b.ConnState == ConnStateGreen {
+			b.ConnState = ConnStateHidden
+		}
+	}
+}
+
+// applyConnEventUnsafe is the participants-only entry point for the CONN_STATE
+// machine: bumpers not assigned to a team (Team == "") never carry a visible
+// badge and are always forced back to hidden. Caller must hold e.mu.
+func applyConnEventUnsafe(b *Bumper, event ConnEvent) {
+	if b.Team == "" {
+		b.ConnState = ConnStateHidden
+		return
+	}
+	transitionConnUnsafe(b, event)
+}
+
+// syncConnStateForTeamChangeUnsafe reacts to a bumper's TEAM field changing,
+// keeping CONN_STATE consistent with the participants-only scope: becoming a
+// participant while disconnected evaluates as an implicit Disconnect (→ orange)
+// instead of waiting for a future disconnect event; leaving the participant
+// pool forces the badge back to hidden. Caller must hold e.mu.
+func (e *Engine) syncConnStateForTeamChangeUnsafe(bumper *Bumper, oldTeam string) {
+	switch {
+	case oldTeam == "" && bumper.Team != "":
+		if !bumper.Connected {
+			applyConnEventUnsafe(bumper, ConnEventDisconnect)
+		}
+	case oldTeam != "" && bumper.Team == "":
+		bumper.ConnState = ConnStateHidden
+	}
+}
+
+// TransitionConn applies a connection-state event to a bumper's CONN_STATE
+// badge (see transitionConnUnsafe for the table). Thread-safe. Unknown bumper
+// IDs are silently ignored (mirrors UpdateBumper's tolerant style).
+func (e *Engine) TransitionConn(bumperID string, event ConnEvent) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+
+	bumper, exists := e.data.Bumpers[bumperID]
+	if !exists {
+		return
+	}
+	applyConnEventUnsafe(bumper, event)
 }
 
 // GetState returns current game state
@@ -134,8 +222,28 @@ func (e *Engine) UpdateBumper(id string, data map[string]interface{}) {
 	if name, ok := data["NAME"].(string); ok {
 		bumper.Name = name
 	}
+	// Connection status (v3.6.5) — also drives the CONN_STATE badge machine (#109
+	// Phase 1): every call site that flips CONNECTED implicitly fires the matching
+	// Disconnect/Reconnect event, so no explicit wiring is needed at those 6 sites.
+	// IMPORTANT: applied BEFORE TEAM below so that a single call setting both
+	// TEAM and CONNECTED:true (e.g. a bumper created already-connected) reflects
+	// bumper.Connected's final value in the TEAM-change sync, instead of firing a
+	// spurious implicit-disconnect-then-reconnect ("green") for a bumper that was
+	// never actually disconnected.
+	if connected, ok := data["CONNECTED"].(bool); ok {
+		bumper.Connected = connected
+		if connected {
+			applyConnEventUnsafe(bumper, ConnEventReconnect)
+		} else {
+			applyConnEventUnsafe(bumper, ConnEventDisconnect)
+		}
+	}
 	if team, ok := data["TEAM"].(string); ok {
+		oldTeam := bumper.Team
 		bumper.Team = team
+		if oldTeam != team {
+			e.syncConnStateForTeamChangeUnsafe(bumper, oldTeam)
+		}
 	}
 	if version, ok := data["VERSION"].(string); ok {
 		bumper.Version = version
@@ -158,10 +266,6 @@ func (e *Engine) UpdateBumper(id string, data map[string]interface{}) {
 	}
 	if otaPercent, ok := data["OTA_PERCENT"].(int); ok {
 		bumper.OTAPercent = otaPercent
-	}
-	// Connection status (v3.6.5)
-	if connected, ok := data["CONNECTED"].(bool); ok {
-		bumper.Connected = connected
 	}
 	// ACK pending flag (v3.8.0)
 	if ackPending, ok := data["ACK_PENDING"].(bool); ok {
@@ -204,6 +308,25 @@ func (e *Engine) SetTeams(teams map[string]*Team) {
 // SetBumpers sets all bumpers and synchronizes VirtualPlayerCount
 func (e *Engine) SetBumpers(bumpers map[string]*Bumper) {
 	e.mu.Lock()
+	// Reconcile CONN_STATE against the previous map before swapping it out (#109
+	// Phase 1): this bulk path (admin FULL/UPDATE, e.g. team assignment via
+	// TeamsPage) is a real TEAM-change site, but the incoming payload's CONN_STATE
+	// is whatever the client last saw — never authoritative. Preserve the
+	// server-side value and only re-evaluate it when TEAM actually changed.
+	oldBumpers := e.data.Bumpers
+	for id, newBumper := range bumpers {
+		if newBumper == nil {
+			continue
+		}
+		oldTeam := ""
+		if old, ok := oldBumpers[id]; ok && old != nil {
+			oldTeam = old.Team
+			newBumper.ConnState = old.ConnState
+		}
+		if oldTeam != newBumper.Team {
+			e.syncConnStateForTeamChangeUnsafe(newBumper, oldTeam)
+		}
+	}
 	e.data.Bumpers = bumpers
 	// Synchronize VirtualPlayerCount with actual bumper count
 	e.state.VirtualPlayerCount = e.countVirtualPlayersUnsafe()
@@ -2298,7 +2421,13 @@ func (e *Engine) SetArdoiseAnswer(teamName string, text string) bool {
 func (e *Engine) CreateVirtualPlayer(name string) (string, *Bumper, error) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
+	return e.createVirtualPlayerUnsafe(name)
+}
 
+// createVirtualPlayerUnsafe creates a new virtual player bumper. Caller must
+// hold e.mu (used directly by ReconnectOrCreateVirtualPlayer to keep the
+// find-or-create sequence atomic — see #109 R1 below).
+func (e *Engine) createVirtualPlayerUnsafe(name string) (string, *Bumper, error) {
 	// Check phase ENROLL
 	if e.state.Phase != PhaseEnroll {
 		return "", nil, &EnrollmentError{Reason: "ENROLLMENT_CLOSED"}
@@ -2327,6 +2456,9 @@ func (e *Engine) CreateVirtualPlayer(name string) (string, *Bumper, error) {
 		Status:    "READY",
 		Connected: true, // VJoueur just opened its WS session at enrollment time, so it's connected by definition
 	}
+	// CONN_STATE: no-op today (Team == "" until assigned to a team), kept for
+	// consistency with the other 5 connection call sites (#109 Phase 1).
+	applyConnEventUnsafe(bumper, ConnEventReconnect)
 
 	e.data.Bumpers[id] = bumper
 
@@ -2338,6 +2470,95 @@ func (e *Engine) CreateVirtualPlayer(name string) (string, *Bumper, error) {
 	go e.SaveBumpers()
 
 	return id, bumper, nil
+}
+
+// ReconnectOrCreateVirtualPlayer finds an existing VJoueur bumper matching name
+// (trimmed, case-insensitive) or creates a new one — atomically, under a single
+// engine lock. This closes the race that caused the #109 "ghost bumper" bug
+// (R1): the previous implementation (main.go) read the bumper map, decided
+// "not found", and only then called CreateVirtualPlayer as a separate locked
+// step — two near-simultaneous PLAYER_CONNECT calls for the same name (e.g. a
+// flaky reconnect firing twice) could both miss the match and each create their
+// own bumper, leaving one of them stuck disconnected forever with no way to
+// reach it again (same name, but a different, now-orphaned ID).
+//
+// It also consolidates duplicate ghost bumpers already left behind by that bug:
+// among bumpers sharing the same normalized name, only the most authoritative
+// one is kept — preference order: assigned to a team > currently connected >
+// higher score > deterministic ID tie-break. Same name means same player
+// identity in this data model (it is the only identity PLAYER_CONNECT has to
+// go on), so every other bumper matching that identity is removed; nothing
+// legitimately different can share the exact same (trimmed, case-insensitive)
+// VJoueur name.
+//
+// Returns (id, bumper, reconnected, err). reconnected is false only when a
+// brand-new bumper was created.
+func (e *Engine) ReconnectOrCreateVirtualPlayer(name string) (string, *Bumper, bool, error) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+
+	normalized := strings.TrimSpace(name)
+
+	var matchID string
+	var match *Bumper
+	var duplicateIDs []string
+
+	for candID, cand := range e.data.Bumpers {
+		if cand == nil || !cand.IsVirtual {
+			continue
+		}
+		if !strings.EqualFold(strings.TrimSpace(cand.Name), normalized) {
+			continue
+		}
+		if match == nil {
+			matchID, match = candID, cand
+			continue
+		}
+		if isBetterVirtualPlayerCandidate(cand, match, candID, matchID) {
+			duplicateIDs = append(duplicateIDs, matchID)
+			matchID, match = candID, cand
+		} else {
+			duplicateIDs = append(duplicateIDs, candID)
+		}
+	}
+
+	// Consolidate to a single bumper (R1/#109): remove every other duplicate
+	// sharing this identity, regardless of whether it carries a team/score/
+	// connection — keeping more than one bumper per identity is the bug itself.
+	for _, dupID := range duplicateIDs {
+		dup := e.data.Bumpers[dupID]
+		delete(e.data.Bumpers, dupID)
+		log.Printf("[Engine] Removed duplicate VJoueur bumper: id=%s, name=%s, team=%s (R1/#109)", dupID, dup.Name, dup.Team)
+	}
+
+	if match != nil {
+		match.Connected = true
+		applyConnEventUnsafe(match, ConnEventReconnect)
+		log.Printf("[Engine] Virtual player reconnected: id=%s, name=%s", matchID, match.Name)
+		go e.SaveBumpers()
+		return matchID, match, true, nil
+	}
+
+	newID, newBumper, err := e.createVirtualPlayerUnsafe(normalized)
+	return newID, newBumper, false, err
+}
+
+// isBetterVirtualPlayerCandidate reports whether candidate b should replace
+// best as the canonical bumper to keep when multiple bumpers share the same
+// normalized name (#109 R1 duplicate consolidation). Preference order:
+// assigned to a team > currently connected > higher score > lower bumper ID
+// (deterministic tie-break, since Go map iteration order is randomized).
+func isBetterVirtualPlayerCandidate(b, best *Bumper, id, bestID string) bool {
+	if (b.Team != "") != (best.Team != "") {
+		return b.Team != ""
+	}
+	if b.Connected != best.Connected {
+		return b.Connected
+	}
+	if b.Score != best.Score {
+		return b.Score > best.Score
+	}
+	return id < bestID
 }
 
 // countVirtualPlayersUnsafe counts virtual players (caller must hold lock)
@@ -2485,7 +2706,11 @@ func (e *Engine) AssignVirtualPlayer(bumperID, team string, answerColor AnswerCo
 	}
 
 	// Assign team and answer color (only physical buzzers get color, VPlayers respond to all)
+	oldTeam := bumper.Team
 	bumper.Team = team
+	if oldTeam != team {
+		e.syncConnStateForTeamChangeUnsafe(bumper, oldTeam)
+	}
 	if !bumper.IsVPlayer {
 		bumper.AnswerColor = answerColor
 	}
