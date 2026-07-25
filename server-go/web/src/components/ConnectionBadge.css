@@ -1,0 +1,26 @@
+/* ConnectionBadge — pastille ronde d'état de connexion (4 états, CONN_STATE) */
+
+.connection-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.connection-badge-orange {
+  background: var(--conn-badge-orange, #f59e0b);
+  box-shadow: 0 1px 4px rgba(245, 158, 11, 0.5);
+}
+
+.connection-badge-red {
+  background: var(--error, #ef4444);
+  box-shadow: 0 1px 4px rgba(239, 68, 68, 0.5);
+}
+
+.connection-badge-green {
+  background: var(--success, #22c55e);
+  box-shadow: 0 1px 4px rgba(34, 197, 94, 0.5);
+}
