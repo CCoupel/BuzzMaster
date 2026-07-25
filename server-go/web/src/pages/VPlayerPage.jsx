@@ -4,6 +4,7 @@ import { useGame } from '../hooks/GameContext'
 import PlayerDisplay from './PlayerDisplay'
 import ArdoiseKeyboard from '../components/ArdoiseKeyboard'
 import NoSleep from 'nosleep.js'
+import { REJECTION_MESSAGES, DEFAULT_REJECTION_MESSAGE } from '../utils/playerConnectMessages'
 import './VPlayerPage.css'
 
 // QCM answer colors mapping
@@ -16,13 +17,18 @@ const ANSWER_COLORS = {
 
 export default function VPlayerPage() {
   const navigate = useNavigate()
-  const { sendMessage, gameState, bumpers, teams, status } = useGame()
+  const { sendMessage, gameState, bumpers, teams, status, playerConnectStatus, clearPlayerConnectStatus } = useGame()
 
   const [playerSession, setPlayerSession] = useState(null)
   const [bumper, setBumper] = useState(null)
   const [team, setTeam] = useState(null)
   const [isFullscreen, setIsFullscreen] = useState(false)
   const [showFullscreenHint, setShowFullscreenHint] = useState(false)
+  // Fix R1 (suite, #109) : message affiché quand une tentative de
+  // reconnexion (PLAYER_CONNECT avec ID) est rejetée par le serveur — ID
+  // périmé (bumper supprimé par l'admin) dont le nom a été repris entre-
+  // temps, ou NAME_TAKEN générique. Sans ça, écran vide sans explication.
+  const [reconnectError, setReconnectError] = useState(null)
   const noSleepRef = useRef(null)
   // Ref to always have the latest bumper value in async callbacks (avoids stale closure)
   const bumperRef = useRef(null)
@@ -125,6 +131,35 @@ export default function VPlayerPage() {
 
     return () => clearTimeout(timeoutId)
   }, [playerSession, status, sendMessage])
+
+  // Fix R1 (suite, #109) : consommer le résultat d'une tentative de
+  // reconnexion. 'connected' ne nécessite rien ici (le bumper apparaîtra
+  // via l'effet de matching par nom ci-dessus, alimenté par `bumpers`).
+  // 'rejected' (ID périmé + nom repris, ou NAME_TAKEN) → afficher un
+  // message et empêcher toute nouvelle tentative avec cet ID périmé.
+  useEffect(() => {
+    if (!playerConnectStatus) return
+
+    if (playerConnectStatus.status === 'rejected') {
+      console.log('[VPlayer] Reconnect rejected:', playerConnectStatus.reason)
+      // L'ID stocké ne correspond plus à un bumper qui nous appartient —
+      // ne surtout pas le réutiliser pour une prochaine tentative.
+      localStorage.removeItem('vplayer_id')
+      setReconnectError(REJECTION_MESSAGES[playerConnectStatus.reason] || DEFAULT_REJECTION_MESSAGE)
+    }
+
+    clearPlayerConnectStatus()
+  }, [playerConnectStatus, clearPlayerConnectStatus])
+
+  // Fix R1 (suite) : après un rejet de reconnexion, repartir sur EnrollPage
+  // avec un pseudo neuf — l'ancien bumper n'est plus à nous (supprimé ou
+  // repris par quelqu'un d'autre), impossible de continuer sur cette session.
+  const handleRejoinFromScratch = useCallback(() => {
+    localStorage.removeItem('vplayer_name')
+    localStorage.removeItem('vplayer_session')
+    localStorage.removeItem('vplayer_id')
+    navigate('/')
+  }, [navigate])
 
   // Auto-respond to PREPARE phase with PONG
   useEffect(() => {
@@ -279,6 +314,22 @@ export default function VPlayerPage() {
     return (
       <div className="vplayer-page loading">
         <div className="loading-spinner">Chargement...</div>
+      </div>
+    )
+  }
+
+  // Fix R1 (suite, #109) : reconnexion rejetée — l'ancien bumper n'est plus
+  // à nous, impossible de continuer sur cette session. Bloque l'écran avec
+  // le message d'erreur et une action pour repartir sur EnrollPage.
+  if (reconnectError) {
+    return (
+      <div className="vplayer-page loading">
+        <div className="vplayer-reconnect-error">
+          <p className="vplayer-reconnect-error-text">{reconnectError}</p>
+          <button className="vplayer-reconnect-btn" onClick={handleRejoinFromScratch}>
+            Rejoindre à nouveau
+          </button>
+        </div>
       </div>
     )
   }

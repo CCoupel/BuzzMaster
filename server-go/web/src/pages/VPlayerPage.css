@@ -30,6 +30,45 @@
   }
 }
 
+/* Fix R1 (suite, #109) — écran de reconnexion rejetée (ID périmé, nom repris) */
+.vplayer-reconnect-error {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--spacing-lg, 1.5rem);
+  padding: var(--spacing-lg, 1.5rem);
+  max-width: 22rem;
+  text-align: center;
+}
+
+.vplayer-reconnect-error-text {
+  color: var(--error);
+  font-size: 1rem;
+  line-height: 1.4;
+}
+
+.vplayer-reconnect-btn {
+  padding: 1rem 1.6rem;
+  font-size: 1rem;
+  font-weight: 600;
+  background: linear-gradient(135deg, var(--accent-cyan) 0%, var(--primary-500) 100%);
+  color: white;
+  border: none;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 4px 12px rgba(34, 211, 238, 0.3);
+}
+
+.vplayer-reconnect-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(34, 211, 238, 0.4);
+}
+
+.vplayer-reconnect-btn:active {
+  transform: translateY(0);
+}
+
 /* Permanent info container - absolute positioning as overlay, does NOT affect PlayerDisplay layout */
 .vplayer-page .vplayer-permanent-info {
   position: absolute;
