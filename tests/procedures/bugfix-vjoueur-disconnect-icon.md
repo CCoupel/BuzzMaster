@@ -133,6 +133,83 @@ clients admin/TV (hub WebSocket partagé avec les VJoueurs).
 - [ ] Scénario 5 : aucune régression sur le comptage/comportement admin/TV
 - [ ] Le style visuel de l'icône VJoueur déconnecté est identique à celui du buzzer physique
       (pas de nouveau libellé "VJoueur déconnecté" introduit — hors scope)
+- [ ] Scénario 6 : les 3 couleurs de badge (orange/rouge/vert) s'affichent correctement
+- [ ] Scénario 7 : les compteurs Navbar `vjoueur`/`buzzer` (X/Y) et leur coloration sont corrects
+- [ ] Scénario 8 : un bumper non assigné à une équipe n'affiche jamais de badge et n'est jamais compté
+- [ ] Scénario 9 : l'écran TV (`/tv`) n'affiche aucun badge ni compteur de connexion (périmètre clos)
+
+---
+
+## Ajout — Batch 1 (25/07/2026) : badge 4 états + compteurs Navbar
+
+> Complète les scénarios 1-5 ci-dessus (toujours valides) suite à l'extension du plan
+> (`_work/reports/planner-20260725-105503-final.md`) : badge de connexion à 4 états
+> (caché/orange/rouge/vert) mutualisé dans `ConnectionBadge.jsx`, filtre "participants
+> uniquement" (assignés à une équipe), et compteurs Navbar `vjoueur`/`buzzer` au format X/Y
+> avec coloration par sévérité. **Écran TV : aucun changement (périmètre clos).**
+
+### Scénario 6 — Les 3 couleurs de badge (orange / rouge / vert)
+
+**Objectif** : Vérifier que le badge de connexion distingue bien 3 situations, pas seulement
+"connecté/déconnecté".
+
+| Étape | Action | Résultat Attendu | Résultat Obtenu | OK ? |
+|-------|--------|-----------------|----------------|------|
+| 1 | Déconnecter un VJoueur ou un buzzer participant (sans qu'aucun message ne lui soit destiné pendant la coupure) | Badge **orange** | | |
+| 2 | Pendant la coupure, déclencher un envoi qui lui est destiné (ex. LED_SET pour un buzzer, ou un changement d'état de jeu pour un VJoueur) | Badge passe au **rouge** | | |
+| 3 | Reconnecter le bumper | Badge passe au **vert** brièvement | | |
+| 4 | Attendre quelques secondes sans provoquer de nouvelle coupure | Badge disparaît (retour à l'état caché) | | |
+| 5 | Re-déconnecter le bumper pendant qu'il est encore vert (juste après reconnexion) | Badge repasse à **orange** (pas de retour direct à caché) | | |
+
+**Verdict** : [ ] PASS  [ ] FAIL
+
+---
+
+### Scénario 7 — Compteurs Navbar : format X/Y et coloration
+
+**Objectif** : Vérifier les compteurs `vjoueur` et `buzzer` de la Navbar admin (format
+connectés/participants) et leur coloration par sévérité.
+
+| Étape | Action | Résultat Attendu | Résultat Obtenu | OK ? |
+|-------|--------|-----------------|----------------|------|
+| 1 | Assigner 2 VJoueurs et 2 buzzers physiques à des équipes, tous connectés | Navbar affiche `vjoueur 2/2` et `buzzer 2/2`, sans coloration | | |
+| 2 | Déconnecter un des VJoueurs (sans message perdu) | Compteur `vjoueur` passe à `1/2`, chip orange | | |
+| 3 | Provoquer une perte de message pour ce même VJoueur | Chip `vjoueur` passe au rouge (le compteur reste `1/2`) | | |
+| 4 | Reconnecter le VJoueur | Chip redevient neutre une fois l'état stabilisé, compteur revient à `2/2` | | |
+| 5 | Vérifier les compteurs `admin`/`tv` pendant toute la manipulation | Inchangés (nombre brut, jamais colorés) | | |
+
+**Verdict** : [ ] PASS  [ ] FAIL
+
+---
+
+### Scénario 8 — Filtre "participants uniquement"
+
+**Objectif** : Vérifier qu'un bumper non assigné à une équipe (buzzer qui vient de faire HELLO
+mais pas encore glissé dans une équipe, ou VJoueur en attente d'assignation) n'affiche jamais de
+badge et n'entre jamais dans les compteurs Navbar, quel que soit son état de connexion réel.
+
+| Étape | Action | Résultat Attendu | Résultat Obtenu | OK ? |
+|-------|--------|-----------------|----------------|------|
+| 1 | Connecter un buzzer physique sans l'assigner à une équipe | Aucun badge, non compté dans `buzzer X/Y` | | |
+| 2 | Déconnecter ce même buzzer non assigné | Toujours aucun badge, compteur Navbar inchangé | | |
+| 3 | Assigner le buzzer (toujours déconnecté) à une équipe | Le badge orange apparaît immédiatement, le compteur `buzzer` passe à son total +1 | | |
+| 4 | Retirer l'assignation d'équipe d'un bumper actuellement en badge rouge/orange | Le badge disparaît immédiatement (retour à l'état caché), sorti des compteurs | | |
+
+**Verdict** : [ ] PASS  [ ] FAIL
+
+---
+
+### Scénario 9 — Non-régression écran TV (périmètre clos)
+
+**Objectif** : Confirmer qu'aucun badge ni compteur de connexion n'apparaît sur l'écran TV
+(décision finale utilisateur — périmètre TV clos à zéro changement).
+
+| Étape | Action | Résultat Attendu | Résultat Obtenu | OK ? |
+|-------|--------|-----------------|----------------|------|
+| 1 | Ouvrir `/tv` en vue PLAYERS pendant qu'un ou plusieurs bumpers sont déconnectés (orange/rouge) | Aucune icône de déconnexion sur les avatars joueurs | | |
+| 2 | Observer l'ensemble des vues TV (scores, PLAYERS, etc.) | Aucun compteur `vjoueur`/`buzzer` ou équivalent affiché nulle part sur `/tv` | | |
+
+**Verdict** : [ ] PASS  [ ] FAIL
 
 ---
 
