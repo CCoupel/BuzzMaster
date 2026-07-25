@@ -22,7 +22,8 @@ import "testing"
 //   5. ID fourni + introuvable + nom libre    -> nouvel enrôlement (= cas 4)
 //
 // Plus : le cas contradictoire (2 bumpers homonymes, données différentes)
-// et la purge StartEnrollment (D-R1b, optionnelle mais implémentée).
+// et la purge des VJoueurs sur InitGame/NEW_GAME (D-R1b, déplacée depuis
+// StartEnrollment — voir le bloc de tests dédié plus bas).
 // ---------------------------------------------------------------------------
 
 // TestReconnectOrCreateVirtualPlayer_Case1_IDFound_Reconnects covers matrix
@@ -275,19 +276,25 @@ func TestReconnectOrCreateVirtualPlayer_Case5_StaleIDAndNameFree_NewEnrollment(t
 }
 
 // TestReconnectOrCreateVirtualPlayer_ContradictoryHomonyms_NeverDeleted is the
-// "code-reviewer scenario": two bumpers already share a (normalized) name but
-// hold DIFFERENT team/score data. A no-ID PLAYER_CONNECT attempt under that
-// name must reject outright — never pick one as "more legitimate" and delete
-// or overwrite the other (that destructive tie-break is exactly what this fix
-// removes).
+// "code-reviewer scenario", scoped to a single ongoing game (no cross-session
+// legacy bumpers are possible — a game always starts with an empty bumper
+// list, per product clarification): two DISTINCT players in the SAME game
+// happen to pick the same first name "Emma" — one already enrolled, assigned
+// to a team and disconnected mid-game (real team/score data), the other a
+// newcomer trying to join under that name without an ID. A no-ID
+// PLAYER_CONNECT attempt under that name must reject outright — never pick
+// one bumper as "more legitimate" and delete or overwrite the other (that
+// destructive tie-break is exactly what this fix removes).
 func TestReconnectOrCreateVirtualPlayer_ContradictoryHomonyms_NeverDeleted(t *testing.T) {
 	e := NewEngine()
 	e.SetTeams(map[string]*Team{"TeamA": {Name: "TeamA"}, "TeamB": {Name: "TeamB"}})
 	e.SetPhase(PhaseEnroll)
 
 	e.SetBumpers(map[string]*Bumper{
-		"vjoueur_emma_legacy":  {Name: "Emma", IsVirtual: true, IsVPlayer: true, Team: "TeamA", Score: 40, Connected: false, ConnState: ConnStateOrange},
-		"vjoueur_emma_tonight": {Name: "Emma", IsVirtual: true, IsVPlayer: true, Team: "TeamB", Score: 5, Connected: true, ConnState: ConnStateHidden},
+		// Already enrolled this game, assigned, has real points, currently disconnected.
+		"vjoueur_emma_first": {Name: "Emma", IsVirtual: true, IsVPlayer: true, Team: "TeamA", Score: 40, Connected: false, ConnState: ConnStateOrange},
+		// A second, distinct player also named Emma, connected and playing on another team.
+		"vjoueur_emma_second": {Name: "Emma", IsVirtual: true, IsVPlayer: true, Team: "TeamB", Score: 5, Connected: true, ConnState: ConnStateHidden},
 	})
 
 	_, _, _, err := e.ReconnectOrCreateVirtualPlayer("", "Emma")
@@ -302,13 +309,13 @@ func TestReconnectOrCreateVirtualPlayer_ContradictoryHomonyms_NeverDeleted(t *te
 	if len(bumpers) != 2 {
 		t.Fatalf("R1: expected both homonym bumpers to survive untouched, got %d bumpers", len(bumpers))
 	}
-	legacy := bumpers["vjoueur_emma_legacy"]
-	if legacy == nil || legacy.Team != "TeamA" || legacy.Score != 40 {
-		t.Errorf("R1: legacy 'Emma' data altered or deleted: %+v", legacy)
+	first := bumpers["vjoueur_emma_first"]
+	if first == nil || first.Team != "TeamA" || first.Score != 40 {
+		t.Errorf("R1: first 'Emma' data altered or deleted: %+v", first)
 	}
-	tonight := bumpers["vjoueur_emma_tonight"]
-	if tonight == nil || tonight.Team != "TeamB" || tonight.Score != 5 {
-		t.Errorf("R1: connected 'Emma' data altered or deleted: %+v", tonight)
+	second := bumpers["vjoueur_emma_second"]
+	if second == nil || second.Team != "TeamB" || second.Score != 5 {
+		t.Errorf("R1: second 'Emma' data altered or deleted: %+v", second)
 	}
 }
 
@@ -335,12 +342,22 @@ func assertNameTakenRejection(t *testing.T, bumper *Bumper, reconnected bool, er
 }
 
 // ---------------------------------------------------------------------------
-// Tests : StartEnrollment purge des VJoueurs déconnectés (D-R1b, optionnelle
-// mais implémentée — hygiène de données, PAS le fix lui-même : le rejet
-// NAME_TAKEN suffit déjà à éliminer tout risque de fusion/perte).
+// Tests : purge des VJoueurs sur InitGame/NEW_GAME (fix R1 follow-up).
+//
+// [CHANGED] La purge D-R1b a été déplacée de StartEnrollment vers
+// InitGame (NEW_GAME) suite à une précision produit de l'utilisateur : une
+// partie démarre toujours avec des données vierges, donc il n'existe pas de
+// VJoueur "legacy" à nettoyer — la vraie limite de fraîcheur est NEW_GAME,
+// pas StartEnrollment (qui peut être rouvert en cours de partie pour inviter
+// plus de monde ; y purger les déconnectés évincerait un joueur actif juste
+// temporairement coupé). La purge est désormais inconditionnelle (tous les
+// VJoueurs, connectés ou non — un nouveau jeu n'hérite d'aucun roster),
+// symétrique du reset de score déjà appliqué à tous les bumpers physiques.
+// Rappel : ceci reste une hygiène de confort — le rejet NAME_TAKEN à lui
+// seul empêche déjà toute perte/fusion de données sur collision de nom.
 // ---------------------------------------------------------------------------
 
-func TestStartEnrollment_PurgesDisconnectedVirtualPlayers(t *testing.T) {
+func TestInitGame_PurgesAllVirtualPlayers(t *testing.T) {
 	e := NewEngine()
 	e.SetBumpers(map[string]*Bumper{
 		"vjoueur_gone":      {Name: "Gone", IsVirtual: true, IsVPlayer: true, Connected: false},
@@ -348,26 +365,26 @@ func TestStartEnrollment_PurgesDisconnectedVirtualPlayers(t *testing.T) {
 		"AA:BB:CC:DD:EE:01": {Name: "Buzzer1", IsVirtual: false, Connected: false}, // physical, must survive
 	})
 
-	e.StartEnrollment(20)
+	e.InitGame()
 
 	if e.GetBumper("vjoueur_gone") != nil {
-		t.Errorf("expected disconnected VJoueur to be purged on StartEnrollment")
+		t.Errorf("expected disconnected VJoueur to be purged on InitGame (NEW_GAME)")
 	}
-	if e.GetBumper("vjoueur_here") == nil {
-		t.Errorf("connected VJoueur must never be purged")
+	if e.GetBumper("vjoueur_here") != nil {
+		t.Errorf("expected connected VJoueur to ALSO be purged on InitGame — a new game starts with no VJoueur roster at all")
 	}
 	if e.GetBumper("AA:BB:CC:DD:EE:01") == nil {
-		t.Errorf("physical (non-virtual) buzzer must never be purged by StartEnrollment")
+		t.Errorf("physical (non-virtual) buzzer must never be purged by InitGame")
 	}
 }
 
-func TestStartEnrollment_PurgeFreesUpTheName(t *testing.T) {
+func TestInitGame_PurgeFreesUpTheName(t *testing.T) {
 	e := NewEngine()
 	e.SetBumpers(map[string]*Bumper{
-		"vjoueur_old_emma": {Name: "Emma", IsVirtual: true, IsVPlayer: true, Connected: false},
+		"vjoueur_emma": {Name: "Emma", IsVirtual: true, IsVPlayer: true, Connected: false},
 	})
 
-	e.StartEnrollment(20)
+	e.InitGame()
 	e.SetPhase(PhaseEnroll)
 
 	// After the purge, "Emma" is no longer taken — a fresh enrollment succeeds.
@@ -380,5 +397,19 @@ func TestStartEnrollment_PurgeFreesUpTheName(t *testing.T) {
 	}
 	if bumper.Name != "Emma" {
 		t.Errorf("expected new bumper named 'Emma', got %q", bumper.Name)
+	}
+}
+
+// StartEnrollment itself must NOT purge anything anymore (moved to InitGame).
+func TestStartEnrollment_DoesNotPurgeVirtualPlayers(t *testing.T) {
+	e := NewEngine()
+	e.SetBumpers(map[string]*Bumper{
+		"vjoueur_disconnected": {Name: "Disconnected", IsVirtual: true, IsVPlayer: true, Connected: false},
+	})
+
+	e.StartEnrollment(20)
+
+	if e.GetBumper("vjoueur_disconnected") == nil {
+		t.Errorf("StartEnrollment must not purge VJoueurs — that's InitGame's job now (fix R1 follow-up)")
 	}
 }
