@@ -210,12 +210,17 @@ func (e *Engine) ConfirmDelivery(bumperID string) {
 		if !ok {
 			return
 		}
-		b.confirmPending = false
-		// Re-validate under lock: only apply if still green AND still the same
-		// green period we scheduled for (a re-disconnect + fresh reconnect in the
-		// meantime must not be short-circuited by this now-stale timer).
-		if b.ConnState == ConnStateGreen && b.greenSince.Equal(scheduledFor) {
-			applyConnEventUnsafe(b, ConnEventDeliveryConfirmed)
+		// Re-validate under lock: only act if still the same green period we
+		// scheduled for (b.greenSince.Equal(scheduledFor)) — a re-disconnect +
+		// fresh reconnect in the meantime starts a NEW period with its own
+		// confirmPending lifecycle; this now-stale timer must not touch it (fix
+		// R1 code-review 5.1: clearing confirmPending unconditionally here could
+		// wipe the flag for that new period instead of its own).
+		if b.greenSince.Equal(scheduledFor) {
+			b.confirmPending = false
+			if b.ConnState == ConnStateGreen {
+				applyConnEventUnsafe(b, ConnEventDeliveryConfirmed)
+			}
 		}
 	})
 }
@@ -234,10 +239,16 @@ func (e *Engine) ApplyVPlayerBroadcastConnEvents() {
 		if !b.IsVPlayer || b.Team == "" {
 			continue
 		}
-		if b.Connected {
-			toConfirm = append(toConfirm, id)
-		} else {
+		if !b.Connected {
 			applyConnEventUnsafe(b, ConnEventMessageLost)
+			continue
+		}
+		// Only bumpers currently "green" can be affected by DeliveryConfirmed
+		// (fix R1 code-review 5.2) — skip the rest to avoid re-acquiring the
+		// lock via ConfirmDelivery for a guaranteed no-op on every connected,
+		// already-hidden VJoueur on every single broadcast.
+		if b.ConnState == ConnStateGreen {
+			toConfirm = append(toConfirm, id)
 		}
 	}
 	e.mu.Unlock()
@@ -2595,93 +2606,74 @@ func (e *Engine) createVirtualPlayerUnsafe(name string) (string, *Bumper, error)
 	return id, bumper, nil
 }
 
-// ReconnectOrCreateVirtualPlayer finds an existing VJoueur bumper matching name
-// (trimmed, case-insensitive) or creates a new one — atomically, under a single
-// engine lock. This closes the race that caused the #109 "ghost bumper" bug
-// (R1): the previous implementation (main.go) read the bumper map, decided
-// "not found", and only then called CreateVirtualPlayer as a separate locked
-// step — two near-simultaneous PLAYER_CONNECT calls for the same name (e.g. a
-// flaky reconnect firing twice) could both miss the match and each create their
-// own bumper, leaving one of them stuck disconnected forever with no way to
-// reach it again (same name, but a different, now-orphaned ID).
+// ReconnectOrCreateVirtualPlayer resolves a PLAYER_CONNECT request per the
+// backend-ID decision matrix (fix R1, code-review CRITICAL —
+// _work/reports/planner-20260725-143029-r1-fix.md §3.3). The bumper ID
+// (already generated and returned to the client at enrollment, in
+// PLAYER_CONNECTED.ID — the map key itself) is the sole source of identity
+// for reconnection; the name is used only for the free/taken check on a new
+// enrollment. This eliminates the ambiguity that made the previous
+// name-based version merge/delete distinct players who happened to share a
+// name (code-review CRITICAL finding — silent, irreversible data loss).
 //
-// It also consolidates duplicate ghost bumpers already left behind by that bug:
-// among bumpers sharing the same normalized name, only the most authoritative
-// one is kept — preference order: assigned to a team > currently connected >
-// higher score > deterministic ID tie-break. Same name means same player
-// identity in this data model (it is the only identity PLAYER_CONNECT has to
-// go on), so every other bumper matching that identity is removed; nothing
-// legitimately different can share the exact same (trimmed, case-insensitive)
-// VJoueur name.
+//  1. id given, Bumpers[id] exists and IsVirtual -> legitimate reconnection,
+//     unambiguous (the ID is unique and stable). Reused as-is (-> green);
+//     Name is refreshed if the client's local copy had changed. Allowed in
+//     any phase, not just ENROLL.
+//  2. id given but not found (stale localStorage, bumper deleted by admin,
+//     server restart before persistence, ...) -> treated as no id, falls to 3/4.
+//  3. no id, name already taken by another VJoueur (connected OR
+//     disconnected) -> REJECTED (NAME_TAKEN). Never merged, never replaced —
+//     this is the actual fix: no more silent consolidation of homonyms.
+//  4. no id, name free -> new enrollment (subject to ENROLL phase / limit,
+//     enforced by createVirtualPlayerUnsafe). Its ID is returned to the
+//     client, which must store it for future reconnections.
+//  5. id given, not found, name free -> same as 4.
+//
+// Atomic under a single engine lock — this IS the real #109 fix (the
+// find-or-create sequence used to be two separate locked steps in main.go,
+// racy for two near-simultaneous PLAYER_CONNECT calls for the same identity).
+// Unlike the previous version of this method, nothing is ever deleted here.
 //
 // Returns (id, bumper, reconnected, err). reconnected is false only when a
 // brand-new bumper was created.
-func (e *Engine) ReconnectOrCreateVirtualPlayer(name string) (string, *Bumper, bool, error) {
+func (e *Engine) ReconnectOrCreateVirtualPlayer(id, name string) (string, *Bumper, bool, error) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 
 	normalized := strings.TrimSpace(name)
 
-	var matchID string
-	var match *Bumper
-	var duplicateIDs []string
+	// Case 1: a resolvable ID is unambiguous — always a genuine reconnection.
+	if id != "" {
+		if bumper, ok := e.data.Bumpers[id]; ok && bumper != nil && bumper.IsVirtual {
+			if bumper.Name != normalized {
+				bumper.Name = normalized
+			}
+			bumper.Connected = true
+			applyConnEventUnsafe(bumper, ConnEventReconnect)
+			log.Printf("[Engine] Virtual player reconnected by ID: id=%s, name=%s", id, bumper.Name)
+			go e.SaveBumpers()
+			return id, bumper, true, nil
+		}
+		// Case 2: stale/unknown ID — fall through as if none was provided.
+	}
 
-	for candID, cand := range e.data.Bumpers {
+	// Case 3: reject a name collision outright — no id means we cannot tell a
+	// genuine reconnection (client lost its stored ID) from a new person who
+	// happens to share a name with an existing (possibly long-gone) VJoueur.
+	// The legitimate owner always has their ID and takes the case-1 path.
+	for _, cand := range e.data.Bumpers {
 		if cand == nil || !cand.IsVirtual {
 			continue
 		}
-		if !strings.EqualFold(strings.TrimSpace(cand.Name), normalized) {
-			continue
-		}
-		if match == nil {
-			matchID, match = candID, cand
-			continue
-		}
-		if isBetterVirtualPlayerCandidate(cand, match, candID, matchID) {
-			duplicateIDs = append(duplicateIDs, matchID)
-			matchID, match = candID, cand
-		} else {
-			duplicateIDs = append(duplicateIDs, candID)
+		if strings.EqualFold(strings.TrimSpace(cand.Name), normalized) {
+			return "", nil, false, &EnrollmentError{Reason: "NAME_TAKEN"}
 		}
 	}
 
-	// Consolidate to a single bumper (R1/#109): remove every other duplicate
-	// sharing this identity, regardless of whether it carries a team/score/
-	// connection — keeping more than one bumper per identity is the bug itself.
-	for _, dupID := range duplicateIDs {
-		dup := e.data.Bumpers[dupID]
-		delete(e.data.Bumpers, dupID)
-		log.Printf("[Engine] Removed duplicate VJoueur bumper: id=%s, name=%s, team=%s (R1/#109)", dupID, dup.Name, dup.Team)
-	}
-
-	if match != nil {
-		match.Connected = true
-		applyConnEventUnsafe(match, ConnEventReconnect)
-		log.Printf("[Engine] Virtual player reconnected: id=%s, name=%s", matchID, match.Name)
-		go e.SaveBumpers()
-		return matchID, match, true, nil
-	}
-
+	// Case 4/5: no usable id, name free -> new enrollment.
 	newID, newBumper, err := e.createVirtualPlayerUnsafe(normalized)
 	return newID, newBumper, false, err
-}
-
-// isBetterVirtualPlayerCandidate reports whether candidate b should replace
-// best as the canonical bumper to keep when multiple bumpers share the same
-// normalized name (#109 R1 duplicate consolidation). Preference order:
-// assigned to a team > currently connected > higher score > lower bumper ID
-// (deterministic tie-break, since Go map iteration order is randomized).
-func isBetterVirtualPlayerCandidate(b, best *Bumper, id, bestID string) bool {
-	if (b.Team != "") != (best.Team != "") {
-		return b.Team != ""
-	}
-	if b.Connected != best.Connected {
-		return b.Connected
-	}
-	if b.Score != best.Score {
-		return b.Score > best.Score
-	}
-	return id < bestID
 }
 
 // countVirtualPlayersUnsafe counts virtual players (caller must hold lock)
@@ -2724,6 +2716,23 @@ func (e *EnrollmentError) Error() string {
 func (e *Engine) StartEnrollment(maxPlayers int) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
+
+	// Purge disconnected VJoueurs (fix R1, D-R1b — operational hygiene, NOT
+	// the fix itself: NAME_TAKEN rejection alone already prevents any
+	// merge/data-loss on a legacy name collision). Keeps the "name taken"
+	// pool from being clogged by absent players from a previous session.
+	purged := 0
+	for id, b := range e.data.Bumpers {
+		if b != nil && b.IsVirtual && !b.Connected {
+			delete(e.data.Bumpers, id)
+			purged++
+		}
+	}
+	if purged > 0 {
+		e.state.VirtualPlayerCount = e.countVirtualPlayersUnsafe()
+		log.Printf("[Engine] StartEnrollment: purged %d disconnected virtual player(s)", purged)
+		go e.SaveBumpers()
+	}
 
 	e.state.EnrollmentActive = true
 	e.state.ShowQRCode = true
