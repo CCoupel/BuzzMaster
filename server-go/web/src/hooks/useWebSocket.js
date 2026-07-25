@@ -48,7 +48,7 @@ export default function useWebSocket(endpoint = '/ws/admin') {
   const [questions, setQuestions] = useState({})
   const [fsInfo, setFsInfo] = useState(null)
   const [version, setVersion] = useState(null)
-  const [clientCounts, setClientCounts] = useState({ admin: 0, tv: 0, vplayer: 0 })
+  const [clientCounts, setClientCounts] = useState({ admin: 0, tv: 0, vplayer: 0, buzzerWs: 0 })
   const [logs, setLogs] = useState([])
   const [firmwareInfo, setFirmwareInfo] = useState(null) // { VERSION, FILENAME, SIZE, EXISTS }
 
@@ -249,6 +249,9 @@ export default function useWebSocket(endpoint = '/ws/admin') {
             admin: MSG.ADMIN_COUNT ?? 0,
             tv: MSG.TV_COUNT ?? 0,
             vplayer: MSG.VPLAYER_COUNT ?? 0,
+            // Compteur brut de sockets buzzer WS (informationnel — le X/Y participants
+            // affiché en Navbar se calcule côté client depuis `bumpers`, pas ce champ).
+            buzzerWs: MSG.BUZZER_WS_COUNT ?? 0,
           })
         }
         break
