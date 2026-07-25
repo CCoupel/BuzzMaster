@@ -48,11 +48,60 @@ Ce document décrit les structures de données utilisées par le serveur BuzzCon
       "VERSION": "1.0.0",
       "ANSWER_COLOR": "RED|GREEN|YELLOW|BLUE",
       "HINTS_AT_BUZZ": 0,
-      "IS_VIRTUAL": false
+      "IS_VIRTUAL": false,
+      "CONNECTED": true,
+      "CONN_STATE": "green"
     }
   }
 }
 ```
+
+### Badge de Connexion (CONN_STATE) - v5.7.13, #109
+
+Champ **CONN_STATE** : état enrichi du badge de connexion (4 niveaux), distinct du champ brut `CONNECTED`.
+
+| État | Valeur | Affichage | Déclencheur | Durée |
+|------|--------|-----------|-------------|-------|
+| **HIDDEN** | `""` (vide) | Aucune icône | Déconnexion confirmée + ACK reçu, ou bumper non participant | Permanent |
+| **ORANGE** | `"orange"` | ⚠ Orange | Déconnexion WebSocket détectée | Jusqu'à reconnexion |
+| **RED** | `"red"` | ⚠ Rouge | Déconnexion + message perdu (LED_SET, OTA, WIFI_CONFIG sans ACK) | Jusqu'à reconnexion |
+| **GREEN** | `"green"` | ✅ Vert | Reconnexion établie, ACK reçu | 2s minimum, puis caché après `ConfirmDelivery` |
+
+**Règles critiques** :
+- **Visible uniquement pour participants** : `TEAM != ""` (bumpers non assignés restent toujours `""`)
+- **Toujours sérialisé** : pas de `omitempty` (évite pertes d'état côté frontend)
+- **Partagé** : même machine d'état `transitionConnUnsafe` pour buzzers physiques ET VJoueurs
+- **Transitions** :
+  - `Hidden|Orange|Red + Disconnect → Orange`
+  - `Orange|Red + MessageLost → Red`
+  - `Orange|Red + Reconnect → Green` (timer 2s minimum)
+  - `Green + ConfirmDelivery (même timestamp) → Hidden`
+  - `Green + Disconnect → Orange`
+
+**Backend** : Piloté par `engine.TransitionConn(bumperID, event)` avec événements :
+- `ConnEventDisconnect` : perte WebSocket
+- `ConnEventMessageLost` : message perdu (LED_SET/OTA/WIFI sans ACK)
+- `ConnEventReconnect` : reconnexion établie
+- `ConnEventDeliveryConfirmed` : ACK reçu
+
+**Frontend** : `ConnectionBadge.jsx` affiche l'icône et la couleur selon `bumper.CONN_STATE`, filtré sur `bumper.TEAM != ""`.
+
+### Identité par ID (PlayerConnectPayload.ID) - v5.7.20, #109 R1
+
+Nouveau champ optionnel dans le payload de reconnexion WebSocket VJoueur.
+
+| Champ | Type | Obligatoire | Description |
+|-------|------|-------------|-------------|
+| `ID` | string | ❌ | Identifiant unique stocké (UUID ou hash) pour identifier un VJoueur lors de reconnexion |
+
+**Comportement** :
+- **Reconnexion par ID** : si le `ID` est reconnu et le bumper existe, reutilise le bumper (nom rafraîchi si nécessaire), `Connected=true`, `ConnEventReconnect`.
+- **Nom déjà pris** : si le nom est assigné à un autre bumper connecté ou déconnecté, rejette avec `PLAYER_REJECTED` (raison: `NAME_TAKEN`).
+- **ID périmé** : si l'`ID` n'est pas résolu, fallback sur identification par nom — peut également rejeter si nom en conflit.
+
+**Avantages** : Élimine tout risque de fusion/perte de données sur collision de nom (ex: deux VJoueurs "Alice" qui se reconnaissent par le même ID perdu d'une session antérieure).
+
+**Implémentation côté frontend** : `EnrollPage.jsx` stocke l'`ID` en localStorage, `VPlayerPage.jsx` l'envoie dans `PlayerConnectPayload`. `VPlayerPage.jsx` affiche un écran bloquant `PLAYER_REJECTED` avec redirection auto 3s si le serveur rejette.
 
 ## Question (SPEEDY type)
 

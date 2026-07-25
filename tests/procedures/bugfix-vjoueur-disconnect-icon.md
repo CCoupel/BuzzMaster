@@ -213,6 +213,123 @@ badge et n'entre jamais dans les compteurs Navbar, quel que soit son état de co
 
 ---
 
+---
+
+## Correction Scénario 15 — Purge roster VJoueur (v5.7.20)
+
+**Scénario original (obsolète)** : Purge à la réouverture d'un enrôlement (`StartEnrollment`).
+
+**Design corrigé** : La purge des VJoueurs déconnectés (et connectés) a **lieu sur `InitGame`/`NEW_GAME`** (inconditionnelle), **pas sur `StartEnrollment`**. Clarification produit : une partie démarre toujours avec un roster VJoueur vierge — il n'existe pas de "VJoueur legacy" à purger à la réouverture d'un enrôlement (qui peut légitimement être rouvert **en cours de partie**, sans évincer un joueur actif temporairement coupé).
+
+### Scénario 15 (corrigé) — Purge à InitGame/NEW_GAME
+
+**Objectif** : Vérifier que la purge du roster VJoueur libère les noms pour la prochaine session.
+
+| Étape | Action | Résultat Attendu | Résultat Obtenu | OK ? |
+|-------|--------|-----------------|----------------|------|
+| 1 | Session 1 active : enrôler 2 VJoueurs ("Alice", "Bob"), les assigner à des équipes, puis terminer la partie | VJoueurs "Alice" et "Bob" en jeu | | |
+| 2 | Démarrer une nouvelle partie (`InitGame`/`NEW_GAME`) | Message `ENROLLMENT_UPDATE` envoyé, indiquant purge du roster | | |
+| 3 | Observer la console server (`log` ou debug) ou vérifier le modele Bumper : tous les VJoueurs doivent avoir été supprimés | VJoueurs "Alice" et "Bob" supprimés du roster ; aucun bumper fantôme restant | | |
+| 4 | Enrôler à nouveau un VJoueur nommé "Alice" | Accepté sans conflit — le nom "Alice" est libre après purge | | |
+| 5 | Vérifier qu'aucun score/équipe legacy de la session 1 n'est préservé pour ce nouvel "Alice" | "Alice" débute avec score 0, aucune équipe assignée | | |
+| 6 | Vérifier qu'un buzzer physique enrôlé en session 1 n'a **pas** été purgé | Buzzer physique toujours présent, équipe et score intacts | | |
+
+**Verdict** : [ ] PASS  [ ] FAIL
+
+---
+
+## Ajout — Fix R1 (Identité par ID) — Scénarios 10-15
+
+> Complète les scénarios 1-9 ci-dessus (toujours valides) suite au fix R1 de la branche
+> (`_work/reports/dev-backend-20260725-...-r1-fix.md`) : identité de reconnexion par ID
+> (localStorage côté VJoueur) élimine tout risque de perte/fusion de données sur collision
+> de nom. Nouveaux codes de rejet : `PLAYER_REJECTED` avec raison `NAME_TAKEN` si nom en
+> conflit. **Tous les scénarios 10-15 couverts par tests automatisés** — procédure manuelle
+> utile pour les futurs smoke tests QUALIF/PROD.
+
+### Scénario 10 — Reconnexion par ID (même appareil)
+
+**Objectif** : Vérifier qu'un VJoueur reconnaît son identité par ID (localStorage) et préserve automatiquement équipe/score sans créer de nouveau bumper.
+
+| Étape | Action | Résultat Attendu | Résultat Obtenu | OK ? |
+|-------|--------|-----------------|----------------|------|
+| 1 | Enrôler un VJoueur "Alice" sur un appareil mobile (note l'ID généré, stocké en localStorage) | VJoueur reçoit un ID unique (ex: `f8d7c6b5-...`) | | |
+| 2 | Assigner "Alice" à l'équipe "Les Rouges", lui attribuer 10 points | Score visible dans l'admin : Alice 10 pts, équipe Les Rouges | | |
+| 3 | Rafraîchir l'appareil mobile (F5 ou fermer/rouvrir l'onglet) | Nouvelle connexion WebSocket, `PLAYER_CONNECT` envoyé avec ID + nom "Alice" | | |
+| 4 | Observer l'admin : vérifier qu'"Alice" n'apparaît qu'**une seule fois** (pas de doublon) | Aucun second bumper "Alice" créé ; équipe Les Rouges, score 10 pts **préservés** | | |
+| 5 | Observer la console du VPlayer après reconnexion | Message `PLAYER_CONNECTED` reçu (pas `PLAYER_REJECTED`), ID et équipe confirmés | | |
+
+**Verdict** : [ ] PASS  [ ] FAIL
+
+---
+
+### Scénario 11 — Rejet si nom déjà pris (VJoueur connecté)
+
+**Objectif** : Vérifier qu'un second VJoueur utilisant le même nom "Alice" est rejeté si le premier est encore connecté.
+
+| Étape | Action | Résultat Attendu | Résultat Obtenu | OK ? |
+|-------|--------|-----------------|----------------|------|
+| 1 | Session active : VJoueur "Alice" connecté sur appareil A | "Alice" visible dans l'admin | | |
+| 2 | Ouvrir un second navigateur/appareil (appareil B), tenter d'enrôler un nouveau VJoueur "Alice" | Nouveau VJoueur "Alice" tente `PLAYER_CONNECT` avec un ID différent | | |
+| 3 | Observer l'appareil B | Écran bloquant `PLAYER_REJECTED` affiché : "Le nom Alice est déjà utilisé" (ou équivalent) | | |
+| 4 | Observer l'admin | Un seul "Alice" affiché (celui de l'appareil A), aucun bumper créé/fusionné/supprimé | | |
+| 5 | Attendre 3 secondes ou cliquer "Rejoindre à nouveau" | Redirection auto vers `/enroll`, possibilité de choisir un autre nom | | |
+
+**Verdict** : [ ] PASS  [ ] FAIL
+
+---
+
+### Scénario 12 — Rejet si nom déjà pris (VJoueur déconnecté)
+
+**Objectif** : Vérifier qu'un nom en conflit reste protégé même si le VJoueur original est déconnecté.
+
+| Étape | Action | Résultat Attendu | Résultat Obtenu | OK ? |
+|-------|--------|-----------------|----------------|------|
+| 1 | VJoueur "Alice" enrôlé et assigné à l'équipe "Les Rouges" (score 10 pts) | Alice visible dans l'admin | | |
+| 2 | Déconnecter "Alice" (fermer l'onglet du VJoueur, réseau coupé) | Badge orange apparaît sur Alice côté admin | | |
+| 3 | Ouvrir un second appareil, tenter d'enrôler un nouveau VJoueur "Alice" | Nouveau VJoueur "Alice" avec un ID différent tente `PLAYER_CONNECT` | | |
+| 4 | Observer l'appareil en enrôlement | Écran bloquant `PLAYER_REJECTED` : "Le nom Alice est déjà utilisé" | | |
+| 5 | Observer l'admin | Toujours un seul "Alice" (déconnecté, badge orange), score et équipe intacts, **aucune duplication ni fusion** | | |
+| 6 | Retour sur l'appareil de l'Alice déconnecté : reconnecter (F5) | "Alice" se reconnecte par ID, badge disparaît, score/équipe restaurés | | |
+
+**Verdict** : [ ] PASS  [ ] FAIL
+
+---
+
+### Scénario 13 — ID périmé → écran d'erreur + redirection
+
+**Objectif** : Vérifier qu'un VJoueur avec un ID obsolète (bumper supprimé/purgé ou ID non résolu) reçoit un écran d'erreur clair et une redirection auto.
+
+| Étape | Action | Résultat Attendu | Résultat Obtenu | OK ? |
+|-------|--------|-----------------|----------------|------|
+| 1 | Enrôler VJoueur "Charlie" sur l'appareil A (note l'ID) | "Charlie" enrôlé, localStorage contient l'ID | | |
+| 2 | Purger le roster (démarrer une nouvelle partie `InitGame`/`NEW_GAME`) | "Charlie" supprimé du roster | | |
+| 3 | Reconnecter l'appareil A du VJoueur "Charlie" (utilise l'ID obsolète stocké localement) | VJoueur envoie `PLAYER_CONNECT` avec ID périmé | | |
+| 4 | Observer l'appareil A | Écran bloquant `PLAYER_REJECTED` s'affiche immédiatement | | |
+| 5 | Observer le message d'erreur | Message clair (ex: "Votre session a expiré" ou "Le joueur a été supprimé") | | |
+| 6 | Attendre 3 secondes sans action | Redirection auto vers `/enroll` (possibilité d'une nouvelle inscription) | | |
+| 7 | Cliquer le bouton "Rejoindre à nouveau" (s'il existe) | Navigation manuelle vers `/enroll` possible également | | |
+
+**Verdict** : [ ] PASS  [ ] FAIL
+
+---
+
+### Scénario 14 — EnrollPage attend réponse serveur (pas de faux départ)
+
+**Objectif** : Vérifier que `EnrollPage` n'affiche pas prématurément le message de succès avant la réponse du serveur (aucune navigation optimiste).
+
+| Étape | Action | Résultat Attendu | Résultat Obtenu | OK ? |
+|-------|--------|-----------------|----------------|------|
+| 1 | Ouvrir la page `/enroll` | Formulaire d'enrôlement affiché | | |
+| 2 | Saisir un nom "David" et cliquer "Valider" | Bouton désactivé/affichage "En attente de réponse..." | | |
+| 3 | Observer la barre d'adresse/URL | Pas de navigation vers `/player` avant la réponse | | |
+| 4 | Sur une connexion lente (ou simulée), attendre la réponse du serveur | Navigation vers `/player` intervient **après** réception de `PLAYER_CONNECTED` (pas avant) | | |
+| 5 | En cas de rejet serveur (ex: `PLAYER_REJECTED`), vérifier que le formulaire redevient actif | Possibilité de ressaisir un autre nom sans rechargement | | |
+
+**Verdict** : [ ] PASS  [ ] FAIL
+
+---
+
 ## Notes QA
 
-[Espace pour observations, capture d'écran, timing précis observé, version du binaire testé]
+[Espace pour observations, capture d'écran, timing précis observé, version du binaire testé, date de test]
