@@ -15,6 +15,10 @@ const ANSWER_COLORS = {
   BLUE: '#3b82f6',
 }
 
+// Fix R1 (suite, #109) : délai avant redirection automatique après un rejet
+// de reconnexion — laisse le temps de lire le message d'erreur.
+const RECONNECT_ERROR_REDIRECT_DELAY_MS = 3000
+
 export default function VPlayerPage() {
   const navigate = useNavigate()
   const { sendMessage, gameState, bumpers, teams, status, playerConnectStatus, clearPlayerConnectStatus } = useGame()
@@ -154,12 +158,30 @@ export default function VPlayerPage() {
   // Fix R1 (suite) : après un rejet de reconnexion, repartir sur EnrollPage
   // avec un pseudo neuf — l'ancien bumper n'est plus à nous (supprimé ou
   // repris par quelqu'un d'autre), impossible de continuer sur cette session.
+  //
+  // Cible unique '/' : EnrollPage est la SEULE route d'enrôlement du routing
+  // (vérifié — aucune page d'attente dédiée n'existe séparément) et gère déjà
+  // en interne les deux sous-états via `gameState.enrollmentActive` (voir
+  // EnrollPage.jsx `enrollmentOpen`) : formulaire standard si les inscriptions
+  // sont ouvertes, écran "en attente de l'ouverture des inscriptions" sinon.
+  // Naviguer vers '/' fait donc automatiquement atterrir l'utilisateur sur le
+  // bon écran selon l'état d'enrôlement live — pas de route distincte à choisir.
   const handleRejoinFromScratch = useCallback(() => {
     localStorage.removeItem('vplayer_name')
     localStorage.removeItem('vplayer_session')
     localStorage.removeItem('vplayer_id')
     navigate('/')
   }, [navigate])
+
+  // Fix R1 (suite) : la redirection doit être AUTOMATIQUE, pas seulement
+  // disponible via un bouton — la session est de toute façon morte (ID
+  // périmé), rien à faire d'autre ici. Un court délai laisse le temps de lire
+  // le message ; le bouton reste disponible pour ne pas attendre.
+  useEffect(() => {
+    if (!reconnectError) return
+    const timeoutId = setTimeout(handleRejoinFromScratch, RECONNECT_ERROR_REDIRECT_DELAY_MS)
+    return () => clearTimeout(timeoutId)
+  }, [reconnectError, handleRejoinFromScratch])
 
   // Auto-respond to PREPARE phase with PONG
   useEffect(() => {
@@ -320,12 +342,18 @@ export default function VPlayerPage() {
 
   // Fix R1 (suite, #109) : reconnexion rejetée — l'ancien bumper n'est plus
   // à nous, impossible de continuer sur cette session. Bloque l'écran avec
-  // le message d'erreur et une action pour repartir sur EnrollPage.
+  // le message d'erreur, redirige automatiquement (voir handleRejoinFromScratch
+  // + l'effet ci-dessus) vers '/' — EnrollPage affichera le formulaire ou
+  // l'écran d'attente selon `gameState.enrollmentActive` en direct.
   if (reconnectError) {
+    const redirectHint = gameState.enrollmentActive
+      ? 'Redirection vers l’inscription…'
+      : 'Redirection vers l’écran d’attente des inscriptions…'
     return (
       <div className="vplayer-page loading">
         <div className="vplayer-reconnect-error">
           <p className="vplayer-reconnect-error-text">{reconnectError}</p>
+          <p className="vplayer-reconnect-error-hint">{redirectHint}</p>
           <button className="vplayer-reconnect-btn" onClick={handleRejoinFromScratch}>
             Rejoindre à nouveau
           </button>
