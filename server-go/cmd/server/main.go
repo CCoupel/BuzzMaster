@@ -1875,43 +1875,15 @@ func (a *App) handlePlayerConnect(clientID string, msg *protocol.Message) {
 		return
 	}
 
-	// Check if player with this name already exists (reconnection)
-	var existingBumperID string
-	var existingBumper *game.Bumper
-	for id, b := range a.engine.GetTeamsAndBumpers().Bumpers {
-		if b.IsVirtual && b.Name == playerName {
-			existingBumperID = id
-			existingBumper = b
-			break
-		}
-	}
-
-	// If player exists, allow reconnection
-	if existingBumper != nil {
-		server.LogInfo(game.LogComponentWebSocket, "PLAYER_CONNECT: reconnecting existing player: id=%s, name=%s", existingBumperID, existingBumper.Name)
-
-		// Send confirmation to this client
-		connectedPayload := protocol.PlayerConnectedPayload{
-			ID:   existingBumperID,
-			Name: existingBumper.Name,
-			Team: existingBumper.Team,
-		}
-		connectedMsg, _ := protocol.NewMessage(protocol.ActionPlayerConnected, connectedPayload)
-		a.wsHub.SendToClient(clientID, connectedMsg)
-
-		// Link this WS client to its VJoueur bumper ID (used by OnPlayerDisconnected / anti-zombie guard)
-		a.wsHub.SetClientPlayerID(clientID, existingBumperID)
-
-		// Mark the VJoueur as connected again (#109: fixes missing disconnect/reconnect icon)
-		a.engine.UpdateBumper(existingBumperID, map[string]interface{}{"CONNECTED": true})
-
-		// Broadcast UPDATE to all clients (to notify of reconnection)
-		a.broadcastUpdate()
-		return
-	}
-
-	// New player: Try to create virtual player
-	bumperID, bumper, err := a.engine.CreateVirtualPlayer(playerName)
+	// Find-or-create the virtual player bumper atomically, under a single engine
+	// lock (#109 R1 fix: the previous implementation read the bumper map here,
+	// decided "not found", and only then called CreateVirtualPlayer as a
+	// separate locked step — two near-simultaneous PLAYER_CONNECT calls for the
+	// same name could race into two different bumpers, leaving one stuck
+	// disconnected forever as an unreachable "ghost". The engine now also
+	// normalizes the name match (trimmed, case-insensitive) and opportunistically
+	// cleans up any ghost duplicates left behind by that bug.
+	bumperID, bumper, reconnected, err := a.engine.ReconnectOrCreateVirtualPlayer(playerName)
 	if err != nil {
 		// Send rejection to this client only
 		reason := "ENROLLMENT_CLOSED"
@@ -1938,10 +1910,18 @@ func (a *App) handlePlayerConnect(clientID string, msg *protocol.Message) {
 	}
 	connectedMsg, _ := protocol.NewMessage(protocol.ActionPlayerConnected, connectedPayload)
 	a.wsHub.SendToClient(clientID, connectedMsg)
-	server.LogInfo(game.LogComponentWebSocket, "PLAYER_CONNECT: player connected: id=%s, name=%s", bumperID, bumper.Name)
 
 	// Link this WS client to its VJoueur bumper ID (used by OnPlayerDisconnected / anti-zombie guard)
 	a.wsHub.SetClientPlayerID(clientID, bumperID)
+
+	if reconnected {
+		server.LogInfo(game.LogComponentWebSocket, "PLAYER_CONNECT: reconnecting existing player: id=%s, name=%s", bumperID, bumper.Name)
+		// Broadcast UPDATE to all clients (to notify of reconnection)
+		a.broadcastUpdate()
+		return
+	}
+
+	server.LogInfo(game.LogComponentWebSocket, "PLAYER_CONNECT: player connected: id=%s, name=%s", bumperID, bumper.Name)
 
 	// Broadcast UPDATE to all clients (teams/bumpers updated)
 	a.broadcastUpdate()
