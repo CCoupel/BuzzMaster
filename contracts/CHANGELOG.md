@@ -2,6 +2,32 @@
 
 ---
 
+## [20260725] — Fix R1 : reconnexion VJoueur par ID, plus de fusion par nom (#109)
+
+> Répond au blocage code-review CRITIQUE (`code-review-20260725-122357.md`) sur
+> `ReconnectOrCreateVirtualPlayer` : la consolidation par nom supprimait silencieusement des
+> données en cas de collision (deux VJoueurs homonymes distincts). Plan :
+> `_work/reports/planner-20260725-143029-r1-fix.md`.
+
+- **[NEW]** `PlayerConnectPayload.ID` (string, `omitempty`) — ID de bumper reçu dans un
+  `PLAYER_CONNECTED` précédent, à renvoyer pour une reconnexion non-ambiguë. Absent au premier
+  enrôlement ; rétrocompatible (anciens clients sans ID → traités comme un enrôlement par nom,
+  rejeté si le nom est déjà pris).
+- **[NEW]** `PlayerRejectedPayload.Reason` : nouvelle valeur `NAME_TAKEN` — nom déjà utilisé par
+  un autre VJoueur (connecté ou déconnecté), sans ID résolvable pour prouver la propriété.
+- **[BREAKING — comportement, pas format]** L'identité d'un VJoueur repose désormais **sur l'ID
+  uniquement**. Le matching par nom seul (avec fusion/suppression de doublons) est **retiré** :
+  une collision de nom sans ID est **rejetée**, jamais fusionnée. Un ancien client qui ne stocke
+  pas encore l'ID (avant la mise à jour frontend correspondante) continuera à fonctionner pour un
+  premier enrôlement, mais toute tentative de reconnexion par nom sur un nom déjà pris sera
+  rejetée au lieu d'être silencieusement acceptée — comportement voulu (règle produit).
+- **[FIX]** `engine.ReconnectOrCreateVirtualPlayer` ne supprime plus jamais de bumper. L'atomicité
+  (verrou unique, corrige la course TOCTOU #109 d'origine) est conservée.
+- **[NEW]** Purge des VJoueurs déconnectés à `StartEnrollment` (hygiène opérationnelle, pas requis
+  pour la correction elle-même — `NAME_TAKEN` seul suffit à éviter toute perte de données).
+
+---
+
 ## [20260725] — Badge de connexion 4 états (#109 Phase 2)
 
 - **[NEW]** `MESSAGE_LOST`/`DELIVERY_CONFIRMED` câblés sur leurs sources réelles (voir

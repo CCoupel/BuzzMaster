@@ -553,24 +553,40 @@ Désactive le QR Code.
 
 ### PLAYER_CONNECT
 
-Demande d'inscription VPlayer.
+Demande d'inscription ou de reconnexion VPlayer.
 
 | Propriété | Valeur |
 |-----------|--------|
 | Direction | `Client→Server` |
-| Trigger   | VPlayer soumet son pseudo |
+| Trigger   | VPlayer soumet son pseudo, ou reconnexion automatique |
 
 #### Payload
 
-| Champ | Type | Description |
-|-------|------|-------------|
-| NAME | string | Pseudo du joueur |
+| Champ | Type | Obligatoire | Description |
+|-------|------|-------------|-------------|
+| NAME | string | ✅ | Pseudo du joueur |
+| ID | string | ❌ | ID de bumper reçu dans un `PLAYER_CONNECTED` précédent (fix R1, #109, v5.7.16). Absent au tout premier enrôlement. Champ `omitempty` — les anciens clients qui ne l'envoient jamais continuent de fonctionner comme un enrôlement par nom. |
+
+#### Comportement serveur (matrice de décision — `engine.ReconnectOrCreateVirtualPlayer`)
+
+| # | Situation | Décision |
+|---|---|---|
+| 1 | `ID` fourni et résout un bumper `IsVirtual` existant | Reconnexion — réutilise le bumper (badge → `green`), pas d'ambiguïté possible |
+| 2 | `ID` fourni mais introuvable (supprimé par l'admin, périmé, ...) | Traité comme si aucun ID n'était fourni → cas 3/4 |
+| 3 | Pas d'`ID` (ou introuvable), nom déjà pris par un autre VJoueur (connecté **ou** déconnecté) | **`PLAYER_REJECTED { REASON: "NAME_TAKEN" }`** — jamais de fusion/remplacement |
+| 4 | Pas d'`ID` (ou introuvable), nom libre | Nouvel enrôlement — un nouveau bumper est créé, son ID est renvoyé dans `PLAYER_CONNECTED.ID` |
+
+> **Important** : l'identité d'un VJoueur repose désormais **uniquement sur l'ID**, jamais sur le
+> nom seul. Un client doit conserver l'`ID` reçu (ex. `localStorage`) et le renvoyer à chaque
+> reconnexion. Sans ID, un nom déjà utilisé est **toujours rejeté**, jamais consolidé — voir
+> `contracts/CHANGELOG.md` [20260725] Fix R1 pour le contexte (ancien comportement retiré :
+> fusion/suppression silencieuse de bumpers homonymes, bloquant en code-review).
 
 ---
 
 ### PLAYER_CONNECTED
 
-Confirmation d'inscription.
+Confirmation d'inscription ou de reconnexion.
 
 | Propriété | Valeur |
 |-----------|--------|
@@ -580,14 +596,14 @@ Confirmation d'inscription.
 
 | Champ | Type | Description |
 |-------|------|-------------|
-| ID | string | ID assigné |
+| ID | string | ID du bumper — **le client DOIT le conserver** (ex. `localStorage`) et le renvoyer dans `PLAYER_CONNECT.ID` pour toute reconnexion future (fix R1, #109) |
 | NAME | string | Pseudo confirmé |
 
 ---
 
 ### PLAYER_REJECTED
 
-Refus d'inscription.
+Refus d'inscription ou de reconnexion.
 
 | Propriété | Valeur |
 |-----------|--------|
@@ -597,7 +613,7 @@ Refus d'inscription.
 
 | Champ | Type | Description |
 |-------|------|-------------|
-| REASON | string | Raison du refus |
+| REASON | string | `ENROLLMENT_CLOSED`, `LIMIT_REACHED`, `INVALID_NAME`, ou `NAME_TAKEN` (fix R1, #109, v5.7.16 — nom déjà pris par un autre VJoueur, sans ID résolvable pour prouver la propriété) |
 
 ---
 
