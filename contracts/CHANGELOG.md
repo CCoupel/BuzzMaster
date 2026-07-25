@@ -2,6 +2,24 @@
 
 ---
 
+## [20260725] — Badge de connexion 4 états (#109 Phase 2)
+
+- **[NEW]** `MESSAGE_LOST`/`DELIVERY_CONFIRMED` câblés sur leurs sources réelles (voir
+  `contracts/websocket-actions.md` §CONN_STATE pour le détail buzzer/VJoueur) + fenêtre minimale
+  de 2s sur l'état `green` avant retour à `""` (D2/D3), sans borne max (D7).
+- **[NEW]** Backend : `engine.ConfirmDelivery(bumperID)` — entrée gated pour `DELIVERY_CONFIRMED`
+  qui respecte la fenêtre `green` ; `engine.ApplyVPlayerBroadcastConnEvents()` — évalue tous les
+  VJoueurs participants à chaque broadcast GameState.
+- **[NEW]** Backend : `WebSocketHub.GetClientPlayerID(clientID)` — getter symétrique de
+  `SetClientPlayerID`, utilisé pour confirmer la livraison à réception de n'importe quel message
+  d'un VJoueur identifié.
+
+> Aucune breaking change — additif sur la Phase 1 (#109, v5.7.13). `engine.TransitionConn` (table
+> pure) reste inchangé et non-gated ; seuls les nouveaux appels de production passent par
+> `ConfirmDelivery`.
+
+---
+
 ## [20260725] — Badge de connexion 4 états (#109 Phase 1)
 
 - **[NEW]** `Bumper.CONN_STATE` (string `""`/`"orange"`/`"red"`/`"green"`, **sans omitempty**) —

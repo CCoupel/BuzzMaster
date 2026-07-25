@@ -363,11 +363,23 @@ Table de transitions (`engine.TransitionConn(bumperID, event)`), `event` ∈ `DI
 | `red` | `red` | → `green` | `red` | (n/a) |
 | `green` | → `orange` | `green` | (n/a) | → `""` |
 
-> **Phase 1 (#109, v5.7.13)** : `DISCONNECT`/`RECONNECT` sont câblés sur les 6 sites de
-> connexion existants (buzzer HELLO/déco, VJoueur reco/déco, reset boot, création VJoueur).
-> **Phase 2** (à venir) : câblage `MESSAGE_LOST` (LED_SET/OTA/WIFI pour buzzer, broadcast pour
-> VJoueur) et `DELIVERY_CONFIRMED` (ACK buzzer, signal bidirectionnel VJoueur) + fenêtre
-> minimale de 2s sur l'état `green` avant retour à `""`.
+> **Phase 1 (#109, v5.7.13)** : `DISCONNECT`/`RECONNECT` câblés sur les 6 sites de connexion
+> existants (buzzer HELLO/déco, VJoueur reco/déco, reset boot, création VJoueur).
+>
+> **Phase 2 (#109, v5.7.14)** : `MESSAGE_LOST` et `DELIVERY_CONFIRMED` câblés sur leurs sources
+> réelles + fenêtre minimale de 2s sur l'état `green` (D2/D3) :
+> - **Buzzer** (fidèle) : `MESSAGE_LOST` sur toute émission LED_SET/OTA_UPDATE/WIFI_CONFIG vers
+>   un buzzer déconnecté ; `DELIVERY_CONFIRMED` sur ACK réel (`handleBuzzerACK`).
+> - **VJoueur** (heuristique large, D4 — pas de liste restreinte) : `MESSAGE_LOST` sur chaque
+>   broadcast `UPDATE` (GameState) alors que le participant est déconnecté ; `DELIVERY_CONFIRMED`
+>   sur chaque broadcast `UPDATE` alors qu'il est connecté, **et** sur tout message reçu de lui
+>   (`handleWebMessage`, n'importe quelle action).
+> - **Fenêtre `green`** : `DELIVERY_CONFIRMED` reçu avant que 2 s se soient écoulées depuis le
+>   passage à `green` est différé (timer interne) — la transition vers `""` n'a lieu qu'une fois
+>   la fenêtre écoulée. Pas de borne max (D7) : sans confirmation, reste `green` indéfiniment.
+>   Entrée gated : `engine.ConfirmDelivery(bumperID)` (utilisée par tous les sites ci-dessus) —
+>   `TransitionConn(id, DELIVERY_CONFIRMED)` reste immédiat/non-gated (réservé aux tests de la
+>   table pure).
 
 ---
 
