@@ -1891,15 +1891,16 @@ func (a *App) handlePlayerConnect(clientID string, msg *protocol.Message) {
 		return
 	}
 
-	// Find-or-create the virtual player bumper atomically, under a single engine
+	// Resolve reconnection vs. new enrollment atomically, under a single engine
 	// lock (#109 R1 fix: the previous implementation read the bumper map here,
 	// decided "not found", and only then called CreateVirtualPlayer as a
 	// separate locked step — two near-simultaneous PLAYER_CONNECT calls for the
-	// same name could race into two different bumpers, leaving one stuck
-	// disconnected forever as an unreachable "ghost". The engine now also
-	// normalizes the name match (trimmed, case-insensitive) and opportunistically
-	// cleans up any ghost duplicates left behind by that bug.
-	bumperID, bumper, reconnected, err := a.engine.ReconnectOrCreateVirtualPlayer(playerName)
+	// same identity could race into two different bumpers). Identity is now the
+	// backend-issued bumper ID (payload.ID, echoed back from a prior
+	// PLAYER_CONNECTED — empty on first enrollment), not the name: a name match
+	// with no resolvable ID is REJECTED (NAME_TAKEN), never merged/replaced —
+	// see engine.ReconnectOrCreateVirtualPlayer for the full decision matrix.
+	bumperID, bumper, reconnected, err := a.engine.ReconnectOrCreateVirtualPlayer(payload.ID, playerName)
 	if err != nil {
 		// Send rejection to this client only
 		reason := "ENROLLMENT_CLOSED"
