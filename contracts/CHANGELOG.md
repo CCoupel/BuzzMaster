@@ -2,6 +2,23 @@
 
 ---
 
+## [20260726] — Fix urgent : badge CONN_STATE bloqué en ROUGE (#109)
+
+> Bug bloquant remonté en test réel post-QUALIF v5.7.20 : un VJoueur qui se déconnecte passait
+> **directement** en `red` (jamais visible en `orange`), et restait parfois bloqué. Handoff :
+> `_work/handoff/task-dev-backend-20260726-090000.md`.
+
+- **[FIX]** `ApplyVPlayerBroadcastConnEvents` ne compte plus le broadcast qui **annonce** une
+  déconnexion comme un `MESSAGE_LOST` pour le VJoueur concerné — `orange` est désormais réellement
+  visible avant tout passage à `red`. Un broadcast **ultérieur** (pendant que le participant est
+  toujours déconnecté) déclenche toujours `MESSAGE_LOST` normalement (D4 inchangé).
+- **Diagnostic** : l'hypothèse alternative (la reconnexion par ID ne déclencherait jamais
+  `RECONNECT`, bloquant en `red` indéfiniment) a été vérifiée et **infirmée** par test — la
+  reconnexion par ID fonctionne correctement.
+- Aucun changement de contrat de champ — comportement uniquement.
+
+---
+
 ## [20260725] — Fix R1 : reconnexion VJoueur par ID, plus de fusion par nom (#109)
 
 > Répond au blocage code-review CRITIQUE (`code-review-20260725-122357.md`) sur

@@ -380,6 +380,15 @@ Table de transitions (`engine.TransitionConn(bumperID, event)`), `event` ∈ `DI
 >   Entrée gated : `engine.ConfirmDelivery(bumperID)` (utilisée par tous les sites ci-dessus) —
 >   `TransitionConn(id, DELIVERY_CONFIRMED)` reste immédiat/non-gated (réservé aux tests de la
 >   table pure).
+>
+> **Fix conn-state (#109, v5.7.21)** : le broadcast `UPDATE` qui **annonce** la déconnexion d'un
+> VJoueur (déclenché juste après avoir posé `CONNECTED=false`) ne compte **plus** comme un
+> `MESSAGE_LOST` pour ce même VJoueur — sans cette exception, `orange` n'était jamais visible
+> (bascule directe vers `red` dans le même broadcast que l'annonce de la déconnexion elle-même).
+> Seuls les broadcasts **suivants**, alors que le participant est toujours déconnecté, comptent
+> comme message manqué (D4 inchangé). Mécanisme : `Bumper.skipNextMessageLost` (interne,
+> non sérialisé), posé à chaque transition `DISCONNECT` vers `orange`, consommé une seule fois par
+> `ApplyVPlayerBroadcastConnEvents`.
 
 ---
 
