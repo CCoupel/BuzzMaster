@@ -26,6 +26,19 @@ Historique des versions du projet BuzzControl.
 
 ---
 
+## [5.7.23] - 2026-07-26
+
+### Fixed
+- **Badge bloqué en ROUGE** : VJoueur passait directement en rouge (jamais visible en orange) après une déconnexion, et restait bloqué indéfiniment après reconnexion — deux causes :
+  - **Backend (v5.7.21)** : le broadcast annonçant la déconnexion était à tort compté comme message perdu pour le même VJoueur. Solution : passe-droit `skipNextMessageLost` à usage unique qui ignore le premier broadcast après une transition vers orange, puis D4 reprend normalement (#109).
+  - **Frontend (v5.7.22)** : `VPlayerPage` n'essayait plus de se reconnecter si un bumper homonyme existait **même déconnecté** (bloquant l'envoi de `PLAYER_CONNECT` sur coupure réseau normale). Solution : garde `CONNECTED === true` stricte avant de marquer un bumper comme "déjà trouvé", obligeant le renvoi de `PLAYER_CONNECT` sur chaque coupure réseau (#109).
+
+### Technical
+- **Backend** : nouveau champ interne `Bumper.skipNextMessageLost` (non sérialisé) pour passe-droit à usage unique dans `ApplyVPlayerBroadcastConnEvents`.
+- **Frontend** : correction logique matching par nom dans `VPlayerPage.jsx` — garantit l'envoi de `PLAYER_CONNECT` après toute coupure réseau.
+
+---
+
 ## [5.7.10] - 2026-06-08
 
 ### Fixed
