@@ -151,7 +151,11 @@ func TestConfirmDelivery_UnknownBumper_NoPanic(t *testing.T) {
 
 // TestApplyVPlayerBroadcastConnEvents_DisconnectedParticipant_MessageLost
 // verifies D4 (no restricted list): a disconnected participant VJoueur gets a
-// MessageLost transition (orange -> red) on each simulated GameState broadcast.
+// MessageLost transition (orange -> red) on a GameState broadcast — but NOT
+// on the very first broadcast that announces the disconnect itself (conn-state
+// fix, #109 — the broadcast telling everyone "this VJoueur just disconnected"
+// is not itself a message it should have received; without this, ORANGE was
+// never actually visible to the admin, jumping straight to RED).
 func TestApplyVPlayerBroadcastConnEvents_DisconnectedParticipant_MessageLost(t *testing.T) {
 	e := NewEngine()
 	e.SetTeams(map[string]*Team{"TeamA": {Name: "TeamA"}})
@@ -163,22 +167,76 @@ func TestApplyVPlayerBroadcastConnEvents_DisconnectedParticipant_MessageLost(t *
 	if err := e.AssignVirtualPlayer(id, "TeamA", AnswerColorNone); err != nil {
 		t.Fatalf("AssignVirtualPlayer failed: %v", err)
 	}
-	// Simulate disconnect (main.go OnPlayerDisconnected path).
+	// Simulate disconnect (main.go onPlayerDisconnected path).
 	e.UpdateBumper(id, map[string]interface{}{"CONNECTED": false})
 	if got := e.GetBumper(id).ConnState; got != ConnStateOrange {
 		t.Fatalf("setup failed: expected orange after disconnect, got %q", got)
 	}
 
-	e.ApplyVPlayerBroadcastConnEvents() // simulates one broadcastUpdate() cycle
-
-	if got := e.GetBumper(id).ConnState; got != ConnStateRed {
-		t.Errorf("D4: expected orange -> red after a broadcast while disconnected, got %q", got)
+	// First broadcast: this is the one announcing the disconnect (mirrors
+	// onPlayerDisconnected calling broadcastUpdate() right after UpdateBumper).
+	// It must NOT immediately turn the badge red — ORANGE must stay visible.
+	e.ApplyVPlayerBroadcastConnEvents()
+	if got := e.GetBumper(id).ConnState; got != ConnStateOrange {
+		t.Errorf("conn-state fix regression: ORANGE skipped straight to %q on the disconnect-announcing broadcast", got)
 	}
 
-	// Idempotence: a second broadcast while still disconnected must stay red.
+	// Second broadcast: a genuinely later broadcast while still disconnected —
+	// this one DOES represent a missed message (D4) and must turn it red.
+	e.ApplyVPlayerBroadcastConnEvents()
+	if got := e.GetBumper(id).ConnState; got != ConnStateRed {
+		t.Errorf("D4: expected orange -> red on a broadcast after the disconnect was already announced, got %q", got)
+	}
+
+	// Idempotence: a third broadcast while still disconnected must stay red.
 	e.ApplyVPlayerBroadcastConnEvents()
 	if got := e.GetBumper(id).ConnState; got != ConnStateRed {
 		t.Errorf("expected red to stay red on repeated broadcasts while disconnected, got %q", got)
+	}
+}
+
+// TestApplyVPlayerBroadcastConnEvents_SkipOnlyAppliesOnce verifies the skip
+// pass is consumed exactly once per disconnect: a re-disconnect while green
+// gets its own fresh pass, but repeated disconnect-adjacent broadcasts don't
+// keep granting free passes.
+func TestApplyVPlayerBroadcastConnEvents_SkipOnlyAppliesOnce(t *testing.T) {
+	withShortGreenWindow(t, 20*time.Millisecond)
+
+	e := NewEngine()
+	e.SetTeams(map[string]*Team{"TeamA": {Name: "TeamA"}})
+	e.SetPhase(PhaseEnroll)
+	id, _, err := e.CreateVirtualPlayer("Zoe")
+	if err != nil {
+		t.Fatalf("CreateVirtualPlayer failed: %v", err)
+	}
+	if err := e.AssignVirtualPlayer(id, "TeamA", AnswerColorNone); err != nil {
+		t.Fatalf("AssignVirtualPlayer failed: %v", err)
+	}
+
+	// First disconnect: skip pass consumed -> orange, then red.
+	e.UpdateBumper(id, map[string]interface{}{"CONNECTED": false})
+	e.ApplyVPlayerBroadcastConnEvents()
+	if got := e.GetBumper(id).ConnState; got != ConnStateOrange {
+		t.Fatalf("expected orange after the first (skipped) broadcast, got %q", got)
+	}
+	e.ApplyVPlayerBroadcastConnEvents()
+	if got := e.GetBumper(id).ConnState; got != ConnStateRed {
+		t.Fatalf("expected red after the second broadcast, got %q", got)
+	}
+
+	// Reconnect -> green, then re-disconnect -> orange with a FRESH skip pass.
+	e.TransitionConn(id, ConnEventReconnect)
+	e.UpdateBumper(id, map[string]interface{}{"CONNECTED": false})
+	if got := e.GetBumper(id).ConnState; got != ConnStateOrange {
+		t.Fatalf("expected orange after re-disconnecting from green, got %q", got)
+	}
+	e.ApplyVPlayerBroadcastConnEvents()
+	if got := e.GetBumper(id).ConnState; got != ConnStateOrange {
+		t.Errorf("expected a fresh skip pass on the re-disconnect announcement, stayed orange, got %q", got)
+	}
+	e.ApplyVPlayerBroadcastConnEvents()
+	if got := e.GetBumper(id).ConnState; got != ConnStateRed {
+		t.Errorf("expected red on the next broadcast after the fresh pass was consumed, got %q", got)
 	}
 }
 
