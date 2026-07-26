@@ -240,6 +240,51 @@ func TestApplyVPlayerBroadcastConnEvents_SkipOnlyAppliesOnce(t *testing.T) {
 	}
 }
 
+// TestSetBumpers_PreservesSkipNextMessageLost covers the code-review finding
+// (20260726, minor, non-blocking) on the stuck-red badge fix: a bulk
+// SetBumpers landing in the narrow window between a Disconnect->orange
+// transition and the next ApplyVPlayerBroadcastConnEvents must not drop the
+// one-shot grace pass — otherwise that specific bumper re-exposes the
+// skipped-orange bug this fix was written for, just this once.
+func TestSetBumpers_PreservesSkipNextMessageLost(t *testing.T) {
+	e := NewEngine()
+	e.SetTeams(map[string]*Team{"TeamA": {Name: "TeamA"}})
+	e.SetPhase(PhaseEnroll)
+	id, _, err := e.CreateVirtualPlayer("Nina")
+	if err != nil {
+		t.Fatalf("CreateVirtualPlayer failed: %v", err)
+	}
+	if err := e.AssignVirtualPlayer(id, "TeamA", AnswerColorNone); err != nil {
+		t.Fatalf("AssignVirtualPlayer failed: %v", err)
+	}
+
+	// Disconnect: orange, grace pass armed.
+	e.UpdateBumper(id, map[string]interface{}{"CONNECTED": false})
+	if got := e.GetBumper(id).ConnState; got != ConnStateOrange {
+		t.Fatalf("setup failed: expected orange after disconnect, got %q", got)
+	}
+
+	// A bulk SetBumpers lands right in the middle of the window — simulates an
+	// admin FULL/UPDATE (e.g. TeamsPage) whose payload round-trips a bumper
+	// object built from a client-side snapshot (a *different* struct value,
+	// not the live pointer) for the same ID, unaware of the pending grace pass.
+	current := e.GetTeamsAndBumpers().Bumpers
+	replacement := make(map[string]*Bumper, len(current))
+	for bid, b := range current {
+		cp := *b // shallow copy — mimics a client-sent object, not the live pointer
+		replacement[bid] = &cp
+	}
+	e.SetBumpers(replacement)
+
+	// The very next broadcast must STILL be the (consumed) grace pass — orange,
+	// not red. If skipNextMessageLost had been dropped by SetBumpers, this
+	// would incorrectly jump straight to red.
+	e.ApplyVPlayerBroadcastConnEvents()
+	if got := e.GetBumper(id).ConnState; got != ConnStateOrange {
+		t.Errorf("code-review regression: SetBumpers dropped the grace pass mid-window, got %q instead of orange", got)
+	}
+}
+
 // TestApplyVPlayerBroadcastConnEvents_ConnectedParticipant_DeliveryConfirmed
 // verifies D3: a connected participant VJoueur counts a GameState broadcast as
 // a successful delivery, eventually closing the green window.

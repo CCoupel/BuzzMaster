@@ -469,6 +469,12 @@ func (e *Engine) SetBumpers(bumpers map[string]*Bumper) {
 			// think the window elapsed ages ago and hide the badge prematurely.
 			newBumper.greenSince = old.greenSince
 			newBumper.confirmPending = old.confirmPending
+			// And the disconnect-announcement grace pass (conn-state fix,
+			// code-review 20260726) — losing it mid-window (a bulk SetBumpers
+			// landing between the Disconnect->orange transition and the next
+			// ApplyVPlayerBroadcastConnEvents) would re-expose the skipped-orange
+			// bug for that one bumper on this one occasion.
+			newBumper.skipNextMessageLost = old.skipNextMessageLost
 		}
 		if oldTeam != newBumper.Team {
 			e.syncConnStateForTeamChangeUnsafe(newBumper, oldTeam)
