@@ -72,7 +72,17 @@ export default function VPlayerPage() {
       const [bumperId, bumperData] = foundBumper
       const newBumper = { id: bumperId, ...bumperData }
       setBumper(newBumper)
-      bumperRef.current = newBumper
+      // Fix R1 (verify, #109) : ne marquer "trouvé/déjà connecté" (ce qui
+      // court-circuite le timer de reconnexion ci-dessous) que si le serveur
+      // rapporte réellement CONNECTED=true pour ce bumper. Après un drop
+      // réseau, le bumper reste dans `bumpers` (orange/red, jamais supprimé)
+      // — dès que CE client se reconnecte au niveau WebSocket, la prochaine
+      // UPDATE le fait matcher par nom AVANT que PLAYER_CONNECT n'ait jamais
+      // été renvoyé. Sans cette garde, bumperRef.current devient truthy sur
+      // la seule base du nom et le timer de reconnexion (ci-dessous) ne
+      // renvoie PLAYER_CONNECT — le badge admin reste alors bloqué pour de
+      // bon, car rien ne retouche plus jamais ce bumper côté serveur.
+      bumperRef.current = bumperData.CONNECTED === true ? newBumper : null
 
       // Find team if assigned
       if (bumperData.TEAM && teams[bumperData.TEAM]) {
