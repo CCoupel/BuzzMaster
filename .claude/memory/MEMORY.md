@@ -21,4 +21,6 @@ Le hook SessionStart a été supprimé — plus de démarrage automatique.
 - **Corrections intra-feature** : SendMessage vers l'agent existant, jamais créer un nouvel agent
 - **Commande /start-session** : créer la TEAM **directement sans demander** confirmation ni sujet. Le nom de la TEAM est **toujours `TEAM-Buzz`**, quelle que soit la session.
 - **Architecture team** : Claude principal (`main`) est l'orchestrateur — pas d'agent CDP séparé. Agents spawned à `/start-session` (IDLE), dispatched via `SendMessage` uniquement pendant la session. Rapports inter-agents vers `main`. Chemins rapports : `_work/reports/`.
+- **Dispatcher test-writer en parallèle de chaque lot dev** : jamais laisser un dev écrire ses propres tests faute de handoff séparé — voir [feedback_test_writer_parallel.md](feedback_test_writer_parallel.md)
+- **`gh issue create` : ne jamais passer `--body` deux fois** (écrase silencieusement en vide) — voir [feedback_gh_issue_body_flag.md](feedback_gh_issue_body_flag.md)
 
