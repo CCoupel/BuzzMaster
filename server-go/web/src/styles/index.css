@@ -1,5 +1,36 @@
 /* BuzzControl Design System - Fun & Playful */
 
+/* Fix #115 : polices embarquées localement (déploiement air-gapped, sans
+ * accès réseau). Remplace l'ancien <link> vers fonts.googleapis.com /
+ * fonts.gstatic.com dans index.html, qui ne pouvait jamais se charger en
+ * production.
+ *
+ * Fichiers dans web/public/fonts/ (copiés tels quels par Vite dans dist/,
+ * donc embarqués comme le reste des assets statiques via
+ * `//go:embed all:dist`, web/embed.go). Ce sont les mêmes fichiers woff2
+ * (sous-ensemble latin) que servait jusqu'ici Google Fonts pour ce projet —
+ * un seul fichier variable par famille couvre tous les poids demandés
+ * (400/500/600/700 pour Fredoka, 400/500/600 pour Inter), exactement comme
+ * le faisait déjà la CSS externe qu'il remplace.
+ */
+@font-face {
+  font-family: 'Fredoka';
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: swap;
+  src: url('/fonts/fredoka-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 400 600;
+  font-display: swap;
+  src: url('/fonts/inter-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
 :root {
   /* Primary Colors - Vibrant Purple/Indigo */
   --primary-50: #eef2ff;

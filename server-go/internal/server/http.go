@@ -202,6 +202,12 @@ func (h *HTTPServer) setupRoutes() {
 	// React static files (if React build exists)
 	h.mux.HandleFunc("/assets/", h.handleReactAssets)
 
+	// web/public/ files copied verbatim to the dist root by Vite — e.g. the
+	// embedded @font-face files (#115) at /fonts/*.woff2. Same handler as
+	// /assets/, which resolves the full request path against the embedded FS
+	// or reactDir regardless of prefix.
+	h.mux.HandleFunc("/fonts/", h.handleReactAssets)
+
 	// Legacy static files (for backward compatibility)
 	h.mux.HandleFunc("/html/", h.handleStatic)
 	h.mux.HandleFunc("/js/", h.handleStatic)
@@ -347,10 +353,36 @@ func (h *HTTPServer) isSPARoute(path string) bool {
 	return false
 }
 
-// handleReactAssets serves React build assets
+// handleReactAssets serves React build assets: content-hashed bundle files
+// under /assets/ (Vite build pipeline output), and files Vite copies verbatim
+// from web/public/ to the dist root — notably /fonts/*.woff2 (#115) — which
+// keep their original, fixed filename.
 func (h *HTTPServer) handleReactAssets(w http.ResponseWriter, r *http.Request) {
-	// Assets in /assets/ have hashes in filenames, so they can be cached forever
-	w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+	// /assets/ filenames are content-hashed by Vite, so they can be cached
+	// forever. Everything else served by this handler (e.g. /fonts/*.woff2)
+	// has a FIXED filename — an "immutable" 1-year cache would survive a font
+	// file swap on redeploy, so use a shorter, revalidatable cache instead
+	// (#115 code-review 20260726).
+	if strings.HasPrefix(r.URL.Path, "/assets/") {
+		w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+	} else {
+		w.Header().Set("Cache-Control", "public, max-age=86400")
+	}
+
+	// Set content type based on extension, for both branches below. Go's mime
+	// package doesn't register font MIME types on every platform (notably
+	// Windows, a BuzzControl deployment target — see CLAUDE.md), so this is
+	// set explicitly instead of relying on extension-based sniffing.
+	switch {
+	case strings.HasSuffix(r.URL.Path, ".js"):
+		w.Header().Set("Content-Type", "application/javascript")
+	case strings.HasSuffix(r.URL.Path, ".css"):
+		w.Header().Set("Content-Type", "text/css")
+	case strings.HasSuffix(r.URL.Path, ".woff2"):
+		w.Header().Set("Content-Type", "font/woff2")
+	case strings.HasSuffix(r.URL.Path, ".woff"):
+		w.Header().Set("Content-Type", "font/woff")
+	}
 
 	// Try embedded FS first
 	if h.embeddedFS != nil {
@@ -360,12 +392,6 @@ func (h *HTTPServer) handleReactAssets(w http.ResponseWriter, r *http.Request) {
 			defer f.Close()
 			stat, _ := f.Stat()
 			content, _ := io.ReadAll(f)
-			// Set content type based on extension
-			if strings.HasSuffix(filePath, ".js") {
-				w.Header().Set("Content-Type", "application/javascript")
-			} else if strings.HasSuffix(filePath, ".css") {
-				w.Header().Set("Content-Type", "text/css")
-			}
 			http.ServeContent(w, r, filepath.Base(filePath), stat.ModTime(), bytes.NewReader(content))
 			return
 		}

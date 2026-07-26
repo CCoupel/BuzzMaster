@@ -6,7 +6,11 @@ Historique des versions du projet BuzzControl.
 
 ---
 
-## [5.7.25] - 2026-07-26
+## [5.8.0] - 2026-07-26
+
+Release PROD consolidant 3 tickets du milestone v5.8.x (livrés séparément en QUALIF sous les
+versions intermédiaires 5.7.24/5.7.25, renumérotés en 5.8.0 au tag PROD conformément à la
+convention de versioning du projet).
 
 ### Added
 - **Palette 16 couleurs d'équipe** : passe de 8 à 16 teintes déclinées en ton vif (saturation 100%, luminosité ~55%) et ton profond (saturation 100%, luminosité ~35%). Attribution déterministe et sans doublon : rangs 1-8 (tons vifs), rangs 9-16 (tons profonds), puis recyclage à rang 1 au-delà de 16 équipes (#113).
@@ -18,25 +22,24 @@ Historique des versions du projet BuzzControl.
 - **Invariance d'affichage** : les 16 couleurs sont choisies invariantes par `boostTeamColor()` (saturation déjà 100%, luminosité déjà dans [35%, 65%]) — RGB stocké = RGB affiché (#113).
 
 ### Fixed
+- **Couleur du badge nom VJoueur** : restait figée sur la couleur de réponse QCM au lieu de suivre la couleur d'équipe (#112). Correction : la couleur d'équipe (`team.COLOR`) est désormais prioritaire dans `getPlayerNameColor()` de `VPlayerPage.jsx` ; la couleur de réponse (`bumper.ANSWER_COLOR`) ne sert que de repli en l'absence d'équipe assignée (mode solo résiduel).
 - **`boostTeamColor()` — arrondi intermédiaire de teinte** : suppression de l'arrondi `Math.round(h*60)` avant reconstruction RGB qui cassait le round-trip exact pour teintes non-multiples de 60° (4 couleurs de palette divergeaient de ±1). Teinte restée flottante jusqu'à reconstruction ; seul le résultat final arrondi (#113).
 - **Persistance atomique `Team.COLOR_NAME`** : `SaveTeams` écrit désormais dans fichier temporaire + rename atomique au lieu de troncature sur place, élimine races lors d'appels concurrents. `SetTeams` attend son auto-save (action admin peu fréquente) au lieu de lancer goroutine (#113).
+- **VPlayer chargeait Google Fonts en externe** (#115) — incompatible avec déploiement air-gapped. Polices Fredoka et Inter désormais embarquées en `.woff2` (fichiers variables complets couvrant tous les poids) et servies localement. **Fix complet en 2 cycles** :
+  - **Cycle 1 (frontend)** : téléchargement des fichiers `.woff2` depuis Google Fonts, ajout de règles `@font-face` locales dans `index.css`, suppression des `<link>` externes vers `googleapis.com`/`gstatic.com` dans `index.html`, audit exhaustif confirmant aucune autre ressource externe chargée au navigateur.
+  - **Cycle 2 (backend)** : ajout de la route HTTP `/fonts/` manquante — première tentative n'embarquait que les fichiers, sans route serveur pour les servir (404). Correction : enregistrement `handleReactAssets` sur `/fonts/`, `Cache-Control` non-immutable (une journée) pour permettre swap de polices en redéploiement, `Content-Type: font/woff2`.
 
 ### Technical
 - `teamColorPalette` (backend, `main.go`) : 16 entrées exactes RGB, ordre rang 1→16, ancres de repli alignées sur palette.
 - `nearestPaletteColorByHue` : utilise teintes des 8 tons vifs comme ancres (attendu : équipes sans `COLOR_NAME` changent de RGB résolu).
 - `TEAM_COLORS` (frontend, `constants/colors.js`) : 16 entrées, `getNextTeamColor(teams)` déterministe, `findTeamColor(colorName, rgb)` résout par clé ou RGB exact (rétrocompat).
 - Consolidation chemins de rendu : `Podium.jsx`, `CategoryPalmaresPage.jsx`, `VPlayerHeader.jsx` utilisent `getRgbColor()` centralisée.
-
----
-
-## [5.7.24] - 2026-07-26
-
-### Fixed
-- **Couleur du badge nom VJoueur** : restait figée sur la couleur de réponse QCM au lieu de suivre la couleur d'équipe (#112). Correction : la couleur d'équipe (`team.COLOR`) est désormais prioritaire dans `getPlayerNameColor()` de `VPlayerPage.jsx` ; la couleur de réponse (`bumper.ANSWER_COLOR`) ne sert que de repli en l'absence d'équipe assignée (mode solo résiduel).
-
-### Technical
 - `VPlayerPage.jsx` : inversion de la priorité — `team.COLOR` testé en premier, `bumper.ANSWER_COLOR` en repli.
 - `VPlayerPage.test.jsx` : nouveaux tests de régression (équipe assignée, changement d'équipe, réponses QCM successives).
+- Fichiers embarqués : `server-go/web/public/fonts/{fredoka,inter}-latin.woff2` (OFL-licensed, redistribution autorisée)
+- Styles : 2 règles `@font-face` avec `font-weight: <min> <max>` (syntaxe plage) → `url(/fonts/*.woff2)`
+- Mécanisme `go:embed` existant couvre les fichiers `dist/fonts/`, aucun changement Go B1
+- Tests : 4 nouveaux tests HTTP (route fonctionnelle + non-régression `/assets/` immutable) + reproduction du repro QA
 
 ---
 
