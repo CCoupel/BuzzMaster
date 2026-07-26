@@ -106,9 +106,9 @@ describe('VPlayerPage — reconnexion auto renvoie l\'ID stocké', () => {
     expect(payload).not.toHaveProperty('ID')
   })
 
-  it('ne tente pas de reconnexion si le bumper est déjà retrouvé par nom', async () => {
+  it('ne tente pas de reconnexion si le bumper est déjà retrouvé par nom ET connecté (CONNECTED=true)', async () => {
     const mock = makeGameMock({
-      bumpers: { vjoueur_alice_123: { NAME: 'Alice', IS_VIRTUAL: true, IS_VPLAYER: true, TEAM: '' } },
+      bumpers: { vjoueur_alice_123: { NAME: 'Alice', IS_VIRTUAL: true, IS_VPLAYER: true, TEAM: '', CONNECTED: true } },
     })
     useGame.mockReturnValue(mock)
 
@@ -119,6 +119,45 @@ describe('VPlayerPage — reconnexion auto renvoie l\'ID stocké', () => {
     })
 
     expect(mock.sendMessage).not.toHaveBeenCalledWith('PLAYER_CONNECT', expect.anything())
+  })
+
+  // Régression (#109, _work/reports/dev-frontend-20260726-091500-conn-state-verify.md) :
+  // avant le fix, un bumper retrouvé par nom court-circuitait la reconnexion
+  // même déconnecté (CONNECTED=false ou absent) — après une coupure réseau
+  // normale, le WebSocket brut se rétablissait, l'UPDATE renvoyait ce même
+  // bumper encore orange/rouge, le matching par nom le trouvait, et
+  // PLAYER_CONNECT n'était alors JAMAIS renvoyé : le badge admin restait
+  // bloqué pour de bon. Le fix ne considère "déjà connecté" (court-circuit
+  // légitime) que si bumperData.CONNECTED === true.
+  it('tente bien la reconnexion (avec ID stocké) si le bumper est retrouvé par nom mais CONNECTED=false', async () => {
+    localStorage.setItem('vplayer_id', 'vjoueur_alice_123')
+    const mock = makeGameMock({
+      bumpers: { vjoueur_alice_123: { NAME: 'Alice', IS_VIRTUAL: true, IS_VPLAYER: true, TEAM: 'red', CONNECTED: false } },
+    })
+    useGame.mockReturnValue(mock)
+
+    render(<VPlayerPage />)
+
+    await act(async () => {
+      vi.advanceTimersByTime(2000)
+    })
+
+    expect(mock.sendMessage).toHaveBeenCalledWith('PLAYER_CONNECT', { NAME: 'Alice', ID: 'vjoueur_alice_123' })
+  })
+
+  it('tente bien la reconnexion si le bumper est retrouvé par nom mais CONNECTED est absent (firmware/état pré-fix)', async () => {
+    const mock = makeGameMock({
+      bumpers: { vjoueur_alice_123: { NAME: 'Alice', IS_VIRTUAL: true, IS_VPLAYER: true, TEAM: 'red' } },
+    })
+    useGame.mockReturnValue(mock)
+
+    render(<VPlayerPage />)
+
+    await act(async () => {
+      vi.advanceTimersByTime(2000)
+    })
+
+    expect(mock.sendMessage).toHaveBeenCalledWith('PLAYER_CONNECT', { NAME: 'Alice' })
   })
 })
 
