@@ -32,6 +32,7 @@ const (
 type WebSocketClient struct {
 	ID       string
 	MAC      string // MAC address for buzzer clients (empty for web clients)
+	PlayerID string // VJoueur bumper ID for ClientTypeVPlayer clients (empty for admin/TV and not-yet-identified VPlayers)
 	Type     ClientType
 	Conn     *websocket.Conn
 	Send     chan []byte
@@ -55,6 +56,11 @@ type WebSocketHub struct {
 
 	// Callback when client count changes
 	OnClientChange func(adminCount, tvCount, vplayerCount int)
+
+	// OnPlayerDisconnected fires immediately on WebSocket close for a ClientTypeVPlayer
+	// client whose PlayerID has been identified (SetClientPlayerID called after PLAYER_CONNECT).
+	// Mirrors BuzzerWebSocketHub.OnBuzzerDisconnected for physical buzzers.
+	OnPlayerDisconnected func(playerID string)
 }
 
 // NewWebSocketHub creates a new WebSocket hub
@@ -87,6 +93,11 @@ func (h *WebSocketHub) Run() {
 			}
 			h.mu.Unlock()
 			LogInfo(game.LogComponentWebSocket, "Client disconnected: %s (type: %s)", client.ID, client.Type)
+			// Notify individual VPlayer disconnection so main.go can update CONNECTED=false.
+			// Fired outside the lock, same pattern as notifyClientChange.
+			if client.Type == ClientTypeVPlayer && client.PlayerID != "" && h.OnPlayerDisconnected != nil {
+				h.OnPlayerDisconnected(client.PlayerID)
+			}
 			h.notifyClientChange()
 
 		case message := <-h.broadcast:
@@ -150,6 +161,50 @@ func (h *WebSocketHub) SetClientType(clientID string, clientType ClientType) {
 	h.mu.Unlock()
 	// Notify after releasing lock to avoid deadlock
 	h.notifyClientChange()
+}
+
+// SetClientPlayerID links a connected client to its VJoueur bumper ID once identified
+// (after PLAYER_CONNECT create/reconnect). Same pattern as SetClientType.
+func (h *WebSocketHub) SetClientPlayerID(clientID, playerID string) {
+	h.mu.Lock()
+	for client := range h.clients {
+		if client.ID == clientID {
+			client.PlayerID = playerID
+			LogInfo(game.LogComponentWebSocket, "Client %s identified as PlayerID: %s", clientID, playerID)
+			break
+		}
+	}
+	h.mu.Unlock()
+}
+
+// GetClientPlayerID returns the VJoueur bumper ID linked to clientID (via
+// SetClientPlayerID), if any. ok is false if the client is unknown or not yet
+// identified as a VJoueur (e.g. admin/TV, or a VPlayer before PLAYER_CONNECT
+// completes). Used to fire the DELIVERY_CONFIRMED connection-badge event (#109
+// Phase 2, D3) when a message is received from an identified VJoueur.
+func (h *WebSocketHub) GetClientPlayerID(clientID string) (playerID string, ok bool) {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	for client := range h.clients {
+		if client.ID == clientID {
+			return client.PlayerID, client.PlayerID != ""
+		}
+	}
+	return "", false
+}
+
+// IsPlayerIDConnected returns true if a ClientTypeVPlayer client with the given PlayerID
+// is currently connected. Used as an anti-zombie guard before marking a VJoueur disconnected,
+// same principle as BuzzerWebSocketHub.IsClientConnected.
+func (h *WebSocketHub) IsPlayerIDConnected(playerID string) bool {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	for client := range h.clients {
+		if client.Type == ClientTypeVPlayer && client.PlayerID == playerID {
+			return true
+		}
+	}
+	return false
 }
 
 // Broadcast sends a message to all connected clients

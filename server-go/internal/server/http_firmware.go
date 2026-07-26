@@ -356,6 +356,10 @@ func (h *HTTPServer) handleAPIBuzzerUpdate(mac string, w http.ResponseWriter, r 
 	msgID := GenerateMsgID()
 	msg.MsgID = msgID
 
+	if !h.buzzerHub.IsClientConnected(mac) {
+		// #109 Phase 2 (D4): OTA_UPDATE emitted to an already-known-disconnected buzzer.
+		h.engine.TransitionConn(mac, game.ConnEventMessageLost)
+	}
 	if err := h.buzzerHub.SendToClient(mac, msg); err != nil {
 		http.Error(w, "Failed to send OTA message: "+err.Error(), http.StatusInternalServerError)
 		return

@@ -1,6 +1,7 @@
 import { motion } from 'framer-motion'
 import { useState, useMemo, useEffect } from 'react'
 import { boostTeamColor } from '../utils/colorUtils'
+import ConnectionBadge from './ConnectionBadge'
 import './TeamCard.css'
 
 // QCM answer colors - same as TeamsPage
@@ -593,7 +594,7 @@ export default function TeamCard({
                 key={`${buzzer.mac}-${buzzer.timestamp}`}
                 layoutId={`buzzer-${buzzer.mac}`}
                 layout
-                className={`buzzer-mini ${buzzer.active ? 'active' : ''} ${buzzer.ready ? 'ready' : ''} ${answerColorData ? 'has-answer-color' : ''} ${buzzerWaitingBuzz ? 'waiting-buzz' : ''} ${buzzerWaitingPong ? 'waiting-pong' : ''} ${onPlayerClick ? 'clickable' : ''} ${buzzer.isVPlayer ? 'is-vplayer' : ''} ${isInvalidatedByVPlayer ? 'invalidated-by-vplayer' : ''} ${!buzzer.isVPlayer && buzzer.connected === false ? 'disconnected' : ''}`}
+                className={`buzzer-mini ${buzzer.active ? 'active' : ''} ${buzzer.ready ? 'ready' : ''} ${answerColorData ? 'has-answer-color' : ''} ${buzzerWaitingBuzz ? 'waiting-buzz' : ''} ${buzzerWaitingPong ? 'waiting-pong' : ''} ${onPlayerClick ? 'clickable' : ''} ${buzzer.isVPlayer ? 'is-vplayer' : ''} ${isInvalidatedByVPlayer ? 'invalidated-by-vplayer' : ''} ${buzzer.connState === 'orange' || buzzer.connState === 'red' ? 'disconnected' : ''} ${buzzer.connState === 'green' ? 'reconnecting' : ''}`}
                 style={answerColorData ? { '--answer-color': answerColorData.color } : undefined}
                 initial={{ scale: 0.95, opacity: 0.8 }}
                 animate={{ scale: 1, opacity: 1 }}
@@ -649,9 +650,7 @@ export default function TeamCard({
                       🚫
                     </span>
                   )}
-                  {!buzzer.isVPlayer && !buzzer.isVirtual && buzzer.connected === false && (
-                    <span style={{display:'inline-flex',alignItems:'center',justifyContent:'center',width:'18px',height:'18px',borderRadius:'50%',background:'#f59e0b',flexShrink:0,boxShadow:'0 1px 4px rgba(245,158,11,0.5)'}} title="Buzzer déconnecté"><svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="1" y1="1" x2="23" y2="23"/><path d="M16.72 11.06A10.94 10.94 0 0 1 19 12.55"/><path d="M5 12.55a10.94 10.94 0 0 1 5.17-2.39"/><path d="M10.71 5.05A16 16 0 0 1 22.56 9"/><path d="M1.42 9a15.91 15.91 0 0 1 4.7-2.88"/><path d="M8.53 16.11a6 6 0 0 1 6.95 0"/><line x1="12" y1="20" x2="12.01" y2="20"/></svg></span>
-                  )}
+                  <ConnectionBadge state={buzzer.connState} />
                   {!buzzer.isVPlayer && !buzzer.isVirtual && buzzer.ackPending === true && (
                     <span style={{display:'inline-flex',alignItems:'center',justifyContent:'center',width:'18px',height:'18px',borderRadius:'50%',background:'#f59e0b',flexShrink:0,boxShadow:'0 1px 4px rgba(245,158,11,0.5)'}} title="En attente de confirmation"><svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></span>
                   )}

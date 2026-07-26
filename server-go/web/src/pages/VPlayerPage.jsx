@@ -4,6 +4,7 @@ import { useGame } from '../hooks/GameContext'
 import PlayerDisplay from './PlayerDisplay'
 import ArdoiseKeyboard from '../components/ArdoiseKeyboard'
 import NoSleep from 'nosleep.js'
+import { REJECTION_MESSAGES, DEFAULT_REJECTION_MESSAGE } from '../utils/playerConnectMessages'
 import './VPlayerPage.css'
 
 // QCM answer colors mapping
@@ -14,15 +15,24 @@ const ANSWER_COLORS = {
   BLUE: '#3b82f6',
 }
 
+// Fix R1 (suite, #109) : délai avant redirection automatique après un rejet
+// de reconnexion — laisse le temps de lire le message d'erreur.
+const RECONNECT_ERROR_REDIRECT_DELAY_MS = 3000
+
 export default function VPlayerPage() {
   const navigate = useNavigate()
-  const { sendMessage, gameState, bumpers, teams, status } = useGame()
+  const { sendMessage, gameState, bumpers, teams, status, playerConnectStatus, clearPlayerConnectStatus } = useGame()
 
   const [playerSession, setPlayerSession] = useState(null)
   const [bumper, setBumper] = useState(null)
   const [team, setTeam] = useState(null)
   const [isFullscreen, setIsFullscreen] = useState(false)
   const [showFullscreenHint, setShowFullscreenHint] = useState(false)
+  // Fix R1 (suite, #109) : message affiché quand une tentative de
+  // reconnexion (PLAYER_CONNECT avec ID) est rejetée par le serveur — ID
+  // périmé (bumper supprimé par l'admin) dont le nom a été repris entre-
+  // temps, ou NAME_TAKEN générique. Sans ça, écran vide sans explication.
+  const [reconnectError, setReconnectError] = useState(null)
   const noSleepRef = useRef(null)
   // Ref to always have the latest bumper value in async callbacks (avoids stale closure)
   const bumperRef = useRef(null)
@@ -62,7 +72,17 @@ export default function VPlayerPage() {
       const [bumperId, bumperData] = foundBumper
       const newBumper = { id: bumperId, ...bumperData }
       setBumper(newBumper)
-      bumperRef.current = newBumper
+      // Fix R1 (verify, #109) : ne marquer "trouvé/déjà connecté" (ce qui
+      // court-circuite le timer de reconnexion ci-dessous) que si le serveur
+      // rapporte réellement CONNECTED=true pour ce bumper. Après un drop
+      // réseau, le bumper reste dans `bumpers` (orange/red, jamais supprimé)
+      // — dès que CE client se reconnecte au niveau WebSocket, la prochaine
+      // UPDATE le fait matcher par nom AVANT que PLAYER_CONNECT n'ait jamais
+      // été renvoyé. Sans cette garde, bumperRef.current devient truthy sur
+      // la seule base du nom et le timer de reconnexion (ci-dessous) ne
+      // renvoie PLAYER_CONNECT — le badge admin reste alors bloqué pour de
+      // bon, car rien ne retouche plus jamais ce bumper côté serveur.
+      bumperRef.current = bumperData.CONNECTED === true ? newBumper : null
 
       // Find team if assigned
       if (bumperData.TEAM && teams[bumperData.TEAM]) {
@@ -93,6 +113,7 @@ export default function VPlayerPage() {
       console.log('[VPlayer] Bumper deleted by admin, redirecting to enrollment')
       localStorage.removeItem('vplayer_name')
       localStorage.removeItem('vplayer_session')
+      localStorage.removeItem('vplayer_id')
       navigate('/')
     }
   }, [bumpers, playerSession, status, navigate])
@@ -110,13 +131,67 @@ export default function VPlayerPage() {
     const timeoutId = setTimeout(() => {
       // Check ref (latest value) rather than closure-captured bumper
       if (!bumperRef.current) {
-        console.log('[VPlayer] Reconnecting with name:', playerSession.name)
-        sendMessage('PLAYER_CONNECT', { NAME: playerSession.name })
+        // Fix R1 (#109) : renvoyer l'ID capturé au précédent PLAYER_CONNECTED
+        // pour une reconnexion sans ambiguïté (lookup par ID côté backend,
+        // plus par nom — évite qu'un nouvel enrôlement homonyme ne vole la
+        // session). Omis si absent (jamais connecté depuis cet appareil).
+        const storedId = localStorage.getItem('vplayer_id')
+        console.log('[VPlayer] Reconnecting with name:', playerSession.name, 'id:', storedId)
+        sendMessage('PLAYER_CONNECT', storedId
+          ? { NAME: playerSession.name, ID: storedId }
+          : { NAME: playerSession.name })
       }
     }, 2000)
 
     return () => clearTimeout(timeoutId)
   }, [playerSession, status, sendMessage])
+
+  // Fix R1 (suite, #109) : consommer le résultat d'une tentative de
+  // reconnexion. 'connected' ne nécessite rien ici (le bumper apparaîtra
+  // via l'effet de matching par nom ci-dessus, alimenté par `bumpers`).
+  // 'rejected' (ID périmé + nom repris, ou NAME_TAKEN) → afficher un
+  // message et empêcher toute nouvelle tentative avec cet ID périmé.
+  useEffect(() => {
+    if (!playerConnectStatus) return
+
+    if (playerConnectStatus.status === 'rejected') {
+      console.log('[VPlayer] Reconnect rejected:', playerConnectStatus.reason)
+      // L'ID stocké ne correspond plus à un bumper qui nous appartient —
+      // ne surtout pas le réutiliser pour une prochaine tentative.
+      localStorage.removeItem('vplayer_id')
+      setReconnectError(REJECTION_MESSAGES[playerConnectStatus.reason] || DEFAULT_REJECTION_MESSAGE)
+    }
+
+    clearPlayerConnectStatus()
+  }, [playerConnectStatus, clearPlayerConnectStatus])
+
+  // Fix R1 (suite) : après un rejet de reconnexion, repartir sur EnrollPage
+  // avec un pseudo neuf — l'ancien bumper n'est plus à nous (supprimé ou
+  // repris par quelqu'un d'autre), impossible de continuer sur cette session.
+  //
+  // Cible unique '/' : EnrollPage est la SEULE route d'enrôlement du routing
+  // (vérifié — aucune page d'attente dédiée n'existe séparément) et gère déjà
+  // en interne les deux sous-états via `gameState.enrollmentActive` (voir
+  // EnrollPage.jsx `enrollmentOpen`) : formulaire standard si les inscriptions
+  // sont ouvertes, écran "en attente de l'ouverture des inscriptions" sinon.
+  // Naviguer vers '/' fait donc automatiquement atterrir l'utilisateur sur le
+  // bon écran selon l'état d'enrôlement live — pas de route distincte à choisir.
+  const handleRejoinFromScratch = useCallback(() => {
+    localStorage.removeItem('vplayer_name')
+    localStorage.removeItem('vplayer_session')
+    localStorage.removeItem('vplayer_id')
+    navigate('/')
+  }, [navigate])
+
+  // Fix R1 (suite) : la redirection doit être AUTOMATIQUE, pas seulement
+  // disponible via un bouton — la session est de toute façon morte (ID
+  // périmé), rien à faire d'autre ici. Un court délai laisse le temps de lire
+  // le message ; le bouton reste disponible pour ne pas attendre.
+  useEffect(() => {
+    if (!reconnectError) return
+    const timeoutId = setTimeout(handleRejoinFromScratch, RECONNECT_ERROR_REDIRECT_DELAY_MS)
+    return () => clearTimeout(timeoutId)
+  }, [reconnectError, handleRejoinFromScratch])
 
   // Auto-respond to PREPARE phase with PONG
   useEffect(() => {
@@ -271,6 +346,28 @@ export default function VPlayerPage() {
     return (
       <div className="vplayer-page loading">
         <div className="loading-spinner">Chargement...</div>
+      </div>
+    )
+  }
+
+  // Fix R1 (suite, #109) : reconnexion rejetée — l'ancien bumper n'est plus
+  // à nous, impossible de continuer sur cette session. Bloque l'écran avec
+  // le message d'erreur, redirige automatiquement (voir handleRejoinFromScratch
+  // + l'effet ci-dessus) vers '/' — EnrollPage affichera le formulaire ou
+  // l'écran d'attente selon `gameState.enrollmentActive` en direct.
+  if (reconnectError) {
+    const redirectHint = gameState.enrollmentActive
+      ? 'Redirection vers l’inscription…'
+      : 'Redirection vers l’écran d’attente des inscriptions…'
+    return (
+      <div className="vplayer-page loading">
+        <div className="vplayer-reconnect-error">
+          <p className="vplayer-reconnect-error-text">{reconnectError}</p>
+          <p className="vplayer-reconnect-error-hint">{redirectHint}</p>
+          <button className="vplayer-reconnect-btn" onClick={handleRejoinFromScratch}>
+            Rejoindre à nouveau
+          </button>
+        </div>
       </div>
     )
   }

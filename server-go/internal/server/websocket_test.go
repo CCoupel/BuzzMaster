@@ -627,3 +627,265 @@ func TestBroadcastToTypes_ConcurrentSafety(t *testing.T) {
 		t.Error("Expected to receive at least some messages")
 	}
 }
+
+// ============================================================================
+// Tests: PlayerID identity tracking (#109 — icône de déconnexion absente
+// pour les VPlayers). Voir plan _work/reports/plan-20260711-160927.md, Phase 1.
+// ============================================================================
+
+// clientIDForType returns the ID of a connected client matching the given type.
+// Test helper — assumes at least one client of that type is connected and
+// returns the first match found.
+func clientIDForType(t *testing.T, hub *WebSocketHub, clientType ClientType) string {
+	t.Helper()
+	hub.mu.RLock()
+	defer hub.mu.RUnlock()
+	for c := range hub.clients {
+		if c.Type == clientType {
+			return c.ID
+		}
+	}
+	t.Fatalf("No client of type %s found", clientType)
+	return ""
+}
+
+func TestSetClientPlayerID_LinksClientToPlayerID(t *testing.T) {
+	srv, hub, cleanup := startTestWSServer(t)
+	defer cleanup()
+
+	conn := dialWSPath(t, srv, "/ws/player")
+	defer conn.Close()
+	time.Sleep(50 * time.Millisecond)
+
+	clientID := clientIDForType(t, hub, ClientTypeVPlayer)
+	hub.SetClientPlayerID(clientID, "vjoueur_Alice_20260711")
+
+	if !hub.IsPlayerIDConnected("vjoueur_Alice_20260711") {
+		t.Error("Expected IsPlayerIDConnected to be true after SetClientPlayerID")
+	}
+}
+
+func TestSetClientPlayerID_UnknownClientID_NoPanic(t *testing.T) {
+	_, hub, cleanup := startTestWSServer(t)
+	defer cleanup()
+
+	// No client connected at all — must be a safe no-op, not a panic.
+	hub.SetClientPlayerID("does-not-exist", "vjoueur_Ghost")
+
+	if hub.IsPlayerIDConnected("vjoueur_Ghost") {
+		t.Error("Expected IsPlayerIDConnected to be false — no client was actually linked")
+	}
+}
+
+func TestIsPlayerIDConnected_FalseWhenNoClient(t *testing.T) {
+	_, hub, cleanup := startTestWSServer(t)
+	defer cleanup()
+
+	if hub.IsPlayerIDConnected("vjoueur_Unknown") {
+		t.Error("Expected false when no client carries this PlayerID")
+	}
+}
+
+func TestIsPlayerIDConnected_FalseAfterDisconnect(t *testing.T) {
+	srv, hub, cleanup := startTestWSServer(t)
+	defer cleanup()
+
+	conn := dialWSPath(t, srv, "/ws/player")
+	time.Sleep(50 * time.Millisecond)
+
+	clientID := clientIDForType(t, hub, ClientTypeVPlayer)
+	hub.SetClientPlayerID(clientID, "vjoueur_Bob")
+
+	if !hub.IsPlayerIDConnected("vjoueur_Bob") {
+		t.Fatal("Precondition failed: expected connected before closing the WebSocket")
+	}
+
+	conn.Close()
+	time.Sleep(150 * time.Millisecond)
+
+	if hub.IsPlayerIDConnected("vjoueur_Bob") {
+		t.Error("Expected IsPlayerIDConnected to be false after the WebSocket closed")
+	}
+}
+
+// TestIsPlayerIDConnected_IgnoresNonVPlayerClientType is a defensive test that
+// matches the method contract described in the plan: IsPlayerIDConnected must
+// only consider ClientTypeVPlayer clients, even if another client type somehow
+// carried the same PlayerID value (should not happen in practice — SetClientPlayerID
+// is only ever called from the PLAYER_CONNECT handler — but the contract is explicit).
+func TestIsPlayerIDConnected_IgnoresNonVPlayerClientType(t *testing.T) {
+	srv, hub, cleanup := startTestWSServer(t)
+	defer cleanup()
+
+	conn := dialWSPath(t, srv, "/ws/admin")
+	defer conn.Close()
+	time.Sleep(50 * time.Millisecond)
+
+	clientID := clientIDForType(t, hub, ClientTypeAdmin)
+	hub.SetClientPlayerID(clientID, "vjoueur_NotAPlayer")
+
+	if hub.IsPlayerIDConnected("vjoueur_NotAPlayer") {
+		t.Error("Expected false — the client carrying this PlayerID is admin, not vplayer")
+	}
+}
+
+// TestIsPlayerIDConnected_TrueAfterReconnectRace covers the hub-level
+// invariant the anti-flash "zombie disconnect" guard depends on (guard itself
+// wired in main.go's OnPlayerDisconnected callback, out of scope for this hub
+// test): when a new connection has already registered under the same PlayerID
+// before the old one unregisters, IsPlayerIDConnected must still report true.
+func TestIsPlayerIDConnected_TrueAfterReconnectRace(t *testing.T) {
+	srv, hub, cleanup := startTestWSServer(t)
+	defer cleanup()
+
+	oldConn := dialWSPath(t, srv, "/ws/player")
+	time.Sleep(50 * time.Millisecond)
+	oldClientID := clientIDForType(t, hub, ClientTypeVPlayer)
+	hub.SetClientPlayerID(oldClientID, "vjoueur_Dan")
+
+	// A new connection for the same VJoueur arrives before the old one closes
+	// (typical fast tab-refresh / reconnect scenario).
+	newConn := dialWSPath(t, srv, "/ws/player")
+	defer newConn.Close()
+	time.Sleep(50 * time.Millisecond)
+
+	hub.mu.RLock()
+	var newClientID string
+	for c := range hub.clients {
+		if c.Type == ClientTypeVPlayer && c.ID != oldClientID {
+			newClientID = c.ID
+		}
+	}
+	hub.mu.RUnlock()
+	if newClientID == "" {
+		t.Fatal("Expected a second VPlayer client to be connected")
+	}
+	hub.SetClientPlayerID(newClientID, "vjoueur_Dan")
+
+	// The stale connection finally closes.
+	oldConn.Close()
+	time.Sleep(150 * time.Millisecond)
+
+	if !hub.IsPlayerIDConnected("vjoueur_Dan") {
+		t.Error("Expected IsPlayerIDConnected to remain true — the new connection still holds this PlayerID")
+	}
+}
+
+// ============================================================================
+// Tests: OnPlayerDisconnected callback (#109)
+// ============================================================================
+
+func TestOnPlayerDisconnected_FiresForVPlayerWithPlayerID(t *testing.T) {
+	srv, hub, cleanup := startTestWSServer(t)
+	defer cleanup()
+
+	var mu sync.Mutex
+	var gotPlayerID string
+	fired := make(chan struct{}, 1)
+	hub.OnPlayerDisconnected = func(playerID string) {
+		mu.Lock()
+		gotPlayerID = playerID
+		mu.Unlock()
+		fired <- struct{}{}
+	}
+
+	conn := dialWSPath(t, srv, "/ws/player")
+	time.Sleep(50 * time.Millisecond)
+
+	clientID := clientIDForType(t, hub, ClientTypeVPlayer)
+	hub.SetClientPlayerID(clientID, "vjoueur_Carla")
+
+	conn.Close()
+
+	select {
+	case <-fired:
+	case <-time.After(1 * time.Second):
+		t.Fatal("Expected OnPlayerDisconnected to fire within 1s of the WebSocket closing")
+	}
+
+	mu.Lock()
+	defer mu.Unlock()
+	if gotPlayerID != "vjoueur_Carla" {
+		t.Errorf("Expected callback with playerID=vjoueur_Carla, got %s", gotPlayerID)
+	}
+}
+
+func TestOnPlayerDisconnected_DoesNotFireForAdmin(t *testing.T) {
+	srv, hub, cleanup := startTestWSServer(t)
+	defer cleanup()
+
+	fired := make(chan struct{}, 1)
+	hub.OnPlayerDisconnected = func(playerID string) {
+		fired <- struct{}{}
+	}
+
+	conn := dialWSPath(t, srv, "/ws/admin")
+	time.Sleep(50 * time.Millisecond)
+	conn.Close()
+
+	select {
+	case <-fired:
+		t.Error("OnPlayerDisconnected must not fire for an admin client")
+	case <-time.After(300 * time.Millisecond):
+		// expected: no callback fired
+	}
+}
+
+func TestOnPlayerDisconnected_DoesNotFireForTV(t *testing.T) {
+	srv, hub, cleanup := startTestWSServer(t)
+	defer cleanup()
+
+	fired := make(chan struct{}, 1)
+	hub.OnPlayerDisconnected = func(playerID string) {
+		fired <- struct{}{}
+	}
+
+	conn := dialWSPath(t, srv, "/ws/tv")
+	time.Sleep(50 * time.Millisecond)
+	conn.Close()
+
+	select {
+	case <-fired:
+		t.Error("OnPlayerDisconnected must not fire for a TV client")
+	case <-time.After(300 * time.Millisecond):
+		// expected: no callback fired
+	}
+}
+
+func TestOnPlayerDisconnected_DoesNotFireForVPlayerWithoutPlayerID(t *testing.T) {
+	srv, hub, cleanup := startTestWSServer(t)
+	defer cleanup()
+
+	fired := make(chan struct{}, 1)
+	hub.OnPlayerDisconnected = func(playerID string) {
+		fired <- struct{}{}
+	}
+
+	// Connect as VPlayer but never call SetClientPlayerID — not yet identified
+	// (e.g. connection dropped before PLAYER_CONNECT was processed).
+	conn := dialWSPath(t, srv, "/ws/player")
+	time.Sleep(50 * time.Millisecond)
+	conn.Close()
+
+	select {
+	case <-fired:
+		t.Error("OnPlayerDisconnected must not fire for a VPlayer with an empty PlayerID")
+	case <-time.After(300 * time.Millisecond):
+		// expected: no callback fired
+	}
+}
+
+func TestOnPlayerDisconnected_NilCallback_NoPanic(t *testing.T) {
+	srv, hub, cleanup := startTestWSServer(t)
+	defer cleanup()
+
+	// hub.OnPlayerDisconnected intentionally left nil.
+	conn := dialWSPath(t, srv, "/ws/player")
+	time.Sleep(50 * time.Millisecond)
+
+	clientID := clientIDForType(t, hub, ClientTypeVPlayer)
+	hub.SetClientPlayerID(clientID, "vjoueur_NilCallback")
+
+	conn.Close()
+	time.Sleep(150 * time.Millisecond) // must not panic with a nil callback
+}

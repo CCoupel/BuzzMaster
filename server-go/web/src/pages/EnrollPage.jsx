@@ -1,17 +1,26 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useGame } from '../hooks/GameContext'
+import { REJECTION_MESSAGES, DEFAULT_REJECTION_MESSAGE } from '../utils/playerConnectMessages'
 import './EnrollPage.css'
+
+// Le serveur ne répond jamais (perte réseau, etc.) — ne pas rester bloqué sur "Connexion..."
+const CONNECT_TIMEOUT_MS = 5000
 
 export default function EnrollPage() {
   const navigate = useNavigate()
-  const { connectVirtualPlayer, gameState, status, bumpers } = useGame()
+  const { connectVirtualPlayer, gameState, status, bumpers, playerConnectStatus, clearPlayerConnectStatus } = useGame()
 
   const [playerName, setPlayerName] = useState('')
   const [error, setError] = useState('')
   const [isConnecting, setIsConnecting] = useState(false)
   const [validationError, setValidationError] = useState('')
   const [checkingSession, setCheckingSession] = useState(true)
+  // Pseudo soumis en attente de confirmation serveur — stocké en localStorage
+  // seulement après PLAYER_CONNECTED (pas avant : un pseudo rejeté NAME_TAKEN
+  // ne doit jamais être persisté comme si c'était le nôtre).
+  const pendingNameRef = useRef('')
+  const connectTimeoutRef = useRef(null)
 
   // Timeout to stop checking after 2 seconds
   useEffect(() => {
@@ -74,6 +83,41 @@ export default function EnrollPage() {
     }
   }, [playerName])
 
+  // Fix R1 (#109) : attendre PLAYER_CONNECTED (succès → /player) ou
+  // PLAYER_REJECTED (erreur affichée, notamment NAME_TAKEN — redemander un
+  // pseudo) au lieu de naviguer en aveugle après un délai fixe.
+  useEffect(() => {
+    if (!playerConnectStatus) return
+
+    if (connectTimeoutRef.current) {
+      clearTimeout(connectTimeoutRef.current)
+      connectTimeoutRef.current = null
+    }
+
+    if (playerConnectStatus.status === 'connected') {
+      // Persister la session seulement une fois le pseudo confirmé accepté
+      // par le serveur (jamais avant : un pseudo rejeté ne doit pas polluer
+      // localStorage comme si la connexion avait réussi).
+      localStorage.setItem('vplayer_name', pendingNameRef.current)
+      localStorage.setItem('vplayer_session', Date.now().toString())
+      navigate('/player')
+    } else if (playerConnectStatus.status === 'rejected') {
+      setIsConnecting(false)
+      setError(REJECTION_MESSAGES[playerConnectStatus.reason] || DEFAULT_REJECTION_MESSAGE)
+      // Redemander un pseudo : vider le champ pour forcer une nouvelle saisie.
+      setPlayerName('')
+    }
+
+    clearPlayerConnectStatus()
+  }, [playerConnectStatus, navigate, clearPlayerConnectStatus])
+
+  // Nettoyage du timeout de garde au démontage
+  useEffect(() => {
+    return () => {
+      if (connectTimeoutRef.current) clearTimeout(connectTimeoutRef.current)
+    }
+  }, [])
+
   const handleSubmit = (e) => {
     e.preventDefault()
 
@@ -94,18 +138,18 @@ export default function EnrollPage() {
     // Clear previous errors
     setError('')
     setIsConnecting(true)
+    pendingNameRef.current = trimmedName
 
     // Client type already set on mount, just send connection request
     connectVirtualPlayer(trimmedName)
 
-    // Store in localStorage for reconnection
-    localStorage.setItem('vplayer_name', trimmedName)
-    localStorage.setItem('vplayer_session', Date.now().toString())
-
-    // Navigate to player page
-    setTimeout(() => {
-      navigate('/player')
-    }, 500)
+    // Garde-fou : si le serveur ne répond jamais (perte réseau...), ne pas
+    // rester bloqué indéfiniment sur "Connexion...".
+    if (connectTimeoutRef.current) clearTimeout(connectTimeoutRef.current)
+    connectTimeoutRef.current = setTimeout(() => {
+      setIsConnecting(false)
+      setError('Le serveur ne répond pas, réessaie.')
+    }, CONNECT_TIMEOUT_MS)
   }
 
   const isValid = playerName.trim().length >= 2 && playerName.trim().length <= 20

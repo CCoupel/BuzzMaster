@@ -1,16 +1,53 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useMemo } from 'react'
 import { NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { useUpdates } from '../hooks/useUpdates'
 import './Navbar.css'
 
-export default function Navbar({ connectionStatus = 'disconnected', clientCounts = { admin: 0, tv: 0, vplayer: 0 }, serverVersion = '' }) {
+// Sévérité agrégée d'un groupe de participants (vjoueur/buzzer) à partir de
+// leurs CONN_STATE respectifs. Priorité stricte : red > orange > neutre.
+// "green" (reconnecté récent) compte comme connecté, n'assombrit pas le chip.
+function aggregateSeverity(connStates) {
+  if (connStates.some(s => s === 'red')) return 'red'
+  if (connStates.some(s => s === 'orange')) return 'orange'
+  return 'neutral'
+}
+
+// Calcule connectés/participants pour un type de bumper donné.
+// Participant = TEAM non vide. Connecté (parmi les participants) = CONN_STATE ∈ {"", "green"}.
+function computeParticipantCounts(bumpers, isType) {
+  const connStates = []
+  let participants = 0
+  let connected = 0
+  Object.values(bumpers || {}).forEach(b => {
+    if (!isType(b)) return
+    if (!b.TEAM) return
+    participants += 1
+    const state = b.CONN_STATE || ''
+    connStates.push(state)
+    if (state === '' || state === 'green') connected += 1
+  })
+  return { connected, participants, severity: aggregateSeverity(connStates) }
+}
+
+export default function Navbar({ connectionStatus = 'disconnected', clientCounts = { admin: 0, tv: 0, vplayer: 0 }, serverVersion = '', bumpers = {} }) {
   const location = useLocation()
   const navigate = useNavigate()
   const [isMenuOpen, setIsMenuOpen] = useState(false)
   const menuRef = useRef(null)
   const buttonRef = useRef(null)
   const { updateInfo, checkForUpdates } = useUpdates()
+
+  // Compteurs participants (X/Y) — calculés côté client depuis `bumpers`
+  // (porte TEAM + CONN_STATE), pas depuis CLIENTS (qui ignore la notion d'équipe).
+  const vjoueurCounts = useMemo(
+    () => computeParticipantCounts(bumpers, b => b.IS_VPLAYER === true),
+    [bumpers]
+  )
+  const buzzerCounts = useMemo(
+    () => computeParticipantCounts(bumpers, b => !b.IS_VIRTUAL && !b.IS_VPLAYER),
+    [bumpers]
+  )
 
   // Vérifier les mises à jour au montage
   useEffect(() => {
@@ -176,9 +213,19 @@ export default function Navbar({ connectionStatus = 'disconnected', clientCounts
             <span className="count-icon">TV</span>
             <span className="count-value">{clientCounts.tv}</span>
           </span>
-          <span className="client-count vplayer" title="Joueurs virtuels">
+          <span
+            className={`client-count vplayer severity-${vjoueurCounts.severity}`}
+            title={`VJoueurs connectés/participants : ${vjoueurCounts.connected}/${vjoueurCounts.participants}`}
+          >
             <span className="count-icon">📱</span>
-            <span className="count-value">{clientCounts.vplayer}</span>
+            <span className="count-value">{vjoueurCounts.connected}/{vjoueurCounts.participants}</span>
+          </span>
+          <span
+            className={`client-count buzzer severity-${buzzerCounts.severity}`}
+            title={`Buzzers connectés/participants : ${buzzerCounts.connected}/${buzzerCounts.participants}`}
+          >
+            <span className="count-icon">🎮</span>
+            <span className="count-value">{buzzerCounts.connected}/{buzzerCounts.participants}</span>
           </span>
         </div>
         <div className={`connection-status ${connectionStatus}`}>

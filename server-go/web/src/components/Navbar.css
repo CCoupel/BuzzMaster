@@ -326,6 +326,25 @@
   color: var(--accent-cyan-dark, #00838f);
 }
 
+.client-count.buzzer {
+  background: var(--gray-100);
+  color: var(--gray-600);
+}
+
+/* Coloration par sévérité agrégée (vjoueur/buzzer uniquement — voir §3 du plan) :
+   rouge si ≥1 participant en état "red", sinon orange si ≥1 "orange", sinon neutre. */
+.client-count.vplayer.severity-orange,
+.client-count.buzzer.severity-orange {
+  background: var(--conn-badge-orange, #f59e0b);
+  color: white;
+}
+
+.client-count.vplayer.severity-red,
+.client-count.buzzer.severity-red {
+  background: var(--error, #ef4444);
+  color: white;
+}
+
 .count-icon {
   font-size: 0.65rem;
   text-transform: uppercase;

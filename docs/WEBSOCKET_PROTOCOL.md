@@ -246,9 +246,90 @@ Reinitialise le buzzer.
 
 ---
 
-## Messages VPlayer vers Serveur (v5.6.0 - ARDOISE)
+## Messages VPlayer vers Serveur
 
-### ARDOISE_INPUT (Saisie ARDOISE)
+### PLAYER_CONNECT (Connexion VJoueur) — v5.7.20, #109
+
+Envoye par un joueur virtuel (VPlayer) lors de l'enrôlement (`EnrollPage`) ou de la reconnexion (`VPlayerPage`).
+
+**Endpoint** : `/ws/player`
+
+**Payload** :
+```json
+{
+  "ACTION": "PLAYER_CONNECT",
+  "MSG": {
+    "NAME": "Alice",
+    "ID": "f8d7c6b5-a4e9-4d2e-b1a0-9f8e7d6c5b4a"
+  }
+}
+```
+
+| Champ MSG | Type | Obligatoire | Description |
+|-----------|------|-------------|-------------|
+| `NAME` | string | ✅ | Nom du joueur virtuel |
+| `ID` | string | ❌ | Identifiant unique pour reconnexion (v5.7.20, #109 R1) — UUID ou hash stocké en localStorage |
+
+**Comportement serveur** :
+
+#### Cas 1 : Reconnexion par ID (ID résolu + bumper existe)
+- Reutilise le bumper existant
+- Rafraîchit le nom si différent (`NAME` peut changer)
+- Marque `Connected=true`, `ConnEventReconnect`
+- Retour : `PLAYER_CONNECTED` avec préservation équipe/score
+
+#### Cas 2 : ID périmé (ID fourni mais non résolu)
+- Fallback sur identification par nom
+- Peut rejeter si nom en conflit
+
+#### Cas 3 : Nom déjà pris (VJoueur connecté ou déconnecté)
+- **Rejette avec `PLAYER_REJECTED`** — aucune suppression/fusion
+- Raison : `NAME_TAKEN`
+- Le bumper existant ne change pas : équipe, score, connexion préservés
+- Le client reçoit un écran d'erreur (`VPlayerPage.jsx`) avec redirection auto 3s
+
+#### Cas 4 : Nouvelle inscription (ID absent, nom libre)
+- Crée un nouveau bumper `IS_VIRTUAL=true`
+- `Connected=true`, `ConnEventReconnect`
+- Retour : `PLAYER_CONNECTED`, attente assignation équipe
+
+**Réponse serveur** :
+
+Succès :
+```json
+{
+  "ACTION": "PLAYER_CONNECTED",
+  "MSG": {
+    "PLAYER_ID": "f8d7c6b5-a4e9-4d2e-b1a0-9f8e7d6c5b4a",
+    "TEAM": "Les Rouges",
+    "SCORE": 30
+  }
+}
+```
+
+Rejet (nom pris) :
+```json
+{
+  "ACTION": "PLAYER_REJECTED",
+  "MSG": {
+    "PLAYER_ID": "f8d7c6b5-a4e9-4d2e-b1a0-9f8e7d6c5b4a",
+    "REASON": "NAME_TAKEN"
+  }
+}
+```
+
+| Raison rejet | Description |
+|---|---|
+| `NAME_TAKEN` | Nom déjà assigné à un autre bumper (connecté ou déconnecté) |
+
+**Frontend** (`VPlayerPage.jsx`) :
+- Affiche un écran bloquant `PLAYER_REJECTED` avec le motif
+- Bouton "Rejoindre à nouveau" pour relancer l'enrôlement
+- Redirection auto vers `/enroll` après 3s (`RECONNECT_ERROR_REDIRECT_DELAY_MS`)
+
+---
+
+### ARDOISE_INPUT (Saisie ARDOISE) — v5.6.0
 
 Envoye par un joueur virtuel (VPlayer) saisissant une réponse libre en ARDOISE.
 

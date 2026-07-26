@@ -63,8 +63,8 @@ export default function GamePage() {
         firmwareVersion: bumper.FIRMWARE_VERSION || '',
         isOutdated: bumper.IS_OUTDATED === true,
         otaStatus: bumper.OTA_STATUS || '',
-        connected: bumper.CONNECTED === true, // strict — undefined does NOT trigger disconnected badge
-        isVirtual: bumper.IS_VIRTUAL === true, // virtual players (VJoueurs) never show disconnected badge
+        connState: bumper.CONN_STATE || '', // 4-état ("" / orange / red / green) — voir ConnectionBadge
+        isVirtual: bumper.IS_VIRTUAL === true, // virtual bumper flag (VJoueurs now show disconnected badge like physical buzzers, see #109)
         ackPending: bumper.ACK_PENDING === true, // strict — undefined does NOT trigger ACK badge
       })
     })

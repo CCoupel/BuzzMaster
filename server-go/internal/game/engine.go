@@ -6,6 +6,7 @@ import (
 	"math/rand"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 )
@@ -58,6 +59,221 @@ func NewEngine() *Engine {
 	}
 }
 
+// ConnEvent drives the Bumper.ConnState transition table (see TransitionConn).
+// See contracts/websocket-actions.md and the connection-badge plan (§2) for the
+// full table. Phase 1 (#109) wired Disconnect/Reconnect at the 6 connection
+// call sites. Phase 2 (#109) wires MessageLost (buzzer LED_SET/OTA/WIFI send,
+// VJoueur broadcast) and DeliveryConfirmed (buzzer ACK, VJoueur bidirectional
+// confirm) at their real sources, plus the minimum 2s "green" display window
+// (D2/D3) — see ConfirmDelivery, which is the gated entry point production
+// code should call for DeliveryConfirmed instead of TransitionConn directly.
+type ConnEvent string
+
+const (
+	ConnEventDisconnect        ConnEvent = "DISCONNECT"
+	ConnEventReconnect         ConnEvent = "RECONNECT"
+	ConnEventMessageLost       ConnEvent = "MESSAGE_LOST"
+	ConnEventDeliveryConfirmed ConnEvent = "DELIVERY_CONFIRMED"
+)
+
+// transitionConnUnsafe applies the CONN_STATE transition table to a single
+// bumper, without the participants-only filter (see applyConnEventUnsafe for
+// the filtered entry point used everywhere else). Caller must hold e.mu.
+//
+//	Current  | Disconnect | Reconnect | MessageLost | DeliveryConfirmed
+//	HIDDEN   | -> orange  | (n/a)     | -> HIDDEN   | -> HIDDEN
+//	orange   | orange     | -> green  | -> red      | (n/a)
+//	red      | red        | -> green  | red         | (n/a)
+//	green    | -> orange  | green     | (n/a)       | -> HIDDEN
+func transitionConnUnsafe(b *Bumper, event ConnEvent) {
+	switch event {
+	case ConnEventDisconnect:
+		if b.ConnState == ConnStateHidden || b.ConnState == ConnStateGreen {
+			b.ConnState = ConnStateOrange
+			// The broadcast that announces this disconnect is not itself a
+			// message this VJoueur should have received — give it a one-time
+			// pass so ORANGE is actually visible before any real MessageLost
+			// can apply (see ApplyVPlayerBroadcastConnEvents / conn-state fix).
+			b.skipNextMessageLost = true
+		}
+	case ConnEventReconnect:
+		if b.ConnState == ConnStateOrange || b.ConnState == ConnStateRed {
+			b.ConnState = ConnStateGreen
+			// Start the D2/D3 minimum display window: a DeliveryConfirmed arriving
+			// before greenMinDuration has elapsed must not hide the badge immediately
+			// (see ConfirmDelivery). Only meaningful for real, timestamped Reconnects —
+			// harmless for bare TransitionConn() calls in tests, which never call
+			// ConfirmDelivery and so never consult these fields.
+			b.greenSince = time.Now()
+			b.confirmPending = false
+		}
+	case ConnEventMessageLost:
+		if b.ConnState == ConnStateOrange {
+			b.ConnState = ConnStateRed
+		}
+	case ConnEventDeliveryConfirmed:
+		if b.ConnState == ConnStateGreen {
+			b.ConnState = ConnStateHidden
+		}
+	}
+}
+
+// applyConnEventUnsafe is the participants-only entry point for the CONN_STATE
+// machine: bumpers not assigned to a team (Team == "") never carry a visible
+// badge and are always forced back to hidden. Caller must hold e.mu.
+func applyConnEventUnsafe(b *Bumper, event ConnEvent) {
+	if b.Team == "" {
+		b.ConnState = ConnStateHidden
+		return
+	}
+	transitionConnUnsafe(b, event)
+}
+
+// syncConnStateForTeamChangeUnsafe reacts to a bumper's TEAM field changing,
+// keeping CONN_STATE consistent with the participants-only scope: becoming a
+// participant while disconnected evaluates as an implicit Disconnect (→ orange)
+// instead of waiting for a future disconnect event; leaving the participant
+// pool forces the badge back to hidden. Caller must hold e.mu.
+func (e *Engine) syncConnStateForTeamChangeUnsafe(bumper *Bumper, oldTeam string) {
+	switch {
+	case oldTeam == "" && bumper.Team != "":
+		if !bumper.Connected {
+			applyConnEventUnsafe(bumper, ConnEventDisconnect)
+		}
+	case oldTeam != "" && bumper.Team == "":
+		bumper.ConnState = ConnStateHidden
+	}
+}
+
+// TransitionConn applies a connection-state event to a bumper's CONN_STATE
+// badge (see transitionConnUnsafe for the table). Thread-safe. Unknown bumper
+// IDs are silently ignored (mirrors UpdateBumper's tolerant style).
+func (e *Engine) TransitionConn(bumperID string, event ConnEvent) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+
+	bumper, exists := e.data.Bumpers[bumperID]
+	if !exists {
+		return
+	}
+	applyConnEventUnsafe(bumper, event)
+}
+
+// connGreenMinDuration is the minimum time (D2/D3, plan §2) a bumper's badge
+// stays "green" after reconnecting before a DeliveryConfirmed signal is
+// allowed to hide it. A package variable (not a const) so tests can shrink it
+// instead of sleeping for real time.
+var connGreenMinDuration = 2 * time.Second
+
+// ConfirmDelivery is the production entry point for the DELIVERY_CONFIRMED
+// event (#109 Phase 2, D2/D3): unlike a raw TransitionConn(id,
+// ConnEventDeliveryConfirmed) call, it honors the minimum "green" display
+// window. If the bumper reconnected less than connGreenMinDuration ago, the
+// HIDDEN transition is deferred to fire automatically once the window
+// elapses, instead of applying immediately. Bumpers not currently "green"
+// (nothing to gate) fall through to the plain, immediate transition.
+//
+// TransitionConn itself is intentionally left untouched by this window logic
+// (used as-is by tests exercising the pure table, e.g. TestTransitionConn_Table)
+// — only real call sites (buzzer ACK, VJoueur broadcast/message) should call
+// ConfirmDelivery.
+func (e *Engine) ConfirmDelivery(bumperID string) {
+	e.mu.Lock()
+
+	bumper, exists := e.data.Bumpers[bumperID]
+	if !exists {
+		e.mu.Unlock()
+		return
+	}
+	if bumper.ConnState != ConnStateGreen {
+		applyConnEventUnsafe(bumper, ConnEventDeliveryConfirmed)
+		e.mu.Unlock()
+		return
+	}
+
+	elapsed := time.Since(bumper.greenSince)
+	if elapsed >= connGreenMinDuration {
+		applyConnEventUnsafe(bumper, ConnEventDeliveryConfirmed)
+		e.mu.Unlock()
+		return
+	}
+
+	if bumper.confirmPending {
+		// Already scheduled for this green period — nothing more to do.
+		e.mu.Unlock()
+		return
+	}
+	bumper.confirmPending = true
+	scheduledFor := bumper.greenSince
+	remaining := connGreenMinDuration - elapsed
+	e.mu.Unlock()
+
+	time.AfterFunc(remaining, func() {
+		e.mu.Lock()
+		defer e.mu.Unlock()
+		b, ok := e.data.Bumpers[bumperID]
+		if !ok {
+			return
+		}
+		// Re-validate under lock: only act if still the same green period we
+		// scheduled for (b.greenSince.Equal(scheduledFor)) — a re-disconnect +
+		// fresh reconnect in the meantime starts a NEW period with its own
+		// confirmPending lifecycle; this now-stale timer must not touch it (fix
+		// R1 code-review 5.1: clearing confirmPending unconditionally here could
+		// wipe the flag for that new period instead of its own).
+		if b.greenSince.Equal(scheduledFor) {
+			b.confirmPending = false
+			if b.ConnState == ConnStateGreen {
+				applyConnEventUnsafe(b, ConnEventDeliveryConfirmed)
+			}
+		}
+	})
+}
+
+// ApplyVPlayerBroadcastConnEvents evaluates the connection-badge machine for
+// every participant VJoueur against a GameState broadcast that is about to go
+// out (#109 Phase 2, D4): per the user-validated "no restricted list" design,
+// a disconnected participant VJoueur counts this broadcast as a lost message
+// (MessageLost); a connected one counts it as a successful delivery (D3),
+// eligible to close the green window via ConfirmDelivery. Intended to be
+// called once per GameState broadcast (see main.go broadcastUpdate()).
+func (e *Engine) ApplyVPlayerBroadcastConnEvents() {
+	e.mu.Lock()
+	var toConfirm []string
+	for id, b := range e.data.Bumpers {
+		if !b.IsVPlayer || b.Team == "" {
+			continue
+		}
+		if !b.Connected {
+			if b.skipNextMessageLost {
+				// This is the broadcast announcing the disconnect itself (see
+				// transitionConnUnsafe's Disconnect case) — consume the pass
+				// without firing MessageLost, so ORANGE is actually visible
+				// before any real "message they missed" can turn it RED.
+				b.skipNextMessageLost = false
+				continue
+			}
+			applyConnEventUnsafe(b, ConnEventMessageLost)
+			continue
+		}
+		// Only bumpers currently "green" can be affected by DeliveryConfirmed
+		// (fix R1 code-review 5.2) — skip the rest to avoid re-acquiring the
+		// lock via ConfirmDelivery for a guaranteed no-op on every connected,
+		// already-hidden VJoueur on every single broadcast.
+		if b.ConnState == ConnStateGreen {
+			toConfirm = append(toConfirm, id)
+		}
+	}
+	e.mu.Unlock()
+
+	// ConfirmDelivery manages its own locking (and may schedule a timer via
+	// time.AfterFunc), so it must run after releasing the lock above to avoid a
+	// self-deadlock / re-entrant lock on e.mu.
+	for _, id := range toConfirm {
+		e.ConfirmDelivery(id)
+	}
+}
+
 // GetState returns current game state
 func (e *Engine) GetState() GameState {
 	e.mu.RLock()
@@ -95,10 +311,24 @@ func (e *Engine) GetTeam(id string) *Team {
 }
 
 // GetBumper returns a specific bumper
+// GetBumper returns a snapshot copy of the bumper identified by id (nil if
+// unknown). Returns a COPY, not the live map entry (#109 Phase 2): since
+// ConfirmDelivery may schedule a background timer (time.AfterFunc) that
+// mutates a bumper's ConnState/greenSince/confirmPending fields asynchronously
+// under e.mu, any caller reading fields off a *live* pointer after this
+// function had already released the lock would race against that timer. All
+// production callers only read fields from the result (never mutate through
+// it — mutations always go through UpdateBumper/AssignVirtualPlayer/etc.), so
+// this is a safe, behavior-preserving change.
 func (e *Engine) GetBumper(id string) *Bumper {
 	e.mu.RLock()
 	defer e.mu.RUnlock()
-	return e.data.Bumpers[id]
+	b, ok := e.data.Bumpers[id]
+	if !ok || b == nil {
+		return nil
+	}
+	snapshot := *b
+	return &snapshot
 }
 
 // GetQuestionStatus returns the status of a question by ID
@@ -134,8 +364,28 @@ func (e *Engine) UpdateBumper(id string, data map[string]interface{}) {
 	if name, ok := data["NAME"].(string); ok {
 		bumper.Name = name
 	}
+	// Connection status (v3.6.5) — also drives the CONN_STATE badge machine (#109
+	// Phase 1): every call site that flips CONNECTED implicitly fires the matching
+	// Disconnect/Reconnect event, so no explicit wiring is needed at those 6 sites.
+	// IMPORTANT: applied BEFORE TEAM below so that a single call setting both
+	// TEAM and CONNECTED:true (e.g. a bumper created already-connected) reflects
+	// bumper.Connected's final value in the TEAM-change sync, instead of firing a
+	// spurious implicit-disconnect-then-reconnect ("green") for a bumper that was
+	// never actually disconnected.
+	if connected, ok := data["CONNECTED"].(bool); ok {
+		bumper.Connected = connected
+		if connected {
+			applyConnEventUnsafe(bumper, ConnEventReconnect)
+		} else {
+			applyConnEventUnsafe(bumper, ConnEventDisconnect)
+		}
+	}
 	if team, ok := data["TEAM"].(string); ok {
+		oldTeam := bumper.Team
 		bumper.Team = team
+		if oldTeam != team {
+			e.syncConnStateForTeamChangeUnsafe(bumper, oldTeam)
+		}
 	}
 	if version, ok := data["VERSION"].(string); ok {
 		bumper.Version = version
@@ -158,10 +408,6 @@ func (e *Engine) UpdateBumper(id string, data map[string]interface{}) {
 	}
 	if otaPercent, ok := data["OTA_PERCENT"].(int); ok {
 		bumper.OTAPercent = otaPercent
-	}
-	// Connection status (v3.6.5)
-	if connected, ok := data["CONNECTED"].(bool); ok {
-		bumper.Connected = connected
 	}
 	// ACK pending flag (v3.8.0)
 	if ackPending, ok := data["ACK_PENDING"].(bool); ok {
@@ -204,6 +450,36 @@ func (e *Engine) SetTeams(teams map[string]*Team) {
 // SetBumpers sets all bumpers and synchronizes VirtualPlayerCount
 func (e *Engine) SetBumpers(bumpers map[string]*Bumper) {
 	e.mu.Lock()
+	// Reconcile CONN_STATE against the previous map before swapping it out (#109
+	// Phase 1): this bulk path (admin FULL/UPDATE, e.g. team assignment via
+	// TeamsPage) is a real TEAM-change site, but the incoming payload's CONN_STATE
+	// is whatever the client last saw — never authoritative. Preserve the
+	// server-side value and only re-evaluate it when TEAM actually changed.
+	oldBumpers := e.data.Bumpers
+	for id, newBumper := range bumpers {
+		if newBumper == nil {
+			continue
+		}
+		oldTeam := ""
+		if old, ok := oldBumpers[id]; ok && old != nil {
+			oldTeam = old.Team
+			newBumper.ConnState = old.ConnState
+			// Also carry over the green-window bookkeeping (#109 Phase 2) — losing
+			// greenSince here would zero it out, making the next ConfirmDelivery
+			// think the window elapsed ages ago and hide the badge prematurely.
+			newBumper.greenSince = old.greenSince
+			newBumper.confirmPending = old.confirmPending
+			// And the disconnect-announcement grace pass (conn-state fix,
+			// code-review 20260726) — losing it mid-window (a bulk SetBumpers
+			// landing between the Disconnect->orange transition and the next
+			// ApplyVPlayerBroadcastConnEvents) would re-expose the skipped-orange
+			// bug for that one bumper on this one occasion.
+			newBumper.skipNextMessageLost = old.skipNextMessageLost
+		}
+		if oldTeam != newBumper.Team {
+			e.syncConnStateForTeamChangeUnsafe(newBumper, oldTeam)
+		}
+	}
 	e.data.Bumpers = bumpers
 	// Synchronize VirtualPlayerCount with actual bumper count
 	e.state.VirtualPlayerCount = e.countVirtualPlayersUnsafe()
@@ -1210,10 +1486,24 @@ func (e *Engine) RecalculateAllTeamScores() {
 func (e *Engine) InitGame() {
 	e.mu.Lock()
 
-	// Reset all bumper scores and times
-	for _, bumper := range e.data.Bumpers {
+	// Reset all bumper scores/times; purge VJoueurs entirely (fix R1 follow-up
+	// — product invariant: a new game always starts with a clean VJoueur
+	// roster, there is no such thing as a "legacy" VJoueur from a prior
+	// session). Physical buzzers are persistent hardware and are kept, just
+	// with their score/time reset like before.
+	purgedVPlayers := 0
+	for id, bumper := range e.data.Bumpers {
+		if bumper.IsVirtual {
+			delete(e.data.Bumpers, id)
+			purgedVPlayers++
+			continue
+		}
 		bumper.Score = 0
 		bumper.Time = 0
+	}
+	if purgedVPlayers > 0 {
+		e.state.VirtualPlayerCount = e.countVirtualPlayersUnsafe()
+		log.Printf("[Engine] InitGame: purged %d virtual player(s) — fresh VJoueur roster for the new game", purgedVPlayers)
 	}
 
 	// Reset all team scores
@@ -2298,7 +2588,13 @@ func (e *Engine) SetArdoiseAnswer(teamName string, text string) bool {
 func (e *Engine) CreateVirtualPlayer(name string) (string, *Bumper, error) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
+	return e.createVirtualPlayerUnsafe(name)
+}
 
+// createVirtualPlayerUnsafe creates a new virtual player bumper. Caller must
+// hold e.mu (used directly by ReconnectOrCreateVirtualPlayer to keep the
+// find-or-create sequence atomic — see #109 R1 below).
+func (e *Engine) createVirtualPlayerUnsafe(name string) (string, *Bumper, error) {
 	// Check phase ENROLL
 	if e.state.Phase != PhaseEnroll {
 		return "", nil, &EnrollmentError{Reason: "ENROLLMENT_CLOSED"}
@@ -2325,7 +2621,11 @@ func (e *Engine) CreateVirtualPlayer(name string) (string, *Bumper, error) {
 		IsVirtual: true,
 		IsVPlayer: true, // VPlayer can answer all QCM colors
 		Status:    "READY",
+		Connected: true, // VJoueur just opened its WS session at enrollment time, so it's connected by definition
 	}
+	// CONN_STATE: no-op today (Team == "" until assigned to a team), kept for
+	// consistency with the other 5 connection call sites (#109 Phase 1).
+	applyConnEventUnsafe(bumper, ConnEventReconnect)
 
 	e.data.Bumpers[id] = bumper
 
@@ -2337,6 +2637,76 @@ func (e *Engine) CreateVirtualPlayer(name string) (string, *Bumper, error) {
 	go e.SaveBumpers()
 
 	return id, bumper, nil
+}
+
+// ReconnectOrCreateVirtualPlayer resolves a PLAYER_CONNECT request per the
+// backend-ID decision matrix (fix R1, code-review CRITICAL —
+// _work/reports/planner-20260725-143029-r1-fix.md §3.3). The bumper ID
+// (already generated and returned to the client at enrollment, in
+// PLAYER_CONNECTED.ID — the map key itself) is the sole source of identity
+// for reconnection; the name is used only for the free/taken check on a new
+// enrollment. This eliminates the ambiguity that made the previous
+// name-based version merge/delete distinct players who happened to share a
+// name (code-review CRITICAL finding — silent, irreversible data loss).
+//
+//  1. id given, Bumpers[id] exists and IsVirtual -> legitimate reconnection,
+//     unambiguous (the ID is unique and stable). Reused as-is (-> green);
+//     Name is refreshed if the client's local copy had changed. Allowed in
+//     any phase, not just ENROLL.
+//  2. id given but not found (stale localStorage, bumper deleted by admin,
+//     server restart before persistence, ...) -> treated as no id, falls to 3/4.
+//  3. no id, name already taken by another VJoueur (connected OR
+//     disconnected) -> REJECTED (NAME_TAKEN). Never merged, never replaced —
+//     this is the actual fix: no more silent consolidation of homonyms.
+//  4. no id, name free -> new enrollment (subject to ENROLL phase / limit,
+//     enforced by createVirtualPlayerUnsafe). Its ID is returned to the
+//     client, which must store it for future reconnections.
+//  5. id given, not found, name free -> same as 4.
+//
+// Atomic under a single engine lock — this IS the real #109 fix (the
+// find-or-create sequence used to be two separate locked steps in main.go,
+// racy for two near-simultaneous PLAYER_CONNECT calls for the same identity).
+// Unlike the previous version of this method, nothing is ever deleted here.
+//
+// Returns (id, bumper, reconnected, err). reconnected is false only when a
+// brand-new bumper was created.
+func (e *Engine) ReconnectOrCreateVirtualPlayer(id, name string) (string, *Bumper, bool, error) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+
+	normalized := strings.TrimSpace(name)
+
+	// Case 1: a resolvable ID is unambiguous — always a genuine reconnection.
+	if id != "" {
+		if bumper, ok := e.data.Bumpers[id]; ok && bumper != nil && bumper.IsVirtual {
+			if bumper.Name != normalized {
+				bumper.Name = normalized
+			}
+			bumper.Connected = true
+			applyConnEventUnsafe(bumper, ConnEventReconnect)
+			log.Printf("[Engine] Virtual player reconnected by ID: id=%s, name=%s", id, bumper.Name)
+			go e.SaveBumpers()
+			return id, bumper, true, nil
+		}
+		// Case 2: stale/unknown ID — fall through as if none was provided.
+	}
+
+	// Case 3: reject a name collision outright — no id means we cannot tell a
+	// genuine reconnection (client lost its stored ID) from a new person who
+	// happens to share a name with an existing (possibly long-gone) VJoueur.
+	// The legitimate owner always has their ID and takes the case-1 path.
+	for _, cand := range e.data.Bumpers {
+		if cand == nil || !cand.IsVirtual {
+			continue
+		}
+		if strings.EqualFold(strings.TrimSpace(cand.Name), normalized) {
+			return "", nil, false, &EnrollmentError{Reason: "NAME_TAKEN"}
+		}
+	}
+
+	// Case 4/5: no usable id, name free -> new enrollment.
+	newID, newBumper, err := e.createVirtualPlayerUnsafe(normalized)
+	return newID, newBumper, false, err
 }
 
 // countVirtualPlayersUnsafe counts virtual players (caller must hold lock)
@@ -2379,6 +2749,15 @@ func (e *EnrollmentError) Error() string {
 func (e *Engine) StartEnrollment(maxPlayers int) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
+
+	// No VJoueur purge here (fix R1 follow-up): a product invariant now holds
+	// that a game session is always started clean (see InitGame, which purges
+	// the entire VJoueur roster on NEW_GAME) — there is no such thing as a
+	// "legacy" VJoueur to clean up here. StartEnrollment can legitimately be
+	// re-opened mid-session (e.g. to invite more people), and purging
+	// disconnected VJoueurs at that point would evict a temporarily-dropped
+	// active player instead of a stale one — NAME_TAKEN rejection alone
+	// already fully prevents any collision-related data loss regardless.
 
 	e.state.EnrollmentActive = true
 	e.state.ShowQRCode = true
@@ -2484,7 +2863,11 @@ func (e *Engine) AssignVirtualPlayer(bumperID, team string, answerColor AnswerCo
 	}
 
 	// Assign team and answer color (only physical buzzers get color, VPlayers respond to all)
+	oldTeam := bumper.Team
 	bumper.Team = team
+	if oldTeam != team {
+		e.syncConnStateForTeamChangeUnsafe(bumper, oldTeam)
+	}
 	if !bumper.IsVPlayer {
 		bumper.AnswerColor = answerColor
 	}

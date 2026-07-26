@@ -2,6 +2,42 @@
 
 Historique des versions du projet BuzzControl.
 
+## [Unreleased]
+
+---
+
+## [5.7.20] - 2026-07-25
+
+### Added
+- **Badge de connexion mutualisé à 4 états** : `hidden` (rien à afficher), `orange` (déconnecté), `rouge` (déconnecté + message perdu), `vert` (reconnecté). Même icône visuelle pour buzzers physiques et VJoueurs, nouveau composant `ConnectionBadge.jsx` (#109).
+- **Compteurs Navbar** : nouveau format `vjoueur X/Y` et `buzzer X/Y` (connectés/participants), avec coloration sévérité (`orange`/`rouge` si dégradé, neutre si tous connectés) (#109).
+- **Identité par ID** : reconnexion par ID stocké (localStorage côté VJoueur) → préservation automatique équipe/score, rejette `NAME_TAKEN` si nom en conflit (`PLAYER_REJECTED` message) — élimine tout risque de perte/fusion données sur collision de nom (#109, fix R1).
+
+### Fixed
+- **#109** : Icône de déconnexion absente pour les VJoueurs (VPlayers) lors de la perte WebSocket `/ws/player` — comportement désormais identique aux buzzers physiques.
+- **R1 (identité par ID)** : rejette explicitement `PLAYER_REJECTED` si le nom est déjà pris (VJoueur connecté ou déconnecté), sans jamais fusionner/supprimer données existantes.
+- **Purge roster VJoueur** : déplacée de `StartEnrollment` vers `InitGame`/`NEW_GAME`, inconditionnelle (tous les VJoueurs, connectés ou non) — jamais les buzzers physiques. Libère les noms pour les futures sessions.
+- **Ghost bumper** : corrigé le bug où `OnPlayerDisconnected` recréait un bumper fantôme vide après purge `NEW_GAME` — garde `if bumper == nil` avant `UpdateBumper`.
+
+### Technical
+- **Bumper.ConnState** : nouveau champ (v5.7.13) pour état badge connexion, transitions: `Hidden|Orange|Red → Green → Hidden` selon événements `Disconnect`, `MessageLost`, `Reconnect`, `ConfirmDelivery`. Toujours sérialisé (pas `omitempty`), visible uniquement pour participants (`TEAM != ""`).
+- **PlayerConnectPayload.ID** : nouveau champ optionnel pour identifier VJoueur par ID (UUID ou hash), permet reconnexion sans créer nouveau bumper.
+- **Raison rejet NAME_TAKEN** : nouveau code erreur `PLAYER_REJECTED` avec raison détaillée côté frontend (`VPlayerPage.jsx`), redirection auto 3s après écran d'erreur bloquant.
+
+---
+
+## [5.7.23] - 2026-07-26
+
+### Fixed
+- **Badge bloqué en ROUGE** : VJoueur passait directement en rouge (jamais visible en orange) après une déconnexion, et restait bloqué indéfiniment après reconnexion — deux causes :
+  - **Backend (v5.7.21)** : le broadcast annonçant la déconnexion était à tort compté comme message perdu pour le même VJoueur. Solution : passe-droit `skipNextMessageLost` à usage unique qui ignore le premier broadcast après une transition vers orange, puis D4 reprend normalement (#109).
+  - **Frontend (v5.7.22)** : `VPlayerPage` n'essayait plus de se reconnecter si un bumper homonyme existait **même déconnecté** (bloquant l'envoi de `PLAYER_CONNECT` sur coupure réseau normale). Solution : garde `CONNECTED === true` stricte avant de marquer un bumper comme "déjà trouvé", obligeant le renvoi de `PLAYER_CONNECT` sur chaque coupure réseau (#109).
+
+### Technical
+- **Backend** : nouveau champ interne `Bumper.skipNextMessageLost` (non sérialisé) pour passe-droit à usage unique dans `ApplyVPlayerBroadcastConnEvents`.
+- **Frontend** : correction logique matching par nom dans `VPlayerPage.jsx` — garantit l'envoi de `PLAYER_CONNECT` après toute coupure réseau.
+
+---
 
 ## [5.7.10] - 2026-06-08
 

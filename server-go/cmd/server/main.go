@@ -259,6 +259,11 @@ func (a *App) init() {
 				return
 			}
 			msg.MsgID = msgID // Original msgID, not a new one
+			if !a.buzzerHub.IsClientConnected(mac) {
+				// #109 Phase 2 (D4): an unacknowledged LED_SET being retried against a
+				// now-disconnected buzzer is itself a lost message.
+				a.engine.TransitionConn(mac, game.ConnEventMessageLost)
+			}
 			if err := a.buzzerHub.SendToClient(mac, msg); err != nil {
 				server.LogWarn(game.LogComponentApp, "AckManager retry: failed to resend LED_SET to %s: %v", mac, err)
 			}
@@ -433,6 +438,11 @@ func (a *App) setupCallbacks() {
 		a.updateBroadcasterFrequency()
 	}
 
+	// Handle individual VPlayer disconnection (#109): set CONNECTED=false when a VJoueur's
+	// WebSocket closes. Extracted as a named method (rather than inlined here) so it can be
+	// unit-tested directly — see onPlayerDisconnected below.
+	a.wsHub.OnPlayerDisconnected = a.onPlayerDisconnected
+
 	// Handle new log entries - broadcast to logs WebSocket clients
 	a.logger.SetOnNewEntry(func(entry game.LogEntry) {
 		payload := protocol.LogEntryPayload{
@@ -443,6 +453,31 @@ func (a *App) setupCallbacks() {
 		}
 		a.logsHub.BroadcastLogEntry(payload)
 	})
+}
+
+// onPlayerDisconnected handles an individual VJoueur's WebSocket closing
+// (#109): sets CONNECTED=false so the connection badge reflects it.
+//
+// Guard 1 (anti-zombie, #109): if the VJoueur already reconnected (same
+// PlayerID, new WS connection) before this fires, skip the CONNECTED=false to
+// avoid a badge flash caused by the zombie connection unregistering after the
+// new connection is already live.
+//
+// Guard 2 (ghost bumper, code-review finding after the NEW_GAME purge fix):
+// if the bumper no longer exists — e.g. it was purged by NEW_GAME while this
+// VJoueur was still connected, and its WebSocket only closes later — do
+// nothing. UpdateBumper creates an empty bumper for any unknown ID (generic
+// behavior meant for physical buzzer self-registration by MAC); without this
+// guard it would resurrect a persisted, empty ghost bumper here.
+func (a *App) onPlayerDisconnected(playerID string) {
+	if a.wsHub.IsPlayerIDConnected(playerID) {
+		return
+	}
+	if a.engine.GetBumper(playerID) == nil {
+		return
+	}
+	a.engine.UpdateBumper(playerID, map[string]interface{}{"CONNECTED": false})
+	a.broadcastUpdate()
 }
 
 func (a *App) loadBackgrounds() {
@@ -807,12 +842,23 @@ func (a *App) handleBuzzerACK(clientID string, msg *protocol.Message) {
 
 	// Clear the AckPending flag on the bumper
 	a.engine.UpdateBumper(mac, map[string]interface{}{"ACK_PENDING": false})
+	// #109 Phase 2 (D1/D3): a real ACK is the buzzer's fidèle delivery confirmation —
+	// closes the connection-badge "green" window (min. duration honored internally).
+	a.engine.ConfirmDelivery(mac)
 	a.broadcastUpdate()
 }
 
 // handleWebMessage processes messages from web clients (WebSocket)
 func (a *App) handleWebMessage(incoming *protocol.IncomingMessage) {
 	msg := incoming.Data
+
+	// #109 Phase 2 (D2/D3): any message received from an already-identified VJoueur
+	// counts as a successful round-trip ("delivery confirmed", either direction) —
+	// closes the connection-badge "green" window (min. duration honored internally).
+	// No-op for admin/TV/not-yet-identified clients (GetClientPlayerID returns ok=false).
+	if playerID, ok := a.wsHub.GetClientPlayerID(incoming.ClientID); ok {
+		a.engine.ConfirmDelivery(playerID)
+	}
 
 	switch msg.Action {
 	case protocol.ActionHello:
@@ -944,6 +990,9 @@ func (a *App) handleWebMessage(incoming *protocol.IncomingMessage) {
 		a.engine.InitGame()
 		a.broadcastQuestions() // push refreshed AVAILABLE statuses to all clients
 		a.broadcastUpdate()
+		// InitGame purges the whole VJoueur roster (fix R1 follow-up) — refresh
+		// the enrollment counter so clients don't show a stale VirtualPlayerCount.
+		a.broadcastEnrollmentUpdate()
 
 	case protocol.ActionUpdateQuizMeta:
 		var payload protocol.QuizMetaPayload
@@ -1863,37 +1912,16 @@ func (a *App) handlePlayerConnect(clientID string, msg *protocol.Message) {
 		return
 	}
 
-	// Check if player with this name already exists (reconnection)
-	var existingBumperID string
-	var existingBumper *game.Bumper
-	for id, b := range a.engine.GetTeamsAndBumpers().Bumpers {
-		if b.IsVirtual && b.Name == playerName {
-			existingBumperID = id
-			existingBumper = b
-			break
-		}
-	}
-
-	// If player exists, allow reconnection
-	if existingBumper != nil {
-		server.LogInfo(game.LogComponentWebSocket, "PLAYER_CONNECT: reconnecting existing player: id=%s, name=%s", existingBumperID, existingBumper.Name)
-
-		// Send confirmation to this client
-		connectedPayload := protocol.PlayerConnectedPayload{
-			ID:   existingBumperID,
-			Name: existingBumper.Name,
-			Team: existingBumper.Team,
-		}
-		connectedMsg, _ := protocol.NewMessage(protocol.ActionPlayerConnected, connectedPayload)
-		a.wsHub.SendToClient(clientID, connectedMsg)
-
-		// Broadcast UPDATE to all clients (to notify of reconnection)
-		a.broadcastUpdate()
-		return
-	}
-
-	// New player: Try to create virtual player
-	bumperID, bumper, err := a.engine.CreateVirtualPlayer(playerName)
+	// Resolve reconnection vs. new enrollment atomically, under a single engine
+	// lock (#109 R1 fix: the previous implementation read the bumper map here,
+	// decided "not found", and only then called CreateVirtualPlayer as a
+	// separate locked step — two near-simultaneous PLAYER_CONNECT calls for the
+	// same identity could race into two different bumpers). Identity is now the
+	// backend-issued bumper ID (payload.ID, echoed back from a prior
+	// PLAYER_CONNECTED — empty on first enrollment), not the name: a name match
+	// with no resolvable ID is REJECTED (NAME_TAKEN), never merged/replaced —
+	// see engine.ReconnectOrCreateVirtualPlayer for the full decision matrix.
+	bumperID, bumper, reconnected, err := a.engine.ReconnectOrCreateVirtualPlayer(payload.ID, playerName)
 	if err != nil {
 		// Send rejection to this client only
 		reason := "ENROLLMENT_CLOSED"
@@ -1920,6 +1948,17 @@ func (a *App) handlePlayerConnect(clientID string, msg *protocol.Message) {
 	}
 	connectedMsg, _ := protocol.NewMessage(protocol.ActionPlayerConnected, connectedPayload)
 	a.wsHub.SendToClient(clientID, connectedMsg)
+
+	// Link this WS client to its VJoueur bumper ID (used by OnPlayerDisconnected / anti-zombie guard)
+	a.wsHub.SetClientPlayerID(clientID, bumperID)
+
+	if reconnected {
+		server.LogInfo(game.LogComponentWebSocket, "PLAYER_CONNECT: reconnecting existing player: id=%s, name=%s", bumperID, bumper.Name)
+		// Broadcast UPDATE to all clients (to notify of reconnection)
+		a.broadcastUpdate()
+		return
+	}
+
 	server.LogInfo(game.LogComponentWebSocket, "PLAYER_CONNECT: player connected: id=%s, name=%s", bumperID, bumper.Name)
 
 	// Broadcast UPDATE to all clients (teams/bumpers updated)
@@ -2112,6 +2151,11 @@ func (a *App) broadcastUpdate() {
 	if a.wsHub == nil {
 		return // Guard for unit tests that construct a minimal App without a wsHub
 	}
+	// #109 Phase 2 (D4): this GameState broadcast is the "message" VJoueur
+	// participants should receive — evaluate MessageLost/DeliveryConfirmed for
+	// each of them before serializing, so the resulting CONN_STATE is reflected
+	// in this very broadcast rather than lagging one cycle behind.
+	a.engine.ApplyVPlayerBroadcastConnEvents()
 	data := a.engine.GetGameJSON()
 	server.LogDebug(game.LogComponentApp, "Broadcasting UPDATE: %s", string(data)[:min(200, len(data))])
 	msg, _ := protocol.NewMessage(protocol.ActionUpdate, nil)
@@ -2387,6 +2431,9 @@ func (a *App) teamColorToRGB(bumper *game.Bumper) [3]int {
 func (a *App) sendLEDSet(mac string, payload protocol.LEDSetPayload) {
 	a.bumperLEDState[mac] = payload
 	if !a.buzzerHub.IsClientConnected(mac) {
+		// #109 Phase 2 (D4): a LED_SET that should have reached this buzzer while
+		// it's disconnected counts as a lost message (orange -> red).
+		a.engine.TransitionConn(mac, game.ConnEventMessageLost)
 		return
 	}
 	msg, err := protocol.NewMessage(protocol.ActionLEDSet, payload)
@@ -3066,6 +3113,10 @@ func (a *App) sendWifiConfigToBuzzer(clientID string) {
 	msgID := server.GenerateMsgID()
 	msg.MsgID = msgID
 
+	if !a.buzzerHub.IsClientConnected(clientID) {
+		// #109 Phase 2 (D4): WIFI_CONFIG emitted to an already-known-disconnected buzzer.
+		a.engine.TransitionConn(clientID, game.ConnEventMessageLost)
+	}
 	if err := a.buzzerHub.SendToClient(clientID, msg); err != nil {
 		server.LogError(game.LogComponentApp, "Failed to send WIFI_CONFIG to %s: %v", clientID, err)
 		return

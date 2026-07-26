@@ -2,6 +2,92 @@
 
 ---
 
+## [20260726] — Fix urgent : badge CONN_STATE bloqué en ROUGE (#109)
+
+> Bug bloquant remonté en test réel post-QUALIF v5.7.20 : un VJoueur qui se déconnecte passait
+> **directement** en `red` (jamais visible en `orange`), et restait parfois bloqué. Handoff :
+> `_work/handoff/task-dev-backend-20260726-090000.md`.
+
+- **[FIX]** `ApplyVPlayerBroadcastConnEvents` ne compte plus le broadcast qui **annonce** une
+  déconnexion comme un `MESSAGE_LOST` pour le VJoueur concerné — `orange` est désormais réellement
+  visible avant tout passage à `red`. Un broadcast **ultérieur** (pendant que le participant est
+  toujours déconnecté) déclenche toujours `MESSAGE_LOST` normalement (D4 inchangé).
+- **Diagnostic** : l'hypothèse alternative (la reconnexion par ID ne déclencherait jamais
+  `RECONNECT`, bloquant en `red` indéfiniment) a été vérifiée et **infirmée** par test — la
+  reconnexion par ID fonctionne correctement.
+- Aucun changement de contrat de champ — comportement uniquement.
+
+---
+
+## [20260725] — Fix R1 : reconnexion VJoueur par ID, plus de fusion par nom (#109)
+
+> Répond au blocage code-review CRITIQUE (`code-review-20260725-122357.md`) sur
+> `ReconnectOrCreateVirtualPlayer` : la consolidation par nom supprimait silencieusement des
+> données en cas de collision (deux VJoueurs homonymes distincts). Plan :
+> `_work/reports/planner-20260725-143029-r1-fix.md`.
+
+- **[NEW]** `PlayerConnectPayload.ID` (string, `omitempty`) — ID de bumper reçu dans un
+  `PLAYER_CONNECTED` précédent, à renvoyer pour une reconnexion non-ambiguë. Absent au premier
+  enrôlement ; rétrocompatible (anciens clients sans ID → traités comme un enrôlement par nom,
+  rejeté si le nom est déjà pris).
+- **[NEW]** `PlayerRejectedPayload.Reason` : nouvelle valeur `NAME_TAKEN` — nom déjà utilisé par
+  un autre VJoueur (connecté ou déconnecté), sans ID résolvable pour prouver la propriété.
+- **[BREAKING — comportement, pas format]** L'identité d'un VJoueur repose désormais **sur l'ID
+  uniquement**. Le matching par nom seul (avec fusion/suppression de doublons) est **retiré** :
+  une collision de nom sans ID est **rejetée**, jamais fusionnée. Un ancien client qui ne stocke
+  pas encore l'ID (avant la mise à jour frontend correspondante) continuera à fonctionner pour un
+  premier enrôlement, mais toute tentative de reconnexion par nom sur un nom déjà pris sera
+  rejetée au lieu d'être silencieusement acceptée — comportement voulu (règle produit).
+- **[FIX]** `engine.ReconnectOrCreateVirtualPlayer` ne supprime plus jamais de bumper. L'atomicité
+  (verrou unique, corrige la course TOCTOU #109 d'origine) est conservée.
+- **[CHANGED]** (suite, même jour) Purge des VJoueurs déplacée de `StartEnrollment` vers
+  `InitGame`/`NEW_GAME`, et rendue **inconditionnelle** (tous les VJoueurs, connectés ou non —
+  auparavant limitée aux déconnectés). Précision produit : une partie démarre toujours avec des
+  données vierges, il n'existe pas de VJoueur « legacy » à nettoyer entre deux ouvertures
+  d'enrôlement au sein d'une même partie ; `NEW_GAME` est la vraie limite de fraîcheur.
+  `StartEnrollment` peut être rouvert en cours de partie (inviter plus de monde) sans jamais
+  toucher au roster existant. Les buzzers physiques ne sont jamais purgés (matériel persistant),
+  seul leur score est remis à zéro comme avant. Toujours une hygiène de confort — `NAME_TAKEN`
+  seul suffit à éviter toute perte/fusion de données sur collision de nom.
+
+---
+
+## [20260725] — Badge de connexion 4 états (#109 Phase 2)
+
+- **[NEW]** `MESSAGE_LOST`/`DELIVERY_CONFIRMED` câblés sur leurs sources réelles (voir
+  `contracts/websocket-actions.md` §CONN_STATE pour le détail buzzer/VJoueur) + fenêtre minimale
+  de 2s sur l'état `green` avant retour à `""` (D2/D3), sans borne max (D7).
+- **[NEW]** Backend : `engine.ConfirmDelivery(bumperID)` — entrée gated pour `DELIVERY_CONFIRMED`
+  qui respecte la fenêtre `green` ; `engine.ApplyVPlayerBroadcastConnEvents()` — évalue tous les
+  VJoueurs participants à chaque broadcast GameState.
+- **[NEW]** Backend : `WebSocketHub.GetClientPlayerID(clientID)` — getter symétrique de
+  `SetClientPlayerID`, utilisé pour confirmer la livraison à réception de n'importe quel message
+  d'un VJoueur identifié.
+
+> Aucune breaking change — additif sur la Phase 1 (#109, v5.7.13). `engine.TransitionConn` (table
+> pure) reste inchangé et non-gated ; seuls les nouveaux appels de production passent par
+> `ConfirmDelivery`.
+
+---
+
+## [20260725] — Badge de connexion 4 états (#109 Phase 1)
+
+- **[NEW]** `Bumper.CONN_STATE` (string `""`/`"orange"`/`"red"`/`"green"`, **sans omitempty**) —
+  badge de connexion enrichi, propagé sur les 4 endpoints WebSocket (admin/tv/player/buzzer).
+  Périmètre : uniquement les bumpers participants (`TEAM != ""`) ; `""` sinon.
+- **[NEW]** Backend : `type ConnEvent string` + `engine.TransitionConn(bumperID string, event ConnEvent)`
+  — table de transitions complète (voir `contracts/websocket-actions.md`). Câblé sur
+  `DISCONNECT`/`RECONNECT` (Phase 1) ; `MESSAGE_LOST`/`DELIVERY_CONFIRMED` + fenêtre 2s sur
+  `green` en Phase 2.
+- **[FIX]** Bumper fantôme VJoueur (R1, root cause #109) : la reconnexion par nom
+  (`handlePlayerConnect`) est désormais atomique côté moteur (`engine.ReconnectOrCreateVirtualPlayer`,
+  matching trim + insensible à la casse) et consolide automatiquement les doublons existants —
+  élimine la course qui pouvait laisser un second bumper bloqué en badge déconnecté.
+
+> Aucune breaking change — `CONN_STATE` est additif, `CONNECTED` (bool) est conservé tel quel.
+
+---
+
 ## [20260607] — Bugfix v5.7.2 (#100)
 
 - **[BREAKING]** `POST /api/categories` — remplace le body JSON par **multipart/form-data** : champ `name` (string) + champ `file` (image PNG/JPG/JPEG/WebP, obligatoire)

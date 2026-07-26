@@ -521,6 +521,16 @@
   box-shadow: none;
 }
 
+/* Connexion (#109 fix R1) — anneau discret en complément du badge ConnectionBadge :
+   orange/red = déconnecté (message perdu ou non), green = reconnecté (fenêtre de grâce). */
+.buzzer-mini.disconnected {
+  box-shadow: inset 0 0 0 1px var(--conn-badge-orange, #f59e0b);
+}
+
+.buzzer-mini.reconnecting {
+  box-shadow: inset 0 0 0 1px var(--success, #22c55e);
+}
+
 /* VPlayer invalidation badge */
 .vplayer-invalidation-badge {
   font-size: 0.9rem;

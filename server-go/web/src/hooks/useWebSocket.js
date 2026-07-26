@@ -48,7 +48,11 @@ export default function useWebSocket(endpoint = '/ws/admin') {
   const [questions, setQuestions] = useState({})
   const [fsInfo, setFsInfo] = useState(null)
   const [version, setVersion] = useState(null)
-  const [clientCounts, setClientCounts] = useState({ admin: 0, tv: 0, vplayer: 0 })
+  const [clientCounts, setClientCounts] = useState({ admin: 0, tv: 0, vplayer: 0, buzzerWs: 0 })
+  // Résultat du dernier PLAYER_CONNECT en attente de réponse serveur — consommé
+  // par EnrollPage (attend PLAYER_CONNECTED/PLAYER_REJECTED au lieu de naviguer
+  // en aveugle, fix R1 #109). { status: 'connected', id, name } | { status: 'rejected', reason } | null
+  const [playerConnectStatus, setPlayerConnectStatus] = useState(null)
   const [logs, setLogs] = useState([])
   const [firmwareInfo, setFirmwareInfo] = useState(null) // { VERSION, FILENAME, SIZE, EXISTS }
 
@@ -249,6 +253,9 @@ export default function useWebSocket(endpoint = '/ws/admin') {
             admin: MSG.ADMIN_COUNT ?? 0,
             tv: MSG.TV_COUNT ?? 0,
             vplayer: MSG.VPLAYER_COUNT ?? 0,
+            // Compteur brut de sockets buzzer WS (informationnel — le X/Y participants
+            // affiché en Navbar se calcule côté client depuis `bumpers`, pas ce champ).
+            buzzerWs: MSG.BUZZER_WS_COUNT ?? 0,
           })
         }
         break
@@ -293,12 +300,18 @@ export default function useWebSocket(endpoint = '/ws/admin') {
 
       case 'PLAYER_CONNECTED':
         console.log('[WS] PLAYER_CONNECTED:', MSG)
+        // Fix R1 (#109) : capturer l'ID renvoyé par le serveur pour le
+        // renvoyer à la reconnexion (lookup par ID côté backend, plus par nom).
+        if (MSG?.ID) {
+          localStorage.setItem('vplayer_id', MSG.ID)
+        }
+        setPlayerConnectStatus({ status: 'connected', id: MSG?.ID, name: MSG?.NAME })
         // Player successfully enrolled - state will be updated via UPDATE message
         break
 
       case 'PLAYER_REJECTED':
         console.log('[WS] PLAYER_REJECTED:', MSG?.REASON)
-        // Handle rejection (will be used by EnrollPage)
+        setPlayerConnectStatus({ status: 'rejected', reason: MSG?.REASON })
         break
 
       case 'PLAYER_ASSIGNED':
@@ -473,6 +486,13 @@ export default function useWebSocket(endpoint = '/ws/admin') {
     sendMessage('SET_VIRTUAL_PLAYER_LIMIT', { LIMIT: limit })
   }, [sendMessage])
 
+  // VPlayer enrollment: consume the last PLAYER_CONNECTED/PLAYER_REJECTED
+  // result once handled by the caller (EnrollPage) — avoids re-triggering
+  // the same navigation/error on every re-render (fix R1 #109).
+  const clearPlayerConnectStatus = useCallback(() => {
+    setPlayerConnectStatus(null)
+  }, [])
+
   // New game: trigger full reset and transition to NEW_GAME phase
   const newGame = useCallback(() => {
     sendMessage('NEW_GAME', {})
@@ -550,6 +570,8 @@ export default function useWebSocket(endpoint = '/ws/admin') {
     hideQRCode,
     connectVirtualPlayer,
     setVirtualPlayerLimit,
+    playerConnectStatus,
+    clearPlayerConnectStatus,
     // Logs
     logs,
     subscribeLogs,

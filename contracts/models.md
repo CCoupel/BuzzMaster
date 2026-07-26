@@ -66,11 +66,17 @@ interface Bumper {
   ANSWER_COLOR: AnswerColor  // Couleur QCM assignée
   HINTS_AT_BUZZ: number  // Indices donnés au moment du buzz (QCM)
   IS_VIRTUAL: boolean    // true = VPlayer (smartphone)
+  CONNECTED: boolean     // true si le buzzer/VJoueur est actuellement connecté (WebSocket)
+  CONN_STATE: ConnState  // Badge de connexion 4 états — voir notes (v5.7.13, #109)
 }
 
 type BumperStatus = "READY" | "PAUSE"
 
 type AnswerColor = "" | "RED" | "GREEN" | "YELLOW" | "BLUE"
+
+// Badge de connexion (v5.7.13, #109) — voir contracts/websocket-actions.md
+// pour la table de transitions complète (backend: engine.TransitionConn).
+type ConnState = "" | "orange" | "red" | "green"
 ```
 
 ### Exemple
@@ -100,6 +106,13 @@ type AnswerColor = "" | "RED" | "GREEN" | "YELLOW" | "BLUE"
 - `TIME` en microsecondes depuis epoch serveur (0 si non buzzé)
 - `IP` = Adresse IP du buzzer sur le réseau
 - `READY` = true après réception du PONG
+- `CONNECTED` = statut socket brut (WebSocket up/down), toujours sérialisé (pas de `omitempty`)
+- `CONN_STATE` = badge de connexion enrichi (v5.7.13, #109) : `""` (HIDDEN, rien à afficher),
+  `"orange"` (déconnecté), `"red"` (déconnecté + message perdu), `"green"` (reconnecté, fenêtre
+  min. 2s — timer géré en Phase 2). Toujours sérialisé (pas de `omitempty`). **Périmètre : seuls
+  les bumpers participants (`TEAM != ""`) portent un état visible** — un bumper non assigné reste
+  toujours à `""`. Piloté côté serveur par `engine.TransitionConn(bumperID, event)` avec
+  `event ∈ {DISCONNECT, RECONNECT, MESSAGE_LOST, DELIVERY_CONFIRMED}`.
 - `ANSWER_COLOR` = Couleur du bouton pour mode QCM
 - `HINTS_AT_BUZZ` = Nombre d'indices donnés au moment du buzz (pénalité individuelle)
 - `IS_VIRTUAL` = Distingue buzzers physiques et VPlayers smartphone

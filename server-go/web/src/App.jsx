@@ -31,7 +31,7 @@ const adminRoutes = [
 ]
 
 function AppContent() {
-  const { status, clientCounts, version } = useGame()
+  const { status, clientCounts, version, bumpers } = useGame()
   const location = useLocation()
 
   // Show navbar only on admin pages (/admin/* or /anim/*)
@@ -40,7 +40,7 @@ function AppContent() {
 
   return (
     <div className="app">
-      {!hideNavbar && <Navbar connectionStatus={status} clientCounts={clientCounts} serverVersion={version} />}
+      {!hideNavbar && <Navbar connectionStatus={status} clientCounts={clientCounts} serverVersion={version} bumpers={bumpers} />}
       <main className={`main-content ${hideNavbar ? 'fullscreen' : ''}`}>
         <Routes>
           {/* Player enrollment page — connected via GameProvider endpoint="/ws/player" */}
