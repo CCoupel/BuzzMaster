@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { render, screen, fireEvent } from '@testing-library/react'
 import TeamsPage from './TeamsPage'
 
 // ---------------------------------------------------------------------------
@@ -335,5 +335,99 @@ describe('TeamsPage — badge ACK_PENDING (v3.8.0 #54)', () => {
     // Un seul badge (Pending uniquement — virtual et vplayer exclus)
     const badges = screen.getAllByTitle('En attente de confirmation')
     expect(badges).toHaveLength(1)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Palette de 16 couleurs d'équipe (#113)
+//
+// Plan : _work/reports/plan-20260726-121500.md (F2 — TeamsPage). Contrat :
+// contracts/models.md § "Palette d'équipes". Maquette de référence :
+// _work/mockups/113-team-colors-palette.html § "05 — Sélecteur" (pastille
+// marquée `taken`, title/aria-label explicites, reste cliquable).
+// ---------------------------------------------------------------------------
+describe('TeamsPage — palette de 16 couleurs d\'équipe (#113)', () => {
+  it("handleAddTeam écrit COLOR et COLOR_NAME (attribution déterministe, prochaine couleur libre)", () => {
+    const mock = makeGameMock(
+      {},
+      { Rouges: { NAME: 'Rouges', COLOR: [255, 26, 26], COLOR_NAME: 'rouge' } }
+    )
+    useGame.mockReturnValue(mock)
+
+    render(<TeamsPage />)
+
+    const input = screen.getByPlaceholderText('Nouvelle equipe...')
+    fireEvent.change(input, { target: { value: 'Les Verts' } })
+
+    const addButton = screen.getByRole('button', { name: 'Ajouter' })
+    fireEvent.click(addButton)
+
+    expect(mock.updateConfig).toHaveBeenCalledWith({
+      teams: {
+        Rouges: { NAME: 'Rouges', COLOR: [255, 26, 26], COLOR_NAME: 'rouge' },
+        'Les Verts': { COLOR: [255, 133, 26], COLOR_NAME: 'orange', SCORE: 0 },
+      },
+    })
+  })
+
+  it('le sélecteur affiche les 16 pastilles de couleur pour une équipe', () => {
+    useGame.mockReturnValue(makeGameMock(
+      {},
+      { Rouges: { NAME: 'Rouges', COLOR: [255, 26, 26], COLOR_NAME: 'rouge' } }
+    ))
+
+    const { container } = render(<TeamsPage />)
+
+    expect(container.querySelectorAll('.color-swatch')).toHaveLength(16)
+  })
+
+  it("marque 'taken' la couleur portée par une AUTRE équipe, mais pas celle de l'équipe courante", () => {
+    useGame.mockReturnValue(makeGameMock(
+      {},
+      {
+        Rouges: { NAME: 'Rouges', COLOR: [255, 26, 26], COLOR_NAME: 'rouge' },
+        Oranges: { NAME: 'Oranges', COLOR: [255, 133, 26], COLOR_NAME: 'orange' },
+      }
+    ))
+
+    const { container } = render(<TeamsPage />)
+
+    // Carte de l'équipe "Rouges" : sa propre couleur (rouge) n'est jamais 'taken',
+    // celle de l'autre équipe (orange) l'est.
+    const rougesCard = screen.getByDisplayValue('Rouges').closest('.team-card')
+    const swatches = rougesCard.querySelectorAll('.color-swatch')
+    const rougeSwatch = [...swatches].find(s => s.title === 'Rouge')
+    const orangeSwatch = [...swatches].find(s => s.title.toLowerCase().startsWith('orange'))
+
+    expect(rougeSwatch.className).not.toMatch(/\btaken\b/)
+    expect(orangeSwatch.className).toMatch(/\btaken\b/)
+    expect(orangeSwatch.title).toMatch(/déjà prise/i)
+  })
+
+  it("une pastille marquée 'taken' reste cliquable et déclenche bien le changement de couleur", () => {
+    const mock = makeGameMock(
+      {},
+      {
+        Rouges: { NAME: 'Rouges', COLOR: [255, 26, 26], COLOR_NAME: 'rouge' },
+        Oranges: { NAME: 'Oranges', COLOR: [255, 133, 26], COLOR_NAME: 'orange' },
+      }
+    )
+    useGame.mockReturnValue(mock)
+
+    const { container } = render(<TeamsPage />)
+
+    const rougesCard = screen.getByDisplayValue('Rouges').closest('.team-card')
+    const swatches = rougesCard.querySelectorAll('.color-swatch')
+    const orangeSwatch = [...swatches].find(s => s.title.toLowerCase().startsWith('orange'))
+    expect(orangeSwatch.className).toMatch(/\btaken\b/)
+    expect(orangeSwatch.disabled).toBeFalsy()
+
+    fireEvent.click(orangeSwatch)
+
+    expect(mock.updateConfig).toHaveBeenCalledWith({
+      teams: expect.objectContaining({
+        Rouges: expect.objectContaining({ COLOR: [255, 133, 26], COLOR_NAME: 'orange' }),
+      }),
+    })
   })
 })

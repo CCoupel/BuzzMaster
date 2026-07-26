@@ -10,7 +10,8 @@
 ```typescript
 interface Team {
   NAME: string          // Nom de l'équipe
-  COLOR: number[]       // Couleur RGB [R, G, B] (ex: [239, 68, 68])
+  COLOR: number[]       // Couleur RGB [R, G, B] (ex: [255, 26, 26])
+  COLOR_NAME?: string   // Clé de palette (ex: "rouge", "bleu-profond") — voir Palette d'équipes
   SCORE: number         // Score total (calculé: TEAM_POINTS + somme joueurs)
   TEAM_POINTS: number   // Points équipe (indépendants des joueurs)
   TIME: number          // Timestamp du buzz (microsecondes, 0 si non buzzé)
@@ -28,7 +29,8 @@ type TeamStatus = "READY" | "PAUSE"
 {
   "Les Rouges": {
     "NAME": "Les Rouges",
-    "COLOR": [239, 68, 68],
+    "COLOR": [255, 26, 26],
+    "COLOR_NAME": "rouge",
     "SCORE": 150,
     "TEAM_POINTS": 50,
     "TIME": 0,
@@ -42,11 +44,54 @@ type TeamStatus = "READY" | "PAUSE"
 ### Notes
 
 - `COLOR` = Tableau RGB `[R, G, B]` (pas string hex)
+- `COLOR_NAME` = Clé de palette. **Écrit par le frontend** à chaque sélection ou attribution
+  automatique de couleur. Le backend s'en sert pour résoudre la couleur LED **exacte** du buzzer
+  (`teamColorToRGB`). Absent sur les équipes créées avant v5.8.0 → le backend retombe sur une
+  approximation par teinte. Optionnel dans le contrat, mais **toujours renseigné** par le
+  frontend courant.
 - `SCORE` = Total calculé (TEAM_POINTS + somme des scores joueurs)
 - `TEAM_POINTS` = Points attribués uniquement à l'équipe
 - `TIME` > 0 signifie qu'un joueur de l'équipe a buzzé
 - `BUMPER` = ID du premier joueur à buzzer
 - `READY` = true si l'équipe est prête (tous buzzers connectés)
+
+---
+
+## Palette d'équipes (#113)
+
+16 couleurs = 8 teintes × 2 tons. Ton vif `S=100% L=55%`, ton profond `S=100% L=35%`.
+Source de vérité frontend : `web/src/constants/colors.js` (`TEAM_COLORS`).
+Source de vérité backend : `cmd/server/main.go` (`teamColorPalette`).
+**Les deux tables doivent rester strictement identiques** — un écart provoque une LED de buzzer
+qui ne correspond pas à la couleur affichée à l'écran.
+
+| Rang | Clé | Nom | RGB | Teinte |
+|------|-----|-----|-----|--------|
+| 1 | `rouge` | Rouge | `[255, 26, 26]` | 0° |
+| 2 | `orange` | Orange | `[255, 133, 26]` | 28° |
+| 3 | `jaune` | Jaune | `[255, 217, 26]` | 50° |
+| 4 | `vert` | Vert | `[26, 255, 83]` | 135° |
+| 5 | `cyan` | Cyan | `[26, 236, 255]` | 185° |
+| 6 | `bleu` | Bleu | `[26, 94, 255]` | 222° |
+| 7 | `violet` | Violet | `[159, 26, 255]` | 275° |
+| 8 | `rose` | Rose | `[255, 26, 159]` | 325° |
+| 9 | `rouge-profond` | Grenat | `[179, 0, 0]` | 0° |
+| 10 | `orange-profond` | Ambre | `[179, 83, 0]` | 28° |
+| 11 | `jaune-profond` | Or | `[179, 149, 0]` | 50° |
+| 12 | `vert-profond` | Émeraude | `[0, 179, 45]` | 135° |
+| 13 | `cyan-profond` | Turquoise | `[0, 164, 179]` | 185° |
+| 14 | `bleu-profond` | Marine | `[0, 54, 179]` | 222° |
+| 15 | `violet-profond` | Indigo | `[104, 0, 179]` | 275° |
+| 16 | `rose-profond` | Magenta | `[179, 0, 104]` | 325° |
+
+**Ordre d'attribution** : le rang est l'ordre d'attribution automatique à la création d'équipe —
+les 8 tons vifs (rangs 1-8) sont épuisés avant que les tons profonds (rangs 9-16) ne soient
+utilisés. Au-delà de 16 équipes, l'attribution recycle depuis le rang 1.
+
+**Invariant d'affichage** : ces 16 valeurs sont choisies pour être invariantes par
+`boostTeamColor()` (saturation déjà à 100 %, luminosité déjà dans `[35%, 65%]`). Le RGB stocké
+est donc exactement le RGB affiché. Toute nouvelle entrée de palette doit conserver cette
+propriété.
 
 ---
 

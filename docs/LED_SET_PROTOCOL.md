@@ -146,7 +146,63 @@ case hash("LED_SET"):
 
 ---
 
-## 11. Effet COMET (v3.7.0)
+## 11. Résolution LED exacte via COLOR_NAME (v5.7.25, #113)
+
+### Contexte
+
+Avant v5.7.25, la couleur LED d'un buzzer était résolue par approximation de teinte (`nearestPaletteColorByHue`) en l'absence de champ `COLOR_NAME`. Ceci causait une divergence :
+- Affichage écran (UI admin/TV) : couleur exacte de palette (16 valeurs)
+- LED buzzer : approximation (seulement 8 ancres de teinte)
+
+### Solution : COLOR_NAME
+
+Nouveau champ optionnel `Team.COLOR_NAME` (string, ex: `"rouge"`, `"bleu-profond"`). Le frontend l'écrit à chaque sélection manuelle ou attribution automatique. Permet résolution LED exacte au lieu d'approximation.
+
+### Implémentation backend
+
+**Fonction `teamColorToRGB(colorName string, fallbackRGB [3]int) [3]int`** :
+1. Si `colorName` présent dans table `teamColorPalette` → retourne RGB exact
+2. Sinon → utilise `fallbackRGB` (brute-force exact, ou recalc par teinte si absent)
+
+**Table `teamColorPalette`** : 16 entrées {clé, RGB}, rangs 1→16 (8 tons vifs + 8 tons profonds).
+
+```go
+// Exemple d'entrée
+{"rouge", [3]int{255, 26, 26}},
+{"bleu-profond", [3]int{0, 54, 179}},
+```
+
+**Rétrocompatibilité** : équipes sans `COLOR_NAME` (pré-v5.7.25) continuent à fonctionner via `nearestPaletteColorByHue(rgb)` — fallback par teinte, pas idéal mais fonctionnel.
+
+### Atténuation relative au ton — `dimIntensityFor()` (v5.7.25, #113)
+
+Nouvelle fonction `dimIntensityFor(rgb [3]int) int` calcule intensité depuis luminosité HSL :
+
+- **Tons vifs** (L≈55%, ex: rouge/bleu) → Intensity ~64 (comportement préexistant NORMAL)
+- **Tons profonds** (L≈35%, ex: bleu-profond) → Intensity ~100 (plus clair, sinon quasi-éteint)
+- **Borné** : [64, 128]
+
+Formule : `Intensity = 163 - 180×L` (borné)
+
+### Sites d'application de `dimIntensityFor()`
+
+1. **`sendLEDSetForBuzzerNormal`** : mode NORMAL, équipes non-buzzées (état STARTED/PAUSED/REVEALED). Cible la couleur d'équipe seulement.
+
+2. **`sendLEDSetForBuzzerMemory`** : mode MEMORY
+   - Branche `PAUSED` (tous buzzers) → `dimIntensityFor(team.COLOR)`
+   - Branche `STARTED+SOLO` inactive → `dimIntensityFor(team.COLOR)`
+   - Branche multi-équipes, « autres équipes participantes » (DIM 25%) → `dimIntensityFor(team.COLOR)`
+
+### Sites **NON** modifiés — QCM conserve intensité fixe
+
+- **`sendLEDSetForBuzzerQCM`** : intensité fixe 64 sur `answerRGB` (couleur de réponse, jamais couleur d'équipe)
+- **`sendLEDSetForBuzzerQCMReveal`** : idem
+
+Rationale : l'atténuation en ton profond ne doit s'appliquer qu'à la **couleur d'équipe**, jamais à la couleur de réponse QCM (2 feedback distincts : intensité atténuée = position inactive en mode jeu, blink = réponse juste).
+
+---
+
+## 12. Effet COMET (v3.7.0)
 
 Bande lumineuse rotative sur 23 LEDs, 2 tours ~3.3 s. Déclenché sur attribution de points (`TEAM_POINTS`/`BUMPER_POINTS`).
 

@@ -18,6 +18,7 @@ Ce document decrit les fonctionnalites d'administration du systeme BuzzControl.
 - [Filtres categories dans GamePage](#filtres-categories-dans-gamepage-v370)
 - [Double QR code enrollment TV](#double-qr-code-enrollment-tv-v370)
 - [Catégories personnalisées](#catégories-personnalisées-v570)
+- [Palette de 16 couleurs d'équipes](#palette-de-16-couleurs-déquipes-v5725)
 
 ---
 
@@ -1030,3 +1031,70 @@ Lors de la phase d'inscription VJoueur, l'affichage TV (`/tv`) montre desormais 
 ### Note
 
 Le QR code WiFi utilise la configuration WiFi enregistree dans `config.json` (SSID principal). Si aucun SSID n'est configure, seul le QR code VJoueur s'affiche.
+
+---
+
+## Palette de 16 couleurs d'équipes (v5.7.25, #113)
+
+### Présentation
+
+Depuis v5.7.25, la palette d'équipe passe de 8 à 16 couleurs pour une meilleure distinctivité. Les 16 couleurs combinent 8 teintes déclinées en deux tons : **ton vif** (saturation 100%, luminosité ~55%) et **ton profond** (saturation 100%, luminosité ~35%).
+
+### Les 16 couleurs de palette
+
+| Rang | Nom (Vif) | Nom (Profond) | Teinte |
+|------|-----------|---------------|--------|
+| 1/9 | Rouge | Grenat | 0° (Rouge) |
+| 2/10 | Orange | Ambre | 28° |
+| 3/11 | Jaune | Or | 50° |
+| 4/12 | Vert | Émeraude | 135° |
+| 5/13 | Cyan | Turquoise | 185° |
+| 6/14 | Bleu | Marine | 222° |
+| 7/15 | Violet | Indigo | 275° |
+| 8/16 | Rose | Magenta | 325° |
+
+Voir `contracts/models.md` § « Palette d'équipes » pour les valeurs RGB exactes.
+
+### Attribution automatique des couleurs
+
+La création d'une nouvelle équipe attribue automatiquement :
+1. **Rangs 1-8** : tons vifs (si disponibles) — couleurs claires, visibles sur toutes les surfaces
+2. **Rangs 9-16** : tons profonds (si rangs 1-8 épuisés) — couleurs sombres, moins consommateur d'énergie
+
+### Au-delà de 16 équipes
+
+Une fois les 16 couleurs épuisées, l'attribution **recycle au rang 1** (Rouge vif). Cet exemple montre un comportement de deux équipes "Les Rouges" (rang 1) et "Les Rouges 2" (rang 17 → rang 1 après recyclage) avec la même couleur.
+
+**Note** : en pratique, les quiz dépassent rarement 16 équipes. Pour les cas hors norme, la page Équipes affiche explicitement le marquage « déjà prise » sur les couleurs en conflit.
+
+### Sélecteur de couleurs — page Équipes
+
+#### Grille 8×2
+
+La sélection manuelle de couleur s'effectue via une grille de 16 pastilles :
+- **2 rangées** : rang 1-8 (première rangée, tons vifs), rang 9-16 (deuxième rangée, tons profonds)
+- **8 colonnes** : une teinte par colonne (rouge, orange, jaune, vert, cyan, bleu, violet, rose)
+
+#### Marquage « déjà prise »
+
+Une couleur est marquée « **déjà prise** » avec des hachures si elle est **déjà assignée à une autre équipe**. Cette équipe peut néanmoins réassigner la couleur d'une autre équipe (décision volontaire). La pastille reste cliquable.
+
+#### Navigation clavier
+
+Focus visible sur chaque pastille via `:focus-visible` (cadre/bordure explicite). Tabulation entre pastilles avec direction Left/Right/Up/Down supportée.
+
+### Persistance et LED buzzer
+
+Le champ `Team.COLOR_NAME` (ex: `"rouge"`, `"bleu-profond"`) est écrit à chaque:
+- **Attribution automatique** : création d'équipe
+- **Changement manuel** : sélection via grille
+
+**Impact LED** : le buzzer physique d'une équipe affiche désormais la **couleur exacte** (via `COLOR_NAME`) au lieu d'une approximation par teinte. Rétrocompatibilité garantie : équipes antérieures à v5.7.25 restent jouables (fallback par teinte).
+
+### Invariant d'affichage
+
+Les 16 couleurs de palette sont **invariantes par le filtre CSS `boostTeamColor()`** (déjà à 100% de saturation, luminosité déjà dans [35%, 65%]). Ainsi :
+- RGB stocké en base = RGB affiché à l'écran
+- Aucune distorsion ou arrondissement lors du rendu
+
+**Important** : ne jamais ajouter de nouvelle couleur à la palette sans vérifier cette propriété d'invariance.

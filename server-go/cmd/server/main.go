@@ -2297,25 +2297,40 @@ func answerColorToRGB(color game.AnswerColor) [3]int {
 	}
 }
 
-// teamColorPalette maps well-known color names (French and English) to vivid RGB values
-// suitable for physical buzzer LEDs. Used by teamColorToRGB when a team has a ColorName set.
+// teamColorPalette maps the 16 canonical team color keys (#113) to their exact RGB
+// values, plus a handful of legacy English aliases pointing at the vivid tones for
+// robustness. Used by teamColorToRGB when a team has a ColorName set.
+//
+// The 16 entries are 8 hues declined as a vivid tone (S=100% L=55%) and a deep tone
+// (S=100% L=35%) — this is the normative table in contracts/models.md ("Palette
+// d'équipes (#113)"). Frontend source of truth: web/src/constants/colors.js
+// (TEAM_COLORS). The two tables MUST stay value-for-value identical, or a team's
+// physical buzzer LED will diverge from its on-screen color.
 var teamColorPalette = map[string][3]int{
-	"rouge":  {255, 0, 0},
-	"red":    {255, 0, 0},
-	"vert":   {0, 200, 0},
-	"green":  {0, 200, 0},
-	"bleu":   {0, 0, 255},
-	"blue":   {0, 0, 255},
-	"jaune":  {255, 200, 0},
-	"yellow": {255, 200, 0},
-	"orange": {255, 100, 0},
-	"violet": {180, 0, 255},
-	"purple": {180, 0, 255},
-	"blanc":  {255, 255, 255},
-	"white":  {255, 255, 255},
-	"rose":   {255, 0, 150},
-	"pink":   {255, 0, 150},
-	"cyan":   {0, 200, 200},
+	// Vivid tones (rank 1-8)
+	"rouge":  {255, 26, 26},
+	"red":    {255, 26, 26},
+	"orange": {255, 133, 26},
+	"jaune":  {255, 217, 26},
+	"yellow": {255, 217, 26},
+	"vert":   {26, 255, 83},
+	"green":  {26, 255, 83},
+	"cyan":   {26, 236, 255},
+	"bleu":   {26, 94, 255},
+	"blue":   {26, 94, 255},
+	"violet": {159, 26, 255},
+	"purple": {159, 26, 255},
+	"rose":   {255, 26, 159},
+	"pink":   {255, 26, 159},
+	// Deep tones (rank 9-16)
+	"rouge-profond":  {179, 0, 0},
+	"orange-profond": {179, 83, 0},
+	"jaune-profond":  {179, 149, 0},
+	"vert-profond":   {0, 179, 45},
+	"cyan-profond":   {0, 164, 179},
+	"bleu-profond":   {0, 54, 179},
+	"violet-profond": {104, 0, 179},
+	"rose-profond":   {179, 0, 104},
 }
 
 // rgbToHue converts an RGB color (0-255 per channel) to a hue angle in degrees [0, 360).
@@ -2359,6 +2374,43 @@ func rgbSaturation(r, g, b int) float64 {
 	return (max - min) / (1 - math.Abs(2*l-1))
 }
 
+// rgbLightness returns the HSL lightness (0.0–1.0) for the given RGB.
+func rgbLightness(r, g, b int) float64 {
+	rf := float64(r) / 255.0
+	gf := float64(g) / 255.0
+	bf := float64(b) / 255.0
+	max := math.Max(rf, math.Max(gf, bf))
+	min := math.Min(rf, math.Min(gf, bf))
+	return (max + min) / 2
+}
+
+// dimIntensityFor returns the LED intensity (0-255) to use for a "dimmed team color"
+// LED state, scaled to the perceived brightness of the team color rather than a flat
+// constant. Used by sendLEDSetForBuzzerNormal (#113 B3) and by the MEMORY LED paths
+// sendLEDSetForBuzzerMemory / sendLEDSetMemoryMultiTeam (#113 B3 fast-follow,
+// code-review 20260726) — every place that dims the TEAM color. Not used by the QCM
+// paths (sendLEDSetForBuzzerQCM/Reveal), which dim the ANSWER color at a flat 64 and
+// are intentionally left untouched. The firmware applies intensity multiplicatively
+// (channel × intensity / 255, see src/Common/led.h), so a flat 64 nearly extinguishes
+// deep tones (L≈35%) while looking fine on vivid ones (L≈55%).
+//
+// Linear interpolation pinned at the two tone families defined by the #113 palette
+// (contracts/models.md): L=55% (vivid) → 64 (unchanged from the pre-#113 behavior),
+// L=35% (deep) → ~100. Result is clamped to [64, 128] so both ends of the color
+// spectrum (near-white, near-black/achromatic fallback) stay within a sane dim range.
+func dimIntensityFor(rgb [3]int) int {
+	l := rgbLightness(rgb[0], rgb[1], rgb[2])
+	intensity := 163.0 - 180.0*l
+	i := int(math.Round(intensity))
+	if i < 64 {
+		i = 64
+	}
+	if i > 128 {
+		i = 128
+	}
+	return i
+}
+
 // nearestPaletteColorByHue returns the teamColorPalette entry whose hue angle is closest
 // to (r,g,b) using circular hue distance. For achromatic inputs (saturation < 0.15)
 // returns white. Hue-based matching is more robust than Euclidean RGB distance for
@@ -2377,14 +2429,14 @@ func nearestPaletteColorByHue(r, g, b int) [3]int {
 		hue float64
 	}
 	ordered := []entry{
-		{[3]int{255, 0, 0}, 0},     // rouge
-		{[3]int{255, 100, 0}, 24},  // orange
-		{[3]int{255, 200, 0}, 47},  // jaune
-		{[3]int{0, 200, 0}, 120},   // vert
-		{[3]int{0, 200, 200}, 180}, // cyan
-		{[3]int{0, 0, 255}, 240},   // bleu
-		{[3]int{180, 0, 255}, 276}, // violet
-		{[3]int{255, 0, 150}, 324}, // rose
+		{[3]int{255, 26, 26}, 0},    // rouge
+		{[3]int{255, 133, 26}, 28},  // orange
+		{[3]int{255, 217, 26}, 50},  // jaune
+		{[3]int{26, 255, 83}, 135},  // vert
+		{[3]int{26, 236, 255}, 185}, // cyan
+		{[3]int{26, 94, 255}, 222},  // bleu
+		{[3]int{159, 26, 255}, 275}, // violet
+		{[3]int{255, 26, 159}, 325}, // rose
 	}
 	best := ordered[0].rgb
 	minDist := 361.0
@@ -2584,6 +2636,7 @@ func (a *App) sendLEDSetForBuzzer(mac string) {
 
 func (a *App) sendLEDSetForBuzzerNormal(mac string, bumper *game.Bumper, phase game.GamePhase) {
 	rgb := a.teamColorToRGB(bumper)
+	dimIntensity := dimIntensityFor(rgb)
 	bs := a.buzzStateFor(mac)
 	switch phase {
 	case game.PhaseStopped, game.PhasePrepare, game.PhaseReady, game.PhaseCountdown:
@@ -2595,7 +2648,7 @@ func (a *App) sendLEDSetForBuzzerNormal(mac string, bumper *game.Bumper, phase g
 		case game.BuzzStateEquipe:
 			a.sendLEDSet(mac, protocol.LEDSetPayload{Color: rgb, Intensity: 255, Effect: "SOLID"})
 		default: // NONE or AUTRE
-			a.sendLEDSet(mac, protocol.LEDSetPayload{Color: rgb, Intensity: 64, Effect: "DIM"})
+			a.sendLEDSet(mac, protocol.LEDSetPayload{Color: rgb, Intensity: dimIntensity, Effect: "DIM"})
 		}
 	case game.PhasePaused:
 		switch bs {
@@ -2604,7 +2657,7 @@ func (a *App) sendLEDSetForBuzzerNormal(mac string, bumper *game.Bumper, phase g
 		case game.BuzzStateEquipe:
 			a.sendLEDSet(mac, protocol.LEDSetPayload{Color: rgb, Intensity: 255, Effect: "SOLID"})
 		default: // NONE or AUTRE
-			a.sendLEDSet(mac, protocol.LEDSetPayload{Color: rgb, Intensity: 64, Effect: "DIM"})
+			a.sendLEDSet(mac, protocol.LEDSetPayload{Color: rgb, Intensity: dimIntensity, Effect: "DIM"})
 		}
 	case game.PhaseRevealed:
 		switch bs {
@@ -2613,7 +2666,7 @@ func (a *App) sendLEDSetForBuzzerNormal(mac string, bumper *game.Bumper, phase g
 		case game.BuzzStateEquipe:
 			a.sendLEDSet(mac, protocol.LEDSetPayload{Color: rgb, Intensity: 255, Effect: "SOLID"})
 		default: // NONE or AUTRE
-			a.sendLEDSet(mac, protocol.LEDSetPayload{Color: rgb, Intensity: 64, Effect: "DIM"})
+			a.sendLEDSet(mac, protocol.LEDSetPayload{Color: rgb, Intensity: dimIntensity, Effect: "DIM"})
 		}
 	default:
 		a.sendLEDSet(mac, protocol.LEDSetPayload{Color: rgb, Intensity: 255, Effect: "SOLID"})
@@ -2722,6 +2775,7 @@ func (a *App) isFirstBuzzTeam(teamName string) bool {
 
 func (a *App) sendLEDSetForBuzzerMemory(mac string, bumper *game.Bumper, phase game.GamePhase, state game.GameState) {
 	rgb := a.teamColorToRGB(bumper)
+	dimIntensity := dimIntensityFor(rgb)
 	memoryMode := ""
 	if state.Question != nil {
 		memoryMode = state.Question.MemoryMode
@@ -2731,14 +2785,14 @@ func (a *App) sendLEDSetForBuzzerMemory(mac string, bumper *game.Bumper, phase g
 	case game.PhaseStopped, game.PhasePrepare, game.PhaseReady, game.PhaseRevealed:
 		a.sendLEDSet(mac, protocol.LEDSetPayload{Color: rgb, Intensity: 255, Effect: "SOLID"})
 	case game.PhasePaused:
-		a.sendLEDSet(mac, protocol.LEDSetPayload{Color: rgb, Intensity: 64, Effect: "DIM"})
+		a.sendLEDSet(mac, protocol.LEDSetPayload{Color: rgb, Intensity: dimIntensity, Effect: "DIM"})
 	case game.PhaseStarted:
 		if memoryMode == string(game.MemoryModeSolo) || memoryMode == "" {
 			// SOLO: active team = SOLID 100%, inactive = DIM 25%
 			if bumper.Team == state.MemoryCurrentTeam {
 				a.sendLEDSet(mac, protocol.LEDSetPayload{Color: rgb, Intensity: 255, Effect: "SOLID"})
 			} else {
-				a.sendLEDSet(mac, protocol.LEDSetPayload{Color: rgb, Intensity: 64, Effect: "DIM"})
+				a.sendLEDSet(mac, protocol.LEDSetPayload{Color: rgb, Intensity: dimIntensity, Effect: "DIM"})
 			}
 		} else {
 			// Multi-team modes: active=SOLID 100%, next=SOLID 50%, others participating=DIM 25%, not selected=OFF
@@ -2780,8 +2834,10 @@ func (a *App) sendLEDSetMemoryMultiTeam(mac string, bumper *game.Bumper, state g
 		return
 	}
 
-	// Other participating teams: DIM 25%
-	a.sendLEDSet(mac, protocol.LEDSetPayload{Color: rgb, Intensity: 64, Effect: "DIM"})
+	// Other participating teams: DIM 25% (tone-relative, #113 B3 fast-follow —
+	// same rationale as sendLEDSetForBuzzerNormal: a flat 64 nearly extinguishes
+	// deep-toned team colors).
+	a.sendLEDSet(mac, protocol.LEDSetPayload{Color: rgb, Intensity: dimIntensityFor(rgb), Effect: "DIM"})
 }
 
 // nextMemoryTeam returns the name of the team that plays after MemoryCurrentTeam,

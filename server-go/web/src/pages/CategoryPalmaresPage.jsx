@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import Card, { CardHeader, CardBody } from '../components/Card'
 import Podium from '../components/Podium'
 import { CATEGORIES } from '../components/QuestionCard'
+import { getRgbColor } from '../utils/colorUtils'
 import './CategoryPalmaresPage.css'
 
 export default function CategoryPalmaresPage() {
@@ -55,12 +56,6 @@ export default function CategoryPalmaresPage() {
 
   const collapseAll = () => {
     setExpandedCategories({})
-  }
-
-  const getRgbColor = (color) => {
-    if (!color) return 'var(--gray-400)'
-    if (Array.isArray(color)) return `rgb(${color.join(',')})`
-    return color
   }
 
   // Transform for Podium component (expects { name, score, color })

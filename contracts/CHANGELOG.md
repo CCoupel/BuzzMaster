@@ -2,6 +2,31 @@
 
 ---
 
+## [20260726] — Palette d'équipes : 16 couleurs et LED exacte (#113)
+
+> Le nombre de couleurs d'équipe (8) était insuffisant en usage réel, et deux équipes pouvaient
+> recevoir la même couleur. Plan : `_work/reports/plan-20260726-121500.md`.
+> Maquette validée : `_work/mockups/113-team-colors-palette.html`.
+
+- **[NEW]** `Team.COLOR_NAME` — le champ existait déjà dans le modèle Go mais n'était **jamais
+  écrit** par le frontend, rendant mort le chemin de résolution LED exacte. Il devient un champ
+  effectivement renseigné à chaque sélection ou attribution de couleur.
+- **[CHANGED]** Palette d'équipes portée de 8 à **16 couleurs** (8 teintes × 2 tons), avec clés
+  canoniques et ordre d'attribution normatif. Nouvelle section « Palette d'équipes » dans
+  `models.md` — table partagée frontend/backend qui doit rester strictement identique des deux
+  côtés.
+- **[CHANGED]** `teamColorPalette` (backend) — les 16 clés actuelles ne portaient en réalité que
+  **9 couleurs distinctes** (`rouge`/`red`, `vert`/`green`… étaient des alias FR/EN). Remplacée
+  par 16 entrées réellement distinctes ; les alias anglais sont conservés vers les tons vifs.
+- **[CHANGED]** Les valeurs RGB des 8 couleurs existantes changent légèrement (alignement sur la
+  nouvelle grille de teintes). Les équipes déjà enregistrées conservent leur `COLOR` d'origine et
+  restent résolues par approximation de teinte côté LED — pas de migration nécessaire.
+
+**Aucun changement BREAKING.** `COLOR_NAME` est additif et optionnel : un état de jeu ou un
+backup antérieur reste chargeable tel quel.
+
+---
+
 ## [20260726] — Fix urgent : badge CONN_STATE bloqué en ROUGE (#109)
 
 > Bug bloquant remonté en test réel post-QUALIF v5.7.20 : un VJoueur qui se déconnecte passait

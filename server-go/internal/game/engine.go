@@ -443,8 +443,16 @@ func (e *Engine) SetTeams(teams map[string]*Team) {
 	e.data.Teams = teams
 	e.mu.Unlock()
 
-	// Auto-save teams to disk
-	go e.SaveTeams()
+	// Auto-save teams to disk. Synchronous (unlike the per-bumper hot paths, which
+	// stay async): SetTeams is a low-frequency bulk action (team roster edits), and
+	// firing this in a background goroutine let it race with a caller's own
+	// SaveTeams()/LoadTeams() sequence (#113 B4) — two unsynchronized writers to the
+	// same file, or a goroutine still in flight after the caller moved on. Returning
+	// only once the write has actually landed also closes a small durability gap:
+	// a crash right after the old async SetTeams() returned could lose the update.
+	if err := e.SaveTeams(); err != nil {
+		log.Printf("[Engine] SetTeams: auto-save failed: %v", err)
+	}
 }
 
 // SetBumpers sets all bumpers and synchronizes VirtualPlayerCount
@@ -2017,7 +2025,37 @@ func (e *Engine) SaveTeams() error {
 		return err
 	}
 
-	if err := os.WriteFile(e.teamsPath, data, 0644); err != nil {
+	// Write to a uniquely-named temp file and atomically rename into place (#113 B4
+	// hardening). SaveTeams is fired from a background goroutine by both SetTeams and
+	// UpdateTeam, so two saves can legitimately overlap; os.WriteFile truncates the
+	// destination in place, so a concurrent LoadTeams (or the other save) could
+	// observe an empty/partial file mid-write. os.CreateTemp gives each call its own
+	// file (no two saves can collide on the same temp path), and os.Rename is atomic
+	// on the same filesystem, so readers only ever see a fully-formed old or new file.
+	tmpFile, err := os.CreateTemp(dir, filepath.Base(e.teamsPath)+".tmp-*")
+	if err != nil {
+		log.Printf("[Engine] Failed to create temp file for teams save: %v", err)
+		return err
+	}
+	tmpPath := tmpFile.Name()
+	if _, err := tmpFile.Write(data); err != nil {
+		tmpFile.Close()
+		os.Remove(tmpPath)
+		log.Printf("[Engine] Failed to write temp teams file: %v", err)
+		return err
+	}
+	if err := tmpFile.Close(); err != nil {
+		os.Remove(tmpPath)
+		log.Printf("[Engine] Failed to close temp teams file: %v", err)
+		return err
+	}
+	if err := os.Chmod(tmpPath, 0644); err != nil {
+		os.Remove(tmpPath)
+		log.Printf("[Engine] Failed to chmod temp teams file: %v", err)
+		return err
+	}
+	if err := os.Rename(tmpPath, e.teamsPath); err != nil {
+		os.Remove(tmpPath)
 		log.Printf("[Engine] Failed to save teams: %v", err)
 		return err
 	}

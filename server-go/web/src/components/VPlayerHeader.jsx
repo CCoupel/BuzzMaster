@@ -1,3 +1,4 @@
+import { getRgbColor } from '../utils/colorUtils'
 import './VPlayerHeader.css'
 
 export default function VPlayerHeader({ bumper, team }) {
@@ -6,9 +7,9 @@ export default function VPlayerHeader({ bumper, team }) {
   // Get first letter of player name for avatar
   const initial = bumper?.NAME?.[0]?.toUpperCase() || '?'
 
-  // Get team color or default gray
+  // Get team color (boosted, #113) or default gray
   const avatarColor = isAssigned && team?.COLOR
-    ? `rgb(${team.COLOR.join(',')})`
+    ? getRgbColor(team.COLOR, 'var(--gray-500)')
     : 'var(--gray-500)'
 
   return (

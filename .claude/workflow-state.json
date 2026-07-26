@@ -1,21 +1,22 @@
 {
-  "type": "BUGFIX",
-  "description": "fix(admin): couleur du VJoueur doit correspondre à la couleur de son équipe sur la page joueur",
-  "branch": "bugfix/vjoueur-team-color",
-  "version": "5.7.23",
-  "started_at": "2026-07-26T10:59:00Z",
+  "type": "FEATURE",
+  "description": "feat(teams): ajouter 15-16 couleurs d'équipe distinctes et reconnaissables",
+  "branch": "feature/team-colors-palette",
+  "version": "5.7.24",
+  "started_at": "2026-07-26T11:49:00Z",
   "cycles": 1,
-  "issue_nums": [112],
+  "issue_nums": [113],
   "milestone_num": 17,
   "phases": {
     "clarification": { "status": "completed", "skipped": false },
-    "plan":          { "status": "skipped" },
-    "dev-frontend":  { "status": "completed", "sha": "3c28bde", "handoff": "_work/handoff/dev-frontend-20260726-112528.md" },
-    "test-writer":   { "status": "completed", "sha": "47edda9", "handoff": "_work/handoff/test-writer-20260726-113008.md" },
-    "review":        { "status": "completed", "verdict": "APPROVED", "report": "_work/reports/code-reviewer-20260726-112720.md" },
-    "qa":            { "status": "completed", "verdict": "VALIDATED WITH RESERVATIONS", "report": "_work/reports/qa-20260726-114414.md" },
-    "doc":           { "status": "completed", "sha": "e333725", "handoff": "_work/handoff/doc-updater-20260726-114530.md" },
-    "deploy-qualif": { "status": "in_progress" },
-    "deploy-prod":   { "status": "pending" }
+    "plan":          { "status": "completed", "report": "_work/reports/plan-20260726-121500.md", "mockup": "_work/mockups/113-team-colors-palette.html" },
+    "dev-backend":   { "status": "completed", "sha": "7c0fd6a", "handoff": "_work/handoff/dev-backend-20260726-131500.md", "note": "fast-follow B3-MEMORY, prior_sha e4e5c12" },
+    "dev-frontend":  { "status": "completed", "sha": "dd4b5d6", "handoff": "_work/handoff/dev-frontend-20260726-122232.md" },
+    "test-writer":   { "status": "completed", "sha": "1646494", "handoff": "_work/handoff/test-writer-20260726-123346.md" },
+    "review":        { "status": "completed", "verdict": "APPROVED", "report": "_work/reports/code-reviewer-20260726-131940.md", "note": "initial APPROVED WITH RESERVATIONS (_work/reports/code-reviewer-20260726-125144.md) resolved by fast-follow" },
+    "qa":            { "status": "completed", "verdict": "VALIDATED WITH RESERVATIONS", "report": "_work/reports/qa-20260726-132800.md" },
+    "doc":           { "status": "completed", "sha": "52206d9", "handoff": "_work/handoff/doc-updater-20260726-141530.md", "note": "docs a46c07f + contrats 52206d9" },
+    "deploy-qualif": { "status": "completed", "sha": "52206d9", "report": "QUALIF_REPORT_v5.7.25.md", "result": "QUALIFIÉ AVEC RÉSERVES — scénarios manuels/matériel non exécutables en sandbox" },
+    "deploy-prod":   { "status": "in_progress", "note": "squash-merge groupé #112+#113+#115 vers v5.8.0" }
   }
 }

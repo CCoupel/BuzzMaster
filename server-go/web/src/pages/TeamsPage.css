@@ -178,20 +178,24 @@
   color: white;
 }
 
-/* Color Swatches */
+/* Color Swatches — palette 16 couleurs (#113) : grille 8 colonnes x 2 rangees
+   (tons vifs en haut, tons profonds en bas, meme ordre de teintes). */
 .team-colors {
-  display: flex;
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
   gap: var(--space-1);
-  flex-wrap: wrap;
   margin-bottom: var(--space-3);
+  max-width: 220px;
 }
 
 .color-swatch {
-  width: 24px;
-  height: 24px;
+  aspect-ratio: 1;
+  width: 100%;
   border-radius: var(--radius-full);
   border: 2px solid transparent;
   cursor: pointer;
+  position: relative;
+  padding: 0;
   transition: all var(--transition-fast);
 }
 
@@ -202,6 +206,24 @@
 .color-swatch.active {
   border-color: var(--gray-800);
   box-shadow: 0 0 0 2px white, 0 0 0 4px var(--gray-300);
+}
+
+.color-swatch:focus-visible {
+  outline: 2px solid var(--primary-500, #6366f1);
+  outline-offset: 2px;
+}
+
+/* Pastille "deja prise" par une autre equipe — hachures, reste cliquable */
+.color-swatch.taken::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: var(--radius-full);
+  background: repeating-linear-gradient(
+    45deg,
+    transparent 0 4px,
+    rgba(0, 0, 0, 0.45) 4px 6px
+  );
 }
 
 /* Team Members Zone */

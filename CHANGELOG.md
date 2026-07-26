@@ -6,6 +6,29 @@ Historique des versions du projet BuzzControl.
 
 ---
 
+## [5.7.25] - 2026-07-26
+
+### Added
+- **Palette 16 couleurs d'équipe** : passe de 8 à 16 teintes déclinées en ton vif (saturation 100%, luminosité ~55%) et ton profond (saturation 100%, luminosité ~35%). Attribution déterministe et sans doublon : rangs 1-8 (tons vifs), rangs 9-16 (tons profonds), puis recyclage à rang 1 au-delà de 16 équipes (#113).
+- **Field `Team.COLOR_NAME`** : identifiant de palette écrit par le frontend à chaque sélection manuelle ou attribution automatique de couleur. Permet résolution LED exacte du buzzer (aucune approximation par teinte). Rétrocompatible : équipes antérieures restent jouables (fallback teinte) (#113).
+- **Sélecteur 16 couleurs** : grille 8×2 avec marquage « déjà prise » sur couleurs assignées à d'autres équipes (reste cliquable), navigation clavier via `:focus-visible` (#113).
+
+### Changed
+- **Atténuation LED relative au ton** : nouvelle fonction `dimIntensityFor(rgb)` calcule intensité depuis luminosité HSL — ~64 pour tons vifs (L≈55%), ~100 pour tons profonds (L≈35%), borné [64,128]. Appliquée aux modes NORMAL (équipes non-buzzées) et MEMORY (solo/multi-équipes inactives). QCM reste inchangé (atténuation fixe 64 sur couleur de réponse, pas couleur d'équipe) (#113).
+- **Invariance d'affichage** : les 16 couleurs sont choisies invariantes par `boostTeamColor()` (saturation déjà 100%, luminosité déjà dans [35%, 65%]) — RGB stocké = RGB affiché (#113).
+
+### Fixed
+- **`boostTeamColor()` — arrondi intermédiaire de teinte** : suppression de l'arrondi `Math.round(h*60)` avant reconstruction RGB qui cassait le round-trip exact pour teintes non-multiples de 60° (4 couleurs de palette divergeaient de ±1). Teinte restée flottante jusqu'à reconstruction ; seul le résultat final arrondi (#113).
+- **Persistance atomique `Team.COLOR_NAME`** : `SaveTeams` écrit désormais dans fichier temporaire + rename atomique au lieu de troncature sur place, élimine races lors d'appels concurrents. `SetTeams` attend son auto-save (action admin peu fréquente) au lieu de lancer goroutine (#113).
+
+### Technical
+- `teamColorPalette` (backend, `main.go`) : 16 entrées exactes RGB, ordre rang 1→16, ancres de repli alignées sur palette.
+- `nearestPaletteColorByHue` : utilise teintes des 8 tons vifs comme ancres (attendu : équipes sans `COLOR_NAME` changent de RGB résolu).
+- `TEAM_COLORS` (frontend, `constants/colors.js`) : 16 entrées, `getNextTeamColor(teams)` déterministe, `findTeamColor(colorName, rgb)` résout par clé ou RGB exact (rétrocompat).
+- Consolidation chemins de rendu : `Podium.jsx`, `CategoryPalmaresPage.jsx`, `VPlayerHeader.jsx` utilisent `getRgbColor()` centralisée.
+
+---
+
 ## [5.7.24] - 2026-07-26
 
 ### Fixed

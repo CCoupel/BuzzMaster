@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { boostTeamColor, getRgbColor, rgbToHex, getContrastColor } from './colorUtils'
+import { TEAM_COLORS } from '../constants/colors'
 
 // ========================================
 // Issue #61 — boostTeamColor
@@ -128,6 +129,53 @@ describe('boostTeamColor — idempotence partielle', () => {
     // Les deux passes doivent produire une string rgb valide
     expect(firstPass).toMatch(/^rgb\(/)
     expect(secondPass).toMatch(/^rgb\(/)
+  })
+})
+
+// ========================================
+// Palette de 16 couleurs d'équipe (#113)
+// ========================================
+
+// Pivot de la feature #113 (contracts/models.md § "Palette d'équipes") : les 16
+// couleurs sont construites à S=100%, L=55%/35% — exactement dans les bornes
+// élargies de boostTeamColor ([35%, 65%]) — pour que le RGB stocké soit
+// identique au RGB affiché. Ce test est ce qui garantit que la maquette
+// validée (_work/mockups/113-team-colors-palette.html) correspond au rendu réel.
+describe('boostTeamColor — invariance pour les 16 couleurs de la palette (#113)', () => {
+  TEAM_COLORS.forEach(({ key, rgb }) => {
+    it(`boostTeamColor(${key} ${JSON.stringify(rgb)}) === rgb(${rgb.join(',')})`, () => {
+      expect(boostTeamColor(rgb)).toBe(`rgb(${rgb[0]},${rgb[1]},${rgb[2]})`)
+    })
+  })
+})
+
+// Non-régression : les couleurs d'équipe enregistrées avant #113 (anciennes
+// PRESET_COLORS de TeamsPage, S/L variables, hors de la palette normative)
+// doivent rester affichables sous le boost élargi — aucune ne doit dégénérer
+// en gris, ni sortir de [0,255], ni planter.
+describe('boostTeamColor — non-régression sur les anciennes couleurs d\'équipe (#113)', () => {
+  const legacyPresetColors = [
+    [239, 68, 68],   // Red
+    [249, 115, 22],  // Orange
+    [234, 179, 8],   // Yellow
+    [34, 197, 94],   // Green
+    [6, 182, 212],   // Cyan
+    [99, 102, 241],  // Indigo
+    [168, 85, 247],  // Purple
+    [236, 72, 153],  // Pink
+  ]
+
+  legacyPresetColors.forEach((rgb) => {
+    it(`ancienne couleur ${JSON.stringify(rgb)} reste affichable (non grise, dans [0,255])`, () => {
+      const result = boostTeamColor(rgb)
+      expect(result).toMatch(/^rgb\(\d+,\d+,\d+\)$/)
+      const [, r, g, b] = result.match(/^rgb\((\d+),(\d+),(\d+)\)$/).map(Number)
+      ;[r, g, b].forEach(v => {
+        expect(v).toBeGreaterThanOrEqual(0)
+        expect(v).toBeLessThanOrEqual(255)
+      })
+      expect(r === g && g === b).toBe(false)
+    })
   })
 })
 

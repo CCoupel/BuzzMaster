@@ -113,15 +113,21 @@ func TestLEDSet_QCMReady_BroadcastReady(t *testing.T) {
 	// Call sendLEDSetAllBuzzers (called by broadcastReady)
 	// Since no WebSocket buzzers are connected in this unit test,
 	// we only verify that bumperLEDState is populated correctly.
+	//
+	// engine.Ready() puts the game in PREPARE, where sendLEDSetForBuzzerQCM shows
+	// the TEAM color (not the answer color yet — that only appears from READY on).
+	// TeamA/TeamB have no ColorName, so this exercises the hue-based fallback
+	// (nearestPaletteColorByHue, #113 B2): TeamA=[255,0,0] → vivid red anchor
+	// [255,26,26], TeamB=[0,0,255] → vivid blue anchor [26,94,255].
 	app.sendLEDSetAllBuzzers()
 
-	// Check bumper 1: RED → [255,0,0] SOLID 100%
+	// Check bumper 1 (TeamA, PREPARE): hue-resolved team color SOLID 100%
 	state1, ok := app.bumperLEDState["AA:BB:CC:DD:EE:01"]
 	if !ok {
 		t.Fatal("Expected LED state for bumper AA:BB:CC:DD:EE:01")
 	}
-	if state1.Color != [3]int{255, 0, 0} {
-		t.Errorf("Bumper 1 color: got %v, want [255,0,0]", state1.Color)
+	if state1.Color != [3]int{255, 26, 26} {
+		t.Errorf("Bumper 1 color: got %v, want [255,26,26]", state1.Color)
 	}
 	if state1.Intensity != 255 {
 		t.Errorf("Bumper 1 intensity: got %d, want 255", state1.Intensity)
@@ -130,13 +136,13 @@ func TestLEDSet_QCMReady_BroadcastReady(t *testing.T) {
 		t.Errorf("Bumper 1 effect: got %s, want SOLID", state1.Effect)
 	}
 
-	// Check bumper 2: BLUE → [0,0,255] SOLID 100%
+	// Check bumper 2 (TeamB, PREPARE): hue-resolved team color SOLID 100%
 	state2, ok := app.bumperLEDState["AA:BB:CC:DD:EE:02"]
 	if !ok {
 		t.Fatal("Expected LED state for bumper AA:BB:CC:DD:EE:02")
 	}
-	if state2.Color != [3]int{0, 0, 255} {
-		t.Errorf("Bumper 2 color: got %v, want [0,0,255]", state2.Color)
+	if state2.Color != [3]int{26, 94, 255} {
+		t.Errorf("Bumper 2 color: got %v, want [26,94,255]", state2.Color)
 	}
 }
 
@@ -556,7 +562,8 @@ func TestLEDQCM_Started_NONE(t *testing.T) {
 func TestLEDQCM_Started_MOI(t *testing.T) {
 	app := newTestApp(t)
 
-	// TeamA has color [255,0,0] from newTestApp
+	// TeamA has color [255,0,0] from newTestApp, no ColorName → resolved via
+	// nearestPaletteColorByHue (#113 B2) to the palette's vivid red anchor [255,26,26].
 	question := &game.Question{ID: "q1", Type: game.QuestionTypeQCM}
 	app.engine.Ready("q1", question)
 	app.engine.SetBumpers(map[string]*game.Bumper{
@@ -572,9 +579,9 @@ func TestLEDQCM_Started_MOI(t *testing.T) {
 	if s.Effect != "SOLID" {
 		t.Errorf("QCM STARTED+MOI: expected SOLID, got %s", s.Effect)
 	}
-	// Should show TEAM color [255,0,0], not answer color BLUE
-	if s.Color != [3]int{255, 0, 0} {
-		t.Errorf("QCM STARTED+MOI: expected team color [255,0,0], got %v", s.Color)
+	// Should show TEAM color (hue-resolved), not answer color BLUE
+	if s.Color != [3]int{255, 26, 26} {
+		t.Errorf("QCM STARTED+MOI: expected team color [255,26,26], got %v", s.Color)
 	}
 }
 
@@ -584,7 +591,7 @@ func TestLEDQCM_Paused_EQUIPE(t *testing.T) {
 
 	question := &game.Question{ID: "q1", Type: game.QuestionTypeQCM}
 	app.engine.Ready("q1", question)
-	// TeamA color [255,0,0], two members
+	// TeamA color [255,0,0], two members, no ColorName → hue-resolved to [255,26,26] (#113 B2)
 	app.engine.SetBumpers(map[string]*game.Bumper{
 		"MAC:A1": {Team: "TeamA", AnswerColor: game.AnswerColorGreen},
 		"MAC:A2": {Team: "TeamA", AnswerColor: game.AnswerColorGreen},
@@ -600,8 +607,8 @@ func TestLEDQCM_Paused_EQUIPE(t *testing.T) {
 	if s.Effect != "SOLID" {
 		t.Errorf("QCM PAUSED+EQUIPE: expected SOLID, got %s", s.Effect)
 	}
-	if s.Color != [3]int{255, 0, 0} {
-		t.Errorf("QCM PAUSED+EQUIPE: expected team color [255,0,0], got %v", s.Color)
+	if s.Color != [3]int{255, 26, 26} {
+		t.Errorf("QCM PAUSED+EQUIPE: expected team color [255,26,26], got %v", s.Color)
 	}
 }
 
@@ -727,6 +734,132 @@ func TestLEDMemory_MultiTeam_NotSelected(t *testing.T) {
 	sC := app.bumperLEDState["MAC:C1"]
 	if sC.Color != [3]int{0, 0, 0} || sC.Intensity != 0 {
 		t.Errorf("Non-selected team: expected OFF (0,0,0 intensity=0), got color=%v intensity=%d", sC.Color, sC.Intensity)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// #113 B3 fast-follow (code-review 20260726) — MEMORY dim intensity must be
+// tone-relative too, not just NORMAL. A flat Intensity 64 nearly extinguishes a
+// deep-toned team color (L≈35%); dimIntensityFor compensates so the LED stays
+// visibly lit. These mirror TestLEDMemory_Solo_Paused / _MultiTeam_Next above,
+// but with a deep-tone COLOR_NAME team instead of the (coincidentally-vivid,
+// via hue fallback) TeamA/TeamB/TeamC fixtures from newTestApp.
+// ---------------------------------------------------------------------------
+
+// TestLEDMemory_Solo_Paused_DeepTone_UsesToneRelativeDim verifies PAUSED (SOLO
+// mode) dims a deep-tone team above the old flat 64.
+func TestLEDMemory_Solo_Paused_DeepTone_UsesToneRelativeDim(t *testing.T) {
+	app := newTestApp(t)
+
+	question := &game.Question{ID: "q1", Type: game.QuestionTypeMemory, MemoryMode: "SOLO"}
+	app.engine.Ready("q1", question)
+	app.engine.SetTeams(map[string]*game.Team{
+		"TeamDeep": {Name: "TeamDeep", ColorName: "bleu-profond", Color: []int{1, 2, 3}},
+	})
+	app.engine.SetBumpers(map[string]*game.Bumper{
+		"MAC:D1": {Team: "TeamDeep"},
+	})
+	if err := app.engine.SetMemoryParticipatingTeams([]string{"TeamDeep"}); err != nil {
+		t.Fatalf("SetMemoryParticipatingTeams failed: %v", err)
+	}
+	app.engine.SetPhase(game.PhasePaused)
+
+	app.sendLEDSetPauseAll()
+
+	s, ok := app.bumperLEDState["MAC:D1"]
+	if !ok {
+		t.Fatal("No LED state for MAC:D1")
+	}
+	if s.Effect != "DIM" {
+		t.Errorf("MEMORY SOLO PAUSED deep tone: expected DIM, got %s", s.Effect)
+	}
+	want := dimIntensityFor([3]int{0, 54, 179}) // bleu-profond RGB
+	if s.Intensity != want {
+		t.Errorf("MEMORY SOLO PAUSED deep tone: intensity = %d, want %d (dimIntensityFor)", s.Intensity, want)
+	}
+	if s.Intensity == 64 {
+		t.Error("MEMORY SOLO PAUSED deep tone dimmed to the old flat 64 — tone-relative intensity not applied")
+	}
+}
+
+// TestLEDMemory_Solo_Inactive_DeepTone_UsesToneRelativeDim verifies STARTED+SOLO
+// dims the inactive deep-tone team above the old flat 64.
+func TestLEDMemory_Solo_Inactive_DeepTone_UsesToneRelativeDim(t *testing.T) {
+	app := newTestApp(t)
+
+	question := &game.Question{ID: "q1", Type: game.QuestionTypeMemory, MemoryMode: "SOLO"}
+	app.engine.Ready("q1", question)
+	app.engine.SetTeams(map[string]*game.Team{
+		"TeamA":    {Name: "TeamA", Color: []int{255, 0, 0}},
+		"TeamDeep": {Name: "TeamDeep", ColorName: "rose-profond", Color: []int{1, 2, 3}},
+	})
+	app.engine.SetBumpers(map[string]*game.Bumper{
+		"MAC:A1": {Team: "TeamA"},
+		"MAC:D1": {Team: "TeamDeep"},
+	})
+	if err := app.engine.SetMemoryParticipatingTeams([]string{"TeamA", "TeamDeep"}); err != nil {
+		t.Fatalf("SetMemoryParticipatingTeams failed: %v", err)
+	}
+	app.engine.SetPhase(game.PhaseStarted)
+
+	app.sendLEDSetAllBuzzers()
+
+	// TeamDeep is not the active team (TeamA is, being first) → DIM, tone-relative.
+	s, ok := app.bumperLEDState["MAC:D1"]
+	if !ok {
+		t.Fatal("No LED state for MAC:D1")
+	}
+	if s.Effect != "DIM" {
+		t.Errorf("MEMORY SOLO inactive deep tone: expected DIM, got %s", s.Effect)
+	}
+	want := dimIntensityFor([3]int{179, 0, 104}) // rose-profond RGB
+	if s.Intensity != want {
+		t.Errorf("MEMORY SOLO inactive deep tone: intensity = %d, want %d (dimIntensityFor)", s.Intensity, want)
+	}
+	if s.Intensity == 64 {
+		t.Error("MEMORY SOLO inactive deep tone dimmed to the old flat 64 — tone-relative intensity not applied")
+	}
+}
+
+// TestLEDMemory_MultiTeam_OtherParticipating_DeepTone_UsesToneRelativeDim verifies
+// the "other participating team" DIM branch of sendLEDSetMemoryMultiTeam is
+// tone-relative for a deep-tone team.
+func TestLEDMemory_MultiTeam_OtherParticipating_DeepTone_UsesToneRelativeDim(t *testing.T) {
+	app := newTestApp(t)
+
+	question := &game.Question{ID: "q1", Type: game.QuestionTypeMemory, MemoryMode: "CHACUN_SON_TOUR"}
+	app.engine.Ready("q1", question)
+	app.engine.SetTeams(map[string]*game.Team{
+		"TeamA":    {Name: "TeamA", Color: []int{255, 0, 0}},
+		"TeamB":    {Name: "TeamB", Color: []int{0, 0, 255}},
+		"TeamDeep": {Name: "TeamDeep", ColorName: "vert-profond", Color: []int{1, 2, 3}},
+	})
+	app.engine.SetBumpers(map[string]*game.Bumper{
+		"MAC:A1": {Team: "TeamA"},
+		"MAC:B1": {Team: "TeamB"},
+		"MAC:D1": {Team: "TeamDeep"},
+	})
+	// TeamA=active, TeamB=next, TeamDeep=other participating (3rd in rotation).
+	if err := app.engine.SetMemoryParticipatingTeams([]string{"TeamA", "TeamB", "TeamDeep"}); err != nil {
+		t.Fatalf("SetMemoryParticipatingTeams failed: %v", err)
+	}
+	app.engine.SetPhase(game.PhaseStarted)
+
+	app.sendLEDSetAllBuzzers()
+
+	s, ok := app.bumperLEDState["MAC:D1"]
+	if !ok {
+		t.Fatal("No LED state for MAC:D1")
+	}
+	if s.Effect != "DIM" {
+		t.Errorf("MEMORY multi-team other participating, deep tone: expected DIM, got %s", s.Effect)
+	}
+	want := dimIntensityFor([3]int{0, 179, 45}) // vert-profond RGB
+	if s.Intensity != want {
+		t.Errorf("MEMORY multi-team other participating, deep tone: intensity = %d, want %d (dimIntensityFor)", s.Intensity, want)
+	}
+	if s.Intensity == 64 {
+		t.Error("MEMORY multi-team other participating deep tone dimmed to the old flat 64 — tone-relative intensity not applied")
 	}
 }
 

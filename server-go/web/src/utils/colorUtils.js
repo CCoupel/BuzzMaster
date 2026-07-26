@@ -3,10 +3,17 @@
  */
 
 /**
- * Boost team color saturation/lightness for display (#61).
+ * Boost team color saturation/lightness for display (#61, widened #113).
  * Converts an RGB array to HSL, enforces a minimum saturation of 95%
- * and clamps lightness to [45%, 55%] for vivid, non-pastel colors.
+ * and clamps lightness to [35%, 65%] for vivid, non-pastel colors.
  * Does NOT modify the stored values — display only.
+ *
+ * The 16-color team palette (constants/colors.js, TEAM_COLORS) is built at
+ * S=100% and L=55% (vif) / L=35% (profond) — exactly within these bounds —
+ * so it passes through unchanged (invariance property, contracts/models.md
+ * "Palette d'équipes"). Widening from [45%,55%] to [35%,65%] is what lets
+ * the deep tones (L=35%) survive the boost instead of being clamped up to
+ * 45% and drifting away from their contractual RGB value.
  *
  * @param {Array} rgbArray - [r, g, b] array (0-255)
  * @returns {string|null} Boosted "rgb(r,g,b)" string, or null on invalid input
@@ -24,12 +31,19 @@ export function boostTeamColor(rgbArray) {
     if (max === r) h = ((g - b) / delta) % 6
     else if (max === g) h = (b - r) / delta + 2
     else h = (r - g) / delta + 4
-    h = Math.round(h * 60)
+    // Fix (#113) : NE PAS arrondir h à un degré entier ici — cet arrondi
+    // intermédiaire cassait l'invariance RGB→HSL→RGB pour toute teinte non
+    // multiple de 60° (ex. 222°, 275°, 325°, 28°), décalant le résultat de
+    // ±1 sur un canal (bleu/violet/rose/orange-profond de la palette #113
+    // divergeaient chacun de 1 du RGB stocké). h ne sert qu'en interne pour
+    // reconstruire r1/g1/b1 ci-dessous — seul le résultat final est arrondi
+    // (toInt), donc garder h en flottant ne change rien au format de sortie.
+    h = h * 60
     if (h < 0) h += 360
   }
 
   s = Math.max(s, 0.95)        // was 0.70 — enforce vivid, non-pastel saturation
-  l = Math.min(Math.max(l, 0.45), 0.55) // was [0.40, 0.65] — tighter range for vivid colors
+  l = Math.min(Math.max(l, 0.35), 0.65) // was [0.45, 0.55] (#113) — lets deep tones (L=35%) through unclamped
 
   const c = (1 - Math.abs(2 * l - 1)) * s
   const x = c * (1 - Math.abs((h / 60) % 2 - 1))

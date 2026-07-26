@@ -23,6 +23,63 @@ Ce document décrit les structures de données utilisées par le serveur BuzzCon
 }
 ```
 
+## Team (Équipe) — v5.7.25, #113
+
+```typescript
+interface Team {
+  NAME: string                    // Nom de l'équipe
+  COLOR: number[]                 // Couleur RGB [R, G, B] (ex: [255, 26, 26])
+  COLOR_NAME?: string             // Clé palette (#113, ex: "rouge", "bleu-profond") — voir Palette d'équipes
+  SCORE: number                   // Score total (calculé: TEAM_POINTS + somme joueurs)
+  TEAM_POINTS: number             // Points équipe (indépendants des joueurs)
+  TIME: number                    // Timestamp du buzz (microsecondes, 0 si non buzzé)
+  STATUS: "READY" | "PAUSE"       // État de l'équipe
+  BUMPER: string                  // ID du bumper gagnant (après buzz)
+  READY: boolean                  // true si l'équipe est prête
+}
+```
+
+**Notes** :
+- `COLOR` = Tableau RGB `[R, G, B]` (entiers 0-255), jamais en hex
+- `COLOR_NAME` = Clé palette (#113 v5.7.25). **Écrit par le frontend** à chaque sélection ou attribution automatique. Permet résolution LED exacte (v5.7.25+). Absent sur équipes antérieures → fallback par teinte. Optionnel dans contrat, **toujours renseigné** par frontend courant.
+- `SCORE` = Total calculé (TEAM_POINTS + somme des scores joueurs)
+- `TEAM_POINTS` = Points attribués uniquement à l'équipe
+- `TIME` > 0 signifie qu'un joueur de l'équipe a buzzé
+- `BUMPER` = ID du premier joueur à buzzer
+- `READY` = true si l'équipe est prête (tous buzzers connectés)
+
+## Palette d'équipes — v5.7.25, #113
+
+16 couleurs = 8 teintes × 2 tons. Ton vif `S=100% L=55%`, ton profond `S=100% L=35%`.
+
+| Rang | Clé | Nom | RGB | Teinte |
+|------|-----|-----|-----|--------|
+| 1 | `rouge` | Rouge | `[255, 26, 26]` | 0° |
+| 2 | `orange` | Orange | `[255, 133, 26]` | 28° |
+| 3 | `jaune` | Jaune | `[255, 217, 26]` | 50° |
+| 4 | `vert` | Vert | `[26, 255, 83]` | 135° |
+| 5 | `cyan` | Cyan | `[26, 236, 255]` | 185° |
+| 6 | `bleu` | Bleu | `[26, 94, 255]` | 222° |
+| 7 | `violet` | Violet | `[159, 26, 255]` | 275° |
+| 8 | `rose` | Rose | `[255, 26, 159]` | 325° |
+| 9 | `rouge-profond` | Grenat | `[179, 0, 0]` | 0° |
+| 10 | `orange-profond` | Ambre | `[179, 83, 0]` | 28° |
+| 11 | `jaune-profond` | Or | `[179, 149, 0]` | 50° |
+| 12 | `vert-profond` | Émeraude | `[0, 179, 45]` | 135° |
+| 13 | `cyan-profond` | Turquoise | `[0, 164, 179]` | 185° |
+| 14 | `bleu-profond` | Marine | `[0, 54, 179]` | 222° |
+| 15 | `violet-profond` | Indigo | `[104, 0, 179]` | 275° |
+| 16 | `rose-profond` | Magenta | `[179, 0, 104]` | 325° |
+
+**Ordre d'attribution** : rangs 1→16 (8 tons vifs puis 8 tons profonds). Au-delà de 16 équipes, recycle au rang 1.
+
+**Invariant d'affichage** : ces 16 valeurs sont invariantes par `boostTeamColor()` (saturation déjà 100%, luminosité déjà dans [35%, 65%]). RGB stocké = RGB affiché.
+
+**Sources de vérité** :
+- Frontend : `web/src/constants/colors.js` (`TEAM_COLORS`)
+- Backend : `cmd/server/main.go` (`teamColorPalette`)
+- Contrat : `contracts/models.md` — **les deux sources doivent rester strictement identiques**
+
 ## Teams and Bumpers
 
 ```json
@@ -30,7 +87,8 @@ Ce document décrit les structures de données utilisées par le serveur BuzzCon
   "teams": {
     "team_id": {
       "NAME": "Team Name",
-      "COLOR": "#FF0000",
+      "COLOR": [255, 26, 26],
+      "COLOR_NAME": "rouge",
       "SCORE": 100,
       "TIME": 123456,
       "STATUS": "READY|PAUSE",

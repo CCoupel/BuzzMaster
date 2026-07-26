@@ -6,18 +6,8 @@ import Card from '../components/Card'
 import { OtaModal } from '../components/TeamCard'
 import ConnectionBadge from '../components/ConnectionBadge'
 import { getRgbColor } from '../utils/colorUtils'
+import { TEAM_COLORS, getNextTeamColor } from '../constants/colors'
 import './TeamsPage.css'
-
-const PRESET_COLORS = [
-  [239, 68, 68],    // Red
-  [249, 115, 22],   // Orange
-  [234, 179, 8],    // Yellow
-  [34, 197, 94],    // Green
-  [6, 182, 212],    // Cyan
-  [99, 102, 241],   // Indigo
-  [168, 85, 247],   // Purple
-  [236, 72, 153],   // Pink
-]
 
 // Answer colors for QCM mode
 const ANSWER_COLORS = {
@@ -58,11 +48,13 @@ export default function TeamsPage() {
   // Unassigned bumpers
   const unassignedBumpers = bumpersByTeam.unassigned || []
 
-  const handleTeamColorChange = (teamName, color) => {
+  // paletteColor : entrée TEAM_COLORS ({ key, label, rgb, deep }) — écrit COLOR
+  // ET COLOR_NAME (#113) pour que le backend résolve la LED exacte du buzzer.
+  const handleTeamColorChange = (teamName, paletteColor) => {
     updateConfig({
       teams: {
         ...teams,
-        [teamName]: { ...teams[teamName], COLOR: color }
+        [teamName]: { ...teams[teamName], COLOR: paletteColor.rgb, COLOR_NAME: paletteColor.key }
       }
     })
   }
@@ -107,11 +99,13 @@ export default function TeamsPage() {
 
   const handleAddTeam = () => {
     if (!newTeamName.trim()) return
-    const randomColor = PRESET_COLORS[Math.floor(Math.random() * PRESET_COLORS.length)]
+    // Attribution déterministe (#113) : première couleur de la palette 16
+    // entrées non portée par une équipe existante, recyclage au rang 1 au-delà.
+    const nextColor = getNextTeamColor(teams)
     updateConfig({
       teams: {
         ...teams,
-        [newTeamName.trim()]: { COLOR: randomColor, SCORE: 0 }
+        [newTeamName.trim()]: { COLOR: nextColor.rgb, COLOR_NAME: nextColor.key, SCORE: 0 }
       }
     })
     setNewTeamName('')
@@ -229,6 +223,14 @@ export default function TeamsPage() {
                 const teamBumpers = bumpersByTeam[name] || []
                 const rgbColor = getRgbColor(data.COLOR)
                 const isDropTarget = dragOverTarget === name
+                // Couleurs (#113) portées par une AUTRE équipe — marquées
+                // "déjà prise" (hachures) dans le sélecteur, sans être bloquées.
+                const otherTeamColorKeys = new Set(
+                  Object.entries(teams)
+                    .filter(([otherName]) => otherName !== name)
+                    .map(([, otherData]) => otherData.COLOR_NAME)
+                    .filter(Boolean)
+                )
 
                 return (
                   <motion.div
@@ -280,15 +282,27 @@ export default function TeamsPage() {
                       </div>
 
                       <div className="team-colors">
-                        {PRESET_COLORS.map((color, i) => (
-                          <button
-                            key={i}
-                            className={`color-swatch ${JSON.stringify(color) === JSON.stringify(data.COLOR) ? 'active' : ''}`}
-                            style={{ backgroundColor: `rgb(${color.join(',')})` }}
-                            onClick={() => handleTeamColorChange(name, color)}
-                            title="Changer la couleur"
-                          />
-                        ))}
+                        {TEAM_COLORS.map((paletteColor) => {
+                          // Repli RGB pour les équipes créées avant #113 (pas de COLOR_NAME).
+                          const isActive = data.COLOR_NAME
+                            ? data.COLOR_NAME === paletteColor.key
+                            : JSON.stringify(data.COLOR) === JSON.stringify(paletteColor.rgb)
+                          const isTaken = otherTeamColorKeys.has(paletteColor.key)
+                          const label = isTaken
+                            ? `${paletteColor.label} (déjà prise par une autre équipe)`
+                            : paletteColor.label
+                          return (
+                            <button
+                              key={paletteColor.key}
+                              type="button"
+                              className={`color-swatch ${isActive ? 'active' : ''} ${isTaken ? 'taken' : ''}`}
+                              style={{ backgroundColor: `rgb(${paletteColor.rgb.join(',')})` }}
+                              onClick={() => handleTeamColorChange(name, paletteColor)}
+                              title={label}
+                              aria-label={label}
+                            />
+                          )
+                        })}
                       </div>
 
                       {/* Team Members - Draggable */}

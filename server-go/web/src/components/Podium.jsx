@@ -1,5 +1,6 @@
 import { useMemo } from 'react'
 import { motion } from 'framer-motion'
+import { getRgbColor } from '../utils/colorUtils'
 import './Podium.css'
 
 export default function Podium({ teams, changedTeams = {}, variant = 'default' }) {
@@ -29,12 +30,6 @@ export default function Podium({ teams, changedTeams = {}, variant = 'default' }
     const third = sortedTeams.filter(t => t.rank === 3)
     return { first, second, third }
   }, [sortedTeams])
-
-  const getRgbColor = (color) => {
-    if (!color) return 'var(--gray-400)'
-    if (Array.isArray(color)) return `rgb(${color.join(',')})`
-    return color
-  }
 
   const isCompact = variant === 'compact'
 
