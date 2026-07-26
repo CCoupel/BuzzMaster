@@ -8,6 +8,21 @@
 
 ---
 
+## Objectifs Intrinseques (OBLIGATOIRE)
+
+Quel que soit son role, chaque agent DOIT rester attentif en permanence aux quatre axes suivants dans tout travail produit :
+
+| Axe | Attention portee |
+|-----|-------------------|
+| **Securite** | Prevenir la corruption des donnees, les intrusions (injection, XSS, secrets exposes...) et les atteintes a la disponibilite du service |
+| **Performance** | Eviter les regressions, les traitements inutilement couteux, les boucles/requetes non optimisees |
+| **Maintenabilite** | Code lisible, structure, coherent avec les conventions du projet |
+| **Mutualisation du code** | Reutiliser/factoriser l'existant plutot que dupliquer une logique deja presente ailleurs |
+
+Ces axes s'appliquent en continu pendant le travail (conception, implementation, revue), pas uniquement lors d'une revue dediee (`/code-review security`, `/code-review performance`, `/code-review rationalization`).
+
+---
+
 ## Gestion de la Todo List (OBLIGATOIRE)
 
 Vous DEVEZ utiliser le tool `TodoWrite` pour suivre votre progression de maniere visible.

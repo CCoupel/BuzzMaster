@@ -6,6 +6,17 @@ Historique des versions du projet BuzzControl.
 
 ---
 
+## [5.7.24] - 2026-07-26
+
+### Fixed
+- **Couleur du badge nom VJoueur** : restait figée sur la couleur de réponse QCM au lieu de suivre la couleur d'équipe (#112). Correction : la couleur d'équipe (`team.COLOR`) est désormais prioritaire dans `getPlayerNameColor()` de `VPlayerPage.jsx` ; la couleur de réponse (`bumper.ANSWER_COLOR`) ne sert que de repli en l'absence d'équipe assignée (mode solo résiduel).
+
+### Technical
+- `VPlayerPage.jsx` : inversion de la priorité — `team.COLOR` testé en premier, `bumper.ANSWER_COLOR` en repli.
+- `VPlayerPage.test.jsx` : nouveaux tests de régression (équipe assignée, changement d'équipe, réponses QCM successives).
+
+---
+
 ## [5.7.20] - 2026-07-25
 
 ### Added

@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, waitFor, act } from '@testing-library/react'
 import VPlayerPage from './VPlayerPage'
+import PlayerDisplay from './PlayerDisplay'
 import { useGame } from '../hooks/GameContext'
 
 // ---------------------------------------------------------------------------
@@ -35,7 +36,7 @@ vi.mock('nosleep.js', () => ({
   },
 }))
 
-vi.mock('./PlayerDisplay', () => ({ default: () => null }))
+vi.mock('./PlayerDisplay', () => ({ default: vi.fn(() => null) }))
 vi.mock('../components/ArdoiseKeyboard', () => ({ default: () => null }))
 
 // localStorage mock — voir EnrollPage.test.jsx pour le contexte (global
@@ -226,5 +227,183 @@ describe('VPlayerPage — rejet de reconnexion (ID périmé / NAME_TAKEN)', () =
     rerender(<VPlayerPage />)
 
     await waitFor(() => expect(rejectedMock.clearPlayerConnectStatus).toHaveBeenCalled())
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Régression (#112) : la couleur du badge nom du VJoueur doit toujours
+// correspondre à la couleur de son équipe, y compris après une réponse QCM.
+//
+// Le backend (engine.go, ProcessButtonPress) réassigne bumper.ANSWER_COLOR à
+// chaque réponse QCM et ne le réinitialise jamais — avant le fix, VPlayerPage
+// priorisait ANSWER_COLOR sur la couleur d'équipe pour le badge nom, ce qui le
+// faisait basculer définitivement sur la dernière couleur de réponse QCM au
+// lieu de team.COLOR, en incohérence avec l'admin/la TV.
+// ---------------------------------------------------------------------------
+describe('VPlayerPage — couleur du badge VJoueur = couleur d\'équipe (#112)', () => {
+  beforeEach(() => {
+    mockNavigate.mockClear()
+    vi.stubGlobal('localStorage', createLocalStorageMock())
+    localStorage.setItem('vplayer_name', 'Alice')
+    localStorage.setItem('vplayer_session', '1234567890')
+    useGame.mockReset()
+    PlayerDisplay.mockClear()
+  })
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it("utilise team.COLOR pour playerNameColor même si bumper.ANSWER_COLOR est déjà positionné (réponse QCM précédente)", () => {
+    const mock = makeGameMock({
+      bumpers: {
+        vjoueur_alice_123: {
+          NAME: 'Alice', IS_VIRTUAL: true, IS_VPLAYER: true, TEAM: 'red',
+          CONNECTED: true, ANSWER_COLOR: 'BLUE', TIME: 0,
+        },
+      },
+      teams: { red: { NAME: 'Les Rouges', COLOR: [239, 68, 68] } },
+    })
+    useGame.mockReturnValue(mock)
+
+    render(<VPlayerPage />)
+
+    const lastCallProps = PlayerDisplay.mock.calls.at(-1)[0]
+    expect(lastCallProps.playerNameColor).toBe('rgb(239,68,68)')
+    expect(lastCallProps.teamColor).toBe('rgb(239,68,68)')
+  })
+
+  it('retombe sur ANSWER_COLOR seulement si le VJoueur n\'a pas d\'équipe assignée', () => {
+    const mock = makeGameMock({
+      bumpers: {
+        vjoueur_alice_123: {
+          NAME: 'Alice', IS_VIRTUAL: true, IS_VPLAYER: true, TEAM: '',
+          CONNECTED: true, ANSWER_COLOR: 'BLUE', TIME: 0,
+        },
+      },
+      teams: {},
+    })
+    useGame.mockReturnValue(mock)
+
+    render(<VPlayerPage />)
+
+    const lastCallProps = PlayerDisplay.mock.calls.at(-1)[0]
+    expect(lastCallProps.playerNameColor).toBe('#3b82f6')
+  })
+
+  it("retourne null (pas de couleur) si le VJoueur n'a ni équipe assignée ni jamais répondu à une QCM", () => {
+    const mock = makeGameMock({
+      bumpers: {
+        vjoueur_alice_123: {
+          NAME: 'Alice', IS_VIRTUAL: true, IS_VPLAYER: true, TEAM: '',
+          CONNECTED: true, TIME: 0,
+        },
+      },
+      teams: {},
+    })
+    useGame.mockReturnValue(mock)
+
+    render(<VPlayerPage />)
+
+    const lastCallProps = PlayerDisplay.mock.calls.at(-1)[0]
+    expect(lastCallProps.playerNameColor).toBeNull()
+    expect(lastCallProps.teamColor).toBeNull()
+  })
+
+  it("suit un changement d'équipe en cours de partie (réassignation admin) sans rester figé sur l'ancienne couleur ni sur ANSWER_COLOR", () => {
+    const baseBumper = {
+      NAME: 'Alice', IS_VIRTUAL: true, IS_VPLAYER: true,
+      CONNECTED: true, ANSWER_COLOR: 'BLUE', TIME: 0,
+    }
+    const teamsBoth = {
+      red: { NAME: 'Les Rouges', COLOR: [239, 68, 68] },
+      blue: { NAME: 'Les Bleus', COLOR: [59, 130, 246] },
+    }
+
+    useGame.mockReturnValue(makeGameMock({
+      bumpers: { vjoueur_alice_123: { ...baseBumper, TEAM: 'red' } },
+      teams: teamsBoth,
+    }))
+    const { rerender } = render(<VPlayerPage />)
+
+    expect(PlayerDisplay.mock.calls.at(-1)[0].playerNameColor).toBe('rgb(239,68,68)')
+
+    // L'admin réassigne Alice à l'équipe bleue en cours de partie — ANSWER_COLOR
+    // (toujours BLUE côté backend, jamais réinitialisé) ne doit jamais être
+    // confondu avec ce changement d'équipe légitime.
+    useGame.mockReturnValue(makeGameMock({
+      bumpers: { vjoueur_alice_123: { ...baseBumper, TEAM: 'blue' } },
+      teams: teamsBoth,
+    }))
+    rerender(<VPlayerPage />)
+
+    const lastCallProps = PlayerDisplay.mock.calls.at(-1)[0]
+    expect(lastCallProps.playerNameColor).toBe('rgb(59,130,246)')
+    expect(lastCallProps.teamColor).toBe('rgb(59,130,246)')
+  })
+
+  it('reste sur team.COLOR à travers une reconnexion (perte réseau puis retour) malgré ANSWER_COLOR déjà positionné', () => {
+    const teams = { red: { NAME: 'Les Rouges', COLOR: [239, 68, 68] } }
+
+    useGame.mockReturnValue(makeGameMock({
+      bumpers: {
+        vjoueur_alice_123: {
+          NAME: 'Alice', IS_VIRTUAL: true, IS_VPLAYER: true, TEAM: 'red',
+          CONNECTED: true, ANSWER_COLOR: 'GREEN', TIME: 0,
+        },
+      },
+      teams,
+    }))
+    const { rerender } = render(<VPlayerPage />)
+    expect(PlayerDisplay.mock.calls.at(-1)[0].playerNameColor).toBe('rgb(239,68,68)')
+
+    // Perte réseau : le bumper reste dans l'état (CONNECTED bascule à false),
+    // ANSWER_COLOR inchangé — le badge doit rester sur la couleur d'équipe.
+    useGame.mockReturnValue(makeGameMock({
+      bumpers: {
+        vjoueur_alice_123: {
+          NAME: 'Alice', IS_VIRTUAL: true, IS_VPLAYER: true, TEAM: 'red',
+          CONNECTED: false, ANSWER_COLOR: 'GREEN', TIME: 0,
+        },
+      },
+      teams,
+    }))
+    rerender(<VPlayerPage />)
+    expect(PlayerDisplay.mock.calls.at(-1)[0].playerNameColor).toBe('rgb(239,68,68)')
+
+    // Retour réseau : reconnexion, toujours la couleur d'équipe.
+    useGame.mockReturnValue(makeGameMock({
+      bumpers: {
+        vjoueur_alice_123: {
+          NAME: 'Alice', IS_VIRTUAL: true, IS_VPLAYER: true, TEAM: 'red',
+          CONNECTED: true, ANSWER_COLOR: 'GREEN', TIME: 0,
+        },
+      },
+      teams,
+    }))
+    rerender(<VPlayerPage />)
+    expect(PlayerDisplay.mock.calls.at(-1)[0].playerNameColor).toBe('rgb(239,68,68)')
+  })
+
+  it("reste sur team.COLOR à travers plusieurs réponses QCM successives (ANSWER_COLOR change à chaque question)", () => {
+    const teams = { red: { NAME: 'Les Rouges', COLOR: [239, 68, 68] } }
+    const bumperWith = (answerColor) => ({
+      vjoueur_alice_123: {
+        NAME: 'Alice', IS_VIRTUAL: true, IS_VPLAYER: true, TEAM: 'red',
+        CONNECTED: true, ANSWER_COLOR: answerColor, TIME: 0,
+      },
+    })
+
+    useGame.mockReturnValue(makeGameMock({ bumpers: bumperWith('RED'), teams }))
+    const { rerender } = render(<VPlayerPage />)
+    expect(PlayerDisplay.mock.calls.at(-1)[0].playerNameColor).toBe('rgb(239,68,68)')
+
+    useGame.mockReturnValue(makeGameMock({ bumpers: bumperWith('YELLOW'), teams }))
+    rerender(<VPlayerPage />)
+    expect(PlayerDisplay.mock.calls.at(-1)[0].playerNameColor).toBe('rgb(239,68,68)')
+
+    useGame.mockReturnValue(makeGameMock({ bumpers: bumperWith('GREEN'), teams }))
+    rerender(<VPlayerPage />)
+    expect(PlayerDisplay.mock.calls.at(-1)[0].playerNameColor).toBe('rgb(239,68,68)')
   })
 })

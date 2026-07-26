@@ -314,14 +314,22 @@ export default function VPlayerPage() {
     sendMessage('VPLAYER_QCM_ANSWER', { ID: bumper.id, ANSWER_COLOR: color })
   }
 
-  // Get player name color - use team color (VPlayers have no dedicated ANSWER_COLOR)
+  // Get player name color - always use team color when assigned (#112).
+  // Fix #112 : bumper.ANSWER_COLOR n'est pas dédié à l'identité du VJoueur —
+  // il est réassigné par le backend à chaque réponse QCM (ProcessButtonPress,
+  // engine.go) et n'est jamais réinitialisé entre les questions. Le prioriser
+  // faisait basculer le badge nom du VJoueur sur sa dernière couleur de
+  // réponse QCM au lieu de la couleur de son équipe, en incohérence avec
+  // l'admin et la TV qui affichent toujours team.COLOR. La couleur d'équipe
+  // doit donc toujours primer ; ANSWER_COLOR ne sert plus que de repli pour
+  // un VJoueur sans équipe assignée (mode solo).
   const getPlayerNameColor = () => {
-    if (bumper?.ANSWER_COLOR && ANSWER_COLORS[bumper.ANSWER_COLOR]) {
-      return ANSWER_COLORS[bumper.ANSWER_COLOR]
-    }
-    // Fallback to team color for VPlayers
     if (team?.COLOR) {
       return `rgb(${team.COLOR.join(',')})`
+    }
+    // Fallback for unassigned/solo VPlayers
+    if (bumper?.ANSWER_COLOR && ANSWER_COLORS[bumper.ANSWER_COLOR]) {
+      return ANSWER_COLORS[bumper.ANSWER_COLOR]
     }
     return null
   }

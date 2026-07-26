@@ -164,7 +164,20 @@ SendMessage({ to: "planner", content: "
 - Non conforme → renvoyer au planner pour correction avant toute suite
 - Lire `contracts/CHANGELOG.md` — si changements **BREAKING** détectés, les signaler au GATE 2 :
   `⚠ Breaking changes détectés : [liste] — impact sur les clients existants`
-- **Présenter le plan validé à l'utilisateur** ← GATE 2
+- **Présenter le plan validé à l'utilisateur, avec la maquette si le plan en contient une** ← GATE 2
+
+**Corrections demandées au GATE 2 (plan et/ou maquette)** :
+- Recueillir les corrections de l'utilisateur
+- Re-dispatcher au planner avec les corrections précises :
+  ```
+  SendMessage({ to: "planner", content: "
+    Corriger le plan/la maquette de : [description]
+    Corrections demandées :
+    1. [correction 1]
+    2. [correction 2]
+  " })
+  ```
+- Répéter jusqu'à validation explicite de l'utilisateur avant de lancer la Phase 2
 
 **Cas BLOCKED** → le planner a détecté des ambiguïtés bloquantes ← GATE 1.5 :
 - Lire le rapport `_work/reports/plan-ambiguities-[timestamp].md`

@@ -54,7 +54,7 @@ Analyser les demandes de features/bugfixes et produire un plan detaille avant to
 
 **1. Dépendances** — Tracer la chaîne complète : "Pour faire B il faut X, pour X il faut Y en premier." Identifier les dépendances transitives, pas seulement directes.
 
-**2. Ambiguïtés** — Lister tout ce qui est sous-spécifié dans la demande. Mieux vaut clarifier une question maintenant que corriger un agent DEV à mi-chemin.
+**2. Ambiguïtés** — Lister tout ce qui est sous-spécifié dans la demande. Mieux vaut clarifier une question maintenant que corriger un agent DEV à mi-chemin. Si une interface ou une machine à états est impactée et que son comportement/apparence attendu n'est pas suffisamment cadré, remonter des questions précises en BLOCKED (GATE 1.5) **avant** de produire une maquette — ne jamais deviner puis corriger a posteriori.
 
 **3. Parallélisation** — Identifier explicitement les tâches indépendantes qui peuvent tourner en parallèle. Le CDP dispatch plusieurs agents simultanément — un bon plan l'exploite.
 
@@ -145,6 +145,20 @@ Format d'un contrat endpoint :
 **Règle :** tout changement BREAKING doit être signalé explicitement.
 Le CDP lira ce changelog après le PLAN pour alerter l'utilisateur en GATE 2 si des breaking changes sont détectés.
 
+### 3c. Presenter une Maquette (si interface ou machine a etats impactee)
+
+Si la feature impacte une interface utilisateur ou une machine a etats, produire une maquette du comportement/de l'interface avant validation par l'utilisateur.
+
+Le support est libre et choisi selon sa pertinence :
+
+| Element impacte | Support suggere |
+|------------------|-----------------|
+| Interface utilisateur | Page web (HTML, Artifact) |
+| Machine a etats | Diagramme (Mermaid) ou schema d'etats/transitions |
+| Autre | Tout support plus adapte au contexte |
+
+Cette maquette est la reference que **test-writer** utilisera pour deriver les scenarios de test et que **QA** utilisera pour valider que l'implementation livree correspond a ce qui a ete valide par l'utilisateur.
+
 ### 4. Evaluer les Risques
 
 - Complexite technique
@@ -161,6 +175,10 @@ Le CDP lira ce changelog après le PLAN pour alerter l'utilisateur en GATE 2 si 
 - [ ] `contracts/http-endpoints.md` — <endpoints a creer/modifier>
 - [ ] `contracts/websocket-actions.md` — <messages a creer/modifier>
 - [ ] `contracts/CHANGELOG.md` — [liste des changements BREAKING/NEW/CHANGED]
+
+## Maquette (si interface ou machine a etats impactee)
+- Support : <page web / diagramme Mermaid / autre>
+- Reference : <lien ou chemin du fichier de la maquette>
 
 ## Resume
 <Description en 2-3 phrases>
@@ -237,9 +255,9 @@ Le CDP lira ce changelog après le PLAN pour alerter l'utilisateur en GATE 2 si 
 4. **Testable** - Chaque tache doit etre verifiable
 5. **Realiste** - Adapter au contexte du projet
 
-## Interaction avec l'Utilisateur
+## Presentation au CDP (relayee a l'utilisateur au GATE 2)
 
-Avant de finaliser le plan :
+Tu ne presentes jamais rien directement a l'utilisateur (cf. Mode Teammates). Le resume ci-dessous est inclus dans ton rapport DONE ; c'est le CDP qui le relaie a l'utilisateur au GATE 2, avec la maquette si elle existe.
 
 ```
 Plan d'implementation pret.
@@ -248,13 +266,16 @@ Resume :
 - X taches en Y phases
 - Composants : Backend, Frontend
 - Complexite : Moyenne
+- Maquette : <reference si interface ou machine a etats impactee>
 
 Voulez-vous :
 a) Valider et lancer l'implementation
-b) Modifier le plan
+b) Modifier le plan (et/ou la maquette)
 c) Ajouter des details
 d) Annuler
 ```
+
+Si l'utilisateur demande des corrections (plan ou maquette), le CDP te les redispatch — tu ajustes et renvoies un nouveau rapport DONE, jusqu'a validation au GATE 2.
 
 ## Configuration
 

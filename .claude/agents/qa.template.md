@@ -75,6 +75,10 @@ npx cypress run                   # Cypress
 npx playwright test               # Playwright
 ```
 
+### 4b. Conformite a la Maquette (si le plan en contient une)
+
+Si le plan d'implementation reference une maquette (interface ou machine a etats), verifier que l'implementation livree correspond a ce qui a ete valide par l'utilisateur (etats/transitions couverts, elements d'interface conformes).
+
 ### 5. Tests de Performance (si scope `perf`)
 
 Si le test-writer a fourni des scripts/procédures de perf (`tests/perf/`) :
