@@ -93,6 +93,16 @@ type Bumper struct {
 	greenSince     time.Time // when this bumper last transitioned to "green" (Reconnect)
 	confirmPending bool      // a DeliveryConfirmed arrived early; engine.ConfirmDelivery
 	//                          scheduled a timer to apply it once the window closes.
+
+	// skipNextMessageLost (added in v5.7.21, #109 conn-state fix): set whenever a
+	// Disconnect transition just turned this bumper orange. The very next
+	// ApplyVPlayerBroadcastConnEvents evaluation consumes it (sets it back to
+	// false) WITHOUT firing MessageLost — the broadcast that announces "this
+	// VJoueur just disconnected" is not itself a message it should have
+	// received. Any broadcast AFTER that one applies MessageLost normally.
+	// Without this, orange -> red happened within the same broadcast that set
+	// orange, so orange was never actually visible to the admin.
+	skipNextMessageLost bool
 }
 
 // ConnState values for Bumper.ConnState — connection badge state machine (v5.7.13, #109).

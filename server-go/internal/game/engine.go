@@ -90,6 +90,11 @@ func transitionConnUnsafe(b *Bumper, event ConnEvent) {
 	case ConnEventDisconnect:
 		if b.ConnState == ConnStateHidden || b.ConnState == ConnStateGreen {
 			b.ConnState = ConnStateOrange
+			// The broadcast that announces this disconnect is not itself a
+			// message this VJoueur should have received — give it a one-time
+			// pass so ORANGE is actually visible before any real MessageLost
+			// can apply (see ApplyVPlayerBroadcastConnEvents / conn-state fix).
+			b.skipNextMessageLost = true
 		}
 	case ConnEventReconnect:
 		if b.ConnState == ConnStateOrange || b.ConnState == ConnStateRed {
@@ -240,6 +245,14 @@ func (e *Engine) ApplyVPlayerBroadcastConnEvents() {
 			continue
 		}
 		if !b.Connected {
+			if b.skipNextMessageLost {
+				// This is the broadcast announcing the disconnect itself (see
+				// transitionConnUnsafe's Disconnect case) — consume the pass
+				// without firing MessageLost, so ORANGE is actually visible
+				// before any real "message they missed" can turn it RED.
+				b.skipNextMessageLost = false
+				continue
+			}
 			applyConnEventUnsafe(b, ConnEventMessageLost)
 			continue
 		}
