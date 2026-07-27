@@ -1,22 +1,22 @@
 {
-  "type": "FEATURE",
-  "description": "feat(teams): ajouter 15-16 couleurs d'équipe distinctes et reconnaissables",
-  "branch": "feature/team-colors-palette",
-  "version": "5.7.24",
-  "started_at": "2026-07-26T11:49:00Z",
+  "type": "BUGFIX",
+  "description": "PROD v5.8.0 — squash-merge groupé #112 (couleur VJoueur=équipe) + #113 (palette 16 couleurs) + #115 (fonts embarquées, air-gapped)",
+  "branch": "main",
+  "version": "5.8.0",
+  "started_at": "2026-07-26T17:30:00Z",
   "cycles": 1,
-  "issue_nums": [113],
+  "issue_nums": [112, 113, 115],
   "milestone_num": 17,
   "phases": {
     "clarification": { "status": "completed", "skipped": false },
-    "plan":          { "status": "completed", "report": "_work/reports/plan-20260726-121500.md", "mockup": "_work/mockups/113-team-colors-palette.html" },
-    "dev-backend":   { "status": "completed", "sha": "7c0fd6a", "handoff": "_work/handoff/dev-backend-20260726-131500.md", "note": "fast-follow B3-MEMORY, prior_sha e4e5c12" },
-    "dev-frontend":  { "status": "completed", "sha": "dd4b5d6", "handoff": "_work/handoff/dev-frontend-20260726-122232.md" },
-    "test-writer":   { "status": "completed", "sha": "1646494", "handoff": "_work/handoff/test-writer-20260726-123346.md" },
-    "review":        { "status": "completed", "verdict": "APPROVED", "report": "_work/reports/code-reviewer-20260726-131940.md", "note": "initial APPROVED WITH RESERVATIONS (_work/reports/code-reviewer-20260726-125144.md) resolved by fast-follow" },
-    "qa":            { "status": "completed", "verdict": "VALIDATED WITH RESERVATIONS", "report": "_work/reports/qa-20260726-132800.md" },
-    "doc":           { "status": "completed", "sha": "52206d9", "handoff": "_work/handoff/doc-updater-20260726-141530.md", "note": "docs a46c07f + contrats 52206d9" },
-    "deploy-qualif": { "status": "completed", "sha": "52206d9", "report": "QUALIF_REPORT_v5.7.25.md", "result": "QUALIFIÉ AVEC RÉSERVES — scénarios manuels/matériel non exécutables en sandbox" },
-    "deploy-prod":   { "status": "in_progress", "note": "squash-merge groupé #112+#113+#115 vers v5.8.0" }
+    "deploy-prod": {
+      "status": "completed",
+      "sha": "b6c3692",
+      "tag": "v5.8.0",
+      "ci_run": "30213915567",
+      "report": "_work/reports/deploy-prod-20260726-200726.md",
+      "release_url": "https://github.com/CCoupel/BuzzMaster/releases/tag/v5.8.0",
+      "note": "vérifié indépendamment : tag v5.8.0 présent, main = b6c3692, #112/#113/#115 CLOSED, milestone v5.8.x 4 closed / 1 open (#117 restant)"
+    }
   }
 }
