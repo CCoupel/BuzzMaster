@@ -2614,10 +2614,19 @@ func (e *Engine) SetArdoiseAnswer(teamName string, text string) bool {
 		return false
 	}
 
-	// Store answer with microsecond timestamp
+	// StartedAt is frozen at the first non-empty text received for this team/question
+	// (#117): it must survive subsequent keystrokes, including a full clear-and-retype.
+	// SubmittedAt, in contrast, is overwritten on every call.
+	now := time.Now().UnixMicro()
+	startedAt := e.state.ArdoiseAnswers[teamName].StartedAt
+	if startedAt == 0 && text != "" {
+		startedAt = now
+	}
+
 	e.state.ArdoiseAnswers[teamName] = ArdoiseAnswer{
 		Text:        text,
-		SubmittedAt: time.Now().UnixMicro(),
+		StartedAt:   startedAt,
+		SubmittedAt: now,
 	}
 	return true
 }

@@ -381,9 +381,23 @@ type KeyboardType = "AZERTY" | "NUMPAD"
 ```typescript
 interface ArdoiseAnswer {
   TEXT: string         // Texte saisi par l'équipe (full content, pas delta)
+  STARTED_AT: number   // Timestamp en microsecondes du PREMIER caractère (figé, #117)
   SUBMITTED_AT: number // Timestamp en microsecondes (dernière mise à jour)
 }
 ```
+
+**`STARTED_AT` (#117)** — instant de réception du premier `ARDOISE_INPUT` porteur d'un texte
+non vide pour cette équipe et cette question.
+
+- Écrit **une seule fois**, jamais réécrit tant que la question courante ne change pas — c'est ce
+  qui le distingue de `SUBMITTED_AT`, réécrit à chaque frappe.
+- Un effacement complet suivi d'une nouvelle saisie **ne réinitialise pas** `STARTED_AT` :
+  l'ordre reflète le moment où l'équipe s'est lancée, pas celui de sa dernière version.
+- Remis à zéro avec le reste de `ARDOISE_ANSWERS` au changement de question.
+- Référence de calcul du délai affiché : `GameState.TIME` (départ de la question), même
+  convention que les temps de réaction au buzzer.
+- Vaut `0` pour une réponse enregistrée avant la v5.8.x — le frontend doit alors se replier sur
+  `SUBMITTED_AT` pour l'ordre et masquer le délai.
 
 ### Question.ARDOISE_KEYBOARD_TYPE
 

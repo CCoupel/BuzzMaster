@@ -6,6 +6,23 @@ Historique des versions du projet BuzzControl.
 
 ---
 
+## [5.8.1] - 2026-07-27
+
+Bugfix : réponses ARDOISE (saisie libre) triées par ordre chronologique d'arrivée avec affichage du délai de réponse.
+
+### Fixed
+- **Ordre des réponses ARDOISE** : réponses affichées dans l'ordre chronologique de réception (premier caractère non vide) au lieu de l'ordre de la liste d'équipes. Ajout du champ `ArdoiseAnswer.STARTED_AT` (timestamp microseconde du premier caractère, figé à la première saisie) — le tri utilise ce timestamp dans le panneau admin (#117).
+- **Délai de réponse visible** : nouveau badge affichant le délai entre le départ de la question et le premier caractère saisi, en secondes avec 3 décimales (ex: `4.732 s`), homogène avec les temps de réaction buzzer. Visible uniquement dans le panneau admin ARDOISE, scope limité aux réponses reçues (équipes sans réponse ne portent pas de délai) (#117).
+- **Premier caractère ARDOISE émis immédiatement** : la première frappe est désormais envoyée au serveur sans délai (synchrone), au lieu d'attendre 200 ms sans frappe. Les frappes suivantes restent régulées par le debounce 200 ms. Aucun changement de format de message — seule la cadence d'émission du **premier** caractère change (#117).
+
+### Technical
+- **Backend** : nouveau champ `ArdoiseAnswer.STARTED_AT` (int64 microseconde, jamais `omitempty`), figé lors du premier appel non-vide à `SetArdoiseAnswer`. Réarmé uniquement au changement de question.
+- **Frontend (VPlayerPage.jsx)** : nouveau flag `ardoiseFirstSentRef` qui déclenche un envoi synchrone pour la première frappe, puis remise à `false` lors du changement de question ou passage en phase `PREPARE`/`STARTED`.
+- **Frontend (GamePage.jsx)** : nouveau `useMemo sortedArdoiseEntries` triant par `STARTED_AT` croissant (repli sur `SUBMITTED_AT` si `STARTED_AT = 0`), avec fonction `formatArdoiseDelay()` calculant `(STARTED_AT - gameTime) / 1000000` en secondes. Aucune modification TV — périmètre limité à l'admin.
+- Tests : 9 tests backend validant gel sur premier caractère, repli sur `SUBMITTED_AT`, réarmement au changement de question ; 4 tests frontend validant l'émission immédiate du premier caractère et le repli sur second caractère après vidage.
+
+---
+
 ## [5.8.0] - 2026-07-26
 
 Release PROD consolidant 3 tickets du milestone v5.8.x (livrés séparément en QUALIF sous les

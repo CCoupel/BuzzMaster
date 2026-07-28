@@ -41,6 +41,10 @@ export default function VPlayerPage() {
   const [ardoiseText, setArdoiseText] = useState('')
   const ardoiseThrottleRef = useRef(null)
   const prevPhaseRef = useRef(null)
+  // ARDOISE #117: true once the first non-empty ARDOISE_INPUT has been sent for the
+  // current question, so the server can timestamp STARTED_AT on the real first
+  // keystroke instead of the first post-debounce pause.
+  const ardoiseFirstSentRef = useRef(false)
 
   // Load session from localStorage on mount
   useEffect(() => {
@@ -207,6 +211,7 @@ export default function VPlayerPage() {
   useEffect(() => {
     setArdoiseText('')
     if (ardoiseThrottleRef.current) clearTimeout(ardoiseThrottleRef.current)
+    ardoiseFirstSentRef.current = false
   }, [gameState.question?.ID])
 
   // ARDOISE: reset on PREPARE (covers replaying the same question + race conditions)
@@ -214,7 +219,15 @@ export default function VPlayerPage() {
     if (gameState.phase !== 'PREPARE') return
     setArdoiseText('')
     if (ardoiseThrottleRef.current) clearTimeout(ardoiseThrottleRef.current)
+    ardoiseFirstSentRef.current = false
   }, [gameState.phase])
+
+  // ARDOISE #117: also rearm the immediate-first-send flag on entry into STARTED, so a
+  // question restarted without passing through PREPARE still measures the real first key.
+  useEffect(() => {
+    if (gameState.phase !== 'STARTED') return
+    ardoiseFirstSentRef.current = false
+  }, [gameState.phase, gameState.question?.ID])
 
   // ARDOISE: forced flush on phase change from STARTED → anything else
   useEffect(() => {
@@ -228,10 +241,17 @@ export default function VPlayerPage() {
     }
   }, [gameState.phase, ardoiseText, sendMessage, bumper])
 
-  // ARDOISE: handle key input — update local state + throttled send
+  // ARDOISE: handle key input — update local state + debounced send (#117: except the
+  // very first non-empty character for the current question, sent immediately so the
+  // server timestamps STARTED_AT on the real first keystroke, not the first typing pause).
   const handleArdoiseChange = useCallback((text) => {
     setArdoiseText(text)
     if (ardoiseThrottleRef.current) clearTimeout(ardoiseThrottleRef.current)
+    if (!ardoiseFirstSentRef.current && text !== '') {
+      ardoiseFirstSentRef.current = true
+      sendMessage('ARDOISE_INPUT', { TEXT: text, ID: bumper?.id })
+      return
+    }
     ardoiseThrottleRef.current = setTimeout(() => {
       sendMessage('ARDOISE_INPUT', { TEXT: text, ID: bumper?.id })
     }, 200)

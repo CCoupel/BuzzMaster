@@ -15,6 +15,17 @@ import QuestionCard from '../components/QuestionCard'
 import NetworkWarningBanner from '../components/NetworkWarningBanner'
 import './GamePage.css'
 
+// ARDOISE panel: delay since question start, from the first-keystroke timestamp (#117).
+// Mirrors the buzzer reaction-time convention (microseconds → seconds, 3 decimals).
+// Returns null when there is nothing meaningful to show (no STARTED_AT, no reference
+// gameTime, or a negative delay caused by a resync/replay).
+function formatArdoiseDelay(answer, gameTime) {
+  if (!answer || !answer.STARTED_AT || !gameTime) return null
+  const delaySeconds = (answer.STARTED_AT - gameTime) / 1000000
+  if (!Number.isFinite(delaySeconds) || delaySeconds < 0) return null
+  return `${delaySeconds.toFixed(3)} s`
+}
+
 export default function GamePage() {
   const {
     gameState,
@@ -158,6 +169,27 @@ export default function GamePage() {
     displayTeams.filter(team => vplayerTeamNames.has(team.name)),
     [displayTeams, vplayerTeamNames]
   )
+
+  // ARDOISE panel: teams with an answer first, ordered by first-keystroke arrival (#117).
+  // Falls back to SUBMITTED_AT when STARTED_AT is 0 (answers recorded before this fix).
+  // Teams without an answer keep the current team-list order, appended at the end.
+  const sortedArdoiseEntries = useMemo(() => {
+    const answers = gameState.ARDOISE_ANSWERS || {}
+    const answered = []
+    const unanswered = []
+    vplayerTeams.forEach((team, idx) => {
+      const teamName = team.NAME || team.name
+      const answer = answers[teamName]
+      if (answer) {
+        const orderKey = answer.STARTED_AT > 0 ? answer.STARTED_AT : answer.SUBMITTED_AT
+        answered.push({ team, teamName, answer, orderKey, idx })
+      } else {
+        unanswered.push({ team, teamName, answer: null, idx })
+      }
+    })
+    answered.sort((a, b) => (a.orderKey - b.orderKey) || (a.idx - b.idx))
+    return [...answered, ...unanswered]
+  }, [vplayerTeams, gameState.ARDOISE_ANSWERS])
 
   // Sort questions by ORDER if available, otherwise by ID
   const sortedQuestions = useMemo(() => {
@@ -634,16 +666,17 @@ export default function GamePage() {
           <div className="ardoise-team-zone">
             <div className="memory-selector-label">Réponses ARDOISE</div>
             <div className="ardoise-answers-list">
-              {vplayerTeams.map((team) => {
-                const teamName = team.NAME || team.name
-                const answer = (gameState.ARDOISE_ANSWERS || {})[teamName]
+              {sortedArdoiseEntries.map(({ team, teamName, answer }, rank) => {
                 const teamColor = getRgbColor(team.COLOR)
                 const defaultPts = parseInt(gameState.question?.POINTS) || pointsInput
+                const delayLabel = answer ? formatArdoiseDelay(answer, gameState.gameTime) : null
                 return (
                   <div key={teamName} className={`ardoise-answer-row ${answer ? 'has-answer' : 'no-answer'}`}>
                     <div className="ardoise-answer-team-name">
+                      {answer && <span className="ardoise-answer-rank">{rank + 1}</span>}
                       <span className="ardoise-team-dot" style={{ background: teamColor }} />
                       <span style={{ color: teamColor }}>{teamName}</span>
+                      {delayLabel && <span className="ardoise-answer-delay">{delayLabel}</span>}
                     </div>
                     <div className="ardoise-answer-text-row">
                       <span className={`ardoise-answer-text ${answer ? 'has-answer' : 'no-answer'}`}>

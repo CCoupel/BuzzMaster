@@ -152,6 +152,7 @@ const (
 // ArdoiseAnswer holds a team's free-text answer for an ARDOISE question
 type ArdoiseAnswer struct {
 	Text        string `json:"TEXT"`         // Current answer text
+	StartedAt   int64  `json:"STARTED_AT"`   // Timestamp in microseconds of the FIRST non-empty character (frozen, #117)
 	SubmittedAt int64  `json:"SUBMITTED_AT"` // Timestamp in microseconds (last update)
 }
 

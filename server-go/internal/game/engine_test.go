@@ -2137,6 +2137,308 @@ func TestNewEngine_ArdoiseAnswersInitialized(t *testing.T) {
 	}
 }
 
+// ─── ArdoiseAnswer.STARTED_AT tests (#117) ──────────────────────────────────
+//
+// Contrat : contracts/models.md — ArdoiseAnswer.STARTED_AT
+// StartedAt fige l'instant du PREMIER caractère non vide reçu pour une
+// équipe sur la question courante. Contrairement à SubmittedAt (réécrit à
+// chaque frappe), StartedAt ne doit plus jamais bouger une fois posé — c'est
+// la garantie qui permet un tri chronologique fiable côté admin.
+
+// TestSetArdoiseAnswer_StartedAt_SetOnFirstNonEmptyText verifies that the
+// very first call carrying non-empty text stamps StartedAt, and that it
+// equals SubmittedAt on that same call (nothing to distinguish them yet).
+func TestSetArdoiseAnswer_StartedAt_SetOnFirstNonEmptyText(t *testing.T) {
+	e := NewEngine()
+	e.SetTeams(map[string]*Team{
+		"teamA": {Name: "teamA", Color: []int{255, 0, 0}},
+	})
+	e.SetBumpers(map[string]*Bumper{
+		"b1": {Name: "Player1", Team: "teamA"},
+	})
+
+	q := &Question{ID: "aq1", Type: QuestionTypeArdoise, Points: "10", Time: "30"}
+	e.Ready("aq1", q)
+	e.StartImmediate(30)
+
+	ok := e.SetArdoiseAnswer("teamA", "P")
+	if !ok {
+		t.Fatal("SetArdoiseAnswer should return true in STARTED phase with ARDOISE question")
+	}
+
+	state := e.GetState()
+	answer, exists := state.ArdoiseAnswers["teamA"]
+	if !exists {
+		t.Fatal("ArdoiseAnswers should contain teamA after SetArdoiseAnswer")
+	}
+	if answer.StartedAt <= 0 {
+		t.Fatalf("StartedAt should be > 0 after first non-empty text, got %d", answer.StartedAt)
+	}
+	if answer.StartedAt != answer.SubmittedAt {
+		t.Errorf("StartedAt should equal SubmittedAt on the very first call, got StartedAt=%d SubmittedAt=%d", answer.StartedAt, answer.SubmittedAt)
+	}
+}
+
+// TestSetArdoiseAnswer_StartedAt_UnchangedOnSubsequentCalls verifies that
+// StartedAt is frozen after the first non-empty write, while SubmittedAt
+// keeps tracking the last update.
+func TestSetArdoiseAnswer_StartedAt_UnchangedOnSubsequentCalls(t *testing.T) {
+	e := NewEngine()
+	e.SetTeams(map[string]*Team{
+		"teamA": {Name: "teamA", Color: []int{255, 0, 0}},
+	})
+	e.SetBumpers(map[string]*Bumper{
+		"b1": {Name: "Player1", Team: "teamA"},
+	})
+
+	q := &Question{ID: "aq1", Type: QuestionTypeArdoise, Points: "10", Time: "30"}
+	e.Ready("aq1", q)
+	e.StartImmediate(30)
+
+	e.SetArdoiseAnswer("teamA", "P")
+	firstState := e.GetState()
+	firstStartedAt := firstState.ArdoiseAnswers["teamA"].StartedAt
+	firstSubmittedAt := firstState.ArdoiseAnswers["teamA"].SubmittedAt
+
+	time.Sleep(2 * time.Millisecond)
+	e.SetArdoiseAnswer("teamA", "Pa")
+	time.Sleep(2 * time.Millisecond)
+	e.SetArdoiseAnswer("teamA", "Par")
+
+	finalState := e.GetState()
+	finalAnswer := finalState.ArdoiseAnswers["teamA"]
+
+	if finalAnswer.StartedAt != firstStartedAt {
+		t.Errorf("StartedAt should stay frozen across subsequent calls, got %d want %d", finalAnswer.StartedAt, firstStartedAt)
+	}
+	if finalAnswer.SubmittedAt <= firstSubmittedAt {
+		t.Errorf("SubmittedAt should keep advancing on subsequent calls, got %d want > %d", finalAnswer.SubmittedAt, firstSubmittedAt)
+	}
+	if finalAnswer.Text != "Par" {
+		t.Errorf("Expected final text 'Par', got %q", finalAnswer.Text)
+	}
+}
+
+// TestSetArdoiseAnswer_StartedAt_EmptyTextDoesNotStartClock verifies that a
+// first call with an empty string does not stamp StartedAt — the clock
+// starts only when actual text is received. This also covers the "STARTED_AT
+// present in JSON even at 0" requirement: the map entry exists (Text="")
+// with StartedAt still at its zero value.
+func TestSetArdoiseAnswer_StartedAt_EmptyTextDoesNotStartClock(t *testing.T) {
+	e := NewEngine()
+	e.SetTeams(map[string]*Team{
+		"teamA": {Name: "teamA", Color: []int{255, 0, 0}},
+	})
+	e.SetBumpers(map[string]*Bumper{
+		"b1": {Name: "Player1", Team: "teamA"},
+	})
+
+	q := &Question{ID: "aq1", Type: QuestionTypeArdoise, Points: "10", Time: "30"}
+	e.Ready("aq1", q)
+	e.StartImmediate(30)
+
+	e.SetArdoiseAnswer("teamA", "")
+	state := e.GetState()
+	answer, exists := state.ArdoiseAnswers["teamA"]
+	if !exists {
+		t.Fatal("ArdoiseAnswers should contain teamA even with empty text")
+	}
+	if answer.StartedAt != 0 {
+		t.Errorf("StartedAt should remain 0 after an empty-text call, got %d", answer.StartedAt)
+	}
+
+	// A subsequent non-empty text is the one that starts the clock.
+	e.SetArdoiseAnswer("teamA", "Paris")
+	afterState := e.GetState()
+	afterAnswer := afterState.ArdoiseAnswers["teamA"]
+	if afterAnswer.StartedAt <= 0 {
+		t.Errorf("StartedAt should be set once non-empty text arrives, got %d", afterAnswer.StartedAt)
+	}
+}
+
+// TestSetArdoiseAnswer_StartedAt_PreservedAfterClearAndRewrite verifies that
+// erasing the answer entirely then retyping it keeps the original StartedAt —
+// the rank must reflect when the team STARTED answering, not when it last
+// touched its text.
+func TestSetArdoiseAnswer_StartedAt_PreservedAfterClearAndRewrite(t *testing.T) {
+	e := NewEngine()
+	e.SetTeams(map[string]*Team{
+		"teamA": {Name: "teamA", Color: []int{255, 0, 0}},
+	})
+	e.SetBumpers(map[string]*Bumper{
+		"b1": {Name: "Player1", Team: "teamA"},
+	})
+
+	q := &Question{ID: "aq1", Type: QuestionTypeArdoise, Points: "10", Time: "30"}
+	e.Ready("aq1", q)
+	e.StartImmediate(30)
+
+	e.SetArdoiseAnswer("teamA", "Paris")
+	originalStartedAt := e.GetState().ArdoiseAnswers["teamA"].StartedAt
+
+	time.Sleep(2 * time.Millisecond)
+	e.SetArdoiseAnswer("teamA", "") // team clears its answer entirely
+	time.Sleep(2 * time.Millisecond)
+	e.SetArdoiseAnswer("teamA", "Lyon") // then rewrites a different answer
+
+	finalAnswer := e.GetState().ArdoiseAnswers["teamA"]
+	if finalAnswer.StartedAt != originalStartedAt {
+		t.Errorf("StartedAt should be preserved across clear+rewrite, got %d want %d", finalAnswer.StartedAt, originalStartedAt)
+	}
+	if finalAnswer.Text != "Lyon" {
+		t.Errorf("Expected final text 'Lyon', got %q", finalAnswer.Text)
+	}
+}
+
+// TestArdoiseAnswers_StartedAt_ResetOnNewQuestion verifies that moving to a
+// new question via Ready() wipes ArdoiseAnswers entirely, so a team's next
+// answer on the new question starts a fresh StartedAt (no leak from the
+// previous question).
+func TestArdoiseAnswers_StartedAt_ResetOnNewQuestion(t *testing.T) {
+	e := NewEngine()
+	e.SetTeams(map[string]*Team{
+		"teamA": {Name: "teamA", Color: []int{255, 0, 0}},
+	})
+	e.SetBumpers(map[string]*Bumper{
+		"b1": {Name: "Player1", Team: "teamA"},
+	})
+
+	q1 := &Question{ID: "aq1", Type: QuestionTypeArdoise, Points: "10", Time: "30"}
+	e.Ready("aq1", q1)
+	e.StartImmediate(30)
+	e.SetArdoiseAnswer("teamA", "First answer")
+
+	e.Stop()
+	q2 := &Question{ID: "aq2", Type: QuestionTypeArdoise, Points: "10", Time: "30"}
+	e.Ready("aq2", q2)
+
+	stateAfterReady := e.GetState()
+	if len(stateAfterReady.ArdoiseAnswers) != 0 {
+		t.Fatalf("ArdoiseAnswers should be empty after Ready() with new question, got %v", stateAfterReady.ArdoiseAnswers)
+	}
+
+	e.StartImmediate(30)
+	e.SetArdoiseAnswer("teamA", "Second answer")
+	newAnswer := e.GetState().ArdoiseAnswers["teamA"]
+	if newAnswer.StartedAt <= 0 {
+		t.Errorf("StartedAt should be freshly set on the new question, got %d", newAnswer.StartedAt)
+	}
+	if newAnswer.Text != "Second answer" {
+		t.Errorf("Expected text 'Second answer', got %q", newAnswer.Text)
+	}
+}
+
+// TestSetArdoiseAnswer_StartedAt_StrictlyIncreasingAcrossTeams verifies that
+// two teams answering one after another get strictly increasing StartedAt
+// values, in the order they were received — the invariant the admin panel's
+// sort relies on.
+func TestSetArdoiseAnswer_StartedAt_StrictlyIncreasingAcrossTeams(t *testing.T) {
+	e := NewEngine()
+	e.SetTeams(map[string]*Team{
+		"teamA": {Name: "teamA", Color: []int{255, 0, 0}},
+		"teamB": {Name: "teamB", Color: []int{0, 255, 0}},
+	})
+	e.SetBumpers(map[string]*Bumper{
+		"b1": {Name: "Player1", Team: "teamA"},
+		"b2": {Name: "Player2", Team: "teamB"},
+	})
+
+	q := &Question{ID: "aq1", Type: QuestionTypeArdoise, Points: "10", Time: "30"}
+	e.Ready("aq1", q)
+	e.StartImmediate(30)
+
+	e.SetArdoiseAnswer("teamB", "Second to answer, first team called")
+	time.Sleep(2 * time.Millisecond)
+	e.SetArdoiseAnswer("teamA", "First team to actually answer")
+
+	state := e.GetState()
+	// teamB called SetArdoiseAnswer first, so it must have the smaller StartedAt.
+	if !(state.ArdoiseAnswers["teamB"].StartedAt < state.ArdoiseAnswers["teamA"].StartedAt) {
+		t.Errorf("Expected teamB.StartedAt (%d) < teamA.StartedAt (%d) — reception order must drive the timestamps",
+			state.ArdoiseAnswers["teamB"].StartedAt, state.ArdoiseAnswers["teamA"].StartedAt)
+	}
+}
+
+// TestSetArdoiseAnswer_StartedAt_GuardedOutsideStartedPhase verifies that the
+// existing phase guard also blocks StartedAt from ever being initialized —
+// no entry should be created at all outside STARTED.
+func TestSetArdoiseAnswer_StartedAt_GuardedOutsideStartedPhase(t *testing.T) {
+	phases := []GamePhase{PhaseStopped, PhasePrepare, PhaseReady, PhasePaused, PhaseRevealed}
+	q := &Question{ID: "aq1", Type: QuestionTypeArdoise, Points: "10", Time: "30"}
+
+	for _, phase := range phases {
+		t.Run(string(phase), func(t *testing.T) {
+			e := NewEngine()
+			e.SetPhase(phase)
+			e.mu.Lock()
+			e.state.Question = q
+			e.mu.Unlock()
+
+			e.SetArdoiseAnswer("teamA", "some text")
+
+			state := e.GetState()
+			if _, exists := state.ArdoiseAnswers["teamA"]; exists {
+				t.Errorf("No ArdoiseAnswers entry (hence no StartedAt) should be created in phase %s", phase)
+			}
+		})
+	}
+}
+
+// TestSetArdoiseAnswer_StartedAt_GuardedForNonArdoiseQuestion verifies that
+// the existing question-type guard also blocks StartedAt initialization.
+func TestSetArdoiseAnswer_StartedAt_GuardedForNonArdoiseQuestion(t *testing.T) {
+	e := NewEngine()
+	e.SetTeams(map[string]*Team{
+		"teamA": {Name: "teamA", Color: []int{255, 0, 0}},
+	})
+	e.SetBumpers(map[string]*Bumper{
+		"b1": {Name: "Player1", Team: "teamA"},
+	})
+
+	q := &Question{ID: "q1", Type: QuestionTypeQCM, Points: "10", Time: "30"}
+	e.Ready("q1", q)
+	e.StartImmediate(30)
+
+	e.SetArdoiseAnswer("teamA", "my answer")
+
+	state := e.GetState()
+	if _, exists := state.ArdoiseAnswers["teamA"]; exists {
+		t.Error("No ArdoiseAnswers entry (hence no StartedAt) should be created for a non-ARDOISE question")
+	}
+}
+
+// TestArdoiseAnswer_StartedAt_SerializedEvenWhenZero verifies that
+// STARTED_AT is present in the JSON payload even when it is 0 — no
+// `omitempty`, per project rule on GameState fields (frontend must be able
+// to tell "not started yet" from "field absent").
+func TestArdoiseAnswer_StartedAt_SerializedEvenWhenZero(t *testing.T) {
+	e := NewEngine()
+	e.SetTeams(map[string]*Team{
+		"teamA": {Name: "teamA", Color: []int{255, 0, 0}},
+	})
+	e.SetBumpers(map[string]*Bumper{
+		"b1": {Name: "Player1", Team: "teamA"},
+	})
+
+	q := &Question{ID: "aq1", Type: QuestionTypeArdoise, Points: "10", Time: "30"}
+	e.Ready("aq1", q)
+	e.StartImmediate(30)
+
+	// Empty text: creates the map entry without starting the clock.
+	e.SetArdoiseAnswer("teamA", "")
+
+	state := e.GetState()
+	data, err := json.Marshal(state)
+	if err != nil {
+		t.Fatalf("Failed to marshal GameState: %v", err)
+	}
+
+	jsonStr := string(data)
+	if !contains(jsonStr, `"STARTED_AT":0`) {
+		t.Errorf("Expected STARTED_AT to be serialized as 0 (not omitted), got: %s", jsonStr)
+	}
+}
+
 // ========================================
 // #96 — NETWORK_ONLY_LOCALHOST
 // ========================================

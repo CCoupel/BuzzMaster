@@ -2,6 +2,26 @@
 
 ---
 
+## [20260727] — Réponses ardoise triées par ordre d'arrivée (#117)
+
+> Sur la page admin, les réponses ARDOISE s'affichaient dans l'ordre de la liste d'équipes, sans
+> rapport avec l'ordre d'arrivée, et aucun délai n'était visible.
+> Plan : `_work/reports/plan-20260727-093000.md`.
+> Maquette : `_work/mockups/117-ardoise-answer-order.html`.
+
+- **[NEW]** `ArdoiseAnswer.STARTED_AT` — horodatage microseconde du **premier** caractère reçu
+  pour l'équipe, figé à la première écriture. `SUBMITTED_AT` conserve son sens inchangé
+  (dernière mise à jour) et reste le champ utilisé partout ailleurs.
+- **[CHANGED]** `ARDOISE_INPUT` (VPlayer → serveur) — le premier envoi porteur d'un texte non
+  vide est désormais émis **immédiatement** au lieu d'attendre 200 ms sans frappe. Les envois
+  suivants restent régulés à ~200 ms. Aucun changement de format de message : seule la cadence
+  d'émission change.
+
+**Aucun changement BREAKING.** `STARTED_AT` est additif ; une réponse antérieure le reçoit à `0`
+et le frontend se replie sur `SUBMITTED_AT`.
+
+---
+
 ## [20260726] — Palette d'équipes : 16 couleurs et LED exacte (#113)
 
 > Le nombre de couleurs d'équipe (8) était insuffisant en usage réel, et deux équipes pouvaient
