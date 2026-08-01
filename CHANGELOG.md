@@ -6,6 +6,21 @@ Historique des versions du projet BuzzControl.
 
 ---
 
+## [5.8.2] - 2026-08-01
+
+Enhancement UI : réponses ARDOISE affichées en grille responsive plutôt qu'en liste verticale sur la page admin, réduisant la hauteur occupée.
+
+### Changed
+- **Panneau ARDOISE en grille responsive** : les réponses s'affichent désormais en grille CSS avec `grid-template-columns: repeat(auto-fill, minmax(178px, 1fr))` au lieu d'une liste verticale. Gain mesurable : 6 équipes → 2 rangées (au lieu de 6 lignes), 16 équipes → 4 rangées (au lieu de 16 lignes). Pantalla admin gagne significativement en verticalité (#116).
+- **Rang renforcé, première réponse distinguée** : le badge de rang passe d'un fond translucide à un fond plein (`rgba(99, 102, 241, 0.9)`) avec texte blanc, taille augmentée. La première réponse (rang 0) porte une bordure et une `box-shadow` inset accentuée pour être repérable immédiatement entre cellules côte à côte (#116).
+- **Réponses longues jamais tronquées** : `overflow-wrap: anywhere` sur `.ardoise-answer-text` réduit efficacement la taille minimale de cellule en contexte de grille CSS (contrairement à `word-break: break-word`), évitant qu'une chaîne d'un seul tenant n'impose la largeur complète d'une colonne. Le bouton d'attribution de points reste ancré en haut (`align-items: flex-start`) sur une réponse multi-ligne (#116).
+
+### Technical
+- **Frontend** : `.ardoise-answers-list` convertie à `display: grid` avec `minmax(178px, 1fr)` et `gap` conservé. `.ardoise-answer-row` non modifiée (reste une cellule de grille). Classe conditionnelle `rank-first` ajoutée en JSX sur rang 0. Aucune modification de `sortedArdoiseEntries` (#117) ni de `formatArdoiseDelay` (#117) — non-régression vérifiée.
+- Tests : 62/62 PASS (tests existants couvrent grille + non-régression #117)
+
+---
+
 ## [5.9.3] - 2026-07-31
 
 Bugfix : un joueur ayant perdu son identifiant local ne pouvait plus jamais reprendre son pseudo — protection anti-vol de #109 devenue un mur permanent. L'animateur peut désormais lui rendre sa place avec score conservé, ou la libérer définitivement.

@@ -125,6 +125,33 @@ Layout vertical en 4 zones avec hauteurs fixes pour l'affichage TV (/tv) :
 | COUNTDOWN | Catégorie en haut + Décompte au centre | Animation de la catégorie du centre vers le haut |
 | STARTED | Question + Média + Réponses | Affichage normal du jeu |
 
+### Panneau ARDOISE - Grille Responsive (v5.8.2)
+
+Affichage des réponses ARDOISE en grille responsive sur la page d'administration (GamePage).
+
+**Disposition en grille :**
+- **Conteneur** : `display: grid` avec `grid-template-columns: repeat(auto-fill, minmax(178px, 1fr))`
+- **Auto-fill** : Génère automatiquement le nombre de colonnes selon la largeur disponible
+- **Largeur minimale** : 178px par cellule (optimisé pour lisibilité rang + texte réponse)
+- **Gap** : Espacements uniformes entre cellules
+
+**Réduction de hauteur observée :**
+- 6 équipes → 2 rangées (au lieu d'une colonne verticale précédente)
+- 16 équipes → 4 rangées (gain significatif de hauteur du panneau)
+
+**Rang (classement) :**
+- **Affichage** : En-tête de chaque cellule avec fond plein (`rgba(99, 102, 241, 0.9)`)
+- **Texte** : Blanc, taille légèrement augmentée pour lisibilité
+- **Première réponse** : Encadrée visuellement avec bordure + `box-shadow` inset accentués
+- **Données** : Rang issu du tri chronologique (#117) des arrivées de réponses
+
+**Texte de réponse :**
+- **Sans troncature** : `overflow-wrap: anywhere` permet le retour à la ligne intégral
+- **Longues chaînes** : Même sans espaces, se distribuent sur plusieurs lignes sans déborder
+- **Alignement vertical** : `.ardoise-answer-text-row` en `align-items: flex-start` pour que le bouton d'attribution reste ancré en haut
+
+**Délai** : Conservé depuis #117, format milliseconde non modifié — visible dans le texte réponse
+
 ## VPlayer - Joueurs Virtuels (v2.45.0)
 
 Permet aux joueurs de buzzer depuis leur smartphone en scannant un QR Code.

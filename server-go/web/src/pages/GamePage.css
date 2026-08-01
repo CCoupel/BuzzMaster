@@ -1071,10 +1071,19 @@
   border: 1px solid rgba(99, 102, 241, 0.25);
 }
 
+/* #116 — grille responsive plutôt qu'une liste pleine largeur. auto-fill
+   (pas auto-fit) : avec 2-3 équipes, les pistes vides gardent la cellule à
+   sa taille naturelle au lieu de l'étirer sur toute la largeur — auto-fit
+   retomberait exactement sur la liste qu'on cherche à quitter. La largeur
+   minimale se cale sur le contenu le plus contraint d'une cellule (rang +
+   pastille + nom + délai au millième sur une même ligne). align-items:
+   start : une réponse longue (F3, non tronquée par choix de conception)
+   grandit sa propre cellule sans étirer ses voisines de la même rangée. */
 .ardoise-answers-list {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(178px, 1fr));
   gap: var(--space-1);
+  align-items: start;
 }
 
 .ardoise-answer-row {
@@ -1087,6 +1096,16 @@
   border: 1px solid var(--gray-200);
 }
 
+/* #116 (F2) — en liste, l'ordre d'arrivée se lisait dans la position
+   verticale ; en grille (lecture gauche-à-droite puis à la ligne), ce repère
+   disparaît. La première réponse est donc encadrée pour rester le repère
+   visuel immédiat que #117 avait établi. Pas de nouvelle donnée : rank vient
+   toujours de l'index de sortedArdoiseEntries (GamePage.jsx). */
+.ardoise-answer-row.rank-first {
+  border-color: rgba(99, 102, 241, 0.9);
+  box-shadow: 0 0 0 1px rgba(99, 102, 241, 0.9) inset;
+}
+
 .ardoise-answer-team-name {
   display: flex;
   align-items: center;
@@ -1095,18 +1114,21 @@
   font-weight: 700;
 }
 
+/* #116 (F2) — fond plein (au lieu d'une teinte translucide) : en grille, le
+   rang doit se repérer d'un coup d'œil entre plusieurs cellules côte à côte,
+   pas seulement se confirmer au sein d'une seule ligne pleine largeur. */
 .ardoise-answer-rank {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 1.1rem;
-  height: 1.1rem;
-  padding: 0 0.2rem;
+  min-width: 1.2rem;
+  height: 1.2rem;
+  padding: 0 0.25rem;
   border-radius: var(--radius-sm);
-  background: rgba(99, 102, 241, 0.18);
-  color: var(--primary-600, var(--text-primary));
+  background: rgba(99, 102, 241, 0.9);
+  color: white;
   font-family: var(--font-mono, ui-monospace, monospace);
-  font-size: 0.68rem;
+  font-size: 0.72rem;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
   flex-shrink: 0;
@@ -1131,16 +1153,27 @@
 
 .ardoise-answer-text-row {
   display: flex;
-  align-items: center;
+  /* #116 (F3) — flex-start plutôt que center : une réponse longue non
+     tronquée (décision de conception, cf. .ardoise-answer-text) peut
+     s'étendre sur plusieurs lignes ; le bouton de points reste ancré en
+     haut au lieu de se centrer verticalement contre tout le bloc de texte
+     — conforme à la maquette (_work/mockups/116-ardoise-grid.html). */
+  align-items: flex-start;
   justify-content: space-between;
   gap: 0.5rem;
   padding-left: 1rem;
 }
 
+/* #116 (F3) — décision de conception : pas de troncature, pas de line-clamp,
+   pas d'infobulle (l'animateur corrige sur ce texte ; une infobulle ne
+   fonctionne pas au doigt sur tablette). overflow-wrap: anywhere (plutôt que
+   word-break: break-word) est ce qui empêche une chaîne d'un seul tenant
+   sans espace de forcer la largeur minimale d'une cellule de grille — c'est
+   la propriété qui compte réellement une fois passé en CSS grid (F1). */
 .ardoise-answer-text {
   font-size: 0.85rem;
   color: var(--text-primary);
-  word-break: break-word;
+  overflow-wrap: anywhere;
 }
 
 .ardoise-answer-text.no-answer {

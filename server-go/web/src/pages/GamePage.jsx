@@ -671,7 +671,10 @@ export default function GamePage() {
                 const defaultPts = parseInt(gameState.question?.POINTS) || pointsInput
                 const delayLabel = answer ? formatArdoiseDelay(answer, gameState.gameTime) : null
                 return (
-                  <div key={teamName} className={`ardoise-answer-row ${answer ? 'has-answer' : 'no-answer'}`}>
+                  <div
+                    key={teamName}
+                    className={`ardoise-answer-row ${answer ? 'has-answer' : 'no-answer'} ${rank === 0 && answer ? 'rank-first' : ''}`}
+                  >
                     <div className="ardoise-answer-team-name">
                       {answer && <span className="ardoise-answer-rank">{rank + 1}</span>}
                       <span className="ardoise-team-dot" style={{ background: teamColor }} />
