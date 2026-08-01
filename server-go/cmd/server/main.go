@@ -29,20 +29,24 @@ var Version = "dev"
 
 // App holds all server components
 type App struct {
-	config         *config.Config
-	engine         *game.Engine
-	udpBcast       *server.UDPBroadcaster
-	broadcaster    *server.BroadcasterManager
-	httpServer     *server.HTTPServer
-	wsHub          *server.WebSocketHub
-	buzzerHub      *server.BuzzerWebSocketHub
-	logsHub        *server.LogsWebSocketHub
-	mdnsServer     *server.MDNSServer
-	dnsServer      *server.DNSServer
-	logger         *server.BroadcastLogger
-	ackManager     *server.AckManager    // ACK tracking for priority buzzer messages (v3.8.0)
-	ctx            context.Context       // Application-lifetime context
-	cancelCtx      context.CancelFunc    // Cancels ctx on shutdown
+	config      *config.Config
+	engine      *game.Engine
+	udpBcast    *server.UDPBroadcaster
+	broadcaster *server.BroadcasterManager
+	httpServer  *server.HTTPServer
+	wsHub       *server.WebSocketHub
+	buzzerHub   *server.BuzzerWebSocketHub
+	logsHub     *server.LogsWebSocketHub
+	mdnsServer  *server.MDNSServer
+	dnsServer   *server.DNSServer
+	logger      *server.BroadcastLogger
+	ackManager  *server.AckManager // ACK tracking for priority buzzer messages (v3.8.0)
+	// evictionRegistry remembers why a VJoueur was recently removed (PLAYER_REMOVED
+	// or GAME_RESET) so a later PLAYER_CONNECT with that now-unknown ID gets the
+	// real reason instead of a generic ENROLLMENT_CLOSED guess (#123 B3).
+	evictionRegistry *server.EvictionRegistry
+	ctx              context.Context    // Application-lifetime context
+	cancelCtx        context.CancelFunc // Cancels ctx on shutdown
 	// bumperLEDState tracks the last LED_SET payload sent to each buzzer (by MAC).
 	// Used by resendLEDOnReconnect to restore LED state when a buzzer reconnects.
 	bumperLEDState map[string]protocol.LEDSetPayload
@@ -201,6 +205,9 @@ func (a *App) init() {
 
 	// WebSocket hub (web clients: admin/TV/VPlayer)
 	a.wsHub = server.NewWebSocketHub()
+
+	// Eviction reason registry (#123 B3) — short-lived, bounded
+	a.evictionRegistry = server.NewEvictionRegistry()
 
 	// Buzzer WebSocket hub (physical buzzers via /ws/buzzer)
 	a.buzzerHub = server.NewBuzzerWebSocketHub()
@@ -914,6 +921,9 @@ func (a *App) handleWebMessage(incoming *protocol.IncomingMessage) {
 	case protocol.ActionDeleteBumper:
 		a.handleDeleteBumper(msg)
 
+	case protocol.ActionReleaseBumperName:
+		a.handleReleaseBumperName(msg)
+
 	case protocol.ActionReset:
 		a.broadcastReset()
 
@@ -987,7 +997,25 @@ func (a *App) handleWebMessage(incoming *protocol.IncomingMessage) {
 
 	case protocol.ActionNewGame:
 		a.logger.Info(game.LogComponentEngine, "NEW_GAME — reset scores, history, statuses")
-		a.engine.InitGame()
+		purgedPlayerIDs := a.engine.InitGame()
+		// #123 B3 — a fresh game invalidates any eviction context left over
+		// from before it (e.g. an individual PLAYER_REMOVED from a prior game
+		// session), so clear the registry first. Fresh GAME_RESET entries for
+		// THIS purge are recorded right after, so a player who was offline at
+		// the moment of the purge still learns the true reason on return.
+		a.evictionRegistry.Reset()
+		// #120 — Notify each purged VJoueur individually, BEFORE the general
+		// broadcasts below, so its client learns the authoritative reason first
+		// instead of deducing removal from the roster it's about to receive via
+		// broadcastUpdate (same ordering rule as handleDeleteBumper).
+		if len(purgedPlayerIDs) > 0 {
+			evictedPayload := protocol.PlayerEvictedPayload{Reason: "GAME_RESET"}
+			evictedMsg, _ := protocol.NewMessage(protocol.ActionPlayerEvicted, evictedPayload)
+			for _, playerID := range purgedPlayerIDs {
+				a.wsHub.SendToPlayerID(playerID, evictedMsg)
+				a.evictionRegistry.Record(playerID, "GAME_RESET")
+			}
+		}
 		a.broadcastQuestions() // push refreshed AVAILABLE statuses to all clients
 		a.broadcastUpdate()
 		// InitGame purges the whole VJoueur roster (fix R1 follow-up) — refresh
@@ -1196,6 +1224,38 @@ func (a *App) handlePong(clientID string, msg *protocol.Message) {
 	}
 }
 
+// notifyEvictedVirtualPlayers compares newBumpers against the CURRENT roster
+// and emits PLAYER_EVICTED{PLAYER_REMOVED} to every VIRTUAL bumper present
+// now but absent from newBumpers, recording the reason in evictionRegistry
+// (#123 B1/B3).
+//
+// This is deliberately triggered by STATE (a roster shrinking), not by a
+// specific action — #120's original notification was wired only into
+// DELETE_BUMPER, an action the real admin UI never sends (it edits the
+// roster via UPDATE, TeamsPage.jsx). A mechanism correct in isolation but
+// wired to a path nobody uses is exactly the class of defect COLOR_NAME hit
+// in #113. Must be called BEFORE the roster is actually replaced
+// (a.engine.SetBumpers), so "current" still reflects the pre-update roster.
+// Physical buzzers are never candidates — they have no WebSocket client of
+// their own to notify.
+func (a *App) notifyEvictedVirtualPlayers(newBumpers map[string]*game.Bumper) {
+	currentBumpers := a.engine.GetTeamsAndBumpers().Bumpers
+	for id, bumper := range currentBumpers {
+		if bumper == nil || !bumper.IsVirtual {
+			continue
+		}
+		if _, stillPresent := newBumpers[id]; stillPresent {
+			continue
+		}
+
+		evictedPayload := protocol.PlayerEvictedPayload{Reason: "PLAYER_REMOVED"}
+		evictedMsg, _ := protocol.NewMessage(protocol.ActionPlayerEvicted, evictedPayload)
+		a.wsHub.SendToPlayerID(id, evictedMsg)
+		a.evictionRegistry.Record(id, "PLAYER_REMOVED")
+		server.LogInfo(game.LogComponentWebSocket, "PLAYER_EVICTED: id=%s reason=PLAYER_REMOVED (roster diff)", id)
+	}
+}
+
 func (a *App) handleFullUpdate(msg *protocol.Message) {
 	var data struct {
 		Teams   map[string]*game.Team   `json:"teams"`
@@ -1212,6 +1272,10 @@ func (a *App) handleFullUpdate(msg *protocol.Message) {
 		a.engine.SetTeams(data.Teams)
 	}
 	if data.Bumpers != nil {
+		// #123 B1 — notify BEFORE replacing the roster, same ordering rule as
+		// handleDeleteBumper: the client must learn the authoritative reason
+		// before it receives an UPDATE broadcast that no longer contains it.
+		a.notifyEvictedVirtualPlayers(data.Bumpers)
 		a.engine.SetBumpers(data.Bumpers)
 		// Bumpers were replaced — recompute broadcaster frequency.
 		a.updateBroadcasterFrequency()
@@ -1386,7 +1450,8 @@ func (a *App) handleDeleteBumper(msg *protocol.Message) {
 
 	// Remove bumper from engine
 	bumpers := a.engine.GetTeamsAndBumpers().Bumpers
-	if _, exists := bumpers[payload.ID]; !exists {
+	deletedBumper, exists := bumpers[payload.ID]
+	if !exists {
 		server.LogWarn(game.LogComponentApp, "DELETE_BUMPER: Bumper %s not found", payload.ID)
 		return
 	}
@@ -1396,10 +1461,50 @@ func (a *App) handleDeleteBumper(msg *protocol.Message) {
 
 	server.LogInfo(game.LogComponentApp, "Deleted bumper: %s", payload.ID)
 
+	// #120 — Notify the evicted VJoueur (never physical buzzers, which have no
+	// WebSocket client of their own) so it can leave the game screen with a
+	// reason instead of silently deducing removal from a roster scan.
+	if deletedBumper != nil && deletedBumper.IsVirtual {
+		evictedPayload := protocol.PlayerEvictedPayload{Reason: "PLAYER_REMOVED"}
+		evictedMsg, _ := protocol.NewMessage(protocol.ActionPlayerEvicted, evictedPayload)
+		a.wsHub.SendToPlayerID(payload.ID, evictedMsg)
+		// #123 B3 — remember the reason so a later PLAYER_CONNECT with this now
+		// stale ID gets the truth instead of a generic ENROLLMENT_CLOSED guess.
+		a.evictionRegistry.Record(payload.ID, "PLAYER_REMOVED")
+	}
+
 	// Broadcast updated state
 	a.broadcastUpdate()
 	// A bumper was removed — recompute broadcaster frequency.
 	a.updateBroadcasterFrequency()
+}
+
+// handleReleaseBumperName grants the one-time reclaim authorization (#122
+// B3): the animateur has decided, having seen the room, that the next
+// nameless PLAYER_CONNECT under this bumper's name is genuinely its owner
+// coming back. This is the sole exception to the #109 R1 ID-only identity
+// rule, and it is explicit and human — never automatic.
+func (a *App) handleReleaseBumperName(msg *protocol.Message) {
+	var payload protocol.ReleaseBumperNamePayload
+	if err := json.Unmarshal(msg.Msg, &payload); err != nil {
+		server.LogError(game.LogComponentApp, "Failed to parse RELEASE_BUMPER_NAME: %v", err)
+		return
+	}
+
+	if payload.ID == "" {
+		server.LogWarn(game.LogComponentApp, "RELEASE_BUMPER_NAME: empty ID")
+		return
+	}
+
+	if !a.engine.ReleaseBumperName(payload.ID) {
+		server.LogWarn(game.LogComponentApp, "RELEASE_BUMPER_NAME: bumper %s not found or not virtual", payload.ID)
+		return
+	}
+
+	server.LogInfo(game.LogComponentApp, "RELEASE_BUMPER_NAME: id=%s", payload.ID)
+	// RECLAIM_REQUESTED cleared server-side — push the updated card state to
+	// admin clients right away.
+	a.broadcastUpdate()
 }
 
 func (a *App) handleReorderQuestions(msg *protocol.Message) {
@@ -1457,8 +1562,6 @@ func (a *App) handleReorderQuestions(msg *protocol.Message) {
 	// Broadcast updated questions list
 	a.broadcastQuestions()
 }
-
-
 
 func (a *App) handleForceReady() {
 	server.LogInfo(game.LogComponentEngine, "FORCE_READY requested (debug)")
@@ -1912,6 +2015,26 @@ func (a *App) handlePlayerConnect(clientID string, msg *protocol.Message) {
 		return
 	}
 
+	// #123 B3 — an ID that no longer resolves to a live VIRTUAL bumper might be
+	// one we just evicted (individually removed, or purged by NEW_GAME).
+	// Consult the eviction registry BEFORE falling through to
+	// ReconnectOrCreateVirtualPlayer's name-based path (matrix case 2), which
+	// would otherwise misreport a generic ENROLLMENT_CLOSED — or silently
+	// attempt a fresh enrollment — instead of the real reason. A currently
+	// live ID is untouched: this check mirrors the engine's own case-1 gate
+	// (resolved AND IsVirtual), so a genuine reconnection never reaches here.
+	if payload.ID != "" {
+		if liveBumper := a.engine.GetBumper(payload.ID); liveBumper == nil || !liveBumper.IsVirtual {
+			if reason, ok := a.evictionRegistry.Lookup(payload.ID); ok {
+				rejectPayload := protocol.PlayerRejectedPayload{Reason: reason}
+				rejectMsg, _ := protocol.NewMessage(protocol.ActionPlayerRejected, rejectPayload)
+				a.wsHub.SendToClient(clientID, rejectMsg)
+				server.LogInfo(game.LogComponentWebSocket, "PLAYER_CONNECT: rejected stale id=%s with recorded eviction reason=%s", payload.ID, reason)
+				return
+			}
+		}
+	}
+
 	// Resolve reconnection vs. new enrollment atomically, under a single engine
 	// lock (#109 R1 fix: the previous implementation read the bumper map here,
 	// decided "not found", and only then called CreateVirtualPlayer as a
@@ -2146,7 +2269,6 @@ func (a *App) broadcastHello() {
 	a.buzzerHub.Broadcast(msg) // HELLO is in buzzer whitelist — sent to physical buzzers
 }
 
-
 func (a *App) broadcastUpdate() {
 	if a.wsHub == nil {
 		return // Guard for unit tests that construct a minimal App without a wsHub
@@ -2184,6 +2306,11 @@ func (a *App) broadcastUpdate() {
 // quickly. When all are connected (or no physical buzzers exist), we revert to the
 // normal 5s interval (enrollment mode overrides both).
 func (a *App) updateBroadcasterFrequency() {
+	if a.broadcaster == nil {
+		// Not wired up in this context (e.g. unit tests instantiate App directly
+		// without the UDP discovery broadcaster) — nothing to update.
+		return
+	}
 	bumpers := a.engine.GetTeamsAndBumpers().Bumpers
 	hasDisconnected := false
 	for _, b := range bumpers {
@@ -3965,19 +4092,19 @@ func (a *App) createDemoQuestions() {
 	demoQuestions := []map[string]interface{}{
 		// GEOGRAPHY - QCM with hints + image
 		{
-			"ID":                    "demo1",
-			"QUESTION":              "Quelle est la capitale de l'Australie?",
-			"ANSWER":                "Canberra",
-			"POINTS":                "10",
-			"TIME":                  "20",
-			"TYPE":                  "QCM",
-			"CATEGORY":              "GEOGRAPHY",
-			"POINTS_TARGET":         "TEAM",
-			"QCM_HINTS_ENABLED":     true,
-			"QCM_HINT_THRESHOLD_1":  0.25,
-			"QCM_HINT_THRESHOLD_2":  0.125,
-			"QCM_PENALTY_1":         0.67,
-			"QCM_PENALTY_2":         0.33,
+			"ID":                   "demo1",
+			"QUESTION":             "Quelle est la capitale de l'Australie?",
+			"ANSWER":               "Canberra",
+			"POINTS":               "10",
+			"TIME":                 "20",
+			"TYPE":                 "QCM",
+			"CATEGORY":             "GEOGRAPHY",
+			"POINTS_TARGET":        "TEAM",
+			"QCM_HINTS_ENABLED":    true,
+			"QCM_HINT_THRESHOLD_1": 0.25,
+			"QCM_HINT_THRESHOLD_2": 0.125,
+			"QCM_PENALTY_1":        0.67,
+			"QCM_PENALTY_2":        0.33,
 			"QCM_ANSWERS": map[string]string{
 				"RED":    "Sydney",
 				"GREEN":  "Canberra",
@@ -4002,15 +4129,15 @@ func (a *App) createDemoQuestions() {
 		},
 		// HISTORY - QCM with hints
 		{
-			"ID":                    "demo3",
-			"QUESTION":              "En quelle annee a debute la Premiere Guerre mondiale?",
-			"ANSWER":                "1914",
-			"POINTS":                "15",
-			"TIME":                  "25",
-			"TYPE":                  "QCM",
-			"CATEGORY":              "HISTORY",
-			"POINTS_TARGET":         "TEAM",
-			"QCM_HINTS_ENABLED":     true,
+			"ID":                "demo3",
+			"QUESTION":          "En quelle annee a debute la Premiere Guerre mondiale?",
+			"ANSWER":            "1914",
+			"POINTS":            "15",
+			"TIME":              "25",
+			"TYPE":              "QCM",
+			"CATEGORY":          "HISTORY",
+			"POINTS_TARGET":     "TEAM",
+			"QCM_HINTS_ENABLED": true,
 			"QCM_ANSWERS": map[string]string{
 				"RED":    "1912",
 				"GREEN":  "1914",
@@ -4067,15 +4194,15 @@ func (a *App) createDemoQuestions() {
 		},
 		// FOOD - QCM with hints + images
 		{
-			"ID":                    "demo7",
-			"QUESTION":              "De quel pays vient la pizza?",
-			"ANSWER":                "Italie",
-			"POINTS":                "10",
-			"TIME":                  "20",
-			"TYPE":                  "QCM",
-			"CATEGORY":              "FOOD",
-			"POINTS_TARGET":         "TEAM",
-			"QCM_HINTS_ENABLED":     true,
+			"ID":                "demo7",
+			"QUESTION":          "De quel pays vient la pizza?",
+			"ANSWER":            "Italie",
+			"POINTS":            "10",
+			"TIME":              "20",
+			"TYPE":              "QCM",
+			"CATEGORY":          "FOOD",
+			"POINTS_TARGET":     "TEAM",
+			"QCM_HINTS_ENABLED": true,
 			"QCM_ANSWERS": map[string]string{
 				"RED":    "France",
 				"GREEN":  "Italie",
@@ -4214,9 +4341,9 @@ func (a *App) createDemoQuestions() {
 
 	// Extract demo question images from embedded assets
 	demoImages := []struct {
-		questionID  string
-		assetName   string
-		destName    string
+		questionID string
+		assetName  string
+		destName   string
 	}{
 		{"demo1", "demo1_australia.jpg", "media.jpg"},
 		{"demo4", "demo4_gold_miner.jpg", "media.jpg"},

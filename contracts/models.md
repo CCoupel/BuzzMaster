@@ -396,7 +396,7 @@ non vide pour cette équipe et cette question.
 - Remis à zéro avec le reste de `ARDOISE_ANSWERS` au changement de question.
 - Référence de calcul du délai affiché : `GameState.TIME` (départ de la question), même
   convention que les temps de réaction au buzzer.
-- Vaut `0` pour une réponse enregistrée avant la v5.8.x — le frontend doit alors se replier sur
+- Vaut `0` pour une réponse enregistrée avant la v5.8.1 — le frontend doit alors se replier sur
   `SUBMITTED_AT` pour l'ordre et masquer le délai.
 
 ### Question.ARDOISE_KEYBOARD_TYPE

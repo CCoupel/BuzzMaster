@@ -207,6 +207,34 @@ func (h *WebSocketHub) IsPlayerIDConnected(playerID string) bool {
 	return false
 }
 
+// SendToPlayerID sends a message to the single ClientTypeVPlayer client linked to
+// playerID via SetClientPlayerID (reverse lookup of GetClientPlayerID). Used for
+// targeted, never-broadcast notifications such as PLAYER_EVICTED (#120) — the
+// admin/TV clients and other VJoueurs never receive it. A no-op (nil error) if no
+// client is currently linked to playerID, e.g. the VJoueur already disconnected.
+func (h *WebSocketHub) SendToPlayerID(playerID string, msg *protocol.Message) error {
+	data, err := msg.SerializeForWebSocket()
+	if err != nil {
+		return err
+	}
+
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+
+	for client := range h.clients {
+		if client.Type == ClientTypeVPlayer && client.PlayerID == playerID {
+			select {
+			case client.Send <- data:
+				return nil
+			default:
+				return nil
+			}
+		}
+	}
+
+	return nil
+}
+
 // Broadcast sends a message to all connected clients
 func (h *WebSocketHub) Broadcast(msg *protocol.Message) {
 	data, err := msg.SerializeForWebSocket()
@@ -407,12 +435,36 @@ func (c *WebSocketClient) readPump() {
 	}
 }
 
+// writePumpTickPeriod drives both the protocol ping frame and the
+// application-level HEARTBEAT (#118) sent alongside it. A single named
+// constant so HEARTBEAT.INTERVAL_MS can never drift from the ticker that
+// actually paces it — see the HEARTBEAT payload build below.
+const writePumpTickPeriod = 3 * time.Second
+
 func (c *WebSocketClient) writePump() {
-	ticker := time.NewTicker(3 * time.Second)
+	ticker := time.NewTicker(writePumpTickPeriod)
 	defer func() {
 		ticker.Stop()
 		c.Conn.Close()
 	}()
+
+	// Built once per connection, not per tick: the payload is constant for the
+	// lifetime of the process (writePumpTickPeriod never changes at runtime).
+	// Marshal failure here is not expected (a fixed int64 field always
+	// encodes), but is handled defensively — a nil heartbeatData just skips
+	// the HEARTBEAT write below without affecting the protocol ping.
+	var heartbeatData []byte
+	if heartbeatMsg, err := protocol.NewMessage(protocol.ActionHeartbeat, protocol.HeartbeatPayload{
+		IntervalMs: writePumpTickPeriod.Milliseconds(),
+	}); err == nil {
+		if data, err := heartbeatMsg.SerializeForWebSocket(); err == nil {
+			heartbeatData = data
+		} else {
+			LogError(game.LogComponentWebSocket, "Failed to serialize HEARTBEAT: %v", err)
+		}
+	} else {
+		LogError(game.LogComponentWebSocket, "Failed to build HEARTBEAT message: %v", err)
+	}
 
 	for {
 		select {
@@ -441,6 +493,21 @@ func (c *WebSocketClient) writePump() {
 			c.Conn.SetWriteDeadline(time.Now().Add(3 * time.Second))
 			if err := c.Conn.WriteMessage(websocket.PingMessage, nil); err != nil {
 				return
+			}
+			// #118 — Application-level HEARTBEAT, in addition to the protocol
+			// ping frame above (never replacing it: the ping frame still feeds
+			// the server's own PongHandler/read-deadline). Unlike the ping
+			// frame, this is a plain TextMessage the browser's WebSocket
+			// onmessage handler can actually observe — the ping/pong frames
+			// are handled transparently below the JavaScript API and expose no
+			// event a client could watch for a dead connection. No response is
+			// expected: nothing reads this back in on the server side, so it
+			// never touches the Incoming channel or its single consumer.
+			if heartbeatData != nil {
+				c.Conn.SetWriteDeadline(time.Now().Add(3 * time.Second))
+				if err := c.Conn.WriteMessage(websocket.TextMessage, heartbeatData); err != nil {
+					return
+				}
 			}
 		}
 	}

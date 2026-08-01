@@ -282,7 +282,41 @@ Pour supprimer un joueur virtuel :
 2. Cliquer sur le bouton × en haut à droite de la carte joueur
 3. Confirmer la suppression
 
-**Important :** Le joueur est automatiquement déconnecté et redirigé vers la page d'inscription.
+**Comportement après suppression** : Le joueur est automatiquement déconnecté et redirigé vers la page d'inscription avec un bandeau explicite « Joueur supprimé ». Il peut immédiatement se réinscrire avec le même pseudo (v5.9.0+, #120).
+
+#### Réinitialisation d'une partie (NEW_GAME)
+
+Lors d'une réinitialisation du jeu (`NEW_GAME`), tous les joueurs virtuels actuellement inscrits sont purgés du roster, même s'ils n'ont pas d'équipe assignée. Ils sont redirigés avec le motif « Partie réinitialisée » et restent libres de se réinscrire après l'ouverture d'une nouvelle phase d'inscriptions.
+
+#### Retrait d'un VJoueur — Réinscription vs. Suppression totale (v5.9.3+)
+
+Chaque fiche VJoueur (y compris dans la liste des équipiers) affiche un bouton **×** qui ouvre un dialogue de confirmation. Ce dialogue propose deux actions selon la situation du joueur :
+
+**Le bouton × propose par défaut** :
+- Si le joueur a une **équipe** → **Réinscription** (conserve score + équipe)
+- Si le joueur est **sans équipe** → **Suppression totale** (libère la place)
+
+**L'autre action reste toujours accessible** dans le même dialogue (juste en dessous, pas besoin de fermer et de cliquer ailleurs).
+
+**Détail des deux actions** :
+
+1. **Réinscription** (« Retrouve son score et son équipe »)
+   - Accorde une autorisation **valide ~5 minutes** au joueur
+   - Il dispose de cette fenêtre pour se reconnecter sans son ancien ID (même s'il l'a perdu)
+   - Son score et son équipe sont **conservés**
+   - L'autorisation est à **usage unique** (une seule reconnexion réussit)
+   - Utilité : joueur bloqué temporairement (changement d'appareil, cache vidé), mais on veut lui rendre sa place
+
+2. **Suppression totale** (« Score et équipe perdus, place libérée »)
+   - Libère complètement la place — pseudonyme, score, assignation équipe
+   - **⚠️ Piège important** : cette suppression ne libère vraiment la place **que si les inscriptions sont ouvertes**
+   - Si les inscriptions sont **fermées**, le joueur ne pourra pas revenir du tout (ni se réinscrire, ni reprendre sa place)
+   - L'avertissement « Inscriptions fermées : {nom} ne pourra pas revenir après une suppression totale » s'affiche dans le dialogue pour vous rappeler ce piège
+
+**Conseil d'utilisation** :
+- **Joueur bloqué après changement d'appareil ?** Cliquez sur le bouton ×, sélectionnez Réinscription, et communiquez-lui le code (il dispose de 5 minutes pour se reconnecter).
+- **Joueur qui abandonne la partie ?** Cliquez sur le bouton ×, vérifiez d'abord que les inscriptions sont ouvertes, puis sélectionnez Suppression totale. S'ils veulent revenir plus tard, elles devront être réouvertes.
+- **Joueur assigné à une équipe, dont vous voulez faire la place pour un autre ?** Cliquez sur le bouton ×, l'action par défaut est Réinscription (conserve son score) — c'est généralement plus sûr. Si vous insistez pour le supprimer totalement (action alternative juste en dessous), acceptez qu'il perde son score.
 
 #### Compteurs
 

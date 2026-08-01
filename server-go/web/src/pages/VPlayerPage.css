@@ -75,6 +75,87 @@
   transform: translateY(0);
 }
 
+/* #120 (F5) — état d'attente entre PLAYER_CONNECTED et l'apparition du
+   bumper dans le roster. Purement visuel (voir VPlayerPage.jsx). */
+.vplayer-connecting {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--spacing-md, 1rem);
+  text-align: center;
+}
+
+.vplayer-connecting-spinner {
+  font-size: 2rem;
+  animation: pulse 2s ease-in-out infinite;
+}
+
+.vplayer-connecting p {
+  color: var(--text-secondary);
+  font-size: 1rem;
+  margin: 0;
+}
+
+/* #118 (F4) — bandeau de connexion, en haut de l'écran de jeu. N'apparaît
+   qu'après une perte de liaison réelle en cours de partie — jamais au
+   premier chargement (cf. hasConnectedOnceRef dans VPlayerPage.jsx). Le
+   bouton buzzer n'est JAMAIS désactivé pendant l'affichage de ce bandeau
+   (arbitrage utilisateur) — ce fichier ne doit ajouter aucune règle
+   `pointer-events`/`opacity` réduite sur `.zone-media`/le bouton buzz liée à
+   ces classes. */
+.vplayer-connection-banner {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 150;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.82rem;
+  font-weight: 600;
+  letter-spacing: -0.005em;
+  text-align: center;
+}
+
+.vplayer-connection-banner.lost {
+  background: #4a2f0c;
+  color: #f5c98a;
+}
+
+.vplayer-connection-banner.restored {
+  background: #0f3d27;
+  color: #8fe3b4;
+}
+
+.vplayer-connection-banner-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.vplayer-connection-banner.lost .vplayer-connection-banner-dot {
+  background: #e0a45c;
+}
+
+.vplayer-connection-banner.restored .vplayer-connection-banner-dot {
+  background: #6fd39b;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .vplayer-connection-banner.lost .vplayer-connection-banner-dot {
+    animation: vplayer-connection-blip 1.4s ease-in-out infinite;
+  }
+}
+
+@keyframes vplayer-connection-blip {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.25; }
+}
+
 /* Permanent info container - absolute positioning as overlay, does NOT affect PlayerDisplay layout */
 .vplayer-page .vplayer-permanent-info {
   position: absolute;

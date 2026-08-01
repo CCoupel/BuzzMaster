@@ -59,6 +59,11 @@ const (
 	ActionPlayerRejected       = "PLAYER_REJECTED"
 	ActionEnrollmentUpdate     = "ENROLLMENT_UPDATE"
 	ActionPlayerAssigned = "PLAYER_ASSIGNED"
+	ActionPlayerEvicted  = "PLAYER_EVICTED" // Server → Client (targeted, never broadcast): a VJoueur's bumper was removed (#120, v5.9.x)
+	// Name recovery (#122, v5.9.x) — animateur-assisted reclaim of a bumper
+	// whose owner lost their local ID (see engine.ReconnectOrCreateVirtualPlayer,
+	// the reclaim-authorization block, and Bumper.RECLAIM_REQUESTED).
+	ActionReleaseBumperName = "RELEASE_BUMPER_NAME" // Admin → Server: grant a one-time reclaim authorization for a bumper's name
 	// VPlayer QCM actions
 	ActionVPlayerQCMAnswer = "VPLAYER_QCM_ANSWER"
 	// ARDOISE actions (v5.6.0)
@@ -82,6 +87,15 @@ const (
 	// Firmware sends ACK in response to priority messages (LED_SET, OTA_UPDATE, WIFI_CONFIG).
 	// Server uses MSG_ID field (omitempty) on outgoing messages to enable ACK tracking.
 	ActionACK = "ACK" // Buzzer → Server: acknowledge receipt of a priority message
+	// Application-level heartbeat (added in v5.9.x, #118)
+	// The WebSocket protocol's own ping/pong frames keep the connection alive
+	// but are invisible to browser JavaScript (no onmessage-level event) — a
+	// client can be looking at a zombie socket with no way to notice. HEARTBEAT
+	// rides the same per-client ticker in writePump as the protocol ping, as a
+	// visible TextMessage the client can watch for. Purely additive: no
+	// response expected, an older client that doesn't recognize it keeps its
+	// current behavior (unknown-action branch, ignored).
+	ActionHeartbeat = "HEARTBEAT" // Server → Client (web: admin/TV/player): periodic liveness signal
 )
 
 // FSInfo represents file storage information
@@ -153,6 +167,15 @@ type RemotePayload struct {
 // DeletePayload for DELETE action
 type DeletePayload struct {
 	ID string `json:"ID"`
+}
+
+// ReleaseBumperNamePayload for RELEASE_BUMPER_NAME action (#122 B3).
+// Grants a one-time, time-bounded authorization for the next nameless
+// PLAYER_CONNECT matching this bumper's name to reattach to it (score, team,
+// and history preserved under a new bumper ID) instead of being rejected
+// with NAME_TAKEN_OFFLINE.
+type ReleaseBumperNamePayload struct {
+	ID string `json:"ID"` // Bumper ID (the current name holder)
 }
 
 // BumperPointsPayload for BUMPER_POINTS action
@@ -278,6 +301,17 @@ type PlayerAssignedPayload struct {
 	AnswerColor string `json:"ANSWER_COLOR"` // Assigned answer color (RED/GREEN/YELLOW/BLUE)
 }
 
+// PlayerEvictedPayload for PLAYER_EVICTED action (#120, v5.9.x).
+// Targeted to the single client whose bumper was just removed — never broadcast.
+// Replaces the client-side "bumper missing from roster" deduction, which could not
+// distinguish "evicted" from "not yet received" and caused silent enrollment-page
+// redirects. Absence of a bumper in a roster update is never, by itself, grounds
+// for eviction — only this message is authoritative (contracts/websocket-actions.md).
+type PlayerEvictedPayload struct {
+	Reason string `json:"REASON"` // PLAYER_REMOVED (admin deleted the bumper) or GAME_RESET
+	// (VJoueur roster purged by InitGame on NEW_GAME)
+}
+
 // VPlayerQCMAnswerPayload for VPLAYER_QCM_ANSWER action (VPlayer buzzes with color)
 type VPlayerQCMAnswerPayload struct {
 	ID          string `json:"ID"`           // Bumper ID (VPlayer MAC)
@@ -382,6 +416,15 @@ type LEDSetPayload struct {
 type AckPayload struct {
 	AckAction string `json:"ack_action"` // Action being acknowledged (e.g. "LED_SET")
 	AckID     string `json:"ack_id"`     // Value of the MSG_ID being acknowledged
+}
+
+// HeartbeatPayload for HEARTBEAT action (#118, v5.9.x).
+// No response expected — the client only watches for arrival. IntervalMs
+// carries the server's actual ticker cadence (never hardcoded on the client
+// side) so a future change to the ticker period doesn't silently desync the
+// client's dead-connection threshold.
+type HeartbeatPayload struct {
+	IntervalMs int64 `json:"INTERVAL_MS"` // Real cadence of the server-side ticker, in milliseconds
 }
 
 // WifiConfigPayload for WIFI_CONFIG action (server → buzzer: sync WiFi credentials)

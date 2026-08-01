@@ -87,6 +87,26 @@ type Bumper struct {
 	// Driven by engine.TransitionConn; see ConnState* constants and contracts/websocket-actions.md.
 	ConnState string `json:"CONN_STATE"` // "" (hidden) | "orange" | "red" | "green"
 
+	// ReclaimRequested (added in v5.9.x, #122) — NO omitempty: false is a
+	// meaningful value the frontend relies on to clear a stale "place demandée"
+	// card. Set on this bumper (the current name holder) when a PLAYER_CONNECT
+	// for its name is rejected with NAME_TAKEN_OFFLINE (engine.
+	// ReconnectOrCreateVirtualPlayer, case 3) — i.e. someone just failed to
+	// reclaim this exact seat. Cleared on a normal ID reconnection (case 1),
+	// when the animateur grants a reclaim authorization (ReleaseBumperName),
+	// or implicitly when the bumper itself is deleted (the whole struct goes
+	// with it).
+	ReclaimRequested bool `json:"RECLAIM_REQUESTED"`
+
+	// --- Internal bookkeeping for the reclaim authorization (#122 B3): an
+	// animateur-granted, single-use, time-bounded exception to the #109 R1
+	// ID-only identity rule. Unexported: never serialized:
+	// reclaimAuthorizedUntil, when non-zero and in the future, means the NEXT
+	// nameless PLAYER_CONNECT matching this bumper's name may reattach to it
+	// instead of being rejected — consumed (reset to zero) on first use, on
+	// expiry, or on a normal ID reconnection in the meantime.
+	reclaimAuthorizedUntil time.Time
+
 	// --- Internal bookkeeping for the CONN_STATE "green" minimum display window
 	// (D2/D3, added in v5.7.14, #109 Phase 2). Unexported: encoding/json only
 	// serializes exported fields, so these never reach the wire regardless of tags.

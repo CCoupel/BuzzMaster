@@ -17,13 +17,19 @@ import "testing"
 // Matrice testée (5 cas, §3.3) :
 //   1. ID fourni et trouvé (IsVirtual)      -> reconnexion, jamais de delete/merge
 //   2. ID fourni mais introuvable            -> traité comme sans ID (cas 4/5)
-//   3. Pas d'ID, nom déjà pris (connecté OU déconnecté) -> REJET NAME_TAKEN
+//   3. Pas d'ID, nom déjà pris, détenteur CONNECTÉ    -> REJET NAME_TAKEN
+//   3bis. Pas d'ID, nom déjà pris, détenteur DÉCONNECTÉ -> REJET NAME_TAKEN_OFFLINE
+//         ([CHANGED] #122/B1 : même rejet strict qu'avant — aucune adoption
+//         silencieuse — mais motif distinct, cf. reprise assistée #122)
 //   4. Pas d'ID, nom libre                    -> nouvel enrôlement
 //   5. ID fourni + introuvable + nom libre    -> nouvel enrôlement (= cas 4)
 //
 // Plus : le cas contradictoire (2 bumpers homonymes, données différentes)
 // et la purge des VJoueurs sur InitGame/NEW_GAME (D-R1b, déplacée depuis
 // StartEnrollment — voir le bloc de tests dédié plus bas).
+//
+// #122 (reprise assistée) ajoute Bumper.ReclaimRequested et le rattachement
+// à usage unique après RELEASE_BUMPER_NAME — voir name_recovery_test.go.
 // ---------------------------------------------------------------------------
 
 // TestReconnectOrCreateVirtualPlayer_Case1_IDFound_Reconnects covers matrix
@@ -167,11 +173,18 @@ func TestReconnectOrCreateVirtualPlayer_Case3_NameTaken_Connected_Rejected(t *te
 	assertNameTakenRejection(t, bumper, reconnected, err)
 }
 
-// TestReconnectOrCreateVirtualPlayer_Case3bis_NameTaken_Disconnected_Rejected
-// covers matrix case 3 (disconnected variant) — the strict rule: a name
-// matching a DISCONNECTED VJoueur is rejected too, no silent adoption. The
-// legitimate owner has their ID and takes the case-1 path instead.
-func TestReconnectOrCreateVirtualPlayer_Case3bis_NameTaken_Disconnected_Rejected(t *testing.T) {
+// TestReconnectOrCreateVirtualPlayer_Case3bis_NameTakenOffline_Disconnected_Rejected
+// covers matrix case 3 (disconnected variant) — the strict rule still holds
+// (rejected, no silent adoption), but the REASON changed under #122 (B1):
+// a name matching a DISCONNECTED VJoueur now returns NAME_TAKEN_OFFLINE
+// instead of the plain NAME_TAKEN returned for a CONNECTED holder (see
+// TestReconnectOrCreateVirtualPlayer_Case3_NameTaken_Connected_Rejected,
+// unchanged just above) — the two situations are opposite in practice (an
+// homonym vs. very likely oneself having lost the stored ID) and #122 lets
+// the client and admin tell them apart. Renamed and its expected reason
+// updated accordingly; the legitimate owner still always has their ID and
+// takes the case-1 path instead — no silent adoption is introduced here.
+func TestReconnectOrCreateVirtualPlayer_Case3bis_NameTakenOffline_Disconnected_Rejected(t *testing.T) {
 	e := NewEngine()
 	e.SetPhase(PhaseEnroll)
 	id, _, err := e.CreateVirtualPlayer("Emma")
@@ -182,9 +195,12 @@ func TestReconnectOrCreateVirtualPlayer_Case3bis_NameTaken_Disconnected_Rejected
 
 	_, bumper, reconnected, err := e.ReconnectOrCreateVirtualPlayer("", "Emma")
 
-	assertNameTakenRejection(t, bumper, reconnected, err)
+	assertNameTakenOfflineRejection(t, bumper, reconnected, err)
 
-	// The existing (disconnected) bumper must be entirely untouched.
+	// The existing (disconnected) bumper must still exist and stay
+	// disconnected — #122 (B2) additionally marks it ReclaimRequested, see
+	// TestReconnectOrCreateVirtualPlayer_Case3_NameTakenOffline_SetsReclaimRequested
+	// (name_recovery_test.go) for that specific side effect.
 	untouched := e.GetBumper(id)
 	if untouched == nil {
 		t.Fatal("R1: existing disconnected bumper was deleted on a rejected name-only attempt")
@@ -299,10 +315,19 @@ func TestReconnectOrCreateVirtualPlayer_ContradictoryHomonyms_NeverDeleted(t *te
 
 	_, _, _, err := e.ReconnectOrCreateVirtualPlayer("", "Emma")
 	if err == nil {
-		t.Fatal("expected NAME_TAKEN rejection on a homonym collision")
+		t.Fatal("expected a rejection on a homonym collision")
 	}
-	if enrollErr, ok := err.(*EnrollmentError); !ok || enrollErr.Reason != "NAME_TAKEN" {
-		t.Errorf("expected EnrollmentError{Reason: NAME_TAKEN}, got %v", err)
+	// [CHANGED, #122/B1] The case-3 loop now returns NAME_TAKEN_OFFLINE for a
+	// disconnected holder and NAME_TAKEN for a connected one. With TWO
+	// homonyms of different connection states, which one the loop finds
+	// FIRST — and hence which reason comes back — depends on Go's
+	// (intentionally randomized) map iteration order. Both are a correct,
+	// strict rejection; asserting an exact one here would make this test
+	// flaky. The invariant this test actually protects (no deletion, no
+	// data loss on either homonym) is unaffected and still checked below.
+	enrollErr, ok := err.(*EnrollmentError)
+	if !ok || (enrollErr.Reason != "NAME_TAKEN" && enrollErr.Reason != "NAME_TAKEN_OFFLINE") {
+		t.Errorf("expected EnrollmentError{Reason: NAME_TAKEN or NAME_TAKEN_OFFLINE}, got %v", err)
 	}
 
 	bumpers := e.GetTeamsAndBumpers().Bumpers
@@ -338,6 +363,29 @@ func assertNameTakenRejection(t *testing.T, bumper *Bumper, reconnected bool, er
 	}
 	if enrollErr.Reason != "NAME_TAKEN" {
 		t.Errorf("expected Reason=NAME_TAKEN, got %q", enrollErr.Reason)
+	}
+}
+
+// assertNameTakenOfflineRejection mirrors assertNameTakenRejection for the
+// #122 (B1) disconnected-holder variant: same rejection shape (no bumper, no
+// reconnection), but Reason=NAME_TAKEN_OFFLINE instead of NAME_TAKEN.
+func assertNameTakenOfflineRejection(t *testing.T, bumper *Bumper, reconnected bool, err error) {
+	t.Helper()
+	if err == nil {
+		t.Fatal("expected a NAME_TAKEN_OFFLINE rejection, got no error")
+	}
+	if reconnected {
+		t.Errorf("expected reconnected=false on rejection")
+	}
+	if bumper != nil {
+		t.Errorf("expected a nil bumper on rejection, got %+v", bumper)
+	}
+	enrollErr, ok := err.(*EnrollmentError)
+	if !ok {
+		t.Fatalf("expected *EnrollmentError, got %T: %v", err, err)
+	}
+	if enrollErr.Reason != "NAME_TAKEN_OFFLINE" {
+		t.Errorf("expected Reason=NAME_TAKEN_OFFLINE, got %q", enrollErr.Reason)
 	}
 }
 

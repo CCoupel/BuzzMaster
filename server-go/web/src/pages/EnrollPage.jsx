@@ -1,8 +1,18 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useGame } from '../hooks/GameContext'
-import { REJECTION_MESSAGES, DEFAULT_REJECTION_MESSAGE } from '../utils/playerConnectMessages'
+import { REJECTION_MESSAGES, DEFAULT_REJECTION_MESSAGE, REDIRECT_MESSAGES, DEFAULT_REDIRECT_MESSAGE } from '../utils/playerConnectMessages'
 import './EnrollPage.css'
+
+// #120 (F3) — présentation du bandeau de motif selon la catégorie du renvoi.
+// Le texte affiché vient de REDIRECT_MESSAGES/DEFAULT_REDIRECT_MESSAGE
+// (validé au GATE 2) ; ceci ne pilote que l'icône/la couleur.
+const REDIRECT_BANNER_META = {
+  PLAYER_REMOVED: { kind: 'warn', icon: '⚠️' },
+  GAME_RESET: { kind: 'info', icon: '🔄' },
+  SESSION_EXPIRED: { kind: 'warn', icon: '⚠️' },
+}
+const DEFAULT_REDIRECT_BANNER_META = { kind: 'warn', icon: '⚠️' }
 
 // Le serveur ne répond jamais (perte réseau, etc.) — ne pas rester bloqué sur "Connexion..."
 const CONNECT_TIMEOUT_MS = 5000
@@ -16,11 +26,35 @@ export default function EnrollPage() {
   const [isConnecting, setIsConnecting] = useState(false)
   const [validationError, setValidationError] = useState('')
   const [checkingSession, setCheckingSession] = useState(true)
+  // #120 (F3) — motif de renvoi relayé par VPlayerPage (PLAYER_EVICTED ou le
+  // filet de sécurité local), lu une seule fois au montage puis consommé.
+  const [redirectReason, setRedirectReason] = useState(null)
+  const redirectReasonConsumedRef = useRef(false)
   // Pseudo soumis en attente de confirmation serveur — stocké en localStorage
   // seulement après PLAYER_CONNECTED (pas avant : un pseudo rejeté NAME_TAKEN
   // ne doit jamais être persisté comme si c'était le nôtre).
   const pendingNameRef = useRef('')
   const connectTimeoutRef = useRef(null)
+
+  // #120 (F3) — lire le motif de renvoi une seule fois au montage. Relais en
+  // sessionStorage (déposé par VPlayerPage avant `navigate('/')`) : cette
+  // seule voie couvre à la fois la navigation SPA immédiate (lu dès le
+  // montage suivant) et un rechargement complet de cet onglet (sessionStorage
+  // survit au reload, contrairement à un état de navigation React Router).
+  // Retiré immédiatement après lecture pour qu'un rechargement ultérieur ne
+  // réaffiche pas le bandeau.
+  useEffect(() => {
+    if (redirectReasonConsumedRef.current) return
+    redirectReasonConsumedRef.current = true
+    let reason = null
+    try {
+      reason = sessionStorage.getItem('vplayer_redirect_reason')
+      if (reason !== null) sessionStorage.removeItem('vplayer_redirect_reason')
+    } catch {
+      reason = null
+    }
+    if (reason !== null) setRedirectReason(reason)
+  }, [])
 
   // Timeout to stop checking after 2 seconds
   useEffect(() => {
@@ -43,24 +77,25 @@ export default function EnrollPage() {
     const savedName = localStorage.getItem('vplayer_name')
 
     if (savedName) {
-      // Check if this player exists on the server
-      const existingBumper = Object.values(bumpers).find(
-        b => b.IS_VIRTUAL && b.NAME === savedName
-      )
+      // #120 (F2) — identité par ID, repli sur le nom uniquement pour une
+      // session antérieure à cette version (pas de vplayer_id stocké) —
+      // repli transitoire, appelé à disparaître avec ces anciennes sessions.
+      const savedId = localStorage.getItem('vplayer_id')
+      const existingBumper = savedId
+        ? (bumpers[savedId]?.IS_VIRTUAL ? bumpers[savedId] : null)
+        : Object.values(bumpers).find(b => b.IS_VIRTUAL && b.NAME === savedName)
 
       if (existingBumper) {
         // Player exists on server, go directly to game
         console.log('[EnrollPage] Found existing session for:', savedName)
         navigate('/player')
-        return
-      } else if (Object.keys(bumpers).length > 0) {
-        // Bumpers loaded but player not found - clear session
-        console.log('[EnrollPage] Session expired for:', savedName)
-        localStorage.removeItem('vplayer_name')
-        localStorage.removeItem('vplayer_session')
-        setCheckingSession(false)
       }
-      // If bumpers is empty, keep waiting (timeout will handle)
+      // #120 : plus de branche "else" — l'absence du bumper n'est jamais, à
+      // elle seule, la preuve que la session est morte (c'est exactement la
+      // course qui causait #120). On continue d'attendre : le timeout de
+      // vérification ci-dessus fera apparaître le formulaire si rien
+      // n'arrive. L'éviction est désormais décidée par le serveur
+      // (PLAYER_EVICTED, traité sur VPlayerPage), jamais déduite ici.
     } else {
       // No saved session
       setCheckingSession(false)
@@ -155,6 +190,22 @@ export default function EnrollPage() {
   const isValid = playerName.trim().length >= 2 && playerName.trim().length <= 20
   const enrollmentOpen = gameState.enrollmentActive
 
+  // #120 (F3) — bandeau de motif, affiché au-dessus du formulaire (et de
+  // l'écran d'attente d'ouverture des inscriptions) quand le joueur arrive à
+  // la suite d'un renvoi. Jamais pendant la vérification de session : cet
+  // écran est transitoire (≤ 2 s) et précède la décision d'affichage.
+  const redirectBanner = redirectReason !== null && (
+    <div
+      className={`enroll-redirect-banner ${(REDIRECT_BANNER_META[redirectReason] || DEFAULT_REDIRECT_BANNER_META).kind}`}
+      role="status"
+    >
+      <span className="enroll-redirect-banner-icon">
+        {(REDIRECT_BANNER_META[redirectReason] || DEFAULT_REDIRECT_BANNER_META).icon}
+      </span>
+      <span>{REDIRECT_MESSAGES[redirectReason] || DEFAULT_REDIRECT_MESSAGE}</span>
+    </div>
+  )
+
   // Show loading while checking session
   if (checkingSession) {
     return (
@@ -177,6 +228,7 @@ export default function EnrollPage() {
           <div className="enroll-header">
             <h1>🎮 BuzzMaster</h1>
           </div>
+          {redirectBanner}
           <div className="enroll-waiting">
             <span className="waiting-spinner">⏳</span>
             <p>En attente de l'ouverture des inscriptions...</p>
@@ -194,6 +246,8 @@ export default function EnrollPage() {
           <h1>🎮 BuzzMaster</h1>
           <p>Rejoins la partie en tant que joueur virtuel</p>
         </div>
+
+        {redirectBanner}
 
         <form className="enroll-form" onSubmit={handleSubmit}>
           <div className="form-group">

@@ -165,6 +165,14 @@ func (e *Engine) TransitionConn(bumperID string, event ConnEvent) {
 // instead of sleeping for real time.
 var connGreenMinDuration = 2 * time.Second
 
+// reclaimAuthorizationTTL bounds how long an animateur-granted reclaim
+// authorization (#122 B3, ReleaseBumperName) stays valid: "a few minutes" per
+// the plan — long enough for the flagged player to notice and retry, short
+// enough that it can never survive into a later game/session. A package
+// variable (not a const) so tests can shrink it instead of sleeping for real
+// time, same convention as connGreenMinDuration above.
+var reclaimAuthorizationTTL = 5 * time.Minute
+
 // ConfirmDelivery is the production entry point for the DELIVERY_CONFIRMED
 // event (#109 Phase 2, D2/D3): unlike a raw TransitionConn(id,
 // ConnEventDeliveryConfirmed) call, it honors the minimum "green" display
@@ -1491,7 +1499,13 @@ func (e *Engine) RecalculateAllTeamScores() {
 
 // InitGame resets the game completely: scores, history, question statuses, and sets phase to NEW_GAME.
 // This is the implementation of issue #66 — Bouton Start GAME.
-func (e *Engine) InitGame() {
+// InitGame resets scores/history/statuses for a new game (NEW_GAME action) and
+// purges the entire VJoueur roster. It returns the bumper IDs of the VJoueurs
+// purged so the caller can notify each of them (PLAYER_EVICTED{GAME_RESET},
+// #120) — the engine has no knowledge of WebSocket clients, so that
+// notification is the caller's responsibility (main.go), keeping the existing
+// engine/transport separation intact.
+func (e *Engine) InitGame() []string {
 	e.mu.Lock()
 
 	// Reset all bumper scores/times; purge VJoueurs entirely (fix R1 follow-up
@@ -1499,19 +1513,19 @@ func (e *Engine) InitGame() {
 	// roster, there is no such thing as a "legacy" VJoueur from a prior
 	// session). Physical buzzers are persistent hardware and are kept, just
 	// with their score/time reset like before.
-	purgedVPlayers := 0
+	var purgedVPlayerIDs []string
 	for id, bumper := range e.data.Bumpers {
 		if bumper.IsVirtual {
 			delete(e.data.Bumpers, id)
-			purgedVPlayers++
+			purgedVPlayerIDs = append(purgedVPlayerIDs, id)
 			continue
 		}
 		bumper.Score = 0
 		bumper.Time = 0
 	}
-	if purgedVPlayers > 0 {
+	if len(purgedVPlayerIDs) > 0 {
 		e.state.VirtualPlayerCount = e.countVirtualPlayersUnsafe()
-		log.Printf("[Engine] InitGame: purged %d virtual player(s) — fresh VJoueur roster for the new game", purgedVPlayers)
+		log.Printf("[Engine] InitGame: purged %d virtual player(s) — fresh VJoueur roster for the new game", len(purgedVPlayerIDs))
 	}
 
 	// Reset all team scores
@@ -1553,6 +1567,8 @@ func (e *Engine) InitGame() {
 	go e.SaveTeams()
 	go e.SaveBumpers()
 	go e.SaveStatuses()
+
+	return purgedVPlayerIDs
 }
 
 // SetQuizMeta sets the quiz metadata (name, theme, notes) on the game state.
@@ -2115,7 +2131,38 @@ func (e *Engine) SaveBumpers() error {
 		return err
 	}
 
-	if err := os.WriteFile(e.bumpersPath, data, 0644); err != nil {
+	// Write to a uniquely-named temp file and atomically rename into place (#120 B2
+	// hardening, same pattern already applied to SaveTeams in #113 B4). SaveBumpers
+	// is fired from a background goroutine on every enrollment and reconnection, so
+	// saves can legitimately overlap; os.WriteFile truncates the destination in
+	// place, so a concurrent LoadBumpers (or the other save) could observe an
+	// empty/partial file mid-write. os.CreateTemp gives each call its own file (no
+	// two saves can collide on the same temp path), and os.Rename is atomic on the
+	// same filesystem, so readers only ever see a fully-formed old or new file.
+	tmpFile, err := os.CreateTemp(dir, filepath.Base(e.bumpersPath)+".tmp-*")
+	if err != nil {
+		log.Printf("[Engine] Failed to create temp file for bumpers save: %v", err)
+		return err
+	}
+	tmpPath := tmpFile.Name()
+	if _, err := tmpFile.Write(data); err != nil {
+		tmpFile.Close()
+		os.Remove(tmpPath)
+		log.Printf("[Engine] Failed to write temp bumpers file: %v", err)
+		return err
+	}
+	if err := tmpFile.Close(); err != nil {
+		os.Remove(tmpPath)
+		log.Printf("[Engine] Failed to close temp bumpers file: %v", err)
+		return err
+	}
+	if err := os.Chmod(tmpPath, 0644); err != nil {
+		os.Remove(tmpPath)
+		log.Printf("[Engine] Failed to chmod temp bumpers file: %v", err)
+		return err
+	}
+	if err := os.Rename(tmpPath, e.bumpersPath); err != nil {
+		os.Remove(tmpPath)
 		log.Printf("[Engine] Failed to save bumpers: %v", err)
 		return err
 	}
@@ -2731,11 +2778,41 @@ func (e *Engine) ReconnectOrCreateVirtualPlayer(id, name string) (string, *Bumpe
 			}
 			bumper.Connected = true
 			applyConnEventUnsafe(bumper, ConnEventReconnect)
+			// #122 B2/B3 — the player found their way back on their own: any
+			// pending "place demandée" signal or reclaim authorization for this
+			// bumper is now moot.
+			bumper.ReclaimRequested = false
+			bumper.reclaimAuthorizedUntil = time.Time{}
 			log.Printf("[Engine] Virtual player reconnected by ID: id=%s, name=%s", id, bumper.Name)
 			go e.SaveBumpers()
 			return id, bumper, true, nil
 		}
 		// Case 2: stale/unknown ID — fall through as if none was provided.
+	}
+
+	// #122 B3 — reclaim authorization: an animateur-granted, single-use,
+	// time-bounded exception to the ID-only identity rule (#109 R1),
+	// deliberately narrow — checked BEFORE the case-3 rejection, and only for
+	// a request with NO id at all (never for a stale/unresolvable one). The
+	// authorization is read and consumed in this same locked section, so two
+	// concurrent PLAYER_CONNECT calls racing the same authorization can never
+	// both succeed.
+	if id == "" {
+		for oldID, cand := range e.data.Bumpers {
+			if cand == nil || !cand.IsVirtual {
+				continue
+			}
+			if !strings.EqualFold(strings.TrimSpace(cand.Name), normalized) {
+				continue
+			}
+			if cand.reclaimAuthorizedUntil.IsZero() || time.Now().After(cand.reclaimAuthorizedUntil) {
+				continue // no authorization for this name, or it has expired
+			}
+
+			newID := e.reattachVirtualPlayerUnsafe(oldID, cand, normalized)
+			log.Printf("[Engine] Virtual player reclaimed: old_id=%s, new_id=%s, name=%s", oldID, newID, normalized)
+			return newID, cand, true, nil
+		}
 	}
 
 	// Case 3: reject a name collision outright — no id means we cannot tell a
@@ -2747,6 +2824,18 @@ func (e *Engine) ReconnectOrCreateVirtualPlayer(id, name string) (string, *Bumpe
 			continue
 		}
 		if strings.EqualFold(strings.TrimSpace(cand.Name), normalized) {
+			// #122 B1 — distinguish the reason by the holder's connection
+			// state: a CONNECTED holder is a genuine homonym collision
+			// (message unchanged, #109 non-regression); a DISCONNECTED holder
+			// is most likely this very player having lost their ID — invite
+			// them to request the seat instead of picking another name.
+			if !cand.Connected {
+				// #122 B2 — this rejection IS the signal: flag the holder's own
+				// card for the animateur right now, not after some delay.
+				cand.ReclaimRequested = true
+				go e.SaveBumpers()
+				return "", nil, false, &EnrollmentError{Reason: "NAME_TAKEN_OFFLINE"}
+			}
 			return "", nil, false, &EnrollmentError{Reason: "NAME_TAKEN"}
 		}
 	}
@@ -2754,6 +2843,52 @@ func (e *Engine) ReconnectOrCreateVirtualPlayer(id, name string) (string, *Bumpe
 	// Case 4/5: no usable id, name free -> new enrollment.
 	newID, newBumper, err := e.createVirtualPlayerUnsafe(normalized)
 	return newID, newBumper, false, err
+}
+
+// reattachVirtualPlayerUnsafe reattaches an existing bumper (whose owner lost
+// their ID) under a freshly generated ID, consuming its reclaim authorization
+// (#122 B3). Caller must hold e.mu and have already verified the
+// authorization is valid for this bumper. Score, Team, and every other field
+// are preserved as-is — only the map key (ID) changes; the seat is rendered,
+// not recreated, which is precisely what preserves the score/team/history.
+func (e *Engine) reattachVirtualPlayerUnsafe(oldID string, bumper *Bumper, name string) string {
+	newID := "vjoueur_" + name + "_" + time.Now().Format("20060102_150405")
+
+	delete(e.data.Bumpers, oldID)
+	e.data.Bumpers[newID] = bumper
+
+	bumper.Name = name
+	bumper.Connected = true
+	bumper.ReclaimRequested = false
+	bumper.reclaimAuthorizedUntil = time.Time{} // consumed — single use
+	applyConnEventUnsafe(bumper, ConnEventReconnect)
+
+	go e.SaveBumpers()
+	return newID
+}
+
+// ReleaseBumperName grants a one-time, time-bounded authorization (#122 B3)
+// for the NEXT nameless PLAYER_CONNECT under this bumper's name to reattach
+// to it instead of being rejected — the only exception to the #109 R1
+// ID-only identity rule, and an explicit, human (animateur) decision rather
+// than an automatic one. Returns false if id doesn't resolve to a virtual
+// bumper (nothing to release).
+func (e *Engine) ReleaseBumperName(id string) bool {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+
+	bumper, ok := e.data.Bumpers[id]
+	if !ok || bumper == nil || !bumper.IsVirtual {
+		return false
+	}
+
+	bumper.reclaimAuthorizedUntil = time.Now().Add(reclaimAuthorizationTTL)
+	bumper.ReclaimRequested = false
+	log.Printf("[Engine] Bumper name released for reclaim: id=%s, name=%s, expires=%s",
+		id, bumper.Name, bumper.reclaimAuthorizedUntil.Format(time.RFC3339))
+
+	go e.SaveBumpers()
+	return true
 }
 
 // countVirtualPlayersUnsafe counts virtual players (caller must hold lock)

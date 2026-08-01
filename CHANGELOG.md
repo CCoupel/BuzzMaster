@@ -6,6 +6,91 @@ Historique des versions du projet BuzzControl.
 
 ---
 
+## [5.9.3] - 2026-07-31
+
+Bugfix : un joueur ayant perdu son identifiant local ne pouvait plus jamais reprendre son pseudo — protection anti-vol de #109 devenue un mur permanent. L'animateur peut désormais lui rendre sa place avec score conservé, ou la libérer définitivement.
+
+### Fixed
+- **Joueur bloqué définitivement sans ID** : un VJoueur ayant perdu le stockage localStorage (changement d'appareil, vidage du cache, navigation incognito) ne pouvait plus se reconnecter avec son ancien pseudo — la protection anti-theft #109 (`NAME_TAKEN` si nom déjà porté sans ID resolvable) le fermait indéfiniment. Correction : nouveau motif `NAME_TAKEN_OFFLINE` (détenteur déconnecté) distinct de `NAME_TAKEN` (connecté), signalant à l'animateur qu'une **reprise assistée** est possible (#122).
+- **Bouton × unique sur chaque VJoueur** : chaque fiche VJoueur (y compris désormais dans la liste des membres d'équipe) porte un bouton × qui ouvre un **dialogue de confirmation** (ReclaimConfirmModal). Ce dialogue propose deux actions dont l'ordre par défaut dépend du statut d'équipe : **Réinscription** (conserve score/équipe, autorisation ~5min usage unique) pour les joueurs assignés, **Suppression totale** (réutilise #123, score perdu) pour les non-assignés. L'autre action reste toujours accessible dans le même dialogue (#122 cycle 2/3).
+- **Piège inscriptions fermées affiché dans le dialogue** : l'avertissement « Inscriptions fermées : {nom} ne pourra pas revenir après une suppression totale » s'affiche sous l'option Suppression totale du dialogue, quelle que soit sa position. Élimine le doute tactile (pas de tooltip au doigt sur tablette, qui n'existe que au survol) (#122 cycle 2/3).
+
+### Changed
+- **Motif `NAME_TAKEN` inchangé** : un homonyme connecté retourne toujours `NAME_TAKEN` (message inchangé). Seul le détenteur déconnecté retourne `NAME_TAKEN_OFFLINE` (nouveau message, signale la reprise possible) — non-régression #109 stricte (#122).
+- **Geste unique + dialogue intelligent** : un seul bouton × sur chaque fiche VJoueur, ouvre un dialogue proposant les deux actions (Réinscription ou Suppression) dont l'ordre par défaut dépend du statut d'équipe. Les deux options restent toujours cliquables (jamais masquées), la confirmation nomme le joueur. Simplifie le geste de l'animateur comparé à deux boutons distincts (#122 cycle 2/3).
+
+### Technical
+- **Backend** : nouveau champ `Bumper.ReclaimRequested` (bool, **sans omitempty**, sérialisé). `Bumper.reclaimAuthorizedUntil` (time.Time, interne non-sérialisé, même convention que `greenSince`). B1 : `NAME_TAKEN_OFFLINE` posé selon `cand.Connected`. B2 : `ReclaimRequested = true` au rejet offline, retiré lors reconnexion normale par ID. B3 : `ReleaseBumperName(id)` pose l'autorisation (TTL ~5min, `var` pas `const` pour testabilité), `reattachVirtualPlayerUnsafe` le consomme (réattachement score/équipe conservés, nouvel ID généré, usage unique garanti par `reclaimAuthorizedUntil` expiré).
+- **Frontend** : nouveau composant `ReclaimActions` (chip + 2 boutons + sous-titres + avertissement) utilisé dans les deux zones. `REJECTION_MESSAGES.NAME_TAKEN_OFFLINE` nouveau, `NAME_TAKEN` inchangé. `TeamsPage.jsx` propose `releaseBumperName(id)` en plus de `deleteBumper(id)`, avec confirmation nommée. #124 couvert sans tâche dédiée — quelle que soit la cause de la perte d'ID (changement d'appareil, cache vidé), la reprise assistée offre une voie de retour.
+- Tests : rattachement score/équipe conservés, usage unique garanti (concurrence 10 goroutines → exactement 1 succès, `-race`), TTL/expiration, avertissement inscriptions fermées présent/absent, non-régression `NAME_TAKEN` stricte (texte exact inchangé).
+
+---
+
+## [5.9.2] - 2026-07-30
+
+Bugfix : suppression d'un VJoueur depuis l'admin n'était jamais notifiée au joueur, et message « nouvelle partie » s'affichait à tort après rechargement. Cause trouvée en validation manuelle sur QUALIF de #120/#118.
+
+### Fixed
+- **VJoueur supprimé sans notification visible** : l'action `DELETE_BUMPER` était correctement codée côté interface mais **jamais émise** (l'interface utilisait une UPDATE générique du roster au lieu de l'action dédiée). Correction : nouvelle fonction `handleDeleteBumper` dans `TeamsPage.jsx` émet maintenant `DELETE_BUMPER`, tandis qu'en parallèle le serveur notifie aussi tout changement de roster par constat de disparition (B1, `handleFullUpdate`) — double filet pour éviter qu'un correctif futur de l'interface ne ré-introduise le bug (#123).
+- **Motif incohérent après rechargement** : le joueur reçoit maintenant le motif d'éviction initial, consulté via le registre borné (`EvictionRegistry`) du serveur au moment de la reconnexion avec l'ID connu. Élimine les messages « nouvelle partie » affichés à tort (R2, cause B du plan) — `ENROLLMENT_CLOSED` retrouve son sens littéral (« inscriptions fermées ») (#123).
+- **Filet SESSION_EXPIRED de #118 redevient opérationnel** : l'état `bumper` n'était jamais remis à `null` à la disparition du roster (seule la ref était nettoyée), laissant le filet bloqué indéfiniment. Correction : `bumperRef` ET React state (`setBumper(null)`, `setTeam(null)`) remis à zéro ensemble, restaurant la garde du filet (R3 du plan #118) (#123).
+
+### Changed
+- **Registre borné pour mémorisation des motifs** : nouveau `EvictionRegistry` (TTL ~1h, plafond 500 entrées) côté serveur, consulté à chaque `PLAYER_CONNECT` quand l'ID est fourni. Permet au serveur d'émettre directement le motif vrai même si le joueur s'est reconnecté bien après son éviction (fenêtre d'au moins 1h). Jamais exposé en API — purement interne (#123).
+- **Double filet sur notification d'éviction** : l'action `DELETE_BUMPER` reste conscient mais non obligatoire pour notifier (B1 couvre aussi les UPDATE génériques du roster). Élimine la dépendance implicite sur une implémentation d'interface correcte (#123).
+- **Suppression de la déduction de motif `ENROLLMENT_CLOSED → GAME_RESET`** : le client ne déduit plus jamais le motif. Le serveur répond désormais directement avec le motif vrai (consulté dans le registre si connu, sinon son code d'erreur littéral). Cohérent avec le design #118/#120 d'éviter les déductions côté client (#123).
+
+### Technical
+- **Backend** : nouveau fichier `server-go/internal/server/eviction_registry.go`, structure `EvictionRegistry{registry map[string]Entry, mu sync.Mutex, lastClean time.Time}`. Méthodes nil-safe (`Record`, `Lookup`, `Reset`). `handlePlayerConnect` consulte le registre avant d'appeler le moteur ; `handleFullUpdate` compare les rosters et notifie les disparitions ; `handleDeleteBumper` et `NEW_GAME` enregistrent les motifs pour consultation ultérieure. Aucune API ne change — le registre est entièrement interne.
+- **Frontend** : `TeamsPage.jsx` utilise `deleteBumper(id)` au lieu de reconstruire le roster. `VPlayerPage.jsx` remise les deux états `bumper` et `team` à `null` (pas juste la ref) quand le bumper disparaît du roster. Suppression de la condition `reason === 'ENROLLMENT_CLOSED' → 'GAME_RESET'` sur le chemin `handlePlayerConnect` rejected.
+- Tests : test central via `handleUpdate` (chemin réel, pas `handleDeleteBumper` direct — l'angle mort qui avait laissé passer #123 sur #120), registre Record/Lookup/TTL/plafond/reset, non-régression buzzer physique. Frontend 100/100 PASS dont filet `SESSION_EXPIRED` redéclenché (F2 vérifié), scénario 6 (`ENROLLMENT_CLOSED` littéral, jamais `GAME_RESET`).
+
+---
+
+## [5.9.1] - 2026-07-30
+
+Bugfix : VJoueurs restant bloqués après une vraie coupure réseau — détection de liaison morte et reconnexion automatique via battement applicatif.
+
+### Fixed
+- **VJoueur bloqué sans le savoir après coupure réseau** : asymétrie du keepalive (R6 cause racine). Le serveur émettait une trame ping protocolaire, mais le navigateur Web y répond automatiquement sans exposer d'événement JavaScript — le client ne détectait jamais la perte et restait sur un socket zombie. Seul un rechargement de page rétablissait la liaison. Correction : battement applicatif `HEARTBEAT` (serveur→client) en complément du ping, dont le client **dérive le seuil** (3 × cadence) plutôt que de le coder en dur. Détection automatique au-delà du seuil, fermeture du socket, reconnexion en arrière-plan avec dispersion ±30 % (#118).
+- **Réassociation immédiate à la reconnexion** : dès que la WebSocket est établie, le client envoie `PLAYER_CONNECT` immédiatement (avec l'ID de bumper connu), au lieu d'attendre 2s. Élimine la fenêtre d'échec sur lien instable où les 2s ne s'écoulaient jamais dans une même fenêtre établie (R4) (#118).
+- **Buzz pendant coupure réseau** : un appui buzzer pendant une perte de liaison est mis en file d'attente (1 seul appui retenu, mémoire seule). À la reconnexion, le buzz est envoyé si la question est la même et toujours en phase `STARTED` ; sinon il est abandonné silencieusement. Élimine les doubles buzzs ou les buzzs sur une question suivante après une coupure qui aurait couvert toute une transition (R2) (#118).
+
+### Changed
+- **Bandeau de statut de connexion** : nouveau bandeau optionnel affichant « Connexion perdue — reconnexion… » (orange, avec pulsation du point) lors d'une détection de liaison morte, puis « Connexion rétablie » (vert, 2s) lors de la reconnexion réussie. Distinct du bandeau d'éviction (#120), qui prime sur celui-ci. Le bouton buzzer n'est jamais désactivé — il accepte les appuis pendant une perte de liaison (#118).
+- **Motif générique sur reconnexion fermée** : si le serveur rejette une reconnexion avec `ENROLLMENT_CLOSED` (partie en cours de réinitialisation), le motif est mappé vers `GAME_RESET` (via le mécanisme d'éviction #120) plutôt qu'un écran `reconnectError` local. Affiche le même bandeau de motif explicite qu'une éviction (#118).
+- **Motif purge `NEW_GAME`** : renvoie désormais `GAME_RESET` au lieu de laisser le client déduire une éviction, cohérent avec #120 (#118).
+
+### Technical
+- **Backend** : `HEARTBEAT { INTERVAL_MS }` (action `ActionHeartbeat`) émise par `writePump` sur un ticker existant (3s), en complément du ping protocolaire. Cadence toujours dérivée de la constante `writePumpTickPeriod`, jamais dupliquée en dur. Livré aux trois endpoints web (`/ws/admin`, `/ws/tv`, `/ws/player`), pas au hub buzzer physique. Jamais lue — aucun retour attendu, ne transite pas par le canal `Incoming`.
+- **Frontend** : `useWebSocket.js` F1 (surveillance) — `lastMessageAtRef` mis à jour sur tout message (ping inclus). `heartbeatIntervalMsRef` alimenté par le `HEARTBEAT`, seuil dérivé (`INTERVAL_MS × 3`), repli 3000ms avant premier `HEARTBEAT`. Effet de surveillance unique (1s), nettoyé au démontage. F5 (dispersion) — `nextReconnectDelay()` appliquée aux deux chemins (onclose normal, `closeZombieSocket`), ±30% sur `RECONNECT_INTERVAL`. `closeZombieSocket()` neutralise les handlers **avant** `close()` — critique pour débloquer la garde de `connect()` et permettre une reconnexion immédiate.
+- **Frontend** : `VPlayerPage.jsx` F2 (réassociation) — `PLAYER_CONNECT` envoyé immédiatement dès que `status === 'connected'` avec `playerSession.id` connu, reprise à 2s. F7 (file buzz) — `pendingBuzzRef` garde `question.ID` capturé, double condition de purge : passage observé en `PREPARE` (toujours éjecté) ; validation au moment de la reconfirmation du bumper (sameQuestion && stillStarted, sinon abandon silencieux). Aucun horodatage client ajouté.
+- Tests : 8 tests backend `HEARTBEAT` (timing réel ~24s, cadence 3s, coexistence ping protocolaire, 3 types clients, aucune lecture retour, non-régression buzzer physique) ; 68 tests React validant surveillance et dérivation du seuil, réassociation immédiate, dispersée, file buzz (scénario critique : offline pendant tout changement de question → abandon, puis buzz normal fonctionne question suivante).
+
+---
+
+## [5.9.0] - 2026-07-29
+
+Bugfix : VJoueur renvoyé sans explication à l'inscription — notifie désormais explicitement le motif de suppression ou d'éviction, et corrige la race qui rendait ce renvoi parfois immédiat.
+
+### Fixed
+- **VJoueur renvoyé silencieusement à l'inscription** : une race entre l'acceptation du serveur et la diffusion du roster causait le renvoi du client vers la saisie de pseudo sans motif visible. Le client ne distinguait pas « pas encore reçu » de « supprimé ». Correction : le serveur notifie désormais explicitement l'éviction via `PLAYER_EVICTED { REASON }`, émis au client concerné avant les broadcasts généraux, fermant la race par construction (#120).
+- **Renvoi sans message** : affiche un bandeau avec le motif explicite (« Joueur supprimé », « Partie réinitialisée », « Session expirée », ou générique). Le joueur supprimé peut se réinscrire avec son pseudo sans être refusé en `NAME_TAKEN` (identité comparée par ID, pas par nom) (#120).
+- **Persistance roster atomique** : `SaveBumpers` était vulnérable à des écritures concurrentes qui pouvaient laisser un fichier vide ou partiel. Corrigée au pattern fichier temporaire + `os.Rename` atomique, appliquant le durcissement déjà validé sur `SaveTeams` (#113 B4) (#120).
+
+### Changed
+- **Identité VJoueur par ID au lieu du pseudo** : le serveur (#109 R1) base l'identité sur l'ID stocké côté client ; le client (VPlayerPage/EnrollPage) utilise désormais ce même ID pour valider l'appartenance (`bumpers[playerSession.id]`), avec repli sur la recherche par nom pour sessions antérieures. Élimine les faux « joueur absent » dus à des divergences de pseudo (casse, espaces) (#120).
+- **Motifs d'éviction explicites** : 8 codes (4 historiques du rejet d'inscription + 3 évictions + générique) avec messages localisés. Les 4 refus historiques (`ENROLLMENT_CLOSED`, `INVALID_NAME`, `NAME_TAKEN`, `LIMIT_REACHED`) conservent leur chemin d'affichage (#109) ; les 3 nouveaux (`PLAYER_REMOVED`, `GAME_RESET`, `SESSION_EXPIRED`) passent par `PLAYER_EVICTED` (#120).
+- **Nettoyage de session mutualisé** : `vplayer_name`, `vplayer_session`, `vplayer_id` toujours effacés ensemble sur tous les chemins (rejet, éviction, timeout 10s) via `clearVPlayerSession()` utilitaire unique (#120).
+
+### Technical
+- **Backend** : action `PLAYER_EVICTED { REASON }` (string, motif explicite), émise ciblée (WebSocket direct au client VJoueur, jamais broadcast). Deux points d'émission : suppression par l'animateur (`handleDeleteBumper`, `PLAYER_REMOVED`) ; purge `InitGame`/`NEW_GAME` (`GAME_RESET` par bumper purgé). `InitGame()` retourne `[]string` (IDs purgés) — l'appelant dans `main.go` les notifie.
+- **Frontend** : `useWebSocket` expose `playerEvictedStatus` (texte motif) ; `VPlayerPage` et `EnrollPage` affichent bandeau `.enroll-redirect-banner` en haut, avec variante visuelle (couleur/icône) selon motif. Redirection automatique 3s après (délai de lecture configurable `RECONNECT_ERROR_REDIRECT_DELAY_MS`).
+- **Filet de sécurité** : si le bumper reste `null` pendant 10s malgré une connexion WebSocket établie et aucune éviction en cours, le client auto-arme `SESSION_EXPIRED` et se redirige (mitigation des cas où une éviction n'aurait pas transitée) (#120).
+- Tests : 13 tests Go validant l'ordre des messages (`PLAYER_EVICTED` avant broadcast), l'émission ciblée, la purge sur `NEW_GAME` ; 32 tests React validant la disparition de la détection par balayage de roster, l'affichage du bandeau pour chaque motif, la course résiduelle minuteur×éviction (fast-follow), le nettoyage mutualisé sur tous les chemins.
+
+---
+
 ## [5.8.1] - 2026-07-27
 
 Bugfix : réponses ARDOISE (saisie libre) triées par ordre chronologique d'arrivée avec affichage du délai de réponse.

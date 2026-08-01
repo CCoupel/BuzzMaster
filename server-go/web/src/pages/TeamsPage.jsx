@@ -17,13 +17,90 @@ const ANSWER_COLORS = {
   BLUE: { label: 'Bleu', color: '#3b82f6', letter: 'D' },
 }
 
+// #122 (fast-follow cycle 2) — geste unique, confirmation intelligente.
+// Le premier cycle conditionnait deux boutons sur RECLAIM_REQUESTED : trop
+// rare/imprévisible à déclencher en usage réel (_work/reports/
+// plan-analysis-20260801-113000-122-verdict.md). Remplacé par LE bouton "×"
+// habituel, toujours visible sur chaque fiche VJoueur, qui ouvre cette
+// confirmation : elle nomme le joueur, propose l'action la plus probable en
+// premier selon son statut d'équipe (avec équipe → Réinscription conserve
+// équipe+score ; sans équipe → Suppression totale), et rend l'AUTRE action
+// accessible dans le même dialogue — nécessaire pour pouvoir supprimer
+// totalement un joueur assigné (countVirtualPlayersUnsafe compte tous les
+// bumpers virtuels, équipe ou non ; sans cette voie, une place ne peut plus
+// jamais être rendue à VirtualPlayerLimit une fois la partie pleine).
+// L'avertissement "inscriptions fermées" est décrit sous l'option de
+// suppression totale, où qu'elle apparaisse dans le dialogue — c'est là,
+// pas au survol (ne fonctionne pas au doigt sur tablette), que l'animateur
+// doit lire la conséquence avant de cliquer.
+function ReclaimConfirmModal({ bumper, enrollmentActive, onRelease, onDelete, onClose }) {
+  const name = bumper.NAME || bumper.mac.slice(-6)
+  const hasTeam = !!bumper.TEAM
+
+  const handleRelease = () => {
+    onRelease(bumper.mac)
+    onClose()
+  }
+
+  const handleDeleteTotal = () => {
+    onDelete(bumper.mac)
+    onClose()
+  }
+
+  const releaseOption = (
+    <div key="release" className="reclaim-modal-option">
+      <button type="button" className="reclaim-btn reclaim-btn-primary" onClick={handleRelease}>
+        Réinscription
+      </button>
+      <span className="reclaim-sub">Retrouve son score et son équipe</span>
+    </div>
+  )
+
+  const deleteOption = (
+    <div key="delete" className="reclaim-modal-option">
+      <button type="button" className="reclaim-btn reclaim-btn-danger" onClick={handleDeleteTotal}>
+        Suppression totale
+      </button>
+      <span className="reclaim-sub">Score et équipe perdus, place libérée</span>
+      {!enrollmentActive && (
+        <div className="reclaim-warning">
+          ⚠ Inscriptions fermées : {name} ne pourra pas revenir après une suppression totale.
+        </div>
+      )}
+    </div>
+  )
+
+  // Statut d'équipe = simple présélection, pas une règle cachée : les deux
+  // options restent toujours visibles et cliquables, seul l'ordre change.
+  const options = hasTeam ? [releaseOption, deleteOption] : [deleteOption, releaseOption]
+
+  return (
+    <div className="reclaim-modal-overlay" onClick={onClose}>
+      <div className="reclaim-modal" onClick={(e) => e.stopPropagation()}>
+        <div className="reclaim-modal-header">
+          <h3>Retirer « {name} » ?</h3>
+          <button className="reclaim-modal-close" onClick={onClose} aria-label="Fermer">×</button>
+        </div>
+        <div className="reclaim-modal-body">
+          {options[0]}
+          <div className="reclaim-modal-divider">ou</div>
+          {options[1]}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export default function TeamsPage() {
-  const { teams, bumpers, gameState, updateConfig, showQRCode, hideQRCode, setVirtualPlayerLimit } = useGame()
+  const { teams, bumpers, gameState, updateConfig, showQRCode, hideQRCode, setVirtualPlayerLimit, deleteBumper, releaseBumperName } = useGame()
   const [newTeamName, setNewTeamName] = useState('')
   const [draggedBumper, setDraggedBumper] = useState(null)
   const [dragOverTarget, setDragOverTarget] = useState(null)
   const [maxPlayers, setMaxPlayers] = useState(10)
   const [otaMac, setOtaMac] = useState(null)
+  // #122 (fast-follow) — mac du VJoueur pour lequel la confirmation
+  // Réinscription/Suppression totale est ouverte. `null` = fermée.
+  const [reclaimTargetMac, setReclaimTargetMac] = useState(null)
 
   // Count physical vs virtual bumpers from server-synchronized data
   const physicalBumperCount = useMemo(() => {
@@ -86,15 +163,33 @@ export default function TeamsPage() {
     })
   }
 
+  // #123 (F1) — action dédiée DELETE_BUMPER plutôt qu'un UPDATE de
+  // configuration amputé : supprimer un joueur n'est pas « mettre à jour la
+  // configuration », et seule DELETE_BUMPER déclenche la notification
+  // PLAYER_EVICTED côté serveur (#120) pour le VJoueur concerné. B1
+  // (dev-backend) couvre désormais aussi ce cas via un diff de roster sur
+  // UPDATE, mais ce correctif reste nécessaire : les deux se cumulent plutôt
+  // que de se substituer l'un à l'autre.
   const handleDeleteBumper = (mac) => {
     const bumper = bumpers[mac]
     const confirmMsg = bumper?.NAME
       ? `Supprimer le joueur "${bumper.NAME}" ?`
       : `Supprimer le joueur ${mac.slice(-6)} ?`
     if (!window.confirm(confirmMsg)) return
-    const newBumpers = { ...bumpers }
-    delete newBumpers[mac]
-    updateConfig({ bumpers: newBumpers })
+    deleteBumper(mac)
+  }
+
+  // #122 (fast-follow) — un VJoueur ouvre toujours la confirmation
+  // Réinscription/Suppression totale (ReclaimConfirmModal) ; un buzzer
+  // physique garde le comportement historique (confirm() simple), inchangé
+  // — cette refonte ne concerne que TeamsPage.jsx et uniquement les VJoueurs.
+  const handleBumperDeleteClick = (mac) => {
+    const bumper = bumpers[mac]
+    if (bumper?.IS_VIRTUAL) {
+      setReclaimTargetMac(mac)
+      return
+    }
+    handleDeleteBumper(mac)
   }
 
   const handleAddTeam = () => {
@@ -314,9 +409,9 @@ export default function TeamsPage() {
                               const avatarColor = !bumper.IS_VPLAYER && bumper.ANSWER_COLOR && ANSWER_COLORS[bumper.ANSWER_COLOR]
                                 ? ANSWER_COLORS[bumper.ANSWER_COLOR].color
                                 : 'var(--gray-400)'
-                              return (
+              return (
+                                <div key={bumper.mac} className="draggable-member-wrapper">
                                 <div
-                                  key={bumper.mac}
                                   className="draggable-member"
                                   draggable
                                   onDragStart={(e) => handleDragStart(e, bumper.mac)}
@@ -372,7 +467,20 @@ export default function TeamsPage() {
                                   {bumper.ACK_PENDING === true && !bumper.IS_VIRTUAL && !bumper.IS_VPLAYER && (
                                     <span style={{display:'inline-flex',alignItems:'center',justifyContent:'center',width:'18px',height:'18px',borderRadius:'50%',background:'#f59e0b',flexShrink:0,boxShadow:'0 1px 4px rgba(245,158,11,0.5)'}} title="En attente de confirmation"><svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></span>
                                   )}
+                                  {bumper.IS_VIRTUAL && (
+                                    <button
+                                      className="member-delete-btn"
+                                      onClick={(e) => {
+                                        e.stopPropagation()
+                                        handleBumperDeleteClick(bumper.mac)
+                                      }}
+                                      title="Supprimer le joueur"
+                                    >
+                                      ×
+                                    </button>
+                                  )}
                                   <span className="drag-handle">⋮⋮</span>
+                                </div>
                                 </div>
                               )
                             })}
@@ -480,7 +588,7 @@ export default function TeamsPage() {
                         className="bumper-delete-btn"
                         onClick={(e) => {
                           e.stopPropagation()
-                          handleDeleteBumper(bumper.mac)
+                          handleBumperDeleteClick(bumper.mac)
                         }}
                         title="Supprimer le joueur"
                       >
@@ -578,6 +686,18 @@ export default function TeamsPage() {
         }
         return <OtaModal buzzer={otaBuzzer} onClose={() => setOtaMac(null)} />
       })()}
+
+      {/* #122 (fast-follow) — confirmation Réinscription/Suppression totale,
+          ouverte par le bouton "×" de n'importe quelle fiche VJoueur. */}
+      {reclaimTargetMac && bumpers[reclaimTargetMac] && (
+        <ReclaimConfirmModal
+          bumper={{ mac: reclaimTargetMac, ...bumpers[reclaimTargetMac] }}
+          enrollmentActive={enrollmentActive}
+          onRelease={releaseBumperName}
+          onDelete={deleteBumper}
+          onClose={() => setReclaimTargetMac(null)}
+        />
+      )}
     </div>
   )
 }

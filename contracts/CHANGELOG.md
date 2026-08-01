@@ -2,6 +2,55 @@
 
 ---
 
+## [20260729] — Battement applicatif client → serveur (#118)
+
+> Un VJoueur dont le réseau tombait restait indéfiniment sur un socket zombie : le serveur le
+> désinscrivait, mais sa trame de fermeture ne traversait pas le réseau coupé, donc le client ne
+> détectait jamais rien et ne se reconnectait pas. Seul un rechargement de page rétablissait la
+> liaison. Plan : `_work/reports/plan-20260729-190000.md`.
+> Maquette : `_work/mockups/118-vplayer-connection-banner.html`.
+
+- **[NEW]** `HEARTBEAT { INTERVAL_MS }` (serveur → client web, **sans réponse attendue**). Émis
+  par `writePump` sur le ticker par client déjà existant (3 s), en complément — et non en
+  remplacement — de la trame ping protocolaire. `INTERVAL_MS` porte la cadence réelle du ticker,
+  dont le client **dérive** son seuil de détection (3 × la cadence) plutôt que de le coder en dur.
+  Concerne les trois endpoints web (`/ws/admin`, `/ws/tv`, `/ws/player`).
+- **[CHANGED]** Règle de contrat ajoutée : **les trames ping du protocole WebSocket ne
+  constituent pas une preuve de vie exploitable côté client** — le navigateur y répond
+  automatiquement et n'expose aucun événement JavaScript. Un client web doit donc surveiller le
+  `HEARTBEAT` applicatif, considérer la liaison morte au-delà du seuil dérivé, puis fermer le
+  socket et se reconnecter de lui-même.
+
+> **Choix d'architecture** : le battement va du serveur vers le client, et non l'inverse. Il
+> réutilise ainsi un ticker existant, reste **hors du canal d'entrée sérialisé par un consommateur
+> unique** qui porte aussi les actions de jeu, et n'ajoute qu'un seul minuteur côté client.
+> Comparaison détaillée : `_work/reports/plan-analysis-20260729-201500-heartbeat.md`.
+
+**Aucun changement BREAKING.** `HEARTBEAT` est additif et sans réponse attendue ; un client
+antérieur l'ignore proprement (branche `default` du switch d'actions) et conserve exactement son
+comportement actuel — le serveur continuant par ailleurs de le surveiller via ses trames ping.
+
+---
+
+## [20260728] — VJoueur renvoyé sans explication à l'inscription (#120)
+
+> Un VJoueur accepté par le serveur (sa carte apparaît côté animateur et TV) était malgré tout
+> renvoyé à la saisie de pseudo, sans message, puis refusé en `NAME_TAKEN` sur son propre pseudo.
+> Plan : `_work/reports/plan-20260728-101500.md`.
+> Maquette : `_work/mockups/120-enroll-redirect-message.html`.
+
+- **[NEW]** `PLAYER_EVICTED { REASON }` (serveur → client VJoueur, ciblé) — notifie explicitement
+  un joueur dont le bumper vient d'être supprimé (`PLAYER_REMOVED`) ou purgé par une nouvelle
+  partie (`GAME_RESET`). Le client n'a plus à déduire son éviction de l'absence de son bumper
+  dans une mise à jour de roster : **cette déduction était la cause racine du renvoi silencieux**.
+- **[CHANGED]** Règle de contrat ajoutée sur le roster : l'absence d'un bumper dans une mise à
+  jour n'est jamais, à elle seule, un motif de renvoi côté client. Seul `PLAYER_EVICTED` fait foi.
+
+**Aucun changement BREAKING.** `PLAYER_EVICTED` est additif ; un client antérieur qui l'ignore
+conserve son comportement actuel.
+
+---
+
 ## [20260727] — Réponses ardoise triées par ordre d'arrivée (#117)
 
 > Sur la page admin, les réponses ARDOISE s'affichaient dans l'ordre de la liste d'équipes, sans

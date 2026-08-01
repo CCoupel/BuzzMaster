@@ -626,6 +626,35 @@ Refus d'inscription ou de reconnexion.
 
 ---
 
+### PLAYER_EVICTED
+
+Notification adressée à **un seul client VJoueur** dont le bumper vient de disparaître du roster
+côté serveur (#120, v5.9.x). Remplace la détection par balayage du roster côté client, qui ne
+pouvait pas distinguer « bumper supprimé » de « bumper pas encore reçu » et provoquait des
+renvois silencieux à la page d'inscription pendant la fenêtre d'enrôlement.
+
+| Propriété | Valeur |
+|-----------|--------|
+| Direction | `Server→Client` (ciblé, jamais broadcast) |
+| Émis vers | le client dont `SetClientPlayerID` correspond au bumper supprimé |
+
+#### Payload
+
+| Champ | Type | Description |
+|-------|------|-------------|
+| REASON | string | `PLAYER_REMOVED` (fiche supprimée par l'animateur) ou `GAME_RESET` (roster VJoueur purgé par `InitGame` sur NEW_GAME) |
+
+#### Règles
+
+- Le client qui reçoit `PLAYER_EVICTED` efface sa session locale (`vplayer_name`,
+  `vplayer_session`, `vplayer_id`) et retourne à la page d'inscription **en affichant le motif**.
+- L'absence d'un bumper dans une mise à jour de roster n'est **jamais** à elle seule un motif de
+  renvoi : seul `PLAYER_EVICTED` fait autorité. C'est la règle qui ferme la course de #120.
+- Un client qui ignore cette action (version antérieure) conserve le comportement précédent —
+  action purement additive.
+
+---
+
 ### ENROLLMENT_UPDATE
 
 Mise à jour compteur inscriptions.

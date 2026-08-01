@@ -1,6 +1,29 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 
 const RECONNECT_INTERVAL = 5000
+// #118 (F5) — dispersion : ±30% autour de RECONNECT_INTERVAL, pour éviter que
+// tous les VJoueurs ne se reconnectent en cadence après une coupure
+// collective (redémarrage de point d'accès).
+const RECONNECT_JITTER_RATIO = 0.3
+
+// #118 (F1, R6) — surveillance de liaison passive. Le client n'émet AUCUN
+// battement périodique : il surveille seulement l'arrivée de messages
+// (n'importe lequel, HEARTBEAT compris — voir handleMessage). Le serveur émet
+// désormais HEARTBEAT { INTERVAL_MS } sur son ticker par client existant
+// (writePump) ; le seuil de liaison morte se déduit de cette cadence plutôt
+// que d'être codé en dur, pour rester synchronisé si le ticker serveur change
+// un jour. Repli tant qu'aucun HEARTBEAT n'a encore été reçu : 3000ms, la
+// cadence actuelle du serveur au moment de ce correctif.
+const FALLBACK_HEARTBEAT_INTERVAL_MS = 3000
+const HEARTBEAT_MISS_THRESHOLD = 3
+// Fréquence à laquelle on VÉRIFIE le délai écoulé — indépendante de la
+// cadence du battement lui-même.
+const LIVENESS_CHECK_INTERVAL_MS = 1000
+
+function nextReconnectDelay() {
+  const jitter = RECONNECT_INTERVAL * RECONNECT_JITTER_RATIO
+  return RECONNECT_INTERVAL + (Math.random() * 2 - 1) * jitter
+}
 
 export default function useWebSocket(endpoint = '/ws/admin') {
   const [status, setStatus] = useState('disconnected')
@@ -53,12 +76,21 @@ export default function useWebSocket(endpoint = '/ws/admin') {
   // par EnrollPage (attend PLAYER_CONNECTED/PLAYER_REJECTED au lieu de naviguer
   // en aveugle, fix R1 #109). { status: 'connected', id, name } | { status: 'rejected', reason } | null
   const [playerConnectStatus, setPlayerConnectStatus] = useState(null)
+  // #120 — dernier PLAYER_EVICTED reçu (ciblé, ce client uniquement), en
+  // attente de consommation par VPlayerPage : { reason } | null. Remplace la
+  // détection par balayage de roster, qui ne pouvait pas distinguer "bumper
+  // supprimé" de "bumper pas encore reçu" pendant la fenêtre d'enrôlement.
+  const [playerEvictedStatus, setPlayerEvictedStatus] = useState(null)
   const [logs, setLogs] = useState([])
   const [firmwareInfo, setFirmwareInfo] = useState(null) // { VERSION, FILENAME, SIZE, EXISTS }
 
   const wsRef = useRef(null)
   const logCallbackRef = useRef(null)
   const reconnectTimeoutRef = useRef(null)
+  // #118 (F1, R6) — instant du dernier message reçu (n'importe lequel,
+  // HEARTBEAT compris) et cadence de battement annoncée par le serveur.
+  const lastMessageAtRef = useRef(Date.now())
+  const heartbeatIntervalMsRef = useRef(null)
 
   const connect = useCallback(() => {
     if (wsRef.current?.readyState === WebSocket.OPEN) return
@@ -69,8 +101,12 @@ export default function useWebSocket(endpoint = '/ws/admin') {
     setStatus('connecting')
     const ws = new WebSocket(wsUrl)
     wsRef.current = ws
+    // Reset the liveness clock on every fresh socket — avoids a false
+    // positive in the window between creation and the first message.
+    lastMessageAtRef.current = Date.now()
 
     ws.onopen = () => {
+      lastMessageAtRef.current = Date.now()
       setStatus('connected')
       sendMessage('HELLO', {})
     }
@@ -78,7 +114,9 @@ export default function useWebSocket(endpoint = '/ws/admin') {
     ws.onclose = () => {
       setStatus('disconnected')
       wsRef.current = null
-      reconnectTimeoutRef.current = setTimeout(connect, RECONNECT_INTERVAL)
+      // #118 (F5) — dispersion : évite que tous les VJoueurs ne se
+      // reconnectent en cadence après une coupure collective.
+      reconnectTimeoutRef.current = setTimeout(connect, nextReconnectDelay())
     }
 
     ws.onerror = (error) => {
@@ -86,6 +124,7 @@ export default function useWebSocket(endpoint = '/ws/admin') {
     }
 
     ws.onmessage = (event) => {
+      lastMessageAtRef.current = Date.now()
       try {
         const data = JSON.parse(event.data)
         handleMessage(data)
@@ -94,6 +133,55 @@ export default function useWebSocket(endpoint = '/ws/admin') {
       }
     }
   }, [endpoint])
+
+  // #118 (F1, R6) — ferme un socket zombie (readyState toujours OPEN, mais
+  // plus aucun message reçu depuis le seuil de liaison morte) et programme une
+  // reconnexion. Neutralise D'ABORD les handlers du socket périmé, puis le
+  // ferme, puis SEULEMENT ENSUITE remet la référence à null : cet ordre est
+  // ce qui empêche la garde de connect() (`readyState === OPEN`) de rester
+  // verrouillée indéfiniment sur ce socket. Neutraliser les handlers avant la
+  // fermeture évite en plus qu'un `onclose` tardif sur CE socket (le
+  // navigateur peut mettre du temps à finaliser une fermeture sur un lien
+  // déjà mort) ne s'exécute après qu'une reconnexion ait déjà eu lieu, et
+  // n'efface par erreur la référence du NOUVEAU socket.
+  const closeZombieSocket = useCallback((reason) => {
+    const zombie = wsRef.current
+    if (!zombie) return
+    console.warn(`[WS] Liaison morte détectée (${reason}) — fermeture forcée et reconnexion`)
+    zombie.onopen = null
+    zombie.onclose = null
+    zombie.onerror = null
+    zombie.onmessage = null
+    try {
+      zombie.close()
+    } catch {
+      // Déjà fermé ou fermeture en cours — sans effet sur la suite.
+    }
+    wsRef.current = null
+    setStatus('disconnected')
+    if (reconnectTimeoutRef.current) clearTimeout(reconnectTimeoutRef.current)
+    reconnectTimeoutRef.current = setTimeout(connect, nextReconnectDelay())
+  }, [connect])
+
+  // #118 (F1, R6) — surveillance passive de la liaison : aucun émetteur
+  // périodique côté client (voir _work/reports/plan-analysis-20260729-201500-
+  // heartbeat.md) — seule l'arrivée de messages est surveillée. Seuil dérivé
+  // de la cadence HEARTBEAT annoncée par le serveur (repli tant qu'aucun
+  // HEARTBEAT n'est encore arrivé), pour rester synchronisé si le ticker
+  // serveur change un jour. Un seul minuteur pour toute la durée de vie du
+  // hook, nettoyé au démontage.
+  useEffect(() => {
+    const checkId = setInterval(() => {
+      if (!wsRef.current) return // pas de socket à surveiller actuellement
+      const intervalMs = heartbeatIntervalMsRef.current || FALLBACK_HEARTBEAT_INTERVAL_MS
+      const thresholdMs = intervalMs * HEARTBEAT_MISS_THRESHOLD
+      const elapsed = Date.now() - lastMessageAtRef.current
+      if (elapsed > thresholdMs) {
+        closeZombieSocket(`silence de ${elapsed}ms > seuil ${thresholdMs}ms`)
+      }
+    }, LIVENESS_CHECK_INTERVAL_MS)
+    return () => clearInterval(checkId)
+  }, [closeZombieSocket])
 
   const handleMessage = useCallback((data) => {
     const { ACTION, MSG, FSINFO, VERSION } = data
@@ -314,6 +402,14 @@ export default function useWebSocket(endpoint = '/ws/admin') {
         setPlayerConnectStatus({ status: 'rejected', reason: MSG?.REASON })
         break
 
+      case 'PLAYER_EVICTED':
+        // #120 — notification ciblée : ce bumper vient d'être supprimé côté
+        // serveur (animateur, ou purge NEW_GAME). Contrairement à l'absence
+        // d'un bumper dans un roster, cette action fait autorité à elle seule.
+        console.log('[WS] PLAYER_EVICTED:', MSG?.REASON)
+        setPlayerEvictedStatus({ reason: MSG?.REASON })
+        break
+
       case 'PLAYER_ASSIGNED':
         console.log('[WS] PLAYER_ASSIGNED:', MSG)
         // Player assigned to team - state will be updated via UPDATE message
@@ -377,6 +473,15 @@ export default function useWebSocket(endpoint = '/ws/admin') {
         }
         break
 
+      case 'HEARTBEAT':
+        // #118 (F1, R6) — pas d'état de jeu à mettre à jour : l'arrivée du
+        // message elle-même a déjà réarmé lastMessageAtRef (dans onmessage,
+        // avant ce switch). Seule la cadence annoncée est retenue ici, pour
+        // que le seuil de liaison morte reste dérivé de la valeur réelle du
+        // ticker serveur plutôt que d'une constante indépendante.
+        if (MSG?.INTERVAL_MS) heartbeatIntervalMsRef.current = MSG.INTERVAL_MS
+        break
+
       default:
         console.log('Unknown action:', ACTION)
     }
@@ -437,6 +542,23 @@ export default function useWebSocket(endpoint = '/ws/admin') {
     sendMessage('TEAM_POINTS', { TEAM: teamName, POINTS: points })
   }, [sendMessage])
 
+  // #123 (F1) — action dédiée pour supprimer un joueur/buzzer. Avant ce fix,
+  // TeamsPage.jsx supprimait un bumper via `updateConfig({ bumpers })` — un
+  // simple UPDATE de configuration, sans notification. `DELETE_BUMPER` est le
+  // seul chemin qui déclenche `PLAYER_EVICTED { PLAYER_REMOVED }` côté
+  // serveur pour le VJoueur concerné (handleDeleteBumper, #120).
+  const deleteBumper = useCallback((bumperId) => {
+    sendMessage('DELETE_BUMPER', { ID: bumperId })
+  }, [sendMessage])
+
+  // #122 (F1) — reprise de place assistée : autorise une reprise à usage
+  // unique du bumper (score, équipe et historique conservés) au prochain
+  // PLAYER_CONNECT sans ID portant ce nom. N'agit que sur une fiche marquée
+  // RECLAIM_REQUESTED — voir TeamsPage.jsx.
+  const releaseBumperName = useCallback((bumperId) => {
+    sendMessage('RELEASE_BUMPER_NAME', { ID: bumperId })
+  }, [sendMessage])
+
   const setClientType = useCallback((type) => {
     sendMessage('SET_CLIENT_TYPE', { TYPE: type })
   }, [sendMessage])
@@ -493,6 +615,12 @@ export default function useWebSocket(endpoint = '/ws/admin') {
     setPlayerConnectStatus(null)
   }, [])
 
+  // #120 — consommer le dernier PLAYER_EVICTED une fois traité par
+  // VPlayerPage, même logique que clearPlayerConnectStatus ci-dessus.
+  const clearPlayerEvictedStatus = useCallback(() => {
+    setPlayerEvictedStatus(null)
+  }, [])
+
   // New game: trigger full reset and transition to NEW_GAME phase
   const newGame = useCallback(() => {
     sendMessage('NEW_GAME', {})
@@ -528,6 +656,13 @@ export default function useWebSocket(endpoint = '/ws/admin') {
         clearTimeout(reconnectTimeoutRef.current)
       }
       if (wsRef.current) {
+        // #118: neutralize handlers before closing on unmount too — a
+        // delayed close event firing after unmount must not call setState
+        // on a component that's gone.
+        wsRef.current.onopen = null
+        wsRef.current.onclose = null
+        wsRef.current.onerror = null
+        wsRef.current.onmessage = null
         wsRef.current.close()
       }
     }
@@ -556,6 +691,8 @@ export default function useWebSocket(endpoint = '/ws/admin') {
     deleteQuestion,
     setBumperPoints,
     setTeamPoints,
+    deleteBumper,
+    releaseBumperName,
     setClientType,
     forceReady,
     simulateButton,
@@ -572,6 +709,8 @@ export default function useWebSocket(endpoint = '/ws/admin') {
     setVirtualPlayerLimit,
     playerConnectStatus,
     clearPlayerConnectStatus,
+    playerEvictedStatus,
+    clearPlayerEvictedStatus,
     // Logs
     logs,
     subscribeLogs,
