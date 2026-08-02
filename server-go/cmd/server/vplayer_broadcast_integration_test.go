@@ -15,39 +15,28 @@ package main
 // (T1.4, suite unitaire de dev-backend), pas un doublon :
 //   - CA1 est ici vérifié à la valeur EXACTE promise par le contrat §1
 //     ("exactement 2"), alors que le test T1.4 correspondant utilise
-//     volontairement une garde plus lâche (`got >= n+1` échoue seulement) —
-//     son propre commentaire indique "exact target count debated in the
-//     handoff". Voir la note "CONSTAT" plus bas : au moment où ce fichier a
-//     été écrit, cette assertion stricte est ROUGE — c'est le signal attendu
-//     d'un test écrit à partir du contrat avant que l'implémentation ne le
-//     satisfasse pleinement (voir CLAUDE.md agent test-writer, §Processus).
+//     volontairement une garde plus lâche (`got >= n+1` échoue seulement).
 //   - CA6 (invariant de restauration de la carte complète) n'est couvert
 //     nulle part ailleurs.
 //
 // Ce fichier définit délibérément son propre harnais (newVPlayerIntegrationApp,
 // setupParticipants, buildXxxMsg, collectMessages...) plutôt que de réutiliser
-// les helpers de main_broadcast_127_test.go : ce dernier est un fichier non
-// commité, en cours d'écriture par dev-backend au moment où cette suite est
-// rédigée (Batch 1 du plan — les deux tâches tournent en parallèle). Les
-// helpers déjà committés et stables (newTestAppWithHub, startEvictionTestServer,
-// dialWS, learnClientID, collectActions) SONT réutilisés — package-privés,
-// les redéfinir ferait échouer la compilation.
+// les helpers de main_broadcast_127_test.go (fichier de dev-backend, en cours
+// d'écriture en parallèle — Batch 1 du plan). Les helpers déjà committés et
+// stables (newTestAppWithHub, startEvictionTestServer, dialWS, learnClientID,
+// collectActions) SONT réutilisés — package-privés, les redéfinir ferait
+// échouer la compilation.
 //
-// CONSTAT (à corriger avant que ce fichier ne soit vert — voir handoff) :
-// au moment de l'écriture, le VJoueur reçoit 4 UPDATE sur la fenêtre
-// PREPARE→READY, pas 2, à cause de 3 appels redondants non couverts par les
-// tâches T1.1-T1.3 :
-//   1. handleReady() : engine.Ready() déclenche déjà OnStateChange(PREPARE)
-//      → broadcastGameState() → 1 UPDATE VJoueur ; l'appel explicite
-//      `a.broadcastUpdate()` juste après, dans handleReady, en envoie un 2e
-//      pour la MÊME entrée en PREPARE.
-//   2. Au dernier PONG : TransitionToReady() → OnStateChange(READY) →
-//      broadcastGameState() → 1 UPDATE VJoueur (attendu, contrat §1 ligne 3).
-//   3. broadcastReady() → sendLEDSetAllBuzzers() se termine par un
-//      `a.broadcastUpdate()` INCONDITIONNEL ("one broadcast for all
-//      AckPending state changes"), qui s'exécute même sans aucun buzzer
-//      physique (boucle vide) — un 2e UPDATE VJoueur pour la transition.
-// Total observé : 2 (entrée) + 2 (transition) = 4.
+// HISTORIQUE (résolu, commit 2a39fef) : la première version de cette suite a
+// mesuré 4 UPDATE VJoueur sur la fenêtre PREPARE→READY, pas 2 — deux appels
+// redondants hors du périmètre T1.1-T1.3 (handleReady() rappelait
+// broadcastUpdate() après que OnStateChange l'ait déjà fait ; sendLEDSetAllBuzzers()
+// rediffusait inconditionnellement, y compris vers VPlayer, alors que sa
+// propre boucle ignore toujours les bumpers VPlayer). dev-backend a corrigé
+// les deux sites (2a39fef) : CA1 est maintenant vérifié à la valeur exacte du
+// contrat. Ces deux appels continuent en revanche de cibler Admin/TV/Buzzer
+// (légitimement, cf. CA2 plus bas) — c'est ce qui porte leur cadence à N+3,
+// pas N+2 comme une lecture superficielle du contrat le suggérerait.
 // ---------------------------------------------------------------------------
 
 import (
@@ -268,9 +257,7 @@ func TestVPlayerBroadcastIntegration_PrepareToRevealSequence(t *testing.T) {
 			// transition en READY), quel que soit N."
 			if got := countMsgAction(vpMsgs, protocol.ActionUpdate); got != 2 {
 				t.Errorf("CA1 (contracts/vplayer-payload-filter.md §1): VJoueur devrait recevoir exactement "+
-					"2 UPDATE entre l'entrée en PREPARE et la transition en READY (N=%d), reçu %d — actions=%v. "+
-					"Voir le CONSTAT en tête de fichier : ce compte inclut probablement 2 messages redondants "+
-					"(handleReady double-appel + sendLEDSetAllBuzzers fin de fonction inconditionnelle).",
+					"2 UPDATE entre l'entrée en PREPARE et la transition en READY (N=%d), reçu %d — actions=%v",
 					n, got, actionsOf(vpMsgs))
 			}
 			// Contract §1 last row: "Le VJoueur ne reçoit toujours jamais
@@ -281,20 +268,46 @@ func TestVPlayerBroadcastIntegration_PrepareToRevealSequence(t *testing.T) {
 			}
 
 			// --- CA2 — admin garde la cadence 1 UPDATE par PONG -----------------
-			// entrée(1) + N PONG(N) + transition READY(1) = N+2, comportement
-			// inchangé par #127 (seul le VJoueur est retiré de la rafale).
-			if got := countMsgAction(adminMsgs, protocol.ActionUpdate); got != n+2 {
-				t.Errorf("CA2: admin devrait recevoir %d UPDATE (1 entrée + %d PONG + 1 transition READY), reçu %d — actions=%v",
-					n+2, n, got, actionsOf(adminMsgs))
+			// entrée(1) + (N-1) PONG réguliers(N-1) + dernier PONG(3) = N+3.
+			// Le dernier PONG (celui qui déclenche la transition) porte à lui
+			// seul 3 UPDATE Admin/TV, comportement inchangé par #127 (ni
+			// handleReady ni sendLEDSetAllBuzzers ne retirent Admin/TV de leur
+			// broadcast, seul VPlayer en est retiré — commit 2a39fef) :
+			//   1. handlePong() lui-même (tail call, T1.2)
+			//   2. TransitionToReady() → OnStateChange(READY) → broadcastGameState()
+			//   3. broadcastReady() → sendLEDSetAllBuzzers() (ACK_PENDING sync,
+			//      légitimement toujours utile à Admin/TV même sans VPlayer)
+			if got := countMsgAction(adminMsgs, protocol.ActionUpdate); got != n+3 {
+				t.Errorf("CA2: admin devrait recevoir %d UPDATE (1 entrée + %d PONG réguliers + 3 sur le dernier PONG), reçu %d — actions=%v",
+					n+3, n-1, got, actionsOf(adminMsgs))
 			}
 			// TV suit la même cadence que l'admin (contenu filtré, nombre de
 			// messages inchangé — contrat §1, colonne TV).
-			if got := countMsgAction(tvMsgs, protocol.ActionUpdate); got != n+2 {
+			if got := countMsgAction(tvMsgs, protocol.ActionUpdate); got != n+3 {
 				t.Errorf("TV devrait recevoir la même cadence que l'admin (%d UPDATE), reçu %d — actions=%v",
-					n+2, got, actionsOf(tvMsgs))
+					n+3, got, actionsOf(tvMsgs))
 			}
 
 			// --- START → BUZZ → STOP → REVEAL -----------------------------------
+			// Nouvelle connexion dédiée à la lecture post-BUZZ, dialée et
+			// identifiée AVANT de déclencher le BUZZ (sinon le broadcast qui
+			// nous intéresse partirait avant que ce client ne soit enregistré
+			// dans le hub, et on ne le verrait jamais). Nécessaire car
+			// collectMessages() termine TOUJOURS sa fenêtre par un timeout de
+			// lecture (c'est ainsi qu'il sait qu'il n'y a plus rien à lire) —
+			// or un *websocket.Conn gorilla est documenté comme inutilisable
+			// pour un futur ReadMessage une fois qu'un timeout de lecture s'est
+			// produit dessus. Réutiliser vpConn ici (déjà "consommée" par le
+			// premier appel à collectMessages() plus haut) retournerait donc
+			// toujours une liste vide, faisant systématiquement échouer CA6 —
+			// bug de harnais repéré empiriquement par dev-backend, sans rapport
+			// avec le comportement du serveur. On relie la nouvelle connexion
+			// au même PlayerID pour observer le même destinataire individualisé
+			// (contrat §2, condition 3).
+			vpConn2 := dialWS(t, baseURL, "/ws/player")
+			vpClientID2 := learnClientID(t, app, vpConn2)
+			app.wsHub.SetClientPlayerID(vpClientID2, ids[0])
+
 			// engine.Start() lance un vrai countdown de plusieurs secondes
 			// (ticker réel) : on saute directement à STARTED, comme les autres
 			// suites du projet (cf. cmd/server/led_test.go), et on émet
@@ -303,7 +316,7 @@ func TestVPlayerBroadcastIntegration_PrepareToRevealSequence(t *testing.T) {
 			app.broadcastStart()
 			app.handleSimulatedButton(buildButtonMsg(t, ids[0]))
 
-			postBuzz := collectMessages(vpConn, 500*time.Millisecond)
+			postBuzz := collectMessages(vpConn2, 500*time.Millisecond)
 
 			// --- CA6 — invariant de restauration (contrat §2, maquette §4) -----
 			firstUpdate := firstMsgAction(postBuzz, protocol.ActionUpdate)
