@@ -383,6 +383,73 @@ func (h *WebSocketHub) BroadcastRawToTypes(data []byte, types ...ClientType) {
 	h.mu.Unlock()
 }
 
+// VPlayerRecipient identifies one connected, identified VPlayer client —
+// the unit SnapshotVPlayerRecipients/SendRawToVPlayers use for individualized
+// UPDATE fan-out during PREPARE/READY (#127 T2.2, contracts/vplayer-payload-filter.md §3).
+type VPlayerRecipient struct {
+	ClientID string
+	PlayerID string
+}
+
+// SnapshotVPlayerRecipients returns every currently-connected VPlayer client
+// that has already been identified (SetClientPlayerID called, i.e. after a
+// completed PLAYER_CONNECT) — candidates for a personalized payload. A
+// VPlayer client with no PlayerID yet is deliberately excluded: contract §2
+// condition 3 requires it always receive the complete payload instead.
+//
+// Read-locked only (RLock) so the caller can build per-recipient payloads
+// entirely outside any lock before calling SendRawToVPlayers — contract §3:
+// "aucun json.Marshal ne doit être exécuté en tenant WebSocketHub.mu".
+func (h *WebSocketHub) SnapshotVPlayerRecipients() []VPlayerRecipient {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+
+	var out []VPlayerRecipient
+	for client := range h.clients {
+		if client.Type == ClientTypeVPlayer && client.PlayerID != "" {
+			out = append(out, VPlayerRecipient{ClientID: client.ID, PlayerID: client.PlayerID})
+		}
+	}
+	return out
+}
+
+// SendRawToVPlayers delivers pre-serialized payloads to every currently-
+// connected VPlayer client: a client whose PlayerID has an entry in payloads
+// gets that personalized slice; any other VPlayer client — not yet
+// identified, or one that connected/disconnected after
+// SnapshotVPlayerRecipients() was called — gets fallback (the same complete
+// filtered payload TV receives, contract §2 condition 3).
+//
+// payloads and fallback must already be fully serialized: no json.Marshal
+// runs here, only channel pushes, matching contract §3. Re-reads h.clients
+// live (not the earlier snapshot) so a client that connects between the
+// snapshot and this call still gets a payload instead of silently missing
+// this broadcast. Single Lock for the whole pass, same invariant as
+// BroadcastToTypes/BroadcastRawToTypes above: close(client.Send) and
+// delete(h.clients, client) on a saturated channel stay atomic with respect
+// to any concurrent broadcast on this hub.
+func (h *WebSocketHub) SendRawToVPlayers(payloads map[string][]byte, fallback []byte) {
+	h.mu.Lock()
+	for client := range h.clients {
+		if client.Type != ClientTypeVPlayer {
+			continue
+		}
+		data := fallback
+		if client.PlayerID != "" {
+			if personalized, ok := payloads[client.PlayerID]; ok {
+				data = personalized
+			}
+		}
+		select {
+		case client.Send <- data:
+		default:
+			close(client.Send)
+			delete(h.clients, client)
+		}
+	}
+	h.mu.Unlock()
+}
+
 func (c *WebSocketClient) readPump() {
 	defer func() {
 		c.Hub.unregister <- c

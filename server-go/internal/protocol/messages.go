@@ -480,6 +480,16 @@ func (m *Message) SerializeForAdmin() ([]byte, error) {
 	return json.Marshal(m)
 }
 
+// AdminOnlyBumperFields lists the per-bumper fields only Admin needs
+// (firmware/OTA/ACK metadata) — stripped from every bumper by
+// SerializeForWebClient, from the single reduced bumper entry by
+// SerializeForVPlayer (#127 T2.1), and by the hot fan-out path in
+// cmd/server/main.go (T2.3), all from this one shared, exported list so none
+// of the three can silently drift apart from the others.
+var AdminOnlyBumperFields = []string{
+	"FIRMWARE_VERSION", "IS_OUTDATED", "OTA_STATUS", "OTA_PERCENT", "ACK_PENDING",
+}
+
 // SerializeForWebClient returns the payload with admin-only fields stripped from
 // bumpers on UPDATE messages. TV and VPlayer clients do not need firmware/OTA/ACK
 // metadata, so stripping them reduces the payload size for these high-frequency broadcasts.
@@ -509,11 +519,9 @@ func (m *Message) SerializeForWebClient() ([]byte, error) {
 	if bumpers, ok := raw["bumpers"].(map[string]interface{}); ok {
 		for _, b := range bumpers {
 			if bumper, ok := b.(map[string]interface{}); ok {
-				delete(bumper, "FIRMWARE_VERSION")
-				delete(bumper, "IS_OUTDATED")
-				delete(bumper, "OTA_STATUS")
-				delete(bumper, "OTA_PERCENT")
-				delete(bumper, "ACK_PENDING")
+				for _, field := range AdminOnlyBumperFields {
+					delete(bumper, field)
+				}
 			}
 		}
 	}
@@ -523,6 +531,86 @@ func (m *Message) SerializeForWebClient() ([]byte, error) {
 	stripped, err := json.Marshal(raw)
 	if err != nil {
 		return json.Marshal(m)
+	}
+	out := *m
+	out.Msg = stripped
+	return json.Marshal(&out)
+}
+
+// vplayerReducedPhases are the GAME.PHASE values during which a VPlayer's own
+// UPDATE payload is reduced to just its own bumper entry — contracts/vplayer-payload-filter.md §2.
+var vplayerReducedPhases = map[string]bool{"PREPARE": true, "READY": true}
+
+// SerializeForVPlayer returns the UPDATE payload for one specific, identified
+// VPlayer client (playerID) — reference implementation of the reduction rule
+// in contracts/vplayer-payload-filter.md §2 (#127 T2.1). Used directly by
+// table-driven tests (T2.5); the hot fan-out path (T2.2/T2.3,
+// internal/server/websocket.go + cmd/server/main.go) reimplements the same
+// rule keeping GAME/teams as json.RawMessage instead of round-tripping
+// through map[string]interface{} for every recipient — both must agree on
+// content, this method is the correctness reference for that agreement.
+//
+// The payload is reduced if and only if all three conditions hold (contract
+// §2 "règle d'application"); on the first condition that fails, or on any
+// JSON error, this falls back to the complete filtered payload
+// (SerializeForWebClient) — an update must never be silently dropped or
+// narrower than that fallback:
+//  1. m.Action == ActionUpdate;
+//  2. MSG.GAME.PHASE is PREPARE or READY — read from the payload itself
+//     (never passed in), so the decision always matches what is actually
+//     being sent, not a caller's possibly-stale belief about the phase;
+//  3. playerID != "" — an unidentified VPlayer (no PLAYER_CONNECT completed
+//     yet, SetClientPlayerID never called for it) must always receive the
+//     complete card: VPlayerPage.jsx recovers a lost identity by scanning
+//     bumpers by NAME, which is impossible on a single-entry map.
+//
+// GAME and teams are left completely untouched — "teams" is deliberately
+// NOT reduced even though only one bumper is kept (contract §2 rationale:
+// PlayerDisplay.jsx's MEMORY/MEMOTION team bars read teams[name] without an
+// !isVPlayer gate). Only "bumpers" is reduced to the single {playerID: ...}
+// entry, with the same admin-only fields SerializeForWebClient strips.
+func (m *Message) SerializeForVPlayer(playerID string) ([]byte, error) {
+	if m.Action != ActionUpdate || playerID == "" {
+		return m.SerializeForWebClient()
+	}
+
+	var raw map[string]interface{}
+	if err := json.Unmarshal(m.Msg, &raw); err != nil {
+		return m.SerializeForWebClient()
+	}
+
+	gameNode, ok := raw["GAME"].(map[string]interface{})
+	if !ok {
+		return m.SerializeForWebClient()
+	}
+	phase, _ := gameNode["PHASE"].(string)
+	if !vplayerReducedPhases[phase] {
+		return m.SerializeForWebClient()
+	}
+
+	bumpers, ok := raw["bumpers"].(map[string]interface{})
+	if !ok {
+		return m.SerializeForWebClient()
+	}
+	own, ok := bumpers[playerID]
+	if !ok {
+		// This player's bumper isn't in the current snapshot (e.g. evicted in
+		// the same instant this broadcast was built) — fall back rather than
+		// send a bumpers map that omits the recipient's own entry entirely.
+		return m.SerializeForWebClient()
+	}
+	if bumper, ok := own.(map[string]interface{}); ok {
+		for _, field := range AdminOnlyBumperFields {
+			delete(bumper, field)
+		}
+	}
+	raw["bumpers"] = map[string]interface{}{playerID: own}
+	// "config" is a server-side key not needed by VPlayer clients (same as SerializeForWebClient)
+	delete(raw, "config")
+
+	stripped, err := json.Marshal(raw)
+	if err != nil {
+		return m.SerializeForWebClient()
 	}
 	out := *m
 	out.Msg = stripped

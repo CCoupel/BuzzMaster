@@ -2352,18 +2352,22 @@ func (a *App) broadcastUpdateTo(types ...server.ClientType) {
 		}
 	}
 
-	// TV and VPlayer clients receive a stripped payload (no firmware/OTA/ACK metadata).
-	var webClientTypes []server.ClientType
-	if targetTV {
-		webClientTypes = append(webClientTypes, server.ClientTypeTV)
-	}
-	if targetVPlayer {
-		webClientTypes = append(webClientTypes, server.ClientTypeVPlayer)
-	}
-	if len(webClientTypes) > 0 {
-		if dataWeb, err := msg.SerializeForWebClient(); err == nil {
-			a.wsHub.BroadcastRawToTypes(dataWeb, webClientTypes...)
+	// TV and VPlayer clients both start from the same stripped payload (no
+	// firmware/OTA/ACK metadata) — computed once and reused: TV always gets
+	// it verbatim; VPlayer gets it too, except during PREPARE/READY where
+	// broadcastUpdateToVPlayers further reduces "bumpers" per recipient
+	// (#127 T2.1-T2.3) — dataWeb is also its fallback for that reduction.
+	var dataWeb []byte
+	if targetTV || targetVPlayer {
+		if data, err := msg.SerializeForWebClient(); err == nil {
+			dataWeb = data
 		}
+	}
+	if targetTV && dataWeb != nil {
+		a.wsHub.BroadcastRawToTypes(dataWeb, server.ClientTypeTV)
+	}
+	if targetVPlayer && dataWeb != nil {
+		a.broadcastUpdateToVPlayers(msg, dataWeb)
 	}
 
 	// Physical buzzer WS clients receive a minimal payload (PHASE/TIMER + slim bumper/team slices).
@@ -2372,6 +2376,118 @@ func (a *App) broadcastUpdateTo(types ...server.ClientType) {
 			a.buzzerHub.BroadcastRawIfRelevant(protocol.ActionUpdate, dataBuzzer)
 		}
 	}
+}
+
+// broadcastUpdateToVPlayers fans an UPDATE out to every connected VPlayer
+// client, applying the #127 payload reduction (contracts/vplayer-payload-filter.md
+// §2) when msg qualifies (UPDATE action, GAME.PHASE is PREPARE or READY):
+// each identified VPlayer gets a payload carrying only its own bumper entry;
+// every other VPlayer (not yet identified, or msg doesn't qualify) gets
+// fallback — the same complete filtered payload TV receives.
+//
+// Perf-critical path (CA10/R3, contract §3): GAME and teams are kept as
+// json.RawMessage and never re-parsed/re-marshaled as a whole per recipient
+// (up to ~11KB for a MEMOTION question) — only the small "bumpers"
+// sub-object is rebuilt per recipient. Recipients are snapshotted under
+// RLock (SnapshotVPlayerRecipients); every payload is built entirely outside
+// any lock; only the final byte pushes happen under a single Lock
+// (SendRawToVPlayers). See BenchmarkVPlayerFanout (T2.4) for the measured
+// cost at 10/30 VPlayers.
+func (a *App) broadcastUpdateToVPlayers(msg *protocol.Message, fallback []byte) {
+	recipients := a.wsHub.SnapshotVPlayerRecipients()
+	if len(recipients) == 0 {
+		// No identified VPlayer to personalize for, but a connected-and-not-
+		// yet-identified VPlayer may still exist and needs the fallback.
+		a.wsHub.SendRawToVPlayers(nil, fallback)
+		return
+	}
+
+	payloads, ok := buildVPlayerPayloads(msg, recipients)
+	if !ok {
+		// msg doesn't qualify for reduction (not UPDATE, wrong phase, or
+		// malformed) — same complete payload for every VPlayer, as before #127.
+		a.wsHub.BroadcastRawToTypes(fallback, server.ClientTypeVPlayer)
+		return
+	}
+
+	a.wsHub.SendRawToVPlayers(payloads, fallback)
+}
+
+// buildVPlayerPayloads is the CPU-bound core of the #127 individualized
+// VPlayer fan-out: one reduced payload per recipient (contract §2), given
+// the full UPDATE message and the set of identified VPlayer recipients.
+// Deliberately factored out of broadcastUpdateToVPlayers, with no
+// WebSocketHub/network involvement at all, so BenchmarkVPlayerFanout (T2.4)
+// measures exactly this cost in isolation.
+//
+// ok=false means msg doesn't qualify for reduction (not an UPDATE, GAME.PHASE
+// outside PREPARE/READY, or malformed JSON) — the caller falls back to the
+// shared complete payload for every VPlayer instead.
+//
+// Perf-critical (CA10/R3, contract §3): GAME and teams are extracted once as
+// json.RawMessage and never re-parsed/re-marshaled as a whole per recipient
+// (up to ~11KB for a MEMOTION question) — only the small "bumpers"
+// sub-object is rebuilt per recipient.
+func buildVPlayerPayloads(msg *protocol.Message, recipients []server.VPlayerRecipient) (map[string][]byte, bool) {
+	if msg.Action != protocol.ActionUpdate {
+		return nil, false
+	}
+
+	var envelope map[string]json.RawMessage
+	if err := json.Unmarshal(msg.Msg, &envelope); err != nil {
+		return nil, false
+	}
+
+	var phaseProbe struct {
+		Phase string `json:"PHASE"`
+	}
+	if err := json.Unmarshal(envelope["GAME"], &phaseProbe); err != nil ||
+		(phaseProbe.Phase != string(game.PhasePrepare) && phaseProbe.Phase != string(game.PhaseReady)) {
+		return nil, false
+	}
+
+	var bumpers map[string]json.RawMessage
+	if err := json.Unmarshal(envelope["bumpers"], &bumpers); err != nil {
+		return nil, false
+	}
+
+	payloads := make(map[string][]byte, len(recipients))
+	for _, r := range recipients {
+		ownRaw, present := bumpers[r.PlayerID]
+		if !present {
+			// Evicted between GetGameJSON() and this call — SendRawToVPlayers
+			// falls back to the complete payload for this recipient.
+			continue
+		}
+		var own map[string]interface{}
+		if err := json.Unmarshal(ownRaw, &own); err != nil {
+			continue
+		}
+		for _, field := range protocol.AdminOnlyBumperFields {
+			delete(own, field)
+		}
+		reducedBumpers, err := json.Marshal(map[string]interface{}{r.PlayerID: own})
+		if err != nil {
+			continue
+		}
+		reducedMsg, err := json.Marshal(map[string]json.RawMessage{
+			"GAME":    envelope["GAME"],
+			"teams":   envelope["teams"],
+			"bumpers": reducedBumpers,
+		})
+		if err != nil {
+			continue
+		}
+		out := *msg
+		out.Msg = reducedMsg
+		data, err := out.SerializeForWebSocket()
+		if err != nil {
+			continue
+		}
+		payloads[r.PlayerID] = data
+	}
+
+	return payloads, true
 }
 
 // updateBroadcasterFrequency adjusts the UDP heartbeat interval based on whether
