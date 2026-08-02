@@ -236,7 +236,14 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
   }, [gameState.remote])
 
   // Sort teams by score for scoreboard with rank calculation
+  // #127 — pour un VJoueur, ce classement n'est JAMAIS rendu sauf quand l'animateur
+  // bascule le remote sur 'SCORE' (vue "Classement Equipes", l.1012 — pas de garde
+  // !isVPlayer sur cette branche, elle s'affiche aussi côté VJoueur : casser ce cas
+  // serait une régression visible). Repli sûr : ne trier que quand ce sera
+  // effectivement affiché — élimine le tri O(n log n) exécuté à chaque UPDATE reçu
+  // pendant la rafale PREPARE→READY (cause racine #127), sans toucher à la vue SCORE.
   const sortedTeams = useMemo(() => {
+    if (isVPlayer && gameState.remote !== 'SCORE') return []
     const sorted = Object.entries(teams)
       .map(([name, data]) => ({
         name,
@@ -257,10 +264,13 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
       lastRank = currentRank
       return { ...team, rank: currentRank }
     })
-  }, [teams])
+  }, [teams, isVPlayer, gameState.remote])
 
   // Sort players (bumpers) by score
+  // #127 — même raisonnement que sortedTeams ci-dessus, pour la vue "Classement
+  // Joueurs" (remote='PLAYERS', l.1085, également non gatée sur !isVPlayer).
   const sortedPlayers = useMemo(() => {
+    if (isVPlayer && gameState.remote !== 'PLAYERS') return []
     const sorted = Object.entries(bumpers)
       .map(([mac, data]) => ({
         mac,
@@ -283,10 +293,15 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
       lastRank = currentRank
       return { ...player, rank: currentRank }
     })
-  }, [bumpers, teams])
+  }, [bumpers, teams, isVPlayer, gameState.remote])
 
   // Detect team ranking changes
+  // #127 — gardé aligné sur le gating de sortedTeams ci-dessus : sans ce retour
+  // anticipé, un VJoueur hors vue SCORE ré-exécuterait quand même setPreviousRanking
+  // avec un nouvel objet {} à chaque UPDATE (sortedTeams=[] fait toujours tourner ce
+  // forEach à vide), déclenchant un re-render inutile à chaque message de la rafale.
   useEffect(() => {
+    if (isVPlayer && gameState.remote !== 'SCORE') return
     const currentRanking = {}
     const changes = {}
 
@@ -309,10 +324,11 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
     }
 
     setPreviousRanking(currentRanking)
-  }, [sortedTeams])
+  }, [sortedTeams, isVPlayer, gameState.remote])
 
-  // Detect player score changes
+  // Detect player score changes — #127, même raisonnement que ci-dessus.
   useEffect(() => {
+    if (isVPlayer && gameState.remote !== 'PLAYERS') return
     const currentScores = {}
     const changes = {}
 
@@ -331,25 +347,39 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
     }
 
     setPreviousPlayerScores(currentScores)
-  }, [sortedPlayers])
+  }, [sortedPlayers, isVPlayer, gameState.remote])
 
   // Detect score changes and trigger celebration animation in GAME view
+  // #127 — DÉLIBÉRÉMENT INDÉPENDANT de sortedTeams/previousRanking (ci-dessus) :
+  // cette célébration est rendue sans garde !isVPlayer (JSX plus bas, vue GAME) et
+  // doit se déclencher précisément quand remote==='GAME' — soit l'exact opposé de la
+  // condition qui vide sortedTeams pour un VJoueur. La coupler à sortedTeams aurait
+  // soit cassé la célébration pendant le jeu (si gardée alignée sur 'SCORE'), soit
+  // réintroduit le tri complet à chaque UPDATE pendant la rafale PREPARE→READY (si
+  // laissée inconditionnelle). Calcul dédié en O(n), sans tri, sur `teams` brut.
+  const previousTeamScoresRef = useRef({})
   useEffect(() => {
-    // Check for team score changes
-    sortedTeams.forEach((team) => {
-      const prev = previousRanking[team.name]
-      if (prev && prev.score !== team.score && team.score > prev.score) {
-        const pointsAdded = team.score - prev.score
+    const previous = previousTeamScoresRef.current
+    const currentScores = {}
+
+    Object.entries(teams).forEach(([name, data]) => {
+      const score = data.SCORE || 0
+      currentScores[name] = score
+
+      const prevScore = previous[name]
+      if (prevScore !== undefined && score > prevScore) {
         setPointsAnimation({
-          name: team.name,
-          points: pointsAdded,
-          color: team.color
+          name,
+          points: score - prevScore,
+          color: data.COLOR,
         })
-        triggerCelebration(team.color)
+        triggerCelebration(data.COLOR)
         setTimeout(() => setPointsAnimation(null), 2500)
       }
     })
-  }, [sortedTeams, previousRanking])
+
+    previousTeamScoresRef.current = currentScores
+  }, [teams])
 
   // Background index is now server-synchronized via gameState.currentBackgroundIndex
   // No local cycling needed - server broadcasts BACKGROUND_CHANGE to all clients
