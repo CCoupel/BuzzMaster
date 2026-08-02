@@ -1220,7 +1220,18 @@ func (a *App) handlePong(clientID string, msg *protocol.Message) {
 			a.broadcastReady()
 		}
 
-		a.broadcastUpdate()
+		// #127 T1.2: VJoueurs are deliberately NOT targeted here — for N
+		// participants this fired N nearly-simultaneous full-GameState
+		// broadcasts at every VJoueur, right at the moment they're also
+		// exchanging PLAYER_CONNECT/PONG traffic (the broadcast storm root
+		// cause of #127). Admin keeps this per-PONG cadence on purpose: the
+		// "prêt" progress on TeamCard (GamePage.jsx) must update one buzzer at
+		// a time, not just once at the end (CA2) — so this call is NOT moved
+		// inside the AreAllTeamsReady() branch above. Physical buzzers also
+		// keep their existing cadence. The VJoueur's own single UPDATE for
+		// this window is delivered by TransitionToReady() → OnStateChange →
+		// broadcastGameState(), which already targets VPlayer (T1.3).
+		a.broadcastUpdateTo(server.ClientTypeAdmin, server.ClientTypeTV, server.ClientTypeBuzzer)
 	}
 }
 
@@ -2269,15 +2280,56 @@ func (a *App) broadcastHello() {
 	a.buzzerHub.Broadcast(msg) // HELLO is in buzzer whitelist — sent to physical buzzers
 }
 
+// broadcastUpdate sends the full GameState UPDATE to every client type that
+// historically received it on every game-state change: Admin, TV, VPlayer
+// and physical buzzers. It is a thin wrapper over broadcastUpdateTo — kept
+// as the default entry point so most call sites don't need to spell out the
+// target list. Callers that only need a subset of these types (#127 — e.g.
+// handlePong's per-PONG update, which must not reach VJoueurs) should call
+// broadcastUpdateTo directly instead of broadcastUpdate.
 func (a *App) broadcastUpdate() {
+	a.broadcastUpdateTo(server.ClientTypeAdmin, server.ClientTypeTV, server.ClientTypeVPlayer, server.ClientTypeBuzzer)
+}
+
+// broadcastUpdateTo sends the full GameState UPDATE, but only to the client
+// types listed in types — each type serialized through the same per-type
+// path broadcastUpdate always used (SerializeForAdmin / SerializeForWebClient
+// / SerializeForBuzzer). Pass server.ClientTypeBuzzer to also reach physical
+// buzzers via a.buzzerHub (a separate hub from a.wsHub, so it needs its own
+// explicit flag rather than being picked up by the wsHub type filter).
+//
+// #127 T1.1: introduced so a broadcast can target Admin/TV without also
+// reaching VJoueurs (handlePong's per-PONG rafale, T1.2) and so
+// broadcastGameState (T1.3) can go through this same filtered path instead
+// of the unfiltered generic a.broadcast(). CA7: ApplyVPlayerBroadcastConnEvents
+// must only run when this broadcast actually reaches VJoueurs — calling it on
+// an Admin/TV-only broadcast would flag MessageLost on VJoueurs that received
+// nothing from this particular broadcast.
+func (a *App) broadcastUpdateTo(types ...server.ClientType) {
 	if a.wsHub == nil {
 		return // Guard for unit tests that construct a minimal App without a wsHub
 	}
-	// #109 Phase 2 (D4): this GameState broadcast is the "message" VJoueur
-	// participants should receive — evaluate MessageLost/DeliveryConfirmed for
-	// each of them before serializing, so the resulting CONN_STATE is reflected
-	// in this very broadcast rather than lagging one cycle behind.
-	a.engine.ApplyVPlayerBroadcastConnEvents()
+
+	hasType := func(t server.ClientType) bool {
+		for _, x := range types {
+			if x == t {
+				return true
+			}
+		}
+		return false
+	}
+
+	targetAdmin := hasType(server.ClientTypeAdmin)
+	targetTV := hasType(server.ClientTypeTV)
+	targetVPlayer := hasType(server.ClientTypeVPlayer)
+	targetBuzzers := hasType(server.ClientTypeBuzzer)
+
+	// #109 Phase 2 (D4) / #127 CA7: only evaluate MessageLost/DeliveryConfirmed
+	// when VJoueurs are actually among the recipients of THIS broadcast.
+	if targetVPlayer {
+		a.engine.ApplyVPlayerBroadcastConnEvents()
+	}
+
 	data := a.engine.GetGameJSON()
 	server.LogDebug(game.LogComponentApp, "Broadcasting UPDATE: %s", string(data)[:min(200, len(data))])
 	msg, _ := protocol.NewMessage(protocol.ActionUpdate, nil)
@@ -2285,18 +2337,31 @@ func (a *App) broadcastUpdate() {
 	msg.Version = a.config.Version
 
 	// Admin clients receive the full payload (all firmware/OTA/ACK fields).
-	if dataAdmin, err := msg.SerializeForAdmin(); err == nil {
-		a.wsHub.BroadcastRawToTypes(dataAdmin, server.ClientTypeAdmin)
+	if targetAdmin {
+		if dataAdmin, err := msg.SerializeForAdmin(); err == nil {
+			a.wsHub.BroadcastRawToTypes(dataAdmin, server.ClientTypeAdmin)
+		}
 	}
 
 	// TV and VPlayer clients receive a stripped payload (no firmware/OTA/ACK metadata).
-	if dataWeb, err := msg.SerializeForWebClient(); err == nil {
-		a.wsHub.BroadcastRawToTypes(dataWeb, server.ClientTypeTV, server.ClientTypeVPlayer)
+	var webClientTypes []server.ClientType
+	if targetTV {
+		webClientTypes = append(webClientTypes, server.ClientTypeTV)
+	}
+	if targetVPlayer {
+		webClientTypes = append(webClientTypes, server.ClientTypeVPlayer)
+	}
+	if len(webClientTypes) > 0 {
+		if dataWeb, err := msg.SerializeForWebClient(); err == nil {
+			a.wsHub.BroadcastRawToTypes(dataWeb, webClientTypes...)
+		}
 	}
 
 	// Physical buzzer WS clients receive a minimal payload (PHASE/TIMER + slim bumper/team slices).
-	if dataBuzzer, err := msg.SerializeForBuzzer(); err == nil {
-		a.buzzerHub.BroadcastRawIfRelevant(protocol.ActionUpdate, dataBuzzer)
+	if targetBuzzers {
+		if dataBuzzer, err := msg.SerializeForBuzzer(); err == nil {
+			a.buzzerHub.BroadcastRawIfRelevant(protocol.ActionUpdate, dataBuzzer)
+		}
 	}
 }
 
@@ -2333,10 +2398,17 @@ func (a *App) broadcastEnrollmentUpdate() {
 	a.wsHub.BroadcastToTypes(msg, server.ClientTypeAdmin, server.ClientTypeTV, server.ClientTypeVPlayer)
 	server.LogDebug(game.LogComponentApp, "Broadcasting ENROLLMENT_UPDATE: %d/%d players", state.VirtualPlayerCount, state.VirtualPlayerLimit)
 }
+// broadcastGameState fires on every OnStateChange phase transition (PREPARE,
+// READY, STARTED, ...). #127 T1.3: routed through broadcastUpdateTo, the same
+// filtered per-type serialization path as broadcastUpdate, instead of the
+// generic a.broadcast() → wsHub.BroadcastToTypes() → SerializeForWebSocket(),
+// which sent the exact same unfiltered admin-grade payload to Admin, TV AND
+// VPlayer alike (contracts/vplayer-payload-filter.md §1). Deliberately does
+// NOT target server.ClientTypeBuzzer — buzzers never received this broadcast
+// before (verified: the old a.broadcast(..., false, ...) call had viaTCP=false
+// and never listed a buzzer-facing type), and T1.3 must not introduce that.
 func (a *App) broadcastGameState(phase string) {
-	data := a.engine.GetGameJSON()
-	a.broadcast(protocol.ActionUpdate, data, false,
-		server.ClientTypeAdmin, server.ClientTypeTV, server.ClientTypeVPlayer)
+	a.broadcastUpdateTo(server.ClientTypeAdmin, server.ClientTypeTV, server.ClientTypeVPlayer)
 }
 
 func (a *App) broadcastStart() {
