@@ -1344,8 +1344,17 @@ func (a *App) handleReady(msg *protocol.Message) {
 	a.logger.Info(game.LogComponentEngine, "READY question=%s", payload.Question)
 	a.engine.Ready(payload.Question, question)
 
-	// Broadcast state update to web clients
-	a.broadcastUpdate()
+	// #127: a.engine.Ready() already fired OnStateChange(PhasePrepare) above,
+	// which calls broadcastGameState() -> broadcastUpdateTo(Admin, TV,
+	// VPlayer) with the exact same fresh GetGameJSON() this line used to send
+	// again via the default broadcastUpdate() (Admin, TV, VPlayer, Buzzer) —
+	// byte-for-byte identical, since nothing mutates state between the two
+	// calls. That duplicated every PREPARE-entry UPDATE for Admin/TV/VPlayer
+	// (found while verifying CA1 empirically: a VJoueur received 2 UPDATEs
+	// at PREPARE entry instead of 1). Buzzers are the only type that
+	// genuinely needs this second call — broadcastGameState never targets
+	// server.ClientTypeBuzzer (T1.3) — so only that type is kept here.
+	a.broadcastUpdateTo(server.ClientTypeBuzzer)
 
 	// Send PING to all buzzers
 	a.broadcastPing()
@@ -3081,7 +3090,16 @@ func (a *App) sendLEDSetAllBuzzers() {
 		}
 	}
 	// One broadcast for all AckPending state changes set by the loop above.
-	a.broadcastUpdate()
+	// #127: the loop above unconditionally skips IsVPlayer bumpers (line
+	// 3077), so this broadcast never carries a change relevant to any
+	// VJoueur, at any of this function's call sites — targeting VPlayer here
+	// was always a needless full-GameState resend to every connected
+	// VJoueur. Found while verifying #127 CA1 empirically: it was firing an
+	// extra unconditional UPDATE at every PREPARE->READY transition (via
+	// broadcastReady -> sendLEDSetAllBuzzers), on top of the legitimate one
+	// from TransitionToReady's OnStateChange. Admin/TV/Buzzer still need it
+	// (ACK_PENDING spinner UI, buzzer LED sync).
+	a.broadcastUpdateTo(server.ClientTypeAdmin, server.ClientTypeTV, server.ClientTypeBuzzer)
 }
 
 // sendLEDSetStop broadcasts team color SOLID 100% to all buzzers (game stopped/prepare).
