@@ -239,9 +239,16 @@ func TestBroadcast129_ArdoiseInput_ZeroUpdatesToVPlayerAndTV(t *testing.T) {
 		t.Errorf("#129 CA4: TV should receive 0 UPDATE from %d ARDOISE_INPUT, got %d (actions=%v)", total, got, tvActions)
 	}
 
+	// #129 T2.2 (Phase 2): all `total` ARDOISE_INPUT calls happen essentially
+	// synchronously here, well within one ardoiseCoalesceWindow (150ms) — the
+	// coalescer collapses them into a single admin UPDATE. This is the
+	// intended Phase 2 behavior (CA5's "retard ajouté ≤150ms"), not a
+	// regression of the "admin sees answers build up live" guarantee: a real
+	// admin, typing over real seconds rather than a test's tight loop, still
+	// sees frequent updates — just capped in the pathological worst case.
 	adminActions := collectActions(adminConn, 500*time.Millisecond)
-	if got := countActions(adminActions, protocol.ActionUpdate); got != total {
-		t.Errorf("#129 CA5 (admin real-time): admin should receive %d UPDATE (1 per ARDOISE_INPUT), got %d (actions=%v)", total, got, adminActions)
+	if got := countActions(adminActions, protocol.ActionUpdate); got != 1 {
+		t.Errorf("#129 CA5 (admin, coalesced): admin should receive exactly 1 UPDATE for %d ARDOISE_INPUT arriving within one %s window, got %d (actions=%v)", total, ardoiseCoalesceWindow, got, adminActions)
 	}
 }
 

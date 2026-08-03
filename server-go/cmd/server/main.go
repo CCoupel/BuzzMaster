@@ -54,6 +54,12 @@ type App struct {
 	// bumperBuzzState tracks the BuzzState (NONE/MOI/EQUIPE/AUTRE) for each buzzer
 	// within the current question round. Reset on READY/PREPARE; updated on each buzz.
 	bumperBuzzState map[string]game.BuzzState
+
+	// ardoiseCoalescer collapses a burst of ARDOISE_INPUT-triggered admin
+	// UPDATEs (#129 T2.1/T2.2) into at most one per ≤150ms window — see
+	// broadcast_coalescer.go. Flushed immediately on every phase change
+	// (OnStateChange) and stopped on server shutdown (a.stop()).
+	ardoiseCoalescer *BroadcastCoalescer
 }
 
 // resolvePort returns the effective HTTP port.
@@ -206,6 +212,15 @@ func (a *App) init() {
 	// WebSocket hub (web clients: admin/TV/VPlayer)
 	a.wsHub = server.NewWebSocketHub()
 
+	// ARDOISE_INPUT broadcast coalescer (#129 T2.1/T2.2) — collapses a burst
+	// of admin UPDATEs into at most one per ardoiseCoalesceWindow. The emit
+	// closure reads live state via broadcastUpdateTo at the moment it
+	// actually fires (never a buffered payload — see BroadcastCoalescer's
+	// doc comment for why that's what makes this safe).
+	a.ardoiseCoalescer = NewBroadcastCoalescer(ardoiseCoalesceWindow, func() {
+		a.broadcastUpdateTo(server.ClientTypeAdmin)
+	})
+
 	// Eviction reason registry (#123 B3) — short-lived, bounded
 	a.evictionRegistry = server.NewEvictionRegistry()
 
@@ -309,6 +324,12 @@ func (a *App) setupCallbacks() {
 
 	// Game state changes
 	a.engine.OnStateChange = func(phase game.GamePhase) {
+		// #129 T2.2 / CA5 / CA6: flush any pending ARDOISE_INPUT coalescing
+		// BEFORE the phase-change broadcasts below, so the admin sees the
+		// last keystrokes at their own timestamp rather than have them
+		// silently subsumed into (and indistinguishable from) the
+		// phase-change UPDATE that follows.
+		a.ardoiseCoalescer.Flush()
 		a.broadcastGameState(string(phase))
 		a.broadcastQuestions() // Sync question status with phase
 	}
@@ -792,6 +813,11 @@ func (a *App) stop() {
 	// Cancel the application context — stops the AckManager goroutine and any other ctx-aware components.
 	if a.cancelCtx != nil {
 		a.cancelCtx()
+	}
+	// #129 T2.2: stop any pending ARDOISE coalescer timer — no time.AfterFunc
+	// goroutine left dangling after the rest of the server has stopped.
+	if a.ardoiseCoalescer != nil {
+		a.ardoiseCoalescer.Stop()
 	}
 	a.dnsServer.Stop()
 	a.mdnsServer.Stop()
@@ -2291,8 +2317,22 @@ func (a *App) handleArdoiseInput(clientID string, msg *protocol.Message) {
 	// and never reads ARDOISE_ANSWERS — this was also a fairness leak, every
 	// VJoueur was receiving the text every OTHER team was actively typing.
 	// Buzzers excluded: SerializeForBuzzer carries no ARDOISE field at all.
-	a.broadcastUpdateTo(server.ClientTypeAdmin)
+	//
+	// #129 T2.2: coalesced rather than broadcast directly — 8 teams typing
+	// produce ~40 calls/sec here, each an a.engine.GetGameJSON() taking the
+	// engine lock (round 1 scenario C). ardoiseCoalescer collapses a burst
+	// into at most one admin UPDATE per ardoiseCoalesceWindow; a.broadcastUpdateTo
+	// still runs exactly the same as before, just deferred slightly and
+	// deduplicated — see BroadcastCoalescer's doc comment for why a delayed
+	// emission is always safe here (it reads live state, never a buffered
+	// payload). Flushed immediately on every phase change (OnStateChange) so
+	// the last keystrokes before REVEAL are never held back — CA5/CA6.
+	a.ardoiseCoalescer.Trigger()
 }
+
+// ardoiseCoalesceWindow is the ≤150ms ceiling #129 T2.1/CA5 sets on how long
+// an ARDOISE_INPUT-triggered admin UPDATE may be delayed by coalescing.
+const ardoiseCoalesceWindow = 150 * time.Millisecond
 
 // Broadcast methods
 
