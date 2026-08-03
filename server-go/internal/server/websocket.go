@@ -207,11 +207,29 @@ func (h *WebSocketHub) IsPlayerIDConnected(playerID string) bool {
 	return false
 }
 
-// SendToPlayerID sends a message to the single ClientTypeVPlayer client linked to
-// playerID via SetClientPlayerID (reverse lookup of GetClientPlayerID). Used for
-// targeted, never-broadcast notifications such as PLAYER_EVICTED (#120) — the
-// admin/TV clients and other VJoueurs never receive it. A no-op (nil error) if no
-// client is currently linked to playerID, e.g. the VJoueur already disconnected.
+// SendToPlayerID sends a message to every ClientTypeVPlayer client currently
+// linked to playerID via SetClientPlayerID (reverse lookup of
+// GetClientPlayerID). Used for targeted, never-broadcast notifications such
+// as PLAYER_EVICTED (#120) — the admin/TV clients and other VJoueurs never
+// receive it. A no-op (nil error) if no client is currently linked to
+// playerID, e.g. the VJoueur already disconnected.
+//
+// #129 code review: sends to ALL matching clients, not just the first one a
+// map iteration happens to visit. Two clients can legitimately share the
+// same PlayerID for a brief, real window during a fast reconnect: the OLD
+// connection is only removed from h.clients once ITS OWN failure is
+// detected server-side (read timeout or a failed write — up to a few
+// seconds, readPump/writePump, websocket.go), which is not synchronized
+// with how quickly the client-side reconnects and completes a fresh
+// PLAYER_CONNECT -> SetClientPlayerID on a NEW connection. Nothing evicts
+// the stale registration before the new one links the same PlayerID.
+// Returning after the first match found via Go's randomized map iteration
+// order meant this could non-deterministically land on the stale,
+// about-to-be-cleaned-up connection instead of the live one the caller
+// actually needs to reach — silently breaking CA2-class guarantees (the
+// reconnecting player must receive its own echo) in that narrow window.
+// Sending to every match costs nothing extra in the common case (exactly
+// one match) and eliminates the race in the rare one.
 func (h *WebSocketHub) SendToPlayerID(playerID string, msg *protocol.Message) error {
 	data, err := msg.SerializeForWebSocket()
 	if err != nil {
@@ -225,9 +243,7 @@ func (h *WebSocketHub) SendToPlayerID(playerID string, msg *protocol.Message) er
 		if client.Type == ClientTypeVPlayer && client.PlayerID == playerID {
 			select {
 			case client.Send <- data:
-				return nil
 			default:
-				return nil
 			}
 		}
 	}
@@ -235,10 +251,12 @@ func (h *WebSocketHub) SendToPlayerID(playerID string, msg *protocol.Message) er
 	return nil
 }
 
-// SendRawToPlayerID sends pre-serialized bytes to the single ClientTypeVPlayer
-// client linked to playerID (reverse lookup of GetClientPlayerID) — raw twin
-// of SendToPlayerID for callers that have already serialized a
-// type-appropriate payload themselves (#129 T1.1).
+// SendRawToPlayerID sends pre-serialized bytes to every ClientTypeVPlayer
+// client currently linked to playerID (reverse lookup of GetClientPlayerID)
+// — raw twin of SendToPlayerID for callers that have already serialized a
+// type-appropriate payload themselves (#129 T1.1). See SendToPlayerID's doc
+// comment for why this targets every match rather than the first found:
+// same stale-vs-live duplicate-registration race, same fix.
 //
 // Why not reuse SendToPlayerID: it always serializes via
 // SerializeForWebSocket — the unfiltered payload, OTA/ACK fields included.
@@ -249,8 +267,8 @@ func (h *WebSocketHub) SendToPlayerID(playerID string, msg *protocol.Message) er
 // established for this client type.
 //
 // Same locking discipline and saturation semantics as SendToPlayerID: RLock
-// only (no send ever removes a client here), silent no-op (not an error) if
-// playerID isn't currently connected or its Send channel is full.
+// only (no send ever removes a client here), silent no-op if playerID isn't
+// currently connected or a given match's Send channel is full.
 func (h *WebSocketHub) SendRawToPlayerID(playerID string, data []byte) {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
@@ -261,7 +279,6 @@ func (h *WebSocketHub) SendRawToPlayerID(playerID string, data []byte) {
 			case client.Send <- data:
 			default:
 			}
-			return
 		}
 	}
 }
