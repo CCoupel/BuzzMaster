@@ -211,6 +211,25 @@ non-régression).
 
 ---
 
+## Scénario 10 — Vue « Joueurs » basculée pendant PREPARE/READY
+
+**Objectif** : Non-régression du fix dev-frontend (code-reviewer, majeur #2, SHA `a69424c`) : le
+classement « Joueurs » affichait une seule entrée si l'animateur basculait cette vue pendant
+PREPARE/READY côté VJoueur — conséquence de la carte `bumpers` réduite à un seul destinataire
+pendant ces deux phases (`sortedPlayers` fige désormais le dernier classement complet connu au lieu
+de le recalculer sur la carte réduite).
+
+| Étape | Action | Résultat Attendu | Résultat Obtenu | OK ? |
+|-------|--------|-----------------|----------------|------|
+| 1 | Au moins 4 VJoueurs inscrits et ayant déjà marqué des points lors d'une manche précédente | Classement « Joueurs » complet visible (4+ entrées) | | |
+| 2 | Depuis l'admin, sélectionner une nouvelle question et cliquer READY, en restant sur la vue « Joueurs » côté TV/VJoueur pendant toute la fenêtre PREPARE→READY | Le classement « Joueurs » continue d'afficher **toutes** les entrées précédentes — **jamais** une seule entrée ni un classement tronqué, y compris pendant la rafale de PONG | | |
+| 3 | Laisser passer la transition en READY, observer encore quelques secondes | Classement toujours complet | | |
+| 4 | Lancer START, faire marquer des points, puis STOP | Le classement se met à jour normalement avec les nouveaux scores dès la sortie de PREPARE/READY | | |
+
+**Verdict** : [ ] PASS  [ ] FAIL
+
+---
+
 ## Critères de Validation
 
 - [ ] Un VJoueur reçoit exactement 2 `UPDATE` entre l'entrée en PREPARE et le passage en READY,
@@ -225,6 +244,8 @@ non-régression).
 - [ ] Aucune dégradation parasite du badge de connexion pendant la rafale de PONG des autres joueurs
       (scénario 7)
 - [ ] Comportement inchangé quand un joueur ne répond jamais (scénario 8)
+- [ ] Le classement « Joueurs » reste complet s'il est affiché pendant PREPARE/READY, jamais réduit
+      à une seule entrée (scénario 10)
 - [ ] Aucune régression sur les buzzers physiques (scénario 9)
 - [ ] Aucune erreur/`panic` dans les logs serveur pendant toute la procédure
 - [ ] Suite automatisée complète (Go + React, 649+ tests) au vert avant validation finale (CA9) —
@@ -235,9 +256,10 @@ non-régression).
 
 [Espace pour observations]
 
-> Note pour QA : au moment de la rédaction de cette procédure, la suite automatisée
-> `TestVPlayerBroadcastIntegration_PrepareToRevealSequence` (CA1) est susceptible d'échouer avec un
-> compte de 4 `UPDATE` au lieu de 2 tant qu'un correctif complémentaire (hors T1.1-T1.3, voir handoff
-> test-writer) n'a pas été appliqué à `handleReady()` et `broadcastReady()`/`sendLEDSetAllBuzzers()`.
-> Si l'étape 5 du scénario 1 montre plus de 2 trames, ce n'est pas un faux positif de la procédure —
-> vérifier l'état de ce correctif complémentaire avant d'investiguer davantage.
+> Historique : au moment de la rédaction initiale de cette procédure, la suite automatisée
+> `TestVPlayerBroadcastIntegration_PrepareToRevealSequence` (CA1) échouait avec un compte de 4
+> `UPDATE` au lieu de 2, à cause de deux appels redondants dans `handleReady()` et
+> `broadcastReady()`/`sendLEDSetAllBuzzers()`, hors du périmètre initial T1.1-T1.3. Corrigé par
+> dev-backend (SHA `2a39fef`) — CA1 est désormais vérifié à la valeur exacte du contrat. Si l'étape
+> 5 du scénario 1 montre à nouveau plus de 2 trames, c'est une régression à signaler, pas un
+> comportement connu.
