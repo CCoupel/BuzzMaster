@@ -1184,12 +1184,34 @@ func (a *App) handleButton(clientID string, msg *protocol.Message, timestamp int
 	// Update BuzzState tracking after the engine has recorded the press
 	a.updateBuzzStates(clientID)
 
-	// Broadcast pause to all
+	// Broadcast pause to all — unchanged, drives LED state for every client.
 	a.broadcastPause(clientID)
-	a.broadcastUpdate()
+
+	// #129 T3.1: Admin/TV/Buzzer see every buzz (score/state changes for the
+	// whole board); a targeted echo goes to the buzzing bumper itself if —
+	// and only if — it's a VPlayer. clientID here is always a physical
+	// buzzer MAC (handleButton is reached exclusively via
+	// handleBuzzerMessage/ActionButton, never from a web client — see
+	// handleSimulatedButton below for that path), so this branch is
+	// currently always false in practice; the explicit IsVPlayer check
+	// (rather than relying on broadcastUpdateToPlayer/SendRawToPlayerID's
+	// already-safe no-op for an unmatched ID) makes that guarantee visible
+	// at the call site and skips a pointless GetGameJSON()+SerializeForVPlayer
+	// on every physical buzz.
+	a.broadcastUpdateTo(server.ClientTypeAdmin, server.ClientTypeTV, server.ClientTypeBuzzer)
+	if bumper := a.engine.GetBumper(clientID); bumper != nil && bumper.IsVPlayer {
+		a.broadcastUpdateToPlayer(clientID)
+	}
 }
 
-// handleSimulatedButton processes button press from web client (debug/testing)
+// handleSimulatedButton processes a BUTTON press from a web client. Despite
+// the name, this is the REAL production path a VJoueur uses to buzz on a
+// SPEEDY question — VPlayerPage.jsx sends {ACTION:"BUTTON", MSG:{ID, button}}
+// (web/src/pages/VPlayerPage.jsx:429/560), which reaches this handler via
+// handleWebMessage's ActionButton case, not handleButton (that one is
+// exclusively the physical-buzzer /ws/buzzer path — see its own comment).
+// It's ALSO used for admin's manual "simulate a press" testing tool with an
+// arbitrary bumper ID, hence the historical name.
 func (a *App) handleSimulatedButton(msg *protocol.Message) {
 	var payload struct {
 		ID     string `json:"ID"`
@@ -1222,9 +1244,22 @@ func (a *App) handleSimulatedButton(msg *protocol.Message) {
 	// Update BuzzState tracking after the engine has recorded the press
 	a.updateBuzzStates(payload.ID)
 
-	// Broadcast pause to all
+	// Broadcast pause to all — unchanged, drives LED state for every client.
 	a.broadcastPause(payload.ID)
-	a.broadcastUpdate()
+
+	// #129 (found beyond the plan's explicit T3.1 scope — same pattern,
+	// same justification, see handoff/report): this IS the real VJoueur buzz
+	// path (see doc comment above), so this call site was reaching every
+	// OTHER VJoueur with the full GameState on every single buzz, at any
+	// phase — not gated to PREPARE/READY like #127's reduction, and not one
+	// of the three sites #129 T1.3-T1.5 explicitly retargeted. Admin/TV/
+	// Buzzer see every buzz; the buzzing bumper gets a targeted echo if (and
+	// only if) it's a VPlayer — admin's manual test tool can target a
+	// physical buzzer's MAC here too, same guard as handleButton.
+	a.broadcastUpdateTo(server.ClientTypeAdmin, server.ClientTypeTV, server.ClientTypeBuzzer)
+	if bumper := a.engine.GetBumper(payload.ID); bumper != nil && bumper.IsVPlayer {
+		a.broadcastUpdateToPlayer(payload.ID)
+	}
 }
 
 // handlePong processes PONG from buzzer or web client (WebSocket simulation)
@@ -2252,9 +2287,15 @@ func (a *App) handleVPlayerQCMAnswer(clientID string, msg *protocol.Message) {
 	// Update BuzzState tracking after the engine has recorded the press
 	a.updateBuzzStates(bumperID)
 
-	// Broadcast pause and update to all clients
+	// Broadcast pause to all — unchanged, drives LED state for every client.
 	a.broadcastPause(bumperID)
-	a.broadcastUpdate()
+
+	// #129 T3.1: Admin/TV/Buzzer see every answer; the answering VPlayer gets
+	// a targeted echo of its own resulting state. bumper.IsVPlayer is already
+	// verified true above (line ~2211) — always a real recipient here, no
+	// guard needed (contrast with handleButton, the physical-buzzer path).
+	a.broadcastUpdateTo(server.ClientTypeAdmin, server.ClientTypeTV, server.ClientTypeBuzzer)
+	a.broadcastUpdateToPlayer(bumperID)
 }
 
 // handleArdoiseInput processes a free-text answer update from a VPlayer during an ARDOISE question.
@@ -3460,7 +3501,27 @@ func (a *App) sendLEDSetPause(bumperID string) {
 		}
 	}
 	// One broadcast for all AckPending changes.
-	a.broadcastUpdate()
+	// #129 (found while verifying Phase 3/CA10 empirically — same pattern
+	// and justification as sendLEDSetAllBuzzers's #127/#129-T1.6 narrowing):
+	// the loop above unconditionally skips IsVPlayer bumpers, and
+	// ACK_PENDING (the field this broadcast exists to announce) is always
+	// stripped from TV's payload too (protocol.AdminOnlyBumperFields, via
+	// SerializeForWebClient) — neither client type can ever see anything
+	// this call carries, at either of sendLEDSetPause's two call sites
+	// (broadcastPause, broadcastPauseAll → sendLEDSetPauseAll). Without this,
+	// every buzz/QCM-answer/etc. still sent a full, un-targeted UPDATE to
+	// every VPlayer right next to it, defeating T3.1's targeting entirely —
+	// this is what main_broadcast_129_phase3_test.go's CA10 tests caught.
+	// broadcastPause's OWN direct PAUSE broadcast (the one the plan says to
+	// leave untouched — it still reaches Admin/TV/VPlayer) is a separate
+	// call, unaffected by this line.
+	//
+	// NOT applied here to the 5 sibling sendLEDSet* functions with the
+	// identical pattern (broadcastLEDSet, sendLEDSetStop, sendLEDSetReveal,
+	// sendLEDSetToTeam, sendLEDSetComet) — none of them sit in a call chain
+	// T1.1-T3.1 retargeted, so fixing them is a separate, larger finding
+	// flagged to the teamleader rather than folded silently into this fix.
+	a.broadcastUpdateTo(server.ClientTypeAdmin, server.ClientTypeBuzzer)
 }
 
 // sendLEDSetPauseAll sends LED state for PAUSE ALL (admin-initiated pause, no specific buzzer).
