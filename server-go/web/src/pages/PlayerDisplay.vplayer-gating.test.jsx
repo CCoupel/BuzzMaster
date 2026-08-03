@@ -256,6 +256,122 @@ describe('PlayerDisplay — gating VJoueur du classement (#127, CA8)', () => {
 })
 
 // ---------------------------------------------------------------------------
+// Fix post-review — code-reviewer #127, Problème Majeur #2 : pendant PREPARE/READY,
+// le serveur réduit `bumpers` au seul bumper du VJoueur destinataire (contrat
+// vplayer-payload-filter.md §2). Rien n'empêche l'admin de basculer sur la vue
+// "Joueurs" (remote=PLAYERS) précisément pendant ces deux phases (GamePage.jsx, bouton
+// sans garde de phase) — sans précaution, sortedPlayers y serait recalculé sur ce
+// payload réduit et n'afficherait qu'une seule entrée (le VJoueur lui-même), trompeur.
+// `teams` n'est jamais réduit, donc remote='SCORE' (sortedTeams) n'est pas concerné.
+// ---------------------------------------------------------------------------
+
+describe('PlayerDisplay — fix régression classement Joueurs pendant PREPARE/READY (#127, code-reviewer Majeur #2)', () => {
+  it('remote=PLAYERS, phase=PREPARE avec bumpers réduit à 1 entrée : réaffiche le dernier classement complet connu (pas de classement à 1 entrée trompeur)', () => {
+    // 1) Vue "Joueurs" affichée normalement (hors PREPARE/READY) avec le classement
+    //    complet — alimente le cache du dernier classement complet connu.
+    const { rerender } = renderVPlayer({
+      phase: 'STOPPED',
+      remote: 'PLAYERS',
+      teams: TEAMS_2,
+      bumpers: BUMPERS_2,
+    })
+    expect(screen.getByText('VJoueur-A')).toBeTruthy()
+    expect(screen.getByText('VJoueur-B')).toBeTruthy()
+
+    // 2) Transition vers PREPARE : le serveur réduit bumpers au seul destinataire.
+    //    Le classement affiché doit rester le classement COMPLET précédent, pas se
+    //    réduire à la seule entrée reçue.
+    useGame.mockReturnValue(makeMock({
+      phase: 'PREPARE',
+      remote: 'PLAYERS',
+      teams: TEAMS_2,
+      bumpers: BUMPERS_REDUCED_TO_SELF,
+    }))
+    rerender(<PlayerDisplay isVPlayer={true} playerName="Joueur1" teamName="Équipe A" />)
+
+    expect(screen.getByText('VJoueur-A')).toBeTruthy()
+    expect(screen.getByText('VJoueur-B')).toBeTruthy()
+  })
+
+  it('remote=PLAYERS, phase=READY avec bumpers réduit à 1 entrée : réaffiche le dernier classement complet connu', () => {
+    const { rerender } = renderVPlayer({
+      phase: 'STARTED',
+      remote: 'PLAYERS',
+      teams: TEAMS_2,
+      bumpers: BUMPERS_2,
+    })
+    expect(screen.getByText('VJoueur-A')).toBeTruthy()
+    expect(screen.getByText('VJoueur-B')).toBeTruthy()
+
+    useGame.mockReturnValue(makeMock({
+      phase: 'READY',
+      remote: 'PLAYERS',
+      teams: TEAMS_2,
+      bumpers: BUMPERS_REDUCED_TO_SELF,
+    }))
+    rerender(<PlayerDisplay isVPlayer={true} playerName="Joueur1" teamName="Équipe A" />)
+
+    expect(screen.getByText('VJoueur-A')).toBeTruthy()
+    expect(screen.getByText('VJoueur-B')).toBeTruthy()
+  })
+
+  it('remote=PLAYERS, phase=PREPARE, aucun classement complet connu au préalable (montage direct) : aucun crash, aucun "undefined" (repli sûr sur liste vide plutôt qu\'un classement à 1 entrée trompeur)', () => {
+    expect(() => {
+      renderVPlayer({
+        phase: 'PREPARE',
+        remote: 'PLAYERS',
+        teams: TEAMS_2,
+        bumpers: BUMPERS_REDUCED_TO_SELF,
+      })
+    }).not.toThrow()
+
+    expect(document.body.textContent).not.toMatch(/undefined/)
+    // Ni classement complet (pas encore connu), ni classement trompeur à 1 entrée.
+    expect(screen.queryByText('VJoueur-A')).toBeNull()
+  })
+
+  it('remote=SCORE, phase=PREPARE avec bumpers réduit : non concerné — teams n\'est jamais réduit, le classement Equipes reste correct', () => {
+    renderVPlayer({
+      phase: 'PREPARE',
+      remote: 'SCORE',
+      teams: TEAMS_2,
+      bumpers: BUMPERS_REDUCED_TO_SELF,
+    })
+
+    expect(screen.getByText('Équipe A')).toBeTruthy()
+    expect(screen.getByText('Équipe B')).toBeTruthy()
+  })
+
+  it('remote=SCORE, phase=READY avec bumpers réduit : non concerné — le classement Equipes reste correct', () => {
+    renderVPlayer({
+      phase: 'READY',
+      remote: 'SCORE',
+      teams: TEAMS_2,
+      bumpers: BUMPERS_REDUCED_TO_SELF,
+    })
+
+    expect(screen.getByText('Équipe A')).toBeTruthy()
+    expect(screen.getByText('Équipe B')).toBeTruthy()
+  })
+
+  it('remote=PLAYERS, phase=STARTED (hors PREPARE/READY) avec bumpers réduit : n\'est PAS concerné par le figeage — recalcule normalement (pas de garde superflue hors des deux phases visées)', () => {
+    // Garde-fou de non-sur-correction : le figeage ne doit s'appliquer QU'à
+    // PREPARE/READY. Ici bumpers est (artificiellement, hors contrat réel) réduit à 1
+    // entrée en dehors de ces phases : le composant doit recalculer sur les données
+    // reçues telles quelles (comportement normal), pas figer un ancien classement.
+    renderVPlayer({
+      phase: 'STARTED',
+      remote: 'PLAYERS',
+      teams: TEAMS_2,
+      bumpers: BUMPERS_REDUCED_TO_SELF,
+    })
+
+    expect(screen.getByText('VJoueur-A')).toBeTruthy()
+    expect(screen.queryByText('VJoueur-B')).toBeNull()
+  })
+})
+
+// ---------------------------------------------------------------------------
 // Non-régression : célébration "+X pts" découplée du classement trié (cf. commentaire
 // #127 dans PlayerDisplay.jsx au-dessus de previousTeamScoresRef) — doit continuer à
 // fonctionner côté VJoueur pendant la partie (remote='GAME'), alors que sortedTeams y

@@ -269,8 +269,23 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
   // Sort players (bumpers) by score
   // #127 — même raisonnement que sortedTeams ci-dessus, pour la vue "Classement
   // Joueurs" (remote='PLAYERS', l.1085, également non gatée sur !isVPlayer).
+  //
+  // Fix post-review (code-reviewer #127, Problème Majeur #2) : pendant PREPARE/READY,
+  // le serveur réduit `bumpers` au seul bumper du VJoueur destinataire (contrat
+  // vplayer-payload-filter.md §2) — rien côté admin n'empêche de basculer sur la vue
+  // "Joueurs" pendant ces deux phases (GamePage.jsx, bouton sans garde de phase). Sans
+  // précaution, un VJoueur y verrait un classement à 1 seule entrée (lui-même),
+  // trompeur. `teams` n'est jamais réduit (contrat), donc sortedTeams n'est pas
+  // concerné — uniquement sortedPlayers. Pendant ces deux phases, on réaffiche donc le
+  // dernier classement complet connu (figé) plutôt que de recalculer sur le payload
+  // réduit : le classement réel ne bouge de toute façon pas pendant PREPARE/READY
+  // (aucun buzz/score possible), donc rejouer la dernière valeur est fidèle, pas périmé.
+  const lastFullSortedPlayersRef = useRef([])
   const sortedPlayers = useMemo(() => {
     if (isVPlayer && gameState.remote !== 'PLAYERS') return []
+    if (isVPlayer && ['PREPARE', 'READY'].includes(gameState.phase)) {
+      return lastFullSortedPlayersRef.current
+    }
     const sorted = Object.entries(bumpers)
       .map(([mac, data]) => ({
         mac,
@@ -284,7 +299,7 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
     let currentRank = 1
     let lastScore = null
     let lastRank = 1
-    return sorted.map((player, index) => {
+    const ranked = sorted.map((player, index) => {
       if (index > 0 && player.score === lastScore) {
         return { ...player, rank: lastRank }
       }
@@ -293,7 +308,9 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
       lastRank = currentRank
       return { ...player, rank: currentRank }
     })
-  }, [bumpers, teams, isVPlayer, gameState.remote])
+    lastFullSortedPlayersRef.current = ranked
+    return ranked
+  }, [bumpers, teams, isVPlayer, gameState.remote, gameState.phase])
 
   // Detect team ranking changes
   // #127 — gardé aligné sur le gating de sortedTeams ci-dessus : sans ce retour
