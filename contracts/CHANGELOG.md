@@ -2,6 +2,36 @@
 
 ---
 
+## [20260802] — Diffusion groupée et payload réduit VJoueur à PREPARE→READY (#127)
+
+> À chaque PONG reçu en phase PREPARE, le serveur rediffusait l'état complet du jeu à **tous** les
+> clients : pour N participants, chaque VJoueur recevait N+2 payloads complets en quelques centaines
+> de millisecondes, au moment précis des déconnexions rapportées. Plan :
+> `_work/reports/planner-20260802-212049.md`. Maquette : `_work/mockups/127-broadcast-matrix.md`.
+> Contrat détaillé : `contracts/vplayer-payload-filter.md`.
+
+- **[CHANGED]** `UPDATE` déclenché par `PONG` en phase `PREPARE` — n'est plus diffusé à
+  `ClientTypeVPlayer`. Admin et TV continuent de le recevoir à chaque PONG (l'admin affiche la
+  progression « prêt » équipe par équipe en direct, `GamePage.jsx:1050-1057`). Le VJoueur reçoit
+  désormais **2** `UPDATE` sur la fenêtre PREPARE→READY au lieu de N+2 : l'entrée en PREPARE, puis
+  la transition en READY. Rétrocompatible — aucun message nouveau, aucun champ modifié.
+- **[CHANGED]** `UPDATE` émis sur changement de phase (`broadcastGameState`, toutes phases) — passe
+  du chemin non filtré au chemin filtré déjà utilisé partout ailleurs : Admin garde le payload
+  complet, TV et VJoueur reçoivent le payload sans métadonnées `FIRMWARE_VERSION` / `IS_OUTDATED` /
+  `OTA_STATUS` / `OTA_PERCENT` / `ACK_PENDING`. Correction d'incohérence — ces champs n'ont jamais
+  été consommés par TV/VJoueur.
+- **[CHANGED]** `UPDATE` destiné à `ClientTypeVPlayer` **pendant les seules phases `PREPARE` et
+  `READY`** — la carte `bumpers` est réduite au seul bumper du destinataire. `GAME` et `teams`
+  restent **intégralement inchangés**. Ne s'applique jamais à un client dont le `PlayerID` n'est pas
+  encore identifié (une session sans `vplayer_id` retrouve son bumper par balayage NAME).
+  Voir `contracts/vplayer-payload-filter.md` §2 pour la règle complète et les consommateurs audités.
+
+**Aucun changement BREAKING.** Aucun endpoint, aucun message, aucun champ n'est ajouté, renommé,
+retiré ni retypé. Seuls varient le *nombre de destinataires* de messages existants et le *nombre
+d'entrées* d'une carte, sur deux messages, pour un seul type de client.
+
+---
+
 ## [20260729] — Battement applicatif client → serveur (#118)
 
 > Un VJoueur dont le réseau tombait restait indéfiniment sur un socket zombie : le serveur le
