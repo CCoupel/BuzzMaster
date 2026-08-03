@@ -4,6 +4,10 @@ Historique des versions du projet BuzzControl.
 
 ## [Unreleased]
 
+### Fixed
+- **Déconnexions VJoueur résiduelles à la transition PREPARE→READY** : rafale de broadcasts non groupée émis pendant la phase de préparation causait un débordement de messages WebSocket, forçant la déconnexion des VJoueurs par timeout. Correction : filtrage payload contextualisé par phase — pendant PREPARE/READY, le VJoueur reçoit uniquement son bumper (non la carte complète), réduisant le volume de ~85% (mesure : 12→2 messages par VJoueur sur la fenêtre critique) (#127).
+- **Correction complémentaire : affichage "Joueurs" persistant pendant PREPARE/READY** : regression trouvée en revue de code — le bandeau "Joueurs" s'affichait durant ces phases alors qu'il devrait rester caché jusqu'à STARTED. Correction sur le frontend (#127).
+
 ---
 
 ## [5.8.2] - 2026-08-01
