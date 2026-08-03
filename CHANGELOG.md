@@ -7,6 +7,10 @@ Historique des versions du projet BuzzControl.
 ### Fixed
 - **Déconnexions VJoueur résiduelles à la transition PREPARE→READY** : rafale de broadcasts non groupée émis pendant la phase de préparation causait un débordement de messages WebSocket, forçant la déconnexion des VJoueurs par timeout. Correction : filtrage payload contextualisé par phase — pendant PREPARE/READY, le VJoueur reçoit uniquement son bumper (non la carte complète), réduisant le volume de ~85% (mesure : 12→2 messages par VJoueur sur la fenêtre critique) (#127).
 - **Correction complémentaire : affichage "Joueurs" persistant pendant PREPARE/READY** : regression trouvée en revue de code — le bandeau "Joueurs" s'affichait durant ces phases alors qu'il devrait rester caché jusqu'à STARTED. Correction sur le frontend (#127).
+- **Rafales de broadcasts non filtrées vers VJoueurs hors PREPARE/READY** : trois événements (connexion/déconnexion participant, saisie ARDOISE soutenue, buzz/réponse QCM) déclenchaient un `UPDATE` complet vers tous les VJoueurs sans distinction. Correction : ciblage par événement — chaque message désormais adressé uniquement aux destinataires pertinents (Admin/TV/buzzers selon l'événement), avec écho ciblé au seul participant concerné quand celui-ci a besoin de l'écho de son propre état. Gain mesuré : 0 message inutile vers les VJoueurs non-participants (#129).
+- **Correction d'équité : fuite de saisie ARDOISE des autres équipes** : le texte saisi par les autres équipes en phase ARDOISE n'est plus transmis aux navigateurs des VJoueurs (gating par événement, non par payload) (#129).
+- **Regroupement des broadcasts ARDOISE côté serveur** : réduction de la contention du moteur sur saisies soutenues via fenêtre temporelle ≤ 150 ms (#129).
+- **TV retirée du per-PONG résiduel en phase PREPARE** : optimization — les écrans TV n'en avaient pas besoin (progression « prêt » affichée via libellé statique) (#129).
 
 ---
 
