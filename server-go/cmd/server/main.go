@@ -484,7 +484,11 @@ func (a *App) onPlayerDisconnected(playerID string) {
 		return
 	}
 	a.engine.UpdateBumper(playerID, map[string]interface{}{"CONNECTED": false})
-	a.broadcastUpdate()
+	// #129 T1.3: no VPlayer consumes another participant's disconnection —
+	// sortedPlayers is gated !isVPlayer since #127. No targeted echo either:
+	// the recipient concerned by this event just disconnected, there is no
+	// one to echo to.
+	a.broadcastUpdateTo(server.ClientTypeAdmin, server.ClientTypeTV, server.ClientTypeBuzzer)
 }
 
 func (a *App) loadBackgrounds() {
@@ -1227,11 +1231,26 @@ func (a *App) handlePong(clientID string, msg *protocol.Message) {
 		// cause of #127). Admin keeps this per-PONG cadence on purpose: the
 		// "prêt" progress on TeamCard (GamePage.jsx) must update one buzzer at
 		// a time, not just once at the end (CA2) — so this call is NOT moved
-		// inside the AreAllTeamsReady() branch above. Physical buzzers also
-		// keep their existing cadence. The VJoueur's own single UPDATE for
-		// this window is delivered by TransitionToReady() → OnStateChange →
-		// broadcastGameState(), which already targets VPlayer (T1.3).
-		a.broadcastUpdateTo(server.ClientTypeAdmin, server.ClientTypeTV, server.ClientTypeBuzzer)
+		// inside the AreAllTeamsReady() branch above. The VJoueur's own single
+		// UPDATE for this window is delivered by TransitionToReady() →
+		// OnStateChange → broadcastGameState(), which already targets
+		// VPlayer (T1.3).
+		//
+		// #129 T1.6: TV also removed from this per-PONG rafale — it's in the
+		// exact pre-#127 situation the VJoueur used to be in: PlayerDisplay.jsx
+		// showPrepare block (~l.1358-1373) renders only a static "🔔 NOUVELLE
+		// QUESTION" label during PREPARE, no reference to READY/bumpers/teams,
+		// and the score carousel depends on SCORE/COLOR/NAME, which don't
+		// change from one PONG to the next. The TV still gets both window
+		// bounds (PREPARE entry via handleReady, READY transition via
+		// broadcastGameState) — N+2 UPDATE becomes 2, same reduction #127 gave
+		// the VJoueur. Physical buzzers are KEPT deliberately: broadcastGameState
+		// never targets them, so this per-PONG UPDATE is their ONLY phase
+		// signal on this path during the window — the firmware uses it (team
+		// assignment, grey LED rotation). Removing them would be a firmware
+		// behavior change, unrelated to #129 — do not "clean up" this line
+		// further.
+		a.broadcastUpdateTo(server.ClientTypeAdmin, server.ClientTypeBuzzer)
 	}
 }
 
@@ -2097,16 +2116,28 @@ func (a *App) handlePlayerConnect(clientID string, msg *protocol.Message) {
 
 	if reconnected {
 		server.LogInfo(game.LogComponentWebSocket, "PLAYER_CONNECT: reconnecting existing player: id=%s, name=%s", bumperID, bumper.Name)
-		// Broadcast UPDATE to all clients (to notify of reconnection)
-		a.broadcastUpdate()
+		// #129 T1.4: Admin/TV/Buzzer see the roster change; no OTHER VPlayer
+		// consumes a peer's reconnection (sortedPlayers gated !isVPlayer since
+		// #127). The reconnecting player itself still needs its own echo — it
+		// recovers its bumper/session state (CONNECTED=true, score, team)
+		// from THIS message (#118/#120/#122) — sent AFTER SetClientPlayerID
+		// above so the hub can already route to it (R1: the one thing this
+		// site must never get wrong).
+		a.broadcastUpdateTo(server.ClientTypeAdmin, server.ClientTypeTV, server.ClientTypeBuzzer)
+		a.broadcastUpdateToPlayer(bumperID)
 		return
 	}
 
 	server.LogInfo(game.LogComponentWebSocket, "PLAYER_CONNECT: player connected: id=%s, name=%s", bumperID, bumper.Name)
 
-	// Broadcast UPDATE to all clients (teams/bumpers updated)
-	a.broadcastUpdate()
-	// Broadcast enrollment count update
+	// #129 T1.4: same reasoning as the reconnection branch above — Admin/TV/
+	// Buzzer see the new roster entry; the newly-enrolled player gets its own
+	// targeted echo (its bumper didn't exist in any earlier broadcast it
+	// could have received).
+	a.broadcastUpdateTo(server.ClientTypeAdmin, server.ClientTypeTV, server.ClientTypeBuzzer)
+	a.broadcastUpdateToPlayer(bumperID)
+	// Broadcast enrollment count update — unchanged, already lightweight and
+	// functionally targeted (carries only the enrollment counter).
 	a.broadcastEnrollmentUpdate()
 }
 
@@ -2252,8 +2283,15 @@ func (a *App) handleArdoiseInput(clientID string, msg *protocol.Message) {
 
 	server.LogInfo(game.LogComponentApp, "ARDOISE_INPUT: team=%s text=%q (from client %s)", teamName, payload.Text, clientID)
 
-	// Broadcast immediate UPDATE so admin sees answers in real-time
-	a.broadcastUpdate()
+	// #129 T1.5: admin only — so admin sees answers build up in real-time.
+	// TV excluded: PlayerDisplay.jsx:2427 only renders ARDOISE_ANSWERS in
+	// phase REVEALED (showAnswer && !isVPlayer); it receives the complete
+	// state on the phase-change broadcast that follows. VPlayer excluded:
+	// VPlayerPage.jsx manages its own text entry as local state (ardoiseText)
+	// and never reads ARDOISE_ANSWERS — this was also a fairness leak, every
+	// VJoueur was receiving the text every OTHER team was actively typing.
+	// Buzzers excluded: SerializeForBuzzer carries no ARDOISE field at all.
+	a.broadcastUpdateTo(server.ClientTypeAdmin)
 }
 
 // Broadcast methods
@@ -2376,6 +2414,43 @@ func (a *App) broadcastUpdateTo(types ...server.ClientType) {
 			a.buzzerHub.BroadcastRawIfRelevant(protocol.ActionUpdate, dataBuzzer)
 		}
 	}
+}
+
+// broadcastUpdateToPlayer sends a targeted UPDATE echo to exactly one
+// VPlayer client — the participant whose own event (connection/reconnection,
+// buzz, QCM answer, ...) just happened and who needs to see the resulting
+// state of their own bumper (#129 T1.2, contracts/vplayer-payload-filter.md
+// §5). Builds the same fresh GetGameJSON() snapshot broadcastUpdateTo would,
+// but serializes it via Message.SerializeForVPlayer(playerID) — the #127
+// reduction rule applies automatically if GAME.PHASE happens to be PREPARE/
+// READY, complete payload otherwise, no rule duplicated here — and sends it
+// to that one recipient only via SendRawToPlayerID. Never a broadcast: no
+// other VPlayer receives anything from this call.
+//
+// MUST NOT call a.engine.ApplyVPlayerBroadcastConnEvents(): that evaluates
+// MessageLost/DeliveryConfirmed for the WHOLE roster of VPlayers, on the
+// assumption a broadcast just reached (or missed) all of them. Calling it
+// here, on a send to a single recipient, would flag MessageLost on every
+// OTHER VPlayer that received nothing from this particular send — same bug
+// class as #127 CA7, same fix: simply never call it on this path (#129 CA8).
+// No-op (silently) if playerID is empty or currently not connected —
+// SendRawToPlayerID already handles the "not connected" case safely.
+func (a *App) broadcastUpdateToPlayer(playerID string) {
+	if a.wsHub == nil || playerID == "" {
+		return
+	}
+
+	data := a.engine.GetGameJSON()
+	msg, _ := protocol.NewMessage(protocol.ActionUpdate, nil)
+	msg.Msg = data
+	msg.Version = a.config.Version
+
+	payload, err := msg.SerializeForVPlayer(playerID)
+	if err != nil {
+		server.LogError(game.LogComponentApp, "broadcastUpdateToPlayer(%s): SerializeForVPlayer failed: %v", playerID, err)
+		return
+	}
+	a.wsHub.SendRawToPlayerID(playerID, payload)
 }
 
 // broadcastUpdateToVPlayers fans an UPDATE out to every connected VPlayer
@@ -3286,9 +3361,22 @@ func (a *App) sendLEDSetAllBuzzers() {
 	// VJoueur. Found while verifying #127 CA1 empirically: it was firing an
 	// extra unconditional UPDATE at every PREPARE->READY transition (via
 	// broadcastReady -> sendLEDSetAllBuzzers), on top of the legitimate one
-	// from TransitionToReady's OnStateChange. Admin/TV/Buzzer still need it
-	// (ACK_PENDING spinner UI, buzzer LED sync).
-	a.broadcastUpdateTo(server.ClientTypeAdmin, server.ClientTypeTV, server.ClientTypeBuzzer)
+	// from TransitionToReady's OnStateChange.
+	//
+	// #129: TV removed too, at all 11 call sites, for a stronger reason than
+	// the VPlayer case above — ACK_PENDING (the very field this broadcast
+	// exists to announce) is one of the 5 fields SerializeForWebClient always
+	// strips from TV's payload (protocol.AdminOnlyBumperFields). TV can never
+	// see the content this call carries, regardless of phase or call site —
+	// unlike the VPlayer case, this isn't conditional on the loop skipping
+	// virtual bumpers, it's the serializer itself making the field invisible
+	// to TV unconditionally. Found while verifying #129 CA12 empirically: TV
+	// was still receiving 3 UPDATE in the PREPARE->READY window instead of
+	// the 2 the contract promises (§1), this call being the 3rd, redundant
+	// with the legitimate READY-transition broadcast from
+	// TransitionToReady's OnStateChange. Admin still needs it (ACK_PENDING
+	// spinner UI); Buzzer still needs it (LED sync, its own fields).
+	a.broadcastUpdateTo(server.ClientTypeAdmin, server.ClientTypeBuzzer)
 }
 
 // sendLEDSetStop broadcasts team color SOLID 100% to all buzzers (game stopped/prepare).

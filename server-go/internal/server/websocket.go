@@ -235,6 +235,37 @@ func (h *WebSocketHub) SendToPlayerID(playerID string, msg *protocol.Message) er
 	return nil
 }
 
+// SendRawToPlayerID sends pre-serialized bytes to the single ClientTypeVPlayer
+// client linked to playerID (reverse lookup of GetClientPlayerID) — raw twin
+// of SendToPlayerID for callers that have already serialized a
+// type-appropriate payload themselves (#129 T1.1).
+//
+// Why not reuse SendToPlayerID: it always serializes via
+// SerializeForWebSocket — the unfiltered payload, OTA/ACK fields included.
+// A caller building a targeted echo for a VPlayer wants the same reduced/
+// filtered payload contract §1-§2 already promises that client type
+// (typically via Message.SerializeForVPlayer); routing it through
+// SendToPlayerID would silently hand back a larger payload than #127
+// established for this client type.
+//
+// Same locking discipline and saturation semantics as SendToPlayerID: RLock
+// only (no send ever removes a client here), silent no-op (not an error) if
+// playerID isn't currently connected or its Send channel is full.
+func (h *WebSocketHub) SendRawToPlayerID(playerID string, data []byte) {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+
+	for client := range h.clients {
+		if client.Type == ClientTypeVPlayer && client.PlayerID == playerID {
+			select {
+			case client.Send <- data:
+			default:
+			}
+			return
+		}
+	}
+}
+
 // Broadcast sends a message to all connected clients
 func (h *WebSocketHub) Broadcast(msg *protocol.Message) {
 	data, err := msg.SerializeForWebSocket()
