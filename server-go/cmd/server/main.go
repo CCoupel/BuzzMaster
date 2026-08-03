@@ -2451,6 +2451,37 @@ func buildVPlayerPayloads(msg *protocol.Message, recipients []server.VPlayerReci
 		return nil, false
 	}
 
+	// #127 T2.4 checkpoint follow-up: BenchmarkVPlayerFanout showed the
+	// obvious approach (build a map[string]json.RawMessage per recipient and
+	// hand it to json.Marshal / Message.SerializeForWebSocket) was ~10-11x
+	// costlier than the pre-#127 shared path for a MEMOTION question at 30
+	// VPlayers (~3.3-3.7ms vs ~0.32ms) — encoding/json calls compact() on
+	// every json.RawMessage value it marshals, an O(len) rescan of GAME
+	// (up to ~11KB) repeated per recipient, not the re-parse we'd guarded
+	// against but a real cost anyway. gameRaw/teamsRaw/actionJSON/versionJSON
+	// are computed ONCE here (constant across recipients); the per-recipient
+	// loop below builds each final frame by byte concatenation instead
+	// (see buildVPlayerMessageBytes) — no json.Marshal ever touches
+	// GAME/teams again after this point. Only the small per-recipient bumper
+	// object (a few hundred bytes) and the playerID key still go through
+	// json.Marshal — cheap, and it's the standard library's own string
+	// escaping, reused rather than hand-rolled, for the "no raw string
+	// concatenation of user-controlled data" rule this project follows.
+	// See _work/reports/dev-backend-t2-benchmark-*.md for the byte-for-byte
+	// equality tests and rebenchmark this rewrite was validated against.
+	actionJSON, err := json.Marshal(msg.Action)
+	if err != nil {
+		return nil, false
+	}
+	var versionJSON []byte
+	if msg.Version != "" {
+		if versionJSON, err = json.Marshal(msg.Version); err != nil {
+			return nil, false
+		}
+	}
+	gameRaw := envelope["GAME"]
+	teamsRaw := envelope["teams"]
+
 	payloads := make(map[string][]byte, len(recipients))
 	for _, r := range recipients {
 		ownRaw, present := bumpers[r.PlayerID]
@@ -2466,28 +2497,70 @@ func buildVPlayerPayloads(msg *protocol.Message, recipients []server.VPlayerReci
 		for _, field := range protocol.AdminOnlyBumperFields {
 			delete(own, field)
 		}
-		reducedBumpers, err := json.Marshal(map[string]interface{}{r.PlayerID: own})
+		strippedBumper, err := json.Marshal(own)
 		if err != nil {
 			continue
 		}
-		reducedMsg, err := json.Marshal(map[string]json.RawMessage{
-			"GAME":    envelope["GAME"],
-			"teams":   envelope["teams"],
-			"bumpers": reducedBumpers,
-		})
+		playerIDJSON, err := json.Marshal(r.PlayerID)
 		if err != nil {
 			continue
 		}
-		out := *msg
-		out.Msg = reducedMsg
-		data, err := out.SerializeForWebSocket()
-		if err != nil {
-			continue
-		}
-		payloads[r.PlayerID] = data
+		payloads[r.PlayerID] = buildVPlayerMessageBytes(actionJSON, versionJSON, gameRaw, teamsRaw, playerIDJSON, strippedBumper)
 	}
 
 	return payloads, true
+}
+
+// buildVPlayerMessageBytes assembles the final WebSocket frame for one
+// VPlayer recipient by direct byte concatenation — no json.Marshal call ever
+// sees gameRaw or teamsRaw here, avoiding the compact()-rescan cost
+// identified by BenchmarkVPlayerFanout (see buildVPlayerPayloads' comment
+// above this call site).
+//
+// Must stay byte-for-byte identical to the reference (slow) path:
+//
+//	json.Marshal(&protocol.Message{Action: <action>, Version: <version>, Msg:
+//	  mustMarshal(map[string]json.RawMessage{"GAME": gameRaw, "teams": teamsRaw,
+//	    "bumpers": mustMarshal(map[string]json.RawMessage{playerID: strippedBumper})})})
+//
+// — verified by TestBuildVPlayerMessageBytes_MatchesReferencePath
+// (cmd/server/vplayer_fanout_bytes_test.go), including playerID/bumper
+// content with quotes, backslashes, and non-ASCII characters. This hardcodes
+// two format facts that test locks in as a regression guard:
+//   - encoding/json marshals map[string]T with keys sorted lexicographically,
+//     so "GAME" < "bumpers" < "teams" (uppercase 'G' sorts before lowercase
+//     letters in ASCII) is always the actual key order for both the outer
+//     MSG object and Message's own field order (Action, then Version if
+//     non-empty per its `omitempty` tag, then MSG — struct fields keep
+//     declaration order, unlike map keys).
+//   - gameRaw/teamsRaw, sourced from json.Unmarshal into a
+//     map[string]json.RawMessage, are already the exact compact-JSON byte
+//     span of the original message — no whitespace to strip, safe to splice
+//     in verbatim.
+//
+// actionJSON/versionJSON/gameRaw/teamsRaw are identical for every recipient
+// of one broadcast (computed once by the caller); playerIDJSON and
+// strippedBumper are the only per-recipient inputs.
+func buildVPlayerMessageBytes(actionJSON, versionJSON, gameRaw, teamsRaw, playerIDJSON, strippedBumper []byte) []byte {
+	size := len(actionJSON) + len(versionJSON) + len(gameRaw) + len(teamsRaw) +
+		len(playerIDJSON) + len(strippedBumper) + 64 // +64: literal braces/keys/colons/commas below
+	buf := make([]byte, 0, size)
+	buf = append(buf, `{"ACTION":`...)
+	buf = append(buf, actionJSON...)
+	if len(versionJSON) > 0 {
+		buf = append(buf, `,"VERSION":`...)
+		buf = append(buf, versionJSON...)
+	}
+	buf = append(buf, `,"MSG":{"GAME":`...)
+	buf = append(buf, gameRaw...)
+	buf = append(buf, `,"bumpers":{`...)
+	buf = append(buf, playerIDJSON...)
+	buf = append(buf, ':')
+	buf = append(buf, strippedBumper...)
+	buf = append(buf, `},"teams":`...)
+	buf = append(buf, teamsRaw...)
+	buf = append(buf, `}}`...)
+	return buf
 }
 
 // updateBroadcasterFrequency adjusts the UDP heartbeat interval based on whether
