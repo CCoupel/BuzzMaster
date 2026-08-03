@@ -90,11 +90,26 @@ func transitionConnUnsafe(b *Bumper, event ConnEvent) {
 	case ConnEventDisconnect:
 		if b.ConnState == ConnStateHidden || b.ConnState == ConnStateGreen {
 			b.ConnState = ConnStateOrange
-			// The broadcast that announces this disconnect is not itself a
-			// message this VJoueur should have received — give it a one-time
-			// pass so ORANGE is actually visible before any real MessageLost
-			// can apply (see ApplyVPlayerBroadcastConnEvents / conn-state fix).
-			b.skipNextMessageLost = true
+			// #129: skipNextMessageLost is NOT set here anymore. It used to
+			// give a one-time pass to "the broadcast that announces this
+			// disconnect" — under #127, that broadcast (onPlayerDisconnected's
+			// a.broadcastUpdate()) always reached VJoueurs and so was always
+			// the very next call to ApplyVPlayerBroadcastConnEvents(),
+			// consuming the pass harmlessly right where it was meant to.
+			// #129 T1.3 retargets that call to Admin/TV/Buzzer only — it
+			// never reaches VPlayer and so never calls
+			// ApplyVPlayerBroadcastConnEvents() at all anymore. Setting the
+			// flag here left it dangling: the NEXT unrelated VPlayer-targeting
+			// broadcast would consume it instead, silently absorbing a
+			// genuinely missed message for one cycle (orange incorrectly
+			// stayed orange instead of turning red) — caught by
+			// TestConnStateProtocol_MissedBroadcastWhileDisconnected_StillTurnsRed.
+			// The self-referential case this flag protected against
+			// structurally no longer exists post-#129, so the flag is no
+			// longer set. skipNextMessageLost the field, and its consumption
+			// in ApplyVPlayerBroadcastConnEvents, are left in place — dead
+			// weight for this path only, not removed, to avoid widening this
+			// fix beyond the one line that caused the regression.
 		}
 	case ConnEventReconnect:
 		if b.ConnState == ConnStateOrange || b.ConnState == ConnStateRed {

@@ -151,11 +151,26 @@ func TestConfirmDelivery_UnknownBumper_NoPanic(t *testing.T) {
 
 // TestApplyVPlayerBroadcastConnEvents_DisconnectedParticipant_MessageLost
 // verifies D4 (no restricted list): a disconnected participant VJoueur gets a
-// MessageLost transition (orange -> red) on a GameState broadcast — but NOT
-// on the very first broadcast that announces the disconnect itself (conn-state
-// fix, #109 — the broadcast telling everyone "this VJoueur just disconnected"
-// is not itself a message it should have received; without this, ORANGE was
-// never actually visible to the admin, jumping straight to RED).
+// MessageLost transition (orange -> red) on the very first GameState
+// broadcast evaluated after the disconnect.
+//
+// #129 UPDATE: prior to #129, the very first broadcast after a disconnect
+// got a one-shot grace pass (ORANGE stayed ORANGE) — because that broadcast
+// was, at the time, always onPlayerDisconnected's own a.broadcastUpdate(),
+// which reached every VJoueur including the one that had just disconnected;
+// without the grace pass, ORANGE would never actually be visible before
+// immediately flipping to RED. #129 T1.3 retargets that specific broadcast
+// to Admin/TV/Buzzer only — it no longer reaches VPlayer and so no longer
+// calls ApplyVPlayerBroadcastConnEvents() at all. The self-referential case
+// the grace pass protected against is now structurally impossible, so
+// transitionConnUnsafe's ConnEventDisconnect case no longer arms it
+// (engine.go) — ORANGE is guaranteed visible simply because no VPlayer-
+// targeting broadcast fires at the moment of disconnect anymore, not
+// because of a pass consumed on the first one. See
+// TestApplyVPlayerBroadcastConnEvents_DisconnectAnnouncement_NoLongerReachesVPlayer
+// below for the regression test the #129 review requested, and
+// cmd/server/connstate_protocol_regression_test.go for the integration-level
+// equivalent (onPlayerDisconnected + a genuinely separate broadcastUpdate()).
 func TestApplyVPlayerBroadcastConnEvents_DisconnectedParticipant_MessageLost(t *testing.T) {
 	e := NewEngine()
 	e.SetTeams(map[string]*Team{"TeamA": {Name: "TeamA"}})
@@ -173,39 +188,36 @@ func TestApplyVPlayerBroadcastConnEvents_DisconnectedParticipant_MessageLost(t *
 		t.Fatalf("setup failed: expected orange after disconnect, got %q", got)
 	}
 
-	// First broadcast: this is the one announcing the disconnect (mirrors
-	// onPlayerDisconnected calling broadcastUpdate() right after UpdateBumper).
-	// It must NOT immediately turn the badge red — ORANGE must stay visible.
-	e.ApplyVPlayerBroadcastConnEvents()
-	if got := e.GetBumper(id).ConnState; got != ConnStateOrange {
-		t.Errorf("conn-state fix regression: ORANGE skipped straight to %q on the disconnect-announcing broadcast", got)
-	}
-
-	// Second broadcast: a genuinely later broadcast while still disconnected —
-	// this one DOES represent a missed message (D4) and must turn it red.
+	// #129: no VPlayer-targeting broadcast fires at the moment of disconnect
+	// anymore (onPlayerDisconnected targets Admin/TV/Buzzer only), so the
+	// FIRST call to ApplyVPlayerBroadcastConnEvents() here is already a
+	// genuinely later, missed broadcast — D4 applies immediately.
 	e.ApplyVPlayerBroadcastConnEvents()
 	if got := e.GetBumper(id).ConnState; got != ConnStateRed {
-		t.Errorf("D4: expected orange -> red on a broadcast after the disconnect was already announced, got %q", got)
+		t.Errorf("D4: expected orange -> red on the first broadcast evaluated after a disconnect (no grace pass post-#129), got %q", got)
 	}
 
-	// Idempotence: a third broadcast while still disconnected must stay red.
+	// Idempotence: a second broadcast while still disconnected must stay red.
 	e.ApplyVPlayerBroadcastConnEvents()
 	if got := e.GetBumper(id).ConnState; got != ConnStateRed {
 		t.Errorf("expected red to stay red on repeated broadcasts while disconnected, got %q", got)
 	}
 }
 
-// TestApplyVPlayerBroadcastConnEvents_SkipOnlyAppliesOnce verifies the skip
-// pass is consumed exactly once per disconnect: a re-disconnect while green
-// gets its own fresh pass, but repeated disconnect-adjacent broadcasts don't
-// keep granting free passes.
-func TestApplyVPlayerBroadcastConnEvents_SkipOnlyAppliesOnce(t *testing.T) {
-	withShortGreenWindow(t, 20*time.Millisecond)
-
+// TestApplyVPlayerBroadcastConnEvents_DisconnectAnnouncement_NoLongerReachesVPlayer
+// is the #129 regression test requested during review: reproduces the exact
+// scenario TestConnStateProtocol_MissedBroadcastWhileDisconnected_StillTurnsRed
+// (cmd/server) exercises at the integration level, at the engine level —
+// confirms a genuinely missed broadcast unrelated to the disconnect itself
+// now correctly turns the badge red, proving the stale grace pass no longer
+// absorbs it by mistake (the bug this fix corrects: before it, this exact
+// sequence left the badge stuck on ORANGE — see git history for the 1-line
+// change in transitionConnUnsafe's ConnEventDisconnect case).
+func TestApplyVPlayerBroadcastConnEvents_DisconnectAnnouncement_NoLongerReachesVPlayer(t *testing.T) {
 	e := NewEngine()
 	e.SetTeams(map[string]*Team{"TeamA": {Name: "TeamA"}})
 	e.SetPhase(PhaseEnroll)
-	id, _, err := e.CreateVirtualPlayer("Zoe")
+	id, _, err := e.CreateVirtualPlayer("Bob")
 	if err != nil {
 		t.Fatalf("CreateVirtualPlayer failed: %v", err)
 	}
@@ -213,39 +225,41 @@ func TestApplyVPlayerBroadcastConnEvents_SkipOnlyAppliesOnce(t *testing.T) {
 		t.Fatalf("AssignVirtualPlayer failed: %v", err)
 	}
 
-	// First disconnect: skip pass consumed -> orange, then red.
+	// Disconnect (main.go onPlayerDisconnected: UpdateBumper only — #129 no
+	// longer follows it with a VPlayer-targeting broadcast at this call site).
 	e.UpdateBumper(id, map[string]interface{}{"CONNECTED": false})
-	e.ApplyVPlayerBroadcastConnEvents()
 	if got := e.GetBumper(id).ConnState; got != ConnStateOrange {
-		t.Fatalf("expected orange after the first (skipped) broadcast, got %q", got)
-	}
-	e.ApplyVPlayerBroadcastConnEvents()
-	if got := e.GetBumper(id).ConnState; got != ConnStateRed {
-		t.Fatalf("expected red after the second broadcast, got %q", got)
+		t.Fatalf("expected orange after disconnect, got %q", got)
 	}
 
-	// Reconnect -> green, then re-disconnect -> orange with a FRESH skip pass.
-	e.TransitionConn(id, ConnEventReconnect)
-	e.UpdateBumper(id, map[string]interface{}{"CONNECTED": false})
-	if got := e.GetBumper(id).ConnState; got != ConnStateOrange {
-		t.Fatalf("expected orange after re-disconnecting from green, got %q", got)
-	}
+	// Something else happens in the game while Bob is still disconnected
+	// (e.g. another team's score changes) -> a real GameState broadcast that
+	// Bob genuinely misses. This is the FIRST call to
+	// ApplyVPlayerBroadcastConnEvents() since the disconnect.
 	e.ApplyVPlayerBroadcastConnEvents()
-	if got := e.GetBumper(id).ConnState; got != ConnStateOrange {
-		t.Errorf("expected a fresh skip pass on the re-disconnect announcement, stayed orange, got %q", got)
-	}
-	e.ApplyVPlayerBroadcastConnEvents()
+
 	if got := e.GetBumper(id).ConnState; got != ConnStateRed {
-		t.Errorf("expected red on the next broadcast after the fresh pass was consumed, got %q", got)
+		t.Errorf("#129 regression: expected orange -> red on a broadcast genuinely missed while disconnected, got %q (a stale grace pass would incorrectly keep this orange)", got)
 	}
 }
 
 // TestSetBumpers_PreservesSkipNextMessageLost covers the code-review finding
 // (20260726, minor, non-blocking) on the stuck-red badge fix: a bulk
-// SetBumpers landing in the narrow window between a Disconnect->orange
-// transition and the next ApplyVPlayerBroadcastConnEvents must not drop the
-// one-shot grace pass — otherwise that specific bumper re-exposes the
-// skipped-orange bug this fix was written for, just this once.
+// SetBumpers landing while a one-shot grace pass is armed on a bumper must
+// not drop it — the field must survive a client-object round-trip for the
+// same ID.
+//
+// #129 UPDATE: since #129 (see the test above), nothing in production ever
+// arms this flag anymore — the disconnect path that used to set it no
+// longer does (transitionConnUnsafe's ConnEventDisconnect case). The
+// preservation invariant this test protects is still real code
+// (ApplyVPlayerBroadcastConnEvents still consumes the flag if it's ever
+// true, SetBumpers still carries it across a replacement, see engine.go) —
+// only dormant, not removed, per the #129 review's explicit request to keep
+// this fix to the one line that caused the regression. This test now arms
+// the flag directly (same package, unexported field) rather than via a real
+// disconnect, so it keeps proving the preservation invariant independent of
+// whatever code path might arm the flag in the future.
 func TestSetBumpers_PreservesSkipNextMessageLost(t *testing.T) {
 	e := NewEngine()
 	e.SetTeams(map[string]*Team{"TeamA": {Name: "TeamA"}})
@@ -257,12 +271,13 @@ func TestSetBumpers_PreservesSkipNextMessageLost(t *testing.T) {
 	if err := e.AssignVirtualPlayer(id, "TeamA", AnswerColorNone); err != nil {
 		t.Fatalf("AssignVirtualPlayer failed: %v", err)
 	}
-
-	// Disconnect: orange, grace pass armed.
 	e.UpdateBumper(id, map[string]interface{}{"CONNECTED": false})
 	if got := e.GetBumper(id).ConnState; got != ConnStateOrange {
 		t.Fatalf("setup failed: expected orange after disconnect, got %q", got)
 	}
+	// Arm the grace pass directly — #129 removed the only production call
+	// site that used to do this on disconnect (see comment above).
+	e.data.Bumpers[id].skipNextMessageLost = true
 
 	// A bulk SetBumpers lands right in the middle of the window — simulates an
 	// admin FULL/UPDATE (e.g. TeamsPage) whose payload round-trips a bumper

@@ -255,8 +255,12 @@ func TestBroadcast129_BroadcastUpdateToPlayer_DoesNotEvaluateVPlayerConnEvents(t
 	app.engine.SetPhase(game.PhaseEnroll) // CreateVirtualPlayer requires PhaseEnroll
 	app.engine.SetTeams(map[string]*game.Team{"TeamA": {Name: "TeamA"}})
 
-	// Bob: disconnected, already past the disconnect-announcing pass (see
-	// engine.go skipNextMessageLost) — genuinely eligible for MessageLost.
+	// Bob: disconnected, genuinely eligible for MessageLost — #129 removed
+	// the disconnect-announcing grace pass (transitionConnUnsafe no longer
+	// arms skipNextMessageLost on ConnEventDisconnect), so the very NEXT
+	// evaluation of ApplyVPlayerBroadcastConnEvents, whatever triggers it,
+	// would immediately turn Bob red. That's exactly what this test must
+	// prove does NOT happen from broadcastUpdateToPlayer below.
 	bobID := setupVirtualPlayer(t, app, "Bob", "TeamA")
 	// Alice: the actual recipient of the targeted echo below.
 	aliceID := setupVirtualPlayer(t, app, "Alice", "TeamA")
@@ -266,11 +270,6 @@ func TestBroadcast129_BroadcastUpdateToPlayer_DoesNotEvaluateVPlayerConnEvents(t
 	if got := app.engine.GetBumper(bobID).ConnState; got != "orange" {
 		t.Fatalf("setup failed: expected Bob orange after disconnect, got %q", got)
 	}
-	// Consume the one-time skipNextMessageLost pass so a genuinely-missed
-	// broadcast would turn Bob red if evaluated (isolates this test from the
-	// engine-level regression tracked separately — this test only asserts
-	// broadcastUpdateToPlayer itself never triggers the evaluation at all).
-	app.engine.ApplyVPlayerBroadcastConnEvents()
 
 	app.broadcastUpdateToPlayer(aliceID)
 
