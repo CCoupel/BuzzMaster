@@ -2,6 +2,53 @@
 
 ---
 
+## [20260803] — Ciblage des broadcasts par événement, hors PREPARE/READY (#129)
+
+> Prolongement de #127. Trois événements par-participant — connexion, déconnexion, frappe ARDOISE —
+> déclenchaient chacun un `UPDATE` complet vers **tous** les VJoueurs, à n'importe quel moment de la
+> partie. La réduction de #127 ne s'y appliquait pas (conditionnée aux phases PREPARE/READY). Audit
+> des consommateurs : les VJoueurs n'exploitent aucune de ces données, hors l'écho de leur propre
+> état. Plan : `_work/reports/planner-20260803-170653.md`.
+> Maquette : `_work/mockups/129-broadcast-targeting.md`.
+> Contrat détaillé : `contracts/vplayer-payload-filter.md` §5.
+
+- **[CHANGED]** `UPDATE` déclenché par `onPlayerDisconnected` — n'est plus diffusé aux VJoueurs
+  (Admin, TV et buzzers inchangés). Aucun affichage VJoueur ne dépend de l'état de connexion des
+  autres joueurs (`sortedPlayers` est gaté `!isVPlayer` depuis #127).
+- **[CHANGED]** `UPDATE` déclenché par `handlePlayerConnect` (création **et** reconnexion) — n'est
+  plus diffusé à l'ensemble des VJoueurs, mais **ciblé sur le participant concerné**, qui en a besoin
+  pour retrouver son bumper après reconnexion (#118/#120/#122). Admin, TV et buzzers inchangés.
+- **[CHANGED]** `UPDATE` déclenché par `PONG` en phase `PREPARE` — n'est plus diffusé à la **TV**.
+  #127 avait retiré les VJoueurs de cette rafale en conservant Admin + TV + buzzers ; la TV n'affiche
+  qu'un libellé statique pendant PREPARE (`PlayerDisplay.jsx:1358-1373`) et n'a besoin que des deux
+  bornes de la fenêtre, qu'elle continue de recevoir (entrée en PREPARE, transition en READY). Elle
+  passe de N+2 à 2 `UPDATE`. **Les buzzers physiques restent ciblés délibérément** : cet `UPDATE` est
+  leur seul signal de phase sur le chemin WebSocket pendant la fenêtre, `broadcastGameState()` ne les
+  incluant pas.
+- **[CHANGED]** `UPDATE` déclenché par `ARDOISE_INPUT` — diffusé à **l'admin seul**. La TV n'affiche
+  les réponses qu'en phase `REVEALED` (`PlayerDisplay.jsx:2427`) et le VJoueur ne lit jamais
+  `ARDOISE_ANSWERS` (saisie en état local). Les buzzers physiques n'ont aucun champ ARDOISE dans leur
+  payload.
+- **[CHANGED]** Règle de contrat ajoutée (§5) : un `UPDATE` déclenché par un événement propre à **un**
+  participant n'est diffusé à tous les VJoueurs que si son contenu est réellement consommé par eux ;
+  sinon Admin/TV, plus un **écho ciblé** au participant concerné. Le chemin d'écho ciblé ne doit
+  jamais appeler `ApplyVPlayerBroadcastConnEvents()` (même invariant que #127 CA7).
+- **[CHANGED]** Règle de contrat ajoutée (§5) : les `UPDATE` d'`ARDOISE_INPUT` peuvent être regroupés
+  sur une fenêtre ≤ 150 ms, sous deux conditions — vidage immédiat à tout changement de phase, et
+  construction du payload **au moment de l'émission** (une émission retardée est alors redondante,
+  jamais périmée).
+- **[NEW]** `sendStateToClient()` (sur `HELLO`) est explicitement contractualisé comme envoyant le
+  payload **complet et non réduit**, quel que soit le type de client — seule source permettant à une
+  session sans `vplayer_id` de retrouver son identité par balayage `NAME`. Ne pas « optimiser ».
+
+**Aucun changement BREAKING.** Aucun message, champ ni type n'est ajouté, renommé, retiré ni retypé —
+seul le jeu des destinataires de messages existants change.
+
+**Correction d'équité obtenue au passage** : `ARDOISE_ANSWERS`, qui transportait vers le navigateur de
+chaque VJoueur le texte que les autres équipes étaient en train de saisir, ne leur est plus transmis.
+
+---
+
 ## [20260802] — Diffusion groupée et payload réduit VJoueur à PREPARE→READY (#127)
 
 > À chaque PONG reçu en phase PREPARE, le serveur rediffusait l'état complet du jeu à **tous** les
