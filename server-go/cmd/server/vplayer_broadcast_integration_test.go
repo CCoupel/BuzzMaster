@@ -37,6 +37,13 @@ package main
 // contrat. Ces deux appels continuent en revanche de cibler Admin/TV/Buzzer
 // (légitimement, cf. CA2 plus bas) — c'est ce qui porte leur cadence à N+3,
 // pas N+2 comme une lecture superficielle du contrat le suggérerait.
+//
+// #129 (commit 96a1d09, contrat §5, plan _work/reports/planner-20260803-170653.md,
+// T1.6/CA12) : la TV est à son tour retirée de la rafale per-PONG résiduelle de
+// handlePong (elle n'affichait qu'un libellé statique pendant PREPARE) — seul
+// ce site change pour elle, pas handleReady/sendLEDSetAllBuzzers. La TV tombe
+// donc à exactement 2 UPDATE sur la fenêtre, comme le VJoueur, tandis que
+// l'admin reste seul à N+3 (assertions CA2 vs CA12 ci-dessous).
 // ---------------------------------------------------------------------------
 
 import (
@@ -270,22 +277,30 @@ func TestVPlayerBroadcastIntegration_PrepareToRevealSequence(t *testing.T) {
 			// --- CA2 — admin garde la cadence 1 UPDATE par PONG -----------------
 			// entrée(1) + (N-1) PONG réguliers(N-1) + dernier PONG(3) = N+3.
 			// Le dernier PONG (celui qui déclenche la transition) porte à lui
-			// seul 3 UPDATE Admin/TV, comportement inchangé par #127 (ni
-			// handleReady ni sendLEDSetAllBuzzers ne retirent Admin/TV de leur
-			// broadcast, seul VPlayer en est retiré — commit 2a39fef) :
+			// seul 3 UPDATE admin, comportement inchangé par #127/#129 (ni
+			// handleReady ni sendLEDSetAllBuzzers ne retirent l'admin de leur
+			// broadcast — commit 2a39fef) :
 			//   1. handlePong() lui-même (tail call, T1.2)
 			//   2. TransitionToReady() → OnStateChange(READY) → broadcastGameState()
 			//   3. broadcastReady() → sendLEDSetAllBuzzers() (ACK_PENDING sync,
-			//      légitimement toujours utile à Admin/TV même sans VPlayer)
+			//      légitimement toujours utile à l'admin)
 			if got := countMsgAction(adminMsgs, protocol.ActionUpdate); got != n+3 {
 				t.Errorf("CA2: admin devrait recevoir %d UPDATE (1 entrée + %d PONG réguliers + 3 sur le dernier PONG), reçu %d — actions=%v",
 					n+3, n-1, got, actionsOf(adminMsgs))
 			}
-			// TV suit la même cadence que l'admin (contenu filtré, nombre de
-			// messages inchangé — contrat §1, colonne TV).
-			if got := countMsgAction(tvMsgs, protocol.ActionUpdate); got != n+3 {
-				t.Errorf("TV devrait recevoir la même cadence que l'admin (%d UPDATE), reçu %d — actions=%v",
-					n+3, got, actionsOf(tvMsgs))
+			// --- CA12 — contracts/vplayer-payload-filter.md §5 (#129 T1.6) ------
+			// La TV n'a plus besoin de la rafale per-PONG résiduelle (elle
+			// n'affiche qu'un libellé statique pendant PREPARE, cf. plan
+			// #129 T1.6/R10) : elle ne reçoit plus que les 2 bornes de la
+			// fenêtre — entrée en PREPARE et transition en READY — exactement
+			// comme le VJoueur depuis #127, quel que soit N. L'admin, lui,
+			// garde sa cadence per-PONG complète (assertion CA2 ci-dessus) :
+			// c'est le seul destinataire encore retiré du dernier PONG à
+			// hauteur des 3 sources listées plus haut, pas la TV.
+			if got := countMsgAction(tvMsgs, protocol.ActionUpdate); got != 2 {
+				t.Errorf("CA12 (contracts/vplayer-payload-filter.md §5): TV devrait recevoir exactement "+
+					"2 UPDATE entre l'entrée en PREPARE et la transition en READY (N=%d), reçu %d — actions=%v",
+					n, got, actionsOf(tvMsgs))
 			}
 
 			// --- START → BUZZ → STOP → REVEAL -----------------------------------
