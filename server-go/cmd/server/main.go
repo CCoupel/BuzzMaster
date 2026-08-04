@@ -3104,6 +3104,13 @@ func (a *App) sendLEDSet(mac string, payload protocol.LEDSetPayload) {
 }
 
 // broadcastLEDSet sends the same LED_SET payload to all connected buzzers.
+//
+// #132 audit: currently DEAD CODE — grep confirms zero call sites anywhere
+// in the codebase (including tests). Fixed anyway, for the same reason
+// dead code still gets its imports checked: if this is ever wired up, it
+// should not silently reintroduce the exact #127/#129 bug class. Flagged
+// separately in the audit report as its own finding (candidate for removal
+// — not done here, out of this bugfix's scope).
 func (a *App) broadcastLEDSet(payload protocol.LEDSetPayload) {
 	tb := a.engine.GetTeamsAndBumpers()
 	if tb == nil {
@@ -3116,7 +3123,13 @@ func (a *App) broadcastLEDSet(payload protocol.LEDSetPayload) {
 		a.sendLEDSet(mac, payload)
 	}
 	// One broadcast for all AckPending state changes set by the loop above.
-	a.broadcastUpdate()
+	// #132 (same pattern/justification as sendLEDSetAllBuzzers #127/#129-T1.6
+	// and sendLEDSetPause #129 T3.1-adjacent): the loop above unconditionally
+	// skips IsVPlayer bumpers, and ACK_PENDING — the only field this call
+	// exists to announce — is always stripped from TV's payload too
+	// (protocol.AdminOnlyBumperFields, via SerializeForWebClient). Neither
+	// client type can ever see anything this call carries.
+	a.broadcastUpdateTo(server.ClientTypeAdmin, server.ClientTypeBuzzer)
 }
 
 // resendLEDOnReconnect re-sends the last known LED state to a buzzer that just reconnected (HELLO).
@@ -3514,7 +3527,13 @@ func (a *App) sendLEDSetStop() {
 		a.sendLEDSet(mac, protocol.LEDSetPayload{Color: rgb, Intensity: 255, Effect: "SOLID"})
 	}
 	// One broadcast for all AckPending changes.
-	a.broadcastUpdate()
+	// #132 audit: same pattern as sendLEDSetAllBuzzers/sendLEDSetPause
+	// (#127/#129) — loop always skips IsVPlayer, ACK_PENDING always stripped
+	// from TV. Sole call site (broadcastStop) already sends its own
+	// Admin+TV+VPlayer ActionStop broadcast right before this — TV/VPlayer
+	// already have everything they need from that call; this one only ever
+	// carried ACK_PENDING, which neither can see anyway.
+	a.broadcastUpdateTo(server.ClientTypeAdmin, server.ClientTypeBuzzer)
 }
 
 // sendLEDSetPause sends per-buzzer LED state when a specific buzzer has buzzed (PAUSED phase).
@@ -3556,11 +3575,10 @@ func (a *App) sendLEDSetPause(bumperID string) {
 	// leave untouched — it still reaches Admin/TV/VPlayer) is a separate
 	// call, unaffected by this line.
 	//
-	// NOT applied here to the 5 sibling sendLEDSet* functions with the
-	// identical pattern (broadcastLEDSet, sendLEDSetStop, sendLEDSetReveal,
-	// sendLEDSetToTeam, sendLEDSetComet) — none of them sit in a call chain
-	// T1.1-T3.1 retargeted, so fixing them is a separate, larger finding
-	// flagged to the teamleader rather than folded silently into this fix.
+	// The 5 sibling sendLEDSet* functions with the identical pattern
+	// (broadcastLEDSet, sendLEDSetStop, sendLEDSetReveal, sendLEDSetToTeam,
+	// sendLEDSetComet) were audited and fixed the same way under #132 —
+	// see their own doc comments and _work/reports/dev-backend-132-audit-*.md.
 	a.broadcastUpdateTo(server.ClientTypeAdmin, server.ClientTypeBuzzer)
 }
 
@@ -3598,11 +3616,20 @@ func (a *App) sendLEDSetReveal(correctAnswer string) {
 		}
 	}
 	// One broadcast for all AckPending changes.
-	a.broadcastUpdate()
+	// #132 audit: same pattern as sendLEDSetAllBuzzers/sendLEDSetPause
+	// (#127/#129) — loop always skips IsVPlayer, ACK_PENDING always stripped
+	// from TV. Sole call site (broadcastReveal) already sends its own
+	// Admin+TV+VPlayer ActionReveal broadcast right before this.
+	a.broadcastUpdateTo(server.ClientTypeAdmin, server.ClientTypeBuzzer)
 }
 
 // sendLEDSetToTeam sends a LED_SET payload to all physical buzzers belonging to teamID.
 // If teamID is empty, sends to ALL physical buzzers (excluding VPlayers).
+//
+// #132 audit: currently DEAD CODE — grep confirms zero call sites anywhere
+// in the codebase (including tests). Fixed anyway — see broadcastLEDSet's
+// doc comment for the reasoning; both are flagged together in the audit
+// report as candidates for removal in a separate cleanup, not done here.
 func (a *App) sendLEDSetToTeam(teamID string, payload protocol.LEDSetPayload) {
 	tb := a.engine.GetTeamsAndBumpers()
 	if tb == nil {
@@ -3618,7 +3645,9 @@ func (a *App) sendLEDSetToTeam(teamID string, payload protocol.LEDSetPayload) {
 		a.sendLEDSet(mac, payload)
 	}
 	// One broadcast for all AckPending changes.
-	a.broadcastUpdate()
+	// #132: same pattern/justification as the other sendLEDSet* functions —
+	// loop always skips IsVPlayer, ACK_PENDING always stripped from TV.
+	a.broadcastUpdateTo(server.ClientTypeAdmin, server.ClientTypeBuzzer)
 }
 
 // cometBandColor returns the best-contrasting band color for a COMET animation over bgColor.
@@ -3660,7 +3689,15 @@ func (a *App) sendLEDSetComet(teamID string) {
 		})
 	}
 	// One broadcast for all AckPending changes from the loop above.
-	a.broadcastUpdate()
+	// #132 audit: same pattern as sendLEDSetAllBuzzers/sendLEDSetPause
+	// (#127/#129) — loop always skips IsVPlayer, ACK_PENDING always stripped
+	// from TV. All 4 call sites (handlePoints, MEMOTION_DONE, BUMPER_POINTS,
+	// handleTeamPoints) already call their own unconditional broadcastUpdate()
+	// right after this returns, to announce the score change itself — by
+	// then ACK_PENDING is already set (sendLEDSet sets it synchronously), so
+	// Admin still sees it on that later broadcast; nothing is lost, only the
+	// redundant TV/VPlayer leg of THIS broadcast is removed.
+	a.broadcastUpdateTo(server.ClientTypeAdmin, server.ClientTypeBuzzer)
 	// Restore normal LED state after firmware COMET animation completes.
 	time.AfterFunc(4800*time.Millisecond, func() {
 		a.sendLEDSetAllBuzzers()
