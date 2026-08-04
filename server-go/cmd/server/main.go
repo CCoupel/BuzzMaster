@@ -1579,11 +1579,33 @@ func (a *App) handleDeleteBumper(msg *protocol.Message) {
 	a.updateBroadcasterFrequency()
 }
 
-// handleReleaseBumperName grants the one-time reclaim authorization (#122
-// B3): the animateur has decided, having seen the room, that the next
-// nameless PLAYER_CONNECT under this bumper's name is genuinely its owner
-// coming back. This is the sole exception to the #109 R1 ID-only identity
-// rule, and it is explicit and human — never automatic.
+// handleReleaseBumperName grants the reclaim authorization (#122 B3): the
+// animateur has decided, having seen the room, that the next nameless
+// PLAYER_CONNECT under this bumper's name is genuinely its owner (or a
+// substitute, #134) coming back. This is the sole exception to the #109 R1
+// ID-only identity rule, and it is explicit and human — never automatic.
+//
+// #134 widens this to a still-CONNECTED bumper: RELEASE_BUMPER_NAME { ID }
+// is unchanged as an action, but the server now branches on connection
+// state (contracts/seat-release.md §2-3). Normative sequence, order
+// matters:
+//  1. read connection state BEFORE any mutation (below);
+//  2. if connected, notify on the OLD id BEFORE the engine re-keys it —
+//     mirrors handleDeleteBumper's contract exactly (same reasoning: never
+//     close the socket, queue PLAYER_EVICTED on client.Send instead);
+//  3. record the eviction reason so a lost-notification reconnect attempt
+//     with the stale ID still gets the truth (#123 B3 registry, reused
+//     as-is);
+//  4. ReleaseSeat performs the actual (atomic) mutation;
+//  5. broadcastUpdate() — the admin card reflects the new state.
+//
+// Note on the narrow race between step 1's read and step 4's mutation: they
+// are two separate lock acquisitions (GetBumper's snapshot, then
+// ReleaseSeat's own lock), so a disconnect/reconnect landing in that exact
+// window could make this read stale. ReleaseSeat re-evaluates Connected
+// itself and is the sole authority for what actually happens — same
+// accepted-narrow-race class as #129's SendToPlayerID duplicate-PlayerID
+// window, not a new risk introduced here.
 func (a *App) handleReleaseBumperName(msg *protocol.Message) {
 	var payload protocol.ReleaseBumperNamePayload
 	if err := json.Unmarshal(msg.Msg, &payload); err != nil {
@@ -1596,14 +1618,32 @@ func (a *App) handleReleaseBumperName(msg *protocol.Message) {
 		return
 	}
 
-	if !a.engine.ReleaseBumperName(payload.ID) {
+	wasConnectedBeforeMutation := false
+	if bumper := a.engine.GetBumper(payload.ID); bumper != nil {
+		wasConnectedBeforeMutation = bumper.Connected
+	}
+
+	if wasConnectedBeforeMutation {
+		evictedPayload := protocol.PlayerEvictedPayload{Reason: "SEAT_RELEASED"}
+		evictedMsg, _ := protocol.NewMessage(protocol.ActionPlayerEvicted, evictedPayload)
+		a.wsHub.SendToPlayerID(payload.ID, evictedMsg)
+		a.evictionRegistry.Record(payload.ID, "SEAT_RELEASED")
+	}
+
+	newID, wasConnected, ok := a.engine.ReleaseSeat(payload.ID)
+	if !ok {
 		server.LogWarn(game.LogComponentApp, "RELEASE_BUMPER_NAME: bumper %s not found or not virtual", payload.ID)
 		return
 	}
 
-	server.LogInfo(game.LogComponentApp, "RELEASE_BUMPER_NAME: id=%s", payload.ID)
-	// RECLAIM_REQUESTED cleared server-side — push the updated card state to
-	// admin clients right away.
+	if wasConnected {
+		server.LogInfo(game.LogComponentApp, "RELEASE_BUMPER_NAME: seat released while connected, old_id=%s new_id=%s", payload.ID, newID)
+	} else {
+		server.LogInfo(game.LogComponentApp, "RELEASE_BUMPER_NAME: id=%s", payload.ID)
+	}
+	// RECLAIM_REQUESTED cleared server-side (and, for a connected release,
+	// the bumper re-keyed) — push the updated card state to admin clients
+	// right away.
 	a.broadcastUpdate()
 }
 
