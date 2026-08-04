@@ -308,6 +308,20 @@ describe('VPlayerPage — la course d\'inscription est fermée (#120)', () => {
       .toBe(REDIRECT_MESSAGES.GAME_RESET)
   })
 
+  it('PLAYER_EVICTED{SEAT_RELEASED} affiche le motif "place libérée, même pseudo" (#134)', async () => {
+    localStorage.setItem('vplayer_name', 'Alice')
+    localStorage.setItem('vplayer_session', '1234567890')
+
+    useGame.mockReturnValue(makeGameMock({
+      bumpers: {},
+      playerEvictedStatus: { reason: 'SEAT_RELEASED' },
+    }))
+    const { container } = render(<VPlayerPage />)
+
+    expect(container.querySelector('.vplayer-reconnect-error-text').textContent)
+      .toBe(REDIRECT_MESSAGES.SEAT_RELEASED)
+  })
+
   it('un motif inconnu ou absent affiche le message générique (filet de sécurité, jamais d\'écran muet)', async () => {
     localStorage.setItem('vplayer_name', 'Alice')
     localStorage.setItem('vplayer_session', '1234567890')

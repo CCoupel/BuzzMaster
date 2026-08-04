@@ -78,6 +78,15 @@ describe('EnrollPage — bandeau de motif de renvoi (#120, F3)', () => {
     expect(screen.getByRole('status').className).toContain('warn')
   })
 
+  it('affiche le bandeau "place libérée, même pseudo" pour SEAT_RELEASED (#134)', async () => {
+    sessionStorage.setItem('vplayer_redirect_reason', 'SEAT_RELEASED')
+    useGame.mockReturnValue(makeGameMock())
+    render(<EnrollPage />)
+
+    await waitFor(() => expect(screen.getByText(REDIRECT_MESSAGES.SEAT_RELEASED)).toBeInTheDocument())
+    expect(screen.getByRole('status').className).toContain('warn')
+  })
+
   it('affiche le bandeau "nouvelle partie" pour GAME_RESET', async () => {
     sessionStorage.setItem('vplayer_redirect_reason', 'GAME_RESET')
     useGame.mockReturnValue(makeGameMock())
