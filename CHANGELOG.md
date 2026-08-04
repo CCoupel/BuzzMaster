@@ -4,6 +4,9 @@ Historique des versions du projet BuzzControl.
 
 ## [Unreleased]
 
+### Fixed
+- **Broadcasts LED non ciblés vers TV/VJoueur** : 5 fonctions LED (`broadcastLEDSet`, `sendLEDSetStop`, `sendLEDSetReveal`, `sendLEDSetToTeam`, `sendLEDSetComet`) envoyaient un broadcast complet à tous les clients au lieu de ciblage buzzers seuls. Corrigé par même technique que #127/#129 (événement ciblé). Bonus : 2 fonctions (`broadcastLEDSet`, `sendLEDSetToTeam`) identifiées sans appelant — code mort, signalé pour nettoyage futur (#132).
+
 ### Added
 - **Libération de place d'un VJoueur connecté** : animation peut désormais libérer la place d'un joueur actuellement connecté via action `RELEASE_BUMPER_NAME`, invoquant un motif distinct `SEAT_RELEASED`. Contrairement à la suppression totale (score perdu), la libération conserve le score et l'équipe, autorisant le joueur à reprendre sa place dans une fenêtre ~5 min. Utilité : réassignation rapide du siège sans perte de données (#134).
 - **Motif d'éviction `SEAT_RELEASED` documenté** : nouveau motif d'éviction accompagnant l'action #134. Documenté dans `docs/PROTOCOLS.md` avec distinction claire vis-à-vis de `PLAYER_REMOVED` (score perdu). Tableau de motifs complétant les évictions v5.9.0 (#120) (#134).
