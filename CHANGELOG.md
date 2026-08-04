@@ -4,6 +4,10 @@ Historique des versions du projet BuzzControl.
 
 ## [Unreleased]
 
+### Added
+- **Libération de place d'un VJoueur connecté** : animation peut désormais libérer la place d'un joueur actuellement connecté via action `RELEASE_BUMPER_NAME`, invoquant un motif distinct `SEAT_RELEASED`. Contrairement à la suppression totale (score perdu), la libération conserve le score et l'équipe, autorisant le joueur à reprendre sa place dans une fenêtre ~5 min. Utilité : réassignation rapide du siège sans perte de données (#134).
+- **Motif d'éviction `SEAT_RELEASED` documenté** : nouveau motif d'éviction accompagnant l'action #134. Documenté dans `docs/PROTOCOLS.md` avec distinction claire vis-à-vis de `PLAYER_REMOVED` (score perdu). Tableau de motifs complétant les évictions v5.9.0 (#120) (#134).
+
 ### Fixed
 - **Détection lien mort VJoueur accélérée et paramétrable** : seuil de liaison morte passé de 9-10 s à 4-4,5 s via nouveau champ `DEAD_LINK_TIMEOUT_MS` du message `HEARTBEAT`. Serveur transmet désormais directement le seuil (4000 ms) au lieu d'une constante dupliquée côté client. Gain secondaire : tolérance ping/pong améliorée (2 pertes acceptées au lieu de 0) grâce au recalibrage de la cadence serveur 3000 ms → 2000 ms et du `ReadDeadline` 5000 ms → 7000 ms. Détection efficace inversée délibérément : client détecte avant serveur (4 s vs 7 s) pour reprendre l'initiative sur liens morts (#130).
 - **Protocole HEARTBEAT documenté** : jamais documenté auparavant. Ajout complet dans `docs/PROTOCOLS.md` avec cascade de repli côté client, tableau des valeurs contractuelles et garanties de compatibilité rétroactive (#130).

@@ -178,6 +178,62 @@ The silence counter is **reset by any incoming message**, including `HEARTBEAT` 
 - New client + old server : field absent, repli on `INTERVAL_MS × 3` = 9000 ms ✓
 - Clients pre-v5.9.1 : no `HEARTBEAT` received, default 9000 ms ✓
 
+### VPlayer Eviction Reasons — `PLAYER_EVICTED` and `PLAYER_REJECTED` (v5.9.0+, extended v5.10.x #134)
+
+When a VJoueur is removed from the game, the server sends a `PLAYER_EVICTED` message (to the disconnected player) or `PLAYER_REJECTED` response (to a reconnection attempt with a stale ID) with a `REASON` field. The client displays a banner explaining why the player was removed.
+
+**Message format** (server → VJoueur):
+```json
+{
+  "ACTION": "PLAYER_EVICTED",
+  "MSG": {
+    "REASON": "<reason_code>"
+  }
+}
+```
+
+**Eviction reasons and meanings** :
+
+| Reason | Introduced | Trigger | Score | Seat | Reprise possible |
+|---|---|---|---|---|---|
+| `ENROLLMENT_CLOSED` | v5.9.0 (#120) | Enrollments closed while player connecting | Preserved | Blocked | Non (inscriptions fermées) |
+| `PLAYER_REMOVED` | v5.9.0 (#120) | Admin deleted player (action `DELETE_BUMPER`) | **Lost** | **Freed completely** | Oui (nouvel enregistrement à zéro) |
+| `GAME_RESET` | v5.9.0 (#120) | Game reinitialized (NEW_GAME action) | Lost | Freed completely | Oui (nouvel enregistrement) |
+| `SESSION_EXPIRED` | v5.9.0 (#120) | Player bumper vanished from roster after ~10s (internal safety net) | Lost | Freed completely | Oui (nouvel enregistrement) |
+| `SEAT_RELEASED` | v5.10.x (#134) | Admin liberated seat (action `RELEASE_BUMPER_NAME` on connected player) | **Preserved** | **Freed for immediate reprise** | **Oui** — may rejoin with same name within ~5 min authorization window |
+
+**Key distinction** :
+- **`PLAYER_REMOVED`** (delete) vs. **`SEAT_RELEASED`** (liberate) :
+  - Both free the seat for others
+  - `PLAYER_REMOVED` : score, team, history all deleted
+  - `SEAT_RELEASED` : score, team, history preserved — player can rejoin same slot with `RECONNECT` path (#122) and reclaim their seat within authorization window
+
+**Message format for rejected reconnection** (server response to stale ID):
+```json
+{
+  "ACTION": "PLAYER_REJECTED",
+  "MSG": {
+    "REASON": "<reason_code>"
+  }
+}
+```
+
+**Rejected connection reasons** :
+| Reason | Meaning |
+|---|---|
+| `ENROLLMENT_CLOSED` | Enrollments not open; retry after opening |
+| `INVALID_NAME` | Name doesn't match rules (2–20 chars, etc.) |
+| `NAME_TAKEN` | Name already assigned to connected player; choose different name or wait for reconnect window |
+| `LIMIT_REACHED` | Max player count reached; retry after others leave |
+| `SEAT_RELEASED` | Your ID was released by admin; rejoin without ID within authorization window (~5 min) to reclaim seat with your score |
+
+**Client-side behavior** :
+- Receive `PLAYER_EVICTED` or `PLAYER_REJECTED` with `REASON`
+- Look up reason in localization table (`REDIRECT_MESSAGES` or `REJECTION_MESSAGES`)
+- Display banner with message + icon (varies by reason)
+- Auto-redirect to enrollment page after 3 seconds (configurable `RECONNECT_ERROR_REDIRECT_DELAY_MS`)
+- Fallback : if reason unknown, display generic "Connection error" message (backward compatibility)
+
 ---
 
 ## HTTP REST API
