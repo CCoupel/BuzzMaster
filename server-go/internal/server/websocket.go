@@ -505,9 +505,9 @@ func (c *WebSocketClient) readPump() {
 	}()
 
 	c.Conn.SetReadLimit(65536)
-	c.Conn.SetReadDeadline(time.Now().Add(5 * time.Second))
+	c.Conn.SetReadDeadline(time.Now().Add(readDeadlineTimeout))
 	c.Conn.SetPongHandler(func(string) error {
-		c.Conn.SetReadDeadline(time.Now().Add(5 * time.Second))
+		c.Conn.SetReadDeadline(time.Now().Add(readDeadlineTimeout))
 		return nil
 	})
 
@@ -554,7 +554,51 @@ func (c *WebSocketClient) readPump() {
 // application-level HEARTBEAT (#118) sent alongside it. A single named
 // constant so HEARTBEAT.INTERVAL_MS can never drift from the ticker that
 // actually paces it — see the HEARTBEAT payload build below.
-const writePumpTickPeriod = 3 * time.Second
+//
+// #130: 3s -> 2s. contracts/liveness-timing.md §4 justifies the full
+// recalibration; the essential fact this constant drives: at the previous
+// P=3s/D=5s pairing, a single lost ping pushed the next pong to 6s > 5s —
+// the connection closed on ANY isolated packet loss, a common event on a
+// venue WiFi. There was no real tolerance behind the apparent 2s margin.
+const writePumpTickPeriod = 2 * time.Second
+
+// readDeadlineTimeout is how long readPump waits without a Pong (control
+// frame, refreshed by SetPongHandler) before considering the connection
+// dead and closing it — set at connection start and re-armed on every Pong.
+//
+// #130: 5s -> 7s, paired with writePumpTickPeriod's 3s -> 2s. Named constant
+// specifically because the previous code repeated the 5s literal at BOTH the
+// initial SetReadDeadline call and inside SetPongHandler — fixing only one
+// would have left the real tolerance unchanged while looking fixed. To
+// tolerate N=2 fully-lost pings at cadence P=2s, the next usable pong can
+// arrive as late as (N+1)*P + RTT + margin = 3*2000 + 500 + 500 = 7000ms
+// (contracts/liveness-timing.md §4 "Justification du ReadDeadline serveur").
+//
+// Invariant, load-bearing, not incidental: deadLinkTimeout (4s, below) <
+// readDeadlineTimeout (7s). The client is meant to detect and reconnect
+// BEFORE the server gives up — a deliberate inversion from the pre-#130
+// order (contract §4 "Ordre de détection"), because on a truly dead link the
+// server's own close frame can never reach the client anyway; the existing
+// anti-zombie guard (IsPlayerIDConnected, #109/#120) absorbs the stale
+// server-side connection once the client's new one registers. A future
+// change to either constant that collapses or reverses this inequality
+// must be a conscious choice, not a side effect — hence naming both instead
+// of leaving one as a literal.
+const readDeadlineTimeout = 7 * time.Second
+
+// deadLinkTimeout is the DEAD_LINK_TIMEOUT_MS value the server hands to web
+// clients via HEARTBEAT (contracts/liveness-timing.md §2) — the absolute
+// silence threshold, in milliseconds, beyond which a client should consider
+// the link dead, close its socket, and reconnect. See readDeadlineTimeout's
+// doc comment for the deadLinkTimeout < readDeadlineTimeout invariant this
+// value is one half of.
+//
+// #130 GATE 2 adjustment: the plan's own recommended value was 5s (a 2s
+// margin above the 3s network spike the spec requires absorbing without
+// reconnecting); the user explicitly chose the more reactive 4s variant
+// instead (margin reduced to 1s, detection at ~4.0-4.5s instead of
+// ~5.0-5.5s) — see _work/handoff/task-dev-backend-20260804-090721.md.
+const deadLinkTimeout = 4 * time.Second
 
 func (c *WebSocketClient) writePump() {
 	ticker := time.NewTicker(writePumpTickPeriod)
@@ -564,13 +608,15 @@ func (c *WebSocketClient) writePump() {
 	}()
 
 	// Built once per connection, not per tick: the payload is constant for the
-	// lifetime of the process (writePumpTickPeriod never changes at runtime).
-	// Marshal failure here is not expected (a fixed int64 field always
-	// encodes), but is handled defensively — a nil heartbeatData just skips
-	// the HEARTBEAT write below without affecting the protocol ping.
+	// lifetime of the process (writePumpTickPeriod/deadLinkTimeout never
+	// change at runtime). Marshal failure here is not expected (two fixed
+	// int64 fields always encode), but is handled defensively — a nil
+	// heartbeatData just skips the HEARTBEAT write below without affecting
+	// the protocol ping.
 	var heartbeatData []byte
 	if heartbeatMsg, err := protocol.NewMessage(protocol.ActionHeartbeat, protocol.HeartbeatPayload{
-		IntervalMs: writePumpTickPeriod.Milliseconds(),
+		IntervalMs:        writePumpTickPeriod.Milliseconds(),
+		DeadLinkTimeoutMs: deadLinkTimeout.Milliseconds(),
 	}); err == nil {
 		if data, err := heartbeatMsg.SerializeForWebSocket(); err == nil {
 			heartbeatData = data

@@ -418,13 +418,24 @@ type AckPayload struct {
 	AckID     string `json:"ack_id"`     // Value of the MSG_ID being acknowledged
 }
 
-// HeartbeatPayload for HEARTBEAT action (#118, v5.9.x).
-// No response expected — the client only watches for arrival. IntervalMs
-// carries the server's actual ticker cadence (never hardcoded on the client
-// side) so a future change to the ticker period doesn't silently desync the
-// client's dead-connection threshold.
+// HeartbeatPayload for HEARTBEAT action (#118, v5.9.x; DeadLinkTimeoutMs
+// added in #130). No response expected — the client only watches for
+// arrival. Both fields carry server-side values the client must not
+// hardcode (contracts/liveness-timing.md §1, "le serveur est la source de
+// vérité unique") so a future change to either constant doesn't silently
+// desync the client's dead-connection threshold.
 type HeartbeatPayload struct {
 	IntervalMs int64 `json:"INTERVAL_MS"` // Real cadence of the server-side ticker, in milliseconds
+
+	// DeadLinkTimeoutMs (#130) is the absolute silence threshold, in
+	// milliseconds, beyond which the client should consider the link dead,
+	// close its socket, and reconnect — not a multiplier: the server
+	// controls this value directly rather than leaving a factor to the
+	// client (contracts/liveness-timing.md §2). No omitempty — project rule
+	// (CLAUDE.md): GameState/protocol fields are always serialized, even at
+	// a zero value, so the client never has to guess whether an absent field
+	// means "zero" or "not sent yet".
+	DeadLinkTimeoutMs int64 `json:"DEAD_LINK_TIMEOUT_MS"`
 }
 
 // WifiConfigPayload for WIFI_CONFIG action (server → buzzer: sync WiFi credentials)
