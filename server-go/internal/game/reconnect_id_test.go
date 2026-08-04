@@ -1,6 +1,10 @@
 package game
 
-import "testing"
+import (
+	"sync"
+	"testing"
+	"time"
+)
 
 // ---------------------------------------------------------------------------
 // Tests : ReconnectOrCreateVirtualPlayer — fix R1 (backend-ID matrix)
@@ -460,4 +464,308 @@ func TestStartEnrollment_DoesNotPurgeVirtualPlayers(t *testing.T) {
 	if e.GetBumper("vjoueur_disconnected") == nil {
 		t.Errorf("StartEnrollment must not purge VJoueurs — that's InitGame's job now (fix R1 follow-up)")
 	}
+}
+
+// ---------------------------------------------------------------------------
+// #134 — ReleaseSeat : libérer la place d'un VJoueur, connecté ou non
+//
+// Contrat : contracts/seat-release.md. Plan : _work/reports/planner-20260804-115318.md
+// (T2.1, T2.4, T2.5). CA1, CA4, CA6, CA11 côté moteur — CA2/CA3/CA5/CA7 côté
+// handler, testés dans cmd/server/seat_release_test.go.
+// ---------------------------------------------------------------------------
+
+// TestReleaseSeat_Disconnected_MatchesReleaseBumperNameExactly is CA1: on a
+// disconnected bumper, ReleaseSeat must be behaviorally identical to the
+// pre-existing #122 ReleaseBumperName — no eviction, no re-key, same ID,
+// same authorization side effects.
+func TestReleaseSeat_Disconnected_MatchesReleaseBumperNameExactly(t *testing.T) {
+	e := NewEngine()
+	e.SetPhase(PhaseEnroll)
+	id, _, err := e.CreateVirtualPlayer("Emma")
+	if err != nil {
+		t.Fatalf("setup CreateVirtualPlayer failed: %v", err)
+	}
+	e.UpdateBumper(id, map[string]interface{}{"CONNECTED": false})
+
+	newID, wasConnected, ok := e.ReleaseSeat(id)
+	if !ok {
+		t.Fatal("expected ReleaseSeat to succeed for a valid disconnected virtual bumper")
+	}
+	if wasConnected {
+		t.Error("expected wasConnected=false for a disconnected bumper")
+	}
+	if newID != "" {
+		t.Errorf("expected no new ID for a disconnected release, got %q", newID)
+	}
+
+	bumper := e.GetBumper(id)
+	if bumper == nil {
+		t.Fatal("expected the bumper to still exist under its ORIGINAL id — #122 never re-keys a disconnected bumper")
+	}
+	if bumper.ReclaimRequested {
+		t.Error("expected ReclaimRequested to be cleared")
+	}
+	if bumper.reclaimAuthorizedUntil.IsZero() || !bumper.reclaimAuthorizedUntil.After(time.Now()) {
+		t.Error("expected a reclaim authorization set in the future")
+	}
+}
+
+// TestReleaseSeat_UnknownID_ReturnsNotOK and
+// TestReleaseSeat_PhysicalBuzzer_ReturnsNotOK mirror ReleaseBumperName's own
+// not-found contract.
+func TestReleaseSeat_UnknownID_ReturnsNotOK(t *testing.T) {
+	e := NewEngine()
+	if _, _, ok := e.ReleaseSeat("does-not-exist"); ok {
+		t.Error("expected ReleaseSeat to return ok=false for an unknown ID")
+	}
+}
+
+func TestReleaseSeat_PhysicalBuzzer_ReturnsNotOK(t *testing.T) {
+	e := NewEngine()
+	e.SetBumpers(map[string]*Bumper{
+		"AA:BB:CC:DD:EE:01": {Name: "Buzzer1", IsVirtual: false, Connected: true},
+	})
+	if _, _, ok := e.ReleaseSeat("AA:BB:CC:DD:EE:01"); ok {
+		t.Error("expected ReleaseSeat to return ok=false for a physical (non-virtual) bumper")
+	}
+}
+
+// TestReleaseSeat_Connected_ReKeysPreservingScoreTeamAndHistory is the
+// central #134 test (CA4): a connected release evicts and re-keys, keeping
+// the same struct (score/team survive) under a brand-new, unresolvable-by
+// -the-old-id key, with Connected forced false and the badge machine
+// reflecting a genuine disconnect (never green — see the "no
+// ConnEventReconnect" design note on ReleaseSeat).
+func TestReleaseSeat_Connected_ReKeysPreservingScoreTeamAndHistory(t *testing.T) {
+	e := NewEngine()
+	e.SetTeams(map[string]*Team{"Renards": {Name: "Renards"}})
+	e.SetPhase(PhaseEnroll)
+	oldID, _, err := e.CreateVirtualPlayer("Emma")
+	if err != nil {
+		t.Fatalf("setup CreateVirtualPlayer failed: %v", err)
+	}
+	if err := e.AssignVirtualPlayer(oldID, "Renards", AnswerColorNone); err != nil {
+		t.Fatalf("setup AssignVirtualPlayer failed: %v", err)
+	}
+	e.UpdateBumperScore(oldID, 42)
+	e.UpdateBumper(oldID, map[string]interface{}{"CONNECTED": true})
+	// Let the badge settle to Hidden/Green as a real reconnect would — not
+	// load-bearing for this test, just representative starting state.
+
+	// IDs are timestamped to the second — wait past the boundary so the new
+	// ID is verifiably distinct (same convention as the #122 reclaim test).
+	time.Sleep(1100 * time.Millisecond)
+
+	newID, wasConnected, ok := e.ReleaseSeat(oldID)
+	if !ok {
+		t.Fatal("expected ReleaseSeat to succeed for a connected virtual bumper")
+	}
+	if !wasConnected {
+		t.Error("expected wasConnected=true for a connected bumper")
+	}
+	if newID == "" || newID == oldID {
+		t.Errorf("expected a freshly generated, DIFFERENT ID, got %q (old was %q)", newID, oldID)
+	}
+
+	if e.GetBumper(oldID) != nil {
+		t.Errorf("expected the old bumper ID %q to no longer resolve after a connected release", oldID)
+	}
+	bumper := e.GetBumper(newID)
+	if bumper == nil {
+		t.Fatalf("expected the new bumper ID %q to exist", newID)
+	}
+	if bumper.Score != 42 {
+		t.Errorf("expected Score=42 preserved, got %d", bumper.Score)
+	}
+	if bumper.Team != "Renards" {
+		t.Errorf("expected Team=Renards preserved, got %q", bumper.Team)
+	}
+	if bumper.Name != "Emma" {
+		t.Errorf("expected Name=Emma preserved, got %q", bumper.Name)
+	}
+	if bumper.Connected {
+		t.Error("expected Connected=false after a #134 seat release — the occupant was just evicted, not reconnected")
+	}
+	if bumper.ConnState == ConnStateGreen {
+		t.Error("expected the badge to NEVER read green after a release — that would misleadingly suggest a fresh reconnection (ConnEventReconnect must not fire here)")
+	}
+	if bumper.reclaimAuthorizedUntil.IsZero() || !bumper.reclaimAuthorizedUntil.After(time.Now()) {
+		t.Error("expected a reclaim authorization set in the future on the re-keyed bumper")
+	}
+}
+
+// TestReleaseSeat_Connected_ThenReclaimByAnyName_PreservesScore is CA6: the
+// full round-trip — release while connected, then a nameless PLAYER_CONNECT
+// under the SAME name reclaims the seat with its score intact. The plan is
+// explicit that this must work for a THIRD PARTY too, not just the original
+// occupant — the seat carries the score, not the person — which is
+// trivially true here since ReconnectOrCreateVirtualPlayer's reclaim branch
+// never checks who is asking, only the name and the authorization.
+func TestReleaseSeat_Connected_ThenReclaimByAnyName_PreservesScore(t *testing.T) {
+	e := NewEngine()
+	e.SetTeams(map[string]*Team{"Renards": {Name: "Renards"}})
+	e.SetPhase(PhaseEnroll)
+	oldID, _, err := e.CreateVirtualPlayer("Emma")
+	if err != nil {
+		t.Fatalf("setup CreateVirtualPlayer failed: %v", err)
+	}
+	if err := e.AssignVirtualPlayer(oldID, "Renards", AnswerColorNone); err != nil {
+		t.Fatalf("setup AssignVirtualPlayer failed: %v", err)
+	}
+	e.UpdateBumperScore(oldID, 42)
+	e.UpdateBumper(oldID, map[string]interface{}{"CONNECTED": true})
+
+	// IDs are timestamped to the second — wait past the boundary at each
+	// re-key so the two operations don't collide onto the same generated ID
+	// (same convention as the #122 reclaim test).
+	time.Sleep(1100 * time.Millisecond)
+	releasedID, wasConnected, ok := e.ReleaseSeat(oldID)
+	if !ok || !wasConnected {
+		t.Fatalf("setup: expected a connected release to succeed, got ok=%v wasConnected=%v", ok, wasConnected)
+	}
+	time.Sleep(1100 * time.Millisecond)
+
+	// A nameless PLAYER_CONNECT under "Emma" — could be the original player
+	// (having purged vplayer_id after PLAYER_EVICTED) or literally anyone
+	// else typing the same name; the contract makes no distinction.
+	reclaimedID, bumper, reconnected, err := e.ReconnectOrCreateVirtualPlayer("", "Emma")
+	if err != nil {
+		t.Fatalf("expected the reclaim to succeed, got: %v", err)
+	}
+	if !reconnected {
+		t.Error("expected reconnected=true — this is a reattachment, not a fresh enrollment")
+	}
+	if reclaimedID == "" || reclaimedID == releasedID {
+		t.Errorf("expected yet another fresh ID for the reclaim, got %q (released bumper was %q)", reclaimedID, releasedID)
+	}
+	if bumper.Score != 42 {
+		t.Errorf("expected Score=42 preserved through the whole release->reclaim cycle, got %d", bumper.Score)
+	}
+	if bumper.Team != "Renards" {
+		t.Errorf("expected Team=Renards preserved, got %q", bumper.Team)
+	}
+	if !bumper.Connected {
+		t.Error("expected Connected=true after the reclaim")
+	}
+}
+
+// TestReleaseSeat_StaleOldID_RejectedNotResurrected verifies half of CA5 at
+// the engine level: once a connected bumper has been released, the OLD id
+// is simply gone — a subsequent ReconnectOrCreateVirtualPlayer call with
+// that stale ID must fall through to the "unresolvable ID" branch (matrix
+// case 2), never resurrect or merge into the released bumper. (The
+// PLAYER_REJECTED{SEAT_RELEASED} + eviction-registry side of CA5 is a
+// handler-level concern, tested in cmd/server/seat_release_test.go.)
+func TestReleaseSeat_StaleOldID_RejectedNotResurrected(t *testing.T) {
+	e := NewEngine()
+	e.SetPhase(PhaseEnroll)
+	oldID, _, err := e.CreateVirtualPlayer("Emma")
+	if err != nil {
+		t.Fatalf("setup CreateVirtualPlayer failed: %v", err)
+	}
+	e.UpdateBumper(oldID, map[string]interface{}{"CONNECTED": true})
+	// ID timestamped to the second — wait past the boundary so the release
+	// genuinely generates a DIFFERENT key (same convention as elsewhere in
+	// this file); otherwise delete-then-reinsert under the same key would be
+	// a no-op and oldID would trivially still resolve, defeating this test.
+	time.Sleep(1100 * time.Millisecond)
+	if newID, wasConnected, ok := e.ReleaseSeat(oldID); !ok || !wasConnected || newID == oldID {
+		t.Fatalf("setup: expected a connected release to succeed with a genuinely different ID, got newID=%q wasConnected=%v ok=%v", newID, wasConnected, ok)
+	}
+
+	// The evicted client retries with its now-stale ID (notification lost,
+	// or simply hasn't processed it yet).
+	_, _, _, err = e.ReconnectOrCreateVirtualPlayer(oldID, "Emma")
+	if err == nil {
+		t.Fatal("expected a PLAYER_CONNECT with the stale, released ID to be rejected, not silently reconnected")
+	}
+}
+
+// TestReleaseSeat_DuringPrepare_UnblocksTeamReady is CA11 / T2.4: a bumper
+// released while the phase is PREPARE must not permanently block its team
+// (and therefore the whole game) from becoming Ready — the mitigation for
+// the "partie bloquée" risk identified in the plan.
+func TestReleaseSeat_DuringPrepare_UnblocksTeamReady(t *testing.T) {
+	e := NewEngine()
+	e.SetTeams(map[string]*Team{"Renards": {Name: "Renards"}})
+	e.SetPhase(PhaseEnroll)
+	id, _, err := e.CreateVirtualPlayer("Emma")
+	if err != nil {
+		t.Fatalf("setup CreateVirtualPlayer failed: %v", err)
+	}
+	if err := e.AssignVirtualPlayer(id, "Renards", AnswerColorNone); err != nil {
+		t.Fatalf("setup AssignVirtualPlayer failed: %v", err)
+	}
+	e.UpdateBumper(id, map[string]interface{}{"CONNECTED": true})
+	e.SetPhase(PhasePrepare)
+
+	if e.AreAllTeamsReady() {
+		t.Fatal("setup: expected the team to NOT be ready yet — Emma hasn't PONGed")
+	}
+
+	if _, wasConnected, ok := e.ReleaseSeat(id); !ok || !wasConnected {
+		t.Fatalf("setup: expected a connected release to succeed")
+	}
+
+	if !e.AreAllTeamsReady() {
+		t.Error("expected the (now-solo) team to become Ready immediately after releasing its only, unresponsive bumper during PREPARE — T2.4 mitigation")
+	}
+}
+
+// TestReleaseSeat_OutsidePrepare_DoesNotForceReady is the negative
+// counterpart: the Ready=true mitigation is scoped strictly to the PREPARE
+// phase (per the plan, "portée strictement limitée à ce bumper" — and
+// implicitly, to that phase) — releasing a connected bumper in, say,
+// PhaseStarted must not fabricate a Ready flag with no phase transition to
+// justify it.
+func TestReleaseSeat_OutsidePrepare_DoesNotForceReady(t *testing.T) {
+	e := NewEngine()
+	e.SetTeams(map[string]*Team{"Renards": {Name: "Renards"}})
+	e.SetPhase(PhaseEnroll)
+	id, _, err := e.CreateVirtualPlayer("Emma")
+	if err != nil {
+		t.Fatalf("setup CreateVirtualPlayer failed: %v", err)
+	}
+	if err := e.AssignVirtualPlayer(id, "Renards", AnswerColorNone); err != nil {
+		t.Fatalf("setup AssignVirtualPlayer failed: %v", err)
+	}
+	e.UpdateBumper(id, map[string]interface{}{"CONNECTED": true})
+	e.SetPhase(PhaseStarted)
+
+	newID, _, ok := e.ReleaseSeat(id)
+	if !ok {
+		t.Fatal("setup: expected the release to succeed")
+	}
+
+	if e.GetBumper(newID).Ready {
+		t.Error("expected Ready to stay false outside PREPARE — the T2.4 mitigation must not leak to other phases")
+	}
+}
+
+// TestReleaseSeat_ConcurrentWithReconnect_NoRace is the atomicity guard
+// (contract §2, "sous un seul verrou") — a ReleaseSeat racing a concurrent
+// ReconnectOrCreateVirtualPlayer for a DIFFERENT identity must never
+// corrupt engine state. Run under `go test -race`.
+func TestReleaseSeat_ConcurrentWithReconnect_NoRace(t *testing.T) {
+	e := NewEngine()
+	e.SetPhase(PhaseEnroll)
+	targetID, _, err := e.CreateVirtualPlayer("Target")
+	if err != nil {
+		t.Fatalf("setup CreateVirtualPlayer failed: %v", err)
+	}
+	e.UpdateBumper(targetID, map[string]interface{}{"CONNECTED": true})
+
+	var wg sync.WaitGroup
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
+		e.ReleaseSeat(targetID)
+	}()
+	go func() {
+		defer wg.Done()
+		for i := 0; i < 20; i++ {
+			e.ReconnectOrCreateVirtualPlayer("", "Bystander")
+		}
+	}()
+	wg.Wait()
 }
