@@ -134,6 +134,52 @@ The server centralizes background image cycling to ensure all TV displays show t
 - On each cycle, server broadcasts `BACKGROUND_CHANGE` to all clients
 - Clients use the server-provided index instead of local cycling
 
+### WebSocket Heartbeat (Keep-alive) — v5.9.1+ (extended in v5.10.x)
+
+The server emits a `HEARTBEAT` message periodically to all web clients (`/ws/admin`, `/ws/tv`, `/ws/player`) as a keep-alive signal and to transmit liveness detection parameters. The client uses this to detect dead links and trigger automatic reconnection.
+
+**Message format** (sent by server, no response expected):
+```json
+{
+  "ACTION": "HEARTBEAT",
+  "MSG": {
+    "INTERVAL_MS": 2000,
+    "DEAD_LINK_TIMEOUT_MS": 4000
+  }
+}
+```
+
+| Field | Type | Since | Description |
+|---|---|---|---|
+| `INTERVAL_MS` | integer (ms) | v5.9.1 (#118) | Actual server ticker cadence — client uses this as a reference for keep-alive calculations. **Current value: 2000 ms.** |
+| `DEAD_LINK_TIMEOUT_MS` | integer (ms) | v5.10.x (#130, GATE 2) | **New in #130.** Absolute silence threshold — if client receives no messages (any kind, including `HEARTBEAT` itself) for this duration, it must consider the link dead, close the socket, and reconnect. Server directly controls the seuil, not dependent on client-side derivation. **Current value: 4000 ms** (détection 4,0–4,5 s effective). |
+
+**Server parameters** (current values after #130 GATE 2 adjustment):
+
+| Parameter | Valeur | Role |
+|---|---|---|
+| Ping + `HEARTBEAT` cadence | 2000 ms | Server tick rate — repeated to all web clients |
+| Server `ReadDeadline` | 7000 ms | Server closes connection if no Pong within 7 s ; tolerates 2 lost pings at 2 s cadence |
+| Client detection threshold | 4000 ms | Sent via `DEAD_LINK_TIMEOUT_MS` ; client closes socket if silence ≥ 4 s |
+| Effective dead-link detection | 4,0 – 4,5 s | Client acts first (deliberate inversion from #118) to reclaim initiative on truly dead links |
+| Client check granularity | 500 ms | Client re-evaluates silence counter every 500 ms (smoother than 1 s) |
+
+**Client-side rule** (cascade with fallback):
+```
+threshold = DEAD_LINK_TIMEOUT_MS              if field received from server
+          = INTERVAL_MS × 3                   if HEARTBEAT received, but DEAD_LINK_TIMEOUT_MS absent (old server)
+          = 3000 × 3 = 9000 ms                if neither field received yet (initial default, v5.9.1 behavior)
+```
+
+The silence counter is **reset by any incoming message**, including `HEARTBEAT` itself — surveillance is passive; the client does not emit its own heartbeat.
+
+**Backward compatibility** :
+- Old client + new server : field ignored, threshold = `INTERVAL_MS × 3` = 6000 ms ✓
+- New client + old server : field absent, repli on `INTERVAL_MS × 3` = 9000 ms ✓
+- Clients pre-v5.9.1 : no `HEARTBEAT` received, default 9000 ms ✓
+
+---
+
 ## HTTP REST API
 
 | Method | Endpoint | Description |
