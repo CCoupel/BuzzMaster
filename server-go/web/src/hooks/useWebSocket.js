@@ -9,16 +9,26 @@ const RECONNECT_JITTER_RATIO = 0.3
 // #118 (F1, R6) — surveillance de liaison passive. Le client n'émet AUCUN
 // battement périodique : il surveille seulement l'arrivée de messages
 // (n'importe lequel, HEARTBEAT compris — voir handleMessage). Le serveur émet
-// désormais HEARTBEAT { INTERVAL_MS } sur son ticker par client existant
-// (writePump) ; le seuil de liaison morte se déduit de cette cadence plutôt
-// que d'être codé en dur, pour rester synchronisé si le ticker serveur change
-// un jour. Repli tant qu'aucun HEARTBEAT n'a encore été reçu : 3000ms, la
-// cadence actuelle du serveur au moment de ce correctif.
+// HEARTBEAT { INTERVAL_MS, DEAD_LINK_TIMEOUT_MS } sur son ticker par client
+// existant (writePump).
+//
+// #130 — chemin nominal : DEAD_LINK_TIMEOUT_MS est désormais transmis en
+// valeur ABSOLUE par le serveur (contrat liveness-timing.md §3) — c'est lui
+// qui fixe le seuil de liaison morte quand il est présent et valide (voir
+// deadLinkTimeoutMsRef, case 'HEARTBEAT'). Les deux constantes ci-dessous ne
+// sont plus le chemin nominal : elles restent le REPLI contractuel, utilisé
+// tant qu'aucun DEAD_LINK_TIMEOUT_MS valide n'a été reçu (serveur antérieur à
+// #130, ou valeur aberrante ignorée par la garde de robustesse) — dans ce
+// cas le seuil se déduit de la cadence INTERVAL_MS annoncée (repli
+// intermédiaire), ou de FALLBACK_HEARTBEAT_INTERVAL_MS si même celle-ci n'est
+// encore jamais arrivée (repli total, cadence supposée au moment de #118).
 const FALLBACK_HEARTBEAT_INTERVAL_MS = 3000
 const HEARTBEAT_MISS_THRESHOLD = 3
 // Fréquence à laquelle on VÉRIFIE le délai écoulé — indépendante de la
-// cadence du battement lui-même.
-const LIVENESS_CHECK_INTERVAL_MS = 1000
+// cadence du battement lui-même. #130 : 1000 → 500ms — au seuil nominal de
+// 4000ms (contrat), une granularité de 1000ms aurait étalé la détection sur
+// 4,0-5,0s au lieu de 4,0-4,5s.
+const LIVENESS_CHECK_INTERVAL_MS = 500
 
 function nextReconnectDelay() {
   const jitter = RECONNECT_INTERVAL * RECONNECT_JITTER_RATIO
@@ -91,6 +101,13 @@ export default function useWebSocket(endpoint = '/ws/admin') {
   // HEARTBEAT compris) et cadence de battement annoncée par le serveur.
   const lastMessageAtRef = useRef(Date.now())
   const heartbeatIntervalMsRef = useRef(null)
+  // #130 — dernier DEAD_LINK_TIMEOUT_MS valide reçu (voir case 'HEARTBEAT').
+  // `null` tant qu'aucune valeur valide n'est jamais arrivée (repli sur la
+  // règle dérivée). N'est jamais réinitialisé sur reconnexion, même logique
+  // que heartbeatIntervalMsRef ci-dessus : c'est une constante serveur, pas
+  // un état par connexion — la garder au chaud évite d'élargir inutilement
+  // la fenêtre de repli juste après une reconnexion.
+  const deadLinkTimeoutMsRef = useRef(null)
 
   const connect = useCallback(() => {
     if (wsRef.current?.readyState === WebSocket.OPEN) return
@@ -173,8 +190,12 @@ export default function useWebSocket(endpoint = '/ws/admin') {
   useEffect(() => {
     const checkId = setInterval(() => {
       if (!wsRef.current) return // pas de socket à surveiller actuellement
+      // #130 — cascade de seuil (contrat liveness-timing.md §3) : valeur
+      // absolue transmise par le serveur (chemin nominal) → sinon dérivée de
+      // la cadence INTERVAL_MS annoncée (repli intermédiaire, serveur
+      // antérieur à #130) → sinon repli total (aucun HEARTBEAT encore reçu).
       const intervalMs = heartbeatIntervalMsRef.current || FALLBACK_HEARTBEAT_INTERVAL_MS
-      const thresholdMs = intervalMs * HEARTBEAT_MISS_THRESHOLD
+      const thresholdMs = deadLinkTimeoutMsRef.current ?? (intervalMs * HEARTBEAT_MISS_THRESHOLD)
       const elapsed = Date.now() - lastMessageAtRef.current
       if (elapsed > thresholdMs) {
         closeZombieSocket(`silence de ${elapsed}ms > seuil ${thresholdMs}ms`)
@@ -476,10 +497,34 @@ export default function useWebSocket(endpoint = '/ws/admin') {
       case 'HEARTBEAT':
         // #118 (F1, R6) — pas d'état de jeu à mettre à jour : l'arrivée du
         // message elle-même a déjà réarmé lastMessageAtRef (dans onmessage,
-        // avant ce switch). Seule la cadence annoncée est retenue ici, pour
-        // que le seuil de liaison morte reste dérivé de la valeur réelle du
-        // ticker serveur plutôt que d'une constante indépendante.
+        // avant ce switch). La cadence annoncée est retenue ici, pour que le
+        // repli intermédiaire reste dérivé de la valeur réelle du ticker
+        // serveur plutôt que d'une constante indépendante.
         if (MSG?.INTERVAL_MS) heartbeatIntervalMsRef.current = MSG.INTERVAL_MS
+        // #130 — seuil de liaison morte transmis en valeur ABSOLUE (chemin
+        // nominal, contrat liveness-timing.md §3). Garde de robustesse
+        // obligatoire (R3, plan #130) : une valeur non numérique, nulle,
+        // négative, ou strictement inférieure à la cadence INTERVAL_MS de CE
+        // MÊME message est ignorée — un seuil sous la cadence de battement
+        // provoquerait une boucle de reconnexion permanente (le socket
+        // serait fermé avant même que le prochain battement normal ait une
+        // chance d'arriver). Sur valeur invalide/absente, on NE RÉINITIALISE
+        // PAS deadLinkTimeoutMsRef : on conserve la dernière valeur valide
+        // connue (ou `null`, jamais reçue) plutôt que de faire flapper le
+        // seuil sur un message isolé aberrant — voir la boucle de
+        // surveillance ci-dessus pour la cascade de repli complète.
+        {
+          const deadLinkTimeoutMs = MSG?.DEAD_LINK_TIMEOUT_MS
+          const currentIntervalMs = heartbeatIntervalMsRef.current || FALLBACK_HEARTBEAT_INTERVAL_MS
+          if (
+            typeof deadLinkTimeoutMs === 'number' &&
+            Number.isFinite(deadLinkTimeoutMs) &&
+            deadLinkTimeoutMs > 0 &&
+            deadLinkTimeoutMs >= currentIntervalMs
+          ) {
+            deadLinkTimeoutMsRef.current = deadLinkTimeoutMs
+          }
+        }
         break
 
       default:
