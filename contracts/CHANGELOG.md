@@ -2,6 +2,45 @@
 
 ---
 
+## [20260803b] — Recalibrage des délais de liaison + transmission serveur→client (#130)
+
+> Axe indépendant de #127/#129 : ceux-ci réduisent le **volume** de messages, celui-ci porte sur la
+> **marge de tolérance temporelle**. Constat central : avec un ping à 3 s et un `ReadDeadline` à 5 s,
+> la perte d'un **seul** ping suffisait à fermer la connexion côté serveur — la marge de 2 s ne
+> représentait aucune tolérance réelle. Plan : `_work/reports/planner-20260803-214210.md`.
+> Maquette : `_work/mockups/130-timing-recalibration.md`.
+> Contrat détaillé : `contracts/liveness-timing.md`.
+
+- **[NEW]** `HEARTBEAT { …, DEAD_LINK_TIMEOUT_MS }` — champ additif portant, en **valeur absolue**,
+  le silence au-delà duquel un client web doit déclarer la liaison morte. Le serveur devient la
+  source de vérité unique du seuil, et non plus seulement de la cadence : #118 transmettait
+  `INTERVAL_MS`, mais le **multiplicateur** (3) restait codé en dur côté client — c'est ce dernier
+  point de dérive possible que ce champ supprime.
+- **[CHANGED]** `HEARTBEAT.INTERVAL_MS` — valeur émise : 3000 → **2000** ms. Le sens du champ est
+  inchangé (cadence réelle du ticker `writePump`).
+- **[CHANGED]** `ReadDeadline` serveur pour les clients web : 5000 → **7000** ms, soit
+  `(N+1) × P + RTT + marge` avec N = 2 pings tolérés et P = 2000 ms. Passe de **0** à **2** pings
+  intégralement perdus tolérés.
+- **[CHANGED]** Seuil client de liaison morte : 9000 → **4000** ms (ajustement GATE 2 — le plan
+  recommandait 5000, l'utilisateur a choisi la variante réactive à 4000), et granularité de
+  vérification 1000 → **500** ms. Détection d'un lien réellement mort : 9,0–10,0 s → **4,0–4,5 s**.
+- **[CHANGED]** Règle de contrat ajoutée : le client applique `DEAD_LINK_TIMEOUT_MS` s'il l'a reçu,
+  sinon `INTERVAL_MS × 3` (comportement #118), sinon `3000 × 3`. Les trois états sont fonctionnels.
+- **[CHANGED]** Règle de contrat ajoutée : l'**ordre de détection est délibérément inversé** — le
+  client détecte désormais avant le serveur (4,0–4,5 s contre 7 s). Sur un lien mort, la trame de
+  fermeture du serveur n'atteint jamais le client (problème fondateur de #118) : c'est au client de
+  reprendre l'initiative. La connexion serveur périmée est absorbée par la garde anti-zombie
+  existante (`IsPlayerIDConnected`, #109/#120).
+
+**Périmètres explicitement non modifiés** : buzzers physiques (`/ws/buzzer`, firmware ESP32-C3
+contraint, et qui n'a jamais reçu `HEARTBEAT`), canal `/ws/logs`, et `SetWriteDeadline` (l'abaisser
+rapprocherait le seuil d'échec d'écriture, qui ferme la connexion — l'inverse du but recherché).
+
+**Aucun changement BREAKING.** `DEAD_LINK_TIMEOUT_MS` est additif ; les quatre combinaisons
+ancien/nouveau client × ancien/nouveau serveur sont fonctionnelles (contrat §6).
+
+---
+
 ## [20260803] — Ciblage des broadcasts par événement, hors PREPARE/READY (#129)
 
 > Prolongement de #127. Trois événements par-participant — connexion, déconnexion, frappe ARDOISE —
