@@ -47,12 +47,32 @@ function ReclaimConfirmModal({ bumper, enrollmentActive, onRelease, onDelete, on
     onClose()
   }
 
+  // #134 — avant cette feature, "Réinscription" ne coupait jamais un joueur
+  // encore connecté (autorisation différée #122 seulement) : aucun
+  // avertissement n'était nécessaire ici. Elle évince désormais immédiatement
+  // un joueur CONNECTED (score/équipe conservés côté serveur, re-clé). Deux
+  // avertissements distincts, rendus SOUS l'option comme pour deleteOption
+  // ci-dessous (pas au survol — ne fonctionne pas au doigt sur tablette) :
+  // l'un annonce l'éviction immédiate, l'autre — piège identifié au plan
+  // #134, absent du handoff initial — prévient que la reprise elle-même sera
+  // bloquée si les inscriptions sont fermées au moment du clic (symétrique à
+  // l'avertissement déjà existant sous "Suppression totale").
   const releaseOption = (
     <div key="release" className="reclaim-modal-option">
       <button type="button" className="reclaim-btn reclaim-btn-primary" onClick={handleRelease}>
         Réinscription
       </button>
       <span className="reclaim-sub">Retrouve son score et son équipe</span>
+      {bumper.CONNECTED && (
+        <div className="reclaim-warning">
+          ⚠ {name} est connectée : elle sera renvoyée à l'inscription tout de suite.
+        </div>
+      )}
+      {bumper.CONNECTED && !enrollmentActive && (
+        <div className="reclaim-warning">
+          ⚠ Inscriptions fermées : {name} ne pourra pas se réinscrire tant qu'elles le sont.
+        </div>
+      )}
     </div>
   )
 

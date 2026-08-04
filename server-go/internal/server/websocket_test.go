@@ -772,6 +772,151 @@ func TestIsPlayerIDConnected_TrueAfterReconnectRace(t *testing.T) {
 }
 
 // ============================================================================
+// Tests: SendToPlayerID / SendRawToPlayerID duplicate-PlayerID hardening
+// (#129 code review)
+// ============================================================================
+
+// TestSendToPlayerID_DuplicateRegistration_ReachesBothConnections reproduces
+// the exact real-world window TestIsPlayerIDConnected_TrueAfterReconnectRace
+// already exercises for a different method: a fast reconnect where the OLD
+// connection hasn't been removed from h.clients yet (its own failure isn't
+// detected server-side until a read timeout or failed write, up to a few
+// seconds — readPump/writePump) when the NEW connection completes
+// PLAYER_CONNECT and links the same PlayerID. Two ClientTypeVPlayer entries
+// legitimately share one PlayerID for that window.
+//
+// Before the #129 hardening, SendToPlayerID returned after the FIRST match
+// found via Go's randomized map iteration — non-deterministically landing on
+// either the stale or the live connection. A caller needing the live one
+// specifically (e.g. a targeted UPDATE echo the reconnecting player depends
+// on to recover its session, #118/#120/#122) could silently miss it. This
+// test proves the fix: sending to every match means the live connection
+// always receives the message, regardless of which one Go's map iteration
+// happens to visit first.
+func TestSendToPlayerID_DuplicateRegistration_ReachesBothConnections(t *testing.T) {
+	srv, hub, cleanup := startTestWSServer(t)
+	defer cleanup()
+
+	oldConn := dialWSPath(t, srv, "/ws/player")
+	defer oldConn.Close()
+	time.Sleep(50 * time.Millisecond)
+	oldClientID := clientIDForType(t, hub, ClientTypeVPlayer)
+	hub.SetClientPlayerID(oldClientID, "vjoueur_Eve")
+
+	// New connection for the same VJoueur arrives before the old one closes.
+	newConn := dialWSPath(t, srv, "/ws/player")
+	defer newConn.Close()
+	time.Sleep(50 * time.Millisecond)
+
+	hub.mu.RLock()
+	var newClientID string
+	for c := range hub.clients {
+		if c.Type == ClientTypeVPlayer && c.ID != oldClientID {
+			newClientID = c.ID
+		}
+	}
+	hub.mu.RUnlock()
+	if newClientID == "" {
+		t.Fatal("Expected a second VPlayer client to be connected")
+	}
+	hub.SetClientPlayerID(newClientID, "vjoueur_Eve")
+
+	msg, err := protocol.NewMessage(protocol.ActionPlayerEvicted, protocol.PlayerEvictedPayload{Reason: "GAME_RESET"})
+	if err != nil {
+		t.Fatalf("failed to build message: %v", err)
+	}
+	if err := hub.SendToPlayerID("vjoueur_Eve", msg); err != nil {
+		t.Fatalf("SendToPlayerID failed: %v", err)
+	}
+
+	oldMsg := readWSMsg(t, oldConn, 500*time.Millisecond)
+	if oldMsg == nil || oldMsg.Action != protocol.ActionPlayerEvicted {
+		t.Errorf("expected the STALE (old) connection to also receive the message, got %v", oldMsg)
+	}
+	newMsg := readWSMsg(t, newConn, 500*time.Millisecond)
+	if newMsg == nil || newMsg.Action != protocol.ActionPlayerEvicted {
+		t.Errorf("expected the LIVE (new) connection to receive the message — this is the one that actually matters, got %v", newMsg)
+	}
+}
+
+// TestSendRawToPlayerID_DuplicateRegistration_ReachesBothConnections is the
+// same scenario for SendRawToPlayerID (#129 T1.1), the raw twin
+// broadcastUpdateToPlayer uses for the reconnection echo CA2 depends on.
+func TestSendRawToPlayerID_DuplicateRegistration_ReachesBothConnections(t *testing.T) {
+	srv, hub, cleanup := startTestWSServer(t)
+	defer cleanup()
+
+	oldConn := dialWSPath(t, srv, "/ws/player")
+	defer oldConn.Close()
+	time.Sleep(50 * time.Millisecond)
+	oldClientID := clientIDForType(t, hub, ClientTypeVPlayer)
+	hub.SetClientPlayerID(oldClientID, "vjoueur_Frank")
+
+	newConn := dialWSPath(t, srv, "/ws/player")
+	defer newConn.Close()
+	time.Sleep(50 * time.Millisecond)
+
+	hub.mu.RLock()
+	var newClientID string
+	for c := range hub.clients {
+		if c.Type == ClientTypeVPlayer && c.ID != oldClientID {
+			newClientID = c.ID
+		}
+	}
+	hub.mu.RUnlock()
+	if newClientID == "" {
+		t.Fatal("Expected a second VPlayer client to be connected")
+	}
+	hub.SetClientPlayerID(newClientID, "vjoueur_Frank")
+
+	msg, err := protocol.NewMessage(protocol.ActionUpdate, nil)
+	if err != nil {
+		t.Fatalf("failed to build message: %v", err)
+	}
+	data, err := msg.SerializeForWebSocket()
+	if err != nil {
+		t.Fatalf("failed to serialize message: %v", err)
+	}
+	hub.SendRawToPlayerID("vjoueur_Frank", data)
+
+	oldMsg := readWSMsg(t, oldConn, 500*time.Millisecond)
+	if oldMsg == nil || oldMsg.Action != protocol.ActionUpdate {
+		t.Errorf("expected the STALE (old) connection to also receive the message, got %v", oldMsg)
+	}
+	newMsg := readWSMsg(t, newConn, 500*time.Millisecond)
+	if newMsg == nil || newMsg.Action != protocol.ActionUpdate {
+		t.Errorf("expected the LIVE (new) connection to receive the message — this is the one that actually matters, got %v", newMsg)
+	}
+}
+
+// TestSendToPlayerID_NoDuplicate_StillWorks is a plain non-regression check:
+// the common case (exactly one client for a PlayerID) must keep working
+// exactly as before the #129 hardening.
+func TestSendToPlayerID_NoDuplicate_StillWorks(t *testing.T) {
+	srv, hub, cleanup := startTestWSServer(t)
+	defer cleanup()
+
+	conn := dialWSPath(t, srv, "/ws/player")
+	defer conn.Close()
+	time.Sleep(50 * time.Millisecond)
+	clientID := clientIDForType(t, hub, ClientTypeVPlayer)
+	hub.SetClientPlayerID(clientID, "vjoueur_Gina")
+
+	msg, err := protocol.NewMessage(protocol.ActionPlayerEvicted, protocol.PlayerEvictedPayload{Reason: "PLAYER_REMOVED"})
+	if err != nil {
+		t.Fatalf("failed to build message: %v", err)
+	}
+	if err := hub.SendToPlayerID("vjoueur_Gina", msg); err != nil {
+		t.Fatalf("SendToPlayerID failed: %v", err)
+	}
+
+	got := readWSMsg(t, conn, 500*time.Millisecond)
+	if got == nil || got.Action != protocol.ActionPlayerEvicted {
+		t.Errorf("expected the single connection to receive the message, got %v", got)
+	}
+}
+
+// ============================================================================
 // Tests: OnPlayerDisconnected callback (#109)
 // ============================================================================
 

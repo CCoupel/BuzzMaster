@@ -29,6 +29,17 @@ export const REDIRECT_MESSAGES = {
   PLAYER_REMOVED: 'Ta place a été libérée par l’animateur. Tu peux te réinscrire.',
   GAME_RESET: 'Une nouvelle partie a commencé. Tous les joueurs doivent se réinscrire.',
   SESSION_EXPIRED: 'Ta session n’est plus valide. Réinscris-toi pour continuer.',
+  // #134 — NE PAS fusionner avec PLAYER_REMOVED malgré un parcours identique
+  // (PLAYER_EVICTED, purge de vplayer_id, renvoi vers l'inscription) : les deux
+  // motifs se distinguent par ce qui arrive au SCORE, information dont le
+  // joueur a besoin pour décider s'il reprend le même pseudo. PLAYER_REMOVED
+  // (#120/#123) = suppression totale, score perdu. SEAT_RELEASED (#134) =
+  // libération de place sur un joueur encore connecté, score/équipe conservés
+  // via un re-clé côté serveur (reattachVirtualPlayerUnsafe) — la reprise DOIT
+  // se faire sous le même pseudo pour que le siège soit rendu (contrat
+  // seat-release.md §2/§3). Texte validé au GATE 2 (#134) — voir
+  // _work/mockups/134-seat-release.md.
+  SEAT_RELEASED: 'Ta place a été libérée par l’animateur. Réinscris-toi avec le même pseudo : tu retrouveras ton score et ton équipe.',
 }
 
 export const DEFAULT_REDIRECT_MESSAGE = 'Tu as été renvoyé à l’inscription. Réinscris-toi pour continuer.'

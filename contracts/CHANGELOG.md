@@ -2,6 +2,161 @@
 
 ---
 
+## [20260804] — Libération de place d'un VJoueur connecté (#134)
+
+> Le bouton « Réinscription » (`RELEASE_BUMPER_NAME`, #122) ne posait qu'une **autorisation
+> différée** consommable par une future tentative — sans jamais toucher une session active. Sur un
+> joueur encore connecté, il ne produisait donc **aucun effet observable**. #134 lui donne le
+> comportement attendu dans ce cas, sans rien changer au cas #122 d'origine.
+> Plan : `_work/reports/planner-20260804-115318.md`.
+> Maquette : `_work/mockups/134-seat-release.md`.
+> Contrat détaillé : `contracts/seat-release.md`.
+
+- **[NEW]** Motif `SEAT_RELEASED`, porté par `PLAYER_EVICTED { REASON }` et
+  `PLAYER_REJECTED { REASON }`. Famille **renvoi** (`REDIRECT_MESSAGES`), comme `PLAYER_REMOVED`.
+  Distinction avec ce dernier : `PLAYER_REMOVED` supprime le bumper (score et équipe perdus),
+  `SEAT_RELEASED` le **conserve** — le joueur qui reprend le siège retrouve son score.
+- **[CHANGED]** `RELEASE_BUMPER_NAME { ID }` — **action inchangée**, comportement élargi. Si le
+  bumper ciblé est **connecté** : `PLAYER_EVICTED { SEAT_RELEASED }` ciblé → enregistrement au
+  registre d'éviction → **re-clé** du bumper sous un nouvel ID (même struct : score, équipe et
+  historique conservés) avec `Connected = false` → autorisation de reprise. Si le bumper est
+  **déconnecté** : strictement inchangé (#122) — autorisation différée seule.
+- **[CHANGED]** Règle de contrat ajoutée : l'ordre des étapes est **normatif**. La notification
+  ciblée doit précéder le re-clé (`SendToPlayerID` résout par l'**ancien** `PlayerID` — après re-clé
+  le joueur n'est plus adressable), et le re-clé est **obligatoire**, pas une commodité : sans lui, un
+  joueur se reconnectant avec son ancien ID emprunte le cas 1 de `ReconnectOrCreateVirtualPlayer`,
+  qui remet `reclaimAuthorizedUntil` à zéro et **annule silencieusement** la libération demandée.
+- **[CHANGED]** Règle de contrat ajoutée : la connexion WebSocket n'est **pas** fermée de force —
+  `PLAYER_EVICTED` est en file sur le canal `Send` et une fermeture immédiate risquerait de perdre la
+  notification. Même contrat que `DELETE_BUMPER`. L'invalidation réelle de la session est le re-clé.
+- **[CHANGED]** Règle de contrat ajoutée : la reprise du siège n'introduit **aucun chemin nouveau** —
+  c'est le chemin de reprise #122 (`PLAYER_CONNECT` sans `ID` + nom + autorisation valide →
+  `reattachVirtualPlayerUnsafe`). Le client arrive sans `ID` car le traitement de `PLAYER_EVICTED`
+  purge `vplayer_id`. **N'importe quel** joueur peut reprendre le siège, pas seulement l'occupant
+  précédent : le siège porte le score, pas la personne.
+
+**Aucun changement BREAKING.** Aucune action, aucun champ ajouté, renommé, retiré ni retypé — seule
+une nouvelle **valeur** de `REASON` apparaît sur des messages existants. Un client antérieur retombe
+sur `DEFAULT_REDIRECT_MESSAGE` (repli déjà en place et déjà testé pour un motif inconnu).
+
+---
+
+## [20260803b] — Recalibrage des délais de liaison + transmission serveur→client (#130)
+
+> Axe indépendant de #127/#129 : ceux-ci réduisent le **volume** de messages, celui-ci porte sur la
+> **marge de tolérance temporelle**. Constat central : avec un ping à 3 s et un `ReadDeadline` à 5 s,
+> la perte d'un **seul** ping suffisait à fermer la connexion côté serveur — la marge de 2 s ne
+> représentait aucune tolérance réelle. Plan : `_work/reports/planner-20260803-214210.md`.
+> Maquette : `_work/mockups/130-timing-recalibration.md`.
+> Contrat détaillé : `contracts/liveness-timing.md`.
+
+- **[NEW]** `HEARTBEAT { …, DEAD_LINK_TIMEOUT_MS }` — champ additif portant, en **valeur absolue**,
+  le silence au-delà duquel un client web doit déclarer la liaison morte. Le serveur devient la
+  source de vérité unique du seuil, et non plus seulement de la cadence : #118 transmettait
+  `INTERVAL_MS`, mais le **multiplicateur** (3) restait codé en dur côté client — c'est ce dernier
+  point de dérive possible que ce champ supprime.
+- **[CHANGED]** `HEARTBEAT.INTERVAL_MS` — valeur émise : 3000 → **2000** ms. Le sens du champ est
+  inchangé (cadence réelle du ticker `writePump`).
+- **[CHANGED]** `ReadDeadline` serveur pour les clients web : 5000 → **7000** ms, soit
+  `(N+1) × P + RTT + marge` avec N = 2 pings tolérés et P = 2000 ms. Passe de **0** à **2** pings
+  intégralement perdus tolérés.
+- **[CHANGED]** Seuil client de liaison morte : 9000 → **4000** ms (ajustement GATE 2 — le plan
+  recommandait 5000, l'utilisateur a choisi la variante réactive à 4000), et granularité de
+  vérification 1000 → **500** ms. Détection d'un lien réellement mort : 9,0–10,0 s → **4,0–4,5 s**.
+- **[CHANGED]** Règle de contrat ajoutée : le client applique `DEAD_LINK_TIMEOUT_MS` s'il l'a reçu,
+  sinon `INTERVAL_MS × 3` (comportement #118), sinon `3000 × 3`. Les trois états sont fonctionnels.
+- **[CHANGED]** Règle de contrat ajoutée : l'**ordre de détection est délibérément inversé** — le
+  client détecte désormais avant le serveur (4,0–4,5 s contre 7 s). Sur un lien mort, la trame de
+  fermeture du serveur n'atteint jamais le client (problème fondateur de #118) : c'est au client de
+  reprendre l'initiative. La connexion serveur périmée est absorbée par la garde anti-zombie
+  existante (`IsPlayerIDConnected`, #109/#120).
+
+**Périmètres explicitement non modifiés** : buzzers physiques (`/ws/buzzer`, firmware ESP32-C3
+contraint, et qui n'a jamais reçu `HEARTBEAT`), canal `/ws/logs`, et `SetWriteDeadline` (l'abaisser
+rapprocherait le seuil d'échec d'écriture, qui ferme la connexion — l'inverse du but recherché).
+
+**Aucun changement BREAKING.** `DEAD_LINK_TIMEOUT_MS` est additif ; les quatre combinaisons
+ancien/nouveau client × ancien/nouveau serveur sont fonctionnelles (contrat §6).
+
+---
+
+## [20260803] — Ciblage des broadcasts par événement, hors PREPARE/READY (#129)
+
+> Prolongement de #127. Trois événements par-participant — connexion, déconnexion, frappe ARDOISE —
+> déclenchaient chacun un `UPDATE` complet vers **tous** les VJoueurs, à n'importe quel moment de la
+> partie. La réduction de #127 ne s'y appliquait pas (conditionnée aux phases PREPARE/READY). Audit
+> des consommateurs : les VJoueurs n'exploitent aucune de ces données, hors l'écho de leur propre
+> état. Plan : `_work/reports/planner-20260803-170653.md`.
+> Maquette : `_work/mockups/129-broadcast-targeting.md`.
+> Contrat détaillé : `contracts/vplayer-payload-filter.md` §5.
+
+- **[CHANGED]** `UPDATE` déclenché par `onPlayerDisconnected` — n'est plus diffusé aux VJoueurs
+  (Admin, TV et buzzers inchangés). Aucun affichage VJoueur ne dépend de l'état de connexion des
+  autres joueurs (`sortedPlayers` est gaté `!isVPlayer` depuis #127).
+- **[CHANGED]** `UPDATE` déclenché par `handlePlayerConnect` (création **et** reconnexion) — n'est
+  plus diffusé à l'ensemble des VJoueurs, mais **ciblé sur le participant concerné**, qui en a besoin
+  pour retrouver son bumper après reconnexion (#118/#120/#122). Admin, TV et buzzers inchangés.
+- **[CHANGED]** `UPDATE` déclenché par `PONG` en phase `PREPARE` — n'est plus diffusé à la **TV**.
+  #127 avait retiré les VJoueurs de cette rafale en conservant Admin + TV + buzzers ; la TV n'affiche
+  qu'un libellé statique pendant PREPARE (`PlayerDisplay.jsx:1358-1373`) et n'a besoin que des deux
+  bornes de la fenêtre, qu'elle continue de recevoir (entrée en PREPARE, transition en READY). Elle
+  passe de N+2 à 2 `UPDATE`. **Les buzzers physiques restent ciblés délibérément** : cet `UPDATE` est
+  leur seul signal de phase sur le chemin WebSocket pendant la fenêtre, `broadcastGameState()` ne les
+  incluant pas.
+- **[CHANGED]** `UPDATE` déclenché par `ARDOISE_INPUT` — diffusé à **l'admin seul**. La TV n'affiche
+  les réponses qu'en phase `REVEALED` (`PlayerDisplay.jsx:2427`) et le VJoueur ne lit jamais
+  `ARDOISE_ANSWERS` (saisie en état local). Les buzzers physiques n'ont aucun champ ARDOISE dans leur
+  payload.
+- **[CHANGED]** Règle de contrat ajoutée (§5) : un `UPDATE` déclenché par un événement propre à **un**
+  participant n'est diffusé à tous les VJoueurs que si son contenu est réellement consommé par eux ;
+  sinon Admin/TV, plus un **écho ciblé** au participant concerné. Le chemin d'écho ciblé ne doit
+  jamais appeler `ApplyVPlayerBroadcastConnEvents()` (même invariant que #127 CA7).
+- **[CHANGED]** Règle de contrat ajoutée (§5) : les `UPDATE` d'`ARDOISE_INPUT` peuvent être regroupés
+  sur une fenêtre ≤ 150 ms, sous deux conditions — vidage immédiat à tout changement de phase, et
+  construction du payload **au moment de l'émission** (une émission retardée est alors redondante,
+  jamais périmée).
+- **[NEW]** `sendStateToClient()` (sur `HELLO`) est explicitement contractualisé comme envoyant le
+  payload **complet et non réduit**, quel que soit le type de client — seule source permettant à une
+  session sans `vplayer_id` de retrouver son identité par balayage `NAME`. Ne pas « optimiser ».
+
+**Aucun changement BREAKING.** Aucun message, champ ni type n'est ajouté, renommé, retiré ni retypé —
+seul le jeu des destinataires de messages existants change.
+
+**Correction d'équité obtenue au passage** : `ARDOISE_ANSWERS`, qui transportait vers le navigateur de
+chaque VJoueur le texte que les autres équipes étaient en train de saisir, ne leur est plus transmis.
+
+---
+
+## [20260802] — Diffusion groupée et payload réduit VJoueur à PREPARE→READY (#127)
+
+> À chaque PONG reçu en phase PREPARE, le serveur rediffusait l'état complet du jeu à **tous** les
+> clients : pour N participants, chaque VJoueur recevait N+2 payloads complets en quelques centaines
+> de millisecondes, au moment précis des déconnexions rapportées. Plan :
+> `_work/reports/planner-20260802-212049.md`. Maquette : `_work/mockups/127-broadcast-matrix.md`.
+> Contrat détaillé : `contracts/vplayer-payload-filter.md`.
+
+- **[CHANGED]** `UPDATE` déclenché par `PONG` en phase `PREPARE` — n'est plus diffusé à
+  `ClientTypeVPlayer`. Admin et TV continuent de le recevoir à chaque PONG (l'admin affiche la
+  progression « prêt » équipe par équipe en direct, `GamePage.jsx:1050-1057`). Le VJoueur reçoit
+  désormais **2** `UPDATE` sur la fenêtre PREPARE→READY au lieu de N+2 : l'entrée en PREPARE, puis
+  la transition en READY. Rétrocompatible — aucun message nouveau, aucun champ modifié.
+- **[CHANGED]** `UPDATE` émis sur changement de phase (`broadcastGameState`, toutes phases) — passe
+  du chemin non filtré au chemin filtré déjà utilisé partout ailleurs : Admin garde le payload
+  complet, TV et VJoueur reçoivent le payload sans métadonnées `FIRMWARE_VERSION` / `IS_OUTDATED` /
+  `OTA_STATUS` / `OTA_PERCENT` / `ACK_PENDING`. Correction d'incohérence — ces champs n'ont jamais
+  été consommés par TV/VJoueur.
+- **[CHANGED]** `UPDATE` destiné à `ClientTypeVPlayer` **pendant les seules phases `PREPARE` et
+  `READY`** — la carte `bumpers` est réduite au seul bumper du destinataire. `GAME` et `teams`
+  restent **intégralement inchangés**. Ne s'applique jamais à un client dont le `PlayerID` n'est pas
+  encore identifié (une session sans `vplayer_id` retrouve son bumper par balayage NAME).
+  Voir `contracts/vplayer-payload-filter.md` §2 pour la règle complète et les consommateurs audités.
+
+**Aucun changement BREAKING.** Aucun endpoint, aucun message, aucun champ n'est ajouté, renommé,
+retiré ni retypé. Seuls varient le *nombre de destinataires* de messages existants et le *nombre
+d'entrées* d'une carte, sur deux messages, pour un seul type de client.
+
+---
+
 ## [20260729] — Battement applicatif client → serveur (#118)
 
 > Un VJoueur dont le réseau tombait restait indéfiniment sur un socket zombie : le serveur le

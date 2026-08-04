@@ -90,11 +90,26 @@ func transitionConnUnsafe(b *Bumper, event ConnEvent) {
 	case ConnEventDisconnect:
 		if b.ConnState == ConnStateHidden || b.ConnState == ConnStateGreen {
 			b.ConnState = ConnStateOrange
-			// The broadcast that announces this disconnect is not itself a
-			// message this VJoueur should have received — give it a one-time
-			// pass so ORANGE is actually visible before any real MessageLost
-			// can apply (see ApplyVPlayerBroadcastConnEvents / conn-state fix).
-			b.skipNextMessageLost = true
+			// #129: skipNextMessageLost is NOT set here anymore. It used to
+			// give a one-time pass to "the broadcast that announces this
+			// disconnect" — under #127, that broadcast (onPlayerDisconnected's
+			// a.broadcastUpdate()) always reached VJoueurs and so was always
+			// the very next call to ApplyVPlayerBroadcastConnEvents(),
+			// consuming the pass harmlessly right where it was meant to.
+			// #129 T1.3 retargets that call to Admin/TV/Buzzer only — it
+			// never reaches VPlayer and so never calls
+			// ApplyVPlayerBroadcastConnEvents() at all anymore. Setting the
+			// flag here left it dangling: the NEXT unrelated VPlayer-targeting
+			// broadcast would consume it instead, silently absorbing a
+			// genuinely missed message for one cycle (orange incorrectly
+			// stayed orange instead of turning red) — caught by
+			// TestConnStateProtocol_MissedBroadcastWhileDisconnected_StillTurnsRed.
+			// The self-referential case this flag protected against
+			// structurally no longer exists post-#129, so the flag is no
+			// longer set. skipNextMessageLost the field, and its consumption
+			// in ApplyVPlayerBroadcastConnEvents, are left in place — dead
+			// weight for this path only, not removed, to avoid widening this
+			// fix beyond the one line that caused the regression.
 		}
 	case ConnEventReconnect:
 		if b.ConnState == ConnStateOrange || b.ConnState == ConnStateRed {
@@ -2845,6 +2860,24 @@ func (e *Engine) ReconnectOrCreateVirtualPlayer(id, name string) (string, *Bumpe
 	return newID, newBumper, false, err
 }
 
+// rekeyBumperUnsafe moves bumper from oldID to a freshly generated ID —
+// the re-keying core shared by reattachVirtualPlayerUnsafe (#122, seat
+// reclaimed by a nameless PLAYER_CONNECT) and ReleaseSeat (#134, seat
+// released by the animateur while still occupied). Only the map key and
+// Name change here: Connected, ConnState, ReclaimRequested and
+// reclaimAuthorizedUntil are left to the caller, deliberately — a reclaim
+// and a release leave the bumper in opposite connection states, so there is
+// no single "after re-key" value correct for both. Caller must hold e.mu.
+func (e *Engine) rekeyBumperUnsafe(oldID string, bumper *Bumper, name string) string {
+	newID := "vjoueur_" + name + "_" + time.Now().Format("20060102_150405")
+
+	delete(e.data.Bumpers, oldID)
+	e.data.Bumpers[newID] = bumper
+	bumper.Name = name
+
+	return newID
+}
+
 // reattachVirtualPlayerUnsafe reattaches an existing bumper (whose owner lost
 // their ID) under a freshly generated ID, consuming its reclaim authorization
 // (#122 B3). Caller must hold e.mu and have already verified the
@@ -2852,12 +2885,8 @@ func (e *Engine) ReconnectOrCreateVirtualPlayer(id, name string) (string, *Bumpe
 // are preserved as-is — only the map key (ID) changes; the seat is rendered,
 // not recreated, which is precisely what preserves the score/team/history.
 func (e *Engine) reattachVirtualPlayerUnsafe(oldID string, bumper *Bumper, name string) string {
-	newID := "vjoueur_" + name + "_" + time.Now().Format("20060102_150405")
+	newID := e.rekeyBumperUnsafe(oldID, bumper, name)
 
-	delete(e.data.Bumpers, oldID)
-	e.data.Bumpers[newID] = bumper
-
-	bumper.Name = name
 	bumper.Connected = true
 	bumper.ReclaimRequested = false
 	bumper.reclaimAuthorizedUntil = time.Time{} // consumed — single use
@@ -2873,6 +2902,15 @@ func (e *Engine) reattachVirtualPlayerUnsafe(oldID string, bumper *Bumper, name 
 // ID-only identity rule, and an explicit, human (animateur) decision rather
 // than an automatic one. Returns false if id doesn't resolve to a virtual
 // bumper (nothing to release).
+//
+// Unchanged by #134: this is exactly the #122 behavior, locked down by the
+// non-regression tests in name_recovery_test.go (both packages) — it is
+// called as-is by ReleaseSeat below for a bumper that is NOT connected
+// (contracts/seat-release.md §3). ReleaseSeat cannot call this method
+// directly (it already holds e.mu; sync.Mutex is not reentrant) — see the
+// duplicated three lines there, deliberately kept in lockstep with this
+// body rather than factored, to avoid touching a function multiple existing
+// tests assert on byte-for-byte (log line included).
 func (e *Engine) ReleaseBumperName(id string) bool {
 	e.mu.Lock()
 	defer e.mu.Unlock()
@@ -2889,6 +2927,81 @@ func (e *Engine) ReleaseBumperName(id string) bool {
 
 	go e.SaveBumpers()
 	return true
+}
+
+// ReleaseSeat is the #134 entry point for RELEASE_BUMPER_NAME, handling both
+// the pre-existing #122 case (bumper disconnected — delegates verbatim,
+// unchanged) and the new #134 case (bumper connected — evict + re-key,
+// preserving the struct so score/team/history survive under a fresh ID).
+// See contracts/seat-release.md §2-3 for the full behavioral contract.
+//
+// Returns:
+//   - newID: the bumper's new ID after a connected release; "" when the
+//     bumper was disconnected (its ID never changes in that case, #122).
+//   - wasConnected: true only when this call actually evicted+re-keyed a
+//     connected bumper. The caller (handleReleaseBumperName) uses this to
+//     decide whether a PLAYER_EVICTED notification is due at all.
+//   - ok: false if id doesn't resolve to a virtual bumper (nothing to
+//     release) — mirrors ReleaseBumperName's own not-found contract.
+//
+// Atomic under a single lock: the connected/disconnected check, the re-key,
+// and the fresh reclaimAuthorizedUntil are all set together, so a concurrent
+// PLAYER_CONNECT can never observe a half-released seat (same discipline
+// that motivated ReconnectOrCreateVirtualPlayer's single lock, #109 R1).
+func (e *Engine) ReleaseSeat(id string) (newID string, wasConnected bool, ok bool) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+
+	bumper, exists := e.data.Bumpers[id]
+	if !exists || bumper == nil || !bumper.IsVirtual {
+		return "", false, false
+	}
+
+	if !bumper.Connected {
+		// #122 unchanged, verbatim (see ReleaseBumperName's doc comment for
+		// why this is duplicated rather than called): no eviction, no
+		// re-key — just the deferred reclaim authorization.
+		bumper.reclaimAuthorizedUntil = time.Now().Add(reclaimAuthorizationTTL)
+		bumper.ReclaimRequested = false
+		log.Printf("[Engine] Bumper name released for reclaim: id=%s, name=%s, expires=%s",
+			id, bumper.Name, bumper.reclaimAuthorizedUntil.Format(time.RFC3339))
+		go e.SaveBumpers()
+		return "", false, true
+	}
+
+	// #134 — bumper is connected: evict and re-key, preserving the struct
+	// (score/team/history) under a fresh ID the stale one can never resolve
+	// to again (contracts/seat-release.md §2, "pourquoi le re-clé est
+	// obligatoire"). Deliberately Connected=false and NO ConnEventReconnect
+	// (unlike reattachVirtualPlayerUnsafe above): this bumper was NOT just
+	// reconnected, it was just evicted — ConnEventDisconnect is the correct
+	// transition, matching the codebase's own general rule that every call
+	// site flipping CONNECTED fires the matching event (see UpdateBumper's
+	// CONNECTED handling a few hundred lines up).
+	newID = e.rekeyBumperUnsafe(id, bumper, bumper.Name)
+	bumper.Connected = false
+	applyConnEventUnsafe(bumper, ConnEventDisconnect)
+	bumper.ReclaimRequested = false
+	bumper.reclaimAuthorizedUntil = time.Now().Add(reclaimAuthorizationTTL)
+
+	// #134 T2.4 — narrow PREPARE mitigation (planner-20260804-115318.md,
+	// "Le point non identifié dans le handoff"): this bumper can never PONG
+	// again under its old identity, and updateTeamsReady() would otherwise
+	// keep its team permanently un-Ready, blocking PREPARE->READY on a
+	// single admin click. Scope strictly limited to THIS bumper — the
+	// general "a disconnected participant blocks READY" rule is left
+	// untouched (a signal the animateur relies on elsewhere, physical
+	// buzzers included). Ready is unconditionally reset to false for every
+	// bumper at the start of the NEXT Ready() call, so this can never leak
+	// past the current PREPARE window.
+	if e.state.Phase == PhasePrepare {
+		bumper.Ready = true
+	}
+	e.updateTeamsReady()
+
+	log.Printf("[Engine] Seat released while connected: old_id=%s, new_id=%s, name=%s", id, newID, bumper.Name)
+	go e.SaveBumpers()
+	return newID, true, true
 }
 
 // countVirtualPlayersUnsafe counts virtual players (caller must hold lock)

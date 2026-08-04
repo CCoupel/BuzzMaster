@@ -207,11 +207,29 @@ func (h *WebSocketHub) IsPlayerIDConnected(playerID string) bool {
 	return false
 }
 
-// SendToPlayerID sends a message to the single ClientTypeVPlayer client linked to
-// playerID via SetClientPlayerID (reverse lookup of GetClientPlayerID). Used for
-// targeted, never-broadcast notifications such as PLAYER_EVICTED (#120) — the
-// admin/TV clients and other VJoueurs never receive it. A no-op (nil error) if no
-// client is currently linked to playerID, e.g. the VJoueur already disconnected.
+// SendToPlayerID sends a message to every ClientTypeVPlayer client currently
+// linked to playerID via SetClientPlayerID (reverse lookup of
+// GetClientPlayerID). Used for targeted, never-broadcast notifications such
+// as PLAYER_EVICTED (#120) — the admin/TV clients and other VJoueurs never
+// receive it. A no-op (nil error) if no client is currently linked to
+// playerID, e.g. the VJoueur already disconnected.
+//
+// #129 code review: sends to ALL matching clients, not just the first one a
+// map iteration happens to visit. Two clients can legitimately share the
+// same PlayerID for a brief, real window during a fast reconnect: the OLD
+// connection is only removed from h.clients once ITS OWN failure is
+// detected server-side (read timeout or a failed write — up to a few
+// seconds, readPump/writePump, websocket.go), which is not synchronized
+// with how quickly the client-side reconnects and completes a fresh
+// PLAYER_CONNECT -> SetClientPlayerID on a NEW connection. Nothing evicts
+// the stale registration before the new one links the same PlayerID.
+// Returning after the first match found via Go's randomized map iteration
+// order meant this could non-deterministically land on the stale,
+// about-to-be-cleaned-up connection instead of the live one the caller
+// actually needs to reach — silently breaking CA2-class guarantees (the
+// reconnecting player must receive its own echo) in that narrow window.
+// Sending to every match costs nothing extra in the common case (exactly
+// one match) and eliminates the race in the rare one.
 func (h *WebSocketHub) SendToPlayerID(playerID string, msg *protocol.Message) error {
 	data, err := msg.SerializeForWebSocket()
 	if err != nil {
@@ -225,14 +243,44 @@ func (h *WebSocketHub) SendToPlayerID(playerID string, msg *protocol.Message) er
 		if client.Type == ClientTypeVPlayer && client.PlayerID == playerID {
 			select {
 			case client.Send <- data:
-				return nil
 			default:
-				return nil
 			}
 		}
 	}
 
 	return nil
+}
+
+// SendRawToPlayerID sends pre-serialized bytes to every ClientTypeVPlayer
+// client currently linked to playerID (reverse lookup of GetClientPlayerID)
+// — raw twin of SendToPlayerID for callers that have already serialized a
+// type-appropriate payload themselves (#129 T1.1). See SendToPlayerID's doc
+// comment for why this targets every match rather than the first found:
+// same stale-vs-live duplicate-registration race, same fix.
+//
+// Why not reuse SendToPlayerID: it always serializes via
+// SerializeForWebSocket — the unfiltered payload, OTA/ACK fields included.
+// A caller building a targeted echo for a VPlayer wants the same reduced/
+// filtered payload contract §1-§2 already promises that client type
+// (typically via Message.SerializeForVPlayer); routing it through
+// SendToPlayerID would silently hand back a larger payload than #127
+// established for this client type.
+//
+// Same locking discipline and saturation semantics as SendToPlayerID: RLock
+// only (no send ever removes a client here), silent no-op if playerID isn't
+// currently connected or a given match's Send channel is full.
+func (h *WebSocketHub) SendRawToPlayerID(playerID string, data []byte) {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+
+	for client := range h.clients {
+		if client.Type == ClientTypeVPlayer && client.PlayerID == playerID {
+			select {
+			case client.Send <- data:
+			default:
+			}
+		}
+	}
 }
 
 // Broadcast sends a message to all connected clients
@@ -383,6 +431,73 @@ func (h *WebSocketHub) BroadcastRawToTypes(data []byte, types ...ClientType) {
 	h.mu.Unlock()
 }
 
+// VPlayerRecipient identifies one connected, identified VPlayer client —
+// the unit SnapshotVPlayerRecipients/SendRawToVPlayers use for individualized
+// UPDATE fan-out during PREPARE/READY (#127 T2.2, contracts/vplayer-payload-filter.md §3).
+type VPlayerRecipient struct {
+	ClientID string
+	PlayerID string
+}
+
+// SnapshotVPlayerRecipients returns every currently-connected VPlayer client
+// that has already been identified (SetClientPlayerID called, i.e. after a
+// completed PLAYER_CONNECT) — candidates for a personalized payload. A
+// VPlayer client with no PlayerID yet is deliberately excluded: contract §2
+// condition 3 requires it always receive the complete payload instead.
+//
+// Read-locked only (RLock) so the caller can build per-recipient payloads
+// entirely outside any lock before calling SendRawToVPlayers — contract §3:
+// "aucun json.Marshal ne doit être exécuté en tenant WebSocketHub.mu".
+func (h *WebSocketHub) SnapshotVPlayerRecipients() []VPlayerRecipient {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+
+	var out []VPlayerRecipient
+	for client := range h.clients {
+		if client.Type == ClientTypeVPlayer && client.PlayerID != "" {
+			out = append(out, VPlayerRecipient{ClientID: client.ID, PlayerID: client.PlayerID})
+		}
+	}
+	return out
+}
+
+// SendRawToVPlayers delivers pre-serialized payloads to every currently-
+// connected VPlayer client: a client whose PlayerID has an entry in payloads
+// gets that personalized slice; any other VPlayer client — not yet
+// identified, or one that connected/disconnected after
+// SnapshotVPlayerRecipients() was called — gets fallback (the same complete
+// filtered payload TV receives, contract §2 condition 3).
+//
+// payloads and fallback must already be fully serialized: no json.Marshal
+// runs here, only channel pushes, matching contract §3. Re-reads h.clients
+// live (not the earlier snapshot) so a client that connects between the
+// snapshot and this call still gets a payload instead of silently missing
+// this broadcast. Single Lock for the whole pass, same invariant as
+// BroadcastToTypes/BroadcastRawToTypes above: close(client.Send) and
+// delete(h.clients, client) on a saturated channel stay atomic with respect
+// to any concurrent broadcast on this hub.
+func (h *WebSocketHub) SendRawToVPlayers(payloads map[string][]byte, fallback []byte) {
+	h.mu.Lock()
+	for client := range h.clients {
+		if client.Type != ClientTypeVPlayer {
+			continue
+		}
+		data := fallback
+		if client.PlayerID != "" {
+			if personalized, ok := payloads[client.PlayerID]; ok {
+				data = personalized
+			}
+		}
+		select {
+		case client.Send <- data:
+		default:
+			close(client.Send)
+			delete(h.clients, client)
+		}
+	}
+	h.mu.Unlock()
+}
+
 func (c *WebSocketClient) readPump() {
 	defer func() {
 		c.Hub.unregister <- c
@@ -390,9 +505,9 @@ func (c *WebSocketClient) readPump() {
 	}()
 
 	c.Conn.SetReadLimit(65536)
-	c.Conn.SetReadDeadline(time.Now().Add(5 * time.Second))
+	c.Conn.SetReadDeadline(time.Now().Add(readDeadlineTimeout))
 	c.Conn.SetPongHandler(func(string) error {
-		c.Conn.SetReadDeadline(time.Now().Add(5 * time.Second))
+		c.Conn.SetReadDeadline(time.Now().Add(readDeadlineTimeout))
 		return nil
 	})
 
@@ -439,7 +554,51 @@ func (c *WebSocketClient) readPump() {
 // application-level HEARTBEAT (#118) sent alongside it. A single named
 // constant so HEARTBEAT.INTERVAL_MS can never drift from the ticker that
 // actually paces it — see the HEARTBEAT payload build below.
-const writePumpTickPeriod = 3 * time.Second
+//
+// #130: 3s -> 2s. contracts/liveness-timing.md §4 justifies the full
+// recalibration; the essential fact this constant drives: at the previous
+// P=3s/D=5s pairing, a single lost ping pushed the next pong to 6s > 5s —
+// the connection closed on ANY isolated packet loss, a common event on a
+// venue WiFi. There was no real tolerance behind the apparent 2s margin.
+const writePumpTickPeriod = 2 * time.Second
+
+// readDeadlineTimeout is how long readPump waits without a Pong (control
+// frame, refreshed by SetPongHandler) before considering the connection
+// dead and closing it — set at connection start and re-armed on every Pong.
+//
+// #130: 5s -> 7s, paired with writePumpTickPeriod's 3s -> 2s. Named constant
+// specifically because the previous code repeated the 5s literal at BOTH the
+// initial SetReadDeadline call and inside SetPongHandler — fixing only one
+// would have left the real tolerance unchanged while looking fixed. To
+// tolerate N=2 fully-lost pings at cadence P=2s, the next usable pong can
+// arrive as late as (N+1)*P + RTT + margin = 3*2000 + 500 + 500 = 7000ms
+// (contracts/liveness-timing.md §4 "Justification du ReadDeadline serveur").
+//
+// Invariant, load-bearing, not incidental: deadLinkTimeout (4s, below) <
+// readDeadlineTimeout (7s). The client is meant to detect and reconnect
+// BEFORE the server gives up — a deliberate inversion from the pre-#130
+// order (contract §4 "Ordre de détection"), because on a truly dead link the
+// server's own close frame can never reach the client anyway; the existing
+// anti-zombie guard (IsPlayerIDConnected, #109/#120) absorbs the stale
+// server-side connection once the client's new one registers. A future
+// change to either constant that collapses or reverses this inequality
+// must be a conscious choice, not a side effect — hence naming both instead
+// of leaving one as a literal.
+const readDeadlineTimeout = 7 * time.Second
+
+// deadLinkTimeout is the DEAD_LINK_TIMEOUT_MS value the server hands to web
+// clients via HEARTBEAT (contracts/liveness-timing.md §2) — the absolute
+// silence threshold, in milliseconds, beyond which a client should consider
+// the link dead, close its socket, and reconnect. See readDeadlineTimeout's
+// doc comment for the deadLinkTimeout < readDeadlineTimeout invariant this
+// value is one half of.
+//
+// #130 GATE 2 adjustment: the plan's own recommended value was 5s (a 2s
+// margin above the 3s network spike the spec requires absorbing without
+// reconnecting); the user explicitly chose the more reactive 4s variant
+// instead (margin reduced to 1s, detection at ~4.0-4.5s instead of
+// ~5.0-5.5s) — see _work/handoff/task-dev-backend-20260804-090721.md.
+const deadLinkTimeout = 4 * time.Second
 
 func (c *WebSocketClient) writePump() {
 	ticker := time.NewTicker(writePumpTickPeriod)
@@ -449,13 +608,15 @@ func (c *WebSocketClient) writePump() {
 	}()
 
 	// Built once per connection, not per tick: the payload is constant for the
-	// lifetime of the process (writePumpTickPeriod never changes at runtime).
-	// Marshal failure here is not expected (a fixed int64 field always
-	// encodes), but is handled defensively — a nil heartbeatData just skips
-	// the HEARTBEAT write below without affecting the protocol ping.
+	// lifetime of the process (writePumpTickPeriod/deadLinkTimeout never
+	// change at runtime). Marshal failure here is not expected (two fixed
+	// int64 fields always encode), but is handled defensively — a nil
+	// heartbeatData just skips the HEARTBEAT write below without affecting
+	// the protocol ping.
 	var heartbeatData []byte
 	if heartbeatMsg, err := protocol.NewMessage(protocol.ActionHeartbeat, protocol.HeartbeatPayload{
-		IntervalMs: writePumpTickPeriod.Milliseconds(),
+		IntervalMs:        writePumpTickPeriod.Milliseconds(),
+		DeadLinkTimeoutMs: deadLinkTimeout.Milliseconds(),
 	}); err == nil {
 		if data, err := heartbeatMsg.SerializeForWebSocket(); err == nil {
 			heartbeatData = data
