@@ -2,6 +2,45 @@
 
 ---
 
+## [20260804] — Libération de place d'un VJoueur connecté (#134)
+
+> Le bouton « Réinscription » (`RELEASE_BUMPER_NAME`, #122) ne posait qu'une **autorisation
+> différée** consommable par une future tentative — sans jamais toucher une session active. Sur un
+> joueur encore connecté, il ne produisait donc **aucun effet observable**. #134 lui donne le
+> comportement attendu dans ce cas, sans rien changer au cas #122 d'origine.
+> Plan : `_work/reports/planner-20260804-115318.md`.
+> Maquette : `_work/mockups/134-seat-release.md`.
+> Contrat détaillé : `contracts/seat-release.md`.
+
+- **[NEW]** Motif `SEAT_RELEASED`, porté par `PLAYER_EVICTED { REASON }` et
+  `PLAYER_REJECTED { REASON }`. Famille **renvoi** (`REDIRECT_MESSAGES`), comme `PLAYER_REMOVED`.
+  Distinction avec ce dernier : `PLAYER_REMOVED` supprime le bumper (score et équipe perdus),
+  `SEAT_RELEASED` le **conserve** — le joueur qui reprend le siège retrouve son score.
+- **[CHANGED]** `RELEASE_BUMPER_NAME { ID }` — **action inchangée**, comportement élargi. Si le
+  bumper ciblé est **connecté** : `PLAYER_EVICTED { SEAT_RELEASED }` ciblé → enregistrement au
+  registre d'éviction → **re-clé** du bumper sous un nouvel ID (même struct : score, équipe et
+  historique conservés) avec `Connected = false` → autorisation de reprise. Si le bumper est
+  **déconnecté** : strictement inchangé (#122) — autorisation différée seule.
+- **[CHANGED]** Règle de contrat ajoutée : l'ordre des étapes est **normatif**. La notification
+  ciblée doit précéder le re-clé (`SendToPlayerID` résout par l'**ancien** `PlayerID` — après re-clé
+  le joueur n'est plus adressable), et le re-clé est **obligatoire**, pas une commodité : sans lui, un
+  joueur se reconnectant avec son ancien ID emprunte le cas 1 de `ReconnectOrCreateVirtualPlayer`,
+  qui remet `reclaimAuthorizedUntil` à zéro et **annule silencieusement** la libération demandée.
+- **[CHANGED]** Règle de contrat ajoutée : la connexion WebSocket n'est **pas** fermée de force —
+  `PLAYER_EVICTED` est en file sur le canal `Send` et une fermeture immédiate risquerait de perdre la
+  notification. Même contrat que `DELETE_BUMPER`. L'invalidation réelle de la session est le re-clé.
+- **[CHANGED]** Règle de contrat ajoutée : la reprise du siège n'introduit **aucun chemin nouveau** —
+  c'est le chemin de reprise #122 (`PLAYER_CONNECT` sans `ID` + nom + autorisation valide →
+  `reattachVirtualPlayerUnsafe`). Le client arrive sans `ID` car le traitement de `PLAYER_EVICTED`
+  purge `vplayer_id`. **N'importe quel** joueur peut reprendre le siège, pas seulement l'occupant
+  précédent : le siège porte le score, pas la personne.
+
+**Aucun changement BREAKING.** Aucune action, aucun champ ajouté, renommé, retiré ni retypé — seule
+une nouvelle **valeur** de `REASON` apparaît sur des messages existants. Un client antérieur retombe
+sur `DEFAULT_REDIRECT_MESSAGE` (repli déjà en place et déjà testé pour un motif inconnu).
+
+---
+
 ## [20260803b] — Recalibrage des délais de liaison + transmission serveur→client (#130)
 
 > Axe indépendant de #127/#129 : ceux-ci réduisent le **volume** de messages, celui-ci porte sur la
