@@ -4,6 +4,10 @@ Historique des versions du projet BuzzControl.
 
 ## [Unreleased]
 
+## [5.10.0] - 2026-08-04
+
+Milestone `v5.10.x - Stabilité VJoueur` complet : 5 correctifs cumulés (#127, #129, #130, #134, #132) réduisant drastiquement le volume de broadcasts WebSocket vers les VJoueurs et fiabilisant la détection de liens morts, plus une nouvelle fonctionnalité de libération de siège.
+
 ### Fixed
 - **Broadcasts LED non ciblés vers TV/VJoueur** : 5 fonctions LED (`broadcastLEDSet`, `sendLEDSetStop`, `sendLEDSetReveal`, `sendLEDSetToTeam`, `sendLEDSetComet`) envoyaient un broadcast complet à tous les clients au lieu de ciblage buzzers seuls. Corrigé par même technique que #127/#129 (événement ciblé). Bonus : 2 fonctions (`broadcastLEDSet`, `sendLEDSetToTeam`) identifiées sans appelant — code mort, signalé pour nettoyage futur (#132).
 
