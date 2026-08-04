@@ -278,7 +278,10 @@ type PlayerRejectedPayload struct {
 	Reason string `json:"REASON"` // Rejection reason: ENROLLMENT_CLOSED, LIMIT_REACHED,
 	// INVALID_NAME, or NAME_TAKEN (fix R1, #109 — no ID provided/resolvable and
 	// the name is already used by another VJoueur, connected or not; never
-	// merged/replaced, the client must pick a different name).
+	// merged/replaced, the client must pick a different name). Also carries
+	// PLAYER_REMOVED / GAME_RESET / SEAT_RELEASED (#123 B3, #134) when a
+	// PLAYER_CONNECT arrives with a now-stale ID the eviction registry still
+	// remembers a reason for.
 }
 
 // QRCodePayload for SHOW_QR_CODE/HIDE_QR_CODE actions
@@ -308,8 +311,13 @@ type PlayerAssignedPayload struct {
 // redirects. Absence of a bumper in a roster update is never, by itself, grounds
 // for eviction — only this message is authoritative (contracts/websocket-actions.md).
 type PlayerEvictedPayload struct {
-	Reason string `json:"REASON"` // PLAYER_REMOVED (admin deleted the bumper) or GAME_RESET
-	// (VJoueur roster purged by InitGame on NEW_GAME)
+	Reason string `json:"REASON"` // PLAYER_REMOVED (admin deleted the bumper), GAME_RESET
+	// (VJoueur roster purged by InitGame on NEW_GAME), or SEAT_RELEASED
+	// (#134 — admin released a still-connected bumper's seat; unlike
+	// PLAYER_REMOVED the bumper survives, re-keyed, score/team preserved).
+	// Free-form string, no server-side enum/whitelist (verified #134 T2.3):
+	// contracts/seat-release.md §4 is the single source of truth for valid
+	// values, not a Go-level validation.
 }
 
 // VPlayerQCMAnswerPayload for VPLAYER_QCM_ANSWER action (VPlayer buzzes with color)
