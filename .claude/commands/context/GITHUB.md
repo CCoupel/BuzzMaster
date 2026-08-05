@@ -80,6 +80,9 @@ gh issue create \
   --milestone "<version>"
 ```
 
+> **Piège** : ne jamais passer `--body` deux fois dans la même commande — la seconde occurrence
+> ecrase silencieusement la premiere en vide, sans erreur. Un seul `--body` (ou `--body-file`) par appel.
+
 ### 2.4 Modifier une issue
 
 ```bash

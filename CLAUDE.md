@@ -176,6 +176,10 @@ SendMessage({
 })
 ```
 
+### Fin de session
+
+**TeamDelete** : proposer à l'utilisateur après PROD validé — **jamais supprimer automatiquement**.
+
 <!-- END TEAMLEADER_PROTOCOL -->
 
 ## Agents Disponibles
@@ -185,7 +189,7 @@ SendMessage({
 | `planner` | Plan d'implémentation + contrats API | `.claude/agents/implementation-planner.template.md` | permanent |
 | `dev-backend` | Backend Go | `.claude/agents/dev-backend.md` | permanent |
 | `dev-frontend` | Frontend React | `.claude/agents/dev-frontend.md` | permanent |
-| `dev-buzzclick` | Firmware ESP32-C3 | `.claude/agents/dev-buzzclick.md` | permanent |
+| `dev-buzzclick` | Firmware ESP32-C3 | `.claude/agents/dev-buzzclick.md` | ponctuel |
 | `test-writer` | Scripts de tests + procédures QA | `.claude/agents/test-writer.template.md` | permanent |
 | `code-reviewer` | Revue de code | `.claude/agents/code-reviewer.template.md` | permanent |
 | `qa` | Exécution des tests et validation | `.claude/agents/qa.template.md` | permanent |
@@ -195,6 +199,6 @@ SendMessage({
 | `infra` | Infrastructure | `.claude/agents/infra.template.md` | ponctuel |
 
 > **permanent** = spawné au `/start-session`, reste en IDLE toute la session.  
-> **ponctuel** = spawné à la demande par sa commande dédiée (`/secu`, etc.), fermé après DONE.
+> **ponctuel** = spawné à la demande, fermé après DONE — soit par sa commande dédiée (`/secu`, etc.), soit par le CDP en cours de workflow quand la tâche l'exige (ex: `dev-buzzclick`, spawné uniquement si un besoin touche `src/BuzzClick/` — pas d'évolution active sur ce périmètre actuellement, voir `.claude/commands/context/CDP_WORKFLOWS.md`).
 
 

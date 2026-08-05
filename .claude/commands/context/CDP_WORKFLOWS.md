@@ -39,6 +39,11 @@ SendMessage({ to: "dev-backend",  content: "<tâche>" })
 SendMessage({ to: "dev-frontend", content: "<tâche>" })
 ```
 
+> **Répertoire de travail partagé** : un `checkout`/`stash` lancé par un agent peut effacer
+> silencieusement les modifications non commitées d'un autre agent (ou de `main`) travaillant dans le
+> même répertoire. Toujours revérifier l'état après un incident git signalé par un teammate — ne
+> jamais supposer qu'un fichier modifié en amont est toujours intact.
+
 ### Agents par phase
 
 | Phase | Agent(s) à dispatcher |
@@ -47,10 +52,28 @@ SendMessage({ to: "dev-frontend", content: "<tâche>" })
 | Dev — Backend seul | `dev-backend` |
 | Dev — Frontend seul | `dev-frontend` |
 | Dev — Les deux | `dev-backend` + `dev-frontend` (parallèle si indépendants) |
-| Review | `code-reviewer` + `test-writer` (parallèle) |
+| Dev — Firmware BuzzClick (`src/BuzzClick/`) | `dev-buzzclick` (ponctuel, spawn à la demande — voir ci-dessous) |
+| Review | `code-reviewer` + `test-writer` (parallèle — **toujours dispatcher test-writer, jamais laisser un dev ecrire ses propres tests**) |
 | QA | `qa` |
 | Doc | `doc-updater` |
 | Deploy QUALIF / PROD | `deployer` |
+
+### Agent ponctuel — dev-buzzclick (firmware BuzzClick)
+
+Non spawné au `/start-session` (peu d'évolution active sur le firmware). Si une tâche `/feature` ou `/bugfix` touche `src/BuzzClick/` :
+
+1. Vérifier s'il est déjà actif dans la session (déjà spawné plus tôt) — si oui, dispatcher directement via `SendMessage`, ne jamais spawner un doublon.
+2. Sinon, le spawner :
+
+```
+Task({
+  name: "dev-buzzclick",
+  prompt: "Lis .claude/agents/context/TEAMMATES_PROTOCOL.md puis .claude/agents/dev-buzzclick.md. Tu fais partie de TEAM-Buzz sur BuzzControl. Mets-toi en IDLE après avoir envoyé ACTIF — le teamleader t'enverra ta tâche."
+})
+```
+
+3. Attendre ACTIF, dispatcher via `SendMessage({to: "dev-buzzclick", content: ...})`.
+4. À réception du DONE, fermer l'agent : `TaskStop("dev-buzzclick")` (contrairement aux agents permanents, qui restent IDLE).
 
 ---
 
@@ -266,6 +289,11 @@ Le titre du milestone correspond à la version cible **sans Z** : `vX.Y`.
 - Exemple : milestone `v2.41` regroupe toutes les issues de la release Y=41, quel que soit Z.
 - Le milestone se clôture lors du deploy PROD → tag `vX.Y.0`.
 
+#### Versions divergentes entre branches paralleles
+
+Normal pendant le developpement — **ne pas synchroniser** les versions entre plusieurs branches
+empilees ou paralleles du meme milestone. Reconcilier une seule fois, au moment du merge PROD reel.
+
 ### Phase Plan
 
 > Applicable : **FEATURE** (obligatoire) — **BUGFIX** (si complexe : plusieurs fichiers, risque de régression, changement d'architecture)
@@ -443,6 +471,12 @@ SendMessage({ to: "deployer", content: "
 |-- CDP informe l'utilisateur : QUALIF déployée, scénarios de validation fournis
 |-- Deploy PROD : déclenché uniquement par commande explicite `/deploy prod`
 ```
+
+### Phase Deploy PROD
+
+> **Push PROD asynchrone** : un ordre de deploy peut continuer a s'executer meme si un "STOP"
+> utilisateur arrive juste apres. Ne jamais supposer qu'une annulation est arrivee a temps —
+> toujours verifier l'etat reel (`git log`, tags, statut CI) apres coup avant d'informer l'utilisateur.
 
 ---
 

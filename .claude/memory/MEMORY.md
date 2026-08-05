@@ -17,15 +17,9 @@ Le hook SessionStart a été supprimé — plus de démarrage automatique.
 - **OTA firmware bootstrap** : si OTA échoue à ~20-30% sur un buzzer, flash USB avec firmware merged (0x0) — voir [project_v370_firmware_ota.md (dans /home/cyril/.claude/projects/...)]()
 
 
-- **TeamDelete** : proposer à l'utilisateur après PROD validé, **jamais supprimer automatiquement**
 - **Corrections intra-feature** : SendMessage vers l'agent existant, jamais créer un nouvel agent
 - **Commande /start-session** : créer la TEAM **directement sans demander** confirmation ni sujet. Le nom de la TEAM est **toujours `TEAM-Buzz`**, quelle que soit la session.
 - **Architecture team** : Claude principal (`main`) est l'orchestrateur — pas d'agent CDP séparé. Agents spawned à `/start-session` (IDLE), dispatched via `SendMessage` uniquement pendant la session. Rapports inter-agents vers `main`. Chemins rapports : `_work/reports/`.
-- **Dispatcher test-writer en parallèle de chaque lot dev** : jamais laisser un dev écrire ses propres tests faute de handoff séparé — voir [feedback_test_writer_parallel.md](feedback_test_writer_parallel.md)
-- **`gh issue create` : ne jamais passer `--body` deux fois** (écrase silencieusement en vide) — voir [feedback_gh_issue_body_flag.md](feedback_gh_issue_body_flag.md)
-- **Répertoire de travail partagé entre teammates** : un checkout/stash par un agent peut effacer silencieusement les modifications non commitées de `workflow-state.json` (main) — toujours revérifier après un incident git signalé — voir [feedback_shared_worktree_git_collateral.md](feedback_shared_worktree_git_collateral.md)
-- **Push PROD asynchrone** : un ordre de deploy peut s'exécuter avant qu'un "STOP" utilisateur n'arrive — toujours vérifier l'état réel (git log/tags/CI) après coup, jamais supposer que l'annulation est arrivée à temps — voir [feedback_prod_push_race.md](feedback_prod_push_race.md)
-- **Versions divergentes entre branches parallèles** : normal pendant le dev, ne pas synchroniser — réconcilier une seule fois au merge PROD réel — voir [feedback_version_reconciliation.md](feedback_version_reconciliation.md)
 - **Maquette site marketing avant implémentation** : toujours passer par une maquette HTML publiée en Artifact, itérée jusqu'à validation explicite, avant tout commit sur `gh-pages` — voir [feedback_marketing_gate_iterations.md](feedback_marketing_gate_iterations.md)
 - **Vérifier visuellement une image avant réutilisation** : ne jamais assigner une image sur la base de son seul nom de fichier/label hérité — voir [feedback_marketing_image_verification.md](feedback_marketing_image_verification.md)
 
