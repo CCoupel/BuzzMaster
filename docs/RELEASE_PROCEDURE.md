@@ -18,10 +18,10 @@ Ce document décrit la procédure complète pour publier une nouvelle version de
 
 > **Note de migration — 2026-08-07.** L'ancienne règle propre au projet (3 segments :
 > `x` = architecture, `y` = fonctionnalité, `z` = toujours 0 en release) est **abandonnée** au
-> profit du schéma à 4 segments du template, décrit ci-dessous et défini dans
-> `.claude/commands/context/COMMON.md` §5, qui fait désormais foi. Les versions publiées avant
-> cette date (jusqu'à **v6.1.1** incluse) suivent l'ancienne règle : voir `CHANGELOG.md` pour
-> l'historique. Le point de départ sous le nouveau schéma est **6.1.0.0**.
+> profit du schéma à 4 segments décrit ci-dessous, repris de
+> `.claude/commands/context/COMMON.md` §5 **à une exception près, la parité de `Y`** (voir
+> l'encadré ci-dessous). Les versions publiées avant cette date (jusqu'à **v6.1.1** incluse)
+> suivent l'ancienne règle : voir `CHANGELOG.md` pour l'historique.
 
 ### Format
 
@@ -33,7 +33,7 @@ Format prod : X.Y.Z       (3 segments — le « a » n'est jamais publié)
 | Segment | Rôle |
 |---------|------|
 | **X** | Compatibilité des **données** (fichiers de questions, équipes, état persisté). Une rupture reste upgradable, mais le rollback devient compliqué. |
-| **Y** | Compteur de milestone/livraison. **Impair = dev, pair = prod.** Avance toujours de +1, jamais de +2. |
+| **Y** | Compteur de milestone/livraison. **Pair = milestone/dev, impair = release/prod.** Avance toujours de +1, jamais de +2. |
 | **Z** | Compteur de bugfix. Remis à 0 uniquement au démarrage d'un nouveau milestone. |
 | **a** | Itération de développement interne — un commit de cycle = un `a`. Jamais visible en production. |
 
@@ -41,6 +41,22 @@ Format prod : X.Y.Z       (3 segments — le « a » n'est jamais publié)
 > nouveau sous-système justifiait un `X+1` (c'est ce qui a produit le passage 5 → 6 du générateur
 > IA). Désormais **seule une rupture de compatibilité des données** incrémente X : une
 > fonctionnalité, même volumineuse, avance `Y`.
+
+> ⚠️ **Écart assumé avec le template — parité de `Y`.**
+> `.claude/commands/context/COMMON.md` §5 énonce l'inverse : « Impair = dev, pair = prod », et son
+> exemple est cohérent avec cet énoncé (dev en 1.1/1.3/1.5, prod en 1.2/1.4/1.6).
+> **Ce projet retient la convention opposée** — dev/milestone sur `Y` **pair**, release sur `Y`
+> **impair** — sur décision utilisateur, parce qu'elle correspond à la pratique réelle :
+> le milestone GitHub **`v6.0`** (Y=0, pair) a produit la release **v6.1.1** (Y=1, impair).
+>
+> Elle est aussi la seule des deux qui reste cohérente après une rupture de compatibilité des
+> données : `X+1` remet `Y=0`, qui est directement un numéro de **dev** valide. Avec la parité du
+> template, `Y=0` serait un numéro de prod et il faudrait aussitôt sauter à `Y=1` — ce que
+> `COMMON.md` prévoit d'ailleurs explicitement, au prix d'un cas particulier dont on se passe ici.
+>
+> **Seule la parité change. Toutes les opérations ci-dessous sont identiques à celles du
+> template** : les deux conventions décrivent la même mécanique en opposition de phase.
+> `COMMON.md` n'a **pas** été modifié — l'écart est ici, documenté et volontaire.
 
 ### Les 6 opérations
 
@@ -51,7 +67,7 @@ Format prod : X.Y.Z       (3 segments — le « a » n'est jamais publié)
 | Nouveau cycle bugfix (aucun milestone actif) | `Z+1 ; a=0` — reprend le `Y` de dev de la dernière vague |
 | Hotfix (`/hotfix`) | `Z+1 ; a=0` — **même si un milestone est en cours** |
 | Promotion dev → prod | `Y+1 ; Z conservé ; a supprimé` |
-| Rupture de compatibilité des données | `X+1 ; Y=0 ; Z=0 ; a=0` — le prochain milestone repart au `Y` impair suivant, donc `Y=1` |
+| Rupture de compatibilité des données | `X+1 ; Y=0 ; Z=0 ; a=0` — `Y=0` étant pair, c'est **directement** le numéro du prochain milestone (pas de saut, contrairement au template) |
 
 ### Règle d'or — bug remonté
 
@@ -65,29 +81,32 @@ Format prod : X.Y.Z       (3 segments — le « a » n'est jamais publié)
 ### Où se place une release de correctifs
 
 Le schéma **a bien un emplacement** pour livrer des correctifs après une release de
-fonctionnalité, et c'est `Z` : le cycle de correctifs se développe sur la vague `Y` impaire
-courante avec `Z+1`, puis sa promotion conserve ce `Z`. Le `Y` de production, lui, avance
+fonctionnalité, et c'est `Z` : le cycle de correctifs se développe sur la vague `Y` **paire** du
+milestone avec `Z+1`, puis sa promotion conserve ce `Z`. Le `Y` de production, lui, avance
 normalement.
 
 C'est précisément ce qui manquait à l'ancienne règle, dont le « z toujours 0 en release »
 n'offrait aucun numéro pour ce cas — d'où la publication de **v6.1.1** hors règle en 2026-08-07.
 
-**Exemple concret, à partir de l'état réel du projet** :
+**Exemple concret — l'histoire réelle du projet relue sous cette règle** :
 
 ```
-6.1.0.0                      point de départ sous le nouveau schéma (Y=1 impair → dev)
-6.1.0.1 → 6.1.0.2            itérations du milestone en cours
-6.2.0                        promotion prod (Y+1 → pair)          ← tag v6.2.0
-6.1.1.0 → 6.1.1.1            bug remonté, aucun milestone actif : reprise de Y=1, Z+1
-6.2.1                        promotion prod, Z conservé            ← tag v6.2.1
-6.3.0.0                      nouveau milestone : Y+1, Z revient à 0
-6.4.0                        promotion prod                        ← tag v6.4.0
+6.0.0.0 → 6.0.0.1 → …        dev du milestone GitHub « v6.0 » (Y=0, pair)
+6.1.0                        promotion prod (Y+1 → impair)         ← tag v6.1.0
+6.0.1.0 → 6.0.1.1            correctifs post-release : retour sur la vague dev Y=0, Z+1
+6.1.1                        promotion prod, Z conservé            ← tag v6.1.1  (réellement publié)
+6.2.0.0                      nouveau milestone « v6.2 » : Y+1 depuis la prod, Z=0, a=0
+6.3.0                        promotion prod                        ← tag v6.3.0
 ```
+
+Chaque opération avance `Y` de +1 depuis le numéro courant : le développement occupe les `Y`
+pairs, la production les `Y` impairs, en alternance.
 
 ### Milestones GitHub
 
 Un milestone se nomme **`vX.Y`** — sans `Z`, sans `a` : il désigne la vague de livraison, pas un
-binaire précis (`/milestone new v6.2`).
+binaire précis. **`Y` y est toujours pair** (`/milestone new v6.2`), puisqu'un milestone est un
+cycle de développement ; la release qui en sort porte le `Y` impair suivant.
 
 ### Versions parallèles pendant le développement
 

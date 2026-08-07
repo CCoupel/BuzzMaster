@@ -13,23 +13,23 @@ Ce document décrit les commandes courantes et les procédures de développement
 | Segment | Signification | Quand incrémenter |
 |---------|---------------|-------------------|
 | **X** | Compatibilité des données | Rupture de format des données persistées |
-| **Y** | Milestone / livraison | Nouveau milestone (**impair = dev, pair = prod**) |
+| **Y** | Milestone / livraison | Nouveau milestone (**pair = milestone/dev, impair = release**) |
 | **Z** | Bugfix | Cycle de correctifs ou hotfix ; remis à 0 au nouveau milestone |
 | **a** | Itération dev | À chaque commit de cycle — **jamais publié** |
 
 ### Règles de versionnement (rappel)
 
 1. **Itération de dev / relance pour test** → incrémenter **a** (pas de limite)
-   - Exemple : `6.1.0.0` → `6.1.0.1` → `6.1.0.2`…
+   - Exemple : `6.0.0.0` → `6.0.0.1` → `6.0.0.2`…
 
-2. **Nouveau milestone** → `Y+1 ; Z=0 ; a=0`
-   - Exemple : `6.1.0.7` → `6.3.0.0`
+2. **Nouveau milestone** → `Y+1 ; Z=0 ; a=0` (depuis la version de prod courante → `Y` pair)
+   - Exemple : prod `6.1.0` → dev `6.2.0.0`
 
-3. **Bug remonté hors milestone / hotfix** → `Z+1 ; a=0`
-   - Exemple : `6.1.0.2` → `6.1.1.0`
+3. **Bug remonté hors milestone / hotfix** → `Z+1 ; a=0` (retour sur la vague dev paire)
+   - Exemple : `6.0.0.2` → `6.0.1.0`
 
-4. **Promotion en production** → `Y+1`, `Z` conservé, `a` supprimé
-   - Exemple : `6.1.1.1` → tag `v6.2.1`
+4. **Promotion en production** → `Y+1`, `Z` conservé, `a` supprimé (→ `Y` impair)
+   - Exemple : `6.0.1.1` → tag `v6.1.1`
 
 > ⚠️ **Changement du 2026-08-07** : l'ancienne règle (`z` = compteur de test, remis à 0 à la
 > validation) est abandonnée — ce rôle est désormais tenu par `a`, et `z` porte les correctifs.
