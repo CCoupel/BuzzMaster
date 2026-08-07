@@ -14,6 +14,89 @@ Ce document décrit la procédure complète pour publier une nouvelle version de
 
 ---
 
+## Règles de Versionnement
+
+> **Note de migration — 2026-08-07.** L'ancienne règle propre au projet (3 segments :
+> `x` = architecture, `y` = fonctionnalité, `z` = toujours 0 en release) est **abandonnée** au
+> profit du schéma à 4 segments du template, décrit ci-dessous et défini dans
+> `.claude/commands/context/COMMON.md` §5, qui fait désormais foi. Les versions publiées avant
+> cette date (jusqu'à **v6.1.1** incluse) suivent l'ancienne règle : voir `CHANGELOG.md` pour
+> l'historique. Le point de départ sous le nouveau schéma est **6.1.0.0**.
+
+### Format
+
+```
+Format dev  : X.Y.Z.a     (4 segments)
+Format prod : X.Y.Z       (3 segments — le « a » n'est jamais publié)
+```
+
+| Segment | Rôle |
+|---------|------|
+| **X** | Compatibilité des **données** (fichiers de questions, équipes, état persisté). Une rupture reste upgradable, mais le rollback devient compliqué. |
+| **Y** | Compteur de milestone/livraison. **Impair = dev, pair = prod.** Avance toujours de +1, jamais de +2. |
+| **Z** | Compteur de bugfix. Remis à 0 uniquement au démarrage d'un nouveau milestone. |
+| **a** | Itération de développement interne — un commit de cycle = un `a`. Jamais visible en production. |
+
+> ⚠️ **X ne signifie plus « changement d'architecture ».** Sous l'ancienne règle, l'arrivée d'un
+> nouveau sous-système justifiait un `X+1` (c'est ce qui a produit le passage 5 → 6 du générateur
+> IA). Désormais **seule une rupture de compatibilité des données** incrémente X : une
+> fonctionnalité, même volumineuse, avance `Y`.
+
+### Les 6 opérations
+
+| Événement | Effet sur la version |
+|-----------|----------------------|
+| Itération dev (commit de cycle) | `a+1` |
+| Nouveau milestone (feature planifiée) | `Y+1 ; Z=0 ; a=0` |
+| Nouveau cycle bugfix (aucun milestone actif) | `Z+1 ; a=0` — reprend le `Y` de dev de la dernière vague |
+| Hotfix (`/hotfix`) | `Z+1 ; a=0` — **même si un milestone est en cours** |
+| Promotion dev → prod | `Y+1 ; Z conservé ; a supprimé` |
+| Rupture de compatibilité des données | `X+1 ; Y=0 ; Z=0 ; a=0` — le prochain milestone repart au `Y` impair suivant, donc `Y=1` |
+
+### Règle d'or — bug remonté
+
+- **Milestone en cours** : le correctif est intégré aux itérations du milestone (`a+1`, `Z` ne
+  bouge pas). La prochaine prod livre le `Y` du milestone.
+- **Aucun milestone en cours** : nouveau cycle bugfix créé depuis le dernier `Y` de dev (même
+  vague que la prod courante), `Z+1`.
+- **Une version prod déjà dépassée n'est jamais repatchée** — le correctif vise toujours la ligne
+  prod courante, jamais une ancienne.
+
+### Où se place une release de correctifs
+
+Le schéma **a bien un emplacement** pour livrer des correctifs après une release de
+fonctionnalité, et c'est `Z` : le cycle de correctifs se développe sur la vague `Y` impaire
+courante avec `Z+1`, puis sa promotion conserve ce `Z`. Le `Y` de production, lui, avance
+normalement.
+
+C'est précisément ce qui manquait à l'ancienne règle, dont le « z toujours 0 en release »
+n'offrait aucun numéro pour ce cas — d'où la publication de **v6.1.1** hors règle en 2026-08-07.
+
+**Exemple concret, à partir de l'état réel du projet** :
+
+```
+6.1.0.0                      point de départ sous le nouveau schéma (Y=1 impair → dev)
+6.1.0.1 → 6.1.0.2            itérations du milestone en cours
+6.2.0                        promotion prod (Y+1 → pair)          ← tag v6.2.0
+6.1.1.0 → 6.1.1.1            bug remonté, aucun milestone actif : reprise de Y=1, Z+1
+6.2.1                        promotion prod, Z conservé            ← tag v6.2.1
+6.3.0.0                      nouveau milestone : Y+1, Z revient à 0
+6.4.0                        promotion prod                        ← tag v6.4.0
+```
+
+### Milestones GitHub
+
+Un milestone se nomme **`vX.Y`** — sans `Z`, sans `a` : il désigne la vague de livraison, pas un
+binaire précis (`/milestone new v6.2`).
+
+### Versions parallèles pendant le développement
+
+Deux branches non mergées **divergent naturellement** sur `a`, et c'est attendu : ces numéros ne
+servent qu'à distinguer les binaires de QUALIF successifs. La réconciliation se fait une seule
+fois, au merge PROD réel, en fixant explicitement la version finale.
+
+---
+
 ## Procédure Complète
 
 ### 1. Validation Utilisateur
@@ -46,12 +129,17 @@ git status
 
 ### 3. Mise à Jour de la Version
 
-**IMPORTANT** : Les trois fichiers doivent avoir la même version.
+> **Le tag fait foi pour ce qui est publié.** La CI réécrit `config.json`,
+> `internal/server/config.json`, `package.json` et `firmware/version.txt` depuis le tag avant de
+> compiler (`.github/workflows/release.yml`, étape « Inject version from tag »). Les valeurs
+> commitées servent aux **builds locaux** (`build.ps1`) et au suivi du cycle de développement —
+> elles n'ont pas besoin d'être parfaites au moment du tag, mais les garder justes évite de
+> livrer un binaire local mal étiqueté.
 
 **Fichier 1** : `server-go/config.json`
 ```json
 {
-  "version": "x.y.0",
+  "version": "X.Y.Z",
   ...
 }
 ```
@@ -59,7 +147,7 @@ git status
 **Fichier 2** : `server-go/web/package.json`
 ```json
 {
-  "version": "x.y.0",
+  "version": "X.Y.Z",
   ...
 }
 ```
@@ -70,12 +158,12 @@ Ce fichier doit être maintenu en phase avec la version courante. Mettre à jour
 ```json
 {
   "FixedFileInfo": {
-    "FileVersion":    { "Major": x, "Minor": y, "Patch": 0, "Build": 0 },
-    "ProductVersion": { "Major": x, "Minor": y, "Patch": 0, "Build": 0 }
+    "FileVersion":    { "Major": X, "Minor": Y, "Patch": Z, "Build": 0 },
+    "ProductVersion": { "Major": X, "Minor": Y, "Patch": Z, "Build": 0 }
   },
   "StringFileInfo": {
-    "FileVersion":    "x.y.0.0",
-    "ProductVersion": "x.y.0"
+    "FileVersion":    "X.Y.Z.0",
+    "ProductVersion": "X.Y.Z"
   }
 }
 ```
@@ -83,10 +171,12 @@ Ce fichier doit être maintenu en phase avec la version courante. Mettre à jour
 > **Note** : La CI (job Windows) régénère `versioninfo.json` automatiquement depuis le tag.
 > La mise à jour manuelle du fichier sert uniquement pour les builds locaux via `build.ps1`.
 
-**Règles de versionnement** :
-- **x** (majeur) : Changement d'architecture ou breaking change
-- **y** (mineur) : Nouvelle fonctionnalité
-- **z** : Toujours 0 pour une release (utilisé uniquement en dev)
+**Fichier 4** : `server-go/internal/server/config.json` — réécrit par la CI au même titre que
+les deux premiers. À garder aligné si vous produisez un build local.
+
+---
+
+> **Quel numéro choisir ?** Voir [Règles de Versionnement](#règles-de-versionnement) ci-dessus.
 
 ---
 
@@ -97,7 +187,7 @@ Ce fichier doit être maintenu en phase avec la version courante. Mettre à jour
 Ajouter une nouvelle section en haut du fichier :
 
 ```markdown
-## [x.y.0] - YYYY-MM-DD
+## [X.Y.Z] - YYYY-MM-DD
 
 ### Ajouté
 - Nouvelle fonctionnalité 1
@@ -173,7 +263,7 @@ git status
 
 # Commit avec message descriptif
 git commit -m "$(cat <<'EOF'
-release: BuzzControl vX.Y.0
+release: BuzzControl vX.Y.Z
 
 ## Nouveautés
 - Feature 1
@@ -202,14 +292,15 @@ git push origin main
 
 ```bash
 # Créer le tag annoté
-git tag -a vX.Y.0 -m "Release vX.Y.0"
+git tag -a vX.Y.Z -m "Release vX.Y.Z"
 
 # Pousser le tag (déclenche le build CI)
-git push origin vX.Y.0
+git push origin vX.Y.Z
 ```
 
 > **🚀 À ce moment, GitHub Actions se déclenche automatiquement et :**
-> 1. Vérifie que les versions correspondent (config.json, package.json, tag)
+> 1. Extrait la version du tag et l'**injecte** dans `config.json`, `internal/server/config.json`,
+>    `package.json` et `firmware/version.txt` — le tag fait foi, aucune comparaison n'est faite
 > 2. Build le frontend React
 > 3. Compile les binaires Windows et Linux ARM64
 > 4. Valide l'intégrité des binaires (taille > 5MB)
@@ -230,7 +321,7 @@ Le pipeline s'exécute en 3 étapes :
 ```
 ┌─────────────────────────────────────────────┐
 │  🔍 Checking (~10s)                         │
-│  └─ Vérifie versions config/package/tag     │
+│  └─ Extrait la version depuis le tag        │
 └─────────────────────┬───────────────────────┘
                       │
         ┌─────────────┼─────────────┐
@@ -280,11 +371,11 @@ Le pipeline s'exécute en 3 étapes :
 **URL** : https://github.com/CCoupel/BuzzMaster/releases
 
 **Claude doit vérifier** :
-1. La release `vX.Y.0` existe
+1. La release `vX.Y.Z` existe
 2. Les 3 binaires sont attachés :
-   - `buzzcontrol-vX.Y.0-windows-amd64.exe` (~8-9 MB)
-   - `buzzcontrol-vX.Y.0-linux-arm64` (~8 MB)
-   - `buzzclick-vX.Y.0-firmware.bin` (~500KB-1MB)
+   - `buzzcontrol-vX.Y.Z-windows-amd64.exe` (~8-9 MB)
+   - `buzzcontrol-vX.Y.Z-linux-arm64` (~8 MB)
+   - `buzzclick-vX.Y.Z-firmware.bin` (~500KB-1MB)
 3. Les notes de release sont extraites du CHANGELOG
 4. Informer l'utilisateur du succès ou de l'échec
 
@@ -311,7 +402,7 @@ curl -s http://localhost/version
 
 **Claude doit vérifier** :
 1. Le serveur répond à `/version`
-2. La version retournée correspond à la release (`X.Y.0`)
+2. La version retournée correspond à la release (`X.Y.Z`)
 3. Informer l'utilisateur que le serveur est opérationnel
 
 ---
@@ -321,7 +412,8 @@ curl -s http://localhost/version
 ```
 [ ] 1.  Validation utilisateur obtenue
 [ ] 2.  Fichiers temporaires nettoyés
-[ ] 3.  Version mise à jour (config.json + package.json + versioninfo.json)
+[ ] 3.  Version mise à jour (config.json + package.json + versioninfo.json + internal/server/config.json)
+        → numéro de prod à 3 segments, le « a » du cycle dev est retiré
 [ ] 4.  CHANGELOG.md mis à jour
 [ ] 5.  CLAUDE.md mis à jour (documentation technique)
 [ ] 6.  README.md mis à jour (si nécessaire)
@@ -346,34 +438,41 @@ curl -s http://localhost/version
 3. Consulter les logs pour identifier l'erreur
 4. Corriger, commiter, et recréer le tag
 
-### Erreur "versions don't match"
+### La version publiée ne correspond pas à celle attendue
 
-Le workflow vérifie que `config.json`, `package.json` et le tag ont la même version.
+Le workflow ne **compare** rien : il prend la version du tag et l'écrit dans les fichiers avant de
+compiler. Une version inattendue dans la release vient donc du **tag**, pas des fichiers commités.
 
 ```bash
-# Vérifier les versions
+# Ce que porte le tag (fait foi pour la release)
+git describe --tags --abbrev=0
+
+# Ce que portent les fichiers (builds locaux uniquement)
 grep '"version"' server-go/config.json
 grep '"version"' server-go/web/package.json
-git describe --tags --abbrev=0
 ```
+
+Correction : supprimer le tag (voir ci-dessous), puis le recréer avec le bon numéro. Un tag à
+4 segments (`v6.1.0.0`) produirait une release étiquetée avec un `a` — **le `a` ne se tague
+jamais**, il est retiré à la promotion.
 
 ### Rollback du tag
 
 ```bash
 # Supprimer le tag local
-git tag -d vX.Y.0
+git tag -d vX.Y.Z
 
 # Supprimer le tag distant (annule aussi la release)
-git push origin --delete vX.Y.0
+git push origin --delete vX.Y.Z
 ```
 
 ### Supprimer une release GitHub
 
 ```bash
 # Via gh CLI
-gh release delete vX.Y.0 --yes
+gh release delete vX.Y.Z --yes
 
-# Ou via l'interface web : Releases > vX.Y.0 > Delete
+# Ou via l'interface web : Releases > vX.Y.Z > Delete
 ```
 
 ---

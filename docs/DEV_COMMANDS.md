@@ -4,30 +4,45 @@ Ce document décrit les commandes courantes et les procédures de développement
 
 ## Gestion des Versions
 
-### Format de version : x.y.z
+> **Règle de référence** : [docs/RELEASE_PROCEDURE.md § Règles de Versionnement](RELEASE_PROCEDURE.md#règles-de-versionnement).
+> Ce qui suit n'en est qu'un rappel côté développement — en cas d'écart, c'est l'autre document
+> qui fait foi.
+
+### Format de version : X.Y.Z.a en dev, X.Y.Z en prod
 
 | Segment | Signification | Quand incrémenter |
 |---------|---------------|-------------------|
-| **x** | Version majeure | Changement d'architecture ou breaking change |
-| **y** | Version mineure | Nouvelle fonctionnalité |
-| **z** | Version de test | À chaque relance du serveur pour test |
+| **X** | Compatibilité des données | Rupture de format des données persistées |
+| **Y** | Milestone / livraison | Nouveau milestone (**impair = dev, pair = prod**) |
+| **Z** | Bugfix | Cycle de correctifs ou hotfix ; remis à 0 au nouveau milestone |
+| **a** | Itération dev | À chaque commit de cycle — **jamais publié** |
 
-### Règles de versionnement
+### Règles de versionnement (rappel)
 
-1. **Nouvelle fonctionnalité** → Incrémenter **y**, mettre z à 1
-   - Exemple : 2.1.0 → 2.2.1
+1. **Itération de dev / relance pour test** → incrémenter **a** (pas de limite)
+   - Exemple : `6.1.0.0` → `6.1.0.1` → `6.1.0.2`…
 
-2. **Relance serveur pour test** → Incrémenter **z** (pas de limite)
-   - Exemple : 2.2.1 → 2.2.2 → 2.2.3 → 2.2.15...
+2. **Nouveau milestone** → `Y+1 ; Z=0 ; a=0`
+   - Exemple : `6.1.0.7` → `6.3.0.0`
 
-3. **Validation par l'utilisateur** → Remettre **z** à 0, documenter et commit
-   - Exemple : 2.2.15 → 2.2.0 (puis commit)
+3. **Bug remonté hors milestone / hotfix** → `Z+1 ; a=0`
+   - Exemple : `6.1.0.2` → `6.1.1.0`
 
-### Fichier à mettre à jour
+4. **Promotion en production** → `Y+1`, `Z` conservé, `a` supprimé
+   - Exemple : `6.1.1.1` → tag `v6.2.1`
+
+> ⚠️ **Changement du 2026-08-07** : l'ancienne règle (`z` = compteur de test, remis à 0 à la
+> validation) est abandonnée — ce rôle est désormais tenu par `a`, et `z` porte les correctifs.
+> Les versions ≤ v6.1.1 suivent l'ancienne règle.
+
+### Fichiers à mettre à jour
 
 | Fichier | Champ |
 |---------|-------|
-| `server-go/config.json` | `"version": "x.y.z"` |
+| `server-go/config.json` | `"version": "X.Y.Z.a"` |
+| `server-go/web/package.json` | `"version": "X.Y.Z.a"` |
+
+> En production, la CI réécrit ces fichiers depuis le tag — cf. RELEASE_PROCEDURE.md étape 3.
 
 **Note** : Depuis v2.35.0 (mode portable), une seule version est utilisée pour le bundle complet (serveur + web).
 
