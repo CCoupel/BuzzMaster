@@ -467,6 +467,85 @@ Indique que le serveur n'est accessible que depuis `localhost` (aucune interface
 
 ---
 
+## GameState — Métadonnées du Quiz (v6.0.0 #8, Batch 2b #137)
+
+Champs globaux décrivant le quiz en cours. Éditables dans QuestionsPage, affichés sur l'écran TV NEW_GAME, pré-remplis dans le formulaire de génération IA.
+
+```json
+{
+  "QUIZ_NAME": "Quiz Cinéma 80s",
+  "QUIZ_THEME": "Cinéma français des années 80",
+  "QUIZ_NOTES": "Soirée entre amis",
+  "QUIZ_POPULATIONS": ["Adulte (18-64 ans)", "Senior (65+)"],
+  "QUIZ_DIFFICULTIES": ["Moyen", "Difficile"],
+  "QUIZ_OBJECTIVES": "Questions sur films de réalisateurs femmes",
+  "QUIZ_HIDDEN_FIELDS": ["ANSWER"],
+  "QUIZ_LANGUAGE": "Français"
+}
+```
+
+**Champs :**
+
+| Champ | Type | Défaut | Description | Depuis |
+|-------|------|--------|-------------|--------|
+| `QUIZ_NAME` | string | `""` | Titre du quiz | v4.0.0 |
+| `QUIZ_THEME` | string | `""` | Thème principal du quiz | v4.0.0 |
+| `QUIZ_NOTES` | string | `""` | Notes/contexte supplémentaires | v4.0.0 |
+| `QUIZ_POPULATIONS` | []string | `[]` | Populations cibles (tableau, ex: `["Junior", "Ado"]`) | v6.0.0 #8, changement plural Batch 2b #137 |
+| `QUIZ_DIFFICULTIES` | []string | `[]` | Difficultés visées (tableau, ex: `["Facile", "Moyen"]`) | v6.0.0 #8, changement plural Batch 2b #137 |
+| `QUIZ_OBJECTIVES` | string | `""` | Objectifs/thème pédagogique de la partie (jamais transmis à `/ws/tv` ou `/ws/player`, confidentialité) | Batch 2b #137 |
+| `QUIZ_HIDDEN_FIELDS` | []string | `[]` | Liste des champs question à masquer sur TV (ex: `["ANSWER"]`, jamais `omitempty`) | Batch 2b #137 |
+| `QUIZ_LANGUAGE` | string | `"Français"` | Langue du quiz | v6.0.0 #8 |
+
+**Règles d'implémentation :**
+
+- Tous les champs sont **sans `omitempty`** — toujours sérialisés, jamais vides (chaîne vide `""` ou tableau vide `[]` autorisés)
+- Éditables dans la section "Quiz" de QuestionsPage
+  - **Populations & Difficultés** : sélection multiple (checkboxes) au lieu de champ texte unique (changement Batch 2b)
+  - **Objectives** : champ texte libre (objectif pédagogique, jamais visible aux joueurs)
+  - **Hidden Fields** : interrupteurs "Afficher sur la TV" par champ (ex: toggle "Réponse" pour masquer/afficher `ANSWER`)
+- Affichés sur l'écran TV NEW_GAME en ligne compacte de badges — **tous les champs n'apparaissent que s'ils sont non-vides**
+- Affichage TV : contrainte projet `overflow: hidden`, unités viewport, `flex` + `min-height: 0` (pas de scroll)
+- Pré-remplissent automatiquement le formulaire de génération IA, mais **restent modifiables pour une génération précise sans affecter le global**
+
+**Diffusion par endpoint WebSocket (Batch 2b #137) :**
+
+- **`/ws/admin`** : Reçoit **tous les champs** sans filtrage (`QUIZ_OBJECTIVES` inclus)
+- **`/ws/tv` et `/ws/player`** : Reçoivent **tous sauf `QUIZ_OBJECTIVES`** (jamais transmis, confidentialité). Reçoivent `QUIZ_HIDDEN_FIELDS` et appliquent le filtrage côté rendu (pas le serveur)
+
+**Action WebSocket associée :**
+
+Action `UPDATE_QUIZ_META` — sémantique **« champ absent = inchangé »** (jamais effacé si omis). Permet la rétrocompatibilité : un client antérieur envoyant seulement `NAME`/`THEME`/`NOTES` ne supprime pas les nouveaux champs.
+
+```json
+{
+  "ACTION": "UPDATE_QUIZ_META",
+  "MSG": {
+    "NAME": "Quiz Cinéma 80s",
+    "THEME": "Cinéma français des années 80",
+    "NOTES": "Soirée entre amis",
+    "POPULATIONS": ["Adulte (18-64 ans)", "Senior (65+)"],
+    "DIFFICULTIES": ["Moyen", "Difficile"],
+    "OBJECTIVES": "Questions sur films de réalisateurs femmes",
+    "HIDDEN_FIELDS": ["ANSWER"],
+    "LANGUAGE": "Français"
+  }
+}
+```
+
+**Énumérations :**
+
+| Champ | Valeurs possibles |
+|-------|-------------------|
+| `QUIZ_POPULATIONS` (tableau) | `"Junior (6-12)"`, `"Ado (13-17)"`, `"Adulte (18-64 ans)"`, `"Senior (65+)"`, `"Famille"` — sélection multiple |
+| `QUIZ_DIFFICULTIES` (tableau) | `"Facile"`, `"Moyen"`, `"Difficile"`, `"Expert"` — sélection multiple |
+| `QUIZ_HIDDEN_FIELDS` (tableau) | `"ANSWER"` (réponse), `"MEDIA"` (image question), autres champs selon besoin TV |
+| `QUIZ_LANGUAGE` | `"Français"` (par défaut), autres à venir |
+
+**Changement Batch 2b (#137)** : Passage de champs singuliers (`QUIZ_POPULATION`, `QUIZ_DIFFICULTY`) à pluriels tableaux (`QUIZ_POPULATIONS`, `QUIZ_DIFFICULTIES`) pour sélection multiple. Ancien format rejeté par `/api/generate-questions` dès v6.1.0+.
+
+---
+
 ## GameEvent (History)
 
 ```go

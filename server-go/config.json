@@ -17,8 +17,8 @@
   },
   "storage": {
     "data_dir": "./data",
-    "questions_dir": "",
-    "files_dir": ""
+    "questions_dir": "./data/files/questions",
+    "files_dir": "./data/files"
   },
   "neon_effect": {
     "enabled": true,
@@ -39,5 +39,18 @@
     "server_ip": "192.168.1.84",
     "server_port": 80
   },
-  "version": "5.10.0"
+  "ai": {
+    "anthropic_api_key": "",
+    "model": "claude-opus-5",
+    "timeout_seconds": 300,
+    "max_questions": 200,
+    "batch_size": 20,
+    "inter_batch_delay_ms": 60000,
+    "context_token_budget": 1500,
+    "max_consecutive_failures": 2,
+    "provider": "groq",
+    "groq_api_key": "",
+    "groq_model": "openai/gpt-oss-120b"
+  },
+  "version": "6.1.1"
 }

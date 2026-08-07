@@ -147,14 +147,20 @@ Le chemin d'import ne fait **QUE créer** de nouveaux fichiers `question.json` a
 
 ### Types supportés
 
-| Type | Champs JSON (schéma sortie LLM) |
-|---|---|
-| **SPEEDY** | `TYPE`, `CATEGORY`, `QUESTION`, `ANSWER`, `POINTS`, `TIME` |
-| **QCM** | `TYPE`, `CATEGORY`, `QUESTION`, `QCM_ANSWERS` (dict RED/GREEN/YELLOW/BLUE), `QCM_CORRECT`, `POINTS`, `TIME` |
-| **MEMORY** | `TYPE`, `CATEGORY`, `PAIRS` (array de `{TEXT, CORRECT}`), `POINTS`, `TIME` |
-| **MEMOTION** | `TYPE`, `CATEGORY`, `PAIRS` (array de `{EMOTION, TEXT}`), `POINTS`, `TIME` |
+Schéma de sortie LLM (structured outputs) pour chaque type, aligné avec le modèle réel du produit :
 
-**Détermination du `TIME` par le LLM** : selon type/difficulté/population cible, permet un affinage itératif si régénération.
+| Type | Champs JSON + Détail |
+|---|---|
+| **SPEEDY** | `TYPE`, `CATEGORY`, `QUESTION`, `ANSWER`, `POINTS` (chaîne : "10"/"20"/"30"/"50" selon difficulté), `TIME` (chaîne : 5-300 sec selon LLM) |
+| **QCM** | `TYPE`, `CATEGORY`, `QUESTION`, `QCM_ANSWERS` (dict RED/GREEN/YELLOW/BLUE), `QCM_CORRECT`, `POINTS` (chaîne : "10"/"20"/"30"/"50" selon difficulté), `TIME` (chaîne) |
+| **MEMORY** | `TYPE`, `CATEGORY`, `MEMORY_PAIRS[]` (array d'objets `{ID: int, CARD1: {TEXT, IS_IMAGE}, CARD2: {TEXT, IS_IMAGE}}`), `POINTS` = "0" (score via `MEMORY_CONFIG.POINTS_PER_PAIR`), `TIME` (chaîne), `MEMORY_CONFIG` (défaut), `MEMORY_HINTS_ENABLED` (défaut : false) |
+| **MEMOTION** | `TYPE`, `CATEGORY`, `MOTION_CARDS[]` (array d'objets `{ID: "mc-N", RECTO_THEME, DIFFICULTY: int (1-3), QUESTION_TEXT, ANSWER_TEXT}`), `POINTS` = "1" (score via `MOTION_CONFIG` étoiles 1/3/5), `TIME` (chaîne), `MOTION_CONFIG` (défaut), `QCM_HINTS_ENABLED` (défaut : false) |
+
+**Notes d'implémentation** :
+- `POINTS` et `TIME` sont des **chaînes**, pas des nombres (format existant de `question.json`)
+- Pour MEMORY/MEMOTION, les `POINTS` générés sont constants ("0"/"1") — le scoring réel se fait via `MEMORY_CONFIG.POINTS_PER_PAIR` ou `MOTION_CONFIG` étoiles
+- `MEMORY_PAIRS[].ID` et `MOTION_CARDS[].ID` sont alloués par le backend lors de la création (ID séquentiels, pas par le LLM)
+- `TIME` est déterminé par le LLM selon type/difficulté/population, permet un affinage itératif si régénération
 
 ---
 

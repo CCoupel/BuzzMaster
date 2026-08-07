@@ -3,6 +3,7 @@ package server
 import (
 	"buzzcontrol/internal/game"
 	"buzzcontrol/internal/protocol"
+	"encoding/json"
 	"net/http"
 	"sync"
 	"time"
@@ -61,6 +62,16 @@ type WebSocketHub struct {
 	// client whose PlayerID has been identified (SetClientPlayerID called after PLAYER_CONNECT).
 	// Mirrors BuzzerWebSocketHub.OnBuzzerDisconnected for physical buzzers.
 	OnPlayerDisconnected func(playerID string)
+
+	// OnClientRegistered fires whenever a client's type becomes known/changes
+	// — either at connection time (the dedicated /ws/admin, /ws/tv, /ws/player
+	// endpoints know their type immediately, contract ai-multi-provider.md
+	// §10) or later via SetClientType (the legacy /ws endpoint + SET_CLIENT_TYPE).
+	// Used to push AI_GENERATION_PROGRESS to a newly-identified admin client
+	// if a job is running, so a page reload retrieves progress without any
+	// client-side reconstruction logic. nil-safe: unit tests building a bare
+	// hub never set it.
+	OnClientRegistered func(client *WebSocketClient)
 }
 
 // NewWebSocketHub creates a new WebSocket hub
@@ -84,6 +95,12 @@ func (h *WebSocketHub) Run() {
 			h.mu.Unlock()
 			LogInfo(game.LogComponentWebSocket, "Client connected: %s (type: %s)", client.ID, client.Type)
 			h.notifyClientChange()
+			// Fired here (not in HandleConnectionWithType) so the hook only
+			// runs once the client is actually present in h.clients — see
+			// the NOTE at the h.register<- send site.
+			if h.OnClientRegistered != nil {
+				h.OnClientRegistered(client)
+			}
 
 		case client := <-h.unregister:
 			h.mu.Lock()
@@ -151,16 +168,21 @@ func (h *WebSocketHub) GetClientCounts() (adminCount, tvCount, vplayerCount int)
 // SetClientType updates the type of a client by ID
 func (h *WebSocketHub) SetClientType(clientID string, clientType ClientType) {
 	h.mu.Lock()
+	var changed *WebSocketClient
 	for client := range h.clients {
 		if client.ID == clientID {
 			client.Type = clientType
+			changed = client
 			LogInfo(game.LogComponentWebSocket, "Client %s type set to: %s", clientID, clientType)
 			break
 		}
 	}
 	h.mu.Unlock()
-	// Notify after releasing lock to avoid deadlock
+	// Notify/hook after releasing lock to avoid deadlock
 	h.notifyClientChange()
+	if changed != nil && h.OnClientRegistered != nil {
+		h.OnClientRegistered(changed)
+	}
 }
 
 // SetClientPlayerID links a connected client to its VJoueur bumper ID once identified
@@ -356,6 +378,14 @@ func (h *WebSocketHub) HandleConnectionWithType(w http.ResponseWriter, r *http.R
 	}
 
 	h.register <- client
+	// NOTE: register is unbuffered, but that only synchronizes the send/
+	// receive rendezvous itself — it does NOT guarantee Run()'s goroutine has
+	// finished h.clients[client]=true by the time this send returns (that's
+	// code AFTER the receive, in a different goroutine, with no ordering
+	// guarantee relative to here). The OnClientRegistered hook is fired from
+	// inside Run() instead, once the client is actually in h.clients — firing
+	// it here raced SendToClient (used by the hook) against the registration
+	// itself and silently dropped the message when the hook lost the race.
 
 	go client.writePump()
 	go client.readPump()
@@ -530,6 +560,21 @@ func (c *WebSocketClient) readPump() {
 		}
 
 		LogDebug(game.LogComponentWebSocket, "Received from %s: ACTION=%s", c.ID, msg.Action)
+
+		// CANCEL_AI_GENERATION (contract ai-multi-provider.md §11) is handled
+		// directly here, self-contained in package server, rather than
+		// relying on cmd/server's App-level dispatch (which consumes
+		// h.Incoming / OnMessage) — package-level tests that talk to a bare
+		// HTTPServer/WebSocketHub (no App wired up) would otherwise never be
+		// able to exercise cancellation at all. CancelAIJob is idempotent
+		// (cancelOnce), so this is also safe if something upstream dispatches
+		// the same action again.
+		if msg.Action == protocol.ActionCancelAIGeneration {
+			var payload protocol.CancelAIGenerationPayload
+			if err := json.Unmarshal(msg.Msg, &payload); err == nil {
+				CancelAIJob(payload.JobID)
+			}
+		}
 
 		incoming := &protocol.IncomingMessage{
 			Source:    "WebSocket",

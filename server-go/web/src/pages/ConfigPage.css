@@ -553,6 +553,67 @@
   flex-wrap: wrap;
 }
 
+/* AI Generation Section (v6.0.0, #8) */
+.ai-key-status {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin-bottom: var(--space-2);
+}
+
+.ai-key-badge {
+  display: inline-block;
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--radius-full);
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.ai-key-badge.configured {
+  background: color-mix(in srgb, var(--success) 15%, white);
+  color: var(--success, #22c55e);
+}
+
+.ai-key-badge.missing {
+  background: color-mix(in srgb, var(--warning) 15%, white);
+  color: var(--warning, #f59e0b);
+}
+
+/* #137 — sélecteur de fournisseur + blocs de clé par fournisseur */
+.ai-provider-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
+  flex-wrap: wrap;
+}
+
+.ai-provider-label {
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--gray-600);
+}
+
+.ai-provider-block {
+  padding: var(--space-3);
+  background: var(--gray-50);
+  border: 1px solid var(--gray-200);
+  border-radius: var(--radius-lg);
+  margin-bottom: var(--space-3);
+}
+
+.ai-provider-block-title {
+  font-weight: 600;
+  color: var(--gray-700);
+  font-size: 0.9rem;
+}
+
+.ai-provider-caveat {
+  font-size: 0.8rem;
+  color: var(--gray-500);
+  margin: 0 0 var(--space-3) 0;
+}
+
 /* Responsive */
 @media (max-width: 1024px) {
   .config-layout {

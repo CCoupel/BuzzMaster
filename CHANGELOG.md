@@ -4,6 +4,94 @@ Historique des versions du projet BuzzControl.
 
 ## [Unreleased]
 
+## [6.1.1] - 2026-08-07
+
+Post-QUALIF correctifs (4 fixes critiques & UX, validation complète Groq #142).
+
+### Fixed (Critical)
+- **#142 Groq schema rejection** — Groq rejetait le schéma JSON car le validateur comptait `CATEGORY`/`DIFFICULTY` comme candidats discriminants dans l'`anyOf`, bien qu'identiques sur toutes les branches. Nouveau `anyOf discriminator ambiguity` au-delà de toute récréation : débloque complètement la génération Groq après test end-to-end réel (SPEEDY/QCM/MEMORY/MEMOTION/ARDOISE). Backend filtre `enum` sur ces champs pour Groq, valide côté serveur (Anthropic non affecté). (#137 T2.3, post-QUALIF).
+
+### Added
+- **Détail technique d'erreur IA (admin-only)** : Nouveau champ `AI_GENERATION_PROGRESS.ERROR_MESSAGE` sur `/ws/admin` (jamais diffusé à TV/VPlayer) — message d'erreur réel du provider (Anthropic/Groq) assaini (clés API supprimées par regex). Frontend affiche ce message dans un panneau repliable "Détail technique" sous le message générique, seulement quand présent (état FAILED). Permet diagnostic immédiat des blocages sans trace de debug (déverrouille #142 avec visibilité utilisateur) (#137 T2.3, post-QUALIF).
+- **Bouton "Nouvelle génération" sur panneaux terminaux** : Après un job DONE/CANCELLED, recliquer sur "Générer via IA" affichait le résultat final sans action de relance (boucle sans issue). Nouveau bouton "Nouvelle génération" (variant primary) à côté de "Fermer" sur panneaux success/cancelled — réinitialise le formulaire sans fermer la modale, conserve Bloc 2 (catégories, volume, distribution). (#137 T2.3, post-QUALIF).
+
+### Fixed (UI)
+- **Couleur sliders MEMORY/ARDOISE (distribution IA)** : `accent-color` CSS provoquait un rendu natif Chromium où la piste non remplie devenait noire pour les couleurs lumineuses (MEMORY `#2e9e6d` luminance 130, ARDOISE `#10b981` luminance 145 — au-delà du seuil de l'heuristique Chromium). Fix : abandon d'`accent-color`, habillage manuel du slider avec dégradé linéaire `var(--type-color)` jusqu'à `var(--pct)`, curseur redessiné `::-webkit-slider-thumb`/`::-moz-range-thumb`. Robuste à futurs types. (#137 QUALIF retour).
+
+### Technical
+- **Backend** : Contrats amendés (contract-first), `AI_GENERATION_PROGRESS.ERROR_MESSAGE` field, `sanitizeUpstreamMessage()` (redaction clés par regex), extraction et threadage message par Anthropic/Groq, validation `DIFFICULTY` serveur-side, fix `groqProvider.AdaptSchema()` retrait `enum` CATEGORY/DIFFICULTY. 11 commits, 8 tests nouveaux. (#137 post-QUALIF).
+- **Frontend** : Display `ERROR_MESSAGE` en panneau repliable `.ai-error-detail` sur FailedBody, bouton "Nouvelle génération" sur success/cancelled, mapping `MSG.ERROR_MESSAGE` → `aiJob.errorMessage`. 2 commits, 3 tests nouveaux. (#137 post-QUALIF).
+- **Vérification** : Build OK, tests Go/React 100% (52 Go, 67 React verts). Appels Groq réels (SPEEDY/QCM/MEMORY/MEMOTION/ARDOISE) validés. Non-régression Anthropic testée explicitement.
+
+### QA Notes
+- Rendu visuel slider vérifié par Chrome headless avant/après (bug reproduit puis résolu). Firefox à tester en QUALIF (headless = Chromium/Blink uniquement, pas Firefox).
+- Génération Groq end-to-end validée côté API réelle. Retester en QUALIF pour confirmation finale.
+- Tous les 4 correctifs VALIDATED, aucune réserve (à l'inverse du Batch 2b initial #137).
+
+---
+
+## [6.1.0] - 2026-08-07
+
+Batch 2b #137 : Multiples publics/difficultés, objectif de partie caché, filtres affichage TV par champ.
+
+### Breaking Changes
+- **Ancien format singulier rejeté** : `POST /api/generate-questions` refuse désormais `population` (singulier) et exige `populations` (tableau). Même traitement pour `difficulty` → `difficulties`. Anciens clients (v6.0.x) doivent être mise à jour (#137 Batch 2b T2.1).
+- **Métadonnées GameState renommées pluriel** : `QUIZ_POPULATION` / `QUIZ_DIFFICULTY` remplacés par `QUIZ_POPULATIONS` / `QUIZ_DIFFICULTIES` (tableaux). Ancien format dans un client `UPDATE_QUIZ_META` est ignoré (sémantique "absent = inchangé" appliquée strictement par champ) (#137 Batch 2b).
+
+### Added
+- **Sélection multiple populations/difficultés** : Interface admin (QuestionsPage section Quiz) passe de champ texte unique à checkboxes multiples. Permet combiner "Junior + Ado" ou "Facile + Moyen" pour une même partie. Pré-remplissage génération IA depuis les sélections globales (#137 Batch 2b T2.1).
+- **Objectif pédagogique de partie (QUIZ_OBJECTIVES)** : Nouveau champ texte libre dans admin (QuestionsPage section Quiz). Jamais transmis aux clients `/ws/tv` ou `/ws/player` (confidentialité — les joueurs ne voient pas l'objectif pédagogique). Transmis à `/ws/admin` uniquement (#137 Batch 2b T2.1).
+- **Filtres affichage TV par champ (QUIZ_HIDDEN_FIELDS)** : Interrupteurs "Afficher sur la TV" pour chaque champ (ex: toggle "Réponse" pour masquer/afficher `ANSWER` en phase REVEALED). Nouveau champ `QUIZ_HIDDEN_FIELDS` (tableau de strings) transmis à tous les endpoints web. Clients `/ws/tv` et `/ws/player` appliquent le filtrage côté rendu (pas le serveur) (#137 Batch 2b T2.1).
+- **Payload UPDATE_QUIZ_META étendue** : 4 nouveaux champs (`POPULATIONS`, `DIFFICULTIES`, `OBJECTIVES`, `HIDDEN_FIELDS`). Sémantique "absent = inchangé" appliquée **par champ** : rétrocompatibilité stricte avec clients v6.0.x (#137 Batch 2b T2.1).
+
+### Changed
+- **Popup modale génération IA simplifiée** : Bloc "Paramètres du Quiz" passe de 3 champs (POPULATION, DIFFICULTY, LANGUAGE) à affichage informatif uniquement (non modifiable, copié depuis l'état global). Bloc "Cette génération" reçoit ses propres champs de multiples (checkboxes pour POPULATIONS/DIFFICULTIES) — génération précise sans affecter le global (#137 Batch 2b T2.3).
+- **Fraîcheur des questions générées** : Corrections de concurrence et gestion état — `POST /api/generate-questions` avec `OnQuestionUpload()` broadcast garantit fraîcheur immédiate en TV/admin sans race condition (#137 Batch 2b T2.3).
+
+### Fixed
+- **#142 Groq API** : Génération réelle Groq cassée (timeout/dégradation qualité). Non bloquant pour ce chantier — note de transparence dans docs (#137 Batch 2b section "Réserves QA").
+- **Rendu visuel écran TV et bandeau "modifications non enregistrées"** : Non vérifiés en environnement QA (pas d'accès navigateur) — à valider par inspection humaine avant QUALIF/PROD (#137 Batch 2b section "Réserves QA").
+
+### Technical
+- **Backend** : Modifications modèles GameState (`QUIZ_POPULATIONS`, `QUIZ_DIFFICULTIES`, `QUIZ_OBJECTIVES`, `QUIZ_HIDDEN_FIELDS` pluriels/nouveaux), payload `UPDATE_QUIZ_META` 6→10 champs, routage diffusion par endpoint (`/ws/admin` vs `/ws/tv` + `/ws/player`) pour masquage `OBJECTIVES` (#137 Batch 2b T2.2).
+- **Frontend** : QuestionsPage section Quiz révisée (checkboxes multiples, toggle masquage champs), modale génération IA redessinée (affichage vs éditable), PlayerDisplay (TV NEW_GAME) applique filtrage `HIDDEN_FIELDS` côté rendu (#137 Batch 2b T2.3).
+- **Documentation** : DATA_MODELS.md, WEBSOCKET_PROTOCOL.md, ADMIN_GUIDE.md mises à jour. Workflow admin documenté : objectif de partie jamais visible joueurs, toggles "Afficher TV" par champ (#137 Batch 2b T3.1).
+
+### QA Notes
+- **Réserves QA validées** : Rendu visuel TV et bandeau UI non vérifiés en QUALIF (pas d'accès navigateur QA). À valider par inspection humaine. Bug indépendant #142 (Groq API) : jamais bloquer ce chantier (#137 Batch 2b).
+
+---
+
+## [6.0.0] - 2026-08-05
+
+**Générateur de questions via IA** : nouveau bouton « ✨ Générer via IA » dans QuestionsPage ouvrant une modale de paramétrage. Le backend appelle l'API Claude (Anthropic) en sortie structurée et écrit directement de nouvelles questions sur disque, **en création uniquement**. Précédé d'un correctif critique sur `POST /config.json` devenu additif (sauvegarde partielle préserve maintenant les autres sections, au lieu de les remettre à zéro).
+
+### Added
+- **Bouton « ✨ Générer via IA » dans QuestionsPage** : nouvelle modale de paramétrage avec 2 blocs distincts — Paramètres du Quiz (pré-remplis depuis les globaux) et Cette génération (éditable). Formule : population cible, difficulté(s), thème, objectifs optionnels, catégories, volume (nombre ou durée), répartition par type (SPEEDY/QCM/MEMORY/MEMOTION avec sliders rebalancés). Validation formulaire côté client, spinner en cours de génération, gestion états erreur/succès (#8).
+- **POST /api/generate-questions** — endpoint synchrone longue durée (1–3 min) générant des questions par lot via l'API Claude (BYOK — Bring Your Own Key). Réponse : `{ status: "ok", created: [{id, type, category}, …], created_count, skipped_count, skipped_reasons }`. Codes stables : 200, 400 (validation), 405, 409 (pas de clé), 502 (erreur amont), 504 (timeout), 507 (IDs saturés). Déclenche obligatoirement `OnQuestionUpload()` → broadcast WebSocket (#8).
+- **Section `ai` dans config.json** — nouvelle clé top-level avec `anthropic_api_key` (BYOK, masqué en GET), `model` (défaut `claude-opus-5`), `timeout_seconds` (300), `max_questions` (200). Remplie via ConfigPage (nouvelle section IA) ; `GET /config.json` retourne toujours `anthropic_api_key: ""` + booléen dérivé `api_key_configured` pour contrôler l'activation du bouton (#8).
+- **Trois champs globaux au quiz (GameState)** : `QUIZ_POPULATION` (Junior/Ado/Adulte/Senior/Famille), `QUIZ_DIFFICULTY` (Facile/Moyen/Difficile/Expert), `QUIZ_LANGUAGE` (Français défaut). Éditables dans QuestionsPage bloc Quiz ; affichés sur TV écran NEW_GAME en ligne compacte de badges. Pas `omitempty` (règle projet). Pré-remplissent le formulaire de génération (#8).
+- **Action WebSocket UPDATE_QUIZ_META étendue** — payload passe de 3 à 6 champs (ajout POPULATION/DIFFICULTY/LANGUAGE). Sémantique normative : **absent = inchangé** (jamais vidé). Élimine le risque qu'un client antérieur effectue accidentellement une régression (#8).
+
+### Changed
+- **POST /config.json — correctif bug destructif** : le handler désérialisait le corps dans un `config.Config` vide puis réécrivait le fichier entier. Aucune section ne portant `omitempty`, toute section absente du payload était remise à zéro. ConfigPage n'envoyant que des payloads partiels (`{neon_effect}`, `{server}`), chaque « Enregistrer » détruisait les autres sections. Désormais **additif** : merge sur `config.Get()` existant, ré-application des défauts, écriture atomique. *Dégât constaté en production : `config.json` porte `questions_dir` et `files_dir` vides, compensés par chemin codé en dur dans `main.go` — corrigé comme effet secondaire du fix* (#8).
+- **Allocation d'ID de question verrouillée** — `findFreeQuestionID` balayait `1..999` **sans verrou** (race pré-existante : deux uploads simultanés pouvaient obtenir le même ID) et repliait sur `"999"` en cas de saturation, écrasant la question 999. Désormais : mutex sur `HTTPServer`, réservation exclusive par `os.Mkdir`, et `507` en cas de saturation. S'applique aussi à `handleUploadQuestion` (#8).
+
+### Technical
+- **Backend** : nouveaux fichiers `internal/server/ai_client.go` (client Anthropic, streaming, structured outputs) et `internal/server/ai_generator.go` (schéma validation, mapping types, allocation IDs) ; modification `internal/config/config.go` (struct AIConfig, Save(), mutex), `internal/server/http.go` (handleConfig additif, POST /api/generate-questions), `internal/game/models.go` (3 champs GameState), `internal/game/engine.go` (SetQuizMeta 6 params), `internal/protocol/messages.go` (QuizMetaPayload), `cmd/server/main.go` (dispatch). Nouvelle dépendance : `github.com/anthropics/anthropic-sdk-go` (#8).
+- **Frontend** : ConfigPage (+CSS) section IA ; QuestionsPage (+CSS) section Quiz étendue + bouton ; nouveau composant `AIGenerateModal.jsx` (+CSS) ; PlayerDisplay (+CSS) écran NEW_GAME ; `useWebSocket.js` (3 champs gameState) (#8).
+- **Tests** : 21/21 tests Go PASS (config merge, allocation IDs concurrence, mapping types, validation questions). React `AIGenerateModal.test.jsx` 36/36 PASS (rebalance sliders, machine à états modale). Procédure manuelle QA : génération réelle + écran TV NEW_GAME saturé — **reportés à QUALIF** (pas de clé API fournie en sandbox, pas d'accès navigateur) (#8).
+
+### Notes de compatibilité
+
+- **Aucun changement BREAKING au sens strict** — aucune action, aucun champ existant supprimé/renommé/retypé. Tous les ajouts sont additifs.
+- **Trois points appellent validation explicite utilisateur au GATE 2** :
+  1. Correctif `POST /config.json` **change le comportement observable** d'un endpoint existant (sauvegarde partielle ne réinitialise plus le reste).
+  2. Sémantique « absent = inchangé » sur `UPDATE_QUIZ_META` modifie le traitement d'un payload déjà émis par QuestionsPage.
+  3. Schéma de sortie LLM pour **MEMORY et MEMOTION diverge légèrement de la spec initiale** : ce sont les structures réelles du code qui font foi (cf. `contracts/ai-generation.md` §5).
+
+---
+
 ## [5.10.0] - 2026-08-04
 
 Milestone `v5.10.x - Stabilité VJoueur` complet : 5 correctifs cumulés (#127, #129, #130, #134, #132) réduisant drastiquement le volume de broadcasts WebSocket vers les VJoueurs et fiabilisant la détection de liens morts, plus une nouvelle fonctionnalité de libération de siège.

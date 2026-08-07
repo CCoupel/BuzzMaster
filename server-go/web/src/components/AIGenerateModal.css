@@ -1,0 +1,645 @@
+/* AIGenerateModal — Générateur de questions via IA (v6.0.0, #8) */
+
+.ai-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: var(--space-4);
+}
+
+.ai-modal {
+  background: white;
+  border-radius: var(--radius-lg, var(--radius-md));
+  width: min(640px, 92vw);
+  max-height: 82vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.3);
+  overflow: hidden;
+}
+
+/* État "Indisponible" (§5 de la maquette) — modale plus étroite */
+.ai-modal--compact {
+  width: min(420px, 92vw);
+  max-height: unset;
+}
+
+.ai-modal-header {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border-bottom: 1px solid var(--gray-200);
+}
+
+.ai-modal-header h2 {
+  margin: 0;
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--gray-800);
+}
+
+.ai-modal-close {
+  border: none;
+  background: var(--gray-100);
+  color: var(--gray-500);
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-size: 1.2rem;
+  flex-shrink: 0;
+}
+
+.ai-modal-close:hover:not(:disabled) {
+  background: var(--error);
+  color: white;
+}
+
+.ai-modal-close:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.ai-modal-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.ai-modal-footer {
+  flex: none;
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border-top: 1px solid var(--gray-200);
+}
+
+/* Blocs "Paramètres du Quiz" / "Cette génération" */
+.ai-modal-block {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.ai-block-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.ai-block-title {
+  margin: 0;
+  font-size: 0.8rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--gray-600);
+}
+
+.ai-inline-link {
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--primary-600);
+  text-decoration: underline;
+  cursor: pointer;
+  font: inherit;
+}
+
+/* Retour QUALIF (#137) — rappel en lecture seule des 5 réglages globaux
+   (Thème/Publics/Difficultés/Langue/Objectif), remplace le bloc "Paramètres
+   du Quiz" éditable retiré. v6.1.0 (T2.3) — Publics/Difficultés passent en
+   liste (mini-chips), ajout de l'Objectif et du bandeau T2.5. */
+.ai-quiz-summary {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  background: var(--gray-50);
+  border: 1px solid var(--gray-200);
+  border-radius: var(--radius-lg);
+  padding: var(--space-3);
+  font-size: 0.85rem;
+  color: var(--gray-700);
+}
+
+.ai-quiz-summary-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.ai-quiz-summary-title {
+  font-weight: 600;
+  color: var(--gray-600);
+}
+
+.ai-quiz-summary-link {
+  margin-left: auto;
+}
+
+/* T2.5 — écart entre le formulaire non enregistré et les valeurs réellement
+   diffusées/utilisées par la génération (correction du bug de fraîcheur). */
+.ai-quiz-summary-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  background: rgba(234, 179, 8, 0.14);
+  border: 1px solid rgba(234, 179, 8, 0.35);
+  border-radius: var(--radius-md);
+  padding: var(--space-2) var(--space-3);
+  color: #a16207;
+  font-size: 0.82rem;
+}
+
+.ai-quiz-summary-banner-icon {
+  flex: none;
+}
+
+.ai-quiz-summary-list {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: var(--space-1) var(--space-3);
+  margin: 0;
+}
+
+.ai-quiz-summary-list dt {
+  font-weight: 600;
+  color: var(--gray-600);
+  white-space: nowrap;
+}
+
+.ai-quiz-summary-list dd {
+  margin: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+  align-items: center;
+}
+
+.ai-mini-chip {
+  display: inline-block;
+  padding: 0.1rem 0.6rem;
+  border-radius: var(--radius-full);
+  background: var(--primary-100);
+  color: var(--primary-700, var(--primary-600));
+  font-size: 0.76rem;
+  font-weight: 500;
+}
+
+.ai-quiz-summary-missing {
+  color: var(--error, #ef4444);
+  font-style: italic;
+}
+
+.ai-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.ai-field > span:first-child {
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: var(--gray-600);
+}
+
+.ai-field input[type="text"],
+.ai-field input[type="number"],
+.ai-field select,
+.ai-field textarea {
+  padding: var(--space-2) var(--space-3);
+  border: 2px solid var(--gray-200);
+  border-radius: var(--radius-lg);
+  font-size: 0.875rem;
+  font-family: inherit;
+  transition: border-color var(--transition-fast);
+}
+
+.ai-field textarea {
+  resize: vertical;
+  min-height: 56px;
+}
+
+.ai-field input:focus,
+.ai-field select:focus,
+.ai-field textarea:focus {
+  outline: none;
+  border-color: var(--primary-400);
+}
+
+.ai-field--full {
+  grid-column: 1 / -1;
+}
+
+/* Chips (Difficulté / Catégories) */
+.ai-chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.ai-chip-row-empty {
+  font-size: 0.8rem;
+  color: var(--gray-400);
+  font-style: italic;
+}
+
+.ai-chip {
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--radius-full);
+  border: 2px solid var(--gray-200);
+  background: white;
+  color: var(--gray-600);
+  font-size: 0.8rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.ai-chip:hover {
+  border-color: var(--primary-300);
+}
+
+.ai-chip.active {
+  background: var(--primary-500);
+  border-color: var(--primary-500);
+  color: white;
+}
+
+.ai-chip--category.active {
+  background: var(--chip-color, var(--primary-500));
+  border-color: var(--chip-color, var(--primary-500));
+  color: white;
+}
+
+.ai-chip-check {
+  margin-right: var(--space-1);
+}
+
+/* Toggle segmenté Volume */
+.ai-volume-toggle {
+  display: inline-flex;
+  border: 2px solid var(--gray-200);
+  border-radius: var(--radius-full);
+  overflow: hidden;
+  width: fit-content;
+}
+
+.ai-volume-toggle button {
+  padding: var(--space-1) var(--space-4);
+  border: none;
+  background: white;
+  color: var(--gray-600);
+  font-size: 0.8rem;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.ai-volume-toggle button.active {
+  background: var(--primary-500);
+  color: white;
+}
+
+.ai-volume-input {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+  font-size: 0.8rem;
+  color: var(--gray-600);
+}
+
+.ai-volume-input input[type="number"] {
+  width: 80px;
+}
+
+/* Répartition par type */
+.ai-distribution-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+}
+
+.ai-distribution-hint {
+  font-size: 0.75rem;
+  color: var(--gray-400);
+}
+
+.ai-distribution-rows {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+}
+
+.ai-distribution-row {
+  display: grid;
+  grid-template-columns: 40px 90px 1fr 44px;
+  align-items: center;
+  gap: var(--space-3);
+  transition: opacity var(--transition-fast);
+}
+
+.ai-distribution-row.disabled {
+  opacity: 0.4;
+}
+
+.ai-distribution-label {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--gray-700);
+}
+
+.ai-distribution-pct {
+  text-align: right;
+  font-size: 0.8rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--gray-500);
+}
+
+/* Retour QUALIF (#137, corrigé) — cause racine réelle, vérifiée empiriquement
+   (capture d'écran Chrome headless sur une page isolée reproduisant
+   exactement ces règles) : ce n'était PAS `accent-color` ignoré sur
+   `:disabled` (hypothèse précédente jamais confirmée, et fausse — MEMORY est
+   ACTIF par défaut et reproduisait déjà le bug). La vraie cause : le rendu
+   natif Chromium d'`accent-color` sur `<input type="range">` choisit un
+   "chrome" clair ou sombre pour la portion NON remplie de la piste selon un
+   seuil de luminance interne calculé sur la couleur d'accent elle-même. Les
+   couleurs à dominante verte de MEMORY (#2e9e6d) et ARDOISE (#10b981) ont la
+   luminance perçue la plus élevée des 5 (calcul L = 0.2126R+0.7152G+0.0722B
+   sur les canaux 0-255 : MEMORY ≈130, ARDOISE ≈145, contre ≈109-118 pour
+   SPEEDY/QCM/MEMOTION) — assez pour franchir ce seuil et faire basculer le
+   "chrome" en sombre, d'où la piste non remplie qui apparaît noire alors que
+   le curseur lui-même reste correctement coloré. Reproductible indépendamment
+   de l'état :disabled (testé activé et désactivé).
+   Fix : abandon complet d'`accent-color` (qui déclenche cette heuristique) au
+   profit d'un habillage manuel — `appearance:none` + piste en dégradé linéaire
+   (couleur du type jusqu'à `--pct`, gris clair ensuite) + curseur redessiné
+   via les pseudo-éléments webkit/moz. Un seul jeu de règles pour tous les
+   types, actif ou non — robuste à l'ajout d'un futur type sans jamais
+   redépendre de l'heuristique de luminance du navigateur. */
+.ai-distribution-row input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 6px;
+  border-radius: var(--radius-full);
+  background: linear-gradient(
+    to right,
+    var(--type-color, var(--primary-500)) var(--pct, 0%),
+    var(--gray-200) var(--pct, 0%)
+  );
+  cursor: pointer;
+}
+
+/* a11y (post-QUALIF, repéré par test-writer) — `appearance: none` supprime
+   l'indicateur de focus natif du navigateur (Chrome/Safari le dessinent comme
+   partie du widget natif du range ; il disparaît avec lui). Remplacé ici par
+   le même motif que le reste du fichier (`.ai-field input:focus` ci-dessus) :
+   jamais de focus supprimé sans indicateur visible de repli — sur la couleur
+   du type plutôt que `--primary-400` générique, pour rester cohérent avec la
+   piste/le curseur déjà colorés par type. `:focus-visible` (pas `:focus`) :
+   seulement au clavier (Tab), pas au clic souris/tactile sur le curseur. */
+.ai-distribution-row input[type="range"]:focus-visible {
+  outline: 2px solid var(--type-color, var(--primary-500));
+  outline-offset: 3px;
+}
+
+.ai-distribution-row input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--type-color, var(--primary-500));
+  border: none;
+  cursor: pointer;
+}
+
+.ai-distribution-row input[type="range"]::-moz-range-track {
+  height: 6px;
+  border-radius: var(--radius-full);
+  background: transparent;
+}
+
+.ai-distribution-row input[type="range"]::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--type-color, var(--primary-500));
+  border: none;
+  cursor: pointer;
+}
+
+.ai-distribution-row.disabled input[type="range"] {
+  background: linear-gradient(
+    to right,
+    var(--gray-400) var(--pct, 0%),
+    var(--gray-200) var(--pct, 0%)
+  );
+  cursor: default;
+}
+
+.ai-distribution-row.disabled input[type="range"]::-webkit-slider-thumb {
+  background: var(--gray-400);
+}
+
+.ai-distribution-row.disabled input[type="range"]::-moz-range-thumb {
+  background: var(--gray-400);
+}
+
+/* Toggle switch (checkbox stylisée) */
+.ai-toggle-switch {
+  position: relative;
+  display: inline-block;
+  width: 36px;
+  height: 20px;
+  flex-shrink: 0;
+}
+
+.ai-toggle-switch input {
+  opacity: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  position: absolute;
+  inset: 0;
+  cursor: pointer;
+  z-index: 1;
+}
+
+.ai-toggle-slider {
+  position: absolute;
+  inset: 0;
+  background: var(--gray-300);
+  border-radius: 999px;
+  transition: background var(--transition-fast);
+}
+
+.ai-toggle-slider::before {
+  content: '';
+  position: absolute;
+  width: 16px;
+  height: 16px;
+  left: 2px;
+  top: 2px;
+  background: white;
+  border-radius: 50%;
+  transition: transform var(--transition-fast);
+}
+
+.ai-toggle-switch input:checked + .ai-toggle-slider {
+  background: var(--type-color, var(--primary-500));
+}
+
+.ai-toggle-switch input:checked + .ai-toggle-slider::before {
+  transform: translateX(16px);
+}
+
+/* États chargement / succès / erreur / indisponible (maquette §5, §6) */
+.ai-modal-status {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  gap: var(--space-3);
+  padding: var(--space-6) var(--space-4);
+}
+
+.ai-status-icon {
+  font-size: 3rem;
+  line-height: 1;
+}
+
+.ai-status-title {
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: var(--gray-800);
+}
+
+.ai-status-sub {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--gray-500);
+}
+
+.ai-status-warning {
+  margin: 0;
+  font-size: 0.82rem;
+  color: var(--warning, #f59e0b);
+  background: color-mix(in srgb, var(--warning, #f59e0b) 12%, white);
+  border-radius: var(--radius-md);
+  padding: var(--space-2) var(--space-3);
+}
+
+/* #137 — état EnCours : progression par lot, décompte inter-lots */
+.ai-modal-status--running {
+  padding: var(--space-5) var(--space-4);
+}
+
+.ai-status-countdown {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--primary-600);
+}
+
+.ai-progress-wrap {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  width: 100%;
+  max-width: 360px;
+}
+
+.ai-progress-bar {
+  flex: 1;
+  height: 10px;
+  background: var(--gray-200);
+  border-radius: var(--radius-full);
+  overflow: hidden;
+}
+
+.ai-progress-fill {
+  height: 100%;
+  background: var(--gradient-primary, var(--primary-500));
+  border-radius: var(--radius-full);
+  transition: width 0.4s ease;
+}
+
+.ai-progress-pct {
+  font-size: 0.8rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--gray-500);
+  min-width: 2.5em;
+  text-align: right;
+}
+
+.ai-status-counts {
+  margin: 0;
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: var(--gray-700);
+}
+
+.ai-status-provider {
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--gray-500);
+}
+
+.ai-success-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  text-align: left;
+  font-size: 0.88rem;
+  color: var(--gray-700);
+  max-width: 100%;
+}
+
+.ai-error-detail {
+  font-size: 0.78rem;
+  color: var(--gray-500);
+  max-width: 100%;
+  text-align: left;
+}
+
+.ai-error-detail pre {
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow-x: auto;
+}
+
+.ai-spinner {
+  width: 48px;
+  height: 48px;
+  border: 4px solid var(--gray-200);
+  border-top-color: var(--primary-500);
+  border-radius: 50%;
+  animation: ai-modal-spin 0.8s linear infinite;
+}
+
+@keyframes ai-modal-spin {
+  to { transform: rotate(360deg); }
+}

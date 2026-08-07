@@ -2,6 +2,7 @@ package game
 
 import (
 	"encoding/json"
+	"reflect"
 	"testing"
 	"time"
 )
@@ -1827,7 +1828,7 @@ func TestInitGame_SetsPhaseNewGame(t *testing.T) {
 func TestSetQuizMeta(t *testing.T) {
 	e := NewEngine()
 
-	e.SetQuizMeta("Mon Quiz", "Sciences", "Un quiz éducatif")
+	e.SetQuizMeta("Mon Quiz", "Sciences", "Un quiz éducatif", []string{"Adulte (18-64 ans)"}, []string{"Moyen"}, "Français", "Réviser le chapitre 3")
 
 	state := e.GetState()
 	if state.QuizName != "Mon Quiz" {
@@ -1839,6 +1840,18 @@ func TestSetQuizMeta(t *testing.T) {
 	if state.QuizNotes != "Un quiz éducatif" {
 		t.Errorf("QuizNotes should be 'Un quiz éducatif', got %q", state.QuizNotes)
 	}
+	if !reflect.DeepEqual(state.QuizPopulations, []string{"Adulte (18-64 ans)"}) {
+		t.Errorf("QuizPopulations should be ['Adulte (18-64 ans)'], got %v", state.QuizPopulations)
+	}
+	if !reflect.DeepEqual(state.QuizDifficulties, []string{"Moyen"}) {
+		t.Errorf("QuizDifficulties should be ['Moyen'], got %v", state.QuizDifficulties)
+	}
+	if state.QuizLanguage != "Français" {
+		t.Errorf("QuizLanguage should be 'Français', got %q", state.QuizLanguage)
+	}
+	if state.QuizObjectives != "Réviser le chapitre 3" {
+		t.Errorf("QuizObjectives should be 'Réviser le chapitre 3', got %q", state.QuizObjectives)
+	}
 }
 
 // TestSetQuizMeta_OverwritesPreviousValues verifies that calling SetQuizMeta twice
@@ -1846,8 +1859,8 @@ func TestSetQuizMeta(t *testing.T) {
 func TestSetQuizMeta_OverwritesPreviousValues(t *testing.T) {
 	e := NewEngine()
 
-	e.SetQuizMeta("Quiz v1", "Histoire", "")
-	e.SetQuizMeta("Quiz v2", "Géographie", "Nouveau quiz")
+	e.SetQuizMeta("Quiz v1", "Histoire", "", []string{"Junior (6-12 ans)"}, []string{"Facile"}, "Anglais", "")
+	e.SetQuizMeta("Quiz v2", "Géographie", "Nouveau quiz", []string{"Adulte (18-64 ans)", "Senior (65+ ans)"}, []string{"Difficile"}, "Français", "Objectif final")
 
 	state := e.GetState()
 	if state.QuizName != "Quiz v2" {
@@ -1858,6 +1871,108 @@ func TestSetQuizMeta_OverwritesPreviousValues(t *testing.T) {
 	}
 	if state.QuizNotes != "Nouveau quiz" {
 		t.Errorf("QuizNotes should be 'Nouveau quiz', got %q", state.QuizNotes)
+	}
+	if !reflect.DeepEqual(state.QuizPopulations, []string{"Adulte (18-64 ans)", "Senior (65+ ans)"}) {
+		t.Errorf("QuizPopulations should be ['Adulte (18-64 ans)', 'Senior (65+ ans)'], got %v", state.QuizPopulations)
+	}
+	if !reflect.DeepEqual(state.QuizDifficulties, []string{"Difficile"}) {
+		t.Errorf("QuizDifficulties should be ['Difficile'], got %v", state.QuizDifficulties)
+	}
+	if state.QuizLanguage != "Français" {
+		t.Errorf("QuizLanguage should be 'Français', got %q", state.QuizLanguage)
+	}
+	if state.QuizObjectives != "Objectif final" {
+		t.Errorf("QuizObjectives should be 'Objectif final', got %q", state.QuizObjectives)
+	}
+}
+
+// TestNewEngine_QuizHiddenFieldsDefaultsToEmptyNotNil verifies rule H1
+// (contract game-state.md §"QUIZ_HIDDEN_FIELDS") — the default is "all shown",
+// represented by a non-nil empty slice so JSON serializes [] rather than null.
+func TestNewEngine_QuizHiddenFieldsDefaultsToEmptyNotNil(t *testing.T) {
+	e := NewEngine()
+	state := e.GetState()
+	if state.QuizHiddenFields == nil {
+		t.Fatal("QuizHiddenFields should default to a non-nil empty slice, got nil")
+	}
+	if len(state.QuizHiddenFields) != 0 {
+		t.Errorf("QuizHiddenFields should default to empty, got %v", state.QuizHiddenFields)
+	}
+}
+
+// TestSetQuizDisplay_ValidValues verifies SetQuizDisplay stores an allowed
+// subset of {THEME, POPULATIONS, DIFFICULTIES, LANGUAGE} (#137 Batch 2b T1.8).
+func TestSetQuizDisplay_ValidValues(t *testing.T) {
+	e := NewEngine()
+	e.SetQuizDisplay([]string{"DIFFICULTIES", "THEME"})
+
+	state := e.GetState()
+	if !reflect.DeepEqual(state.QuizHiddenFields, []string{"DIFFICULTIES", "THEME"}) {
+		t.Errorf("QuizHiddenFields should be ['DIFFICULTIES', 'THEME'], got %v", state.QuizHiddenFields)
+	}
+}
+
+// TestSetQuizDisplay_UnknownValueIgnoredNotError verifies rule H2 — an
+// unrecognized field label is silently dropped (and logged), never rejected:
+// a newer client sending a label this build doesn't know yet must not fail
+// the whole save.
+func TestSetQuizDisplay_UnknownValueIgnoredNotError(t *testing.T) {
+	e := NewEngine()
+	e.SetQuizDisplay([]string{"THEME", "SOME_FUTURE_FIELD", "LANGUAGE"})
+
+	state := e.GetState()
+	if !reflect.DeepEqual(state.QuizHiddenFields, []string{"THEME", "LANGUAGE"}) {
+		t.Errorf("QuizHiddenFields should drop the unknown value, got %v", state.QuizHiddenFields)
+	}
+}
+
+// TestSetQuizDisplay_ObjectivesNotAcceptedValue verifies rule H3 — OBJECTIVES
+// is deliberately not a valid QUIZ_HIDDEN_FIELDS member: the objective is
+// never broadcast at all, so accepting it here would wrongly suggest it could
+// be shown/hidden on TV rather than never transmitted.
+func TestSetQuizDisplay_ObjectivesNotAcceptedValue(t *testing.T) {
+	e := NewEngine()
+	e.SetQuizDisplay([]string{"OBJECTIVES", "LANGUAGE"})
+
+	state := e.GetState()
+	if !reflect.DeepEqual(state.QuizHiddenFields, []string{"LANGUAGE"}) {
+		t.Errorf("QuizHiddenFields should drop OBJECTIVES, got %v", state.QuizHiddenFields)
+	}
+}
+
+// TestSetQuizDisplay_EmptyClearsToNonNilEmptySlice verifies that passing an
+// empty/nil slice results in a non-nil empty slice stored (rule H1), not nil.
+func TestSetQuizDisplay_EmptyClearsToNonNilEmptySlice(t *testing.T) {
+	e := NewEngine()
+	e.SetQuizDisplay([]string{"THEME"})
+	e.SetQuizDisplay(nil)
+
+	state := e.GetState()
+	if state.QuizHiddenFields == nil {
+		t.Fatal("QuizHiddenFields should be a non-nil empty slice after clearing, got nil")
+	}
+	if len(state.QuizHiddenFields) != 0 {
+		t.Errorf("QuizHiddenFields should be empty after clearing, got %v", state.QuizHiddenFields)
+	}
+}
+
+// TestSetQuizDisplay_DoesNotAffectSetQuizMetaFields verifies SetQuizDisplay
+// only mutates QuizHiddenFields — it must not touch the fields set by
+// SetQuizMeta (contract: dedicated setter, not an 8th SetQuizMeta parameter).
+func TestSetQuizDisplay_DoesNotAffectSetQuizMetaFields(t *testing.T) {
+	e := NewEngine()
+	e.SetQuizMeta("Quiz", "Thème", "Notes", []string{"Adulte (18-64 ans)"}, []string{"Moyen"}, "Français", "Objectif")
+	e.SetQuizDisplay([]string{"THEME"})
+
+	state := e.GetState()
+	if state.QuizName != "Quiz" || state.QuizTheme != "Thème" || state.QuizNotes != "Notes" {
+		t.Errorf("SetQuizDisplay must not alter name/theme/notes, got %+v", state)
+	}
+	if !reflect.DeepEqual(state.QuizPopulations, []string{"Adulte (18-64 ans)"}) {
+		t.Errorf("SetQuizDisplay must not alter populations, got %v", state.QuizPopulations)
+	}
+	if state.QuizObjectives != "Objectif" {
+		t.Errorf("SetQuizDisplay must not alter objectives, got %q", state.QuizObjectives)
 	}
 }
 

@@ -69,6 +69,43 @@ export default function ConfigPage() {
   const [defaultImageToast, setDefaultImageToast] = useState(null)
   const defaultImageFileRef = useRef(null)
 
+  // AI generation section (v6.0.0, #8) — la clé n'est jamais reçue du serveur
+  // (contract ai-generation.md §2) : seul `api_key_configured` est lu.
+  const [aiApiKeyInput, setAiApiKeyInput] = useState('')
+  const [aiKeyConfigured, setAiKeyConfigured] = useState(false)
+  const [savingAiKey, setSavingAiKey] = useState(false)
+  const [clearingAiKey, setClearingAiKey] = useState(false)
+  const [aiToast, setAiToast] = useState(null)
+  // #137 — second provider BYOK (Groq, tier gratuit). Mêmes règles de secret
+  // que la clé Anthropic (contract ai-multi-provider.md §8) : jamais
+  // renvoyée, vide en POST = préservée, effacement explicite dédié.
+  const [aiProvider, setAiProvider] = useState('anthropic') // 'anthropic' | 'groq'
+  const [savingProvider, setSavingProvider] = useState(false)
+  const [groqApiKeyInput, setGroqApiKeyInput] = useState('')
+  const [groqKeyConfigured, setGroqKeyConfigured] = useState(false)
+  const [savingGroqKey, setSavingGroqKey] = useState(false)
+  const [clearingGroqKey, setClearingGroqKey] = useState(false)
+  // Fix bloquant (_work/handoff/task-dev-frontend-20260806-103759.md) — la
+  // section `ai` d'un POST /config.json est remplacée INTÉGRALEMENT, sauf les
+  // 2 clés API résolues individuellement (contract ai-generation.md §0, même
+  // règle que neon_effect — confirmé par dev-backend, pas une régression
+  // backend). Poster un payload partiel ({ai: {groq_api_key: "..."}} seul)
+  // remettait provider/batch_size/groq_model/etc à leurs défauts à chaque
+  // sauvegarde de clé. `aiSettings` porte donc l'état COMPLET de la section
+  // (hors clés, jamais reçues du serveur) pour être ré-émis en entier à
+  // chaque POST, exactement comme `neonConfig` ci-dessus.
+  const [aiSettings, setAiSettings] = useState({
+    provider: 'anthropic',
+    model: 'claude-opus-5',
+    timeout_seconds: 300,
+    max_questions: 200,
+    batch_size: 20,
+    inter_batch_delay_ms: 60000,
+    context_token_budget: 1500,
+    max_consecutive_failures: 2,
+    groq_model: 'openai/gpt-oss-120b',
+  })
+
   // WiFi toast auto-hide
   useEffect(() => {
     if (wifiToast) {
@@ -93,6 +130,14 @@ export default function ConfigPage() {
     }
   }, [defaultImageToast])
 
+  // AI key toast auto-hide
+  useEffect(() => {
+    if (aiToast) {
+      const timer = setTimeout(() => setAiToast(null), 3000)
+      return () => clearTimeout(timer)
+    }
+  }, [aiToast])
+
   // Load neon config and server parameters from server on mount
   useEffect(() => {
     const fetchConfig = async () => {
@@ -107,6 +152,27 @@ export default function ConfigPage() {
             setServerParams({
               auto_open_browsers: data.server.auto_open_browsers || false,
               debug: data.server.debug || false
+            })
+          }
+          // v6.0.0 (#8) — la clé elle-même n'est jamais renvoyée par le
+          // serveur, seul ce booléen dérivé l'est (contract ai-generation.md §2).
+          if (data.ai) {
+            setAiKeyConfigured(!!data.ai.api_key_configured)
+            // #137 — provider sélectionné + état de la clé Groq (même règle de secret).
+            setAiProvider(data.ai.provider || 'anthropic')
+            setGroqKeyConfigured(!!data.ai.groq_api_key_configured)
+            // Fix bloquant — capture la section complète pour la ré-émettre
+            // entière à chaque POST (cf. commentaire sur aiSettings ci-dessus).
+            setAiSettings({
+              provider: data.ai.provider || 'anthropic',
+              model: data.ai.model || 'claude-opus-5',
+              timeout_seconds: data.ai.timeout_seconds || 300,
+              max_questions: data.ai.max_questions || 200,
+              batch_size: data.ai.batch_size || 20,
+              inter_batch_delay_ms: data.ai.inter_batch_delay_ms || 60000,
+              context_token_budget: data.ai.context_token_budget || 1500,
+              max_consecutive_failures: data.ai.max_consecutive_failures || 2,
+              groq_model: data.ai.groq_model || 'openai/gpt-oss-120b',
             })
           }
         }
@@ -217,6 +283,153 @@ export default function ConfigPage() {
       alert('Erreur: ' + error.message)
     } finally {
       setSavingParams(false)
+    }
+  }
+
+  // AI: enregistrer la clé — un champ laissé vide NE modifie PAS la clé
+  // existante côté serveur (contract ai-generation.md §2, maquette §9).
+  // Le payload ré-émet TOUJOURS la section `ai` complète (aiSettings) — un
+  // payload partiel ({ai: {anthropic_api_key: "..."}} seul) remettrait
+  // provider/batch_size/etc à leurs défauts (fix bloquant, cf. commentaire
+  // sur aiSettings plus haut).
+  const handleSaveAiKey = async () => {
+    setSavingAiKey(true)
+    try {
+      const trimmed = aiApiKeyInput.trim()
+      const payload = { ai: { ...aiSettings, ...(trimmed ? { anthropic_api_key: trimmed } : {}) } }
+      const response = await fetch('/config.json', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      })
+      if (response.ok) {
+        if (trimmed) {
+          setAiKeyConfigured(true)
+          setAiApiKeyInput('')
+        }
+        setAiToast({ message: 'Clé API enregistrée', type: 'success' })
+      } else {
+        const text = await response.text()
+        setAiToast({ message: 'Erreur: ' + text, type: 'error' })
+      }
+    } catch (error) {
+      console.error('Save AI key failed:', error)
+      setAiToast({ message: 'Erreur: ' + error.message, type: 'error' })
+    } finally {
+      setSavingAiKey(false)
+    }
+  }
+
+  // AI: suppression explicite, via le bouton dédié (maquette §9) — distincte
+  // d'un simple "Enregistrer" avec champ vide, qui préserve la clé.
+  const handleClearAiKey = async () => {
+    if (!window.confirm('Supprimer la clé API Claude enregistrée ?')) return
+    setClearingAiKey(true)
+    try {
+      const response = await fetch('/config.json', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ai: { ...aiSettings, clear_api_key: true } })
+      })
+      if (response.ok) {
+        setAiKeyConfigured(false)
+        setAiApiKeyInput('')
+        setAiToast({ message: 'Clé API supprimée', type: 'success' })
+      } else {
+        const text = await response.text()
+        setAiToast({ message: 'Erreur: ' + text, type: 'error' })
+      }
+    } catch (error) {
+      console.error('Clear AI key failed:', error)
+      setAiToast({ message: 'Erreur: ' + error.message, type: 'error' })
+    } finally {
+      setClearingAiKey(false)
+    }
+  }
+
+  // #137 — bascule le fournisseur actif. Persisté immédiatement (pas de
+  // bouton "Enregistrer" séparé pour ce champ) — mise à jour optimiste avec
+  // rollback si le POST échoue.
+  const handleProviderChange = async (nextProvider) => {
+    if (nextProvider === aiProvider || savingProvider) return
+    const previous = aiProvider
+    setAiProvider(nextProvider)
+    setAiSettings(prev => ({ ...prev, provider: nextProvider }))
+    setSavingProvider(true)
+    try {
+      const response = await fetch('/config.json', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ai: { ...aiSettings, provider: nextProvider } })
+      })
+      if (!response.ok) {
+        setAiProvider(previous)
+        setAiSettings(prev => ({ ...prev, provider: previous }))
+        const text = await response.text()
+        setAiToast({ message: 'Erreur: ' + text, type: 'error' })
+      }
+    } catch (error) {
+      setAiProvider(previous)
+      setAiSettings(prev => ({ ...prev, provider: previous }))
+      console.error('Save AI provider failed:', error)
+      setAiToast({ message: 'Erreur: ' + error.message, type: 'error' })
+    } finally {
+      setSavingProvider(false)
+    }
+  }
+
+  // Groq: mêmes règles de secret que la clé Claude (contract §8) — champ vide
+  // préserve la clé existante, suppression via bouton dédié.
+  const handleSaveGroqKey = async () => {
+    setSavingGroqKey(true)
+    try {
+      const trimmed = groqApiKeyInput.trim()
+      const payload = { ai: { ...aiSettings, ...(trimmed ? { groq_api_key: trimmed } : {}) } }
+      const response = await fetch('/config.json', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      })
+      if (response.ok) {
+        if (trimmed) {
+          setGroqKeyConfigured(true)
+          setGroqApiKeyInput('')
+        }
+        setAiToast({ message: 'Clé API enregistrée', type: 'success' })
+      } else {
+        const text = await response.text()
+        setAiToast({ message: 'Erreur: ' + text, type: 'error' })
+      }
+    } catch (error) {
+      console.error('Save Groq key failed:', error)
+      setAiToast({ message: 'Erreur: ' + error.message, type: 'error' })
+    } finally {
+      setSavingGroqKey(false)
+    }
+  }
+
+  const handleClearGroqKey = async () => {
+    if (!window.confirm('Supprimer la clé API Groq enregistrée ?')) return
+    setClearingGroqKey(true)
+    try {
+      const response = await fetch('/config.json', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ai: { ...aiSettings, clear_groq_api_key: true } })
+      })
+      if (response.ok) {
+        setGroqKeyConfigured(false)
+        setGroqApiKeyInput('')
+        setAiToast({ message: 'Clé API supprimée', type: 'success' })
+      } else {
+        const text = await response.text()
+        setAiToast({ message: 'Erreur: ' + text, type: 'error' })
+      }
+    } catch (error) {
+      console.error('Clear Groq key failed:', error)
+      setAiToast({ message: 'Erreur: ' + error.message, type: 'error' })
+    } finally {
+      setClearingGroqKey(false)
     }
   }
 
@@ -717,6 +930,108 @@ export default function ConfigPage() {
               </div>
             </div>
 
+            {/* AI Generation Section (v6.0.0 #8, fournisseurs multiples v6.1.0 #137) */}
+            <div className="config-section">
+              <h3 className="config-section-title">IA</h3>
+              <p className="config-section-hint">
+                Génération automatique de questions depuis QuestionsPage. Choisissez un fournisseur
+                et renseignez sa clé API — le bouton « ✨ Générer via IA » s'active selon la clé du
+                fournisseur sélectionné ci-dessous.
+              </p>
+
+              {/* #137 — sélecteur de fournisseur (maquette 137-generation-tache-de-fond.md §7) */}
+              <div className="ai-provider-row">
+                <span className="ai-provider-label">Fournisseur</span>
+                <div className="mode-selector">
+                  <button
+                    type="button"
+                    className={`mode-btn ${aiProvider !== 'groq' ? 'active' : ''}`}
+                    onClick={() => handleProviderChange('anthropic')}
+                    disabled={savingProvider}
+                  >
+                    Claude (Anthropic)
+                  </button>
+                  <button
+                    type="button"
+                    className={`mode-btn ${aiProvider === 'groq' ? 'active' : ''}`}
+                    onClick={() => handleProviderChange('groq')}
+                    disabled={savingProvider}
+                  >
+                    Groq
+                  </button>
+                </div>
+              </div>
+
+              {/* Claude (Anthropic) */}
+              <div className="ai-provider-block">
+                <div className="ai-key-status">
+                  <span className="ai-provider-block-title">Claude (Anthropic)</span>
+                  <span className={`ai-key-badge ${aiKeyConfigured ? 'configured' : 'missing'}`}>
+                    {aiKeyConfigured ? '✅ Clé configurée' : '⚠️ Aucune clé'}
+                  </span>
+                </div>
+                <p className="ai-provider-caveat">Payant, rapide (1 à 3 min pour 200 questions).</p>
+                <label className="wifi-field">
+                  <span>Clé API Claude</span>
+                  <input
+                    type="password"
+                    value={aiApiKeyInput}
+                    onChange={(e) => setAiApiKeyInput(e.target.value)}
+                    placeholder={aiKeyConfigured ? '••••••••' : 'sk-ant-...'}
+                    autoComplete="off"
+                  />
+                </label>
+                <div className="config-section-actions">
+                  <Button variant="primary" size="sm" onClick={handleSaveAiKey} loading={savingAiKey}>
+                    Enregistrer
+                  </Button>
+                  {aiKeyConfigured && (
+                    <Button variant="secondary" size="sm" onClick={handleClearAiKey} loading={clearingAiKey}>
+                      Supprimer la clé
+                    </Button>
+                  )}
+                </div>
+              </div>
+
+              {/* Groq (#137) */}
+              <div className="ai-provider-block">
+                <div className="ai-key-status">
+                  <span className="ai-provider-block-title">Groq</span>
+                  <span className={`ai-key-badge ${groqKeyConfigured ? 'configured' : 'missing'}`}>
+                    {groqKeyConfigured ? '✅ Clé configurée' : '⚠️ Aucune clé'}
+                  </span>
+                </div>
+                <p className="ai-provider-caveat">
+                  Gratuit, mais limité en débit : comptez ~10 minutes pour 200 questions.
+                </p>
+                <label className="wifi-field">
+                  <span>Clé API Groq</span>
+                  <input
+                    type="password"
+                    value={groqApiKeyInput}
+                    onChange={(e) => setGroqApiKeyInput(e.target.value)}
+                    placeholder={groqKeyConfigured ? '••••••••' : 'gsk_...'}
+                    autoComplete="off"
+                  />
+                </label>
+                <div className="config-section-actions">
+                  <Button variant="primary" size="sm" onClick={handleSaveGroqKey} loading={savingGroqKey}>
+                    Enregistrer
+                  </Button>
+                  {groqKeyConfigured && (
+                    <Button variant="secondary" size="sm" onClick={handleClearGroqKey} loading={clearingGroqKey}>
+                      Supprimer la clé
+                    </Button>
+                  )}
+                </div>
+              </div>
+
+              <p className="config-section-hint">
+                Les clés sont stockées localement sur le serveur, jamais renvoyées au navigateur.
+                Laisser un champ vide et Enregistrer conserve la clé existante.
+              </p>
+            </div>
+
             {/* Neon Effect Section */}
             <div className="config-section">
               <h3 className="config-section-title">Effet Neon</h3>
@@ -995,6 +1310,12 @@ export default function ConfigPage() {
       {wifiToast && (
         <div className={`wifi-toast wifi-toast-${wifiToast.type}`}>
           {wifiToast.message}
+        </div>
+      )}
+
+      {aiToast && (
+        <div className={`wifi-toast wifi-toast-${aiToast.type}`}>
+          {aiToast.message}
         </div>
       )}
 

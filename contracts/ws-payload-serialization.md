@@ -53,6 +53,9 @@ Les besoins TV et VPlayer sont donc identiques côté messages.
 | `bumpers[*].FIRMWARE_VERSION` | ✅ | ❌ | ❌ |
 | `bumpers[*].IS_OUTDATED / OTA_STATUS` | ✅ | ❌ | ❌ |
 | `bumpers[*].ACK_PENDING` | ✅ | ❌ | ❌ |
+| `GAME.QUIZ_*` sauf `QUIZ_OBJECTIVES` | ✅ | ✅ | ❌ |
+| `GAME.QUIZ_HIDDEN_FIELDS` (**v6.1.0**) | ✅ | ✅ — la TV en a besoin pour **appliquer** la préférence | ❌ |
+| `GAME.QUIZ_OBJECTIVES` (**v6.1.0**) | ✅ | ❌ | ❌ |
 | `config` (paramètres serveur) | ✅ | ❌ | ❌ |
 | `history` / `palmares` | ✅ | ✅ | ❌ |
 | `remote` | ✅ | ✅ | ❌ |
@@ -73,6 +76,20 @@ Supprimer de `UPDATE.MSG` :
 - `bumpers[*].OTA_STATUS`
 - `bumpers[*].ACK_PENDING`
 - `config`
+- **`GAME.QUIZ_OBJECTIVES` (v6.1.0)** — premier champ du nœud `GAME` à être filtré par type de
+  client. Ce n'est pas une optimisation de payload mais une **règle de confidentialité** :
+  l'objectif de la partie est une consigne d'animation qui ne doit pas être lisible depuis un
+  écran TV ni depuis les outils de développement d'un VJoueur (`game-state.md`,
+  § « `QUIZ_OBJECTIVES` — champ à diffusion restreinte »).
+
+> ⚠️ **Trois sites doivent appliquer ce retrait, pas un seul.** Le filtrage des champs
+> admin-only est aujourd'hui dupliqué entre `SerializeForWebClient`
+> (`internal/protocol/messages.go:560`), `SerializeForVPlayer` (`:625`) et le fan-out chaud
+> (`cmd/server/main.go:2718`), qui réimplémente la règle pour éviter un aller-retour
+> `map[string]interface{}` par destinataire. La discipline en place pour les champs de bumper —
+> **une seule liste exportée et partagée** (`AdminOnlyBumperFields`, `messages.go:542`) — doit
+> être reprise à l'identique pour les champs du nœud `GAME` (p. ex. `AdminOnlyGameFields`).
+> Un chemin oublié = une fuite silencieuse, invisible en test unitaire du sérialiseur.
 
 ### `SerializeForBuzzer(msg)` — buzzers physiques
 

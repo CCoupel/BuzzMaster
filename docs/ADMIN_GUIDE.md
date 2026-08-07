@@ -19,6 +19,7 @@ Ce document decrit les fonctionnalites d'administration du systeme BuzzControl.
 - [Double QR code enrollment TV](#double-qr-code-enrollment-tv-v370)
 - [Catégories personnalisées](#catégories-personnalisées-v570)
 - [Palette de 16 couleurs d'équipes](#palette-de-16-couleurs-déquipes-v5725)
+- [Générateur de questions via IA](#générateur-de-questions-via-ia-v600)
 
 ---
 
@@ -1142,3 +1143,380 @@ Les 16 couleurs de palette sont **invariantes par le filtre CSS `boostTeamColor(
 - Aucune distorsion ou arrondissement lors du rendu
 
 **Important** : ne jamais ajouter de nouvelle couleur à la palette sans vérifier cette propriété d'invariance.
+
+---
+
+## Générateur de questions via IA (v6.0.0)
+
+### Présentation
+
+Le **Générateur de questions via IA** permet de créer automatiquement des questions pour compléter votre quiz en envoyant une demande à l'API Claude (Anthropic). Contrairement à la création manuelle, vous définissez les paramètres (population cible, difficulté, thème, catégories) et l'IA génère les questions directement.
+
+**Important** : Cette fonctionnalité nécessite une **clé API Claude personnelle**. Vous devez la configurer dans les Paramètres avant de pouvoir utiliser le générateur. Les coûts d'utilisation de l'API sont **facturés sur votre compte Anthropic** — ce n'est pas inclus dans BuzzControl.
+
+### Configuration préalable : Choisir un provider et configurer la clé API
+
+Deux providers LLM sont disponibles. Choisissez celui qui correspond à vos besoins :
+
+| Provider | Coût | Format clé | Configuration | Vitesse | Notes |
+|----------|------|-----------|----------------|---------|-------|
+| **Claude (Anthropic)** | Payant (BYOK) | `sk-ant-...` | Console Anthropic | 1–3 min (200q) | Qualité et vitesse optimales |
+| **Groq** | **Gratuit** | `gsk_...` | Console Groq | ~10 min (200q) | Gratuit, plus lent, quota journalier limité |
+
+#### Accès à la configuration
+
+1. Ouvrir la page **Configuration** (`/settings` ou lien "⚙️ Paramètres" en haut à droite)
+2. Aller à la section **IA** (nouvelle section en bas de la page)
+3. **Sélectionner le Provider** : Bouton radio ou dropdown pour choisir Claude ou Groq
+4. **Remplir la clé API** du provider sélectionné (voir ci-dessous)
+
+#### Option 1 : Claude (Payant, Anthropic)
+
+**Format attendu** : `sk-ant-...` (commence par `sk-ant-`, suivie de caractères alphanumériques)
+
+**Où trouver votre clé ?**
+- Console Anthropic : https://console.anthropic.com/account/keys
+- Créer une nouvelle clé si nécessaire (remplacer une clé exposée publiquement)
+- Nécessite une **méthode de paiement** (carte de crédit, débit mensuel)
+
+**Modèle utilisé** : Claude Opus 5 (le plus capable, recommandé pour la qualité)
+
+#### Option 2 : Groq (Gratuit, Tier gratuit)
+
+**Format attendu** : `gsk_...` (commence par `gsk_`, suivie de caractères)
+
+**Où trouver votre clé ?**
+- Console Groq : https://console.groq.com/keys
+- Créer un compte **gratuit** (aucune CB requise)
+- Nouvelle clé générée automatiquement
+
+**Limitations du tier gratuit** :
+- **Quota journalier** : 1 000 requêtes, 200 000 tokens/jour
+- **Débit** : 8 000 tokens/minute
+- **Modèle** : `openai/gpt-oss-120b` (open-source, qualité variable)
+
+**Temps de génération** :
+- 200 questions → ~10 minutes (contre 1–3 min avec Claude)
+- Les questions **apparaissent au fur et à mesure** dans QuestionsPage (non pas tout à la fin)
+- Vous pouvez **arrêter la génération entre les lots** et conserver les questions générées jusqu'à présent
+
+**Important** : La qualité du français de `gpt-oss-120b` n'est pas garantie. Après génération, **relisez et corrigez** les questions avant de les utiliser en partie publique.
+
+#### Vérification et Sauvegarde
+
+Après saisie et clic sur "Enregistrer" :
+- **✅ Vert** : Clé reconnue (format valide) et sauvegardée
+- **❌ Rouge** : Clé invalide (format incorrect ou vérification serveur échouée)
+
+Les clés valides sont **masquées** en affichage (jamais exposées en clair dans la page ou les logs).
+
+### Configurer les clés API IA en production (recommandé)
+
+> **Contexte** : `server-go/config.json` est un fichier de configuration classique, potentiellement
+> suivi par git (comme dans ce dépôt) — une clé saisie via la page Paramètres y est écrite en
+> clair sur disque. Sur un poste personnel ou un dépôt privé, ce n'est pas un problème. Sur un
+> déploiement dont le dépôt est **public** ou partagé, une clé écrite dans `config.json` finit
+> tôt ou tard commitée et exposée (c'est exactement ce qui s'est produit lors du développement de
+> cette fonctionnalité, cf. `contracts/CHANGELOG.md` [20260807]).
+
+Pour un déploiement en production, configurez la clé via **variable d'environnement** plutôt que
+via la page Paramètres — elle n'est alors **jamais écrite sur disque**.
+
+| Provider | Variable d'environnement |
+|---|---|
+| Claude (Anthropic) | `BUZZCONTROL_ANTHROPIC_API_KEY` |
+| Groq | `BUZZCONTROL_GROQ_API_KEY` |
+
+**Exemple (Linux/systemd)** :
+```ini
+# /etc/systemd/system/buzzcontrol.service
+[Service]
+Environment="BUZZCONTROL_GROQ_API_KEY=gsk_votre_cle_ici"
+ExecStart=/opt/buzzcontrol/server
+```
+
+**Exemple (lancement manuel)** :
+```bash
+BUZZCONTROL_GROQ_API_KEY=gsk_votre_cle_ici ./server
+```
+
+**Règles de priorité** :
+- La variable d'environnement, si définie, est **toujours prioritaire** sur la valeur de
+  `config.json` — y compris si une clé (différente ou identique) est déjà enregistrée dans le
+  fichier.
+- Si la variable n'est **pas** définie, le comportement est inchangé : la clé enregistrée via la
+  page Paramètres (`config.json`) continue de fonctionner normalement — pratique pour un usage
+  local/dev qui accepte ce risque en connaissance de cause.
+- La page Paramètres affiche **"clé configurée"** dès qu'une clé est disponible **par l'une ou
+  l'autre voie** — vous n'avez pas besoin de laisser un champ vide dans l'UI pour que la variable
+  d'environnement soit prise en compte, mais dans ce cas laissez-le vide justement pour ne rien
+  écrire sur disque.
+- La clé fournie par variable d'environnement n'est **jamais** écrite dans `config.json` par le
+  serveur, quelle que soit l'action effectuée par la suite dans la page Paramètres (modifier un
+  autre réglage IA, changer de provider, etc.) — les deux mécanismes sont indépendants.
+
+**Recommandation** : sur un déploiement PROD, laissez `anthropic_api_key`/`groq_api_key` **vides**
+dans `config.json` et utilisez exclusivement les variables d'environnement ci-dessus.
+
+### Utilisation : Générer des questions (Workflow asynchrone)
+
+#### Accès au formulaire
+
+1. Aller à la page **Questions** (`/admin/questions` ou lien "❓ Questions")
+2. Localiser le bouton **"✨ Générer via IA"** dans le bloc "Nouvelle Question" (carte grise à gauche)
+3. Cliquer sur le bouton → ouverture d'une modale de génération
+
+**Note** : Si le bouton est grisé, cela signifie que **aucune clé API n'est configurée**. Configurez-la d'abord dans les Paramètres (voir section ci-dessus).
+
+**Important (v6.1.0+)** : **Une seule génération à la fois** est possible. Si une génération est en cours, le bouton affiche un message `"Génération en cours..."` et est désactivé. Une autre tentative renvoie une erreur `409 Génération déjà en cours`.
+
+#### Formulaire de génération
+
+La modale affiche deux blocs :
+
+**Bloc 1 — Paramètres du Quiz (pré-remplis, informatif)** :
+- Thème global de votre quiz
+- Population cible
+- Langue
+- Difficulté globale
+
+Ces valeurs viennent de la section "Quiz" en haut de QuestionsPage. Elles sont **affichées à titre informatif** et ne sont **pas modifiables** dans le formulaire de génération.
+
+**Bloc 2 — Cette génération (éditable)** :
+- **Difficulté** : Cocher une ou plusieurs cases (Facile, Moyen, Difficile, Expert). Vous pouvez mixer les niveaux pour un même lot — l'IA répartira les questions équitablement.
+- **Objectifs / Consignes** (optionnel) : Texte libre décrivant le contexte (ex: "révision scolaire", "ambiance conviviale") ou des contraintes spéciales (ex: "éviter les questions sur la politique").
+- **Catégories cibles** : Sélectionner une ou plusieurs catégories existantes. L'IA génère des questions **uniquement** dans ces catégories (elle ne crée jamais de nouvelle catégorie).
+- **Volume** : 
+  - **Mode "Nombre"** : indiquer combien de questions générer (ex: 20)
+  - **Mode "Durée"** : indiquer la durée cible de la partie en minutes (ex: 30 min) — l'IA calcule le nombre de questions et le temps de réponse pour approcher cette durée
+- **Répartition par type** : Quatre sliders (SPEEDY, QCM, MEMORY, MEMOTION) fixant le pourcentage de chaque type. Les sliders se **rééquilibrent automatiquement** quand vous en bougez un. Vous pouvez **désactiver complètement** un type en cliquant sur le toggle (remis à 0%, exclu du rééquilibrage).
+
+#### Lancer la génération
+
+1. Remplir les champs du bloc "Cette génération"
+2. Cliquer sur le bouton **"Générer"** en bas à droite de la modale
+3. La génération démarre **en arrière-plan** :
+   - La modale **ne se ferme pas** et affiche une **barre de progression**
+   - Les questions apparaissent **par lots** au fur et à mesure dans QuestionsPage (refresh temps réel)
+   - Le temps total dépend du provider (Claude 1–3 min, Groq ~10 min pour 200 questions)
+
+**Pendant la génération** :
+- **Modale non-bloquante** : Vous pouvez continuer à éditer d'autres questions, naviguer, etc.
+- **Progression visible** : Barre montrant le nombre de lots générés (ex: "Lot 3/5")
+- **Questions en direct** : Chaque lot de questions terminé s'affiche immédiatement dans QuestionsPage sans attendre la fin
+
+#### Résultat et gestion des erreurs
+
+**✅ Succès complet** :
+- Modale affiche "Génération terminée"
+- Bouton "Fermer" pour quitter
+- Les **nouvelles questions sont visibles dans QuestionsPage**
+- Vous pouvez les **éditer, supprimer ou télécharger des images** comme des questions manuelles
+
+**⚠️ Succès partiel** (certains lots échouent, d'autres réussissent) :
+- Les questions **déjà générées sont conservées**
+- Message indiquant combien de questions ont été créées et combien d'erreurs rencontrées
+- Possibilité de **relancer une génération** pour compléter (sans duplication)
+
+**❌ Erreur (avant ou pendant la génération)** :
+- Message d'erreur explicite :
+  - `Clé API invalide` — vérifiez le format dans Paramètres
+  - `Clé API refusée` — la clé a été révoquée ou n'est pas reconnue par le provider
+  - `Quota dépassé` — quota journalier épuisé (surtout Groq : 1 000 requêtes/jour)
+  - `Erreur réseau/provider` — réponse HTTP 500, timeout, ou erreur structurelle du provider
+- Bouton **"Réessayer"** conservant votre saisie — corrigez la clé (si besoin) et relancez
+- **Panneau "Détail technique"** (repliable, nouveau v6.1.1) : Message d'erreur réel du provider
+  - Affiché en complément du message générique
+  - Exemple Groq #142 (avant correction) : `"discriminator: multiple candidate properties CATEGORY, DIFFICULTY, TYPE [discriminator_multiple_candidates]"` — permet un diagnostic immédiat
+  - Masque les clés API par sécurité (filtre automatique)
+  - Admin-only — jamais visible en TV ou interface VPlayer
+
+**Aucune question n'a été créée en cas d'erreur initiale** — la génération est atomique jusqu'au premier lot réussi.
+
+#### Après une génération terminée : relancer
+
+Après que une génération soit **terminée avec succès (DONE)** ou **arrêtée (CANCELLED)** :
+
+1. La modale affiche un **panneau résumé** :
+   - DONE : nombre de questions créées, aucun message d'erreur
+   - CANCELLED : nombre de questions créées avant l'arrêt
+
+2. Deux boutons sont présents :
+   - **"Fermer"** (variant secondaire) → Ferme la modale, conserve les questions générées
+   - **"Nouvelle génération"** (variant primary, nouveau v6.1.1) → Réinitialise le formulaire à l'intérieur de la modale (Bloc 2 "Cette génération" — catégories, volume, distribution reprennent les dernières valeurs) et remet le curseur dans le formulaire. Permet de relancer une génération sans fermer/rouvrir la modale.
+
+**Bon à savoir** :
+- Fermer la modale puis recliquer sur "✨ Générer via IA" affiche le même résultat (modale conserve l'état du dernier job).
+- Cliquer "Nouvelle génération" sans fermer reste dans la modale — gain de temps pour un deuxième lot.
+- Les questions de la première génération restent intactes dans QuestionsPage, quelle que soit votre choix (Fermer ou Nouvelle génération).
+
+### ⚠️ Note de sécurité — CRITIQUE
+
+L'endpoint de génération (`POST /api/generate-questions`) **n'a aucune authentification**, exactement comme le reste du serveur BuzzControl. Cela signifie :
+
+- **Toute personne sur le réseau LAN** peut déclencher une génération
+- **Chaque génération est facturée** sur le compte Anthropic de l'opérateur (celui dont la clé API est configurée)
+- Si votre serveur est exposé sur un réseau non maîtrisé (WiFi public, réseau d'entreprise ouvert), des tiers peuvent vous facturer involontairement des appels API
+
+**Recommandation** :
+- **Ne pas exposer ce serveur** sur un réseau public ou non maîtrisé tant qu'il n'y a pas d'authentification globale
+- **Limiter l'accès** via un pare-feu réseau ou un reverse proxy authentifiant
+- **Surveiller votre compte Anthropic** pour détecter toute utilisation anormale
+
+Cette limitation a été **acceptée explicitement** au GATE 2 du chantier comme un risque connu et managé par l'opérateur (voir contrats/CHANGELOG.md pour le détail).
+
+### Arrêt et reprise de la génération
+
+**Pendant une génération en cours** :
+- Bouton **"Arrêter"** dans la modale (visible pendant la progression)
+- L'arrêt prend effet **entre deux lots** — jamais au milieu d'un appel au fournisseur
+- Les questions **déjà générées sont conservées** (vous n'avez rien perdu)
+- État sauvegardé : vous pouvez relancer une nouvelle génération après, ou éditer les questions existantes
+
+**Exemple** :
+- Génération de 200 questions prévue en 5 lots de 40
+- Vous arrêtez après le lot 2 (80 questions générées)
+- 80 questions restent dans QuestionsPage
+- Vous pouvez les éditer, ou relancer une génération pour compléter
+
+### Assurance qualité : Relecture obligatoire
+
+**Important** : Le contenu généré par l'IA est une **aide à la création**, pas une finalité. Avant d'utiliser les questions en partie publique :
+
+1. **Relisez chaque question** — même Claude peut contenir des typos ou imprécisions
+2. **Vérifiez la pertinence** — l'IA peut générer des questions hors contexte ou trop évidentes
+3. **Corrigez les défauts** — changez les valeurs de points, ajoutez une image, reformulez si besoin
+4. **Testez en partie réelle** — voir comment les questions jouent en situation réelle
+
+**Surtout avec Groq (gratuit)** : La qualité du français n'est pas garantie, expect corriger plus de typos et reformulations que Claude.
+
+### Régénération
+
+Si vous êtes insatisfait des questions générées :
+1. **Supprimer** les questions du lot (sélectionner et cliquer le bouton ×)
+2. **Relancer** la génération avec des paramètres ajustés (autre difficulté, autres catégories, autre thème, etc.)
+3. L'IA tiendra compte du nouvel état (les questions supprimées ne seront **pas régénérées identiques**)
+
+**Note** : Il n'existe **pas de bouton "Annuler"** pour une génération passée — la suppression manuelle sert de mécanisme de correction. Pour arrêter une génération **en cours**, utilisez le bouton "Arrêter" (voir section ci-dessus).
+
+---
+
+## Workflow Admin v6.1.0 — Publics/Difficultés multiples, Objectifs, Filtres TV (Batch 2b #137)
+
+### Sélection multiple populations et difficultés
+
+Depuis v6.1.0, l'admin peut spécifier **plusieurs populations cibles et difficultés** pour une même partie.
+
+#### Accès et interface
+
+1. Ouvrir la page **Questions** (`/admin/questions`)
+2. Localiser la section **"Quiz"** en haut de page (bloc gris)
+3. **Populations cibles** : Passage de champ texte unique à **checkboxes multiples**
+   - Cochez une ou plusieurs : Junior (6-12), Ado (13-17), Adulte (18-64), Senior (65+), Famille
+   - Aucune sélection → tableau vide `[]` (défaut)
+4. **Difficultés visées** : Passage de champ texte unique à **checkboxes multiples**
+   - Cochez une ou plusieurs : Facile, Moyen, Difficile, Expert
+   - Aucune sélection → tableau vide `[]` (défaut)
+
+#### Impact sur la génération IA
+
+Les sélections globales Population/Difficulté pré-remplissent automatiquement la modale "Générer via IA" :
+- **Bloc informatif** (non-modifiable) : Affiche les valeurs globales du Quiz
+- **Bloc "Cette génération"** (éditable) : Les checkboxes héritent les sélections globales, mais restent modifiables (permet une génération différente sans affecter le global)
+
+**Exemple** :
+- Quiz global : Populations = `["Adulte", "Senior"]`, Difficultés = `["Moyen"]`
+- Modale génération : Les checkboxes affichent "Adulte" ✓ "Senior" ✓ et "Moyen" ✓
+- Vous pouvez décocher "Senior" et cocher "Facile" pour générer un lot "Adulte + Facile" sans changer le global
+
+#### Affichage sur l'écran TV NEW_GAME
+
+Les populations et difficultés sélectionnées s'affichent sur la TV en **ligne compacte de badges** :
+- Badges "Junior", "Ado", "Adulte", "Senior", "Famille" (si sélectionnés)
+- Badges "Facile", "Moyen", "Difficile", "Expert" (si sélectionnés)
+- **Uniquement si non-vides** — tableau vide `[]` n'affiche rien
+
+**Contraintes TV statique** : `overflow: hidden`, unités viewport (`vh`, `vw`), `flex` avec `min-height: 0` — les badges s'affichent sans déborder.
+
+---
+
+### Objectif pédagogique de partie (QUIZ_OBJECTIVES)
+
+Nouveau champ texte libre permettant de documenter l'objectif ou le thème pédagogique de la partie.
+
+#### Accès et interface
+
+1. Page **Questions**, section **"Quiz"**
+2. Nouveau champ **"Objectif de partie"** (texte libre, multi-ligne)
+   - Exemple : "Révision scolaire sur la Seconde Guerre mondiale"
+   - Exemple : "Team-building ambiance conviviale sans enjeu"
+   - Optionnel — laisser vide si non applicable
+
+#### Confidentialité — Jamais visible aux joueurs
+
+- **`/ws/admin`** : Reçoit `QUIZ_OBJECTIVES` dans le GameState complet
+- **`/ws/tv` (écran TV)** : N'reçoit **pas** `QUIZ_OBJECTIVES` (masqué par le serveur)
+- **`/ws/player` (interface VPlayer)** : N'reçoit **pas** `QUIZ_OBJECTIVES` (masqué par le serveur)
+
+**Cas d'usage** : L'admin peut documenter que la partie vise la "révision" ou "team-building", sans que les joueurs voient cet objectif (garantit l'impartialité pédagogique).
+
+---
+
+### Filtres affichage TV par champ (QUIZ_HIDDEN_FIELDS)
+
+Interface **interrupteurs "Afficher sur la TV"** permettant de masquer certains champs question lors de l'affichage sur l'écran TV.
+
+#### Accès et interface
+
+1. Page **Questions**, section **"Quiz"**
+2. Nouvelle zone **"Visibilité TV"** avec liste de toggles :
+   - ☑️ **Réponse** — affiche/masque le champ `ANSWER` en phase REVEALED
+   - ☑️ **Image question** — affiche/masque `MEDIA` (image de la question)
+   - ☑️ **Image réponse** — affiche/masque `MEDIA_ANSWER` (image de la réponse)
+   - (Autres champs selon évolution future)
+
+#### Comportement et diffusion
+
+- **Stockage** : Les toggles coché/décochés sont sauvegardés dans `QUIZ_HIDDEN_FIELDS` (tableau de strings, ex: `["ANSWER"]`)
+- **Diffusion WebSocket** :
+  - **Tous endpoints web** (`/ws/admin`, `/ws/tv`, `/ws/player`) reçoivent `QUIZ_HIDDEN_FIELDS` dans le GameState
+  - Le **serveur ne filtre pas** — il envoie la liste complète des champs masqués
+  - **Le client applique le filtrage côté rendu** (frontend)
+
+#### Exemple concret
+
+**Scénario** : Vous voulez masquer la réponse sur la TV avant qu'elle ne soit révélée.
+
+1. Cochez le toggle **"Réponse"** → `QUIZ_HIDDEN_FIELDS = ["ANSWER"]`
+2. En phase STARTED : La réponse n'apparaît pas à l'écran TV
+3. En phase REVEALED : La réponse s'affiche (le frontend applique le masquage intelligemment selon la phase)
+
+**Cas d'usage courant** : Masquer l'image réponse pendant le jeu pour plus de suspense — l'image apparaît seulement après la révélation.
+
+#### Rétrocompatibilité
+
+- Ancien quiz sans toggles → `QUIZ_HIDDEN_FIELDS = []` (affiche tout par défaut)
+- Aucune modification retroactive sur les questions existantes
+
+---
+
+### Workflow complet — étapes recommandées
+
+1. **Ouvrir la page Questions** (`/admin/questions`)
+2. **Bloc Quiz** :
+   - Saisir Nom, Thème, Notes (existant)
+   - ✨ **Nouveau** : Sélectionner Populations (checkboxes multiples)
+   - ✨ **Nouveau** : Sélectionner Difficultés (checkboxes multiples)
+   - ✨ **Nouveau** : Remplir Objectif de partie (texte, optionnel)
+   - ✨ **Nouveau** : Cocher les toggles Visibilité TV (ex: masquer Réponse)
+   - Choisir Langue
+3. **Générer via IA** (si applicable) :
+   - Les selections Population/Difficulté pré-remplissent la modale
+   - Ajuster si besoin pour cette génération
+4. **Sauvegarder** → Les paramètres sont persistés
+5. **Affichage TV** :
+   - Les badges Population/Difficulté s'affichent (s'il non-vides)
+   - L'Objectif n'est pas visible (masqué au serveur)
+   - Les champs cochés "Afficher TV" s'affichent selon la phase
+
+

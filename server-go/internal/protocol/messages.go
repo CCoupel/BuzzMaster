@@ -96,6 +96,9 @@ const (
 	// response expected, an older client that doesn't recognize it keeps its
 	// current behavior (unknown-action branch, ignored).
 	ActionHeartbeat = "HEARTBEAT" // Server → Client (web: admin/TV/player): periodic liveness signal
+	// AI generation job progress (v6.1.0, #137 — contract ai-multi-provider.md §10-§11)
+	ActionAIGenerationProgress = "AI_GENERATION_PROGRESS" // Server → Client (/ws/admin only): job state after each batch
+	ActionCancelAIGeneration   = "CANCEL_AI_GENERATION"   // Admin → Server: cancel the running job (effect between batches)
 )
 
 // FSInfo represents file storage information
@@ -213,11 +216,65 @@ type BackgroundChangePayload struct {
 	Index int `json:"INDEX"` // Current background index (0-based)
 }
 
-// QuizMetaPayload for UPDATE_QUIZ_META action (v4.0.0)
+// QuizMetaPayload for UPDATE_QUIZ_META action (v4.0.0; extended v6.0.0 #8;
+// extended again v6.1.0 #137 Batch 2b — ⚠️ BREAKING: Population/Difficulty
+// (string) replaced by Populations/Difficulties ([]string), Objectives added).
+//
+// Populations/Difficulties/Language/Objectives are pointers so the handler
+// (cmd/server/main.go) can distinguish "field absent from the payload" (nil
+// → leave the existing GameState value unchanged, for backward compatibility
+// with clients that only send a subset of the form) from "field present with
+// an empty value" (non-nil "" or [] → explicitly clear it). Contract
+// ai-generation.md §7 — without this, a client saving only part of the form
+// would silently wipe the others.
+//
+// Rétrocompatibilité rompue en v6.1.0 : POPULATION/DIFFICULTY (singuliers) ne
+// sont plus reconnus — un client v6.0.0 qui les envoie voit ces deux clés
+// ignorées par le décodage JSON (clés inconnues), les valeurs courantes sont
+// préservées, aucun repli n'est implémenté (contract ai-generation.md §3ter).
+// HiddenFields (v6.1.0, #137 Batch 2b T1.8, additive — contract game-state.md
+// §"QUIZ_HIDDEN_FIELDS") carries the TV display preference: same
+// absent/present-empty pointer semantics as the other fields, but routed to
+// the dedicated Engine.SetQuizDisplay setter, not SetQuizMeta.
 type QuizMetaPayload struct {
-	Name  string `json:"NAME"`
-	Theme string `json:"THEME"`
-	Notes string `json:"NOTES"`
+	Name         string    `json:"NAME"`
+	Theme        string    `json:"THEME"`
+	Notes        string    `json:"NOTES"`
+	Populations  *[]string `json:"POPULATIONS,omitempty"`
+	Difficulties *[]string `json:"DIFFICULTIES,omitempty"`
+	Language     *string   `json:"LANGUAGE,omitempty"`
+	Objectives   *string   `json:"OBJECTIVES,omitempty"`
+	HiddenFields *[]string `json:"HIDDEN_FIELDS,omitempty"`
+}
+
+// AIGenerationProgressPayload for AI_GENERATION_PROGRESS action (v6.1.0, #137;
+// ErrorMessage added v6.1.1, #142-adjacent verbosity fix).
+// Server → Client, /ws/admin only, emitted after every batch of an AI
+// generation job (contract ai-multi-provider.md §10). CreatedCount/SkippedCount
+// are cumulative over the whole job, not per-batch.
+type AIGenerationProgressPayload struct {
+	JobID        string `json:"JOB_ID"`
+	State        string `json:"STATE"` // "RUNNING" | "DONE" | "FAILED" | "CANCELLED"
+	BatchesDone  int    `json:"BATCHES_DONE"`
+	BatchesTotal int    `json:"BATCHES_TOTAL"`
+	CreatedCount int    `json:"CREATED_COUNT"`
+	SkippedCount int    `json:"SKIPPED_COUNT"`
+	ErrorCode    string `json:"ERROR_CODE"` // stable code (ai-generation.md §3) + "provider_quota"; "" when not applicable
+	// ErrorMessage is a human-readable detail for the admin — the sanitized
+	// provider/local error text (contract ai-generation.md §8 S2, amended):
+	// never the raw, unfiltered upstream body, but no longer a fixed generic
+	// string either. Redacted of anything matching a known API key shape,
+	// truncated to a bounded length (server.sanitizeUpstreamMessage). Only
+	// meaningful when State is FAILED; "" otherwise. /ws/admin only, same as
+	// the whole action — never reaches TV/VPlayer/buzzer.
+	ErrorMessage string `json:"ERROR_MESSAGE,omitempty"`
+	Provider     string `json:"PROVIDER"` // "anthropic" | "groq"
+}
+
+// CancelAIGenerationPayload for CANCEL_AI_GENERATION action (v6.1.0, #137).
+// Client → Server. Cancellation takes effect between batches (contract §11).
+type CancelAIGenerationPayload struct {
+	JobID string `json:"JOB_ID"`
 }
 
 // FlipMemoryCardPayload for FLIP_MEMORY_CARD action
@@ -509,13 +566,32 @@ var AdminOnlyBumperFields = []string{
 	"FIRMWARE_VERSION", "IS_OUTDATED", "OTA_STATUS", "OTA_PERCENT", "ACK_PENDING",
 }
 
+// AdminOnlyGameFields lists the fields of the "GAME" node only Admin needs —
+// stripped from that node by SerializeForWebClient, by the reduced path of
+// SerializeForVPlayer, and by the hot VPlayer fan-out path in
+// cmd/server/main.go (buildVPlayerPayloads), all from this one shared,
+// exported list so none of the three can silently drift apart from the
+// others (contracts/ws-payload-serialization.md, contracts/game-state.md
+// §"QUIZ_OBJECTIVES — champ à diffusion restreinte", v6.1.0 #137 Batch 2b).
+//
+// QUIZ_OBJECTIVES is a confidentiality rule, not a payload-size optimization:
+// the game's global objective is an animation cue for the admin/AI generator
+// and must never be readable from a TV screen or a VPlayer's dev tools, even
+// though the rest of the QUIZ_* fields are shown on the TV NEW_GAME screen.
+var AdminOnlyGameFields = []string{
+	"QUIZ_OBJECTIVES",
+}
+
 // SerializeForWebClient returns the payload with admin-only fields stripped from
-// bumpers on UPDATE messages. TV and VPlayer clients do not need firmware/OTA/ACK
-// metadata, so stripping them reduces the payload size for these high-frequency broadcasts.
+// bumpers and from the GAME node on UPDATE messages. TV and VPlayer clients do
+// not need firmware/OTA/ACK metadata nor QUIZ_OBJECTIVES, so stripping them
+// reduces the payload size (and, for QUIZ_OBJECTIVES, enforces confidentiality)
+// for these high-frequency broadcasts.
 //
 // Fields stripped per bumper on UPDATE: FIRMWARE_VERSION, IS_OUTDATED, OTA_STATUS,
-// OTA_PERCENT, ACK_PENDING. The top-level "config" key is also removed (server-side
-// config is not needed by TV/VPlayer clients).
+// OTA_PERCENT, ACK_PENDING. Fields stripped from GAME: see AdminOnlyGameFields.
+// The top-level "config" key is also removed (server-side config is not needed
+// by TV/VPlayer clients).
 //
 // The format produced by GetGameJSON() (GameData struct) uses lowercase map keys:
 //   - "bumpers" → map[mac]*Bumper  (not "BUMPERS" / slice)
@@ -542,6 +618,12 @@ func (m *Message) SerializeForWebClient() ([]byte, error) {
 					delete(bumper, field)
 				}
 			}
+		}
+	}
+	// "GAME" node: strip admin-only fields (QUIZ_OBJECTIVES, v6.1.0)
+	if gameNode, ok := raw["GAME"].(map[string]interface{}); ok {
+		for _, field := range AdminOnlyGameFields {
+			delete(gameNode, field)
 		}
 	}
 	// "config" is a server-side key not needed by TV/VPlayer clients
@@ -601,6 +683,15 @@ func (m *Message) SerializeForVPlayer(playerID string) ([]byte, error) {
 	gameNode, ok := raw["GAME"].(map[string]interface{})
 	if !ok {
 		return m.SerializeForWebClient()
+	}
+	// Strip admin-only GAME fields (QUIZ_OBJECTIVES, v6.1.0) — this reduced
+	// path builds its own "raw" independently of SerializeForWebClient, so
+	// the same list must be applied here too (contracts/ws-payload-serialization.md).
+	// gameNode is a reference into raw (map values from json.Unmarshal into
+	// map[string]interface{} are shared, not copied), so deleting from it
+	// here is reflected in raw["GAME"] below without reassignment.
+	for _, field := range AdminOnlyGameFields {
+		delete(gameNode, field)
 	}
 	phase, _ := gameNode["PHASE"].(string)
 	if !vplayerReducedPhases[phase] {

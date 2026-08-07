@@ -624,6 +624,189 @@ Le serveur v3.0.0 gere deja les deux protocoles. Aucune modification serveur n'e
 
 ---
 
+## Action UPDATE_QUIZ_META (v6.0.0, Batch 2b #137)
+
+Mise à jour des métadonnées globales du quiz (thème, populations cibles, difficultés, objectifs, affichage TV).
+
+### Payload
+
+```json
+{
+  "ACTION": "UPDATE_QUIZ_META",
+  "MSG": {
+    "NAME": "Quiz Cinéma 80s",
+    "THEME": "Cinéma français des années 80",
+    "NOTES": "Soirée entre amis",
+    "POPULATIONS": ["Adulte (18-64 ans)", "Senior (65+)"],
+    "DIFFICULTIES": ["Moyen", "Difficile"],
+    "OBJECTIVES": "Questions sur films de réalisateurs femmes",
+    "HIDDEN_FIELDS": ["ANSWER"],
+    "LANGUAGE": "Français"
+  }
+}
+```
+
+### Champs
+
+| Champ | Type | Obligatoire | Description | Depuis |
+|-------|------|-------------|-------------|--------|
+| `NAME` | string | ❌ | Titre du quiz | v4.0.0 |
+| `THEME` | string | ❌ | Thème principal | v4.0.0 |
+| `NOTES` | string | ❌ | Notes supplémentaires | v4.0.0 |
+| `POPULATIONS` | []string | ❌ | Populations cibles (tableau, ex: `["Adulte", "Senior"]`) | v6.0.0 #8, plural depuis Batch 2b #137 |
+| `DIFFICULTIES` | []string | ❌ | Difficultés visées (tableau, ex: `["Facile", "Moyen"]`) | v6.0.0 #8, plural depuis Batch 2b #137 |
+| `OBJECTIVES` | string | ❌ | Objectifs/thème pédagogique (jamais diffusé à `/ws/tv` ou `/ws/player`) | Batch 2b #137 |
+| `HIDDEN_FIELDS` | []string | ❌ | Champs question à masquer sur TV (ex: `["ANSWER"]`) | Batch 2b #137 |
+| `LANGUAGE` | string | ❌ | Langue du quiz (Français par défaut) | v6.0.0 |
+
+### Sémantique — **CRITIQUE**
+
+**« Champ absent = inchangé »** (par champ)
+
+- Un champ **absent** du payload ne modifie **pas** la valeur stockée — elle reste inchangée
+- Un champ **présent** remplace la valeur stockée (même si vide ou tableau vide `[]`)
+- Cette sémantique garantit la rétrocompatibilité : les clients antérieurs (v4.0.0–v5.x) envoyant seulement `NAME`/`THEME`/`NOTES` ne supprimaient pas accidentellement les nouveaux champs
+
+**Exemples** :
+
+```json
+// Scénario 1 : Update seulement NAME (v5.x client)
+{ "ACTION": "UPDATE_QUIZ_META", "MSG": { "NAME": "Nouveau titre" } }
+→ NAME change, THEME/NOTES/POPULATIONS/DIFFICULTIES/OBJECTIVES/HIDDEN_FIELDS/LANGUAGE inchangés
+
+// Scénario 2 : Update NAME + POPULATIONS (v6.1.0+ client, pluriel)
+{ "ACTION": "UPDATE_QUIZ_META", "MSG": { "NAME": "...", "POPULATIONS": ["Adulte", "Senior"] } }
+→ NAME et POPULATIONS changent, autres champs inchangés
+
+// Scénario 3 : Effacer un champ (le passer à vide)
+{ "ACTION": "UPDATE_QUIZ_META", "MSG": { "NOTES": "", "OBJECTIVES": "", "HIDDEN_FIELDS": [] } }
+→ NOTES, OBJECTIVES, HIDDEN_FIELDS deviennent vides, autres champs inchangés
+
+// Scénario 4 : Ancien format singulier (dépréciée Batch 2b)
+{ "ACTION": "UPDATE_QUIZ_META", "MSG": { "POPULATION": "Adulte" } }
+→ Rejeté ou ignoré par serveur v6.1.0+ (utiliser "POPULATIONS" pluriel)
+```
+
+### Diffusion par endpoint
+
+**`/ws/admin`** : Message `UPDATE` avec **tous les champs** incluant `OBJECTIVES` (full payload)
+
+**`/ws/tv` et `/ws/player`** : Message `UPDATE` avec **tous les champs sauf `OBJECTIVES`** (jamais transmis, confidentialité pédagogique). Reçoivent `HIDDEN_FIELDS` pour filtrage côté rendu.
+
+Le serveur émet toujours le GameState complet (jamais de payload partiel) à chaque `UPDATE_QUIZ_META`, sérialisé sans `omitempty` sur tous les champs.
+
+### Affichage
+
+- **QuestionsPage** : Les 6 champs éditables dans la section "Quiz" en haut de page
+- **TV NEW_GAME** : Affiche les 3 nouveaux champs uniquement s'ils sont **non-vides**, en ligne compacte de badges
+
+---
+
+## Action AI_GENERATION_PROGRESS (v6.1.1, post-QUALIF #137)
+
+Progression d'une génération de questions via l'API Claude (Anthropic) ou Groq (gratuit).
+
+### Endpoint
+
+`/ws/admin` uniquement — jamais `/ws/tv` ou `/ws/player`.
+
+### Payload
+
+```json
+{
+  "ACTION": "AI_GENERATION_PROGRESS",
+  "MSG": {
+    "STATE": "RUNNING",
+    "BATCH_NUMBER": 2,
+    "TOTAL_BATCHES": 5,
+    "CREATED_COUNT": 40,
+    "SKIPPED_COUNT": 0,
+    "ERROR_CODE": "",
+    "ERROR_MESSAGE": ""
+  }
+}
+```
+
+### Champs
+
+| Champ | Type | Description | États possibles |
+|-------|------|-------------|-----------------|
+| `STATE` | string | État actuel du job | `RUNNING`, `DONE`, `FAILED`, `CANCELLED` |
+| `BATCH_NUMBER` | int | Numéro du lot en cours (base 1) | ≥ 1 |
+| `TOTAL_BATCHES` | int | Nombre total de lots prévu | ≥ 1 |
+| `CREATED_COUNT` | int | Nombre de questions créées jusqu'ici | ≥ 0 |
+| `SKIPPED_COUNT` | int | Nombre de questions rejetées/invalides | ≥ 0 |
+| `ERROR_CODE` | string | Code d'erreur stable (machine-friendly) | Vide, ou `no_api_key`, `api_key_rejected`, `quota_exceeded`, `upstream_error`, `network_error`, etc. — vide si `STATE != FAILED` |
+| `ERROR_MESSAGE` | string | Message d'erreur réel du provider, assaini (clés API masquées) | Vide sauf `STATE = FAILED` — exemple Groq #142 (avant correction) : `"discriminator: multiple candidate properties CATEGORY, DIFFICULTY, TYPE [discriminator_multiple_candidates]"` |
+
+### Sémantique
+
+- **STATE transitions** : `RUNNING` → (`DONE` \| `FAILED` \| `CANCELLED`)
+- **ERROR_MESSAGE** :
+  - **Absent** (`omitempty`) quand `STATE != FAILED` (pas de message d'erreur généré)
+  - **Présent** quand `STATE = FAILED` — message texte réel du provider (Anthropic ou Groq API response body) avec :
+    - Clés API filtrées (regex `sk-ant-…` / `gsk_…` → `[redacted]`)
+    - Troncature UTF-8 safe si > 500 runes
+    - Jamais exposé à la TV ou VPlayer (endpoint `/ws/admin` uniquement)
+
+### Exemple de flux complet
+
+**Succès** :
+```json
+{ "ACTION": "AI_GENERATION_PROGRESS", "MSG": { "STATE": "RUNNING", "BATCH_NUMBER": 1, "TOTAL_BATCHES": 5, "CREATED_COUNT": 0, "SKIPPED_COUNT": 0 } }
+{ "ACTION": "AI_GENERATION_PROGRESS", "MSG": { "STATE": "RUNNING", "BATCH_NUMBER": 2, "TOTAL_BATCHES": 5, "CREATED_COUNT": 40, "SKIPPED_COUNT": 0 } }
+...
+{ "ACTION": "AI_GENERATION_PROGRESS", "MSG": { "STATE": "DONE", "BATCH_NUMBER": 5, "TOTAL_BATCHES": 5, "CREATED_COUNT": 200, "SKIPPED_COUNT": 0, "ERROR_CODE": "", "ERROR_MESSAGE": "" } }
+```
+
+**Erreur avec détail** (Groq #142, post-QUALIF v6.1.1) :
+```json
+{ "ACTION": "AI_GENERATION_PROGRESS", "MSG": { "STATE": "RUNNING", "BATCH_NUMBER": 1, "TOTAL_BATCHES": 5, "CREATED_COUNT": 0, "SKIPPED_COUNT": 0 } }
+{ "ACTION": "AI_GENERATION_PROGRESS", "MSG": { "STATE": "FAILED", "BATCH_NUMBER": 1, "TOTAL_BATCHES": 5, "CREATED_COUNT": 0, "SKIPPED_COUNT": 0, "ERROR_CODE": "upstream_error", "ERROR_MESSAGE": "invalid JSON schema for response_format: 'buzz_questions': /properties/questions/items/anyOf: anyOf disambiguation failed: anyOf: discriminator: multiple candidate properties CATEGORY, DIFFICULTY, TYPE [discriminator_multiple_candidates]" } }
+```
+
+Frontend affiche :
+- Message générique : `"Le service IA a renvoyé une erreur"`
+- Panneau détail technique (repliable) : Le message exact du provider
+
+**Arrêt utilisateur** :
+```json
+{ "ACTION": "AI_GENERATION_PROGRESS", "MSG": { "STATE": "RUNNING", "BATCH_NUMBER": 2, "TOTAL_BATCHES": 5, "CREATED_COUNT": 40, "SKIPPED_COUNT": 0 } }
+{ "ACTION": "AI_GENERATION_PROGRESS", "MSG": { "STATE": "CANCELLED", "BATCH_NUMBER": 2, "TOTAL_BATCHES": 5, "CREATED_COUNT": 40, "SKIPPED_COUNT": 0, "ERROR_CODE": "", "ERROR_MESSAGE": "" } }
+```
+
+Frontend affiche un panneau de résumé (40 questions créées, arrêt gracieux).
+
+### Diffusion et visibilité
+
+- **`/ws/admin`** : Reçoit tous les messages et tous les champs (incluant `ERROR_MESSAGE`)
+- **`/ws/tv` et `/ws/player`** : N'reçoivent JAMAIS `AI_GENERATION_PROGRESS` (action absente de la table de routage)
+
+### Affichage admin (QuestionsPage)
+
+**Phase RUNNING** :
+- Barre de progression : `BATCH_NUMBER / TOTAL_BATCHES`
+- Compteurs : `CREATED_COUNT` questions, `SKIPPED_COUNT` rejetées
+- Bouton **"Arrêter"** actif
+
+**Phase DONE** :
+- Message succès avec total créé
+- Bouton **"Nouvelle génération"** (v6.1.1) — relance le formulaire
+- Bouton **"Fermer"** — ferme la modale
+
+**Phase FAILED** :
+- Message générique d'erreur (dérivé de `ERROR_CODE`)
+- Panneau repliable **"Détail technique"** affichant `ERROR_MESSAGE` (si présent)
+- Bouton **"Réessayer"** — corrigez/relancez
+- Bouton **"Fermer"**
+
+**Phase CANCELLED** :
+- Message résumé (X questions créées avant arrêt)
+- Bouton **"Nouvelle génération"** (v6.1.1)
+- Bouton **"Fermer"**
+
+---
+
 ## References
 
 - [RFC 6455 - WebSocket Protocol](https://datatracker.ietf.org/doc/html/rfc6455)

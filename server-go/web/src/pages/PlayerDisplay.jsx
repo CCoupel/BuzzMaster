@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, useCallback, useRef } from 'react'
+import { Fragment, useEffect, useMemo, useState, useCallback, useRef } from 'react'
 import NoSleep from 'nosleep.js'
 import { motion, AnimatePresence } from 'framer-motion'
 import confetti from 'canvas-confetti'
@@ -30,6 +30,11 @@ const BUTTON_TO_QCM_COLOR = {
   'C': 'YELLOW',
   'D': 'BLUE',
 }
+
+// v6.1.0 (#137, T2.4) — écran NEW_GAME statique (contrainte TV, aucun scroll) :
+// au plus 2 badges par famille (publics/difficultés), le surplus rendu en
+// "+N" (maquette 137-batch2b-globaux-multiples.html §vue 3, règle 2).
+const QUIZ_BADGE_CAP_PER_FAMILY = 2
 
 // Renders category badge (icon+label or image+label) OR ✋ PRÉPAREZ-VOUS fallback.
 // Used by all game types in READY phase — single source of truth for READY display.
@@ -188,6 +193,28 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
 
   // NEW_GAME backgrounds rotation (client-side, based on each image's duration)
   const newGameBgs = gameState.newGameBackgrounds || []
+
+  // v6.1.0 (#137, T2.4) — familles de badges de l'écran NEW_GAME : on masque
+  // D'ABORD (QUIZ_HIDDEN_FIELDS, préférence d'affichage — les valeurs restent
+  // dans le payload TV, cf. game-state.md "diffusion — préférence d'affichage
+  // ≠ confidentialité"), puis on plafonne CE QUI RESTE (maquette §vue 3,
+  // règle 3 : "les deux règles se composent dans cet ordre"). THEME est géré
+  // séparément (bloc .new-game-quiz-theme, pas une famille de badges).
+  const quizHiddenFields = gameState.quizHiddenFields || []
+  const themeHiddenFromTV = quizHiddenFields.includes('THEME')
+  const quizBadgeFamilies = useMemo(() => {
+    const families = []
+    if (!quizHiddenFields.includes('POPULATIONS') && gameState.quizPopulations?.length > 0) {
+      families.push({ key: 'populations', values: gameState.quizPopulations })
+    }
+    if (!quizHiddenFields.includes('DIFFICULTIES') && gameState.quizDifficulties?.length > 0) {
+      families.push({ key: 'difficulties', values: gameState.quizDifficulties })
+    }
+    if (!quizHiddenFields.includes('LANGUAGE') && gameState.quizLanguage) {
+      families.push({ key: 'language', values: [gameState.quizLanguage] })
+    }
+    return families
+  }, [quizHiddenFields, gameState.quizPopulations, gameState.quizDifficulties, gameState.quizLanguage])
   useEffect(() => {
     if (newGameBgs.length <= 1) return
     const current = newGameBgs[ngBgIndex] || newGameBgs[0]
@@ -1030,7 +1057,7 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
               Préparez-vous !
             </motion.p>
 
-            {(gameState.quizName || gameState.quizTheme) && (
+            {(gameState.quizName || (!themeHiddenFromTV && gameState.quizTheme)) && (
               <motion.div
                 className="new-game-meta"
                 initial={{ opacity: 0, y: 20 }}
@@ -1040,7 +1067,9 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
                 {gameState.quizName && (
                   <div className="new-game-quiz-name">{gameState.quizName}</div>
                 )}
-                {gameState.quizTheme && (
+                {/* QUIZ_NAME n'est pas maskable (H4, contract game-state.md) —
+                    seul le thème l'est via QUIZ_HIDDEN_FIELDS. */}
+                {!themeHiddenFromTV && gameState.quizTheme && (
                   <div className="new-game-quiz-theme">{gameState.quizTheme}</div>
                 )}
               </motion.div>
@@ -1053,6 +1082,36 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
                 transition={{ delay: 0.5 }}
               >
                 {gameState.quizNotes}
+              </motion.div>
+            )}
+            {/* v6.1.0 (#137, T2.4) — Publics/Difficultés/Langue : une ligne
+                compacte de badges, plafonnée à 2 par famille ("+N" pour le
+                surplus) et respectant QUIZ_HIDDEN_FIELDS (masquer d'abord,
+                plafonner ensuite ce qui reste — quizBadgeFamilies ci-dessus).
+                Contrainte TV STATIQUE (CLAUDE.md) : overflow hidden hérité de
+                .new-game-phase, jamais de nouvelle ligne par champ. Les
+                quatre champs masqués -> quizBadgeFamilies est vide -> la
+                rangée entière disparaît, sans bloc vide résiduel. */}
+            {quizBadgeFamilies.length > 0 && (
+              <motion.div
+                className="new-game-badges"
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.6 }}
+              >
+                {quizBadgeFamilies.map((family, index) => (
+                  <Fragment key={family.key}>
+                    {index > 0 && <span className="new-game-badge-sep" aria-hidden="true" />}
+                    {family.values.slice(0, QUIZ_BADGE_CAP_PER_FAMILY).map(value => (
+                      <span key={value} className="new-game-badge">{value}</span>
+                    ))}
+                    {family.values.length > QUIZ_BADGE_CAP_PER_FAMILY && (
+                      <span className="new-game-badge new-game-badge-more">
+                        +{family.values.length - QUIZ_BADGE_CAP_PER_FAMILY}
+                      </span>
+                    )}
+                  </Fragment>
+                ))}
               </motion.div>
             )}
           </motion.div>

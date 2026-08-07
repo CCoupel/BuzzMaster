@@ -35,6 +35,15 @@ function nextReconnectDelay() {
   return RECONNECT_INTERVAL + (Math.random() * 2 - 1) * jitter
 }
 
+// v6.1.0 (#137, contract game-state.md risque R2) — un GameState diffusé porte
+// toujours QUIZ_POPULATIONS/QUIZ_DIFFICULTIES/QUIZ_HIDDEN_FIELDS comme
+// tableaux (jamais null côté serveur), mais un serveur partiellement déployé
+// ou un message malformé pourrait envoyer autre chose : une valeur absente ou
+// d'un type inattendu devient [] plutôt que de casser l'itération côté TV.
+function normalizeQuizArray(value) {
+  return Array.isArray(value) ? value : []
+}
+
 export default function useWebSocket(endpoint = '/ws/admin') {
   const [status, setStatus] = useState('disconnected')
   const [gameState, setGameState] = useState({
@@ -72,6 +81,11 @@ export default function useWebSocket(endpoint = '/ws/admin') {
     quizName: '', // Quiz name (v4.0.0)
     quizTheme: '', // Quiz theme (v4.0.0)
     quizNotes: '', // Quiz free-text notes (v4.0.0)
+    quizPopulations: [], // Quiz target populations, multi-value (v6.1.0, #137 — replaces quizPopulation string)
+    quizDifficulties: [], // Quiz difficulties, multi-value (v6.1.0, #137 — replaces quizDifficulty string)
+    quizLanguage: '', // Quiz language (v6.0.0, #8)
+    quizObjectives: '', // Quiz global objectives (v6.1.0, #137) — admin-only, never sent to /ws/tv or /ws/player
+    quizHiddenFields: [], // Fields hidden from the TV NEW_GAME screen (v6.1.0, #137), subset of THEME/POPULATIONS/DIFFICULTIES/LANGUAGE
     newGameBackgrounds: [], // Multi-image backgrounds for NEW_GAME screen (v4.0.4)
     // ARDOISE fields (v5.6.0)
     ARDOISE_ANSWERS: {}, // Map of teamName -> { TEXT, SUBMITTED_AT }
@@ -93,6 +107,13 @@ export default function useWebSocket(endpoint = '/ws/admin') {
   const [playerEvictedStatus, setPlayerEvictedStatus] = useState(null)
   const [logs, setLogs] = useState([])
   const [firmwareInfo, setFirmwareInfo] = useState(null) // { VERSION, FILENAME, SIZE, EXISTS }
+  // #137 — état du job de génération IA en tâche de fond (un seul job global,
+  // tout admin confondu, contract ai-multi-provider.md §10/§12). null = aucun
+  // job connu. Alimenté par AI_GENERATION_PROGRESS, émis par le serveur après
+  // chaque lot ET immédiatement à la connexion d'un client admin si un job
+  // est en cours (permet à AIGenerateModal de se ré-attacher après un
+  // rechargement de page sans état à reconstruire côté client).
+  const [aiJob, setAiJob] = useState(null) // { jobId, state, batchesDone, batchesTotal, createdCount, skippedCount, errorCode, errorMessage, provider } | null
 
   const wsRef = useRef(null)
   const logCallbackRef = useRef(null)
@@ -260,6 +281,15 @@ export default function useWebSocket(endpoint = '/ws/admin') {
             quizName: MSG.GAME.QUIZ_NAME !== undefined ? MSG.GAME.QUIZ_NAME : prev.quizName,
             quizTheme: MSG.GAME.QUIZ_THEME !== undefined ? MSG.GAME.QUIZ_THEME : prev.quizTheme,
             quizNotes: MSG.GAME.QUIZ_NOTES !== undefined ? MSG.GAME.QUIZ_NOTES : prev.quizNotes,
+            // v6.1.0 (#137) — publics/difficultés multiples, objectif global,
+            // visibilité TV par champ. QUIZ_OBJECTIVES est diffusion restreinte
+            // (game-state.md) : absent sur /ws/tv et /ws/player, d'où le repli
+            // sur prev (reste '' par défaut sur ces clients, jamais écrasé).
+            quizPopulations: normalizeQuizArray(MSG.GAME.QUIZ_POPULATIONS),
+            quizDifficulties: normalizeQuizArray(MSG.GAME.QUIZ_DIFFICULTIES),
+            quizLanguage: MSG.GAME.QUIZ_LANGUAGE !== undefined ? MSG.GAME.QUIZ_LANGUAGE : prev.quizLanguage,
+            quizObjectives: MSG.GAME.QUIZ_OBJECTIVES !== undefined ? MSG.GAME.QUIZ_OBJECTIVES : prev.quizObjectives,
+            quizHiddenFields: normalizeQuizArray(MSG.GAME.QUIZ_HIDDEN_FIELDS),
           }))
         }
         if (MSG?.teams !== undefined) setTeams(MSG.teams ?? {})
@@ -527,6 +557,32 @@ export default function useWebSocket(endpoint = '/ws/admin') {
         }
         break
 
+      case 'AI_GENERATION_PROGRESS':
+        // #137 — progression du job de génération IA en tâche de fond
+        // (contract ai-multi-provider.md §10). Un seul job global : ce
+        // message écrase l'état précédent sans le fusionner (STATE fait
+        // autorité). Émis après chaque lot ET à la connexion si un job est
+        // déjà en cours — c'est ce second cas qui permet le ré-attachement
+        // après un rechargement de page (AIGenerateModal lit `aiJob` au
+        // montage, pas de reconstruction d'état côté client).
+        if (MSG) {
+          setAiJob({
+            jobId: MSG.JOB_ID,
+            state: MSG.STATE,
+            batchesDone: MSG.BATCHES_DONE ?? 0,
+            batchesTotal: MSG.BATCHES_TOTAL ?? 0,
+            createdCount: MSG.CREATED_COUNT ?? 0,
+            skippedCount: MSG.SKIPPED_COUNT ?? 0,
+            errorCode: MSG.ERROR_CODE || '',
+            // issue #142 — détail assaini du message d'erreur provider,
+            // présent uniquement quand STATE=FAILED (omitempty côté serveur,
+            // absent et non '' sur les autres états — || '' couvre les deux).
+            errorMessage: MSG.ERROR_MESSAGE || '',
+            provider: MSG.PROVIDER || '',
+          })
+        }
+        break
+
       default:
         console.log('Unknown action:', ACTION)
     }
@@ -671,9 +727,33 @@ export default function useWebSocket(endpoint = '/ws/admin') {
     sendMessage('NEW_GAME', {})
   }, [sendMessage])
 
-  // Quiz metadata: update name, theme, notes
-  const updateQuizMeta = useCallback((name, theme, notes) => {
-    sendMessage('UPDATE_QUIZ_META', { NAME: name, THEME: theme, NOTES: notes })
+  // Quiz metadata: update name, theme, notes, populations, difficulties,
+  // language, objectives, hiddenFields (v6.1.0, #137 — payload étendu à 8
+  // champs, contract §7). Les 5 derniers paramètres sont optionnels pour
+  // compat arrière des appelants existants ; QuestionsPage envoie désormais
+  // toujours les 8.
+  // Fix M-1 (code-review 20260805-163118) : des défauts `= ''`/`= []`
+  // enverraient explicitement ces champs vides sur un appel partiel — le
+  // backend distingue "absent" (conservé) de "présent vide" (effacé,
+  // contract §7). N'inclure ces clés dans le message que si explicitement
+  // fournies, pour que la compat arrière promise par le commentaire
+  // ci-dessus soit réelle et pas seulement documentée.
+  const updateQuizMeta = useCallback((name, theme, notes, populations, difficulties, language, objectives, hiddenFields) => {
+    const msg = { NAME: name, THEME: theme, NOTES: notes }
+    if (populations !== undefined) msg.POPULATIONS = populations
+    if (difficulties !== undefined) msg.DIFFICULTIES = difficulties
+    if (language !== undefined) msg.LANGUAGE = language
+    if (objectives !== undefined) msg.OBJECTIVES = objectives
+    if (hiddenFields !== undefined) msg.HIDDEN_FIELDS = hiddenFields
+    sendMessage('UPDATE_QUIZ_META', msg)
+  }, [sendMessage])
+
+  // #137 — arrête le job de génération IA en cours. Prend effet entre deux
+  // lots (contract §11) ; les questions déjà écrites sont conservées. Le
+  // passage à l'état CANCELLED arrive de façon asynchrone via
+  // AI_GENERATION_PROGRESS, pas en retour de cet appel.
+  const cancelAiGeneration = useCallback((jobId) => {
+    sendMessage('CANCEL_AI_GENERATION', { JOB_ID: jobId })
   }, [sendMessage])
 
   // Logs: Subscribe to log updates
@@ -723,6 +803,7 @@ export default function useWebSocket(endpoint = '/ws/admin') {
     version,
     clientCounts,
     firmwareInfo,
+    aiJob,
     // Actions
     sendMessage,
     startGame,
@@ -747,6 +828,8 @@ export default function useWebSocket(endpoint = '/ws/admin') {
     // New game / Quiz meta
     newGame,
     updateQuizMeta,
+    // AI generation (#137)
+    cancelAiGeneration,
     // VPlayer enrollment
     showQRCode,
     hideQRCode,

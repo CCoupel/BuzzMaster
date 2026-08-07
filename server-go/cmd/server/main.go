@@ -1058,8 +1058,41 @@ func (a *App) handleWebMessage(incoming *protocol.IncomingMessage) {
 			server.LogWarn(game.LogComponentApp, "Failed to parse UPDATE_QUIZ_META payload: %v", err)
 			return
 		}
-		a.engine.SetQuizMeta(payload.Name, payload.Theme, payload.Notes)
+		// Absent = unchanged for the additive fields (contract ai-generation.md
+		// §7): a client sending only a subset of the form must not wipe the
+		// rest. v6.1.0 (#137 Batch 2b): Population/Difficulty (string)
+		// replaced by Populations/Difficulties ([]string); Objectives added —
+		// same absent/present-empty distinction applies to all four.
+		current := a.engine.GetState()
+		populations := current.QuizPopulations
+		if payload.Populations != nil {
+			populations = *payload.Populations
+		}
+		difficulties := current.QuizDifficulties
+		if payload.Difficulties != nil {
+			difficulties = *payload.Difficulties
+		}
+		language := current.QuizLanguage
+		if payload.Language != nil {
+			language = *payload.Language
+		}
+		objectives := current.QuizObjectives
+		if payload.Objectives != nil {
+			objectives = *payload.Objectives
+		}
+		a.engine.SetQuizMeta(payload.Name, payload.Theme, payload.Notes, populations, difficulties, language, objectives)
+		// HIDDEN_FIELDS (v6.1.0, #137 Batch 2b T1.8) goes through the
+		// dedicated SetQuizDisplay setter, not SetQuizMeta — same
+		// absent = unchanged rule: only call it when the key was present.
+		if payload.HiddenFields != nil {
+			a.engine.SetQuizDisplay(*payload.HiddenFields)
+		}
 		a.broadcastUpdate()
+
+	// CANCEL_AI_GENERATION is handled directly in
+	// internal/server/websocket.go's readPump (contract ai-multi-provider.md
+	// §11) — self-contained in package server so it works whether or not an
+	// App-level dispatch loop is present (package-level tests included).
 
 	default:
 		server.LogWarn(game.LogComponentApp, "Unknown web action: %s", msg.Action)
@@ -2090,6 +2123,11 @@ func (a *App) handleSetClientType(clientID string, msg *protocol.Message) {
 	}
 
 	a.wsHub.SetClientType(clientID, clientType)
+	// contract ai-multi-provider.md §10 (pushing AI_GENERATION_PROGRESS to a
+	// newly-identified admin) is handled uniformly inside
+	// internal/server.WebSocketHub.OnClientRegistered, wired in
+	// server.NewHTTPServer — covers this legacy SET_CLIENT_TYPE path AND the
+	// dedicated /ws/admin endpoint from one place.
 
 	// Broadcast updated counts
 	a.broadcastClientCounts()
@@ -2675,7 +2713,17 @@ func buildVPlayerPayloads(msg *protocol.Message, recipients []server.VPlayerReci
 			return nil, false
 		}
 	}
-	gameRaw := envelope["GAME"]
+	// Strip admin-only GAME fields (QUIZ_OBJECTIVES, v6.1.0 #137 Batch 2b)
+	// once here, before the per-recipient loop — this hot path bypasses
+	// SerializeForWebClient/SerializeForVPlayer entirely (it keeps GAME as
+	// json.RawMessage and splices it in verbatim, see buildVPlayerMessageBytes
+	// below), so without this call gameRaw would carry QUIZ_OBJECTIVES to
+	// every VPlayer during PREPARE/READY — the confidentiality rule from
+	// contracts/game-state.md would be enforced everywhere except here.
+	gameRaw, err := stripAdminOnlyGameFields(envelope["GAME"])
+	if err != nil {
+		return nil, false
+	}
 	teamsRaw := envelope["teams"]
 
 	payloads := make(map[string][]byte, len(recipients))
@@ -2705,6 +2753,26 @@ func buildVPlayerPayloads(msg *protocol.Message, recipients []server.VPlayerReci
 	}
 
 	return payloads, true
+}
+
+// stripAdminOnlyGameFields returns a copy of the "GAME" node JSON with
+// protocol.AdminOnlyGameFields (QUIZ_OBJECTIVES, v6.1.0 #137 Batch 2b)
+// removed. Called once per broadcastUpdateToVPlayers fan-out (not per
+// recipient) by buildVPlayerPayloads, since this hot path keeps GAME as
+// json.RawMessage and splices it into every recipient's frame verbatim
+// (buildVPlayerMessageBytes) — it never goes through
+// Message.SerializeForWebClient/SerializeForVPlayer, which apply the same
+// list on their own code paths (internal/protocol/messages.go). All three
+// sites must agree (contracts/ws-payload-serialization.md).
+func stripAdminOnlyGameFields(raw json.RawMessage) (json.RawMessage, error) {
+	var gameNode map[string]interface{}
+	if err := json.Unmarshal(raw, &gameNode); err != nil {
+		return nil, err
+	}
+	for _, field := range protocol.AdminOnlyGameFields {
+		delete(gameNode, field)
+	}
+	return json.Marshal(gameNode)
 }
 
 // buildVPlayerMessageBytes assembles the final WebSocket frame for one

@@ -2552,6 +2552,51 @@
   backdrop-filter: blur(4px);
 }
 
+/* v6.0.0 (#8) — Population/Difficulté/Langue : ligne compacte de badges,
+   contrainte TV STATIQUE respectée (overflow hidden hérité de
+   .new-game-phase, unités viewport, flex-wrap plutôt qu'une ligne par
+   champ). Affichage conditionnel par champ — cf. PlayerDisplay.jsx. */
+.new-game-badges {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 0.8vh 1vw;
+  max-width: 80vw;
+}
+
+.new-game-badge {
+  font-size: clamp(0.7rem, 1.6vw, 1.1rem);
+  font-weight: 600;
+  color: #ffffff;
+  text-shadow: 0 2px 6px rgba(0, 0, 0, 0.8);
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  border-radius: 999px;
+  padding: 0.3rem 1rem;
+  backdrop-filter: blur(4px);
+  white-space: nowrap;
+}
+
+/* v6.1.0 (#137, T2.4) — "+N" (surplus au-delà du plafond par famille) et
+   séparateur entre familles (publics / difficultés / langue), sans quoi les
+   badges de familles différentes se confondent en une seule bouillie de
+   pastilles identiques. */
+.new-game-badge-more {
+  background: rgba(255, 255, 255, 0.05);
+  border-style: dashed;
+  color: rgba(255, 255, 255, 0.82);
+}
+
+.new-game-badge-sep {
+  width: 1px;
+  height: 1.6em;
+  background: rgba(255, 255, 255, 0.28);
+  align-self: center;
+}
+
 /* ===== ENROLL PHASE ===== */
 .enroll-phase {
   height: 100%;

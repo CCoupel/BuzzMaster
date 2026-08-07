@@ -2,6 +2,274 @@
 
 ---
 
+## [20260807b] — Fix : schéma JSON rejeté par Groq, discriminator ambigu (issue #142, v6.1.1)
+
+> Bug bloquant confirmé et corrigé — 100% des générations réelles via Groq échouaient,
+> quels que soient les paramètres. Cause racine confirmée par appel réel à l'API Groq
+> (2026-08-07), pas une hypothèse : voir `ai-multi-provider.md` §7 (amendé) pour le mécanisme
+> exact. **Aucun [BREAKING]** — comportement fonctionnel inchangé, seule la structure du schéma
+> envoyé à Groq change, et une vérification serveur compense la restriction perdue.
+
+- **[CHANGED]** `contracts/ai-multi-provider.md` §7 — remplace la spéculation précédente
+  (`MOTION_CARDS.DIFFICULTY` entier, jamais le vrai problème) par le mécanisme confirmé :
+  Groq compte comme candidat discriminant toute propriété `required` + `enum`/`const` **commune
+  à toutes les branches** de l'`anyOf`, sans vérifier si l'ensemble de valeurs varie réellement.
+  `CATEGORY`/`DIFFICULTY` (identiques dans les 5 branches) et `TYPE` (const distinct) étaient
+  candidats ensemble → rejet. `groqProvider.AdaptSchema` retire `enum` de `CATEGORY`/`DIFFICULTY`
+  pour Groq uniquement ; `TYPE` devient l'unique discriminant.
+- **[CHANGED]** `contracts/ai-generation.md` §5.1 — nouvelle vérification serveur : `DIFFICULTY`
+  doit appartenir aux `difficulties` de la requête (compense la restriction `enum` perdue côté
+  schéma Groq ; `CATEGORY` avait déjà cette vérification, pas `DIFFICULTY`). Appliquée aux deux
+  providers par cohérence, sans effet observable sur Anthropic (son schéma garde l'`enum`).
+- Confirmé sans régression pour Anthropic (chemin `AdaptSchema` séparé, inchangé) et validé par
+  appel réel pour les 5 types générables (SPEEDY/QCM/MEMORY/MEMOTION/ARDOISE).
+
+---
+
+## [20260807] — Verbosité des erreurs de génération IA (issue #142, v6.1.1)
+
+> Retour utilisateur QUALIF : les erreurs de génération IA n'étaient visibles côté admin que via
+> un code stable générique (`ERROR_CODE`) — le détail réel (ex. schéma JSON rejeté par Groq,
+> issue #142) n'était accessible qu'en ajoutant une trace de diagnostic temporaire dans le code,
+> retirée ensuite. **Aucun [BREAKING]** — champ additif uniquement.
+
+- **[NEW]** `AI_GENERATION_PROGRESS.ERROR_MESSAGE` (string) — détail lisible de l'erreur,
+  **assaini**, présent uniquement quand `STATE = "FAILED"`. Contenu : le message d'erreur réel du
+  provider (`.error.message` Anthropic/Groq) quand disponible, sinon le message générique
+  précédent en repli. `/ws/admin` uniquement, comme le reste de l'action.
+- **[CHANGED]** `contracts/ai-generation.md` §8 S2 — la règle « le corps d'erreur du provider
+  n'est pas relayé tel quel » est amendée : il **peut** désormais être relayé, assaini
+  (`server.sanitizeUpstreamMessage` : substrings au format d'une clé API connue remplacées par
+  `[redacted]`, message tronqué à 500 caractères) et uniquement via le canal admin ci-dessus —
+  jamais une réponse HTTP synchrone, jamais `/ws/tv`/`/ws/player`/`/ws/buzzer`. La règle sur la
+  clé elle-même est inchangée : elle n'apparaît dans aucun corps de réponse provider en premier
+  lieu (transmise seulement via l'en-tête `Authorization`) ; le filtre est une défense en
+  profondeur, pas le mécanisme garantissant son absence.
+
+---
+
+## [20260806b] — Visibilité TV par champ (#137 Batch 2b, v6.1.0)
+
+> Complément **strictement additif** à l'entrée `[20260806]` ci-dessous, demandé après
+> présentation de la maquette : l'animateur choisit, champ par champ, ce qui est annoncé sur
+> l'écran TV NEW_GAME. **Aucun [BREAKING]** — rien de ce qui est déjà implémenté n'est invalidé.
+> Rapport : `_work/reports/planner-20260806-152640-tv-visibility.md`.
+
+- **[NEW]** `GameState.QUIZ_HIDDEN_FIELDS` (string[]) — champs **non** affichés sur l'écran TV
+  NEW_GAME, valeurs ⊂ `THEME` / `POPULATIONS` / `DIFFICULTIES` / `LANGUAGE`. Liste vide (défaut)
+  = tout est affiché. Sérialisé toujours, jamais `null`.
+  *Forme choisie contre quatre booléens `QUIZ_DISPLAY_*` : le défaut voulu étant « affiché », des
+  booléens auraient exigé de forcer `true` à chaque construction/réinitialisation du state — un
+  chemin oublié masquant silencieusement des champs. Avec une liste, le zéro Go est le
+  comportement correct.*
+- **[NEW]** `UPDATE_QUIZ_META.HIDDEN_FIELDS` (string[]) — même sémantique « absent = inchangé »
+  que les autres champs ; `[]` présent = tout réafficher. Une valeur inconnue est **ignorée et
+  journalisée**, jamais une erreur : un client plus récent ne doit pas faire échouer un
+  enregistrement entier sur un libellé qu'un serveur plus ancien ne connaît pas.
+- **[CHANGED]** `contracts/ws-payload-serialization.md` — `QUIZ_HIDDEN_FIELDS` est transmis à la
+  TV (elle en a besoin pour appliquer la préférence). **Distinction posée explicitement** :
+  confidentialité ⇒ retrait côté serveur (`QUIZ_OBJECTIVES`) ; préférence d'affichage ⇒
+  application côté client (`QUIZ_HIDDEN_FIELDS`). Les valeurs masquées restent donc présentes
+  dans le payload TV — ce ne sont pas des secrets.
+- `OBJECTIVES` n'est **pas** une valeur acceptable de `HIDDEN_FIELDS` : il n'est jamais diffusé,
+  l'y admettre laisserait croire qu'il pourrait l'être. `QUIZ_NAME` et `QUIZ_NOTES` ne sont pas
+  pilotables dans cette version (extension future = une valeur d'énumération de plus).
+
+---
+
+## [20260806] — Publics/difficultés multiples, objectif global, ARDOISE générable (#137 Batch 2a+2b, v6.1.0)
+
+> Retour QUALIF utilisateur sur #137 : les réglages globaux de la partie (thème, publics,
+> difficultés, langue, objectif) ne doivent exister **qu'à un seul endroit** — la section Quiz —
+> le popup de génération IA n'en proposant qu'un rappel en lecture seule et des précisions
+> propres à la génération.
+> Audit de gap : `_work/reports/planner-20260806-143248.md`.
+> Arbitrages utilisateur : `_work/handoff/task-planner-contracts-20260806-144240.md`.
+
+- **[BREAKING]** `GameState` — `QUIZ_POPULATION` (string) → **`QUIZ_POPULATIONS`** (string[]),
+  `QUIZ_DIFFICULTY` (string) → **`QUIZ_DIFFICULTIES`** (string[]). Remplacement franc **sans
+  champ dérivé de compatibilité** (choix utilisateur explicite, contre l'option additive
+  proposée par l'audit). Les deux tableaux sont sérialisés `[]` et **jamais `null`**.
+  *Aucune migration de fichier n'est requise* : `GameState` n'est ni persisté ni rechargé
+  (vérifié — `cmd/server/main.go:205-211` ne persiste que history/teams/bumpers/statuses).
+  Le risque est côté **clients non rechargés** après déploiement, cf. `game-state.md` § Migration.
+- **[BREAKING]** `UPDATE_QUIZ_META` — `POPULATION`/`DIFFICULTY` (singuliers) remplacés par
+  `POPULATIONS`/`DIFFICULTIES` (tableaux). Un client de v6.0.0 voit ces deux champs **ignorés**
+  (valeurs courantes préservées, pas de corruption) : son enregistrement est partiellement sans
+  effet. Aucun repli sur les anciens noms — un client non redéployé doit être visible.
+- **[BREAKING]** `POST /api/generate-questions` — `population` (string) → **`populations`**
+  (string[], ≥ 1 élément). Un appelant de v6.0.0 reçoit `400 invalid_request`.
+- **[NEW]** `GameState.QUIZ_OBJECTIVES` (string, texte libre) — objectif de la partie.
+  **Premier champ du nœud `GAME` à diffusion restreinte** : retiré du payload `/ws/tv` et
+  `/ws/player`, conservé sur `/ws/admin`. Le retrait doit être appliqué aux **trois** sites de
+  sérialisation TV/VPlayer via une liste partagée, sur le modèle de `AdminOnlyBumperFields`
+  (`ws-payload-serialization.md`). Ne pas confondre avec `QUIZ_NOTES`, qui reste **affiché aux
+  joueurs**.
+- **[NEW]** `UPDATE_QUIZ_META.OBJECTIVES` (string ≤ 2000 car.) — sémantique « absent = inchangé »
+  comme les autres champs ; `""` présent = effacement explicite.
+- **[NEW]** `POST /api/generate-questions` — champ `objectives` (string, optionnel, ≤ 2000 car.),
+  **distinct de `instructions`** : l'un est l'objectif persisté de la partie, l'autre les
+  précisions non persistées de cette génération.
+- **[CHANGED]** Prompt de génération — ordre d'injection désormais normatif : objectif global
+  (« Objectif de la partie : … ») **avant** les précisions (« Précisions pour cette
+  génération : … »), et `Publics cibles` au pluriel. Sans libellés distincts, le modèle reçoit
+  deux consignes concurrentes indiscernables (`ai-generation.md` §4).
+- **[CHANGED]** `difficulties` (`POST /api/generate-questions`) — inchangé en **forme** (déjà un
+  tableau depuis v6.0.0), mais devient la seule source : le frontend n'enveloppe plus une valeur
+  globale unique dans un tableau à un élément.
+- **[CHANGED]** Cardinalité des énumérations (`ai-generation.md` §6) — `QUIZ_POPULATIONS` et
+  `QUIZ_DIFFICULTIES` passent de 1 à N valeurs ; listes de valeurs **inchangées**.
+  `QUIZ_LANGUAGE` reste à valeur unique. Rendu UI imposé : chips multi-sélection.
+- **[NEW]** *(Batch 2a, livré — entrée manquante rétablie ici)* `ARDOISE` devient un **type
+  générable** par l'IA, au même rang que SPEEDY/QCM/MEMORY/MEMOTION (`ai-generation.md` §5, §6).
+  Structurellement `ARDOISE = SPEEDY + ARDOISE_KEYBOARD_TYPE`. Le **modèle choisit lui-même**
+  le clavier (`NUMPAD` si la réponse est purement numérique, `AZERTY` sinon) — consigne en prose,
+  le schéma ne pouvant pas exprimer une règle dépendant du contenu d'un autre champ. Désactivé
+  à 0 % par défaut dans la répartition, comme MEMOTION, pour ne pas redistribuer silencieusement
+  les pourcentages des types existants.
+
+---
+
+## [20260805b] — Provider gratuit Groq + génération par lots (#137, v6.1.0)
+
+> Ajout de **Groq** (`openai/gpt-oss-120b`, tier gratuit) comme second provider BYOK à côté de
+> Claude. Le tier gratuit impose **8 000 tokens/minute**, ce qui rend impossible le modèle
+> « 200 questions en un appel » de #8 : la génération devient une **suite de lots séquentiels
+> avec reprise**, exécutée en **tâche de fond** avec progression WebSocket.
+> Plan : `_work/reports/planner-20260805-204318-plan-137.md`.
+> Maquette : `_work/mockups/137-generation-tache-de-fond.md`.
+> Contrat détaillé : `contracts/ai-multi-provider.md`.
+> Recherche providers : `_work/reports/planner-20260805-203550-providers-137.md`.
+
+- **[BREAKING]** `POST /api/generate-questions` — ne renvoie plus le résultat. Répond désormais
+  `202 Accepted` avec `{job_id, batches_total}` ; le résultat et les erreurs transitent par
+  l'action WebSocket `AI_GENERATION_PROGRESS`. Les codes `502` / `504` ne sont plus émis par cet
+  endpoint. Nouveau `409 generation_in_progress` — **un seul job à la fois**, tout admin confondu.
+  *Seul changement réellement cassant de cette entrée : tout appelant de #8 doit être adapté.*
+- **[NEW]** `AI_GENERATION_PROGRESS` (Server→Client, `/ws/admin` **uniquement**) —
+  `{JOB_ID, STATE, BATCHES_DONE, BATCHES_TOTAL, CREATED_COUNT, SKIPPED_COUNT, ERROR_CODE,
+  PROVIDER}`. Émis après chaque lot — **après** le broadcast des questions du lot — et à la
+  connexion d'un client admin si un job est en cours, pour qu'un rechargement de page retrouve
+  la progression sans état à reconstituer côté client.
+- **[NEW]** `CANCEL_AI_GENERATION` (Client→Server) — `{JOB_ID}`. Prend effet **entre deux
+  lots**, jamais au milieu d'un appel provider. Les questions déjà écrites sont **conservées**.
+- **[NEW]** Code d'erreur `provider_quota` — quota journalier du fournisseur épuisé
+  (Groq : 1 000 requêtes/jour, 200 000 tokens/jour).
+- **[NEW]** Champs `AIConfig` : `provider` (`anthropic` | `groq`, défaut `anthropic`),
+  `groq_api_key`, `groq_model` (défaut `openai/gpt-oss-120b`), `batch_size` (20),
+  `inter_batch_delay_ms` (60000), `context_token_budget` (1500), `max_consecutive_failures` (2).
+  **Les défauts de découpage et de cadencement sont provisoires** : Groq ne documente ni ce que
+  compte son TPM ni le sort d'une requête qui le dépasse, ces valeurs sont à calibrer
+  empiriquement (tâche T0.1 du plan).
+- **[NEW]** La clé Groq suit **exactement** les règles de secret de la clé Anthropic
+  (`ai-generation.md` §2) : jamais renvoyée en `GET`, booléen dérivé `groq_api_key_configured`,
+  valeur vide en `POST` = préserver, effacement explicite via `clear_groq_api_key`.
+- **[CHANGED]** Génération découpée en lots — **s'applique aussi au chemin Anthropic**. Chaque
+  lot est validé, écrit et broadcasté avant l'appel suivant ; un lot en échec n'annule pas les
+  précédents. Supprime le mode d'échec « troncature = lot entier perdu » : sous décodage
+  contraint, une troncature en milieu de tableau rendait auparavant **zéro** question.
+- **[CHANGED]** Contexte anti-doublon désormais **budgété en tokens** et dépendant du provider
+  (Anthropic : 150 questions comme avant ; Groq : ~1 500 tokens, soit ~25 questions), enrichi à
+  chaque lot des questions produites dans le job courant.
+- **[CHANGED]** Interface `aiProvider` (3 méthodes) sur le point d'appel unique
+  `ai_generator.go:781`. Le chemin Anthropic devient une implémentation à comportement
+  identique. Abstraction délibérément minimale — elle ne préjuge d'aucune architecture à
+  plugins et n'en interdit aucune.
+- **[CHANGED]** `POST /config.json`, section `ai` — amendement de `ai-generation.md` §0
+  (§0bis) : cette section n'est plus **remplacée intégralement** comme les autres sections
+  de `config.json`, elle est désormais **fusionnée champ à champ** — une clé JSON absente du
+  payload préserve la valeur stockée, une clé présente (même à sa valeur zéro Go, ex.
+  `batch_size: 0`) l'écrase. Corrige un bug bloquant trouvé en QA sur #137 : `ConfigPage.jsx`
+  sauvegarde `provider`/la clé API/les réglages de batching via des boutons séparés à payload
+  partiel ; le remplacement intégral réinitialisait silencieusement tout champ absent du
+  payload (ex. sauvegarder la clé Groq seule repassait `provider` à `"anthropic"`). Corrigé
+  côté frontend (`ConfigPage.jsx` envoie désormais la section `ai` complète à chaque
+  sauvegarde) **et** côté backend (fusion champ à champ, généralisant la sémantique déjà
+  appliquée aux deux clés secrètes) — les deux fixes sont compatibles et cumulés en défense
+  en profondeur.
+- **[CHANGED]** Prompt de génération — consigne dédiée pour `MEMOTION` (contrainte « 4 à 12
+  cartes » explicitée en prose, définition des 3 champs `RECTO_THEME`/`QUESTION_TEXT`/
+  `ANSWER_TEXT`, exemple few-shot), gatée sur `distribution["MEMOTION"] > 0`. Corrige un taux de
+  production réel mesuré à 2 % (3/152) contre 15 % demandé (`qa-20260806-111416.md` §5.4) — le
+  schéma de sortie n'a pas de `minItems`/`maxItems`, rien n'empêchait structurellement le modèle
+  de produire moins de 4 cartes. Vérifié en conditions réelles par `qa` après fix : 100 %
+  (10/10) sur deux échantillons Groq.
+- **[NEW]** `ARDOISE` rejoint les types générables (5ᵉ variante du schéma) — voir l'amendement
+  détaillé dans `ai-generation.md` §5/§6 et `ai-multi-provider.md` §13 : la spec d'origine de #8
+  le décrivait à tort comme un mode d'affichage plutôt qu'un type de contenu. Champs additionnels
+  `ANSWER` + `ARDOISE_KEYBOARD_TYPE` (`enum` `AZERTY`\|`NUMPAD`, choisi par le LLM selon la
+  réponse — `NUMPAD` si purement numérique). `POINTS_TARGET = TEAM` (cohérent avec la donnée
+  existante). Désactivé à 0 % par défaut dans la répartition, comme `MEMOTION`.
+
+**Un seul changement BREAKING**, isolé et identifié ci-dessus. **Deux points appellent une
+validation explicite de l'utilisateur au GATE 2** :
+1. **Le comportement du produit change** — 200 questions passent de 1-3 min (Claude, payant) à
+   ~10 min (Groq, gratuit), avec une modale non bloquante et des questions qui apparaissent au
+   fur et à mesure. Ce n'est pas un détail d'implémentation.
+2. **La qualité du français de `gpt-oss-120b` n'est pas mesurée** — aucun fournisseur ne publie
+   cette donnée. Le test amont ayant été écarté, le contrôle est déplacé en aval : lot réel joint
+   au handoff de `dev-backend`, puis relecture humaine obligatoire en QA.
+
+---
+
+## [20260805] — Générateur de questions via IA (#8, v6.0.0)
+
+> Bouton « ✨ Générer via IA » dans QuestionsPage : le backend appelle l'API Claude (BYOK) en
+> sortie structurée et écrit directement de nouvelles questions, **en création uniquement**.
+> Plan : `_work/reports/planner-20260805-121900.md`.
+> Maquette : `_work/mockups/8-generateur-ia.md`.
+> Contrat détaillé : `contracts/ai-generation.md`.
+
+- **[CHANGED]** `POST /config.json` — **correctif de bug destructif, à livrer en premier.** Le
+  handler désérialisait le corps dans un `config.Config` **vide** puis réécrivait le fichier
+  entier ; aucune section ne portant `omitempty`, toute section absente du payload était remise
+  à zéro. ConfigPage n'envoyant que des payloads partiels (`{neon_effect}`, `{server}`), chaque
+  « Enregistrer » détruisait les autres sections. Le handler devient **additif** : merge sur
+  `config.Get()`, ré-application des défauts, écriture atomique. Motif déjà en place dans
+  `handleAPIWiFiDefaults`.
+  *Dégât déjà constaté en production : `config.json` porte `questions_dir: ""` et
+  `files_dir: ""`, compensés par un chemin codé en dur dans `main.go`.*
+- **[NEW]** `POST /api/generate-questions` — génération par lot. Réponse **synchrone longue**
+  (1–3 min). Codes stables : `200` (`created[]`, `skipped_count`), `400`, `405`, `409`
+  (pas de clé), `502` (erreur amont Anthropic), `504` (timeout), `507` (plus d'ID libre).
+  Déclenche obligatoirement `OnQuestionUpload()` → `broadcastQuestions()`.
+- **[NEW]** Section `ai` dans `config.json` : `anthropic_api_key`, `model`
+  (défaut `claude-opus-5`), `timeout_seconds` (300), `max_questions` (200).
+- **[NEW]** Règle de contrat sur le secret : `GET /config.json` renvoie **toujours**
+  `ai.anthropic_api_key: ""` + un booléen dérivé `ai.api_key_configured`. En `POST`, une clé
+  absente ou vide **préserve** la valeur stockée ; l'effacement explicite passe par
+  `ai.clear_api_key: true`. Le serveur n'ayant aucune authentification, renvoyer la clé en clair
+  l'exposerait à tout le LAN.
+- **[CHANGED]** `UPDATE_QUIZ_META` — payload étendu de 3 à 6 champs : ajout de `POPULATION`,
+  `DIFFICULTY`, `LANGUAGE`. **Additif**, mais assorti d'une règle normative : le handler doit
+  appliquer une sémantique **« champ absent = inchangé »** (et non « absent = chaîne vide »).
+  Sans elle, un client antérieur envoyant seulement `NAME`/`THEME`/`NOTES` effacerait les trois
+  nouveaux champs.
+- **[CHANGED]** `GameState` — ajout de `QUIZ_POPULATION`, `QUIZ_DIFFICULTY`, `QUIZ_LANGUAGE`,
+  **sans `omitempty`** (règle projet). Affichés sur l'écran TV NEW_GAME, qui passe de 3 à 6
+  champs : l'affichage TV étant **statique et sans scroll**, le regroupement compact est imposé
+  par la maquette §8.
+- **[CHANGED]** `SetQuizMeta` (`internal/game/engine.go:1591`) passe de 3 à 6 paramètres.
+  Signature interne, un seul appelant (`main.go:1061`).
+- **[CHANGED]** Allocation d'ID de question — `findFreeQuestionID` balayait `1..999` **sans
+  verrou** (course pré-existante : deux uploads simultanés pouvaient obtenir le même ID) et
+  repliait sur `"999"` en cas de saturation, écrasant la question 999. Désormais : mutex sur
+  `HTTPServer`, réservation exclusive par `os.Mkdir`, et `507` en cas de saturation. Le
+  correctif s'applique aussi à `handleUploadQuestion`.
+
+**Aucun changement BREAKING au sens strict** — aucune action, aucun champ existant n'est
+supprimé, renommé ni retypé ; tous les ajouts sont additifs. **Trois points appellent néanmoins
+une validation explicite de l'utilisateur au GATE 2** :
+1. le correctif `POST /config.json` **change le comportement observable** d'un endpoint existant
+   (une sauvegarde partielle ne réinitialise plus le reste) — c'est l'intention, mais tout
+   client qui s'appuyait sur l'effet de remise à zéro changerait de comportement ;
+2. la sémantique « absent = inchangé » sur `UPDATE_QUIZ_META` modifie le traitement d'un
+   payload déjà émis aujourd'hui par QuestionsPage ;
+3. le schéma de sortie du LLM pour **MEMORY et MEMOTION diverge de la spec validée**, qui
+   décrivait des structures inexistantes dans le code (cf. `ai-generation.md` §5).
+
+---
+
 ## [20260804] — Libération de place d'un VJoueur connecté (#134)
 
 > Le bouton « Réinscription » (`RELEASE_BUMPER_NAME`, #122) ne posait qu'une **autorisation

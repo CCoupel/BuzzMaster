@@ -52,6 +52,15 @@ func NewEngine() *Engine {
 			MotionCurrentTeamColor:   []int{},
 			// ARDOISE: initialize empty map so JSON serializes {} (not null)
 			ArdoiseAnswers: make(map[string]ArdoiseAnswer),
+			// Quiz metadata multi-values (v6.1.0, #137 Batch 2b): initialize
+			// empty (not nil) so JSON serializes [] (not null) before the
+			// first UPDATE_QUIZ_META (contract game-state.md §"Aucun omitempty").
+			QuizPopulations:  []string{},
+			QuizDifficulties: []string{},
+			// TV display preference (v6.1.0, #137 Batch 2b T1.8): empty = all
+			// four eligible fields shown, the desired default (contract
+			// game-state.md rule H1).
+			QuizHiddenFields: []string{},
 		},
 		data:             NewTeamsAndBumpers(),
 		questionStatuses: make(map[string]QuestionStatus),
@@ -1586,15 +1595,67 @@ func (e *Engine) InitGame() []string {
 	return purgedVPlayerIDs
 }
 
-// SetQuizMeta sets the quiz metadata (name, theme, notes) on the game state.
+// SetQuizMeta sets the quiz metadata (name, theme, notes, and — since v6.0.0,
+// #8 — populations/difficulties/language, plus objectives since v6.1.0,
+// #137 Batch 2b) on the game state.
 // This is the implementation of issue #67 — Change QUESTIONS en QUIZ.
-func (e *Engine) SetQuizMeta(name, theme, notes string) {
+//
+// populations/difficulties are normalized to a non-nil, possibly-empty slice
+// (never left nil) so GameState always serializes them as [] rather than
+// null (contract game-state.md §"Aucun omitempty" — a null would break any
+// client iterating without a guard).
+func (e *Engine) SetQuizMeta(name, theme, notes string, populations, difficulties []string, language, objectives string) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
+	if populations == nil {
+		populations = []string{}
+	}
+	if difficulties == nil {
+		difficulties = []string{}
+	}
 	e.state.QuizName = name
 	e.state.QuizTheme = theme
 	e.state.QuizNotes = notes
-	log.Printf("[Engine] Quiz meta set: name=%q, theme=%q", name, theme)
+	e.state.QuizPopulations = populations
+	e.state.QuizDifficulties = difficulties
+	e.state.QuizLanguage = language
+	e.state.QuizObjectives = objectives
+	log.Printf("[Engine] Quiz meta set: name=%q, theme=%q, populations=%v, difficulties=%v, language=%q, objectives_len=%d", name, theme, populations, difficulties, language, len(objectives))
+}
+
+// quizHiddenFieldAllowedValues are the only values SetQuizDisplay accepts
+// (contract game-state.md rule H2). OBJECTIVES is deliberately not a member
+// (rule H3): the objective is never broadcast at all, so it can't be a
+// "shown/hidden on TV" choice — accepting it here would suggest otherwise.
+// NAME/NOTES are not members either (rule H4): not pilotable in this version.
+var quizHiddenFieldAllowedValues = map[string]bool{
+	"THEME": true, "POPULATIONS": true, "DIFFICULTIES": true, "LANGUAGE": true,
+}
+
+// SetQuizDisplay sets which QUIZ_* fields the admin chose to hide from the TV
+// NEW_GAME screen (v6.1.0, #137 Batch 2b T1.8, contract game-state.md
+// §"QUIZ_HIDDEN_FIELDS"). A dedicated setter, deliberately NOT an 8th
+// SetQuizMeta parameter — that signature was just extended to 7 and the
+// contract explicitly calls for a separate setter here.
+//
+// hidden is normalized to a non-nil, possibly-empty slice (rule H1 — same
+// "never null" requirement as the other QUIZ_* arrays) and filtered against
+// quizHiddenFieldAllowedValues: an unknown value is dropped and logged, never
+// treated as an error (rule H2) — a newer client sending a label this build
+// doesn't know yet must not fail the whole save.
+func (e *Engine) SetQuizDisplay(hidden []string) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	filtered := make([]string, 0, len(hidden))
+	for _, field := range hidden {
+		if quizHiddenFieldAllowedValues[field] {
+			filtered = append(filtered, field)
+		} else {
+			log.Printf("[Engine] SetQuizDisplay: ignoring unknown field %q", field)
+		}
+	}
+	e.state.QuizHiddenFields = filtered
+	log.Printf("[Engine] Quiz display set: hidden=%v", filtered)
 }
 
 // RAZScores resets all scores to zero

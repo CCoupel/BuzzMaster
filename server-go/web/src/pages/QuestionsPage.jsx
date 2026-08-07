@@ -9,8 +9,16 @@ import Card, { CardHeader, CardBody } from '../components/Card'
 import CategoryBalance from '../components/CategoryBalance'
 import CategoryBadge from '../components/CategoryBadge'
 import QuestionCard from '../components/QuestionCard'
+import AIGenerateModal from '../components/AIGenerateModal'
 import './QuestionsPage.css'
 import './ConfigPage.css'
+
+// Énumérations partagées avec la modale IA et le contrat backend
+// (contracts/ai-generation.md §6) — source de vérité pour les selects
+// Population/Langue et le multi-select Difficulté, ici comme dans la modale.
+export const QUIZ_POPULATIONS = ['Junior (6-12 ans)', 'Ado (13-17 ans)', 'Adulte (18-64 ans)', 'Senior (65+ ans)', 'Famille']
+export const QUIZ_DIFFICULTIES = ['Facile', 'Moyen', 'Difficile', 'Expert']
+export const QUIZ_LANGUAGES = ['Français', 'Anglais', 'Espagnol']
 
 // QCM answer colors (for form only)
 const QCM_COLORS = {
@@ -24,7 +32,7 @@ const QCM_COLORS = {
 export { CATEGORIES }
 
 export default function QuestionsPage() {
-  const { questions, fsInfo, deleteQuestion, sendMessage, gameState, newGame } = useGame()
+  const { questions, fsInfo, deleteQuestion, sendMessage, gameState, newGame, aiJob, cancelAiGeneration } = useGame()
   const [isUploading, setIsUploading] = useState(false)
   const [editingId, setEditingId] = useState(null)
   const fileInputRef = useRef(null)
@@ -100,20 +108,181 @@ export default function QuestionsPage() {
   const [quizName, setQuizName] = useState(gameState.quizName || '')
   const [quizTheme, setQuizTheme] = useState(gameState.quizTheme || '')
   const [quizNotes, setQuizNotes] = useState(gameState.quizNotes || '')
+  // v6.1.0 (#137) — publics/difficultés multiples (remplacent les valeurs
+  // uniques v6.0.0), objectif de partie, visibilité TV par champ. Contract
+  // game-state.md §"Métadonnées Quiz".
+  const [quizPopulations, setQuizPopulations] = useState(gameState.quizPopulations || [])
+  const [quizDifficulties, setQuizDifficulties] = useState(gameState.quizDifficulties || [])
+  const [quizLanguage, setQuizLanguage] = useState(gameState.quizLanguage || 'Français')
+  const [quizObjectives, setQuizObjectives] = useState(gameState.quizObjectives || '')
+  const [quizHiddenFields, setQuizHiddenFields] = useState(gameState.quizHiddenFields || [])
   const [quizSaved, setQuizSaved] = useState(false)
+
+  // AI generation modal (v6.0.0 #8, multi-provider + tâche de fond v6.1.0 #137)
+  const [showAIModal, setShowAIModal] = useState(false)
+  const [aiConfig, setAiConfig] = useState({
+    provider: 'anthropic',
+    apiKeyConfigured: false,
+    groqApiKeyConfigured: false,
+    interBatchDelayMs: 60000,
+    maxConsecutiveFailures: 2,
+  })
+  const [aiToast, setAiToast] = useState(null)
+  // #137 — jobId déjà signalé par toast, pour ne pas re-toaster à chaque
+  // re-render tant que le job reste dans le même état terminal, et pour ne
+  // pas toaster un job dont la fin a été vue en direct dans la modale.
+  const toastedAiJobIdRef = useRef(null)
+  const quizMetaSectionRef = useRef(null)
+
+  // #137 — le bouton "✨ Générer via IA" s'active selon la clé du provider
+  // ACTUELLEMENT sélectionné (maquette 137 §7), pas "si n'importe lequel en
+  // a une". Reste cliquable si un job tourne déjà, pour permettre le
+  // ré-attachement/l'annulation même si la clé a depuis été retirée.
+  const providerConfigured = aiConfig.provider === 'groq' ? aiConfig.groqApiKeyConfigured : aiConfig.apiKeyConfigured
+  const canOpenAiModal = providerConfigured || aiJob?.state === 'RUNNING'
 
   // Sync quiz form with gameState (populated from WS after mount)
   useEffect(() => {
     setQuizName(gameState.quizName || '')
     setQuizTheme(gameState.quizTheme || '')
     setQuizNotes(gameState.quizNotes || '')
-  }, [gameState.quizName, gameState.quizTheme, gameState.quizNotes])
+    setQuizPopulations(gameState.quizPopulations || [])
+    setQuizDifficulties(gameState.quizDifficulties || [])
+    setQuizLanguage(gameState.quizLanguage || 'Français')
+    setQuizObjectives(gameState.quizObjectives || '')
+    setQuizHiddenFields(gameState.quizHiddenFields || [])
+  }, [gameState.quizName, gameState.quizTheme, gameState.quizNotes, gameState.quizPopulations, gameState.quizDifficulties, gameState.quizLanguage, gameState.quizObjectives, gameState.quizHiddenFields])
+
+  // v6.1.0 (#137, T2.5) — comparaison indépendante de l'ordre pour les deux
+  // tableaux : "publics/difficultés dans un ordre différent" ne doit pas être
+  // traité comme une divergence.
+  const arraysEqualUnordered = (a, b) => {
+    if (a.length !== b.length) return false
+    const sa = [...a].sort()
+    const sb = [...b].sort()
+    return sa.every((v, i) => v === sb[i])
+  }
+
+  // T2.5 — écart entre le formulaire de la section Quiz et le GameState
+  // réellement diffusé, restreint aux 5 champs qui alimentent la génération
+  // (thème/publics/difficultés/langue/objectif) — QUIZ_NAME et QUIZ_NOTES
+  // partagent le même bouton Enregistrer mais n'affectent pas la génération,
+  // les inclure ferait apparaître le bandeau de la modale IA à tort.
+  const quizFormDiverged =
+    quizTheme !== (gameState.quizTheme || '') ||
+    quizLanguage !== (gameState.quizLanguage || 'Français') ||
+    quizObjectives !== (gameState.quizObjectives || '') ||
+    !arraysEqualUnordered(quizPopulations, gameState.quizPopulations || []) ||
+    !arraysEqualUnordered(quizDifficulties, gameState.quizDifficulties || [])
+
+  // AI: état de la clé API + provider sélectionné — source de vérité pour
+  // activer/désactiver le bouton "✨ Générer via IA" (contract
+  // ai-generation.md §2, ai-multi-provider.md §8, maquette 137 §7). La clé
+  // elle-même n'est jamais transmise au frontend. async/await + try/catch
+  // (motif ConfigPage.jsx) plutôt qu'une chaîne .then() : protège aussi
+  // contre un environnement où fetch() ne retournerait pas une Promise
+  // valide (ex. mock de test partiel), pas seulement contre un rejet réseau.
+  useEffect(() => {
+    let cancelled = false
+    const fetchAiStatus = async () => {
+      try {
+        const res = await fetch('/config.json')
+        if (!res.ok) return
+        const data = await res.json()
+        if (!cancelled && data?.ai) {
+          setAiConfig({
+            provider: data.ai.provider || 'anthropic',
+            apiKeyConfigured: !!data.ai.api_key_configured,
+            groqApiKeyConfigured: !!data.ai.groq_api_key_configured,
+            interBatchDelayMs: data.ai.inter_batch_delay_ms || 60000,
+            maxConsecutiveFailures: data.ai.max_consecutive_failures || 2,
+          })
+        }
+      } catch {
+        // Génération indisponible — le bouton reste désactivé, le modal
+        // (si ouvert malgré tout) retombera sur l'état "Indisponible".
+      }
+    }
+    fetchAiStatus()
+    return () => { cancelled = true }
+  }, [])
+
+  // #137 — toast de fin de job (motif wifiToast) quand la modale a été
+  // fermée pendant que la génération continuait en fond (maquette §4).
+  // `toastedAiJobIdRef` marque le job comme "vu" dès qu'il atteint un état
+  // terminal, que ce soit via ce toast ou parce que la modale l'affichait
+  // déjà à l'écran — évite un doublon si l'admin ferme juste après.
+  useEffect(() => {
+    if (aiToast) {
+      const timer = setTimeout(() => setAiToast(null), 4000)
+      return () => clearTimeout(timer)
+    }
+  }, [aiToast])
+
+  useEffect(() => {
+    if (!aiJob) return
+    const terminal = aiJob.state === 'DONE' || aiJob.state === 'CANCELLED' || aiJob.state === 'FAILED'
+    if (!terminal || toastedAiJobIdRef.current === aiJob.jobId) return
+    toastedAiJobIdRef.current = aiJob.jobId
+    if (showAIModal) return // déjà visible dans la modale elle-même
+    const n = aiJob.createdCount || 0
+    const plural = n > 1 ? 's' : ''
+    if (aiJob.state === 'DONE') {
+      setAiToast({ message: `✅ Génération terminée — ${n} question${plural} créée${plural}`, type: 'success' })
+    } else if (aiJob.state === 'CANCELLED') {
+      setAiToast({ message: `⏹ Génération arrêtée — ${n} question${plural} conservée${plural}`, type: 'success' })
+    } else {
+      setAiToast({ message: `⚠️ Génération interrompue — ${n} question${plural} conservée${plural}`, type: 'error' })
+    }
+  }, [aiJob, showAIModal])
 
   const handleSaveQuizMeta = (e) => {
     e.preventDefault()
-    sendMessage('UPDATE_QUIZ_META', { NAME: quizName, THEME: quizTheme, NOTES: quizNotes })
+    sendMessage('UPDATE_QUIZ_META', {
+      NAME: quizName,
+      THEME: quizTheme,
+      NOTES: quizNotes,
+      POPULATIONS: quizPopulations,
+      DIFFICULTIES: quizDifficulties,
+      LANGUAGE: quizLanguage,
+      OBJECTIVES: quizObjectives,
+      HIDDEN_FIELDS: quizHiddenFields,
+    })
     setQuizSaved(true)
     setTimeout(() => setQuizSaved(false), 2000)
+  }
+
+  // Chips multi-sélection (motif AIGenerateModal.jsx — catégories)
+  const toggleQuizPopulation = (p) => {
+    setQuizPopulations(prev => prev.includes(p) ? prev.filter(x => x !== p) : [...prev, p])
+  }
+  const toggleQuizDifficulty = (d) => {
+    setQuizDifficulties(prev => prev.includes(d) ? prev.filter(x => x !== d) : [...prev, d])
+  }
+
+  // Interrupteur "Afficher sur la TV" — case cochée = champ ABSENT de
+  // QUIZ_HIDDEN_FIELDS. L'inversion (liste des champs masqués ↔ case "visible")
+  // est absorbée ici uniquement (plan §5, T2.2).
+  const isQuizFieldVisibleOnTV = (field) => !quizHiddenFields.includes(field)
+  const toggleQuizFieldVisibility = (field) => {
+    setQuizHiddenFields(prev => prev.includes(field) ? prev.filter(f => f !== field) : [...prev, field])
+  }
+
+  // AI: après une génération (terminée/arrêtée/en échec partiel) et la
+  // fermeture de la modale, défiler jusqu'à la première question créée
+  // (maquette §4). AIGenerateModal calcule déjà cet ID (delta sur
+  // `questions`, cf. son commentaire sur startingQuestionIdsRef) et le passe
+  // directement — un court délai supplémentaire laisse le DOM se stabiliser.
+  const handleAIGenerated = (firstId) => {
+    if (!firstId) return
+    setTimeout(() => {
+      document.getElementById(`qcard-${firstId}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    }, 300)
+  }
+
+  const handleNavigateToQuizSettings = () => {
+    setShowAIModal(false)
+    quizMetaSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }
 
   // NEW_GAME backgrounds handlers (mirror Zone Ambiance, endpoint: /new-game-backgrounds)
@@ -830,7 +999,7 @@ export default function QuestionsPage() {
       </header>
 
       {/* Zone 1 — Quiz */}
-      <section className="quiz-meta-section">
+      <section className="quiz-meta-section" ref={quizMetaSectionRef}>
         <Card padding="lg">
           <CardHeader>
             <div className="section-header">
@@ -842,39 +1011,161 @@ export default function QuestionsPage() {
           </CardHeader>
           <CardBody>
             <form onSubmit={handleSaveQuizMeta} className="quiz-meta-form">
-              <div className="form-group">
-                <label htmlFor="quiz-name">Nom du quiz</label>
-                <input
-                  id="quiz-name"
-                  type="text"
-                  value={quizName}
-                  onChange={e => setQuizName(e.target.value)}
-                  placeholder="Ex : Quiz Science et Nature"
-                />
+              <div className="quiz-meta-grid">
+                <div className="form-group">
+                  <label htmlFor="quiz-name">Nom du quiz</label>
+                  <input
+                    id="quiz-name"
+                    type="text"
+                    value={quizName}
+                    onChange={e => setQuizName(e.target.value)}
+                    placeholder="Ex : Quiz Science et Nature"
+                  />
+                </div>
+                <div className="form-group">
+                  <label htmlFor="quiz-theme">
+                    Thème général
+                    <span className="quiz-tv-toggle">
+                      <button
+                        type="button"
+                        role="switch"
+                        aria-checked={isQuizFieldVisibleOnTV('THEME')}
+                        aria-label="Afficher le thème sur la TV"
+                        className={`quiz-switch ${isQuizFieldVisibleOnTV('THEME') ? 'on' : ''}`}
+                        onClick={() => toggleQuizFieldVisibility('THEME')}
+                      />
+                      TV
+                    </span>
+                  </label>
+                  <input
+                    id="quiz-theme"
+                    type="text"
+                    value={quizTheme}
+                    onChange={e => setQuizTheme(e.target.value)}
+                    placeholder="Ex : Culture générale"
+                  />
+                </div>
+                {/* v6.1.0 (#137) — publics/difficultés multiples (chips, motif
+                    AIGenerateModal.jsx catégories) + interrupteur "Afficher sur
+                    la TV" par champ (contract game-state.md, QUIZ_HIDDEN_FIELDS) */}
+                <div className="form-group quiz-meta-wide">
+                  <span className="quiz-field-label">
+                    Publics cibles <span className="quiz-field-hint">— au moins un</span>
+                    <span className="quiz-tv-toggle">
+                      <button
+                        type="button"
+                        role="switch"
+                        aria-checked={isQuizFieldVisibleOnTV('POPULATIONS')}
+                        aria-label="Afficher les publics sur la TV"
+                        className={`quiz-switch ${isQuizFieldVisibleOnTV('POPULATIONS') ? 'on' : ''}`}
+                        onClick={() => toggleQuizFieldVisibility('POPULATIONS')}
+                      />
+                      TV
+                    </span>
+                  </span>
+                  <div className="quiz-chip-row">
+                    {QUIZ_POPULATIONS.map(p => (
+                      <button
+                        type="button"
+                        key={p}
+                        className={`quiz-chip ${quizPopulations.includes(p) ? 'active' : ''}`}
+                        onClick={() => toggleQuizPopulation(p)}
+                      >
+                        {quizPopulations.includes(p) && <span className="quiz-chip-check" aria-hidden="true">✓</span>}
+                        {p}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div className="form-group quiz-meta-wide">
+                  <span className="quiz-field-label">
+                    Difficultés visées <span className="quiz-field-hint">— au moins une</span>
+                    <span className="quiz-tv-toggle">
+                      <button
+                        type="button"
+                        role="switch"
+                        aria-checked={isQuizFieldVisibleOnTV('DIFFICULTIES')}
+                        aria-label="Afficher les difficultés sur la TV"
+                        className={`quiz-switch ${isQuizFieldVisibleOnTV('DIFFICULTIES') ? 'on' : ''}`}
+                        onClick={() => toggleQuizFieldVisibility('DIFFICULTIES')}
+                      />
+                      TV
+                    </span>
+                  </span>
+                  <div className="quiz-chip-row">
+                    {QUIZ_DIFFICULTIES.map(d => (
+                      <button
+                        type="button"
+                        key={d}
+                        className={`quiz-chip ${quizDifficulties.includes(d) ? 'active' : ''}`}
+                        onClick={() => toggleQuizDifficulty(d)}
+                      >
+                        {quizDifficulties.includes(d) && <span className="quiz-chip-check" aria-hidden="true">✓</span>}
+                        {d}
+                      </button>
+                    ))}
+                  </div>
+                  <span className="quiz-field-hint">
+                    Interrupteur éteint : sélection prise en compte pour la génération, mais non annoncée aux joueurs.
+                  </span>
+                </div>
+                <div className="form-group">
+                  <label htmlFor="quiz-language">
+                    Langue
+                    <span className="quiz-tv-toggle">
+                      <button
+                        type="button"
+                        role="switch"
+                        aria-checked={isQuizFieldVisibleOnTV('LANGUAGE')}
+                        aria-label="Afficher la langue sur la TV"
+                        className={`quiz-switch ${isQuizFieldVisibleOnTV('LANGUAGE') ? 'on' : ''}`}
+                        onClick={() => toggleQuizFieldVisibility('LANGUAGE')}
+                      />
+                      TV
+                    </span>
+                  </label>
+                  <select
+                    id="quiz-language"
+                    value={quizLanguage}
+                    onChange={e => setQuizLanguage(e.target.value)}
+                  >
+                    {QUIZ_LANGUAGES.map(l => <option key={l} value={l}>{l}</option>)}
+                  </select>
+                </div>
+                <div className="form-group quiz-meta-wide">
+                  <span className="quiz-field-label">
+                    Objectif de la partie
+                    <span className="quiz-field-visibility private">🔒 Non affiché aux joueurs</span>
+                  </span>
+                  <textarea
+                    id="quiz-objectives"
+                    value={quizObjectives}
+                    onChange={e => setQuizObjectives(e.target.value)}
+                    placeholder="Ex : révision du chapitre 3, team building, faire marquer les timides..."
+                    rows={2}
+                    maxLength={2000}
+                  />
+                  <span className="quiz-field-hint">Sert de consigne au générateur IA et de rappel pour l'animateur.</span>
+                </div>
+                <div className="form-group quiz-meta-wide">
+                  <span className="quiz-field-label">
+                    Texte libre
+                    <span className="quiz-field-visibility public">📺 Affiché aux joueurs</span>
+                  </span>
+                  <textarea
+                    id="quiz-notes"
+                    value={quizNotes}
+                    onChange={e => setQuizNotes(e.target.value)}
+                    placeholder="Notes, règles, anecdotes..."
+                    rows={3}
+                  />
+                </div>
               </div>
-              <div className="form-group">
-                <label htmlFor="quiz-theme">Thème général</label>
-                <input
-                  id="quiz-theme"
-                  type="text"
-                  value={quizTheme}
-                  onChange={e => setQuizTheme(e.target.value)}
-                  placeholder="Ex : Culture générale"
-                />
+              <div className="quiz-meta-actions">
+                <Button type="submit" variant="primary" size="sm">
+                  {quizSaved ? 'Enregistré ✓' : 'Enregistrer'}
+                </Button>
               </div>
-              <div className="form-group">
-                <label htmlFor="quiz-notes">Texte libre</label>
-                <textarea
-                  id="quiz-notes"
-                  value={quizNotes}
-                  onChange={e => setQuizNotes(e.target.value)}
-                  placeholder="Notes, règles, anecdotes..."
-                  rows={3}
-                />
-              </div>
-              <Button type="submit" variant="primary" size="sm">
-                {quizSaved ? 'Enregistré ✓' : 'Enregistrer'}
-              </Button>
             </form>
 
             {/* Image(s) de fond — écran "Nouvelle Partie" */}
@@ -1146,12 +1437,32 @@ export default function QuestionsPage() {
                 <h3 className="sidebar-title">
                   {editingId ? `Modifier Question #${editingId}` : 'Nouvelle Question'}
                 </h3>
-                {editingId && (
-                  <Button variant="ghost" size="sm" onClick={handleNewQuestion}>
-                    + Nouveau
+                <div className="form-header-actions">
+                  {/* v6.0.0 (#8) — désactivé tant qu'aucune clé n'est configurée pour le
+                      provider sélectionné (maquette 137 §7, contract ai-multi-provider.md §8).
+                      Reste actif si un job tourne déjà (ré-attachement, #137). */}
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    onClick={() => setShowAIModal(true)}
+                    disabled={!canOpenAiModal}
+                    title={canOpenAiModal ? 'Générer des questions via IA' : 'Configurer une clé API dans Paramètres pour activer la génération IA'}
+                  >
+                    ✨ Générer via IA
                   </Button>
-                )}
+                  {editingId && (
+                    <Button variant="ghost" size="sm" onClick={handleNewQuestion}>
+                      + Nouveau
+                    </Button>
+                  )}
+                </div>
               </div>
+              {!canOpenAiModal && (
+                <p className="ai-generate-hint">
+                  <span className="ai-generate-hint-dot" aria-hidden="true">●</span>
+                  Configurer une clé API dans Paramètres pour activer la génération IA
+                </p>
+              )}
             </CardHeader>
             <CardBody>
               <form onSubmit={handleSubmit} className="add-form">
@@ -2199,6 +2510,36 @@ export default function QuestionsPage() {
         </aside>
       </div>
 
+      {showAIModal && (
+        <AIGenerateModal
+          onClose={() => setShowAIModal(false)}
+          apiKeyConfigured={providerConfigured}
+          provider={aiConfig.provider}
+          categories={apiCategories}
+          // T2.5 — la modale lit gameState.quiz*, jamais l'état local du
+          // formulaire ci-dessus : la génération doit utiliser ce qui est
+          // réellement enregistré et diffusé (cohérent avec l'écran TV).
+          quizTheme={gameState.quizTheme}
+          quizPopulations={gameState.quizPopulations}
+          quizDifficulties={gameState.quizDifficulties}
+          quizLanguage={gameState.quizLanguage}
+          quizObjectives={gameState.quizObjectives}
+          hasUnsavedQuizChanges={quizFormDiverged}
+          questions={questions}
+          aiJob={aiJob}
+          onCancelGeneration={cancelAiGeneration}
+          interBatchDelayMs={aiConfig.interBatchDelayMs}
+          maxConsecutiveFailures={aiConfig.maxConsecutiveFailures}
+          onGenerated={handleAIGenerated}
+          onNavigateToQuizSettings={handleNavigateToQuizSettings}
+        />
+      )}
+
+      {aiToast && (
+        <div className={`wifi-toast wifi-toast-${aiToast.type}`}>
+          {aiToast.message}
+        </div>
+      )}
     </div>
   )
 }

@@ -903,3 +903,94 @@ Envoyé par le VPlayer (throttlé ~200ms). Envoi forcé sur réception STOP/PAUS
 5. Broadcast `UPDATE` immédiat vers admin/TV
 
 **Fire-and-forget** : aucune réponse du serveur vers le VPlayer.
+
+---
+
+## UPDATE_QUIZ_META
+
+| Propriété | Valeur |
+|-----------|--------|
+| Direction | `Client→Server` |
+| Phase     | Toutes (édition de quiz, principalement NEW_GAME) |
+| Trigger   | Bouton « Enregistrer » de la section Quiz (QuestionsPage) |
+
+### Payload
+
+| Champ | Type | Obligatoire | Description |
+|-------|------|-------------|-------------|
+| NAME | string | ✅ | Nom du quiz (v4.0.0) |
+| THEME | string | ✅ | Thème général (v4.0.0) |
+| NOTES | string | ✅ | Texte libre (v4.0.0) — **affiché aux joueurs** sur l'écran TV NEW_GAME |
+| POPULATIONS | string[] | ➕ **v6.1.0** | Publics cibles — énumération `ai-generation.md` §6, ≥ 1 élément. ⚠️ **remplace `POPULATION`** (string, v6.0.0) |
+| DIFFICULTIES | string[] | ➕ **v6.1.0** | Difficultés visées — énumération `ai-generation.md` §6, ≥ 1 élément. ⚠️ **remplace `DIFFICULTY`** (string, v6.0.0) |
+| LANGUAGE | string | ➕ v6.0.0 | Langue du quiz, défaut `Français` — valeur unique, inchangé |
+| OBJECTIVES | string | ➕ **v6.1.0** | Objectif de la partie, texte libre ≤ 2000 car. — **jamais diffusé vers `/ws/tv` ni `/ws/player`** (`game-state.md`) |
+| HIDDEN_FIELDS | string[] | ➕ **v6.1.0** | Champs non affichés sur l'écran TV — ⊂ `THEME`, `POPULATIONS`, `DIFFICULTIES`, `LANGUAGE` ; `[]` = tout est affiché. Valeur inconnue **ignorée**, jamais une erreur (`game-state.md`, règle H2) |
+
+### Exemple (v6.1.0)
+
+```json
+{
+  "ACTION": "UPDATE_QUIZ_META",
+  "MSG": {
+    "NAME": "Quiz ciné",
+    "THEME": "Cinéma français des années 80",
+    "NOTES": "",
+    "POPULATIONS": ["Ado (13-17 ans)", "Adulte (18-64 ans)"],
+    "DIFFICULTIES": ["Moyen", "Difficile"],
+    "LANGUAGE": "Français",
+    "OBJECTIVES": "Soirée du club — que chaque équipe marque au moins une fois",
+    "HIDDEN_FIELDS": ["DIFFICULTIES"]
+  }
+}
+```
+
+### Sémantique par champ — « absent = inchangé »
+
+| Cas | Effet |
+|-----|-------|
+| Clé **absente** du `MSG` | Valeur courante **préservée** |
+| Clé présente, `[]` (tableaux) ou `""` (`OBJECTIVES`) | **Effacement explicite** |
+
+Imposée par `contracts/ai-generation.md` §7 (pointeurs dans `QuizMetaPayload`,
+`messages.go:221-233`) : sans elle, tout émetteur n'envoyant qu'une partie du formulaire efface
+le reste.
+
+> ⚠️ **v6.1.0 — rétrocompatibilité rompue.** `POPULATION` et `DIFFICULTY` (singuliers) ne sont
+> plus reconnus : un client de v6.0.0 qui les envoie voit ces deux champs **ignorés** (clés
+> inconnues ⇒ valeurs courantes préservées, pas de corruption), son enregistrement est donc
+> partiellement sans effet. **Aucun repli** vers les anciens noms — cf. `ai-generation.md` §3ter.
+
+---
+
+## AI_GENERATION_PROGRESS
+
+| Propriété | Valeur |
+|-----------|--------|
+| Direction | `Server→Client` |
+| Endpoint  | `/ws/admin` **uniquement** |
+| Trigger   | Fin de chaque lot, fin de job, erreur, annulation, et connexion d'un admin pendant un job |
+
+### Payload
+
+| Champ | Type | Description |
+|-------|------|-------------|
+| JOB_ID | string | Identifiant du job |
+| STATE | string | `RUNNING` / `DONE` / `FAILED` / `CANCELLED` |
+| BATCHES_DONE / BATCHES_TOTAL | int | Progression par lots |
+| CREATED_COUNT / SKIPPED_COUNT | int | Cumulatifs sur le job |
+| ERROR_CODE | string | Codes stables de `ai-generation.md` §3, plus `provider_quota` |
+| PROVIDER | string | `anthropic` / `groq` |
+
+---
+
+## CANCEL_AI_GENERATION
+
+| Propriété | Valeur |
+|-----------|--------|
+| Direction | `Client→Server` |
+| Payload   | `{ "JOB_ID": "…" }` |
+
+Prend effet **entre deux lots**. Les questions déjà écrites sont **conservées**.
+
+> **Contrat détaillé** : `contracts/ai-multi-provider.md` §10 et §11.

@@ -6,13 +6,16 @@ import (
 	"buzzcontrol/internal/config"
 	"buzzcontrol/internal/game"
 	"encoding/json"
+	"errors"
 	"io"
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
+	"sync"
 	"testing"
 )
 
@@ -240,6 +243,102 @@ func TestHTTPServer_Config_GET(t *testing.T) {
 	}
 }
 
+// TestHTTPServer_Config_GET_AISecretMasked verifies GET /config.json never
+// leaks the Anthropic API key and exposes only the derived boolean
+// api_key_configured (contract ai-generation.md §2, CA3, CA12).
+func TestHTTPServer_Config_GET_AISecretMasked(t *testing.T) {
+	server, _ := setupTestHTTPServer(t)
+
+	cfg := config.Get()
+	cfg.AI.AnthropicAPIKey = "sk-ant-super-secret-value"
+	// Mi-2 (code-review-20260806-101822.md): the Groq key follows the exact
+	// same masking rule (contract ai-multi-provider.md §8, security M3) —
+	// covered here alongside Anthropic's, previously only exercised
+	// in-memory by ai_batching_test.go, never through this HTTP-level test.
+	cfg.AI.GroqAPIKey = "gsk_super-secret-groq-value"
+	config.SetInstance(cfg)
+
+	req := httptest.NewRequest("GET", "/config.json", nil)
+	w := httptest.NewRecorder()
+	server.mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("Expected 200, got %d", w.Code)
+	}
+	if strings.Contains(w.Body.String(), "super-secret-value") {
+		t.Fatalf("Anthropic API key leaked in GET /config.json response: %s", w.Body.String())
+	}
+	if strings.Contains(w.Body.String(), "super-secret-groq-value") {
+		t.Fatalf("Groq API key leaked in GET /config.json response: %s", w.Body.String())
+	}
+
+	var parsed map[string]interface{}
+	if err := json.Unmarshal(w.Body.Bytes(), &parsed); err != nil {
+		t.Fatalf("Response is not valid JSON: %v", err)
+	}
+	ai, ok := parsed["ai"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("Expected ai section in response, got: %v", parsed)
+	}
+	if ai["anthropic_api_key"] != "" {
+		t.Errorf("Expected anthropic_api_key=\"\", got %v", ai["anthropic_api_key"])
+	}
+	if ai["api_key_configured"] != true {
+		t.Errorf("Expected api_key_configured=true, got %v", ai["api_key_configured"])
+	}
+	if ai["groq_api_key"] != "" {
+		t.Errorf("Expected groq_api_key=\"\", got %v", ai["groq_api_key"])
+	}
+	if ai["groq_api_key_configured"] != true {
+		t.Errorf("Expected groq_api_key_configured=true, got %v", ai["groq_api_key_configured"])
+	}
+}
+
+// TestHTTPServer_Config_GET_AIKeyConfigured_FromEnvVarAlone is the end-to-end
+// check for the security incident 2026-08-07 fix (docs/ADMIN_GUIDE.md
+// "Configurer les clés API IA en production"): with config.json's fields
+// left empty (the PROD-recommended state — no key on disk) and the key
+// supplied only via BUZZCONTROL_*_API_KEY, GET /config.json must still
+// report *_configured=true (otherwise the frontend keeps "✨ Générer via IA"
+// disabled despite a working key) — and must never leak the env var's value
+// either, same masking guarantee as the config.json-sourced case above.
+func TestHTTPServer_Config_GET_AIKeyConfigured_FromEnvVarAlone(t *testing.T) {
+	t.Setenv(config.EnvAnthropicAPIKey, "sk-ant-from-env-value")
+	t.Setenv(config.EnvGroqAPIKey, "gsk_from-env-value")
+	server, _ := setupTestHTTPServer(t)
+
+	cfg := config.Get()
+	cfg.AI.AnthropicAPIKey = "" // PROD state: nothing on disk
+	cfg.AI.GroqAPIKey = ""
+	config.SetInstance(cfg)
+
+	req := httptest.NewRequest("GET", "/config.json", nil)
+	w := httptest.NewRecorder()
+	server.mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("Expected 200, got %d", w.Code)
+	}
+	if strings.Contains(w.Body.String(), "from-env-value") {
+		t.Fatalf("Env-var-sourced API key leaked in GET /config.json response: %s", w.Body.String())
+	}
+
+	var parsed map[string]interface{}
+	if err := json.Unmarshal(w.Body.Bytes(), &parsed); err != nil {
+		t.Fatalf("Response is not valid JSON: %v", err)
+	}
+	ai, ok := parsed["ai"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("Expected ai section in response, got: %v", parsed)
+	}
+	if ai["api_key_configured"] != true {
+		t.Errorf("Expected api_key_configured=true from the env var alone, got %v", ai["api_key_configured"])
+	}
+	if ai["groq_api_key_configured"] != true {
+		t.Errorf("Expected groq_api_key_configured=true from the env var alone, got %v", ai["groq_api_key_configured"])
+	}
+}
+
 func TestHTTPServer_Config_POST(t *testing.T) {
 	server, _ := setupTestHTTPServer(t)
 
@@ -281,6 +380,416 @@ func TestHTTPServer_Config_POST(t *testing.T) {
 	if neonEffect["arc_width"] != float64(90) {
 		t.Errorf("Expected arc_width=90, got %v", neonEffect["arc_width"])
 	}
+
+	// Defaults must be re-applied to fields the partial section left at zero
+	// (contract ai-generation.md §0) — e.g. bar_offset was absent from the
+	// posted neon_effect object.
+	if neonEffect["bar_offset"] != float64(20) {
+		t.Errorf("Expected bar_offset default (20) re-applied, got %v", neonEffect["bar_offset"])
+	}
+}
+
+// TestHTTPServer_Config_POST_PartialPreservesOtherSections is the regression
+// test for the destructive bug fixed by #8 (contract ai-generation.md §0,
+// CA1): a POST containing only one section must leave every other section —
+// including one it never mentions — untouched on disk and in memory.
+func TestHTTPServer_Config_POST_PartialPreservesOtherSections(t *testing.T) {
+	server, dataDir := setupTestHTTPServer(t)
+
+	initial := config.Get()
+	initial.WiFi = config.WiFiConfig{SSID: "MyHomeWifi", Password: "supersecret"}
+	initial.AI.AnthropicAPIKey = "sk-ant-should-survive"
+	initial.Storage.QuestionsDir = filepath.Join(dataDir, "files", "questions")
+	initial.Storage.FilesDir = filepath.Join(dataDir, "files")
+	config.SetInstance(initial)
+
+	// Partial save touching only neon_effect (mirrors ConfigPage's real payloads).
+	req := httptest.NewRequest("POST", "/config.json", strings.NewReader(`{"neon_effect":{"enabled":true}}`))
+	w := httptest.NewRecorder()
+	server.mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("Expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	after := config.Get()
+	if after.WiFi.SSID != "MyHomeWifi" || after.WiFi.Password != "supersecret" {
+		t.Errorf("WiFi section was wiped by an unrelated partial save: %+v", after.WiFi)
+	}
+	if after.AI.AnthropicAPIKey != "sk-ant-should-survive" {
+		t.Errorf("AI API key was wiped by an unrelated partial save: %q", after.AI.AnthropicAPIKey)
+	}
+	if after.Storage.QuestionsDir == "" || after.Storage.FilesDir == "" {
+		t.Errorf("Storage section was wiped by an unrelated partial save: %+v", after.Storage)
+	}
+	if !after.NeonEffect.Enabled {
+		t.Errorf("Expected neon_effect.enabled=true from the posted section")
+	}
+
+	// Also assert the reverse: saving the "server" section must not touch neon_effect.
+	req2 := httptest.NewRequest("POST", "/config.json", strings.NewReader(`{"server":{"debug":true}}`))
+	w2 := httptest.NewRecorder()
+	server.mux.ServeHTTP(w2, req2)
+	if w2.Code != http.StatusOK {
+		t.Fatalf("Expected 200, got %d: %s", w2.Code, w2.Body.String())
+	}
+	after2 := config.Get()
+	if !after2.NeonEffect.Enabled {
+		t.Errorf("Expected neon_effect.enabled to survive a POST of the server section, got %+v", after2.NeonEffect)
+	}
+	if after2.Server.HTTPPort != 80 {
+		t.Errorf("Expected http_port default (80) re-applied after posting {server:{debug:true}}, got %d", after2.Server.HTTPPort)
+	}
+	if !after2.Server.Debug {
+		t.Errorf("Expected server.debug=true from the posted section")
+	}
+}
+
+// TestHTTPServer_Config_POST_APIKeyPreservation covers the AI-key-specific
+// merge exception (contract ai-generation.md §2, CA2): absent or empty key
+// preserves the stored value; clear_api_key erases it; a malformed key is
+// rejected with 400 and the store is left unchanged.
+func TestHTTPServer_Config_POST_APIKeyPreservation(t *testing.T) {
+	t.Run("absent ai section preserves key", func(t *testing.T) {
+		server, _ := setupTestHTTPServer(t)
+		cfg := config.Get()
+		cfg.AI.AnthropicAPIKey = "sk-ant-original"
+		config.SetInstance(cfg)
+
+		req := httptest.NewRequest("POST", "/config.json", strings.NewReader(`{"neon_effect":{"enabled":true}}`))
+		w := httptest.NewRecorder()
+		server.mux.ServeHTTP(w, req)
+		if w.Code != http.StatusOK {
+			t.Fatalf("Expected 200, got %d: %s", w.Code, w.Body.String())
+		}
+		if got := config.Get().AI.AnthropicAPIKey; got != "sk-ant-original" {
+			t.Errorf("Expected key preserved, got %q", got)
+		}
+	})
+
+	t.Run("empty key in ai section preserves key", func(t *testing.T) {
+		server, _ := setupTestHTTPServer(t)
+		cfg := config.Get()
+		cfg.AI.AnthropicAPIKey = "sk-ant-original"
+		config.SetInstance(cfg)
+
+		req := httptest.NewRequest("POST", "/config.json", strings.NewReader(`{"ai":{"anthropic_api_key":"","model":"claude-opus-5"}}`))
+		w := httptest.NewRecorder()
+		server.mux.ServeHTTP(w, req)
+		if w.Code != http.StatusOK {
+			t.Fatalf("Expected 200, got %d: %s", w.Code, w.Body.String())
+		}
+		if got := config.Get().AI.AnthropicAPIKey; got != "sk-ant-original" {
+			t.Errorf("Expected key preserved on empty string, got %q", got)
+		}
+	})
+
+	t.Run("clear_api_key erases the key", func(t *testing.T) {
+		server, _ := setupTestHTTPServer(t)
+		cfg := config.Get()
+		cfg.AI.AnthropicAPIKey = "sk-ant-original"
+		config.SetInstance(cfg)
+
+		req := httptest.NewRequest("POST", "/config.json", strings.NewReader(`{"ai":{"clear_api_key":true}}`))
+		w := httptest.NewRecorder()
+		server.mux.ServeHTTP(w, req)
+		if w.Code != http.StatusOK {
+			t.Fatalf("Expected 200, got %d: %s", w.Code, w.Body.String())
+		}
+		if got := config.Get().AI.AnthropicAPIKey; got != "" {
+			t.Errorf("Expected key cleared, got %q", got)
+		}
+	})
+
+	t.Run("new key replaces the old one", func(t *testing.T) {
+		server, _ := setupTestHTTPServer(t)
+		cfg := config.Get()
+		cfg.AI.AnthropicAPIKey = "sk-ant-original"
+		config.SetInstance(cfg)
+
+		req := httptest.NewRequest("POST", "/config.json", strings.NewReader(`{"ai":{"anthropic_api_key":"sk-ant-new-value"}}`))
+		w := httptest.NewRecorder()
+		server.mux.ServeHTTP(w, req)
+		if w.Code != http.StatusOK {
+			t.Fatalf("Expected 200, got %d: %s", w.Code, w.Body.String())
+		}
+		if got := config.Get().AI.AnthropicAPIKey; got != "sk-ant-new-value" {
+			t.Errorf("Expected key replaced, got %q", got)
+		}
+	})
+
+	t.Run("malformed key is rejected with 400 and store is untouched", func(t *testing.T) {
+		server, _ := setupTestHTTPServer(t)
+		cfg := config.Get()
+		cfg.AI.AnthropicAPIKey = "sk-ant-original"
+		config.SetInstance(cfg)
+
+		req := httptest.NewRequest("POST", "/config.json", strings.NewReader(`{"ai":{"anthropic_api_key":"not-a-valid-key"}}`))
+		w := httptest.NewRecorder()
+		server.mux.ServeHTTP(w, req)
+		if w.Code != http.StatusBadRequest {
+			t.Fatalf("Expected 400, got %d: %s", w.Code, w.Body.String())
+		}
+		if got := config.Get().AI.AnthropicAPIKey; got != "sk-ant-original" {
+			t.Errorf("Expected key untouched after rejected request, got %q", got)
+		}
+	})
+
+	t.Run("response never echoes the stored key", func(t *testing.T) {
+		server, _ := setupTestHTTPServer(t)
+		cfg := config.Get()
+		cfg.AI.AnthropicAPIKey = "sk-ant-original"
+		config.SetInstance(cfg)
+
+		req := httptest.NewRequest("POST", "/config.json", strings.NewReader(`{"ai":{"model":"claude-opus-5"}}`))
+		w := httptest.NewRecorder()
+		server.mux.ServeHTTP(w, req)
+		if strings.Contains(w.Body.String(), "sk-ant-original") {
+			t.Errorf("POST response leaked the API key: %s", w.Body.String())
+		}
+	})
+
+	// Mi-1 (code-review-20260806-101822.md), corrected after a real bug was
+	// found in QA (_work/handoff/task-dev-backend-20260806-103004.md): an
+	// earlier version of this coverage treated the "ai" section as
+	// wholesale-replaced like every other config section (matching contract
+	// ai-generation.md §0's literal wording at the time), and asserted that a
+	// key-only POST resets batch_size/provider/etc. to their defaults. That
+	// assertion PASSED against the code as it was, but the code itself was
+	// wrong: ConfigPage.jsx saves individual ai.* settings from separate
+	// buttons (provider select, API key field, batching sliders —
+	// ConfigPage.jsx:343-352 for the key-only save), each firing a POST that
+	// only carries the field(s) it owns. Wholesale-replacing "ai" on every
+	// such POST silently reset every field the caller didn't happen to
+	// include — e.g. saving the Groq key alone reset provider back to
+	// "anthropic", breaking the documented Groq setup flow (QA Scénario 1
+	// étape 2). Fixed in http.go: "ai" now gets a field-by-field merge
+	// (absent JSON key preserves the stored value, same semantics the two
+	// secrets already had) instead of being wholesale-replaced. Both
+	// scenarios below now assert the corrected, contract-amended behavior.
+	t.Run("ai section ABSENT: batching and provider fields untouched", func(t *testing.T) {
+		server, _ := setupTestHTTPServer(t)
+		cfg := config.Get()
+		cfg.AI.AnthropicAPIKey = "sk-ant-original"
+		cfg.AI.BatchSize = 42
+		cfg.AI.Provider = "groq"
+		cfg.AI.InterBatchDelayMs = 12345
+		cfg.AI.ContextTokenBudget = 999
+		cfg.AI.MaxConsecutiveFailures = 7
+		cfg.AI.GroqModel = "openai/gpt-oss-20b"
+		config.SetInstance(cfg)
+
+		req := httptest.NewRequest("POST", "/config.json", strings.NewReader(`{"neon_effect":{"enabled":true}}`))
+		w := httptest.NewRecorder()
+		server.mux.ServeHTTP(w, req)
+		if w.Code != http.StatusOK {
+			t.Fatalf("Expected 200, got %d: %s", w.Code, w.Body.String())
+		}
+
+		after := config.Get()
+		if after.AI.AnthropicAPIKey != "sk-ant-original" {
+			t.Errorf("Expected key untouched, got %q", after.AI.AnthropicAPIKey)
+		}
+		if after.AI.BatchSize != 42 {
+			t.Errorf("Expected BatchSize=42 untouched, got %d", after.AI.BatchSize)
+		}
+		if after.AI.Provider != "groq" {
+			t.Errorf("Expected Provider=groq untouched, got %q", after.AI.Provider)
+		}
+		if after.AI.InterBatchDelayMs != 12345 {
+			t.Errorf("Expected InterBatchDelayMs=12345 untouched, got %d", after.AI.InterBatchDelayMs)
+		}
+		if after.AI.ContextTokenBudget != 999 {
+			t.Errorf("Expected ContextTokenBudget=999 untouched, got %d", after.AI.ContextTokenBudget)
+		}
+		if after.AI.MaxConsecutiveFailures != 7 {
+			t.Errorf("Expected MaxConsecutiveFailures=7 untouched, got %d", after.AI.MaxConsecutiveFailures)
+		}
+		if after.AI.GroqModel != "openai/gpt-oss-20b" {
+			t.Errorf("Expected GroqModel untouched, got %q", after.AI.GroqModel)
+		}
+	})
+
+	t.Run("batching and provider fields survive a key-only POST", func(t *testing.T) {
+		server, _ := setupTestHTTPServer(t)
+		cfg := config.Get()
+		cfg.AI.AnthropicAPIKey = "sk-ant-original"
+		cfg.AI.BatchSize = 42
+		cfg.AI.Provider = "groq"
+		cfg.AI.InterBatchDelayMs = 12345
+		cfg.AI.ContextTokenBudget = 999
+		cfg.AI.MaxConsecutiveFailures = 7
+		cfg.AI.GroqModel = "openai/gpt-oss-20b"
+		config.SetInstance(cfg)
+
+		req := httptest.NewRequest("POST", "/config.json", strings.NewReader(`{"ai":{"anthropic_api_key":"sk-ant-new"}}`))
+		w := httptest.NewRecorder()
+		server.mux.ServeHTTP(w, req)
+		if w.Code != http.StatusOK {
+			t.Fatalf("Expected 200, got %d: %s", w.Code, w.Body.String())
+		}
+
+		after := config.Get()
+		if after.AI.AnthropicAPIKey != "sk-ant-new" {
+			t.Errorf("Expected key replaced, got %q", after.AI.AnthropicAPIKey)
+		}
+		// http.go: "ai" is field-by-field merged, not wholesale-replaced —
+		// a JSON key absent from the POST body preserves the previously
+		// stored value for that field, exactly like the two secrets already
+		// did. Reproduces the exact repro steps from
+		// _work/handoff/task-dev-backend-20260806-103004.md (save provider,
+		// then save the key alone — provider must not revert).
+		if after.AI.BatchSize != 42 {
+			t.Errorf("Expected BatchSize=42 preserved, got %d", after.AI.BatchSize)
+		}
+		if after.AI.Provider != "groq" {
+			t.Errorf("Expected Provider=groq preserved, got %q", after.AI.Provider)
+		}
+		if after.AI.InterBatchDelayMs != 12345 {
+			t.Errorf("Expected InterBatchDelayMs=12345 preserved, got %d", after.AI.InterBatchDelayMs)
+		}
+		if after.AI.ContextTokenBudget != 999 {
+			t.Errorf("Expected ContextTokenBudget=999 preserved, got %d", after.AI.ContextTokenBudget)
+		}
+		if after.AI.MaxConsecutiveFailures != 7 {
+			t.Errorf("Expected MaxConsecutiveFailures=7 preserved, got %d", after.AI.MaxConsecutiveFailures)
+		}
+		if after.AI.GroqModel != "openai/gpt-oss-20b" {
+			t.Errorf("Expected GroqModel preserved, got %q", after.AI.GroqModel)
+		}
+	})
+
+	// Explicit zero-value still applies: batch_size: 0 sent EXPLICITLY (key
+	// present) is a real value, not "field omitted" — it goes through
+	// ApplyDefaults afterward same as any other zero value would (existing,
+	// documented behavior), landing on the default rather than staying 0.
+	// This is what distinguishes the field merge from a naive "if incoming
+	// field is non-zero, overwrite" approach, which would be unable to tell
+	// "the user explicitly sent 0" apart from "the user didn't send this
+	// field at all" and would silently coalesce the two.
+	t.Run("ai section PRESENT with explicit zero: field is set then defaulted, not preserved", func(t *testing.T) {
+		server, _ := setupTestHTTPServer(t)
+		cfg := config.Get()
+		cfg.AI.AnthropicAPIKey = "sk-ant-original"
+		cfg.AI.BatchSize = 42
+		config.SetInstance(cfg)
+
+		req := httptest.NewRequest("POST", "/config.json", strings.NewReader(`{"ai":{"anthropic_api_key":"sk-ant-new","batch_size":0}}`))
+		w := httptest.NewRecorder()
+		server.mux.ServeHTTP(w, req)
+		if w.Code != http.StatusOK {
+			t.Fatalf("Expected 200, got %d: %s", w.Code, w.Body.String())
+		}
+
+		after := config.Get()
+		if after.AI.BatchSize != 20 {
+			t.Errorf("Expected explicit batch_size:0 to be re-defaulted to 20 (existing ApplyDefaults behavior), got %d", after.AI.BatchSize)
+		}
+	})
+
+	// Mi-2 (code-review-20260806-101822.md): the Groq key's POST semantics
+	// (preserve on absent/empty, clear_groq_api_key, gsk_ prefix validation)
+	// duplicated from the Anthropic sub-tests above — previously only
+	// exercised in-memory (ai_batching_test.go sets cfg.GroqAPIKey directly),
+	// never through this HTTP-level merge path.
+	t.Run("groq key: absent ai section preserves key", func(t *testing.T) {
+		server, _ := setupTestHTTPServer(t)
+		cfg := config.Get()
+		cfg.AI.GroqAPIKey = "gsk_original"
+		config.SetInstance(cfg)
+
+		req := httptest.NewRequest("POST", "/config.json", strings.NewReader(`{"neon_effect":{"enabled":true}}`))
+		w := httptest.NewRecorder()
+		server.mux.ServeHTTP(w, req)
+		if w.Code != http.StatusOK {
+			t.Fatalf("Expected 200, got %d: %s", w.Code, w.Body.String())
+		}
+		if got := config.Get().AI.GroqAPIKey; got != "gsk_original" {
+			t.Errorf("Expected Groq key preserved, got %q", got)
+		}
+	})
+
+	t.Run("groq key: empty key in ai section preserves key", func(t *testing.T) {
+		server, _ := setupTestHTTPServer(t)
+		cfg := config.Get()
+		cfg.AI.GroqAPIKey = "gsk_original"
+		config.SetInstance(cfg)
+
+		req := httptest.NewRequest("POST", "/config.json", strings.NewReader(`{"ai":{"groq_api_key":"","model":"claude-opus-5"}}`))
+		w := httptest.NewRecorder()
+		server.mux.ServeHTTP(w, req)
+		if w.Code != http.StatusOK {
+			t.Fatalf("Expected 200, got %d: %s", w.Code, w.Body.String())
+		}
+		if got := config.Get().AI.GroqAPIKey; got != "gsk_original" {
+			t.Errorf("Expected Groq key preserved on empty string, got %q", got)
+		}
+	})
+
+	t.Run("groq key: clear_groq_api_key erases the key", func(t *testing.T) {
+		server, _ := setupTestHTTPServer(t)
+		cfg := config.Get()
+		cfg.AI.GroqAPIKey = "gsk_original"
+		config.SetInstance(cfg)
+
+		req := httptest.NewRequest("POST", "/config.json", strings.NewReader(`{"ai":{"clear_groq_api_key":true}}`))
+		w := httptest.NewRecorder()
+		server.mux.ServeHTTP(w, req)
+		if w.Code != http.StatusOK {
+			t.Fatalf("Expected 200, got %d: %s", w.Code, w.Body.String())
+		}
+		if got := config.Get().AI.GroqAPIKey; got != "" {
+			t.Errorf("Expected Groq key cleared, got %q", got)
+		}
+	})
+
+	t.Run("groq key: new key replaces the old one", func(t *testing.T) {
+		server, _ := setupTestHTTPServer(t)
+		cfg := config.Get()
+		cfg.AI.GroqAPIKey = "gsk_original"
+		config.SetInstance(cfg)
+
+		req := httptest.NewRequest("POST", "/config.json", strings.NewReader(`{"ai":{"groq_api_key":"gsk_new-value"}}`))
+		w := httptest.NewRecorder()
+		server.mux.ServeHTTP(w, req)
+		if w.Code != http.StatusOK {
+			t.Fatalf("Expected 200, got %d: %s", w.Code, w.Body.String())
+		}
+		if got := config.Get().AI.GroqAPIKey; got != "gsk_new-value" {
+			t.Errorf("Expected Groq key replaced, got %q", got)
+		}
+	})
+
+	t.Run("groq key: malformed key is rejected with 400 and store is untouched", func(t *testing.T) {
+		server, _ := setupTestHTTPServer(t)
+		cfg := config.Get()
+		cfg.AI.GroqAPIKey = "gsk_original"
+		config.SetInstance(cfg)
+
+		req := httptest.NewRequest("POST", "/config.json", strings.NewReader(`{"ai":{"groq_api_key":"not-a-valid-key"}}`))
+		w := httptest.NewRecorder()
+		server.mux.ServeHTTP(w, req)
+		if w.Code != http.StatusBadRequest {
+			t.Fatalf("Expected 400, got %d: %s", w.Code, w.Body.String())
+		}
+		if got := config.Get().AI.GroqAPIKey; got != "gsk_original" {
+			t.Errorf("Expected Groq key untouched after rejected request, got %q", got)
+		}
+	})
+
+	t.Run("groq key: response never echoes the stored key", func(t *testing.T) {
+		server, _ := setupTestHTTPServer(t)
+		cfg := config.Get()
+		cfg.AI.GroqAPIKey = "gsk_original"
+		config.SetInstance(cfg)
+
+		req := httptest.NewRequest("POST", "/config.json", strings.NewReader(`{"ai":{"model":"claude-opus-5"}}`))
+		w := httptest.NewRecorder()
+		server.mux.ServeHTTP(w, req)
+		if strings.Contains(w.Body.String(), "gsk_original") {
+			t.Errorf("POST response leaked the Groq API key: %s", w.Body.String())
+		}
+	})
 }
 
 func TestHTTPServer_CORS(t *testing.T) {
@@ -512,30 +1021,122 @@ func TestHTTPServer_FindFreeQuestionID(t *testing.T) {
 	questionsDir := filepath.Join(dataDir, "files", "questions")
 	os.MkdirAll(questionsDir, 0755)
 
-	// First ID should be 1
-	id := server.findFreeQuestionID()
+	// First ID should be 1 — resolveQuestionDir also reserves it (creates the
+	// directory), unlike the old findFreeQuestionID which only inspected the
+	// filesystem, so each call below advances past the one it just reserved.
+	id, dir, err := server.resolveQuestionDir("")
+	if err != nil {
+		t.Fatalf("resolveQuestionDir failed: %v", err)
+	}
 	if id != "1" {
 		t.Errorf("Expected first ID to be 1, got %s", id)
 	}
+	if dir != filepath.Join(questionsDir, "1") {
+		t.Errorf("Expected dir %s, got %s", filepath.Join(questionsDir, "1"), dir)
+	}
+	if info, statErr := os.Stat(dir); statErr != nil || !info.IsDir() {
+		t.Errorf("Expected reserved directory to exist: %v", statErr)
+	}
 
-	// Create ID 1
-	os.MkdirAll(filepath.Join(questionsDir, "1"), 0755)
-
-	// Next should be 2
-	id = server.findFreeQuestionID()
+	// Next should be 2 (1 is now reserved)
+	id, _, err = server.resolveQuestionDir("")
+	if err != nil {
+		t.Fatalf("resolveQuestionDir failed: %v", err)
+	}
 	if id != "2" {
 		t.Errorf("Expected next ID to be 2, got %s", id)
 	}
 
-	// Create 2, 3, 4
-	os.MkdirAll(filepath.Join(questionsDir, "2"), 0755)
+	// Create 3, 4 manually (simulating IDs taken by another path)
 	os.MkdirAll(filepath.Join(questionsDir, "3"), 0755)
 	os.MkdirAll(filepath.Join(questionsDir, "4"), 0755)
 
-	// Next should be 5
-	id = server.findFreeQuestionID()
+	// Next should be 5 (1, 2 reserved above; 3, 4 created manually)
+	id, _, err = server.resolveQuestionDir("")
+	if err != nil {
+		t.Fatalf("resolveQuestionDir failed: %v", err)
+	}
 	if id != "5" {
 		t.Errorf("Expected next ID to be 5, got %s", id)
+	}
+}
+
+// TestHTTPServer_ResolveQuestionDir_ExplicitIDReusesExistingDir verifies that
+// an explicit ID (editing an existing question) uses MkdirAll — not the
+// exclusive os.Mkdir reserved for auto-allocation — so re-saving an existing
+// question never fails just because its directory already exists.
+func TestHTTPServer_ResolveQuestionDir_ExplicitIDReusesExistingDir(t *testing.T) {
+	server, dataDir := setupTestHTTPServer(t)
+	questionsDir := filepath.Join(dataDir, "files", "questions")
+	os.MkdirAll(filepath.Join(questionsDir, "7"), 0755)
+
+	id, dir, err := server.resolveQuestionDir("7")
+	if err != nil {
+		t.Fatalf("resolveQuestionDir failed on existing explicit ID: %v", err)
+	}
+	if id != "7" || dir != filepath.Join(questionsDir, "7") {
+		t.Errorf("Expected id=7 dir=%s, got id=%s dir=%s", filepath.Join(questionsDir, "7"), id, dir)
+	}
+}
+
+// TestHTTPServer_ResolveQuestionDir_Exhausted verifies the id_exhausted error
+// path (contract ai-generation.md §5.1, CA: never silently reuse/overwrite
+// question 999) replaces the old "return 999" fallback.
+func TestHTTPServer_ResolveQuestionDir_Exhausted(t *testing.T) {
+	server, dataDir := setupTestHTTPServer(t)
+	questionsDir := filepath.Join(dataDir, "files", "questions")
+	for i := 1; i < 1000; i++ {
+		os.MkdirAll(filepath.Join(questionsDir, strconv.Itoa(i)), 0755)
+	}
+
+	_, _, err := server.resolveQuestionDir("")
+	if !errors.Is(err, ErrQuestionIDExhausted) {
+		t.Fatalf("Expected ErrQuestionIDExhausted, got %v", err)
+	}
+
+	// The pre-existing question 999 must be untouched (no silent overwrite).
+	info, statErr := os.Stat(filepath.Join(questionsDir, "999"))
+	if statErr != nil || !info.IsDir() {
+		t.Errorf("Expected question 999's directory to still exist untouched: %v", statErr)
+	}
+}
+
+// TestConcurrentQuestionResolveDir_UniqueIDs races many goroutines through
+// resolveQuestionDir("") and verifies each gets a distinct ID — the
+// regression test for the pre-fix race (contract ai-generation.md §5.1, R2).
+// Run with `go test -race` (qa gate) to also catch any data race on the
+// mutex itself.
+func TestConcurrentQuestionResolveDir_UniqueIDs(t *testing.T) {
+	server, dataDir := setupTestHTTPServer(t)
+	os.MkdirAll(filepath.Join(dataDir, "files", "questions"), 0755)
+
+	const n = 50
+	ids := make([]string, n)
+	errs := make([]error, n)
+	var wg sync.WaitGroup
+	for i := 0; i < n; i++ {
+		wg.Add(1)
+		go func(idx int) {
+			defer wg.Done()
+			id, _, err := server.resolveQuestionDir("")
+			ids[idx] = id
+			errs[idx] = err
+		}(i)
+	}
+	wg.Wait()
+
+	seen := make(map[string]bool, n)
+	for i, err := range errs {
+		if err != nil {
+			t.Fatalf("goroutine %d: resolveQuestionDir failed: %v", i, err)
+		}
+		if seen[ids[i]] {
+			t.Fatalf("duplicate ID allocated: %s", ids[i])
+		}
+		seen[ids[i]] = true
+	}
+	if len(seen) != n {
+		t.Errorf("Expected %d unique IDs, got %d", n, len(seen))
 	}
 }
 

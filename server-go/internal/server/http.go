@@ -21,6 +21,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 	"unicode"
 )
@@ -41,6 +42,14 @@ type HTTPServer struct {
 	updater    *Updater         // Auto-update handler
 	firmwareManager *FirmwareManager // OTA firmware manager (v3.1.0+)
 	defaultQuestionImageAsset []byte // Embedded fallback image (v3.2.2)
+	// questionIDMu serializes question ID allocation AND directory creation
+	// (contract ai-generation.md §5.1, #8). Without it, two concurrent
+	// requests (e.g. a manual upload racing an AI batch generation) can
+	// observe the same "free" ID before either reserves it. Every path that
+	// creates a question directory — auto-allocated or explicit — goes
+	// through resolveQuestionDir, which holds this lock for the full
+	// scan-and-reserve (or explicit-create) operation.
+	questionIDMu sync.Mutex
 
 	// Callbacks
 	OnAction                    func(action string, data json.RawMessage)
@@ -60,7 +69,7 @@ type HTTPServer struct {
 // NewHTTPServer creates a new HTTP server
 func NewHTTPServer(port int, engine *game.Engine, wsHub *WebSocketHub, buzzerHub *BuzzerWebSocketHub, logsHub *LogsWebSocketHub) *HTTPServer {
 	cfg := config.Get()
-	return &HTTPServer{
+	h := &HTTPServer{
 		port:            port,
 		engine:          engine,
 		wsHub:           wsHub,
@@ -73,6 +82,16 @@ func NewHTTPServer(port int, engine *game.Engine, wsHub *WebSocketHub, buzzerHub
 		updater:         NewUpdater(cfg.Version, cfg.Storage.DataDir),
 		firmwareManager: NewFirmwareManager(cfg.Storage.DataDir, cfg.Version),
 	}
+	// contract ai-multi-provider.md §10: push AI_GENERATION_PROGRESS to a
+	// newly-identified admin client immediately if a job is running. Wired
+	// here (not left to cmd/server) so it fires uniformly for both the
+	// dedicated /ws/admin endpoint (type known at connection time) and the
+	// legacy /ws + SET_CLIENT_TYPE flow — and so it works in package-level
+	// tests that talk to h.mux directly without the cmd/server App at all.
+	if wsHub != nil {
+		wsHub.OnClientRegistered = h.pushAIJobProgressToNewAdmin
+	}
+	return h
 }
 
 // GetFirmwareManager returns the firmware manager instance.
@@ -259,6 +278,9 @@ func (h *HTTPServer) setupRoutes() {
 
 	// Categories API (v5.6.2 — #95)
 	h.mux.HandleFunc("/api/categories", h.handleAPICategories)
+
+	// AI question generator (v6.0.0 — #8)
+	h.mux.HandleFunc("/api/generate-questions", h.handleGenerateQuestions)
 
 	// Buzzer API (WiFi config + OTA)
 	h.mux.HandleFunc("/api/buzzers", h.handleAPIBuzzers)
@@ -686,14 +708,18 @@ func (h *HTTPServer) handleUploadQuestion(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	// Get or generate question ID
-	id := r.FormValue("number")
-	if id == "" {
-		id = h.findFreeQuestionID()
+	// Get or generate question ID — allocation and directory creation are a
+	// single locked operation (T3.1/T3.2, contract ai-generation.md §5.1) so
+	// this can never race a concurrent upload or AI batch generation.
+	id, questionsDir, err := h.resolveQuestionDir(r.FormValue("number"))
+	if err != nil {
+		if errors.Is(err, ErrQuestionIDExhausted) {
+			http.Error(w, "No question ID available (1-999 exhausted)", http.StatusInsufficientStorage)
+		} else {
+			http.Error(w, "Failed to allocate question storage", http.StatusInternalServerError)
+		}
+		return
 	}
-
-	questionsDir := filepath.Join(h.dataDir, "files", "questions", id)
-	os.MkdirAll(questionsDir, 0755)
 
 	// Load existing question to preserve media if not updated
 	existingQuestion := make(map[string]interface{})
@@ -1005,15 +1031,55 @@ func (h *HTTPServer) handleUploadQuestion(w http.ResponseWriter, r *http.Request
 	w.Write([]byte(`{"status": "ok"}`))
 }
 
-func (h *HTTPServer) findFreeQuestionID() string {
+// ErrQuestionIDExhausted is returned by resolveQuestionDir when every ID in
+// 1..999 is already taken. Callers map it to HTTP 507 (contract
+// ai-generation.md §3/§5.1) — never silently reuse/overwrite question 999.
+var ErrQuestionIDExhausted = errors.New("id_exhausted")
+
+// resolveQuestionDir returns the question ID and its directory for an upload,
+// creating that directory as part of the same locked operation.
+//
+//   - explicitID != "": the caller (an edit, or a manual create with a chosen
+//     ID) gets exactly that ID; the directory is created with MkdirAll
+//     (idempotent — safe to call again on an existing question).
+//   - explicitID == "": scans 1..999 and reserves the first free one with
+//     os.Mkdir (exclusive — fails if the directory already exists), never
+//     os.MkdirAll, so the creation itself is the reservation. If the scan
+//     reaches 999 without finding a free slot, returns
+//     ErrQuestionIDExhausted instead of the previous silent "999" fallback,
+//     which would have overwritten that question.
+//
+// Both branches run under h.questionIDMu (T3.1/T3.2, contract
+// ai-generation.md §5.1) so a manual upload (handleUploadQuestion) and a
+// concurrent AI batch generation (handleGenerateQuestions) can never race on
+// the same ID — previously an unlocked os.Stat scan with no reservation step.
+func (h *HTTPServer) resolveQuestionDir(explicitID string) (id, dir string, err error) {
+	h.questionIDMu.Lock()
+	defer h.questionIDMu.Unlock()
+
 	questionsDir := filepath.Join(h.dataDir, "files", "questions")
+
+	if explicitID != "" {
+		dir = filepath.Join(questionsDir, explicitID)
+		if err := os.MkdirAll(dir, 0755); err != nil {
+			return "", "", err
+		}
+		return explicitID, dir, nil
+	}
+
+	if err := os.MkdirAll(questionsDir, 0755); err != nil {
+		return "", "", err
+	}
 	for i := 1; i < 1000; i++ {
-		id := fmt.Sprintf("%d", i)
-		if _, err := os.Stat(filepath.Join(questionsDir, id)); os.IsNotExist(err) {
-			return id
+		candidate := strconv.Itoa(i)
+		candidateDir := filepath.Join(questionsDir, candidate)
+		if mkErr := os.Mkdir(candidateDir, 0755); mkErr == nil {
+			return candidate, candidateDir, nil
+		} else if !os.IsExist(mkErr) {
+			return "", "", mkErr
 		}
 	}
-	return "999"
+	return "", "", ErrQuestionIDExhausted
 }
 
 // getStorageInfo returns file storage information (like ESP32's printLittleFSInfo)
@@ -1053,58 +1119,245 @@ func (h *HTTPServer) getStorageInfo() map[string]interface{} {
 	}
 }
 
-func (h *HTTPServer) handleConfig(w http.ResponseWriter, r *http.Request) {
-	configPath := "config.json" // Main config file
+// maskedConfigJSON builds the JSON response for a Config, masking the
+// Anthropic and Groq API keys (neither ever returned to the client) and
+// computing their derived *_configured flags. It never mutates cfg or the
+// config singleton (contract ai-generation.md §2, §8 S1; the Groq key
+// follows the identical rule per ai-multi-provider.md §8).
+func maskedConfigJSON(cfg *config.Config) ([]byte, error) {
+	resp := *cfg
+	// EffectiveXxxAPIKeyConfigured (security incident 2026-08-07): reflects a
+	// key supplied via BUZZCONTROL_*_API_KEY env var too, not just the
+	// (possibly empty, in a PROD deployment) config.json field — otherwise
+	// an env-only deployment would show "no key configured" and the
+	// frontend would keep "✨ Générer via IA" disabled despite a working key.
+	resp.AI.APIKeyConfigured = resp.AI.EffectiveAnthropicAPIKeyConfigured()
+	resp.AI.AnthropicAPIKey = ""
+	resp.AI.ClearAPIKey = false
+	resp.AI.GroqAPIKeyConfigured = resp.AI.EffectiveGroqAPIKeyConfigured()
+	resp.AI.GroqAPIKey = ""
+	resp.AI.ClearGroqAPIKey = false
+	return json.MarshalIndent(&resp, "", "  ")
+}
 
+// handleConfig serves GET/POST /config.json.
+//
+// POST is additive (contract ai-generation.md §0): it starts from the current
+// singleton, and for every top-level section present in the request body,
+// resets that section to its zero value before decoding the request's section
+// into it — so a section present but missing some of its own fields doesn't
+// silently keep stale values, it falls back to defaults instead (applied
+// below via config.ApplyDefaults-equivalent, see the exported Save path).
+// Sections absent from the body are left completely untouched. This replaces
+// the previous behavior, which decoded the body into a zero Config and wrote
+// it whole, silently erasing every section the caller didn't send.
+//
+// The "ai" section is the one documented exception to that whole-section
+// replace rule (contract amendment following a bug found in QA on #137,
+// _work/handoff/task-dev-backend-20260806-103004.md): ConfigPage.jsx saves
+// individual ai.* settings from separate buttons (provider select, API key
+// field, batching sliders — see ConfigPage.jsx:343-352 for the key-only
+// save), each firing its own POST with only the field(s) it owns. Treating
+// "ai" as wholesale-replaced like every other section silently zeroed every
+// field the caller didn't happen to include — e.g. saving the Groq key alone
+// reset provider back to "anthropic" — which is a real functional bug, not
+// merely a test gap: it broke the documented Groq setup flow (QA Scénario 1
+// étape 2). So "ai" gets a field-by-field merge instead: a JSON key present
+// in the section (even if its value is the zero value, e.g. batch_size: 0)
+// overwrites the stored field; a key absent from the section leaves the
+// previously stored value untouched. The two secrets already had exactly
+// this "absent means preserved" semantics (contract ai-generation.md §2,
+// ai-multi-provider.md §8) — this generalizes it to every other ai.* field
+// instead of being the sole exception to a wholesale-replace default.
+func (h *HTTPServer) handleConfig(w http.ResponseWriter, r *http.Request) {
 	if r.Method == "POST" {
+		// Hard size limit before reading the body (security audit M1/M4,
+		// _work/reports/security-20260805-125747.md) — this endpoint now
+		// carries a secret (ai.anthropic_api_key), same motif as
+		// handlePostCategory (http.go:1664).
+		r.Body = http.MaxBytesReader(w, r.Body, 10<<20)
 		body, err := io.ReadAll(r.Body)
 		if err != nil {
 			http.Error(w, "Failed to read request body", http.StatusBadRequest)
 			return
 		}
 
-		// Parse the incoming config to validate neon_effect fields
-		var cfg config.Config
-		if err := json.Unmarshal(body, &cfg); err != nil {
+		var raw map[string]json.RawMessage
+		if err := json.Unmarshal(body, &raw); err != nil {
 			http.Error(w, "Invalid JSON", http.StatusBadRequest)
 			return
 		}
 
-		// Validate and clamp neon effect values
-		cfg.ValidateAndClampNeonEffect()
+		current := config.Get()
+		cfg := *current // value copy: every section is a plain struct, no aliasing
 
-		// Marshal back to JSON with proper formatting
-		validatedJSON, err := json.MarshalIndent(&cfg, "", "  ")
-		if err != nil {
-			http.Error(w, "Failed to encode config", http.StatusInternalServerError)
-			return
+		if data, ok := raw["server"]; ok {
+			cfg.Server = config.ServerConfig{}
+			if err := json.Unmarshal(data, &cfg.Server); err != nil {
+				http.Error(w, "Invalid JSON in \"server\" section", http.StatusBadRequest)
+				return
+			}
+		}
+		if data, ok := raw["wifi"]; ok {
+			cfg.WiFi = config.WiFiConfig{}
+			if err := json.Unmarshal(data, &cfg.WiFi); err != nil {
+				http.Error(w, "Invalid JSON in \"wifi\" section", http.StatusBadRequest)
+				return
+			}
+		}
+		if data, ok := raw["game"]; ok {
+			cfg.Game = config.GameConfig{}
+			if err := json.Unmarshal(data, &cfg.Game); err != nil {
+				http.Error(w, "Invalid JSON in \"game\" section", http.StatusBadRequest)
+				return
+			}
+		}
+		if data, ok := raw["storage"]; ok {
+			cfg.Storage = config.StorageConfig{}
+			if err := json.Unmarshal(data, &cfg.Storage); err != nil {
+				http.Error(w, "Invalid JSON in \"storage\" section", http.StatusBadRequest)
+				return
+			}
+		}
+		if data, ok := raw["neon_effect"]; ok {
+			cfg.NeonEffect = config.NeonEffectConfig{}
+			if err := json.Unmarshal(data, &cfg.NeonEffect); err != nil {
+				http.Error(w, "Invalid JSON in \"neon_effect\" section", http.StatusBadRequest)
+				return
+			}
+		}
+		if data, ok := raw["wifi_defaults"]; ok {
+			cfg.WiFiDefaults = config.WiFiDefaultsConfig{}
+			if err := json.Unmarshal(data, &cfg.WiFiDefaults); err != nil {
+				http.Error(w, "Invalid JSON in \"wifi_defaults\" section", http.StatusBadRequest)
+				return
+			}
+		}
+		if data, ok := raw["version"]; ok {
+			if err := json.Unmarshal(data, &cfg.Version); err != nil {
+				http.Error(w, "Invalid JSON in \"version\" field", http.StatusBadRequest)
+				return
+			}
+		}
+		if data, ok := raw["ai"]; ok {
+			var incoming config.AIConfig
+			if err := json.Unmarshal(data, &incoming); err != nil {
+				http.Error(w, "Invalid JSON in \"ai\" section", http.StatusBadRequest)
+				return
+			}
+			if incoming.AnthropicAPIKey != "" && !strings.HasPrefix(incoming.AnthropicAPIKey, "sk-ant-") {
+				http.Error(w, "Format de clé API invalide (attendu : sk-ant-...)", http.StatusBadRequest)
+				return
+			}
+			if incoming.GroqAPIKey != "" && !strings.HasPrefix(incoming.GroqAPIKey, "gsk_") {
+				http.Error(w, "Format de clé API Groq invalide (attendu : gsk_...)", http.StatusBadRequest)
+				return
+			}
+
+			// Field-by-field merge (see the func-level comment above for
+			// why): re-parse the section as a raw key map purely to know
+			// which JSON keys the caller actually sent — presence, not
+			// value — since `incoming` alone can't distinguish "field
+			// omitted" from "field explicitly sent as its zero value" and
+			// json.RawMessage. cfg.AI already holds the previously stored
+			// values (cfg is a copy of the current singleton) and is only
+			// touched below for keys present in aiRaw, so every omitted
+			// field is left exactly as it was.
+			var aiRaw map[string]json.RawMessage
+			if err := json.Unmarshal(data, &aiRaw); err != nil {
+				http.Error(w, "Invalid JSON in \"ai\" section", http.StatusBadRequest)
+				return
+			}
+			if _, ok := aiRaw["model"]; ok {
+				cfg.AI.Model = incoming.Model
+			}
+			if _, ok := aiRaw["timeout_seconds"]; ok {
+				cfg.AI.TimeoutSeconds = incoming.TimeoutSeconds
+			}
+			if _, ok := aiRaw["max_questions"]; ok {
+				cfg.AI.MaxQuestions = incoming.MaxQuestions
+			}
+			if _, ok := aiRaw["batch_size"]; ok {
+				cfg.AI.BatchSize = incoming.BatchSize
+			}
+			if _, ok := aiRaw["inter_batch_delay_ms"]; ok {
+				cfg.AI.InterBatchDelayMs = incoming.InterBatchDelayMs
+			}
+			if _, ok := aiRaw["context_token_budget"]; ok {
+				cfg.AI.ContextTokenBudget = incoming.ContextTokenBudget
+			}
+			if _, ok := aiRaw["max_consecutive_failures"]; ok {
+				cfg.AI.MaxConsecutiveFailures = incoming.MaxConsecutiveFailures
+			}
+			if _, ok := aiRaw["provider"]; ok {
+				cfg.AI.Provider = incoming.Provider
+			}
+			if _, ok := aiRaw["groq_model"]; ok {
+				cfg.AI.GroqModel = incoming.GroqModel
+			}
+
+			// The two secrets keep their existing "absent or empty key
+			// preserves the stored value" semantics (contract
+			// ai-generation.md §2, identical rule for the Groq key per
+			// ai-multi-provider.md §8) — unaffected by the field merge
+			// above since cfg.AI.AnthropicAPIKey/GroqAPIKey haven't been
+			// touched yet at this point.
+			preservedAnthropicKey := cfg.AI.AnthropicAPIKey
+			preservedGroqKey := cfg.AI.GroqAPIKey
+			cfg.AI.APIKeyConfigured = false
+			cfg.AI.ClearAPIKey = false
+			cfg.AI.GroqAPIKeyConfigured = false
+			cfg.AI.ClearGroqAPIKey = false
+
+			switch {
+			case incoming.ClearAPIKey:
+				cfg.AI.AnthropicAPIKey = ""
+			case incoming.AnthropicAPIKey != "":
+				cfg.AI.AnthropicAPIKey = incoming.AnthropicAPIKey
+			default:
+				cfg.AI.AnthropicAPIKey = preservedAnthropicKey
+			}
+			switch {
+			case incoming.ClearGroqAPIKey:
+				cfg.AI.GroqAPIKey = ""
+			case incoming.GroqAPIKey != "":
+				cfg.AI.GroqAPIKey = incoming.GroqAPIKey
+			default:
+				cfg.AI.GroqAPIKey = preservedGroqKey
+			}
 		}
 
-		// Save to file
-		if err := os.WriteFile(configPath, validatedJSON, 0644); err != nil {
+		// Re-apply defaults to any field a partial section reset to zero, and
+		// clamp neon effect values, exactly as a config.json load would.
+		config.ApplyDefaults(&cfg)
+		cfg.ValidateAndClampNeonEffect()
+
+		if err := config.Save(&cfg); err != nil {
 			http.Error(w, "Failed to save config", http.StatusInternalServerError)
 			return
 		}
-
-		// Reload config singleton
 		config.SetInstance(&cfg)
 
-		// Trigger broadcast callback
 		if h.OnConfigUpdate != nil {
 			h.OnConfigUpdate()
 		}
 
-		LogInfo(game.LogComponentHTTP, "Config updated and saved (neon_effect: enabled=%v, mode=%s, arc=%d, intensity=%d, speed=%.1f, offset=%d, thickness=%d)",
-			cfg.NeonEffect.Enabled, cfg.NeonEffect.Mode, cfg.NeonEffect.ArcWidth, cfg.NeonEffect.IntensityGap, cfg.NeonEffect.RotationSpeed, cfg.NeonEffect.BarOffset, cfg.NeonEffect.BarThickness)
+		LogInfo(game.LogComponentHTTP, "Config updated and saved (sections: %v; neon_effect: enabled=%v, mode=%s, arc=%d, intensity=%d, speed=%.1f, offset=%d, thickness=%d)",
+			keysOf(raw), cfg.NeonEffect.Enabled, cfg.NeonEffect.Mode, cfg.NeonEffect.ArcWidth, cfg.NeonEffect.IntensityGap, cfg.NeonEffect.RotationSpeed, cfg.NeonEffect.BarOffset, cfg.NeonEffect.BarThickness)
 
+		respJSON, err := maskedConfigJSON(&cfg)
+		if err != nil {
+			http.Error(w, "Failed to encode config", http.StatusInternalServerError)
+			return
+		}
 		w.Header().Set("Content-Type", "application/json")
-		w.Write(validatedJSON)
+		w.Write(respJSON)
 		return
 	}
 
-	// GET: return current config
+	// GET: return current config (secret masked, contract ai-generation.md §2)
 	cfg := config.Get()
-	data, err := json.MarshalIndent(cfg, "", "  ")
+	data, err := maskedConfigJSON(cfg)
 	if err != nil {
 		http.Error(w, "Failed to encode config", http.StatusInternalServerError)
 		return
@@ -1112,6 +1365,18 @@ func (h *HTTPServer) handleConfig(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	w.Write(data)
+}
+
+// keysOf returns the top-level keys of a raw JSON object map, for logging
+// which sections a POST /config.json request touched (never logs values —
+// in particular never the AI section's content, S2).
+func keysOf(m map[string]json.RawMessage) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	return keys
 }
 
 func (h *HTTPServer) handleClearGame(w http.ResponseWriter, r *http.Request) {

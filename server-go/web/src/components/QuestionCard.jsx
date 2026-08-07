@@ -227,6 +227,7 @@ export default function QuestionCard({
   if (draggable && Object.keys(dragHandlers).length > 0) {
     return (
       <motion.div
+        id={`qcard-${question.ID}`}
         className={`qcard-wrapper ${dragHandlers.isDragging ? 'dragging' : ''} ${dragHandlers.isDragOver ? 'drag-over' : ''}`}
         draggable
         onDragStart={dragHandlers.onDragStart}

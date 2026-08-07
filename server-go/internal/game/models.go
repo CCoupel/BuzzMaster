@@ -343,6 +343,32 @@ type GameState struct {
 	QuizName  string `json:"QUIZ_NAME"`
 	QuizTheme string `json:"QUIZ_THEME"`
 	QuizNotes string `json:"QUIZ_NOTES"`
+	// Quiz metadata for AI generation prefill (v6.0.0, #8) — no omitempty for the
+	// same reason as the three fields above: a client must be able to see a
+	// field cleared back to "" (contract game-state.md, ai-generation.md §6).
+	// v6.1.0 (#137 Batch 2b): QuizPopulation/QuizDifficulty (string) became
+	// QuizPopulations/QuizDifficulties ([]string) — a game can target several
+	// audiences/difficulties at once. Serialized as [] never null: MUST be
+	// initialized to []string{} (never left nil) everywhere they're set, so a
+	// client iterating the array never crashes on null (contract game-state.md
+	// §"Aucun omitempty"). QuizObjectives is new — the game's global objective,
+	// admin-only, never broadcast to /ws/tv or /ws/player (see
+	// protocol.AdminOnlyGameFields and contracts/game-state.md
+	// §"QUIZ_OBJECTIVES — champ à diffusion restreinte").
+	QuizPopulations  []string `json:"QUIZ_POPULATIONS"`
+	QuizDifficulties []string `json:"QUIZ_DIFFICULTIES"`
+	QuizLanguage     string   `json:"QUIZ_LANGUAGE"`
+	QuizObjectives   string   `json:"QUIZ_OBJECTIVES"`
+	// QuizHiddenFields (v6.1.0, #137 Batch 2b T1.8, additive) — TV NEW_GAME
+	// display preference, not confidentiality: values ⊂ {THEME, POPULATIONS,
+	// DIFFICULTIES, LANGUAGE} that the admin chose NOT to show on the TV
+	// screen. Unlike QuizObjectives, this field IS broadcast to /ws/tv and
+	// /ws/player (contract ws-payload-serialization.md) — the client applies
+	// the preference, the server does not strip it (contract game-state.md
+	// §"Diffusion — préférence d'affichage ≠ confidentialité"). Set only via
+	// SetQuizDisplay, not SetQuizMeta (contract H1-H5, rule H1: never null,
+	// always initialized to []string{}).
+	QuizHiddenFields []string `json:"QUIZ_HIDDEN_FIELDS"`
 }
 
 // TeamsAndBumpers holds all teams and bumpers data

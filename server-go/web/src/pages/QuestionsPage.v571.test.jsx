@@ -281,9 +281,14 @@ describe('QuestionsPage — Bouton + catégorie (#97)', () => {
 
   it('une erreur 409 (conflit) affiche "Cette catégorie existe déjà"', async () => {
     // v5.7.2 BREAKING: POST /api/categories requiert multipart + fichier image obligatoire
-    global.fetch = vi.fn().mockResolvedValueOnce({
-      ok: false,
-      status: 409,
+    // v6.0.0 (#8): QuestionsPage appelle aussi GET /config.json au montage
+    // (état de la clé IA) — router par URL plutôt que mockResolvedValueOnce
+    // pour ne pas dépendre de l'ordre des appels fetch.
+    global.fetch = vi.fn((url) => {
+      if (url === '/config.json') {
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({ ai: { api_key_configured: false } }) })
+      }
+      return Promise.resolve({ ok: false, status: 409 })
     })
 
     const { container } = render(<QuestionsPage />)
@@ -311,14 +316,22 @@ describe('QuestionsPage — Bouton + catégorie (#97)', () => {
     const mockRefetch = vi.fn()
     useCategories.mockReturnValue(makeCategoriesMock({ refetch: mockRefetch }))
 
-    global.fetch = vi.fn().mockResolvedValueOnce({
-      ok: true,
-      json: () => Promise.resolve({
-        key: 'MA_CATEGORIE',
-        name: 'Ma Categorie',
-        imageURL: '/files/categories/MA_CATEGORIE.png',
-        isCustom: true,
-      }),
+    // v6.0.0 (#8): QuestionsPage appelle aussi GET /config.json au montage
+    // (état de la clé IA) — router par URL plutôt que mockResolvedValueOnce
+    // pour ne pas dépendre de l'ordre des appels fetch.
+    global.fetch = vi.fn((url) => {
+      if (url === '/config.json') {
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({ ai: { api_key_configured: false } }) })
+      }
+      return Promise.resolve({
+        ok: true,
+        json: () => Promise.resolve({
+          key: 'MA_CATEGORIE',
+          name: 'Ma Categorie',
+          imageURL: '/files/categories/MA_CATEGORIE.png',
+          isCustom: true,
+        }),
+      })
     })
 
     const { container } = render(<QuestionsPage />)

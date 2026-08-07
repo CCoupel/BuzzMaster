@@ -568,3 +568,65 @@ WebSocket dédiée aux logs temps réel.
 | Usage     | Page Logs uniquement |
 
 Actions: `LOG_HISTORY`, `LOG_ENTRY`
+
+---
+
+## Génération IA (v6.0.0, #8)
+
+### POST /api/generate-questions
+
+Génère des questions via l'API Claude et les écrit directement en base (additif uniquement).
+
+| Propriété | Valeur |
+|-----------|--------|
+| Auth      | Aucune |
+| Content-Type | `application/json` |
+| Durée     | Longue (1 à 3 min) — réponse synchrone |
+
+> **Contrat détaillé** : `contracts/ai-generation.md` §3 (request, response, codes d'erreur
+> stables, effet de bord `OnQuestionUpload` obligatoire).
+
+Codes : `200` (avec `created` / `skipped_count`), `400` invalide, `405`, `409` pas de clé,
+`502` erreur amont Anthropic, `504` timeout, `507` plus d'ID libre.
+
+---
+
+### POST /config.json — comportement modifié (correctif)
+
+Le handler devient **additif** : il part de `config.Get()` et n'écrase que les sections
+présentes dans le corps. Auparavant il désérialisait dans un struct vide puis réécrivait tout
+le fichier, ce qui remettait à zéro chaque section absente du payload.
+
+> **Contrat détaillé** : `contracts/ai-generation.md` §0 et §2.
+
+### GET /config.json — nouvelle section `ai`
+
+```json
+"ai": {
+  "anthropic_api_key": "",
+  "api_key_configured": true,
+  "model": "claude-opus-5",
+  "timeout_seconds": 300,
+  "max_questions": 200
+}
+```
+
+`anthropic_api_key` est **toujours vide en réponse** — le secret n'est jamais renvoyé. Le
+frontend s'appuie sur `api_key_configured` seul. Voir `contracts/ai-generation.md` §2.
+
+---
+
+### POST /api/generate-questions — devient asynchrone (v6.1.0, #137)
+
+**[BREAKING]** L'endpoint ne renvoie plus le résultat de la génération.
+
+| Propriété | Valeur |
+|-----------|--------|
+| Réponse   | `202 Accepted` — `{"status":"accepted","job_id":"…","batches_total":10}` |
+| Progression | Action WebSocket `AI_GENERATION_PROGRESS` sur `/ws/admin` |
+| Concurrence | `409 generation_in_progress` — un seul job à la fois |
+
+Les codes `502` / `504` ne sont plus renvoyés par cet endpoint : ces erreurs surviennent
+pendant le job et transitent par la progression.
+
+> **Contrat détaillé** : `contracts/ai-multi-provider.md` §9 à §12.
