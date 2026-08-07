@@ -24,15 +24,15 @@ Sinon → detecter le mode selon le premier mot de `$ARGUMENTS`.
 ```
 Commandes disponibles :
 
-  /milestone new <version> [date]   Creer un milestone (ex: v1.2.0 2026-05-01)
+  /milestone new <version> [date]   Creer un milestone (ex: v1.4 2026-05-01)
   /milestone status                  Voir la progression des milestones actifs
   /milestone close [version]         Cloturer un milestone
 
 Exemples :
-  /milestone new v1.2.0
-  /milestone new v1.2.0 2026-06-01
+  /milestone new v1.4
+  /milestone new v1.4 2026-06-01
   /milestone status
-  /milestone close v1.2.0
+  /milestone close v1.4
   /milestone close                   (clot le milestone le plus avance)
 ```
 
@@ -143,7 +143,7 @@ Pour chaque milestone ouvert, calculer le pourcentage et afficher :
 Milestones actifs :
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  v1.2.0  ████████░░░░░░░░  50%  (3/6 issues)
+  v1.4  ████████░░░░░░░░  50%  (3/6 issues)
   Echeance : 2026-06-01  (J-46)
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
@@ -222,7 +222,7 @@ Si des issues sont encore ouvertes, proposer :
 2 issues non terminees. Que faire ?
 
   [A] Reporter vers le prochain milestone
-      → Entrer le nom du prochain milestone (ex: v1.3.0)
+      → Entrer le nom du prochain milestone (ex: v1.6 — Y pair suivant, voir context/COMMON.md section 5)
   [B] Fermer toutes les issues et cloturer
       → Les issues seront fermees avec le commentaire "Cloture avec le milestone <version>"
   [C] Cloturer le milestone sans toucher aux issues

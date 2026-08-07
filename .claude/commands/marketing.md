@@ -78,6 +78,9 @@ La version recuperee est utilisee dans toutes les sections du site (Hero, Featur
 [GENERATION] --> Generer ou mettre a jour les sections du site
     |
     v
+[MAQUETTE] --> Publier une maquette HTML en Artifact, iterer jusqu'a validation explicite
+    |
+    v
 [TRADUCTION] --> Produire les fichiers locales/fr.json et locales/en.json
     |
     v
@@ -109,6 +112,15 @@ gh api repos/{owner}/{repo}/milestones \
 ```
 
 Si aucun milestone n'existe pour la version → fallback sur CHANGELOG.md et issues GitHub classiques.
+
+## Maquette — Gate obligatoire avant commit
+
+> ⚠️ **Règle** : toujours passer par une maquette HTML publiée en Artifact, itérée jusqu'à
+> validation explicite de l'utilisateur, **avant tout commit** sur `gh-pages`. Ne jamais committer
+> directement une génération non validée visuellement.
+
+> ⚠️ **Règle** : ne jamais assigner une image sur la base de son seul nom de fichier ou label
+> hérité — toujours la vérifier visuellement avant réutilisation dans une section du site.
 
 ## Structure du site genere
 

@@ -62,7 +62,7 @@ Lancer dev-backend ET dev-frontend en parallele (2 Task tools)
 
 ```bash
 # Version actuelle
-cat server-go/config.json | python3 -c "import json,sys; d=json.load(sys.stdin); print(d['version'])"
+{VERSION_READ_CMD}
 
 # Branche courante
 git branch --show-current
@@ -71,15 +71,15 @@ git branch --show-current
 ### Etape 2 : Incrementer Version (OBLIGATOIRE)
 
 ```bash
-# AVANT tout code, incrementer z
-# X.Y.Z -> X.Y.Z+1
-git add server-go/config.json
-git commit -m "chore(version): Bump to X.Y.Z"
+# AVANT tout code, incrementer l'iteration dev a
+# X.Y.Z.a -> X.Y.Z.a+1  (voir context/COMMON.md section 5)
+git add {VERSION_FILE}
+git commit -m "chore(version): Bump to X.Y.Z.a"
 ```
 
 ### Etape 3 : Implementer
 
-Voir ordre par agent dans `CLAUDE.md`.
+Voir ordre par agent dans `context/PROJECT_CONTEXT.md`.
 
 ### Etape 4 : Build Final
 
@@ -122,7 +122,7 @@ git push origin <branche>
 
 | Regle | Detail |
 |-------|--------|
-| Version first | Incrementer z AVANT tout code |
+| Version first | Incrementer a AVANT tout code |
 | Scope strict | Chaque agent reste dans son domaine |
 | Tests | Chaque fonction publique = tests |
 | Commits | Atomiques, 1 commit par tache logique |

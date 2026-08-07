@@ -47,7 +47,7 @@ SendMessage({ to: "dev-frontend", content: "<tâche frontend>" })
 
 Adresses `SendMessage` = noms canoniques définis dans CLAUDE.md :
 ```
-planner, dev-backend, dev-frontend, dev-firmware, dev-plugin,
+planner, dev-backend, dev-frontend, dev-buzzclick,
 test-writer, code-reviewer, qa, doc-updater, deployer, security, infra
 ```
 

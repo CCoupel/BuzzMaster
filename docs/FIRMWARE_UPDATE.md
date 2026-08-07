@@ -267,6 +267,12 @@ Dans les logs du serveur BuzzControl :
 3. Vérifier que le serveur est démarré AVANT le buzzer
 4. Vérifier l'adresse IP du serveur dans `src/BuzzClick/config.h`
 
+### L'OTA échoue à ~20-30% sur un buzzer
+
+**Symptôme** : la mise à jour OTA s'arrête systématiquement autour de 20-30% de progression sur un buzzer donné.
+
+**Solution** : flasher ce buzzer en USB avec le firmware merged (bootloader + partitions + boot_app0 + app, offset `0x0`) plutôt que de réessayer l'OTA — ce mode de bootstrap contourne le blocage. Voir aussi la mémoire projet `project_v370_firmware_ota.md` pour le détail de l'incident d'origine (v3.7.0).
+
 ### Erreur "Failed to connect to ESP32"
 
 **Symptôme** : esptool ne peut pas se connecter au buzzer

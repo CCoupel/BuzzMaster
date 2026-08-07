@@ -84,7 +84,7 @@ Task({
 })
 ```
 
-> Les agents `ponctuel` (ex: `security`, `infra`, `dev-buzzclick`) ne sont **pas** spawnés ici — `security`/`infra` via leur commande dédiée, `dev-buzzclick` à la demande par le CDP en cours de workflow (`/feature`, `/bugfix`) si la tâche touche `src/BuzzClick/`, voir `.claude/commands/context/CDP_WORKFLOWS.md`.
+> Les agents `ponctuel` (ex: `security`, `infra`) sont spawned à la demande par leur commande dédiée — ne pas les inclure ici.
 
 3. **Attendre les ACTIF de tous les teammates** avant de continuer.
 

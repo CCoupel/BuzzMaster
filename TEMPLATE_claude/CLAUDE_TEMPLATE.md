@@ -2,7 +2,7 @@
 
 > **Repo** : `{ORG}/{PROJECT}`
 > **Branche principale** : `main`
-> **Versionnement** : SemVer, tags `vX.Y.Z`
+> **Versionnement** : `X.Y.Z.a` en dev / `X.Y.Z` en prod — voir `context/COMMON.md` section 5
 
 ---
 

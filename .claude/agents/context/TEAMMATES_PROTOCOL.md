@@ -61,6 +61,7 @@ Action requise : [ce dont j'ai besoin]
 - Rester en IDLE après DONE — ne pas fermer ce pane
 - Signaler les jalons en cours de route (EN COURS étape N/M)
 - Si la tâche référence un handoff (`_work/handoff/...`) ou un rapport (`_work/reports/...`) → lire le fichier avant de commencer
+- Créer une branche que d'autres teammates doivent checkout → envoyer un `SendMessage` **direct** à chacun d'eux (en plus du rapport à `main`). Écrire "X peut checkout la branche" dans un rapport adressé à `main` ne notifie **pas** réellement X — bug récurrent observé deux fois avant correction.
 
 ---
 

@@ -3,25 +3,30 @@
 > **Ce fichier contient les regles communes a tous les agents de developpement.**
 > Agents concernes : tous les agents `dev-*`
 >
-> **Prerequis** : Respecter `context/COMMON.md` (regles generales) et `CLAUDE.md` (contexte technique)
+> **Prerequis** : Respecter `context/COMMON.md` (regles generales) et `context/PROJECT_CONTEXT.md` (contexte technique)
 
 ---
 
 ## Etape Critique : Increment de Version
 
+Format : `X.Y.Z.a` en dev (le `a` disparait en prod). Reference complete : `context/COMMON.md` section 5.
+
 **AVANT TOUT CHANGEMENT DE CODE**, vous DEVEZ :
 
-1. **Lire** la version actuelle depuis `server-go/config.json`
-2. **Incrementer** le numero z (patch) : `X.Y.Z` -> `X.Y.Z+1`
-3. **Committer** : `chore(version): Bump to X.Y.Z+1`
+1. **Lire** la version actuelle depuis `{VERSION_FILE}`
+2. **Incrementer** l'iteration dev `a` : `X.Y.Z.a` -> `X.Y.Z.a+1`
+3. **Committer** : `chore(version): Bump to X.Y.Z.a+1`
+
+`Z` ne s'incremente **jamais** a chaque commit — c'est un evenement de cycle (demarrage d'un bugfix sans milestone actif), pas un increment par iteration.
 
 ### Regles de Versioning
 
 | Qui | Incremente | Quand |
 |-----|------------|-------|
-| **PLAN** | y (minor) | Nouvelle feature (`X.Y.0` -> `X.Y+1.0`) |
-| **DEV** | z (patch) | Chaque cycle de developpement (`X.Y.0` -> `X.Y.1`) |
-| **DOC** | Reset z=0 | Finalisation release (`X.Y.N` -> `X.Y.0`) |
+| **PLAN** | Y (`Y+1 ; Z=0 ; a=0`) | Nouveau milestone (FEATURE) |
+| **DEV** | Z (`Z+1 ; a=0`) | 1er commit d'un cycle bugfix, aucun milestone actif (BUGFIX/HOTFIX) |
+| **DEV** | a (`a+1`) | Chaque commit suivant du cycle courant |
+| **DEPLOY** | Y (`Y+1`, Z conserve, a supprime) | Promotion dev -> prod |
 
 ---
 
@@ -53,7 +58,7 @@ feat(api): Add user authentication endpoint
 fix(auth): Handle expired tokens gracefully
 test(api): Add tests for user registration
 refactor(utils): Extract validation helpers
-chore(version): Bump to 1.2.3
+chore(version): Bump to 1.2.3.4
 ```
 
 ---
@@ -182,8 +187,8 @@ Chaque agent DEV doit produire un summary structure :
 # [Agent] Implementation Summary
 
 ## Version
-- Previous: X.Y.Z
-- Current: X.Y.Z+1
+- Previous: X.Y.Z.a
+- Current: X.Y.Z.a+1
 
 ## Files Modified
 
@@ -197,7 +202,7 @@ Chaque agent DEV doit produire un summary structure :
 - Coverage: XX%
 
 ## Commits
-1. `chore(version): Bump to X.Y.Z+1`
+1. `chore(version): Bump to X.Y.Z.a+1`
 2. `feat(scope): Description`
 
 ## Verification

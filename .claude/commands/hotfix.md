@@ -94,9 +94,11 @@ git checkout -b hotfix/<name> main
 git commit -m "fix: <description>"
 
 # Merge et tag
+# Versionnement : toujours Z+1 ; a=0 (meme si un milestone est en cours)
+# Voir context/COMMON.md section 5 — pas de suffixe dedie, Z porte deja l'info
 git checkout main
 git merge --no-ff hotfix/<name>
-git tag v<version>-hotfix
+git tag v<version>
 git push origin main --tags
 ```
 

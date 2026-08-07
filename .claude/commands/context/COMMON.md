@@ -12,11 +12,11 @@ Ce fichier centralise les elements repetes dans les definitions de commandes et 
 
 ```yaml
 Projet: BuzzControl
-Repository: https://github.com/CCoupel/BuzzMaster
+Repository: {REPO_URL}
 
 Structure:
-  Source: server-go/
-  Config version: server-go/config.json
+  Source: {SRC_DIR}
+  Config version: {VERSION_FILE}
   Backlog: GitHub Issues (gh issue list)
   Documentation: docs/
 
@@ -39,7 +39,7 @@ cd server-go && go build ./cmd/server
 ### 2.2 Validation du Build
 
 ```bash
-ls -la server-go/server 2>/dev/null || echo 'Binary not found'
+{BUILD_VALIDATE_CMD}
 ```
 
 ---
@@ -51,19 +51,19 @@ ls -la server-go/server 2>/dev/null || echo 'Binary not found'
 > **REGLE** : Toujours utiliser la methode d'arret prevue, jamais de kill force.
 
 ```bash
-curl -s http://localhost/shutdown
+{SERVER_STOP_CMD}
 ```
 
 ### 3.2 Sequence Redemarrage Complete
 
 ```bash
-curl -s http://localhost/shutdown && sleep 2 && cd server-go && ./server
+{SERVER_RESTART_CMD}
 ```
 
 ### 3.3 Verification Post-Demarrage
 
 ```bash
-curl -s http://localhost/api/version
+{SERVER_VERIFY_CMD}
 ```
 
 ---
@@ -79,7 +79,7 @@ cd server-go && go test ./...
 ### 4.2 Rapport de Couverture
 
 ```bash
-cd server-go && go test ./... -coverprofile=coverage.out && go tool cover -html=coverage.out
+{COVERAGE_CMD}
 ```
 
 ---
@@ -90,28 +90,55 @@ cd server-go && go test ./... -coverprofile=coverage.out && go tool cover -html=
 
 | Fichier | Champ | Usage |
 |---------|-------|-------|
-| `server-go/config.json` | `"version"` | Source de verite |
+| `{VERSION_FILE}` | `"version"` | Source de verite |
 
-### 5.2 Regles de Versionnement
+### 5.2 Format et Regles de Versionnement
 
 ```
-Format: X.Y.Z (SemVer)
-
-X (major): Breaking changes, migrations necessaires
-Y (minor): Nouvelles features (incremente par PLAN)
-Z (patch): Bugfixes, corrections (incremente par DEV)
-
-Exemple:
-- Feature nouvelle: 2.45.0 -> 2.46.0
-- Bugfix: 2.46.0 -> 2.46.1
-- Release finale: 2.46.3 -> 2.46.0 (reset Z)
+Format dev  : X.Y.Z.a
+Format prod : X.Y.Z   (le "a" n'est jamais publie en prod)
 ```
 
-### 5.3 Incrementer la Version
+| Segment | Role |
+|---------|------|
+| X | Compatibilite des donnees (DB, fichiers). Rupture = upgrade possible mais rollback complique. |
+| Y | Compteur de milestone/livraison. Impair = dev, pair = prod. Avance toujours de +1 (jamais +2). |
+| Z | Compteur de bugfix. Remis a 0 uniquement au demarrage d'un nouveau milestone. |
+| a | Iteration dev interne (un commit = un `a`). Jamais visible en prod. |
+
+### 5.3 Les 5 Operations
+
+| Evenement | Effet |
+|-----------|-------|
+| Iteration dev (commit courant) | `a+1` |
+| Nouveau milestone (feature planifiee) | `Y+1 ; Z=0 ; a=0` |
+| Nouveau cycle bugfix (aucun milestone actif) | `Z+1 ; a=0` (reprend le Y de dev de la derniere wave) |
+| Promotion dev -> prod | `Y+1 ; Z conserve ; a supprime` |
+| Rupture de compatibilite de donnees | `X+1 ; Y=0 ; Z=0 ; a=0` (le prochain milestone repart au Y impair suivant, donc `Y=1`) |
+
+### 5.4 Regle d'Or — Bug Remonte
+
+- **Milestone en cours** : le fix est integre aux iterations du milestone (`a+1`, `Z` ne bouge pas). La prochaine prod livre le Y du milestone.
+- **Aucun milestone en cours** : nouveau cycle bugfix cree a partir du dernier Y de dev (meme wave que la prod courante), `Z+1`.
+- **Une version prod deja depassee n'est jamais repatchee** — le fix cible toujours la ligne prod courante, jamais une ancienne.
+
+### 5.5 Exemple
+
+```
+1.1.0.0 -> 1.1.0.1 -> 1.1.0.2        (dev, Milestone A)
+1.2.0                                 (promotion prod)
+1.3.0.0 -> 1.3.0.1                    (dev, Milestone B)
+1.4.0                                 (promotion prod)
+1.3.1.0 -> 1.3.1.1                    (bug remonte, aucun milestone actif — reprise Y=3)
+1.4.1                                 (promotion prod, Z conserve)
+1.5.0.0                               (nouveau milestone, Z revient a 0)
+1.6.0                                 (promotion prod)
+```
+
+### 5.6 Lire la Version
 
 ```bash
-# Lire la version actuelle
-cat server-go/config.json | python3 -c "import json,sys; d=json.load(sys.stdin); print(d['version'])"
+{VERSION_READ_CMD}
 ```
 
 ---
@@ -124,9 +151,9 @@ cat server-go/config.json | python3 -c "import json,sys; d=json.load(sys.stdin);
 git checkout main
 git pull origin main
 git checkout -b feature/<nom-court>
-# Incrementer Y dans server-go/config.json
-git add server-go/config.json
-git commit -m "chore(version): Start vX.Y.0 - <feature name>"
+# Nouveau milestone dans {VERSION_FILE} : Y+1 ; Z=0 ; a=0
+git add {VERSION_FILE}
+git commit -m "chore(version): Start vX.Y.0.0 - <feature name>"
 git push -u origin feature/<nom-court>
 ```
 
@@ -174,7 +201,7 @@ git push origin v<version>
 ```markdown
 - [ ] Code compile sans erreur
 - [ ] Tests unitaires passes
-- [ ] Version incrementee (Z pour bugfix)
+- [ ] Version incrementee (a pour chaque commit ; Z uniquement au 1er commit d'un cycle bugfix sans milestone actif)
 - [ ] Commits atomiques avec messages clairs
 - [ ] Pas de fichiers temporaires
 - [ ] Push effectue
@@ -196,7 +223,7 @@ git push origin v<version>
 - [ ] Review code approuvee
 - [ ] CHANGELOG.md mis a jour
 - [ ] Documentation mis a jour (si nouvelles features)
-- [ ] Version Z remise a 0
+- [ ] Version promue (Y+1 ; Z conserve ; a supprime — voir section 5.3)
 - [ ] Build reussi
 ```
 
@@ -250,7 +277,7 @@ rm -f coverage.out coverage.html
 
 ### 10.1 Criteres de Routage
 
-Le routage vers les agents DEV se fait selon les fichiers impactes et le type de modification. Chaque projet definit ses propres criteres dans `CLAUDE.md`.
+Le routage vers les agents DEV se fait selon les fichiers impactes et le type de modification. Chaque projet definit ses propres criteres dans `context/PROJECT_CONTEXT.md`.
 
 ### 10.2 Ordre d'Execution
 
@@ -265,7 +292,7 @@ Le routage vers les agents DEV se fait selon les fichiers impactes et le type de
 
 | Fichier | Role |
 |---------|------|
-| `server-go/config.json` | Version (source de verite) |
+| `{VERSION_FILE}` | Version (source de verite) |
 | `CHANGELOG.md` | Historique des versions |
 | `CLAUDE.md` | Documentation projet |
 

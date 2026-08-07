@@ -71,10 +71,10 @@ git branch --show-current
 ### Etape 2 : Incrementer Version (OBLIGATOIRE)
 
 ```bash
-# AVANT tout code, incrementer z
-# X.Y.Z -> X.Y.Z+1
+# AVANT tout code, incrementer l'iteration dev a
+# X.Y.Z.a -> X.Y.Z.a+1  (voir context/COMMON.md section 5)
 git add {VERSION_FILE}
-git commit -m "chore(version): Bump to X.Y.Z"
+git commit -m "chore(version): Bump to X.Y.Z.a"
 ```
 
 ### Etape 3 : Implementer
@@ -122,7 +122,7 @@ git push origin <branche>
 
 | Regle | Detail |
 |-------|--------|
-| Version first | Incrementer z AVANT tout code |
+| Version first | Incrementer a AVANT tout code |
 | Scope strict | Chaque agent reste dans son domaine |
 | Tests | Chaque fonction publique = tests |
 | Commits | Atomiques, 1 commit par tache logique |

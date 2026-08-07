@@ -388,6 +388,9 @@ GOOS=windows GOARCH=amd64 CGO_ENABLED=0 \
 - La CI/CD PROD fait exactement la meme chose -> BORE garanti
 - Regle memoire : `feedback_qualif_windows_firmware.md`
 
+> ⚠️ **Règle** : ne jamais demander la validation QUALIF à l'utilisateur avant que l'étape 3
+> (binaire Windows) soit terminée — l'utilisateur teste systématiquement depuis Windows.
+
 ### Smoke tests QUALIF BuzzControl
 
 Le serveur QUALIF est lancé sur le **port 9090** pour éviter toute interférence avec un serveur de production tournant sur le port 80.

@@ -17,10 +17,10 @@ Role: Orchestrer workflows multi-agents avec validation utilisateur
 
 | Commande | Type | Workflow | Version |
 |----------|------|----------|---------|
-| `/feature` | FEATURE | Complet | Incremente Y |
-| `/bugfix` | BUGFIX | Simplifie | Incremente Z |
-| `/hotfix` | HOTFIX | Accelere | Incremente Z + suffix |
-| `/refactor` | REFACTOR | Leger | Aucun changement |
+| `/feature` | FEATURE | Complet | Nouveau milestone -> `Y+1 ; Z=0 ; a=0` |
+| `/bugfix` | BUGFIX | Simplifie | Milestone actif -> `a+1` seul ; sinon -> `Z+1 ; a=0` |
+| `/hotfix` | HOTFIX | Accelere | Toujours `Z+1 ; a=0` (meme si un milestone est en cours) |
+| `/refactor` | REFACTOR | Leger | Aucun changement (`a+1` sur les commits) |
 
 ---
 
@@ -39,11 +39,6 @@ SendMessage({ to: "dev-backend",  content: "<tâche>" })
 SendMessage({ to: "dev-frontend", content: "<tâche>" })
 ```
 
-> **Répertoire de travail partagé** : un `checkout`/`stash` lancé par un agent peut effacer
-> silencieusement les modifications non commitées d'un autre agent (ou de `main`) travaillant dans le
-> même répertoire. Toujours revérifier l'état après un incident git signalé par un teammate — ne
-> jamais supposer qu'un fichier modifié en amont est toujours intact.
-
 ### Agents par phase
 
 | Phase | Agent(s) à dispatcher |
@@ -52,28 +47,10 @@ SendMessage({ to: "dev-frontend", content: "<tâche>" })
 | Dev — Backend seul | `dev-backend` |
 | Dev — Frontend seul | `dev-frontend` |
 | Dev — Les deux | `dev-backend` + `dev-frontend` (parallèle si indépendants) |
-| Dev — Firmware BuzzClick (`src/BuzzClick/`) | `dev-buzzclick` (ponctuel, spawn à la demande — voir ci-dessous) |
-| Review | `code-reviewer` + `test-writer` (parallèle — **toujours dispatcher test-writer, jamais laisser un dev ecrire ses propres tests**) |
+| Review | `code-reviewer` + `test-writer` (parallèle) |
 | QA | `qa` |
 | Doc | `doc-updater` |
 | Deploy QUALIF / PROD | `deployer` |
-
-### Agent ponctuel — dev-buzzclick (firmware BuzzClick)
-
-Non spawné au `/start-session` (peu d'évolution active sur le firmware). Si une tâche `/feature` ou `/bugfix` touche `src/BuzzClick/` :
-
-1. Vérifier s'il est déjà actif dans la session (déjà spawné plus tôt) — si oui, dispatcher directement via `SendMessage`, ne jamais spawner un doublon.
-2. Sinon, le spawner :
-
-```
-Task({
-  name: "dev-buzzclick",
-  prompt: "Lis .claude/agents/context/TEAMMATES_PROTOCOL.md puis .claude/agents/dev-buzzclick.md. Tu fais partie de TEAM-Buzz sur BuzzControl. Mets-toi en IDLE après avoir envoyé ACTIF — le teamleader t'enverra ta tâche."
-})
-```
-
-3. Attendre ACTIF, dispatcher via `SendMessage({to: "dev-buzzclick", content: ...})`.
-4. À réception du DONE, fermer l'agent : `TaskStop("dev-buzzclick")` (contrairement aux agents permanents, qui restent IDLE).
 
 ---
 
@@ -270,29 +247,25 @@ git checkout -b refactor/<nom-court>
 
 ### Phase Versionnement
 
-| Type | Action | Exemple |
-|------|--------|---------|
-| FEATURE | Incremente Y, reset Z | 2.40.3 -> 2.41.0 |
-| BUGFIX | Incremente Z (build counter) | 2.41.0 -> 2.41.1 |
-| HOTFIX | Incremente Z + suffix | 2.41.1 -> 2.41.2-hotfix |
-| REFACTOR | Aucun | 2.41.1 (inchange) |
+**Référence complète** : `context/COMMON.md` section 5 (format `X.Y.Z.a`, les 5 opérations).
 
-#### Convention Z — compteur de build / reset PROD
+| Type | Condition | Action | Exemple |
+|------|-----------|--------|---------|
+| FEATURE | Toujours | Nouveau milestone : `Y+1 ; Z=0 ; a=0` | dev `1.3.0.0` → prod `1.4.0` |
+| BUGFIX | Milestone actif | Intégré aux itérations du milestone : `a+1` (Z inchangé) | dev `1.3.0.2` → prod `1.4.0` (fix inclus) |
+| BUGFIX | Aucun milestone actif | Nouveau cycle bugfix : `Z+1 ; a=0` (reprend le Y de dev de la dernière wave) | dev `1.3.1.0` → prod `1.4.1` |
+| HOTFIX | Toujours (urgence prod) | Nouveau cycle bugfix, même si un milestone est en cours : `Z+1 ; a=0` sur la wave dev de la prod courante | dev `1.3.1.0` → prod `1.4.1` |
+| REFACTOR | — | Aucun changement de version (`a+1` sur les commits) | `1.3.0.4` (inchangé en prod) |
 
-- **Z** est le compteur de build : incrémenté à chaque BUGFIX ou build intermédiaire durant le cycle.
-- **Deploy PROD** : Z est **toujours remis à 0**. Le tag de release est `vX.Y.0`.
-  - Exemple : si le cycle a produit `v2.41.1`, `v2.41.2`… le tag PROD est `v2.41.0`.
+#### Règle — bug remonté sur une ancienne version prod
 
-#### Convention Milestone — nommage `vX.Y`
+Une version prod déjà remplacée n'est **jamais repatchée**. Le fix cible toujours la ligne prod courante, quelle que soit l'ancienneté du bug (voir `context/COMMON.md` section 5.4).
 
-Le titre du milestone correspond à la version cible **sans Z** : `vX.Y`.
-- Exemple : milestone `v2.41` regroupe toutes les issues de la release Y=41, quel que soit Z.
-- Le milestone se clôture lors du deploy PROD → tag `vX.Y.0`.
+#### Convention Milestone GitHub — nommage `vX.Y`
 
-#### Versions divergentes entre branches paralleles
-
-Normal pendant le developpement — **ne pas synchroniser** les versions entre plusieurs branches
-empilees ou paralleles du meme milestone. Reconcilier une seule fois, au moment du merge PROD reel.
+Le titre du milestone GitHub correspond au **Y** de la version prod ciblée : `vX.Y` (sans Z, sans `a`).
+- Un cycle FEATURE crée/utilise le milestone GitHub `vX.Y`, clôturé au deploy PROD (tag `vX.Y.0`).
+- Un cycle BUGFIX/HOTFIX sans milestone actif (`Z+1`) ne crée **pas** de nouveau milestone GitHub — le tag `vX.Y.Z` qui en résulte patche silencieusement la dernière livraison.
 
 ### Phase Plan
 
@@ -471,12 +444,6 @@ SendMessage({ to: "deployer", content: "
 |-- CDP informe l'utilisateur : QUALIF déployée, scénarios de validation fournis
 |-- Deploy PROD : déclenché uniquement par commande explicite `/deploy prod`
 ```
-
-### Phase Deploy PROD
-
-> **Push PROD asynchrone** : un ordre de deploy peut continuer a s'executer meme si un "STOP"
-> utilisateur arrive juste apres. Ne jamais supposer qu'une annulation est arrivee a temps —
-> toujours verifier l'etat reel (`git log`, tags, statut CI) apres coup avant d'informer l'utilisateur.
 
 ---
 

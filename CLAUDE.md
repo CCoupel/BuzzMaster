@@ -159,7 +159,7 @@ Le paramètre `name` dans `Task` est **toujours le nom canonique simple** : `qa`
 
 **Noms canoniques** :
 ```
-planner, dev-backend, dev-frontend, dev-buzzclick,
+planner, dev-backend, dev-frontend, dev-firmware, dev-plugin,
 test-writer, code-reviewer, qa, doc-updater, deployer, security, infra
 ```
 
@@ -175,10 +175,6 @@ SendMessage({
   content: "Rapport invalide — écris le contenu dans _work/reports/<agent>-<timestamp>.md et renvoie le DONE avec la référence."
 })
 ```
-
-### Fin de session
-
-**TeamDelete** : proposer à l'utilisateur après PROD validé — **jamais supprimer automatiquement**.
 
 <!-- END TEAMLEADER_PROTOCOL -->
 

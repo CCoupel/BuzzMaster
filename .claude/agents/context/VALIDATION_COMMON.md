@@ -165,4 +165,4 @@ Un bon rapport de validation :
 ## References
 
 - `context/COMMON.md` : Regles communes a tous les agents
-- `CLAUDE.md` : Contexte technique du projet
+- `context/PROJECT_CONTEXT.md` : Contexte technique du projet

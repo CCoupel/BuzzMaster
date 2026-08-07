@@ -17,10 +17,10 @@ Role: Orchestrer workflows multi-agents avec validation utilisateur
 
 | Commande | Type | Workflow | Version |
 |----------|------|----------|---------|
-| `/feature` | FEATURE | Complet | Incremente Y |
-| `/bugfix` | BUGFIX | Simplifie | Incremente Z |
-| `/hotfix` | HOTFIX | Accelere | Incremente Z + suffix |
-| `/refactor` | REFACTOR | Leger | Aucun changement |
+| `/feature` | FEATURE | Complet | Nouveau milestone -> `Y+1 ; Z=0 ; a=0` |
+| `/bugfix` | BUGFIX | Simplifie | Milestone actif -> `a+1` seul ; sinon -> `Z+1 ; a=0` |
+| `/hotfix` | HOTFIX | Accelere | Toujours `Z+1 ; a=0` (meme si un milestone est en cours) |
+| `/refactor` | REFACTOR | Leger | Aucun changement (`a+1` sur les commits) |
 
 ---
 
@@ -247,24 +247,25 @@ git checkout -b refactor/<nom-court>
 
 ### Phase Versionnement
 
-| Type | Action | Exemple |
-|------|--------|---------|
-| FEATURE | Incremente Y, reset Z | 2.40.3 -> 2.41.0 |
-| BUGFIX | Incremente Z (build counter) | 2.41.0 -> 2.41.1 |
-| HOTFIX | Incremente Z + suffix | 2.41.1 -> 2.41.2-hotfix |
-| REFACTOR | Aucun | 2.41.1 (inchange) |
+**Référence complète** : `context/COMMON.md` section 5 (format `X.Y.Z.a`, les 5 opérations).
 
-#### Convention Z — compteur de build / reset PROD
+| Type | Condition | Action | Exemple |
+|------|-----------|--------|---------|
+| FEATURE | Toujours | Nouveau milestone : `Y+1 ; Z=0 ; a=0` | dev `1.3.0.0` → prod `1.4.0` |
+| BUGFIX | Milestone actif | Intégré aux itérations du milestone : `a+1` (Z inchangé) | dev `1.3.0.2` → prod `1.4.0` (fix inclus) |
+| BUGFIX | Aucun milestone actif | Nouveau cycle bugfix : `Z+1 ; a=0` (reprend le Y de dev de la dernière wave) | dev `1.3.1.0` → prod `1.4.1` |
+| HOTFIX | Toujours (urgence prod) | Nouveau cycle bugfix, même si un milestone est en cours : `Z+1 ; a=0` sur la wave dev de la prod courante | dev `1.3.1.0` → prod `1.4.1` |
+| REFACTOR | — | Aucun changement de version (`a+1` sur les commits) | `1.3.0.4` (inchangé en prod) |
 
-- **Z** est le compteur de build : incrémenté à chaque BUGFIX ou build intermédiaire durant le cycle.
-- **Deploy PROD** : Z est **toujours remis à 0**. Le tag de release est `vX.Y.0`.
-  - Exemple : si le cycle a produit `v2.41.1`, `v2.41.2`… le tag PROD est `v2.41.0`.
+#### Règle — bug remonté sur une ancienne version prod
 
-#### Convention Milestone — nommage `vX.Y`
+Une version prod déjà remplacée n'est **jamais repatchée**. Le fix cible toujours la ligne prod courante, quelle que soit l'ancienneté du bug (voir `context/COMMON.md` section 5.4).
 
-Le titre du milestone correspond à la version cible **sans Z** : `vX.Y`.
-- Exemple : milestone `v2.41` regroupe toutes les issues de la release Y=41, quel que soit Z.
-- Le milestone se clôture lors du deploy PROD → tag `vX.Y.0`.
+#### Convention Milestone GitHub — nommage `vX.Y`
+
+Le titre du milestone GitHub correspond au **Y** de la version prod ciblée : `vX.Y` (sans Z, sans `a`).
+- Un cycle FEATURE crée/utilise le milestone GitHub `vX.Y`, clôturé au deploy PROD (tag `vX.Y.0`).
+- Un cycle BUGFIX/HOTFIX sans milestone actif (`Z+1`) ne crée **pas** de nouveau milestone GitHub — le tag `vX.Y.Z` qui en résulte patche silencieusement la dernière livraison.
 
 ### Phase Plan
 

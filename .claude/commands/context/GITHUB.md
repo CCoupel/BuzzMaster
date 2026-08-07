@@ -80,9 +80,6 @@ gh issue create \
   --milestone "<version>"
 ```
 
-> **Piège** : ne jamais passer `--body` deux fois dans la même commande — la seconde occurrence
-> ecrase silencieusement la premiere en vide, sans erreur. Un seul `--body` (ou `--body-file`) par appel.
-
 ### 2.4 Modifier une issue
 
 ```bash
@@ -114,6 +111,9 @@ gh issue reopen <numero>
 ```bash
 gh issue comment <numero> --body "<message>"
 ```
+
+> ⚠️ **Règle** : ne jamais fermer, rouvrir ou commenter une issue/PR sans validation explicite de
+> l'utilisateur — même dans un workflow autrement autonome (QA→DOC→QUALIF par exemple).
 
 ---
 
@@ -366,8 +366,8 @@ fi
 
 | Element | Convention | Exemple |
 |---------|------------|---------|
-| Milestone | Version SemVer | `v1.2.0` |
-| Tag | Prefixe `v` + SemVer | `v1.2.0` |
+| Milestone | `vX.Y` (sans Z, sans a) | `v1.4` |
+| Tag | Prefixe `v` + `X.Y.Z` | `v1.4.1` |
 | Branche feature | `feature/<nom-court>` | `feature/auth-oauth` |
 | Branche bugfix | `fix/<nom-court>` | `fix/crash-login` |
 | Branche hotfix | `hotfix/<nom-court>` | `hotfix/security-patch` |

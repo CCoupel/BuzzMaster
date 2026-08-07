@@ -363,8 +363,8 @@ fi
 
 | Element | Convention | Exemple |
 |---------|------------|---------|
-| Milestone | Version SemVer | `v1.2.0` |
-| Tag | Prefixe `v` + SemVer | `v1.2.0` |
+| Milestone | `vX.Y` (sans Z, sans a) | `v1.4` |
+| Tag | Prefixe `v` + `X.Y.Z` | `v1.4.1` |
 | Branche feature | `feature/<nom-court>` | `feature/auth-oauth` |
 | Branche bugfix | `fix/<nom-court>` | `fix/crash-login` |
 | Branche hotfix | `hotfix/<nom-court>` | `hotfix/security-patch` |

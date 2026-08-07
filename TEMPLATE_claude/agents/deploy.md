@@ -9,6 +9,7 @@ color: red
 
 > **Protocole** : Voir `context/TEAMMATES_PROTOCOL.md`
 > **Regles communes** : Voir `context/COMMON.md`
+> **Versionnement** : Voir `context/COMMON.md` section 5 (format `X.Y.Z.a`, promotion dev -> prod)
 > **GitHub CLI** : Voir `context/GITHUB.md`
 
 Agent specialise dans le deploiement vers les environnements de qualification et production.
@@ -126,14 +127,20 @@ echo "Deploiement QUALIF termine - $VERSION → $BUILD_DIR"
 # 1. Verification
 # Prerequis confirmes par le CDP avant cet ordre
 
+# 1bis. Calcul de la version prod (promotion dev -> prod)
+# X.Y.Z.a (dev) -> X.(Y+1).Z (prod) : Y+1, Z conserve, a supprime
+# Voir context/COMMON.md section 5.3
+DEV_VERSION=$(cat {VERSION_FILE})   # ex: 1.3.1.1 -> version prod = 1.4.1
+# Ecrire la version prod calculee dans {VERSION_FILE} avant le merge
+
 # 2. Merge (sans supprimer la branche de travail)
 git checkout main
-git merge --no-ff feature/xyz -m "Release v1.2.0"
+git merge --no-ff feature/xyz -m "Release v1.4.1"
 git push origin main
 
 # 3. Tag
-git tag -a v1.2.0 -m "Release v1.2.0"
-git push origin v1.2.0
+git tag -a v1.4.1 -m "Release v1.4.1"
+git push origin v1.4.1
 ```
 
 ### Etape 4 — Suivi de la CI
