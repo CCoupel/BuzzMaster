@@ -3,6 +3,7 @@ import { useGame } from '../hooks/GameContext'
 import Button from '../components/Button'
 import Card from '../components/Card'
 import USBConfigModal from '../components/USBConfigModal'
+import ApiKeyHelpModal from '../components/ApiKeyHelpModal'
 import { OtaAllModal } from '../components/TeamCard'
 import './ConfigPage.css'
 
@@ -76,6 +77,8 @@ export default function ConfigPage() {
   const [savingAiKey, setSavingAiKey] = useState(false)
   const [clearingAiKey, setClearingAiKey] = useState(false)
   const [aiToast, setAiToast] = useState(null)
+  // Popup d'aide "comment obtenir une clé API" par fournisseur (bugfix/config-api-key-help)
+  const [apiKeyHelpProvider, setApiKeyHelpProvider] = useState(null) // null | 'anthropic' | 'groq'
   // #137 — second provider BYOK (Groq, tier gratuit). Mêmes règles de secret
   // que la clé Anthropic (contract ai-multi-provider.md §8) : jamais
   // renvoyée, vide en POST = préservée, effacement explicite dédié.
@@ -972,7 +975,18 @@ export default function ConfigPage() {
                 </div>
                 <p className="ai-provider-caveat">Payant, rapide (1 à 3 min pour 200 questions).</p>
                 <label className="wifi-field">
-                  <span>Clé API Claude</span>
+                  <span className="wifi-field-label-row">
+                    Clé API Claude
+                    <button
+                      type="button"
+                      className="api-key-help-btn"
+                      onClick={() => setApiKeyHelpProvider('anthropic')}
+                      aria-label="Comment obtenir une clé API Anthropic ?"
+                      title="Comment obtenir une clé API ?"
+                    >
+                      ?
+                    </button>
+                  </span>
                   <input
                     type="password"
                     value={aiApiKeyInput}
@@ -1005,7 +1019,18 @@ export default function ConfigPage() {
                   Gratuit, mais limité en débit : comptez ~10 minutes pour 200 questions.
                 </p>
                 <label className="wifi-field">
-                  <span>Clé API Groq</span>
+                  <span className="wifi-field-label-row">
+                    Clé API Groq
+                    <button
+                      type="button"
+                      className="api-key-help-btn"
+                      onClick={() => setApiKeyHelpProvider('groq')}
+                      aria-label="Comment obtenir une clé API Groq ?"
+                      title="Comment obtenir une clé API ?"
+                    >
+                      ?
+                    </button>
+                  </span>
                   <input
                     type="password"
                     value={groqApiKeyInput}
@@ -1298,6 +1323,13 @@ export default function ConfigPage() {
           onClose={() => setShowUSBModal(false)}
           wifiConfig={{ ssid: wifiSsid, password: wifiPassword, serverIp: wifiServerIp, serverPort: wifiServerPort }}
           firmwareInfo={firmwareInfo}
+        />
+      )}
+
+      {apiKeyHelpProvider && (
+        <ApiKeyHelpModal
+          provider={apiKeyHelpProvider}
+          onClose={() => setApiKeyHelpProvider(null)}
         />
       )}
 
