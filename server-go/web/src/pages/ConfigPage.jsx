@@ -7,6 +7,17 @@ import ApiKeyHelpModal from '../components/ApiKeyHelpModal'
 import { OtaAllModal } from '../components/TeamCard'
 import './ConfigPage.css'
 
+// Auto-sélection du fournisseur IA selon les clés disponibles (bugfix/config-api-key-help,
+// ConfigPage uniquement — ne touche pas AIGenerateModal/QuestionsPage).
+// Claude prioritaire si les deux clés existent, sinon Groq si seule clé Groq
+// dispo, sinon on conserve `fallback` (aucune clé disponible : la sélection
+// n'a pas d'importance, le bouton "Générer via IA" reste désactivé ailleurs).
+function pickAutoProvider(claudeConfigured, groqConfigured, fallback) {
+  if (claudeConfigured) return 'anthropic'
+  if (groqConfigured) return 'groq'
+  return fallback
+}
+
 export default function ConfigPage() {
   const { teams, bumpers, gameState, updateConfig, sendMessage, version, firmwareInfo: wsFirmwareInfo } = useGame()
   const dualRangeTrackRef = useRef(null)
@@ -160,14 +171,21 @@ export default function ConfigPage() {
           // v6.0.0 (#8) — la clé elle-même n'est jamais renvoyée par le
           // serveur, seul ce booléen dérivé l'est (contract ai-generation.md §2).
           if (data.ai) {
-            setAiKeyConfigured(!!data.ai.api_key_configured)
+            const claudeOk = !!data.ai.api_key_configured
+            const groqOk = !!data.ai.groq_api_key_configured
+            const savedProvider = data.ai.provider || 'anthropic'
+            // Auto-sélection (bugfix/config-api-key-help) — Claude prioritaire
+            // si les deux clés existent, sinon Groq si seule clé dispo, sinon
+            // on conserve la valeur enregistrée côté serveur (pas de clé du tout).
+            const resolvedProvider = pickAutoProvider(claudeOk, groqOk, savedProvider)
+            setAiKeyConfigured(claudeOk)
             // #137 — provider sélectionné + état de la clé Groq (même règle de secret).
-            setAiProvider(data.ai.provider || 'anthropic')
-            setGroqKeyConfigured(!!data.ai.groq_api_key_configured)
+            setAiProvider(resolvedProvider)
+            setGroqKeyConfigured(groqOk)
             // Fix bloquant — capture la section complète pour la ré-émettre
             // entière à chaque POST (cf. commentaire sur aiSettings ci-dessus).
-            setAiSettings({
-              provider: data.ai.provider || 'anthropic',
+            const resolvedSettings = {
+              provider: resolvedProvider,
               model: data.ai.model || 'claude-opus-5',
               timeout_seconds: data.ai.timeout_seconds || 300,
               max_questions: data.ai.max_questions || 200,
@@ -176,7 +194,18 @@ export default function ConfigPage() {
               context_token_budget: data.ai.context_token_budget || 1500,
               max_consecutive_failures: data.ai.max_consecutive_failures || 2,
               groq_model: data.ai.groq_model || 'openai/gpt-oss-120b',
-            })
+            }
+            setAiSettings(resolvedSettings)
+            // L'auto-sélection diverge de la valeur persistée côté serveur
+            // (ex: clé Claude ajoutée depuis une autre session) → on repersiste
+            // silencieusement pour rester cohérent avec AIGenerateModal/QuestionsPage.
+            if (resolvedProvider !== savedProvider) {
+              fetch('/config.json', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ ai: resolvedSettings })
+              }).catch(err => console.error('Auto-select AI provider (mount) failed:', err))
+            }
           }
         }
       } catch (error) {
@@ -309,6 +338,9 @@ export default function ConfigPage() {
         if (trimmed) {
           setAiKeyConfigured(true)
           setAiApiKeyInput('')
+          // Auto-sélection (bugfix/config-api-key-help) — Claude reste
+          // prioritaire dès qu'une clé est enregistrée.
+          if (aiProvider !== 'anthropic') handleProviderChange('anthropic')
         }
         setAiToast({ message: 'Clé API enregistrée', type: 'success' })
       } else {
@@ -337,6 +369,12 @@ export default function ConfigPage() {
       if (response.ok) {
         setAiKeyConfigured(false)
         setAiApiKeyInput('')
+        // Auto-sélection (bugfix/config-api-key-help) — si Claude (fournisseur
+        // supprimé) était sélectionné, bascule sur Groq s'il a une clé, sinon
+        // on laisse la sélection telle quelle (bouton Générer restera désactivé).
+        if (aiProvider === 'anthropic' && groqKeyConfigured) {
+          handleProviderChange('groq')
+        }
         setAiToast({ message: 'Clé API supprimée', type: 'success' })
       } else {
         const text = await response.text()
@@ -397,6 +435,9 @@ export default function ConfigPage() {
         if (trimmed) {
           setGroqKeyConfigured(true)
           setGroqApiKeyInput('')
+          // Auto-sélection (bugfix/config-api-key-help) — Claude reste
+          // prioritaire : Groq n'est sélectionné que si Claude n'a pas de clé.
+          if (!aiKeyConfigured && aiProvider !== 'groq') handleProviderChange('groq')
         }
         setAiToast({ message: 'Clé API enregistrée', type: 'success' })
       } else {
@@ -423,6 +464,12 @@ export default function ConfigPage() {
       if (response.ok) {
         setGroqKeyConfigured(false)
         setGroqApiKeyInput('')
+        // Auto-sélection (bugfix/config-api-key-help) — si Groq (fournisseur
+        // supprimé) était sélectionné, bascule sur Claude s'il a une clé,
+        // sinon on laisse la sélection telle quelle.
+        if (aiProvider === 'groq' && aiKeyConfigured) {
+          handleProviderChange('anthropic')
+        }
         setAiToast({ message: 'Clé API supprimée', type: 'success' })
       } else {
         const text = await response.text()
@@ -950,7 +997,8 @@ export default function ConfigPage() {
                     type="button"
                     className={`mode-btn ${aiProvider !== 'groq' ? 'active' : ''}`}
                     onClick={() => handleProviderChange('anthropic')}
-                    disabled={savingProvider}
+                    disabled={savingProvider || !aiKeyConfigured}
+                    title={!aiKeyConfigured ? 'Enregistrez une clé API Claude pour sélectionner ce fournisseur' : undefined}
                   >
                     Claude (Anthropic)
                   </button>
@@ -958,7 +1006,8 @@ export default function ConfigPage() {
                     type="button"
                     className={`mode-btn ${aiProvider === 'groq' ? 'active' : ''}`}
                     onClick={() => handleProviderChange('groq')}
-                    disabled={savingProvider}
+                    disabled={savingProvider || !groqKeyConfigured}
+                    title={!groqKeyConfigured ? 'Enregistrez une clé API Groq pour sélectionner ce fournisseur' : undefined}
                   >
                     Groq
                   </button>
