@@ -73,4 +73,4 @@ Le rapport QA inclut :
 Dispatcher via `SendMessage` (teammate en IDLE depuis `/start-session`) :
 `SendMessage({to: "qa", content: ...})`
 
-Spec : `.claude/agents/qa.template.md`
+Spec : `.claude/agents/qa.md`

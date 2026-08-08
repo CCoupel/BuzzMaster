@@ -48,7 +48,28 @@ Declenche si `$ARGUMENTS` commence par `new`.
 gh repo view --json owner,name --jq '"repos/" + .owner.login + "/" + .name'
 ```
 
-### Etape 2 — Creer le milestone sur GitHub
+### Etape 2 — Valider la version cible
+
+> Voir `context/COMMON.md` section 5.7 — le titre du milestone pinne la version prod du cycle.
+
+`<version>` (`vX.Y`) doit correspondre au prochain Y pair valide, soit `Y_prod_actuel + 2`.
+
+```bash
+# Derniere version prod connue (dernier tag)
+LAST_PROD=$(git tag --list 'v*' --sort=-v:refname | head -1)   # ex: v3.0.1
+```
+
+Comparer le `X.Y` de `<version>` a celui de `LAST_PROD` :
+
+- **`Y` = `Y_LAST_PROD` + 2** → coherent, continuer a l'etape 3.
+- **Ecart** → alerter avant de creer :
+  ```
+  Attention : le dernier prod est <LAST_PROD>, le prochain Y pair attendu est v<X>.<Y_LAST_PROD + 2>.
+  <version> ne correspond pas a cette suite. Continuer quand meme ? [O/n]
+  ```
+  Si non → annuler, ne pas creer le milestone.
+
+### Etape 3 — Creer le milestone sur GitHub
 
 ```bash
 # Sans date
@@ -71,7 +92,7 @@ Milestone <version> cree.
 URL : https://github.com/{owner}/{repo}/milestone/<numero>
 ```
 
-### Etape 3 — Lister les issues ouvertes
+### Etape 4 — Lister les issues ouvertes
 
 ```bash
 gh issue list --state open --limit 100 \
@@ -96,7 +117,7 @@ Entrez les numeros des issues a associer au milestone <version>
 (separees par des virgules, ex: 42,38,51 — ou "all" pour toutes, "0" pour aucune) :
 ```
 
-### Etape 4 — Associer les issues selectionnees
+### Etape 5 — Associer les issues selectionnees
 
 Pour chaque issue selectionnee :
 

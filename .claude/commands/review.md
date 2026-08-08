@@ -111,4 +111,4 @@ Agent permanent — spawné au `/start-session`, toujours en IDLE.
 Envoyer la tâche directement :
 `SendMessage({to: "code-reviewer", content: ...})`
 
-Spec : `.claude/agents/code-reviewer.template.md`
+Spec : `.claude/agents/code-reviewer.md`

@@ -78,9 +78,6 @@ La version recuperee est utilisee dans toutes les sections du site (Hero, Featur
 [GENERATION] --> Generer ou mettre a jour les sections du site
     |
     v
-[MAQUETTE] --> Publier une maquette HTML en Artifact, iterer jusqu'a validation explicite
-    |
-    v
 [TRADUCTION] --> Produire les fichiers locales/fr.json et locales/en.json
     |
     v
@@ -112,15 +109,6 @@ gh api repos/{owner}/{repo}/milestones \
 ```
 
 Si aucun milestone n'existe pour la version → fallback sur CHANGELOG.md et issues GitHub classiques.
-
-## Maquette — Gate obligatoire avant commit
-
-> ⚠️ **Règle** : toujours passer par une maquette HTML publiée en Artifact, itérée jusqu'à
-> validation explicite de l'utilisateur, **avant tout commit** sur `gh-pages`. Ne jamais committer
-> directement une génération non validée visuellement.
-
-> ⚠️ **Règle** : ne jamais assigner une image sur la base de son seul nom de fichier ou label
-> hérité — toujours la vérifier visuellement avant réutilisation dans une section du site.
 
 ## Structure du site genere
 
@@ -273,7 +261,7 @@ Agent ponctuel — non spawné au `/start-session`, spawné à la demande :
 ```
 Task({
   name: "marketing-release",
-  prompt: "Lis .claude/agents/context/TEAMMATES_PROTOCOL.md puis .claude/agents/marketing-release.template.md. Tu fais partie de TEAM-Buzz sur BuzzControl. Mets-toi en IDLE après avoir envoyé ACTIF — le teamleader t'enverra ta tâche."
+  prompt: "Lis .claude/agents/context/TEAMMATES_PROTOCOL.md puis .claude/agents/marketing-release.md. Tu fais partie de TEAM-Buzz sur BuzzControl. Mets-toi en IDLE après avoir envoyé ACTIF — le teamleader t'enverra ta tâche."
 })
 ```
 
@@ -283,4 +271,4 @@ Attendre ACTIF, puis envoyer la tâche :
 À réception du DONE, fermer l'agent :
 `TaskStop("marketing-release")`
 
-Spec : `.claude/agents/marketing-release.template.md`
+Spec : `.claude/agents/marketing-release.md`

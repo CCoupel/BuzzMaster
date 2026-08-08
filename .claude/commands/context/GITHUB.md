@@ -112,9 +112,6 @@ gh issue reopen <numero>
 gh issue comment <numero> --body "<message>"
 ```
 
-> ⚠️ **Règle** : ne jamais fermer, rouvrir ou commenter une issue/PR sans validation explicite de
-> l'utilisateur — même dans un workflow autrement autonome (QA→DOC→QUALIF par exemple).
-
 ---
 
 ## 3. Milestones
