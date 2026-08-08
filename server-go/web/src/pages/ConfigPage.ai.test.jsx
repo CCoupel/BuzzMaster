@@ -13,6 +13,22 @@ import ConfigPage from './ConfigPage'
 // ⚠️ ConfigPage rend PLUSIEURS boutons "Enregistrer" (params serveur, WiFi,
 // IA, néon) — chaque test scope ses requêtes avec `within()` à partir de la
 // section IA (repérée par le label "Clé API Claude"), jamais par texte global.
+//
+// MISE À JOUR (bugfix/config-api-key-help, sur demande explicite du CDP) :
+// ce fichier datait de #8 (fournisseur Claude unique) et n'avait jamais pu
+// tourner jusqu'ici (blocage vitest/WSL, cf. `_work/reports/test-writer-*.md`),
+// ce qui a laissé passer sa désynchronisation avec le libellé UI introduit par
+// #137 (fournisseurs multiples Claude/Groq, contracts/CHANGELOG.md
+// [20260805b]/[20260806] — `provider`/`groq_api_key_configured` ajoutés,
+// badges/labels raccourcis) : les textes attendus ("Clé API Anthropic
+// (Claude)", "⚠️ Aucune clé configurée") ne correspondent plus au JSX actuel
+// ("Clé API Claude", "⚠️ Aucune clé"), et `getAiSection()` scopait sur
+// `.config-section` — qui contient désormais AUSSI le bloc Groq introduit par
+// #137, donc DEUX boutons "Enregistrer"/"Supprimer la clé" (un par
+// fournisseur) sous ce même scope, faisant échouer `getByText` (élément
+// ambigu) dès que ces tests s'exécuteraient. Corrigé ci-dessous : libellés
+// alignés sur le JSX courant, scope resserré sur `.ai-provider-block` (bloc
+// Claude uniquement).
 
 vi.mock('../hooks/GameContext', () => ({
   useGame: () => ({
@@ -38,11 +54,13 @@ vi.mock('../components/TeamCard', () => ({
   )
 }))
 
-// Locates the "IA" config-section card, scoping every query below it so the
-// multiple other "Enregistrer" buttons on the page never collide.
+// Locates the Claude-specific "ai-provider-block" (NOT the wider IA
+// ".config-section", which also holds the Groq block since #137 — scoping
+// there would make "Enregistrer"/"Supprimer la clé" ambiguous, one pair per
+// provider), so every query below it targets the Claude fields only.
 function getAiSection() {
   const label = screen.getByText('Clé API Claude')
-  return label.closest('.config-section')
+  return label.closest('.ai-provider-block')
 }
 
 function mockFetchImplementation({ apiKeyConfigured = false, postOk = true, postBody = null } = {}) {
@@ -77,20 +95,20 @@ describe('ConfigPage — Section IA (#8)', () => {
     vi.clearAllMocks()
   })
 
-  it('renders the "IA" section title and hint', async () => {
+  it('renders the "IA" section title and the Claude API key field', async () => {
     mockFetchImplementation({ apiKeyConfigured: false })
     render(<ConfigPage />)
 
     await waitFor(() => expect(screen.getByText('IA')).toBeInTheDocument())
-    expect(screen.getByText(/Clé API Anthropic \(Claude\)/)).toBeInTheDocument()
+    expect(screen.getByText('Clé API Claude')).toBeInTheDocument()
   })
 
-  it('shows "Aucune clé configurée" badge when ai.api_key_configured is false', async () => {
+  it('shows "Aucune clé" badge when ai.api_key_configured is false', async () => {
     mockFetchImplementation({ apiKeyConfigured: false })
     render(<ConfigPage />)
 
     await waitFor(() => {
-      expect(screen.getByText('⚠️ Aucune clé configurée')).toBeInTheDocument()
+      expect(within(getAiSection()).getByText('⚠️ Aucune clé')).toBeInTheDocument()
     })
     expect(screen.queryByText('✅ Clé configurée')).not.toBeInTheDocument()
   })
@@ -129,7 +147,7 @@ describe('ConfigPage — Section IA (#8)', () => {
   it('shows "Supprimer la clé" only when a key is configured', async () => {
     mockFetchImplementation({ apiKeyConfigured: false })
     render(<ConfigPage />)
-    await waitFor(() => expect(screen.getByText('⚠️ Aucune clé configurée')).toBeInTheDocument())
+    await waitFor(() => expect(within(getAiSection()).getByText('⚠️ Aucune clé')).toBeInTheDocument())
 
     const section = getAiSection()
     expect(within(section).queryByText('Supprimer la clé')).not.toBeInTheDocument()
@@ -207,7 +225,7 @@ describe('ConfigPage — Section IA (#8)', () => {
   it('clears the input and flips the badge to configured after a successful non-empty save', async () => {
     mockFetchImplementation({ apiKeyConfigured: false })
     render(<ConfigPage />)
-    await waitFor(() => expect(screen.getByText('⚠️ Aucune clé configurée')).toBeInTheDocument())
+    await waitFor(() => expect(within(getAiSection()).getByText('⚠️ Aucune clé')).toBeInTheDocument())
 
     const section = getAiSection()
     const input = within(section).getByPlaceholderText('sk-ant-...')
@@ -215,7 +233,7 @@ describe('ConfigPage — Section IA (#8)', () => {
     fireEvent.click(within(section).getByText('Enregistrer'))
 
     await waitFor(() => {
-      expect(screen.getByText('✅ Clé configurée')).toBeInTheDocument()
+      expect(within(getAiSection()).getByText('✅ Clé configurée')).toBeInTheDocument()
     })
     const refreshedSection = getAiSection()
     const refreshedInput = within(refreshedSection).getByPlaceholderText('••••••••')
@@ -270,7 +288,7 @@ describe('ConfigPage — Section IA (#8)', () => {
       )
     })
     await waitFor(() => {
-      expect(screen.getByText('⚠️ Aucune clé configurée')).toBeInTheDocument()
+      expect(within(getAiSection()).getByText('⚠️ Aucune clé')).toBeInTheDocument()
     })
     confirmSpy.mockRestore()
   })
