@@ -9,13 +9,27 @@ import './ConfigPage.css'
 
 // Auto-sélection du fournisseur IA selon les clés disponibles (bugfix/config-api-key-help,
 // ConfigPage uniquement — ne touche pas AIGenerateModal/QuestionsPage).
-// Claude prioritaire si les deux clés existent, sinon Groq si seule clé Groq
-// dispo, sinon on conserve `fallback` (aucune clé disponible : la sélection
-// n'a pas d'importance, le bouton "Générer via IA" reste désactivé ailleurs).
-function pickAutoProvider(claudeConfigured, groqConfigured, fallback) {
+//
+// Règle unique, appliquée IDENTIQUEMENT au montage et dans les 4 handlers de clé
+// (save/clear × claude/groq) : ne réévalue la sélection QUE si `current` n'a plus de
+// clé valide. Un choix déjà en place (explicite via clic, ou simplement déjà persisté
+// côté serveur) n'est donc jamais écrasé silencieusement tant qu'il reste utilisable.
+// La priorité Claude > Groq ne s'applique qu'en l'absence de sélection valide — ex:
+// aucune clé n'a jamais permis au fournisseur actuel d'être utilisable (1er ajout de
+// clé), ou la clé du fournisseur actif vient d'être supprimée.
+//
+// Fix revue de code (cycle 1) — bug critique : l'ancienne version retournait
+// 'anthropic' inconditionnellement dès que Claude avait une clé, ce qui écrasait un
+// choix Groq explicite (et le re-persistait silencieusement côté serveur) à chaque
+// remontage du composant, même quand Groq restait parfaitement valide.
+export function pickAutoProvider(claudeConfigured, groqConfigured, current) {
+  const currentIsValid =
+    (current === 'anthropic' && claudeConfigured) ||
+    (current === 'groq' && groqConfigured)
+  if (currentIsValid) return current
   if (claudeConfigured) return 'anthropic'
   if (groqConfigured) return 'groq'
-  return fallback
+  return current
 }
 
 export default function ConfigPage() {
@@ -174,9 +188,12 @@ export default function ConfigPage() {
             const claudeOk = !!data.ai.api_key_configured
             const groqOk = !!data.ai.groq_api_key_configured
             const savedProvider = data.ai.provider || 'anthropic'
-            // Auto-sélection (bugfix/config-api-key-help) — Claude prioritaire
-            // si les deux clés existent, sinon Groq si seule clé dispo, sinon
-            // on conserve la valeur enregistrée côté serveur (pas de clé du tout).
+            // Auto-sélection (bugfix/config-api-key-help, fix revue cycle 2) —
+            // respecte `savedProvider` tant qu'il a encore une clé valide (ne
+            // JAMAIS écraser silencieusement un choix déjà persisté, même si
+            // l'autre fournisseur a aussi une clé). Ne corrige que si la
+            // sélection enregistrée n'est plus utilisable (ex: 1er montage
+            // avec le défaut backend "anthropic" mais sans clé Claude).
             const resolvedProvider = pickAutoProvider(claudeOk, groqOk, savedProvider)
             setAiKeyConfigured(claudeOk)
             // #137 — provider sélectionné + état de la clé Groq (même règle de secret).
@@ -338,9 +355,10 @@ export default function ConfigPage() {
         if (trimmed) {
           setAiKeyConfigured(true)
           setAiApiKeyInput('')
-          // Auto-sélection (bugfix/config-api-key-help) — Claude reste
-          // prioritaire dès qu'une clé est enregistrée.
-          if (aiProvider !== 'anthropic') handleProviderChange('anthropic')
+          // Auto-sélection (bugfix/config-api-key-help, fix revue cycle 2) —
+          // ne bascule que si la sélection actuelle n'est plus valide.
+          const nextProvider = pickAutoProvider(true, groqKeyConfigured, aiProvider)
+          if (nextProvider !== aiProvider) handleProviderChange(nextProvider)
         }
         setAiToast({ message: 'Clé API enregistrée', type: 'success' })
       } else {
@@ -369,12 +387,11 @@ export default function ConfigPage() {
       if (response.ok) {
         setAiKeyConfigured(false)
         setAiApiKeyInput('')
-        // Auto-sélection (bugfix/config-api-key-help) — si Claude (fournisseur
-        // supprimé) était sélectionné, bascule sur Groq s'il a une clé, sinon
-        // on laisse la sélection telle quelle (bouton Générer restera désactivé).
-        if (aiProvider === 'anthropic' && groqKeyConfigured) {
-          handleProviderChange('groq')
-        }
+        // Auto-sélection (bugfix/config-api-key-help, fix revue cycle 2) — si
+        // Claude (fournisseur supprimé) était sélectionné, bascule sur Groq
+        // s'il a une clé, sinon la sélection reste inchangée.
+        const nextProvider = pickAutoProvider(false, groqKeyConfigured, aiProvider)
+        if (nextProvider !== aiProvider) handleProviderChange(nextProvider)
         setAiToast({ message: 'Clé API supprimée', type: 'success' })
       } else {
         const text = await response.text()
@@ -435,9 +452,10 @@ export default function ConfigPage() {
         if (trimmed) {
           setGroqKeyConfigured(true)
           setGroqApiKeyInput('')
-          // Auto-sélection (bugfix/config-api-key-help) — Claude reste
-          // prioritaire : Groq n'est sélectionné que si Claude n'a pas de clé.
-          if (!aiKeyConfigured && aiProvider !== 'groq') handleProviderChange('groq')
+          // Auto-sélection (bugfix/config-api-key-help, fix revue cycle 2) —
+          // ne bascule que si la sélection actuelle n'est plus valide.
+          const nextProvider = pickAutoProvider(aiKeyConfigured, true, aiProvider)
+          if (nextProvider !== aiProvider) handleProviderChange(nextProvider)
         }
         setAiToast({ message: 'Clé API enregistrée', type: 'success' })
       } else {
@@ -464,12 +482,11 @@ export default function ConfigPage() {
       if (response.ok) {
         setGroqKeyConfigured(false)
         setGroqApiKeyInput('')
-        // Auto-sélection (bugfix/config-api-key-help) — si Groq (fournisseur
-        // supprimé) était sélectionné, bascule sur Claude s'il a une clé,
-        // sinon on laisse la sélection telle quelle.
-        if (aiProvider === 'groq' && aiKeyConfigured) {
-          handleProviderChange('anthropic')
-        }
+        // Auto-sélection (bugfix/config-api-key-help, fix revue cycle 2) — si
+        // Groq (fournisseur supprimé) était sélectionné, bascule sur Claude
+        // s'il a une clé, sinon la sélection reste inchangée.
+        const nextProvider = pickAutoProvider(aiKeyConfigured, false, aiProvider)
+        if (nextProvider !== aiProvider) handleProviderChange(nextProvider)
         setAiToast({ message: 'Clé API supprimée', type: 'success' })
       } else {
         const text = await response.text()
