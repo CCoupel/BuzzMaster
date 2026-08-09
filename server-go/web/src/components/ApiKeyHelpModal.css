@@ -1,0 +1,133 @@
+/* API Key Help Modal (bugfix/config-api-key-help) */
+.apikey-help-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1100;
+  padding: var(--space-4);
+}
+
+.apikey-help-modal {
+  background: white;
+  border-radius: var(--radius-xl);
+  width: 100%;
+  max-width: 480px;
+  max-height: 85vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: var(--shadow-xl);
+  overflow: hidden;
+}
+
+.apikey-help-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: var(--space-4) var(--space-6);
+  border-bottom: 1px solid var(--gray-200);
+}
+
+.apikey-help-header h2 {
+  font-family: var(--font-display);
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: var(--gray-800);
+  margin: 0;
+}
+
+.apikey-help-close {
+  background: none;
+  border: none;
+  font-size: 1.5rem;
+  color: var(--gray-400);
+  cursor: pointer;
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-md);
+  transition: all var(--transition-fast);
+  line-height: 1;
+}
+
+.apikey-help-close:hover {
+  background: var(--gray-100);
+  color: var(--gray-700);
+}
+
+.apikey-help-body {
+  padding: var(--space-4) var(--space-6) var(--space-6);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.apikey-help-badge {
+  display: inline-block;
+  align-self: flex-start;
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--radius-full);
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.apikey-help-badge.free {
+  background: color-mix(in srgb, var(--success) 15%, white);
+  color: var(--success, #22c55e);
+}
+
+.apikey-help-badge.paid {
+  background: color-mix(in srgb, var(--warning) 15%, white);
+  color: var(--warning, #f59e0b);
+}
+
+.apikey-help-steps {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  margin: 0;
+  padding-left: 1.25em;
+}
+
+.apikey-help-steps li {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.apikey-help-steps strong {
+  color: var(--gray-800);
+  font-size: 0.95rem;
+}
+
+.apikey-help-steps p {
+  margin: 0;
+  font-size: 0.875rem;
+  color: var(--gray-600);
+  line-height: 1.4;
+}
+
+.apikey-help-note {
+  font-style: italic;
+  color: var(--gray-500) !important;
+}
+
+.apikey-help-steps a.btn {
+  align-self: flex-start;
+  text-decoration: none;
+}
+
+/* Responsive */
+@media (max-width: 600px) {
+  .apikey-help-modal {
+    max-height: 90vh;
+  }
+
+  .apikey-help-body {
+    padding: var(--space-3) var(--space-4) var(--space-5);
+  }
+}

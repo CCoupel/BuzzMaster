@@ -13,6 +13,43 @@ import ConfigPage from './ConfigPage'
 // ⚠️ ConfigPage rend PLUSIEURS boutons "Enregistrer" (params serveur, WiFi,
 // IA, néon) — chaque test scope ses requêtes avec `within()` à partir de la
 // section IA (repérée par le label "Clé API Claude"), jamais par texte global.
+//
+// MISE À JOUR (bugfix/config-api-key-help, sur demande explicite du CDP) :
+// ce fichier datait de #8 (fournisseur Claude unique) et n'avait jamais pu
+// tourner jusqu'ici (blocage vitest/WSL, cf. `_work/reports/test-writer-*.md`),
+// ce qui a laissé passer sa désynchronisation avec le libellé UI introduit par
+// #137 (fournisseurs multiples Claude/Groq, contracts/CHANGELOG.md
+// [20260805b]/[20260806] — `provider`/`groq_api_key_configured` ajoutés,
+// badges/labels raccourcis) : les textes attendus ("Clé API Anthropic
+// (Claude)", "⚠️ Aucune clé configurée") ne correspondent plus au JSX actuel
+// ("Clé API Claude", "⚠️ Aucune clé"), et `getAiSection()` scopait sur
+// `.config-section` — qui contient désormais AUSSI le bloc Groq introduit par
+// #137, donc DEUX boutons "Enregistrer"/"Supprimer la clé" (un par
+// fournisseur) sous ce même scope, faisant échouer `getByText` (élément
+// ambigu) dès que ces tests s'exécuteraient. Corrigé ci-dessous : libellés
+// alignés sur le JSX courant, scope resserré sur `.ai-provider-block` (bloc
+// Claude uniquement).
+//
+// MISE À JOUR 2 (tâche #13, contracts/ai-key-validation.md, sur demande
+// explicite du CDP — signalé par dev-frontend dans
+// `_work/handoff/dev-frontend-20260809-115500.md`, non traité par eux pour
+// éviter un conflit d'édition concurrente) : le badge passe de binaire
+// (`✅ Clé configurée` / `⚠️ Aucune clé`) à **tri-état**
+// (`✅ Clé vérifiée` / `⚠️ Clé non vérifiée` / `⚠️ Aucune clé`), lu depuis
+// `api_key_configured` ET le nouveau `anthropic_api_key_verified`. Plus
+// profond qu'un simple changement de libellé : `handleSaveAiKey` route
+// désormais TOUJOURS par `POST /api/ai/validate-key` avant d'écrire
+// `/config.json` dès qu'un champ est rempli OU qu'une clé est déjà stockée
+// (contrat §9) — les tests de sauvegarde ci-dessous, qui ne mockaient que
+// `/config.json`, échoueraient silencieusement contre le code actuel
+// (`validateAndProceed` prend la branche d'erreur générique faute de mock
+// pour `/api/ai/validate-key`, et n'atteint jamais le POST `/config.json`).
+// `mockFetchImplementation` gagne donc un verdict de validation par défaut
+// (`valid`), et les payloads persistés incluent désormais
+// `anthropic_api_key_verified`. `handleClearAiKey` reste hors de ce chemin
+// (inchangé, tâche 7 du plan) — ses tests n'ont besoin que du correctif de
+// libellé. Suit le même correctif déjà appliqué par dev-frontend à 3 tests
+// similaires dans `ConfigPage.apikeyhelp.test.jsx` (même commit).
 
 vi.mock('../hooks/GameContext', () => ({
   useGame: () => ({
@@ -38,29 +75,57 @@ vi.mock('../components/TeamCard', () => ({
   )
 }))
 
-// Locates the "IA" config-section card, scoping every query below it so the
-// multiple other "Enregistrer" buttons on the page never collide.
+// Locates the Claude-specific "ai-provider-block" (NOT the wider IA
+// ".config-section", which also holds the Groq block since #137 — scoping
+// there would make "Enregistrer"/"Supprimer la clé" ambiguous, one pair per
+// provider), so every query below it targets the Claude fields only.
 function getAiSection() {
   const label = screen.getByText('Clé API Claude')
-  return label.closest('.config-section')
+  return label.closest('.ai-provider-block')
 }
 
-function mockFetchImplementation({ apiKeyConfigured = false, postOk = true, postBody = null } = {}) {
+// `apiKeyVerified` (tâche #13) alimente le nouveau `anthropic_api_key_verified`
+// du GET de montage. `validateOk`/`validateResult` pilotent la réponse de
+// `POST /api/ai/validate-key`, désormais appelé par `handleSaveAiKey` avant
+// tout `POST /config.json` (contrat §9) — `validateOk: false` simule un rejet
+// de NOTRE serveur (préfixe invalide, 400, texte brut), `validateResult`
+// simule le verdict fournisseur normal (`{result: 'valid', ...}` par défaut,
+// pour que les tests antérieurs à #13 continuent d'exercer le chemin direct
+// sans avoir à connaître le dialogue de validation — cf. `postOk` qui garde
+// son rôle inchangé pour le POST /config.json qui suit).
+function mockFetchImplementation({
+  apiKeyConfigured = false,
+  apiKeyVerified = false,
+  postOk = true,
+  postBody = null,
+  validateOk = true,
+  validateResult = { result: 'valid', http_status: 200 },
+} = {}) {
   global.fetch = vi.fn((url, options) => {
     if (url === '/config.json' && (!options || options.method === undefined)) {
       return Promise.resolve({
         ok: true,
         json: async () => ({
           server: { auto_open_browsers: false, debug: false },
-          ai: { api_key_configured: apiKeyConfigured },
+          ai: { api_key_configured: apiKeyConfigured, anthropic_api_key_verified: apiKeyVerified },
         }),
+      })
+    }
+    if (url === '/api/ai/validate-key') {
+      if (!validateOk) {
+        return Promise.resolve({ ok: false, text: async () => 'Format de clé API invalide' })
+      }
+      const body = options?.body ? JSON.parse(options.body) : {}
+      return Promise.resolve({
+        ok: true,
+        json: async () => ({ provider: body.provider, ...validateResult }),
       })
     }
     if (url === '/config.json' && options?.method === 'POST') {
       if (postOk) {
         return Promise.resolve({ ok: true, json: async () => (postBody || {}) })
       }
-      return Promise.resolve({ ok: false, text: async () => 'Format de clé API invalide (attendu : sk-ant-...)' })
+      return Promise.resolve({ ok: false, text: async () => 'Erreur serveur' })
     }
     if (url === '/api/wifi/defaults') {
       return Promise.resolve({ ok: true, json: async () => ({ ssid: '', password: '', server_ip: '', server_port: 80 }) })
@@ -77,38 +142,50 @@ describe('ConfigPage — Section IA (#8)', () => {
     vi.clearAllMocks()
   })
 
-  it('renders the "IA" section title and hint', async () => {
+  it('renders the "IA" section title and the Claude API key field', async () => {
     mockFetchImplementation({ apiKeyConfigured: false })
     render(<ConfigPage />)
 
     await waitFor(() => expect(screen.getByText('IA')).toBeInTheDocument())
-    expect(screen.getByText(/Clé API Anthropic \(Claude\)/)).toBeInTheDocument()
+    expect(screen.getByText('Clé API Claude')).toBeInTheDocument()
   })
 
-  it('shows "Aucune clé configurée" badge when ai.api_key_configured is false', async () => {
+  it('shows "Aucune clé" badge when ai.api_key_configured is false', async () => {
     mockFetchImplementation({ apiKeyConfigured: false })
     render(<ConfigPage />)
 
     await waitFor(() => {
-      expect(screen.getByText('⚠️ Aucune clé configurée')).toBeInTheDocument()
+      expect(within(getAiSection()).getByText('⚠️ Aucune clé')).toBeInTheDocument()
     })
-    expect(screen.queryByText('✅ Clé configurée')).not.toBeInTheDocument()
+    expect(screen.queryByText('✅ Clé vérifiée')).not.toBeInTheDocument()
+    expect(screen.queryByText('⚠️ Clé non vérifiée')).not.toBeInTheDocument()
   })
 
-  it('shows "Clé configurée" badge when ai.api_key_configured is true', async () => {
-    mockFetchImplementation({ apiKeyConfigured: true })
+  // Tri-état depuis la tâche #13 (contracts/ai-key-validation.md §7) — les 2
+  // tests suivants remplacent l'ancien test binaire unique.
+  it('shows "✅ Clé vérifiée" badge when configured and verified', async () => {
+    mockFetchImplementation({ apiKeyConfigured: true, apiKeyVerified: true })
     render(<ConfigPage />)
 
     await waitFor(() => {
-      expect(screen.getByText('✅ Clé configurée')).toBeInTheDocument()
+      expect(within(getAiSection()).getByText('✅ Clé vérifiée')).toBeInTheDocument()
+    })
+  })
+
+  it('shows "⚠️ Clé non vérifiée" badge when configured but not verified', async () => {
+    mockFetchImplementation({ apiKeyConfigured: true, apiKeyVerified: false })
+    render(<ConfigPage />)
+
+    await waitFor(() => {
+      expect(within(getAiSection()).getByText('⚠️ Clé non vérifiée')).toBeInTheDocument()
     })
   })
 
   it('never receives the actual API key from the server — only api_key_configured (contract §2, CA3)', async () => {
-    mockFetchImplementation({ apiKeyConfigured: true })
+    mockFetchImplementation({ apiKeyConfigured: true, apiKeyVerified: true })
     render(<ConfigPage />)
 
-    await waitFor(() => expect(screen.getByText('✅ Clé configurée')).toBeInTheDocument())
+    await waitFor(() => expect(within(getAiSection()).getByText('✅ Clé vérifiée')).toBeInTheDocument())
 
     const section = getAiSection()
     const input = within(section).getByPlaceholderText('••••••••')
@@ -129,16 +206,16 @@ describe('ConfigPage — Section IA (#8)', () => {
   it('shows "Supprimer la clé" only when a key is configured', async () => {
     mockFetchImplementation({ apiKeyConfigured: false })
     render(<ConfigPage />)
-    await waitFor(() => expect(screen.getByText('⚠️ Aucune clé configurée')).toBeInTheDocument())
+    await waitFor(() => expect(within(getAiSection()).getByText('⚠️ Aucune clé')).toBeInTheDocument())
 
     const section = getAiSection()
     expect(within(section).queryByText('Supprimer la clé')).not.toBeInTheDocument()
   })
 
   it('renders "Supprimer la clé" when a key is configured', async () => {
-    mockFetchImplementation({ apiKeyConfigured: true })
+    mockFetchImplementation({ apiKeyConfigured: true, apiKeyVerified: true })
     render(<ConfigPage />)
-    await waitFor(() => expect(screen.getByText('✅ Clé configurée')).toBeInTheDocument())
+    await waitFor(() => expect(within(getAiSection()).getByText('✅ Clé vérifiée')).toBeInTheDocument())
 
     const section = getAiSection()
     expect(within(section).getByText('Supprimer la clé')).toBeInTheDocument()
@@ -163,7 +240,7 @@ describe('ConfigPage — Section IA (#8)', () => {
     groq_model: 'openai/gpt-oss-120b',
   }
 
-  it('saving a non-empty key POSTs the full ai section including anthropic_api_key (contract §0)', async () => {
+  it('saving a non-empty key validates it (POST /api/ai/validate-key), then POSTs the full ai section including anthropic_api_key + anthropic_api_key_verified (contract §0; ai-key-validation.md §9)', async () => {
     mockFetchImplementation({ apiKeyConfigured: false })
     render(<ConfigPage />)
     await waitFor(() => expect(screen.getByText('IA')).toBeInTheDocument())
@@ -175,20 +252,29 @@ describe('ConfigPage — Section IA (#8)', () => {
 
     await waitFor(() => {
       expect(global.fetch).toHaveBeenCalledWith(
+        '/api/ai/validate-key',
+        expect.objectContaining({
+          method: 'POST',
+          body: JSON.stringify({ provider: 'anthropic', api_key: 'sk-ant-newkey123' }),
+        })
+      )
+    })
+    await waitFor(() => {
+      expect(global.fetch).toHaveBeenCalledWith(
         '/config.json',
         expect.objectContaining({
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ ai: { ...FULL_AI_SETTINGS, anthropic_api_key: 'sk-ant-newkey123' } }),
+          body: JSON.stringify({ ai: { ...FULL_AI_SETTINGS, anthropic_api_key: 'sk-ant-newkey123', anthropic_api_key_verified: true } }),
         })
       )
     })
   })
 
-  it('saving with an empty field POSTs the full ai section WITHOUT anthropic_api_key — preserves the stored key server-side (contract §0/§2, CA2)', async () => {
-    mockFetchImplementation({ apiKeyConfigured: true })
+  it('saving with an empty field validates the effective stored key, then POSTs the full ai section WITHOUT anthropic_api_key — preserves the stored key server-side (contract §0/§2, CA2; ai-key-validation.md §9 D3)', async () => {
+    mockFetchImplementation({ apiKeyConfigured: true, apiKeyVerified: true })
     render(<ConfigPage />)
-    await waitFor(() => expect(screen.getByText('✅ Clé configurée')).toBeInTheDocument())
+    await waitFor(() => expect(within(getAiSection()).getByText('✅ Clé vérifiée')).toBeInTheDocument())
 
     const section = getAiSection()
     fireEvent.click(within(section).getByText('Enregistrer'))
@@ -198,16 +284,16 @@ describe('ConfigPage — Section IA (#8)', () => {
         '/config.json',
         expect.objectContaining({
           method: 'POST',
-          body: JSON.stringify({ ai: FULL_AI_SETTINGS }),
+          body: JSON.stringify({ ai: { ...FULL_AI_SETTINGS, anthropic_api_key_verified: true } }),
         })
       )
     })
   })
 
-  it('clears the input and flips the badge to configured after a successful non-empty save', async () => {
+  it('clears the input and flips the badge to verified after a successful non-empty save', async () => {
     mockFetchImplementation({ apiKeyConfigured: false })
     render(<ConfigPage />)
-    await waitFor(() => expect(screen.getByText('⚠️ Aucune clé configurée')).toBeInTheDocument())
+    await waitFor(() => expect(within(getAiSection()).getByText('⚠️ Aucune clé')).toBeInTheDocument())
 
     const section = getAiSection()
     const input = within(section).getByPlaceholderText('sk-ant-...')
@@ -215,14 +301,17 @@ describe('ConfigPage — Section IA (#8)', () => {
     fireEvent.click(within(section).getByText('Enregistrer'))
 
     await waitFor(() => {
-      expect(screen.getByText('✅ Clé configurée')).toBeInTheDocument()
+      expect(within(getAiSection()).getByText('✅ Clé vérifiée')).toBeInTheDocument()
     })
     const refreshedSection = getAiSection()
     const refreshedInput = within(refreshedSection).getByPlaceholderText('••••••••')
     expect(refreshedInput.value).toBe('')
   })
 
-  it('shows a success toast after saving', async () => {
+  // Message mis à jour par la tâche #13 (ai-key-validation.md §9) — un
+  // verdict "valid" nomme désormais le fournisseur, remplace l'ancien
+  // "Clé API enregistrée" générique de #8.
+  it('shows a success toast naming the provider after a validated save', async () => {
     mockFetchImplementation({ apiKeyConfigured: false })
     render(<ConfigPage />)
     await waitFor(() => expect(screen.getByText('IA')).toBeInTheDocument())
@@ -232,12 +321,16 @@ describe('ConfigPage — Section IA (#8)', () => {
     fireEvent.click(within(section).getByText('Enregistrer'))
 
     await waitFor(() => {
-      expect(screen.getByText('Clé API enregistrée')).toBeInTheDocument()
+      expect(screen.getByText('Clé vérifiée auprès de Claude et enregistrée.')).toBeInTheDocument()
     })
   })
 
-  it('shows an error toast when the server rejects the key format (400)', async () => {
-    mockFetchImplementation({ apiKeyConfigured: false, postOk: false })
+  // #13 déplace ce rejet de format de POST /config.json vers
+  // POST /api/ai/validate-key (préfixe vérifié côté serveur AVANT tout appel
+  // fournisseur, contrat ai-key-validation.md §5) — le texte d'erreur change
+  // en conséquence (plus de suffixe "(attendu : sk-ant-...)").
+  it('shows an error toast when the key-validation endpoint rejects the format (400)', async () => {
+    mockFetchImplementation({ apiKeyConfigured: false, validateOk: false })
     render(<ConfigPage />)
     await waitFor(() => expect(screen.getByText('IA')).toBeInTheDocument())
 
@@ -251,10 +344,10 @@ describe('ConfigPage — Section IA (#8)', () => {
   })
 
   it('clicking "Supprimer la clé" asks for confirmation, then POSTs clear_api_key:true', async () => {
-    mockFetchImplementation({ apiKeyConfigured: true })
+    mockFetchImplementation({ apiKeyConfigured: true, apiKeyVerified: true })
     const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true)
     render(<ConfigPage />)
-    await waitFor(() => expect(screen.getByText('✅ Clé configurée')).toBeInTheDocument())
+    await waitFor(() => expect(within(getAiSection()).getByText('✅ Clé vérifiée')).toBeInTheDocument())
 
     const section = getAiSection()
     fireEvent.click(within(section).getByText('Supprimer la clé'))
@@ -270,16 +363,16 @@ describe('ConfigPage — Section IA (#8)', () => {
       )
     })
     await waitFor(() => {
-      expect(screen.getByText('⚠️ Aucune clé configurée')).toBeInTheDocument()
+      expect(within(getAiSection()).getByText('⚠️ Aucune clé')).toBeInTheDocument()
     })
     confirmSpy.mockRestore()
   })
 
   it('does nothing when "Supprimer la clé" confirmation is declined', async () => {
-    mockFetchImplementation({ apiKeyConfigured: true })
+    mockFetchImplementation({ apiKeyConfigured: true, apiKeyVerified: true })
     const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false)
     render(<ConfigPage />)
-    await waitFor(() => expect(screen.getByText('✅ Clé configurée')).toBeInTheDocument())
+    await waitFor(() => expect(within(getAiSection()).getByText('✅ Clé vérifiée')).toBeInTheDocument())
 
     global.fetch.mockClear()
     const section = getAiSection()

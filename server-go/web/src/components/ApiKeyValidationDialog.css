@@ -1,0 +1,84 @@
+/* API Key Validation Dialog (contracts/ai-key-validation.md §9, tâche #13) */
+.apikey-validation-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1200;
+  padding: var(--space-4);
+}
+
+.apikey-validation-modal {
+  background: white;
+  border-radius: var(--radius-xl);
+  width: 100%;
+  max-width: 420px;
+  box-shadow: var(--shadow-xl);
+  padding: var(--space-5) var(--space-6);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  border-top: 4px solid var(--gray-300);
+}
+
+.apikey-validation-modal.refus {
+  border-top-color: var(--error, #ef4444);
+}
+
+.apikey-validation-modal.injoignable {
+  border-top-color: var(--warning, #f59e0b);
+}
+
+.apikey-validation-title {
+  font-family: var(--font-display);
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: var(--gray-800);
+  margin: 0;
+}
+
+.apikey-validation-body {
+  font-size: 0.875rem;
+  color: var(--gray-600);
+  line-height: 1.5;
+  margin: 0;
+}
+
+.apikey-validation-detail {
+  font-family: monospace;
+  font-size: 0.75rem;
+  color: var(--gray-500);
+  background: var(--gray-50);
+  border: 1px solid var(--gray-200);
+  border-radius: var(--radius-sm);
+  padding: var(--space-2) var(--space-3);
+  overflow-x: auto;
+  white-space: nowrap;
+}
+
+.apikey-validation-actions {
+  display: flex;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  padding-top: var(--space-1);
+}
+
+@media (max-width: 480px) {
+  .apikey-validation-modal {
+    padding: var(--space-4);
+  }
+
+  .apikey-validation-actions {
+    justify-content: stretch;
+  }
+
+  .apikey-validation-actions > * {
+    flex: 1;
+  }
+}

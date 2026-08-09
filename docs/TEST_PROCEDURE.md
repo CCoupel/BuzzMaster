@@ -17,6 +17,7 @@
 | `internal/server/tcp_test.go` | Protocole TCP buzzers |
 | `internal/server/udp_test.go` | Broadcast UDP |
 | `internal/server/e2e_test.go` | Tests d'intégration serveur |
+| `internal/server/ai_validate_test.go` | `POST /api/ai/validate-key` — taxonomie valid/invalid_key/unreachable, cooldown, sécurité (§9) |
 | `internal/protocol/parser_test.go` | Parsing JSON null-terminated |
 | `internal/protocol/messages_test.go` | Types de messages |
 
@@ -372,3 +373,88 @@ Le serveur doit toujours être opérationnel à la fin de la procédure de test.
 | 2.33.0 | Phase 1 | TestMemory* (8 models, 2 http) | En cours |
 | 2.34.0 | Phase 2 | TestEngine_Memory* (3) | Planifié |
 | 2.35.0 | Phase 3 | TestEngine_Memory* (8) | Planifié |
+| 6.0.3 | #9 — Validation clé API IA | `TestValidateAPIKey_*` (31, `ai_validate_test.go`) | 2026-08-09 |
+
+---
+
+## 9. Validation de clé API IA à l'enregistrement (v6.0.3, #9)
+
+> **Contrat** : `contracts/ai-key-validation.md`
+> **Plan** : `_work/reports/plan-20260809-104602.md`
+> **Maquette** : `_work/reports/mockup-ai-key-validation-20260809-104602.html`
+> **Tests Go** : `internal/server/ai_validate_test.go` (31 tests, dérivés du contrat)
+
+Une clé API bien formée mais révoquée/tronquée/du mauvais compte passait aujourd'hui
+le seul contrôle de préfixe (`sk-ant-`/`gsk_`) et s'enregistrait sans broncher. Le
+bouton **Enregistrer** appelle désormais `POST /api/ai/validate-key` (coût nul en
+tokens, `GET /models`) avant toute écriture, et distingue **clé refusée**
+(`invalid_key`, 401/403 → « corrige ta clé ») de **fournisseur injoignable**
+(`unreachable`, réseau/timeout/5xx/429 → « réessaie plus tard »). Dans les deux cas
+l'opérateur peut forcer l'enregistrement ; la clé est alors marquée persistante non
+vérifiée (`*_api_key_verified: false`).
+
+### 9.1 Tests unitaires Go (`ai_validate_test.go`)
+
+| Section | Tests | Couverture |
+|---------|-------|------------|
+| A — Requête | `MethodNotAllowed`, `MalformedJSON`, `UnknownProvider`, `ProviderAbsent`, `BodyTooLarge`, `InvalidPrefix_*_NoNetworkCall` (×2) | Rejets avant tout appel réseau (contrat §5) |
+| B — Taxonomie Anthropic | `Valid200`, `401_InvalidKey`, `403_InvalidKey`, `429_IsUnreachable_NeverInvalidKey`, `500_Unreachable`, `NetworkDown_Unreachable`, `Timeout_Unreachable`, `SlowButWithinTimeout_StillValid` | Les 3 issues de la taxonomie (contrat §3), y compris la règle 429 → `unreachable` |
+| C — Taxonomie Groq | `Valid200`, `401_InvalidKey`, `429_IsUnreachable` | Échantillon — le code de classification est partagé avec Anthropic |
+| D — Non-régression | `Anthropic/Groq_HitsModelsEndpoint_NotGenerate` | Prouve que c'est `/v1/models`/`/openai/v1/models` qui est appelé, jamais l'endpoint de génération |
+| E — Clé effective | `EmptyAPIKey_UsesStoredKey`, `EmptyAPIKey_EnvVarTakesPriorityOverStored`, `EmptyAPIKey_GroqEnvVar`, `NoSideEffect_DoesNotMutateStoredConfig` | Contrat §5/§7 — champ vide ⇒ clé stockée puis variable d'environnement prioritaire ; aucune écriture par cet endpoint |
+| F — Sécurité | `ResponseNeverContainsTheKey`, `DetailIsSanitized_KeyShapedSubstringRedacted`, `LogsNeverContainTheKey`, `ValidResult_DetailFieldOmittedFromJSON` | Contrat §8 — la clé ne fuite ni en réponse ni en logs ; `sanitizeUpstreamMessage` réellement branché sur ce chemin |
+| G — Cooldown | `SecondCallWithin2s_Gets429`, `IsGlobal_NotPerProvider`, `AfterWindowElapses_Succeeds` | Contrat §8 — 1 validation / 2 s, global au serveur |
+
+> ⚠️ **`TestValidateAPIKey_Anthropic_Timeout_Unreachable` dure ~10 s** (le plafond de
+> timeout de ce chemin est codé en dur à 10 s par le contrat §2, délibérément non
+> dérivé de `ai.timeout_seconds`, donc non raccourcissable côté test). Skippé sous
+> `go test -short` ; s'exécute en entier avec la commande standard `go test ./...`.
+
+### 9.2 Procédure manuelle QA — les 11 scénarios de la maquette
+
+**Prérequis** :
+- [ ] Environnement : QUALIF ou LOCAL, serveur démarré, accès admin sur `/config`
+- [ ] Une vraie clé API Groq de test valide (tier gratuit, aucun coût) pour les
+      scénarios impliquant un fournisseur réel — voir 9.3
+- [ ] Config IA vierge (aucune clé Claude ni Groq) au départ du Scénario 1
+
+| # | Scénario | Étapes | Attendu à l'écran | Attendu en base (`config.json`) | OK ? |
+|---|----------|--------|-------------------|----------------------------------|------|
+| 1 | Clé valide, fournisseur joignable | Coller une clé Groq **valide**, cliquer "Enregistrer" | Bref état "Vérification…" puis badge **✅ Clé vérifiée**, toast succès — **aucun dialogue** | `groq_api_key` écrite, `groq_api_key_verified: true` | |
+| 2 | Clé refusée, puis "Corriger" | Coller une clé au bon préfixe mais invalide (ex : révoquée ou tronquée), "Enregistrer", puis cliquer **"Corriger la clé"** dans le dialogue | Dialogue **refus** ("[Fournisseur] a refusé cette clé"), puis retour au champ marqué en erreur | **Rien n'est écrit** — clé précédente (ou absence de clé) intacte, `*_verified` inchangé | |
+| 3 | Clé refusée, puis "Enregistrer quand même" | Même point de départ que #2, cliquer **"Enregistrer quand même"** | Badge **⚠️ Clé non vérifiée**, toast d'avertissement | Clé écrite, `*_api_key_verified: false` | |
+| 4 | Fournisseur injoignable, "Réessayer" qui réussit | Couper temporairement l'accès réseau sortant (ou pointer un environnement de test sans accès Internet), "Enregistrer" → dialogue injoignable → rétablir le réseau → cliquer **"Réessayer"** | Dialogue se ferme, badge **✅ Clé vérifiée** | Clé écrite, `*_verified: true` | |
+| 5 | Fournisseur répond 429 | (Test backend suffisant — `TestValidateAPIKey_*_429_IsUnreachable*`) Si testé manuellement : rafale de validations rapprochées côté fournisseur | Dialogue **injoignable**, **jamais** "refusée" | Rien tant que non forcé | |
+| 6 | Champ vide, clé déjà enregistrée | Laisser le champ clé vide, cliquer "Enregistrer" (clé déjà présente en base) | La clé stockée est vérifiée, badge mis à jour en conséquence | Clé inchangée, `*_verified` actualisé | |
+| 7 | Champ vide, clé issue de `BUZZCONTROL_*_API_KEY` | Démarrer le serveur avec `BUZZCONTROL_GROQ_API_KEY` positionnée, champ clé vide côté UI, cliquer "Enregistrer" | La clé d'environnement est vérifiée, badge mis à jour | **Aucun secret écrit sur disque** (`config.json` ne contient pas la clé d'environnement) | |
+| 8 | Champ vide, aucune clé nulle part | Config vierge, champ vide, cliquer "Enregistrer" | Aucune vérification déclenchée (pas de "Vérification…", pas de dialogue) — comportement actuel inchangé | Autres réglages `ai.*` enregistrés normalement | |
+| 9 | "Supprimer la clé" | Avec une clé enregistrée (vérifiée ou non), cliquer "Supprimer la clé" | Aucune vérification déclenchée (retour immédiat, pas d'appel réseau observable) | Clé effacée, `*_verified: false` | |
+| 10 | Préfixe invalide | Saisir `foo-123` (ni `sk-ant-` ni `gsk_`), cliquer "Enregistrer" | Erreur de format immédiate (pas d'état "Vérification…") | Rien écrit, **aucun appel réseau** (vérifiable via les logs serveur — aucune ligne "AI key validation") | |
+| 11 | Rechargement après enregistrement forcé | Suite du scénario #3, recharger `/config` (F5) | Badge **⚠️ Clé non vérifiée** persiste (ne redevient PAS "✅ Clé vérifiée") | `*_verified: false` relu du disque | |
+
+**Verdict** : [ ] PASS  [ ] FAIL
+
+### 9.3 Test avec une vraie clé Groq (tier gratuit, coût nul)
+
+**Objectif** : valider le scénario #1/#2/#4 ci-dessus contre le **vrai** fournisseur
+Groq (pas un mock), et confirmer par la console fournisseur qu'aucun token n'est
+consommé par la validation (contrat §2 : `GET /models`, pas un appel de génération).
+
+| Étape | Action | Résultat Attendu | OK ? |
+|-------|--------|-------------------|------|
+| 1 | Noter l'usage token actuel sur [console.groq.com](https://console.groq.com) (onglet Usage/Billing) | Valeur de référence notée | |
+| 2 | Coller une clé Groq **valide** dans `/config`, cliquer "Enregistrer" | Badge **✅ Clé vérifiée** | |
+| 3 | Rafraîchir la console Groq (Usage/Billing) | **Aucune variation** du compteur de tokens/requêtes de génération par rapport à l'étape 1 | |
+| 4 | Supprimer la clé, coller la **même clé tronquée** (retirer les 4 derniers caractères), "Enregistrer" | Dialogue **refus** ("Groq a refusé cette clé") | |
+| 5 | Rafraîchir la console Groq | Toujours **aucune variation** de tokens (le refus n'a pas consommé de quota) | |
+| 6 | Couper l'accès réseau sortant du poste de test, "Enregistrer" avec la clé valide | Dialogue **injoignable** ("Impossible de joindre Groq"), dans un délai ≤ ~10 s | |
+| 7 | Rétablir le réseau, cliquer "Réessayer" | Dialogue se ferme, badge **✅ Clé vérifiée** | |
+
+**Verdict** : [ ] PASS  [ ] FAIL
+
+### 9.4 Non-régression
+
+- [ ] Le chemin de génération (`✨ Générer via IA`) fonctionne toujours à l'identique — aucun changement de comportement, de payload ni de latence perceptible
+- [ ] `POST /config.json` sans les 2 nouveaux champs (`*_api_key_verified`) se comporte exactement comme avant (client qui ne les envoie pas)
+- [ ] Le sélecteur de fournisseur Claude/Groq (bugfix/config-api-key-help, #7) n'est pas affecté — aucune validation déclenchée au changement de fournisseur
+- [ ] `go test ./... -v -cover` — suite complète toujours verte (0 FAIL)

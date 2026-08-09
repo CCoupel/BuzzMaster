@@ -51,10 +51,46 @@ vi.mock('../components/TeamCard', () => ({
   )
 }))
 
+// Fournit un mock fetch COMPLET pour les 3 requêtes déclenchées au montage
+// (/config.json, /api/wifi/defaults, /api/firmware/buzzclick/version).
+// Durcissement (bugfix/config-api-key-help, sur demande explicite du CDP) :
+// avant ce commit, `beforeEach` posait `global.fetch = vi.fn()` SANS
+// implémentation par défaut, et chaque test ne mockait qu'UN SEUL appel via
+// `mockResolvedValueOnce` — les 2 autres requêtes de montage retombaient sur
+// le mock non configuré (résolution en `undefined`, avalé par le try/catch
+// mais fragile/silencieux). Non concluant comme correctif du blocage vitest
+// observé dans l'environnement WSL de dev-frontend (reproduit aussi sur le
+// commit parent, donc probablement lié à l'environnement — voir
+// `_work/reports/test-writer-*.md`), mais retire une source d'appels fetch
+// non déterministes et aligne ce describe sur le pattern déjà utilisé plus
+// bas dans ce même fichier (describe "Flash via USB button").
+function mockConfigPageFetch(overrides = {}) {
+  global.fetch = vi.fn((url) => {
+    if (url === '/config.json') {
+      return Promise.resolve({
+        ok: true,
+        json: async () => ({
+          server: { auto_open_browsers: false, debug: false },
+          ...overrides.config,
+        })
+      })
+    }
+    if (url === '/api/wifi/defaults') {
+      return Promise.resolve({
+        ok: true,
+        json: async () => ({ ssid: '', password: '', ssid2: '', password2: '', server_ip: '', server_port: 80 })
+      })
+    }
+    if (url === '/api/firmware/buzzclick/version') {
+      return Promise.resolve({ ok: true, json: async () => ({ EXISTS: false }) })
+    }
+    return Promise.resolve({ ok: false, json: async () => ({}), text: async () => '' })
+  })
+}
+
 describe('ConfigPage - Server Parameters', () => {
   beforeEach(() => {
-    // Mock fetch
-    global.fetch = vi.fn()
+    mockConfigPageFetch()
   })
 
   afterEach(() => {
@@ -62,25 +98,13 @@ describe('ConfigPage - Server Parameters', () => {
   })
 
   test('Should render "Parametres serveur" section', () => {
-    global.fetch.mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({
-        server: { auto_open_browsers: false, debug: false }
-      })
-    })
-
     render(<ConfigPage />)
 
     expect(screen.getByText('Parametres serveur')).toBeInTheDocument()
   })
 
   test('Should load server parameters from /config.json on mount', async () => {
-    global.fetch.mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({
-        server: { auto_open_browsers: true, debug: true }
-      })
-    })
+    mockConfigPageFetch({ config: { server: { auto_open_browsers: true, debug: true } } })
 
     render(<ConfigPage />)
 
@@ -90,13 +114,6 @@ describe('ConfigPage - Server Parameters', () => {
   })
 
   test('Should display auto_open_browsers toggle', () => {
-    global.fetch.mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({
-        server: { auto_open_browsers: false, debug: false }
-      })
-    })
-
     render(<ConfigPage />)
 
     const label = screen.getByText('Ouvrir les navigateurs automatiquement')
@@ -104,13 +121,6 @@ describe('ConfigPage - Server Parameters', () => {
   })
 
   test('Should display debug toggle', () => {
-    global.fetch.mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({
-        server: { auto_open_browsers: false, debug: false }
-      })
-    })
-
     render(<ConfigPage />)
 
     const label = screen.getByText('Mode debug')
@@ -118,13 +128,6 @@ describe('ConfigPage - Server Parameters', () => {
   })
 
   test('Should toggle auto_open_browsers on checkbox change', async () => {
-    global.fetch.mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({
-        server: { auto_open_browsers: false, debug: false }
-      })
-    })
-
     const { container } = render(<ConfigPage />)
 
     await waitFor(() => {
@@ -137,13 +140,6 @@ describe('ConfigPage - Server Parameters', () => {
   })
 
   test('Should toggle debug on checkbox change', async () => {
-    global.fetch.mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({
-        server: { auto_open_browsers: false, debug: false }
-      })
-    })
-
     const { container } = render(<ConfigPage />)
 
     await waitFor(() => {
@@ -156,13 +152,6 @@ describe('ConfigPage - Server Parameters', () => {
   })
 
   test('Should save server parameters via POST /config.json', async () => {
-    global.fetch.mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({
-        server: { auto_open_browsers: false, debug: false }
-      })
-    })
-
     const { container } = render(<ConfigPage />)
 
     await waitFor(() => {
@@ -170,7 +159,7 @@ describe('ConfigPage - Server Parameters', () => {
     })
 
     global.fetch.mockClear()
-    global.fetch.mockResolvedValueOnce({ ok: true })
+    global.fetch.mockImplementation(() => Promise.resolve({ ok: true, json: async () => ({}) }))
 
     const buttons = screen.getAllByRole('button')
     const saveButton = buttons.find(btn => btn.textContent === 'Enregistrer')

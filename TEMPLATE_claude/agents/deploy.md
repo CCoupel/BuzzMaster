@@ -105,6 +105,9 @@ echo "Deploiement QUALIF termine - $VERSION → $BUILD_DIR"
 [1. VERIFICATION] -- Prerequis + validation manuelle
     |
     v
+[1bis. DOCUMENTATION] -- Verification doc finalisee (CHANGELOG, README, docs API)
+    |
+    v
 [2. MERGE] -- Merge branche travail -> main
     |
     v
@@ -127,20 +130,46 @@ echo "Deploiement QUALIF termine - $VERSION → $BUILD_DIR"
 # 1. Verification
 # Prerequis confirmes par le CDP avant cet ordre
 
-# 1bis. Calcul de la version prod (promotion dev -> prod)
-# X.Y.Z.a (dev) -> X.(Y+1).Z (prod) : Y+1, Z conserve, a supprime
-# Voir context/COMMON.md section 5.3
-DEV_VERSION=$(cat {VERSION_FILE})   # ex: 1.3.1.1 -> version prod = 1.4.1
-# Ecrire la version prod calculee dans {VERSION_FILE} avant le merge
+# 1bis. Determination de la version prod cible
+# Le milestone est la source prioritaire (context/COMMON.md section 5.7) ;
+# le calcul arithmetique (section 5.3) ne sert que de repli hors milestone.
+DEV_VERSION=$(cat {VERSION_FILE})   # ex: 1.3.1.1
+X=$(echo "$DEV_VERSION" | cut -d. -f1)
+Y_DEV=$(echo "$DEV_VERSION" | cut -d. -f2)
+Z=$(echo "$DEV_VERSION" | cut -d. -f3)
+Y_PROD_ATTENDU=$((Y_DEV + 1))
+
+# Candidat de recherche uniquement — sert a trouver le milestone, pas a fixer la version
+MILESTONE_TITLE=$(gh api repos/{owner}/{repo}/milestones \
+  --jq ".[] | select(.state==\"open\" and .title==\"v${X}.${Y_PROD_ATTENDU}\") | .title")
+
+if [ -n "$MILESTONE_TITLE" ]; then
+  # SI un milestone OPEN correspond : X.Y lu tel quel sur son titre, aucun calcul
+  XY="${MILESTONE_TITLE#v}"        # ex: "v1.4" -> "1.4"
+else
+  # SINON (bugfix hors milestone) : calcul arithmetique existant, Y+1
+  XY="${X}.${Y_PROD_ATTENDU}"
+fi
+VERSION="${XY}.${Z}"
+# Ecrire $VERSION dans {VERSION_FILE} avant le merge
+
+# 1ter. Verification documentation (avant merge)
+# En orchestration CDP : le doc-updater a deja fait le DOC FINALIZE (Phase 5) — verifier juste la reception du DONE.
+# En usage standalone (/deploy prod hors CDP) : verifier manuellement que la doc est a jour, sinon STOP.
+grep -q "$DEV_VERSION" CHANGELOG.md || {
+  echo "CHANGELOG.md non mis a jour pour cette version — STOP, retour doc-updater avant de continuer."
+  exit 1
+}
+# README/docs concernes : verifier manuellement qu'ils refletent les changements de ce release.
 
 # 2. Merge (sans supprimer la branche de travail)
 git checkout main
-git merge --no-ff feature/xyz -m "Release v1.4.1"
+git merge --no-ff feature/xyz -m "Release v$VERSION"
 git push origin main
 
 # 3. Tag
-git tag -a v1.4.1 -m "Release v1.4.1"
-git push origin v1.4.1
+git tag -a "v$VERSION" -m "Release v$VERSION"
+git push origin "v$VERSION"
 ```
 
 ### Etape 4 — Suivi de la CI
@@ -230,27 +259,72 @@ gh release create v1.2.0 --title "v1.2.0" --notes-file RELEASE_NOTES.md
 
 ### Etape 7 — Cloture du milestone (apres CI OK)
 
-Apres un deploiement PROD reussi, verifier si un milestone correspond a la version deployee :
+Apres un deploiement PROD reussi, verifier si un milestone correspond a la version deployee.
+Le titre du milestone est `vX.Y` (sans `Z`, section 5.7) — le matching se fait sur ce prefixe, jamais sur `X.Y.Z` complet :
 
 ```bash
-# Chercher le milestone correspondant a la version
+# Chercher le milestone correspondant au X.Y de la version deployee (pas X.Y.Z)
 gh api repos/{owner}/{repo}/milestones \
-  --jq '.[] | select(.state=="open" and .title=="<version>")'
+  --jq ".[] | select(.state==\"open\" and .title==\"v$XY\")"
 ```
 
-Si un milestone actif correspond a la version :
+Si un milestone actif correspond :
 
 ```
-Milestone <version> detecte (<N> issues — <X>% complete).
-Cloturer le milestone <version> ? [O/n]
+Milestone v[X.Y] detecte (<N> issues — <X>% complete).
+Cloturer le milestone v[X.Y] ? [O/n]
 ```
 
-Si oui → executer la logique de cloture (identique a `/milestone close <version>`) :
+Si oui → executer la logique de cloture (identique a `/milestone close v[X.Y]`) :
 
 1. Lister les issues ouvertes restantes dans le milestone
 2. Si issues ouvertes → proposer : reporter vers prochain milestone / fermer / laisser en suspens
-3. Fermer le milestone : `gh api repos/{owner}/{repo}/milestones/<numero> --method PATCH -f state=closed`
+3. Fermer le milestone et y consigner la version livree (ecriture ponctuelle, section 5.7) :
+   ```bash
+   gh api repos/{owner}/{repo}/milestones/<numero> \
+     --method PATCH \
+     -f state=closed \
+     -f description="Release v$XY — livre en v$VERSION, tag v$VERSION"
+   ```
 4. Afficher le bilan de cloture
+
+### Etape 8 — Proposer l'agent marketing (si changements marquants)
+
+**Reference** : `agents/marketing-release.md`, `commands/marketing.md`.
+
+Uniquement si le milestone a ete cloture a l'etape 7. Lister ses issues livrees (fermees) et
+filtrer sur les labels visibles utilisateur :
+
+```bash
+gh issue list --milestone "v$XY" --state closed \
+  --json number,title,labels \
+  --jq '[.[] | select(.labels[]?.name as $l | ["feature","enhancement","breaking-change"] | index($l))]
+        | .[] | "#" + (.number|tostring) + " — " + .title + " [" + (.labels | map(.name) | join(", ")) + "]"'
+```
+
+Si la liste est vide (que des `fix`/`chore`/`refactor`) → passer directement au rapport final (etape suivante), sans proposer l'agent.
+
+Si au moins une issue marquante est trouvee, afficher :
+
+```
+📣 Milestone v[X.Y] — <N> changement(s) marquant(s) livre(s) :
+   - #42 — Ajouter auth OAuth2 [feature]
+   - #51 — Export PDF des rapports [feature]
+
+   Lancer l'agent marketing pour mettre a jour le site (gh-pages) ? [O/n]
+```
+
+- Si **oui** → spawner l'agent `marketing-release` (voir `commands/marketing.md` section Agent) avec
+  la tache "Mettre a jour le site marketing pour la version v[X.Y]", attendre son `DONE`, puis
+  `TaskStop("marketing-release")`
+- Si **non** → continuer normalement
+
+En orchestration CDP (teammate `deployer`, jamais de contact direct utilisateur) : remonter le
+resultat dans le rapport `DEPLOY DONE` a `main` au lieu d'afficher le prompt `[O/n]` —
+c'est au CDP de le presenter a l'utilisateur (meme principe que GATE 4) :
+```
+SendMessage({ to: "main", content: "DEPLOY DONE\n...\nMilestone v[X.Y] cloture — <N> changement(s) marquant(s) : #42 [feature], #51 [feature] → proposer /marketing v[X.Y] a l'utilisateur" })
+```
 
 ## Gestion des Echecs CI
 

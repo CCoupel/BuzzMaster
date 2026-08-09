@@ -192,7 +192,7 @@ SendMessage({
 | `doc-updater` | Documentation | `.claude/agents/doc-updater.template.md` | permanent |
 | `deployer` | Déploiement QUALIF/PROD | `.claude/agents/deploy.md` | permanent |
 | `security` | Audit sécurité | `.claude/agents/security.template.md` | ponctuel |
-| `infra` | Infrastructure | `.claude/agents/infra.template.md` | ponctuel |
+| `infra` | Infrastructure (si configurée) | `.claude/agents/infra.template.md` | ponctuel |
 
 > **permanent** = spawné au `/start-session`, reste en IDLE toute la session.  
 > **ponctuel** = spawné à la demande, fermé après DONE — soit par sa commande dédiée (`/secu`, etc.), soit par le CDP en cours de workflow quand la tâche l'exige (ex: `dev-buzzclick`, spawné uniquement si un besoin touche `src/BuzzClick/` — pas d'évolution active sur ce périmètre actuellement, voir `.claude/commands/context/CDP_WORKFLOWS.md`).

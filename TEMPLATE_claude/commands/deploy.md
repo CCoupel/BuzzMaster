@@ -69,12 +69,14 @@ Build --> Push --> Smoke Tests --> Notification
 /deploy prod
     |
     v
-Confirmation --> Merge main --> Tag --> CI/CD
+Confirmation --> Verification Doc --> Merge main --> Tag --> CI/CD
     |
     |-- SI OK --> Release Notes --> Monitoring
     |
     |-- SI ECHEC --> Rollback --> Analyse
 ```
+
+> **Verification Doc** : CHANGELOG.md et README/docs concernes doivent etre a jour avant le merge (voir `.claude/agents/deploy.md`).
 
 ## Rollback
 

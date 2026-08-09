@@ -542,6 +542,24 @@ export default function AIGenerateModal({
     hasActiveType &&
     volumeValid
 
+  // Tooltip explicatif sur le bouton "Générer" (bugfix/config-api-key-help,
+  // tâche #8) — liste précisément la/les condition(s) manquante(s) plutôt
+  // qu'un message générique. Contrairement au bouton "✨ Générer via IA" de
+  // QuestionsPage (désactivé pour une seule raison possible : pas de clé
+  // pour le provider sélectionné, déjà pourvu d'un title), ce bouton dépend
+  // de 6 conditions indépendantes.
+  const submitMissingReasons = canSubmit ? [] : [
+    (quizTheme || '').trim() === '' && 'le thème (section Quiz)',
+    quizPopulations.length === 0 && 'au moins un public (section Quiz)',
+    quizDifficulties.length === 0 && 'au moins une difficulté (section Quiz)',
+    selectedCategories.size === 0 && 'au moins une catégorie cible',
+    !hasActiveType && 'au moins un type de question activé',
+    !volumeValid && (volumeMode === 'count' ? 'un nombre de questions valide' : 'une durée de partie valide'),
+  ].filter(Boolean)
+  const submitDisabledTitle = submitMissingReasons.length > 0
+    ? `Champ(s) requis manquant(s) : ${submitMissingReasons.join(', ')}`
+    : undefined
+
   const handleGenerate = async () => {
     if (!canSubmit) return
     setSubmitError(null)
@@ -848,7 +866,14 @@ export default function AIGenerateModal({
         {viewState === 'form' && (
           <div className="ai-modal-footer">
             <Button variant="secondary" onClick={handleClose}>Annuler</Button>
-            <Button variant="primary" onClick={handleGenerate} disabled={!canSubmit}>✨ Générer</Button>
+            <Button
+              variant="primary"
+              onClick={handleGenerate}
+              disabled={!canSubmit}
+              title={submitDisabledTitle}
+            >
+              ✨ Générer
+            </Button>
           </div>
         )}
         {viewState === 'loading' && (

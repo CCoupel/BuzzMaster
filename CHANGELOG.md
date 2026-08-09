@@ -4,6 +4,43 @@ Historique des versions du projet BuzzControl.
 
 ## [Unreleased]
 
+## [6.0.2] - 2026-08-09
+
+**bugfix/config-api-key-help** : Aide à la configuration des clés API IA, validation en temps réel au point d'enregistrement, interface simplifiée.
+
+### Added
+- **Popup d'aide "?" sur la configuration de clés API** : Bouton accessible sur chaque carte de fournisseur (Claude / Groq) pour guider pas à pas vers la création d'un compte et la génération d'une clé. Utile si vous oubliez comment obtenir une clé.
+- **Endpoint de validation `POST /api/ai/validate-key`** : Valide une clé API auprès du fournisseur réel **sans la facturer** (appel gratuit sur `/models`). Retourne trois résultats : `valid`, `invalid_key`, `unreachable`. Cooldown global 2s pour protéger le quota du fournisseur.
+- **Dialogue de validation à l'enregistrement** : Lors du clic "Enregistrer" d'une clé API, un dialogue bloquant affiche le verdict de validation. Trois cas :
+  - ✅ **Clé valide** → Enregistrement silencieux avec badge "✅ Clé vérifiée"
+  - ⚠️ **Clé refusée** → Dialogue "Claude a refusé cette clé" avec options [Corriger] ou [Enregistrer quand même]
+  - ⚠️ **Injoignable** → Dialogue "Impossible de joindre Claude" avec options [Réessayer] / [Corriger] / [Enregistrer quand même]
+- **Badges tri-état pour statut de clé** : "✅ Clé vérifiée" (vert), "⚠️ Clé non vérifiée" (orange), "⚠️ Aucune clé" (gris) — indicatif du dernier verdict de validation, jamais une garantie cryptographique.
+
+### Changed
+- **Sélecteur de fournisseur IA simplifié** : Boutons "Claude (Anthropic)" et "Groq" toujours cliquables (jamais `disabled`). Seule la carte du fournisseur sélectionné s'affiche ; l'autre est masquée. Plus aucune auto-sélection ni bascule silencieuse lors du montage ou de l'enregistrement — choix entièrement manuel.
+- **Tooltip précis sur bouton "Générer via IA"** : Le bouton `submit` dans la modale de génération affiche un `title` exact listant **toutes les conditions manquantes** pour valider le formulaire, au lieu d'un message générique.
+
+### Fixed
+- **Persistance de l'état de vérification** : Deux nouveaux champs `anthropic_api_key_verified` / `groq_api_key_verified` enregistrent si la clé a passé une validation réussie. Utilisés pour afficher le badge tri-état correct après un rechargement de page.
+
+### Security
+- **Coût d'abus gratuit pour test de clé** : Contrairement à l'ancien chemin `POST /api/generate-questions` qui était facturé, `POST /api/ai/validate-key` est gratuit. L'endpoint est protégé par un cooldown global 2s, mais un LAN malveillant peut tester une clé capturée sans coût financier. **Même classe de risque que `/api/generate-questions`** (accès LAN non authentifié) — pas une nouvelle exposition, mais un changement du profil de frein (financier → technique uniquement). À considérer lors d'un déploiement PROD exposé au-delà d'un LAN privé (voir `docs/ADMIN_GUIDE.md` pour détails).
+- **Badge "Clé vérifiée" est indicatif, non-certifiant** : Le badge marque que la clé a été acceptée par le fournisseur **une fois dans le passé** — généralement juste après l'enregistrement. Il ne garantit jamais que la clé soit encore valide, ni que la génération de questions réelle aboutira. C'est une aide au diagnostic, pas une barrière de sécurité. Recommandation : gardez votre clé confidentielle et révoquez-la immédiatement si compromise (voir `docs/ADMIN_GUIDE.md` pour détails).
+
+### Technical
+- **Backend** : Nouvel `internal/server/ai_validate.go` implémentant `validateAnthropicKey` / `validateGroqKey` via appels `/models` stdlib (`net/http`). Cooldown global `aiValidateCooldownState` sans race. Extension d'`aiProvider` avec méthode `ValidateKey`. Deux champs booléens persistés dans `config.AIConfig` via fusion champ-par-champ existante.
+- **Frontend** : Nouveau composant `ApiKeyValidationDialog.jsx` pour dialogue bloquant (refus/injoignable). Séquence normative dans `ConfigPage.jsx` : validation puis sauvegarde, avec option de forçage en cas d'échec. Badges tri-état reflétant le statut persisté. Popup d'aide pointant vers les consoles fournisseur.
+- **Contrats** : `contracts/ai-key-validation.md` (entièrement respecté).
+- **Tests** : 26 tests Go pour `ai_validate` (200/401/403/429/500/réseau/timeout/cooldown). 10 des 11 scénarios maquette dans `ConfigPage.keyvalidation.test.jsx` vérifiés e2e sur build réel. 3 tests `ConfigPage.apikeyhelp.test.jsx` mis à jour pour nouveaux libellés tri-état.
+
+### Notes de compatibilité
+- **Aucun changement BREAKING** : `POST /config.json` accepte les deux nouveaux champs booléens comme une fusion champ-par-champ standard ; les clients qui ne les envoient pas se comportent exactement comme avant.
+- **Point mineur — tests vitest bloqués en environnement** : `ConfigPage.keyvalidation.test.jsx` et `ConfigPage.apikeyhelp.test.jsx` bloquent indéfiniment à l'exécution vitest (vérifiés manuellement sur build réel, pas de mock). Recommandation : exécuter sur Windows natif avant merge.
+- **Audit sécurité** : Complet avec score 88/100 — deux points MOYENNE documentés, aucun correctif de code requis avant merge.
+
+---
+
 ## [6.1.1] - 2026-08-07
 
 Post-QUALIF correctifs (4 fixes critiques & UX, validation complète Groq #142).

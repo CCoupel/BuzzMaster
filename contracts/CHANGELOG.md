@@ -2,6 +2,39 @@
 
 ---
 
+## [20260809] — Validation de clé API par appel réel au fournisseur
+
+> Une clé bien formée mais révoquée/tronquée était acceptée sur le seul contrôle de préfixe
+> (`sk-ant-`/`gsk_`) et n'échouait qu'à la première génération, très loin du geste qui l'a
+> causée. La validation passe au moment de l'enregistrement, par un appel réel au fournisseur.
+> **Aucun [BREAKING]** — endpoint nouveau, champs de config additifs, chemin de génération
+> strictement inchangé.
+
+- **[NEW]** `contracts/ai-key-validation.md` — contrat complet (appel de validation, taxonomie
+  du résultat, séquence d'enregistrement, sécurité).
+- **[NEW]** `POST /api/ai/validate-key` — valide une clé auprès de son fournisseur **sans rien
+  persister**. Corps `{provider, api_key?}` ; `api_key` vide ⇒ valide la clé effective stockée
+  (variable d'environnement incluse). Réponse `200` portant le verdict dans le corps :
+  `result: "valid" | "invalid_key" | "unreachable"`, `http_status`, `detail` assaini.
+  `400`/`405`/`413`/`429` réservés aux erreurs de la requête elle-même — **jamais** de `5xx`
+  pour un échec fournisseur.
+- **[NEW]** `aiProvider.ValidateKey(ctx, cfg, key)` — quatrième méthode de l'abstraction #137,
+  qui ne disposait d'**aucun** mécanisme de vérification de connectivité. Appel `GET /v1/models`
+  (Anthropic) / `GET /openai/v1/models` (Groq) : coût nul en tokens, préserve le budget 8 000 TPM
+  de Groq, isole strictement l'authentification. Timeout dédié **10 s** (et non les 300 s de
+  `ai.timeout_seconds`, inutilisables en interactif). Aucune signature existante modifiée.
+- **[NEW]** `ai.anthropic_api_key_verified` / `ai.groq_api_key_verified` (bool, persistés,
+  retournés par `GET /config.json` — ce ne sont pas des secrets). `true` après enregistrement
+  suivi d'une validation réussie, `false` si enregistrement forcé ou clé effacée. Persistés et
+  non dérivés : sans cela le badge « ✅ Clé configurée » réapparaîtrait après rechargement pour
+  une clé enregistrée de force malgré un refus.
+- **[CHANGED]** `contracts/ai-generation.md` §2 / `ai-multi-provider.md` §8 — le contrôle de
+  préfixe reste en place, désormais appliqué **en amont** de la validation réseau.
+  Sémantique de `POST /config.json` inchangée (les deux nouveaux champs suivent la fusion
+  champ-par-champ existante de la section `ai`).
+
+---
+
 ## [20260807b] — Fix : schéma JSON rejeté par Groq, discriminator ambigu (issue #142, v6.1.1)
 
 > Bug bloquant confirmé et corrigé — 100% des générations réelles via Groq échouaient,

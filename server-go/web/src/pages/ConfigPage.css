@@ -574,9 +574,23 @@
   color: var(--success, #22c55e);
 }
 
-.ai-key-badge.missing {
+.ai-key-badge.missing,
+.ai-key-badge.unverified {
   background: color-mix(in srgb, var(--warning) 15%, white);
   color: var(--warning, #f59e0b);
+}
+
+/* Champ de clé en erreur après un refus/injoignable + "Corriger" (validation clé API) */
+.wifi-field input.invalid {
+  border-color: var(--error, #dc2626);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--error, #dc2626) 16%, transparent);
+}
+
+.wifi-field-error {
+  font-size: 0.8rem;
+  color: var(--error, #dc2626);
+  font-weight: 500;
+  margin: 0;
 }
 
 /* #137 — sélecteur de fournisseur + blocs de clé par fournisseur */
@@ -682,6 +696,39 @@
   font-size: 0.8rem;
   font-weight: 500;
   color: var(--gray-600);
+}
+
+/* Label + bouton d'aide clé API (bugfix/config-api-key-help) */
+.wifi-field-label-row {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.api-key-help-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 1px solid var(--gray-300);
+  background: var(--gray-100);
+  color: var(--gray-500);
+  font-size: 0.7rem;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0;
+  transition: all var(--transition-fast);
+}
+
+.api-key-help-btn:hover,
+.api-key-help-btn:focus-visible {
+  background: var(--primary-100);
+  border-color: var(--primary-400);
+  color: var(--primary-600);
+  outline: none;
 }
 
 .wifi-field input {
@@ -1155,6 +1202,20 @@
   background: var(--primary-500);
   border-color: var(--primary-500);
   color: white;
+}
+
+/* Etat desactive (ex: fournisseur IA sans cle enregistree) */
+.mode-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  background: var(--gray-100);
+  border-color: var(--gray-200);
+  color: var(--gray-400);
+}
+
+.mode-btn:disabled:hover {
+  border-color: var(--gray-200);
+  color: var(--gray-400);
 }
 
 /* Neon Arc subsection */

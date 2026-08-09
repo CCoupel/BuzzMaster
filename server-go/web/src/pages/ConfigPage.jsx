@@ -3,8 +3,15 @@ import { useGame } from '../hooks/GameContext'
 import Button from '../components/Button'
 import Card from '../components/Card'
 import USBConfigModal from '../components/USBConfigModal'
+import ApiKeyHelpModal from '../components/ApiKeyHelpModal'
+import ApiKeyValidationDialog from '../components/ApiKeyValidationDialog'
 import { OtaAllModal } from '../components/TeamCard'
 import './ConfigPage.css'
+
+// Libellés fournisseur pour les messages de validation de clé API
+// (contracts/ai-key-validation.md §9.1) — noms utilisateur, pas les identifiants
+// techniques 'anthropic'/'groq'.
+const PROVIDER_LABELS = { anthropic: 'Claude', groq: 'Groq' }
 
 export default function ConfigPage() {
   const { teams, bumpers, gameState, updateConfig, sendMessage, version, firmwareInfo: wsFirmwareInfo } = useGame()
@@ -76,6 +83,21 @@ export default function ConfigPage() {
   const [savingAiKey, setSavingAiKey] = useState(false)
   const [clearingAiKey, setClearingAiKey] = useState(false)
   const [aiToast, setAiToast] = useState(null)
+  // Popup d'aide "comment obtenir une clé API" par fournisseur (bugfix/config-api-key-help)
+  const [apiKeyHelpProvider, setApiKeyHelpProvider] = useState(null) // null | 'anthropic' | 'groq'
+  // Validation de clé API par appel réel au fournisseur (contracts/ai-key-validation.md,
+  // tâche #13 du plan) — état "vérifiée" tri-état (persisté côté serveur, jamais
+  // dérivé) + dialogue bloquant en cas de refus/injoignable + message d'erreur
+  // inline sur le champ après "Corriger".
+  const [aiKeyVerified, setAiKeyVerified] = useState(false)
+  const [aiKeyFieldError, setAiKeyFieldError] = useState(null)
+  const [groqKeyVerified, setGroqKeyVerified] = useState(false)
+  const [groqKeyFieldError, setGroqKeyFieldError] = useState(null)
+  // null | { provider, trimmedKey, result: 'invalid_key'|'unreachable', httpStatus,
+  // detail, isConfigured, setConfigured, setVerified, setInput, setSaving, setFieldError }
+  const [keyValidation, setKeyValidation] = useState(null)
+  const [retryingValidation, setRetryingValidation] = useState(false)
+  const [forcingValidationSave, setForcingValidationSave] = useState(false)
   // #137 — second provider BYOK (Groq, tier gratuit). Mêmes règles de secret
   // que la clé Anthropic (contract ai-multi-provider.md §8) : jamais
   // renvoyée, vide en POST = préservée, effacement explicite dédié.
@@ -157,14 +179,23 @@ export default function ConfigPage() {
           // v6.0.0 (#8) — la clé elle-même n'est jamais renvoyée par le
           // serveur, seul ce booléen dérivé l'est (contract ai-generation.md §2).
           if (data.ai) {
-            setAiKeyConfigured(!!data.ai.api_key_configured)
+            const claudeOk = !!data.ai.api_key_configured
+            const groqOk = !!data.ai.groq_api_key_configured
+            const savedProvider = data.ai.provider || 'anthropic'
+            setAiKeyConfigured(claudeOk)
             // #137 — provider sélectionné + état de la clé Groq (même règle de secret).
-            setAiProvider(data.ai.provider || 'anthropic')
-            setGroqKeyConfigured(!!data.ai.groq_api_key_configured)
+            // Sélection strictement manuelle (bugfix/config-api-key-help, simplification
+            // #7) — on respecte tel quel ce qui est persisté côté serveur, plus d'auto-pick.
+            setAiProvider(savedProvider)
+            setGroqKeyConfigured(groqOk)
+            // Validation de clé API (contracts/ai-key-validation.md §7) — booléens
+            // simples, jamais masqués, persistés (pas dérivés : cf. contrat D2).
+            setAiKeyVerified(!!data.ai.anthropic_api_key_verified)
+            setGroqKeyVerified(!!data.ai.groq_api_key_verified)
             // Fix bloquant — capture la section complète pour la ré-émettre
             // entière à chaque POST (cf. commentaire sur aiSettings ci-dessus).
             setAiSettings({
-              provider: data.ai.provider || 'anthropic',
+              provider: savedProvider,
               model: data.ai.model || 'claude-opus-5',
               timeout_seconds: data.ai.timeout_seconds || 300,
               max_questions: data.ai.max_questions || 200,
@@ -286,39 +317,178 @@ export default function ConfigPage() {
     }
   }
 
-  // AI: enregistrer la clé — un champ laissé vide NE modifie PAS la clé
-  // existante côté serveur (contract ai-generation.md §2, maquette §9).
-  // Le payload ré-émet TOUJOURS la section `ai` complète (aiSettings) — un
-  // payload partiel ({ai: {anthropic_api_key: "..."}} seul) remettrait
-  // provider/batch_size/etc à leurs défauts (fix bloquant, cf. commentaire
-  // sur aiSettings plus haut).
-  const handleSaveAiKey = async () => {
-    setSavingAiKey(true)
+  // Validation de clé API par appel réel au fournisseur (contracts/ai-key-validation.md
+  // §9, tâche #13 du plan) — factorisé pour les 2 fournisseurs, appelé uniquement par
+  // handleSaveAiKey/handleSaveGroqKey (handleClearAiKey/handleClearGroqKey/
+  // handleProviderChange restent hors scope, inchangés).
+  // Persiste la clé (si fournie) + le flag *_verified. `trimmedKey` vide préserve la
+  // clé existante côté serveur (règle de secret inchangée) ; seul le flag est mis à jour.
+  const persistApiKey = async (cfg, trimmedKey, verified, message) => {
+    const { provider, setConfigured, setVerified, setInput } = cfg
+    const keyField = provider === 'anthropic' ? 'anthropic_api_key' : 'groq_api_key'
+    const verifiedField = provider === 'anthropic' ? 'anthropic_api_key_verified' : 'groq_api_key_verified'
+    const payload = {
+      ai: {
+        ...aiSettings,
+        ...(trimmedKey ? { [keyField]: trimmedKey } : {}),
+        [verifiedField]: verified,
+      }
+    }
     try {
-      const trimmed = aiApiKeyInput.trim()
-      const payload = { ai: { ...aiSettings, ...(trimmed ? { anthropic_api_key: trimmed } : {}) } }
       const response = await fetch('/config.json', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
       })
       if (response.ok) {
-        if (trimmed) {
-          setAiKeyConfigured(true)
-          setAiApiKeyInput('')
+        if (trimmedKey) {
+          setConfigured(true)
+          setInput('')
         }
-        setAiToast({ message: 'Clé API enregistrée', type: 'success' })
+        setVerified(verified)
+        setAiToast({ message, type: verified ? 'success' : 'warning' })
       } else {
         const text = await response.text()
         setAiToast({ message: 'Erreur: ' + text, type: 'error' })
       }
     } catch (error) {
-      console.error('Save AI key failed:', error)
+      console.error(`Save ${provider} key failed:`, error)
       setAiToast({ message: 'Erreur: ' + error.message, type: 'error' })
-    } finally {
-      setSavingAiKey(false)
     }
   }
+
+  // Appelle POST /api/ai/validate-key (contrat §5) puis agit selon le verdict :
+  // valid -> enregistre directement ; invalid_key/unreachable -> ouvre le dialogue
+  // bloquant (contrat §9). `keyToValidate` vide = valide la clé effective déjà stockée
+  // côté serveur (§9 D3 — c'est aussi le seul chemin pour vérifier une clé fournie par
+  // variable d'environnement, qui ne transite jamais par le champ de saisie).
+  const validateAndProceed = async (cfg, keyToValidate) => {
+    const { provider } = cfg
+    let verdict
+    try {
+      const res = await fetch('/api/ai/validate-key', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ provider, api_key: keyToValidate })
+      })
+      if (!res.ok) {
+        // Erreur de NOTRE serveur (400 préfixe invalide, 429 cooldown, ...) — pas un
+        // verdict fournisseur au sens du contrat, donc pas de dialogue : toast classique.
+        const text = await res.text()
+        setAiToast({ message: 'Erreur: ' + text, type: 'error' })
+        return
+      }
+      verdict = await res.json()
+    } catch (error) {
+      console.error(`Validate ${provider} key failed:`, error)
+      setAiToast({ message: 'Erreur: ' + error.message, type: 'error' })
+      return
+    }
+
+    if (verdict.result === 'valid') {
+      await persistApiKey(cfg, keyToValidate, true, `Clé vérifiée auprès de ${PROVIDER_LABELS[provider]} et enregistrée.`)
+      return
+    }
+
+    // invalid_key | unreachable — dialogue bloquant (contrat §9), rien n'est écrit.
+    setKeyValidation({ ...cfg, trimmedKey: keyToValidate, result: verdict.result, httpStatus: verdict.http_status, detail: verdict.detail })
+  }
+
+  // Point d'entrée des boutons "Enregistrer" (contrat §9, séquence normative) :
+  //   1. champ vide ET aucune clé stockée -> comportement actuel inchangé (pas de
+  //      validation, enregistre les autres réglages ai.*)
+  //   2. sinon -> validation réelle, cf. validateAndProceed
+  const runKeyValidationFlow = async (cfg) => {
+    const { trimmedKey, isConfigured, setSaving, setFieldError } = cfg
+    setFieldError(null)
+    setSaving(true)
+    try {
+      if (!trimmedKey && !isConfigured) {
+        const response = await fetch('/config.json', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ai: aiSettings })
+        })
+        if (response.ok) {
+          setAiToast({ message: 'Clé API enregistrée', type: 'success' })
+        } else {
+          const text = await response.text()
+          setAiToast({ message: 'Erreur: ' + text, type: 'error' })
+        }
+        return
+      }
+      await validateAndProceed(cfg, trimmedKey)
+    } catch (error) {
+      console.error(`Save ${cfg.provider} key failed:`, error)
+      setAiToast({ message: 'Erreur: ' + error.message, type: 'error' })
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  // Dialogue de validation — "Corriger" (§9, ESC) : ne persiste rien, laisse le champ
+  // tel quel (l'utilisateur peut le corriger) et affiche l'erreur inline sur le champ.
+  const handleValidationCorrect = () => {
+    if (!keyValidation) return
+    const { provider, result, setFieldError } = keyValidation
+    const label = PROVIDER_LABELS[provider]
+    setFieldError(
+      result === 'invalid_key'
+        ? `Clé refusée par ${label}. Rien n'a été enregistré.`
+        : `Impossible de vérifier la clé (${label} injoignable). Rien n'a été enregistré.`
+    )
+    setKeyValidation(null)
+  }
+
+  // "Enregistrer quand même" — décision consciente de l'opérateur (§9) : persiste la
+  // clé avec *_verified: false, quel que soit le verdict (refus ou injoignable).
+  const handleValidationForceSave = async () => {
+    if (!keyValidation) return
+    const cfg = keyValidation
+    setKeyValidation(null)
+    setForcingValidationSave(true)
+    try {
+      await persistApiKey(
+        cfg,
+        cfg.trimmedKey,
+        false,
+        `Clé enregistrée sans vérification. Elle n'a pas été confirmée par ${PROVIDER_LABELS[cfg.provider]}.`
+      )
+    } finally {
+      setForcingValidationSave(false)
+    }
+  }
+
+  // "Réessayer" — uniquement pour `unreachable` (le dialogue ne l'affiche pas pour
+  // `invalid_key`, cf. ApiKeyValidationDialog) : relance la même validation.
+  const handleValidationRetry = async () => {
+    if (!keyValidation) return
+    const cfg = keyValidation
+    setKeyValidation(null)
+    setRetryingValidation(true)
+    try {
+      await validateAndProceed(cfg, cfg.trimmedKey)
+    } finally {
+      setRetryingValidation(false)
+    }
+  }
+
+  // AI: enregistrer la clé — un champ laissé vide NE modifie PAS la clé
+  // existante côté serveur (contract ai-generation.md §2, maquette §9).
+  // Le payload ré-émet TOUJOURS la section `ai` complète (aiSettings) — un
+  // payload partiel ({ai: {anthropic_api_key: "..."}} seul) remettrait
+  // provider/batch_size/etc à leurs défauts (fix bloquant, cf. commentaire
+  // sur aiSettings plus haut).
+  const handleSaveAiKey = () => runKeyValidationFlow({
+    provider: 'anthropic',
+    trimmedKey: aiApiKeyInput.trim(),
+    isConfigured: aiKeyConfigured,
+    setConfigured: setAiKeyConfigured,
+    setVerified: setAiKeyVerified,
+    setInput: setAiApiKeyInput,
+    setSaving: setSavingAiKey,
+    setFieldError: setAiKeyFieldError,
+  })
 
   // AI: suppression explicite, via le bouton dédié (maquette §9) — distincte
   // d'un simple "Enregistrer" avec champ vide, qui préserve la clé.
@@ -380,33 +550,16 @@ export default function ConfigPage() {
 
   // Groq: mêmes règles de secret que la clé Claude (contract §8) — champ vide
   // préserve la clé existante, suppression via bouton dédié.
-  const handleSaveGroqKey = async () => {
-    setSavingGroqKey(true)
-    try {
-      const trimmed = groqApiKeyInput.trim()
-      const payload = { ai: { ...aiSettings, ...(trimmed ? { groq_api_key: trimmed } : {}) } }
-      const response = await fetch('/config.json', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      })
-      if (response.ok) {
-        if (trimmed) {
-          setGroqKeyConfigured(true)
-          setGroqApiKeyInput('')
-        }
-        setAiToast({ message: 'Clé API enregistrée', type: 'success' })
-      } else {
-        const text = await response.text()
-        setAiToast({ message: 'Erreur: ' + text, type: 'error' })
-      }
-    } catch (error) {
-      console.error('Save Groq key failed:', error)
-      setAiToast({ message: 'Erreur: ' + error.message, type: 'error' })
-    } finally {
-      setSavingGroqKey(false)
-    }
-  }
+  const handleSaveGroqKey = () => runKeyValidationFlow({
+    provider: 'groq',
+    trimmedKey: groqApiKeyInput.trim(),
+    isConfigured: groqKeyConfigured,
+    setConfigured: setGroqKeyConfigured,
+    setVerified: setGroqKeyVerified,
+    setInput: setGroqApiKeyInput,
+    setSaving: setSavingGroqKey,
+    setFieldError: setGroqKeyFieldError,
+  })
 
   const handleClearGroqKey = async () => {
     if (!window.confirm('Supprimer la clé API Groq enregistrée ?')) return
@@ -962,69 +1115,102 @@ export default function ConfigPage() {
                 </div>
               </div>
 
-              {/* Claude (Anthropic) */}
-              <div className="ai-provider-block">
-                <div className="ai-key-status">
-                  <span className="ai-provider-block-title">Claude (Anthropic)</span>
-                  <span className={`ai-key-badge ${aiKeyConfigured ? 'configured' : 'missing'}`}>
-                    {aiKeyConfigured ? '✅ Clé configurée' : '⚠️ Aucune clé'}
-                  </span>
-                </div>
-                <p className="ai-provider-caveat">Payant, rapide (1 à 3 min pour 200 questions).</p>
-                <label className="wifi-field">
-                  <span>Clé API Claude</span>
-                  <input
-                    type="password"
-                    value={aiApiKeyInput}
-                    onChange={(e) => setAiApiKeyInput(e.target.value)}
-                    placeholder={aiKeyConfigured ? '••••••••' : 'sk-ant-...'}
-                    autoComplete="off"
-                  />
-                </label>
-                <div className="config-section-actions">
-                  <Button variant="primary" size="sm" onClick={handleSaveAiKey} loading={savingAiKey}>
-                    Enregistrer
-                  </Button>
-                  {aiKeyConfigured && (
-                    <Button variant="secondary" size="sm" onClick={handleClearAiKey} loading={clearingAiKey}>
-                      Supprimer la clé
+              {/* Simplification #7 (bugfix/config-api-key-help) — sélection strictement
+                  manuelle via le sélecteur ci-dessus : seule la carte du fournisseur
+                  actif est affichée, l'autre est masquée (pas de logique d'auto-pick). */}
+              {aiProvider !== 'groq' ? (
+                <div className="ai-provider-block">
+                  <div className="ai-key-status">
+                    <span className="ai-provider-block-title">Claude (Anthropic)</span>
+                    {/* Badge tri-état (contracts/ai-key-validation.md §7, tâche #13) —
+                        pas de clé / clé enregistrée mais non vérifiée / clé vérifiée. */}
+                    <span className={`ai-key-badge ${aiKeyConfigured ? (aiKeyVerified ? 'configured' : 'unverified') : 'missing'}`}>
+                      {aiKeyConfigured ? (aiKeyVerified ? '✅ Clé vérifiée' : '⚠️ Clé non vérifiée') : '⚠️ Aucune clé'}
+                    </span>
+                  </div>
+                  <p className="ai-provider-caveat">Payant, rapide (1 à 3 min pour 200 questions).</p>
+                  <label className="wifi-field">
+                    <span className="wifi-field-label-row">
+                      Clé API Claude
+                      <button
+                        type="button"
+                        className="api-key-help-btn"
+                        onClick={() => setApiKeyHelpProvider('anthropic')}
+                        aria-label="Comment obtenir une clé API Anthropic ?"
+                        title="Comment obtenir une clé API ?"
+                      >
+                        ?
+                      </button>
+                    </span>
+                    <input
+                      type="password"
+                      className={aiKeyFieldError ? 'invalid' : ''}
+                      value={aiApiKeyInput}
+                      onChange={(e) => { setAiApiKeyInput(e.target.value); setAiKeyFieldError(null) }}
+                      placeholder={aiKeyConfigured ? '••••••••' : 'sk-ant-...'}
+                      autoComplete="off"
+                    />
+                    {aiKeyFieldError && <span className="wifi-field-error">{aiKeyFieldError}</span>}
+                  </label>
+                  <div className="config-section-actions">
+                    <Button variant="primary" size="sm" onClick={handleSaveAiKey} loading={savingAiKey}>
+                      Enregistrer
                     </Button>
-                  )}
+                    {aiKeyConfigured && (
+                      <Button variant="secondary" size="sm" onClick={handleClearAiKey} loading={clearingAiKey}>
+                        Supprimer la clé
+                      </Button>
+                    )}
+                  </div>
                 </div>
-              </div>
-
-              {/* Groq (#137) */}
-              <div className="ai-provider-block">
-                <div className="ai-key-status">
-                  <span className="ai-provider-block-title">Groq</span>
-                  <span className={`ai-key-badge ${groqKeyConfigured ? 'configured' : 'missing'}`}>
-                    {groqKeyConfigured ? '✅ Clé configurée' : '⚠️ Aucune clé'}
-                  </span>
-                </div>
-                <p className="ai-provider-caveat">
-                  Gratuit, mais limité en débit : comptez ~10 minutes pour 200 questions.
-                </p>
-                <label className="wifi-field">
-                  <span>Clé API Groq</span>
-                  <input
-                    type="password"
-                    value={groqApiKeyInput}
-                    onChange={(e) => setGroqApiKeyInput(e.target.value)}
-                    placeholder={groqKeyConfigured ? '••••••••' : 'gsk_...'}
-                    autoComplete="off"
-                  />
-                </label>
-                <div className="config-section-actions">
-                  <Button variant="primary" size="sm" onClick={handleSaveGroqKey} loading={savingGroqKey}>
-                    Enregistrer
-                  </Button>
-                  {groqKeyConfigured && (
-                    <Button variant="secondary" size="sm" onClick={handleClearGroqKey} loading={clearingGroqKey}>
-                      Supprimer la clé
+              ) : (
+                <div className="ai-provider-block">
+                  <div className="ai-key-status">
+                    <span className="ai-provider-block-title">Groq</span>
+                    {/* Badge tri-état (contracts/ai-key-validation.md §7, tâche #13) —
+                        pas de clé / clé enregistrée mais non vérifiée / clé vérifiée. */}
+                    <span className={`ai-key-badge ${groqKeyConfigured ? (groqKeyVerified ? 'configured' : 'unverified') : 'missing'}`}>
+                      {groqKeyConfigured ? (groqKeyVerified ? '✅ Clé vérifiée' : '⚠️ Clé non vérifiée') : '⚠️ Aucune clé'}
+                    </span>
+                  </div>
+                  <p className="ai-provider-caveat">
+                    Gratuit, mais limité en débit : comptez ~10 minutes pour 200 questions.
+                  </p>
+                  <label className="wifi-field">
+                    <span className="wifi-field-label-row">
+                      Clé API Groq
+                      <button
+                        type="button"
+                        className="api-key-help-btn"
+                        onClick={() => setApiKeyHelpProvider('groq')}
+                        aria-label="Comment obtenir une clé API Groq ?"
+                        title="Comment obtenir une clé API ?"
+                      >
+                        ?
+                      </button>
+                    </span>
+                    <input
+                      type="password"
+                      className={groqKeyFieldError ? 'invalid' : ''}
+                      value={groqApiKeyInput}
+                      onChange={(e) => { setGroqApiKeyInput(e.target.value); setGroqKeyFieldError(null) }}
+                      placeholder={groqKeyConfigured ? '••••••••' : 'gsk_...'}
+                      autoComplete="off"
+                    />
+                    {groqKeyFieldError && <span className="wifi-field-error">{groqKeyFieldError}</span>}
+                  </label>
+                  <div className="config-section-actions">
+                    <Button variant="primary" size="sm" onClick={handleSaveGroqKey} loading={savingGroqKey}>
+                      Enregistrer
                     </Button>
-                  )}
+                    {groqKeyConfigured && (
+                      <Button variant="secondary" size="sm" onClick={handleClearGroqKey} loading={clearingGroqKey}>
+                        Supprimer la clé
+                      </Button>
+                    )}
+                  </div>
                 </div>
-              </div>
+              )}
 
               <p className="config-section-hint">
                 Les clés sont stockées localement sur le serveur, jamais renvoyées au navigateur.
@@ -1298,6 +1484,27 @@ export default function ConfigPage() {
           onClose={() => setShowUSBModal(false)}
           wifiConfig={{ ssid: wifiSsid, password: wifiPassword, serverIp: wifiServerIp, serverPort: wifiServerPort }}
           firmwareInfo={firmwareInfo}
+        />
+      )}
+
+      {apiKeyHelpProvider && (
+        <ApiKeyHelpModal
+          provider={apiKeyHelpProvider}
+          onClose={() => setApiKeyHelpProvider(null)}
+        />
+      )}
+
+      {keyValidation && (
+        <ApiKeyValidationDialog
+          provider={keyValidation.provider}
+          result={keyValidation.result}
+          httpStatus={keyValidation.httpStatus}
+          detail={keyValidation.detail}
+          onCorrect={handleValidationCorrect}
+          onForceSave={handleValidationForceSave}
+          onRetry={handleValidationRetry}
+          retrying={retryingValidation}
+          forcing={forcingValidationSave}
         />
       )}
 

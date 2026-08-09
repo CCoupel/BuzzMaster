@@ -282,6 +282,9 @@ func (h *HTTPServer) setupRoutes() {
 	// AI question generator (v6.0.0 — #8)
 	h.mux.HandleFunc("/api/generate-questions", h.handleGenerateQuestions)
 
+	// AI API key validation (v6.0.3, #9 — contract ai-key-validation.md §5)
+	h.mux.HandleFunc("/api/ai/validate-key", h.handleValidateAPIKey)
+
 	// Buzzer API (WiFi config + OTA)
 	h.mux.HandleFunc("/api/buzzers", h.handleAPIBuzzers)
 	h.mux.HandleFunc("/api/buzzer/wifi-config", h.handleAPIBuzzerWifiConfig)
@@ -1245,11 +1248,11 @@ func (h *HTTPServer) handleConfig(w http.ResponseWriter, r *http.Request) {
 				http.Error(w, "Invalid JSON in \"ai\" section", http.StatusBadRequest)
 				return
 			}
-			if incoming.AnthropicAPIKey != "" && !strings.HasPrefix(incoming.AnthropicAPIKey, "sk-ant-") {
+			if incoming.AnthropicAPIKey != "" && !strings.HasPrefix(incoming.AnthropicAPIKey, anthropicKeyPrefix) {
 				http.Error(w, "Format de clé API invalide (attendu : sk-ant-...)", http.StatusBadRequest)
 				return
 			}
-			if incoming.GroqAPIKey != "" && !strings.HasPrefix(incoming.GroqAPIKey, "gsk_") {
+			if incoming.GroqAPIKey != "" && !strings.HasPrefix(incoming.GroqAPIKey, groqKeyPrefix) {
 				http.Error(w, "Format de clé API Groq invalide (attendu : gsk_...)", http.StatusBadRequest)
 				return
 			}
@@ -1295,6 +1298,20 @@ func (h *HTTPServer) handleConfig(w http.ResponseWriter, r *http.Request) {
 			if _, ok := aiRaw["groq_model"]; ok {
 				cfg.AI.GroqModel = incoming.GroqModel
 			}
+			// Key-validation verdict (v6.0.3, #9 — contract
+			// ai-key-validation.md §7): same "present overwrites, absent
+			// preserves" rule as every other plain ai.* field above. The
+			// frontend sends *_api_key_verified=true only right after a
+			// "valid" POST /api/ai/validate-key verdict, and false when
+			// saving after a forced/unverified save (contract §9) — this
+			// handler has no opinion of its own on the value, it just stores
+			// what it's told, same as batch_size or provider.
+			if _, ok := aiRaw["anthropic_api_key_verified"]; ok {
+				cfg.AI.AnthropicAPIKeyVerified = incoming.AnthropicAPIKeyVerified
+			}
+			if _, ok := aiRaw["groq_api_key_verified"]; ok {
+				cfg.AI.GroqAPIKeyVerified = incoming.GroqAPIKeyVerified
+			}
 
 			// The two secrets keep their existing "absent or empty key
 			// preserves the stored value" semantics (contract
@@ -1312,6 +1329,12 @@ func (h *HTTPServer) handleConfig(w http.ResponseWriter, r *http.Request) {
 			switch {
 			case incoming.ClearAPIKey:
 				cfg.AI.AnthropicAPIKey = ""
+				// "clear_api_key... remettent le flag correspondant à
+				// false" (contract §7) — takes precedence over any
+				// anthropic_api_key_verified the caller might also have
+				// sent, mirroring how ClearAPIKey already wins over
+				// AnthropicAPIKey above.
+				cfg.AI.AnthropicAPIKeyVerified = false
 			case incoming.AnthropicAPIKey != "":
 				cfg.AI.AnthropicAPIKey = incoming.AnthropicAPIKey
 			default:
@@ -1320,6 +1343,7 @@ func (h *HTTPServer) handleConfig(w http.ResponseWriter, r *http.Request) {
 			switch {
 			case incoming.ClearGroqAPIKey:
 				cfg.AI.GroqAPIKey = ""
+				cfg.AI.GroqAPIKeyVerified = false
 			case incoming.GroqAPIKey != "":
 				cfg.AI.GroqAPIKey = incoming.GroqAPIKey
 			default:
