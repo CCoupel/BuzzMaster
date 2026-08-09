@@ -1167,8 +1167,10 @@ Deux providers LLM sont disponibles. Choisissez celui qui correspond à vos beso
 
 1. Ouvrir la page **Configuration** (`/settings` ou lien "⚙️ Paramètres" en haut à droite)
 2. Aller à la section **IA** (nouvelle section en bas de la page)
-3. **Sélectionner le Provider** : Bouton radio ou dropdown pour choisir Claude ou Groq
+3. **Sélectionner le Provider** : Cliquer sur le bouton "Claude (Anthropic)" ou "Groq" pour basculer entre les deux. Seule la carte du fournisseur sélectionné s'affiche — l'autre est masquée.
 4. **Remplir la clé API** du provider sélectionné (voir ci-dessous)
+
+**Popup d'aide "?" sur la carte du provider** : Un bouton "?" en haut à droite de la carte vous guide pas à pas pour créer un compte et générer une clé auprès du fournisseur sélectionné. Valable uniquement pour les nouveaux comptes ou si vous avez oublié comment accéder à votre clé.
 
 #### Option 1 : Claude (Payant, Anthropic)
 
@@ -1202,13 +1204,36 @@ Deux providers LLM sont disponibles. Choisissez celui qui correspond à vos beso
 
 **Important** : La qualité du français de `gpt-oss-120b` n'est pas garantie. Après génération, **relisez et corrigez** les questions avant de les utiliser en partie publique.
 
-#### Vérification et Sauvegarde
+#### Validation et Sauvegarde à l'enregistrement
 
-Après saisie et clic sur "Enregistrer" :
-- **✅ Vert** : Clé reconnue (format valide) et sauvegardée
-- **❌ Rouge** : Clé invalide (format incorrect ou vérification serveur échouée)
+Quand vous cliquez sur "Enregistrer" (après avoir changé la clé ou laissé le champ vide si une clé est stockée), le serveur **valide la clé auprès du fournisseur réel** en effectuant un appel authentifié. Trois cas :
 
-Les clés valides sont **masquées** en affichage (jamais exposées en clair dans la page ou les logs).
+**✅ Clé valide** :
+- La clé a été vérifiée auprès du fournisseur
+- Badge affiché : **"✅ Clé vérifiée"** (vert)
+- Clé sauvegardée avec statut `verified: true`
+- Toast de confirmation : "Clé vérifiée auprès de Claude et enregistrée."
+
+**⚠️ Clé refusée** (le fournisseur rejette la clé) :
+- Dialogue modal apparaît : **"Claude a refusé cette clé"** ou **"Groq a refusé cette clé"**
+- Message : *"La clé a bien été transmise, mais le fournisseur ne la reconnaît pas. Vérifiez que vous l'avez copiée en entier et qu'elle n'a pas été révoquée."*
+- Deux options :
+  - **[Corriger]** — rejette la sauvegarde, le champ reste en bordure rouge. Vous pouvez modifier la clé et réessayer.
+  - **[Enregistrer quand même]** — enregistre la clé sans vérification (rare, utile si la clé n'est pas encore active côté fournisseur). Badge : **"⚠️ Clé non vérifiée"** (orange). Toast : "Clé enregistrée sans vérification — testez-la plus tard."
+
+**⚠️ Fournisseur injoignable** (réseau, timeout, ou autre erreur) :
+- Dialogue modal : **"Impossible de joindre Claude"** ou **"Impossible de joindre Groq"**
+- Message : *"La clé n'a pas pu être vérifiée — elle n'est ni confirmée ni refusée. Si ce serveur est hors ligne, vous pouvez l'enregistrer telle quelle et vérifier plus tard."*
+- Trois options :
+  - **[Réessayer]** — relance la validation après quelques secondes (utile si dérangement temporaire)
+  - **[Corriger]** — rejette la sauvegarde comme ci-dessus
+  - **[Enregistrer quand même]** — enregistre la clé. Badge : **"⚠️ Clé non vérifiée"** (orange). Toast : "Clé enregistrée sans vérification — testez-la plus tard."
+
+**Champ vide + clé stockée** :
+- Si vous laissez le champ vide mais qu'une clé est déjà enregistrée pour ce fournisseur, cliquer "Enregistrer" valide la clé stockée (utile pour mettre à jour le badge de vérification après un rechargement de page, ou pour vérifier une clé issue d'une variable d'environnement PROD).
+
+**Affichage des clés** :
+- Les clés valides sont **toujours masquées** en affichage (jamais exposées en clair dans la page ou les logs), qu'elles soient vérifiées ou non.
 
 ### Configurer les clés API IA en production (recommandé)
 
@@ -1350,9 +1375,11 @@ Après que une génération soit **terminée avec succès (DONE)** ou **arrêté
 - Cliquer "Nouvelle génération" sans fermer reste dans la modale — gain de temps pour un deuxième lot.
 - Les questions de la première génération restent intactes dans QuestionsPage, quelle que soit votre choix (Fermer ou Nouvelle génération).
 
-### ⚠️ Note de sécurité — CRITIQUE
+### ⚠️ Note de sécurité
 
-L'endpoint de génération (`POST /api/generate-questions`) **n'a aucune authentification**, exactement comme le reste du serveur BuzzControl. Cela signifie :
+#### Génération de questions (`POST /api/generate-questions`)
+
+L'endpoint de génération **n'a aucune authentification**, exactement comme le reste du serveur BuzzControl. Cela signifie :
 
 - **Toute personne sur le réseau LAN** peut déclencher une génération
 - **Chaque génération est facturée** sur le compte Anthropic de l'opérateur (celui dont la clé API est configurée)
@@ -1364,6 +1391,30 @@ L'endpoint de génération (`POST /api/generate-questions`) **n'a aucune authent
 - **Surveiller votre compte Anthropic** pour détecter toute utilisation anormale
 
 Cette limitation a été **acceptée explicitement** au GATE 2 du chantier comme un risque connu et managé par l'opérateur (voir contrats/CHANGELOG.md pour le détail).
+
+#### Validation de clé API (`POST /api/ai/validate-key`)
+
+Depuis v6.0.2 (bugfix/config-api-key-help), une **nouvelle vérification de clé** valide votre clé API auprès du fournisseur au moment de l'enregistrement. Deux points de sécurité supplémentaires à connaître :
+
+**1. Coût d'abus gratuit pour tester une clé déjà obtenue**
+
+Auparavant, tester une clé valait via `POST /api/generate-questions` consommait des tokens facturés sur votre compte Anthropic — un frein naturel aux abus. Désormais, `POST /api/ai/validate-key` est **gratuit et illimité** (juste un cooldown de 2 secondes entre deux validations). Cela signifie qu'un utilisateur du LAN peut tester une clé capturée ou trouvée sans coût financier.
+
+**C'est la même classe de risque que `/api/generate-questions`** (accès LAN non authentifié) — pas une nouvelle vulnérabilité — mais la nature du frein change (financier → technique seulement). Si votre serveur est exposé en production à un réseau non contrôlé, surveillez votre compte Anthropic/Groq pour détecter des taux anormalement élevés d'authentifications échouées.
+
+**2. Le badge "✅ Clé vérifiée" est indicatif, pas une garantie cryptographique**
+
+Le badge marque que **la clé a été acceptée par le fournisseur une fois dans le passé** — généralement juste après l'enregistrement. Il ne garantit **jamais** que :
+- La clé est encore valide à ce moment (elle peut avoir été révoquée entre-temps)
+- La génération de questions réelle va aboutir (une clé valide peut échouer en génération pour une autre raison — modèle indisponible, quota dépassé, problème de schéma)
+- Quelqu'un d'autre n'a pas découvert/utilisé votre clé depuis
+
+Le badge est un **rappel visuel** (pour l'opérateur : "cette clé a été testée") et une **aide au diagnostic** (certaines erreurs de génération viennent d'une clé bien formée mais invalide — ce badge vous dit qu'on l'a vérifiée au moins une fois). C'est tout.
+
+**Recommandation** :
+- Gardez votre clé API **confidentielle** — ne la partagez jamais
+- Si vous pensez qu'une clé a été exposée, **révoquez-la immédiatement** dans la console du fournisseur et générez-en une nouvelle
+- Testez une clé neuve via "Enregistrer" dans les Paramètres (qui valide), pas en la laissant dans un historique ou un fichier de configuration checké en git
 
 ### Arrêt et reprise de la génération
 
