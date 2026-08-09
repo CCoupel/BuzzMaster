@@ -44,7 +44,10 @@ import (
 	"time"
 )
 
-const anthropicBaseURLEnvVar = "ANTHROPIC_BASE_URL"
+// anthropicBaseURLEnvVar itself now lives in ai_validate.go (v6.0.3, #9): the
+// key-validation path added a real, non-test consumer of the same env var
+// override, so the constant that used to live only here (see the file-level
+// comment above) moved to production code instead of being duplicated.
 
 // ================================================================================
 // Helpers
