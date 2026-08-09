@@ -61,6 +61,21 @@ type AIConfig struct {
 	GroqModel            string `json:"groq_model"`             // default "openai/gpt-oss-120b"
 	GroqAPIKeyConfigured bool   `json:"groq_api_key_configured,omitempty"`
 	ClearGroqAPIKey      bool   `json:"clear_groq_api_key,omitempty"`
+
+	// Key-validation verdict persistence (v6.0.3, #9 — contract
+	// ai-key-validation.md §7). Unlike APIKeyConfigured/GroqAPIKeyConfigured
+	// above, these two ARE persisted to config.json and are NOT secrets (no
+	// omitempty, no masking in maskedConfigJSON) — they record a past EVENT
+	// ("a real call to the provider's API succeeded for the key currently
+	// stored"), not a derived/computable state. Written true only by the
+	// POST /config.json key-save path immediately after a "valid" verdict
+	// from POST /api/ai/validate-key; forced false by ClearAPIKey/
+	// ClearGroqAPIKey and by any key write not preceded by a "valid"
+	// verdict (contract §7 event table). Never touched by ValidateKey
+	// itself, which has no access to persistence (contract §5: the
+	// validation endpoint has no side effect).
+	AnthropicAPIKeyVerified bool `json:"anthropic_api_key_verified"`
+	GroqAPIKeyVerified      bool `json:"groq_api_key_verified"`
 }
 
 // Environment variable names for the two secrets AIConfig holds (security
