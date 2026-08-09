@@ -7,31 +7,6 @@ import ApiKeyHelpModal from '../components/ApiKeyHelpModal'
 import { OtaAllModal } from '../components/TeamCard'
 import './ConfigPage.css'
 
-// Auto-sélection du fournisseur IA selon les clés disponibles (bugfix/config-api-key-help,
-// ConfigPage uniquement — ne touche pas AIGenerateModal/QuestionsPage).
-//
-// Règle unique, appliquée IDENTIQUEMENT au montage et dans les 4 handlers de clé
-// (save/clear × claude/groq) : ne réévalue la sélection QUE si `current` n'a plus de
-// clé valide. Un choix déjà en place (explicite via clic, ou simplement déjà persisté
-// côté serveur) n'est donc jamais écrasé silencieusement tant qu'il reste utilisable.
-// La priorité Claude > Groq ne s'applique qu'en l'absence de sélection valide — ex:
-// aucune clé n'a jamais permis au fournisseur actuel d'être utilisable (1er ajout de
-// clé), ou la clé du fournisseur actif vient d'être supprimée.
-//
-// Fix revue de code (cycle 1) — bug critique : l'ancienne version retournait
-// 'anthropic' inconditionnellement dès que Claude avait une clé, ce qui écrasait un
-// choix Groq explicite (et le re-persistait silencieusement côté serveur) à chaque
-// remontage du composant, même quand Groq restait parfaitement valide.
-export function pickAutoProvider(claudeConfigured, groqConfigured, current) {
-  const currentIsValid =
-    (current === 'anthropic' && claudeConfigured) ||
-    (current === 'groq' && groqConfigured)
-  if (currentIsValid) return current
-  if (claudeConfigured) return 'anthropic'
-  if (groqConfigured) return 'groq'
-  return current
-}
-
 export default function ConfigPage() {
   const { teams, bumpers, gameState, updateConfig, sendMessage, version, firmwareInfo: wsFirmwareInfo } = useGame()
   const dualRangeTrackRef = useRef(null)
@@ -188,21 +163,16 @@ export default function ConfigPage() {
             const claudeOk = !!data.ai.api_key_configured
             const groqOk = !!data.ai.groq_api_key_configured
             const savedProvider = data.ai.provider || 'anthropic'
-            // Auto-sélection (bugfix/config-api-key-help, fix revue cycle 2) —
-            // respecte `savedProvider` tant qu'il a encore une clé valide (ne
-            // JAMAIS écraser silencieusement un choix déjà persisté, même si
-            // l'autre fournisseur a aussi une clé). Ne corrige que si la
-            // sélection enregistrée n'est plus utilisable (ex: 1er montage
-            // avec le défaut backend "anthropic" mais sans clé Claude).
-            const resolvedProvider = pickAutoProvider(claudeOk, groqOk, savedProvider)
             setAiKeyConfigured(claudeOk)
             // #137 — provider sélectionné + état de la clé Groq (même règle de secret).
-            setAiProvider(resolvedProvider)
+            // Sélection strictement manuelle (bugfix/config-api-key-help, simplification
+            // #7) — on respecte tel quel ce qui est persisté côté serveur, plus d'auto-pick.
+            setAiProvider(savedProvider)
             setGroqKeyConfigured(groqOk)
             // Fix bloquant — capture la section complète pour la ré-émettre
             // entière à chaque POST (cf. commentaire sur aiSettings ci-dessus).
-            const resolvedSettings = {
-              provider: resolvedProvider,
+            setAiSettings({
+              provider: savedProvider,
               model: data.ai.model || 'claude-opus-5',
               timeout_seconds: data.ai.timeout_seconds || 300,
               max_questions: data.ai.max_questions || 200,
@@ -211,18 +181,7 @@ export default function ConfigPage() {
               context_token_budget: data.ai.context_token_budget || 1500,
               max_consecutive_failures: data.ai.max_consecutive_failures || 2,
               groq_model: data.ai.groq_model || 'openai/gpt-oss-120b',
-            }
-            setAiSettings(resolvedSettings)
-            // L'auto-sélection diverge de la valeur persistée côté serveur
-            // (ex: clé Claude ajoutée depuis une autre session) → on repersiste
-            // silencieusement pour rester cohérent avec AIGenerateModal/QuestionsPage.
-            if (resolvedProvider !== savedProvider) {
-              fetch('/config.json', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ ai: resolvedSettings })
-              }).catch(err => console.error('Auto-select AI provider (mount) failed:', err))
-            }
+            })
           }
         }
       } catch (error) {
@@ -355,10 +314,6 @@ export default function ConfigPage() {
         if (trimmed) {
           setAiKeyConfigured(true)
           setAiApiKeyInput('')
-          // Auto-sélection (bugfix/config-api-key-help, fix revue cycle 2) —
-          // ne bascule que si la sélection actuelle n'est plus valide.
-          const nextProvider = pickAutoProvider(true, groqKeyConfigured, aiProvider)
-          if (nextProvider !== aiProvider) handleProviderChange(nextProvider)
         }
         setAiToast({ message: 'Clé API enregistrée', type: 'success' })
       } else {
@@ -387,11 +342,6 @@ export default function ConfigPage() {
       if (response.ok) {
         setAiKeyConfigured(false)
         setAiApiKeyInput('')
-        // Auto-sélection (bugfix/config-api-key-help, fix revue cycle 2) — si
-        // Claude (fournisseur supprimé) était sélectionné, bascule sur Groq
-        // s'il a une clé, sinon la sélection reste inchangée.
-        const nextProvider = pickAutoProvider(false, groqKeyConfigured, aiProvider)
-        if (nextProvider !== aiProvider) handleProviderChange(nextProvider)
         setAiToast({ message: 'Clé API supprimée', type: 'success' })
       } else {
         const text = await response.text()
@@ -452,10 +402,6 @@ export default function ConfigPage() {
         if (trimmed) {
           setGroqKeyConfigured(true)
           setGroqApiKeyInput('')
-          // Auto-sélection (bugfix/config-api-key-help, fix revue cycle 2) —
-          // ne bascule que si la sélection actuelle n'est plus valide.
-          const nextProvider = pickAutoProvider(aiKeyConfigured, true, aiProvider)
-          if (nextProvider !== aiProvider) handleProviderChange(nextProvider)
         }
         setAiToast({ message: 'Clé API enregistrée', type: 'success' })
       } else {
@@ -482,11 +428,6 @@ export default function ConfigPage() {
       if (response.ok) {
         setGroqKeyConfigured(false)
         setGroqApiKeyInput('')
-        // Auto-sélection (bugfix/config-api-key-help, fix revue cycle 2) — si
-        // Groq (fournisseur supprimé) était sélectionné, bascule sur Claude
-        // s'il a une clé, sinon la sélection reste inchangée.
-        const nextProvider = pickAutoProvider(aiKeyConfigured, false, aiProvider)
-        if (nextProvider !== aiProvider) handleProviderChange(nextProvider)
         setAiToast({ message: 'Clé API supprimée', type: 'success' })
       } else {
         const text = await response.text()
@@ -1014,8 +955,7 @@ export default function ConfigPage() {
                     type="button"
                     className={`mode-btn ${aiProvider !== 'groq' ? 'active' : ''}`}
                     onClick={() => handleProviderChange('anthropic')}
-                    disabled={savingProvider || !aiKeyConfigured}
-                    title={!aiKeyConfigured ? 'Enregistrez une clé API Claude pour sélectionner ce fournisseur' : undefined}
+                    disabled={savingProvider}
                   >
                     Claude (Anthropic)
                   </button>
@@ -1023,99 +963,101 @@ export default function ConfigPage() {
                     type="button"
                     className={`mode-btn ${aiProvider === 'groq' ? 'active' : ''}`}
                     onClick={() => handleProviderChange('groq')}
-                    disabled={savingProvider || !groqKeyConfigured}
-                    title={!groqKeyConfigured ? 'Enregistrez une clé API Groq pour sélectionner ce fournisseur' : undefined}
+                    disabled={savingProvider}
                   >
                     Groq
                   </button>
                 </div>
               </div>
 
-              {/* Claude (Anthropic) */}
-              <div className="ai-provider-block">
-                <div className="ai-key-status">
-                  <span className="ai-provider-block-title">Claude (Anthropic)</span>
-                  <span className={`ai-key-badge ${aiKeyConfigured ? 'configured' : 'missing'}`}>
-                    {aiKeyConfigured ? '✅ Clé configurée' : '⚠️ Aucune clé'}
-                  </span>
-                </div>
-                <p className="ai-provider-caveat">Payant, rapide (1 à 3 min pour 200 questions).</p>
-                <label className="wifi-field">
-                  <span className="wifi-field-label-row">
-                    Clé API Claude
-                    <button
-                      type="button"
-                      className="api-key-help-btn"
-                      onClick={() => setApiKeyHelpProvider('anthropic')}
-                      aria-label="Comment obtenir une clé API Anthropic ?"
-                      title="Comment obtenir une clé API ?"
-                    >
-                      ?
-                    </button>
-                  </span>
-                  <input
-                    type="password"
-                    value={aiApiKeyInput}
-                    onChange={(e) => setAiApiKeyInput(e.target.value)}
-                    placeholder={aiKeyConfigured ? '••••••••' : 'sk-ant-...'}
-                    autoComplete="off"
-                  />
-                </label>
-                <div className="config-section-actions">
-                  <Button variant="primary" size="sm" onClick={handleSaveAiKey} loading={savingAiKey}>
-                    Enregistrer
-                  </Button>
-                  {aiKeyConfigured && (
-                    <Button variant="secondary" size="sm" onClick={handleClearAiKey} loading={clearingAiKey}>
-                      Supprimer la clé
+              {/* Simplification #7 (bugfix/config-api-key-help) — sélection strictement
+                  manuelle via le sélecteur ci-dessus : seule la carte du fournisseur
+                  actif est affichée, l'autre est masquée (pas de logique d'auto-pick). */}
+              {aiProvider !== 'groq' ? (
+                <div className="ai-provider-block">
+                  <div className="ai-key-status">
+                    <span className="ai-provider-block-title">Claude (Anthropic)</span>
+                    <span className={`ai-key-badge ${aiKeyConfigured ? 'configured' : 'missing'}`}>
+                      {aiKeyConfigured ? '✅ Clé configurée' : '⚠️ Aucune clé'}
+                    </span>
+                  </div>
+                  <p className="ai-provider-caveat">Payant, rapide (1 à 3 min pour 200 questions).</p>
+                  <label className="wifi-field">
+                    <span className="wifi-field-label-row">
+                      Clé API Claude
+                      <button
+                        type="button"
+                        className="api-key-help-btn"
+                        onClick={() => setApiKeyHelpProvider('anthropic')}
+                        aria-label="Comment obtenir une clé API Anthropic ?"
+                        title="Comment obtenir une clé API ?"
+                      >
+                        ?
+                      </button>
+                    </span>
+                    <input
+                      type="password"
+                      value={aiApiKeyInput}
+                      onChange={(e) => setAiApiKeyInput(e.target.value)}
+                      placeholder={aiKeyConfigured ? '••••••••' : 'sk-ant-...'}
+                      autoComplete="off"
+                    />
+                  </label>
+                  <div className="config-section-actions">
+                    <Button variant="primary" size="sm" onClick={handleSaveAiKey} loading={savingAiKey}>
+                      Enregistrer
                     </Button>
-                  )}
+                    {aiKeyConfigured && (
+                      <Button variant="secondary" size="sm" onClick={handleClearAiKey} loading={clearingAiKey}>
+                        Supprimer la clé
+                      </Button>
+                    )}
+                  </div>
                 </div>
-              </div>
-
-              {/* Groq (#137) */}
-              <div className="ai-provider-block">
-                <div className="ai-key-status">
-                  <span className="ai-provider-block-title">Groq</span>
-                  <span className={`ai-key-badge ${groqKeyConfigured ? 'configured' : 'missing'}`}>
-                    {groqKeyConfigured ? '✅ Clé configurée' : '⚠️ Aucune clé'}
-                  </span>
-                </div>
-                <p className="ai-provider-caveat">
-                  Gratuit, mais limité en débit : comptez ~10 minutes pour 200 questions.
-                </p>
-                <label className="wifi-field">
-                  <span className="wifi-field-label-row">
-                    Clé API Groq
-                    <button
-                      type="button"
-                      className="api-key-help-btn"
-                      onClick={() => setApiKeyHelpProvider('groq')}
-                      aria-label="Comment obtenir une clé API Groq ?"
-                      title="Comment obtenir une clé API ?"
-                    >
-                      ?
-                    </button>
-                  </span>
-                  <input
-                    type="password"
-                    value={groqApiKeyInput}
-                    onChange={(e) => setGroqApiKeyInput(e.target.value)}
-                    placeholder={groqKeyConfigured ? '••••••••' : 'gsk_...'}
-                    autoComplete="off"
-                  />
-                </label>
-                <div className="config-section-actions">
-                  <Button variant="primary" size="sm" onClick={handleSaveGroqKey} loading={savingGroqKey}>
-                    Enregistrer
-                  </Button>
-                  {groqKeyConfigured && (
-                    <Button variant="secondary" size="sm" onClick={handleClearGroqKey} loading={clearingGroqKey}>
-                      Supprimer la clé
+              ) : (
+                <div className="ai-provider-block">
+                  <div className="ai-key-status">
+                    <span className="ai-provider-block-title">Groq</span>
+                    <span className={`ai-key-badge ${groqKeyConfigured ? 'configured' : 'missing'}`}>
+                      {groqKeyConfigured ? '✅ Clé configurée' : '⚠️ Aucune clé'}
+                    </span>
+                  </div>
+                  <p className="ai-provider-caveat">
+                    Gratuit, mais limité en débit : comptez ~10 minutes pour 200 questions.
+                  </p>
+                  <label className="wifi-field">
+                    <span className="wifi-field-label-row">
+                      Clé API Groq
+                      <button
+                        type="button"
+                        className="api-key-help-btn"
+                        onClick={() => setApiKeyHelpProvider('groq')}
+                        aria-label="Comment obtenir une clé API Groq ?"
+                        title="Comment obtenir une clé API ?"
+                      >
+                        ?
+                      </button>
+                    </span>
+                    <input
+                      type="password"
+                      value={groqApiKeyInput}
+                      onChange={(e) => setGroqApiKeyInput(e.target.value)}
+                      placeholder={groqKeyConfigured ? '••••••••' : 'gsk_...'}
+                      autoComplete="off"
+                    />
+                  </label>
+                  <div className="config-section-actions">
+                    <Button variant="primary" size="sm" onClick={handleSaveGroqKey} loading={savingGroqKey}>
+                      Enregistrer
                     </Button>
-                  )}
+                    {groqKeyConfigured && (
+                      <Button variant="secondary" size="sm" onClick={handleClearGroqKey} loading={clearingGroqKey}>
+                        Supprimer la clé
+                      </Button>
+                    )}
+                  </div>
                 </div>
-              </div>
+              )}
 
               <p className="config-section-hint">
                 Les clés sont stockées localement sur le serveur, jamais renvoyées au navigateur.
