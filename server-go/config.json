@@ -52,5 +52,5 @@
     "groq_api_key": "",
     "groq_model": "openai/gpt-oss-120b"
   },
-  "version": "6.0.2.0"
+  "version": "6.0.2.1"
 }
