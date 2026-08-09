@@ -4,7 +4,7 @@ Historique des versions du projet BuzzControl.
 
 ## [Unreleased]
 
-## [6.0.2] - 2026-08-09
+## [6.1.2] - 2026-08-09
 
 **bugfix/config-api-key-help** : Aide à la configuration des clés API IA, validation en temps réel au point d'enregistrement, interface simplifiée.
 
