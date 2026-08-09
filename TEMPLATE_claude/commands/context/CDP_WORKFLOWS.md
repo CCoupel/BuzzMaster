@@ -220,7 +220,7 @@ pour chaque issue_num dans ISSUE_NUMS[] :
 | Moment | Action |
 |--------|--------|
 | Deploy PROD OK (tag `vX.Y.0`) | `gh issue list --milestone "<title>" --state open --json number,title` |
-| Milestone à 100% (liste vide) | Fermer : `mcp__plugin_github_github__issue_write` (milestone state: closed) + informer l'utilisateur |
+| Milestone à 100% (liste vide) | Fermer : `mcp__plugin_github_github__issue_write` (milestone state: closed) + consigner la version livrée dans la description (écriture ponctuelle, `COMMON.md` section 5.7) + informer l'utilisateur |
 | Issues encore ouvertes | Alerter l'utilisateur avec la liste des issues restantes et leur label actuel |
 
 ---
@@ -266,6 +266,7 @@ Une version prod déjà remplacée n'est **jamais repatchée**. Le fix cible tou
 Le titre du milestone GitHub correspond au **Y** de la version prod ciblée : `vX.Y` (sans Z, sans `a`).
 - Un cycle FEATURE crée/utilise le milestone GitHub `vX.Y`, clôturé au deploy PROD (tag `vX.Y.0`).
 - Un cycle BUGFIX/HOTFIX sans milestone actif (`Z+1`) ne crée **pas** de nouveau milestone GitHub — le tag `vX.Y.Z` qui en résulte patche silencieusement la dernière livraison.
+- À la création (`/milestone new`), `Y` est validé contre `Y_prod_actuel + 2` avant création. Ce titre devient ensuite la source lue directement par `deploy.md` à la promotion, au lieu d'un recalcul — voir `COMMON.md` section 5.7.
 
 ### Phase Plan
 

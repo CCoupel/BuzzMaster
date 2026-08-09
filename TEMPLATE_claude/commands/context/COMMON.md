@@ -113,7 +113,7 @@ Format prod : X.Y.Z   (le "a" n'est jamais publie en prod)
 | Iteration dev (commit courant) | `a+1` |
 | Nouveau milestone (feature planifiee) | `Y+1 ; Z=0 ; a=0` |
 | Nouveau cycle bugfix (aucun milestone actif) | `Z+1 ; a=0` (reprend le Y de dev de la derniere wave) |
-| Promotion dev -> prod | `Y+1 ; Z conserve ; a supprime` |
+| Promotion dev -> prod | `Y+1 ; Z conserve ; a supprime` — **sauf** si un milestone `OPEN` correspond (voir 5.7) : `X.Y` est alors lu sur son titre, pas recalcule |
 | Rupture de compatibilite de donnees | `X+1 ; Y=0 ; Z=0 ; a=0` (le prochain milestone repart au Y impair suivant, donc `Y=1`) |
 
 ### 5.4 Regle d'Or — Bug Remonte
@@ -140,6 +140,22 @@ Format prod : X.Y.Z   (le "a" n'est jamais publie en prod)
 ```bash
 {VERSION_READ_CMD}
 ```
+
+### 5.7 Le Milestone comme Source de la Version Cible
+
+Le titre du milestone (`vX.Y`, cree par `/milestone new`) pinne la version prod qui sera livree a la fin du cycle, au lieu de la laisser se deduire arithmetiquement en fin de course.
+
+**A la creation (`/milestone new vX.Y`)** :
+- Validation : `Y` doit etre le prochain Y pair valide, soit `Y_prod_actuel + 2`. Ecart detecte -> alerter avant de creer (voir `commands/milestone.md` Mode NEW).
+- Le titre `vX.Y` devient ensuite la reference unique de la cible prod pour tout le cycle — il ne change plus.
+
+**A la promotion dev -> prod (`/deploy prod`)** :
+- **SI** un milestone `OPEN` a un titre `vX.Y` dont le `X` correspond a la ligne courante et le `Y` vaut `Y_dev + 1` -> `X.Y` est lu directement sur le titre, aucun calcul.
+- **SINON** (aucun milestone actif — bugfix hors cycle planifie) -> `X.Y` reste calcule par l'operation "Promotion dev -> prod" ci-dessus.
+- Dans les deux cas, `Z` vient toujours de `{VERSION_FILE}` (conserve depuis le dernier commit dev) — seul `X.Y` change de source.
+
+**A la cloture du milestone (apres deploy PROD reussi)** :
+- La description du milestone est completee une seule fois avec la version effectivement livree (ex: `Release vX.Y — livre en vX.Y.Z, tag vX.Y.Z`). Ecriture ponctuelle a la cloture — la description ne suit jamais l'etat dev en direct, `{VERSION_FILE}` reste la seule source vivante de cet etat.
 
 ---
 
