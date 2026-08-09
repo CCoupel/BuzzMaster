@@ -79,8 +79,13 @@ function providerButtons() {
 
 // `postSpy` lets assertions inspect every POST /config.json body without
 // caring about the GET calls.
-function mockFetch({ claudeOk = false, groqOk = false, provider = 'anthropic', postOk = true } = {}) {
+// `validateResult` (contracts/ai-key-validation.md §5, tâche #13) — par défaut
+// "valid" pour que les tests de ce fichier (antérieurs à la validation de clé,
+// commit 1241802) continuent d'exercer le chemin d'enregistrement direct sans
+// avoir à connaître le détail du dialogue de validation.
+function mockFetch({ claudeOk = false, groqOk = false, provider = 'anthropic', postOk = true, validateResult = { result: 'valid', http_status: 200 } } = {}) {
   const postSpy = vi.fn()
+  const validateSpy = vi.fn()
   global.fetch = vi.fn((url, options) => {
     if (url === '/config.json' && (!options || !options.method)) {
       return Promise.resolve({
@@ -101,6 +106,10 @@ function mockFetch({ claudeOk = false, groqOk = false, provider = 'anthropic', p
       if (postOk) return Promise.resolve({ ok: true, json: async () => ({}) })
       return Promise.resolve({ ok: false, text: async () => 'Erreur serveur' })
     }
+    if (url === '/api/ai/validate-key') {
+      validateSpy(JSON.parse(options.body))
+      return Promise.resolve({ ok: true, json: async () => ({ provider: JSON.parse(options.body).provider, ...validateResult }) })
+    }
     if (url === '/api/wifi/defaults') {
       return Promise.resolve({ ok: true, json: async () => ({ ssid: '', password: '', server_ip: '', server_port: 80 }) })
     }
@@ -109,6 +118,7 @@ function mockFetch({ claudeOk = false, groqOk = false, provider = 'anthropic', p
     }
     return Promise.resolve({ ok: false, json: async () => ({}), text: async () => '' })
   })
+  postSpy.validateSpy = validateSpy
   return postSpy
 }
 
@@ -274,6 +284,10 @@ describe('ConfigPage — Sélecteur de fournisseur IA, sélection manuelle uniqu
   })
 
   it('saving the Claude key does NOT switch the active provider or the visible card', async () => {
+    // Tâche #13 (contracts/ai-key-validation.md) — "Enregistrer" valide
+    // désormais la clé auprès du fournisseur avant de la persister ; mockFetch
+    // renvoie "valid" par défaut, donc le comportement observable (pas de
+    // bascule de fournisseur) reste identique, seul le badge change de libellé.
     const postSpy = mockFetch({ claudeOk: false, groqOk: true, provider: 'anthropic' })
     render(<ConfigPage />)
     await waitFor(() => expect(screen.getByText('Clé API Claude')).toBeInTheDocument())
@@ -282,20 +296,25 @@ describe('ConfigPage — Sélecteur de fournisseur IA, sélection manuelle uniqu
     fireEvent.change(within(section).getByPlaceholderText('sk-ant-...'), { target: { value: 'sk-ant-newkey' } })
     fireEvent.click(within(section).getByText('Enregistrer'))
 
-    await waitFor(() => expect(within(visibleBlock()).getByText('✅ Clé configurée')).toBeInTheDocument())
+    await waitFor(() => expect(within(visibleBlock()).getByText('✅ Clé vérifiée')).toBeInTheDocument())
     // Still on the Claude card — no switch to Groq even though Groq has a key.
     expect(screen.getByText('Clé API Claude')).toBeInTheDocument()
     expect(providerButtons().claudeBtn).toHaveClass('active')
+    expect(postSpy.validateSpy).toHaveBeenCalledWith({ provider: 'anthropic', api_key: 'sk-ant-newkey' })
     // Only the key-save POST fires — no extra provider-switch POST.
     expect(postSpy).toHaveBeenCalledTimes(1)
-    expect(postSpy).toHaveBeenCalledWith({ ai: { ...FULL_AI_SETTINGS, anthropic_api_key: 'sk-ant-newkey' } })
+    expect(postSpy).toHaveBeenCalledWith({ ai: { ...FULL_AI_SETTINGS, anthropic_api_key: 'sk-ant-newkey', anthropic_api_key_verified: true } })
   })
 
   it('clearing the only configured key does NOT switch the active provider or the visible card', async () => {
     const postSpy = mockFetch({ claudeOk: true, groqOk: false, provider: 'anthropic' })
     vi.spyOn(window, 'confirm').mockReturnValue(true)
     render(<ConfigPage />)
-    await waitFor(() => expect(within(visibleBlock()).getByText('✅ Clé configurée')).toBeInTheDocument())
+    // Une clé "configurée" au montage n'est pas automatiquement "vérifiée"
+    // (contrat §7 D2 — l'état vérifié est un événement passé, jamais dérivé) :
+    // ce mock GET ne renvoie pas *_verified, donc le badge tri-état affiche
+    // "non vérifiée", pas "configurée" (libellé retiré, tâche #13).
+    await waitFor(() => expect(within(visibleBlock()).getByText('⚠️ Clé non vérifiée')).toBeInTheDocument())
 
     fireEvent.click(within(visibleBlock()).getByText('Supprimer la clé'))
 
@@ -318,7 +337,7 @@ describe('ConfigPage — Sélecteur de fournisseur IA, sélection manuelle uniqu
     fireEvent.change(within(section).getByPlaceholderText('gsk_...'), { target: { value: 'gsk_newkey' } })
     fireEvent.click(within(section).getByText('Enregistrer'))
 
-    await waitFor(() => expect(within(visibleBlock()).getByText('✅ Clé configurée')).toBeInTheDocument())
+    await waitFor(() => expect(within(visibleBlock()).getByText('✅ Clé vérifiée')).toBeInTheDocument())
     expect(screen.getByText('Clé API Groq')).toBeInTheDocument()
     expect(providerButtons().groqBtn).toHaveClass('active')
     expect(postSpy).toHaveBeenCalledTimes(1)

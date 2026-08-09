@@ -574,9 +574,23 @@
   color: var(--success, #22c55e);
 }
 
-.ai-key-badge.missing {
+.ai-key-badge.missing,
+.ai-key-badge.unverified {
   background: color-mix(in srgb, var(--warning) 15%, white);
   color: var(--warning, #f59e0b);
+}
+
+/* Champ de clé en erreur après un refus/injoignable + "Corriger" (validation clé API) */
+.wifi-field input.invalid {
+  border-color: var(--error, #dc2626);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--error, #dc2626) 16%, transparent);
+}
+
+.wifi-field-error {
+  font-size: 0.8rem;
+  color: var(--error, #dc2626);
+  font-weight: 500;
+  margin: 0;
 }
 
 /* #137 — sélecteur de fournisseur + blocs de clé par fournisseur */
