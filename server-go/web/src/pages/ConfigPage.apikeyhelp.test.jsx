@@ -2,23 +2,31 @@ import { describe, it, expect, afterEach, vi } from 'vitest'
 import { render, screen, fireEvent, waitFor, within } from '@testing-library/react'
 import ConfigPage from './ConfigPage'
 
-// Tests dérivés de bugfix/config-api-key-help — handoff dev-frontend
-// (_work/handoff/dev-frontend-20260808-164252.md, commits 38164db + 5d29182) :
-//   1. Popup d'aide par fournisseur (bouton "?" → ApiKeyHelpModal)
-//   2. Auto-sélection / désactivation du sélecteur Claude/Groq selon la
-//      présence de chaque clé API (helper `pickAutoProvider`, non exporté —
-//      testé ici par comportement, pas en unité)
+// Tests dérivés de bugfix/config-api-key-help :
+//   1. Popup d'aide par fournisseur (bouton "?" → ApiKeyHelpModal, commit 38164db)
+//   2. Sélecteur de fournisseur Claude/Groq (handoff dev-frontend
+//      dev-frontend-20260809-105500.md, tâche #7, commit 1d5de9f)
 //
-// Fichier NEUF, isolé de ConfigPage.test.jsx / ConfigPage.ai.test.jsx à la
-// demande du CDP (ces 2 fichiers restent bloqués indéfiniment dans certains
-// environnements WSL — cf. rapport _work/reports/test-writer-*.md). Reprend
-// les mêmes conventions : GameContext mocké, USBConfigModal/OtaAllModal
-// mockés, chaque requête `fetch` explicitement gérée (aucun appel non mocké
-// ne doit atteindre le réseau réel).
+// RÉÉCRITURE (sur demande explicite du CDP, suite au commit 1d5de9f) : la
+// version précédente de ce fichier (commit 1241802) testait l'auto-sélection
+// de fournisseur (`pickAutoProvider`, boutons `disabled` selon présence de
+// clé, bascule automatique on save/clear) — cette logique a été entièrement
+// supprimée sur décision CDP/utilisateur suite à un bug critique trouvé en
+// revue (voir commits 5d29182 → 3a595c3 → 1d5de9f). Le nouveau comportement
+// est strictement manuel et beaucoup plus simple :
+//   - les 2 boutons du sélecteur "Fournisseur" sont **toujours cliquables**,
+//     quelle que soit la présence d'une clé ;
+//   - **une seule carte fournisseur est montée dans le DOM** à la fois
+//     (Claude XOR Groq, jamais les deux) — enregistrer/supprimer une clé ne
+//     change JAMAIS quelle carte est affichée, ni le fournisseur actif ;
+//   - la sélection n'est modifiée QUE par un clic explicite sur le
+//     sélecteur, persisté immédiatement via `handleProviderChange` (POST
+//     /config.json) — aucun POST silencieux au montage ni ailleurs.
 //
-// ⚠️ ConfigPage rend PLUSIEURS boutons "Enregistrer" — chaque test scope ses
-// requêtes avec `within()` à partir de la section IA (repérée par le label
-// "Clé API Claude" ou "Clé API Groq"), jamais par texte global.
+// ⚠️ Une seule carte `.ai-provider-block` existe dans le DOM à un instant
+// donné (contrairement à l'ancienne version où les 2 étaient toujours
+// montées) — `visibleBlock()` ci-dessous la retrouve sans avoir besoin de
+// désambiguïser Claude/Groq comme le faisait l'ancien fichier.
 
 vi.mock('../hooks/GameContext', () => ({
   useGame: () => ({
@@ -27,7 +35,7 @@ vi.mock('../hooks/GameContext', () => ({
     gameState: { backgrounds: [] },
     updateConfig: vi.fn(),
     sendMessage: vi.fn(),
-    version: '6.1.1',
+    version: '6.1.2',
     firmwareInfo: { EXISTS: true, IS_MERGED: true, VERSION: '3.1.1', FILENAME: 'buzzclick-v3.1.1.bin', SIZE: 512000 },
   })
 }))
@@ -56,11 +64,10 @@ const FULL_AI_SETTINGS = {
   groq_model: 'openai/gpt-oss-120b',
 }
 
-function claudeSection() {
-  return screen.getByText('Clé API Claude').closest('.ai-provider-block')
-}
-function groqSection() {
-  return screen.getByText('Clé API Groq').closest('.ai-provider-block')
+// The single mounted `.ai-provider-block` — whichever provider is currently
+// selected (Claude XOR Groq, never both).
+function visibleBlock() {
+  return screen.getByText(/^Clé API (Claude|Groq)$/).closest('.ai-provider-block')
 }
 function providerButtons() {
   const row = screen.getByText('Fournisseur').closest('.ai-provider-row')
@@ -70,8 +77,8 @@ function providerButtons() {
   }
 }
 
-// `postSpy` lets assertions inspect every POST /config.json body (including
-// the silent mount-time re-persist) without caring about GET calls.
+// `postSpy` lets assertions inspect every POST /config.json body without
+// caring about the GET calls.
 function mockFetch({ claudeOk = false, groqOk = false, provider = 'anthropic', postOk = true } = {}) {
   const postSpy = vi.fn()
   global.fetch = vi.fn((url, options) => {
@@ -81,9 +88,6 @@ function mockFetch({ claudeOk = false, groqOk = false, provider = 'anthropic', p
         json: async () => ({
           server: { auto_open_browsers: false, debug: false },
           ai: {
-            // Spread FIRST, then override — FULL_AI_SETTINGS also carries a
-            // `provider` field (default 'anthropic') which must NOT clobber
-            // the `provider` param under test here.
             ...FULL_AI_SETTINGS,
             api_key_configured: claudeOk,
             groq_api_key_configured: groqOk,
@@ -113,22 +117,22 @@ describe('ConfigPage — Popup d\'aide clé API (bugfix/config-api-key-help, com
     vi.clearAllMocks()
   })
 
-  it('renders a "?" help button next to the Claude API key field', async () => {
-    mockFetch()
+  it('renders a "?" help button next to the Claude API key field when Claude is the active provider', async () => {
+    mockFetch({ provider: 'anthropic' })
     render(<ConfigPage />)
     await waitFor(() => expect(screen.getByText('IA')).toBeInTheDocument())
 
-    const btn = within(claudeSection()).getByRole('button', { name: 'Comment obtenir une clé API Anthropic ?' })
+    const btn = within(visibleBlock()).getByRole('button', { name: 'Comment obtenir une clé API Anthropic ?' })
     expect(btn).toBeInTheDocument()
     expect(btn).toHaveTextContent('?')
   })
 
-  it('renders a "?" help button next to the Groq API key field', async () => {
-    mockFetch()
+  it('renders a "?" help button next to the Groq API key field when Groq is the active provider', async () => {
+    mockFetch({ provider: 'groq' })
     render(<ConfigPage />)
     await waitFor(() => expect(screen.getByText('IA')).toBeInTheDocument())
 
-    const btn = within(groqSection()).getByRole('button', { name: 'Comment obtenir une clé API Groq ?' })
+    const btn = within(visibleBlock()).getByRole('button', { name: 'Comment obtenir une clé API Groq ?' })
     expect(btn).toBeInTheDocument()
   })
 
@@ -139,201 +143,199 @@ describe('ConfigPage — Popup d\'aide clé API (bugfix/config-api-key-help, com
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
   })
 
-  it('clicking the Claude "?" button opens the help modal with Anthropic content', async () => {
-    mockFetch()
+  it('clicking the "?" button on the Claude card opens the help modal with Anthropic content', async () => {
+    mockFetch({ provider: 'anthropic' })
     render(<ConfigPage />)
     await waitFor(() => expect(screen.getByText('IA')).toBeInTheDocument())
 
-    fireEvent.click(within(claudeSection()).getByRole('button', { name: 'Comment obtenir une clé API Anthropic ?' }))
+    fireEvent.click(within(visibleBlock()).getByRole('button', { name: 'Comment obtenir une clé API Anthropic ?' }))
 
     expect(screen.getByRole('heading', { name: 'Obtenir une clé API Claude (Anthropic)' })).toBeInTheDocument()
   })
 
-  it('clicking the Groq "?" button opens the help modal with Groq content', async () => {
-    mockFetch()
+  it('switching to the Groq card (via the provider selector) then clicking its "?" button opens Groq help content', async () => {
+    mockFetch({ provider: 'anthropic' })
     render(<ConfigPage />)
     await waitFor(() => expect(screen.getByText('IA')).toBeInTheDocument())
 
-    fireEvent.click(within(groqSection()).getByRole('button', { name: 'Comment obtenir une clé API Groq ?' }))
+    fireEvent.click(providerButtons().groqBtn)
+    await waitFor(() => expect(screen.getByText('Clé API Groq')).toBeInTheDocument())
 
+    fireEvent.click(within(visibleBlock()).getByRole('button', { name: 'Comment obtenir une clé API Groq ?' }))
     expect(screen.getByRole('heading', { name: 'Obtenir une clé API Groq' })).toBeInTheDocument()
   })
 
-  it('switches modal content when closing Claude help and opening Groq help', async () => {
-    mockFetch()
+  it('closing the help modal (×) hides it, regardless of the active provider', async () => {
+    mockFetch({ provider: 'groq' })
     render(<ConfigPage />)
     await waitFor(() => expect(screen.getByText('IA')).toBeInTheDocument())
 
-    fireEvent.click(within(claudeSection()).getByRole('button', { name: 'Comment obtenir une clé API Anthropic ?' }))
-    expect(screen.getByRole('heading', { name: 'Obtenir une clé API Claude (Anthropic)' })).toBeInTheDocument()
+    fireEvent.click(within(visibleBlock()).getByRole('button', { name: 'Comment obtenir une clé API Groq ?' }))
+    expect(screen.getByRole('dialog')).toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: 'Fermer' }))
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
-
-    fireEvent.click(within(groqSection()).getByRole('button', { name: 'Comment obtenir une clé API Groq ?' }))
-    expect(screen.getByRole('heading', { name: 'Obtenir une clé API Groq' })).toBeInTheDocument()
   })
 
-  it('closing the help modal does not trigger any extra /config.json POST', async () => {
+  it('closing the help modal does not trigger any /config.json POST', async () => {
     const postSpy = mockFetch()
     render(<ConfigPage />)
     await waitFor(() => expect(screen.getByText('IA')).toBeInTheDocument())
 
-    fireEvent.click(within(claudeSection()).getByRole('button', { name: 'Comment obtenir une clé API Anthropic ?' }))
+    fireEvent.click(within(visibleBlock()).getByRole('button', { name: 'Comment obtenir une clé API Anthropic ?' }))
     fireEvent.click(screen.getByRole('button', { name: 'Fermer' }))
 
     expect(postSpy).not.toHaveBeenCalled()
   })
 })
 
-describe('ConfigPage — Auto-sélection fournisseur IA (bugfix/config-api-key-help, commit 5d29182)', () => {
+describe('ConfigPage — Sélecteur de fournisseur IA, sélection manuelle uniquement (bugfix/config-api-key-help, commit 1d5de9f)', () => {
   afterEach(() => {
     vi.clearAllMocks()
   })
 
-  it('no key at all: both provider buttons are disabled, no silent re-POST fired', async () => {
-    const postSpy = mockFetch({ claudeOk: false, groqOk: false, provider: 'anthropic' })
+  it('mounts with the Claude card only when the server-saved provider is "anthropic" — Groq fields absent from the DOM', async () => {
+    mockFetch({ provider: 'anthropic' })
     render(<ConfigPage />)
-    await waitFor(() => expect(screen.getByText('IA')).toBeInTheDocument())
-
-    const { claudeBtn, groqBtn } = providerButtons()
-    expect(claudeBtn).toBeDisabled()
-    expect(groqBtn).toBeDisabled()
-    expect(postSpy).not.toHaveBeenCalled()
+    await waitFor(() => expect(screen.getByText('Clé API Claude')).toBeInTheDocument())
+    expect(screen.queryByText('Clé API Groq')).not.toBeInTheDocument()
   })
 
-  it('only Claude configured: Claude button active & enabled, Groq disabled with an explanatory title', async () => {
-    mockFetch({ claudeOk: true, groqOk: false, provider: 'anthropic' })
+  it('mounts with the Groq card only when the server-saved provider is "groq" — Claude fields absent from the DOM', async () => {
+    mockFetch({ provider: 'groq' })
+    render(<ConfigPage />)
+    await waitFor(() => expect(screen.getByText('Clé API Groq')).toBeInTheDocument())
+    expect(screen.queryByText('Clé API Claude')).not.toBeInTheDocument()
+  })
+
+  it('both selector buttons stay clickable (never disabled) even when NEITHER provider has a key', async () => {
+    mockFetch({ claudeOk: false, groqOk: false, provider: 'anthropic' })
     render(<ConfigPage />)
     await waitFor(() => expect(screen.getByText('IA')).toBeInTheDocument())
 
     const { claudeBtn, groqBtn } = providerButtons()
     expect(claudeBtn).not.toBeDisabled()
-    expect(claudeBtn).toHaveClass('active')
-    expect(groqBtn).toBeDisabled()
-    expect(groqBtn).toHaveAttribute('title', 'Enregistrez une clé API Groq pour sélectionner ce fournisseur')
-  })
-
-  it('only Groq configured: Groq auto-selected & enabled, Claude disabled', async () => {
-    mockFetch({ claudeOk: false, groqOk: true, provider: 'anthropic' })
-    render(<ConfigPage />)
-    await waitFor(() => expect(screen.getByText('IA')).toBeInTheDocument())
-
-    const { claudeBtn, groqBtn } = providerButtons()
-    await waitFor(() => expect(groqBtn).toHaveClass('active'))
     expect(groqBtn).not.toBeDisabled()
-    expect(claudeBtn).toBeDisabled()
+    expect(claudeBtn).not.toHaveAttribute('title')
+    expect(groqBtn).not.toHaveAttribute('title')
   })
 
-  it('both keys configured: Claude wins the auto-selection over Groq even if Groq was persisted as provider', async () => {
-    mockFetch({ claudeOk: true, groqOk: true, provider: 'groq' })
+  it('clicking "Groq" switches the visible card to Groq and persists the choice via POST /config.json', async () => {
+    const postSpy = mockFetch({ provider: 'anthropic' })
     render(<ConfigPage />)
-    await waitFor(() => expect(screen.getByText('IA')).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByText('Clé API Claude')).toBeInTheDocument())
 
-    const { claudeBtn, groqBtn } = providerButtons()
-    await waitFor(() => expect(claudeBtn).toHaveClass('active'))
-    expect(claudeBtn).not.toBeDisabled()
-    expect(groqBtn).not.toBeDisabled()
+    fireEvent.click(providerButtons().groqBtn)
+
+    await waitFor(() => expect(screen.getByText('Clé API Groq')).toBeInTheDocument())
+    expect(screen.queryByText('Clé API Claude')).not.toBeInTheDocument()
+    await waitFor(() => {
+      expect(postSpy).toHaveBeenCalledWith({ ai: { ...FULL_AI_SETTINGS, provider: 'groq' } })
+    })
   })
 
-  it('mount auto-repersist: resolved provider diverging from the server value silently re-POSTs the corrected provider', async () => {
-    const postSpy = mockFetch({ claudeOk: true, groqOk: true, provider: 'groq' })
+  it('clicking "Claude (Anthropic)" while Groq is active switches back and persists the choice', async () => {
+    const postSpy = mockFetch({ provider: 'groq' })
     render(<ConfigPage />)
+    await waitFor(() => expect(screen.getByText('Clé API Groq')).toBeInTheDocument())
 
+    fireEvent.click(providerButtons().claudeBtn)
+
+    await waitFor(() => expect(screen.getByText('Clé API Claude')).toBeInTheDocument())
+    expect(screen.queryByText('Clé API Groq')).not.toBeInTheDocument()
     await waitFor(() => {
       expect(postSpy).toHaveBeenCalledWith({ ai: { ...FULL_AI_SETTINGS, provider: 'anthropic' } })
     })
   })
 
-  it('mount: no re-POST when the resolved provider already matches the server value', async () => {
-    const postSpy = mockFetch({ claudeOk: true, groqOk: false, provider: 'anthropic' })
+  it('the active provider button carries the "active" class, the other does not', async () => {
+    mockFetch({ provider: 'groq' })
     render(<ConfigPage />)
-    await waitFor(() => expect(screen.getByText('IA')).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByText('Clé API Groq')).toBeInTheDocument())
 
-    expect(postSpy).not.toHaveBeenCalled()
+    const { claudeBtn, groqBtn } = providerButtons()
+    expect(groqBtn).toHaveClass('active')
+    expect(claudeBtn).not.toHaveClass('active')
   })
 
-  it('saving a Claude key while Groq was selected auto-switches the active provider to Claude', async () => {
-    const postSpy = mockFetch({ claudeOk: false, groqOk: true, provider: 'groq' })
-    render(<ConfigPage />)
-    await waitFor(() => expect(providerButtons().groqBtn).toHaveClass('active'))
+  it('mounting never fires a silent /config.json POST, whatever the key/provider combination', async () => {
+    for (const params of [
+      { claudeOk: false, groqOk: false, provider: 'anthropic' },
+      { claudeOk: true, groqOk: false, provider: 'anthropic' },
+      { claudeOk: false, groqOk: true, provider: 'anthropic' },
+      { claudeOk: true, groqOk: true, provider: 'groq' },
+    ]) {
+      const postSpy = mockFetch(params)
+      const { unmount } = render(<ConfigPage />)
+      await waitFor(() => expect(screen.getByText('IA')).toBeInTheDocument())
+      expect(postSpy).not.toHaveBeenCalled()
+      unmount()
+    }
+  })
 
-    const section = claudeSection()
+  it('saving the Claude key does NOT switch the active provider or the visible card', async () => {
+    const postSpy = mockFetch({ claudeOk: false, groqOk: true, provider: 'anthropic' })
+    render(<ConfigPage />)
+    await waitFor(() => expect(screen.getByText('Clé API Claude')).toBeInTheDocument())
+
+    const section = visibleBlock()
     fireEvent.change(within(section).getByPlaceholderText('sk-ant-...'), { target: { value: 'sk-ant-newkey' } })
     fireEvent.click(within(section).getByText('Enregistrer'))
 
-    await waitFor(() => expect(providerButtons().claudeBtn).toHaveClass('active'))
-    await waitFor(() => {
-      expect(postSpy).toHaveBeenCalledWith(
-        expect.objectContaining({ ai: expect.objectContaining({ provider: 'anthropic' }) })
-      )
-    })
-  })
-
-  it('saving a Groq key while no Claude key exists auto-switches the active provider to Groq', async () => {
-    mockFetch({ claudeOk: false, groqOk: false, provider: 'anthropic' })
-    render(<ConfigPage />)
-    await waitFor(() => expect(screen.getByText('IA')).toBeInTheDocument())
-
-    const section = groqSection()
-    fireEvent.change(within(section).getByPlaceholderText('gsk_...'), { target: { value: 'gsk_newkey' } })
-    fireEvent.click(within(section).getByText('Enregistrer'))
-
-    await waitFor(() => expect(providerButtons().groqBtn).toHaveClass('active'))
-  })
-
-  it('saving a Groq key while a Claude key already exists does NOT switch the active provider away from Claude', async () => {
-    const postSpy = mockFetch({ claudeOk: true, groqOk: false, provider: 'anthropic' })
-    render(<ConfigPage />)
-    await waitFor(() => expect(providerButtons().claudeBtn).toHaveClass('active'))
-    postSpy.mockClear()
-
-    const section = groqSection()
-    fireEvent.change(within(section).getByPlaceholderText('gsk_...'), { target: { value: 'gsk_newkey' } })
-    fireEvent.click(within(section).getByText('Enregistrer'))
-
-    await waitFor(() => expect(within(section).getByText('✅ Clé configurée')).toBeInTheDocument())
+    await waitFor(() => expect(within(visibleBlock()).getByText('✅ Clé configurée')).toBeInTheDocument())
+    // Still on the Claude card — no switch to Groq even though Groq has a key.
+    expect(screen.getByText('Clé API Claude')).toBeInTheDocument()
     expect(providerButtons().claudeBtn).toHaveClass('active')
     // Only the key-save POST fires — no extra provider-switch POST.
     expect(postSpy).toHaveBeenCalledTimes(1)
+    expect(postSpy).toHaveBeenCalledWith({ ai: { ...FULL_AI_SETTINGS, anthropic_api_key: 'sk-ant-newkey' } })
   })
 
-  it('clearing the Claude key while Groq is configured auto-switches to Groq', async () => {
-    mockFetch({ claudeOk: true, groqOk: true, provider: 'anthropic' })
+  it('clearing the only configured key does NOT switch the active provider or the visible card', async () => {
+    const postSpy = mockFetch({ claudeOk: true, groqOk: false, provider: 'anthropic' })
     vi.spyOn(window, 'confirm').mockReturnValue(true)
     render(<ConfigPage />)
-    await waitFor(() => expect(providerButtons().claudeBtn).toHaveClass('active'))
+    await waitFor(() => expect(within(visibleBlock()).getByText('✅ Clé configurée')).toBeInTheDocument())
 
-    fireEvent.click(within(claudeSection()).getByText('Supprimer la clé'))
+    fireEvent.click(within(visibleBlock()).getByText('Supprimer la clé'))
 
-    await waitFor(() => expect(providerButtons().groqBtn).toHaveClass('active'))
+    await waitFor(() => expect(within(visibleBlock()).getByText('⚠️ Aucune clé')).toBeInTheDocument())
+    // Still on the Claude card, still the active/highlighted selector button —
+    // no auto-switch even though no provider has a key anymore.
+    expect(screen.getByText('Clé API Claude')).toBeInTheDocument()
+    expect(providerButtons().claudeBtn).toHaveClass('active')
+    expect(providerButtons().claudeBtn).not.toBeDisabled()
+    expect(postSpy).toHaveBeenCalledTimes(1)
+    expect(postSpy).toHaveBeenCalledWith({ ai: { ...FULL_AI_SETTINGS, clear_api_key: true } })
   })
 
-  it('clearing the Claude key while Groq has no key leaves the selection unchanged (both end up disabled)', async () => {
-    mockFetch({ claudeOk: true, groqOk: false, provider: 'anthropic' })
-    vi.spyOn(window, 'confirm').mockReturnValue(true)
+  it('saving the Groq key does NOT switch the active provider away from Groq even with a Claude key present', async () => {
+    const postSpy = mockFetch({ claudeOk: true, groqOk: false, provider: 'groq' })
     render(<ConfigPage />)
-    await waitFor(() => expect(providerButtons().claudeBtn).toHaveClass('active'))
+    await waitFor(() => expect(screen.getByText('Clé API Groq')).toBeInTheDocument())
 
-    fireEvent.click(within(claudeSection()).getByText('Supprimer la clé'))
+    const section = visibleBlock()
+    fireEvent.change(within(section).getByPlaceholderText('gsk_...'), { target: { value: 'gsk_newkey' } })
+    fireEvent.click(within(section).getByText('Enregistrer'))
 
-    await waitFor(() => expect(within(claudeSection()).getByText('⚠️ Aucune clé')).toBeInTheDocument())
-    const { claudeBtn, groqBtn } = providerButtons()
-    expect(claudeBtn).toHaveClass('active')
-    expect(claudeBtn).toBeDisabled()
-    expect(groqBtn).toBeDisabled()
+    await waitFor(() => expect(within(visibleBlock()).getByText('✅ Clé configurée')).toBeInTheDocument())
+    expect(screen.getByText('Clé API Groq')).toBeInTheDocument()
+    expect(providerButtons().groqBtn).toHaveClass('active')
+    expect(postSpy).toHaveBeenCalledTimes(1)
   })
 
-  it('clearing the Groq key while Claude is configured auto-switches to Claude', async () => {
-    mockFetch({ claudeOk: true, groqOk: true, provider: 'groq' })
-    vi.spyOn(window, 'confirm').mockReturnValue(true)
+  it('a failed provider switch (POST rejected) rolls back to the previous card', async () => {
+    const postSpy = mockFetch({ provider: 'anthropic', postOk: false })
     render(<ConfigPage />)
-    await waitFor(() => expect(providerButtons().claudeBtn).toHaveClass('active'))
-    // Both keys present → Claude auto-selected on mount regardless of persisted 'groq' (see test above).
+    await waitFor(() => expect(screen.getByText('Clé API Claude')).toBeInTheDocument())
 
-    fireEvent.click(within(groqSection()).getByText('Supprimer la clé'))
+    fireEvent.click(providerButtons().groqBtn)
 
-    await waitFor(() => expect(within(groqSection()).getByText('⚠️ Aucune clé')).toBeInTheDocument())
+    // Optimistic switch happens first...
+    await waitFor(() => expect(postSpy).toHaveBeenCalled())
+    // ...then rolls back once the POST resolves with ok:false.
+    await waitFor(() => expect(screen.getByText('Clé API Claude')).toBeInTheDocument())
+    expect(screen.queryByText('Clé API Groq')).not.toBeInTheDocument()
     expect(providerButtons().claudeBtn).toHaveClass('active')
   })
 })
