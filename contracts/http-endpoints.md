@@ -103,7 +103,10 @@ Crée ou met à jour une question.
 
 ### GET /config.json
 
-Récupère la configuration.
+Récupère la configuration **système** (serveur, WiFi, stockage, clés API IA).
+
+**⚠️ BREAKING (v6.0.x, #150)** : les sections `game` et `neon_effect` ne sont
+**plus** exposées ici — voir [GET /game-config.json](#get-game-configjson).
 
 #### Response 200
 
@@ -121,11 +124,78 @@ Récupère la configuration.
 
 ### POST /config.json
 
-Met à jour la configuration.
+Met à jour la configuration **système**. Fusion additive par section (une
+section présente dans le body remplace intégralement cette section ; une
+section absente n'est pas touchée).
 
 | Propriété | Valeur |
 |-----------|--------|
 | Content-Type | application/json |
+
+**⚠️ BREAKING (v6.0.x, #150)** : une requête contenant encore une section
+`game` ou `neon_effect` est **rejetée en 400**, avec un message nommant le
+nouvel endpoint (`POST /game-config.json`). Migration côté serveur
+automatique et idempotente au démarrage — voir §Migration ci-dessous.
+
+---
+
+### GET /game-config.json
+
+**Nouveau (v6.0.x, #150).** Récupère la configuration **de jeu** (délai par
+défaut, effet néon) — séparée de la configuration système pour pouvoir être
+sauvegardée/restaurée avec une partie (voir §Backup / Restore), indépendamment
+des clés API et identifiants WiFi.
+
+#### Response 200
+
+```json
+{
+  "game": { "default_delay": 30 },
+  "neon_effect": {
+    "enabled": false,
+    "mode": "bar",
+    "arc_width": 60,
+    "intensity_gap": 80,
+    "rotation_speed": 4,
+    "bar_offset": 20,
+    "bar_thickness": 4,
+    "arc_blur": 100,
+    "glow_pulse_speed": 2,
+    "glow_pulse_min": 30,
+    "glow_pulse_max": 50
+  }
+}
+```
+
+---
+
+### POST /game-config.json
+
+**Nouveau (v6.0.x, #150).** Met à jour la configuration de jeu. Même
+sémantique de fusion additive par section que `POST /config.json` (`game` et
+`neon_effect` sont les deux seules sections). Les valeurs de `neon_effect`
+sont validées/clampées aux mêmes bornes qu'avant la scission.
+
+| Propriété | Valeur |
+|-----------|--------|
+| Content-Type | application/json |
+
+Le payload WebSocket `neon_effect` (`CONFIG_UPDATE`, voir
+`websocket-actions.md`) **n'est pas modifié** — seule sa source de lecture
+change côté serveur.
+
+#### Migration (v6.0.x, #150)
+
+Au démarrage, si `config.json` porte encore une section `game` ou
+`neon_effect` :
+- si `data/config/game-config.json` n'existe pas encore → ses valeurs sont
+  extraites vers ce nouveau fichier, puis retirées de `config.json` ;
+- si `data/config/game-config.json` existe déjà → il fait autorité, les
+  valeurs résiduelles de `config.json` sont **ignorées** (avec avertissement
+  dans les logs) et retirées de `config.json`.
+
+La migration est **idempotente** : un second démarrage sur des fichiers déjà
+migrés ne réécrit rien.
 
 ---
 
@@ -149,7 +219,13 @@ Télécharge une sauvegarde complète du système de fichiers (TAR).
 
 ### GET /game-backup
 
-Télécharge uniquement les données de jeu (config, pas les questions).
+**Correction (divergence contrat/code constatée en v6.0.x, #150)** :
+télécharge `dataDir/files` — c'est-à-dire les **questions et médias**
+(backgrounds, catégories), **pas** la configuration. La description
+précédente de cet endpoint était inversée par rapport au code
+(`http.go:handleGameBackup`). Pour une sauvegarde incluant la configuration
+de jeu (`game-config.json`), voir `GET /fs-backup` (complète, tout `dataDir`)
+ou `GET /backup-select?history=true` (sélective).
 
 | Propriété | Valeur |
 |-----------|--------|
@@ -168,7 +244,7 @@ Sauvegarde sélective.
 | questions | bool | true | Inclure questions |
 | teams | bool | true | Inclure équipes |
 | bumpers | bool | true | Inclure joueurs |
-| history | bool | true | Inclure historique |
+| history | bool | true | Inclure historique **et `game-config.json`** (délai par défaut + effet néon — v6.0.x, #150 : pas de paramètre dédié, ce petit fichier de réglages est rattaché à `history`, le paramètre existant le plus proche conceptuellement) |
 | medias | bool | true | Inclure fonds & catégories (**renommé depuis `backgrounds` en v5.7.1**) |
 
 #### Exemple
@@ -181,7 +257,9 @@ GET /backup-select?questions=true&history=true&medias=true
 
 ### POST /restore
 
-Restaure depuis un fichier TAR.
+Restaure depuis un fichier TAR. Détection automatique du contenu (pas de
+paramètre de sélection) : chaque type de donnée présent dans l'archive est
+restauré indépendamment.
 
 | Propriété | Valeur |
 |-----------|--------|
@@ -192,6 +270,12 @@ Restaure depuis un fichier TAR.
 | Champ | Type | Description |
 |-------|------|-------------|
 | file | file | Fichier TAR |
+
+**v6.0.x (#150)** : une entrée `config/game-config.json` dans l'archive est
+détectée et restaurée indépendamment de tout paramètre (contrairement à
+`/backup-select`, la détection ici se fait sur le contenu réel de l'archive,
+pas sur un flag) — le singleton en mémoire est rafraîchi immédiatement,
+sans redémarrage.
 
 ---
 
@@ -207,7 +291,7 @@ Reset sélectif.
 | questions | bool | Supprimer questions |
 | teams | bool | Vider équipes |
 | bumpers | bool | Vider joueurs |
-| history | bool | Vider historique |
+| history | bool | Vider historique **et réinitialiser `game-config.json` aux valeurs par défaut** (v6.0.x, #150 — même rattachement que `/backup-select`) |
 | medias | bool | Supprimer fonds & catégories (**renommé depuis `backgrounds` en v5.7.1**) |
 
 ---

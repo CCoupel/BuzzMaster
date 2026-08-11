@@ -2,6 +2,40 @@
 
 ---
 
+## [20260811] — Séparation config système / config de jeu (#150)
+
+> `config.json` mélangeait réglages système (clés API, WiFi, ports) et réglages de jeu
+> (délai par défaut, effet néon) dans un seul fichier/endpoint, empêchant de sauvegarder ou
+> restaurer les réglages de jeu avec une partie sans embarquer aussi les secrets. Option (b)
+> actée par arbitrage utilisateur : scission en deux fichiers/endpoints.
+> **[BREAKING]** — migration automatique et idempotente au démarrage, voir
+> `contracts/http-endpoints.md` §Migration.
+
+- **[BREAKING]** `GET/POST /config.json` — les sections `game` et `neon_effect` ne sont plus
+  acceptées ni retournées ; `POST /config.json` portant encore l'une de ces sections est rejeté
+  en `400` avec un message nommant le nouvel endpoint.
+- **[BREAKING]** `server-go/config.json` — les sections `game` et `neon_effect` sont déplacées
+  vers `data/config/game-config.json` ; migration automatique et idempotente au démarrage
+  (ancien format sans `game-config.json` → extraction + migration + journalisation ; les deux
+  présents → `game-config.json` fait autorité, sections résiduelles de `config.json`
+  supprimées avec avertissement ; aucun des deux → défauts).
+- **[NEW]** `GET/POST /game-config.json` — réglages de jeu (délai par défaut, effet néon),
+  même sémantique de fusion additive par section que `/config.json`.
+- **[NEW]** `data/config/game-config.json` — fichier de réglages de jeu, inclus au
+  backup/restore/reset sélectifs (rattaché au flag `history`, voir
+  `contracts/http-endpoints.md`) et à la sauvegarde complète (`/fs-backup`, qui archive tout
+  `dataDir` sans changement de code).
+- **[CHANGED]** `contracts/http-endpoints.md` — correction de la description de
+  `GET /game-backup` : archive `dataDir/files` (questions + médias), **pas** la configuration
+  — la description précédente était inversée par rapport au code (divergence contrat/code
+  détectée en marge de #150, sans lien fonctionnel avec la scission elle-même).
+- **Non impacté** : le payload WebSocket `neon_effect` (`CONFIG_UPDATE`,
+  `contracts/websocket-actions.md`) est inchangé — seule sa source de lecture, côté serveur,
+  change (`config.GetGameSettings()` au lieu de `config.Get()`). Le BREAKING est strictement
+  confiné à la surface HTTP et au format des fichiers sur disque.
+
+---
+
 ## [20260809] — Validation de clé API par appel réel au fournisseur
 
 > Une clé bien formée mais révoquée/tronquée était acceptée sur le seul contrôle de préfixe
