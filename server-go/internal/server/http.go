@@ -2785,13 +2785,13 @@ func (h *HTTPServer) handleAPIWiFiDefaults(w http.ResponseWriter, r *http.Reques
 		cfg := config.Get()
 		cfg.WiFiDefaults = defaults
 
-		// Save to disk
-		validatedJSON, err := json.MarshalIndent(cfg, "", "  ")
-		if err != nil {
-			http.Error(w, "Failed to encode config", http.StatusInternalServerError)
-			return
-		}
-		if err := os.WriteFile("config.json", validatedJSON, 0644); err != nil {
+		// Save to disk atomically via config.Save() (bugfix #143): this used to
+		// be a direct os.WriteFile("config.json", ...) that (a) hardcoded the
+		// path instead of going through the config package's path indirection,
+		// (b) was not atomic (no temp file + rename, unlike config.Save()), and
+		// (c) serialized the whole struct — secrets included — the same way
+		// config.Save() does, so routing through it changes no behavior here.
+		if err := config.Save(cfg); err != nil {
 			http.Error(w, "Failed to save config", http.StatusInternalServerError)
 			return
 		}
