@@ -308,14 +308,27 @@ func (a *App) init() {
 }
 
 func (a *App) setupCallbacks() {
-	// Handle WebSocket messages from web clients
+	// Handle WebSocket messages from web clients.
+	//
+	// Bugfix #131 (plan risk R3): this is the SOLE consumer of a.wsHub.Incoming
+	// for the whole process — a panic that kills this goroutine silently
+	// deafens every admin/TV/VPlayer client, worse than the crash it would
+	// otherwise cause. The recover() is placed INSIDE the loop, wrapping only
+	// the single a.handleWebMessage(msg) call, specifically so the loop
+	// itself survives and keeps consuming the channel after a panic — a
+	// recover() wrapped AROUND the `for` (one defer for the whole goroutine)
+	// would still stop the crash, but the goroutine would exit right after
+	// recovering from the first panic, and every message sent afterward
+	// would sit unconsumed in the channel forever (see
+	// dispatch_panic_recovery_test.go for the regression test this guards).
 	go func() {
 		for msg := range a.wsHub.Incoming {
 			a.handleWebMessage(msg)
 		}
 	}()
 
-	// Handle WebSocket messages from buzzers (/ws/buzzer)
+	// Handle WebSocket messages from buzzers (/ws/buzzer) — same reasoning
+	// as above, mirrored for the buzzer-side single dispatch goroutine.
 	go func() {
 		for msg := range a.buzzerHub.Incoming {
 			a.handleBuzzerMessage(msg)
@@ -826,8 +839,30 @@ func (a *App) stop() {
 	a.udpBcast.Stop()
 }
 
-// handleBuzzerMessage processes messages from BuzzClick buzzers (WebSocket)
+// handleBuzzerMessage processes messages from BuzzClick buzzers (WebSocket).
+//
+// Bugfix #131 (plan risk R3): this is called from the SOLE consumer
+// goroutine of a.buzzerHub.Incoming for the whole process (setupCallbacks)
+// — a panic that kills that goroutine silently deafens every physical
+// buzzer, worse than the crash it would otherwise cause. The recover() lives
+// HERE, inside the per-message handler itself, rather than around the
+// dispatch loop in setupCallbacks: that loop calls this function directly
+// (`for msg := range a.buzzerHub.Incoming { a.handleBuzzerMessage(msg) }`),
+// so putting the guard here protects it no matter where it's called from,
+// and specifically means the loop survives and keeps consuming the channel
+// after a panic — a recover() wrapped AROUND the `for` (one defer for the
+// whole goroutine) would still stop the crash, but the goroutine would exit
+// right after recovering from the first panic, and every message sent
+// afterward would sit unconsumed in the channel forever. recover() is
+// called directly in this deferred literal, as required for it to actually
+// stop the panic — see server.LogRecoveredPanic's doc comment.
 func (a *App) handleBuzzerMessage(incoming *protocol.IncomingMessage) {
+	defer func() {
+		if r := recover(); r != nil {
+			server.LogRecoveredPanic(game.LogComponentApp, "handleBuzzerMessage clientID="+incoming.ClientID, r)
+		}
+	}()
+
 	msg := incoming.Data
 
 	switch msg.Action {
@@ -885,8 +920,20 @@ func (a *App) handleBuzzerACK(clientID string, msg *protocol.Message) {
 	a.broadcastUpdate()
 }
 
-// handleWebMessage processes messages from web clients (WebSocket)
+// handleWebMessage processes messages from web clients (WebSocket).
+//
+// Bugfix #131 (plan risk R3) — see handleBuzzerMessage's doc comment
+// immediately above for the full rationale (identical: this is the SOLE
+// consumer of a.wsHub.Incoming, called directly from setupCallbacks' `for`
+// loop, so the recover() lives in the handler itself rather than around the
+// loop).
 func (a *App) handleWebMessage(incoming *protocol.IncomingMessage) {
+	defer func() {
+		if r := recover(); r != nil {
+			server.LogRecoveredPanic(game.LogComponentApp, "handleWebMessage clientID="+incoming.ClientID, r)
+		}
+	}()
+
 	msg := incoming.Data
 
 	// #109 Phase 2 (D2/D3): any message received from an already-identified VJoueur
