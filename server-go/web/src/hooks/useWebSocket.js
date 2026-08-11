@@ -588,13 +588,21 @@ export default function useWebSocket(endpoint = '/ws/admin') {
     }
   }, [])
 
+  // #149 — renvoie désormais un booléen (true = effectivement envoyé sur un
+  // socket ouvert) pour permettre aux appelants qui font une mise à jour
+  // optimiste locale (ex: QuestionsPage.jsx handleShuffleQuestions) de
+  // détecter synchroniquement l'échec réseau et revenir à l'état antérieur.
+  // Tous les appelants existants ignoraient déjà la valeur de retour (void) —
+  // changement additif, non cassant.
   const sendMessage = useCallback((action, msg = {}) => {
     if (wsRef.current?.readyState === WebSocket.OPEN) {
       const message = JSON.stringify({ ACTION: action, MSG: msg })
       console.log('[WS] Sending:', action, msg)
       wsRef.current.send(message)
+      return true
     } else {
       console.error('WebSocket is not connected')
+      return false
     }
   }, [])
 
