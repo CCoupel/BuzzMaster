@@ -7,39 +7,42 @@ import (
 	"testing"
 )
 
+// TestNeonEffectDefaults moved to GameSettings by #150 (option b): neon
+// effect settings now live in game-config.json (LoadGameSettings), not
+// config.json (Load) — see gameconfig.go's doc comment.
 func TestNeonEffectDefaults(t *testing.T) {
 	// Create temp config file with minimal data
-	tmpFile, err := os.CreateTemp("", "config-*.json")
+	tmpFile, err := os.CreateTemp("", "game-config-*.json")
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer os.Remove(tmpFile.Name())
 
-	// Write minimal config
+	// Write minimal game-config.json (no neon_effect section at all).
 	minimalConfig := `{
-		"version": "2.46.0"
+		"game": {"default_delay": 30}
 	}`
 	tmpFile.WriteString(minimalConfig)
 	tmpFile.Close()
 
-	// Load config
-	cfg, err := Load(tmpFile.Name())
+	// Load game settings
+	gs, err := LoadGameSettings(tmpFile.Name())
 	if err != nil {
-		t.Fatalf("Failed to load config: %v", err)
+		t.Fatalf("Failed to load game settings: %v", err)
 	}
 
 	// Check neon effect defaults
-	if cfg.NeonEffect.ArcWidth != 60 {
-		t.Errorf("Expected ArcWidth=60, got %d", cfg.NeonEffect.ArcWidth)
+	if gs.NeonEffect.ArcWidth != 60 {
+		t.Errorf("Expected ArcWidth=60, got %d", gs.NeonEffect.ArcWidth)
 	}
-	if cfg.NeonEffect.IntensityGap != 80 {
-		t.Errorf("Expected IntensityGap=80, got %d", cfg.NeonEffect.IntensityGap)
+	if gs.NeonEffect.IntensityGap != 80 {
+		t.Errorf("Expected IntensityGap=80, got %d", gs.NeonEffect.IntensityGap)
 	}
-	if cfg.NeonEffect.RotationSpeed != 4.0 {
-		t.Errorf("Expected RotationSpeed=4.0, got %.1f", cfg.NeonEffect.RotationSpeed)
+	if gs.NeonEffect.RotationSpeed != 4.0 {
+		t.Errorf("Expected RotationSpeed=4.0, got %.1f", gs.NeonEffect.RotationSpeed)
 	}
-	if cfg.NeonEffect.Enabled != false {
-		t.Errorf("Expected Enabled=false, got %v", cfg.NeonEffect.Enabled)
+	if gs.NeonEffect.Enabled != false {
+		t.Errorf("Expected Enabled=false, got %v", gs.NeonEffect.Enabled)
 	}
 }
 
@@ -118,17 +121,17 @@ func TestNeonEffectValidation(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			cfg := &Config{NeonEffect: tt.input}
-			cfg.ValidateAndClampNeonEffect()
+			gs := &GameSettings{NeonEffect: tt.input}
+			gs.ValidateAndClampNeonEffect()
 
-			if cfg.NeonEffect.ArcWidth != tt.expectedArc {
-				t.Errorf("ArcWidth: got %d, want %d", cfg.NeonEffect.ArcWidth, tt.expectedArc)
+			if gs.NeonEffect.ArcWidth != tt.expectedArc {
+				t.Errorf("ArcWidth: got %d, want %d", gs.NeonEffect.ArcWidth, tt.expectedArc)
 			}
-			if cfg.NeonEffect.IntensityGap != tt.expectedGap {
-				t.Errorf("IntensityGap: got %d, want %d", cfg.NeonEffect.IntensityGap, tt.expectedGap)
+			if gs.NeonEffect.IntensityGap != tt.expectedGap {
+				t.Errorf("IntensityGap: got %d, want %d", gs.NeonEffect.IntensityGap, tt.expectedGap)
 			}
-			if cfg.NeonEffect.RotationSpeed != tt.expectedSpeed {
-				t.Errorf("RotationSpeed: got %.1f, want %.1f", cfg.NeonEffect.RotationSpeed, tt.expectedSpeed)
+			if gs.NeonEffect.RotationSpeed != tt.expectedSpeed {
+				t.Errorf("RotationSpeed: got %.1f, want %.1f", gs.NeonEffect.RotationSpeed, tt.expectedSpeed)
 			}
 		})
 	}
@@ -247,10 +250,11 @@ func TestGetSetInstance_ConcurrentAccess(t *testing.T) {
 	}
 }
 
-func TestConfigJSONRoundtrip(t *testing.T) {
-	// Test that config can be marshaled and unmarshaled correctly
-	original := &Config{
-		Version: "2.46.0",
+// TestGameSettingsJSONRoundtrip moved from Config to GameSettings by #150 —
+// neon_effect is no longer part of Config's own JSON shape at all.
+func TestGameSettingsJSONRoundtrip(t *testing.T) {
+	// Test that game settings can be marshaled and unmarshaled correctly
+	original := &GameSettings{
 		NeonEffect: NeonEffectConfig{
 			Enabled:       true,
 			ArcWidth:      90,
@@ -266,7 +270,7 @@ func TestConfigJSONRoundtrip(t *testing.T) {
 	}
 
 	// Unmarshal back
-	var decoded Config
+	var decoded GameSettings
 	if err := json.Unmarshal(jsonData, &decoded); err != nil {
 		t.Fatalf("Failed to unmarshal: %v", err)
 	}
