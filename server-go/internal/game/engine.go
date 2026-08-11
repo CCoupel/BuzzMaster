@@ -48,6 +48,7 @@ type Engine struct {
 	teamsPath        string
 	bumpersPath      string
 	statusesPath     string // Path to question_statuses.json
+	statePath        string // Path to game_state.json (#141 — quiz metadata persistence)
 	mu               sync.RWMutex
 	timer            *time.Ticker
 	stopCh           chan struct{}
@@ -1633,7 +1634,6 @@ func (e *Engine) InitGame() []string {
 // client iterating without a guard).
 func (e *Engine) SetQuizMeta(name, theme, notes string, populations, difficulties []string, language, objectives string) {
 	e.mu.Lock()
-	defer e.mu.Unlock()
 	if populations == nil {
 		populations = []string{}
 	}
@@ -1647,7 +1647,17 @@ func (e *Engine) SetQuizMeta(name, theme, notes string, populations, difficultie
 	e.state.QuizDifficulties = difficulties
 	e.state.QuizLanguage = language
 	e.state.QuizObjectives = objectives
+	e.mu.Unlock()
+
 	log.Printf("[Engine] Quiz meta set: name=%q, theme=%q, populations=%v, difficulties=%v, language=%q, objectives_len=%d", name, theme, populations, difficulties, language, len(objectives))
+
+	// #141 — persist synchronously, same rationale as SetTeams: this is a
+	// low-frequency admin action (not a hot path), and firing it in a
+	// background goroutine would let it race with a caller's own
+	// SaveState()/LoadState() sequence.
+	if err := e.SaveState(); err != nil {
+		log.Printf("[Engine] Failed to persist game state after quiz meta change: %v", err)
+	}
 }
 
 // quizHiddenFieldAllowedValues are the only values SetQuizDisplay accepts
@@ -1672,7 +1682,6 @@ var quizHiddenFieldAllowedValues = map[string]bool{
 // doesn't know yet must not fail the whole save.
 func (e *Engine) SetQuizDisplay(hidden []string) {
 	e.mu.Lock()
-	defer e.mu.Unlock()
 	filtered := make([]string, 0, len(hidden))
 	for _, field := range hidden {
 		if quizHiddenFieldAllowedValues[field] {
@@ -1682,7 +1691,14 @@ func (e *Engine) SetQuizDisplay(hidden []string) {
 		}
 	}
 	e.state.QuizHiddenFields = filtered
+	e.mu.Unlock()
+
 	log.Printf("[Engine] Quiz display set: hidden=%v", filtered)
+
+	// #141 — persist synchronously, same rationale as SetQuizMeta above.
+	if err := e.SaveState(); err != nil {
+		log.Printf("[Engine] Failed to persist game state after quiz display change: %v", err)
+	}
 }
 
 // RAZScores resets all scores to zero
@@ -2738,12 +2754,18 @@ func (e *Engine) GetVirtualPlayerLimit() int {
 // SetVirtualPlayerLimit sets the maximum number of virtual players allowed
 func (e *Engine) SetVirtualPlayerLimit(limit int) {
 	e.mu.Lock()
-	defer e.mu.Unlock()
 	if limit < 1 {
 		limit = 20 // Minimum 1, default to 20 if invalid
 	}
 	e.state.VirtualPlayerLimit = limit
+	e.mu.Unlock()
+
 	log.Printf("[Engine] Virtual player limit set to: %d", limit)
+
+	// #141 — persist synchronously, same rationale as SetQuizMeta above.
+	if err := e.SaveState(); err != nil {
+		log.Printf("[Engine] Failed to persist game state after virtual player limit change: %v", err)
+	}
 }
 
 // SetArdoiseAnswer updates the free-text answer for a team during an ARDOISE question.
