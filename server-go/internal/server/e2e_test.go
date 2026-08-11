@@ -25,6 +25,10 @@ func TestE2E_WebSocketClient(t *testing.T) {
 		},
 		Version: "2.0.0",
 	}
+	// Defensive isolation from the tracked fixture (bugfix #143), even though
+	// this test only calls config.SetInstance (no disk I/O today) — see
+	// setupTestHTTPServer's comment in http_test.go for why.
+	t.Chdir(t.TempDir())
 	config.SetInstance(cfg)
 
 	engine := game.NewEngine()
@@ -182,6 +186,10 @@ func TestE2E_HTTPWithEngine(t *testing.T) {
 		},
 		Version: "2.0.0",
 	}
+	// Defensive isolation from the tracked fixture (bugfix #143), even though
+	// this test only calls config.SetInstance (no disk I/O today) — see
+	// setupTestHTTPServer's comment in http_test.go for why.
+	t.Chdir(t.TempDir())
 	config.SetInstance(cfg)
 
 	engine := game.NewEngine()

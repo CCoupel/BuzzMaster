@@ -41,6 +41,9 @@ func newStopTestServer(t *testing.T) (*HTTPServer, int) {
 
 	// Initialise a minimal config. config.Get() must be called first so that
 	// the internal once.Do has already fired before SetInstance is used.
+	// Isolate from the tracked fixture (bugfix #143) — see
+	// setupTestHTTPServer's comment in http_test.go for why.
+	t.Chdir(t.TempDir())
 	_ = config.Get()
 	dataDir := t.TempDir()
 	cfg := &config.Config{
@@ -159,7 +162,9 @@ func TestHTTPServerStop_GracefulDrain(t *testing.T) {
 	port := l.Addr().(*net.TCPAddr).Port
 	l.Close()
 
-	// Minimal config.
+	// Minimal config. Isolate from the tracked fixture (bugfix #143) — see
+	// setupTestHTTPServer's comment in http_test.go for why.
+	t.Chdir(t.TempDir())
 	_ = config.Get()
 	dataDir := t.TempDir()
 	cfg := &config.Config{

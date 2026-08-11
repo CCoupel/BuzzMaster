@@ -1,4 +1,4 @@
-import { describe, it, expect, afterEach, vi } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { render, screen, fireEvent, waitFor, within } from '@testing-library/react'
 import ConfigPage from './ConfigPage'
 
@@ -13,17 +13,32 @@ import ConfigPage from './ConfigPage'
 // syntaxiquement validé (esbuild) mais NON vérifié à l'exécution dans cette
 // session ; à faire tourner sur un environnement Windows natif (QA).
 
+// #136 — `useGame` en `vi.fn()` + `mockReturnValue(obj)` (identité stable
+// entre rendus), pas un littéral fléché qui recrée `firmwareInfo` à chaque
+// appel (cause de la boucle de rendu synchrone sous RTL, cf.
+// ConfigPage.jsx:262-266 corrigé dans le même commit que le durcissement des
+// 4 mocks de ce milestone).
 vi.mock('../hooks/GameContext', () => ({
-  useGame: () => ({
-    teams: {},
-    bumpers: {},
-    gameState: { backgrounds: [] },
-    updateConfig: vi.fn(),
-    sendMessage: vi.fn(),
-    version: '6.1.2',
-    firmwareInfo: { EXISTS: true, IS_MERGED: true, VERSION: '3.1.1', FILENAME: 'buzzclick-v3.1.1.bin', SIZE: 512000 },
-  })
+  useGame: vi.fn(),
+  GameProvider: ({ children }) => children,
 }))
+
+import { useGame } from '../hooks/GameContext'
+
+const makeConfigPageMock = (overrides = {}) => ({
+  teams: {},
+  bumpers: {},
+  gameState: { backgrounds: [] },
+  updateConfig: vi.fn(),
+  sendMessage: vi.fn(),
+  version: '6.1.2',
+  firmwareInfo: { EXISTS: true, IS_MERGED: true, VERSION: '3.1.1', FILENAME: 'buzzclick-v3.1.1.bin', SIZE: 512000 },
+  ...overrides,
+})
+
+beforeEach(() => {
+  useGame.mockReturnValue(makeConfigPageMock())
+})
 
 vi.mock('../components/USBConfigModal', () => ({
   default: ({ onClose }) => (

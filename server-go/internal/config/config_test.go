@@ -7,39 +7,42 @@ import (
 	"testing"
 )
 
+// TestNeonEffectDefaults moved to GameSettings by #150 (option b): neon
+// effect settings now live in game-config.json (LoadGameSettings), not
+// config.json (Load) — see gameconfig.go's doc comment.
 func TestNeonEffectDefaults(t *testing.T) {
 	// Create temp config file with minimal data
-	tmpFile, err := os.CreateTemp("", "config-*.json")
+	tmpFile, err := os.CreateTemp("", "game-config-*.json")
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer os.Remove(tmpFile.Name())
 
-	// Write minimal config
+	// Write minimal game-config.json (no neon_effect section at all).
 	minimalConfig := `{
-		"version": "2.46.0"
+		"game": {"default_delay": 30}
 	}`
 	tmpFile.WriteString(minimalConfig)
 	tmpFile.Close()
 
-	// Load config
-	cfg, err := Load(tmpFile.Name())
+	// Load game settings
+	gs, err := LoadGameSettings(tmpFile.Name())
 	if err != nil {
-		t.Fatalf("Failed to load config: %v", err)
+		t.Fatalf("Failed to load game settings: %v", err)
 	}
 
 	// Check neon effect defaults
-	if cfg.NeonEffect.ArcWidth != 60 {
-		t.Errorf("Expected ArcWidth=60, got %d", cfg.NeonEffect.ArcWidth)
+	if gs.NeonEffect.ArcWidth != 60 {
+		t.Errorf("Expected ArcWidth=60, got %d", gs.NeonEffect.ArcWidth)
 	}
-	if cfg.NeonEffect.IntensityGap != 80 {
-		t.Errorf("Expected IntensityGap=80, got %d", cfg.NeonEffect.IntensityGap)
+	if gs.NeonEffect.IntensityGap != 80 {
+		t.Errorf("Expected IntensityGap=80, got %d", gs.NeonEffect.IntensityGap)
 	}
-	if cfg.NeonEffect.RotationSpeed != 4.0 {
-		t.Errorf("Expected RotationSpeed=4.0, got %.1f", cfg.NeonEffect.RotationSpeed)
+	if gs.NeonEffect.RotationSpeed != 4.0 {
+		t.Errorf("Expected RotationSpeed=4.0, got %.1f", gs.NeonEffect.RotationSpeed)
 	}
-	if cfg.NeonEffect.Enabled != false {
-		t.Errorf("Expected Enabled=false, got %v", cfg.NeonEffect.Enabled)
+	if gs.NeonEffect.Enabled != false {
+		t.Errorf("Expected Enabled=false, got %v", gs.NeonEffect.Enabled)
 	}
 }
 
@@ -118,17 +121,17 @@ func TestNeonEffectValidation(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			cfg := &Config{NeonEffect: tt.input}
-			cfg.ValidateAndClampNeonEffect()
+			gs := &GameSettings{NeonEffect: tt.input}
+			gs.ValidateAndClampNeonEffect()
 
-			if cfg.NeonEffect.ArcWidth != tt.expectedArc {
-				t.Errorf("ArcWidth: got %d, want %d", cfg.NeonEffect.ArcWidth, tt.expectedArc)
+			if gs.NeonEffect.ArcWidth != tt.expectedArc {
+				t.Errorf("ArcWidth: got %d, want %d", gs.NeonEffect.ArcWidth, tt.expectedArc)
 			}
-			if cfg.NeonEffect.IntensityGap != tt.expectedGap {
-				t.Errorf("IntensityGap: got %d, want %d", cfg.NeonEffect.IntensityGap, tt.expectedGap)
+			if gs.NeonEffect.IntensityGap != tt.expectedGap {
+				t.Errorf("IntensityGap: got %d, want %d", gs.NeonEffect.IntensityGap, tt.expectedGap)
 			}
-			if cfg.NeonEffect.RotationSpeed != tt.expectedSpeed {
-				t.Errorf("RotationSpeed: got %.1f, want %.1f", cfg.NeonEffect.RotationSpeed, tt.expectedSpeed)
+			if gs.NeonEffect.RotationSpeed != tt.expectedSpeed {
+				t.Errorf("RotationSpeed: got %.1f, want %.1f", gs.NeonEffect.RotationSpeed, tt.expectedSpeed)
 			}
 		})
 	}
@@ -247,10 +250,11 @@ func TestGetSetInstance_ConcurrentAccess(t *testing.T) {
 	}
 }
 
-func TestConfigJSONRoundtrip(t *testing.T) {
-	// Test that config can be marshaled and unmarshaled correctly
-	original := &Config{
-		Version: "2.46.0",
+// TestGameSettingsJSONRoundtrip moved from Config to GameSettings by #150 —
+// neon_effect is no longer part of Config's own JSON shape at all.
+func TestGameSettingsJSONRoundtrip(t *testing.T) {
+	// Test that game settings can be marshaled and unmarshaled correctly
+	original := &GameSettings{
 		NeonEffect: NeonEffectConfig{
 			Enabled:       true,
 			ArcWidth:      90,
@@ -266,7 +270,7 @@ func TestConfigJSONRoundtrip(t *testing.T) {
 	}
 
 	// Unmarshal back
-	var decoded Config
+	var decoded GameSettings
 	if err := json.Unmarshal(jsonData, &decoded); err != nil {
 		t.Fatalf("Failed to unmarshal: %v", err)
 	}
@@ -374,5 +378,60 @@ func TestEffectiveAPIKey_NeverMutatesTheStoredField(t *testing.T) {
 	}
 	if cfg.GroqAPIKey != "" {
 		t.Errorf("EffectiveGroqAPIKey must not mutate AIConfig.GroqAPIKey, got %q", cfg.GroqAPIKey)
+	}
+}
+
+// ----------------------------------------------------------------------------------
+// SetConfigPath / ConfigPath — path indirection (bugfix #143)
+// ----------------------------------------------------------------------------------
+
+// TestSetConfigPath_RoundTrips verifies the setter/getter pair itself,
+// independent of Get()/Save(). Restores the previous value afterwards so
+// this test cannot influence any other test's Get()/Save() calls, since
+// configPath is a process-wide global.
+func TestSetConfigPath_RoundTrips(t *testing.T) {
+	orig := ConfigPath()
+	t.Cleanup(func() { SetConfigPath(orig) })
+
+	SetConfigPath("/tmp/somewhere/custom-config.json")
+	if got := ConfigPath(); got != "/tmp/somewhere/custom-config.json" {
+		t.Errorf("ConfigPath() = %q, want the value just set", got)
+	}
+}
+
+// TestSetConfigPath_Save_WritesToConfiguredPath is the regression test for
+// #143: Save() must resolve the path SetConfigPath configured, not the
+// literal "config.json" that used to be hardcoded — and must NOT fall back
+// to writing the default relative path once overridden. This is the
+// mechanism internal/server's tests rely on to avoid writing fake API keys
+// into the tracked internal/server/config.json fixture.
+func TestSetConfigPath_Save_WritesToConfiguredPath(t *testing.T) {
+	t.Chdir(t.TempDir()) // isolate the "did it fall back to the default?" check below
+
+	orig := ConfigPath()
+	t.Cleanup(func() { SetConfigPath(orig) })
+
+	dir := t.TempDir()
+	custom := filepath.Join(dir, "custom-name.json")
+	SetConfigPath(custom)
+
+	if err := Save(&Config{Version: "6.1.3-test"}); err != nil {
+		t.Fatalf("Save failed: %v", err)
+	}
+
+	data, err := os.ReadFile(custom)
+	if err != nil {
+		t.Fatalf("expected Save() to write to the configured path %s: %v", custom, err)
+	}
+	var onDisk map[string]interface{}
+	if err := json.Unmarshal(data, &onDisk); err != nil {
+		t.Fatalf("written file is not valid JSON: %v", err)
+	}
+	if onDisk["version"] != "6.1.3-test" {
+		t.Errorf("unexpected content at configured path: %v", onDisk)
+	}
+
+	if _, err := os.Stat("config.json"); err == nil {
+		t.Errorf("Save() also wrote to the default relative config.json even though SetConfigPath was overridden — the override was ignored")
 	}
 }

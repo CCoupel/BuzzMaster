@@ -5,6 +5,7 @@ import { useCategoryFilter } from '../hooks/useCategoryFilter'
 import { useCategories } from '../hooks/useCategories'
 import { categoryMeta } from '../utils/categoryUtils'
 import { getRgbColor } from '../utils/colorUtils'
+import { sortQuestionsByOrder } from '../utils/questionOrder'
 import Button from '../components/Button'
 import Card from '../components/Card'
 import Timer from '../components/Timer'
@@ -192,11 +193,11 @@ export default function GamePage() {
   }, [vplayerTeams, gameState.ARDOISE_ANSWERS])
 
   // Sort questions by ORDER if available, otherwise by ID
-  const sortedQuestions = useMemo(() => {
-    return Object.values(questions)
-      .filter(q => q && q.ID)
-      .sort((a, b) => { const orderA = a.ORDER !== undefined ? parseInt(a.ORDER) : parseInt(a.ID); const orderB = b.ORDER !== undefined ? parseInt(b.ORDER) : parseInt(b.ID); return orderA - orderB })
-  }, [questions])
+  // #149 — mutualisé avec QuestionsPage.jsx (utils/questionOrder.js) : ce
+  // tri était dupliqué à l'identique dans les deux pages ; toute évolution
+  // (dont "Mélanger les questions") devait d'abord passer par cette
+  // mutualisation pour ne pas diverger entre les deux.
+  const sortedQuestions = useMemo(() => sortQuestionsByOrder(questions), [questions])
 
   // Custom categories from API (#95)
   const { categories: apiCategories } = useCategories()

@@ -564,7 +564,7 @@ type GameEvent struct {
 }
 ```
 
-## Configuration File (config.json)
+## Configuration System File (config.json)
 
 ```json
 {
@@ -579,13 +579,36 @@ type GameEvent struct {
     "ssid": "buzzmaster",
     "password": "BuzzMaster"
   },
-  "game": {
-    "default_delay": 30
-  },
   "storage": {
     "data_dir": "./data",
     "questions_dir": "./data/files/questions",
     "files_dir": "./data/files"
+  },
+  "ai": {
+    "anthropic_api_key": "",
+    "groq_api_key": "",
+    "anthropic_api_key_verified": false,
+    "groq_api_key_verified": false
+  },
+  "version": "6.1.2"
+}
+```
+
+**Changements depuis v6.0.x (Milestone v6.0.x — #150, #143) :**
+
+- **Sections `game` et `neon_effect` supprimées** — migrées vers `data/config/game-config.json` au démarrage. La migration est automatique et idempotente. Voir §Game Configuration ci-dessous.
+- **Sections système conservées** : `server`, `wifi`, `storage`, `ai`. L'endpoint `/config.json` expose désormais **uniquement** la configuration système.
+
+---
+
+## Game Configuration File (data/config/game-config.json) - v6.0.x, #150
+
+**Nouveau fichier** — contient les réglages de jeu, séparés de la configuration système pour être inclus dans les sauvegardes/restaurations de partie.
+
+```json
+{
+  "game": {
+    "default_delay": 30
   },
   "neon_effect": {
     "enabled": false,
@@ -599,10 +622,91 @@ type GameEvent struct {
     "glow_pulse_speed": 2,
     "glow_pulse_min": 30,
     "glow_pulse_max": 50
-  },
-  "version": "2.47.0"
+  }
 }
 ```
+
+**Champs :**
+
+| Champ | Description |
+|-------|-------------|
+| `game.default_delay` | Délai par défaut des questions (secondes) |
+| `neon_effect.*` | Configuration effet néon (voir §Neon Effect Configuration) |
+
+**Accès** :
+- Endpoint HTTP : `GET /game-config.json` (lecture), `POST /game-config.json` (écriture)
+- Inclus dans `/backup-select?history=true` (sélectif) et `/fs-backup` (complet)
+- Restauré via `POST /restore` (détection automatique)
+
+**Migration v6.0.x (#150)** :
+
+À la première exécution, si `config.json` porte encore les sections `game` et `neon_effect` :
+- Elles sont **extraites** vers ce nouveau fichier
+- **Retirées** de `config.json`
+- Un log indique la migration effectuée
+
+Si démarrage sur `config.json` déjà migré : **aucune action** (idempotent).
+
+---
+
+## Game State Persistence File (data/config/game_state.json) - v6.0.x, #141
+
+**Nouveau fichier** — persiste les métadonnées du quiz entre redémarrages du serveur.
+
+```json
+{
+  "version": "1.0.0",
+  "data": {
+    "QUIZ_NAME": "Quiz Cinéma 80s",
+    "QUIZ_THEME": "Cinéma français des années 80",
+    "QUIZ_NOTES": "Soirée entre amis",
+    "QUIZ_POPULATIONS": ["Adulte (18-64 ans)", "Senior (65+)"],
+    "QUIZ_DIFFICULTIES": ["Moyen", "Difficile"],
+    "QUIZ_LANGUAGE": "Français",
+    "QUIZ_OBJECTIVES": "Questions sur films de réalisateurs femmes",
+    "QUIZ_HIDDEN_FIELDS": ["ANSWER"],
+    "VIRTUAL_PLAYER_LIMIT": 0
+  }
+}
+```
+
+**Structure :**
+
+- **`version` (string)** — Format version (`"1.0.0"` pour cette implémentation). Permet migration future si le schéma change.
+- **`data` (object)** — Métadonnées persistées :
+  - `QUIZ_NAME`, `QUIZ_THEME`, `QUIZ_NOTES` — Libellés informatifs du quiz
+  - `QUIZ_POPULATIONS`, `QUIZ_DIFFICULTIES` — Tableau de populations/difficultés ciblées
+  - `QUIZ_LANGUAGE` — Langue du quiz
+  - `QUIZ_OBJECTIVES` — Objectif pédagogique (admin only, jamais transmis aux joueurs)
+  - `QUIZ_HIDDEN_FIELDS` — Tableau de champs à masquer sur TV (ex: `["ANSWER"]`)
+  - `VIRTUAL_PLAYER_LIMIT` — Plafond de joueurs virtuels pour cette partie
+
+**Champs NON persistés (éphémères, réinitialisés par `NEW_GAME`) :**
+
+- `PHASE`, `QUESTION`, `CURRENT_TIME`, `DELAY` — État du jeu en cours
+- `MEMORY_*`, `MOTION_*`, `ARDOISE_ANSWERS` — État spécifique au type de question
+- `QUIZ_HIDDEN_FIELDS` — **PAS** persisté (revient à `[]` défaut à chaque `NEW_GAME`, pour que les réglages TV soient oubliés entre deux parties)
+
+**Sémantique au démarrage :**
+
+1. Le fichier est chargé si présent (après `NEW_GAME` ou au démarrage initial)
+2. Les champs sont restaurés dans le `GameState` moteur
+3. À chaque `NEW_GAME`, seuls ces champs métadonnées **restent en mémoire** ; l'état éphémère est réinitialisé (règle H5 : `QUIZ_HIDDEN_FIELDS` persiste en mémoire mais réinitialisation `NEW_GAME` l'efface — ce comportement change en v6.0.x pour durable mais le contenu reste local à la session)
+
+**Accès** :
+
+- **Pas d'endpoint HTTP direct** — le fichier est géré par le serveur uniquement
+- Inclus dans `/backup-select?history=true` (sélectif) et `/fs-backup` (complet)
+- Restauré via `POST /restore` (détection automatique) — rechargement en mémoire sans redémarrage
+- Supprimé par `/reset-select?history=true`
+
+**Versionnement** :
+
+Ce fichier est le **premier du projet à utiliser un champ `version`** — préparant toute évolution future du schéma (ajout de champs, changement de structure). Un lecteur qui reçoit une version inconnue **doit ignorer le fichier et logger un avertissement** (migration future pourra upgrader).
+
+---
+
+## Configuration Neon Effect (v2.46.0)
 
 ### Neon Effect Configuration (v2.46.0)
 

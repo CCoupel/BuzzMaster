@@ -161,15 +161,21 @@ export default function ConfigPage() {
   }, [aiToast])
 
   // Load neon config and server parameters from server on mount
+  //
+  // #136 (tâche 15) — garde `cancelled` : si le composant est démonté avant la
+  // résolution du fetch (navigation rapide, remount en test), on n'appelle plus
+  // setState sur un composant démonté. Pas d'AbortController ici : il changerait
+  // la signature de l'appel `fetch()` (2e argument `{ signal }`), ce qui casse
+  // les assertions existantes `toHaveBeenCalledWith('/config.json')`.
   useEffect(() => {
+    let cancelled = false
     const fetchConfig = async () => {
       try {
         const response = await fetch('/config.json')
+        if (cancelled) return
         if (response.ok) {
           const data = await response.json()
-          if (data.neon_effect) {
-            setNeonConfig(data.neon_effect)
-          }
+          if (cancelled) return
           if (data.server) {
             setServerParams({
               auto_open_browsers: data.server.auto_open_browsers || false,
@@ -208,19 +214,52 @@ export default function ConfigPage() {
           }
         }
       } catch (error) {
-        console.error('Failed to fetch config:', error)
+        if (!cancelled) console.error('Failed to fetch config:', error)
       }
     }
     fetchConfig()
+    return () => { cancelled = true }
+  }, [])
+
+  // Load game config (neon effect) from server on mount
+  //
+  // #150 — scission système/jeu : `GET /config.json` ne renvoie plus
+  // `neon_effect` (ni `game`) — désormais servi par `GET /game-config.json`
+  // (contracts/http-endpoints.md §GET /game-config.json), forme JSON de
+  // `neon_effect` inchangée. Effet dédié séparé (même motif que les autres
+  // fetches de montage ci-dessous), garde `cancelled` pour la même raison
+  // que fetchConfig ci-dessus.
+  useEffect(() => {
+    let cancelled = false
+    const fetchGameConfig = async () => {
+      try {
+        const response = await fetch('/game-config.json')
+        if (cancelled) return
+        if (response.ok) {
+          const data = await response.json()
+          if (cancelled) return
+          if (data.neon_effect) {
+            setNeonConfig(data.neon_effect)
+          }
+        }
+      } catch (error) {
+        if (!cancelled) console.error('Failed to fetch game config:', error)
+      }
+    }
+    fetchGameConfig()
+    return () => { cancelled = true }
   }, [])
 
   // Load WiFi defaults on mount
   useEffect(() => {
+    let cancelled = false
     const fetchWifiDefaults = async () => {
       try {
         const res = await fetch('/api/wifi/defaults')
+        if (cancelled) return
         if (res.ok) {
           const data = await res.json()
+          if (cancelled) return
           if (data.ssid) setWifiSsid(data.ssid)
           if (data.password) setWifiPassword(data.password)
           if (data.ssid2) setWifiSsid2(data.ssid2)
@@ -233,15 +272,19 @@ export default function ConfigPage() {
       }
     }
     fetchWifiDefaults()
+    return () => { cancelled = true }
   }, [])
 
   // Fetch firmware info on mount
   useEffect(() => {
+    let cancelled = false
     const fetchFirmwareInfo = async () => {
       try {
         const res = await fetch('/api/firmware/buzzclick/version')
+        if (cancelled) return
         if (res.ok) {
           const data = await res.json()
+          if (cancelled) return
           setFirmwareInfo(data)
         }
       } catch {
@@ -249,6 +292,7 @@ export default function ConfigPage() {
       }
     }
     fetchFirmwareInfo()
+    return () => { cancelled = true }
   }, [])
 
   // Sync defaultImageIsCustom from gameState (CONFIG_UPDATE broadcasts it)
@@ -259,23 +303,43 @@ export default function ConfigPage() {
   }, [gameState?.defaultQuestionImageIsCustom])
 
   // Update firmware info from WebSocket broadcast (after upload)
+  //
+  // #136/#111 — cet effet dépend d'un OBJET (wsFirmwareInfo), pas d'une valeur
+  // primitive. En production, useWebSocket.js expose un useState d'identité
+  // stable entre deux rendus sans changement réel, donc l'effet est inoffensif.
+  // Mais toute source qui recrée cet objet à chaque appel (un hook composé, un
+  // mock de test littéral, un futur refactor) déclenche une boucle : l'effet se
+  // relance à chaque rendu -> setFirmwareInfo -> nouveau rendu -> nouvel objet
+  // -> effet relancé. On se protège en comparant le CONTENU avant d'écrire
+  // l'état, pas seulement la référence : si le contenu n'a pas changé, le
+  // setState fonctionnel renvoie la référence précédente et React ignore le
+  // rendu (bail-out), ce qui casse la boucle indépendamment de la stabilité de
+  // wsFirmwareInfo en amont.
   useEffect(() => {
-    if (wsFirmwareInfo) {
-      setFirmwareInfo(wsFirmwareInfo)
-    }
+    if (!wsFirmwareInfo) return
+    setFirmwareInfo(prev => (
+      prev && JSON.stringify(prev) === JSON.stringify(wsFirmwareInfo) ? prev : wsFirmwareInfo
+    ))
   }, [wsFirmwareInfo])
 
   // Update local state when gameState.neonEffect changes (from WebSocket)
+  // Même défaut de classe que ci-dessus (dépendance objet + setState de ce
+  // même objet) — dormant aujourd'hui car aucune fixture de test ne peuple
+  // gameState.neonEffect, mais corrigé par cohérence (#136 tâche 13).
   useEffect(() => {
-    if (gameState?.neonEffect) {
-      setNeonConfig(gameState.neonEffect)
-    }
+    if (!gameState?.neonEffect) return
+    setNeonConfig(prev => (
+      prev && JSON.stringify(prev) === JSON.stringify(gameState.neonEffect) ? prev : gameState.neonEffect
+    ))
   }, [gameState?.neonEffect])
 
   const handleSaveNeonConfig = async () => {
     setSavingNeon(true)
     try {
-      const response = await fetch('/config.json', {
+      // #150 — neon_effect vit désormais dans game-config.json (POST
+      // /config.json avec neon_effect est rejeté en 400 côté serveur).
+      // Même body, même sémantique de fusion additive par section.
+      const response = await fetch('/game-config.json', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ neon_effect: neonConfig })

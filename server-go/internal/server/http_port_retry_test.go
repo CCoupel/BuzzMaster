@@ -77,6 +77,9 @@ func TestHTTPServer_Start_RetriesOnPortBusy(t *testing.T) {
 	port := blocker.Addr().(*net.TCPAddr).Port
 
 	// Step 2 — configure the server for this test.
+	// Isolate config from the tracked fixture (bugfix #143) — see
+	// setupTestHTTPServer's comment in http_test.go for why.
+	t.Chdir(t.TempDir())
 	_ = config.Get() // ensure once.Do has fired
 	dataDir := t.TempDir()
 	cfg := &config.Config{

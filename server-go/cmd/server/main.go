@@ -98,6 +98,18 @@ func main() {
 	}
 	config.SetInstance(cfg)
 
+	// #150 (option b): game-config.json's path is dataDir-relative (unlike
+	// config.json, at the server root) — resolve it now that
+	// cfg.Storage.DataDir has its final value (explicit config.json value,
+	// or ApplyDefaults' "./data" fallback), same configDir the four engine
+	// Set*Path calls in init() use below. Must happen BEFORE anything reads
+	// GetGameSettings() (the migration itself does).
+	gameConfigPath := filepath.Join(cfg.Storage.DataDir, "config", "game-config.json")
+	config.SetGameConfigPath(gameConfigPath)
+	if err := config.MigrateGameSettings(); err != nil {
+		log.Printf("Warning: game settings migration (#150) failed, falling back to defaults: %v", err)
+	}
+
 	log.Printf("Version: %s (embedded: %s)", cfg.Version, Version)
 	log.Printf("HTTP Port: %d", cfg.Server.HTTPPort)
 
@@ -176,6 +188,18 @@ func main() {
 		server.LogWarn(game.LogComponentApp, "Could not load question statuses: %v", err)
 	}
 
+	// Load persisted game state (#141: quiz metadata, virtual player limit).
+	// Must run AFTER app.init() (which already set the path below) and after
+	// loadBackgrounds()/loadNewGameBackgrounds() (called from init() at
+	// main.go:458-459 as of this writing) have already populated
+	// state.Backgrounds/state.NewGameBackgrounds — LoadState's persisted
+	// subset deliberately excludes both fields for exactly this reason (see
+	// PersistedGameState's doc comment), so the ordering is a defense-in-depth
+	// note, not a hazard today.
+	if err := app.engine.LoadState(); err != nil {
+		server.LogWarn(game.LogComponentApp, "Could not load game state: %v", err)
+	}
+
 	// Start servers
 	if err := app.start(); err != nil {
 		server.LogError(game.LogComponentApp, "Failed to start: %v", err)
@@ -208,6 +232,7 @@ func (a *App) init() {
 	a.engine.SetTeamsPath(filepath.Join(configDir, "teams.json"))
 	a.engine.SetBumpersPath(filepath.Join(configDir, "bumpers.json"))
 	a.engine.SetStatusesPath(filepath.Join(configDir, "question_statuses.json"))
+	a.engine.SetStatePath(filepath.Join(configDir, "game_state.json")) // #141
 
 	// WebSocket hub (web clients: admin/TV/VPlayer)
 	a.wsHub = server.NewWebSocketHub()
@@ -308,14 +333,27 @@ func (a *App) init() {
 }
 
 func (a *App) setupCallbacks() {
-	// Handle WebSocket messages from web clients
+	// Handle WebSocket messages from web clients.
+	//
+	// Bugfix #131 (plan risk R3): this is the SOLE consumer of a.wsHub.Incoming
+	// for the whole process — a panic that kills this goroutine silently
+	// deafens every admin/TV/VPlayer client, worse than the crash it would
+	// otherwise cause. The recover() is placed INSIDE the loop, wrapping only
+	// the single a.handleWebMessage(msg) call, specifically so the loop
+	// itself survives and keeps consuming the channel after a panic — a
+	// recover() wrapped AROUND the `for` (one defer for the whole goroutine)
+	// would still stop the crash, but the goroutine would exit right after
+	// recovering from the first panic, and every message sent afterward
+	// would sit unconsumed in the channel forever (see
+	// dispatch_panic_recovery_test.go for the regression test this guards).
 	go func() {
 		for msg := range a.wsHub.Incoming {
 			a.handleWebMessage(msg)
 		}
 	}()
 
-	// Handle WebSocket messages from buzzers (/ws/buzzer)
+	// Handle WebSocket messages from buzzers (/ws/buzzer) — same reasoning
+	// as above, mirrored for the buzzer-side single dispatch goroutine.
 	go func() {
 		for msg := range a.buzzerHub.Incoming {
 			a.handleBuzzerMessage(msg)
@@ -826,8 +864,30 @@ func (a *App) stop() {
 	a.udpBcast.Stop()
 }
 
-// handleBuzzerMessage processes messages from BuzzClick buzzers (WebSocket)
+// handleBuzzerMessage processes messages from BuzzClick buzzers (WebSocket).
+//
+// Bugfix #131 (plan risk R3): this is called from the SOLE consumer
+// goroutine of a.buzzerHub.Incoming for the whole process (setupCallbacks)
+// — a panic that kills that goroutine silently deafens every physical
+// buzzer, worse than the crash it would otherwise cause. The recover() lives
+// HERE, inside the per-message handler itself, rather than around the
+// dispatch loop in setupCallbacks: that loop calls this function directly
+// (`for msg := range a.buzzerHub.Incoming { a.handleBuzzerMessage(msg) }`),
+// so putting the guard here protects it no matter where it's called from,
+// and specifically means the loop survives and keeps consuming the channel
+// after a panic — a recover() wrapped AROUND the `for` (one defer for the
+// whole goroutine) would still stop the crash, but the goroutine would exit
+// right after recovering from the first panic, and every message sent
+// afterward would sit unconsumed in the channel forever. recover() is
+// called directly in this deferred literal, as required for it to actually
+// stop the panic — see server.LogRecoveredPanic's doc comment.
 func (a *App) handleBuzzerMessage(incoming *protocol.IncomingMessage) {
+	defer func() {
+		if r := recover(); r != nil {
+			server.LogRecoveredPanic(game.LogComponentApp, "handleBuzzerMessage clientID="+incoming.ClientID, r)
+		}
+	}()
+
 	msg := incoming.Data
 
 	switch msg.Action {
@@ -885,8 +945,20 @@ func (a *App) handleBuzzerACK(clientID string, msg *protocol.Message) {
 	a.broadcastUpdate()
 }
 
-// handleWebMessage processes messages from web clients (WebSocket)
+// handleWebMessage processes messages from web clients (WebSocket).
+//
+// Bugfix #131 (plan risk R3) — see handleBuzzerMessage's doc comment
+// immediately above for the full rationale (identical: this is the SOLE
+// consumer of a.wsHub.Incoming, called directly from setupCallbacks' `for`
+// loop, so the recover() lives in the handler itself rather than around the
+// loop).
 func (a *App) handleWebMessage(incoming *protocol.IncomingMessage) {
+	defer func() {
+		if r := recover(); r != nil {
+			server.LogRecoveredPanic(game.LogComponentApp, "handleWebMessage clientID="+incoming.ClientID, r)
+		}
+	}()
+
 	msg := incoming.Data
 
 	// #109 Phase 2 (D2/D3): any message received from an already-identified VJoueur
@@ -1506,13 +1578,19 @@ func (a *App) loadQuestion(id string) *game.Question {
 }
 
 func (a *App) handleStart(msg *protocol.Message) {
+	// #150: default_delay moved from a.config (system config.json) to
+	// GameSettings (game-config.json) — read via the package singleton
+	// rather than threading a new App field through, same pattern as
+	// broadcastConfigUpdate's config.GetGameSettings() below.
+	defaultDelay := config.GetGameSettings().Game.DefaultDelay
+
 	var payload protocol.StartPayload
 	if err := json.Unmarshal(msg.Msg, &payload); err != nil {
-		payload.Delay = a.config.Game.DefaultDelay
+		payload.Delay = defaultDelay
 	}
 
 	if payload.Delay <= 0 {
-		payload.Delay = a.config.Game.DefaultDelay
+		payload.Delay = defaultDelay
 	}
 
 	a.logger.Info(game.LogComponentEngine, "START game with delay=%ds", payload.Delay)
@@ -3849,20 +3927,24 @@ func (a *App) broadcastHideQRCode() {
 }
 
 func (a *App) broadcastConfigUpdate() {
-	cfg := config.Get()
+	// #150: neon_effect moved from config.Get() (system config.json) to
+	// config.GetGameSettings() (game-config.json). The WS payload itself
+	// (protocol.NeonEffectPayload) is unchanged — only the source changes,
+	// per contract ws-payload-serialization.md.
+	gs := config.GetGameSettings()
 	payload := protocol.ConfigUpdatePayload{
 		NeonEffect: protocol.NeonEffectPayload{
-			Enabled:        cfg.NeonEffect.Enabled,
-			Mode:           cfg.NeonEffect.Mode,
-			ArcWidth:       cfg.NeonEffect.ArcWidth,
-			IntensityGap:   cfg.NeonEffect.IntensityGap,
-			RotationSpeed:  cfg.NeonEffect.RotationSpeed,
-			BarOffset:      cfg.NeonEffect.BarOffset,
-			BarThickness:   cfg.NeonEffect.BarThickness,
-			ArcBlur:        cfg.NeonEffect.ArcBlur,
-			GlowPulseSpeed: cfg.NeonEffect.GlowPulseSpeed,
-			GlowPulseMin:   cfg.NeonEffect.GlowPulseMin,
-			GlowPulseMax:   cfg.NeonEffect.GlowPulseMax,
+			Enabled:        gs.NeonEffect.Enabled,
+			Mode:           gs.NeonEffect.Mode,
+			ArcWidth:       gs.NeonEffect.ArcWidth,
+			IntensityGap:   gs.NeonEffect.IntensityGap,
+			RotationSpeed:  gs.NeonEffect.RotationSpeed,
+			BarOffset:      gs.NeonEffect.BarOffset,
+			BarThickness:   gs.NeonEffect.BarThickness,
+			ArcBlur:        gs.NeonEffect.ArcBlur,
+			GlowPulseSpeed: gs.NeonEffect.GlowPulseSpeed,
+			GlowPulseMin:   gs.NeonEffect.GlowPulseMin,
+			GlowPulseMax:   gs.NeonEffect.GlowPulseMax,
 		},
 		DefaultQuestionImageIsCustom: a.httpServer.HasCustomDefaultQuestionImage(),
 		NewGameBackgrounds:           a.engine.GetNewGameBackgrounds(),
@@ -3871,7 +3953,7 @@ func (a *App) broadcastConfigUpdate() {
 	a.broadcast(protocol.ActionConfigUpdate, data, false,
 		server.ClientTypeAdmin, server.ClientTypeTV)
 	server.LogInfo(game.LogComponentApp, "Config update broadcast (neon: enabled=%v, mode=%s, arc=%d, intensity=%d, speed=%.1f, pulsing=%.1f-%d%%, offset=%d, thickness=%d, blur=%d)",
-		cfg.NeonEffect.Enabled, cfg.NeonEffect.Mode, cfg.NeonEffect.ArcWidth, cfg.NeonEffect.IntensityGap, cfg.NeonEffect.RotationSpeed, cfg.NeonEffect.GlowPulseSpeed, cfg.NeonEffect.GlowPulseMax, cfg.NeonEffect.BarOffset, cfg.NeonEffect.BarThickness, cfg.NeonEffect.ArcBlur)
+		gs.NeonEffect.Enabled, gs.NeonEffect.Mode, gs.NeonEffect.ArcWidth, gs.NeonEffect.IntensityGap, gs.NeonEffect.RotationSpeed, gs.NeonEffect.GlowPulseSpeed, gs.NeonEffect.GlowPulseMax, gs.NeonEffect.BarOffset, gs.NeonEffect.BarThickness, gs.NeonEffect.ArcBlur)
 }
 
 // resolveServerIP returns the actual server IP to send to buzzers.
@@ -4031,21 +4113,24 @@ func (a *App) sendStateToClient(clientID string) {
 	clientsMsg.Msg = cData
 	a.wsHub.SendToClient(clientID, clientsMsg)
 
-	// Send CONFIG_UPDATE with neon effect settings
-	cfg := config.Get()
+	// Send CONFIG_UPDATE with neon effect settings.
+	// #150: source is now config.GetGameSettings() (game-config.json), not
+	// config.Get() (system config.json) — see broadcastConfigUpdate's
+	// identical comment above.
+	gs := config.GetGameSettings()
 	neonPayload := protocol.ConfigUpdatePayload{
 		NeonEffect: protocol.NeonEffectPayload{
-			Enabled:        cfg.NeonEffect.Enabled,
-			Mode:           cfg.NeonEffect.Mode,
-			ArcWidth:       cfg.NeonEffect.ArcWidth,
-			IntensityGap:   cfg.NeonEffect.IntensityGap,
-			RotationSpeed:  cfg.NeonEffect.RotationSpeed,
-			BarOffset:      cfg.NeonEffect.BarOffset,
-			BarThickness:   cfg.NeonEffect.BarThickness,
-			ArcBlur:        cfg.NeonEffect.ArcBlur,
-			GlowPulseSpeed: cfg.NeonEffect.GlowPulseSpeed,
-			GlowPulseMin:   cfg.NeonEffect.GlowPulseMin,
-			GlowPulseMax:   cfg.NeonEffect.GlowPulseMax,
+			Enabled:        gs.NeonEffect.Enabled,
+			Mode:           gs.NeonEffect.Mode,
+			ArcWidth:       gs.NeonEffect.ArcWidth,
+			IntensityGap:   gs.NeonEffect.IntensityGap,
+			RotationSpeed:  gs.NeonEffect.RotationSpeed,
+			BarOffset:      gs.NeonEffect.BarOffset,
+			BarThickness:   gs.NeonEffect.BarThickness,
+			ArcBlur:        gs.NeonEffect.ArcBlur,
+			GlowPulseSpeed: gs.NeonEffect.GlowPulseSpeed,
+			GlowPulseMin:   gs.NeonEffect.GlowPulseMin,
+			GlowPulseMax:   gs.NeonEffect.GlowPulseMax,
 		},
 		DefaultQuestionImageIsCustom: a.httpServer.HasCustomDefaultQuestionImage(),
 		NewGameBackgrounds:           a.engine.GetNewGameBackgrounds(),

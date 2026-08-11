@@ -421,43 +421,99 @@ C'est volontaire, et la frontière est nette :
 > sérialisation pour un gain nul. **Corollaire à retenir** : si un champ réellement sensible
 > devait un jour être masquable, il relèverait de la première ligne du tableau, pas de celle-ci.
 
-### Migration — `GameState` n'est pas persisté (v6.1.0)
+### Persistance — `game_state.json` (v6.0.x, #141)
 
-Le passage de `QUIZ_POPULATION`/`QUIZ_DIFFICULTY` (string) à `QUIZ_POPULATIONS`/`QUIZ_DIFFICULTIES`
-(string[]) est un **changement de type incompatible**. La question posée avant rédaction de ce
-contrat était : un fichier de partie écrit avant le déploiement casse-t-il le rechargement au
-démarrage (`string` → `[]string` = `json.UnmarshalTypeError`) ?
+**Cette section remplace l'ancienne « Migration — GameState n'est pas persisté (v6.1.0) »,
+devenue fausse** : son propre avertissement (« si un mécanisme de persistance du `GameState`
+est ajouté entre-temps, cette section devient fausse ») s'est réalisé.
 
-**Réponse — vérifiée dans le code : le risque n'existe pas.** `GameState` **n'est jamais écrit
-sur disque ni relu**. Les seuls chemins de persistance déclarés sont
-(`cmd/server/main.go:205-211`) :
+Un sous-ensemble volontairement étroit de `GameState` — les métadonnées quiz et le plafond de
+joueurs virtuels — survit désormais à un redémarrage du serveur, via
+`data/config/game_state.json` (`internal/game/state_persistence.go` : `SetStatePath`/
+`SaveState`/`LoadState`, câblés dans `cmd/server/main.go`, entre `LoadStatuses()` et
+`app.start()`).
 
-| Fichier persisté | Contenu | Contient des `QUIZ_*` ? |
-|---|---|---|
-| `config/history.json` | Historique des parties | ❌ |
-| `config/teams.json` | Équipes | ❌ |
-| `config/bumpers.json` | Buzzers | ❌ |
-| `config/question_statuses.json` | Statuts des questions | ❌ |
+#### Champs persistés
 
-Il n'existe ni `SetStatePath`, ni `SaveState`, ni `LoadState` (`internal/game/engine.go`). Les
-métadonnées quiz vivent **en mémoire** et sont perdues à chaque redémarrage du serveur — un
-comportement préexistant, indépendant de ce changement. Les sauvegardes TAR
-(`/fs-backup`, `/game-backup`, `/backup-select`, `internal/server/http.go:268-272`) archivent des
-**répertoires de données** (questions, équipes, buzzers, historique, médias) : aucune ne contient
-de `GameState` sérialisé.
+| Champ `GameState` | Clé JSON dans `game_state.json` |
+|---|---|
+| `QuizName`, `QuizTheme`, `QuizNotes` | `QUIZ_NAME`, `QUIZ_THEME`, `QUIZ_NOTES` |
+| `QuizPopulations`, `QuizDifficulties` | `QUIZ_POPULATIONS`, `QUIZ_DIFFICULTIES` |
+| `QuizLanguage`, `QuizObjectives` | `QUIZ_LANGUAGE`, `QUIZ_OBJECTIVES` |
+| `QuizHiddenFields` | `QUIZ_HIDDEN_FIELDS` |
+| `VirtualPlayerLimit` | `VIRTUAL_PLAYER_LIMIT` |
 
-**Conséquence contractuelle** : **aucun script de migration, aucun numéro de version de format,
-aucun reset de partie n'est requis.** Toute proposition de migration de fichier sur ce chantier
-serait du code mort.
+**Explicitement exclu**, avec la raison (voir le commentaire de doc de
+`PersistedGameState`, `internal/game/state_persistence.go`, pour le détail complet) :
+`Phase`, `Question`, `Memory*`, `Motion*`, `ArdoiseAnswers`, `EnrollmentActive`, `ShowQRCode`
+(état éphémère d'une partie en cours — le restaurer ressusciterait une partie sans clients
+connectés ni minuteur vivant) ; `Delay` (minuteur du round courant, réaffecté à chaque
+`Start`/`Ready`/décompte MEMOTION — ce n'est pas un réglage, contrairement à
+`GameSettings.Game.DefaultDelay`, #150, qui lui est le vrai réglage stocké) ;
+`NetworkOnlyLocalhost` (recalculé au démarrage) ; `VirtualPlayerCount` (dérivé du nombre de
+buzzers réellement enrôlés) ; `Backgrounds`/`NewGameBackgrounds` (déjà persistés
+indépendamment dans `data/files/backgrounds/backgrounds.json`, chargés par `loadBackgrounds()`/
+`loadNewGameBackgrounds()` **avant** `LoadState()` dans la séquence de démarrage — les exclure
+du sous-ensemble persisté évite tout risque d'écrasement par un ordre de chargement inversé).
 
-**Les deux risques résiduels — réels, mais côté client** :
+#### Enveloppe et versionnement de format
 
-| # | Risque | Traitement imposé |
-|---|---|---|
-| R1 | Un onglet admin/TV resté **ouvert** pendant le déploiement exécute le JS de v6.0.0 : il lit `QUIZ_POPULATION` (absent) et affiche du vide ; s'il enregistre, il poste `POPULATION` (ignoré, cf. `ai-generation.md` §7) | Rechargement des interfaces après déploiement — mode opératoire habituel de montée de version. **Pas de code de compatibilité** : un client non redéployé doit être visible. |
-| R2 | Le client reçoit un jour un type inattendu (serveur partiellement déployé, cache) et itère sur une chaîne au lieu d'un tableau | Normalisation défensive **à la lecture** du `GameState` (`web/src/hooks/useWebSocket.js`) : une valeur absente ou non-tableau devient `[]`. Trois lignes, elles évitent un écran blanc sur l'affichage TV. |
+`game_state.json` est le **premier fichier versionné** du projet (aucun des quatre fichiers
+préexistants — `history.json`, `teams.json`, `bumpers.json`, `question_statuses.json` — n'a
+d'enveloppe ni de champ de version, et il n'existe aucun code de migration dans le dépôt) :
 
-> ⚠️ **À valider par `dev-backend` au moment de l'implémentation** : ce constat de non-persistance
-> a été établi par recherche exhaustive des chemins de sauvegarde à la date du 2026-08-06. Si un
-> mécanisme de persistance du `GameState` est ajouté **entre-temps** par un autre chantier, cette
-> section devient fausse et une migration redevient nécessaire.
+```json
+{
+  "format_version": 1,
+  "QUIZ_NAME": "Mon Quiz",
+  "QUIZ_THEME": "Sciences",
+  "QUIZ_NOTES": "",
+  "QUIZ_POPULATIONS": ["Adulte (18-64 ans)"],
+  "QUIZ_DIFFICULTIES": ["Moyen"],
+  "QUIZ_LANGUAGE": "Français",
+  "QUIZ_OBJECTIVES": "",
+  "QUIZ_HIDDEN_FIELDS": ["THEME"],
+  "VIRTUAL_PLAYER_LIMIT": 20
+}
+```
+
+`LoadState` tolère un `format_version` **supérieur** à celui que le build courant connaît
+(fichier écrit par une version future du serveur, ex. rollback) : il journalise un avertissement
+et charge les champs connus, sans échouer. Il n'existe pas encore de code de migration
+**ascendante** (`format_version` inférieur avec un schéma incompatible) — à écrire le jour où
+`PersistedGameState` change de forme de façon incompatible.
+
+#### Séquence de chargement au démarrage
+
+Entre `LoadStatuses()` et `app.start()` (`cmd/server/main.go`) — après que
+`loadBackgrounds()`/`loadNewGameBackgrounds()` (appelés depuis `init()`) ont déjà rempli
+`state.Backgrounds`/`state.NewGameBackgrounds`, d'où leur exclusion du sous-ensemble persisté
+ci-dessus. Absence de fichier (première installation) : aucune erreur, les défauts de
+`NewEngine()` s'appliquent (`VIRTUAL_PLAYER_LIMIT` = 20, chaînes/tableaux `QUIZ_*` vides).
+
+#### Écriture
+
+Synchrone (pas de goroutine), motif atomique identique à `SaveTeams`/`SaveBumpers`
+(`os.CreateTemp` + `Chmod 0644` + `os.Rename` — **pas** le `os.WriteFile` direct de
+`SaveHistory`/`SaveStatuses`) — déclenchée par `SetQuizMeta`, `SetQuizDisplay` et
+`SetVirtualPlayerLimit` à chaque appel.
+
+#### Règle H5 — inchangée, désormais durable
+
+La règle H5 ci-dessus (« la valeur persiste en mémoire d'une partie à l'autre et n'est pas
+réinitialisée par `NEW_GAME` ») reste valable **à l'identique** : `InitGame` ne touche toujours
+aucun champ `Quiz*` ni `VirtualPlayerLimit`. #141 ajoute uniquement la survie à un redémarrage du
+processus — **aucun changement de comportement observable** en cours de session.
+
+#### Backup / Restore / Reset
+
+`game_state.json` est rattaché au flag `history` de `/backup-select` et `/reset-select` (comme
+`game-config.json`, #150 — aucune case dédiée dans l'interface pour ce petit fichier de
+métadonnées ; voir `contracts/http-endpoints.md`). `/restore` le détecte par le **contenu** de
+l'archive (présence de `config/game_state.json`), indépendamment de tout paramètre, et recharge
+l'état moteur immédiatement après extraction.
+
+#### Vie privée / secrets (risque R11 du plan)
+
+Aucun champ persisté n'est sensible : noms/thèmes/notes de quiz, préférences d'affichage,
+plafond de joueurs — rien qui ne soit déjà visible à l'écran pendant la partie.

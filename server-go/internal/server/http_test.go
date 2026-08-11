@@ -20,6 +20,15 @@ import (
 )
 
 func setupTestHTTPServer(t *testing.T) (*HTTPServer, string) {
+	// Isolate config.Get()/config.Save() from the tracked fixture
+	// internal/server/config.json (bugfix #143): both resolve the relative
+	// path "config.json" against the process CWD, and this helper backs
+	// every TestHTTPServer_Config_POST* test, whose real handleConfig call
+	// ends in config.Save(). t.Chdir(t.TempDir()) (Go 1.24) redirects that
+	// write into a throwaway directory and is auto-restored by t.Cleanup —
+	// same pattern as internal/config/config_merge_test.go.
+	t.Chdir(t.TempDir())
+
 	// Initialize config - use same temp dir for both DataDir and QuestionsDir
 	dataDir := t.TempDir()
 
@@ -38,7 +47,23 @@ func setupTestHTTPServer(t *testing.T) (*HTTPServer, string) {
 	}
 	config.SetInstance(cfg)
 
+	// #150 — mirror main.go's startup wiring: GameConfigPath() must resolve
+	// under the SAME dataDir as h.dataDir (below), because
+	// handleBackupSelect/handleResetSelect/handleRestore mix
+	// filepath.Join(h.dataDir, "config") for teams/bumpers/history with
+	// config.GameConfigPath() for game-config.json — the two must agree, or
+	// tests silently look for game-config.json in the wrong directory
+	// (config.GameConfigPath()'s "data/config/..." default, relative to the
+	// t.Chdir'd CWD above, which is a DIFFERENT temp dir than dataDir).
+	config.SetGameConfigPath(filepath.Join(dataDir, "config", "game-config.json"))
+
 	engine := game.NewEngine()
+	// #141 — mirror main.go's startup wiring (same reasoning as
+	// config.SetGameConfigPath above): without this, engine.SaveState/
+	// LoadState/ClearQuizMeta are silent no-ops (statePath == ""), and
+	// handleRestore's game_state.json case could never be genuinely
+	// exercised by a test.
+	engine.SetStatePath(filepath.Join(dataDir, "config", "game_state.json"))
 	wsHub := NewWebSocketHub()
 	go wsHub.Run()
 	logsHub := NewLogsWebSocketHub(100)
@@ -231,15 +256,19 @@ func TestHTTPServer_Config_GET(t *testing.T) {
 		t.Errorf("Expected 200, got %d", w.Code)
 	}
 
-	// Parse response to verify it's valid JSON with neon_effect
+	// Parse response to verify it's valid JSON with the system sections
+	// (neon_effect moved to GET /game-config.json by #150 — see
+	// TestHTTPServer_GameConfig_GET).
 	var cfg map[string]interface{}
 	if err := json.Unmarshal(w.Body.Bytes(), &cfg); err != nil {
 		t.Fatalf("Response is not valid JSON: %v", err)
 	}
 
-	// Verify neon_effect exists in response
-	if _, ok := cfg["neon_effect"]; !ok {
-		t.Errorf("Expected neon_effect in config, got: %v", cfg)
+	if _, ok := cfg["server"]; !ok {
+		t.Errorf("Expected server section in config, got: %v", cfg)
+	}
+	if _, ok := cfg["neon_effect"]; ok {
+		t.Errorf("neon_effect must no longer be part of /config.json (#150), got: %v", cfg)
 	}
 }
 
@@ -339,12 +368,13 @@ func TestHTTPServer_Config_GET_AIKeyConfigured_FromEnvVarAlone(t *testing.T) {
 	}
 }
 
-func TestHTTPServer_Config_POST(t *testing.T) {
+// TestHTTPServer_GameConfig_POST is TestHTTPServer_Config_POST's #150
+// successor: neon_effect moved from /config.json to /game-config.json.
+func TestHTTPServer_GameConfig_POST(t *testing.T) {
 	server, _ := setupTestHTTPServer(t)
 
-	// Post a valid config with neon_effect
+	// Post a valid game config with neon_effect
 	configJSON := `{
-		"version": "2.46.0",
 		"neon_effect": {
 			"enabled": true,
 			"arc_width": 90,
@@ -353,23 +383,23 @@ func TestHTTPServer_Config_POST(t *testing.T) {
 		}
 	}`
 
-	req := httptest.NewRequest("POST", "/config.json", strings.NewReader(configJSON))
+	req := httptest.NewRequest("POST", "/game-config.json", strings.NewReader(configJSON))
 	w := httptest.NewRecorder()
 
 	server.mux.ServeHTTP(w, req)
 
 	if w.Code != http.StatusOK {
-		t.Errorf("Expected 200, got %d", w.Code)
+		t.Errorf("Expected 200, got %d: %s", w.Code, w.Body.String())
 	}
 
 	// Parse response to verify validation
-	var cfg map[string]interface{}
-	if err := json.Unmarshal(w.Body.Bytes(), &cfg); err != nil {
+	var gs map[string]interface{}
+	if err := json.Unmarshal(w.Body.Bytes(), &gs); err != nil {
 		t.Fatalf("Response is not valid JSON: %v", err)
 	}
 
 	// Verify neon_effect was saved
-	neonEffect, ok := cfg["neon_effect"].(map[string]interface{})
+	neonEffect, ok := gs["neon_effect"].(map[string]interface{})
 	if !ok {
 		t.Fatalf("neon_effect not found in response")
 	}
@@ -382,10 +412,114 @@ func TestHTTPServer_Config_POST(t *testing.T) {
 	}
 
 	// Defaults must be re-applied to fields the partial section left at zero
-	// (contract ai-generation.md §0) — e.g. bar_offset was absent from the
-	// posted neon_effect object.
+	// (contract ai-generation.md §0, carried over to game-config.json by
+	// #150) — e.g. bar_offset was absent from the posted neon_effect object.
 	if neonEffect["bar_offset"] != float64(20) {
 		t.Errorf("Expected bar_offset default (20) re-applied, got %v", neonEffect["bar_offset"])
+	}
+}
+
+// TestHTTPServer_Config_POST_GameSection_Rejected400 and
+// TestHTTPServer_Config_POST_NeonEffectSection_Rejected400 are the
+// regression tests for #150's BREAKING change: POST /config.json must
+// reject a request that still carries "game" or "neon_effect", with a
+// message pointing at the new endpoint, rather than silently accepting and
+// discarding it.
+func TestHTTPServer_Config_POST_GameSection_Rejected400(t *testing.T) {
+	server, _ := setupTestHTTPServer(t)
+
+	req := httptest.NewRequest("POST", "/config.json", strings.NewReader(`{"game":{"default_delay":45}}`))
+	w := httptest.NewRecorder()
+	server.mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("Expected 400, got %d: %s", w.Code, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), "/game-config.json") {
+		t.Errorf("Expected the 400 body to name the new endpoint, got: %s", w.Body.String())
+	}
+}
+
+func TestHTTPServer_Config_POST_NeonEffectSection_Rejected400(t *testing.T) {
+	server, _ := setupTestHTTPServer(t)
+
+	req := httptest.NewRequest("POST", "/config.json", strings.NewReader(`{"neon_effect":{"enabled":true}}`))
+	w := httptest.NewRecorder()
+	server.mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("Expected 400, got %d: %s", w.Code, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), "/game-config.json") {
+		t.Errorf("Expected the 400 body to name the new endpoint, got: %s", w.Body.String())
+	}
+}
+
+// TestHTTPServer_GameConfig_GET verifies GET /game-config.json returns the
+// current singleton (defaults, absent any prior POST/migration).
+func TestHTTPServer_GameConfig_GET(t *testing.T) {
+	server, _ := setupTestHTTPServer(t)
+
+	req := httptest.NewRequest("GET", "/game-config.json", nil)
+	w := httptest.NewRecorder()
+	server.mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("Expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+	var gs map[string]interface{}
+	if err := json.Unmarshal(w.Body.Bytes(), &gs); err != nil {
+		t.Fatalf("Response is not valid JSON: %v", err)
+	}
+	if _, ok := gs["neon_effect"]; !ok {
+		t.Errorf("Expected a neon_effect section in the response, got: %v", gs)
+	}
+	if _, ok := gs["game"]; !ok {
+		t.Errorf("Expected a game section in the response, got: %v", gs)
+	}
+}
+
+// TestHTTPServer_GameConfig_POST_PartialPreservesOtherSection is
+// TestHTTPServer_Config_POST_PartialPreservesOtherSections' #150 sibling:
+// the same additive, section-by-section merge semantics apply to
+// /game-config.json's two sections ("game", "neon_effect").
+func TestHTTPServer_GameConfig_POST_PartialPreservesOtherSection(t *testing.T) {
+	server, _ := setupTestHTTPServer(t)
+
+	// Set a non-default delay directly on the singleton.
+	initial := config.GetGameSettings()
+	initial.Game.DefaultDelay = 45
+	config.SetGameSettingsInstance(initial)
+
+	// Partial save touching only neon_effect must leave game.default_delay untouched.
+	req := httptest.NewRequest("POST", "/game-config.json", strings.NewReader(`{"neon_effect":{"enabled":true}}`))
+	w := httptest.NewRecorder()
+	server.mux.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("Expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	after := config.GetGameSettings()
+	if after.Game.DefaultDelay != 45 {
+		t.Errorf("Expected game.default_delay=45 to survive a neon_effect-only POST, got %d", after.Game.DefaultDelay)
+	}
+	if !after.NeonEffect.Enabled {
+		t.Errorf("Expected neon_effect.enabled=true from the posted section")
+	}
+
+	// Reverse: saving "game" must not touch neon_effect.
+	req2 := httptest.NewRequest("POST", "/game-config.json", strings.NewReader(`{"game":{"default_delay":60}}`))
+	w2 := httptest.NewRecorder()
+	server.mux.ServeHTTP(w2, req2)
+	if w2.Code != http.StatusOK {
+		t.Fatalf("Expected 200, got %d: %s", w2.Code, w2.Body.String())
+	}
+	after2 := config.GetGameSettings()
+	if !after2.NeonEffect.Enabled {
+		t.Errorf("Expected neon_effect.enabled to survive a POST of the game section, got %+v", after2.NeonEffect)
+	}
+	if after2.Game.DefaultDelay != 60 {
+		t.Errorf("Expected game.default_delay=60 from the posted section, got %d", after2.Game.DefaultDelay)
 	}
 }
 
@@ -403,8 +537,10 @@ func TestHTTPServer_Config_POST_PartialPreservesOtherSections(t *testing.T) {
 	initial.Storage.FilesDir = filepath.Join(dataDir, "files")
 	config.SetInstance(initial)
 
-	// Partial save touching only neon_effect (mirrors ConfigPage's real payloads).
-	req := httptest.NewRequest("POST", "/config.json", strings.NewReader(`{"neon_effect":{"enabled":true}}`))
+	// Partial save touching only "server" (neon_effect moved to
+	// /game-config.json by #150 — see TestHTTPServer_GameConfig_POST_* for
+	// its own partial-preserve coverage of the game-settings side).
+	req := httptest.NewRequest("POST", "/config.json", strings.NewReader(`{"server":{"debug":true}}`))
 	w := httptest.NewRecorder()
 	server.mux.ServeHTTP(w, req)
 
@@ -422,26 +558,23 @@ func TestHTTPServer_Config_POST_PartialPreservesOtherSections(t *testing.T) {
 	if after.Storage.QuestionsDir == "" || after.Storage.FilesDir == "" {
 		t.Errorf("Storage section was wiped by an unrelated partial save: %+v", after.Storage)
 	}
-	if !after.NeonEffect.Enabled {
-		t.Errorf("Expected neon_effect.enabled=true from the posted section")
+	if !after.Server.Debug {
+		t.Errorf("Expected server.debug=true from the posted section")
 	}
 
-	// Also assert the reverse: saving the "server" section must not touch neon_effect.
-	req2 := httptest.NewRequest("POST", "/config.json", strings.NewReader(`{"server":{"debug":true}}`))
+	// Also assert the reverse: saving the "wifi" section must not touch server.debug.
+	req2 := httptest.NewRequest("POST", "/config.json", strings.NewReader(`{"wifi":{"ssid":"AnotherWifi","password":"anotherpass"}}`))
 	w2 := httptest.NewRecorder()
 	server.mux.ServeHTTP(w2, req2)
 	if w2.Code != http.StatusOK {
 		t.Fatalf("Expected 200, got %d: %s", w2.Code, w2.Body.String())
 	}
 	after2 := config.Get()
-	if !after2.NeonEffect.Enabled {
-		t.Errorf("Expected neon_effect.enabled to survive a POST of the server section, got %+v", after2.NeonEffect)
-	}
-	if after2.Server.HTTPPort != 80 {
-		t.Errorf("Expected http_port default (80) re-applied after posting {server:{debug:true}}, got %d", after2.Server.HTTPPort)
-	}
 	if !after2.Server.Debug {
-		t.Errorf("Expected server.debug=true from the posted section")
+		t.Errorf("Expected server.debug to survive a POST of the wifi section, got %+v", after2.Server)
+	}
+	if after2.WiFi.SSID != "AnotherWifi" {
+		t.Errorf("Expected wifi.ssid=AnotherWifi from the posted section, got %q", after2.WiFi.SSID)
 	}
 }
 
@@ -456,7 +589,7 @@ func TestHTTPServer_Config_POST_APIKeyPreservation(t *testing.T) {
 		cfg.AI.AnthropicAPIKey = "sk-ant-original"
 		config.SetInstance(cfg)
 
-		req := httptest.NewRequest("POST", "/config.json", strings.NewReader(`{"neon_effect":{"enabled":true}}`))
+		req := httptest.NewRequest("POST", "/config.json", strings.NewReader(`{"server":{"debug":true}}`))
 		w := httptest.NewRecorder()
 		server.mux.ServeHTTP(w, req)
 		if w.Code != http.StatusOK {
@@ -579,7 +712,7 @@ func TestHTTPServer_Config_POST_APIKeyPreservation(t *testing.T) {
 		cfg.AI.GroqModel = "openai/gpt-oss-20b"
 		config.SetInstance(cfg)
 
-		req := httptest.NewRequest("POST", "/config.json", strings.NewReader(`{"neon_effect":{"enabled":true}}`))
+		req := httptest.NewRequest("POST", "/config.json", strings.NewReader(`{"server":{"debug":true}}`))
 		w := httptest.NewRecorder()
 		server.mux.ServeHTTP(w, req)
 		if w.Code != http.StatusOK {
@@ -698,7 +831,7 @@ func TestHTTPServer_Config_POST_APIKeyPreservation(t *testing.T) {
 		cfg.AI.GroqAPIKey = "gsk_original"
 		config.SetInstance(cfg)
 
-		req := httptest.NewRequest("POST", "/config.json", strings.NewReader(`{"neon_effect":{"enabled":true}}`))
+		req := httptest.NewRequest("POST", "/config.json", strings.NewReader(`{"server":{"debug":true}}`))
 		w := httptest.NewRecorder()
 		server.mux.ServeHTTP(w, req)
 		if w.Code != http.StatusOK {

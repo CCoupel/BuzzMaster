@@ -6,10 +6,37 @@ import (
 	"math/rand"
 	"os"
 	"path/filepath"
+	"runtime/debug"
 	"strings"
 	"sync"
 	"time"
 )
+
+// safeGo runs fn in a new goroutine, recovering any panic so a single
+// failed background save can never take down the whole process (bugfix
+// #131, plan task 10 — applied uniformly to the ~30 `go e.SaveXxx()`
+// call sites in this file, all of which are fire-and-forget persistence
+// after a state mutation; none of their callers were checking the returned
+// error even before this change — see e.g. setQuestionStatus above the
+// first call site). A panic here is logged with a stack trace and the
+// goroutine simply exits; the in-memory state (already mutated by the
+// synchronous caller before the `go` statement) is unaffected — only that
+// one disk write is lost, exactly like any other failed save.
+// fn's error return, if any, is also logged, which most existing call
+// sites did not do before (errors were silently discarded by `go
+// e.SaveXxx()` — a bare `go` statement drops return values).
+func safeGo(name string, fn func() error) {
+	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				log.Printf("[Engine] recovered panic in background %s: %v\n%s", name, r, debug.Stack())
+			}
+		}()
+		if err := fn(); err != nil {
+			log.Printf("[Engine] background %s failed: %v", name, err)
+		}
+	}()
+}
 
 // Engine manages the game state and logic
 type Engine struct {
@@ -21,6 +48,7 @@ type Engine struct {
 	teamsPath        string
 	bumpersPath      string
 	statusesPath     string // Path to question_statuses.json
+	statePath        string // Path to game_state.json (#141 — quiz metadata persistence)
 	mu               sync.RWMutex
 	timer            *time.Ticker
 	stopCh           chan struct{}
@@ -378,7 +406,7 @@ func (e *Engine) setQuestionStatus(status QuestionStatus) {
 	if e.state.Question != nil {
 		e.state.Question.Status = status
 		e.questionStatuses[e.state.Question.ID] = status
-		go e.SaveStatuses() // Persist to disk
+		safeGo("SaveStatuses", e.SaveStatuses) // Persist to disk
 	}
 }
 
@@ -450,7 +478,7 @@ func (e *Engine) UpdateBumper(id string, data map[string]interface{}) {
 	e.mu.Unlock()
 
 	// Auto-save bumpers to disk
-	go e.SaveBumpers()
+	safeGo("SaveBumpers", e.SaveBumpers)
 }
 
 // UpdateTeam updates or creates a team
@@ -460,7 +488,7 @@ func (e *Engine) UpdateTeam(id string, team *Team) {
 	e.mu.Unlock()
 
 	// Auto-save teams to disk
-	go e.SaveTeams()
+	safeGo("SaveTeams", e.SaveTeams)
 }
 
 // SetTeams sets all teams
@@ -526,7 +554,7 @@ func (e *Engine) SetBumpers(bumpers map[string]*Bumper) {
 	e.mu.Unlock()
 
 	// Auto-save bumpers to disk
-	go e.SaveBumpers()
+	safeGo("SaveBumpers", e.SaveBumpers)
 }
 
 // Ready prepares a new question round
@@ -1457,8 +1485,8 @@ func (e *Engine) UpdateBumperScore(bumperID string, points int) int {
 	e.mu.Unlock()
 
 	// Auto-save (scores are part of bumper/team data)
-	go e.SaveBumpers()
-	go e.SaveTeams()
+	safeGo("SaveBumpers", e.SaveBumpers)
+	safeGo("SaveTeams", e.SaveTeams)
 
 	return score
 }
@@ -1486,7 +1514,7 @@ func (e *Engine) UpdateTeamScore(teamName string, points int) int {
 	e.mu.Unlock()
 
 	// Auto-save teams to disk
-	go e.SaveTeams()
+	safeGo("SaveTeams", e.SaveTeams)
 
 	return score
 }
@@ -1587,10 +1615,10 @@ func (e *Engine) InitGame() []string {
 	e.mu.Unlock()
 
 	// Persist async
-	go e.SaveHistory()
-	go e.SaveTeams()
-	go e.SaveBumpers()
-	go e.SaveStatuses()
+	safeGo("SaveHistory", e.SaveHistory)
+	safeGo("SaveTeams", e.SaveTeams)
+	safeGo("SaveBumpers", e.SaveBumpers)
+	safeGo("SaveStatuses", e.SaveStatuses)
 
 	return purgedVPlayerIDs
 }
@@ -1606,7 +1634,6 @@ func (e *Engine) InitGame() []string {
 // client iterating without a guard).
 func (e *Engine) SetQuizMeta(name, theme, notes string, populations, difficulties []string, language, objectives string) {
 	e.mu.Lock()
-	defer e.mu.Unlock()
 	if populations == nil {
 		populations = []string{}
 	}
@@ -1620,7 +1647,17 @@ func (e *Engine) SetQuizMeta(name, theme, notes string, populations, difficultie
 	e.state.QuizDifficulties = difficulties
 	e.state.QuizLanguage = language
 	e.state.QuizObjectives = objectives
+	e.mu.Unlock()
+
 	log.Printf("[Engine] Quiz meta set: name=%q, theme=%q, populations=%v, difficulties=%v, language=%q, objectives_len=%d", name, theme, populations, difficulties, language, len(objectives))
+
+	// #141 — persist synchronously, same rationale as SetTeams: this is a
+	// low-frequency admin action (not a hot path), and firing it in a
+	// background goroutine would let it race with a caller's own
+	// SaveState()/LoadState() sequence.
+	if err := e.SaveState(); err != nil {
+		log.Printf("[Engine] Failed to persist game state after quiz meta change: %v", err)
+	}
 }
 
 // quizHiddenFieldAllowedValues are the only values SetQuizDisplay accepts
@@ -1645,7 +1682,6 @@ var quizHiddenFieldAllowedValues = map[string]bool{
 // doesn't know yet must not fail the whole save.
 func (e *Engine) SetQuizDisplay(hidden []string) {
 	e.mu.Lock()
-	defer e.mu.Unlock()
 	filtered := make([]string, 0, len(hidden))
 	for _, field := range hidden {
 		if quizHiddenFieldAllowedValues[field] {
@@ -1655,7 +1691,14 @@ func (e *Engine) SetQuizDisplay(hidden []string) {
 		}
 	}
 	e.state.QuizHiddenFields = filtered
+	e.mu.Unlock()
+
 	log.Printf("[Engine] Quiz display set: hidden=%v", filtered)
+
+	// #141 — persist synchronously, same rationale as SetQuizMeta above.
+	if err := e.SaveState(); err != nil {
+		log.Printf("[Engine] Failed to persist game state after quiz display change: %v", err)
+	}
 }
 
 // RAZScores resets all scores to zero
@@ -1680,9 +1723,9 @@ func (e *Engine) RAZScores() {
 	e.mu.Unlock()
 
 	// Save all data to disk
-	go e.SaveHistory()
-	go e.SaveTeams()
-	go e.SaveBumpers()
+	safeGo("SaveHistory", e.SaveHistory)
+	safeGo("SaveTeams", e.SaveTeams)
+	safeGo("SaveBumpers", e.SaveBumpers)
 }
 
 // ClearBumpers removes all bumpers (keeps teams intact)
@@ -1702,8 +1745,8 @@ func (e *Engine) ClearBumpers() {
 	e.mu.Unlock()
 
 	// Auto-save empty bumpers and updated teams
-	go e.SaveBumpers()
-	go e.SaveTeams()
+	safeGo("SaveBumpers", e.SaveBumpers)
+	safeGo("SaveTeams", e.SaveTeams)
 }
 
 // ClearAll removes all teams and bumpers
@@ -1715,8 +1758,8 @@ func (e *Engine) ClearAll() {
 	e.mu.Unlock()
 
 	// Auto-save empty data
-	go e.SaveTeams()
-	go e.SaveBumpers()
+	safeGo("SaveTeams", e.SaveTeams)
+	safeGo("SaveBumpers", e.SaveBumpers)
 }
 
 // SetPage sets the remote page
@@ -1946,7 +1989,7 @@ func (e *Engine) AddGameEvent(event GameEvent) {
 	e.mu.Unlock()
 
 	// Save history to disk (non-blocking, async)
-	go e.SaveHistory()
+	safeGo("SaveHistory", e.SaveHistory)
 }
 
 // GetHistory returns the game event history
@@ -2355,10 +2398,10 @@ func (e *Engine) ClearStatuses() {
 
 // SaveAll saves teams, bumpers, history and statuses to disk
 func (e *Engine) SaveAll() {
-	go e.SaveTeams()
-	go e.SaveBumpers()
-	go e.SaveHistory()
-	go e.SaveStatuses()
+	safeGo("SaveTeams", e.SaveTeams)
+	safeGo("SaveBumpers", e.SaveBumpers)
+	safeGo("SaveHistory", e.SaveHistory)
+	safeGo("SaveStatuses", e.SaveStatuses)
 }
 
 // FlipMemoryCard handles flipping a Memory card with game logic
@@ -2711,12 +2754,18 @@ func (e *Engine) GetVirtualPlayerLimit() int {
 // SetVirtualPlayerLimit sets the maximum number of virtual players allowed
 func (e *Engine) SetVirtualPlayerLimit(limit int) {
 	e.mu.Lock()
-	defer e.mu.Unlock()
 	if limit < 1 {
 		limit = 20 // Minimum 1, default to 20 if invalid
 	}
 	e.state.VirtualPlayerLimit = limit
+	e.mu.Unlock()
+
 	log.Printf("[Engine] Virtual player limit set to: %d", limit)
+
+	// #141 — persist synchronously, same rationale as SetQuizMeta above.
+	if err := e.SaveState(); err != nil {
+		log.Printf("[Engine] Failed to persist game state after virtual player limit change: %v", err)
+	}
 }
 
 // SetArdoiseAnswer updates the free-text answer for a team during an ARDOISE question.
@@ -2804,7 +2853,7 @@ func (e *Engine) createVirtualPlayerUnsafe(name string) (string, *Bumper, error)
 	log.Printf("[Engine] Virtual player created: id=%s, name=%s, count=%d", id, name, e.state.VirtualPlayerCount)
 
 	// Save bumpers to disk (in goroutine to avoid blocking)
-	go e.SaveBumpers()
+	safeGo("SaveBumpers", e.SaveBumpers)
 
 	return id, bumper, nil
 }
@@ -2860,7 +2909,7 @@ func (e *Engine) ReconnectOrCreateVirtualPlayer(id, name string) (string, *Bumpe
 			bumper.ReclaimRequested = false
 			bumper.reclaimAuthorizedUntil = time.Time{}
 			log.Printf("[Engine] Virtual player reconnected by ID: id=%s, name=%s", id, bumper.Name)
-			go e.SaveBumpers()
+			safeGo("SaveBumpers", e.SaveBumpers)
 			return id, bumper, true, nil
 		}
 		// Case 2: stale/unknown ID — fall through as if none was provided.
@@ -2909,7 +2958,7 @@ func (e *Engine) ReconnectOrCreateVirtualPlayer(id, name string) (string, *Bumpe
 				// #122 B2 — this rejection IS the signal: flag the holder's own
 				// card for the animateur right now, not after some delay.
 				cand.ReclaimRequested = true
-				go e.SaveBumpers()
+				safeGo("SaveBumpers", e.SaveBumpers)
 				return "", nil, false, &EnrollmentError{Reason: "NAME_TAKEN_OFFLINE"}
 			}
 			return "", nil, false, &EnrollmentError{Reason: "NAME_TAKEN"}
@@ -2953,7 +3002,7 @@ func (e *Engine) reattachVirtualPlayerUnsafe(oldID string, bumper *Bumper, name 
 	bumper.reclaimAuthorizedUntil = time.Time{} // consumed — single use
 	applyConnEventUnsafe(bumper, ConnEventReconnect)
 
-	go e.SaveBumpers()
+	safeGo("SaveBumpers", e.SaveBumpers)
 	return newID
 }
 
@@ -2986,7 +3035,7 @@ func (e *Engine) ReleaseBumperName(id string) bool {
 	log.Printf("[Engine] Bumper name released for reclaim: id=%s, name=%s, expires=%s",
 		id, bumper.Name, bumper.reclaimAuthorizedUntil.Format(time.RFC3339))
 
-	go e.SaveBumpers()
+	safeGo("SaveBumpers", e.SaveBumpers)
 	return true
 }
 
@@ -3026,7 +3075,7 @@ func (e *Engine) ReleaseSeat(id string) (newID string, wasConnected bool, ok boo
 		bumper.ReclaimRequested = false
 		log.Printf("[Engine] Bumper name released for reclaim: id=%s, name=%s, expires=%s",
 			id, bumper.Name, bumper.reclaimAuthorizedUntil.Format(time.RFC3339))
-		go e.SaveBumpers()
+		safeGo("SaveBumpers", e.SaveBumpers)
 		return "", false, true
 	}
 
@@ -3061,7 +3110,7 @@ func (e *Engine) ReleaseSeat(id string) (newID string, wasConnected bool, ok boo
 	e.updateTeamsReady()
 
 	log.Printf("[Engine] Seat released while connected: old_id=%s, new_id=%s, name=%s", id, newID, bumper.Name)
-	go e.SaveBumpers()
+	safeGo("SaveBumpers", e.SaveBumpers)
 	return newID, true, true
 }
 
@@ -3232,7 +3281,7 @@ func (e *Engine) AssignVirtualPlayer(bumperID, team string, answerColor AnswerCo
 	log.Printf("[Engine] Virtual player assigned: id=%s, team=%s, color=%s, isVPlayer=%v", bumperID, team, answerColor, bumper.IsVPlayer)
 
 	// Save bumpers to disk
-	go e.SaveBumpers()
+	safeGo("SaveBumpers", e.SaveBumpers)
 
 	return nil
 }

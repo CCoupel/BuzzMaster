@@ -8,13 +8,18 @@ import (
 	"sync"
 )
 
-// Config holds all server configuration
+// Config holds the "système" (system) subset of server configuration:
+// network/server settings, storage paths, WiFi defaults, and AI provider
+// settings. It does NOT hold game settings (default delay, neon effect) —
+// those live in GameSettings (gameconfig.go), split out by #150 so game
+// settings can travel with a game's data (backup/restore) independently of
+// system settings like API keys. See gameconfig.go's doc comment for the
+// full rationale and the migration path from the pre-#150 monolithic
+// format.
 type Config struct {
 	Server       ServerConfig       `json:"server"`
 	WiFi         WiFiConfig         `json:"wifi"`
-	Game         GameConfig         `json:"game"`
 	Storage      StorageConfig      `json:"storage"`
-	NeonEffect   NeonEffectConfig   `json:"neon_effect"`
 	WiFiDefaults WiFiDefaultsConfig `json:"wifi_defaults"`
 	AI           AIConfig           `json:"ai"`
 	Version      string             `json:"version"`
@@ -230,9 +235,6 @@ func ApplyDefaults(cfg *Config) {
 	// (false) is indistinguishable from an explicit false, so they are not
 	// defaulted here (unchanged behavior).
 
-	if cfg.Game.DefaultDelay == 0 {
-		cfg.Game.DefaultDelay = 30
-	}
 	if cfg.Storage.DataDir == "" {
 		cfg.Storage.DataDir = "./data"
 	}
@@ -258,39 +260,6 @@ func ApplyDefaults(cfg *Config) {
 	if cfg.WiFiDefaults.ServerPort == 0 {
 		cfg.WiFiDefaults.ServerPort = 80
 	}
-
-	// NeonEffect defaults
-	if cfg.NeonEffect.Mode == "" {
-		cfg.NeonEffect.Mode = "bar" // Default to bar mode
-	}
-	if cfg.NeonEffect.ArcWidth == 0 {
-		cfg.NeonEffect.ArcWidth = 60
-	}
-	if cfg.NeonEffect.IntensityGap == 0 {
-		cfg.NeonEffect.IntensityGap = 80
-	}
-	if cfg.NeonEffect.RotationSpeed == 0 {
-		cfg.NeonEffect.RotationSpeed = 4.0
-	}
-	if cfg.NeonEffect.BarOffset == 0 {
-		cfg.NeonEffect.BarOffset = 20 // 20 pixels from edge
-	}
-	if cfg.NeonEffect.BarThickness == 0 {
-		cfg.NeonEffect.BarThickness = 4 // 4 pixels thick
-	}
-	if cfg.NeonEffect.ArcBlur == 0 {
-		cfg.NeonEffect.ArcBlur = 100 // 100% of bar thickness
-	}
-	if cfg.NeonEffect.GlowPulseSpeed == 0 {
-		cfg.NeonEffect.GlowPulseSpeed = 2.0 // 2 seconds
-	}
-	if cfg.NeonEffect.GlowPulseMin == 0 {
-		cfg.NeonEffect.GlowPulseMin = 30 // 30% minimum glow
-	}
-	if cfg.NeonEffect.GlowPulseMax == 0 {
-		cfg.NeonEffect.GlowPulseMax = 50 // 50% maximum glow
-	}
-	// Enabled defaults to false (zero value)
 
 	// AI generator defaults (v6.0.0, #8 — contract ai-generation.md §1)
 	if cfg.AI.Model == "" {
@@ -335,6 +304,39 @@ var (
 	once       sync.Once
 )
 
+// configPath is the filesystem path Get() and Save() resolve against.
+// Defaults to "config.json" (relative to CWD) — matching the production
+// layout at server-go/config.json. Tests MUST call SetConfigPath with an
+// isolated path (e.g. a t.TempDir() file) before anything in the process
+// calls Get() or Save(), otherwise they will read/write the real fixture or
+// production file (bugfix #143 — this indirection replaces the two literal
+// "config.json" strings that used to be hardcoded in Get() and Save()).
+// SetConfigPath is generic on purpose: #150 (system/game config split) is
+// expected to reuse it for a second, independently-pathed config file.
+var (
+	configPath   = "config.json"
+	configPathMu sync.RWMutex
+)
+
+// SetConfigPath overrides the path Get() and Save() use to resolve
+// config.json. Safe to call concurrently. Get() only resolves its path once
+// (sync.Once), so callers that need an isolated Get() must call
+// SetConfigPath before the first Get() of the process/test binary; Save()
+// re-reads the current path on every call, so it is always isolated
+// immediately after SetConfigPath runs.
+func SetConfigPath(path string) {
+	configPathMu.Lock()
+	configPath = path
+	configPathMu.Unlock()
+}
+
+// ConfigPath returns the path Get() and Save() currently resolve against.
+func ConfigPath() string {
+	configPathMu.RLock()
+	defer configPathMu.RUnlock()
+	return configPath
+}
+
 // Get returns the singleton config instance
 func Get() *Config {
 	// If instance was set via SetInstance, return it directly
@@ -345,7 +347,7 @@ func Get() *Config {
 		return cur
 	}
 	once.Do(func() {
-		loaded, err := Load("config.json")
+		loaded, err := Load(ConfigPath())
 		if err != nil {
 			log.Printf("Warning: Could not load config.json, using defaults: %v", err)
 			loaded = &Config{}
@@ -383,8 +385,8 @@ func Save(cfg *Config) error {
 		return err
 	}
 
-	const configPath = "config.json"
-	dir := filepath.Dir(configPath)
+	path := ConfigPath()
+	dir := filepath.Dir(path)
 	if dir == "" {
 		dir = "."
 	}
@@ -405,85 +407,10 @@ func Save(cfg *Config) error {
 		return err
 	}
 
-	if err := os.Rename(tmpPath, configPath); err != nil {
+	if err := os.Rename(tmpPath, path); err != nil {
 		os.Remove(tmpPath)
 		return err
 	}
 	return nil
 }
 
-// ValidateAndClampNeonEffect validates and clamps neon effect values to acceptable ranges
-func (c *Config) ValidateAndClampNeonEffect() {
-	// Validate mode
-	if c.NeonEffect.Mode != "halo" && c.NeonEffect.Mode != "bar" {
-		c.NeonEffect.Mode = "bar"
-	}
-
-	// Clamp arc_width to 30-180 degrees
-	if c.NeonEffect.ArcWidth < 30 {
-		c.NeonEffect.ArcWidth = 30
-	} else if c.NeonEffect.ArcWidth > 180 {
-		c.NeonEffect.ArcWidth = 180
-	}
-
-	// Clamp intensity_gap to 0-100%
-	if c.NeonEffect.IntensityGap < 0 {
-		c.NeonEffect.IntensityGap = 0
-	} else if c.NeonEffect.IntensityGap > 100 {
-		c.NeonEffect.IntensityGap = 100
-	}
-
-	// Clamp rotation_speed to 1.0-10.0 seconds
-	if c.NeonEffect.RotationSpeed < 1.0 {
-		c.NeonEffect.RotationSpeed = 1.0
-	} else if c.NeonEffect.RotationSpeed > 10.0 {
-		c.NeonEffect.RotationSpeed = 10.0
-	}
-
-	// Clamp bar_offset to 10-100 pixels
-	if c.NeonEffect.BarOffset < 10 {
-		c.NeonEffect.BarOffset = 10
-	} else if c.NeonEffect.BarOffset > 100 {
-		c.NeonEffect.BarOffset = 100
-	}
-
-	// Clamp bar_thickness to 2-20 pixels
-	if c.NeonEffect.BarThickness < 2 {
-		c.NeonEffect.BarThickness = 2
-	} else if c.NeonEffect.BarThickness > 20 {
-		c.NeonEffect.BarThickness = 20
-	}
-
-	// Clamp arc_blur to 0-200%
-	if c.NeonEffect.ArcBlur < 0 {
-		c.NeonEffect.ArcBlur = 0
-	} else if c.NeonEffect.ArcBlur > 200 {
-		c.NeonEffect.ArcBlur = 200
-	}
-
-	// Clamp glow_pulse_speed to 0.5-5.0 seconds
-	if c.NeonEffect.GlowPulseSpeed < 0.5 {
-		c.NeonEffect.GlowPulseSpeed = 0.5
-	} else if c.NeonEffect.GlowPulseSpeed > 5.0 {
-		c.NeonEffect.GlowPulseSpeed = 5.0
-	}
-
-	// Clamp glow_pulse_min to 0-100%
-	if c.NeonEffect.GlowPulseMin < 0 {
-		c.NeonEffect.GlowPulseMin = 0
-	} else if c.NeonEffect.GlowPulseMin > 100 {
-		c.NeonEffect.GlowPulseMin = 100
-	}
-
-	// Clamp glow_pulse_max to 0-100%
-	if c.NeonEffect.GlowPulseMax < 0 {
-		c.NeonEffect.GlowPulseMax = 0
-	} else if c.NeonEffect.GlowPulseMax > 100 {
-		c.NeonEffect.GlowPulseMax = 100
-	}
-
-	// Ensure min <= max
-	if c.NeonEffect.GlowPulseMin > c.NeonEffect.GlowPulseMax {
-		c.NeonEffect.GlowPulseMin, c.NeonEffect.GlowPulseMax = c.NeonEffect.GlowPulseMax, c.NeonEffect.GlowPulseMin
-	}
-}

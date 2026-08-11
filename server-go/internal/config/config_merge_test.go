@@ -204,7 +204,7 @@ func TestSave_NoLeftoverTempFile(t *testing.T) {
 func TestSave_OverwritesAtomically(t *testing.T) {
 	t.Chdir(t.TempDir())
 
-	if err := Save(&Config{Version: "6.0.0", NeonEffect: NeonEffectConfig{Enabled: true}}); err != nil {
+	if err := Save(&Config{Version: "6.0.0", WiFi: WiFiConfig{SSID: "FirstSaveSSID"}}); err != nil {
 		t.Fatalf("First Save failed: %v", err)
 	}
 	if err := Save(&Config{Version: "6.0.1"}); err != nil {
@@ -222,8 +222,8 @@ func TestSave_OverwritesAtomically(t *testing.T) {
 	if onDisk["version"] != "6.0.1" {
 		t.Errorf("Expected version=6.0.1 after second Save, got %v", onDisk["version"])
 	}
-	neon, _ := onDisk["neon_effect"].(map[string]interface{})
-	if neon != nil && neon["enabled"] == true {
+	wifi, _ := onDisk["wifi"].(map[string]interface{})
+	if wifi != nil && wifi["ssid"] == "FirstSaveSSID" {
 		t.Error("Second Save() should not resurrect fields from the first call — Save() is a full overwrite, not a merge")
 	}
 }
