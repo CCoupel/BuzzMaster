@@ -4,6 +4,7 @@ import { useGame } from '../hooks/GameContext'
 import { useCategoryFilter } from '../hooks/useCategoryFilter'
 import { useCategories } from '../hooks/useCategories'
 import { CATEGORIES, categoryMeta } from '../utils/categoryUtils'
+import { sortQuestionsByOrder, shuffleArray } from '../utils/questionOrder'
 import Button from '../components/Button'
 import Card, { CardHeader, CardBody } from '../components/Card'
 import CategoryBalance from '../components/CategoryBalance'
@@ -128,6 +129,9 @@ export default function QuestionsPage() {
     maxConsecutiveFailures: 2,
   })
   const [aiToast, setAiToast] = useState(null)
+  // #149 — toast de confirmation après "Mélanger les questions" (même motif
+  // que aiToast/wifiToast : auto-masqué, cf. effet plus bas).
+  const [shuffleToast, setShuffleToast] = useState(null)
   // #137 — jobId déjà signalé par toast, pour ne pas re-toaster à chaque
   // re-render tant que le job reste dans le même état terminal, et pour ne
   // pas toaster un job dont la fin a été vue en direct dans la modale.
@@ -218,6 +222,14 @@ export default function QuestionsPage() {
       return () => clearTimeout(timer)
     }
   }, [aiToast])
+
+  // #149 — shuffleToast auto-hide
+  useEffect(() => {
+    if (shuffleToast) {
+      const timer = setTimeout(() => setShuffleToast(null), 3000)
+      return () => clearTimeout(timer)
+    }
+  }, [shuffleToast])
 
   useEffect(() => {
     if (!aiJob) return
@@ -360,16 +372,43 @@ export default function QuestionsPage() {
     }
   }
 
+  // #149 — mise à jour optimiste de l'ordre après "Mélanger les questions" :
+  // REORDER_QUESTIONS (comme handleDrop plus bas) est fire-and-forget côté
+  // WebSocket, sans accusé de réception. `shuffleOverrideOrder` affiche donc
+  // le nouvel ordre immédiatement, avant même la diffusion serveur, et se
+  // referme tout seul dès que `questions` reflète réellement ce même ordre
+  // (ou après un délai de sécurité si la diffusion tarde/normalise l'ORDER
+  // différemment — cf. handleShuffleQuestions et l'effet de reconciliation
+  // plus bas).
+  const [shuffleOverrideOrder, setShuffleOverrideOrder] = useState(null) // string[] | null
+
   const sortedQuestions = useMemo(() => {
-    return Object.values(questions)
-      .filter(q => q && q.ID)
-      .sort((a, b) => {
-        // Sort by ORDER if available, otherwise by ID
-        const orderA = a.ORDER !== undefined ? parseInt(a.ORDER) : parseInt(a.ID)
-        const orderB = b.ORDER !== undefined ? parseInt(b.ORDER) : parseInt(b.ID)
-        return orderA - orderB
-      })
-  }, [questions])
+    const naturalOrder = sortQuestionsByOrder(questions)
+    if (!shuffleOverrideOrder) return naturalOrder
+    const byId = new Map(naturalOrder.map(q => [q.ID, q]))
+    const ordered = shuffleOverrideOrder.map(id => byId.get(id)).filter(Boolean)
+    // Sécurité : toute question absente du snapshot mélangé (créée entre
+    // temps par exemple) reste visible, ajoutée à la suite.
+    const missing = naturalOrder.filter(q => !shuffleOverrideOrder.includes(q.ID))
+    return [...ordered, ...missing]
+  }, [questions, shuffleOverrideOrder])
+
+  // Referme l'override optimiste dès que l'ordre réel (issu de la diffusion
+  // REORDER_QUESTIONS) coïncide avec celui qu'on affichait déjà — ou après un
+  // délai de sécurité, pour ne jamais rester bloqué sur un ordre obsolète si
+  // la diffusion n'arrive jamais exactement à l'identique (le backend
+  // renormalise ORDER en 0-based, mais la SÉQUENCE d'ID reste la même
+  // permutation, donc la comparaison ci-dessous reste fiable).
+  useEffect(() => {
+    if (!shuffleOverrideOrder) return
+    const naturalIds = sortQuestionsByOrder(questions).map(q => q.ID)
+    if (JSON.stringify(naturalIds) === JSON.stringify(shuffleOverrideOrder)) {
+      setShuffleOverrideOrder(null)
+      return
+    }
+    const timer = setTimeout(() => setShuffleOverrideOrder(null), 5000)
+    return () => clearTimeout(timer)
+  }, [questions, shuffleOverrideOrder])
 
   // Custom categories from API (#95)
   const { categories: apiCategories, refetch: refetchCategories } = useCategories()
@@ -505,6 +544,49 @@ export default function QuestionsPage() {
 
     setDraggedId(null)
     setDragOverId(null)
+  }
+
+  // #149 — "Mélanger les questions" : réordonne aléatoirement TOUTES les
+  // questions (sortedQuestions, jamais filteredQuestions — le mélange porte
+  // sur l'ensemble même quand un filtre de catégorie est actif, cf. maquette
+  // validée §5), via le même message REORDER_QUESTIONS que le glisser-déposer
+  // (handleDrop ci-dessus). Action irréversible -> confirmation, renforcée si
+  // une partie est en cours (décision utilisateur, plan Batch 5 point 3).
+  const handleShuffleQuestions = () => {
+    if (sortedQuestions.length < 2) return
+
+    const count = sortedQuestions.length
+    const gameInProgress = !!gameState?.phase && gameState.phase !== 'STOPPED'
+    const filterActive = selectedCategories.size > 0
+
+    const messageParts = [
+      gameInProgress
+        ? `⚠️ Une partie est en cours : mélanger les ${count} questions va changer l'ordre de jeu immédiatement, pour tout le monde.`
+        : `Mélanger les ${count} questions ?`,
+      `L'ordre actuel sera remplacé par un ordre aléatoire, pour tout le monde. ` +
+        `Vous pourrez le réajuster ensuite au glisser-déposer, mais l'ordre actuel ne pourra pas être restauré.`,
+    ]
+    if (filterActive) {
+      messageParts.push('Le mélange porte sur toutes les questions, pas seulement celles affichées par le filtre actif.')
+    }
+    if (!window.confirm(messageParts.join('\n\n'))) return
+
+    const previousOrder = sortedQuestions.map(q => q.ID)
+    const newOrder = shuffleArray(previousOrder)
+
+    // Mise à jour optimiste — cf. commentaire sur shuffleOverrideOrder plus
+    // haut. sendMessage (hooks/useWebSocket.js) renvoie désormais un booléen
+    // (true si effectivement envoyé sur le socket ouvert) pour permettre ce
+    // retour à l'état antérieur en cas d'échec réseau, ce qu'aucun appel
+    // WebSocket fire-and-forget de cette page ne faisait jusqu'ici.
+    setShuffleOverrideOrder(newOrder)
+    const sent = sendMessage('REORDER_QUESTIONS', { ORDER: newOrder })
+    if (!sent) {
+      setShuffleOverrideOrder(null)
+      setShuffleToast({ message: "Erreur : connexion perdue, le mélange n'a pas été envoyé.", type: 'error' })
+      return
+    }
+    setShuffleToast({ message: `✓ Ordre mélangé — ${count} question${count > 1 ? 's' : ''}`, type: 'success' })
   }
 
   const handleInputChange = (field, value) => {
@@ -1391,6 +1473,23 @@ export default function QuestionsPage() {
         )}
       </div>
 
+      {/* #149 — barre de mélange, entre les filtres et la grille (maquette validée §1) */}
+      <div className="questions-shuffle-toolbar">
+        <span className="questions-shuffle-toolbar-count">
+          {sortedQuestions.length} question{sortedQuestions.length > 1 ? 's' : ''}
+        </span>
+        <Button
+          variant="secondary"
+          size="sm"
+          icon="⇄"
+          onClick={handleShuffleQuestions}
+          disabled={sortedQuestions.length < 2}
+          title={sortedQuestions.length < 2 ? 'Au moins 2 questions sont necessaires pour melanger' : undefined}
+        >
+          Mélanger les questions
+        </Button>
+      </div>
+
       <div className="questions-layout">
         {/* Questions List */}
         <section className="questions-list-section">
@@ -1997,10 +2096,10 @@ export default function QuestionsPage() {
                         className="memory-preview-grid"
                         style={{ '--grid-cols': getMemoryGridColumns(formData.memoryPairs.length) }}
                       >
-                        {formData.memoryPairs.flatMap(pair => [
+                        {shuffleArray(formData.memoryPairs.flatMap(pair => [
                           { ...pair.card1, pairId: pair.id, cardNum: 1 },
                           { ...pair.card2, pairId: pair.id, cardNum: 2 },
-                        ]).sort(() => Math.random() - 0.5).map((card, idx) => (
+                        ])).map((card, idx) => (
                           <div key={`${card.pairId}-${card.cardNum}-${idx}`} className="memory-preview-card">
                             {card.isImage && card.image ? (
                               <img
@@ -2538,6 +2637,12 @@ export default function QuestionsPage() {
       {aiToast && (
         <div className={`wifi-toast wifi-toast-${aiToast.type}`}>
           {aiToast.message}
+        </div>
+      )}
+
+      {shuffleToast && (
+        <div className={`wifi-toast wifi-toast-${shuffleToast.type}`}>
+          {shuffleToast.message}
         </div>
       )}
     </div>
