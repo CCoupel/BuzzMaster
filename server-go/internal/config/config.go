@@ -335,6 +335,39 @@ var (
 	once       sync.Once
 )
 
+// configPath is the filesystem path Get() and Save() resolve against.
+// Defaults to "config.json" (relative to CWD) — matching the production
+// layout at server-go/config.json. Tests MUST call SetConfigPath with an
+// isolated path (e.g. a t.TempDir() file) before anything in the process
+// calls Get() or Save(), otherwise they will read/write the real fixture or
+// production file (bugfix #143 — this indirection replaces the two literal
+// "config.json" strings that used to be hardcoded in Get() and Save()).
+// SetConfigPath is generic on purpose: #150 (system/game config split) is
+// expected to reuse it for a second, independently-pathed config file.
+var (
+	configPath   = "config.json"
+	configPathMu sync.RWMutex
+)
+
+// SetConfigPath overrides the path Get() and Save() use to resolve
+// config.json. Safe to call concurrently. Get() only resolves its path once
+// (sync.Once), so callers that need an isolated Get() must call
+// SetConfigPath before the first Get() of the process/test binary; Save()
+// re-reads the current path on every call, so it is always isolated
+// immediately after SetConfigPath runs.
+func SetConfigPath(path string) {
+	configPathMu.Lock()
+	configPath = path
+	configPathMu.Unlock()
+}
+
+// ConfigPath returns the path Get() and Save() currently resolve against.
+func ConfigPath() string {
+	configPathMu.RLock()
+	defer configPathMu.RUnlock()
+	return configPath
+}
+
 // Get returns the singleton config instance
 func Get() *Config {
 	// If instance was set via SetInstance, return it directly
@@ -345,7 +378,7 @@ func Get() *Config {
 		return cur
 	}
 	once.Do(func() {
-		loaded, err := Load("config.json")
+		loaded, err := Load(ConfigPath())
 		if err != nil {
 			log.Printf("Warning: Could not load config.json, using defaults: %v", err)
 			loaded = &Config{}
@@ -383,8 +416,8 @@ func Save(cfg *Config) error {
 		return err
 	}
 
-	const configPath = "config.json"
-	dir := filepath.Dir(configPath)
+	path := ConfigPath()
+	dir := filepath.Dir(path)
 	if dir == "" {
 		dir = "."
 	}
@@ -405,7 +438,7 @@ func Save(cfg *Config) error {
 		return err
 	}
 
-	if err := os.Rename(tmpPath, configPath); err != nil {
+	if err := os.Rename(tmpPath, path); err != nil {
 		os.Remove(tmpPath)
 		return err
 	}
