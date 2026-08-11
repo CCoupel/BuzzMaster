@@ -2067,6 +2067,18 @@ func (h *HTTPServer) handleBackupSelect(w http.ResponseWriter, r *http.Request) 
 		}
 	}
 
+	// Add game_state.json (#141) — quiz metadata (name/theme/notes/
+	// populations/difficulties/language/objectives/hidden fields) and the
+	// virtual player limit. Same "history" anchor as game-config.json just
+	// above, same reasoning: no dedicated UI flag, and this is a small
+	// settings/metadata file with no natural fit among the other four.
+	if includeHistory {
+		statePath := filepath.Join(configDir, "game_state.json")
+		if _, err := os.Stat(statePath); err == nil {
+			h.addFileToTAR(tw, statePath, "config/game_state.json")
+		}
+	}
+
 	// Add medias (backgrounds + categories)
 	if includeMedias {
 		backgroundsDir := filepath.Join(filesDir, "backgrounds")
@@ -2215,6 +2227,16 @@ func (h *HTTPServer) handleResetSelect(w http.ResponseWriter, r *http.Request) {
 		os.Remove(historyPath)
 		result["history"] = true
 		log.Printf("[HTTP] Reset: History cleared")
+
+		// Reset game state (#141) — quiz metadata + virtual player limit,
+		// same "history" anchor as game-config.json (#150) just below, and
+		// the same clear-in-memory-then-remove-file division of labor as
+		// history.json above (Engine has no direct file-removal
+		// responsibility of its own — ClearQuizMeta only touches memory).
+		h.engine.ClearQuizMeta()
+		statePath := filepath.Join(configDir, "game_state.json")
+		os.Remove(statePath)
+		log.Printf("[HTTP] Reset: Game state cleared")
 
 		// Reset game settings (default delay + neon effect, #150) —
 		// piggybacks on "history", same anchor as handleBackupSelect's
@@ -2434,6 +2456,11 @@ func (h *HTTPServer) handleRestore(w http.ResponseWriter, r *http.Request) {
 				targetPath = filepath.Join(configDir, "game-config.json")
 				allowed = true
 			}
+		case tarPath == "config/game_state.json":
+			if detected["gameState"] {
+				targetPath = filepath.Join(configDir, "game_state.json")
+				allowed = true
+			}
 		// Legacy format: questions directly in root
 		case strings.HasPrefix(tarPath, "questions/"):
 			if detected["questions"] {
@@ -2532,6 +2559,20 @@ func (h *HTTPServer) handleRestore(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	if detected["gameState"] {
+		// #141 — LoadState reads from e.statePath (set once at startup to
+		// the same configDir this handler just extracted into) and updates
+		// the engine's in-memory GameState directly, immediately reflected
+		// by GetState() — no separate "set instance" step needed, unlike
+		// the config package's Get()/SetInstance() singleton pattern.
+		if err := h.engine.LoadState(); err == nil {
+			restoredMap["gameState"] = true
+			log.Printf("[HTTP] Restore: Game state (quiz metadata) restored")
+		} else {
+			log.Printf("[HTTP] Restore: Game state extracted but could not be reloaded: %v", err)
+		}
+	}
+
 	log.Printf("[HTTP] Intelligent restore completed")
 
 	if h.OnAction != nil {
@@ -2552,6 +2593,7 @@ func (h *HTTPServer) detectTARContents(data []byte) map[string]bool {
 		"backgrounds": false,
 		"categories":  false,
 		"gameConfig":  false, // #150 — game-config.json (default delay + neon effect)
+		"gameState":   false, // #141 — game_state.json (quiz metadata)
 	}
 
 	tr := tar.NewReader(bytes.NewReader(data))
@@ -2578,6 +2620,8 @@ func (h *HTTPServer) detectTARContents(data []byte) map[string]bool {
 			detected["history"] = true
 		case tarPath == "config/game-config.json":
 			detected["gameConfig"] = true
+		case tarPath == "config/game_state.json":
+			detected["gameState"] = true
 		}
 	}
 
