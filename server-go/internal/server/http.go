@@ -253,6 +253,7 @@ func (h *HTTPServer) setupRoutes() {
 	h.mux.HandleFunc("/history", h.handleHistory)
 	h.mux.HandleFunc("/palmares", h.handlePalmares) // pre-assembled leaderboard (v5.7.10 — #107)
 	h.mux.HandleFunc("/config.json", h.handleConfig)
+	h.mux.HandleFunc("/game-config.json", h.handleGameConfig) // #150 — game settings, split from /config.json
 
 	// Actions
 	h.mux.HandleFunc("/clearGame", h.handleClearGame)
@@ -1191,6 +1192,20 @@ func (h *HTTPServer) handleConfig(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
+		// #150 (BREAKING): "game" and "neon_effect" moved to their own
+		// endpoint, POST /game-config.json (handleGameConfig below) — reject
+		// early, before touching the system config singleton, with a message
+		// naming the new endpoint so an old client gets an actionable error
+		// instead of its game settings silently being dropped.
+		if _, ok := raw["game"]; ok {
+			http.Error(w, "\"game\" section moved to POST /game-config.json (#150)", http.StatusBadRequest)
+			return
+		}
+		if _, ok := raw["neon_effect"]; ok {
+			http.Error(w, "\"neon_effect\" section moved to POST /game-config.json (#150)", http.StatusBadRequest)
+			return
+		}
+
 		current := config.Get()
 		cfg := *current // value copy: every section is a plain struct, no aliasing
 
@@ -1208,24 +1223,10 @@ func (h *HTTPServer) handleConfig(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 		}
-		if data, ok := raw["game"]; ok {
-			cfg.Game = config.GameConfig{}
-			if err := json.Unmarshal(data, &cfg.Game); err != nil {
-				http.Error(w, "Invalid JSON in \"game\" section", http.StatusBadRequest)
-				return
-			}
-		}
 		if data, ok := raw["storage"]; ok {
 			cfg.Storage = config.StorageConfig{}
 			if err := json.Unmarshal(data, &cfg.Storage); err != nil {
 				http.Error(w, "Invalid JSON in \"storage\" section", http.StatusBadRequest)
-				return
-			}
-		}
-		if data, ok := raw["neon_effect"]; ok {
-			cfg.NeonEffect = config.NeonEffectConfig{}
-			if err := json.Unmarshal(data, &cfg.NeonEffect); err != nil {
-				http.Error(w, "Invalid JSON in \"neon_effect\" section", http.StatusBadRequest)
 				return
 			}
 		}
@@ -1351,10 +1352,10 @@ func (h *HTTPServer) handleConfig(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 
-		// Re-apply defaults to any field a partial section reset to zero, and
-		// clamp neon effect values, exactly as a config.json load would.
+		// Re-apply defaults to any field a partial section reset to zero,
+		// exactly as a config.json load would. (Neon effect clamping moved
+		// to handleGameConfig with the rest of the game settings, #150.)
 		config.ApplyDefaults(&cfg)
-		cfg.ValidateAndClampNeonEffect()
 
 		if err := config.Save(&cfg); err != nil {
 			http.Error(w, "Failed to save config", http.StatusInternalServerError)
@@ -1366,8 +1367,7 @@ func (h *HTTPServer) handleConfig(w http.ResponseWriter, r *http.Request) {
 			h.OnConfigUpdate()
 		}
 
-		LogInfo(game.LogComponentHTTP, "Config updated and saved (sections: %v; neon_effect: enabled=%v, mode=%s, arc=%d, intensity=%d, speed=%.1f, offset=%d, thickness=%d)",
-			keysOf(raw), cfg.NeonEffect.Enabled, cfg.NeonEffect.Mode, cfg.NeonEffect.ArcWidth, cfg.NeonEffect.IntensityGap, cfg.NeonEffect.RotationSpeed, cfg.NeonEffect.BarOffset, cfg.NeonEffect.BarThickness)
+		LogInfo(game.LogComponentHTTP, "Config updated and saved (sections: %v)", keysOf(raw))
 
 		respJSON, err := maskedConfigJSON(&cfg)
 		if err != nil {
@@ -1384,6 +1384,88 @@ func (h *HTTPServer) handleConfig(w http.ResponseWriter, r *http.Request) {
 	data, err := maskedConfigJSON(cfg)
 	if err != nil {
 		http.Error(w, "Failed to encode config", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.Write(data)
+}
+
+// handleGameConfig serves GET/POST /game-config.json (#150) — the "jeu"
+// (game) counterpart to handleConfig's "système" (system) sections, split
+// out so game settings (default delay, neon effect) can be saved/restored
+// with a game's data independently of system settings like API keys (see
+// config.GameSettings' doc comment for the full rationale). Same additive,
+// section-by-section merge semantics as handleConfig: a section present in
+// the POST body replaces that section wholesale (after
+// ApplyGameSettingsDefaults re-fills any field left at zero by the partial
+// replacement); a section absent from the body is left untouched. No secret
+// masking needed here (contrast maskedConfigJSON) — GameSettings holds no
+// secrets.
+func (h *HTTPServer) handleGameConfig(w http.ResponseWriter, r *http.Request) {
+	if r.Method == "POST" {
+		r.Body = http.MaxBytesReader(w, r.Body, 10<<20)
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			http.Error(w, "Failed to read request body", http.StatusBadRequest)
+			return
+		}
+
+		var raw map[string]json.RawMessage
+		if err := json.Unmarshal(body, &raw); err != nil {
+			http.Error(w, "Invalid JSON", http.StatusBadRequest)
+			return
+		}
+
+		current := config.GetGameSettings()
+		gs := *current // value copy: every section is a plain struct, no aliasing
+
+		if data, ok := raw["game"]; ok {
+			gs.Game = config.GameConfig{}
+			if err := json.Unmarshal(data, &gs.Game); err != nil {
+				http.Error(w, "Invalid JSON in \"game\" section", http.StatusBadRequest)
+				return
+			}
+		}
+		if data, ok := raw["neon_effect"]; ok {
+			gs.NeonEffect = config.NeonEffectConfig{}
+			if err := json.Unmarshal(data, &gs.NeonEffect); err != nil {
+				http.Error(w, "Invalid JSON in \"neon_effect\" section", http.StatusBadRequest)
+				return
+			}
+		}
+
+		config.ApplyGameSettingsDefaults(&gs)
+		gs.ValidateAndClampNeonEffect()
+
+		if err := config.SaveGameSettings(&gs); err != nil {
+			http.Error(w, "Failed to save game config", http.StatusInternalServerError)
+			return
+		}
+		config.SetGameSettingsInstance(&gs)
+
+		if h.OnConfigUpdate != nil {
+			h.OnConfigUpdate()
+		}
+
+		LogInfo(game.LogComponentHTTP, "Game config updated and saved (sections: %v; neon_effect: enabled=%v, mode=%s, arc=%d, intensity=%d, speed=%.1f, offset=%d, thickness=%d; default_delay=%d)",
+			keysOf(raw), gs.NeonEffect.Enabled, gs.NeonEffect.Mode, gs.NeonEffect.ArcWidth, gs.NeonEffect.IntensityGap, gs.NeonEffect.RotationSpeed, gs.NeonEffect.BarOffset, gs.NeonEffect.BarThickness, gs.Game.DefaultDelay)
+
+		respJSON, err := json.MarshalIndent(&gs, "", "  ")
+		if err != nil {
+			http.Error(w, "Failed to encode game config", http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.Write(respJSON)
+		return
+	}
+
+	// GET: return current game config
+	gs := config.GetGameSettings()
+	data, err := json.MarshalIndent(gs, "", "  ")
+	if err != nil {
+		http.Error(w, "Failed to encode game config", http.StatusInternalServerError)
 		return
 	}
 
@@ -1968,6 +2050,23 @@ func (h *HTTPServer) handleBackupSelect(w http.ResponseWriter, r *http.Request) 
 		}
 	}
 
+	// Add game-config.json (#150) — piggybacks on "history" rather than a
+	// dedicated flag: BackupPage.jsx exposes exactly the 5 checkboxes tested
+	// above, and game-config.json (default delay + neon effect) is a small,
+	// game-session-scoped settings file with no natural fit among the other
+	// four (questions/teams/bumpers/medias). It lives in configDir next to
+	// history.json, the closest existing precedent for "settings tied to a
+	// game session" — same reasoning as question_statuses.json piggybacking
+	// on "questions" just above. /fs-backup (full backup) already includes
+	// it unconditionally (it just archives dataDir wholesale), so this only
+	// affects the *selective* backup endpoint.
+	if includeHistory {
+		gameConfigPath := config.GameConfigPath()
+		if _, err := os.Stat(gameConfigPath); err == nil {
+			h.addFileToTAR(tw, gameConfigPath, "config/game-config.json")
+		}
+	}
+
 	// Add medias (backgrounds + categories)
 	if includeMedias {
 		backgroundsDir := filepath.Join(filesDir, "backgrounds")
@@ -2116,6 +2215,25 @@ func (h *HTTPServer) handleResetSelect(w http.ResponseWriter, r *http.Request) {
 		os.Remove(historyPath)
 		result["history"] = true
 		log.Printf("[HTTP] Reset: History cleared")
+
+		// Reset game settings (default delay + neon effect, #150) —
+		// piggybacks on "history", same anchor as handleBackupSelect's
+		// identical choice above (no dedicated UI flag for this small
+		// settings file). Writes fresh defaults rather than just deleting
+		// the file: GetGameSettings()'s singleton would not otherwise pick
+		// up the deletion until a full process restart (once.Do), so the
+		// in-memory instance must be explicitly replaced for GET
+		// /game-config.json to reflect the reset immediately — mirrors
+		// h.engine.ClearHistory()'s immediate in-memory effect just above.
+		defaultGS := &config.GameSettings{}
+		config.ApplyGameSettingsDefaults(defaultGS)
+		if err := config.SaveGameSettings(defaultGS); err == nil {
+			config.SetGameSettingsInstance(defaultGS)
+			log.Printf("[HTTP] Reset: Game config cleared")
+			if h.OnConfigUpdate != nil {
+				h.OnConfigUpdate()
+			}
+		}
 	}
 
 	// Reset medias (backgrounds + categories)
@@ -2311,6 +2429,11 @@ func (h *HTTPServer) handleRestore(w http.ResponseWriter, r *http.Request) {
 				targetPath = filepath.Join(configDir, "question_statuses.json")
 				allowed = true
 			}
+		case tarPath == "config/game-config.json":
+			if detected["gameConfig"] {
+				targetPath = filepath.Join(configDir, "game-config.json")
+				allowed = true
+			}
 		// Legacy format: questions directly in root
 		case strings.HasPrefix(tarPath, "questions/"):
 			if detected["questions"] {
@@ -2391,6 +2514,24 @@ func (h *HTTPServer) handleRestore(w http.ResponseWriter, r *http.Request) {
 		log.Printf("[HTTP] Restore: Backgrounds restored")
 	}
 
+	if detected["gameConfig"] {
+		// #150 — reload from the just-extracted file (same path
+		// GameConfigPath() already resolves to, set once at startup) and
+		// refresh the in-memory singleton so GET /game-config.json and the
+		// WS neon_effect payload reflect the restored values immediately,
+		// without a process restart.
+		if gs, err := config.LoadGameSettings(config.GameConfigPath()); err == nil {
+			config.SetGameSettingsInstance(gs)
+			restoredMap["gameConfig"] = true
+			log.Printf("[HTTP] Restore: Game config (default delay + neon effect) restored")
+			if h.OnConfigUpdate != nil {
+				h.OnConfigUpdate()
+			}
+		} else {
+			log.Printf("[HTTP] Restore: Game config extracted but could not be reloaded: %v", err)
+		}
+	}
+
 	log.Printf("[HTTP] Intelligent restore completed")
 
 	if h.OnAction != nil {
@@ -2410,6 +2551,7 @@ func (h *HTTPServer) detectTARContents(data []byte) map[string]bool {
 		"history":     false,
 		"backgrounds": false,
 		"categories":  false,
+		"gameConfig":  false, // #150 — game-config.json (default delay + neon effect)
 	}
 
 	tr := tar.NewReader(bytes.NewReader(data))
@@ -2434,6 +2576,8 @@ func (h *HTTPServer) detectTARContents(data []byte) map[string]bool {
 			detected["bumpers"] = true
 		case tarPath == "config/history.json" || tarPath == "history.json":
 			detected["history"] = true
+		case tarPath == "config/game-config.json":
+			detected["gameConfig"] = true
 		}
 	}
 
