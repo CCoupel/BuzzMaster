@@ -188,6 +188,18 @@ func main() {
 		server.LogWarn(game.LogComponentApp, "Could not load question statuses: %v", err)
 	}
 
+	// Load persisted game state (#141: quiz metadata, virtual player limit).
+	// Must run AFTER app.init() (which already set the path below) and after
+	// loadBackgrounds()/loadNewGameBackgrounds() (called from init() at
+	// main.go:458-459 as of this writing) have already populated
+	// state.Backgrounds/state.NewGameBackgrounds — LoadState's persisted
+	// subset deliberately excludes both fields for exactly this reason (see
+	// PersistedGameState's doc comment), so the ordering is a defense-in-depth
+	// note, not a hazard today.
+	if err := app.engine.LoadState(); err != nil {
+		server.LogWarn(game.LogComponentApp, "Could not load game state: %v", err)
+	}
+
 	// Start servers
 	if err := app.start(); err != nil {
 		server.LogError(game.LogComponentApp, "Failed to start: %v", err)
@@ -220,6 +232,7 @@ func (a *App) init() {
 	a.engine.SetTeamsPath(filepath.Join(configDir, "teams.json"))
 	a.engine.SetBumpersPath(filepath.Join(configDir, "bumpers.json"))
 	a.engine.SetStatusesPath(filepath.Join(configDir, "question_statuses.json"))
+	a.engine.SetStatePath(filepath.Join(configDir, "game_state.json")) // #141
 
 	// WebSocket hub (web clients: admin/TV/VPlayer)
 	a.wsHub = server.NewWebSocketHub()
