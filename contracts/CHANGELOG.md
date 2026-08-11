@@ -2,6 +2,30 @@
 
 ---
 
+## [20260811] — Persistance des métadonnées quiz (#141)
+
+> `GameState` (nom/thème/notes de quiz, publics visés, difficultés, langue, objectif, champs
+> masqués sur la TV, plafond de joueurs virtuels) ne survivait à aucun redémarrage serveur —
+> constat de `contracts/game-state.md` (v6.1.0) devenu faux par ce changement. **Non-BREAKING** :
+> fichier nouveau, aucun changement de protocole WebSocket ni d'endpoint HTTP existant.
+
+- **[NEW]** `data/config/game_state.json` — sous-ensemble persisté de `GameState` (métadonnées
+  quiz + plafond de joueurs virtuels), enveloppe versionnée (`format_version`, **premier fichier
+  versionné du projet**). Voir `contracts/game-state.md` §"Persistance — game_state.json" pour le
+  détail complet (champs inclus/exclus, séquence de démarrage, sémantique NEW_GAME inchangée).
+- **[NEW]** `internal/game/state_persistence.go` — `SetStatePath`/`SaveState`/`LoadState`/
+  `ClearQuizMeta`, écriture atomique (motif `SaveTeams`/`SaveBumpers`).
+- **[CHANGED]** `contracts/game-state.md` §Migration — la non-persistance du `GameState` décrite
+  pour v6.1.0 n'est plus vraie ; section réécrite.
+- **[CHANGED]** `contracts/http-endpoints.md` — `game_state.json` intégré au flag `history` de
+  `/backup-select`/`/reset-select` (même rattachement que `game-config.json`, #150) et à la
+  détection par contenu de `/restore`.
+- **Non impacté** : aucun payload WebSocket, aucun endpoint HTTP existant, aucune sémantique
+  `NEW_GAME` (règle H5 conservée à l'identique — la persistance ne fait que rendre durable un
+  comportement déjà vrai en mémoire).
+
+---
+
 ## [20260811] — Séparation config système / config de jeu (#150)
 
 > `config.json` mélangeait réglages système (clés API, WiFi, ports) et réglages de jeu

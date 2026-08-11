@@ -244,7 +244,7 @@ Sauvegarde sélective.
 | questions | bool | true | Inclure questions |
 | teams | bool | true | Inclure équipes |
 | bumpers | bool | true | Inclure joueurs |
-| history | bool | true | Inclure historique **et `game-config.json`** (délai par défaut + effet néon — v6.0.x, #150 : pas de paramètre dédié, ce petit fichier de réglages est rattaché à `history`, le paramètre existant le plus proche conceptuellement) |
+| history | bool | true | Inclure historique, **et deux petits fichiers de métadonnées sans case dédiée dans l'interface, rattachés à ce paramètre par défaut de conception** : `game-config.json` (délai par défaut + effet néon, v6.0.x #150) et `game_state.json` (métadonnées quiz + plafond de joueurs virtuels, v6.0.x #141) |
 | medias | bool | true | Inclure fonds & catégories (**renommé depuis `backgrounds` en v5.7.1**) |
 
 #### Exemple
@@ -271,11 +271,12 @@ restauré indépendamment.
 |-------|------|-------------|
 | file | file | Fichier TAR |
 
-**v6.0.x (#150)** : une entrée `config/game-config.json` dans l'archive est
-détectée et restaurée indépendamment de tout paramètre (contrairement à
-`/backup-select`, la détection ici se fait sur le contenu réel de l'archive,
-pas sur un flag) — le singleton en mémoire est rafraîchi immédiatement,
-sans redémarrage.
+**v6.0.x (#150, #141)** : une entrée `config/game-config.json` et/ou
+`config/game_state.json` dans l'archive est détectée et restaurée
+indépendamment de tout paramètre (contrairement à `/backup-select`, la
+détection ici se fait sur le contenu réel de l'archive, pas sur un flag) —
+l'état en mémoire (singleton config, ou `GameState` du moteur pour
+`game_state.json`) est rafraîchi immédiatement, sans redémarrage.
 
 ---
 
@@ -291,7 +292,7 @@ Reset sélectif.
 | questions | bool | Supprimer questions |
 | teams | bool | Vider équipes |
 | bumpers | bool | Vider joueurs |
-| history | bool | Vider historique **et réinitialiser `game-config.json` aux valeurs par défaut** (v6.0.x, #150 — même rattachement que `/backup-select`) |
+| history | bool | Vider historique, **réinitialiser `game-config.json` aux valeurs par défaut** (v6.0.x, #150) **et vider `game_state.json`** (métadonnées quiz — fichier supprimé, même convention que `history.json`, v6.0.x #141) — même rattachement que `/backup-select` |
 | medias | bool | Supprimer fonds & catégories (**renommé depuis `backgrounds` en v5.7.1**) |
 
 ---
