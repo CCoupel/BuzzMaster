@@ -20,6 +20,15 @@ import (
 )
 
 func setupTestHTTPServer(t *testing.T) (*HTTPServer, string) {
+	// Isolate config.Get()/config.Save() from the tracked fixture
+	// internal/server/config.json (bugfix #143): both resolve the relative
+	// path "config.json" against the process CWD, and this helper backs
+	// every TestHTTPServer_Config_POST* test, whose real handleConfig call
+	// ends in config.Save(). t.Chdir(t.TempDir()) (Go 1.24) redirects that
+	// write into a throwaway directory and is auto-restored by t.Cleanup —
+	// same pattern as internal/config/config_merge_test.go.
+	t.Chdir(t.TempDir())
+
 	// Initialize config - use same temp dir for both DataDir and QuestionsDir
 	dataDir := t.TempDir()
 
