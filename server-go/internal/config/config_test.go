@@ -376,3 +376,58 @@ func TestEffectiveAPIKey_NeverMutatesTheStoredField(t *testing.T) {
 		t.Errorf("EffectiveGroqAPIKey must not mutate AIConfig.GroqAPIKey, got %q", cfg.GroqAPIKey)
 	}
 }
+
+// ----------------------------------------------------------------------------------
+// SetConfigPath / ConfigPath — path indirection (bugfix #143)
+// ----------------------------------------------------------------------------------
+
+// TestSetConfigPath_RoundTrips verifies the setter/getter pair itself,
+// independent of Get()/Save(). Restores the previous value afterwards so
+// this test cannot influence any other test's Get()/Save() calls, since
+// configPath is a process-wide global.
+func TestSetConfigPath_RoundTrips(t *testing.T) {
+	orig := ConfigPath()
+	t.Cleanup(func() { SetConfigPath(orig) })
+
+	SetConfigPath("/tmp/somewhere/custom-config.json")
+	if got := ConfigPath(); got != "/tmp/somewhere/custom-config.json" {
+		t.Errorf("ConfigPath() = %q, want the value just set", got)
+	}
+}
+
+// TestSetConfigPath_Save_WritesToConfiguredPath is the regression test for
+// #143: Save() must resolve the path SetConfigPath configured, not the
+// literal "config.json" that used to be hardcoded — and must NOT fall back
+// to writing the default relative path once overridden. This is the
+// mechanism internal/server's tests rely on to avoid writing fake API keys
+// into the tracked internal/server/config.json fixture.
+func TestSetConfigPath_Save_WritesToConfiguredPath(t *testing.T) {
+	t.Chdir(t.TempDir()) // isolate the "did it fall back to the default?" check below
+
+	orig := ConfigPath()
+	t.Cleanup(func() { SetConfigPath(orig) })
+
+	dir := t.TempDir()
+	custom := filepath.Join(dir, "custom-name.json")
+	SetConfigPath(custom)
+
+	if err := Save(&Config{Version: "6.1.3-test"}); err != nil {
+		t.Fatalf("Save failed: %v", err)
+	}
+
+	data, err := os.ReadFile(custom)
+	if err != nil {
+		t.Fatalf("expected Save() to write to the configured path %s: %v", custom, err)
+	}
+	var onDisk map[string]interface{}
+	if err := json.Unmarshal(data, &onDisk); err != nil {
+		t.Fatalf("written file is not valid JSON: %v", err)
+	}
+	if onDisk["version"] != "6.1.3-test" {
+		t.Errorf("unexpected content at configured path: %v", onDisk)
+	}
+
+	if _, err := os.Stat("config.json"); err == nil {
+		t.Errorf("Save() also wrote to the default relative config.json even though SetConfigPath was overridden — the override was ignored")
+	}
+}
