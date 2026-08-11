@@ -3,18 +3,35 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import ConfigPage from './ConfigPage'
 
 // Mock GameContext
+//
+// #136 — `useGame` doit être un `vi.fn()` + `mockReturnValue(obj)` (identité
+// stable entre rendus), jamais un littéral fléché `() => ({...})` : ce dernier
+// recrée `firmwareInfo` à chaque appel, ce qui déclenchait une boucle de rendu
+// synchrone dans act() de RTL via ConfigPage.jsx:262-266 (corrigé dans le même
+// commit). Pattern de référence : QuestionsPage.v571.test.jsx.
 vi.mock('../hooks/GameContext', () => ({
-  useGame: () => ({
-    teams: {},
-    bumpers: {},
-    gameState: { backgrounds: [] },
-    updateConfig: vi.fn(),
-    sendMessage: vi.fn(),
-    version: '2.49.0',
-    // IS_MERGED: true requis pour que le bouton "Flash via USB" ne soit pas disabled
-    firmwareInfo: { EXISTS: true, IS_MERGED: true, VERSION: '3.1.1', FILENAME: 'buzzclick-v3.1.1.bin', SIZE: 512000 },
-  })
+  useGame: vi.fn(),
+  GameProvider: ({ children }) => children,
 }))
+
+// Import après le mock (convention du repo, cf. QuestionsPage.v571.test.jsx)
+import { useGame } from '../hooks/GameContext'
+
+const makeConfigPageMock = (overrides = {}) => ({
+  teams: {},
+  bumpers: {},
+  gameState: { backgrounds: [] },
+  updateConfig: vi.fn(),
+  sendMessage: vi.fn(),
+  version: '2.49.0',
+  // IS_MERGED: true requis pour que le bouton "Flash via USB" ne soit pas disabled
+  firmwareInfo: { EXISTS: true, IS_MERGED: true, VERSION: '3.1.1', FILENAME: 'buzzclick-v3.1.1.bin', SIZE: 512000 },
+  ...overrides,
+})
+
+beforeEach(() => {
+  useGame.mockReturnValue(makeConfigPageMock())
+})
 
 // Note: framer-motion is globally aliased via vite.config.js test.alias → src/mocks/framer-motion.jsx
 
@@ -200,7 +217,12 @@ describe('ConfigPage - Flash via USB button', () => {
       if (url === '/api/firmware/buzzclick/version') {
         return Promise.resolve({
           ok: true,
-          json: async () => ({ VERSION: '3.1.1', FILENAME: 'buzzclick-v3.1.1.bin', SIZE: 512000, EXISTS: true })
+          // IS_MERGED: true requis pour que le bouton "Flash via USB" ne soit pas
+          // disabled — cette réponse mock écrase, via le second useEffect de
+          // montage (fetchFirmwareInfo), la valeur posée par le mock useGame
+          // (ligne 28) ; masqué jusqu'ici par le hang #136, qui empêchait ce
+          // describe de s'exécuter jusqu'au bout.
+          json: async () => ({ VERSION: '3.1.1', FILENAME: 'buzzclick-v3.1.1.bin', SIZE: 512000, EXISTS: true, IS_MERGED: true })
         })
       }
       return Promise.resolve({ ok: false })
