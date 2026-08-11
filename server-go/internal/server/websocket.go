@@ -38,7 +38,6 @@ type WebSocketClient struct {
 	Conn     *websocket.Conn
 	Send     chan []byte
 	Hub      *WebSocketHub
-	LastSeen time.Time
 }
 
 // WebSocketHub manages all WebSocket connections
@@ -92,8 +91,17 @@ func (h *WebSocketHub) Run() {
 		case client := <-h.register:
 			h.mu.Lock()
 			h.clients[client] = true
+			// Snapshot the fields this case needs to read AFTER Unlock, while
+			// still holding h.mu (bugfix #133): client.Type is also written
+			// under h.mu by SetClientType, so reading it here unlocked would
+			// race with a concurrent SET_CLIENT_TYPE from the very connection
+			// that just registered. Same "collect under lock, act outside"
+			// shape as AckManager.tick() (ack_manager.go:128-174) — the field
+			// values are frozen into local vars before Unlock instead of
+			// being re-read from the shared *WebSocketClient afterward.
+			id, clientType := client.ID, client.Type
 			h.mu.Unlock()
-			LogInfo(game.LogComponentWebSocket, "Client connected: %s (type: %s)", client.ID, client.Type)
+			LogInfo(game.LogComponentWebSocket, "Client connected: %s (type: %s)", id, clientType)
 			h.notifyClientChange()
 			// Fired here (not in HandleConnectionWithType) so the hook only
 			// runs once the client is actually present in h.clients — see
@@ -108,12 +116,16 @@ func (h *WebSocketHub) Run() {
 				delete(h.clients, client)
 				close(client.Send)
 			}
+			// Snapshot under lock — see the register case above for why
+			// (bugfix #133). client.PlayerID is written under h.mu by
+			// SetClientPlayerID, so it needs the same treatment as Type.
+			id, clientType, playerID := client.ID, client.Type, client.PlayerID
 			h.mu.Unlock()
-			LogInfo(game.LogComponentWebSocket, "Client disconnected: %s (type: %s)", client.ID, client.Type)
+			LogInfo(game.LogComponentWebSocket, "Client disconnected: %s (type: %s)", id, clientType)
 			// Notify individual VPlayer disconnection so main.go can update CONNECTED=false.
 			// Fired outside the lock, same pattern as notifyClientChange.
-			if client.Type == ClientTypeVPlayer && client.PlayerID != "" && h.OnPlayerDisconnected != nil {
-				h.OnPlayerDisconnected(client.PlayerID)
+			if clientType == ClientTypeVPlayer && playerID != "" && h.OnPlayerDisconnected != nil {
+				h.OnPlayerDisconnected(playerID)
 			}
 			h.notifyClientChange()
 
@@ -369,12 +381,11 @@ func (h *WebSocketHub) HandleConnectionWithType(w http.ResponseWriter, r *http.R
 	}
 
 	client := &WebSocketClient{
-		ID:       r.RemoteAddr,
-		Type:     clientType,
-		Conn:     conn,
-		Send:     make(chan []byte, 256),
-		Hub:      h,
-		LastSeen: time.Now(),
+		ID:   r.RemoteAddr,
+		Type: clientType,
+		Conn: conn,
+		Send: make(chan []byte, 256),
+		Hub:  h,
 	}
 
 	h.register <- client
@@ -530,6 +541,14 @@ func (h *WebSocketHub) SendRawToVPlayers(payloads map[string][]byte, fallback []
 
 func (c *WebSocketClient) readPump() {
 	defer func() {
+		// Bugfix #131: a panic anywhere in this per-connection loop (e.g. in
+		// hub.OnMessage, invoked below on every message) must take down only
+		// THIS connection, not the whole process. recover() must be called
+		// directly here (see LogRecoveredPanic's doc comment) — the existing
+		// cleanup below still runs unconditionally, panic or not.
+		if r := recover(); r != nil {
+			LogRecoveredPanic(game.LogComponentWebSocket, "readPump client="+c.ID, r)
+		}
 		c.Hub.unregister <- c
 		c.Conn.Close()
 	}()
@@ -549,8 +568,6 @@ func (c *WebSocketClient) readPump() {
 			}
 			break
 		}
-
-		c.LastSeen = time.Now()
 
 		// Parse message
 		msg, err := protocol.ParseSingle(message)
@@ -648,6 +665,11 @@ const deadLinkTimeout = 4 * time.Second
 func (c *WebSocketClient) writePump() {
 	ticker := time.NewTicker(writePumpTickPeriod)
 	defer func() {
+		// Bugfix #131 — see readPump's identical guard above for the
+		// rationale (recover() must be called directly in this literal).
+		if r := recover(); r != nil {
+			LogRecoveredPanic(game.LogComponentWebSocket, "writePump client="+c.ID, r)
+		}
 		ticker.Stop()
 		c.Conn.Close()
 	}()
