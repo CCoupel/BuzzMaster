@@ -176,9 +176,6 @@ export default function ConfigPage() {
         if (response.ok) {
           const data = await response.json()
           if (cancelled) return
-          if (data.neon_effect) {
-            setNeonConfig(data.neon_effect)
-          }
           if (data.server) {
             setServerParams({
               auto_open_browsers: data.server.auto_open_browsers || false,
@@ -221,6 +218,35 @@ export default function ConfigPage() {
       }
     }
     fetchConfig()
+    return () => { cancelled = true }
+  }, [])
+
+  // Load game config (neon effect) from server on mount
+  //
+  // #150 — scission système/jeu : `GET /config.json` ne renvoie plus
+  // `neon_effect` (ni `game`) — désormais servi par `GET /game-config.json`
+  // (contracts/http-endpoints.md §GET /game-config.json), forme JSON de
+  // `neon_effect` inchangée. Effet dédié séparé (même motif que les autres
+  // fetches de montage ci-dessous), garde `cancelled` pour la même raison
+  // que fetchConfig ci-dessus.
+  useEffect(() => {
+    let cancelled = false
+    const fetchGameConfig = async () => {
+      try {
+        const response = await fetch('/game-config.json')
+        if (cancelled) return
+        if (response.ok) {
+          const data = await response.json()
+          if (cancelled) return
+          if (data.neon_effect) {
+            setNeonConfig(data.neon_effect)
+          }
+        }
+      } catch (error) {
+        if (!cancelled) console.error('Failed to fetch game config:', error)
+      }
+    }
+    fetchGameConfig()
     return () => { cancelled = true }
   }, [])
 
@@ -310,7 +336,10 @@ export default function ConfigPage() {
   const handleSaveNeonConfig = async () => {
     setSavingNeon(true)
     try {
-      const response = await fetch('/config.json', {
+      // #150 — neon_effect vit désormais dans game-config.json (POST
+      // /config.json avec neon_effect est rejeté en 400 côté serveur).
+      // Même body, même sémantique de fusion additive par section.
+      const response = await fetch('/game-config.json', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ neon_effect: neonConfig })
