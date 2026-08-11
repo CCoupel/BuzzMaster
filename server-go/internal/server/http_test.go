@@ -58,6 +58,12 @@ func setupTestHTTPServer(t *testing.T) (*HTTPServer, string) {
 	config.SetGameConfigPath(filepath.Join(dataDir, "config", "game-config.json"))
 
 	engine := game.NewEngine()
+	// #141 — mirror main.go's startup wiring (same reasoning as
+	// config.SetGameConfigPath above): without this, engine.SaveState/
+	// LoadState/ClearQuizMeta are silent no-ops (statePath == ""), and
+	// handleRestore's game_state.json case could never be genuinely
+	// exercised by a test.
+	engine.SetStatePath(filepath.Join(dataDir, "config", "game_state.json"))
 	wsHub := NewWebSocketHub()
 	go wsHub.Run()
 	logsHub := NewLogsWebSocketHub(100)

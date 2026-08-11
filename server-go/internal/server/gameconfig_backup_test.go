@@ -98,6 +98,30 @@ func buildTARWithGameConfig(t *testing.T, content string) []byte {
 	return buf.Bytes()
 }
 
+// buildTARWithGameState returns a minimal TAR archive containing a single
+// config/game_state.json entry with the given content (#141 sibling of
+// buildTARWithGameConfig above).
+func buildTARWithGameState(t *testing.T, content string) []byte {
+	t.Helper()
+	var buf bytes.Buffer
+	tw := tar.NewWriter(&buf)
+	data := []byte(content)
+	if err := tw.WriteHeader(&tar.Header{
+		Name: "config/game_state.json",
+		Mode: 0644,
+		Size: int64(len(data)),
+	}); err != nil {
+		t.Fatalf("could not write TAR header: %v", err)
+	}
+	if _, err := tw.Write(data); err != nil {
+		t.Fatalf("could not write TAR content: %v", err)
+	}
+	if err := tw.Close(); err != nil {
+		t.Fatalf("could not close TAR writer: %v", err)
+	}
+	return buf.Bytes()
+}
+
 // multipartRestoreBody wraps tarData as the multipart/form-data body
 // /restore expects (field name "file").
 func multipartRestoreBody(t *testing.T, tarData []byte) (body *bytes.Buffer, contentType string) {
