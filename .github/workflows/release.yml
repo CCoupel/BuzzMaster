@@ -14,6 +14,28 @@ env:
 
 jobs:
   # ============================================
+  # STAGE 0: Testing (unit tests + race detector)
+  # ============================================
+  testing:
+    name: 🧪 Test (race)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Run tests with race detector
+        working-directory: server-go
+        env:
+          CGO_ENABLED: 1
+        run: go test -race ./...
+
+  # ============================================
   # STAGE 1: Checking (extract version from tag)
   # ============================================
   checking:
