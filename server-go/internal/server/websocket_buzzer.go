@@ -52,8 +52,15 @@ func (h *BuzzerWebSocketHub) Run() {
 		case client := <-h.register:
 			h.mu.Lock()
 			h.clients[client] = true
+			// Snapshot under lock (bugfix #133): client.MAC/client.ID can be
+			// rewritten by readPump's identifyClient (also under h.mu) the
+			// instant the buzzer's first HELLO/message arrives, which can
+			// race this log line if read after Unlock. Same "collect under
+			// lock, act outside" shape as AckManager.tick()
+			// (ack_manager.go:128-174).
+			id, mac := client.ID, client.MAC
 			h.mu.Unlock()
-			LogInfo(game.LogComponentWebSocket, "Buzzer connected via WebSocket: %s (MAC: %s)", client.ID, client.MAC)
+			LogInfo(game.LogComponentWebSocket, "Buzzer connected via WebSocket: %s (MAC: %s)", id, mac)
 			h.notifyBuzzerChange()
 
 		case client := <-h.unregister:
@@ -62,12 +69,13 @@ func (h *BuzzerWebSocketHub) Run() {
 				delete(h.clients, client)
 				close(client.Send)
 			}
+			// Snapshot under lock — see the register case above (bugfix #133).
+			id, mac := client.ID, client.MAC
 			h.mu.Unlock()
-			LogInfo(game.LogComponentWebSocket, "Buzzer disconnected from WebSocket: %s (MAC: %s)", client.ID, client.MAC)
+			LogInfo(game.LogComponentWebSocket, "Buzzer disconnected from WebSocket: %s (MAC: %s)", id, mac)
 			// Notify with MAC address so main.go can update CONNECTED=false
-			mac := client.MAC
 			if mac == "" {
-				mac = client.ID
+				mac = id
 			}
 			if h.OnBuzzerDisconnected != nil && mac != "" {
 				h.OnBuzzerDisconnected(mac)
@@ -204,6 +212,41 @@ func (h *BuzzerWebSocketHub) SetClientMAC(clientID string, mac string) {
 	}
 }
 
+// identifyClient sets c.MAC/c.ID to mac the first time a buzzer self-reports
+// it on its own connection (readPump, on the message's ID field) — the
+// direct-pointer equivalent of SetClientMAC, used where the caller already
+// holds *WebSocketClient instead of a clientID to look up. Returns true the
+// first time (so the caller can log once), false if already identified.
+//
+// Bugfix #133: readPump used to write c.MAC/c.ID directly with no
+// synchronization at all, while Run() (register/unregister), SendToClient,
+// IsClientConnected and GetClients all read the same fields — some under
+// h.mu, some not. Routing every read AND write through h.mu closes that
+// race for good (same bug class as SetClientType/SetClientPlayerID in
+// websocket.go — see ai_job.go:231-237 for the prior instance of this class
+// in this repo).
+func (h *BuzzerWebSocketHub) identifyClient(c *WebSocketClient, mac string) bool {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if c.MAC != "" {
+		return false
+	}
+	c.MAC = mac
+	c.ID = mac
+	return true
+}
+
+// clientDisplayID returns c.MAC if set, else c.ID, read under h.mu for the
+// same reason as identifyClient (bugfix #133).
+func (h *BuzzerWebSocketHub) clientDisplayID(c *WebSocketClient) string {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	if c.MAC != "" {
+		return c.MAC
+	}
+	return c.ID
+}
+
 // IsClientConnected returns true if a buzzer with the given MAC address is currently connected.
 func (h *BuzzerWebSocketHub) IsClientConnected(mac string) bool {
 	h.mu.RLock()
@@ -250,13 +293,12 @@ func (h *BuzzerWebSocketHub) HandleConnection(w http.ResponseWriter, r *http.Req
 	}
 
 	client := &WebSocketClient{
-		ID:       clientID,
-		MAC:      mac,
-		Type:     ClientTypeBuzzer,
-		Conn:     conn,
-		Send:     make(chan []byte, 256),
-		Hub:      nil, // Not using the web hub
-		LastSeen: time.Now(),
+		ID:   clientID,
+		MAC:  mac,
+		Type: ClientTypeBuzzer,
+		Conn: conn,
+		Send: make(chan []byte, 256),
+		Hub:  nil, // Not using the web hub
 	}
 
 	h.register <- client
@@ -267,6 +309,11 @@ func (h *BuzzerWebSocketHub) HandleConnection(w http.ResponseWriter, r *http.Req
 
 func (h *BuzzerWebSocketHub) readPump(c *WebSocketClient) {
 	defer func() {
+		// Bugfix #131 — see websocket.go's readPump for the rationale
+		// (recover() must be called directly in this literal).
+		if r := recover(); r != nil {
+			LogRecoveredPanic(game.LogComponentWebSocket, "buzzer readPump client="+c.ID, r)
+		}
 		h.unregister <- c
 		c.Conn.Close()
 	}()
@@ -287,8 +334,6 @@ func (h *BuzzerWebSocketHub) readPump(c *WebSocketClient) {
 			break
 		}
 
-		c.LastSeen = time.Now()
-
 		// Parse message
 		msg, err := protocol.ParseSingle(message)
 		if err != nil {
@@ -296,18 +341,15 @@ func (h *BuzzerWebSocketHub) readPump(c *WebSocketClient) {
 			continue
 		}
 
-		// Update MAC from message ID field (buzzer sends MAC in ID)
-		if msg.ID != "" && c.MAC == "" {
-			c.MAC = msg.ID
-			c.ID = msg.ID
+		// Update MAC from message ID field (buzzer sends MAC in ID) — routed
+		// through identifyClient (h.mu-guarded) instead of a direct field
+		// write (bugfix #133; see identifyClient's doc comment).
+		if msg.ID != "" && h.identifyClient(c, msg.ID) {
 			LogInfo(game.LogComponentWebSocket, "Buzzer identified via message: MAC=%s", msg.ID)
 		}
 
 		// Use MAC as client ID for the game engine
-		clientID := c.MAC
-		if clientID == "" {
-			clientID = c.ID
-		}
+		clientID := h.clientDisplayID(c)
 
 		LogDebug(game.LogComponentWebSocket, "Buzzer WS received from %s: ACTION=%s", clientID, msg.Action)
 
@@ -329,6 +371,11 @@ func (h *BuzzerWebSocketHub) readPump(c *WebSocketClient) {
 func (h *BuzzerWebSocketHub) writePump(c *WebSocketClient) {
 	ticker := time.NewTicker(3 * time.Second)
 	defer func() {
+		// Bugfix #131 — see websocket.go's readPump for the rationale
+		// (recover() must be called directly in this literal).
+		if r := recover(); r != nil {
+			LogRecoveredPanic(game.LogComponentWebSocket, "buzzer writePump client="+c.ID, r)
+		}
 		ticker.Stop()
 		c.Conn.Close()
 	}()
