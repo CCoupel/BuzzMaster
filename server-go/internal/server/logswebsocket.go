@@ -13,11 +13,10 @@ import (
 
 // LogsWebSocketClient represents a client connected to the logs WebSocket
 type LogsWebSocketClient struct {
-	ID       string
-	Conn     *websocket.Conn
-	Send     chan []byte
-	Hub      *LogsWebSocketHub
-	LastSeen time.Time
+	ID   string
+	Conn *websocket.Conn
+	Send chan []byte
+	Hub  *LogsWebSocketHub
 }
 
 // LogsWebSocketHub manages WebSocket connections for logs
@@ -139,11 +138,10 @@ func (h *LogsWebSocketHub) HandleConnection(w http.ResponseWriter, r *http.Reque
 	}
 
 	client := &LogsWebSocketClient{
-		ID:       r.RemoteAddr,
-		Conn:     conn,
-		Send:     make(chan []byte, 256),
-		Hub:      h,
-		LastSeen: time.Now(),
+		ID:   r.RemoteAddr,
+		Conn: conn,
+		Send: make(chan []byte, 256),
+		Hub:  h,
 	}
 
 	h.register <- client
@@ -154,6 +152,11 @@ func (h *LogsWebSocketHub) HandleConnection(w http.ResponseWriter, r *http.Reque
 
 func (c *LogsWebSocketClient) readPump() {
 	defer func() {
+		// Bugfix #131 — see websocket.go's readPump for the rationale
+		// (recover() must be called directly in this literal).
+		if r := recover(); r != nil {
+			LogRecoveredPanic(game.LogComponentWebSocket, "logs readPump client="+c.ID, r)
+		}
 		c.Hub.unregister <- c
 		c.Conn.Close()
 	}()
@@ -174,8 +177,6 @@ func (c *LogsWebSocketClient) readPump() {
 			break
 		}
 
-		c.LastSeen = time.Now()
-
 		// Parse message (logs WebSocket doesn't expect many incoming messages)
 		var msg protocol.Message
 		if err := json.Unmarshal(message, &msg); err != nil {
@@ -190,6 +191,11 @@ func (c *LogsWebSocketClient) readPump() {
 func (c *LogsWebSocketClient) writePump() {
 	ticker := time.NewTicker(30 * time.Second)
 	defer func() {
+		// Bugfix #131 — see websocket.go's readPump for the rationale
+		// (recover() must be called directly in this literal).
+		if r := recover(); r != nil {
+			LogRecoveredPanic(game.LogComponentWebSocket, "logs writePump client="+c.ID, r)
+		}
 		ticker.Stop()
 		c.Conn.Close()
 	}()
