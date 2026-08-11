@@ -49,6 +49,34 @@ Au demarrage du serveur :
 2. Si les fichiers existent et contiennent des donnees, les donnees de test ne sont pas initialisees
 3. Les scores peuvent etre recalcules depuis l'historique
 
+### Persistance des metadata de quiz (v6.0.x, #141)
+
+**Nouveau depuis v6.0.x** : les métadonnées du quiz (nom, thème, notes, publics, difficultés, objectifs, langue, champs masqués TV) sont automatiquement sauvegardées dans `data/config/game_state.json` et **survivent au redémarrage du serveur**.
+
+Au redémarrage :
+1. Les métadonnées sont restaurées — le quiz retrouve son nom, thème, notes, etc.
+2. Le nouvel état du jeu (phase, question en cours, scores) commence vide (comportement inchangé)
+3. Les réglages TV masqués (ex: réponses cachées) sont **oubliés entre deux sessions** — c'est intentionnel pour éviter les fuites accidentelles
+
+**Impact utilisateur** : plus besoin de re-remplir la fiche "Quiz" après un redémarrage. Les joueurs qui reviennent jouent sur la même partie avec les mêmes métadonnées de contexte.
+
+---
+
+### Migration configuration système / jeu (v6.0.x, #150)
+
+**Changement structurel** : les réglages de jeu (délai par défaut, effet néon) sont désormais sauvegardés dans un fichier séparé (`data/config/game-config.json`), indépendant de la configuration système (clés API, identifiants WiFi, etc.).
+
+**Migration automatique au démarrage** (une seule fois) :
+
+- Si vous aviez un `config.json` au format ancien (sections `game` et `neon_effect` présentes)
+- Au premier démarrage de v6.0.x, ces sections sont **extraites** vers `game-config.json`
+- Aucune action de votre part — tout est transparent
+- La migration est **idempotente** : démarrage suivant = pas de re-migration
+
+**Impact utilisateur** : aucun ! Les réglages de jeu (délai, effet néon) restent disponibles au même endroit dans l'interface admin.
+
+**Avantage interne** : les réglages de jeu sont maintenant inclus dans les sauvegardes/restaurations de partie (via `/backup-select` ou `/fs-backup`), séparé des clés API qui ne doivent jamais être sauvegardées.
+
 ---
 
 ## Sauvegarde et restauration

@@ -4,6 +4,34 @@ Historique des versions du projet BuzzControl.
 
 ## [Unreleased]
 
+## [6.0.x] - 2026-08-11
+
+**Milestone v6.0.x — Stabilité & Tests** : Correctifs critiques de sécurité, résilience serveur, persistance des métadonnées de partie.
+
+### Added
+- **Persistance des métadonnées quiz** (#141) : Le nom, thème, notes, publics ciblés, difficultés, langue et réglages d'affichage TV du quiz sont automatiquement sauvegardés et survivent au redémarrage du serveur. Utile après interruption électrique ou maintenance — la partie redémarre avec le même contexte.
+- **Séparation configuration système / jeu** (#150) : Les réglages de jeu (délai par défaut, effet néon) sont maintenant sauvegardés dans un fichier séparé, inclus dans les sauvegardes/restaurations de partie. Migration automatique et transparente à la première exécution.
+
+### Fixed
+- **Sécurité : pollution des fichiers tracés par clés API factices** (#143) — `go test` n'écrit plus les clés de test dans les fichiers suivi git. À l'avenir, les suites de test sont isolées en répertoires temporaires.
+- **Résilience serveur : paniques goroutines** (#131) — Les crashes dans les connexions WebSocket (buzzers, affichage TV) n'arrêtent plus tout le serveur — la connexion fautive se ferme proprement, les autres continuent.
+- **Races sur état WebSocket** (#133) — Concurrence résolue sur les 5 champs critiques du hub (type client, ID joueur, adresse MAC, ID unique, timestamp). `go test -race` vert.
+- **Test ConfigPage bloqués en environnement** (#136) — Tests de la page de configuration plus robustes, suppression des boucles infinies lors de la mutation d'objets en contexte de test.
+- **Ordre des questions mélangeables** (#149) — Bouton "Mélanger" dans l'éditeur de quiz pour randomiser l'ordre des questions. Confirmation avant action, persistance de l'ordre nouveau, modifiable par glisser-déposer après.
+
+### Changed
+- Optimisation interne backup/restore — les fichiers métadonnées quiz et jeu réglages sont maintenant inclus dans les archives (v6.0.x).
+
+### Breaking Changes
+- ⚠️ **`GET/POST /config.json` — sections `game` et `neon_effect` supprimées** (#150) : Si vous aviez du code client qui les consultait directement, migrez vers `GET/POST /game-config.json`. Migration serveur automatique pour les anciennes installations (idempotent, une seule fois au démarrage).
+
+### Technical
+- **Contrats** : `game-state.md` mise à jour (persistance GameState), `http-endpoints.md` correction divergence `/game-backup` (ligne 222), nouveaux endpoints `/game-config.json`.
+- **Backend** : Indirection chemin config (`config.SetConfigPath`), versionnement `game_state.json` (v1.0.0, premier fichier du projet avec ce système), snapshot thread-safe hub WebSocket, `recover()` par goroutine.
+- **Tests** : 31 tests Go configuration (#143), 6 tests race (non exécutables localement WSL, CI-only), tests persistance GameState (#141), tests ConfigPage (#136).
+
+---
+
 ## [6.1.2] - 2026-08-09
 
 **bugfix/config-api-key-help** : Aide à la configuration des clés API IA, validation en temps réel au point d'enregistrement, interface simplifiée.
