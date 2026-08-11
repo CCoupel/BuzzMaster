@@ -54,5 +54,5 @@
     "anthropic_api_key_verified": false,
     "groq_api_key_verified": false
   },
-  "version": "6.0.3.10"
+  "version": "6.0.3.11"
 }
