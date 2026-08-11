@@ -98,6 +98,18 @@ func main() {
 	}
 	config.SetInstance(cfg)
 
+	// #150 (option b): game-config.json's path is dataDir-relative (unlike
+	// config.json, at the server root) — resolve it now that
+	// cfg.Storage.DataDir has its final value (explicit config.json value,
+	// or ApplyDefaults' "./data" fallback), same configDir the four engine
+	// Set*Path calls in init() use below. Must happen BEFORE anything reads
+	// GetGameSettings() (the migration itself does).
+	gameConfigPath := filepath.Join(cfg.Storage.DataDir, "config", "game-config.json")
+	config.SetGameConfigPath(gameConfigPath)
+	if err := config.MigrateGameSettings(); err != nil {
+		log.Printf("Warning: game settings migration (#150) failed, falling back to defaults: %v", err)
+	}
+
 	log.Printf("Version: %s (embedded: %s)", cfg.Version, Version)
 	log.Printf("HTTP Port: %d", cfg.Server.HTTPPort)
 
@@ -1553,13 +1565,19 @@ func (a *App) loadQuestion(id string) *game.Question {
 }
 
 func (a *App) handleStart(msg *protocol.Message) {
+	// #150: default_delay moved from a.config (system config.json) to
+	// GameSettings (game-config.json) — read via the package singleton
+	// rather than threading a new App field through, same pattern as
+	// broadcastConfigUpdate's config.GetGameSettings() below.
+	defaultDelay := config.GetGameSettings().Game.DefaultDelay
+
 	var payload protocol.StartPayload
 	if err := json.Unmarshal(msg.Msg, &payload); err != nil {
-		payload.Delay = a.config.Game.DefaultDelay
+		payload.Delay = defaultDelay
 	}
 
 	if payload.Delay <= 0 {
-		payload.Delay = a.config.Game.DefaultDelay
+		payload.Delay = defaultDelay
 	}
 
 	a.logger.Info(game.LogComponentEngine, "START game with delay=%ds", payload.Delay)
@@ -3896,20 +3914,24 @@ func (a *App) broadcastHideQRCode() {
 }
 
 func (a *App) broadcastConfigUpdate() {
-	cfg := config.Get()
+	// #150: neon_effect moved from config.Get() (system config.json) to
+	// config.GetGameSettings() (game-config.json). The WS payload itself
+	// (protocol.NeonEffectPayload) is unchanged — only the source changes,
+	// per contract ws-payload-serialization.md.
+	gs := config.GetGameSettings()
 	payload := protocol.ConfigUpdatePayload{
 		NeonEffect: protocol.NeonEffectPayload{
-			Enabled:        cfg.NeonEffect.Enabled,
-			Mode:           cfg.NeonEffect.Mode,
-			ArcWidth:       cfg.NeonEffect.ArcWidth,
-			IntensityGap:   cfg.NeonEffect.IntensityGap,
-			RotationSpeed:  cfg.NeonEffect.RotationSpeed,
-			BarOffset:      cfg.NeonEffect.BarOffset,
-			BarThickness:   cfg.NeonEffect.BarThickness,
-			ArcBlur:        cfg.NeonEffect.ArcBlur,
-			GlowPulseSpeed: cfg.NeonEffect.GlowPulseSpeed,
-			GlowPulseMin:   cfg.NeonEffect.GlowPulseMin,
-			GlowPulseMax:   cfg.NeonEffect.GlowPulseMax,
+			Enabled:        gs.NeonEffect.Enabled,
+			Mode:           gs.NeonEffect.Mode,
+			ArcWidth:       gs.NeonEffect.ArcWidth,
+			IntensityGap:   gs.NeonEffect.IntensityGap,
+			RotationSpeed:  gs.NeonEffect.RotationSpeed,
+			BarOffset:      gs.NeonEffect.BarOffset,
+			BarThickness:   gs.NeonEffect.BarThickness,
+			ArcBlur:        gs.NeonEffect.ArcBlur,
+			GlowPulseSpeed: gs.NeonEffect.GlowPulseSpeed,
+			GlowPulseMin:   gs.NeonEffect.GlowPulseMin,
+			GlowPulseMax:   gs.NeonEffect.GlowPulseMax,
 		},
 		DefaultQuestionImageIsCustom: a.httpServer.HasCustomDefaultQuestionImage(),
 		NewGameBackgrounds:           a.engine.GetNewGameBackgrounds(),
@@ -3918,7 +3940,7 @@ func (a *App) broadcastConfigUpdate() {
 	a.broadcast(protocol.ActionConfigUpdate, data, false,
 		server.ClientTypeAdmin, server.ClientTypeTV)
 	server.LogInfo(game.LogComponentApp, "Config update broadcast (neon: enabled=%v, mode=%s, arc=%d, intensity=%d, speed=%.1f, pulsing=%.1f-%d%%, offset=%d, thickness=%d, blur=%d)",
-		cfg.NeonEffect.Enabled, cfg.NeonEffect.Mode, cfg.NeonEffect.ArcWidth, cfg.NeonEffect.IntensityGap, cfg.NeonEffect.RotationSpeed, cfg.NeonEffect.GlowPulseSpeed, cfg.NeonEffect.GlowPulseMax, cfg.NeonEffect.BarOffset, cfg.NeonEffect.BarThickness, cfg.NeonEffect.ArcBlur)
+		gs.NeonEffect.Enabled, gs.NeonEffect.Mode, gs.NeonEffect.ArcWidth, gs.NeonEffect.IntensityGap, gs.NeonEffect.RotationSpeed, gs.NeonEffect.GlowPulseSpeed, gs.NeonEffect.GlowPulseMax, gs.NeonEffect.BarOffset, gs.NeonEffect.BarThickness, gs.NeonEffect.ArcBlur)
 }
 
 // resolveServerIP returns the actual server IP to send to buzzers.
@@ -4078,21 +4100,24 @@ func (a *App) sendStateToClient(clientID string) {
 	clientsMsg.Msg = cData
 	a.wsHub.SendToClient(clientID, clientsMsg)
 
-	// Send CONFIG_UPDATE with neon effect settings
-	cfg := config.Get()
+	// Send CONFIG_UPDATE with neon effect settings.
+	// #150: source is now config.GetGameSettings() (game-config.json), not
+	// config.Get() (system config.json) — see broadcastConfigUpdate's
+	// identical comment above.
+	gs := config.GetGameSettings()
 	neonPayload := protocol.ConfigUpdatePayload{
 		NeonEffect: protocol.NeonEffectPayload{
-			Enabled:        cfg.NeonEffect.Enabled,
-			Mode:           cfg.NeonEffect.Mode,
-			ArcWidth:       cfg.NeonEffect.ArcWidth,
-			IntensityGap:   cfg.NeonEffect.IntensityGap,
-			RotationSpeed:  cfg.NeonEffect.RotationSpeed,
-			BarOffset:      cfg.NeonEffect.BarOffset,
-			BarThickness:   cfg.NeonEffect.BarThickness,
-			ArcBlur:        cfg.NeonEffect.ArcBlur,
-			GlowPulseSpeed: cfg.NeonEffect.GlowPulseSpeed,
-			GlowPulseMin:   cfg.NeonEffect.GlowPulseMin,
-			GlowPulseMax:   cfg.NeonEffect.GlowPulseMax,
+			Enabled:        gs.NeonEffect.Enabled,
+			Mode:           gs.NeonEffect.Mode,
+			ArcWidth:       gs.NeonEffect.ArcWidth,
+			IntensityGap:   gs.NeonEffect.IntensityGap,
+			RotationSpeed:  gs.NeonEffect.RotationSpeed,
+			BarOffset:      gs.NeonEffect.BarOffset,
+			BarThickness:   gs.NeonEffect.BarThickness,
+			ArcBlur:        gs.NeonEffect.ArcBlur,
+			GlowPulseSpeed: gs.NeonEffect.GlowPulseSpeed,
+			GlowPulseMin:   gs.NeonEffect.GlowPulseMin,
+			GlowPulseMax:   gs.NeonEffect.GlowPulseMax,
 		},
 		DefaultQuestionImageIsCustom: a.httpServer.HasCustomDefaultQuestionImage(),
 		NewGameBackgrounds:           a.engine.GetNewGameBackgrounds(),
