@@ -207,6 +207,24 @@ func (h *WebSocketHub) SetClientType(clientID string, clientType ClientType) {
 	}
 }
 
+// TypeSnapshot returns the client's current Type, safe for concurrent use
+// with SetClientType (which writes Type under Hub.mu from the dispatch
+// goroutine — a different goroutine from this client's own readPump).
+//
+// #154 code review CRITIQUE 2: readPump used to read c.Type directly
+// (unprotected) to build each message's IncomingMessage.ClientType and to
+// gate CANCEL_AI_GENERATION — a real, reproduced-under-`-race` data race
+// against SetClientType's locked write, same bug class as #133 on this same
+// field (client.Type read/written across goroutines, this file). Takes the
+// hub's RLock — cheap (single field read) and never held across a callback,
+// so it cannot deadlock against SetClientType's own Lock/Unlock-then-notify
+// sequence.
+func (c *WebSocketClient) TypeSnapshot() ClientType {
+	c.Hub.mu.RLock()
+	defer c.Hub.mu.RUnlock()
+	return c.Type
+}
+
 // SetClientPlayerID links a connected client to its VJoueur bumper ID once identified
 // (after PLAYER_CONNECT create/reconnect). Same pattern as SetClientType.
 func (h *WebSocketHub) SetClientPlayerID(clientID, playerID string) {
@@ -649,6 +667,20 @@ func (c *WebSocketClient) readPump() {
 
 		LogDebug(game.LogComponentWebSocket, "Received from %s: ACTION=%s", c.ID, msg.Action)
 
+		// #154 code review CRITIQUE 2: c.Type is written under c.Hub.mu by
+		// SetClientType (below), called from the dispatch goroutine
+		// (cmd/server's handleSetClientType, a different goroutine from this
+		// per-connection readPump). Reading c.Type directly here — as both
+		// call sites below used to — races that write: a client that sends
+		// SET_CLIENT_TYPE followed immediately by a second message (no wait
+		// for the first to be dispatched) can hit this line while the
+		// dispatch goroutine is still inside SetClientType's locked section.
+		// Same bug class as #133 on this same field. TypeSnapshot takes the
+		// same RLock SetClientType's write takes, so this read is ordered
+		// with respect to it; both uses below share this single snapshot
+		// instead of re-reading c.Type (which would just move the race).
+		clientType := c.TypeSnapshot()
+
 		// CANCEL_AI_GENERATION (contract ai-multi-provider.md §11) is handled
 		// directly here, self-contained in package server, rather than
 		// relying on cmd/server's App-level dispatch (which consumes
@@ -664,10 +696,19 @@ func (c *WebSocketClient) readPump() {
 		// ("/ws/admin only") must be enforced here directly instead — same
 		// vulnerability class as the rest of #154 (a TV/VPlayer client could
 		// otherwise cancel a running AI generation job it never started).
-		if msg.Action == protocol.ActionCancelAIGeneration && c.Type == ClientTypeAdmin {
-			var payload protocol.CancelAIGenerationPayload
-			if err := json.Unmarshal(msg.Msg, &payload); err == nil {
-				CancelAIJob(payload.JobID)
+		if msg.Action == protocol.ActionCancelAIGeneration {
+			if clientType == ClientTypeAdmin {
+				var payload protocol.CancelAIGenerationPayload
+				if err := json.Unmarshal(msg.Msg, &payload); err == nil {
+					CancelAIJob(payload.JobID)
+				}
+			} else {
+				// #154 code review (mineur): symmetric WARN to
+				// handleWebMessage's allow-list rejection log — this is the
+				// one action that bypasses that switch entirely, so it must
+				// not also bypass the observability every other rejection
+				// gets.
+				LogWarn(game.LogComponentWebSocket, "Rejected action %s from client %s (type=%q): not allowed for this client type", msg.Action, c.ID, clientType)
 			}
 		}
 
@@ -675,7 +716,7 @@ func (c *WebSocketClient) readPump() {
 			Source:     "WebSocket",
 			Data:       msg,
 			ClientID:   c.ID,
-			ClientType: string(c.Type),
+			ClientType: string(clientType),
 			Timestamp:  time.Now(),
 		}
 
