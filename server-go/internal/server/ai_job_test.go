@@ -280,6 +280,21 @@ func TestAIJob_ProgressEmittedImmediatelyOnAdminConnect_WhenJobRunning(t *testin
 	if msg["JOB_ID"] != jobID {
 		t.Errorf("Expected the reattachment message to reference the running job (%s), got %v", jobID, msg["JOB_ID"])
 	}
+
+	// #140: wait for the job to actually finish before returning — same
+	// motif as TestAIJob_SecondGenerateWhileRunning_Returns409 above and
+	// ai_batching_test.go's own callers. Without this, the background job
+	// goroutine (still sleeping inside blockingAnthropicServer's 3s delay)
+	// outlives the test: it later writes generated questions into
+	// setupTestHTTPServer's t.TempDir()-backed dataDir, racing that
+	// directory's automatic cleanup ("unlinkat: directory not empty") under
+	// load — not reproducible in isolation, since a lightly-loaded run
+	// finishes the write before cleanup fires. Do NOT shorten
+	// blockingAnthropicServer's delay to "fix" this faster (see its own
+	// comment above): the 3s sleep is what proves the RUNNING message just
+	// read is the connect-triggered push, not a coincidental
+	// batch-just-finished message.
+	waitForJobTerminalState(t, reattached, 5*time.Second)
 }
 
 func TestAIJob_NoAdminBroadcastToOtherClientTypes(t *testing.T) {
