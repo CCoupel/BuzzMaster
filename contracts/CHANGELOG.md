@@ -2,6 +2,47 @@
 
 ---
 
+## [20260812] — Allow-list entrante WebSocket par ClientType (#154, sec)
+
+> Vulnérabilité préexistante découverte par `planner` pendant le cadrage de l'Interface
+> Animateur (#110) : le serveur distinguait déjà les types de client WebSocket (`admin`/`tv`/
+> `vplayer`) en **sortie** (sérialiseurs `SerializeForAdmin`/`SerializeForWebClient`/
+> `SerializeForVPlayer`), mais le dispatch **entrant** (`handleWebMessage`) ne consultait jamais
+> le type du client émetteur — un client connecté sur `/ws/tv` ou `/ws/player` pouvait envoyer
+> n'importe quelle action (START/STOP/RAZ/DELETE/NEW_GAME/BUMPER_POINTS...) et le serveur
+> l'exécutait comme si un admin l'avait envoyée. **Non-BREAKING** pour tout client legitime
+> (admin/tv/vplayer n'envoyant que les actions déjà documentées pour son propre rôle) ; **BREAKING**
+> uniquement pour un client hors-contrat qui dépendait de ce trou (aucun cas légitime identifié).
+
+- **[NEW]** `internal/server/inbound_allowlist.go` — `IsActionAllowed(action, clientType)` (map
+  statique action → types autorisés, deny-by-default) et `IsSetClientTypeAllowed(currentType)`
+  (SET_CLIENT_TYPE a sa propre règle : dépend du type COURANT, pas d'une liste fixe). Voir
+  `contracts/websocket-actions.md` §"Sécurité — Allow-list entrante par ClientType" pour la table
+  complète.
+- **[NEW]** `protocol.IncomingMessage.ClientType` (string) — porte le type du client émetteur,
+  peuplé par `websocket.go`'s `readPump` directement depuis `WebSocketClient.Type` (pas de lookup
+  par `ClientID` a posteriori : évite la fenêtre de course documentée sur `h.register <-`).
+- **[CHANGED]** `cmd/server/main.go` `handleWebMessage` — rejette (log `WARN`, aucun effet de
+  bord) toute action hors allow-list avant dispatch.
+- **[CHANGED]** `handleSetClientType` — n'accepte plus SET_CLIENT_TYPE que d'un client dont le
+  type courant est `admin` (ferme l'auto-promotion en admin qu'un type inconnu déclenchait
+  silencieusement avant, E3).
+- **[FIXED]** E1 — `sendStateToClient` (HELLO) sérialise désormais par type (`SerializeForAdmin`
+  vs `SerializeForWebClient`) au lieu du payload admin complet non filtré ; `CONFIG_UPDATE` n'est
+  plus envoyé qu'à `admin`/`tv` à la connexion (aligné sur la politique déjà appliquée par
+  `broadcastConfigUpdate` en continu).
+- **[FIXED]** E2 — `WebSocketHub.GetClientCounts` : un type de client non reconnu ne compte plus
+  par défaut comme admin.
+- **[FIXED]** E4 — `WebSocketHub.BroadcastToTypes` sérialise désormais une fois par type demandé
+  (au lieu d'une fois globalement) — sans effet observable aujourd'hui (aucun sérialiseur ne
+  réduit de contenu hors `ActionUpdate`), mais ferme l'incohérence structurelle pour une future
+  action sensible au type (réutilisable par #155).
+- **Non impacté** : aucun endpoint HTTP, aucun format de payload existant (seuls certains clients
+  cessent de RECEVOIR ou d'ÉMETTRE certains messages — le contenu des messages qu'ils reçoivent
+  légitimement est inchangé).
+
+---
+
 ## [20260811] — Persistance des métadonnées quiz (#141)
 
 > `GameState` (nom/thème/notes de quiz, publics visés, difficultés, langue, objectif, champs

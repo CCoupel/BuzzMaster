@@ -2,7 +2,53 @@
 
 > **Endpoint** : `/ws`
 > **Format** : JSON
-> **Dernière mise à jour** : 2026-01-27
+> **Dernière mise à jour** : 2026-08-12
+
+---
+
+## Sécurité — Allow-list entrante par ClientType (#154, v6.1.4)
+
+Le serveur distingue plusieurs types de client WebSocket (`admin`, `tv`, `vplayer` —
+voir SET_CLIENT_TYPE ci-dessous ; `buzzer` existe côté firmware sur un hub séparé,
+non concerné par cette table) déjà en **sortie** (sérialiseurs `SerializeForAdmin` /
+`SerializeForWebClient` / `SerializeForVPlayer` / `SerializeForBuzzer`,
+`contracts/ws-payload-serialization.md`). Depuis #154, il applique désormais la même
+distinction en **entrée** : `handleWebMessage` (`cmd/server/main.go`) rejette (avec
+log `WARN`) toute action envoyée par un type de client non autorisé, avant tout
+traitement — `internal/server/inbound_allowlist.go` (`IsActionAllowed`) est la
+source de vérité.
+
+**Avant #154** : aucune vérification n'existait — un client connecté sur `/ws/tv` ou
+`/ws/player` (censés être des vues à capacités réduites) pouvait envoyer n'importe
+quelle action, y compris START/STOP/RAZ/DELETE/NEW_GAME/BUMPER_POINTS, et le serveur
+l'exécutait comme si un admin l'avait envoyée.
+
+| Action | `admin` | `tv` | `vplayer` |
+|---|---|---|---|
+| HELLO | ✅ | ✅ | ✅ |
+| FULL, UPDATE, POINTS, READY, START, STOP, PAUSE, CONTINUE, REVEAL, RAZ, REMOTE, DELETE, DELETE_BUMPER, RELEASE_BUMPER_NAME, RESET, REBOOT, BUMPER_POINTS, TEAM_POINTS, REORDER_QUESTIONS, FORCE_READY, BUTTON, PONG, MEMORY_SET_TEAMS, MEMOTION_FLIP, MEMOTION_STOP_TIMER, MEMOTION_REVEAL, MEMOTION_DONE, MEMOTION_SET_TEAMS, SHOW_QR_CODE, HIDE_QR_CODE, SET_VIRTUAL_PLAYER_LIMIT, NEW_GAME, UPDATE_QUIZ_META, CANCEL_AI_GENERATION | ✅ | ❌ | ❌ |
+| FLIP_MEMORY_CARD | ❌ | ✅ | ✅ |
+| MEMOTION_SELECT | ❌ | ✅ | ❌ |
+| PLAYER_CONNECT, VPLAYER_QCM_ANSWER, ARDOISE_INPUT | ❌ | ❌ | ✅ |
+
+Notes :
+- **FLIP_MEMORY_CARD** est autorisé pour `tv` car cette connexion couvre deux cas
+  légitimes : l'aperçu admin en iframe (`/tv?admin=true`, toujours une vraie
+  connexion `tv` — `PlayerDisplay.jsx` `isAdminPreview`) et le clic d'un spectateur
+  sur l'écran public. `vplayer` peut retourner ses propres cartes en mode équipe
+  active (`MEMORY_CURRENT_TEAM`).
+- **MEMOTION_SELECT** n'est envoyé que depuis l'aperçu admin en iframe — toujours
+  une connexion `tv`, jamais `vplayer`.
+- **SET_CLIENT_TYPE** a une règle à part (dépend du type COURANT du client, pas
+  d'une liste fixe) — voir sa propre section ci-dessous et
+  `internal/server/inbound_allowlist.go`'s `IsSetClientTypeAllowed` : seul un
+  client dont le type courant est `admin` (état par défaut de `/ws`, avant
+  auto-déclaration) peut l'envoyer. Une fois auto-déclaré `tv`/`vplayer`, le
+  handshake ne peut plus être répété — ferme l'auto-promotion en admin qui
+  existait avant #154 (`handleSetClientType` mappait toute valeur `TYPE`
+  inconnue vers `admin` par défaut).
+- Toute action **absente de cette table**, ou envoyée par un type absent de sa
+  ligne, est rejetée par défaut (deny-by-default, pas une liste d'exceptions).
 
 ---
 
