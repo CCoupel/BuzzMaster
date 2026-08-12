@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -101,10 +102,35 @@ func TestE2E_WebSocketClient(t *testing.T) {
 func TestE2E_GameStateMachine(t *testing.T) {
 	engine := game.NewEngine()
 
-	// Track state changes
+	// Track state changes. OnStateChange is invoked from multiple goroutines
+	// with no ordering guarantee between them (see its concurrency contract,
+	// internal/game/engine.go:60) — the countdown goroutine started by
+	// Start() and this test's own synchronous Pause()/Continue()/Stop()
+	// calls are exactly the two concurrent invokers documented there.
+	// stateChangesMu protects the slice itself (bugfix #121 — plain race,
+	// caught by go test -race).
+	var stateChangesMu sync.Mutex
 	var stateChanges []game.GamePhase
+	// startedCh signals the FIRST PhaseStarted callback (the one
+	// actualStart() emits once the countdown goroutine finishes) — see the
+	// wait below for why a mutex around stateChanges alone is not enough.
+	startedCh := make(chan struct{}, 1)
 	engine.OnStateChange = func(phase game.GamePhase) {
+		stateChangesMu.Lock()
 		stateChanges = append(stateChanges, phase)
+		stateChangesMu.Unlock()
+
+		if phase == game.PhaseStarted {
+			select {
+			case startedCh <- struct{}{}:
+			default:
+				// Already signaled once (e.g. the second PhaseStarted, from
+				// Continue() later) — nothing waits on a second delivery, and
+				// the buffered slot is free again the next time it's drained
+				// (it never is after the first wait below, which is fine:
+				// this send just becomes a no-op).
+			}
+		}
 	}
 
 	// Initial state
@@ -124,11 +150,24 @@ func TestE2E_GameStateMachine(t *testing.T) {
 		t.Error("Should be in READY phase")
 	}
 
-	// READY -> START (Start() launches a 3s countdown goroutine before entering STARTED)
+	// READY -> START (Start() launches a 3s countdown goroutine before entering STARTED).
+	//
+	// Wait on the OnStateChange(PhaseStarted) callback itself, not on
+	// IsGameStarted() (bugfix #121, plan §1.1): actualStart() sets
+	// e.state.Phase under lock and only calls the callback AFTER releasing
+	// it (engine.go's documented release-before-call pattern). Polling
+	// IsGameStarted() can therefore observe PhaseStarted and let this
+	// goroutine call Pause() — appending PhasePaused to stateChanges —
+	// before the countdown goroutine's own callback(PhaseStarted) append has
+	// run, silently reordering the recorded sequence to [...,PAUSED,
+	// STARTED,...]. That failure mode is NOT caught by -race (both appends
+	// would then be properly synchronized by stateChangesMu) — only by
+	// synchronizing on the actual event this test's assertions depend on.
 	engine.Start(10)
-	deadline := time.Now().Add(5 * time.Second)
-	for time.Now().Before(deadline) && !engine.IsGameStarted() {
-		time.Sleep(50 * time.Millisecond)
+	select {
+	case <-startedCh:
+	case <-time.After(5 * time.Second):
+		t.Fatal("Timed out waiting for the PhaseStarted callback after Start() (countdown default is 3s, engine.go)")
 	}
 	if !engine.IsGameStarted() {
 		t.Error("Should be in START phase")
@@ -164,13 +203,21 @@ func TestE2E_GameStateMachine(t *testing.T) {
 		game.PhaseStopped,
 	}
 
-	if len(stateChanges) != len(expectedSequence) {
-		t.Errorf("Expected %d state changes, got %d", len(expectedSequence), len(stateChanges))
+	// Locked even though, by this point, every OnStateChange call the test
+	// triggered has already happened synchronously or been waited on
+	// (startedCh above) — matches the task's own requirement to guard the
+	// read here too, not just the callback's write, and costs nothing.
+	stateChangesMu.Lock()
+	got := append([]game.GamePhase(nil), stateChanges...)
+	stateChangesMu.Unlock()
+
+	if len(got) != len(expectedSequence) {
+		t.Errorf("Expected %d state changes, got %d", len(expectedSequence), len(got))
 	}
 
 	for i, expected := range expectedSequence {
-		if i < len(stateChanges) && stateChanges[i] != expected {
-			t.Errorf("State change %d: expected %s, got %s", i, expected, stateChanges[i])
+		if i < len(got) && got[i] != expected {
+			t.Errorf("State change %d: expected %s, got %s", i, expected, got[i])
 		}
 	}
 }
