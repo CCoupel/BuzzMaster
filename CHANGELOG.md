@@ -4,6 +4,20 @@ Historique des versions du projet BuzzControl.
 
 ## [Unreleased]
 
+## [6.0.3.15] - 2026-08-12
+
+Correctifs suite à test E2E — 2 tests instables éliminés (race condition, flaky).
+
+### Fixed
+- **TestE2E_GameStateMachine race condition** (#121) — Synchronisation correcte sur `OnStateChange` listener lors du chargement concurrence d'état de jeu. Race détectée en CI lors d'exécution parallèle de multiples suites Go.
+- **TestAIJob_ProgressEmittedImmediatelyOnAdminConnect_WhenJobRunning flaky** (#140) — Timing déterministe sur réception du premier progress événement lors de reconnexion admin mid-job. Timer calibré pour éviter faux-positifs sous charge CI.
+
+### Technical
+- **Documentation du contrat OnStateChange concurrence** : ajout commentaire explicite dans le code Go (internal/game/engine.go) documentant les garanties thread-safety sur `OnStateChange` callback et listeners — premier enregistrement du contrat implicite de synchronisation moteur. Élimine ambiguïté source de #121.
+- **Aucun changement contrat, aucun changement API** : ces fixes ne modifient que la robustesse des tests, pas le code applicatif (#121, #140).
+
+---
+
 ## [6.0.x] - 2026-08-11
 
 **Milestone v6.0.x — Stabilité & Tests** : Correctifs critiques de sécurité, résilience serveur, persistance des métadonnées de partie.
