@@ -160,18 +160,28 @@ func (h *WebSocketHub) notifyClientChange() {
 	}
 }
 
-// GetClientCounts returns the count of admin, TV, and VPlayer clients
+// GetClientCounts returns the count of admin, TV, and VPlayer clients.
+//
+// #154 E2 (sec): previously `default: adminCount++` — any client whose Type
+// wasn't TV or VPlayer counted as Admin, including an unrecognized/future
+// type (e.g. ClientTypeBuzzer, which never actually registers on THIS hub —
+// see BuzzerWebSocketHub — but nothing enforced that invariant here). An
+// explicit case per known type means a type this function doesn't recognize
+// counts toward none of the three, matching ClientsPayload's actual fields
+// (AdminCount/TVCount/VPlayerCount only — buzzer counts come from
+// a.buzzerHub.BuzzerCount() separately) instead of silently inflating the
+// admin count.
 func (h *WebSocketHub) GetClientCounts() (adminCount, tvCount, vplayerCount int) {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
 	for client := range h.clients {
 		switch client.Type {
+		case ClientTypeAdmin:
+			adminCount++
 		case ClientTypeTV:
 			tvCount++
 		case ClientTypeVPlayer:
 			vplayerCount++
-		default:
-			adminCount++
 		}
 	}
 	return
@@ -357,6 +367,31 @@ func (h *WebSocketHub) SendToClient(clientID string, msg *protocol.Message) erro
 	return nil
 }
 
+// SendRawToClient sends pre-serialized bytes to a specific client by ID — raw
+// twin of SendToClient for callers that need type-appropriate serialization
+// decided by the caller (#154 E1: App.sendStateToClient picks SerializeForAdmin
+// vs SerializeForWebClient per the connecting client's own type, instead of
+// SendToClient's always-full SerializeForWebSocket). Same silent-no-op
+// semantics as SendToClient: unknown clientID or a saturated Send channel
+// both return nil.
+func (h *WebSocketHub) SendRawToClient(clientID string, data []byte) error {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+
+	for client := range h.clients {
+		if client.ID == clientID {
+			select {
+			case client.Send <- data:
+				return nil
+			default:
+				return nil
+			}
+		}
+	}
+
+	return nil
+}
+
 // ClientCount returns number of connected clients
 func (h *WebSocketHub) ClientCount() int {
 	h.mu.RLock()
@@ -411,16 +446,30 @@ func (h *WebSocketHub) BroadcastToTypes(msg *protocol.Message, types ...ClientTy
 		return
 	}
 
-	data, err := msg.SerializeForWebSocket()
-	if err != nil {
-		LogError(game.LogComponentWebSocket, "BroadcastToTypes: failed to serialize message: %v", err)
-		return
-	}
-
-	// Build a fast lookup set for the requested types
-	typeSet := make(map[ClientType]bool, len(types))
+	// #154 E4 (sec): serialize once PER DISTINCT requested type, not once
+	// globally via SerializeForWebSocket — the same bytes used to be handed
+	// to every recipient regardless of its type. Every SerializeForXxx
+	// variant (messages.go) only actually reduces content for
+	// Action == ActionUpdate today, so this has no observable effect on any
+	// current caller (none of them pass an UPDATE through this path — see
+	// broadcastUpdateTo/BroadcastRawToTypes for that). It exists so a future
+	// action that DOES need per-type content (e.g. #155's animateur work)
+	// is correct by construction here, rather than depending on every new
+	// call site remembering to route around this function instead.
+	dataByType := make(map[ClientType][]byte, len(types))
 	for _, t := range types {
-		typeSet[t] = true
+		if _, done := dataByType[t]; done {
+			continue
+		}
+		data, err := serializeForClientType(msg, t)
+		if err != nil {
+			LogError(game.LogComponentWebSocket, "BroadcastToTypes: failed to serialize message for type %s: %v", t, err)
+			continue
+		}
+		dataByType[t] = data
+	}
+	if len(dataByType) == 0 {
+		return
 	}
 
 	// Use a single WLock so that close(client.Send) and delete(h.clients, client)
@@ -429,7 +478,8 @@ func (h *WebSocketHub) BroadcastToTypes(msg *protocol.Message, types ...ClientTy
 	// channel between the RUnlock and the WLock, causing a "close of closed channel" panic.
 	h.mu.Lock()
 	for client := range h.clients {
-		if !typeSet[client.Type] {
+		data, ok := dataByType[client.Type]
+		if !ok {
 			continue
 		}
 		select {
@@ -440,6 +490,27 @@ func (h *WebSocketHub) BroadcastToTypes(msg *protocol.Message, types ...ClientTy
 		}
 	}
 	h.mu.Unlock()
+}
+
+// serializeForClientType picks the same per-type serializer the rest of the
+// codebase already uses for broadcasts (broadcastUpdateTo, buildVPlayerPayloads)
+// — Admin gets the full/unfiltered payload, TV and VPlayer share the
+// admin-fields-stripped payload, Buzzer gets the minimal buzzer payload.
+// clientType == ClientTypeBuzzer never actually appears among THIS hub's
+// clients (physical buzzers register on the separate BuzzerWebSocketHub) —
+// handled anyway so a caller passing it here (e.g. against a future unified
+// hub) gets the correct payload rather than the admin one by accident.
+func serializeForClientType(msg *protocol.Message, clientType ClientType) ([]byte, error) {
+	switch clientType {
+	case ClientTypeAdmin:
+		return msg.SerializeForAdmin()
+	case ClientTypeTV, ClientTypeVPlayer:
+		return msg.SerializeForWebClient()
+	case ClientTypeBuzzer:
+		return msg.SerializeForBuzzer()
+	default:
+		return msg.SerializeForAdmin()
+	}
 }
 
 // BroadcastRawToTypes sends pre-serialized bytes only to connected clients whose type
@@ -586,7 +657,14 @@ func (c *WebSocketClient) readPump() {
 		// able to exercise cancellation at all. CancelAIJob is idempotent
 		// (cancelOnce), so this is also safe if something upstream dispatches
 		// the same action again.
-		if msg.Action == protocol.ActionCancelAIGeneration {
+		//
+		// #154 (sec): this bypasses cmd/server's handleWebMessage allow-list
+		// entirely (it's dispatched from here, not from that switch), so the
+		// admin-only restriction documented on protocol.ActionCancelAIGeneration
+		// ("/ws/admin only") must be enforced here directly instead — same
+		// vulnerability class as the rest of #154 (a TV/VPlayer client could
+		// otherwise cancel a running AI generation job it never started).
+		if msg.Action == protocol.ActionCancelAIGeneration && c.Type == ClientTypeAdmin {
 			var payload protocol.CancelAIGenerationPayload
 			if err := json.Unmarshal(msg.Msg, &payload); err == nil {
 				CancelAIJob(payload.JobID)
@@ -594,10 +672,11 @@ func (c *WebSocketClient) readPump() {
 		}
 
 		incoming := &protocol.IncomingMessage{
-			Source:    "WebSocket",
-			Data:      msg,
-			ClientID:  c.ID,
-			Timestamp: time.Now(),
+			Source:     "WebSocket",
+			Data:       msg,
+			ClientID:   c.ID,
+			ClientType: string(c.Type),
+			Timestamp:  time.Now(),
 		}
 
 		select {

@@ -354,10 +354,11 @@ func (h *BuzzerWebSocketHub) readPump(c *WebSocketClient) {
 		LogDebug(game.LogComponentWebSocket, "Buzzer WS received from %s: ACTION=%s", clientID, msg.Action)
 
 		incoming := &protocol.IncomingMessage{
-			Source:    "WebSocket-Buzzer",
-			Data:      msg,
-			ClientID:  clientID,
-			Timestamp: time.Now(),
+			Source:     "WebSocket-Buzzer",
+			Data:       msg,
+			ClientID:   clientID,
+			ClientType: string(ClientTypeBuzzer),
+			Timestamp:  time.Now(),
 		}
 
 		select {
