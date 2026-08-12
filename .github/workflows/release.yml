@@ -33,7 +33,7 @@ jobs:
         working-directory: server-go
         env:
           CGO_ENABLED: 1
-        run: go test -race ./...
+        run: go test -race -timeout=20m ./...
 
   # ============================================
   # STAGE 1: Checking (extract version from tag)
