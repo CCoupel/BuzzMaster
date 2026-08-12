@@ -4,23 +4,11 @@ Historique des versions du projet BuzzControl.
 
 ## [Unreleased]
 
-## [6.0.3.15] - 2026-08-12
+## [6.1.3] - 2026-08-12
 
-Correctifs suite à test E2E — 2 tests instables éliminés (race condition, flaky).
-
-### Fixed
-- **TestE2E_GameStateMachine race condition** (#121) — Synchronisation correcte sur `OnStateChange` listener lors du chargement concurrence d'état de jeu. Race détectée en CI lors d'exécution parallèle de multiples suites Go.
-- **TestAIJob_ProgressEmittedImmediatelyOnAdminConnect_WhenJobRunning flaky** (#140) — Timing déterministe sur réception du premier progress événement lors de reconnexion admin mid-job. Timer calibré pour éviter faux-positifs sous charge CI.
-
-### Technical
-- **Documentation du contrat OnStateChange concurrence** : ajout commentaire explicite dans le code Go (internal/game/engine.go) documentant les garanties thread-safety sur `OnStateChange` callback et listeners — premier enregistrement du contrat implicite de synchronisation moteur. Élimine ambiguïté source de #121.
-- **Aucun changement contrat, aucun changement API** : ces fixes ne modifient que la robustesse des tests, pas le code applicatif (#121, #140).
-
----
-
-## [6.0.x] - 2026-08-11
-
-**Milestone v6.0.x — Stabilité & Tests** : Correctifs critiques de sécurité, résilience serveur, persistance des métadonnées de partie.
+**Milestone v6.0.x — Stabilité & Tests** (#23) : Correctifs critiques de sécurité, résilience
+serveur, persistance des métadonnées de partie, et élimination de 2 tests instables détectés
+pendant le cycle QUALIF.
 
 ### Added
 - **Persistance des métadonnées quiz** (#141) : Le nom, thème, notes, publics ciblés, difficultés, langue et réglages d'affichage TV du quiz sont automatiquement sauvegardés et survivent au redémarrage du serveur. Utile après interruption électrique ou maintenance — la partie redémarre avec le même contexte.
@@ -32,6 +20,8 @@ Correctifs suite à test E2E — 2 tests instables éliminés (race condition, f
 - **Races sur état WebSocket** (#133) — Concurrence résolue sur les 5 champs critiques du hub (type client, ID joueur, adresse MAC, ID unique, timestamp). `go test -race` vert.
 - **Test ConfigPage bloqués en environnement** (#136) — Tests de la page de configuration plus robustes, suppression des boucles infinies lors de la mutation d'objets en contexte de test.
 - **Ordre des questions mélangeables** (#149) — Bouton "Mélanger" dans l'éditeur de quiz pour randomiser l'ordre des questions. Confirmation avant action, persistance de l'ordre nouveau, modifiable par glisser-déposer après.
+- **TestE2E_GameStateMachine race condition** (#121) — Synchronisation correcte sur `OnStateChange` listener lors du chargement concurrence d'état de jeu. Race détectée en CI lors d'exécution parallèle de multiples suites Go.
+- **TestAIJob_ProgressEmittedImmediatelyOnAdminConnect_WhenJobRunning flaky** (#140) — Timing déterministe sur réception du premier progress événement lors de reconnexion admin mid-job. Timer calibré pour éviter faux-positifs sous charge CI.
 
 ### Changed
 - Optimisation interne backup/restore — les fichiers métadonnées quiz et jeu réglages sont maintenant inclus dans les archives (v6.0.x).
@@ -42,7 +32,12 @@ Correctifs suite à test E2E — 2 tests instables éliminés (race condition, f
 ### Technical
 - **Contrats** : `game-state.md` mise à jour (persistance GameState), `http-endpoints.md` correction divergence `/game-backup` (ligne 222), nouveaux endpoints `/game-config.json`.
 - **Backend** : Indirection chemin config (`config.SetConfigPath`), versionnement `game_state.json` (v1.0.0, premier fichier du projet avec ce système), snapshot thread-safe hub WebSocket, `recover()` par goroutine.
-- **Tests** : 31 tests Go configuration (#143), 6 tests race (non exécutables localement WSL, CI-only), tests persistance GameState (#141), tests ConfigPage (#136).
+- **Tests** : 31 tests Go configuration (#143), tests race désormais verts en CI (`-race -timeout=20m`, #121), tests persistance GameState (#141), tests ConfigPage (#136).
+- **Documentation du contrat OnStateChange concurrence** (#121) : ajout d'un commentaire explicite dans `internal/game/engine.go` documentant les garanties thread-safety sur le callback `OnStateChange` — premier enregistrement du contrat implicite de synchronisation moteur.
+- Aucun changement de contrat public, aucun changement d'API pour les fixes #121/#140 — robustesse des tests uniquement.
+
+### Validation
+- 2 cycles QUALIF (v6.0.3.14, v6.0.3.15) : 14/9 smoke tests PASS, scénario de migration `config.json` → `game-config.json` (#150) vérifié conforme et idempotent sur 2 démarrages consécutifs, `go test -race -timeout=20m ./...` : 0 FAIL / 0 DATA RACE.
 
 ---
 
