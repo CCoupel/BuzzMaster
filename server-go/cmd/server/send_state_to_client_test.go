@@ -100,3 +100,44 @@ func TestSendStateToClient_Admin_IncludesAdminFieldsAndConfigUpdate(t *testing.T
 	// established policy, unchanged by #154.
 	readActionMatching(t, conn, protocol.ActionConfigUpdate)
 }
+
+// TestSendStateToClient_TV_IncludesConfigUpdate is the code-review minor-fix
+// follow-up: main.go:4182's gate is `clientType == ClientTypeAdmin ||
+// clientType == ClientTypeTV` — only the Admin and VPlayer branches were
+// covered above, leaving the TV half of that condition unverified against a
+// future accidental simplification (e.g. down to `== ClientTypeAdmin` alone).
+func TestSendStateToClient_TV_IncludesConfigUpdate(t *testing.T) {
+	app := newTestAppWithHub(t)
+	app.engine.SetTeams(map[string]*game.Team{"TeamA": {Name: "TeamA"}})
+	app.engine.UpdateBumper("bumper-1", map[string]interface{}{
+		"TEAM":             "TeamA",
+		"FIRMWARE_VERSION": "1.2.3",
+	})
+	app.httpServer = server.NewHTTPServer(0, app.engine, app.wsHub, app.buzzerHub, server.NewLogsWebSocketHub(10))
+
+	baseURL := startEvictionTestServer(t, app)
+	conn := dialWS(t, baseURL, "/ws/tv")
+	clientID := learnClientID(t, app, conn)
+
+	app.sendStateToClient(clientID, server.ClientTypeTV)
+
+	_, updateRaw := readActionMatching(t, conn, protocol.ActionUpdate)
+	var updateEnvelope struct {
+		Msg struct {
+			Bumpers map[string]map[string]interface{} `json:"bumpers"`
+		} `json:"MSG"`
+	}
+	if err := json.Unmarshal([]byte(updateRaw), &updateEnvelope); err != nil {
+		t.Fatalf("failed to unmarshal UPDATE: %v (raw: %s)", err, updateRaw)
+	}
+	if _, ok := updateEnvelope.Msg.Bumpers["bumper-1"]["FIRMWARE_VERSION"]; ok {
+		t.Error("#154 E1: TV must NOT receive FIRMWARE_VERSION on its HELLO UPDATE (SerializeForWebClient)")
+	}
+
+	readActionMatching(t, conn, protocol.ActionQuestions)
+	readActionMatching(t, conn, protocol.ActionClients)
+
+	// TV must still receive CONFIG_UPDATE — same established policy as
+	// admin (broadcastConfigUpdate targets Admin+TV, never VPlayer).
+	readActionMatching(t, conn, protocol.ActionConfigUpdate)
+}

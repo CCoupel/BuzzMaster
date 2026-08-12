@@ -203,6 +203,67 @@ func TestHandleWebMessage_AllowList_TVCanFlipMemoryCard(t *testing.T) {
 	}
 }
 
+// TestHandleWebMessage_AllowList_VPlayerCanPong is the code-review CRITIQUE 1
+// regression test: PONG is not admin-only debug tooling — VPlayerPage.jsx
+// auto-sends it on entering PREPARE (the real VJoueur readiness handshake,
+// handlePong -> SetBumperReady). Exercised through handleWebMessage over a
+// real /ws/player connection (not a direct app.handlePong call) so the
+// allow-list gate is actually on the path being tested.
+func TestHandleWebMessage_AllowList_VPlayerCanPong(t *testing.T) {
+	app := newTestAppWithHub(t)
+	// handlePong -> broadcastReady -> a.broadcast() dereferences a.udpBcast
+	// unconditionally — newTestAppWithHub leaves it nil (only wires the
+	// WebSocket hub); an unstarted UDPBroadcaster's Broadcast() is a safe
+	// no-op (conn == nil), same setup as main_broadcast_127_test.go's
+	// newBroadcast127TestApp.
+	app.udpBcast = server.NewUDPBroadcaster()
+	app.engine.SetTeams(map[string]*game.Team{"TeamA": {Name: "TeamA"}})
+	app.engine.UpdateBumper("vplayer-1", map[string]interface{}{"TEAM": "TeamA"})
+	app.engine.SetPhase(game.PhasePrepare)
+
+	baseURL := startEvictionTestServer(t, app)
+	vplayer := dialWS(t, baseURL, "/ws/player")
+	learnClientID(t, app, vplayer)
+
+	sendAction(t, app, vplayer, protocol.ActionPong, map[string]interface{}{"ID": "vplayer-1"})
+
+	if got := app.engine.GetBumper("vplayer-1"); got == nil || !got.Ready {
+		t.Errorf("#154 CRITIQUE 1: VPlayer must still be able to PONG (readiness handshake) — bumper=%+v", got)
+	}
+}
+
+// TestHandleWebMessage_AllowList_VPlayerCanButton is the code-review
+// CRITIQUE 1 regression test: BUTTON is not admin-only debug tooling —
+// VPlayerPage.jsx's handleBuzz sends it directly for every real buzzer
+// press. Exercised through handleWebMessage over a real /ws/player
+// connection (not a direct app.handleSimulatedButton call).
+func TestHandleWebMessage_AllowList_VPlayerCanButton(t *testing.T) {
+	app := newTestAppWithHub(t)
+	// See TestHandleWebMessage_AllowList_VPlayerCanPong's identical comment —
+	// handleSimulatedButton -> broadcastPause (on first buzz) also needs a
+	// non-nil (if unstarted) udpBcast.
+	app.udpBcast = server.NewUDPBroadcaster()
+	app.engine.SetTeams(map[string]*game.Team{"TeamA": {Name: "TeamA"}})
+	app.engine.UpdateBumper("vplayer-1", map[string]interface{}{"TEAM": "TeamA"})
+	app.engine.SetPhase(game.PhaseStarted)
+
+	baseURL := startEvictionTestServer(t, app)
+	vplayer := dialWS(t, baseURL, "/ws/player")
+	learnClientID(t, app, vplayer)
+
+	// handleSimulatedButton reads ID from the MSG payload (not the
+	// ClientID) — VPlayerPage.jsx:429/560 sends exactly this shape
+	// (sendMessage('BUTTON', { ID: bumper.id, button: 'A' })).
+	// protocol.ButtonPayload has no ID field (it's the buzzer-side payload
+	// shape, ID comes from the TCP/WS connection identity there), so build
+	// the MSG body as a map instead, same as the PONG test above.
+	sendAction(t, app, vplayer, protocol.ActionButton, map[string]interface{}{"ID": "vplayer-1", "button": "A"})
+
+	if got := app.engine.GetBumper("vplayer-1"); got == nil || got.Time == 0 {
+		t.Errorf("#154 CRITIQUE 1: VPlayer must still be able to BUTTON (buzz) — bumper=%+v", got)
+	}
+}
+
 // TestHandleWebMessage_AllowList_SetClientType_EscalationBlocked is #154 E3:
 // a client connected on a DEDICATED endpoint (fixed type at connection) must
 // not be able to self-promote via SET_CLIENT_TYPE.

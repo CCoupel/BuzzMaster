@@ -1,10 +1,14 @@
 package server
 
 import (
+	"buzzcontrol/internal/game"
 	"buzzcontrol/internal/protocol"
 	"encoding/json"
+	"strings"
 	"testing"
 	"time"
+
+	"github.com/gorilla/websocket"
 )
 
 // ---------------------------------------------------------------------------
@@ -166,5 +170,139 @@ func TestBroadcastToTypes_PerTypeSerialization(t *testing.T) {
 	}
 	if _, ok := tvBody.Bumpers["mac-1"]["FIRMWARE_VERSION"]; ok {
 		t.Error("#154 E4: TV must NOT receive FIRMWARE_VERSION via BroadcastToTypes (SerializeForWebClient)")
+	}
+}
+
+// TestReadPump_TypeSnapshot_NoRaceOnConsecutiveMessages is the code-review
+// CRITIQUE 2 regression test: a client sending two messages back-to-back on
+// the same /ws connection, without waiting for the first to be dispatched,
+// must not race readPump's read of c.Type against SetClientType's locked
+// write.
+//
+// Deliberately does NOT use the sendAction-style "write, then synchronously
+// wait+dispatch" pattern other #154 tests use — that pattern can structurally
+// never reproduce this race (readPump never blocks between two
+// ReadMessage() calls waiting for the previous message's dispatch to
+// finish, but a strictly-sequential test harness does exactly that
+// waiting). Instead this spawns a REAL dispatch goroutine — the same shape
+// as cmd/server's setupCallbacks (`for msg := range hub.Incoming { ... }`)
+// — running concurrently with the client writing both frames without any
+// wait in between, so readPump's second read genuinely overlaps the first
+// message's SetClientType call. Run under `go test -race`: before the
+// TypeSnapshot fix this reliably reported a DATA RACE on WebSocketClient.Type
+// (reproduced by code-reviewer); after the fix it passes clean.
+func TestReadPump_TypeSnapshot_NoRaceOnConsecutiveMessages(t *testing.T) {
+	srv, hub, cleanup := startTestWSServer(t)
+	defer cleanup()
+
+	// Legacy endpoint — defaults to Admin, the one client type SET_CLIENT_TYPE
+	// can legitimately be sent from (IsSetClientTypeAllowed).
+	conn := dialWSPath(t, srv, "/")
+	defer conn.Close()
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		for i := 0; i < 2; i++ {
+			select {
+			case incoming := <-hub.Incoming:
+				if incoming.Data.Action == protocol.ActionSetClientType {
+					// Mirrors cmd/server's handleSetClientType (IsSetClientTypeAllowed
+					// already covered by its own test) — the write this test's
+					// second message must not race.
+					hub.SetClientType(incoming.ClientID, ClientTypeTV)
+				}
+			case <-time.After(2 * time.Second):
+				t.Errorf("timed out waiting for message %d/2 on hub.Incoming", i+1)
+				return
+			}
+		}
+	}()
+
+	setTypeMsg, err := protocol.NewMessage(protocol.ActionSetClientType, protocol.SetClientTypePayload{Type: "tv"})
+	if err != nil {
+		t.Fatalf("failed to build SET_CLIENT_TYPE: %v", err)
+	}
+	setTypeData, err := setTypeMsg.SerializeForWebSocket()
+	if err != nil {
+		t.Fatalf("failed to serialize SET_CLIENT_TYPE: %v", err)
+	}
+
+	followUpMsg, err := protocol.NewMessage(protocol.ActionHello, nil)
+	if err != nil {
+		t.Fatalf("failed to build HELLO: %v", err)
+	}
+	followUpData, err := followUpMsg.SerializeForWebSocket()
+	if err != nil {
+		t.Fatalf("failed to serialize HELLO: %v", err)
+	}
+
+	// No wait between the two writes — the exact interleaving CRITIQUE 2
+	// flagged: readPump loops straight to its next ReadMessage()/TypeSnapshot
+	// call while the dispatch goroutine above may still be inside
+	// SetClientType's locked section for the first message.
+	if err := conn.WriteMessage(websocket.TextMessage, setTypeData); err != nil {
+		t.Fatalf("failed to send SET_CLIENT_TYPE: %v", err)
+	}
+	if err := conn.WriteMessage(websocket.TextMessage, followUpData); err != nil {
+		t.Fatalf("failed to send HELLO: %v", err)
+	}
+
+	<-done
+}
+
+// TestReadPump_CancelAIGeneration_NonAdminRejectionIsLogged is the
+// code-review minor-fix follow-up: CANCEL_AI_GENERATION is the one action
+// that bypasses handleWebMessage's switch entirely (handled directly in
+// readPump, contract ai-multi-provider.md §11), so before this fix its
+// rejection for a non-admin client was completely silent — unlike every
+// other allow-list rejection, which logs a WARN via handleWebMessage.
+//
+// ⚠️ Mutates the package-level global logger (SetGlobalLogger) — restored via
+// t.Cleanup. Per this package's convention (see ai_job_test.go et al.), no
+// t.Parallel() here.
+func TestReadPump_CancelAIGeneration_NonAdminRejectionIsLogged(t *testing.T) {
+	previous := GetGlobalLogger()
+	bl := NewBroadcastLogger(50)
+	SetGlobalLogger(bl)
+	t.Cleanup(func() { SetGlobalLogger(previous) })
+
+	srv, hub, cleanup := startTestWSServer(t)
+	defer cleanup()
+
+	// TV — a dedicated, fixed-type endpoint, definitely not admin.
+	conn := dialWSPath(t, srv, "/ws/tv")
+	defer conn.Close()
+
+	msg, err := protocol.NewMessage(protocol.ActionCancelAIGeneration, protocol.CancelAIGenerationPayload{JobID: "job-1"})
+	if err != nil {
+		t.Fatalf("failed to build CANCEL_AI_GENERATION: %v", err)
+	}
+	data, err := msg.SerializeForWebSocket()
+	if err != nil {
+		t.Fatalf("failed to serialize CANCEL_AI_GENERATION: %v", err)
+	}
+	if err := conn.WriteMessage(websocket.TextMessage, data); err != nil {
+		t.Fatalf("failed to send CANCEL_AI_GENERATION: %v", err)
+	}
+
+	// Drain the resulting IncomingMessage so the test doesn't depend on
+	// readPump's internal timing beyond "the WARN was logged before the
+	// message reached the Incoming channel" (it's logged first in readPump).
+	select {
+	case <-hub.Incoming:
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for the message to reach hub.Incoming")
+	}
+
+	found := false
+	for _, entry := range bl.GetRecent(50) {
+		if entry.Level == game.LogLevelWarn && strings.Contains(entry.Message, "CANCEL_AI_GENERATION") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Error("#154 code review (mineur): CANCEL_AI_GENERATION rejected for a non-admin client must log a WARN, same as every other allow-list rejection")
 	}
 }
