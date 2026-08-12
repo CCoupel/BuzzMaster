@@ -41,6 +41,28 @@
   cessent de RECEVOIR ou d'ÉMETTRE certains messages — le contenu des messages qu'ils reçoivent
   légitimement est inchangé).
 
+### Corrections post-revue (v6.1.4.1, même cycle)
+
+> `code-reviewer` a refusé la première livraison (2 critiques). Corrections ciblées, pas de
+> reprise de conception — voir `_work/reports/code-reviewer-20260812-160150.md`.
+
+- **[FIXED]** BUTTON et PONG étaient classées admin-only par erreur — ce sont en réalité les
+  actions de gameplay réel du VJoueur (`VPlayerPage.jsx` : PONG = handshake de disponibilité en
+  PREPARE, BUTTON = l'appui sur le buzzer). Corrigé en `{admin, vplayer}` dans
+  `inbound_allowlist.go` ; table `websocket-actions.md` mise à jour. L'audit frontend initial
+  s'appuyait sur les noms de fonctions wrapper (`simulateButton`/`simulatePong`) et avait manqué
+  l'appel direct `sendMessage('BUTTON'/'PONG', ...)` de `VPlayerPage.jsx`, hors de tout wrapper
+  nommé — méthodologie corrigée pour un grep de la chaîne d'action littérale.
+- **[FIXED]** Race de données confirmée sur `WebSocketClient.Type` (même champ, même fichier que
+  #133) : `readPump` lisait `c.Type` sans protection alors que `SetClientType` l'écrit sous
+  verrou depuis la goroutine de dispatch. Nouvelle méthode `(*WebSocketClient) TypeSnapshot()`
+  (verrou partagé), utilisée pour les deux lectures (`IncomingMessage.ClientType` et la garde
+  CANCEL_AI_GENERATION). Portée réelle limitée à la transition `admin → tv/vplayer` sur `/ws`
+  legacy (maintien transitoire d'un privilège déjà détenu, pas une élévation) mais race réelle,
+  reproduite et vérifiée sous `-race`.
+- **[FIXED]** (mineur) Rejet silencieux de CANCEL_AI_GENERATION pour un client non-admin dans
+  `readPump` — ajout d'un `LogWarn` symétrique à celui de `handleWebMessage`.
+
 ---
 
 ## [20260811] — Persistance des métadonnées quiz (#141)
