@@ -57,6 +57,27 @@ type Engine struct {
 	pendingDelay     int // Store delay for after countdown
 
 	// Callbacks
+	//
+	// OnStateChange — concurrency contract (#121): invoked from every one of
+	// the 12 call sites marked "Release lock BEFORE calling callback to
+	// avoid deadlock" throughout this file (e.g. :636, :724, :931 — the
+	// countdown goroutine started by actualStart() — and :1200, the
+	// synchronous Pause() path). The engine deliberately does NOT serialize
+	// these invocations: a mutex held across the callback would sequence
+	// every state broadcast behind it and reintroduce exactly the lock-
+	// ordering risk this release-before-call pattern exists to avoid. Two
+	// calls (e.g. the countdown's PhaseStarted and a near-simultaneous
+	// Pause()'s PhasePaused) can therefore run on different goroutines with
+	// no ordering guarantee between them. The consumer MUST be thread-safe
+	// on its own — this was the actual root cause of #121's flaky
+	// TestE2E_GameStateMachine (internal/server/e2e_test.go), which
+	// appended to an unsynchronized slice from this callback. The one
+	// production consumer (cmd/server/main.go, wired in setupCallbacks) is
+	// safe today: broadcastGameState ignores its phase argument entirely
+	// (always re-reads current state), ardoiseCoalescer.Flush() has its own
+	// internal mutex, and broadcastQuestions() re-reads live state too — but
+	// that safety is a property of what each consumer happens to do, not a
+	// guarantee this field provides.
 	OnStateChange   func(phase GamePhase)
 	OnTimerTick     func(currentTime int)
 	OnCountdownTick func(countdownTime int)
