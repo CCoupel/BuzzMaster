@@ -63,8 +63,6 @@ var inboundActionAllowlist = map[string][]ClientType{
 	protocol.ActionTeamPoints:            {ClientTypeAdmin},
 	protocol.ActionReorderQuestions:      {ClientTypeAdmin},
 	protocol.ActionForceReady:            {ClientTypeAdmin},
-	protocol.ActionButton:                {ClientTypeAdmin}, // simulated buzzer press (debug/testing)
-	protocol.ActionPong:                  {ClientTypeAdmin}, // simulated buzzer PONG (debug/testing)
 	protocol.ActionMemorySetTeams:        {ClientTypeAdmin},
 	protocol.ActionMotionFlip:            {ClientTypeAdmin},
 	protocol.ActionMotionStopTimer:       {ClientTypeAdmin},
@@ -82,6 +80,23 @@ var inboundActionAllowlist = map[string][]ClientType{
 	// call site consults, instead of a second hardcoded rule drifting apart
 	// from this one.
 	protocol.ActionCancelAIGeneration: {ClientTypeAdmin},
+
+	// --- BUTTON / PONG — dual purpose, NOT admin-only -----------------
+	// #154 code review (CRITIQUE 1): these two are the REAL VJoueur gameplay
+	// path, not just admin debug tooling — web/src/pages/VPlayerPage.jsx
+	// (routed at /player, App.jsx) sends both directly via sendMessage(),
+	// bypassing the named simulateButton/simulatePong wrappers that a
+	// function-name-only frontend audit would have caught:
+	//   - VPlayerPage.jsx:386 — PONG, auto-sent on entering PREPARE (the
+	//     readiness handshake every VJoueur performs, handlePong ->
+	//     SetBumperReady/TransitionToReady).
+	//   - VPlayerPage.jsx:429,560 — BUTTON — the buzzer press itself
+	//     (handleBuzz), the central VJoueur gameplay action.
+	// Admin also legitimately sends both, via GamePage.jsx's simulateButton/
+	// simulatePong debug tools (useWebSocket.js sendButton/sendPong) — hence
+	// both types are listed, not VPlayer alone.
+	protocol.ActionButton: {ClientTypeAdmin, ClientTypeVPlayer},
+	protocol.ActionPong:   {ClientTypeAdmin, ClientTypeVPlayer},
 
 	// --- MEMORY / MEMOTION card interaction ---------------------------
 	// FLIP_MEMORY_CARD: TV carries BOTH the admin preview iframe (/tv?admin=true,

@@ -26,12 +26,22 @@ l'exécutait comme si un admin l'avait envoyée.
 | Action | `admin` | `tv` | `vplayer` |
 |---|---|---|---|
 | HELLO | ✅ | ✅ | ✅ |
-| FULL, UPDATE, POINTS, READY, START, STOP, PAUSE, CONTINUE, REVEAL, RAZ, REMOTE, DELETE, DELETE_BUMPER, RELEASE_BUMPER_NAME, RESET, REBOOT, BUMPER_POINTS, TEAM_POINTS, REORDER_QUESTIONS, FORCE_READY, BUTTON, PONG, MEMORY_SET_TEAMS, MEMOTION_FLIP, MEMOTION_STOP_TIMER, MEMOTION_REVEAL, MEMOTION_DONE, MEMOTION_SET_TEAMS, SHOW_QR_CODE, HIDE_QR_CODE, SET_VIRTUAL_PLAYER_LIMIT, NEW_GAME, UPDATE_QUIZ_META, CANCEL_AI_GENERATION | ✅ | ❌ | ❌ |
+| FULL, UPDATE, POINTS, READY, START, STOP, PAUSE, CONTINUE, REVEAL, RAZ, REMOTE, DELETE, DELETE_BUMPER, RELEASE_BUMPER_NAME, RESET, REBOOT, BUMPER_POINTS, TEAM_POINTS, REORDER_QUESTIONS, FORCE_READY, MEMORY_SET_TEAMS, MEMOTION_FLIP, MEMOTION_STOP_TIMER, MEMOTION_REVEAL, MEMOTION_DONE, MEMOTION_SET_TEAMS, SHOW_QR_CODE, HIDE_QR_CODE, SET_VIRTUAL_PLAYER_LIMIT, NEW_GAME, UPDATE_QUIZ_META, CANCEL_AI_GENERATION | ✅ | ❌ | ❌ |
+| BUTTON, PONG | ✅ | ❌ | ✅ |
 | FLIP_MEMORY_CARD | ❌ | ✅ | ✅ |
 | MEMOTION_SELECT | ❌ | ✅ | ❌ |
 | PLAYER_CONNECT, VPLAYER_QCM_ANSWER, ARDOISE_INPUT | ❌ | ❌ | ✅ |
 
 Notes :
+- **BUTTON, PONG** sont à double usage — ce ne sont PAS des actions admin-only :
+  `vplayer` les envoie pour le gameplay réel (`VPlayerPage.jsx:386` PONG = handshake
+  de disponibilité en PREPARE ; `VPlayerPage.jsx:429,560` BUTTON = l'appui sur le
+  buzzer lui-même, `handleBuzz`) ; `admin` les envoie aussi, via les outils de
+  simulation debug de `GamePage.jsx` (`simulateButton`/`simulatePong`). Corrigé en
+  v6.1.4.1 suite revue code (le lot #154 initial les avait classées admin-only par
+  erreur — l'audit frontend s'était appuyé sur les noms de fonctions wrapper
+  `simulateButton`/`simulatePong` et avait manqué l'appel direct `sendMessage(...)`
+  de `VPlayerPage.jsx`, hors de tout wrapper nommé).
 - **FLIP_MEMORY_CARD** est autorisé pour `tv` car cette connexion couvre deux cas
   légitimes : l'aperçu admin en iframe (`/tv?admin=true`, toujours une vraie
   connexion `tv` — `PlayerDisplay.jsx` `isAdminPreview`) et le clic d'un spectateur
