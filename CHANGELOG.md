@@ -4,6 +4,9 @@ Historique des versions du projet BuzzControl.
 
 ## [Unreleased]
 
+### Security
+- **Allow-list entrante WebSocket par ClientType** (#154) — Le serveur refuse désormais les commandes de pilotage (START, STOP, DELETE, etc.) envoyées depuis un canal TV ou joueur virtuel — seul l'admin peut les émettre. Vérification centralisée à l'entrée de chaque action WebSocket, zéro impact sur l'usage normal (les clients légitimes n'envoient que les actions documentées pour leur rôle).
+
 ## [6.1.3] - 2026-08-12
 
 **Milestone v6.0.x — Stabilité & Tests** (#23) : Correctifs critiques de sécurité, résilience
