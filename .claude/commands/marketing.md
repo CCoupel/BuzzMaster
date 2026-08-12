@@ -256,7 +256,9 @@ c) Regenerer la roadmap uniquement
 
 ## Agent
 
-Agent ponctuel — non spawné au `/start-session`, spawné à la demande :
+Agent ponctuel — non spawné au `/start-session`, spawné à la demande. Orchestré par le CDP
+en deux dispatches distincts (`PREPARE` puis `PUBLISH`), en parallèle du déploiement PROD —
+voir `agents/cdp.md` Phase 6 et `agents/marketing-release.md` pour le détail du protocole :
 
 ```
 Task({
@@ -265,10 +267,16 @@ Task({
 })
 ```
 
-Attendre ACTIF, puis envoyer la tâche :
-`SendMessage({to: "marketing-release", content: ...})`
+Attendre ACTIF, puis envoyer la tâche de préparation :
+`SendMessage({to: "marketing-release", content: "PREPARE vX.Y"})`
 
-À réception du DONE, fermer l'agent :
+À réception de `MARKETING RIEN A PUBLIER` → `TaskStop("marketing-release")`, terminé.
+
+À réception de `MARKETING PRET` → relayer le rapport à l'utilisateur (GATE 4d). Une fois la
+maquette validée **et** le déploiement PROD confirmé réussi, envoyer la publication :
+`SendMessage({to: "marketing-release", content: "PUBLISH"})`
+
+À réception du `MARKETING TERMINE`, fermer l'agent :
 `TaskStop("marketing-release")`
 
 Spec : `.claude/agents/marketing-release.md`

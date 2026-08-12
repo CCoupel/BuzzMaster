@@ -408,11 +408,48 @@ SendMessage({ to: "infra", content: "
 ```
 - NOT VALIDATED → escalade utilisateur avec le rapport d'ecarts ← GATE 4c (aucune correction ici — retour Phase DEV)
 
+**Dispatch parallele — deploiement + preparation marketing (meme tour) :**
+
 ```
 SendMessage({ to: "deployer", content: "
   Deploie en PROD la version [X.Y.Z].
   Workflow : squash merge → main → tag vX.Y.Z → push → monitoring CI.
 " })
+```
+
+Si un milestone `v[X.Y]` correspond a la version cible : `CLEAR(marketing)` puis
+```
+SendMessage({ to: "marketing", content: "PREPARE v[X.Y]" })
+```
+La preparation marketing ne depend pas du resultat du deploiement — le contenu du milestone
+(issues fermees, labels) est deja fige avant le lancement de la CI.
+
+**Reponse de `marketing` (asynchrone, n'attend pas `deployer`) :**
+- `MARKETING RIEN A PUBLIER` → `TaskStop(marketing)`, rien d'autre a faire, aucune sollicitation utilisateur.
+- `MARKETING PRET — rapport: _work/reports/marketing-[timestamp].md` → lire le rapport, puis
+  presenter a l'utilisateur ← **GATE 4d** :
+  ```
+  Maquette de communication prete pour v[X.Y] :
+  [resume tire du rapport]
+
+  Valider et publier des que le deploiement sera confirme ? [O/n]
+  ```
+  - Refus / corrections demandees → `SendMessage({ to: "marketing", content: "PREPARE v[X.Y] — corrections : [...]" })`
+    (pas de `CLEAR` — le contexte de ce qui a deja ete produit doit etre conserve), reboucler jusqu'a validation.
+  - Valide → `mockup_ok = true`.
+
+**Reponse de `deployer` :**
+- CI PROD OK → `deploy_ok = true`, poursuivre la cloture de milestone (ci-dessous).
+- Echec → gestion d'echec standard du deployer. Si `marketing` a deja produit une maquette
+  (PRET ou en attente de validation) → `TaskStop(marketing)` **sans jamais dispatcher `PUBLISH`**
+  — rien n'est publie pour une release qui n'a pas ete livree.
+
+**Publication marketing — des que les deux conditions sont vraies (peu importe l'ordre d'arrivee) :**
+```
+deploy_ok == true ET mockup_ok == true
+  → SendMessage({ to: "marketing", content: "PUBLISH" })  // pas de CLEAR avant PUBLISH : continuite avec PREPARE
+  → Attendre MARKETING TERMINE
+  → TaskStop(marketing)
 ```
 
 Apres CI PROD OK — verifier le milestone via GitHub MCP :
@@ -428,7 +465,7 @@ mcp__plugin_github_github__issue_read — lister les issues ouvertes du mileston
   Le milestone reste ouvert jusqu'a leur livraison.
   ```
 
-Informer l'utilisateur du resultat du deploiement.
+Informer l'utilisateur du resultat du deploiement (et de la publication marketing si applicable).
 
 ## Dispatch selon le Type de Workflow
 
@@ -500,6 +537,7 @@ Si cycle >= MAX_CYCLES → ESCALADE UTILISATEUR
 | GATE 4   | QUALIF DONE + DOC finalize DONE | Commande explicite `/deploy prod` — tout est fige, PROD = zero modification |
 | GATE 4b  | Infra QUALIF invalide | "Procedure QUALIF incoherente avec l'infra. Voir rapport." |
 | GATE 4c  | Infra PROD invalide | Stop immediat — retour Phase DEV, aucune correction en PROD |
+| GATE 4d  | Maquette marketing prete (en parallele du deploiement PROD) | "Voici la maquette de communication pour v[X.Y]. Validez-vous ?" |
 
 **Tout le reste est execute en autonomie** — QA validee → DOC → DEPLOY QUALIF sans interruption.
 

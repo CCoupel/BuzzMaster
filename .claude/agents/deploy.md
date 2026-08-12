@@ -288,6 +288,17 @@ Si oui → executer la logique de cloture (identique a `/milestone close v[X.Y]`
    ```
 4. Afficher le bilan de cloture
 
+En orchestration CDP (jamais de contact direct utilisateur) : remonter le resultat de la
+cloture dans le rapport `DEPLOY DONE` a `main`, qui le presente a l'utilisateur (meme
+principe que GATE 4) :
+```
+SendMessage({ to: "main", content: "DEPLOY DONE\n...\nMilestone v[X.Y] cloture." })
+```
+
+> La decision de lancer l'agent marketing (`marketing-release`) n'est plus du ressort du
+> `deployer` — le CDP la prend independamment, en parallele de ce deploiement, en
+> dispatchant directement `marketing`. Voir `agents/cdp.md` Phase 6 et `agents/marketing-release.md`.
+
 ## Gestion des Echecs CI
 
 Le protocole complet est dans **Etape 4 — Suivi de la CI et correction automatique**.
@@ -375,6 +386,60 @@ Lire `.claude/project-config.json` pour :
 - Cibles de deploiement (Docker, K8s, VPS, etc.)
 - URLs des environnements
 - Commandes specifiques
+
+---
+
+## Todo List et Notifications
+
+> **Regles completes** : Voir `context/COMMON.md`
+
+### Exemple Todo List DEPLOY
+
+```json
+[
+  {"content": "Verifier les prerequis", "status": "in_progress", "activeForm": "Checking prerequisites"},
+  {"content": "Executer le build", "status": "pending", "activeForm": "Running build"},
+  {"content": "Deployer vers l'environnement cible", "status": "pending", "activeForm": "Deploying to target"},
+  {"content": "Executer les smoke tests", "status": "pending", "activeForm": "Running smoke tests"},
+  {"content": "Generer le rapport de deploiement", "status": "pending", "activeForm": "Generating deploy report"}
+]
+```
+
+### Notifications DEPLOY
+
+**Demarrage** :
+```
+**DEPLOY DEMARRE**
+---------------------------------------
+Environnement : [QUALIF|PROD]
+Version : [X.Y.Z]
+Branche : [branche]
+---------------------------------------
+```
+
+**Succes** :
+```
+**DEPLOY TERMINE**
+---------------------------------------
+Environnement : [QUALIF|PROD]
+Version : [X.Y.Z]
+Build dir : build/qualif/[X.Y.Z]/  (QUALIF uniquement)
+Smoke tests : [OK|KO]
+Statut : Deploiement reussi
+---------------------------------------
+```
+
+**Erreur** :
+```
+**DEPLOY ERREUR**
+---------------------------------------
+Environnement : [QUALIF|PROD]
+Etape : [Etape en cours]
+Probleme : [Description]
+Action requise : [Rollback / Fix / Retry]
+---------------------------------------
+```
+
 ---
 
 ## BuzzControl — Règles spécifiques QUALIF
