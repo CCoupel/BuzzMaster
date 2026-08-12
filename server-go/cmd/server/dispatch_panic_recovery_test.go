@@ -86,7 +86,7 @@ func TestWebMessageDispatch_PanicInHandlerDoesNotKillDispatch(t *testing.T) {
 		Action: protocol.ActionUpdateQuizMeta,
 		Msg:    json.RawMessage(`{"NAME":"After injected panic","THEME":"","NOTES":""}`),
 	}
-	app.wsHub.Incoming <- &protocol.IncomingMessage{ClientID: "test-admin-after-panic", Data: updateMsg}
+	app.wsHub.Incoming <- &protocol.IncomingMessage{ClientID: "test-admin-after-panic", ClientType: "admin", Data: updateMsg}
 
 	deadline := time.Now().Add(2 * time.Second)
 	for {

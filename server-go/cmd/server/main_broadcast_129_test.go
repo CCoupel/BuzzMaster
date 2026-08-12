@@ -307,7 +307,7 @@ func TestBroadcast129_SendStateToClient_StillCompletePayload(t *testing.T) {
 	conn := dialWS(t, baseURL, "/ws/player")
 	clientID := learnClientID(t, app, conn)
 
-	app.sendStateToClient(clientID)
+	app.sendStateToClient(clientID, server.ClientTypeVPlayer)
 
 	action, raw := readActionMatching(t, conn, protocol.ActionUpdate)
 	if action != protocol.ActionUpdate {

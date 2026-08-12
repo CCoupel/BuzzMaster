@@ -264,7 +264,7 @@ func TestNewGame_EmitsPlayerEvicted_GameResetToEachPurgedVJoueur(t *testing.T) {
 	// pointer dereference.
 	app.logger = server.NewBroadcastLogger(100)
 
-	app.handleWebMessage(&protocol.IncomingMessage{ClientID: "admin-client", Data: newGameMsg(t)})
+	app.handleWebMessage(&protocol.IncomingMessage{ClientID: "admin-client", ClientType: "admin", Data: newGameMsg(t)})
 
 	for name, conn := range map[string]*websocket.Conn{"Alice": aliceConn, "Bob": bobConn} {
 		action, rawMsg := readAction(t, conn)
