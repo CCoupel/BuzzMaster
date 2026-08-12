@@ -12,26 +12,10 @@
     "ssid": "",
     "password": ""
   },
-  "game": {
-    "default_delay": 30
-  },
   "storage": {
     "data_dir": "./data",
     "questions_dir": "./data/files/questions",
     "files_dir": "./data/files"
-  },
-  "neon_effect": {
-    "enabled": true,
-    "mode": "halo",
-    "arc_width": 30,
-    "intensity_gap": 100,
-    "rotation_speed": 5,
-    "bar_offset": 12,
-    "bar_thickness": 5,
-    "arc_blur": 180,
-    "glow_pulse_speed": 3.7,
-    "glow_pulse_min": 50,
-    "glow_pulse_max": 70
   },
   "wifi_defaults": {
     "ssid": "CC-Home",
