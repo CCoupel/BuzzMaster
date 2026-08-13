@@ -57,8 +57,10 @@ Le serveur envoie chaque action uniquement aux types clients concernés :
 
 > **Colonne Animateur (v6.2.0, #155/#156)** : périmètre volontairement minimal. L'interface
 > animateur (zones A/C — contexte + équipes, voir `_work/reports/plan-20260813-094321.md` F4) a
-> besoin de l'état de jeu (`UPDATE`) et de la question suivante (`NEXT_QUESTION`, exclusif) ; rien
-> d'autre. Les actions ci-dessous que l'animateur peut lui-même **envoyer** (`START`, `STOP`,
+> besoin de l'état de jeu (`UPDATE`), de la question suivante (`NEXT_QUESTION`, exclusif) et du
+> montant de base à créditer (`CREDIT_POINTS`, exclusif, ajouté suite code review MAJEUR-1 — voir
+> `contracts/websocket-actions.md` §"Animateur") ; rien d'autre. Les actions ci-dessous que
+> l'animateur peut lui-même **envoyer** (`START`, `STOP`,
 > `PAUSE`, `CONTINUE`, `REVEAL`, `READY`, `BUMPER_POINTS`, `TEAM_POINTS` — voir
 > `contracts/websocket-actions.md` §"Sécurité — Allow-list entrante") ne sont **pas** pour autant
 > ré-émises vers lui sous leur propre nom : leur effet sur l'état de jeu lui parvient via `UPDATE`,
@@ -73,6 +75,7 @@ Le serveur envoie chaque action uniquement aux types clients concernés :
 | `UPDATE` | ✓ full | ✓ partiel | ✓ partiel | ✓ partiel | ✓ réduit | Voir contrat ws-payload-serialization.md. Anim : `SerializeForWebClient`, comme TV/VPlayer |
 | `UPDATE_TIMER` | ✓ | ✓ | ✓ | ✓ | ✓ | Chronomètre affiché en zone A (`AnimPage.jsx`) |
 | `NEXT_QUESTION` | — | — | — | ✓ **exclusif** | — | **Nouveau (v6.2.0, #155)** — voir `contracts/websocket-actions.md` §"Animateur" |
+| `CREDIT_POINTS` | — | — | — | ✓ **exclusif** | — | **Nouveau (v6.2.0, code review MAJEUR-1 #155/#156)** — voir `contracts/websocket-actions.md` §"Animateur" |
 | `START` / `CONTINUE` | ✓ | ✓ | ✓ | ✗ | ✓ | Firmware : startGame(). Anim : état reflété via `UPDATE` uniquement |
 | `STOP` | ✓ | ✓ | ✓ | ✗ | ✓ | Firmware : stopGame(). Anim : état reflété via `UPDATE` uniquement |
 | `PAUSE` | ✓ | ✓ | ✓ | ✗ | ✓ | Firmware : pauseGame(). Anim : état reflété via `UPDATE` uniquement |

@@ -35,12 +35,18 @@ fait **exclusivement par de nouvelles entrées dans la map** — aucun changemen
 | START, STOP, PAUSE, CONTINUE, REVEAL, READY | ✅ | ❌ | ❌ | ✅ |
 | BUMPER_POINTS, TEAM_POINTS | ✅ | ❌ | ❌ | ✅ |
 | FULL, UPDATE, POINTS, RAZ, REMOTE, DELETE, DELETE_BUMPER, RELEASE_BUMPER_NAME, RESET, REBOOT, REORDER_QUESTIONS, FORCE_READY, MEMORY_SET_TEAMS, MEMOTION_FLIP, MEMOTION_STOP_TIMER, MEMOTION_REVEAL, MEMOTION_DONE, MEMOTION_SET_TEAMS, SHOW_QR_CODE, HIDE_QR_CODE, SET_VIRTUAL_PLAYER_LIMIT, NEW_GAME, UPDATE_QUIZ_META, CANCEL_AI_GENERATION | ✅ | ❌ | ❌ | ❌ |
+| **SET_CREDIT_POINTS** | ✅ | ❌ | ❌ | ❌ |
 | BUTTON, PONG | ✅ | ❌ | ✅ | ❌ |
 | FLIP_MEMORY_CARD | ❌ | ✅ | ✅ | ❌ |
 | MEMOTION_SELECT | ❌ | ✅ | ❌ | ❌ |
 | PLAYER_CONNECT, VPLAYER_QCM_ANSWER, ARDOISE_INPUT | ❌ | ❌ | ✅ | ❌ |
 
 Notes :
+- **SET_CREDIT_POINTS** (v6.2.0, code review MAJEUR-1 sur #155/#156, voir §"Animateur" ci-dessous)
+  — `admin` uniquement, jamais `anim` : l'animateur **reçoit** le montant courant via
+  `CREDIT_POINTS`, il ne le **fixe** jamais lui-même. Placée à part plutôt que dans le gros bloc
+  admin-only ci-dessus pour rester visible comme un ajout de ce lot, même traitement que la
+  séparation faite plus haut pour la « conduite en direct ».
 - **START, STOP, PAUSE, CONTINUE, REVEAL, READY, BUMPER_POINTS, TEAM_POINTS** sont désormais
   partagées entre `admin` et `anim` (v6.2.0, #155/#156) — c'est le périmètre exact de « conduite en
   direct » retenu pour l'interface animateur (`_work/reports/plan-20260812-141735.md` §1) : lancer/
@@ -755,8 +761,8 @@ Mise à jour compteur inscriptions.
 > l'état de jeu via `UPDATE` (payload `SerializeForWebClient`, comme TV/VPlayer —
 > `contracts/ws-payload-serialization.md` §"Animateur") et peut émettre les actions de conduite
 > listées dans l'allow-list ci-dessus (`START`, `STOP`, `PAUSE`, `CONTINUE`, `REVEAL`, `READY`,
-> `BUMPER_POINTS`, `TEAM_POINTS`). `NEXT_QUESTION` ci-dessous est la seule action qui lui est
-> exclusive.
+> `BUMPER_POINTS`, `TEAM_POINTS`). `NEXT_QUESTION` et `CREDIT_POINTS` ci-dessous lui sont
+> exclusives.
 
 ### NEXT_QUESTION
 
@@ -837,6 +843,75 @@ injecter la question suivante dans ce payload déclencherait une lecture disque 
 `NEXT_QUESTION` est donc **strictement interdite** sur le chemin de `broadcastUpdate`/
 `broadcastUpdateTo` : calculée et diffusée uniquement depuis les déclencheurs explicites listés
 ci-dessus, jamais depuis la boucle de timer.
+
+### SET_CREDIT_POINTS
+
+Ajuste le montant de base que l'animateur créditera à la fin de la question courante — l'équivalent
+serveur du champ `pointsInput` de la régie (`GamePage.jsx:770-771`), qui est aujourd'hui un état
+React **local à `/admin`**, initialisé à `question.POINTS` à la sélection mais librement modifiable
+ensuite (ex. manche bonus), et dont le serveur n'avait connaissance d'aucune façon avant cette
+action (`START` transmet bien `POINTS` dans son payload WS mais `protocol.StartPayload` ne l'a
+jamais décodé — champ silencieusement ignoré).
+
+**Origine** : code review MAJEUR-1 sur #155/#156
+(`_work/reports/code-reviewer-20260813-120457.md`) — sans ce mécanisme, `/anim` créditait
+`question.POINTS` brut (`AnimPage.jsx`, avant ce lot) alors que `/admin` créditait `pointsInput`
+potentiellement ajusté : deux montants différents pour la même question, dans le même état de jeu,
+selon l'interface utilisée pour créditer — silencieux, sans indication du mismatch dans aucune des
+deux interfaces.
+
+| Propriété | Valeur |
+|-----------|--------|
+| Direction | `Client→Server` |
+| Émetteur | `admin` uniquement (voir §"Sécurité — Allow-list entrante" ci-dessus) |
+| Trigger | Modification du champ `pointsInput` sur `/admin` (`onChange`, **avec un debounce côté
+  frontend** — ce champ change à chaque frappe, il ne faut pas un message WS par frappe) |
+
+#### Payload
+
+| Champ | Type | Description |
+|-------|------|-------------|
+| POINTS | int | Nouveau montant de base |
+
+#### CREDIT_POINTS
+
+Rediffuse le montant de base courant à l'interface animateur — la contrepartie serveur→client de
+`SET_CREDIT_POINTS`.
+
+| Propriété | Valeur |
+|-----------|--------|
+| Direction | `Server→Client` |
+| Cible | `ClientTypeAnim` **exclusivement** — `BroadcastToTypes(msg, ClientTypeAnim)` |
+| Trigger | `SET_CREDIT_POINTS` reçu (admin ajuste) ; `READY` (nouvelle question sélectionnée — réinitialise à `question.POINTS`, même règle que `pointsInput` sur `handleQuestionSelect`) ; `NEW_GAME` (aucune question courante — remise à zéro) ; HELLO d'un client animateur (état initial, envoi ciblé comme `NEXT_QUESTION`) |
+
+##### Payload
+
+| Champ | Type | Description |
+|-------|------|-------------|
+| POINTS | int | Montant de base courant à utiliser pour créditer la question en cours |
+
+#### Valeur par défaut et réinitialisation
+
+Le serveur garde en mémoire (non persisté — état de session, comme `pointsInput` côté React) un
+montant courant, initialisé à `question.POINTS` (repli sur `1` si absent/invalide — même règle que
+`GamePage.jsx:299` `parseInt(question.POINTS) || 1`) à chaque `READY`, et écrasé par la valeur reçue
+sur chaque `SET_CREDIT_POINTS`. Aucune lecture disque ni recalcul sur le chemin de `broadcastUpdate`
+n'est nécessaire ici (contrairement à `NEXT_QUESTION`) — c'est une simple valeur en mémoire, pas une
+requête sur `loadQuestions()`.
+
+#### Ce que ce mécanisme NE couvre PAS (hors périmètre de ce correctif)
+
+- **QCM / MEMORY** : `resolvePointsAward` (`web/src/utils/pointsAward.js`) applique des règles
+  spécifiques à ces types (pénalité par indices, score MEMORY par paires) par-dessus le montant de
+  base — `CREDIT_POINTS` ne transmet que le montant de **base**, pas le montant final calculé. Sans
+  conséquence aujourd'hui : QCM/MEMORY sont hors périmètre de la tranche SPEEDY #155/#156 sur
+  `/anim`. À réévaluer si ces types y sont ouverts.
+- **`TIME`** (durée du chrono) : la revue de code a noté la même famille de problème sur
+  `AnimPage.jsx`'s `handleStart`, qui lit `question.TIME` brut plutôt qu'un éventuel `timeInput`
+  ajusté côté admin avant qu'un animateur ne lance la question. Non traité par ce correctif
+  (arbitrage explicite : MAJEUR-1 porte sur le crédit de points, pas sur le lancement) — impact
+  jugé moindre par la revue (visible et corrigeable en cours de manche via PAUSE, contrairement à un
+  score mal crédité qui est difficile à corriger après coup).
 
 ---
 

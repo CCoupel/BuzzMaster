@@ -2,6 +2,43 @@
 
 ---
 
+## [20260813-3] — Synchronisation live du montant crédité `/anim` (code review MAJEUR-1, #155/#156)
+
+> Correctif suite revue de code (`_work/reports/code-reviewer-20260813-120457.md` MAJEUR-1,
+> arbitrage utilisateur relayé par le teamleader) : `/anim` créditait `question.POINTS` brut alors
+> que `/admin` crédite `pointsInput`, un état React local ajustable à tout moment après la
+> sélection de la question (ex. manche bonus) — deux montants différents pour la même question
+> selon l'interface utilisée pour créditer, silencieusement.
+
+- **[NEW]** Action `SET_CREDIT_POINTS` (Client→Server, `admin` uniquement) — l'admin transmet son
+  `pointsInput` ajusté au serveur. Absente avant ce lot : `START` transportait déjà `POINTS` dans
+  son payload WS côté frontend, mais `protocol.StartPayload` ne l'a jamais décodé (champ
+  silencieusement ignoré) — aucune autre voie n'existait pour que le serveur connaisse cette
+  valeur.
+- **[NEW]** Action `CREDIT_POINTS` (Server→Client, `ClientTypeAnim` exclusif) — rediffuse le
+  montant de base courant. Sur le modèle de `NEXT_QUESTION` (B5) : diffusée sur événements
+  explicites (`SET_CREDIT_POINTS`, `READY`, `NEW_GAME`, HELLO ciblé), jamais recalculée sur le
+  chemin de `broadcastUpdate` — bien que, contrairement à `NEXT_QUESTION`, aucune lecture disque ne
+  soit en jeu ici (valeur en mémoire, pas `loadQuestions()`).
+- **[CHANGED]** Valeur par défaut : réinitialisée à `question.POINTS` (repli `1`) à chaque `READY`
+  — même règle que `pointsInput` côté `GamePage.jsx` (`handleQuestionSelect`).
+- **Hors périmètre de ce correctif** (documenté explicitement dans `websocket-actions.md`
+  §"Animateur", pas seulement passé sous silence) :
+  - QCM/MEMORY : `CREDIT_POINTS` transmet le montant de **base**, pas le montant final calculé par
+    `resolvePointsAward` (pénalités/score spécifiques au type) — sans conséquence tant que ces
+    types restent hors périmètre `/anim` (tranche SPEEDY #155/#156 uniquement).
+  - `TIME` (durée du chrono) : même famille de problème identifiée par la revue sur
+    `AnimPage.jsx`'s `handleStart`, non traitée par ce correctif (arbitrage explicite — impact
+    jugé moindre, corrigeable en cours de manche via `PAUSE`).
+- **Coordination frontend requise** (dev-frontend, dispatché séparément) : `GamePage.jsx` doit
+  émettre `SET_CREDIT_POINTS` sur changement de `pointsInput` (debounced) ; `AnimPage.jsx` doit
+  consommer `CREDIT_POINTS` au lieu de lire `question.POINTS` directement dans le calcul de
+  `creditAmount`. Le JSDoc de `resolvePointsAward` (qui affirme aujourd'hui « un seul montant
+  possible dans les deux interfaces », vrai seulement une fois ce câblage fait) est à corriger à ce
+  moment-là — fichier frontend, hors périmètre backend de ce lot.
+
+---
+
 ## [20260813-2] — Batch 1 backend #155/#156 : implémentation B1-B6 + correction NEXT_QUESTION
 
 > Suite du Batch 0 ci-dessous — implémentation backend (`internal/server/websocket.go`, `http.go`,
