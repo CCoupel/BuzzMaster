@@ -6,6 +6,13 @@ import { useCategories } from '../hooks/useCategories'
 import { categoryMeta } from '../utils/categoryUtils'
 import { getRgbColor } from '../utils/colorUtils'
 import { sortQuestionsByOrder } from '../utils/questionOrder'
+import {
+  calcQcmPenaltyForHints,
+  calcQcmPenalty,
+  calcMemoryScore,
+  calcArdoiseDefaultPoints,
+  resolvePointsAward,
+} from '../utils/pointsAward'
 import Button from '../components/Button'
 import Card from '../components/Card'
 import Timer from '../components/Timer'
@@ -229,62 +236,16 @@ export default function GamePage() {
   }, [gameState.MEMOTION_SELECTED, gameState.question])
 
   // Calculate Memory score based on matched pairs, errors, and config
+  // Rule mutualized in utils/pointsAward.js (calcMemoryScore) — consumed by
+  // /admin here and by the animateur page (#155/#156/F1).
   const memoryScore = useMemo(() => {
-    if (gameState.question?.TYPE !== 'MEMORY') return null
-
-    const config = gameState.question.MEMORY_CONFIG || {}
-    const pointsPerPair = config.POINTS_PER_PAIR || 10
-    const errorPenalty = config.ERROR_PENALTY || 0
-    const completionBonus = config.COMPLETION_BONUS || 0
-
-    const matchedPairs = gameState.memoryMatchedPairs?.length || 0
-    const totalPairs = gameState.question.MEMORY_PAIRS?.length || 0
-    const errors = gameState.memoryErrors || 0
-    const isComplete = matchedPairs === totalPairs && totalPairs > 0
-
-    let score = matchedPairs * pointsPerPair
-    if (isComplete) score += completionBonus
-    score -= errors * errorPenalty
-    if (score < 0) score = 0
-
-    return { score, matchedPairs, totalPairs, errors, isComplete, pointsPerPair, errorPenalty, completionBonus }
+    return calcMemoryScore(gameState.question, gameState.memoryMatchedPairs?.length || 0, gameState.memoryErrors || 0)
   }, [gameState.question, gameState.memoryMatchedPairs, gameState.memoryErrors])
 
-  // Calculate QCM penalty for a given hintsAtBuzz count (per-player)
-  // Returns { multiplier, effectivePoints, penaltyPercent } or null if no penalty config
-  const calcQcmPenaltyForHints = (hintsAtBuzz) => {
-    if (gameState.question?.TYPE !== 'QCM' || !gameState.question?.QCM_HINTS_ENABLED) return null
-    const penalty1 = gameState.question?.QCM_PENALTY_1 || 0.67
-    const penalty2 = gameState.question?.QCM_PENALTY_2 || 0.33
-    let multiplier = 1
-    if (hintsAtBuzz === 1) multiplier = penalty1
-    else if (hintsAtBuzz >= 2) multiplier = penalty2
-    const effectivePoints = Math.max(1, Math.round(pointsInput * multiplier))
-    const penaltyPercent = Math.round(multiplier * 100)
-    return { multiplier, effectivePoints, penaltyPercent }
-  }
-
   // Calculate QCM penalty based on current invalidated count (used for UI display in score input)
+  // Rule mutualized in utils/pointsAward.js (calcQcmPenalty).
   const qcmPenalty = useMemo(() => {
-    // Only apply for QCM questions with hints enabled
-    if (gameState.question?.TYPE !== 'QCM' || !gameState.question?.QCM_HINTS_ENABLED) return null
-
-    const invalidatedCount = gameState.qcmInvalidated?.length || 0
-    if (invalidatedCount === 0) return null
-
-    // Use configurable penalties from question, with defaults
-    const penalty1 = gameState.question?.QCM_PENALTY_1 || 0.67
-    const penalty2 = gameState.question?.QCM_PENALTY_2 || 0.33
-
-    let multiplier = 1
-    if (invalidatedCount === 1) multiplier = penalty1
-    else if (invalidatedCount >= 2) multiplier = penalty2
-
-    // Ensure effective points is at least 1 (never 0)
-    const effectivePoints = Math.max(1, Math.round(pointsInput * multiplier))
-    const penaltyPercent = Math.round(multiplier * 100)
-
-    return { invalidatedCount, multiplier, effectivePoints, penaltyPercent }
+    return calcQcmPenalty(gameState.question, pointsInput, gameState.qcmInvalidated?.length || 0)
   }, [gameState.question, gameState.qcmInvalidated, pointsInput])
 
   // Calculate per-team QCM acquired points for the REVEALED badge
@@ -299,7 +260,7 @@ export default function GamePage() {
       if (bumper.ANSWER_COLOR !== correctColor) return
       // This bumper answered correctly — compute their points with per-player penalty
       const hints = bumper.HINTS_AT_BUZZ || 0
-      const penalty = calcQcmPenaltyForHints(hints)
+      const penalty = calcQcmPenaltyForHints(gameState.question, pointsInput, hints)
       const pts = penalty ? penalty.effectivePoints : pointsInput
       // Keep the best (highest) points among correct buzzers of this team
       if (result[bumper.TEAM] === undefined || pts > result[bumper.TEAM]) {
@@ -390,24 +351,20 @@ export default function GamePage() {
       // Only allow points for players who have buzzed
       const bumper = bumpers[bumperMac]
       if (bumper?.TIME && bumper.TIME > 0) {
-        // For Memory questions, use calculated score
-        // For QCM with hints, use per-player penalty based on hints at buzz time (not current hints)
-        // Otherwise use pointsInput
-        let pointsToAward = pointsInput
-        if (memoryScore) {
-          pointsToAward = memoryScore.score
-        } else if (gameState.question?.TYPE === 'QCM' && gameState.question?.QCM_HINTS_ENABLED) {
-          const perPlayerPenalty = calcQcmPenaltyForHints(bumper.HINTS_AT_BUZZ || 0)
-          if (perPlayerPenalty) pointsToAward = perPlayerPenalty.effectivePoints
-        }
-        // Check POINTS_TARGET: if TEAM, give points to team instead of player
-        if (gameState.question?.POINTS_TARGET === 'TEAM') {
+        // Rule mutualized in utils/pointsAward.js (resolvePointsAward) — Memory
+        // score, QCM per-player hint penalty (buzz-time, not current), and
+        // POINTS_TARGET (team vs player) all applied there.
+        const { amount, target } = resolvePointsAward(gameState.question, pointsInput, {
+          hintsAtBuzz: bumper.HINTS_AT_BUZZ || 0,
+          memory: { matchedPairs: gameState.memoryMatchedPairs?.length || 0, errors: gameState.memoryErrors || 0 },
+        })
+        if (target === 'TEAM') {
           const teamName = bumper.TEAM
           if (teamName) {
-            setTeamPoints(teamName, pointsToAward)
+            setTeamPoints(teamName, amount)
           }
         } else {
-          setBumperPoints(bumperMac, pointsToAward)
+          setBumperPoints(bumperMac, amount)
         }
       }
     }
@@ -669,7 +626,7 @@ export default function GamePage() {
             <div className="ardoise-answers-list">
               {sortedArdoiseEntries.map(({ team, teamName, answer }, rank) => {
                 const teamColor = getRgbColor(team.COLOR)
-                const defaultPts = parseInt(gameState.question?.POINTS) || pointsInput
+                const defaultPts = calcArdoiseDefaultPoints(gameState.question, pointsInput)
                 const delayLabel = answer ? formatArdoiseDelay(answer, gameState.gameTime) : null
                 return (
                   <div
@@ -1082,18 +1039,13 @@ export default function GamePage() {
                       if (gameState.question?.TYPE === 'MEMORY' &&
                           gameState.question?.MEMORY_MODE !== 'SOLO' &&
                           gameState.MEMORY_TEAM_PAIRS?.[teamName] !== undefined) {
-                        // Calculate team-specific Memory points
-                        const config = gameState.question?.MEMORY_CONFIG || {}
+                        // Calculate team-specific Memory points — same rule as
+                        // solo (utils/pointsAward.js calcMemoryScore), only the
+                        // pairs/errors source differs (per-team vs global).
                         const pairs = gameState.MEMORY_TEAM_PAIRS[teamName] || 0
                         const errors = gameState.MEMORY_TEAM_ERRORS?.[teamName] || 0
-                        const totalPairs = gameState.question?.MEMORY_PAIRS?.length || 0
-                        const pointsPerPair = config.POINTS_PER_PAIR || 10
-                        const errorPenalty = config.ERROR_PENALTY || 0
-                        const completionBonus = config.COMPLETION_BONUS || 0
-                        const isComplete = pairs === totalPairs && totalPairs > 0
-                        pointsToAward = pairs * pointsPerPair - errors * errorPenalty
-                        if (isComplete) pointsToAward += completionBonus
-                        if (pointsToAward < 0) pointsToAward = 0
+                        const teamMemoryScore = calcMemoryScore(gameState.question, pairs, errors)
+                        if (teamMemoryScore) pointsToAward = teamMemoryScore.score
                       } else if (memoryScore) {
                         // Solo Memory mode - use global score
                         pointsToAward = memoryScore.score
