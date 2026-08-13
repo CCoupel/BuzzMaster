@@ -4,7 +4,8 @@ import { useGame } from '../hooks/GameContext'
 import { useCategories } from '../hooks/useCategories'
 import { categoryMeta } from '../utils/categoryUtils'
 import { sortTeamsByBuzzOrder, getRankBadge, formatReactionTime } from '../utils/buzzOrder'
-import { resolvePointsAward } from '../utils/pointsAward'
+import { resolvePointsAward, resolvePointsTarget, calcQcmTeamAward } from '../utils/pointsAward'
+import { QCM_COLORS } from '../constants/colors'
 import Timer from '../components/Timer'
 import CategoryBadge from '../components/CategoryBadge'
 import AnimTeamCard from '../components/AnimTeamCard'
@@ -27,7 +28,7 @@ const STATUS_LABEL = {
 }
 
 /**
- * AnimPage — interface animateur (`/anim`, #155/#156).
+ * AnimPage — interface animateur (`/anim`, #155/#156/#157).
  *
  * Gabarit à 3 zones (plan _work/reports/plan-20260813-094321.md §4 F4) :
  *   - Zone A (contexte) : question courante, chronomètre + phase, statut de
@@ -36,7 +37,13 @@ const STATUS_LABEL = {
  *     contextuels à la phase — jamais un bouton inactif "pour information".
  *   - Zone C (équipes, #156/F6) : AnimTeamCard enrichie (rang de buzz, temps
  *     de réaction, bouton de crédit) sans réécriture du composant — voir
- *     AnimTeamCard.jsx (point d'extension `children`).
+ *     AnimTeamCard.jsx (point d'extension `children`). #157 (mode QCM,
+ *     plan _work/reports/plan-20260813-151543.md) y ajoute la couleur de
+ *     réponse choisie par équipe et rend le montant de crédit PAR ÉQUIPE
+ *     (chaque équipe a sa propre pénalité d'indices) au lieu d'un montant
+ *     unique — le verrou de buzz étant PAR ÉQUIPE (`engine.go:1404-1409`,
+ *     tous types sauf MEMORY/MEMOTION), une équipe = un buzzer = une
+ *     couleur, donc pas de vue par joueur à construire.
  *
  * Tablette paysage, pas de Navbar régie (App.jsx ne l'affiche que sur
  * /admin/* désormais — #155/F2). Connecté sur /ws/anim (ClientTypeAnim,
@@ -136,38 +143,82 @@ export default function AnimPage() {
   const showRankBadge = RANK_BADGE_PHASES.includes(gameState.phase)
   const showBuzzOrder = BUZZ_ORDER_PHASES.includes(gameState.phase)
   const creditEnabled = CREDIT_PHASES.includes(gameState.phase)
+  const isQcmWithHints = gameState.question?.TYPE === 'QCM' && gameState.question?.QCM_HINTS_ENABLED
 
-  // Crédit — montant unique via l'utilitaire partagé (F1), sans saisie ;
-  // cible équipe ou joueur selon POINTS_TARGET (GamePage.jsx:404-411).
-  // Base = creditPoints (CREDIT_POINTS, MAJEUR-1) — l'équivalent serveur de
-  // pointsInput sur /admin, PAS question.POINTS brut : /admin crédite
-  // pointsInput, potentiellement ajusté après sélection (ex. manche bonus),
-  // et SET_CREDIT_POINTS/CREDIT_POINTS existent précisément pour que /anim
-  // voie cet ajustement plutôt que de retomber silencieusement sur la valeur
-  // de la question. Calculé une seule fois : le montant ne dépend pas de
-  // l'équipe cliquée (F5/F6 visent le mode SPEEDY — pas de pénalité QCM
-  // par-joueur ni de score MEMORY ici, resolvePointsAward retombe donc sur
-  // le montant de base), donc le même { amount, target } vaut pour le
-  // bouton de chaque équipe — affiché et appliqué à l'identique.
-  const { amount: creditAmount, target: creditTarget } = resolvePointsAward(
-    gameState.question,
-    creditPoints || 1,
-    {}
-  )
-  // En PLAYER, crédite le bumper le plus rapide de l'équipe (dans le mode
-  // SPEEDY, un seul bumper par équipe a TIME > 0 — le buzz est verrouillé
-  // globalement dès le premier appui — donc c'est le même joueur que
-  // /admin créditerait en cliquant sur son buzzer).
+  // Bumpers groupés par équipe — évite un filtre O(bumpers) répété par
+  // équipe à chaque rendu ; consommé par le crédit QCM (T3, #157) et
+  // l'affichage de la réponse QCM (T4, #157).
+  const bumpersByTeam = useMemo(() => {
+    const grouped = {}
+    Object.entries(bumpers).forEach(([mac, bumper]) => {
+      if (!bumper.TEAM) return
+      if (!grouped[bumper.TEAM]) grouped[bumper.TEAM] = []
+      // `mac` ajouté au bumper brut : garde ANSWER_COLOR/HINTS_AT_BUZZ/TIME
+      // directement accessibles (forme attendue par calcQcmTeamAward) tout
+      // en gardant l'identifiant nécessaire à setBumperPoints.
+      grouped[bumper.TEAM].push({ ...bumper, mac })
+    })
+    return grouped
+  }, [bumpers])
+
+  // Crédit — cible (équipe/joueur) globale, POINTS_TARGET ne dépend pas de
+  // l'équipe (GamePage.jsx:404-411). Base = creditPoints (CREDIT_POINTS,
+  // MAJEUR-1) — l'équivalent serveur de pointsInput sur /admin, PAS
+  // question.POINTS brut : /admin crédite pointsInput, potentiellement
+  // ajusté après sélection (ex. manche bonus), et SET_CREDIT_POINTS/
+  // CREDIT_POINTS existent précisément pour que /anim voie cet ajustement.
+  const creditTarget = resolvePointsTarget(gameState.question)
+
+  // #157/T3 — le MONTANT, lui, est par équipe en QCM avec indices activés
+  // (chaque équipe a sa propre pénalité, celle de SON buzzer) : calcul
+  // mutualisé par calcQcmTeamAward (#157/T1). Hors QCM (ou QCM sans
+  // indices), resolvePointsAward retombe sur le montant de base pour
+  // toutes les équipes — comportement inchangé par rapport à avant T3.
+  const getTeamAward = (teamName) => {
+    const basePoints = creditPoints || 1
+    if (isQcmWithHints) {
+      return calcQcmTeamAward(gameState.question, basePoints, bumpersByTeam[teamName] || [], gameState.qcmInvalidated?.length || 0)
+    }
+    return { amount: resolvePointsAward(gameState.question, basePoints, {}).amount, hasCorrectAnswer: null }
+  }
+
+  // En PLAYER, crédite le bumper le plus rapide de l'équipe. Correction
+  // #157/T2 : le verrou de buzz n'est PAS global, il est PAR ÉQUIPE
+  // (engine.go:1404-1409, "only ONE player per team can buzz") — et
+  // s'applique à tous les types de question SAUF MEMORY/MEMOTION, donc à
+  // QCM et ARDOISE aussi, pas seulement SPEEDY. Conséquence : une équipe a
+  // au plus UN bumper avec TIME > 0, quel que soit le type — "le plus
+  // rapide de l'équipe" est donc sans ambiguïté le même joueur que /admin
+  // créditerait en cliquant sur son buzzer, pas une approximation propre à
+  // SPEEDY.
   const handleCredit = (teamName) => {
     if (!creditEnabled) return
+    const { amount } = getTeamAward(teamName)
     if (creditTarget === 'TEAM') {
-      setTeamPoints(teamName, creditAmount)
+      setTeamPoints(teamName, amount)
       return
     }
-    const fastestBumper = Object.entries(bumpers)
-      .filter(([, b]) => b.TEAM === teamName && (b.TIME ?? 0) > 0)
-      .sort((a, b) => a[1].TIME - b[1].TIME)[0]
-    if (fastestBumper) setBumperPoints(fastestBumper[0], creditAmount)
+    const fastestBumper = (bumpersByTeam[teamName] || [])
+      .filter(b => (b.TIME ?? 0) > 0)
+      .sort((a, b) => a.TIME - b.TIME)[0]
+    if (fastestBumper) setBumperPoints(fastestBumper.mac, amount)
+  }
+
+  // #157/T4 — réponse QCM de l'équipe (zone C) : couleur choisie + joueur,
+  // dès que l'équipe a buzzé (pas de garde de phase — contrairement au
+  // crédit). Marqueur de justesse séparé, gardé côté rendu à REVEALED
+  // uniquement (décision D1 : l'animateur ne doit pas lire la réponse sur
+  // sa tablette avant REVEALED). Rien de tout cela hors QCM.
+  const getTeamQcmAnswer = (teamName) => {
+    if (gameState.question?.TYPE !== 'QCM') return null
+    const buzzedBumper = (bumpersByTeam[teamName] || []).find(b => (b.TIME ?? 0) > 0)
+    if (!buzzedBumper?.ANSWER_COLOR) return null
+    const colorInfo = QCM_COLORS[buzzedBumper.ANSWER_COLOR] || null
+    return {
+      colorInfo,
+      playerName: buzzedBumper.NAME || '',
+      isCorrect: buzzedBumper.ANSWER_COLOR === gameState.question?.QCM_CORRECT,
+    }
   }
 
   return (
@@ -232,13 +283,16 @@ export default function AnimPage() {
         />
       </div>
 
-      {/* Zone C — équipes (#156/F6 : ordre de buzz, rang, temps, crédit) */}
+      {/* Zone C — équipes (#156/F6 : ordre de buzz, rang, temps, crédit ;
+          #157/T3-T4 : montant par équipe en QCM, couleur de réponse) */}
       <div className="anim-zone anim-zone-teams">
         {displayTeams.map((team, index) => {
           const rank = index + 1
           const rankBadge = showRankBadge ? getRankBadge(rank) : null
           const reactionTime = showBuzzOrder ? formatReactionTime(team.TIME, gameState.gameTime) : null
-          const hasExtra = rankBadge || reactionTime || creditEnabled
+          const qcmAnswer = getTeamQcmAnswer(team.name)
+          const teamCreditAmount = creditEnabled ? getTeamAward(team.name).amount : null
+          const hasExtra = rankBadge || reactionTime || qcmAnswer || creditEnabled
           return (
             <AnimTeamCard key={team.name} name={team.name} color={team.COLOR} score={team.SCORE || 0}>
               {hasExtra && (
@@ -249,13 +303,38 @@ export default function AnimPage() {
                       {reactionTime && <span className="anim-team-reaction-time">{reactionTime}</span>}
                     </span>
                   )}
+                  {/* #157/T4 — couleur choisie dès le buzz ; justesse (✓/✗)
+                      uniquement en REVEALED (décision D1, plan §4) — rien de
+                      tout cela hors QCM (qcmAnswer est null hors QCM ou tant
+                      que l'équipe n'a pas buzzé). */}
+                  {qcmAnswer && (
+                    <span className="anim-team-qcm-answer">
+                      {qcmAnswer.colorInfo && (
+                        <span
+                          className="anim-team-qcm-color"
+                          style={{ backgroundColor: qcmAnswer.colorInfo.color }}
+                          title={qcmAnswer.colorInfo.label}
+                        >
+                          {qcmAnswer.colorInfo.letter}
+                        </span>
+                      )}
+                      {qcmAnswer.playerName && (
+                        <span className="anim-team-qcm-player">{qcmAnswer.playerName}</span>
+                      )}
+                      {gameState.phase === 'REVEALED' && (
+                        <span className={`anim-team-qcm-correct ${qcmAnswer.isCorrect ? 'correct' : 'incorrect'}`}>
+                          {qcmAnswer.isCorrect ? '✓' : '✗'}
+                        </span>
+                      )}
+                    </span>
+                  )}
                   {creditEnabled && (
                     <button
                       className="anim-team-credit-btn"
                       onClick={() => handleCredit(team.name)}
-                      title={`Créditer ${creditAmount} pts à ${team.name}`}
+                      title={`Créditer ${teamCreditAmount} pts à ${team.name}`}
                     >
-                      +{creditAmount} pts
+                      +{teamCreditAmount} pts
                     </button>
                   )}
                 </>

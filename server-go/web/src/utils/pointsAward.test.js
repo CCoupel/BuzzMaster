@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import {
   calcQcmPenaltyForHints,
   calcQcmPenalty,
+  calcQcmTeamAward,
   calcMemoryScore,
   calcArdoiseDefaultPoints,
   resolvePointsTarget,
@@ -248,5 +249,140 @@ describe('resolvePointsAward — MEMORY', () => {
   it('MEMORY sans contexte memory fourni : replie sur le montant de base', () => {
     const result = resolvePointsAward(memoryQuestion, 8, {})
     expect(result).toEqual({ amount: 8, target: 'PLAYER' })
+  })
+})
+
+// ========================================
+// calcQcmTeamAward — #157 T1, montant QCM de niveau équipe (interface
+// animateur, zone C) — mutualisé depuis GamePage.jsx:272-290
+// (qcmTeamAcquiredPoints) + GamePage.jsx:1072-1078 (repli), plan
+// _work/reports/plan-20260813-151543.md §1.2/T1.
+//
+// Trois branches à reproduire à l'identique (repli compris, sous peine de
+// divergence de montant avec /admin — plan §6 R1) :
+//   1. Un bumper de l'équipe a buzzé (TIME > 0) avec ANSWER_COLOR ===
+//      QCM_CORRECT → pénalité PAR JOUEUR (calcQcmPenaltyForHints, son propre
+//      HINTS_AT_BUZZ). S'il y en a plusieurs, garde le MEILLEUR montant
+//      (GamePage.jsx:284-288 "Keep the best (highest) points").
+//   2. Aucun bumper correct → repli sur la pénalité des indices COURANTS
+//      (calcQcmPenalty, invalidatedCount — PAS le HINTS_AT_BUZZ d'un buzz).
+//   3. Ni l'un ni l'autre applicable (indices désactivés, ou aucun indice
+//      invalidé) → montant de base tel quel.
+//
+// hasCorrectAnswer distingue la branche 1 des branches 2/3 (consommé par T4
+// pour le marqueur ✓/✗ en zone C) — vrai dès qu'un bumper correct est
+// trouvé, MÊME si les indices sont désactivés (auquel cas le montant reste
+// le montant de base malgré tout — piège identifié en lisant
+// GamePage.jsx:279-280 : `pts = penalty ? penalty.effectivePoints :
+// pointsInput`, `penalty` peut être null tout en ayant trouvé un bumper
+// correct).
+// ========================================
+
+describe('calcQcmTeamAward', () => {
+  const qcmQuestion = (overrides = {}) => ({
+    TYPE: 'QCM',
+    QCM_CORRECT: 'RED',
+    QCM_HINTS_ENABLED: true,
+    ...overrides,
+  })
+
+  describe('branche 1 — buzzer correct dans l\'équipe', () => {
+    it('0 indice au buzz → montant plein, hasCorrectAnswer=true', () => {
+      const teamBumpers = [{ TIME: 100, ANSWER_COLOR: 'RED', HINTS_AT_BUZZ: 0 }]
+      const result = calcQcmTeamAward(qcmQuestion(), 10, teamBumpers, 0)
+      expect(result).toEqual({ amount: 10, hasCorrectAnswer: true })
+    })
+
+    it('1 indice au buzz → pénalité 0.67, hasCorrectAnswer=true', () => {
+      const teamBumpers = [{ TIME: 100, ANSWER_COLOR: 'RED', HINTS_AT_BUZZ: 1 }]
+      const result = calcQcmTeamAward(qcmQuestion(), 10, teamBumpers, 0)
+      expect(result).toEqual({ amount: 7, hasCorrectAnswer: true })
+    })
+
+    it('2+ indices au buzz → pénalité 0.33, hasCorrectAnswer=true', () => {
+      const teamBumpers = [{ TIME: 100, ANSWER_COLOR: 'RED', HINTS_AT_BUZZ: 2 }]
+      const result = calcQcmTeamAward(qcmQuestion(), 10, teamBumpers, 0)
+      expect(result).toEqual({ amount: 3, hasCorrectAnswer: true })
+    })
+
+    it('plusieurs bumpers corrects dans l\'équipe → garde le meilleur montant (le moins d\'indices)', () => {
+      const teamBumpers = [
+        { TIME: 100, ANSWER_COLOR: 'RED', HINTS_AT_BUZZ: 2 }, // 3 pts
+        { TIME: 150, ANSWER_COLOR: 'RED', HINTS_AT_BUZZ: 0 }, // 10 pts — le meilleur
+      ]
+      const result = calcQcmTeamAward(qcmQuestion(), 10, teamBumpers, 0)
+      expect(result).toEqual({ amount: 10, hasCorrectAnswer: true })
+    })
+
+    it('un bumper avec la mauvaise couleur ne compte pas comme correct', () => {
+      const teamBumpers = [{ TIME: 100, ANSWER_COLOR: 'BLUE', HINTS_AT_BUZZ: 0 }]
+      const result = calcQcmTeamAward(qcmQuestion(), 10, teamBumpers, 0)
+      expect(result.hasCorrectAnswer).toBe(false)
+    })
+
+    it('un bumper correct mais n\'ayant pas buzzé (TIME=0) ne compte pas', () => {
+      const teamBumpers = [{ TIME: 0, ANSWER_COLOR: 'RED', HINTS_AT_BUZZ: 0 }]
+      const result = calcQcmTeamAward(qcmQuestion(), 10, teamBumpers, 0)
+      expect(result.hasCorrectAnswer).toBe(false)
+    })
+  })
+
+  describe('branche 2 — aucun buzzer correct : repli sur les indices courants', () => {
+    it('mauvaise couleur buzzée, 1 indice courant invalidé → pénalité 0.67 (PAS le HINTS_AT_BUZZ du buzz)', () => {
+      const teamBumpers = [{ TIME: 100, ANSWER_COLOR: 'BLUE', HINTS_AT_BUZZ: 2 }] // HINTS_AT_BUZZ ignoré ici
+      const result = calcQcmTeamAward(qcmQuestion(), 10, teamBumpers, 1)
+      expect(result).toEqual({ amount: 7, hasCorrectAnswer: false })
+    })
+
+    it('2+ indices courants invalidés → pénalité 0.33', () => {
+      const teamBumpers = [{ TIME: 100, ANSWER_COLOR: 'BLUE', HINTS_AT_BUZZ: 0 }]
+      const result = calcQcmTeamAward(qcmQuestion(), 10, teamBumpers, 3)
+      expect(result).toEqual({ amount: 3, hasCorrectAnswer: false })
+    })
+  })
+
+  describe('branche — équipe sans buzz (aucun bumper, ou aucun avec TIME>0)', () => {
+    it('teamBumpers vide → repli sur les indices courants comme une équipe ayant mal répondu', () => {
+      const result = calcQcmTeamAward(qcmQuestion(), 10, [], 2)
+      expect(result).toEqual({ amount: 3, hasCorrectAnswer: false })
+    })
+
+    it('teamBumpers vide et aucun indice invalidé → montant de base', () => {
+      const result = calcQcmTeamAward(qcmQuestion(), 10, [], 0)
+      expect(result).toEqual({ amount: 10, hasCorrectAnswer: false })
+    })
+
+    it('teamBumpers undefined/non fourni → ne plante pas, se comporte comme vide', () => {
+      const result = calcQcmTeamAward(qcmQuestion(), 10, undefined, 0)
+      expect(result).toEqual({ amount: 10, hasCorrectAnswer: false })
+    })
+  })
+
+  describe('branche 3 — QCM sans indices activés (QCM_HINTS_ENABLED=false)', () => {
+    it('avec un bumper correct → montant de base tel quel, MAIS hasCorrectAnswer reste true', () => {
+      const question = qcmQuestion({ QCM_HINTS_ENABLED: false })
+      const teamBumpers = [{ TIME: 100, ANSWER_COLOR: 'RED', HINTS_AT_BUZZ: 2 }]
+      const result = calcQcmTeamAward(question, 10, teamBumpers, 3)
+      expect(result).toEqual({ amount: 10, hasCorrectAnswer: true })
+    })
+
+    it('sans bumper correct → montant de base, hasCorrectAnswer=false', () => {
+      const question = qcmQuestion({ QCM_HINTS_ENABLED: false })
+      const result = calcQcmTeamAward(question, 10, [], 3)
+      expect(result).toEqual({ amount: 10, hasCorrectAnswer: false })
+    })
+  })
+
+  it('non-QCM (ex: SPEEDY) : repli neutre sur le montant de base', () => {
+    const result = calcQcmTeamAward({ TYPE: 'SPEEDY' }, 10, [], 0)
+    expect(result).toEqual({ amount: 10, hasCorrectAnswer: false })
+  })
+
+  it('respecte des seuils QCM_PENALTY_1/2 personnalisés, dans les deux branches', () => {
+    const question = qcmQuestion({ QCM_PENALTY_1: 0.5, QCM_PENALTY_2: 0.1 })
+    const correctBranch = calcQcmTeamAward(question, 10, [{ TIME: 100, ANSWER_COLOR: 'RED', HINTS_AT_BUZZ: 1 }], 0)
+    expect(correctBranch.amount).toBe(5)
+    const fallbackBranch = calcQcmTeamAward(question, 10, [], 1)
+    expect(fallbackBranch.amount).toBe(5)
   })
 })

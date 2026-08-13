@@ -6,7 +6,7 @@ Historique des versions du projet BuzzControl.
 
 ## [6.2.0] - Milestone v6.2.x — Interface Animateur (#24)
 
-**Issues** : #155 (socle) + #156 (SPEEDY) — nouvelle interface animateur pour conduite de parties SPEEDY depuis une tablette.
+**Issues** : #155 (socle) + #156 (SPEEDY) + #157 (QCM) — nouvelle interface animateur pour conduite de parties SPEEDY et QCM depuis une tablette.
 
 ### Added
 - **Interface animateur dédiée** (#155, #156) : Nouvelle page `/anim` optimisée pour tablette paysage — zone contexte (question courante, chronomètre, statut connexion), zone conduite (boutons contextuels par phase SPEEDY), zone équipes avec scores. Accessible via raccourci Navbar dédié. Veille écran maintenue (wake lock natif + repli `nosleep.js`). Reconnexion automatique avec indicateur visuel.
@@ -14,6 +14,10 @@ Historique des versions du projet BuzzControl.
 - **Compteur animateur en Navbar** (#155) : Nouveau badge affichant le nombre d'interfaces animateur connectées (motif similaire aux badges Admin/TV/VJoueur/Buzzer).
 - **Crédit de points depuis `/anim`** (#156) : Boutons de crédit pour équipes ou joueurs (selon mode), montant issu du calcul partagé, disponibles en phases STOPPED et REVEALED uniquement. Parité garantie avec `/admin`.
 - **Utilitaire de calcul de points partagé** (#155) : Extraction du calcul des points (pénalité QCM, score MEMORY, crédit ARDOISE, crédit SPEEDY) en fonction `pointsAward.js`, utilisé par les deux interfaces admin et animateur.
+- **Mode QCM depuis interface animateur** (#157) : Conduite QCM complète depuis `/anim` — couleur de réponse par joueur visible en direct, crédit par équipe appliquée avec pénalité d'indices calculée, justesse (bonne/mauvaise réponse) révélée seulement après attribution des points (phase REVEALED). Même comportement et mêmes montants que `/admin`.
+
+### Fixed
+- **Crédit d'équipe en phase STOPPED avec montant incorrect** (#157) — Bug latent découvert en implémentation QCM animateur : le crédit appliqué en STOPPED (avant révélation) pouvait utiliser un montant calculé sur les mauvais indices/pénalités. Désormais correct dans les deux interfaces (`/admin` et `/anim`), montant toujours calculé au moment de l'application.
 
 ### Changed
 - **Raccourcis Navbar TV/Joueur/Animateur** (#155) : Les trois entrées ouvrent désormais des nouveaux onglets (cible `_blank`) au lieu de naviguer dans l'onglet courant. Permet au régisseur de basculer rapidement entre les vues sans perdre le contexte admin.
