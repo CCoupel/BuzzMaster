@@ -257,15 +257,14 @@ describe('Navbar — badge version cliquable (#43) — logique', () => {
     expect(display).toBe('v3.7.0')
   })
 
+  // #155 (F2, BREAKING) — currentPrefix is a constant '/admin' now, not
+  // derived from the URL anymore (Navbar.jsx only ever renders on /admin/*,
+  // /anim is its own page — AnimPage — that never shows this navbar). The
+  // sibling case that used to test a '/anim' prefix here no longer applies
+  // and was removed rather than adapted.
   it('la destination navigate est construite avec le bon chemin', () => {
     const currentPrefix = '/admin'
     const getFullPath = (path) => path ? `${currentPrefix}/${path}` : currentPrefix
     expect(getFullPath('updates')).toBe('/admin/updates')
-  })
-
-  it('la destination navigate est correcte pour prefix /anim', () => {
-    const currentPrefix = '/anim'
-    const getFullPath = (path) => path ? `${currentPrefix}/${path}` : currentPrefix
-    expect(getFullPath('updates')).toBe('/anim/updates')
   })
 })

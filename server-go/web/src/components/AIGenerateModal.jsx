@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect, useCallback, useRef } from 'react'
-import { useNavigate, useLocation } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import Button from './Button'
 import './AIGenerateModal.css'
 
@@ -384,7 +384,6 @@ export default function AIGenerateModal({
   onNavigateToQuizSettings,
 }) {
   const navigate = useNavigate()
-  const location = useLocation()
 
   // 'unavailable' | 'form' | 'loading' | 'success' | 'cancelled' | 'failed' | 'submit-error'
   const [viewState, setViewState] = useState(() => initialViewStateFor(aiJob, apiKeyConfigured))
@@ -433,10 +432,12 @@ export default function AIGenerateModal({
   }
 
   const handleConfigure = useCallback(() => {
-    const prefix = location.pathname.startsWith('/anim') ? '/anim' : '/admin'
-    navigate(`${prefix}/settings`)
+    // AIGenerateModal only ever renders on /admin/* (QuestionsPage) — /anim is
+    // its own page (AnimPage) without question generation, so the prefix is a
+    // constant now, not derived from the URL (#155/F2, was an alias before).
+    navigate('/admin/settings')
     onClose()
-  }, [location.pathname, navigate, onClose])
+  }, [navigate, onClose])
 
   // #137 — fermeture désormais TOUJOURS autorisée, y compris pendant EnCours
   // (maquette §3 : "plus de blocage, puisque rien n'est perdu") — le job
