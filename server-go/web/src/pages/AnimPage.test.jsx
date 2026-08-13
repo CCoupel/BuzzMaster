@@ -404,6 +404,184 @@ describe('AnimPage — Zone C, crédit (#156/F6)', () => {
 })
 
 // ---------------------------------------------------------------------------
+// Zone C — crédit QCM par équipe (#157/T3)
+// ---------------------------------------------------------------------------
+
+describe('AnimPage — crédit QCM par équipe (#157/T3)', () => {
+  function qcmGameMock(phase, overrides = {}) {
+    // Déstructure `gameState` séparément — un spread `...overrides` en
+    // dernier écraserait entièrement le `gameState` fusionné ci-dessous
+    // (phase/question perdus) si `overrides.gameState` ne contient qu'un
+    // sous-ensemble de champs (ex: juste `qcmInvalidated`).
+    const { gameState: gameStateOverrides, ...restOverrides } = overrides
+    return makeGameMock({
+      gameState: {
+        phase,
+        question: { ID: '1', TYPE: 'QCM', QCM_HINTS_ENABLED: true, QCM_CORRECT: 'RED', POINTS: '10' },
+        ...gameStateOverrides,
+      },
+      creditPoints: 10,
+      teams: {
+        'Les Rouges': { COLOR: [255, 0, 0], SCORE: 0 },
+        'Les Bleus': { COLOR: [0, 0, 255], SCORE: 0 },
+      },
+      bumpers: {
+        r1: { TEAM: 'Les Rouges', TIME: 1000, ANSWER_COLOR: 'RED', HINTS_AT_BUZZ: 1 },
+        b1: { TEAM: 'Les Bleus', TIME: 1200, ANSWER_COLOR: 'RED', HINTS_AT_BUZZ: 0 },
+      },
+      ...restOverrides,
+    })
+  }
+
+  it('chaque équipe affiche et crédite SON montant (pénalité de son buzzer)', () => {
+    const props = qcmGameMock('STOPPED')
+    useGame.mockReturnValue(props)
+    render(<AnimPage />)
+
+    // Les Rouges : 1 indice au buzz -> 10*0.67 = 7 pts
+    expect(screen.getByText('+7 pts')).toBeInTheDocument()
+    // Les Bleus : 0 indice au buzz -> 10 pts pleins
+    expect(screen.getByText('+10 pts')).toBeInTheDocument()
+
+    screen.getByText('+7 pts').click()
+    expect(props.setBumperPoints).toHaveBeenCalledWith('r1', 7)
+    screen.getByText('+10 pts').click()
+    expect(props.setBumperPoints).toHaveBeenCalledWith('b1', 10)
+  })
+
+  it('équipe sans buzzer correct : replie sur la pénalité des indices courants (pas 0)', () => {
+    const props = qcmGameMock('STOPPED', {
+      gameState: { qcmInvalidated: ['GREEN'] }, // 1 indice courant invalidé -> pénalité 0.67
+      bumpers: {
+        r1: { TEAM: 'Les Rouges', TIME: 1000, ANSWER_COLOR: 'BLUE', HINTS_AT_BUZZ: 2 }, // mauvaise couleur
+      },
+      teams: { 'Les Rouges': { COLOR: [255, 0, 0], SCORE: 0 } },
+    })
+    useGame.mockReturnValue(props)
+    render(<AnimPage />)
+
+    // Repli : pénalité des indices COURANTS (1 -> 0.67 -> 7), pas le
+    // HINTS_AT_BUZZ du buzz (2 -> 0.33 -> 3)
+    expect(screen.getByText('+7 pts')).toBeInTheDocument()
+    expect(screen.queryByText('+3 pts')).not.toBeInTheDocument()
+  })
+
+  it('le montant est identique à celui que calcQcmTeamAward (la même règle que /admin) calculerait', () => {
+    // 2 indices au buzz -> pénalité 0.33 -> 10*0.33 = 3.3 -> round 3
+    const props = qcmGameMock('REVEALED', {
+      bumpers: { r1: { TEAM: 'Les Rouges', TIME: 1000, ANSWER_COLOR: 'RED', HINTS_AT_BUZZ: 2 } },
+      teams: { 'Les Rouges': { COLOR: [255, 0, 0], SCORE: 0 } },
+    })
+    useGame.mockReturnValue(props)
+    render(<AnimPage />)
+    expect(screen.getByText('+3 pts')).toBeInTheDocument()
+  })
+
+  it('non-régression SPEEDY : montant unique identique pour toutes les équipes', () => {
+    const props = makeGameMock({
+      gameState: { phase: 'STOPPED', question: { ID: '1', TYPE: 'SPEEDY', POINTS: '10' } },
+      creditPoints: 10,
+      teams: {
+        'Les Rouges': { COLOR: [255, 0, 0], SCORE: 0 },
+        'Les Bleus': { COLOR: [0, 0, 255], SCORE: 0 },
+      },
+      bumpers: {
+        r1: { TEAM: 'Les Rouges', TIME: 1000 },
+        b1: { TEAM: 'Les Bleus', TIME: 1200 },
+      },
+    })
+    useGame.mockReturnValue(props)
+    const { container } = render(<AnimPage />)
+    const creditButtons = Array.from(container.querySelectorAll('.anim-team-credit-btn')).map(b => b.textContent)
+    expect(creditButtons).toEqual(['+10 pts', '+10 pts'])
+  })
+
+  it('le crédit reste indisponible avant STOPPED/REVEALED en QCM aussi', () => {
+    useGame.mockReturnValue(qcmGameMock('STARTED'))
+    render(<AnimPage />)
+    expect(screen.queryByText(/\+\d+ pts/)).not.toBeInTheDocument()
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Zone C — réponse QCM (couleur, joueur, justesse) (#157/T4)
+// ---------------------------------------------------------------------------
+
+describe('AnimPage — réponse QCM en zone C (#157/T4)', () => {
+  function qcmAnswerGameMock(phase) {
+    return makeGameMock({
+      gameState: {
+        phase,
+        question: { ID: '1', TYPE: 'QCM', QCM_HINTS_ENABLED: false, QCM_CORRECT: 'RED' },
+      },
+      teams: { 'Les Rouges': { COLOR: [255, 0, 0], SCORE: 0 } },
+      bumpers: { r1: { TEAM: 'Les Rouges', TIME: 1000, ANSWER_COLOR: 'RED', NAME: 'Alice' } },
+    })
+  }
+
+  it('affiche la couleur choisie et le nom du joueur dès le buzz (avant STOPPED/REVEALED)', () => {
+    useGame.mockReturnValue(qcmAnswerGameMock('STARTED'))
+    const { container } = render(<AnimPage />)
+    expect(screen.getByText('Alice')).toBeInTheDocument()
+    expect(container.querySelector('.anim-team-qcm-color')).not.toBeNull()
+  })
+
+  it('n\'affiche PAS la justesse (✓/✗) avant REVEALED (décision D1)', () => {
+    useGame.mockReturnValue(qcmAnswerGameMock('STARTED'))
+    const { container } = render(<AnimPage />)
+    expect(container.querySelector('.anim-team-qcm-correct')).toBeNull()
+
+    useGame.mockReturnValue(qcmAnswerGameMock('STOPPED'))
+    const { container: container2 } = render(<AnimPage />)
+    expect(container2.querySelector('.anim-team-qcm-correct')).toBeNull()
+  })
+
+  it('affiche ✓ en REVEALED quand la couleur choisie est correcte', () => {
+    useGame.mockReturnValue(qcmAnswerGameMock('REVEALED'))
+    const { container } = render(<AnimPage />)
+    const marker = container.querySelector('.anim-team-qcm-correct')
+    expect(marker).not.toBeNull()
+    expect(marker.textContent).toBe('✓')
+    expect(marker.className).toContain('correct')
+  })
+
+  it('affiche ✗ en REVEALED quand la couleur choisie est incorrecte', () => {
+    const props = makeGameMock({
+      gameState: { phase: 'REVEALED', question: { ID: '1', TYPE: 'QCM', QCM_CORRECT: 'RED' } },
+      teams: { 'Les Rouges': { COLOR: [255, 0, 0], SCORE: 0 } },
+      bumpers: { r1: { TEAM: 'Les Rouges', TIME: 1000, ANSWER_COLOR: 'BLUE', NAME: 'Bob' } },
+    })
+    useGame.mockReturnValue(props)
+    const { container } = render(<AnimPage />)
+    const marker = container.querySelector('.anim-team-qcm-correct')
+    expect(marker.textContent).toBe('✗')
+    expect(marker.className).toContain('incorrect')
+  })
+
+  it('n\'affiche rien tant que l\'équipe n\'a pas buzzé', () => {
+    const props = makeGameMock({
+      gameState: { phase: 'STARTED', question: { ID: '1', TYPE: 'QCM', QCM_CORRECT: 'RED' } },
+      teams: { 'Les Rouges': { COLOR: [255, 0, 0], SCORE: 0 } },
+      bumpers: { r1: { TEAM: 'Les Rouges', TIME: 0 } },
+    })
+    useGame.mockReturnValue(props)
+    const { container } = render(<AnimPage />)
+    expect(container.querySelector('.anim-team-qcm-answer')).toBeNull()
+  })
+
+  it('reste visuellement inchangée hors QCM (pas de badge de couleur en SPEEDY)', () => {
+    const props = makeGameMock({
+      gameState: { phase: 'STARTED', question: { ID: '1', TYPE: 'SPEEDY' } },
+      teams: { 'Les Rouges': { COLOR: [255, 0, 0], SCORE: 0 } },
+      bumpers: { r1: { TEAM: 'Les Rouges', TIME: 1000 } },
+    })
+    useGame.mockReturnValue(props)
+    const { container } = render(<AnimPage />)
+    expect(container.querySelector('.anim-team-qcm-answer')).toBeNull()
+  })
+})
+
+// ---------------------------------------------------------------------------
 // Veille écran — reprend le motif PlayerDisplay.jsx:912-921
 // ---------------------------------------------------------------------------
 

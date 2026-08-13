@@ -39,6 +39,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex-wrap: wrap;
   gap: var(--space-2);
 }
 
@@ -62,6 +63,54 @@
 .anim-team-reaction-time {
   font-variant-numeric: tabular-nums;
   opacity: 0.9;
+}
+
+/* Réponse QCM (#157/T4) — couleur choisie + joueur, dès le buzz ; justesse
+   (✓/✗) uniquement en REVEALED (composée depuis AnimPage.jsx, même
+   discipline `children` que ci-dessus — AnimTeamCard.jsx non modifié). */
+
+.anim-team-qcm-answer {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: 1rem;
+  font-weight: 600;
+  flex-wrap: wrap;
+}
+
+.anim-team-qcm-color {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  color: #ffffff;
+  font-weight: 800;
+  font-size: 0.9rem;
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.6);
+  flex-shrink: 0;
+}
+
+.anim-team-qcm-player {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 10rem;
+}
+
+.anim-team-qcm-correct {
+  font-size: 1.2rem;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.anim-team-qcm-correct.correct {
+  color: var(--success, #22c55e);
+}
+
+.anim-team-qcm-correct.incorrect {
+  color: var(--error, #ef4444);
 }
 
 .anim-team-credit-btn {
