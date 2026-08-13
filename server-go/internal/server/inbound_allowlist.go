@@ -36,22 +36,35 @@ var inboundActionAllowlist = map[string][]ClientType{
 	// --- Handshake ---------------------------------------------------
 	// Every web client type identifies itself and expects its own
 	// (type-filtered — see App.sendStateToClient, #154 E1) state in return.
-	protocol.ActionHello: {ClientTypeAdmin, ClientTypeTV, ClientTypeVPlayer},
+	// ClientTypeAnim added v6.2.0 (#155) — interface animateur.
+	protocol.ActionHello: {ClientTypeAdmin, ClientTypeTV, ClientTypeVPlayer, ClientTypeAnim},
 
-	// --- Game control (régie) — admin (/admin, /anim) only -----------
+	// --- Conduite en direct — admin + anim (v6.2.0, #155/#156) --------
+	// Exact périmètre acté for the interface animateur (cadrage
+	// _work/reports/plan-20260812-141735.md §1, plan B3
+	// _work/reports/plan-20260813-092950.md §3): lancer/arrêter/mettre en
+	// pause une question, révéler la réponse, enchaîner, créditer une équipe
+	// ou un joueur — nothing else. Was merged into the admin-only block below
+	// before #155; split out here so the ClientTypeAnim addition doesn't
+	// silently widen anything else in that block (contracts/
+	// websocket-actions.md documents this split explicitly).
+	protocol.ActionReady:        {ClientTypeAdmin, ClientTypeAnim},
+	protocol.ActionStart:        {ClientTypeAdmin, ClientTypeAnim},
+	protocol.ActionStop:         {ClientTypeAdmin, ClientTypeAnim},
+	protocol.ActionPause:        {ClientTypeAdmin, ClientTypeAnim},
+	protocol.ActionContinue:     {ClientTypeAdmin, ClientTypeAnim},
+	protocol.ActionReveal:       {ClientTypeAdmin, ClientTypeAnim},
+	protocol.ActionBumperPoints: {ClientTypeAdmin, ClientTypeAnim},
+	protocol.ActionTeamPoints:   {ClientTypeAdmin, ClientTypeAnim},
+
+	// --- Game control (régie) — admin (/admin) only -------------------
 	// Starting/stopping/scoring/resetting/deleting/configuring a game is
 	// exclusively a régie action. web/src/hooks/useWebSocket.js only wires
 	// these senders up from GamePage.jsx (admin routes) — never PlayerDisplay
-	// (TV) nor VPlayerPage/EnrollPage (VPlayer).
+	// (TV) nor VPlayerPage/EnrollPage (VPlayer), nor (v6.2.0) AnimPage.
 	protocol.ActionFull:                  {ClientTypeAdmin},
 	protocol.ActionUpdate:                {ClientTypeAdmin},
 	protocol.ActionPoints:                {ClientTypeAdmin},
-	protocol.ActionReady:                 {ClientTypeAdmin},
-	protocol.ActionStart:                 {ClientTypeAdmin},
-	protocol.ActionStop:                  {ClientTypeAdmin},
-	protocol.ActionPause:                 {ClientTypeAdmin},
-	protocol.ActionContinue:              {ClientTypeAdmin},
-	protocol.ActionReveal:                {ClientTypeAdmin},
 	protocol.ActionRAZ:                   {ClientTypeAdmin},
 	protocol.ActionRemote:                {ClientTypeAdmin},
 	protocol.ActionDelete:                {ClientTypeAdmin},
@@ -59,8 +72,6 @@ var inboundActionAllowlist = map[string][]ClientType{
 	protocol.ActionReleaseBumperName:     {ClientTypeAdmin},
 	protocol.ActionReset:                 {ClientTypeAdmin},
 	protocol.ActionReboot:                {ClientTypeAdmin},
-	protocol.ActionBumperPoints:          {ClientTypeAdmin},
-	protocol.ActionTeamPoints:            {ClientTypeAdmin},
 	protocol.ActionReorderQuestions:      {ClientTypeAdmin},
 	protocol.ActionForceReady:            {ClientTypeAdmin},
 	protocol.ActionMemorySetTeams:        {ClientTypeAdmin},

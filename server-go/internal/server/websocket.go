@@ -26,7 +26,14 @@ const (
 	ClientTypeAdmin   ClientType = "admin"
 	ClientTypeTV      ClientType = "tv"
 	ClientTypeVPlayer ClientType = "vplayer"
-	ClientTypeBuzzer  ClientType = "buzzer"
+	// ClientTypeAnim — v6.2.0 (#155): the interface animateur (/anim, /ws/anim),
+	// a reduced-capability web client (contracts/websocket-actions.md
+	// §"Sécurité — Allow-list entrante", contracts/ws-payload-serialization.md
+	// §"Animateur"). Fixed at connection time via HandleConnectionWithType,
+	// same as TV/VPlayer — never mutated after (IsSetClientTypeAllowed only
+	// permits SET_CLIENT_TYPE from the Admin state).
+	ClientTypeAnim   ClientType = "anim"
+	ClientTypeBuzzer ClientType = "buzzer"
 )
 
 // WebSocketClient represents a connected WebSocket client
@@ -55,7 +62,8 @@ type WebSocketHub struct {
 	OnMessage func(clientID string, msg *protocol.Message)
 
 	// Callback when client count changes
-	OnClientChange func(adminCount, tvCount, vplayerCount int)
+	// animCount added v6.2.0 (#155) — interface animateur.
+	OnClientChange func(adminCount, tvCount, vplayerCount, animCount int)
 
 	// OnPlayerDisconnected fires immediately on WebSocket close for a ClientTypeVPlayer
 	// client whose PlayerID has been identified (SetClientPlayerID called after PLAYER_CONNECT).
@@ -155,23 +163,24 @@ func (h *WebSocketHub) Run() {
 // notifyClientChange calls the OnClientChange callback with current counts
 func (h *WebSocketHub) notifyClientChange() {
 	if h.OnClientChange != nil {
-		adminCount, tvCount, vplayerCount := h.GetClientCounts()
-		h.OnClientChange(adminCount, tvCount, vplayerCount)
+		adminCount, tvCount, vplayerCount, animCount := h.GetClientCounts()
+		h.OnClientChange(adminCount, tvCount, vplayerCount, animCount)
 	}
 }
 
-// GetClientCounts returns the count of admin, TV, and VPlayer clients.
+// GetClientCounts returns the count of admin, TV, VPlayer, and (v6.2.0, #155)
+// animateur clients.
 //
 // #154 E2 (sec): previously `default: adminCount++` — any client whose Type
 // wasn't TV or VPlayer counted as Admin, including an unrecognized/future
 // type (e.g. ClientTypeBuzzer, which never actually registers on THIS hub —
 // see BuzzerWebSocketHub — but nothing enforced that invariant here). An
 // explicit case per known type means a type this function doesn't recognize
-// counts toward none of the three, matching ClientsPayload's actual fields
-// (AdminCount/TVCount/VPlayerCount only — buzzer counts come from
+// counts toward none of the four, matching ClientsPayload's actual fields
+// (AdminCount/TVCount/VPlayerCount/AnimCount only — buzzer counts come from
 // a.buzzerHub.BuzzerCount() separately) instead of silently inflating the
 // admin count.
-func (h *WebSocketHub) GetClientCounts() (adminCount, tvCount, vplayerCount int) {
+func (h *WebSocketHub) GetClientCounts() (adminCount, tvCount, vplayerCount, animCount int) {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
 	for client := range h.clients {
@@ -182,6 +191,8 @@ func (h *WebSocketHub) GetClientCounts() (adminCount, tvCount, vplayerCount int)
 			tvCount++
 		case ClientTypeVPlayer:
 			vplayerCount++
+		case ClientTypeAnim:
+			animCount++
 		}
 	}
 	return
@@ -522,7 +533,16 @@ func serializeForClientType(msg *protocol.Message, clientType ClientType) ([]byt
 	switch clientType {
 	case ClientTypeAdmin:
 		return msg.SerializeForAdmin()
-	case ClientTypeTV, ClientTypeVPlayer:
+	case ClientTypeTV, ClientTypeVPlayer, ClientTypeAnim:
+		// #155 (v6.2.0): ClientTypeAnim reuses SerializeForWebClient, same as
+		// TV/VPlayer — no dedicated serializer. Its payload need is a strict
+		// subset of what TV/VPlayer already get (contracts/
+		// ws-payload-serialization.md §"Animateur" has the full decision +
+		// justification). PRIORITY FIX (plan _work/reports/plan-20260813-092950.md
+		// §0.2): this case MUST list ClientTypeAnim explicitly — the default
+		// branch below returns the full ADMIN payload (firmware/OTA/ACK
+		// fields, QUIZ_OBJECTIVES, config), the exact opposite of the intent,
+		// for any type this switch doesn't know about.
 		return msg.SerializeForWebClient()
 	case ClientTypeBuzzer:
 		return msg.SerializeForBuzzer()

@@ -99,6 +99,8 @@ const (
 	// AI generation job progress (v6.1.0, #137 — contract ai-multi-provider.md §10-§11)
 	ActionAIGenerationProgress = "AI_GENERATION_PROGRESS" // Server → Client (/ws/admin only): job state after each batch
 	ActionCancelAIGeneration   = "CANCEL_AI_GENERATION"   // Admin → Server: cancel the running job (effect between batches)
+	// Interface animateur (v6.2.0, #155 tâche B5 — contracts/websocket-actions.md §"Animateur")
+	ActionNextQuestion = "NEXT_QUESTION" // Server → Client (/ws/anim only): the next playable question, for enchaînement without /admin
 )
 
 // FSInfo represents file storage information
@@ -221,7 +223,26 @@ type ClientsPayload struct {
 	AdminCount   int `json:"ADMIN_COUNT"`
 	TVCount      int `json:"TV_COUNT"`
 	VPlayerCount int `json:"VPLAYER_COUNT"`
-	BuzzerWS     int `json:"BUZZER_WS_COUNT"`
+	// AnimCount — v6.2.0 (#155): number of connected interface animateur
+	// clients (ClientTypeAnim). Diffused to admin only (CLIENTS stays
+	// admin-only, contracts/websocket-endpoints.md), consumed by the Navbar
+	// badge (dev-frontend F3) — the régie signalement for #155/#156 (D2).
+	AnimCount int `json:"ANIM_COUNT"`
+	BuzzerWS  int `json:"BUZZER_WS_COUNT"`
+}
+
+// NextQuestionPayload for NEXT_QUESTION action (v6.2.0, #155 tâche B5).
+// Server → Client, ClientTypeAnim exclusively (contracts/websocket-actions.md
+// §"Animateur"). All fields are the zero value (empty payload) when no
+// question is playable — see App.getNextQuestion's doc comment for the full
+// computation rule (parity with GamePage.jsx's nextUnplayedQuestion).
+type NextQuestionPayload struct {
+	ID       string `json:"ID"`
+	Question string `json:"QUESTION"`
+	Category string `json:"CATEGORY"`
+	Type     string `json:"TYPE"`
+	Points   int    `json:"POINTS"`
+	Time     int    `json:"TIME"`
 }
 
 // SetClientTypePayload for SET_CLIENT_TYPE action
