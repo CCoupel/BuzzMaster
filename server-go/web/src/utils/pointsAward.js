@@ -10,9 +10,10 @@
  * crédité strictement identique dans les deux interfaces (voir plan §7 R11).
  *
  * IMPORTANT — le montant de base n'est JAMAIS décidé ici. C'est toujours un
- * paramètre fourni par l'appelant (`pointsInput` sur /admin, `question.POINTS`
- * sur /anim) : ce module applique les règles de pénalité/bonus par-dessus,
- * il ne choisit pas la source.
+ * paramètre fourni par l'appelant (`pointsInput` sur /admin, `creditPoints`
+ * — rediffusé par CREDIT_POINTS, PAS `question.POINTS` brut, voir MAJEUR-1
+ * ci-dessous — sur /anim) : ce module applique les règles de pénalité/bonus
+ * par-dessus, il ne choisit pas la source.
  */
 
 /**
@@ -131,12 +132,23 @@ export function resolvePointsTarget(question) {
  * POINTS_TARGET, quel que soit le type.
  *
  * Consommé par /admin (handleBumperClick) et par le bouton de crédit de la
- * page animateur (#156/F6) — un seul calcul, un seul montant possible dans
- * les deux interfaces (plan §7 R11).
+ * page animateur (#156/F6) — un seul calcul, donc un montant garanti
+ * identique pour un même `(question, basePoints, ctx)` dans les deux
+ * interfaces (plan §7 R11). Cette garantie ne tenait PAS avant le mécanisme
+ * SET_CREDIT_POINTS/CREDIT_POINTS (MAJEUR-1, revue de code #155/#156) :
+ * `basePoints` valait `pointsInput` sur /admin (état React local, ajustable
+ * après sélection — ex. manche bonus) mais `question.POINTS` brut sur
+ * /anim, deux valeurs pouvant diverger silencieusement pour la même
+ * question. Elle est vraie maintenant que /admin pousse tout ajustement de
+ * `pointsInput` au serveur (SET_CREDIT_POINTS, debounced) qui le rediffuse
+ * à /anim (CREDIT_POINTS) — voir `useWebSocket.js` (`creditPoints`) et
+ * `AnimPage.jsx`, qui appelle cette fonction avec `creditPoints`, jamais
+ * `question.POINTS` directement.
  *
  * @param {object} question - question courante
  * @param {number} basePoints - montant de base (paramètre : pointsInput sur
- *   /admin, question.POINTS sur /anim)
+ *   /admin, creditPoints — issu de CREDIT_POINTS, PAS question.POINTS brut
+ *   — sur /anim)
  * @param {object} [ctx]
  * @param {number} [ctx.hintsAtBuzz] - QCM : HINTS_AT_BUZZ du bumper au moment du buzz
  * @param {{matchedPairs:number, errors:number}} [ctx.memory] - MEMORY : paires/erreurs à créditer

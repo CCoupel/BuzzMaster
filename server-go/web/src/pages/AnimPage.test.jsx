@@ -52,6 +52,10 @@ function makeGameMock(overrides = {}) {
     teams: {},
     bumpers: {},
     nextQuestion: null,
+    // MAJEUR-1 — creditPoints (CREDIT_POINTS) est l'équivalent serveur de
+    // pointsInput sur /admin, PAS question.POINTS brut. Défaut à 0 comme
+    // l'état initial réel de useWebSocket.js (avant tout CREDIT_POINTS reçu).
+    creditPoints: 0,
     startGame: vi.fn(),
     stopGame: vi.fn(),
     pauseGame: vi.fn(),
@@ -160,18 +164,19 @@ describe('AnimPage — Zone B (conduite, #156/F5)', () => {
     expect(screen.queryByText('RÉPONSE')).not.toBeInTheDocument()
   })
 
-  it('LANCER envoie startGame avec TIME/POINTS de la question courante', () => {
+  it('LANCER envoie startGame avec TIME de la question et creditPoints (MAJEUR-1), pas question.POINTS', () => {
     const props = makeGameMock({
       gameState: { phase: 'READY', question: { ID: '1', TIME: '45', POINTS: '3' } },
+      creditPoints: 7, // ajusté côté admin, diverge délibérément de question.POINTS (3)
     })
     useGame.mockReturnValue(props)
     render(<AnimPage />)
     screen.getByText('LANCER').click()
-    expect(props.startGame).toHaveBeenCalledWith(45, 3)
+    expect(props.startGame).toHaveBeenCalledWith(45, 7)
   })
 
-  it('LANCER replie sur 30s/1pt si TIME/POINTS sont absents de la question', () => {
-    const props = makeGameMock({ gameState: { phase: 'READY', question: { ID: '1' } } })
+  it('LANCER replie sur 30s/1pt si TIME est absent et creditPoints vaut 0', () => {
+    const props = makeGameMock({ gameState: { phase: 'READY', question: { ID: '1' } }, creditPoints: 0 })
     useGame.mockReturnValue(props)
     render(<AnimPage />)
     screen.getByText('LANCER').click()
@@ -313,6 +318,7 @@ describe('AnimPage — Zone C, crédit (#156/F6)', () => {
   it('aucun bouton de crédit avant l\'arrêt de la question (ex: STARTED)', () => {
     useGame.mockReturnValue(makeGameMock({
       gameState: { phase: 'STARTED', question: { ID: '1', POINTS: '5' } },
+      creditPoints: 5,
       teams: { 'Les Rouges': { COLOR: [255, 0, 0], SCORE: 0 } },
       bumpers: { m1: { TEAM: 'Les Rouges' } },
     }))
@@ -320,10 +326,11 @@ describe('AnimPage — Zone C, crédit (#156/F6)', () => {
     expect(screen.queryByText(/pts/)).not.toBeInTheDocument()
   })
 
-  it('STOPPED et REVEALED : bouton de crédit visible avec le montant de la question', () => {
+  it('STOPPED et REVEALED : bouton de crédit visible avec le montant de creditPoints', () => {
     ;['STOPPED', 'REVEALED'].forEach(phase => {
       useGame.mockReturnValue(makeGameMock({
         gameState: { phase, question: { ID: '1', POINTS: '5' } },
+        creditPoints: 5,
         teams: { 'Les Rouges': { COLOR: [255, 0, 0], SCORE: 0 } },
         bumpers: { m1: { TEAM: 'Les Rouges' } },
       }))
@@ -333,9 +340,30 @@ describe('AnimPage — Zone C, crédit (#156/F6)', () => {
     })
   })
 
+  // MAJEUR-1 — scénario exact de la revue de code : question sélectionnée à
+  // 10 points, l'admin ajuste pointsInput à 20 sans resélectionner (donc
+  // question.POINTS reste 10, seul creditPoints — rediffusé par
+  // CREDIT_POINTS — reflète l'ajustement). /anim doit créditer 20, pas 10.
+  it('crédite creditPoints (ajusté par l\'admin), jamais question.POINTS brut', () => {
+    const props = makeGameMock({
+      gameState: { phase: 'STOPPED', question: { ID: '1', POINTS: '10' } },
+      creditPoints: 20,
+      teams: { 'Les Rouges': { COLOR: [255, 0, 0], SCORE: 0 } },
+      bumpers: { m1: { TEAM: 'Les Rouges', TIME: 2000 } },
+    })
+    useGame.mockReturnValue(props)
+    render(<AnimPage />)
+    expect(screen.getByText('+20 pts')).toBeInTheDocument()
+    expect(screen.queryByText('+10 pts')).not.toBeInTheDocument()
+
+    screen.getByText('+20 pts').click()
+    expect(props.setBumperPoints).toHaveBeenCalledWith('m1', 20)
+  })
+
   it('POINTS_TARGET absent (PLAYER) : crédite le bumper le plus rapide de l\'équipe', () => {
     const props = makeGameMock({
       gameState: { phase: 'STOPPED', question: { ID: '1', POINTS: '5' } },
+      creditPoints: 5,
       teams: { 'Les Rouges': { COLOR: [255, 0, 0], SCORE: 0, TIME: 2000 } },
       bumpers: {
         slow: { TEAM: 'Les Rouges', TIME: 5000 },
@@ -352,6 +380,7 @@ describe('AnimPage — Zone C, crédit (#156/F6)', () => {
   it('POINTS_TARGET=TEAM : crédite l\'équipe directement', () => {
     const props = makeGameMock({
       gameState: { phase: 'STOPPED', question: { ID: '1', POINTS: '5', POINTS_TARGET: 'TEAM' } },
+      creditPoints: 5,
       teams: { 'Les Rouges': { COLOR: [255, 0, 0], SCORE: 0 } },
       bumpers: { m1: { TEAM: 'Les Rouges', TIME: 2000 } },
     })
@@ -362,9 +391,10 @@ describe('AnimPage — Zone C, crédit (#156/F6)', () => {
     expect(props.setBumperPoints).not.toHaveBeenCalled()
   })
 
-  it('replie sur 1 point si question.POINTS est absent', () => {
+  it('replie sur 1 point si creditPoints vaut 0 (aucun CREDIT_POINTS encore reçu)', () => {
     useGame.mockReturnValue(makeGameMock({
-      gameState: { phase: 'STOPPED', question: { ID: '1' } },
+      gameState: { phase: 'STOPPED', question: { ID: '1', POINTS: '5' } },
+      creditPoints: 0,
       teams: { 'Les Rouges': { COLOR: [255, 0, 0], SCORE: 0 } },
       bumpers: { m1: { TEAM: 'Les Rouges', TIME: 2000 } },
     }))

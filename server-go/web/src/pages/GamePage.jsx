@@ -1,4 +1,4 @@
-﻿import { useState, useMemo, useEffect } from 'react'
+﻿import { useState, useMemo, useEffect, useRef } from 'react'
 // AnimatePresence removed - layout animations handled by motion.div in TeamCard
 import { useGame } from '../hooks/GameContext'
 import { useCategoryFilter } from '../hooks/useCategoryFilter'
@@ -58,6 +58,29 @@ export default function GamePage() {
 
   const [timeInput, setTimeInput] = useState(30)
   const [pointsInput, setPointsInput] = useState(1)
+
+  // MAJEUR-1 (revue de code #155/#156) — pointsInput est un état React
+  // local, dont le serveur n'avait connaissance d'aucune façon avant ce
+  // mécanisme : /anim créditait question.POINTS brut pendant que /admin
+  // créditait pointsInput potentiellement ajusté (ex. manche bonus), deux
+  // montants différents pour la même question selon l'interface utilisée.
+  // SET_CREDIT_POINTS pousse la valeur ajustée au serveur, qui la rediffuse
+  // à /anim via CREDIT_POINTS (contrats/websocket-actions.md §SET_CREDIT_POINTS).
+  // Debounce 400ms : ce champ change à chaque frappe/incrément, pas question
+  // d'envoyer un message WS par frappe. Ne se déclenche pas au montage (rien
+  // n'a encore été ajusté par l'utilisateur à ce moment).
+  const isFirstPointsRender = useRef(true)
+  useEffect(() => {
+    if (isFirstPointsRender.current) {
+      isFirstPointsRender.current = false
+      return
+    }
+    const timeoutId = setTimeout(() => {
+      sendMessage('SET_CREDIT_POINTS', { POINTS: pointsInput })
+    }, 400)
+    return () => clearTimeout(timeoutId)
+  }, [pointsInput, sendMessage])
+
   // Memory team selection - always use backend state as source of truth
   const selectedTeams = gameState.MEMORY_PARTICIPATING_TEAMS || []
   // MEMOTION team selection

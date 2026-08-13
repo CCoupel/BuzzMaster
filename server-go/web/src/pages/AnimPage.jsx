@@ -49,6 +49,7 @@ export default function AnimPage() {
     teams,
     bumpers,
     nextQuestion,
+    creditPoints,
     startGame,
     stopGame,
     pauseGame,
@@ -107,8 +108,14 @@ export default function AnimPage() {
 
   const handleStart = () => {
     const time = parseInt(gameState.question?.TIME) || 30
-    const points = parseInt(gameState.question?.POINTS) || 1
-    startGame(time, points)
+    // MAJEUR-1 — creditPoints (CREDIT_POINTS) est l'équivalent serveur de
+    // pointsInput sur /admin, potentiellement ajusté depuis question.POINTS
+    // (ex. manche bonus) : c'est la valeur à jour, pas la valeur brute de la
+    // question. En pratique ce paramètre n'a aujourd'hui aucun effet côté
+    // serveur (StartPayload.POINTS n'est pas décodé, cf. rapport backend
+    // MAJEUR-1) mais autant transmettre la bonne valeur plutôt que réintroduire
+    // le même écart que celui corrigé pour le crédit.
+    startGame(time, creditPoints || 1)
   }
 
   // Zone C — mêmes équipes que /admin (au moins un joueur assigné — règle de
@@ -132,14 +139,19 @@ export default function AnimPage() {
 
   // Crédit — montant unique via l'utilitaire partagé (F1), sans saisie ;
   // cible équipe ou joueur selon POINTS_TARGET (GamePage.jsx:404-411).
-  // Calculé une seule fois : le montant ne dépend pas de l'équipe cliquée
-  // (F5/F6 visent le mode SPEEDY — pas de pénalité QCM par-joueur ni de
-  // score MEMORY ici, resolvePointsAward retombe donc sur le montant de
-  // base), donc le même { amount, target } vaut pour le bouton de chaque
-  // équipe — affiché et appliqué à l'identique.
+  // Base = creditPoints (CREDIT_POINTS, MAJEUR-1) — l'équivalent serveur de
+  // pointsInput sur /admin, PAS question.POINTS brut : /admin crédite
+  // pointsInput, potentiellement ajusté après sélection (ex. manche bonus),
+  // et SET_CREDIT_POINTS/CREDIT_POINTS existent précisément pour que /anim
+  // voie cet ajustement plutôt que de retomber silencieusement sur la valeur
+  // de la question. Calculé une seule fois : le montant ne dépend pas de
+  // l'équipe cliquée (F5/F6 visent le mode SPEEDY — pas de pénalité QCM
+  // par-joueur ni de score MEMORY ici, resolvePointsAward retombe donc sur
+  // le montant de base), donc le même { amount, target } vaut pour le
+  // bouton de chaque équipe — affiché et appliqué à l'identique.
   const { amount: creditAmount, target: creditTarget } = resolvePointsAward(
     gameState.question,
-    parseInt(gameState.question?.POINTS) || 1,
+    creditPoints || 1,
     {}
   )
   // En PLAYER, crédite le bumper le plus rapide de l'équipe (dans le mode
