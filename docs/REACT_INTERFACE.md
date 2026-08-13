@@ -9,21 +9,22 @@ Ce document décrit l'interface web React de BuzzControl.
 - Route `/player` : Interface de jeu VJoueur (VPlayerPage)
 - Route `/tv` : Affichage TV plein écran (PlayerDisplay)
 - Routes `/admin/*` : Pages d'administration
-- Routes `/anim/*` : Alias des routes admin (même comportement)
+- Route `/anim` : Interface animateur dédiée (AnimPage, tablette)
 
-| Route | Alias | Page | Description |
-|-------|-------|------|-------------|
-| `/` | - | EnrollPage | Page d'inscription VJoueurs |
-| `/player` | - | VPlayerPage | Interface de jeu VJoueur (smartphone) |
-| `/tv` | - | PlayerDisplay | Affichage TV (plein écran, statique) |
-| `/admin` | `/anim` | GamePage | Interface admin principale (Jeu) |
-| `/admin/scoreboard` | `/anim/scoreboard` | ScoresPage | Tableau des scores |
-| `/admin/teams` | `/anim/teams` | TeamsPage | Gestion des joueurs et équipes |
-| `/admin/quiz` | `/anim/quiz` | QuestionsPage | Gestion des questions |
-| `/admin/settings` | `/anim/settings` | ConfigPage | Configuration |
-| `/admin/history` | `/anim/history` | HistoryPage | Historique des événements |
-| `/admin/palmares` | `/anim/palmares` | CategoryPalmaresPage | Palmarès par catégorie |
-| `/admin/logs` | `/anim/logs` | LogsPage | Logs serveur temps réel |
+| Route | Page | Description |
+|-------|------|-------------|
+| `/` | EnrollPage | Page d'inscription VJoueurs |
+| `/player` | VPlayerPage | Interface de jeu VJoueur (smartphone) |
+| `/tv` | PlayerDisplay | Affichage TV (plein écran, statique) |
+| `/admin` | GamePage | Interface admin principale (Jeu) |
+| `/admin/scoreboard` | ScoresPage | Tableau des scores |
+| `/admin/teams` | TeamsPage | Gestion des joueurs et équipes |
+| `/admin/quiz` | QuestionsPage | Gestion des questions |
+| `/admin/settings` | ConfigPage | Configuration |
+| `/admin/history` | HistoryPage | Historique des événements |
+| `/admin/palmares` | CategoryPalmaresPage | Palmarès par catégorie |
+| `/admin/logs` | LogsPage | Logs serveur temps réel |
+| `/anim` | AnimPage | Interface animateur (tablette, nouvelle en v6.2.0) |
 
 **Navbar (v2.48.0) :**
 - Affiché uniquement sur les routes `/admin/*` et `/anim/*`

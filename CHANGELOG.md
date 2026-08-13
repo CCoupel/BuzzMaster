@@ -4,6 +4,30 @@ Historique des versions du projet BuzzControl.
 
 ## [Unreleased]
 
+## [6.2.0] - Milestone v6.2.x — Interface Animateur (#24)
+
+**Issues** : #155 (socle) + #156 (SPEEDY) — nouvelle interface animateur pour conduite de parties SPEEDY depuis une tablette.
+
+### Added
+- **Interface animateur dédiée** (#155, #156) : Nouvelle page `/anim` optimisée pour tablette paysage — zone contexte (question courante, chronomètre, statut connexion), zone conduite (boutons contextuels par phase SPEEDY), zone équipes avec scores. Accessible via raccourci Navbar dédié. Veille écran maintenue (wake lock natif + repli `nosleep.js`). Reconnexion automatique avec indicateur visuel.
+- **Conduite SPEEDY depuis `/anim`** (#156) : Cycle complet READY→STARTED→STOPPED→REVEALED opérationnel depuis l'animateur (LANCER, PAUSE, STOP, RÉPONSE, enchaînement question suivante). Conditions d'activation identiques à `/admin`.
+- **Compteur animateur en Navbar** (#155) : Nouveau badge affichant le nombre d'interfaces animateur connectées (motif similaire aux badges Admin/TV/VJoueur/Buzzer).
+- **Crédit de points depuis `/anim`** (#156) : Boutons de crédit pour équipes ou joueurs (selon mode), montant issu du calcul partagé, disponibles en phases STOPPED et REVEALED uniquement. Parité garantie avec `/admin`.
+- **Utilitaire de calcul de points partagé** (#155) : Extraction du calcul des points (pénalité QCM, score MEMORY, crédit ARDOISE, crédit SPEEDY) en fonction `pointsAward.js`, utilisé par les deux interfaces admin et animateur.
+
+### Changed
+- **Raccourcis Navbar TV/Joueur/Animateur** (#155) : Les trois entrées ouvrent désormais des nouveaux onglets (cible `_blank`) au lieu de naviguer dans l'onglet courant. Permet au régisseur de basculer rapidement entre les vues sans perdre le contexte admin.
+- **Ordre de buzz enrichi en interface animateur** (#156) : Les équipes s'affichent triées par ordre de buzz (temps de réaction croissant) quand une question est en cours ou arrêtée, avec temps de réaction visible.
+
+### Breaking Changes
+- ⚠️ **Suppression de l'alias `/anim/*` vers `/admin/*`** (#155) : Les routes `/anim/teams`, `/anim/quiz`, `/anim/settings`, etc. ne renvoient plus vers `/admin` — route unique `/anim` mène à la nouvelle interface animateur. **Impact utilisateur** : les favoris/bookmarks pointant sur `/anim/*` cessent de fonctionner, migrer vers `/admin/*` pour l'interface admin ou `/anim` pour l'animateur. Les routes `/admin/*` restent entièrement opérationnelles.
+
+### Technical
+- **Contrats** : `contracts/websocket-actions.md` allow-list client type `anim` (actions NEXT_QUESTION, SET_CREDIT_POINTS, CREDIT_POINTS), `contracts/websocket-endpoints.md` nouvel endpoint `/ws/anim`, `contracts/ws-payload-serialization.md` filtres payload par type client.
+- **Backend** : Nouveau type client `anim`, endpoint `/ws/anim`, compteur `ANIM_COUNT` diffusé via `CLIENTS`, gestion allow-list, actions NEXT_QUESTION et SET_CREDIT_POINTS.
+- **Frontend** : Nouvelle page `AnimPage.jsx` (zones A, B, C), composants animateur, badges Navbar, raccourci Animateur, utilitaire `pointsAward.js`, refactor `GamePage.jsx` pour réutilisation du calcul de points.
+- **Tests** : Routage `/anim` · endpoint `/ws/anim` · badge animateur · gestes par phase SPEEDY · parité crédit points avec admin.
+
 ### Security
 - **Allow-list entrante WebSocket par ClientType** (#154) — Le serveur refuse désormais les commandes de pilotage (START, STOP, DELETE, etc.) envoyées depuis un canal TV ou joueur virtuel — seul l'admin peut les émettre. Vérification centralisée à l'entrée de chaque action WebSocket, zéro impact sur l'usage normal (les clients légitimes n'envoient que les actions documentées pour leur rôle).
 

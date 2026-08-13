@@ -250,7 +250,7 @@ La fonctionnalite VPlayer permet aux joueurs de buzzer depuis leur smartphone en
 ### Workflow d'inscription
 
 1. **Ouvrir les inscriptions**
-   - Aller sur la page Joueurs (`/admin/teams` ou `/anim/teams`)
+   - Aller sur la page Joueurs (`/admin/teams`)
    - Section "Inscriptions" en haut de la page
    - Cliquer sur "Lancer Inscriptions"
 
@@ -437,7 +437,7 @@ L'effet néon affiche une bordure lumineuse animée autour de l'écran TV (`/tv`
 
 ### Accès à la configuration
 
-1. Ouvrir la page Configuration (`/admin/settings` ou `/anim/settings`)
+1. Ouvrir la page Configuration (`/admin/settings`)
 2. Section "Effet Néon" en bas de la page
 3. Toggle pour activer/désactiver
 4. Deux onglets : **Structure** et **Glow**
