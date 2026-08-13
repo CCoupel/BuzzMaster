@@ -190,7 +190,7 @@ SendMessage({
 | `test-writer` | Scripts de tests + procédures QA | `.claude/agents/test-writer.template.md` | permanent |
 | `code-reviewer` | Revue de code | `.claude/agents/code-reviewer.template.md` | permanent |
 | `qa` | Exécution des tests et validation | `.claude/agents/qa.template.md` | permanent |
-| `doc-updater` | Documentation | `.claude/agents/doc-updater.template.md` | permanent |
+| `doc-updater` | Documentation | `.claude/agents/doc-updater.md` | permanent |
 | `deployer` | Déploiement QUALIF/PROD | `.claude/agents/deploy.md` | permanent |
 | `security` | Audit sécurité | `.claude/agents/security.template.md` | ponctuel |
 | `infra` | Infrastructure (si configurée) | `.claude/agents/infra.template.md` | ponctuel |
