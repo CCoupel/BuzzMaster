@@ -2,6 +2,57 @@
 
 ---
 
+## [20260813] — Interface Animateur — socle #155 + SPEEDY #156 (Batch 0, contrats)
+
+> Milestone v6.2.x — Interface Animateur (#24), cible **6.2.0.0**. Batch 0 (contrats, avant tout
+> code) du plan `_work/reports/plan-20260813-092950.md` (rév. 1) et
+> `_work/reports/plan-20260813-094321.md` (rév. 2 — #156 SPEEDY intégrée au même lot). #154
+> (allow-list entrante, `IncomingMessage.ClientType`, sérialisation par type) est le socle
+> technique direct de ce lot — aucune plomberie n'est recréée, uniquement étendue.
+
+- **[BREAKING]** Disparition de l'alias SPA `/anim` → `/admin`. La route `/anim` cesse de servir
+  `GamePage` (pleins droits régie) et sert désormais la nouvelle page animateur (`AnimPage.jsx`,
+  #155 F4), connectée sur le nouvel endpoint `/ws/anim` avec le `ClientType` réduit `anim`.
+  `/anim/quiz`, `/anim/settings`, `/anim/logs` (sous-routes admin dupliquées sous ce préfixe) ne
+  résolvent donc plus vers la régie. `/admin/*` est strictement inchangée. Voir
+  `contracts/websocket-endpoints.md` §"Endpoints WebSocket" et le détail frontend F2 du plan.
+- **[NEW]** Endpoint `/ws/anim` (`ClientType` `"anim"`, D1) — `contracts/websocket-endpoints.md`.
+- **[NEW]** `ClientTypeAnim` ajouté à `serializeForClientType` (`internal/server/websocket.go`) →
+  route vers `SerializeForWebClient` (même payload que TV/VPlayer, aucun sérialiseur dédié créé) —
+  décision et justification complètes dans `contracts/ws-payload-serialization.md`
+  §"Animateur". ⚠️ Piège identifié par le plan (§0.2) : le `default:` de cette fonction retourne
+  aujourd'hui `SerializeForAdmin()` — un type non explicitement ajouté au `switch` reçoit le
+  payload admin complet par défaut. Première ligne de code du lot (tâche B1), avec test dédié.
+- **[NEW]** Action `NEXT_QUESTION` (Server→Client, exclusive à `ClientTypeAnim`) — question
+  suivante calculée côté App (règle identique à `GamePage.jsx:210-220`, tri `ORDER`/`ID` puis
+  premier statut jouable), diffusée sur événements explicites (jamais sur le chemin de
+  `broadcastUpdate`, pour éviter une lecture disque par tick). Détail complet
+  (payload, déclencheurs, règle de calcul) : `contracts/websocket-actions.md` §"Animateur".
+- **[NEW]** Lignes `anim` de l'allow-list entrante (#154) : `HELLO` ; `START`/`STOP`/`PAUSE`/
+  `CONTINUE`/`REVEAL`/`READY` ; `BUMPER_POINTS`/`TEAM_POINTS` — périmètre "conduite en direct"
+  du cadrage (`_work/reports/plan-20260812-141735.md` §1). Ajout d'entrées uniquement dans
+  `internal/server/inbound_allowlist.go`, aucun changement de mécanisme (`IsActionAllowed`,
+  `IsSetClientTypeAllowed` inchangées). Détail : `contracts/websocket-actions.md` §"Sécurité —
+  Allow-list entrante par ClientType".
+- **[NEW]** Champ `ANIM_COUNT` dans `ClientsPayload` (`internal/protocol/messages.go`) — nombre
+  de clients animateur connectés, affiché en badge Navbar régie (D2, frontend F3). `CLIENTS`
+  reste diffusé à `admin` seul, comportement inchangé.
+- **[CHANGED]** `sendStateToClient` (HELLO) : le bloc `QUESTIONS` (`cmd/server/main.go`), envoyé
+  jusqu'ici sans condition de type, est gaté `admin`-only — alignement sur `broadcastQuestions`,
+  déjà `admin`-only en continu. **Effet de bord voulu** : TV et VPlayer cessent de recevoir
+  `QUESTIONS` au HELLO (ils ne le recevaient déjà plus ensuite). `CONFIG_UPDATE` reste gaté
+  Admin+TV (politique #154 E1 inchangée) — `anim` en est donc exclu par construction, sans
+  modification supplémentaire. Détail : `contracts/websocket-endpoints.md` §"Filtres de diffusion
+  par type".
+- **[FIXED]** (à l'occasion de cette relecture) `contracts/websocket-endpoints.md` §"Filtres de
+  diffusion par type" indiquait `CONFIG_UPDATE` reçu par VPlayer (✓) — inexact depuis #154
+  (v6.1.4) : `sendStateToClient` restreint `CONFIG_UPDATE` à Admin+TV. Corrigé.
+- **Non impacté par ce Batch (contrats seuls, aucun code)** : les endpoints/actions existants ne
+  changent pas de comportement pour `admin`/`tv`/`vplayer`/`buzzer`. Le mécanisme d'allow-list
+  (#154) n'est pas modifié, uniquement étendu par de nouvelles entrées.
+
+---
+
 ## [20260812] — Allow-list entrante WebSocket par ClientType (#154, sec)
 
 > Vulnérabilité préexistante découverte par `planner` pendant le cadrage de l'Interface

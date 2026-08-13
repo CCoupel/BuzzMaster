@@ -2,13 +2,13 @@
 
 > **Endpoint** : `/ws`
 > **Format** : JSON
-> **Dernière mise à jour** : 2026-08-12
+> **Dernière mise à jour** : 2026-08-13 (#155/#156 — allow-list animateur, action NEXT_QUESTION, v6.2.0)
 
 ---
 
-## Sécurité — Allow-list entrante par ClientType (#154, v6.1.4)
+## Sécurité — Allow-list entrante par ClientType (#154, v6.1.4 · étendue #155/#156, v6.2.0)
 
-Le serveur distingue plusieurs types de client WebSocket (`admin`, `tv`, `vplayer` —
+Le serveur distingue plusieurs types de client WebSocket (`admin`, `tv`, `vplayer`, `anim` —
 voir SET_CLIENT_TYPE ci-dessous ; `buzzer` existe côté firmware sur un hub séparé,
 non concerné par cette table) déjà en **sortie** (sérialiseurs `SerializeForAdmin` /
 `SerializeForWebClient` / `SerializeForVPlayer` / `SerializeForBuzzer`,
@@ -23,16 +23,31 @@ source de vérité.
 quelle action, y compris START/STOP/RAZ/DELETE/NEW_GAME/BUMPER_POINTS, et le serveur
 l'exécutait comme si un admin l'avait envoyée.
 
-| Action | `admin` | `tv` | `vplayer` |
-|---|---|---|---|
-| HELLO | ✅ | ✅ | ✅ |
-| FULL, UPDATE, POINTS, READY, START, STOP, PAUSE, CONTINUE, REVEAL, RAZ, REMOTE, DELETE, DELETE_BUMPER, RELEASE_BUMPER_NAME, RESET, REBOOT, BUMPER_POINTS, TEAM_POINTS, REORDER_QUESTIONS, FORCE_READY, MEMORY_SET_TEAMS, MEMOTION_FLIP, MEMOTION_STOP_TIMER, MEMOTION_REVEAL, MEMOTION_DONE, MEMOTION_SET_TEAMS, SHOW_QR_CODE, HIDE_QR_CODE, SET_VIRTUAL_PLAYER_LIMIT, NEW_GAME, UPDATE_QUIZ_META, CANCEL_AI_GENERATION | ✅ | ❌ | ❌ |
-| BUTTON, PONG | ✅ | ❌ | ✅ |
-| FLIP_MEMORY_CARD | ❌ | ✅ | ✅ |
-| MEMOTION_SELECT | ❌ | ✅ | ❌ |
-| PLAYER_CONNECT, VPLAYER_QCM_ANSWER, ARDOISE_INPUT | ❌ | ❌ | ✅ |
+**#155/#156 (v6.2.0)** ajoutent le type `anim` (`/ws/anim`, interface animateur — conduite du jeu
+depuis une tablette). Conformément à la conception de #154 (« indexé par nom d'action, pas par
+handler, pour qu'un futur `ClientType` n'ait besoin que de nouvelles entrées ici »), l'ajout se
+fait **exclusivement par de nouvelles entrées dans la map** — aucun changement du mécanisme
+`IsActionAllowed`/`IsSetClientTypeAllowed` ni du point d'accroche dans `handleWebMessage`.
+
+| Action | `admin` | `tv` | `vplayer` | `anim` |
+|---|---|---|---|---|
+| HELLO | ✅ | ✅ | ✅ | ✅ |
+| START, STOP, PAUSE, CONTINUE, REVEAL, READY | ✅ | ❌ | ❌ | ✅ |
+| BUMPER_POINTS, TEAM_POINTS | ✅ | ❌ | ❌ | ✅ |
+| FULL, UPDATE, POINTS, RAZ, REMOTE, DELETE, DELETE_BUMPER, RELEASE_BUMPER_NAME, RESET, REBOOT, REORDER_QUESTIONS, FORCE_READY, MEMORY_SET_TEAMS, MEMOTION_FLIP, MEMOTION_STOP_TIMER, MEMOTION_REVEAL, MEMOTION_DONE, MEMOTION_SET_TEAMS, SHOW_QR_CODE, HIDE_QR_CODE, SET_VIRTUAL_PLAYER_LIMIT, NEW_GAME, UPDATE_QUIZ_META, CANCEL_AI_GENERATION | ✅ | ❌ | ❌ | ❌ |
+| BUTTON, PONG | ✅ | ❌ | ✅ | ❌ |
+| FLIP_MEMORY_CARD | ❌ | ✅ | ✅ | ❌ |
+| MEMOTION_SELECT | ❌ | ✅ | ❌ | ❌ |
+| PLAYER_CONNECT, VPLAYER_QCM_ANSWER, ARDOISE_INPUT | ❌ | ❌ | ✅ | ❌ |
 
 Notes :
+- **START, STOP, PAUSE, CONTINUE, REVEAL, READY, BUMPER_POINTS, TEAM_POINTS** sont désormais
+  partagées entre `admin` et `anim` (v6.2.0, #155/#156) — c'est le périmètre exact de « conduite en
+  direct » retenu pour l'interface animateur (`_work/reports/plan-20260812-141735.md` §1) : lancer/
+  arrêter/mettre en pause une question et créditer une équipe ou un joueur, sans les actions de
+  préparation ni de configuration (qui restent `admin`-only, ligne ci-dessous). Cette ligne était
+  auparavant fusionnée avec le gros bloc `admin`-only ; elle en est extraite ici pour l'ajout de la
+  colonne `anim`, sans changement de comportement pour `admin`/`tv`/`vplayer`.
 - **BUTTON, PONG** sont à double usage — ce ne sont PAS des actions admin-only :
   `vplayer` les envoie pour le gameplay réel (`VPlayerPage.jsx:386` PONG = handshake
   de disponibilité en PREPARE ; `VPlayerPage.jsx:429,560` BUTTON = l'appui sur le
@@ -41,22 +56,27 @@ Notes :
   v6.1.4.1 suite revue code (le lot #154 initial les avait classées admin-only par
   erreur — l'audit frontend s'était appuyé sur les noms de fonctions wrapper
   `simulateButton`/`simulatePong` et avait manqué l'appel direct `sendMessage(...)`
-  de `VPlayerPage.jsx`, hors de tout wrapper nommé).
+  de `VPlayerPage.jsx`, hors de tout wrapper nommé). **`anim` n'y est pas ajouté** : la conduite
+  animateur ne simule pas de buzzer et ne fait pas de handshake PREPARE en son nom propre — hors
+  périmètre #155/#156.
 - **FLIP_MEMORY_CARD** est autorisé pour `tv` car cette connexion couvre deux cas
   légitimes : l'aperçu admin en iframe (`/tv?admin=true`, toujours une vraie
   connexion `tv` — `PlayerDisplay.jsx` `isAdminPreview`) et le clic d'un spectateur
   sur l'écran public. `vplayer` peut retourner ses propres cartes en mode équipe
-  active (`MEMORY_CURRENT_TEAM`).
+  active (`MEMORY_CURRENT_TEAM`). MEMORY/MEMOTION restent hors périmètre de l'interface
+  animateur en #155/#156 — `anim` n'y figure pas.
 - **MEMOTION_SELECT** n'est envoyé que depuis l'aperçu admin en iframe — toujours
-  une connexion `tv`, jamais `vplayer`.
+  une connexion `tv`, jamais `vplayer` ni `anim`.
 - **SET_CLIENT_TYPE** a une règle à part (dépend du type COURANT du client, pas
   d'une liste fixe) — voir sa propre section ci-dessous et
   `internal/server/inbound_allowlist.go`'s `IsSetClientTypeAllowed` : seul un
   client dont le type courant est `admin` (état par défaut de `/ws`, avant
-  auto-déclaration) peut l'envoyer. Une fois auto-déclaré `tv`/`vplayer`, le
+  auto-déclaration) peut l'envoyer. Une fois auto-déclaré `tv`/`vplayer`/`anim`, le
   handshake ne peut plus être répété — ferme l'auto-promotion en admin qui
   existait avant #154 (`handleSetClientType` mappait toute valeur `TYPE`
-  inconnue vers `admin` par défaut).
+  inconnue vers `admin` par défaut). Un client connecté sur `/ws/anim` (type fixé à la
+  connexion, comme `/ws/tv`/`/ws/player`) n'a de toute façon aucune raison légitime de
+  l'envoyer — même situation que TV/VPlayer, aucun changement de mécanisme requis pour #155.
 - Toute action **absente de cette table**, ou envoyée par un type absent de sa
   ligne, est rejetée par défaut (deny-by-default, pas une liste d'exceptions).
 
@@ -726,6 +746,70 @@ Mise à jour compteur inscriptions.
 | VIRTUAL_PLAYER_COUNT | int | Nombre inscrits |
 | VIRTUAL_PLAYER_LIMIT | int | Limite max |
 | ENROLLMENT_ACTIVE | bool | Inscriptions ouvertes |
+
+---
+
+## Animateur (Interface conduite, v6.2.0 — #155/#156)
+
+> Endpoint dédié `/ws/anim` (`ClientType` `anim`, `contracts/websocket-endpoints.md`). Reçoit
+> l'état de jeu via `UPDATE` (payload `SerializeForWebClient`, comme TV/VPlayer —
+> `contracts/ws-payload-serialization.md` §"Animateur") et peut émettre les actions de conduite
+> listées dans l'allow-list ci-dessus (`START`, `STOP`, `PAUSE`, `CONTINUE`, `REVEAL`, `READY`,
+> `BUMPER_POINTS`, `TEAM_POINTS`). `NEXT_QUESTION` ci-dessous est la seule action qui lui est
+> exclusive.
+
+### NEXT_QUESTION
+
+Indique à l'interface animateur la prochaine question jouable, pour permettre l'enchaînement
+(bouton « à suivre ») sans consulter `/admin`.
+
+| Propriété | Valeur |
+|-----------|--------|
+| Direction | `Server→Client` |
+| Cible | `ClientTypeAnim` **exclusivement** — `BroadcastToTypes(msg, ClientTypeAnim)`. Aucun autre type de client ne reçoit cette action |
+| Trigger | HELLO d'un client animateur (état initial) ; `READY` (sélection/enchaînement de question) ; `STOP` ; `REVEAL` ; `NEW_GAME` ; `REORDER_QUESTIONS` ; `DELETE` (suppression d'une question) |
+
+#### Payload
+
+| Champ | Type | Description |
+|-------|------|-------------|
+| ID | string | ID de la question suivante |
+| QUESTION | string | Texte de la question |
+| CATEGORY | string | Catégorie |
+| TYPE | string | Type de question (SPEEDY, QCM, MEMORY, MEMOTION, ARDOISE) |
+| POINTS | int | Points de base |
+| TIME | int | Durée en secondes |
+
+Payload **vide** (tous les champs absents/zéro-valeur) si plus aucune question n'est jouable —
+fin de partie ou toutes les questions restantes déjà `STOPPED`/`REVEALED`/`PLAYED`.
+
+#### Règle de calcul — parité stricte avec `GamePage.jsx:210-220`
+
+1. Charger les questions (mécanisme de `loadQuestions()`, `cmd/server/main.go`), trier par
+   `ORDER` croissant, repli sur `ID` en cas d'égalité ou d'`ORDER` absent — même règle que
+   `web/src/utils/questionOrder.js` (`sortQuestionsByOrder`).
+2. Retenir la **première** question dont `STATUS` n'est ni `STOPPED`, ni `REVEALED`, ni `PLAYED`.
+3. Aucun résultat → payload vide (règle §"Payload" ci-dessus).
+
+⚠️ **Cette règle doit être réimplémentée en Go à l'identique de sa version JS actuelle**
+(`GamePage.jsx:210-220`, bouton « à suivre » de la régie) — **pas** réinventée ni simplifiée. Une
+divergence, même minime (tri, égalité d'`ORDER`, jeu de statuts exclus), afficherait une question
+différente à l'animateur et à la régie pendant la même partie. Les cas de test du backend
+(`_work/reports/plan-20260813-092950.md` §3 tâche B5, critères d'acceptation) doivent être
+**dérivés du comportement JS observé**, pas conçus indépendamment — ordre personnalisé
+(`ORDER` non contigu), égalité d'`ORDER`, et question finale (payload vide) au minimum.
+
+#### Pourquoi une action dédiée plutôt qu'un champ de `UPDATE`
+
+L'`Engine` ne connaît pas la liste des questions : elles vivent en fichiers sur disque, chargés
+par `loadQuestions()` — un `os.ReadDir` puis un `os.ReadFile` **par question**, à chaque appel ;
+les statuts viennent de `engine.GetQuestionStatus(qID)`, pas de l'état interne de l'engine.
+`UPDATE` (`GetGameJSON()`, produit par l'engine seul) est diffusé à **chaque tick de timer** —
+injecter la question suivante dans ce payload déclencherait une lecture disque complète par tick.
+
+`NEXT_QUESTION` est donc **strictement interdite** sur le chemin de `broadcastUpdate`/
+`broadcastUpdateTo` : calculée et diffusée uniquement depuis les déclencheurs explicites listés
+ci-dessus, jamais depuis la boucle de timer.
 
 ---
 

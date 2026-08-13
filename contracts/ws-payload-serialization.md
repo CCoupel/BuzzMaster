@@ -2,7 +2,9 @@
 
 > **Feature** : #41 étendu — Réduire payload WS pour tous les types de clients  
 > **Branche** : `feature/ws-broadcast-ack-v380`  
-> **Créé** : 2026-04-28 (analyse QUALIF — VPlayerPage embed PlayerDisplay)
+> **Créé** : 2026-04-28 (analyse QUALIF — VPlayerPage embed PlayerDisplay)  
+> **Mis à jour** : 2026-08-13 (#155/#156, v6.2.0) — décision de sérialisation pour `ClientTypeAnim`,
+> voir §"Animateur" ci-dessous.
 
 ---
 
@@ -61,6 +63,48 @@ Les besoins TV et VPlayer sont donc identiques côté messages.
 | `remote` | ✅ | ✅ | ❌ |
 | `neonEffect` | ✅ | ✅ | ❌ |
 | `enrollmentOpen` | ✅ | ✅ | ❌ |
+
+---
+
+## Animateur (`ClientTypeAnim`, v6.2.0 — #155/#156)
+
+### Décision : pas de sérialiseur dédié — réutilisation de `SerializeForWebClient`
+
+`serializeForClientType` (`internal/server/websocket.go`, la fonction qui choisit le sérialiseur
+par type pour `BroadcastToTypes` — voir `contracts/websocket-actions.md` sur l'allow-list
+entrante #154 pour le contexte de cette fonction) route `ClientTypeAnim` vers le **même**
+`SerializeForWebClient` que TV et VPlayer, exactement comme le fait déjà
+`serializeForClientType(ClientTypeVPlayer)`. **Aucun `SerializeForAnim` n'est créé.**
+
+### Justification
+
+- Le besoin payload de l'animateur (Tableaux 1 et 2 ci-dessus) est un **sous-ensemble strict** de
+  ce que `SerializeForWebClient` retire déjà pour TV/VPlayer : aucun champ firmware/OTA/ACK
+  (`AdminOnlyBumperFields`), aucun `QUIZ_OBJECTIVES` (`AdminOnlyGameFields`), aucune `config`
+  serveur. Un quatrième sérialiseur quasi identique dupliquerait ces deux listes partagées sans
+  bénéfice — l'avertissement déjà présent plus haut dans ce document (« Trois sites doivent
+  appliquer ce retrait, pas un seul ») deviendrait « quatre sites », pour un contenu strictement
+  identique.
+- La réduction *supplémentaire* propre à l'animateur ne porte pas sur le contenu de `bumpers`/
+  `teams`/`GAME` (ce que `SerializeForWebClient` filtre), mais sur **quelles actions lui sont
+  diffusées du tout** — `QUESTIONS`, `CLIENTS` et `CONFIG_UPDATE` ne sont jamais envoyées à
+  `ClientTypeAnim` (voir `contracts/websocket-endpoints.md` §"Filtres de diffusion par type").
+  C'est une décision **au niveau de l'appelant** (quels types figurent dans les arguments de
+  `BroadcastToTypes`/`sendStateToClient`), pas au niveau du sérialiseur — un sérialiseur ne décide
+  jamais QUI reçoit un message, seulement CE QUI est dans le message envoyé à un type donné.
+  `NEXT_QUESTION` suit la même logique en sens inverse : diffusée uniquement à `ClientTypeAnim`
+  via `BroadcastToTypes(msg, ClientTypeAnim)`, sans avoir besoin d'un sérialiseur particulier
+  puisqu'un seul type la reçoit.
+
+### ⚠️ Piège à ne pas réintroduire
+
+`serializeForClientType` (`websocket.go`) se termine par un `default: return msg.SerializeForAdmin()`.
+**Un `ClientTypeAnim` non explicitement ajouté au `switch` recevrait donc, par défaut, le payload
+admin COMPLET** (firmware/OTA/ACK, `QUIZ_OBJECTIVES`) — l'exact inverse de la décision ci-dessus.
+L'ajout du `case ClientTypeAnim: return msg.SerializeForWebClient()` est la toute première ligne de
+code de #155 (tâche B1) et doit être couverte par un test dédié qui vérifie explicitement
+l'absence de ces champs — pas seulement par relecture. Voir
+`_work/reports/plan-20260813-092950.md` §0.2 pour l'analyse complète de ce risque.
 
 ---
 
