@@ -1,0 +1,156 @@
+/* AnimPage — interface animateur (/anim, #155/#156).
+   Tablette paysage, pas de Navbar régie. Même pattern d'ancrage plein écran
+   que PlayerDisplay.css (position: fixed; inset: 0) — indépendant du
+   contexte flex de .main-content (App.css). */
+
+.anim-page {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  grid-template-areas:
+    "context context"
+    "conduct teams";
+  grid-template-rows: auto 1fr;
+  grid-template-columns: 2fr 1fr;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  box-sizing: border-box;
+  background: var(--bg-primary, #0f172a);
+  color: var(--text-primary, #f8fafc);
+  overflow: hidden;
+}
+
+.anim-zone {
+  border-radius: var(--radius-lg);
+  box-sizing: border-box;
+}
+
+/* ------------------------------------------------------------------ */
+/* Zone A — contexte                                                   */
+/* ------------------------------------------------------------------ */
+
+.anim-zone-context {
+  grid-area: context;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+  padding: var(--space-3) var(--space-4);
+  background: var(--bg-secondary, #1e293b);
+}
+
+.anim-connection-status {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: 0.85rem;
+  font-weight: 600;
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--radius-full);
+  background: var(--bg-tertiary, #334155);
+}
+
+.anim-status-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--gray-400, #94a3b8);
+}
+
+.anim-connection-status.connected .anim-status-dot {
+  background: var(--success, #22c55e);
+}
+
+.anim-connection-status.connecting .anim-status-dot {
+  background: var(--warning, #eab308);
+}
+
+.anim-connection-status.disconnected .anim-status-dot {
+  background: var(--error, #ef4444);
+}
+
+.anim-question-info {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex: 1;
+  min-width: 0;
+}
+
+.anim-question-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.anim-question-id {
+  font-size: 1.1rem;
+  font-weight: 700;
+}
+
+.anim-question-type {
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  opacity: 0.7;
+  letter-spacing: 0.04em;
+}
+
+.anim-question-empty {
+  font-size: 1rem;
+  opacity: 0.6;
+  font-style: italic;
+}
+
+.anim-next-question {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--radius-md);
+  background: var(--bg-tertiary, #334155);
+}
+
+.anim-next-question-label {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  opacity: 0.7;
+  letter-spacing: 0.04em;
+}
+
+.anim-next-question-text {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.anim-next-question-empty {
+  opacity: 0.5;
+  font-weight: 400;
+}
+
+/* ------------------------------------------------------------------ */
+/* Zone B — conduite (conteneur vide, contenu livré par #156/F5)       */
+/* ------------------------------------------------------------------ */
+
+.anim-zone-conduct {
+  grid-area: conduct;
+  background: var(--bg-secondary, #1e293b);
+  min-height: 0;
+}
+
+/* ------------------------------------------------------------------ */
+/* Zone C — équipes                                                     */
+/* ------------------------------------------------------------------ */
+
+.anim-zone-teams {
+  grid-area: teams;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-2);
+  background: var(--bg-secondary, #1e293b);
+  min-height: 0;
+  overflow-y: auto;
+}

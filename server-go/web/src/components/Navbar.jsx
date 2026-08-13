@@ -30,7 +30,7 @@ function computeParticipantCounts(bumpers, isType) {
   return { connected, participants, severity: aggregateSeverity(connStates) }
 }
 
-export default function Navbar({ connectionStatus = 'disconnected', clientCounts = { admin: 0, tv: 0, vplayer: 0 }, serverVersion = '', bumpers = {} }) {
+export default function Navbar({ connectionStatus = 'disconnected', clientCounts = { admin: 0, tv: 0, vplayer: 0, anim: 0 }, serverVersion = '', bumpers = {} }) {
   const location = useLocation()
   const navigate = useNavigate()
   const [isMenuOpen, setIsMenuOpen] = useState(false)
@@ -71,8 +71,10 @@ export default function Navbar({ connectionStatus = 'disconnected', clientCounts
     }
   }, [isMenuOpen, menuRef, buttonRef])
 
-  // Detect current prefix from URL (default to /admin)
-  const currentPrefix = location.pathname.startsWith('/anim') ? '/anim' : '/admin'
+  // Navbar only ever renders on /admin/* — /anim is its own page (AnimPage)
+  // and never shows this navbar (App.jsx isAdminRoute), so the prefix is a
+  // constant, not derived from the URL anymore (#155/F2, was an alias before).
+  const currentPrefix = '/admin'
 
   // Zone Jeu: pages principales du jeu (use relative paths, prefix added dynamically)
   const gameItems = [
@@ -88,10 +90,11 @@ export default function Navbar({ connectionStatus = 'disconnected', clientCounts
     { path: 'quiz', label: 'Quiz', icon: '❓' },
   ]
 
-  // Zone TV: affichage TV et joueurs
+  // Zone TV: affichage TV, joueurs et animateur
   const tvItems = [
     { path: '/tv', label: 'TV', icon: '📺', absolute: true },
     { path: '/player', label: 'Joueur', icon: '📱', absolute: true },
+    { path: '/anim', label: 'Animateur', icon: '🎤', absolute: true },
   ]
 
   // Menu items dans le menu déroulant
@@ -114,11 +117,15 @@ export default function Navbar({ connectionStatus = 'disconnected', clientCounts
   const renderNavLink = (item) => {
     const path = item.absolute ? item.path : getFullPath(item.path)
     const isActive = item.absolute ? location.pathname === item.path : isActiveRoute(item.path)
+    // D4 (#155) — TV, Joueur et Animateur ouvrent désormais un nouvel onglet
+    // (les 3 entrées `absolute`) : changement de comportement demandé
+    // explicitement, pas une régression — voir plan §7 R8/R9.
     return (
       <NavLink
         key={item.path}
         to={path}
         className={() => `nav-link ${isActive ? 'active' : ''}`}
+        {...(item.absolute ? { target: '_blank', rel: 'noopener' } : {})}
       >
         <span className="nav-icon">{item.icon}</span>
         <span className="nav-label">{item.label}</span>
@@ -212,6 +219,10 @@ export default function Navbar({ connectionStatus = 'disconnected', clientCounts
           <span className="client-count tv" title="Ecrans TV/joueurs">
             <span className="count-icon">TV</span>
             <span className="count-value">{clientCounts.tv}</span>
+          </span>
+          <span className="client-count anim" title="Interfaces animateur">
+            <span className="count-icon">🎤</span>
+            <span className="count-value">{clientCounts.anim}</span>
           </span>
           <span
             className={`client-count vplayer severity-${vjoueurCounts.severity}`}

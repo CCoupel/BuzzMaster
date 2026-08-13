@@ -1,0 +1,42 @@
+/* AnimTeamCard — carte d'équipe de base, page animateur (#155, F4).
+   Tablette paysage, lisible à distance de bras : gros texte, forte couleur. */
+
+.anim-team-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-lg);
+  background: var(--anim-team-color, var(--gray-400));
+  color: var(--anim-team-text, #ffffff);
+  min-height: 62px;
+  box-sizing: border-box;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+.anim-team-card-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.anim-team-card-name {
+  font-size: 1.15rem;
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.anim-team-card-score {
+  font-size: 1.5rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.anim-team-card-extra {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}

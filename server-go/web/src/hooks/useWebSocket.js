@@ -95,7 +95,14 @@ export default function useWebSocket(endpoint = '/ws/admin') {
   const [questions, setQuestions] = useState({})
   const [fsInfo, setFsInfo] = useState(null)
   const [version, setVersion] = useState(null)
-  const [clientCounts, setClientCounts] = useState({ admin: 0, tv: 0, vplayer: 0, buzzerWs: 0 })
+  const [clientCounts, setClientCounts] = useState({ admin: 0, tv: 0, vplayer: 0, buzzerWs: 0, anim: 0 })
+  // #155/#156 (F4) — dernier NEXT_QUESTION reçu : la question suivante jouable,
+  // pour l'enchaînement animateur sans consulter /admin. `null` tant qu'aucun
+  // NEXT_QUESTION n'est encore arrivé, ou si le serveur a explicitement
+  // annoncé qu'il n'y en a plus (payload vide — contracts/websocket-actions.md
+  // §NEXT_QUESTION : absence de champ ID). Exclusif à /ws/anim (ClientTypeAnim),
+  // reste toujours null sur les autres endpoints.
+  const [nextQuestion, setNextQuestion] = useState(null)
   // Résultat du dernier PLAYER_CONNECT en attente de réponse serveur — consommé
   // par EnrollPage (attend PLAYER_CONNECTED/PLAYER_REJECTED au lieu de naviguer
   // en aveugle, fix R1 #109). { status: 'connected', id, name } | { status: 'rejected', reason } | null
@@ -395,8 +402,17 @@ export default function useWebSocket(endpoint = '/ws/admin') {
             // Compteur brut de sockets buzzer WS (informationnel — le X/Y participants
             // affiché en Navbar se calcule côté client depuis `bumpers`, pas ce champ).
             buzzerWs: MSG.BUZZER_WS_COUNT ?? 0,
+            // #155 (F3/B2) — interfaces animateur connectées.
+            anim: MSG.ANIM_COUNT ?? 0,
           })
         }
+        break
+
+      case 'NEXT_QUESTION':
+        // #155/#156 (B5/F4) — payload vide (pas d'ID) = plus aucune question
+        // jouable, contrat §NEXT_QUESTION. `null` dans les deux cas (jamais
+        // reçu / explicitement vide) : AnimPage n'a pas besoin de distinguer.
+        setNextQuestion(MSG?.ID ? MSG : null)
         break
 
       case 'BACKGROUND_CHANGE':
@@ -812,6 +828,7 @@ export default function useWebSocket(endpoint = '/ws/admin') {
     clientCounts,
     firmwareInfo,
     aiJob,
+    nextQuestion,
     // Actions
     sendMessage,
     startGame,
