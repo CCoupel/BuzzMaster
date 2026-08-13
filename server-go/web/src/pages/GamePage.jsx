@@ -6,6 +6,7 @@ import { useCategories } from '../hooks/useCategories'
 import { categoryMeta } from '../utils/categoryUtils'
 import { getRgbColor } from '../utils/colorUtils'
 import { sortQuestionsByOrder } from '../utils/questionOrder'
+import { sortTeamsByBuzzOrder } from '../utils/buzzOrder'
 import {
   calcQcmPenaltyForHints,
   calcQcmPenalty,
@@ -109,17 +110,12 @@ export default function GamePage() {
       }))
 
     // Tri par temps de réponse si en STARTED/PAUSED/REVEALED/STOPPED (feature tri-rapidite)
-    // Le tri persiste jusqu'à PREPARE (nouvelle question)
+    // Le tri persiste jusqu'à PREPARE (nouvelle question) — règle mutualisée
+    // dans utils/buzzOrder.js (sortTeamsByBuzzOrder), consommée aussi par
+    // AnimPage.jsx (#156/F6) pour un ordre strictement identique entre les
+    // deux interfaces pendant la même partie.
     if (['STARTED', 'PAUSED', 'REVEALED', 'STOPPED'].includes(gameState.phase)) {
-      // Séparer équipes buzzées et non-buzzées
-      const buzzedTeams = teamsList.filter(t => (t.TIME ?? 0) > 0)
-      const nonBuzzedTeams = teamsList.filter(t => (t.TIME ?? 0) === 0)
-
-      // Trier équipes buzzées par temps croissant (plus rapide en haut)
-      buzzedTeams.sort((a, b) => a.TIME - b.TIME)
-
-      // Garder l'ordre original des non-buzzés
-      return [...buzzedTeams, ...nonBuzzedTeams]
+      return sortTeamsByBuzzOrder(teamsList, gameState.phase)
     } else {
       // Tri par score hors phases de jeu actif (STOP, PREPARE, READY)
       teamsList.sort((a, b) => {

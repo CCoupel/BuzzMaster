@@ -1,0 +1,105 @@
+/* AnimConductPanel — zone de conduite SPEEDY, page animateur (#156, F5).
+   Cibles ≥ 62px (tablette). */
+
+.anim-conduct {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-4);
+  box-sizing: border-box;
+}
+
+.anim-conduct-waiting-text,
+.anim-conduct-empty {
+  font-size: 1.1rem;
+  opacity: 0.6;
+  font-style: italic;
+}
+
+.anim-conduct-btn {
+  min-height: 62px;
+  border: none;
+  border-radius: var(--radius-lg);
+  font-size: 1.3rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  color: #ffffff;
+  transition: transform var(--transition-fast, 150ms ease), filter var(--transition-fast, 150ms ease);
+}
+
+.anim-conduct-btn:active {
+  transform: scale(0.97);
+  filter: brightness(0.9);
+}
+
+/* Pair layout (STARTED/PAUSED) — deux boutons à parts égales */
+.anim-conduct-pair {
+  display: flex;
+  gap: var(--space-4);
+  width: 100%;
+  max-width: 700px;
+}
+
+.anim-conduct-pair .anim-conduct-btn {
+  flex: 1;
+  min-height: 96px;
+}
+
+.anim-conduct-btn-pause {
+  background: var(--warning, #eab308);
+}
+
+.anim-conduct-btn-stop {
+  background: var(--error, #ef4444);
+}
+
+/* Single layout (RÉPONSE) */
+.anim-conduct-single .anim-conduct-btn {
+  min-width: 260px;
+  min-height: 96px;
+}
+
+.anim-conduct-btn-reveal {
+  background: var(--primary-500, #6366f1);
+}
+
+/* Idle layout (LANCER + enchaînement) */
+.anim-conduct-idle {
+  display: flex;
+  gap: var(--space-4);
+  width: 100%;
+  max-width: 700px;
+  flex-wrap: wrap;
+}
+
+.anim-conduct-btn-start {
+  flex: 1;
+  min-width: 200px;
+  min-height: 96px;
+  background: var(--success, #22c55e);
+}
+
+.anim-conduct-btn-next {
+  flex: 1;
+  min-width: 200px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  background: var(--bg-tertiary, #334155);
+}
+
+.anim-conduct-next-label {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  opacity: 0.8;
+  font-weight: 600;
+}
+
+.anim-conduct-next-id {
+  font-size: 1.2rem;
+}
