@@ -65,13 +65,21 @@ func collectActionsT(t *testing.T, conn *websocket.Conn, timeout time.Duration) 
 // containsAction is shared with player_evicted_test.go (package main) — same
 // signature, no local redefinition needed here.
 
-// TestSendStateToClient_Anim_StripsAdminFieldsAndExcludesQuestionsAndConfig
+// TestSendStateToClient_Anim_StripsAdminFieldsAndExcludesQuestionsClientsConfig
 // is B1+B4's combined acceptance criterion for the animateur's HELLO: the
 // UPDATE it receives must be the web-client-filtered payload (no
-// FIRMWARE_VERSION), and it must never receive QUESTIONS nor CONFIG_UPDATE
-// (contracts/websocket-endpoints.md "Filtres de diffusion par type": UPDATE
-// ✓ partiel, QUESTIONS ✗, CONFIG_UPDATE ✗ for the animateur column).
-func TestSendStateToClient_Anim_StripsAdminFieldsAndExcludesQuestionsAndConfig(t *testing.T) {
+// FIRMWARE_VERSION), and it must never receive QUESTIONS, CLIENTS nor
+// CONFIG_UPDATE (contracts/websocket-endpoints.md "Filtres de diffusion par
+// type": UPDATE ✓ partiel, QUESTIONS ✗, CLIENTS ✗, CONFIG_UPDATE ✗ for the
+// animateur column).
+//
+// CLIENTS assertion added post-code-review (MAJEUR-2, verdict APPROUVÉ AVEC
+// RÉSERVES sur `835cd07`..`d7336ed`): sendStateToClient's CLIENTS block sent
+// unconditionally to every connecting type until that fix, contradicting
+// contracts/websocket-endpoints.md (written in this same lot) and B6's own
+// acceptance criterion ("aucune information de concurrence n'est envoyée au
+// client animateur" — CLIENTS, who else is connected, is exactly that).
+func TestSendStateToClient_Anim_StripsAdminFieldsAndExcludesQuestionsClientsConfig(t *testing.T) {
 	app := newTestAppWithHub(t)
 	app.engine.SetTeams(map[string]*game.Team{"TeamA": {Name: "TeamA"}})
 	app.engine.UpdateBumper("bumper-1", map[string]interface{}{
@@ -100,8 +108,8 @@ func TestSendStateToClient_Anim_StripsAdminFieldsAndExcludesQuestionsAndConfig(t
 	if containsAction(actions, protocol.ActionConfigUpdate) {
 		t.Errorf("#155/#156 B1: anim must NEVER receive CONFIG_UPDATE — got actions: %v", actions)
 	}
-	if !containsAction(actions, protocol.ActionClients) {
-		t.Errorf("anim should still receive CLIENTS (unaffected by #155/#156) — got actions: %v", actions)
+	if containsAction(actions, protocol.ActionClients) {
+		t.Errorf("#155/#156 code review MAJEUR-2: anim must NEVER receive CLIENTS (concurrency info) — got actions: %v", actions)
 	}
 }
 

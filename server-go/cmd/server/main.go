@@ -2995,6 +2995,7 @@ func (a *App) broadcastEnrollmentUpdate() {
 	a.wsHub.BroadcastToTypes(msg, server.ClientTypeAdmin, server.ClientTypeTV, server.ClientTypeVPlayer)
 	server.LogDebug(game.LogComponentApp, "Broadcasting ENROLLMENT_UPDATE: %d/%d players", state.VirtualPlayerCount, state.VirtualPlayerLimit)
 }
+
 // broadcastGameState fires on every OnStateChange phase transition (PREPARE,
 // READY, STARTED, ...). #127 T1.3: routed through broadcastUpdateTo, the same
 // filtered per-type serialization path as broadcastUpdate, instead of the
@@ -4193,19 +4194,32 @@ func (a *App) sendStateToClient(clientID string, clientType server.ClientType) {
 		a.wsHub.SendToClient(clientID, questionsMsg)
 	}
 
-	// Send CLIENTS counts
-	adminCount, tvCount, vplayerCount, animCount := a.wsHub.GetClientCounts()
-	clientsPayload := protocol.ClientsPayload{
-		AdminCount:   adminCount,
-		TVCount:      tvCount,
-		VPlayerCount: vplayerCount,
-		AnimCount:    animCount,
-		BuzzerWS:     a.buzzerHub.BuzzerCount(),
+	// Send CLIENTS counts — admin only (code review MAJEUR-2, #155/#156).
+	//
+	// contracts/websocket-endpoints.md's "Filtres de diffusion par type"
+	// (written in this same lot) documents CLIENTS as admin-only, animateur
+	// excluded (✗) — and plan B6's own acceptance criterion is explicit:
+	// "Aucune information de concurrence n'est envoyée au client animateur".
+	// CLIENTS (who else is connected: ADMIN_COUNT/TV_COUNT/VPLAYER_COUNT/
+	// ANIM_COUNT/BuzzerWS) is exactly a concurrency signal. This block sent
+	// unconditionally to every connecting client type until this fix —
+	// unlike the QUESTIONS block just above (already gated, B4) and the
+	// CONFIG_UPDATE block just below (already gated Admin+TV) — same
+	// pattern, copied.
+	if clientType == server.ClientTypeAdmin {
+		adminCount, tvCount, vplayerCount, animCount := a.wsHub.GetClientCounts()
+		clientsPayload := protocol.ClientsPayload{
+			AdminCount:   adminCount,
+			TVCount:      tvCount,
+			VPlayerCount: vplayerCount,
+			AnimCount:    animCount,
+			BuzzerWS:     a.buzzerHub.BuzzerCount(),
+		}
+		cData, _ := json.Marshal(clientsPayload)
+		clientsMsg, _ := protocol.NewMessage(protocol.ActionClients, nil)
+		clientsMsg.Msg = cData
+		a.wsHub.SendToClient(clientID, clientsMsg)
 	}
-	cData, _ := json.Marshal(clientsPayload)
-	clientsMsg, _ := protocol.NewMessage(protocol.ActionClients, nil)
-	clientsMsg.Msg = cData
-	a.wsHub.SendToClient(clientID, clientsMsg)
 
 	// Send CONFIG_UPDATE with neon effect settings — Admin+TV only.
 	//
