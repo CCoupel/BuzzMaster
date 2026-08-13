@@ -31,7 +31,7 @@ func sendQuizMeta(t *testing.T, app *App, rawMsg string) {
 		Action: protocol.ActionUpdateQuizMeta,
 		Msg:    json.RawMessage(rawMsg),
 	}
-	app.handleWebMessage(&protocol.IncomingMessage{ClientID: "test-admin", Data: msg})
+	app.handleWebMessage(&protocol.IncomingMessage{ClientID: "test-admin", ClientType: "admin", Data: msg})
 }
 
 func TestUpdateQuizMeta_AbsentFieldsLeaveNewFieldsUnchanged(t *testing.T) {

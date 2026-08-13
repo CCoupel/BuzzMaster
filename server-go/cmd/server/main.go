@@ -969,10 +969,28 @@ func (a *App) handleWebMessage(incoming *protocol.IncomingMessage) {
 		a.engine.ConfirmDelivery(playerID)
 	}
 
+	// #154 (sec): reject any action the sending client's type isn't allow-
+	// listed for (server.IsActionAllowed, contracts/websocket-actions.md) —
+	// closes the inbound gap symmetric to the OUTBOUND per-type filtering
+	// that already existed (SerializeForAdmin/SerializeForWebClient/
+	// SerializeForVPlayer/SerializeForBuzzer). Before this check, a client
+	// connected on /ws/tv or /ws/player could send START/STOP/RAZ/DELETE/
+	// NEW_GAME/BUMPER_POINTS/... and the server executed them unconditionally.
+	//
+	// SET_CLIENT_TYPE is exempt here — its rule depends on the sender's
+	// CURRENT type, not a fixed allow-list entry, so it is checked separately
+	// inside handleSetClientType via IsSetClientTypeAllowed; it must still
+	// reach its handler for that check to run.
+	clientType := server.ClientType(incoming.ClientType)
+	if msg.Action != protocol.ActionSetClientType && !server.IsActionAllowed(msg.Action, clientType) {
+		server.LogWarn(game.LogComponentWebSocket, "Rejected action %s from client %s (type=%q): not allowed for this client type", msg.Action, incoming.ClientID, incoming.ClientType)
+		return
+	}
+
 	switch msg.Action {
 	case protocol.ActionHello:
 		// Send state directly to the connecting client (not broadcast - avoids race condition)
-		a.sendStateToClient(incoming.ClientID)
+		a.sendStateToClient(incoming.ClientID, clientType)
 
 	case protocol.ActionFull:
 		a.handleFullUpdate(msg)
@@ -1039,7 +1057,7 @@ func (a *App) handleWebMessage(incoming *protocol.IncomingMessage) {
 		a.handleTeamPoints(msg)
 
 	case protocol.ActionSetClientType:
-		a.handleSetClientType(incoming.ClientID, msg)
+		a.handleSetClientType(incoming.ClientID, clientType, msg)
 
 	case protocol.ActionReorderQuestions:
 		a.handleReorderQuestions(msg)
@@ -2182,7 +2200,19 @@ func (a *App) handleTeamPoints(msg *protocol.Message) {
 	a.broadcastUpdate()
 }
 
-func (a *App) handleSetClientType(clientID string, msg *protocol.Message) {
+func (a *App) handleSetClientType(clientID string, currentType server.ClientType, msg *protocol.Message) {
+	// #154 E3 (sec): a client connected on a DEDICATED /ws/tv or /ws/player
+	// endpoint (fixed type at connection, HandleConnectionWithType) has no
+	// legitimate reason to ever send SET_CLIENT_TYPE — but the switch below
+	// mapped any unrecognized payload.Type value to server.ClientTypeAdmin,
+	// so such a client could self-promote to Admin with a single message.
+	// Only the legacy /ws endpoint's default-Admin-until-self-identified
+	// state may use this handshake once (IsSetClientTypeAllowed).
+	if !server.IsSetClientTypeAllowed(currentType) {
+		server.LogWarn(game.LogComponentWebSocket, "Rejected SET_CLIENT_TYPE from client %s (current type=%q): only allowed from the initial admin state (legacy /ws handshake)", clientID, currentType)
+		return
+	}
+
 	var payload protocol.SetClientTypePayload
 	if err := json.Unmarshal(msg.Msg, &payload); err != nil {
 		server.LogError(game.LogComponentApp, "Failed to parse SET_CLIENT_TYPE: %v", err)
@@ -4072,16 +4102,40 @@ func (a *App) broadcastQuestions() {
 	a.wsHub.BroadcastToTypes(msg, server.ClientTypeAdmin)
 }
 
-// sendStateToClient sends the full state to a specific client (used on HELLO)
-func (a *App) sendStateToClient(clientID string) {
-	server.LogDebug(game.LogComponentWebSocket, "Sending state to client: %s", clientID)
+// sendStateToClient sends the full state to a specific client (used on HELLO).
+//
+// clientType picks the same per-type serialization the rest of the codebase
+// already applies to broadcasts (broadcastUpdateTo: SerializeForAdmin for
+// Admin, SerializeForWebClient for TV/VPlayer) — #154 E1: before this fix,
+// every message here went through WebSocketHub.SendToClient, which always
+// calls the unfiltered SerializeForWebSocket regardless of clientType, so a
+// TV/VPlayer connecting client received the full admin-only bumper fields
+// (FIRMWARE_VERSION/OTA/ACK) and QUIZ_OBJECTIVES on its very first UPDATE.
+func (a *App) sendStateToClient(clientID string, clientType server.ClientType) {
+	server.LogDebug(game.LogComponentWebSocket, "Sending state to client: %s (type=%s)", clientID, clientType)
 
-	// Send UPDATE with game state
+	// Send UPDATE with game state — serialized per clientType (#154 E1),
+	// mirroring broadcastUpdateTo's existing Admin/TV+VPlayer split. Note:
+	// unlike broadcastUpdateTo's VPlayer path in PREPARE/READY, this never
+	// reduces "bumpers" to the recipient's own single entry (#129 CA9) — a
+	// freshly (re)connecting client, VPlayer included, always needs the
+	// complete roster.
 	data := a.engine.GetGameJSON()
 	updateMsg, _ := protocol.NewMessage(protocol.ActionUpdate, nil)
 	updateMsg.Msg = data
 	updateMsg.Version = a.config.Version
-	a.wsHub.SendToClient(clientID, updateMsg)
+	var updateData []byte
+	var err error
+	if clientType == server.ClientTypeAdmin {
+		updateData, err = updateMsg.SerializeForAdmin()
+	} else {
+		updateData, err = updateMsg.SerializeForWebClient()
+	}
+	if err != nil {
+		server.LogError(game.LogComponentWebSocket, "sendStateToClient: failed to serialize UPDATE for %s: %v", clientID, err)
+	} else {
+		a.wsHub.SendRawToClient(clientID, updateData)
+	}
 
 	// Send QUESTIONS with statuses
 	questions := a.loadQuestions()
@@ -4113,32 +4167,45 @@ func (a *App) sendStateToClient(clientID string) {
 	clientsMsg.Msg = cData
 	a.wsHub.SendToClient(clientID, clientsMsg)
 
-	// Send CONFIG_UPDATE with neon effect settings.
-	// #150: source is now config.GetGameSettings() (game-config.json), not
-	// config.Get() (system config.json) — see broadcastConfigUpdate's
-	// identical comment above.
-	gs := config.GetGameSettings()
-	neonPayload := protocol.ConfigUpdatePayload{
-		NeonEffect: protocol.NeonEffectPayload{
-			Enabled:        gs.NeonEffect.Enabled,
-			Mode:           gs.NeonEffect.Mode,
-			ArcWidth:       gs.NeonEffect.ArcWidth,
-			IntensityGap:   gs.NeonEffect.IntensityGap,
-			RotationSpeed:  gs.NeonEffect.RotationSpeed,
-			BarOffset:      gs.NeonEffect.BarOffset,
-			BarThickness:   gs.NeonEffect.BarThickness,
-			ArcBlur:        gs.NeonEffect.ArcBlur,
-			GlowPulseSpeed: gs.NeonEffect.GlowPulseSpeed,
-			GlowPulseMin:   gs.NeonEffect.GlowPulseMin,
-			GlowPulseMax:   gs.NeonEffect.GlowPulseMax,
-		},
-		DefaultQuestionImageIsCustom: a.httpServer.HasCustomDefaultQuestionImage(),
-		NewGameBackgrounds:           a.engine.GetNewGameBackgrounds(),
+	// Send CONFIG_UPDATE with neon effect settings — Admin+TV only.
+	//
+	// #154 E1: broadcastConfigUpdate already restricts ongoing CONFIG_UPDATE
+	// broadcasts to Admin+TV (main.go's a.broadcast(protocol.ActionConfigUpdate,
+	// ..., ClientTypeAdmin, ClientTypeTV) — VPlayer is deliberately excluded).
+	// Sending it here unconditionally to every connecting client meant a
+	// VPlayer got it once at HELLO despite never receiving it again for the
+	// rest of its connection — the exact "config incluse quel que soit le
+	// type" symptom #154 reported. Match the established policy instead —
+	// the whole payload (not just the send) is gated: it dereferences
+	// a.httpServer, which minimal test Apps (VPlayer/TV-only scenarios)
+	// legitimately leave nil.
+	if clientType == server.ClientTypeAdmin || clientType == server.ClientTypeTV {
+		// #150: source is now config.GetGameSettings() (game-config.json), not
+		// config.Get() (system config.json) — see broadcastConfigUpdate's
+		// identical comment above.
+		gs := config.GetGameSettings()
+		neonPayload := protocol.ConfigUpdatePayload{
+			NeonEffect: protocol.NeonEffectPayload{
+				Enabled:        gs.NeonEffect.Enabled,
+				Mode:           gs.NeonEffect.Mode,
+				ArcWidth:       gs.NeonEffect.ArcWidth,
+				IntensityGap:   gs.NeonEffect.IntensityGap,
+				RotationSpeed:  gs.NeonEffect.RotationSpeed,
+				BarOffset:      gs.NeonEffect.BarOffset,
+				BarThickness:   gs.NeonEffect.BarThickness,
+				ArcBlur:        gs.NeonEffect.ArcBlur,
+				GlowPulseSpeed: gs.NeonEffect.GlowPulseSpeed,
+				GlowPulseMin:   gs.NeonEffect.GlowPulseMin,
+				GlowPulseMax:   gs.NeonEffect.GlowPulseMax,
+			},
+			DefaultQuestionImageIsCustom: a.httpServer.HasCustomDefaultQuestionImage(),
+			NewGameBackgrounds:           a.engine.GetNewGameBackgrounds(),
+		}
+		neonData, _ := json.Marshal(neonPayload)
+		neonMsg, _ := protocol.NewMessage(protocol.ActionConfigUpdate, nil)
+		neonMsg.Msg = neonData
+		a.wsHub.SendToClient(clientID, neonMsg)
 	}
-	neonData, _ := json.Marshal(neonPayload)
-	neonMsg, _ := protocol.NewMessage(protocol.ActionConfigUpdate, nil)
-	neonMsg.Msg = neonData
-	a.wsHub.SendToClient(clientID, neonMsg)
 }
 
 // getStorageInfo returns file storage information (in bytes, like ESP32)

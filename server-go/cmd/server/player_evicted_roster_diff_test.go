@@ -211,7 +211,7 @@ func TestHandlePlayerConnect_StaleIDFromNewGamePurge_RejectedWithGameReset(t *te
 	}
 
 	// Alice is offline when NEW_GAME purges the whole VJoueur roster.
-	app.handleWebMessage(&protocol.IncomingMessage{ClientID: "admin-client", Data: newGameMsg(t)})
+	app.handleWebMessage(&protocol.IncomingMessage{ClientID: "admin-client", ClientType: "admin", Data: newGameMsg(t)})
 	app.engine.SetPhase(game.PhaseStarted) // a fresh game has since started, enrollment closed
 
 	baseURL := startEvictionTestServer(t, app)

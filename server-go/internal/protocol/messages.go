@@ -126,10 +126,33 @@ type Message struct {
 
 // IncomingMessage from TCP/WebSocket clients
 type IncomingMessage struct {
-	Source    string // "TCP", "WebSocket"
-	Data      *Message
-	ClientID  string
-	Timestamp time.Time
+	Source string // "TCP", "WebSocket"
+	Data   *Message
+	ClientID string
+	// ClientType carries the sending WebSocketClient's type ("admin", "tv",
+	// "vplayer", "buzzer" — mirrors server.ClientType's string values,
+	// duplicated here as a plain string rather than that type itself: package
+	// server already imports package protocol, so importing server.ClientType
+	// back into this struct would create an import cycle) — populated by
+	// internal/server/websocket.go's readPump directly from the connection's
+	// own WebSocketClient.Type field at message-read time.
+	//
+	// #154 (sec): deliberately NOT looked up from WebSocketHub by ClientID at
+	// dispatch time — h.clients is only populated once WebSocketHub.Run()
+	// processes the register channel, which the documented race at
+	// HandleConnectionWithType's `h.register <- client` call site (see that
+	// NOTE) does not guarantee has happened by the time this same
+	// connection's first message (e.g. HELLO) reaches readPump. Reading
+	// c.Type directly here has no such window: it is set once at connection
+	// and only ever mutated under WebSocketHub.mu by SetClientType, on the
+	// SAME struct this read comes from.
+	//
+	// Empty ("") for TCP-sourced messages and for any IncomingMessage a test
+	// constructs directly without setting it — cmd/server's handleWebMessage
+	// allow-list (contracts/websocket-actions.md) treats an empty/unrecognized
+	// ClientType as matching no entry, i.e. default-deny, not default-admin.
+	ClientType string
+	Timestamp  time.Time
 }
 
 // ButtonPayload for BUTTON action
