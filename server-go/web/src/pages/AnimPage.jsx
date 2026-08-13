@@ -154,10 +154,15 @@ export default function AnimPage() {
     creditPoints || 1,
     {}
   )
-  // En PLAYER, crédite le bumper le plus rapide de l'équipe (dans le mode
-  // SPEEDY, un seul bumper par équipe a TIME > 0 — le buzz est verrouillé
-  // globalement dès le premier appui — donc c'est le même joueur que
-  // /admin créditerait en cliquant sur son buzzer).
+  // En PLAYER, crédite le bumper le plus rapide de l'équipe. Correction
+  // #157/T2 : le verrou de buzz n'est PAS global, il est PAR ÉQUIPE
+  // (engine.go:1404-1409, "only ONE player per team can buzz") — et
+  // s'applique à tous les types de question SAUF MEMORY/MEMOTION, donc à
+  // QCM et ARDOISE aussi, pas seulement SPEEDY. Conséquence : une équipe a
+  // au plus UN bumper avec TIME > 0, quel que soit le type — "le plus
+  // rapide de l'équipe" est donc sans ambiguïté le même joueur que /admin
+  // créditerait en cliquant sur son buzzer, pas une approximation propre à
+  // SPEEDY.
   const handleCredit = (teamName) => {
     if (!creditEnabled) return
     if (creditTarget === 'TEAM') {

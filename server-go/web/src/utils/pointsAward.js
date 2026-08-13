@@ -167,3 +167,56 @@ export function resolvePointsAward(question, basePoints, ctx = {}) {
 
   return { amount, target: resolvePointsTarget(question) }
 }
+
+/**
+ * Montant de crédit QCM au niveau ÉQUIPE — mutualise la règle restée locale
+ * à GamePage.jsx (`qcmTeamAcquiredPoints` 272-290 et le repli du clic sur
+ * carte d'équipe 1072-1078) avant #157 : une équipe = un buzzer retenu par
+ * le moteur (`engine.go:1404-1409`, verrou par équipe), mais la fonction
+ * reste correcte si plusieurs bumpers sont fournis (garde le meilleur
+ * montant), l'invariant moteur n'étant pas une hypothèse à coder en dur ici.
+ *
+ * Trois branches :
+ *  1. Chercher parmi `teamBumpers` celui dont `ANSWER_COLOR === QCM_CORRECT`.
+ *  2. Trouvé → pénalité PAR JOUEUR selon SON `HINTS_AT_BUZZ` au moment du
+ *     buzz (calcQcmPenaltyForHints) — figée, indépendante des indices
+ *     révélés depuis.
+ *  3. Aucun bumper correct pour cette équipe → repli sur la pénalité des
+ *     indices COURANTS (calcQcmPenalty, `invalidatedCount`), PAS celle du
+ *     buzz — c'est délibérément différent de la branche 2 (aucune réponse
+ *     correcte à figer, donc pas d'autre repère que l'état actuel).
+ *
+ * Consommé par /admin (`GamePage.jsx`) et par le bouton de crédit de la
+ * page animateur (#156/F6, #157) pour garantir le même montant dans les
+ * deux interfaces, y compris ce repli — l'oublier romprait la parité
+ * exactement dans le cas où une équipe n'a pas la bonne réponse.
+ *
+ * @param {object} question - question courante (TYPE QCM, QCM_CORRECT, QCM_HINTS_ENABLED, ...)
+ * @param {number} basePoints - montant de base (paramètre : pointsInput sur /admin, creditPoints sur /anim)
+ * @param {Array<{TIME?: number, ANSWER_COLOR?: string, HINTS_AT_BUZZ?: number}>} teamBumpers - bumpers de
+ *   l'équipe (objets bumper bruts) — seuls ceux ayant buzzé (`TIME > 0`) sont éligibles à la branche 1
+ * @param {number} invalidatedCount - gameState.qcmInvalidated?.length || 0
+ * @returns {{amount: number, hasCorrectAnswer: boolean}} hasCorrectAnswer distingue
+ *   la branche 2 (réponse correcte trouvée) de la branche 3 (repli) — sert à
+ *   l'affichage (ex: n'ajouter une équipe à une liste "a la bonne réponse"
+ *   que si `hasCorrectAnswer` est vrai)
+ */
+export function calcQcmTeamAward(question, basePoints, teamBumpers, invalidatedCount) {
+  const correctColor = question?.QCM_CORRECT
+  let best = null
+
+  if (correctColor) {
+    ;(teamBumpers || []).forEach(bumper => {
+      if (!bumper || !bumper.TIME || bumper.ANSWER_COLOR !== correctColor) return
+      const hints = bumper.HINTS_AT_BUZZ || 0
+      const penalty = calcQcmPenaltyForHints(question, basePoints, hints)
+      const pts = penalty ? penalty.effectivePoints : basePoints
+      if (best === null || pts > best) best = pts
+    })
+  }
+
+  if (best !== null) return { amount: best, hasCorrectAnswer: true }
+
+  const fallbackPenalty = calcQcmPenalty(question, basePoints, invalidatedCount)
+  return { amount: fallbackPenalty ? fallbackPenalty.effectivePoints : basePoints, hasCorrectAnswer: false }
+}
