@@ -62,6 +62,17 @@ type App struct {
 	// broadcast_coalescer.go. Flushed immediately on every phase change
 	// (OnStateChange) and stopped on server shutdown (a.stop()).
 	ardoiseCoalescer *BroadcastCoalescer
+
+	// currentCreditPoints is the animateur's live-synced base credit amount
+	// (code review MAJEUR-1, #155/#156 — contracts/websocket-actions.md
+	// §"Animateur" CREDIT_POINTS) — the server-side mirror of /admin's
+	// pointsInput React state. In-memory only, not persisted (same
+	// session-scoped nature as pointsInput itself): reset to the current
+	// question's POINTS on every READY (resetCreditPointsForQuestion), and
+	// overwritten on every SET_CREDIT_POINTS the admin sends. Read only from
+	// handleWebMessage's single dispatch goroutine (#131) — no mutex needed,
+	// same discipline as bumperLEDState/bumperBuzzState above.
+	currentCreditPoints int
 }
 
 // resolvePort returns the effective HTTP port.
@@ -1078,6 +1089,9 @@ func (a *App) handleWebMessage(incoming *protocol.IncomingMessage) {
 	case protocol.ActionTeamPoints:
 		a.handleTeamPoints(msg)
 
+	case protocol.ActionSetCreditPoints:
+		a.handleSetCreditPoints(msg)
+
 	case protocol.ActionSetClientType:
 		a.handleSetClientType(incoming.ClientID, clientType, msg)
 
@@ -1164,6 +1178,7 @@ func (a *App) handleWebMessage(incoming *protocol.IncomingMessage) {
 		// the enrollment counter so clients don't show a stale VirtualPlayerCount.
 		a.broadcastEnrollmentUpdate()
 		a.broadcastNextQuestion() // #155/#156 B5 — no current question after NEW_GAME, clears anim's preview
+		a.resetCreditPointsForQuestion(nil) // code review MAJEUR-1 — no current question, nothing to credit
 
 	case protocol.ActionUpdateQuizMeta:
 		var payload protocol.QuizMetaPayload
@@ -1586,6 +1601,7 @@ func (a *App) handleReady(msg *protocol.Message) {
 	a.broadcastPing()
 
 	a.broadcastNextQuestion() // #155/#156 B5 — current question just changed
+	a.resetCreditPointsForQuestion(question) // code review MAJEUR-1 — pointsInput resets to question.POINTS on selection too
 }
 
 // loadQuestion loads a question from storage by ID
@@ -4268,6 +4284,9 @@ func (a *App) sendStateToClient(clientID string, clientType server.ClientType) {
 	// without waiting for the next trigger event.
 	if clientType == server.ClientTypeAnim {
 		a.wsHub.SendToClient(clientID, a.buildNextQuestionMessage())
+		// Code review MAJEUR-1 — same reasoning as NEXT_QUESTION just above:
+		// targeted at this one connecting client, not broadcastCreditPoints().
+		a.wsHub.SendToClient(clientID, a.buildCreditPointsMessage())
 	}
 }
 
@@ -4506,6 +4525,58 @@ func (a *App) buildNextQuestionMessage() *protocol.Message {
 // separate action exists to avoid).
 func (a *App) broadcastNextQuestion() {
 	a.wsHub.BroadcastToTypes(a.buildNextQuestionMessage(), server.ClientTypeAnim)
+}
+
+// buildCreditPointsMessage serializes a.currentCreditPoints into a
+// ready-to-send CREDIT_POINTS *protocol.Message (code review MAJEUR-1,
+// #155/#156 — contracts/websocket-actions.md §"Animateur").
+func (a *App) buildCreditPointsMessage() *protocol.Message {
+	data, _ := json.Marshal(protocol.CreditPointsPayload{Points: a.currentCreditPoints})
+	msg, _ := protocol.NewMessage(protocol.ActionCreditPoints, nil)
+	msg.Msg = data
+	return msg
+}
+
+// broadcastCreditPoints pushes the current CREDIT_POINTS to every connected
+// interface animateur client — same fan-out shape as broadcastNextQuestion,
+// but with no disk I/O at all (a.currentCreditPoints is a plain in-memory
+// int, not derived from loadQuestions()).
+func (a *App) broadcastCreditPoints() {
+	a.wsHub.BroadcastToTypes(a.buildCreditPointsMessage(), server.ClientTypeAnim)
+}
+
+// resetCreditPointsForQuestion re-initializes a.currentCreditPoints to the
+// given question's base POINTS (parity with GamePage.jsx:299's
+// `setPointsInput(parseInt(question.POINTS) || 1)` on question selection —
+// same repeal-to-1 default) and pushes the reset value to every connected
+// animateur. question may be nil (e.g. NEW_GAME, no current question at
+// all) — resets to 0 in that case: there is nothing to credit, and 0 is not
+// a value handleQuestionSelect's own `|| 1` fallback would ever produce, so
+// an animateur client can tell "no active question" apart from "a real
+// 1-point question" if it ever needs to.
+func (a *App) resetCreditPointsForQuestion(question *game.Question) {
+	if question == nil {
+		a.currentCreditPoints = 0
+	} else if n, err := strconv.Atoi(question.Points); err == nil && n > 0 {
+		a.currentCreditPoints = n
+	} else {
+		a.currentCreditPoints = 1
+	}
+	a.broadcastCreditPoints()
+}
+
+// handleSetCreditPoints applies the admin's adjusted pointsInput (code
+// review MAJEUR-1, #155/#156) and re-broadcasts it to every connected
+// animateur — the only writer of a.currentCreditPoints besides
+// resetCreditPointsForQuestion's own READY/NEW_GAME resets.
+func (a *App) handleSetCreditPoints(msg *protocol.Message) {
+	var payload protocol.CreditPointsPayload
+	if err := json.Unmarshal(msg.Msg, &payload); err != nil {
+		server.LogError(game.LogComponentApp, "Failed to parse SET_CREDIT_POINTS: %v", err)
+		return
+	}
+	a.currentCreditPoints = payload.Points
+	a.broadcastCreditPoints()
 }
 
 // displayAndOpenURLs shows all accessible URLs and opens the browser

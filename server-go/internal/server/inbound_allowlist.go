@@ -85,6 +85,12 @@ var inboundActionAllowlist = map[string][]ClientType{
 	protocol.ActionSetVirtualPlayerLimit: {ClientTypeAdmin},
 	protocol.ActionNewGame:               {ClientTypeAdmin},
 	protocol.ActionUpdateQuizMeta:        {ClientTypeAdmin},
+	// Code review MAJEUR-1 follow-up (v6.2.0, #155/#156): the admin pushes
+	// its adjusted pointsInput to the server so it can be echoed to the
+	// animateur via CREDIT_POINTS — anim only ever RECEIVES this value
+	// (CREDIT_POINTS, contracts/websocket-actions.md §"Animateur"), it never
+	// sends this action itself.
+	protocol.ActionSetCreditPoints: {ClientTypeAdmin},
 	// Handled directly in websocket.go's readPump (contract
 	// ai-multi-provider.md §11), not through handleWebMessage's switch — kept
 	// here anyway so IsActionAllowed remains the single source of truth that
