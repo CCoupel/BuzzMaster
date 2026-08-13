@@ -561,7 +561,7 @@ func (a *App) onPlayerDisconnected(playerID string) {
 	// sortedPlayers is gated !isVPlayer since #127. No targeted echo either:
 	// the recipient concerned by this event just disconnected, there is no
 	// one to echo to.
-	a.broadcastUpdateTo(server.ClientTypeAdmin, server.ClientTypeTV, server.ClientTypeBuzzer)
+	a.broadcastUpdateTo(server.ClientTypeAdmin, server.ClientTypeTV, server.ClientTypeBuzzer, server.ClientTypeAnim)
 }
 
 func (a *App) loadBackgrounds() {
@@ -1359,7 +1359,7 @@ func (a *App) handleButton(clientID string, msg *protocol.Message, timestamp int
 	// already-safe no-op for an unmatched ID) makes that guarantee visible
 	// at the call site and skips a pointless GetGameJSON()+SerializeForVPlayer
 	// on every physical buzz.
-	a.broadcastUpdateTo(server.ClientTypeAdmin, server.ClientTypeTV, server.ClientTypeBuzzer)
+	a.broadcastUpdateTo(server.ClientTypeAdmin, server.ClientTypeTV, server.ClientTypeBuzzer, server.ClientTypeAnim)
 	if bumper := a.engine.GetBumper(clientID); bumper != nil && bumper.IsVPlayer {
 		a.broadcastUpdateToPlayer(clientID)
 	}
@@ -1417,7 +1417,7 @@ func (a *App) handleSimulatedButton(msg *protocol.Message) {
 	// Buzzer see every buzz; the buzzing bumper gets a targeted echo if (and
 	// only if) it's a VPlayer — admin's manual test tool can target a
 	// physical buzzer's MAC here too, same guard as handleButton.
-	a.broadcastUpdateTo(server.ClientTypeAdmin, server.ClientTypeTV, server.ClientTypeBuzzer)
+	a.broadcastUpdateTo(server.ClientTypeAdmin, server.ClientTypeTV, server.ClientTypeBuzzer, server.ClientTypeAnim)
 	if bumper := a.engine.GetBumper(payload.ID); bumper != nil && bumper.IsVPlayer {
 		a.broadcastUpdateToPlayer(payload.ID)
 	}
@@ -2413,7 +2413,7 @@ func (a *App) handlePlayerConnect(clientID string, msg *protocol.Message) {
 		// from THIS message (#118/#120/#122) — sent AFTER SetClientPlayerID
 		// above so the hub can already route to it (R1: the one thing this
 		// site must never get wrong).
-		a.broadcastUpdateTo(server.ClientTypeAdmin, server.ClientTypeTV, server.ClientTypeBuzzer)
+		a.broadcastUpdateTo(server.ClientTypeAdmin, server.ClientTypeTV, server.ClientTypeBuzzer, server.ClientTypeAnim)
 		a.broadcastUpdateToPlayer(bumperID)
 		return
 	}
@@ -2424,7 +2424,7 @@ func (a *App) handlePlayerConnect(clientID string, msg *protocol.Message) {
 	// Buzzer see the new roster entry; the newly-enrolled player gets its own
 	// targeted echo (its bumper didn't exist in any earlier broadcast it
 	// could have received).
-	a.broadcastUpdateTo(server.ClientTypeAdmin, server.ClientTypeTV, server.ClientTypeBuzzer)
+	a.broadcastUpdateTo(server.ClientTypeAdmin, server.ClientTypeTV, server.ClientTypeBuzzer, server.ClientTypeAnim)
 	a.broadcastUpdateToPlayer(bumperID)
 	// Broadcast enrollment count update — unchanged, already lightweight and
 	// functionally targeted (carries only the enrollment counter).
@@ -2523,7 +2523,7 @@ func (a *App) handleVPlayerQCMAnswer(clientID string, msg *protocol.Message) {
 	// a targeted echo of its own resulting state. bumper.IsVPlayer is already
 	// verified true above (line ~2211) — always a real recipient here, no
 	// guard needed (contrast with handleButton, the physical-buzzer path).
-	a.broadcastUpdateTo(server.ClientTypeAdmin, server.ClientTypeTV, server.ClientTypeBuzzer)
+	a.broadcastUpdateTo(server.ClientTypeAdmin, server.ClientTypeTV, server.ClientTypeBuzzer, server.ClientTypeAnim)
 	a.broadcastUpdateToPlayer(bumperID)
 }
 
@@ -2645,7 +2645,7 @@ func (a *App) broadcastHello() {
 // handlePong's per-PONG update, which must not reach VJoueurs) should call
 // broadcastUpdateTo directly instead of broadcastUpdate.
 func (a *App) broadcastUpdate() {
-	a.broadcastUpdateTo(server.ClientTypeAdmin, server.ClientTypeTV, server.ClientTypeVPlayer, server.ClientTypeBuzzer)
+	a.broadcastUpdateTo(server.ClientTypeAdmin, server.ClientTypeTV, server.ClientTypeVPlayer, server.ClientTypeBuzzer, server.ClientTypeAnim)
 }
 
 // broadcastUpdateTo sends the full GameState UPDATE, but only to the client
@@ -2680,6 +2680,7 @@ func (a *App) broadcastUpdateTo(types ...server.ClientType) {
 	targetTV := hasType(server.ClientTypeTV)
 	targetVPlayer := hasType(server.ClientTypeVPlayer)
 	targetBuzzers := hasType(server.ClientTypeBuzzer)
+	targetAnim := hasType(server.ClientTypeAnim)
 
 	// #109 Phase 2 (D4) / #127 CA7: only evaluate MessageLost/DeliveryConfirmed
 	// when VJoueurs are actually among the recipients of THIS broadcast.
@@ -2700,13 +2701,25 @@ func (a *App) broadcastUpdateTo(types ...server.ClientType) {
 		}
 	}
 
-	// TV and VPlayer clients both start from the same stripped payload (no
-	// firmware/OTA/ACK metadata) — computed once and reused: TV always gets
-	// it verbatim; VPlayer gets it too, except during PREPARE/READY where
-	// broadcastUpdateToVPlayers further reduces "bumpers" per recipient
-	// (#127 T2.1-T2.3) — dataWeb is also its fallback for that reduction.
+	// TV, VPlayer and (#162) Anim clients all start from the same stripped
+	// payload (no firmware/OTA/ACK metadata) — computed once and reused: TV
+	// and Anim always get it verbatim; VPlayer gets it too, except during
+	// PREPARE/READY where broadcastUpdateToVPlayers further reduces
+	// "bumpers" per recipient (#127 T2.1-T2.3) — dataWeb is also its
+	// fallback for that reduction.
+	//
+	// #162: Anim reuses dataWeb as-is (byte-for-byte identical to what TV
+	// receives) rather than going through serializeForClientType — that
+	// function exists for the generic action dispatch path (a.broadcast ->
+	// BroadcastToTypes), which UPDATE deliberately bypasses in favor of this
+	// dedicated, already-per-type-branching function. Before this fix,
+	// ClientTypeAnim was never one of the branches here at all: adding it to
+	// a caller's type list (any of the ~19 sites #162 touches) was a
+	// no-op — hasType(Anim) was never even computed, let alone acted on. This
+	// is the fix's actual prerequisite; every other #162 change is inert
+	// without it.
 	var dataWeb []byte
-	if targetTV || targetVPlayer {
+	if targetTV || targetVPlayer || targetAnim {
 		if data, err := msg.SerializeForWebClient(); err == nil {
 			dataWeb = data
 		}
@@ -2716,6 +2729,14 @@ func (a *App) broadcastUpdateTo(types ...server.ClientType) {
 	}
 	if targetVPlayer && dataWeb != nil {
 		a.broadcastUpdateToVPlayers(msg, dataWeb)
+	}
+	if targetAnim && dataWeb != nil {
+		// Deliberately NOT calling a.engine.ApplyVPlayerBroadcastConnEvents()
+		// here — that evaluates MessageLost/DeliveryConfirmed for the VJoueur
+		// roster (#127 CA7/#129 CA8) and has nothing to do with Anim clients.
+		// It already only runs inside the `if targetVPlayer` branch above,
+		// which this branch is independent of.
+		a.wsHub.BroadcastRawToTypes(dataWeb, server.ClientTypeAnim)
 	}
 
 	// Physical buzzer WS clients receive a minimal payload (PHASE/TIMER + slim bumper/team slices).
@@ -3022,55 +3043,55 @@ func (a *App) broadcastEnrollmentUpdate() {
 // before (verified: the old a.broadcast(..., false, ...) call had viaTCP=false
 // and never listed a buzzer-facing type), and T1.3 must not introduce that.
 func (a *App) broadcastGameState(phase string) {
-	a.broadcastUpdateTo(server.ClientTypeAdmin, server.ClientTypeTV, server.ClientTypeVPlayer)
+	a.broadcastUpdateTo(server.ClientTypeAdmin, server.ClientTypeTV, server.ClientTypeVPlayer, server.ClientTypeAnim)
 }
 
 func (a *App) broadcastStart() {
 	data := a.engine.GetGameJSON()
 	a.broadcast(protocol.ActionStart, data, true,
-		server.ClientTypeAdmin, server.ClientTypeTV, server.ClientTypeVPlayer)
+		server.ClientTypeAdmin, server.ClientTypeTV, server.ClientTypeVPlayer, server.ClientTypeAnim)
 	a.sendLEDSetAllBuzzers()
 }
 
 func (a *App) broadcastStop() {
 	data := a.engine.GetGameJSON()
 	a.broadcast(protocol.ActionStop, data, true,
-		server.ClientTypeAdmin, server.ClientTypeTV, server.ClientTypeVPlayer)
+		server.ClientTypeAdmin, server.ClientTypeTV, server.ClientTypeVPlayer, server.ClientTypeAnim)
 	a.sendLEDSetStop()
 }
 
 func (a *App) broadcastPause(bumperID string) {
 	data := a.engine.GetGameJSON()
 	a.broadcast(protocol.ActionPause, data, true,
-		server.ClientTypeAdmin, server.ClientTypeTV, server.ClientTypeVPlayer)
+		server.ClientTypeAdmin, server.ClientTypeTV, server.ClientTypeVPlayer, server.ClientTypeAnim)
 	a.sendLEDSetPause(bumperID)
 }
 
 func (a *App) broadcastPauseAll() {
 	data := a.engine.GetGameJSON()
 	a.broadcast(protocol.ActionPause, data, true,
-		server.ClientTypeAdmin, server.ClientTypeTV, server.ClientTypeVPlayer)
+		server.ClientTypeAdmin, server.ClientTypeTV, server.ClientTypeVPlayer, server.ClientTypeAnim)
 	a.sendLEDSetPauseAll()
 }
 
 func (a *App) broadcastContinue() {
 	data := a.engine.GetGameJSON()
 	a.broadcast(protocol.ActionContinue, data, true,
-		server.ClientTypeAdmin, server.ClientTypeTV, server.ClientTypeVPlayer)
+		server.ClientTypeAdmin, server.ClientTypeTV, server.ClientTypeVPlayer, server.ClientTypeAnim)
 	a.sendLEDSetContinue()
 }
 
 func (a *App) broadcastTimerUpdate(currentTime int) {
 	data := a.engine.GetGameJSON()
 	a.broadcast(protocol.ActionUpdateTimer, data, true,
-		server.ClientTypeAdmin, server.ClientTypeTV, server.ClientTypeVPlayer)
+		server.ClientTypeAdmin, server.ClientTypeTV, server.ClientTypeVPlayer, server.ClientTypeAnim)
 }
 
 func (a *App) broadcastCountdownUpdate(countdownTime int) {
 	data := a.engine.GetGameJSON()
 	server.LogDebug(game.LogComponentApp, "Broadcasting countdown: %d", countdownTime)
 	a.broadcast(protocol.ActionUpdateTimer, data, true,
-		server.ClientTypeAdmin, server.ClientTypeTV, server.ClientTypeVPlayer)
+		server.ClientTypeAdmin, server.ClientTypeTV, server.ClientTypeVPlayer, server.ClientTypeAnim)
 }
 
 func (a *App) broadcastPing() {
@@ -3083,14 +3104,14 @@ func (a *App) broadcastReady() {
 	a.resetBuzzStates()
 	data := a.engine.GetTeamsAndBumpersJSON()
 	a.broadcast(protocol.ActionReady, data, true,
-		server.ClientTypeAdmin, server.ClientTypeTV)
+		server.ClientTypeAdmin, server.ClientTypeTV, server.ClientTypeAnim)
 	a.sendLEDSetAllBuzzers()
 }
 
 func (a *App) broadcastReveal(answer string) {
 	data, _ := json.Marshal(answer)
 	a.broadcast(protocol.ActionReveal, data, true,
-		server.ClientTypeAdmin, server.ClientTypeTV, server.ClientTypeVPlayer)
+		server.ClientTypeAdmin, server.ClientTypeTV, server.ClientTypeVPlayer, server.ClientTypeAnim)
 	a.sendLEDSetReveal(answer)
 }
 
@@ -3926,7 +3947,7 @@ func (a *App) sendLEDSetComet(teamID string) {
 
 func (a *App) broadcastReset() {
 	msg, _ := protocol.NewMessage(protocol.ActionReset, map[string]interface{}{})
-	a.wsHub.BroadcastToTypes(msg, server.ClientTypeAdmin, server.ClientTypeTV, server.ClientTypeVPlayer)
+	a.wsHub.BroadcastToTypes(msg, server.ClientTypeAdmin, server.ClientTypeTV, server.ClientTypeVPlayer, server.ClientTypeAnim)
 	a.udpBcast.Broadcast(msg)
 	// Note: RESET not sent to buzzer WS — HELLO below re-establishes buzzer state
 
@@ -3972,7 +3993,7 @@ func (a *App) broadcastQCMHint(invalidatedColor string, remainingAnswers int) {
 	}
 	data, _ := json.Marshal(payload)
 	a.broadcast(protocol.ActionQCMHint, data, false,
-		server.ClientTypeAdmin, server.ClientTypeTV, server.ClientTypeVPlayer)
+		server.ClientTypeAdmin, server.ClientTypeTV, server.ClientTypeVPlayer, server.ClientTypeAnim)
 	server.LogInfo(game.LogComponentEngine, "QCM hint: invalidated=%s, remaining=%d", invalidatedColor, remainingAnswers)
 
 	// Also broadcast full update so clients receive the updated QcmInvalidated state

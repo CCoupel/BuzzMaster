@@ -18,6 +18,7 @@ Historique des versions du projet BuzzControl.
 
 ### Fixed
 - **Crédit d'équipe en phase STOPPED avec montant incorrect** (#157) — Bug latent découvert en implémentation QCM animateur : le crédit appliqué en STOPPED (avant révélation) pouvait utiliser un montant calculé sur les mauvais indices/pénalités. Désormais correct dans les deux interfaces (`/admin` et `/anim`), montant toujours calculé au moment de l'application.
+- **Interface animateur figée après la connexion initiale** (#162) — Défaut fonctionnel important : hormis le passage à la question suivante, aucune mise à jour du jeu n'atteignait la tablette `/anim`. Scores, chronomètre et changement de phase (LANCER, PAUSE, STOP, RÉPONSE...) restaient bloqués sur leur état de connexion, y compris lorsque l'animateur actionnait lui-même les boutons — nécessitant un rechargement de page pour voir l'effet de sa propre action. L'interface animateur suit désormais ces changements en direct, comme `/admin` et `/tv`. Corrige aussi un montant de pénalité QCM potentiellement faux en repli (aucun buzzer correct), qui dépendait d'une donnée elle-même jamais reçue par `/anim`.
 
 ### Changed
 - **Raccourcis Navbar TV/Joueur/Animateur** (#155) : Les trois entrées ouvrent désormais des nouveaux onglets (cible `_blank`) au lieu de naviguer dans l'onglet courant. Permet au régisseur de basculer rapidement entre les vues sans perdre le contexte admin.
