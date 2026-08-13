@@ -783,21 +783,48 @@ Indique à l'interface animateur la prochaine question jouable, pour permettre l
 Payload **vide** (tous les champs absents/zéro-valeur) si plus aucune question n'est jouable —
 fin de partie ou toutes les questions restantes déjà `STOPPED`/`REVEALED`/`PLAYED`.
 
-#### Règle de calcul — parité stricte avec `GamePage.jsx:210-220`
+#### Règle de calcul — parité stricte avec `GamePage.jsx` (`nextUnplayedQuestion`)
 
-1. Charger les questions (mécanisme de `loadQuestions()`, `cmd/server/main.go`), trier par
-   `ORDER` croissant, repli sur `ID` en cas d'égalité ou d'`ORDER` absent — même règle que
+> **Corrigé 2026-08-13 (implémentation B5)** — la formulation initiale de cette section
+> (« première question dont STATUS ∉ {...} », sans plus de précision) était une approximation qui
+> omettait deux comportements réels du JS. Remplacée ci-dessous par une lecture ligne à ligne de
+> `GamePage.jsx`'s `nextUnplayedQuestion` (le calcul du bouton « à suivre » de la régie).
+
+1. **Aucune question courante → pas de « suivante » du tout.** Si `GameState.QUESTION` est absent
+   (aucune question chargée — ENROLL, NEW_GAME juste après reset, etc.), le résultat est le
+   payload vide, **quel que soit** le contenu de la liste par ailleurs. Ce n'est pas « aucune
+   question disponible n'a été trouvée » (qui impliquerait de chercher), c'est « rien à chercher ».
+2. Charger les questions (mécanisme de `loadQuestions()`, `cmd/server/main.go`), trier par
+   `ORDER` croissant, repli sur `ID` (parsé en entier) en cas d'`ORDER` absent — même règle que
    `web/src/utils/questionOrder.js` (`sortQuestionsByOrder`).
-2. Retenir la **première** question dont `STATUS` n'est ni `STOPPED`, ni `REVEALED`, ni `PLAYED`.
-3. Aucun résultat → payload vide (règle §"Payload" ci-dessus).
+3. Localiser la position de la question **courante** dans cette liste triée. Si elle n'y figure
+   plus (supprimée entre-temps mais toujours question courante côté moteur), la recherche
+   ci-dessous démarre au début de la liste — c'est le comportement de repli naturel de
+   `Array.prototype.findIndex` renvoyant `-1` en JS (`i = -1 + 1 = 0`), pas un cas à traiter à part.
+4. Retenir la première question **strictement après cette position** dont `STATUS` n'est ni
+   `STOPPED`, ni `REVEALED`, ni `PLAYED` — **jamais** une question qui précède la position
+   courante, même si elle est elle-même rejouable. « Suivante » veut dire suivante, pas
+   « n'importe laquelle de disponible dans la liste ».
+5. Aucun résultat après cette position → payload vide (règle §"Payload" ci-dessus) — la recherche
+   ne boucle jamais vers le début.
 
 ⚠️ **Cette règle doit être réimplémentée en Go à l'identique de sa version JS actuelle**
-(`GamePage.jsx:210-220`, bouton « à suivre » de la régie) — **pas** réinventée ni simplifiée. Une
-divergence, même minime (tri, égalité d'`ORDER`, jeu de statuts exclus), afficherait une question
-différente à l'animateur et à la régie pendant la même partie. Les cas de test du backend
-(`_work/reports/plan-20260813-092950.md` §3 tâche B5, critères d'acceptation) doivent être
-**dérivés du comportement JS observé**, pas conçus indépendamment — ordre personnalisé
-(`ORDER` non contigu), égalité d'`ORDER`, et question finale (payload vide) au minimum.
+(`GamePage.jsx`, bouton « à suivre » de la régie) — **pas** réinventée ni simplifiée. Une
+divergence, même minime (tri, égalité d'`ORDER`, jeu de statuts exclus, recherche depuis le début
+plutôt que depuis la position courante), afficherait une question différente à l'animateur et à la
+régie pendant la même partie. Les cas de test du backend
+(`_work/reports/plan-20260813-092950.md` §3 tâche B5, critères d'acceptation) sont **dérivés du
+comportement JS observé**, pas conçus indépendamment — ordre personnalisé (`ORDER` non contigu),
+question courante absente de la liste triée, statut exclu juste après la position courante, et
+question finale (payload vide, position courante = dernière de la liste) au minimum.
+
+**Note additionnelle (implémentation)** : le JS a également une garde de phase en tête de fonction
+(`if (!['STOPPED','REVEALED','PREPARE','READY','STARTED','PAUSED','COUNTDOWN','ENROLL',
+'NEW_GAME'].includes(phase)) return null`) — cette liste couvre en réalité **les 9 valeurs
+possibles** de `GamePhase` (`internal/game/models.go`), donc la condition n'est jamais vraie en
+pratique. Non porté côté Go (ajouter une branche systématiquement morte n'aurait aucun effet et
+masquerait une vraie régression si un futur `GamePhase` venait à exister sans être ajouté ici) —
+documenté pour qu'une future lecture de ce contrat ne pense pas à un oubli.
 
 #### Pourquoi une action dédiée plutôt qu'un champ de `UPDATE`
 

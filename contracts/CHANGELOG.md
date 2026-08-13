@@ -2,6 +2,30 @@
 
 ---
 
+## [20260813-2] — Batch 1 backend #155/#156 : implémentation B1-B6 + correction NEXT_QUESTION
+
+> Suite du Batch 0 ci-dessous — implémentation backend (`internal/server/websocket.go`, `http.go`,
+> `inbound_allowlist.go`, `internal/protocol/messages.go`, `cmd/server/main.go`). Version
+> `6.2.0.0`.
+
+- **[FIXED]** `websocket-actions.md` §"Animateur" NEXT_QUESTION, règle de calcul : la formulation
+  du Batch 0 (« première question dont STATUS ∉ {...} ») était une approximation qui omettait deux
+  comportements réels de `GamePage.jsx`'s `nextUnplayedQuestion` : (1) aucune question courante ⇒
+  payload vide d'office, sans chercher dans la liste ; (2) la recherche se fait **strictement
+  après la position de la question courante** dans l'ordre trié, jamais « n'importe laquelle de
+  disponible dans la liste entière », et ne boucle jamais vers le début. Corrigé après lecture
+  ligne à ligne du JS (implémentation B5, `cmd/server/main.go` `getNextQuestionPayload`). Aucun
+  changement de payload ni de déclencheurs, uniquement la précision de la règle documentée.
+- **[NEW]** B1-B6 implémentées telles que contractées en Batch 0 : `ClientTypeAnim` +
+  `/ws/anim` + `serializeForClientType` (B1) ; `ANIM_COUNT` (B2) ; allow-list `anim` pour
+  HELLO/START/STOP/PAUSE/CONTINUE/REVEAL/READY/BUMPER_POINTS/TEAM_POINTS (B3) ; `QUESTIONS` gaté
+  admin-only au HELLO (B4) ; `NEXT_QUESTION` (B5) ; log régie `INFO` sur toute action animateur
+  acceptée (B6, distinct du `WARN` de rejet #154).
+- **Non impacté** : aucun changement de payload par rapport au Batch 0 — uniquement la précision
+  de la règle de calcul NEXT_QUESTION et l'implémentation du reste tel que contracté.
+
+---
+
 ## [20260813] — Interface Animateur — socle #155 + SPEEDY #156 (Batch 0, contrats)
 
 > Milestone v6.2.x — Interface Animateur (#24), cible **6.2.0.0**. Batch 0 (contrats, avant tout
