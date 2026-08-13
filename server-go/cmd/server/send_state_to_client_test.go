@@ -52,11 +52,9 @@ func TestSendStateToClient_VPlayer_StripsAdminFieldsAndConfigUpdate(t *testing.T
 		t.Error("#154 E1: VPlayer must not receive FIRMWARE_VERSION on its HELLO UPDATE")
 	}
 
-	// QUESTIONS and CLIENTS are unaffected by #154 E1 (out of scope — see
-	// E5 in _work/reports/plan-20260812-141735.md §4.3, deferred to #155) —
-	// drain them so the CONFIG_UPDATE assertion below isn't fooled by
-	// ordering.
-	readActionMatching(t, conn, protocol.ActionQuestions)
+	// QUESTIONS is admin-only since #155/#156 B4 (contracts/CHANGELOG.md
+	// [20260813]) — VPlayer never receives it at HELLO anymore. Drain CLIENTS
+	// so the CONFIG_UPDATE assertion below isn't fooled by ordering.
 	readActionMatching(t, conn, protocol.ActionClients)
 
 	conn.SetReadDeadline(time.Now().Add(200 * time.Millisecond))
@@ -134,7 +132,8 @@ func TestSendStateToClient_TV_IncludesConfigUpdate(t *testing.T) {
 		t.Error("#154 E1: TV must NOT receive FIRMWARE_VERSION on its HELLO UPDATE (SerializeForWebClient)")
 	}
 
-	readActionMatching(t, conn, protocol.ActionQuestions)
+	// QUESTIONS is admin-only since #155/#156 B4 — TV never receives it at
+	// HELLO anymore (contracts/CHANGELOG.md [20260813]).
 	readActionMatching(t, conn, protocol.ActionClients)
 
 	// TV must still receive CONFIG_UPDATE — same established policy as

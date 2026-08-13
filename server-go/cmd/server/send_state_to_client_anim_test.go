@@ -28,7 +28,7 @@ import (
 // IMPORTANT: deliberately does NOT use readActionMatching (main_broadcast_
 // 127_test.go) for the "must NOT receive" assertions — that helper skips
 // past any action that isn't the one it's looking for, which would silently
-// swallow a QUESTIONS message instead of catching it. collectActions below
+// swallow a QUESTIONS message instead of catching it. collectActionsT below
 // drains everything sendStateToClient sent within a short window instead.
 //
 // The anim-specific tests below dial through startAnimAllowlistTestServer
@@ -38,12 +38,12 @@ import (
 // "/anim"-suffixed path would silently fall through to its VPlayer default.
 // ---------------------------------------------------------------------------
 
-// collectActions drains every frame conn receives before timeout elapses,
+// collectActionsT drains every frame conn receives before timeout elapses,
 // returning their ACTION values in arrival order. Unlike readActionMatching,
 // it never stops early on a match — every message in the window is recorded,
 // so a message the caller does NOT want to see is actually caught, not
 // silently skipped past.
-func collectActions(t *testing.T, conn *websocket.Conn, timeout time.Duration) []string {
+func collectActionsT(t *testing.T, conn *websocket.Conn, timeout time.Duration) []string {
 	t.Helper()
 	var actions []string
 	deadline := time.Now().Add(timeout)
@@ -62,14 +62,8 @@ func collectActions(t *testing.T, conn *websocket.Conn, timeout time.Duration) [
 	}
 }
 
-func containsAction(actions []string, want string) bool {
-	for _, a := range actions {
-		if a == want {
-			return true
-		}
-	}
-	return false
-}
+// containsAction is shared with player_evicted_test.go (package main) — same
+// signature, no local redefinition needed here.
 
 // TestSendStateToClient_Anim_StripsAdminFieldsAndExcludesQuestionsAndConfig
 // is B1+B4's combined acceptance criterion for the animateur's HELLO: the
@@ -95,7 +89,7 @@ func TestSendStateToClient_Anim_StripsAdminFieldsAndExcludesQuestionsAndConfig(t
 
 	app.sendStateToClient(clientID, server.ClientTypeAnim)
 
-	actions := collectActions(t, conn, 400*time.Millisecond)
+	actions := collectActionsT(t, conn, 400*time.Millisecond)
 
 	if !containsAction(actions, protocol.ActionUpdate) {
 		t.Fatalf("anim never received UPDATE at HELLO — got actions: %v", actions)
@@ -157,7 +151,7 @@ func TestSendStateToClient_TV_NoLongerReceivesQuestionsAtHello(t *testing.T) {
 
 	app.sendStateToClient(clientID, server.ClientTypeTV)
 
-	actions := collectActions(t, conn, 400*time.Millisecond)
+	actions := collectActionsT(t, conn, 400*time.Millisecond)
 	if containsAction(actions, protocol.ActionQuestions) {
 		t.Errorf("#155/#156 B4 [CHANGED]: TV must no longer receive QUESTIONS at HELLO — got actions: %v", actions)
 	}
@@ -178,7 +172,7 @@ func TestSendStateToClient_VPlayer_NoLongerReceivesQuestionsAtHello(t *testing.T
 
 	app.sendStateToClient(clientID, server.ClientTypeVPlayer)
 
-	actions := collectActions(t, conn, 400*time.Millisecond)
+	actions := collectActionsT(t, conn, 400*time.Millisecond)
 	if containsAction(actions, protocol.ActionQuestions) {
 		t.Errorf("#155/#156 B4 [CHANGED]: VPlayer must no longer receive QUESTIONS at HELLO — got actions: %v", actions)
 	}
@@ -198,7 +192,7 @@ func TestSendStateToClient_Admin_StillReceivesQuestionsAtHello(t *testing.T) {
 
 	app.sendStateToClient(clientID, server.ClientTypeAdmin)
 
-	actions := collectActions(t, conn, 400*time.Millisecond)
+	actions := collectActionsT(t, conn, 400*time.Millisecond)
 	if !containsAction(actions, protocol.ActionQuestions) {
 		t.Errorf("admin must still receive QUESTIONS at HELLO — got actions: %v", actions)
 	}
