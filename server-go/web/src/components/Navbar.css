@@ -321,6 +321,11 @@
   color: var(--gray-600);
 }
 
+.client-count.anim {
+  background: var(--gray-100);
+  color: var(--gray-600);
+}
+
 .client-count.vplayer {
   background: linear-gradient(135deg, var(--accent-cyan-light, #e0f7fa), var(--accent-cyan-lighter, #f0fbfc));
   color: var(--accent-cyan-dark, #00838f);

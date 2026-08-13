@@ -2,13 +2,13 @@
 
 > **Endpoint** : `/ws`
 > **Format** : JSON
-> **Dernière mise à jour** : 2026-08-12
+> **Dernière mise à jour** : 2026-08-13 (#155/#156 — allow-list animateur, action NEXT_QUESTION, v6.2.0)
 
 ---
 
-## Sécurité — Allow-list entrante par ClientType (#154, v6.1.4)
+## Sécurité — Allow-list entrante par ClientType (#154, v6.1.4 · étendue #155/#156, v6.2.0)
 
-Le serveur distingue plusieurs types de client WebSocket (`admin`, `tv`, `vplayer` —
+Le serveur distingue plusieurs types de client WebSocket (`admin`, `tv`, `vplayer`, `anim` —
 voir SET_CLIENT_TYPE ci-dessous ; `buzzer` existe côté firmware sur un hub séparé,
 non concerné par cette table) déjà en **sortie** (sérialiseurs `SerializeForAdmin` /
 `SerializeForWebClient` / `SerializeForVPlayer` / `SerializeForBuzzer`,
@@ -23,16 +23,37 @@ source de vérité.
 quelle action, y compris START/STOP/RAZ/DELETE/NEW_GAME/BUMPER_POINTS, et le serveur
 l'exécutait comme si un admin l'avait envoyée.
 
-| Action | `admin` | `tv` | `vplayer` |
-|---|---|---|---|
-| HELLO | ✅ | ✅ | ✅ |
-| FULL, UPDATE, POINTS, READY, START, STOP, PAUSE, CONTINUE, REVEAL, RAZ, REMOTE, DELETE, DELETE_BUMPER, RELEASE_BUMPER_NAME, RESET, REBOOT, BUMPER_POINTS, TEAM_POINTS, REORDER_QUESTIONS, FORCE_READY, MEMORY_SET_TEAMS, MEMOTION_FLIP, MEMOTION_STOP_TIMER, MEMOTION_REVEAL, MEMOTION_DONE, MEMOTION_SET_TEAMS, SHOW_QR_CODE, HIDE_QR_CODE, SET_VIRTUAL_PLAYER_LIMIT, NEW_GAME, UPDATE_QUIZ_META, CANCEL_AI_GENERATION | ✅ | ❌ | ❌ |
-| BUTTON, PONG | ✅ | ❌ | ✅ |
-| FLIP_MEMORY_CARD | ❌ | ✅ | ✅ |
-| MEMOTION_SELECT | ❌ | ✅ | ❌ |
-| PLAYER_CONNECT, VPLAYER_QCM_ANSWER, ARDOISE_INPUT | ❌ | ❌ | ✅ |
+**#155/#156 (v6.2.0)** ajoutent le type `anim` (`/ws/anim`, interface animateur — conduite du jeu
+depuis une tablette). Conformément à la conception de #154 (« indexé par nom d'action, pas par
+handler, pour qu'un futur `ClientType` n'ait besoin que de nouvelles entrées ici »), l'ajout se
+fait **exclusivement par de nouvelles entrées dans la map** — aucun changement du mécanisme
+`IsActionAllowed`/`IsSetClientTypeAllowed` ni du point d'accroche dans `handleWebMessage`.
+
+| Action | `admin` | `tv` | `vplayer` | `anim` |
+|---|---|---|---|---|
+| HELLO | ✅ | ✅ | ✅ | ✅ |
+| START, STOP, PAUSE, CONTINUE, REVEAL, READY | ✅ | ❌ | ❌ | ✅ |
+| BUMPER_POINTS, TEAM_POINTS | ✅ | ❌ | ❌ | ✅ |
+| FULL, UPDATE, POINTS, RAZ, REMOTE, DELETE, DELETE_BUMPER, RELEASE_BUMPER_NAME, RESET, REBOOT, REORDER_QUESTIONS, FORCE_READY, MEMORY_SET_TEAMS, MEMOTION_FLIP, MEMOTION_STOP_TIMER, MEMOTION_REVEAL, MEMOTION_DONE, MEMOTION_SET_TEAMS, SHOW_QR_CODE, HIDE_QR_CODE, SET_VIRTUAL_PLAYER_LIMIT, NEW_GAME, UPDATE_QUIZ_META, CANCEL_AI_GENERATION | ✅ | ❌ | ❌ | ❌ |
+| **SET_CREDIT_POINTS** | ✅ | ❌ | ❌ | ❌ |
+| BUTTON, PONG | ✅ | ❌ | ✅ | ❌ |
+| FLIP_MEMORY_CARD | ❌ | ✅ | ✅ | ❌ |
+| MEMOTION_SELECT | ❌ | ✅ | ❌ | ❌ |
+| PLAYER_CONNECT, VPLAYER_QCM_ANSWER, ARDOISE_INPUT | ❌ | ❌ | ✅ | ❌ |
 
 Notes :
+- **SET_CREDIT_POINTS** (v6.2.0, code review MAJEUR-1 sur #155/#156, voir §"Animateur" ci-dessous)
+  — `admin` uniquement, jamais `anim` : l'animateur **reçoit** le montant courant via
+  `CREDIT_POINTS`, il ne le **fixe** jamais lui-même. Placée à part plutôt que dans le gros bloc
+  admin-only ci-dessus pour rester visible comme un ajout de ce lot, même traitement que la
+  séparation faite plus haut pour la « conduite en direct ».
+- **START, STOP, PAUSE, CONTINUE, REVEAL, READY, BUMPER_POINTS, TEAM_POINTS** sont désormais
+  partagées entre `admin` et `anim` (v6.2.0, #155/#156) — c'est le périmètre exact de « conduite en
+  direct » retenu pour l'interface animateur (`_work/reports/plan-20260812-141735.md` §1) : lancer/
+  arrêter/mettre en pause une question et créditer une équipe ou un joueur, sans les actions de
+  préparation ni de configuration (qui restent `admin`-only, ligne ci-dessous). Cette ligne était
+  auparavant fusionnée avec le gros bloc `admin`-only ; elle en est extraite ici pour l'ajout de la
+  colonne `anim`, sans changement de comportement pour `admin`/`tv`/`vplayer`.
 - **BUTTON, PONG** sont à double usage — ce ne sont PAS des actions admin-only :
   `vplayer` les envoie pour le gameplay réel (`VPlayerPage.jsx:386` PONG = handshake
   de disponibilité en PREPARE ; `VPlayerPage.jsx:429,560` BUTTON = l'appui sur le
@@ -41,22 +62,27 @@ Notes :
   v6.1.4.1 suite revue code (le lot #154 initial les avait classées admin-only par
   erreur — l'audit frontend s'était appuyé sur les noms de fonctions wrapper
   `simulateButton`/`simulatePong` et avait manqué l'appel direct `sendMessage(...)`
-  de `VPlayerPage.jsx`, hors de tout wrapper nommé).
+  de `VPlayerPage.jsx`, hors de tout wrapper nommé). **`anim` n'y est pas ajouté** : la conduite
+  animateur ne simule pas de buzzer et ne fait pas de handshake PREPARE en son nom propre — hors
+  périmètre #155/#156.
 - **FLIP_MEMORY_CARD** est autorisé pour `tv` car cette connexion couvre deux cas
   légitimes : l'aperçu admin en iframe (`/tv?admin=true`, toujours une vraie
   connexion `tv` — `PlayerDisplay.jsx` `isAdminPreview`) et le clic d'un spectateur
   sur l'écran public. `vplayer` peut retourner ses propres cartes en mode équipe
-  active (`MEMORY_CURRENT_TEAM`).
+  active (`MEMORY_CURRENT_TEAM`). MEMORY/MEMOTION restent hors périmètre de l'interface
+  animateur en #155/#156 — `anim` n'y figure pas.
 - **MEMOTION_SELECT** n'est envoyé que depuis l'aperçu admin en iframe — toujours
-  une connexion `tv`, jamais `vplayer`.
+  une connexion `tv`, jamais `vplayer` ni `anim`.
 - **SET_CLIENT_TYPE** a une règle à part (dépend du type COURANT du client, pas
   d'une liste fixe) — voir sa propre section ci-dessous et
   `internal/server/inbound_allowlist.go`'s `IsSetClientTypeAllowed` : seul un
   client dont le type courant est `admin` (état par défaut de `/ws`, avant
-  auto-déclaration) peut l'envoyer. Une fois auto-déclaré `tv`/`vplayer`, le
+  auto-déclaration) peut l'envoyer. Une fois auto-déclaré `tv`/`vplayer`/`anim`, le
   handshake ne peut plus être répété — ferme l'auto-promotion en admin qui
   existait avant #154 (`handleSetClientType` mappait toute valeur `TYPE`
-  inconnue vers `admin` par défaut).
+  inconnue vers `admin` par défaut). Un client connecté sur `/ws/anim` (type fixé à la
+  connexion, comme `/ws/tv`/`/ws/player`) n'a de toute façon aucune raison légitime de
+  l'envoyer — même situation que TV/VPlayer, aucun changement de mécanisme requis pour #155.
 - Toute action **absente de cette table**, ou envoyée par un type absent de sa
   ligne, est rejetée par défaut (deny-by-default, pas une liste d'exceptions).
 
@@ -726,6 +752,166 @@ Mise à jour compteur inscriptions.
 | VIRTUAL_PLAYER_COUNT | int | Nombre inscrits |
 | VIRTUAL_PLAYER_LIMIT | int | Limite max |
 | ENROLLMENT_ACTIVE | bool | Inscriptions ouvertes |
+
+---
+
+## Animateur (Interface conduite, v6.2.0 — #155/#156)
+
+> Endpoint dédié `/ws/anim` (`ClientType` `anim`, `contracts/websocket-endpoints.md`). Reçoit
+> l'état de jeu via `UPDATE` (payload `SerializeForWebClient`, comme TV/VPlayer —
+> `contracts/ws-payload-serialization.md` §"Animateur") et peut émettre les actions de conduite
+> listées dans l'allow-list ci-dessus (`START`, `STOP`, `PAUSE`, `CONTINUE`, `REVEAL`, `READY`,
+> `BUMPER_POINTS`, `TEAM_POINTS`). `NEXT_QUESTION` et `CREDIT_POINTS` ci-dessous lui sont
+> exclusives.
+
+### NEXT_QUESTION
+
+Indique à l'interface animateur la prochaine question jouable, pour permettre l'enchaînement
+(bouton « à suivre ») sans consulter `/admin`.
+
+| Propriété | Valeur |
+|-----------|--------|
+| Direction | `Server→Client` |
+| Cible | `ClientTypeAnim` **exclusivement** — `BroadcastToTypes(msg, ClientTypeAnim)`. Aucun autre type de client ne reçoit cette action |
+| Trigger | HELLO d'un client animateur (état initial) ; `READY` (sélection/enchaînement de question) ; `STOP` ; `REVEAL` ; `NEW_GAME` ; `REORDER_QUESTIONS` ; `DELETE` (suppression d'une question) |
+
+#### Payload
+
+| Champ | Type | Description |
+|-------|------|-------------|
+| ID | string | ID de la question suivante |
+| QUESTION | string | Texte de la question |
+| CATEGORY | string | Catégorie |
+| TYPE | string | Type de question (SPEEDY, QCM, MEMORY, MEMOTION, ARDOISE) |
+| POINTS | int | Points de base |
+| TIME | int | Durée en secondes |
+
+Payload **vide** (tous les champs absents/zéro-valeur) si plus aucune question n'est jouable —
+fin de partie ou toutes les questions restantes déjà `STOPPED`/`REVEALED`/`PLAYED`.
+
+#### Règle de calcul — parité stricte avec `GamePage.jsx` (`nextUnplayedQuestion`)
+
+> **Corrigé 2026-08-13 (implémentation B5)** — la formulation initiale de cette section
+> (« première question dont STATUS ∉ {...} », sans plus de précision) était une approximation qui
+> omettait deux comportements réels du JS. Remplacée ci-dessous par une lecture ligne à ligne de
+> `GamePage.jsx`'s `nextUnplayedQuestion` (le calcul du bouton « à suivre » de la régie).
+
+1. **Aucune question courante → pas de « suivante » du tout.** Si `GameState.QUESTION` est absent
+   (aucune question chargée — ENROLL, NEW_GAME juste après reset, etc.), le résultat est le
+   payload vide, **quel que soit** le contenu de la liste par ailleurs. Ce n'est pas « aucune
+   question disponible n'a été trouvée » (qui impliquerait de chercher), c'est « rien à chercher ».
+2. Charger les questions (mécanisme de `loadQuestions()`, `cmd/server/main.go`), trier par
+   `ORDER` croissant, repli sur `ID` (parsé en entier) en cas d'`ORDER` absent — même règle que
+   `web/src/utils/questionOrder.js` (`sortQuestionsByOrder`).
+3. Localiser la position de la question **courante** dans cette liste triée. Si elle n'y figure
+   plus (supprimée entre-temps mais toujours question courante côté moteur), la recherche
+   ci-dessous démarre au début de la liste — c'est le comportement de repli naturel de
+   `Array.prototype.findIndex` renvoyant `-1` en JS (`i = -1 + 1 = 0`), pas un cas à traiter à part.
+4. Retenir la première question **strictement après cette position** dont `STATUS` n'est ni
+   `STOPPED`, ni `REVEALED`, ni `PLAYED` — **jamais** une question qui précède la position
+   courante, même si elle est elle-même rejouable. « Suivante » veut dire suivante, pas
+   « n'importe laquelle de disponible dans la liste ».
+5. Aucun résultat après cette position → payload vide (règle §"Payload" ci-dessus) — la recherche
+   ne boucle jamais vers le début.
+
+⚠️ **Cette règle doit être réimplémentée en Go à l'identique de sa version JS actuelle**
+(`GamePage.jsx`, bouton « à suivre » de la régie) — **pas** réinventée ni simplifiée. Une
+divergence, même minime (tri, égalité d'`ORDER`, jeu de statuts exclus, recherche depuis le début
+plutôt que depuis la position courante), afficherait une question différente à l'animateur et à la
+régie pendant la même partie. Les cas de test du backend
+(`_work/reports/plan-20260813-092950.md` §3 tâche B5, critères d'acceptation) sont **dérivés du
+comportement JS observé**, pas conçus indépendamment — ordre personnalisé (`ORDER` non contigu),
+question courante absente de la liste triée, statut exclu juste après la position courante, et
+question finale (payload vide, position courante = dernière de la liste) au minimum.
+
+**Note additionnelle (implémentation)** : le JS a également une garde de phase en tête de fonction
+(`if (!['STOPPED','REVEALED','PREPARE','READY','STARTED','PAUSED','COUNTDOWN','ENROLL',
+'NEW_GAME'].includes(phase)) return null`) — cette liste couvre en réalité **les 9 valeurs
+possibles** de `GamePhase` (`internal/game/models.go`), donc la condition n'est jamais vraie en
+pratique. Non porté côté Go (ajouter une branche systématiquement morte n'aurait aucun effet et
+masquerait une vraie régression si un futur `GamePhase` venait à exister sans être ajouté ici) —
+documenté pour qu'une future lecture de ce contrat ne pense pas à un oubli.
+
+#### Pourquoi une action dédiée plutôt qu'un champ de `UPDATE`
+
+L'`Engine` ne connaît pas la liste des questions : elles vivent en fichiers sur disque, chargés
+par `loadQuestions()` — un `os.ReadDir` puis un `os.ReadFile` **par question**, à chaque appel ;
+les statuts viennent de `engine.GetQuestionStatus(qID)`, pas de l'état interne de l'engine.
+`UPDATE` (`GetGameJSON()`, produit par l'engine seul) est diffusé à **chaque tick de timer** —
+injecter la question suivante dans ce payload déclencherait une lecture disque complète par tick.
+
+`NEXT_QUESTION` est donc **strictement interdite** sur le chemin de `broadcastUpdate`/
+`broadcastUpdateTo` : calculée et diffusée uniquement depuis les déclencheurs explicites listés
+ci-dessus, jamais depuis la boucle de timer.
+
+### SET_CREDIT_POINTS
+
+Ajuste le montant de base que l'animateur créditera à la fin de la question courante — l'équivalent
+serveur du champ `pointsInput` de la régie (`GamePage.jsx:770-771`), qui est aujourd'hui un état
+React **local à `/admin`**, initialisé à `question.POINTS` à la sélection mais librement modifiable
+ensuite (ex. manche bonus), et dont le serveur n'avait connaissance d'aucune façon avant cette
+action (`START` transmet bien `POINTS` dans son payload WS mais `protocol.StartPayload` ne l'a
+jamais décodé — champ silencieusement ignoré).
+
+**Origine** : code review MAJEUR-1 sur #155/#156
+(`_work/reports/code-reviewer-20260813-120457.md`) — sans ce mécanisme, `/anim` créditait
+`question.POINTS` brut (`AnimPage.jsx`, avant ce lot) alors que `/admin` créditait `pointsInput`
+potentiellement ajusté : deux montants différents pour la même question, dans le même état de jeu,
+selon l'interface utilisée pour créditer — silencieux, sans indication du mismatch dans aucune des
+deux interfaces.
+
+| Propriété | Valeur |
+|-----------|--------|
+| Direction | `Client→Server` |
+| Émetteur | `admin` uniquement (voir §"Sécurité — Allow-list entrante" ci-dessus) |
+| Trigger | Modification du champ `pointsInput` sur `/admin` (`onChange`, **avec un debounce côté
+  frontend** — ce champ change à chaque frappe, il ne faut pas un message WS par frappe) |
+
+#### Payload
+
+| Champ | Type | Description |
+|-------|------|-------------|
+| POINTS | int | Nouveau montant de base |
+
+#### CREDIT_POINTS
+
+Rediffuse le montant de base courant à l'interface animateur — la contrepartie serveur→client de
+`SET_CREDIT_POINTS`.
+
+| Propriété | Valeur |
+|-----------|--------|
+| Direction | `Server→Client` |
+| Cible | `ClientTypeAnim` **exclusivement** — `BroadcastToTypes(msg, ClientTypeAnim)` |
+| Trigger | `SET_CREDIT_POINTS` reçu (admin ajuste) ; `READY` (nouvelle question sélectionnée — réinitialise à `question.POINTS`, même règle que `pointsInput` sur `handleQuestionSelect`) ; `NEW_GAME` (aucune question courante — remise à zéro) ; HELLO d'un client animateur (état initial, envoi ciblé comme `NEXT_QUESTION`) |
+
+##### Payload
+
+| Champ | Type | Description |
+|-------|------|-------------|
+| POINTS | int | Montant de base courant à utiliser pour créditer la question en cours |
+
+#### Valeur par défaut et réinitialisation
+
+Le serveur garde en mémoire (non persisté — état de session, comme `pointsInput` côté React) un
+montant courant, initialisé à `question.POINTS` (repli sur `1` si absent/invalide — même règle que
+`GamePage.jsx:299` `parseInt(question.POINTS) || 1`) à chaque `READY`, et écrasé par la valeur reçue
+sur chaque `SET_CREDIT_POINTS`. Aucune lecture disque ni recalcul sur le chemin de `broadcastUpdate`
+n'est nécessaire ici (contrairement à `NEXT_QUESTION`) — c'est une simple valeur en mémoire, pas une
+requête sur `loadQuestions()`.
+
+#### Ce que ce mécanisme NE couvre PAS (hors périmètre de ce correctif)
+
+- **QCM / MEMORY** : `resolvePointsAward` (`web/src/utils/pointsAward.js`) applique des règles
+  spécifiques à ces types (pénalité par indices, score MEMORY par paires) par-dessus le montant de
+  base — `CREDIT_POINTS` ne transmet que le montant de **base**, pas le montant final calculé. Sans
+  conséquence aujourd'hui : QCM/MEMORY sont hors périmètre de la tranche SPEEDY #155/#156 sur
+  `/anim`. À réévaluer si ces types y sont ouverts.
+- **`TIME`** (durée du chrono) : la revue de code a noté la même famille de problème sur
+  `AnimPage.jsx`'s `handleStart`, qui lit `question.TIME` brut plutôt qu'un éventuel `timeInput`
+  ajusté côté admin avant qu'un animateur ne lance la question. Non traité par ce correctif
+  (arbitrage explicite : MAJEUR-1 porte sur le crédit de points, pas sur le lancement) — impact
+  jugé moindre par la revue (visible et corrigeable en cours de manche via PAUSE, contrairement à un
+  score mal crédité qui est difficile à corriger après coup).
 
 ---
 

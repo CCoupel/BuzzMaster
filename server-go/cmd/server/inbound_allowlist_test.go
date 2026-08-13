@@ -273,14 +273,14 @@ func TestHandleWebMessage_AllowList_SetClientType_EscalationBlocked(t *testing.T
 	tv := dialWS(t, baseURL, "/ws/tv")
 	learnClientID(t, app, tv)
 
-	adminBefore, tvBefore, _ := app.wsHub.GetClientCounts()
+	adminBefore, tvBefore, _, _ := app.wsHub.GetClientCounts()
 	if adminBefore != 0 || tvBefore != 1 {
 		t.Fatalf("setup failed: expected admin=0 tv=1, got admin=%d tv=%d", adminBefore, tvBefore)
 	}
 
 	sendAction(t, app, tv, protocol.ActionSetClientType, protocol.SetClientTypePayload{Type: "admin"})
 
-	adminAfter, tvAfter, _ := app.wsHub.GetClientCounts()
+	adminAfter, tvAfter, _, _ := app.wsHub.GetClientCounts()
 	if adminAfter != 0 || tvAfter != 1 {
 		t.Errorf("#154 E3: TV must not self-promote to admin via SET_CLIENT_TYPE — got admin=%d tv=%d, want admin=0 tv=1", adminAfter, tvAfter)
 	}
@@ -298,7 +298,7 @@ func TestHandleWebMessage_AllowList_SetClientType_LegacyHandshakeStillWorks(t *t
 
 	sendAction(t, app, conn, protocol.ActionSetClientType, protocol.SetClientTypePayload{Type: "tv"})
 
-	adminAfter, tvAfter, _ := app.wsHub.GetClientCounts()
+	adminAfter, tvAfter, _, _ := app.wsHub.GetClientCounts()
 	if adminAfter != 0 || tvAfter != 1 {
 		t.Errorf("SET_CLIENT_TYPE from an Admin-typed connection should still work — got admin=%d tv=%d, want admin=0 tv=1", adminAfter, tvAfter)
 	}

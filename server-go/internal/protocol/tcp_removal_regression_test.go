@@ -39,11 +39,18 @@ func TestClientsPayload_NoTCPField(t *testing.T) {
 
 // TestClientsPayload_ExpectedFields verifies that ClientsPayload JSON output
 // contains exactly the expected fields (no more, no less).
+//
+// Field count bumped 4 -> 5 for v6.2.0 (#155, tâche B2): ANIM_COUNT is a new,
+// deliberate additive field (interface animateur client count,
+// contracts/websocket-endpoints.md) — not a regression of this guard's
+// original bugfix #80 intent (no TCP fields reappearing), which
+// TestClientsPayload_NoTCPField above still covers independently.
 func TestClientsPayload_ExpectedFields(t *testing.T) {
 	payload := ClientsPayload{
 		AdminCount:   1,
 		TVCount:      1,
 		VPlayerCount: 1,
+		AnimCount:    1,
 		BuzzerWS:     1,
 	}
 
@@ -57,16 +64,16 @@ func TestClientsPayload_ExpectedFields(t *testing.T) {
 		t.Fatalf("json.Unmarshal failed: %v", err)
 	}
 
-	expectedFields := []string{"ADMIN_COUNT", "TV_COUNT", "VPLAYER_COUNT", "BUZZER_WS_COUNT"}
+	expectedFields := []string{"ADMIN_COUNT", "TV_COUNT", "VPLAYER_COUNT", "ANIM_COUNT", "BUZZER_WS_COUNT"}
 	for _, field := range expectedFields {
 		if _, ok := decoded[field]; !ok {
 			t.Errorf("ClientsPayload JSON must contain field %q, got: %s", field, string(data))
 		}
 	}
 
-	// Strict field count: exactly 4 fields expected
-	if len(decoded) != 4 {
-		t.Errorf("ClientsPayload JSON must have exactly 4 fields, got %d: %s", len(decoded), string(data))
+	// Strict field count: exactly 5 fields expected (v6.2.0: +ANIM_COUNT)
+	if len(decoded) != 5 {
+		t.Errorf("ClientsPayload JSON must have exactly 5 fields, got %d: %s", len(decoded), string(data))
 	}
 }
 

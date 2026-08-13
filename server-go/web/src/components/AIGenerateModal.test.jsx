@@ -66,7 +66,6 @@ function modalTree(props, route) {
     <MemoryRouter initialEntries={[route]}>
       <Routes>
         <Route path="/admin/settings" element={<div data-testid="settings-page">Settings</div>} />
-        <Route path="/anim/settings" element={<div data-testid="anim-settings-page">Anim Settings</div>} />
         <Route path="*" element={<AIGenerateModal {...props} />} />
       </Routes>
     </MemoryRouter>
@@ -127,14 +126,13 @@ describe('AIGenerateModal — état indisponible (maquette §5)', () => {
     expect(props.onClose).toHaveBeenCalled()
   })
 
-  it('navigates to /anim/settings when opened from an /anim route', async () => {
-    renderModal({ apiKeyConfigured: false }, { route: '/anim/questions' })
-    fireEvent.click(screen.getByText('Configurer une clé API'))
-
-    await waitFor(() => {
-      expect(screen.getByTestId('anim-settings-page')).toBeInTheDocument()
-    })
-  })
+  // #155 (F2, BREAKING) — the "navigates to /anim/settings when opened from
+  // an /anim route" case that used to live here is removed, not adapted:
+  // /anim used to be an alias serving the admin interface (this modal
+  // included) ; it now serves its own page (AnimPage), which never renders
+  // AIGenerateModal. "Configurer une clé API" navigating to /admin/settings
+  // (previous test) is therefore the only case left — there is no /anim
+  // variant anymore.
 })
 
 describe('AIGenerateModal — formulaire (maquette §2, retour QUALIF v6.0.7)', () => {

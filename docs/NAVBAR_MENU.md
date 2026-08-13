@@ -31,11 +31,11 @@ The Navbar has been enhanced with a dropdown menu on the BuzzControl bee logo. T
   - Navigating to another page
 
 **Menu Items** :
-1. **⚙️ Config** - Navigate to `/admin/settings` (or `/anim/settings`)
+1. **⚙️ Config** - Navigate to `/admin/settings`
    - Server configuration
    - Game settings
    - Neon effect parameters
-2. **📋 Logs** - Navigate to `/admin/logs` (or `/anim/logs`)
+2. **📋 Logs** - Navigate to `/admin/logs`
    - Real-time server logs
    - Event history
    - Debug information

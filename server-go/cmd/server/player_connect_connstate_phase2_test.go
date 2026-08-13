@@ -201,6 +201,12 @@ func TestHandleWebMessage_ConfirmsDeliveryForIdentifiedVPlayer(t *testing.T) {
 // PLAYER_CONNECT) must not cause handleWebMessage to touch any bumper.
 func TestHandleWebMessage_UnidentifiedClient_NoPanic(t *testing.T) {
 	app := newTestAppWithHub(t)
+	// This message's empty ClientType is rejected by the #154 allow-list gate
+	// (main.go), which since #155/#156 logs via a.logger (not the nil-safe
+	// package-level server.LogWarn) — must be initialized to avoid a nil
+	// pointer dereference, same reasoning as player_evicted_test.go's
+	// identical setup for its own a.logger-using handleWebMessage path.
+	app.logger = server.NewBroadcastLogger(100)
 	pongMsg, err := protocol.NewMessage("PONG", map[string]interface{}{})
 	if err != nil {
 		t.Fatalf("failed to build message: %v", err)

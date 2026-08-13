@@ -6,7 +6,22 @@ Ce document specifie le protocole WebSocket pour la communication entre les buzz
 
 ## Vue d'ensemble
 
-A partir de la version 3.0.0, le serveur BuzzControl supporte un **mode hybride** : les buzzers physiques peuvent se connecter soit via le protocole TCP historique (port 1234), soit via WebSocket (port 80, endpoint `/ws/buzzer`).
+Le serveur BuzzControl expose plusieurs endpoints WebSocket pour différents types de clients.
+
+### Endpoints WebSocket disponibles
+
+| Endpoint | ClientType | Accès | Description |
+|----------|-----------|-------|-------------|
+| `/ws` ou `/ws/admin` | `admin` | Navigateur admin (`/admin`) | Interface d'administration complète (plein contrôle) |
+| `/ws/tv` | `tv` | Affichage TV (`/tv`) | Écran TV plein écran (lecture seule) |
+| `/ws/player` | `vplayer` | Joueur virtuel (`/player`) | Interface joueur sur smartphone/tablette |
+| `/ws/buzzer` | `buzzer` | Buzzer physique (BuzzClick) | Buzzers ESP32-C3 (TCP v1 ou WebSocket v3) |
+| `/ws/anim` | `anim` | Animateur (`/anim`) | Interface animateur sur tablette (v6.2.0) |
+| `/ws/logs` | - | Admin (`/admin/logs`) | Logs temps réel (accès admin) |
+
+### Support hybride buzzers physiques (v3.0.0+)
+
+A partir de la version 3.0.0, les buzzers physiques peuvent se connecter soit via le protocole TCP historique (port 1234), soit via WebSocket (port 80, endpoint `/ws/buzzer`).
 
 ### Architecture
 
@@ -22,8 +37,8 @@ Buzzers BuzzClick (ESP32-C3)
     |
 Serveur BuzzControl (Go)
     |
-    +-- WebSocket port 80 /ws       (clients web : Admin, TV, VJoueur)
-    +-- WebSocket port 80 /ws/logs  (logs temps reel)
+    +-- WebSocket port 80 /ws, /ws/admin, /ws/tv, /ws/player, /ws/anim, /ws/logs
+        Clients web et interface animateur
 ```
 
 ### Differences TCP vs WebSocket

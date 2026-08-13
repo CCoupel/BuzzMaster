@@ -117,12 +117,12 @@ func TestGetClientCounts_UnrecognizedType_CountsTowardNone(t *testing.T) {
 	hub.clients[&WebSocketClient{ID: "buzzer-1", Type: ClientTypeBuzzer}] = true
 	hub.clients[&WebSocketClient{ID: "mystery-1", Type: "future-role"}] = true
 
-	adminCount, tvCount, vplayerCount := hub.GetClientCounts()
+	adminCount, tvCount, vplayerCount, animCount := hub.GetClientCounts()
 	if adminCount != 1 {
 		t.Errorf("#154 E2: adminCount = %d, want 1 (buzzer/unknown types must not inflate it)", adminCount)
 	}
-	if tvCount != 0 || vplayerCount != 0 {
-		t.Errorf("#154 E2: tvCount=%d vplayerCount=%d, want 0/0", tvCount, vplayerCount)
+	if tvCount != 0 || vplayerCount != 0 || animCount != 0 {
+		t.Errorf("#154 E2: tvCount=%d vplayerCount=%d animCount=%d, want 0/0/0", tvCount, vplayerCount, animCount)
 	}
 }
 

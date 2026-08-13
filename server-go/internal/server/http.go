@@ -321,6 +321,8 @@ func (h *HTTPServer) setupRoutes() {
 	h.mux.HandleFunc("/ws/admin", h.handleWebSocketAdmin)
 	h.mux.HandleFunc("/ws/tv", h.handleWebSocketTV)
 	h.mux.HandleFunc("/ws/player", h.handleWebSocketPlayer)
+	// v6.2.0 (#155) — interface animateur, reduced-capability web client
+	h.mux.HandleFunc("/ws/anim", h.handleWebSocketAnim)
 
 	// Buzzer WebSocket (dedicated endpoint for physical buzzers)
 	h.mux.HandleFunc("/ws/buzzer", h.handleBuzzerWebSocket)
@@ -369,7 +371,12 @@ func (h *HTTPServer) handleRoot(w http.ResponseWriter, r *http.Request) {
 // isSPARoute checks if the path is a React SPA route
 // Uses distinct paths to avoid conflicts with API endpoints
 func (h *HTTPServer) isSPARoute(path string) bool {
-	// /admin and /anim are aliases for the admin interface
+	// #155 (v6.2.0): /anim used to be an alias serving the admin interface —
+	// it now serves its own SPA page (the interface animateur, connected on
+	// /ws/anim with the reduced ClientTypeAnim). Kept in this list because
+	// it's still a React SPA route that needs the same catch-all serving
+	// behavior as every other entry here — just no longer the SAME page as
+	// /admin. contracts/websocket-endpoints.md documents the endpoint split.
 	spaRoutes := []string{"/admin", "/anim", "/scoreboard", "/quiz", "/settings", "/tv", "/game", "/teams", "/history-page", "/palmares", "/player"}
 	for _, route := range spaRoutes {
 		if strings.HasPrefix(path, route) {
@@ -2809,6 +2816,11 @@ func (h *HTTPServer) handleWebSocketTV(w http.ResponseWriter, r *http.Request) {
 // handleWebSocketPlayer handles /ws/player — virtual player (VPlayer/enrollment).
 func (h *HTTPServer) handleWebSocketPlayer(w http.ResponseWriter, r *http.Request) {
 	h.wsHub.HandleConnectionWithType(w, r, ClientTypeVPlayer)
+}
+
+// handleWebSocketAnim handles /ws/anim — interface animateur (v6.2.0, #155).
+func (h *HTTPServer) handleWebSocketAnim(w http.ResponseWriter, r *http.Request) {
+	h.wsHub.HandleConnectionWithType(w, r, ClientTypeAnim)
 }
 
 func (h *HTTPServer) handleBuzzerWebSocket(w http.ResponseWriter, r *http.Request) {

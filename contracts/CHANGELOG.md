@@ -2,6 +2,118 @@
 
 ---
 
+## [20260813-3] — Synchronisation live du montant crédité `/anim` (code review MAJEUR-1, #155/#156)
+
+> Correctif suite revue de code (`_work/reports/code-reviewer-20260813-120457.md` MAJEUR-1,
+> arbitrage utilisateur relayé par le teamleader) : `/anim` créditait `question.POINTS` brut alors
+> que `/admin` crédite `pointsInput`, un état React local ajustable à tout moment après la
+> sélection de la question (ex. manche bonus) — deux montants différents pour la même question
+> selon l'interface utilisée pour créditer, silencieusement.
+
+- **[NEW]** Action `SET_CREDIT_POINTS` (Client→Server, `admin` uniquement) — l'admin transmet son
+  `pointsInput` ajusté au serveur. Absente avant ce lot : `START` transportait déjà `POINTS` dans
+  son payload WS côté frontend, mais `protocol.StartPayload` ne l'a jamais décodé (champ
+  silencieusement ignoré) — aucune autre voie n'existait pour que le serveur connaisse cette
+  valeur.
+- **[NEW]** Action `CREDIT_POINTS` (Server→Client, `ClientTypeAnim` exclusif) — rediffuse le
+  montant de base courant. Sur le modèle de `NEXT_QUESTION` (B5) : diffusée sur événements
+  explicites (`SET_CREDIT_POINTS`, `READY`, `NEW_GAME`, HELLO ciblé), jamais recalculée sur le
+  chemin de `broadcastUpdate` — bien que, contrairement à `NEXT_QUESTION`, aucune lecture disque ne
+  soit en jeu ici (valeur en mémoire, pas `loadQuestions()`).
+- **[CHANGED]** Valeur par défaut : réinitialisée à `question.POINTS` (repli `1`) à chaque `READY`
+  — même règle que `pointsInput` côté `GamePage.jsx` (`handleQuestionSelect`).
+- **Hors périmètre de ce correctif** (documenté explicitement dans `websocket-actions.md`
+  §"Animateur", pas seulement passé sous silence) :
+  - QCM/MEMORY : `CREDIT_POINTS` transmet le montant de **base**, pas le montant final calculé par
+    `resolvePointsAward` (pénalités/score spécifiques au type) — sans conséquence tant que ces
+    types restent hors périmètre `/anim` (tranche SPEEDY #155/#156 uniquement).
+  - `TIME` (durée du chrono) : même famille de problème identifiée par la revue sur
+    `AnimPage.jsx`'s `handleStart`, non traitée par ce correctif (arbitrage explicite — impact
+    jugé moindre, corrigeable en cours de manche via `PAUSE`).
+- **Coordination frontend requise** (dev-frontend, dispatché séparément) : `GamePage.jsx` doit
+  émettre `SET_CREDIT_POINTS` sur changement de `pointsInput` (debounced) ; `AnimPage.jsx` doit
+  consommer `CREDIT_POINTS` au lieu de lire `question.POINTS` directement dans le calcul de
+  `creditAmount`. Le JSDoc de `resolvePointsAward` (qui affirme aujourd'hui « un seul montant
+  possible dans les deux interfaces », vrai seulement une fois ce câblage fait) est à corriger à ce
+  moment-là — fichier frontend, hors périmètre backend de ce lot.
+
+---
+
+## [20260813-2] — Batch 1 backend #155/#156 : implémentation B1-B6 + correction NEXT_QUESTION
+
+> Suite du Batch 0 ci-dessous — implémentation backend (`internal/server/websocket.go`, `http.go`,
+> `inbound_allowlist.go`, `internal/protocol/messages.go`, `cmd/server/main.go`). Version
+> `6.2.0.0`.
+
+- **[FIXED]** `websocket-actions.md` §"Animateur" NEXT_QUESTION, règle de calcul : la formulation
+  du Batch 0 (« première question dont STATUS ∉ {...} ») était une approximation qui omettait deux
+  comportements réels de `GamePage.jsx`'s `nextUnplayedQuestion` : (1) aucune question courante ⇒
+  payload vide d'office, sans chercher dans la liste ; (2) la recherche se fait **strictement
+  après la position de la question courante** dans l'ordre trié, jamais « n'importe laquelle de
+  disponible dans la liste entière », et ne boucle jamais vers le début. Corrigé après lecture
+  ligne à ligne du JS (implémentation B5, `cmd/server/main.go` `getNextQuestionPayload`). Aucun
+  changement de payload ni de déclencheurs, uniquement la précision de la règle documentée.
+- **[NEW]** B1-B6 implémentées telles que contractées en Batch 0 : `ClientTypeAnim` +
+  `/ws/anim` + `serializeForClientType` (B1) ; `ANIM_COUNT` (B2) ; allow-list `anim` pour
+  HELLO/START/STOP/PAUSE/CONTINUE/REVEAL/READY/BUMPER_POINTS/TEAM_POINTS (B3) ; `QUESTIONS` gaté
+  admin-only au HELLO (B4) ; `NEXT_QUESTION` (B5) ; log régie `INFO` sur toute action animateur
+  acceptée (B6, distinct du `WARN` de rejet #154).
+- **Non impacté** : aucun changement de payload par rapport au Batch 0 — uniquement la précision
+  de la règle de calcul NEXT_QUESTION et l'implémentation du reste tel que contracté.
+
+---
+
+## [20260813] — Interface Animateur — socle #155 + SPEEDY #156 (Batch 0, contrats)
+
+> Milestone v6.2.x — Interface Animateur (#24), cible **6.2.0.0**. Batch 0 (contrats, avant tout
+> code) du plan `_work/reports/plan-20260813-092950.md` (rév. 1) et
+> `_work/reports/plan-20260813-094321.md` (rév. 2 — #156 SPEEDY intégrée au même lot). #154
+> (allow-list entrante, `IncomingMessage.ClientType`, sérialisation par type) est le socle
+> technique direct de ce lot — aucune plomberie n'est recréée, uniquement étendue.
+
+- **[BREAKING]** Disparition de l'alias SPA `/anim` → `/admin`. La route `/anim` cesse de servir
+  `GamePage` (pleins droits régie) et sert désormais la nouvelle page animateur (`AnimPage.jsx`,
+  #155 F4), connectée sur le nouvel endpoint `/ws/anim` avec le `ClientType` réduit `anim`.
+  `/anim/quiz`, `/anim/settings`, `/anim/logs` (sous-routes admin dupliquées sous ce préfixe) ne
+  résolvent donc plus vers la régie. `/admin/*` est strictement inchangée. Voir
+  `contracts/websocket-endpoints.md` §"Endpoints WebSocket" et le détail frontend F2 du plan.
+- **[NEW]** Endpoint `/ws/anim` (`ClientType` `"anim"`, D1) — `contracts/websocket-endpoints.md`.
+- **[NEW]** `ClientTypeAnim` ajouté à `serializeForClientType` (`internal/server/websocket.go`) →
+  route vers `SerializeForWebClient` (même payload que TV/VPlayer, aucun sérialiseur dédié créé) —
+  décision et justification complètes dans `contracts/ws-payload-serialization.md`
+  §"Animateur". ⚠️ Piège identifié par le plan (§0.2) : le `default:` de cette fonction retourne
+  aujourd'hui `SerializeForAdmin()` — un type non explicitement ajouté au `switch` reçoit le
+  payload admin complet par défaut. Première ligne de code du lot (tâche B1), avec test dédié.
+- **[NEW]** Action `NEXT_QUESTION` (Server→Client, exclusive à `ClientTypeAnim`) — question
+  suivante calculée côté App (règle identique à `GamePage.jsx:210-220`, tri `ORDER`/`ID` puis
+  premier statut jouable), diffusée sur événements explicites (jamais sur le chemin de
+  `broadcastUpdate`, pour éviter une lecture disque par tick). Détail complet
+  (payload, déclencheurs, règle de calcul) : `contracts/websocket-actions.md` §"Animateur".
+- **[NEW]** Lignes `anim` de l'allow-list entrante (#154) : `HELLO` ; `START`/`STOP`/`PAUSE`/
+  `CONTINUE`/`REVEAL`/`READY` ; `BUMPER_POINTS`/`TEAM_POINTS` — périmètre "conduite en direct"
+  du cadrage (`_work/reports/plan-20260812-141735.md` §1). Ajout d'entrées uniquement dans
+  `internal/server/inbound_allowlist.go`, aucun changement de mécanisme (`IsActionAllowed`,
+  `IsSetClientTypeAllowed` inchangées). Détail : `contracts/websocket-actions.md` §"Sécurité —
+  Allow-list entrante par ClientType".
+- **[NEW]** Champ `ANIM_COUNT` dans `ClientsPayload` (`internal/protocol/messages.go`) — nombre
+  de clients animateur connectés, affiché en badge Navbar régie (D2, frontend F3). `CLIENTS`
+  reste diffusé à `admin` seul, comportement inchangé.
+- **[CHANGED]** `sendStateToClient` (HELLO) : le bloc `QUESTIONS` (`cmd/server/main.go`), envoyé
+  jusqu'ici sans condition de type, est gaté `admin`-only — alignement sur `broadcastQuestions`,
+  déjà `admin`-only en continu. **Effet de bord voulu** : TV et VPlayer cessent de recevoir
+  `QUESTIONS` au HELLO (ils ne le recevaient déjà plus ensuite). `CONFIG_UPDATE` reste gaté
+  Admin+TV (politique #154 E1 inchangée) — `anim` en est donc exclu par construction, sans
+  modification supplémentaire. Détail : `contracts/websocket-endpoints.md` §"Filtres de diffusion
+  par type".
+- **[FIXED]** (à l'occasion de cette relecture) `contracts/websocket-endpoints.md` §"Filtres de
+  diffusion par type" indiquait `CONFIG_UPDATE` reçu par VPlayer (✓) — inexact depuis #154
+  (v6.1.4) : `sendStateToClient` restreint `CONFIG_UPDATE` à Admin+TV. Corrigé.
+- **Non impacté par ce Batch (contrats seuls, aucun code)** : les endpoints/actions existants ne
+  changent pas de comportement pour `admin`/`tv`/`vplayer`/`buzzer`. Le mécanisme d'allow-list
+  (#154) n'est pas modifié, uniquement étendu par de nouvelles entrées.
+
+---
+
 ## [20260812] — Allow-list entrante WebSocket par ClientType (#154, sec)
 
 > Vulnérabilité préexistante découverte par `planner` pendant le cadrage de l'Interface

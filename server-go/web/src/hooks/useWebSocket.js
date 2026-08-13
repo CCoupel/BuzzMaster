@@ -95,7 +95,25 @@ export default function useWebSocket(endpoint = '/ws/admin') {
   const [questions, setQuestions] = useState({})
   const [fsInfo, setFsInfo] = useState(null)
   const [version, setVersion] = useState(null)
-  const [clientCounts, setClientCounts] = useState({ admin: 0, tv: 0, vplayer: 0, buzzerWs: 0 })
+  const [clientCounts, setClientCounts] = useState({ admin: 0, tv: 0, vplayer: 0, buzzerWs: 0, anim: 0 })
+  // #155/#156 (F4) — dernier NEXT_QUESTION reçu : la question suivante jouable,
+  // pour l'enchaînement animateur sans consulter /admin. `null` tant qu'aucun
+  // NEXT_QUESTION n'est encore arrivé, ou si le serveur a explicitement
+  // annoncé qu'il n'y en a plus (payload vide — contracts/websocket-actions.md
+  // §NEXT_QUESTION : absence de champ ID). Exclusif à /ws/anim (ClientTypeAnim),
+  // reste toujours null sur les autres endpoints.
+  const [nextQuestion, setNextQuestion] = useState(null)
+  // #155/#156 (MAJEUR-1, revue de code) — montant de base courant que
+  // l'animateur créditera, rediffusé par le serveur via CREDIT_POINTS
+  // (contrepartie de SET_CREDIT_POINTS émis par /admin). Remplace la lecture
+  // directe de `question.POINTS` côté AnimPage — sans ce champ, /anim et
+  // /admin pouvaient créditer deux montants différents pour la même question
+  // dès que l'admin ajustait pointsInput sans resélectionner. 0 tant qu'aucun
+  // CREDIT_POINTS n'est encore arrivé (le serveur envoie une valeur ciblée
+  // dès le HELLO, donc la fenêtre réelle est très courte) ou après NEW_GAME
+  // (aucune question courante — contrat §CREDIT_POINTS). Exclusif à
+  // /ws/anim, reste 0 sur les autres endpoints.
+  const [creditPoints, setCreditPoints] = useState(0)
   // Résultat du dernier PLAYER_CONNECT en attente de réponse serveur — consommé
   // par EnrollPage (attend PLAYER_CONNECTED/PLAYER_REJECTED au lieu de naviguer
   // en aveugle, fix R1 #109). { status: 'connected', id, name } | { status: 'rejected', reason } | null
@@ -395,8 +413,23 @@ export default function useWebSocket(endpoint = '/ws/admin') {
             // Compteur brut de sockets buzzer WS (informationnel — le X/Y participants
             // affiché en Navbar se calcule côté client depuis `bumpers`, pas ce champ).
             buzzerWs: MSG.BUZZER_WS_COUNT ?? 0,
+            // #155 (F3/B2) — interfaces animateur connectées.
+            anim: MSG.ANIM_COUNT ?? 0,
           })
         }
+        break
+
+      case 'NEXT_QUESTION':
+        // #155/#156 (B5/F4) — payload vide (pas d'ID) = plus aucune question
+        // jouable, contrat §NEXT_QUESTION. `null` dans les deux cas (jamais
+        // reçu / explicitement vide) : AnimPage n'a pas besoin de distinguer.
+        setNextQuestion(MSG?.ID ? MSG : null)
+        break
+
+      case 'CREDIT_POINTS':
+        // MAJEUR-1 — contrepartie serveur→client de SET_CREDIT_POINTS,
+        // contrat §CREDIT_POINTS. Toujours un entier (0 = rien à créditer).
+        setCreditPoints(MSG?.POINTS ?? 0)
         break
 
       case 'BACKGROUND_CHANGE':
@@ -812,6 +845,8 @@ export default function useWebSocket(endpoint = '/ws/admin') {
     clientCounts,
     firmwareInfo,
     aiJob,
+    nextQuestion,
+    creditPoints,
     // Actions
     sendMessage,
     startGame,

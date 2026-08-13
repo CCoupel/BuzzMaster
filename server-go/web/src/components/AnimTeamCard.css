@@ -1,0 +1,83 @@
+/* AnimTeamCard — carte d'équipe de base, page animateur (#155, F4).
+   Tablette paysage, lisible à distance de bras : gros texte, forte couleur. */
+
+.anim-team-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-lg);
+  background: var(--anim-team-color, var(--gray-400));
+  color: var(--anim-team-text, #ffffff);
+  min-height: 62px;
+  box-sizing: border-box;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+.anim-team-card-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.anim-team-card-name {
+  font-size: 1.15rem;
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.anim-team-card-score {
+  font-size: 1.5rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.anim-team-card-extra {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+/* Contenu additionnel F6 — ordre de buzz (rang + temps de réaction) et
+   bouton de crédit. Composés depuis AnimPage.jsx via le point d'extension
+   `children` — AnimTeamCard.jsx lui-même n'est pas modifié (#156/F6). */
+
+.anim-team-buzz-info {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.anim-team-rank {
+  font-size: 1.3rem;
+  line-height: 1;
+}
+
+.anim-team-reaction-time {
+  font-variant-numeric: tabular-nums;
+  opacity: 0.9;
+}
+
+.anim-team-credit-btn {
+  min-height: 62px;
+  padding: 0 var(--space-4);
+  border: none;
+  border-radius: var(--radius-md);
+  background: rgba(255, 255, 255, 0.25);
+  color: inherit;
+  font-size: 1.1rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: filter var(--transition-fast, 150ms ease), transform var(--transition-fast, 150ms ease);
+}
+
+.anim-team-credit-btn:active {
+  transform: scale(0.96);
+  filter: brightness(1.15);
+}

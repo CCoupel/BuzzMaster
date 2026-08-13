@@ -31,6 +31,8 @@ func startTestWSServer(t *testing.T) (*httptest.Server, *WebSocketHub, func()) {
 			hub.HandleConnectionWithType(w, r, ClientTypeTV)
 		case "/ws/player":
 			hub.HandleConnectionWithType(w, r, ClientTypeVPlayer)
+		case "/ws/anim":
+			hub.HandleConnectionWithType(w, r, ClientTypeAnim)
 		default:
 			hub.HandleConnection(w, r) // legacy: defaults to admin
 		}
@@ -88,7 +90,7 @@ func TestHandleConnectionWithType_AdminType(t *testing.T) {
 
 	time.Sleep(50 * time.Millisecond)
 
-	adminCount, tvCount, vplayerCount := hub.GetClientCounts()
+	adminCount, tvCount, vplayerCount, _ := hub.GetClientCounts()
 	if adminCount != 1 {
 		t.Errorf("Expected 1 admin client, got %d", adminCount)
 	}
@@ -106,7 +108,7 @@ func TestHandleConnectionWithType_TVType(t *testing.T) {
 
 	time.Sleep(50 * time.Millisecond)
 
-	adminCount, tvCount, vplayerCount := hub.GetClientCounts()
+	adminCount, tvCount, vplayerCount, _ := hub.GetClientCounts()
 	if tvCount != 1 {
 		t.Errorf("Expected 1 TV client, got %d", tvCount)
 	}
@@ -124,7 +126,7 @@ func TestHandleConnectionWithType_VPlayerType(t *testing.T) {
 
 	time.Sleep(50 * time.Millisecond)
 
-	adminCount, tvCount, vplayerCount := hub.GetClientCounts()
+	adminCount, tvCount, vplayerCount, _ := hub.GetClientCounts()
 	if vplayerCount != 1 {
 		t.Errorf("Expected 1 VPlayer client, got %d", vplayerCount)
 	}
@@ -142,7 +144,7 @@ func TestHandleConnection_DefaultsToAdmin(t *testing.T) {
 
 	time.Sleep(50 * time.Millisecond)
 
-	adminCount, tvCount, vplayerCount := hub.GetClientCounts()
+	adminCount, tvCount, vplayerCount, _ := hub.GetClientCounts()
 	if adminCount != 1 {
 		t.Errorf("Expected 1 admin client from legacy /ws, got %d", adminCount)
 	}
@@ -355,7 +357,7 @@ func TestSetClientType_CanChangeType(t *testing.T) {
 
 	time.Sleep(50 * time.Millisecond)
 
-	adminCount, tvCount, _ := hub.GetClientCounts()
+	adminCount, tvCount, _, _ := hub.GetClientCounts()
 	if adminCount != 1 || tvCount != 0 {
 		t.Fatalf("Before: expected admin=1 tv=0, got admin=%d tv=%d", adminCount, tvCount)
 	}
@@ -370,7 +372,7 @@ func TestSetClientType_CanChangeType(t *testing.T) {
 
 	hub.SetClientType(clientID, ClientTypeTV)
 
-	adminCount, tvCount, _ = hub.GetClientCounts()
+	adminCount, tvCount, _, _ = hub.GetClientCounts()
 	if adminCount != 0 || tvCount != 1 {
 		t.Errorf("After SetClientType: expected admin=0 tv=1, got admin=%d tv=%d", adminCount, tvCount)
 	}

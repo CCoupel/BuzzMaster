@@ -63,6 +63,62 @@ describe('Navbar — compteurs admin/tv (inchangés)', () => {
 })
 
 // ---------------------------------------------------------------------------
+// #155 (F3) — badge animateur (.client-count.anim) : même motif simple
+// (icône + valeur) que .admin/.tv, jamais coloré par sévérité.
+// ---------------------------------------------------------------------------
+
+describe('Navbar — compteur animateur (.client-count.anim)', () => {
+  it('affiche le nombre brut animateur depuis clientCounts.anim, sans coloration', () => {
+    const { container } = renderNavbar({ clientCounts: { admin: 1, tv: 0, vplayer: 0, anim: 2 } })
+
+    const animChip = container.querySelector('.client-count.anim')
+    expect(animChip).not.toBeNull()
+    expect(animChip.textContent).toContain('2')
+    expect(animChip.className).not.toMatch(/severity-/)
+  })
+
+  it('affiche 0 quand aucun animateur n\'est connecté', () => {
+    const { container } = renderNavbar({ clientCounts: { admin: 1, tv: 0, vplayer: 0, anim: 0 } })
+
+    const animChip = container.querySelector('.client-count.anim')
+    expect(animChip.textContent).toContain('0')
+  })
+})
+
+// ---------------------------------------------------------------------------
+// #155 (D4/F3) — TV, Joueur et Animateur ouvrent un nouvel onglet
+// (target="_blank" + rel="noopener") ; les entrées non-absolute (Jeu,
+// Config, ...) restent dans l'onglet courant.
+// ---------------------------------------------------------------------------
+
+describe('Navbar — raccourcis TV/Joueur/Animateur (nouvel onglet, D4)', () => {
+  it('ajoute target="_blank" et rel="noopener" sur les 3 entrées absolute', () => {
+    // Scoped to .nav-group-tv — "TV" apparaît aussi dans le badge de
+    // compteur (.client-count.tv .count-icon), getByText('TV') seul serait
+    // ambigu (screen porte sur tout le body).
+    const { container } = renderNavbar()
+    const links = container.querySelectorAll('.nav-group-tv a.nav-link')
+    expect(links).toHaveLength(3)
+
+    links.forEach(link => {
+      expect(link).toHaveAttribute('target', '_blank')
+      expect(link).toHaveAttribute('rel', 'noopener')
+    })
+
+    const hrefs = Array.from(links).map(l => l.getAttribute('href'))
+    expect(hrefs).toEqual(['/tv', '/player', '/anim'])
+  })
+
+  it('ne met pas target="_blank" sur les entrées non-absolute (ex: Scores)', () => {
+    const { container } = renderNavbar()
+    const scoresLink = container.querySelector('.nav-group-game a.nav-link[href="/admin/scoreboard"]')
+    expect(scoresLink).not.toBeNull()
+    expect(scoresLink).not.toHaveAttribute('target')
+    expect(scoresLink).not.toHaveAttribute('rel')
+  })
+})
+
+// ---------------------------------------------------------------------------
 // vjoueur (.client-count.vplayer) / buzzer : format X/Y participants
 // ---------------------------------------------------------------------------
 

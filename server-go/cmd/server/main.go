@@ -19,6 +19,8 @@ import (
 	"os/signal"
 	"path/filepath"
 	"runtime"
+	"sort"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -60,6 +62,17 @@ type App struct {
 	// broadcast_coalescer.go. Flushed immediately on every phase change
 	// (OnStateChange) and stopped on server shutdown (a.stop()).
 	ardoiseCoalescer *BroadcastCoalescer
+
+	// currentCreditPoints is the animateur's live-synced base credit amount
+	// (code review MAJEUR-1, #155/#156 — contracts/websocket-actions.md
+	// §"Animateur" CREDIT_POINTS) — the server-side mirror of /admin's
+	// pointsInput React state. In-memory only, not persisted (same
+	// session-scoped nature as pointsInput itself): reset to the current
+	// question's POINTS on every READY (resetCreditPointsForQuestion), and
+	// overwritten on every SET_CREDIT_POINTS the admin sends. Read only from
+	// handleWebMessage's single dispatch goroutine (#131) — no mutex needed,
+	// same discipline as bumperLEDState/bumperBuzzState above.
+	currentCreditPoints int
 }
 
 // resolvePort returns the effective HTTP port.
@@ -476,7 +489,8 @@ func (a *App) setupCallbacks() {
 	a.updateNetworkState()
 
 	// Handle client count changes (WebSocket connect/disconnect)
-	a.wsHub.OnClientChange = func(adminCount, tvCount, vplayerCount int) {
+	// animCount added v6.2.0 (#155) — interface animateur.
+	a.wsHub.OnClientChange = func(adminCount, tvCount, vplayerCount, animCount int) {
 		a.broadcastClientCounts()
 	}
 
@@ -981,10 +995,27 @@ func (a *App) handleWebMessage(incoming *protocol.IncomingMessage) {
 	// CURRENT type, not a fixed allow-list entry, so it is checked separately
 	// inside handleSetClientType via IsSetClientTypeAllowed; it must still
 	// reach its handler for that check to run.
+	// #155/#156: uses a.logger (App-level instance), not the package-level
+	// server.LogWarn/LogInfo — matches the rest of this switch's handlers
+	// (STOP/PAUSE/CONTINUE/REVEAL/RAZ/NEW_GAME all log via a.logger) and,
+	// unlike the package-level functions (silently no-op to a bare
+	// log.Printf unless SetGlobalLogger was called), makes both the
+	// rejection warning and the B6 régie notice below actually visible via
+	// a.logger.GetRecent() — the same channel /admin/logs reads from.
 	clientType := server.ClientType(incoming.ClientType)
 	if msg.Action != protocol.ActionSetClientType && !server.IsActionAllowed(msg.Action, clientType) {
-		server.LogWarn(game.LogComponentWebSocket, "Rejected action %s from client %s (type=%q): not allowed for this client type", msg.Action, incoming.ClientID, incoming.ClientType)
+		a.logger.Warn(game.LogComponentWebSocket, "Rejected action %s from client %s (type=%q): not allowed for this client type", msg.Action, incoming.ClientID, incoming.ClientType)
 		return
+	}
+
+	// #155/#156 B6 — asymmetric régie signalement (D2, v1 scope: server log +
+	// ANIM_COUNT badge, no admin UI). Fires only AFTER the allow-list check
+	// above, so a rejected action (which already produced its own Warn and
+	// returned) never also produces this notice — only actions the animateur
+	// actually triggered are reported. Nothing is sent back to the animateur
+	// client itself.
+	if clientType == server.ClientTypeAnim {
+		a.logger.Info(game.LogComponentWebSocket, "Action %s déclenchée depuis l'interface animateur (client %s)", msg.Action, incoming.ClientID)
 	}
 
 	switch msg.Action {
@@ -1011,6 +1042,7 @@ func (a *App) handleWebMessage(incoming *protocol.IncomingMessage) {
 		a.logger.Info(game.LogComponentEngine, "STOP game")
 		a.engine.Stop()
 		a.broadcastStop()
+		a.broadcastNextQuestion() // #155/#156 B5 — question ends, "next" may now differ
 
 	case protocol.ActionPause:
 		a.logger.Info(game.LogComponentEngine, "PAUSE all")
@@ -1026,6 +1058,7 @@ func (a *App) handleWebMessage(incoming *protocol.IncomingMessage) {
 		a.logger.Info(game.LogComponentEngine, "REVEAL answer")
 		answer := a.engine.Reveal()
 		a.broadcastReveal(answer)
+		a.broadcastNextQuestion() // #155/#156 B5 — REVEALED status can change "next"
 
 	case protocol.ActionRAZ:
 		a.logger.Info(game.LogComponentEngine, "RAZ - Reset all scores")
@@ -1055,6 +1088,9 @@ func (a *App) handleWebMessage(incoming *protocol.IncomingMessage) {
 
 	case protocol.ActionTeamPoints:
 		a.handleTeamPoints(msg)
+
+	case protocol.ActionSetCreditPoints:
+		a.handleSetCreditPoints(msg)
 
 	case protocol.ActionSetClientType:
 		a.handleSetClientType(incoming.ClientID, clientType, msg)
@@ -1141,6 +1177,8 @@ func (a *App) handleWebMessage(incoming *protocol.IncomingMessage) {
 		// InitGame purges the whole VJoueur roster (fix R1 follow-up) — refresh
 		// the enrollment counter so clients don't show a stale VirtualPlayerCount.
 		a.broadcastEnrollmentUpdate()
+		a.broadcastNextQuestion() // #155/#156 B5 — no current question after NEW_GAME, clears anim's preview
+		a.resetCreditPointsForQuestion(nil) // code review MAJEUR-1 — no current question, nothing to credit
 
 	case protocol.ActionUpdateQuizMeta:
 		var payload protocol.QuizMetaPayload
@@ -1561,6 +1599,9 @@ func (a *App) handleReady(msg *protocol.Message) {
 
 	// Send PING to all buzzers
 	a.broadcastPing()
+
+	a.broadcastNextQuestion() // #155/#156 B5 — current question just changed
+	a.resetCreditPointsForQuestion(question) // code review MAJEUR-1 — pointsInput resets to question.POINTS on selection too
 }
 
 // loadQuestion loads a question from storage by ID
@@ -1661,6 +1702,7 @@ func (a *App) handleDelete(msg *protocol.Message) {
 
 	// Broadcast updated questions list (like ESP32: sendQuestions())
 	a.broadcastQuestions()
+	a.broadcastNextQuestion() // #155/#156 B5 — a deleted question may have been "next"
 }
 
 func (a *App) handleDeleteBumper(msg *protocol.Message) {
@@ -1830,6 +1872,7 @@ func (a *App) handleReorderQuestions(msg *protocol.Message) {
 
 	// Broadcast updated questions list
 	a.broadcastQuestions()
+	a.broadcastNextQuestion() // #155/#156 B5 — reordering can change which question is "next"
 }
 
 func (a *App) handleForceReady() {
@@ -2968,6 +3011,7 @@ func (a *App) broadcastEnrollmentUpdate() {
 	a.wsHub.BroadcastToTypes(msg, server.ClientTypeAdmin, server.ClientTypeTV, server.ClientTypeVPlayer)
 	server.LogDebug(game.LogComponentApp, "Broadcasting ENROLLMENT_UPDATE: %d/%d players", state.VirtualPlayerCount, state.VirtualPlayerLimit)
 }
+
 // broadcastGameState fires on every OnStateChange phase transition (PREPARE,
 // READY, STARTED, ...). #127 T1.3: routed through broadcastUpdateTo, the same
 // filtered per-type serialization path as broadcastUpdate, instead of the
@@ -3897,17 +3941,18 @@ func (a *App) broadcastRemote() {
 }
 
 func (a *App) broadcastClientCounts() {
-	adminCount, tvCount, vplayerCount := a.wsHub.GetClientCounts()
+	adminCount, tvCount, vplayerCount, animCount := a.wsHub.GetClientCounts()
 	payload := protocol.ClientsPayload{
 		AdminCount:   adminCount,
 		TVCount:      tvCount,
 		VPlayerCount: vplayerCount,
+		AnimCount:    animCount,
 		BuzzerWS:     a.buzzerHub.BuzzerCount(),
 	}
 	data, _ := json.Marshal(payload)
 	a.broadcast(protocol.ActionClients, data, false, server.ClientTypeAdmin)
-	server.LogDebug(game.LogComponentWebSocket, "Client counts: admin=%d, tv=%d, vplayer=%d, buzzer_ws=%d",
-		adminCount, tvCount, vplayerCount, payload.BuzzerWS)
+	server.LogDebug(game.LogComponentWebSocket, "Client counts: admin=%d, tv=%d, vplayer=%d, anim=%d, buzzer_ws=%d",
+		adminCount, tvCount, vplayerCount, animCount, payload.BuzzerWS)
 }
 
 func (a *App) broadcastBackgroundChange(index int) {
@@ -4137,35 +4182,60 @@ func (a *App) sendStateToClient(clientID string, clientType server.ClientType) {
 		a.wsHub.SendRawToClient(clientID, updateData)
 	}
 
-	// Send QUESTIONS with statuses
-	questions := a.loadQuestions()
-	// Inject status from questionStatuses map for ALL questions
-	for _, q := range questions {
-		if qID, ok := q["ID"].(string); ok && qID != "" {
-			status := a.engine.GetQuestionStatus(qID)
-			q["STATUS"] = string(status)
+	// Send QUESTIONS with statuses — admin only (#155/#156 B4).
+	//
+	// Previously sent unconditionally to every connecting client type;
+	// broadcastQuestions (the ongoing-broadcast counterpart) has always been
+	// admin-only, so this brought HELLO in line with it. Intentional side
+	// effect: TV and VPlayer stop receiving QUESTIONS at HELLO — they never
+	// received it again afterward anyway (contracts/CHANGELOG.md [20260813]).
+	// The animateur (ClientTypeAnim, v6.2.0) is excluded by the same gate,
+	// matching contracts/websocket-endpoints.md's "Filtres de diffusion par
+	// type" (QUESTIONS ✗ for anim) — no separate condition needed for it.
+	if clientType == server.ClientTypeAdmin {
+		questions := a.loadQuestions()
+		// Inject status from questionStatuses map for ALL questions
+		for _, q := range questions {
+			if qID, ok := q["ID"].(string); ok && qID != "" {
+				status := a.engine.GetQuestionStatus(qID)
+				q["STATUS"] = string(status)
+			}
 		}
+		qData, _ := json.Marshal(questions)
+		fsInfo := a.getStorageInfo()
+		questionsMsg, _ := protocol.NewMessage(protocol.ActionQuestions, nil)
+		questionsMsg.Msg = qData
+		questionsMsg.FSInfo = fsInfo
+		questionsMsg.Version = a.config.Version
+		a.wsHub.SendToClient(clientID, questionsMsg)
 	}
-	qData, _ := json.Marshal(questions)
-	fsInfo := a.getStorageInfo()
-	questionsMsg, _ := protocol.NewMessage(protocol.ActionQuestions, nil)
-	questionsMsg.Msg = qData
-	questionsMsg.FSInfo = fsInfo
-	questionsMsg.Version = a.config.Version
-	a.wsHub.SendToClient(clientID, questionsMsg)
 
-	// Send CLIENTS counts
-	adminCount, tvCount, vplayerCount := a.wsHub.GetClientCounts()
-	clientsPayload := protocol.ClientsPayload{
-		AdminCount:   adminCount,
-		TVCount:      tvCount,
-		VPlayerCount: vplayerCount,
-		BuzzerWS:     a.buzzerHub.BuzzerCount(),
+	// Send CLIENTS counts — admin only (code review MAJEUR-2, #155/#156).
+	//
+	// contracts/websocket-endpoints.md's "Filtres de diffusion par type"
+	// (written in this same lot) documents CLIENTS as admin-only, animateur
+	// excluded (✗) — and plan B6's own acceptance criterion is explicit:
+	// "Aucune information de concurrence n'est envoyée au client animateur".
+	// CLIENTS (who else is connected: ADMIN_COUNT/TV_COUNT/VPLAYER_COUNT/
+	// ANIM_COUNT/BuzzerWS) is exactly a concurrency signal. This block sent
+	// unconditionally to every connecting client type until this fix —
+	// unlike the QUESTIONS block just above (already gated, B4) and the
+	// CONFIG_UPDATE block just below (already gated Admin+TV) — same
+	// pattern, copied.
+	if clientType == server.ClientTypeAdmin {
+		adminCount, tvCount, vplayerCount, animCount := a.wsHub.GetClientCounts()
+		clientsPayload := protocol.ClientsPayload{
+			AdminCount:   adminCount,
+			TVCount:      tvCount,
+			VPlayerCount: vplayerCount,
+			AnimCount:    animCount,
+			BuzzerWS:     a.buzzerHub.BuzzerCount(),
+		}
+		cData, _ := json.Marshal(clientsPayload)
+		clientsMsg, _ := protocol.NewMessage(protocol.ActionClients, nil)
+		clientsMsg.Msg = cData
+		a.wsHub.SendToClient(clientID, clientsMsg)
 	}
-	cData, _ := json.Marshal(clientsPayload)
-	clientsMsg, _ := protocol.NewMessage(protocol.ActionClients, nil)
-	clientsMsg.Msg = cData
-	a.wsHub.SendToClient(clientID, clientsMsg)
 
 	// Send CONFIG_UPDATE with neon effect settings — Admin+TV only.
 	//
@@ -4205,6 +4275,18 @@ func (a *App) sendStateToClient(clientID string, clientType server.ClientType) {
 		neonMsg, _ := protocol.NewMessage(protocol.ActionConfigUpdate, nil)
 		neonMsg.Msg = neonData
 		a.wsHub.SendToClient(clientID, neonMsg)
+	}
+
+	// Send NEXT_QUESTION — animateur only (#155/#156 B5). Targeted at this
+	// one connecting client (not a.broadcastNextQuestion(), which would
+	// redundantly re-push to every OTHER already-connected animateur tablet
+	// too) so a newly-opened /anim tab sees the current "next" immediately,
+	// without waiting for the next trigger event.
+	if clientType == server.ClientTypeAnim {
+		a.wsHub.SendToClient(clientID, a.buildNextQuestionMessage())
+		// Code review MAJEUR-1 — same reasoning as NEXT_QUESTION just above:
+		// targeted at this one connecting client, not broadcastCreditPoints().
+		a.wsHub.SendToClient(clientID, a.buildCreditPointsMessage())
 	}
 }
 
@@ -4296,6 +4378,205 @@ func (a *App) loadQuestions() map[string]map[string]interface{} {
 	}
 
 	return questions
+}
+
+// nextQuestionExcludedStatuses are the STATUS values a question must NOT
+// have to be eligible as "next" — mirrors GamePage.jsx's nextUnplayedQuestion
+// literally, including "PLAYED" even though no game.QuestionStatus constant
+// ever produces that value today (GetQuestionStatus only returns AVAILABLE/
+// PREPARE/READY/STARTED/PAUSED/STOPPED/REVEALED) — kept for faithful parity
+// with the JS source rather than "corrected", per contracts/websocket-actions.md
+// §"Animateur" NEXT_QUESTION's explicit parity requirement.
+var nextQuestionExcludedStatuses = map[string]bool{
+	string(game.StatusStopped):  true,
+	string(game.StatusRevealed): true,
+	"PLAYED":                    true,
+}
+
+// getNextQuestionPayload computes the next playable question for the
+// interface animateur (contracts/websocket-actions.md §"Animateur"
+// NEXT_QUESTION) — an exact port of GamePage.jsx's nextUnplayedQuestion
+// (~line 215-224), NOT a reinvention (#155/#156 B5, plan §2.2 parity
+// requirement):
+//
+//  1. No current question (GameState.Question == nil or empty ID) -> no
+//     next question at all (nil), regardless of what's available elsewhere
+//     in the list. This matches the JS exactly: an animateur mid-ENROLL or
+//     between games sees no "next" until a question is actually loaded.
+//  2. Sort ALL questions by ORDER (int), falling back to ID parsed as int
+//     when ORDER is absent — same rule as web/src/utils/questionOrder.js
+//     sortQuestionsByOrder, ported field-for-field.
+//  3. Locate the CURRENT question's position in that sorted order. If it
+//     isn't found there at all (e.g. deleted from disk but still the
+//     engine's current question), the search below starts at index 0 — the
+//     same behavior JS gets from `sortedQuestions.findIndex` returning -1
+//     (`i = -1 + 1 = 0`), not a bug being special-cased here.
+//  4. Return the first question STRICTLY AFTER that position whose STATUS
+//     isn't in nextQuestionExcludedStatuses. Never wraps back to search
+//     before that position — a question already passed is never "next"
+//     again just because everything after it is also done.
+//  5. Nothing found after that position -> nil (end of playable questions).
+//
+// The (deliberately Go 1-based-index-free) phase gate JS has at the top of
+// nextUnplayedQuestion — `if (!['STOPPED','REVEALED',...].includes(phase))
+// return null` — is NOT ported: that list is literally all 9 GamePhase
+// values that exist (models.go), so the condition can never actually be
+// true. Porting it would add a permanently-dead branch; noted here instead
+// so a future GamePhase addition prompts revisiting this comment, not a
+// silent behavioral gap.
+func (a *App) getNextQuestionPayload() *protocol.NextQuestionPayload {
+	state := a.engine.GetState()
+	if state.Question == nil || state.Question.ID == "" {
+		return nil
+	}
+	currentID := state.Question.ID
+
+	type sortableQuestion struct {
+		id    string
+		order int
+		data  map[string]interface{}
+	}
+
+	raw := a.loadQuestions()
+	sorted := make([]sortableQuestion, 0, len(raw))
+	for _, q := range raw {
+		id, ok := q["ID"].(string)
+		if !ok || id == "" {
+			continue // sortQuestionsByOrder filters out entries with no ID
+		}
+		order := 0
+		if orderRaw, present := q["ORDER"]; present {
+			switch v := orderRaw.(type) {
+			case float64:
+				order = int(v)
+			case string:
+				if n, err := strconv.Atoi(v); err == nil {
+					order = n
+				}
+			}
+		} else if n, err := strconv.Atoi(id); err == nil {
+			order = n
+		}
+		sorted = append(sorted, sortableQuestion{id: id, order: order, data: q})
+	}
+	sort.SliceStable(sorted, func(i, j int) bool { return sorted[i].order < sorted[j].order })
+
+	currentIndex := -1
+	for i, sq := range sorted {
+		if sq.id == currentID {
+			currentIndex = i
+			break
+		}
+	}
+
+	for i := currentIndex + 1; i < len(sorted); i++ {
+		status := string(a.engine.GetQuestionStatus(sorted[i].id))
+		if nextQuestionExcludedStatuses[status] {
+			continue
+		}
+		q := sorted[i].data
+		payload := &protocol.NextQuestionPayload{ID: sorted[i].id}
+		if v, ok := q["QUESTION"].(string); ok {
+			payload.Question = v
+		}
+		if v, ok := q["CATEGORY"].(string); ok {
+			payload.Category = v
+		}
+		if v, ok := q["TYPE"].(string); ok {
+			payload.Type = v
+		}
+		if v, ok := q["POINTS"].(string); ok {
+			if n, err := strconv.Atoi(v); err == nil {
+				payload.Points = n
+			}
+		}
+		if v, ok := q["TIME"].(string); ok {
+			if n, err := strconv.Atoi(v); err == nil {
+				payload.Time = n
+			}
+		}
+		return payload
+	}
+	return nil
+}
+
+// buildNextQuestionMessage serializes getNextQuestionPayload's result into a
+// ready-to-send NEXT_QUESTION *protocol.Message — nil payload (no question
+// eligible) becomes the zero-value NextQuestionPayload{} (empty payload,
+// contracts/websocket-actions.md §"Animateur": "tous les champs absents/
+// zéro-valeur" — no omitempty, same discipline as ClientsPayload/AnimCount
+// and the project-wide GameState convention, CLAUDE.md).
+func (a *App) buildNextQuestionMessage() *protocol.Message {
+	payload := a.getNextQuestionPayload()
+	if payload == nil {
+		payload = &protocol.NextQuestionPayload{}
+	}
+	data, _ := json.Marshal(payload)
+	msg, _ := protocol.NewMessage(protocol.ActionNextQuestion, nil)
+	msg.Msg = data
+	return msg
+}
+
+// broadcastNextQuestion pushes the current NEXT_QUESTION to every connected
+// interface animateur client (#155/#156 B5). Called from every trigger the
+// contract lists (READY, STOP, REVEAL, NEW_GAME, REORDER_QUESTIONS, DELETE)
+// — NEVER from broadcastUpdate/broadcastUpdateTo, which would mean a disk
+// read (loadQuestions) on every timer tick (plan §2.2, the risk this
+// separate action exists to avoid).
+func (a *App) broadcastNextQuestion() {
+	a.wsHub.BroadcastToTypes(a.buildNextQuestionMessage(), server.ClientTypeAnim)
+}
+
+// buildCreditPointsMessage serializes a.currentCreditPoints into a
+// ready-to-send CREDIT_POINTS *protocol.Message (code review MAJEUR-1,
+// #155/#156 — contracts/websocket-actions.md §"Animateur").
+func (a *App) buildCreditPointsMessage() *protocol.Message {
+	data, _ := json.Marshal(protocol.CreditPointsPayload{Points: a.currentCreditPoints})
+	msg, _ := protocol.NewMessage(protocol.ActionCreditPoints, nil)
+	msg.Msg = data
+	return msg
+}
+
+// broadcastCreditPoints pushes the current CREDIT_POINTS to every connected
+// interface animateur client — same fan-out shape as broadcastNextQuestion,
+// but with no disk I/O at all (a.currentCreditPoints is a plain in-memory
+// int, not derived from loadQuestions()).
+func (a *App) broadcastCreditPoints() {
+	a.wsHub.BroadcastToTypes(a.buildCreditPointsMessage(), server.ClientTypeAnim)
+}
+
+// resetCreditPointsForQuestion re-initializes a.currentCreditPoints to the
+// given question's base POINTS (parity with GamePage.jsx:299's
+// `setPointsInput(parseInt(question.POINTS) || 1)` on question selection —
+// same repeal-to-1 default) and pushes the reset value to every connected
+// animateur. question may be nil (e.g. NEW_GAME, no current question at
+// all) — resets to 0 in that case: there is nothing to credit, and 0 is not
+// a value handleQuestionSelect's own `|| 1` fallback would ever produce, so
+// an animateur client can tell "no active question" apart from "a real
+// 1-point question" if it ever needs to.
+func (a *App) resetCreditPointsForQuestion(question *game.Question) {
+	if question == nil {
+		a.currentCreditPoints = 0
+	} else if n, err := strconv.Atoi(question.Points); err == nil && n > 0 {
+		a.currentCreditPoints = n
+	} else {
+		a.currentCreditPoints = 1
+	}
+	a.broadcastCreditPoints()
+}
+
+// handleSetCreditPoints applies the admin's adjusted pointsInput (code
+// review MAJEUR-1, #155/#156) and re-broadcasts it to every connected
+// animateur — the only writer of a.currentCreditPoints besides
+// resetCreditPointsForQuestion's own READY/NEW_GAME resets.
+func (a *App) handleSetCreditPoints(msg *protocol.Message) {
+	var payload protocol.CreditPointsPayload
+	if err := json.Unmarshal(msg.Msg, &payload); err != nil {
+		server.LogError(game.LogComponentApp, "Failed to parse SET_CREDIT_POINTS: %v", err)
+		return
+	}
+	a.currentCreditPoints = payload.Points
+	a.broadcastCreditPoints()
 }
 
 // displayAndOpenURLs shows all accessible URLs and opens the browser

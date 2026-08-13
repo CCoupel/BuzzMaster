@@ -9,57 +9,57 @@ import (
 
 // Actions constants - matching ESP32 protocol
 const (
-	ActionHello       = "HELLO"
-	ActionButton      = "BUTTON"
-	ActionPong        = "PONG"
-	ActionPing        = "PING"
-	ActionStart       = "START"
-	ActionStop        = "STOP"
-	ActionPause       = "PAUSE"
-	ActionContinue    = "CONTINUE"
-	ActionUpdate      = "UPDATE"
-	ActionUpdateTimer = "UPDATE_TIMER"
-	ActionReset           = "RESET"
-	ActionNewGame         = "NEW_GAME"          // Web → Server: reset game (scores, history, statuses) and enter NEW_GAME phase
-	ActionUpdateQuizMeta  = "UPDATE_QUIZ_META"  // Web → Server: set quiz name/theme/notes metadata
-	ActionReady       = "READY"
-	ActionReveal      = "REVEAL"
-	ActionQuestions   = "QUESTIONS"
-	ActionPoints      = "POINTS"
-	ActionRemote      = "REMOTE"
-	ActionFull        = "FULL"
-	ActionRAZ         = "RAZ"
-	ActionReboot      = "REBOOT"
-	ActionFSInfo       = "FSINFO"
+	ActionHello            = "HELLO"
+	ActionButton           = "BUTTON"
+	ActionPong             = "PONG"
+	ActionPing             = "PING"
+	ActionStart            = "START"
+	ActionStop             = "STOP"
+	ActionPause            = "PAUSE"
+	ActionContinue         = "CONTINUE"
+	ActionUpdate           = "UPDATE"
+	ActionUpdateTimer      = "UPDATE_TIMER"
+	ActionReset            = "RESET"
+	ActionNewGame          = "NEW_GAME"         // Web → Server: reset game (scores, history, statuses) and enter NEW_GAME phase
+	ActionUpdateQuizMeta   = "UPDATE_QUIZ_META" // Web → Server: set quiz name/theme/notes metadata
+	ActionReady            = "READY"
+	ActionReveal           = "REVEAL"
+	ActionQuestions        = "QUESTIONS"
+	ActionPoints           = "POINTS"
+	ActionRemote           = "REMOTE"
+	ActionFull             = "FULL"
+	ActionRAZ              = "RAZ"
+	ActionReboot           = "REBOOT"
+	ActionFSInfo           = "FSINFO"
 	ActionDelete           = "DELETE"
 	ActionDeleteBumper     = "DELETE_BUMPER"
 	ActionBumperPoints     = "BUMPER_POINTS"
 	ActionTeamPoints       = "TEAM_POINTS"
 	ActionClients          = "CLIENTS"
 	ActionSetClientType    = "SET_CLIENT_TYPE"
-	ActionReorderQuestions  = "REORDER_QUESTIONS"
-	ActionForceReady        = "FORCE_READY"
-	ActionBackgroundChange  = "BACKGROUND_CHANGE"
-	ActionFlipMemoryCard    = "FLIP_MEMORY_CARD"
-	ActionMemorySetTeams    = "MEMORY_SET_TEAMS"
+	ActionReorderQuestions = "REORDER_QUESTIONS"
+	ActionForceReady       = "FORCE_READY"
+	ActionBackgroundChange = "BACKGROUND_CHANGE"
+	ActionFlipMemoryCard   = "FLIP_MEMORY_CARD"
+	ActionMemorySetTeams   = "MEMORY_SET_TEAMS"
 	// MEMOTION actions (v5.0.0)
-	ActionMotionSelect   = "MEMOTION_SELECT"    // Admin → Server: select a card from the grid (→ SELECTED subphase, no timer)
-	ActionMotionFlip     = "MEMOTION_FLIP"      // Admin → Server: flip selected card to QUESTION face + start timer
+	ActionMotionSelect    = "MEMOTION_SELECT"     // Admin → Server: select a card from the grid (→ SELECTED subphase, no timer)
+	ActionMotionFlip      = "MEMOTION_FLIP"       // Admin → Server: flip selected card to QUESTION face + start timer
 	ActionMotionStopTimer = "MEMOTION_STOP_TIMER" // Admin → Server: stop per-card timer (subphase stays QUESTION)
-	ActionMotionReveal   = "MEMOTION_REVEAL"    // Admin → Server: flip card to REVEAL face
-	ActionMotionDone     = "MEMOTION_DONE"      // Admin → Server: mark card played + optional winner team
-	ActionMotionSetTeams = "MEMOTION_SET_TEAMS" // Admin → Server: set participating teams
-	ActionQCMHint           = "QCM_HINT"
+	ActionMotionReveal    = "MEMOTION_REVEAL"     // Admin → Server: flip card to REVEAL face
+	ActionMotionDone      = "MEMOTION_DONE"       // Admin → Server: mark card played + optional winner team
+	ActionMotionSetTeams  = "MEMOTION_SET_TEAMS"  // Admin → Server: set participating teams
+	ActionQCMHint         = "QCM_HINT"
 	// Virtual player enrollment actions
-	ActionShowQRCode           = "SHOW_QR_CODE"
-	ActionHideQRCode           = "HIDE_QR_CODE"
+	ActionShowQRCode            = "SHOW_QR_CODE"
+	ActionHideQRCode            = "HIDE_QR_CODE"
 	ActionSetVirtualPlayerLimit = "SET_VIRTUAL_PLAYER_LIMIT"
-	ActionPlayerConnect        = "PLAYER_CONNECT"
-	ActionPlayerConnected      = "PLAYER_CONNECTED"
-	ActionPlayerRejected       = "PLAYER_REJECTED"
-	ActionEnrollmentUpdate     = "ENROLLMENT_UPDATE"
-	ActionPlayerAssigned = "PLAYER_ASSIGNED"
-	ActionPlayerEvicted  = "PLAYER_EVICTED" // Server → Client (targeted, never broadcast): a VJoueur's bumper was removed (#120, v5.9.x)
+	ActionPlayerConnect         = "PLAYER_CONNECT"
+	ActionPlayerConnected       = "PLAYER_CONNECTED"
+	ActionPlayerRejected        = "PLAYER_REJECTED"
+	ActionEnrollmentUpdate      = "ENROLLMENT_UPDATE"
+	ActionPlayerAssigned        = "PLAYER_ASSIGNED"
+	ActionPlayerEvicted         = "PLAYER_EVICTED" // Server → Client (targeted, never broadcast): a VJoueur's bumper was removed (#120, v5.9.x)
 	// Name recovery (#122, v5.9.x) — animateur-assisted reclaim of a bumper
 	// whose owner lost their local ID (see engine.ReconnectOrCreateVirtualPlayer,
 	// the reclaim-authorization block, and Bumper.RECLAIM_REQUESTED).
@@ -74,8 +74,8 @@ const (
 	// Config update action
 	ActionConfigUpdate = "CONFIG_UPDATE"
 	// OTA firmware update actions (added in v3.1.0)
-	ActionOTAUpdate      = "OTA_UPDATE"      // Server → Buzzer: trigger OTA update
-	ActionOTAProgress    = "OTA_PROGRESS"    // Buzzer → Server: OTA progress update
+	ActionOTAUpdate       = "OTA_UPDATE"       // Server → Buzzer: trigger OTA update
+	ActionOTAProgress     = "OTA_PROGRESS"     // Buzzer → Server: OTA progress update
 	ActionFirmwareVersion = "FIRMWARE_VERSION" // Server → Web: firmware version info
 	// WiFi config sync (added in v3.1.3)
 	ActionWifiConfig = "WIFI_CONFIG" // Server → Buzzer: sync WiFi credentials
@@ -99,14 +99,19 @@ const (
 	// AI generation job progress (v6.1.0, #137 — contract ai-multi-provider.md §10-§11)
 	ActionAIGenerationProgress = "AI_GENERATION_PROGRESS" // Server → Client (/ws/admin only): job state after each batch
 	ActionCancelAIGeneration   = "CANCEL_AI_GENERATION"   // Admin → Server: cancel the running job (effect between batches)
+	// Interface animateur (v6.2.0, #155 tâche B5 — contracts/websocket-actions.md §"Animateur")
+	ActionNextQuestion = "NEXT_QUESTION" // Server → Client (/ws/anim only): the next playable question, for enchaînement without /admin
+	// Code review MAJEUR-1 follow-up (v6.2.0, #155/#156 — contracts/websocket-actions.md §"Animateur")
+	ActionSetCreditPoints = "SET_CREDIT_POINTS" // Admin → Server: pointsInput was adjusted, push the new base credit amount
+	ActionCreditPoints    = "CREDIT_POINTS"     // Server → Client (/ws/anim only): current base credit amount for the active question
 )
 
 // FSInfo represents file storage information
 type FSInfo struct {
-	Used   int     `json:"USED"`
-	Free   int     `json:"FREE"`
-	Total  int     `json:"TOTAL"`
-	PUsed  float64 `json:"P_USED"`
+	Used  int     `json:"USED"`
+	Free  int     `json:"FREE"`
+	Total int     `json:"TOTAL"`
+	PUsed float64 `json:"P_USED"`
 }
 
 // Message represents the protocol message structure
@@ -126,8 +131,8 @@ type Message struct {
 
 // IncomingMessage from TCP/WebSocket clients
 type IncomingMessage struct {
-	Source string // "TCP", "WebSocket"
-	Data   *Message
+	Source   string // "TCP", "WebSocket"
+	Data     *Message
 	ClientID string
 	// ClientType carries the sending WebSocketClient's type ("admin", "tv",
 	// "vplayer", "buzzer" — mirrors server.ClientType's string values,
@@ -221,7 +226,35 @@ type ClientsPayload struct {
 	AdminCount   int `json:"ADMIN_COUNT"`
 	TVCount      int `json:"TV_COUNT"`
 	VPlayerCount int `json:"VPLAYER_COUNT"`
-	BuzzerWS     int `json:"BUZZER_WS_COUNT"`
+	// AnimCount — v6.2.0 (#155): number of connected interface animateur
+	// clients (ClientTypeAnim). Diffused to admin only (CLIENTS stays
+	// admin-only, contracts/websocket-endpoints.md), consumed by the Navbar
+	// badge (dev-frontend F3) — the régie signalement for #155/#156 (D2).
+	AnimCount int `json:"ANIM_COUNT"`
+	BuzzerWS  int `json:"BUZZER_WS_COUNT"`
+}
+
+// NextQuestionPayload for NEXT_QUESTION action (v6.2.0, #155 tâche B5).
+// Server → Client, ClientTypeAnim exclusively (contracts/websocket-actions.md
+// §"Animateur"). All fields are the zero value (empty payload) when no
+// question is playable — see App.getNextQuestion's doc comment for the full
+// computation rule (parity with GamePage.jsx's nextUnplayedQuestion).
+type NextQuestionPayload struct {
+	ID       string `json:"ID"`
+	Question string `json:"QUESTION"`
+	Category string `json:"CATEGORY"`
+	Type     string `json:"TYPE"`
+	Points   int    `json:"POINTS"`
+	Time     int    `json:"TIME"`
+}
+
+// CreditPointsPayload is shared by both directions of the code review
+// MAJEUR-1 mechanism (v6.2.0, #155/#156 — contracts/websocket-actions.md
+// §"Animateur"): SET_CREDIT_POINTS (Admin → Server, the admin's adjusted
+// pointsInput) and CREDIT_POINTS (Server → Client, ClientTypeAnim
+// exclusively — the current effective base credit amount, echoed back).
+type CreditPointsPayload struct {
+	Points int `json:"POINTS"`
 }
 
 // SetClientTypePayload for SET_CLIENT_TYPE action
@@ -317,7 +350,7 @@ type MotionSelectPayload struct {
 
 // MotionDonePayload for MEMOTION_DONE action (Admin → Server)
 type MotionDonePayload struct {
-	CardID     string `json:"CARD_ID"`              // ID of the card being closed
+	CardID     string `json:"CARD_ID"`               // ID of the card being closed
 	WinnerTeam string `json:"WINNER_TEAM,omitempty"` // Team name if a winner, "" if none
 }
 
@@ -431,8 +464,8 @@ type LogEntryPayload struct {
 // ConfigUpdatePayload for CONFIG_UPDATE action (broadcast config changes)
 type ConfigUpdatePayload struct {
 	NeonEffect                   NeonEffectPayload `json:"neon_effect"`
-	DefaultQuestionImageIsCustom bool              `json:"default_question_image_is_custom"`  // true if custom image uploaded, false = embedded fallback
-	NewGameBackgrounds           []game.Background `json:"new_game_backgrounds"`              // NEW_GAME screen backgrounds (v4.0.4)
+	DefaultQuestionImageIsCustom bool              `json:"default_question_image_is_custom"` // true if custom image uploaded, false = embedded fallback
+	NewGameBackgrounds           []game.Background `json:"new_game_backgrounds"`             // NEW_GAME screen backgrounds (v4.0.4)
 }
 
 // NeonEffectPayload represents neon effect configuration
@@ -462,10 +495,10 @@ type OTAUpdatePayload struct {
 
 // OTAProgressPayload for OTA_PROGRESS action (buzzer → server: progress update)
 type OTAProgressPayload struct {
-	MAC     string `json:"MAC"`               // Buzzer MAC address
-	Status  string `json:"STATUS"`             // "downloading", "flashing", "done", "error"
-	Percent int    `json:"PERCENT"`            // Progress percentage (0-100)
-	Error   string `json:"ERROR,omitempty"`    // Error message if status == "error"
+	MAC     string `json:"MAC"`             // Buzzer MAC address
+	Status  string `json:"STATUS"`          // "downloading", "flashing", "done", "error"
+	Percent int    `json:"PERCENT"`         // Progress percentage (0-100)
+	Error   string `json:"ERROR,omitempty"` // Error message if status == "error"
 }
 
 // FirmwareVersionPayload for FIRMWARE_VERSION action (server → web: firmware info)
@@ -493,9 +526,9 @@ const (
 // For COMET: COLOR=background team color, COMET_COLOR=band color (gold or white for contrast).
 type LEDSetPayload struct {
 	Color      [3]int  `json:"COLOR"`                 // RGB background [0-255]
-	Intensity  int     `json:"INTENSITY"`              // 0-255
-	Effect     string  `json:"EFFECT"`                 // "SOLID", "BLINK", "DIM", "COMET", "SPINNER"
-	CometColor *[3]int `json:"COMET_COLOR,omitempty"`  // COMET band color (nil = firmware default gold)
+	Intensity  int     `json:"INTENSITY"`             // 0-255
+	Effect     string  `json:"EFFECT"`                // "SOLID", "BLINK", "DIM", "COMET", "SPINNER"
+	CometColor *[3]int `json:"COMET_COLOR,omitempty"` // COMET band color (nil = firmware default gold)
 }
 
 // AckPayload for ACK action (buzzer → server: acknowledge receipt of a priority message).
