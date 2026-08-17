@@ -5,6 +5,12 @@
 > **Créé** : 2026-04-28 (analyse QUALIF — VPlayerPage embed PlayerDisplay)  
 > **Mis à jour** : 2026-08-13 (#155/#156, v6.2.0) — décision de sérialisation pour `ClientTypeAnim`,
 > voir §"Animateur" ci-dessous.
+> **Mis à jour** : 2026-08-14 (#163, v6.2.0.10) — clarification documentaire (aucun changement de
+> payload) sur `QCM_CORRECT`/`ANSWER` côté animateur, voir §"Clarification (#163 → révisée #166)"
+> ci-dessous.
+> **Mis à jour** : 2026-08-15 (#166, v6.2.0.15) — la clarification #163 ci-dessus est **corrigée** :
+> la réponse n'est plus retenue jusqu'au reveal, elle est rendue en permanence et floutée. Aucun
+> changement de payload.
 
 ---
 
@@ -105,6 +111,37 @@ L'ajout du `case ClientTypeAnim: return msg.SerializeForWebClient()` est la tout
 code de #155 (tâche B1) et doit être couverte par un test dédié qui vérifie explicitement
 l'absence de ces champs — pas seulement par relecture. Voir
 `_work/reports/plan-20260813-092950.md` §0.2 pour l'analyse complète de ce risque.
+
+### Clarification (#163 → révisée #166, v6.2.0.15) — `QCM_CORRECT` / `ANSWER` atteignent `/anim` avant `REVEALED`
+
+**Constat, pas un changement de contrat — mais la nature de l'affichage a changé entre #163 et
+#166, cette section est corrigée en conséquence.** Depuis #163, `question.QCM_CORRECT` et
+`question.ANSWER` transitent sur `/ws/anim` dès le chargement de la question (`SerializeForWebClient`
+ne les retire pas — voir Tableau 1/2 ci-dessus, aucune ligne dédiée), exactement comme pour TV et
+VPlayer. **Ce constat est inchangé.** Ce qui change, c'est ce que le client en fait avant `REVEALED` :
+
+- **#163 (v6.2.0.10, dépassé)** : la réponse n'était **pas rendue du tout** avant `REVEALED` — une
+  garde de rendu conditionnelle (`revealed && ...`) empêchait toute apparition dans le DOM.
+- **#166 (v6.2.0.15, actuel)** : la réponse est **rendue en permanence** dès qu'une question est
+  chargée, dans un composant dédié (`AnimAnswerZone.jsx`), **floutée** (`filter: blur()`) et
+  d'opacité réduite tant que `phase !== 'REVEALED'`, nette ensuite — mêmes dimensions dans les deux
+  états, seul le style change. `AnimQcmOptions.jsx` conserve en parallèle son propre marquage
+  (liseré vert + ✓) sous la même garde `revealed`, désormais purement décoratif au-dessus d'une
+  donnée déjà présente à l'écran.
+
+**Le flou n'est ni un masque ni un mécanisme de confidentialité.** Il évite la lecture involontaire
+par l'animateur — c'est son seul objectif — mais ne résiste ni à un regard appuyé, ni aux outils de
+développement du navigateur, ni à une copie du texte (`user-select: none` bloque uniquement la
+sélection à la souris). Aucun filtrage serveur n'est ajouté — cela casserait l'affichage au moment
+du reveal, puisque le payload ne serait alors mis à jour qu'à `REVEAL`, pas avant.
+
+Conséquence pratique, **renforcée** par rapport à #163 (déjà documentée en risque R4 du plan
+#166) : la réponse est désormais visible à l'écran en permanence, sous un voile CSS — la tablette
+animateur ne doit pas être visible du public. C'était déjà vrai quand la réponse n'était que dans
+le payload (#163) ; ça l'est davantage maintenant qu'elle est physiquement à l'écran (#166).
+
+**Aucun tableau ci-dessus n'est modifié par cette clarification** — elle documente un comportement
+de rendu client déjà en vigueur depuis #155/#156 (le payload) et #166 (l'affichage flouté).
 
 ---
 

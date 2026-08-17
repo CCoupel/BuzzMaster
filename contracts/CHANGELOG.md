@@ -2,6 +2,282 @@
 
 ---
 
+## [20260817-3] — Les 5 actions de conduite MEMOTION autorisées à l'animateur (#160, `/anim`)
+
+> Issue #160 · Branche `feature/anim-question-display` · Contrat posé **avant** implémentation
+> (contract-first) · Plan : `_work/reports/plan-20260817-160500.md`
+
+Dernière issue du milestone #24 (Interface Animateur). Même diagnostic que #159, appliqué au mode
+MEMOTION : **l'état MEMOTION atteint déjà `/anim`** — tous les handlers `handleMotion*`
+(`cmd/server/main.go:1985-2147`) appellent `broadcastUpdate()`, qui vise `ClientTypeAnim` depuis
+#162, et `SerializeForWebClient` ne filtre **aucun** champ `MEMOTION_*` ni `MOTION_CARDS`. Aucun
+bug de diffusion, aucun sérialiseur à créer, aucun champ `GameState` à ajouter.
+
+Le blocage est **exclusivement entrant** : la liste blanche (#154) réserve les cinq actions de
+conduite à `admin` (`MEMOTION_FLIP/STOP_TIMER/REVEAL/DONE`) et à `tv` (`MEMOTION_SELECT`, envoyée
+depuis l'aperçu régie en iframe). Sans iframe sur la tablette, l'animateur n'a aucun chemin.
+
+- **[CHANGED]** Liste blanche entrante — `MEMOTION_SELECT` accepte désormais `ClientTypeAnim`, **en
+  plus** de `ClientTypeTV` (inchangé). `admin` reste ❌, comme avant.
+- **[CHANGED]** Liste blanche entrante — `MEMOTION_FLIP`, `MEMOTION_STOP_TIMER`,
+  `MEMOTION_REVEAL`, `MEMOTION_DONE` acceptent désormais `ClientTypeAnim`, **en plus** de
+  `ClientTypeAdmin` (inchangé).
+- **[UNCHANGED]** `MEMOTION_SET_TEAMS` — reste `admin` uniquement. Le choix des équipes
+  participantes reste en régie (périmètre explicite de l'issue #160), strictement parallèle à
+  `MEMORY_SET_TEAMS` en #159.
+- **[UNCHANGED]** Payloads des 5 actions — `{CARD_ID}`, `{}`, `{}`, `{}`, `{CARD_ID, WINNER_TEAM}`
+  inchangés, aucun champ ajouté ni renommé.
+- **[UNCHANGED]** `GameState` — aucun champ ajouté ; les 7 champs `MEMOTION_*` existent depuis
+  v5.0.0 et transitent déjà sur `/ws/anim`. `omitempty` jamais modifié.
+- **[UNCHANGED]** Moteur — aucune garde ajoutée, aucune transition modifiée. Les gardes de
+  sous-phase existantes s'appliquent telles quelles au nouvel émetteur.
+- **[UNCHANGED]** Tableau de diffusion sortante (`contracts/websocket-endpoints.md`) — `UPDATE` et
+  `UPDATE_TIMER` atteignent `anim` depuis #162, rien à y changer.
+
+**Aucun changement BREAKING** : ce lot n'ajoute qu'une colonne à la liste blanche. Aucun type de
+client ne perd un droit, aucun payload existant ne change de forme.
+
+**Limite connue, délibérément non corrigée** : `Engine.DoneMotionCard` ne contraint pas
+`WINNER_TEAM` à valoir `MEMOTION_CURRENT_TEAM`. La règle « équipe courante ou personne » est une
+contrainte d'**interface**, appliquée identiquement par `/admin` et `/anim` — pas une garde moteur.
+Voir `contracts/websocket-actions.md` §"Sécurité — Allow-list entrante" pour le détail et le motif
+de non-correction.
+
+Contrat détaillé : `contracts/websocket-actions.md` §"Sécurité — Allow-list entrante par
+ClientType". Machine à états : `docs/GAME_STATE_MACHINE.md` §"Type de jeu MEMOTION".
+
+---
+
+## [20260817-1] — Conformité participants PREPARE↔READY (#172, modes MEMORY/MEMOTION)
+
+> Issue #172 · Branche `feature/anim-question-display` · Commits `1c43e31`, `c6b4e70`, `1f767d3`, `61040ff`
+
+Deux critères indépendants conditionnent désormais la transition PREPARE → READY pour **tous** les modes :
+1. **Buzzers physiques prêts** (condition préexistante, inchangée : tous répondent PONG)
+2. **Sélection de participants conforme** (nouveauté #172 : règles par type de question)
+
+**AUCUN changement de contrat WebSocket ni de payload** : les champs `MEMORY_PARTICIPATING_TEAMS` et `MEMOTION_PARTICIPATING_TEAMS` existaient déjà, ils deviennent simplement des prérequis normatifs de passage en `READY`.
+
+- **[UNCHANGED]** `GameState` — aucun champ ajouté, `omitempty` jamais modifié
+- **[UNCHANGED]** Actions WebSocket (`internal/protocol/messages.go`) — aucune action ajoutée ni modifiée
+- **[UNCHANGED]** Transitions de phase — 9 valeurs de `Phase` inchangées
+- **[NEW]** Règle moteur : `Engine.Start()` refuse `phase != READY` (verrou de sécurité, transparente côté WebSocket)
+- **[NEW]** Règle moteur : retour `READY → PREPARE` si conformité cesse d'être vraie (transactionnel, réévalué à chaque sélection)
+
+**Conformité par mode** (voir `docs/GAME_STATE_MACHINE.md` pour le détail) :
+- MEMORY SOLO : exactement 1 équipe — `len(MEMORY_PARTICIPATING_TEAMS) === 1`
+- MEMORY multi (CHACUN_SON_TOUR, TANT_QUE_JE_GAGNE) : au moins 2 — `len(...) >= 2`
+- MEMOTION : au moins 1 — `len(MEMOTION_PARTICIPATING_TEAMS) >= 1`
+- SPEEDY/QCM/ARDOISE/Type inconnu : permissif (défaut) — aucun prérequis nouveau
+- **Défaut sûr** : type de jeu inconnu passe toujours (jamais bloquer sans le savoir)
+
+Contrat détaillé : `contracts/game-state.md` §"Prérequis de Passage PREPARE → READY", `docs/GAME_STATE_MACHINE.md` §"Retour Arrière READY → PREPARE", `docs/GAME_STATE_MACHINE.md` §"Verrou de phase sur `Engine.Start()`".
+Plan : `_work/reports/plan-20260817-122307.md`.
+
+---
+
+## [20260817-2] — Correction visuelle indicateur équipe active (#173, `/anim`)
+
+> Issue #173 · Commit `df2930e`
+
+- **[CHANGED]** `AnimTeamCard.css` — le liseré vert (`outline-color: --success`) qui se fondait dans une carte d'équipe elle-même verte est remplacé par un double anneau blanc/quasi-noir (`box-shadow`) + ombre portée renforcée. Contraste de luminance garanti indépendamment de la teinte de l'équipe.
+- **[UNCHANGED]** Aucun changement de contrat WebSocket, aucun champ, aucune action
+- **[UNCHANGED]** `AnimTeamCard.jsx` — seulement le CSS modifié, pas de changement JSX ni de props
+
+Correction cosmétique, zéro impact opérationnel.
+
+---
+
+## [20260816-3] — `FLIP_MEMORY_CARD` autorisé à l'animateur (#159, mode MEMORY)
+
+> Investigation #159. Contrairement à ce que la lecture du tableau de diffusion laissait craindre
+> (`FLIP_MEMORY_CARD` et `MEMORY_SET_TEAMS` marqués ✗ pour l'animateur), **l'état MEMORY atteint
+> déjà `/anim`** : `handleFlipMemoryCard` appelle `broadcastUpdate()`, qui vise tous les types de
+> client, `ClientTypeAnim` compris depuis #162. Les ✗ du tableau portent sur l'**écho de l'action
+> sous son propre nom**, pas sur l'`UPDATE` qui transporte l'état — même nuance que pour
+> `TEAM_POINTS`/`BUMPER_POINTS`, déjà documentée. **Aucun bug de diffusion, à la différence de
+> #158.**
+>
+> Le blocage réel est **entrant** : la liste blanche (#154) accorde `FLIP_MEMORY_CARD` à `tv` et
+> `vplayer` seulement (`inbound_allowlist.go:125`). La régie contourne en retournant les cartes
+> depuis son aperçu TV en iframe, qui est une connexion `tv` ; sans iframe sur la tablette,
+> l'animateur n'a aucun chemin.
+
+- **[CHANGED]** Liste blanche entrante : `FLIP_MEMORY_CARD` accepte désormais `ClientTypeAnim`, en
+  plus de `tv` et `vplayer`. Une seule entrée de map modifiée, aucun changement du mécanisme
+  `IsActionAllowed` — conformément à la conception de #154.
+- **[INCHANGÉ] `admin`** reste ❌ sur cette action : la régie n'en a jamais eu besoin en direct.
+- **[INCHANGÉ] `MEMORY_SET_TEAMS`** reste `admin` uniquement — le choix des équipes participantes
+  demeure à la régie (périmètre explicite de #159). Conséquence assumée : un animateur seul ne peut
+  pas démarrer une partie MEMORY multi-équipes.
+- **Aucun BREAKING**, aucune action nouvelle, aucun champ de payload ajouté ou modifié, aucune
+  diffusion nouvelle. Le garde-fou de phase du moteur (`Engine.FlipMemoryCard` refuse hors
+  `STARTED`) s'applique inchangé à ce nouvel émetteur.
+- **Élargissement de capacité** pour `anim`, à lire comme tel : le retournement modifie l'état de
+  jeu. Il est cohérent avec le périmètre « conduite en direct » déjà accordé (START/STOP/REVEAL/
+  READY, TEAM_POINTS) et reste borné par le moteur.
+
+Contrat détaillé : `contracts/websocket-actions.md` §"Sécurité — Allow-list entrante".
+Plan : `_work/reports/plan-20260816-211851.md`.
+
+---
+
+## [20260816-2] — `AWARDED_TEAMS` : crédit synchronisé entre animateurs (#170, GATE 2 A2)
+
+> Arbitrage utilisateur : l'état « équipe déjà créditée » ne peut pas rester local à la tablette.
+> Il doit être diffusé à tous les animateurs (confirmation du crédit, montant compris) et bloquer
+> un second crédit sur la même équipe, que le premier vienne d'une autre tablette ou de la régie.
+>
+> **Question de l'utilisateur : réutiliser un historique existant plutôt que d'inventer un état ?
+> Réponse : oui, il existe et il suffit.** `Engine.history` (`AddGameEvent`, persisté par
+> `SaveHistory`, exposé par `GET /history`, consommé par le PALMARÈS) enregistre déjà, depuis
+> `handleTeamPoints` **et** `handleBumperPoints`, un `GameEvent{EventType: "POINTS_AWARDED",
+> QuestionID, TeamName, Points, Timestamp}` — quelle que soit l'interface d'origine du crédit.
+
+- **[NEW]** Action `AWARDED_TEAMS` (Server→Client, `ClientTypeAnim` **exclusif**) — équipes déjà
+  créditées pour la question courante, avec la somme des points et l'horodatage du premier crédit.
+  Diffusée sur `TEAM_POINTS`, `BUMPER_POINTS`, `READY`, `NEW_GAME`, `RAZ` et au HELLO d'un
+  animateur ; **jamais** sur le chemin de `broadcastUpdate` (même discipline que `NEXT_QUESTION` —
+  un parcours d'historique par tick de chronomètre grandirait avec la partie).
+- **[AUCUN nouvel état]** — le payload est une **projection** de l'historique existant, pas un
+  champ de `GameState` supplémentaire. Aucune structure persistée n'est créée ni modifiée.
+- **Filtre `Timestamp >= GameState.GameTime` obligatoire** : l'historique n'est purgé qu'à
+  `NEW_GAME`/`RAZ`, pas entre deux questions. Sans ce filtre, **rejouer une question déjà créditée
+  la laisserait bloquée indéfiniment**.
+- **Regroupement par `TeamName`, pas `WinnerID`** : `WinnerID` porte une MAC quand le crédit vise un
+  joueur ; `TeamName` est toujours renseigné. Une équipe créditée via l'un de ses joueurs compte
+  donc comme créditée.
+- **[INCHANGÉ] `/admin`** : non destinataire, aucune garde ajoutée. Constat vérifié — il n'existe
+  aujourd'hui **aucune** garde de double-crédit, ni dans `GamePage.jsx` (bouton ARDOISE
+  inconditionnel) ni dans `Engine.UpdateTeamScore`. Le blocage est une règle de l'interface
+  animateur seule, appliquée côté client.
+- **Aucun BREAKING** : action nouvelle, aucun champ retiré ni renommé, aucun autre type de client
+  concerné. L'allow-list entrante (#154) est inchangée — le crédit continue de passer par
+  `TEAM_POINTS`, déjà autorisée à l'animateur.
+- **⚠️ `TEAMS[].POINTS` peut valoir `0`, et un montant nul est un verrou valide** — le refus d'une
+  réponse (#170, geste « 0 pt ») est un crédit ordinaire à montant nul, pas « pas encore traité » :
+  il produit une entrée `TEAMS[]` comme tout autre crédit. **Un client ne doit jamais tester la
+  présence d'un verrou par la véracité du montant** (`if (points)` est faux pour un refus en JS,
+  `0` étant falsy) mais par la **présence de l'entrée** dans `TEAMS[]`. Voir
+  `contracts/websocket-actions.md` §"Animateur" → `AWARDED_TEAMS` §"⚠️ `POINTS` peut valoir `0`".
+
+Contrat détaillé : `contracts/websocket-actions.md` §"Animateur" → `AWARDED_TEAMS` ;
+`contracts/websocket-endpoints.md` (ligne du tableau de diffusion).
+Plan : `_work/reports/plan-20260816-125123.md` (plan consolidé final, fait foi — remplace la
+référence `plan-20260816-171200.md` pour le volet crédit synchronisé, conservée pour ARDOISE seul).
+
+---
+
+## [20260816-1] — Diffusion de la frappe ARDOISE à l'animateur (#158)
+
+> Investigation #158 : le champ `GAME.ARDOISE_ANSWERS` atteint bien `/ws/anim` (aucun filtrage par
+> `SerializeForWebClient`), mais l'`UPDATE` déclenché par la frappe des joueurs ne visait que la
+> régie — le coalesceur `ARDOISE_INPUT` (#129 T2.1/T2.2) appelle
+> `broadcastUpdateTo(server.ClientTypeAdmin)`. Une tablette `/anim` aurait donc affiché une liste de
+> copies figée pendant toute la frappe, jusqu'au prochain changement de phase.
+
+- **[CHANGED]** L'`UPDATE` coalescé déclenché par `ARDOISE_INPUT` cible désormais
+  `ClientTypeAdmin` **et** `ClientTypeAnim`. Aucun changement de payload, aucun champ ajouté :
+  seule la liste des destinataires change.
+- **Aucun impact** sur `/ws/tv`, `/ws/player`, `/ws/buzzer` : ils n'étaient pas destinataires de
+  cette diffusion et ne le deviennent pas.
+- **Aucun BREAKING**, aucune action nouvelle, aucune modification de l'allow-list entrante (#154) :
+  le crédit ARDOISE utilise `TEAM_POINTS`, déjà autorisée à l'animateur depuis #155.
+- **Note de vigilance ajoutée au contrat** (`websocket-endpoints.md`) : même famille de défaut que
+  #162, à un étage différent — là c'était la fonction de diffusion qui ignorait le type, ici c'est
+  un appelant qui ne le demande pas. Tout nouvel appel à `broadcastUpdateTo` doit énumérer
+  explicitement les types concernés ; l'oubli est silencieux.
+
+Contrat détaillé : `contracts/websocket-endpoints.md` §"Filtres de diffusion par type",
+complément 2026-08-16. Plan : `_work/reports/plan-20260816-102900.md`.
+
+---
+
+## [20260815-3] — Correction de la note #163 sur `ws-payload-serialization.md` (#166)
+
+> Entrée **documentaire uniquement** — aucun BREAKING, aucun NEW, aucun CHANGED fonctionnel.
+> Aucun payload modifié.
+
+- **[DOC]** `ws-payload-serialization.md` §"Clarification (#163 → révisée #166)" : la note posée
+  par #163 (« la retenue jusqu'à `REVEALED` est une garde de rendu côté client ») est devenue
+  trompeuse depuis #166 — il n'y a plus de retenue. La réponse (`QCM_CORRECT`/`ANSWER`, déjà dans
+  le payload dès #155/#156, constat inchangé) est désormais **rendue en permanence** dans
+  `AnimAnswerZone.jsx`, floutée jusqu'à `REVEALED`, nette ensuite — un changement de présentation,
+  pas de filtrage. Section corrigée pour refléter le composant et le mécanisme actuels ; risque de
+  confidentialité renforcé en conséquence (la réponse est désormais physiquement à l'écran, pas
+  seulement dans le payload) — même conclusion : aucun filtrage serveur, tablette à ne pas exposer
+  au public.
+
+---
+
+## [20260815-2] — `NEXT_QUESTION` pointe la première question quand aucune n'est en cours (#166, GATE 2 D2)
+
+> Arbitrage utilisateur au GATE 2 : le bouton « À suivre » de `/anim` devenant permanent, il doit
+> proposer la **première question du quiz** en `NEW_GAME` / `ENROLL` plutôt qu'un état vide — c'est
+> le point d'entrée de la partie depuis la tablette, sans passer par la régie.
+
+- **[CHANGED]** Règle de calcul §1 de `NEXT_QUESTION` : « aucune question courante → payload vide »
+  devient « aucune question courante → première question jouable de la liste triée ». En pratique,
+  suppression de la sortie anticipée `state.Question == nil` dans `getNextQuestionPayload` : la
+  boucle démarre alors à l'indice 0, chemin déjà emprunté quand la question courante ne figure plus
+  dans la liste (règle §3). Aucun mécanisme nouveau.
+- **[CHANGED]** ⚠️ **Parité stricte avec `GamePage.jsx` (`nextUnplayedQuestion`) rompue sur ce seul
+  cas**, délibérément. La régie continue de n'afficher aucun bouton « à suivre » sans question
+  courante (`GamePage.jsx:239`) ; `/anim` en affichera un. La parité reste la règle pour tous les
+  autres cas — tri, position de départ, statuts exclus, absence de bouclage. Écart nommé au contrat
+  pour qu'il ne soit pas relu plus tard comme une régression.
+- **Aucun impact** sur `/ws/admin`, `/ws/tv`, `/ws/player`, `/ws/buzzer`.
+
+Contrat détaillé : `contracts/websocket-actions.md` §"Animateur" → `NEXT_QUESTION`, règle §1.
+Plan révisé : `_work/reports/plan-20260815-144925.md` (révision 5, fait foi).
+
+---
+
+## [20260815-1] — Progression dans le quiz sur `NEXT_QUESTION` (#166)
+
+> Réorganisation de la zone contexte de `/anim` (#166) : la ligne méta doit afficher « 7/12 ».
+> Ni le rang de la question courante ni le total ne sont connus de `/anim` — la liste `QUESTIONS`
+> ne lui est délibérément pas diffusée. Les deux valeurs sont en revanche **déjà calculées** par
+> `getNextQuestionPayload` (`main.go:4448` — tri complet de la liste, localisation de la question
+> courante) puis jetées : elles sont exposées plutôt que recalculées ailleurs.
+
+- **[NEW]** `NEXT_QUESTION.CURRENT_POSITION` (int, 1-based) — rang de la question **courante** dans
+  la liste triée. `0` si aucune question courante ou si elle ne figure plus dans la liste.
+- **[NEW]** `NEXT_QUESTION.TOTAL_QUESTIONS` (int) — nombre total de questions du quiz.
+- **[CHANGED]** Sémantique du payload vide — **non rétrocompatible pour un consommateur qui
+  supposait « tout ou rien »**, sans être BREAKING au sens du transport (aucun champ retiré,
+  aucun renommage, aucun type modifié) : `CURRENT_POSITION` et `TOTAL_QUESTIONS` sont renseignés
+  **même en l'absence de question suivante**. Un client ne peut donc plus déduire « plus de
+  question suivante » d'un payload globalement vide ; il doit tester l'absence d'`ID`.
+  `useWebSocket.js` le fait déjà (`setNextQuestion(MSG?.ID ? MSG : null)`) — aucun consommateur
+  existant n'est cassé, mais la nuance est actée ici pour les suivants.
+- **[CHANGED]** La règle §1 de calcul (« aucune question courante → payload vide ») ne court-circuite
+  plus `loadQuestions()` : le total doit être connu même sans question courante. Surcoût limité aux
+  déclencheurs `NEW_GAME` et HELLO. **L'interdit de calcul sur le chemin de `broadcastUpdate`
+  (lecture disque par tick de timer) reste entier** — c'est la raison d'être de cette action
+  dédiée, elle n'est pas relâchée.
+- **Aucun impact** sur `/ws/admin`, `/ws/tv`, `/ws/player`, `/ws/buzzer` : `NEXT_QUESTION` reste
+  exclusive à `ClientTypeAnim`.
+
+Contrat détaillé : `contracts/websocket-actions.md` §"Animateur" → `NEXT_QUESTION`.
+Plan : `_work/reports/plan-20260815-112949.md`.
+
+---
+
+## [20260814-1] — Clarification documentaire `ws-payload-serialization.md` (#163)
+
+> Entrée **documentaire uniquement** — aucun BREAKING, aucun NEW, aucun CHANGED fonctionnel.
+> Aucun fichier `contracts/*` de fond modifié, aucun sérialiseur touché.
+
+- **[DOC]** `ws-payload-serialization.md` §"Clarification (#163)" : précise que `QCM_CORRECT` et
+  `ANSWER` atteignent `/anim` dès le chargement de la question (comme TV/VPlayer), et que la
+  retenue jusqu'à la phase `REVEALED` sur `/anim` est une garde de rendu **côté client**
+  (`AnimQcmOptions.jsx`, `AnimPage.jsx`), pas un filtrage serveur. Comportement préexistant depuis
+  #155/#156 (risque R3 du plan #163/#164), non modifié par #163 — seulement rendu explicite au
+  moment où #163 en dépend visuellement (affichage de la bonne réponse et de la réponse hors QCM).
+
+---
+
 ## [20260813-3] — Synchronisation live du montant crédité `/anim` (code review MAJEUR-1, #155/#156)
 
 > Correctif suite revue de code (`_work/reports/code-reviewer-20260813-120457.md` MAJEUR-1,

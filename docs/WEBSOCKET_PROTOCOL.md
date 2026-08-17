@@ -607,6 +607,8 @@ Le serveur v3.0.0 gere deja les deux protocoles. Aucune modification serveur n'e
 | LED_SET, OTA_UPDATE, WIFI_CONFIG, HELLO | ✓ | - | - | ✓ |
 | ARDOISE_INPUT | - | - | ✓ (send) | - |
 
+**Note sur MEMOTION_*** : Les actions listées ci-dessus (`MEMOTION_*`) sont des actions **SORTANTES** (serveur → client). Les actions **ENTRANTES** acceptées (client → server) sont documentées dans `contracts/websocket-actions.md` §"Sécurité — Allow-list entrante par ClientType" — depuis v6.2.0 (#160), les 5 actions `MEMOTION_SELECT`, `MEMOTION_FLIP`, `MEMOTION_STOP_TIMER`, `MEMOTION_REVEAL`, `MEMOTION_DONE` sont désormais acceptées depuis `/ws/anim` (interface animateur tablette, v6.2.0+), en plus de leurs sources existantes.
+
 **Sérialiseurs** :
 - `SerializeForAdmin()` : full (bumpers avec FIRMWARE_VERSION, OTA_STATUS, ACK_PENDING, config)
 - `SerializeForWebClient()` : strips FIRMWARE_VERSION, IS_OUTDATED, OTA_STATUS, OTA_PERCENT, ACK_PENDING, config
@@ -819,6 +821,206 @@ Frontend affiche un panneau de résumé (40 questions créées, arrêt gracieux)
 - Message résumé (X questions créées avant arrêt)
 - Bouton **"Nouvelle génération"** (v6.1.1)
 - Bouton **"Fermer"**
+
+---
+
+## Action NEXT_QUESTION (v6.2.0, #155 — enrichi v6.2.x #166)
+
+### Endpoint
+
+- **Direction** : Server → Client
+- **Cible** : `ClientTypeAnim` **exclusivement** (`/ws/anim`), via `BroadcastToTypes(msg, ClientTypeAnim)`
+- **Trigger** : HELLO d'un client animateur (état initial), `READY`, `STOP`, `REVEAL`, `NEW_GAME`,
+  `REORDER_QUESTIONS`, `DELETE` (suppression d'une question)
+
+Indique à l'interface animateur (`/anim`) la prochaine question jouable ainsi que la progression
+dans le quiz, pour permettre l'enchaînement (bouton « à suivre », `AnimNextButton`) et l'affichage
+`n/total` sans consulter `/admin`. Détail complet du contrat :
+`contracts/websocket-actions.md` §"Animateur".
+
+### Payload
+
+```json
+{
+  "ID": "42",
+  "QUESTION": "Qui a peint la Nuit étoilée ?",
+  "CATEGORY": "Art",
+  "TYPE": "QCM",
+  "POINTS": 20,
+  "TIME": 30,
+  "CURRENT_POSITION": 5,
+  "TOTAL_QUESTIONS": 82
+}
+```
+
+| Champ | Type | Description |
+|-------|------|-------------|
+| `ID` | string | ID de la question suivante |
+| `QUESTION` | string | Texte de la question suivante |
+| `CATEGORY` | string | Catégorie de la question suivante |
+| `TYPE` | string | Type de la question suivante (SPEEDY, QCM, MEMORY, MEMOTION, ARDOISE) |
+| `POINTS` | int | Points de base de la question suivante |
+| `TIME` | int | Durée en secondes de la question suivante |
+| `CURRENT_POSITION` | int | **v6.2.x (#166)** — rang de la question **courante** dans la liste triée par `ORDER` (1-based). `0` si aucune question courante, ou si elle ne figure plus dans la liste. |
+| `TOTAL_QUESTIONS` | int | **v6.2.x (#166)** — nombre total de questions du quiz (longueur de la liste triée). |
+
+**Le payload n'est plus « tout ou rien » depuis #166.** Les champs de la question suivante (`ID`,
+`QUESTION`, `CATEGORY`, `TYPE`, `POINTS`, `TIME`) sont tous absents/zéro-valeur si plus aucune
+question n'est jouable (fin de quiz) — inchangé depuis #155/#156. En revanche `CURRENT_POSITION`
+et `TOTAL_QUESTIONS` sont désormais renseignés **sans `omitempty`, y compris quand il n'y a plus de
+question suivante** : sans cette dissociation, la progression affichée par `/anim` (`n/total`)
+disparaîtrait exactement sur la dernière question du quiz — le moment où « 82/82 » est le plus
+utile. Un client détecte l'absence de question suivante en testant `ID` (vide), jamais en testant
+la présence du payload entier.
+
+### Règle de calcul (révisée v6.2.x #166 — GATE 2 D2)
+
+Port fidèle de `GamePage.jsx`'s `nextUnplayedQuestion`, avec une divergence assumée sur le premier
+point :
+
+1. **Aucune question courante** (`GameState.QUESTION` absent — ENROLL, `NEW_GAME` juste après
+   reset) → **la recherche démarre à l'indice 0 et renvoie la première question jouable du quiz**,
+   au lieu d'un payload vide. Divergence délibérée avec `/admin` : `GamePage.jsx`'s
+   `nextUnplayedQuestion` renvoie `null` dans ce cas (`if (!currentId) return null`) — la régie ne
+   propose toujours rien tant qu'aucune question n'a été sélectionnée. `/anim` gagne ainsi un point
+   d'entrée pour démarrer une partie depuis la tablette sans passer par `/admin`, dont le
+   comportement propre reste inchangé. Voir `contracts/CHANGELOG.md` `[20260815-2]`.
+2. Toutes les questions triées par `ORDER` (repli sur `ID` numérique si `ORDER` absent) — même
+   règle que `web/src/utils/questionOrder.js`.
+3. Position de la question **courante** localisée dans cette liste triée ; si introuvable (question
+   supprimée du disque mais toujours courante côté moteur, ou absente per point 1), la recherche
+   démarre à l'indice 0.
+4. Première question **strictement après** cette position dont le statut n'est pas déjà joué —
+   jamais de retour en arrière dans la liste.
+5. Rien trouvé après cette position → champs de la question suivante à zéro-valeur (fin de quiz) ;
+   `CURRENT_POSITION`/`TOTAL_QUESTIONS` restent renseignés (point ci-dessus).
+
+### Exemple — fin de quiz (dernière question)
+
+```json
+{
+  "ID": "",
+  "QUESTION": "",
+  "CATEGORY": "",
+  "TYPE": "",
+  "POINTS": 0,
+  "TIME": 0,
+  "CURRENT_POSITION": 82,
+  "TOTAL_QUESTIONS": 82
+}
+```
+
+---
+
+## Action AWARDED_TEAMS (v6.2.x, #170)
+
+### Endpoint
+
+- **Direction** : Server → Client
+- **Cible** : `ClientTypeAnim` **exclusivement** (`/ws/anim`), via `BroadcastToTypes(msg, ClientTypeAnim)` — comme `NEXT_QUESTION`. `/admin`, `/tv`, `/player` et `/buzzer` ne reçoivent jamais cette action.
+- **Trigger** : `TEAM_POINTS` et `BUMPER_POINTS` traités (origine `/admin` ou `/anim` indifféremment), `READY` (changement de question), `NEW_GAME`, `RAZ`, HELLO d'un client animateur (état initial)
+
+Informe les interfaces animateur des équipes **déjà créditées pour la question en cours**. Sert
+deux besoins : confirmer à **tous** les animateurs qu'un crédit vient d'avoir lieu (équipe +
+montant), et leur permettre de **bloquer** un second crédit sur la même équipe — que le premier
+crédit vienne d'une autre tablette ou de la régie. Détail complet du contrat :
+`contracts/websocket-actions.md` §"Animateur" → `AWARDED_TEAMS`.
+
+**Périmètre : tous les modes de jeu conduits depuis `/anim`** (SPEEDY, QCM déjà livrés — #156/
+#157 — et les modes à venir), pas seulement ARDOISE.
+
+### Payload
+
+```json
+{
+  "QUESTION_ID": "42",
+  "TEAMS": [
+    { "TEAM": "Les Bleus", "POINTS": 20, "TIMESTAMP": 1755341200000000 },
+    { "TEAM": "Les Rouges", "POINTS": 0, "TIMESTAMP": 1755341205000000 }
+  ]
+}
+```
+
+| Champ | Type | Description |
+|-------|------|-------------|
+| `QUESTION_ID` | string | ID de la question courante — `""` si aucune. Permet au client de rejeter un payload obsolète arrivé après un changement de question |
+| `TEAMS` | array | Une entrée par équipe créditée, dans l'ordre chronologique du premier crédit — **`[]`, jamais `null`**, quand aucune équipe n'a encore été créditée |
+| `TEAMS[].TEAM` | string | Nom de l'équipe |
+| `TEAMS[].POINTS` | int | **Somme** des points attribués à cette équipe pour la question courante (une équipe peut être créditée deux fois depuis la régie, qui n'a aucune garde) |
+| `TEAMS[].TIMESTAMP` | int64 | Horodatage µs du **premier** crédit de cette équipe pour la question courante |
+
+> ⚠️ **`POINTS` peut valoir `0` — un montant nul est un verrou valide, pas « pas encore traité ».**
+> Le refus d'une réponse (#170, geste « 0 pt ») est un crédit ordinaire à montant nul : il produit
+> une entrée `TEAMS[]` comme tout autre crédit. **Un client ne doit jamais tester la présence d'un
+> verrou par la véracité du montant** (`if (points)` est faux pour un refus en JS, `0` étant
+> falsy) — le test correct porte sur la **présence de l'entrée** dans `TEAMS[]` pour cette équipe.
+> Voir `contracts/websocket-actions.md` §"AWARDED_TEAMS" pour l'exemple de code correct/incorrect.
+
+### Source de vérité — projection de l'historique existant, pas un nouvel état
+
+Aucun nouveau champ de `GameState`, aucune structure persistée créée ou modifiée. Le payload est
+une **projection** de l'historique déjà tenu par le moteur (`Engine.history`, `AddGameEvent`,
+persisté par `SaveHistory`, exposé par `GET /history`, consommé aussi par le PALMARÈS — voir
+`docs/DATA_MODELS.md` §"GameEvent (History)"). `handleTeamPoints` et `handleBumperPoints`
+enregistrent déjà cet événement, quelle que soit l'interface d'origine du crédit :
+
+```
+événements tels que  EventType == "POINTS_AWARDED"
+                 ET  QuestionID == GameState.Question.ID
+                 ET  Timestamp  >= GameState.GameTime
+regroupés par TeamName ; POINTS = somme, TIMESTAMP = min
+```
+
+- Regroupement par **`TeamName`**, pas `WinnerID` : `WinnerID` porte une MAC quand le crédit vise
+  un joueur (SPEEDY) ; `TeamName` est toujours renseigné — une équipe créditée via l'un de ses
+  joueurs compte donc comme créditée.
+- Le filtre `Timestamp >= GameState.GameTime` est **indispensable** : l'historique n'est purgé
+  qu'à `NEW_GAME`/`RAZ`, pas entre deux questions. Sans lui, rejouer une question déjà créditée la
+  laisserait bloquée indéfiniment.
+- Projection recalculée **uniquement sur les déclencheurs listés ci-dessus, jamais** sur le chemin
+  de `broadcastUpdate` — même discipline que `NEXT_QUESTION` : un parcours de l'historique à
+  chaque tick de chronomètre est un coût qui grandirait avec la partie.
+
+### `/admin` n'est pas contraint
+
+La régie n'est pas destinataire de cette action et **ne reçoit aucune garde** : elle peut
+créditer, recréditer, surcharger — état de fait préexistant, inchangé par #170 (il n'existe
+aujourd'hui aucune garde de double-crédit côté `GamePage.jsx` ni côté `Engine.UpdateTeamScore`).
+Le blocage est une règle de l'**interface animateur uniquement**, appliquée côté client React à
+partir de ce payload — jamais côté serveur.
+
+---
+
+## Liste blanche entrante — `FLIP_MEMORY_CARD` accepte désormais `anim` (v6.2.x, #159)
+
+Le serveur applique une liste blanche par `ClientType` sur les actions **entrantes**
+(`Client→Server`) : `internal/server/inbound_allowlist.go` (`IsActionAllowed`) rejette (avec log
+`WARN`) toute action envoyée par un type de client non autorisé, avant tout traitement. Détail
+complet et table exhaustive : `contracts/websocket-actions.md` §"Sécurité — Allow-list entrante
+par ClientType".
+
+`FLIP_MEMORY_CARD` (retournement d'une carte en question de type MEMORY) était jusqu'ici autorisé
+pour `tv` (aperçu admin en iframe `/tv?admin=true` **et** clic d'un spectateur sur l'écran public)
+et `vplayer` (un joueur retourne ses propres cartes en mode équipe active). #159 y ajoute `anim` :
+l'animateur peut désormais retourner les cartes du doigt directement sur sa tablette — **une seule
+entrée ajoutée à la table**, aucun changement du mécanisme `IsActionAllowed`.
+
+| Client | `FLIP_MEMORY_CARD` |
+|---|---|
+| `admin` | ❌ — la régie retourne les cartes via son aperçu TV en iframe, une connexion `tv`, pas `admin` |
+| `tv` | ✅ (inchangé) |
+| `vplayer` | ✅ (inchangé) |
+| `anim` | ✅ **nouveau (v6.2.x, #159)** |
+
+> ⚠️ **C'est un élargissement de capacité pour `anim`, pas un simple affichage** : le retournement
+> modifie l'état de jeu (paires trouvées, erreurs, tour de l'équipe active). Cohérent avec le
+> périmètre "conduite en direct" déjà accordé à l'animateur (`START`/`STOP`/`REVEAL`/`READY`,
+> `TEAM_POINTS`/`BUMPER_POINTS`), et borné par le moteur : `Engine.FlipMemoryCard` refuse tout
+> retournement hors phase `STARTED`, quel que soit le client d'origine.
+>
+> **`MEMORY_SET_TEAMS` n'est PAS ajouté** : le choix des équipes participantes reste réservé à
+> `/admin` (périmètre explicite de #159). Conséquence assumée : un animateur seul ne peut pas
+> démarrer une partie MEMORY multi-équipes sans passer par la régie au préalable.
 
 ---
 

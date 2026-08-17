@@ -66,7 +66,7 @@ export default function useWebSocket(endpoint = '/ws/admin') {
     MEMORY_TEAM_ERRORS: {}, // Map of teamName -> errorCount
     MEMORY_PARTICIPATING_TEAMS: [], // List of participating team names
     // MEMOTION fields (v5.0.0)
-    MEMOTION_SUBPHASE: '', // 'GRID' | 'QUESTION' | 'REVEAL' | ''
+    MEMOTION_SUBPHASE: '', // 'MEMORIZE' | 'GRID' | 'SELECTED' | 'QUESTION' | 'REVEAL' | ''
     MEMOTION_SELECTED: '', // ID of active card
     MEMOTION_CARD_STATES: {}, // Map of cardID -> 'UNPLAYED'|'QUESTION'|'REVEALED'|'DONE'
     MEMOTION_CARD_TEAMS: {}, // Map of cardID -> teamName (winner)
@@ -103,6 +103,23 @@ export default function useWebSocket(endpoint = '/ws/admin') {
   // §NEXT_QUESTION : absence de champ ID). Exclusif à /ws/anim (ClientTypeAnim),
   // reste toujours null sur les autres endpoints.
   const [nextQuestion, setNextQuestion] = useState(null)
+  // #166 (F1) — progression dans le quiz (question COURANTE, pas la
+  // suivante) : contracts/websocket-actions.md §NEXT_QUESTION,
+  // CURRENT_POSITION/TOTAL_QUESTIONS. Volontairement INDÉPENDANT de
+  // `nextQuestion` — le payload n'est plus "tout ou rien" depuis #166 :
+  // ces deux champs restent renseignés même en fin de quiz (plus de
+  // question suivante), pour que "12/12" reste affiché sur la dernière
+  // question plutôt que de disparaître. `position: 0` = pas encore reçu /
+  // aucune question courante.
+  const [questionPosition, setQuestionPosition] = useState({ position: 0, total: 0 })
+  // #170 (F1) — équipes déjà créditées pour la question COURANTE, indexé
+  // par nom d'équipe pour accès direct (contracts/websocket-actions.md
+  // §AWARDED_TEAMS). Exclusif à /ws/anim, comme nextQuestion/creditPoints —
+  // reste vide ({}) sur les autres endpoints (jamais diffusé par le
+  // serveur ailleurs que ClientTypeAnim). Source de vérité du verrouillage
+  // du crédit (AnimCreditControl, F2) : JAMAIS d'anticipation locale du
+  // clic ici, uniquement ce que le serveur confirme.
+  const [awardedTeams, setAwardedTeams] = useState({})
   // #155/#156 (MAJEUR-1, revue de code) — montant de base courant que
   // l'animateur créditera, rediffusé par le serveur via CREDIT_POINTS
   // (contrepartie de SET_CREDIT_POINTS émis par /admin). Remplace la lecture
@@ -242,6 +259,17 @@ export default function useWebSocket(endpoint = '/ws/admin') {
     }, LIVENESS_CHECK_INTERVAL_MS)
     return () => clearInterval(checkId)
   }, [closeZombieSocket])
+
+  // #170 (F1) — miroir de gameState.question.ID toujours à jour, lu par le
+  // handler AWARDED_TEAMS pour rejeter un payload obsolète. `handleMessage`
+  // est mémoïsé une seule fois (useCallback([]) ci-dessous) : il fermerait
+  // sinon sur le `gameState` du tout premier rendu (closure périmée), même
+  // piège que celui déjà évité par les mises à jour fonctionnelles
+  // `setGameState(prev => ...)` utilisées partout ailleurs dans ce fichier.
+  const currentQuestionIdRef = useRef(null)
+  useEffect(() => {
+    currentQuestionIdRef.current = gameState.question?.ID ?? null
+  }, [gameState.question?.ID])
 
   const handleMessage = useCallback((data) => {
     const { ACTION, MSG, FSINFO, VERSION } = data
@@ -424,7 +452,36 @@ export default function useWebSocket(endpoint = '/ws/admin') {
         // jouable, contrat §NEXT_QUESTION. `null` dans les deux cas (jamais
         // reçu / explicitement vide) : AnimPage n'a pas besoin de distinguer.
         setNextQuestion(MSG?.ID ? MSG : null)
+        // #166 (F1) — CURRENT_POSITION/TOTAL_QUESTIONS décrivent la question
+        // COURANTE et le quiz, pas la suivante : mis à jour indépendamment de
+        // la ligne ci-dessus, même quand MSG.ID est absent (fin de quiz).
+        setQuestionPosition({
+          position: MSG?.CURRENT_POSITION ?? 0,
+          total: MSG?.TOTAL_QUESTIONS ?? 0,
+        })
         break
+
+      case 'AWARDED_TEAMS': {
+        // #170 (F1) — projection serveur des équipes déjà créditées pour la
+        // question courante, contrat §AWARDED_TEAMS. Garde anti-obsolescence :
+        // un payload qui ne correspond plus à la question affichée localement
+        // (changement de question entre l'émission et la réception) est
+        // ignoré plutôt qu'appliqué — sinon une réponse de la question
+        // PRÉCÉDENTE pourrait verrouiller (ou, pire, réinitialiser) le
+        // verrouillage de la question qui vient de démarrer. `""` et
+        // `null`/`undefined` sont équivalents ("aucune question").
+        const msgQuestionId = MSG?.QUESTION_ID || null
+        if (msgQuestionId !== (currentQuestionIdRef.current || null)) break
+        const map = {}
+        ;(MSG?.TEAMS || []).forEach((entry) => {
+          if (!entry?.TEAM) return
+          map[entry.TEAM] = { POINTS: entry.POINTS, TIMESTAMP: entry.TIMESTAMP }
+        })
+        // Tableau vide ([]) -> map vide ({}) : c'est la réinitialisation
+        // "payload vide" demandée par F1, sans cas particulier à écrire.
+        setAwardedTeams(map)
+        break
+      }
 
       case 'CREDIT_POINTS':
         // MAJEUR-1 — contrepartie serveur→client de SET_CREDIT_POINTS,
@@ -730,6 +787,31 @@ export default function useWebSocket(endpoint = '/ws/admin') {
     sendMessage('MEMOTION_SELECT', { CARD_ID: cardId })
   }, [sendMessage])
 
+  // MEMOTION (#160/F2) — flip la carte sélectionnée (SELECTED -> QUESTION),
+  // sur le modèle exact de selectMotionCard ci-dessus.
+  const flipMotionCard = useCallback(() => {
+    sendMessage('MEMOTION_FLIP', {})
+  }, [sendMessage])
+
+  // MEMOTION (#160/F2) — coupe le chrono de la carte en cours (reste en
+  // QUESTION).
+  const stopMotionTimer = useCallback(() => {
+    sendMessage('MEMOTION_STOP_TIMER', {})
+  }, [sendMessage])
+
+  // MEMOTION (#160/F2) — révèle la réponse de la carte en cours
+  // (QUESTION -> REVEAL).
+  const revealMotionCard = useCallback(() => {
+    sendMessage('MEMOTION_REVEAL', {})
+  }, [sendMessage])
+
+  // MEMOTION (#160/F2) — clôt la carte en cours (retour à GRID), avec ou
+  // sans équipe gagnante. CARD_ID doit toujours être renseigné (même pour
+  // "annuler"/"sans vainqueur") — le moteur le compare à MEMOTION_SELECTED.
+  const doneMotionCard = useCallback((cardId, winnerTeam = '') => {
+    sendMessage('MEMOTION_DONE', { CARD_ID: cardId, WINNER_TEAM: winnerTeam })
+  }, [sendMessage])
+
   // VPlayer enrollment: Show QR code
   const showQRCode = useCallback(() => {
     sendMessage('SHOW_QR_CODE', {})
@@ -846,6 +928,8 @@ export default function useWebSocket(endpoint = '/ws/admin') {
     firmwareInfo,
     aiJob,
     nextQuestion,
+    questionPosition,
+    awardedTeams,
     creditPoints,
     // Actions
     sendMessage,
@@ -868,6 +952,10 @@ export default function useWebSocket(endpoint = '/ws/admin') {
     simulatePong,
     flipMemoryCard,
     selectMotionCard,
+    flipMotionCard,
+    stopMotionTimer,
+    revealMotionCard,
+    doneMotionCard,
     // New game / Quiz meta
     newGame,
     updateQuizMeta,

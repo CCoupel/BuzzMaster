@@ -149,6 +149,25 @@ type QuestionStatus =
 | `MEMORY_FLIPPED_CARDS` | string[] | IDs des cartes retournées (max 2) |
 | `MEMORY_MATCHED_PAIRS` | number[] | IDs des paires trouvées (permanent) |
 | `MEMORY_ERRORS` | number | Nombre d'erreurs (tentatives ratées) |
+| `MEMORY_PARTICIPATING_TEAMS` | string[] | Équipes sélectionnées pour cette manche (#172) |
+| `MEMOTION_PARTICIPATING_TEAMS` | string[] | Équipes sélectionnées pour cette MEMOTION (#172) |
+
+#### Prérequis de Passage PREPARE → READY (#172)
+
+Depuis la v6.2.0.32, les champs `MEMORY_PARTICIPATING_TEAMS` et `MEMOTION_PARTICIPATING_TEAMS` deviennent des **prérequis normatifs** au passage en phase `READY` — c'est-à-dire que leur conformité est **obligatoire** pour que la transition puisse s'effectuer.
+
+| Type de question | Prérequis | Détail |
+|--|--|--|
+| MEMORY (SOLO) | `len(MEMORY_PARTICIPATING_TEAMS) === 1` | Exactement 1 équipe sélectionnée |
+| MEMORY (CHACUN_SON_TOUR, TANT_QUE_JE_GAGNE) | `len(MEMORY_PARTICIPATING_TEAMS) >= 2` | Au moins 2 équipes sélectionnées |
+| MEMOTION | `len(MEMOTION_PARTICIPATING_TEAMS) >= 1` | Au moins 1 équipe sélectionnée |
+| SPEEDY, QCM, ARDOISE | Aucun prérequis spécifique | Au moins 1 équipe active (logique générale inchangée) |
+| Type inconnu | Permissif (défaut) | Jamais refuser une conformité inconnue |
+
+**Comportement :**
+- Réévaluation **continue** — chaque modification de sélection en phase `READY` reteste la conformité
+- **Retour arrière possible** : si la conformité cesse d'être vraie en `READY`, retour automatique en `PREPARE`
+- **Jamais de régression depuis une phase de jeu** (`STARTED`, `COUNTDOWN`, `PAUSED`, `REVEALED`) — la sélection ne peut plus être modifiée une fois qu'une partie est lancée
 
 ### Dans Question
 

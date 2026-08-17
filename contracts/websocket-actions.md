@@ -34,11 +34,12 @@ fait **exclusivement par de nouvelles entrées dans la map** — aucun changemen
 | HELLO | ✅ | ✅ | ✅ | ✅ |
 | START, STOP, PAUSE, CONTINUE, REVEAL, READY | ✅ | ❌ | ❌ | ✅ |
 | BUMPER_POINTS, TEAM_POINTS | ✅ | ❌ | ❌ | ✅ |
-| FULL, UPDATE, POINTS, RAZ, REMOTE, DELETE, DELETE_BUMPER, RELEASE_BUMPER_NAME, RESET, REBOOT, REORDER_QUESTIONS, FORCE_READY, MEMORY_SET_TEAMS, MEMOTION_FLIP, MEMOTION_STOP_TIMER, MEMOTION_REVEAL, MEMOTION_DONE, MEMOTION_SET_TEAMS, SHOW_QR_CODE, HIDE_QR_CODE, SET_VIRTUAL_PLAYER_LIMIT, NEW_GAME, UPDATE_QUIZ_META, CANCEL_AI_GENERATION | ✅ | ❌ | ❌ | ❌ |
+| FULL, UPDATE, POINTS, RAZ, REMOTE, DELETE, DELETE_BUMPER, RELEASE_BUMPER_NAME, RESET, REBOOT, REORDER_QUESTIONS, FORCE_READY, MEMORY_SET_TEAMS, MEMOTION_SET_TEAMS, SHOW_QR_CODE, HIDE_QR_CODE, SET_VIRTUAL_PLAYER_LIMIT, NEW_GAME, UPDATE_QUIZ_META, CANCEL_AI_GENERATION | ✅ | ❌ | ❌ | ❌ |
 | **SET_CREDIT_POINTS** | ✅ | ❌ | ❌ | ❌ |
 | BUTTON, PONG | ✅ | ❌ | ✅ | ❌ |
-| FLIP_MEMORY_CARD | ❌ | ✅ | ✅ | ❌ |
-| MEMOTION_SELECT | ❌ | ✅ | ❌ | ❌ |
+| FLIP_MEMORY_CARD | ❌ | ✅ | ✅ | ✅ **(v6.2.x, #159)** |
+| MEMOTION_SELECT | ❌ | ✅ | ❌ | ✅ **(v6.2.x, #160)** |
+| MEMOTION_FLIP, MEMOTION_STOP_TIMER, MEMOTION_REVEAL, MEMOTION_DONE | ✅ | ❌ | ❌ | ✅ **(v6.2.x, #160)** |
 | PLAYER_CONNECT, VPLAYER_QCM_ANSWER, ARDOISE_INPUT | ❌ | ❌ | ✅ | ❌ |
 
 Notes :
@@ -71,8 +72,57 @@ Notes :
   sur l'écran public. `vplayer` peut retourner ses propres cartes en mode équipe
   active (`MEMORY_CURRENT_TEAM`). MEMORY/MEMOTION restent hors périmètre de l'interface
   animateur en #155/#156 — `anim` n'y figure pas.
-- **MEMOTION_SELECT** n'est envoyé que depuis l'aperçu admin en iframe — toujours
-  une connexion `tv`, jamais `vplayer` ni `anim`.
+- **FLIP_MEMORY_CARD — `anim` ajouté en v6.2.x (#159)**, seule modification de cette table par ce
+  lot. Motif : l'animateur retourne les cartes du doigt sur sa tablette (#159), et **aucun chemin ne
+  le lui permettait**. La régie, elle, n'en a jamais eu besoin en direct — elle retourne les cartes
+  depuis son aperçu TV en iframe, qui est une connexion `tv` : c'est pourquoi `admin` reste ❌, et le
+  reste. Conformément à la conception de #154, l'ajout se fait **par une seule entrée dans la map**,
+  sans toucher au mécanisme.
+  > ⚠️ C'est un **élargissement de capacité** pour `anim`, à traiter comme tel : le retournement
+  > modifie l'état de jeu (paires trouvées, erreurs, tour de l'équipe active). Il est cohérent avec
+  > le périmètre « conduite en direct » déjà accordé à l'animateur (START/STOP/REVEAL/READY,
+  > TEAM_POINTS), et il reste borné par le moteur, qui refuse tout retournement hors phase
+  > `STARTED` (`Engine.FlipMemoryCard`).
+  >
+  > **`MEMORY_SET_TEAMS` n'est PAS ajouté** : le choix des équipes participantes reste à la régie
+  > (périmètre explicite de #159). Conséquence assumée : un animateur seul ne peut pas démarrer une
+  > partie MEMORY multi-équipes.
+- **MEMOTION_SELECT** était envoyé jusqu'en #159 uniquement depuis l'aperçu admin en iframe —
+  toujours une connexion `tv`, jamais `vplayer`. `anim` s'y ajoute en #160 (ci-dessous). `vplayer`
+  reste ❌ : contrairement à MEMORY, aucune carte MEMOTION n'est retournée par un joueur.
+- **MEMOTION_SELECT / MEMOTION_FLIP / MEMOTION_STOP_TIMER / MEMOTION_REVEAL / MEMOTION_DONE —
+  `anim` ajouté en v6.2.x (#160)**, seule modification de cette table par ce lot. Motif identique à
+  #159 : l'animateur conduit les cinq sous-phases MEMOTION depuis sa tablette
+  (`MEMORIZE` → `GRID` → `SELECTED` → `QUESTION` → `REVEAL`), et **aucun chemin ne le lui
+  permettait** — la régie passe, elle, par son aperçu TV en iframe (connexion `tv`) pour
+  `MEMOTION_SELECT`, et par `/admin` pour les quatre autres. `admin` conserve donc ses ✅ existants
+  et `tv` conserve `MEMOTION_SELECT` : ce lot **n'enlève aucun droit à personne**, il n'ajoute
+  qu'une colonne. Conformément à la conception de #154, l'ajout se fait **par cinq entrées dans la
+  map**, sans toucher au mécanisme `IsActionAllowed`.
+  > ⚠️ **Élargissement de capacité** pour `anim`, du même ordre que #159 mais plus large : ces
+  > actions modifient l'état de jeu (sous-phase, état des cartes, **attribution de points** et
+  > rotation de l'équipe active via `MEMOTION_DONE`). Ce n'est pas une classe de capacité nouvelle
+  > pour l'animateur — il peut déjà créditer n'importe quelle équipe via `TEAM_POINTS` depuis
+  > #155/#156 — mais c'est le premier chemin par lequel il déclenche une attribution de points
+  > *calculée par le moteur*. Chaque action reste bornée par les gardes de sous-phase du moteur
+  > (`SelectMotionCard` exige `GRID` + carte `UNPLAYED`, `FlipMotionCard` exige `SELECTED`,
+  > `RevealMotionCard` exige `QUESTION`, `DoneMotionCard` exige `SELECTED|QUESTION|REVEAL`), toutes
+  > inchangées par ce lot — aucune garde ajoutée, aucun changement moteur.
+  >
+  > ⚠️ **Limite connue, non corrigée par #160** : `Engine.DoneMotionCard` **ne vérifie pas** que
+  > `WINNER_TEAM` vaut `MEMOTION_CURRENT_TEAM` (ni même qu'il appartient à
+  > `MEMOTION_PARTICIPATING_TEAMS`) — il crédite toute équipe existant dans `data.Teams`. La règle
+  > « équipe courante ou personne » est donc, aujourd'hui comme avant ce lot, **une contrainte
+  > d'interface** appliquée identiquement par `/admin` (`GamePage.jsx`) et par `/anim` (#160), pas
+  > une garde moteur. Ajouter cette garde côté moteur serait un changement de comportement à part
+  > entière (risque de régression sur le mode SOLO, où `MEMOTION_CURRENT_TEAM` peut être vide) —
+  > délibérément hors périmètre de #160.
+  >
+  > **`MEMOTION_SET_TEAMS` n'est PAS ajouté** : le choix des équipes participantes reste à la régie
+  > (périmètre explicite de #160, strictement parallèle à `MEMORY_SET_TEAMS` en #159). Conséquence
+  > assumée et identique : un animateur seul ne peut pas composer la table des équipes d'une manche
+  > MEMOTION. Le moteur l'interdirait de toute façon hors `PREPARE`/`READY`
+  > (`NOT_IN_PREPARE_OR_READY_PHASE`).
 - **SET_CLIENT_TYPE** a une règle à part (dépend du type COURANT du client, pas
   d'une liste fixe) — voir sa propre section ci-dessous et
   `internal/server/inbound_allowlist.go`'s `IsSetClientTypeAllowed` : seul un
@@ -785,9 +835,25 @@ Indique à l'interface animateur la prochaine question jouable, pour permettre l
 | TYPE | string | Type de question (SPEEDY, QCM, MEMORY, MEMOTION, ARDOISE) |
 | POINTS | int | Points de base |
 | TIME | int | Durée en secondes |
+| CURRENT_POSITION | int | **v6.2.x (#166)** — rang de la question **courante** dans la liste triée (1-based). `0` si aucune question courante, ou si la question courante ne figure plus dans la liste (supprimée du disque mais toujours courante côté moteur — même cas de repli que la règle §3 ci-dessous) |
+| TOTAL_QUESTIONS | int | **v6.2.x (#166)** — nombre total de questions du quiz (longueur de la liste triée), indépendamment de leur statut |
 
-Payload **vide** (tous les champs absents/zéro-valeur) si plus aucune question n'est jouable —
-fin de partie ou toutes les questions restantes déjà `STOPPED`/`REVEALED`/`PLAYED`.
+Les champs de la **question suivante** (`ID`, `QUESTION`, `CATEGORY`, `TYPE`, `POINTS`, `TIME`)
+sont tous absents/zéro-valeur si plus aucune question n'est jouable — fin de partie ou toutes les
+questions restantes déjà `STOPPED`/`REVEALED`/`PLAYED`.
+
+> ⚠️ **v6.2.x (#166) — le payload n'est plus « tout ou rien ».** `CURRENT_POSITION` et
+> `TOTAL_QUESTIONS` décrivent la question **courante** et le quiz, pas la suivante : ils sont
+> renseignés **même quand il n'y a plus de question suivante**. Sans cette dissociation, la
+> progression affichée par `/anim` (ligne méta, #166) disparaîtrait exactement sur la **dernière**
+> question du quiz — le moment où « 12/12 » est le plus utile. Conséquence côté client : un
+> consommateur ne peut plus déduire « pas de question suivante » de « payload vide », il doit
+> tester l'absence d'`ID` (ce que `useWebSocket.js` fait déjà : `setNextQuestion(MSG?.ID ? MSG : null)`).
+>
+> Conséquence côté serveur : la règle §1 ci-dessous (« aucune question courante → pas de suivante »)
+> ne peut plus court-circuiter `loadQuestions()`, puisque `TOTAL_QUESTIONS` doit être connu même
+> sans question courante. Le surcoût est une lecture disque sur les seuls déclencheurs `NEW_GAME`
+> et HELLO — jamais sur le chemin de `broadcastUpdate`, l'interdit posé plus bas restant entier.
 
 #### Règle de calcul — parité stricte avec `GamePage.jsx` (`nextUnplayedQuestion`)
 
@@ -796,10 +862,23 @@ fin de partie ou toutes les questions restantes déjà `STOPPED`/`REVEALED`/`PLA
 > omettait deux comportements réels du JS. Remplacée ci-dessous par une lecture ligne à ligne de
 > `GamePage.jsx`'s `nextUnplayedQuestion` (le calcul du bouton « à suivre » de la régie).
 
-1. **Aucune question courante → pas de « suivante » du tout.** Si `GameState.QUESTION` est absent
-   (aucune question chargée — ENROLL, NEW_GAME juste après reset, etc.), le résultat est le
-   payload vide, **quel que soit** le contenu de la liste par ailleurs. Ce n'est pas « aucune
-   question disponible n'a été trouvée » (qui impliquerait de chercher), c'est « rien à chercher ».
+1. ~~**Aucune question courante → pas de « suivante » du tout.**~~ **Révisé v6.2.x (#166,
+   arbitrage GATE 2 D2) — divergence assumée avec `/admin`.** Si `GameState.QUESTION` est absent
+   (aucune question chargée — ENROLL, NEW_GAME juste après reset), la recherche démarre à
+   l'**indice 0** et renvoie la **première question jouable du quiz**, au lieu du payload vide.
+   L'animateur dispose ainsi d'un point d'entrée pour démarrer la partie depuis la tablette, sans
+   passer par la régie.
+
+   > **Ceci rompt délibérément la parité stricte avec `GamePage.jsx`** exigée plus bas : la régie,
+   > elle, continue de ne rien afficher dans cet état (`nextUnplayedQuestion` renvoie `null` sur
+   > `if (!currentId)`, `GamePage.jsx:239`). La parité reste la règle pour **tous les autres cas**
+   > (tri, position de départ de la recherche, statuts exclus, absence de bouclage) — c'est le seul
+   > écart, il est nommé ici plutôt que découvert plus tard comme une régression.
+   >
+   > Implémentation : il s'agit de **retirer la sortie anticipée** `if state.Question == nil { return nil }`
+   > de `getNextQuestionPayload`. Le chemin résultant (`currentIndex` restant à `-1`, boucle
+   > démarrant à `0`) est celui que le code emprunte déjà quand la question courante ne figure plus
+   > dans la liste — règle §3 ci-dessous. Aucun mécanisme nouveau.
 2. Charger les questions (mécanisme de `loadQuestions()`, `cmd/server/main.go`), trier par
    `ORDER` croissant, repli sur `ID` (parsé en entier) en cas d'`ORDER` absent — même règle que
    `web/src/utils/questionOrder.js` (`sortQuestionsByOrder`).
@@ -912,6 +991,103 @@ requête sur `loadQuestions()`.
   (arbitrage explicite : MAJEUR-1 porte sur le crédit de points, pas sur le lancement) — impact
   jugé moindre par la revue (visible et corrigeable en cours de manche via PAUSE, contrairement à un
   score mal crédité qui est difficile à corriger après coup).
+
+---
+
+### AWARDED_TEAMS
+
+Informe les interfaces animateur des équipes **déjà créditées pour la question en cours**, avec le
+montant. Sert deux besoins d'un coup (arbitrage GATE 2 A2 de #158, élargi à tous les modes) : confirmer à **tous** les
+animateurs qu'un crédit vient d'avoir lieu, et leur permettre de **bloquer** un second crédit sur
+la même équipe — que le premier vienne d'une autre tablette ou de la régie.
+
+> **Périmètre : tous les modes de jeu conduits depuis `/anim`**, pas seulement ARDOISE — le crédit
+> SPEEDY et QCM déjà livré (#156/#157, bouton de la carte d'équipe) est concerné au même titre.
+> Cette action relève d'un chantier transversal faisant l'objet d'une **issue dédiée, #170** ;
+> #158 (ARDOISE) en est un consommateur, pas le propriétaire.
+
+| Propriété | Valeur |
+|-----------|--------|
+| Direction | `Server→Client` |
+| Cible | `ClientTypeAnim` **exclusivement** — `BroadcastToTypes(msg, ClientTypeAnim)`, comme `NEXT_QUESTION` et `CREDIT_POINTS`. La régie n'est pas destinataire : elle reste sans restriction (voir §"La régie n'est pas contrainte") |
+| Trigger | `TEAM_POINTS` et `BUMPER_POINTS` traités (quelle qu'en soit l'origine, `/admin` ou `/anim`) ; `READY` (changement de question) ; `NEW_GAME` ; `RAZ` ; HELLO d'un client animateur (état initial) |
+
+#### Payload
+
+| Champ | Type | Description |
+|-------|------|-------------|
+| QUESTION_ID | string | ID de la question courante — `""` si aucune. Permet au client de rejeter un payload obsolète arrivé après un changement de question |
+| TEAMS | array | Une entrée par équipe créditée, dans l'ordre chronologique du premier crédit |
+| TEAMS[].TEAM | string | Nom de l'équipe |
+| TEAMS[].POINTS | int | **Somme** des points attribués à cette équipe pour la question courante (une équipe peut être créditée deux fois depuis la régie — voir ci-dessous) |
+| TEAMS[].TIMESTAMP | int64 | Horodatage µs du **premier** crédit de cette équipe pour la question courante |
+
+Tableau **vide** (`[]`, jamais `null`) quand aucune équipe n'a encore été créditée — discipline
+projet, un client qui itère ne doit jamais tomber sur `null`.
+
+#### ⚠️ `POINTS` peut valoir `0` — un montant nul est un verrou valide
+
+Un crédit à **montant nul est un refus explicite** (#170, geste « 0 pt » — refuser une réponse
+emprunte le chemin de crédit normal avec `POINTS: 0`), pas « pas encore traité ». Il produit une
+entrée `TEAMS[]` comme n'importe quel autre crédit : même enregistrement inconditionnel dans
+l'historique, même projection, même verrouillage.
+
+**Un client ne doit jamais tester la présence d'un verrou par la véracité du montant** —
+`if (awardedTeams[team]?.POINTS)` est **faux** pour un refus (`0` est falsy en JS), ce qui
+déverrouillerait silencieusement la ligne et réexposerait exactement les réponses refusées au
+double-crédit. Le test correct porte sur la **présence de l'entrée** dans `TEAMS[]` pour cette
+équipe, jamais sur la valeur de `POINTS` :
+
+```js
+// Correct
+const locked = team in awardedTeamsByName   // ou : awardedTeamsByName[team] !== undefined
+// Faux — casse silencieusement sur un refus (POINTS: 0)
+const locked = !!awardedTeamsByName[team]?.POINTS
+```
+
+Voir `web/src/components/AnimCreditControl.jsx` (composant de crédit unique, seul point
+d'application de cette règle côté frontend) et `contracts/CHANGELOG.md` `[20260816-2]`.
+
+#### Source de vérité — l'historique existant, pas un nouvel état
+
+**Aucun nouveau champ d'état n'est créé.** Le payload est une **projection** de l'historique
+d'événements déjà tenu par le moteur (`Engine.history`, `AddGameEvent`, persisté par `SaveHistory`,
+exposé par `GET /history`, consommé par le PALMARÈS). `handleTeamPoints` **comme**
+`handleBumperPoints` y enregistrent déjà un `GameEvent{EventType: "POINTS_AWARDED", QuestionID,
+TeamName, Points, Timestamp}` — tout ce dont ce mécanisme a besoin y est, quelle que soit
+l'interface d'origine du crédit.
+
+Règle de projection :
+
+```
+événements tels que  EventType == "POINTS_AWARDED"
+                 ET  QuestionID == GameState.Question.ID
+                 ET  Timestamp  >= GameState.GameTime
+regroupés par TeamName ; POINTS = somme, TIMESTAMP = min
+```
+
+- Le filtre sur `TeamName` (et non `WinnerID`) est délibéré : `WinnerID` porte une MAC quand le
+  crédit vise un joueur, alors que `TeamName` est **toujours** renseigné (`models.go:457`). Une
+  équipe créditée via l'un de ses joueurs compte donc comme créditée.
+- **Le filtre `Timestamp >= GameState.GameTime` est indispensable** : l'historique n'est pas remis à
+  zéro entre deux questions, seulement à `NEW_GAME`/`RAZ`. `GameTime` est l'horodatage du départ de
+  la question courante (`Engine.Start`/`StartImmediate`) : sans ce filtre, **rejouer une question
+  déjà créditée la laisserait bloquée pour toujours**.
+- Projection recalculée **uniquement sur les déclencheurs listés**, jamais sur le chemin de
+  `broadcastUpdate` — même discipline que `NEXT_QUESTION`, pour la même raison : un parcours de
+  l'historique à chaque tick de chronomètre est un coût qui grandit avec la partie.
+
+#### La régie n'est pas contrainte
+
+`/admin` n'est pas destinataire de cette action et **ne reçoit aucune garde** : elle peut créditer,
+recréditer, surcharger. C'est l'état de fait actuel — il n'existe aujourd'hui **aucune garde de
+double-crédit**, ni côté interface (`GamePage.jsx`, bouton ARDOISE inconditionnel) ni côté moteur
+(`UpdateTeamScore` n'inspecte pas l'historique) — et #158 ne le change pas. Le blocage est une règle
+**de l'interface animateur uniquement**, appliquée côté client à partir de ce payload.
+
+Conséquence assumée : un second crédit venu de la régie s'ajoute au premier ; c'est pourquoi
+`POINTS` transporte la **somme** et non le dernier montant, afin que l'animateur voie ce que
+l'équipe a réellement reçu pour cette question.
 
 ---
 

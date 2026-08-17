@@ -564,6 +564,28 @@ type GameEvent struct {
 }
 ```
 
+### Seconde source de vérité : verrouillage du crédit animateur (v6.2.x, #170)
+
+Depuis #170, l'historique de partie (`Engine.history` / `AddGameEvent` / `SaveHistory`) sert **deux**
+consommateurs, pas un seul :
+
+1. **PALMARÈS** (`GET /palmares`, `handlePalmares`) — filtre déjà les événements à `Points <= 0`
+   (`internal/server/http.go:558`), inchangé par #170.
+2. **Verrouillage du crédit côté interface animateur** (`/anim`, action `AWARDED_TEAMS`,
+   `contracts/websocket-actions.md` §"Animateur") — **nouveau consommateur, aucun nouvel état**.
+   Le serveur projette à la volée les événements `EventType == "POINTS_AWARDED"` de la question
+   courante (`QuestionID == GameState.Question.ID` **et** `Timestamp >= GameState.GameTime`,
+   regroupés par `TeamName`) pour déterminer, pour chaque équipe, si elle a déjà été créditée pour
+   cette question et avec quel montant total — **tous modes confondus, quelle que soit
+   l'interface d'origine du crédit** (`/admin` ou `/anim`).
+
+**Un événement à `Points == 0` (refus explicite, geste "0 pt") est enregistré et projeté
+exactement comme un crédit ordinaire** — le PALMARÈS l'écarte (montant non positif), le
+verrouillage animateur le traite comme une entrée à part entière (voir
+`contracts/websocket-actions.md` §"AWARDED_TEAMS" §"⚠️ `POINTS` peut valoir `0`"). Les deux
+consommateurs lisent donc le **même** historique avec des filtres différents ; aucune structure
+persistée n'a été ajoutée ou modifiée pour permettre ce second usage.
+
 ## Configuration System File (config.json)
 
 ```json

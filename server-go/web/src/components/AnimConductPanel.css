@@ -1,105 +1,137 @@
-/* AnimConductPanel — zone de conduite SPEEDY, page animateur (#156, F5).
-   Cibles ≥ 62px (tablette). */
+/* AnimConductPanel — zone de conduite, page animateur (#166/F5, cinq
+   lignes permanentes). Cibles ≥ 62px (tablette) — jamais réduites (F7).
+   CSS mort de #156/#165 (.anim-conduct-pair/.anim-conduct-single/
+   .anim-conduct-idle/.anim-conduct-waiting-text/.anim-conduct-empty)
+   supprimé : les branches conditionnelles qu'il habillait n'existent
+   plus. */
 
 .anim-conduct {
   width: 100%;
   height: 100%;
   display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: var(--space-4);
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3);
   box-sizing: border-box;
+  min-height: 0;
 }
 
-.anim-conduct-waiting-text,
-.anim-conduct-empty {
-  font-size: 1.1rem;
-  opacity: 0.6;
-  font-style: italic;
+/* ------------------------------------------------------------------ */
+/* L1 — cinq gestes globaux                                            */
+/* ------------------------------------------------------------------ */
+
+.anim-conduct-l1 {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: var(--space-2);
 }
 
 .anim-conduct-btn {
   min-height: 62px;
   border: none;
   border-radius: var(--radius-lg);
-  font-size: 1.3rem;
+  /* F7 — clamp() pour que "CONTINUER" tienne à ~120px de large (colonne
+     2fr en 1024x768) sans réduire les surfaces tactiles. */
+  font-size: clamp(0.7rem, 2.6vw, 1.05rem);
   font-weight: 700;
-  letter-spacing: 0.02em;
+  letter-spacing: 0.01em;
   cursor: pointer;
   color: #ffffff;
-  transition: transform var(--transition-fast, 150ms ease), filter var(--transition-fast, 150ms ease);
-}
-
-.anim-conduct-btn:active {
-  transform: scale(0.97);
-  filter: brightness(0.9);
-}
-
-/* Pair layout (STARTED/PAUSED) — deux boutons à parts égales */
-.anim-conduct-pair {
-  display: flex;
-  gap: var(--space-4);
-  width: 100%;
-  max-width: 700px;
-}
-
-.anim-conduct-pair .anim-conduct-btn {
-  flex: 1;
-  min-height: 96px;
-}
-
-.anim-conduct-btn-pause {
-  background: var(--warning, #eab308);
-}
-
-.anim-conduct-btn-stop {
-  background: var(--error, #ef4444);
-}
-
-/* Single layout (RÉPONSE) */
-.anim-conduct-single .anim-conduct-btn {
-  min-width: 260px;
-  min-height: 96px;
-}
-
-.anim-conduct-btn-reveal {
-  background: var(--primary-500, #6366f1);
-}
-
-/* Idle layout (LANCER + enchaînement) */
-.anim-conduct-idle {
-  display: flex;
-  gap: var(--space-4);
-  width: 100%;
-  max-width: 700px;
-  flex-wrap: wrap;
-}
-
-.anim-conduct-btn-start {
-  flex: 1;
-  min-width: 200px;
-  min-height: 96px;
-  background: var(--success, #22c55e);
-}
-
-.anim-conduct-btn-next {
-  flex: 1;
-  min-width: 200px;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 2px;
-  background: var(--bg-tertiary, #334155);
+  gap: 1px;
+  padding: 4px 3px;
+  transition: transform var(--transition-fast, 150ms ease), filter var(--transition-fast, 150ms ease);
 }
 
-.anim-conduct-next-label {
-  font-size: 0.75rem;
-  text-transform: uppercase;
-  opacity: 0.8;
+.anim-conduct-btn:active:not(:disabled) {
+  transform: scale(0.97);
+  filter: brightness(0.9);
+}
+
+.anim-conduct-btn-sub {
+  font-family: var(--font-body, sans-serif);
+  font-size: 0.62rem;
   font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  opacity: 0.85;
 }
 
-.anim-conduct-next-id {
-  font-size: 1.2rem;
+/* Couleurs sémantiques (#165, étendues #166) : jamais de gris pour un
+   bouton cliquable. 'off' EST le seul état non cliquable de cette liste
+   (disabled natif) — c'est précisément pour ça qu'il reste gris. */
+.anim-conduct-btn-go {
+  background: var(--success, #22c55e);
+}
+
+.anim-conduct-btn-optional {
+  background: var(--info, #3b82f6);
+}
+
+.anim-conduct-btn-danger {
+  background: var(--error, #ef4444);
+}
+
+.anim-conduct-btn-off {
+  background: var(--bg-tertiary, #334155);
+  color: var(--text-secondary, #94a3b8);
+  cursor: default;
+}
+
+/* ------------------------------------------------------------------ */
+/* Bloc central (#171/F3) — L2 (gestes du mode) + L3 (QCM/réservé) +   */
+/* L4 (note #168), seul endroit qui défile. min-height:0 est ce qui    */
+/* empêche une L4 longue de repousser "à suivre" (L5) hors écran — un  */
+/* enfant flex refuse de rétrécir sous la taille de son contenu tant   */
+/* que min-height:0 n'est pas explicite (F7).                         */
+/* ------------------------------------------------------------------ */
+
+.anim-conduct-mid {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  overflow-y: auto;
+}
+
+/* L3 — grille QCM ou emplacement réservé (#166/F9, ex-L2). Seule ligne
+   du bloc central autorisée à grandir librement au sein du bloc — les
+   autres (L2, L4) restent à leur taille de contenu. */
+.anim-conduct-l3 {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
+
+.anim-conduct-l3 .anim-qcm-options {
+  flex: 1;
+}
+
+/* ------------------------------------------------------------------ */
+/* L2 / L4 — réservées, vides, sans état ni action (#166/E4)           */
+/* ------------------------------------------------------------------ */
+
+.anim-conduct-l2,
+.anim-conduct-l4 {
+  display: flex;
+  flex: none;
+}
+
+.anim-conduct-reserved {
+  flex: 1;
+  border: 1.5px dashed #47536b;
+  border-radius: var(--radius-md);
+  min-height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 4px var(--space-2);
+  font-size: 0.72rem;
+  font-style: italic;
+  color: var(--text-secondary, #94a3b8);
 }

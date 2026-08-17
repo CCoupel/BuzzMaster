@@ -173,6 +173,29 @@ GOOS=linux GOARCH=arm64 go build -o buzzcontrol ./cmd/server
 scp buzzcontrol pi@raspberrypi.local:~/
 ```
 
+### Ouverture automatique du navigateur (étendu v6.2.0.10 — #164)
+
+Au démarrage, si `auto_open_browsers: true` (défaut, `config.json` / `AutoOpenBrowsers`), le
+serveur ouvre automatiquement des onglets navigateur vers l'URL primaire détectée, dans cet ordre
+fixe, avec un délai de 500 ms entre chaque ouverture :
+
+| # | Page | Libellé log |
+|---|------|-------------|
+| 1 | `/admin` | régie |
+| 2 | `/anim` | animateur |
+| 3 | `/tv` | affichage TV |
+| 4 | `/` | accueil joueurs |
+| 5 (si `debug: true`) | `/logs` | logs (debug) |
+
+Soit 4 onglets en usage normal, 5 en mode debug (~1,5 s / ~2 s de séquence d'ouverture).
+`auto_open_browsers: false` désactive entièrement cette ouverture (aucun onglet).
+
+Implémentation : `startupPages(debug bool) []startupPage` (`cmd/server/main.go`) — fonction pure
+sans effet de bord, testée indépendamment (`startup_pages_test.go`) ; `displayAndOpenURLs` itère le
+résultat et reste seule responsable des effets de bord (`openBrowser`, logs). Avant #164, `/admin`
+n'était pas dans la liste et le libellé de `/anim` affichait à tort `(admin)` — reliquat de
+l'ancien alias `/anim` → `/admin` supprimé par #155.
+
 ## Stopping the Server
 
 ```bash

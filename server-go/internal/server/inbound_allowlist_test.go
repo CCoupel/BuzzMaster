@@ -50,10 +50,37 @@ func TestIsActionAllowed(t *testing.T) {
 		{"FLIP_MEMORY_CARD from tv", protocol.ActionFlipMemoryCard, ClientTypeTV, true},
 		{"FLIP_MEMORY_CARD from vplayer", protocol.ActionFlipMemoryCard, ClientTypeVPlayer, true},
 		{"FLIP_MEMORY_CARD from admin", protocol.ActionFlipMemoryCard, ClientTypeAdmin, false},
+		// #159/B1/T1 (v6.2.x) — capability widening: the interface animateur
+		// can now flip a MEMORY card directly (first action where /anim
+		// MUTATES game state rather than only arbitrating it). admin stays
+		// OUT (flips through its embedded TV preview iframe instead) and
+		// MEMORY_SET_TEAMS stays admin-only — neither is touched by this
+		// widening, asserted explicitly below so a future accidental
+		// broadening of either would fail here.
+		{"FLIP_MEMORY_CARD from anim", protocol.ActionFlipMemoryCard, ClientTypeAnim, true},
+		{"MEMORY_SET_TEAMS from anim", protocol.ActionMemorySetTeams, ClientTypeAnim, false},
+		{"MEMORY_SET_TEAMS from admin", protocol.ActionMemorySetTeams, ClientTypeAdmin, true},
+		// #160/B1/T8b (v6.2.x) — non-régression : `tv` conserve MEMOTION_SELECT,
+		// `admin` conserve les quatre autres (Flip/StopTimer/Reveal/Done), et
+		// `vplayer` reste refusé sur les cinq — ce lot n'ajoute QUE `anim` à
+		// chaque entrée (couvert séparément par inbound_allowlist_anim_test.go).
 		{"MEMOTION_SELECT from tv", protocol.ActionMotionSelect, ClientTypeTV, true},
 		{"MEMOTION_SELECT from vplayer", protocol.ActionMotionSelect, ClientTypeVPlayer, false},
+		{"MEMOTION_SELECT from admin", protocol.ActionMotionSelect, ClientTypeAdmin, false},
 		{"MEMOTION_FLIP from admin", protocol.ActionMotionFlip, ClientTypeAdmin, true},
 		{"MEMOTION_FLIP from tv", protocol.ActionMotionFlip, ClientTypeTV, false},
+		{"MEMOTION_FLIP from vplayer", protocol.ActionMotionFlip, ClientTypeVPlayer, false},
+		{"MEMOTION_STOP_TIMER from admin", protocol.ActionMotionStopTimer, ClientTypeAdmin, true},
+		{"MEMOTION_STOP_TIMER from tv", protocol.ActionMotionStopTimer, ClientTypeTV, false},
+		{"MEMOTION_STOP_TIMER from vplayer", protocol.ActionMotionStopTimer, ClientTypeVPlayer, false},
+		{"MEMOTION_REVEAL from admin", protocol.ActionMotionReveal, ClientTypeAdmin, true},
+		{"MEMOTION_REVEAL from tv", protocol.ActionMotionReveal, ClientTypeTV, false},
+		{"MEMOTION_REVEAL from vplayer", protocol.ActionMotionReveal, ClientTypeVPlayer, false},
+		{"MEMOTION_DONE from admin", protocol.ActionMotionDone, ClientTypeAdmin, true},
+		{"MEMOTION_DONE from tv", protocol.ActionMotionDone, ClientTypeTV, false},
+		{"MEMOTION_DONE from vplayer", protocol.ActionMotionDone, ClientTypeVPlayer, false},
+		{"MEMOTION_SET_TEAMS from admin", protocol.ActionMotionSetTeams, ClientTypeAdmin, true},
+		{"MEMOTION_SET_TEAMS from anim", protocol.ActionMotionSetTeams, ClientTypeAnim, false},
 
 		// VPlayer-only.
 		{"PLAYER_CONNECT from vplayer", protocol.ActionPlayerConnect, ClientTypeVPlayer, true},

@@ -1,0 +1,160 @@
+/* AnimMemoryGrid — grille MEMORY tactile, page animateur (#159/F1+F2).
+   Pensée pour le doigt, pas pour la souris : cible tactile >= 62px même
+   dans le pire cas (24 cartes, 6 colonnes). Le nombre de colonnes ne
+   dépend JAMAIS de la largeur du conteneur (utils/memoryGrid.js) — seule
+   la TAILLE des cartes s'adapte ici. */
+
+.anim-memory {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+/* F2 — bandeau de compteurs, au-dessus de la grille. */
+.anim-memory-hud {
+  flex: none;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.anim-memory-hud-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--bg-tertiary, #334155);
+  border-radius: var(--radius-full);
+  padding: 3px var(--space-3);
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.anim-memory-hud-key {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 0.62rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  opacity: 0.65;
+}
+
+.anim-memory-hud-value {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Équipe active — mise en évidence, même famille que .phase-badge.phase-running
+   (Timer.css) pour cohérence visuelle "en cours". */
+.anim-memory-hud-turn {
+  background: color-mix(in srgb, var(--success, #22c55e) 20%, var(--bg-tertiary, #334155));
+  color: var(--success, #22c55e);
+  border: 1.5px solid var(--success, #22c55e);
+}
+
+.anim-memory-hud-turn .anim-memory-hud-key {
+  opacity: 0.85;
+}
+
+/* F1 — grille, colonnes FIXES sur le nombre de cartes (jamais la largeur
+   d'écran) : voir utils/memoryGrid.js. Seule la taille des cartes
+   s'adapte à l'espace disponible via 1fr. */
+.anim-memory-grid {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: repeat(var(--anim-memory-cols, 4), 1fr);
+  grid-auto-rows: minmax(62px, 1fr);
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.anim-memory-card {
+  appearance: none;
+  -webkit-appearance: none;
+  min-height: 62px;
+  border-radius: var(--radius-md);
+  border: 2px solid #33415a;
+  background: #243349;
+  color: #cbd5e1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 4px 6px;
+  font-size: 0.85rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: transform var(--transition-fast, 150ms ease), filter var(--transition-fast, 150ms ease);
+  overflow: hidden;
+}
+
+.anim-memory-card:disabled {
+  cursor: default;
+}
+
+.anim-memory-card:active:not(:disabled) {
+  transform: scale(0.96);
+}
+
+/* Dos de carte face cachée ("down" ET "inert" — les deux sont face
+   cachée, seule l'interactivité diffère) — MÊME design que
+   PlayerDisplay.css `.memory-card-back`/`.memory-card-letter`
+   (dégradé violet + lettre A/B/C..., pas une icône générique inventée
+   ici). Repris précisément après un bug remonté (issue #159, commentaire
+   du 2026-08-17) : le dos différait visuellement de /tv et la vue
+   joueur. La lettre elle-même vient du même ordre mélangé que /tv
+   (utils/memoryGrid.js, #159/F0) — même lettre pour la même carte
+   partout. */
+.anim-memory-card-down,
+.anim-memory-card-inert {
+  background: linear-gradient(145deg, #6366f1 0%, #8b5cf6 50%, #a855f7 100%);
+  border-color: rgba(255, 255, 255, 0.3);
+}
+
+.anim-memory-card-letter {
+  font-size: 1.6rem;
+  font-weight: 800;
+  color: #ffffff;
+  text-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
+}
+
+/* État "retournée" — visible, pas encore validée par le serveur. */
+.anim-memory-card-up {
+  background: #1e3a5f;
+  border-color: #60a5fa;
+  color: #dbeafe;
+}
+
+/* État "paire trouvée" — couleur du propriétaire (MEMORY_PAIR_OWNERS),
+   repli vert par défaut (mode SOLO/pas de propriétaire connu). */
+.anim-memory-card-matched {
+  background: color-mix(in srgb, var(--anim-memory-owner-color, #22c55e) 22%, #1e293b);
+  border-color: var(--anim-memory-owner-color, #22c55e);
+  color: #f1f5f9;
+  cursor: default;
+  opacity: 0.9;
+}
+
+/* État "inerte hors STARTED" — même dos que "down" (ci-dessus), juste
+   estompé et non cliquable. */
+.anim-memory-card-inert {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.anim-memory-card-image {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  border-radius: var(--radius-sm);
+}
+
+.anim-memory-card-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+}

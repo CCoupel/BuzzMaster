@@ -1,0 +1,101 @@
+/* AnimArdoiseList — liste des copies ARDOISE, zone équipes de /anim
+   (#158/F2). Remplace AnimTeamCard à la même place en mode ARDOISE. */
+
+.anim-ardoise-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.anim-ardoise-row {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  background: var(--bg-tertiary, #334155);
+  border: 1px solid transparent;
+  box-sizing: border-box;
+  /* Même correctif que #170 sur AnimTeamCard : une ligne ne doit jamais
+     être comprimée sous la hauteur de son contenu (AnimCreditControl,
+     62px) — sinon le débordement est peint sous la ligne suivante au lieu
+     de déclencher le scroll réel de .anim-zone-teams. */
+  flex-shrink: 0;
+}
+
+.anim-ardoise-row.no-answer {
+  border-style: dashed;
+  border-color: #47536b;
+  opacity: 0.7;
+}
+
+.anim-ardoise-row-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.anim-ardoise-rank {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.3rem;
+  height: 1.3rem;
+  padding: 0 0.3rem;
+  border-radius: var(--radius-sm);
+  background: var(--info, #3b82f6);
+  color: #04162e;
+  font-size: 0.7rem;
+  font-weight: 800;
+}
+
+.anim-ardoise-team-dot {
+  flex: none;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+}
+
+.anim-ardoise-team-name {
+  font-size: 0.9rem;
+  font-weight: 700;
+}
+
+.anim-ardoise-delay {
+  margin-left: auto;
+  flex: none;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 0.7rem;
+  font-variant-numeric: tabular-nums;
+  opacity: 0.7;
+}
+
+.anim-ardoise-no-answer-hint {
+  margin-left: auto;
+  flex: none;
+  font-size: 0.7rem;
+  font-style: italic;
+  opacity: 0.6;
+}
+
+.anim-ardoise-body {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+/* Copie longue : retour à la ligne, jamais de troncature. */
+.anim-ardoise-text {
+  flex: 1;
+  min-width: 0;
+  font-size: 0.9rem;
+  overflow-wrap: anywhere;
+}
+
+.anim-ardoise-text.no-answer {
+  opacity: 0.5;
+  font-style: italic;
+}

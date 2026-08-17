@@ -251,12 +251,22 @@ func (a *App) init() {
 	a.wsHub = server.NewWebSocketHub()
 
 	// ARDOISE_INPUT broadcast coalescer (#129 T2.1/T2.2) — collapses a burst
-	// of admin UPDATEs into at most one per ardoiseCoalesceWindow. The emit
-	// closure reads live state via broadcastUpdateTo at the moment it
+	// of admin+anim UPDATEs into at most one per ardoiseCoalesceWindow. The
+	// emit closure reads live state via broadcastUpdateTo at the moment it
 	// actually fires (never a buffered payload — see BroadcastCoalescer's
 	// doc comment for why that's what makes this safe).
+	//
+	// ClientTypeAnim added (#158 B1): without it, a live ARDOISE game
+	// conducted from /anim showed a frozen list of team answers throughout
+	// the players' typing, only refreshing on the next phase change
+	// (STOP/REVEAL) — too late for the mode's whole point of watching
+	// answers land one by one. GAME.ARDOISE_ANSWERS already reaches
+	// ClientTypeAnim unfiltered (SerializeForWebClient), and
+	// broadcastUpdateTo has routed to ClientTypeAnim since #162 — the
+	// only gap was this call site never asking for it. /tv, /vplayer and
+	// /buzzer stay excluded, as before.
 	a.ardoiseCoalescer = NewBroadcastCoalescer(ardoiseCoalesceWindow, func() {
-		a.broadcastUpdateTo(server.ClientTypeAdmin)
+		a.broadcastUpdateTo(server.ClientTypeAdmin, server.ClientTypeAnim)
 	})
 
 	// Eviction reason registry (#123 B3) — short-lived, bounded
@@ -1064,6 +1074,7 @@ func (a *App) handleWebMessage(incoming *protocol.IncomingMessage) {
 		a.logger.Info(game.LogComponentEngine, "RAZ - Reset all scores")
 		a.engine.RAZScores()
 		a.broadcastUpdate()
+		a.broadcastAwardedTeams() // #170 — RAZScores clears history, every lock is released
 
 	case protocol.ActionRemote:
 		a.handleRemote(msg)
@@ -1179,6 +1190,7 @@ func (a *App) handleWebMessage(incoming *protocol.IncomingMessage) {
 		a.broadcastEnrollmentUpdate()
 		a.broadcastNextQuestion() // #155/#156 B5 — no current question after NEW_GAME, clears anim's preview
 		a.resetCreditPointsForQuestion(nil) // code review MAJEUR-1 — no current question, nothing to credit
+		a.broadcastAwardedTeams() // #170 — InitGame resets history, every lock is released
 
 	case protocol.ActionUpdateQuizMeta:
 		var payload protocol.QuizMetaPayload
@@ -1440,8 +1452,12 @@ func (a *App) handlePong(clientID string, msg *protocol.Message) {
 	if a.engine.IsGamePrepare() {
 		a.engine.SetBumperReady(bumperID)
 
-		// Check if all ready
-		if a.engine.AreAllTeamsReady() {
+		// Check if all ready. #172 B2: PREPARE's exit condition is the two
+		// criteria combined — AreAllTeamsReady (buzzers) AND ParticipantsConform
+		// (selection valid for the question's type). AreAllTeamsReady itself is
+		// deliberately left unmodified; the two stay separate, readable
+		// functions, joined only here.
+		if a.engine.AreAllTeamsReady() && a.engine.ParticipantsConform() {
 			a.engine.TransitionToReady()
 			a.broadcastReady()
 		}
@@ -1602,6 +1618,7 @@ func (a *App) handleReady(msg *protocol.Message) {
 
 	a.broadcastNextQuestion() // #155/#156 B5 — current question just changed
 	a.resetCreditPointsForQuestion(question) // code review MAJEUR-1 — pointsInput resets to question.POINTS on selection too
+	a.broadcastAwardedTeams() // #170 — new current question, locks reset (or reflect prior credits if replayed)
 }
 
 // loadQuestion loads a question from storage by ID
@@ -1878,7 +1895,15 @@ func (a *App) handleReorderQuestions(msg *protocol.Message) {
 func (a *App) handleForceReady() {
 	server.LogInfo(game.LogComponentEngine, "FORCE_READY requested (debug)")
 	a.engine.ForceReady()
-	a.broadcastReady()
+	// #172 B5: ForceReady may stay in PREPARE if the selected participants are
+	// not conform for the question's type (arbitrage G — it only skips the PONG
+	// wait, never participant-selection conformity). Only announce READY
+	// (LED_SET_ALL + ACTION_READY) if the engine actually reached it; the
+	// unconditional broadcastUpdate() below still reflects bumpers/teams marked
+	// ready either way.
+	if a.engine.IsGameReady() {
+		a.broadcastReady()
+	}
 	a.broadcastUpdate()
 }
 
@@ -2189,6 +2214,7 @@ func (a *App) handleBumperPoints(msg *protocol.Message) {
 	a.engine.AddGameEvent(event)
 
 	a.broadcastUpdate()
+	a.broadcastAwardedTeams() // #170 — this credit may lock the team for other animateurs
 }
 
 func (a *App) handleTeamPoints(msg *protocol.Message) {
@@ -2241,6 +2267,7 @@ func (a *App) handleTeamPoints(msg *protocol.Message) {
 	a.engine.AddGameEvent(event)
 
 	a.broadcastUpdate()
+	a.broadcastAwardedTeams() // #170 — this credit may lock the team for other animateurs
 }
 
 func (a *App) handleSetClientType(clientID string, currentType server.ClientType, msg *protocol.Message) {
@@ -4308,6 +4335,11 @@ func (a *App) sendStateToClient(clientID string, clientType server.ClientType) {
 		// Code review MAJEUR-1 — same reasoning as NEXT_QUESTION just above:
 		// targeted at this one connecting client, not broadcastCreditPoints().
 		a.wsHub.SendToClient(clientID, a.buildCreditPointsMessage())
+		// #170 — same reasoning: a newly-(re)connecting tablet must see the
+		// current credit locks immediately, targeted rather than
+		// broadcastAwardedTeams() which would redundantly re-push to every
+		// other already-connected animateur tablet too.
+		a.wsHub.SendToClient(clientID, a.buildAwardedTeamsMessage())
 	}
 }
 
@@ -4417,26 +4449,42 @@ var nextQuestionExcludedStatuses = map[string]bool{
 // getNextQuestionPayload computes the next playable question for the
 // interface animateur (contracts/websocket-actions.md §"Animateur"
 // NEXT_QUESTION) — an exact port of GamePage.jsx's nextUnplayedQuestion
-// (~line 215-224), NOT a reinvention (#155/#156 B5, plan §2.2 parity
-// requirement):
+// (~line 215-224) for the next-question fields, NOT a reinvention (#155/#156
+// B5, plan §2.2 parity requirement), REVISED v6.2.x #166 (GATE 2 D2 — see
+// contracts/CHANGELOG.md [20260815-2] for the rationale):
 //
-//  1. No current question (GameState.Question == nil or empty ID) -> no
-//     next question at all (nil), regardless of what's available elsewhere
-//     in the list. This matches the JS exactly: an animateur mid-ENROLL or
-//     between games sees no "next" until a question is actually loaded.
+//  1. No current question (GameState.Question == nil or empty ID) -> the
+//     search below starts at index 0, exactly the same path taken when the
+//     current question exists but is no longer found in the list (step 3).
+//     This is a DELIBERATE divergence from GamePage.jsx's nextUnplayedQuestion,
+//     which returns null outright in this case (`if (!currentId) return
+//     null`, GamePage.jsx:239) — /anim gets a "next" pointing at the quiz's
+//     first playable question so the tablette can start a game without going
+//     through /admin; /admin's own behavior is untouched.
 //  2. Sort ALL questions by ORDER (int), falling back to ID parsed as int
 //     when ORDER is absent — same rule as web/src/utils/questionOrder.js
-//     sortQuestionsByOrder, ported field-for-field.
+//     sortQuestionsByOrder, ported field-for-field. Always performed, even
+//     with no current question, because TOTAL_QUESTIONS must be known
+//     regardless (step 6).
 //  3. Locate the CURRENT question's position in that sorted order. If it
 //     isn't found there at all (e.g. deleted from disk but still the
-//     engine's current question), the search below starts at index 0 — the
-//     same behavior JS gets from `sortedQuestions.findIndex` returning -1
-//     (`i = -1 + 1 = 0`), not a bug being special-cased here.
+//     engine's current question, or simply absent per step 1), the search
+//     below starts at index 0 — the same behavior JS gets from
+//     `sortedQuestions.findIndex` returning -1 (`i = -1 + 1 = 0`).
 //  4. Return the first question STRICTLY AFTER that position whose STATUS
 //     isn't in nextQuestionExcludedStatuses. Never wraps back to search
 //     before that position — a question already passed is never "next"
 //     again just because everything after it is also done.
-//  5. Nothing found after that position -> nil (end of playable questions).
+//  5. Nothing found after that position -> the next-question fields
+//     (ID/Question/Category/Type/Points/Time) stay at their zero value —
+//     end of playable questions.
+//  6. CURRENT_POSITION (1-based rank of the CURRENT question in the sorted
+//     list, 0 if none/not found) and TOTAL_QUESTIONS (length of the sorted
+//     list) are computed unconditionally and populated on every return path,
+//     including step 5's "nothing next" case — deliberately NOT part of the
+//     "all-or-nothing" group the other fields belong to, so /anim's "n/total"
+//     progression survives on the quiz's last question (contracts/CHANGELOG.md
+//     [20260815-1]).
 //
 // The (deliberately Go 1-based-index-free) phase gate JS has at the top of
 // nextUnplayedQuestion — `if (!['STOPPED','REVEALED',...].includes(phase))
@@ -4447,10 +4495,10 @@ var nextQuestionExcludedStatuses = map[string]bool{
 // silent behavioral gap.
 func (a *App) getNextQuestionPayload() *protocol.NextQuestionPayload {
 	state := a.engine.GetState()
-	if state.Question == nil || state.Question.ID == "" {
-		return nil
+	currentID := ""
+	if state.Question != nil {
+		currentID = state.Question.ID
 	}
-	currentID := state.Question.ID
 
 	type sortableQuestion struct {
 		id    string
@@ -4483,12 +4531,20 @@ func (a *App) getNextQuestionPayload() *protocol.NextQuestionPayload {
 	sort.SliceStable(sorted, func(i, j int) bool { return sorted[i].order < sorted[j].order })
 
 	currentIndex := -1
-	for i, sq := range sorted {
-		if sq.id == currentID {
-			currentIndex = i
-			break
+	if currentID != "" {
+		for i, sq := range sorted {
+			if sq.id == currentID {
+				currentIndex = i
+				break
+			}
 		}
 	}
+
+	currentPosition := 0
+	if currentIndex != -1 {
+		currentPosition = currentIndex + 1
+	}
+	totalQuestions := len(sorted)
 
 	for i := currentIndex + 1; i < len(sorted); i++ {
 		status := string(a.engine.GetQuestionStatus(sorted[i].id))
@@ -4496,7 +4552,11 @@ func (a *App) getNextQuestionPayload() *protocol.NextQuestionPayload {
 			continue
 		}
 		q := sorted[i].data
-		payload := &protocol.NextQuestionPayload{ID: sorted[i].id}
+		payload := &protocol.NextQuestionPayload{
+			ID:              sorted[i].id,
+			CurrentPosition: currentPosition,
+			TotalQuestions:  totalQuestions,
+		}
 		if v, ok := q["QUESTION"].(string); ok {
 			payload.Question = v
 		}
@@ -4518,15 +4578,17 @@ func (a *App) getNextQuestionPayload() *protocol.NextQuestionPayload {
 		}
 		return payload
 	}
-	return nil
+	return &protocol.NextQuestionPayload{
+		CurrentPosition: currentPosition,
+		TotalQuestions:  totalQuestions,
+	}
 }
 
 // buildNextQuestionMessage serializes getNextQuestionPayload's result into a
-// ready-to-send NEXT_QUESTION *protocol.Message — nil payload (no question
-// eligible) becomes the zero-value NextQuestionPayload{} (empty payload,
-// contracts/websocket-actions.md §"Animateur": "tous les champs absents/
-// zéro-valeur" — no omitempty, same discipline as ClientsPayload/AnimCount
-// and the project-wide GameState convention, CLAUDE.md).
+// ready-to-send NEXT_QUESTION *protocol.Message. getNextQuestionPayload
+// always returns a non-nil payload since #166 (CurrentPosition/
+// TotalQuestions must be populated even with no next question) — the nil
+// guard is kept defensively rather than relied upon.
 func (a *App) buildNextQuestionMessage() *protocol.Message {
 	payload := a.getNextQuestionPayload()
 	if payload == nil {
@@ -4600,6 +4662,111 @@ func (a *App) handleSetCreditPoints(msg *protocol.Message) {
 	a.broadcastCreditPoints()
 }
 
+// getAwardedTeamsPayload computes, for the CURRENT question, every team
+// already credited — a projection of Engine.GetHistory() (v6.2.x, #170 —
+// contracts/websocket-actions.md §"Animateur" AWARDED_TEAMS), NOT a new
+// piece of GameState: handleTeamPoints and handleBumperPoints already record
+// a GameEvent{EventType: "POINTS_AWARDED", ...} on every credit, whichever
+// interface it came from.
+//
+// Rule (see the contract for the full rationale):
+//   - QuestionID == "" (no current question) -> empty payload, no history
+//     scan at all.
+//   - Otherwise, keep events where EventType == "POINTS_AWARDED" AND
+//     QuestionID matches the current question AND Timestamp >= GameTime.
+//     The GameTime floor is NOT optional: history is only cleared at
+//     NEW_GAME/RAZ, never between two questions, so replaying an
+//     already-credited question would otherwise stay locked forever.
+//   - Grouped by TeamName, never WinnerID: WinnerID carries a bumper MAC
+//     when the credit targets a player (SPEEDY's nominal /anim path via
+//     BUMPER_POINTS) — grouping on it would never lock anything in SPEEDY.
+//     TeamName is always populated regardless of target (models.go).
+//   - Points is the SUM of every matching event for that team (the régie has
+//     no double-credit guard and can add to an already-locked team) and
+//     Timestamp is the FIRST matching event's — relies on GetHistory()
+//     returning events in insertion order, which is also chronological
+//     order (AddGameEvent appends under lock, Timestamp stamped
+//     synchronously right before the call).
+//   - A zero-point event still produces (or adds to) an entry: a "0 pt"
+//     refusal is a real credit for locking purposes, never filtered out.
+func (a *App) getAwardedTeamsPayload() *protocol.AwardedTeamsPayload {
+	state := a.engine.GetState()
+	questionID := ""
+	if state.Question != nil {
+		questionID = state.Question.ID
+	}
+
+	teams := make([]protocol.AwardedTeamEntry, 0)
+	if questionID != "" {
+		index := make(map[string]int, 4) // TeamName -> its slot in teams
+		for _, event := range a.engine.GetHistory() {
+			if event.EventType != "POINTS_AWARDED" || event.QuestionID != questionID || event.Timestamp < state.GameTime {
+				continue
+			}
+			if i, ok := index[event.TeamName]; ok {
+				teams[i].Points += event.Points
+				continue
+			}
+			index[event.TeamName] = len(teams)
+			teams = append(teams, protocol.AwardedTeamEntry{
+				Team:      event.TeamName,
+				Points:    event.Points,
+				Timestamp: event.Timestamp,
+			})
+		}
+	}
+
+	return &protocol.AwardedTeamsPayload{QuestionID: questionID, Teams: teams}
+}
+
+// buildAwardedTeamsMessage serializes getAwardedTeamsPayload's result into a
+// ready-to-send AWARDED_TEAMS *protocol.Message.
+func (a *App) buildAwardedTeamsMessage() *protocol.Message {
+	data, _ := json.Marshal(a.getAwardedTeamsPayload())
+	msg, _ := protocol.NewMessage(protocol.ActionAwardedTeams, nil)
+	msg.Msg = data
+	return msg
+}
+
+// broadcastAwardedTeams pushes the current AWARDED_TEAMS to every connected
+// interface animateur client (#170) — same fan-out shape as
+// broadcastNextQuestion/broadcastCreditPoints. Called from every trigger the
+// contract lists (TEAM_POINTS, BUMPER_POINTS, READY, NEW_GAME, RAZ) —
+// NEVER from broadcastUpdate/broadcastUpdateTo, which would mean a full
+// history scan on every timer tick (same discipline, same reason, as
+// NEXT_QUESTION's own loadQuestions() restriction).
+func (a *App) broadcastAwardedTeams() {
+	a.wsHub.BroadcastToTypes(a.buildAwardedTeamsMessage(), server.ClientTypeAnim)
+}
+
+// startupPage describes one browser tab opened automatically at server startup.
+type startupPage struct {
+	path string
+	name string
+}
+
+// startupPages returns the ordered list of pages to open automatically at
+// server startup. Pure function (no side effect, no process spawned) so it
+// can be unit-tested independently of displayAndOpenURLs, which is the one
+// that actually launches browser processes via openBrowser.
+//
+// Order: /admin (régie), /anim (animateur), /tv (affichage TV),
+// / (accueil joueurs), then /logs (logs (debug)) if debug is enabled.
+func startupPages(debug bool) []startupPage {
+	pages := []startupPage{
+		{"/admin", "régie"},
+		{"/anim", "animateur"},
+		{"/tv", "affichage TV"},
+		{"/", "accueil joueurs"},
+	}
+
+	if debug {
+		pages = append(pages, startupPage{"/logs", "logs (debug)"})
+	}
+
+	return pages
+}
+
 // displayAndOpenURLs shows all accessible URLs and opens the browser
 func displayAndOpenURLs(httpPort int, autoOpen bool, debug bool) {
 	log.Println("")
@@ -4649,24 +4816,8 @@ func displayAndOpenURLs(httpPort int, autoOpen bool, debug bool) {
 		return
 	}
 
-	// Open browsers to /, /tv and /anim pages with small delays
-	// Order: /anim (admin), /tv (display), / (home), /logs (if debug)
-	pagesToOpen := []struct {
-		path string
-		name string
-	}{
-		{"/anim", "admin"},
-		{"/tv", "TV display"},
-		{"/", "home"},
-	}
-
-	// Add /logs page if debug mode is enabled
-	if debug {
-		pagesToOpen = append(pagesToOpen, struct {
-			path string
-			name string
-		}{"/logs", "logs (debug)"})
-	}
+	// Open browsers to /admin, /anim, /tv and / pages with small delays
+	pagesToOpen := startupPages(debug)
 
 	for i, page := range pagesToOpen {
 		url := primaryURL + page.path

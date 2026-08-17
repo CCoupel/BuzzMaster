@@ -1,0 +1,152 @@
+/* AnimMotionGrid — grille MEMOTION tactile, page animateur (#160/F4/F9).
+   Pensée pour le doigt, pas pour la souris : cible tactile >= 62px même
+   dans le pire cas (20 cartes, 5 colonnes). Le nombre de colonnes ne
+   dépend JAMAIS de la largeur du conteneur (utils/motionGrid.js) — seule
+   la TAILLE des cartes s'adapte ici. */
+
+.anim-motion {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.anim-motion-hud {
+  flex: none;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.anim-motion-hud-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--bg-tertiary, #334155);
+  border-radius: var(--radius-full);
+  padding: 3px var(--space-3);
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.anim-motion-hud-key {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 0.62rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  opacity: 0.65;
+}
+
+.anim-motion-hud-value {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Équipe active — même famille visuelle que AnimMemoryGrid.css
+   .anim-memory-hud-turn (cohérence "en cours" entre les deux modes). */
+.anim-motion-hud-turn {
+  background: color-mix(in srgb, var(--success, #22c55e) 20%, var(--bg-tertiary, #334155));
+  color: var(--success, #22c55e);
+  border: 1.5px solid var(--success, #22c55e);
+}
+
+.anim-motion-hud-turn .anim-motion-hud-key {
+  opacity: 0.85;
+}
+
+/* Grille — colonnes FIXES sur le nombre de cartes (jamais la largeur
+   d'écran) : voir utils/motionGrid.js. Seule la taille des cartes
+   s'adapte à l'espace disponible via 1fr. */
+.anim-motion-grid {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: repeat(var(--anim-motion-cols, 4), 1fr);
+  grid-auto-rows: minmax(62px, 1fr);
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.anim-motion-card {
+  appearance: none;
+  -webkit-appearance: none;
+  min-height: 62px;
+  border-radius: var(--radius-md);
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  text-align: center;
+  padding: 4px 6px;
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: #ffffff;
+  cursor: pointer;
+  transition: transform var(--transition-fast, 150ms ease), filter var(--transition-fast, 150ms ease), opacity var(--transition-fast, 150ms ease);
+  overflow: hidden;
+}
+
+.anim-motion-card:disabled {
+  cursor: default;
+}
+
+.anim-motion-card:active:not(:disabled) {
+  transform: scale(0.96);
+}
+
+/* Carte libre, sélectionnable (subphase GRID) — MÊME dégradé violet que
+   /tv (PlayerDisplay.jsx memotion-card), pas une palette inventée ici. */
+.anim-motion-card-active {
+  background: linear-gradient(145deg, #6366f1 0%, #8b5cf6 50%, #a855f7 100%);
+}
+
+/* Carte libre, hors GRID (dont MEMORIZE) — même dégradé, éteinte et non
+   cliquable. */
+.anim-motion-card-inert {
+  background: linear-gradient(145deg, #6366f1 0%, #8b5cf6 50%, #a855f7 100%);
+  opacity: 0.45;
+  cursor: default;
+}
+
+.anim-motion-card-coord {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 1.4rem;
+  font-weight: 800;
+  text-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
+}
+
+.anim-motion-card-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+.anim-motion-card-stars {
+  font-size: 0.75rem;
+  letter-spacing: 0.05em;
+  opacity: 0.9;
+}
+
+/* Carte jouée — couleur de l'équipe gagnante (fallback gris neutre si
+   personne n'a gagné, posé en style inline, cf. AnimMotionGrid.jsx),
+   réduite à 90%, non cliquable. */
+.anim-motion-card-done {
+  background: color-mix(in srgb, var(--anim-motion-winner-color, #4b4368) 55%, #1e293b);
+  border-color: var(--anim-motion-winner-color, #4b4368);
+  transform: scale(0.9);
+  opacity: 0.95;
+  cursor: default;
+}
+
+.anim-motion-card-team {
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  opacity: 0.95;
+}

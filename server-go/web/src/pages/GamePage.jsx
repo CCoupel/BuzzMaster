@@ -7,6 +7,15 @@ import { categoryMeta } from '../utils/categoryUtils'
 import { getRgbColor } from '../utils/colorUtils'
 import { sortQuestionsByOrder } from '../utils/questionOrder'
 import { sortTeamsByBuzzOrder } from '../utils/buzzOrder'
+import { formatArdoiseDelay, sortArdoiseEntries } from '../utils/ardoiseOrder'
+import { getMotionGridCols, getMotionCardCoord, getMotionCardPoints, isMotionSecretMode } from '../utils/motionGrid'
+import {
+  canSelectQuestion as canSelectQuestionRule,
+  canStart as canStartRule,
+  isPlaying as isPlayingRule,
+  canReveal as canRevealRule,
+} from '../utils/phaseRules'
+import { isTeamReady, prepareWaitReason } from '../utils/prepareWaitReason'
 import {
   calcQcmPenalty,
   calcQcmTeamAward,
@@ -23,17 +32,6 @@ import CategoryBadge from '../components/CategoryBadge'
 import QuestionCard from '../components/QuestionCard'
 import NetworkWarningBanner from '../components/NetworkWarningBanner'
 import './GamePage.css'
-
-// ARDOISE panel: delay since question start, from the first-keystroke timestamp (#117).
-// Mirrors the buzzer reaction-time convention (microseconds → seconds, 3 decimals).
-// Returns null when there is nothing meaningful to show (no STARTED_AT, no reference
-// gameTime, or a negative delay caused by a resync/replay).
-function formatArdoiseDelay(answer, gameTime) {
-  if (!answer || !answer.STARTED_AT || !gameTime) return null
-  const delaySeconds = (answer.STARTED_AT - gameTime) / 1000000
-  if (!Number.isFinite(delaySeconds) || delaySeconds < 0) return null
-  return `${delaySeconds.toFixed(3)} s`
-}
 
 export default function GamePage() {
   const {
@@ -200,23 +198,12 @@ export default function GamePage() {
   // ARDOISE panel: teams with an answer first, ordered by first-keystroke arrival (#117).
   // Falls back to SUBMITTED_AT when STARTED_AT is 0 (answers recorded before this fix).
   // Teams without an answer keep the current team-list order, appended at the end.
-  const sortedArdoiseEntries = useMemo(() => {
-    const answers = gameState.ARDOISE_ANSWERS || {}
-    const answered = []
-    const unanswered = []
-    vplayerTeams.forEach((team, idx) => {
-      const teamName = team.NAME || team.name
-      const answer = answers[teamName]
-      if (answer) {
-        const orderKey = answer.STARTED_AT > 0 ? answer.STARTED_AT : answer.SUBMITTED_AT
-        answered.push({ team, teamName, answer, orderKey, idx })
-      } else {
-        unanswered.push({ team, teamName, answer: null, idx })
-      }
-    })
-    answered.sort((a, b) => (a.orderKey - b.orderKey) || (a.idx - b.idx))
-    return [...answered, ...unanswered]
-  }, [vplayerTeams, gameState.ARDOISE_ANSWERS])
+  // #158/F1 — règle extraite dans utils/ardoiseOrder.js (consommée aussi par /anim,
+  // AnimArdoiseList.jsx) ; extraction pure, comportement inchangé.
+  const sortedArdoiseEntries = useMemo(
+    () => sortArdoiseEntries(vplayerTeams, gameState.ARDOISE_ANSWERS),
+    [vplayerTeams, gameState.ARDOISE_ANSWERS]
+  )
 
   // Sort questions by ORDER if available, otherwise by ID
   // #149 — mutualisé avec QuestionsPage.jsx (utils/questionOrder.js) : ce
@@ -390,12 +377,14 @@ export default function GamePage() {
     }
   }
 
-  const isPlaying = gameState.phase === 'STARTED' || gameState.phase === 'PAUSED'
-  const canSelectQuestion = ['STOPPED', 'REVEALED', 'PREPARE', 'READY', 'NEW_GAME'].includes(gameState.phase)
+  // #166/F4b — règles d'activation extraites vers utils/phaseRules.js (source
+  // unique partagée avec /anim) ; extraction pure, comportement inchangé.
+  const isPlaying = isPlayingRule(gameState.phase)
+  const canSelectQuestion = canSelectQuestionRule(gameState.phase)
   // REPONSE button active only in STOPPED phase after a question was played
-  const canReveal = gameState.phase === 'STOPPED' && gameState.question?.STATUS === 'STOPPED'
+  const canReveal = canRevealRule(gameState.phase, gameState.question)
   // START button only active in READY phase
-  const canStart = gameState.phase === 'READY'
+  const canStart = canStartRule(gameState.phase)
 
   return (
     <>
@@ -460,7 +449,7 @@ export default function GamePage() {
               className="next-question-btn"
               onClick={() => handleQuestionSelect(nextUnplayedQuestion)}
               title={`Aller à la question #${nextUnplayedQuestion.ID}`}
-              style={['STARTED', 'PAUSED', 'COUNTDOWN', 'ENROLL'].includes(gameState.phase) ? { opacity: 0.5, pointerEvents: 'none' } : undefined}
+              style={!canSelectQuestion ? { opacity: 0.5, pointerEvents: 'none' } : undefined}
             >
               <span className="nq-label">à suivre : #{nextUnplayedQuestion.ID}</span>
               {nextUnplayedQuestion.CATEGORY && (() => {
@@ -541,10 +530,16 @@ export default function GamePage() {
           const teamsWithBuzzers = sortedTeams.filter(t => t.buzzers && t.buzzers.length > 0)
           const selected = teamsWithBuzzers.filter(t => selectedTeams.includes(t.name))
           const available = teamsWithBuzzers.filter(t => !selectedTeams.includes(t.name))
+          // #172/C2 — motif d'attente PREPARE (buzzers, ou sélection non
+          // conforme à la règle du mode) : miroir client-side en lecture
+          // seule de participantsConform (#172/B1) — n'influence aucune
+          // action, seulement le texte affiché.
+          const waitReason = prepareWaitReason(gameState.phase, gameState.question, teamsWithBuzzers, gameState)
           return (
             <div className={`memory-team-selector ${isSolo ? 'solo-mode' : 'multi-mode'}`}>
               <div className="memory-selector-label">
                 {isSolo ? 'Mode SOLO' : gameState.question.MEMORY_MODE === 'CHACUN_SON_TOUR' ? 'Chacun son tour' : 'Tant que je gagne'}
+                {waitReason && ` · ${waitReason}`}
               </div>
               <div className="memory-chips-row">
                 {selected.map((team, idx) => {
@@ -568,16 +563,19 @@ export default function GamePage() {
                 )}
                 {available.map(team => {
                   const teamColor = getRgbColor(team.COLOR)
+                  // #172/C1 (arbitrage H) — équipe non prête : reste dans la
+                  // liste, en retrait visuel, non sélectionnable.
+                  const notReady = !isTeamReady(team)
                   return (
                     <div
                       key={team.name}
-                      className="memory-team-chip available"
+                      className={`memory-team-chip available${notReady ? ' not-ready' : ''}`}
                       style={{ backgroundColor: teamColor, '--team-color': teamColor }}
-                      onClick={() => toggleTeam(team.name)}
-                      title="Cliquer pour ajouter"
+                      onClick={notReady ? undefined : () => toggleTeam(team.name)}
+                      title={notReady ? 'Buzzer(s) non prêt(s)' : 'Cliquer pour ajouter'}
                     >
                       <span className="chip-name">{team.name}</span>
-                      <span className="chip-action">+</span>
+                      {!notReady && <span className="chip-action">+</span>}
                     </div>
                   )
                 })}
@@ -593,10 +591,13 @@ export default function GamePage() {
           const teamsWithBuzzers = sortedTeams.filter(t => t.buzzers && t.buzzers.length > 0)
           const selected = teamsWithBuzzers.filter(t => selectedMotionTeams.includes(t.name))
           const available = teamsWithBuzzers.filter(t => !selectedMotionTeams.includes(t.name))
+          // #172/C2 — même motif d'attente que MEMORY (voir bloc ci-dessus).
+          const waitReason = prepareWaitReason(gameState.phase, gameState.question, teamsWithBuzzers, gameState)
           return (
             <div className={`memory-team-selector ${isSolo ? 'solo-mode' : 'multi-mode'}`}>
               <div className="memory-selector-label">
                 🃏 MEMOTION · {isSolo ? 'Mode SOLO' : motionMode === 'CHACUN_SON_TOUR' ? 'Chacun son tour' : 'Tant que je gagne'}
+                {waitReason && ` · ${waitReason}`}
               </div>
               <div className="memory-chips-row">
                 {selected.map((team, idx) => {
@@ -620,16 +621,18 @@ export default function GamePage() {
                 )}
                 {available.map(team => {
                   const teamColor = getRgbColor(team.COLOR)
+                  // #172/C1 (arbitrage H) — même traitement que MEMORY.
+                  const notReady = !isTeamReady(team)
                   return (
                     <div
                       key={team.name}
-                      className="memory-team-chip available"
+                      className={`memory-team-chip available${notReady ? ' not-ready' : ''}`}
                       style={{ backgroundColor: teamColor, '--team-color': teamColor }}
-                      onClick={() => toggleMotionTeam(team.name)}
-                      title="Cliquer pour ajouter"
+                      onClick={notReady ? undefined : () => toggleMotionTeam(team.name)}
+                      title={notReady ? 'Buzzer(s) non prêt(s)' : 'Cliquer pour ajouter'}
                     >
                       <span className="chip-name">{team.name}</span>
-                      <span className="chip-action">+</span>
+                      {!notReady && <span className="chip-action">+</span>}
                     </div>
                   )
                 })}
@@ -720,7 +723,7 @@ export default function GamePage() {
           {filteredQuestions.map((question) => {
             const isCurrentQuestion = gameState.question?.ID === question.ID
             const isUnplayed = !['STOPPED', 'REVEALED', 'PLAYED'].includes(question.STATUS)
-            const dimmed = !isCurrentQuestion && isUnplayed && ['STARTED', 'PAUSED', 'COUNTDOWN', 'ENROLL'].includes(gameState.phase)
+            const dimmed = !isCurrentQuestion && isUnplayed && !canSelectQuestion
             return (
               <div key={question.ID} style={dimmed ? { opacity: 0.5 } : undefined}>
                 <QuestionCard
@@ -809,14 +812,7 @@ export default function GamePage() {
             const currentTeam = gameState.MEMOTION_CURRENT_TEAM
             const motionCards = gameState.question?.MOTION_CARDS || []
             const motionCfg = gameState.question?.MOTION_CONFIG
-            const diffPts = d => {
-              if (motionCfg) {
-                if (d === 1) return motionCfg.POINTS_1_STAR ?? 1
-                if (d === 2) return motionCfg.POINTS_2_STAR ?? 3
-                if (d === 3) return motionCfg.POINTS_3_STAR ?? 5
-              }
-              return d === 3 ? 5 : d === 2 ? 3 : 1
-            }
+            const diffPts = d => getMotionCardPoints(d, motionCfg)
 
             if (subphase === 'MEMORIZE') {
               return (
@@ -829,10 +825,10 @@ export default function GamePage() {
               )
             }
 
-            const isSecretMode = (gameState.question?.MOTION_MEMORIZE_DURATION || 0) > 0
+            const isSecretMode = isMotionSecretMode(gameState.question)
             const motionCount = motionCards.length
-            const motionCols = motionCount <= 4 ? 2 : motionCount <= 6 ? 3 : motionCount <= 12 ? 4 : 5
-            const getCoord = (idx, cols) => `${String.fromCharCode(65 + Math.floor(idx / cols))}${(idx % cols) + 1}`
+            const motionCols = getMotionGridCols(motionCount)
+            const getCoord = getMotionCardCoord
 
             if (subphase === 'GRID') {
               return (

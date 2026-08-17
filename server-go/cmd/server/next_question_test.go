@@ -70,12 +70,36 @@ func newNextQuestionTestApp(t *testing.T) *App {
 	return app
 }
 
-func TestGetNextQuestionPayload_NoCurrentQuestion_ReturnsNil(t *testing.T) {
+// TestGetNextQuestionPayload_NoCurrentQuestion_ReturnsFirstPlayable —
+// #166/B2 (T2), REPLACES TestGetNextQuestionPayload_NoCurrentQuestion_ReturnsNil.
+//
+// contracts/CHANGELOG.md [20260815-2] (GATE 2 D2, [CHANGED]): "aucune
+// question courante -> payload vide" devient "aucune question courante ->
+// première question jouable de la liste triée". The old nil-return
+// assertion documented exactly the behavior #166 deliberately reverses
+// (deliberate /anim-only divergence from GamePage.jsx's nextUnplayedQuestion,
+// which still returns null in this case — parity intentionally broken here,
+// not elsewhere) — rewritten, not neutralized, per T11's requirement.
+func TestGetNextQuestionPayload_NoCurrentQuestion_ReturnsFirstPlayable(t *testing.T) {
 	app := newNextQuestionTestApp(t)
-	writeQuestionFile(t, app.config.Storage.QuestionsDir, "1", 1, nil)
+	dir := app.config.Storage.QuestionsDir
+	writeQuestionFile(t, dir, "1", 1, nil)
+	writeQuestionFile(t, dir, "2", 2, nil)
+	// No app.engine.Ready() call at all — no current question, exactly the
+	// NEW_GAME/ENROLL situation the matrix names.
 
-	if got := app.getNextQuestionPayload(); got != nil {
-		t.Errorf("expected nil (no current question), got %+v", got)
+	got := app.getNextQuestionPayload()
+	if got == nil {
+		t.Fatal("getNextQuestionPayload must never return nil since #166 (CurrentPosition/TotalQuestions are always populated)")
+	}
+	if got.ID != "1" {
+		t.Errorf("expected first playable question (ID=1) with no current question, got ID=%q", got.ID)
+	}
+	if got.CurrentPosition != 0 {
+		t.Errorf("expected CurrentPosition=0 (no current question), got %d", got.CurrentPosition)
+	}
+	if got.TotalQuestions != 2 {
+		t.Errorf("expected TotalQuestions=2, got %d", got.TotalQuestions)
 	}
 }
 
@@ -97,7 +121,17 @@ func TestGetNextQuestionPayload_ReturnsFirstAfterCurrentInOrder(t *testing.T) {
 	}
 }
 
-func TestGetNextQuestionPayload_NoneAfterCurrent_ReturnsNil(t *testing.T) {
+// TestGetNextQuestionPayload_LastQuestion_PositionPopulatedNoNextID —
+// #166/T1 ("dernière question"), REPLACES
+// TestGetNextQuestionPayload_NoneAfterCurrent_ReturnsNil.
+//
+// contracts/CHANGELOG.md [20260815-1]: CURRENT_POSITION/TOTAL_QUESTIONS are
+// NOT part of the next-question "all-or-nothing" group — they stay
+// populated even when nothing is left to play, so /anim's "n/total"
+// progression survives on the quiz's last question. The old nil-return
+// assertion is exactly the behavior this contract entry reverses —
+// rewritten, not neutralized.
+func TestGetNextQuestionPayload_LastQuestion_PositionPopulatedNoNextID(t *testing.T) {
 	app := newNextQuestionTestApp(t)
 	dir := app.config.Storage.QuestionsDir
 	writeQuestionFile(t, dir, "1", 1, nil)
@@ -105,8 +139,18 @@ func TestGetNextQuestionPayload_NoneAfterCurrent_ReturnsNil(t *testing.T) {
 
 	app.engine.Ready("2", &game.Question{ID: "2"}) // last in order
 
-	if got := app.getNextQuestionPayload(); got != nil {
-		t.Errorf("expected nil (current is last), got %+v", got)
+	got := app.getNextQuestionPayload()
+	if got == nil {
+		t.Fatal("getNextQuestionPayload must never return nil since #166")
+	}
+	if got.ID != "" {
+		t.Errorf("expected no next question (empty ID, current is last), got ID=%q", got.ID)
+	}
+	if got.CurrentPosition != 2 {
+		t.Errorf("expected CurrentPosition=2 (current is #2 of 2), got %d", got.CurrentPosition)
+	}
+	if got.TotalQuestions != 2 {
+		t.Errorf("expected TotalQuestions=2, got %d", got.TotalQuestions)
 	}
 }
 
@@ -176,6 +220,134 @@ func TestGetNextQuestionPayload_SkipsExcludedStatuses(t *testing.T) {
 		t.Fatalf("expected #2 (STOPPED) to be skipped, next should be ID=3, got %+v", got)
 	}
 }
+
+// ---------------------------------------------------------------------------
+// #166/T1 — CURRENT_POSITION/TOTAL_QUESTIONS, cas limites (contracts/
+// CHANGELOG.md [20260815-1]). "Dernière question" is
+// TestGetNextQuestionPayload_LastQuestion_PositionPopulatedNoNextID above ;
+// "aucune question courante" is
+// TestGetNextQuestionPayload_NoCurrentQuestion_ReturnsFirstPlayable above.
+// ---------------------------------------------------------------------------
+
+// TestGetNextQuestionPayload_PositionTotal_Middle — "milieu" : la question
+// courante n'est ni la première ni la dernière du quiz.
+func TestGetNextQuestionPayload_PositionTotal_Middle(t *testing.T) {
+	app := newNextQuestionTestApp(t)
+	dir := app.config.Storage.QuestionsDir
+	writeQuestionFile(t, dir, "1", 1, nil)
+	writeQuestionFile(t, dir, "2", 2, nil)
+	writeQuestionFile(t, dir, "3", 3, nil)
+
+	app.engine.Ready("2", &game.Question{ID: "2"}) // middle of 3
+
+	got := app.getNextQuestionPayload()
+	if got == nil {
+		t.Fatal("expected a non-nil payload")
+	}
+	if got.CurrentPosition != 2 {
+		t.Errorf("expected CurrentPosition=2 (question #2 is 2nd of 3), got %d", got.CurrentPosition)
+	}
+	if got.TotalQuestions != 3 {
+		t.Errorf("expected TotalQuestions=3, got %d", got.TotalQuestions)
+	}
+	if got.ID != "3" {
+		t.Errorf("expected next question ID=3, got %q", got.ID)
+	}
+}
+
+// TestGetNextQuestionPayload_PositionTotal_CurrentNotInList — "question
+// courante absente de la liste" (deleted from disk, or the ENGINE's current
+// question simply isn't part of the loaded set) : CurrentPosition falls
+// back to 0, exactly like "no current question at all" — the contract
+// makes no distinction between the two ([20260815-1]: "0 si aucune question
+// courante OU si elle ne figure plus dans la liste").
+func TestGetNextQuestionPayload_PositionTotal_CurrentNotInList(t *testing.T) {
+	app := newNextQuestionTestApp(t)
+	dir := app.config.Storage.QuestionsDir
+	writeQuestionFile(t, dir, "1", 1, nil)
+	writeQuestionFile(t, dir, "2", 2, nil)
+
+	app.engine.Ready("99", &game.Question{ID: "99"}) // not on disk
+
+	got := app.getNextQuestionPayload()
+	if got == nil {
+		t.Fatal("expected a non-nil payload")
+	}
+	if got.CurrentPosition != 0 {
+		t.Errorf("expected CurrentPosition=0 (current question not found in list), got %d", got.CurrentPosition)
+	}
+	if got.TotalQuestions != 2 {
+		t.Errorf("expected TotalQuestions=2, got %d", got.TotalQuestions)
+	}
+	if got.ID != "1" {
+		t.Errorf("expected search to restart from index 0 (ID=1), got %q", got.ID)
+	}
+}
+
+// TestGetNextQuestionPayload_PositionTotal_EmptyList — "liste vide" : aucune
+// question chargée du tout (QuestionsDir vide). Ne doit ni paniquer ni
+// retourner nil.
+func TestGetNextQuestionPayload_PositionTotal_EmptyList(t *testing.T) {
+	app := newNextQuestionTestApp(t)
+	// QuestionsDir reste vide — aucun writeQuestionFile, pas de Ready().
+
+	got := app.getNextQuestionPayload()
+	if got == nil {
+		t.Fatal("expected a non-nil payload even with an empty question list")
+	}
+	if got.ID != "" {
+		t.Errorf("expected no next question (empty ID), got %q", got.ID)
+	}
+	if got.CurrentPosition != 0 {
+		t.Errorf("expected CurrentPosition=0, got %d", got.CurrentPosition)
+	}
+	if got.TotalQuestions != 0 {
+		t.Errorf("expected TotalQuestions=0, got %d", got.TotalQuestions)
+	}
+}
+
+// TestGetNextQuestionPayload_PositionTotal_NonContiguousOrder — "ORDER non
+// contigu" : la position/le total reflètent le RANG trié, jamais la valeur
+// brute du champ ORDER (qui peut avoir des trous — suppressions, réordonnancements
+// manuels côté QuestionsPage).
+func TestGetNextQuestionPayload_PositionTotal_NonContiguousOrder(t *testing.T) {
+	app := newNextQuestionTestApp(t)
+	dir := app.config.Storage.QuestionsDir
+	writeQuestionFile(t, dir, "a", 1, nil)
+	writeQuestionFile(t, dir, "b", 50, nil)
+	writeQuestionFile(t, dir, "c", 100, nil)
+
+	app.engine.Ready("b", &game.Question{ID: "b"}) // ORDER=50, but rank 2 of 3
+
+	got := app.getNextQuestionPayload()
+	if got == nil {
+		t.Fatal("expected a non-nil payload")
+	}
+	if got.CurrentPosition != 2 {
+		t.Errorf("expected CurrentPosition=2 (sorted rank, not the raw ORDER=50 value), got %d", got.CurrentPosition)
+	}
+	if got.TotalQuestions != 3 {
+		t.Errorf("expected TotalQuestions=3, got %d", got.TotalQuestions)
+	}
+	if got.ID != "c" {
+		t.Errorf("expected next question ID=c, got %q", got.ID)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// #166/T3 — non-régression de la parité B5 (contracts/websocket-actions.md
+// §"Animateur" NEXT_QUESTION). Les tests ci-dessus (ReturnsFirstAfterCurrentInOrder,
+// CurrentNotInList_SearchesFromStart, CustomOrder_RespectsOrderFieldNotID,
+// FallsBackToIDWhenOrderAbsent, SkipsExcludedStatuses) et les tests
+// d'intégration ci-dessous (HELLO, READY, filtrage par ClientType,
+// non-déclenchement depuis broadcastUpdate) sont restés INTACTS — le tri,
+// la localisation de la question courante, l'exclusion des STATUS déjà
+// joués, le jamais-de-bouclage et le ciblage /ws/anim exclusif n'ont pas
+// changé avec #166. Seuls les deux cas où l'ancien code retournait nil
+// (aucune question courante ; plus rien après la courante) ont été
+// réécrits ci-dessus, exactement là où le contrat [20260815-1]/[20260815-2]
+// les change délibérément.
+// ---------------------------------------------------------------------------
 
 // TestHandleWebMessage_Anim_ReceivesNextQuestionOnHello is the HELLO
 // integration case: a connecting animateur must receive NEXT_QUESTION

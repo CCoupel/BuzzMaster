@@ -4,13 +4,28 @@ import { useGame } from '../hooks/GameContext'
 import { useCategories } from '../hooks/useCategories'
 import { categoryMeta } from '../utils/categoryUtils'
 import { sortTeamsByBuzzOrder, getRankBadge, formatReactionTime } from '../utils/buzzOrder'
+import { sortArdoiseEntries } from '../utils/ardoiseOrder'
 import { resolvePointsAward, resolvePointsTarget, calcQcmTeamAward } from '../utils/pointsAward'
+import { isRevealed } from '../utils/phaseRules'
+import { prepareWaitReason } from '../utils/prepareWaitReason'
+import { getQuestionTypeMeta } from '../utils/questionTypeMeta'
+import { getMotionCardPoints } from '../utils/motionGrid'
+import { getPhaseBadge } from '../utils/phaseBadge'
+import { canAwardPoints } from '../utils/canAwardPoints'
 import { QCM_COLORS } from '../constants/colors'
 import Timer from '../components/Timer'
-import CategoryBadge from '../components/CategoryBadge'
 import AnimTeamCard from '../components/AnimTeamCard'
 import AnimConductPanel from '../components/AnimConductPanel'
+import AnimAnswerZone from '../components/AnimAnswerZone'
+import AnimCreditControl from '../components/AnimCreditControl'
+import AnimArdoiseList from '../components/AnimArdoiseList'
 import './AnimPage.css'
+
+// #158/F3 — phases où la liste ARDOISE remplace les cartes équipe. Mêmes
+// phases que les critères d'acceptation du plan (STARTED/PAUSED/STOPPED/
+// REVEALED) — les copies arrivent en direct dès STARTED, PAUSED inclus
+// (l'animateur peut suspendre le chrono sans perdre la vue des réponses).
+const ARDOISE_LIST_PHASES = ['STARTED', 'PAUSED', 'STOPPED', 'REVEALED']
 
 // Phases pendant lesquelles l'ordre de buzz (rang, réordonnancement) est
 // actif — même règle que GamePage.jsx (utils/buzzOrder.js).
@@ -21,6 +36,15 @@ const RANK_BADGE_PHASES = ['STARTED', 'PAUSED', 'REVEALED']
 // Crédit actif uniquement une fois la question arrêtée (GamePage.jsx:1077).
 const CREDIT_PHASES = ['STOPPED', 'REVEALED']
 
+// #166/F3 — libellés des modes de tour MEMORY/MEMOTION (D5, "puce mode de
+// tour"). Affichée même si ces modes ne sont pas encore conduits depuis
+// /anim — cf. modèle Go (models.go:224-230, MemoryMode).
+const MEMORY_MODE_LABEL = {
+  SOLO: 'Solo',
+  CHACUN_SON_TOUR: 'Chacun son tour',
+  TANT_QUE_JE_GAGNE: 'Tant que je gagne',
+}
+
 const STATUS_LABEL = {
   connected: 'Connecté',
   connecting: 'Connexion...',
@@ -28,22 +52,22 @@ const STATUS_LABEL = {
 }
 
 /**
- * AnimPage — interface animateur (`/anim`, #155/#156/#157).
+ * AnimPage — interface animateur (`/anim`, #155/#156/#157/#163/#165/#166).
  *
- * Gabarit à 3 zones (plan _work/reports/plan-20260813-094321.md §4 F4) :
- *   - Zone A (contexte) : question courante, chronomètre + phase, statut de
- *     connexion, question suivante.
- *   - Zone B (conduite, #156/F5) : gestes de pilotage SPEEDY (AnimConductPanel),
- *     contextuels à la phase — jamais un bouton inactif "pour information".
- *   - Zone C (équipes, #156/F6) : AnimTeamCard enrichie (rang de buzz, temps
- *     de réaction, bouton de crédit) sans réécriture du composant — voir
- *     AnimTeamCard.jsx (point d'extension `children`). #157 (mode QCM,
- *     plan _work/reports/plan-20260813-151543.md) y ajoute la couleur de
- *     réponse choisie par équipe et rend le montant de crédit PAR ÉQUIPE
- *     (chaque équipe a sa propre pénalité d'indices) au lieu d'un montant
- *     unique — le verrou de buzz étant PAR ÉQUIPE (`engine.go:1404-1409`,
- *     tous types sauf MEMORY/MEMOTION), une équipe = un buzzer = une
- *     couleur, donc pas de vue par joueur à construire.
+ * Gabarit à quatre zones (#166/F6, plan
+ * `_work/reports/plan-20260815-144925.md`) :
+ *   - Zone contexte (bandeau) : ligne méta (statut, catégorie, type,
+ *     progression n/total, #ID, options conditionnelles, points — F3),
+ *     énoncé, zone réponse permanente (AnimAnswerZone, F10), chronomètre en
+ *     colonne dédiée (F12).
+ *   - Zone conduite (AnimConductPanel, #166/F5) : cinq lignes permanentes
+ *     (L1 cinq gestes globaux, "à suivre", L2 grille QCM/réservé, L3/L4
+ *     réservées) — le composant calcule lui-même l'état de chaque geste
+ *     depuis `phase`/`question` (utils/phaseRules.js), AnimPage ne lui
+ *     passe plus de booléens précalculés.
+ *   - Zone équipes (AnimTeamCard enrichie, #156/#157) — INCHANGÉE par
+ *     #166 : seule sa place dans la grille change (AnimPage.css).
+ *   - Bande régie réservée (#166/F8, #167) — pleine largeur, vide.
  *
  * Tablette paysage, pas de Navbar régie (App.jsx ne l'affiche que sur
  * /admin/* désormais — #155/F2). Connecté sur /ws/anim (ClientTypeAnim,
@@ -56,6 +80,8 @@ export default function AnimPage() {
     teams,
     bumpers,
     nextQuestion,
+    questionPosition,
+    awardedTeams,
     creditPoints,
     startGame,
     stopGame,
@@ -65,6 +91,12 @@ export default function AnimPage() {
     selectQuestion,
     setTeamPoints,
     setBumperPoints,
+    flipMemoryCard,
+    selectMotionCard,
+    flipMotionCard,
+    stopMotionTimer,
+    revealMotionCard,
+    doneMotionCard,
   } = useGame()
 
   // Veille écran — reprend le motif PlayerDisplay.jsx:912-921 : wake lock
@@ -105,13 +137,69 @@ export default function AnimPage() {
 
   const question = gameState.question
   const categoryInfo = question?.CATEGORY ? categoryMeta(question.CATEGORY, customCategories) : null
-  const nextCategoryInfo = nextQuestion?.CATEGORY ? categoryMeta(nextQuestion.CATEGORY, customCategories) : null
+  // #166/F3 — icône + libellé de type (D4), repli SPEEDY géré par
+  // getQuestionTypeMeta lui-même (même convention que #163).
+  const typeMeta = getQuestionTypeMeta(question?.TYPE)
+  // #166 — verrou de la zone réponse (F10) ET du marquage QCM en L2 (F9),
+  // seule source : phaseRules.isRevealed. Remplace l'inline
+  // `gameState.phase === 'REVEALED'` répété à trois endroits avant #166.
+  const revealed = isRevealed(gameState.phase)
+  // #171/F2 — badge de phase déplacé de la colonne chrono vers la ligne
+  // réponse (voir utils/phaseBadge.js).
+  const phaseBadge = getPhaseBadge(gameState.phase)
 
-  // Zone B — mêmes conditions d'activation que /admin (GamePage.jsx:373-378),
-  // seule la présentation change (AnimConductPanel, #156/F5).
-  const isPlaying = gameState.phase === 'STARTED' || gameState.phase === 'PAUSED'
-  const canReveal = gameState.phase === 'STOPPED' && gameState.question?.STATUS === 'STOPPED'
-  const canStart = gameState.phase === 'READY'
+  // #160/F8 — MEMOTION, sur le modèle exact de isMemoryQuestion (#159, plus
+  // bas dans le fichier, zone équipes). La manche entière se joue en phase
+  // STARTED (les 5 sous-phases sont dans MEMOTION_SUBPHASE, pas dans
+  // gameState.phase) — aucun impact sur CREDIT_PHASES ci-dessus : AC7 tient
+  // par construction, pas par garde ajoutée ici.
+  const isMemotionQuestion = question?.TYPE === 'MEMOTION'
+  const motionSubphase = gameState.MEMOTION_SUBPHASE
+  const motionCards = question?.MOTION_CARDS || []
+  const selectedMotionCard = isMemotionQuestion
+    ? motionCards.find(c => c.ID === gameState.MEMOTION_SELECTED) || null
+    : null
+  const motionCardPoints = selectedMotionCard
+    ? getMotionCardPoints(selectedMotionCard.DIFFICULTY || 1, question?.MOTION_CONFIG)
+    : 0
+  // Zone contexte — l'énoncé suit la carte en cours plutôt que rester figé
+  // sur l'énoncé de la question MEMOTION (qui n'a pas de sens ici, une
+  // question MEMOTION porte plusieurs cartes) : thème + points en SELECTED,
+  // texte de la carte en QUESTION/REVEAL, rappel générique en MEMORIZE/GRID.
+  const motionStatement = isMemotionQuestion
+    ? (motionSubphase === 'SELECTED' && selectedMotionCard
+        ? `Carte « ${selectedMotionCard.RECTO_THEME} » — ${'★'.repeat(selectedMotionCard.DIFFICULTY || 1)} · ${motionCardPoints}pt${motionCardPoints > 1 ? 's' : ''}`
+        : (motionSubphase === 'QUESTION' || motionSubphase === 'REVEAL') && selectedMotionCard?.QUESTION_TEXT
+          ? selectedMotionCard.QUESTION_TEXT
+          : motionSubphase === 'MEMORIZE'
+            ? 'Mémorisez la grille'
+            : 'Choisissez une carte')
+    : null
+  // Zone réponse (arbitrage n°1 du GATE 2, #160) — AnimAnswerZone lit
+  // `question.ANSWER`, inexistant en MEMOTION (vide toute la manche sans
+  // ce contournement) : on lui passe un objet question dérivé où ANSWER
+  // pointe la réponse de la CARTE en cours. Réutilise la mécanique
+  // AnimAnswerZone EXISTANTE (flou + révélation par pression) sans y
+  // toucher — TYPE reste 'MEMOTION', hors la branche QCM de ce composant.
+  const answerZoneQuestion = isMemotionQuestion
+    ? { ...question, ANSWER: selectedMotionCard?.ANSWER_TEXT || '' }
+    : question
+
+  // #166/F3 — options conditionnelles de la ligne méta (D5) : cible des
+  // points, indices QCM activés, mode de tour MEMORY/MEMOTION (affiché même
+  // si ces modes ne sont pas encore conduits depuis /anim — la donnée
+  // existe côté modèle, cf. models.go:281).
+  const optionChips = useMemo(() => {
+    if (!question) return []
+    const chips = []
+    if (question.POINTS_TARGET === 'TEAM') chips.push({ key: 'target', label: 'Équipe' })
+    else if (question.POINTS_TARGET === 'PLAYER') chips.push({ key: 'target', label: 'Individuel' })
+    if (question.TYPE === 'QCM' && question.QCM_HINTS_ENABLED) chips.push({ key: 'hints', label: 'Indices' })
+    if ((question.TYPE === 'MEMORY' || question.TYPE === 'MEMOTION') && question.MEMORY_MODE) {
+      chips.push({ key: 'turn', label: MEMORY_MODE_LABEL[question.MEMORY_MODE] || question.MEMORY_MODE })
+    }
+    return chips
+  }, [question])
 
   const handleStart = () => {
     const time = parseInt(gameState.question?.TIME) || 30
@@ -125,9 +213,10 @@ export default function AnimPage() {
     startGame(time, creditPoints || 1)
   }
 
-  // Zone C — mêmes équipes que /admin (au moins un joueur assigné — règle de
-  // base #45, GamePage.jsx:135), triées par ordre de buzz pendant les phases
-  // actives (utils/buzzOrder.js — même règle que GamePage.jsx, #156/F6).
+  // Zone équipes — mêmes équipes que /admin (au moins un joueur assigné —
+  // règle de base #45, GamePage.jsx:135), triées par ordre de buzz pendant
+  // les phases actives (utils/buzzOrder.js — même règle que GamePage.jsx,
+  // #156/F6). INCHANGÉ par #166 (seule la grid-area change, AnimPage.css).
   const displayTeams = useMemo(() => {
     const teamsWithPlayers = new Set(
       Object.values(bumpers)
@@ -139,6 +228,42 @@ export default function AnimPage() {
       .map(([name, data]) => ({ name, ...data }))
     return sortTeamsByBuzzOrder(list, gameState.phase)
   }, [teams, bumpers, gameState.phase])
+
+  // #172/C2 — motif d'attente PREPARE, passé à AnimConductPanel (repli du
+  // bouton LANCER, style "à suivre" #166 déjà en place, aucun nouveau
+  // badge/CSS). `short: true` — sub-label du bouton, place limitée (F7).
+  const waitReason = useMemo(
+    () => prepareWaitReason(gameState.phase, question, displayTeams, gameState, { short: true }),
+    [gameState, question, displayTeams]
+  )
+
+  // #158/F3 — mode ARDOISE : liste des copies à la place des cartes équipe.
+  // Filtre équipes à joueur virtuel, parité #93 (même règle que
+  // GamePage.jsx vplayerTeamNames) — pas "au moins un joueur" comme
+  // displayTeams ci-dessus, une équipe SPEEDY sans VJoueur n'a pas de
+  // copie possible.
+  const isArdoise = question?.TYPE === 'ARDOISE'
+  const showArdoiseList = isArdoise && ARDOISE_LIST_PHASES.includes(gameState.phase)
+  const ardoiseTeams = useMemo(() => {
+    if (!showArdoiseList) return []
+    const vplayerTeamNames = new Set(
+      Object.values(bumpers)
+        .filter(b => b.IS_VPLAYER)
+        .map(b => b.TEAM)
+        .filter(Boolean)
+    )
+    return Object.entries(teams)
+      .filter(([name]) => vplayerTeamNames.has(name))
+      .map(([name, data]) => ({ name, ...data }))
+  }, [teams, bumpers, showArdoiseList])
+  const ardoiseEntries = useMemo(
+    () => sortArdoiseEntries(ardoiseTeams, gameState.ARDOISE_ANSWERS),
+    [ardoiseTeams, gameState.ARDOISE_ANSWERS]
+  )
+  // #158/F3 — cible TOUJOURS l'équipe pour ARDOISE, mirror exact du bouton
+  // ARDOISE de /admin (GamePage.jsx : setTeamPoints(teamName, defaultPts)
+  // direct, sans résolution PLAYER/bumper via POINTS_TARGET).
+  const handleArdoiseCredit = (teamName, points) => setTeamPoints(teamName, points)
 
   const showRankBadge = RANK_BADGE_PHASES.includes(gameState.phase)
   const showBuzzOrder = BUZZ_ORDER_PHASES.includes(gameState.phase)
@@ -174,8 +299,23 @@ export default function AnimPage() {
   // mutualisé par calcQcmTeamAward (#157/T1). Hors QCM (ou QCM sans
   // indices), resolvePointsAward retombe sur le montant de base pour
   // toutes les équipes — comportement inchangé par rapport à avant T3.
+  // #159/F5 — MEMORY : le montant vient de calcMemoryScore (via
+  // resolvePointsAward, ctx.memory), JAMAIS recalculé ici. matchedPairs/
+  // errors par équipe si MEMORY_TEAM_PAIRS est renseigné (multi-équipes) ;
+  // repli sur les compteurs globaux (memoryMatchedPairs/memoryErrors) en
+  // mode SOLO, où la carte de MEMORY_TEAM_PAIRS n'existe pas pour ce nom
+  // d'équipe. basePoints n'a aucun effet pour MEMORY (calcMemoryScore
+  // l'ignore, cf. pointsAward.js) — transmis pour l'uniformité de l'appel.
   const getTeamAward = (teamName) => {
     const basePoints = creditPoints || 1
+    if (question?.TYPE === 'MEMORY') {
+      const matchedPairs = gameState.MEMORY_TEAM_PAIRS?.[teamName] ?? gameState.memoryMatchedPairs?.length ?? 0
+      const errors = gameState.MEMORY_TEAM_ERRORS?.[teamName] ?? gameState.memoryErrors ?? 0
+      return {
+        amount: resolvePointsAward(gameState.question, basePoints, { memory: { matchedPairs, errors } }).amount,
+        hasCorrectAnswer: null,
+      }
+    }
     if (isQcmWithHints) {
       return calcQcmTeamAward(gameState.question, basePoints, bumpersByTeam[teamName] || [], gameState.qcmInvalidated?.length || 0)
     }
@@ -191,24 +331,29 @@ export default function AnimPage() {
   // rapide de l'équipe" est donc sans ambiguïté le même joueur que /admin
   // créditerait en cliquant sur son buzzer, pas une approximation propre à
   // SPEEDY.
-  const handleCredit = (teamName) => {
+  //
+  // #170/F4 — le montant n'est plus recalculé ici : il est fourni par
+  // l'appelant (AnimCreditControl, "+N pts" via getTeamAward INCHANGÉ, ou
+  // "0 pt" via un simple 0 littéral). Même chemin de crédit pour les deux
+  // gestes — c'est ce qui donne au refus l'enregistrement d'historique, la
+  // diffusion AWARDED_TEAMS et le verrouillage d'un crédit ordinaire, sans
+  // aucun état local à construire. Cible (équipe/bumper) inchangée.
+  const handleCredit = (teamName, points) => {
     if (!creditEnabled) return
-    const { amount } = getTeamAward(teamName)
     if (creditTarget === 'TEAM') {
-      setTeamPoints(teamName, amount)
+      setTeamPoints(teamName, points)
       return
     }
     const fastestBumper = (bumpersByTeam[teamName] || [])
       .filter(b => (b.TIME ?? 0) > 0)
       .sort((a, b) => a.TIME - b.TIME)[0]
-    if (fastestBumper) setBumperPoints(fastestBumper.mac, amount)
+    if (fastestBumper) setBumperPoints(fastestBumper.mac, points)
   }
 
-  // #157/T4 — réponse QCM de l'équipe (zone C) : couleur choisie + joueur,
-  // dès que l'équipe a buzzé (pas de garde de phase — contrairement au
-  // crédit). Marqueur de justesse séparé, gardé côté rendu à REVEALED
-  // uniquement (décision D1 : l'animateur ne doit pas lire la réponse sur
-  // sa tablette avant REVEALED). Rien de tout cela hors QCM.
+  // #157/T4 — réponse QCM de l'équipe (zone équipes) : couleur choisie +
+  // joueur, dès que l'équipe a buzzé (pas de garde de phase — contrairement
+  // au crédit). Marqueur de justesse séparé, gardé côté rendu à REVEALED
+  // uniquement. Rien de tout cela hors QCM.
   const getTeamQcmAnswer = (teamName) => {
     if (gameState.question?.TYPE !== 'QCM') return null
     const buzzedBumper = (bumpersByTeam[teamName] || []).find(b => (b.TIME ?? 0) > 0)
@@ -223,56 +368,113 @@ export default function AnimPage() {
 
   return (
     <div className="anim-page">
-      {/* Zone A — contexte */}
+      {/* Zone contexte — bandeau (#166/F3 méta, F10 réponse permanente,
+          F12 chrono en colonne). Grille 2 colonnes : lignes à gauche,
+          chronomètre pleine hauteur à droite (E6 = option i, recommandée). */}
       <div className="anim-zone anim-zone-context">
-        <span className={`anim-connection-status ${status}`}>
-          <span className="anim-status-dot" />
-          {STATUS_LABEL[status] || status}
-        </span>
+        <div className="anim-context-lines">
+          <div className="anim-meta-row">
+            <span className={`anim-connection-status ${status}`}>
+              <span className="anim-status-dot" />
+              {STATUS_LABEL[status] || status}
+            </span>
 
-        <div className="anim-question-info">
-          {question ? (
-            <>
-              {categoryInfo && (
-                <CategoryBadge catKey={question.CATEGORY} customCategories={customCategories} size="lg" />
+            {/* Groupe flex:1 — pousse .anim-question-points contre le bord
+                droit de la ligne (même mécanique que #163 retouche, portée
+                depuis .anim-question-info vers ce groupe englobant tous les
+                chips désormais côte à côte). */}
+            <div className="anim-meta-chips">
+              {question ? (
+                <>
+                  {/* #171/F1 — ordre : avancement · catégorie · type · #ID
+                      (le "titre") · options. #ID promu au même style que les
+                      autres chips (auparavant en retrait, seule occurrence
+                      sur la page désormais — l'ancien affichage subdued a
+                      disparu, pas de doublon). */}
+                  {questionPosition.total > 0 && (
+                    <span className="anim-chip anim-chip-count">
+                      {questionPosition.position}
+                      <span className="anim-question-counter-total">/{questionPosition.total}</span>
+                    </span>
+                  )}
+                  {categoryInfo && (
+                    <span className="anim-chip">
+                      {categoryInfo.icon && <span className="anim-chip-glyph">{categoryInfo.icon}</span>}
+                      {categoryInfo.label}
+                    </span>
+                  )}
+                  <span className="anim-chip">
+                    <span className="anim-chip-glyph">{typeMeta.icon}</span>
+                    {typeMeta.label}
+                  </span>
+                  <span className="anim-chip anim-chip-title">#{question.ID}</span>
+                  {optionChips.map(chip => (
+                    <span key={chip.key} className="anim-opt-chip">{chip.label}</span>
+                  ))}
+                </>
+              ) : (
+                <span className="anim-question-empty">Aucune question en cours</span>
               )}
-              <div className="anim-question-text">
-                <span className="anim-question-id">#{question.ID}</span>
-                <span className="anim-question-type">{question.TYPE || 'SPEEDY'}</span>
-              </div>
-            </>
-          ) : (
-            <span className="anim-question-empty">Aucune question en cours</span>
+            </div>
+
+            {/* Points totaux de la question en cours, alignés à droite de
+                la ligne méta (#163 retouche). */}
+            {question?.POINTS != null && (
+              <span className="anim-question-points">{question.POINTS}pt</span>
+            )}
+          </div>
+
+          {/* Énoncé de la question en cours. Affiché dès que la question
+              est chargée, SANS garde de phase (l'animateur lit la question
+              avant de lancer, écart assumé avec la TV qui attend STARTED).
+              #160/F8 — MEMOTION : suit la carte en cours (motionStatement)
+              plutôt que question.QUESTION, qui n'a pas de sens pour une
+              question portant plusieurs cartes. */}
+          {isMemotionQuestion ? (
+            <p className="anim-question-statement">{motionStatement}</p>
+          ) : question?.QUESTION && (
+            <p className="anim-question-statement">{question.QUESTION}</p>
           )}
+
+          {/* #171/F2 — pastille de statut de phase déplacée de la colonne
+              chrono (Timer, showPhase=false ci-dessous) vers cette ligne,
+              juste avant la zone réponse. Mêmes classes/libellés que Timer
+              (utils/phaseBadge.js — Timer.jsx lui-même n'est pas modifié). */}
+          <div className="anim-answer-row">
+            {phaseBadge && (
+              <span className={`phase-badge ${phaseBadge.className}`}>{phaseBadge.label}</span>
+            )}
+            {/* #166/F10 — zone réponse permanente : remplace le bloc
+                conditionnel #163/F4. Absente si aucune question chargée
+                (AnimAnswerZone rend null). */}
+            <AnimAnswerZone question={answerZoneQuestion} revealed={revealed} />
+          </div>
         </div>
 
-        <Timer
-          currentTime={gameState.timer}
-          totalTime={gameState.totalTime}
-          phase={gameState.phase}
-          size="md"
-        />
-
-        <div className="anim-next-question">
-          <span className="anim-next-question-label">Suivante</span>
-          {nextQuestion?.ID ? (
-            <span className="anim-next-question-text">
-              {nextCategoryInfo && <CategoryBadge catKey={nextQuestion.CATEGORY} customCategories={customCategories} size="sm" />}
-              {nextQuestion.TYPE || 'SPEEDY'}
-            </span>
-          ) : (
-            <span className="anim-next-question-text anim-next-question-empty">—</span>
-          )}
+        {/* #166/F12 (E6 = i) — chronomètre en colonne dédiée, pleine hauteur
+            sur les trois lignes du bandeau. Même composant Timer que
+            précédemment, simplement repositionné et agrandi (md -> lg). */}
+        <div className="anim-chrono-col">
+          <Timer
+            currentTime={gameState.timer}
+            totalTime={gameState.totalTime}
+            phase={gameState.phase}
+            size="lg"
+            showPhase={false}
+          />
         </div>
       </div>
 
-      {/* Zone B — conduite SPEEDY (#156/F5) */}
+      {/* Zone conduite (#166/F5) — cinq lignes permanentes, l'état de
+          chaque geste est calculé PAR AnimConductPanel depuis phase/question
+          (utils/phaseRules.js) : AnimPage ne précalcule plus isPlaying/
+          canStart/canReveal. */}
       <div className="anim-zone anim-zone-conduct">
         <AnimConductPanel
           phase={gameState.phase}
-          isPlaying={isPlaying}
-          canStart={canStart}
-          canReveal={canReveal}
+          question={question}
+          qcmInvalidated={gameState.qcmInvalidated}
+          revealed={revealed}
           nextQuestion={nextQuestion}
           onStart={handleStart}
           onPause={pauseGame}
@@ -280,33 +482,137 @@ export default function AnimPage() {
           onStop={stopGame}
           onReveal={revealAnswer}
           onSelectNext={selectQuestion}
+          teams={teams}
+          memory={{
+            flippedCards: gameState.memoryFlippedCards,
+            matchedPairs: gameState.memoryMatchedPairs,
+            pairOwners: gameState.MEMORY_PAIR_OWNERS,
+            currentTeam: gameState.MEMORY_CURRENT_TEAM,
+            teamPairs: gameState.MEMORY_TEAM_PAIRS,
+            teamErrors: gameState.MEMORY_TEAM_ERRORS,
+            errors: gameState.memoryErrors,
+          }}
+          onFlipMemoryCard={flipMemoryCard}
+          motion={{
+            subphase: motionSubphase,
+            timerRunning: gameState.timer > 0,
+            cardStates: gameState.MEMOTION_CARD_STATES,
+            cardTeams: gameState.MEMOTION_CARD_TEAMS,
+            currentTeam: gameState.MEMOTION_CURRENT_TEAM,
+            currentTeamColor: gameState.MEMOTION_CURRENT_TEAM_COLOR,
+            selectedId: gameState.MEMOTION_SELECTED,
+            participatingTeams: gameState.MEMOTION_PARTICIPATING_TEAMS,
+          }}
+          onSelectMotionCard={selectMotionCard}
+          onFlipMotionCard={flipMotionCard}
+          onStopMotionTimer={stopMotionTimer}
+          onRevealMotionCard={revealMotionCard}
+          onDoneMotionCard={doneMotionCard}
+          waitReason={waitReason}
         />
       </div>
 
-      {/* Zone C — équipes (#156/F6 : ordre de buzz, rang, temps, crédit ;
-          #157/T3-T4 : montant par équipe en QCM, couleur de réponse) */}
+      {/* Zone équipes (#156/F6 : ordre de buzz, rang, temps, crédit ;
+          #157/T3-T4 : montant par équipe en QCM, couleur de réponse).
+          INCHANGÉE par #166 — seule sa grid-area change (AnimPage.css).
+          #158/F3 — en ARDOISE (phases STARTED/PAUSED/STOPPED/REVEALED),
+          AnimArdoiseList remplace les cartes équipe À LA MÊME PLACE ; hors
+          ARDOISE, ce bloc reste strictement celui de #156/#157/#170. */}
       <div className="anim-zone anim-zone-teams">
-        {displayTeams.map((team, index) => {
+        {showArdoiseList ? (
+          <AnimArdoiseList
+            entries={ardoiseEntries}
+            question={question}
+            gameTime={gameState.gameTime}
+            creditPoints={creditPoints}
+            revealed={revealed}
+            awardedTeams={awardedTeams}
+            onCredit={handleArdoiseCredit}
+          />
+        ) : displayTeams.map((team, index) => {
           const rank = index + 1
           const rankBadge = showRankBadge ? getRankBadge(rank) : null
           const reactionTime = showBuzzOrder ? formatReactionTime(team.TIME, gameState.gameTime) : null
           const qcmAnswer = getTeamQcmAnswer(team.name)
-          const teamCreditAmount = creditEnabled ? getTeamAward(team.name).amount : null
-          const hasExtra = rankBadge || reactionTime || qcmAnswer || creditEnabled
+          // #159/F4 — MEMORY : participation (MEMORY_PARTICIPATING_TEAMS
+          // vide/absent = pas de restriction, toutes les équipes du roster
+          // participent — repli permissif, même philosophie que
+          // canAwardPoints #171/F4), compteurs par équipe (repli sur les
+          // compteurs globaux memoryMatchedPairs/memoryErrors quand
+          // MEMORY_TEAM_PAIRS/TEAM_ERRORS n'a pas d'entrée pour cette
+          // équipe — mode SOLO) et équipe active (MEMORY_CURRENT_TEAM). La
+          // ligne de stat s'affiche pour TOUTE question MEMORY, jamais
+          // conditionnée à la présence de MEMORY_TEAM_PAIRS : la
+          // participation est une notion à part (MEMORY_PARTICIPATING_TEAMS),
+          // indépendante de la ventilation par équipe des compteurs.
+          const isMemoryQuestion = question?.TYPE === 'MEMORY'
+          const memoryParticipating = isMemoryQuestion
+            ? (!gameState.MEMORY_PARTICIPATING_TEAMS?.length || gameState.MEMORY_PARTICIPATING_TEAMS.includes(team.name))
+            : true
+          const memoryStat = isMemoryQuestion
+            ? (() => {
+                if (!memoryParticipating) return { participating: false, label: 'ne participe pas' }
+                const pairs = gameState.MEMORY_TEAM_PAIRS?.[team.name] ?? gameState.memoryMatchedPairs?.length ?? 0
+                const errors = gameState.MEMORY_TEAM_ERRORS?.[team.name] ?? gameState.memoryErrors ?? 0
+                const label = `${pairs} paire${pairs > 1 ? 's' : ''} · ${errors} erreur${errors > 1 ? 's' : ''}`
+                return { participating: true, label }
+              })()
+            : null
+          const isActiveMemoryTeam = isMemoryQuestion && gameState.MEMORY_CURRENT_TEAM === team.name
+          // #160/F8 — MEMOTION : même traitement que MEMORY ci-dessus
+          // (liseré équipe active, atténuation + mention "ne participe pas"
+          // hors participation) — SANS ligne de compteur paires/erreurs (pas
+          // de notion équivalente en MEMOTION : les points sont attribués
+          // carte par carte par le moteur, cf. AC7, pas de compteur à
+          // afficher côté équipe).
+          const motionParticipating = isMemotionQuestion
+            ? (!gameState.MEMOTION_PARTICIPATING_TEAMS?.length || gameState.MEMOTION_PARTICIPATING_TEAMS.includes(team.name))
+            : true
+          const motionStat = isMemotionQuestion && !motionParticipating
+            ? { participating: false, label: 'ne participe pas' }
+            : null
+          const isActiveMotionTeam = isMemotionQuestion && gameState.MEMOTION_CURRENT_TEAM === team.name
+          // #171/F4/F6 — "tenté" ne conditionne plus si le geste de crédit
+          // est monté (creditEnabled, phase seule, inchangé) : seulement si
+          // un montant positif est proposé en plus de "0 pt". Une équipe
+          // jamais buzzée mais DÉJÀ créditée par la régie doit rester
+          // verrouillée avec son montant — attempted n'intervient qu'AVANT
+          // verrouillage (awardedTeams reste l'unique source du lock, #170).
+          // #159/F5/F6 — pour MEMORY, "tenté" = participe à la question
+          // (memoryParticipating) plutôt que canAwardPoints (basé sur les
+          // bumpers, sans objet ici) : une équipe hors
+          // MEMORY_PARTICIPATING_TEAMS ne se voit proposer que "0 pt".
+          const attempted = isMemoryQuestion ? memoryParticipating : canAwardPoints(question, bumpersByTeam[team.name])
+          const teamCreditAmount = attempted ? getTeamAward(team.name).amount : null
+          const noAttemptLabel = question?.TYPE === 'QCM' ? 'pas de réponse' : 'pas de buzz'
+          const hasExtra = reactionTime || qcmAnswer || creditEnabled || memoryStat || motionStat
           return (
-            <AnimTeamCard key={team.name} name={team.name} color={team.COLOR} score={team.SCORE || 0}>
+            <AnimTeamCard
+              key={team.name}
+              name={team.name}
+              color={team.COLOR}
+              score={team.SCORE || 0}
+              medal={rankBadge}
+              active={isActiveMemoryTeam || isActiveMotionTeam}
+              dimmed={(isMemoryQuestion && !memoryParticipating) || (isMemotionQuestion && !motionParticipating)}
+            >
               {hasExtra && (
                 <>
-                  {(rankBadge || reactionTime) && (
+                  {reactionTime && (
                     <span className="anim-team-buzz-info">
-                      {rankBadge && <span className="anim-team-rank">{rankBadge}</span>}
-                      {reactionTime && <span className="anim-team-reaction-time">{reactionTime}</span>}
+                      <span className="anim-team-reaction-time">{reactionTime}</span>
                     </span>
                   )}
+                  {memoryStat && (
+                    <span className="anim-team-memory-stat">{memoryStat.label}</span>
+                  )}
+                  {motionStat && (
+                    <span className="anim-team-memory-stat">{motionStat.label}</span>
+                  )}
                   {/* #157/T4 — couleur choisie dès le buzz ; justesse (✓/✗)
-                      uniquement en REVEALED (décision D1, plan §4) — rien de
-                      tout cela hors QCM (qcmAnswer est null hors QCM ou tant
-                      que l'équipe n'a pas buzzé). */}
+                      uniquement en REVEALED — rien de tout cela hors QCM
+                      (qcmAnswer est null hors QCM ou tant que l'équipe n'a
+                      pas buzzé). */}
                   {qcmAnswer && (
                     <span className="anim-team-qcm-answer">
                       {qcmAnswer.colorInfo && (
@@ -321,27 +627,46 @@ export default function AnimPage() {
                       {qcmAnswer.playerName && (
                         <span className="anim-team-qcm-player">{qcmAnswer.playerName}</span>
                       )}
-                      {gameState.phase === 'REVEALED' && (
+                      {revealed && (
                         <span className={`anim-team-qcm-correct ${qcmAnswer.isCorrect ? 'correct' : 'incorrect'}`}>
                           {qcmAnswer.isCorrect ? '✓' : '✗'}
                         </span>
                       )}
                     </span>
                   )}
+                  {/* #170/F3 — composant de crédit unique : décide et rend
+                      les deux gestes ou l'état verrouillé, à partir de
+                      awardedTeams (F1). Cible et montant ("+N pts")
+                      inchangés (getTeamAward, #157) — seuls l'habillage et
+                      le verrou sont nouveaux. #171/F6 — monté pour TOUTES
+                      les équipes dès creditEnabled (plus de gate sur
+                      rankBadge/reactionTime/qcmAnswer) ; motif "pas de
+                      buzz"/"pas de réponse" à côté, jamais à la place. */}
                   {creditEnabled && (
-                    <button
-                      className="anim-team-credit-btn"
-                      onClick={() => handleCredit(team.name)}
-                      title={`Créditer ${teamCreditAmount} pts à ${team.name}`}
-                    >
-                      +{teamCreditAmount} pts
-                    </button>
+                    <span className="anim-team-credit-group">
+                      {/* #159/F6 — pas de motif "pas de buzz/réponse" pour
+                          MEMORY : memoryStat ("ne participe pas") le dit
+                          déjà, pas la peine de le répéter à côté du crédit. */}
+                      {!attempted && !isMemoryQuestion && <span className="anim-team-no-attempt">{noAttemptLabel}</span>}
+                      <AnimCreditControl
+                        team={team.name}
+                        amount={teamCreditAmount}
+                        awarded={awardedTeams[team.name]}
+                        onCredit={(points) => handleCredit(team.name, points)}
+                      />
+                    </span>
                   )}
                 </>
               )}
             </AnimTeamCard>
           )
         })}
+      </div>
+
+      {/* #166/F8 — bande régie réservée (#167). Vide, sans interaction, sans
+          état ni contrat — même traitement que L3/L4 de la conduite (E4). */}
+      <div className="anim-zone anim-zone-regie">
+        <div className="anim-regie-bar">Messagerie régie → animateur — espace réservé (#167)</div>
       </div>
     </div>
   )

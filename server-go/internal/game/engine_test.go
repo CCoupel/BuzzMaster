@@ -287,6 +287,12 @@ func TestEngine_Start(t *testing.T) {
 func TestEngine_Start_WithCountdown(t *testing.T) {
 	e := NewEngine()
 
+	// #172 B4: Start() now refuses any phase other than READY (see
+	// TestEngine_Start_RefusesOutsideReady) — reach READY first so this test can
+	// keep verifying what it was written for (countdown mechanics), not the guard.
+	e.Ready("q1", nil)
+	e.TransitionToReady()
+
 	// Test that Start() enters COUNTDOWN phase
 	e.Start(20)
 

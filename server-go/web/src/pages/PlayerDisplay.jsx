@@ -12,6 +12,8 @@ import QRCodeDisplay from '../components/QRCodeDisplay'
 import { getCategoryColor } from '../constants/colors'
 import { getRgbColor } from '../utils/colorUtils'
 import { escapeWifiString } from '../utils/wifiUtils'
+import { buildMemoryCards, getMemoryGridCols, getMemoryGridRows } from '../utils/memoryGrid'
+import { getMotionGridCols, getMotionGridRows, getMotionCardCoord, getMotionCardPoints, isMotionSecretMode } from '../utils/motionGrid'
 import './PlayerDisplay.css'
 import '../styles/neon.css'
 
@@ -706,56 +708,27 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
     }))
   }, [sortedPlayers])
 
-  // Prepare Memory cards - all cards shuffled (Card1 and Card2 from each pair)
-  const memoryCards = useMemo(() => {
-    const pairs = gameState.question?.MEMORY_PAIRS || []
-    if (pairs.length === 0) return []
+  // Règle de disposition MEMORY — EXTRAITE dans utils/memoryGrid.js (#159/F0),
+  // partagée avec la grille animateur (AnimMemoryGrid). Extraction pure :
+  // même mélange ensemencé, même formule de colonnes/rangées, mêmes
+  // dépendances de useMemo qu'avant l'extraction. Ne PAS réimplémenter
+  // cette logique ailleurs — voir le commentaire de tête de memoryGrid.js
+  // pour le motif (correspondance positionnelle entre /tv, la vue joueur et
+  // /anim).
+  const memoryCards = useMemo(
+    () => buildMemoryCards(gameState.question),
+    [gameState.question?.MEMORY_PAIRS, gameState.question?.ID]
+  )
 
-    // Create array with all cards, each linked to its pair ID
-    const allCards = []
-    pairs.forEach((pair) => {
-      allCards.push({
-        id: `${pair.ID}-1`,
-        pairId: pair.ID,
-        card: pair.CARD1,
-        cardIndex: 1,
-      })
-      allCards.push({
-        id: `${pair.ID}-2`,
-        pairId: pair.ID,
-        card: pair.CARD2,
-        cardIndex: 2,
-      })
-    })
+  const memoryGridCols = useMemo(
+    () => getMemoryGridCols(memoryCards.length),
+    [memoryCards.length]
+  )
 
-    // Shuffle using Fisher-Yates with seeded randomness based on question ID
-    // This ensures consistent shuffle for same question across all clients
-    const questionId = gameState.question?.ID || '0'
-    let seed = parseInt(questionId, 10) || 1
-    const shuffled = [...allCards]
-    for (let i = shuffled.length - 1; i > 0; i--) {
-      seed = (seed * 1103515245 + 12345) & 0x7fffffff
-      const j = seed % (i + 1)
-      ;[shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]]
-    }
-    return shuffled
-  }, [gameState.question?.MEMORY_PAIRS, gameState.question?.ID])
-
-  // Calculate grid columns and rows based on card count
-  // Optimized for common configurations: 2x2, 2x3, 3x4, 4x4, 4x5, 4x6
-  const memoryGridCols = useMemo(() => {
-    const cardCount = memoryCards.length
-    if (cardCount <= 4) return 2   // 2x2
-    if (cardCount <= 6) return 3   // 2x3
-    if (cardCount <= 16) return 4  // 4x4 max (changed from 12)
-    if (cardCount <= 20) return 5  // 4x5
-    return 6                       // 4x6
-  }, [memoryCards.length])
-
-  const memoryGridRows = useMemo(() => {
-    const cardCount = memoryCards.length
-    return Math.ceil(cardCount / memoryGridCols)
-  }, [memoryCards.length, memoryGridCols])
+  const memoryGridRows = useMemo(
+    () => getMemoryGridRows(memoryCards.length, memoryGridCols),
+    [memoryCards.length, memoryGridCols]
+  )
 
   // Calculate if we need 2 columns for players (if more than 6 players)
   const useTwoColumns = sortedPlayers.length > 6
@@ -2010,23 +1983,16 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
               const selectedId = gameState.MEMOTION_SELECTED
               const selectedCard = motionCards.find(c => c.ID === selectedId) || null
               const motionCfg = gameState.question?.MOTION_CONFIG
-              const diffPts = d => {
-                if (motionCfg) {
-                  if (d === 1) return motionCfg.POINTS_1_STAR ?? 1
-                  if (d === 2) return motionCfg.POINTS_2_STAR ?? 3
-                  if (d === 3) return motionCfg.POINTS_3_STAR ?? 5
-                }
-                return d === 3 ? 5 : d === 2 ? 3 : 1
-              }
+              const diffPts = d => getMotionCardPoints(d, motionCfg)
 
               /* ---- Secret mode ---- */
-              const isSecretMode = (gameState.question?.MOTION_MEMORIZE_DURATION || 0) > 0
-              const getCoord = (idx, cols) => `${String.fromCharCode(65 + Math.floor(idx / cols))}${(idx % cols) + 1}`
+              const isSecretMode = isMotionSecretMode(gameState.question)
+              const getCoord = getMotionCardCoord
 
-              /* ---- Calcul grille ---- */
+              /* ---- Calcul grille (utils/motionGrid.js, #160/F0) ---- */
               const count = motionCards.length
-              const motionCols = count <= 4 ? 2 : count <= 6 ? 3 : count <= 12 ? 4 : 5
-              const motionRows = Math.ceil(count / motionCols)
+              const motionCols = getMotionGridCols(count)
+              const motionRows = getMotionGridRows(count)
               const participatingTeams = gameState.MEMOTION_PARTICIPATING_TEAMS || []
 
               /* ---- isMotionFullscreen : grille visible mais dimmed ---- */

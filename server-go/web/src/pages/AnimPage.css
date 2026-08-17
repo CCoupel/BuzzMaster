@@ -1,4 +1,4 @@
-/* AnimPage — interface animateur (/anim, #155/#156).
+/* AnimPage — interface animateur (/anim, #155/#156/#163/#165/#166).
    Tablette paysage, pas de Navbar régie. Même pattern d'ancrage plein écran
    que PlayerDisplay.css (position: fixed; inset: 0) — indépendant du
    contexte flex de .main-content (App.css). */
@@ -7,11 +7,13 @@
   position: fixed;
   inset: 0;
   display: grid;
+  /* #166/F6 — bande régie ajoutée en bas, pleine largeur. */
   grid-template-areas:
     "context context"
-    "conduct teams";
-  grid-template-rows: auto 1fr;
+    "conduct teams"
+    "regie   regie";
   grid-template-columns: 2fr 1fr;
+  grid-template-rows: auto 1fr auto;
   gap: var(--space-3);
   padding: var(--space-4);
   box-sizing: border-box;
@@ -26,20 +28,42 @@
 }
 
 /* ------------------------------------------------------------------ */
-/* Zone A — contexte                                                   */
+/* Zone contexte — bandeau (#166/F3, F10, F12)                         */
 /* ------------------------------------------------------------------ */
 
 .anim-zone-context {
   grid-area: context;
+  display: grid;
+  /* #166/F12 (E6 = i) — chronomètre en colonne dédiée, pleine hauteur sur
+     les 3 lignes du bandeau, à droite. */
+  grid-template-columns: 1fr auto;
+  gap: var(--space-3);
+  align-items: stretch;
+  padding: var(--space-3) var(--space-4);
+  background: var(--bg-secondary, #1e293b);
+  min-height: 0;
+  overflow: hidden;
+}
+
+.anim-context-lines {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-width: 0;
+  justify-content: center;
+}
+
+/* Ligne 1 — méta : statut, catégorie, type, progression, #ID, options,
+   points (#166/F3, recomposée). */
+.anim-meta-row {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: var(--space-4);
-  padding: var(--space-3) var(--space-4);
-  background: var(--bg-secondary, #1e293b);
+  gap: var(--space-2);
 }
 
 .anim-connection-status {
+  flex: none;
   display: flex;
   align-items: center;
   gap: var(--space-2);
@@ -69,30 +93,74 @@
   background: var(--error, #ef4444);
 }
 
-.anim-question-info {
+/* Groupe flex:1 qui rassemble catégorie/type/progression/#ID/options —
+   pousse .anim-question-points contre le bord droit de la ligne, comme
+   .anim-question-info le faisait avant #166 (même mécanique, portée
+   élargie à tous les chips). */
+.anim-meta-chips {
   display: flex;
   align-items: center;
-  gap: var(--space-3);
+  flex-wrap: wrap;
+  gap: var(--space-2);
   flex: 1;
   min-width: 0;
 }
 
-.anim-question-text {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-}
-
-.anim-question-id {
-  font-size: 1.1rem;
+/* Chip générique icône + libellé (catégorie, type) — #166/F3, agrandi
+   #171/F1 pour matcher la taille du bouton "à suivre"
+   (AnimNextButton.css : statement 0.95rem/700). */
+.anim-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: var(--bg-tertiary, #334155);
+  border-radius: var(--radius-full);
+  padding: 3px var(--space-3);
+  font-size: 0.85rem;
   font-weight: 700;
+  white-space: nowrap;
 }
 
-.anim-question-type {
-  font-size: 0.8rem;
+.anim-chip-glyph {
+  font-size: 1.05rem;
+  line-height: 1;
+}
+
+/* Progression n/total (#166/F1/F3) — #171/F1 : devient un `.anim-chip`
+   (première position de la ligne méta), plus un élément à part. */
+.anim-chip-count {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-variant-numeric: tabular-nums;
+  font-weight: 800;
+}
+
+.anim-question-counter-total {
+  opacity: 0.55;
+  font-weight: 600;
+}
+
+/* #ID — #171/F1 : seule occurrence sur la page (l'ancien affichage en
+   retrait de #166/F3 disparaît). Repris du mockup `.mchip.title` : même
+   famille `.anim-chip` mais fond transparent + bordure, pour se distinguer
+   des chips catégorie/type sans changer de taille. */
+.anim-chip-title {
+  background: transparent;
+  border: 1.5px solid #47536b;
+  font-weight: 750;
+}
+
+/* Options conditionnelles (#166/F3/D5) : cible des points, indices QCM,
+   mode de tour MEMORY/MEMOTION. */
+.anim-opt-chip {
+  flex: none;
+  display: inline-flex;
+  border: 1px solid #47536b;
+  border-radius: var(--radius-sm);
+  padding: 3px var(--space-2);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
   text-transform: uppercase;
-  opacity: 0.7;
-  letter-spacing: 0.04em;
 }
 
 .anim-question-empty {
@@ -101,37 +169,68 @@
   font-style: italic;
 }
 
-.anim-next-question {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  padding: var(--space-1) var(--space-3);
-  border-radius: var(--radius-md);
-  background: var(--bg-tertiary, #334155);
+/* Points totaux de la question en cours, alignés à droite de la ligne
+   méta (#163 retouche). flex:none : ne doit jamais être compressé/tronqué. */
+.anim-question-points {
+  flex: none;
+  font-size: 1rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  opacity: 0.9;
 }
 
-.anim-next-question-label {
-  font-size: 0.75rem;
-  text-transform: uppercase;
-  opacity: 0.7;
-  letter-spacing: 0.04em;
-}
-
-.anim-next-question-text {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  font-size: 0.9rem;
+/* Ligne 2 — énoncé de la question en cours. 2 lignes max : la zone
+   contexte ne doit jamais pousser conduite/équipes hors écran (/anim est
+   en overflow: hidden, F7). */
+.anim-question-statement {
+  margin: 0;
+  font-size: 1.35rem;
   font-weight: 600;
+  line-height: 1.28;
+  letter-spacing: -0.01em;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 
-.anim-next-question-empty {
-  opacity: 0.5;
-  font-weight: 400;
+/* Ligne 3 — badge de phase (#171/F2, classes `.phase-badge.phase-*`
+   réutilisées de Timer.css) + zone réponse permanente : voir
+   AnimAnswerZone.css pour le contenu de `.anim-answer-zone`. */
+.anim-answer-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.anim-answer-row .anim-answer-zone {
+  flex: 1;
+  min-width: 0;
+}
+
+/* Phase COUNTDOWN — absente de Timer.css (Timer.jsx n'a lui-même aucune
+   branche pour cette phase, #171 ne l'avait pas couverte). Reprend
+   exactement la classe/couleur déjà utilisées par GamePage.jsx (admin,
+   phase-badge phase-countdown / --accent-orange, GamePage.css:174) —
+   visible en pratique pendant la mémorisation MEMORY (#159), seule phase
+   qui rendait ce trou perceptible côté /anim. */
+.phase-countdown {
+  background: var(--accent-orange);
+  color: white;
+}
+
+/* Colonne chrono (#166/F12) — Timer existant, repositionné et agrandi. */
+.anim-chrono-col {
+  flex: none;
+  min-width: 96px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 /* ------------------------------------------------------------------ */
-/* Zone B — conduite (conteneur vide, contenu livré par #156/F5)       */
+/* Zone conduite — voir AnimConductPanel.css (#166/F5)                 */
 /* ------------------------------------------------------------------ */
 
 .anim-zone-conduct {
@@ -141,7 +240,7 @@
 }
 
 /* ------------------------------------------------------------------ */
-/* Zone C — équipes                                                     */
+/* Zone équipes — INCHANGÉE par #166, seule la grid-area change         */
 /* ------------------------------------------------------------------ */
 
 .anim-zone-teams {
@@ -153,4 +252,28 @@
   background: var(--bg-secondary, #1e293b);
   min-height: 0;
   overflow-y: auto;
+}
+
+/* ------------------------------------------------------------------ */
+/* Bande régie — réservée, vide (#166/F8, #167)                        */
+/* ------------------------------------------------------------------ */
+
+.anim-zone-regie {
+  grid-area: regie;
+  display: flex;
+  /* F7 — hauteur fixe ~42px, jamais réduite (ordre de dégradation). */
+  height: 42px;
+  flex: none;
+}
+
+.anim-regie-bar {
+  flex: 1;
+  border: 1.5px dashed #47536b;
+  border-radius: var(--radius-md);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.78rem;
+  font-style: italic;
+  color: var(--text-secondary, #94a3b8);
 }

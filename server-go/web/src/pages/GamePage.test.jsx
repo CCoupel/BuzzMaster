@@ -575,3 +575,205 @@ describe('GamePage — NetworkWarningBanner (#96)', () => {
     expect(container.querySelector('.network-warning-banner')).toBeNull()
   })
 })
+
+// ---------------------------------------------------------------------------
+// Sélecteur régie MEMORY/MEMOTION — filtre équipes non prêtes (#172/C1) et
+// motif d'attente (#172/C2). Gap identifié en QA (#172, `_work/reports/
+// qa-20260817-145412.md` §4) : aucun test frontend n'exerçait ce
+// comportement avant cet ajout. Libellés/classes vérifiés par grep dans
+// GamePage.jsx (memory-team-chip/not-ready/memory-selector-label) plutôt
+// que devinés — cf. handoff dev-frontend `_work/handoff/
+// dev-frontend-20260817-1445-172c.md` §C1/C2.
+// ---------------------------------------------------------------------------
+
+describe('GamePage — sélecteur MEMORY/MEMOTION, filtre non-prêtes + motif d\'attente (#172/C1/C2)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  // Une équipe = un bumper qui lui est assigné (teamsWithBuzzers, même
+  // filtre que displayTeams). READY porté sur l'objet équipe lui-même
+  // (teams[name].READY), comme sortedTeams le construit (`...data`).
+  const bumpersFor = (teamNames) =>
+    Object.fromEntries(teamNames.map((name, i) => [`MAC-${i}`, { TEAM: name, NAME: `P${i}`, SCORE: 0 }]))
+
+  function chipsRow(container) {
+    return container.querySelector('.memory-team-selector .memory-chips-row')
+  }
+
+  function availableChip(container, teamName) {
+    const row = chipsRow(container)
+    return Array.from(row.querySelectorAll('.memory-team-chip.available')).find(
+      (el) => el.querySelector('.chip-name')?.textContent === teamName
+    )
+  }
+
+  // --- C1 : filtre visuel + non-cliquable ------------------------------
+
+  it('MEMORY : équipe non prête (READY=false) reçoit .not-ready, title dédié, et n\'émet aucune action au clic', () => {
+    const gameMock = makeGameMock({
+      gameState: {
+        phase: 'PREPARE',
+        question: { ID: '1', TYPE: 'MEMORY' },
+        MEMORY_PARTICIPATING_TEAMS: [],
+      },
+      teams: {
+        Rouge: { READY: true, COLOR: 'RED' },
+        Bleu: { READY: false, COLOR: 'BLUE' },
+      },
+      bumpers: bumpersFor(['Rouge', 'Bleu']),
+    })
+    useGame.mockReturnValue(gameMock)
+
+    const { container } = render(<GamePage />)
+    const bleuChip = availableChip(container, 'Bleu')
+    expect(bleuChip).toBeTruthy()
+    expect(bleuChip.className).toMatch(/\bnot-ready\b/)
+    expect(bleuChip.getAttribute('title')).toBe('Buzzer(s) non prêt(s)')
+
+    fireEvent.click(bleuChip)
+    expect(gameMock.sendMessage).not.toHaveBeenCalledWith('MEMORY_SET_TEAMS', expect.anything())
+  })
+
+  it('MEMORY : équipe prête (READY=true) reste cliquable, sans .not-ready, title "Cliquer pour ajouter"', () => {
+    const gameMock = makeGameMock({
+      gameState: {
+        phase: 'PREPARE',
+        question: { ID: '1', TYPE: 'MEMORY' },
+        MEMORY_PARTICIPATING_TEAMS: [],
+      },
+      teams: {
+        Rouge: { READY: true, COLOR: 'RED' },
+        Bleu: { READY: false, COLOR: 'BLUE' },
+      },
+      bumpers: bumpersFor(['Rouge', 'Bleu']),
+    })
+    useGame.mockReturnValue(gameMock)
+
+    const { container } = render(<GamePage />)
+    const rougeChip = availableChip(container, 'Rouge')
+    expect(rougeChip.className).not.toMatch(/\bnot-ready\b/)
+    expect(rougeChip.getAttribute('title')).toBe('Cliquer pour ajouter')
+
+    fireEvent.click(rougeChip)
+    expect(gameMock.sendMessage).toHaveBeenCalledWith('MEMORY_SET_TEAMS', { TEAMS: ['Rouge'] })
+  })
+
+  it('MEMOTION : même filtre .not-ready / non-cliquable (toggleMotionTeam n\'est jamais appelé)', () => {
+    const gameMock = makeGameMock({
+      gameState: {
+        phase: 'PREPARE',
+        question: { ID: '1', TYPE: 'MEMOTION' },
+        MEMOTION_PARTICIPATING_TEAMS: [],
+      },
+      teams: {
+        Vert: { READY: false, COLOR: 'GREEN' },
+      },
+      bumpers: bumpersFor(['Vert']),
+    })
+    useGame.mockReturnValue(gameMock)
+
+    const { container } = render(<GamePage />)
+    const vertChip = availableChip(container, 'Vert')
+    expect(vertChip.className).toMatch(/\bnot-ready\b/)
+    expect(vertChip.getAttribute('title')).toBe('Buzzer(s) non prêt(s)')
+
+    fireEvent.click(vertChip)
+    expect(gameMock.sendMessage).not.toHaveBeenCalledWith('MEMOTION_SET_TEAMS', expect.anything())
+  })
+
+  // --- C2 : motif d'attente affiché dans memory-selector-label ----------
+
+  it('MEMORY SOLO, aucune équipe sélectionnée, buzzers prêts → libellé "Mode SOLO · sélectionnez une équipe"', () => {
+    useGame.mockReturnValue(makeGameMock({
+      gameState: {
+        phase: 'PREPARE',
+        question: { ID: '1', TYPE: 'MEMORY' },
+        MEMORY_PARTICIPATING_TEAMS: [],
+      },
+      teams: {
+        Rouge: { READY: true },
+        Bleu: { READY: true },
+      },
+      bumpers: bumpersFor(['Rouge', 'Bleu']),
+    }))
+
+    const { container } = render(<GamePage />)
+    const label = container.querySelector('.memory-team-selector .memory-selector-label')
+    expect(label.textContent).toBe('Mode SOLO · sélectionnez une équipe')
+  })
+
+  it('MEMORY multi (CHACUN_SON_TOUR), une seule équipe sélectionnée → libellé "... · sélectionnez au moins deux équipes"', () => {
+    useGame.mockReturnValue(makeGameMock({
+      gameState: {
+        phase: 'PREPARE',
+        question: { ID: '1', TYPE: 'MEMORY', MEMORY_MODE: 'CHACUN_SON_TOUR' },
+        MEMORY_PARTICIPATING_TEAMS: ['Rouge'],
+      },
+      teams: {
+        Rouge: { READY: true },
+        Bleu: { READY: true },
+      },
+      bumpers: bumpersFor(['Rouge', 'Bleu']),
+    }))
+
+    const { container } = render(<GamePage />)
+    const label = container.querySelector('.memory-team-selector .memory-selector-label')
+    expect(label.textContent).toBe('Chacun son tour · sélectionnez au moins deux équipes')
+  })
+
+  it('MEMOTION, aucune équipe sélectionnée, buzzers prêts → libellé "🃏 MEMOTION · Mode SOLO · sélectionnez au moins une équipe"', () => {
+    useGame.mockReturnValue(makeGameMock({
+      gameState: {
+        phase: 'PREPARE',
+        question: { ID: '1', TYPE: 'MEMOTION' },
+        MEMOTION_PARTICIPATING_TEAMS: [],
+      },
+      teams: {
+        Vert: { READY: true },
+      },
+      bumpers: bumpersFor(['Vert']),
+    }))
+
+    const { container } = render(<GamePage />)
+    const label = container.querySelector('.memory-team-selector .memory-selector-label')
+    expect(label.textContent).toBe('🃏 MEMOTION · Mode SOLO · sélectionnez au moins une équipe')
+  })
+
+  it('un buzzer non prêt prime sur la conformité : libellé "Mode SOLO · Buzzers en attente" même si la sélection est déjà valide', () => {
+    useGame.mockReturnValue(makeGameMock({
+      gameState: {
+        phase: 'PREPARE',
+        question: { ID: '1', TYPE: 'MEMORY' },
+        MEMORY_PARTICIPATING_TEAMS: ['Rouge'], // déjà conforme (SOLO, 1 équipe)
+      },
+      teams: {
+        Rouge: { READY: true },
+        Bleu: { READY: false }, // active (a un buzzer) mais pas prête
+      },
+      bumpers: bumpersFor(['Rouge', 'Bleu']),
+    }))
+
+    const { container } = render(<GamePage />)
+    const label = container.querySelector('.memory-team-selector .memory-selector-label')
+    expect(label.textContent).toBe('Mode SOLO · Buzzers en attente')
+  })
+
+  it('sélection déjà conforme et tous les buzzers prêts → aucun motif affiché (pas de " · " superflu)', () => {
+    useGame.mockReturnValue(makeGameMock({
+      gameState: {
+        phase: 'PREPARE',
+        question: { ID: '1', TYPE: 'MEMORY' },
+        MEMORY_PARTICIPATING_TEAMS: ['Rouge'],
+      },
+      teams: {
+        Rouge: { READY: true },
+      },
+      bumpers: bumpersFor(['Rouge']),
+    }))
+
+    const { container } = render(<GamePage />)
+    const label = container.querySelector('.memory-team-selector .memory-selector-label')
+    expect(label.textContent).toBe('Mode SOLO')
+  })
+})

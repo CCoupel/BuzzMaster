@@ -10,15 +10,67 @@
   background: var(--anim-team-color, var(--gray-400));
   color: var(--anim-team-text, #ffffff);
   min-height: 62px;
+  /* flex-shrink:0 — repéré en vérification #170 : .anim-zone-teams
+     (flex-column, overflow-y:auto) laissait le flex-shrink par défaut (1)
+     comprimer chaque carte SOUS la hauteur réelle de son contenu (en-tête
+     + zone "extra", ex. AnimCreditControl à 62px) dès que 6 équipes ne
+     tenaient plus toutes à l'écran (phase créditable, #157/#170). Le
+     contenu qui débordait de la carte ainsi rétrécie n'était pas coupé
+     proprement : il continuait à s'afficher hors de la boîte, recouvert
+     par la carte suivante peinte par-dessus (ordre du DOM) — texte
+     présent, mesurable, mais invisible à l'écran. flex-shrink:0 empêche
+     toute carte de rétrécir sous sa taille de contenu ; overflow-y:auto
+     sur le conteneur prend alors correctement le relais (défilement réel
+     au lieu d'une corrective silencieuse). */
+  flex-shrink: 0;
   box-sizing: border-box;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  outline: 2px solid transparent;
+  outline-offset: -2px;
+  transition: outline-color var(--transition-fast, 150ms ease), opacity var(--transition-fast, 150ms ease), box-shadow var(--transition-fast, 150ms ease);
 }
 
+/* #159/F4 — équipe active (ex. MEMORY_CURRENT_TEAM). Opt-in via la prop
+   `active` — aucun effet pour les appelants qui ne la passent pas.
+   #173 — le simple entourage 2px vert (outline-color ci-dessous, seul)
+   se confondait avec la carte quand la couleur d'équipe est elle-même
+   verte : indicateur non-couleur, indépendant de toute teinte d'équipe —
+   double liseré blanc puis quasi-noir (contraste de LUMINANCE, jamais de
+   teinte, donc lisible même sur une équipe verte, rouge, blanche ou noire)
+   plus une ombre portée marquée qui détache nettement la carte de ses
+   voisines. Remplace l'outline (transparent par défaut, cf. .anim-team-card
+   ci-dessus) plutôt que de l'empiler, pour ne pas dupliquer deux liserés
+   concurrents. */
+.anim-team-card-active {
+  outline-color: transparent;
+  box-shadow:
+    0 0 0 3px #ffffff,
+    0 0 0 6px #0f172a,
+    0 4px 14px rgba(0, 0, 0, 0.5);
+}
+
+/* #159/F4 — équipe visible mais ne participant pas à la question en cours.
+   Reste lisible (score, nom) mais visuellement en retrait. Opt-in via la
+   prop `dimmed`. */
+.anim-team-card-dimmed {
+  opacity: 0.55;
+}
+
+/* #171/F5 — ancrage déterministe : plus de justify-content:space-between
+   (la position dépendait du nombre d'enfants présents, cause réelle du
+   bug d'alignement signalé). Le score reste collé à droite via
+   margin-left:auto sur lui-même, quel que soit ce qui précède (médaille +
+   nom, ou nom seul). */
 .anim-team-card-header {
   display: flex;
   align-items: baseline;
-  justify-content: space-between;
-  gap: var(--space-3);
+  gap: var(--space-2);
+}
+
+.anim-team-card-medal {
+  flex: none;
+  font-size: 1.3rem;
+  line-height: 1;
 }
 
 .anim-team-card-name {
@@ -30,17 +82,33 @@
 }
 
 .anim-team-card-score {
+  flex: none;
+  margin-left: auto;
   font-size: 1.5rem;
   font-weight: 800;
   font-variant-numeric: tabular-nums;
 }
 
+/* #171/F5 — même correctif que le header : plus de justify-content:
+   space-between (la position du crédit dépendait du nombre de siblings
+   présents — temps de réaction, réponse QCM). Le groupe crédit
+   (.anim-team-credit-group ci-dessous) porte margin-left:auto et reste
+   ancré à droite quel que soit ce qui précède. */
 .anim-team-card-extra {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   flex-wrap: wrap;
   gap: var(--space-2);
+}
+
+/* #171/F6 — wrapper composé depuis AnimPage.jsx autour du motif "pas de
+   buzz"/"pas de réponse" + AnimCreditControl (#170, NON modifié — ce
+   composant partagé reste intact, l'ancrage se fait depuis l'extérieur). */
+.anim-team-credit-group {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-left: auto;
 }
 
 /* Contenu additionnel F6 — ordre de buzz (rang + temps de réaction) et
@@ -53,11 +121,6 @@
   gap: var(--space-2);
   font-size: 1rem;
   font-weight: 600;
-}
-
-.anim-team-rank {
-  font-size: 1.3rem;
-  line-height: 1;
 }
 
 .anim-team-reaction-time {
@@ -111,6 +174,26 @@
 
 .anim-team-qcm-correct.incorrect {
   color: var(--error, #ef4444);
+}
+
+/* #159/F4 — compteurs MEMORY par équipe (paires/erreurs), ou motif "ne
+   participe pas" pour une équipe hors MEMORY_PARTICIPATING_TEAMS. Composé
+   depuis AnimPage.jsx, même discipline `children` que ci-dessus. */
+.anim-team-memory-stat {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 0.8rem;
+  font-weight: 600;
+  opacity: 0.85;
+}
+
+/* #171/F6 — motif discret "pas de buzz"/"pas de réponse" : à CÔTÉ du
+   geste de crédit (jamais à sa place), quand l'équipe n'a pas tenté la
+   question (utils/canAwardPoints.js). Composé depuis AnimPage.jsx, même
+   discipline `children` que ci-dessus. */
+.anim-team-no-attempt {
+  font-size: 0.85rem;
+  font-style: italic;
+  opacity: 0.7;
 }
 
 .anim-team-credit-btn {

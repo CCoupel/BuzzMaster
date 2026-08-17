@@ -59,15 +59,23 @@ func TestIsActionAllowed_Anim(t *testing.T) {
 		{"UPDATE", protocol.ActionUpdate, false},
 		{"POINTS", protocol.ActionPoints, false},
 
-		// MEMORY/MEMOTION — hors périmètre #155/#156 (contract note explicite).
+		// MEMORY/MEMOTION — hors périmètre #155/#156 (contract note explicite),
+		// SAUF FLIP_MEMORY_CARD depuis #159 (B1) et, depuis #160 (B1), les
+		// cinq actions MEMOTION (Select/Flip/StopTimer/Reveal/Done) : l'anim
+		// conduit désormais une manche MEMOTION de bout en bout depuis sa
+		// tablette (sélection, retournement, arrêt du chrono, révélation,
+		// crédit), exactement comme #159 l'a fait pour MEMORY — capability
+		// widening délibéré, signalé au rapport dev-backend, pas noyé dans
+		// le diff. MEMORY_SET_TEAMS et MEMOTION_SET_TEAMS restent hors
+		// périmètre (admin uniquement), non touchés par #159/#160.
 		{"MEMORY_SET_TEAMS", protocol.ActionMemorySetTeams, false},
-		{"FLIP_MEMORY_CARD", protocol.ActionFlipMemoryCard, false},
-		{"MEMOTION_FLIP", protocol.ActionMotionFlip, false},
-		{"MEMOTION_STOP_TIMER", protocol.ActionMotionStopTimer, false},
-		{"MEMOTION_REVEAL", protocol.ActionMotionReveal, false},
-		{"MEMOTION_DONE", protocol.ActionMotionDone, false},
+		{"FLIP_MEMORY_CARD", protocol.ActionFlipMemoryCard, true}, // #159/B1 — était `false` avant ce lot
+		{"MEMOTION_FLIP", protocol.ActionMotionFlip, true},        // #160/B1 — était `false` avant ce lot
+		{"MEMOTION_STOP_TIMER", protocol.ActionMotionStopTimer, true}, // #160/B1 — était `false` avant ce lot
+		{"MEMOTION_REVEAL", protocol.ActionMotionReveal, true},    // #160/B1 — était `false` avant ce lot
+		{"MEMOTION_DONE", protocol.ActionMotionDone, true},        // #160/B1 — était `false` avant ce lot
 		{"MEMOTION_SET_TEAMS", protocol.ActionMotionSetTeams, false},
-		{"MEMOTION_SELECT", protocol.ActionMotionSelect, false},
+		{"MEMOTION_SELECT", protocol.ActionMotionSelect, true}, // #160/B1 — était `false` avant ce lot
 
 		// Enrôlement VJoueur — hors périmètre animateur.
 		{"PLAYER_CONNECT", protocol.ActionPlayerConnect, false},

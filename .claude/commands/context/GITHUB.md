@@ -395,7 +395,12 @@ fi
 
 Ces labels évoluent séquentiellement et sont mutuellement exclusifs.
 Un cycle correctif (REVIEW refuse ou QA échoue) remet le label à `EN COURS`.
-Si l'utilisateur rejette à GATE 4, l'issue repasse à `EN COURS`.
+Si l'utilisateur valide à GATE 4, l'issue est fermée (elle porte déjà `DONE`, aucun changement de label).
+Si l'utilisateur rejette à GATE 4, le label `DONE` est retiré et l'issue repart vers :
+- `EN COURS` — correction dans le scope (bug, régression, précision) → retour Phase DEV (Cas A)
+- `PLANNING` — scope invalide (approche erronée, exigences changées) → retour Phase 1 (Cas B)
+
+Voir `cdp.md` (GATE 4) pour le détail de la décision Cas A / Cas B.
 
 ### 8.3 Format des commits avec issue
 
@@ -435,16 +440,32 @@ gh issue edit <numero> --add-label "EN QA" --remove-label "EN COURS,EN REVIEW,DO
 gh issue edit <numero> --add-label "DONE" --remove-label "EN COURS,EN REVIEW,EN QA"
 ```
 
-### 9.5 Fermeture (validation utilisateur à GATE 4)
+### 9.5 Rejet à GATE 4 (validation utilisateur refusée)
+
+Le label `DONE` est retiré. La destination dépend de la nature de la correction
+(cf. `cdp.md`, GATE 4 — Cas A / Cas B) :
+
+```bash
+# Cas A — correction dans le scope (bug, régression, précision) → retour Phase DEV
+gh issue edit <numero> --add-label "EN COURS" --remove-label "DONE"
+
+# Cas B — scope invalide (approche erronée, exigences changées) → retour Phase 1
+gh issue edit <numero> --add-label "PLANNING" --remove-label "DONE"
+```
+
+### 9.6 Fermeture (validation utilisateur à GATE 4)
+
+L'issue porte déjà le label `DONE` — la fermeture suffit, aucun changement de label.
 
 ```bash
 gh issue comment <numero> --body "✅ Validé — QA OK — documentation mise à jour"
 gh issue close <numero>
 ```
 
-### 9.6 Création des labels (si absents du repo)
+### 9.7 Création des labels (si absents du repo)
 
 ```bash
+gh label create "PLANNING"  --color "c5def5" --description "Planification en cours"
 gh label create "EN COURS"  --color "0075ca" --description "En cours de developpement"
 gh label create "EN REVIEW" --color "e4e669" --description "En cours de revue"
 gh label create "EN QA"     --color "d93f0b" --description "En cours de validation QA"

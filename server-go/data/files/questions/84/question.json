@@ -1,0 +1,63 @@
+{
+  "ANSWER": "6 cartes",
+  "CATEGORY": "GEOGRAPHY",
+  "ID": "84",
+  "MOTION_CARDS": [
+    {
+      "ID": "mc-1",
+      "DIFFICULTY": 1,
+      "RECTO_THEME": "Capitale",
+      "QUESTION_TEXT": "Quelle est la capitale de la France ?",
+      "ANSWER_TEXT": "Paris"
+    },
+    {
+      "ID": "mc-2",
+      "DIFFICULTY": 2,
+      "RECTO_THEME": "Capitale",
+      "QUESTION_TEXT": "Quelle est la capitale du Japon ?",
+      "ANSWER_TEXT": "Tokyo"
+    },
+    {
+      "ID": "mc-3",
+      "DIFFICULTY": 1,
+      "RECTO_THEME": "Capitale",
+      "QUESTION_TEXT": "Quelle est la capitale de l'Italie ?",
+      "ANSWER_TEXT": "Rome"
+    },
+    {
+      "ID": "mc-4",
+      "DIFFICULTY": 3,
+      "RECTO_THEME": "Capitale",
+      "QUESTION_TEXT": "Quelle est la capitale de l'Australie ?",
+      "ANSWER_TEXT": "Canberra"
+    },
+    {
+      "ID": "mc-5",
+      "DIFFICULTY": 2,
+      "RECTO_THEME": "Capitale",
+      "QUESTION_TEXT": "Quelle est la capitale du Canada ?",
+      "ANSWER_TEXT": "Ottawa"
+    },
+    {
+      "ID": "mc-6",
+      "DIFFICULTY": 1,
+      "RECTO_THEME": "Capitale",
+      "QUESTION_TEXT": "Quelle est la capitale de l'Espagne ?",
+      "ANSWER_TEXT": "Madrid"
+    }
+  ],
+  "MOTION_CONFIG": {
+    "POINTS_1_STAR": 1,
+    "POINTS_2_STAR": 3,
+    "POINTS_3_STAR": 5
+  },
+  "MOTION_MEMORIZE_DURATION": 15,
+  "MOTION_MODE": "CHACUN_SON_TOUR",
+  "ORDER": 91,
+  "POINTS": "1",
+  "POINTS_TARGET": "TEAM",
+  "QCM_HINTS_ENABLED": false,
+  "QUESTION": "QA #160 - Scenario 3 - MEMOTION 6 cartes mode Secret",
+  "TIME": "30",
+  "TYPE": "MEMOTION"
+}

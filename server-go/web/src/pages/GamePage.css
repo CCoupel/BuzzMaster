@@ -575,6 +575,24 @@
   box-shadow: 0 0 10px var(--team-color), 0 2px 8px rgba(0, 0, 0, 0.3);
 }
 
+/* #172/C1 (arbitrage H) — équipe non prête (buzzer(s) sans PONG) : reste
+   visible dans la liste (la régie doit voir la cause), mais nettement plus
+   en retrait qu'un simple "disponible", et non cliquable. La règle .available
+   ci-dessus s'applique aussi (même sélecteur de classe), .not-ready la
+   durcit — jamais d'état "plein" au survol, contrairement à .available. */
+.memory-team-selector .memory-team-chip.not-ready {
+  opacity: 0.3;
+  filter: grayscale(80%);
+  cursor: not-allowed;
+}
+
+.memory-team-selector .memory-team-chip.not-ready:hover {
+  opacity: 0.3;
+  filter: grayscale(80%);
+  transform: none;
+  box-shadow: none;
+}
+
 .chip-order {
   display: flex;
   align-items: center;

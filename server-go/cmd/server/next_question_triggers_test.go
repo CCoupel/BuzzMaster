@@ -92,15 +92,20 @@ func TestNextQuestion_Anim_SearchesOnlyAfterCurrentIndex_NotWholeOrder(t *testin
 	}
 }
 
-// TestNextQuestion_Anim_EmptyPayload_NoCurrentQuestion is the HELLO
-// integration case next_question_test.go doesn't have: its own HELLO test
-// (TestHandleWebMessage_Anim_ReceivesNextQuestionOnHello) always sets a
-// current question via engine.Ready before connecting. Right after startup
-// — no READY has ever happened — the payload must be empty, per the
-// arbitrage's "no current question → no next at all" pillar (NOT "the
-// first playable question overall", which the pre-correction contract text
-// would have produced).
-func TestNextQuestion_Anim_EmptyPayload_NoCurrentQuestion(t *testing.T) {
+// TestNextQuestion_Anim_HelloNoCurrentQuestion_ReturnsFirstPlayable is the
+// HELLO integration case next_question_test.go doesn't have: its own HELLO
+// test (TestHandleWebMessage_Anim_ReceivesNextQuestionOnHello) always sets a
+// current question via engine.Ready before connecting.
+//
+// #166/B2/T2 (GATE 2 D2, contracts/CHANGELOG.md [20260815-2]): REPLACES
+// TestNextQuestion_Anim_EmptyPayload_NoCurrentQuestion. The old assertion
+// ("no current question → empty payload") documented exactly the
+// all-or-nothing arbitrage #166 deliberately reverses so the permanent "à
+// suivre" button (AnimNextButton, matrice de la maquette : NEW_GAME → vert,
+// "1ʳᵉ") has a first question to point at right after startup, before any
+// READY has ever happened — not neutralized, rewritten against the new
+// contract.
+func TestNextQuestion_Anim_HelloNoCurrentQuestion_ReturnsFirstPlayable(t *testing.T) {
 	app := newNextQuestionIntegrationTestApp(t)
 	dir := app.config.Storage.QuestionsDir
 	writeQuestionFile(t, dir, "1", 1, nil)
@@ -113,8 +118,14 @@ func TestNextQuestion_Anim_EmptyPayload_NoCurrentQuestion(t *testing.T) {
 	app.sendStateToClient(clientID, server.ClientTypeAnim)
 
 	got := readNextQuestion(t, anim)
-	if got.ID != "" {
-		t.Errorf("expected empty NEXT_QUESTION (no current question yet), got ID=%q — a 'first playable overall' rule would wrongly return %q here", got.ID, "1")
+	if got.ID != "1" {
+		t.Errorf("expected NEXT_QUESTION to point at the first playable question (ID=1) with no current question, got ID=%q", got.ID)
+	}
+	if got.CurrentPosition != 0 {
+		t.Errorf("expected CurrentPosition=0 (no current question), got %d", got.CurrentPosition)
+	}
+	if got.TotalQuestions != 2 {
+		t.Errorf("expected TotalQuestions=2, got %d", got.TotalQuestions)
 	}
 }
 
@@ -234,7 +245,16 @@ func TestNextQuestion_Anim_DeleteTriggerRebroadcasts(t *testing.T) {
 	}
 }
 
-func TestNextQuestion_Anim_NewGameTriggerSendsEmptyPayload(t *testing.T) {
+// TestNextQuestion_Anim_NewGameTriggerReturnsFirstPlayable — #166/B2/T2
+// (GATE 2 D2, contracts/CHANGELOG.md [20260815-2]), REPLACES
+// TestNextQuestion_Anim_NewGameTriggerSendsEmptyPayload. NEW_GAME resets
+// GameState.Question to nil — same "no current question" arbitrage as
+// HELLO (TestNextQuestion_Anim_HelloNoCurrentQuestion_ReturnsFirstPlayable),
+// deliberately reversed by #166: the payload now points at the quiz's
+// first playable question (matrice de la maquette : NEW_GAME → "à suivre"
+// vert, "1ʳᵉ"), not "the previous question of the finished game" and not
+// empty either.
+func TestNextQuestion_Anim_NewGameTriggerReturnsFirstPlayable(t *testing.T) {
 	app := newNextQuestionIntegrationTestApp(t)
 	dir := app.config.Storage.QuestionsDir
 	writeQuestionFile(t, dir, "1", 1, nil)
@@ -252,11 +272,14 @@ func TestNextQuestion_Anim_NewGameTriggerSendsEmptyPayload(t *testing.T) {
 
 	sendAction(t, app, admin, protocol.ActionNewGame, struct{}{})
 
-	// NEW_GAME resets GameState.Question to nil — no "current" question, so
-	// (same arbitrage rule as HELLO before any READY) the broadcast payload
-	// must be empty, not "the first question of the new game".
 	got := readNextQuestion(t, anim)
-	if got.ID != "" {
-		t.Errorf("NEW_GAME: expected empty NEXT_QUESTION (no current question after reset), got ID=%q", got.ID)
+	if got.ID != "1" {
+		t.Errorf("NEW_GAME: expected NEXT_QUESTION to point at the first playable question (ID=1) after reset, got ID=%q", got.ID)
+	}
+	if got.CurrentPosition != 0 {
+		t.Errorf("NEW_GAME: expected CurrentPosition=0 (no current question after reset), got %d", got.CurrentPosition)
+	}
+	if got.TotalQuestions != 2 {
+		t.Errorf("NEW_GAME: expected TotalQuestions=2, got %d", got.TotalQuestions)
 	}
 }

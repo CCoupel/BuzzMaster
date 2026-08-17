@@ -51,7 +51,8 @@ Ce document décrit la machine à états qui gouverne le déroulement d'une part
 | **REVEALED** | PREPARE | Click question | Idem ci-dessus | Idem ci-dessus |
 | **PREPARE** | PREPARE | Click autre question | Change de question, renvoie PING, boutons inchangés | Réaffiche "PREPAREZ-VOUS" |
 | **PREPARE** | PREPARE | Réception PONG | Le joueur concerné reprend sa couleur. L'équipe reprend sa couleur quand TOUS ses joueurs ont envoyé PONG. Boutons inchangés (désactivés) | Pas de changement |
-| **PREPARE** | READY | Tous PONG reçus | Bouton START devient actif. PAUSE/REPONSE restent désactivés | "PREPAREZ-VOUS" clignote |
+| **PREPARE** | READY | Tous PONG reçus **ET participants conformes** | Bouton START devient actif. PAUSE/REPONSE restent désactivés | "PREPAREZ-VOUS" clignote |
+| **READY** | PREPARE | Sélection participants non conforme (#172) | Retour automatique en attente, motif d'incompatibilité affiché | Réaffiche "PREPAREZ-VOUS" |
 | **READY** | PREPARE | Click autre question | Change de question, renvoie PING, retour en attente des PONGs | Réaffiche "PREPAREZ-VOUS" |
 | **READY** | STARTED | Click START | Bouton START devient STOP (actif). Bouton PAUSE actif. REPONSE désactivé. Timer démarre | Affiche la question + média. Chronomètre démarre |
 | **STARTED** | PAUSED | Click PAUSE | STOP reste actif. PAUSE devient CONTINUE (actif). REPONSE désactivé | Chronomètre en pause (clignote) |
@@ -108,14 +109,49 @@ Ce document décrit la machine à états qui gouverne le déroulement d'une part
   - L'équipe reprend sa couleur **uniquement** quand **tous** ses joueurs ont envoyé leur PONG
 
 ### Transition PREPARE → READY
-- Se déclenche automatiquement quand tous les buzzers connectés ont répondu PONG
-- Si aucun buzzer n'est connecté, la transition est immédiate
+- Se déclenche automatiquement quand **tous les buzzers connectés ont répondu PONG**
+- **ET** que la sélection des équipes participantes est **conforme** aux règles du mode (#172)
+- Si aucun buzzer n'est connecté, la transition est immédiate (si conformité OK)
+
+### Règles de Conformité des Participants (#172)
+
+La sortie de `PREPARE` vers `READY` dépend désormais de deux critères indépendants : les buzzers physiques ET la sélection des équipes.
+
+**Pour les modes simples (SPEEDY, QCM, ARDOISE) :** Aucun changement — au moins une équipe active requise, déjà le cas auparavant.
+
+**Pour les modes de sélection :**
+
+| Type | Critère | Exemple | Comportement |
+|------|---------|---------|--------------|
+| **MEMORY SOLO** | Exactement 1 équipe sélectionnée | `["Red"]` | Permis → READY, sinon reste PREPARE |
+| **MEMORY multi** (CHACUN_SON_TOUR, TANT_QUE_JE_GAGNE) | Au moins 2 équipes sélectionnées | `["Red", "Blue"]` | ≥2 → READY ; <2 → PREPARE |
+| **MEMOTION** | Au moins 1 équipe sélectionnée | `["Red"]` | ≥1 → READY ; 0 → PREPARE |
+| **Type inconnu** | Permissif | N/A | Toujours permis (défaut sûr) |
+
+### Retour Arrière READY → PREPARE (#172)
+
+Si la sélection des participants cesse d'être conforme **alors que la phase est `READY`**, la question repasse automatiquement en `PREPARE` :
+- **Quand cela arrive** : un administrateur retire une équipe de la sélection (ex. en MEMORY SOLO, passer de 1 équipe à 0, ou en MEMORY multi, de 2 équipes à 1)
+- **Jamais depuis une phase de jeu** : `STARTED`, `PAUSED`, `COUNTDOWN`, `REVEALED` restent insensibles aux changements de sélection
+- **Comportement** : le motif d'attente est affiché à la régie et sur la tablette animateur (`#172 Bloc C`)
+- **Remise en conformité** : dès que la sélection redevient valide, repasse automatiquement en `READY` sans geste supplémentaire
 
 ## Implémentation
 
 ### Backend (Go)
 - Fichier: `server-go/internal/game/engine.go`
 - Les phases sont définies comme constantes: `PhaseStopped`, `PhasePrepare`, `PhaseReady`, `PhaseStarted`, `PhasePaused`, `PhaseRevealed`
+
+#### Verrou de phase sur `Engine.Start()` (#172)
+La méthode `Engine.Start()` refuse toute phase autre que `READY` :
+```go
+if e.state.Phase != PhaseReady {
+    // Log + return sans rien modifier
+}
+```
+**Conséquence** : une partie démarrée est nécessairement conforme, et le reste (car `SetMemoryParticipatingTeams` et `SetMotionParticipatingTeams` n'acceptent que PREPARE/READY, interdites une fois `STARTED` atteint).
+
+**`ForceReady()` (fonction de débogage, admin)** : saute l'attente des PONG mais **respecte toujours** la conformité des participants — voir arbitrage G du plan #172.
 
 ### Frontend Admin (React)
 - Fichier: `server-go/web/src/pages/GamePage.jsx`
@@ -124,6 +160,11 @@ Ce document décrit la machine à états qui gouverne le déroulement d'une part
 ### Frontend Joueur (React)
 - Fichier: `server-go/web/src/pages/PlayerDisplay.jsx`
 - L'affichage est conditionné par `gameState.phase`
+
+### Frontend Animateur (React) — v6.2.x
+- Fichier: `server-go/web/src/pages/AnimPage.jsx` (page `/anim`), zone conduite `AnimConductPanel.jsx`
+- Conduite en direct des transitions de phase depuis une tablette (LANCER/PAUSE/CONTINUER/STOP/RÉPONSE), au même titre que `/admin` — voir `docs/REACT_INTERFACE.md` §"Layout AnimPage"
+- **Depuis #159 (v6.2.0.27), l'animateur peut également agir directement sur l'état de jeu en mode MEMORY** : la grille (`AnimMemoryGrid.jsx`) permet de retourner les cartes du doigt sur sa tablette, action `FLIP_MEMORY_CARD` (auparavant réservée à `tv`/`vplayer`). C'est le premier mode où l'interface animateur modifie l'état de jeu (paires trouvées, erreurs, tour de l'équipe active) au-delà de la conduite de phase et du crédit de points — voir `docs/WEBSOCKET_PROTOCOL.md` §"Liste blanche entrante" pour le détail de cet élargissement de capacité. Le choix des équipes participantes (`MEMORY_SET_TEAMS`) reste réservé à `/admin`.
 
 ## États du Chronomètre (Timer)
 
@@ -381,3 +422,8 @@ Structure commune à tous les jeux :
 - `PlayerDisplay.jsx` : vues TV + framer-motion layoutId + AnimatePresence flip + bannière MEMORIZE + coordonnées Secret Mode (v5.5.0)
 - `PlayerDisplay.css` : classes `.memotion-*`, `.memotion-memorize-active`, `.memotion-memorize-banner` (v5.5.0)
 - `QuestionsPage.jsx` : champ "Durée mémorisation (s)" dans éditeur MEMOTION (v5.5.0)
+- `AnimPage.jsx` : interface animateur tablette (v6.2.0, #160 — conduite MEMOTION complète depuis `/anim`)
+- `AnimConductPanel.jsx` : conduite 5 lignes, L2 occupée par `AnimMotionActions`, L3 4 voies avec MEMOTION grille/carte (v6.2.0, #160)
+- `AnimMotionGrid.jsx` / `AnimMotionCard.jsx` / `AnimMotionActions.jsx` : composants MEMOTION tablette (v6.2.0, #160)
+- `utils/motionGrid.js` : règles disposition MEMOTION partagées avec TV (v6.2.0, #160)
+- `utils/motionRules.js` : matrice gestes MEMOTION par sous-phase (v6.2.0, #160)

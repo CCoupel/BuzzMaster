@@ -1,0 +1,161 @@
+{
+  "ANSWER": "20 cartes",
+  "CATEGORY": "GEOGRAPHY",
+  "ID": "85",
+  "MOTION_CARDS": [
+    {
+      "ID": "mc-1",
+      "DIFFICULTY": 2,
+      "RECTO_THEME": "Fleuve",
+      "QUESTION_TEXT": "Question test carte 1 ?",
+      "ANSWER_TEXT": "Reponse 1"
+    },
+    {
+      "ID": "mc-2",
+      "DIFFICULTY": 3,
+      "RECTO_THEME": "Montagne",
+      "QUESTION_TEXT": "Question test carte 2 ?",
+      "ANSWER_TEXT": "Reponse 2"
+    },
+    {
+      "ID": "mc-3",
+      "DIFFICULTY": 1,
+      "RECTO_THEME": "Ocean",
+      "QUESTION_TEXT": "Question test carte 3 ?",
+      "ANSWER_TEXT": "Reponse 3"
+    },
+    {
+      "ID": "mc-4",
+      "DIFFICULTY": 2,
+      "RECTO_THEME": "Desert",
+      "QUESTION_TEXT": "Question test carte 4 ?",
+      "ANSWER_TEXT": "Reponse 4"
+    },
+    {
+      "ID": "mc-5",
+      "DIFFICULTY": 3,
+      "RECTO_THEME": "Capitale",
+      "QUESTION_TEXT": "Question test carte 5 ?",
+      "ANSWER_TEXT": "Reponse 5"
+    },
+    {
+      "ID": "mc-6",
+      "DIFFICULTY": 1,
+      "RECTO_THEME": "Fleuve",
+      "QUESTION_TEXT": "Question test carte 6 ?",
+      "ANSWER_TEXT": "Reponse 6"
+    },
+    {
+      "ID": "mc-7",
+      "DIFFICULTY": 2,
+      "RECTO_THEME": "Montagne",
+      "QUESTION_TEXT": "Question test carte 7 ?",
+      "ANSWER_TEXT": "Reponse 7"
+    },
+    {
+      "ID": "mc-8",
+      "DIFFICULTY": 3,
+      "RECTO_THEME": "Ocean",
+      "QUESTION_TEXT": "Question test carte 8 ?",
+      "ANSWER_TEXT": "Reponse 8"
+    },
+    {
+      "ID": "mc-9",
+      "DIFFICULTY": 1,
+      "RECTO_THEME": "Desert",
+      "QUESTION_TEXT": "Question test carte 9 ?",
+      "ANSWER_TEXT": "Reponse 9"
+    },
+    {
+      "ID": "mc-10",
+      "DIFFICULTY": 2,
+      "RECTO_THEME": "Capitale",
+      "QUESTION_TEXT": "Question test carte 10 ?",
+      "ANSWER_TEXT": "Reponse 10"
+    },
+    {
+      "ID": "mc-11",
+      "DIFFICULTY": 3,
+      "RECTO_THEME": "Fleuve",
+      "QUESTION_TEXT": "Question test carte 11 ?",
+      "ANSWER_TEXT": "Reponse 11"
+    },
+    {
+      "ID": "mc-12",
+      "DIFFICULTY": 1,
+      "RECTO_THEME": "Montagne",
+      "QUESTION_TEXT": "Question test carte 12 ?",
+      "ANSWER_TEXT": "Reponse 12"
+    },
+    {
+      "ID": "mc-13",
+      "DIFFICULTY": 2,
+      "RECTO_THEME": "Ocean",
+      "QUESTION_TEXT": "Question test carte 13 ?",
+      "ANSWER_TEXT": "Reponse 13"
+    },
+    {
+      "ID": "mc-14",
+      "DIFFICULTY": 3,
+      "RECTO_THEME": "Desert",
+      "QUESTION_TEXT": "Question test carte 14 ?",
+      "ANSWER_TEXT": "Reponse 14"
+    },
+    {
+      "ID": "mc-15",
+      "DIFFICULTY": 1,
+      "RECTO_THEME": "Capitale",
+      "QUESTION_TEXT": "Question test carte 15 ?",
+      "ANSWER_TEXT": "Reponse 15"
+    },
+    {
+      "ID": "mc-16",
+      "DIFFICULTY": 2,
+      "RECTO_THEME": "Fleuve",
+      "QUESTION_TEXT": "Question test carte 16 ?",
+      "ANSWER_TEXT": "Reponse 16"
+    },
+    {
+      "ID": "mc-17",
+      "DIFFICULTY": 3,
+      "RECTO_THEME": "Montagne",
+      "QUESTION_TEXT": "Question test carte 17 ?",
+      "ANSWER_TEXT": "Reponse 17"
+    },
+    {
+      "ID": "mc-18",
+      "DIFFICULTY": 1,
+      "RECTO_THEME": "Ocean",
+      "QUESTION_TEXT": "Question test carte 18 ?",
+      "ANSWER_TEXT": "Reponse 18"
+    },
+    {
+      "ID": "mc-19",
+      "DIFFICULTY": 2,
+      "RECTO_THEME": "Desert",
+      "QUESTION_TEXT": "Question test carte 19 ?",
+      "ANSWER_TEXT": "Reponse 19"
+    },
+    {
+      "ID": "mc-20",
+      "DIFFICULTY": 3,
+      "RECTO_THEME": "Capitale",
+      "QUESTION_TEXT": "Question test carte 20 ?",
+      "ANSWER_TEXT": "Reponse 20"
+    }
+  ],
+  "MOTION_CONFIG": {
+    "POINTS_1_STAR": 1,
+    "POINTS_2_STAR": 3,
+    "POINTS_3_STAR": 5
+  },
+  "MOTION_MEMORIZE_DURATION": 0,
+  "MOTION_MODE": "CHACUN_SON_TOUR",
+  "ORDER": 92,
+  "POINTS": "1",
+  "POINTS_TARGET": "TEAM",
+  "QCM_HINTS_ENABLED": false,
+  "QUESTION": "QA #160 - Scenario 1 (borne haute) - MEMOTION 20 cartes",
+  "TIME": "30",
+  "TYPE": "MEMOTION"
+}

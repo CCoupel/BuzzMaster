@@ -75,10 +75,6 @@ var inboundActionAllowlist = map[string][]ClientType{
 	protocol.ActionReorderQuestions:      {ClientTypeAdmin},
 	protocol.ActionForceReady:            {ClientTypeAdmin},
 	protocol.ActionMemorySetTeams:        {ClientTypeAdmin},
-	protocol.ActionMotionFlip:            {ClientTypeAdmin},
-	protocol.ActionMotionStopTimer:       {ClientTypeAdmin},
-	protocol.ActionMotionReveal:          {ClientTypeAdmin},
-	protocol.ActionMotionDone:            {ClientTypeAdmin},
 	protocol.ActionMotionSetTeams:        {ClientTypeAdmin},
 	protocol.ActionShowQRCode:            {ClientTypeAdmin},
 	protocol.ActionHideQRCode:            {ClientTypeAdmin},
@@ -115,19 +111,57 @@ var inboundActionAllowlist = map[string][]ClientType{
 	protocol.ActionButton: {ClientTypeAdmin, ClientTypeVPlayer},
 	protocol.ActionPong:   {ClientTypeAdmin, ClientTypeVPlayer},
 
-	// --- MEMORY / MEMOTION card interaction ---------------------------
+	// --- MEMORY card interaction ---------------------------------------
 	// FLIP_MEMORY_CARD: TV carries BOTH the admin preview iframe (/tv?admin=true,
 	// embedded read-only in GamePage but connects as a genuine ClientTypeTV —
 	// PlayerDisplay.jsx isAdminPreview) AND a real spectator screen that lets
 	// the active team's own VPlayer click their own card through
 	// (PlayerDisplay.jsx canClick / isVPlayerInActiveTeam, contract
 	// game-state.md MEMORY_CURRENT_TEAM).
-	protocol.ActionFlipMemoryCard: {ClientTypeTV, ClientTypeVPlayer},
-	// MEMOTION_SELECT: only ever sent from the admin preview iframe
-	// (PlayerDisplay.jsx canSelectCard requires isAdminPreview) — that
-	// connection is still a genuine ClientTypeTV (the iframe's path is
-	// still /tv), never VPlayer.
-	protocol.ActionMotionSelect: {ClientTypeTV},
+	//
+	// ⚠️ CAPABILITY WIDENING (v6.2.x, #159 B1, contracts/websocket-actions.md
+	// §Allow-list, contracts/CHANGELOG.md [20260816-3]): ClientTypeAnim added
+	// — the FIRST action where the interface animateur can directly MUTATE
+	// game state (flip a MEMORY card) rather than only ARBITRATE it
+	// (start/stop/reveal/credit, the "conduite en direct" block above). The
+	// engine's own phase guard (flip rejected outside PhaseStarted) applies
+	// unchanged to this new sender — no engine change, no additional guard
+	// added here. `admin` deliberately stays OUT of this entry: the régie
+	// flips cards through its embedded TV preview iframe (a genuine
+	// ClientTypeTV connection, not admin itself) — unchanged by this lot.
+	// ActionMemorySetTeams (above, admin-only) is NOT touched either.
+	protocol.ActionFlipMemoryCard: {ClientTypeTV, ClientTypeVPlayer, ClientTypeAnim},
+
+	// --- MEMOTION card interaction --------------------------------------
+	// Mirrors the MEMORY block above, but for the five sub-phases
+	// (MEMORIZE -> GRID -> SELECTED -> QUESTION -> REVEAL) of a MEMOTION
+	// round. Until #160 these five actions were split across the admin-only
+	// "Game control (régie)" block (Flip/StopTimer/Reveal/Done) and this
+	// section (Select, TV-only) — moved here as one documented unit so the
+	// full MEMOTION conduct surface reads together.
+	//
+	// ⚠️ CAPABILITY WIDENING (v6.2.x, #160 B1, contracts/websocket-actions.md
+	// §Allow-list, contracts/CHANGELOG.md [20260817-3]): ClientTypeAnim added
+	// to all five — the interface animateur conducts a MEMOTION round
+	// (select a card, flip it, stop the reveal timer, reveal the answer,
+	// credit the round) directly from its tablet, exactly as #159 did for
+	// MEMORY. The engine's own phase/subphase guards (handleMotion* in
+	// cmd/server/main.go) apply unchanged to this new sender — no engine
+	// change, no additional guard added here.
+	//
+	// `tv` stays on ActionMotionSelect only (the admin preview iframe,
+	// PlayerDisplay.jsx canSelectCard requires isAdminPreview — a genuine
+	// ClientTypeTV connection, the iframe's path is still /tv, never
+	// VPlayer). `admin` stays on the four others (régie conduct panel).
+	// Neither loses a right — this lot only adds `anim` to each entry.
+	// ActionMotionSetTeams (above, admin-only) is deliberately NOT touched:
+	// the choice of participating teams stays with the régie, exactly as
+	// ActionMemorySetTeams does for MEMORY (#159).
+	protocol.ActionMotionSelect:    {ClientTypeTV, ClientTypeAnim},
+	protocol.ActionMotionFlip:      {ClientTypeAdmin, ClientTypeAnim},
+	protocol.ActionMotionStopTimer: {ClientTypeAdmin, ClientTypeAnim},
+	protocol.ActionMotionReveal:    {ClientTypeAdmin, ClientTypeAnim},
+	protocol.ActionMotionDone:      {ClientTypeAdmin, ClientTypeAnim},
 
 	// --- VPlayer-only -------------------------------------------------
 	protocol.ActionPlayerConnect:    {ClientTypeVPlayer},

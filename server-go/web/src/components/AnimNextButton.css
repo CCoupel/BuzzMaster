@@ -1,0 +1,77 @@
+/* AnimNextButton — bouton "à suivre" de la conduite (/anim, #166/F4).
+   Couleurs #165 : go=vert, optional=bleu ; nouvel état inert=gris pointillé
+   (jamais un fond gris plein sur un élément qui reste dans le DOM mais
+   n'émet rien — cohérent avec la règle #165 "jamais de gris sur un bouton
+   cliquable" : ce bouton, en 'inert', ne l'est justement plus). */
+
+.anim-next-btn {
+  width: 100%;
+  min-height: 62px;
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  border-radius: var(--radius-lg);
+  padding: var(--space-2) var(--space-4);
+  border: 2px solid transparent;
+  box-sizing: border-box;
+  cursor: pointer;
+  text-align: left;
+  transition: transform var(--transition-fast, 150ms ease), filter var(--transition-fast, 150ms ease);
+}
+
+.anim-next-btn:active:not(:disabled) {
+  transform: scale(0.98);
+  filter: brightness(0.9);
+}
+
+.anim-next-btn-go {
+  background: var(--success, #22c55e);
+  color: #07220f;
+}
+
+.anim-next-btn-optional {
+  background: var(--info, #3b82f6);
+  color: #04162e;
+}
+
+.anim-next-btn-inert {
+  background: transparent;
+  border-style: dashed;
+  border-color: #47536b;
+  color: #8b98ad;
+  cursor: default;
+}
+
+.anim-next-btn-label {
+  flex: none;
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  opacity: 0.85;
+}
+
+.anim-next-btn-body {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+}
+
+.anim-next-btn-statement {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.95rem;
+  font-weight: 700;
+}
+
+.anim-next-btn-meta {
+  flex: none;
+  font-size: 0.8rem;
+  opacity: 0.85;
+  font-variant-numeric: tabular-nums;
+}

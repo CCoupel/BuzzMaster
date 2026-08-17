@@ -288,43 +288,16 @@ Si oui → executer la logique de cloture (identique a `/milestone close v[X.Y]`
    ```
 4. Afficher le bilan de cloture
 
-### Etape 8 — Proposer l'agent marketing (si changements marquants)
-
-**Reference** : `agents/marketing-release.md`, `commands/marketing.md`.
-
-Uniquement si le milestone a ete cloture a l'etape 7. Lister ses issues livrees (fermees) et
-filtrer sur les labels visibles utilisateur :
-
-```bash
-gh issue list --milestone "v$XY" --state closed \
-  --json number,title,labels \
-  --jq '[.[] | select(.labels[]?.name as $l | ["feature","enhancement","breaking-change"] | index($l))]
-        | .[] | "#" + (.number|tostring) + " — " + .title + " [" + (.labels | map(.name) | join(", ")) + "]"'
+En orchestration CDP (jamais de contact direct utilisateur) : remonter le resultat de la
+cloture dans le rapport `DEPLOY DONE` a `main`, qui le presente a l'utilisateur (meme
+principe que GATE 4) :
+```
+SendMessage({ to: "main", content: "DEPLOY DONE\n...\nMilestone v[X.Y] cloture." })
 ```
 
-Si la liste est vide (que des `fix`/`chore`/`refactor`) → passer directement au rapport final (etape suivante), sans proposer l'agent.
-
-Si au moins une issue marquante est trouvee, afficher :
-
-```
-📣 Milestone v[X.Y] — <N> changement(s) marquant(s) livre(s) :
-   - #42 — Ajouter auth OAuth2 [feature]
-   - #51 — Export PDF des rapports [feature]
-
-   Lancer l'agent marketing pour mettre a jour le site (gh-pages) ? [O/n]
-```
-
-- Si **oui** → spawner l'agent `marketing-release` (voir `commands/marketing.md` section Agent) avec
-  la tache "Mettre a jour le site marketing pour la version v[X.Y]", attendre son `DONE`, puis
-  `TaskStop("marketing-release")`
-- Si **non** → continuer normalement
-
-En orchestration CDP (teammate `deployer`, jamais de contact direct utilisateur) : remonter le
-resultat dans le rapport `DEPLOY DONE` a `main` au lieu d'afficher le prompt `[O/n]` —
-c'est au CDP de le presenter a l'utilisateur (meme principe que GATE 4) :
-```
-SendMessage({ to: "main", content: "DEPLOY DONE\n...\nMilestone v[X.Y] cloture — <N> changement(s) marquant(s) : #42 [feature], #51 [feature] → proposer /marketing v[X.Y] a l'utilisateur" })
-```
+> La decision de lancer l'agent marketing (`marketing-release`) n'est plus du ressort du
+> `deployer` — le CDP la prend independamment, en parallele de ce deploiement, en
+> dispatchant directement `marketing`. Voir `agents/cdp.md` Phase 6 et `agents/marketing-release.md`.
 
 ## Gestion des Echecs CI
 

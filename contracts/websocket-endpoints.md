@@ -78,6 +78,7 @@ Le serveur envoie chaque action uniquement aux types clients concernés :
 | `UPDATE_TIMER` | ✓ | ✓ | ✓ | ✓ | ✓ | Chronomètre affiché en zone A (`AnimPage.jsx`). **Corrigé #162** : le chronomètre ne s'écoulait jamais sur la tablette avant ce correctif (même cause que `UPDATE` ci-dessus) |
 | `NEXT_QUESTION` | — | — | — | ✓ **exclusif** | — | **Nouveau (v6.2.0, #155)** — voir `contracts/websocket-actions.md` §"Animateur" |
 | `CREDIT_POINTS` | — | — | — | ✓ **exclusif** | — | **Nouveau (v6.2.0, code review MAJEUR-1 #155/#156)** — voir `contracts/websocket-actions.md` §"Animateur" |
+| `AWARDED_TEAMS` | — | — | — | ✓ **exclusif** | — | **Nouveau (v6.2.x, chantier crédit synchronisé — #170)** — équipes déjà créditées pour la question courante, **tous modes confondus**, projection de l'historique existant. Admin volontairement exclu : la régie reste sans garde de double-crédit. Voir `contracts/websocket-actions.md` §"Animateur" |
 | `START` / `CONTINUE` | ✓ | ✓ | ✓ | ✓ | ✓ | Firmware : startGame(). **Anim depuis #162** (`broadcastStart`/`broadcastContinue`) — avant, la phase ne suivait jamais sur la tablette, y compris pour son propre appui sur LANCER |
 | `STOP` | ✓ | ✓ | ✓ | ✓ | ✓ | Firmware : stopGame(). **Anim depuis #162** (`broadcastStop`) |
 | `PAUSE` | ✓ | ✓ | ✓ | ✓ | ✓ | Firmware : pauseGame(). **Anim depuis #162** (`broadcastPause`/`broadcastPauseAll`) |
@@ -123,6 +124,24 @@ changement : `QUESTIONS`, `CLIENTS`, `CONFIG_UPDATE`, `FIRMWARE_VERSION`, `BACKG
 associé, lui, est concerné ci-dessus) et les lignes buzzer-only restent ✗ pour Animateur, sans
 changement de #162 — voir l'inventaire « À NE PAS modifier » de `_work/reports/plan-20260813-174513.md`
 §2.3.
+
+**Colonne Animateur — complément 2026-08-16 (#158)** : l'`UPDATE` déclenché par la **frappe ARDOISE
+des joueurs** échappait à la correction #162 et restait **régie seulement**. Ce n'est pas
+`broadcastUpdateTo` qui est en cause cette fois — il route correctement `Anim` depuis #162 — mais son
+**appelant** : le coalesceur d'`ARDOISE_INPUT` (`cmd/server/main.go`, `NewBroadcastCoalescer(…, func()
+{ a.broadcastUpdateTo(server.ClientTypeAdmin) })`, #129 T2.1/T2.2) ne lui passe que
+`ClientTypeAdmin`. Conséquence : `GAME.ARDOISE_ANSWERS` est bien présent dans le payload animateur
+(aucun filtrage, cf. `ws-payload-serialization.md`), mais il n'y est **rafraîchi qu'au prochain
+changement de phase** — une tablette `/anim` verrait la liste des copies figée pendant toute la
+frappe. Corrigé par #158 : le coalesceur cible désormais `ClientTypeAdmin` **et** `ClientTypeAnim`.
+
+> Même famille de défaut que #162, à un étage différent de la pile : là c'était la fonction de
+> diffusion qui ignorait le type, ici c'est un appelant qui ne le demande pas. **Tout nouvel appel à
+> `broadcastUpdateTo` doit énumérer explicitement les types concernés** — l'oubli est silencieux, il
+> ne produit ni erreur ni log, seulement un écran qui ne bouge plus.
+>
+> Périmètre strictement limité au coalesceur ARDOISE : `broadcastUpdateToPlayer` (VPlayer ciblé) et
+> les autres appelants ne sont pas modifiés par #158.
 
 ---
 

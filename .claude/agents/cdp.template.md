@@ -378,16 +378,19 @@ Valide ? repondre OUI (ou `/deploy prod`) — Pas conforme ? repondre NON + desc
 Selon la reponse utilisateur :
 - **OUI / `/deploy prod`** →
   > `ISSUE_NUMS[]` non vide → fermer toutes les issues + verifier milestone
+  > (l'issue porte déjà le label `DONE` — la fermeture GitHub suffit, aucun changement de label)
   Phase 6 (PROD)
 - **NON** →
-  > `ISSUE_NUMS[]` non vide → reset label `EN COURS` sur toutes les issues
+  Le label `DONE` est retiré — la destination dépend de la nature de la correction (jamais `EN COURS` par défaut) :
 
   **Cas A — correction dans le scope (bug, régression, précision) → retour Phase DEV :**
+  > `ISSUE_NUMS[]` non vide → reset label `EN COURS` sur toutes les issues (`--add-label "EN COURS" --remove-label "DONE"`)
   - dev-* et test-writer : **pas de CLEAR** — leur contexte est la carte exacte de ce qu'ils ont construit
   - CLEAR(code-reviewer) + CLEAR(qa) + CLEAR(doc-updater) avant redispatch
   - La documentation reste valide pour le delta
 
   **Cas B — scope invalide (approche erronée, exigences changées) → retour Phase 1 :**
+  > `ISSUE_NUMS[]` non vide → reset label `PLANNING` sur toutes les issues (`--add-label "PLANNING" --remove-label "DONE"`)
   - CLEAR(planner) → nouveau plan → GATE 2
   - Après réception du nouveau plan : CLEAR(dev-*) + CLEAR(test-writer) — contexte obsolète
   - CLEAR(code-reviewer) + CLEAR(qa) + CLEAR(doc-updater) avant redispatch

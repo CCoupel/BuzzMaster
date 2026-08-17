@@ -1,0 +1,64 @@
+/* AnimAnswerZone — zone réponse permanente (/anim, #166/F10).
+   R5 : dimensions IDENTIQUES entre .masked et .revealed — seuls
+   filter/opacity/border-style changent, jamais une taille ou un padding. */
+
+.anim-answer-zone {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 38px;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  border: 1.5px solid var(--success, #22c55e);
+  background: color-mix(in srgb, var(--success, #22c55e) 14%, var(--bg-tertiary, #334155));
+  box-sizing: border-box;
+}
+
+.anim-answer-zone-label {
+  flex: none;
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  opacity: 0.8;
+}
+
+.anim-answer-zone-badge {
+  flex: none;
+  width: 19px;
+  height: 19px;
+  border-radius: var(--radius-sm);
+  display: grid;
+  place-items: center;
+  font-weight: 800;
+  font-size: 0.7rem;
+  color: #0b1120;
+}
+
+.anim-answer-zone-value {
+  font-size: 1rem;
+  font-weight: 700;
+}
+
+/* Floutée jusqu'au reveal — précaution d'usage, pas un masque (voir
+   AnimAnswerZone.jsx). Bordure en pointillés : distingue visuellement
+   l'état masqué sans changer l'épaisseur de bordure (même 1.5px), donc
+   sans décaler le contenu voisin. */
+.anim-answer-zone.masked {
+  border-style: dashed;
+  border-color: color-mix(in srgb, var(--success, #22c55e) 45%, transparent);
+}
+
+.anim-answer-zone.masked .anim-answer-zone-value,
+.anim-answer-zone.masked .anim-answer-zone-badge {
+  filter: blur(5px);
+  opacity: 0.7;
+  user-select: none;
+}
+
+/* #169 — révélation par pression tactile (Pointer Events), active
+   uniquement avant REVEALED. touch-action:none empêche le geste de
+   déclencher un scroll/zoom tactile parasite pendant la pression. */
+.anim-answer-zone-peekable {
+  cursor: pointer;
+  touch-action: none;
+}

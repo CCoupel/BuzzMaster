@@ -1,0 +1,39 @@
+/* AnimMotionActions — ligne L2 pendant une manche MEMOTION (#160/F6/F9).
+   Réutilise .anim-conduct-btn-{go|optional|danger|off} TEL QUEL
+   (AnimConductPanel.css, chargé par AnimConductPanel qui monte toujours ce
+   composant) — jamais redéfini ici (T5). Seule la mise en page (wrap,
+   tailles) et le bandeau MEMORIZE/GRID sont propres à cette ligne. */
+
+.anim-motion-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  align-items: stretch;
+  width: 100%;
+}
+
+.anim-motion-action-btn {
+  flex: 1 1 7rem;
+  min-height: 62px;
+}
+
+/* Bandeau d'information MEMORIZE/GRID (motionGestures() retourne []) —
+   même habillage visuel que .anim-conduct-reserved (AnimConductPanel.css)
+   sans en dépendre : classe propre pour ne pas coupler les deux fichiers. */
+.anim-motion-banner {
+  flex: 1;
+  border: 1.5px dashed #47536b;
+  border-radius: var(--radius-md);
+  min-height: 62px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 4px var(--space-3);
+  font-size: 0.8rem;
+  color: var(--text-secondary, #94a3b8);
+}
+
+.anim-motion-banner b {
+  color: var(--text-primary, #eae7f5);
+}

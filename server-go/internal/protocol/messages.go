@@ -104,6 +104,8 @@ const (
 	// Code review MAJEUR-1 follow-up (v6.2.0, #155/#156 — contracts/websocket-actions.md §"Animateur")
 	ActionSetCreditPoints = "SET_CREDIT_POINTS" // Admin → Server: pointsInput was adjusted, push the new base credit amount
 	ActionCreditPoints    = "CREDIT_POINTS"     // Server → Client (/ws/anim only): current base credit amount for the active question
+	// Synchronized credit lock across animateur tablets (v6.2.x, #170 — contracts/websocket-actions.md §"Animateur")
+	ActionAwardedTeams = "AWARDED_TEAMS" // Server → Client (/ws/anim only): teams already credited for the current question, all modes
 )
 
 // FSInfo represents file storage information
@@ -234,18 +236,26 @@ type ClientsPayload struct {
 	BuzzerWS  int `json:"BUZZER_WS_COUNT"`
 }
 
-// NextQuestionPayload for NEXT_QUESTION action (v6.2.0, #155 tâche B5).
+// NextQuestionPayload for NEXT_QUESTION action (v6.2.0, #155 tâche B5;
+// CurrentPosition/TotalQuestions added v6.2.x #166).
 // Server → Client, ClientTypeAnim exclusively (contracts/websocket-actions.md
-// §"Animateur"). All fields are the zero value (empty payload) when no
-// question is playable — see App.getNextQuestion's doc comment for the full
-// computation rule (parity with GamePage.jsx's nextUnplayedQuestion).
+// §"Animateur"). The next-question fields (ID/Question/Category/Type/Points/
+// Time) are the zero value (empty) when no question is playable — see
+// App.getNextQuestionPayload's doc comment for the full computation rule
+// (parity with GamePage.jsx's nextUnplayedQuestion). CurrentPosition and
+// TotalQuestions are NOT part of that "all or nothing" group: they describe
+// the current question and the quiz as a whole, and are populated even when
+// there is no next question (e.g. the last question of the quiz) — no
+// omitempty, project-wide GameState convention (CLAUDE.md).
 type NextQuestionPayload struct {
-	ID       string `json:"ID"`
-	Question string `json:"QUESTION"`
-	Category string `json:"CATEGORY"`
-	Type     string `json:"TYPE"`
-	Points   int    `json:"POINTS"`
-	Time     int    `json:"TIME"`
+	ID              string `json:"ID"`
+	Question        string `json:"QUESTION"`
+	Category        string `json:"CATEGORY"`
+	Type            string `json:"TYPE"`
+	Points          int    `json:"POINTS"`
+	Time            int    `json:"TIME"`
+	CurrentPosition int    `json:"CURRENT_POSITION"`
+	TotalQuestions  int    `json:"TOTAL_QUESTIONS"`
 }
 
 // CreditPointsPayload is shared by both directions of the code review
@@ -255,6 +265,32 @@ type NextQuestionPayload struct {
 // exclusively — the current effective base credit amount, echoed back).
 type CreditPointsPayload struct {
 	Points int `json:"POINTS"`
+}
+
+// AwardedTeamsPayload for AWARDED_TEAMS action (v6.2.x, #170 — synchronized
+// credit lock across animateur tablets, contracts/websocket-actions.md
+// §"Animateur"). Server → Client, ClientTypeAnim exclusively. A pure
+// projection of Engine.history's POINTS_AWARDED events for the CURRENT
+// question — no new GameState field, see App.buildAwardedTeamsMessage's doc
+// comment for the exact filter/grouping rule. TEAMS is always [], never nil
+// (no omitempty on either field — project-wide GameState convention,
+// CLAUDE.md).
+type AwardedTeamsPayload struct {
+	QuestionID string             `json:"QUESTION_ID"`
+	Teams      []AwardedTeamEntry `json:"TEAMS"`
+}
+
+// AwardedTeamEntry is one team already credited for the current question
+// (AwardedTeamsPayload.Teams) — Points is the SUM of every POINTS_AWARDED
+// event for that team on this question (a team may be credited more than
+// once from the régie, which has no double-credit guard), Timestamp is the
+// FIRST such event's timestamp. A zero Points is a valid, deliberate entry
+// (a "0 pt" refusal locks the team exactly like a positive credit) — never
+// filtered out.
+type AwardedTeamEntry struct {
+	Team      string `json:"TEAM"`
+	Points    int    `json:"POINTS"`
+	Timestamp int64  `json:"TIMESTAMP"`
 }
 
 // SetClientTypePayload for SET_CLIENT_TYPE action

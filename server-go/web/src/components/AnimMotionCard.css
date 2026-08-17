@@ -1,0 +1,79 @@
+/* AnimMotionCard — carte MEMOTION au premier plan, page animateur
+   (#160/F5/F9). Occupe L3 à la place de la grille pendant SELECTED /
+   QUESTION / REVEAL — mêmes contraintes que le reste de .anim-conduct-l3
+   (flex:1, min-height:0, aucun scroll de page). */
+
+.anim-motion-card-focus {
+  flex: 1;
+  min-height: 0;
+  border-radius: var(--radius-lg);
+  padding: var(--space-3);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  text-align: center;
+  color: #ffffff;
+  overflow: hidden;
+}
+
+/* Face recto (SELECTED) — même dégradé violet que la grille/TV. */
+.anim-motion-card-focus-recto {
+  background: linear-gradient(145deg, #6366f1 0%, #8b5cf6 50%, #a855f7 100%);
+}
+
+/* Face verso (QUESTION / REVEAL) — neutre sombre, cohérent avec
+   .anim-conduct-reserved (bordures pointillées de la conduite). */
+.anim-motion-card-focus-verso {
+  background: var(--bg-tertiary, #241f3a);
+  border: 1px solid #443c68;
+  color: var(--text-primary, #eae7f5);
+}
+
+.anim-motion-card-focus-theme {
+  font-weight: 700;
+  font-size: clamp(0.9rem, 2.4vw, 1.3rem);
+  line-height: 1.25;
+  margin: 0;
+  max-width: 100%;
+}
+
+/* Rappel de la question en REVEAL — volontairement atténué, distinct de
+   la réponse mise en évidence ci-dessous. */
+.anim-motion-card-focus-question {
+  opacity: 0.65;
+  font-weight: 600;
+  font-size: clamp(0.8rem, 2vw, 1.05rem);
+  margin: 0;
+  max-width: 100%;
+}
+
+.anim-motion-card-focus-img {
+  flex: 1;
+  min-height: 0;
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  border-radius: var(--radius-md);
+}
+
+.anim-motion-card-focus-foot {
+  font-size: 1rem;
+  font-weight: 700;
+  opacity: 0.95;
+}
+
+.anim-motion-card-focus-stars {
+  letter-spacing: 0.05em;
+}
+
+.anim-motion-card-focus-points {
+  font-variant-numeric: tabular-nums;
+}
+
+.anim-motion-card-focus-answer {
+  font-size: clamp(1rem, 2.6vw, 1.5rem);
+  font-weight: 800;
+  color: var(--success, #4ade80);
+}

@@ -1,0 +1,81 @@
+/* AnimCreditControl — composant de crédit unique (/anim, #170).
+   Reprend la palette "overlay clair sur carte colorée" de l'ancien
+   .anim-team-credit-btn (AnimTeamCard.css, #156) — même contexte visuel
+   (fond de carte teinté par équipe), désormais partagé par les deux
+   gestes ("+N pts" / "0 pt") et l'état verrouillé. */
+
+.anim-credit-control {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.anim-credit-control-btn {
+  /* appearance:none impératif ici : un <button> garde appearance:auto par
+     défaut (rendu de widget natif), qui empêche `color: inherit` de
+     reprendre la couleur de contraste dynamique de la carte
+     (--anim-team-text, calculée par équipe dans AnimTeamCard.jsx) — sans
+     cette ligne le texte reste noir quelle que soit la couleur d'équipe,
+     illisible sur les fonds sombres. Repéré en vérification #170 : les
+     boutons de AnimConductPanel.css n'ont pas ce problème parce qu'ils
+     posent une couleur EXPLICITE (#ffffff), pas `inherit` — ici la couleur
+     doit rester dynamique, donc c'est `appearance` qu'il faut corriger. */
+  appearance: none;
+  -webkit-appearance: none;
+  min-height: 62px;
+  padding: 0 var(--space-4);
+  border: none;
+  border-radius: var(--radius-md);
+  color: inherit;
+  font-size: 1.1rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: filter var(--transition-fast, 150ms ease), transform var(--transition-fast, 150ms ease);
+}
+
+.anim-credit-control-btn:active {
+  transform: scale(0.96);
+  filter: brightness(1.15);
+}
+
+/* Geste principal — même habillage que l'ancien bouton unique. */
+.anim-credit-control-btn-award {
+  background: rgba(255, 255, 255, 0.25);
+}
+
+/* Geste de refus (#170/F4) — délibérément moins appuyé visuellement que
+   "+N pts" (c'est un choix par défaut moins engageant), mais tout aussi
+   cliquable : même hauteur, même famille de style, jamais grisé/désactivé. */
+.anim-credit-control-btn-zero {
+  background: rgba(255, 255, 255, 0.12);
+  font-weight: 600;
+  opacity: 0.85;
+}
+
+/* État verrouillé — aussi la confirmation du crédit (#170/F5) : l'arrivée
+   de l'entrée dans awardedTeams EST l'événement annoncé, le rendu de cet
+   état suffit à la rendre visible sans mécanique de toast séparée.
+   Pas d'animation d'apparition ici (essayée puis retirée en vérification
+   #170 : capture headless Chrome incohérente sur ce bloc précis avec une
+   `animation` CSS active — texte confirmé présent en DOM/computed style
+   mais absent du screenshot, alors qu'un `display:flex` statique
+   équivalent sans animation rend correctement ; plutôt qu'affirmer sans
+   certitude que c'est un artefact propre au rendu headless, l'animation
+   est retirée — c'était un embellissement, pas une exigence de F5). */
+.anim-credit-control-locked {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 62px;
+  padding: 0 var(--space-4);
+  border-radius: var(--radius-md);
+  background: rgba(255, 255, 255, 0.15);
+  font-size: 1.1rem;
+  font-weight: 700;
+}
+
+.anim-credit-control-check {
+  color: var(--success, #22c55e);
+  font-weight: 800;
+}

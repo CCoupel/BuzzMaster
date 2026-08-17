@@ -1,0 +1,64 @@
+/* AnimQcmOptions — grille 2x2 des propositions QCM (/anim, #163/F3).
+   Tokens repris de AnimPage.css (ardoise) ; dimensionnement compact pour
+   tenir dans la zone contexte sans écraser conduite/équipes (F5). */
+
+.anim-qcm-options {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.anim-qcm-option {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+  background: var(--bg-tertiary, #334155);
+  border: 2px solid transparent;
+  border-radius: var(--radius-md);
+  padding: var(--space-1) var(--space-2);
+}
+
+.anim-qcm-option-letter {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  border-radius: var(--radius-sm);
+  display: grid;
+  place-items: center;
+  font-weight: 800;
+  font-size: 0.75rem;
+  color: #0b1120;
+}
+
+.anim-qcm-option-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.85rem;
+}
+
+/* Invalidée par un indice (QCM_INVALIDATED) — parité visuelle avec la TV
+   (PlayerDisplay.jsx, .qcm-answer-item.invalidated). */
+.anim-qcm-option.invalidated {
+  opacity: 0.34;
+}
+
+.anim-qcm-option.invalidated .anim-qcm-option-text {
+  text-decoration: line-through;
+}
+
+/* Bonne réponse — uniquement si revealed=true (garde côté composant). */
+.anim-qcm-option.correct {
+  border-color: var(--success, #22c55e);
+  background: color-mix(in srgb, var(--success, #22c55e) 18%, var(--bg-tertiary, #334155));
+}
+
+.anim-qcm-option-mark {
+  margin-left: auto;
+  flex: none;
+  font-weight: 800;
+  color: var(--success, #22c55e);
+}

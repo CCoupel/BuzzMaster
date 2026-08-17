@@ -717,6 +717,13 @@ func (e *Engine) AreAllTeamsReady() bool {
 	e.mu.RLock()
 	defer e.mu.RUnlock()
 
+	return e.areAllTeamsReadyUnsafe()
+}
+
+// areAllTeamsReadyUnsafe is AreAllTeamsReady without locking. Callers must already
+// hold e.mu (read or write) — used by reevaluatePrepareReadyUnsafe, which runs from
+// inside functions that already hold the write lock (sync.RWMutex is not reentrant).
+func (e *Engine) areAllTeamsReadyUnsafe() bool {
 	active := e.getActiveTeams()
 	if len(active) == 0 {
 		return false
@@ -727,6 +734,88 @@ func (e *Engine) AreAllTeamsReady() bool {
 		}
 	}
 	return true
+}
+
+// participantsConform (#172 B1) reports whether the currently selected participants
+// satisfy the minimum requirement for question's type. Pure function, no locking —
+// safe to call from any context, including while e.mu is already held.
+//
+// Table of rules (plan §6/§7 B1 — no branch by type outside this function):
+//   - SPEEDY, QCM, ARDOISE: no requirement of its own — "at least one active team"
+//     is already enforced by AreAllTeamsReady, so this simply returns true.
+//   - MEMORY SOLO: exactly one team selected.
+//   - MEMORY multi (CHACUN_SON_TOUR / TANT_QUE_JE_GAGNE): at least two teams selected.
+//   - MEMOTION: at least one team selected.
+//   - Unknown/future question type, or nil question: permissive by default (true).
+func participantsConform(question *Question, state *GameState) bool {
+	if question == nil {
+		return true
+	}
+	switch question.Type {
+	case QuestionTypeMemory:
+		memoryMode := question.MemoryMode
+		if memoryMode == "" {
+			memoryMode = string(MemoryModeSolo)
+		}
+		if memoryMode == string(MemoryModeSolo) {
+			return len(state.MemoryParticipatingTeams) == 1
+		}
+		// CHACUN_SON_TOUR / TANT_QUE_JE_GAGNE
+		return len(state.MemoryParticipatingTeams) >= 2
+	case QuestionTypeMemotion:
+		return len(state.MotionParticipatingTeams) >= 1
+	default:
+		return true
+	}
+}
+
+// ParticipantsConform (#172 B1) is the locked, exported wrapper around
+// participantsConform for the currently active question — used alongside
+// AreAllTeamsReady at PREPARE→READY transition points (main.go). AreAllTeamsReady is
+// deliberately left unmodified: the two criteria remain distinct, separately
+// readable functions, combined only at the call site (plan §7 B2).
+func (e *Engine) ParticipantsConform() bool {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+
+	return participantsConform(e.state.Question, &e.state)
+}
+
+// reevaluatePrepareReadyUnsafe (#172 B3) re-checks the PREPARE↔READY transition
+// after a participant-selection change (SetMemoryParticipatingTeams /
+// SetMotionParticipatingTeams). Must be called with e.mu already held (write) and
+// returns the new phase if a transition happened, or "" otherwise — the caller is
+// responsible for invoking the OnStateChange callback AFTER releasing the lock
+// (release-before-call pattern used throughout this file), exactly like Ready(),
+// TransitionToReady() and ForceReady() already do.
+//
+// Only two directions exist, and both are bounded to PREPARE/READY on purpose:
+//   - READY, conformity now false (e.g. a team was just removed): back to PREPARE.
+//   - PREPARE, buzzers ready AND conformity now true (e.g. a team was just added
+//     back): forward to READY, "sans geste supplémentaire" — bumper/team Ready
+//     flags are untouched by this function, so no PONG wait is repeated.
+//
+// Never called from STARTED or any later phase: SetMemoryParticipatingTeams and
+// SetMotionParticipatingTeams already refuse any phase other than PREPARE/READY
+// before this is reached, so a running round can never be regressed (plan R2).
+func (e *Engine) reevaluatePrepareReadyUnsafe() GamePhase {
+	switch e.state.Phase {
+	case PhaseReady:
+		if !participantsConform(e.state.Question, &e.state) {
+			e.state.Phase = PhasePrepare
+			e.setQuestionStatus(StatusPrepare)
+			log.Printf("[Engine] Participants no longer conform, reverting READY -> PREPARE")
+			return PhasePrepare
+		}
+	case PhasePrepare:
+		if e.areAllTeamsReadyUnsafe() && participantsConform(e.state.Question, &e.state) {
+			e.state.Phase = PhaseReady
+			e.setQuestionStatus(StatusReady)
+			log.Printf("[Engine] Participants conform again, transitioning PREPARE -> READY")
+			return PhaseReady
+		}
+	}
+	return ""
 }
 
 // TransitionToReady moves to READY phase when all buzzers responded
@@ -756,6 +845,19 @@ func (e *Engine) TransitionToReady() {
 // For other questions, uses 3-second countdown
 func (e *Engine) Start(delay int) {
 	e.mu.Lock()
+
+	// #172 B4: Start refuses any phase other than READY. Without this guard the
+	// PREPARE↔READY conformity mechanism (participantsConform, B1-B3) is only an
+	// interface convention — START emitted while still in PREPARE (or any other
+	// phase) would bypass it entirely (plan §3). With it, "a started round is
+	// conform" becomes a real engine invariant: participant selection can only be
+	// changed in PREPARE/READY (SetMemoryParticipatingTeams,
+	// SetMotionParticipatingTeams), and READY is only reached when conform.
+	if e.state.Phase != PhaseReady {
+		log.Printf("[Engine] Cannot start game from phase %s (must be READY)", e.state.Phase)
+		e.mu.Unlock()
+		return
+	}
 
 	// Store delay for after countdown
 	e.pendingDelay = delay
@@ -889,32 +991,14 @@ func (e *Engine) actualStart() {
 	e.state.MemoryMatchedPairs = nil
 	e.state.MemoryErrors = 0
 
-	// Auto-initialize Memory participating teams if not already set
-	// This handles SOLO mode where admin doesn't select teams explicitly
-	if e.state.Question != nil && e.state.Question.Type == QuestionTypeMemory &&
-		(e.state.MemoryParticipatingTeams == nil || len(e.state.MemoryParticipatingTeams) == 0) {
-		// Get active teams (with buzzers) for auto-initialization
-		allTeams := make([]string, 0, len(e.data.Teams))
-		for teamName := range e.getActiveTeams() {
-			allTeams = append(allTeams, teamName)
-		}
-		// Initialize with all teams
-		e.state.MemoryParticipatingTeams = allTeams
-		if len(allTeams) > 0 {
-			e.state.MemoryCurrentTeam = allTeams[0]
-			if team, exists := e.data.Teams[allTeams[0]]; exists {
-				e.state.MemoryCurrentTeamColor = team.Color
-			}
-		}
-		e.state.MemoryTeamPairs = make(map[string]int)
-		e.state.MemoryTeamErrors = make(map[string]int)
-		e.state.MemoryPairOwners = make(map[int]string)
-		for _, teamName := range allTeams {
-			e.state.MemoryTeamPairs[teamName] = 0
-			e.state.MemoryTeamErrors[teamName] = 0
-		}
-		log.Printf("[Engine] Auto-initialized Memory participating teams: %v", allTeams)
-	}
+	// #172 A1: the automatic Memory-participant catch-up that used to live here
+	// (picking teams via Go map iteration — non-deterministic order) has been
+	// removed. It is now structurally impossible to reach this point without a
+	// conform selection already in place: entering STARTED requires READY
+	// (Engine.Start's phase guard, #172 B4), and READY requires
+	// participantsConform to hold (#172 B2) — which for MEMORY SOLO means
+	// exactly one team already selected via SetMemoryParticipatingTeams, and
+	// for MEMORY multi-team modes means at least two. See participantsConform.
 
 	// Initialize MEMOTION card states for fresh start
 	motionMemorizeDuration := 0
@@ -1958,6 +2042,19 @@ func (e *Engine) ForceReady() {
 	// Mark all teams as ready
 	for _, team := range e.data.Teams {
 		team.Ready = true
+	}
+
+	// #172 B5 (arbitrage G): ForceReady only skips the PONG wait — it must not
+	// also skip participant-selection conformity, or the original bug (a
+	// non-conform MEMORY/MEMOTION round reaching STARTED) would return through
+	// this debug/admin door. Bumpers/teams stay marked ready above so that, once
+	// the admin selects a conform participant set, the PREPARE→READY reevaluation
+	// (reevaluatePrepareReadyUnsafe, triggered by Set*ParticipatingTeams) fires
+	// immediately without waiting on PONG again.
+	if !participantsConform(e.state.Question, &e.state) {
+		log.Printf("[Engine] FORCE_READY: buzzers marked ready, but participants do not conform — staying in PREPARE")
+		e.mu.Unlock()
+		return
 	}
 
 	e.state.Phase = PhaseReady
@@ -3317,14 +3414,15 @@ func (e *Engine) GetEnrollmentStatus() bool {
 // SetMemoryParticipatingTeams sets the teams participating in a Memory game
 func (e *Engine) SetMemoryParticipatingTeams(teams []string) error {
 	e.mu.Lock()
-	defer e.mu.Unlock()
 
 	// Allow setting teams during PREPARE or READY phases (before game starts)
 	if e.state.Phase != PhasePrepare && e.state.Phase != PhaseReady {
+		e.mu.Unlock()
 		return &MemoryError{Reason: "NOT_IN_PREPARE_OR_READY_PHASE"}
 	}
 
 	if e.state.Question == nil || e.state.Question.Type != QuestionTypeMemory {
+		e.mu.Unlock()
 		return &MemoryError{Reason: "NOT_MEMORY_QUESTION"}
 	}
 
@@ -3340,6 +3438,7 @@ func (e *Engine) SetMemoryParticipatingTeams(teams []string) error {
 	// Validate all teams exist
 	for _, teamName := range teams {
 		if _, exists := e.data.Teams[teamName]; !exists {
+			e.mu.Unlock()
 			return &MemoryError{Reason: "TEAM_NOT_FOUND"}
 		}
 	}
@@ -3362,6 +3461,21 @@ func (e *Engine) SetMemoryParticipatingTeams(teams []string) error {
 	}
 
 	log.Printf("[Engine] Memory participating teams set: %v, current team: %s, mode: %s", teams, e.state.MemoryCurrentTeam, memoryMode)
+
+	// #172 B3: the selection just changed — re-check whether PREPARE↔READY
+	// should flip (e.g. removing a team from a conform READY selection sends
+	// the round back to PREPARE; restoring it returns to READY without
+	// repeating the PONG wait). See reevaluatePrepareReadyUnsafe.
+	newPhase := e.reevaluatePrepareReadyUnsafe()
+
+	// Release lock BEFORE calling callback to avoid deadlock
+	callback := e.OnStateChange
+	e.mu.Unlock()
+
+	if callback != nil && newPhase != "" {
+		callback(newPhase)
+	}
+
 	return nil
 }
 
@@ -3662,18 +3776,20 @@ func (e *Engine) DoneMotionCard(cardID string, winnerTeam string) (int, bool, er
 // Mirrors SetMemoryParticipatingTeams — allowed during PREPARE or READY phases.
 func (e *Engine) SetMotionParticipatingTeams(teams []string) error {
 	e.mu.Lock()
-	defer e.mu.Unlock()
 
 	if e.state.Phase != PhasePrepare && e.state.Phase != PhaseReady {
+		e.mu.Unlock()
 		return &MotionError{Reason: "NOT_IN_PREPARE_OR_READY_PHASE"}
 	}
 	if e.state.Question == nil || e.state.Question.Type != QuestionTypeMemotion {
+		e.mu.Unlock()
 		return &MotionError{Reason: "NOT_MEMOTION_QUESTION"}
 	}
 
 	// Validate all teams exist
 	for _, teamName := range teams {
 		if _, exists := e.data.Teams[teamName]; !exists {
+			e.mu.Unlock()
 			return &MotionError{Reason: "TEAM_NOT_FOUND"}
 		}
 	}
@@ -3691,6 +3807,19 @@ func (e *Engine) SetMotionParticipatingTeams(teams []string) error {
 
 	log.Printf("[Engine] MEMOTION SetMotionParticipatingTeams: teams=%v currentTeam=%s",
 		teams, e.state.MotionCurrentTeam)
+
+	// #172 B3: re-check PREPARE↔READY now that the selection changed — see
+	// reevaluatePrepareReadyUnsafe (same mechanism as SetMemoryParticipatingTeams).
+	newPhase := e.reevaluatePrepareReadyUnsafe()
+
+	// Release lock BEFORE calling callback to avoid deadlock
+	callback := e.OnStateChange
+	e.mu.Unlock()
+
+	if callback != nil && newPhase != "" {
+		callback(newPhase)
+	}
+
 	return nil
 }
 

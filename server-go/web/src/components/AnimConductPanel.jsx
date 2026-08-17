@@ -1,41 +1,118 @@
+import {
+  startButtonState,
+  pauseButtonState,
+  continueButtonState,
+  stopButtonState,
+  revealButtonState,
+} from '../utils/phaseRules'
+import { getQuestionTypeMeta } from '../utils/questionTypeMeta'
+import { getMotionCardPoints } from '../utils/motionGrid'
+import AnimNextButton from './AnimNextButton'
+import AnimQcmOptions from './AnimQcmOptions'
+import AnimMemoryGrid from './AnimMemoryGrid'
+import AnimMotionGrid from './AnimMotionGrid'
+import AnimMotionCard from './AnimMotionCard'
+import AnimMotionActions from './AnimMotionActions'
 import './AnimConductPanel.css'
 
+// L1 — cinq emplacements FIXES (#166/F5) : la liste ne varie jamais dans
+// son nombre d'entrées, seul l'état de chaque bouton varie par phase.
+function buildL1(phase, question, handlers) {
+  return [
+    { key: 'start', label: 'LANCER', state: startButtonState(phase), onClick: handlers.onStart },
+    { key: 'pause', label: 'PAUSE', state: pauseButtonState(phase), onClick: handlers.onPause },
+    { key: 'continue', label: 'CONTINUER', state: continueButtonState(phase), onClick: handlers.onContinue },
+    { key: 'stop', label: 'STOP', state: stopButtonState(phase), onClick: handlers.onStop },
+    { key: 'reveal', label: 'RÉPONSE', state: revealButtonState(phase, question), onClick: handlers.onReveal },
+  ]
+}
+
+// Libellé secondaire (#166/E3) — texte de présentation attaché à un état
+// DÉJÀ dérivé de phaseRules (pas une condition d'activation réécrite,
+// juste le texte humain qui va avec). Matrice complète vérifiée phase par
+// phase contre _work/mockups/anim-conduct-permanent-166.html (les 3 écrans
+// illustrés — READY, STARTED, REVEALED — donnent "attendu"/"optionnel"/
+// "arrête"/"en cours"/"après arrêt"/"déjà révélée" ; les phases non
+// illustrées (ENROLL, COUNTDOWN, PAUSED, NEW_GAME, PREPARE, STOPPED non
+// jouée) reprennent le repli générique "indispo." faute de texte donné —
+// à confirmer en revue si un libellé plus spécifique est attendu).
+// waitReason (#172/C2) — motif d'attente PREPARE (buzzers, ou sélection non
+// conforme, cf. utils/prepareWaitReason.js), calculé par AnimPage.jsx et
+// passé en prop. Vient remplacer le repli générique "indispo." pour le
+// bouton LANCER en PREPARE — même emplacement, même style, aucun nouveau
+// badge ni CSS (#166).
+function buttonSubLabel(key, state, phase, waitReason) {
+  if (state === 'go') return key === 'continue' ? 'reprise' : 'attendu'
+  if (state === 'optional') return 'optionnel'
+  if (state === 'danger') return 'arrête'
+  // state === 'off'
+  if (key === 'start' && phase === 'PREPARE' && waitReason) return waitReason
+  if (key === 'start' && (phase === 'STARTED' || phase === 'PAUSED')) return 'en cours'
+  if (key === 'reveal' && (phase === 'STARTED' || phase === 'PAUSED')) return 'après arrêt'
+  if (key === 'reveal' && phase === 'REVEALED') return 'déjà révélée'
+  return 'indispo.'
+}
+
 /**
- * AnimConductPanel — zone de conduite SPEEDY de la page animateur
- * (`/anim` zone B, #156/F5).
+ * AnimConductPanel — zone de conduite de la page animateur (`/anim`, zone
+ * B), réécrite en cinq lignes PERMANENTES (#166/F5, plan
+ * `_work/reports/plan-20260815-144925.md`), puis REMAPPÉE #171/F3 (plan
+ * `_work/reports/plan-20260816-192400.md`) :
  *
- * Contextuel à la phase : n'affiche JAMAIS un geste inactif "pour
- * information" (règle d'ergonomie du cadrage, maquette §02) — contrairement
- * à `/admin` qui affiche les boutons START/PAUSE/REPONSE en permanence,
- * désactivés selon la phase. Les CONDITIONS d'activation sont les mêmes que
- * `/admin` (`GamePage.jsx:373-378` — `isPlaying`/`canReveal`/`canStart`),
- * seule la PRÉSENTATION change (plan §4 F5).
+ * Renversement de principe par rapport à #156/#165 : le composant ne
+ * choisit plus QUELS boutons rendre selon la phase (branches PREPARE /
+ * isPlaying / canReveal / idle) — il rend TOUJOURS les mêmes cinq
+ * emplacements de L1 et calcule l'ÉTAT de chacun. Ordre fixe (#171) :
+ *   L1 (LANCER · PAUSE · CONTINUER · STOP · RÉPONSE, 5 emplacements, inchangé)
+ *   → bloc central `.anim-conduct-mid` (flex:1, min-height:0,
+ *     overflow-y:auto — SEUL endroit qui peut défiler, jamais la page) :
+ *     L2 (gestes propres au mode, ex-L3 #166) → L3 (grille QCM ou emplacement
+ *     réservé, ex-L2 #166) → L4 (note d'explication #168, inchangé)
+ *   → À suivre (AnimNextButton, #166/F4 — déplacé en DERNIER, ancré en bas
+ *     du panneau car dernier enfant d'un flex-column, #171/F3)
  *
- * | Phase                          | Geste affiché                        |
- * |---------------------------------|---------------------------------------|
- * | PREPARE                         | attente des PONG, aucun geste         |
- * | STARTED / PAUSED (isPlaying)    | PAUSE/CONTINUER + STOP, parts égales  |
- * | STOPPED après jeu (canReveal)   | RÉPONSE seule                         |
- * | READY                           | LANCER + enchaînement (si dispo)      |
- * | STOPPED idle / NEW_GAME/REVEALED| enchaînement seul (si dispo)          |
+ * États d'un bouton L1 : 'go' (vert, attendu) / 'optional' (bleu,
+ * facultatif) / 'danger' (rouge, destructif) / 'off' (gris, NON cliquable,
+ * n'émet AUCUNE action — un libellé secondaire explique pourquoi). Source
+ * de vérité unique : `utils/phaseRules.js`, dérivé lui-même de
+ * `engine.go:585-593` et `GamePage.jsx:373-378`. Aucune condition
+ * d'activation n'est réécrite ici (point de revue R1-a) — seul le texte de
+ * présentation (`buttonSubLabel`) est local.
  *
- * @param {string} phase - gameState.phase
- * @param {boolean} isPlaying - STARTED || PAUSED (même calcul que GamePage.jsx:373)
- * @param {boolean} canStart - phase === READY (GamePage.jsx:378)
- * @param {boolean} canReveal - STOPPED && question.STATUS === 'STOPPED' (GamePage.jsx:376)
- * @param {{ID?: string}|null} nextQuestion - dernier NEXT_QUESTION reçu
- * @param {() => void} onStart
- * @param {() => void} onPause
- * @param {() => void} onContinue
- * @param {() => void} onStop
- * @param {() => void} onReveal
- * @param {(questionId: string) => void} onSelectNext
+ * @param {Object} props
+ * @param {string} props.phase - gameState.phase
+ * @param {Object|null} props.question - gameState.question
+ * @param {string[]} [props.qcmInvalidated] - gameState.qcmInvalidated
+ * @param {boolean} props.revealed - phase === 'REVEALED' (phaseRules.isRevealed)
+ * @param {{ID?: string}|null} props.nextQuestion - dernier NEXT_QUESTION reçu
+ * @param {() => void} props.onStart
+ * @param {() => void} props.onPause
+ * @param {() => void} props.onContinue
+ * @param {() => void} props.onStop
+ * @param {() => void} props.onReveal
+ * @param {(questionId: string) => void} props.onSelectNext
+ * @param {Object} [props.teams] - teams (useGame()) — #159/F3, couleur du propriétaire MEMORY
+ * @param {Object} [props.memory] - état MEMORY groupé (#159/F3) : {flippedCards, matchedPairs,
+ *   pairOwners, currentTeam, teamPairs, teamErrors, errors} — passthrough vers AnimMemoryGrid,
+ *   rien n'est recalculé ici
+ * @param {(cardId: string) => void} [props.onFlipMemoryCard] - flipMemoryCard (useGame())
+ * @param {Object} [props.motion] - état MEMOTION groupé (#160/F7) : {subphase, timerRunning,
+ *   cardStates, cardTeams, currentTeam, currentTeamColor, selectedId, participatingTeams} —
+ *   passthrough vers AnimMotionGrid/AnimMotionCard/AnimMotionActions, rien n'est recalculé ici
+ * @param {(cardId: string) => void} [props.onSelectMotionCard] - selectMotionCard (useGame())
+ * @param {() => void} [props.onFlipMotionCard] - flipMotionCard (useGame())
+ * @param {() => void} [props.onStopMotionTimer] - stopMotionTimer (useGame())
+ * @param {() => void} [props.onRevealMotionCard] - revealMotionCard (useGame())
+ * @param {(cardId: string, winnerTeam: string) => void} [props.onDoneMotionCard] - doneMotionCard (useGame())
+ * @param {string|null} [props.waitReason] - #172/C2 : motif d'attente PREPARE
+ *   (utils/prepareWaitReason.js, calculé par AnimPage.jsx) — remplace le
+ *   repli générique "indispo." du bouton LANCER quand renseigné
  */
 export default function AnimConductPanel({
   phase,
-  isPlaying,
-  canStart,
-  canReveal,
+  question,
+  qcmInvalidated,
+  revealed,
   nextQuestion,
   onStart,
   onPause,
@@ -43,64 +120,143 @@ export default function AnimConductPanel({
   onStop,
   onReveal,
   onSelectNext,
+  teams,
+  memory,
+  onFlipMemoryCard,
+  motion,
+  onSelectMotionCard,
+  onFlipMotionCard,
+  onStopMotionTimer,
+  onRevealMotionCard,
+  onDoneMotionCard,
+  waitReason = null,
 }) {
-  const hasNext = !!nextQuestion?.ID
+  const l1 = buildL1(phase, question, { onStart, onPause, onContinue, onStop, onReveal })
+  const isQcm = question?.TYPE === 'QCM'
+  const isMemory = question?.TYPE === 'MEMORY'
+  // #160/F7 — premier mode à occuper L2 (ex-vide, #166/E4). GRID/MEMORIZE
+  // n'ont pas de carte sélectionnée : selectedMotionCard reste null, sans
+  // effet (AnimMotionCard n'est de toute façon monté que hors GRID/MEMORIZE).
+  const isMemotion = question?.TYPE === 'MEMOTION'
+  const motionCards = question?.MOTION_CARDS || []
+  const selectedMotionCard = isMemotion
+    ? motionCards.find(c => c.ID === motion?.selectedId) || null
+    : null
+  const motionCardPoints = selectedMotionCard
+    ? getMotionCardPoints(selectedMotionCard.DIFFICULTY || 1, question?.MOTION_CONFIG)
+    : 0
+  const modeLabel = question?.TYPE ? getQuestionTypeMeta(question.TYPE).label : null
+  // #171/F3 — contenu L2 (gestes propres au mode), ex-L3 #166.
+  const modeGestureText = modeLabel ? `Aucun geste propre au mode ${modeLabel}` : 'Aucun geste propre au mode'
 
-  if (phase === 'PREPARE') {
-    return (
-      <div className="anim-conduct anim-conduct-waiting">
-        <span className="anim-conduct-waiting-text">En attente des joueurs…</span>
-      </div>
-    )
-  }
-
-  if (isPlaying) {
-    const isPaused = phase === 'PAUSED'
-    return (
-      <div className="anim-conduct anim-conduct-pair">
-        <button
-          className="anim-conduct-btn anim-conduct-btn-pause"
-          onClick={isPaused ? onContinue : onPause}
-        >
-          {isPaused ? 'CONTINUER' : 'PAUSE'}
-        </button>
-        <button className="anim-conduct-btn anim-conduct-btn-stop" onClick={onStop}>
-          STOP
-        </button>
-      </div>
-    )
-  }
-
-  if (canReveal) {
-    return (
-      <div className="anim-conduct anim-conduct-single">
-        <button className="anim-conduct-btn anim-conduct-btn-reveal" onClick={onReveal}>
-          RÉPONSE
-        </button>
-      </div>
-    )
-  }
-
-  // STOPPED (idle, pas encore jouée) / NEW_GAME / REVEALED / READY
   return (
-    <div className="anim-conduct anim-conduct-idle">
-      {canStart && (
-        <button className="anim-conduct-btn anim-conduct-btn-start" onClick={onStart}>
-          LANCER
-        </button>
-      )}
-      {hasNext && (
-        <button
-          className="anim-conduct-btn anim-conduct-btn-next"
-          onClick={() => onSelectNext(nextQuestion.ID)}
-        >
-          <span className="anim-conduct-next-label">À suivre</span>
-          <span className="anim-conduct-next-id">#{nextQuestion.ID}</span>
-        </button>
-      )}
-      {!canStart && !hasNext && (
-        <span className="anim-conduct-empty">Aucune question disponible</span>
-      )}
+    <div className="anim-conduct">
+      <div className="anim-conduct-l1">
+        {l1.map(btn => (
+          <button
+            key={btn.key}
+            className={`anim-conduct-btn anim-conduct-btn-${btn.state}`}
+            disabled={btn.state === 'off'}
+            onClick={btn.state === 'off' ? undefined : btn.onClick}
+          >
+            {btn.label}
+            <span className="anim-conduct-btn-sub">{buttonSubLabel(btn.key, btn.state, phase, waitReason)}</span>
+          </button>
+        ))}
+      </div>
+
+      {/* #171/F3 — bloc central unique, seul endroit qui peut défiler
+          (flex:1, min-height:0, overflow-y:auto — AnimConductPanel.css).
+          L1 et "à suivre" restent visibles en permanence de part et
+          d'autre : L1 au-dessus (statique), "à suivre" en dessous (dernier
+          enfant, ancré en bas). Sans min-height:0 ici, une note L4 longue
+          repousserait "à suivre" hors écran — c'est précisément le bug que
+          cet ancrage doit empêcher (F7). */}
+      <div className="anim-conduct-mid">
+        {/* L2 — gestes propres au mode. #160/F7 : MEMOTION est le PREMIER
+            mode à occuper cet emplacement (ex-vide, #166/E4) — QCM et
+            MEMORY gardent leur repli générique inchangé (R5, point de
+            revue). */}
+        <div className="anim-conduct-l2">
+          {isMemotion ? (
+            <AnimMotionActions
+              subphase={motion?.subphase}
+              timerRunning={motion?.timerRunning}
+              currentTeam={motion?.currentTeam}
+              currentTeamColor={motion?.currentTeamColor}
+              selectedCardId={motion?.selectedId}
+              cardPoints={motionCardPoints}
+              onFlipMotionCard={onFlipMotionCard}
+              onStopMotionTimer={onStopMotionTimer}
+              onRevealMotionCard={onRevealMotionCard}
+              onDoneMotionCard={onDoneMotionCard}
+            />
+          ) : (
+            <div className="anim-conduct-reserved">{modeGestureText}</div>
+          )}
+        </div>
+
+        {/* L3 — grille QCM, grille MEMORY (#159/F3), grille/carte MEMOTION
+            (#160/F7) ou emplacement réservé (#166/F9). */}
+        <div className="anim-conduct-l3">
+          {isQcm ? (
+            <AnimQcmOptions
+              type={question.TYPE}
+              answers={question.QCM_ANSWERS}
+              correct={question.QCM_CORRECT}
+              invalidated={qcmInvalidated}
+              revealed={revealed}
+            />
+          ) : isMemory ? (
+            <AnimMemoryGrid
+              question={question}
+              phase={phase}
+              teams={teams}
+              flippedCards={memory?.flippedCards}
+              matchedPairs={memory?.matchedPairs}
+              pairOwners={memory?.pairOwners}
+              currentTeam={memory?.currentTeam}
+              teamPairs={memory?.teamPairs}
+              teamErrors={memory?.teamErrors}
+              globalErrors={memory?.errors}
+              onFlip={onFlipMemoryCard}
+            />
+          ) : isMemotion ? (
+            (motion?.subphase === 'MEMORIZE' || motion?.subphase === 'GRID') ? (
+              <AnimMotionGrid
+                question={question}
+                phase={phase}
+                subphase={motion?.subphase}
+                cardStates={motion?.cardStates}
+                cardTeams={motion?.cardTeams}
+                currentTeam={motion?.currentTeam}
+                selectedId={motion?.selectedId}
+                teams={teams}
+                onSelect={onSelectMotionCard}
+              />
+            ) : (
+              <AnimMotionCard
+                subphase={motion?.subphase}
+                card={selectedMotionCard}
+                motionConfig={question?.MOTION_CONFIG}
+              />
+            )
+          ) : (
+            <div className="anim-conduct-reserved">Aucun élément spécifique à cette question</div>
+          )}
+        </div>
+
+        {/* L4 — réservée pour la note d'explication (#168, #166/F11). Vide,
+            sans état, sans donnée, sans contrat — ne rien anticiper de plus
+            que le libellé de destination (risque R11 du plan). */}
+        <div className="anim-conduct-l4">
+          <div className="anim-conduct-reserved">Note d'explication — réservé (#168)</div>
+        </div>
+      </div>
+
+      {/* L5 — "à suivre" (#171/F3, déplacé de juste après L1 vers cette
+          dernière position ; composant lui-même inchangé). */}
+      <AnimNextButton phase={phase} question={question} nextQuestion={nextQuestion} onSelectNext={onSelectNext} />
     </div>
   )
 }
