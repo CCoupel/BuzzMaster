@@ -2,7 +2,7 @@
 
 /* Teams Page Layout */
 .teams-page {
-  min-height: calc(100vh - 120px);
+  min-height: calc(100vh - var(--admin-chrome-h));
 }
 
 .teams-layout {

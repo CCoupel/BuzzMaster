@@ -3,7 +3,14 @@
   top: 64px; /* Height of navbar */
   left: 0;
   right: 0;
-  bottom: 0;
+  /* #177 (F4) — cette page est en position: fixed, hors du flux de
+     .main-content : le padding-bottom réservé au bandeau régie (App.css,
+     F2) n'a donc aucun effet ici. Sans ce bottom, le conteneur de logs
+     s'étendait jusqu'au bord réel du viewport et son bas (dernières lignes,
+     indicateur de défilement) se retrouvait recouvert par le bandeau
+     (position: fixed, z-index 200) — un recouvrement réel, constaté, pas
+     préventif. */
+  bottom: var(--regie-bar-h, 0px);
   display: flex;
   flex-direction: column;
   background-color: var(--gray-900);
@@ -240,7 +247,10 @@
 /* Scroll indicator */
 .logs-scroll-indicator {
   position: fixed;
-  bottom: 1.5rem;
+  /* #177 (F4) — même motif que .logs-page ci-dessus : sans ce décalage,
+     l'indicateur (z-index 100) se retrouvait partiellement/totalement
+     masqué sous le bandeau régie (z-index 200). */
+  bottom: calc(1.5rem + var(--regie-bar-h, 0px));
   left: 50%;
   transform: translateX(-50%);
   padding: 0.5rem 1rem;

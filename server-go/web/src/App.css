@@ -1,3 +1,19 @@
+/* #177 (F2) — source unique de l'offset de chrome des pages /admin/*.
+   --regie-bar-h est la hauteur RÉELLE et MESURÉE du bandeau régie (F1,
+   RegieMessageBar.jsx : ResizeObserver -> document.documentElement.style.
+   setProperty), avec un repli à 44px (hauteur nominale) le temps du tout
+   premier rendu, avant que F1 n'ait mesuré quoi que ce soit — évite un saut
+   visuel. --admin-chrome-h centralise le nombre magique 120px (Navbar ~72px
+   + padding-top 24px + padding-bottom 24px, vrai avant #167) dans un SEUL
+   fichier au lieu de huit (pages/*.css, F3) : la classe de bug corrigée ici
+   ("une constante a dérivé") ne peut plus se reproduire silencieusement.
+   Invariant à préserver si ce chrome change un jour :
+     Navbar + padding-top + (100vh - --admin-chrome-h) + padding-bottom = 100vh */
+:root {
+  --regie-bar-h: 44px;
+  --admin-chrome-h: calc(120px + var(--regie-bar-h));
+}
+
 /* App Layout */
 .app {
   min-height: 100vh;
@@ -21,9 +37,12 @@
 /* #167 (F3) — espace réservé au bandeau régie (position: fixed, pleine
    largeur du bas de l'écran, RegieMessageBar.css), pour qu'il ne recouvre
    pas le bas des pages /admin/* longues (questions, logs). Absent en
-   fullscreen (/anim, /tv, /player) : RegieMessageBar n'y est jamais monté. */
+   fullscreen (/anim, /tv, /player) : RegieMessageBar n'y est jamais monté.
+   #177 (F2) — --regie-bar-h (mesurée, F1) remplace le 44px en dur : un
+   bandeau qui grandit (fenêtre étroite, message + Effacer + indicateur
+   d'acquittement ensemble, #176) ne recouvre plus jamais le contenu (AC4). */
 .main-content:not(.fullscreen) {
-  padding-bottom: calc(var(--space-6) + 44px);
+  padding-bottom: calc(var(--space-6) + var(--regie-bar-h));
 }
 
 /* Page Transitions */

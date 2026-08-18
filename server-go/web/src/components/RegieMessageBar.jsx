@@ -45,6 +45,13 @@ export default function RegieMessageBar() {
   // de faire.
   const [ackVisible, setAckVisible] = useState(false)
 
+  // #177 (F1) — élément racine mesuré par ResizeObserver ci-dessous.
+  const barRef = useRef(null)
+  // Dernière hauteur (arrondie, px) effectivement écrite dans la variable
+  // CSS — évite de réécrire à chaque pixel/fraction rapportés par
+  // ResizeObserver (invalidations de layout inutiles).
+  const lastHeightRef = useRef(null)
+
   const debounceRef = useRef(null)
   const ackTimerRef = useRef(null)
   // Dernier texte (trimmé) effectivement envoyé par CE composant — garde
@@ -70,6 +77,49 @@ export default function RegieMessageBar() {
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current)
       if (ackTimerRef.current) clearTimeout(ackTimerRef.current)
+    }
+  }, [])
+
+  // #177 (F1) — mesure la hauteur RÉELLE du bandeau et la partage via une
+  // variable CSS (--regie-bar-h, App.css F2), source unique consommée par
+  // .main-content ET par les huit pages admin (F3) — remplace la constante
+  // 44px en dur qui provoquait soit un débordement (bandeau plus petit que
+  // prévu... jamais le cas ici) soit un recouvrement (bandeau plus grand,
+  // #176 : message + Effacer + indicateur d'acquittement ensemble sur
+  // fenêtre étroite).
+  //
+  // ⚠️ Pas de boucle ResizeObserver possible : --regie-bar-h n'influence
+  // jamais CE composant (position: fixed, dimensionné par son propre
+  // contenu et la largeur du viewport) — seulement .main-content et les
+  // pages, qui n'affectent pas le bandeau en retour.
+  useEffect(() => {
+    const el = barRef.current
+    if (!el) return
+
+    const applyHeight = (height) => {
+      const rounded = Math.round(height)
+      if (rounded === lastHeightRef.current) return
+      lastHeightRef.current = rounded
+      document.documentElement.style.setProperty('--regie-bar-h', `${rounded}px`)
+    }
+
+    applyHeight(el.getBoundingClientRect().height)
+
+    const observer = new ResizeObserver((entries) => {
+      const entry = entries[0]
+      if (!entry) return
+      const height = entry.borderBoxSize?.[0]?.blockSize ?? entry.contentRect.height
+      applyHeight(height)
+    })
+    observer.observe(el)
+
+    return () => {
+      observer.disconnect()
+      // AC8 — aucune réservation résiduelle une fois le bandeau démonté
+      // (navigation vers une route plein écran, où RegieMessageBar n'est
+      // jamais monté).
+      lastHeightRef.current = null
+      document.documentElement.style.setProperty('--regie-bar-h', '0px')
     }
   }, [])
 
@@ -167,7 +217,7 @@ export default function RegieMessageBar() {
   const remaining = MAX_LENGTH - localText.length
 
   return (
-    <div className="regie-message-bar">
+    <div className="regie-message-bar" ref={barRef}>
       <span className="regie-message-tag">Animateur</span>
       <input
         type="text"
