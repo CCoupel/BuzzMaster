@@ -523,6 +523,19 @@ func (a *App) setupCallbacks() {
 		a.broadcastUpdate()
 	}
 
+	// #175 B1: wire the /shutdown cleanup hook — declared (http.go's OnShutdown
+	// field) and called (handleShutdown, 100ms after the response is written,
+	// right before os.Exit(0)) since the ACK/priority-message plumbing above,
+	// but never actually assigned anywhere in the repo. Without this, /shutdown
+	// went straight to os.Exit(0): no a.cancelCtx() (AckManager goroutine leaked),
+	// no dnsServer/mdnsServer/broadcaster/udpBcast Stop(), and critically no
+	// a.httpServer.Stop() — the listening port could outlive the process exit
+	// depending on OS/socket state, forcing a full machine reboot to free it
+	// (suspected root cause of the QUALIF v6.2.0.35 port-release issue). #175
+	// makes /shutdown the every-game end-of-session gesture instead of an
+	// occasional dev curl call, so this latent gap needed closing now.
+	a.httpServer.OnShutdown = a.stop
+
 	// Detect existing backgrounds on startup
 	a.loadBackgrounds()
 	a.loadNewGameBackgrounds()
