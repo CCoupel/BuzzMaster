@@ -178,6 +178,27 @@ Nouveau champ optionnel dans le payload de reconnexion WebSocket VJoueur.
 
 > **Note**: Type `NORMAL` est renommé `SPEEDY` depuis v5.7.1. Les fichiers existants avec `"TYPE": "NORMAL"` sont convertis automatiquement à la lecture.
 
+### Champs communs à tous les types de questions
+
+| Champ | Type | Obligatoire | Description | Depuis |
+|-------|------|-------------|-------------|--------|
+| `ID` | string | ✅ | Identifiant unique numérique (chaîne) | v1.0 |
+| `QUESTION` | string | ✅ | Énoncé de la question | v1.0 |
+| `ANSWER` | string | ✅ | Réponse attendue (chaîne libre) | v1.0 |
+| `TYPE` | string | ✅ | Type de question : `SPEEDY`, `QCM`, `MEMORY`, `MEMOTION`, `ARDOISE` | v1.0 |
+| `POINTS` | int | ✅ | Points de base accordés | v1.0 |
+| `TIME` | int | ✅ | Durée du chronomètre (secondes) | v1.0 |
+| `MEDIA` | string | ❌ | Chemin de l'image/vidéo de la question | v1.0 |
+| `MEDIA_ANSWER` | string | ❌ | Chemin de l'image/vidéo de la réponse | v1.0 |
+| `EXPLANATION` | string | ❌ | Note d'explication (animateur seul, floutée jusqu'à REVEALED) | v6.4.0 (#168) |
+
+**Note sur `EXPLANATION`** (v6.4.0, #168) :
+- Affiché **uniquement** sur `/anim`, jamais sur `/admin`, `/tv`, `/player`
+- Floutée avant phase `REVEALED`, révélée par appui maintenu (même geste que `ANSWER`)
+- Permanente et lisible en `REVEALED`
+- Persistance optionnelle (`omitempty` en JSON) — aucune migration requise
+- Survit à la réédition de la question
+
 ## Question (QCM type)
 
 ```json

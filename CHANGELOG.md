@@ -2,6 +2,68 @@
 
 Historique des versions du projet BuzzControl.
 
+## [6.4.0] - Milestone v6.4.x — Communication Animateur (#26)
+
+**Issues** : #167 (messagerie régie) + #168 (note d'explication). Deux fonctionnalités orthogonales 
+d'outillage animateur : canal de consignes unidirectionnel régie → tablettes et note d'explication 
+(animateur uniquement) attachée à chaque question.
+
+### Added
+- **Messagerie régie → animateurs** (#167) — La régie envoie une consigne texte (140 caractères max) 
+  qui s'affiche sur toutes les tablettes animateur connectées. Trois déclencheurs d'envoi sans bouton : 
+  touche Entrée, perte de focus du champ, pause de frappe (2 s). Unique message actif à la fois, 
+  acquittement global (« Vu par l'animateur » depuis `/anim`, suppression possible en régie). Deux 
+  sessions `/admin` restent synchronisées. Aucune file, aucun historique. Message survit aux 
+  transitions de jeu (NEW_GAME, RAZ, changement de question). Élargissement de capacité réseau : 
+  action `REGIE_MESSAGE_CLEAR` acceptée depuis `/anim` en plus de `/admin`.
+- **Note d'explication par question** (#168) — Éditeur de questions enrichi d'un champ texte libre 
+  « Note d'explication (animateur seul) ». Affichée sur `/anim` floutée avant phase `REVEALED`, 
+  révélée par appui maintenu (même geste que la réponse #166), permanente en `REVEALED`. Aucune 
+  affichage sur `/admin`, `/tv`, `/player`. Survit à la réédition de la question (piège B9). 
+  Persistance optionnelle (omitempty).
+
+### Changed
+- **Trois actions WebSocket nouvelles** — `REGIE_MESSAGE_SEND` (Client→Server, admin uniquement), 
+  `REGIE_MESSAGE_CLEAR` (Client→Server, admin + anim), `REGIE_MESSAGE` (Server→Client, admin + anim). 
+  Aucun changement BREAKING sur les protocoles existants.
+- **Champ Question.EXPLANATION** — Nouvellement éditable en `POST /questions`, persiste sans migration.
+
+### Technical
+- **Backend** (#167/#168) — Quatre fichiers Go modifiés : `internal/protocol/messages.go` (3 constantes 
+  + RegieMessagePayload, aucun omitempty), `internal/server/inbound_allowlist.go` (allow-list des 
+  2 actions), `cmd/server/main.go` (état + handlers + diffusion), `internal/game/models.go` 
+  (champ Question). État du message en mémoire vive, non persisté (comme currentCreditPoints, 
+  discipline mono-goroutine sans mutex). Gardé idempotent côté serveur : un SEND identique au 
+  message déjà actif est un no-op (ni réarmement de SENT_AT, ni remise de CLEARED_BY, ni 
+  diffusion) — l'interface régie envoie automatiquement, le même texte arrive légitimement 
+  plusieurs fois (Entrée + blur + pause), sans celle garde un blur après acquittement le 
+  ressusciterait sur toutes les tablettes.
+- **Frontend** (#167) — Nouveau composant `RegieMessageBar.jsx`/`.css` (quatre états : repos, 
+  saisie, actif, acquitté). Trois déclencheurs simultanés via useEffect (touche Entrée, blur, 
+  debounce 2 s). Hook `useWebSocket` enrichi d'état `regieMessage` et helpers `sendRegieMessage()` 
+  / `clearRegieMessage()`. Bande `/anim` : état repos ou message + bouton « Vu ». Montage dans 
+  `App.jsx` pleine largeur fixed, padding-bottom sur `.main-content` contre occlusion des pages 
+  longues. Affichage piloté **exclusivement** par l'état WebSocket reçu, jamais par état local 
+  optimiste — deux sessions `/admin` restent synchronisées.
+- **Frontend** (#168) — Nouvel utilitaire `useHoldToPeek.js` : extraction du geste de révélation 
+  (#169, réutilisé) pour mutualisation zone réponse / note. Nouveau composant `AnimExplanationNote.jsx` 
+  montant en L4 de `AnimConductPanel` : floutée avant REVEALED, visible en permanence après 
+  (révélation par pression maintenue). Sans note → emplacement au repos (« Aucune note pour cette 
+  question »). Modèle Bumper enrichi du champ `EXPLANATION` en formulaire `QuestionsPage` 
+  (survit à réédition — piège documenté en plan B9, test dédié T8). No `dangerouslySetInnerHTML` 
+  introduit, contenu textuel pur.
+- **Tests** — Go : allow-list (T1), troncature 140 runes UTF-8 (T2), CLEARED_BY déduit (T3), 
+  remplacement + idempotence (T4/T4b), diffusion ciblée (T5), rejeu HELLO (T6), sérialisation 
+  sans omitempty (T7), persistence question + survie réédition (T8). React : 4 états du bandeau, 
+  3 déclencheurs envoi (T9/T9b), affichage piloté par WS (T9c), L4 avec pression (T9). Procédure 
+  manuelle : deux tablettes, reconnexion, 140 caractères accentués, retrait régie, message actif 
+  lors changement question.
+
+### Security
+- **Allow-list entrante WebSocket** — `REGIE_MESSAGE_SEND` : admin uniquement. 
+  `REGIE_MESSAGE_CLEAR` : admin + anim. `/anim` ne peut pas envoyer SEND. TV/vplayer/buzzers ne 
+  peuvent envoyer ni SEND ni CLEAR.
+
 ## [6.3.0] - 2026-08-17
 
 **Milestone v6.2.x — Interface Animateur (#24)** : dernière livraison du milestone — mode MEMOTION
