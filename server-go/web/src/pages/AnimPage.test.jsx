@@ -163,6 +163,13 @@ function makeGameMock(overrides = {}) {
     // autres callbacks ci-dessus (aucun changement pour les tests
     // pré-existants qui ne l'exercent pas).
     flipMemoryCard: vi.fn(),
+    // v6.4.x (#167) — messagerie régie : état par défaut = repos (aucun
+    // message actif), même convention que questionPosition/awardedTeams
+    // ci-dessus. AnimPage.jsx porte de toute façon ce même défaut en
+    // paramètre par défaut de déstructuration ; l'exposer ici aussi permet
+    // aux tests de cliquer sur « Vu » sans le répéter à chaque fois.
+    regieMessage: { ACTIVE: false, TEXT: '', SENT_AT: 0, CLEARED_BY: '' },
+    clearRegieMessage: vi.fn(),
     // #160/F2 — les 5 émetteurs MEMOTION de useWebSocket.js (useGame()),
     // vi.fn() par défaut (extension ADDITIVE, comme flipMemoryCard
     // ci-dessus) : aucun changement pour les tests pré-existants qui ne les
@@ -617,19 +624,57 @@ describe('AnimPage — mode ARDOISE, câblage vers AnimArdoiseList (#158/T4)', (
 // `grid-area` change, AnimPage.css — non testable en jsdom, T12).
 // ---------------------------------------------------------------------------
 
-describe('AnimPage — disposition, bande régie réservée (#166/T10, F8)', () => {
+// La bande régie était réservée (texte statique "Messagerie régie", aucun
+// élément interactif) avant #167. Le lot v6.4.x #167 lui donne un contenu
+// réel — réception du message actif + bouton « Vu » (F4, câblé sur
+// clearRegieMessage). RÉÉCRIT (pas neutralisé, changement documenté : plan
+// _work/reports/plan-20260818-121500.md, tâche F4) : mêmes phases
+// couvertes, mais sur le comportement réel plutôt que la réserve vide.
+describe('AnimPage — bande régie, réception du message (#167, F4)', () => {
   it.each(['NEW_GAME', 'STARTED', 'REVEALED'])(
-    'phase %s : bande régie présente, texte statique, sans élément interactif',
+    'phase %s : aucun message actif -> état repos, sans élément interactif',
     (phase) => {
       useGame.mockReturnValue(makeGameMock({ gameState: { phase, question: null } }))
       const { container } = render(<AnimPage />)
       const bar = container.querySelector('.anim-zone-regie .anim-regie-bar')
       expect(bar).not.toBeNull()
-      expect(bar.textContent).toContain('Messagerie régie')
+      expect(bar.textContent).toContain('Aucun message de la régie')
       expect(container.querySelector('.anim-zone-regie button')).toBeNull()
       expect(container.querySelector('.anim-zone-regie input')).toBeNull()
     }
   )
+
+  it('message actif : texte affiché et bouton « Vu », quelle que soit la phase de jeu', () => {
+    useGame.mockReturnValue(makeGameMock({
+      gameState: { phase: 'STARTED', question: null },
+      regieMessage: { ACTIVE: true, TEXT: 'Question 12 annulée', SENT_AT: 1, CLEARED_BY: '' },
+    }))
+    const { container } = render(<AnimPage />)
+    const bar = container.querySelector('.anim-zone-regie .anim-regie-bar')
+    expect(bar.textContent).toContain('Question 12 annulée')
+    expect(screen.getByText('Vu')).toBeInTheDocument()
+  })
+
+  it('cliquer sur « Vu » appelle clearRegieMessage (acquittement, AC2/AC3)', () => {
+    const props = makeGameMock({
+      gameState: { phase: 'STARTED', question: null },
+      regieMessage: { ACTIVE: true, TEXT: 'Consigne', SENT_AT: 1, CLEARED_BY: '' },
+    })
+    useGame.mockReturnValue(props)
+    render(<AnimPage />)
+    screen.getByText('Vu').click()
+    expect(props.clearRegieMessage).toHaveBeenCalledTimes(1)
+  })
+
+  it('AUCUNE transition de jeu (NEW_GAME) n\'efface le message affiché — l\'état vient exclusivement de regieMessage (AC12)', () => {
+    useGame.mockReturnValue(makeGameMock({
+      gameState: { phase: 'NEW_GAME', question: null },
+      regieMessage: { ACTIVE: true, TEXT: 'Consigne persistante', SENT_AT: 1, CLEARED_BY: '' },
+    }))
+    render(<AnimPage />)
+    expect(screen.getByText('Vu')).toBeInTheDocument()
+    expect(screen.getByText('Consigne persistante')).toBeInTheDocument()
+  })
 })
 
 // ---------------------------------------------------------------------------

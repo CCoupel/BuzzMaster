@@ -85,3 +85,85 @@ func TestClientsPayload_AnimCount_ZeroValueOmittedIsStillPresent(t *testing.T) {
 		t.Error("ANIM_COUNT must be present (as 0) even when the count is zero — no omitempty")
 	}
 }
+
+// ---------------------------------------------------------------------------
+// Tests: RegieMessagePayload (v6.4.x, #167 — plan tâche B1/T7,
+// contracts/websocket-actions.md §"Messagerie régie" → REGIE_MESSAGE).
+//
+// The four fields (ACTIVE/TEXT/SENT_AT/CLEARED_BY) deliberately carry no
+// `omitempty` — same discipline as GameState (CLAUDE.md) and ClientsPayload
+// above: an `ACTIVE: false` silently omitted from the wire would leave the
+// frontend displaying an already-cleared message forever, because it would
+// never receive the explicit "it's gone" signal.
+// ---------------------------------------------------------------------------
+
+func TestRegieMessagePayload_JSONFieldNames(t *testing.T) {
+	payload := RegieMessagePayload{
+		Active:    true,
+		Text:      "Question 12 annulée",
+		SentAt:    1755511234567,
+		ClearedBy: "",
+	}
+
+	data, err := json.Marshal(payload)
+	if err != nil {
+		t.Fatalf("failed to marshal RegieMessagePayload: %v", err)
+	}
+
+	var raw map[string]interface{}
+	if err := json.Unmarshal(data, &raw); err != nil {
+		t.Fatalf("failed to unmarshal into raw map: %v", err)
+	}
+
+	for key, want := range map[string]interface{}{
+		"ACTIVE":     true,
+		"TEXT":       "Question 12 annulée",
+		"SENT_AT":    float64(1755511234567),
+		"CLEARED_BY": "",
+	} {
+		got, ok := raw[key]
+		if !ok {
+			t.Errorf("RegieMessagePayload JSON is missing %q entirely: %s", key, data)
+			continue
+		}
+		if got != want {
+			t.Errorf("%s = %v, want %v", key, got, want)
+		}
+	}
+}
+
+func TestRegieMessagePayload_RoundTrip(t *testing.T) {
+	src := `{"ACTIVE":true,"TEXT":"Vu par l'animateur ?","SENT_AT":42,"CLEARED_BY":"ANIM"}`
+	var payload RegieMessagePayload
+	if err := json.Unmarshal([]byte(src), &payload); err != nil {
+		t.Fatalf("failed to unmarshal: %v", err)
+	}
+	if !payload.Active || payload.Text != "Vu par l'animateur ?" || payload.SentAt != 42 || payload.ClearedBy != "ANIM" {
+		t.Errorf("round-trip mismatch: got %+v", payload)
+	}
+}
+
+// TestRegieMessagePayload_InactiveZeroValue_NoOmitempty is the contract's own
+// example of the "après acquittement" wire frame: every field must still be
+// PRESENT (not omitted) even at its zero value, because the absence of
+// ACTIVE/TEXT/SENT_AT/CLEARED_BY is indistinguishable from "field not
+// updated" on the frontend — the explicit `false`/`""`/`0` IS the
+// information "this message was just cleared".
+func TestRegieMessagePayload_InactiveZeroValue_NoOmitempty(t *testing.T) {
+	payload := RegieMessagePayload{} // zero value: Active=false, Text="", SentAt=0, ClearedBy=""
+
+	data, err := json.Marshal(payload)
+	if err != nil {
+		t.Fatalf("failed to marshal: %v", err)
+	}
+	var raw map[string]interface{}
+	if err := json.Unmarshal(data, &raw); err != nil {
+		t.Fatalf("failed to unmarshal: %v", err)
+	}
+
+	for _, key := range []string{"ACTIVE", "TEXT", "SENT_AT", "CLEARED_BY"} {
+		if _, ok := raw[key]; !ok {
+			t.Errorf("%s must be present in the JSON even at its zero value (no omitempty) — got: %s", key, data)
+		}
+	}
+}

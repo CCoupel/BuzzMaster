@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"testing"
 	"time"
+
+	"github.com/gorilla/websocket"
 )
 
 // ---------------------------------------------------------------------------
@@ -323,6 +325,99 @@ func TestBroadcastConfigUpdate_StillAdminAndTVOnly(t *testing.T) {
 // across a full PREPARE->N-PONGs->READY sequence must be exactly 2,
 // regardless of N — if handlePong's per-PONG call ever regains Anim, this
 // count inflates by N.
+// ---------------------------------------------------------------------------
+// Tests: v6.4.x (#167) — REGIE_MESSAGE diffusion (plan tâche B5, T5,
+// contracts/websocket-actions.md §"Messagerie régie" → REGIE_MESSAGE).
+//
+// REGIE_MESSAGE is the FIRST outbound action shared by exactly admin+anim
+// (see the contract's own note) — every other "Animateur" action
+// (NEXT_QUESTION/CREDIT_POINTS/AWARDED_TEAMS) is anim-exclusive. tv and
+// vplayer must never receive it (they don't even read the régie/anim
+// channel); buzzer is architecturally unreachable by any wsHub broadcast
+// (a distinct hub, app.buzzerHub — verified by code inspection, same
+// reasoning as TestHandlePong_StillExcludesAnim's own comment on
+// ClientTypeBuzzer, not exercised live here).
+// ---------------------------------------------------------------------------
+
+func TestBroadcastRegieMessage_ReachesAdminAndAnim_NeverTVOrVPlayer(t *testing.T) {
+	app := newAnimTestApp(t)
+	app.regieMessage = &protocol.RegieMessagePayload{
+		Active: true,
+		Text:   "Question 12 annulée — enchaîne sur la 13",
+		SentAt: 1755511234567,
+	}
+
+	baseURL := startAnimAllowlistTestServer(t, app)
+	admin := dialWS(t, baseURL, "/ws/admin")
+	learnClientID(t, app, admin)
+	anim := dialWS(t, baseURL, "/ws/anim")
+	learnClientID(t, app, anim)
+	tv := dialWS(t, baseURL, "/ws/tv")
+	learnClientID(t, app, tv)
+	vplayer := dialWS(t, baseURL, "/ws/player")
+	learnClientID(t, app, vplayer)
+
+	app.broadcastRegieMessage()
+
+	for _, conn := range []struct {
+		name string
+		c    *websocket.Conn
+	}{{"admin", admin}, {"anim", anim}} {
+		_, raw := readActionMatching(t, conn.c, protocol.ActionRegieMessage)
+		var envelope struct {
+			Msg protocol.RegieMessagePayload `json:"MSG"`
+		}
+		if err := json.Unmarshal([]byte(raw), &envelope); err != nil {
+			t.Fatalf("%s: failed to unmarshal REGIE_MESSAGE: %v (raw: %s)", conn.name, err, raw)
+		}
+		if !envelope.Msg.Active || envelope.Msg.Text != "Question 12 annulée — enchaîne sur la 13" {
+			t.Errorf("%s: REGIE_MESSAGE payload mismatch: got %+v", conn.name, envelope.Msg)
+		}
+	}
+
+	tvActions := collectActionsT(t, tv, 300*time.Millisecond)
+	if containsAction(tvActions, protocol.ActionRegieMessage) {
+		t.Errorf("#167: tv must NEVER receive REGIE_MESSAGE — got actions: %v", tvActions)
+	}
+	vplayerActions := collectActionsT(t, vplayer, 300*time.Millisecond)
+	if containsAction(vplayerActions, protocol.ActionRegieMessage) {
+		t.Errorf("#167: vplayer must NEVER receive REGIE_MESSAGE — got actions: %v", vplayerActions)
+	}
+}
+
+// TestHandleWebMessage_RegieMessageSend_BroadcastsToAdminAndAnim exercises
+// the same guarantee end-to-end through the real dispatch path (REGIE_
+// MESSAGE_SEND sent by an admin), rather than calling
+// app.broadcastRegieMessage() directly.
+func TestHandleWebMessage_RegieMessageSend_BroadcastsToAdminAndAnim(t *testing.T) {
+	app := newAnimTestApp(t)
+
+	baseURL := startAnimAllowlistTestServer(t, app)
+	admin := dialWS(t, baseURL, "/ws/admin")
+	learnClientID(t, app, admin)
+	anim := dialWS(t, baseURL, "/ws/anim")
+	learnClientID(t, app, anim)
+
+	// RegieMessagePayload is reused for the SEND request body — same "shared
+	// by both directions" precedent as CreditPointsPayload (SET_CREDIT_POINTS
+	// / CREDIT_POINTS): the server only reads .Text from an incoming SEND,
+	// Active/SentAt/ClearedBy are irrelevant on this side and ignored.
+	sendAction(t, app, admin, protocol.ActionRegieMessageSend, protocol.RegieMessagePayload{Text: "Pause technique 2 minutes"})
+
+	for _, conn := range []*websocket.Conn{admin, anim} {
+		_, raw := readActionMatching(t, conn, protocol.ActionRegieMessage)
+		var envelope struct {
+			Msg protocol.RegieMessagePayload `json:"MSG"`
+		}
+		if err := json.Unmarshal([]byte(raw), &envelope); err != nil {
+			t.Fatalf("failed to unmarshal REGIE_MESSAGE: %v (raw: %s)", err, raw)
+		}
+		if !envelope.Msg.Active || envelope.Msg.Text != "Pause technique 2 minutes" {
+			t.Errorf("REGIE_MESSAGE payload mismatch after REGIE_MESSAGE_SEND: got %+v", envelope.Msg)
+		}
+	}
+}
+
 func TestHandlePong_StillExcludesAnim(t *testing.T) {
 	for _, n := range []int{1, 10} {
 		n := n

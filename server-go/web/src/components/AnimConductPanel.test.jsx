@@ -404,20 +404,54 @@ describe('AnimConductPanel — L3, grille MEMORY (#159/T3)', () => {
   })
 })
 
-describe('AnimConductPanel — L4, réservée pour #168 (#166/T8, F11)', () => {
+// L4 était réservée (texte statique, aucune donnée) avant #168. Le lot
+// v6.4.x #168 lui donne un contenu réel — AnimExplanationNote, propre
+// couverture exhaustive dans AnimExplanationNote.test.jsx (F6/F7). Ce bloc
+// est RÉÉCRIT (pas neutralisé, changement documenté : plan
+// _work/reports/plan-20260818-121500.md, tâche F7) — il vérifie désormais le
+// CÂBLAGE (question/revealed transmis tels quels) plutôt que la réserve
+// vide, avec la même couverture par phase que l'ancienne suite.
+describe('AnimConductPanel — L4, note d\'explication (#168, F7)', () => {
   it.each(['NEW_GAME', 'READY', 'STARTED', 'STOPPED', 'REVEALED'])(
-    'phase %s : L4 présente, réservée, texte statique',
+    'phase %s : L4 présente, question sans EXPLANATION -> emplacement au repos',
     (phase) => {
       const { container } = render(
         <AnimConductPanel {...baseProps({ phase, question: { ID: '1', TYPE: 'SPEEDY' } })} />
       )
-      expect(container.querySelector('.anim-conduct-l4 .anim-conduct-reserved')).not.toBeNull()
+      expect(container.querySelector('.anim-conduct-l4 .anim-explanation-note.empty')).not.toBeNull()
+      expect(screen.getByText('Aucune note pour cette question')).toBeInTheDocument()
     }
   )
 
-  it('aucun bouton, aucune donnée dans L4 (pas de contrat, #168 non implémentée)', () => {
+  it('aucun bouton dans L4 (AnimExplanationNote n\'en rend jamais)', () => {
     const { container } = render(<AnimConductPanel {...baseProps({ phase: 'REVEALED', question: { ID: '1' } })} />)
     expect(container.querySelector('.anim-conduct-l4 button')).toBeNull()
+  })
+
+  it('question avec EXPLANATION : contenu transmis à AnimExplanationNote, visible en REVEALED', () => {
+    const { container } = render(
+      <AnimConductPanel {...baseProps({
+        phase: 'REVEALED',
+        revealed: true,
+        question: { ID: '1', TYPE: 'SPEEDY', EXPLANATION: 'Une note d\'explication.' },
+      })} />
+    )
+    const note = container.querySelector('.anim-conduct-l4 .anim-explanation-note')
+    expect(note).not.toBeNull()
+    expect(note.className).toMatch(/\bshown\b/)
+    expect(screen.getByText('Une note d\'explication.')).toBeInTheDocument()
+  })
+
+  it('question avec EXPLANATION hors REVEALED : floutée, pas visible en clair sans interaction', () => {
+    const { container } = render(
+      <AnimConductPanel {...baseProps({
+        phase: 'STARTED',
+        revealed: false,
+        question: { ID: '1', TYPE: 'SPEEDY', EXPLANATION: 'Une note d\'explication.' },
+      })} />
+    )
+    const note = container.querySelector('.anim-conduct-l4 .anim-explanation-note')
+    expect(note.className).toMatch(/\bmasked\b/)
   })
 })
 
@@ -778,7 +812,12 @@ describe('AnimConductPanel — L3, branche à QUATRE voies (#160/T6, F7) : AnimM
 })
 
 describe('AnimConductPanel — L1/L4/L5 inchangées par MEMOTION (#160/T6, non-régression)', () => {
-  it('L1 garde ses 5 boutons, L4 reste l\'emplacement réservé #168, même avec une question MEMOTION chargée', () => {
+  // #168 (F7) — L4 rend désormais AnimExplanationNote au lieu de la réserve
+  // statique ; motionQuestion() (ci-dessous) ne porte pas de champ
+  // EXPLANATION, donc l'emplacement au repos reste le comportement attendu
+  // — assertion mise à jour sur le nouveau sélecteur, même invariant
+  // (MEMOTION ne perturbe ni L1 ni L4).
+  it('L1 garde ses 5 boutons, L4 affiche l\'emplacement au repos #168 (pas de note sur cette question), même avec une question MEMOTION chargée', () => {
     const { container } = render(
       <AnimConductPanel {...baseProps({
         phase: 'STARTED',
@@ -787,7 +826,7 @@ describe('AnimConductPanel — L1/L4/L5 inchangées par MEMOTION (#160/T6, non-r
       })} />
     )
     expect(container.querySelectorAll('.anim-conduct-l1 .anim-conduct-btn')).toHaveLength(5)
-    expect(container.querySelector('.anim-conduct-l4 .anim-conduct-reserved')).not.toBeNull()
+    expect(container.querySelector('.anim-conduct-l4 .anim-explanation-note.empty')).not.toBeNull()
   })
 
   // #171/T4 — même piège que pour QCM/MEMORY : une grille MEMOTION à 20

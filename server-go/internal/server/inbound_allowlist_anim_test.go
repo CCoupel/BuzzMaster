@@ -133,3 +133,55 @@ func TestIsSetClientTypeAllowed_Anim(t *testing.T) {
 		t.Error("IsSetClientTypeAllowed(ClientTypeAnim) = true, want false — an anim-typed connection must not be able to self-declare a different type")
 	}
 }
+
+// ---------------------------------------------------------------------------
+// Tests: v6.4.x (#167) — Messagerie régie allow-list entries (plan tâche B2,
+// T1, contracts/websocket-actions.md §"Sécurité" table + §"Messagerie
+// régie"). REGIE_MESSAGE_SEND is admin-only — the channel is unidirectional
+// régie → tablettes, /anim never composes a message, only reads and
+// acquits one. REGIE_MESSAGE_CLEAR is the first action shared by admin
+// (retire its own message, D4) AND anim (acquits, D3) that isn't part of
+// the pre-existing "conduite en direct" block — deliberately its own
+// map entries rather than folded into that block, mirroring how B2 split
+// "conduite en direct" out of the old admin-only block for #155/#156.
+// ---------------------------------------------------------------------------
+
+func TestIsActionAllowed_RegieMessageSend(t *testing.T) {
+	tests := []struct {
+		name       string
+		clientType ClientType
+		want       bool
+	}{
+		{"admin allowed", ClientTypeAdmin, true},
+		{"anim NOT allowed — unidirectional régie → tablettes", ClientTypeAnim, false},
+		{"tv NOT allowed", ClientTypeTV, false},
+		{"vplayer NOT allowed", ClientTypeVPlayer, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := IsActionAllowed(protocol.ActionRegieMessageSend, tt.clientType); got != tt.want {
+				t.Errorf("IsActionAllowed(REGIE_MESSAGE_SEND, %q) = %v, want %v", tt.clientType, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestIsActionAllowed_RegieMessageClear(t *testing.T) {
+	tests := []struct {
+		name       string
+		clientType ClientType
+		want       bool
+	}{
+		{"admin allowed — retire son propre message (D4)", ClientTypeAdmin, true},
+		{"anim allowed — acquittement (D3)", ClientTypeAnim, true},
+		{"tv NOT allowed", ClientTypeTV, false},
+		{"vplayer NOT allowed", ClientTypeVPlayer, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := IsActionAllowed(protocol.ActionRegieMessageClear, tt.clientType); got != tt.want {
+				t.Errorf("IsActionAllowed(REGIE_MESSAGE_CLEAR, %q) = %v, want %v", tt.clientType, got, tt.want)
+			}
+		})
+	}
+}

@@ -190,6 +190,135 @@ func TestSendStateToClient_VPlayer_NoLongerReceivesQuestionsAtHello(t *testing.T
 // B4 only narrows the gate to admin-only, it must not remove it for admin
 // itself (contracts/CHANGELOG.md: "alignement sur broadcastQuestions, déjà
 // admin-only en continu").
+// ---------------------------------------------------------------------------
+// Tests: v6.4.x (#167) — REGIE_MESSAGE replay at HELLO (plan tâche B7, T6,
+// contracts/websocket-actions.md §"Messagerie régie" D6: "livraison différée
+// plutôt que perdue" — a tablette in standby / reconnecting Wi-Fi must not
+// miss an active consigne).
+//
+// IMPORTANT (B7's own warning): this must be a TARGETED SendToClient, never
+// a.broadcastRegieMessage() — that would re-push to every OTHER already-
+// connected admin/anim connection too, exactly the NEXT_QUESTION/
+// CREDIT_POINTS/AWARDED_TEAMS mistake already guarded against just above in
+// this same file. TestSendStateToClient_RegieMessage_TargetedNotRebroadcast
+// below is the test that would catch a re-broadcast implementation.
+// ---------------------------------------------------------------------------
+
+func TestSendStateToClient_Anim_ReplaysActiveRegieMessageAtHello(t *testing.T) {
+	app := newAnimTestApp(t)
+	app.regieMessage = &protocol.RegieMessagePayload{
+		Active: true,
+		Text:   "Question 12 annulée — enchaîne sur la 13",
+		SentAt: 1755511234567,
+	}
+
+	baseURL := startAnimAllowlistTestServer(t, app)
+	conn := dialWS(t, baseURL, "/ws/anim")
+	clientID := learnClientID(t, app, conn)
+
+	app.sendStateToClient(clientID, server.ClientTypeAnim)
+
+	_, raw := readActionMatching(t, conn, protocol.ActionRegieMessage)
+	var envelope struct {
+		Msg protocol.RegieMessagePayload `json:"MSG"`
+	}
+	if err := json.Unmarshal([]byte(raw), &envelope); err != nil {
+		t.Fatalf("failed to unmarshal REGIE_MESSAGE: %v (raw: %s)", err, raw)
+	}
+	if !envelope.Msg.Active || envelope.Msg.Text != "Question 12 annulée — enchaîne sur la 13" {
+		t.Errorf("#167 D6: a reconnecting anim must receive the active regie message at HELLO — got %+v", envelope.Msg)
+	}
+}
+
+// TestSendStateToClient_Admin_ReplaysActiveRegieMessageAtHello — the régie
+// itself must also see its own still-pending message when reconnecting
+// (contracts/websocket-actions.md: REGIE_MESSAGE targets "admin ET anim"),
+// so it can tell "still awaiting acquittement" apart from "already cleared".
+func TestSendStateToClient_Admin_ReplaysActiveRegieMessageAtHello(t *testing.T) {
+	app := newAnimTestApp(t)
+	app.httpServer = server.NewHTTPServer(0, app.engine, app.wsHub, app.buzzerHub, server.NewLogsWebSocketHub(10))
+	app.regieMessage = &protocol.RegieMessagePayload{Active: true, Text: "En attente de retour", SentAt: 42}
+
+	baseURL := startAnimAllowlistTestServer(t, app)
+	conn := dialWS(t, baseURL, "/ws/admin")
+	clientID := learnClientID(t, app, conn)
+
+	app.sendStateToClient(clientID, server.ClientTypeAdmin)
+
+	readActionMatching(t, conn, protocol.ActionRegieMessage) // fails (timeout) if never received
+}
+
+// TestSendStateToClient_Anim_NoRegieMessageSentWhenInactive is B7's negative
+// case: no active message at all means nothing is sent — a freshly
+// (re)connecting tablet with no pending consigne must not receive a
+// REGIE_MESSAGE frame it would have to interpret as "nothing to see", it
+// simply receives none.
+func TestSendStateToClient_Anim_NoRegieMessageSentWhenInactive(t *testing.T) {
+	app := newAnimTestApp(t)
+	// app.regieMessage left nil — no message was ever sent this session.
+
+	baseURL := startAnimAllowlistTestServer(t, app)
+	conn := dialWS(t, baseURL, "/ws/anim")
+	clientID := learnClientID(t, app, conn)
+
+	app.sendStateToClient(clientID, server.ClientTypeAnim)
+
+	actions := collectActionsT(t, conn, 400*time.Millisecond)
+	if containsAction(actions, protocol.ActionRegieMessage) {
+		t.Errorf("#167 B7: no REGIE_MESSAGE should be sent at HELLO when no message is active — got actions: %v", actions)
+	}
+}
+
+// TestSendStateToClient_Anim_NoRegieMessageReplayWhenAlreadyCleared is B7's
+// gate written precisely: "si regieMessage != nil ET Active" — a
+// (re)connecting tablet must not be replayed a STALE already-cleared
+// message either. Distinct from the nil case above: here a.regieMessage is
+// non-nil (a message was sent and acknowledged earlier this session) but
+// Active is false — the reconnecting client's own default rest state
+// already covers this case, nothing needs to be pushed.
+func TestSendStateToClient_Anim_NoRegieMessageReplayWhenAlreadyCleared(t *testing.T) {
+	app := newAnimTestApp(t)
+	app.regieMessage = &protocol.RegieMessagePayload{Active: false, Text: "Ancienne consigne acquittée", SentAt: 0, ClearedBy: "ANIM"}
+
+	baseURL := startAnimAllowlistTestServer(t, app)
+	conn := dialWS(t, baseURL, "/ws/anim")
+	clientID := learnClientID(t, app, conn)
+
+	app.sendStateToClient(clientID, server.ClientTypeAnim)
+
+	actions := collectActionsT(t, conn, 400*time.Millisecond)
+	if containsAction(actions, protocol.ActionRegieMessage) {
+		t.Errorf("#167 B7: a (re)connecting client must not be replayed an already-cleared message — got actions: %v", actions)
+	}
+}
+
+// TestSendStateToClient_RegieMessage_TargetedNotRebroadcast is B7's explicit
+// warning, made concrete: a SECOND anim tablet connecting while a first one
+// is already connected must not cause the FIRST tablet to receive a
+// duplicate REGIE_MESSAGE — the replay is a targeted SendToClient(new
+// clientID, ...), never a.broadcastRegieMessage() (which would fan out to
+// every already-connected admin/anim connection, not just the new one).
+func TestSendStateToClient_RegieMessage_TargetedNotRebroadcast(t *testing.T) {
+	app := newAnimTestApp(t)
+	app.regieMessage = &protocol.RegieMessagePayload{Active: true, Text: "Consigne unique", SentAt: 1}
+
+	baseURL := startAnimAllowlistTestServer(t, app)
+	firstAnim := dialWS(t, baseURL, "/ws/anim")
+	learnClientID(t, app, firstAnim)
+	// Drain the HELLO REGIE_MESSAGE the first tablet legitimately receives
+	// for itself (dialWS doesn't send HELLO — learnClientID uses PONG — so
+	// nothing has been sent to firstAnim yet at this point).
+
+	secondClientID := learnClientID(t, app, dialWS(t, baseURL, "/ws/anim"))
+
+	app.sendStateToClient(secondClientID, server.ClientTypeAnim)
+
+	firstAnimActions := collectActionsT(t, firstAnim, 300*time.Millisecond)
+	if containsAction(firstAnimActions, protocol.ActionRegieMessage) {
+		t.Errorf("#167 B7: sendStateToClient for a NEW connection must not re-push REGIE_MESSAGE to an already-connected tablet — got actions on the first tablet: %v", firstAnimActions)
+	}
+}
+
 func TestSendStateToClient_Admin_StillReceivesQuestionsAtHello(t *testing.T) {
 	app := newTestAppWithHub(t)
 	app.httpServer = server.NewHTTPServer(0, app.engine, app.wsHub, app.buzzerHub, server.NewLogsWebSocketHub(10))
