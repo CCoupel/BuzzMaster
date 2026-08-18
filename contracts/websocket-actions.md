@@ -133,7 +133,7 @@ Notes :
   - `REGIE_MESSAGE_CLEAR` est la **première action partagée `admin` + `anim` qui n'appartient pas à
     la « conduite en direct »**. Une seule action pour deux intentions, parce que l'**effet serveur
     est rigoureusement identique** (effacer l'unique message actif et diffuser l'effacement) :
-    l'animateur l'envoie pour **acquitter** (« Vu »), la régie pour **retirer** un message envoyé
+    l'animateur l'envoie depuis sa tablette, la régie pour **retirer** un message envoyé
     par erreur. La distinction n'est pas dans le protocole mais dans le `ClientType` de
     l'émetteur — c'est le serveur qui en déduit `CLEARED_BY` (voir §"Messagerie régie" ci-dessous),
     ce qui évite une seconde action au périmètre identique et une entrée d'allow-list de plus.
