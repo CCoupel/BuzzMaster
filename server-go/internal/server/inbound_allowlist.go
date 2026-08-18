@@ -93,6 +93,29 @@ var inboundActionAllowlist = map[string][]ClientType{
 	// call site consults, instead of a second hardcoded rule drifting apart
 	// from this one.
 	protocol.ActionCancelAIGeneration: {ClientTypeAdmin},
+	// Messagerie régie (v6.4.x, #167 — contracts/websocket-actions.md
+	// §"Messagerie régie"): unidirectional by design (issue #167 — "pas de
+	// réponse possible"). Anim has no path to SEND, deliberately: it must
+	// not acquire one as a side effect of the CLEAR entry just below.
+	protocol.ActionRegieMessageSend: {ClientTypeAdmin},
+
+	// --- Messagerie régie — admin + anim, NOT "conduite en direct" ----
+	// (v6.4.x, #167 — contracts/websocket-actions.md §"Messagerie régie")
+	// REGIE_MESSAGE_CLEAR is one action for two intents: admin sends it to
+	// retire a message sent by mistake, anim sends it to acknowledge ("Vu").
+	// The server-side EFFECT is identical either way (clear the single active
+	// message, broadcast the clear) — the distinction lives only in
+	// ClientType, which the handler uses to deduce CLEARED_BY ("REGIE" vs
+	// "ANIM"), never read from the payload itself.
+	//
+	// ⚠️ CAPABILITY WIDENING, a different class than #159/#160's: those let
+	// anim MUTATE game state (still bounded by engine guards). This lets anim
+	// mutate a state OUTSIDE the engine, with a GLOBAL effect — one tablet's
+	// "Vu" clears the message for every tablet AND for régie. Deliberate
+	// (D3, single message → single acknowledgment), not a side effect; no
+	// engine guard applies or is added, valid in every phase including
+	// NEW_GAME (D5).
+	protocol.ActionRegieMessageClear: {ClientTypeAdmin, ClientTypeAnim},
 
 	// --- BUTTON / PONG — dual purpose, NOT admin-only -----------------
 	// #154 code review (CRITIQUE 1): these two are the REAL VJoueur gameplay
