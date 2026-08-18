@@ -102,7 +102,7 @@ Format prod : X.Y.Z   (le "a" n'est jamais publie en prod)
 | Segment | Role |
 |---------|------|
 | X | Compatibilite des donnees (DB, fichiers). Rupture = upgrade possible mais rollback complique. |
-| Y | Compteur de milestone/livraison. Impair = dev, pair = prod. Avance toujours de +1 (jamais +2). |
+| Y | Compteur de milestone/livraison. Pair = dev, impair = prod. Avance toujours de +1 (jamais +2). |
 | Z | Compteur de bugfix. Remis a 0 uniquement au demarrage d'un nouveau milestone. |
 | a | Iteration dev interne (un commit = un `a`). Jamais visible en prod. |
 
