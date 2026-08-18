@@ -1,13 +1,22 @@
-# Procédure de Test — Communication Animateur (#167 + #168 + #175)
+# Procédure de Test — Communication Animateur (#167 + #168 + #175 + #176)
 
 **Version** : v6.4.x (branche `feature/anim-communication`)
-**Date** : 2026-08-18
+**Date** : 2026-08-18 (révisée pour #176)
 **Testeur** : QA / Utilisateur
 **Issues** : #167 (messagerie régie → tablettes animateur) + #168 (note d'explication par question) +
-#175 (menu « Quitter » — arrêt du serveur)
+#175 (menu « Quitter » — arrêt du serveur) + #176 (correctifs UX de #167 : champ régie permanent,
+double-tap remplace le bouton « Vu »)
 **Référence** : Plan `_work/reports/plan-20260818-121500.md` (#167/#168), `_work/reports/plan-20260818-140953.md`
-(#175), maquette `docs/mockups/anim-communication-167-168.html`, `contracts/websocket-actions.md`
-§"Messagerie régie", `contracts/models.md` §EXPLANATION, `contracts/http-endpoints.md` §`/shutdown`
+(#175), `_work/reports/plan-20260818-141638.md` (#176), maquette `docs/mockups/anim-communication-167-168.html`
+(**republiée pour #176** — vérifier qu'elle montre bien le champ permanent et le double-tap, pas
+l'ancien bouton « Vu »/« Nouveau message »), `contracts/websocket-actions.md` §"Messagerie régie",
+`contracts/models.md` §EXPLANATION, `contracts/http-endpoints.md` §`/shutdown`
+
+> ⚠️ **#176 change l'interface décrite dans les scénarios 1/3/4/5/6 ci-dessous** (rédigés pour #167,
+> révisés ici) : le bouton « Vu » côté `/anim` est remplacé par un **double-tap sur toute la zone du
+> message** ; côté régie, le champ de saisie est désormais **toujours visible et pré-rempli**, et le
+> bouton « Nouveau message » a disparu au profit d'un indicateur fugace. Les scénarios ont été mis à
+> jour en conséquence — ne pas chercher ces boutons disparus lors de la recette.
 
 ---
 
@@ -33,10 +42,10 @@ acquittement unique, jamais de comptage par tablette.
 | Étape | Action | Résultat Attendu | Résultat Obtenu | OK ? |
 |-------|--------|-----------------|----------------|------|
 | 1 | Ouvrir deux tablettes `/anim` (A et B) côte à côte | Les deux affichent « Aucun message de la régie » | | |
-| 2 | Depuis `/admin`, taper une consigne courte et attendre l'envoi automatique (voir Scénario 3 pour le détail des déclencheurs) | La consigne apparaît sur A **et** B, avec un bouton « Vu » sur chacune | | |
-| 3 | Taper « Vu » depuis la tablette A **uniquement** | Le message disparaît immédiatement sur A **et** sur B (pas seulement A) | | |
-| 4 | Observer la régie | Le bandeau passe à « Vu par l'animateur » | | |
-| 5 | Répéter l'envoi, puis acquitter depuis B cette fois | Même résultat croisé : disparition sur A et B simultanément | | |
+| 2 | Depuis `/admin`, taper une consigne courte et attendre l'envoi automatique (voir Scénario 3 pour le détail des déclencheurs) | La consigne apparaît sur A **et** B, avec un indice « Double-tap pour marquer comme vu » sur chacune (#176 — **plus de bouton « Vu »**) | | |
+| 3 | **Double-tapper** (deux appuis rapprochés) sur la zone du message depuis la tablette A **uniquement** | Le message disparaît immédiatement sur A **et** sur B (pas seulement A) | | |
+| 4 | Observer la régie | Un indicateur fugace « Vu par l'animateur » apparaît **à côté** du champ de saisie, qui reste visible et vide (#176 — plus d'état bloquant) | | |
+| 5 | Répéter l'envoi, puis double-tapper depuis B cette fois | Même résultat croisé : disparition sur A et B simultanément | | |
 
 **Verdict** : [ ] PASS  [ ] FAIL
 
@@ -52,7 +61,7 @@ livraison différée, jamais perdue.
 | 1 | Sur une tablette `/anim`, couper le Wi-Fi (ou fermer l'onglet) | Déconnexion observée (indicateur de statut) | | |
 | 2 | Depuis `/admin`, envoyer une consigne pendant que la tablette est hors ligne | Aucune erreur côté régie ; le bandeau régie affiche la consigne comme active | | |
 | 3 | Reconnecter la tablette (Wi-Fi rétabli ou onglet rouvert sur `/anim`) | La consigne apparaît **immédiatement** à la reconnexion, sans action supplémentaire — pas d'attente d'un prochain événement de jeu | | |
-| 4 | Acquitter depuis cette même tablette | Le message s'efface partout comme au Scénario 1 | | |
+| 4 | Double-tapper depuis cette même tablette | Le message s'efface partout comme au Scénario 1 | | |
 
 **Verdict** : [ ] PASS  [ ] FAIL
 
@@ -70,7 +79,7 @@ serveur à 140 caractères sur du texte accentué, et l'affichage intégral côt
 | 3 | Effacer, taper une nouvelle consigne puis cliquer **ailleurs sur la page** (perte de focus) | Envoi déclenché par le blur, même résultat | | |
 | 4 | Effacer, taper une nouvelle consigne et **ne rien faire** pendant ~2 secondes | Envoi automatique après la pause de frappe, sans Entrée ni clic | | |
 | 5 | Composer un texte de plus de 140 caractères, **entièrement accentué** (é/è/à/ç, ex. copier-coller un paragraphe français riche en accents) et l'envoyer | Le texte reçu sur la tablette est tronqué à 140 caractères **exactement**, lisible, **sans caractère coupé/corrompu en fin de texte** (pas de `�` ni de glyphe cassé) | | |
-| 6 | Observer la bande `/anim` avec ce message de 140 caractères | Le texte tient **en entier** dans la bande (elle s'agrandit verticalement si besoin), rien n'est coupé visuellement, le bouton « Vu » reste accessible, et le bloc « à suivre » n'est pas repoussé hors écran | | |
+| 6 | Observer la bande `/anim` avec ce message de 140 caractères | Le texte tient **en entier** dans la bande (elle s'agrandit verticalement si besoin), rien n'est coupé visuellement, la zone reste double-tapable sur toute sa surface (#176), et le bloc « à suivre » n'est pas repoussé hors écran | | |
 
 **Verdict** : [ ] PASS  [ ] FAIL
 
@@ -83,11 +92,30 @@ blur sur un texte **identique**, après acquittement, ne doit **jamais** faire r
 
 | Étape | Action | Résultat Attendu | Résultat Obtenu | OK ? |
 |-------|--------|-----------------|----------------|------|
-| 1 | Sur `/admin`, taper une consigne et attendre la pause de frappe (2s) pour déclencher l'envoi | La consigne est active, visible sur `/anim` | | |
-| 2 | Depuis `/anim`, acquitter (« Vu ») | Le bandeau régie passe à « Vu par l'animateur » | | |
-| 3 | Sans modifier le texte dans le champ régie, **cliquer ailleurs sur la page** (déclenche un blur sur le même texte, encore présent) | **Le message ne réapparaît PAS** sur les tablettes ni en régie — le bandeau régie reste sur « Vu par l'animateur » | | |
-| 4 | Cliquer sur « Nouveau message », vérifier que le champ est vide | Le champ a bien été vidé à l'acquittement (pas de résidu de l'ancien texte) | | |
-| 5 | Taper un texte **différent** et l'envoyer | Cette fois le message apparaît normalement sur les tablettes — seule l'identité stricte au texte acquitté était bloquée | | |
+| 1 | Sur `/admin`, taper une consigne et attendre la pause de frappe (2s) pour déclencher l'envoi | La consigne est active, visible sur `/anim`, le champ régie affiche le même texte (pré-rempli, #176) | | |
+| 2 | Depuis `/anim`, **double-tapper** sur la zone du message | Le champ régie se vide **automatiquement** (sans clic), un indicateur fugace « Vu par l'animateur » apparaît brièvement à côté | | |
+| 3 | Sans rien retaper, **cliquer dans le champ régie désormais vide puis ailleurs sur la page** (déclenche un blur sur un champ vide) | **Aucun message ne réapparaît** sur les tablettes ni en régie (un texte vide n'envoie rien) | | |
+| 4 | Vérifier que le champ régie est bien vide, sans résidu de l'ancien texte | Le champ a bien été vidé automatiquement à l'acquittement | | |
+| 5 | Taper le texte **identique** à l'ancienne consigne (celle déjà acquittée) et l'envoyer | Le message réapparaît normalement — ce n'est plus la même "instance" de message pour le serveur (le champ a été vidé, ce n'est pas un blur résiduel sur l'ancien texte) ; **c'est le scénario 4bis ci-dessous qui teste la vraie garde de résurrection, plus difficile à déclencher accidentellement depuis #176** | | |
+
+**Verdict** : [ ] PASS  [ ] FAIL
+
+---
+
+## Scénario 4bis — Résurrection, variante #176 : re-préremplissage puis blur immédiat
+
+**Objectif** : #176 rend la résurrection accidentelle plus difficile (le champ se vide tout seul), mais
+la garde serveur doit rester active pour le cas où le champ est encore synchronisé au moment de
+l'acquittement (ex. re-render juste avant le clear, ou un deuxième poste régie qui n'a pas eu le temps
+de voir le champ se vider).
+
+| Étape | Action | Résultat Attendu | Résultat Obtenu | OK ? |
+|-------|--------|-----------------|----------------|------|
+| 1 | Ouvrir **deux** sessions `/admin`. Depuis le poste 1, envoyer une consigne | Les deux postes affichent le champ pré-rempli avec la consigne | | |
+| 2 | Depuis `/anim`, double-tapper immédiatement (avant que le poste 2 n'ait eu le temps de réagir à l'écran) | Le message est acquitté | | |
+| 3 | Observer le poste 2 juste après | Son champ se vide également (dès que son propre état WebSocket reçoit l'effacement) — **si un blur survient sur ce poste entre l'acquittement et le vidage affiché**, aucune résurrection ne doit se produire malgré la fenêtre de course | | |
+
+**Verdict** : [ ] PASS  [ ] FAIL
 
 **Verdict** : [ ] PASS  [ ] FAIL
 
@@ -102,7 +130,7 @@ avec un statut distinct de l'acquittement.
 |-------|--------|-----------------|----------------|------|
 | 1 | Depuis `/admin`, envoyer une consigne (erreur de frappe, par exemple) | Message actif sur `/admin` et `/anim` | | |
 | 2 | Depuis `/admin` (PAS `/anim`), cliquer sur « Effacer » | Le message disparaît immédiatement sur `/admin` **et** `/anim` | | |
-| 3 | Observer l'état régie après ce retrait | Le bandeau régie repasse **directement au champ de saisie** (repos), **PAS** à « Vu par l'animateur » — distinction `CLEARED_BY` REGIE vs ANIM | | |
+| 3 | Observer l'état régie après ce retrait | Le champ (toujours visible, #176) repasse à vide, **AUCUN** indicateur « Vu par l'animateur » n'apparaît — distinction `CLEARED_BY` REGIE vs ANIM préservée malgré le changement d'interface | | |
 | 4 | Observer `/anim` après ce retrait | La bande affiche « Aucun message de la régie », aucune trace de l'ancien texte | | |
 
 **Verdict** : [ ] PASS  [ ] FAIL
@@ -116,11 +144,11 @@ l'état du message, sans état local optimiste divergent.
 
 | Étape | Action | Résultat Attendu | Résultat Obtenu | OK ? |
 |-------|--------|-----------------|----------------|------|
-| 1 | Ouvrir deux sessions `/admin` (poste 1 et poste 2), les placer côte à côte | Les deux affichent le champ de saisie au repos | | |
-| 2 | Depuis le poste 1, taper et envoyer une consigne | Le poste 2 affiche **immédiatement** la consigne active et le bouton « Effacer », sans avoir rien tapé lui-même | | |
-| 3 | Depuis le poste 2, cliquer sur « Effacer » | Le message disparaît sur les deux postes | | |
-| 4 | Renvoyer une consigne depuis le poste 1, puis l'acquitter depuis une tablette `/anim` | Les deux postes régie passent à « Vu par l'animateur » simultanément | | |
-| 5 | Sur le poste 2, cliquer sur « Nouveau message » PENDANT que le poste 1 est encore sur l'écran acquitté | Seul le poste 2 bascule sur le champ de saisie ; le poste 1 reste sur « Vu par l'animateur » tant qu'il n'a pas cliqué lui-même (bascule locale d'affichage, pas un état serveur partagé) | | |
+| 1 | Ouvrir deux sessions `/admin` (poste 1 et poste 2), les placer côte à côte | Les deux affichent le champ de saisie vide | | |
+| 2 | Depuis le poste 1, taper et envoyer une consigne | Le poste 2 affiche **immédiatement** son champ **pré-rempli** avec la consigne (#176, AC2/AC3) et le bouton « Effacer », sans avoir rien tapé lui-même | | |
+| 3 | Depuis le poste 2, cliquer sur « Effacer » | Le message disparaît sur les deux postes, les deux champs se vident | | |
+| 4 | Renvoyer une consigne depuis le poste 1, puis double-tapper depuis une tablette `/anim` | Les deux postes régie affichent simultanément l'indicateur fugace « Vu par l'animateur », et leurs champs se vident automatiquement en même temps | | |
+| 5 | Sur le poste 1, **pendant que le poste 2 a encore l'indicateur fugace affiché**, commencer à taper une nouvelle consigne | Le poste 1 peut taper librement sans être perturbé par l'état d'affichage du poste 2 — les deux postes évoluent indépendamment une fois le champ vidé | | |
 
 **Verdict** : [ ] PASS  [ ] FAIL
 
@@ -235,6 +263,46 @@ v6.2.0.35, où le port ne se libérait pas et une machine entière avait dû êt
 
 ---
 
+## Scénario 13 — Double-tap réel sur tablette tactile (#176, AC12-AC16)
+
+**Objectif** : Le double-tap ne peut être validé qu'à la main, sur un vrai appareil tactile — c'est le
+seul scénario du lot où l'automatisé (jsdom) ne peut rien prouver sur le comportement réel du
+navigateur (zoom natif, latence tactile).
+
+**Prérequis** : une tablette ou un smartphone réel connecté sur `/anim` (pas un émulateur desktop).
+
+| Étape | Action | Résultat Attendu | Résultat Obtenu | OK ? |
+|-------|--------|-----------------|----------------|------|
+| 1 | Envoyer une consigne depuis `/admin` | Le message apparaît sur la tablette avec l'indice « Double-tap pour marquer comme vu » | | |
+| 2 | Faire un **tap unique** (un seul appui bref) sur la zone du message | **Rien ne se passe** — le message reste actif, aucun acquittement accidentel (AC13) | | |
+| 3 | Faire un **double-tap** franc (deux appuis rapprochés, comme pour zoomer une photo) sur la zone du message | Le message s'efface (acquitté) — **ET** le navigateur **ne zoome PAS** sur la zone (AC16, `touch-action: manipulation`) | | |
+| 4 | Répéter l'envoi, puis faire un appui **suivi d'un glissement du doigt** (comme pour faire défiler) sur la zone | Rien ne se passe — le geste n'est pas compté comme un tap (AC15), la page peut défiler normalement si applicable | | |
+| 5 | Répéter l'envoi, faire un tap, **attendre plus d'une seconde**, puis faire un second tap | Rien ne se passe — les deux taps sont hors fenêtre, pas comptés comme un double-tap (AC14) | | |
+| 6 | Vérifier l'accès clavier (tablette avec clavier externe ou test sur desktop) : **Tab** jusqu'à la zone du message, puis **Entrée** | Le message s'efface en **un seul appui** — le double-tap protège le doigt, pas le clavier (AC18) | | |
+| 7 | Même vérification avec la touche **Espace** | Même résultat | | |
+
+**Verdict** : [ ] PASS  [ ] FAIL
+
+---
+
+## Scénario 14 — Brouillon régie préservé pendant un acquittement concurrent (#176, AC4, AC6)
+
+**Objectif** : Le scénario exact de la décision ② du plan #176 — la régie compose une nouvelle
+consigne PENDANT qu'un message précédent (le sien ou celui d'un collègue) est en train d'être
+acquitté par l'animateur.
+
+| Étape | Action | Résultat Attendu | Résultat Obtenu | OK ? |
+|-------|--------|-----------------|----------------|------|
+| 1 | Envoyer une première consigne « A » depuis `/admin` | Le champ régie affiche « A » (pré-rempli) | | |
+| 2 | **Sans envoyer**, cliquer dans le champ et remplacer le contenu par « B » (ne pas attendre les 2s de pause de frappe, ou annuler avant l'envoi) | Le champ affiche « B », en cours de frappe | | |
+| 3 | PENDANT que « B » est en cours de composition, double-tapper le message « A » depuis `/anim` | « A » est acquitté sur les tablettes | | |
+| 4 | Observer le champ régie immédiatement après | Le champ affiche **toujours « B »** — le brouillon n'a **PAS** été écrasé ni vidé par l'acquittement de « A » (AC4 course écho/saisie + AC6 brouillon divergent) | | |
+| 5 | Terminer la frappe de « B » et l'envoyer (Entrée) | « B » devient le nouveau message actif normalement | | |
+
+**Verdict** : [ ] PASS  [ ] FAIL
+
+---
+
 ## Critères de Validation Globale
 
 - [ ] Acquittement croisé entre deux tablettes fonctionne, message unique (Scénario 1)
@@ -255,6 +323,10 @@ v6.2.0.35, où le port ne se libérait pas et une machine entière avait dû êt
 - [ ] Menu « Quitter » : annulation sans effet, entrée non-lien en dernière position (Scénario 11)
 - [ ] Menu « Quitter » : confirmation déconnecte TOUS les postes (pas seulement le poste cliqueur),
       et surtout **le port est immédiatement réutilisable au redémarrage** (Scénario 12, B1)
+- [ ] Double-tap réel sur tablette : tap unique sans effet, double-tap déclenche SANS zoom navigateur,
+      glissement et fenêtre expirée ignorés, accès clavier intact (Scénario 13)
+- [ ] Un brouillon régie en cours de composition survit à l'acquittement d'un AUTRE message
+      (Scénario 14)
 
 ---
 
@@ -263,10 +335,11 @@ v6.2.0.35, où le port ne se libérait pas et une machine entière avait dû êt
 | Étape | Action | Résultat Attendu | Résultat Obtenu | OK ? |
 |-------|--------|-----------------|----------------|------|
 | 1 | `cd server-go && go build ./... && go test ./...` | Build OK, tous les tests PASS, y compris `regie_message_test.go` (T2-T4b, NOUVEAU), `inbound_allowlist_anim_test.go` (T1), `broadcast_anim_test.go`/`send_state_to_client_anim_test.go` (T5/T6), `messages_anim_test.go` (T7), `http_test.go` (T8), `main_test.go` (T5 #175, NOUVEAU — vérifie l'assignation d'`OnShutdown`) | | |
-| 2 | `cd server-go/web && npm test` (suite Vitest complète) | Tous les tests PASS, y compris `RegieMessageBar.test.jsx`, `AnimExplanationNote.test.jsx` (NOUVEAUX), `QuestionsPage.explanation.test.jsx`, `PlayerDisplay.explanation.test.jsx` (NOUVEAUX), `AnimPage.test.jsx` et `AnimConductPanel.test.jsx` (blocs réécrits), `Navbar.test.jsx` (bloc #175 additif : T1-T4) | | |
-| 3 | `AnimAnswerZone.test.jsx` passe **sans la moindre modification** | Preuve que l'extraction du geste de révélation en `useHoldToPeek` (F6) n'a rien changé au comportement #169 | | |
+| 2 | `cd server-go/web && npm test` (suite Vitest complète) | Tous les tests PASS, y compris `RegieMessageBar.test.jsx`, `AnimExplanationNote.test.jsx` (NOUVEAUX #167/#168), `QuestionsPage.explanation.test.jsx`, `PlayerDisplay.explanation.test.jsx` (NOUVEAUX), `AnimPage.test.jsx` et `AnimConductPanel.test.jsx` (blocs réécrits), `Navbar.test.jsx` (bloc #175 additif), `useDoubleTap.test.js` (NOUVEAU #176), `RegieMessageBar.test.jsx` (blocs état réécrits pour #176 — champ permanent, course écho/saisie, indicateur fugace) | | |
+| 3 | `AnimAnswerZone.test.jsx` passe **sans la moindre modification** | Preuve que l'extraction du geste de révélation en `useHoldToPeek` (F6) n'a rien changé au comportement #169 — `useDoubleTap` (#176) est un hook SÉPARÉ, ne le touche pas non plus | | |
 | 4 | Manche QCM/SPEEDY/ARDOISE/MEMORY/MEMOTION sur `/anim` (hors #167/#168) | Aucune régression : conduite, crédit, colonne équipes inchangés | | |
 | 5 | Les quatre entrées de navigation existantes du menu (Config/Backup/Mises à jour/Logs) | Comportement strictement inchangé (mêmes routes, même rendu) — #175 n'affecte que l'ajout de « Quitter » | | |
+| 6 | Section "Envoi automatique" de `RegieMessageBar.test.jsx` (Entrée/blur/pause 2s) | PASSE **sans la moindre modification** — #176 ne touche pas ce mécanisme (garde-fou explicite du plan #176) | | |
 
 **Verdict** : [ ] PASS  [ ] FAIL
 

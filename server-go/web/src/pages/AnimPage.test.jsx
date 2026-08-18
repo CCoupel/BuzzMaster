@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { render, screen, fireEvent } from '@testing-library/react'
 import AnimPage from './AnimPage'
 import { useGame } from '../hooks/GameContext'
 import { useCategories } from '../hooks/useCategories'
@@ -625,14 +625,16 @@ describe('AnimPage — mode ARDOISE, câblage vers AnimArdoiseList (#158/T4)', (
 // ---------------------------------------------------------------------------
 
 // La bande régie était réservée (texte statique "Messagerie régie", aucun
-// élément interactif) avant #167. Le lot v6.4.x #167 lui donne un contenu
-// réel — réception du message actif + bouton « Vu » (F4, câblé sur
-// clearRegieMessage). RÉÉCRIT (pas neutralisé, changement documenté : plan
-// _work/reports/plan-20260818-121500.md, tâche F4) : mêmes phases
-// couvertes, mais sur le comportement réel plutôt que la réserve vide.
-describe('AnimPage — bande régie, réception du message (#167, F4)', () => {
+// élément interactif) avant #167, puis a affiché un bouton « Vu » (#167,
+// F4). #176 retire ce bouton — trop petit pour un usage tactile debout — et
+// le remplace par un double-tap sur toute la zone (F5, useDoubleTap.js),
+// avec un repli clavier (role="button"/tabIndex/Entrée-Espace, un seul
+// appui suffit au clavier — le double-tap protège le doigt, pas le
+// clavier). RÉÉCRIT une seconde fois (pas neutralisé, changement documenté :
+// plan _work/reports/plan-20260818-141638.md, tâche F5, AC11-AC19).
+describe('AnimPage — bande régie, réception du message (#167/#176, F4/F5)', () => {
   it.each(['NEW_GAME', 'STARTED', 'REVEALED'])(
-    'phase %s : aucun message actif -> état repos, sans élément interactif',
+    'phase %s : aucun message actif -> état repos, sans élément interactif (AC19)',
     (phase) => {
       useGame.mockReturnValue(makeGameMock({ gameState: { phase, question: null } }))
       const { container } = render(<AnimPage />)
@@ -641,10 +643,12 @@ describe('AnimPage — bande régie, réception du message (#167, F4)', () => {
       expect(bar.textContent).toContain('Aucun message de la régie')
       expect(container.querySelector('.anim-zone-regie button')).toBeNull()
       expect(container.querySelector('.anim-zone-regie input')).toBeNull()
+      expect(bar).not.toHaveAttribute('role', 'button')
+      expect(bar).not.toHaveAttribute('tabIndex')
     }
   )
 
-  it('message actif : texte affiché et bouton « Vu », quelle que soit la phase de jeu', () => {
+  it('message actif : texte affiché, indice « Double-tap pour marquer comme vu », AUCUN bouton (AC11, AC17)', () => {
     useGame.mockReturnValue(makeGameMock({
       gameState: { phase: 'STARTED', question: null },
       regieMessage: { ACTIVE: true, TEXT: 'Question 12 annulée', SENT_AT: 1, CLEARED_BY: '' },
@@ -652,28 +656,89 @@ describe('AnimPage — bande régie, réception du message (#167, F4)', () => {
     const { container } = render(<AnimPage />)
     const bar = container.querySelector('.anim-zone-regie .anim-regie-bar')
     expect(bar.textContent).toContain('Question 12 annulée')
-    expect(screen.getByText('Vu')).toBeInTheDocument()
+    expect(bar.textContent).toMatch(/double-tap/i)
+    expect(container.querySelector('.anim-zone-regie button')).toBeNull()
   })
 
-  it('cliquer sur « Vu » appelle clearRegieMessage (acquittement, AC2/AC3)', () => {
+  it('la zone active est focalisable et actionnable au clavier (role="button", tabIndex=0, AC18)', () => {
+    useGame.mockReturnValue(makeGameMock({
+      gameState: { phase: 'STARTED', question: null },
+      regieMessage: { ACTIVE: true, TEXT: 'Consigne', SENT_AT: 1, CLEARED_BY: '' },
+    }))
+    const { container } = render(<AnimPage />)
+    const activeBar = container.querySelector('.anim-zone-regie .anim-regie-bar.active')
+    expect(activeBar).toHaveAttribute('role', 'button')
+    expect(activeBar).toHaveAttribute('tabIndex', '0')
+  })
+
+  it('un double-tap (deux pointerdown/up rapprochés) sur la zone appelle clearRegieMessage UNE fois (AC12)', () => {
     const props = makeGameMock({
       gameState: { phase: 'STARTED', question: null },
       regieMessage: { ACTIVE: true, TEXT: 'Consigne', SENT_AT: 1, CLEARED_BY: '' },
     })
     useGame.mockReturnValue(props)
-    render(<AnimPage />)
-    screen.getByText('Vu').click()
+    const { container } = render(<AnimPage />)
+    const activeBar = container.querySelector('.anim-zone-regie .anim-regie-bar.active')
+
+    fireEvent.pointerDown(activeBar, { clientX: 10, clientY: 10 })
+    fireEvent.pointerUp(activeBar, { clientX: 10, clientY: 10 })
+    fireEvent.pointerDown(activeBar, { clientX: 10, clientY: 10 })
+    fireEvent.pointerUp(activeBar, { clientX: 10, clientY: 10 })
+
     expect(props.clearRegieMessage).toHaveBeenCalledTimes(1)
   })
 
-  it('AUCUNE transition de jeu (NEW_GAME) n\'efface le message affiché — l\'état vient exclusivement de regieMessage (AC12)', () => {
+  it('un TAP UNIQUE sur la zone n\'appelle PAS clearRegieMessage — aucun acquittement accidentel (AC13)', () => {
+    const props = makeGameMock({
+      gameState: { phase: 'STARTED', question: null },
+      regieMessage: { ACTIVE: true, TEXT: 'Consigne', SENT_AT: 1, CLEARED_BY: '' },
+    })
+    useGame.mockReturnValue(props)
+    const { container } = render(<AnimPage />)
+    const activeBar = container.querySelector('.anim-zone-regie .anim-regie-bar.active')
+
+    fireEvent.pointerDown(activeBar, { clientX: 10, clientY: 10 })
+    fireEvent.pointerUp(activeBar, { clientX: 10, clientY: 10 })
+
+    expect(props.clearRegieMessage).not.toHaveBeenCalled()
+  })
+
+  it('touche Entrée sur la zone focalisée appelle clearRegieMessage (accès clavier, un seul appui suffit, AC18)', () => {
+    const props = makeGameMock({
+      gameState: { phase: 'STARTED', question: null },
+      regieMessage: { ACTIVE: true, TEXT: 'Consigne', SENT_AT: 1, CLEARED_BY: '' },
+    })
+    useGame.mockReturnValue(props)
+    const { container } = render(<AnimPage />)
+    const activeBar = container.querySelector('.anim-zone-regie .anim-regie-bar.active')
+
+    fireEvent.keyDown(activeBar, { key: 'Enter' })
+
+    expect(props.clearRegieMessage).toHaveBeenCalledTimes(1)
+  })
+
+  it('touche Espace sur la zone focalisée appelle clearRegieMessage (AC18)', () => {
+    const props = makeGameMock({
+      gameState: { phase: 'STARTED', question: null },
+      regieMessage: { ACTIVE: true, TEXT: 'Consigne', SENT_AT: 1, CLEARED_BY: '' },
+    })
+    useGame.mockReturnValue(props)
+    const { container } = render(<AnimPage />)
+    const activeBar = container.querySelector('.anim-zone-regie .anim-regie-bar.active')
+
+    fireEvent.keyDown(activeBar, { key: ' ' })
+
+    expect(props.clearRegieMessage).toHaveBeenCalledTimes(1)
+  })
+
+  it('AUCUNE transition de jeu (NEW_GAME) n\'efface le message affiché — l\'état vient exclusivement de regieMessage (AC12 du lot #167)', () => {
     useGame.mockReturnValue(makeGameMock({
       gameState: { phase: 'NEW_GAME', question: null },
       regieMessage: { ACTIVE: true, TEXT: 'Consigne persistante', SENT_AT: 1, CLEARED_BY: '' },
     }))
-    render(<AnimPage />)
-    expect(screen.getByText('Vu')).toBeInTheDocument()
+    const { container } = render(<AnimPage />)
     expect(screen.getByText('Consigne persistante')).toBeInTheDocument()
+    expect(container.querySelector('.anim-zone-regie .anim-regie-bar.active')).not.toBeNull()
   })
 })
 

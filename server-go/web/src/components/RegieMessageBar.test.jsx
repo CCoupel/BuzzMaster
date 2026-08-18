@@ -4,17 +4,37 @@ import RegieMessageBar from './RegieMessageBar'
 import { useGame } from '../hooks/GameContext'
 
 // ---------------------------------------------------------------------------
-// RegieMessageBar — bandeau d'envoi régie → animateurs (v6.4.x, #167).
+// RegieMessageBar — bandeau d'envoi régie → animateurs (v6.4.x, #167, révisé
+// #176).
 //
-// Plan : _work/reports/plan-20260818-121500.md, tâches F2/F2b/F3b. Contrat :
-// contracts/websocket-actions.md §"Messagerie régie". Maquette :
-// docs/mockups/anim-communication-167-168.html (bandeau /admin, 4 états).
+// Plan #167 : _work/reports/plan-20260818-121500.md, tâches F2/F2b/F3b.
+// Plan #176 (correctifs UX) : _work/reports/plan-20260818-141638.md, tâches
+// F1/F2/F3 — REMPLACE le modèle à 4 états exclusifs (repos/saisie/actif/
+// acquitté avec bouton « Nouveau message ») par UNE structure unique où le
+// champ de saisie est TOUJOURS visible et éditable, pré-rempli avec le
+// message actif, avec un indicateur d'acquittement FUGACE (~4s) au lieu
+// d'un état bloquant. Contrat : contracts/websocket-actions.md §"Messagerie
+// régie" (sémantique serveur inchangée par #176 — seul le geste/rendu
+// côté client change).
 //
-// T9 — 4 états, AUCUN bouton « Envoyer ».
+// T9/T1 (#176) — champ toujours présent, AUCUN bouton « Envoyer », AUCUN
+//                bouton « Nouveau message ».
+// T2 (#176) — pré-remplissage quand un message devient actif (AC2/AC3).
+// T3 (#176) — course écho/saisie : un champ FOCALISÉ n'est jamais écrasé
+//             par l'écho serveur (AC4, le point délicat du lot).
 // T9b — envoi automatique (Entrée/blur/pause de frappe 2s), cycle de vie du
-//       timer, gardes anti-doublon/vide, vidage du champ à l'acquittement.
+//       timer, gardes anti-doublon/vide — INCHANGÉ par #176, section non
+//       modifiée (garde-fou explicite du plan #176).
+// T4 (#176) — vidage du champ à l'effacement (AC5) ; brouillon divergent
+//             préservé (AC6) — logique F2b conservée, adaptée au rendu
+//             (plus de bouton « Nouveau message », le champ vidé est
+//             directement visible).
+// T5 (#176) — indicateur fugace « Vu par l'animateur » (AC9) : apparaît sur
+//             CLEARED_BY=ANIM, pas sur REGIE, disparaît après un délai,
+//             timer nettoyé au démontage — SANS masquer le champ.
 // T9c — affichage piloté EXCLUSIVEMENT par l'état WebSocket (regieMessage),
-//       jamais par un état local optimiste.
+//       jamais par un état local optimiste — INCHANGÉ dans son principe,
+//       une assertion réécrite vers l'indicateur fugace (#176).
 // ---------------------------------------------------------------------------
 
 vi.mock('../hooks/GameContext', () => ({
@@ -49,25 +69,25 @@ afterEach(() => {
 })
 
 // ---------------------------------------------------------------------------
-// T9 — 4 états de la maquette, aucun bouton « Envoyer »
+// T1/T9 (#176) — le champ de saisie est TOUJOURS présent et éditable, quel
+// que soit l'état du message (repos, actif, juste acquitté) — AC1, AC7.
+// Plus d'état bloquant "acquitté", plus de bouton "Nouveau message".
 // ---------------------------------------------------------------------------
 
-describe('RegieMessageBar — état repos', () => {
-  it('affiche le champ de saisie et le compteur à 140 (aucun texte tapé)', () => {
+describe('RegieMessageBar — le champ est toujours présent (AC1, AC7)', () => {
+  it('état repos : champ vide, compteur à 140', () => {
     render(<RegieMessageBar />)
     expect(getInput()).toBeInTheDocument()
     expect(getInput()).toHaveValue('')
     expect(screen.getByText('140')).toBeInTheDocument()
   })
 
-  it("n'affiche ni « Effacer » ni « Vu par l'animateur »", () => {
+  it("état repos : n'affiche ni « Effacer » ni indicateur d'acquittement", () => {
     render(<RegieMessageBar />)
     expect(screen.queryByText('Effacer')).toBeNull()
     expect(screen.queryByText(/vu par l'animateur/i)).toBeNull()
   })
-})
 
-describe('RegieMessageBar — état saisie', () => {
   it('le compteur décroît avec la longueur du texte tapé (140 - longueur)', () => {
     render(<RegieMessageBar />)
     fireEvent.change(getInput(), { target: { value: 'Question 12 annulée' } }) // 19 caractères
@@ -78,20 +98,17 @@ describe('RegieMessageBar — état saisie', () => {
     render(<RegieMessageBar />)
     expect(getInput()).toHaveAttribute('maxLength', '140')
   })
-})
 
-describe('RegieMessageBar — état message actif', () => {
-  it('affiche le texte du message actif et le bouton « Effacer », plus de champ de saisie', () => {
+  it('message actif : le CHAMP reste présent (pas remplacé par un texte statique), plus « Effacer »', () => {
     useGame.mockReturnValue(makeGameMock({
       regieMessage: { ACTIVE: true, TEXT: 'Question 12 annulée', SENT_AT: 1000, CLEARED_BY: '' },
     }))
     render(<RegieMessageBar />)
-    expect(screen.getByText('« Question 12 annulée »')).toBeInTheDocument()
+    expect(getInput()).toBeInTheDocument() // #176 AC1 : plus de branche exclusive sans champ
     expect(screen.getByText('Effacer')).toBeInTheDocument()
-    expect(screen.queryByLabelText('Consigne à envoyer aux tablettes animateur')).toBeNull()
   })
 
-  it('« Effacer » appelle clearRegieMessage (retrait régie, D4)', () => {
+  it('« Effacer » appelle clearRegieMessage (retrait régie, D4) — disponible tant qu\'ACTIVE (AC8)', () => {
     const props = makeGameMock({
       regieMessage: { ACTIVE: true, TEXT: 'Consigne', SENT_AT: 1000, CLEARED_BY: '' },
     })
@@ -100,35 +117,19 @@ describe('RegieMessageBar — état message actif', () => {
     fireEvent.click(screen.getByText('Effacer'))
     expect(props.clearRegieMessage).toHaveBeenCalledTimes(1)
   })
-})
 
-describe('RegieMessageBar — état acquitté', () => {
-  it('affiche « Vu par l\'animateur » et le bouton « Nouveau message » (CLEARED_BY=ANIM)', () => {
+  it('« Effacer » absent quand aucun message n\'est actif', () => {
+    render(<RegieMessageBar />)
+    expect(screen.queryByText('Effacer')).toBeNull()
+  })
+
+  it('un message juste acquitté (CLEARED_BY=ANIM, ACTIVE=false) : le champ reste présent, aucun bouton « Nouveau message » (AC7)', () => {
     useGame.mockReturnValue(makeGameMock({
       regieMessage: { ACTIVE: false, TEXT: '', SENT_AT: 0, CLEARED_BY: 'ANIM' },
     }))
     render(<RegieMessageBar />)
-    expect(screen.getByText("Vu par l'animateur")).toBeInTheDocument()
-    expect(screen.getByText('Nouveau message')).toBeInTheDocument()
-  })
-
-  it('CLEARED_BY=REGIE (retrait régie) repasse au repos, PAS à l\'état acquitté', () => {
-    useGame.mockReturnValue(makeGameMock({
-      regieMessage: { ACTIVE: false, TEXT: '', SENT_AT: 0, CLEARED_BY: 'REGIE' },
-    }))
-    render(<RegieMessageBar />)
-    expect(screen.queryByText("Vu par l'animateur")).toBeNull()
     expect(getInput()).toBeInTheDocument()
-  })
-
-  it('« Nouveau message » bascule vers le champ de saisie (repos)', () => {
-    useGame.mockReturnValue(makeGameMock({
-      regieMessage: { ACTIVE: false, TEXT: '', SENT_AT: 0, CLEARED_BY: 'ANIM' },
-    }))
-    render(<RegieMessageBar />)
-    fireEvent.click(screen.getByText('Nouveau message'))
-    expect(getInput()).toBeInTheDocument()
-    expect(screen.queryByText("Vu par l'animateur")).toBeNull()
+    expect(screen.queryByText('Nouveau message')).toBeNull()
   })
 })
 
@@ -136,12 +137,130 @@ describe('RegieMessageBar — aucun bouton « Envoyer », dans aucun état (AC1c
   it.each([
     ['repos', IDLE],
     ['actif', { ACTIVE: true, TEXT: 'Consigne', SENT_AT: 1, CLEARED_BY: '' }],
-    ['acquitté', { ACTIVE: false, TEXT: '', SENT_AT: 0, CLEARED_BY: 'ANIM' }],
+    ['juste acquitté', { ACTIVE: false, TEXT: '', SENT_AT: 0, CLEARED_BY: 'ANIM' }],
   ])('état %s : pas de bouton "Envoyer"', (_, regieMessage) => {
     useGame.mockReturnValue(makeGameMock({ regieMessage }))
     render(<RegieMessageBar />)
     const sendButtons = screen.queryAllByRole('button', { name: /envoyer/i })
     expect(sendButtons).toHaveLength(0)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// T2 (#176) — pré-remplissage : quand un message devient actif, le champ
+// affiche son texte — y compris pour un second poste régie qui n'a rien
+// tapé lui-même (AC2, AC3).
+// ---------------------------------------------------------------------------
+
+describe('RegieMessageBar — pré-remplissage du champ (T2, AC2/AC3)', () => {
+  it('un message qui devient actif pré-remplit le champ avec son texte', () => {
+    const props = makeGameMock({ regieMessage: IDLE })
+    useGame.mockReturnValue(props)
+    const { rerender } = render(<RegieMessageBar />)
+    expect(getInput()).toHaveValue('')
+
+    useGame.mockReturnValue(makeGameMock({
+      ...props,
+      regieMessage: { ACTIVE: true, TEXT: 'Question 12 annulée', SENT_AT: 1, CLEARED_BY: '' },
+    }))
+    rerender(<RegieMessageBar />)
+
+    expect(getInput()).toHaveValue('Question 12 annulée')
+  })
+
+  it("un second poste régie (qui n'a rien tapé) voit le texte envoyé par l'autre poste (AC3)", () => {
+    const props = makeGameMock({ regieMessage: IDLE })
+    useGame.mockReturnValue(props)
+    const { rerender } = render(<RegieMessageBar />)
+
+    // Aucune frappe locale ici — seul l'état serveur change, comme si un
+    // AUTRE poste /admin venait d'envoyer.
+    useGame.mockReturnValue(makeGameMock({
+      ...props,
+      regieMessage: { ACTIVE: true, TEXT: 'Envoyé par un autre poste', SENT_AT: 1, CLEARED_BY: '' },
+    }))
+    rerender(<RegieMessageBar />)
+
+    expect(getInput()).toHaveValue('Envoyé par un autre poste')
+    expect(props.sendRegieMessage).not.toHaveBeenCalled() // pure réception, aucun envoi de ce poste
+  })
+
+  it('le compteur reflète la longueur du texte pré-rempli', () => {
+    const props = makeGameMock({
+      regieMessage: { ACTIVE: true, TEXT: 'Douze caractères', SENT_AT: 1, CLEARED_BY: '' }, // 16 caractères
+    })
+    useGame.mockReturnValue(props)
+    render(<RegieMessageBar />)
+    expect(screen.getByText('124')).toBeInTheDocument() // 140 - 16
+  })
+})
+
+// ---------------------------------------------------------------------------
+// T3 (#176) — course écho/saisie, LE point délicat du lot : un champ
+// FOCALISÉ ne doit JAMAIS être écrasé par l'écho serveur (AC4). Sans cette
+// garde, la régie tape "abcd", la pause de frappe envoie "abc" (frappe
+// antérieure), l'écho serveur revient et réécrirait le champ à "abc" en
+// pleine saisie — une course classique entre un champ contrôlé et son écho.
+// ---------------------------------------------------------------------------
+
+describe('RegieMessageBar — course écho/saisie (T3, AC4)', () => {
+  it('un REGIE_MESSAGE entrant ne réécrit PAS un champ FOCALISÉ, même avec un texte différent', () => {
+    const props = makeGameMock({ regieMessage: IDLE })
+    useGame.mockReturnValue(props)
+    const { rerender } = render(<RegieMessageBar />)
+    const input = getInput()
+
+    fireEvent.focus(input)
+    fireEvent.change(input, { target: { value: 'abcd' } }) // la régie continue de taper
+
+    // L'écho serveur revient pour une frappe antérieure ("abc"), PENDANT
+    // que le champ est toujours focalisé.
+    useGame.mockReturnValue(makeGameMock({
+      ...props,
+      regieMessage: { ACTIVE: true, TEXT: 'abc', SENT_AT: 1, CLEARED_BY: '' },
+    }))
+    rerender(<RegieMessageBar />)
+
+    expect(getInput()).toHaveValue('abcd') // pas écrasé par "abc"
+  })
+
+  it('une fois le champ défocalisé (blur), un REGIE_MESSAGE entrant LE synchronise de nouveau normalement', () => {
+    const props = makeGameMock({ regieMessage: IDLE })
+    useGame.mockReturnValue(props)
+    const { rerender } = render(<RegieMessageBar />)
+    const input = getInput()
+
+    fireEvent.focus(input)
+    fireEvent.change(input, { target: { value: 'Brouillon local' } })
+    fireEvent.blur(input) // la régie quitte le champ (déclenche aussi un envoi, F2b — sans incidence ici)
+
+    useGame.mockReturnValue(makeGameMock({
+      ...props,
+      regieMessage: { ACTIVE: true, TEXT: 'Message venu d\'un autre poste', SENT_AT: 2, CLEARED_BY: '' },
+    }))
+    rerender(<RegieMessageBar />)
+
+    expect(getInput()).toHaveValue("Message venu d'un autre poste")
+  })
+
+  it('un champ NON focalisé (jamais touché) se synchronise sans condition — cas nominal AC2/AC3', () => {
+    const props = makeGameMock({ regieMessage: IDLE })
+    useGame.mockReturnValue(props)
+    const { rerender } = render(<RegieMessageBar />)
+
+    useGame.mockReturnValue(makeGameMock({
+      ...props,
+      regieMessage: { ACTIVE: true, TEXT: 'Première synchro', SENT_AT: 1, CLEARED_BY: '' },
+    }))
+    rerender(<RegieMessageBar />)
+    expect(getInput()).toHaveValue('Première synchro')
+
+    useGame.mockReturnValue(makeGameMock({
+      ...props,
+      regieMessage: { ACTIVE: true, TEXT: 'Remplacement par un autre poste', SENT_AT: 2, CLEARED_BY: '' },
+    }))
+    rerender(<RegieMessageBar />)
+    expect(getInput()).toHaveValue('Remplacement par un autre poste')
   })
 })
 
@@ -254,19 +373,21 @@ describe('RegieMessageBar — envoi automatique (F2b)', () => {
 })
 
 // ---------------------------------------------------------------------------
-// F2b — vidage du champ à l'acquittement, seulement si le contenu n'a pas
-// divergé entre-temps
+// T4 (#176) — vidage du champ à l'effacement (AC5), seulement si le contenu
+// n'a pas divergé entre-temps (AC6, décision ② du plan #176 : la garde F2b
+// est CONSERVÉE telle quelle, seul le rendu change — plus besoin de cliquer
+// « Nouveau message », le champ vidé est directement visible).
 // ---------------------------------------------------------------------------
 
-describe('RegieMessageBar — vidage du champ à l\'acquittement (F2b)', () => {
-  it('le texte qu\'on vient de faire acquitter (encore présent en local) est vidé', () => {
+describe('RegieMessageBar — vidage automatique du champ à l\'effacement (T4, AC5)', () => {
+  it('le texte qu\'on vient de faire acquitter (encore présent en local, non focalisé) est vidé AUTOMATIQUEMENT', () => {
     const props = makeGameMock({ regieMessage: IDLE })
     useGame.mockReturnValue(props)
     const { rerender } = render(<RegieMessageBar />)
 
-    // La régie tape et envoie (Entrée) — localText contient toujours
-    // 'Consigne' même une fois la vue basculée sur l'état "actif" (l'input
-    // disparaît du DOM mais l'état React persiste).
+    // La régie tape et envoie (Entrée) — champ non focalisé pour ce test
+    // (pas de fireEvent.focus), donc l'écho serveur peut ensuite le
+    // synchroniser sans être bloqué par la garde de course (T3).
     fireEvent.change(getInput(), { target: { value: 'Consigne' } })
     fireEvent.keyDown(getInput(), { key: 'Enter' })
 
@@ -275,7 +396,7 @@ describe('RegieMessageBar — vidage du champ à l\'acquittement (F2b)', () => {
       regieMessage: { ACTIVE: true, TEXT: 'Consigne', SENT_AT: 1, CLEARED_BY: '' },
     }))
     rerender(<RegieMessageBar />)
-    expect(screen.getByText('« Consigne »')).toBeInTheDocument()
+    expect(getInput()).toHaveValue('Consigne')
 
     // L'animateur acquitte.
     useGame.mockReturnValue(makeGameMock({
@@ -284,36 +405,40 @@ describe('RegieMessageBar — vidage du champ à l\'acquittement (F2b)', () => {
     }))
     rerender(<RegieMessageBar />)
 
-    fireEvent.click(screen.getByText('Nouveau message'))
-    expect(getInput()).toHaveValue('') // le texte acquitté a été vidé
+    // #176 AC5 : vidé automatiquement, SANS action de l'admin (pas de bouton
+    // à cliquer — le champ vidé est déjà l'état affiché).
+    expect(getInput()).toHaveValue('')
   })
 
-  it('un brouillon qui DIVERGE du message acquitté (envoyé entre-temps par un autre poste) n\'est PAS détruit', () => {
+  it('un brouillon qui DIVERGE du message acquitté (composé au clavier PENDANT qu\'un autre poste avait un message actif) n\'est PAS détruit (AC6)', () => {
     const props = makeGameMock({ regieMessage: IDLE })
     useGame.mockReturnValue(props)
     const { rerender } = render(<RegieMessageBar />)
+    const input = getInput()
 
-    // La régie commence à composer "Y" — sans l'envoyer (aucun déclencheur).
-    fireEvent.change(getInput(), { target: { value: 'Y' } })
-
-    // Pendant ce temps, un AUTRE poste /admin envoie "X" — le message actif
-    // partagé n'est PAS le brouillon de cette session.
+    // Un AUTRE poste /admin a déjà un message actif ("X").
     useGame.mockReturnValue(makeGameMock({
       ...props,
       regieMessage: { ACTIVE: true, TEXT: 'X', SENT_AT: 1, CLEARED_BY: '' },
     }))
     rerender(<RegieMessageBar />)
+    expect(input).toHaveValue('X') // pré-rempli (T2)
 
-    // Puis acquitté.
+    // La régie de CE poste se met à composer "Y" à la place — champ
+    // focalisé, donc protégé de tout futur écho (T3) tant qu'elle y reste.
+    fireEvent.focus(input)
+    fireEvent.change(input, { target: { value: 'Y' } })
+
+    // "X" est acquitté pendant que "Y" est en cours de composition.
     useGame.mockReturnValue(makeGameMock({
       ...props,
       regieMessage: { ACTIVE: false, TEXT: '', SENT_AT: 0, CLEARED_BY: 'ANIM' },
     }))
     rerender(<RegieMessageBar />)
 
-    fireEvent.click(screen.getByText('Nouveau message'))
     // Le brouillon "Y" de cette session doit survivre — il ne correspond pas
-    // au texte "X" qui vient d'être acquitté.
+    // au texte "X" qui vient d'être acquitté (comparaison sur le CONTENU,
+    // pas seulement sur le focus).
     expect(getInput()).toHaveValue('Y')
   })
 })
@@ -321,36 +446,54 @@ describe('RegieMessageBar — vidage du champ à l\'acquittement (F2b)', () => {
 // ---------------------------------------------------------------------------
 // T9c — affichage piloté EXCLUSIVEMENT par l'état WebSocket (F3b) : une mise
 // à jour REGIE_MESSAGE venue d'une AUTRE session doit changer l'affichage
-// SANS que ce composant ait rien envoyé lui-même.
+// SANS que ce composant ait rien envoyé lui-même. Sous #176, "l'affichage"
+// se lit désormais dans la VALEUR du champ (T2 couvre déjà le cas simple
+// "second poste qui n'a rien tapé") — ce bloc se concentre sur l'assertion
+// réécrite vers l'indicateur fugace (plan #176 : ":347 à réécrire").
 // ---------------------------------------------------------------------------
 
 describe('RegieMessageBar — affichage piloté par regieMessage, jamais un état local (T9c, F3b)', () => {
-  it('un second poste régie qui tape voit son propre message actif refléter regieMessage — sans appeler sendRegieMessage', () => {
-    const props = makeGameMock({ regieMessage: IDLE })
-    useGame.mockReturnValue(props)
-    const { rerender } = render(<RegieMessageBar />)
-    expect(getInput()).toBeInTheDocument() // repos
-
-    // Un AUTRE poste /admin envoie un message : le hook WS de CE poste reçoit
-    // la diffusion REGIE_MESSAGE et regieMessage change — sans qu'aucune
-    // action locale (frappe, Entrée, blur) n'ait eu lieu ici.
-    useGame.mockReturnValue(makeGameMock({
-      ...props,
-      regieMessage: { ACTIVE: true, TEXT: 'Envoyé par l\'autre poste', SENT_AT: 1, CLEARED_BY: '' },
-    }))
-    rerender(<RegieMessageBar />)
-
-    expect(screen.getByText("« Envoyé par l'autre poste »")).toBeInTheDocument()
-    expect(props.sendRegieMessage).not.toHaveBeenCalled()
-  })
-
-  it('un animateur qui acquitte depuis sa tablette fait passer CE poste régie à "Vu par l\'animateur" sans action locale', () => {
+  it('un animateur qui acquitte depuis sa tablette fait apparaître l\'indicateur fugace SANS action locale ni masquer le champ', () => {
     const props = makeGameMock({
       regieMessage: { ACTIVE: true, TEXT: 'Consigne', SENT_AT: 1, CLEARED_BY: '' },
     })
     useGame.mockReturnValue(props)
     const { rerender } = render(<RegieMessageBar />)
-    expect(screen.getByText('« Consigne »')).toBeInTheDocument()
+    expect(getInput()).toHaveValue('Consigne')
+
+    useGame.mockReturnValue(makeGameMock({
+      ...props,
+      regieMessage: { ACTIVE: false, TEXT: '', SENT_AT: 0, CLEARED_BY: 'ANIM' },
+    }))
+    rerender(<RegieMessageBar />)
+
+    // #176 (décision ①) : indicateur fugace, PAS un état bloquant — le champ
+    // (vidé, T4) reste présent et éditable en même temps.
+    expect(screen.getByText("Vu par l'animateur")).toBeInTheDocument()
+    expect(getInput()).toBeInTheDocument()
+    expect(props.clearRegieMessage).not.toHaveBeenCalled() // aucune action locale n'a eu lieu
+  })
+})
+
+// ---------------------------------------------------------------------------
+// T5 (#176) — indicateur fugace « Vu par l'animateur » (AC9, décision ①) :
+// apparaît sur CLEARED_BY=ANIM, PAS sur CLEARED_BY=REGIE (la régie sait ce
+// qu'elle vient de faire), disparaît après un court délai, sans jamais
+// masquer ni désactiver le champ. Timer nettoyé au démontage, comme celui
+// du debounce (F3).
+// ---------------------------------------------------------------------------
+
+describe('RegieMessageBar — indicateur fugace "Vu par l\'animateur" (T5, AC9)', () => {
+  beforeEach(() => {
+    vi.useFakeTimers()
+  })
+
+  it('apparaît après une transition ACTIVE true -> false avec CLEARED_BY=ANIM', () => {
+    const props = makeGameMock({
+      regieMessage: { ACTIVE: true, TEXT: 'Consigne', SENT_AT: 1, CLEARED_BY: '' },
+    })
+    useGame.mockReturnValue(props)
+    const { rerender } = render(<RegieMessageBar />)
 
     useGame.mockReturnValue(makeGameMock({
       ...props,
@@ -359,6 +502,92 @@ describe('RegieMessageBar — affichage piloté par regieMessage, jamais un éta
     rerender(<RegieMessageBar />)
 
     expect(screen.getByText("Vu par l'animateur")).toBeInTheDocument()
-    expect(props.clearRegieMessage).not.toHaveBeenCalled()
+  })
+
+  it("n'apparaît PAS quand CLEARED_BY=REGIE (retrait régie, pas un acquittement)", () => {
+    const props = makeGameMock({
+      regieMessage: { ACTIVE: true, TEXT: 'Consigne', SENT_AT: 1, CLEARED_BY: '' },
+    })
+    useGame.mockReturnValue(props)
+    const { rerender } = render(<RegieMessageBar />)
+
+    useGame.mockReturnValue(makeGameMock({
+      ...props,
+      regieMessage: { ACTIVE: false, TEXT: '', SENT_AT: 0, CLEARED_BY: 'REGIE' },
+    }))
+    rerender(<RegieMessageBar />)
+
+    expect(screen.queryByText("Vu par l'animateur")).toBeNull()
+  })
+
+  it('disparaît après un court délai (~4s d\'après le plan) — fugace, pas permanent', () => {
+    const props = makeGameMock({
+      regieMessage: { ACTIVE: true, TEXT: 'Consigne', SENT_AT: 1, CLEARED_BY: '' },
+    })
+    useGame.mockReturnValue(props)
+    const { rerender } = render(<RegieMessageBar />)
+
+    useGame.mockReturnValue(makeGameMock({
+      ...props,
+      regieMessage: { ACTIVE: false, TEXT: '', SENT_AT: 0, CLEARED_BY: 'ANIM' },
+    }))
+    rerender(<RegieMessageBar />)
+    expect(screen.getByText("Vu par l'animateur")).toBeInTheDocument()
+
+    // Borne basse généreuse : encore là peu après l'apparition.
+    act(() => { vi.advanceTimersByTime(1000) })
+    expect(screen.getByText("Vu par l'animateur")).toBeInTheDocument()
+
+    // Borne haute généreuse (le plan dit "~4s", pas une valeur exacte
+    // contractuelle) : parti au-delà d'une seconde marge raisonnable.
+    act(() => { vi.advanceTimersByTime(6000) })
+    expect(screen.queryByText("Vu par l'animateur")).toBeNull()
+  })
+
+  it('un nouvel acquittement réarme l\'indicateur (ne reste pas figé "disparu" après un premier cycle)', () => {
+    const props = makeGameMock({
+      regieMessage: { ACTIVE: true, TEXT: 'Première', SENT_AT: 1, CLEARED_BY: '' },
+    })
+    useGame.mockReturnValue(props)
+    const { rerender } = render(<RegieMessageBar />)
+
+    useGame.mockReturnValue(makeGameMock({
+      ...props,
+      regieMessage: { ACTIVE: false, TEXT: '', SENT_AT: 0, CLEARED_BY: 'ANIM' },
+    }))
+    rerender(<RegieMessageBar />)
+    act(() => { vi.advanceTimersByTime(7000) }) // laisse le premier indicateur disparaître
+    expect(screen.queryByText("Vu par l'animateur")).toBeNull()
+
+    useGame.mockReturnValue(makeGameMock({
+      ...props,
+      regieMessage: { ACTIVE: true, TEXT: 'Seconde', SENT_AT: 2, CLEARED_BY: '' },
+    }))
+    rerender(<RegieMessageBar />)
+    useGame.mockReturnValue(makeGameMock({
+      ...props,
+      regieMessage: { ACTIVE: false, TEXT: '', SENT_AT: 0, CLEARED_BY: 'ANIM' },
+    }))
+    rerender(<RegieMessageBar />)
+
+    expect(screen.getByText("Vu par l'animateur")).toBeInTheDocument()
+  })
+
+  it('timer nettoyé au démontage — aucune erreur si le composant disparaît pendant que l\'indicateur est affiché', () => {
+    const props = makeGameMock({
+      regieMessage: { ACTIVE: true, TEXT: 'Consigne', SENT_AT: 1, CLEARED_BY: '' },
+    })
+    useGame.mockReturnValue(props)
+    const { rerender, unmount } = render(<RegieMessageBar />)
+
+    useGame.mockReturnValue(makeGameMock({
+      ...props,
+      regieMessage: { ACTIVE: false, TEXT: '', SENT_AT: 0, CLEARED_BY: 'ANIM' },
+    }))
+    rerender(<RegieMessageBar />)
+    expect(screen.getByText("Vu par l'animateur")).toBeInTheDocument()
+
+    expect(() => unmount()).not.toThrow()
+    expect(() => { act(() => { vi.advanceTimersByTime(10000) }) }).not.toThrow()
   })
 })
