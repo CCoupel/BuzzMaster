@@ -125,6 +125,54 @@
   font-weight: 500;
 }
 
+/* #175 — l'entrée action (Quitter) réutilise .menu-item, mais c'est un
+   <button>, pas un <a> : réinitialise les styles natifs de bouton pour
+   rester visuellement identique aux entrées de navigation. */
+.menu-item-action {
+  width: 100%;
+  background: none;
+  border: none;
+  border-left: 3px solid transparent;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+/* #175 (AC2) — geste destructif et irréversible, voisin de quatre entrées
+   anodines : séparateur visuel + teinte d'avertissement, jamais confondu
+   avec une navigation normale. */
+.menu-item-danger {
+  border-top: 1px solid var(--gray-200);
+  margin-top: var(--space-1);
+  padding-top: calc(var(--space-2) + 1px);
+  color: var(--error, #ef4444);
+}
+
+.menu-item-danger:hover {
+  background: color-mix(in srgb, var(--error, #ef4444) 8%, white);
+  color: var(--error, #ef4444);
+  border-left-color: var(--error, #ef4444);
+}
+
+/* #175 (F3, AC8) — état "arrêt demandé" : remplace toute la navbar par un
+   message explicite plutôt que de laisser la reconnexion boucler en
+   silence. */
+.navbar-shutdown {
+  justify-content: center;
+}
+
+.navbar-shutdown-message {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-weight: 600;
+  color: var(--gray-700);
+}
+
+.navbar-shutdown-icon {
+  font-size: 1.2rem;
+}
+
 .brand-text {
   font-family: var(--font-display);
   font-size: 1.25rem;
