@@ -8,7 +8,7 @@
 double-tap remplace le bouton « Vu »)
 **Référence** : Plan `_work/reports/plan-20260818-121500.md` (#167/#168), `_work/reports/plan-20260818-140953.md`
 (#175), `_work/reports/plan-20260818-141638.md` (#176), maquette `docs/mockups/anim-communication-167-168.html`
-(**republiée pour #176** — vérifier qu'elle montre bien le champ permanent et le double-tap, pas
+(mise à jour et republié pour #176 — manuels, vérifier qu'elle montre bien le champ permanent et le double-tap, pas
 l'ancien bouton « Vu »/« Nouveau message »), `contracts/websocket-actions.md` §"Messagerie régie",
 `contracts/models.md` §EXPLANATION, `contracts/http-endpoints.md` §`/shutdown`
 
