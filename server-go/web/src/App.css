@@ -18,6 +18,14 @@
   max-width: none;
 }
 
+/* #167 (F3) — espace réservé au bandeau régie (position: fixed, pleine
+   largeur du bas de l'écran, RegieMessageBar.css), pour qu'il ne recouvre
+   pas le bas des pages /admin/* longues (questions, logs). Absent en
+   fullscreen (/anim, /tv, /player) : RegieMessageBar n'y est jamais monté. */
+.main-content:not(.fullscreen) {
+  padding-bottom: calc(var(--space-6) + 44px);
+}
+
 /* Page Transitions */
 .page {
   animation: fadeIn 0.3s ease-out;
