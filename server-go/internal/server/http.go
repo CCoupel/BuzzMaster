@@ -789,6 +789,20 @@ func (h *HTTPServer) handleUploadQuestion(w http.ResponseWriter, r *http.Request
 		question["CATEGORY"] = category
 	}
 
+	// Handle explanation note (v6.4.x, #168 — contracts/http-endpoints.md,
+	// contracts/models.md §EXPLANATION). Explicit read is mandatory: this
+	// handler reconstructs `question` from scratch and only carries forward
+	// MEDIA/MEDIA_ANSWER/ORDER from the existing file (above/below) — any
+	// field not read here is silently destroyed on every re-edit. Writing
+	// the key only when non-empty IS the erasure mechanism, no dedicated
+	// "clear" code path: an empty/whitespace-only explanation simply isn't
+	// written, so EXPLANATION is absent from the reconstructed question.json
+	// exactly like an admin who intentionally emptied the field expects.
+	explanation := strings.TrimSpace(r.FormValue("explanation"))
+	if explanation != "" {
+		question["EXPLANATION"] = explanation
+	}
+
 	// Handle QCM specific fields
 	if questionType == "QCM" {
 		qcmAnswersStr := r.FormValue("qcm_answers")
