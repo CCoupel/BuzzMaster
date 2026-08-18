@@ -8,35 +8,45 @@ const DEBOUNCE_MS = 2000
 // #167 (F2) — commodité d'interface uniquement : la troncature fait
 // autorité côté serveur (contrat §REGIE_MESSAGE_SEND, règle 3, en runes).
 const MAX_LENGTH = 140
+// #176 (F3) — durée d'affichage de l'indicateur fugace "Vu par l'animateur".
+const ACK_INDICATOR_MS = 4000
 
 /**
- * RegieMessageBar — bandeau d'envoi régie → animateurs (`/admin/*`, #167).
+ * RegieMessageBar — bandeau d'envoi régie → animateurs (`/admin/*`, #167,
+ * révisé #176).
  *
- * Composant neuf, sœur de `Navbar`, monté par `App.jsx` sous la même
- * condition `isAdminRoute`. Pleine largeur du bas de l'écran (voir
- * RegieMessageBar.css).
+ * Composant sœur de `Navbar`, monté par `App.jsx` sous la même condition
+ * `isAdminRoute`. Pleine largeur du bas de l'écran (voir RegieMessageBar.css).
  *
  * **Aucun bouton « Envoyer ».** L'envoi part de lui-même sur trois
  * déclencheurs simultanés (F2b) : touche Entrée, perte de focus, pause de
- * frappe de 2s. Les deux seuls boutons sont « Effacer » (retirer son propre
- * message) et « Nouveau message » (bascule locale d'affichage après
- * acquittement, F3b — ne décide jamais de l'état actif/inactif lui-même).
+ * frappe de 2s.
  *
- * F3b — l'état affiché (actif / acquitté / repos) est dérivé EXCLUSIVEMENT
- * de `regieMessage` (état WebSocket, useWebSocket.js). Seule la saisie en
- * cours (`localText`) est un état local légitime : c'est un champ texte.
+ * #176 — le champ de saisie est désormais **toujours visible et éditable**,
+ * quel que soit l'état du message (repos, actif, juste acquitté) — plus
+ * d'état bloquant « acquitté » ni de bouton « Nouveau message » (décision ①
+ * du plan #176 : le seul retour d'acquittement du modèle devient un
+ * indicateur EN LIGNE fugace, ~4s, à côté du champ qui reste éditable).
+ * Le seul bouton restant est « Effacer », visible tant qu'un message est
+ * actif.
+ *
+ * L'état affiché (texte du champ quand ACTIVE, indicateur fugace) est
+ * dérivé de `regieMessage` (état WebSocket, useWebSocket.js) — SAUF la
+ * saisie en cours d'un champ FOCALISÉ, qui n'est jamais écrasée par l'écho
+ * serveur (F2, garde de focus — la course écho/saisie est le piège
+ * principal de cette révision).
  */
 export default function RegieMessageBar() {
   const { regieMessage, sendRegieMessage, clearRegieMessage } = useGame()
   const [localText, setLocalText] = useState('')
-  // Bascule purement locale d'affichage après acquittement (« Nouveau
-  // message ») — ne décide PAS de l'état actif/inactif du message
-  // (regieMessage seul en décide, F3b), seulement si on montre le résumé
-  // "Vu par l'animateur" ou l'input d'édition pendant que l'état serveur
-  // reste "inactif, dernier effacement = ANIM".
-  const [ackDismissed, setAckDismissed] = useState(false)
+  // #176 (F3) — indicateur fugace "Vu par l'animateur", visible ~4s après un
+  // acquittement animateur (CLEARED_BY === 'ANIM'). Un retrait régie
+  // (CLEARED_BY === 'REGIE') n'affiche rien : la régie sait ce qu'elle vient
+  // de faire.
+  const [ackVisible, setAckVisible] = useState(false)
 
   const debounceRef = useRef(null)
+  const ackTimerRef = useRef(null)
   // Dernier texte (trimmé) effectivement envoyé par CE composant — garde
   // anti-doublon côté client (F2b). Le serveur pose la même garde et fait
   // autorité (contrat §REGIE_MESSAGE_SEND règle 4) ; celle-ci évite
@@ -47,12 +57,19 @@ export default function RegieMessageBar() {
   // (contrat), pas le texte qui vient d'être effacé.
   const lastActiveTextRef = useRef('')
   const prevActiveRef = useRef(regieMessage.ACTIVE)
+  // #176 (F2) — la garde qui rend la synchronisation entrante sûre : un
+  // champ FOCALISÉ n'est jamais écrasé par l'écho serveur. Sans elle : la
+  // régie tape "abcd", la pause de frappe envoie "abc" (frappe antérieure),
+  // l'écho serveur revient et réécrit le champ à "abc" en pleine saisie —
+  // course classique entre un champ contrôlé et son écho serveur.
+  const isFocusedRef = useRef(false)
 
-  // Nettoyage du timer de debounce au démontage — le bandeau est monté sur
-  // tout /admin/*, vit longtemps (F2b, obligatoire).
+  // Nettoyage des timers (debounce + indicateur fugace) au démontage — le
+  // bandeau est monté sur tout /admin/*, vit longtemps (F2b, obligatoire).
   useEffect(() => {
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current)
+      if (ackTimerRef.current) clearTimeout(ackTimerRef.current)
     }
   }, [])
 
@@ -62,12 +79,28 @@ export default function RegieMessageBar() {
     }
   }, [regieMessage.ACTIVE, regieMessage.TEXT])
 
-  // F2b — vidage du champ à l'acquittement, UNIQUEMENT si son contenu
-  // trimmé est encore égal au message qui vient d'être effacé. Si la régie
-  // a commencé à composer autre chose entre-temps, on ne détruit pas sa
-  // frappe.
+  // #176 (F2) — synchronisation entrante : quand un message devient actif
+  // ou est remplacé (SENT_AT réarmé) ET que le champ n'a PAS le focus,
+  // aligne la saisie locale sur le texte serveur (AC2/AC3 — pré-remplissage,
+  // visible par un second poste régie qui ne tape pas). `lastSentRef` est
+  // posé en même temps pour qu'un blur ultérieur sur ce champ pré-rempli ne
+  // renvoie pas le même texte (le serveur le dédupliquerait de toute façon —
+  // ceci évite simplement du trafic inutile).
   useEffect(() => {
-    if (prevActiveRef.current && !regieMessage.ACTIVE) {
+    if (regieMessage.ACTIVE && !isFocusedRef.current) {
+      setLocalText(regieMessage.TEXT)
+      lastSentRef.current = regieMessage.TEXT
+    }
+  }, [regieMessage.SENT_AT, regieMessage.ACTIVE, regieMessage.TEXT])
+
+  // Vidage à l'effacement (F2b/#176 décision ②) + indicateur fugace
+  // (#176/F3), sur la même transition ACTIVE true -> false.
+  useEffect(() => {
+    const wasActive = prevActiveRef.current
+    if (wasActive && !regieMessage.ACTIVE) {
+      // Vidage — UNIQUEMENT si le contenu local trimmé est encore égal au
+      // message qui vient d'être effacé. Si la régie a commencé à composer
+      // autre chose entre-temps, on ne détruit pas sa frappe (AC6).
       setLocalText(prev => {
         if (prev.trim() === lastActiveTextRef.current) {
           lastSentRef.current = ''
@@ -75,17 +108,18 @@ export default function RegieMessageBar() {
         }
         return prev
       })
+
+      if (regieMessage.CLEARED_BY === 'ANIM') {
+        setAckVisible(true)
+        if (ackTimerRef.current) clearTimeout(ackTimerRef.current)
+        ackTimerRef.current = setTimeout(() => {
+          ackTimerRef.current = null
+          setAckVisible(false)
+        }, ACK_INDICATOR_MS)
+      }
     }
     prevActiveRef.current = regieMessage.ACTIVE
-  }, [regieMessage.ACTIVE])
-
-  // Réinitialise la bascule locale « Nouveau message » à chaque nouvel
-  // événement serveur (nouvel envoi ou nouvel acquittement) — sans quoi un
-  // second message acquitté resterait affiché en input à cause d'un clic
-  // précédent sur "Nouveau message".
-  useEffect(() => {
-    setAckDismissed(false)
-  }, [regieMessage.SENT_AT, regieMessage.CLEARED_BY])
+  }, [regieMessage.ACTIVE, regieMessage.CLEARED_BY])
 
   const doSend = (text) => {
     const trimmed = text.trim()
@@ -105,6 +139,10 @@ export default function RegieMessageBar() {
     }, DEBOUNCE_MS)
   }
 
+  const handleFocus = () => {
+    isFocusedRef.current = true
+  }
+
   const handleKeyDown = (e) => {
     if (e.key !== 'Enter') return
     e.preventDefault()
@@ -116,6 +154,7 @@ export default function RegieMessageBar() {
   }
 
   const handleBlur = () => {
+    isFocusedRef.current = false
     if (debounceRef.current) {
       clearTimeout(debounceRef.current)
       debounceRef.current = null
@@ -124,44 +163,32 @@ export default function RegieMessageBar() {
   }
 
   const handleClear = () => clearRegieMessage()
-  const handleNewMessage = () => setAckDismissed(true)
 
-  const isAcked = !regieMessage.ACTIVE && regieMessage.CLEARED_BY === 'ANIM' && !ackDismissed
   const remaining = MAX_LENGTH - localText.length
 
   return (
     <div className="regie-message-bar">
       <span className="regie-message-tag">Animateur</span>
-
-      {regieMessage.ACTIVE ? (
-        <>
-          <span className="regie-message-pending">« {regieMessage.TEXT} »</span>
-          <button type="button" className="regie-message-btn regie-message-btn-ghost" onClick={handleClear}>
-            Effacer
-          </button>
-        </>
-      ) : isAcked ? (
-        <>
-          <span className="regie-message-acked">Vu par l'animateur</span>
-          <button type="button" className="regie-message-btn regie-message-btn-ghost" onClick={handleNewMessage}>
-            Nouveau message
-          </button>
-        </>
-      ) : (
-        <>
-          <input
-            type="text"
-            className="regie-message-input"
-            value={localText}
-            onChange={handleChange}
-            onKeyDown={handleKeyDown}
-            onBlur={handleBlur}
-            maxLength={MAX_LENGTH}
-            placeholder="Consigne à envoyer aux tablettes animateur…"
-            aria-label="Consigne à envoyer aux tablettes animateur"
-          />
-          <span className={`regie-message-counter ${remaining <= 20 ? 'near' : ''}`}>{remaining}</span>
-        </>
+      <input
+        type="text"
+        className="regie-message-input"
+        value={localText}
+        onChange={handleChange}
+        onKeyDown={handleKeyDown}
+        onFocus={handleFocus}
+        onBlur={handleBlur}
+        maxLength={MAX_LENGTH}
+        placeholder="Consigne à envoyer aux tablettes animateur…"
+        aria-label="Consigne à envoyer aux tablettes animateur"
+      />
+      <span className={`regie-message-counter ${remaining <= 20 ? 'near' : ''}`}>{remaining}</span>
+      {regieMessage.ACTIVE && (
+        <button type="button" className="regie-message-btn regie-message-btn-ghost" onClick={handleClear}>
+          Effacer
+        </button>
+      )}
+      {ackVisible && (
+        <span className="regie-message-ack-indicator">Vu par l'animateur</span>
       )}
     </div>
   )

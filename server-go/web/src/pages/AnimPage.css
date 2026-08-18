@@ -294,6 +294,17 @@
   border: 1.5px solid #b45309;
   background: rgba(180, 83, 9, 0.14);
   color: var(--text-primary, #f8fafc);
+  cursor: pointer;
+  /* #176 (F5, AC16) — INDISPENSABLE : sans elle, le double-tap déclenche le
+     zoom natif du navigateur sur tablette et le geste devient inutilisable. */
+  touch-action: manipulation;
+  /* Évite la sélection de texte parasite pendant les deux appuis rapides. */
+  user-select: none;
+}
+
+.anim-regie-bar.active:focus-visible {
+  outline: 2px solid #f0a92e;
+  outline-offset: 2px;
 }
 
 .anim-regie-bar .msg {
@@ -302,18 +313,11 @@
   overflow-wrap: anywhere;
 }
 
-.anim-regie-ack-btn {
+/* #176 (F5, AC17) — indice discret annonçant le geste, à droite du texte. */
+.anim-regie-hint {
   flex: none;
-  border: none;
-  border-radius: var(--radius-md);
-  padding: 6px 16px;
-  font-size: 0.82rem;
-  font-weight: 700;
-  color: #f0fdf4;
-  background: var(--success, #15803d);
-  cursor: pointer;
-}
-
-.anim-regie-ack-btn:active {
-  filter: brightness(0.9);
+  font-size: 0.68rem;
+  font-style: italic;
+  opacity: 0.7;
+  white-space: nowrap;
 }

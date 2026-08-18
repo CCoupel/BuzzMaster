@@ -66,18 +66,14 @@
   color: #fbbf24;
 }
 
-.regie-message-pending {
-  flex: 1;
-  min-width: 0;
-  overflow-wrap: anywhere;
-  color: #fbbf24;
-  font-style: italic;
-}
-
-.regie-message-acked {
-  flex: 1;
-  min-width: 0;
+/* #176 (F3) — indicateur fugace "Vu par l'animateur", à côté du champ qui
+   reste éditable (aucun état bloquant, décision ① du plan #176). */
+.regie-message-ack-indicator {
+  flex: none;
   color: #4ade80;
+  font-size: 0.78rem;
+  font-weight: 600;
+  white-space: nowrap;
 }
 
 .regie-message-btn {
