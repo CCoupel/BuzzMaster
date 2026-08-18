@@ -36,6 +36,8 @@ fait **exclusivement par de nouvelles entrées dans la map** — aucun changemen
 | BUMPER_POINTS, TEAM_POINTS | ✅ | ❌ | ❌ | ✅ |
 | FULL, UPDATE, POINTS, RAZ, REMOTE, DELETE, DELETE_BUMPER, RELEASE_BUMPER_NAME, RESET, REBOOT, REORDER_QUESTIONS, FORCE_READY, MEMORY_SET_TEAMS, MEMOTION_SET_TEAMS, SHOW_QR_CODE, HIDE_QR_CODE, SET_VIRTUAL_PLAYER_LIMIT, NEW_GAME, UPDATE_QUIZ_META, CANCEL_AI_GENERATION | ✅ | ❌ | ❌ | ❌ |
 | **SET_CREDIT_POINTS** | ✅ | ❌ | ❌ | ❌ |
+| **REGIE_MESSAGE_SEND** | ✅ | ❌ | ❌ | ❌ **(v6.4.x, #167)** |
+| **REGIE_MESSAGE_CLEAR** | ✅ | ❌ | ❌ | ✅ **(v6.4.x, #167)** |
 | BUTTON, PONG | ✅ | ❌ | ✅ | ❌ |
 | FLIP_MEMORY_CARD | ❌ | ✅ | ✅ | ✅ **(v6.2.x, #159)** |
 | MEMOTION_SELECT | ❌ | ✅ | ❌ | ✅ **(v6.2.x, #160)** |
@@ -123,6 +125,30 @@ Notes :
   > assumée et identique : un animateur seul ne peut pas composer la table des équipes d'une manche
   > MEMOTION. Le moteur l'interdirait de toute façon hors `PREPARE`/`READY`
   > (`NOT_IN_PREPARE_OR_READY_PHASE`).
+- **REGIE_MESSAGE_SEND / REGIE_MESSAGE_CLEAR (v6.4.x, #167)** — messagerie ponctuelle
+  régie → animateurs, seules modifications de cette table par ce lot.
+  - `REGIE_MESSAGE_SEND` est **`admin` uniquement**, jamais `anim` : le canal est **unidirectionnel
+    par conception** (issue #167 — « pas de réponse possible »). L'animateur ne dispose d'aucun
+    chemin pour émettre du texte vers la régie, et il ne doit pas en acquérir un par effet de bord.
+  - `REGIE_MESSAGE_CLEAR` est la **première action partagée `admin` + `anim` qui n'appartient pas à
+    la « conduite en direct »**. Une seule action pour deux intentions, parce que l'**effet serveur
+    est rigoureusement identique** (effacer l'unique message actif et diffuser l'effacement) :
+    l'animateur l'envoie pour **acquitter** (« Vu »), la régie pour **retirer** un message envoyé
+    par erreur. La distinction n'est pas dans le protocole mais dans le `ClientType` de
+    l'émetteur — c'est le serveur qui en déduit `CLEARED_BY` (voir §"Messagerie régie" ci-dessous),
+    ce qui évite une seconde action au périmètre identique et une entrée d'allow-list de plus.
+  > ⚠ **Élargissement de capacité pour `anim`, mais d'une classe nouvelle** : jusqu'ici, tout ce que
+  > l'animateur pouvait émettre agissait sur l'**état de jeu** (phase, cartes, points) et restait
+  > borné par les gardes du moteur. `REGIE_MESSAGE_CLEAR` agit sur un état **hors moteur**, et son
+  > effet est **global** — un seul animateur efface le message pour **toutes** les tablettes ET pour
+  > la régie. C'est délibéré (§"Messagerie régie", décision D3), pas un effet de bord : le message
+  > est unique, donc son acquittement l'est aussi. Aucune garde moteur ne s'y applique et aucune
+  > n'est ajoutée : l'action est valide dans **toutes** les phases, y compris `NEW_GAME`.
+  >
+  > **Conséquence assumée** : avec plusieurs tablettes, le premier animateur qui appuie sur « Vu »
+  > fait disparaître le message chez les autres, éventuellement avant qu'ils ne l'aient lu. C'est le
+  > modèle retenu (un message, un acquittement) ; un acquittement par tablette a été explicitement
+  > écarté au GATE 1.5.
 - **SET_CLIENT_TYPE** a une règle à part (dépend du type COURANT du client, pas
   d'une liste fixe) — voir sa propre section ci-dessous et
   `internal/server/inbound_allowlist.go`'s `IsSetClientTypeAllowed` : seul un
@@ -1088,6 +1114,179 @@ double-crédit**, ni côté interface (`GamePage.jsx`, bouton ARDOISE inconditio
 Conséquence assumée : un second crédit venu de la régie s'ajoute au premier ; c'est pourquoi
 `POINTS` transporte la **somme** et non le dernier montant, afin que l'animateur voie ce que
 l'équipe a réellement reçu pour cette question.
+
+---
+
+## Messagerie régie (v6.4.x — #167)
+
+Canal de communication **hors moteur de jeu** : la régie (`/admin`) pousse une consigne courte vers
+toutes les tablettes animateur (`/anim`). Trois actions, un seul état.
+
+### Modèle — un seul message actif, un seul acquittement
+
+Le serveur détient **un unique emplacement** (`RegieMessage`), en **mémoire vive uniquement** :
+
+```
+inactif ──REGIE_MESSAGE_SEND (admin)──▶ actif {TEXT, SENT_AT}
+   ▲                                        │
+   │                                        │ REGIE_MESSAGE_SEND (admin)
+   │                                        │ ─▶ remplace le contenu, SENT_AT réarmé
+   │                                        │    (reste actif, pas de file d'attente)
+   │                                        ▼
+   └──────REGIE_MESSAGE_CLEAR (admin OU anim)──────┘
+```
+
+**Décisions structurantes (GATE 1.5, #167)** :
+
+- **D1 — un seul emplacement, jamais de file.** Un `REGIE_MESSAGE_SEND` porteur d'un texte
+  **différent** remplace le contenu actif et réarme `SENT_AT`. Aucun message n'est mis en attente,
+  aucun historique n'est conservé. C'est la traduction directe de « message ponctuel ». Un `SEND`
+  porteur du texte **déjà actif** est un no-op (règle 4 de validation ci-dessous) — nécessaire parce
+  que l'envoi régie est automatique et se déclenche donc plusieurs fois pour une même saisie.
+- **D2 — état en mémoire vive, jamais sur disque.** Même nature et même discipline que
+  `a.currentCreditPoints` (`cmd/server/main.go`) : écrit et lu **exclusivement depuis la goroutine
+  de dispatch unique** de `handleWebMessage` (#131) — **aucun mutex requis**. Corollaire assumé :
+  un redémarrage serveur efface le message actif. C'est conforme à « pas d'historique persistant ».
+- **D3 — l'acquittement est global, pas par tablette.** N'importe quel animateur connecté efface le
+  message **pour tout le monde** (toutes les tablettes *et* la régie). Il n'existe **aucun comptage
+  par client** (« 2/3 ont vu ») : un message unique, un acquittement unique. Écarté explicitement
+  au GATE 1.5 au profit de ce modèle binaire.
+- **D4 — la régie peut retirer son propre message** à tout moment (envoi par erreur), via la
+  **même** action que l'acquittement animateur. Le serveur distingue les deux par le `ClientType`
+  de l'émetteur et le restitue dans `CLEARED_BY`.
+- **D5 — aucun couplage avec la machine à états du jeu.** Le message n'est **jamais** effacé
+  automatiquement par une transition (`NEW_GAME`, `READY`, `RAZ`, changement de question…). C'est
+  un canal de coordination humaine, orthogonal au déroulé de la partie ; le moteur (`engine.go`)
+  n'est pas touché par #167 et aucune garde de phase ne s'applique. Corollaire assumé : une consigne
+  non acquittée survit à un changement de question.
+- **D6 — livraison différée plutôt que perdue.** Si aucune tablette n'est connectée au moment de
+  l'envoi, le message reste actif et est délivré à la **prochaine** connexion `/anim` (rejeu au
+  `HELLO`). C'est la raison d'être de l'état serveur : une tablette en veille ou en reconnexion
+  Wi-Fi ne rate pas la consigne.
+
+---
+
+### REGIE_MESSAGE_SEND
+
+**Direction** : Client → Server
+**Émetteur autorisé** : `admin` **uniquement** (allow-list #154 — voir §"Sécurité" en tête)
+**Effet** : arme ou remplace l'unique message actif, puis diffuse `REGIE_MESSAGE`.
+
+#### Payload
+
+| Champ | Type | Obligatoire | Description |
+|---|---|---|---|
+| `TEXT` | string | oui | Texte libre de la consigne. **140 caractères maximum** |
+
+#### Exemple
+
+```json
+{ "ACTION": "REGIE_MESSAGE_SEND", "MSG": { "TEXT": "Question 12 annulée — enchaîne sur la 13" } }
+```
+
+#### Validation serveur (normative)
+
+Le serveur est la **seule** autorité sur ces trois règles ; la limite `maxLength` du champ de saisie
+régie est une commodité d'interface, jamais une garantie.
+
+1. **Espaces de bordure retirés** (`strings.TrimSpace`) avant toute autre vérification.
+2. **Texte vide après trim → l'action est ignorée** (log `WARN`, aucun changement d'état, aucune
+   diffusion). Un message vide n'efface pas le message courant : l'effacement passe **uniquement**
+   par `REGIE_MESSAGE_CLEAR`.
+3. **Troncature à 140 caractères**, comptés en **runes et non en octets** — les consignes sont en
+   français et « à », « é », « ç » occupent 2 octets chacun. Une troncature en octets couperait au
+   milieu d'un caractère et produirait de l'UTF-8 invalide.
+4. **Texte identique au message déjà actif → no-op idempotent** : aucun réarmement de `SENT_AT`,
+   aucun effacement de `CLEARED_BY`, **aucune diffusion**. Comparaison sur le texte *après* trim et
+   troncature.
+
+> ⚠️ **La règle 4 n'est pas une optimisation, c'est une garde de correction.** L'interface régie
+> déclenche l'envoi automatiquement (touche Entrée, perte de focus, pause de frappe), donc le même
+> texte part légitimement plusieurs fois : on tape, la pause de frappe envoie, puis on clique
+> ailleurs et le blur renvoie l'identique. Sans cette règle, ce second envoi réarmerait le message
+> et remettrait `CLEARED_BY` à `""` — **un message déjà acquitté réapparaîtrait sur les tablettes**,
+> déclenché par un simple changement de focus en régie. La garde est posée **côté serveur** et non
+> côté client parce qu'elle doit tenir quelle que soit l'interface qui émet.
+
+**Sécurité** : `TEXT` est transporté et rendu comme **texte**, jamais comme HTML. React échappe le
+contenu textuel par construction ; aucun `dangerouslySetInnerHTML` ne doit être introduit sur ce
+chemin, côté `/anim` comme côté `/admin`.
+
+---
+
+### REGIE_MESSAGE_CLEAR
+
+**Direction** : Client → Server
+**Émetteurs autorisés** : `admin` (retirer son message) **et** `anim` (acquitter)
+**Effet** : efface l'unique message actif, puis diffuse `REGIE_MESSAGE` à l'état inactif.
+
+#### Payload
+
+Aucun champ — `{}`. Il n'y a **rien à désigner** : un seul message peut être actif à la fois.
+
+#### Exemple
+
+```json
+{ "ACTION": "REGIE_MESSAGE_CLEAR", "MSG": {} }
+```
+
+#### Sémantique
+
+- Reçue alors qu'**aucun** message n'est actif → **no-op idempotent** : aucun changement d'état,
+  aucune diffusion. Deux tablettes qui acquittent au même instant ne produisent donc qu'une seule
+  diffusion d'effacement, et jamais d'incohérence.
+- `CLEARED_BY` de la diffusion qui suit vaut `"ANIM"` ou `"REGIE"` selon le `ClientType` de
+  l'émetteur — déduit par le serveur, **jamais** transmis par le client (un client ne se déclare
+  pas lui-même).
+
+---
+
+### REGIE_MESSAGE
+
+**Direction** : Server → Client
+**Cibles** : `admin` **et** `anim` — voir `contracts/websocket-endpoints.md` §"Filtres de diffusion
+par type". C'est la **première** action sortante partagée par ces deux types seuls : `/anim`
+l'affiche pour la lire, `/admin` pour savoir si sa consigne est encore en attente ou déjà acquittée.
+`tv`, `vplayer` et `buzzer` ne la reçoivent **jamais**.
+
+**Déclencheurs** : `REGIE_MESSAGE_SEND` · `REGIE_MESSAGE_CLEAR` · connexion d'un client `admin` ou
+`anim` (`HELLO` → envoi **ciblé** à ce seul client, jamais un re-broadcast à tous).
+
+#### Payload
+
+| Champ | Type | Description |
+|---|---|---|
+| `ACTIVE` | bool | `true` = un message est en attente d'acquittement |
+| `TEXT` | string | Contenu ; `""` quand `ACTIVE` vaut `false` |
+| `SENT_AT` | number | Horodatage d'émission, millisecondes Unix ; `0` quand `ACTIVE` vaut `false` |
+| `CLEARED_BY` | string | `"ANIM"`, `"REGIE"`, ou `""` — origine du dernier effacement |
+
+> ⚠️ **Aucun champ ne porte `omitempty`.** Même règle que `GameState` (`CLAUDE.md` §"Implementation
+> Rules") et pour la même raison : un `ACTIVE: false` omis du JSON laisserait le frontend afficher
+> indéfiniment un message déjà effacé. L'effacement **est** l'information à transmettre — il doit
+> voyager explicitement.
+
+#### Exemples
+
+Message actif :
+```json
+{
+  "ACTION": "REGIE_MESSAGE",
+  "MSG": { "ACTIVE": true, "TEXT": "Question 12 annulée — enchaîne sur la 13", "SENT_AT": 1755511234567, "CLEARED_BY": "" }
+}
+```
+
+Après acquittement par un animateur :
+```json
+{
+  "ACTION": "REGIE_MESSAGE",
+  "MSG": { "ACTIVE": false, "TEXT": "", "SENT_AT": 0, "CLEARED_BY": "ANIM" }
+}
+```
+
+`CLEARED_BY` survit à l'effacement précisément pour que la régie puisse afficher « Vu par
+l'animateur » plutôt qu'un simple retour à l'état vide — c'est le seul retour d'acquittement du
+modèle, et il remplace tout comptage par tablette.
 
 ---
 

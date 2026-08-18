@@ -63,8 +63,20 @@ Crée ou met à jour une question.
 | time | int | ❌ | Durée en secondes (défaut: 30) |
 | category | string | ❌ | Catégorie |
 | points_target | string | ❌ | `PLAYER` ou `TEAM` |
+| explanation | string | ❌ | **v6.4.x (#168)** — note d'explication/justification, visible de l'animateur seul. Texte libre, longueur non bornée. Écrit dans `EXPLANATION` ; **champ absent ou vide = note effacée** (voir note ci-dessous) |
 | file | file | ❌ | Image question |
 | file_answer | file | ❌ | Image réponse |
+
+> ⚠️ **`explanation` doit être lu explicitement par `handleUploadQuestion`.** Ce handler
+> **reconstruit la question de zéro** à chaque enregistrement et ne recopie depuis le fichier
+> existant que `MEDIA`, `MEDIA_ANSWER` et `ORDER` : un champ non relu est perdu à la première
+> édition. C'est aussi ce qui donne gratuitement la sémantique d'effacement — un `explanation`
+> vide n'est simplement pas réécrit, donc la clé `EXPLANATION` disparaît du `question.json`.
+
+> ℹ️ Cette table est **incomplète et antérieure** aux types ARDOISE et MEMOTION : les champs
+> `ardoise_keyboard_type`, `memory_*`, `motion_*` et les extras QCM au-delà de ceux listés
+> ci-dessous sont acceptés par le handler sans figurer ici. Constat signalé lors de #168, **non
+> corrigé par ce lot** (hors périmètre) — à traiter dans une passe de remise à niveau des contrats.
 
 **Champs QCM additionnels :**
 

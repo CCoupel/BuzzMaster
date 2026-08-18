@@ -2,6 +2,75 @@
 
 ---
 
+## [20260818] — Communication animateur : messagerie régie (#167) + note d'explication (#168)
+
+> Milestone v6.4.x « Communication Animateur » (#26) · Branche `feature/anim-communication`
+> Contrats posés **avant** implémentation (contract-first) · Plan : `_work/reports/plan-20260818-121500.md`
+> Arbitrages : `_work/reports/plan-ambiguities-20260818-113500.md` (GATE 1.5)
+
+**Aucun changement BREAKING.** Tout est additif : deux actions entrantes nouvelles, une action
+sortante nouvelle, un champ `Question` optionnel. Aucun type de client ne perd un droit, aucun
+payload existant ne change de forme, aucun fichier de données n'a besoin de migration.
+
+### #167 — Messagerie régie → animateurs
+
+- **[NEW]** `REGIE_MESSAGE_SEND` (Client → Server, **`admin` uniquement**) — arme ou remplace
+  l'unique message actif. Payload `{TEXT}`, **140 caractères maximum, comptés en runes** (troncature
+  serveur ; le `maxLength` de la saisie régie n'est qu'une commodité d'interface). Texte vide après
+  `TrimSpace` → action ignorée, log `WARN`, aucune diffusion. **Texte identique au message déjà
+  actif → no-op idempotent** (ni réarmement de `SENT_AT`, ni remise à zéro de `CLEARED_BY`, ni
+  diffusion) : l'interface régie envoie automatiquement — touche Entrée, perte de focus, pause de
+  frappe — donc le même texte part légitimement plusieurs fois, et sans cette garde un simple
+  changement de focus ferait **réapparaître sur les tablettes un message déjà acquitté**.
+- **[NEW]** `REGIE_MESSAGE_CLEAR` (Client → Server, **`admin` + `anim`**) — efface l'unique message
+  actif. Payload `{}`. **No-op idempotent** si aucun message n'est actif. Une seule action pour deux
+  intentions (acquitter côté animateur / retirer côté régie) parce que l'effet serveur est
+  identique ; le serveur déduit l'origine du `ClientType` et la restitue dans `CLEARED_BY`.
+- **[NEW]** `REGIE_MESSAGE` (Server → Client, **`admin` + `anim`**) — état complet du message.
+  Payload `{ACTIVE, TEXT, SENT_AT, CLEARED_BY}`, **aucun champ en `omitempty`** (même règle que
+  `GameState` : un `ACTIVE:false` omis laisserait la tablette afficher un message déjà effacé).
+  Première action sortante partagée par `admin` et `anim` à l'exclusion de tous les autres types.
+- **[CHANGED]** Liste blanche entrante (#154) — deux entrées ajoutées à la map, **sans toucher au
+  mécanisme** `IsActionAllowed` ni au point d'accroche dans `handleWebMessage`, conformément à la
+  conception de #154.
+- **[CHANGED]** `contracts/websocket-endpoints.md` §"Filtres de diffusion par type" — ligne
+  `REGIE_MESSAGE` ajoutée (`admin` ✓, `anim` ✓, tous les autres —).
+- **[UNCHANGED]** `GameState` — **aucun champ ajouté**. L'état du message vit dans `App`, en mémoire
+  vive, hors moteur (même nature et même discipline mono-goroutine que `a.currentCreditPoints`).
+- **[UNCHANGED]** Moteur (`engine.go`) — aucune transition, aucune garde. La messagerie est
+  orthogonale à la machine à états : **aucune transition de jeu n'efface le message**, y compris
+  `NEW_GAME` et `RAZ` (décision D5).
+
+Détail complet et décisions D1–D6 : `contracts/websocket-actions.md` §"Messagerie régie".
+
+> **Limites connues, délibérément assumées** : (a) un redémarrage serveur efface le message actif —
+> conséquence directe de « pas d'historique persistant » ; (b) avec plusieurs tablettes, le premier
+> animateur qui acquitte fait disparaître le message chez les autres — modèle « un message, un
+> acquittement », le comptage par tablette a été explicitement écarté au GATE 1.5.
+
+### #168 — Note d'explication/justification
+
+- **[NEW]** `Question.EXPLANATION` (string, `omitempty`) — texte libre, longueur non bornée.
+- **[NEW]** `POST /questions` — champ de formulaire `explanation`.
+- **[UNCHANGED]** **Aucun sérialiseur, aucun filtrage serveur** (décision GATE 1.5, option O1). Le
+  champ transite vers `tv` et `vplayer` exactement comme `ANSWER`/`QCM_CORRECT` le font déjà. La
+  décision #155 « aucun `SerializeForAnim` » (`ws-payload-serialization.md` §"Justification")
+  **reste intacte** — c'était l'alternative envisagée, et elle est écartée : `GET /questions` étant
+  public et sans authentification, un filtrage WebSocket n'aurait fermé aucune fuite réelle. La
+  garantie est **d'affichage** (aucun composant hors `/anim` ne lit le champ, couvert par un test de
+  non-affichage), pas de confidentialité.
+- **[UNCHANGED]** `NEXT_QUESTION` — la projection réduite (`ID, QUESTION, CATEGORY, TYPE, POINTS,
+  TIME`) n'est **pas** étendue : la note concerne la question en cours, pas la suivante.
+- **[UNCHANGED]** Import/export — **aucun code CSV n'existe dans le projet** (vérifié sur tout le Go
+  et tout le frontend) ; l'hypothèse « mettre à jour l'import/export CSV » de l'issue #168 est
+  caduque et hors périmètre. L'export/import de quiz est un TAR opaque, insensible aux champs.
+- **[UNCHANGED]** Persistance — additif, `omitempty`, **aucune migration** : les 85 `question.json`
+  existants restent inchangés octet pour octet.
+
+Détail : `contracts/models.md` §"`EXPLANATION`", `contracts/http-endpoints.md` §`POST /questions`.
+
+---
+
 ## [20260817-3] — Les 5 actions de conduite MEMOTION autorisées à l'animateur (#160, `/anim`)
 
 > Issue #160 · Branche `feature/anim-question-display` · Contrat posé **avant** implémentation
