@@ -1,5 +1,5 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { render, screen, fireEvent } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import Navbar from './Navbar'
 
@@ -261,5 +261,134 @@ describe('Navbar — cas limite : aucun participant', () => {
 
   it('ne plante pas quand bumpers est undefined (valeur par défaut)', () => {
     expect(() => renderNavbar({ bumpers: undefined })).not.toThrow()
+  })
+})
+
+// ---------------------------------------------------------------------------
+// #175 — entrée « Quitter » du menu déroulant (T1-T4).
+//
+// Plan : _work/reports/plan-20260818-140953.md, tâches F1/F2. Contrat :
+// aucun (GET /shutdown existe déjà, contracts/http-endpoints.md:554).
+//
+// AC6 est le point de vigilance central : cette entrée est la SEULE du menu
+// qui ne soit pas une navigation — un `href`/`to` résiduel serait
+// préchargeable par le navigateur (arrêt du serveur au survol du menu).
+// ---------------------------------------------------------------------------
+
+// openMenu clicks the brand-logo button (aria-label="Menu de navigation")
+// that toggles .navbar-menu-dropdown — no dedicated test id exists for it,
+// this is the only way to reach the dropdown's content.
+function openMenu() {
+  fireEvent.click(screen.getByLabelText('Menu de navigation'))
+}
+
+function getDropdown(container) {
+  return container.querySelector('.navbar-menu-dropdown')
+}
+
+afterEach(() => {
+  vi.restoreAllMocks()
+})
+
+describe('#175 — entrée « Quitter », présence et nature (T1, AC1, AC6)', () => {
+  it('apparaît dans le menu déroulant, en DERNIÈRE position, après Logs', () => {
+    const { container } = renderNavbar()
+    openMenu()
+    const dropdown = getDropdown(container)
+    expect(dropdown).not.toBeNull()
+
+    const labels = Array.from(dropdown.querySelectorAll('.menu-label')).map(el => el.textContent)
+    expect(labels[labels.length - 1]).toBe('Quitter')
+    expect(labels).toContain('Logs')
+    expect(labels.indexOf('Quitter')).toBeGreaterThan(labels.indexOf('Logs'))
+  })
+
+  it("n'est PAS un lien — aucun élément <a> dans le menu ne porte le texte « Quitter », aucun href", () => {
+    const { container } = renderNavbar()
+    openMenu()
+    const dropdown = getDropdown(container)
+
+    const quitLink = Array.from(dropdown.querySelectorAll('a')).find(a => a.textContent.includes('Quitter'))
+    expect(quitLink).toBeUndefined()
+
+    const quitButton = Array.from(dropdown.querySelectorAll('button')).find(b => b.textContent.includes('Quitter'))
+    expect(quitButton).not.toBeUndefined()
+    expect(quitButton).not.toHaveAttribute('href')
+    expect(quitButton.tagName).toBe('BUTTON')
+  })
+
+  it('les quatre entrées de navigation existantes restent des <a href> inchangées (AC9)', () => {
+    const { container } = renderNavbar()
+    openMenu()
+    const dropdown = getDropdown(container)
+
+    ;['Config', 'Backup/Restaure', 'Mises à jour', 'Logs'].forEach(label => {
+      const link = Array.from(dropdown.querySelectorAll('a')).find(a => a.textContent.includes(label))
+      expect(link, `entrée "${label}" doit rester un <a>`).not.toBeUndefined()
+      expect(link).toHaveAttribute('href')
+    })
+  })
+})
+
+describe('#175 — confirmation refusée (T2, AC4)', () => {
+  it('window.confirm() renvoyant false : aucun fetch, le menu se referme', () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(false)
+    global.fetch = vi.fn()
+    const { container } = renderNavbar()
+    openMenu()
+
+    const quitButton = Array.from(getDropdown(container).querySelectorAll('button')).find(b => b.textContent.includes('Quitter'))
+    fireEvent.click(quitButton)
+
+    expect(window.confirm).toHaveBeenCalledTimes(1)
+    expect(global.fetch).not.toHaveBeenCalled()
+    expect(getDropdown(container)).toBeNull() // menu refermé même en cas d'annulation
+  })
+})
+
+describe('#175 — confirmation acceptée (T3, AC5, AC7)', () => {
+  it("window.confirm() renvoyant true : fetch('/shutdown') appelé une fois, menu refermé", () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    global.fetch = vi.fn().mockResolvedValue({ ok: true })
+    const { container } = renderNavbar()
+    openMenu()
+
+    const quitButton = Array.from(getDropdown(container).querySelectorAll('button')).find(b => b.textContent.includes('Quitter'))
+    fireEvent.click(quitButton)
+
+    expect(global.fetch).toHaveBeenCalledTimes(1)
+    expect(global.fetch).toHaveBeenCalledWith('/shutdown')
+    expect(getDropdown(container)).toBeNull()
+  })
+
+  it('le message de confirmation mentionne explicitement la conséquence (AC3)', () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(false) // pas besoin d'aller plus loin
+    const { container } = renderNavbar()
+    openMenu()
+    const quitButton = Array.from(getDropdown(container).querySelectorAll('button')).find(b => b.textContent.includes('Quitter'))
+    fireEvent.click(quitButton)
+
+    expect(window.confirm).toHaveBeenCalledTimes(1)
+    const message = window.confirm.mock.calls[0][0]
+    expect(message).toMatch(/arrêter le serveur/i)
+    expect(message).toMatch(/déconnectés/i)
+  })
+})
+
+describe('#175 — échec réseau silencieux (T4)', () => {
+  it("un fetch('/shutdown') rejeté ne lève pas d'exception et ne déclenche aucune alerte", async () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    vi.spyOn(window, 'alert').mockImplementation(() => {})
+    global.fetch = vi.fn().mockRejectedValue(new TypeError('Failed to fetch'))
+    const { container } = renderNavbar()
+    openMenu()
+
+    const quitButton = Array.from(getDropdown(container).querySelectorAll('button')).find(b => b.textContent.includes('Quitter'))
+    expect(() => fireEvent.click(quitButton)).not.toThrow()
+
+    // Laisse la microtask du .catch() silencieux se résoudre.
+    await new Promise(resolve => setTimeout(resolve, 0))
+
+    expect(window.alert).not.toHaveBeenCalled()
   })
 })

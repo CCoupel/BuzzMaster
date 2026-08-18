@@ -1,12 +1,13 @@
-# Procédure de Test — Communication Animateur (#167 + #168)
+# Procédure de Test — Communication Animateur (#167 + #168 + #175)
 
 **Version** : v6.4.x (branche `feature/anim-communication`)
 **Date** : 2026-08-18
 **Testeur** : QA / Utilisateur
-**Issues** : #167 (messagerie régie → tablettes animateur) + #168 (note d'explication par question)
-**Référence** : Plan `_work/reports/plan-20260818-121500.md`, maquette
-`docs/mockups/anim-communication-167-168.html`, `contracts/websocket-actions.md` §"Messagerie régie",
-`contracts/models.md` §EXPLANATION
+**Issues** : #167 (messagerie régie → tablettes animateur) + #168 (note d'explication par question) +
+#175 (menu « Quitter » — arrêt du serveur)
+**Référence** : Plan `_work/reports/plan-20260818-121500.md` (#167/#168), `_work/reports/plan-20260818-140953.md`
+(#175), maquette `docs/mockups/anim-communication-167-168.html`, `contracts/websocket-actions.md`
+§"Messagerie régie", `contracts/models.md` §EXPLANATION, `contracts/http-endpoints.md` §`/shutdown`
 
 ---
 
@@ -196,6 +197,44 @@ l'absence totale ailleurs.
 
 ---
 
+## Scénario 11 — Menu « Quitter », annulation sans effet (#175, AC1-AC4)
+
+**Objectif** : Vérifier la présence, la position et le caractère non destructif d'une annulation.
+
+| Étape | Action | Résultat Attendu | Résultat Obtenu | OK ? |
+|-------|--------|-----------------|----------------|------|
+| 1 | Sur `/admin`, ouvrir le menu déroulant (logo 🐝) | Une entrée « Quitter » apparaît **en dernière position**, après « Logs », visuellement distincte (séparateur/teinte d'avertissement) des quatre entrées de navigation | | |
+| 2 | Survoler l'entrée « Quitter » | Aucune barre d'état de navigateur n'affiche une URL de destination (ce n'est pas un lien) | | |
+| 3 | Cliquer sur « Quitter » | Une confirmation apparaît, mentionnant explicitement que TV, joueurs et animateur seront déconnectés | | |
+| 4 | **Annuler** la confirmation | Le menu se referme, **aucune déconnexion** ne se produit, la partie en cours continue normalement — vérifier notamment que `/tv` reste connecté | | |
+| 5 | Rouvrir le menu, cliquer à nouveau sur « Quitter », annuler à nouveau | Comportement identique, reproductible | | |
+
+**Verdict** : [ ] PASS  [ ] FAIL
+
+---
+
+## Scénario 12 — Menu « Quitter », confirmation avec postes multiples connectés (#175, AC5, AC8, B1)
+
+**Objectif** : Vérifier l'arrêt effectif pour tous les participants ET la libération immédiate du
+port réseau (le vrai test de la correction B1 — c'est le symptôme rencontré à la dernière QUALIF
+v6.2.0.35, où le port ne se libérait pas et une machine entière avait dû être redémarrée).
+
+| Étape | Action | Résultat Attendu | Résultat Obtenu | OK ? |
+|-------|--------|-----------------|----------------|------|
+| 1 | Connecter simultanément : un `/tv`, un `/player` (VJoueur), une tablette `/anim`, et deux sessions `/admin` | Les cinq postes affichent un statut connecté | | |
+| 2 | Depuis une session `/admin`, ouvrir le menu, cliquer « Quitter », **confirmer** | Le menu se referme immédiatement (AC7) | | |
+| 3 | Observer `/tv` | Perd la connexion ; n'entre pas dans une boucle de reconnexion silencieuse — un état explicite doit apparaître (AC8, si F3 retenue) plutôt qu'un badge "Déconnecté" figé sans explication | | |
+| 4 | Observer `/player` | Perd la connexion, même constat | | |
+| 5 | Observer la tablette `/anim` | Perd la connexion, même constat | | |
+| 6 | Observer la **seconde** session `/admin` (celle qui n'a pas cliqué) | Perd elle aussi la connexion — l'arrêt est global, pas propre à la session qui a cliqué | | |
+| 7 | Observer la session `/admin` qui a cliqué | Affiche un message clair indiquant que le serveur est arrêté (AC8, si F3 retenue), pas une page figée sans explication | | |
+| 8 | **Vérification critique B1** — relancer immédiatement le serveur sur le même port (`./buzzcontrol.exe` ou équivalent, sans changer de port) | Le serveur redémarre **sans erreur "port already in use"**, sans délai d'attente ni redémarrage de la machine — c'est la preuve que `OnShutdown`/`a.stop()` a bien fermé le port proprement (contrat `http-endpoints.md` : arrêt "**proprement**") | | |
+| 9 | Se reconnecter sur les cinq postes après le redémarrage | Tous se reconnectent normalement, comme après un redémarrage propre habituel | | |
+
+**Verdict** : [ ] PASS  [ ] FAIL
+
+---
+
 ## Critères de Validation Globale
 
 - [ ] Acquittement croisé entre deux tablettes fonctionne, message unique (Scénario 1)
@@ -213,6 +252,9 @@ l'absence totale ailleurs.
 - [ ] Note d'explication : survit à une réédition de la question, effacée si vidée explicitement
       (Scénario 9)
 - [ ] Note d'explication : geste identique à la réponse, jamais rendue hors `/anim` (Scénario 10)
+- [ ] Menu « Quitter » : annulation sans effet, entrée non-lien en dernière position (Scénario 11)
+- [ ] Menu « Quitter » : confirmation déconnecte TOUS les postes (pas seulement le poste cliqueur),
+      et surtout **le port est immédiatement réutilisable au redémarrage** (Scénario 12, B1)
 
 ---
 
@@ -220,10 +262,11 @@ l'absence totale ailleurs.
 
 | Étape | Action | Résultat Attendu | Résultat Obtenu | OK ? |
 |-------|--------|-----------------|----------------|------|
-| 1 | `cd server-go && go build ./... && go test ./...` | Build OK, tous les tests PASS, y compris `regie_message_test.go` (T2-T4b, NOUVEAU), `inbound_allowlist_anim_test.go` (T1), `broadcast_anim_test.go`/`send_state_to_client_anim_test.go` (T5/T6), `messages_anim_test.go` (T7), `http_test.go` (T8) | | |
-| 2 | `cd server-go/web && npm test` (suite Vitest complète) | Tous les tests PASS, y compris `RegieMessageBar.test.jsx`, `AnimExplanationNote.test.jsx` (NOUVEAUX), `QuestionsPage.explanation.test.jsx`, `PlayerDisplay.explanation.test.jsx` (NOUVEAUX), `AnimPage.test.jsx` et `AnimConductPanel.test.jsx` (blocs réécrits) | | |
+| 1 | `cd server-go && go build ./... && go test ./...` | Build OK, tous les tests PASS, y compris `regie_message_test.go` (T2-T4b, NOUVEAU), `inbound_allowlist_anim_test.go` (T1), `broadcast_anim_test.go`/`send_state_to_client_anim_test.go` (T5/T6), `messages_anim_test.go` (T7), `http_test.go` (T8), `main_test.go` (T5 #175, NOUVEAU — vérifie l'assignation d'`OnShutdown`) | | |
+| 2 | `cd server-go/web && npm test` (suite Vitest complète) | Tous les tests PASS, y compris `RegieMessageBar.test.jsx`, `AnimExplanationNote.test.jsx` (NOUVEAUX), `QuestionsPage.explanation.test.jsx`, `PlayerDisplay.explanation.test.jsx` (NOUVEAUX), `AnimPage.test.jsx` et `AnimConductPanel.test.jsx` (blocs réécrits), `Navbar.test.jsx` (bloc #175 additif : T1-T4) | | |
 | 3 | `AnimAnswerZone.test.jsx` passe **sans la moindre modification** | Preuve que l'extraction du geste de révélation en `useHoldToPeek` (F6) n'a rien changé au comportement #169 | | |
 | 4 | Manche QCM/SPEEDY/ARDOISE/MEMORY/MEMOTION sur `/anim` (hors #167/#168) | Aucune régression : conduite, crédit, colonne équipes inchangés | | |
+| 5 | Les quatre entrées de navigation existantes du menu (Config/Backup/Mises à jour/Logs) | Comportement strictement inchangé (mêmes routes, même rendu) — #175 n'affecte que l'ajout de « Quitter » | | |
 
 **Verdict** : [ ] PASS  [ ] FAIL
 
