@@ -400,7 +400,7 @@ Si l'utilisateur rejette à GATE 4, le label `DONE` est retiré et l'issue repar
 - `EN COURS` — correction dans le scope (bug, régression, précision) → retour Phase DEV (Cas A)
 - `PLANNING` — scope invalide (approche erronée, exigences changées) → retour Phase 1 (Cas B)
 
-Voir `cdp.md` (GATE 4) pour le détail de la décision Cas A / Cas B.
+Voir `cdp.template.md` (GATE 4) pour le détail de la décision Cas A / Cas B.
 
 ### 8.3 Format des commits avec issue
 
@@ -443,7 +443,7 @@ gh issue edit <numero> --add-label "DONE" --remove-label "EN COURS,EN REVIEW,EN 
 ### 9.5 Rejet à GATE 4 (validation utilisateur refusée)
 
 Le label `DONE` est retiré. La destination dépend de la nature de la correction
-(cf. `cdp.md`, GATE 4 — Cas A / Cas B) :
+(cf. `cdp.template.md`, GATE 4 — Cas A / Cas B) :
 
 ```bash
 # Cas A — correction dans le scope (bug, régression, précision) → retour Phase DEV

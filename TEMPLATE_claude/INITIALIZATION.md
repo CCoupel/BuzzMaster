@@ -336,12 +336,12 @@ Selon la stack, Claude copie et adapte les templates :
 
 | Stack detectee | Template | Agent genere |
 |----------------|----------|--------------|
-| Go | `templates/dev-backend-go.md` | `agents/dev-backend.md` |
-| Node.js | `templates/dev-backend-node.md` | `agents/dev-backend.md` |
-| Python | `templates/dev-backend-python.md` | `agents/dev-backend.md` |
-| React | `templates/dev-frontend-react.md` | `agents/dev-frontend.md` |
-| Vue.js | `templates/dev-frontend-vue.md` | `agents/dev-frontend.md` |
-| ESP32 | `templates/dev-firmware-esp32.md` | `agents/dev-firmware.md` |
+| Go | `templates/dev-backend-go.md` | `agents/dev-backend.template.md` |
+| Node.js | `templates/dev-backend-node.md` | `agents/dev-backend.template.md` |
+| Python | `templates/dev-backend-python.md` | `agents/dev-backend.template.md` |
+| React | `templates/dev-frontend-react.md` | `agents/dev-frontend.template.md` |
+| Vue.js | `templates/dev-frontend-vue.md` | `agents/dev-frontend.template.md` |
+| ESP32 | `templates/dev-firmware-esp32.md` | `agents/dev-firmware.template.md` |
 
 ### 3. Mise a jour CLAUDE.md
 
@@ -431,8 +431,13 @@ Après le déploiement, une **analyse de dérive** est effectuée automatiquemen
 |--------|---------------|
 | `[↓]` DERIVE-TEMPLATE | Le template couvre maintenant votre customisation → simplification possible |
 | `[↑]` DERIVE-PROJET | Votre `.md` a grossi depuis la derniere sync → verifier l'intentionnalite |
+| `[~]` MIXTE | Une partie de votre `.md` est couverte par le template, une autre reste propre au projet → retirer seulement la partie redondante |
 | `[=]` IDENTIQUE | Le `.md` duplique le template sans rien ajouter → peut etre supprime |
 | `[*]` PROPRE | Contenu projet uniquement, rien a faire |
+
+La détection opère règle par règle, pas seulement fichier par fichier : dès qu'une
+règle du compagnon se retrouve (littéralement ou en substance) dans le template mis
+à jour, elle peut être retirée du compagnon — même si le reste du fichier reste propre.
 
 Cette analyse est silencieuse si aucun fichier compagnon `*.md` n'existe ou si tout est propre.
 
@@ -449,8 +454,8 @@ CI/CD : GitHub Actions
 Deploy : Docker
 
 Agents a generer :
-- dev-backend.md (Go)
-- dev-frontend.md (React)
+- dev-backend.template.md (Go)
+- dev-frontend.template.md (React)
 
 Commandes disponibles :
 - /feature, /bugfix, /hotfix, /refactor
@@ -495,9 +500,12 @@ Personnalisation via les fichiers `context/` (ex: `context/COMMON.md`).
 .claude/agents/cdp.md            ← adaptations projet, tracké git
 ```
 
-Claude lit les deux automatiquement. À chaque sync, une analyse de dérive détecte :
-- Le template qui a rattrapé une customisation projet (`[↓]` simplification possible)
+Claude lit les deux automatiquement. À chaque sync, une analyse de dérive détecte,
+règle par règle :
+- Le template qui a rattrapé une règle projet (`[↓]` simplification possible — la règle
+  peut être retirée du compagnon puisqu'elle est désormais couverte par le template)
 - Un fichier projet qui a grossi (`[↑]` vérifier l'intentionnalité)
+- Un compagnon qui mélange les deux (`[~]` MIXTE — ne retirer que la part redondante)
 
 ## Post-Initialisation
 

@@ -668,13 +668,16 @@ Valeurs a deriver si elles ne sont pas fournies explicitement :
 
 | Stack | Template Source | Destination |
 |-------|-----------------|-------------|
-| Go | `TEMPLATE_claude/templates/dev-backend-go.md` | `.claude/agents/dev-backend.md` |
-| Node.js | `TEMPLATE_claude/templates/dev-backend-node.md` | `.claude/agents/dev-backend.md` |
-| Python | `TEMPLATE_claude/templates/dev-backend-python.md` | `.claude/agents/dev-backend.md` |
-| React | `TEMPLATE_claude/templates/dev-frontend-react.md` | `.claude/agents/dev-frontend.md` |
-| Vue.js | `TEMPLATE_claude/templates/dev-frontend-vue.md` | `.claude/agents/dev-frontend.md` |
-| ESP32 | `TEMPLATE_claude/templates/dev-firmware-esp32.md` | `.claude/agents/dev-firmware.md` |
-| Plugin (toute plateforme) | `TEMPLATE_claude/templates/dev-plugin.md` | `.claude/agents/dev-plugin.md` |
+| Go | `TEMPLATE_claude/templates/dev-backend-go.md` | `.claude/agents/dev-backend.template.md` |
+| Node.js | `TEMPLATE_claude/templates/dev-backend-node.md` | `.claude/agents/dev-backend.template.md` |
+| Python | `TEMPLATE_claude/templates/dev-backend-python.md` | `.claude/agents/dev-backend.template.md` |
+| React | `TEMPLATE_claude/templates/dev-frontend-react.md` | `.claude/agents/dev-frontend.template.md` |
+| Vue.js | `TEMPLATE_claude/templates/dev-frontend-vue.md` | `.claude/agents/dev-frontend.template.md` |
+| ESP32 | `TEMPLATE_claude/templates/dev-firmware-esp32.md` | `.claude/agents/dev-firmware.template.md` |
+| Plugin (toute plateforme) | `TEMPLATE_claude/templates/dev-plugin.md` | `.claude/agents/dev-plugin.template.md` |
+
+> Même convention que les agents génériques (§ précédent) : déployé en `.template.md`,
+> avec un compagnon `.md` optionnel pour les adaptations projet.
 
 ### 3. Workflow CI/CD
 
@@ -818,8 +821,8 @@ Configuration :
 - Deploy   : <DEPLOY>
 
 Agents generes :
-- .claude/agents/dev-backend.md
-- .claude/agents/dev-frontend.md
+- .claude/agents/dev-backend.template.md
+- .claude/agents/dev-frontend.template.md
 
 Commandes disponibles :
 - /feature, /bugfix, /hotfix, /refactor
@@ -1170,8 +1173,15 @@ Pour chaque `xxx.md`, lire les deux fichiers et détecter les dérives dans les 
 | `IDENTIQUE` | `xxx.md` quasiment identique au template | Duplication inutile — peut être supprimé |
 | `DERIVE-TEMPLATE` | Contenu de `xxx.md` couvert par le nouveau template | Template a rattrapé le projet — simplification possible |
 | `DERIVE-PROJET` | Contenu ajouté dans `xxx.md` non présent dans le template | Dérive projet — vérifier que c'est intentionnel |
+| `MIXTE` | `xxx.md` mélange des règles désormais couvertes par le template et des règles propres au projet | Retirer uniquement les règles redondantes, conserver le reste |
 | `PROPRE` | `xxx.md` contient uniquement du contenu spécifique, sans overlap | Aucune action requise |
 
+> La détection opère à la granularité de la règle/section, pas seulement du fichier
+> entier : dès qu'une règle présente dans `xxx.md` se retrouve (littéralement ou en
+> substance) dans `xxx.template.md`, elle peut être retirée du compagnon — même si le
+> reste du fichier reste `PROPRE`. C'est ce qui distingue `MIXTE` (retrait partiel) de
+> `DERIVE-TEMPLATE` (le fichier entier est devenu redondant).
+>
 > **`DERIVE-TEMPLATE`** : une mise à jour du template intègre nativement ce que le projet
 > avait customisé → la règle dans `xxx.md` est devenue redondante.
 >
@@ -1192,14 +1202,15 @@ Analyse drift template/projet :
   Agents :
   [↓] cdp.md          — le template couvre maintenant "phase CLARIFICATION" → simplification possible
   [↑] qa.md           — 1 section ajoutée → vérifier intentionnel
+  [~] marketing-release.md — règle "diff origin/gh-pages" désormais couverte, règle "GATE 4d" toujours propre
 
-  [=] N identiques  [↓] N simplifiables  [↑] N à vérifier  [*] N propres
+  [=] N identiques  [↓] N simplifiables  [↑] N à vérifier  [~] N mixtes  [*] N propres
 ```
 
 **Actions proposées :**
 
 ```
-  [N] Nettoyer automatiquement (supprimer IDENTIQUES, extraire DERIVE-PROJET vers xxx.md épuré)
+  [N] Nettoyer automatiquement (supprimer IDENTIQUES, extraire DERIVE-PROJET/MIXTE vers xxx.md épuré)
   [I] Inspecter fichier par fichier
   [S] Ignorer — continuer sans modification
 ```

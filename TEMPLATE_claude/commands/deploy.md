@@ -76,7 +76,7 @@ Confirmation --> Verification Doc --> Merge main --> Tag --> CI/CD
     |-- SI ECHEC --> Rollback --> Analyse
 ```
 
-> **Verification Doc** : CHANGELOG.md et README/docs concernes doivent etre a jour avant le merge (voir `.claude/agents/deploy.md`).
+> **Verification Doc** : CHANGELOG.md et README/docs concernes doivent etre a jour avant le merge (voir `.claude/agents/deploy.template.md`).
 
 ## Rollback
 
@@ -92,4 +92,4 @@ En cas de probleme :
 Dispatcher via `SendMessage` (teammate en IDLE depuis `/start-session`) :
 `SendMessage({to: "deployer", content: ...})`
 
-Spec : `.claude/agents/deploy.md`
+Spec : `.claude/agents/deploy.template.md` (+ `.claude/agents/deploy.md` si présent)

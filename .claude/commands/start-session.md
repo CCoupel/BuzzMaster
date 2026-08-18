@@ -78,7 +78,8 @@ Extraire :
 Pour chaque agent avec Spawn = permanent :
 Task({
   name: "<nom-canonique>",
-  prompt: "Lis .claude/agents/context/TEAMMATES_PROTOCOL.md puis .claude/agents/<nom>.md.
+  prompt: "Lis .claude/agents/context/TEAMMATES_PROTOCOL.md puis .claude/agents/<nom>.template.md
+           (et .claude/agents/<nom>.md s'il existe — adaptations projet).
            Tu fais partie de TEAM-Buzz sur BuzzControl.
            Mets-toi en IDLE après avoir envoyé ACTIF — le teamleader t'enverra ta tâche."
 })

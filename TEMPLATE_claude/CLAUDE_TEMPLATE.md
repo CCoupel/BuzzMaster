@@ -34,17 +34,21 @@
 
 | Nom | Rôle | Fichier | Spawn |
 |-----|------|---------|-------|
-| `planner` | Plan d'implémentation + contrats API | `.claude/agents/implementation-planner.md` | permanent |
-| `dev-backend` | Backend ({BACKEND_TECH}) | `.claude/agents/dev-backend.md` | permanent |
-| `dev-frontend` | Frontend ({FRONTEND_TECH}) | `.claude/agents/dev-frontend.md` | permanent |
-| `dev-plugin` | Plugin ({PLUGIN_PLATFORM}) | `.claude/agents/dev-plugin.md` | permanent |
-| `test-writer` | Scripts de tests + procédures QA | `.claude/agents/test-writer.md` | permanent |
-| `code-reviewer` | Revue de code | `.claude/agents/code-reviewer.md` | permanent |
-| `qa` | Exécution des tests et validation | `.claude/agents/qa.md` | permanent |
-| `doc-updater` | Documentation | `.claude/agents/doc-updater.md` | permanent |
-| `deployer` | Déploiement QUALIF/PROD | `.claude/agents/deploy.md` | permanent |
-| `security` | Audit sécurité | `.claude/agents/security.md` | ponctuel |
-| `infra` | Infrastructure (si configurée) | `.claude/agents/infra.md` | ponctuel |
+| `planner` | Plan d'implémentation + contrats API | `.claude/agents/implementation-planner.template.md` | permanent |
+| `dev-backend` | Backend ({BACKEND_TECH}) | `.claude/agents/dev-backend.template.md` | permanent |
+| `dev-frontend` | Frontend ({FRONTEND_TECH}) | `.claude/agents/dev-frontend.template.md` | permanent |
+| `dev-plugin` | Plugin ({PLUGIN_PLATFORM}) | `.claude/agents/dev-plugin.template.md` | permanent |
+| `test-writer` | Scripts de tests + procédures QA | `.claude/agents/test-writer.template.md` | permanent |
+| `code-reviewer` | Revue de code | `.claude/agents/code-reviewer.template.md` | permanent |
+| `qa` | Exécution des tests et validation | `.claude/agents/qa.template.md` | permanent |
+| `doc-updater` | Documentation | `.claude/agents/doc-updater.template.md` | permanent |
+| `deployer` | Déploiement QUALIF/PROD | `.claude/agents/deploy.template.md` | permanent |
+| `security` | Audit sécurité | `.claude/agents/security.template.md` | ponctuel |
+| `infra` | Infrastructure (si configurée) | `.claude/agents/infra.template.md` | ponctuel |
+
+> **Fichier** pointe vers le `.template.md` — géré par sync, toujours présent. Un compagnon
+> `.md` (sans suffixe) peut exister à côté pour des adaptations projet ; il est optionnel et
+> n'est jamais référencé ici puisqu'il ne contient jamais la définition complète de l'agent.
 
 > **permanent** = spawné au `/start-session`, reste en IDLE toute la session.  
 > **ponctuel** = spawné à la demande par la commande dédiée, fermé après DONE.

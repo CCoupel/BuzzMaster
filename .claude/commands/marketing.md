@@ -258,12 +258,12 @@ c) Regenerer la roadmap uniquement
 
 Agent ponctuel — non spawné au `/start-session`, spawné à la demande. Orchestré par le CDP
 en deux dispatches distincts (`PREPARE` puis `PUBLISH`), en parallèle du déploiement PROD —
-voir `agents/cdp.md` Phase 6 et `agents/marketing-release.md` pour le détail du protocole :
+voir `agents/cdp.template.md` Phase 6 et `agents/marketing-release.template.md` pour le détail du protocole :
 
 ```
 Task({
   name: "marketing-release",
-  prompt: "Lis .claude/agents/context/TEAMMATES_PROTOCOL.md puis .claude/agents/marketing-release.md. Tu fais partie de TEAM-Buzz sur BuzzControl. Mets-toi en IDLE après avoir envoyé ACTIF — le teamleader t'enverra ta tâche."
+  prompt: "Lis .claude/agents/context/TEAMMATES_PROTOCOL.md puis .claude/agents/marketing-release.template.md (et .claude/agents/marketing-release.md s'il existe — adaptations projet). Tu fais partie de TEAM-Buzz sur BuzzControl. Mets-toi en IDLE après avoir envoyé ACTIF — le teamleader t'enverra ta tâche."
 })
 ```
 
@@ -279,4 +279,4 @@ maquette validée **et** le déploiement PROD confirmé réussi, envoyer la publ
 À réception du `MARKETING TERMINE`, fermer l'agent :
 `TaskStop("marketing-release")`
 
-Spec : `.claude/agents/marketing-release.md`
+Spec : `.claude/agents/marketing-release.template.md` (+ `.claude/agents/marketing-release.md` si présent)

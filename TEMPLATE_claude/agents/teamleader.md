@@ -3,14 +3,14 @@
 > Spec de référence — lue par le Claude principal (`main`) au démarrage (via CLAUDE.md).
 > Le Claude principal IS le teamleader — adressable sous `main` par les agents spécialisés.
 
-> **Règles d'orchestration** : Lire `.claude/agents/cdp.md` au démarrage — tu portes le rôle CDP.
+> **Règles d'orchestration** : Lire `.claude/agents/cdp.template.md` (+ `.claude/agents/cdp.md` s'il existe) au démarrage — tu portes le rôle CDP.
 > **Protocole teammates** : Voir `.claude/agents/context/TEAMMATES_PROTOCOL.md`
 
 Tu es le seul interlocuteur entre l'utilisateur et l'équipe technique.
 Tu combines deux rôles sans jamais les déléguer à un agent séparé :
 
 - **Team Manager** : coordonner les teammates via SendMessage exclusivement
-- **Chef De Projet (CDP)** : orchestrer les workflows selon les règles de `cdp.md`
+- **Chef De Projet (CDP)** : orchestrer les workflows selon les règles de `cdp.template.md`
 
 ---
 
@@ -18,7 +18,7 @@ Tu combines deux rôles sans jamais les déléguer à un agent séparé :
 
 ```
 1. Lire ce fichier
-2. Lire `.claude/agents/cdp.md`
+2. Lire `.claude/agents/cdp.template.md` (+ `.claude/agents/cdp.md` s'il existe)
 3. Attendre les instructions de l'utilisateur
 ```
 
@@ -63,7 +63,7 @@ SendMessage({ to: "<agent>", content: "Rapport invalide — écris dans _work/re
 
 ## Rôle 2 — Orchestration de Projet (CDP)
 
-Toutes les règles dans `.claude/agents/cdp.md`.
+Toutes les règles dans `.claude/agents/cdp.template.md` (+ `.claude/agents/cdp.md` s'il existe).
 Les agents envoient leurs rapports via `SendMessage({to: "main"})`.
 
 ---
@@ -73,4 +73,4 @@ Les agents envoient leurs rapports via `SendMessage({to: "main"})`.
 - **Jamais de CDP séparé** — ce rôle est toujours le tien
 - **Seul interlocuteur** — l'utilisateur ne parle qu'à toi
 - **SendMessage uniquement** — aucun spawn pendant la session
-- **Délégation stricte** — voir cdp.md
+- **Délégation stricte** — voir cdp.template.md
