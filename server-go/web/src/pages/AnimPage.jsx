@@ -83,6 +83,11 @@ export default function AnimPage() {
     questionPosition,
     awardedTeams,
     creditPoints,
+    // Défauts défensifs (repos, jamais actif) — le hook réel (useWebSocket.js)
+    // fournit toujours ces valeurs, mais certains mocks de test n'ont pas
+    // encore été mis à jour avec les champs #167 (test-writer, en parallèle).
+    regieMessage = { ACTIVE: false, TEXT: '', SENT_AT: 0, CLEARED_BY: '' },
+    clearRegieMessage = () => {},
     startGame,
     stopGame,
     pauseGame,
@@ -663,10 +668,21 @@ export default function AnimPage() {
         })}
       </div>
 
-      {/* #166/F8 — bande régie réservée (#167). Vide, sans interaction, sans
-          état ni contrat — même traitement que L3/L4 de la conduite (E4). */}
+      {/* #166/F8 — bande régie (#167, câblée). État dérivé exclusivement de
+          regieMessage (F3b, même règle que RegieMessageBar) : repos si
+          aucun message actif, sinon consigne + bouton « Vu » qui acquitte
+          pour toutes les tablettes ET la régie (REGIE_MESSAGE_CLEAR, F1). */}
       <div className="anim-zone anim-zone-regie">
-        <div className="anim-regie-bar">Messagerie régie → animateur — espace réservé (#167)</div>
+        {regieMessage.ACTIVE ? (
+          <div className="anim-regie-bar active">
+            <span className="msg">{regieMessage.TEXT}</span>
+            <button type="button" className="anim-regie-ack-btn" onClick={clearRegieMessage}>
+              Vu
+            </button>
+          </div>
+        ) : (
+          <div className="anim-regie-bar idle">Aucun message de la régie</div>
+        )}
       </div>
     </div>
   )

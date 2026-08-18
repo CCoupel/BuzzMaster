@@ -261,19 +261,59 @@
 .anim-zone-regie {
   grid-area: regie;
   display: flex;
-  /* F7 — hauteur fixe ~42px, jamais réduite (ordre de dégradation). */
-  height: 42px;
+  /* F5/F7 — min-height et non plus height fixe : 140 caractères ne tiennent
+     pas sur une ligne une fois le bouton « Vu » posé (constat de la
+     maquette). La rangée de grille est déjà en `auto` (:11-14), la seconde
+     ligne est absorbée sans rien déplacer d'autre. Jamais RÉDUITE en
+     dessous de 42px (ordre de dégradation, F7). */
+  min-height: 42px;
   flex: none;
 }
 
 .anim-regie-bar {
   flex: 1;
-  border: 1.5px dashed #47536b;
+  min-width: 0;
   border-radius: var(--radius-md);
   display: flex;
   align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  font-size: 0.86rem;
+  line-height: 1.35;
+}
+
+.anim-regie-bar.idle {
+  border: 1.5px dashed #47536b;
   justify-content: center;
   font-size: 0.78rem;
   font-style: italic;
   color: var(--text-secondary, #94a3b8);
+}
+
+.anim-regie-bar.active {
+  border: 1.5px solid #b45309;
+  background: rgba(180, 83, 9, 0.14);
+  color: var(--text-primary, #f8fafc);
+}
+
+.anim-regie-bar .msg {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.anim-regie-ack-btn {
+  flex: none;
+  border: none;
+  border-radius: var(--radius-md);
+  padding: 6px 16px;
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: #f0fdf4;
+  background: var(--success, #15803d);
+  cursor: pointer;
+}
+
+.anim-regie-ack-btn:active {
+  filter: brightness(0.9);
 }
