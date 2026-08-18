@@ -12,6 +12,10 @@ double-tap remplace le bouton « Vu »)
 l'ancien bouton « Vu »/« Nouveau message »), `contracts/websocket-actions.md` §"Messagerie régie",
 `contracts/models.md` §EXPLANATION, `contracts/http-endpoints.md` §`/shutdown`
 
+> **#177 (scrollbar parasite sur les pages admin, effet de bord de #167)** a sa **propre procédure** :
+> `tests/procedures/anim-scrollbar-177.md` — recette visuelle dédiée (huit pages admin, fenêtre
+> large/étroite, avec/sans message actif), à exécuter en complément de ce document.
+
 > ⚠️ **#176 change l'interface décrite dans les scénarios 1/3/4/5/6 ci-dessous** (rédigés pour #167,
 > révisés ici) : le bouton « Vu » côté `/anim` est remplacé par un **double-tap sur toute la zone du
 > message** ; côté régie, le champ de saisie est désormais **toujours visible et pré-rempli**, et le

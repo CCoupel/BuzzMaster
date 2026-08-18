@@ -59,13 +59,38 @@ function getInput() {
   return screen.getByLabelText('Consigne à envoyer aux tablettes animateur')
 }
 
+// ResizeObserver n'existe pas nativement en jsdom (#177, F1) — le composant
+// en construit un inconditionnellement (mesure de sa hauteur, voir le bloc
+// T1 dédié plus bas), donc TOUS les tests de ce fichier ont besoin d'un
+// mock global, pas seulement ceux qui vérifient ce mécanisme spécifiquement.
+// Capture les instances (et leur callback) pour que le bloc T1 (#177)
+// puisse les piloter manuellement.
+class ResizeObserverMock {
+  constructor(callback) {
+    this.callback = callback
+    this.observed = []
+    ResizeObserverMock.instances.push(this)
+  }
+  observe(target) { this.observed.push(target) }
+  unobserve() {}
+  disconnect() { this.disconnected = true }
+  fire(height) {
+    this.callback([{ contentRect: { height } }], this)
+  }
+}
+ResizeObserverMock.instances = []
+
 beforeEach(() => {
   useGame.mockReturnValue(makeGameMock())
+  ResizeObserverMock.instances = []
+  global.ResizeObserver = ResizeObserverMock
+  document.documentElement.style.removeProperty('--regie-bar-h')
 })
 
 afterEach(() => {
   vi.clearAllMocks()
   vi.useRealTimers()
+  document.documentElement.style.removeProperty('--regie-bar-h')
 })
 
 // ---------------------------------------------------------------------------
@@ -589,5 +614,100 @@ describe('RegieMessageBar — indicateur fugace "Vu par l\'animateur" (T5, AC9)'
 
     expect(() => unmount()).not.toThrow()
     expect(() => { act(() => { vi.advanceTimersByTime(10000) }) }).not.toThrow()
+  })
+})
+
+// ---------------------------------------------------------------------------
+// T1 (#177) — mesure réelle de la hauteur du bandeau, propagée via la
+// variable CSS `--regie-bar-h` sur `document.documentElement` (plan
+// _work/reports/plan-20260818-174801.md, tâche F1).
+//
+// ⚠️ Ce bloc vérifie UNIQUEMENT le MÉCANISME (la variable posée/mise à
+// jour/nettoyée) — jamais le RÉSULTAT visuel (absence de scrollbar) :
+// jsdom ne fait aucun calcul de mise en page (`offsetHeight` y vaut
+// toujours 0, `100vh` n'est jamais résolu). Le résultat relève de la
+// recette visuelle (tests/procedures/), exécutée par l'utilisateur.
+//
+// ResizeObserver est mocké globalement en tête de fichier (toutes les
+// suites de ce fichier en ont besoin, le composant en construit un
+// inconditionnellement) — capturant le callback passé au constructeur pour
+// le déclencher manuellement avec un événement `{ contentRect: { height } }`
+// (forme standard de l'API, hypothèse documentée : le plan ne fixe pas la
+// forme exacte de l'entrée lue par l'implémentation). `ResizeObserverMock`
+// et la remise à zéro de `--regie-bar-h` sont pris en charge par le
+// `beforeEach`/`afterEach` globaux ; ce bloc pilote juste les instances.
+// ---------------------------------------------------------------------------
+
+describe('RegieMessageBar — mesure de hauteur via --regie-bar-h (#177, T1)', () => {
+
+  it('observe son élément racine au montage (un ResizeObserver est bien créé et activé)', () => {
+    render(<RegieMessageBar />)
+    expect(ResizeObserverMock.instances).toHaveLength(1)
+    expect(ResizeObserverMock.instances[0].observed).toHaveLength(1)
+    expect(ResizeObserverMock.instances[0].observed[0]).toBeInstanceOf(HTMLElement)
+  })
+
+  it('pose --regie-bar-h sur document.documentElement quand une mesure arrive', () => {
+    render(<RegieMessageBar />)
+    const observer = ResizeObserverMock.instances[0]
+
+    act(() => { observer.fire(62) })
+
+    expect(document.documentElement.style.getPropertyValue('--regie-bar-h')).toBe('62px')
+  })
+
+  it('met à jour --regie-bar-h quand ResizeObserver rapporte une nouvelle hauteur', () => {
+    render(<RegieMessageBar />)
+    const observer = ResizeObserverMock.instances[0]
+
+    act(() => { observer.fire(44) })
+    expect(document.documentElement.style.getPropertyValue('--regie-bar-h')).toBe('44px')
+
+    act(() => { observer.fire(88) }) // ex. retour à la ligne sur fenêtre étroite (#176)
+    expect(document.documentElement.style.getPropertyValue('--regie-bar-h')).toBe('88px')
+  })
+
+  it('arrondit la hauteur mesurée', () => {
+    render(<RegieMessageBar />)
+    const observer = ResizeObserverMock.instances[0]
+
+    act(() => { observer.fire(62.7) })
+
+    expect(document.documentElement.style.getPropertyValue('--regie-bar-h')).toBe('63px')
+  })
+
+  it("n'écrit PAS quand la valeur arrondie est inchangée (évite des invalidations de layout inutiles)", () => {
+    render(<RegieMessageBar />)
+    const observer = ResizeObserverMock.instances[0]
+    const setPropertySpy = vi.spyOn(document.documentElement.style, 'setProperty')
+
+    act(() => { observer.fire(44.4) }) // arrondit à 44
+    act(() => { observer.fire(44.2) }) // arrondit aussi à 44 — pas de nouvelle écriture attendue
+
+    const regieBarHCalls = setPropertySpy.mock.calls.filter(call => call[0] === '--regie-bar-h')
+    expect(regieBarHCalls).toHaveLength(1)
+    expect(document.documentElement.style.getPropertyValue('--regie-bar-h')).toBe('44px')
+
+    setPropertySpy.mockRestore()
+  })
+
+  it('remet --regie-bar-h à 0px au démontage (AC8 — aucune réservation résiduelle)', () => {
+    const { unmount } = render(<RegieMessageBar />)
+    const observer = ResizeObserverMock.instances[0]
+    act(() => { observer.fire(62) })
+    expect(document.documentElement.style.getPropertyValue('--regie-bar-h')).toBe('62px')
+
+    unmount()
+
+    expect(document.documentElement.style.getPropertyValue('--regie-bar-h')).toBe('0px')
+  })
+
+  it('déconnecte le ResizeObserver au démontage (pas de fuite de callback)', () => {
+    const { unmount } = render(<RegieMessageBar />)
+    const observer = ResizeObserverMock.instances[0]
+
+    unmount()
+
+    expect(observer.disconnected).toBe(true)
   })
 })
