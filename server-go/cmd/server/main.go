@@ -22,6 +22,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 )
@@ -1959,6 +1960,51 @@ func (a *App) handleForceReady() {
 	a.broadcastUpdate()
 }
 
+// testInjectMemoryFlipBackPanicFn, when non-nil, is invoked at the very
+// start of the memory auto-flip-back goroutine below (#151 regression
+// test) — lets tests inject a real panic without needing an otherwise-
+// unreachable invalid engine state to trigger one naturally. Nil in
+// production; set only by _test.go files in this package via
+// setTestInjectMemoryFlipBackPanic, cleared via
+// clearTestInjectMemoryFlipBackPanic.
+//
+// Guarded by a dedicated mutex rather than a bare package var: a test
+// assigning it directly from its own goroutine would race against the
+// goroutine below reading it (caught by `go test -race`) — see
+// internal/game/engine.go's testInjectPanicFn doc comment for the same
+// reasoning applied to the 4 engine.go ticker sites.
+var (
+	testInjectMemoryFlipBackPanicMu sync.Mutex
+	testInjectMemoryFlipBackPanicFn func()
+)
+
+// setTestInjectMemoryFlipBackPanic installs the #151 panic-injection hook
+// race-safely. _test.go files in this package must use this (and
+// clearTestInjectMemoryFlipBackPanic for cleanup) instead of assigning
+// testInjectMemoryFlipBackPanicFn directly.
+func setTestInjectMemoryFlipBackPanic(fn func()) {
+	testInjectMemoryFlipBackPanicMu.Lock()
+	defer testInjectMemoryFlipBackPanicMu.Unlock()
+	testInjectMemoryFlipBackPanicFn = fn
+}
+
+// clearTestInjectMemoryFlipBackPanic removes the hook installed by
+// setTestInjectMemoryFlipBackPanic.
+func clearTestInjectMemoryFlipBackPanic() {
+	setTestInjectMemoryFlipBackPanic(nil)
+}
+
+// callTestInjectMemoryFlipBackPanic invokes the currently installed hook,
+// if any. Called from the auto-flip-back goroutine in handleFlipMemoryCard.
+func callTestInjectMemoryFlipBackPanic() {
+	testInjectMemoryFlipBackPanicMu.Lock()
+	fn := testInjectMemoryFlipBackPanicFn
+	testInjectMemoryFlipBackPanicMu.Unlock()
+	if fn != nil {
+		fn()
+	}
+}
+
 func (a *App) handleFlipMemoryCard(msg *protocol.Message) {
 	var payload protocol.FlipMemoryCardPayload
 	if err := json.Unmarshal(msg.Msg, &payload); err != nil {
@@ -1981,9 +2027,29 @@ func (a *App) handleFlipMemoryCard(msg *protocol.Message) {
 
 	// If no match and 2 cards are flipped, schedule auto-flip-back
 	if shouldFlipBack && flipDelay > 0 {
+		// #151 priority 1: reachable directly from a client WS message
+		// (FLIP_MEMORY_CARD), so a malicious client or corrupted state
+		// hitting a panic in ClearMemoryFlippedCards/broadcastUpdate/
+		// sendLEDSetAllBuzzers below would otherwise take down the whole
+		// process. Nothing here holds a manual lock across this goroutine
+		// (unlike the engine.go ticker sites), so a plain recover suffices.
 		go func() {
+			defer func() {
+				if r := recover(); r != nil {
+					server.LogRecoveredPanic(game.LogComponentEngine, "memory auto-flip-back", r)
+				}
+			}()
 			time.Sleep(time.Duration(flipDelay) * time.Millisecond)
 			a.engine.ClearMemoryFlippedCards()
+			// Injected after ClearMemoryFlippedCards (not before): a panic
+			// here still exercises the same single recover() covering the
+			// whole goroutine (proving broadcastUpdate/sendLEDSetAllBuzzers
+			// failures don't take down the process either), while leaving
+			// MemoryFlippedCards correctly cleared — injecting earlier would
+			// permanently strand it at 2 flipped cards (FlipMemoryCard's own
+			// "already 2 cards flipped" guard), making every later flip in
+			// the test a legitimate no-op instead of a fresh mismatch.
+			callTestInjectMemoryFlipBackPanic()
 			server.LogInfo(game.LogComponentEngine, "Memory auto-flip-back after %dms", flipDelay)
 			a.broadcastUpdate()
 			a.sendLEDSetAllBuzzers()

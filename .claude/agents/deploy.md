@@ -50,8 +50,12 @@ cd server-go/web && npm run build && cd ..
 
 # Etape 3 — Backend Go — cross-compilation Windows exe (QUALIF testable directement)
 export PATH="$PATH:/usr/local/go/bin"
+MILESTONE_VERSION=$(grep '"version"' server-go/config.json | sed 's/.*"\([0-9]*\.[0-9]*\.[0-9]*\)\..*/\1/')
+FULL_VERSION=$(grep '"version"' server-go/config.json | sed 's/.*"\([0-9.]*\)".*/\1/')
+QUALIF_DIR="build/qualif_v${MILESTONE_VERSION}"
+mkdir -p "$QUALIF_DIR"
 GOOS=windows GOARCH=amd64 CGO_ENABLED=0 \
-  go build -ldflags="-s -w" -o buzzcontrol-qualif-amd64.exe ./cmd/server
+  go build -ldflags="-s -w" -o "$QUALIF_DIR/buzzcontrol-qualif-${FULL_VERSION}-windows-amd64.exe" ./cmd/server
 ```
 
 ### Pourquoi le merged binary
@@ -70,8 +74,8 @@ GOOS=windows GOARCH=amd64 CGO_ENABLED=0 \
 Le serveur QUALIF est lancé sur le **port 9090** pour éviter toute interférence avec un serveur de production tournant sur le port 80.
 
 ```bash
-# Depuis server-go/ — lancer le binaire QUALIF sur port 9090 (flag --port, v5.1.3+)
-./buzzcontrol-qualif-amd64.exe --port 9090 &
+# Depuis la racine du projet — lancer le binaire QUALIF sur port 9090 (flag --port, v5.1.3+)
+"$QUALIF_DIR/buzzcontrol-qualif-${FULL_VERSION}-windows-amd64.exe" --port 9090 &
 QUALIF_PID=$!
 sleep 2  # attendre démarrage
 
@@ -91,5 +95,6 @@ kill $QUALIF_PID
 
 ### Artefact QUALIF
 
-Le fichier `server.exe` (ou `buzzcontrol-qualif`) est l'artefact unique QUALIF.
-Copier vers le serveur Raspberry Pi via scp ou rsync.
+Le fichier `build/qualif_vX.Y.Z/buzzcontrol-qualif-<version>[-windows-amd64].exe` (dossier `build/`
+non gitté, à la racine du projet) est l'artefact unique QUALIF. Copier vers le serveur Raspberry Pi
+via scp ou rsync.

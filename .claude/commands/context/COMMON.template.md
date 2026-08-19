@@ -152,15 +152,16 @@ Milestone v1.5.0 cree (nouvelle feature planifiee)
 
 ### 5.7 Le Milestone comme Source Unique de la Version
 
-Le titre du milestone (`vX.Y.Z`, cree par `/milestone new`) fixe integralement la version qui sera livree a la fin du cycle — aucun calcul arithmetique, aucune deduction en fin de course.
+Le titre du milestone (`vX.Y.Z` ou `vX.Y.Z — <nom>`, cree par `/milestone new`) fixe integralement la version qui sera livree a la fin du cycle — aucun calcul arithmetique, aucune deduction en fin de course. Le nom apres " — " est purement descriptif (ex: `v1.4.0 — Authentification OAuth2`) : il ne participe a aucune comparaison ni calcul. Toute lecture/comparaison de version porte exclusivement sur le **prefixe** `vX.Y.Z`, jamais sur le titre entier — deux milestones ne peuvent jamais partager le meme prefixe, quel que soit leur nom.
 
 **A la creation (`/milestone new vX.Y[.Z]`)** :
 - `X` et `Y` sont obligatoires dans l'argument. S'il en manque un, le demander explicitement avant de continuer (jamais de valeur par defaut, jamais de deduction).
-- `Z` est optionnel : rechercher les tags/releases existants pour ce `X.Y`. S'il en existe, prendre le `Z` max trouve + 1 ; sinon `Z=0`. Le titre du milestone est cree/renomme avec `X.Y.Z` complet — jamais de `Z` implicite dans le titre.
-- Verifier que `X.Y.Z` (complete) n'existe pas deja (ni tag, ni milestone) et qu'il est strictement posterieur a la derniere version livree.
+- `Z` est optionnel : rechercher les tags/releases existants pour ce `X.Y`. S'il en existe, prendre le `Z` max trouve + 1 ; sinon `Z=0`.
+- Un nom descriptif est ensuite propose en option (ex: "Authentification OAuth2"). S'il est fourni, le titre devient `vX.Y.Z — <nom>` ; sinon `vX.Y.Z` seul. Dans tous les cas le prefixe `vX.Y.Z` est complet — jamais de `Z` implicite.
+- Verifier que le prefixe `vX.Y.Z` (complete) n'existe pas deja (ni tag, ni milestone dont le titre est `vX.Y.Z` ou commence par `vX.Y.Z — `) et qu'il est strictement posterieur a la derniere version livree.
 - Verifier la coherence avec les labels des issues selectionnees pour ce milestone (mapping labels -> segment, voir `context/GITHUB.md` section 8.3) : avertissement **non-bloquant** si le segment incremente ne correspond pas a la nature des issues (ex: issue `breaking` incluse mais seul `Z` a bouge) — jamais de blocage si l'utilisateur confirme.
 - Cette verification labels <-> version se recalcule aussi a chaque ajout d'issue en cours de cycle (`gh issue edit --milestone`), sur l'ensemble des issues **actuellement** associees (jamais en delta par issue ajoutee) — pour rester idempotente et ne pas re-alerter plusieurs fois pour le meme type d'ecart.
-- Le titre `vX.Y.Z` devient ensuite la reference unique de la version cible pour tout le cycle — il ne change plus (voir `commands/milestone.md` Mode NEW).
+- Le titre devient ensuite la reference unique de la version cible pour tout le cycle — il ne change plus, y compris son nom descriptif (voir `commands/milestone.md` Mode NEW).
 
 **A l'ouverture du cycle** :
 - `{VERSION_FILE}` est positionne sur `X.Y.Z.0` (version du milestone, `a=0`).

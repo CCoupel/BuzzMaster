@@ -9,7 +9,7 @@ permissions:
   contents: write
 
 env:
-  GO_VERSION: '1.21'
+  GO_VERSION: '1.24'
   NODE_VERSION: '18'
 
 jobs:
@@ -28,6 +28,32 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version: ${{ env.GO_VERSION }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: server-go/web/package-lock.json
+
+      - name: Install frontend dependencies
+        working-directory: server-go/web
+        run: npm ci
+
+      - name: Build frontend
+        working-directory: server-go/web
+        run: npm run build
+
+      # server-go/web/embed.go declares `//go:embed all:dist`, and
+      # cmd/server/dist/ is gitignored — on a clean checkout the directory
+      # doesn't exist, so `go build`/`go test` fail at compile time before a
+      # single test runs (#153). Mirrors the compiling job's sequence above
+      # exactly rather than a stub dist/, since internal/server/
+      # fonts_route_test.go exercises the real embedded fonts.
+      - name: Copy dist for embedding
+        run: |
+          rm -rf server-go/cmd/server/dist
+          cp -r server-go/web/dist server-go/cmd/server/dist
 
       - name: Run tests with race detector
         working-directory: server-go

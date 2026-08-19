@@ -280,21 +280,23 @@ gh release create v1.2.0 --title "v1.2.0" --notes-file RELEASE_NOTES.md
 ### Etape 7 — Cloture du milestone (apres CI OK)
 
 Apres un deploiement PROD reussi, verifier si un milestone correspond a la version deployee.
-Le titre du milestone est `vX.Y.Z` complet (section 5.7) — puisque `X.Y.Z` a ete fixe par
-ce meme milestone des l'ouverture du cycle, le matching se fait directement sur `vX.Y.Z`
-(= `v$VERSION`), jamais sur un prefixe :
+Le titre du milestone est `vX.Y.Z` ou `vX.Y.Z — <nom>` (section 5.7) — puisque `X.Y.Z` a ete
+fixe par ce meme milestone des l'ouverture du cycle, le matching se fait sur le **prefixe**
+`vX.Y.Z` (= `v$VERSION`), jamais sur le titre entier (le nom descriptif ne doit pas empecher
+le match) :
 
 ```bash
-# Chercher le milestone correspondant a la version X.Y.Z deployee
-gh api repos/{owner}/{repo}/milestones \
-  --jq ".[] | select(.state==\"open\" and .title==\"v$VERSION\")"
+# Chercher le milestone dont le prefixe version correspond a la version deployee
+MILESTONE_JSON=$(gh api repos/{owner}/{repo}/milestones \
+  --jq ".[] | select(.state==\"open\" and (.title == \"v$VERSION\" or (.title | startswith(\"v$VERSION — \"))))")
+TITLE=$(echo "$MILESTONE_JSON" | jq -r '.title')   # ex: "v1.4.0" ou "v1.4.0 — Authentification OAuth2"
 ```
 
 Si un milestone actif correspond :
 
 ```
-Milestone v[X.Y.Z] detecte (<N> issues — <X>% complete).
-Cloturer le milestone v[X.Y.Z] ? [O/n]
+Milestone <TITLE> detecte (<N> issues — <X>% complete).
+Cloturer le milestone <TITLE> ? [O/n]
 ```
 
 Si oui → executer la logique de cloture (identique a `/milestone close v[X.Y.Z]`) :
@@ -314,7 +316,7 @@ En orchestration CDP (jamais de contact direct utilisateur) : remonter le result
 cloture dans le rapport `DEPLOY DONE` a `main`, qui le presente a l'utilisateur (meme
 principe que GATE 4) :
 ```
-SendMessage({ to: "main", content: "DEPLOY DONE\n...\nMilestone v[X.Y.Z] cloture." })
+SendMessage({ to: "main", content: "DEPLOY DONE\n...\nMilestone <TITLE> cloture." })
 ```
 
 > La decision de lancer l'agent marketing (`marketing-release`) n'est plus du ressort du

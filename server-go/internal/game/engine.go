@@ -27,15 +27,83 @@ import (
 // e.SaveXxx()` — a bare `go` statement drops return values).
 func safeGo(name string, fn func() error) {
 	go func() {
-		defer func() {
-			if r := recover(); r != nil {
-				log.Printf("[Engine] recovered panic in background %s: %v\n%s", name, r, debug.Stack())
-			}
-		}()
+		defer recoverBackgroundPanic(name)
 		if err := fn(); err != nil {
 			log.Printf("[Engine] background %s failed: %v", name, err)
 		}
 	}()
+}
+
+// recoverBackgroundPanic recovers a panic from a background goroutine (or a
+// single iteration of one) and logs it with the same grep-able format used
+// throughout this file ("[Engine] recovered panic in background <name>"),
+// so safeGo's fire-and-forget saves and the long-lived ticker loops below
+// (#151) share one implementation instead of a third ad hoc variant.
+//
+// Must be invoked as `defer recoverBackgroundPanic(name)` directly — per
+// Go's recover() semantics, recover() only stops a panic when called
+// directly by the function that is itself deferred; this works here because
+// recoverBackgroundPanic IS that deferred function (contrast with
+// server.LogRecoveredPanic, which deliberately takes an already-recovered
+// value instead of calling recover() itself, because it is invoked one
+// frame removed from the deferred func at its call sites).
+//
+// Callers that wrap a single ticker iteration (not the whole goroutine) rely
+// on this being scoped to just that iteration's closure so the surrounding
+// `for { select { ... } }` loop survives and keeps consuming the next tick —
+// see startTimer/startCountdown/StartMotionCardTimer/StartMotionMemorizeTimer.
+func recoverBackgroundPanic(name string) {
+	if r := recover(); r != nil {
+		log.Printf("[Engine] recovered panic in background %s: %v\n%s", name, r, debug.Stack())
+	}
+}
+
+// testInjectPanicFn, when non-nil, is invoked at the very start of each
+// process*Tick locked body (processCountdownTick, processTimerTick,
+// processMotionCardTick, processMotionMemorizeTick) with a site label —
+// lets the #151 regression tests (package game) inject a real panic WHILE
+// e.mu is held, proving the mutex is still released and the goroutine
+// survives, without needing an otherwise-unreachable invalid engine state
+// to trigger a panic naturally. Nil in production; set only by _test.go
+// files in this package via setTestInjectPanic, and must be reset (e.g. via
+// t.Cleanup(clearTestInjectPanic)) so one test's injection doesn't leak
+// into another.
+//
+// Guarded by testInjectPanicMu rather than a bare package var: the ticker
+// goroutines read it from inside process*Tick while e.mu is held, but a
+// test assigning it directly (`testInjectPanicFn = fn`) from the test's own
+// goroutine would NOT be synchronized with those reads just because the
+// reader happens to also hold e.mu — e.mu only orders accesses that both
+// sides actually acquire, and the test's assignment doesn't. `go test
+// -race` catches exactly this if the accessors below are bypassed.
+var (
+	testInjectPanicMu sync.Mutex
+	testInjectPanicFn func(site string)
+)
+
+// setTestInjectPanic installs the #151 panic-injection hook race-safely.
+// _test.go files in this package must use this (and clearTestInjectPanic
+// for cleanup) instead of assigning testInjectPanicFn directly.
+func setTestInjectPanic(fn func(site string)) {
+	testInjectPanicMu.Lock()
+	defer testInjectPanicMu.Unlock()
+	testInjectPanicFn = fn
+}
+
+// clearTestInjectPanic removes the hook installed by setTestInjectPanic.
+func clearTestInjectPanic() {
+	setTestInjectPanic(nil)
+}
+
+// callTestInjectPanic invokes the currently installed hook, if any. Called
+// from the 4 process*Tick methods below.
+func callTestInjectPanic(site string) {
+	testInjectPanicMu.Lock()
+	fn := testInjectPanicFn
+	testInjectPanicMu.Unlock()
+	if fn != nil {
+		fn(site)
+	}
 }
 
 // Engine manages the game state and logic
@@ -937,11 +1005,19 @@ func (e *Engine) startCountdown() {
 		for {
 			select {
 			case <-ticker.C:
-				e.mu.Lock()
-				if e.state.Phase == PhaseCountdown {
-					e.state.CountdownTime--
-					countdownTime := e.state.CountdownTime
-					e.mu.Unlock()
+				// #151: the locked section is extracted into
+				// processCountdownTick so the mutex is released via `defer`
+				// on every exit path (including a panic) BEFORE
+				// recoverBackgroundPanic runs — a recover() posed around
+				// this whole case instead would still catch the panic, but
+				// with e.mu left locked forever, freezing the engine on the
+				// next Lock() (worse than the crash it replaces).
+				func() {
+					defer recoverBackgroundPanic("countdown timer")
+					active, countdownTime := e.processCountdownTick()
+					if !active {
+						return
+					}
 
 					if e.OnCountdownTick != nil {
 						e.OnCountdownTick(countdownTime)
@@ -951,14 +1027,31 @@ func (e *Engine) startCountdown() {
 						// Countdown finished, start the actual game
 						e.actualStart()
 					}
-				} else {
-					e.mu.Unlock()
-				}
+				}()
 			case <-stopCh:
 				return
 			}
 		}
 	}()
+}
+
+// processCountdownTick applies one countdown tick under lock and returns
+// whether the countdown was actually active (phase == PhaseCountdown) along
+// with the new CountdownTime. Extracted from startCountdown's goroutine
+// (#151) so `defer e.mu.Unlock()` guarantees the mutex is released even if
+// this panics — see recoverBackgroundPanic's doc comment.
+func (e *Engine) processCountdownTick() (active bool, countdownTime int) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+
+	callTestInjectPanic("countdown")
+
+	if e.state.Phase != PhaseCountdown {
+		return false, 0
+	}
+
+	e.state.CountdownTime--
+	return true, e.state.CountdownTime
 }
 
 // actualStart is called after countdown finishes to start the actual game
@@ -1123,45 +1216,86 @@ func (e *Engine) startTimer() {
 		for {
 			select {
 			case <-ticker.C:
-				e.mu.Lock()
-				if e.state.Phase == PhaseStarted {
-					e.state.CurrentTime--
-					currentTime := e.state.CurrentTime
-					totalTime := e.state.Delay
-
-					// Check for QCM hint invalidation
-					var qcmHintCallback func(string, int)
-					var invalidatedColor string
-					var remainingAnswers int
-					if e.shouldTriggerQCMHint(currentTime, totalTime) {
-						invalidatedColor, remainingAnswers = e.invalidateRandomWrongAnswer()
-						if invalidatedColor != "" {
-							qcmHintCallback = e.OnQCMHint
-						}
+				// #151: this is the most exposed of the 5 sites — the locked
+				// section calls invalidateRandomWrongAnswer(), which mutates
+				// e.state.QcmInvalidated and calls rand.Intn(). It is
+				// extracted into processTimerTick (Lock + `defer` Unlock) so
+				// a panic there still releases e.mu before
+				// recoverBackgroundPanic runs. A recover() wrapped around
+				// this whole case with the original manual Lock/Unlock would
+				// instead leave e.mu locked forever — the engine freezes
+				// silently on the next Lock(), worse than the crash it
+				// replaces.
+				func() {
+					defer recoverBackgroundPanic("game timer tick")
+					result := e.processTimerTick()
+					if !result.active {
+						return
 					}
 
-					e.mu.Unlock()
-
 					if e.OnTimerTick != nil {
-						e.OnTimerTick(currentTime)
+						e.OnTimerTick(result.currentTime)
 					}
 
 					// Call QCM hint callback outside of lock
-					if qcmHintCallback != nil && invalidatedColor != "" {
-						qcmHintCallback(invalidatedColor, remainingAnswers)
+					if result.qcmHintCallback != nil && result.invalidatedColor != "" {
+						result.qcmHintCallback(result.invalidatedColor, result.remainingAnswers)
 					}
 
-					if currentTime <= 0 {
+					if result.currentTime <= 0 {
 						e.Stop()
 					}
-				} else {
-					e.mu.Unlock()
-				}
+				}()
 			case <-stopCh:
 				return
 			}
 		}
 	}()
+}
+
+// timerTickResult carries the outcome of one locked timer-tick iteration
+// (processTimerTick) out to the unlocked caller, which invokes callbacks
+// and may call e.Stop() — mirrors the original inline logic in startTimer's
+// goroutine before #151 extracted it for panic safety.
+type timerTickResult struct {
+	active           bool // phase was PhaseStarted; currentTime/QCM fields are meaningful
+	currentTime      int
+	qcmHintCallback  func(string, int)
+	invalidatedColor string
+	remainingAnswers int
+}
+
+// processTimerTick applies one game-timer tick under lock: decrements
+// CurrentTime and, if a QCM hint threshold is crossed, invalidates a wrong
+// answer. Extracted from startTimer's goroutine (#151) so `defer
+// e.mu.Unlock()` guarantees the mutex is released even if this panics — see
+// recoverBackgroundPanic's doc comment.
+func (e *Engine) processTimerTick() timerTickResult {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+
+	callTestInjectPanic("timer")
+
+	if e.state.Phase != PhaseStarted {
+		return timerTickResult{}
+	}
+
+	e.state.CurrentTime--
+	currentTime := e.state.CurrentTime
+	totalTime := e.state.Delay
+
+	result := timerTickResult{active: true, currentTime: currentTime}
+
+	if e.shouldTriggerQCMHint(currentTime, totalTime) {
+		invalidatedColor, remainingAnswers := e.invalidateRandomWrongAnswer()
+		if invalidatedColor != "" {
+			result.qcmHintCallback = e.OnQCMHint
+			result.invalidatedColor = invalidatedColor
+			result.remainingAnswers = remainingAnswers
+		}
+	}
+
+	return result
 }
 
 // shouldTriggerQCMHint checks if a QCM hint should be triggered at the current time
@@ -3897,25 +4031,31 @@ func (e *Engine) StartMotionCardTimer(delay int) {
 		for {
 			select {
 			case <-ticker.C:
-				e.mu.Lock()
-				// Guard: exit if game state changed unexpectedly
-				if e.state.Phase != PhaseStarted || e.state.MotionSubPhase != "QUESTION" {
-					e.mu.Unlock()
-					ticker.Stop()
-					return
-				}
-				e.state.CurrentTime--
-				currentTime := e.state.CurrentTime
-				e.mu.Unlock()
+				// #151: locked section extracted into processMotionCardTick
+				// (Lock + `defer` Unlock) so a panic there still releases
+				// e.mu before recoverBackgroundPanic runs — see that
+				// function's doc comment.
+				stop := func() bool {
+					defer recoverBackgroundPanic("MEMOTION card timer")
+					result := e.processMotionCardTick()
+					if result.guardFailed {
+						ticker.Stop()
+						return true
+					}
 
-				if e.OnTimerTick != nil {
-					e.OnTimerTick(currentTime)
-				}
+					if e.OnTimerTick != nil {
+						e.OnTimerTick(result.currentTime)
+					}
 
-				if currentTime <= 0 {
-					// Timer expired — do NOT call e.Stop(). Phase stays STARTED.
-					ticker.Stop()
-					log.Printf("[Engine] MEMOTION card timer expired — phase stays STARTED, admin must act")
+					if result.currentTime <= 0 {
+						// Timer expired — do NOT call e.Stop(). Phase stays STARTED.
+						ticker.Stop()
+						log.Printf("[Engine] MEMOTION card timer expired — phase stays STARTED, admin must act")
+						return true
+					}
+					return false
+				}()
+				if stop {
 					return
 				}
 			case <-stopCh:
@@ -3924,6 +4064,32 @@ func (e *Engine) StartMotionCardTimer(delay int) {
 			}
 		}
 	}()
+}
+
+// motionCardTickResult carries the outcome of one locked MEMOTION
+// card-timer iteration (processMotionCardTick) out to the unlocked caller.
+type motionCardTickResult struct {
+	guardFailed bool // phase/subphase changed unexpectedly; caller must stop the ticker and return
+	currentTime int
+}
+
+// processMotionCardTick applies one MEMOTION card-timer tick under lock.
+// Extracted from StartMotionCardTimer's goroutine (#151) so `defer
+// e.mu.Unlock()` guarantees the mutex is released even if this panics — see
+// recoverBackgroundPanic's doc comment.
+func (e *Engine) processMotionCardTick() motionCardTickResult {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+
+	callTestInjectPanic("motion-card")
+
+	// Guard: exit if game state changed unexpectedly
+	if e.state.Phase != PhaseStarted || e.state.MotionSubPhase != "QUESTION" {
+		return motionCardTickResult{guardFailed: true}
+	}
+
+	e.state.CurrentTime--
+	return motionCardTickResult{currentTime: e.state.CurrentTime}
 }
 
 // StartMotionMemorizeTimer starts a countdown for the MEMORIZE phase in Secret Mode (v5.5.0).
@@ -3971,35 +4137,36 @@ func (e *Engine) StartMotionMemorizeTimer(duration int) {
 		for {
 			select {
 			case <-ticker.C:
-				e.mu.Lock()
-				// Guard: exit if game state changed unexpectedly
-				if e.state.Phase != PhaseStarted || e.state.MotionSubPhase != "MEMORIZE" {
-					e.mu.Unlock()
-					ticker.Stop()
-					return
-				}
-				e.state.CurrentTime--
-				currentTime := e.state.CurrentTime
-
-				if currentTime <= 0 {
-					// Timer expired: transition MEMORIZE → GRID automatically
-					e.state.MotionSubPhase = "GRID"
-					e.state.MotionSelected = ""
-					e.state.CurrentTime = 0
-					callback := e.OnStateChange
-					e.mu.Unlock()
-					ticker.Stop()
-					log.Printf("[Engine] MEMOTION MEMORIZE timer expired → transitioned to GRID")
-					if callback != nil {
-						callback(PhaseStarted)
+				// #151: locked section extracted into
+				// processMotionMemorizeTick (Lock + `defer` Unlock) so a
+				// panic there still releases e.mu before
+				// recoverBackgroundPanic runs — see that function's doc
+				// comment.
+				stop := func() bool {
+					defer recoverBackgroundPanic("MEMOTION memorize timer")
+					result := e.processMotionMemorizeTick()
+					switch {
+					case result.guardFailed:
+						ticker.Stop()
+						return true
+					case result.expired:
+						ticker.Stop()
+						log.Printf("[Engine] MEMOTION MEMORIZE timer expired → transitioned to GRID")
+						if result.callback != nil {
+							result.callback(PhaseStarted)
+						}
+						return true
+					default:
+						// Full state broadcast on each tick so the TV display receives the
+						// updated CurrentTime immediately (matches StartMotionCardTimer pattern).
+						if e.OnStateChange != nil {
+							e.OnStateChange(PhaseStarted)
+						}
+						return false
 					}
+				}()
+				if stop {
 					return
-				}
-				e.mu.Unlock()
-				// Full state broadcast on each tick so the TV display receives the
-				// updated CurrentTime immediately (matches StartMotionCardTimer pattern).
-				if e.OnStateChange != nil {
-					e.OnStateChange(PhaseStarted)
 				}
 
 			case <-stopCh:
@@ -4008,6 +4175,45 @@ func (e *Engine) StartMotionMemorizeTimer(duration int) {
 			}
 		}
 	}()
+}
+
+// motionMemorizeTickResult carries the outcome of one locked MEMOTION
+// memorize-timer iteration (processMotionMemorizeTick) out to the unlocked
+// caller, which stops the ticker / invokes OnStateChange as needed.
+type motionMemorizeTickResult struct {
+	guardFailed bool            // phase/subphase changed unexpectedly; caller must stop the ticker and return
+	expired     bool            // CurrentTime reached 0; MotionSubPhase was transitioned to GRID under lock
+	callback    func(GamePhase) // OnStateChange captured under lock, to invoke after unlock when expired
+}
+
+// processMotionMemorizeTick applies one MEMOTION memorize-timer tick under
+// lock: decrements CurrentTime and, on expiry, transitions MotionSubPhase
+// from MEMORIZE to GRID. Extracted from StartMotionMemorizeTimer's goroutine
+// (#151) so `defer e.mu.Unlock()` guarantees the mutex is released even if
+// this panics — see recoverBackgroundPanic's doc comment.
+func (e *Engine) processMotionMemorizeTick() motionMemorizeTickResult {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+
+	callTestInjectPanic("motion-memorize")
+
+	// Guard: exit if game state changed unexpectedly
+	if e.state.Phase != PhaseStarted || e.state.MotionSubPhase != "MEMORIZE" {
+		return motionMemorizeTickResult{guardFailed: true}
+	}
+
+	e.state.CurrentTime--
+	currentTime := e.state.CurrentTime
+
+	if currentTime <= 0 {
+		// Timer expired: transition MEMORIZE → GRID automatically
+		e.state.MotionSubPhase = "GRID"
+		e.state.MotionSelected = ""
+		e.state.CurrentTime = 0
+		return motionMemorizeTickResult{expired: true, callback: e.OnStateChange}
+	}
+
+	return motionMemorizeTickResult{}
 }
 
 // StopMotionMemorizeTimer stops the MEMORIZE phase timer without changing the game phase.

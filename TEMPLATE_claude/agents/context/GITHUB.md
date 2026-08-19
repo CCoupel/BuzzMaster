@@ -77,14 +77,18 @@ gh issue create \
   --body "<description>" \
   --label "<label1>,<label2>" \
   --assignee "<login>" \
-  --milestone "<version>"
+  --milestone "<TITLE>"
 ```
+
+> `--milestone` exige le titre exact du milestone (pas seulement sa version — le titre peut
+> porter un nom apres " — ", voir section 3.1). Resoudre `<TITLE>` au prealable si on ne
+> dispose que de la version (voir section 3.1 "Milestone correspondant a une version").
 
 ### 2.4 Modifier une issue
 
 ```bash
 # Assigner un milestone
-gh issue edit <numero> --milestone "<version>"
+gh issue edit <numero> --milestone "<TITLE>"
 
 # Changer les labels
 gh issue edit <numero> --add-label "bug" --remove-label "feature"
@@ -127,12 +131,15 @@ gh api repos/{owner}/{repo}/milestones \
 gh api repos/{owner}/{repo}/milestones \
   --jq '[.[] | select(.state=="open")] | sort_by(.due_on) | .[0]'
 
-# Milestone correspondant a une version
+# Milestone correspondant a une version — matching par PREFIXE, jamais par titre exact
+# (le titre reel peut porter un nom descriptif apres " — ", voir context/COMMON.md section 5.7)
 gh api repos/{owner}/{repo}/milestones \
-  --jq '.[] | select(.title=="<version>")'
+  --jq '.[] | select(.title == "<version>" or (.title | startswith("<version> — ")))'
 ```
 
 ### 3.2 Creer un milestone
+
+Titre = `<version>` seul, ou `<version> — <nom>` si un nom descriptif est fourni.
 
 ```bash
 # Sans echeance
@@ -141,10 +148,10 @@ gh api repos/{owner}/{repo}/milestones \
   -f title="<version>" \
   -f description="Release <version>"
 
-# Avec echeance (format ISO 8601)
+# Avec nom descriptif et echeance (format ISO 8601)
 gh api repos/{owner}/{repo}/milestones \
   --method POST \
-  -f title="<version>" \
+  -f title="<version> — <nom>" \
   -f description="Release <version>" \
   -f due_on="<YYYY-MM-DD>T23:59:59Z"
 ```
@@ -152,9 +159,9 @@ gh api repos/{owner}/{repo}/milestones \
 ### 3.3 Cloturer un milestone
 
 ```bash
-# Recuperer d'abord le numero du milestone
+# Recuperer d'abord le numero du milestone — matching par prefixe (voir 3.1)
 MILESTONE_NUM=$(gh api repos/{owner}/{repo}/milestones \
-  --jq '.[] | select(.title=="<version>") | .number')
+  --jq '.[] | select(.title == "<version>" or (.title | startswith("<version> — "))) | .number')
 
 # Cloturer
 gh api repos/{owner}/{repo}/milestones/$MILESTONE_NUM \
@@ -165,9 +172,9 @@ gh api repos/{owner}/{repo}/milestones/$MILESTONE_NUM \
 ### 3.4 Progression d'un milestone
 
 ```bash
-# Calcul : closed / (open + closed) * 100
+# Calcul : closed / (open + closed) * 100 — matching par prefixe (voir 3.1)
 gh api repos/{owner}/{repo}/milestones \
-  --jq '.[] | select(.title=="<version>") |
+  --jq '.[] | select(.title == "<version>" or (.title | startswith("<version> — "))) |
     {
       title,
       total: (.open_issues + .closed_issues),
@@ -363,7 +370,7 @@ fi
 
 | Element | Convention | Exemple |
 |---------|------------|---------|
-| Milestone | `vX.Y.Z` complet (sans `a`) — seule source de verite de la version du cycle | `v1.4.0` |
+| Milestone | `vX.Y.Z` complet (sans `a`), optionnellement suivi de `" — <nom>"` — seule source de verite de la version du cycle, matching toujours par prefixe | `v1.4.0` ou `v1.4.0 — Authentification OAuth2` |
 | Tag | Prefixe `v` + `X.Y.Z` | `v1.4.1` |
 | Branche feature | `feature/<nom-court>` | `feature/auth-oauth` |
 | Branche bugfix | `fix/<nom-court>` | `fix/crash-login` |

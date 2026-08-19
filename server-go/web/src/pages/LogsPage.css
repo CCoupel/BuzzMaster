@@ -1,6 +1,6 @@
 .logs-page {
   position: fixed;
-  top: 64px; /* Height of navbar */
+  top: var(--navbar-h); /* Height of navbar */
   left: 0;
   right: 0;
   /* #177 (F4) — cette page est en position: fixed, hors du flux de

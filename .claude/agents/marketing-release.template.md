@@ -76,10 +76,16 @@ Avant de produire tout contenu :
 1. Lire `CHANGELOG.md` pour identifier les changements de la version
 2. Lire `README.md` pour le positionnement produit
 3. Lire `docs/` pour les details techniques si necessaire
-4. **Recuperer le milestone GitHub correspondant a la version** (source privilegiee) :
+4. **Recuperer le milestone GitHub correspondant a la version** (source privilegiee) — matching
+   par **prefixe** de version, jamais par titre exact (le titre peut porter un nom descriptif
+   apres " — ", voir `context/COMMON.md` section 5.7) :
    ```bash
+   # Resoudre le titre exact du milestone a partir de la version
+   TITLE=$(gh api repos/{owner}/{repo}/milestones \
+     --jq ".[] | select(.title == \"<version>\" or (.title | startswith(\"<version> — \"))) | .title")
+
    # Issues livrees dans ce milestone (ce qui a ete reellement livre)
-   gh issue list --milestone "<version>" --state closed \
+   gh issue list --milestone "$TITLE" --state closed \
      --json number,title,labels \
      --jq '.[] | "#" + (.number|tostring) + " — " + .title'
 

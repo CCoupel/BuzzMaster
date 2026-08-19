@@ -23,22 +23,57 @@ Sinon → Mode 2 (création).
 
 ## Mode 1 : Liste (sans argument ou filtre)
 
+Les issues sont affichées **groupées par milestone**, un tableau par milestone, dans l'ordre
+des versions — puis les issues sans milestone à part, toujours en dernier.
+
 ### Etapes
 
-1. Exécuter `gh issue list --state open --limit 50` avec les flags adaptés au filtre
-2. Afficher sous forme de tableau :
+1. Récupérer les issues ouvertes avec leur milestone :
+```bash
+gh issue list --state open --limit 50 \
+  --json number,title,labels,milestone,assignees,updatedAt <flags-du-filtre>
+```
+
+2. Grouper les issues par `milestone.title` — les issues sans milestone forment le groupe
+   "orphelines" (`milestone` absent ou `null`).
+
+3. Trier les groupes de milestones :
+   - **Milestones versionnés** — titre `vX.Y`, `vX.Y.Z`, ou `vX.Y.Z — <nom>` (le nom descriptif
+     est optionnel, voir `context/COMMON.md` section 5.7) → extraire le **préfixe** `vX.Y[.Z]`
+     avant tout " — " et trier numériquement croissant sur `X`, puis `Y`, puis `Z` (pas un tri
+     alphabétique sur le titre entier : `v1.9` doit passer avant `v1.10`, et le nom après " — "
+     ne doit jamais influencer le tri).
+   - **Milestones au nom libre** (le titre ne commence pas par `vX.Y`) → après les versionnés, par ordre alphabétique.
+   - **Orphelines** (aucun milestone) → toujours en dernier.
+
+4. Afficher un tableau par groupe, dans cet ordre — le titre affiché est le titre **complet**
+   du milestone (version + nom descriptif s'il existe), le compte d'issues entre parenthèses :
 
 ```markdown
 ## Backlog — Issues ouvertes
 
-| # | Titre | Labels | Milestone | Assignee | Maj |
-|---|-------|--------|-----------|----------|-----|
-| 42 | Ajouter auth OAuth2 | feature | v1.2 | - | 2025-01-10 |
-| 38 | Crash au démarrage iOS | bug | v1.2 | @user | 2025-01-08 |
-| 35 | Refactor module auth | refactor | — | - | 2025-01-05 |
+### Milestone v1.4.0 — Authentification OAuth2 (3 ouvertes)
+| # | Titre | Labels | Assignee | Maj |
+|---|-------|--------|----------|-----|
+| 42 | Ajouter auth OAuth2 | feature | - | 2025-01-10 |
+| 38 | Crash au démarrage iOS | bug | @user | 2025-01-08 |
+| 51 | Export PDF des rapports | feature | - | 2025-01-09 |
+
+### Milestone v1.5.0 (1 ouverte)
+| # | Titre | Labels | Assignee | Maj |
+|---|-------|--------|----------|-----|
+| 47 | Lenteur page dashboard | bug, performance | - | 2025-01-11 |
+
+### Issues orphelines (sans milestone)
+| # | Titre | Labels | Assignee | Maj |
+|---|-------|--------|----------|-----|
+| 35 | Refactor module auth | refactor | - | 2025-01-05 |
 ```
 
-3. Proposer les actions disponibles :
+Si aucune issue ouverte → afficher `Aucune issue ouverte.` sans tableau.
+Si un groupe est vide après filtre → ne pas l'afficher (pas de tableau à 0 ligne).
+
+5. Proposer les actions disponibles :
 
 ```
 Pour créer une issue :
@@ -53,15 +88,26 @@ Pour implémenter une issue existante :
 
 | Syntaxe | Effet |
 |---------|-------|
-| `/backlog` | Toutes les issues ouvertes |
-| `/backlog label:bug` | Issues avec le label "bug" |
-| `/backlog label:feature` | Issues avec le label "feature" |
-| `/backlog @me` | Issues qui me sont assignées |
-| `/backlog milestone:<nom>` | Issues d'un milestone |
+| `/backlog` | Toutes les issues ouvertes, groupées par milestone |
+| `/backlog label:bug` | Issues avec le label "bug", groupées par milestone |
+| `/backlog label:feature` | Issues avec le label "feature", groupées par milestone |
+| `/backlog @me` | Issues qui me sont assignées, groupées par milestone |
+| `/backlog milestone:<version>` | Issues d'un seul milestone (un seul groupe affiché, pas de section orphelines) |
 
 **Implémentation des filtres :**
 Détecter si `$ARGUMENTS` correspond à un filtre (`label:`, `@me`, `milestone:`)
 et traduire en flags `gh issue list` correspondants (`--label`, `--assignee @me`, `--milestone`).
+
+Pour `milestone:<version>` : `--milestone` de `gh` exige le titre exact, or `<version>` n'est
+qu'un préfixe (le titre réel peut porter un nom après " — "). Résoudre d'abord le titre complet :
+```bash
+TITLE=$(gh api repos/{owner}/{repo}/milestones \
+  --jq ".[] | select(.title == \"<version>\" or (.title | startswith(\"<version> — \"))) | .title")
+gh issue list --state open --milestone "$TITLE" --json number,title,labels,milestone,assignees,updatedAt
+```
+Le filtre `milestone:<nom>` court-circuite le groupement (un seul milestone concerné, la
+section "orphelines" n'a pas lieu d'être) ; les autres filtres réduisent l'ensemble des issues
+en amont, le groupement/tri par milestone s'applique ensuite normalement au résultat filtré.
 
 ---
 
@@ -145,16 +191,20 @@ gh api repos/{owner}/{repo}/milestones \
   --jq '.[] | select(.state=="open") | {number, title, open_issues, closed_issues}'
 ```
 
-Afficher et demander :
+Afficher le titre **complet** de chaque milestone (`.title` tel quel — version + nom
+descriptif s'il existe, ne jamais le tronquer à la version seule) et demander :
 
 ```
 Milestones disponibles :
-  1. v1.2.0  (3 issues ouvertes)
+  1. v1.2.0 — Authentification OAuth2  (3 issues ouvertes)
   2. v1.3.0  (0 issues ouvertes)
   3. Aucun milestone
 
 Associer cette issue à quel milestone ? [1/2/3]
 ```
+
+Le choix de l'utilisateur donne directement `TITLE` (le titre exact du milestone selectionné,
+utilise tel quel a l'etape 3 — aucune reconstruction a partir de la version).
 
 Si aucun milestone ouvert :
 ```
@@ -168,7 +218,7 @@ Continuer sans milestone ? [O/n]
 gh issue create \
   --title "<$ARGUMENTS>" \
   --label "<bug|feature>" \
-  --milestone "<version>" \   # omis si aucun milestone sélectionné
+  --milestone "<TITLE>" \   # omis si aucun milestone sélectionné
   --body ""
 ```
 
@@ -177,7 +227,7 @@ gh issue create \
 ```
 ✅ Issue créée : #<numero> — <titre>
    Label     : <bug|feature>
-   Milestone : <version ou "aucun">
+   Milestone : <TITLE ou "aucun">
    URL       : https://github.com/{owner}/{repo}/issues/<numero>
 
 Pour l'implémenter :

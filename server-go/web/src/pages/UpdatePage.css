@@ -2,7 +2,7 @@
     padding: var(--spacing-lg);
     max-width: 1400px;
     margin: 0 auto;
-    height: calc(100vh - 60px);
+    height: calc(100vh - var(--admin-chrome-h));
     overflow-y: auto;
 }
 

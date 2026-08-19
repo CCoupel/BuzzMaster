@@ -50,7 +50,7 @@ gh repo view --json owner,name --jq '"repos/" + .owner.login + "/" + .name'
 
 ### Etape 2 — Completer et valider la version cible
 
-> Voir `context/COMMON.md` section 5.7 — le titre du milestone fixe integralement `X.Y.Z`, seule source de verite pour tout le cycle.
+> Voir `context/COMMON.md` section 5.7 — le titre du milestone fixe integralement `X.Y.Z`, seule source de verite pour tout le cycle. Le titre GitHub complet est `vX.Y.Z` ou `vX.Y.Z — <nom>` : la version est toujours le prefixe, le nom (optionnel) est purement descriptif et ne participe a aucun calcul.
 
 **a) `X` et `Y` obligatoires** — si `<version>` n'en precise pas un, le demander explicitement a l'utilisateur avant de continuer (jamais de valeur par defaut) :
 ```
@@ -66,25 +66,35 @@ EXISTING_Z=$(git tag --list "v${X}.${Y}.*" --sort=-v:refname | head -1)   # ex: 
 - Sinon, si des tags `vX.Y.*` existent → `Z = Z_max + 1`.
 - Sinon (aucune release `X.Y.*`) → `Z = 0`.
 
-Le titre du milestone est cree avec `vX.Y.Z` complet — jamais de `Z` implicite.
+`VERSION="vX.Y.Z"` complet — jamais de `Z` implicite. C'est ce prefixe, et lui seul, qui sert a toute comparaison/validation/parsing par la suite (unicite, ordre, matching a la promotion prod, tri dans `/backlog`).
 
-**c) Unicite et ordre** :
+**c) Nom descriptif (optionnel)** :
+```
+Nom descriptif du milestone (optionnel, ex: "Authentification OAuth2") :
+```
+- Si un nom est fourni → `TITLE="${VERSION} — <nom>"` (separateur " — ", em dash entoure d'espaces).
+- Si vide → `TITLE="${VERSION}"`.
+
+`TITLE` est ce qui est effectivement écrit dans le champ `title` GitHub et utilise pour toutes les commandes `gh` qui referencent le milestone par son titre exact (`--milestone "<TITLE>"`). `VERSION` reste la seule valeur utilisee pour les comparaisons de version.
+
+**d) Unicite et ordre** — la comparaison porte sur le **prefixe version** de chaque milestone existant, jamais sur le titre complet (deux milestones ne peuvent pas partager le meme `VERSION`, quel que soit leur nom) :
 ```bash
 # Derniere version prod connue (dernier tag, toutes lignes confondues)
 LAST_PROD=$(git tag --list 'v*' --sort=-v:refname | head -1)
-# Milestones existants avec ce titre exact
-gh api repos/{owner}/{repo}/milestones --jq ".[] | select(.title==\"v${X}.${Y}.${Z}\")"
+# Milestones existants dont le prefixe version correspond (titre = VERSION ou VERSION + " — ...")
+gh api repos/{owner}/{repo}/milestones \
+  --jq ".[] | select(.title == \"${VERSION}\" or (.title | startswith(\"${VERSION} — \")))"
 ```
-- Si un tag ou un milestone `vX.Y.Z` existe deja → alerter, ne pas creer :
+- Si un tag existe deja pour `VERSION`, ou si un milestone dont le prefixe version est `VERSION` existe deja → alerter, ne pas creer :
   ```
-  vX.Y.Z existe deja (tag ou milestone). Choisir une autre version.
+  VERSION existe deja (tag ou milestone <titre existant>). Choisir une autre version.
   ```
-- Si `vX.Y.Z` n'est pas strictement posterieur a `LAST_PROD` → alerter, ne pas creer :
+- Si `VERSION` n'est pas strictement posterieur a `LAST_PROD` → alerter, ne pas creer :
   ```
-  vX.Y.Z n'est pas posterieur a la derniere version livree (<LAST_PROD>). Choisir une autre version.
+  VERSION n'est pas posterieur a la derniere version livree (<LAST_PROD>). Choisir une autre version.
   ```
 
-**d) Coherence avec les labels des issues** — reportee a l'etape 5, une fois les issues selectionnees (voir `context/GITHUB.md` section 8.3 pour le mapping labels -> segment).
+**e) Coherence avec les labels des issues** — reportee a l'etape 5, une fois les issues selectionnees (voir `context/GITHUB.md` section 8.3 pour le mapping labels -> segment).
 
 ### Etape 3 — Creer le milestone sur GitHub
 
@@ -92,20 +102,20 @@ gh api repos/{owner}/{repo}/milestones --jq ".[] | select(.title==\"v${X}.${Y}.$
 # Sans date
 gh api repos/{owner}/{repo}/milestones \
   --method POST \
-  -f title="<version>" \
-  -f description="Release <version>"
+  -f title="<TITLE>" \
+  -f description="Release <VERSION>"
 
 # Avec date (format ISO 8601)
 gh api repos/{owner}/{repo}/milestones \
   --method POST \
-  -f title="<version>" \
-  -f description="Release <version>" \
+  -f title="<TITLE>" \
+  -f description="Release <VERSION>" \
   -f due_on="<YYYY-MM-DD>T23:59:59Z"
 ```
 
 Afficher la confirmation :
 ```
-Milestone <version> cree.
+Milestone <TITLE> cree.
 URL : https://github.com/{owner}/{repo}/milestone/<numero>
 ```
 
@@ -130,7 +140,7 @@ Issues disponibles (sans milestone) :
   51 | Export PDF des rapports            | feature
   47 | Lenteur page dashboard             | bug, performance
 
-Entrez les numeros des issues a associer au milestone <version>
+Entrez les numeros des issues a associer au milestone <TITLE>
 (separees par des virgules, ex: 42,38,51 — ou "all" pour toutes, "0" pour aucune) :
 ```
 
@@ -139,7 +149,7 @@ Entrez les numeros des issues a associer au milestone <version>
 Pour chaque issue selectionnee :
 
 ```bash
-gh issue edit <numero> --milestone "<version>"
+gh issue edit <numero> --milestone "<TITLE>"
 ```
 
 ### Etape 6 — Verifier la coherence labels ↔ version
@@ -149,14 +159,14 @@ gh issue edit <numero> --milestone "<version>"
 Recuperer les labels de **toutes** les issues actuellement associees au milestone (celles de l'etape 5, jamais en delta) :
 
 ```bash
-gh issue list --milestone "<version>" --json labels --jq '[.[].labels[].name] | unique'
+gh issue list --milestone "<TITLE>" --json labels --jq '[.[].labels[].name] | unique'
 ```
 
-Determiner le segment le plus fort attendu (`breaking` > `feature`/`enhancement` > le reste) et comparer au segment reellement incremente par `<version>` par rapport a `LAST_PROD` (X different → X, sinon Y different → Y, sinon → Z).
+Determiner le segment le plus fort attendu (`breaking` > `feature`/`enhancement` > le reste) et comparer au segment reellement incremente par `VERSION` par rapport a `LAST_PROD` (X different → X, sinon Y different → Y, sinon → Z).
 
 Si incoherence → avertissement **non-bloquant** :
 ```
-⚠️  Attention : issue(s) <label> incluses mais seul <segment> a change dans <version>.
+⚠️  Attention : issue(s) <label> incluses mais seul <segment> a change dans <VERSION>.
 Continuer quand meme ? [O/n]
 ```
 Si non → proposer de corriger la version ou la liste d'issues, sans annuler ce qui est deja cree.
@@ -166,7 +176,7 @@ Cette meme verification (sur l'ensemble des issues associees, jamais en delta) s
 Afficher le recapitulatif final :
 
 ```
-Milestone <version> configure.
+Milestone <TITLE> configure.
 
 Issues associees :
   ✅ #42 — Ajouter auth OAuth2
@@ -202,7 +212,7 @@ Pour chaque milestone ouvert, calculer le pourcentage et afficher :
 Milestones actifs :
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  v1.4  ████████░░░░░░░░  50%  (3/6 issues)
+  v1.4.0 — Authentification OAuth2  ████████░░░░░░░░  50%  (3/6 issues)
   Echeance : 2026-06-01  (J-46)
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
@@ -237,14 +247,21 @@ Si aucune version precisee → utiliser le milestone avec le plus de progression
 
 ### Etape 1 — Identifier le milestone
 
+`<version>` designe toujours un prefixe `vX.Y.Z` — le titre reel peut porter un nom apres
+" — " (ex: `/milestone close v1.4.0` doit matcher `v1.4.0 — Authentification OAuth2`).
+Le resultat de cette etape est `TITLE`, le titre exact du milestone trouve, utilise pour
+toutes les commandes `gh` suivantes (`--milestone` exige une correspondance exacte).
+
 ```bash
-# Avec version specifiee
+# Avec version specifiee — matching par prefixe
 gh api repos/{owner}/{repo}/milestones \
-  --jq '.[] | select(.title=="<version>")'
+  --jq ".[] | select(.title == \"<version>\" or (.title | startswith(\"<version> — \")))"
+# → TITLE = .title du resultat
 
 # Sans version → le plus avance
 gh api repos/{owner}/{repo}/milestones \
   --jq 'sort_by(.closed_issues / (.open_issues + .closed_issues + 0.001) | -.) | .[0]'
+# → TITLE = .title du resultat
 ```
 
 ### Etape 2 — Rapport pre-cloture
@@ -253,16 +270,16 @@ Lister toutes les issues du milestone :
 
 ```bash
 # Issues fermees
-gh issue list --milestone "<version>" --state closed --json number,title
+gh issue list --milestone "<TITLE>" --state closed --json number,title
 
 # Issues ouvertes
-gh issue list --milestone "<version>" --state open --json number,title,labels
+gh issue list --milestone "<TITLE>" --state open --json number,title,labels
 ```
 
 Afficher le rapport :
 
 ```
-Milestone <version> — Rapport avant cloture
+Milestone <TITLE> — Rapport avant cloture
 
   ✅ #42 — Ajouter auth OAuth2             [closed]
   ✅ #38 — Crash au demarrage iOS          [closed]
@@ -281,9 +298,10 @@ Si des issues sont encore ouvertes, proposer :
 2 issues non terminees. Que faire ?
 
   [A] Reporter vers le prochain milestone
-      → Entrer le nom du prochain milestone (ex: v1.5.0, voir context/COMMON.md section 5)
+      → Entrer la prochaine version (ex: v1.5.0, voir context/COMMON.md section 5) — et
+        optionnellement son nom si un nouveau milestone doit etre cree
   [B] Fermer toutes les issues et cloturer
-      → Les issues seront fermees avec le commentaire "Cloture avec le milestone <version>"
+      → Les issues seront fermees avec le commentaire "Cloture avec le milestone <TITLE>"
   [C] Cloturer le milestone sans toucher aux issues
       → Les issues restent ouvertes (non liees a un milestone)
   [D] Annuler
@@ -294,19 +312,21 @@ Votre choix :
 **Si [A] — Reporter** :
 
 ```bash
-# Verifier si le prochain milestone existe, sinon le creer
-gh api repos/{owner}/{repo}/milestones --jq '.[] | select(.title=="<next-version>")'
+# Verifier si le prochain milestone existe deja (matching par prefixe) → NEXT_TITLE
+gh api repos/{owner}/{repo}/milestones \
+  --jq ".[] | select(.title == \"<next-version>\" or (.title | startswith(\"<next-version> — \")))"
 
-# Si n'existe pas : creer
+# Si n'existe pas : creer (titre = version seule, pas de nom dans ce flux non-interactif)
 gh api repos/{owner}/{repo}/milestones --method POST -f title="<next-version>"
+# → NEXT_TITLE = "<next-version>"
 
 # Reporter chaque issue ouverte
-gh issue edit <numero> --milestone "<next-version>"
+gh issue edit <numero> --milestone "<NEXT_TITLE>"
 ```
 
 Afficher confirmation :
 ```
-Issues reportees vers <next-version> :
+Issues reportees vers <NEXT_TITLE> :
   → #51 — Export PDF des rapports
   → #47 — Lenteur page dashboard
 ```
@@ -315,7 +335,7 @@ Issues reportees vers <next-version> :
 
 ```bash
 # Fermer chaque issue ouverte avec un commentaire
-gh issue close <numero> --comment "Cloture avec le milestone <version>"
+gh issue close <numero> --comment "Cloture avec le milestone <TITLE>"
 ```
 
 **Si [C] — Cloturer sans toucher** :
@@ -333,12 +353,12 @@ gh api repos/{owner}/{repo}/milestones/<numero> \
 ### Etape 5 — Rapport de cloture
 
 ```
-Milestone <version> cloture.
+Milestone <TITLE> cloture.
 
   Bilan :
     ✅ Issues terminees  : <N>
-    ↩️  Issues reportees : <N> → <next-version>   (ou)
-    🔒 Issues fermees    : <N>                     (ou)
+    ↩️  Issues reportees : <N> → <NEXT_TITLE>   (ou)
+    🔒 Issues fermees    : <N>                   (ou)
     📌 Issues en suspens : <N> (toujours ouvertes)
 
   URL : https://github.com/{owner}/{repo}/milestone/<numero>?closed=1

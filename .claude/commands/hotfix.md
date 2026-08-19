@@ -75,7 +75,8 @@ Si aucun milestone `OPEN` ne cible `X.Y.Z+1` (Z+1 sur la derniere version prod l
   de `/milestone new` (`commands/milestone.md` Mode NEW, `context/COMMON.md` section 5.7).
 - `{VERSION_FILE}` est positionne sur `X.Y.Z+1.0`.
 
-Si un milestone `X.Y.Z+1` existe deja (autre hotfix en cours sur la meme ligne) -> le reutiliser.
+Si un milestone `X.Y.Z+1` existe deja (autre hotfix en cours sur la meme ligne) -> le reutiliser
+(matching par prefixe de version — un nom descriptif eventuel sur ce milestone n'empeche pas la detection).
 
 ### 2. FIX
 

@@ -2,6 +2,65 @@
 
 Historique des versions du projet BuzzControl.
 
+## [Unreleased] - Milestone v6.4.1 — Bugfix CI/Infra (#27)
+
+**Issues** : #151 (durcissement goroutines), #153 (job CI testing), #161 (nettoyage code mort),
+#178 (offsets admin en dur), #181 (artefacts + .gitignore). Cycle de correction ciblée sur la
+stabilité du moteur de jeu (concurrence), réparation de pipelines CI, et hygiène du dépôt.
+
+### Fixed
+- **Cinq goroutines du moteur de jeu (countdown, timer, MEMOTION) sans `recover()`** (#151) —
+  Quatre tickers `engine.go` (countdown, timer, motion card, motion memorize) étaient non protégés
+  contre les panics : un panic en dehors d'une section verrouillée (`e.mu.Lock()`) laissait le
+  mutex enfermé à jamais (trap habituel des `recover()` naïfs). Extraits en méthodes séparées
+  (`process*Tick`) avec verrous manuels et `defer Unlock()` — garantit la libération même en cas
+  de panic avant que le handler `recoverBackgroundPanic` ne prenne le relais. Site auto-flip-back
+  MEMORY (`main.go`) recouvert d'un `recover()` simple, réutilisant le formateur `server.LogRecoveredPanic`. Cinq tests de régression validés sous `-race` (countdown, timer, MEMOTION carte, MEMOTION mémorisation, auto-flip-back). Suivi 97db8ea : corrige aussi une vraie race sur les hooks de test eux-mêmes (`testInjectPanic`, `testInjectMemoryFlipBackPanic` lues/écrites par goroutines concurrentes sans synchro), et réarrête un test logiquement biaisé (goroutine orpheline source de flakiness intermittente).
+- **Job CI `testing` cassé sur checkout propre** (#153) — `go:embed all:dist` exigeait que
+  `web/dist/` soit construit avant `go test ./cmd/server/...`, mais le job n'exécutait pas les
+  étapes npm préalables (contrairement au job `compiling`). Fix : miroir la séquence complète
+  `npm run build && cp -r web/dist dist/` du job `compiling` avant `go test`. Justifié par
+  `fonts_route_test.go`, qui vérifie les polices réellement embarquées.
+- **Offsets chrome admin en dur (60px, 64px) remplacés par variables mesurées** (#178) —
+  `UpdatePage.css` et `LogsPage.css` portaient les deux derniers nombres magiques d'offset admin,
+  alors que les 8 autres pages admin avaient déjà migré vers `--admin-chrome-h` et `--navbar-h`
+  mesurées dynamiquement (#177/#179). Alignement : utilisation des mêmes variables, pas de
+  nouvelles constantes ad hoc.
+
+### Changed
+- **Hygiène du dépôt : artefacts volumineux supprimés + `.gitignore` durci** (#181) —
+  Suppression des binaires non trackés (`server-go/buzzcontrol*`, `node_modules/`, fichiers
+  temporaires VS Code et editors), archivage de huit `QUALIF_REPORT_*.md` (historique git
+  conservé par renommage, pas de perte), et renforcement de `.gitignore` pour empêcher les
+  futures mêmes accumulations. Cinq livrables légitimes préservés : contrat `ai-key-validation.md`,
+  maquette #160 `anim-memotion-160.html`, deux release notes v3.7.0 et v6.3.0 stockées en
+  `docs/releases/`, huit rapports de qualification archivés en `docs/qualif/`. À trancher
+  ultérieurement : mockup `anim-communication-176-updated.html` et binaire ARM64 `server-go/buzzcontrol` (historique de déploiement ancien, hors scope de ce cycle).
+
+### Removed
+- **Code mort `PlayerPage.jsx` et `PlayerPage.css`** (#161) — Deux fichiers du frontend
+  devenus orphelins (jamais utilisés depuis les débuts du projet, aucune route qui les
+  importait). Suppression propre, vérifiée par grep : aucune référence résiduelle au composant
+  `PlayerPage` dans le codebase (seul `VPlayerPage`, actif, subsiste).
+
+### Technical
+- **Go** — Durcissement panic-recovery : extracting de la logique verrouillée en méthodes avec
+  `defer`, réutilisation du formateur partagé `LogRecoveredPanic` (#131). Tests ciblés de
+  régression sur les 5 sites (countdown, timer, MEMOTION carte, MEMOTION mémorisation, auto-flip-back),
+  vérifiés sous `-race` (aucune race détectée). Race détectée et corrigée sur les hooks de test
+  eux-mêmes (test isolation).
+- **CI** — Job `testing` : aligne la séquence npm du job `compiling` (React build + dist copy)
+  avant `go:embed` et `go test`. `GO_VERSION` aligné à `1.24` (matche `go.mod`) dans les deux
+  jobs.
+- **Frontend CSS** — Deux dernières pages admin (`UpdatePage`, `LogsPage`) migrées vers les
+  variables dynamiques `--admin-chrome-h` et `--navbar-h`, alignement avec les 8 autres pages
+  qui avaient introduit `useElementHeightVar` en #177/#179.
+- **Tests** — Procédure manuelle `tests/procedures/v6.4.1.md` couvre l'ensemble des 5 issues
+  (Scénarios 1-5 : cycle complet #151, navigation #161, job CI #153, recette visuelle #178, hygiène
+  #181). Tests automatisés : panic-recovery (5/5), grep de non-régression (3/3), vérification
+  des livrables préservés (4/4). Scénarios navigateur et build QUALIF restent à la charge de
+  l'utilisateur (pas de navigateur en session `qa`).
+
 ## [6.5.0] - Milestone v6.4.x — Communication Animateur (#26)
 
 **Issues** : #167 (messagerie régie), #168 (note d'explication), #175 (menu Quitter régie),

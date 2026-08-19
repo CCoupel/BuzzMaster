@@ -92,19 +92,20 @@ La version recuperee est utilisee dans toutes les sections du site (Hero, Featur
 Dans la phase COLLECTE, recuperer les donnees du milestone correspondant a la version :
 
 ```bash
-# Milestone cloture correspondant a la version (source principale)
-gh api repos/{owner}/{repo}/milestones \
-  --jq '.[] | select(.title=="<version>")'
+# Milestone cloture correspondant a la version — matching par PREFIXE, jamais par titre exact
+# (le titre reel peut porter un nom descriptif apres " — ", voir context/COMMON.md section 5.7)
+TITLE=$(gh api repos/{owner}/{repo}/milestones \
+  --jq ".[] | select(.title == \"<version>\" or (.title | startswith(\"<version> — \"))) | .title")
 
 # Issues fermees dans ce milestone (= ce qui a ete livre)
-gh issue list --milestone "<version>" --state closed \
+gh issue list --milestone "$TITLE" --state closed \
   --json number,title,labels \
   --jq '.[] | [.number, .title, (.labels | map(.name) | join(", "))] | @tsv'
 
 # Issues ouvertes dans le prochain milestone (= roadmap "a venir")
-gh api repos/{owner}/{repo}/milestones \
-  --jq '[.[] | select(.state=="open")] | sort_by(.due_on) | .[0]' | \
-  xargs -I{} gh issue list --milestone "{}" --state open \
+NEXT_TITLE=$(gh api repos/{owner}/{repo}/milestones \
+  --jq '[.[] | select(.state=="open")] | sort_by(.due_on) | .[0].title')
+gh issue list --milestone "$NEXT_TITLE" --state open \
   --json number,title,labels
 ```
 

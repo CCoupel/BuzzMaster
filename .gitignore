@@ -94,6 +94,18 @@ Thumbs.db
 server-go/data/config/
 server-go/data/files/questions/
 server-go/data/files/backgrounds/
+server-go/data/files/new-game-backgrounds/
+server-go/data/files/*.png
+
+# BuzzControl - Artefacts de build/QUALIF non trackés (#181)
+server-go/buzzcontrol-*
+server-go/test-report-*.txt
+server-go/build/
+server-go/QA_REPORT_*.md
+/QUALIF_REPORT_*.md
+/.vite/
+/build/
+/tmp/
 
 # BuzzControl - Build outputs
 server-go/releases/
