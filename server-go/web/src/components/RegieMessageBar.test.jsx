@@ -681,12 +681,12 @@ describe('RegieMessageBar — mesure de hauteur via --regie-bar-h (#177, T1)', (
     const observer = ResizeObserverMock.instances[0]
     const setPropertySpy = vi.spyOn(document.documentElement.style, 'setProperty')
 
-    act(() => { observer.fire(44.4) }) // arrondit à 44
-    act(() => { observer.fire(44.2) }) // arrondit aussi à 44 — pas de nouvelle écriture attendue
+    act(() => { observer.fire(44.4) }) // #180 — Math.ceil : arrondit à 45
+    act(() => { observer.fire(44.2) }) // arrondit aussi à 45 — pas de nouvelle écriture attendue
 
     const regieBarHCalls = setPropertySpy.mock.calls.filter(call => call[0] === '--regie-bar-h')
     expect(regieBarHCalls).toHaveLength(1)
-    expect(document.documentElement.style.getPropertyValue('--regie-bar-h')).toBe('44px')
+    expect(document.documentElement.style.getPropertyValue('--regie-bar-h')).toBe('45px')
 
     setPropertySpy.mockRestore()
   })

@@ -15,9 +15,14 @@ import { useEffect, useRef } from 'react'
  * - Mesure initiale via `getBoundingClientRect().height`, puis suivi par
  *   `ResizeObserver` (`borderBoxSize` quand disponible, repli sur
  *   `contentRect.height`).
- * - N'écrit la variable CSS que si la valeur **arrondie** change — évite des
- *   invalidations de layout à chaque fraction de pixel rapportée par
- *   `ResizeObserver`.
+ * - N'écrit la variable CSS que si la valeur **arrondie au pixel supérieur**
+ *   (`Math.ceil`, #180) change — évite des invalidations de layout à chaque
+ *   fraction de pixel rapportée par `ResizeObserver`. `Math.ceil` plutôt que
+ *   `Math.round` (#177/#179 d'origine) : un arrondi standard peut SOUS-estimer
+ *   la hauteur réelle (ex. 44.3px → 44px), donc réserver un peu moins que la
+ *   place réellement occupée — suffisant pour déclencher une scrollbar selon
+ *   le zoom/la résolution. `Math.ceil` garantit une réservation TOUJOURS
+ *   ≥ la hauteur réelle.
  * - Nettoyage au démontage : `disconnect()` de l'observer **et** remise de
  *   la variable à `0px` — aucune réservation résiduelle si l'élément mesuré
  *   n'est plus monté (ex. navigation vers une route plein écran).
@@ -36,7 +41,9 @@ export default function useElementHeightVar(ref, varName) {
     if (!el) return
 
     const applyHeight = (height) => {
-      const rounded = Math.round(height)
+      // #180 — Math.ceil, pas Math.round : la réservation d'espace doit
+      // toujours être >= la hauteur réelle, jamais en dessous.
+      const rounded = Math.ceil(height)
       if (rounded === lastHeightRef.current) return
       lastHeightRef.current = rounded
       document.documentElement.style.setProperty(varName, `${rounded}px`)

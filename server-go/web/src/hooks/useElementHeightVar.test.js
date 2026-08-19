@@ -136,12 +136,12 @@ describe("useElementHeightVar — n'écrit pas si la valeur arrondie est inchang
     const observer = ResizeObserverMock.instances[0]
     const setPropertySpy = vi.spyOn(document.documentElement.style, 'setProperty')
 
-    act(() => { observer.fire(44.4) }) // arrondit à 44
-    act(() => { observer.fire(44.2) }) // arrondit aussi à 44 — pas de nouvelle écriture attendue
+    act(() => { observer.fire(44.4) }) // #180 — Math.ceil : arrondit à 45
+    act(() => { observer.fire(44.2) }) // arrondit aussi à 45 — pas de nouvelle écriture attendue
 
     const calls = setPropertySpy.mock.calls.filter(call => call[0] === VAR_NAME)
     expect(calls).toHaveLength(1)
-    expect(document.documentElement.style.getPropertyValue(VAR_NAME)).toBe('44px')
+    expect(document.documentElement.style.getPropertyValue(VAR_NAME)).toBe('45px')
 
     setPropertySpy.mockRestore()
   })
