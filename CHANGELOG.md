@@ -2,7 +2,7 @@
 
 Historique des versions du projet BuzzControl.
 
-## [Unreleased] - Milestone v6.4.1 — Bugfix CI/Infra (#27)
+## [6.5.1] - Milestone v6.5.1 — Bugfix CI/Infra (#27)
 
 **Issues** : #151 (durcissement goroutines), #153 (job CI testing), #161 (nettoyage code mort),
 #178 (offsets admin en dur), #181 (artefacts + .gitignore). Cycle de correction ciblée sur la
