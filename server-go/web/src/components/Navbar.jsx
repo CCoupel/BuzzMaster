@@ -2,6 +2,7 @@ import { useState, useRef, useEffect, useMemo } from 'react'
 import { NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { useUpdates } from '../hooks/useUpdates'
+import useElementHeightVar from '../hooks/useElementHeightVar'
 import './Navbar.css'
 
 // Sévérité agrégée d'un groupe de participants (vjoueur/buzzer) à partir de
@@ -44,6 +45,15 @@ export default function Navbar({ connectionStatus = 'disconnected', clientCounts
   const menuRef = useRef(null)
   const buttonRef = useRef(null)
   const { updateInfo, checkForUpdates } = useUpdates()
+
+  // #179 (F3) — mesure la hauteur RÉELLE de la Navbar (jamais garantie par
+  // son CSS, qui ne déclare aucune hauteur fixe) et la partage via
+  // --navbar-h (App.css F4), consommée par --admin-chrome-h. Même hook que
+  // RegieMessageBar (#177/#179, useElementHeightVar) : cleanup (disconnect +
+  // remise à 0px) géré par le hook, nécessaire ici aussi puisque la Navbar
+  // est démontée sur les routes plein écran (App.jsx, `{!hideNavbar && ...}`).
+  const navRef = useRef(null)
+  useElementHeightVar(navRef, '--navbar-h')
 
   // Compteurs participants (X/Y) — calculés côté client depuis `bumpers`
   // (porte TEAM + CONN_STATE), pas depuis CLIENTS (qui ignore la notion d'équipe).
@@ -187,7 +197,7 @@ export default function Navbar({ connectionStatus = 'disconnected', clientCounts
   }
 
   return (
-    <nav className="navbar">
+    <nav className="navbar" ref={navRef}>
       <div className="navbar-brand">
         <div className="brand-logo-container">
           <button

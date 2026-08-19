@@ -1,17 +1,22 @@
-/* #177 (F2) — source unique de l'offset de chrome des pages /admin/*.
-   --regie-bar-h est la hauteur RÉELLE et MESURÉE du bandeau régie (F1,
-   RegieMessageBar.jsx : ResizeObserver -> document.documentElement.style.
-   setProperty), avec un repli à 44px (hauteur nominale) le temps du tout
-   premier rendu, avant que F1 n'ait mesuré quoi que ce soit — évite un saut
-   visuel. --admin-chrome-h centralise le nombre magique 120px (Navbar ~72px
-   + padding-top 24px + padding-bottom 24px, vrai avant #167) dans un SEUL
-   fichier au lieu de huit (pages/*.css, F3) : la classe de bug corrigée ici
-   ("une constante a dérivé") ne peut plus se reproduire silencieusement.
+/* #177/#179 (F2/F4) — source unique de l'offset de chrome des pages
+   /admin/*, désormais SANS AUCUNE constante en pixels :
+     - --navbar-h est la hauteur RÉELLE et MESURÉE de la Navbar (#179/F3,
+       Navbar.jsx via hooks/useElementHeightVar.js) — son CSS ne déclare
+       aucune hauteur fixe, "72px" n'a jamais été garanti.
+     - --regie-bar-h est la hauteur RÉELLE et MESURÉE du bandeau régie
+       (#177/F1, RegieMessageBar.jsx, même hook).
+     - var(--space-6) * 2 dérive le padding (haut + bas de .main-content) du
+       token, plutôt que de le figer en littéral ("48px") décorrélé de sa
+       source — si --space-6 change un jour, l'invariant reste juste.
+   Repli 72px/44px le temps du tout premier rendu, avant que les hooks
+   n'aient mesuré quoi que ce soit — évite un saut visuel (AC8, #177/#179).
    Invariant à préserver si ce chrome change un jour :
-     Navbar + padding-top + (100vh - --admin-chrome-h) + padding-bottom = 100vh */
+     Navbar (--navbar-h) + padding-top (--space-6) + (100vh - --admin-chrome-h)
+       + padding-bottom (--space-6 + --regie-bar-h) = 100vh */
 :root {
+  --navbar-h: 72px;
   --regie-bar-h: 44px;
-  --admin-chrome-h: calc(120px + var(--regie-bar-h));
+  --admin-chrome-h: calc(var(--navbar-h) + var(--space-6) * 2 + var(--regie-bar-h));
 }
 
 /* App Layout */
