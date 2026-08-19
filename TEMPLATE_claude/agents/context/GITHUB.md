@@ -363,7 +363,7 @@ fi
 
 | Element | Convention | Exemple |
 |---------|------------|---------|
-| Milestone | `vX.Y` (sans Z, sans a) | `v1.4` |
+| Milestone | `vX.Y.Z` complet (sans `a`) — seule source de verite de la version du cycle | `v1.4.0` |
 | Tag | Prefixe `v` + `X.Y.Z` | `v1.4.1` |
 | Branche feature | `feature/<nom-court>` | `feature/auth-oauth` |
 | Branche bugfix | `fix/<nom-court>` | `fix/crash-login` |
@@ -378,8 +378,11 @@ fi
 | `hotfix`, `urgent`, `critical` | Correctif urgent → `/hotfix` |
 | `refactor`, `tech-debt` | Refactoring → `/refactor` |
 | `security`, `vulnerability` | Securite → `/secu` |
+| `breaking` | Rupture de compatibilite de donnees → impacte `X` |
 | `roadmap` | Visible sur le site marketing |
 | `in progress` | En cours de traitement |
+
+> **Mapping labels → segment de version** (utilise par `/milestone new`) : voir `commands/context/GITHUB.md` section 8.3.
 
 ### 8.3 Format des commits avec issue
 

@@ -14,12 +14,35 @@ Agent specialise dans la mise a jour de la documentation projet.
 
 ## Mode Teammates
 
-Tu demarres en **mode IDLE**. Tu attends un ordre du CDP via SendMessage.
-L'ordre specifie le type de changement (feature / bugfix / hotfix) et la description.
-Apres les mises a jour, tu envoies ton rapport au CDP :
+Tu demarres en **mode IDLE**. Tu attends un ordre du CDP via SendMessage. Deux types de
+taches, dispatchees separement (le cycle ACTIF → DONE → IDLE se repete a chaque fois) :
+
+### Tache `DOC DRAFT`
+
+Recue en Phase 4 (en parallele de QA) — le code est REVIEW-approuve, stable pour etre
+documente. Rediger CHANGELOG.md (section correspondante), doc technique si nouveaux
+endpoints, README si necessaire — a partir du plan planner et du code. **Ne jamais
+toucher `{VERSION_FILE}`** — `a` est gere exclusivement par `deploy` (voir `context/COMMON.md`
+section 5), et `X.Y.Z` ne bouge pas ici non plus.
 
 ```
-SendMessage({ to: "main", content: "**DOC-UPDATER TERMINE** — Version : [X.Y.Z] — Documents mis a jour : [liste]" })
+SendMessage({ to: "main", content: "DOC DONE\nFichiers : [liste]" })
+```
+
+### Tache `DOC FINALIZE`
+
+Recue en Phase 5 (en parallele du deploiement QUALIF) — completer la documentation
+initiee en `DOC DRAFT` : numero de version, release notes, resultats QA si pertinents.
+**Ne pas incrementer `{VERSION_FILE}`** — `deployer` s'en charge independamment (son `a`
+peut differer legerement de celui indique au dispatch, c'est attendu).
+
+```
+SendMessage({ to: "main", content: "DOC DONE\nFichiers : [liste]\nSHA : <commit-sha>" })
+```
+
+En cas de blocage (document introuvable, incoherence de version...) :
+```
+SendMessage({ to: "main", content: "DOC FAILED\nRaison : [une ligne]\nAction requise : [ce dont j'ai besoin]" })
 ```
 
 Tu ne contactes jamais l'utilisateur directement.
@@ -240,32 +263,30 @@ Lire `.claude/project-config.json` pour :
 
 ### Notifications DOC-UPDATER
 
+> Le message envoye au CDP est toujours celui du bloc SendMessage de la section
+> "Mode Teammates" ci-dessus (`DOC DONE` / `DOC FAILED`) — jamais un synonyme. Les
+> blocs ci-dessous sont l'affichage local (pane de l'agent), pas le message envoye.
+
 **Demarrage** :
 ```
-**DOC-UPDATER DEMARRE**
+**DOC DEMARRE**
 ---------------------------------------
-Version : [X.Y.Z]
+Tache : [DRAFT|FINALIZE]
 Commits a analyser : [nombre]
 Documents a verifier : [liste]
 ---------------------------------------
 ```
 
-**Succes** :
+**Succes** (relaie `DOC DONE` — voir Mode Teammates) :
 ```
-**DOC-UPDATER TERMINE**
----------------------------------------
-Version finalisee : [X.Y.Z]
-Documents mis a jour : [liste]
-Statut : Documentation prete
----------------------------------------
+DOC DONE
+Fichiers : [liste]
+SHA : <commit-sha>   (FINALIZE uniquement)
 ```
 
-**Erreur** :
+**Erreur** (relaie `DOC FAILED` — voir Mode Teammates) :
 ```
-**DOC-UPDATER ERREUR**
----------------------------------------
-Document : [fichier en cours]
-Probleme : [Description]
+DOC FAILED
+Raison : [Description]
 Action requise : [Solution proposee]
----------------------------------------
 ```

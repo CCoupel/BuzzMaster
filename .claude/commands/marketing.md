@@ -268,7 +268,7 @@ Task({
 ```
 
 Attendre ACTIF, puis envoyer la tâche de préparation :
-`SendMessage({to: "marketing-release", content: "PREPARE vX.Y"})`
+`SendMessage({to: "marketing-release", content: "PREPARE vX.Y.Z"})`
 
 À réception de `MARKETING RIEN A PUBLIER` → `TaskStop("marketing-release")`, terminé.
 

@@ -48,26 +48,43 @@ Declenche si `$ARGUMENTS` commence par `new`.
 gh repo view --json owner,name --jq '"repos/" + .owner.login + "/" + .name'
 ```
 
-### Etape 2 — Valider la version cible
+### Etape 2 — Completer et valider la version cible
 
-> Voir `context/COMMON.md` section 5.7 — le titre du milestone pinne la version prod du cycle.
+> Voir `context/COMMON.md` section 5.7 — le titre du milestone fixe integralement `X.Y.Z`, seule source de verite pour tout le cycle.
 
-`<version>` (`vX.Y`) doit correspondre au prochain Y pair valide, soit `Y_prod_actuel + 2`.
-
-```bash
-# Derniere version prod connue (dernier tag)
-LAST_PROD=$(git tag --list 'v*' --sort=-v:refname | head -1)   # ex: v3.0.1
+**a) `X` et `Y` obligatoires** — si `<version>` n'en precise pas un, le demander explicitement a l'utilisateur avant de continuer (jamais de valeur par defaut) :
+```
+Version incomplete : <version>. X et Y sont obligatoires (ex: v1.4). Quelle version cible ?
 ```
 
-Comparer le `X.Y` de `<version>` a celui de `LAST_PROD` :
+**b) `Z` optionnel, complete automatiquement** :
+```bash
+# Releases existantes pour ce X.Y
+EXISTING_Z=$(git tag --list "v${X}.${Y}.*" --sort=-v:refname | head -1)   # ex: v1.4.2
+```
+- Si `<version>` precise deja `Z` → le garder tel quel.
+- Sinon, si des tags `vX.Y.*` existent → `Z = Z_max + 1`.
+- Sinon (aucune release `X.Y.*`) → `Z = 0`.
 
-- **`Y` = `Y_LAST_PROD` + 2** → coherent, continuer a l'etape 3.
-- **Ecart** → alerter avant de creer :
+Le titre du milestone est cree avec `vX.Y.Z` complet — jamais de `Z` implicite.
+
+**c) Unicite et ordre** :
+```bash
+# Derniere version prod connue (dernier tag, toutes lignes confondues)
+LAST_PROD=$(git tag --list 'v*' --sort=-v:refname | head -1)
+# Milestones existants avec ce titre exact
+gh api repos/{owner}/{repo}/milestones --jq ".[] | select(.title==\"v${X}.${Y}.${Z}\")"
+```
+- Si un tag ou un milestone `vX.Y.Z` existe deja → alerter, ne pas creer :
   ```
-  Attention : le dernier prod est <LAST_PROD>, le prochain Y pair attendu est v<X>.<Y_LAST_PROD + 2>.
-  <version> ne correspond pas a cette suite. Continuer quand meme ? [O/n]
+  vX.Y.Z existe deja (tag ou milestone). Choisir une autre version.
   ```
-  Si non → annuler, ne pas creer le milestone.
+- Si `vX.Y.Z` n'est pas strictement posterieur a `LAST_PROD` → alerter, ne pas creer :
+  ```
+  vX.Y.Z n'est pas posterieur a la derniere version livree (<LAST_PROD>). Choisir une autre version.
+  ```
+
+**d) Coherence avec les labels des issues** — reportee a l'etape 5, une fois les issues selectionnees (voir `context/GITHUB.md` section 8.3 pour le mapping labels -> segment).
 
 ### Etape 3 — Creer le milestone sur GitHub
 
@@ -124,6 +141,27 @@ Pour chaque issue selectionnee :
 ```bash
 gh issue edit <numero> --milestone "<version>"
 ```
+
+### Etape 6 — Verifier la coherence labels ↔ version
+
+> Voir `context/GITHUB.md` section 8.3 — mapping labels -> segment de version.
+
+Recuperer les labels de **toutes** les issues actuellement associees au milestone (celles de l'etape 5, jamais en delta) :
+
+```bash
+gh issue list --milestone "<version>" --json labels --jq '[.[].labels[].name] | unique'
+```
+
+Determiner le segment le plus fort attendu (`breaking` > `feature`/`enhancement` > le reste) et comparer au segment reellement incremente par `<version>` par rapport a `LAST_PROD` (X different → X, sinon Y different → Y, sinon → Z).
+
+Si incoherence → avertissement **non-bloquant** :
+```
+⚠️  Attention : issue(s) <label> incluses mais seul <segment> a change dans <version>.
+Continuer quand meme ? [O/n]
+```
+Si non → proposer de corriger la version ou la liste d'issues, sans annuler ce qui est deja cree.
+
+Cette meme verification (sur l'ensemble des issues associees, jamais en delta) se redeclenche a chaque association ulterieure d'une issue au milestone en cours de cycle (`gh issue edit --milestone`).
 
 Afficher le recapitulatif final :
 
@@ -243,7 +281,7 @@ Si des issues sont encore ouvertes, proposer :
 2 issues non terminees. Que faire ?
 
   [A] Reporter vers le prochain milestone
-      → Entrer le nom du prochain milestone (ex: v1.6 — Y pair suivant, voir context/COMMON.md section 5)
+      → Entrer le nom du prochain milestone (ex: v1.5.0, voir context/COMMON.md section 5)
   [B] Fermer toutes les issues et cloturer
       → Les issues seront fermees avec le commentaire "Cloture avec le milestone <version>"
   [C] Cloturer le milestone sans toucher aux issues

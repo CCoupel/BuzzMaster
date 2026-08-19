@@ -365,14 +365,14 @@ Les fichiers sont déployés depuis `TEMPLATE_claude/` vers `.claude/` :
 ```
 commands/feature.md → .claude/commands/feature.md        (invocable /feature)
 agents/cdp.md       → .claude/agents/cdp.template.md     (immutable)
+commands/context/COMMON.md → .claude/commands/context/COMMON.template.md (immutable)
 ...
 ```
 
 #### Convention template / projet
 
 **Commandes** : déployées en `*.md`, directement invocables (`/feature`, `/bugfix`...).
-Ne pas les éditer — elles sont écrasées à chaque sync. Pour adapter une commande,
-écrire dans les fichiers `context/` qu'elle référence.
+Ne pas les éditer — elles sont écrasées à chaque sync, sans compagnon.
 
 **Agents** : déployés en `*.template.md`, avec un fichier compagnon `*.md` optionnel :
 
@@ -384,7 +384,21 @@ Ne pas les éditer — elles sont écrasées à chaque sync. Pour adapter une co
 Claude lit les deux à chaque invocation. Pour adapter un agent, créer le fichier
 `*.md` correspondant avec uniquement les règles spécifiques.
 
-Les projets sans adaptation n'ont pas besoin de créer de fichier `*.md`.
+**Contextes partagés** (`context/COMMON.md`, `context/GITHUB.md`... référencés par les commandes
+et les agents) : même convention que les agents — un compagnon optionnel par fichier, jamais
+écrasé par la sync :
+
+```
+.claude/commands/context/COMMON.template.md   ← template (sync automatique, ne jamais éditer)
+.claude/commands/context/COMMON.md            ← adaptations projet (tracké git, jamais écrasé)
+```
+
+Une référence "voir `context/COMMON.md`" dans une commande ou un agent désigne ce concept
+logique — elle se résout en lisant `COMMON.template.md` puis `COMMON.md` compagnon s'il existe,
+les règles projet primant en cas de conflit. Pour adapter une commande ou une règle partagée,
+créer/éditer le compagnon `context/X.md` correspondant.
+
+Les projets sans adaptation n'ont pas besoin de créer de fichier `*.md` (agents comme contextes).
 
 ## Reinitialisation et synchronisation
 
@@ -490,8 +504,7 @@ Le deployer ne corrige jamais lui-même — il remonte les faits, `main` décide
 
 ### Séparation template / adaptations projet
 
-**Commandes** (`*.md`) : directement invocables, gérées par sync, ne pas éditer.
-Personnalisation via les fichiers `context/` (ex: `context/COMMON.md`).
+**Commandes** (`*.md`) : directement invocables, gérées par sync, ne pas éditer, sans compagnon.
 
 **Agents** : pattern template + compagnon projet optionnel :
 
@@ -500,8 +513,15 @@ Personnalisation via les fichiers `context/` (ex: `context/COMMON.md`).
 .claude/agents/cdp.md            ← adaptations projet, tracké git
 ```
 
-Claude lit les deux automatiquement. À chaque sync, une analyse de dérive détecte,
-règle par règle :
+**Contextes partagés** (`context/COMMON.md`, `context/GITHUB.md`...) : même pattern que les agents :
+
+```
+.claude/commands/context/COMMON.template.md   ← géré par sync, jamais édité
+.claude/commands/context/COMMON.md            ← adaptations projet, tracké git
+```
+
+Claude lit les deux automatiquement (template puis compagnon s'il existe). À chaque sync,
+une analyse de dérive détecte, règle par règle, sur les agents ET les contextes partagés :
 - Le template qui a rattrapé une règle projet (`[↓]` simplification possible — la règle
   peut être retirée du compagnon puisqu'elle est désormais couverte par le template)
 - Un fichier projet qui a grossi (`[↑]` vérifier l'intentionnalité)

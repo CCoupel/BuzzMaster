@@ -17,10 +17,10 @@ Role: Orchestrer workflows multi-agents avec validation utilisateur
 
 | Commande | Type | Workflow | Version |
 |----------|------|----------|---------|
-| `/feature` | FEATURE | Complet | Nouveau milestone -> `Y+1 ; Z=0 ; a=0` |
-| `/bugfix` | BUGFIX | Simplifie | Milestone actif -> `a+1` seul ; sinon -> `Z+1 ; a=0` |
-| `/hotfix` | HOTFIX | Accelere | Toujours `Z+1 ; a=0` (meme si un milestone est en cours) |
-| `/refactor` | REFACTOR | Leger | Aucun changement (`a+1` sur les commits) |
+| `/feature` | FEATURE | Complet | Rattache a un milestone (nouveau ou existant) — `X.Y.Z` fixe par son titre |
+| `/bugfix` | BUGFIX | Simplifie | Milestone actif -> aucun changement (commits normaux) ; sinon -> milestone `X.Y.Z+1` cree automatiquement |
+| `/hotfix` | HOTFIX | Accelere | Milestone `X.Y.Z+1` cree automatiquement si absent, meme si un autre milestone est en cours |
+| `/refactor` | REFACTOR | Leger | Rattache au milestone actif — aucun changement de version (`a` gere par `deploy` au prochain deploiement QUALIF) |
 
 ---
 
@@ -109,9 +109,15 @@ Si des zones d'ombre existent → les lister et attendre la validation utilisate
         --json number,title,labels
       → ajouter toutes les issues ouvertes du milestone à ISSUE_NUMS[] (dédupliquer)
 
+   c. Si MILESTONE_NUM toujours indéfini (BUGFIX/HOTFIX sans milestone actif) :
+      → créer automatiquement le milestone cible `X.Y.Z+1` (Z+1 sur la dernière version prod livrée)
+        en suivant la logique de `/milestone new` (`commands/milestone.md` Mode NEW,
+        `context/COMMON.md` section 5.7) → MILESTONE_NUM
+      → tout développement doit être rattaché à un milestone, aucun cycle hors milestone (section 5.4)
+
 4. Persister dans workflow-state.json :
    issue_nums: ISSUE_NUMS[]
-   milestone_num: MILESTONE_NUM (ou null si aucun)
+   milestone_num: MILESTONE_NUM (obligatoire, jamais null)
 
 5. Évaluer la complétude de la spec (critères ci-dessous)
 
@@ -214,12 +220,12 @@ pour chaque issue_num dans ISSUE_NUMS[] :
 
 ### Milestone — Suivi de Complétion
 
-> **Condition** : s'applique si `MILESTONE_NUM` est défini (construit en CLARIFICATION).
-> **Nommage** : le titre du milestone est `vX.Y` (sans Z). Voir "Convention Milestone" ci-dessus.
+> **Condition** : s'applique toujours — `MILESTONE_NUM` est désormais obligatoire (construit ou créé automatiquement en CLARIFICATION, voir "Convention Milestone" ci-dessous).
+> **Nommage** : le titre du milestone est `vX.Y.Z` complet. Voir "Convention Milestone" ci-dessous.
 
 | Moment | Action |
 |--------|--------|
-| Deploy PROD OK (tag `vX.Y.0`) | `gh issue list --milestone "<title>" --state open --json number,title` |
+| Deploy PROD OK (tag `vX.Y.Z`) | `gh issue list --milestone "<title>" --state open --json number,title` |
 | Milestone à 100% (liste vide) | Fermer : `mcp__plugin_github_github__issue_write` (milestone state: closed) + consigner la version livrée dans la description (écriture ponctuelle, `COMMON.md` section 5.7) + informer l'utilisateur |
 | Issues encore ouvertes | Alerter l'utilisateur avec la liste des issues restantes et leur label actuel |
 
@@ -228,45 +234,42 @@ pour chaque issue_num dans ISSUE_NUMS[] :
 ### Phase Init (Git)
 
 ```bash
-# FEATURE
+# FEATURE / BUGFIX / HOTFIX / REFACTOR — meme sequence, prefixe de branche different
 git checkout main && git pull origin main
-git checkout -b feature/<nom-court>
+git checkout -b <feature|bugfix|hotfix|refactor>/<nom-court>
 
-# BUGFIX
-git checkout main && git pull origin main
-git checkout -b bugfix/<nom-court>
-
-# HOTFIX (depuis production)
-git checkout main && git pull origin main
-git checkout -b hotfix/<nom-court>
-
-# REFACTOR
-git checkout main && git pull origin main
-git checkout -b refactor/<nom-court>
+# Ecriture de la version du milestone (X.Y.Z fixe par son titre, voir Phase Versionnement
+# ci-dessous) — a la charge de CDP, avant tout commit DEV :
+echo "X.Y.Z.0" > {VERSION_FILE}   # adapter selon le format reel de {VERSION_FILE}
+git add {VERSION_FILE}
+git commit -m "chore(version): Start vX.Y.Z.0 - <nom-court>"
+git push -u origin <feature|bugfix|hotfix|refactor>/<nom-court>
 ```
 
 ### Phase Versionnement
 
-**Référence complète** : `context/COMMON.md` section 5 (format `X.Y.Z.a`, les 5 opérations).
+**Référence complète** : `context/COMMON.md` section 5 (format `X.Y.Z.a`, cycle de vie de la version).
+
+Le milestone GitHub actif est la **seule source de vérité** pour `X.Y.Z` — plus aucun agent ne recalcule ces segments. Tout workflow est rattaché à un milestone.
 
 | Type | Condition | Action | Exemple |
 |------|-----------|--------|---------|
-| FEATURE | Toujours | Nouveau milestone : `Y+1 ; Z=0 ; a=0` | dev `1.3.0.0` → prod `1.4.0` |
-| BUGFIX | Milestone actif | Intégré aux itérations du milestone : `a+1` (Z inchangé) | dev `1.3.0.2` → prod `1.4.0` (fix inclus) |
-| BUGFIX | Aucun milestone actif | Nouveau cycle bugfix : `Z+1 ; a=0` (reprend le Y de dev de la dernière wave) | dev `1.3.1.0` → prod `1.4.1` |
-| HOTFIX | Toujours (urgence prod) | Nouveau cycle bugfix, même si un milestone est en cours : `Z+1 ; a=0` sur la wave dev de la prod courante | dev `1.3.1.0` → prod `1.4.1` |
-| REFACTOR | — | Aucun changement de version (`a+1` sur les commits) | `1.3.0.4` (inchangé en prod) |
+| FEATURE | Toujours | Rattaché à un milestone (nouveau ou existant, `X.Y.Z` fixé par son titre) | milestone `v1.4.0` → dev `1.4.0.0` → prod `1.4.0` |
+| BUGFIX | Milestone actif | Intégré aux itérations du milestone : commit normal, sans toucher `{VERSION_FILE}`. `a` s'incrémente au prochain deploiement QUALIF, à la charge de `deploy` | milestone `v1.4.0` → dev `1.4.0.0` (fix inclus) → prod `1.4.0` |
+| BUGFIX | Aucun milestone actif | Milestone `X.Y.Z+1` créé automatiquement (Z+1 sur la dernière prod livrée) | dernière prod `1.4.0` → milestone `v1.4.1` créé → dev `1.4.1.0` → prod `1.4.1` |
+| HOTFIX | Toujours (urgence prod) | Milestone `X.Y.Z+1` créé automatiquement si absent, même si un autre milestone est en cours | dernière prod `1.4.0` → milestone `v1.4.1` créé → dev `1.4.1.0` → prod `1.4.1` |
+| REFACTOR | — | Rattaché au milestone actif — aucun changement de version, `a` reste sous la seule responsabilité de `deploy` | `1.4.0.x` (inchangé en prod) |
 
 #### Règle — bug remonté sur une ancienne version prod
 
 Une version prod déjà remplacée n'est **jamais repatchée**. Le fix cible toujours la ligne prod courante, quelle que soit l'ancienneté du bug (voir `context/COMMON.md` section 5.4).
 
-#### Convention Milestone GitHub — nommage `vX.Y`
+#### Convention Milestone GitHub — nommage `vX.Y.Z`
 
-Le titre du milestone GitHub correspond au **Y** de la version prod ciblée : `vX.Y` (sans Z, sans `a`).
-- Un cycle FEATURE crée/utilise le milestone GitHub `vX.Y`, clôturé au deploy PROD (tag `vX.Y.0`).
-- Un cycle BUGFIX/HOTFIX sans milestone actif (`Z+1`) ne crée **pas** de nouveau milestone GitHub — le tag `vX.Y.Z` qui en résulte patche silencieusement la dernière livraison.
-- À la création (`/milestone new`), `Y` est validé contre `Y_prod_actuel + 2` avant création. Ce titre devient ensuite la source lue directement par `deploy.template.md` à la promotion, au lieu d'un recalcul — voir `COMMON.md` section 5.7.
+Le titre du milestone GitHub porte la version complète `X.Y.Z` fixée dès sa création — voir `COMMON.md` section 5.7 pour la logique complète de validation (X/Y obligatoires, Z auto-complété, unicité, cohérence labels↔version).
+- Un cycle FEATURE crée/utilise le milestone GitHub `vX.Y.Z`, clôturé au deploy PROD (tag `vX.Y.Z` identique).
+- Un cycle BUGFIX/HOTFIX sans milestone actif crée automatiquement le milestone `vX.Y.(Z+1)` — plus de cycle "hors milestone" qui patcherait silencieusement une livraison.
+- `deploy.template.md` lit `X.Y.Z` directement depuis `{VERSION_FILE}` à la promotion (déjà fixé par le milestone à l'ouverture du cycle) — aucun recalcul.
 
 ### Phase Plan
 

@@ -149,8 +149,8 @@ Afficher et demander :
 
 ```
 Milestones disponibles :
-  1. v1.2  (3 issues ouvertes)
-  2. v1.3  (0 issues ouvertes)
+  1. v1.2.0  (3 issues ouvertes)
+  2. v1.3.0  (0 issues ouvertes)
   3. Aucun milestone
 
 Associer cette issue à quel milestone ? [1/2/3]

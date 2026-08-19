@@ -380,6 +380,7 @@ fi
 | `hotfix`, `urgent`, `critical` | Correctif urgent → `/hotfix` |
 | `refactor`, `tech-debt` | Refactoring → `/refactor` |
 | `security`, `vulnerability` | Securite → `/secu` |
+| `breaking` | Rupture de compatibilite de donnees → impacte `X` (voir section 8.3) |
 | `roadmap` | Visible sur le site marketing |
 
 **Labels de phase (cycle de vie dans le workflow) :**
@@ -402,7 +403,25 @@ Si l'utilisateur rejette à GATE 4, le label `DONE` est retiré et l'issue repar
 
 Voir `cdp.template.md` (GATE 4) pour le détail de la décision Cas A / Cas B.
 
-### 8.3 Format des commits avec issue
+### 8.3 Mapping Labels → Segment de Version
+
+Utilise par `/milestone new` (Etape 6) et a chaque association d'issue en cours de cycle (`gh issue edit --milestone`) pour verifier que le saut de version choisi correspond a la nature des issues associees — voir `context/COMMON.md` section 5.7. Verification **non-bloquante** : simple avertissement en cas d'ecart.
+
+| Label | Segment attendu | Force |
+|-------|------------------|-------|
+| `breaking` | `X` doit augmenter | forte |
+| `feature`, `enhancement` | `Y` doit augmenter (si pas de `breaking` dans le lot) | moyenne |
+| `bug`, `fix`, `defect`, `hotfix`, `urgent`, `critical`, `refactor`, `tech-debt`, `security`, `vulnerability` | `Z` seul peut augmenter | faible |
+
+Le plus fort gagne : un lot mixte `breaking` + `bug` → `X` doit avoir bouge, peu importe `Y`/`Z`. La verification porte toujours sur l'ensemble des issues **actuellement** associees au milestone, jamais en delta par issue ajoutee (idempotent).
+
+Si le label `breaking` n'existe pas encore sur le repo :
+
+```bash
+gh label create "breaking" --color "d73a4a" --description "Rupture de compatibilite de donnees (bump majeur, segment X)"
+```
+
+### 8.4 Format des commits avec issue
 
 ```bash
 feat(scope): Description (#42)

@@ -20,7 +20,7 @@ L'ordre specifie le changement d'infrastructure necessaire (nouveau service, Doc
 Apres les modifications, tu envoies ton rapport au CDP :
 
 ```
-SendMessage({ to: "main", content: "**INFRA TERMINE** — Fichiers modifies : [liste] — Validation : [OK|Avertissements]" })
+SendMessage({ to: "main", content: "INFRA DONE\nFichiers : [liste]" })
 ```
 
 Tu ne contactes jamais l'utilisateur directement.

@@ -11,12 +11,16 @@ TEMPLATE_claude/
 # Les commandes sont directement invocables comme /xxx — pas de fichier compagnon projet
 .claude/commands/*.md
 .claude/commands/*.template.md
-.claude/commands/context/
 
 # Agents template générés depuis TEMPLATE_claude/ (*.template.md — jamais édités manuellement)
 # Les *.md dans agents/ (hors dev-*) sont des adaptations projet — trackés dans git
 .claude/agents/*.template.md
-.claude/agents/context/
+
+# Contextes partagés générés depuis TEMPLATE_claude/{commands,agents}/context/ (*.template.md —
+# jamais édités manuellement). Comme pour les agents, les compagnons context/*.md (hors
+# .template.md) sont des adaptations projet — trackés dans git, jamais écrasés par la sync.
+.claude/commands/context/*.template.md
+.claude/agents/context/*.template.md
 
 # Fichiers PROJET — toujours git trackes (ne pas ajouter ici)
 # .claude/CLAUDE.md
@@ -29,5 +33,5 @@ TEMPLATE_claude/
 # Dossier de travail inter-agents (rapports et handoffs temporaires)
 _work/
 
-# Build artifacts (qualif : build/qualif/<version>/)
+# Build artifacts (qualif : build/qualif/<X.Y.Z>/<artefact>-<X.Y.Z.a>.<ext>)
 build/

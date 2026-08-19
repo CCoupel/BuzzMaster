@@ -95,44 +95,53 @@ cd server-go && go test ./...
 ### 5.2 Format et Regles de Versionnement
 
 ```
-Format dev  : X.Y.Z.a
-Format prod : X.Y.Z   (le "a" n'est jamais publie en prod)
+Format dev/qualif : X.Y.Z.a
+Format prod       : X.Y.Z   (le "a" n'est jamais publie en prod)
 ```
 
 | Segment | Role |
 |---------|------|
-| X | Compatibilite des donnees (DB, fichiers). Rupture = upgrade possible mais rollback complique. |
-| Y | Compteur de milestone/livraison. Pair = dev, impair = prod. Avance toujours de +1 (jamais +2). |
-| Z | Compteur de bugfix. Remis a 0 uniquement au demarrage d'un nouveau milestone. |
-| a | Iteration dev interne (un commit = un `a`). Jamais visible en prod. |
+| X | Compatibilite des donnees (DB, fichiers). Fixe par le titre du milestone. |
+| Y | Compteur de milestone/livraison. Fixe par le titre du milestone. |
+| Z | Compteur de bugfix au sein de la ligne `X.Y`. Fixe par le titre du milestone. |
+| a | Compteur de build QUALIF, gere exclusivement par `deploy`. Les agents `dev-*` ne le touchent jamais. Jamais visible en prod. |
 
-### 5.3 Les 5 Operations
+`X.Y.Z` est fixe integralement par le titre du milestone GitHub actif — voir 5.7. Le milestone est la SEULE source de verite pour ces 3 segments ; aucun agent ne les recalcule ni ne les incremente au fil de l'eau. `a` est le seul segment qui bouge pendant le cycle : simple compteur de build, independant des commits dev, incremente uniquement par `deploy` a chaque build QUALIF.
+
+### 5.3 Cycle de Vie de la Version
 
 | Evenement | Effet |
 |-----------|-------|
-| Iteration dev (commit courant) | `a+1` |
-| Nouveau milestone (feature planifiee) | `Y+1 ; Z=0 ; a=0` |
-| Nouveau cycle bugfix (aucun milestone actif) | `Z+1 ; a=0` (reprend le Y de dev de la derniere wave) |
-| Promotion dev -> prod | `Y+1 ; Z conserve ; a supprime` — **sauf** si un milestone `OPEN` correspond (voir 5.7) : `X.Y` est alors lu sur son titre, pas recalcule |
-| Rupture de compatibilite de donnees | `X+1 ; Y=0 ; Z=0 ; a=0` (le prochain milestone repart au Y impair suivant, donc `Y=1`) |
+| Creation du milestone (`/milestone new vX.Y[.Z]`) | Le titre fixe `X.Y.Z` pour tout le cycle — logique complete de validation en 5.7 |
+| Ouverture du cycle (1er commit sur la branche rattachee au milestone) | `{VERSION_FILE}` -> `X.Y.Z.0` (version du milestone, `a=0`) |
+| Deploiement QUALIF (avant build) | `a+1` — a la charge de `deploy`, commit dedie `chore(version): Bump to X.Y.Z.a+1`. Seul declencheur de `a` : garantit un artefact unique par deploiement, meme sans nouveau commit dev entre deux deploiements. Le dossier `build/qualif/X.Y.Z/` (sans `a`) reste le meme entre deux builds ; c'est le nom de l'artefact a l'interieur (`app-X.Y.Z.a.tar.gz`) qui change (voir `deploy.template.md`) |
+| Promotion dev -> prod | `a` est supprime — la version livree est exactement `X.Y.Z`, telle que fixee par le milestone. Aucun calcul. |
 
-### 5.4 Regle d'Or — Bug Remonte
+> Les commits dev ordinaires (`feat`, `fix`, `refactor`...) ne touchent jamais `{VERSION_FILE}`. `a` s'incremente uniquement au fil des deploiements QUALIF — plusieurs commits dev peuvent donc s'accumuler sous le meme `a`, et `a` peut s'incrementer plusieurs fois sans aucun nouveau commit dev entre deux deploiements (ex: redeploiement suite a un correctif infra hors code). C'est le comportement attendu.
 
-- **Milestone en cours** : le fix est integre aux iterations du milestone (`a+1`, `Z` ne bouge pas). La prochaine prod livre le Y du milestone.
-- **Aucun milestone en cours** : nouveau cycle bugfix cree a partir du dernier Y de dev (meme wave que la prod courante), `Z+1`.
+### 5.4 Regle d'Or — Tout Developpement Rattache a un Milestone
+
+- Il n'existe plus de cycle de developpement hors milestone : toute issue travaillee doit etre associee a un milestone `OPEN`.
+- **Bug remonte pendant un milestone en cours** : le fix est integre normalement (commit sans toucher `{VERSION_FILE}`), `X.Y.Z` ne bouge pas. Le prochain deploiement QUALIF incremente `a` automatiquement.
+- **Bugfix urgent solitaire, aucun milestone actif** : le milestone cible `X.Y.Z+1` (Z+1 par rapport a la derniere version prod livree) est cree automatiquement, sans intervention manuelle prealable — voir `commands/hotfix.md`.
 - **Une version prod deja depassee n'est jamais repatchee** — le fix cible toujours la ligne prod courante, jamais une ancienne.
 
 ### 5.5 Exemple
 
 ```
-1.1.0.0 -> 1.1.0.1 -> 1.1.0.2        (dev, Milestone A)
-1.2.0                                 (promotion prod)
-1.3.0.0 -> 1.3.0.1                    (dev, Milestone B)
-1.4.0                                 (promotion prod)
-1.3.1.0 -> 1.3.1.1                    (bug remonte, aucun milestone actif — reprise Y=3)
-1.4.1                                 (promotion prod, Z conserve)
-1.5.0.0                               (nouveau milestone, Z revient a 0)
-1.6.0                                 (promotion prod)
+Milestone v1.4.0 cree (X=1, Y=4, Z=0)
+1.4.0.0                                (ouverture du cycle)
+1.4.0.1                                (1er deploiement QUALIF — a+1 par deploy)
+1.4.0.2                                (redeploiement QUALIF apres correctif — a+1 par deploy)
+1.4.0                                  (promotion prod — a supprime, version livree = milestone exact)
+
+Milestone v1.4.1 cree (bugfix solitaire urgent, Z+1 auto)
+1.4.1.0 -> 1.4.1.1                     (1 deploiement QUALIF)
+1.4.1                                  (promotion prod)
+
+Milestone v1.5.0 cree (nouvelle feature planifiee)
+1.5.0.0 -> 1.5.0.1
+1.5.0                                  (promotion prod)
 ```
 
 ### 5.6 Lire la Version
@@ -141,21 +150,26 @@ Format prod : X.Y.Z   (le "a" n'est jamais publie en prod)
 {VERSION_READ_CMD}
 ```
 
-### 5.7 Le Milestone comme Source de la Version Cible
+### 5.7 Le Milestone comme Source Unique de la Version
 
-Le titre du milestone (`vX.Y`, cree par `/milestone new`) pinne la version prod qui sera livree a la fin du cycle, au lieu de la laisser se deduire arithmetiquement en fin de course.
+Le titre du milestone (`vX.Y.Z`, cree par `/milestone new`) fixe integralement la version qui sera livree a la fin du cycle — aucun calcul arithmetique, aucune deduction en fin de course.
 
-**A la creation (`/milestone new vX.Y`)** :
-- Validation : `Y` doit etre le prochain Y pair valide, soit `Y_prod_actuel + 2`. Ecart detecte -> alerter avant de creer (voir `commands/milestone.md` Mode NEW).
-- Le titre `vX.Y` devient ensuite la reference unique de la cible prod pour tout le cycle — il ne change plus.
+**A la creation (`/milestone new vX.Y[.Z]`)** :
+- `X` et `Y` sont obligatoires dans l'argument. S'il en manque un, le demander explicitement avant de continuer (jamais de valeur par defaut, jamais de deduction).
+- `Z` est optionnel : rechercher les tags/releases existants pour ce `X.Y`. S'il en existe, prendre le `Z` max trouve + 1 ; sinon `Z=0`. Le titre du milestone est cree/renomme avec `X.Y.Z` complet — jamais de `Z` implicite dans le titre.
+- Verifier que `X.Y.Z` (complete) n'existe pas deja (ni tag, ni milestone) et qu'il est strictement posterieur a la derniere version livree.
+- Verifier la coherence avec les labels des issues selectionnees pour ce milestone (mapping labels -> segment, voir `context/GITHUB.md` section 8.3) : avertissement **non-bloquant** si le segment incremente ne correspond pas a la nature des issues (ex: issue `breaking` incluse mais seul `Z` a bouge) — jamais de blocage si l'utilisateur confirme.
+- Cette verification labels <-> version se recalcule aussi a chaque ajout d'issue en cours de cycle (`gh issue edit --milestone`), sur l'ensemble des issues **actuellement** associees (jamais en delta par issue ajoutee) — pour rester idempotente et ne pas re-alerter plusieurs fois pour le meme type d'ecart.
+- Le titre `vX.Y.Z` devient ensuite la reference unique de la version cible pour tout le cycle — il ne change plus (voir `commands/milestone.md` Mode NEW).
+
+**A l'ouverture du cycle** :
+- `{VERSION_FILE}` est positionne sur `X.Y.Z.0` (version du milestone, `a=0`).
 
 **A la promotion dev -> prod (`/deploy prod`)** :
-- **SI** un milestone `OPEN` a un titre `vX.Y` dont le `X` correspond a la ligne courante et le `Y` vaut `Y_dev + 1` -> `X.Y` est lu directement sur le titre, aucun calcul.
-- **SINON** (aucun milestone actif — bugfix hors cycle planifie) -> `X.Y` reste calcule par l'operation "Promotion dev -> prod" ci-dessus.
-- Dans les deux cas, `Z` vient toujours de `{VERSION_FILE}` (conserve depuis le dernier commit dev) — seul `X.Y` change de source.
+- `a` est supprime de `{VERSION_FILE}`. La version livree est exactement `X.Y.Z` — aucun recalcul, aucune branche conditionnelle.
 
 **A la cloture du milestone (apres deploy PROD reussi)** :
-- La description du milestone est completee une seule fois avec la version effectivement livree (ex: `Release vX.Y — livre en vX.Y.Z, tag vX.Y.Z`). Ecriture ponctuelle a la cloture — la description ne suit jamais l'etat dev en direct, `{VERSION_FILE}` reste la seule source vivante de cet etat.
+- La description du milestone est completee une seule fois avec la version effectivement livree (ex: `Release vX.Y.Z — livre, tag vX.Y.Z`). Ecriture ponctuelle a la cloture — la description ne suit jamais l'etat dev en direct, `{VERSION_FILE}` reste la seule source vivante de cet etat.
 
 ---
 
@@ -167,9 +181,9 @@ Le titre du milestone (`vX.Y`, cree par `/milestone new`) pinne la version prod 
 git checkout main
 git pull origin main
 git checkout -b feature/<nom-court>
-# Nouveau milestone dans {VERSION_FILE} : Y+1 ; Z=0 ; a=0
+# Version du milestone actif ecrite dans {VERSION_FILE} : X.Y.Z.0 (voir section 5.7)
 git add {VERSION_FILE}
-git commit -m "chore(version): Start vX.Y.0.0 - <feature name>"
+git commit -m "chore(version): Start vX.Y.Z.0 - <feature name>"
 git push -u origin feature/<nom-court>
 ```
 
@@ -217,7 +231,7 @@ git push origin v<version>
 ```markdown
 - [ ] Code compile sans erreur
 - [ ] Tests unitaires passes
-- [ ] Version incrementee (a pour chaque commit ; Z uniquement au 1er commit d'un cycle bugfix sans milestone actif)
+- [ ] Version `X.Y.Z` inchangee (fixee par le milestone, jamais editee manuellement) ; `a` non touche (reserve a `deploy`)
 - [ ] Commits atomiques avec messages clairs
 - [ ] Pas de fichiers temporaires
 - [ ] Push effectue
@@ -239,7 +253,7 @@ git push origin v<version>
 - [ ] Review code approuvee
 - [ ] CHANGELOG.md mis a jour
 - [ ] Documentation mis a jour (si nouvelles features)
-- [ ] Version promue (Y+1 ; Z conserve ; a supprime — voir section 5.3)
+- [ ] Version promue (`a` supprime — version livree = `X.Y.Z` du milestone, voir section 5.3)
 - [ ] Build reussi
 ```
 
@@ -412,9 +426,11 @@ $ARGUMENTS = "Ajouter mode X"  -> Action: workflow normal (pas de mot-cle)
 
 ## 13. Adaptations Projet
 
-Chaque commande `xxx.md` est gérée par le template — ne pas l'éditer directement (elle sera écrasée à la prochaine sync).
-Pour personnaliser le comportement d'une commande, écrire dans les fichiers `context/` qu'elle référence (ex: `context/COMMON.md`).
-Pour les agents, `xxx.template.md` (template) peut avoir un fichier compagnon `xxx.md` pour les adaptations projet.
+- **Commandes** (`xxx.md`) : gérées par le template, jamais éditées directement — écrasées à chaque sync, sans compagnon.
+- **Agents** : pattern `xxx.template.md` (sync, jamais édité) + `xxx.md` compagnon optionnel (tracké git, jamais écrasé, adaptations projet).
+- **Fichiers `context/`** (`context/COMMON.md`, `context/GITHUB.md`, etc., référencés par les commandes et les agents) suivent exactement le même pattern que les agents : `context/X.template.md` (sync, jamais édité) + `context/X.md` compagnon optionnel (tracké git, jamais écrasé). Une référence "voir `context/COMMON.md`" dans une commande ou un agent désigne le concept logique — elle se résout en lisant `context/COMMON.template.md` puis `context/COMMON.md` compagnon s'il existe, les règles projet primant sur les règles génériques en cas de conflit.
+
+Pour personnaliser le comportement d'une commande ou d'un agent au niveau de règles partagées, créer/éditer le compagnon `context/X.md` correspondant — jamais `context/X.template.md`.
 
 ---
 

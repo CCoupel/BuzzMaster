@@ -52,6 +52,15 @@ Raison : [une ligne]
 Action requise : [ce dont j'ai besoin]
 ```
 
+**Mot-clé de fin — jamais de synonyme improvisé.** `[NOM]` est le libellé court que `cdp.md`
+utilise pour dispatcher et attendre cet agent (ex. `doc-updater` répond `DOC DONE`, pas
+`DOC-UPDATER DONE` ni `DOC-UPDATER TERMINE` — voir la table de routage dans `cdp.md`). Si
+l'agent définit ses propres états intermédiaires (ex. `MARKETING PRET`, `MARKETING RIEN A
+PUBLIER`), ils doivent être documentés à l'identique des deux côtés : dans `<agent>.md` ET
+dans `cdp.md` (recherche du mot-clé exact). Avant de modifier un message de fin dans un
+`<agent>.md`, vérifier ce que `cdp.md` attend réellement de cet agent — ne jamais dupliquer
+le format sans le confronter à la table de dispatch.
+
 ---
 
 ## 4. Règles

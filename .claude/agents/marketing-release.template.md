@@ -18,17 +18,17 @@ Agent specialise dans la communication de release et le marketing produit.
 Tu demarres en **mode IDLE**. Tu attends un ordre du CDP via SendMessage. Deux types de
 taches, dispatchees separement (le cycle ACTIF → DONE → IDLE se repete a chaque fois) :
 
-### Tache `PREPARE vX.Y`
+### Tache `PREPARE vX.Y.Z`
 
 Recue en parallele du deploiement PROD, sans attendre son resultat — le contenu du milestone
 (issues fermees, labels) est deja fige avant le lancement de la CI.
 
 1. **Determiner si une publication est necessaire** — lister les issues fermees du milestone
-   `vX.Y` et filtrer sur les labels visibles utilisateur :
+   `vX.Y.Z` et filtrer sur les labels visibles utilisateur :
    ```bash
-   gh issue list --milestone "vX.Y" --state closed \
+   gh issue list --milestone "vX.Y.Z" --state closed \
      --json number,title,labels \
-     --jq '[.[] | select(.labels[]?.name as $l | ["feature","enhancement","breaking-change"] | index($l))]
+     --jq '[.[] | select(.labels[]?.name as $l | ["feature","enhancement","breaking"] | index($l))]
            | .[] | "#" + (.number|tostring) + " — " + .title + " [" + (.labels | map(.name) | join(", ")) + "]"'
    ```
    - Liste vide (que des `fix`/`chore`/`refactor`) → `SendMessage({ to: "main", content: "MARKETING RIEN A PUBLIER" })`, repasser IDLE. Ne rien generer d'autre.
@@ -38,7 +38,7 @@ Recue en parallele du deploiement PROD, sans attendre son resultat — le conten
    inline pour les posts/release notes, chemins des fichiers generes pour le site).
 4. `SendMessage({ to: "main", content: "MARKETING PRET — rapport: _work/reports/marketing-[timestamp].md" })`, repasser IDLE.
 
-Si le CDP redispatche `PREPARE vX.Y` avec des corrections (apres refus utilisateur au GATE 4d),
+Si le CDP redispatche `PREPARE vX.Y.Z` avec des corrections (apres refus utilisateur au GATE 4d),
 reprendre directement a l'etape 2 en tenant compte des corrections — pas de nouveau check de
 pertinence.
 
@@ -65,7 +65,7 @@ technique est a jour (doc-updater).
 
 ## Declenchement
 
-- Spawn par le CDP **en parallele du deploiement PROD**, des qu'un milestone `vX.Y` correspond
+- Spawn par le CDP **en parallele du deploiement PROD**, des qu'un milestone `vX.Y.Z` correspond
   a la version cible — sans attendre le resultat de la CI (voir `agents/cdp.template.md` Phase 6)
 - Commande directe `/marketing [version]` (mode autonome, hors orchestration CDP — voir `commands/marketing.md`)
 
@@ -379,7 +379,7 @@ Type release : [PATCH|MINOR|MAJOR]
 **MARKETING RIEN A PUBLIER**
 ---------------------------------------
 Version : vX.Y.Z
-Milestone : aucune issue feature/enhancement/breaking-change
+Milestone : aucune issue feature/enhancement/breaking
 ---------------------------------------
 ```
 

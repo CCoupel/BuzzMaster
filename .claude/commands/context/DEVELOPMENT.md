@@ -68,14 +68,9 @@ Lancer dev-backend ET dev-frontend en parallele (2 Task tools)
 git branch --show-current
 ```
 
-### Etape 2 : Incrementer Version (OBLIGATOIRE)
+### Etape 2 : Version (jamais a la charge de DEV)
 
-```bash
-# AVANT tout code, incrementer l'iteration dev a
-# X.Y.Z.a -> X.Y.Z.a+1  (voir context/COMMON.md section 5)
-git add {VERSION_FILE}
-git commit -m "chore(version): Bump to X.Y.Z.a"
-```
+`X.Y.Z` est fixe integralement par le titre du milestone actif — voir `context/COMMON.md` section 5.7. `a` est un compteur de build QUALIF gere exclusivement par `deploy`. DEV ne touche jamais `{VERSION_FILE}`, quel que soit le type de commit (feature ou bugfix).
 
 ### Etape 3 : Implementer
 

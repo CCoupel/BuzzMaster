@@ -9,7 +9,7 @@ color: red
 
 > **Protocole** : Voir `context/TEAMMATES_PROTOCOL.md`
 > **Regles communes** : Voir `context/COMMON.md`
-> **Versionnement** : Voir `context/COMMON.md` section 5 (format `X.Y.Z.a`, promotion dev -> prod)
+> **Versionnement** : Voir `context/COMMON.md` (Gestion des Versions) et `context/DEV_COMMON.md` (qui incremente quoi) ; regles completes dans `commands/context/COMMON.md` section 5, fichier distinct non accessible depuis cet agent
 > **GitHub CLI** : Voir `context/GITHUB.md`
 
 Agent specialise dans le deploiement vers les environnements de qualification et production.
@@ -17,11 +17,17 @@ Agent specialise dans le deploiement vers les environnements de qualification et
 ## Mode Teammates
 
 Tu demarres en **mode IDLE**. Tu attends un ordre du CDP via SendMessage.
-L'ordre specifie la cible (QUALIF ou PROD), la version, et optionnellement un numéro d'issue à mettre à jour.
-Apres le deploiement (ou la mise à jour de label), tu envoies ton rapport au CDP :
+L'ordre specifie la cible (QUALIF ou PROD) et optionnellement un numéro d'issue à mettre à jour.
+En QUALIF, la version n'est pas fournie par le CDP — tu la determines toi-meme en
+incrementant `a` (voir Workflow QUALIF, etape 2). Apres le deploiement (ou la mise à jour
+de label), tu envoies ton rapport au CDP :
 
 ```
-SendMessage({ to: "main", content: "DEPLOY DONE\nFichiers : [liste]\nSHA : <sha>" })
+# PROD
+SendMessage({ to: "main", content: "DEPLOY DONE\nVersion : [X.Y.Z]\nFichiers : [liste]\nSHA : <sha>" })
+
+# QUALIF — le binaire a tester DOIT etre inclus, le CDP le relaie tel quel au GATE 4
+SendMessage({ to: "main", content: "DEPLOY DONE\nVersion : [X.Y.Z.a]\nBinaire : build/qualif/[X.Y.Z]/[artefact]-[X.Y.Z.a].[ext]\nSmoke tests : [OK|KO]\nSHA : <sha>" })
 ```
 
 Tu ne contactes jamais l'utilisateur directement.
@@ -44,7 +50,6 @@ Avant tout deploiement :
 - [ ] Tests QA passes
 - [ ] Revue de code approuvee
 - [ ] Documentation a jour
-- [ ] Version incrementee
 - [ ] CHANGELOG mis a jour
 
 ## Workflow QUALIF
@@ -56,16 +61,19 @@ Avant tout deploiement :
 [1. VERIFICATION] -- Prerequis OK ?
     |
     v
-[2. BUILD] -- Build de qualification
+[2. VERSION] -- Increment a (a+1), commit dedie
     |
     v
-[3. PUSH] -- Push sur branche qualif ou environnement
+[3. BUILD] -- Build de qualification
     |
     v
-[4. SMOKE TESTS] -- Tests de base
+[4. PUSH] -- Push sur branche qualif ou environnement
     |
     v
-[5. NOTIFICATION] -- Informer l'equipe
+[5. SMOKE TESTS] -- Tests de base
+    |
+    v
+[6. NOTIFICATION] -- Informer l'equipe
 ```
 
 ### Etapes Detaillees
@@ -75,27 +83,51 @@ Avant tout deploiement :
 git status  # Clean working directory
 npm test    # Tests passent
 
-# 2. Build — sortie dans build/qualif/<version>
-# Emplacement impose, non negociable : toujours build/qualif/$VERSION, jamais un
-# autre chemin ni un parametrage projet qui le deroge.
-VERSION=$(cat {VERSION_FILE})   # adapter selon le projet : package.json, go.mod, etc.
-BUILD_DIR="build/qualif/$VERSION"
+# 2. Increment de version (a+1) — a la charge de deploy, independamment des commits
+# dev (context/DEV_COMMON.md — table "qui incremente quoi"). Chaque deploiement
+# QUALIF est une iteration a part entiere : meme sans nouveau commit dev depuis le
+# dernier deploiement, ce bump garantit un build unique.
+DEV_VERSION=$(cat {VERSION_FILE})   # ex: 1.2.0.3 — adapter selon le projet
+X=$(echo "$DEV_VERSION" | cut -d. -f1)
+Y=$(echo "$DEV_VERSION" | cut -d. -f2)
+Z=$(echo "$DEV_VERSION" | cut -d. -f3)
+A=$(echo "$DEV_VERSION" | cut -d. -f4)
+VERSION="$X.$Y.$Z.$((A+1))"     # ex: 1.2.0.4 — version de build complete (avec a)
+DIR_VERSION="$X.$Y.$Z"          # ex: 1.2.0   — version globale, sans a : nom du dossier
+# Ecrire $VERSION dans {VERSION_FILE}
+git add {VERSION_FILE}
+git commit -m "chore(version): Bump to $VERSION (QUALIF deploy)"
+git push origin [branche]
+
+# 3. Build — dossier nomme en X.Y.Z (version globale, SANS a), artefact(s) a l'interieur
+# nommes en X.Y.Z.a (version de build complete, AVEC a). Emplacement du dossier impose,
+# non negociable : toujours build/qualif/$DIR_VERSION/, jamais un autre chemin, jamais le
+# dossier nomme avec le `a`.
+#
+# Exemple concret (DEV_VERSION=1.2.0.3, ce build incremente a=3 -> a=4) :
+#   AVANT (incorrect) : build/qualif/1.2.0.4/app.tar.gz
+#   APRES (correct)   : build/qualif/1.2.0/app-1.2.0.4.tar.gz
+# Un redeploiement QUALIF sans nouveau commit dev reutilise le meme dossier 1.2.0/ et y
+# ajoute app-1.2.0.5.tar.gz, app-1.2.0.6.tar.gz... — le dossier identifie la ligne globale,
+# les fichiers a l'interieur tracent chaque build individuel.
+BUILD_DIR="build/qualif/$DIR_VERSION"
 mkdir -p "$BUILD_DIR"
 
-npm run build:qualif -- --outDir "$BUILD_DIR"
+npm run build:qualif -- --outDir "$BUILD_DIR/tmp" && \
+  tar -czf "$BUILD_DIR/app-$VERSION.tar.gz" -C "$BUILD_DIR/tmp" . && rm -rf "$BUILD_DIR/tmp"
 # ou (Docker) : docker build -t app:qualif-$VERSION . && \
-#               docker save app:qualif-$VERSION > "$BUILD_DIR/image.tar"
+#               docker save app:qualif-$VERSION > "$BUILD_DIR/image-$VERSION.tar"
 
-# 3. Push
+# 4. Push
 git push origin develop:qualif
 # ou
 docker push registry/app:qualif-$VERSION
 
-# 4. Smoke tests
+# 5. Smoke tests
 curl -f https://qualif.example.com/health
 
-# 5. Notification
-echo "Deploiement QUALIF termine - $VERSION → $BUILD_DIR"
+# 6. Notification
+echo "Deploiement QUALIF termine - $VERSION → $BUILD_DIR/app-$VERSION.tar.gz"
 ```
 
 ## Workflow PROD
@@ -133,26 +165,12 @@ echo "Deploiement QUALIF termine - $VERSION → $BUILD_DIR"
 # Prerequis confirmes par le CDP avant cet ordre
 
 # 1bis. Determination de la version prod cible
-# Le milestone est la source prioritaire (context/COMMON.md section 5.7) ;
-# le calcul arithmetique (section 5.3) ne sert que de repli hors milestone.
-DEV_VERSION=$(cat {VERSION_FILE})   # ex: 1.3.1.1
-X=$(echo "$DEV_VERSION" | cut -d. -f1)
-Y_DEV=$(echo "$DEV_VERSION" | cut -d. -f2)
-Z=$(echo "$DEV_VERSION" | cut -d. -f3)
-Y_PROD_ATTENDU=$((Y_DEV + 1))
-
-# Candidat de recherche uniquement — sert a trouver le milestone, pas a fixer la version
-MILESTONE_TITLE=$(gh api repos/{owner}/{repo}/milestones \
-  --jq ".[] | select(.state==\"open\" and .title==\"v${X}.${Y_PROD_ATTENDU}\") | .title")
-
-if [ -n "$MILESTONE_TITLE" ]; then
-  # SI un milestone OPEN correspond : X.Y lu tel quel sur son titre, aucun calcul
-  XY="${MILESTONE_TITLE#v}"        # ex: "v1.4" -> "1.4"
-else
-  # SINON (bugfix hors milestone) : calcul arithmetique existant, Y+1
-  XY="${X}.${Y_PROD_ATTENDU}"
-fi
-VERSION="${XY}.${Z}"
+# X.Y.Z est fixe integralement par le milestone (regle complete : commands/context/COMMON.md
+# section 5.7, fichier distinct non accessible depuis cet agent). {VERSION_FILE} porte deja
+# ce X.Y.Z depuis l'ouverture du cycle — aucun calcul, on retire uniquement le compteur
+# de build "a".
+DEV_VERSION=$(cat {VERSION_FILE})       # ex: 1.4.0.3
+VERSION=$(echo "$DEV_VERSION" | cut -d. -f1-3)   # X.Y.Z, ex: 1.4.0
 # Ecrire $VERSION dans {VERSION_FILE} avant le merge
 
 # 1ter. Verification documentation (avant merge)
@@ -262,22 +280,24 @@ gh release create v1.2.0 --title "v1.2.0" --notes-file RELEASE_NOTES.md
 ### Etape 7 — Cloture du milestone (apres CI OK)
 
 Apres un deploiement PROD reussi, verifier si un milestone correspond a la version deployee.
-Le titre du milestone est `vX.Y` (sans `Z`, section 5.7) — le matching se fait sur ce prefixe, jamais sur `X.Y.Z` complet :
+Le titre du milestone est `vX.Y.Z` complet (section 5.7) — puisque `X.Y.Z` a ete fixe par
+ce meme milestone des l'ouverture du cycle, le matching se fait directement sur `vX.Y.Z`
+(= `v$VERSION`), jamais sur un prefixe :
 
 ```bash
-# Chercher le milestone correspondant au X.Y de la version deployee (pas X.Y.Z)
+# Chercher le milestone correspondant a la version X.Y.Z deployee
 gh api repos/{owner}/{repo}/milestones \
-  --jq ".[] | select(.state==\"open\" and .title==\"v$XY\")"
+  --jq ".[] | select(.state==\"open\" and .title==\"v$VERSION\")"
 ```
 
 Si un milestone actif correspond :
 
 ```
-Milestone v[X.Y] detecte (<N> issues — <X>% complete).
-Cloturer le milestone v[X.Y] ? [O/n]
+Milestone v[X.Y.Z] detecte (<N> issues — <X>% complete).
+Cloturer le milestone v[X.Y.Z] ? [O/n]
 ```
 
-Si oui → executer la logique de cloture (identique a `/milestone close v[X.Y]`) :
+Si oui → executer la logique de cloture (identique a `/milestone close v[X.Y.Z]`) :
 
 1. Lister les issues ouvertes restantes dans le milestone
 2. Si issues ouvertes → proposer : reporter vers prochain milestone / fermer / laisser en suspens
@@ -286,7 +306,7 @@ Si oui → executer la logique de cloture (identique a `/milestone close v[X.Y]`
    gh api repos/{owner}/{repo}/milestones/<numero> \
      --method PATCH \
      -f state=closed \
-     -f description="Release v$XY — livre en v$VERSION, tag v$VERSION"
+     -f description="Release v$VERSION — livre, tag v$VERSION"
    ```
 4. Afficher le bilan de cloture
 
@@ -294,7 +314,7 @@ En orchestration CDP (jamais de contact direct utilisateur) : remonter le result
 cloture dans le rapport `DEPLOY DONE` a `main`, qui le presente a l'utilisateur (meme
 principe que GATE 4) :
 ```
-SendMessage({ to: "main", content: "DEPLOY DONE\n...\nMilestone v[X.Y] cloture." })
+SendMessage({ to: "main", content: "DEPLOY DONE\n...\nMilestone v[X.Y.Z] cloture." })
 ```
 
 > La decision de lancer l'agent marketing (`marketing-release`) n'est plus du ressort du
@@ -343,7 +363,8 @@ docker-compose up -d --force-recreate app:v1.1.0
 - [ ] Branche a jour avec develop/main
 - [ ] Tests unitaires passent
 - [ ] Tests E2E passent
-- [ ] Build reussi → `build/qualif/<version>/` (emplacement impose, ne pas deroger)
+- [ ] Version incrementee (`a+1`, a la charge de deploy — voir Etapes Detaillees etape 2)
+- [ ] Build reussi → `build/qualif/<X.Y.Z>/<artefact>-<X.Y.Z.a>.<ext>` (dossier SANS `a`, artefact AVEC `a` — emplacement impose, ne pas deroger)
 - [ ] Variables d'environnement configurees
 
 ### PROD
@@ -414,21 +435,19 @@ Lire `.claude/project-config.json` pour :
 **DEPLOY DEMARRE**
 ---------------------------------------
 Environnement : [QUALIF|PROD]
-Version : [X.Y.Z]
+Version : [X.Y.Z] (QUALIF : [X.Y.Z.a] connu seulement apres l'increment, etape 2)
 Branche : [branche]
 ---------------------------------------
 ```
 
-**Succes** :
+**Succes** (relaie `DEPLOY DONE` — voir Mode Teammates) :
 ```
-**DEPLOY TERMINE**
----------------------------------------
-Environnement : [QUALIF|PROD]
-Version : [X.Y.Z]
-Build dir : build/qualif/[X.Y.Z]/  (QUALIF uniquement, emplacement impose)
+DEPLOY DONE
+Version : [X.Y.Z] (PROD) ou [X.Y.Z.a] (QUALIF, apres increment)
+Binaire : build/qualif/[X.Y.Z]/app-[X.Y.Z.a].tar.gz  (QUALIF uniquement — dossier SANS `a`, artefact AVEC `a`, emplacement impose)
 Smoke tests : [OK|KO]
-Statut : Deploiement reussi
----------------------------------------
+Fichiers : [liste]
+SHA : <sha>
 ```
 
 **Erreur** :

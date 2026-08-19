@@ -66,6 +66,17 @@ Sinon -> workflow normal.
 
 **Pas de plan detaille** - On agit vite.
 
+### 1bis. MILESTONE (automatique)
+
+Tout developpement est rattache a un milestone — voir `context/COMMON.md` section 5.4.
+
+Si aucun milestone `OPEN` ne cible `X.Y.Z+1` (Z+1 sur la derniere version prod livree) :
+- Le creer automatiquement, sans validation utilisateur prealable (urgence prod) — logique
+  de `/milestone new` (`commands/milestone.md` Mode NEW, `context/COMMON.md` section 5.7).
+- `{VERSION_FILE}` est positionne sur `X.Y.Z+1.0`.
+
+Si un milestone `X.Y.Z+1` existe deja (autre hotfix en cours sur la meme ligne) -> le reutiliser.
+
 ### 2. FIX
 
 - Correction la plus simple possible
@@ -94,11 +105,12 @@ git checkout -b hotfix/<name> main
 git commit -m "fix: <description>"
 
 # Merge et tag
-# Versionnement : toujours Z+1 ; a=0 (meme si un milestone est en cours)
-# Voir context/COMMON.md section 5 — pas de suffixe dedie, Z porte deja l'info
+# Version X.Y.Z fixee par le milestone (etape 1bis) — lue directement depuis {VERSION_FILE}
+# Voir context/COMMON.md section 5.7
+VERSION=$(cat {VERSION_FILE} | cut -d. -f1-3)
 git checkout main
 git merge --no-ff hotfix/<name>
-git tag v<version>
+git tag "v$VERSION"
 git push origin main --tags
 ```
 

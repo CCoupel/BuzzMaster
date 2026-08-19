@@ -7,26 +7,23 @@
 
 ---
 
-## Etape Critique : Increment de Version
+## Etape Critique : Gestion de Version
 
-Format : `X.Y.Z.a` en dev (le `a` disparait en prod). Reference complete : `context/COMMON.md` section 5.
+Format : `X.Y.Z.a` en dev/qualif (le `a` disparait en prod). Resume local : `context/COMMON.md`.
+Reference complete (cycle de vie detaille, exemple, regle du milestone) : `commands/context/COMMON.md` section 5 — fichier distinct, non accessible depuis un agent, mentionne ici a titre indicatif.
 
-**AVANT TOUT CHANGEMENT DE CODE**, vous DEVEZ :
+`X.Y.Z` est fixe integralement par le titre du milestone GitHub actif — **le milestone est la seule source de verite**, aucun agent DEV ne le calcule ni ne l'incremente. Tout developpement est rattache a un milestone (plus de cycle hors milestone). `a` est un **compteur de build QUALIF, gere exclusivement par `deploy`** : les agents DEV ne l'incrementent jamais et n'ont pas a y toucher lors d'un commit normal.
 
-1. **Lire** la version actuelle depuis `{VERSION_FILE}`
-2. **Incrementer** l'iteration dev `a` : `X.Y.Z.a` -> `X.Y.Z.a+1`
-3. **Committer** : `chore(version): Bump to X.Y.Z.a+1`
-
-`Z` ne s'incremente **jamais** a chaque commit — c'est un evenement de cycle (demarrage d'un bugfix sans milestone actif), pas un increment par iteration.
+**Vous ne modifiez jamais `{VERSION_FILE}` vous-meme.** L'ecriture initiale `X.Y.Z.0` (a l'ouverture du cycle, sur la branche rattachee au milestone) est faite en amont, avant que DEV ne commence a commiter. Pour tout commit normal (feature comme bugfix), ne jamais toucher `{VERSION_FILE}` — `a` sera incremente par `deploy` au prochain deploiement QUALIF, pas par vous.
 
 ### Regles de Versioning
 
 | Qui | Incremente | Quand |
 |-----|------------|-------|
-| **PLAN** | Y (`Y+1 ; Z=0 ; a=0`) | Nouveau milestone (FEATURE) |
-| **DEV** | Z (`Z+1 ; a=0`) | 1er commit d'un cycle bugfix, aucun milestone actif (BUGFIX/HOTFIX) |
-| **DEV** | a (`a+1`) | Chaque commit suivant du cycle courant |
-| **DEPLOY** | Y (`Y+1`, Z conserve, a supprime) | Promotion dev -> prod |
+| **CDP** | Ecriture initiale `X.Y.Z.0` (depuis le titre du milestone) | Phase Init (Git) — creation de la branche, avant meme l'appel a PLAN |
+| **DEV** | — (jamais) | — |
+| **DEPLOY** | `a` (`a+1`) | Avant chaque build QUALIF — commit dedie, garantit un build unique par deploiement |
+| **DEPLOY** | `a` (suppression) | Promotion dev -> prod — version livree = `X.Y.Z` exact du milestone |
 
 ---
 
@@ -58,7 +55,7 @@ feat(api): Add user authentication endpoint
 fix(auth): Handle expired tokens gracefully
 test(api): Add tests for user registration
 refactor(utils): Extract validation helpers
-chore(version): Bump to 1.2.3.4
+chore(version): Start bugfix cycle 1.2.4.0
 ```
 
 ---
@@ -158,6 +155,7 @@ Apres le build, verifier que le serveur demarre correctement :
 | Modifier la documentation | DOC agent |
 | Deployer | DEPLOY agent |
 | Incrementer y (version minor) | PLAN agent |
+| Incrementer a (version de build) | DEPLOY agent |
 | Executer les tests E2E | QA agent |
 | Ecrire les scenarios E2E | TEST-WRITER agent |
 
@@ -187,8 +185,8 @@ Chaque agent DEV doit produire un summary structure :
 # [Agent] Implementation Summary
 
 ## Version
-- Previous: X.Y.Z.a
-- Current: X.Y.Z.a+1
+- X.Y.Z : [inchangee | Z incremente — nouveau cycle bugfix, voir Commits]
+- `a` : gere par `deploy`, non modifie par cet agent
 
 ## Files Modified
 
@@ -202,8 +200,7 @@ Chaque agent DEV doit produire un summary structure :
 - Coverage: XX%
 
 ## Commits
-1. `chore(version): Bump to X.Y.Z.a+1`
-2. `feat(scope): Description`
+1. `feat(scope): Description`
 
 ## Verification
 - [x] Build OK

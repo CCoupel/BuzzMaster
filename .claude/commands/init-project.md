@@ -71,9 +71,10 @@ puis deploiera les commandes et agents dans `.claude/`.
 | Categorie | Emplacement | Comportement |
 |-----------|-------------|--------------|
 | **TEMPLATE** | `TEMPLATE_claude/` (racine projet) | Fetche depuis GitHub, gitignore, jamais edite manuellement |
-| **COMMANDES** | `.claude/commands/*.md` + `.claude/commands/context/` | Depuis `TEMPLATE_claude/commands/*.md` et `commands/context/`, déployé en `*.md` — gitignore |
-| **AGENTS TEMPLATE** | `.claude/agents/*.template.md` + `.claude/agents/context/` | Depuis `TEMPLATE_claude/agents/*.md`, déployé en `*.template.md` — gitignore |
-| **PROJET** | `.claude/CLAUDE.md`, `project-config.json`, `memory/`, `agents/dev-*.md` | Trackes dans git, jamais ecrases |
+| **COMMANDES** | `.claude/commands/*.md` | Depuis `TEMPLATE_claude/commands/*.md`, déployé en `*.md` — gitignore, pas de compagnon |
+| **AGENTS TEMPLATE** | `.claude/agents/*.template.md` | Depuis `TEMPLATE_claude/agents/*.md`, déployé en `*.template.md` — gitignore |
+| **CONTEXTES PARTAGES** | `.claude/{commands,agents}/context/*.template.md` + compagnon `.claude/{commands,agents}/context/*.md` optionnel | Depuis `TEMPLATE_claude/{commands,agents}/context/*.md` — meme convention template/compagnon que les agents |
+| **PROJET** | `.claude/CLAUDE.md`, `project-config.json`, `memory/`, `agents/dev-*.md`, compagnons `agents/*.md` et `context/*.md` | Trackes dans git, jamais ecrases |
 
 ---
 
@@ -140,9 +141,10 @@ gh api repos/$TEMPLATE_REPO/git/trees/$TEMPLATE_BRANCH?recursive=1 \
 
 Les commandes sont déployées en `*.md` — directement invocables comme `/xxx`, jamais éditées manuellement.
 Les agents sont déployés en `*.template.md` — les adaptations projet vont dans des fichiers `*.md` compagnons (voir COMMON.md §13).
+Les contextes partagés (`context/COMMON.md`, `context/GITHUB.md`...) suivent la même convention que les agents : déployés en `*.template.md`, avec un compagnon `*.md` optionnel pour les adaptations projet (voir COMMON.md §13).
 
 ```bash
-mkdir -p .claude/commands .claude/agents
+mkdir -p .claude/commands .claude/agents .claude/agents/context .claude/commands/context
 
 # Commandes : déployé en *.md (invocables directement comme /xxx)
 for src in TEMPLATE_claude/commands/*.md; do
@@ -158,9 +160,18 @@ for src in TEMPLATE_claude/agents/*.md; do
   echo "  ✓ $dest"
 done
 
-# Contextes partagés (restent en *.md — lus directement, pas de convention template/projet)
-cp -r TEMPLATE_claude/agents/context .claude/agents/context
-cp -r TEMPLATE_claude/commands/context .claude/commands/context
+# Contextes partagés : même convention que les agents — déployé en *.template.md,
+# compagnon *.md optionnel pour les adaptations projet (jamais créé automatiquement)
+for src in TEMPLATE_claude/agents/context/*.md; do
+  dest=".claude/agents/context/$(basename $src .md).template.md"
+  cp "$src" "$dest"
+  echo "  ✓ $dest"
+done
+for src in TEMPLATE_claude/commands/context/*.md; do
+  dest=".claude/commands/context/$(basename $src .md).template.md"
+  cp "$src" "$dest"
+  echo "  ✓ $dest"
+done
 ```
 
 #### 5. Mettre a jour TEMPLATE_claude/.template-source.json
@@ -253,14 +264,33 @@ Si `CUSTOMIZED_COMMANDS[]` non vide → informer l'utilisateur :
 Pour rétablir le template, supprimer le fichier .claude/commands/[nom].md et relancer /init-project.
 ```
 
+### Etape M1c — Migration : renommer les contextes legacy `context/X.md` → `context/X.template.md`
+
+> ⚠ **SCOPE STRICT** : uniquement les fichiers directement dans `.claude/agents/context/` et
+> `.claude/commands/context/` — ne renomme jamais un fichier qui est déjà un compagnon `.template.md`.
+
+Avant l'introduction du pattern template/compagnon pour `context/`, ces fichiers étaient déployés
+en `context/X.md` (gitignorés en bloc, sans compagnon). Les renommer en `context/X.template.md` —
+sauf si un `.template.md` existe déjà pour ce nom (déjà migré).
+
+```bash
+for f in .claude/agents/context/*.md .claude/commands/context/*.md; do
+  [[ -f "$f" ]] || continue
+  dest="${f%.md}.template.md"
+  [[ -f "$dest" ]] && continue   # déjà migré
+  mv "$f" "$dest"
+  echo "  ✓ migration contexte : $(basename $f) → $(basename $dest)"
+done
+```
+
 ### Etape M2 — Nettoyer .claude/ des anciens fichiers template
 
 ```bash
 git rm --cached .claude/commands/*.template.md 2>/dev/null || true
 git rm --cached .claude/commands/*.md 2>/dev/null || true
 # Note : après migration v3, les commandes sont en *.md (gitignored)
-git rm --cached -r .claude/agents/context/ 2>/dev/null || true
-git rm --cached -r .claude/commands/context/ 2>/dev/null || true
+git rm --cached .claude/agents/context/*.template.md 2>/dev/null || true
+git rm --cached .claude/commands/context/*.template.md 2>/dev/null || true
 git rm --cached .claude/agents/*.template.md 2>/dev/null || true
 git rm --cached .claude/agents/*.md 2>/dev/null || true
 git rm --cached -r .claude/templates/ 2>/dev/null || true
@@ -269,6 +299,10 @@ git rm --cached .claude/INITIALIZATION.md 2>/dev/null || true
 git rm --cached .claude/CLAUDE_TEMPLATE.md 2>/dev/null || true
 git rm --cached .claude/gitignore-for-projects 2>/dev/null || true
 ```
+
+> Seuls les `*.template.md` de `context/` sont désindexés — les compagnons `context/*.md`
+> (issus de la migration M1c ou déjà présents) restent/redeviennent trackés, comme pour les
+> compagnons `agents/*.md`.
 
 ### Etape M3 — Appliquer le .gitignore
 
@@ -280,7 +314,7 @@ cp TEMPLATE_claude/gitignore-for-projects .gitignore
 ### Etape M4 — Commiter la migration
 
 M2 a désindexé les `*.md` agents via `git rm --cached`. Re-tracker les fichiers compagnons agents
-qui existent sur disque (customisations projet à préserver) avant de commiter.
+et contextes qui existent sur disque (customisations projet à préserver) avant de commiter.
 
 ```bash
 git add .gitignore TEMPLATE_claude/.template-source.json
@@ -291,12 +325,17 @@ for f in .claude/agents/*.md; do
   [[ "$name" == dev-*.md ]] && continue  # dev-* gérés séparément
   git add "$f" 2>/dev/null && echo "  ✓ re-tracking companion agent : $name"
 done
+# Re-tracker les companions context/ (issus de M1c ou déjà présents), hors *.template.md
+for f in .claude/agents/context/*.md .claude/commands/context/*.md; do
+  [[ -f "$f" ]] || continue
+  git add "$f" 2>/dev/null && echo "  ✓ re-tracking companion contexte : $(basename $f)"
+done
 git commit -m "chore(claude): Migrate to v3 template architecture (TEMPLATE_claude/)
 
 - TEMPLATE_claude/ fetched from GitHub, gitignored at root
 - .claude/ now contains only project-specific files
 - Untracked legacy template files from .claude/
-- Agent companion files re-tracked after cache cleanup"
+- Agent and context companion files re-tracked after cache cleanup"
 ```
 
 ### Etape M5 — Rapport
@@ -307,12 +346,14 @@ Migration → v3 terminee.
   TEMPLATE_claude/ fetche depuis CCoupel/claude_project_template
   Commandes deployees dans .claude/commands/
   Agents template deployes dans .claude/agents/
+  Contextes partages deployes dans .claude/agents/context/ et .claude/commands/context/
 
   Fichiers PROJET preserves :
     ✓ .claude/CLAUDE.md
     ✓ .claude/project-config.json
     ✓ .claude/memory/
     ✓ .claude/agents/dev-*.md (si presents)
+    ✓ .claude/agents/*.md et context/*.md compagnons (si presents)
 ```
 
 ---
@@ -918,6 +959,21 @@ Si `CUSTOMIZED_COMMANDS[]` non vide → informer l'utilisateur avant de continue
 Pour rétablir le template, supprimer le fichier .claude/commands/[nom].md et relancer l'option d.
 ```
 
+#### Etape d1c — Migration : renommer les contextes legacy `context/X.md` → `context/X.template.md`
+
+Même migration que l'étape M1c (v1/v2 → v3), applicable ici à un projet déjà en v3 mais synchronisé
+avant l'introduction du pattern template/compagnon pour `context/`. Sans effet si déjà migré.
+
+```bash
+for f in .claude/agents/context/*.md .claude/commands/context/*.md; do
+  [[ -f "$f" ]] || continue
+  dest="${f%.md}.template.md"
+  [[ -f "$dest" ]] && continue   # déjà migré
+  mv "$f" "$dest"
+  echo "  ✓ migration contexte : $(basename $f) → $(basename $dest)"
+done
+```
+
 #### Etape d2 — Calculer les noms deployes attendus
 
 ```bash
@@ -952,12 +1008,12 @@ DEPLOYED_COMMANDS=$(
 DEPLOYED_AGENTS=$(ls .claude/agents/*.template.md 2>/dev/null \
   | xargs -I{} basename {} .template.md)
 
-# Contextes partagés (agents/context/ et commands/context/)
+# Contextes partagés (agents/context/ et commands/context/) — déployés en *.template.md
 # Comparer chaque fichier source avec le fichier déployé
 for src in TEMPLATE_claude/agents/context/*.md TEMPLATE_claude/commands/context/*.md; do
   [ -f "$src" ] || continue
   subdir=$(echo "$src" | grep -o 'agents/context\|commands/context')
-  dest=".claude/${subdir}/$(basename $src)"
+  dest=".claude/${subdir}/$(basename $src .md).template.md"
   if [ ! -f "$dest" ]; then
     statut="NOUVEAU"
   elif ! cmp -s "$src" "$dest"; then
@@ -1090,24 +1146,25 @@ for src in TEMPLATE_claude/agents/*.md; do
   fi
 done
 
-# Contextes partagés — copier fichier par fichier pour reporter les changements
+# Contextes partagés — copier fichier par fichier pour reporter les changements, déployé en *.template.md
 for src in TEMPLATE_claude/agents/context/*.md TEMPLATE_claude/commands/context/*.md; do
   [ -f "$src" ] || continue
   subdir=$(echo "$src" | grep -o 'agents/context\|commands/context')
-  dest=".claude/${subdir}/$(basename $src)"
+  dest=".claude/${subdir}/$(basename $src .md).template.md"
   mkdir -p ".claude/${subdir}"
   if ! cmp -s "$src" "$dest" 2>/dev/null; then
     cp "$src" "$dest"
-    echo "  ✓ ${subdir}/$(basename $src) mis a jour"
+    echo "  ✓ ${subdir}/$(basename $dest) mis a jour"
   fi
 done
 ```
 
 **Etape systematique — Appliquer les placeholders sur TOUS les fichiers deployes :**
 
-Scanner l'integralite de `.claude/commands/*.md`, `.claude/commands/context/*.md`, `.claude/agents/*.template.md` et `.claude/agents/context/*.md` et appliquer
+Scanner l'integralite de `.claude/commands/*.md`, `.claude/commands/context/*.template.md`, `.claude/agents/*.template.md` et `.claude/agents/context/*.template.md` et appliquer
 la procedure "Application des placeholders" (section 4 ci-dessus) sur tous les fichiers,
-en lisant les valeurs depuis `.claude/project-config.json` existant.
+en lisant les valeurs depuis `.claude/project-config.json` existant. Les compagnons `context/*.md`
+et `agents/*.md` ne sont pas scannés — ce sont des fichiers projet sans `{VAR}` a substituer.
 
 > **Exclure `init-project.md`** de cette substitution (contient des `{VAR}` d'exemple
 > dans ses blocs de code — les remplacer le corromprait).
@@ -1154,7 +1211,8 @@ Silencieuse si aucun `*.md` compagnon n'existe ou si tout est propre.
 
 ```bash
 COMPANIONS=()
-for tmpl in .claude/agents/*.template.md; do
+for tmpl in .claude/agents/*.template.md .claude/agents/context/*.template.md .claude/commands/context/*.template.md; do
+  [[ -f "$tmpl" ]] || continue
   base=$(basename "$tmpl" .template.md)
   dir=$(dirname "$tmpl")
   companion="$dir/$base.md"
@@ -1203,6 +1261,9 @@ Analyse drift template/projet :
   [↓] cdp.md          — le template couvre maintenant "phase CLARIFICATION" → simplification possible
   [↑] qa.md           — 1 section ajoutée → vérifier intentionnel
   [~] marketing-release.md — règle "diff origin/gh-pages" désormais couverte, règle "GATE 4d" toujours propre
+
+  Contextes (agents/context/ et commands/context/) :
+  [*] COMMON.md (commands) — propre (règle de versionnement projet spécifique)
 
   [=] N identiques  [↓] N simplifiables  [↑] N à vérifier  [~] N mixtes  [*] N propres
 ```
