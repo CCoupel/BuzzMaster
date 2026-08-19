@@ -41,8 +41,31 @@ const renderNavbar = (props = {}) =>
     </MemoryRouter>
   )
 
+// ResizeObserver n'existe pas nativement en jsdom (#179 — Navbar mesure
+// désormais sa hauteur via useElementHeightVar, comme RegieMessageBar
+// depuis #177). Mock GLOBAL au fichier (même piège que RegieMessageBar.
+// test.jsx #177 : scoper le mock à un seul bloc casse TOUS les autres
+// rendus de Navbar de ce fichier avec "ResizeObserver is not defined").
+class ResizeObserverMock {
+  constructor(callback) {
+    this.callback = callback
+    this.observed = []
+    ResizeObserverMock.instances.push(this)
+  }
+  observe(target) { this.observed.push(target) }
+  unobserve() {}
+  disconnect() { this.disconnected = true }
+  fire(height) {
+    this.callback([{ contentRect: { height } }], this)
+  }
+}
+ResizeObserverMock.instances = []
+
 beforeEach(() => {
   global.fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => ({}) })
+  ResizeObserverMock.instances = []
+  global.ResizeObserver = ResizeObserverMock
+  document.documentElement.style.removeProperty('--navbar-h')
 })
 
 // ---------------------------------------------------------------------------
@@ -288,6 +311,7 @@ function getDropdown(container) {
 
 afterEach(() => {
   vi.restoreAllMocks()
+  document.documentElement.style.removeProperty('--navbar-h')
 })
 
 describe('#175 — entrée « Quitter », présence et nature (T1, AC1, AC6)', () => {
@@ -390,5 +414,46 @@ describe('#175 — échec réseau silencieux (T4)', () => {
     await new Promise(resolve => setTimeout(resolve, 0))
 
     expect(window.alert).not.toHaveBeenCalled()
+  })
+})
+
+// ---------------------------------------------------------------------------
+// #179 — Navbar mesure sa propre hauteur via useElementHeightVar, écrit
+// --navbar-h (plan _work/reports/plan-20260818-212304.md, tâche F3). Le
+// hook lui-même a sa couverture exhaustive dans useElementHeightVar.test.js
+// (T1) ; ce bloc (T2) vérifie uniquement le CÂBLAGE : Navbar l'appelle bien
+// avec '--navbar-h' sur son élément racine, montage ET démontage (AC2, AC4)
+// — la Navbar est démontée à chaque bascule vers une route plein écran
+// (App.jsx : `{!hideNavbar && <Navbar ... />}`), le nettoyage n'est donc
+// pas un détail.
+// ---------------------------------------------------------------------------
+
+describe('Navbar — mesure de hauteur --navbar-h (#179, T2)', () => {
+  it('pose --navbar-h quand une mesure arrive après le montage (AC2)', () => {
+    renderNavbar()
+    expect(ResizeObserverMock.instances).toHaveLength(1)
+    const observer = ResizeObserverMock.instances[0]
+
+    observer.fire(80)
+
+    expect(document.documentElement.style.getPropertyValue('--navbar-h')).toBe('80px')
+  })
+
+  it('observe son élément <nav> racine', () => {
+    const { container } = renderNavbar()
+    const observer = ResizeObserverMock.instances[0]
+    expect(observer.observed).toHaveLength(1)
+    expect(observer.observed[0]).toBe(container.querySelector('nav.navbar'))
+  })
+
+  it('remet --navbar-h à 0px au démontage (AC4 — bascule vers une route plein écran)', () => {
+    const { unmount } = renderNavbar()
+    const observer = ResizeObserverMock.instances[0]
+    observer.fire(80)
+    expect(document.documentElement.style.getPropertyValue('--navbar-h')).toBe('80px')
+
+    unmount()
+
+    expect(document.documentElement.style.getPropertyValue('--navbar-h')).toBe('0px')
   })
 })

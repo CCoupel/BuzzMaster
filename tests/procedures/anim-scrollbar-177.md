@@ -1,18 +1,20 @@
-# Procédure de Test — Scrollbar parasite sur les pages admin (#177)
+# Procédure de Test — Scrollbar parasite sur les pages admin (#177 + #179)
 
 **Version** : v6.4.x (branche `feature/anim-communication`)
-**Date** : 2026-08-18
+**Date** : 2026-08-18 (révisée 2026-08-19 pour #179)
 **Testeur** : QA / Utilisateur
-**Issue** : #177 — scrollbar verticale permanente sur les pages `/admin/*`, effet de bord de #167
-**Référence** : Plan `_work/reports/plan-20260818-174801.md`. Complète la procédure du milestone
-`tests/procedures/anim-communication-167-168.md` (#167/#168/#175/#176) — même environnement, mêmes
-prérequis de session.
+**Issues** : #177 (scrollbar verticale permanente sur `/admin/*`, effet de bord de #167) + #179
+(hauteur de la Navbar jamais mesurée, deuxième occurrence de la même faille sur `--navbar-h`)
+**Référence** : Plan `_work/reports/plan-20260818-174801.md` (#177), `_work/reports/plan-20260818-212304.md`
+(#179). Complète la procédure du milestone `tests/procedures/anim-communication-167-168.md`
+(#167/#168/#175/#176) — même environnement, mêmes prérequis de session.
 
 > ⚠️ **Ceci est une recette purement visuelle.** L'absence de scrollbar ne peut pas être vérifiée par
 > un test automatique : jsdom (le moteur des tests Vitest) ne fait aucun calcul de mise en page réel.
-> La suite automatisée (`RegieMessageBar.test.jsx`, bloc "#177, T1") vérifie uniquement le
-> **mécanisme** (la variable CSS `--regie-bar-h` posée/mise à jour/nettoyée), jamais le **résultat**
-> visuel. Ce document est donc le seul endroit où #177 est réellement validé.
+> La suite automatisée (`useElementHeightVar.test.js`, `Navbar.test.jsx` bloc "#179, T2",
+> `RegieMessageBar.test.jsx` bloc "#177, T1") vérifie uniquement le **mécanisme** (les variables CSS
+> `--regie-bar-h` et `--navbar-h` posées/mises à jour/nettoyées), jamais le **résultat** visuel. Ce
+> document est donc le seul endroit où #177 **et** #179 sont réellement validées.
 
 ---
 
@@ -24,21 +26,27 @@ prérequis de session.
 - [ ] Un compte `/admin` avec au moins quelques questions, équipes et un peu d'historique — pour que
       les pages « Questions »/« Équipes »/« Historique » ne soient pas vides (une page vide masque
       certains cas de débordement)
+- [ ] Un panneau/outils de développement permettant de lire ou fixer précisément la largeur de la
+      fenêtre (utile pour viser 768 px et 1200 px au Scénario 7)
 - [ ] Suite automatisée verte avant de démarrer (voir section Non-Régression en fin de document)
 
 ---
 
 ## Ce qu'il faut savoir avant de commencer
 
-Le bandeau régie (`/admin/*`, bas d'écran) réserve désormais un espace **mesuré dynamiquement**
-(`--regie-bar-h`), au lieu d'une constante figée à 44 px. Sa hauteur varie selon :
-- **la largeur de la fenêtre** (le contenu du bandeau retourne à la ligne sur fenêtre étroite),
-- **l'état du message** (champ seul ≈ 44 px ; champ + « Effacer » + indicateur « Vu par l'animateur »
-  peuvent pousser la hauteur au-delà, surtout en fenêtre étroite).
+L'espace réservé en bas (bandeau régie) **et** en haut (Navbar) des pages `/admin/*` est désormais
+**mesuré dynamiquement** — plus aucune constante en dur (`--admin-chrome-h` ne contient plus ni
+`120px`, ni `72px`, ni `48px`, ni `44px` fixes). Deux sources varient :
 
-Chaque page ci-dessous doit s'adapter à cette hauteur **quelle qu'elle soit** — c'est tout l'objet de
-la correction : une seule mesure réelle, partagée par toutes les pages, au lieu de huit constantes en
-dur qui pouvaient dériver.
+- **`--regie-bar-h`** (#177) — le bandeau régie, en bas. Varie selon la largeur de la fenêtre (le
+  contenu retourne à la ligne sur fenêtre étroite) et l'état du message (champ seul ≈ 44 px ; champ +
+  « Effacer » + indicateur « Vu par l'animateur » peuvent pousser la hauteur au-delà).
+- **`--navbar-h`** (#179) — la Navbar, en haut. Varie **par sauts discrets** aux points de rupture
+  responsive **768 px** et **1200 px** (paddings et libellés qui changent), pas en continu.
+
+Chaque page ci-dessous doit s'adapter à ces deux hauteurs **quelles qu'elles soient**, séparément et
+combinées — c'est tout l'objet des deux corrections : deux mesures réelles, partagées par toutes les
+pages, au lieu de constantes en dur qui pouvaient dériver.
 
 ---
 
@@ -183,6 +191,28 @@ jamais le bandeau régie.
 | 3 | Ouvrir `/anim` | Aucune trace du bandeau régie (bas d'écran) — seule la bande de réception du message (Scénario du milestone #167) est présente, ailleurs sur la page | [ ] |
 | 4 | Ouvrir `/enroll` (ou `/`, page d'inscription) | Aucune trace du bandeau, mise en page inchangée | [ ] |
 | 5 | Redimensionner la fenêtre sur chacune de ces 4 pages | Aucun changement de comportement lié au bandeau régie (il n'existe pas sur ces pages) | [ ] |
+| 6 | Redimensionner la fenêtre en franchissant 768 px et 1200 px sur `/tv` | Aucun changement — la Navbar n'est **jamais montée** sur les routes plein écran (#179 n'y a aucune prise) | [ ] |
+
+**Verdict** : [ ] PASS  [ ] FAIL
+
+---
+
+## Scénario 7 — Franchissement des points de rupture Navbar, 768 px et 1200 px (#179, AC1, AC3)
+
+**Objectif** : La hauteur de la Navbar change **par sauts discrets** à ces deux largeurs précises
+(paddings et libellés qui changent) — c'est le cas que #177 seul ne couvrait pas, puisque
+`--regie-bar-h` était déjà mesuré mais `--navbar-h` restait une constante figée à ~72 px jusqu'à #179.
+
+| Étape | Action | Résultat Attendu | OK ? |
+|-------|--------|-----------------|------|
+| 1 | Sur `/admin`, régler la largeur de la fenêtre à **1250 px** (au-dessus du point de rupture 1200 px) | Pas de scrollbar, Navbar dans son affichage "large" | [ ] |
+| 2 | Rétrécir **lentement** jusqu'à **1150 px** (franchissant 1200 px) | La Navbar change de hauteur/densité à ce point précis ; **aucune scrollbar n'apparaît** pendant ni après la transition | [ ] |
+| 3 | Continuer jusqu'à **820 px** (au-dessus du point de rupture 768 px) | Toujours pas de scrollbar | [ ] |
+| 4 | Rétrécir jusqu'à **720 px** (franchissant 768 px) | La Navbar change à nouveau de hauteur ; toujours aucune scrollbar | [ ] |
+| 5 | Répéter les étapes 1-4 sur **au moins 3 des huit pages admin** (GamePage recommandée — le pire cas — + deux autres au choix) | Même constat sur chacune : aucune scrollbar en franchissant les deux points de rupture | [ ] |
+| 6 | Répéter l'étape 2 (franchissement de 1200 px) **avec un message régie actif** | Aucune scrollbar, même avec les deux sources de variation (Navbar + bandeau) combinées | [ ] |
+| 7 | Faire varier le nombre de badges de compteurs clients affichés dans la Navbar si possible (ex. connecter/déconnecter des tablettes animateur pendant l'observation) | La Navbar peut changer de hauteur si sa largeur disponible varie ; toujours aucune scrollbar | [ ] |
+| 8 | Naviguer vers `/tv` puis revenir sur `/admin` (démonte puis remonte la Navbar) | Pas de saut visuel anormal au retour, pas de scrollbar résiduelle | [ ] |
 
 **Verdict** : [ ] PASS  [ ] FAIL
 
@@ -197,6 +227,8 @@ jamais le bandeau régie.
       bandeau (Scénario 5)
 - [ ] Les 4 pages plein écran (`/tv`, `/player`, `/anim`, `/enroll`) strictement inchangées
       (Scénario 6) — en particulier `/tv` reste statique, sans scroll
+- [ ] Aucune scrollbar en franchissant les points de rupture 768 px et 1200 px, seuls ou combinés à un
+      message régie actif (Scénario 7, #179)
 
 ---
 
@@ -204,9 +236,12 @@ jamais le bandeau régie.
 
 | Étape | Action | Résultat Attendu | OK ? |
 |-------|--------|-----------------|------|
-| 1 | `cd server-go/web && npm test -- RegieMessageBar` | PASS, y compris le bloc « mesure de hauteur via --regie-bar-h (#177, T1) » : observation au montage, mise à jour sur nouvelle mesure, arrondi, déduplication, remise à 0px au démontage, disconnect | [ ] |
-| 2 | `cd server-go/web && npm test` (suite complète) | Aucune régression sur le reste de la suite (les autres tests utilisant `RegieMessageBar` héritent désormais d'un mock global `ResizeObserver`) | [ ] |
-| 3 | `grep -rn "calc(100vh - 120px)" server-go/web/src/pages/` | **Aucune occurrence** (AC7) | [ ] |
+| 1 | `cd server-go/web && npm test -- useElementHeightVar` | PASS — hook mutualisé (#179) : observation au montage, mise à jour sur nouvelle mesure, priorité `borderBoxSize` sur `contentRect`, arrondi, déduplication, remise à 0px au démontage, disconnect, plusieurs consommateurs indépendants | [ ] |
+| 2 | `cd server-go/web && npm test -- Navbar` | PASS, y compris le bloc « mesure de hauteur --navbar-h (#179, T2) » : `--navbar-h` posée au montage, remise à 0px au démontage | [ ] |
+| 3 | `cd server-go/web && npm test -- RegieMessageBar` | PASS **sans la moindre modification** de ce fichier depuis #177 (AC9 de #179 — garde-fou de l'extraction du hook `useElementHeightVar`) | [ ] |
+| 4 | `cd server-go/web && npm test` (suite complète) | Aucune régression sur le reste de la suite (les tests utilisant `RegieMessageBar`/`Navbar` héritent désormais d'un mock global `ResizeObserver`) | [ ] |
+| 5 | `grep -rn "calc(100vh - 120px)" server-go/web/src/pages/` | **Aucune occurrence** (AC7 de #177) | [ ] |
+| 6 | `grep -n "72px\|48px\|120px" server-go/web/src/App.css` | Aucune occurrence dans la formule `--admin-chrome-h` — seul un repli `--navbar-h: 72px` en `:root` est légitime (valeur nominale avant première mesure, AC8 de #179) | [ ] |
 
 **Verdict** : [ ] PASS  [ ] FAIL
 
