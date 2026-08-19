@@ -1,0 +1,98 @@
+/* RegieMessageBar — bandeau d'envoi régie → animateurs (#167).
+   Pleine largeur du bas de l'écran, monté sur TOUTES les pages /admin/*
+   (App.jsx, même condition isAdminRoute que Navbar) — position: fixed,
+   indépendant de la largeur de contenu de .main-content (F3). Palette
+   volontairement distincte du thème clair /admin (barre "console" sombre,
+   accent ambre-signal) — reprend les tokens réels de la tablette animateur
+   (AnimPage.css) pour marquer que ce canal parle À l'animateur. */
+
+.regie-message-bar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  width: 100%;
+  z-index: 200;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-height: 44px;
+  padding: var(--space-2) var(--space-4);
+  background: var(--bg-secondary, #1e293b);
+  border-top: 1px solid var(--bg-tertiary, #334155);
+  color: #f8fafc;
+  font-size: 0.85rem;
+}
+
+.regie-message-tag {
+  flex: none;
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #94a3b8;
+}
+
+.regie-message-input {
+  flex: 1;
+  min-width: 0;
+  background: var(--bg-primary, #0f172a);
+  border: 1px solid var(--bg-tertiary, #334155);
+  border-radius: var(--radius-md, 6px);
+  padding: 6px 10px;
+  color: #f8fafc;
+  font-size: 0.85rem;
+}
+
+.regie-message-input::placeholder {
+  color: #64748b;
+}
+
+.regie-message-input:focus {
+  outline: none;
+  border-color: #f0a92e;
+}
+
+.regie-message-counter {
+  flex: none;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-variant-numeric: tabular-nums;
+  font-size: 0.75rem;
+  color: #94a3b8;
+}
+
+.regie-message-counter.near {
+  color: #fbbf24;
+}
+
+/* #176 (F3) — indicateur fugace "Vu par l'animateur", à côté du champ qui
+   reste éditable (aucun état bloquant, décision ① du plan #176). */
+.regie-message-ack-indicator {
+  flex: none;
+  color: #4ade80;
+  font-size: 0.78rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.regie-message-btn {
+  flex: none;
+  border-radius: var(--radius-md, 6px);
+  padding: 6px 14px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  border: 1px solid transparent;
+}
+
+.regie-message-btn-ghost {
+  background: transparent;
+  border-color: #47536b;
+  color: #94a3b8;
+}
+
+.regie-message-btn-ghost:hover {
+  color: #f8fafc;
+  border-color: #94a3b8;
+}

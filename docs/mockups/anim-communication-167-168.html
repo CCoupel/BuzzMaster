@@ -1,0 +1,775 @@
+<title>Communication Animateur</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700&family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,600;1,8..60,400&family=JetBrains+Mono:wght@400;600&display=swap">
+
+<style>
+/* ─────────────────────────────────────────────────────────────
+   Maquette #167 + #168 — milestone v6.4.x « Communication Animateur »
+   Chrome du document : neutres biaisés ardoise, accent ambre-signal
+   (le voyant de régie). Les cadres d'appareil reprennent les VRAIS
+   tokens de AnimPage.css (#0f172a / #1e293b / #334155) et ne
+   basculent pas avec le thème : ils montrent le produit réel.
+   ───────────────────────────────────────────────────────────── */
+
+:root {
+  --ground:    #f4f6f9;
+  --surface:   #ffffff;
+  --sunken:    #e9edf3;
+  --line:      #d7dee8;
+  --line-soft: #e6ebf2;
+  --fg:        #10151d;
+  --muted:     #5b6675;
+
+  --signal:      #a35a00;
+  --signal-soft: #fdf1de;
+  --signal-line: #e8c894;
+
+  --ack:      #15803d;
+  --ack-soft: #e4f5e9;
+
+  --warn:     #a3341b;
+
+  /* Tokens réels de l'application — identiques dans les deux thèmes */
+  --dev-bg:      #0f172a;
+  --dev-surface: #1e293b;
+  --dev-line:    #334155;
+  --dev-fg:      #f8fafc;
+  --dev-muted:   #94a3b8;
+  --dev-dashed:  #47536b;
+
+  --display: "Archivo", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --body:    "Source Serif 4", Georgia, "Times New Roman", serif;
+  --mono:    "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --app:     ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+
+  --s1: 0.25rem; --s2: 0.5rem;  --s3: 0.75rem; --s4: 1rem;
+  --s5: 1.5rem;  --s6: 2rem;    --s7: 3rem;    --s8: 4.5rem;
+  --radius: 10px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --ground:    #10141c;
+    --surface:   #171d28;
+    --sunken:    #1d2531;
+    --line:      #2c3542;
+    --line-soft: #232b37;
+    --fg:        #e8edf5;
+    --muted:     #94a1b3;
+
+    --signal:      #f0a92e;
+    --signal-soft: #33260f;
+    --signal-line: #5c4517;
+
+    --ack:      #4ade80;
+    --ack-soft: #102a1a;
+
+    --warn:     #f4917a;
+  }
+}
+
+:root[data-theme="dark"] {
+  --ground:    #10141c;
+  --surface:   #171d28;
+  --sunken:    #1d2531;
+  --line:      #2c3542;
+  --line-soft: #232b37;
+  --fg:        #e8edf5;
+  --muted:     #94a1b3;
+
+  --signal:      #f0a92e;
+  --signal-soft: #33260f;
+  --signal-line: #5c4517;
+
+  --ack:      #4ade80;
+  --ack-soft: #102a1a;
+
+  --warn:     #f4917a;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--ground);
+  color: var(--fg);
+  font-family: var(--body);
+  font-size: 17px;
+  line-height: 1.65;
+  -webkit-font-smoothing: antialiased;
+}
+
+.wrap {
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: var(--s7) var(--s5) var(--s8);
+}
+
+/* ── Typographie ─────────────────────────────────────────────── */
+
+h1, h2, h3 {
+  font-family: var(--display);
+  text-wrap: balance;
+  margin: 0;
+  letter-spacing: -0.015em;
+}
+h1 { font-size: clamp(2rem, 4.5vw, 2.9rem); font-weight: 700; line-height: 1.08; }
+h2 { font-size: clamp(1.35rem, 2.6vw, 1.7rem); font-weight: 600; line-height: 1.2; }
+h3 { font-size: 1.02rem; font-weight: 600; line-height: 1.3; }
+
+p { margin: 0; max-width: 68ch; }
+strong { font-weight: 600; }
+
+.eyebrow {
+  font-family: var(--mono);
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--signal);
+}
+
+.lede { font-size: 1.1rem; color: var(--muted); max-width: 62ch; }
+
+code {
+  font-family: var(--mono);
+  font-size: 0.84em;
+  background: var(--sunken);
+  border: 1px solid var(--line-soft);
+  border-radius: 4px;
+  padding: 0.1em 0.35em;
+}
+
+/* ── Structure ───────────────────────────────────────────────── */
+
+header.masthead {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s4);
+  padding-bottom: var(--s6);
+  border-bottom: 2px solid var(--fg);
+}
+
+.meta-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s2) var(--s4);
+  font-family: var(--mono);
+  font-size: 0.76rem;
+  color: var(--muted);
+}
+.meta-row span { white-space: nowrap; }
+
+section.surface {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s5);
+  padding-top: var(--s7);
+}
+
+.section-head { display: flex; flex-direction: column; gap: var(--s2); }
+
+.stack { display: flex; flex-direction: column; gap: var(--s4); }
+
+/* ── Cadres d'appareil ───────────────────────────────────────── */
+
+.device {
+  background: var(--dev-bg);
+  border: 1px solid var(--dev-line);
+  border-radius: var(--radius);
+  padding: var(--s3);
+  font-family: var(--app);
+  overflow-x: auto;
+}
+
+.device-label {
+  font-family: var(--mono);
+  font-size: 0.66rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--dev-muted);
+  margin-bottom: var(--s2);
+}
+
+/* Grille d'états */
+.states {
+  display: grid;
+  gap: var(--s4);
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+}
+
+.state {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s2);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: var(--s4);
+}
+
+.state-name {
+  font-family: var(--display);
+  font-size: 0.82rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+}
+
+.dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+.dot-idle   { background: var(--muted); }
+.dot-signal { background: var(--signal); }
+.dot-ack    { background: var(--ack); }
+
+.state-note {
+  font-size: 0.88rem;
+  color: var(--muted);
+  line-height: 1.5;
+  margin: 0;
+}
+
+/* ── Surface A : bandeau bas régie (/admin) ──────────────────── */
+
+.regie-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--s3);
+  background: var(--dev-surface);
+  border: 1px solid var(--dev-line);
+  border-radius: 8px;
+  padding: 0 var(--s3);
+  min-height: 44px;
+  color: var(--dev-fg);
+  font-size: 0.82rem;
+}
+
+.regie-tag {
+  font-family: var(--mono);
+  font-size: 0.62rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--dev-muted);
+  flex: none;
+}
+
+.regie-input {
+  flex: 1;
+  min-width: 0;
+  background: var(--dev-bg);
+  border: 1px solid var(--dev-line);
+  border-radius: 6px;
+  padding: 6px 10px;
+  color: var(--dev-fg);
+  font-family: var(--app);
+  font-size: 0.82rem;
+}
+.regie-input.placeholder { color: var(--dev-muted); }
+
+.counter {
+  font-family: var(--mono);
+  font-size: 0.7rem;
+  color: var(--dev-muted);
+  flex: none;
+  font-variant-numeric: tabular-nums;
+}
+.counter.near { color: #fbbf24; }
+
+.btn {
+  flex: none;
+  border-radius: 6px;
+  padding: 6px 14px;
+  font-family: var(--app);
+  font-size: 0.78rem;
+  font-weight: 600;
+  border: 1px solid transparent;
+  white-space: nowrap;
+}
+.btn-ghost   { background: transparent; border-color: var(--dev-line); color: var(--dev-muted); }
+.btn-ack     { background: #15803d; color: #f0fdf4; }
+
+.pending-text {
+  flex: 1;
+  min-width: 0;
+  color: #fbbf24;
+  font-style: italic;
+  overflow-wrap: anywhere;
+}
+.acked-text { flex: 1; min-width: 0; color: #4ade80; }
+
+/* ── Surface B : bande régie côté /anim ──────────────────────── */
+
+.anim-frame {
+  background: var(--dev-bg);
+  border-radius: 8px;
+  padding: var(--s3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--s2);
+}
+
+.anim-ghost {
+  border: 1px dashed var(--dev-dashed);
+  border-radius: 6px;
+  color: var(--dev-muted);
+  font-size: 0.68rem;
+  text-align: center;
+  padding: var(--s2);
+}
+
+.anim-regie {
+  display: flex;
+  align-items: center;
+  gap: var(--s3);
+  min-height: 42px;
+  border-radius: 6px;
+  padding: var(--s2) var(--s3);
+  font-size: 0.86rem;
+  color: var(--dev-fg);
+}
+.anim-regie.idle {
+  border: 1.5px dashed var(--dev-dashed);
+  color: var(--dev-muted);
+  font-size: 0.74rem;
+  font-style: italic;
+  justify-content: center;
+}
+.anim-regie.active {
+  border: 1.5px solid #b45309;
+  background: rgba(180, 83, 9, 0.14);
+}
+.anim-regie .msg { flex: 1; min-width: 0; overflow-wrap: anywhere; line-height: 1.35; }
+
+.measure {
+  font-family: var(--mono);
+  font-size: 0.64rem;
+  color: var(--dev-muted);
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+}
+.measure::before {
+  content: "";
+  width: 14px;
+  border-top: 1px solid var(--dev-dashed);
+}
+
+/* ── Surface C : ligne L4, note #168 ─────────────────────────── */
+
+.l4 {
+  border-radius: 6px;
+  padding: var(--s3);
+  font-size: 0.84rem;
+  color: var(--dev-fg);
+  line-height: 1.45;
+  min-height: 56px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.l4.empty {
+  border: 1.5px dashed var(--dev-dashed);
+  color: var(--dev-muted);
+  font-size: 0.74rem;
+  align-items: center;
+  justify-content: center;
+}
+.l4.masked, .l4.shown {
+  border: 1px solid var(--dev-line);
+  background: var(--dev-surface);
+}
+.l4-label {
+  font-family: var(--mono);
+  font-size: 0.6rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--dev-muted);
+}
+.l4-body.blur {
+  filter: blur(5px);
+  opacity: 0.55;
+  user-select: none;
+}
+
+/* ── Diagramme de cycle de vie ───────────────────────────────── */
+
+.lifecycle {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: stretch;
+  gap: var(--s3);
+  background: var(--sunken);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: var(--s5);
+}
+
+.node {
+  flex: 1 1 190px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: var(--s3) var(--s4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--s1);
+}
+.node.armed { border-color: var(--signal-line); background: var(--signal-soft); }
+.node-title { font-family: var(--display); font-weight: 600; font-size: 0.92rem; }
+.node-sub { font-family: var(--mono); font-size: 0.68rem; color: var(--muted); line-height: 1.5; }
+
+.arrow {
+  flex: 0 0 auto;
+  align-self: center;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  align-items: center;
+  font-family: var(--mono);
+  font-size: 0.64rem;
+  color: var(--muted);
+  min-width: 130px;
+  text-align: center;
+}
+.arrow .glyph { font-size: 1rem; color: var(--signal); line-height: 1; }
+
+/* ── Tableaux ────────────────────────────────────────────────── */
+
+.table-scroll { overflow-x: auto; border: 1px solid var(--line); border-radius: var(--radius); }
+table { border-collapse: collapse; width: 100%; font-family: var(--display); font-size: 0.86rem; }
+th, td { text-align: left; padding: 10px var(--s4); border-bottom: 1px solid var(--line-soft); vertical-align: top; }
+th {
+  font-family: var(--mono);
+  font-size: 0.66rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+  background: var(--sunken);
+  white-space: nowrap;
+}
+tbody tr:last-child td { border-bottom: none; }
+td code { white-space: nowrap; }
+
+/* ── Encarts ─────────────────────────────────────────────────── */
+
+.callout {
+  border-left: 3px solid var(--signal);
+  background: var(--signal-soft);
+  border-radius: 0 8px 8px 0;
+  padding: var(--s4) var(--s5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--s2);
+}
+.callout.caution { border-left-color: var(--warn); background: var(--sunken); }
+.callout h3 { font-size: 0.92rem; }
+.callout p { font-size: 0.94rem; }
+
+ul { margin: 0; padding-left: 1.15rem; max-width: 68ch; }
+li { margin-bottom: var(--s2); }
+li:last-child { margin-bottom: 0; }
+
+footer.foot {
+  margin-top: var(--s8);
+  padding-top: var(--s5);
+  border-top: 1px solid var(--line);
+  font-family: var(--mono);
+  font-size: 0.72rem;
+  color: var(--muted);
+  line-height: 1.8;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * { animation: none !important; transition: none !important; }
+}
+</style>
+
+<div class="wrap">
+
+  <header class="masthead">
+    <span class="eyebrow">Maquette de validation · GATE 2</span>
+    <h1>Communication Animateur</h1>
+    <p class="lede">Trois surfaces d'interface à valider avant développement : le bandeau
+      d'envoi régie, la bande de réception animateur, et la note d'explication de question.</p>
+    <div class="meta-row">
+      <span>Milestone v6.4.x (#26)</span>
+      <span>Issues #167 · #168</span>
+      <span>Branche feature/anim-communication</span>
+      <span>2026-08-18</span>
+    </div>
+  </header>
+
+  <!-- ══════════════════════════════════════════════════════════ -->
+
+  <!-- ══════════════════════════════════════════════════════════ -->
+  <section class="surface">
+    <div class="section-head">
+      <span class="eyebrow">Surface A — /admin, #167 (corrigée #176)</span>
+      <h2>Bandeau d'envoi régie — champ permanent</h2>
+      <p><strong>Changement #176 :</strong> Le champ reste <strong>toujours visible et éditable</strong>, quel que soit l'état du message. Plus d'état bloquant « acquitté ». Un indicateur fugace (~4 s) apparaît brièvement après acquittement, sans masquer le champ.</p>
+    </div>
+
+    <div class="states">
+      <div class="state">
+        <span class="state-name"><span class="dot dot-idle"></span>Repos</span>
+        <div class="device">
+          <div class="regie-bar">
+            <span class="regie-tag">RÉGIE</span>
+            <input type="text" placeholder="Tapez une consigne…" style="flex:1; border:none; background:transparent; outline:none; font-size:0.95em;">
+            <span style="font-size:0.8em; color:#999;">0/140</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="state">
+        <span class="state-name"><span class="dot dot-signal"></span>Message actif</span>
+        <div class="device">
+          <div class="regie-bar">
+            <span class="regie-tag">RÉGIE</span>
+            <input type="text" value="Répondez aux 3 questions" style="flex:1; border:none; background:transparent; outline:none; font-size:0.95em;">
+            <span style="font-size:0.8em; color:#999;">27/140</span>
+            <span class="btn btn-ghost">Effacer</span>
+          </div>
+        </div>
+        <p class="state-note">La régie peut modifier ou effacer. Aucun bouton « Envoyer » — les trois déclencheurs (Entrée, blur, pause 2s) restent inchangés.</p>
+      </div>
+
+      <div class="state">
+        <span class="state-name"><span class="dot dot-ack"></span>Acquittement (fugace ~4s)</span>
+        <div class="device">
+          <div class="regie-bar">
+            <span class="regie-tag">RÉGIE</span>
+            <input type="text" placeholder="Tapez une consigne…" style="flex:1; border:none; background:transparent; outline:none; font-size:0.95em;">
+            <span style="font-size:0.8em; color:#999;">0/140</span>
+            <span style="color:#4caf50; font-size:0.85em;">✓ Vu par l'animateur</span>
+          </div>
+        </div>
+        <p class="state-note"><strong>Différence #176 :</strong> L'indicateur « Vu par l'animateur » apparaît brièvement (~4 s) à droite du champ vide. Le champ reste toujours éditable — plus d'état bloquant.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="surface">
+    <div class="section-head">
+      <span class="eyebrow">Cycle de vie</span>
+      <h2>Un seul emplacement, deux façons de l'éteindre</h2>
+      <p>Le serveur ne détient qu'un message à la fois, en mémoire vive. Un nouvel envoi remplace le
+        précédent : il n'y a ni file d'attente, ni historique.</p>
+    </div>
+
+    <div class="lifecycle">
+      <div class="node">
+        <span class="node-title">Inactif</span>
+        <span class="node-sub">ACTIVE: false<br>TEXT: ""</span>
+      </div>
+      <div class="arrow">
+        <span class="glyph">→</span>
+        <span>REGIE_MESSAGE_SEND<br>régie seule</span>
+      </div>
+      <div class="node armed">
+        <span class="node-title">Actif</span>
+        <span class="node-sub">ACTIVE: true<br>TEXT, SENT_AT<br><br>Un nouvel envoi remplace<br>le contenu sur place</span>
+      </div>
+      <div class="arrow">
+        <span class="glyph">→</span>
+        <span>REGIE_MESSAGE_CLEAR<br>animateur <em>ou</em> régie</span>
+      </div>
+      <div class="node">
+        <span class="node-title">Inactif</span>
+        <span class="node-sub">CLEARED_BY:<br>"ANIM" | "REGIE"</span>
+      </div>
+    </div>
+
+    <div class="table-scroll">
+      <table>
+        <thead>
+          <tr><th>Situation</th><th>Comportement retenu</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Aucune tablette connectée à l'envoi</td>
+            <td>Le message reste actif et sera délivré à la prochaine connexion <code>/anim</code>.
+              C'est la raison d'être de l'état serveur.</td>
+          </tr>
+          <tr>
+            <td>Tablette en veille, puis reconnexion</td>
+            <td>Rejeu au <code>HELLO</code> si le message est toujours actif. Une consigne n'est pas
+              perdue parce que l'écran s'est éteint.</td>
+          </tr>
+          <tr>
+            <td>Deuxième message avant acquittement</td>
+            <td>Remplace le premier, <code>SENT_AT</code> réarmé. Pas de file.</td>
+          </tr>
+          <tr>
+            <td>Le <strong>même</strong> texte renvoyé (pause de frappe puis blur)</td>
+            <td>No-op : ni réarmement, ni effacement de l'acquittement, ni diffusion. Sans cette
+              règle, une consigne déjà vue réapparaîtrait sur les tablettes.</td>
+          </tr>
+          <tr>
+            <td>Deux postes régie ouverts</td>
+            <td>Les deux affichent le même état et peuvent tous deux effacer. Deux envois
+              simultanés : le dernier remplace, il n'y a jamais qu'un message.</td>
+          </tr>
+          <tr>
+            <td>Deux tablettes acquittent en même temps</td>
+            <td>La seconde est un no-op idempotent — une seule diffusion d'effacement.</td>
+          </tr>
+          <tr>
+            <td>Changement de question, NEW_GAME, RAZ</td>
+            <td><strong>Aucun effet.</strong> Le canal est orthogonal à la machine à états ; seul un
+              acquittement ou un retrait efface.</td>
+          </tr>
+          <tr>
+            <td>Redémarrage du serveur</td>
+            <td>Le message actif est perdu. Conséquence assumée de « pas d'historique persistant ».</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ══════════════════════════════════════════════════════════ -->
+
+  <!-- ══════════════════════════════════════════════════════════ -->
+  <section class="surface">
+    <div class="section-head">
+      <span class="eyebrow">Surface B — /anim, #167 (corrigée #176)</span>
+      <h2>Bande de réception animateur — double-tap</h2>
+      <p><strong>Changement #176 :</strong> Le bouton « Vu » est supprimé. Le <strong>double-tap sur toute la zone</strong> acquitte le message. Un indice discret annonce le geste.</p>
+    </div>
+
+    <div class="states">
+      <div class="state">
+        <span class="state-name"><span class="dot dot-idle"></span>Aucun message</span>
+        <div class="device">
+          <div class="device-label">Tablette animateur — bas d'écran</div>
+          <div class="anim-frame">
+            <div class="anim-ghost">zone conduite · zone équipes</div>
+            <div class="anim-regie idle">Aucun message de la régie</div>
+            <span class="measure">hauteur 42 px, inchangée</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="state">
+        <span class="state-name"><span class="dot dot-signal"></span>Message actif</span>
+        <div class="device">
+          <div class="device-label">Tablette animateur — bas d'écran</div>
+          <div class="anim-frame">
+            <div class="anim-ghost">zone conduite · zone équipes</div>
+            <div class="anim-regie active">
+              <div style="flex:1;">Répondez aux 3 questions<br><span style="font-size:0.75em; color:#999; font-style:italic;">👆 Double-tap pour marquer comme vu</span></div>
+            </div>
+            <span class="measure">hauteur auto ≥ 42 px</span>
+          </div>
+        </div>
+        <p class="state-note"><strong>Geste #176 :</strong> Double-tap (2 appuis &lt; 300 ms) sur la zone envoie REGIE_MESSAGE_CLEAR. Tap unique : sans effet. Clavier (Entrée/Espace) : acquitte aussi (accès clavier préservé). CSS touch-action:manipulation pour éviter le zoom navigateur.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="surface">
+    <div class="section-head">
+      <span class="eyebrow">Surface C — /anim, #168</span>
+      <h2>Note d'explication</h2>
+      <p>La note s'affiche en ligne L4 du panneau de conduite — emplacement également réservé lors
+        de #166. Elle suit <strong>exactement</strong> le geste déjà appris pour la réponse : masquée
+        par défaut, révélée tant que le doigt reste posé, définitivement visible une fois la réponse
+        révélée.</p>
+    </div>
+
+    <div class="states">
+      <div class="state">
+        <span class="state-name"><span class="dot dot-idle"></span>Question sans note</span>
+        <div class="device">
+          <div class="l4 empty">Aucune note pour cette question</div>
+        </div>
+        <p class="state-note">L'emplacement reste rendu en permanence, comme les autres lignes du
+          panneau — rien ne bouge d'une question à l'autre.</p>
+      </div>
+
+      <div class="state">
+        <span class="state-name"><span class="dot dot-signal"></span>Avant révélation</span>
+        <div class="device">
+          <div class="l4 masked">
+            <span class="l4-label">Note — maintenir pour lire</span>
+            <span class="l4-body blur">Le Groenland appartient au Danemark depuis 1814 ; sa calotte
+              glaciaire couvre 80 % du territoire.</span>
+          </div>
+        </div>
+        <p class="state-note">Floutée. Le flou évite la lecture involontaire ; ce n'est pas un
+          mécanisme de confidentialité, et la maquette ne prétend pas le contraire.</p>
+      </div>
+
+      <div class="state">
+        <span class="state-name"><span class="dot dot-signal"></span>Doigt maintenu</span>
+        <div class="device">
+          <div class="l4 shown">
+            <span class="l4-label">Note</span>
+            <span class="l4-body">Le Groenland appartient au Danemark depuis 1814 ; sa calotte
+              glaciaire couvre 80 % du territoire.</span>
+          </div>
+        </div>
+        <p class="state-note">Révélation à la demande, même geste que la zone réponse. Relâché ou
+          doigt sorti de la zone → remasquée.</p>
+      </div>
+
+      <div class="state">
+        <span class="state-name"><span class="dot dot-ack"></span>Phase REVEALED</span>
+        <div class="device">
+          <div class="l4 shown">
+            <span class="l4-label">Note</span>
+            <span class="l4-body">Le Groenland appartient au Danemark depuis 1814 ; sa calotte
+              glaciaire couvre 80 % du territoire.</span>
+          </div>
+        </div>
+        <p class="state-note">Visible en permanence, sans interaction : l'animateur commente en
+          créditant les équipes, il n'a pas une main libre pour maintenir un appui.</p>
+      </div>
+    </div>
+
+    <div class="callout">
+      <h3>Le même mécanisme, pas un second</h3>
+      <p>La révélation par pression existe déjà dans la zone réponse. Elle sera extraite en une
+        pièce partagée plutôt que réécrite ici : deux zones voisines qui répondent au doigt de deux
+        façons subtilement différentes seraient un défaut d'ergonomie, et deux implémentations de la
+        même règle finiraient par diverger. Les tests existants de la zone réponse doivent rester
+        verts sans modification — c'est la garantie que l'extraction n'a rien changé.</p>
+    </div>
+
+    <div class="callout caution">
+      <h3>Ce que la note n'est pas</h3>
+      <p>Comme la réponse, elle circule sur le réseau local en clair et reste lisible via
+        <code>GET /questions</code>, qui est public et sans authentification. La garantie offerte
+        est <strong>d'affichage</strong> — aucun écran hors <code>/anim</code> ne la rend, et un test
+        dédié le vérifie — pas de confidentialité. La tablette animateur ne doit pas être visible du
+        public, ce qui était déjà vrai pour la réponse.</p>
+    </div>
+  </section>
+
+  <!-- ══════════════════════════════════════════════════════════ -->
+  <section class="surface">
+    <div class="section-head">
+      <span class="eyebrow">Périmètre</span>
+      <h2>Ce que cette maquette engage (v6.4.0 final)</h2>
+    </div>
+    <ul>
+      <li><strong>Elle fait référence pour la validation.</strong> Les scénarios de test manuels en seront dérivés, et la recette vérifiera que l'écran livré correspond à ces états.</li>
+      <li><strong>Les couleurs des cadres sont les vraies</strong> — reprises des tokens de l'application. Les proportions, elles, sont indicatives : la tablette réelle est en paysage et bien plus large, et le bandeau régie court sur <strong>toute</strong> la largeur de l'écran.</li>
+      <li><strong>Côté régie (#167) :</strong> champ toujours visible/éditable, trois déclencheurs (Entrée, blur, pause 2s), bouton « Effacer » si message actif, indicateur fugace ~4s après acquittement animateur.</li>
+      <li><strong>Côté animateur (#167) :</strong> double-tap sur toute la zone (pas de bouton « Vu »), indice « Double-tap pour marquer comme vu », accès clavier préservé (role/tabIndex/Entrée/Espace).</li>
+      <li><strong>Note d'explication (#168) :</strong> masquée par défaut, révélée par appui maintenu, permanente en REVEALED. Même geste que la réponse.</li>
+      <li><strong>Hors périmètre :</strong> réponse de l'animateur vers la régie, messages prédéfinis, ciblage d'une tablette précise, historique des messages, et note d'explication par carte MEMOTION.</li>
+    </ul>
+  </section>
+
+  <footer class="foot">
+    Maquette mise à jour pour #176 (v6.4.0) · Originale GATE 2 — milestone v6.4.x « Communication Animateur » (#26)<br>
+    Contrats : contracts/websocket-actions.md §Messagerie régie · contracts/models.md §EXPLANATION<br>
+    Plans : _work/reports/plan-20260818-121500.md (#167/#168) · _work/reports/plan-20260818-141638.md (#176)
+  </footer>
+
+</body>
+</html>

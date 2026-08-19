@@ -2,6 +2,7 @@ import React from 'react'
 import { Routes, Route, useLocation } from 'react-router-dom'
 import { GameProvider, useGame } from './hooks/GameContext'
 import Navbar from './components/Navbar'
+import RegieMessageBar from './components/RegieMessageBar'
 import GamePage from './pages/GamePage'
 import ScoresPage from './pages/ScoresPage'
 import TeamsPage from './pages/TeamsPage'
@@ -76,6 +77,11 @@ function AppContent() {
           <Route path="/anim" element={<AnimPage />} />
         </Routes>
       </main>
+      {/* #167 (F3) — bandeau régie, monté APRÈS <main> sous la même condition
+          isAdminRoute que Navbar. Pleine largeur du bas de l'écran (position:
+          fixed dans RegieMessageBar.css) — absent de /anim, /tv, /player
+          (AC1). */}
+      {isAdminRoute && <RegieMessageBar />}
     </div>
   )
 }

@@ -73,6 +73,39 @@ type App struct {
 	// handleWebMessage's single dispatch goroutine (#131) — no mutex needed,
 	// same discipline as bumperLEDState/bumperBuzzState above.
 	currentCreditPoints int
+
+	// regieMessage is the single régie → anim instruction slot (v6.4.x, #167
+	// — contracts/websocket-actions.md §"Messagerie régie").
+	//
+	// nil = no message has EVER been sent this server session — the initial
+	// state. Once a REGIE_MESSAGE_SEND has armed it, it stays non-nil for
+	// the rest of the session; Active then distinguishes "pending
+	// acknowledgment" from "already cleared". This is deliberate, not the
+	// literal "nil = cleared" reading a first pass at this field suggests:
+	// Text is kept internally even after Active flips to false, because
+	// handleRegieMessageSend's idempotency guard (contract rule 4) must
+	// still recognize a resend of the same text AFTER an acknowledgment —
+	// the régie's automatic triggers (Enter/blur/2s pause, no send button)
+	// legitimately re-fire the identical text on a stray blur right after
+	// the animateur has already acked it, and without this memory that
+	// resend would look "new" and resurrect the message on every tablet
+	// (D1 amendment, GATE 1.5). The wire payload never leaks this: buildRegieMessage
+	// always reports TEXT=""/SENT_AT=0 when ACTIVE is false, matching the
+	// contract's payload table regardless of what's remembered internally.
+	//
+	// Gates read both nil AND Active together — never nil alone — wherever
+	// "is there a message to act on / show" matters (handleRegieMessageClear,
+	// sendStateToClient's HELLO replay, B7): a merely-cleared, non-nil slot
+	// must behave as "nothing active" for those.
+	//
+	// In-memory only, never persisted — same nature as currentCreditPoints
+	// above and pointsInput's React mirror: a régie instruction is a live
+	// coordination signal, not game state, and does not survive a server
+	// restart. Written and read exclusively from handleWebMessage's single
+	// dispatch goroutine (#131) — same discipline as currentCreditPoints, no
+	// mutex. sendStateToClient (the HELLO replay path, B7) runs on that same
+	// goroutine too, so the discipline holds there as well.
+	regieMessage *protocol.RegieMessagePayload
 }
 
 // resolvePort returns the effective HTTP port.
@@ -489,6 +522,19 @@ func (a *App) setupCallbacks() {
 		a.engine.UpdateBumper(mac, map[string]interface{}{"ACK_PENDING": true})
 		a.broadcastUpdate()
 	}
+
+	// #175 B1: wire the /shutdown cleanup hook — declared (http.go's OnShutdown
+	// field) and called (handleShutdown, 100ms after the response is written,
+	// right before os.Exit(0)) since the ACK/priority-message plumbing above,
+	// but never actually assigned anywhere in the repo. Without this, /shutdown
+	// went straight to os.Exit(0): no a.cancelCtx() (AckManager goroutine leaked),
+	// no dnsServer/mdnsServer/broadcaster/udpBcast Stop(), and critically no
+	// a.httpServer.Stop() — the listening port could outlive the process exit
+	// depending on OS/socket state, forcing a full machine reboot to free it
+	// (suspected root cause of the QUALIF v6.2.0.35 port-release issue). #175
+	// makes /shutdown the every-game end-of-session gesture instead of an
+	// occasional dev curl call, so this latent gap needed closing now.
+	a.httpServer.OnShutdown = a.stop
 
 	// Detect existing backgrounds on startup
 	a.loadBackgrounds()
@@ -1102,6 +1148,12 @@ func (a *App) handleWebMessage(incoming *protocol.IncomingMessage) {
 
 	case protocol.ActionSetCreditPoints:
 		a.handleSetCreditPoints(msg)
+
+	case protocol.ActionRegieMessageSend:
+		a.handleRegieMessageSend(msg)
+
+	case protocol.ActionRegieMessageClear:
+		a.handleRegieMessageClear(clientType)
 
 	case protocol.ActionSetClientType:
 		a.handleSetClientType(incoming.ClientID, clientType, msg)
@@ -4341,6 +4393,19 @@ func (a *App) sendStateToClient(clientID string, clientType server.ClientType) {
 		// other already-connected animateur tablet too.
 		a.wsHub.SendToClient(clientID, a.buildAwardedTeamsMessage())
 	}
+
+	// Send REGIE_MESSAGE — admin + anim only, targeted (v6.4.x, #167 —
+	// contracts/websocket-actions.md §"Messagerie régie" AC6). Gated on
+	// Active, not merely non-nil (see a.regieMessage's doc comment): a
+	// (re)connecting client must NOT be replayed a stale already-cleared
+	// message it never needs to know about — its own default rest state
+	// already matches that case. Targeted at this one connecting client,
+	// same reasoning as NEXT_QUESTION/CREDIT_POINTS/AWARDED_TEAMS just
+	// above: broadcastRegieMessage() would redundantly re-push to every
+	// OTHER already-connected admin/anim client too.
+	if a.regieMessage != nil && a.regieMessage.Active && (clientType == server.ClientTypeAnim || clientType == server.ClientTypeAdmin) {
+		a.wsHub.SendToClient(clientID, a.buildRegieMessage())
+	}
 }
 
 // getStorageInfo returns file storage information (in bytes, like ESP32)
@@ -4660,6 +4725,113 @@ func (a *App) handleSetCreditPoints(msg *protocol.Message) {
 	}
 	a.currentCreditPoints = payload.Points
 	a.broadcastCreditPoints()
+}
+
+// buildRegieMessage serializes the current a.regieMessage into a
+// ready-to-send REGIE_MESSAGE *protocol.Message (v6.4.x, #167 — contracts/
+// websocket-actions.md §"Messagerie régie"). a.regieMessage == nil (never
+// sent this session) produces the payload's Go zero value, which already IS
+// the wire "rest" shape (Active:false, Text:"", SentAt:0, ClearedBy:"").
+//
+// When a.regieMessage is non-nil but !Active (already cleared/acked), TEXT
+// and SENT_AT are forced back to their rest values here — a.regieMessage
+// itself keeps the real Text internally (see its doc comment) purely for
+// handleRegieMessageSend's idempotency guard; that memory must never leak
+// onto the wire, where the contract requires TEXT=""/SENT_AT=0 whenever
+// ACTIVE is false.
+func (a *App) buildRegieMessage() *protocol.Message {
+	payload := protocol.RegieMessagePayload{}
+	if a.regieMessage != nil {
+		payload = *a.regieMessage
+		if !payload.Active {
+			payload.Text = ""
+			payload.SentAt = 0
+		}
+	}
+	data, _ := json.Marshal(payload)
+	msg, _ := protocol.NewMessage(protocol.ActionRegieMessage, nil)
+	msg.Msg = data
+	return msg
+}
+
+// broadcastRegieMessage pushes the current REGIE_MESSAGE to every connected
+// admin AND anim client (contracts/websocket-actions.md §"Messagerie régie"
+// — the régie sees its own message too, e.g. a second /admin session, F3b).
+// Same fan-out shape as broadcastAwardedTeams, but two ClientTypes instead
+// of one.
+func (a *App) broadcastRegieMessage() {
+	a.wsHub.BroadcastToTypes(a.buildRegieMessage(), server.ClientTypeAdmin, server.ClientTypeAnim)
+}
+
+// handleRegieMessageSend arms or replaces the single active régie message
+// (v6.4.x, #167 — contracts/websocket-actions.md §"Messagerie régie",
+// validation rules 1-4). Only reachable from ClientTypeAdmin (allow-list,
+// B2) — the channel is unidirectional by design (#167, "pas de réponse
+// possible").
+func (a *App) handleRegieMessageSend(msg *protocol.Message) {
+	var payload protocol.RegieMessagePayload
+	if err := json.Unmarshal(msg.Msg, &payload); err != nil {
+		server.LogError(game.LogComponentApp, "Failed to parse REGIE_MESSAGE_SEND: %v", err)
+		return
+	}
+
+	// Rule 2: trim, reject blank — a blank/whitespace-only text is silently
+	// ignored, NEVER treated as an implicit clear (that's REGIE_MESSAGE_CLEAR's
+	// job alone).
+	text := strings.TrimSpace(payload.Text)
+	if text == "" {
+		a.logger.Warn(game.LogComponentApp, "REGIE_MESSAGE_SEND ignoré : texte vide")
+		return
+	}
+
+	// Rule 3: truncate to 140 RUNES, never bytes — French accented text
+	// (à/é/ç) is multi-byte UTF-8; a byte-truncation would cut mid-character
+	// and produce invalid UTF-8 on the wire.
+	if runes := []rune(text); len(runes) > 140 {
+		text = string(runes[:140])
+	}
+
+	// Rule 4 — idempotence guard, a correctness guard NOT an optimization
+	// (see a.regieMessage's doc comment for the full scenario it closes):
+	// a text identical to the last one this slot ever held — active or
+	// already acknowledged — is a no-op. No SENT_AT rearm, no CLEARED_BY
+	// reset, no diffusion at all.
+	if a.regieMessage != nil && a.regieMessage.Text == text {
+		return
+	}
+
+	a.regieMessage = &protocol.RegieMessagePayload{
+		Active:    true,
+		Text:      text,
+		SentAt:    time.Now().UnixMilli(),
+		ClearedBy: "",
+	}
+	a.broadcastRegieMessage()
+}
+
+// handleRegieMessageClear clears the single active régie message (v6.4.x,
+// #167 — contracts/websocket-actions.md §"Messagerie régie"). One action,
+// two intents distinguished purely by clientType (never read from the
+// payload — a client does not get to declare its own identity): admin
+// retiring its own message, or anim acknowledging ("Vu"). The server-side
+// effect is identical either way.
+//
+// No-op idempotent when there is nothing active to clear — checked on
+// Active, not merely on nil, because a.regieMessage stays non-nil (holding
+// its last Text for the SEND guard above) after the first clear of the
+// session; without the Active check a second CLEAR would spuriously
+// re-diffuse an unchanged state.
+func (a *App) handleRegieMessageClear(clientType server.ClientType) {
+	if a.regieMessage == nil || !a.regieMessage.Active {
+		return
+	}
+	clearedBy := "REGIE"
+	if clientType == server.ClientTypeAnim {
+		clearedBy = "ANIM"
+	}
+	a.regieMessage.Active = false
+	a.regieMessage.ClearedBy = clearedBy
+	a.broadcastRegieMessage()
 }
 
 // getAwardedTeamsPayload computes, for the CURRENT question, every team

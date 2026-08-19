@@ -1,0 +1,64 @@
+/* AnimExplanationNote — note d'explication, ligne L4 de AnimConductPanel
+   (/anim, #168). Même logique que AnimAnswerZone.css (R5 : dimensions
+   identiques entre masked/shown, seuls filter/opacity/bordure changent) —
+   couleur distincte (accent violet plutôt que vert "réponse") pour ne pas
+   se confondre visuellement avec la zone réponse du bandeau contexte. */
+
+.anim-explanation-note {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-height: 28px;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  box-sizing: border-box;
+}
+
+.anim-explanation-note.empty {
+  border: 1.5px dashed #47536b;
+  align-items: center;
+  justify-content: center;
+  flex-direction: row;
+  text-align: center;
+  font-size: 0.72rem;
+  font-style: italic;
+  color: var(--text-secondary, #94a3b8);
+}
+
+.anim-explanation-note.masked,
+.anim-explanation-note.shown {
+  border: 1.5px solid #7c3aed;
+  background: color-mix(in srgb, #7c3aed 14%, var(--bg-tertiary, #334155));
+}
+
+.anim-explanation-note.masked {
+  border-style: dashed;
+  border-color: color-mix(in srgb, #7c3aed 45%, transparent);
+}
+
+.anim-explanation-note-label {
+  flex: none;
+  font-size: 0.62rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  opacity: 0.8;
+}
+
+.anim-explanation-note-body {
+  font-size: 0.84rem;
+  line-height: 1.4;
+}
+
+.anim-explanation-note.masked .anim-explanation-note-body {
+  filter: blur(5px);
+  opacity: 0.7;
+  user-select: none;
+}
+
+/* Même geste que AnimAnswerZone (#169) — touch-action:none empêche le
+   scroll/zoom tactile parasite pendant la pression. */
+.anim-explanation-note-peekable {
+  cursor: pointer;
+  touch-action: none;
+}

@@ -13,6 +13,7 @@ import AnimMemoryGrid from './AnimMemoryGrid'
 import AnimMotionGrid from './AnimMotionGrid'
 import AnimMotionCard from './AnimMotionCard'
 import AnimMotionActions from './AnimMotionActions'
+import AnimExplanationNote from './AnimExplanationNote'
 import './AnimConductPanel.css'
 
 // L1 — cinq emplacements FIXES (#166/F5) : la liste ne varie jamais dans
@@ -246,11 +247,12 @@ export default function AnimConductPanel({
           )}
         </div>
 
-        {/* L4 — réservée pour la note d'explication (#168, #166/F11). Vide,
-            sans état, sans donnée, sans contrat — ne rien anticiper de plus
-            que le libellé de destination (risque R11 du plan). */}
+        {/* L4 — note d'explication (#168, câblée). Consomme useHoldToPeek via
+            AnimExplanationNote — même geste EXACT que la zone réponse
+            (#166/F10, #169). question/revealed déjà disponibles dans les
+            props de ce composant (#166). */}
         <div className="anim-conduct-l4">
-          <div className="anim-conduct-reserved">Note d'explication — réservé (#168)</div>
+          <AnimExplanationNote question={question} revealed={revealed} />
         </div>
       </div>
 

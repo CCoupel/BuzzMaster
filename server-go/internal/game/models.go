@@ -290,6 +290,7 @@ type Question struct {
 	Order        int              `json:"ORDER,omitempty"`         // Display order (for drag and drop)
 	Media        string           `json:"MEDIA,omitempty"`         // Question media (shown during game)
 	MediaAnswer  string           `json:"MEDIA_ANSWER,omitempty"`  // Answer media (shown during REVEAL)
+	Explanation  string           `json:"EXPLANATION,omitempty"`   // note animateur (v6.4.x, #168) — visible /anim only, never TV/player/admin
 	Status       QuestionStatus   `json:"STATUS,omitempty"`
 }
 

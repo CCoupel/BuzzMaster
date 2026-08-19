@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef } from 'react'
 import NoSleep from 'nosleep.js'
 import { useGame } from '../hooks/GameContext'
 import { useCategories } from '../hooks/useCategories'
+import useDoubleTap from '../hooks/useDoubleTap'
 import { categoryMeta } from '../utils/categoryUtils'
 import { sortTeamsByBuzzOrder, getRankBadge, formatReactionTime } from '../utils/buzzOrder'
 import { sortArdoiseEntries } from '../utils/ardoiseOrder'
@@ -83,6 +84,11 @@ export default function AnimPage() {
     questionPosition,
     awardedTeams,
     creditPoints,
+    // Défauts défensifs (repos, jamais actif) — le hook réel (useWebSocket.js)
+    // fournit toujours ces valeurs, mais certains mocks de test n'ont pas
+    // encore été mis à jour avec les champs #167 (test-writer, en parallèle).
+    regieMessage = { ACTIVE: false, TEXT: '', SENT_AT: 0, CLEARED_BY: '' },
+    clearRegieMessage = () => {},
     startGame,
     stopGame,
     pauseGame,
@@ -98,6 +104,11 @@ export default function AnimPage() {
     revealMotionCard,
     doneMotionCard,
   } = useGame()
+
+  // #176 (F5) — acquittement de la consigne régie par double-tap sur toute
+  // la zone du message (remplace le bouton « Vu », trop petit pour un usage
+  // tactile debout). Un tap unique n'a aucun effet (AC13).
+  const { handlers: regieDoubleTapHandlers } = useDoubleTap(clearRegieMessage)
 
   // Veille écran — reprend le motif PlayerDisplay.jsx:912-921 : wake lock
   // natif (HTTPS) si disponible, repli NoSleep.js sinon. Le serveur n'expose
@@ -663,10 +674,34 @@ export default function AnimPage() {
         })}
       </div>
 
-      {/* #166/F8 — bande régie réservée (#167). Vide, sans interaction, sans
-          état ni contrat — même traitement que L3/L4 de la conduite (E4). */}
+      {/* #166/F8 — bande régie (#167, câblée ; geste révisé #176). État
+          dérivé exclusivement de regieMessage (F3b, même règle que
+          RegieMessageBar) : repos si aucun message actif, sinon consigne —
+          toute la zone est la cible du double-tap qui acquitte pour toutes
+          les tablettes ET la régie (REGIE_MESSAGE_CLEAR, F1). Plus de
+          bouton « Vu » (AC11) : role="button"/tabIndex/onKeyDown préservent
+          l'accès clavier (AC18, un seul appui suffit au clavier — le
+          double-tap protège du doigt, pas du clavier). */}
       <div className="anim-zone anim-zone-regie">
-        <div className="anim-regie-bar">Messagerie régie → animateur — espace réservé (#167)</div>
+        {regieMessage.ACTIVE ? (
+          <div
+            className="anim-regie-bar active"
+            role="button"
+            tabIndex={0}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault()
+                clearRegieMessage()
+              }
+            }}
+            {...regieDoubleTapHandlers}
+          >
+            <span className="msg">{regieMessage.TEXT}</span>
+            <span className="anim-regie-hint">Double-tap pour marquer comme vu</span>
+          </div>
+        ) : (
+          <div className="anim-regie-bar idle">Aucun message de la régie</div>
+        )}
       </div>
     </div>
   )

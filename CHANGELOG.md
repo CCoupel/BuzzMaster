@@ -2,6 +2,123 @@
 
 Historique des versions du projet BuzzControl.
 
+## [6.5.0] - Milestone v6.4.x — Communication Animateur (#26)
+
+**Issues** : #167 (messagerie régie), #168 (note d'explication), #175 (menu Quitter régie),
+#176 (correctifs UX régie), #177 (scrollbar permanente admin), #179 (hauteur Navbar mesurée),
+#180 (fix arrondi de mesure). Sept issues d'outillage animateur/régie et de fiabilisation UI
+admin, livrées dans un même cycle de qualification.
+
+### Added
+- **Messagerie régie → animateurs** (#167) — La régie envoie une consigne texte (140 caractères max) 
+  qui s'affiche sur toutes les tablettes animateur connectées. Trois déclencheurs d'envoi sans bouton : 
+  touche Entrée, perte de focus du champ, pause de frappe (2 s). Unique message actif à la fois, 
+  acquittement global (« Vu par l'animateur » depuis `/anim`, suppression possible en régie). Deux 
+  sessions `/admin` restent synchronisées. Aucune file, aucun historique. Message survit aux 
+  transitions de jeu (NEW_GAME, RAZ, changement de question). Élargissement de capacité réseau : 
+  action `REGIE_MESSAGE_CLEAR` acceptée depuis `/anim` en plus de `/admin`.
+- **Note d'explication par question** (#168) — Éditeur de questions enrichi d'un champ texte libre 
+  « Note d'explication (animateur seul) ». Affichée sur `/anim` floutée avant phase `REVEALED`, 
+  révélée par appui maintenu (même geste que la réponse #166), permanente en `REVEALED`. Aucune 
+  affichage sur `/admin`, `/tv`, `/player`. Survit à la réédition de la question (piège B9). 
+  Persistance optionnelle (omitempty).
+- **Menu « Quitter » en régie** (#175) — Nouvelle entrée en dernière position du menu de la
+  Navbar admin, séparée visuellement (teinte d'avertissement) des entrées de navigation.
+  Confirmation `window.confirm` explicitant la conséquence ; annulation = aucun effet ;
+  confirmation = arrêt propre du serveur (`/shutdown`). Après confirmation, la Navbar est
+  remplacée par un message explicite (« Serveur arrêté — cette page n'est plus active ») au
+  lieu de boucler en reconnexion silencieuse — réinitialisé automatiquement si une
+  reconnexion aboutit malgré tout (redémarrage manuel entre-temps).
+
+### Changed
+- **Trois actions WebSocket nouvelles** — `REGIE_MESSAGE_SEND` (Client→Server, admin uniquement), 
+  `REGIE_MESSAGE_CLEAR` (Client→Server, admin + anim), `REGIE_MESSAGE` (Server→Client, admin + anim). 
+  Aucun changement BREAKING sur les protocoles existants.
+- **Champ Question.EXPLANATION** — Nouvellement éditable en `POST /questions`, persiste sans migration.
+- **Messagerie régie — champ permanent + acquittement par double-tap** (#176) — Le champ de
+  saisie côté régie reste toujours visible et éditable (pré-rempli avec le message actif) : plus
+  d'état bloquant « acquitté » ni de bouton « Nouveau message ». L'acquittement animateur devient
+  un geste discret (double-tap sur la zone du message, accès clavier préservé Entrée/Espace) et
+  un indicateur en ligne fugace (« Vu par l'animateur », ~4s) remplace l'ancien bouton « Vu ».
+- **Scrollbar permanente corrigée sur les pages admin** (#177) — Huit pages admin (GamePage,
+  QuestionsPage, TeamsPage, ConfigPage, BackupPage, ScoresPage, HistoryPage,
+  CategoryPalmaresPage) débordaient de 44px depuis #167 (padding-bottom du bandeau régie non
+  répercuté dans leur calcul de hauteur en dur). Nouvelle variable CSS `--admin-chrome-h`,
+  dérivée de la hauteur réellement mesurée du bandeau régie (`--regie-bar-h`), remplace le
+  nombre magique `120px` partout. LogsPage (hors flux, `position:fixed`) corrigée séparément.
+- **Hauteur de la Navbar mesurée dynamiquement** (#179) — `--admin-chrome-h` intégrait `72px`
+  en dur pour la Navbar (jamais garanti par le CSS réel : logo, liens, badges, pastille de
+  version). La mécanique de mesure de #177 est extraite en hook partagé
+  (`useElementHeightVar`) et appliquée à la fois au bandeau régie et à la Navbar — plus aucune
+  constante en pixels dans `--admin-chrome-h`.
+- **Arrondi de mesure de hauteur passé à `Math.ceil`** (#180) — `Math.round` pouvait
+  sous-estimer une hauteur mesurée (ex. 44.3px → 44px), réservant légèrement moins de place que
+  l'élément n'en occupe réellement et provoquant une scrollbar résiduelle selon zoom/résolution.
+  `Math.ceil` garantit une réservation toujours ≥ la hauteur réelle.
+
+### Technical
+- **Backend** (#167/#168) — Quatre fichiers Go modifiés : `internal/protocol/messages.go` (3 constantes 
+  + RegieMessagePayload, aucun omitempty), `internal/server/inbound_allowlist.go` (allow-list des 
+  2 actions), `cmd/server/main.go` (état + handlers + diffusion), `internal/game/models.go` 
+  (champ Question). État du message en mémoire vive, non persisté (comme currentCreditPoints, 
+  discipline mono-goroutine sans mutex). Gardé idempotent côté serveur : un SEND identique au 
+  message déjà actif est un no-op (ni réarmement de SENT_AT, ni remise de CLEARED_BY, ni 
+  diffusion) — l'interface régie envoie automatiquement, le même texte arrive légitimement 
+  plusieurs fois (Entrée + blur + pause), sans celle garde un blur après acquittement le 
+  ressusciterait sur toutes les tablettes.
+- **Frontend** (#167) — Nouveau composant `RegieMessageBar.jsx`/`.css` (quatre états : repos, 
+  saisie, actif, acquitté). Trois déclencheurs simultanés via useEffect (touche Entrée, blur, 
+  debounce 2 s). Hook `useWebSocket` enrichi d'état `regieMessage` et helpers `sendRegieMessage()` 
+  / `clearRegieMessage()`. Bande `/anim` : état repos ou message + bouton « Vu ». Montage dans 
+  `App.jsx` pleine largeur fixed, padding-bottom sur `.main-content` contre occlusion des pages 
+  longues. Affichage piloté **exclusivement** par l'état WebSocket reçu, jamais par état local 
+  optimiste — deux sessions `/admin` restent synchronisées.
+- **Frontend** (#168) — Nouvel utilitaire `useHoldToPeek.js` : extraction du geste de révélation 
+  (#169, réutilisé) pour mutualisation zone réponse / note. Nouveau composant `AnimExplanationNote.jsx` 
+  montant en L4 de `AnimConductPanel` : floutée avant REVEALED, visible en permanence après 
+  (révélation par pression maintenue). Sans note → emplacement au repos (« Aucune note pour cette 
+  question »). Modèle Bumper enrichi du champ `EXPLANATION` en formulaire `QuestionsPage` 
+  (survit à réédition — piège documenté en plan B9, test dédié T8). No `dangerouslySetInnerHTML` 
+  introduit, contenu textuel pur.
+- **Tests** — Go : allow-list (T1), troncature 140 runes UTF-8 (T2), CLEARED_BY déduit (T3), 
+  remplacement + idempotence (T4/T4b), diffusion ciblée (T5), rejeu HELLO (T6), sérialisation 
+  sans omitempty (T7), persistence question + survie réédition (T8). React : 4 états du bandeau, 
+  3 déclencheurs envoi (T9/T9b), affichage piloté par WS (T9c), L4 avec pression (T9). Procédure 
+  manuelle : deux tablettes, reconnexion, 140 caractères accentués, retrait régie, message actif 
+  lors changement question.
+- **Backend** (#175) — `httpServer.OnShutdown` était déclaré et appelé (juste avant `os.Exit(0)`)
+  mais jamais assigné : `/shutdown` faisait un `os.Exit(0)` sec, sans `cancelCtx()` (fuite
+  goroutine AckManager), ni arrêt propre de `dnsServer`/`mdnsServer`/`broadcaster`/`udpBcast`/
+  `httpServer` (port pouvant rester occupé selon l'OS). Câblage corrigé — `/shutdown` devient le
+  geste quotidien de fin de partie via le menu Quitter.
+- **Frontend** (#176) — Nouveau hook `useDoubleTap.js` (Pointer Events, fenêtre 300ms, tolérance
+  de déplacement 10px), distinct du geste maintenu `useHoldToPeek`. `touch-action: manipulation`
+  indispensable sur la zone active pour éviter le zoom navigateur tactile.
+- **Frontend** (#177/#179) — Nouveau hook partagé `useElementHeightVar.js` (extraction de la
+  mécanique `ResizeObserver` du bandeau régie) : mesure `getBoundingClientRect`/`borderBoxSize`,
+  écrit une variable CSS uniquement si la valeur arrondie change, cleanup (`disconnect()` +
+  remise à 0px) au démontage. Deux consommateurs indépendants (`--regie-bar-h`, `--navbar-h`),
+  aucune interférence.
+- **Tests #175** — Go : `main_test.go` T5 (assignation `OnShutdown`, sans l'exercer). React :
+  Navbar.test.jsx T1-T4 (présence/position/nature non-lien, annulation sans fetch, confirmation
+  appelle `/shutdown` une fois, échec réseau avalé silencieusement).
+- **Tests #176** — `RegieMessageBar.test.jsx` (pré-remplissage, garde course écho/saisie,
+  auto-clear sans bouton, indicateur fugace), `useDoubleTap.test.js` (nouveau), `AnimPage.test.jsx`
+  (double-tap vs simple tap, accès clavier).
+- **Tests #177** — `RegieMessageBar.test.jsx` T1 (mesure `--regie-bar-h`, arrondi/dédoublonnage,
+  reset au démontage), procédure manuelle dédiée `tests/procedures/anim-scrollbar-177.md` (jsdom
+  ne calcule pas de mise en page réelle — absence de scrollbar vérifiable uniquement par un humain).
+- **Tests #179** — `useElementHeightVar.test.js` (nouveau, contrat extrait de #177),
+  `Navbar.test.jsx` T2 (pose/reset de `--navbar-h`), `RegieMessageBar.test.jsx` confirmé vert
+  sans modification (garde-fou de non-régression de l'extraction).
+- **Tests #180** — `useElementHeightVar.test.js` et `RegieMessageBar.test.jsx` mis à jour pour les
+  assertions dépendant du comportement d'arrondi (44.4/44.2 → 44px devient 45px avec `Math.ceil`).
+
+### Security
+- **Allow-list entrante WebSocket** — `REGIE_MESSAGE_SEND` : admin uniquement. 
+  `REGIE_MESSAGE_CLEAR` : admin + anim. `/anim` ne peut pas envoyer SEND. TV/vplayer/buzzers ne 
+  peuvent envoyer ni SEND ni CLEAR.
+
 ## [6.3.0] - 2026-08-17
 
 **Milestone v6.2.x — Interface Animateur (#24)** : dernière livraison du milestone — mode MEMOTION

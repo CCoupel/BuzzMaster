@@ -2,6 +2,7 @@ import { useState, useRef, useEffect, useMemo } from 'react'
 import { NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { useUpdates } from '../hooks/useUpdates'
+import useElementHeightVar from '../hooks/useElementHeightVar'
 import './Navbar.css'
 
 // Sévérité agrégée d'un groupe de participants (vjoueur/buzzer) à partir de
@@ -34,9 +35,25 @@ export default function Navbar({ connectionStatus = 'disconnected', clientCounts
   const location = useLocation()
   const navigate = useNavigate()
   const [isMenuOpen, setIsMenuOpen] = useState(false)
+  // #175 (F3) — "arrêt demandé" : passe à true après confirmation de
+  // l'entrée Quitter. Sans cela, useWebSocket reconnecte toutes les ~5s
+  // indéfiniment (RECONNECT_INTERVAL) et l'utilisateur reste devant une page
+  // figée portant un badge "Déconnecté", sans lien de cause à effet avec son
+  // clic — c'est le seul endroit du parcours qui peut expliquer ce qui vient
+  // de se passer.
+  const [shutdownRequested, setShutdownRequested] = useState(false)
   const menuRef = useRef(null)
   const buttonRef = useRef(null)
   const { updateInfo, checkForUpdates } = useUpdates()
+
+  // #179 (F3) — mesure la hauteur RÉELLE de la Navbar (jamais garantie par
+  // son CSS, qui ne déclare aucune hauteur fixe) et la partage via
+  // --navbar-h (App.css F4), consommée par --admin-chrome-h. Même hook que
+  // RegieMessageBar (#177/#179, useElementHeightVar) : cleanup (disconnect +
+  // remise à 0px) géré par le hook, nécessaire ici aussi puisque la Navbar
+  // est démontée sur les routes plein écran (App.jsx, `{!hideNavbar && ...}`).
+  const navRef = useRef(null)
+  useElementHeightVar(navRef, '--navbar-h')
 
   // Compteurs participants (X/Y) — calculés côté client depuis `bumpers`
   // (porte TEAM + CONN_STATE), pas depuis CLIENTS (qui ignore la notion d'équipe).
@@ -71,6 +88,15 @@ export default function Navbar({ connectionStatus = 'disconnected', clientCounts
     }
   }, [isMenuOpen, menuRef, buttonRef])
 
+  // #175 (F3) — si le serveur redémarre et que la reconnexion aboutit après
+  // un "Quitter" (ex. relancé manuellement entre-temps), l'état "arrêté"
+  // n'a plus lieu d'être : la page redevient utilisable normalement.
+  useEffect(() => {
+    if (shutdownRequested && connectionStatus === 'connected') {
+      setShutdownRequested(false)
+    }
+  }, [shutdownRequested, connectionStatus])
+
   // Navbar only ever renders on /admin/* — /anim is its own page (AnimPage)
   // and never shows this navbar (App.jsx isAdminRoute), so the prefix is a
   // constant, not derived from the URL anymore (#155/F2, was an alias before).
@@ -103,6 +129,10 @@ export default function Navbar({ connectionStatus = 'disconnected', clientCounts
     { path: 'backup', label: 'Backup/Restaure', icon: '💾' },
     { path: 'updates', label: 'Mises à jour', icon: '🔄', badge: updateInfo?.update_available },
     { path: 'logs', label: 'Logs', icon: '📋' },
+    // #175 (F1) — seule entrée qui soit une ACTION et non une navigation :
+    // pas de `path`, jamais de NavLink/href (un href serait préchargeable
+    // par le navigateur — arrêt du serveur au simple survol du menu, AC6).
+    { action: 'quit', label: 'Quitter', icon: '⏻', danger: true },
   ]
 
   // Build full path with current prefix
@@ -113,6 +143,25 @@ export default function Navbar({ connectionStatus = 'disconnected', clientCounts
     const fullPath = getFullPath(path)
     return location.pathname === fullPath
   }
+
+  // #175 (F2) — pattern établi du projet pour les gestes destructifs
+  // (window.confirm, BackupPage.jsx/ConfigPage.jsx/USBConfigModal.jsx) :
+  // aucun composant de dialogue dédié, ce serait un doublon.
+  const handleQuit = () => {
+    const confirmed = window.confirm(
+      'Arrêter le serveur ? Tous les participants seront déconnectés — TV, joueurs, animateur et cette page.'
+    )
+    // Le menu se referme dans tous les cas (AC4/AC7), confirmé ou annulé.
+    setIsMenuOpen(false)
+    if (!confirmed) return
+    // La requête n'aboutit pas toujours : le serveur peut mourir avant
+    // d'avoir fini d'écrire la réponse HTTP. Une erreur réseau ici EST le
+    // succès attendu, jamais un échec à signaler (F2).
+    fetch('/shutdown').catch(() => {})
+    setShutdownRequested(true)
+  }
+
+  const menuActionHandlers = { quit: handleQuit }
 
   const renderNavLink = (item) => {
     const path = item.absolute ? item.path : getFullPath(item.path)
@@ -133,8 +182,22 @@ export default function Navbar({ connectionStatus = 'disconnected', clientCounts
     )
   }
 
+  // #175 (F3, AC8) — état "arrêt demandé" : remplace la navbar entière par
+  // un message explicite, plutôt que de laisser la page figée avec un
+  // simple badge "Déconnecté" sans lien de cause à effet avec le clic.
+  if (shutdownRequested) {
+    return (
+      <nav className="navbar navbar-shutdown">
+        <div className="navbar-shutdown-message">
+          <span className="navbar-shutdown-icon" aria-hidden="true">⏻</span>
+          Serveur arrêté — cette page n'est plus active.
+        </div>
+      </nav>
+    )
+  }
+
   return (
-    <nav className="navbar">
+    <nav className="navbar" ref={navRef}>
       <div className="navbar-brand">
         <div className="brand-logo-container">
           <button
@@ -158,16 +221,31 @@ export default function Navbar({ connectionStatus = 'disconnected', clientCounts
           {isMenuOpen && (
             <div ref={menuRef} className="navbar-menu-dropdown">
               {menuItems.map((item) => (
-                <NavLink
-                  key={item.path}
-                  to={getFullPath(item.path)}
-                  className={() => `menu-item ${isActiveRoute(item.path) ? 'active' : ''}`}
-                  onClick={() => setIsMenuOpen(false)}
-                >
-                  <span className="menu-icon">{item.icon}</span>
-                  <span className="menu-label">{item.label}</span>
-                  {item.badge && <span className="update-badge">!</span>}
-                </NavLink>
+                item.action ? (
+                  // #175 (F1/AC6) — action, JAMAIS une navigation : <button>
+                  // uniquement, aucun `to`/`href` (préchargeable par le
+                  // navigateur, ce qui arrêterait le serveur au survol).
+                  <button
+                    key={item.action}
+                    type="button"
+                    className={`menu-item menu-item-action ${item.danger ? 'menu-item-danger' : ''}`}
+                    onClick={menuActionHandlers[item.action]}
+                  >
+                    <span className="menu-icon">{item.icon}</span>
+                    <span className="menu-label">{item.label}</span>
+                  </button>
+                ) : (
+                  <NavLink
+                    key={item.path}
+                    to={getFullPath(item.path)}
+                    className={() => `menu-item ${isActiveRoute(item.path) ? 'active' : ''}`}
+                    onClick={() => setIsMenuOpen(false)}
+                  >
+                    <span className="menu-icon">{item.icon}</span>
+                    <span className="menu-label">{item.label}</span>
+                    {item.badge && <span className="update-badge">!</span>}
+                  </NavLink>
+                )
               ))}
             </div>
           )}

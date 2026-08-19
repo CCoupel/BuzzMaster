@@ -103,6 +103,8 @@ export default function QuestionsPage() {
     existingMedia: null,
     mediaAnswer: null,
     existingMediaAnswer: null,
+    // Note d'explication — animateur seul (v6.4.x, #168)
+    explanation: '',
   })
 
   // Quiz metadata form state
@@ -720,6 +722,8 @@ export default function QuestionsPage() {
       existingMedia: question.MEDIA || null,
       mediaAnswer: null,
       existingMediaAnswer: question.MEDIA_ANSWER || null,
+      // Note d'explication — animateur seul (v6.4.x, #168)
+      explanation: question.EXPLANATION || '',
     })
     if (fileInputRef.current) {
       fileInputRef.current.value = ''
@@ -774,6 +778,8 @@ export default function QuestionsPage() {
       existingMedia: null,
       mediaAnswer: null,
       existingMediaAnswer: null,
+      // Note d'explication — animateur seul (v6.4.x, #168)
+      explanation: '',
     })
     if (fileInputRef.current) {
       fileInputRef.current.value = ''
@@ -924,6 +930,11 @@ export default function QuestionsPage() {
     data.append('points_target', formData.pointsTarget)
     data.append('points', formData.points)
     data.append('time', formData.time)
+    // Note d'explication — animateur seul (v6.4.x, #168). Piège
+    // handleUploadQuestion (backend) : sans cette lecture explicite, la note
+    // serait détruite à chaque édition. Vidé si le champ est vide — c'est le
+    // mécanisme d'effacement, sans code dédié côté serveur.
+    data.append('explanation', formData.explanation || '')
 
     if (formData.type === 'SPEEDY') {
       data.append('answer', formData.answer)
@@ -1779,6 +1790,21 @@ export default function QuestionsPage() {
                     />
                   </div>
                 )}
+
+                {/* Note d'explication — animateur seul (v6.4.x, #168).
+                    Toujours affichée, quel que soit le type de question :
+                    pas de maxLength (longueur non bornée, contrat
+                    §EXPLANATION), jamais rendue ailleurs que /anim. */}
+                <div className="form-group">
+                  <label htmlFor="explanation-input">Note d'explication (animateur seul)</label>
+                  <textarea
+                    id="explanation-input"
+                    value={formData.explanation}
+                    onChange={(e) => handleInputChange('explanation', e.target.value)}
+                    placeholder="Contexte, anecdote, source... visible uniquement par l'animateur sur /anim"
+                    rows={3}
+                  />
+                </div>
 
                 {/* QCM Answers */}
                 {formData.type === 'QCM' && (

@@ -180,6 +180,7 @@ interface Question {
   STATUS: QuestionStatus
   MEDIA?: string         // URL image question
   MEDIA_ANSWER?: string  // URL image réponse
+  EXPLANATION?: string   // Note d'explication/justification — animateur uniquement (v6.4.x, #168)
 
   // QCM
   QCM_ANSWERS?: QCMAnswers
@@ -216,6 +217,46 @@ interface QCMAnswers {
   BLUE: string
 }
 ```
+
+### `EXPLANATION` — note d'explication animateur (v6.4.x, #168)
+
+Texte libre attaché à une question (contexte, anecdote, source) destiné à aider l'animateur à
+commenter la réponse en direct. **Longueur non bornée** — la zone d'affichage (`/anim`, ligne L4)
+défile.
+
+**Diffusion — aucun filtrage serveur (décision GATE 1.5, option O1)** : le champ voyage dans le
+nœud `QUESTION` du payload `UPDATE`, donc il atteint `tv` et `vplayer` **exactement comme `ANSWER`
+et `QCM_CORRECT` le font déjà** (`contracts/ws-payload-serialization.md` §"Clarification (#163 →
+révisée #166)"). Aucun `SerializeForAnim` n'est créé : la décision #155
+(`ws-payload-serialization.md` §"Justification") **reste intacte**.
+
+Motifs du choix, à conserver pour toute relecture ultérieure :
+1. Un champ reçu n'est pas un champ affiché — **aucun composant de `PlayerDisplay.jsx` ne lit
+   `EXPLANATION`**, et c'est cette absence qui est couverte par un test dédié, pas par un filtre
+   réseau.
+2. Un filtrage WebSocket n'apporterait **aucune confidentialité réelle** : `GET /questions` est un
+   endpoint HTTP public et sans authentification qui renvoie déjà toutes les questions avec tous
+   leurs champs.
+3. Le filtrer imposerait un troisième palier de sérialisation, donc l'inversion d'une décision
+   d'architecture documentée, pour un bénéfice nul.
+
+> ⚠️ **Ce champ n'est donc pas un secret.** Comme `ANSWER`, il est lisible sur le réseau local. La
+> garantie offerte est **d'affichage** (jamais rendu hors `/anim`), pas de confidentialité.
+
+**Persistance** : additif et rétrocompatible. `omitempty` côté Go → les 85 `question.json` existants
+restent inchangés octet pour octet ; une question sans note se comporte comme aujourd'hui. Aucun
+versionnage de schéma n'existe pour `question.json` et **aucune migration n'est nécessaire**.
+
+> ⚠️ **Piège d'implémentation** : `handleUploadQuestion` (`internal/server/http.go`) **reconstruit
+> la question de zéro** à chaque enregistrement et ne recopie explicitement que `MEDIA`,
+> `MEDIA_ANSWER` et `ORDER`. Sans lecture explicite du champ de formulaire `explanation`, la note
+> serait **silencieusement détruite à chaque édition d'une question**. Corollaire utile : ce même
+> mécanisme fait qu'une note vidée dans l'éditeur est correctement effacée, sans code dédié.
+
+**Périmètre MEMOTION (décision GATE 1.5)** : la note est portée par la **Question**, pas par les
+cartes `MOTION_CARDS`. Une manche MEMOTION a donc **une seule** note pour l'ensemble de ses cartes.
+Une note par carte reste un ajout **additif et non breaking**, renvoyé au chantier MEMOTION+
+(#174, milestone v9.x) qui rouvrira de toute façon le modèle de carte.
 
 ### Exemple NORMAL
 

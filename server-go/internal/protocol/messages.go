@@ -106,6 +106,12 @@ const (
 	ActionCreditPoints    = "CREDIT_POINTS"     // Server → Client (/ws/anim only): current base credit amount for the active question
 	// Synchronized credit lock across animateur tablets (v6.2.x, #170 — contracts/websocket-actions.md §"Animateur")
 	ActionAwardedTeams = "AWARDED_TEAMS" // Server → Client (/ws/anim only): teams already credited for the current question, all modes
+	// Messagerie régie (v6.4.x, #167 — contracts/websocket-actions.md §"Messagerie régie"):
+	// unidirectional régie → anim instruction channel, orthogonal to the game
+	// engine (no engine.go change, never cleared by a phase transition).
+	ActionRegieMessageSend  = "REGIE_MESSAGE_SEND"  // Admin → Server: arm or replace the single active message
+	ActionRegieMessageClear = "REGIE_MESSAGE_CLEAR" // Admin (retire) OR Anim (acknowledge) → Server: clear the active message
+	ActionRegieMessage      = "REGIE_MESSAGE"       // Server → Client (/ws/admin + /ws/anim only): current message state
 )
 
 // FSInfo represents file storage information
@@ -291,6 +297,24 @@ type AwardedTeamEntry struct {
 	Team      string `json:"TEAM"`
 	Points    int    `json:"POINTS"`
 	Timestamp int64  `json:"TIMESTAMP"`
+}
+
+// RegieMessagePayload for REGIE_MESSAGE (v6.4.x, #167 — contracts/
+// websocket-actions.md §"Messagerie régie"). Server → Client, ClientTypeAdmin
+// + ClientTypeAnim exclusively. Reflects the single in-memory régie
+// instruction slot (App.regieMessage): Active=false is the rest state
+// (TEXT="", SentAt=0), ClearedBy survives the clear so the régie can show
+// "Vu par l'animateur" instead of a bare empty state.
+//
+// No omitempty on any of the 4 fields — same project-wide GameState
+// convention (CLAUDE.md §"Implementation Rules") and for the same reason: an
+// omitted ACTIVE:false would leave a stale/already-acknowledged message
+// displayed on a tablet that only diffs the JSON it receives.
+type RegieMessagePayload struct {
+	Active    bool   `json:"ACTIVE"`
+	Text      string `json:"TEXT"`
+	SentAt    int64  `json:"SENT_AT"`
+	ClearedBy string `json:"CLEARED_BY"` // "ANIM", "REGIE", or "" — origin of the last clear
 }
 
 // SetClientTypePayload for SET_CLIENT_TYPE action

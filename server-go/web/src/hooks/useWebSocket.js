@@ -149,6 +149,13 @@ export default function useWebSocket(endpoint = '/ws/admin') {
   // est en cours (permet à AIGenerateModal de se ré-attacher après un
   // rechargement de page sans état à reconstruire côté client).
   const [aiJob, setAiJob] = useState(null) // { jobId, state, batchesDone, batchesTotal, createdCount, skippedCount, errorCode, errorMessage, provider } | null
+  // #167 (F1) — messagerie régie → animateurs, un seul emplacement, jamais
+  // optimiste côté client (contrats/websocket-actions.md §"Messagerie
+  // régie"). Diffusé aux clients admin ET anim uniquement ; reste à sa
+  // valeur par défaut sur tv/vplayer, qui ne reçoivent jamais REGIE_MESSAGE.
+  // ACTIVE:false / TEXT:'' / SENT_AT:0 / CLEARED_BY:'' = repos initial, avant
+  // tout REGIE_MESSAGE reçu (le serveur rejoue l'état courant au HELLO).
+  const [regieMessage, setRegieMessage] = useState({ ACTIVE: false, TEXT: '', SENT_AT: 0, CLEARED_BY: '' })
 
   const wsRef = useRef(null)
   const logCallbackRef = useRef(null)
@@ -489,6 +496,21 @@ export default function useWebSocket(endpoint = '/ws/admin') {
         setCreditPoints(MSG?.POINTS ?? 0)
         break
 
+      case 'REGIE_MESSAGE':
+        // #167 (F1) — état dérivé EXCLUSIVEMENT du serveur (F3b) : aucun
+        // champ n'a omitempty côté Go (contrat), donc MSG porte toujours les
+        // 4 champs — pas de repli sur `prev` ici, contrairement à la plupart
+        // des autres handlers de ce switch.
+        if (MSG) {
+          setRegieMessage({
+            ACTIVE: MSG.ACTIVE === true,
+            TEXT: MSG.TEXT || '',
+            SENT_AT: MSG.SENT_AT || 0,
+            CLEARED_BY: MSG.CLEARED_BY || '',
+          })
+        }
+        break
+
       case 'BACKGROUND_CHANGE':
         if (MSG?.INDEX !== undefined) {
           setGameState(prev => ({
@@ -741,6 +763,18 @@ export default function useWebSocket(endpoint = '/ws/admin') {
     sendMessage('TEAM_POINTS', { TEAM: teamName, POINTS: points })
   }, [sendMessage])
 
+  // #167 (F1) — envoi/effacement de la consigne régie. Validation (trim,
+  // troncature 140 runes, garde d'idempotence) intégralement côté serveur
+  // (contrat §REGIE_MESSAGE_SEND règles 1-4) : ces wrappers transmettent le
+  // texte brut tel quel, sans logique dupliquée ici.
+  const sendRegieMessage = useCallback((text) => {
+    sendMessage('REGIE_MESSAGE_SEND', { TEXT: text })
+  }, [sendMessage])
+
+  const clearRegieMessage = useCallback(() => {
+    sendMessage('REGIE_MESSAGE_CLEAR', {})
+  }, [sendMessage])
+
   // #123 (F1) — action dédiée pour supprimer un joueur/buzzer. Avant ce fix,
   // TeamsPage.jsx supprimait un bumper via `updateConfig({ bumpers })` — un
   // simple UPDATE de configuration, sans notification. `DELETE_BUMPER` est le
@@ -931,6 +965,7 @@ export default function useWebSocket(endpoint = '/ws/admin') {
     questionPosition,
     awardedTeams,
     creditPoints,
+    regieMessage,
     // Actions
     sendMessage,
     startGame,
@@ -946,6 +981,8 @@ export default function useWebSocket(endpoint = '/ws/admin') {
     setTeamPoints,
     deleteBumper,
     releaseBumperName,
+    sendRegieMessage,
+    clearRegieMessage,
     setClientType,
     forceReady,
     simulateButton,

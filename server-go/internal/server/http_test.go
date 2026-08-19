@@ -3173,3 +3173,171 @@ func TestHistory_OldEventNoMetaFields(t *testing.T) {
 		}
 	}
 }
+
+// ---------------------------------------------------------------------------
+// Tests: v6.4.x (#168) — POST /questions "explanation" field (plan tâche B9,
+// T8, contracts/models.md §"EXPLANATION").
+//
+// handleUploadQuestion RECONSTRUCTS the question map from zero on every
+// save, only explicitly recopying MEDIA/MEDIA_ANSWER/ORDER from the existing
+// file (internal/server/http.go, ~:751-761) — the piège this whole lot
+// warns about (plan risk table, "Élevée si non signalé" / "Élevé"): without
+// an explicit `r.FormValue("explanation")` read, the note is silently
+// destroyed on every single edit of the question, including edits that
+// don't touch it at all (e.g. only the QUESTION text changed). Precedent:
+// TestHTTPServer_QuestionUpload_DefaultIsSpeedy/NormalMigratedToSpeedy just
+// above use the same server/setupTestHTTPServer/mux.ServeHTTP harness.
+// ---------------------------------------------------------------------------
+
+// postQuestionMultipart POSTs fields as a multipart/form-data request to
+// /questions and returns the recorder — a thin wrapper over
+// newMultipartCategoryRequest's multipart.Writer pattern (used elsewhere in
+// this file), generalized to an arbitrary field set instead of the fixed
+// name/file pair /api/categories expects.
+func postQuestionMultipart(t *testing.T, server *HTTPServer, fields map[string]string) *httptest.ResponseRecorder {
+	t.Helper()
+	body := &bytes.Buffer{}
+	writer := multipart.NewWriter(body)
+	for k, v := range fields {
+		if err := writer.WriteField(k, v); err != nil {
+			t.Fatalf("failed to write field %q: %v", k, err)
+		}
+	}
+	writer.Close()
+
+	req := httptest.NewRequest("POST", "/questions", body)
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+	w := httptest.NewRecorder()
+	server.mux.ServeHTTP(w, req)
+	return w
+}
+
+// readSavedQuestion reads back the persisted question.json for id under
+// dataDir/files/questions/<id>/question.json.
+func readSavedQuestion(t *testing.T, dataDir, id string) map[string]interface{} {
+	t.Helper()
+	path := filepath.Join(dataDir, "files", "questions", id, "question.json")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("failed to read %s: %v", path, err)
+	}
+	var saved map[string]interface{}
+	if err := json.Unmarshal(data, &saved); err != nil {
+		t.Fatalf("failed to parse %s: %v", path, err)
+	}
+	return saved
+}
+
+// TestHTTPServer_QuestionUpload_ExplanationPersisted is the basic positive
+// case: a note submitted alongside a new question is written to disk.
+func TestHTTPServer_QuestionUpload_ExplanationPersisted(t *testing.T) {
+	server, dataDir := setupTestHTTPServer(t)
+
+	w := postQuestionMultipart(t, server, map[string]string{
+		"number":      "1",
+		"question":    "Capitale de la France ?",
+		"answer":      "Paris",
+		"explanation": "Paris est la capitale depuis 508 (Clovis).",
+	})
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	saved := readSavedQuestion(t, dataDir, "1")
+	if saved["EXPLANATION"] != "Paris est la capitale depuis 508 (Clovis)." {
+		t.Errorf("EXPLANATION not persisted: got %v", saved["EXPLANATION"])
+	}
+}
+
+// TestHTTPServer_QuestionUpload_ExplanationSurvivesReedit is #168's core
+// regression test — the "piège" itself: handleUploadQuestion rebuilds the
+// question map from scratch on EVERY save. A second submission that edits
+// an unrelated field (here: the question text) but re-sends the SAME
+// explanation value (exactly what the real QuestionsPage editor does — a
+// controlled textarea always resubmits its current value) must still leave
+// the note intact. Before B9 (no explicit `r.FormValue("explanation")`
+// read), this test is RED: the note vanishes on this second save.
+func TestHTTPServer_QuestionUpload_ExplanationSurvivesReedit(t *testing.T) {
+	server, dataDir := setupTestHTTPServer(t)
+
+	postQuestionMultipart(t, server, map[string]string{
+		"number":      "2",
+		"question":    "Capitale de l'Allemagne ?",
+		"answer":      "Berlin",
+		"explanation": "Berlin depuis la réunification de 1990.",
+	})
+	saved := readSavedQuestion(t, dataDir, "2")
+	if saved["EXPLANATION"] != "Berlin depuis la réunification de 1990." {
+		t.Fatalf("setup failed: EXPLANATION not persisted on first save, got %v", saved["EXPLANATION"])
+	}
+
+	// Re-edit: only the question text changes, but the form (like the real
+	// editor) resubmits the SAME explanation value.
+	w := postQuestionMultipart(t, server, map[string]string{
+		"number":      "2",
+		"question":    "Quelle est la capitale de l'Allemagne ?",
+		"answer":      "Berlin",
+		"explanation": "Berlin depuis la réunification de 1990.",
+	})
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200 on re-edit, got %d: %s", w.Code, w.Body.String())
+	}
+
+	reedited := readSavedQuestion(t, dataDir, "2")
+	if reedited["EXPLANATION"] != "Berlin depuis la réunification de 1990." {
+		t.Errorf("#168 B9 piège: EXPLANATION was destroyed by a re-edit that didn't touch it — got %v, want the original note", reedited["EXPLANATION"])
+	}
+	if reedited["QUESTION"] != "Quelle est la capitale de l'Allemagne ?" {
+		t.Errorf("the re-edit itself must still have applied: got QUESTION=%v", reedited["QUESTION"])
+	}
+}
+
+// TestHTTPServer_QuestionUpload_ExplanationClearedWhenEmptied covers AC15:
+// vider le champ dans l'éditeur efface la note — no dedicated deletion code,
+// it's the same "only write the key when non-empty" mechanism as CATEGORY.
+func TestHTTPServer_QuestionUpload_ExplanationClearedWhenEmptied(t *testing.T) {
+	server, dataDir := setupTestHTTPServer(t)
+
+	postQuestionMultipart(t, server, map[string]string{
+		"number":      "3",
+		"question":    "Une question",
+		"answer":      "Une réponse",
+		"explanation": "Une note qui va être effacée",
+	})
+	saved := readSavedQuestion(t, dataDir, "3")
+	if saved["EXPLANATION"] == "" {
+		t.Fatalf("setup failed: EXPLANATION not persisted on first save")
+	}
+
+	postQuestionMultipart(t, server, map[string]string{
+		"number":      "3",
+		"question":    "Une question",
+		"answer":      "Une réponse",
+		"explanation": "",
+	})
+
+	cleared := readSavedQuestion(t, dataDir, "3")
+	if v, ok := cleared["EXPLANATION"]; ok && v != "" {
+		t.Errorf("#168 AC15: an emptied explanation field must clear the note — got EXPLANATION=%v", v)
+	}
+}
+
+// TestHTTPServer_QuestionUpload_NoExplanation_QuestionUnchanged is AC20's
+// direct counterpart: a question that never had a note (the common case —
+// 85 existing question.json files) must not gain a spurious "EXPLANATION"
+// key just because the (empty, untouched) form field always travels with
+// every submission.
+func TestHTTPServer_QuestionUpload_NoExplanation_QuestionUnchanged(t *testing.T) {
+	server, dataDir := setupTestHTTPServer(t)
+
+	postQuestionMultipart(t, server, map[string]string{
+		"number":   "4",
+		"question": "Question sans note",
+		"answer":   "Réponse",
+	})
+
+	saved := readSavedQuestion(t, dataDir, "4")
+	if v, ok := saved["EXPLANATION"]; ok && v != "" {
+		t.Errorf("#168 AC20: a question with no explanation submitted must not gain a non-empty EXPLANATION key — got %v", v)
+	}
+}

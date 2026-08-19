@@ -1022,6 +1022,103 @@ entrée ajoutée à la table**, aucun changement du mécanisme `IsActionAllowed`
 > `/admin` (périmètre explicite de #159). Conséquence assumée : un animateur seul ne peut pas
 > démarrer une partie MEMORY multi-équipes sans passer par la régie au préalable.
 
+## Messagerie Régie — Communication Animateur (#167, v6.4.0)
+
+### REGIE_MESSAGE_SEND (Régie → Animateurs) — v6.4.0, #167
+
+Envoye par la régie pour diffuser une consigne texte à tous les animateurs connectés.
+
+**Endpoint** : `/ws/admin`  
+**Emetteur** : Admin uniquement  
+**Destinataire** : `anim` + `admin`
+
+**Payload** (Client → Server) :
+```json
+{
+  "ACTION": "REGIE_MESSAGE_SEND",
+  "MSG": {
+    "TEXT": "Passez à la question suivante"
+  }
+}
+```
+
+| Champ MSG | Type | Obligatoire | Description |
+|-----------|------|-------------|-------------|
+| `TEXT` | string | ✅ | Consigne (max 140 caractères, troncature serveur en runes) |
+
+**Comportement serveur** :
+- Trim l'espace, refuse si vide
+- **Troncature à 140 runes** (jamais octets) — UTF-8 valide en sortie
+- **Idempotence** : si texte identique au message actif → no-op, pas de diffusion
+- Réarmement du timestamp `SENT_AT` en ms Unix, diffusion du nouvel état via `REGIE_MESSAGE`
+
+**Réponse serveur** : Silence (200 OK implicite) si succès, `WARN` log si rejeté (vide/idempotent)
+
+### REGIE_MESSAGE_CLEAR (Acquittement) — v6.4.0, #167
+
+Envoye par animateur (« Vu ») ou régie (retrait) pour effacer le message actif.
+
+**Endpoint** : `/ws/admin` (régie), `/ws/anim` (animateur)  
+**Emetteur** : Admin + Anim  
+**Destinataire** : `anim` + `admin`
+
+**Payload** (Client → Server) :
+```json
+{
+  "ACTION": "REGIE_MESSAGE_CLEAR",
+  "MSG": {}
+}
+```
+
+**Comportement serveur** :
+- No-op idempotent si aucun message actif
+- `CLEARED_BY` déduit du `ClientType` emetteur : `"ANIM"` (animateur acquitte), `"REGIE"` (régie retire)
+- Diffusion du nouvel état via `REGIE_MESSAGE` avec `ACTIVE: false`
+
+### REGIE_MESSAGE (État du message) — v6.4.0, #167
+
+Action de diffusion serveur portant l'état complet du message.
+
+**Endpoint** : `/ws/admin` + `/ws/anim`  
+**Emetteur** : Serveur uniquement  
+**Destinataire** : `anim` + `admin` (jamais `tv`, `vplayer`, `buzzer`)
+
+**Payload** (Server → Client) :
+```json
+{
+  "ACTION": "REGIE_MESSAGE",
+  "MSG": {
+    "ACTIVE": true,
+    "TEXT": "Passez à la question suivante",
+    "SENT_AT": 1724079850123,
+    "CLEARED_BY": ""
+  }
+}
+```
+
+| Champ MSG | Type | Toujours présent | Description |
+|-----------|------|---|-------------|
+| `ACTIVE` | bool | ✅ | `true` = message affiché, `false` = repos/acquitté |
+| `TEXT` | string | ✅ | Contenu du message (jamais `null`, chaîne vide si inactif) |
+| `SENT_AT` | int64 | ✅ | Timestamp ms Unix, `0` si inactif |
+| `CLEARED_BY` | string | ✅ | Raison de l'inactivité : `"ANIM"` (acquitté), `"REGIE"` (retiré), `""` (repos initial) |
+
+**Diffusion** :
+- Au `HELLO` d'un admin ou animateur si message actif
+- Après `REGIE_MESSAGE_SEND` (nouveau ou remplacement)
+- Après `REGIE_MESSAGE_CLEAR` (acquittement/retrait)
+- **Jamais** sur le chemin de `broadcastUpdate` — envoi explicite uniquement
+
+**Contrainte d'affichage** :
+- Bande régie (`/admin`) : quatre états (repos, saisie, actif, acquitté)
+- Bande animateur (`/anim`) : état repos ou message + bouton « Vu »
+- Aucun affichage sur `/tv`, `/player`, `/buzzer`
+
+**Garantie de synchronisation** :
+- Deux sessions `/admin` voient le même état
+- Acquittement `/anim` synchrone sur tous les `/admin`
+- Retrait `/admin` synchrone sur tous les `/anim`
+
 ---
 
 ## References

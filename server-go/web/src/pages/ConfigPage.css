@@ -1,6 +1,6 @@
 /* Config Page */
 .config-page {
-  min-height: calc(100vh - 120px);
+  min-height: calc(100vh - var(--admin-chrome-h));
 }
 
 .config-layout {

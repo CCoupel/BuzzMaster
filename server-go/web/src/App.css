@@ -1,3 +1,24 @@
+/* #177/#179 (F2/F4) — source unique de l'offset de chrome des pages
+   /admin/*, désormais SANS AUCUNE constante en pixels :
+     - --navbar-h est la hauteur RÉELLE et MESURÉE de la Navbar (#179/F3,
+       Navbar.jsx via hooks/useElementHeightVar.js) — son CSS ne déclare
+       aucune hauteur fixe, "72px" n'a jamais été garanti.
+     - --regie-bar-h est la hauteur RÉELLE et MESURÉE du bandeau régie
+       (#177/F1, RegieMessageBar.jsx, même hook).
+     - var(--space-6) * 2 dérive le padding (haut + bas de .main-content) du
+       token, plutôt que de le figer en littéral ("48px") décorrélé de sa
+       source — si --space-6 change un jour, l'invariant reste juste.
+   Repli 72px/44px le temps du tout premier rendu, avant que les hooks
+   n'aient mesuré quoi que ce soit — évite un saut visuel (AC8, #177/#179).
+   Invariant à préserver si ce chrome change un jour :
+     Navbar (--navbar-h) + padding-top (--space-6) + (100vh - --admin-chrome-h)
+       + padding-bottom (--space-6 + --regie-bar-h) = 100vh */
+:root {
+  --navbar-h: 72px;
+  --regie-bar-h: 44px;
+  --admin-chrome-h: calc(var(--navbar-h) + var(--space-6) * 2 + var(--regie-bar-h));
+}
+
 /* App Layout */
 .app {
   min-height: 100vh;
@@ -16,6 +37,17 @@
 .main-content.fullscreen {
   padding: 0;
   max-width: none;
+}
+
+/* #167 (F3) — espace réservé au bandeau régie (position: fixed, pleine
+   largeur du bas de l'écran, RegieMessageBar.css), pour qu'il ne recouvre
+   pas le bas des pages /admin/* longues (questions, logs). Absent en
+   fullscreen (/anim, /tv, /player) : RegieMessageBar n'y est jamais monté.
+   #177 (F2) — --regie-bar-h (mesurée, F1) remplace le 44px en dur : un
+   bandeau qui grandit (fenêtre étroite, message + Effacer + indicateur
+   d'acquittement ensemble, #176) ne recouvre plus jamais le contenu (AC4). */
+.main-content:not(.fullscreen) {
+  padding-bottom: calc(var(--space-6) + var(--regie-bar-h));
 }
 
 /* Page Transitions */

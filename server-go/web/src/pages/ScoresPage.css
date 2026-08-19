@@ -1,6 +1,6 @@
 /* Scores Page */
 .scores-page {
-  min-height: calc(100vh - 120px);
+  min-height: calc(100vh - var(--admin-chrome-h));
 }
 
 .scores-page .page-header {

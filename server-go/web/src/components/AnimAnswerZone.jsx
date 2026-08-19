@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react'
 import { QCM_COLORS } from '../constants/colors'
+import useHoldToPeek from '../hooks/useHoldToPeek'
 import './AnimAnswerZone.css'
 
 /**
@@ -41,41 +41,33 @@ import './AnimAnswerZone.css'
  * réponse en REVEALED (#163/F3, liseré vert + ✓) : les deux lectures se
  * confirment, cette zone ne le remplace pas.
  *
+ * #168/F6 — le geste de révélation par pression (état `peeking`, les 4
+ * handlers pointeur, la réinitialisation sur changement de question) est
+ * extrait dans `useHoldToPeek` (hooks/useHoldToPeek.js), partagé avec
+ * `AnimExplanationNote.jsx` (note d'explication, #168) — même geste EXACT,
+ * pas une seconde implémentation. Comportement inchangé par cette
+ * extraction (garde-fou : `AnimAnswerZone.test.jsx` reste vert sans
+ * modification).
+ *
  * @param {Object} props
  * @param {Object|null} [props.question] - gameState.question ; zone absente si null
  * @param {boolean} [props.revealed] - phase === 'REVEALED' (phaseRules.isRevealed)
  */
 export default function AnimAnswerZone({ question, revealed }) {
-  const [peeking, setPeeking] = useState(false)
-
-  // Garde-fou : une question qui change en cours de pression (ex. STOP puis
-  // enchaînement) ne doit jamais laisser la réponse de la question SUIVANTE
-  // déjà visible avant même le prochain pointerdown.
-  useEffect(() => {
-    setPeeking(false)
-  }, [question?.ID])
+  const { visible, handlers } = useHoldToPeek(revealed, question?.ID)
 
   if (!question) return null
 
-  const visible = revealed || peeking
   const isQcm = question.TYPE === 'QCM'
   const colorInfo = isQcm ? QCM_COLORS[question.QCM_CORRECT] : null
   const value = isQcm
     ? (question.QCM_ANSWERS?.[question.QCM_CORRECT] || '—')
     : (question.ANSWER || '—')
 
-  // #169 — no-op une fois REVEALED : la réponse reste figée visible, aucune
-  // interaction n'est plus nécessaire ni souhaitée à ce stade.
-  const startPeek = () => { if (!revealed) setPeeking(true) }
-  const endPeek = () => { if (!revealed) setPeeking(false) }
-
   return (
     <div
       className={`anim-answer-zone ${visible ? 'revealed' : 'masked'} ${!revealed ? 'anim-answer-zone-peekable' : ''}`}
-      onPointerDown={startPeek}
-      onPointerUp={endPeek}
-      onPointerLeave={endPeek}
-      onPointerCancel={endPeek}
+      {...handlers}
     >
       <span className="anim-answer-zone-label">Réponse</span>
       {isQcm && colorInfo && (
