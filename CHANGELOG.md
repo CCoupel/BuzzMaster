@@ -2,7 +2,7 @@
 
 Historique des versions du projet BuzzControl.
 
-## [6.4.0] - Milestone v6.4.x — Communication Animateur (#26)
+## [6.5.0] - Milestone v6.4.x — Communication Animateur (#26)
 
 **Issues** : #167 (messagerie régie), #168 (note d'explication), #175 (menu Quitter régie),
 #176 (correctifs UX régie), #177 (scrollbar permanente admin), #179 (hauteur Navbar mesurée),
