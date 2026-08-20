@@ -16,6 +16,32 @@
   50% { opacity: 0.75; }
 }
 
+/* ENTRACTE (v6.5.2, #119) — barre hors grille (.game-page est une grille à
+   placement explicite, F6 : jamais de wrapper filtré interposé autour
+   d'elle). Le bouton reste net en toute circonstance. */
+.entracte-toolbar {
+  display: flex;
+  justify-content: flex-end;
+  padding: var(--space-2) var(--space-3) 0;
+}
+
+.entracte-toggle-btn.btn-warning {
+  /* Idle — ambre, reprise de la maquette docs/mockups/entracte-119.html */
+  background: #f59e0b;
+  color: #2b1400;
+}
+
+.entracte-toggle-btn.active.btn-danger {
+  /* Actif — rouge avec halo, reprise de la maquette */
+  box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.35);
+}
+
+.entracte-toggle-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
 /* Game Page - Grid Layout:
  * Row 1: [Controls 300px] [Timer + Display stacked, spans cols 2-3]
  * Row 2: [Questions 300px] [Preview flex] [Equipes 300px]
