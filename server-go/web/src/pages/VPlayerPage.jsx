@@ -2,11 +2,13 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useGame } from '../hooks/GameContext'
 import PlayerDisplay from './PlayerDisplay'
+import EntractePanel from '../components/EntractePanel'
 import ArdoiseKeyboard from '../components/ArdoiseKeyboard'
 import NoSleep from 'nosleep.js'
 import { REJECTION_MESSAGES, DEFAULT_REJECTION_MESSAGE, REDIRECT_MESSAGES, DEFAULT_REDIRECT_MESSAGE } from '../utils/playerConnectMessages'
 import { clearVPlayerSession } from '../utils/vplayerSession'
 import './VPlayerPage.css'
+import '../styles/entracte.css'
 
 // QCM answer colors mapping
 const ANSWER_COLORS = {
@@ -519,6 +521,14 @@ export default function VPlayerPage() {
   const handleBuzz = () => {
     if (!bumper || !bumper.id) return
 
+    // ENTRACTE (#119) — le blocage réel est côté serveur (garde D6, seule
+    // source de vérité) ; cette garde évite seulement l'envoi inutile et le
+    // retour visuel trompeur (overlay "BUZZÉ !") pendant la pause. En pratique
+    // l'entracte ne peut de toute façon coexister avec STARTED/PAUSED (D4),
+    // donc le check de phase juste en dessous suffirait déjà — explicite ici
+    // pour la clarté et la robustesse (voir plan #119, F5).
+    if (gameState.entracte) return
+
     // Only allow buzz during STARTED or PAUSED phases
     if (gameState.phase !== 'STARTED' && gameState.phase !== 'PAUSED') return
 
@@ -732,18 +742,29 @@ export default function VPlayerPage() {
         )
       })()}
 
-      <PlayerDisplay
-        playerName={bumper?.NAME}
-        playerNameColor={getPlayerNameColor()}
-        teamName={team?.NAME}
-        teamColor={getTeamColor()}
-        isVPlayer={true}
-        onMediaClick={handleBuzz}
-        onQCMAnswer={handleQCMAnswer}
-        vplayerHasBuzzed={hasBuzzed}
-      />
+      {/* ENTRACTE (#119) — le contenu de jeu existant (TV embarquée) reste
+          visible mais estompé derrière le panneau. Wrapper toujours monté
+          (seule la classe entracte-dim est conditionnelle) pour ne pas
+          démonter/remonter PlayerDisplay au bascule. Le filtre de
+          PlayerDisplay lui-même est désactivé quand isVPlayer (voir F4) :
+          VPlayerPage porte son propre filtre ici, pas de double filtrage. */}
+      <div className={`entracte-content${gameState.entracte ? ' entracte-dim' : ''}`}>
+        <PlayerDisplay
+          playerName={bumper?.NAME}
+          playerNameColor={getPlayerNameColor()}
+          teamName={team?.NAME}
+          teamColor={getTeamColor()}
+          isVPlayer={true}
+          onMediaClick={gameState.entracte ? undefined : handleBuzz}
+          onQCMAnswer={handleQCMAnswer}
+          vplayerHasBuzzed={hasBuzzed}
+        />
+      </div>
 
-      {/* ARDOISE keyboard overlay — shown for all ARDOISE phases, active only during STARTED */}
+      {/* ARDOISE keyboard overlay — shown for all ARDOISE phases, active only during STARTED.
+          Kept OUTSIDE .entracte-content: position:fixed, même piège que le bandeau de
+          connexion et l'overlay de buzz ci-dessus. En pratique ne peut pas être actif
+          pendant un entracte (STARTED requis, exclu par la garde de phase D4). */}
       {isArdoiseQuestion && (
         <div className="vplayer-ardoise-container">
           <ArdoiseKeyboard
@@ -753,6 +774,16 @@ export default function VPlayerPage() {
             disabled={gameState.phase !== 'STARTED'}
           />
         </div>
+      )}
+
+      {/* ENTRACTE panel + cadenas — frères du contenu filtré, jamais enfants. */}
+      {gameState.entracte && (
+        <>
+          <EntractePanel config={gameState.entracteConfig} />
+          <div className="entracte-lock-wrap" aria-hidden="true">
+            <span className="entracte-lock">🔒</span>
+          </div>
+        </>
       )}
     </div>
   )
