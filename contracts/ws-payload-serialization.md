@@ -231,6 +231,25 @@ comportent comme n'importe quel champ non listé dans `AdminOnlyGameFields` :
 | `anim` | ✅ | routé vers `SerializeForWebClient` |
 | `buzzer` | ❌ | `SerializeForBuzzer` est une liste d'**autorisation** (`PHASE`, `TIME`, `CURRENT_TIME`) |
 
+### ⚠️ Rectification #128 (v6.5.2) — le filtrage ne se limitait qu'à `UPDATE`
+
+Jusqu'à #128, `SerializeForWebClient` renvoyait la charge utile **intacte** pour toute action autre
+que `ActionUpdate`. Or `START`, `STOP`, `PAUSE`, `CONTINUE` et `UPDATE_TIMER` transportent le
+`GameState` complet vers TV, VJoueur et animateur — `UPDATE_TIMER` **une fois par seconde**. Tous les
+champs réservés à l'admin (`QUIZ_OBJECTIVES`, métadonnées firmware/OTA/ACK par buzzer) leur
+parvenaient donc en clair, et la règle de confidentialité de `QUIZ_OBJECTIVES` posée en v6.1.0 était
+inopérante hors `UPDATE`.
+
+**La règle est désormais fondée sur la forme de la charge utile, pas sur le nom de l'action** : une
+charge utile portant un nœud `GAME` est filtrée, les autres passent intactes (repli existant en cas
+d'échec de désérialisation). Énumérer les actions concernées reproduirait le défaut à la première
+action ajoutée. Détail complet : `contracts/vplayer-payload-filter.md` §6.
+
+`ARDOISE_ANSWERS` (#128) est retiré **du seul VJoueur** : la TV l'affiche au REVEAL et `/anim` le
+liste en direct (#158). Il ne peut donc pas rejoindre `AdminOnlyGameFields` — d'où une seconde liste
+exportée, `VPlayerOnlyGameFields`, appliquée sur le seul chemin VJoueur. Conséquence : le VJoueur ne
+partage plus sa charge utile avec la TV et l'animateur.
+
 `ENTRACTE_CONFIG_SAVED` (v6.5.2, arbitrage 2026-08-20) fait exception : il rejoint
 `AdminOnlyGameFields`, aux côtés de `QUIZ_OBJECTIVES`, et n'atteint donc **que l'admin**. C'est la
 configuration *enregistrée*, distincte de la configuration *diffusée* gelée pendant une pause ;

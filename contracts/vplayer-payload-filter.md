@@ -202,4 +202,90 @@ Deux obligations : *(a)* tout changement de phase vide immédiatement le regroup
 Seul le **jeu des destinataires** de messages existants change.
 
 **Correction d'équité obtenue au passage** : `ARDOISE_ANSWERS` — donc le texte que les autres équipes
-sont en train de saisir — n'est plus transmis aux navigateurs des VJoueurs pendant la saisie.
+sont en train de saisir — n'est plus transmis aux navigateurs des VJoueurs **par le broadcast
+déclenché par la frappe**.
+
+> ⚠️ **Rectification (#128, 2026-08-20)** : cette phrase a longtemps été lue comme « le VJoueur ne
+> reçoit plus les réponses des autres équipes ». C'était faux. #129 a fermé un **déclencheur**, pas
+> la fuite : le champ restait dans le nœud `GAME`, et **tout autre** broadcast le transportait —
+> au premier rang desquels le tic de chronomètre, **une fois par seconde**. Voir §6.
+
+---
+
+## 6. Retrait par champ, toutes actions confondues (#128, v6.5.2)
+
+### Deux défauts, à corriger ensemble
+
+| | Défaut | Portée |
+|---|---|---|
+| **A** | Le filtrage par type de client ne s'appliquait **qu'à `ActionUpdate`** | **Tous** les champs réservés à l'admin, vers TV, VJoueur et animateur |
+| **B** | `ARDOISE_ANSWERS` n'appartenait à **aucune** liste de retrait | Le VJoueur le recevait **aussi** sur `ActionUpdate` |
+
+Corriger A seul laisse `ARDOISE_ANSWERS` partir, faute d'appartenir à une liste. Corriger B seul
+laisse les autres actions passer à côté du filtre. Les deux sont nécessaires.
+
+**Sept sites de diffusion** transportaient le `GameState` complet vers le VJoueur sans aucun
+filtrage — `broadcastStart`, `broadcastStop`, `broadcastPause`, `broadcastPauseAll`,
+`broadcastContinue`, `broadcastTimerUpdate`, `broadcastCountdownUpdate` — soit les actions `START`,
+`STOP`, `PAUSE`, `CONTINUE` et `UPDATE_TIMER`. **`UPDATE_TIMER` part une fois par seconde** : la
+fuite n'était pas ponctuelle, elle était continue.
+
+Fuyaient à chacun de ces envois : `QUIZ_OBJECTIVES` (dont la règle de confidentialité v6.1.0 était
+donc inopérante hors `UPDATE`), `ARDOISE_ANSWERS`, et par buzzer `FIRMWARE_VERSION`, `IS_OUTDATED`,
+`OTA_STATUS`, `OTA_PERCENT`, `ACK_PENDING`.
+
+### Règle — la forme de la charge utile, jamais le nom de l'action
+
+> Une charge utile qui porte un nœud `GAME` est filtrée. Une charge utile qui n'en porte pas passe
+> intacte.
+
+Énumérer les actions concernées reproduirait exactement le défaut corrigé : la prochaine action
+transportant le `GameState` serait ajoutée sans que personne ne pense à cette liste, et la fuite
+reviendrait en silence. Le seul critère qui ne se périme pas est ce que la charge utile **contient**.
+
+En pratique, `SerializeForWebClient` n'a plus de garde sur l'action : elle désérialise, et **en cas
+d'échec ou d'absence des clés attendues, renvoie la charge utile intacte**. Les actions sans nœud
+`GAME` (`REVEAL`, `HELLO`, `LED_SET`…) empruntent ce repli et sont **inchangées**.
+
+`SerializeForVPlayer` conserve en revanche sa garde `ActionUpdate` : elle protège la **réduction du
+nœud `bumpers`**, qui reste propre à `UPDATE` (§2). Deux mécanismes distincts dans la même fonction
+— le retrait de champs, qui s'applique partout via le repli, et la réduction de `bumpers`, qui reste
+conditionnelle.
+
+### Une liste de retrait propre au VJoueur
+
+`ARDOISE_ANSWERS` ne peut pas simplement rejoindre `AdminOnlyGameFields` : **la TV et l'animateur en
+ont un besoin légitime** — la TV affiche les réponses par équipe au REVEAL, `/anim` les liste en
+direct (#158). Le retrait doit viser le seul VJoueur, ce que le mécanisme binaire admin/non-admin ne
+savait pas exprimer.
+
+D'où une seconde liste exportée, `VPlayerOnlyGameFields`, appliquée au seul chemin VJoueur :
+
+| Champ | admin | tv | anim | **player** | buzzer |
+|---|:---:|:---:|:---:|:---:|:---:|
+| `QUIZ_OBJECTIVES` | ✅ | ❌ | ❌ | ❌ | ❌ |
+| `ARDOISE_ANSWERS` | ✅ | ✅ | ✅ | **❌** | ❌ |
+
+Conséquence : le VJoueur ne partage plus sa charge utile avec la TV et l'animateur. Il lui faut son
+propre sérialiseur sur le chemin générique — `serializeForClientType` le routait jusqu'ici vers
+`SerializeForWebClient`, comme la TV.
+
+### Trois sites, une seule liste
+
+Le retrait des champs `GAME` est ré-implémenté sur **trois** chemins — `SerializeForWebClient`,
+`SerializeForVPlayer`, et la fonction de retrait du chemin chaud de fan-out (`cmd/server/main.go`).
+**Les trois doivent lire les listes exportées.** Un site oublié laisse la fuite ouverte sur ce
+chemin, sans erreur ni symptôme visible : c'est le risque principal de ce correctif.
+
+### Risque résiduel assumé
+
+`ARDOISE_ANSWERS` **reste envoyé à la TV**, qui en a besoin au REVEAL. Le projet n'ayant aucune
+authentification, un joueur qui connaît l'URL peut ouvrir `/tv` et y lire les réponses avant le
+REVEAL. **Ce chemin n'est pas fermé par ce lot.**
+
+Le fermer supposerait soit de ne transmettre `ARDOISE_ANSWERS` à la TV qu'en phase `REVEALED` —
+filtrage dépendant de la phase, plus fragile — soit de contrôler l'accès à `/tv`, hors périmètre et
+sans objet dans une application qui n'a pas d'authentification.
+
+Ce qui est fermé, et qui était l'objet de #128 : le chemin **par défaut**, celui qu'un joueur
+emprunte sans rien chercher — les outils de développement sur sa propre page.

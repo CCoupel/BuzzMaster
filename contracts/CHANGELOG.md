@@ -2,6 +2,37 @@
 
 ---
 
+## [20260820-3] — sec : fuite des champs réservés à l'admin hors `UPDATE` (#128)
+
+> Milestone v6.5.2 · Plan : `_work/reports/plan-128-20260820-170433.md`
+
+**Aucun changement BREAKING** : aucun client ne perd une donnée qu'il utilisait. Le VJoueur perd un
+champ qu'il n'a jamais lu — c'est précisément l'objet du correctif.
+
+- **[CHANGED]** `SerializeForWebClient` ne filtre plus **seulement** `ActionUpdate`. La règle porte
+  désormais sur la **forme de la charge utile** : celle qui contient un nœud `GAME` est filtrée, les
+  autres passent intactes. Énumérer les actions concernées aurait reproduit le défaut dès la
+  prochaine action ajoutée.
+- **[CHANGED]** Conséquence : `START`, `STOP`, `PAUSE`, `CONTINUE` et `UPDATE_TIMER` sont désormais
+  filtrées comme `UPDATE`. Ces cinq actions transportaient le `GameState` complet vers TV, VJoueur et
+  animateur — **`UPDATE_TIMER` une fois par seconde**. La fuite n'était pas ponctuelle, elle était
+  continue.
+- **[NEW]** `VPlayerOnlyGameFields = ["ARDOISE_ANSWERS"]` — retrait appliqué au **seul** VJoueur.
+  La TV l'affiche au REVEAL et `/anim` le liste en direct : le champ ne pouvait pas rejoindre
+  `AdminOnlyGameFields`. Le VJoueur ne partage donc plus sa charge utile avec la TV et l'animateur.
+- **[CHANGED]** `QUIZ_OBJECTIVES` : la règle de confidentialité posée en v6.1.0 (#137) — « jamais
+  lisible depuis un écran TV ou les outils de développement d'un VJoueur » — **n'avait jamais tenu
+  hors de `UPDATE`**. Elle est effective à partir de ce lot. Seconde correction de confidentialité,
+  que personne n'avait demandée.
+- **[CHANGED]** Les métadonnées par buzzer (`FIRMWARE_VERSION`, `IS_OUTDATED`, `OTA_STATUS`,
+  `OTA_PERCENT`, `ACK_PENDING`) cessent également de fuiter sur ces cinq actions.
+- **Rectification de contrat** : `vplayer-payload-filter.md` affirmait depuis #129 que
+  `ARDOISE_ANSWERS` « n'est plus transmis aux navigateurs des VJoueurs pendant la saisie ». #129
+  avait fermé un **déclencheur**, pas la fuite. La phrase est corrigée, et §6 documente le
+  **risque résiduel non fermé** : `/tv` reste accessible sans authentification et porte ce champ.
+
+---
+
 ## [20260820-2] — ENTRACTE : config rattachée à la partie, transition progressive (#119)
 
 > Milestone v6.5.2 · Corrections après essai en QUALIF (`6.5.2.2`) par l'utilisateur

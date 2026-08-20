@@ -275,7 +275,15 @@ Réponses texte libres des équipes pour les questions de type `ARDOISE`.
 
 | Propriété | Type | Valeur par défaut | Notes |
 |-----------|------|-------------------|-------|
-| ARDOISE_ANSWERS | `{ [teamName: string]: ArdoiseAnswer }` | `{}` | **Jamais null** — toujours sérialisé |
+| ARDOISE_ANSWERS | `{ [teamName: string]: ArdoiseAnswer }` | `{}` | **Jamais null** — toujours sérialisé. ⚠️ **Jamais diffusé au VJoueur** (#128) |
+
+> **Confidentialité (#128, v6.5.2)** : ce champ contient le texte que **chaque équipe** est en train
+> de saisir. Il est retiré de toute charge utile destinée à `ClientTypeVPlayer`, sur **toutes** les
+> actions — un joueur ne doit pas pouvoir lire les réponses des autres avant le REVEAL depuis les
+> outils de développement de sa propre page. La TV (affichage au REVEAL) et l'animateur (liste en
+> direct, #158) continuent de le recevoir : il ne peut donc pas rejoindre `AdminOnlyGameFields`,
+> d'où la liste `VPlayerOnlyGameFields`. Voir `contracts/vplayer-payload-filter.md` §6, qui
+> documente aussi le risque résiduel (`/tv` reste accessible sans authentification).
 
 ```typescript
 interface ArdoiseAnswer {
