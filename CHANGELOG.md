@@ -2,6 +2,12 @@
 
 Historique des versions du projet BuzzControl.
 
+## [Unreleased]
+
+### Fixed
+- **Cartes Memory redimensionnées au 80% de la zone disponible** (#108) — Les cartes Memory s'agrandissent maintenant jusqu'à 460px de large (au lieu de 280px), remplissant ~80% de la largeur disponible à l'écran, avec texte et taille de police adaptatifs via `clamp()` pilotés par la taille réelle des cartes. Garantit que la contrainte TV statique (`overflow: hidden`) est respectée en tous les cas (formule mathématique prouvée, filet de sécurité `max-width: 100%` en place). Affects : `web/src/pages/PlayerDisplay.jsx` et `web/src/pages/PlayerDisplay.css`.
+- **Contraste texte type de question en phase READY** (#114) — Le label du type de question (ex. "QCM", "SPEEDY") bénéficie désormais d'un contour sombre (`-webkit-text-stroke`) et d'un fond assombri (`rgba(0,0,0,0.45)`) pour assurer un contraste de luminance garanti sur toute teinte d'arrière-plan, même clair ou saturé. Fallback `text-shadow` multi-directionnel pour navigateurs sans support du contour (Firefox). Affects : `web/src/pages/PlayerDisplay.jsx` et `web/src/pages/PlayerDisplay.css`.
+
 ## [6.5.1] - Milestone v6.5.1 — Bugfix CI/Infra (#27)
 
 **Issues** : #151 (durcissement goroutines), #153 (job CI testing), #161 (nettoyage code mort),
