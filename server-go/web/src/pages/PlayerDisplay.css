@@ -1754,8 +1754,12 @@
 
   /* Use the smaller dimension to keep cards square */
   --card-size: min(var(--card-width), var(--card-height));
-  /* Cap maximum card size for very large screens */
-  --card-size-capped: min(var(--card-size), 280px);
+  /* #108 — plafond relevé (était 280px, laissait un vide important autour de la grille sur
+     grand écran TV) : les cartes occupent maintenant ~80% de la largeur de zone disponible
+     (ou le max possible selon le nombre de cartes), le plafond ne sert plus qu'à borner les
+     cas extrêmes (très peu de cartes sur un très grand écran). Voir maquette
+     docs/mockups/tv-memory-contrast-108-114.html */
+  --card-size-capped: min(var(--card-size), 460px);
 
   display: grid;
   grid-template-columns: repeat(var(--cols), var(--card-size-capped));
@@ -1802,11 +1806,18 @@
 
 .memory-card-text {
   font-family: var(--font-display);
-  font-size: clamp(0.75rem, 1.5vw, 1.2rem);
+  /* #108 — police adaptative liée à la taille réelle de la carte (--card-size-capped,
+     hérité de .memory-grid) plutôt qu'au seul viewport : suit l'agrandissement des cartes
+     sans déborder ni tronquer les mots longs (ex. "ELEPHANT"). Voir maquette
+     docs/mockups/tv-memory-contrast-108-114.html */
+  font-size: clamp(0.75rem, calc(var(--card-size-capped, 100px) * 0.15), 2.6rem);
   font-weight: 700;
   color: #1a1a2e;
   text-align: center;
+  width: 100%;
   word-break: break-word;
+  overflow-wrap: break-word;
+  hyphens: auto;
   line-height: 1.2;
 }
 
@@ -1836,7 +1847,8 @@
 
 .memory-card-letter {
   font-family: var(--font-display);
-  font-size: clamp(1.5rem, 3vw, 2.5rem);
+  /* #108 — suit la même logique adaptative que .memory-card-text */
+  font-size: clamp(1.5rem, calc(var(--card-size-capped, 100px) * 0.22), 4.5rem);
   font-weight: 800;
   color: white;
   text-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
