@@ -36,10 +36,14 @@ const persistedGameStateFormatVersion = 1
 //     state — restoring it after a restart would resurrect a game that no
 //     longer has connected clients or a live timer behind it. A server that
 //     restarts mid-pause simply comes back outside ENTRACTE (contract
-//     game-state.md §"Persistance"). EntracteConfig is NOT in this
-//     exclusion list — it is a stored setting, persisted independently in
-//     game-config.json (config.GameSettings), same treatment as
-//     Backgrounds/NewGameBackgrounds below.
+//     game-state.md §"Persistance"). EntracteConfig (the SAVED variant,
+//     GameState.EntracteConfigSaved — see below) is NOT in this exclusion
+//     list: as of C1 (2026-08-20) it IS a stored property of the game,
+//     alongside the Quiz* fields — a correction of the original design,
+//     which persisted it independently in game-config.json
+//     (config.GameSettings) instead. Two neighboring fields, two opposite
+//     lifecycles: don't "fix" this apparent inconsistency by adding
+//     Entracte here or removing EntracteConfig.
 //   - Delay: looks like a setting but isn't — set by Start()/Ready()/the
 //     MEMOTION memorize countdown on every round (engine.go), so it's
 //     current-round timer state, not a stored preference. The actual
@@ -70,6 +74,31 @@ type PersistedGameState struct {
 	// InitGame — same "survives NEW_GAME already, should survive a restart
 	// too" reasoning as the QUIZ_* fields above.
 	VirtualPlayerLimit int `json:"VIRTUAL_PLAYER_LIMIT"`
+
+	// EntracteConfig (v6.5.2, #119, C1): the SAVED entracte panel
+	// configuration (GameState.EntracteConfigSaved, not the possibly-frozen
+	// GameState.EntracteConfig — C4). A *pointer*, unlike every field above,
+	// and deliberately: a nil value (JSON key entirely absent) means "this
+	// game_state.json predates the field, or was never configured" — apply
+	// NewEngine()'s compile-time defaults (LoadState below leaves them
+	// untouched in that case). A non-nil value means "configured", and is
+	// used exactly as stored, WITHOUT re-defaulting any of its own
+	// sub-fields — by the time a value reaches here it has already been
+	// validated/clamped by the WS handler (cmd/server/main.go,
+	// handleUpdateEntracteConfig) before SetEntracteConfig wrote it. This is
+	// what protects ANIM_INTENSITY=0 ("animation disabled") from ever being
+	// silently re-defaulted back to 20 on a reload — the exact pitfall this
+	// project already hit once building the original (pre-C1) design; see
+	// EntracteConfig's own doc comment (models.go) and
+	// internal/game/entracte_test.go.
+	//
+	// IMAGE_IS_CUSTOM is written as false here regardless of the in-memory
+	// value (SaveState zeroes a local copy before marshaling) — it is never
+	// a stored value, always recomputed from disk (see EntracteConfig's doc
+	// comment); LoadState mirrors this by leaving it false on read, for the
+	// caller (cmd/server/main.go, after LoadState returns) to recompute via
+	// Engine.RefreshEntracteImageIsCustom.
+	EntracteConfig *EntracteConfig `json:"ENTRACTE_CONFIG,omitempty"`
 }
 
 // ClearQuizMeta resets the #141 persisted subset (quiz metadata + virtual
@@ -109,6 +138,14 @@ func (e *Engine) SetStatePath(path string) {
 func (e *Engine) SaveState() error {
 	e.mu.RLock()
 	path := e.statePath
+	// EntracteConfig (v6.5.2, #119, C1): persist the SAVED variant
+	// (EntracteConfigSaved), never the possibly-frozen diffused one — the
+	// file on disk must always reflect what the Quiz page's form last
+	// enregistered, not whatever happens to be showing on a panel right
+	// now. IMAGE_IS_CUSTOM is explicitly zeroed in this local copy — it is
+	// never a stored value (see PersistedGameState's doc comment).
+	entracteCfg := e.state.EntracteConfigSaved
+	entracteCfg.ImageIsCustom = false
 	persisted := PersistedGameState{
 		FormatVersion:      persistedGameStateFormatVersion,
 		QuizName:           e.state.QuizName,
@@ -120,6 +157,7 @@ func (e *Engine) SaveState() error {
 		QuizObjectives:     e.state.QuizObjectives,
 		QuizHiddenFields:   e.state.QuizHiddenFields,
 		VirtualPlayerLimit: e.state.VirtualPlayerLimit,
+		EntracteConfig:     &entracteCfg,
 	}
 	e.mu.RUnlock()
 
@@ -236,6 +274,24 @@ func (e *Engine) LoadState() error {
 	// would leak through in the meantime).
 	if persisted.VirtualPlayerLimit > 0 {
 		e.state.VirtualPlayerLimit = persisted.VirtualPlayerLimit
+	}
+
+	// EntracteConfig (v6.5.2, #119, C1/C4): nil means "never configured" —
+	// leave NewEngine()'s compile-time defaults in place for BOTH fields
+	// (untouched here). Non-nil means "configured" — apply AS STORED (no
+	// re-defaulting of individual sub-fields: values were already
+	// validated/clamped before being saved, see PersistedGameState's doc
+	// comment) to BOTH EntracteConfig and EntracteConfigSaved identically
+	// (C4-B3 — a freshly restarted server is definitionally outside any
+	// entracte, so "diffused" and "saved" start out equal, same as any other
+	// out-of-pause moment). IMAGE_IS_CUSTOM is left at the stored false —
+	// the caller (cmd/server/main.go, right after LoadState returns) must
+	// call Engine.RefreshEntracteImageIsCustom to recompute it from disk.
+	if persisted.EntracteConfig != nil {
+		cfg := *persisted.EntracteConfig
+		cfg.ImageIsCustom = false
+		e.state.EntracteConfig = cfg
+		e.state.EntracteConfigSaved = cfg
 	}
 
 	log.Printf("[Engine] Game state loaded from %s (quiz=%q, hidden_fields=%v, vplayer_limit=%d)",

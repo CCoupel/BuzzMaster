@@ -302,12 +302,19 @@ type Background struct {
 }
 
 // EntracteConfig is the panel configuration for ENTRACTE mode (v6.5.2,
-// #119) — mirrored read-only into GameState.EntracteConfig from the
-// "entracte" section of game-config.json (contract game-state.md
-// §"ENTRACTE_CONFIG", http-endpoints.md §"Mode ENTRACTE"). ImageIsCustom is
-// derived at push time from whether a custom image file exists — no file
-// path ever crosses the wire, the client builds the stable
-// /api/config/entracte-image URL itself with a cache-buster.
+// #119). A property of the GAME/session, not of server config (arbitrage
+// utilisateur 2026-08-20, C1 — amends the original design, which lived in
+// game-config.json/GameSettings): persisted in game_state.json alongside
+// the Quiz* fields (see PersistedGameState, state_persistence.go), edited
+// from the Quiz page via UPDATE_ENTRACTE_CONFIG (contract game-state.md
+// §"ENTRACTE_CONFIG", websocket-actions.md §"UPDATE_ENTRACTE_CONFIG").
+//
+// ImageIsCustom is ALWAYS derived at read time from whether a custom image
+// file exists on disk (data/files/entracte/) — never itself persisted (see
+// state_persistence.go, SaveState/LoadState zero it explicitly) and never
+// part of the UPDATE_ENTRACTE_CONFIG payload. No file path ever crosses the
+// wire; the client builds the stable /api/game/entracte-image URL itself
+// with a cache-buster.
 type EntracteConfig struct {
 	Title         string `json:"TITLE"`
 	Subtitle      string `json:"SUBTITLE"`
@@ -315,6 +322,13 @@ type EntracteConfig struct {
 	PanelSize     int    `json:"PANEL_SIZE"`     // % of screen, width AND height, same on /tv and /player. Clamped 20-100.
 	AnimPeriod    int    `json:"ANIM_PERIOD"`    // Animation cycle duration, seconds. Clamped 2-30.
 	AnimIntensity int    `json:"ANIM_INTENSITY"` // Animation amplitude, 0-100. 0 = animation disabled.
+	// TransitionMs (v6.5.2, #119, C3) — fade duration in/out of entracte, on
+	// all 4 surfaces, milliseconds. Default 2000, clamped 0-10000. 0 =
+	// instant switch (the pre-C3 behavior). Unlike the animation fields
+	// above, prefers-reduced-motion does NOT neutralize this one — a fade
+	// is not the kind of motion that setting targets (contract game-state.md
+	// §"Animation du panneau").
+	TransitionMs int `json:"TRANSITION_MS"`
 }
 
 // GameState holds the current game state
@@ -359,15 +373,31 @@ type GameState struct {
 	// NewGameBackgrounds (which precede the project's no-omitempty rule and
 	// are not a model to copy), `false` MUST stay on the wire or no client
 	// could ever learn the pause has ENDED (contract game-state.md
-	// §"ENTRACTE"). EntracteConfig mirrors the "entracte" section of
-	// game-config.json (config.GameSettings) into GameState so a VJoueur —
-	// which cannot receive CONFIG_UPDATE, restricted to Admin+TV since #154
-	// — still gets title/subtitle/panel size/animation atomically in the
-	// same UPDATE as the flag itself (contract game-state.md D2). NO
-	// omitempty either: ANIM_INTENSITY=0 is a meaningful value (animation
-	// disabled), not an absent one.
-	Entracte       bool           `json:"ENTRACTE"`
-	EntracteConfig EntracteConfig `json:"ENTRACTE_CONFIG"`
+	// §"ENTRACTE"). EntracteConfig delivers title/subtitle/panel size/
+	// animation/transition atomically in the same UPDATE as the flag itself
+	// to every surface that needs it, including VJoueur (which cannot
+	// receive CONFIG_UPDATE, restricted to Admin+TV since #154) — contract
+	// game-state.md §"Diffusion". NO omitempty either: ANIM_INTENSITY=0 is a
+	// meaningful value (animation disabled), not an absent one.
+	//
+	// C4 (2026-08-20, arbitrage) — TWO objects of the same type coexist,
+	// deliberately, and this is NOT duplication to "simplify" away:
+	//   - EntracteConfig    — the DIFFUSED config the panel actually shows.
+	//     FROZEN while Entracte is true (SetEntracteConfig only refreshes it
+	//     when !Entracte; SetEntracte(true) recopies Saved -> this field,
+	//     under the same lock, right before raising the flag).
+	//   - EntracteConfigSaved — the SAVED config, always current, edited from
+	//     the Quiz page. Admin-only (protocol.AdminOnlyGameFields, alongside
+	//     QUIZ_OBJECTIVES) — TV/VJoueur only ever need the panel they see.
+	// Editing settings mid-pause must persist and be visible to the editor
+	// (Saved) without changing what's already on screen (Config) — it takes
+	// effect at the NEXT entracte. Without this split, an admin editing
+	// during a live pause, leaving the Quiz page and coming back, would see
+	// their just-saved values vanish (overwritten by the frozen diffused
+	// copy) and believe the save was lost.
+	Entracte            bool           `json:"ENTRACTE"`
+	EntracteConfig      EntracteConfig `json:"ENTRACTE_CONFIG"`
+	EntracteConfigSaved EntracteConfig `json:"ENTRACTE_CONFIG_SAVED"`
 	// Network state (v5.6.2) — NO omitempty: always serialized so frontend receives updates
 	NetworkOnlyLocalhost bool `json:"NETWORK_ONLY_LOCALHOST"`
 	// ARDOISE answers (v5.6.0) — NO omitempty: always serialized so frontend resets on new question
