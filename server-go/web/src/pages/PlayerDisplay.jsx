@@ -50,6 +50,12 @@ const GAME_TYPE_COLORS = {
 function ReadyCategoryDisplay({ catKey, customCategories, variant, gameType }) {
   const catMeta = categoryMeta(catKey, customCategories)
   const typeStyle = GAME_TYPE_COLORS[gameType] ?? { color: '#fff', shadow: 'rgba(255,255,255,0.5)' }
+  // #114 — contour sombre (text-shadow multi-directionnel, fallback pour navigateurs sans
+  // -webkit-text-stroke comme Firefox) combiné au glow coloré existant : une valeur inline
+  // écrase toute règle CSS text-shadow, donc les deux doivent être fusionnés ici plutôt que
+  // séparés entre JSX et .ready-game-type. Voir maquette docs/mockups/tv-memory-contrast-108-114.html
+  const typeOutline = '-1.5px -1.5px 0 rgba(0,0,0,0.85), 1.5px -1.5px 0 rgba(0,0,0,0.85), -1.5px 1.5px 0 rgba(0,0,0,0.85), 1.5px 1.5px 0 rgba(0,0,0,0.85)'
+  const typeTextShadow = `${typeOutline}, 0 0 20px ${typeStyle.shadow}, 0 0 50px ${typeStyle.shadow}`
 
   // Icône unifiée : image ou emoji
   const iconInner = catMeta ? (
@@ -81,7 +87,7 @@ function ReadyCategoryDisplay({ catKey, customCategories, variant, gameType }) {
         {gameType && (
         <motion.span
           className="ready-game-type"
-          style={{ color: typeStyle.color, textShadow: `0 0 20px ${typeStyle.shadow}, 0 0 50px ${typeStyle.shadow}` }}
+          style={{ color: typeStyle.color, textShadow: typeTextShadow }}
           initial={{ opacity: 0, y: -24, scale: 0.7 }}
           animate={{ opacity: [null, 1, 0.85, 1], y: 0, scale: [null, 1.2, 1, 1.06, 1] }}
           transition={{ duration: 1.6, times: [0, 0.2, 0.6, 0.8, 1], repeat: Infinity, repeatDelay: 0.8 }}
@@ -114,7 +120,7 @@ function ReadyCategoryDisplay({ catKey, customCategories, variant, gameType }) {
       {gameType && (
         <motion.span
           className="ready-game-type"
-          style={{ color: typeStyle.color, textShadow: `0 0 20px ${typeStyle.shadow}, 0 0 50px ${typeStyle.shadow}` }}
+          style={{ color: typeStyle.color, textShadow: typeTextShadow }}
           initial={{ opacity: 0, y: -24, scale: 0.7 }}
           animate={{ opacity: [null, 1, 0.85, 1], y: 0, scale: [null, 1.2, 1, 1.06, 1] }}
           transition={{ duration: 1.6, times: [0, 0.2, 0.6, 0.8, 1], repeat: Infinity, repeatDelay: 0.8 }}

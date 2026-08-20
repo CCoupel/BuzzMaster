@@ -330,7 +330,16 @@
   text-transform: uppercase;
   letter-spacing: 0.3em;
   display: block;
-  /* color et text-shadow injectés en style inline par ReadyCategoryDisplay */
+  /* color et text-shadow (glow + contour fusionnés, #114) injectés en style inline
+     par ReadyCategoryDisplay — une valeur inline écrase toute règle CSS text-shadow */
+  /* #114 — contour sombre fixe (fonctionne sur fond clair, coloré vif et sombre — voir
+     maquette docs/mockups/tv-memory-contrast-108-114.html) + box légèrement assombrie
+     pour limiter l'impact du fond d'écran actif derrière le texte */
+  -webkit-text-stroke: 2px rgba(0, 0, 0, 0.85);
+  paint-order: stroke fill;
+  background: rgba(0, 0, 0, 0.45);
+  padding: var(--space-2) var(--space-6);
+  border-radius: var(--radius-xl);
 }
 
 .ready-category-icon-wrapper {
