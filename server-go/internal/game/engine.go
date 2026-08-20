@@ -1323,7 +1323,7 @@ func (e *Engine) shouldTriggerQCMHint(currentTime, totalTime int) bool {
 	// Safety constraints:
 	// - Min 1s between hints: threshold1 - threshold2 >= 1
 	// - Last hint >= 1s before end: threshold2 >= 1
-	if threshold1 <= 0 || threshold2 < 1 || (threshold1 - threshold2) < 1 {
+	if threshold1 <= 0 || threshold2 < 1 || (threshold1-threshold2) < 1 {
 		// Constraints not met, disable hints for this question
 		return false
 	}
@@ -1552,7 +1552,6 @@ func (e *Engine) Reveal() string {
 
 	return answer
 }
-
 
 // ProcessButtonPress handles a button press from a buzzer
 func (e *Engine) ProcessButtonPress(bumperID string, pressTime int64, button string) {
@@ -2156,7 +2155,6 @@ func (e *Engine) GetTeamsAndBumpersJSON() json.RawMessage {
 	result, _ := json.Marshal(e.data)
 	return result
 }
-
 
 // ForceReady forces transition to READY phase (debug function, skips PONG wait)
 func (e *Engine) ForceReady() {
@@ -2966,6 +2964,64 @@ func (e *Engine) GetShowQRCode() bool {
 	e.mu.RLock()
 	defer e.mu.RUnlock()
 	return e.state.ShowQRCode
+}
+
+// SetEntracte activates or deactivates ENTRACTE mode (v6.5.2, #119, D3: an
+// explicit idempotent command carrying the desired state, not a toggle —
+// two rapid clicks or a network resend can never leave the state
+// inverted). Returns whether the change was applied.
+//
+// Activation is gated by phase (contract game-state.md §"Phases
+// autorisées", D4): only allowed from STOPPED/PREPARE/READY/NEW_GAME/
+// REVEALED — never while a round is live (COUNTDOWN/STARTED/PAUSED), never
+// from ENROLL (the QR code screen players need). A refused activation is
+// logged and returns false, changing nothing else in state.
+//
+// Deactivation always succeeds, from ANY phase — ENTRACTE must never be a
+// dead end (contract, risk table "Entracte sans issue").
+//
+// Deliberately touches ONLY e.state.Entracte: no other field is read or
+// written, so a question selected in PREPARE is found intact on exit.
+func (e *Engine) SetEntracte(active bool) bool {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+
+	if !active {
+		e.state.Entracte = false
+		log.Printf("[Engine] Entracte: deactivated (phase=%s)", e.state.Phase)
+		return true
+	}
+
+	allowedPhases := e.state.Phase == PhaseStopped || e.state.Phase == PhasePrepare ||
+		e.state.Phase == PhaseReady || e.state.Phase == PhaseNewGame ||
+		e.state.Phase == PhaseRevealed
+	if !allowedPhases {
+		log.Printf("[Engine] Entracte: activation refused, phase=%s not eligible", e.state.Phase)
+		return false
+	}
+
+	e.state.Entracte = true
+	log.Printf("[Engine] Entracte: activated (phase=%s)", e.state.Phase)
+	return true
+}
+
+// IsEntracte returns whether ENTRACTE mode is currently active.
+func (e *Engine) IsEntracte() bool {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	return e.state.Entracte
+}
+
+// SetEntracteConfig mirrors the "entracte" section of game-config.json
+// (config.GameSettings) into GameState.EntracteConfig (v6.5.2, #119, D2) —
+// same pattern as SetBackgrounds: a plain setter, called at startup and
+// whenever the config is saved (cmd/server/main.go), so a text change is
+// visible live to every connected surface, VJoueur included, in the same
+// UPDATE as the ENTRACTE flag itself.
+func (e *Engine) SetEntracteConfig(cfg EntracteConfig) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.state.EntracteConfig = cfg
 }
 
 // GetVirtualPlayerCount returns the current count of enrolled virtual players
@@ -3882,7 +3938,7 @@ func (e *Engine) DoneMotionCard(cardID string, winnerTeam string) (int, bool, er
 		if winnerTeam == "" {
 			e.rotateMotionTeam()
 		}
-	// MemoryModeSolo: no rotation
+		// MemoryModeSolo: no rotation
 	}
 
 	// Return to grid

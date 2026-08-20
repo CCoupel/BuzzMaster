@@ -32,9 +32,14 @@ const persistedGameStateFormatVersion = 1
 //
 // Explicitly NOT included, and why:
 //   - Phase, Question, Memory*, Motion*, ArdoiseAnswers, EnrollmentActive,
-//     ShowQRCode: ephemeral, per-game-in-progress state — restoring it
-//     after a restart would resurrect a game that no longer has connected
-//     clients or a live timer behind it.
+//     ShowQRCode, Entracte (v6.5.2, #119): ephemeral, per-game-in-progress
+//     state — restoring it after a restart would resurrect a game that no
+//     longer has connected clients or a live timer behind it. A server that
+//     restarts mid-pause simply comes back outside ENTRACTE (contract
+//     game-state.md §"Persistance"). EntracteConfig is NOT in this
+//     exclusion list — it is a stored setting, persisted independently in
+//     game-config.json (config.GameSettings), same treatment as
+//     Backgrounds/NewGameBackgrounds below.
 //   - Delay: looks like a setting but isn't — set by Start()/Ready()/the
 //     MEMOTION memorize countdown on every round (engine.go), so it's
 //     current-round timer state, not a stored preference. The actual
