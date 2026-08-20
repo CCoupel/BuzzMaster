@@ -112,6 +112,12 @@ const (
 	ActionRegieMessageSend  = "REGIE_MESSAGE_SEND"  // Admin → Server: arm or replace the single active message
 	ActionRegieMessageClear = "REGIE_MESSAGE_CLEAR" // Admin (retire) OR Anim (acknowledge) → Server: clear the active message
 	ActionRegieMessage      = "REGIE_MESSAGE"       // Server → Client (/ws/admin + /ws/anim only): current message state
+
+	// ENTRACTE (v6.5.2, #119 — contracts/websocket-actions.md §"ENTRACTE_SET"):
+	// admin → server, idempotent (payload carries the desired state, not a
+	// toggle — D3). anim is deliberately excluded (contrat "contrôle réservé
+	// à l'admin"), unlike the "conduite en direct" actions above.
+	ActionEntracteSet = "ENTRACTE_SET"
 )
 
 // FSInfo represents file storage information
@@ -461,6 +467,13 @@ type PlayerRejectedPayload struct {
 type QRCodePayload struct {
 	URL  string `json:"URL"`  // URL to encode in QR code
 	Show bool   `json:"SHOW"` // Whether to show or hide
+}
+
+// EntracteSetPayload for ENTRACTE_SET action (v6.5.2, #119) — an explicit
+// idempotent command (D3), not a toggle: ACTIVE always carries the state the
+// client wants, so a double-click or a network resend can never invert it.
+type EntracteSetPayload struct {
+	Active bool `json:"ACTIVE"`
 }
 
 // EnrollmentUpdatePayload for ENROLLMENT_UPDATE action (broadcast virtual player count)
