@@ -76,6 +76,29 @@ export default function ConfigPage() {
   const [defaultImageToast, setDefaultImageToast] = useState(null)
   const defaultImageFileRef = useRef(null)
 
+  // ENTRACTE (v6.5.2, #119) — panneau de pause globale. Défauts + forme
+  // snake_case du contrat HTTP (contracts/http-endpoints.md §"Section entracte
+  // de POST /game-config.json") — DIFFÉRENTE de la forme UPPERCASE de
+  // GameState.ENTRACTE_CONFIG (contracts/game-state.md) consommée par
+  // useWebSocket.js/EntractePanel : deux représentations distinctes de la
+  // même config, l'une HTTP (ce fichier), l'autre WebSocket (diffusion live).
+  // IMAGE_IS_CUSTOM n'est PAS dans cette section (juste le fichier, endpoint
+  // dédié ci-dessous) — état séparé, même pattern que defaultImageIsCustom.
+  const [entracteConfig, setEntracteConfig] = useState({
+    title: 'ENTRACTE',
+    subtitle: 'Retour dans 20mn',
+    panel_size: 65,
+    anim_period: 10,
+    anim_intensity: 20,
+  })
+  const [entracteImageIsCustom, setEntracteImageIsCustom] = useState(false)
+  const [savingEntracte, setSavingEntracte] = useState(false)
+  const [entracteImageCacheBuster, setEntracteImageCacheBuster] = useState(() => Date.now())
+  const [uploadingEntracteImage, setUploadingEntracteImage] = useState(false)
+  const [deletingEntracteImage, setDeletingEntracteImage] = useState(false)
+  const [entracteToast, setEntracteToast] = useState(null)
+  const entracteImageFileRef = useRef(null)
+
   // AI generation section (v6.0.0, #8) — la clé n'est jamais reçue du serveur
   // (contract ai-generation.md §2) : seul `api_key_configured` est lu.
   const [aiApiKeyInput, setAiApiKeyInput] = useState('')
@@ -151,6 +174,14 @@ export default function ConfigPage() {
       return () => clearTimeout(timer)
     }
   }, [defaultImageToast])
+
+  // ENTRACTE image toast auto-hide
+  useEffect(() => {
+    if (entracteToast) {
+      const timer = setTimeout(() => setEntracteToast(null), 3000)
+      return () => clearTimeout(timer)
+    }
+  }, [entracteToast])
 
   // AI key toast auto-hide
   useEffect(() => {
@@ -240,6 +271,17 @@ export default function ConfigPage() {
           if (cancelled) return
           if (data.neon_effect) {
             setNeonConfig(data.neon_effect)
+          }
+          if (data.entracte) {
+            // image_is_custom (si le backend l'inclut en lecture) n'est pas
+            // un réglage de cette section — état séparé, jamais renvoyé dans
+            // le POST (contract http-endpoints.md : "l'image de fond n'est
+            // pas dans cette section").
+            const { image_is_custom, ...entracteFields } = data.entracte
+            setEntracteConfig(entracteFields)
+            if (image_is_custom !== undefined) {
+              setEntracteImageIsCustom(image_is_custom)
+            }
           }
         }
       } catch (error) {
@@ -332,6 +374,27 @@ export default function ConfigPage() {
       prev && JSON.stringify(prev) === JSON.stringify(gameState.neonEffect) ? prev : gameState.neonEffect
     ))
   }, [gameState?.neonEffect])
+
+  // ENTRACTE (#119) — resynchronise depuis GameState.ENTRACTE_CONFIG (diffusé
+  // à chaque sauvegarde de config, voir contrat game-state.md) : une
+  // modification faite depuis un autre onglet/poste admin se reflète ici
+  // sans rechargement. Conversion UPPERCASE (forme WebSocket) → snake_case
+  // (forme locale/HTTP de cette page) — même garde anti-boucle que neonEffect.
+  useEffect(() => {
+    const ws = gameState?.entracteConfig
+    if (!ws) return
+    setEntracteConfig(prev => {
+      const next = {
+        title: ws.TITLE ?? prev.title,
+        subtitle: ws.SUBTITLE ?? prev.subtitle,
+        panel_size: ws.PANEL_SIZE ?? prev.panel_size,
+        anim_period: ws.ANIM_PERIOD ?? prev.anim_period,
+        anim_intensity: ws.ANIM_INTENSITY ?? prev.anim_intensity,
+      }
+      return prev && JSON.stringify(prev) === JSON.stringify(next) ? prev : next
+    })
+    if (ws.IMAGE_IS_CUSTOM !== undefined) setEntracteImageIsCustom(ws.IMAGE_IS_CUSTOM)
+  }, [gameState?.entracteConfig])
 
   const handleSaveNeonConfig = async () => {
     setSavingNeon(true)
@@ -838,6 +901,85 @@ export default function ConfigPage() {
       setDefaultImageToast({ message: 'Erreur reseau: ' + err.message, type: 'error' })
     } finally {
       setDeletingDefaultImage(false)
+    }
+  }
+
+  const handleEntracteImageDelete = async () => {
+    if (!window.confirm('Retirer l\'image d\'entracte ? Le panneau restera lisible sans image.')) return
+    setDeletingEntracteImage(true)
+    try {
+      const res = await fetch('/api/config/entracte-image', { method: 'DELETE' })
+      if (res.ok) {
+        setEntracteImageIsCustom(false)
+        setEntracteImageCacheBuster(Date.now())
+        setEntracteToast({ message: 'Image d\'entracte supprimee', type: 'success' })
+      } else {
+        setEntracteToast({ message: 'Erreur lors de la suppression', type: 'error' })
+      }
+    } catch (err) {
+      setEntracteToast({ message: 'Erreur reseau: ' + err.message, type: 'error' })
+    } finally {
+      setDeletingEntracteImage(false)
+    }
+  }
+
+  // ENTRACTE (#119) — image de fond du panneau, même patron à deux actions
+  // séparées que le bloc "Image par défaut" ci-dessus (upload immédiat sur
+  // son propre bouton, indépendant du bouton d'enregistrement des réglages).
+  const handleEntracteImageUpload = async () => {
+    const file = entracteImageFileRef.current?.files?.[0]
+    if (!file) {
+      setEntracteToast({ message: 'Veuillez selectionner une image', type: 'error' })
+      return
+    }
+    const allowed = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.svg']
+    const ext = '.' + file.name.split('.').pop().toLowerCase()
+    if (!allowed.includes(ext)) {
+      setEntracteToast({ message: 'Format non supporte. Utilisez jpg, png, gif, webp ou svg', type: 'error' })
+      return
+    }
+    setUploadingEntracteImage(true)
+    try {
+      const formData = new FormData()
+      formData.append('file', file)
+      const res = await fetch('/api/config/entracte-image', { method: 'POST', body: formData })
+      const data = await res.json()
+      if (res.ok && (data.is_custom || data.image_is_custom)) {
+        setEntracteImageIsCustom(true)
+        setEntracteImageCacheBuster(Date.now())
+        setEntracteToast({ message: 'Image d\'entracte enregistree', type: 'success' })
+        if (entracteImageFileRef.current) entracteImageFileRef.current.value = ''
+      } else {
+        setEntracteToast({ message: 'Erreur lors de l\'upload', type: 'error' })
+      }
+    } catch (err) {
+      setEntracteToast({ message: 'Erreur reseau: ' + err.message, type: 'error' })
+    } finally {
+      setUploadingEntracteImage(false)
+    }
+  }
+
+  const handleSaveEntracteConfig = async () => {
+    setSavingEntracte(true)
+    try {
+      // Même sémantique de fusion additive par section que neon_effect
+      // ci-dessus (POST /game-config.json, contrats/http-endpoints.md §entracte).
+      const response = await fetch('/game-config.json', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ entracte: entracteConfig })
+      })
+      if (!response.ok) {
+        const text = await response.text()
+        alert('Erreur: ' + text)
+      } else {
+        setEntracteToast({ message: 'Réglages entracte enregistrés', type: 'success' })
+      }
+    } catch (error) {
+      console.error('Save entracte config failed:', error)
+      alert('Erreur: ' + error.message)
+    } finally {
+      setSavingEntracte(false)
     }
   }
 
@@ -1539,6 +1681,135 @@ export default function ConfigPage() {
               </div>
             </div>
 
+            {/* ENTRACTE Section (v6.5.2, #119) — pause globale : panneau TV/VJoueur
+                configurable + filtre estompé sur les 4 surfaces. Le déclenchement
+                lui-même se fait depuis GamePage (bouton ENTRACTE / FIN D'ENTRACTE),
+                ici uniquement la configuration du panneau. */}
+            <div className="config-section">
+              <h3 className="config-section-title">Entracte (pause globale)</h3>
+              <p className="config-section-hint">
+                Panneau affiche sur l'ecran TV et VJoueur pendant une pause globale (repas, changement de salle...), declenchee depuis l'ecran de jeu. Le reste de l'interface (TV, VJoueur, admin, animateur) est estompe pendant toute la duree de la pause.
+              </p>
+
+              <div className="wifi-form">
+                <label className="wifi-field">
+                  <span>Titre</span>
+                  <input
+                    type="text"
+                    value={entracteConfig.title}
+                    onChange={(e) => setEntracteConfig(prev => ({ ...prev, title: e.target.value }))}
+                    placeholder="ENTRACTE"
+                    maxLength={40}
+                  />
+                </label>
+                <label className="wifi-field">
+                  <span>Sous-titre</span>
+                  <input
+                    type="text"
+                    value={entracteConfig.subtitle}
+                    onChange={(e) => setEntracteConfig(prev => ({ ...prev, subtitle: e.target.value }))}
+                    placeholder="Retour dans 20mn"
+                    maxLength={80}
+                  />
+                </label>
+              </div>
+
+              <div className="default-image-preview">
+                {entracteImageIsCustom ? (
+                  <img
+                    src={`/api/config/entracte-image?t=${entracteImageCacheBuster}`}
+                    alt="Image d'entracte"
+                    className="default-image-thumbnail"
+                  />
+                ) : (
+                  <span className="default-image-filename">Aucune image (panneau sans fond)</span>
+                )}
+                {entracteImageIsCustom && (
+                  <span className="default-image-filename">Image personnalisée</span>
+                )}
+              </div>
+
+              <div className="firmware-upload-row">
+                <input
+                  ref={entracteImageFileRef}
+                  type="file"
+                  accept=".jpg,.jpeg,.png,.gif,.webp,.svg"
+                  className="firmware-file-input"
+                  id="entracte-image-file-input"
+                />
+                <label htmlFor="entracte-image-file-input" className="firmware-file-label">
+                  Choisir une image (jpg, png, gif, webp, svg)
+                </label>
+              </div>
+
+              <div className="config-section-actions">
+                <Button variant="primary" onClick={handleEntracteImageUpload} loading={uploadingEntracteImage}>
+                  Enregistrer l'image
+                </Button>
+                {entracteImageIsCustom && (
+                  <Button variant="secondary" onClick={handleEntracteImageDelete} loading={deletingEntracteImage}>
+                    Retirer l'image
+                  </Button>
+                )}
+              </div>
+
+              <div className="neon-sliders">
+                <div className="slider-row">
+                  <label>Taille du panneau</label>
+                  <div className="slider-control">
+                    <input
+                      type="range"
+                      min="20"
+                      max="100"
+                      value={entracteConfig.panel_size}
+                      onChange={(e) => setEntracteConfig(prev => ({ ...prev, panel_size: parseInt(e.target.value) }))}
+                    />
+                    <span className="slider-value">{entracteConfig.panel_size}%</span>
+                  </div>
+                  <p className="config-section-hint">
+                    Même réglage, même rendu sur TV et VJoueur — pas de taille séparée par écran.
+                  </p>
+                </div>
+
+                <div className="slider-row">
+                  <label>Vitesse du mouvement</label>
+                  <div className="slider-control">
+                    <input
+                      type="range"
+                      min="2"
+                      max="30"
+                      value={entracteConfig.anim_period}
+                      onChange={(e) => setEntracteConfig(prev => ({ ...prev, anim_period: parseInt(e.target.value) }))}
+                    />
+                    <span className="slider-value">{entracteConfig.anim_period}s</span>
+                  </div>
+                  <p className="config-section-hint">Durée d'un cycle complet — plus court = plus rapide.</p>
+                </div>
+
+                <div className="slider-row">
+                  <label>Intensité du mouvement</label>
+                  <div className="slider-control">
+                    <input
+                      type="range"
+                      min="0"
+                      max="100"
+                      value={entracteConfig.anim_intensity}
+                      onChange={(e) => setEntracteConfig(prev => ({ ...prev, anim_intensity: parseInt(e.target.value) }))}
+                    />
+                    <span className="slider-value">
+                      {entracteConfig.anim_intensity === 0 ? 'animation désactivée' : entracteConfig.anim_intensity}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="config-section-actions">
+                <Button variant="primary" onClick={handleSaveEntracteConfig} loading={savingEntracte}>
+                  Enregistrer
+                </Button>
+              </div>
+            </div>
+
           </Card>
         </section>
       </div>
@@ -1575,6 +1846,12 @@ export default function ConfigPage() {
       {defaultImageToast && (
         <div className={`wifi-toast wifi-toast-${defaultImageToast.type}`}>
           {defaultImageToast.message}
+        </div>
+      )}
+
+      {entracteToast && (
+        <div className={`wifi-toast wifi-toast-${entracteToast.type}`}>
+          {entracteToast.message}
         </div>
       )}
 
