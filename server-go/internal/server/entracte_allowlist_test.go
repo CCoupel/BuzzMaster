@@ -22,13 +22,14 @@ import (
 // plus tard échappe à la garde").
 var entracteExpectedAllowed = map[string]bool{
 	// --- Allowed during entracte (D6) ---------------------------------
-	protocol.ActionEntracteSet:       true,
-	protocol.ActionHello:             true,
-	protocol.ActionSetClientType:     true,
-	protocol.ActionPlayerConnect:     true,
-	protocol.ActionRegieMessageSend:  true,
-	protocol.ActionRegieMessageClear: true,
-	protocol.ActionPong:              true,
+	protocol.ActionEntracteSet:          true,
+	protocol.ActionHello:                true,
+	protocol.ActionSetClientType:        true,
+	protocol.ActionPlayerConnect:        true,
+	protocol.ActionRegieMessageSend:     true,
+	protocol.ActionRegieMessageClear:    true,
+	protocol.ActionUpdateEntracteConfig: true,
+	protocol.ActionPong:                 true,
 
 	// --- Refused during entracte (everything else) --------------------
 	protocol.ActionReady:                 false,

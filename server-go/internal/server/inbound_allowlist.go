@@ -87,6 +87,10 @@ var inboundActionAllowlist = map[string][]ClientType{
 	// not just the round in progress; the animateur sees it (filter +
 	// indicator) but cannot trigger or lift it.
 	protocol.ActionEntracteSet: {ClientTypeAdmin},
+	// UPDATE_ENTRACTE_CONFIG (v6.5.2, #119, C1, contracts/websocket-actions.md
+	// §"UPDATE_ENTRACTE_CONFIG"): saves the panel configuration from the Quiz
+	// page — admin only, same reasoning as ENTRACTE_SET above.
+	protocol.ActionUpdateEntracteConfig: {ClientTypeAdmin},
 	// Code review MAJEUR-1 follow-up (v6.2.0, #155/#156): the admin pushes
 	// its adjusted pointsInput to the server so it can be echoed to the
 	// animateur via CREDIT_POINTS — anim only ever RECEIVES this value
@@ -261,23 +265,33 @@ func IsSetClientTypeAllowed(currentType ClientType) bool {
 //     their seat.
 //   - REGIE_MESSAGE_SEND/CLEAR: régie → anim messaging is exactly as useful
 //     during a pause as during play — arguably more so.
+//   - UPDATE_ENTRACTE_CONFIG (v6.5.2, C1/C4): preparing the NEXT pause's
+//     panel while the current one is showing is explicitly the point of the
+//     freeze design (contract game-state.md §"Configuration gelée à
+//     l'activation") — the save succeeds and persists, but has NO effect on
+//     the panel already displayed (Engine.SetEntracteConfig only refreshes
+//     the diffused config when !Entracte). This is the ONLY configuration
+//     action admitted here, and it's admitted without an exception carved
+//     into the general rule below — it simply never changes anything about
+//     the pause in progress.
 //   - PONG: harmless (no transition depends on it outside PREPARE) and
 //     avoids making a buzzer look dead to whatever polls it.
 //
 // Everything else — READY/START/STOP/PAUSE/CONTINUE/REVEAL/REMOTE/NEW_GAME/
-// RAZ/SHOW_QR_CODE/point credits/MEMORY*/MEMOTION*/ARDOISE_INPUT/... — is
-// refused. Physical buzz presses need no entry here: handleButton already
-// no-ops outside PhaseStarted, and entracte is only reachable outside
-// PhaseStarted (D4) — see the dedicated non-regression test instead of a
-// guard here.
+// RAZ/SHOW_QR_CODE/UPDATE_QUIZ_META/point credits/MEMORY*/MEMOTION*/
+// ARDOISE_INPUT/... — is refused. Physical buzz presses need no entry here:
+// handleButton already no-ops outside PhaseStarted, and entracte is only
+// reachable outside PhaseStarted (D4) — see the dedicated non-regression
+// test instead of a guard here.
 var entracteAllowedActions = map[string]bool{
-	protocol.ActionEntracteSet:       true,
-	protocol.ActionHello:             true,
-	protocol.ActionSetClientType:     true,
-	protocol.ActionPlayerConnect:     true,
-	protocol.ActionRegieMessageSend:  true,
-	protocol.ActionRegieMessageClear: true,
-	protocol.ActionPong:              true,
+	protocol.ActionEntracteSet:          true,
+	protocol.ActionHello:                true,
+	protocol.ActionSetClientType:        true,
+	protocol.ActionPlayerConnect:        true,
+	protocol.ActionRegieMessageSend:     true,
+	protocol.ActionRegieMessageClear:    true,
+	protocol.ActionUpdateEntracteConfig: true,
+	protocol.ActionPong:                 true,
 }
 
 // IsActionAllowedDuringEntracte reports whether action may proceed while
