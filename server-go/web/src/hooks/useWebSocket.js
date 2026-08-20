@@ -78,6 +78,16 @@ export default function useWebSocket(endpoint = '/ws/admin') {
     virtualPlayerLimit: 20, // Server-synchronized virtual player limit
     enrollmentActive: false, // Whether enrollment is currently open
     showQRCode: false, // Whether QR code should be displayed on TV
+    // ENTRACTE (v6.5.2, #119) — pause globale, même nature éphémère que showQRCode.
+    entracte: false, // true for the whole duration of the pause
+    entracteConfig: {
+      TITLE: 'ENTRACTE',
+      SUBTITLE: 'Retour dans 20mn',
+      IMAGE_IS_CUSTOM: false,
+      PANEL_SIZE: 65,
+      ANIM_PERIOD: 10,
+      ANIM_INTENSITY: 20,
+    },
     quizName: '', // Quiz name (v4.0.0)
     quizTheme: '', // Quiz theme (v4.0.0)
     quizNotes: '', // Quiz free-text notes (v4.0.0)
@@ -331,6 +341,10 @@ export default function useWebSocket(endpoint = '/ws/admin') {
             virtualPlayerLimit: MSG.GAME.VIRTUAL_PLAYER_LIMIT ?? prev.virtualPlayerLimit,
             enrollmentActive: MSG.GAME.ENROLLMENT_ACTIVE ?? prev.enrollmentActive,
             showQRCode: MSG.GAME.SHOW_QR_CODE ?? prev.showQRCode,
+            // ENTRACTE (v6.5.2, #119) — jamais omitempty côté serveur (contrat game-state.md),
+            // mais on garde le repli sur prev pour un client plus ancien / un message partiel.
+            entracte: MSG.GAME.ENTRACTE ?? prev.entracte,
+            entracteConfig: MSG.GAME.ENTRACTE_CONFIG ?? prev.entracteConfig,
             quizName: MSG.GAME.QUIZ_NAME !== undefined ? MSG.GAME.QUIZ_NAME : prev.quizName,
             quizTheme: MSG.GAME.QUIZ_THEME !== undefined ? MSG.GAME.QUIZ_THEME : prev.quizTheme,
             quizNotes: MSG.GAME.QUIZ_NOTES !== undefined ? MSG.GAME.QUIZ_NOTES : prev.quizNotes,
@@ -846,6 +860,13 @@ export default function useWebSocket(endpoint = '/ws/admin') {
     sendMessage('MEMOTION_DONE', { CARD_ID: cardId, WINNER_TEAM: winnerTeam })
   }, [sendMessage])
 
+  // ENTRACTE (v6.5.2, #119) — commande explicite portant l'état voulu (pas un
+  // toggle, D3 du plan) : admin uniquement, le libellé du bouton se dérive
+  // côté client de gameState.entracte, aucun état de bouton côté serveur.
+  const setEntracte = useCallback((active) => {
+    sendMessage('ENTRACTE_SET', { ACTIVE: active })
+  }, [sendMessage])
+
   // VPlayer enrollment: Show QR code
   const showQRCode = useCallback(() => {
     sendMessage('SHOW_QR_CODE', {})
@@ -998,6 +1019,8 @@ export default function useWebSocket(endpoint = '/ws/admin') {
     updateQuizMeta,
     // AI generation (#137)
     cancelAiGeneration,
+    // ENTRACTE (#119)
+    setEntracte,
     // VPlayer enrollment
     showQRCode,
     hideQRCode,
