@@ -47,6 +47,17 @@
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  /* Transition progressive (#119, C3) — DOIT vivre ici, sur le sélecteur de
+     base toujours présent, pas dans .entracte-dim : une transition déclarée
+     uniquement dans la classe conditionnelle jouerait à l'entrée et
+     disparaîtrait avec la classe, donc pas au retour. --ep-transition posée
+     par PlayerDisplay.jsx depuis entracteConfig.TRANSITION_MS (héritée).
+     ⚠️ Ne PAS poser un filter identité (grayscale(0) brightness(1)) ici pour
+     "aider" l'interpolation — même neutre, un filter réel crée en
+     permanence un containing block pour les descendants position:fixed,
+     hors entracte compris (piège documenté au plan initial, réintroduit ici
+     si on cède à la tentation). transition: filter seul ne crée rien. */
+  transition: filter var(--ep-transition, 2000ms) ease;
 }
 
 /* Background Cycling */

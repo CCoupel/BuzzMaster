@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef } from 'react'
+import { AnimatePresence, motion } from 'framer-motion'
 import NoSleep from 'nosleep.js'
 import { useGame } from '../hooks/GameContext'
 import { useCategories } from '../hooks/useCategories'
@@ -384,14 +385,29 @@ export default function AnimPage() {
   // explicite, F7) — la classe est appliquée à chacune de ses 4 zones.
   const entracteActive = !!gameState.entracte
   const entracteDim = entracteActive ? ' entracte-dim' : ''
+  // Transition progressive (#119, C3) — posée une seule fois sur .anim-page,
+  // héritée par les 4 zones (.anim-zone la consomme, styles/entracte.css) —
+  // pas besoin de la répéter sur chacune. Depuis entracteConfig (diffusé,
+  // gelé pendant une pause active) — jamais entracteConfigSaved.
+  const entracteTransitionMs = gameState.entracteConfig?.TRANSITION_MS ?? 2000
 
   return (
-    <div className="anim-page">
-      {entracteActive && (
-        <div className="anim-entracte-indicator" role="status">
-          ⏸ Entracte en cours — contrôle réservé à l'admin
-        </div>
-      )}
+    <div className="anim-page" style={{ '--ep-transition': `${entracteTransitionMs}ms` }}>
+      <AnimatePresence>
+        {entracteActive && (
+          <motion.div
+            key="anim-entracte-indicator"
+            className="anim-entracte-indicator"
+            role="status"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: Math.max(0, Number(entracteTransitionMs)) / 1000 }}
+          >
+            ⏸ Entracte en cours — contrôle réservé à l'admin
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Zone contexte — bandeau (#166/F3 méta, F10 réponse permanente,
           F12 chrono en colonne). Grille 2 colonnes : lignes à gauche,

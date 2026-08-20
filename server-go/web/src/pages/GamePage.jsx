@@ -14,7 +14,6 @@ import {
   canStart as canStartRule,
   isPlaying as isPlayingRule,
   canReveal as canRevealRule,
-  canToggleEntracte,
 } from '../utils/phaseRules'
 import { isTeamReady, prepareWaitReason } from '../utils/prepareWaitReason'
 import {
@@ -54,7 +53,6 @@ export default function GamePage() {
     simulateButton,
     simulatePong,
     sendMessage,
-    setEntracte,
   } = useGame()
 
   const [timeInput, setTimeInput] = useState(30)
@@ -389,43 +387,24 @@ export default function GamePage() {
   // START button only active in READY phase
   const canStart = canStartRule(gameState.phase)
 
-  // ENTRACTE (#119) — bouton hors du nœud filtré (F6 du plan) : dérivé de
-  // utils/phaseRules.js, jamais une liste de phases recopiée ici.
-  const entracteActive = !!gameState.entracte
-  const canEntracteToggle = canToggleEntracte(gameState.phase, entracteActive)
-  const entracteDim = entracteActive ? ' entracte-dim' : ''
-
-  const handleToggleEntracte = () => {
-    if (!canEntracteToggle) return
-    setEntracte(!entracteActive)
-  }
+  // ENTRACTE (#119, C2) — le bouton a déménagé dans Navbar.jsx (visible sur
+  // toutes les pages admin, pas seulement ici) ; seul l'estompage de
+  // l'interface reste porté par GamePage. .game-page (GamePage.css:23-30) n'a
+  // AUCUN descendant position:fixed (RegieMessageBar/Navbar vivent au niveau
+  // App.jsx, hors de cet arbre) — filtrer .game-page directement est donc
+  // sûr : `filter` ne modifie pas la disposition de la grille qui le porte,
+  // seulement son rendu et le containing block de ses éventuels descendants
+  // fixed (aucun ici).
+  const entracteDim = gameState.entracte ? ' entracte-dim' : ''
+  // Transition progressive (#119, C3) — depuis entracteConfig (diffusé, gelé
+  // pendant une pause active) — jamais entracteConfigSaved.
+  const entracteTransitionStyle = { '--ep-transition': `${gameState.entracteConfig?.TRANSITION_MS ?? 2000}ms` }
 
   return (
     <>
       {gameState.NETWORK_ONLY_LOCALHOST && <NetworkWarningBanner />}
 
-      {/* ENTRACTE (#119) — barre hors grille, jamais filtrée : rendue en frère
-          de .game-page (pas un enfant), donc jamais capturée par le filtre
-          appliqué plus bas. .game-page (GamePage.css:23-30) n'a AUCUN
-          descendant position:fixed (RegieMessageBar/Navbar vivent au niveau
-          App.jsx, hors de cet arbre) — filtrer .game-page directement est donc
-          sûr : `filter` ne modifie pas la disposition de la grille qui le
-          porte, seulement son rendu et le containing block de ses éventuels
-          descendants fixed (aucun ici). */}
-      <div className="entracte-toolbar">
-        <Button
-          variant={entracteActive ? 'danger' : 'warning'}
-          size="md"
-          className={`entracte-toggle-btn${entracteActive ? ' active' : ''}`}
-          onClick={handleToggleEntracte}
-          disabled={!canEntracteToggle}
-          title={!canEntracteToggle ? "Désactivé pendant une question en cours" : undefined}
-        >
-          {entracteActive ? "FIN D'ENTRACTE" : 'ENTRACTE'}
-        </Button>
-      </div>
-
-      <div className={`game-page page${entracteDim}`}>
+      <div className={`game-page page${entracteDim}`} style={entracteTransitionStyle}>
       {/* Timer + Display Section (stacked vertically) */}
       <div className="timer-display-section">
         <Card variant="elevated" padding="md" className="timer-card">

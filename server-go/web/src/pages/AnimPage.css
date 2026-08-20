@@ -25,6 +25,11 @@
 .anim-zone {
   border-radius: var(--radius-lg);
   box-sizing: border-box;
+  /* Transition progressive (#119, C3) — sur le sélecteur de base partagé par
+     les 4 zones, jamais .entracte-dim seule (raisonnement complet dans
+     PlayerDisplay.css). --ep-transition posée une fois sur .anim-page,
+     héritée par les 4 zones (pas besoin de la répéter). */
+  transition: filter var(--ep-transition, 2000ms) ease;
 }
 
 /* ENTRACTE (v6.5.2, #119) — indicateur net, aucun bouton (anim ne peut ni

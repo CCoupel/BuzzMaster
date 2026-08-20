@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useGame } from '../hooks/GameContext'
+import { AnimatePresence, motion } from 'framer-motion'
 import PlayerDisplay from './PlayerDisplay'
 import EntractePanel from '../components/EntractePanel'
 import ArdoiseKeyboard from '../components/ArdoiseKeyboard'
@@ -747,8 +748,13 @@ export default function VPlayerPage() {
           (seule la classe entracte-dim est conditionnelle) pour ne pas
           démonter/remonter PlayerDisplay au bascule. Le filtre de
           PlayerDisplay lui-même est désactivé quand isVPlayer (voir F4) :
-          VPlayerPage porte son propre filtre ici, pas de double filtrage. */}
-      <div className={`entracte-content${gameState.entracte ? ' entracte-dim' : ''}`}>
+          VPlayerPage porte son propre filtre ici, pas de double filtrage.
+          --ep-transition (C3) depuis entracteConfig (diffusé, gelé pendant
+          une pause active) — jamais entracteConfigSaved. */}
+      <div
+        className={`entracte-content${gameState.entracte ? ' entracte-dim' : ''}`}
+        style={{ '--ep-transition': `${gameState.entracteConfig?.TRANSITION_MS ?? 2000}ms` }}
+      >
         <PlayerDisplay
           playerName={bumper?.NAME}
           playerNameColor={getPlayerNameColor()}
@@ -776,15 +782,31 @@ export default function VPlayerPage() {
         </div>
       )}
 
-      {/* ENTRACTE panel + cadenas — frères du contenu filtré, jamais enfants. */}
-      {gameState.entracte && (
-        <>
-          <EntractePanel config={gameState.entracteConfig} />
-          <div className="entracte-lock-wrap" aria-hidden="true">
+      {/* ENTRACTE panel + cadenas — frères du contenu filtré, jamais enfants.
+          Fondu groupé (#119, C3) : le cadenas apparaît/disparaît avec le
+          panneau, jamais net sur un écran encore en train de s'estomper —
+          deux enfants DIRECTS de la même AnimatePresence (chacun garde sa
+          propre clé et sa propre animation d'exit ; un <div> englobant les
+          deux empêcherait AnimatePresence de suivre leur démontage, seuls
+          ses enfants directs sont interceptés). */}
+      <AnimatePresence>
+        {gameState.entracte && (
+          <EntractePanel key="entracte-panel" config={gameState.entracteConfig} />
+        )}
+        {gameState.entracte && (
+          <motion.div
+            key="entracte-lock"
+            className="entracte-lock-wrap"
+            aria-hidden="true"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: Math.max(0, Number(gameState.entracteConfig?.TRANSITION_MS ?? 2000)) / 1000 }}
+          >
             <span className="entracte-lock">🔒</span>
-          </div>
-        </>
-      )}
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   )
 }

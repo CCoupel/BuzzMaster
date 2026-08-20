@@ -166,3 +166,25 @@
   filter: drop-shadow(0 2px 8px rgba(0, 0, 0, 0.6));
   pointer-events: none;
 }
+
+/* ================================================================
+   Bouton ENTRACTE / FIN D'ENTRACTE — Navbar (#119, C2). Partagé plutôt que
+   dupliqué dans Navbar.css : c'est le même bouton, au même endroit
+   conceptuel (barre supérieure), qui vivait avant dans GamePage.css.
+   Repose sur le composant Button (classes .btn .btn-warning/.btn-danger) —
+   idle ambre, actif rouge avec halo, désactivé grisé.
+   ================================================================ */
+.entracte-toggle-btn.btn-warning {
+  background: #f59e0b;
+  color: #2b1400;
+}
+
+.entracte-toggle-btn.active.btn-danger {
+  box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.35);
+}
+
+.entracte-toggle-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  box-shadow: none;
+}

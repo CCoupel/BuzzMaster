@@ -913,6 +913,11 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
   // cette garde les deux filtres se composeraient et l'écran deviendrait
   // presque noir (piège documenté au plan, "double filtrage").
   const entracteActiveHere = !!gameState.entracte && !isVPlayer
+  // Transition progressive (#119, C3) — --ep-transition posée ici, héritée
+  // par .entracte-dim et le fondu du panneau (même durée pour les deux
+  // mécanismes). Depuis entracteConfig (diffusé, gelé pendant une pause
+  // active) — jamais entracteConfigSaved.
+  const entracteTransitionStyle = { '--ep-transition': `${gameState.entracteConfig?.TRANSITION_MS ?? 2000}ms` }
 
   return (
     <div className={`player-display ${showNeon ? `neon-border ${neonModeClass}` : ''}`} style={neonStyle}>
@@ -927,7 +932,10 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
           derrière le panneau ; wrapper toujours monté (jamais démonté/remonté
           au bascule, pour ne pas perturber AnimatePresence/timers), la classe
           entracte-dim est seule conditionnelle. */}
-      <div className={`entracte-content${entracteActiveHere ? ' entracte-dim' : ''}`}>
+      <div
+        className={`entracte-content${entracteActiveHere ? ' entracte-dim' : ''}`}
+        style={entracteTransitionStyle}
+      >
       {/* Background Images with Crossfade */}
       <div className="background-container">
         <AnimatePresence mode="sync">
@@ -2603,8 +2611,13 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
       {/* /.entracte-content */}
 
       {/* ENTRACTE panel — frère du contenu filtré, jamais enfant (même piège
-          position:fixed / z-index que QRCodeOverlay et le bouton plein écran). */}
-      {entracteActiveHere && <EntractePanel config={gameState.entracteConfig} />}
+          position:fixed / z-index que QRCodeOverlay et le bouton plein écran).
+          AnimatePresence (#119, C3) : sans elle, le panneau serait démonté
+          instantanément à la sortie, quelle que soit TRANSITION_MS — il
+          n'existerait plus pour jouer son fondu de sortie. */}
+      <AnimatePresence>
+        {entracteActiveHere && <EntractePanel key="entracte-panel" config={gameState.entracteConfig} />}
+      </AnimatePresence>
 
       {/* QR Code Overlay — suppressed during ENROLL (dedicated two-QR view handles it) */}
       <QRCodeOverlay show={(gameState.showQRCode || false) && gameState.phase !== 'ENROLL'} />
