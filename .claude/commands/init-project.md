@@ -1036,7 +1036,7 @@ Pour chaque fichier compare, determiner le statut :
 
 #### Etape d3b — Comparer la table "Agents Disponibles" (teammates)
 
-> ⚠ **SCOPE STRICT** : cette comparaison (et sa mise à jour en d5c) ne porte que sur le
+> ⚠ **SCOPE STRICT** : cette comparaison (et sa mise à jour en d5d) ne porte que sur le
 > *texte* de la table `## Agents Disponibles` dans `CLAUDE.md`. Elle ne crée, ne supprime
 > et ne modifie **jamais** `.claude/agents/*.md` ni `.claude/agents/*.template.md` — la liste
 > réelle des agents déployés pour le projet n'est jamais changée par cette étape. Un
@@ -1202,10 +1202,12 @@ for name in $DEPLOYED_AGENTS; do
 done
 ```
 
-#### Etape d5b — Détection de dérive template/projet
+#### Etape d5b — Détection de doublons (règles identiques ou couvertes)
 
-Exécutée à **chaque sync** pour détecter les dérives dans les deux sens.
-Silencieuse si aucun `*.md` compagnon n'existe ou si tout est propre.
+Exécutée à **chaque sync** sur les fichiers compagnons `*.md`. Détecte les règles d'un
+compagnon devenues redondantes avec le template — un fichier entier ou certaines règles
+seulement — pour proposer leur retrait. Ne traite que la redondance ; les règles qui
+disent autre chose que le template sur un même sujet relèvent de l'étape d5c (conflits).
 
 **Détection des fichiers compagnons :**
 
@@ -1220,58 +1222,49 @@ for tmpl in .claude/agents/*.template.md .claude/agents/context/*.template.md .c
 done
 ```
 
-Si `COMPANIONS` est vide → sauter cette étape silencieusement.
+Si `COMPANIONS` est vide → sauter d5b et d5c silencieusement.
 
-**Analyse de chaque fichier compagnon :**
+**Analyse de chaque fichier compagnon, à la granularité de la règle/section :**
 
-Pour chaque `xxx.md`, lire les deux fichiers et détecter les dérives dans les **deux sens** :
+Pour chaque `xxx.md`, comparer avec `xxx.template.md` :
 
 | Statut | Critère | Signal |
 |--------|---------|--------|
 | `IDENTIQUE` | `xxx.md` quasiment identique au template | Duplication inutile — peut être supprimé |
 | `DERIVE-TEMPLATE` | Contenu de `xxx.md` couvert par le nouveau template | Template a rattrapé le projet — simplification possible |
-| `DERIVE-PROJET` | Contenu ajouté dans `xxx.md` non présent dans le template | Dérive projet — vérifier que c'est intentionnel |
 | `MIXTE` | `xxx.md` mélange des règles désormais couvertes par le template et des règles propres au projet | Retirer uniquement les règles redondantes, conserver le reste |
-| `PROPRE` | `xxx.md` contient uniquement du contenu spécifique, sans overlap | Aucune action requise |
+| `PROPRE` | `xxx.md` contient uniquement du contenu spécifique, sans overlap | Rien à retirer ici — passer à l'étape d5c |
 
 > La détection opère à la granularité de la règle/section, pas seulement du fichier
 > entier : dès qu'une règle présente dans `xxx.md` se retrouve (littéralement ou en
-> substance) dans `xxx.template.md`, elle peut être retirée du compagnon — même si le
-> reste du fichier reste `PROPRE`. C'est ce qui distingue `MIXTE` (retrait partiel) de
-> `DERIVE-TEMPLATE` (le fichier entier est devenu redondant).
->
-> **`DERIVE-TEMPLATE`** : une mise à jour du template intègre nativement ce que le projet
-> avait customisé → la règle dans `xxx.md` est devenue redondante.
->
-> **`DERIVE-PROJET`** : `xxx.md` a grossi depuis la dernière sync → vérifier que les ajouts
-> sont intentionnels et non des duplications accidentelles.
+> substance, **en disant la même chose**) dans `xxx.template.md`, elle peut être retirée
+> du compagnon — même si le reste du fichier reste `PROPRE`. Une règle qui traite du même
+> sujet mais dit autre chose n'est **pas** un doublon : c'est un conflit potentiel,
+> laissé à l'étape d5c.
 
 **Rapport (affiché uniquement si au moins un fichier non-PROPRE) :**
 
 ```
-Analyse drift template/projet :
+Analyse doublons template/projet :
 
   Commandes :
   [=] feature.md      — identique au template → peut être supprimé
   [↓] bugfix.md       — le template couvre maintenant "règle X" → simplification possible
-  [↑] deploy.md       — 2 sections ajoutées depuis la dernière sync → vérifier intentionnel
-  [*] backlog.md      — propre (contenu projet uniquement)
 
   Agents :
   [↓] cdp.md          — le template couvre maintenant "phase CLARIFICATION" → simplification possible
-  [↑] qa.md           — 1 section ajoutée → vérifier intentionnel
-  [~] marketing-release.md — règle "diff origin/gh-pages" désormais couverte, règle "GATE 4d" toujours propre
+  [~] marketing-release.md — règle "diff origin/gh-pages" désormais couverte, reste propre sinon
 
   Contextes (agents/context/ et commands/context/) :
-  [*] COMMON.md (commands) — propre (règle de versionnement projet spécifique)
+  [*] COMMON.md (commands) — propre (rien de redondant)
 
-  [=] N identiques  [↓] N simplifiables  [↑] N à vérifier  [~] N mixtes  [*] N propres
+  [=] N identiques  [↓] N simplifiables  [~] N mixtes  [*] N propres (→ d5c)
 ```
 
 **Actions proposées :**
 
 ```
-  [N] Nettoyer automatiquement (supprimer IDENTIQUES, extraire DERIVE-PROJET/MIXTE vers xxx.md épuré)
+  [N] Nettoyer automatiquement (supprimer IDENTIQUES, retirer les règles couvertes des DERIVE-TEMPLATE/MIXTE)
   [I] Inspecter fichier par fichier
   [S] Ignorer — continuer sans modification
 ```
@@ -1284,33 +1277,89 @@ rm "$companion"
 echo "  ✗ $(basename $companion) supprimé (identique au template)"
 ```
 
-Pour chaque fichier `DERIVE-PROJET` ou `MIXTE` :
-- Lire `xxx.md` (agent projet) et `xxx.template.md` (agent template)
-- Identifier les blocs présents dans `xxx.md` mais absents du template
-  (diff sémantique : sections ajoutées, règles supplémentaires, surcharges)
-- Réécrire `xxx.md` avec uniquement ces blocs
-- Confirmer : `"  ✓ $(basename $companion) — N blocs projet conservés"`
-
-Pour chaque fichier `DERIVE-TEMPLATE` :
-- Afficher la règle/section devenue redondante
-- Proposer de la retirer de `xxx.md` avec confirmation
+Pour chaque fichier `DERIVE-TEMPLATE` ou `MIXTE` :
+- Lire `xxx.md` et `xxx.template.md`
+- Identifier les règles de `xxx.md` qui disent la même chose qu'une règle du template
+- Retirer uniquement ces règles redondantes, conserver le reste tel quel
+- Confirmer : `"  ✓ $(basename $companion) — N règles redondantes retirées"`
 
 **Option I — Fichier par fichier :**
 
 Pour chaque fichier non-PROPRE, afficher le diff annoté et proposer l'action :
 ```
-[xxx.md] — dérive détectée
+[xxx.md] — doublons détectés
 
   [↓] Section "Règle X" — couverte par le template mis à jour → retirer ?
-  [↑] Section "Règle Y" — ajout projet non présent dans le template → conserver ?
 
   [R] Retirer les redondances  [C] Conserver tel quel  [E] Editer manuellement
 ```
 
 > Le système fonctionne correctement quelle que soit l'action choisie.
-> La dérive est un signal de maintenance, pas une erreur bloquante.
+> Un doublon est un signal de maintenance, pas une erreur bloquante.
 
-#### Etape d5c — Mettre à jour la table "Agents Disponibles" dans CLAUDE.md
+#### Etape d5c — Détection de conflits (règles incohérentes)
+
+Exécutée après d5b, sur le contenu restant des compagnons (fichiers `PROPRE` en entier,
+et la part non redondante des fichiers `DERIVE-TEMPLATE`/`MIXTE` une fois les doublons
+retirés). Contrairement à d5b (même règle en double), d5c cherche des règles qui portent
+sur le **même sujet** que le template mais disent **autre chose** — une incohérence, pas
+une simple règle spécifique au projet.
+
+**Analyse de chaque règle restante :**
+
+Pour chaque règle du compagnon, chercher si le template contient une règle sur le même
+sujet (même commande, même mécanisme, même chemin, même convention...) :
+
+| Statut | Critère | Signal |
+|--------|---------|--------|
+| `CONFLIT` | Le compagnon et le template traitent du même sujet mais se contredisent | Incohérence — nécessite un arbitrage |
+| `COHERENT` | Le compagnon ajoute du contenu spécifique sans contredire le template | Aucune action requise |
+
+> Exemple de `CONFLIT` : le template fixe le chemin qualif à `build/qualif_v<X.Y.Z>/`,
+> le compagnon documente encore `build/qualif/<X.Y.Z>/`. Exemple de `COHERENT` : le
+> compagnon ajoute une règle de nommage de branche propre au projet, absente du template
+> et qui ne le contredit pas.
+
+**Rapport (affiché uniquement si au moins un conflit détecté) :**
+
+```
+Analyse conflits template/projet :
+
+  [X] deploy.md — chemin qualif : template "build/qualif_v<ver>/" vs compagnon "build/qualif/<ver>/"
+  [X] cdp.md     — ordonnancement : template "QA parallèle à Review" vs compagnon "QA après Review"
+
+  2 conflits détectés — nécessitent un arbitrage.
+```
+
+Si aucun conflit → passer directement à l'étape d5d, sans afficher de rapport.
+
+**Arbitrage — un conflit à la fois :**
+
+```
+[deploy.md] Conflit détecté :
+
+  Template  (nouveau)  : "build/qualif_v<X.Y.Z>/"
+  Compagnon (projet)   : "build/qualif/<X.Y.Z>/"
+
+  Lequel fait foi pour ce projet ?
+  [T] Le template — adapter/retirer la règle du compagnon
+  [P] Le compagnon — dérogation projet assumée, conserver telle quelle
+  [E] Éditer manuellement
+```
+
+- **[T]** : retirer ou réécrire la règle du compagnon pour qu'elle ne contredise plus le
+  template — le template s'applique alors sans override.
+- **[P]** : conserver la règle du compagnon telle quelle — dérogation projet volontaire,
+  pas une erreur. Elle sera re-signalée en `CONFLIT` aux prochaines sync tant qu'elle
+  diffère du template ; c'est attendu pour une dérogation assumée.
+- **[E]** : ouvrir le fichier pour édition manuelle, ne rien appliquer automatiquement.
+
+Confirmer chaque arbitrage : `"  ✓ $(basename $companion) — conflit '<sujet>' résolu ([T]/[P]/[E])"`
+
+> Un conflit non tranché (utilisateur ferme sans choisir) reste en l'état — il sera
+> re-signalé à la prochaine sync.
+
+#### Etape d5d — Mettre à jour la table "Agents Disponibles" dans CLAUDE.md
 
 > ⚠ **SCOPE STRICT** : identique au rappel de l'étape d3b — cette étape réécrit uniquement
 > le texte de la table `## Agents Disponibles` dans `CLAUDE.md`. Elle ne touche jamais
@@ -1396,6 +1445,8 @@ Synchronisation terminee.
   Commandes mises a jour            : N
   Agents mis a jour                 : N
   Reliquats supprimes               : N
+  Doublons compagnons retires       : N (etape d5b)
+  Conflits compagnons arbitres      : N (etape d5c)
   CLAUDE.md bloc TEAMLEADER_PROTOCOL : mis à jour
   CLAUDE.md table Agents Disponibles : mis à jour (N lignes — documentation uniquement)
   Labels GitHub                     : vérifiés (PLANNING, EN COURS, EN REVIEW, EN QA, DONE)
