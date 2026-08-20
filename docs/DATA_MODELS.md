@@ -943,11 +943,26 @@ type EntracteConfig struct {
 ```go
 type GameState struct {
     ...
-    ENTRACTE        bool             `json:"ENTRACTE"`         // Pause active (sans omitempty)
-    ENTRACTE_CONFIG EntracteConfig   `json:"ENTRACTE_CONFIG"`  // Configuration persistée (sans omitempty)
+    ENTRACTE              bool             `json:"ENTRACTE"`                // Pause active (sans omitempty)
+    ENTRACTE_CONFIG       EntracteConfig   `json:"ENTRACTE_CONFIG"`         // Configuration courante (sans omitempty)
+    ENTRACTE_CONFIG_SAVED EntracteConfig   `json:"ENTRACTE_CONFIG_SAVED"`   // Configuration gelée à l'activation (admin-only, sans omitempty)
     ...
 }
 ```
+
+#### Gel de la configuration à l'activation
+
+- `ENTRACTE_CONFIG` : configuration courante, modifiable à tout moment
+- `ENTRACTE_CONFIG_SAVED` : snapshot sauvegardé automatiquement dès `ENTRACTE = true`
+- Pendant l'entracte : le panneau affiche `ENTRACTE_CONFIG_SAVED`, jamais la courante
+- Modifications de `ENTRACTE_CONFIG` pendant une pause active : prennent effet au **prochain 
+  cycle d'entracte** (après sortie + nouvelle entrée)
+- Client reçoit uniquement `ENTRACTE_CONFIG` (configuration courante) dans les payloads 
+  ordinaires (`UPDATE`, `HELLO`) ; `ENTRACTE_CONFIG_SAVED` n'est jamais diffusé (admin-only, 
+  transparence interne)
+
+**Motif** : éviter que des modifications pendant une pause active perturbent le panneau affiché 
+sur les quatre surfaces.
 
 **Note** : aucun `omitempty` sur ces champs — un client doit toujours savoir que 
 l'entracte est **terminé** (`ENTRACTE = false`), d'où la présence du champ même à 
@@ -978,9 +993,10 @@ Persistée dans `game-config.json`, reloadée au démarrage et à chaque sauvega
 
 Image unique optionnelle :
 - Stockée dans `data/files/entracte/` (répertoire dédié, distinct de `data/files/`).
-- Accessible via `GET /api/config/entracte-image`.
-- Upload/suppression via `POST`/`DELETE /api/config/entracte-image`.
+- Accessible via `GET /api/game/entracte-image`.
+- Upload/suppression via `POST`/`DELETE /api/game/entracte-image`.
 - Le champ `IMAGE_IS_CUSTOM` véhicule uniquement un booléen — jamais le chemin.
+- URL stable : le client construit l'URL avec cache-buster pour forcer le rechargement après upload.
 
 ### Animation du panneau
 

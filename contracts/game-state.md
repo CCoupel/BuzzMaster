@@ -565,13 +565,12 @@ de `GameState`, tous deux **sans `omitempty`** (règle H1 : toujours sérialisé
 
 ### ENTRACTE_CONFIG
 
-Miroir en lecture seule de la section `entracte` de `game-config.json` (voir
-`contracts/http-endpoints.md`). Poussé dans `GameState` au démarrage et à chaque sauvegarde de la
-configuration.
+Configuration courante du panneau ENTRACTE. Persistée dans `game_state.json` (propriété de la 
+partie, pas réglage global). Poussée dans `GameState` au démarrage et à chaque modification.
 
-⚠️ **`ENTRACTE_CONFIG` est GELÉ pendant un entracte actif** (arbitrage utilisateur 2026-08-20) : voir
-§« Configuration gelée à l'activation » plus bas. Le champ ci-dessous décrit la configuration
-**diffusée au panneau**, pas nécessairement la dernière enregistrée.
+⚠️ **`ENTRACTE_CONFIG` est GELÉ pendant un entracte actif** (arbitrage utilisateur 2026-08-20) : 
+voir §« Configuration gelée à l'activation » plus bas. Le champ ci-dessous décrit la configuration 
+**courante**, pas nécessairement celle affichée au panneau pendant l'entracte.
 
 | Champ | Type | Défaut | Description |
 |---|---|---|---|

@@ -220,6 +220,16 @@ Il représente une **pause globale** de la partie (déjeuner, changement de sall
 La **sortie est autorisée depuis n'importe quelle phase** — on ne doit jamais rester 
 coincé en entracte.
 
+### Configuration gelée à l'activation
+
+À l'entrée en entracte, la configuration courante est **sauvegardée et gelée** dans 
+`ENTRACTE_CONFIG_SAVED` — la configuration du panneau ne change plus pendant toute la 
+durée de l'entracte. Les modifications apportées pendant une pause active (titre, 
+animation, etc.) prennent effet au **prochain cycle d'entracte**, pas immédiatement.
+
+Configuration persistée dans `game_state.json` (cycle de vie `QUIZ_*`), partie intégrante 
+de la partie en cours — pas une section globale de réglages.
+
 ## Historique
 
 | Version | Date | Changements |

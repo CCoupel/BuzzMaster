@@ -1016,7 +1016,7 @@ Contenu :
 - **Titre** (défaut `"ENTRACTE"`)
 - **Sous-titre** (défaut `"Retour dans 20mn"`)
 - **Image de fond optionnelle** (booléen `IMAGE_IS_CUSTOM`, URL stable 
-  `/api/config/entracte-image` avec cache-buster)
+  `/api/game/entracte-image` avec cache-buster)
 - **Centrage flex** (jamais via `transform: translate(-50%, -50%)` qui serait écrasé par 
   la transformation d'animation)
 - **Taille unique** (prop `PANEL_SIZE` %, largeur et hauteur identiques, borné 20–100)
@@ -1058,18 +1058,24 @@ porte son propre filtre indépendant.
 return` même si le serveur refuse la plupart des actions — évite l'envoi inutile et 
 la rétroaction visuelle trompeuse.
 
-### Surface Admin (`GamePage.jsx`, `/admin`)
+### Surface Admin — Bouton Navbar
+
+**Rendu** :
+- **Bouton `ENTRACTE` / `FIN D'ENTRACTE`** dans la **Navbar** (entre badge version et groupe 
+  "Jeu", visible sur toutes les pages admin).
+- Reste net (pas filtré), cliquable, contrasté (couleur ambre inactif, rouge actif avec 
+  halo, grisé désactivé si phase non autorisée).
+- Accessible sur `/admin`, `/admin/quiz`, `/admin/config`, etc. — présent partout.
+
+**Phases autorisées** : cf. `utils/phaseRules.js` (`canToggleEntracte(phase)`). 
+Une seule source de vérité, partagée avec l'animateur.
+
+### Surface Admin — Contenu Filtré (`GamePage.jsx`, `/admin`)
 
 **Rendu** :
 - Interface filtré (classe `.entracte-dim` appliquée aux enfants de grille, jamais 
   interposer de nœud — sinon la grille CSS casse).
 - **Aucun panneau**.
-- **Bouton `ENTRACTE` / `FIN D'ENTRACTE`** reste net (pas filtré), cliquable, contrasté 
-  (couleur ambre inactif, rouge actif avec halo, grisé désactivé si phase non 
-  autorisée).
-
-**Phases autorisées** : cf. `utils/phaseRules.js` (`canToggleEntracte(phase)`). 
-Une seule source de vérité, partagée avec l'animateur.
 
 ### Surface Animateur (`AnimPage.jsx`, `/anim`)
 

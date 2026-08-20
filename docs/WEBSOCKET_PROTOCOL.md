@@ -1148,6 +1148,43 @@ Action de diffusion serveur portant l'état complet du message.
 
 ---
 
+## Action UPDATE_ENTRACTE_CONFIG — Mise à jour Configuration Entracte (v6.5.2, #119)
+
+### Action Entrante (Client → Server)
+
+**Clientèle autorisée** : `admin` uniquement.
+
+**Spécialité** : cette action est **autorisée même pendant l'entracte** — contrairement à la 
+quasi-totalité des actions qui sont refusées (C4, gel de config).
+
+**Payload** :
+```json
+{
+  "action": "UPDATE_ENTRACTE_CONFIG",
+  "payload": {
+    "config": {
+      "TITLE": "ENTRACTE",
+      "SUBTITLE": "Retour dans 20mn",
+      "IMAGE_IS_CUSTOM": false,
+      "PANEL_SIZE": 65,
+      "ANIM_PERIOD": 10,
+      "ANIM_INTENSITY": 20
+    }
+  }
+}
+```
+
+**Comportement** :
+- Mise à jour de `GameState.ENTRACTE_CONFIG` (configuration courante).
+- Diffusion immédiate via `broadcastUpdate()` à tous les clients admin.
+- Si entracte actif (`ENTRACTE = true`) : les modifications **ne s'appliquent pas au panneau 
+  affiché** (qui reste gelé sur `ENTRACTE_CONFIG_SAVED`) ; elles prennent effet au **prochain 
+  cycle d'entracte** (après sortie + nouvelle entrée).
+- Si entracte inactif : les modifications **s'appliquent immédiatement** au panneau (si jamais 
+  déclenché pendant le jeu — cas rare).
+
+---
+
 ## Actions Refusées Pendant l'ENTRACTE (v6.5.2, #119)
 
 Quand `ENTRACTE = true`, une **liste blanche centralisée** (`IsActionAllowedDuringEntracte`) 

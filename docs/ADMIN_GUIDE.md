@@ -1613,7 +1613,7 @@ précédente est prête à continuer.
 
 ### Configuration du panneau
 
-Dans les **Paramètres** (`/settings`), section **ENTRACTE** :
+Dans la **Page Quiz** (`/admin/quiz`), section **ENTRACTE** (ou bouton dédié dans la zone Quiz) :
 
 | Champ | Défaut | Portée |
 |-------|--------|--------|
@@ -1623,6 +1623,21 @@ Dans les **Paramètres** (`/settings`), section **ENTRACTE** :
 | **Taille du panneau** | 65% | Pourcentage de l'écran (20–100) — affecte TV et écran joueur identiquement |
 | **Vitesse du mouvement** | 10s | Durée d'un cycle d'animation (2–30 secondes) |
 | **Amplitude du mouvement** | 20 | Force de l'animation (0–100 ; **0 = animation désactivée**) |
+
+### Gel de la configuration à l'activation
+
+**Point important** : dès que vous cliquez le bouton **ENTRACTE**, la configuration courante 
+(titre, sous-titre, image, taille, animation) est **sauvegardée et gelée** — elle ne change 
+plus pendant toute la durée de la pause, même si vous modifiez les réglages.
+
+Les modifications apportées pendant un entracte actif **prennent effet au prochain cycle** 
+(après sortie puis nouvelle entrée en entracte). C'est un mécanisme de sécurité pour que le 
+panneau affiché reste stable pendant une pause prolongée.
+
+**Exemple** : vous lancez une pause avec le titre « DÉJEUNER » et l'animation 
+à 20. Pendant la pause, vous changez le titre en « RETOUR IMMINENT » et l'animation en 0. 
+Quand vous cliquez « FIN D'ENTRACTE » et que vous relancez une pause 10 minutes plus tard, 
+c'est le nouveau titre et la nouvelle animation qui s'afficheront.
 
 ### Animation du panneau
 
@@ -1640,9 +1655,10 @@ pause prolongée.
 
 ### Image de fond
 
-1. Cliquez **Choisir une image** dans la section Entracte.
+1. Cliquez **Choisir une image** dans la section Entracte de la page Quiz.
 2. Sélectionnez un fichier depuis votre ordinateur (PNG, JPG, etc.).
-3. L'image s'affiche immédiatement derrière le titre et le sous-titre.
+3. L'image s'affiche immédiatement derrière le titre et le sous-titre (le changement prend 
+   effet au prochain entracte si un est en cours).
 
 Pour **supprimer l'image**, cliquez **Supprimer image** — le panneau reste lisible 
 sans image de fond.
