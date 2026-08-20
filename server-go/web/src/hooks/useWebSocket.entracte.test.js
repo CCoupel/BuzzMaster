@@ -171,9 +171,17 @@ describe('useWebSocket — mode ENTRACTE (#119)', () => {
     // Aucune exception levée, valeurs par défaut toujours cohérentes
     expect(result.current.gameState.entracte).toBe(false)
     expect(result.current.gameState.entracteConfig).toEqual(DEFAULT_ENTRACTE_CONFIG)
-    expect(result.current.gameState.PHASE).toBe('STARTED')
+    // Fix (dev-frontend) : la clé du state est `phase` en minuscule partout
+    // dans useWebSocket.js (voir l'état initial du hook), jamais `PHASE`.
+    expect(result.current.gameState.phase).toBe('STARTED')
   })
 
+  // Fix (dev-frontend) : `wsInstance.onopen()` déclenche l'envoi automatique
+  // et pré-existant de HELLO par le hook (useWebSocket.js:198-201, sans
+  // rapport avec #119) — `send` reçoit donc déjà un premier appel avant même
+  // `setEntracte()`. Les deux tests ci-dessous repèrent l'appel ENTRACTE_SET
+  // par son contenu plutôt que par position/compte fixe, pour ne pas dépendre
+  // du nombre d'envois qu'une connexion déclenche par ailleurs.
   it('setEntracte(true) envoie ENTRACTE_SET avec ACTIVE: true', async () => {
     const { result } = renderHook(() => useWebSocket('/ws/test'))
 
@@ -186,9 +194,10 @@ describe('useWebSocket — mode ENTRACTE (#119)', () => {
       result.current.setEntracte(true)
     })
 
-    expect(wsInstance.send).toHaveBeenCalledTimes(1)
-    const sent = JSON.parse(wsInstance.send.mock.calls[0][0])
-    expect(sent).toEqual({ ACTION: 'ENTRACTE_SET', MSG: { ACTIVE: true } })
+    const entracteCall = wsInstance.send.mock.calls
+      .map(([payload]) => JSON.parse(payload))
+      .find(msg => msg.ACTION === 'ENTRACTE_SET')
+    expect(entracteCall).toEqual({ ACTION: 'ENTRACTE_SET', MSG: { ACTIVE: true } })
   })
 
   it('setEntracte(false) envoie ENTRACTE_SET avec ACTIVE: false (commande explicite, pas un toggle — D3)', async () => {
@@ -203,7 +212,9 @@ describe('useWebSocket — mode ENTRACTE (#119)', () => {
       result.current.setEntracte(false)
     })
 
-    const sent = JSON.parse(wsInstance.send.mock.calls[0][0])
-    expect(sent).toEqual({ ACTION: 'ENTRACTE_SET', MSG: { ACTIVE: false } })
+    const entracteCall = wsInstance.send.mock.calls
+      .map(([payload]) => JSON.parse(payload))
+      .find(msg => msg.ACTION === 'ENTRACTE_SET')
+    expect(entracteCall).toEqual({ ACTION: 'ENTRACTE_SET', MSG: { ACTIVE: false } })
   })
 })

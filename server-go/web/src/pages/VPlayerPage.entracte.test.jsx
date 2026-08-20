@@ -62,16 +62,19 @@ function createStorageMock() {
 
 const BUMPER_ID = 'vjoueur_alice_1'
 
+// Fix (dev-frontend, découvert en implémentant F5) : `...overrides` était
+// spreadé APRÈS la clé `gameState` déjà fusionnée avec `...overrides.gameState`
+// — l'objet `gameState` fusionné (avec ses défauts phase/question/...) était
+// donc entièrement écrasé par `overrides.gameState` BRUT (non fusionné) dès
+// qu'un appelant passait `{ gameState: { entracte: ... } }` sans repréciser
+// `phase`. Résultat : `gameState.phase` devenait `undefined` dans le composant
+// rendu, ce qui bloquait `handleBuzz` AVANT même la garde entracte — le test
+// "hors entracte, l'appui envoie bien BUTTON" échouait pour une raison sans
+// rapport avec #119. `...overrides` est maintenant spreadé EN PREMIER, et
+// `gameState` (déjà correctement fusionné) est calculé APRÈS pour ne jamais
+// être re-écrasé.
 const makeGameMock = (overrides = {}) => ({
   sendMessage: vi.fn(),
-  gameState: {
-    phase: 'STARTED',
-    question: { ID: 'q1', TYPE: 'NORMAL' },
-    enrollmentActive: true,
-    entracte: false,
-    entracteConfig: { TITLE: 'ENTRACTE', SUBTITLE: '', IMAGE_IS_CUSTOM: false, PANEL_SIZE: 65, ANIM_PERIOD: 10, ANIM_INTENSITY: 20 },
-    ...overrides.gameState,
-  },
   bumpers: {
     [BUMPER_ID]: { NAME: 'Alice', IS_VIRTUAL: true, IS_VPLAYER: true, CONNECTED: true },
   },
@@ -82,6 +85,14 @@ const makeGameMock = (overrides = {}) => ({
   playerEvictedStatus: null,
   clearPlayerEvictedStatus: vi.fn(),
   ...overrides,
+  gameState: {
+    phase: 'STARTED',
+    question: { ID: 'q1', TYPE: 'NORMAL' },
+    enrollmentActive: true,
+    entracte: false,
+    entracteConfig: { TITLE: 'ENTRACTE', SUBTITLE: '', IMAGE_IS_CUSTOM: false, PANEL_SIZE: 65, ANIM_PERIOD: 10, ANIM_INTENSITY: 20 },
+    ...overrides.gameState,
+  },
 })
 
 function pressBuzz(container) {
