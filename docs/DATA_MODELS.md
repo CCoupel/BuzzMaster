@@ -922,3 +922,72 @@ Badges frontend : `TeamCard.jsx` + `TeamsPage.jsx` (style inline React `backgrou
 | `STARTED` | Question currently in play | Orange |
 | `STOPPED` | Question was played but not revealed | Rouge |
 | `REVEALED` | Answer has been shown | Gris |
+
+## EntracteConfig et GameState.ENTRACTE (v6.5.2, #119)
+
+### Modèle : EntracteConfig
+
+```go
+type EntracteConfig struct {
+    TITLE          string `json:"TITLE"`           // Titre du panneau (défaut "ENTRACTE", sans omitempty)
+    SUBTITLE       string `json:"SUBTITLE"`        // Sous-titre (défaut "Retour dans 20mn", sans omitempty)
+    IMAGE_IS_CUSTOM bool  `json:"IMAGE_IS_CUSTOM"` // Image de fond présente (sans omitempty)
+    PANEL_SIZE     int    `json:"PANEL_SIZE"`      // Pourcentage 20–100 (défaut 65, sans omitempty)
+    ANIM_PERIOD    int    `json:"ANIM_PERIOD"`     // Durée cycle en secondes 2–30 (défaut 10, sans omitempty)
+    ANIM_INTENSITY int    `json:"ANIM_INTENSITY"`  // Amplitude 0–100 (défaut 20 ; 0=désactivée, sans omitempty)
+}
+```
+
+### Champ GameState.ENTRACTE
+
+```go
+type GameState struct {
+    ...
+    ENTRACTE        bool             `json:"ENTRACTE"`         // Pause active (sans omitempty)
+    ENTRACTE_CONFIG EntracteConfig   `json:"ENTRACTE_CONFIG"`  // Configuration persistée (sans omitempty)
+    ...
+}
+```
+
+**Note** : aucun `omitempty` sur ces champs — un client doit toujours savoir que 
+l'entracte est **terminé** (`ENTRACTE = false`), d'où la présence du champ même à 
+valeur fausse. La règle projet CLAUDE.md s'applique intégralement.
+
+### Configuration persistée : GameSettings.Entracte
+
+```go
+type GameSettings struct {
+    ...
+    Entracte EntracteConfig `json:"entracte"`  // Section entracte dans game-config.json
+    ...
+}
+```
+
+Persistée dans `game-config.json`, reloadée au démarrage et à chaque sauvegarde. État 
+(`ENTRACTE = true/false`) non persisté — propriété `ShowQRCode` est l'analogue existant.
+
+### Filtrage par type de client
+
+- **Admin, TV, VJoueur, Animateur** : reçoivent les deux champs `ENTRACTE` et 
+  `ENTRACTE_CONFIG` via la liste de retrait existante (`SerializeForWebClient`, pas de 
+  modification).
+- **Buzzers** : ne reçoivent ni champ (liste d'autorisation `SerializeForBuzzer`, 
+  aucune modification requise).
+
+### Image de fond
+
+Image unique optionnelle :
+- Stockée dans `data/files/entracte/` (répertoire dédié, distinct de `data/files/`).
+- Accessible via `GET /api/config/entracte-image`.
+- Upload/suppression via `POST`/`DELETE /api/config/entracte-image`.
+- Le champ `IMAGE_IS_CUSTOM` véhicule uniquement un booléen — jamais le chemin.
+
+### Animation du panneau
+
+Deux paramètres : `ANIM_PERIOD` (vitesse) et `ANIM_INTENSITY` (amplitude).
+
+À `ANIM_INTENSITY = 0`, **aucune animation n'est déclarée** — pas seulement une 
+amplitude nulle qui tournerait quand même. Le panneau reste fixe.
+
+Sous `prefers-reduced-motion: reduce`, animation neutralisée quelle que soit la 
+configuration (accessibilité, respect des préférences système).

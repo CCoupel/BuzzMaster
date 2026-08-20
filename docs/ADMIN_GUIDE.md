@@ -1579,6 +1579,95 @@ Interface **interrupteurs "Afficher sur la TV"** permettant de masquer certains 
 
 ---
 
+## Mode ENTRACTE — Pause Globale
+
+### Qu'est-ce que c'est ?
+
+L'entracte est une **pause globale** de la partie (pause déjeuner, changement de salle, 
+annonce spéciale). Pendant une pause :
+
+- La **TV et l'écran joueur** affichent un panneau estompé au-dessus du contenu actuel.
+- L'**admin et l'animateur** voient leur interface estompée (l'admin garde un bouton 
+  de contrôle visible).
+- **Aucune action de jeu n'est possible** — pas de lancement, arrêt, scoring, rien.
+- Les **LEDs des buzzers s'éteignent**.
+- La question sélectionnée avant la pause **reste intacte** — à la reprise, on continue 
+  où on s'était arrêté.
+
+### Déclencher une pause
+
+1. Arrêtez la question courante (bouton **STOP** ou attendez la révélation).
+2. Attendez une phase sans manche active (`STOPPED`, `PREPARE`, `READY`, `NEW_GAME`, 
+   `REVEALED`).
+3. Cliquez le bouton **ENTRACTE** (navbar ou panel de contrôle).
+4. Le bouton devient **FIN D'ENTRACTE** (rouge avec halo).
+
+### Mettre fin à la pause
+
+Cliquez le bouton **FIN D'ENTRACTE** — tout revient à la normale, la question 
+précédente est prête à continuer.
+
+> **Note** : vous pouvez sortir de l'entracte **à n'importe quel moment**, même si le 
+> serveur avait refusé l'entrée (cas rare : une manche a démarré pendant que vous 
+> remplissiez le formulaire de config).
+
+### Configuration du panneau
+
+Dans les **Paramètres** (`/settings`), section **ENTRACTE** :
+
+| Champ | Défaut | Portée |
+|-------|--------|--------|
+| **Titre** | `ENTRACTE` | Texte grand affiché sur TV et écran joueur |
+| **Sous-titre** | `Retour dans 20mn` | Texte secondaire (ex. horaire de reprise) |
+| **Image de fond** | (aucune) | Image optionnelle (ex. logo, photo, pause café) |
+| **Taille du panneau** | 65% | Pourcentage de l'écran (20–100) — affecte TV et écran joueur identiquement |
+| **Vitesse du mouvement** | 10s | Durée d'un cycle d'animation (2–30 secondes) |
+| **Amplitude du mouvement** | 20 | Force de l'animation (0–100 ; **0 = animation désactivée**) |
+
+### Animation du panneau
+
+Le panneau anime un **respiration douce** : zoom oscillant combiné avec balancement 
+(oscillation de rotation). Cet effet subtil rend le panneau plus vivant pendant une 
+pause prolongée.
+
+- **Augmentez l'amplitude** (ex. 50) pour une respiration plus prononcée — utile pour 
+  une pause brève et attirer l'attention.
+- **Diminuez l'amplitude** (ex. 5) ou mettez à **0** pour un panneau fixe — préférable 
+  pour une pause longue (déjeuner).
+- **Respecte `prefers-reduced-motion`** : les utilisateurs qui ont activé ce réglage 
+  système voient un panneau fixe, quel que soit votre paramétrage — c'est une 
+  accessibilité, pas une préférence esthétique.
+
+### Image de fond
+
+1. Cliquez **Choisir une image** dans la section Entracte.
+2. Sélectionnez un fichier depuis votre ordinateur (PNG, JPG, etc.).
+3. L'image s'affiche immédiatement derrière le titre et le sous-titre.
+
+Pour **supprimer l'image**, cliquez **Supprimer image** — le panneau reste lisible 
+sans image de fond.
+
+> **Note** : l'image est stockée côté serveur et persiste après un redémarrage (elle 
+> est sauvegardée dans votre sauvegarde de partie si vous cochez « historique » lors 
+> de la sauvegarde).
+
+### Exigences de sécurité
+
+- Seule l'**interface admin** peut déclencher / arrêter une pause.
+- L'**interface animateur** voit quand une pause est active, mais ne peut pas la 
+  commander (bouton grisé).
+- Le **serveur bloque tout clic malveillant** — même si quelqu'un essaie de scorer ou 
+  lancer une question depuis un navigateur hostile, le serveur refuse.
+
+### Cas d'usage
+
+1. **Pause déjeuner** : titre `"DÉJEUNER"`, sous-titre `"Retour à 14h"`, animation 
+   très douce ou désactivée, durée 60 minutes.
+2. **Changement de salle** : titre `"EN DÉPLACEMENT"`, animation rapide (vitesse 5s) 
+   pour signaler du changement, image de logo.
+3. **Annonce spéciale** : titre customisé (ex. `"TIRAGE AU SORT"`), image pertinente, 
+   animation moyenne pour garder l'attention.
+
 ### Workflow complet — étapes recommandées
 
 1. **Ouvrir la page Questions** (`/admin/questions`)

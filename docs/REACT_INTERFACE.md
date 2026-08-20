@@ -991,3 +991,111 @@ Les styles de GamePage utilisent des sélecteurs plus spécifiques pour éviter 
 - `.memotion-card-body` : image (flex-grow, couvre l'espace central)
 - Footer : étoiles + points (bas de la carte)
 Supprime l'ancienne logique conditionnelle image/no-image.
+
+---
+
+## Mode ENTRACTE — Filtre Partagé et Panneau (v6.5.2, #119)
+
+### Filtre d'Estompage
+
+Quand `gameState.ENTRACTE = true`, un **filtre CSS identique** s'applique au contenu 
+des quatre surfaces (sauf éléments explicitement nets) :
+
+```css
+filter: grayscale(0.85) brightness(0.55);
+```
+
+**Fichier source** : `web/src/styles/entracte.css` (classe `.entracte-dim`).
+
+### Composant EntractePanel
+
+Composant unique `components/EntractePanel.jsx` restitue l'affichage du panneau, 
+idéal sur TV et VJoueur (mêmes proportions, même centrage). Pas de variante par surface.
+
+Contenu :
+- **Titre** (défaut `"ENTRACTE"`)
+- **Sous-titre** (défaut `"Retour dans 20mn"`)
+- **Image de fond optionnelle** (booléen `IMAGE_IS_CUSTOM`, URL stable 
+  `/api/config/entracte-image` avec cache-buster)
+- **Centrage flex** (jamais via `transform: translate(-50%, -50%)` qui serait écrasé par 
+  la transformation d'animation)
+- **Taille unique** (prop `PANEL_SIZE` %, largeur et hauteur identiques, borné 20–100)
+- **Animation** (si `ANIM_INTENSITY > 0` et `prefers-reduced-motion: reduce` absent) : 
+  zoom oscillant (±6% d'échelle) et balancement oscillant (±2° de rotation) combinés, 
+  durée contrôlée par `ANIM_PERIOD`.
+
+**Propriétés CSS** :
+- `--ep-size` : pourcentage du panneau (défaut `65%`)
+- `--ep-anim-duration` : durée en secondes
+- `--ep-anim-intensity` : amplitude 0–100 (0 = pas de déclaration d'animation)
+
+### Surface TV (`PlayerDisplay.jsx`, `/tv`)
+
+**Rendu** :
+- Contenu du jeu entouré de classe `.entracte-dim` (branche conditionnelle 
+  `!isVPlayer`).
+- `EntractePanel` monté en **frère**, jamais en enfant du nœud filtré (piège 
+  `position: fixed` du QR code).
+
+**z-index** : panneau à `500` (au-dessus du contenu TV max 100, sous QR code 1000).
+
+**Contrainte TV statique** : aucun scroll, panneau centré et lisible en une seule 
+vue ; tailles de police relatives au panneau, pas en `rem`.
+
+### Surface VJoueur (`VPlayerPage.jsx`, `/player`)
+
+**Rendu** :
+- Contenu filtré avec classe `.entracte-dim`.
+- `EntractePanel` identique à la TV — mêmes proportions, même centrage.
+- **Cadenas 🔒** (`filter: none !important`) positionné au-dessus de la zone de buzz 
+  (média click).
+
+**Piège évité** : filtres ne s'additionnent pas (ex. un double filtrage rendrait l'écran 
+presque noir). `PlayerDisplay` conditionne son filtre par `!isVPlayer` ; `VPlayerPage` 
+porte son propre filtre indépendant.
+
+**Garde additionnelle** : `handleBuzz` contient une garde `if (gameState.entracte) 
+return` même si le serveur refuse la plupart des actions — évite l'envoi inutile et 
+la rétroaction visuelle trompeuse.
+
+### Surface Admin (`GamePage.jsx`, `/admin`)
+
+**Rendu** :
+- Interface filtré (classe `.entracte-dim` appliquée aux enfants de grille, jamais 
+  interposer de nœud — sinon la grille CSS casse).
+- **Aucun panneau**.
+- **Bouton `ENTRACTE` / `FIN D'ENTRACTE`** reste net (pas filtré), cliquable, contrasté 
+  (couleur ambre inactif, rouge actif avec halo, grisé désactivé si phase non 
+  autorisée).
+
+**Phases autorisées** : cf. `utils/phaseRules.js` (`canToggleEntracte(phase)`). 
+Une seule source de vérité, partagée avec l'animateur.
+
+### Surface Animateur (`AnimPage.jsx`, `/anim`)
+
+**Rendu** :
+- Interface filtré (classe `.entracte-dim` appliquée aux quatre zones de grille 
+  séparément).
+- **Aucun panneau, aucun bouton**.
+- **Indicateur textuel net** : « ⏸ Entracte en cours — contrôle réservé à l'admin » 
+  (positionné en angle, hors du nœud filtré).
+
+### Utilitaires Partagés
+
+#### `utils/phaseRules.js` — `canToggleEntracte(phase)`
+
+Table booléenne centralisée des phases autorisées pour l'entrée en entracte :
+```
+STOPPED, PREPARE, READY, NEW_GAME, REVEALED → true
+COUNTDOWN, STARTED, PAUSED, ENROLL → false
+```
+
+Sortie toujours permise (indépendant de la phase).
+
+#### `web/src/styles/entracte.css`
+
+Fichier CSS partagé déclarant :
+- `.entracte-dim` — filtre + élément parent flex + animation (si applicable)
+- `.entracte-panel*` — styles du panneau (centrage, taille, typographie relative)
+- `@keyframes` combinant `scale` et `rotate`
+- `@media (prefers-reduced-motion: reduce)` — animation neutralisée

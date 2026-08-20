@@ -183,6 +183,43 @@ Le chronomètre affiche différents états visuels :
 - **25-50%** : Orange (`--warning`)
 - **<25%** : Rouge (`--error`)
 
+## ENTRACTE — État Transverse (v6.5.2, #119)
+
+### Concept
+
+`ENTRACTE` est un **booléen transverse** de `GameState`, indépendant du cycle de question. 
+Il représente une **pause globale** de la partie (déjeuner, changement de salle, annonce) :
+
+- Quand actif (`ENTRACTE = true`) :
+  - Les **quatre surfaces** (TV, VJoueur, admin, animateur) affichent un **panneau 
+    estompé** au-dessus du contenu existant.
+  - Aucune action de jeu (`START`, `READY`, `REVEAL`, etc.) n'est acceptée.
+  - Seules les actions de maintenance sont autorisées (`ENTRACTE_SET`, `HELLO`, etc.).
+  - **LEDs des buzzers éteintes**.
+
+- Quand inactif (`ENTRACTE = false`) :
+  - Comportement normal — le cycle de question reprend.
+  - LEDs restaurées à l'état correspondant à la phase courante.
+
+### Phases autorisées pour l'entrée en entracte
+
+| Phase | Autorisée | Motif |
+|---|---|---|
+| `STOPPED` | ✅ Oui | Aucune question en cours |
+| `PREPARE` | ✅ Oui | Aucune question en cours |
+| `READY` | ✅ Oui | Aucune question en cours |
+| `NEW_GAME` | ✅ Oui | Transition avant question, pas de manche active |
+| `REVEALED` | ✅ Oui | Question finie, scoring en cours — moment naturel pour annoncer une pause |
+| `COUNTDOWN` | ❌ Non | Compte à rebours avant lancement — question imminente |
+| `STARTED` | ❌ Non | Manche en cours — ne jamais couper une manche active |
+| `PAUSED` | ❌ Non | Manche temporairement arrêtée — toujours en cours |
+| `ENROLL` | ❌ Non | Écran d'inscription — QR code visible, le masquer serait contre-productif |
+
+### Sortie de l'entracte
+
+La **sortie est autorisée depuis n'importe quelle phase** — on ne doit jamais rester 
+coincé en entracte.
+
 ## Historique
 
 | Version | Date | Changements |

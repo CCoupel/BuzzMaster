@@ -1121,6 +1121,59 @@ Action de diffusion serveur portant l'état complet du message.
 
 ---
 
+## Action ENTRACTE_SET — Pause Globale (v6.5.2, #119)
+
+### Action Entrante (Client → Server)
+
+**Clientèle autorisée** : `admin` uniquement.
+
+**Payload** :
+```json
+{
+  "action": "ENTRACTE_SET",
+  "payload": {
+    "ACTIVE": true  // true = entrée en entracte, false = sortie
+  }
+}
+```
+
+**Comportement** :
+- `ACTIVE = true` en phase autorisée → état change, diffusion `broadcastUpdate()` vers 
+  tous les clients (admin, TV, VJoueur, animateur), **LEDs tous les buzzers éteints**.
+- `ACTIVE = true` en phase non autorisée (`COUNTDOWN`, `STARTED`, `PAUSED`, `ENROLL`) → 
+  refusée, log `WARN`, pas de modification.
+- `ACTIVE = false` → désactivation immédiate (jamais refusée), diffusion, LEDs restaurées.
+
+**Idempotent** — envoyer la même valeur est un no-op.
+
+---
+
+## Actions Refusées Pendant l'ENTRACTE (v6.5.2, #119)
+
+Quand `ENTRACTE = true`, une **liste blanche centralisée** (`IsActionAllowedDuringEntracte`) 
+refuse automatiquement toutes les actions sauf :
+
+| Action | Motif |
+|--------|--------|
+| `ENTRACTE_SET` | Sortir de l'entracte (jamais pas d'issue) |
+| `HELLO` | Poignée de main — écran qui recharge pendant la pause |
+| `SET_CLIENT_TYPE` | Changement de rôle (admin ↔ TV, etc.) |
+| `PLAYER_CONNECT` | Écran joueur qui recharge |
+| `REGIE_MESSAGE_SEND` | Régie communique avec animateurs pendant la pause |
+| `REGIE_MESSAGE_CLEAR` | Régie efface message |
+| `PONG` | Keepalive réseau, inoffensif |
+
+**Toute autre action** (`START`, `READY`, `REVEAL`, `RAZ`, `NEW_GAME`, `FLIP_MEMORY_CARD`, 
+etc.) est immédiatement refusée.
+
+**Log** : action refusée → `WARN` (log distinct du refus d'allow-list habituel, 
+distingue les deux causes de rejet).
+
+**Réponse client** : aucune erreur renvoyée au client — le message est silencieusement 
+ignoré (cohérent avec le comportement d'allow-list existant).
+
+---
+
 ## References
 
 - [RFC 6455 - WebSocket Protocol](https://datatracker.ietf.org/doc/html/rfc6455)
