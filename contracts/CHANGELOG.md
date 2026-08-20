@@ -2,6 +2,45 @@
 
 ---
 
+## [20260820] — Mode ENTRACTE : pause globale (#119)
+
+> Milestone v6.5.2 · Maquette validée : `docs/mockups/entracte-119.html`
+> Contrats posés **avant** implémentation (contract-first) · Plan : `_work/reports/plan-entracte-119-20260820-140825.md`
+
+**Aucun changement BREAKING.** Tout est additif : deux champs de `GameState`, une action entrante,
+une section de configuration, un endpoint d'image. Aucun payload existant ne change de forme, aucun
+type de client ne perd un droit, aucun fichier de données n'a besoin de migration.
+
+- **[NEW]** `GameState.ENTRACTE` (`boolean`, **sans `omitempty`**) — `true` pendant la pause globale.
+  Atteint `admin` + `tv` + `player` + `anim` par le mécanisme de retrait existant ; **n'atteint pas**
+  les buzzers (`SerializeForBuzzer` est une liste d'autorisation, et les LEDs sont server-driven).
+  **Non persisté** au redémarrage, comme `SHOW_QR_CODE`.
+- **[NEW]** `GameState.ENTRACTE_CONFIG` (`{TITLE, SUBTITLE, IMAGE_IS_CUSTOM, PANEL_SIZE}`, sans
+  `omitempty`) — miroir de la section `entracte` de `game-config.json`. Transite par `GameState` et
+  **non** par `CONFIG_UPDATE`, qui est restreint à Admin + TV et dont #154 a délibérément exclu le
+  VJoueur — or le VJoueur doit afficher le panneau. Le drapeau et sa configuration arrivent ainsi
+  dans le même `UPDATE`, y compris pour un client qui se connecte pendant l'entracte.
+  `PANEL_SIZE` est un **réglage unique** en %, appliqué identiquement sur `/tv` et `/player`, le
+  panneau étant **centré** sur les deux surfaces (arbitrage utilisateur 2026-08-20 — la piste de la
+  maquette, proportions distinctes par surface et VJoueur décentré, est abandonnée).
+- **[NEW]** `ENTRACTE_SET` (Client → Server, **`admin` uniquement**) — payload `{ACTIVE}`. Commande
+  explicite et idempotente, jamais un basculement : deux clics rapides ne peuvent pas laisser l'état
+  inversé. `anim` est délibérément exclu (« contrôle réservé à l'admin »), exception assumée au bloc
+  « conduite en direct » où il partage pourtant START/STOP/PAUSE/REVEAL.
+- **[NEW]** Liste d'autorisation fermée des actions **acceptées pendant l'entracte** : `ENTRACTE_SET`,
+  `HELLO`, `SET_CLIENT_TYPE`, `PLAYER_CONNECT`, `REGIE_MESSAGE_SEND`, `REGIE_MESSAGE_CLEAR`, `PONG`.
+  Tout le reste est refusé et journalisé. **Ce n'est pas une commodité d'interface** : un filtre CSS
+  ne bloque aucun clic, donc l'estompage des interfaces n'est qu'un signal — la garde serveur est la
+  seule chose qui tienne réellement le « aucun lancement de question pendant la pause ».
+- **[NEW]** Section `entracte` de `POST /game-config.json` — textes et proportions du panneau,
+  mêmes sémantiques additives que `neon_effect`.
+- **[NEW]** `GET`/`POST`/`DELETE /api/config/entracte-image` — image de fond unique et optionnelle,
+  calquée sur `/api/config/default-image`. Stockée dans `data/files/entracte/`, **ajoutée
+  explicitement** à l'archive du flag `medias` (qui ne couvrait jusqu'ici que `backgrounds/` et
+  `categories/`).
+
+---
+
 ## [20260818] — Communication animateur : messagerie régie (#167) + note d'explication (#168)
 
 > Milestone v6.4.x « Communication Animateur » (#26) · Branche `feature/anim-communication`

@@ -727,3 +727,57 @@ Les codes `502` / `504` ne sont plus renvoyés par cet endpoint : ces erreurs su
 pendant le job et transitent par la progression.
 
 > **Contrat détaillé** : `contracts/ai-multi-provider.md` §9 à §12.
+
+---
+
+## Mode ENTRACTE (v6.5.2, #119)
+
+### Section `entracte` de `POST /game-config.json`
+
+Nouvelle section de `game-config.json`, aux mêmes sémantiques additives que `game` et
+`neon_effect` : une section présente dans le corps remplace **la section entière** (puis les
+défauts re-remplissent les champs laissés à zéro) ; une section absente est laissée intacte.
+
+```json
+{
+  "entracte": {
+    "title": "ENTRACTE",
+    "subtitle": "Retour dans 20mn",
+    "panel_size": 65
+  }
+}
+```
+
+| Champ | Type | Défaut | Bornes |
+|---|---|---|---|
+| `title` | string | `"ENTRACTE"` | tronqué à une longueur raisonnable |
+| `subtitle` | string | `"Retour dans 20mn"` | idem |
+| `panel_size` | int (%) | `65` | 20–100 — **réglage unique**, appliqué à la largeur et à la hauteur, identiquement sur `/tv` et `/player` (panneau centré sur les deux) |
+
+L'image de fond n'est **pas** dans cette section : c'est un fichier, servi par l'endpoint ci-dessous.
+Après sauvegarde, la configuration est poussée dans `GameState.ENTRACTE_CONFIG` et diffusée — un
+changement de texte est donc visible en direct pendant un entracte actif.
+
+> **Sauvegarde** : comme tout `game-config.json`, ces réglages sont rattachés au flag `history` de
+> `/backup-select` (verrue pré-existante décrite par #152, non aggravée par ce lot).
+
+### `GET` / `POST` / `DELETE /api/config/entracte-image`
+
+Image de fond **unique et optionnelle** du panneau. Calqué à l'identique sur
+`/api/config/default-image` (v3.2.2), le seul patron d'image unique du projet.
+
+| Méthode | Effet |
+|---|---|
+| `GET` | Sert l'image téléversée ; `404` si aucune |
+| `POST` | `multipart/form-data`, champ `file`, 10 Mo max, extensions image validées. **Remplace** l'image précédente quelle que soit son extension |
+| `DELETE` | Supprime l'image — le panneau retombe sur son fond par défaut |
+
+L'URL est **stable** : aucun chemin de fichier ne transite par le WebSocket, seul le booléen
+`ENTRACTE_CONFIG.IMAGE_IS_CUSTOM` indique si une image existe. Le client ajoute un cache-buster
+(`?t=…`), comme `ConfigPage` le fait déjà pour l'image de question par défaut.
+
+**Stockage : `data/files/entracte/`**, un répertoire dédié — et **ajouté explicitement** à l'archive
+du flag `medias` ainsi qu'à la remise à zéro des médias. Cette liste ne couvre aujourd'hui que
+`backgrounds/` et `categories/` : l'image de question par défaut (écrite à la racine `data/files/`)
+et `new-game-backgrounds/` en sont déjà absentes et ne survivent qu'à une sauvegarde intégrale
+`/fs-backup`. Le répertoire dédié évite de reproduire ce trou.

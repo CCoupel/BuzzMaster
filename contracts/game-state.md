@@ -536,3 +536,77 @@ l'état moteur immédiatement après extraction.
 
 Aucun champ persisté n'est sensible : noms/thèmes/notes de quiz, préférences d'affichage,
 plafond de joueurs — rien qui ne soit déjà visible à l'écran pendant la partie.
+
+---
+
+## ENTRACTE (v6.5.2, #119)
+
+Mode de **pause globale** déclenché depuis l'admin, indépendant du cycle de question. Deux champs
+de `GameState`, tous deux **sans `omitempty`** (règle H1 : toujours sérialisés, jamais `null`).
+
+### ENTRACTE
+
+| Champ | Type | Défaut | Description |
+|---|---|---|---|
+| `ENTRACTE` | `boolean` | `false` | `true` pendant toute la durée de la pause |
+
+> **Jamais `omitempty`.** Avec `omitempty`, la valeur `false` disparaîtrait du fil et aucun client ne
+> pourrait apprendre que l'entracte est **terminé**. Les voisins `backgrounds` /
+> `new_game_backgrounds` en portent un — ils précèdent la règle, ce ne sont pas des modèles.
+
+### ENTRACTE_CONFIG
+
+Miroir en lecture seule de la section `entracte` de `game-config.json` (voir
+`contracts/http-endpoints.md`). Poussé dans `GameState` au démarrage et à chaque sauvegarde de la
+configuration, de sorte qu'un changement de texte soit visible en direct pendant un entracte actif.
+
+| Champ | Type | Défaut | Description |
+|---|---|---|---|
+| `TITLE` | `string` | `"ENTRACTE"` | Texte principal du panneau |
+| `SUBTITLE` | `string` | `"Retour dans 20mn"` | Sous-texte |
+| `IMAGE_IS_CUSTOM` | `boolean` | `false` | Une image de fond a été téléversée. **Aucun chemin ne circule** : le client construit l'URL stable `/api/config/entracte-image` avec un cache-buster |
+| `PANEL_SIZE` | `number` | `65` | Taille du panneau en % de l'écran, appliquée à la largeur **et** à la hauteur. **Réglage unique, identique sur `/tv` et `/player`.** Borné 20–100 |
+
+**Le panneau est centré sur les deux surfaces** (arbitrage utilisateur 2026-08-20) — pas de
+positionnement propre au VJoueur. La maquette illustrait des proportions distinctes par surface
+(TV `65 × 60`, VJoueur `80 × 38` décentré) ; cette piste est **abandonnée** au profit d'un réglage
+unique et d'un centrage uniforme.
+
+> **Conséquence à assumer côté rendu** : un même pourcentage s'applique désormais à un écran 16:9 et
+> à un téléphone en portrait. Sur portrait, le panneau sera donc sensiblement plus haut que ce que
+> montrait la maquette. Les tailles de texte doivent être **relatives au panneau** (unités viewport
+> ou `%`), et le contenu centré en flex, pour rester lisible dans une boîte étroite et haute comme
+> dans une boîte large et basse.
+
+### Diffusion
+
+Les deux champs appartiennent au nœud `GAME` et atteignent donc **admin, tv, player et anim** par le
+mécanisme de retrait existant (`SerializeForWebClient` / `SerializeForVPlayer` ne suppriment que
+`AdminOnlyGameFields`). Ils **n'atteignent pas les buzzers** : `SerializeForBuzzer` est une liste
+d'autorisation (`PHASE`, `TIME`, `CURRENT_TIME`) et les LEDs sont pilotées par le serveur.
+
+> Ce choix est délibéré et remplace l'option « faire transiter la config par `CONFIG_UPDATE` » :
+> `CONFIG_UPDATE` est restreint à **Admin + TV**, à la diffusion comme au HELLO, et #154 l'a
+> explicitement retiré du VJoueur. Or le VJoueur doit afficher le panneau. Via `GameState`, le
+> drapeau et sa configuration arrivent **dans le même UPDATE**, y compris pour un client qui se
+> connecte pendant l'entracte.
+
+### Phases autorisées
+
+| Phase | Entrée en entracte |
+|---|---|
+| `STOPPED`, `PREPARE`, `READY`, `NEW_GAME`, `REVEALED` | ✅ Autorisée — aucune question en cours |
+| `COUNTDOWN`, `STARTED`, `PAUSED` | ❌ Refusée — ne jamais couper une manche en cours |
+| `ENROLL` | ❌ Refusée — l'écran d'inscription affiche le QR code dont les joueurs ont besoin |
+
+La **sortie** d'entracte est autorisée depuis n'importe quelle phase : le mode ne doit jamais être
+sans issue.
+
+Entrer en entracte **ne modifie aucun autre champ** de `GameState` : une question sélectionnée en
+`PREPARE` est retrouvée intacte à la sortie.
+
+### Persistance
+
+`ENTRACTE` **n'est pas persisté** — absent de `PersistedGameState`, au même titre que `SHOW_QR_CODE`
+et pour la même raison (état éphémère). Un serveur qui redémarre repart hors entracte.
+`ENTRACTE_CONFIG` est en revanche persisté, dans `game-config.json` : c'est un réglage, pas un état.

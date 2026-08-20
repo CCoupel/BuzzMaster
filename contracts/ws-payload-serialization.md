@@ -215,3 +215,26 @@ func (h *WebSocketHub) broadcastUpdate(msg *protocol.Message) {
 ```
 
 Buzzer géré séparément via `BuzzerWebSocketHub.BroadcastIfRelevant()` — voir `buzzer-payload-filter.md`.
+
+---
+
+## ENTRACTE / ENTRACTE_CONFIG (v6.5.2, #119)
+
+**Aucun filtre n'est modifié par ce lot.** Les deux champs sont ajoutés au nœud `GAME` et se
+comportent comme n'importe quel champ non listé dans `AdminOnlyGameFields` :
+
+| Type de client | Reçoit `ENTRACTE` / `ENTRACTE_CONFIG` | Mécanisme |
+|---|---|---|
+| `admin` | ✅ | `SerializeForAdmin` — marshal complet |
+| `tv` | ✅ | `SerializeForWebClient` — liste de **retrait**, les clés inconnues passent |
+| `player` | ✅ | idem, y compris sur le chemin chaud (`GAME` est recopié tel quel en `json.RawMessage`) |
+| `anim` | ✅ | routé vers `SerializeForWebClient` |
+| `buzzer` | ❌ | `SerializeForBuzzer` est une liste d'**autorisation** (`PHASE`, `TIME`, `CURRENT_TIME`) |
+
+L'exclusion des buzzers est **voulue** : les LEDs sont pilotées par le serveur depuis la v3.4.0, le
+firmware n'a aucune décision à prendre sur l'entracte. Ne pas ajouter `ENTRACTE` à la liste
+d'autorisation du sérialiseur buzzer.
+
+> Rappel du piège documenté plus haut : le retrait des champs admin est ré-implémenté sur **trois**
+> sites. Ce lot n'y touche pas — mais toute tentative future de restreindre `ENTRACTE` à certains
+> types devrait passer par la liste partagée exportée, jamais par un littéral en ligne.

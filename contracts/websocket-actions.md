@@ -1611,3 +1611,62 @@ le reste.
 Prend effet **entre deux lots**. Les questions déjà écrites sont **conservées**.
 
 > **Contrat détaillé** : `contracts/ai-multi-provider.md` §10 et §11.
+
+---
+
+## ENTRACTE_SET ✨ (v6.5.2, #119)
+
+Active ou désactive le **mode entracte** (pause globale).
+
+| Propriété | Valeur |
+|-----------|--------|
+| Direction | `Client→Server` |
+| Payload   | `{ "ACTIVE": true \| false }` |
+| Allow-list | **`admin` uniquement** |
+| Phases acceptées (activation) | `STOPPED`, `PREPARE`, `READY`, `NEW_GAME`, `REVEALED` |
+| Phases refusées (activation) | `COUNTDOWN`, `STARTED`, `PAUSED`, `ENROLL` |
+| Désactivation | Acceptée depuis **toute** phase |
+| Effet | `GameState.ENTRACTE` ← `ACTIVE`, extinction/restauration des LEDs, `UPDATE` diffusé aux 5 types |
+
+**`anim` est délibérément exclu.** L'interface animateur voit l'entracte (filtre + indicateur) mais
+ne peut ni le déclencher ni le lever — « contrôle réservé à l'admin ». C'est une exception assumée au
+bloc « conduite en direct » (#155/#156), où `anim` partage pourtant START/STOP/PAUSE/REVEAL : une
+pause engage toute la salle, pas seulement la manche en cours.
+
+**Commande explicite, pas un basculement.** Le payload porte l'état voulu, il n'inverse pas l'état
+courant : deux clics rapides ou un renvoi réseau ne peuvent pas laisser l'entracte inversé. Le
+libellé du bouton (`ENTRACTE` / `FIN D'ENTRACTE`) est dérivé côté client de `GameState.ENTRACTE` —
+aucun état de bouton n'existe côté serveur.
+
+Une activation refusée pour cause de phase est journalisée en `WARN` et **ne renvoie rien au client** :
+même politique que le refus d'allow-list existant.
+
+---
+
+## Actions refusées pendant l'entracte (v6.5.2, #119)
+
+Tant que `GameState.ENTRACTE` vaut `true`, un **second contrôle** s'applique après celui de
+l'allow-list par type de client (`cmd/server/main.go`, juste après `IsActionAllowed`). C'est une
+**liste d'autorisation fermée** : toute action absente est refusée, journalisée en `WARN`, et
+n'atteint jamais son handler.
+
+| Action autorisée pendant l'entracte | Pourquoi |
+|---|---|
+| `ENTRACTE_SET` | Sortir de l'entracte — sans quoi le mode serait sans issue |
+| `HELLO`, `SET_CLIENT_TYPE` | Poignée de main : un écran rafraîchi pendant la pause doit se reconnecter |
+| `PLAYER_CONNECT` | Un VJoueur qui recharge son téléphone pendant la pause doit retrouver sa place |
+| `REGIE_MESSAGE_SEND`, `REGIE_MESSAGE_CLEAR` | La régie prévient les animateurs — c'est précisément le moment utile |
+| `PONG` | Inoffensif (aucune transition n'en dépend hors `PREPARE`) et évite de faire croire un buzzer muet |
+
+Tout le reste — `READY`, `START`, `STOP`, `PAUSE`, `CONTINUE`, `REVEAL`, `REMOTE`, `NEW_GAME`,
+`RAZ`, `SHOW_QR_CODE`, crédits de points, actions MEMORY/MEMOTION/ARDOISE… — est refusé.
+
+> **Pourquoi une garde serveur et pas seulement l'estompage.** Un filtre CSS ne bloque aucun clic :
+> un bouton estompé sur `/admin` ou `/anim` reste parfaitement cliquable, et un onglet resté ouvert
+> peut de toute façon émettre n'importe quelle action. L'estompage est un **signal**, la garde est la
+> **règle**. Le « aucun lancement de question, aucun changement d'affichage » de #119 n'est tenu que
+> par cette garde.
+
+> **Liste fermée, volontairement.** Une action ajoutée plus tard au protocole sans décision explicite
+> sera refusée pendant l'entracte — bruyamment, dans les journaux — plutôt que silencieusement
+> permise. Un test balaie l'ensemble des actions du protocole pour que cet arbitrage reste conscient.
