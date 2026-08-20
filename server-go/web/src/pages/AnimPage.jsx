@@ -21,6 +21,7 @@ import AnimAnswerZone from '../components/AnimAnswerZone'
 import AnimCreditControl from '../components/AnimCreditControl'
 import AnimArdoiseList from '../components/AnimArdoiseList'
 import './AnimPage.css'
+import '../styles/entracte.css'
 
 // #158/F3 — phases où la liste ARDOISE remplace les cartes équipe. Mêmes
 // phases que les critères d'acceptation du plan (STARTED/PAUSED/STOPPED/
@@ -377,12 +378,25 @@ export default function AnimPage() {
     }
   }
 
+  // ENTRACTE (#119) — anim n'a AUCUN bouton de contrôle (admin uniquement,
+  // contract websocket-actions.md §ENTRACTE_SET) : filtre seul + indicateur
+  // net. .anim-page reste elle-même non filtrée (grille à placement
+  // explicite, F7) — la classe est appliquée à chacune de ses 4 zones.
+  const entracteActive = !!gameState.entracte
+  const entracteDim = entracteActive ? ' entracte-dim' : ''
+
   return (
     <div className="anim-page">
+      {entracteActive && (
+        <div className="anim-entracte-indicator" role="status">
+          ⏸ Entracte en cours — contrôle réservé à l'admin
+        </div>
+      )}
+
       {/* Zone contexte — bandeau (#166/F3 méta, F10 réponse permanente,
           F12 chrono en colonne). Grille 2 colonnes : lignes à gauche,
           chronomètre pleine hauteur à droite (E6 = option i, recommandée). */}
-      <div className="anim-zone anim-zone-context">
+      <div className={`anim-zone anim-zone-context${entracteDim}`}>
         <div className="anim-context-lines">
           <div className="anim-meta-row">
             <span className={`anim-connection-status ${status}`}>
@@ -480,7 +494,7 @@ export default function AnimPage() {
           chaque geste est calculé PAR AnimConductPanel depuis phase/question
           (utils/phaseRules.js) : AnimPage ne précalcule plus isPlaying/
           canStart/canReveal. */}
-      <div className="anim-zone anim-zone-conduct">
+      <div className={`anim-zone anim-zone-conduct${entracteDim}`}>
         <AnimConductPanel
           phase={gameState.phase}
           question={question}
@@ -529,7 +543,7 @@ export default function AnimPage() {
           #158/F3 — en ARDOISE (phases STARTED/PAUSED/STOPPED/REVEALED),
           AnimArdoiseList remplace les cartes équipe À LA MÊME PLACE ; hors
           ARDOISE, ce bloc reste strictement celui de #156/#157/#170. */}
-      <div className="anim-zone anim-zone-teams">
+      <div className={`anim-zone anim-zone-teams${entracteDim}`}>
         {showArdoiseList ? (
           <AnimArdoiseList
             entries={ardoiseEntries}
@@ -682,7 +696,7 @@ export default function AnimPage() {
           bouton « Vu » (AC11) : role="button"/tabIndex/onKeyDown préservent
           l'accès clavier (AC18, un seul appui suffit au clavier — le
           double-tap protège du doigt, pas du clavier). */}
-      <div className="anim-zone anim-zone-regie">
+      <div className={`anim-zone anim-zone-regie${entracteDim}`}>
         {regieMessage.ACTIVE ? (
           <div
             className="anim-regie-bar active"

@@ -27,6 +27,26 @@
   box-sizing: border-box;
 }
 
+/* ENTRACTE (v6.5.2, #119) — indicateur net, aucun bouton (anim ne peut ni
+   déclencher ni lever l'entracte, contrôle réservé à l'admin). position:absolute
+   retire l'élément du flux de la grille (pas de grid-area nécessaire) ; .anim-page
+   elle-même n'est jamais filtrée (F7), donc cet indicateur reste net sans
+   précaution supplémentaire. */
+.anim-entracte-indicator {
+  position: absolute;
+  top: var(--space-3);
+  right: var(--space-3);
+  z-index: 500;
+  padding: var(--space-2) var(--space-4);
+  border-radius: var(--radius-md);
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+  font-weight: 600;
+  font-size: 0.9rem;
+  letter-spacing: 0.01em;
+  pointer-events: none;
+}
+
 /* ------------------------------------------------------------------ */
 /* Zone contexte — bandeau (#166/F3, F10, F12)                         */
 /* ------------------------------------------------------------------ */
