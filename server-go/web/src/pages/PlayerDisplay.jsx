@@ -9,6 +9,7 @@ import Timer from '../components/Timer'
 import Podium from '../components/Podium'
 import QRCodeOverlay from '../components/QRCodeOverlay'
 import QRCodeDisplay from '../components/QRCodeDisplay'
+import EntractePanel from '../components/EntractePanel'
 import { getCategoryColor } from '../constants/colors'
 import { getRgbColor } from '../utils/colorUtils'
 import { escapeWifiString } from '../utils/wifiUtils'
@@ -16,6 +17,7 @@ import { buildMemoryCards, getMemoryGridCols, getMemoryGridRows } from '../utils
 import { getMotionGridCols, getMotionGridRows, getMotionCardCoord, getMotionCardPoints, isMotionSecretMode } from '../utils/motionGrid'
 import './PlayerDisplay.css'
 import '../styles/neon.css'
+import '../styles/entracte.css'
 
 // QCM answer colors
 const QCM_COLORS = {
@@ -906,12 +908,26 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
     }
   }, [isVPlayer, isAdminPreview])
 
+  // ENTRACTE (v6.5.2, #119) — conditionné par !isVPlayer : VPlayerPage monte
+  // <PlayerDisplay isVPlayer> et gère son propre filtre/panneau (F5) ; sans
+  // cette garde les deux filtres se composeraient et l'écran deviendrait
+  // presque noir (piège documenté au plan, "double filtrage").
+  const entracteActiveHere = !!gameState.entracte && !isVPlayer
+
   return (
     <div className={`player-display ${showNeon ? `neon-border ${neonModeClass}` : ''}`} style={neonStyle}>
-      {/* TV fullscreen fallback button — only if auto-fullscreen failed and not admin preview */}
+      {/* TV fullscreen fallback button — only if auto-fullscreen failed and not admin preview.
+          Kept OUTSIDE .entracte-content: `filter` on an ancestor breaks `position: fixed`
+          descendants (they'd reposition relative to the filtered box and lose their z-index). */}
       {!isVPlayer && !isAdminPreview && !isFullscreen && (
         <button className="tv-fullscreen-btn" onClick={toggleTvFullscreen} title="Plein écran">⛶</button>
       )}
+
+      {/* ENTRACTE — tout le contenu de jeu existant reste visible mais estompé
+          derrière le panneau ; wrapper toujours monté (jamais démonté/remonté
+          au bascule, pour ne pas perturber AnimatePresence/timers), la classe
+          entracte-dim est seule conditionnelle. */}
+      <div className={`entracte-content${entracteActiveHere ? ' entracte-dim' : ''}`}>
       {/* Background Images with Crossfade */}
       <div className="background-container">
         <AnimatePresence mode="sync">
@@ -2583,6 +2599,12 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
           </motion.div>
         )}
       </AnimatePresence>
+      </div>
+      {/* /.entracte-content */}
+
+      {/* ENTRACTE panel — frère du contenu filtré, jamais enfant (même piège
+          position:fixed / z-index que QRCodeOverlay et le bouton plein écran). */}
+      {entracteActiveHere && <EntractePanel config={gameState.entracteConfig} />}
 
       {/* QR Code Overlay — suppressed during ENROLL (dedicated two-QR view handles it) */}
       <QRCodeOverlay show={(gameState.showQRCode || false) && gameState.phase !== 'ENROLL'} />
