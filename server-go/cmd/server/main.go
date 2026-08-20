@@ -509,6 +509,13 @@ func (a *App) setupCallbacks() {
 	// Config update handler
 	a.httpServer.OnConfigUpdate = func() {
 		a.broadcastConfigUpdate()
+		// #119 (v6.5.2, B6): unlike neon_effect (Admin+TV only, via
+		// CONFIG_UPDATE above), ENTRACTE_CONFIG must also reach VPlayer — it
+		// is mirrored into GameState instead (contract game-state.md D2), so
+		// a text/size/animation change is visible live to every surface,
+		// including mid-entracte.
+		a.pushEntracteConfig()
+		a.broadcastUpdate()
 	}
 
 	// WiFi config broadcast handler (triggered by POST /api/buzzer/wifi-config)
@@ -540,6 +547,15 @@ func (a *App) setupCallbacks() {
 	// Detect existing backgrounds on startup
 	a.loadBackgrounds()
 	a.loadNewGameBackgrounds()
+
+	// #119 (v6.5.2, B6): mirror the "entracte" section of game-config.json
+	// into GameState.EntracteConfig at startup, same reasoning as the
+	// OnConfigUpdate wiring above — a client connecting before any config
+	// save has ever happened this run must still see the right defaults
+	// (contract game-state.md D2, "un client qui se connecte pendant
+	// l'entracte affiche immédiatement le panneau et le filtre, avec les
+	// bons textes").
+	a.pushEntracteConfig()
 
 	// Ensure categories directory exists and detect initial network state
 	a.ensureCategoriesDir()
@@ -1065,6 +1081,18 @@ func (a *App) handleWebMessage(incoming *protocol.IncomingMessage) {
 		return
 	}
 
+	// #119 (D6) — SECOND, orthogonal gate: while ENTRACTE is active, only a
+	// closed allow-list of actions may proceed (server.IsActionAllowedDuringEntracte,
+	// contracts/websocket-actions.md §"Actions refusées pendant l'entracte").
+	// Deliberately checked AFTER the client-type gate above, never instead of
+	// it — the logs must distinguish "wrong client type" from "blocked by
+	// entracte" as two different rejection reasons. A CSS filter doesn't stop
+	// a click; this does.
+	if a.engine.IsEntracte() && !server.IsActionAllowedDuringEntracte(msg.Action) {
+		a.logger.Warn(game.LogComponentWebSocket, "Rejected action %s from client %s (type=%q): blocked during ENTRACTE", msg.Action, incoming.ClientID, incoming.ClientType)
+		return
+	}
+
 	// #155/#156 B6 — asymmetric régie signalement (D2, v1 scope: server log +
 	// ANIM_COUNT badge, no admin UI). Fires only AFTER the allow-list check
 	// above, so a rejected action (which already produced its own Warn and
@@ -1203,6 +1231,9 @@ func (a *App) handleWebMessage(incoming *protocol.IncomingMessage) {
 	case protocol.ActionHideQRCode:
 		a.handleHideQRCode()
 
+	case protocol.ActionEntracteSet:
+		a.handleEntracteSet(msg)
+
 	case protocol.ActionSetVirtualPlayerLimit:
 		a.handleSetVirtualPlayerLimit(msg)
 
@@ -1241,9 +1272,9 @@ func (a *App) handleWebMessage(incoming *protocol.IncomingMessage) {
 		// InitGame purges the whole VJoueur roster (fix R1 follow-up) — refresh
 		// the enrollment counter so clients don't show a stale VirtualPlayerCount.
 		a.broadcastEnrollmentUpdate()
-		a.broadcastNextQuestion() // #155/#156 B5 — no current question after NEW_GAME, clears anim's preview
+		a.broadcastNextQuestion()           // #155/#156 B5 — no current question after NEW_GAME, clears anim's preview
 		a.resetCreditPointsForQuestion(nil) // code review MAJEUR-1 — no current question, nothing to credit
-		a.broadcastAwardedTeams() // #170 — InitGame resets history, every lock is released
+		a.broadcastAwardedTeams()           // #170 — InitGame resets history, every lock is released
 
 	case protocol.ActionUpdateQuizMeta:
 		var payload protocol.QuizMetaPayload
@@ -1669,9 +1700,9 @@ func (a *App) handleReady(msg *protocol.Message) {
 	// Send PING to all buzzers
 	a.broadcastPing()
 
-	a.broadcastNextQuestion() // #155/#156 B5 — current question just changed
+	a.broadcastNextQuestion()                // #155/#156 B5 — current question just changed
 	a.resetCreditPointsForQuestion(question) // code review MAJEUR-1 — pointsInput resets to question.POINTS on selection too
-	a.broadcastAwardedTeams() // #170 — new current question, locks reset (or reflect prior credits if replayed)
+	a.broadcastAwardedTeams()                // #170 — new current question, locks reset (or reflect prior credits if replayed)
 }
 
 // loadQuestion loads a question from storage by ID
@@ -2454,6 +2485,64 @@ func (a *App) handleHideQRCode() {
 	server.LogInfo(game.LogComponentApp, "Exiting ENROLL phase - %d virtual players enrolled", a.engine.GetVirtualPlayerCount())
 	a.broadcastUpdate()
 	a.broadcastEnrollmentUpdate()
+}
+
+// handleEntracteSet processes ENTRACTE_SET (v6.5.2, #119): parses the
+// desired ACTIVE state, applies it through the engine's own phase guard
+// (SetEntracte, D4), and — only if the state actually changed — drives the
+// LED side effect (B5: buzzers go dark on entry, restored on exit) before
+// broadcasting the new GameState. A refused activation (wrong phase) is
+// logged by the engine itself and produces no broadcast, matching the
+// existing allow-list rejection convention (contract: "ne renvoie rien au
+// client").
+func (a *App) handleEntracteSet(msg *protocol.Message) {
+	var payload protocol.EntracteSetPayload
+	if err := json.Unmarshal(msg.Msg, &payload); err != nil {
+		server.LogError(game.LogComponentApp, "Error parsing ENTRACTE_SET payload: %v", err)
+		return
+	}
+
+	wasActive := a.engine.IsEntracte()
+	applied := a.engine.SetEntracte(payload.Active)
+	if !applied {
+		// Refused by the engine's phase guard — already logged there.
+		return
+	}
+	if wasActive == payload.Active {
+		// No-op (e.g. deactivate while already inactive) — nothing changed,
+		// no need to touch LEDs or broadcast.
+		return
+	}
+
+	if payload.Active {
+		a.sendLEDSetAllEntracteOff()
+		server.LogInfo(game.LogComponentApp, "Entracte activated — buzzer LEDs off")
+	} else {
+		a.sendLEDSetAllBuzzers()
+		server.LogInfo(game.LogComponentApp, "Entracte deactivated — buzzer LEDs restored")
+	}
+
+	a.broadcastUpdate()
+}
+
+// sendLEDSetAllEntracteOff turns off every non-VPlayer buzzer's LED (B5,
+// entry into ENTRACTE) — same OFF payload already used elsewhere
+// (sendLEDSetMemoryMultiTeam's "not participating" branch), sent via the
+// normal sendLEDSet channel so MSG_ID/ACK/resend are handled exactly as any
+// other LED_SET.
+func (a *App) sendLEDSetAllEntracteOff() {
+	tb := a.engine.GetTeamsAndBumpers()
+	if tb == nil {
+		return
+	}
+	off := protocol.LEDSetPayload{Color: [3]int{0, 0, 0}, Intensity: 0, Effect: "SOLID"}
+	for mac, bumper := range tb.Bumpers {
+		if bumper.IsVPlayer {
+			continue
+		}
+		a.sendLEDSet(mac, off)
+	}
+	a.broadcastUpdateTo(server.ClientTypeAdmin, server.ClientTypeBuzzer)
 }
 
 func (a *App) handleSetVirtualPlayerLimit(msg *protocol.Message) {
@@ -3610,6 +3699,17 @@ func (a *App) sendLEDSetForBuzzer(mac string) {
 		return
 	}
 
+	// #119 (B5): a buzzer connecting for the first time during ENTRACTE (no
+	// prior stored LED state — resendLEDOnReconnect's fallback path, the
+	// sole caller of this function) must come up OFF, not its team color.
+	// The reconnect-with-remembered-state path is already covered: entering
+	// entracte overwrites bumperLEDState via sendLEDSetAllEntracteOff, so
+	// resendLEDOnReconnect's "stored state" branch already resends OFF.
+	if a.engine.IsEntracte() {
+		a.sendLEDSet(mac, protocol.LEDSetPayload{Color: [3]int{0, 0, 0}, Intensity: 0, Effect: "SOLID"})
+		return
+	}
+
 	state := a.engine.GetState()
 	phase := a.engine.GetPhase()
 
@@ -4165,6 +4265,35 @@ func (a *App) broadcastHideQRCode() {
 	a.broadcast(protocol.ActionHideQRCode, data, false,
 		server.ClientTypeAdmin, server.ClientTypeTV)
 	server.LogInfo(game.LogComponentApp, "QR Code enrollment deactivated")
+}
+
+// pushEntracteConfig mirrors the "entracte" section of game-config.json
+// (config.GameSettings) into the engine's GameState.EntracteConfig (v6.5.2,
+// #119, contract game-state.md D2) — the config package's snake_case
+// on-disk representation (internal/config.EntracteConfig) converted to the
+// wire's upper-snake game.EntracteConfig. IMAGE_IS_CUSTOM is NOT read from
+// config.GameSettings (the section holds no image field at all — the image
+// is a file, not a stored value) but derived live from
+// a.httpServer.HasCustomEntracteImage(), same pattern
+// broadcastConfigUpdate already uses for DefaultQuestionImageIsCustom.
+//
+// Does NOT broadcast by itself — callers (OnConfigUpdate, startup) decide
+// when to broadcastUpdate(), so a caller that wants to batch this with other
+// state changes in one UPDATE can.
+func (a *App) pushEntracteConfig() {
+	gs := config.GetGameSettings()
+	animIntensity := 20 // ApplyGameSettingsDefaults guarantees non-nil, but never trust a pointer across package boundaries without a fallback
+	if gs.Entracte.AnimIntensity != nil {
+		animIntensity = *gs.Entracte.AnimIntensity
+	}
+	a.engine.SetEntracteConfig(game.EntracteConfig{
+		Title:         gs.Entracte.Title,
+		Subtitle:      gs.Entracte.Subtitle,
+		ImageIsCustom: a.httpServer.HasCustomEntracteImage(),
+		PanelSize:     gs.Entracte.PanelSize,
+		AnimPeriod:    gs.Entracte.AnimPeriod,
+		AnimIntensity: animIntensity,
+	})
 }
 
 func (a *App) broadcastConfigUpdate() {
