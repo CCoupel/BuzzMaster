@@ -38,7 +38,7 @@ func buildTARWithSingleFile(t *testing.T, tarPath string, content []byte) []byte
 
 // ---------------------------------------------------------------------------
 // B7 (#119, v6.5.2, contract http-endpoints.md §"Mode ENTRACTE") —
-// GET/POST/DELETE /api/config/entracte-image, and its inclusion in the
+// GET/POST/DELETE /api/game/entracte-image, and its inclusion in the
 // selective backup/restore/reset "medias" flag alongside backgrounds/
 // categories (the plan's documented pitfall: the default-question-image and
 // new-game-backgrounds/ are ALREADY missing from that list, #152 — a
@@ -66,7 +66,7 @@ func multipartImageBody(t *testing.T, filename string, content []byte) (body *by
 func TestHTTPServer_EntracteImage_GET_NoImage_404(t *testing.T) {
 	server, _ := setupTestHTTPServer(t)
 
-	req := httptest.NewRequest("GET", "/api/config/entracte-image", nil)
+	req := httptest.NewRequest("GET", "/api/game/entracte-image", nil)
 	w := httptest.NewRecorder()
 	server.mux.ServeHTTP(w, req)
 
@@ -81,7 +81,7 @@ func TestHTTPServer_EntracteImage_POST_Upload_Then_GET(t *testing.T) {
 	fakePNG := []byte{0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A} // PNG magic bytes, content irrelevant to the handler
 	body, contentType := multipartImageBody(t, "panel.png", fakePNG)
 
-	req := httptest.NewRequest("POST", "/api/config/entracte-image", body)
+	req := httptest.NewRequest("POST", "/api/game/entracte-image", body)
 	req.Header.Set("Content-Type", contentType)
 	w := httptest.NewRecorder()
 	server.mux.ServeHTTP(w, req)
@@ -112,7 +112,7 @@ func TestHTTPServer_EntracteImage_POST_Upload_Then_GET(t *testing.T) {
 	}
 
 	// GET now serves it.
-	getReq := httptest.NewRequest("GET", "/api/config/entracte-image", nil)
+	getReq := httptest.NewRequest("GET", "/api/game/entracte-image", nil)
 	getW := httptest.NewRecorder()
 	server.mux.ServeHTTP(getW, getReq)
 	if getW.Code != http.StatusOK {
@@ -130,12 +130,12 @@ func TestHTTPServer_EntracteImage_POST_ReplacesPreviousExtension(t *testing.T) {
 	server, dataDir := setupTestHTTPServer(t)
 
 	body1, ct1 := multipartImageBody(t, "a.png", []byte("first"))
-	req1 := httptest.NewRequest("POST", "/api/config/entracte-image", body1)
+	req1 := httptest.NewRequest("POST", "/api/game/entracte-image", body1)
 	req1.Header.Set("Content-Type", ct1)
 	server.mux.ServeHTTP(httptest.NewRecorder(), req1)
 
 	body2, ct2 := multipartImageBody(t, "b.jpg", []byte("second"))
-	req2 := httptest.NewRequest("POST", "/api/config/entracte-image", body2)
+	req2 := httptest.NewRequest("POST", "/api/game/entracte-image", body2)
 	req2.Header.Set("Content-Type", ct2)
 	w2 := httptest.NewRecorder()
 	server.mux.ServeHTTP(w2, req2)
@@ -157,11 +157,11 @@ func TestHTTPServer_EntracteImage_DELETE(t *testing.T) {
 	server, dataDir := setupTestHTTPServer(t)
 
 	body, contentType := multipartImageBody(t, "panel.png", []byte("data"))
-	req := httptest.NewRequest("POST", "/api/config/entracte-image", body)
+	req := httptest.NewRequest("POST", "/api/game/entracte-image", body)
 	req.Header.Set("Content-Type", contentType)
 	server.mux.ServeHTTP(httptest.NewRecorder(), req)
 
-	delReq := httptest.NewRequest("DELETE", "/api/config/entracte-image", nil)
+	delReq := httptest.NewRequest("DELETE", "/api/game/entracte-image", nil)
 	delW := httptest.NewRecorder()
 	server.mux.ServeHTTP(delW, delReq)
 	if delW.Code != http.StatusOK {
@@ -184,7 +184,7 @@ func TestHTTPServer_EntracteImage_DELETE(t *testing.T) {
 	}
 
 	// DELETE with no image present -> 404, not a silent 200.
-	delReq2 := httptest.NewRequest("DELETE", "/api/config/entracte-image", nil)
+	delReq2 := httptest.NewRequest("DELETE", "/api/game/entracte-image", nil)
 	delW2 := httptest.NewRecorder()
 	server.mux.ServeHTTP(delW2, delReq2)
 	if delW2.Code != http.StatusNotFound {
