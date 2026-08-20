@@ -23,6 +23,11 @@ type de client ne perd un droit, aucun fichier de données n'a besoin de migrati
   `PANEL_SIZE` est un **réglage unique** en %, appliqué identiquement sur `/tv` et `/player`, le
   panneau étant **centré** sur les deux surfaces (arbitrage utilisateur 2026-08-20 — la piste de la
   maquette, proportions distinctes par surface et VJoueur décentré, est abandonnée).
+  `ANIM_PERIOD` (s) et `ANIM_INTENSITY` (0–100) pilotent l'animation du panneau — zoom et
+  balancement combinés en un seul mouvement, deux réglages partagés plutôt qu'un par effet.
+  **`ANIM_INTENSITY = 0` désactive l'animation** : pas de champ d'activation séparé, et « désactivée »
+  veut dire qu'aucune animation n'est déclarée, pas qu'on en joue une d'amplitude nulle. L'animation
+  est neutralisée sous `prefers-reduced-motion`.
 - **[NEW]** `ENTRACTE_SET` (Client → Server, **`admin` uniquement**) — payload `{ACTIVE}`. Commande
   explicite et idempotente, jamais un basculement : deux clics rapides ne peuvent pas laisser l'état
   inversé. `anim` est délibérément exclu (« contrôle réservé à l'admin »), exception assumée au bloc

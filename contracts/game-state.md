@@ -566,6 +566,8 @@ configuration, de sorte qu'un changement de texte soit visible en direct pendant
 | `SUBTITLE` | `string` | `"Retour dans 20mn"` | Sous-texte |
 | `IMAGE_IS_CUSTOM` | `boolean` | `false` | Une image de fond a été téléversée. **Aucun chemin ne circule** : le client construit l'URL stable `/api/config/entracte-image` avec un cache-buster |
 | `PANEL_SIZE` | `number` | `65` | Taille du panneau en % de l'écran, appliquée à la largeur **et** à la hauteur. **Réglage unique, identique sur `/tv` et `/player`.** Borné 20–100 |
+| `ANIM_PERIOD` | `number` | `10` | Durée d'un cycle d'animation, en **secondes**. Borné 2–30 |
+| `ANIM_INTENSITY` | `number` | `20` | Amplitude de l'animation, 0–100. **`0` = animation désactivée** |
 
 **Le panneau est centré sur les deux surfaces** (arbitrage utilisateur 2026-08-20) — pas de
 positionnement propre au VJoueur. La maquette illustrait des proportions distinctes par surface
@@ -577,6 +579,37 @@ unique et d'un centrage uniforme.
 > montrait la maquette. Les tailles de texte doivent être **relatives au panneau** (unités viewport
 > ou `%`), et le contenu centré en flex, pour rester lisible dans une boîte étroite et haute comme
 > dans une boîte large et basse.
+
+### Animation du panneau
+
+Le panneau respire : un **zoom** (oscillation d'échelle) et un **balancement** (oscillation de
+rotation) combinés en un seul mouvement continu, pilotés par **deux réglages partagés** —
+`ANIM_PERIOD` et `ANIM_INTENSITY`. Il n'y a **pas** de réglage par effet, ni de sélecteur d'effet :
+même logique de réglage unique que `PANEL_SIZE`.
+
+| Réglage | Sens |
+|---|---|
+| `ANIM_PERIOD` | Durée d'un aller-retour complet, en secondes. Plus court = plus rapide |
+| `ANIM_INTENSITY` | Amplitude commune aux deux effets, 0–100 |
+
+**`ANIM_INTENSITY = 0` désactive l'animation** — pas de champ d'activation séparé. « Désactivée »
+signifie que **le rendu ne déclare aucune animation**, pas qu'il en joue une d'amplitude nulle : un
+panneau resté 20 minutes à l'écran ne doit pas entretenir une boucle de composition pour rien.
+
+L'amplitude est convertie en valeurs concrètes côté rendu, l'échelle et la rotation ne pouvant pas
+partager la même unité. Correspondance retenue, à `ANIM_INTENSITY = 100` : **±6 % d'échelle** et
+**±2° de rotation** ; au défaut `20`, **±1,2 %** et **±0,4°** — un mouvement perceptible mais qui ne
+capte pas l'attention.
+
+> **Accessibilité** : l'animation doit être neutralisée sous `@media (prefers-reduced-motion: reduce)`,
+> quelle que soit la configuration. Un panneau en mouvement continu affiché pendant toute une pause
+> est exactement le cas que ce réglage système vise.
+
+> **Contrainte de rendu** : seules des transformations composables (`scale`, `rotate`) sont animées —
+> jamais une propriété déclenchant un recalcul de mise en page. Le centrage du panneau ne doit pas
+> reposer sur `transform: translate(-50%, -50%)`, qui entrerait en conflit avec la transformation
+> animée : le centrage est assuré par le conteneur (flex), la transformation reste au seul service
+> de l'animation.
 
 ### Diffusion
 

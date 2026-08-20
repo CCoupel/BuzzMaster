@@ -743,7 +743,9 @@ défauts re-remplissent les champs laissés à zéro) ; une section absente est 
   "entracte": {
     "title": "ENTRACTE",
     "subtitle": "Retour dans 20mn",
-    "panel_size": 65
+    "panel_size": 65,
+    "anim_period": 10,
+    "anim_intensity": 20
   }
 }
 ```
@@ -753,6 +755,8 @@ défauts re-remplissent les champs laissés à zéro) ; une section absente est 
 | `title` | string | `"ENTRACTE"` | tronqué à une longueur raisonnable |
 | `subtitle` | string | `"Retour dans 20mn"` | idem |
 | `panel_size` | int (%) | `65` | 20–100 — **réglage unique**, appliqué à la largeur et à la hauteur, identiquement sur `/tv` et `/player` (panneau centré sur les deux) |
+| `anim_period` | int (s) | `10` | 2–30 — durée d'un cycle de l'animation du panneau (zoom + balancement) |
+| `anim_intensity` | int | `20` | 0–100 — amplitude commune aux deux effets. **`0` désactive l'animation**, aucun champ d'activation séparé |
 
 L'image de fond n'est **pas** dans cette section : c'est un fichier, servi par l'endpoint ci-dessous.
 Après sauvegarde, la configuration est poussée dans `GameState.ENTRACTE_CONFIG` et diffusée — un
