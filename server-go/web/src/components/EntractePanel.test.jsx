@@ -59,14 +59,17 @@ describe('EntractePanel — image de fond présente/absente (T2)', () => {
     expect(container.querySelector('.entracte-panel-bg')).toBeNull()
   })
 
-  it('affiche un calque de fond pointant vers /api/config/entracte-image quand IMAGE_IS_CUSTOM est true', () => {
+  it('affiche un calque de fond pointant vers /api/game/entracte-image quand IMAGE_IS_CUSTOM est true', () => {
+    // Fix (dev-frontend, C1-B6) : endpoint renommé /api/config/entracte-image
+    // → /api/game/entracte-image (l'image appartient désormais à la partie,
+    // pas à la config serveur — corrections C1, http-endpoints.md).
     const { container } = render(<EntractePanel config={baseConfig({ IMAGE_IS_CUSTOM: true })} />)
     const bg = container.querySelector('.entracte-panel-bg')
     expect(bg).not.toBeNull()
-    expect(bg.style.backgroundImage).toContain('/api/config/entracte-image')
+    expect(bg.style.backgroundImage).toContain('/api/game/entracte-image')
   })
 
-  it('aucun chemin de fichier ne transite — seule l\'URL stable /api/config/entracte-image apparaît (contrat http-endpoints.md)', () => {
+  it('aucun chemin de fichier ne transite — seule l\'URL stable /api/game/entracte-image apparaît (contrat http-endpoints.md)', () => {
     const { container } = render(<EntractePanel config={baseConfig({ IMAGE_IS_CUSTOM: true })} />)
     const bg = container.querySelector('.entracte-panel-bg')
     expect(bg.style.backgroundImage).not.toMatch(/data\/files|\.jpg|\.png|\.jpeg|\.webp/i)

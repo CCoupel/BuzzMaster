@@ -27,6 +27,9 @@ MockWebSocket.OPEN      = 1
 MockWebSocket.CLOSING   = 2
 MockWebSocket.CLOSED    = 3
 
+// Fix (dev-frontend, corrections C3 du plan #119) : TRANSITION_MS ajouté au
+// contrat ENTRACTE_CONFIG (contracts/game-state.md delta) — absent de ce
+// fichier de test au moment où C3 a été implémenté côté hook, gap comblé ici.
 const DEFAULT_ENTRACTE_CONFIG = {
   TITLE: 'ENTRACTE',
   SUBTITLE: 'Retour dans 20mn',
@@ -34,6 +37,7 @@ const DEFAULT_ENTRACTE_CONFIG = {
   PANEL_SIZE: 65,
   ANIM_PERIOD: 10,
   ANIM_INTENSITY: 20,
+  TRANSITION_MS: 2000,
 }
 
 // ---------------------------------------------------------------------------
