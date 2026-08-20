@@ -461,12 +461,21 @@ joueurs virtuels — survit désormais à un redémarrage du serveur, via
 | `QuizLanguage`, `QuizObjectives` | `QUIZ_LANGUAGE`, `QUIZ_OBJECTIVES` |
 | `QuizHiddenFields` | `QUIZ_HIDDEN_FIELDS` |
 | `VirtualPlayerLimit` | `VIRTUAL_PLAYER_LIMIT` |
+| `EntracteConfig` (v6.5.2, #119) | `ENTRACTE_CONFIG` |
+
+> `ENTRACTE_CONFIG` rejoint ce sous-ensemble parce que la configuration du panneau de pause est une
+> propriété **de la partie**, au même titre que les métadonnées de quiz — pas un réglage du serveur.
+> Son ajout est **additif** : un `game_state.json` antérieur qui ne le porte pas se relit sans
+> erreur et reçoit les défauts, donc **sans bump de `format_version`** ni branche de migration.
+> Le champ `IMAGE_IS_CUSTOM` en est **exclu** : il est dérivé de la présence du fichier sur disque
+> et doit être recalculé, jamais figé.
 
 **Explicitement exclu**, avec la raison (voir le commentaire de doc de
 `PersistedGameState`, `internal/game/state_persistence.go`, pour le détail complet) :
-`Phase`, `Question`, `Memory*`, `Motion*`, `ArdoiseAnswers`, `EnrollmentActive`, `ShowQRCode`
-(état éphémère d'une partie en cours — le restaurer ressusciterait une partie sans clients
-connectés ni minuteur vivant) ; `Delay` (minuteur du round courant, réaffecté à chaque
+`Phase`, `Question`, `Memory*`, `Motion*`, `ArdoiseAnswers`, `EnrollmentActive`, `ShowQRCode`,
+`Entracte` (état éphémère d'une partie en cours — le restaurer ressusciterait une partie sans
+clients connectés ni minuteur vivant ; noter que `Entracte`, l'état, est exclu alors que
+`EntracteConfig`, le réglage, est persisté — deux champs voisins, deux cycles de vie opposés) ; `Delay` (minuteur du round courant, réaffecté à chaque
 `Start`/`Ready`/décompte MEMOTION — ce n'est pas un réglage, contrairement à
 `GameSettings.Game.DefaultDelay`, #150, qui lui est le vrai réglage stocké) ;
 `NetworkOnlyLocalhost` (recalculé au démarrage) ; `VirtualPlayerCount` (dérivé du nombre de
@@ -564,10 +573,11 @@ configuration, de sorte qu'un changement de texte soit visible en direct pendant
 |---|---|---|---|
 | `TITLE` | `string` | `"ENTRACTE"` | Texte principal du panneau |
 | `SUBTITLE` | `string` | `"Retour dans 20mn"` | Sous-texte |
-| `IMAGE_IS_CUSTOM` | `boolean` | `false` | Une image de fond a été téléversée. **Aucun chemin ne circule** : le client construit l'URL stable `/api/config/entracte-image` avec un cache-buster |
+| `IMAGE_IS_CUSTOM` | `boolean` | `false` | Une image de fond a été téléversée. **Aucun chemin ne circule** : le client construit l'URL stable `/api/game/entracte-image` avec un cache-buster. **Champ dérivé du disque, jamais persisté** — recalculé au chargement et après chaque upload/suppression, pour qu'une image effacée hors application ne laisse pas le panneau en réclamer une inexistante |
 | `PANEL_SIZE` | `number` | `65` | Taille du panneau en % de l'écran, appliquée à la largeur **et** à la hauteur. **Réglage unique, identique sur `/tv` et `/player`.** Borné 20–100 |
 | `ANIM_PERIOD` | `number` | `10` | Durée d'un cycle d'animation, en **secondes**. Borné 2–30 |
 | `ANIM_INTENSITY` | `number` | `20` | Amplitude de l'animation, 0–100. **`0` = animation désactivée** |
+| `TRANSITION_MS` | `number` | `2000` | Durée du fondu à l'entrée **et** à la sortie d'entracte, en millisecondes. Borné 0–10000. **`0` = bascule instantanée** |
 
 **Le panneau est centré sur les deux surfaces** (arbitrage utilisateur 2026-08-20) — pas de
 positionnement propre au VJoueur. La maquette illustrait des proportions distinctes par surface
@@ -604,12 +614,37 @@ capte pas l'attention.
 > **Accessibilité** : l'animation doit être neutralisée sous `@media (prefers-reduced-motion: reduce)`,
 > quelle que soit la configuration. Un panneau en mouvement continu affiché pendant toute une pause
 > est exactement le cas que ce réglage système vise.
+>
+> **En revanche, le fondu d'entrée/sortie (`TRANSITION_MS`) est conservé** sous ce même réglage, et
+> c'est délibéré : `prefers-reduced-motion` vise le **mouvement** — déplacement, échelle, rotation,
+> parallaxe — parce qu'il provoque gêne vestibulaire et nausée. Un fondu d'opacité et une dérive
+> colorimétrique n'en produisent aucun, et les supprimer rendrait le basculement plus brutal, pas
+> plus confortable. Qui veut l'instantané dispose du réglage : `TRANSITION_MS = 0`, pour tous.
 
 > **Contrainte de rendu** : seules des transformations composables (`scale`, `rotate`) sont animées —
 > jamais une propriété déclenchant un recalcul de mise en page. Le centrage du panneau ne doit pas
 > reposer sur `transform: translate(-50%, -50%)`, qui entrerait en conflit avec la transformation
 > animée : le centrage est assuré par le conteneur (flex), la transformation reste au seul service
 > de l'animation.
+
+### Transition d'entrée et de sortie
+
+`TRANSITION_MS` pilote **deux effets simultanés**, qui doivent partager la même durée pour rester
+solidaires : le fondu du panneau (et du cadenas VJoueur, et de l'indicateur animateur) et
+l'apparition/retrait progressif du filtre estompé sur le contenu existant.
+
+> **Contrainte de rendu** : la déclaration `transition` doit vivre sur le **sélecteur de base**, pas
+> dans la classe conditionnelle — une transition déclarée uniquement dans la classe joue à l'aller
+> puis disparaît avec elle, donc jamais au retour.
+>
+> **Ne jamais poser un filtre identité** (`grayscale(0) brightness(1)`) sur ce sélecteur de base pour
+> « aider » l'interpolation : un `filter` réel, même neutre, crée en permanence un bloc conteneur
+> pour les descendants `position: fixed` et un contexte d'empilement — le piège déjà documenté,
+> qu'on réintroduirait cette fois **en dehors de tout entracte**. Déclarer `transition: filter` ne
+> crée rien ; seule une valeur de `filter` le fait.
+>
+> Le panneau étant monté conditionnellement, sa **sortie** exige de le maintenir monté pendant le
+> fondu, faute de quoi il disparaîtra instantanément quelle que soit la durée configurée.
 
 ### Diffusion
 
@@ -642,4 +677,29 @@ Entrer en entracte **ne modifie aucun autre champ** de `GameState` : une questio
 
 `ENTRACTE` **n'est pas persisté** — absent de `PersistedGameState`, au même titre que `SHOW_QR_CODE`
 et pour la même raison (état éphémère). Un serveur qui redémarre repart hors entracte.
-`ENTRACTE_CONFIG` est en revanche persisté, dans `game-config.json` : c'est un réglage, pas un état.
+
+`ENTRACTE_CONFIG` **est persisté, dans `game_state.json`** (`PersistedGameState`), aux côtés des
+champs `QUIZ_*` : **c'est une propriété de la partie, pas un réglage du serveur** (arbitrage
+utilisateur 2026-08-20, après essai en QUALIF). Il est édité depuis la **page Quiz**
+(`UPDATE_ENTRACTE_CONFIG`), et non depuis les réglages serveur.
+
+> **Changement par rapport à la première livraison** : la configuration vivait dans la section
+> `entracte` de `game-config.json`. Cette section est **supprimée**. Aucune migration n'est fournie —
+> elle n'a existé qu'en QUALIF, jamais en production ; une clé résiduelle est simplement ignorée.
+
+Conséquences héritées du cycle de vie des `QUIZ_*` :
+
+| Événement | Effet sur `ENTRACTE_CONFIG` |
+|---|---|
+| Redémarrage du serveur | **Conservée** |
+| `NEW_GAME` (nouvelle partie) | **Conservée** — comme les métadonnées de quiz |
+| `POST /reset-select` avec le drapeau `history` | **Effacée** (avec `game_state.json`) |
+| Restauration d'archive | Remplacée par celle de l'archive |
+
+⚠️ L'**image**, elle, vit dans `data/files/entracte/` et suit le drapeau `medias`. Réglages et image
+relèvent donc de deux drapeaux de sauvegarde différents : les restaurer séparément donne une partie
+incomplète. Verrue héritée, de même nature que celle décrite par #152.
+
+Deux champs voisins, deux cycles de vie **opposés** : `ENTRACTE` (état, jamais persisté) et
+`ENTRACTE_CONFIG` (réglage, persisté). Ce n'est pas une incohérence, c'est la distinction même entre
+les deux — ne pas « corriger » l'un en croyant à un oubli.

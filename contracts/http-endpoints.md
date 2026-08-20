@@ -732,40 +732,18 @@ pendant le job et transitent par la progression.
 
 ## Mode ENTRACTE (v6.5.2, #119)
 
-### Section `entracte` de `POST /game-config.json`
+### ~~Section `entracte` de `POST /game-config.json`~~ — **supprimée (2026-08-20)**
 
-Nouvelle section de `game-config.json`, aux mêmes sémantiques additives que `game` et
-`neon_effect` : une section présente dans le corps remplace **la section entière** (puis les
-défauts re-remplissent les champs laissés à zéro) ; une section absente est laissée intacte.
+La configuration du panneau d'entracte **ne vit plus dans `game-config.json`**. C'est une propriété
+de la **partie**, pas un réglage du serveur : elle est désormais persistée dans `game_state.json`
+et éditée depuis la page Quiz via l'action WebSocket `UPDATE_ENTRACTE_CONFIG`
+(voir `contracts/game-state.md` §ENTRACTE_CONFIG et `contracts/websocket-actions.md`).
 
-```json
-{
-  "entracte": {
-    "title": "ENTRACTE",
-    "subtitle": "Retour dans 20mn",
-    "panel_size": 65,
-    "anim_period": 10,
-    "anim_intensity": 20
-  }
-}
-```
+`POST /game-config.json` **n'accepte plus** de section `entracte` ; une clé résiduelle est ignorée
+sans erreur. Aucune migration n'est fournie — cette section n'a existé qu'en QUALIF, jamais en
+production.
 
-| Champ | Type | Défaut | Bornes |
-|---|---|---|---|
-| `title` | string | `"ENTRACTE"` | tronqué à une longueur raisonnable |
-| `subtitle` | string | `"Retour dans 20mn"` | idem |
-| `panel_size` | int (%) | `65` | 20–100 — **réglage unique**, appliqué à la largeur et à la hauteur, identiquement sur `/tv` et `/player` (panneau centré sur les deux) |
-| `anim_period` | int (s) | `10` | 2–30 — durée d'un cycle de l'animation du panneau (zoom + balancement) |
-| `anim_intensity` | int | `20` | 0–100 — amplitude commune aux deux effets. **`0` désactive l'animation**, aucun champ d'activation séparé |
-
-L'image de fond n'est **pas** dans cette section : c'est un fichier, servi par l'endpoint ci-dessous.
-Après sauvegarde, la configuration est poussée dans `GameState.ENTRACTE_CONFIG` et diffusée — un
-changement de texte est donc visible en direct pendant un entracte actif.
-
-> **Sauvegarde** : comme tout `game-config.json`, ces réglages sont rattachés au flag `history` de
-> `/backup-select` (verrue pré-existante décrite par #152, non aggravée par ce lot).
-
-### `GET` / `POST` / `DELETE /api/config/entracte-image`
+### `GET` / `POST` / `DELETE /api/game/entracte-image`
 
 Image de fond **unique et optionnelle** du panneau. Calqué à l'identique sur
 `/api/config/default-image` (v3.2.2), le seul patron d'image unique du projet.
@@ -776,8 +754,15 @@ Image de fond **unique et optionnelle** du panneau. Calqué à l'identique sur
 | `POST` | `multipart/form-data`, champ `file`, 10 Mo max, extensions image validées. **Remplace** l'image précédente quelle que soit son extension |
 | `DELETE` | Supprime l'image — le panneau retombe sur son fond par défaut |
 
+> **Renommé le 2026-08-20** — anciennement `/api/config/entracte-image`. Le préfixe `/api/config/`
+> est devenu trompeur dès lors que l'image appartient à la partie et non aux réglages serveur.
+> Renommage effectué pendant que c'était encore gratuit : l'endpoint n'a jamais atteint la
+> production et son unique consommateur frontend était de toute façon réécrit par le déplacement de
+> la section vers la page Quiz.
+
 L'URL est **stable** : aucun chemin de fichier ne transite par le WebSocket, seul le booléen
-`ENTRACTE_CONFIG.IMAGE_IS_CUSTOM` indique si une image existe. Le client ajoute un cache-buster
+`ENTRACTE_CONFIG.IMAGE_IS_CUSTOM` — **dérivé de la présence du fichier, jamais persisté** —
+indique si une image existe. Le client ajoute un cache-buster
 (`?t=…`), comme `ConfigPage` le fait déjà pour l'image de question par défaut.
 
 **Stockage : `data/files/entracte/`**, un répertoire dédié — et **ajouté explicitement** à l'archive

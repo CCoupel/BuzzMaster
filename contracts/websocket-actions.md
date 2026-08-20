@@ -1643,6 +1643,36 @@ même politique que le refus d'allow-list existant.
 
 ---
 
+## UPDATE_ENTRACTE_CONFIG ✨ (v6.5.2, #119)
+
+Enregistre la configuration du panneau d'entracte — **propriété de la partie**, éditée depuis la
+page Quiz (`/quiz`), persistée dans `game_state.json` aux côtés des champs `QUIZ_*`.
+
+| Propriété | Valeur |
+|-----------|--------|
+| Direction | `Client→Server` |
+| Payload   | `{ TITLE, SUBTITLE, PANEL_SIZE, ANIM_PERIOD, ANIM_INTENSITY, TRANSITION_MS }` |
+| Allow-list | **`admin` uniquement** |
+| Accepté pendant un entracte actif | ❌ Non — voir la section suivante |
+| Effet | Bornage, écriture dans `GameState.ENTRACTE_CONFIG`, persistance synchrone, `UPDATE` diffusé |
+
+**Action dédiée, et non une extension de `UPDATE_QUIZ_META`.** Les deux formulaires cohabitent sur
+la même page mais ont chacun leur bouton d'enregistrement. `QuizMetaPayload` porte déjà une
+mécanique de pointeurs destinée à éviter qu'un client n'envoyant qu'une partie du formulaire
+n'efface le reste ; y greffer un second formulaire rendrait ce piège plus probable — enregistrer le
+bloc Quiz effacerait les réglages d'entracte, et réciproquement. Deux formulaires, deux actions,
+chacune propriétaire de ses champs.
+
+`ANIM_INTENSITY` et `TRANSITION_MS` sont transmis en **pointeurs** : `0` y est une valeur
+signifiante (animation désactivée / transition instantanée) qu'il faut pouvoir distinguer de
+« champ absent ». Même convention que `POPULATIONS`/`DIFFICULTIES` dans `QuizMetaPayload`.
+
+`IMAGE_IS_CUSTOM` **n'est pas dans le payload** : c'est un champ dérivé, calculé par le serveur
+d'après la présence du fichier sur disque. L'image se gère par son endpoint dédié
+(`/api/game/entracte-image`, voir `contracts/http-endpoints.md`).
+
+---
+
 ## Actions refusées pendant l'entracte (v6.5.2, #119)
 
 Tant que `GameState.ENTRACTE` vaut `true`, un **second contrôle** s'applique après celui de
@@ -1659,7 +1689,13 @@ n'atteint jamais son handler.
 | `PONG` | Inoffensif (aucune transition n'en dépend hors `PREPARE`) et évite de faire croire un buzzer muet |
 
 Tout le reste — `READY`, `START`, `STOP`, `PAUSE`, `CONTINUE`, `REVEAL`, `REMOTE`, `NEW_GAME`,
-`RAZ`, `SHOW_QR_CODE`, crédits de points, actions MEMORY/MEMOTION/ARDOISE… — est refusé.
+`RAZ`, `SHOW_QR_CODE`, `UPDATE_QUIZ_META`, `UPDATE_ENTRACTE_CONFIG`, crédits de points, actions
+MEMORY/MEMOTION/ARDOISE… — est refusé.
+
+> **Conséquence sur `UPDATE_ENTRACTE_CONFIG`** : on prépare une pause, on ne la reconfigure pas
+> pendant qu'elle est diffusée. Le panneau ne peut donc pas être retouché en direct — ce qui
+> **retire un critère d'acceptation de la première livraison** (« changer les textes se voit en
+> direct »). Décision assumée ; l'ajouter à la liste ci-dessus suffirait à revenir dessus.
 
 > **Pourquoi une garde serveur et pas seulement l'estompage.** Un filtre CSS ne bloque aucun clic :
 > un bouton estompé sur `/admin` ou `/anim` reste parfaitement cliquable, et un onglet resté ouvert

@@ -2,6 +2,42 @@
 
 ---
 
+## [20260820-2] — ENTRACTE : config rattachée à la partie, transition progressive (#119)
+
+> Milestone v6.5.2 · Corrections après essai en QUALIF (`6.5.2.2`) par l'utilisateur
+> Plan : `_work/reports/plan-entracte-119-fixes-20260820-155123.md`
+
+**Deux changements BREAKING**, sans migration — **aucune version publiée n'est concernée** :
+l'entracte n'a existé qu'en QUALIF. Un `game-config.json` de QUALIF portant encore la section
+`entracte` la verra simplement ignorée ; les réglages sont à ressaisir depuis la page Quiz.
+
+- **[BREAKING]** La section `entracte` de `POST /game-config.json` est **supprimée**. La
+  configuration du panneau est une propriété **de la partie**, pas un réglage du serveur : elle est
+  désormais persistée dans `game_state.json` (`PersistedGameState`, aux côtés des champs `QUIZ_*`)
+  et éditée depuis la **page Quiz**, plus depuis `/settings`.
+- **[BREAKING]** `/api/config/entracte-image` → **`/api/game/entracte-image`**. Même stockage, mêmes
+  verbes ; seul le préfixe change, devenu trompeur. Renommé pendant que c'était encore gratuit.
+- **[NEW]** `UPDATE_ENTRACTE_CONFIG` (Client → Server, **`admin` uniquement**) — payload
+  `{TITLE, SUBTITLE, PANEL_SIZE, ANIM_PERIOD, ANIM_INTENSITY, TRANSITION_MS}`, `ANIM_INTENSITY` et
+  `TRANSITION_MS` en pointeurs car `0` y est signifiant. Action dédiée plutôt qu'une extension de
+  `UPDATE_QUIZ_META` : deux formulaires distincts sur la même page, chacun propriétaire de ses
+  champs, sinon enregistrer l'un effacerait l'autre.
+- **[CHANGED]** `UPDATE_ENTRACTE_CONFIG` **n'est pas** acceptée pendant un entracte actif — on
+  prépare une pause, on ne la reconfigure pas en cours de diffusion. Cela **retire un critère
+  d'acceptation** de la première livraison (« changer les textes se voit en direct »).
+- **[CHANGED]** `ENTRACTE_CONFIG.IMAGE_IS_CUSTOM` est explicitement **dérivé du disque et jamais
+  persisté** — le figer laisserait le panneau réclamer une image effacée hors application.
+- **[NEW]** `ENTRACTE_CONFIG.TRANSITION_MS` (ms, 0–10000, défaut **2000**) — fondu progressif du
+  panneau et du filtre à l'entrée **et** à la sortie ; `0` = bascule instantanée. Contrairement à
+  l'animation de respiration, ce fondu est **conservé** sous `prefers-reduced-motion` : il ne
+  produit aucun mouvement, et le supprimer rendrait le basculement plus brutal, pas plus confortable.
+- **[CHANGED]** Cycle de vie de la configuration, hérité des `QUIZ_*` : conservée au redémarrage et
+  à `NEW_GAME`, effacée par `POST /reset-select` avec le drapeau `history`. ⚠️ L'**image** reste sous
+  le drapeau `medias` — réglages et image relèvent de deux drapeaux différents, verrue de même
+  nature que celle décrite par #152.
+
+---
+
 ## [20260820] — Mode ENTRACTE : pause globale (#119)
 
 > Milestone v6.5.2 · Maquette validée : `docs/mockups/entracte-119.html`
