@@ -231,6 +231,13 @@ comportent comme n'importe quel champ non listé dans `AdminOnlyGameFields` :
 | `anim` | ✅ | routé vers `SerializeForWebClient` |
 | `buzzer` | ❌ | `SerializeForBuzzer` est une liste d'**autorisation** (`PHASE`, `TIME`, `CURRENT_TIME`) |
 
+`ENTRACTE_CONFIG_SAVED` (v6.5.2, arbitrage 2026-08-20) fait exception : il rejoint
+`AdminOnlyGameFields`, aux côtés de `QUIZ_OBJECTIVES`, et n'atteint donc **que l'admin**. C'est la
+configuration *enregistrée*, distincte de la configuration *diffusée* gelée pendant une pause ;
+seule la page Quiz l'utilise. Rappel du piège documenté plus haut : ce retrait est ré-implémenté sur
+**trois** sites, qui lisent tous la même liste exportée — ne jamais écrire ce nom de champ en dur
+ailleurs.
+
 L'exclusion des buzzers est **voulue** : les LEDs sont pilotées par le serveur depuis la v3.4.0, le
 firmware n'a aucune décision à prendre sur l'entracte. Ne pas ajouter `ENTRACTE` à la liste
 d'autorisation du sérialiseur buzzer.

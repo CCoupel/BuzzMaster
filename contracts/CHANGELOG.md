@@ -22,9 +22,16 @@ l'entracte n'a existé qu'en QUALIF. Un `game-config.json` de QUALIF portant enc
   `TRANSITION_MS` en pointeurs car `0` y est signifiant. Action dédiée plutôt qu'une extension de
   `UPDATE_QUIZ_META` : deux formulaires distincts sur la même page, chacun propriétaire de ses
   champs, sinon enregistrer l'un effacerait l'autre.
-- **[CHANGED]** `UPDATE_ENTRACTE_CONFIG` **n'est pas** acceptée pendant un entracte actif — on
-  prépare une pause, on ne la reconfigure pas en cours de diffusion. Cela **retire un critère
-  d'acceptation** de la première livraison (« changer les textes se voit en direct »).
+- **[NEW]** `GameState.ENTRACTE_CONFIG_SAVED` — la configuration **enregistrée**, distincte de
+  `ENTRACTE_CONFIG` qui est la configuration **diffusée au panneau**. Ajouté à
+  `AdminOnlyGameFields` : seule la page Quiz l'utilise, la TV et le VJoueur n'ont que faire d'une
+  configuration qui n'est pas celle qu'ils affichent.
+- **[CHANGED]** `UPDATE_ENTRACTE_CONFIG` **est acceptée** pendant un entracte actif, mais
+  **`ENTRACTE_CONFIG` est gelé** tant que la pause dure : les nouvelles valeurs s'appliquent au
+  **prochain** déclenchement. On peut donc préparer le panneau suivant pendant la pause en cours.
+  Cela **retire un critère d'acceptation** de la première livraison (« changer les textes se voit
+  en direct »). Le formulaire d'édition se relit dans `ENTRACTE_CONFIG_SAVED`, jamais dans
+  `ENTRACTE_CONFIG` — sans quoi un enregistrement fait pendant la pause paraîtrait perdu.
 - **[CHANGED]** `ENTRACTE_CONFIG.IMAGE_IS_CUSTOM` est explicitement **dérivé du disque et jamais
   persisté** — le figer laisserait le panneau réclamer une image effacée hors application.
 - **[NEW]** `ENTRACTE_CONFIG.TRANSITION_MS` (ms, 0–10000, défaut **2000**) — fondu progressif du
@@ -32,7 +39,7 @@ l'entracte n'a existé qu'en QUALIF. Un `game-config.json` de QUALIF portant enc
   l'animation de respiration, ce fondu est **conservé** sous `prefers-reduced-motion` : il ne
   produit aucun mouvement, et le supprimer rendrait le basculement plus brutal, pas plus confortable.
 - **[CHANGED]** Cycle de vie de la configuration, hérité des `QUIZ_*` : conservée au redémarrage et
-  à `NEW_GAME`, effacée par `POST /reset-select` avec le drapeau `history`. ⚠️ L'**image** reste sous
+  à `NEW_GAME` (confirmé par l'utilisateur), effacée par `POST /reset-select` avec le drapeau `history`. ⚠️ L'**image** reste sous
   le drapeau `medias` — réglages et image relèvent de deux drapeaux différents, verrue de même
   nature que celle décrite par #152.
 

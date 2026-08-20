@@ -567,7 +567,11 @@ de `GameState`, tous deux **sans `omitempty`** (règle H1 : toujours sérialisé
 
 Miroir en lecture seule de la section `entracte` de `game-config.json` (voir
 `contracts/http-endpoints.md`). Poussé dans `GameState` au démarrage et à chaque sauvegarde de la
-configuration, de sorte qu'un changement de texte soit visible en direct pendant un entracte actif.
+configuration.
+
+⚠️ **`ENTRACTE_CONFIG` est GELÉ pendant un entracte actif** (arbitrage utilisateur 2026-08-20) : voir
+§« Configuration gelée à l'activation » plus bas. Le champ ci-dessous décrit la configuration
+**diffusée au panneau**, pas nécessairement la dernière enregistrée.
 
 | Champ | Type | Défaut | Description |
 |---|---|---|---|
@@ -589,6 +593,32 @@ unique et d'un centrage uniforme.
 > montrait la maquette. Les tailles de texte doivent être **relatives au panneau** (unités viewport
 > ou `%`), et le contenu centré en flex, pour rester lisible dans une boîte étroite et haute comme
 > dans une boîte large et basse.
+
+### Configuration gelée à l'activation
+
+Deux objets de même forme coexistent, et c'est délibéré :
+
+| Champ | Contenu | Destinataires |
+|---|---|---|
+| `ENTRACTE_CONFIG` | La configuration **diffusée**, consommée par le panneau. **Gelée** tant qu'un entracte est actif | admin, tv, player, anim |
+| `ENTRACTE_CONFIG_SAVED` | La configuration **enregistrée**, toujours à jour. Consommée par le formulaire d'édition | **admin uniquement** (`AdminOnlyGameFields`) |
+
+**La règle tient en une phrase** : `UPDATE_ENTRACTE_CONFIG` écrit toujours la configuration
+enregistrée, mais ne rafraîchit la configuration diffusée **que si aucun entracte n'est actif**.
+L'activation (`ENTRACTE_SET{ACTIVE:true}`) recopie l'enregistrée vers la diffusée **avant** de lever
+le drapeau — sous le même verrou, faute de quoi un client recevrait l'entracte actif accompagné de
+l'ancienne configuration.
+
+Conséquence voulue : on peut préparer et enregistrer un nouveau panneau **pendant** une pause en
+cours ; il s'appliquera au **prochain** déclenchement, jamais à celui qui est diffusé.
+
+> **Pourquoi deux objets et pas un.** Si le formulaire d'édition se nourrissait du champ gelé, un
+> enregistrement fait pendant la pause disparaîtrait de l'écran au retour sur la page : l'animateur
+> croirait son enregistrement perdu. Le formulaire lit donc **toujours** `ENTRACTE_CONFIG_SAVED`,
+> pendant comme hors entracte — une règle unique plutôt qu'une bascule conditionnelle.
+
+> **Ne pas « simplifier » ce voisinage.** Deux champs du même type dont l'un est un gel de l'autre
+> ressemblent à une duplication ; c'en est le contraire.
 
 ### Animation du panneau
 
@@ -648,10 +678,15 @@ l'apparition/retrait progressif du filtre estompé sur le contenu existant.
 
 ### Diffusion
 
-Les deux champs appartiennent au nœud `GAME` et atteignent donc **admin, tv, player et anim** par le
-mécanisme de retrait existant (`SerializeForWebClient` / `SerializeForVPlayer` ne suppriment que
-`AdminOnlyGameFields`). Ils **n'atteignent pas les buzzers** : `SerializeForBuzzer` est une liste
-d'autorisation (`PHASE`, `TIME`, `CURRENT_TIME`) et les LEDs sont pilotées par le serveur.
+`ENTRACTE` et `ENTRACTE_CONFIG` appartiennent au nœud `GAME` et atteignent donc **admin, tv, player
+et anim** par le mécanisme de retrait existant (`SerializeForWebClient` / `SerializeForVPlayer` ne
+suppriment que `AdminOnlyGameFields`). Ils **n'atteignent pas les buzzers** : `SerializeForBuzzer`
+est une liste d'autorisation (`PHASE`, `TIME`, `CURRENT_TIME`) et les LEDs sont pilotées par le
+serveur.
+
+`ENTRACTE_CONFIG_SAVED` est en revanche **réservé à l'admin** : il figure dans
+`AdminOnlyGameFields`, aux côtés de `QUIZ_OBJECTIVES`. Seule la page Quiz en a l'usage ; la TV et le
+VJoueur n'ont que faire d'une configuration qui n'est pas celle du panneau qu'ils affichent.
 
 > Ce choix est délibéré et remplace l'option « faire transiter la config par `CONFIG_UPDATE` » :
 > `CONFIG_UPDATE` est restreint à **Admin + TV**, à la diffusion comme au HELLO, et #154 l'a
