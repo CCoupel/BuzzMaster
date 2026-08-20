@@ -1,13 +1,16 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
-import { render, screen, fireEvent } from '@testing-library/react'
+import { render } from '@testing-library/react'
 import GamePage from './GamePage'
 
 // ---------------------------------------------------------------------------
-// GamePage — bouton ENTRACTE / FIN D'ENTRACTE (#119, T4 du plan
-// _work/reports/plan-entracte-119-20260820-140825.md).
+// GamePage — estompage pendant l'entracte (#119, T3, révisé par le delta C2
+// du plan _work/reports/plan-entracte-119-fixes-20260820-155123.md).
 //
-// Mêmes mocks que GamePage.test.jsx (F6 ajoute le bouton sans changer la
-// structure des dépendances déjà mockées ailleurs).
+// C2-F2 déplace le bouton ENTRACTE / FIN D'ENTRACTE vers la Navbar (couvert
+// par Navbar.entracte.test.jsx) — GamePage ne porte donc plus AUCUNE
+// assertion de bouton, seulement le filtre `.entracte-dim` qu'elle
+// conserve (`entracteDim` reste appliqué sur `.game-page`, C2-F2 : « seul
+// le bouton déménage »).
 // ---------------------------------------------------------------------------
 
 vi.mock('../hooks/GameContext', () => ({
@@ -85,95 +88,11 @@ const makeGameMock = (overrides = {}) => ({
   ...overrides,
 })
 
-function getEntracteButton() {
-  return screen.getByRole('button', { name: /ENTRACTE/i })
-}
-
 beforeEach(() => {
   vi.clearAllMocks()
 })
 
-// ---------------------------------------------------------------------------
-// Libellé du bouton — dérivé de gameState.entracte, aucun état côté serveur (D3)
-// ---------------------------------------------------------------------------
-
-describe('GamePage — libellé du bouton ENTRACTE', () => {
-  it('affiche "ENTRACTE" quand entracte est false', () => {
-    useGame.mockReturnValue(makeGameMock({ gameState: { phase: 'READY', entracte: false } }))
-    render(<GamePage />)
-    expect(getEntracteButton()).toHaveTextContent('ENTRACTE')
-    expect(screen.queryByText(/FIN D.ENTRACTE/i)).toBeNull()
-  })
-
-  it("affiche \"FIN D'ENTRACTE\" quand entracte est true", () => {
-    useGame.mockReturnValue(makeGameMock({ gameState: { phase: 'STOPPED', entracte: true } }))
-    render(<GamePage />)
-    expect(screen.getByText(/FIN D.ENTRACTE/i)).toBeInTheDocument()
-  })
-})
-
-// ---------------------------------------------------------------------------
-// Table complète des phases — actif/désactivé selon D4 (entrée en entracte
-// seulement, gameState.entracte reste false dans ce bloc)
-// ---------------------------------------------------------------------------
-
-describe('GamePage — bouton actif/désactivé selon la phase (D4, table complète)', () => {
-  it.each([
-    ['STOPPED', false],
-    ['PREPARE', false],
-    ['READY', false],
-    ['NEW_GAME', false],
-    ['REVEALED', false],
-    ['COUNTDOWN', true],
-    ['STARTED', true],
-    ['PAUSED', true],
-    ['ENROLL', true],
-  ])('phase %s → bouton disabled=%s', (phase, expectedDisabled) => {
-    useGame.mockReturnValue(makeGameMock({ gameState: { phase, entracte: false } }))
-    render(<GamePage />)
-    const btn = getEntracteButton()
-    if (expectedDisabled) {
-      expect(btn).toBeDisabled()
-    } else {
-      expect(btn).not.toBeDisabled()
-    }
-  })
-})
-
-// ---------------------------------------------------------------------------
-// Sortie d'entracte toujours possible — même dans une phase où l'ENTRÉE
-// serait refusée (acceptance criteria game-state.md : "jamais de blocage
-// définitif"). Cas défensif : phase/entracte sont deux états indépendants
-// côté client, même si le serveur ne les laisse pas coexister en pratique.
-// ---------------------------------------------------------------------------
-
-describe('GamePage — la sortie d\'entracte reste possible depuis toute phase', () => {
-  it.each(['STOPPED', 'READY', 'COUNTDOWN', 'STARTED', 'PAUSED', 'ENROLL'])(
-    'entracte actif + phase %s → bouton "FIN D\'ENTRACTE" reste cliquable',
-    (phase) => {
-      useGame.mockReturnValue(makeGameMock({ gameState: { phase, entracte: true } }))
-      render(<GamePage />)
-      expect(getEntracteButton()).not.toBeDisabled()
-    }
-  )
-})
-
-// ---------------------------------------------------------------------------
-// Émission de ENTRACTE_SET (via setEntracte) — commande explicite, pas un
-// toggle interne (D3) : la valeur émise porte l'état VOULU.
-// ---------------------------------------------------------------------------
-
-// ---------------------------------------------------------------------------
-// T3 — filtre .entracte-dim sur /admin : présent quand entracte est actif,
-// le bouton ENTRACTE / FIN D'ENTRACTE restant l'élément NET (contracts/
-// game-state.md, contrainte "aucun élément position:fixed ne se déplace" /
-// maquette entracte-119.html). `.game-page` est une grille CSS à placement
-// explicite (F6 du plan) : la classe est appliquée à CHAQUE enfant de
-// grille séparément (pas un seul wrapper) — le compte exact n'est pas
-// contractuel, seule l'existence d'au moins un nœud filtré l'est.
-// ---------------------------------------------------------------------------
-
-describe('GamePage — filtre .entracte-dim (T3)', () => {
+describe('GamePage — filtre .entracte-dim (T3, conservé après le déménagement du bouton vers la Navbar — C2)', () => {
   it('aucun filtre quand entracte est false', () => {
     useGame.mockReturnValue(makeGameMock({ gameState: { phase: 'READY', entracte: false } }))
     const { container } = render(<GamePage />)
@@ -186,40 +105,9 @@ describe('GamePage — filtre .entracte-dim (T3)', () => {
     expect(container.querySelectorAll('.entracte-dim').length).toBeGreaterThan(0)
   })
 
-  it('le bouton ENTRACTE / FIN D\'ENTRACTE reste HORS de tout nœud filtré (net et cliquable)', () => {
+  it("n'expose plus aucun bouton ENTRACTE / FIN D'ENTRACTE (déménagé vers la Navbar, C2-F2 — non-régression)", () => {
     useGame.mockReturnValue(makeGameMock({ gameState: { phase: 'STOPPED', entracte: true } }))
-    const { container } = render(<GamePage />)
-    const dimNodes = container.querySelectorAll('.entracte-dim')
-    const btn = getEntracteButton()
-    dimNodes.forEach(dim => {
-      expect(dim.contains(btn)).toBe(false)
-    })
-  })
-})
-
-describe('GamePage — clic sur le bouton émet ENTRACTE_SET avec la bonne valeur', () => {
-  it('entracte=false, phase=READY → clic appelle setEntracte(true)', () => {
-    const mock = makeGameMock({ gameState: { phase: 'READY', entracte: false } })
-    useGame.mockReturnValue(mock)
-    render(<GamePage />)
-    fireEvent.click(getEntracteButton())
-    expect(mock.setEntracte).toHaveBeenCalledTimes(1)
-    expect(mock.setEntracte).toHaveBeenCalledWith(true)
-  })
-
-  it('entracte=true → clic appelle setEntracte(false)', () => {
-    const mock = makeGameMock({ gameState: { phase: 'STOPPED', entracte: true } })
-    useGame.mockReturnValue(mock)
-    render(<GamePage />)
-    fireEvent.click(getEntracteButton())
-    expect(mock.setEntracte).toHaveBeenCalledWith(false)
-  })
-
-  it('bouton désactivé (phase STARTED, entracte=false) → un clic n\'appelle pas setEntracte', () => {
-    const mock = makeGameMock({ gameState: { phase: 'STARTED', entracte: false } })
-    useGame.mockReturnValue(mock)
-    render(<GamePage />)
-    fireEvent.click(getEntracteButton())
-    expect(mock.setEntracte).not.toHaveBeenCalled()
+    const { queryByRole } = render(<GamePage />)
+    expect(queryByRole('button', { name: /ENTRACTE/i })).toBeNull()
   })
 })

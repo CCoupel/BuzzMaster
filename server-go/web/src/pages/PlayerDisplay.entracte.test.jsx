@@ -114,6 +114,18 @@ describe('PlayerDisplay (TV) — filtre .entracte-dim (T3)', () => {
     expect(content.classList.contains('entracte-dim')).toBe(true)
   })
 
+  // C3 (delta #119, plan-entracte-119-fixes-20260820-155123.md) — la durée
+  // du fondu (TRANSITION_MS) doit être posée sur .entracte-content, la
+  // classe de base — jamais seulement dans .entracte-dim, sans quoi la
+  // transition jouerait à l'entrée mais pas au retour (cf. commentaire C3
+  // du plan).
+  it('pose --ep-transition sur .entracte-content depuis entracteConfig.TRANSITION_MS', () => {
+    mockUseGame({ entracte: true, entracteConfig: { ...BASE_GAME_STATE.entracteConfig, TRANSITION_MS: 1500 } })
+    const { container } = render(<PlayerDisplay />)
+    const content = container.querySelector('.entracte-content')
+    expect(content.style.getPropertyValue('--ep-transition')).toBe('1500ms')
+  })
+
   it('PAS de filtre côté TV quand isVPlayer=true, même si entracte est true (F4 : évite le double filtrage avec VPlayerPage)', () => {
     mockUseGame({ entracte: true })
     const { container } = render(<PlayerDisplay isVPlayer={true} />)

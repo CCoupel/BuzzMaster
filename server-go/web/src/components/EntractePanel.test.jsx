@@ -24,6 +24,9 @@ function baseConfig(overrides = {}) {
     PANEL_SIZE: 65,
     ANIM_PERIOD: 10,
     ANIM_INTENSITY: 20,
+    // C3 (delta #119, plan-entracte-119-fixes-20260820-155123.md) — durée du
+    // fondu d'entrée/sortie, ms, défaut 2000, bornée 0-10000.
+    TRANSITION_MS: 2000,
     ...overrides,
   }
 }
@@ -129,5 +132,38 @@ describe('EntractePanel — animation du panneau (T2 bis, D8)', () => {
   it('ANIM_INTENSITY = 0 : la variable --ep-anim-intensity reste à 0 (traçable), seule la classe pilote l\'activation', () => {
     const { container } = render(<EntractePanel config={baseConfig({ ANIM_INTENSITY: 0 })} />)
     expect(getPanel(container).style.getPropertyValue('--ep-anim-intensity')).toBe('0')
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Transition (C3, delta #119 —
+// _work/reports/plan-entracte-119-fixes-20260820-155123.md) : TRANSITION_MS
+// pilote la durée du fondu d'entrée/sortie via --ep-transition. Cherché sur
+// `.entracte-panel-stage` (le conteneur porteur du fondu, cf. C3 : « le
+// fondu se pose sur .entracte-panel-stage ») OU `.entracte-panel` — la
+// variable CSS doit être posée sur l'un des deux (une variable héritée
+// depuis un ancêtre plus haut ne serait pas visible sur `.style` ici).
+// ---------------------------------------------------------------------------
+
+function getTransitionValue(container) {
+  const stage = container.querySelector('.entracte-panel-stage')
+  const panel = getPanel(container)
+  return stage?.style.getPropertyValue('--ep-transition') || panel?.style.getPropertyValue('--ep-transition') || ''
+}
+
+describe('EntractePanel — transition d\'entrée/sortie (C3)', () => {
+  it('répercute TRANSITION_MS sur la variable CSS --ep-transition', () => {
+    const { container } = render(<EntractePanel config={baseConfig({ TRANSITION_MS: 1500 })} />)
+    expect(getTransitionValue(container)).toBe('1500ms')
+  })
+
+  it('reflète le défaut contractuel TRANSITION_MS=2000 quand non précisé', () => {
+    const { container } = render(<EntractePanel config={baseConfig()} />)
+    expect(getTransitionValue(container)).toBe('2000ms')
+  })
+
+  it('TRANSITION_MS=0 (bascule instantanée) est répercuté tel quel, pas retombé sur le défaut', () => {
+    const { container } = render(<EntractePanel config={baseConfig({ TRANSITION_MS: 0 })} />)
+    expect(getTransitionValue(container)).toBe('0ms')
   })
 })

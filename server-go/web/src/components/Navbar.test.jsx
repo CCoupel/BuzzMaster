@@ -28,6 +28,20 @@ vi.mock('../hooks/useUpdates', () => ({
   }),
 }))
 
+// ENTRACTE (#119, delta C2) — Navbar consomme désormais useGame() (bouton
+// ENTRACTE / FIN D'ENTRACTE, cf. Navbar.entracte.test.jsx pour sa propre
+// couverture). Mock minimal ici, additif et sans rapport avec les tests
+// préexistants de ce fichier (compteurs participants) — sans lui, TOUT
+// rendu de <Navbar> planterait ("useGame must be used within a
+// GameProvider"), ce fichier entier serait rouge pour une raison hors de
+// son sujet.
+vi.mock('../hooks/GameContext', () => ({
+  useGame: vi.fn(() => ({
+    gameState: { phase: 'STOPPED', entracte: false },
+    setEntracte: vi.fn(),
+  })),
+}))
+
 const renderNavbar = (props = {}) =>
   render(
     <MemoryRouter initialEntries={['/admin']}>

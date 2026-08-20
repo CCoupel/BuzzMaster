@@ -158,6 +158,24 @@ describe('VPlayerPage — filtre et panneau ENTRACTE (T3)', () => {
     expect(container.querySelectorAll('.entracte-dim')).toHaveLength(1)
   })
 
+  // C3 — même règle que PlayerDisplay.entracte.test.jsx : --ep-transition
+  // posée sur le sélecteur de base, pas seulement sous la classe .entracte-dim.
+  it('pose --ep-transition depuis entracteConfig.TRANSITION_MS', async () => {
+    const mock = makeGameMock({
+      gameState: {
+        entracte: true,
+        entracteConfig: { TITLE: 'ENTRACTE', SUBTITLE: '', IMAGE_IS_CUSTOM: false, PANEL_SIZE: 65, ANIM_PERIOD: 10, ANIM_INTENSITY: 20, TRANSITION_MS: 1500 },
+      },
+    })
+    useGame.mockReturnValue(mock)
+    const { container } = render(<VPlayerPage />)
+    await act(async () => {})
+
+    const content = container.querySelector('.entracte-content')
+    expect(content).not.toBeNull()
+    expect(content.style.getPropertyValue('--ep-transition')).toBe('1500ms')
+  })
+
   it('rend le panneau ENTRACTE avec la config reçue', async () => {
     const mock = makeGameMock({
       gameState: {
