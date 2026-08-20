@@ -9,32 +9,6 @@ import (
 	"sync"
 )
 
-// EntracteConfig holds the "entracte" section of game-config.json (v6.5.2,
-// #119, contract http-endpoints.md §"Mode ENTRACTE") — panel text, size, and
-// animation settings for ENTRACTE mode. On-disk/HTTP representation
-// (snake_case tags); cmd/server/main.go mirrors it into
-// game.EntracteConfig (upper-snake wire tags, GameState.ENTRACTE_CONFIG) at
-// startup and on every save, deriving IMAGE_IS_CUSTOM separately (it is a
-// file-existence check, not a stored field — the image itself is served by
-// GET/POST/DELETE /api/config/entracte-image).
-//
-// AnimIntensity is a *int, unlike every other field here — deliberately.
-// ANIM_INTENSITY=0 is a MEANINGFUL value (animation disabled), so
-// ApplyGameSettingsDefaults cannot use the same "zero means unset" test the
-// other fields use: a naive `if gs.Entracte.AnimIntensity == 0 { default }`
-// would silently re-enable the animation on every single save once the user
-// turns it off — "disabled" would become impossible to persist. nil means
-// "absent from this JSON" (fill from the default, 20); a non-nil pointer to
-// 0 means "explicitly disabled" and must survive untouched. See
-// ApplyGameSettingsDefaults and ValidateAndClampEntracte below.
-type EntracteConfig struct {
-	Title         string `json:"title"`
-	Subtitle      string `json:"subtitle"`
-	PanelSize     int    `json:"panel_size"`     // % of screen, width AND height. Default 65, clamped 20-100.
-	AnimPeriod    int    `json:"anim_period"`    // Animation cycle duration, seconds. Default 10, clamped 2-30.
-	AnimIntensity *int   `json:"anim_intensity"` // Animation amplitude, 0-100. nil = unset (default 20 applies); 0 = explicitly disabled.
-}
-
 // GameSettings holds the "jeu" (game) subset of configuration — default
 // game delay and neon-effect visuals — split out of Config by #150 (option
 // b, user-arbitrated). Unlike Config (server root, server-go/config.json,
@@ -55,9 +29,16 @@ type EntracteConfig struct {
 type GameSettings struct {
 	Game       GameConfig       `json:"game"`
 	NeonEffect NeonEffectConfig `json:"neon_effect"`
-	// Entracte (v6.5.2, #119): additive section, same merge semantics as the
-	// two above (contract http-endpoints.md §"Mode ENTRACTE").
-	Entracte EntracteConfig `json:"entracte"`
+	// NOTE: an "entracte" section briefly lived here (v6.5.2, #119, QUALIF
+	// only) and was REMOVED 2026-08-20 (C1, arbitrage utilisateur): the
+	// entracte panel configuration is a property of the GAME/session, not
+	// of server config — it now lives in game_state.json
+	// (game.PersistedGameState, internal/game/state_persistence.go),
+	// edited via the WS action UPDATE_ENTRACTE_CONFIG. No migration is
+	// provided (never reached production); a residual "entracte" key in an
+	// old game-config.json is simply ignored by json.Unmarshal. See
+	// contracts/http-endpoints.md §"Mode ENTRACTE" and
+	// contracts/CHANGELOG.md [20260820-2] (BREAKING, QUALIF-only).
 }
 
 // ApplyGameSettingsDefaults fills every zero-valued field with its default
@@ -104,28 +85,10 @@ func ApplyGameSettingsDefaults(gs *GameSettings) {
 	}
 	// Enabled defaults to false (zero value)
 
-	// Entracte (v6.5.2, #119) — defaults per contract game-state.md
-	// §"ENTRACTE_CONFIG". Title/Subtitle/PanelSize/AnimPeriod use the same
-	// "zero means unset" convention as every other field in this function.
-	if gs.Entracte.Title == "" {
-		gs.Entracte.Title = "ENTRACTE"
-	}
-	if gs.Entracte.Subtitle == "" {
-		gs.Entracte.Subtitle = "Retour dans 20mn"
-	}
-	if gs.Entracte.PanelSize == 0 {
-		gs.Entracte.PanelSize = 65
-	}
-	if gs.Entracte.AnimPeriod == 0 {
-		gs.Entracte.AnimPeriod = 10
-	}
-	// AnimIntensity is deliberately NOT a "== 0" check — see EntracteConfig's
-	// doc comment. Only a nil pointer (field absent from the JSON that
-	// produced this GameSettings) gets the default; an explicit 0 survives.
-	if gs.Entracte.AnimIntensity == nil {
-		defaultIntensity := 20
-		gs.Entracte.AnimIntensity = &defaultIntensity
-	}
+	// NOTE: entracte defaults used to live here (v6.5.2, #119) — moved with
+	// the rest of the entracte config to internal/game (NewEngine's compile-
+	// time defaults + state_persistence.go's LoadState) by C1. See
+	// GameSettings' own doc comment above.
 }
 
 // ValidateAndClampNeonEffect validates and clamps neon effect values to
@@ -206,55 +169,12 @@ func (gs *GameSettings) ValidateAndClampNeonEffect() {
 	}
 }
 
-// entracteTextMaxRunes bounds Title/Subtitle — "tronqué à une longueur
-// raisonnable" per contract http-endpoints.md; no exact figure is
-// prescribed there, 200 runes is this implementation's choice (ample for a
-// panel headline, short enough that a pathological paste can't blow up
-// layout). Rune-based, not byte-based: French accented text (à/é/ç) is
-// multi-byte UTF-8 and a byte-slice truncation could cut mid-character —
-// same rationale as REGIE_MESSAGE_SEND's 140-rune truncation
-// (cmd/server/main.go).
-const entracteTextMaxRunes = 200
-
-// ValidateAndClampEntracte validates and clamps ENTRACTE panel config
-// values (v6.5.2, #119) — same role as ValidateAndClampNeonEffect above,
-// called right after ApplyGameSettingsDefaults so AnimIntensity is
-// guaranteed non-nil by the time this runs.
-func (gs *GameSettings) ValidateAndClampEntracte() {
-	if runes := []rune(gs.Entracte.Title); len(runes) > entracteTextMaxRunes {
-		gs.Entracte.Title = string(runes[:entracteTextMaxRunes])
-	}
-	if runes := []rune(gs.Entracte.Subtitle); len(runes) > entracteTextMaxRunes {
-		gs.Entracte.Subtitle = string(runes[:entracteTextMaxRunes])
-	}
-
-	// Clamp panel_size to 20-100%
-	if gs.Entracte.PanelSize < 20 {
-		gs.Entracte.PanelSize = 20
-	} else if gs.Entracte.PanelSize > 100 {
-		gs.Entracte.PanelSize = 100
-	}
-
-	// Clamp anim_period to 2-30 seconds
-	if gs.Entracte.AnimPeriod < 2 {
-		gs.Entracte.AnimPeriod = 2
-	} else if gs.Entracte.AnimPeriod > 30 {
-		gs.Entracte.AnimPeriod = 30
-	}
-
-	// Clamp anim_intensity to 0-100 — preserving the pointer's non-nilness,
-	// never re-defaulting it (that's ApplyGameSettingsDefaults' job, and it
-	// already ran before this method by contract).
-	if gs.Entracte.AnimIntensity != nil {
-		v := *gs.Entracte.AnimIntensity
-		if v < 0 {
-			v = 0
-		} else if v > 100 {
-			v = 100
-		}
-		gs.Entracte.AnimIntensity = &v
-	}
-}
+// NOTE: entracteTextMaxRunes and ValidateAndClampEntracte used to live here
+// (v6.5.2, #119) — the bounds (PANEL_SIZE 20-100, ANIM_PERIOD 2-30,
+// ANIM_INTENSITY 0-100, TRANSITION_MS 0-10000, text truncated to 200 runes)
+// moved to cmd/server/main.go's clampEntracteConfig, alongside the new
+// UPDATE_ENTRACTE_CONFIG handler that's now the only writer (C1-B5) — the
+// values, not just their location, are otherwise unchanged.
 
 // LoadGameSettings reads game-config.json from path.
 func LoadGameSettings(path string) (*GameSettings, error) {
