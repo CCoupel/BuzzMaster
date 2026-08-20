@@ -80,6 +80,10 @@ export default function useWebSocket(endpoint = '/ws/admin') {
     showQRCode: false, // Whether QR code should be displayed on TV
     // ENTRACTE (v6.5.2, #119) — pause globale, même nature éphémère que showQRCode.
     entracte: false, // true for the whole duration of the pause
+    // ENTRACTE_CONFIG — configuration DIFFUSÉE au panneau (gelée pendant une
+    // pause active, corrections C4). entracteConfigSaved (ci-dessous) est la
+    // configuration ENREGISTRÉE, toujours à jour, admin-only — c'est elle que
+    // lit le formulaire d'édition (QuestionsPage.jsx), jamais entracteConfig.
     entracteConfig: {
       TITLE: 'ENTRACTE',
       SUBTITLE: 'Retour dans 20mn',
@@ -87,6 +91,16 @@ export default function useWebSocket(endpoint = '/ws/admin') {
       PANEL_SIZE: 65,
       ANIM_PERIOD: 10,
       ANIM_INTENSITY: 20,
+      TRANSITION_MS: 2000,
+    },
+    entracteConfigSaved: {
+      TITLE: 'ENTRACTE',
+      SUBTITLE: 'Retour dans 20mn',
+      IMAGE_IS_CUSTOM: false,
+      PANEL_SIZE: 65,
+      ANIM_PERIOD: 10,
+      ANIM_INTENSITY: 20,
+      TRANSITION_MS: 2000,
     },
     quizName: '', // Quiz name (v4.0.0)
     quizTheme: '', // Quiz theme (v4.0.0)
@@ -345,6 +359,12 @@ export default function useWebSocket(endpoint = '/ws/admin') {
             // mais on garde le repli sur prev pour un client plus ancien / un message partiel.
             entracte: MSG.GAME.ENTRACTE ?? prev.entracte,
             entracteConfig: MSG.GAME.ENTRACTE_CONFIG ?? prev.entracteConfig,
+            // ENTRACTE_CONFIG_SAVED (corrections C4) — diffusion restreinte à
+            // l'admin (AdminOnlyGameFields), même repli que QUIZ_OBJECTIVES :
+            // absent sur /ws/tv, /ws/player et /ws/anim, jamais écrasé (reste
+            // au défaut initial sur ces clients, qui n'en ont de toute façon
+            // aucun usage — seul le formulaire QuestionsPage le consomme).
+            entracteConfigSaved: MSG.GAME.ENTRACTE_CONFIG_SAVED ?? prev.entracteConfigSaved,
             quizName: MSG.GAME.QUIZ_NAME !== undefined ? MSG.GAME.QUIZ_NAME : prev.quizName,
             quizTheme: MSG.GAME.QUIZ_THEME !== undefined ? MSG.GAME.QUIZ_THEME : prev.quizTheme,
             quizNotes: MSG.GAME.QUIZ_NOTES !== undefined ? MSG.GAME.QUIZ_NOTES : prev.quizNotes,
@@ -867,6 +887,25 @@ export default function useWebSocket(endpoint = '/ws/admin') {
     sendMessage('ENTRACTE_SET', { ACTIVE: active })
   }, [sendMessage])
 
+  // ENTRACTE (#119, corrections C1/C4) — enregistre la configuration du
+  // panneau (propriété de la partie, éditée depuis QuestionsPage.jsx).
+  // Action dédiée UPDATE_ENTRACTE_CONFIG, distincte d'UPDATE_QUIZ_META — deux
+  // formulaires séparés, chacun propriétaire de ses champs (contrat
+  // websocket-actions.md). Toujours le formulaire complet (pas de champs
+  // optionnels à omettre comme updateQuizMeta) : cfg porte les 6 champs.
+  // Accepté par le serveur même pendant un entracte actif (C4) — l'action
+  // écrit ENTRACTE_CONFIG_SAVED, sans rafraîchir le panneau déjà diffusé.
+  const updateEntracteConfig = useCallback((cfg) => {
+    sendMessage('UPDATE_ENTRACTE_CONFIG', {
+      TITLE: cfg.TITLE,
+      SUBTITLE: cfg.SUBTITLE,
+      PANEL_SIZE: cfg.PANEL_SIZE,
+      ANIM_PERIOD: cfg.ANIM_PERIOD,
+      ANIM_INTENSITY: cfg.ANIM_INTENSITY,
+      TRANSITION_MS: cfg.TRANSITION_MS,
+    })
+  }, [sendMessage])
+
   // VPlayer enrollment: Show QR code
   const showQRCode = useCallback(() => {
     sendMessage('SHOW_QR_CODE', {})
@@ -1021,6 +1060,7 @@ export default function useWebSocket(endpoint = '/ws/admin') {
     cancelAiGeneration,
     // ENTRACTE (#119)
     setEntracte,
+    updateEntracteConfig,
     // VPlayer enrollment
     showQRCode,
     hideQRCode,
