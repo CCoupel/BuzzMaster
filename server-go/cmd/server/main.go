@@ -247,6 +247,16 @@ func main() {
 		server.LogWarn(game.LogComponentApp, "Could not load game state: %v", err)
 	}
 
+	// #119 (v6.5.2, C1): IMAGE_IS_CUSTOM is never persisted (state_persistence.go
+	// zeroes it on both save and load) — recompute it from disk now that
+	// LoadState has populated the rest of EntracteConfig/EntracteConfigSaved,
+	// so a client connecting before any upload/delete this run still sees
+	// the right value (contract game-state.md D2: "un client qui se
+	// connecte pendant l'entracte affiche immédiatement le panneau [...]
+	// avec les bons textes"). MUST run after LoadState, never before — see
+	// that call's own removed-code comment in init() for why.
+	app.refreshEntracteImageIsCustom()
+
 	// Start servers
 	if err := app.start(); err != nil {
 		server.LogError(game.LogComponentApp, "Failed to start: %v", err)
@@ -509,12 +519,12 @@ func (a *App) setupCallbacks() {
 	// Config update handler
 	a.httpServer.OnConfigUpdate = func() {
 		a.broadcastConfigUpdate()
-		// #119 (v6.5.2, B6): unlike neon_effect (Admin+TV only, via
-		// CONFIG_UPDATE above), ENTRACTE_CONFIG must also reach VPlayer — it
-		// is mirrored into GameState instead (contract game-state.md D2), so
-		// a text/size/animation change is visible live to every surface,
-		// including mid-entracte.
-		a.pushEntracteConfig()
+		// #119 (v6.5.2, C1): this shared callback is also what the entracte
+		// panel-image endpoint (/api/game/entracte-image POST/DELETE) fires
+		// after every upload/delete — refresh IMAGE_IS_CUSTOM from disk and
+		// broadcast. Harmless (idempotent, cheap) on the other call sites
+		// that share this callback for unrelated config sections.
+		a.refreshEntracteImageIsCustom()
 		a.broadcastUpdate()
 	}
 
@@ -548,14 +558,14 @@ func (a *App) setupCallbacks() {
 	a.loadBackgrounds()
 	a.loadNewGameBackgrounds()
 
-	// #119 (v6.5.2, B6): mirror the "entracte" section of game-config.json
-	// into GameState.EntracteConfig at startup, same reasoning as the
-	// OnConfigUpdate wiring above — a client connecting before any config
-	// save has ever happened this run must still see the right defaults
-	// (contract game-state.md D2, "un client qui se connecte pendant
-	// l'entracte affiche immédiatement le panneau et le filtre, avec les
-	// bons textes").
-	a.pushEntracteConfig()
+	// NOTE (v6.5.2, #119, C1): the entracte-config startup push that used to
+	// happen here was removed — EntracteConfig/EntracteConfigSaved are now
+	// loaded from game_state.json by app.engine.LoadState(), called later
+	// in main() (AFTER init() returns). The IMAGE_IS_CUSTOM refresh
+	// (a.refreshEntracteImageIsCustom()) deliberately happens there too,
+	// right after LoadState — not here — because LoadState overwrites the
+	// whole EntracteConfig struct (models.go), which would otherwise
+	// clobber a refresh done this early right back to false.
 
 	// Ensure categories directory exists and detect initial network state
 	a.ensureCategoriesDir()
@@ -1233,6 +1243,9 @@ func (a *App) handleWebMessage(incoming *protocol.IncomingMessage) {
 
 	case protocol.ActionEntracteSet:
 		a.handleEntracteSet(msg)
+
+	case protocol.ActionUpdateEntracteConfig:
+		a.handleUpdateEntracteConfig(msg)
 
 	case protocol.ActionSetVirtualPlayerLimit:
 		a.handleSetVirtualPlayerLimit(msg)
@@ -4267,33 +4280,117 @@ func (a *App) broadcastHideQRCode() {
 	server.LogInfo(game.LogComponentApp, "QR Code enrollment deactivated")
 }
 
-// pushEntracteConfig mirrors the "entracte" section of game-config.json
-// (config.GameSettings) into the engine's GameState.EntracteConfig (v6.5.2,
-// #119, contract game-state.md D2) — the config package's snake_case
-// on-disk representation (internal/config.EntracteConfig) converted to the
-// wire's upper-snake game.EntracteConfig. IMAGE_IS_CUSTOM is NOT read from
-// config.GameSettings (the section holds no image field at all — the image
-// is a file, not a stored value) but derived live from
-// a.httpServer.HasCustomEntracteImage(), same pattern
-// broadcastConfigUpdate already uses for DefaultQuestionImageIsCustom.
+// refreshEntracteImageIsCustom recomputes GameState.ENTRACTE_CONFIG(_SAVED)
+// .IMAGE_IS_CUSTOM from disk (v6.5.2, #119, C1) — a thin App-level wrapper
+// around Engine.RefreshEntracteImageIsCustom, called once at startup (right
+// after LoadState) and after every /api/game/entracte-image upload/delete.
+// Never persisted (see EntracteConfig's doc comment, models.go) — purely a
+// file-existence check via a.httpServer.HasCustomEntracteImage(), same
+// pattern broadcastConfigUpdate uses for DefaultQuestionImageIsCustom.
 //
-// Does NOT broadcast by itself — callers (OnConfigUpdate, startup) decide
-// when to broadcastUpdate(), so a caller that wants to batch this with other
-// state changes in one UPDATE can.
-func (a *App) pushEntracteConfig() {
-	gs := config.GetGameSettings()
-	animIntensity := 20 // ApplyGameSettingsDefaults guarantees non-nil, but never trust a pointer across package boundaries without a fallback
-	if gs.Entracte.AnimIntensity != nil {
-		animIntensity = *gs.Entracte.AnimIntensity
+// Does NOT broadcast by itself — callers decide when to broadcastUpdate(),
+// so a caller that wants to batch this with other state changes in one
+// UPDATE can.
+func (a *App) refreshEntracteImageIsCustom() {
+	a.engine.RefreshEntracteImageIsCustom(a.httpServer.HasCustomEntracteImage())
+}
+
+// entracteTextMaxRunes bounds ENTRACTE_CONFIG's Title/Subtitle — "tronqué à
+// une longueur raisonnable" per contract http-endpoints.md; no exact figure
+// is prescribed there, 200 runes is this implementation's choice (ample for
+// a panel headline, short enough that a pathological paste can't blow up
+// layout) — moved here unchanged from internal/config/gameconfig.go by C1
+// (the value, not just its home, is preserved). Rune-based, not byte-based:
+// French accented text (à/é/ç) is multi-byte UTF-8 and a byte-slice
+// truncation could cut mid-character — same rationale as
+// REGIE_MESSAGE_SEND's 140-rune truncation elsewhere in this file.
+const entracteTextMaxRunes = 200
+
+// clampEntracteConfig bounds every field of cfg in place (v6.5.2, #119,
+// C1-B5/C3-B1) — the same bounds ValidateAndClampEntracte used to enforce
+// in internal/config/gameconfig.go before C1 moved entracte config out of
+// game-config.json: PANEL_SIZE 20-100, ANIM_PERIOD 2-30, ANIM_INTENSITY
+// 0-100, TRANSITION_MS 0-10000, Title/Subtitle truncated to
+// entracteTextMaxRunes runes. Called by handleUpdateEntracteConfig AFTER
+// merging the incoming payload against the current saved config — cfg is
+// expected fully resolved (no nil pointers) by the time it reaches here.
+func clampEntracteConfig(cfg *game.EntracteConfig) {
+	if runes := []rune(cfg.Title); len(runes) > entracteTextMaxRunes {
+		cfg.Title = string(runes[:entracteTextMaxRunes])
 	}
-	a.engine.SetEntracteConfig(game.EntracteConfig{
-		Title:         gs.Entracte.Title,
-		Subtitle:      gs.Entracte.Subtitle,
-		ImageIsCustom: a.httpServer.HasCustomEntracteImage(),
-		PanelSize:     gs.Entracte.PanelSize,
-		AnimPeriod:    gs.Entracte.AnimPeriod,
+	if runes := []rune(cfg.Subtitle); len(runes) > entracteTextMaxRunes {
+		cfg.Subtitle = string(runes[:entracteTextMaxRunes])
+	}
+	if cfg.PanelSize < 20 {
+		cfg.PanelSize = 20
+	} else if cfg.PanelSize > 100 {
+		cfg.PanelSize = 100
+	}
+	if cfg.AnimPeriod < 2 {
+		cfg.AnimPeriod = 2
+	} else if cfg.AnimPeriod > 30 {
+		cfg.AnimPeriod = 30
+	}
+	if cfg.AnimIntensity < 0 {
+		cfg.AnimIntensity = 0
+	} else if cfg.AnimIntensity > 100 {
+		cfg.AnimIntensity = 100
+	}
+	if cfg.TransitionMs < 0 {
+		cfg.TransitionMs = 0
+	} else if cfg.TransitionMs > 10000 {
+		cfg.TransitionMs = 10000
+	}
+}
+
+// handleUpdateEntracteConfig processes UPDATE_ENTRACTE_CONFIG (v6.5.2,
+// #119, C1/C4, contract websocket-actions.md §"UPDATE_ENTRACTE_CONFIG"):
+// saves the entracte panel configuration from the Quiz page. Merges the
+// incoming payload against the CURRENT SAVED config (EntracteConfigSaved,
+// never the possibly-frozen diffused one — merging against a frozen value
+// mid-pause could silently reintroduce stale settings the user already
+// moved past), same "nil pointer = absent = keep existing" convention
+// UPDATE_QUIZ_META uses for its own pointer fields.
+//
+// Clamps, then hands off to Engine.SetEntracteConfig, which itself applies
+// the C4 freeze rule (only refreshes the diffused config when no entracte
+// is active) and persists synchronously. Accepted even while an entracte is
+// active (entracteAllowedActions) — by design, it just has no visible
+// effect on the pause in progress.
+func (a *App) handleUpdateEntracteConfig(msg *protocol.Message) {
+	var payload protocol.EntracteConfigPayload
+	if err := json.Unmarshal(msg.Msg, &payload); err != nil {
+		server.LogWarn(game.LogComponentApp, "Failed to parse UPDATE_ENTRACTE_CONFIG payload: %v", err)
+		return
+	}
+
+	current := a.engine.GetState().EntracteConfigSaved
+	animIntensity := current.AnimIntensity
+	if payload.AnimIntensity != nil {
+		animIntensity = *payload.AnimIntensity
+	}
+	transitionMs := current.TransitionMs
+	if payload.TransitionMs != nil {
+		transitionMs = *payload.TransitionMs
+	}
+
+	cfg := game.EntracteConfig{
+		Title:    payload.Title,
+		Subtitle: payload.Subtitle,
+		// ImageIsCustom is deliberately NOT set from the payload (it isn't
+		// part of it — contract: "n'est pas dans le payload, c'est un champ
+		// dérivé") — preserve whatever the current saved value already is,
+		// so this save can't accidentally clobber it back to false.
+		ImageIsCustom: current.ImageIsCustom,
+		PanelSize:     payload.PanelSize,
+		AnimPeriod:    payload.AnimPeriod,
 		AnimIntensity: animIntensity,
-	})
+		TransitionMs:  transitionMs,
+	}
+	clampEntracteConfig(&cfg)
+
+	a.engine.SetEntracteConfig(cfg)
+	a.broadcastUpdate()
 }
 
 func (a *App) broadcastConfigUpdate() {
