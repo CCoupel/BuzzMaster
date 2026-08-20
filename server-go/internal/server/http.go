@@ -308,7 +308,7 @@ func (h *HTTPServer) setupRoutes() {
 	// ENTRACTE panel image API (v6.5.2, #119) — same single-image pattern
 	// as default-image, dedicated storage dir (contract http-endpoints.md
 	// §"Mode ENTRACTE")
-	h.mux.HandleFunc("/api/config/entracte-image", h.handleAPIEntracteImage)
+	h.mux.HandleFunc("/api/game/entracte-image", h.handleAPIEntracteImage)
 
 	// NEW_GAME background images API (v4.0.4) — multi-image, same pattern as /background
 	h.mux.HandleFunc("/new-game-backgrounds", h.handleNewGameBackground)
@@ -1460,24 +1460,16 @@ func (h *HTTPServer) handleGameConfig(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 		}
-		if data, ok := raw["entracte"]; ok {
-			// v6.5.2, #119 — same additive, whole-section-replace semantics
-			// as "game"/"neon_effect" above. gs.Entracte starts from a zero
-			// value: AnimIntensity == nil unless this JSON explicitly sets
-			// "anim_intensity", so ApplyGameSettingsDefaults below can tell
-			// "the client omitted this field" (nil -> default 20) apart from
-			// "the client explicitly disabled the animation" (non-nil 0 ->
-			// kept as 0) — see EntracteConfig's doc comment.
-			gs.Entracte = config.EntracteConfig{}
-			if err := json.Unmarshal(data, &gs.Entracte); err != nil {
-				http.Error(w, "Invalid JSON in \"entracte\" section", http.StatusBadRequest)
-				return
-			}
-		}
+		// v6.5.2, #119, C1 — the "entracte" section used to live here
+		// (QUALIF only, never production). It has moved to game_state.json,
+		// edited via the WS action UPDATE_ENTRACTE_CONFIG from the Quiz page
+		// (contract http-endpoints.md §"Mode ENTRACTE" — "section supprimée").
+		// A residual "entracte" key in a POSTed body is simply ignored: Go's
+		// JSON decode above only reads keys this handler explicitly looks
+		// up, so it's already a no-op — no migration needed.
 
 		config.ApplyGameSettingsDefaults(&gs)
 		gs.ValidateAndClampNeonEffect()
-		gs.ValidateAndClampEntracte()
 
 		if err := config.SaveGameSettings(&gs); err != nil {
 			http.Error(w, "Failed to save game config", http.StatusInternalServerError)
@@ -3296,9 +3288,15 @@ func (h *HTTPServer) handleAPIDefaultQuestionImage(w http.ResponseWriter, r *htt
 //     entracte's image (plan risk table "Image de config perdue à la
 //     restauration").
 //
-// GET    /api/config/entracte-image → serves the image binary, 404 if none
-// POST   /api/config/entracte-image → multipart upload (field "file"), replaces any existing image regardless of its extension
-// DELETE /api/config/entracte-image → removes the image — panel falls back to no background
+// GET    /api/game/entracte-image → serves the image binary, 404 if none
+// POST   /api/game/entracte-image → multipart upload (field "file"), replaces any existing image regardless of its extension
+// DELETE /api/game/entracte-image → removes the image — panel falls back to no background
+//
+// Renamed 2026-08-20 (C1) from /api/config/entracte-image: the image
+// belongs to the game/session, not to server config — /api/config/ became
+// misleading once the rest of the entracte settings moved to game_state.json.
+// Free rename: this endpoint never reached production (contract
+// http-endpoints.md §"Mode ENTRACTE").
 const entracteImageBaseName = "entracte-image"
 
 // entracteImageExts lists supported extensions in search priority order —
@@ -3404,7 +3402,7 @@ func (h *HTTPServer) handleAPIEntracteImage(w http.ResponseWriter, r *http.Reque
 
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]interface{}{
-			"path":      "/api/config/entracte-image",
+			"path":      "/api/game/entracte-image",
 			"is_custom": true,
 		})
 
@@ -3428,7 +3426,7 @@ func (h *HTTPServer) handleAPIEntracteImage(w http.ResponseWriter, r *http.Reque
 
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]interface{}{
-			"path":      "/api/config/entracte-image",
+			"path":      "/api/game/entracte-image",
 			"is_custom": false,
 		})
 
