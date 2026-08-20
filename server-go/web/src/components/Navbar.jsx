@@ -3,7 +3,11 @@ import { NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { useUpdates } from '../hooks/useUpdates'
 import useElementHeightVar from '../hooks/useElementHeightVar'
+import { useGame } from '../hooks/GameContext'
+import { canToggleEntracte } from '../utils/phaseRules'
+import Button from './Button'
 import './Navbar.css'
+import '../styles/entracte.css'
 
 // Sévérité agrégée d'un groupe de participants (vjoueur/buzzer) à partir de
 // leurs CONN_STATE respectifs. Priorité stricte : red > orange > neutre.
@@ -34,6 +38,19 @@ function computeParticipantCounts(bumpers, isType) {
 export default function Navbar({ connectionStatus = 'disconnected', clientCounts = { admin: 0, tv: 0, vplayer: 0, anim: 0 }, serverVersion = '', bumpers = {} }) {
   const location = useLocation()
   const navigate = useNavigate()
+  // ENTRACTE (#119, C2) — bouton déplacé ici depuis GamePage : visible sur
+  // toutes les pages admin (Navbar montée pour toutes les routes admin,
+  // App.jsx:49), pas seulement /admin. Élargissement de portée assumé par le
+  // plan de correction — ENTRACTE_SET reste admin-only côté serveur (D6),
+  // aucune conséquence de sécurité. Règle de phase inchangée, seul son point
+  // d'usage déménage (utils/phaseRules.js).
+  const { gameState, setEntracte } = useGame()
+  const entracteActive = !!gameState.entracte
+  const canEntracteToggle = canToggleEntracte(gameState.phase, entracteActive)
+  const handleToggleEntracte = () => {
+    if (!canEntracteToggle) return
+    setEntracte(!entracteActive)
+  }
   const [isMenuOpen, setIsMenuOpen] = useState(false)
   // #175 (F3) — "arrêt demandé" : passe à true après confirmation de
   // l'entrée Quitter. Sans cela, useWebSocket reconnecte toutes les ~5s
@@ -265,6 +282,17 @@ export default function Navbar({ connectionStatus = 'disconnected', clientCounts
             <span className="update-badge-version" title="Mise à jour disponible">!</span>
           )}
         </span>
+
+        <Button
+          variant={entracteActive ? 'danger' : 'warning'}
+          size="sm"
+          className={`entracte-toggle-btn${entracteActive ? ' active' : ''}`}
+          onClick={handleToggleEntracte}
+          disabled={!canEntracteToggle}
+          title={!canEntracteToggle ? "Désactivé pendant une question en cours" : undefined}
+        >
+          {entracteActive ? "FIN D'ENTRACTE" : 'ENTRACTE'}
+        </Button>
       </div>
 
       <div className="navbar-links">
