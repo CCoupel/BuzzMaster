@@ -118,6 +118,16 @@ const (
 	// toggle — D3). anim is deliberately excluded (contrat "contrôle réservé
 	// à l'admin"), unlike the "conduite en direct" actions above.
 	ActionEntracteSet = "ENTRACTE_SET"
+
+	// ActionUpdateEntracteConfig (v6.5.2, #119, C1 — contracts/
+	// websocket-actions.md §"UPDATE_ENTRACTE_CONFIG"): admin → server, saves
+	// the entracte panel configuration. A dedicated action, NOT an extension
+	// of UPDATE_QUIZ_META — two forms on the same Quiz page, two save
+	// buttons, each owning its own fields (contract: grafting a second form
+	// onto QuizMetaPayload's existing "absent vs cleared" pointer mechanic
+	// would make an accidental cross-wipe between the two forms more
+	// likely, not less).
+	ActionUpdateEntracteConfig = "UPDATE_ENTRACTE_CONFIG"
 )
 
 // FSInfo represents file storage information
@@ -476,6 +486,31 @@ type EntracteSetPayload struct {
 	Active bool `json:"ACTIVE"`
 }
 
+// EntracteConfigPayload for UPDATE_ENTRACTE_CONFIG action (v6.5.2, #119,
+// C1/C3, contract websocket-actions.md §"UPDATE_ENTRACTE_CONFIG"). Saves
+// the entracte panel configuration — a property of the game, edited from
+// the Quiz page.
+//
+// AnimIntensity and TransitionMs are *int, unlike Title/Subtitle/PanelSize/
+// AnimPeriod — deliberately, same convention as QuizMetaPayload's
+// Populations/Difficulties/Language/Objectives (absent vs present-and-zero
+// must be distinguishable). 0 is a MEANINGFUL value for both: "animation
+// disabled" and "instant switch, no fade" respectively — a plain int field
+// couldn't tell "the client explicitly chose 0" apart from "the client
+// didn't send this field at all", which cmd/server/main.go's handler needs
+// to merge against the current saved config correctly (nil -> keep current
+// value; non-nil, even *0 -> apply it). PanelSize/AnimPeriod don't need
+// this: 0 is never a legal value for either (clamped up to 20/2), so a
+// plain int naturally self-heals via clamping the same way it always has.
+type EntracteConfigPayload struct {
+	Title         string `json:"TITLE"`
+	Subtitle      string `json:"SUBTITLE"`
+	PanelSize     int    `json:"PANEL_SIZE"`
+	AnimPeriod    int    `json:"ANIM_PERIOD"`
+	AnimIntensity *int   `json:"ANIM_INTENSITY,omitempty"`
+	TransitionMs  *int   `json:"TRANSITION_MS,omitempty"`
+}
+
 // EnrollmentUpdatePayload for ENROLLMENT_UPDATE action (broadcast virtual player count)
 type EnrollmentUpdatePayload struct {
 	VirtualPlayerCount int  `json:"VIRTUAL_PLAYER_COUNT"` // Current count
@@ -707,8 +742,18 @@ var AdminOnlyBumperFields = []string{
 // the game's global objective is an animation cue for the admin/AI generator
 // and must never be readable from a TV screen or a VPlayer's dev tools, even
 // though the rest of the QUIZ_* fields are shown on the TV NEW_GAME screen.
+//
+// ENTRACTE_CONFIG_SAVED (v6.5.2, #119, C4, arbitrage 2026-08-20) joins this
+// list for a different reason than QUIZ_OBJECTIVES: it isn't a secret, it's
+// simply not the config TV/VJoueur/anim need — they display the DIFFUSED
+// panel (GameState.EntracteConfig, NOT in this list, always broadcast),
+// while ENTRACTE_CONFIG_SAVED exists only to feed the Quiz page's edit form
+// so an admin can see their just-saved values even while an older
+// configuration is still frozen on screen during an active pause (contract
+// game-state.md §"Configuration gelée à l'activation").
 var AdminOnlyGameFields = []string{
 	"QUIZ_OBJECTIVES",
+	"ENTRACTE_CONFIG_SAVED",
 }
 
 // SerializeForWebClient returns the payload with admin-only fields stripped from
