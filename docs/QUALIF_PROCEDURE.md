@@ -79,7 +79,7 @@ cd server-go/web && npm run build && cd ..
 export PATH="$PATH:/usr/local/go/bin"
 MILESTONE_VERSION=$(grep '"version"' server-go/config.json | sed 's/.*"\([0-9]*\.[0-9]*\.[0-9]*\)\..*/\1/')
 FULL_VERSION=$(grep '"version"' server-go/config.json | sed 's/.*"\([0-9.]*\)".*/\1/')
-QUALIF_DIR="build/qualif/${MILESTONE_VERSION}"
+QUALIF_DIR="build/qualif_v${MILESTONE_VERSION}"
 mkdir -p "$QUALIF_DIR"
 GOOS=windows GOARCH=amd64 CGO_ENABLED=0 \
   go build -ldflags="-s -w" -o "$QUALIF_DIR/buzzcontrol-qualif-${FULL_VERSION}-windows-amd64.exe" ./cmd/server

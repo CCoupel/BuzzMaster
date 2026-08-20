@@ -124,5 +124,23 @@ nul
 # Claude Code local settings
 .claude/settings.local.json
 
+# Claude Code v3 template architecture — fetches depuis GitHub a chaque /init-project
+# Ne pas modifier manuellement, ecrases lors de la prochaine sync (voir TEMPLATE_claude/.template-source.json)
+TEMPLATE_claude/
+
+# Commandes template generees depuis TEMPLATE_claude/ (*.md — jamais editees manuellement)
+.claude/commands/*.md
+.claude/commands/*.template.md
+!.claude/commands/init-project.md
+
+# Agents template generes depuis TEMPLATE_claude/ (*.template.md — jamais edites manuellement)
+# Les *.md dans agents/ (hors dev-*) sont des adaptations projet — trackes dans git
+.claude/agents/*.template.md
+
+# Contextes partages generes depuis TEMPLATE_claude/{commands,agents}/context/ (*.template.md —
+# jamais edites manuellement). Les compagnons context/*.md restent trackes.
+.claude/commands/context/*.template.md
+.claude/agents/context/*.template.md
+
 # Marketing site worktree (gh-pages branch)
 MARKETING/
