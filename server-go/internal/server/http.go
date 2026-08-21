@@ -965,53 +965,64 @@ func (h *HTTPServer) handleUploadQuestion(w http.ResponseWriter, r *http.Request
 					}
 				}
 
-				// Process each card to handle per-face image uploads
+				// Process each card to handle per-face image uploads. The
+				// set of <slot> names is now driven by the card's own type
+				// descriptor (#184 B-B7, contract §8) instead of being
+				// hard-coded to recto/question/answer. SPEEDY declares
+				// exactly those three, so every existing editor payload
+				// (which only ever sends SPEEDY cards before #184) keeps
+				// working unchanged — form field name and behavior both
+				// identical to before. A type with fewer slots (QCM:
+				// recto, question — no answer face) simply never looks up
+				// that upload field, so it can never gain an orphaned
+				// ANSWER_IMAGE that B-B2's CARD_TYPE_CONTENT_MISMATCH would
+				// otherwise only catch on the NEXT save, not this one.
+				//
+				// Slot → JSON field name is the mechanical
+				// strings.ToUpper(slot)+"_IMAGE" convention already in use
+				// (recto→RECTO_IMAGE, question→QUESTION_IMAGE,
+				// answer→ANSWER_IMAGE) — holds for every currently-nestable
+				// type (SPEEDY, QCM); MEMORY's "recto"-plus-N-pairs slots
+				// (contract §7, not modeled as a flat list, #187) and
+				// ARDOISE aren't reachable here yet, both rejected earlier
+				// as not-yet-nestable.
 				for i, card := range cards {
 					cardID, _ := card["ID"].(string)
 					if cardID == "" {
 						continue
 					}
 
-					// Handle recto image upload
-					rectoField := fmt.Sprintf("motion_card_%s_recto", cardID)
-					if file, header, err := r.FormFile(rectoField); err == nil {
-						defer file.Close()
-						randomNum := rand.Intn(9000) + 1000
-						fileName := fmt.Sprintf("motion_%s_recto_%d%s", cardID, randomNum, filepath.Ext(header.Filename))
-						filePath := filepath.Join(questionsDir, fileName)
-						if dst, err := os.Create(filePath); err == nil {
-							io.Copy(dst, file)
-							dst.Close()
-							cards[i]["RECTO_IMAGE"] = "/question/" + id + "/" + fileName
-						}
+					cardTypeStr, _ := card["TYPE"].(string)
+					cardType := game.QuestionType(cardTypeStr)
+					if cardType == "" {
+						cardType = game.QuestionTypeSpeedy
+					}
+					desc, ok := game.TypeDescriptorFor(cardType)
+					if !ok {
+						// Unreachable: any card with an unregistered TYPE
+						// was already rejected above (CARD_TYPE_NOT_NESTABLE).
+						// Skip defensively rather than risk a nil slice.
+						continue
 					}
 
-					// Handle question image upload
-					questionField := fmt.Sprintf("motion_card_%s_question", cardID)
-					if file, header, err := r.FormFile(questionField); err == nil {
-						defer file.Close()
-						randomNum := rand.Intn(9000) + 1000
-						fileName := fmt.Sprintf("motion_%s_q_%d%s", cardID, randomNum, filepath.Ext(header.Filename))
-						filePath := filepath.Join(questionsDir, fileName)
-						if dst, err := os.Create(filePath); err == nil {
-							io.Copy(dst, file)
-							dst.Close()
-							cards[i]["QUESTION_IMAGE"] = "/question/" + id + "/" + fileName
+					for _, slot := range desc.MediaSlots {
+						formField := fmt.Sprintf("motion_card_%s_%s", cardID, slot)
+						file, header, err := r.FormFile(formField)
+						if err != nil {
+							continue
 						}
-					}
-
-					// Handle answer image upload
-					answerField := fmt.Sprintf("motion_card_%s_answer", cardID)
-					if file, header, err := r.FormFile(answerField); err == nil {
-						defer file.Close()
 						randomNum := rand.Intn(9000) + 1000
-						fileName := fmt.Sprintf("motion_%s_ans_%d%s", cardID, randomNum, filepath.Ext(header.Filename))
+						fileName := fmt.Sprintf("motion_%s_%s_%d%s", cardID, slot, randomNum, filepath.Ext(header.Filename))
 						filePath := filepath.Join(questionsDir, fileName)
-						if dst, err := os.Create(filePath); err == nil {
-							io.Copy(dst, file)
-							dst.Close()
-							cards[i]["ANSWER_IMAGE"] = "/question/" + id + "/" + fileName
+						dst, err := os.Create(filePath)
+						if err != nil {
+							file.Close()
+							continue
 						}
+						io.Copy(dst, file)
+						dst.Close()
+						file.Close()
+						cards[i][strings.ToUpper(slot)+"_IMAGE"] = "/question/" + id + "/" + fileName
 					}
 				}
 				question["MOTION_CARDS"] = cards

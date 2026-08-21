@@ -1,0 +1,172 @@
+// Tests for #184 B-B7 — media upload driven by the card type's descriptor
+// (MediaSlots) instead of a hard-coded recto/question/answer trio.
+// Run: go test ./internal/server/... -run TestHTTPServer_MEMOTIONUpload_MediaSlots -v
+
+package server
+
+import (
+	"buzzcontrol/internal/game"
+	"bytes"
+	"encoding/json"
+	"mime/multipart"
+	"net/http"
+	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"testing"
+)
+
+// newMEMOTIONUploadRequestWithImages is newMEMOTIONUploadRequest plus
+// per-card image file fields, keyed "motion_card_<cardID>_<slot>" exactly
+// as contract §8 requires the form field name to stay.
+func newMEMOTIONUploadRequestWithImages(t *testing.T, cardsJSON string, images map[string][]byte) *http.Request {
+	t.Helper()
+	body := &bytes.Buffer{}
+	mw := multipart.NewWriter(body)
+	_ = mw.WriteField("question", "MEMOTION media slots test #184")
+	_ = mw.WriteField("answer", "")
+	_ = mw.WriteField("points", "1")
+	_ = mw.WriteField("time", "30")
+	_ = mw.WriteField("type", "MEMOTION")
+	_ = mw.WriteField("motion_cards", cardsJSON)
+	for field, content := range images {
+		part, err := mw.CreateFormFile(field, "img.png")
+		if err != nil {
+			t.Fatalf("CreateFormFile(%s): %v", field, err)
+		}
+		if _, err := part.Write(content); err != nil {
+			t.Fatalf("write image for %s: %v", field, err)
+		}
+	}
+	_ = mw.Close()
+
+	req := httptest.NewRequest("POST", "/questions", body)
+	req.Header.Set("Content-Type", mw.FormDataContentType())
+	return req
+}
+
+// TestHTTPServer_MEMOTIONUpload_MediaSlots_SPEEDY is the non-regression
+// case: a SPEEDY card (recto/question/answer, contract §7) still accepts
+// all 3 image slots exactly like before #184.
+func TestHTTPServer_MEMOTIONUpload_MediaSlots_SPEEDY(t *testing.T) {
+	server, dataDir := setupTestHTTPServer(t)
+
+	cards := []map[string]interface{}{
+		{"ID": "mc-1", "RECTO_THEME": "x", "DIFFICULTY": 1},
+	}
+	cardsJSON, err := json.Marshal(cards)
+	if err != nil {
+		t.Fatalf("marshal cards: %v", err)
+	}
+
+	images := map[string][]byte{
+		"motion_card_mc-1_recto":    minimalPNG,
+		"motion_card_mc-1_question": minimalPNG,
+		"motion_card_mc-1_answer":   minimalPNG,
+	}
+	req := newMEMOTIONUploadRequestWithImages(t, string(cardsJSON), images)
+	w := httptest.NewRecorder()
+	server.mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	q := readWrittenMEMOTIONQuestion(t, dataDir)
+	if len(q.MotionCards) != 1 {
+		t.Fatalf("expected 1 motion card, got %d", len(q.MotionCards))
+	}
+	card := q.MotionCards[0]
+	if card.RectoImage == "" {
+		t.Error("expected RECTO_IMAGE to be set for a SPEEDY card")
+	}
+	if card.QuestionImage == "" {
+		t.Error("expected QUESTION_IMAGE to be set for a SPEEDY card")
+	}
+	if card.AnswerImage == "" {
+		t.Error("expected ANSWER_IMAGE to be set for a SPEEDY card")
+	}
+}
+
+// TestHTTPServer_MEMOTIONUpload_MediaSlots_QCM_IgnoresAnswerSlot verifies
+// the point of B-B7: a QCM card's descriptor declares only recto/question
+// (contract §7) — even if the client (a hand-crafted request, bypassing the
+// editor UI) also sends an "answer" image field, it must be silently
+// ignored, never written as ANSWER_IMAGE. Before B-B7 this would have
+// written an orphaned ANSWER_IMAGE (a SPEEDY-owned field, contract §3.1)
+// onto a QCM card, only caught as CARD_TYPE_CONTENT_MISMATCH on the NEXT
+// save — not this one.
+func TestHTTPServer_MEMOTIONUpload_MediaSlots_QCM_IgnoresAnswerSlot(t *testing.T) {
+	server, dataDir := setupTestHTTPServer(t)
+
+	cards := []map[string]interface{}{
+		{
+			"ID": "mc-1", "RECTO_THEME": "x", "DIFFICULTY": 1, "TYPE": "QCM",
+			"QCM_ANSWERS": map[string]string{"RED": "a", "GREEN": "b", "YELLOW": "c", "BLUE": "d"},
+			"QCM_CORRECT": "RED",
+		},
+	}
+	cardsJSON, err := json.Marshal(cards)
+	if err != nil {
+		t.Fatalf("marshal cards: %v", err)
+	}
+
+	images := map[string][]byte{
+		"motion_card_mc-1_recto":    minimalPNG,
+		"motion_card_mc-1_question": minimalPNG,
+		"motion_card_mc-1_answer":   minimalPNG, // must be ignored — QCM has no "answer" slot
+	}
+	req := newMEMOTIONUploadRequestWithImages(t, string(cardsJSON), images)
+	w := httptest.NewRecorder()
+	server.mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	q := readWrittenMEMOTIONQuestion(t, dataDir)
+	if len(q.MotionCards) != 1 {
+		t.Fatalf("expected 1 motion card, got %d", len(q.MotionCards))
+	}
+	card := q.MotionCards[0]
+	if card.RectoImage == "" {
+		t.Error("expected RECTO_IMAGE to be set for a QCM card (recto is one of its slots)")
+	}
+	if card.QuestionImage == "" {
+		t.Error("expected QUESTION_IMAGE to be set for a QCM card (question is one of its slots)")
+	}
+	if card.AnswerImage != "" {
+		t.Errorf("expected ANSWER_IMAGE to stay unset for a QCM card (not one of its media slots), got %q", card.AnswerImage)
+	}
+
+	// The card must still be internally consistent — re-validating it
+	// against its own TYPE must not flag CARD_TYPE_CONTENT_MISMATCH, which
+	// is exactly the regression B-B7 closes relative to B-B2 alone.
+	cardMap := map[string]interface{}{"ID": card.ID}
+	if card.AnswerImage != "" {
+		cardMap["ANSWER_IMAGE"] = card.AnswerImage
+	}
+	if err := game.ValidateCardTypeContent(card.Type, cardMap); err != nil {
+		t.Errorf("card became internally inconsistent after upload: %v", err)
+	}
+}
+
+// readWrittenMEMOTIONQuestion reads back the single question.json written
+// under dataDir/files/questions by the test's upload request.
+func readWrittenMEMOTIONQuestion(t *testing.T, dataDir string) game.Question {
+	t.Helper()
+	questionsDir := filepath.Join(dataDir, "files", "questions")
+	entries, err := os.ReadDir(questionsDir)
+	if err != nil || len(entries) != 1 {
+		t.Fatalf("expected exactly one question directory, got %v (err=%v)", entries, err)
+	}
+	raw, err := os.ReadFile(filepath.Join(questionsDir, entries[0].Name(), "question.json"))
+	if err != nil {
+		t.Fatalf("failed to read written question.json: %v", err)
+	}
+	var q game.Question
+	if err := json.Unmarshal(raw, &q); err != nil {
+		t.Fatalf("failed to unmarshal written question.json: %v", err)
+	}
+	return q
+}
