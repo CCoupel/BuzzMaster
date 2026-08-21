@@ -54,7 +54,7 @@ func buildFanoutBenchMessage(n int, question *game.Question) *protocol.Message {
 		MemoryPairOwners:         map[int]string{},
 		MemoryCurrentTeamColor:   []int{},
 		QcmInvalidated:           []string{},
-		MotionCardStates:         map[string]string{},
+		MotionCardStates:         map[string]game.MotionCardState{},
 		MotionCardTeams:          map[string]string{},
 		MotionParticipatingTeams: []string{},
 		MotionCurrentTeamColor:   []int{},

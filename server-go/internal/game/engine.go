@@ -163,7 +163,7 @@ func NewEngine() *Engine {
 			Page:               "GAME",
 			VirtualPlayerLimit: 20, // Default limit
 			// MEMOTION: initialize with empty (not nil) so JSON serializes [] and {} (not null)
-			MotionCardStates:         make(map[string]string),
+			MotionCardStates:         make(map[string]MotionCardState),
 			MotionCardTeams:          make(map[string]string),
 			MotionParticipatingTeams: []string{},
 			MotionCurrentTeamColor:   []int{},
@@ -721,7 +721,7 @@ func (e *Engine) Ready(questionID string, question *Question) {
 		// Reset MEMOTION state for new question (same pattern as Memory)
 		e.state.MotionSubPhase = ""
 		e.state.MotionSelected = ""
-		e.state.MotionCardStates = make(map[string]string)
+		e.state.MotionCardStates = make(map[string]MotionCardState)
 		e.state.MotionCardTeams = make(map[string]string)
 		e.state.MotionCurrentTeam = ""
 		e.state.MotionCurrentTeamColor = []int{}
@@ -1581,7 +1581,7 @@ func (e *Engine) ProcessButtonPress(bumperID string, pressTime int64, button str
 	}
 
 	// Ignore buzz for MEMORY questions - admin controls the game
-	if e.state.Question != nil && e.state.Question.Type == "MEMORY" {
+	if e.state.Question != nil && e.state.Question.Type == QuestionTypeMemory {
 		log.Printf("[Engine] Ignoring buzz for MEMORY question from %s", bumperID)
 		e.mu.Unlock()
 		return
@@ -1857,7 +1857,7 @@ func (e *Engine) InitGame() []string {
 	// Reset MEMOTION state completely
 	e.state.MotionSubPhase = ""
 	e.state.MotionSelected = ""
-	e.state.MotionCardStates = make(map[string]string)
+	e.state.MotionCardStates = make(map[string]MotionCardState)
 	e.state.MotionCardTeams = make(map[string]string)
 	e.state.MotionCurrentTeam = ""
 	e.state.MotionCurrentTeamColor = []int{}
@@ -3826,21 +3826,21 @@ func (e *Engine) motionCardPoints(difficulty int) int {
 func (e *Engine) initMotionStateUnsafe() {
 	// Secret mode: start with MEMORIZE subphase if duration is configured
 	if e.state.Question != nil && e.state.Question.MotionMemorizeDuration > 0 {
-		e.state.MotionSubPhase = "MEMORIZE"
+		e.state.MotionSubPhase = MotionSubPhaseMemorize
 		// Initialise CurrentTime synchronously so the first broadcast reflects the
 		// correct MEMORIZE countdown — StartMotionMemorizeTimer is called after the
 		// broadcast and would be too late to set this for the first frame.
 		e.state.CurrentTime = e.state.Question.MotionMemorizeDuration
 		e.state.Delay = e.state.Question.MotionMemorizeDuration
 	} else {
-		e.state.MotionSubPhase = "GRID"
+		e.state.MotionSubPhase = MotionSubPhaseGrid
 		e.state.CurrentTime = 0 // clear any residual from a previous question
 	}
 	e.state.MotionSelected = ""
-	e.state.MotionCardStates = make(map[string]string)
+	e.state.MotionCardStates = make(map[string]MotionCardState)
 	if e.state.Question != nil {
 		for _, card := range e.state.Question.MotionCards {
-			e.state.MotionCardStates[card.ID] = "UNPLAYED"
+			e.state.MotionCardStates[card.ID] = MotionCardStateUnplayed
 		}
 	}
 }
@@ -3862,20 +3862,20 @@ func (e *Engine) SelectMotionCard(cardID string) error {
 	if e.state.Phase != PhaseStarted {
 		return &MotionError{Reason: "NOT_STARTED"}
 	}
-	if e.state.MotionSubPhase != "GRID" {
+	if e.state.MotionSubPhase != MotionSubPhaseGrid {
 		return &MotionError{Reason: "NOT_IN_GRID_SUBPHASE"}
 	}
 	st, exists := e.state.MotionCardStates[cardID]
 	if !exists {
 		return &MotionError{Reason: "CARD_NOT_FOUND"}
 	}
-	if st != "UNPLAYED" {
+	if st != MotionCardStateUnplayed {
 		return &MotionError{Reason: "CARD_NOT_UNPLAYED"}
 	}
 
-	e.state.MotionCardStates[cardID] = "SELECTED"
+	e.state.MotionCardStates[cardID] = MotionCardStateSelected
 	e.state.MotionSelected = cardID
-	e.state.MotionSubPhase = "SELECTED"
+	e.state.MotionSubPhase = MotionSubPhaseSelected
 
 	log.Printf("[Engine] MEMOTION SelectMotionCard: cardID=%s → SELECTED", cardID)
 	return nil
@@ -3891,7 +3891,7 @@ func (e *Engine) FlipMotionCard() error {
 	if e.state.Phase != PhaseStarted {
 		return &MotionError{Reason: "NOT_STARTED"}
 	}
-	if e.state.MotionSubPhase != "SELECTED" {
+	if e.state.MotionSubPhase != MotionSubPhaseSelected {
 		return &MotionError{Reason: "NOT_IN_SELECTED_SUBPHASE"}
 	}
 
@@ -3899,12 +3899,12 @@ func (e *Engine) FlipMotionCard() error {
 	if cardID == "" {
 		return &MotionError{Reason: "NO_CARD_SELECTED"}
 	}
-	if e.state.MotionCardStates[cardID] != "SELECTED" {
+	if e.state.MotionCardStates[cardID] != MotionCardStateSelected {
 		return &MotionError{Reason: "CARD_NOT_IN_SELECTED_STATE"}
 	}
 
-	e.state.MotionCardStates[cardID] = "QUESTION"
-	e.state.MotionSubPhase = "QUESTION"
+	e.state.MotionCardStates[cardID] = MotionCardStateQuestion
+	e.state.MotionSubPhase = MotionSubPhaseQuestion
 
 	log.Printf("[Engine] MEMOTION FlipMotionCard: cardID=%s → QUESTION", cardID)
 	return nil
@@ -3919,15 +3919,15 @@ func (e *Engine) RevealMotionCard() error {
 	if e.state.Phase != PhaseStarted {
 		return &MotionError{Reason: "NOT_STARTED"}
 	}
-	if e.state.MotionSubPhase != "QUESTION" {
+	if e.state.MotionSubPhase != MotionSubPhaseQuestion {
 		return &MotionError{Reason: "NOT_IN_QUESTION_SUBPHASE"}
 	}
 
 	cardID := e.state.MotionSelected
 	if cardID != "" {
-		e.state.MotionCardStates[cardID] = "REVEALED"
+		e.state.MotionCardStates[cardID] = MotionCardStateRevealed
 	}
-	e.state.MotionSubPhase = "REVEAL"
+	e.state.MotionSubPhase = MotionSubPhaseReveal
 
 	log.Printf("[Engine] MEMOTION RevealMotionCard: cardID=%s → REVEAL", cardID)
 	return nil
@@ -3943,16 +3943,16 @@ func (e *Engine) DoneMotionCard(cardID string, winnerTeam string) (int, bool, er
 	if e.state.Phase != PhaseStarted {
 		return 0, false, &MotionError{Reason: "NOT_STARTED"}
 	}
-	if e.state.MotionSubPhase != "QUESTION" && e.state.MotionSubPhase != "REVEAL" && e.state.MotionSubPhase != "SELECTED" {
+	if e.state.MotionSubPhase != MotionSubPhaseQuestion && e.state.MotionSubPhase != MotionSubPhaseReveal && e.state.MotionSubPhase != MotionSubPhaseSelected {
 		return 0, false, &MotionError{Reason: "INVALID_SUBPHASE"}
 	}
 
 	// Cancellation from SELECTED subphase: reset card to UNPLAYED, return to GRID.
 	// Use e.state.MotionSelected (server-authoritative) rather than client-supplied cardID.
-	if e.state.MotionSubPhase == "SELECTED" {
-		e.state.MotionCardStates[e.state.MotionSelected] = "UNPLAYED"
+	if e.state.MotionSubPhase == MotionSubPhaseSelected {
+		e.state.MotionCardStates[e.state.MotionSelected] = MotionCardStateUnplayed
 		e.state.MotionSelected = ""
-		e.state.MotionSubPhase = "GRID"
+		e.state.MotionSubPhase = MotionSubPhaseGrid
 		log.Printf("[Engine] MEMOTION DoneMotionCard: SELECTED → cancelled, cardID=%s back to UNPLAYED", cardID)
 		return 0, false, nil
 	}
@@ -3963,7 +3963,7 @@ func (e *Engine) DoneMotionCard(cardID string, winnerTeam string) (int, bool, er
 	}
 
 	// Mark card as DONE
-	e.state.MotionCardStates[cardID] = "DONE"
+	e.state.MotionCardStates[cardID] = MotionCardStateDone
 
 	// Award points and record winner if winnerTeam is provided
 	points := 0
@@ -4015,13 +4015,13 @@ func (e *Engine) DoneMotionCard(cardID string, winnerTeam string) (int, bool, er
 	}
 
 	// Return to grid
-	e.state.MotionSubPhase = "GRID"
+	e.state.MotionSubPhase = MotionSubPhaseGrid
 	e.state.MotionSelected = ""
 
 	// Check if all cards are DONE
 	isComplete := true
 	for _, st := range e.state.MotionCardStates {
-		if st != "DONE" {
+		if st != MotionCardStateDone {
 			isComplete = false
 			break
 		}
@@ -4213,7 +4213,7 @@ func (e *Engine) processMotionCardTick() motionCardTickResult {
 	callTestInjectPanic("motion-card")
 
 	// Guard: exit if game state changed unexpectedly
-	if e.state.Phase != PhaseStarted || e.state.MotionSubPhase != "QUESTION" {
+	if e.state.Phase != PhaseStarted || e.state.MotionSubPhase != MotionSubPhaseQuestion {
 		return motionCardTickResult{guardFailed: true}
 	}
 
@@ -4327,7 +4327,7 @@ func (e *Engine) processMotionMemorizeTick() motionMemorizeTickResult {
 	callTestInjectPanic("motion-memorize")
 
 	// Guard: exit if game state changed unexpectedly
-	if e.state.Phase != PhaseStarted || e.state.MotionSubPhase != "MEMORIZE" {
+	if e.state.Phase != PhaseStarted || e.state.MotionSubPhase != MotionSubPhaseMemorize {
 		return motionMemorizeTickResult{guardFailed: true}
 	}
 
@@ -4336,7 +4336,7 @@ func (e *Engine) processMotionMemorizeTick() motionMemorizeTickResult {
 
 	if currentTime <= 0 {
 		// Timer expired: transition MEMORIZE → GRID automatically
-		e.state.MotionSubPhase = "GRID"
+		e.state.MotionSubPhase = MotionSubPhaseGrid
 		e.state.MotionSelected = ""
 		e.state.CurrentTime = 0
 		return motionMemorizeTickResult{expired: true, callback: e.OnStateChange}

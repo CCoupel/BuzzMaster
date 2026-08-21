@@ -261,6 +261,43 @@ type MotionConfig struct {
 	Points3Star int `json:"POINTS_3_STAR"` // points for 3-star cards (default: 5)
 }
 
+// MotionSubPhase represents the current sub-phase of a MEMOTION round
+// (GameState.MotionSubPhase, "" outside a MEMOTION question).
+type MotionSubPhase string
+
+const (
+	MotionSubPhaseMemorize MotionSubPhase = "MEMORIZE" // Secret Mode countdown before the grid is shown
+	MotionSubPhaseGrid     MotionSubPhase = "GRID"     // Grid of cards, none selected
+	MotionSubPhaseSelected MotionSubPhase = "SELECTED" // One card selected, RECTO face shown fullscreen
+	MotionSubPhaseQuestion MotionSubPhase = "QUESTION" // Selected card flipped, VERSO face + timer
+	MotionSubPhaseReveal   MotionSubPhase = "REVEAL"   // Selected card's answer (REVEAL face) shown
+)
+
+// MotionCardState represents the state of one card in GameState.MotionCardStates.
+type MotionCardState string
+
+const (
+	MotionCardStateUnplayed MotionCardState = "UNPLAYED" // not yet selected this question
+	MotionCardStateSelected MotionCardState = "SELECTED" // currently selected, RECTO shown
+	MotionCardStateQuestion MotionCardState = "QUESTION" // currently flipped, VERSO shown
+	MotionCardStateRevealed MotionCardState = "REVEALED" // currently revealed, REVEAL shown
+	MotionCardStateDone     MotionCardState = "DONE"     // played, DoneMotionCard called
+)
+
+// AllQuestionTypes returns the full registry of question types, i.e. the 5
+// values QuestionType may take. Exported as a test-exhaustiveness helper —
+// see contracts/question-types.md §10 (test d'agnosticité) — not consumed by
+// production code in v7.0.0.
+func AllQuestionTypes() []QuestionType {
+	return []QuestionType{
+		QuestionTypeSpeedy,
+		QuestionTypeQCM,
+		QuestionTypeMemory,
+		QuestionTypeMemotion,
+		QuestionTypeArdoise,
+	}
+}
+
 // Question represents a quiz question
 type Question struct {
 	ID                     string           `json:"ID"`
@@ -355,17 +392,17 @@ type GameState struct {
 	MemoryCurrentTeamColor   []int          `json:"MEMORY_CURRENT_TEAM_COLOR"`  // RGB color of current team
 	QcmInvalidated           []string       `json:"QCM_INVALIDATED"`            // Invalidated QCM answers (e.g., ["RED", "YELLOW"])
 	// MEMOTION fields — NO omitempty: maps/slices/strings must be serialized even when empty for frontend reset (v5.0.0)
-	MotionSubPhase           string            `json:"MEMOTION_SUBPHASE"`            // "GRID" | "SELECTED" | "QUESTION" | "REVEAL" | ""
-	MotionSelected           string            `json:"MEMOTION_SELECTED"`            // ID of active card, "" when on grid
-	MotionCardStates         map[string]string `json:"MEMOTION_CARD_STATES"`         // cardID → "UNPLAYED"|"SELECTED"|"QUESTION"|"REVEALED"|"DONE"
-	MotionCardTeams          map[string]string `json:"MEMOTION_CARD_TEAMS"`          // cardID → teamName (winner)
-	MotionCurrentTeam        string            `json:"MEMOTION_CURRENT_TEAM"`        // Team currently playing
-	MotionParticipatingTeams []string          `json:"MEMOTION_PARTICIPATING_TEAMS"` // Teams selected to play
-	MotionCurrentTeamColor   []int             `json:"MEMOTION_CURRENT_TEAM_COLOR"`  // RGB color of current team
-	VirtualPlayerCount       int               `json:"VIRTUAL_PLAYER_COUNT"`         // Number of enrolled virtual players
-	VirtualPlayerLimit       int               `json:"VIRTUAL_PLAYER_LIMIT"`         // Maximum number of virtual players allowed
-	EnrollmentActive         bool              `json:"ENROLLMENT_ACTIVE"`            // Whether player enrollment is active
-	ShowQRCode               bool              `json:"SHOW_QR_CODE"`                 // Whether to display QR code on TV
+	MotionSubPhase           MotionSubPhase             `json:"MEMOTION_SUBPHASE"`            // MotionSubPhaseMemorize | Grid | Selected | Question | Reveal | ""
+	MotionSelected           string                     `json:"MEMOTION_SELECTED"`            // ID of active card, "" when on grid
+	MotionCardStates         map[string]MotionCardState `json:"MEMOTION_CARD_STATES"`         // cardID → MotionCardStateUnplayed|Selected|Question|Revealed|Done
+	MotionCardTeams          map[string]string          `json:"MEMOTION_CARD_TEAMS"`          // cardID → teamName (winner)
+	MotionCurrentTeam        string                     `json:"MEMOTION_CURRENT_TEAM"`        // Team currently playing
+	MotionParticipatingTeams []string                   `json:"MEMOTION_PARTICIPATING_TEAMS"` // Teams selected to play
+	MotionCurrentTeamColor   []int                      `json:"MEMOTION_CURRENT_TEAM_COLOR"`  // RGB color of current team
+	VirtualPlayerCount       int                        `json:"VIRTUAL_PLAYER_COUNT"`         // Number of enrolled virtual players
+	VirtualPlayerLimit       int                        `json:"VIRTUAL_PLAYER_LIMIT"`         // Maximum number of virtual players allowed
+	EnrollmentActive         bool                       `json:"ENROLLMENT_ACTIVE"`            // Whether player enrollment is active
+	ShowQRCode               bool                       `json:"SHOW_QR_CODE"`                 // Whether to display QR code on TV
 	// ENTRACTE (v6.5.2, #119) — global pause mode, independent of the question
 	// cycle. Same nature as ShowQRCode just above: an ephemeral display flag,
 	// NOT persisted (state_persistence.go excludes it explicitly, alongside

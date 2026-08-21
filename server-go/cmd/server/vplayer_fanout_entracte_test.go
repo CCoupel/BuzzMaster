@@ -56,7 +56,7 @@ func buildEntracteFanoutMessage(t *testing.T, phase game.GamePhase) *protocol.Me
 		MemoryPairOwners:         map[int]string{},
 		MemoryCurrentTeamColor:   []int{},
 		QcmInvalidated:           []string{},
-		MotionCardStates:         map[string]string{},
+		MotionCardStates:         map[string]game.MotionCardState{},
 		MotionCardTeams:          map[string]string{},
 		MotionParticipatingTeams: []string{},
 		MotionCurrentTeamColor:   []int{},
