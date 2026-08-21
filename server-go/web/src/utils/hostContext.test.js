@@ -84,8 +84,14 @@ describe('resolveHostContext — aucun hôte actif', () => {
     expect(ctx).toEqual({ playable: false, revealed: false, timerRunning: false, cardId: '' })
   })
 
-  it('aucun hôte actif : SELECTED — ni playable ni revealed, mais cardId renseigné ("selon le cas", contrat §4)', () => {
+  // #184/B-F6 — règle unique du contrat (§4, "CardID — règle unique, sans cas
+  // particulier") : CardID === MEMOTION_SELECTED, sans exception, quelle que
+  // soit la sous-phase. C'est la cellule qui avait divergé entre Go et JS
+  // (historique du contrat) — cas de test nommé explicitement pour SELECTED,
+  // comme exigé côté Go, pour ancrer la non-régression.
+  it('SELECTED : CardID === MEMOTION_SELECTED (règle unique, sans cas particulier — contrat §4)', () => {
     const ctx = resolveHostContext({ phase: 'STARTED', MEMOTION_SUBPHASE: 'SELECTED', MEMOTION_SELECTED: 'mc-3' })
+    expect(ctx.cardId).toBe('mc-3')
     expect(ctx).toEqual({ playable: false, revealed: false, timerRunning: false, cardId: 'mc-3' })
   })
 })

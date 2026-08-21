@@ -54,9 +54,20 @@ export function resolveHostContext(gameState) {
 
   // Aucun hôte actif — MEMORIZE/GRID/SELECTED (contrat §4, ligne "Aucun") :
   // ni playable ni revealed, quel que soit `phase` (qui reste STARTED tout
-  // au long de la manche MEMOTION). `cardId` suit `MEMOTION_SELECTED`
-  // uniquement en sous-phase SELECTED (carte choisie, chrono pas encore
-  // démarré) — "selon le cas" du contrat.
+  // au long de la manche MEMOTION).
+  //
+  // `cardId` — règle unique du contrat (§4, "CardID — règle unique, sans cas
+  // particulier") : CardID vaut TOUJOURS MEMOTION_SELECTED, sans condition ni
+  // branchement, quelle que soit la sous-phase. Le branchement ci-dessous
+  // n'est PAS une exception à cette règle : c'est un simple raccourci — en
+  // MEMORIZE/GRID, MEMOTION_SELECTED vaut déjà "" par construction (remis à
+  // zéro par le moteur à l'entrée de ces sous-phases), donc lire
+  // MEMOTION_SELECTED directement ou renvoyer "" ici produit exactement le
+  // même résultat. En SELECTED, MEMOTION_SELECTED porte l'ID de la carte
+  // choisie (carte = hôte actif, même si rien n'y est encore jouable) — d'où
+  // la lecture explicite. Ne PAS lire cette branche comme "cardId dépend de
+  // la sous-phase" : elle dépend uniquement de MEMOTION_SELECTED, ici comme
+  // partout ailleurs dans ce fichier.
   if (subphase) {
     return {
       playable: false,

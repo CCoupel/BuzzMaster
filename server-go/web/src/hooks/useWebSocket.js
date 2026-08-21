@@ -70,6 +70,10 @@ export default function useWebSocket(endpoint = '/ws/admin') {
     MEMOTION_SELECTED: '', // ID of active card
     MEMOTION_CARD_STATES: {}, // Map of cardID -> 'UNPLAYED'|'QUESTION'|'REVEALED'|'DONE'
     MEMOTION_CARD_TEAMS: {}, // Map of cardID -> teamName (winner)
+    // #184/B-F6 — emplacement actif MEMOTION (contrat question-types.md §5.2) :
+    // {CARD_ID, TYPE, STATE}, jamais omitempty côté serveur. Consommé par
+    // utils/typeState.js::getTypeState (hôte carte, cardId !== "").
+    MEMOTION_ACTIVE: { CARD_ID: '', TYPE: '', STATE: {} },
     MEMOTION_CURRENT_TEAM: '', // Currently playing team
     MEMOTION_CURRENT_TEAM_COLOR: [], // RGB array of current team
     MEMOTION_PARTICIPATING_TEAMS: [], // Selected participating teams
@@ -345,6 +349,8 @@ export default function useWebSocket(endpoint = '/ws/admin') {
             MEMOTION_SELECTED: MSG.GAME.MEMOTION_SELECTED !== undefined ? MSG.GAME.MEMOTION_SELECTED : prev.MEMOTION_SELECTED,
             MEMOTION_CARD_STATES: MSG.GAME.MEMOTION_CARD_STATES ?? prev.MEMOTION_CARD_STATES,
             MEMOTION_CARD_TEAMS: MSG.GAME.MEMOTION_CARD_TEAMS ?? prev.MEMOTION_CARD_TEAMS,
+            // #184/B-F6 — voir défaut ci-dessus (state initial du hook).
+            MEMOTION_ACTIVE: MSG.GAME.MEMOTION_ACTIVE ?? prev.MEMOTION_ACTIVE,
             MEMOTION_CURRENT_TEAM: MSG.GAME.MEMOTION_CURRENT_TEAM !== undefined ? MSG.GAME.MEMOTION_CURRENT_TEAM : prev.MEMOTION_CURRENT_TEAM,
             MEMOTION_CURRENT_TEAM_COLOR: MSG.GAME.MEMOTION_CURRENT_TEAM_COLOR ?? prev.MEMOTION_CURRENT_TEAM_COLOR,
             MEMOTION_PARTICIPATING_TEAMS: MSG.GAME.MEMOTION_PARTICIPATING_TEAMS ?? prev.MEMOTION_PARTICIPATING_TEAMS,
