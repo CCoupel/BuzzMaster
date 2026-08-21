@@ -1405,19 +1405,25 @@ func (e *Engine) processTimerTick() timerTickResult {
 	return result
 }
 
-// shouldTriggerQCMHint checks if a QCM hint should be triggered at the current time
-// Must be called with lock held
-func (e *Engine) shouldTriggerQCMHint(currentTime, totalTime int) bool {
-	// Check if question is QCM with hints enabled
-	if e.state.Question == nil || e.state.Question.Type != QuestionTypeQCM || !e.state.Question.QCMHintsEnabled {
+// qcmHintShouldTrigger is the QCM hint threshold decision, extracted pure
+// (#185 C-B1) from the original question-only shouldTriggerQCMHint so both
+// the question host (processTimerTick) and the MEMOTION card host
+// (processMotionCardTick, a QCM-typed card) can share one implementation
+// instead of two copies — contracts/question-types.md §10's agnosticity
+// test anticipated exactly this move; see processMotionCardTick's doc
+// comment for why this is the one authorized host change in this batch.
+// Reads nothing but its parameters: hintsEnabled/t1Percent/t2Percent come
+// from whichever host's own config (Question or MotionCard — both carry
+// identically-shaped QCMHintsEnabled/QCMHintThreshold1/2 via TypedContent,
+// #184 B-B1), currentTime/totalTime/invalidatedCount from that host's own
+// timer and invalidated-answers count.
+func qcmHintShouldTrigger(hintsEnabled bool, t1Percent, t2Percent float64, currentTime, totalTime, invalidatedCount int) bool {
+	if !hintsEnabled {
 		return false
 	}
 
-	// Get thresholds from question config (or use defaults)
 	// Threshold 1: % of total time remaining for first hint (default 25%)
 	// Threshold 2: % of total time remaining for second hint (default 12.5%)
-	t1Percent := e.state.Question.QCMHintThreshold1
-	t2Percent := e.state.Question.QCMHintThreshold2
 	if t1Percent <= 0 {
 		t1Percent = 0.25 // Default 25%
 	}
@@ -1435,8 +1441,6 @@ func (e *Engine) shouldTriggerQCMHint(currentTime, totalTime int) bool {
 		return false
 	}
 
-	invalidatedCount := len(e.state.QcmInvalidated)
-
 	// Check if we hit threshold 1 (first hint)
 	if currentTime == threshold1 && invalidatedCount == 0 {
 		log.Printf("[Engine] QCM hint threshold 1 reached: time=%d, total=%d, threshold=%d", currentTime, totalTime, threshold1)
@@ -1452,52 +1456,86 @@ func (e *Engine) shouldTriggerQCMHint(currentTime, totalTime int) bool {
 	return false
 }
 
-// invalidateRandomWrongAnswer invalidates a random wrong QCM answer
-// Must be called with lock held
-// Returns the invalidated color and the number of remaining valid answers
-func (e *Engine) invalidateRandomWrongAnswer() (string, int) {
-	if e.state.Question == nil || e.state.Question.QCMAnswers == nil {
+// shouldTriggerQCMHint checks if a QCM hint should be triggered at the
+// current time for the top-level question. Thin wrapper around
+// qcmHintShouldTrigger (#185 C-B1) — behavior byte-for-byte identical to
+// before the extraction. Must be called with lock held.
+func (e *Engine) shouldTriggerQCMHint(currentTime, totalTime int) bool {
+	if e.state.Question == nil || e.state.Question.Type != QuestionTypeQCM {
+		return false
+	}
+	return qcmHintShouldTrigger(
+		e.state.Question.QCMHintsEnabled,
+		e.state.Question.QCMHintThreshold1,
+		e.state.Question.QCMHintThreshold2,
+		currentTime, totalTime, len(e.state.QcmInvalidated),
+	)
+}
+
+// qcmInvalidateRandomWrongAnswer picks a random not-yet-invalidated wrong
+// QCM answer, extracted pure (#185 C-B1) from the original question-only
+// invalidateRandomWrongAnswer — see qcmHintShouldTrigger's doc comment for
+// why. Unlike the method it replaces, this does NOT mutate any state: it
+// returns the color to invalidate ("" if every wrong answer is already
+// invalidated) and the resulting remaining-valid-answers count; the caller
+// is responsible for appending color to its own invalidated-answers slice
+// (QcmInvalidated for the question host, MEMOTION_ACTIVE.STATE.QCM_INVALIDATED
+// for the card host — contract §5.3, two different slices, same shape).
+func qcmInvalidateRandomWrongAnswer(answers *QCMAnswers, correct string, invalidated []string) (color string, remaining int) {
+	if answers == nil {
 		return "", 0
 	}
 
-	correctAnswer := e.state.Question.QCMCorrect
 	allColors := []string{"RED", "GREEN", "YELLOW", "BLUE"}
 
 	// Find wrong answers that haven't been invalidated yet
 	var availableWrongAnswers []string
-	for _, color := range allColors {
-		if color == correctAnswer {
+	for _, c := range allColors {
+		if c == correct {
 			continue // Skip correct answer
 		}
-		// Check if already invalidated
 		isInvalidated := false
-		for _, inv := range e.state.QcmInvalidated {
-			if inv == color {
+		for _, inv := range invalidated {
+			if inv == c {
 				isInvalidated = true
 				break
 			}
 		}
 		if !isInvalidated {
-			availableWrongAnswers = append(availableWrongAnswers, color)
+			availableWrongAnswers = append(availableWrongAnswers, c)
 		}
 	}
 
 	if len(availableWrongAnswers) == 0 {
-		return "", 4 - len(e.state.QcmInvalidated)
+		return "", 4 - len(invalidated)
 	}
 
 	// Pick a random wrong answer to invalidate
 	randomIndex := rand.Intn(len(availableWrongAnswers))
-	invalidatedColor := availableWrongAnswers[randomIndex]
+	color = availableWrongAnswers[randomIndex]
 
-	// Add to invalidated list
-	e.state.QcmInvalidated = append(e.state.QcmInvalidated, invalidatedColor)
+	// Calculate remaining valid answers (4 total - invalidated count, +1 for
+	// the one about to be appended by the caller)
+	remaining = 4 - (len(invalidated) + 1)
 
-	// Calculate remaining valid answers (4 total - invalidated count)
-	remainingAnswers := 4 - len(e.state.QcmInvalidated)
+	log.Printf("[Engine] QCM hint: invalidated %s, remaining answers: %d", color, remaining)
+	return color, remaining
+}
 
-	log.Printf("[Engine] QCM hint: invalidated %s, remaining answers: %d", invalidatedColor, remainingAnswers)
-	return invalidatedColor, remainingAnswers
+// invalidateRandomWrongAnswer invalidates a random wrong QCM answer for the
+// top-level question, mutating e.state.QcmInvalidated. Thin wrapper around
+// qcmInvalidateRandomWrongAnswer (#185 C-B1) — behavior byte-for-byte
+// identical to before the extraction. Must be called with lock held.
+// Returns the invalidated color and the number of remaining valid answers.
+func (e *Engine) invalidateRandomWrongAnswer() (string, int) {
+	if e.state.Question == nil {
+		return "", 0
+	}
+	color, remaining := qcmInvalidateRandomWrongAnswer(e.state.Question.QCMAnswers, e.state.Question.QCMCorrect, e.state.QcmInvalidated)
+	if color != "" {
+		e.state.QcmInvalidated = append(e.state.QcmInvalidated, color)
+	}
+	return color, remaining
 }
 
 // Stop ends the game round
@@ -4331,6 +4369,13 @@ func (e *Engine) StartMotionCardTimer(delay int) {
 						e.OnTimerTick(result.currentTime)
 					}
 
+					// Call QCM hint callback outside of lock (#185 C-B1) —
+					// same pattern as startTimer's goroutine for the
+					// question host.
+					if result.qcmHintCallback != nil && result.invalidatedColor != "" {
+						result.qcmHintCallback(result.invalidatedColor, result.remainingAnswers)
+					}
+
 					if result.currentTime <= 0 {
 						// Timer expired — do NOT call e.Stop(). Phase stays STARTED.
 						ticker.Stop()
@@ -4355,12 +4400,30 @@ func (e *Engine) StartMotionCardTimer(delay int) {
 type motionCardTickResult struct {
 	guardFailed bool // phase/subphase changed unexpectedly; caller must stop the ticker and return
 	currentTime int
+	// qcmHintCallback/invalidatedColor/remainingAnswers (#185 C-B1) — set
+	// only when the active card is QCM-typed and a hint threshold was
+	// crossed this tick, mirroring timerTickResult's fields for the
+	// question host.
+	qcmHintCallback  func(string, int)
+	invalidatedColor string
+	remainingAnswers int
 }
 
 // processMotionCardTick applies one MEMOTION card-timer tick under lock.
 // Extracted from StartMotionCardTimer's goroutine (#151) so `defer
 // e.mu.Unlock()` guarantees the mutex is released even if this panics — see
 // recoverBackgroundPanic's doc comment.
+//
+// #185 C-B1 — the QCM hint branch below is the ONE authorized host
+// modification of this batch: contracts/question-types.md §10's
+// agnosticity test explicitly anticipated a nested type needing its own
+// per-tick logic branched onto the MEMOTION card host, and QCM-in-card
+// (the GATE decision behind #185) is exactly that case. No new ticker is
+// created — this reuses the per-card timer StartMotionCardTimer already
+// starts (e.timer/e.stopCh, Risque R2 of the plan, untouched). The
+// decision/invalidation logic itself (qcmHintShouldTrigger,
+// qcmInvalidateRandomWrongAnswer, above) is fully host-agnostic — it was
+// extracted for exactly this reuse, not written twice.
 func (e *Engine) processMotionCardTick() motionCardTickResult {
 	e.mu.Lock()
 	defer e.mu.Unlock()
@@ -4373,7 +4436,62 @@ func (e *Engine) processMotionCardTick() motionCardTickResult {
 	}
 
 	e.state.CurrentTime--
-	return motionCardTickResult{currentTime: e.state.CurrentTime}
+	currentTime := e.state.CurrentTime
+	result := motionCardTickResult{currentTime: currentTime}
+
+	// MotionActive.Type is checked first (cheap, no card lookup) since the
+	// overwhelmingly common case is a SPEEDY card, which never needs this
+	// branch at all.
+	if e.state.MotionActive.Type == QuestionTypeQCM {
+		if card := e.activeMotionCardUnsafe(); card != nil {
+			invalidated := motionActiveQCMInvalidated(e.state.MotionActive.State)
+			if qcmHintShouldTrigger(card.QCMHintsEnabled, card.QCMHintThreshold1, card.QCMHintThreshold2, currentTime, e.state.Delay, len(invalidated)) {
+				color, remaining := qcmInvalidateRandomWrongAnswer(card.QCMAnswers, card.QCMCorrect, invalidated)
+				if color != "" {
+					e.state.MotionActive.State["QCM_INVALIDATED"] = append(invalidated, color)
+					result.qcmHintCallback = e.OnQCMHint
+					result.invalidatedColor = color
+					result.remainingAnswers = remaining
+				}
+			}
+		}
+	}
+
+	return result
+}
+
+// activeMotionCardUnsafe returns a pointer to the currently active MEMOTION
+// card — e.state.Question.MotionCards[i] where ID == e.state.MotionSelected
+// (== MotionActive.CardID, contract §4's internal-consistency requirement)
+// — or nil if there is none (no MEMOTION round, or no card selected yet).
+// Must be called with e.mu held.
+func (e *Engine) activeMotionCardUnsafe() *MotionCard {
+	if e.state.Question == nil || e.state.MotionSelected == "" {
+		return nil
+	}
+	for i := range e.state.Question.MotionCards {
+		if e.state.Question.MotionCards[i].ID == e.state.MotionSelected {
+			return &e.state.Question.MotionCards[i]
+		}
+	}
+	return nil
+}
+
+// motionActiveQCMInvalidated reads the QCM_INVALIDATED slice from
+// MEMOTION_ACTIVE.STATE — the card-scoped equivalent of the top-level
+// QcmInvalidated field (contract §5.3: a nested type's live state lives in
+// MEMOTION_ACTIVE.STATE, never the flat question-scoped fields). Absent or
+// unexpectedly-shaped ⇒ nil (no exclusions yet); never panics.
+func motionActiveQCMInvalidated(state map[string]interface{}) []string {
+	v, ok := state["QCM_INVALIDATED"]
+	if !ok {
+		return nil
+	}
+	s, ok := v.([]string)
+	if !ok {
+		return nil
+	}
+	return s
 }
 
 // StartMotionMemorizeTimer starts a countdown for the MEMORIZE phase in Secret Mode (v5.5.0).
