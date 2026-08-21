@@ -28,8 +28,18 @@ describe('resolveHostContext — hôte question', () => {
   })
 
   it('MEMOTION_SUBPHASE absent (undefined) est traité comme hôte question, comme une chaîne vide', () => {
-    const ctx = resolveHostContext({ phase: 'STARTED' })
+    const ctx = resolveHostContext({ phase: 'STARTED', timer: 5 })
     expect(ctx).toEqual({ playable: true, revealed: false, timerRunning: true, cardId: '' })
+  })
+
+  // #184 — correction ponctuelle TimerRunning (divergence Go/JS tranchée par
+  // `planner`, contrat §4 "TimerRunning — toujours dérivé de CURRENT_TIME,
+  // jamais du ticker") : côté hôte question aussi, TimerRunning dépend de
+  // CURRENT_TIME (gameState.timer), pas de la seule phase — même règle et
+  // même cas de test nommé que côté Go.
+  it('Hôte question, PHASE == STARTED avec CURRENT_TIME == 0 → timerRunning === false', () => {
+    const ctx = resolveHostContext({ phase: 'STARTED', timer: 0 })
+    expect(ctx).toEqual({ playable: true, revealed: false, timerRunning: false, cardId: '' })
   })
 })
 

@@ -77,11 +77,16 @@ export function resolveHostContext(gameState) {
     }
   }
 
-  // Hôte question — contrat §4, ligne "Question".
+  // Hôte question — contrat §4, ligne "Question". TimerRunning : toujours
+  // dérivé de CURRENT_TIME (gameState.timer), jamais de la seule phase —
+  // même expression que la ligne "Carte MEMOTION" ci-dessus, à dessein (voir
+  // contrat §4, "TimerRunning — toujours dérivé de CURRENT_TIME, jamais du
+  // ticker") : un composant de type ne doit pas voir une notion différente
+  // de "le chrono tourne" selon l'hôte qui le monte.
   return {
     playable: phase === 'STARTED',
     revealed: phase === 'REVEALED',
-    timerRunning: phase === 'STARTED',
+    timerRunning: phase === 'STARTED' && (gameState?.timer ?? 0) > 0,
     cardId: '',
   }
 }
