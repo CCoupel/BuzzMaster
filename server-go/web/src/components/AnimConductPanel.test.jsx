@@ -396,7 +396,7 @@ describe('AnimConductPanel — L3, grille MEMORY (#159/T3)', () => {
   it('onFlipMemoryCard reçoit l\'id de la carte cliquée ("pairID-cardNum")', () => {
     const onFlipMemoryCard = vi.fn()
     const { container } = render(
-      <AnimConductPanel {...baseProps({ phase: 'STARTED', question: memoryQuestion(), onFlipMemoryCard })} />
+      <AnimConductPanel {...baseProps({ phase: 'STARTED', hostContext: { playable: true, revealed: false }, question: memoryQuestion(), onFlipMemoryCard })} />
     )
     container.querySelector('.anim-conduct-l3 .anim-memory-card-down').click()
     expect(onFlipMemoryCard).toHaveBeenCalledTimes(1)
@@ -775,10 +775,14 @@ describe('AnimConductPanel — L3, branche à QUATRE voies (#160/T6, F7) : AnimM
   it.each(['SELECTED', 'QUESTION', 'REVEAL'])(
     'subphase %s : L3 affiche AnimMotionCard (carte au premier plan), pas la grille',
     (subphase) => {
+      // #184/B-F2/B-F3 — AnimConductPanel ne dérive plus playable/revealed de
+      // subphase lui-même (repli sur l'appelant, cf. AnimPage.jsx/hostContext.js) ;
+      // hostContext est donc explicité ici comme le ferait resolveHostContext.
       const { container } = render(
         <AnimConductPanel {...baseProps({
           phase: 'STARTED',
           question: motionQuestion(),
+          hostContext: { playable: subphase === 'QUESTION', revealed: subphase === 'REVEAL' },
           motion: motionProps({ subphase, selectedId: 'c1' }),
         })} />
       )
