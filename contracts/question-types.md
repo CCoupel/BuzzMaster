@@ -214,11 +214,72 @@ type HostContext struct {
 
 **Table de dérivation — spécification unique, implémentée des deux côtés :**
 
-| Hôte | `Playable` | `Revealed` | `TimerRunning` | `CardID` |
-|---|---|---|---|---|
-| **Question** | `PHASE == STARTED` | `PHASE == REVEALED` | `PHASE == STARTED` | `""` |
-| **Carte MEMOTION** | `MEMOTION_SUBPHASE == QUESTION` | `MEMOTION_SUBPHASE == REVEAL` | `MEMOTION_SUBPHASE == QUESTION` et timer de carte actif | `MEMOTION_SELECTED` |
-| **Aucun** (GRID, MEMORIZE, SELECTED, PREPARE, READY…) | `false` | `false` | `false` | selon le cas |
+| Hôte | `Playable` | `Revealed` | `TimerRunning` |
+|---|---|---|---|
+| **Question** | `PHASE == STARTED` | `PHASE == REVEALED` | `PHASE == STARTED` **et** `CURRENT_TIME > 0` |
+| **Carte MEMOTION** | `MEMOTION_SUBPHASE == QUESTION` | `MEMOTION_SUBPHASE == REVEAL` | `MEMOTION_SUBPHASE == QUESTION` **et** `CURRENT_TIME > 0` |
+| **Aucun** (GRID, MEMORIZE, SELECTED, PREPARE, READY…) | `false` | `false` | `false` |
+
+#### `TimerRunning` — toujours dérivé de `CURRENT_TIME`, jamais du ticker
+
+> **`TimerRunning` vaut « l'hôte est dans son état courant **et** `CURRENT_TIME > 0` ». Il ne doit
+> jamais être dérivé de l'existence d'un objet ticker côté serveur.**
+
+Le motif est structurel, pas esthétique : `Engine.timer` est un `*time.Ticker`, **champ privé jamais
+sérialisé**. Un client ne peut pas l'observer, donc **aucune implémentation JS ne pourra jamais s'y
+conformer**. Une clause qu'un des deux côtés est structurellement incapable d'implémenter n'est pas
+une spécification partagée. `CURRENT_TIME` est en revanche diffusé (tag JSON `CURRENT_TIME`, exposé
+côté client sous `gameState.timer`) : c'est la seule base sur laquelle les deux côtés peuvent
+converger.
+
+S'y ajoute une **convention déjà en production** : `AnimPage.jsx` alimente
+`motion.timerRunning = gameState.timer > 0` depuis #160, valeur consommée par `AnimConductPanel` →
+`AnimMotionActions` → la matrice de gestes de `utils/motionRules.js`. Dériver `HostContext.TimerRunning`
+autrement donnerait à `/anim` **deux notions contradictoires de « le chrono tourne » dans le même
+panneau**.
+
+> ⚠️ **La même expression dans les deux lignes, délibérément.** Un composant de type reçoit ce
+> triplet sans savoir quel hôte le lui fournit : si `TimerRunning` signifiait « la phase est
+> STARTED » chez l'un et « un décompte reste » chez l'autre, le même composant se comporterait
+> différemment selon son hôte — exactement la classe de défaut que `HostContext` existe pour
+> empêcher.
+
+> 📌 **Ce que le contrat garantit, et ce qu'il ne garantit pas** : les deux côtés appliquent la
+> **même expression au même état**. Ils ne sont pas tenus à l'égalité instantanée à travers le
+> réseau — le serveur lit `CURRENT_TIME` à l'instant de l'appel, le client la dernière valeur
+> diffusée, d'où un écart possible d'un tick. C'est de la latence, inhérente à toute valeur dérivée
+> non sérialisée, et c'est exactement le même régime que `Playable` et `Revealed`. Ce n'est **pas**
+> un motif pour sérialiser le triplet (§4, « Non sérialisé »).
+
+#### `CardID` — règle unique, sans cas particulier
+
+> **`CardID` vaut toujours `MEMOTION_SELECTED`. Sans condition, sans branchement, quelle que soit
+> la sous-phase et quel que soit le type de la question.**
+
+Cette formulation n'a **aucune** exception à énumérer, parce que `MEMOTION_SELECTED` est déjà exactement
+l'identité de la carte en jeu à tout instant :
+
+| Situation | `MEMOTION_SELECTED` | Donc `CardID` |
+|---|---|---|
+| Question non-MEMOTION | `""` (remis à zéro dans `Ready()` et `InitGame()`) | `""` — hôte question |
+| MEMOTION en `MEMORIZE` ou `GRID` | `""` (posé par `initMotionStateUnsafe`, par l'expiration du timer de mémorisation et par chaque retour en `GRID`) | `""` — aucune carte en jeu |
+| MEMOTION en `SELECTED`, `QUESTION` ou `REVEAL` | ID de la carte (posé par `SelectMotionCard`) | **l'ID de la carte** |
+
+> ⚠️ **`CardID` est un discriminant d'hôte, pas un indicateur d'activité.** Il répond à « quel
+> emplacement porte l'état typé ? », pas à « le contenu est-il jouable ? » — ce à quoi répondent
+> `Playable` et `Revealed`. En sous-phase `SELECTED`, une carte **est** l'hôte (elle est choisie, son
+> emplacement actif est peuplé) même si rien n'y est encore jouable. Renvoyer `""` y ferait router
+> `getTypeState` (§5.3) vers les champs plats de l'hôte **question** — l'hôte inverse.
+
+> **Cohérence interne exigée** : `CardID` doit valoir `MEMOTION_ACTIVE.CARD_ID` (§5.2) à tout
+> instant, et l'invariant de portée des actions (§9.2) doit s'appuyer sur **la même** expression
+> `MEMOTION_SELECTED`. Ces trois mécanismes désignent la même chose ; les faire diverger est un
+> défaut, jamais un choix d'implémentation.
+
+> 📌 **Historique** — cette cellule disait « selon le cas » dans la première version du contrat. Go
+> et JS ont chacun tranché différemment, tous deux verts de leur côté (risque R5 du plan, matérialisé
+> et détecté par `test-writer`). L'ambiguïté est levée ici : plus aucune cellule de cette table ne
+> laisse de choix à l'implémentation.
 
 **Non sérialisé.** Le contexte est **recalculé de part et d'autre** à partir de `PHASE` et
 `MEMOTION_SUBPHASE`, tous deux déjà présents dans `GameState`. Motif : le sérialiser coûterait de

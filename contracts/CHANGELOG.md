@@ -38,6 +38,22 @@ aucune migration — l'invariance octet pour octet est une condition de recette,
 - **[CHANGED]** Emplacements média d'une carte pilotés par le descripteur du type au lieu des trois
   slots codés en dur (`recto`/`question`/`answer`). `SPEEDY` déclare exactement ces trois noms : les
   charges utiles de l'éditeur restent valides sans changement.
+- **[CHANGED]** `HostContext.TimerRunning` — dérivé de **`CURRENT_TIME > 0`** dans les deux lignes de
+  la table §4, jamais de l'existence d'un ticker serveur. `Engine.timer` est un `*time.Ticker` privé
+  **jamais sérialisé** : aucun client ne peut s'y conformer, donc une clause fondée dessus n'est pas
+  une spécification partageable. S'y ajoute une convention déjà en production depuis #160
+  (`AnimPage.jsx` → `motion.timerRunning = gameState.timer > 0`, consommée par la matrice de gestes
+  de `motionRules.js`) : en dériver autrement donnerait à `/anim` deux notions contradictoires du
+  même fait. La ligne « Question » gagne au passage le terme `CURRENT_TIME > 0` : un composant de
+  type reçoit le triplet sans connaître son hôte, la même valeur doit donc y signifier la même chose.
+- **[CHANGED]** `HostContext.CardID` — la cellule « selon le cas » de la table de dérivation (§4) est
+  supprimée au profit d'une **règle unique sans branchement** : `CardID` vaut toujours
+  `MEMOTION_SELECTED`. Go et JS avaient tranché différemment en sous-phase `SELECTED`, chacun vert de
+  son côté — divergence sans effet visible tant que `MEMOTION_ACTIVE` n'est pas câblé côté client,
+  mais latente. `CardID` est un **discriminant d'hôte**, pas un indicateur d'activité : en `SELECTED`
+  une carte est bien l'hôte, et renvoyer `""` ferait router `getTypeState` vers l'hôte question,
+  l'hôte inverse. Trois mécanismes doivent désormais désigner la même chose par la **même**
+  expression : `HostContext.CardID`, `MEMOTION_ACTIVE.CARD_ID` et l'invariant de portée §9.2.
 - **[CHANGED]** Les composants de type ne reçoivent plus `phase` mais un contexte d'hôte normalisé
   (`playable` / `revealed` / `timerRunning`). C'est ce qui réconcilie `phase === 'REVEALED'` et
   `MEMOTION_SUBPHASE === 'REVEAL'`, deux vocabulaires jusqu'ici incompatibles, et rend les
