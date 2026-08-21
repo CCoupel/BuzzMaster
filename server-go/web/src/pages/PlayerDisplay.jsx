@@ -664,14 +664,40 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
   const showQcmAnswerText = ['COUNTDOWN', 'STARTED', 'PAUSED', 'STOPPED', 'REVEALED'].includes(gameState.phase)
 
   // Calculate QCM hint markers for the timer bar
+  //
+  // #185 (correction ponctuelle, détectée par test-writer en C-T1) — étendu
+  // à l'hôte carte MEMOTION : jusqu'ici gated sur `isQcm` (question-scopée),
+  // ces repères visuels n'apparaissaient jamais sur une carte QCM active,
+  // alors que l'invalidation elle-même (C-B1) fonctionne déjà côté carte.
+  // Même dispatch par `cardType` que le reste de #185 (C-F2) : source des
+  // seuils/de l'état d'indices résolue par hôte, aucune nouvelle donnée
+  // serveur — juste étendre le déclenchement visuel client au contexte carte.
   const qcmHintMarkers = useMemo(() => {
-    if (!isQcm || !gameState.question?.QCM_HINTS_ENABLED) return null
+    let hintsEnabled, threshold1, threshold2, invalidated
 
-    const t1 = gameState.question.QCM_HINT_THRESHOLD_1 || 0.25
-    const t2 = gameState.question.QCM_HINT_THRESHOLD_2 || 0.125
+    if (isQcm) {
+      hintsEnabled = gameState.question?.QCM_HINTS_ENABLED
+      threshold1 = gameState.question?.QCM_HINT_THRESHOLD_1
+      threshold2 = gameState.question?.QCM_HINT_THRESHOLD_2
+      invalidated = gameState.qcmInvalidated || []
+    } else if (isMemotion) {
+      const motionCards = gameState.question?.MOTION_CARDS || []
+      const selected = motionCards.find(c => c.ID === gameState.MEMOTION_SELECTED) || null
+      if (selected?.TYPE !== 'QCM') return null
+      hintsEnabled = selected.QCM_HINTS_ENABLED
+      threshold1 = selected.QCM_HINT_THRESHOLD_1
+      threshold2 = selected.QCM_HINT_THRESHOLD_2
+      invalidated = getTypeState(gameState, resolveHostContext(gameState)).qcmInvalidated
+    } else {
+      return null
+    }
+
+    if (!hintsEnabled) return null
+
+    const t1 = threshold1 || 0.25
+    const t2 = threshold2 || 0.125
     const totalTime = gameState.totalTime || 0
     const currentTime = gameState.timer || 0
-    const invalidated = gameState.qcmInvalidated || []
 
     if (totalTime <= 0) return null
 
@@ -718,7 +744,11 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
     }
 
     return markers.length > 0 ? markers : null
-  }, [isQcm, gameState.question?.QCM_HINTS_ENABLED, gameState.question?.QCM_HINT_THRESHOLD_1, gameState.question?.QCM_HINT_THRESHOLD_2, gameState.totalTime, gameState.timer, gameState.qcmInvalidated])
+  }, [
+    isQcm, isMemotion,
+    gameState.question, gameState.MEMOTION_SELECTED, gameState.MEMOTION_ACTIVE,
+    gameState.totalTime, gameState.timer, gameState.qcmInvalidated,
+  ])
 
   // Top 3 players for podium
   const topPlayers = useMemo(() => {
@@ -2091,7 +2121,9 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
               /* ---- Grille (toujours rendue pour que layoutId fonctionne) ---- */
               const gridView = (
                 <div className={`game-content-zones memory-game memotion-game${subphase === 'MEMORIZE' ? ' memotion-memorize-active' : ''}`}>
-                  {/* Zone 1: Timer — reste visible (non dimmed) quand fullscreen overlay actif */}
+                  {/* Zone 1: Timer — reste visible (non dimmed) quand fullscreen overlay actif.
+                      hintMarkers (#185, correction ponctuelle) : repères de seuils d'indices,
+                      null hors carte QCM à indices activés — cf. qcmHintMarkers ci-dessus. */}
                   <div className="zone-timer">
                     <Timer
                       currentTime={gameState.timer}
@@ -2099,6 +2131,7 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
                       phase={gameState.phase}
                       size="xl"
                       showPhase={false}
+                      hintMarkers={qcmHintMarkers}
                     />
                   </div>
 
