@@ -12,6 +12,7 @@ import { isRevealed } from '../utils/phaseRules'
 import { prepareWaitReason } from '../utils/prepareWaitReason'
 import { getQuestionTypeMeta } from '../utils/questionTypeMeta'
 import { resolveHostContext } from '../utils/hostContext'
+import { getTypeState } from '../utils/typeState'
 import { getMotionCardPoints } from '../utils/motionGrid'
 import { getPhaseBadge } from '../utils/phaseBadge'
 import { canAwardPoints } from '../utils/canAwardPoints'
@@ -212,6 +213,14 @@ export default function AnimPage() {
   // QUESTION/REVEAL) sans jamais relire `gameState.phase`/`MEMOTION_SUBPHASE`
   // lui-même.
   const hostContext = resolveHostContext(gameState)
+  // #185/C-F1 — état d'indices QCM de l'hôte COURANT (question ou carte
+  // MEMOTION active), résolu une seule fois via l'accesseur unique posé en
+  // B-F1 (question-types.md §5.3) — jusqu'ici calculé mais jamais consommé.
+  // Remplace la lecture directe de `gameState.qcmInvalidated` (qui ne
+  // couvrait que l'hôte question) dans la prop transmise à
+  // `AnimConductPanel` ci-dessous — neutre pour l'hôte question (même
+  // valeur), correct pour l'hôte carte QCM.
+  const typeState = getTypeState(gameState, hostContext)
 
   // #160/F8 — MEMOTION, sur le modèle exact de isMemoryQuestion (#159, plus
   // bas dans le fichier, zone équipes). La manche entière se joue en phase
@@ -576,7 +585,7 @@ export default function AnimPage() {
         <AnimConductPanel
           phase={gameState.phase}
           question={question}
-          qcmInvalidated={gameState.qcmInvalidated}
+          qcmInvalidated={typeState.qcmInvalidated}
           revealed={revealed}
           hostContext={hostContext}
           nextQuestion={nextQuestion}

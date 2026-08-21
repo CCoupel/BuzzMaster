@@ -86,7 +86,10 @@ function buttonSubLabel(key, state, phase, waitReason) {
  *   commandes de l'hôte question, hors du périmètre hostContext ; #184/B-F2
  *   ne touche PAS cet usage)
  * @param {Object|null} props.question - gameState.question
- * @param {string[]} [props.qcmInvalidated] - gameState.qcmInvalidated
+ * @param {string[]} [props.qcmInvalidated] - état d'indices QCM de l'hôte
+ *   COURANT (#185/C-F1) : `getTypeState(gameState, hostContext).qcmInvalidated`,
+ *   calculé par `AnimPage.jsx` — question ou carte MEMOTION active selon
+ *   l'hôte, jamais `gameState.qcmInvalidated` directement depuis ce composant
  * @param {boolean} props.revealed - phase === 'REVEALED' (phaseRules.isRevealed)
  *   — hôte QUESTION uniquement, inchangé par #184 : consommé par L4
  *   (AnimExplanationNote) et la branche QCM (AnimQcmOptions), toutes deux
@@ -219,7 +222,6 @@ export default function AnimConductPanel({
         <div className="anim-conduct-l3">
           {isQcm ? (
             <AnimQcmOptions
-              type={question.TYPE}
               answers={question.QCM_ANSWERS}
               correct={question.QCM_CORRECT}
               invalidated={qcmInvalidated}
@@ -252,6 +254,19 @@ export default function AnimConductPanel({
                 selectedId={motion?.selectedId}
                 teams={teams}
                 onSelect={onSelectMotionCard}
+              />
+            ) : selectedMotionCard?.TYPE === 'QCM' ? (
+              // #185/C-F1 — carte QCM : point de délégation posé en B-F3
+              // (résolution du type de l'hôte courant), premier type
+              // branché ici. `invalidated` vient de `qcmInvalidated`
+              // (résolu par l'appelant via getTypeState, hôte carte quand
+              // une carte est active — question-types.md §5.3), jamais
+              // recalculé ici.
+              <AnimQcmOptions
+                answers={selectedMotionCard.QCM_ANSWERS}
+                correct={selectedMotionCard.QCM_CORRECT}
+                invalidated={qcmInvalidated}
+                revealed={hostContext?.revealed}
               />
             ) : (
               <AnimMotionCard
