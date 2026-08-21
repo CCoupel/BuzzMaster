@@ -756,31 +756,57 @@ var AdminOnlyGameFields = []string{
 	"ENTRACTE_CONFIG_SAVED",
 }
 
-// SerializeForWebClient returns the payload with admin-only fields stripped from
-// bumpers and from the GAME node on UPDATE messages. TV and VPlayer clients do
-// not need firmware/OTA/ACK metadata nor QUIZ_OBJECTIVES, so stripping them
-// reduces the payload size (and, for QUIZ_OBJECTIVES, enforces confidentiality)
-// for these high-frequency broadcasts.
+// VPlayerOnlyGameFields lists "GAME" node fields stripped from the VPlayer
+// path SPECIFICALLY — in addition to AdminOnlyGameFields, never instead of
+// it — because TV and /anim have a legitimate need for them that VPlayer
+// does not (#128, v6.5.2, contract vplayer-payload-filter.md §6). A field
+// here can't simply join AdminOnlyGameFields: that list is stripped from
+// EVERY non-admin client, and these fields must still reach TV/anim.
 //
-// Fields stripped per bumper on UPDATE: FIRMWARE_VERSION, IS_OUTDATED, OTA_STATUS,
-// OTA_PERCENT, ACK_PENDING. Fields stripped from GAME: see AdminOnlyGameFields.
-// The top-level "config" key is also removed (server-side config is not needed
-// by TV/VPlayer clients).
+// ARDOISE_ANSWERS: the TV displays each team's answer at REVEAL
+// (PlayerDisplay.jsx, guarded !isVPlayer) and /anim lists them live (#158,
+// AnimArdoiseList) — but a VJoueur has no legitimate reason to see what
+// other teams are typing while a round is in progress. #129 closed the
+// keystroke-triggered broadcast that carried this in near-real-time; #128
+// found the field still reachable via every OTHER GameState broadcast
+// (START/STOP/PAUSE/CONTINUE/UPDATE_TIMER — the last firing once per
+// second for the whole question), because the field belonged to no removal
+// list at all. See SerializeForVPlayerCommon and the three application
+// sites below (D2/§6 "un site oublié laisse la fuite ouverte").
+var VPlayerOnlyGameFields = []string{
+	"ARDOISE_ANSWERS",
+}
+
+// serializeFiltered is the shared implementation behind SerializeForWebClient
+// and SerializeForVPlayerCommon (#128): strips AdminOnlyBumperFields from
+// every bumper, AdminOnlyGameFields from the GAME node, and — when the
+// caller is the VPlayer path — extraGameFields (VPlayerOnlyGameFields) too.
+// extraGameFields nil/empty for TV/anim, non-nil for VPlayer.
+//
+// #128 D1: NO action-name guard here — a payload is filtered if and only if
+// it PARSES with a GAME-or-bumpers shape; json.Unmarshal failing, or the
+// expected keys being absent, falls back to the message unchanged. This
+// used to be gated on `m.Action != ActionUpdate`, which meant six other
+// actions carrying the full GameState (START/STOP/PAUSE/CONTINUE/
+// UPDATE_TIMER, plus COUNTDOWN's timer tick) bypassed filtering entirely —
+// the actual #128 defect, wider than the issue's own STOP-only framing.
+// Enumerating "the actions that carry GAME" would only reproduce that bug
+// under a new name the next time a broadcast starts carrying GameState —
+// filtering by payload SHAPE is the only criterion that doesn't rot.
+//
+// Fields stripped per bumper: AdminOnlyBumperFields (FIRMWARE_VERSION,
+// IS_OUTDATED, OTA_STATUS, OTA_PERCENT, ACK_PENDING). The top-level "config"
+// key is also removed (server-side config is not needed by TV/VPlayer/anim).
 //
 // The format produced by GetGameJSON() (GameData struct) uses lowercase map keys:
 //   - "bumpers" → map[mac]*Bumper  (not "BUMPERS" / slice)
 //   - "teams"   → map[name]*Team   (not "TEAMS"   / slice)
 //   - "GAME"    → GameState node
-//
-// All other actions are serialised identically to SerializeForWebSocket.
-func (m *Message) SerializeForWebClient() ([]byte, error) {
-	if m.Action != ActionUpdate {
-		return json.Marshal(m)
-	}
-
+func (m *Message) serializeFiltered(extraGameFields []string) ([]byte, error) {
 	var raw map[string]interface{}
 	if err := json.Unmarshal(m.Msg, &raw); err != nil {
-		// Fallback to full serialisation — never silently drop updates
+		// Not a GameData-shaped payload (or MSG isn't even an object, e.g.
+		// REVEAL's plain string) — nothing to filter, send unchanged.
 		return json.Marshal(m)
 	}
 
@@ -794,13 +820,24 @@ func (m *Message) SerializeForWebClient() ([]byte, error) {
 			}
 		}
 	}
-	// "GAME" node: strip admin-only fields (QUIZ_OBJECTIVES, v6.1.0)
+	// "GAME" node: strip admin-only fields, plus the caller's extra list
+	// (VPlayerOnlyGameFields for the VPlayer path, nil for TV/anim).
 	if gameNode, ok := raw["GAME"].(map[string]interface{}); ok {
 		for _, field := range AdminOnlyGameFields {
 			delete(gameNode, field)
 		}
+		for _, field := range extraGameFields {
+			delete(gameNode, field)
+		}
+	} else if _, hasBumpers := raw["bumpers"]; !hasBumpers {
+		// Neither "GAME" nor "bumpers" present — this isn't a GameData
+		// payload at all (an unrelated action whose MSG happens to decode
+		// as a JSON object, e.g. a simple {} payload). Nothing to filter;
+		// send unchanged rather than re-marshal a raw map that could differ
+		// byte-for-byte from the original for no reason.
+		return json.Marshal(m)
 	}
-	// "config" is a server-side key not needed by TV/VPlayer clients
+	// "config" is a server-side key not needed by TV/VPlayer/anim clients
 	delete(raw, "config")
 
 	stripped, err := json.Marshal(raw)
@@ -810,6 +847,35 @@ func (m *Message) SerializeForWebClient() ([]byte, error) {
 	out := *m
 	out.Msg = stripped
 	return json.Marshal(&out)
+}
+
+// SerializeForWebClient returns the payload with admin-only fields stripped
+// from bumpers and from the GAME node — TV and VPlayer clients (and, via
+// serializeForClientType, /anim — contracts/vplayer-payload-filter.md §1)
+// do not need firmware/OTA/ACK metadata nor QUIZ_OBJECTIVES/
+// ENTRACTE_CONFIG_SAVED, so stripping them reduces payload size (and, for
+// the admin-only GAME fields, enforces confidentiality).
+//
+// #128 (v6.5.2): applies to EVERY action whose payload has a GAME/bumpers
+// shape, not just ActionUpdate — see serializeFiltered's doc comment for
+// why an action-name guard was the defect, not a safety net. An action
+// without that shape (REVEAL's plain string, HELLO, LED_SET, …) passes
+// through the fallback inside serializeFiltered, byte-identical to before.
+func (m *Message) SerializeForWebClient() ([]byte, error) {
+	return m.serializeFiltered(nil)
+}
+
+// SerializeForVPlayerCommon is SerializeForWebClient() plus
+// VPlayerOnlyGameFields stripped from the GAME node (#128, contract
+// vplayer-payload-filter.md §6) — the VPlayer path's counterpart to
+// SerializeForWebClient, needed because VPlayer can no longer share a
+// payload with TV/anim (ARDOISE_ANSWERS is legitimate for them, not for
+// VPlayer). This is the fallback SerializeForVPlayer uses whenever its own
+// per-recipient reduction doesn't apply (not an UPDATE, phase outside
+// PREPARE/READY, or an unidentified player) — an update must never be
+// silently dropped or narrower than this.
+func (m *Message) SerializeForVPlayerCommon() ([]byte, error) {
+	return m.serializeFiltered(VPlayerOnlyGameFields)
 }
 
 // vplayerReducedPhases are the GAME.PHASE values during which a VPlayer's own
@@ -827,9 +893,10 @@ var vplayerReducedPhases = map[string]bool{"PREPARE": true, "READY": true}
 //
 // The payload is reduced if and only if all three conditions hold (contract
 // §2 "règle d'application"); on the first condition that fails, or on any
-// JSON error, this falls back to the complete filtered payload
-// (SerializeForWebClient) — an update must never be silently dropped or
-// narrower than that fallback:
+// JSON error, this falls back to SerializeForVPlayerCommon() — the complete
+// VPlayer-filtered payload (#128: AdminOnlyGameFields AND
+// VPlayerOnlyGameFields both stripped) — an update must never be silently
+// dropped or narrower than that fallback:
 //  1. m.Action == ActionUpdate;
 //  2. MSG.GAME.PHASE is PREPARE or READY — read from the payload itself
 //     (never passed in), so the decision always matches what is actually
@@ -839,49 +906,55 @@ var vplayerReducedPhases = map[string]bool{"PREPARE": true, "READY": true}
 //     complete card: VPlayerPage.jsx recovers a lost identity by scanning
 //     bumpers by NAME, which is impossible on a single-entry map.
 //
-// GAME and teams are left completely untouched — "teams" is deliberately
-// NOT reduced even though only one bumper is kept (contract §2 rationale:
-// PlayerDisplay.jsx's MEMORY/MEMOTION team bars read teams[name] without an
-// !isVPlayer gate). Only "bumpers" is reduced to the single {playerID: ...}
-// entry, with the same admin-only fields SerializeForWebClient strips.
+// GAME and teams are left completely untouched (beyond the field strips
+// below) — "teams" is deliberately NOT reduced even though only one bumper
+// is kept (contract §2 rationale: PlayerDisplay.jsx's MEMORY/MEMOTION team
+// bars read teams[name] without an !isVPlayer gate). Only "bumpers" is
+// reduced to the single {playerID: ...} entry, with the same admin-only
+// fields SerializeForWebClient strips.
 func (m *Message) SerializeForVPlayer(playerID string) ([]byte, error) {
 	if m.Action != ActionUpdate || playerID == "" {
-		return m.SerializeForWebClient()
+		return m.SerializeForVPlayerCommon()
 	}
 
 	var raw map[string]interface{}
 	if err := json.Unmarshal(m.Msg, &raw); err != nil {
-		return m.SerializeForWebClient()
+		return m.SerializeForVPlayerCommon()
 	}
 
 	gameNode, ok := raw["GAME"].(map[string]interface{})
 	if !ok {
-		return m.SerializeForWebClient()
+		return m.SerializeForVPlayerCommon()
 	}
-	// Strip admin-only GAME fields (QUIZ_OBJECTIVES, v6.1.0) — this reduced
-	// path builds its own "raw" independently of SerializeForWebClient, so
-	// the same list must be applied here too (contracts/ws-payload-serialization.md).
+	// Strip admin-only GAME fields (QUIZ_OBJECTIVES, v6.1.0) AND
+	// VPlayer-only-excluded fields (ARDOISE_ANSWERS, #128) — this reduced
+	// path builds its own "raw" independently of serializeFiltered, so both
+	// lists must be applied here too (contracts/ws-payload-serialization.md,
+	// vplayer-payload-filter.md §6 "trois sites, une seule liste").
 	// gameNode is a reference into raw (map values from json.Unmarshal into
 	// map[string]interface{} are shared, not copied), so deleting from it
 	// here is reflected in raw["GAME"] below without reassignment.
 	for _, field := range AdminOnlyGameFields {
 		delete(gameNode, field)
 	}
+	for _, field := range VPlayerOnlyGameFields {
+		delete(gameNode, field)
+	}
 	phase, _ := gameNode["PHASE"].(string)
 	if !vplayerReducedPhases[phase] {
-		return m.SerializeForWebClient()
+		return m.SerializeForVPlayerCommon()
 	}
 
 	bumpers, ok := raw["bumpers"].(map[string]interface{})
 	if !ok {
-		return m.SerializeForWebClient()
+		return m.SerializeForVPlayerCommon()
 	}
 	own, ok := bumpers[playerID]
 	if !ok {
 		// This player's bumper isn't in the current snapshot (e.g. evicted in
 		// the same instant this broadcast was built) — fall back rather than
 		// send a bumpers map that omits the recipient's own entry entirely.
-		return m.SerializeForWebClient()
+		return m.SerializeForVPlayerCommon()
 	}
 	if bumper, ok := own.(map[string]interface{}); ok {
 		for _, field := range AdminOnlyBumperFields {
@@ -894,7 +967,7 @@ func (m *Message) SerializeForVPlayer(playerID string) ([]byte, error) {
 
 	stripped, err := json.Marshal(raw)
 	if err != nil {
-		return m.SerializeForWebClient()
+		return m.SerializeForVPlayerCommon()
 	}
 	out := *m
 	out.Msg = stripped
