@@ -516,13 +516,13 @@ func (e *Engine) hostContextUnsafe() HostContext {
 		switch e.state.MotionSubPhase {
 		case MotionSubPhaseQuestion:
 			ctx.Playable = true
-			// e.timer is the one shared ticker field for whichever timer
-			// currently runs (countdown, game, MEMOTION card, or MEMOTION
-			// memorize — mutually exclusive by construction, see the
-			// field's doc comment) — non-nil while MotionSubPhase==QUESTION
-			// means specifically the per-card timer (StartMotionCardTimer)
-			// is active.
-			ctx.TimerRunning = e.timer != nil
+			// TimerRunning keys on CurrentTime, not e.timer (correction,
+			// planner ruling, contract §4): e.timer is a private
+			// *time.Ticker, never serialized — structurally impossible to
+			// replicate on the JS side, which only ever sees
+			// gameState.timer (CurrentTime) over the wire. CurrentTime is
+			// the only basis both implementations can actually share.
+			ctx.TimerRunning = e.state.CurrentTime > 0
 		case MotionSubPhaseReveal:
 			ctx.Revealed = true
 		}
@@ -536,7 +536,10 @@ func (e *Engine) hostContextUnsafe() HostContext {
 	// here: MotionSelected is always empty outside a MEMOTION round.
 	ctx.Playable = e.state.Phase == PhaseStarted
 	ctx.Revealed = e.state.Phase == PhaseRevealed
-	ctx.TimerRunning = e.state.Phase == PhaseStarted
+	// TimerRunning also keys on CurrentTime (see the MotionSubPhaseQuestion
+	// case above for why) — PHASE==STARTED alone doesn't distinguish a
+	// running countdown from one that already reached 0.
+	ctx.TimerRunning = e.state.Phase == PhaseStarted && e.state.CurrentTime > 0
 	return ctx
 }
 
