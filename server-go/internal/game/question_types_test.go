@@ -34,6 +34,36 @@ func TestQuestionTypeRegistry_Exhaustive(t *testing.T) {
 	}
 }
 
+// TestQuestionTypeRegistry_NestableTypesDeclareMediaSlots is B-B8's
+// stronger half of the §10.1 exhaustiveness test: any type marked
+// NestableInMotionCard must also declare at least one MediaSlots entry —
+// a nestable type with zero upload slots would be a silent dead end (the
+// card could never render any media), the same class of "falls back
+// silently instead of breaking loudly" bug §10.1 exists to catch. MEMOTION
+// is the one deliberate, permanent exception (never nestable, so its nil
+// MediaSlots is correct, not an oversight).
+func TestQuestionTypeRegistry_NestableTypesDeclareMediaSlots(t *testing.T) {
+	for qt, desc := range questionTypeRegistry {
+		if !desc.NestableInMotionCard {
+			continue
+		}
+		if len(desc.MediaSlots) == 0 {
+			t.Errorf("type %q is NestableInMotionCard but declares no MediaSlots — a nestable type must have at least one upload slot (contract §7/§8)", qt)
+		}
+	}
+}
+
+// TestQuestionTypeRegistry_TypeFieldMatchesMapKey guards against a
+// copy-paste registry entry — questionTypeRegistry[qt].Type must equal qt,
+// the map key it's stored under, for every entry.
+func TestQuestionTypeRegistry_TypeFieldMatchesMapKey(t *testing.T) {
+	for qt, desc := range questionTypeRegistry {
+		if desc.Type != qt {
+			t.Errorf("questionTypeRegistry[%q].Type = %q, want %q (map key and Type field must match)", qt, desc.Type, qt)
+		}
+	}
+}
+
 func TestTypeDescriptorFor(t *testing.T) {
 	if d, ok := TypeDescriptorFor(QuestionTypeQCM); !ok || d.Type != QuestionTypeQCM {
 		t.Errorf("TypeDescriptorFor(QCM) = %+v, %v — want a QCM descriptor, true", d, ok)
