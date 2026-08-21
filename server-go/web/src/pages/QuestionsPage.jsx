@@ -5,6 +5,7 @@ import { useCategoryFilter } from '../hooks/useCategoryFilter'
 import { useCategories } from '../hooks/useCategories'
 import { CATEGORIES, categoryMeta } from '../utils/categoryUtils'
 import { sortQuestionsByOrder, shuffleArray } from '../utils/questionOrder'
+import { QUESTION_TYPES } from '../utils/questionTypeMeta'
 import Button from '../components/Button'
 import Card, { CardHeader, CardBody } from '../components/Card'
 import CategoryBalance from '../components/CategoryBalance'
@@ -1863,49 +1864,26 @@ export default function QuestionsPage() {
                   />
                 </div>
 
-                {/* Question Type Selector */}
+                {/* Question Type Selector — généré depuis la table unique
+                    utils/questionTypeMeta.js (#183/A-F2), regroupement visuel
+                    3+2 conservé à l'identique (rows CSS .type-filter-row) */}
                 <div className="form-group">
                   <label>Type de question</label>
                   <div className="type-filter-grid">
-                    <div className="type-filter-row">
-                      <button
-                        type="button"
-                        className={`type-btn speedy ${formData.type === 'SPEEDY' ? 'active' : ''}`}
-                        onClick={() => handleInputChange('type', 'SPEEDY')}
-                      >
-                        Speedy
-                      </button>
-                      <button
-                        type="button"
-                        className={`type-btn qcm ${formData.type === 'QCM' ? 'active' : ''}`}
-                        onClick={() => handleInputChange('type', 'QCM')}
-                      >
-                        QCM
-                      </button>
-                      <button
-                        type="button"
-                        className={`type-btn memory ${formData.type === 'MEMORY' ? 'active' : ''}`}
-                        onClick={() => handleInputChange('type', 'MEMORY')}
-                      >
-                        Memory
-                      </button>
-                    </div>
-                    <div className="type-filter-row">
-                      <button
-                        type="button"
-                        className={`type-btn memotion ${formData.type === 'MEMOTION' ? 'active' : ''}`}
-                        onClick={() => handleInputChange('type', 'MEMOTION')}
-                      >
-                        Memotion
-                      </button>
-                      <button
-                        type="button"
-                        className={`type-btn ardoise ${formData.type === 'ARDOISE' ? 'active' : ''}`}
-                        onClick={() => handleInputChange('type', 'ARDOISE')}
-                      >
-                        ⌨️ Ardoise
-                      </button>
-                    </div>
+                    {[QUESTION_TYPES.slice(0, 3), QUESTION_TYPES.slice(3)].map((row, rowIdx) => (
+                      <div className="type-filter-row" key={rowIdx}>
+                        {row.map(t => (
+                          <button
+                            key={t.key}
+                            type="button"
+                            className={`type-btn ${t.key.toLowerCase()} ${formData.type === t.key ? 'active' : ''}`}
+                            onClick={() => handleInputChange('type', t.key)}
+                          >
+                            {t.label}
+                          </button>
+                        ))}
+                      </div>
+                    ))}
                   </div>
                 </div>
 
