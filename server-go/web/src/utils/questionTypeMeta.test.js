@@ -61,6 +61,39 @@ describe('questionTypeMeta — registre QUESTION_TYPES / QUESTION_TYPE_META', ()
 })
 
 // ---------------------------------------------------------------------------
+// `nestable` (#184/B-F4) — miroir JS de `TypeDescriptor.NestableInMotionCard`
+// (registre Go, `internal/game/question_types.go`, contrat §7). Ajouté par
+// B-T1 (#184) : c'est le point de rendez-vous Go/JS le plus exposé aux
+// dérives silencieuses (une des deux tables oubliée lors d'un futur type
+// nestable, ex. #186/#187) — un test qui épingle les 5 valeurs attendues
+// des deux côtés le détecte immédiatement plutôt qu'à l'usage.
+// ---------------------------------------------------------------------------
+
+describe('questionTypeMeta — nestable (#184/B-F4, miroir de NestableInMotionCard)', () => {
+  // Valeurs attendues = table du contrat §7 / registre Go
+  // (internal/game/question_types.go) au 2026-08-21 : SPEEDY et QCM seuls
+  // nestables en v7.0.0 ; ARDOISE/MEMORY rejoignent en v7.1.0 (#186/#187) ;
+  // MEMOTION jamais (profondeur plafonnée à 1, contrat §1).
+  const EXPECTED_NESTABLE = {
+    SPEEDY: true,
+    QCM: true,
+    MEMORY: false,
+    MEMOTION: false,
+    ARDOISE: false,
+  }
+
+  it.each(KNOWN_TYPES)('QUESTION_TYPES[%s] porte un champ `nestable` booléen', (type) => {
+    const entry = QUESTION_TYPES.find(t => t.key === type)
+    expect(typeof entry.nestable).toBe('boolean')
+  })
+
+  it.each(Object.entries(EXPECTED_NESTABLE))('nestable(%s) == %s (miroir du registre Go)', (type, expected) => {
+    const entry = QUESTION_TYPES.find(t => t.key === type)
+    expect(entry.nestable).toBe(expected)
+  })
+})
+
+// ---------------------------------------------------------------------------
 // 2. getQuestionTypeMeta() — repli SPEEDY (type absent) vs signalement
 //    explicite (type renseigné mais inconnu, #183).
 // ---------------------------------------------------------------------------
