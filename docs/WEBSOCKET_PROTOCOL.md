@@ -1185,6 +1185,48 @@ quasi-totalité des actions qui sont refusées (C4, gel de config).
 
 ---
 
+## Sérialiseurs et Filtrage par Type de Client (v6.5.2, #128)
+
+### Listes de Filtrage
+
+Le serveur applique **deux listes distinctes** de retrait de champs `GameState`, selon le type de client :
+
+#### AdminOnlyGameFields
+Champs **réservés à l'admin**, retirés automatiquement pour tous les autres clients :
+- `QUIZ_OBJECTIVES` — objectifs pédagogiques (jamais transmis à TV/VJoueur)
+- `ENTRACTE_CONFIG_SAVED` — configuration gelée d'entracte (interne)
+
+#### VPlayerOnlyGameFields
+Champs **spécifiquement retirés pour le VJoueur uniquement** (pas de retrait pour TV/animateur) :
+- `ARDOISE_ANSWERS` — réponses ARDOISE par équipe (confidentialité vers l'écran joueur, #128)
+
+**Motif** : `ARDOISE_ANSWERS` est légitimement nécessaire à la TV (affichage au REVEAL) et à l'animateur 
+(colonne équipes en direct) — seul le VJoueur (écran joueur) ne doit pas le recevoir.
+
+### Points d'Application (v6.5.2, #128 — 4 sites)
+
+**Avant #128**, le filtrage ne s'appliquait que sur `ActionUpdate`. Après correction, il s'applique sur 
+**tous les payloads** transportant `GameState`, indépendamment de l'action (`STOP`, `START`, `PAUSE`, 
+`UPDATE_TIMER`, etc.) :
+
+1. **`SerializeForWebClient`** (`internal/protocol/messages.go`) — filtre tous les champs `GAME`
+2. **`SerializeForVPlayer` (chemin PREPARE/READY)** — réimplémentation locale, utilise les mêmes listes
+3. **`buildVPlayerPayloads`** (`cmd/server/main.go`) — ventilation par recipient VJoueur, applique les deux listes
+4. **`broadcastUpdateTo`** (`cmd/server/main.go`) — diffusion `UPDATE` distincte par type de client
+
+**Stratégie** : filtrage **par forme du payload** (présence d'un nœud `GAME`), non par énumération d'actions — 
+garantit que tout nouveau broadcast transportant `GameState` bénéficie du filtrage sans modification future.
+
+### Risques Résiduels Documentés
+
+- **`/tv` sans authentification** (brut sur le réseau) — hors périmètre de ce correctif. `/tv` suppose un 
+  réseau de confiance (salle de sport, café) ou une TV protégée par un pare-feu. Le filtrage réduit 
+  l'exposition accidentelle du VJoueur, qui se connecte toujours via le même réseau.
+- **Métadonnées buzzer** (`FIRMWARE_VERSION`, `OTA_STATUS`, etc.) : retiré du nœud `bumpers` pour le 
+  VJoueur (pas d'admin-only strict, filtrage VJoueur sur ce nœud séparé).
+
+---
+
 ## Actions Refusées Pendant l'ENTRACTE (v6.5.2, #119)
 
 Quand `ENTRACTE = true`, une **liste blanche centralisée** (`IsActionAllowedDuringEntracte`) 
