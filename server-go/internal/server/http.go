@@ -2009,25 +2009,34 @@ func (h *HTTPServer) handlePostCategory(w http.ResponseWriter, r *http.Request) 
 }
 
 // handleBackupSelect creates a selective backup based on query parameters
-// Query params: questions=true, teams=true, bumpers=true, history=true, medias=true
+// Query params: questions=true, teams=true, bumpers=true, history=true, medias=true, ambiance=true
 func (h *HTTPServer) handleBackupSelect(w http.ResponseWriter, r *http.Request) {
 	includeQuestions := r.URL.Query().Get("questions") == "true"
 	includeTeams := r.URL.Query().Get("teams") == "true"
 	includeBumpers := r.URL.Query().Get("bumpers") == "true"
 	includeHistory := r.URL.Query().Get("history") == "true"
 	includeMedias := r.URL.Query().Get("medias") == "true"
+	// #152: dedicated flag for game-config.json (default delay + neon
+	// effect) — code-reviewer flagged its "history" attachment (#150) as
+	// semantically incorrect during #150's own review; this is that
+	// correction, with its own "Configuration Ambiance" checkbox in
+	// BackupPage.jsx. game_state.json (quiz metadata, #141) is NOT part of
+	// this flag — it stays anchored to "history" (a session's identity, not
+	// an ambiance/visual setting), unchanged from before #152.
+	includeAmbiance := r.URL.Query().Get("ambiance") == "true"
 
 	// If nothing selected, include everything
-	if !includeQuestions && !includeTeams && !includeBumpers && !includeHistory && !includeMedias {
+	if !includeQuestions && !includeTeams && !includeBumpers && !includeHistory && !includeMedias && !includeAmbiance {
 		includeQuestions = true
 		includeTeams = true
 		includeBumpers = true
 		includeHistory = true
 		includeMedias = true
+		includeAmbiance = true
 	}
 
-	log.Printf("[HTTP] Selective backup: questions=%v, teams=%v, bumpers=%v, history=%v, medias=%v",
-		includeQuestions, includeTeams, includeBumpers, includeHistory, includeMedias)
+	log.Printf("[HTTP] Selective backup: questions=%v, teams=%v, bumpers=%v, history=%v, medias=%v, ambiance=%v",
+		includeQuestions, includeTeams, includeBumpers, includeHistory, includeMedias, includeAmbiance)
 
 	// Set headers for TAR download
 	cfg := config.Get()
@@ -2083,17 +2092,17 @@ func (h *HTTPServer) handleBackupSelect(w http.ResponseWriter, r *http.Request) 
 		}
 	}
 
-	// Add game-config.json (#150) — piggybacks on "history" rather than a
-	// dedicated flag: BackupPage.jsx exposes exactly the 5 checkboxes tested
-	// above, and game-config.json (default delay + neon effect) is a small,
-	// game-session-scoped settings file with no natural fit among the other
-	// four (questions/teams/bumpers/medias). It lives in configDir next to
-	// history.json, the closest existing precedent for "settings tied to a
-	// game session" — same reasoning as question_statuses.json piggybacking
-	// on "questions" just above. /fs-backup (full backup) already includes
-	// it unconditionally (it just archives dataDir wholesale), so this only
-	// affects the *selective* backup endpoint.
-	if includeHistory {
+	// Add game-config.json (#150) — #152: dedicated "ambiance" flag, no
+	// longer piggybacked on "history". game-config.json (default delay +
+	// neon effect) is a game-session-scoped VISUAL/AMBIANCE settings file;
+	// tying its inclusion to "history" (score/event log) was a semantic
+	// mismatch flagged by code-reviewer during #150's own review — a user
+	// wanting to keep history but reset the room's look (or vice versa)
+	// couldn't express that. BackupPage.jsx now has its own "Configuration
+	// Ambiance" checkbox for exactly this. /fs-backup (full backup) already
+	// includes it unconditionally (it just archives dataDir wholesale), so
+	// this only affects the *selective* backup endpoint.
+	if includeAmbiance {
 		gameConfigPath := config.GameConfigPath()
 		if _, err := os.Stat(gameConfigPath); err == nil {
 			h.addFileToTAR(tw, gameConfigPath, "config/game-config.json")
@@ -2101,10 +2110,12 @@ func (h *HTTPServer) handleBackupSelect(w http.ResponseWriter, r *http.Request) 
 	}
 
 	// Add game_state.json (#141) — quiz metadata (name/theme/notes/
-	// populations/difficulties/language/objectives/hidden fields) and the
-	// virtual player limit. Same "history" anchor as game-config.json just
-	// above, same reasoning: no dedicated UI flag, and this is a small
-	// settings/metadata file with no natural fit among the other four.
+	// populations/difficulties/language/objectives/hidden fields), the
+	// virtual player limit, and (v6.5.2, #119) the saved entracte panel
+	// config. Stays anchored to "history", unlike game-config.json above
+	// (#152, moved to "ambiance"): this is a session's identity/settings
+	// (quiz name, theme...), conceptually closer to the history/event log
+	// than to a visual "ambiance" preset — no dedicated UI flag of its own.
 	if includeHistory {
 		statePath := filepath.Join(configDir, "game_state.json")
 		if _, err := os.Stat(statePath); err == nil {
@@ -2203,13 +2214,17 @@ func (h *HTTPServer) addDirToTAR(tw *tar.Writer, sourceDir, tarPrefix string) er
 }
 
 // handleResetSelect performs selective reset based on query parameters
-// Query params: questions=true, teams=true, bumpers=true, history=true, medias=true, all=true
+// Query params: questions=true, teams=true, bumpers=true, history=true, medias=true, ambiance=true, all=true
 func (h *HTTPServer) handleResetSelect(w http.ResponseWriter, r *http.Request) {
 	resetQuestions := r.URL.Query().Get("questions") == "true"
 	resetTeams := r.URL.Query().Get("teams") == "true"
 	resetBumpers := r.URL.Query().Get("bumpers") == "true"
 	resetHistory := r.URL.Query().Get("history") == "true"
 	resetMedias := r.URL.Query().Get("medias") == "true"
+	// #152: dedicated flag, mirrors handleBackupSelect's includeAmbiance —
+	// see its doc comment for the full rationale (code-reviewer's #150
+	// finding). game_state.json stays on resetHistory, unchanged.
+	resetAmbiance := r.URL.Query().Get("ambiance") == "true"
 	resetAll := r.URL.Query().Get("all") == "true"
 
 	// "all" means reset everything
@@ -2219,10 +2234,11 @@ func (h *HTTPServer) handleResetSelect(w http.ResponseWriter, r *http.Request) {
 		resetBumpers = true
 		resetHistory = true
 		resetMedias = true
+		resetAmbiance = true
 	}
 
-	log.Printf("[HTTP] Selective reset: questions=%v, teams=%v, bumpers=%v, history=%v, medias=%v",
-		resetQuestions, resetTeams, resetBumpers, resetHistory, resetMedias)
+	log.Printf("[HTTP] Selective reset: questions=%v, teams=%v, bumpers=%v, history=%v, medias=%v, ambiance=%v",
+		resetQuestions, resetTeams, resetBumpers, resetHistory, resetMedias, resetAmbiance)
 
 	result := make(map[string]bool)
 	configDir := filepath.Join(h.dataDir, "config")
@@ -2269,30 +2285,35 @@ func (h *HTTPServer) handleResetSelect(w http.ResponseWriter, r *http.Request) {
 		result["history"] = true
 		log.Printf("[HTTP] Reset: History cleared")
 
-		// Reset game state (#141) — quiz metadata + virtual player limit,
-		// same "history" anchor as game-config.json (#150) just below, and
-		// the same clear-in-memory-then-remove-file division of labor as
-		// history.json above (Engine has no direct file-removal
-		// responsibility of its own — ClearQuizMeta only touches memory).
+		// Reset game state (#141) — quiz metadata + virtual player limit
+		// (+ v6.5.2 #119: the saved entracte panel config). Stays anchored
+		// to "history" (#152 only moved game-config.json to "ambiance" —
+		// see below — game_state.json is unchanged), same clear-in-memory-
+		// then-remove-file division of labor as history.json above (Engine
+		// has no direct file-removal responsibility of its own —
+		// ClearQuizMeta only touches memory).
 		h.engine.ClearQuizMeta()
 		statePath := filepath.Join(configDir, "game_state.json")
 		os.Remove(statePath)
 		log.Printf("[HTTP] Reset: Game state cleared")
+	}
 
-		// Reset game settings (default delay + neon effect, #150) —
-		// piggybacks on "history", same anchor as handleBackupSelect's
-		// identical choice above (no dedicated UI flag for this small
-		// settings file). Writes fresh defaults rather than just deleting
-		// the file: GetGameSettings()'s singleton would not otherwise pick
-		// up the deletion until a full process restart (once.Do), so the
-		// in-memory instance must be explicitly replaced for GET
-		// /game-config.json to reflect the reset immediately — mirrors
-		// h.engine.ClearHistory()'s immediate in-memory effect just above.
+	// Reset game settings (default delay + neon effect, #150) — #152:
+	// dedicated "ambiance" flag, no longer piggybacked on "history" (see
+	// handleBackupSelect's includeAmbiance doc comment for the full
+	// rationale — code-reviewer flagged the "history" attachment as a
+	// semantic mismatch during #150's own review). Writes fresh defaults
+	// rather than just deleting the file: GetGameSettings()'s singleton
+	// would not otherwise pick up the deletion until a full process restart
+	// (once.Do), so the in-memory instance must be explicitly replaced for
+	// GET /game-config.json to reflect the reset immediately.
+	if resetAmbiance {
 		defaultGS := &config.GameSettings{}
 		config.ApplyGameSettingsDefaults(defaultGS)
 		if err := config.SaveGameSettings(defaultGS); err == nil {
 			config.SetGameSettingsInstance(defaultGS)
-			log.Printf("[HTTP] Reset: Game config cleared")
+			result["ambiance"] = true
+			log.Printf("[HTTP] Reset: Game config (ambiance) cleared")
 			if h.OnConfigUpdate != nil {
 				h.OnConfigUpdate()
 			}
