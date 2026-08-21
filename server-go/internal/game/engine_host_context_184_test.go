@@ -92,19 +92,32 @@ func TestGetHostContext_MotionCardHost(t *testing.T) {
 			want:     HostContext{Playable: false, Revealed: true, TimerRunning: false, CardID: "mc-1"},
 		},
 		{
+			// CardID stays "mc-1" here even though this test setup wouldn't
+			// occur in practice (GRID normally implies MotionSelected==""
+			// — see startMEMOTION/initMotionStateUnsafe) — deliberate: this
+			// table pins the mechanical "CardID = MotionSelected, no
+			// branching" property (contract §4, B-B9) independently of
+			// which subphase is active, exactly what "sans cas particulier"
+			// means. Only Playable/Revealed/TimerRunning stay false.
 			name:     "MotionCard_Grid_None",
 			subphase: MotionSubPhaseGrid,
-			want:     HostContext{},
+			want:     HostContext{CardID: "mc-1"},
 		},
 		{
 			name:     "MotionCard_Memorize_None",
 			subphase: MotionSubPhaseMemorize,
-			want:     HostContext{},
+			want:     HostContext{CardID: "mc-1"},
 		},
 		{
-			name:     "MotionCard_Selected_None",
+			// The cell that diverged Go/JS (B-B9): a card IS selected in
+			// SELECTED (SelectMotionCard just set MotionSelected), so
+			// CardID must reflect it — see the dedicated
+			// TestGetHostContext_MotionCardHost_Selected_CardIDMatchesMotionSelected
+			// below for the named, non-table-driven regression test planner
+			// required.
+			name:     "MotionCard_Selected_CardIDSet",
 			subphase: MotionSubPhaseSelected,
-			want:     HostContext{},
+			want:     HostContext{CardID: "mc-1"},
 		},
 	}
 
@@ -131,22 +144,34 @@ func TestGetHostContext_MotionCardHost(t *testing.T) {
 	}
 }
 
-// TestGetHostContext_MotionCardHost_SelectedCardIDIgnoredWhenNoHostActive
-// pins down the one documented ambiguity in contract §4 (the "Aucun" row's
-// "selon le cas" CardID column): even though a card IS selected during
-// MotionSubPhaseSelected (MotionSelected is non-empty), HostContext.CardID
-// is "" — resolved to the simplest consistent choice since nothing reads
-// typed content through it while Playable/Revealed are both false. See
-// hostContextUnsafe's doc comment for the reasoning.
-func TestGetHostContext_MotionCardHost_SelectedCardIDIgnoredWhenNoHostActive(t *testing.T) {
+// TestGetHostContext_MotionCardHost_Selected_CardIDMatchesMotionSelected is
+// the B-B9 regression test planner required by name: contract §4 used to
+// say "selon le cas" for CardID in SELECTED, Go and JS each resolved it
+// differently (both green on their own side), test-writer caught the
+// divergence, planner ruled Go was wrong and the contract now reads
+// "CardID vaut toujours MEMOTION_SELECTED, sans condition, sans
+// branchement". Exercised through the real SelectMotionCard path (not a
+// hand-set MotionSubPhase/MotionSelected like the table above) so this
+// also proves the production code path — not just the derivation
+// function in isolation — produces the correct value.
+func TestGetHostContext_MotionCardHost_Selected_CardIDMatchesMotionSelected(t *testing.T) {
 	e := NewEngine()
-	e.state.Question = &Question{ID: "mq1", Type: QuestionTypeMemotion}
-	e.state.Phase = PhaseStarted
-	e.state.MotionSubPhase = MotionSubPhaseSelected
-	e.state.MotionSelected = "mc-1"
+	q := makeMotionQuestion("mq1", defaultMotionCards(), "SOLO")
+	startMEMOTION(t, e, "mq1", q)
+	defer e.Stop()
 
-	got := e.GetHostContext()
-	if got.CardID != "" {
-		t.Errorf("GetHostContext().CardID = %q during SELECTED, want \"\" per the Aucun row", got.CardID)
+	if err := e.SelectMotionCard("mc-2"); err != nil {
+		t.Fatalf("SelectMotionCard failed: %v", err)
+	}
+
+	ctx := e.GetHostContext()
+	if ctx.CardID != e.GetState().MotionSelected {
+		t.Fatalf("GetHostContext().CardID = %q, want it to equal MotionSelected (%q)", ctx.CardID, e.GetState().MotionSelected)
+	}
+	if ctx.CardID != "mc-2" {
+		t.Errorf("GetHostContext().CardID = %q, want mc-2", ctx.CardID)
+	}
+	if ctx.Playable || ctx.Revealed || ctx.TimerRunning {
+		t.Errorf("GetHostContext() in SELECTED should have Playable/Revealed/TimerRunning all false, got %+v", ctx)
 	}
 }

@@ -493,44 +493,51 @@ func (e *Engine) GetHostContext() HostContext {
 // already hold e.mu (none yet in v7.0.0 — #185/#186 are expected to need
 // this) can derive the context without double-locking. Must be called with
 // e.mu held (read or write).
+//
+// CardID — contract §4 ("règle unique, sans cas particulier", B-B9 fix for
+// a Go/JS divergence test-writer caught in SELECTED, planner ruling: Go was
+// wrong): CardID always equals MotionSelected, no branching, because
+// MotionSelected already IS the identity of the card in play at every
+// instant — "" outside a MEMOTION round (reset in Ready()/InitGame()) and
+// while GRID/MEMORIZE (reset by initMotionStateUnsafe, the memorize-timer's
+// auto-expiry, and every return to GRID), and the card's ID from
+// SelectMotionCard onward through SELECTED/QUESTION/REVEAL. Setting it once
+// here, unconditionally, before the switch below (which only ever touches
+// Playable/Revealed/TimerRunning) is what makes that "no special case for
+// SELECTED" property hold by construction rather than by remembering to
+// repeat it in three switch arms. Must equal MotionActive.CardID (§5.2) and
+// the MotionSelected ValidateCardScope (§9.2, B-B6) already compares
+// against — same expression, three call sites, per the contract's internal
+// consistency requirement.
 func (e *Engine) hostContextUnsafe() HostContext {
+	ctx := HostContext{CardID: e.state.MotionSelected}
+
 	if e.state.Question != nil && e.state.Question.Type == QuestionTypeMemotion {
 		switch e.state.MotionSubPhase {
 		case MotionSubPhaseQuestion:
-			return HostContext{
-				Playable: true,
-				// TimerRunning: e.timer is the one shared ticker field for
-				// whichever timer currently runs (countdown, game, MEMOTION
-				// card, or MEMOTION memorize — mutually exclusive by
-				// construction, see the field's doc comment) — non-nil
-				// while MotionSubPhase==QUESTION means specifically the
-				// per-card timer (StartMotionCardTimer) is active.
-				TimerRunning: e.timer != nil,
-				CardID:       e.state.MotionSelected,
-			}
+			ctx.Playable = true
+			// e.timer is the one shared ticker field for whichever timer
+			// currently runs (countdown, game, MEMOTION card, or MEMOTION
+			// memorize — mutually exclusive by construction, see the
+			// field's doc comment) — non-nil while MotionSubPhase==QUESTION
+			// means specifically the per-card timer (StartMotionCardTimer)
+			// is active.
+			ctx.TimerRunning = e.timer != nil
 		case MotionSubPhaseReveal:
-			return HostContext{
-				Revealed: true,
-				CardID:   e.state.MotionSelected,
-			}
-		default:
-			// GRID, MEMORIZE, SELECTED, or "" (not a MEMOTION round at
-			// all) — contract §4's "Aucun" row: no type is actively
-			// running, so CardID is "" even during SELECTED (a card IS
-			// chosen there, but nothing reads typed content through this
-			// CardID while Playable/Revealed are both false — see
-			// GetHostContext's doc comment and contract §4's "selon le
-			// cas" note, resolved here to the simplest consistent choice).
-			return HostContext{}
+			ctx.Revealed = true
 		}
+		// GRID, MEMORIZE, SELECTED: Playable/Revealed/TimerRunning stay
+		// false (contract §4's "Aucun" row) — CardID was already set above
+		// and needs no further action here, SELECTED included.
+		return ctx
 	}
 
-	// Question host — classic GamePhase cycle.
-	return HostContext{
-		Playable:     e.state.Phase == PhaseStarted,
-		Revealed:     e.state.Phase == PhaseRevealed,
-		TimerRunning: e.state.Phase == PhaseStarted,
-	}
+	// Question host — classic GamePhase cycle. ctx.CardID is already ""
+	// here: MotionSelected is always empty outside a MEMOTION round.
+	ctx.Playable = e.state.Phase == PhaseStarted
+	ctx.Revealed = e.state.Phase == PhaseRevealed
+	ctx.TimerRunning = e.state.Phase == PhaseStarted
+	return ctx
 }
 
 // SetPhase sets the game phase
