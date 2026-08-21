@@ -120,7 +120,7 @@ func TestMotionActive_EmptiedOnDoneMotionCard(t *testing.T) {
 		_ = e.SelectMotionCard("mc-1")
 		_ = e.FlipMotionCard()
 		_ = e.RevealMotionCard()
-		if _, _, err := e.DoneMotionCard("mc-1", "red"); err != nil {
+		if _, _, err := e.DoneMotionCard("mc-1", "red", 1); err != nil {
 			t.Fatalf("DoneMotionCard failed: %v", err)
 		}
 
@@ -137,7 +137,7 @@ func TestMotionActive_EmptiedOnDoneMotionCard(t *testing.T) {
 		defer e.Stop()
 
 		_ = e.SelectMotionCard("mc-1")
-		if _, _, err := e.DoneMotionCard("mc-1", ""); err != nil {
+		if _, _, err := e.DoneMotionCard("mc-1", "", 1); err != nil {
 			t.Fatalf("DoneMotionCard (cancel) failed: %v", err)
 		}
 

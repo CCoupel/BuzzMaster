@@ -285,6 +285,9 @@ type MotionCard struct {
 	QuestionImage string       `json:"QUESTION_IMAGE,omitempty"` // Optional question image
 	AnswerText    string       `json:"ANSWER_TEXT,omitempty"`    // Answer text (REVEAL face)
 	AnswerImage   string       `json:"ANSWER_IMAGE,omitempty"`   // Optional answer image
+	// PointsRule is this card's own points-award rule (#184, B-B5, contract
+	// §6.2) — absent ⇒ STARS, the pre-#184 star-based scale, unchanged.
+	PointsRule *PointsRule `json:"POINTS_RULE,omitempty"`
 
 	TypedContent // embedded flat — QCM_*/MEMORY_*/ARDOISE_KEYBOARD_TYPE/ANSWER for a typed card (#184, contract §2/§3)
 }
@@ -298,6 +301,47 @@ func (c *MotionCard) EffectiveType() QuestionType {
 		return QuestionTypeSpeedy
 	}
 	return c.Type
+}
+
+// PointsRuleMode is PointsRule.Mode — contract §6.2.
+type PointsRuleMode string
+
+const (
+	// PointsRuleModeStars is the default (absent MODE ⇒ STARS too, see
+	// PointsRule's doc comment): the pre-#184 star-based scale
+	// (MotionConfig.POINTS_<n>_STAR if >0, else DIFFICULTY→1/3/5),
+	// unchanged — engine.go's motionCardPoints.
+	PointsRuleModeStars PointsRuleMode = "STARS"
+	// PointsRuleModeFixed awards VALUE if the type's outcome reports
+	// Units > 0, else 0 — a card whose value doesn't depend on difficulty.
+	PointsRuleModeFixed PointsRuleMode = "FIXED"
+	// PointsRuleModePerUnit awards VALUE × Units — progression types
+	// (#187, MEMORY prorata).
+	PointsRuleModePerUnit PointsRuleMode = "PER_UNIT"
+)
+
+// PointsRule is a MotionCard's own points-award rule — contract §6.2. The
+// scoring authority always belongs to the host (never to the nested type,
+// which only ever reports a TypeOutcome), so this lives on MotionCard, not
+// on TypedContent. Absent (nil) ⇒ STARS with the current-behavior star
+// scale, same as an explicit {"MODE":"STARS"}.
+type PointsRule struct {
+	Mode  PointsRuleMode `json:"MODE,omitempty"`
+	Value int            `json:"VALUE,omitempty"`
+}
+
+// TypeOutcome is what a nested type implementation reports back to its
+// host after a round — contract §6.1: "un type ne rend qu'un résultat".
+// Units defaults to 1 for any binary (won/lost) type; a progression type
+// (MEMORY prorata, #187) reports its own count. Not yet produced anywhere
+// in v7.0.0 — #185 (QCM-in-card) is designated via the existing
+// MEMOTION_DONE action exactly like SPEEDY, not through this struct;
+// documented here because #186/#187 must be able to assume it's part of
+// the core contract, and adding it after the fact would reopen engine.go
+// (forbidden by #184's agnosticity test, contract §10).
+type TypeOutcome struct {
+	WinnerTeam string // "" = nobody
+	Units      int    // 1 = won, 0 = lost; >1 reserved for progression types
 }
 
 // MemoryConfig holds configuration for the Memory game

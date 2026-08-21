@@ -428,6 +428,13 @@ type MotionSelectPayload struct {
 type MotionDonePayload struct {
 	CardID     string `json:"CARD_ID"`               // ID of the card being closed
 	WinnerTeam string `json:"WINNER_TEAM,omitempty"` // Team name if a winner, "" if none
+	// Units (#184, B-B5, contract §9.3) — a *int (not int) so the handler
+	// can tell "absent" (⇒ default 1, current behavior unchanged) apart
+	// from an explicit 0 (a meaningful "zero progress" outcome under
+	// POINTS_RULE.MODE FIXED/PER_UNIT — contract §6.2). Consumed by
+	// POINTS_RULE.MODE=="PER_UNIT"/"FIXED"; ignored under the default
+	// STARS scale.
+	Units *int `json:"UNITS,omitempty"`
 }
 
 // MotionSetTeamsPayload is an alias for MemorySetTeamsPayload — same {TEAMS: [...]} structure

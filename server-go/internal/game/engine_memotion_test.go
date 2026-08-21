@@ -203,7 +203,7 @@ func TestSelectMotionCard_ErrorWhenCardDone(t *testing.T) {
 	_ = e.SelectMotionCard("mc-1")
 	_ = e.FlipMotionCard()
 	_ = e.RevealMotionCard()
-	_, _, _ = e.DoneMotionCard("mc-1", "")
+	_, _, _ = e.DoneMotionCard("mc-1", "", 1)
 
 	// Now mc-1 is DONE — must not be selectable again
 	err := e.SelectMotionCard("mc-1")
@@ -333,7 +333,7 @@ func TestDoneMotionCard_DifficultyPoints(t *testing.T) {
 			_ = e.FlipMotionCard()
 			_ = e.RevealMotionCard()
 
-			points, _, err := e.DoneMotionCard("mc-1", "red")
+			points, _, err := e.DoneMotionCard("mc-1", "red", 1)
 			if err != nil {
 				t.Fatalf("DoneMotionCard should succeed, got error: %v", err)
 			}
@@ -357,7 +357,7 @@ func TestDoneMotionCard_Difficulty1_1Point(t *testing.T) {
 	_ = e.FlipMotionCard()
 	_ = e.RevealMotionCard()
 
-	points, _, err := e.DoneMotionCard("mc-1", "red")
+	points, _, err := e.DoneMotionCard("mc-1", "red", 1)
 	if err != nil {
 		t.Fatalf("DoneMotionCard error: %v", err)
 	}
@@ -378,7 +378,7 @@ func TestDoneMotionCard_Difficulty2_3Points(t *testing.T) {
 	_ = e.FlipMotionCard()
 	_ = e.RevealMotionCard()
 
-	points, _, err := e.DoneMotionCard("mc-1", "red")
+	points, _, err := e.DoneMotionCard("mc-1", "red", 1)
 	if err != nil {
 		t.Fatalf("DoneMotionCard error: %v", err)
 	}
@@ -399,7 +399,7 @@ func TestDoneMotionCard_Difficulty3_5Points(t *testing.T) {
 	_ = e.FlipMotionCard()
 	_ = e.RevealMotionCard()
 
-	points, _, err := e.DoneMotionCard("mc-1", "red")
+	points, _, err := e.DoneMotionCard("mc-1", "red", 1)
 	if err != nil {
 		t.Fatalf("DoneMotionCard error: %v", err)
 	}
@@ -420,7 +420,7 @@ func TestDoneMotionCard_NoWinner_ZeroPoints(t *testing.T) {
 	_ = e.FlipMotionCard()
 	_ = e.RevealMotionCard()
 
-	points, _, err := e.DoneMotionCard("mc-2", "") // empty winner
+	points, _, err := e.DoneMotionCard("mc-2", "", 1) // empty winner
 	if err != nil {
 		t.Fatalf("DoneMotionCard should succeed with no winner, got error: %v", err)
 	}
@@ -453,7 +453,7 @@ func TestDoneMotionCard_CardBecomeDoneReturnsGrid(t *testing.T) {
 	_ = e.FlipMotionCard()
 	_ = e.RevealMotionCard()
 
-	_, _, err := e.DoneMotionCard("mc-2", "red")
+	_, _, err := e.DoneMotionCard("mc-2", "red", 1)
 	if err != nil {
 		t.Fatalf("DoneMotionCard should succeed: %v", err)
 	}
@@ -485,7 +485,7 @@ func TestDoneMotionCard_TeamScoreUpdated(t *testing.T) {
 	_ = e.SelectMotionCard("mc-1")
 	_ = e.FlipMotionCard()
 	_ = e.RevealMotionCard()
-	_, _, _ = e.DoneMotionCard("mc-1", "red")
+	_, _, _ = e.DoneMotionCard("mc-1", "red", 1)
 
 	team := e.GetTeam("red")
 	if team == nil {
@@ -509,7 +509,7 @@ func TestDoneMotionCard_IsComplete_AllCardsDone(t *testing.T) {
 	_ = e.FlipMotionCard()
 	_ = e.RevealMotionCard()
 
-	_, isComplete, err := e.DoneMotionCard("mc-1", "red")
+	_, isComplete, err := e.DoneMotionCard("mc-1", "red", 1)
 	if err != nil {
 		t.Fatalf("DoneMotionCard should succeed: %v", err)
 	}
@@ -531,7 +531,7 @@ func TestDoneMotionCard_IsNotComplete_CardsRemaining(t *testing.T) {
 	_ = e.FlipMotionCard()
 	_ = e.RevealMotionCard()
 
-	_, isComplete, err := e.DoneMotionCard("mc-1", "red")
+	_, isComplete, err := e.DoneMotionCard("mc-1", "red", 1)
 	if err != nil {
 		t.Fatalf("DoneMotionCard should succeed: %v", err)
 	}
@@ -554,7 +554,7 @@ func TestDoneMotionCard_FromQuestionSubPhase(t *testing.T) {
 	_ = e.FlipMotionCard()
 	// SubPhase = QUESTION — skip RevealMotionCard
 
-	_, _, err := e.DoneMotionCard("mc-1", "red")
+	_, _, err := e.DoneMotionCard("mc-1", "red", 1)
 	if err != nil {
 		t.Errorf("DoneMotionCard should work from QUESTION sub-phase (spec: SubPhase ∈ {QUESTION,REVEAL}), got error: %v", err)
 	}
@@ -588,7 +588,7 @@ func TestDoneMotionCard_Rotation_ChacunSonTour_Win(t *testing.T) {
 	_ = e.SelectMotionCard("mc-1")
 	_ = e.FlipMotionCard()
 	_ = e.RevealMotionCard()
-	_, _, _ = e.DoneMotionCard("mc-1", "red")
+	_, _, _ = e.DoneMotionCard("mc-1", "red", 1)
 
 	state := e.GetState()
 	if state.MotionCurrentTeam != "blue" {
@@ -615,7 +615,7 @@ func TestDoneMotionCard_Rotation_ChacunSonTour_NoWin(t *testing.T) {
 	_ = e.SelectMotionCard("mc-1")
 	_ = e.FlipMotionCard()
 	_ = e.RevealMotionCard()
-	_, _, _ = e.DoneMotionCard("mc-1", "") // no winner
+	_, _, _ = e.DoneMotionCard("mc-1", "", 1) // no winner
 
 	state := e.GetState()
 	if state.MotionCurrentTeam != "blue" {
@@ -643,13 +643,13 @@ func TestDoneMotionCard_Rotation_ChacunSonTour_Circular(t *testing.T) {
 	_ = e.SelectMotionCard("mc-1")
 	_ = e.FlipMotionCard()
 	_ = e.RevealMotionCard()
-	_, _, _ = e.DoneMotionCard("mc-1", "")
+	_, _, _ = e.DoneMotionCard("mc-1", "", 1)
 
 	// Card 2: blue → red (wrap-around)
 	_ = e.SelectMotionCard("mc-2")
 	_ = e.FlipMotionCard()
 	_ = e.RevealMotionCard()
-	_, _, _ = e.DoneMotionCard("mc-2", "")
+	_, _, _ = e.DoneMotionCard("mc-2", "", 1)
 
 	state := e.GetState()
 	if state.MotionCurrentTeam != "red" {
@@ -677,7 +677,7 @@ func TestDoneMotionCard_Rotation_TantQueJeGagne_Win(t *testing.T) {
 	_ = e.SelectMotionCard("mc-1")
 	_ = e.FlipMotionCard()
 	_ = e.RevealMotionCard()
-	_, _, _ = e.DoneMotionCard("mc-1", "red")
+	_, _, _ = e.DoneMotionCard("mc-1", "red", 1)
 
 	state := e.GetState()
 	if state.MotionCurrentTeam != "red" {
@@ -705,7 +705,7 @@ func TestDoneMotionCard_Rotation_TantQueJeGagne_NoWin(t *testing.T) {
 	_ = e.SelectMotionCard("mc-1")
 	_ = e.FlipMotionCard()
 	_ = e.RevealMotionCard()
-	_, _, _ = e.DoneMotionCard("mc-1", "")
+	_, _, _ = e.DoneMotionCard("mc-1", "", 1)
 
 	state := e.GetState()
 	if state.MotionCurrentTeam != "blue" {
@@ -730,12 +730,12 @@ func TestDoneMotionCard_Rotation_Solo_NoRotation(t *testing.T) {
 	_ = e.SelectMotionCard("mc-1")
 	_ = e.FlipMotionCard()
 	_ = e.RevealMotionCard()
-	_, _, _ = e.DoneMotionCard("mc-1", "red")
+	_, _, _ = e.DoneMotionCard("mc-1", "red", 1)
 
 	_ = e.SelectMotionCard("mc-2")
 	_ = e.FlipMotionCard()
 	_ = e.RevealMotionCard()
-	_, _, _ = e.DoneMotionCard("mc-2", "")
+	_, _, _ = e.DoneMotionCard("mc-2", "", 1)
 
 	state := e.GetState()
 	if state.MotionCurrentTeam != "red" {
@@ -1123,7 +1123,7 @@ func TestDoneMotionCard_CancelFromSelected(t *testing.T) {
 
 	_ = e.SelectMotionCard("mc-2") // → SELECTED
 
-	points, isComplete, err := e.DoneMotionCard("mc-2", "") // cancel
+	points, isComplete, err := e.DoneMotionCard("mc-2", "", 1) // cancel
 	if err != nil {
 		t.Fatalf("DoneMotionCard from SELECTED should succeed (cancel), got error: %v", err)
 	}
@@ -1377,7 +1377,7 @@ func TestDoneMotionCard_WithMotionConfig(t *testing.T) {
 			_ = e.FlipMotionCard()
 			_ = e.RevealMotionCard()
 
-			points, _, err := e.DoneMotionCard("mc-1", "blue")
+			points, _, err := e.DoneMotionCard("mc-1", "blue", 1)
 			if err != nil {
 				t.Fatalf("DoneMotionCard failed: %v", err)
 			}

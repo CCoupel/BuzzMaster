@@ -3897,6 +3897,34 @@ func (e *Engine) motionCardPoints(difficulty int) int {
 	return motionDifficultyPoints[difficulty]
 }
 
+// motionCardPointsForOutcome computes the points to award for card given a
+// type's outcome (currently just `units`, from MEMOTION_DONE.UNITS —
+// #184 B-B5, contract §6.2). Dispatches on card.PointsRule.Mode: absent
+// (nil PointsRule, or an explicit empty/"STARS" MODE) falls through to the
+// pre-#184 star-based scale (motionCardPoints, unchanged); FIXED and
+// PER_UNIT are new. This is the one place #187 (MEMORY prorata) needs to
+// reach — via PER_UNIT — without touching anything else in this file,
+// which is the mechanism's own acceptance criterion (contract §6.2).
+func (e *Engine) motionCardPointsForOutcome(card *MotionCard, units int) int {
+	mode := PointsRuleModeStars
+	value := 0
+	if card.PointsRule != nil && card.PointsRule.Mode != "" {
+		mode = card.PointsRule.Mode
+		value = card.PointsRule.Value
+	}
+	switch mode {
+	case PointsRuleModeFixed:
+		if units > 0 {
+			return value
+		}
+		return 0
+	case PointsRuleModePerUnit:
+		return value * units
+	default: // STARS
+		return e.motionCardPoints(card.Difficulty)
+	}
+}
+
 // initMotionStateUnsafe initialises MEMOTION card states for the current question.
 // All cards are set to "UNPLAYED". MotionSubPhase is set to "MEMORIZE" when
 // MotionMemorizeDuration > 0 (Secret Mode), otherwise "GRID" (standard mode).
@@ -4039,8 +4067,16 @@ func (e *Engine) RevealMotionCard() error {
 
 // DoneMotionCard marks the active card as DONE, optionally awards points to winnerTeam,
 // rotates the team if needed, and returns to the GRID sub-phase.
+// units is the type's outcome (MEMOTION_DONE.UNITS, #184 B-B5, contract
+// §6/§9.3) — the caller must resolve an absent UNITS to 1 before calling
+// (see main.go's handleMotionDone), so this function's own default (a
+// units==0 zero value) is never accidentally the "not specified" case.
+// Consumed only by card.PointsRule.MODE == FIXED/PER_UNIT
+// (motionCardPointsForOutcome); ignored under the default STARS scale,
+// which is why 1 as a "no-op" default is correct here too — units is
+// simply unused in that branch.
 // Returns (pointsAwarded, isComplete, error).
-func (e *Engine) DoneMotionCard(cardID string, winnerTeam string) (int, bool, error) {
+func (e *Engine) DoneMotionCard(cardID string, winnerTeam string, units int) (int, bool, error) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 
@@ -4073,11 +4109,14 @@ func (e *Engine) DoneMotionCard(cardID string, winnerTeam string) (int, bool, er
 	// Award points and record winner if winnerTeam is provided
 	points := 0
 	if winnerTeam != "" {
-		// Find card difficulty to calculate points
+		// Find the card to compute points via its own POINTS_RULE (#184
+		// B-B5) — STARS (absent/default) still goes through
+		// motionCardPoints/difficulty exactly as before.
 		if e.state.Question != nil {
-			for _, card := range e.state.Question.MotionCards {
+			for i := range e.state.Question.MotionCards {
+				card := &e.state.Question.MotionCards[i]
 				if card.ID == cardID {
-					pts := e.motionCardPoints(card.Difficulty)
+					pts := e.motionCardPointsForOutcome(card, units)
 					ok := pts > 0
 					if ok {
 						points = pts
