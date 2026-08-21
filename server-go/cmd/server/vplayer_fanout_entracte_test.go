@@ -16,7 +16,7 @@ import (
 //
 // buildVPlayerPayloads (main.go) bypasses SerializeForVPlayer entirely for
 // PREPARE/READY phases — it extracts GAME as json.RawMessage and splices it
-// into every recipient's frame verbatim (see stripAdminOnlyGameFields),
+// into every recipient's frame verbatim (see stripVPlayerHiddenGameFields),
 // stripping ONLY protocol.AdminOnlyGameFields. ENTRACTE/ENTRACTE_CONFIG are
 // deliberately NOT in that list (they are not admin-only — the opposite of
 // QUIZ_OBJECTIVES, vplayer_fanout_quiz_objectives_test.go's subject), so

@@ -2948,34 +2948,48 @@ func (a *App) broadcastUpdateTo(types ...server.ClientType) {
 		}
 	}
 
-	// TV, VPlayer and (#162) Anim clients all start from the same stripped
-	// payload (no firmware/OTA/ACK metadata) — computed once and reused: TV
-	// and Anim always get it verbatim; VPlayer gets it too, except during
-	// PREPARE/READY where broadcastUpdateToVPlayers further reduces
-	// "bumpers" per recipient (#127 T2.1-T2.3) — dataWeb is also its
-	// fallback for that reduction.
+	// TV and (#162) Anim start from the same stripped payload (no firmware/
+	// OTA/ACK metadata, no QUIZ_OBJECTIVES/ENTRACTE_CONFIG_SAVED) — computed
+	// once and reused, byte-for-byte identical for both.
 	//
-	// #162: Anim reuses dataWeb as-is (byte-for-byte identical to what TV
-	// receives) rather than going through serializeForClientType — that
-	// function exists for the generic action dispatch path (a.broadcast ->
-	// BroadcastToTypes), which UPDATE deliberately bypasses in favor of this
-	// dedicated, already-per-type-branching function. Before this fix,
-	// ClientTypeAnim was never one of the branches here at all: adding it to
-	// a caller's type list (any of the ~19 sites #162 touches) was a
-	// no-op — hasType(Anim) was never even computed, let alone acted on. This
-	// is the fix's actual prerequisite; every other #162 change is inert
-	// without it.
+	// #162: Anim reuses dataWeb as-is rather than going through
+	// serializeForClientType — that function exists for the generic action
+	// dispatch path (a.broadcast -> BroadcastToTypes), which UPDATE
+	// deliberately bypasses in favor of this dedicated, already-per-type-
+	// branching function. Before #162, ClientTypeAnim was never one of the
+	// branches here at all: adding it to a caller's type list (any of the
+	// ~19 sites #162 touches) was a no-op — hasType(Anim) was never even
+	// computed, let alone acted on. This is that fix's actual prerequisite;
+	// every other #162 change is inert without it.
+	//
+	// #128 (v6.5.2): VPlayer can NO LONGER share dataWeb with TV/Anim —
+	// ARDOISE_ANSWERS is legitimate for TV (REVEAL display) and Anim
+	// (#158 live list) but must never reach VPlayer (contract
+	// vplayer-payload-filter.md §6). A separate dataVPlayer
+	// (SerializeForVPlayerCommon: AdminOnlyGameFields AND
+	// VPlayerOnlyGameFields both stripped) is computed only when VPlayer is
+	// actually targeted — this is B5's flagged extra serialization cost,
+	// paid only when VJoueurs are connected; the PREPARE/READY per-recipient
+	// reduced path (broadcastUpdateToVPlayers -> buildVPlayerPayloads) is
+	// untouched by this, it strips its own extra field list separately
+	// (stripVPlayerHiddenGameFields, below).
 	var dataWeb []byte
-	if targetTV || targetVPlayer || targetAnim {
+	if targetTV || targetAnim {
 		if data, err := msg.SerializeForWebClient(); err == nil {
 			dataWeb = data
+		}
+	}
+	var dataVPlayer []byte
+	if targetVPlayer {
+		if data, err := msg.SerializeForVPlayerCommon(); err == nil {
+			dataVPlayer = data
 		}
 	}
 	if targetTV && dataWeb != nil {
 		a.wsHub.BroadcastRawToTypes(dataWeb, server.ClientTypeTV)
 	}
-	if targetVPlayer && dataWeb != nil {
-		a.broadcastUpdateToVPlayers(msg, dataWeb)
+	if targetVPlayer && dataVPlayer != nil {
+		a.broadcastUpdateToVPlayers(msg, dataVPlayer)
 	}
 	if targetAnim && dataWeb != nil {
 		// Deliberately NOT calling a.engine.ApplyVPlayerBroadcastConnEvents()
@@ -3132,14 +3146,16 @@ func buildVPlayerPayloads(msg *protocol.Message, recipients []server.VPlayerReci
 			return nil, false
 		}
 	}
-	// Strip admin-only GAME fields (QUIZ_OBJECTIVES, v6.1.0 #137 Batch 2b)
-	// once here, before the per-recipient loop — this hot path bypasses
-	// SerializeForWebClient/SerializeForVPlayer entirely (it keeps GAME as
-	// json.RawMessage and splices it in verbatim, see buildVPlayerMessageBytes
-	// below), so without this call gameRaw would carry QUIZ_OBJECTIVES to
-	// every VPlayer during PREPARE/READY — the confidentiality rule from
-	// contracts/game-state.md would be enforced everywhere except here.
-	gameRaw, err := stripAdminOnlyGameFields(envelope["GAME"])
+	// Strip admin-only GAME fields (QUIZ_OBJECTIVES, ENTRACTE_CONFIG_SAVED)
+	// AND VPlayer-hidden fields (ARDOISE_ANSWERS, #128) once here, before the
+	// per-recipient loop — this hot path bypasses SerializeForWebClient/
+	// SerializeForVPlayer entirely (it keeps GAME as json.RawMessage and
+	// splices it in verbatim, see buildVPlayerMessageBytes below), so
+	// without this call gameRaw would carry both to every VPlayer during
+	// PREPARE/READY — the confidentiality/exclusivity rules from
+	// contracts/game-state.md and vplayer-payload-filter.md §6 would be
+	// enforced everywhere except here.
+	gameRaw, err := stripVPlayerHiddenGameFields(envelope["GAME"])
 	if err != nil {
 		return nil, false
 	}
@@ -3174,21 +3190,29 @@ func buildVPlayerPayloads(msg *protocol.Message, recipients []server.VPlayerReci
 	return payloads, true
 }
 
-// stripAdminOnlyGameFields returns a copy of the "GAME" node JSON with
-// protocol.AdminOnlyGameFields (QUIZ_OBJECTIVES, v6.1.0 #137 Batch 2b)
-// removed. Called once per broadcastUpdateToVPlayers fan-out (not per
-// recipient) by buildVPlayerPayloads, since this hot path keeps GAME as
-// json.RawMessage and splices it into every recipient's frame verbatim
-// (buildVPlayerMessageBytes) — it never goes through
+// stripVPlayerHiddenGameFields returns a copy of the "GAME" node JSON with
+// BOTH protocol.AdminOnlyGameFields (QUIZ_OBJECTIVES, ENTRACTE_CONFIG_SAVED)
+// AND protocol.VPlayerOnlyGameFields (ARDOISE_ANSWERS, #128) removed —
+// renamed from stripAdminOnlyGameFields (v6.5.2, #128) because it always
+// served the VPlayer fan-out path exclusively, and a name mentioning only
+// "admin-only" undersold what it actually strips once VPlayerOnlyGameFields
+// existed to strip too. Called once per broadcastUpdateToVPlayers fan-out
+// (not per recipient) by buildVPlayerPayloads, since this hot path keeps
+// GAME as json.RawMessage and splices it into every recipient's frame
+// verbatim (buildVPlayerMessageBytes) — it never goes through
 // Message.SerializeForWebClient/SerializeForVPlayer, which apply the same
-// list on their own code paths (internal/protocol/messages.go). All three
-// sites must agree (contracts/ws-payload-serialization.md).
-func stripAdminOnlyGameFields(raw json.RawMessage) (json.RawMessage, error) {
+// two lists on their own code paths (internal/protocol/messages.go). All
+// three sites must agree (contracts/vplayer-payload-filter.md §6 "trois
+// sites, une seule liste" — now two lists, same discipline).
+func stripVPlayerHiddenGameFields(raw json.RawMessage) (json.RawMessage, error) {
 	var gameNode map[string]interface{}
 	if err := json.Unmarshal(raw, &gameNode); err != nil {
 		return nil, err
 	}
 	for _, field := range protocol.AdminOnlyGameFields {
+		delete(gameNode, field)
+	}
+	for _, field := range protocol.VPlayerOnlyGameFields {
 		delete(gameNode, field)
 	}
 	return json.Marshal(gameNode)
