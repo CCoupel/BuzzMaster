@@ -12,6 +12,7 @@ import CategoryBalance from '../components/CategoryBalance'
 import CategoryBadge from '../components/CategoryBadge'
 import QuestionCard from '../components/QuestionCard'
 import AIGenerateModal from '../components/AIGenerateModal'
+import QcmAnswersEditor from '../components/QcmAnswersEditor'
 import './QuestionsPage.css'
 import './ConfigPage.css'
 import '../styles/sliders.css'
@@ -22,14 +23,6 @@ import '../styles/sliders.css'
 export const QUIZ_POPULATIONS = ['Junior (6-12 ans)', 'Ado (13-17 ans)', 'Adulte (18-64 ans)', 'Senior (65+ ans)', 'Famille']
 export const QUIZ_DIFFICULTIES = ['Facile', 'Moyen', 'Difficile', 'Expert']
 export const QUIZ_LANGUAGES = ['Français', 'Anglais', 'Espagnol']
-
-// QCM answer colors (for form only)
-const QCM_COLORS = {
-  RED: { label: 'Rouge', color: '#ef4444', letter: 'A' },
-  GREEN: { label: 'Vert', color: '#22c55e', letter: 'B' },
-  YELLOW: { label: 'Jaune', color: '#eab308', letter: 'C' },
-  BLUE: { label: 'Bleu', color: '#3b82f6', letter: 'D' },
-}
 
 // Re-export CATEGORIES for backward compatibility
 export { CATEGORIES }
@@ -2059,105 +2052,24 @@ export default function QuestionsPage() {
                   />
                 </div>
 
-                {/* QCM Answers */}
+                {/* QCM Answers — extrait dans QcmAnswersEditor (#184/B-F4,
+                    commit 1), réutilisé tel quel pour la carte MEMOTION QCM
+                    (commit 2) : ni la forme des données ni les callbacks ne
+                    changent, comportement strictement identique. */}
                 {formData.type === 'QCM' && (
-                  <div className="qcm-answers-section">
-                    <label>Reponses QCM *</label>
-                    <div className="qcm-form-answers">
-                      {Object.entries(QCM_COLORS).map(([colorKey, { label, color, letter }]) => (
-                        <div
-                          key={colorKey}
-                          className={`qcm-answer-item ${formData.qcmCorrect === colorKey ? 'correct' : ''}`}
-                          style={{ '--qcm-color': color }}
-                        >
-                          <div className="qcm-answer-header">
-                            <span className="qcm-letter" style={{ backgroundColor: color }}>{letter}</span>
-                            <button
-                              type="button"
-                              className={`qcm-correct-btn ${formData.qcmCorrect === colorKey ? 'active' : ''}`}
-                              onClick={() => handleInputChange('qcmCorrect', colorKey)}
-                              title="Marquer comme bonne reponse"
-                            >
-                              {formData.qcmCorrect === colorKey ? '✓' : '○'}
-                            </button>
-                          </div>
-                          <input
-                            type="text"
-                            value={formData.qcmAnswers[colorKey]}
-                            onChange={(e) => handleQcmAnswerChange(colorKey, e.target.value)}
-                            placeholder={`Reponse ${letter}...`}
-                            className="qcm-answer-input"
-                          />
-                        </div>
-                      ))}
-                    </div>
-                    {!formData.qcmCorrect && (
-                      <p className="qcm-hint">Cliquez sur ○ pour indiquer la bonne reponse</p>
-                    )}
-
-                    {/* QCM Hints Toggle */}
-                    <div className="qcm-hints-toggle">
-                      <label>
-                        <input
-                          type="checkbox"
-                          checked={formData.qcmHintsEnabled}
-                          onChange={(e) => handleInputChange('qcmHintsEnabled', e.target.checked)}
-                        />
-                        Activer les indices progressifs
-                      </label>
-                      <span className="qcm-hints-description">
-                        {formData.qcmHintsEnabled
-                          ? `Les mauvaises reponses seront invalidees progressivement (penalites: ${Math.round((formData.qcmPenalty1 || 0.67) * 100)}% puis ${Math.round((formData.qcmPenalty2 || 0.33) * 100)}%)`
-                          : 'Pas d\'indices automatiques'}
-                      </span>
-                      {formData.qcmHintsEnabled && (
-                        <div className="qcm-hints-config">
-                          <div className="hint-row">
-                            <span className="hint-label">Indice 1 :</span>
-                            <span className="hint-at">a</span>
-                            <input
-                              type="number"
-                              min="1"
-                              max="99"
-                              value={Math.round((formData.qcmHintThreshold1 || 0.25) * 100)}
-                              onChange={(e) => handleInputChange('qcmHintThreshold1', parseInt(e.target.value) / 100)}
-                            />
-                            <span className="hint-unit">%</span>
-                            <span className="hint-arrow">→</span>
-                            <input
-                              type="number"
-                              min="1"
-                              max="99"
-                              value={Math.round((formData.qcmPenalty1 || 0.67) * 100)}
-                              onChange={(e) => handleInputChange('qcmPenalty1', parseInt(e.target.value) / 100)}
-                            />
-                            <span className="hint-unit">% pts</span>
-                          </div>
-                          <div className="hint-row">
-                            <span className="hint-label">Indice 2 :</span>
-                            <span className="hint-at">a</span>
-                            <input
-                              type="number"
-                              min="1"
-                              max="99"
-                              value={Math.round((formData.qcmHintThreshold2 || 0.125) * 100)}
-                              onChange={(e) => handleInputChange('qcmHintThreshold2', parseInt(e.target.value) / 100)}
-                            />
-                            <span className="hint-unit">%</span>
-                            <span className="hint-arrow">→</span>
-                            <input
-                              type="number"
-                              min="1"
-                              max="99"
-                              value={Math.round((formData.qcmPenalty2 || 0.33) * 100)}
-                              onChange={(e) => handleInputChange('qcmPenalty2', parseInt(e.target.value) / 100)}
-                            />
-                            <span className="hint-unit">% pts</span>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  </div>
+                  <QcmAnswersEditor
+                    values={{
+                      qcmAnswers: formData.qcmAnswers,
+                      qcmCorrect: formData.qcmCorrect,
+                      qcmHintsEnabled: formData.qcmHintsEnabled,
+                      qcmHintThreshold1: formData.qcmHintThreshold1,
+                      qcmHintThreshold2: formData.qcmHintThreshold2,
+                      qcmPenalty1: formData.qcmPenalty1,
+                      qcmPenalty2: formData.qcmPenalty2,
+                    }}
+                    onFieldChange={handleInputChange}
+                    onAnswerChange={handleQcmAnswerChange}
+                  />
                 )}
 
                 {/* Memory Pairs Editor */}
