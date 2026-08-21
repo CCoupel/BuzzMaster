@@ -4549,3 +4549,40 @@ type MotionError struct {
 func (e *MotionError) Error() string {
 	return e.Reason
 }
+
+// ValidateCardScope enforces contracts/question-types.md §9.2's invariant:
+// an action scoped to a MEMOTION card (protocol.CardScope.MotionCardID,
+// passed here as motionCardID — game can't import protocol, which already
+// imports game) may only apply to the card currently active in a MEMOTION
+// round. motionCardID == "" means the caller's payload carried no
+// MOTION_CARD_ID at all (contract §9.1: the field is optional and
+// omitempty on the wire).
+//
+// Generalizes the contract table's two named rows ("aucune manche MEMOTION
+// en cours" / "manche MEMOTION, emplacement actif") to every subphase by
+// keying on whether a card is actually selected (MotionSelected != ""),
+// which subsumes both: SUBPHASE=="" and SUBPHASE running GRID/MEMORIZE
+// (round in progress, nothing selected yet) both have MotionSelected=="",
+// and are treated identically — no active card, so no MOTION_CARD_ID is
+// expected. The table itself only names the two extremes explicitly; this
+// is the natural reading of its own stated purpose ("empêche une action
+// typée de s'appliquer à une carte qui n'est pas celle en jeu").
+//
+// Posed and tested ahead of any real consumer — no v7.0.0 action actually
+// carries CardScope (see CardScope's doc comment); #186 is the first.
+func (e *Engine) ValidateCardScope(motionCardID string) error {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+
+	if e.state.MotionSelected == "" {
+		if motionCardID != "" {
+			return &MotionError{Reason: "CARD_SCOPE_UNEXPECTED"}
+		}
+		return nil
+	}
+
+	if motionCardID != e.state.MotionSelected {
+		return &MotionError{Reason: "CARD_SCOPE_MISMATCH"}
+	}
+	return nil
+}
