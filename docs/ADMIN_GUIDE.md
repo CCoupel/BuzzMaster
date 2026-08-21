@@ -98,10 +98,18 @@ La section **Sauvegarde** permet de choisir quoi inclure dans l'archive :
 #### Sauvegarde selective
 
 ```
-GET /backup-select?questions=true&teams=true&bumpers=true&history=true&medias=true
+GET /backup-select?questions=true&teams=true&bumpers=true&history=true&medias=true&ambiance=true
 ```
 
 Retourne un fichier TAR contenant uniquement les elements selectionnes.
+
+**Parametres disponibles** :
+- `questions` — questions du quiz
+- `teams` — configuration des equipes
+- `bumpers` — configuration des joueurs
+- `history` — historique des parties
+- `medias` — images de fond / ressources
+- `ambiance` — configuration ambiance (fonds d'ecran, musique, effets) — independant de `history`
 
 #### Sauvegarde complete (legacy)
 
@@ -123,6 +131,7 @@ Le serveur detecte automatiquement le contenu de l'archive et restaure uniquemen
 - Detecte les dossiers `questions/`
 - Detecte les fichiers `teams.json`, `bumpers.json`, `history.json`
 - Detecte les fichiers `medias/`
+- Detecte les fichiers `ambiance/` (configuration ambiance — independante de `history`)
 
 Apres restauration, les donnees sont rechargees en memoire.
 
@@ -141,14 +150,17 @@ La section **Reinitialisation** permet de choisir quoi remettre a zero :
 | Joueurs | Vide la liste des joueurs |
 | Historique | Efface l'historique des evenements |
 | Fonds | Supprime les images de fond |
+| Configuration Ambiance | Reinitialise les reglages d'ambiance (fonds d'ecran, musique, effets) — independant de l'Historique |
 
 ### Endpoint API
 
 ```
-POST /reset-select?questions=true&teams=true&bumpers=true&history=true&medias=true
+POST /reset-select?questions=true&teams=true&bumpers=true&history=true&medias=true&ambiance=true
 ```
 
 Reinitialise uniquement les elements selectionnes.
+
+**Parametres disponibles** : memes que `/backup-select` ci-dessus.
 
 ### Remise a zero des scores uniquement
 
