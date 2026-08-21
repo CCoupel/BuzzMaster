@@ -643,6 +643,17 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
     (!gameState.question && (gameState.MEMORY_PARTICIPATING_TEAMS?.length ?? 0) > 0 && showMemoryGrid)
   const isMemotion = gameState.question?.TYPE === 'MEMOTION'
   const isArdoise = gameState.question?.TYPE === 'ARDOISE'
+  // #183/A-F1 — dispatch positif du type de contenu affiché : remplace les
+  // gardes par négation (`!isQcm && !isMemory && !isMemotion`), répétées à 3
+  // endroits pour la mise en page par défaut partagée SPEEDY/ARDOISE.
+  // Équivalence vérifiée pour les 5 types connus (repli MEMORY_PARTICIPATING_TEAMS
+  // ci-dessus inclus) : `!isQcm && !isMemory && !isMemotion` ≡ `isSpeedy || isArdoise`.
+  // Seule différence de comportement du lot (voulue par #183) : un TYPE
+  // renseigné qui ne correspond à aucune des 4 branches ci-dessus (donc
+  // inconnu des 5 types gérés) n'est plus traité comme SPEEDY par défaut —
+  // inatteignable avec les données actuelles (5 types connus).
+  const isKnownOtherType = isQcm || isMemory || isMemotion || isArdoise
+  const isSpeedy = !isKnownOtherType && (!gameState.question?.TYPE || gameState.question?.TYPE === 'SPEEDY')
   // QCM answers visible from READY through REVEALED (no re-render on transition)
   const showQcmAnswers = ['READY', 'COUNTDOWN', 'STARTED', 'PAUSED', 'STOPPED', 'REVEALED'].includes(gameState.phase)
   // Memory grid visible from READY (cards face down during countdown) through REVEALED
@@ -1435,7 +1446,7 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
             )}
 
             {/* COUNTDOWN State - Timer + Category animates to question zone + Big countdown number */}
-            {showCountdown && !isQcm && !isMemory && !isMemotion && (
+            {showCountdown && (isSpeedy || isArdoise) && (
               <div className="game-content-zones">
                 {/* Zone 1: Timer */}
                 <div className="zone-timer">
@@ -1499,7 +1510,7 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
             )}
 
             {/* READY State - Non-QCM, Non-Memory: Timer + centered message (same layout as QCM) */}
-            {showReady && !isQcm && !isMemory && !isMemotion && (
+            {showReady && (isSpeedy || isArdoise) && (
               <div className="game-content-zones">
                 {/* Zone 1: Timer */}
                 <div className="zone-timer">
@@ -2410,7 +2421,7 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
 
             {/* Non-QCM/Non-Memory/Non-Memotion Game Content - 4 vertical zones: Timer, Question, Media, Answers */}
             {/* ARDOISE TV reveal handled separately below — exclude from this block during REVEALED non-VPlayer */}
-            {!isQcm && !isMemory && !isMemotion && !(isArdoise && showAnswer && !isVPlayer) && showGameContent && gameState.question && (
+            {(isSpeedy || isArdoise) && !(isArdoise && showAnswer && !isVPlayer) && showGameContent && gameState.question && (
               <div className="game-content-zones">
                 {/* Zone 1: Timer */}
                 <div className="zone-timer">
