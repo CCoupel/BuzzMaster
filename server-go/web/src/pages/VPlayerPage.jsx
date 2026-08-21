@@ -1,12 +1,15 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useGame } from '../hooks/GameContext'
+import { AnimatePresence, motion } from 'framer-motion'
 import PlayerDisplay from './PlayerDisplay'
+import EntractePanel from '../components/EntractePanel'
 import ArdoiseKeyboard from '../components/ArdoiseKeyboard'
 import NoSleep from 'nosleep.js'
 import { REJECTION_MESSAGES, DEFAULT_REJECTION_MESSAGE, REDIRECT_MESSAGES, DEFAULT_REDIRECT_MESSAGE } from '../utils/playerConnectMessages'
 import { clearVPlayerSession } from '../utils/vplayerSession'
 import './VPlayerPage.css'
+import '../styles/entracte.css'
 
 // QCM answer colors mapping
 const ANSWER_COLORS = {
@@ -519,6 +522,14 @@ export default function VPlayerPage() {
   const handleBuzz = () => {
     if (!bumper || !bumper.id) return
 
+    // ENTRACTE (#119) — le blocage réel est côté serveur (garde D6, seule
+    // source de vérité) ; cette garde évite seulement l'envoi inutile et le
+    // retour visuel trompeur (overlay "BUZZÉ !") pendant la pause. En pratique
+    // l'entracte ne peut de toute façon coexister avec STARTED/PAUSED (D4),
+    // donc le check de phase juste en dessous suffirait déjà — explicite ici
+    // pour la clarté et la robustesse (voir plan #119, F5).
+    if (gameState.entracte) return
+
     // Only allow buzz during STARTED or PAUSED phases
     if (gameState.phase !== 'STARTED' && gameState.phase !== 'PAUSED') return
 
@@ -732,18 +743,34 @@ export default function VPlayerPage() {
         )
       })()}
 
-      <PlayerDisplay
-        playerName={bumper?.NAME}
-        playerNameColor={getPlayerNameColor()}
-        teamName={team?.NAME}
-        teamColor={getTeamColor()}
-        isVPlayer={true}
-        onMediaClick={handleBuzz}
-        onQCMAnswer={handleQCMAnswer}
-        vplayerHasBuzzed={hasBuzzed}
-      />
+      {/* ENTRACTE (#119) — le contenu de jeu existant (TV embarquée) reste
+          visible mais estompé derrière le panneau. Wrapper toujours monté
+          (seule la classe entracte-dim est conditionnelle) pour ne pas
+          démonter/remonter PlayerDisplay au bascule. Le filtre de
+          PlayerDisplay lui-même est désactivé quand isVPlayer (voir F4) :
+          VPlayerPage porte son propre filtre ici, pas de double filtrage.
+          --ep-transition (C3) depuis entracteConfig (diffusé, gelé pendant
+          une pause active) — jamais entracteConfigSaved. */}
+      <div
+        className={`entracte-content${gameState.entracte ? ' entracte-dim' : ''}`}
+        style={{ '--ep-transition': `${gameState.entracteConfig?.TRANSITION_MS ?? 2000}ms` }}
+      >
+        <PlayerDisplay
+          playerName={bumper?.NAME}
+          playerNameColor={getPlayerNameColor()}
+          teamName={team?.NAME}
+          teamColor={getTeamColor()}
+          isVPlayer={true}
+          onMediaClick={gameState.entracte ? undefined : handleBuzz}
+          onQCMAnswer={handleQCMAnswer}
+          vplayerHasBuzzed={hasBuzzed}
+        />
+      </div>
 
-      {/* ARDOISE keyboard overlay — shown for all ARDOISE phases, active only during STARTED */}
+      {/* ARDOISE keyboard overlay — shown for all ARDOISE phases, active only during STARTED.
+          Kept OUTSIDE .entracte-content: position:fixed, même piège que le bandeau de
+          connexion et l'overlay de buzz ci-dessus. En pratique ne peut pas être actif
+          pendant un entracte (STARTED requis, exclu par la garde de phase D4). */}
       {isArdoiseQuestion && (
         <div className="vplayer-ardoise-container">
           <ArdoiseKeyboard
@@ -754,6 +781,32 @@ export default function VPlayerPage() {
           />
         </div>
       )}
+
+      {/* ENTRACTE panel + cadenas — frères du contenu filtré, jamais enfants.
+          Fondu groupé (#119, C3) : le cadenas apparaît/disparaît avec le
+          panneau, jamais net sur un écran encore en train de s'estomper —
+          deux enfants DIRECTS de la même AnimatePresence (chacun garde sa
+          propre clé et sa propre animation d'exit ; un <div> englobant les
+          deux empêcherait AnimatePresence de suivre leur démontage, seuls
+          ses enfants directs sont interceptés). */}
+      <AnimatePresence>
+        {gameState.entracte && (
+          <EntractePanel key="entracte-panel" config={gameState.entracteConfig} />
+        )}
+        {gameState.entracte && (
+          <motion.div
+            key="entracte-lock"
+            className="entracte-lock-wrap"
+            aria-hidden="true"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: Math.max(0, Number(gameState.entracteConfig?.TRANSITION_MS ?? 2000)) / 1000 }}
+          >
+            <span className="entracte-lock">🔒</span>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   )
 }

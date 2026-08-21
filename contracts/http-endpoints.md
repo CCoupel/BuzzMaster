@@ -256,13 +256,14 @@ Sauvegarde sélective.
 | questions | bool | true | Inclure questions |
 | teams | bool | true | Inclure équipes |
 | bumpers | bool | true | Inclure joueurs |
-| history | bool | true | Inclure historique, **et deux petits fichiers de métadonnées sans case dédiée dans l'interface, rattachés à ce paramètre par défaut de conception** : `game-config.json` (délai par défaut + effet néon, v6.0.x #150) et `game_state.json` (métadonnées quiz + plafond de joueurs virtuels, v6.0.x #141) |
+| history | bool | true | Inclure historique, **et** `game_state.json` (métadonnées quiz + plafond de joueurs virtuels + config d'entracte enregistrée, v6.0.x #141, v6.5.2 #119) — pas de case dédiée pour ce petit fichier, rattaché à `history` par défaut de conception (identité/réglages d'une session, plus proche de l'historique qu'un préréglage visuel) |
+| ambiance | bool | true | Inclure `game-config.json` (délai par défaut + effet néon, v6.0.x #150). **Flag dédié depuis #152** (2026-08-21) — n'était auparavant rattaché à aucun flag propre, **piggybacké sur `history`** ; `code-reviewer` a relevé ce rattachement comme un contresens sémantique (un réglage visuel/ambiance n'est pas de l'historique) lors de la revue de #150. Correspond à la case « Configuration Ambiance » de `BackupPage.jsx` |
 | medias | bool | true | Inclure fonds & catégories (**renommé depuis `backgrounds` en v5.7.1**) |
 
 #### Exemple
 
 ```
-GET /backup-select?questions=true&history=true&medias=true
+GET /backup-select?questions=true&history=true&ambiance=true&medias=true
 ```
 
 ---
@@ -304,7 +305,8 @@ Reset sélectif.
 | questions | bool | Supprimer questions |
 | teams | bool | Vider équipes |
 | bumpers | bool | Vider joueurs |
-| history | bool | Vider historique, **réinitialiser `game-config.json` aux valeurs par défaut** (v6.0.x, #150) **et vider `game_state.json`** (métadonnées quiz — fichier supprimé, même convention que `history.json`, v6.0.x #141) — même rattachement que `/backup-select` |
+| history | bool | Vider historique **et vider `game_state.json`** (métadonnées quiz — fichier supprimé, même convention que `history.json`, v6.0.x #141) — même rattachement que `/backup-select` |
+| ambiance | bool | **Réinitialiser `game-config.json` aux valeurs par défaut** (v6.0.x, #150). **Flag dédié depuis #152** — n'était auparavant réinitialisé qu'avec `history=true` ; voir `/backup-select` ci-dessus pour le détail du rattachement corrigé |
 | medias | bool | Supprimer fonds & catégories (**renommé depuis `backgrounds` en v5.7.1**) |
 
 ---
@@ -732,40 +734,18 @@ pendant le job et transitent par la progression.
 
 ## Mode ENTRACTE (v6.5.2, #119)
 
-### Section `entracte` de `POST /game-config.json`
+### ~~Section `entracte` de `POST /game-config.json`~~ — **supprimée (2026-08-20)**
 
-Nouvelle section de `game-config.json`, aux mêmes sémantiques additives que `game` et
-`neon_effect` : une section présente dans le corps remplace **la section entière** (puis les
-défauts re-remplissent les champs laissés à zéro) ; une section absente est laissée intacte.
+La configuration du panneau d'entracte **ne vit plus dans `game-config.json`**. C'est une propriété
+de la **partie**, pas un réglage du serveur : elle est désormais persistée dans `game_state.json`
+et éditée depuis la page Quiz via l'action WebSocket `UPDATE_ENTRACTE_CONFIG`
+(voir `contracts/game-state.md` §ENTRACTE_CONFIG et `contracts/websocket-actions.md`).
 
-```json
-{
-  "entracte": {
-    "title": "ENTRACTE",
-    "subtitle": "Retour dans 20mn",
-    "panel_size": 65,
-    "anim_period": 10,
-    "anim_intensity": 20
-  }
-}
-```
+`POST /game-config.json` **n'accepte plus** de section `entracte` ; une clé résiduelle est ignorée
+sans erreur. Aucune migration n'est fournie — cette section n'a existé qu'en QUALIF, jamais en
+production.
 
-| Champ | Type | Défaut | Bornes |
-|---|---|---|---|
-| `title` | string | `"ENTRACTE"` | tronqué à une longueur raisonnable |
-| `subtitle` | string | `"Retour dans 20mn"` | idem |
-| `panel_size` | int (%) | `65` | 20–100 — **réglage unique**, appliqué à la largeur et à la hauteur, identiquement sur `/tv` et `/player` (panneau centré sur les deux) |
-| `anim_period` | int (s) | `10` | 2–30 — durée d'un cycle de l'animation du panneau (zoom + balancement) |
-| `anim_intensity` | int | `20` | 0–100 — amplitude commune aux deux effets. **`0` désactive l'animation**, aucun champ d'activation séparé |
-
-L'image de fond n'est **pas** dans cette section : c'est un fichier, servi par l'endpoint ci-dessous.
-Après sauvegarde, la configuration est poussée dans `GameState.ENTRACTE_CONFIG` et diffusée — un
-changement de texte est donc visible en direct pendant un entracte actif.
-
-> **Sauvegarde** : comme tout `game-config.json`, ces réglages sont rattachés au flag `history` de
-> `/backup-select` (verrue pré-existante décrite par #152, non aggravée par ce lot).
-
-### `GET` / `POST` / `DELETE /api/config/entracte-image`
+### `GET` / `POST` / `DELETE /api/game/entracte-image`
 
 Image de fond **unique et optionnelle** du panneau. Calqué à l'identique sur
 `/api/config/default-image` (v3.2.2), le seul patron d'image unique du projet.
@@ -776,8 +756,15 @@ Image de fond **unique et optionnelle** du panneau. Calqué à l'identique sur
 | `POST` | `multipart/form-data`, champ `file`, 10 Mo max, extensions image validées. **Remplace** l'image précédente quelle que soit son extension |
 | `DELETE` | Supprime l'image — le panneau retombe sur son fond par défaut |
 
+> **Renommé le 2026-08-20** — anciennement `/api/config/entracte-image`. Le préfixe `/api/config/`
+> est devenu trompeur dès lors que l'image appartient à la partie et non aux réglages serveur.
+> Renommage effectué pendant que c'était encore gratuit : l'endpoint n'a jamais atteint la
+> production et son unique consommateur frontend était de toute façon réécrit par le déplacement de
+> la section vers la page Quiz.
+
 L'URL est **stable** : aucun chemin de fichier ne transite par le WebSocket, seul le booléen
-`ENTRACTE_CONFIG.IMAGE_IS_CUSTOM` indique si une image existe. Le client ajoute un cache-buster
+`ENTRACTE_CONFIG.IMAGE_IS_CUSTOM` — **dérivé de la présence du fichier, jamais persisté** —
+indique si une image existe. Le client ajoute un cache-buster
 (`?t=…`), comme `ConfigPage` le fait déjà pour l'image de question par défaut.
 
 **Stockage : `data/files/entracte/`**, un répertoire dédié — et **ajouté explicitement** à l'archive

@@ -108,3 +108,26 @@ export function nextButtonState(phase, question) {
   if (!canSelectQuestion(phase)) return 'inert'
   return (canStart(phase) || canReveal(phase, question)) ? 'optional' : 'go'
 }
+
+// ---------------------------------------------------------------------------
+// ENTRACTE (v6.5.2, #119) — bouton ENTRACTE / FIN D'ENTRACTE de /admin
+// (GamePage.jsx, seule surface qui peut déclencher/lever le mode). Miroir
+// exact de la garde serveur D4 (contract websocket-actions.md §ENTRACTE_SET) :
+// l'ENTRÉE est refusée pendant une question en cours, la SORTIE est toujours
+// autorisée — jamais de blocage définitif.
+// ---------------------------------------------------------------------------
+
+// Phases où le moteur accepte ENTRACTE_SET{ACTIVE:true} — question jamais en
+// cours (COUNTDOWN/STARTED/PAUSED refusés) ni ENROLL (l'écran d'inscription a
+// besoin du QR code).
+export const ENTRACTE_ALLOWED_PHASES = ['STOPPED', 'PREPARE', 'READY', 'NEW_GAME', 'REVEALED']
+
+/**
+ * @param {string} phase - gameState.phase
+ * @param {boolean} entracteActive - gameState.entracte — si déjà actif, la
+ *   sortie est toujours permise, quelle que soit la phase.
+ */
+export function canToggleEntracte(phase, entracteActive) {
+  if (entracteActive) return true
+  return ENTRACTE_ALLOWED_PHASES.includes(phase)
+}

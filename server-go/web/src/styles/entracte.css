@@ -1,0 +1,190 @@
+/* ENTRACTE — pause globale (v6.5.2, #119)
+ *
+ * Effet transverse partagé par les 4 surfaces (TV, VJoueur, Admin, Anim), sur
+ * le modèle de neon.css : un fichier dédié, importé par les pages qui en ont
+ * besoin, plutôt que dupliqué dans chaque .css de page.
+ *
+ * Contrat : contracts/game-state.md §ENTRACTE / ENTRACTE_CONFIG.
+ * Plan : _work/reports/plan-entracte-119-20260820-140825.md (D7, D8, F1, F2).
+ */
+
+/* ================================================================
+   Filtre partagé — recette EXACTE, identique sur les 4 surfaces.
+   Ne jamais dupliquer cette valeur ailleurs : toute page qui a besoin de
+   l'effet "entracte" importe ce fichier et applique cette classe.
+   ================================================================ */
+.entracte-dim {
+  filter: grayscale(0.85) brightness(0.55);
+}
+
+/* ================================================================
+   Scène de centrage du panneau (TV + VJoueur).
+   position:absolute + flex — PAS de transform ici : un transform de
+   centrage serait écrasé par la transformation animée du panneau (D8),
+   qui partirait se coller en bas à droite dès la première image.
+   z-index 500 : au-dessus du contenu de jeu (max 100 sur /tv), sous
+   QRCodeOverlay (1000).
+   ================================================================ */
+.entracte-panel-stage {
+  position: absolute;
+  inset: 0;
+  z-index: 500;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden; /* contrainte TV statique — jamais de scroll */
+  pointer-events: none; /* le panneau n'intercepte aucun clic/tap */
+}
+
+/* ================================================================
+   Panneau — une seule taille (--ep-size, % de la largeur ET de la
+   hauteur du conteneur), un seul rendu, identique TV et VJoueur (D7).
+   container-type:size permet aux tailles de texte internes de rester
+   relatives au panneau lui-même (cqmin), pas au viewport : la même
+   valeur de PANEL_SIZE reste lisible dans une boîte large et basse
+   (16:9) comme dans une boîte étroite et haute (portrait).
+   ================================================================ */
+.entracte-panel {
+  --ep-size: 65%;
+  width: var(--ep-size);
+  height: var(--ep-size);
+  position: relative;
+  container-type: size;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  box-sizing: border-box;
+  border-radius: 3%;
+  border: 2px solid rgba(255, 255, 255, 0.25);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6);
+  background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+  transform-origin: center center;
+}
+
+.entracte-panel-bg {
+  position: absolute;
+  inset: 0;
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  z-index: 0;
+}
+
+/* Assombrit une image de fond claire pour garder le texte lisible,
+   même recette que .background-overlay de PlayerDisplay.css */
+.entracte-panel-bg::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+}
+
+.entracte-panel-content {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3cqmin;
+  padding: 6cqmin;
+  max-width: 100%;
+  color: #fff;
+  text-align: center;
+  text-shadow: 0 2px 10px rgba(0, 0, 0, 0.6);
+}
+
+.entracte-panel-title {
+  margin: 0;
+  font-weight: 900;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  line-height: 1.1;
+  font-size: clamp(1rem, 13cqmin, 3.4rem);
+  word-break: break-word;
+}
+
+.entracte-panel-subtitle {
+  margin: 0;
+  font-weight: 600;
+  line-height: 1.2;
+  font-size: clamp(0.65rem, 6cqmin, 1.6rem);
+  color: rgba(255, 255, 255, 0.9);
+  word-break: break-word;
+}
+
+/* ================================================================
+   Animation (D8) — zoom + balancement combinés en un seul mouvement.
+   Appliquée UNIQUEMENT via la classe --animated (ANIM_INTENSITY > 0
+   côté composant) : aucune animation d'amplitude nulle ne doit tourner
+   en continu sur le navigateur qui pilote la TV pendant vingt minutes.
+   Amplitude : ±6% d'échelle et ±2° de rotation à ANIM_INTENSITY=100,
+   dérivées via calc() depuis --ep-anim-intensity (contrat game-state.md).
+   ================================================================ */
+.entracte-panel--animated {
+  --ep-scale-delta: calc(var(--ep-anim-intensity, 20) / 100 * 0.06);
+  --ep-rotate-delta: calc(var(--ep-anim-intensity, 20) / 100 * 2deg);
+  animation: entracte-breathe var(--ep-anim-duration, 10s) ease-in-out infinite;
+  will-change: transform;
+}
+
+@keyframes entracte-breathe {
+  0%,
+  100% {
+    transform: scale(1) rotate(0deg);
+  }
+  25% {
+    transform: scale(calc(1 + var(--ep-scale-delta, 0))) rotate(var(--ep-rotate-delta, 0deg));
+  }
+  50% {
+    transform: scale(1) rotate(0deg);
+  }
+  75% {
+    transform: scale(calc(1 - var(--ep-scale-delta, 0))) rotate(calc(var(--ep-rotate-delta, 0deg) * -1));
+  }
+}
+
+/* Accessibilité — neutralise l'animation quelle que soit la configuration.
+   Un panneau qui bouge en continu pendant toute une pause est précisément
+   ce que ce réglage système vise à éviter. */
+@media (prefers-reduced-motion: reduce) {
+  .entracte-panel--animated {
+    animation: none;
+  }
+}
+
+/* ================================================================
+   Cadenas VJoueur — reste net, au-dessus de la zone média.
+   IMPORTANT : `filter` sur un ancêtre s'applique au rendu composité de
+   TOUT son sous-arbre — un `filter: none` posé ici n'aurait AUCUN effet
+   si ce nœud était un descendant du wrapper `.entracte-dim`. Le seul
+   garde-fou réel est structurel : ce nœud doit être un FRÈRE du nœud
+   filtré, jamais un enfant (voir VPlayerPage.jsx).
+   ================================================================ */
+.entracte-lock {
+  font-size: clamp(1.5rem, 10vmin, 3rem);
+  filter: drop-shadow(0 2px 8px rgba(0, 0, 0, 0.6));
+  pointer-events: none;
+}
+
+/* ================================================================
+   Bouton ENTRACTE / FIN D'ENTRACTE — Navbar (#119, C2). Partagé plutôt que
+   dupliqué dans Navbar.css : c'est le même bouton, au même endroit
+   conceptuel (barre supérieure), qui vivait avant dans GamePage.css.
+   Repose sur le composant Button (classes .btn .btn-warning/.btn-danger) —
+   idle ambre, actif rouge avec halo, désactivé grisé.
+   ================================================================ */
+.entracte-toggle-btn.btn-warning {
+  background: #f59e0b;
+  color: #2b1400;
+}
+
+.entracte-toggle-btn.active.btn-danger {
+  box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.35);
+}
+
+.entracte-toggle-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  box-shadow: none;
+}

@@ -7,6 +7,7 @@ import ApiKeyHelpModal from '../components/ApiKeyHelpModal'
 import ApiKeyValidationDialog from '../components/ApiKeyValidationDialog'
 import { OtaAllModal } from '../components/TeamCard'
 import './ConfigPage.css'
+import '../styles/sliders.css'
 
 // Libellés fournisseur pour les messages de validation de clé API
 // (contracts/ai-key-validation.md §9.1) — noms utilisateur, pas les identifiants
@@ -75,6 +76,12 @@ export default function ConfigPage() {
   const [deletingDefaultImage, setDeletingDefaultImage] = useState(false)
   const [defaultImageToast, setDefaultImageToast] = useState(null)
   const defaultImageFileRef = useRef(null)
+
+  // ENTRACTE (#119, corrections C1) — la configuration a déménagé sur
+  // QuestionsPage.jsx (propriété de la partie, pas un réglage serveur) — plus
+  // aucun état/handler entracte ici. Voir QuestionsPage.jsx pour le nouveau
+  // formulaire (action UPDATE_ENTRACTE_CONFIG, lecture de
+  // gameState.entracteConfigSaved).
 
   // AI generation section (v6.0.0, #8) — la clé n'est jamais reçue du serveur
   // (contract ai-generation.md §2) : seul `api_key_configured` est lu.
@@ -241,6 +248,11 @@ export default function ConfigPage() {
           if (data.neon_effect) {
             setNeonConfig(data.neon_effect)
           }
+          // ENTRACTE (#119, C1) — la section `entracte` a quitté
+          // game-config.json (propriété de la partie désormais, voir
+          // QuestionsPage.jsx) ; ne plus la lire ici, même si un
+          // game-config.json de QUALIF la porte encore (clé simplement
+          // ignorée).
         }
       } catch (error) {
         if (!cancelled) console.error('Failed to fetch game config:', error)
@@ -842,6 +854,7 @@ export default function ConfigPage() {
   }
 
 
+
   return (
     <div className="config-page page">
       <header className="page-header">
@@ -1299,7 +1312,7 @@ export default function ConfigPage() {
               </label>
 
               {neonConfig.enabled && (
-                <div className="neon-sliders">
+                <div className="slider-group">
                   {/* Mode selector */}
                   <div className="slider-row">
                     <label>Mode d'affichage</label>

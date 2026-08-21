@@ -98,10 +98,18 @@ La section **Sauvegarde** permet de choisir quoi inclure dans l'archive :
 #### Sauvegarde selective
 
 ```
-GET /backup-select?questions=true&teams=true&bumpers=true&history=true&medias=true
+GET /backup-select?questions=true&teams=true&bumpers=true&history=true&medias=true&ambiance=true
 ```
 
 Retourne un fichier TAR contenant uniquement les elements selectionnes.
+
+**Parametres disponibles** :
+- `questions` — questions du quiz
+- `teams` — configuration des equipes
+- `bumpers` — configuration des joueurs
+- `history` — historique des parties
+- `medias` — images de fond / ressources
+- `ambiance` — configuration ambiance (fonds d'ecran, musique, effets) — independant de `history`
 
 #### Sauvegarde complete (legacy)
 
@@ -123,6 +131,7 @@ Le serveur detecte automatiquement le contenu de l'archive et restaure uniquemen
 - Detecte les dossiers `questions/`
 - Detecte les fichiers `teams.json`, `bumpers.json`, `history.json`
 - Detecte les fichiers `medias/`
+- Detecte les fichiers `ambiance/` (configuration ambiance — independante de `history`)
 
 Apres restauration, les donnees sont rechargees en memoire.
 
@@ -141,14 +150,17 @@ La section **Reinitialisation** permet de choisir quoi remettre a zero :
 | Joueurs | Vide la liste des joueurs |
 | Historique | Efface l'historique des evenements |
 | Fonds | Supprime les images de fond |
+| Configuration Ambiance | Reinitialise les reglages d'ambiance (fonds d'ecran, musique, effets) — independant de l'Historique |
 
 ### Endpoint API
 
 ```
-POST /reset-select?questions=true&teams=true&bumpers=true&history=true&medias=true
+POST /reset-select?questions=true&teams=true&bumpers=true&history=true&medias=true&ambiance=true
 ```
 
 Reinitialise uniquement les elements selectionnes.
+
+**Parametres disponibles** : memes que `/backup-select` ci-dessus.
 
 ### Remise a zero des scores uniquement
 
@@ -1578,6 +1590,111 @@ Interface **interrupteurs "Afficher sur la TV"** permettant de masquer certains 
 - Aucune modification retroactive sur les questions existantes
 
 ---
+
+## Mode ENTRACTE — Pause Globale
+
+### Qu'est-ce que c'est ?
+
+L'entracte est une **pause globale** de la partie (pause déjeuner, changement de salle, 
+annonce spéciale). Pendant une pause :
+
+- La **TV et l'écran joueur** affichent un panneau estompé au-dessus du contenu actuel.
+- L'**admin et l'animateur** voient leur interface estompée (l'admin garde un bouton 
+  de contrôle visible).
+- **Aucune action de jeu n'est possible** — pas de lancement, arrêt, scoring, rien.
+- Les **LEDs des buzzers s'éteignent**.
+- La question sélectionnée avant la pause **reste intacte** — à la reprise, on continue 
+  où on s'était arrêté.
+
+### Déclencher une pause
+
+1. Arrêtez la question courante (bouton **STOP** ou attendez la révélation).
+2. Attendez une phase sans manche active (`STOPPED`, `PREPARE`, `READY`, `NEW_GAME`, 
+   `REVEALED`).
+3. Cliquez le bouton **ENTRACTE** (navbar ou panel de contrôle).
+4. Le bouton devient **FIN D'ENTRACTE** (rouge avec halo).
+
+### Mettre fin à la pause
+
+Cliquez le bouton **FIN D'ENTRACTE** — tout revient à la normale, la question 
+précédente est prête à continuer.
+
+> **Note** : vous pouvez sortir de l'entracte **à n'importe quel moment**, même si le 
+> serveur avait refusé l'entrée (cas rare : une manche a démarré pendant que vous 
+> remplissiez le formulaire de config).
+
+### Configuration du panneau
+
+Dans la **Page Quiz** (`/admin/quiz`), section **ENTRACTE** (ou bouton dédié dans la zone Quiz) :
+
+| Champ | Défaut | Portée |
+|-------|--------|--------|
+| **Titre** | `ENTRACTE` | Texte grand affiché sur TV et écran joueur |
+| **Sous-titre** | `Retour dans 20mn` | Texte secondaire (ex. horaire de reprise) |
+| **Image de fond** | (aucune) | Image optionnelle (ex. logo, photo, pause café) |
+| **Taille du panneau** | 65% | Pourcentage de l'écran (20–100) — affecte TV et écran joueur identiquement |
+| **Vitesse du mouvement** | 10s | Durée d'un cycle d'animation (2–30 secondes) |
+| **Amplitude du mouvement** | 20 | Force de l'animation (0–100 ; **0 = animation désactivée**) |
+
+### Gel de la configuration à l'activation
+
+**Point important** : dès que vous cliquez le bouton **ENTRACTE**, la configuration courante 
+(titre, sous-titre, image, taille, animation) est **sauvegardée et gelée** — elle ne change 
+plus pendant toute la durée de la pause, même si vous modifiez les réglages.
+
+Les modifications apportées pendant un entracte actif **prennent effet au prochain cycle** 
+(après sortie puis nouvelle entrée en entracte). C'est un mécanisme de sécurité pour que le 
+panneau affiché reste stable pendant une pause prolongée.
+
+**Exemple** : vous lancez une pause avec le titre « DÉJEUNER » et l'animation 
+à 20. Pendant la pause, vous changez le titre en « RETOUR IMMINENT » et l'animation en 0. 
+Quand vous cliquez « FIN D'ENTRACTE » et que vous relancez une pause 10 minutes plus tard, 
+c'est le nouveau titre et la nouvelle animation qui s'afficheront.
+
+### Animation du panneau
+
+Le panneau anime un **respiration douce** : zoom oscillant combiné avec balancement 
+(oscillation de rotation). Cet effet subtil rend le panneau plus vivant pendant une 
+pause prolongée.
+
+- **Augmentez l'amplitude** (ex. 50) pour une respiration plus prononcée — utile pour 
+  une pause brève et attirer l'attention.
+- **Diminuez l'amplitude** (ex. 5) ou mettez à **0** pour un panneau fixe — préférable 
+  pour une pause longue (déjeuner).
+- **Respecte `prefers-reduced-motion`** : les utilisateurs qui ont activé ce réglage 
+  système voient un panneau fixe, quel que soit votre paramétrage — c'est une 
+  accessibilité, pas une préférence esthétique.
+
+### Image de fond
+
+1. Cliquez **Choisir une image** dans la section Entracte de la page Quiz.
+2. Sélectionnez un fichier depuis votre ordinateur (PNG, JPG, etc.).
+3. L'image s'affiche immédiatement derrière le titre et le sous-titre (le changement prend 
+   effet au prochain entracte si un est en cours).
+
+Pour **supprimer l'image**, cliquez **Supprimer image** — le panneau reste lisible 
+sans image de fond.
+
+> **Note** : l'image est stockée côté serveur et persiste après un redémarrage (elle 
+> est sauvegardée dans votre sauvegarde de partie si vous cochez « historique » lors 
+> de la sauvegarde).
+
+### Exigences de sécurité
+
+- Seule l'**interface admin** peut déclencher / arrêter une pause.
+- L'**interface animateur** voit quand une pause est active, mais ne peut pas la 
+  commander (bouton grisé).
+- Le **serveur bloque tout clic malveillant** — même si quelqu'un essaie de scorer ou 
+  lancer une question depuis un navigateur hostile, le serveur refuse.
+
+### Cas d'usage
+
+1. **Pause déjeuner** : titre `"DÉJEUNER"`, sous-titre `"Retour à 14h"`, animation 
+   très douce ou désactivée, durée 60 minutes.
+2. **Changement de salle** : titre `"EN DÉPLACEMENT"`, animation rapide (vitesse 5s) 
+   pour signaler du changement, image de logo.
+3. **Annonce spéciale** : titre customisé (ex. `"TIRAGE AU SORT"`), image pertinente, 
+   animation moyenne pour garder l'attention.
 
 ### Workflow complet — étapes recommandées
 

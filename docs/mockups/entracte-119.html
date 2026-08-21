@@ -1,0 +1,578 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mode ENTRACTE — 4 surfaces (#119 redéfinie)</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background: #f5f5f5;
+            padding: 40px 20px;
+            line-height: 1.6;
+            color: #222;
+        }
+        .container { max-width: 1280px; margin: 0 auto; }
+        h1 { margin-bottom: 10px; color: #333; }
+        h2 { margin-top: 60px; margin-bottom: 20px; color: #555; font-size: 1.3em; }
+        .intro { color: #666; margin-bottom: 30px; max-width: 900px; }
+
+        .demo-section {
+            background: white;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            padding: 30px;
+            margin-bottom: 40px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+        .section-label {
+            display: inline-block;
+            background: #e3f2fd;
+            color: #1976d2;
+            padding: 4px 8px;
+            border-radius: 3px;
+            font-size: 0.75em;
+            font-weight: 600;
+            margin-bottom: 15px;
+        }
+        .demo-subtitle {
+            font-size: 0.9em;
+            color: #666;
+            margin-bottom: 20px;
+            font-style: italic;
+        }
+        .note {
+            background: #fff3cd;
+            border-left: 4px solid #ffc107;
+            padding: 12px;
+            margin-top: 15px;
+            border-radius: 4px;
+            font-size: 0.9em;
+        }
+        .note.info { background: #e3f2fd; border-left-color: #1976d2; }
+        .code {
+            font-family: "Courier New", monospace;
+            background: #f5f5f5;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-size: 0.9em;
+        }
+        .states-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+        .states-table th, .states-table td {
+            border: 1px solid #ddd;
+            padding: 12px;
+            text-align: left;
+            vertical-align: top;
+        }
+        .states-table th { background: #f5f5f5; font-weight: 600; color: #333; }
+        .states-table tr:nth-child(even) { background: #fafafa; }
+
+        .compare {
+            display: flex;
+            gap: 24px;
+            flex-wrap: wrap;
+            align-items: flex-start;
+        }
+        .compare-block { display: flex; flex-direction: column; gap: 10px; }
+        .badge {
+            display: inline-block;
+            align-self: flex-start;
+            padding: 4px 12px;
+            border-radius: 4px;
+            font-size: 0.8em;
+            font-weight: 700;
+            letter-spacing: 0.05em;
+        }
+        .badge.normal { background: #e3f2fd; color: #1565c0; }
+        .badge.entracte { background: #fff3e0; color: #ef6c00; }
+        .caption {
+            font-size: 0.85em;
+            color: #888;
+            max-width: 420px;
+        }
+
+        /* ============ Generic stage frame ============ */
+        .stage-frame {
+            position: relative;
+            border-radius: 10px;
+            border: 5px solid #111;
+            overflow: hidden;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.35);
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+        }
+        .res-tag {
+            position: absolute;
+            bottom: 6px;
+            right: 10px;
+            font-size: 0.6em;
+            color: rgba(255,255,255,0.35);
+            font-family: "Courier New", monospace;
+            z-index: 8;
+        }
+
+        /* The "existing content behind the panel" — grayscale+brightness recipe, shared across all 4 surfaces */
+        .dim-filter {
+            filter: grayscale(0.85) brightness(0.55);
+        }
+
+        /* ============ ENTRACTE overlay panel (TV / VJoueur) ============ */
+        .entracte-panel {
+            position: absolute;
+            top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            width: var(--ep-w, 65%);
+            height: var(--ep-h, 60%);
+            border-radius: 16px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            overflow: hidden;
+            box-shadow: 0 12px 40px rgba(0,0,0,0.6);
+            border: 2px solid rgba(255,255,255,0.25);
+            z-index: 5;
+        }
+        .entracte-panel-bg {
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(135deg, #7c3aed 0%, #db2777 50%, #f59e0b 100%);
+            opacity: 0.9;
+        }
+        .entracte-panel-content {
+            position: relative;
+            z-index: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 6px;
+            text-shadow: 0 2px 10px rgba(0,0,0,0.5);
+        }
+        .entracte-title {
+            font-weight: 900;
+            letter-spacing: 0.15em;
+            text-transform: uppercase;
+            color: #fff;
+        }
+        .entracte-subtitle {
+            color: rgba(255,255,255,0.9);
+            font-weight: 600;
+        }
+        .entracte-slot-tag {
+            position: absolute;
+            top: 6px;
+            left: 8px;
+            font-size: 0.55em;
+            color: rgba(255,255,255,0.6);
+            background: rgba(0,0,0,0.35);
+            padding: 2px 6px;
+            border-radius: 4px;
+            z-index: 2;
+            font-family: "Courier New", monospace;
+        }
+
+        /* ============ TV frame ============ */
+        .frame-tv { width: 520px; aspect-ratio: 16 / 9; }
+        .frame-tv .entracte-title { font-size: 1.9rem; }
+        .frame-tv .entracte-subtitle { font-size: 0.95rem; }
+
+        .tv-bg-content {
+            position: absolute; inset: 0;
+            display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px;
+        }
+        .tv-ready-badge {
+            padding: 8px 22px; border-radius: 999px; background: #34d399;
+            color: #06281d; font-weight: 800; letter-spacing: 0.1em; font-size: 0.85rem;
+        }
+        .tv-ready-text { color: #fff; font-weight: 900; font-size: 1.4rem; letter-spacing: 0.1em; }
+        .tv-team-strip {
+            position: absolute; bottom: 10px; left: 10px; right: 10px;
+            display: flex; gap: 8px; justify-content: center;
+        }
+        .tv-team-chip {
+            padding: 4px 10px; border-radius: 6px; background: rgba(255,255,255,0.12);
+            color: #fff; font-size: 0.65rem; font-weight: 700;
+        }
+
+        /* ============ VJoueur frame (portrait) ============ */
+        .frame-vplayer { width: 230px; aspect-ratio: 9 / 16; }
+        .frame-vplayer .entracte-title { font-size: 1rem; }
+        .frame-vplayer .entracte-subtitle { font-size: 0.68rem; }
+
+        .vp-bg-content {
+            position: absolute; inset: 0;
+            display: flex; flex-direction: column;
+        }
+        .vp-header {
+            padding: 10px 12px;
+            background: rgba(255,255,255,0.08);
+            display: flex; justify-content: space-between; align-items: center;
+        }
+        .vp-team-name { color: #fff; font-weight: 800; font-size: 0.75rem; }
+        .vp-score { color: #fcd34d; font-weight: 800; font-size: 0.75rem; }
+        .vp-mid { flex: 1; display: flex; align-items: center; justify-content: center; }
+        .vp-mid-text { color: rgba(255,255,255,0.7); font-size: 0.7rem; font-weight: 600; text-align: center; padding: 0 16px; }
+        .vp-buzz-zone { padding: 16px; display: flex; justify-content: center; position: relative; }
+        .vp-buzz-btn {
+            width: 100px; height: 100px; border-radius: 50%;
+            background: radial-gradient(circle at 35% 30%, #ff8a65, #d32f2f 70%);
+            box-shadow: 0 8px 20px rgba(211,47,47,0.5), inset 0 -6px 12px rgba(0,0,0,0.3);
+            color: #fff; font-weight: 900; letter-spacing: 0.1em;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 0.9rem;
+        }
+        .vp-lock-overlay {
+            position: absolute; z-index: 6;
+            display: flex; align-items: center; justify-content: center;
+            width: 100px; height: 100px;
+            font-size: 1.8rem;
+            filter: none !important; /* lock icon stays crisp even though behind is dimmed */
+        }
+
+        /* ============ Admin frame ============ */
+        .frame-admin { width: 720px; aspect-ratio: 16 / 8.2; display: flex; flex-direction: column; }
+        .admin-toolbar {
+            position: relative; z-index: 6;
+            padding: 10px 14px;
+            display: flex; align-items: center; justify-content: space-between;
+            background: rgba(0,0,0,0.35);
+            border-bottom: 1px solid rgba(255,255,255,0.08);
+        }
+        .admin-toolbar-title { color: rgba(255,255,255,0.8); font-weight: 700; font-size: 0.85rem; letter-spacing: 0.03em; }
+        .admin-body {
+            flex: 1; position: relative;
+            display: flex; flex-direction: column; gap: 14px;
+            padding: 16px;
+        }
+        .admin-teams-row { display: flex; gap: 10px; }
+        .admin-team-card {
+            flex: 1; padding: 10px; border-radius: 8px;
+            background: rgba(255,255,255,0.08);
+            color: #fff; font-size: 0.75rem; font-weight: 700;
+        }
+        .admin-team-card .score { display: block; margin-top: 4px; color: #fcd34d; font-size: 0.85rem; }
+        .admin-controls-row { display: flex; gap: 8px; flex-wrap: wrap; }
+        .admin-btn {
+            padding: 8px 16px; border-radius: 6px; border: none;
+            font-weight: 700; font-size: 0.75rem; letter-spacing: 0.03em;
+            color: #fff; background: rgba(255,255,255,0.14);
+        }
+        .admin-btn.primary { background: #3b82f6; }
+        .admin-btn.success { background: #22c55e; color: #06281d; }
+
+        .entracte-btn {
+            padding: 9px 18px; border-radius: 6px; border: none;
+            font-weight: 800; font-size: 0.8rem; letter-spacing: 0.05em;
+            cursor: pointer;
+        }
+        .entracte-btn.idle { background: #f59e0b; color: #2b1400; }
+        .entracte-btn.active { background: #ef4444; color: #fff; box-shadow: 0 0 0 3px rgba(239,68,68,0.35); }
+        .entracte-btn.disabled { background: rgba(255,255,255,0.12); color: rgba(255,255,255,0.35); cursor: not-allowed; }
+        .btn-note { font-size: 0.62rem; color: rgba(255,255,255,0.5); margin-top: 4px; max-width: 160px; }
+
+        /* ============ Anim frame (tablet) ============ */
+        .frame-anim { width: 560px; aspect-ratio: 16 / 10; }
+        .anim-body { position: absolute; inset: 0; padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+        .anim-msgbar { padding: 10px 14px; border-radius: 8px; background: rgba(255,255,255,0.08); color: rgba(255,255,255,0.7); font-size: 0.75rem; }
+        .anim-grid { flex: 1; display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+        .anim-cell { border-radius: 8px; background: rgba(255,255,255,0.1); }
+        .anim-idle-note {
+            position: absolute; top: 10px; right: 12px; z-index: 6;
+            font-size: 0.65rem; color: rgba(255,255,255,0.55);
+            background: rgba(0,0,0,0.4); padding: 4px 8px; border-radius: 4px;
+        }
+
+        .filter-recipe {
+            font-family: "Courier New", monospace;
+            background: #263238; color: #a5d6a7;
+            padding: 10px 14px; border-radius: 6px; display: inline-block; margin-top: 8px;
+        }
+
+        .legend-swatch { display: inline-block; width: 12px; height: 12px; border-radius: 3px; margin-right: 6px; vertical-align: -1px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Mode ENTRACTE — 4 surfaces</h1>
+        <p class="intro">
+            Maquette statique AVANT/APRÈS de validation (milestone v6.5.2, issue #119 redéfinie).
+            <strong>#119 n'est plus un type de question</strong> — c'est un <strong>mode de pause
+            globale</strong> déclenché depuis l'admin, qui affiche un panneau configurable
+            (texte + fond image) par-dessus l'écran TV et VJoueur, avec le reste de l'interface
+            visible en fond mais estompé (filtre CSS). Aucun code applicatif n'a été modifié pour
+            produire cette maquette.
+        </p>
+
+        <div class="note info">
+            <strong>Recette de filtre partagée</strong> — même traitement visuel sur les 4 surfaces,
+            pour une cohérence de perception "pause" quel que soit l'écran regardé :
+            <div class="filter-recipe">filter: grayscale(0.85) brightness(0.55);</div>
+            Suffisamment marqué pour signaler clairement l'arrêt du jeu, sans rendre le contenu
+            totalement illisible (on doit pouvoir deviner qu'une partie était en cours).
+        </div>
+
+        <!-- ============ 1. TV ============ -->
+        <h2>1. TV (<span class="code">/tv</span>) — cadre 16:9, 1920×1080 simulé</h2>
+        <div class="demo-section">
+            <div class="section-label">Panneau ENTRACTE — ratio configurable (~65% largeur × ~60% hauteur, centré)</div>
+            <div class="demo-subtitle">Texte principal + sous-texte + zone de fond image (placeholder dégradé ici) ; le reste de l'écran (ex. état READY simplifié) reste visible en fond, estompé.</div>
+
+            <div class="compare">
+                <div class="compare-block">
+                    <span class="badge normal">NORMAL</span>
+                    <div class="stage-frame frame-tv">
+                        <div class="tv-bg-content">
+                            <span class="tv-ready-badge">QCM</span>
+                            <span class="tv-ready-text">✋ PRÉPAREZ-VOUS</span>
+                        </div>
+                        <div class="tv-team-strip">
+                            <span class="tv-team-chip">Les Foudroyants — 40</span>
+                            <span class="tv-team-chip">Buzz Masters — 35</span>
+                            <span class="tv-team-chip">Quiz Time — 28</span>
+                        </div>
+                        <span class="res-tag">1920×1080 simulé</span>
+                    </div>
+                </div>
+                <div class="compare-block">
+                    <span class="badge entracte">ENTRACTE ACTIF</span>
+                    <div class="stage-frame frame-tv">
+                        <div class="tv-bg-content dim-filter">
+                            <span class="tv-ready-badge">QCM</span>
+                            <span class="tv-ready-text">✋ PRÉPAREZ-VOUS</span>
+                        </div>
+                        <div class="tv-team-strip dim-filter">
+                            <span class="tv-team-chip">Les Foudroyants — 40</span>
+                            <span class="tv-team-chip">Buzz Masters — 35</span>
+                            <span class="tv-team-chip">Quiz Time — 28</span>
+                        </div>
+                        <div class="entracte-panel" style="--ep-w:65%; --ep-h:60%;">
+                            <span class="entracte-slot-tag">zone image configurable</span>
+                            <div class="entracte-panel-bg"></div>
+                            <div class="entracte-panel-content">
+                                <span class="entracte-title">Entracte</span>
+                                <span class="entracte-subtitle">Retour dans 20 min</span>
+                            </div>
+                        </div>
+                        <span class="res-tag">1920×1080 simulé</span>
+                    </div>
+                </div>
+            </div>
+            <p class="caption" style="margin-top:12px;">Le plateau (badge de type, texte READY, bandeau d'équipes) reste visible en arrière-plan mais estompé — le panneau ENTRACTE n'occupe volontairement pas 100% de l'écran.</p>
+        </div>
+
+        <!-- ============ 2. VJoueur ============ -->
+        <h2>2. VJoueur — cadre mobile/tablette portrait</h2>
+        <div class="demo-section">
+            <div class="section-label">Même principe — bouton buzz visuellement neutralisé</div>
+            <div class="demo-subtitle">Bandeau joueur/équipe/score et bouton buzz visibles en fond, estompés ; un cadenas signale explicitement que le buzz est désactivé.</div>
+
+            <div class="compare">
+                <div class="compare-block">
+                    <span class="badge normal">NORMAL</span>
+                    <div class="stage-frame frame-vplayer">
+                        <div class="vp-bg-content">
+                            <div class="vp-header">
+                                <span class="vp-team-name">Buzz Masters</span>
+                                <span class="vp-score">35 pts</span>
+                            </div>
+                            <div class="vp-mid">
+                                <span class="vp-mid-text">Question QCM en cours…</span>
+                            </div>
+                            <div class="vp-buzz-zone">
+                                <div class="vp-buzz-btn">BUZZ</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="compare-block">
+                    <span class="badge entracte">ENTRACTE ACTIF</span>
+                    <div class="stage-frame frame-vplayer">
+                        <div class="vp-bg-content dim-filter">
+                            <div class="vp-header">
+                                <span class="vp-team-name">Buzz Masters</span>
+                                <span class="vp-score">35 pts</span>
+                            </div>
+                            <div class="vp-mid">
+                                <span class="vp-mid-text">Question QCM en cours…</span>
+                            </div>
+                            <div class="vp-buzz-zone">
+                                <div class="vp-buzz-btn">BUZZ</div>
+                            </div>
+                        </div>
+                        <div class="vp-lock-overlay" style="top: 63%;">🔒</div>
+                        <div class="entracte-panel" style="--ep-w:80%; --ep-h:38%; top:32%;">
+                            <div class="entracte-panel-bg"></div>
+                            <div class="entracte-panel-content">
+                                <span class="entracte-title">Entracte</span>
+                                <span class="entracte-subtitle">Retour dans 20 min</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <p class="caption" style="margin-top:12px;">Sur un écran étroit, le panneau prend une proportion différente (plus large, moins haut) que sur TV — même principe de ratio configurable, adapté au format portrait.</p>
+        </div>
+
+        <!-- ============ 3. Admin ============ -->
+        <h2>3. Admin — GamePage (cadre desktop large)</h2>
+        <div class="demo-section">
+            <div class="section-label">Pas de panneau ENTRACTE côté admin — uniquement le filtre estompé, sauf le bouton de contrôle</div>
+            <div class="demo-subtitle">Le bouton ENTRACTE / FIN D'ENTRACTE reste net et contrasté en toute circonstance — c'est le seul élément non filtré.</div>
+
+            <div class="compare">
+                <div class="compare-block">
+                    <span class="badge normal">AVANT DÉCLENCHEMENT</span>
+                    <div class="stage-frame frame-admin">
+                        <div class="admin-toolbar">
+                            <span class="admin-toolbar-title">BuzzControl — Contrôle de partie</span>
+                            <div>
+                                <button class="entracte-btn idle">ENTRACTE</button>
+                            </div>
+                        </div>
+                        <div class="admin-body">
+                            <div class="admin-teams-row">
+                                <div class="admin-team-card">Les Foudroyants<span class="score">40 pts</span></div>
+                                <div class="admin-team-card">Buzz Masters<span class="score">35 pts</span></div>
+                                <div class="admin-team-card">Quiz Time<span class="score">28 pts</span></div>
+                            </div>
+                            <div class="admin-controls-row">
+                                <button class="admin-btn primary">START</button>
+                                <button class="admin-btn">PAUSE</button>
+                                <button class="admin-btn success">REVEAL</button>
+                                <button class="admin-btn">STOP</button>
+                            </div>
+                        </div>
+                        <span class="res-tag">GamePage simulé</span>
+                    </div>
+                </div>
+                <div class="compare-block">
+                    <span class="badge entracte">ENTRACTE ACTIF</span>
+                    <div class="stage-frame frame-admin">
+                        <div class="admin-toolbar">
+                            <span class="admin-toolbar-title">BuzzControl — Contrôle de partie</span>
+                            <div>
+                                <button class="entracte-btn active">FIN D'ENTRACTE</button>
+                            </div>
+                        </div>
+                        <div class="admin-body dim-filter">
+                            <div class="admin-teams-row">
+                                <div class="admin-team-card">Les Foudroyants<span class="score">40 pts</span></div>
+                                <div class="admin-team-card">Buzz Masters<span class="score">35 pts</span></div>
+                                <div class="admin-team-card">Quiz Time<span class="score">28 pts</span></div>
+                            </div>
+                            <div class="admin-controls-row">
+                                <button class="admin-btn primary">START</button>
+                                <button class="admin-btn">PAUSE</button>
+                                <button class="admin-btn success">REVEAL</button>
+                                <button class="admin-btn">STOP</button>
+                            </div>
+                        </div>
+                        <span class="res-tag">GamePage simulé</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="row-title" style="margin-top:26px; font-weight:600; color:#444;">Cas "question en cours" — bouton désactivé</div>
+            <div class="compare" style="margin-top:10px;">
+                <div class="compare-block">
+                    <span class="badge normal">QUESTION EN COURS (phase STARTED)</span>
+                    <div class="stage-frame frame-admin" style="aspect-ratio: 16/4.2;">
+                        <div class="admin-toolbar">
+                            <span class="admin-toolbar-title">BuzzControl — Contrôle de partie</span>
+                            <div>
+                                <button class="entracte-btn disabled" disabled>ENTRACTE</button>
+                                <div class="btn-note">Désactivé pendant une question en cours (phase ≠ PREPARE/READY/STOP)</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="note">
+                <strong>Piste d'implémentation :</strong> le bouton ENTRACTE n'est cliquable que
+                hors cycle de question (ex. phases <span class="code">STOP</span>/<span class="code">PREPARE</span>/<span class="code">READY</span>) —
+                état <span class="code">disabled</span> visuellement distinct (grisé) pendant
+                <span class="code">STARTED</span>/<span class="code">PAUSED</span>/<span class="code">REVEALED</span> pour éviter de
+                couper une question en pleine partie.
+            </div>
+        </div>
+
+        <!-- ============ 4. Anim ============ -->
+        <h2>4. Anim — tablette (landscape)</h2>
+        <div class="demo-section">
+            <div class="section-label">Filtre estompé sur toute l'interface — pas de bouton dédié</div>
+            <div class="demo-subtitle">L'animateur ne peut rien déclencher ni changer pendant l'entracte (contrôle exclusivement admin).</div>
+
+            <div class="compare">
+                <div class="compare-block">
+                    <span class="badge normal">NORMAL</span>
+                    <div class="stage-frame frame-anim">
+                        <div class="anim-body">
+                            <div class="anim-msgbar">Zone message régie — tapez une consigne…</div>
+                            <div class="anim-grid">
+                                <div class="anim-cell"></div><div class="anim-cell"></div><div class="anim-cell"></div><div class="anim-cell"></div>
+                                <div class="anim-cell"></div><div class="anim-cell"></div><div class="anim-cell"></div><div class="anim-cell"></div>
+                            </div>
+                        </div>
+                        <span class="res-tag">AnimPage simulé</span>
+                    </div>
+                </div>
+                <div class="compare-block">
+                    <span class="badge entracte">ENTRACTE ACTIF</span>
+                    <div class="stage-frame frame-anim">
+                        <div class="anim-body dim-filter">
+                            <div class="anim-msgbar">Zone message régie — tapez une consigne…</div>
+                            <div class="anim-grid">
+                                <div class="anim-cell"></div><div class="anim-cell"></div><div class="anim-cell"></div><div class="anim-cell"></div>
+                                <div class="anim-cell"></div><div class="anim-cell"></div><div class="anim-cell"></div><div class="anim-cell"></div>
+                            </div>
+                        </div>
+                        <div class="anim-idle-note">⏸ Entracte en cours — contrôle réservé à l'admin</div>
+                        <span class="res-tag">AnimPage simulé</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- RECAP -->
+        <h2>Récapitulatif</h2>
+        <table class="states-table">
+            <thead>
+                <tr><th>Surface</th><th>Panneau ENTRACTE</th><th>Élément(s) non filtré(s)</th></tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td><strong>TV</strong> (<span class="code">/tv</span>)</td>
+                    <td>Oui — ~65% × 60%, centré, texte + sous-texte + fond configurable</td>
+                    <td>—</td>
+                </tr>
+                <tr>
+                    <td><strong>VJoueur</strong></td>
+                    <td>Oui — ratio adapté au format portrait (~80% × 38%)</td>
+                    <td>—</td>
+                </tr>
+                <tr>
+                    <td><strong>Admin</strong> (GamePage)</td>
+                    <td>Non</td>
+                    <td>Bouton <span class="code">ENTRACTE</span> / <span class="code">FIN D'ENTRACTE</span> (toolbar)</td>
+                </tr>
+                <tr>
+                    <td><strong>Anim</strong></td>
+                    <td>Non</td>
+                    <td>—</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <hr style="margin: 40px 0; border: none; border-top: 1px solid #ddd;">
+        <p style="color: #999; font-size: 0.9em;">
+            <strong>Maquette :</strong> 2026-08-20 · Milestone v6.5.2 · Issue #119 (redéfinie — mode ENTRACTE, plus un type de question)
+        </p>
+    </div>
+</body>
+</html>

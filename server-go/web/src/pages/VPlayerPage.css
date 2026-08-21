@@ -10,6 +10,43 @@
   position: relative;
 }
 
+/* ENTRACTE (v6.5.2, #119) — englobe <PlayerDisplay isVPlayer> en entier
+   (celui-ci désactive son propre filtre quand isVPlayer, F4 : c'est ici,
+   côté VJoueur, que le filtre et le panneau sont portés). position:fixed +
+   inset:0 plutôt qu'un flex:1 : PlayerDisplay embarque QRCodeOverlay
+   (position:fixed, non gardé par isVPlayer) — fixer ce wrapper explicitement
+   sur le vrai viewport garantit que ce descendant fixed niché reste
+   correctement positionné même une fois capturé par le containing block que
+   `filter` introduit (même raisonnement que .entracte-content dans
+   PlayerDisplay.css). Bandeau de connexion, indice plein écran, overlay de
+   buzz et clavier ARDOISE restent HORS de ce nœud (tous position:fixed). */
+.entracte-content {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  /* Transition progressive (#119, C3) — sur le sélecteur de base, jamais
+     .entracte-dim (même raisonnement que PlayerDisplay.css). ⚠️ Ne PAS poser
+     un filter identité ici pour lisser l'interpolation — voir le
+     commentaire complet dans PlayerDisplay.css, même piège. */
+  transition: filter var(--ep-transition, 2000ms) ease;
+}
+
+/* Cadenas — reste net au-dessus de la zone média/buzz (frère du contenu
+   filtré, jamais enfant). z-index au-dessus du panneau (500, styles/entracte.css)
+   pour rester visible même si PANEL_SIZE est réglé proche de 100%. */
+.entracte-lock-wrap {
+  position: fixed;
+  inset: 0;
+  z-index: 550;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding-bottom: 6%;
+  pointer-events: none;
+}
+
 .vplayer-page.loading {
   align-items: center;
   justify-content: center;

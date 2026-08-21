@@ -19,7 +19,7 @@ import (
 // concaténation d'octets (voir son commentaire dans main.go) pour éviter un
 // aller-retour map[string]interface{} par destinataire. Ce chemin extrait le
 // nœud GAME directement du message source, indépendamment de
-// SerializeForWebClient : sans son propre appel à stripAdminOnlyGameFields,
+// SerializeForWebClient : sans son propre appel à stripVPlayerHiddenGameFields,
 // QUIZ_OBJECTIVES fuirait vers tout VJoueur en phase PREPARE/READY, même
 // après la correction apportée à internal/protocol/messages.go — c'est
 // exactement le "chemin oublié" que contracts/ws-payload-serialization.md

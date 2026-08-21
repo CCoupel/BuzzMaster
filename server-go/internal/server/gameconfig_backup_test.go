@@ -2,15 +2,20 @@ package server
 
 // Tests for #150 (plan task 17.6): game-config.json's integration into
 // selective backup (/backup-select), restore (/restore) and reset
-// (/reset-select). All three piggyback on the existing "history" flag —
-// see handleBackupSelect/handleResetSelect's doc comments in http.go for
-// why — except restore, whose detection is content-based (presence of
+// (/reset-select). Restore's detection is content-based (presence of
 // "config/game-config.json" in the uploaded TAR), independent of any flag.
+//
+// #152 (2026-08-21): backup/reset used to piggyback game-config.json on the
+// "history" flag — code-reviewer flagged this as a semantic mismatch during
+// #150's own review (game-config.json is a visual/ambiance setting, not
+// history/event data). Both endpoints now gate it on a dedicated "ambiance"
+// flag instead (BackupPage.jsx's "Configuration Ambiance" checkbox) — see
+// handleBackupSelect/handleResetSelect's doc comments in http.go.
 
 import (
 	"archive/tar"
-	"bytes"
 	"buzzcontrol/internal/config"
+	"bytes"
 	"encoding/json"
 	"mime/multipart"
 	"net/http"
@@ -20,10 +25,11 @@ import (
 	"testing"
 )
 
-// TestHTTPServer_BackupSelect_IncludesGameConfigWithHistory verifies
+// TestHTTPServer_BackupSelect_IncludesGameConfigWithAmbiance verifies
 // game-config.json is included in the TAR produced by /backup-select when
-// history=true, and absent when history is not selected.
-func TestHTTPServer_BackupSelect_IncludesGameConfigWithHistory(t *testing.T) {
+// ambiance=true, and absent when ambiance is not selected — including when
+// history=true IS selected (#152: the two are no longer linked).
+func TestHTTPServer_BackupSelect_IncludesGameConfigWithAmbiance(t *testing.T) {
 	server, dataDir := setupTestHTTPServer(t)
 
 	gs := &config.GameSettings{}
@@ -33,19 +39,19 @@ func TestHTTPServer_BackupSelect_IncludesGameConfigWithHistory(t *testing.T) {
 		t.Fatalf("could not write fixture game-config.json: %v", err)
 	}
 
-	t.Run("history=true includes game-config.json", func(t *testing.T) {
-		req := httptest.NewRequest("GET", "/backup-select?history=true", nil)
+	t.Run("ambiance=true includes game-config.json", func(t *testing.T) {
+		req := httptest.NewRequest("GET", "/backup-select?ambiance=true", nil)
 		w := httptest.NewRecorder()
 		server.mux.ServeHTTP(w, req)
 		if w.Code != http.StatusOK {
 			t.Fatalf("Expected 200, got %d: %s", w.Code, w.Body.String())
 		}
 		if !tarContains(t, w.Body.Bytes(), "config/game-config.json") {
-			t.Errorf("Expected config/game-config.json in the TAR when history=true")
+			t.Errorf("Expected config/game-config.json in the TAR when ambiance=true")
 		}
 	})
 
-	t.Run("history=false (teams only) excludes game-config.json", func(t *testing.T) {
+	t.Run("ambiance=false (teams only) excludes game-config.json", func(t *testing.T) {
 		req := httptest.NewRequest("GET", "/backup-select?teams=true", nil)
 		w := httptest.NewRecorder()
 		server.mux.ServeHTTP(w, req)
@@ -55,6 +61,23 @@ func TestHTTPServer_BackupSelect_IncludesGameConfigWithHistory(t *testing.T) {
 		if tarContains(t, w.Body.Bytes(), "config/game-config.json") {
 			t.Errorf("Did not expect config/game-config.json in the TAR when only teams=true")
 		}
+	})
+
+	// #152: the whole point of the split — history=true alone must NO
+	// LONGER pull in game-config.json (it did before this fix).
+	t.Run("history=true alone (no ambiance) excludes game-config.json", func(t *testing.T) {
+		req := httptest.NewRequest("GET", "/backup-select?history=true", nil)
+		w := httptest.NewRecorder()
+		server.mux.ServeHTTP(w, req)
+		if w.Code != http.StatusOK {
+			t.Fatalf("Expected 200, got %d: %s", w.Code, w.Body.String())
+		}
+		if tarContains(t, w.Body.Bytes(), "config/game-config.json") {
+			t.Errorf("#152 regression: history=true alone must not include game-config.json anymore (needs ambiance=true)")
+		}
+		// game_state.json staying on "history" is covered independently by
+		// TestHTTPServer_BackupSelect_IncludesGameStateWithHistory
+		// (gamestate_backup_test.go) — not duplicated here.
 	})
 
 	_ = dataDir
@@ -194,44 +217,67 @@ func TestHTTPServer_Restore_GameConfig(t *testing.T) {
 	}
 }
 
-// TestHTTPServer_ResetSelect_GameConfig verifies /reset-select?history=true
-// resets game-config.json to defaults, both on disk and in memory.
+// TestHTTPServer_ResetSelect_GameConfig verifies /reset-select?ambiance=true
+// resets game-config.json to defaults, both on disk and in memory — and
+// (#152) that history=true alone no longer does.
 func TestHTTPServer_ResetSelect_GameConfig(t *testing.T) {
 	server, dataDir := setupTestHTTPServer(t)
 
-	gs := &config.GameSettings{}
-	config.ApplyGameSettingsDefaults(gs)
-	gs.Game.DefaultDelay = 90
-	gs.NeonEffect.Enabled = true
-	if err := config.SaveGameSettings(gs); err != nil {
-		t.Fatalf("could not write fixture game-config.json: %v", err)
-	}
-	config.SetGameSettingsInstance(gs)
-
-	req := httptest.NewRequest("POST", "/reset-select?history=true", nil)
-	w := httptest.NewRecorder()
-	server.mux.ServeHTTP(w, req)
-	if w.Code != http.StatusOK {
-		t.Fatalf("Expected 200, got %d: %s", w.Code, w.Body.String())
+	freshFixture := func() {
+		gs := &config.GameSettings{}
+		config.ApplyGameSettingsDefaults(gs)
+		gs.Game.DefaultDelay = 90
+		gs.NeonEffect.Enabled = true
+		if err := config.SaveGameSettings(gs); err != nil {
+			t.Fatalf("could not write fixture game-config.json: %v", err)
+		}
+		config.SetGameSettingsInstance(gs)
 	}
 
-	after := config.GetGameSettings()
-	if after.Game.DefaultDelay != 30 {
-		t.Errorf("Expected default_delay reset to the default (30), got %d", after.Game.DefaultDelay)
-	}
-	if after.NeonEffect.Enabled {
-		t.Errorf("Expected neon_effect.enabled reset to the default (false), got true")
-	}
+	t.Run("history=true alone no longer resets game-config.json (#152)", func(t *testing.T) {
+		freshFixture()
 
-	onDisk, err := os.ReadFile(filepath.Join(dataDir, "config", "game-config.json"))
-	if err != nil {
-		t.Fatalf("game-config.json should still exist (rewritten with defaults), got error: %v", err)
-	}
-	var onDiskGS config.GameSettings
-	if err := json.Unmarshal(onDisk, &onDiskGS); err != nil {
-		t.Fatalf("reset game-config.json is not valid JSON: %v", err)
-	}
-	if onDiskGS.Game.DefaultDelay != 30 {
-		t.Errorf("Expected default_delay=30 on disk after reset, got %d", onDiskGS.Game.DefaultDelay)
-	}
+		req := httptest.NewRequest("POST", "/reset-select?history=true", nil)
+		w := httptest.NewRecorder()
+		server.mux.ServeHTTP(w, req)
+		if w.Code != http.StatusOK {
+			t.Fatalf("Expected 200, got %d: %s", w.Code, w.Body.String())
+		}
+
+		after := config.GetGameSettings()
+		if after.Game.DefaultDelay != 90 {
+			t.Errorf("#152 regression: history=true alone must not touch game-config.json anymore, got default_delay=%d (fixture was 90)", after.Game.DefaultDelay)
+		}
+	})
+
+	t.Run("ambiance=true resets game-config.json", func(t *testing.T) {
+		freshFixture()
+
+		req := httptest.NewRequest("POST", "/reset-select?ambiance=true", nil)
+		w := httptest.NewRecorder()
+		server.mux.ServeHTTP(w, req)
+		if w.Code != http.StatusOK {
+			t.Fatalf("Expected 200, got %d: %s", w.Code, w.Body.String())
+		}
+
+		after := config.GetGameSettings()
+		if after.Game.DefaultDelay != 30 {
+			t.Errorf("Expected default_delay reset to the default (30), got %d", after.Game.DefaultDelay)
+		}
+		if after.NeonEffect.Enabled {
+			t.Errorf("Expected neon_effect.enabled reset to the default (false), got true")
+		}
+
+		onDisk, err := os.ReadFile(filepath.Join(dataDir, "config", "game-config.json"))
+		if err != nil {
+			t.Fatalf("game-config.json should still exist (rewritten with defaults), got error: %v", err)
+		}
+		var onDiskGS config.GameSettings
+		if err := json.Unmarshal(onDisk, &onDiskGS); err != nil {
+			t.Fatalf("reset game-config.json is not valid JSON: %v", err)
+		}
+		if onDiskGS.Game.DefaultDelay != 30 {
+			t.Errorf("Expected default_delay=30 on disk after reset, got %d", onDiskGS.Game.DefaultDelay)
+		}
+	})
 }

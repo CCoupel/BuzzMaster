@@ -9,12 +9,18 @@ export default function BackupPage() {
   const { sendMessage } = useGame()
 
   // Backup options
+  // "ambiance" (#152) : case dédiée pour game-config.json (délai par défaut,
+  // effet néon — la config ENTRACTE a rejoint game_state.json avec #119, donc
+  // le flag "history" existant). Auparavant rattaché à "history", sans
+  // rapport sémantique (relevé par code-reviewer lors de #150) — flag serveur
+  // dédié coordonné avec dev-backend, nom convenu "ambiance".
   const [backupOptions, setBackupOptions] = useState({
     questions: true,
     teams: true,
     bumpers: true,
     history: true,
     medias: true,
+    ambiance: true,
   })
 
   // Reset options
@@ -24,6 +30,7 @@ export default function BackupPage() {
     bumpers: false,
     history: false,
     medias: false,
+    ambiance: false,
   })
 
   const handleBackup = async () => {
@@ -35,6 +42,7 @@ export default function BackupPage() {
       if (backupOptions.bumpers) params.append('bumpers', 'true')
       if (backupOptions.history) params.append('history', 'true')
       if (backupOptions.medias) params.append('medias', 'true')
+      if (backupOptions.ambiance) params.append('ambiance', 'true')
 
       const response = await fetch(`/backup-select?${params.toString()}`)
       const blob = await response.blob()
@@ -64,7 +72,8 @@ export default function BackupPage() {
       teams: 'Equipes',
       bumpers: 'Joueurs',
       history: 'Historique',
-      medias: 'Médias & Catégories'
+      medias: 'Médias & Catégories',
+      ambiance: 'Configuration Ambiance'
     }
     const selectedLabels = selected.map(k => labels[k]).join(', ')
 
@@ -132,7 +141,8 @@ export default function BackupPage() {
                 teams: 'Equipes',
                 bumpers: 'Joueurs',
                 history: 'Historique',
-                medias: 'Médias & Catégories'
+                medias: 'Médias & Catégories',
+                ambiance: 'Configuration Ambiance'
               }).map(([key, label]) => (
                 <label key={key} className="checkbox-item">
                   <input
@@ -208,7 +218,8 @@ export default function BackupPage() {
                 teams: 'Equipes',
                 bumpers: 'Joueurs',
                 history: 'Historique',
-                medias: 'Médias & Catégories'
+                medias: 'Médias & Catégories',
+                ambiance: 'Configuration Ambiance'
               }).map(([key, label]) => (
                 <label key={key} className="checkbox-item">
                   <input

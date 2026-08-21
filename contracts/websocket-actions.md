@@ -1643,6 +1643,42 @@ même politique que le refus d'allow-list existant.
 
 ---
 
+## UPDATE_ENTRACTE_CONFIG ✨ (v6.5.2, #119)
+
+Enregistre la configuration du panneau d'entracte — **propriété de la partie**, éditée depuis la
+page Quiz (`/quiz`), persistée dans `game_state.json` aux côtés des champs `QUIZ_*`.
+
+| Propriété | Valeur |
+|-----------|--------|
+| Direction | `Client→Server` |
+| Payload   | `{ TITLE, SUBTITLE, PANEL_SIZE, ANIM_PERIOD, ANIM_INTENSITY, TRANSITION_MS }` |
+| Allow-list | **`admin` uniquement** |
+| Accepté pendant un entracte actif | ✅ **Oui** — mais sans effet sur la pause en cours (voir ci-dessous) |
+| Effet | Bornage, écriture dans `GameState.ENTRACTE_CONFIG`, persistance synchrone, `UPDATE` diffusé |
+
+**Action dédiée, et non une extension de `UPDATE_QUIZ_META`.** Les deux formulaires cohabitent sur
+la même page mais ont chacun leur bouton d'enregistrement. `QuizMetaPayload` porte déjà une
+mécanique de pointeurs destinée à éviter qu'un client n'envoyant qu'une partie du formulaire
+n'efface le reste ; y greffer un second formulaire rendrait ce piège plus probable — enregistrer le
+bloc Quiz effacerait les réglages d'entracte, et réciproquement. Deux formulaires, deux actions,
+chacune propriétaire de ses champs.
+
+`ANIM_INTENSITY` et `TRANSITION_MS` sont transmis en **pointeurs** : `0` y est une valeur
+signifiante (animation désactivée / transition instantanée) qu'il faut pouvoir distinguer de
+« champ absent ». Même convention que `POPULATIONS`/`DIFFICULTIES` dans `QuizMetaPayload`.
+
+`IMAGE_IS_CUSTOM` **n'est pas dans le payload** : c'est un champ dérivé, calculé par le serveur
+d'après la présence du fichier sur disque. L'image se gère par son endpoint dédié
+(`/api/game/entracte-image`, voir `contracts/http-endpoints.md`).
+
+**Effet pendant un entracte actif** — l'action est acceptée et la configuration est bien persistée,
+mais elle **ne modifie pas le panneau diffusé** : `ENTRACTE_CONFIG` est gelé jusqu'à la fin de la
+pause, et les nouvelles valeurs s'appliquent au **prochain** `ENTRACTE_SET{ACTIVE:true}`. Le
+formulaire d'édition se relit dans `ENTRACTE_CONFIG_SAVED`, pas dans `ENTRACTE_CONFIG` — détail des
+deux champs dans `contracts/game-state.md` §« Configuration gelée à l'activation ».
+
+---
+
 ## Actions refusées pendant l'entracte (v6.5.2, #119)
 
 Tant que `GameState.ENTRACTE` vaut `true`, un **second contrôle** s'applique après celui de
@@ -1656,10 +1692,17 @@ n'atteint jamais son handler.
 | `HELLO`, `SET_CLIENT_TYPE` | Poignée de main : un écran rafraîchi pendant la pause doit se reconnecter |
 | `PLAYER_CONNECT` | Un VJoueur qui recharge son téléphone pendant la pause doit retrouver sa place |
 | `REGIE_MESSAGE_SEND`, `REGIE_MESSAGE_CLEAR` | La régie prévient les animateurs — c'est précisément le moment utile |
+| `UPDATE_ENTRACTE_CONFIG` | Préparer le panneau de la **prochaine** pause pendant celle en cours. Sans effet sur le panneau diffusé (gel, voir ci-dessus) |
 | `PONG` | Inoffensif (aucune transition n'en dépend hors `PREPARE`) et évite de faire croire un buzzer muet |
 
 Tout le reste — `READY`, `START`, `STOP`, `PAUSE`, `CONTINUE`, `REVEAL`, `REMOTE`, `NEW_GAME`,
-`RAZ`, `SHOW_QR_CODE`, crédits de points, actions MEMORY/MEMOTION/ARDOISE… — est refusé.
+`RAZ`, `SHOW_QR_CODE`, `UPDATE_QUIZ_META`, crédits de points, actions MEMORY/MEMOTION/ARDOISE… —
+est refusé.
+
+> **`UPDATE_ENTRACTE_CONFIG` est la seule action de configuration admise**, et sans exception à la
+> règle générale : elle ne change rien à la pause en cours. Le panneau diffusé reste celui figé au
+> déclenchement — ce qui **retire un critère d'acceptation de la première livraison** (« changer les
+> textes se voit en direct »).
 
 > **Pourquoi une garde serveur et pas seulement l'estompage.** Un filtre CSS ne bloque aucun clic :
 > un bouton estompé sur `/admin` ou `/anim` reste parfaitement cliquable, et un onglet resté ouvert

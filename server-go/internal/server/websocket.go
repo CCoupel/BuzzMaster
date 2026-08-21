@@ -533,17 +533,29 @@ func serializeForClientType(msg *protocol.Message, clientType ClientType) ([]byt
 	switch clientType {
 	case ClientTypeAdmin:
 		return msg.SerializeForAdmin()
-	case ClientTypeTV, ClientTypeVPlayer, ClientTypeAnim:
+	case ClientTypeTV, ClientTypeAnim:
 		// #155 (v6.2.0): ClientTypeAnim reuses SerializeForWebClient, same as
-		// TV/VPlayer — no dedicated serializer. Its payload need is a strict
-		// subset of what TV/VPlayer already get (contracts/
-		// ws-payload-serialization.md §"Animateur" has the full decision +
-		// justification). PRIORITY FIX (plan _work/reports/plan-20260813-092950.md
-		// §0.2): this case MUST list ClientTypeAnim explicitly — the default
-		// branch below returns the full ADMIN payload (firmware/OTA/ACK
-		// fields, QUIZ_OBJECTIVES, config), the exact opposite of the intent,
-		// for any type this switch doesn't know about.
+		// TV — no dedicated serializer. Its payload need is a strict subset
+		// of what TV already gets (contracts/ws-payload-serialization.md
+		// §"Animateur" has the full decision + justification). PRIORITY FIX
+		// (plan _work/reports/plan-20260813-092950.md §0.2): this case MUST
+		// list ClientTypeAnim explicitly — the default branch below returns
+		// the full ADMIN payload (firmware/OTA/ACK fields, QUIZ_OBJECTIVES,
+		// config), the exact opposite of the intent, for any type this
+		// switch doesn't know about.
 		return msg.SerializeForWebClient()
+	case ClientTypeVPlayer:
+		// #128 (v6.5.2): VPlayer split out of the TV/anim branch above —
+		// SerializeForWebClient() no longer suffices for it. VPlayer must
+		// additionally lose VPlayerOnlyGameFields (ARDOISE_ANSWERS), which
+		// TV and /anim legitimately need (contract vplayer-payload-filter.md
+		// §6). SerializeForVPlayerCommon applies both AdminOnlyGameFields
+		// AND VPlayerOnlyGameFields. Per-recipient reduction (PREPARE/READY,
+		// own bumper entry) happens separately, on the identified path
+		// (SerializeForVPlayer(playerID) / the hot fan-out in
+		// cmd/server/main.go) — this generic, non-identified path is what a
+		// not-yet-PLAYER_CONNECT'd VPlayer socket gets.
+		return msg.SerializeForVPlayerCommon()
 	case ClientTypeBuzzer:
 		return msg.SerializeForBuzzer()
 	default:

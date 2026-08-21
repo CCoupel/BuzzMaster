@@ -81,6 +81,16 @@ var inboundActionAllowlist = map[string][]ClientType{
 	protocol.ActionSetVirtualPlayerLimit: {ClientTypeAdmin},
 	protocol.ActionNewGame:               {ClientTypeAdmin},
 	protocol.ActionUpdateQuizMeta:        {ClientTypeAdmin},
+	// ENTRACTE_SET (v6.5.2, #119, contracts/websocket-actions.md
+	// §"ENTRACTE_SET"): admin only — deliberately NOT ClientTypeAnim, unlike
+	// the "conduite en direct" block above. A pause engages the whole room,
+	// not just the round in progress; the animateur sees it (filter +
+	// indicator) but cannot trigger or lift it.
+	protocol.ActionEntracteSet: {ClientTypeAdmin},
+	// UPDATE_ENTRACTE_CONFIG (v6.5.2, #119, C1, contracts/websocket-actions.md
+	// §"UPDATE_ENTRACTE_CONFIG"): saves the panel configuration from the Quiz
+	// page — admin only, same reasoning as ENTRACTE_SET above.
+	protocol.ActionUpdateEntracteConfig: {ClientTypeAdmin},
 	// Code review MAJEUR-1 follow-up (v6.2.0, #155/#156): the admin pushes
 	// its adjusted pointsInput to the server so it can be echoed to the
 	// animateur via CREDIT_POINTS — anim only ever RECEIVES this value
@@ -234,4 +244,60 @@ func IsActionAllowed(action string, clientType ClientType) bool {
 // handshake legacy clients rely on.
 func IsSetClientTypeAllowed(currentType ClientType) bool {
 	return currentType == ClientTypeAdmin
+}
+
+// entracteAllowedActions is the SECOND, orthogonal gate applied while
+// GameState.ENTRACTE is true (v6.5.2, #119, D6, contracts/websocket-actions.md
+// §"Actions refusées pendant l'entracte") — checked by cmd/server/main.go's
+// handleWebMessage AFTER inboundActionAllowlist/IsActionAllowed above, never
+// instead of it. A CLOSED allow-list, same default-deny discipline as
+// inboundActionAllowlist: an action absent here is refused while entracte is
+// active, logged, and never reaches its handler — including any action added
+// to the protocol later without an explicit decision recorded here.
+//
+// Rationale for each entry (contract, D6):
+//   - ENTRACTE_SET: the only way OUT — without it entracte would be a dead
+//     end.
+//   - HELLO, SET_CLIENT_TYPE: handshake — a screen that reloads mid-pause
+//     must be able to reconnect and receive state (which now includes
+//     ENTRACTE/ENTRACTE_CONFIG, same UPDATE).
+//   - PLAYER_CONNECT: a VJoueur reloading their phone mid-pause must recover
+//     their seat.
+//   - REGIE_MESSAGE_SEND/CLEAR: régie → anim messaging is exactly as useful
+//     during a pause as during play — arguably more so.
+//   - UPDATE_ENTRACTE_CONFIG (v6.5.2, C1/C4): preparing the NEXT pause's
+//     panel while the current one is showing is explicitly the point of the
+//     freeze design (contract game-state.md §"Configuration gelée à
+//     l'activation") — the save succeeds and persists, but has NO effect on
+//     the panel already displayed (Engine.SetEntracteConfig only refreshes
+//     the diffused config when !Entracte). This is the ONLY configuration
+//     action admitted here, and it's admitted without an exception carved
+//     into the general rule below — it simply never changes anything about
+//     the pause in progress.
+//   - PONG: harmless (no transition depends on it outside PREPARE) and
+//     avoids making a buzzer look dead to whatever polls it.
+//
+// Everything else — READY/START/STOP/PAUSE/CONTINUE/REVEAL/REMOTE/NEW_GAME/
+// RAZ/SHOW_QR_CODE/UPDATE_QUIZ_META/point credits/MEMORY*/MEMOTION*/
+// ARDOISE_INPUT/... — is refused. Physical buzz presses need no entry here:
+// handleButton already no-ops outside PhaseStarted, and entracte is only
+// reachable outside PhaseStarted (D4) — see the dedicated non-regression
+// test instead of a guard here.
+var entracteAllowedActions = map[string]bool{
+	protocol.ActionEntracteSet:          true,
+	protocol.ActionHello:                true,
+	protocol.ActionSetClientType:        true,
+	protocol.ActionPlayerConnect:        true,
+	protocol.ActionRegieMessageSend:     true,
+	protocol.ActionRegieMessageClear:    true,
+	protocol.ActionUpdateEntracteConfig: true,
+	protocol.ActionPong:                 true,
+}
+
+// IsActionAllowedDuringEntracte reports whether action may proceed while
+// GameState.ENTRACTE is true. Called only when entracte is actually active;
+// callers must apply the normal IsActionAllowed/IsSetClientTypeAllowed gate
+// first — this is a second, narrower gate on top, not a replacement.
+func IsActionAllowedDuringEntracte(action string) bool {
+	return entracteAllowedActions[action]
 }

@@ -16,7 +16,7 @@
  * QuestionsPage.ardoise.test.jsx.
  */
 import { describe, it, expect, beforeEach, vi } from 'vitest'
-import { render, screen, fireEvent } from '@testing-library/react'
+import { render, screen, fireEvent, within } from '@testing-library/react'
 import QuestionsPage from './QuestionsPage'
 
 // ---------------------------------------------------------------------------
@@ -166,7 +166,7 @@ describe('QuestionsPage — chips multi-sélection Publics/Difficultés (#137 Ba
   it('"Enregistrer" envoie la sélection locale de chips (POPULATIONS/DIFFICULTIES), pas seulement ce qui était déjà dans gameState', () => {
     const sendMessage = vi.fn()
     useGame.mockReturnValue(makeQPageMock({ sendMessage, gameState: { quizPopulations: [], quizDifficulties: [] } }))
-    render(<QuestionsPage />)
+    const { container } = render(<QuestionsPage />)
 
     // Sélectionne 2 publics et 1 difficulté avant tout enregistrement —
     // persistance dans l'état local du formulaire, pas encore dans gameState.
@@ -174,7 +174,11 @@ describe('QuestionsPage — chips multi-sélection Publics/Difficultés (#137 Ba
     fireEvent.click(screen.getByRole('button', { name: 'Adulte (18-64 ans)' }))
     fireEvent.click(screen.getByRole('button', { name: 'Moyen' }))
 
-    fireEvent.click(screen.getByText('Enregistrer'))
+    // Scopé au formulaire Quiz (.quiz-meta-form) : depuis #119 (corrections
+    // C1), la section Entracte de cette même page a AUSSI un bouton
+    // "Enregistrer" — un getByText global ne serait plus unique.
+    const quizMetaForm = container.querySelector('.quiz-meta-form')
+    fireEvent.click(within(quizMetaForm).getByText('Enregistrer'))
 
     expect(sendMessage).toHaveBeenCalledWith(
       'UPDATE_QUIZ_META',

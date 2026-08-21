@@ -2,6 +2,80 @@
 
 ---
 
+## [20260820-3] — sec : fuite des champs réservés à l'admin hors `UPDATE` (#128)
+
+> Milestone v6.5.2 · Plan : `_work/reports/plan-128-20260820-170433.md`
+
+**Aucun changement BREAKING** : aucun client ne perd une donnée qu'il utilisait. Le VJoueur perd un
+champ qu'il n'a jamais lu — c'est précisément l'objet du correctif.
+
+- **[CHANGED]** `SerializeForWebClient` ne filtre plus **seulement** `ActionUpdate`. La règle porte
+  désormais sur la **forme de la charge utile** : celle qui contient un nœud `GAME` est filtrée, les
+  autres passent intactes. Énumérer les actions concernées aurait reproduit le défaut dès la
+  prochaine action ajoutée.
+- **[CHANGED]** Conséquence : `START`, `STOP`, `PAUSE`, `CONTINUE` et `UPDATE_TIMER` sont désormais
+  filtrées comme `UPDATE`. Ces cinq actions transportaient le `GameState` complet vers TV, VJoueur et
+  animateur — **`UPDATE_TIMER` une fois par seconde**. La fuite n'était pas ponctuelle, elle était
+  continue.
+- **[NEW]** `VPlayerOnlyGameFields = ["ARDOISE_ANSWERS"]` — retrait appliqué au **seul** VJoueur.
+  La TV l'affiche au REVEAL et `/anim` le liste en direct : le champ ne pouvait pas rejoindre
+  `AdminOnlyGameFields`. Le VJoueur ne partage donc plus sa charge utile avec la TV et l'animateur.
+- **[CHANGED]** `QUIZ_OBJECTIVES` : la règle de confidentialité posée en v6.1.0 (#137) — « jamais
+  lisible depuis un écran TV ou les outils de développement d'un VJoueur » — **n'avait jamais tenu
+  hors de `UPDATE`**. Elle est effective à partir de ce lot. Seconde correction de confidentialité,
+  que personne n'avait demandée.
+- **[CHANGED]** Les métadonnées par buzzer (`FIRMWARE_VERSION`, `IS_OUTDATED`, `OTA_STATUS`,
+  `OTA_PERCENT`, `ACK_PENDING`) cessent également de fuiter sur ces cinq actions.
+- **Rectification de contrat** : `vplayer-payload-filter.md` affirmait depuis #129 que
+  `ARDOISE_ANSWERS` « n'est plus transmis aux navigateurs des VJoueurs pendant la saisie ». #129
+  avait fermé un **déclencheur**, pas la fuite. La phrase est corrigée, et §6 documente le
+  **risque résiduel non fermé** : `/tv` reste accessible sans authentification et porte ce champ.
+
+---
+
+## [20260820-2] — ENTRACTE : config rattachée à la partie, transition progressive (#119)
+
+> Milestone v6.5.2 · Corrections après essai en QUALIF (`6.5.2.2`) par l'utilisateur
+> Plan : `_work/reports/plan-entracte-119-fixes-20260820-155123.md`
+
+**Deux changements BREAKING**, sans migration — **aucune version publiée n'est concernée** :
+l'entracte n'a existé qu'en QUALIF. Un `game-config.json` de QUALIF portant encore la section
+`entracte` la verra simplement ignorée ; les réglages sont à ressaisir depuis la page Quiz.
+
+- **[BREAKING]** La section `entracte` de `POST /game-config.json` est **supprimée**. La
+  configuration du panneau est une propriété **de la partie**, pas un réglage du serveur : elle est
+  désormais persistée dans `game_state.json` (`PersistedGameState`, aux côtés des champs `QUIZ_*`)
+  et éditée depuis la **page Quiz**, plus depuis `/settings`.
+- **[BREAKING]** `/api/config/entracte-image` → **`/api/game/entracte-image`**. Même stockage, mêmes
+  verbes ; seul le préfixe change, devenu trompeur. Renommé pendant que c'était encore gratuit.
+- **[NEW]** `UPDATE_ENTRACTE_CONFIG` (Client → Server, **`admin` uniquement**) — payload
+  `{TITLE, SUBTITLE, PANEL_SIZE, ANIM_PERIOD, ANIM_INTENSITY, TRANSITION_MS}`, `ANIM_INTENSITY` et
+  `TRANSITION_MS` en pointeurs car `0` y est signifiant. Action dédiée plutôt qu'une extension de
+  `UPDATE_QUIZ_META` : deux formulaires distincts sur la même page, chacun propriétaire de ses
+  champs, sinon enregistrer l'un effacerait l'autre.
+- **[NEW]** `GameState.ENTRACTE_CONFIG_SAVED` — la configuration **enregistrée**, distincte de
+  `ENTRACTE_CONFIG` qui est la configuration **diffusée au panneau**. Ajouté à
+  `AdminOnlyGameFields` : seule la page Quiz l'utilise, la TV et le VJoueur n'ont que faire d'une
+  configuration qui n'est pas celle qu'ils affichent.
+- **[CHANGED]** `UPDATE_ENTRACTE_CONFIG` **est acceptée** pendant un entracte actif, mais
+  **`ENTRACTE_CONFIG` est gelé** tant que la pause dure : les nouvelles valeurs s'appliquent au
+  **prochain** déclenchement. On peut donc préparer le panneau suivant pendant la pause en cours.
+  Cela **retire un critère d'acceptation** de la première livraison (« changer les textes se voit
+  en direct »). Le formulaire d'édition se relit dans `ENTRACTE_CONFIG_SAVED`, jamais dans
+  `ENTRACTE_CONFIG` — sans quoi un enregistrement fait pendant la pause paraîtrait perdu.
+- **[CHANGED]** `ENTRACTE_CONFIG.IMAGE_IS_CUSTOM` est explicitement **dérivé du disque et jamais
+  persisté** — le figer laisserait le panneau réclamer une image effacée hors application.
+- **[NEW]** `ENTRACTE_CONFIG.TRANSITION_MS` (ms, 0–10000, défaut **2000**) — fondu progressif du
+  panneau et du filtre à l'entrée **et** à la sortie ; `0` = bascule instantanée. Contrairement à
+  l'animation de respiration, ce fondu est **conservé** sous `prefers-reduced-motion` : il ne
+  produit aucun mouvement, et le supprimer rendrait le basculement plus brutal, pas plus confortable.
+- **[CHANGED]** Cycle de vie de la configuration, hérité des `QUIZ_*` : conservée au redémarrage et
+  à `NEW_GAME` (confirmé par l'utilisateur), effacée par `POST /reset-select` avec le drapeau `history`. ⚠️ L'**image** reste sous
+  le drapeau `medias` — réglages et image relèvent de deux drapeaux différents, verrue de même
+  nature que celle décrite par #152.
+
+---
+
 ## [20260820] — Mode ENTRACTE : pause globale (#119)
 
 > Milestone v6.5.2 · Maquette validée : `docs/mockups/entracte-119.html`

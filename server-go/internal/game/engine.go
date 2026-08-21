@@ -178,6 +178,23 @@ func NewEngine() *Engine {
 			// four eligible fields shown, the desired default (contract
 			// game-state.md rule H1).
 			QuizHiddenFields: []string{},
+			// ENTRACTE config (v6.5.2, #119, C1): compile-time defaults for
+			// BOTH the diffused and saved variants — identical, since a
+			// fresh engine is definitionally outside any entracte. LoadState
+			// overwrites both together if game_state.json carries a
+			// configured value (state_persistence.go); otherwise these are
+			// what a freshly connecting client, or the Quiz page's edit
+			// form, sees before any UPDATE_ENTRACTE_CONFIG has ever run.
+			// IMAGE_IS_CUSTOM starts false — cmd/server/main.go recomputes
+			// it from disk right after LoadState, at every startup.
+			EntracteConfig: EntracteConfig{
+				Title: "ENTRACTE", Subtitle: "Retour dans 20mn",
+				PanelSize: 65, AnimPeriod: 10, AnimIntensity: 20, TransitionMs: 2000,
+			},
+			EntracteConfigSaved: EntracteConfig{
+				Title: "ENTRACTE", Subtitle: "Retour dans 20mn",
+				PanelSize: 65, AnimPeriod: 10, AnimIntensity: 20, TransitionMs: 2000,
+			},
 		},
 		data:             NewTeamsAndBumpers(),
 		questionStatuses: make(map[string]QuestionStatus),
@@ -1323,7 +1340,7 @@ func (e *Engine) shouldTriggerQCMHint(currentTime, totalTime int) bool {
 	// Safety constraints:
 	// - Min 1s between hints: threshold1 - threshold2 >= 1
 	// - Last hint >= 1s before end: threshold2 >= 1
-	if threshold1 <= 0 || threshold2 < 1 || (threshold1 - threshold2) < 1 {
+	if threshold1 <= 0 || threshold2 < 1 || (threshold1-threshold2) < 1 {
 		// Constraints not met, disable hints for this question
 		return false
 	}
@@ -1552,7 +1569,6 @@ func (e *Engine) Reveal() string {
 
 	return answer
 }
-
 
 // ProcessButtonPress handles a button press from a buzzer
 func (e *Engine) ProcessButtonPress(bumperID string, pressTime int64, button string) {
@@ -2156,7 +2172,6 @@ func (e *Engine) GetTeamsAndBumpersJSON() json.RawMessage {
 	result, _ := json.Marshal(e.data)
 	return result
 }
-
 
 // ForceReady forces transition to READY phase (debug function, skips PONG wait)
 func (e *Engine) ForceReady() {
@@ -2966,6 +2981,120 @@ func (e *Engine) GetShowQRCode() bool {
 	e.mu.RLock()
 	defer e.mu.RUnlock()
 	return e.state.ShowQRCode
+}
+
+// SetEntracte activates or deactivates ENTRACTE mode (v6.5.2, #119, D3: an
+// explicit idempotent command carrying the desired state, not a toggle —
+// two rapid clicks or a network resend can never leave the state
+// inverted). Returns whether the change was applied.
+//
+// Activation is gated by phase (contract game-state.md §"Phases
+// autorisées", D4): only allowed from STOPPED/PREPARE/READY/NEW_GAME/
+// REVEALED — never while a round is live (COUNTDOWN/STARTED/PAUSED), never
+// from ENROLL (the QR code screen players need). A refused activation is
+// logged and returns false, changing nothing else in state.
+//
+// Deactivation always succeeds, from ANY phase — ENTRACTE must never be a
+// dead end (contract, risk table "Entracte sans issue").
+//
+// Deliberately touches ONLY e.state.Entracte and (on activation)
+// e.state.EntracteConfig: Phase, Question and everything else are read-only
+// here, so a question selected in PREPARE is found intact on exit.
+//
+// C4 (2026-08-20, arbitrage): on activation, recopies EntracteConfigSaved
+// into EntracteConfig — under this SAME lock, BEFORE raising the flag — so
+// the panel that's about to be shown always reflects the latest saved
+// settings, and no client can ever observe ENTRACTE=true paired with a
+// stale diffused config left over from a previous pause (contract
+// game-state.md §"Configuration gelée à l'activation"). This is also what
+// makes EntracteConfig/EntracteConfigSaved provably identical immediately
+// after every activation, and after every LoadState() at startup — "equal
+// outside a pause" is not just true by convention, it's enforced at the
+// one place the pause begins.
+func (e *Engine) SetEntracte(active bool) bool {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+
+	if !active {
+		e.state.Entracte = false
+		log.Printf("[Engine] Entracte: deactivated (phase=%s)", e.state.Phase)
+		return true
+	}
+
+	allowedPhases := e.state.Phase == PhaseStopped || e.state.Phase == PhasePrepare ||
+		e.state.Phase == PhaseReady || e.state.Phase == PhaseNewGame ||
+		e.state.Phase == PhaseRevealed
+	if !allowedPhases {
+		log.Printf("[Engine] Entracte: activation refused, phase=%s not eligible", e.state.Phase)
+		return false
+	}
+
+	e.state.EntracteConfig = e.state.EntracteConfigSaved
+	e.state.Entracte = true
+	log.Printf("[Engine] Entracte: activated (phase=%s)", e.state.Phase)
+	return true
+}
+
+// IsEntracte returns whether ENTRACTE mode is currently active.
+func (e *Engine) IsEntracte() bool {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	return e.state.Entracte
+}
+
+// SetEntracteConfig saves a new entracte panel configuration (v6.5.2,
+// #119, C1/C4) — called by cmd/server/main.go's handleUpdateEntracteConfig
+// after validating/clamping the incoming payload. cfg is expected fully
+// resolved (no zero-value ambiguity left to resolve here — the caller
+// already merged any "field absent" pointer against the current saved
+// config and clamped every bound).
+//
+// ALWAYS updates EntracteConfigSaved and persists synchronously
+// (SaveState, same pattern as SetQuizMeta: unlock first, then save, so a
+// slow disk write never holds e.mu). Only ALSO refreshes the diffused
+// EntracteConfig — what the panel currently on screen actually shows —
+// when no entracte is active (C4's freeze rule): editing settings mid-pause
+// must reach the Quiz page's own form (which always reads
+// EntracteConfigSaved) without touching what's already displayed. The new
+// values take effect at the next SetEntracte(true), which recopies Saved
+// into the diffused field under its own lock.
+func (e *Engine) SetEntracteConfig(cfg EntracteConfig) {
+	e.mu.Lock()
+	e.state.EntracteConfigSaved = cfg
+	frozen := e.state.Entracte
+	if !frozen {
+		e.state.EntracteConfig = cfg
+	}
+	e.mu.Unlock()
+
+	log.Printf("[Engine] Entracte config saved: title=%q panel_size=%d anim_period=%d anim_intensity=%d transition_ms=%d (diffused %s)",
+		cfg.Title, cfg.PanelSize, cfg.AnimPeriod, cfg.AnimIntensity, cfg.TransitionMs,
+		map[bool]string{true: "frozen (entracte active)", false: "refreshed"}[frozen])
+
+	if err := e.SaveState(); err != nil {
+		log.Printf("[Engine] Failed to persist game state after entracte config change: %v", err)
+	}
+}
+
+// RefreshEntracteImageIsCustom updates the disk-derived IMAGE_IS_CUSTOM
+// flag (v6.5.2, #119, C1/C4) — called by cmd/server/main.go once at
+// startup (right after LoadState) and after every panel-image upload/
+// delete (/api/game/entracte-image). NEVER persisted — see EntracteConfig's
+// own doc comment and PersistedGameState's — so there is no SaveState()
+// call here, unlike SetEntracteConfig.
+//
+// Follows the exact same C4 freeze rule as SetEntracteConfig, extended to
+// this field for consistency: the Quiz page's edit form (reading
+// EntracteConfigSaved) must see an uploaded image immediately, but a panel
+// already on screen during an active pause must not change out from under
+// the audience just because someone swapped the image file mid-pause.
+func (e *Engine) RefreshEntracteImageIsCustom(isCustom bool) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.state.EntracteConfigSaved.ImageIsCustom = isCustom
+	if !e.state.Entracte {
+		e.state.EntracteConfig.ImageIsCustom = isCustom
+	}
 }
 
 // GetVirtualPlayerCount returns the current count of enrolled virtual players
@@ -3882,7 +4011,7 @@ func (e *Engine) DoneMotionCard(cardID string, winnerTeam string) (int, bool, er
 		if winnerTeam == "" {
 			e.rotateMotionTeam()
 		}
-	// MemoryModeSolo: no rotation
+		// MemoryModeSolo: no rotation
 	}
 
 	// Return to grid

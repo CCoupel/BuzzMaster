@@ -254,3 +254,31 @@ Le serveur inclut un `MSG_ID` dans les `LED_SET` critiques. Le buzzer ACK avant 
 - `Bumper.ACK_PENDING` : `true` pendant attente, `false` sur ACK ou expiry
 
 Fichier : `internal/server/ack_manager.go`, `src/BuzzClick/click_websocket_espidf.h` (`ws_sendAck()`)
+
+---
+
+## 13. LED État ENTRACTE — Extinction (v6.5.2, #119)
+
+### Transition
+
+**ENTRACTE → OFF (Extinction)**
+- À l'activation (`ENTRACTE_SET {ACTIVE: true}`) : tous les buzzers reçoivent un 
+  payload LED OFF immédiatement.
+- Payload : `{R: 0, G: 0, B: 0, intensity: 0, mode: SOLID, duration: -1}`.
+- Pendant l'entracte : LEDs restent OFF.
+- À la désactivation (`ENTRACTE_SET {ACTIVE: false}`) : LEDs restaurées à l'état 
+  correspondant à la phase courante (voir table des états LED ci-dessus).
+
+### Reconnexion pendant l'ENTRACTE
+
+Quand un buzzer se reconnecte (ou établit sa première connexion) pendant une pause 
+en cours, il reçoit immédiatement un payload LED OFF — garantit que les LEDs ne 
+révèlent jamais la configuration des équipes pendant une pause.
+
+### Non-régression
+
+Le buzz physique est **déjà inerte** pendant l'entracte : `handleButton` retourne si 
+la phase n'est pas `STARTED`, et l'entracte n'est atteignable qu'en dehors de `STARTED` 
+(phases autorisées : `STOPPED`, `PREPARE`, `READY`, `NEW_GAME`, `REVEALED`). Aucun 
+code n'a besoin d'être ajouté pour ça — c'est une propriété héritée, maintenant 
+verrouillée par test.

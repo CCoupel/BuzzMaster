@@ -32,6 +32,7 @@ import CategoryBadge from '../components/CategoryBadge'
 import QuestionCard from '../components/QuestionCard'
 import NetworkWarningBanner from '../components/NetworkWarningBanner'
 import './GamePage.css'
+import '../styles/entracte.css'
 
 export default function GamePage() {
   const {
@@ -386,10 +387,24 @@ export default function GamePage() {
   // START button only active in READY phase
   const canStart = canStartRule(gameState.phase)
 
+  // ENTRACTE (#119, C2) — le bouton a déménagé dans Navbar.jsx (visible sur
+  // toutes les pages admin, pas seulement ici) ; seul l'estompage de
+  // l'interface reste porté par GamePage. .game-page (GamePage.css:23-30) n'a
+  // AUCUN descendant position:fixed (RegieMessageBar/Navbar vivent au niveau
+  // App.jsx, hors de cet arbre) — filtrer .game-page directement est donc
+  // sûr : `filter` ne modifie pas la disposition de la grille qui le porte,
+  // seulement son rendu et le containing block de ses éventuels descendants
+  // fixed (aucun ici).
+  const entracteDim = gameState.entracte ? ' entracte-dim' : ''
+  // Transition progressive (#119, C3) — depuis entracteConfig (diffusé, gelé
+  // pendant une pause active) — jamais entracteConfigSaved.
+  const entracteTransitionStyle = { '--ep-transition': `${gameState.entracteConfig?.TRANSITION_MS ?? 2000}ms` }
+
   return (
     <>
       {gameState.NETWORK_ONLY_LOCALHOST && <NetworkWarningBanner />}
-      <div className="game-page page">
+
+      <div className={`game-page page${entracteDim}`} style={entracteTransitionStyle}>
       {/* Timer + Display Section (stacked vertically) */}
       <div className="timer-display-section">
         <Card variant="elevated" padding="md" className="timer-card">

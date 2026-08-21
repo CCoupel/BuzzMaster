@@ -29,6 +29,16 @@ import (
 type GameSettings struct {
 	Game       GameConfig       `json:"game"`
 	NeonEffect NeonEffectConfig `json:"neon_effect"`
+	// NOTE: an "entracte" section briefly lived here (v6.5.2, #119, QUALIF
+	// only) and was REMOVED 2026-08-20 (C1, arbitrage utilisateur): the
+	// entracte panel configuration is a property of the GAME/session, not
+	// of server config — it now lives in game_state.json
+	// (game.PersistedGameState, internal/game/state_persistence.go),
+	// edited via the WS action UPDATE_ENTRACTE_CONFIG. No migration is
+	// provided (never reached production); a residual "entracte" key in an
+	// old game-config.json is simply ignored by json.Unmarshal. See
+	// contracts/http-endpoints.md §"Mode ENTRACTE" and
+	// contracts/CHANGELOG.md [20260820-2] (BREAKING, QUALIF-only).
 }
 
 // ApplyGameSettingsDefaults fills every zero-valued field with its default
@@ -74,6 +84,11 @@ func ApplyGameSettingsDefaults(gs *GameSettings) {
 		gs.NeonEffect.GlowPulseMax = 50 // 50% maximum glow
 	}
 	// Enabled defaults to false (zero value)
+
+	// NOTE: entracte defaults used to live here (v6.5.2, #119) — moved with
+	// the rest of the entracte config to internal/game (NewEngine's compile-
+	// time defaults + state_persistence.go's LoadState) by C1. See
+	// GameSettings' own doc comment above.
 }
 
 // ValidateAndClampNeonEffect validates and clamps neon effect values to
@@ -153,6 +168,13 @@ func (gs *GameSettings) ValidateAndClampNeonEffect() {
 		gs.NeonEffect.GlowPulseMin, gs.NeonEffect.GlowPulseMax = gs.NeonEffect.GlowPulseMax, gs.NeonEffect.GlowPulseMin
 	}
 }
+
+// NOTE: entracteTextMaxRunes and ValidateAndClampEntracte used to live here
+// (v6.5.2, #119) — the bounds (PANEL_SIZE 20-100, ANIM_PERIOD 2-30,
+// ANIM_INTENSITY 0-100, TRANSITION_MS 0-10000, text truncated to 200 runes)
+// moved to cmd/server/main.go's clampEntracteConfig, alongside the new
+// UPDATE_ENTRACTE_CONFIG handler that's now the only writer (C1-B5) — the
+// values, not just their location, are otherwise unchanged.
 
 // LoadGameSettings reads game-config.json from path.
 func LoadGameSettings(path string) (*GameSettings, error) {

@@ -28,6 +28,38 @@
   overflow: hidden;
 }
 
+/* ENTRACTE (v6.5.2, #119) — wrapper toujours monté autour du contenu de jeu
+   existant (background + AnimatePresence), reproduisant le contexte flex
+   column que .player-display fournissait directement à ces enfants avant son
+   insertion. Seule la classe .entracte-dim (styles/entracte.css) y est
+   conditionnelle — le bouton plein écran et QRCodeOverlay restent hors de ce
+   nœud (position: fixed, piège documenté au plan #119).
+   position:fixed + inset:0 plutôt qu'un simple flex:1 rempli : un `filter`
+   posé sur ce nœud devient le containing block de TOUT descendant
+   `position:fixed` niché plus bas dans l'arbre (ex. VPlayerPage englobe
+   <PlayerDisplay> entier dans son propre wrapper filtré, F5) — en fixant
+   explicitement ce nœud sur le vrai viewport, ses descendants fixed
+   continuent de se positionner correctement quel que soit le niveau
+   d'imbrication, sans dépendre d'une coïncidence de taille flex. */
+.entracte-content {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  /* Transition progressive (#119, C3) — DOIT vivre ici, sur le sélecteur de
+     base toujours présent, pas dans .entracte-dim : une transition déclarée
+     uniquement dans la classe conditionnelle jouerait à l'entrée et
+     disparaîtrait avec la classe, donc pas au retour. --ep-transition posée
+     par PlayerDisplay.jsx depuis entracteConfig.TRANSITION_MS (héritée).
+     ⚠️ Ne PAS poser un filter identité (grayscale(0) brightness(1)) ici pour
+     "aider" l'interpolation — même neutre, un filter réel crée en
+     permanence un containing block pour les descendants position:fixed,
+     hors entracte compris (piège documenté au plan initial, réintroduit ici
+     si on cède à la tentation). transition: filter seul ne crée rien. */
+  transition: filter var(--ep-transition, 2000ms) ease;
+}
+
 /* Background Cycling */
 .background-container {
   position: absolute;

@@ -247,6 +247,16 @@ func main() {
 		server.LogWarn(game.LogComponentApp, "Could not load game state: %v", err)
 	}
 
+	// #119 (v6.5.2, C1): IMAGE_IS_CUSTOM is never persisted (state_persistence.go
+	// zeroes it on both save and load) — recompute it from disk now that
+	// LoadState has populated the rest of EntracteConfig/EntracteConfigSaved,
+	// so a client connecting before any upload/delete this run still sees
+	// the right value (contract game-state.md D2: "un client qui se
+	// connecte pendant l'entracte affiche immédiatement le panneau [...]
+	// avec les bons textes"). MUST run after LoadState, never before — see
+	// that call's own removed-code comment in init() for why.
+	app.refreshEntracteImageIsCustom()
+
 	// Start servers
 	if err := app.start(); err != nil {
 		server.LogError(game.LogComponentApp, "Failed to start: %v", err)
@@ -509,6 +519,13 @@ func (a *App) setupCallbacks() {
 	// Config update handler
 	a.httpServer.OnConfigUpdate = func() {
 		a.broadcastConfigUpdate()
+		// #119 (v6.5.2, C1): this shared callback is also what the entracte
+		// panel-image endpoint (/api/game/entracte-image POST/DELETE) fires
+		// after every upload/delete — refresh IMAGE_IS_CUSTOM from disk and
+		// broadcast. Harmless (idempotent, cheap) on the other call sites
+		// that share this callback for unrelated config sections.
+		a.refreshEntracteImageIsCustom()
+		a.broadcastUpdate()
 	}
 
 	// WiFi config broadcast handler (triggered by POST /api/buzzer/wifi-config)
@@ -540,6 +557,15 @@ func (a *App) setupCallbacks() {
 	// Detect existing backgrounds on startup
 	a.loadBackgrounds()
 	a.loadNewGameBackgrounds()
+
+	// NOTE (v6.5.2, #119, C1): the entracte-config startup push that used to
+	// happen here was removed — EntracteConfig/EntracteConfigSaved are now
+	// loaded from game_state.json by app.engine.LoadState(), called later
+	// in main() (AFTER init() returns). The IMAGE_IS_CUSTOM refresh
+	// (a.refreshEntracteImageIsCustom()) deliberately happens there too,
+	// right after LoadState — not here — because LoadState overwrites the
+	// whole EntracteConfig struct (models.go), which would otherwise
+	// clobber a refresh done this early right back to false.
 
 	// Ensure categories directory exists and detect initial network state
 	a.ensureCategoriesDir()
@@ -1065,6 +1091,18 @@ func (a *App) handleWebMessage(incoming *protocol.IncomingMessage) {
 		return
 	}
 
+	// #119 (D6) — SECOND, orthogonal gate: while ENTRACTE is active, only a
+	// closed allow-list of actions may proceed (server.IsActionAllowedDuringEntracte,
+	// contracts/websocket-actions.md §"Actions refusées pendant l'entracte").
+	// Deliberately checked AFTER the client-type gate above, never instead of
+	// it — the logs must distinguish "wrong client type" from "blocked by
+	// entracte" as two different rejection reasons. A CSS filter doesn't stop
+	// a click; this does.
+	if a.engine.IsEntracte() && !server.IsActionAllowedDuringEntracte(msg.Action) {
+		a.logger.Warn(game.LogComponentWebSocket, "Rejected action %s from client %s (type=%q): blocked during ENTRACTE", msg.Action, incoming.ClientID, incoming.ClientType)
+		return
+	}
+
 	// #155/#156 B6 — asymmetric régie signalement (D2, v1 scope: server log +
 	// ANIM_COUNT badge, no admin UI). Fires only AFTER the allow-list check
 	// above, so a rejected action (which already produced its own Warn and
@@ -1203,6 +1241,12 @@ func (a *App) handleWebMessage(incoming *protocol.IncomingMessage) {
 	case protocol.ActionHideQRCode:
 		a.handleHideQRCode()
 
+	case protocol.ActionEntracteSet:
+		a.handleEntracteSet(msg)
+
+	case protocol.ActionUpdateEntracteConfig:
+		a.handleUpdateEntracteConfig(msg)
+
 	case protocol.ActionSetVirtualPlayerLimit:
 		a.handleSetVirtualPlayerLimit(msg)
 
@@ -1241,9 +1285,9 @@ func (a *App) handleWebMessage(incoming *protocol.IncomingMessage) {
 		// InitGame purges the whole VJoueur roster (fix R1 follow-up) — refresh
 		// the enrollment counter so clients don't show a stale VirtualPlayerCount.
 		a.broadcastEnrollmentUpdate()
-		a.broadcastNextQuestion() // #155/#156 B5 — no current question after NEW_GAME, clears anim's preview
+		a.broadcastNextQuestion()           // #155/#156 B5 — no current question after NEW_GAME, clears anim's preview
 		a.resetCreditPointsForQuestion(nil) // code review MAJEUR-1 — no current question, nothing to credit
-		a.broadcastAwardedTeams() // #170 — InitGame resets history, every lock is released
+		a.broadcastAwardedTeams()           // #170 — InitGame resets history, every lock is released
 
 	case protocol.ActionUpdateQuizMeta:
 		var payload protocol.QuizMetaPayload
@@ -1669,9 +1713,9 @@ func (a *App) handleReady(msg *protocol.Message) {
 	// Send PING to all buzzers
 	a.broadcastPing()
 
-	a.broadcastNextQuestion() // #155/#156 B5 — current question just changed
+	a.broadcastNextQuestion()                // #155/#156 B5 — current question just changed
 	a.resetCreditPointsForQuestion(question) // code review MAJEUR-1 — pointsInput resets to question.POINTS on selection too
-	a.broadcastAwardedTeams() // #170 — new current question, locks reset (or reflect prior credits if replayed)
+	a.broadcastAwardedTeams()                // #170 — new current question, locks reset (or reflect prior credits if replayed)
 }
 
 // loadQuestion loads a question from storage by ID
@@ -2456,6 +2500,64 @@ func (a *App) handleHideQRCode() {
 	a.broadcastEnrollmentUpdate()
 }
 
+// handleEntracteSet processes ENTRACTE_SET (v6.5.2, #119): parses the
+// desired ACTIVE state, applies it through the engine's own phase guard
+// (SetEntracte, D4), and — only if the state actually changed — drives the
+// LED side effect (B5: buzzers go dark on entry, restored on exit) before
+// broadcasting the new GameState. A refused activation (wrong phase) is
+// logged by the engine itself and produces no broadcast, matching the
+// existing allow-list rejection convention (contract: "ne renvoie rien au
+// client").
+func (a *App) handleEntracteSet(msg *protocol.Message) {
+	var payload protocol.EntracteSetPayload
+	if err := json.Unmarshal(msg.Msg, &payload); err != nil {
+		server.LogError(game.LogComponentApp, "Error parsing ENTRACTE_SET payload: %v", err)
+		return
+	}
+
+	wasActive := a.engine.IsEntracte()
+	applied := a.engine.SetEntracte(payload.Active)
+	if !applied {
+		// Refused by the engine's phase guard — already logged there.
+		return
+	}
+	if wasActive == payload.Active {
+		// No-op (e.g. deactivate while already inactive) — nothing changed,
+		// no need to touch LEDs or broadcast.
+		return
+	}
+
+	if payload.Active {
+		a.sendLEDSetAllEntracteOff()
+		server.LogInfo(game.LogComponentApp, "Entracte activated — buzzer LEDs off")
+	} else {
+		a.sendLEDSetAllBuzzers()
+		server.LogInfo(game.LogComponentApp, "Entracte deactivated — buzzer LEDs restored")
+	}
+
+	a.broadcastUpdate()
+}
+
+// sendLEDSetAllEntracteOff turns off every non-VPlayer buzzer's LED (B5,
+// entry into ENTRACTE) — same OFF payload already used elsewhere
+// (sendLEDSetMemoryMultiTeam's "not participating" branch), sent via the
+// normal sendLEDSet channel so MSG_ID/ACK/resend are handled exactly as any
+// other LED_SET.
+func (a *App) sendLEDSetAllEntracteOff() {
+	tb := a.engine.GetTeamsAndBumpers()
+	if tb == nil {
+		return
+	}
+	off := protocol.LEDSetPayload{Color: [3]int{0, 0, 0}, Intensity: 0, Effect: "SOLID"}
+	for mac, bumper := range tb.Bumpers {
+		if bumper.IsVPlayer {
+			continue
+		}
+		a.sendLEDSet(mac, off)
+	}
+	a.broadcastUpdateTo(server.ClientTypeAdmin, server.ClientTypeBuzzer)
+}
+
 func (a *App) handleSetVirtualPlayerLimit(msg *protocol.Message) {
 	var payload protocol.SetVirtualPlayerLimitPayload
 	if err := json.Unmarshal(msg.Msg, &payload); err != nil {
@@ -2846,34 +2948,48 @@ func (a *App) broadcastUpdateTo(types ...server.ClientType) {
 		}
 	}
 
-	// TV, VPlayer and (#162) Anim clients all start from the same stripped
-	// payload (no firmware/OTA/ACK metadata) — computed once and reused: TV
-	// and Anim always get it verbatim; VPlayer gets it too, except during
-	// PREPARE/READY where broadcastUpdateToVPlayers further reduces
-	// "bumpers" per recipient (#127 T2.1-T2.3) — dataWeb is also its
-	// fallback for that reduction.
+	// TV and (#162) Anim start from the same stripped payload (no firmware/
+	// OTA/ACK metadata, no QUIZ_OBJECTIVES/ENTRACTE_CONFIG_SAVED) — computed
+	// once and reused, byte-for-byte identical for both.
 	//
-	// #162: Anim reuses dataWeb as-is (byte-for-byte identical to what TV
-	// receives) rather than going through serializeForClientType — that
-	// function exists for the generic action dispatch path (a.broadcast ->
-	// BroadcastToTypes), which UPDATE deliberately bypasses in favor of this
-	// dedicated, already-per-type-branching function. Before this fix,
-	// ClientTypeAnim was never one of the branches here at all: adding it to
-	// a caller's type list (any of the ~19 sites #162 touches) was a
-	// no-op — hasType(Anim) was never even computed, let alone acted on. This
-	// is the fix's actual prerequisite; every other #162 change is inert
-	// without it.
+	// #162: Anim reuses dataWeb as-is rather than going through
+	// serializeForClientType — that function exists for the generic action
+	// dispatch path (a.broadcast -> BroadcastToTypes), which UPDATE
+	// deliberately bypasses in favor of this dedicated, already-per-type-
+	// branching function. Before #162, ClientTypeAnim was never one of the
+	// branches here at all: adding it to a caller's type list (any of the
+	// ~19 sites #162 touches) was a no-op — hasType(Anim) was never even
+	// computed, let alone acted on. This is that fix's actual prerequisite;
+	// every other #162 change is inert without it.
+	//
+	// #128 (v6.5.2): VPlayer can NO LONGER share dataWeb with TV/Anim —
+	// ARDOISE_ANSWERS is legitimate for TV (REVEAL display) and Anim
+	// (#158 live list) but must never reach VPlayer (contract
+	// vplayer-payload-filter.md §6). A separate dataVPlayer
+	// (SerializeForVPlayerCommon: AdminOnlyGameFields AND
+	// VPlayerOnlyGameFields both stripped) is computed only when VPlayer is
+	// actually targeted — this is B5's flagged extra serialization cost,
+	// paid only when VJoueurs are connected; the PREPARE/READY per-recipient
+	// reduced path (broadcastUpdateToVPlayers -> buildVPlayerPayloads) is
+	// untouched by this, it strips its own extra field list separately
+	// (stripVPlayerHiddenGameFields, below).
 	var dataWeb []byte
-	if targetTV || targetVPlayer || targetAnim {
+	if targetTV || targetAnim {
 		if data, err := msg.SerializeForWebClient(); err == nil {
 			dataWeb = data
+		}
+	}
+	var dataVPlayer []byte
+	if targetVPlayer {
+		if data, err := msg.SerializeForVPlayerCommon(); err == nil {
+			dataVPlayer = data
 		}
 	}
 	if targetTV && dataWeb != nil {
 		a.wsHub.BroadcastRawToTypes(dataWeb, server.ClientTypeTV)
 	}
-	if targetVPlayer && dataWeb != nil {
-		a.broadcastUpdateToVPlayers(msg, dataWeb)
+	if targetVPlayer && dataVPlayer != nil {
+		a.broadcastUpdateToVPlayers(msg, dataVPlayer)
 	}
 	if targetAnim && dataWeb != nil {
 		// Deliberately NOT calling a.engine.ApplyVPlayerBroadcastConnEvents()
@@ -3030,14 +3146,16 @@ func buildVPlayerPayloads(msg *protocol.Message, recipients []server.VPlayerReci
 			return nil, false
 		}
 	}
-	// Strip admin-only GAME fields (QUIZ_OBJECTIVES, v6.1.0 #137 Batch 2b)
-	// once here, before the per-recipient loop — this hot path bypasses
-	// SerializeForWebClient/SerializeForVPlayer entirely (it keeps GAME as
-	// json.RawMessage and splices it in verbatim, see buildVPlayerMessageBytes
-	// below), so without this call gameRaw would carry QUIZ_OBJECTIVES to
-	// every VPlayer during PREPARE/READY — the confidentiality rule from
-	// contracts/game-state.md would be enforced everywhere except here.
-	gameRaw, err := stripAdminOnlyGameFields(envelope["GAME"])
+	// Strip admin-only GAME fields (QUIZ_OBJECTIVES, ENTRACTE_CONFIG_SAVED)
+	// AND VPlayer-hidden fields (ARDOISE_ANSWERS, #128) once here, before the
+	// per-recipient loop — this hot path bypasses SerializeForWebClient/
+	// SerializeForVPlayer entirely (it keeps GAME as json.RawMessage and
+	// splices it in verbatim, see buildVPlayerMessageBytes below), so
+	// without this call gameRaw would carry both to every VPlayer during
+	// PREPARE/READY — the confidentiality/exclusivity rules from
+	// contracts/game-state.md and vplayer-payload-filter.md §6 would be
+	// enforced everywhere except here.
+	gameRaw, err := stripVPlayerHiddenGameFields(envelope["GAME"])
 	if err != nil {
 		return nil, false
 	}
@@ -3072,21 +3190,29 @@ func buildVPlayerPayloads(msg *protocol.Message, recipients []server.VPlayerReci
 	return payloads, true
 }
 
-// stripAdminOnlyGameFields returns a copy of the "GAME" node JSON with
-// protocol.AdminOnlyGameFields (QUIZ_OBJECTIVES, v6.1.0 #137 Batch 2b)
-// removed. Called once per broadcastUpdateToVPlayers fan-out (not per
-// recipient) by buildVPlayerPayloads, since this hot path keeps GAME as
-// json.RawMessage and splices it into every recipient's frame verbatim
-// (buildVPlayerMessageBytes) — it never goes through
+// stripVPlayerHiddenGameFields returns a copy of the "GAME" node JSON with
+// BOTH protocol.AdminOnlyGameFields (QUIZ_OBJECTIVES, ENTRACTE_CONFIG_SAVED)
+// AND protocol.VPlayerOnlyGameFields (ARDOISE_ANSWERS, #128) removed —
+// renamed from stripAdminOnlyGameFields (v6.5.2, #128) because it always
+// served the VPlayer fan-out path exclusively, and a name mentioning only
+// "admin-only" undersold what it actually strips once VPlayerOnlyGameFields
+// existed to strip too. Called once per broadcastUpdateToVPlayers fan-out
+// (not per recipient) by buildVPlayerPayloads, since this hot path keeps
+// GAME as json.RawMessage and splices it into every recipient's frame
+// verbatim (buildVPlayerMessageBytes) — it never goes through
 // Message.SerializeForWebClient/SerializeForVPlayer, which apply the same
-// list on their own code paths (internal/protocol/messages.go). All three
-// sites must agree (contracts/ws-payload-serialization.md).
-func stripAdminOnlyGameFields(raw json.RawMessage) (json.RawMessage, error) {
+// two lists on their own code paths (internal/protocol/messages.go). All
+// three sites must agree (contracts/vplayer-payload-filter.md §6 "trois
+// sites, une seule liste" — now two lists, same discipline).
+func stripVPlayerHiddenGameFields(raw json.RawMessage) (json.RawMessage, error) {
 	var gameNode map[string]interface{}
 	if err := json.Unmarshal(raw, &gameNode); err != nil {
 		return nil, err
 	}
 	for _, field := range protocol.AdminOnlyGameFields {
+		delete(gameNode, field)
+	}
+	for _, field := range protocol.VPlayerOnlyGameFields {
 		delete(gameNode, field)
 	}
 	return json.Marshal(gameNode)
@@ -3607,6 +3733,17 @@ func (a *App) buzzStateFor(mac string) game.BuzzState {
 func (a *App) sendLEDSetForBuzzer(mac string) {
 	bumper := a.engine.GetBumper(mac)
 	if bumper == nil || bumper.IsVPlayer {
+		return
+	}
+
+	// #119 (B5): a buzzer connecting for the first time during ENTRACTE (no
+	// prior stored LED state — resendLEDOnReconnect's fallback path, the
+	// sole caller of this function) must come up OFF, not its team color.
+	// The reconnect-with-remembered-state path is already covered: entering
+	// entracte overwrites bumperLEDState via sendLEDSetAllEntracteOff, so
+	// resendLEDOnReconnect's "stored state" branch already resends OFF.
+	if a.engine.IsEntracte() {
+		a.sendLEDSet(mac, protocol.LEDSetPayload{Color: [3]int{0, 0, 0}, Intensity: 0, Effect: "SOLID"})
 		return
 	}
 
@@ -4165,6 +4302,119 @@ func (a *App) broadcastHideQRCode() {
 	a.broadcast(protocol.ActionHideQRCode, data, false,
 		server.ClientTypeAdmin, server.ClientTypeTV)
 	server.LogInfo(game.LogComponentApp, "QR Code enrollment deactivated")
+}
+
+// refreshEntracteImageIsCustom recomputes GameState.ENTRACTE_CONFIG(_SAVED)
+// .IMAGE_IS_CUSTOM from disk (v6.5.2, #119, C1) — a thin App-level wrapper
+// around Engine.RefreshEntracteImageIsCustom, called once at startup (right
+// after LoadState) and after every /api/game/entracte-image upload/delete.
+// Never persisted (see EntracteConfig's doc comment, models.go) — purely a
+// file-existence check via a.httpServer.HasCustomEntracteImage(), same
+// pattern broadcastConfigUpdate uses for DefaultQuestionImageIsCustom.
+//
+// Does NOT broadcast by itself — callers decide when to broadcastUpdate(),
+// so a caller that wants to batch this with other state changes in one
+// UPDATE can.
+func (a *App) refreshEntracteImageIsCustom() {
+	a.engine.RefreshEntracteImageIsCustom(a.httpServer.HasCustomEntracteImage())
+}
+
+// entracteTextMaxRunes bounds ENTRACTE_CONFIG's Title/Subtitle — "tronqué à
+// une longueur raisonnable" per contract http-endpoints.md; no exact figure
+// is prescribed there, 200 runes is this implementation's choice (ample for
+// a panel headline, short enough that a pathological paste can't blow up
+// layout) — moved here unchanged from internal/config/gameconfig.go by C1
+// (the value, not just its home, is preserved). Rune-based, not byte-based:
+// French accented text (à/é/ç) is multi-byte UTF-8 and a byte-slice
+// truncation could cut mid-character — same rationale as
+// REGIE_MESSAGE_SEND's 140-rune truncation elsewhere in this file.
+const entracteTextMaxRunes = 200
+
+// clampEntracteConfig bounds every field of cfg in place (v6.5.2, #119,
+// C1-B5/C3-B1) — the same bounds ValidateAndClampEntracte used to enforce
+// in internal/config/gameconfig.go before C1 moved entracte config out of
+// game-config.json: PANEL_SIZE 20-100, ANIM_PERIOD 2-30, ANIM_INTENSITY
+// 0-100, TRANSITION_MS 0-10000, Title/Subtitle truncated to
+// entracteTextMaxRunes runes. Called by handleUpdateEntracteConfig AFTER
+// merging the incoming payload against the current saved config — cfg is
+// expected fully resolved (no nil pointers) by the time it reaches here.
+func clampEntracteConfig(cfg *game.EntracteConfig) {
+	if runes := []rune(cfg.Title); len(runes) > entracteTextMaxRunes {
+		cfg.Title = string(runes[:entracteTextMaxRunes])
+	}
+	if runes := []rune(cfg.Subtitle); len(runes) > entracteTextMaxRunes {
+		cfg.Subtitle = string(runes[:entracteTextMaxRunes])
+	}
+	if cfg.PanelSize < 20 {
+		cfg.PanelSize = 20
+	} else if cfg.PanelSize > 100 {
+		cfg.PanelSize = 100
+	}
+	if cfg.AnimPeriod < 2 {
+		cfg.AnimPeriod = 2
+	} else if cfg.AnimPeriod > 30 {
+		cfg.AnimPeriod = 30
+	}
+	if cfg.AnimIntensity < 0 {
+		cfg.AnimIntensity = 0
+	} else if cfg.AnimIntensity > 100 {
+		cfg.AnimIntensity = 100
+	}
+	if cfg.TransitionMs < 0 {
+		cfg.TransitionMs = 0
+	} else if cfg.TransitionMs > 10000 {
+		cfg.TransitionMs = 10000
+	}
+}
+
+// handleUpdateEntracteConfig processes UPDATE_ENTRACTE_CONFIG (v6.5.2,
+// #119, C1/C4, contract websocket-actions.md §"UPDATE_ENTRACTE_CONFIG"):
+// saves the entracte panel configuration from the Quiz page. Merges the
+// incoming payload against the CURRENT SAVED config (EntracteConfigSaved,
+// never the possibly-frozen diffused one — merging against a frozen value
+// mid-pause could silently reintroduce stale settings the user already
+// moved past), same "nil pointer = absent = keep existing" convention
+// UPDATE_QUIZ_META uses for its own pointer fields.
+//
+// Clamps, then hands off to Engine.SetEntracteConfig, which itself applies
+// the C4 freeze rule (only refreshes the diffused config when no entracte
+// is active) and persists synchronously. Accepted even while an entracte is
+// active (entracteAllowedActions) — by design, it just has no visible
+// effect on the pause in progress.
+func (a *App) handleUpdateEntracteConfig(msg *protocol.Message) {
+	var payload protocol.EntracteConfigPayload
+	if err := json.Unmarshal(msg.Msg, &payload); err != nil {
+		server.LogWarn(game.LogComponentApp, "Failed to parse UPDATE_ENTRACTE_CONFIG payload: %v", err)
+		return
+	}
+
+	current := a.engine.GetState().EntracteConfigSaved
+	animIntensity := current.AnimIntensity
+	if payload.AnimIntensity != nil {
+		animIntensity = *payload.AnimIntensity
+	}
+	transitionMs := current.TransitionMs
+	if payload.TransitionMs != nil {
+		transitionMs = *payload.TransitionMs
+	}
+
+	cfg := game.EntracteConfig{
+		Title:    payload.Title,
+		Subtitle: payload.Subtitle,
+		// ImageIsCustom is deliberately NOT set from the payload (it isn't
+		// part of it — contract: "n'est pas dans le payload, c'est un champ
+		// dérivé") — preserve whatever the current saved value already is,
+		// so this save can't accidentally clobber it back to false.
+		ImageIsCustom: current.ImageIsCustom,
+		PanelSize:     payload.PanelSize,
+		AnimPeriod:    payload.AnimPeriod,
+		AnimIntensity: animIntensity,
+		TransitionMs:  transitionMs,
+	}
+	clampEntracteConfig(&cfg)
+
+	a.engine.SetEntracteConfig(cfg)
+	a.broadcastUpdate()
 }
 
 func (a *App) broadcastConfigUpdate() {

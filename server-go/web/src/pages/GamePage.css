@@ -27,6 +27,11 @@
   gap: var(--space-3);
   height: calc(100vh - var(--admin-chrome-h));
   overflow: hidden;
+  /* Transition progressive (#119, C3) — sur le sélecteur de base, jamais
+     .entracte-dim seule (voir PlayerDisplay.css pour le raisonnement
+     complet). Pas de filter identité ici : .game-page n'a filtré que par la
+     classe conditionnelle, `transition` seul ne crée aucun containing block. */
+  transition: filter var(--ep-transition, 2000ms) ease;
 }
 
 /* Row 1 - Control Panel (column 1) */

@@ -2,9 +2,9 @@ package server
 
 import (
 	"archive/tar"
-	"bytes"
 	"buzzcontrol/internal/config"
 	"buzzcontrol/internal/game"
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -28,20 +28,20 @@ import (
 
 // HTTPServer handles HTTP requests
 type HTTPServer struct {
-	port       int
-	engine     *game.Engine
-	wsHub      *WebSocketHub
-	buzzerHub  *BuzzerWebSocketHub
-	logsHub    *LogsWebSocketHub
-	dataDir    string
-	webDir     string
-	reactDir   string // React build directory (filesystem)
-	embeddedFS fs.FS  // Embedded web filesystem (takes priority over reactDir)
-	mux        *http.ServeMux
-	server     *http.Server
-	updater    *Updater         // Auto-update handler
-	firmwareManager *FirmwareManager // OTA firmware manager (v3.1.0+)
-	defaultQuestionImageAsset []byte // Embedded fallback image (v3.2.2)
+	port                      int
+	engine                    *game.Engine
+	wsHub                     *WebSocketHub
+	buzzerHub                 *BuzzerWebSocketHub
+	logsHub                   *LogsWebSocketHub
+	dataDir                   string
+	webDir                    string
+	reactDir                  string // React build directory (filesystem)
+	embeddedFS                fs.FS  // Embedded web filesystem (takes priority over reactDir)
+	mux                       *http.ServeMux
+	server                    *http.Server
+	updater                   *Updater         // Auto-update handler
+	firmwareManager           *FirmwareManager // OTA firmware manager (v3.1.0+)
+	defaultQuestionImageAsset []byte           // Embedded fallback image (v3.2.2)
 	// questionIDMu serializes question ID allocation AND directory creation
 	// (contract ai-generation.md §5.1, #8). Without it, two concurrent
 	// requests (e.g. a manual upload racing an AI batch generation) can
@@ -52,14 +52,14 @@ type HTTPServer struct {
 	questionIDMu sync.Mutex
 
 	// Callbacks
-	OnAction                    func(action string, data json.RawMessage)
-	OnQuestionUpload            func() // Called after question upload to broadcast update
-	OnBackgroundChange          func(path string) // Called after background upload/delete
-	OnNewGameBackgroundChange   func(action string) // Called after NEW_GAME background upload/delete (v4.0.4)
-	OnShutdown                  func() // Called before server shutdown for cleanup
-	OnLoadDemo                  func() // Called to load demo data
-	OnConfigUpdate              func() // Called after config update to broadcast to clients
-	OnBuzzerWifiConfig          func() int // Called to broadcast WiFi config to all buzzers; returns connected buzzer count
+	OnAction                  func(action string, data json.RawMessage)
+	OnQuestionUpload          func()              // Called after question upload to broadcast update
+	OnBackgroundChange        func(path string)   // Called after background upload/delete
+	OnNewGameBackgroundChange func(action string) // Called after NEW_GAME background upload/delete (v4.0.4)
+	OnShutdown                func()              // Called before server shutdown for cleanup
+	OnLoadDemo                func()              // Called to load demo data
+	OnConfigUpdate            func()              // Called after config update to broadcast to clients
+	OnBuzzerWifiConfig        func() int          // Called to broadcast WiFi config to all buzzers; returns connected buzzer count
 	// OnPriorityMessageSent is called after a priority message (OTA_UPDATE, WIFI_CONFIG) is sent to a buzzer.
 	// mac is the buzzer MAC, msgID is the generated MSG_ID, action is the protocol action string.
 	// The callback registers the message for ACK tracking and sets AckPending on the bumper (v3.8.0).
@@ -304,6 +304,11 @@ func (h *HTTPServer) setupRoutes() {
 
 	// Default question image API (v3.2.2)
 	h.mux.HandleFunc("/api/config/default-image", h.handleAPIDefaultQuestionImage)
+
+	// ENTRACTE panel image API (v6.5.2, #119) — same single-image pattern
+	// as default-image, dedicated storage dir (contract http-endpoints.md
+	// §"Mode ENTRACTE")
+	h.mux.HandleFunc("/api/game/entracte-image", h.handleAPIEntracteImage)
 
 	// NEW_GAME background images API (v4.0.4) — multi-image, same pattern as /background
 	h.mux.HandleFunc("/new-game-backgrounds", h.handleNewGameBackground)
@@ -567,11 +572,11 @@ func (h *HTTPServer) handlePalmares(w http.ResponseWriter, r *http.Request) {
 		if !exists {
 			catName, catImageURL, catColor := h.ResolveCategoryMeta(key)
 			acc = &catAccum{
-				name:    catName,
+				name:     catName,
 				imageURL: catImageURL,
-				color:   catColor,
-				teams:   make(map[string]*TeamScore),
-				players: make(map[string]*PlayerScore),
+				color:    catColor,
+				teams:    make(map[string]*TeamScore),
+				players:  make(map[string]*PlayerScore),
 			}
 			catMap[key] = acc
 		}
@@ -1455,6 +1460,13 @@ func (h *HTTPServer) handleGameConfig(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 		}
+		// v6.5.2, #119, C1 — the "entracte" section used to live here
+		// (QUALIF only, never production). It has moved to game_state.json,
+		// edited via the WS action UPDATE_ENTRACTE_CONFIG from the Quiz page
+		// (contract http-endpoints.md §"Mode ENTRACTE" — "section supprimée").
+		// A residual "entracte" key in a POSTed body is simply ignored: Go's
+		// JSON decode above only reads keys this handler explicitly looks
+		// up, so it's already a no-op — no migration needed.
 
 		config.ApplyGameSettingsDefaults(&gs)
 		gs.ValidateAndClampNeonEffect()
@@ -1744,7 +1756,7 @@ type PalmaresEntry struct {
 // TeamScore aggregates points for one team in a PALMARES category row.
 type TeamScore struct {
 	Name   string `json:"name"`
-	Color  []int  `json:"color"`  // RGB triplet, same format as GameState
+	Color  []int  `json:"color"` // RGB triplet, same format as GameState
 	Points int    `json:"points"`
 }
 
@@ -1997,25 +2009,34 @@ func (h *HTTPServer) handlePostCategory(w http.ResponseWriter, r *http.Request) 
 }
 
 // handleBackupSelect creates a selective backup based on query parameters
-// Query params: questions=true, teams=true, bumpers=true, history=true, medias=true
+// Query params: questions=true, teams=true, bumpers=true, history=true, medias=true, ambiance=true
 func (h *HTTPServer) handleBackupSelect(w http.ResponseWriter, r *http.Request) {
 	includeQuestions := r.URL.Query().Get("questions") == "true"
 	includeTeams := r.URL.Query().Get("teams") == "true"
 	includeBumpers := r.URL.Query().Get("bumpers") == "true"
 	includeHistory := r.URL.Query().Get("history") == "true"
 	includeMedias := r.URL.Query().Get("medias") == "true"
+	// #152: dedicated flag for game-config.json (default delay + neon
+	// effect) — code-reviewer flagged its "history" attachment (#150) as
+	// semantically incorrect during #150's own review; this is that
+	// correction, with its own "Configuration Ambiance" checkbox in
+	// BackupPage.jsx. game_state.json (quiz metadata, #141) is NOT part of
+	// this flag — it stays anchored to "history" (a session's identity, not
+	// an ambiance/visual setting), unchanged from before #152.
+	includeAmbiance := r.URL.Query().Get("ambiance") == "true"
 
 	// If nothing selected, include everything
-	if !includeQuestions && !includeTeams && !includeBumpers && !includeHistory && !includeMedias {
+	if !includeQuestions && !includeTeams && !includeBumpers && !includeHistory && !includeMedias && !includeAmbiance {
 		includeQuestions = true
 		includeTeams = true
 		includeBumpers = true
 		includeHistory = true
 		includeMedias = true
+		includeAmbiance = true
 	}
 
-	log.Printf("[HTTP] Selective backup: questions=%v, teams=%v, bumpers=%v, history=%v, medias=%v",
-		includeQuestions, includeTeams, includeBumpers, includeHistory, includeMedias)
+	log.Printf("[HTTP] Selective backup: questions=%v, teams=%v, bumpers=%v, history=%v, medias=%v, ambiance=%v",
+		includeQuestions, includeTeams, includeBumpers, includeHistory, includeMedias, includeAmbiance)
 
 	// Set headers for TAR download
 	cfg := config.Get()
@@ -2071,17 +2092,17 @@ func (h *HTTPServer) handleBackupSelect(w http.ResponseWriter, r *http.Request) 
 		}
 	}
 
-	// Add game-config.json (#150) — piggybacks on "history" rather than a
-	// dedicated flag: BackupPage.jsx exposes exactly the 5 checkboxes tested
-	// above, and game-config.json (default delay + neon effect) is a small,
-	// game-session-scoped settings file with no natural fit among the other
-	// four (questions/teams/bumpers/medias). It lives in configDir next to
-	// history.json, the closest existing precedent for "settings tied to a
-	// game session" — same reasoning as question_statuses.json piggybacking
-	// on "questions" just above. /fs-backup (full backup) already includes
-	// it unconditionally (it just archives dataDir wholesale), so this only
-	// affects the *selective* backup endpoint.
-	if includeHistory {
+	// Add game-config.json (#150) — #152: dedicated "ambiance" flag, no
+	// longer piggybacked on "history". game-config.json (default delay +
+	// neon effect) is a game-session-scoped VISUAL/AMBIANCE settings file;
+	// tying its inclusion to "history" (score/event log) was a semantic
+	// mismatch flagged by code-reviewer during #150's own review — a user
+	// wanting to keep history but reset the room's look (or vice versa)
+	// couldn't express that. BackupPage.jsx now has its own "Configuration
+	// Ambiance" checkbox for exactly this. /fs-backup (full backup) already
+	// includes it unconditionally (it just archives dataDir wholesale), so
+	// this only affects the *selective* backup endpoint.
+	if includeAmbiance {
 		gameConfigPath := config.GameConfigPath()
 		if _, err := os.Stat(gameConfigPath); err == nil {
 			h.addFileToTAR(tw, gameConfigPath, "config/game-config.json")
@@ -2089,10 +2110,12 @@ func (h *HTTPServer) handleBackupSelect(w http.ResponseWriter, r *http.Request) 
 	}
 
 	// Add game_state.json (#141) — quiz metadata (name/theme/notes/
-	// populations/difficulties/language/objectives/hidden fields) and the
-	// virtual player limit. Same "history" anchor as game-config.json just
-	// above, same reasoning: no dedicated UI flag, and this is a small
-	// settings/metadata file with no natural fit among the other four.
+	// populations/difficulties/language/objectives/hidden fields), the
+	// virtual player limit, and (v6.5.2, #119) the saved entracte panel
+	// config. Stays anchored to "history", unlike game-config.json above
+	// (#152, moved to "ambiance"): this is a session's identity/settings
+	// (quiz name, theme...), conceptually closer to the history/event log
+	// than to a visual "ambiance" preset — no dedicated UI flag of its own.
 	if includeHistory {
 		statePath := filepath.Join(configDir, "game_state.json")
 		if _, err := os.Stat(statePath); err == nil {
@@ -2100,7 +2123,7 @@ func (h *HTTPServer) handleBackupSelect(w http.ResponseWriter, r *http.Request) 
 		}
 	}
 
-	// Add medias (backgrounds + categories)
+	// Add medias (backgrounds + categories + entracte)
 	if includeMedias {
 		backgroundsDir := filepath.Join(filesDir, "backgrounds")
 		if _, err := os.Stat(backgroundsDir); err == nil {
@@ -2109,6 +2132,14 @@ func (h *HTTPServer) handleBackupSelect(w http.ResponseWriter, r *http.Request) 
 		categoriesDir := filepath.Join(filesDir, "categories")
 		if _, err := os.Stat(categoriesDir); err == nil {
 			h.addDirToTAR(tw, categoriesDir, "files/categories")
+		}
+		// v6.5.2, #119 — added explicitly, per the plan's risk table: the
+		// default-question-image (files/ root) and new-game-backgrounds/ are
+		// ALREADY missing from this list (#152), a dedicated directory here
+		// avoids reproducing that same gap for the entracte panel image.
+		entracteDir := filepath.Join(filesDir, "entracte")
+		if _, err := os.Stat(entracteDir); err == nil {
+			h.addDirToTAR(tw, entracteDir, "files/entracte")
 		}
 	}
 
@@ -2183,13 +2214,17 @@ func (h *HTTPServer) addDirToTAR(tw *tar.Writer, sourceDir, tarPrefix string) er
 }
 
 // handleResetSelect performs selective reset based on query parameters
-// Query params: questions=true, teams=true, bumpers=true, history=true, medias=true, all=true
+// Query params: questions=true, teams=true, bumpers=true, history=true, medias=true, ambiance=true, all=true
 func (h *HTTPServer) handleResetSelect(w http.ResponseWriter, r *http.Request) {
 	resetQuestions := r.URL.Query().Get("questions") == "true"
 	resetTeams := r.URL.Query().Get("teams") == "true"
 	resetBumpers := r.URL.Query().Get("bumpers") == "true"
 	resetHistory := r.URL.Query().Get("history") == "true"
 	resetMedias := r.URL.Query().Get("medias") == "true"
+	// #152: dedicated flag, mirrors handleBackupSelect's includeAmbiance —
+	// see its doc comment for the full rationale (code-reviewer's #150
+	// finding). game_state.json stays on resetHistory, unchanged.
+	resetAmbiance := r.URL.Query().Get("ambiance") == "true"
 	resetAll := r.URL.Query().Get("all") == "true"
 
 	// "all" means reset everything
@@ -2199,10 +2234,11 @@ func (h *HTTPServer) handleResetSelect(w http.ResponseWriter, r *http.Request) {
 		resetBumpers = true
 		resetHistory = true
 		resetMedias = true
+		resetAmbiance = true
 	}
 
-	log.Printf("[HTTP] Selective reset: questions=%v, teams=%v, bumpers=%v, history=%v, medias=%v",
-		resetQuestions, resetTeams, resetBumpers, resetHistory, resetMedias)
+	log.Printf("[HTTP] Selective reset: questions=%v, teams=%v, bumpers=%v, history=%v, medias=%v, ambiance=%v",
+		resetQuestions, resetTeams, resetBumpers, resetHistory, resetMedias, resetAmbiance)
 
 	result := make(map[string]bool)
 	configDir := filepath.Join(h.dataDir, "config")
@@ -2249,37 +2285,42 @@ func (h *HTTPServer) handleResetSelect(w http.ResponseWriter, r *http.Request) {
 		result["history"] = true
 		log.Printf("[HTTP] Reset: History cleared")
 
-		// Reset game state (#141) — quiz metadata + virtual player limit,
-		// same "history" anchor as game-config.json (#150) just below, and
-		// the same clear-in-memory-then-remove-file division of labor as
-		// history.json above (Engine has no direct file-removal
-		// responsibility of its own — ClearQuizMeta only touches memory).
+		// Reset game state (#141) — quiz metadata + virtual player limit
+		// (+ v6.5.2 #119: the saved entracte panel config). Stays anchored
+		// to "history" (#152 only moved game-config.json to "ambiance" —
+		// see below — game_state.json is unchanged), same clear-in-memory-
+		// then-remove-file division of labor as history.json above (Engine
+		// has no direct file-removal responsibility of its own —
+		// ClearQuizMeta only touches memory).
 		h.engine.ClearQuizMeta()
 		statePath := filepath.Join(configDir, "game_state.json")
 		os.Remove(statePath)
 		log.Printf("[HTTP] Reset: Game state cleared")
+	}
 
-		// Reset game settings (default delay + neon effect, #150) —
-		// piggybacks on "history", same anchor as handleBackupSelect's
-		// identical choice above (no dedicated UI flag for this small
-		// settings file). Writes fresh defaults rather than just deleting
-		// the file: GetGameSettings()'s singleton would not otherwise pick
-		// up the deletion until a full process restart (once.Do), so the
-		// in-memory instance must be explicitly replaced for GET
-		// /game-config.json to reflect the reset immediately — mirrors
-		// h.engine.ClearHistory()'s immediate in-memory effect just above.
+	// Reset game settings (default delay + neon effect, #150) — #152:
+	// dedicated "ambiance" flag, no longer piggybacked on "history" (see
+	// handleBackupSelect's includeAmbiance doc comment for the full
+	// rationale — code-reviewer flagged the "history" attachment as a
+	// semantic mismatch during #150's own review). Writes fresh defaults
+	// rather than just deleting the file: GetGameSettings()'s singleton
+	// would not otherwise pick up the deletion until a full process restart
+	// (once.Do), so the in-memory instance must be explicitly replaced for
+	// GET /game-config.json to reflect the reset immediately.
+	if resetAmbiance {
 		defaultGS := &config.GameSettings{}
 		config.ApplyGameSettingsDefaults(defaultGS)
 		if err := config.SaveGameSettings(defaultGS); err == nil {
 			config.SetGameSettingsInstance(defaultGS)
-			log.Printf("[HTTP] Reset: Game config cleared")
+			result["ambiance"] = true
+			log.Printf("[HTTP] Reset: Game config (ambiance) cleared")
 			if h.OnConfigUpdate != nil {
 				h.OnConfigUpdate()
 			}
 		}
 	}
 
-	// Reset medias (backgrounds + categories)
+	// Reset medias (backgrounds + categories + entracte)
 	if resetMedias {
 		mediasOk := false
 		backgroundsDir := filepath.Join(filesDir, "backgrounds")
@@ -2294,6 +2335,17 @@ func (h *HTTPServer) handleResetSelect(w http.ResponseWriter, r *http.Request) {
 			os.MkdirAll(categoriesDir, 0755)
 			mediasOk = true
 			log.Printf("[HTTP] Reset: Categories cleared")
+		}
+		// v6.5.2, #119 — added explicitly alongside backgrounds/categories,
+		// same rationale as the backup archive above.
+		entracteDir := filepath.Join(filesDir, "entracte")
+		if err := os.RemoveAll(entracteDir); err == nil {
+			os.MkdirAll(entracteDir, 0755)
+			mediasOk = true
+			log.Printf("[HTTP] Reset: Entracte image cleared")
+			if h.OnConfigUpdate != nil {
+				h.OnConfigUpdate()
+			}
 		}
 		if mediasOk {
 			result["medias"] = true
@@ -2452,6 +2504,11 @@ func (h *HTTPServer) handleRestore(w http.ResponseWriter, r *http.Request) {
 				targetPath = filepath.Join(h.dataDir, tarPath)
 				allowed = true
 			}
+		case strings.HasPrefix(tarPath, "files/entracte/"):
+			if detected["entracte"] {
+				targetPath = filepath.Join(h.dataDir, tarPath)
+				allowed = true
+			}
 		case tarPath == "config/teams.json":
 			if detected["teams"] {
 				targetPath = filepath.Join(configDir, "teams.json")
@@ -2562,6 +2619,19 @@ func (h *HTTPServer) handleRestore(w http.ResponseWriter, r *http.Request) {
 		log.Printf("[HTTP] Restore: Backgrounds restored")
 	}
 
+	if detected["entracte"] {
+		restoredMap["entracte"] = true
+		// No engine-side file list to reload (unlike backgrounds) — the
+		// image's existence is checked on demand (HasCustomEntracteImage).
+		// OnConfigUpdate refreshes GameState.ENTRACTE_CONFIG.IMAGE_IS_CUSTOM
+		// and rebroadcasts, so connected clients see the restored image
+		// immediately.
+		if h.OnConfigUpdate != nil {
+			h.OnConfigUpdate()
+		}
+		log.Printf("[HTTP] Restore: Entracte image restored")
+	}
+
 	if detected["gameConfig"] {
 		// #150 — reload from the just-extracted file (same path
 		// GameConfigPath() already resolves to, set once at startup) and
@@ -2613,6 +2683,7 @@ func (h *HTTPServer) detectTARContents(data []byte) map[string]bool {
 		"history":     false,
 		"backgrounds": false,
 		"categories":  false,
+		"entracte":    false, // #119 — files/entracte/ (ENTRACTE panel image, v6.5.2)
 		"gameConfig":  false, // #150 — game-config.json (default delay + neon effect)
 		"gameState":   false, // #141 — game_state.json (quiz metadata)
 	}
@@ -2633,6 +2704,8 @@ func (h *HTTPServer) detectTARContents(data []byte) map[string]bool {
 			detected["backgrounds"] = true
 		case strings.HasPrefix(tarPath, "files/categories/"):
 			detected["categories"] = true
+		case strings.HasPrefix(tarPath, "files/entracte/"):
+			detected["entracte"] = true
 		case tarPath == "config/teams.json" || tarPath == "teams.json":
 			detected["teams"] = true
 		case tarPath == "config/bumpers.json" || tarPath == "bumpers.json":
@@ -3187,8 +3260,8 @@ func (h *HTTPServer) handleAPIDefaultQuestionImage(w http.ResponseWriter, r *htt
 
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]interface{}{
-			"path":       "/api/config/default-image",
-			"is_custom":  true,
+			"path":      "/api/config/default-image",
+			"is_custom": true,
 		})
 
 	case http.MethodDelete:
@@ -3211,8 +3284,171 @@ func (h *HTTPServer) handleAPIDefaultQuestionImage(w http.ResponseWriter, r *htt
 
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]interface{}{
-			"path":       "/api/config/default-image",
-			"is_custom":  false,
+			"path":      "/api/config/default-image",
+			"is_custom": false,
+		})
+
+	default:
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+	}
+}
+
+// ENTRACTE panel image API (v6.5.2, #119, contract http-endpoints.md
+// §"Mode ENTRACTE") — single optional background image for the ENTRACTE
+// panel. Calqué à l'identique sur handleAPIDefaultQuestionImage above (the
+// project's one single-image pattern), with two deliberate differences:
+//   - no embedded fallback asset — GET 404s if no image was ever uploaded,
+//     the panel simply renders without a background image;
+//   - stored in its OWN directory, data/files/entracte/, not the shared
+//     data/files/ root. The selective-backup "medias" flag only archives
+//     files/backgrounds/ and files/categories/ (handleSelectiveBackup,
+//     below) — the default-question-image at the files/ root is ALREADY
+//     missing from that list (a pre-existing gap, #152), and new-game-
+//     backgrounds/ too. A dedicated directory, added explicitly to the
+//     "medias" backup/reset code, avoids reproducing that same hole for
+//     entracte's image (plan risk table "Image de config perdue à la
+//     restauration").
+//
+// GET    /api/game/entracte-image → serves the image binary, 404 if none
+// POST   /api/game/entracte-image → multipart upload (field "file"), replaces any existing image regardless of its extension
+// DELETE /api/game/entracte-image → removes the image — panel falls back to no background
+//
+// Renamed 2026-08-20 (C1) from /api/config/entracte-image: the image
+// belongs to the game/session, not to server config — /api/config/ became
+// misleading once the rest of the entracte settings moved to game_state.json.
+// Free rename: this endpoint never reached production (contract
+// http-endpoints.md §"Mode ENTRACTE").
+const entracteImageBaseName = "entracte-image"
+
+// entracteImageExts lists supported extensions in search priority order —
+// same set handleAPIDefaultQuestionImage accepts.
+var entracteImageExts = []string{".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg"}
+
+func (h *HTTPServer) entracteImageDir() string {
+	return filepath.Join(h.dataDir, "files", "entracte")
+}
+
+// getCustomEntracteImagePath returns the path to the uploaded ENTRACTE
+// panel image, or "" if none exists.
+func (h *HTTPServer) getCustomEntracteImagePath() string {
+	dir := h.entracteImageDir()
+	for _, ext := range entracteImageExts {
+		candidate := filepath.Join(dir, entracteImageBaseName+ext)
+		if _, err := os.Stat(candidate); err == nil {
+			return candidate
+		}
+	}
+	return ""
+}
+
+// HasCustomEntracteImage returns true if an ENTRACTE panel image has been
+// uploaded — the source of truth for GameState.ENTRACTE_CONFIG.IMAGE_IS_CUSTOM
+// (cmd/server/main.go pushes this into the engine on every config update).
+func (h *HTTPServer) HasCustomEntracteImage() bool {
+	return h.getCustomEntracteImagePath() != ""
+}
+
+func (h *HTTPServer) handleAPIEntracteImage(w http.ResponseWriter, r *http.Request) {
+	dir := h.entracteImageDir()
+
+	switch r.Method {
+	case http.MethodGet:
+		customPath := h.getCustomEntracteImagePath()
+		if customPath == "" {
+			http.NotFound(w, r)
+			return
+		}
+		ext := strings.ToLower(filepath.Ext(customPath))
+		contentType := "image/jpeg"
+		switch ext {
+		case ".png":
+			contentType = "image/png"
+		case ".gif":
+			contentType = "image/gif"
+		case ".webp":
+			contentType = "image/webp"
+		case ".svg":
+			contentType = "image/svg+xml"
+		}
+		w.Header().Set("Content-Type", contentType)
+		http.ServeFile(w, r, customPath)
+
+	case http.MethodPost:
+		if err := r.ParseMultipartForm(10 << 20); err != nil {
+			http.Error(w, "Failed to parse form: "+err.Error(), http.StatusBadRequest)
+			return
+		}
+		file, header, err := r.FormFile("file")
+		if err != nil {
+			http.Error(w, "No file uploaded: "+err.Error(), http.StatusBadRequest)
+			return
+		}
+		defer file.Close()
+
+		ext := strings.ToLower(filepath.Ext(header.Filename))
+		if ext == "" {
+			ext = ".png"
+		}
+		allowed := map[string]bool{".jpg": true, ".jpeg": true, ".png": true, ".gif": true, ".webp": true, ".svg": true}
+		if !allowed[ext] {
+			http.Error(w, "Unsupported file type: "+ext, http.StatusBadRequest)
+			return
+		}
+
+		os.MkdirAll(dir, 0755)
+
+		// Remove any existing entracte image (all extensions) — POST replaces
+		// the previous image regardless of its own extension.
+		for _, oldExt := range entracteImageExts {
+			os.Remove(filepath.Join(dir, entracteImageBaseName+oldExt))
+		}
+
+		destPath := filepath.Join(dir, entracteImageBaseName+ext)
+		dst, err := os.Create(destPath)
+		if err != nil {
+			http.Error(w, "Failed to save file", http.StatusInternalServerError)
+			return
+		}
+		defer dst.Close()
+		if _, err := io.Copy(dst, file); err != nil {
+			http.Error(w, "Failed to write file", http.StatusInternalServerError)
+			return
+		}
+
+		LogInfo(game.LogComponentHTTP, "Entracte panel image uploaded: %s", destPath)
+
+		if h.OnConfigUpdate != nil {
+			h.OnConfigUpdate()
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"path":      "/api/game/entracte-image",
+			"is_custom": true,
+		})
+
+	case http.MethodDelete:
+		removed := false
+		for _, ext := range entracteImageExts {
+			candidate := filepath.Join(dir, entracteImageBaseName+ext)
+			if err := os.Remove(candidate); err == nil {
+				removed = true
+				LogInfo(game.LogComponentHTTP, "Entracte panel image deleted: %s", candidate)
+			}
+		}
+		if !removed {
+			http.Error(w, "No entracte image found", http.StatusNotFound)
+			return
+		}
+
+		if h.OnConfigUpdate != nil {
+			h.OnConfigUpdate()
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"path":      "/api/game/entracte-image",
+			"is_custom": false,
 		})
 
 	default:

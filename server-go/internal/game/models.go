@@ -16,7 +16,7 @@ const (
 	PhaseStarted   GamePhase = "STARTED"
 	PhasePaused    GamePhase = "PAUSED"
 	PhaseRevealed  GamePhase = "REVEALED"
-	PhaseEnroll    GamePhase = "ENROLL"    // Player enrollment phase (virtual players)
+	PhaseEnroll    GamePhase = "ENROLL"   // Player enrollment phase (virtual players)
 	PhaseNewGame   GamePhase = "NEW_GAME" // Game reset — scores/history cleared, ready to start fresh
 )
 
@@ -39,7 +39,7 @@ type Team struct {
 	Color      []int  `json:"COLOR"`
 	ColorName  string `json:"COLOR_NAME,omitempty"` // Named color key for LED lookup (e.g. "rouge", "bleu")
 	Score      int    `json:"SCORE"`                // Calculated: TeamPoints + sum(bumpers)
-	TeamPoints int    `json:"TEAM_POINTS"`           // Independent team points
+	TeamPoints int    `json:"TEAM_POINTS"`          // Independent team points
 	Time       int64  `json:"TIME,omitempty"`
 	Status     string `json:"STATUS,omitempty"`
 	Bumper     string `json:"BUMPER,omitempty"`
@@ -225,21 +225,21 @@ type MemoryPair struct {
 type MemoryMode string
 
 const (
-	MemoryModeSolo          MemoryMode = "SOLO"
-	MemoryModeChacunSonTour MemoryMode = "CHACUN_SON_TOUR"
+	MemoryModeSolo           MemoryMode = "SOLO"
+	MemoryModeChacunSonTour  MemoryMode = "CHACUN_SON_TOUR"
 	MemoryModeTantQueJeGagne MemoryMode = "TANT_QUE_JE_GAGNE"
 )
 
 // MotionCard represents one card in a MEMOTION grid (3 faces: RECTO, VERSO, REVEAL)
 type MotionCard struct {
-	ID            string `json:"ID"`                        // Unique identifier (e.g. "mc-1")
-	RectoTheme    string `json:"RECTO_THEME"`               // Theme/title shown on front face
-	RectoImage    string `json:"RECTO_IMAGE,omitempty"`     // Optional image on front face (data/files/ path)
-	Difficulty    int    `json:"DIFFICULTY"`                // 1 | 2 | 3 → 1pt | 3pt | 5pt
-	QuestionText  string `json:"QUESTION_TEXT,omitempty"`   // Question text (VERSO face)
-	QuestionImage string `json:"QUESTION_IMAGE,omitempty"`  // Optional question image
-	AnswerText    string `json:"ANSWER_TEXT,omitempty"`     // Answer text (REVEAL face)
-	AnswerImage   string `json:"ANSWER_IMAGE,omitempty"`    // Optional answer image
+	ID            string `json:"ID"`                       // Unique identifier (e.g. "mc-1")
+	RectoTheme    string `json:"RECTO_THEME"`              // Theme/title shown on front face
+	RectoImage    string `json:"RECTO_IMAGE,omitempty"`    // Optional image on front face (data/files/ path)
+	Difficulty    int    `json:"DIFFICULTY"`               // 1 | 2 | 3 → 1pt | 3pt | 5pt
+	QuestionText  string `json:"QUESTION_TEXT,omitempty"`  // Question text (VERSO face)
+	QuestionImage string `json:"QUESTION_IMAGE,omitempty"` // Optional question image
+	AnswerText    string `json:"ANSWER_TEXT,omitempty"`    // Answer text (REVEAL face)
+	AnswerImage   string `json:"ANSWER_IMAGE,omitempty"`   // Optional answer image
 }
 
 // MemoryConfig holds configuration for the Memory game
@@ -263,35 +263,35 @@ type MotionConfig struct {
 
 // Question represents a quiz question
 type Question struct {
-	ID           string           `json:"ID"`
-	Question     string           `json:"QUESTION"`
-	Answer       string           `json:"ANSWER"`                  // For normal questions
-	Type         QuestionType     `json:"TYPE,omitempty"`          // "SPEEDY", "QCM", "MEMORY", "MEMOTION", "ARDOISE" (default SPEEDY)
-	Category     QuestionCategory `json:"CATEGORY,omitempty"`      // Question category
-	PointsTarget PointsTarget     `json:"POINTS_TARGET,omitempty"` // "PLAYER" or "TEAM" (default based on type)
-	QCMAnswers        *QCMAnswers      `json:"QCM_ANSWERS,omitempty"`        // For QCM questions
-	QCMCorrect        string           `json:"QCM_CORRECT,omitempty"`        // "RED", "GREEN", "YELLOW", "BLUE"
-	QCMHintsEnabled   bool             `json:"QCM_HINTS_ENABLED,omitempty"`  // Enable automatic hint invalidation
-	QCMHintThreshold1 float64          `json:"QCM_HINT_THRESHOLD_1,omitempty"` // First hint at this % of time remaining (default 0.25)
-	QCMHintThreshold2 float64          `json:"QCM_HINT_THRESHOLD_2,omitempty"` // Second hint at this % of time remaining (default 0.125)
-	QCMPenalty1       float64          `json:"QCM_PENALTY_1,omitempty"`        // Point multiplier after 1 hint (default 0.67)
-	QCMPenalty2       float64          `json:"QCM_PENALTY_2,omitempty"`        // Point multiplier after 2 hints (default 0.33)
-	MemoryPairs       []MemoryPair     `json:"MEMORY_PAIRS,omitempty"`       // For Memory questions
-	MemoryConfig      *MemoryConfig    `json:"MEMORY_CONFIG,omitempty"`      // Memory game configuration
-	MemoryMode        string           `json:"MEMORY_MODE,omitempty"`        // "SOLO", "CHACUN_SON_TOUR", "TANT_QUE_JE_GAGNE" (default SOLO)
-	MotionCards       []MotionCard     `json:"MOTION_CARDS,omitempty"`       // Cards for MEMOTION questions (v5.0.0)
-	MotionMode        string           `json:"MOTION_MODE,omitempty"`        // "SOLO", "CHACUN_SON_TOUR", "TANT_QUE_JE_GAGNE" (default SOLO)
+	ID                     string           `json:"ID"`
+	Question               string           `json:"QUESTION"`
+	Answer                 string           `json:"ANSWER"`                             // For normal questions
+	Type                   QuestionType     `json:"TYPE,omitempty"`                     // "SPEEDY", "QCM", "MEMORY", "MEMOTION", "ARDOISE" (default SPEEDY)
+	Category               QuestionCategory `json:"CATEGORY,omitempty"`                 // Question category
+	PointsTarget           PointsTarget     `json:"POINTS_TARGET,omitempty"`            // "PLAYER" or "TEAM" (default based on type)
+	QCMAnswers             *QCMAnswers      `json:"QCM_ANSWERS,omitempty"`              // For QCM questions
+	QCMCorrect             string           `json:"QCM_CORRECT,omitempty"`              // "RED", "GREEN", "YELLOW", "BLUE"
+	QCMHintsEnabled        bool             `json:"QCM_HINTS_ENABLED,omitempty"`        // Enable automatic hint invalidation
+	QCMHintThreshold1      float64          `json:"QCM_HINT_THRESHOLD_1,omitempty"`     // First hint at this % of time remaining (default 0.25)
+	QCMHintThreshold2      float64          `json:"QCM_HINT_THRESHOLD_2,omitempty"`     // Second hint at this % of time remaining (default 0.125)
+	QCMPenalty1            float64          `json:"QCM_PENALTY_1,omitempty"`            // Point multiplier after 1 hint (default 0.67)
+	QCMPenalty2            float64          `json:"QCM_PENALTY_2,omitempty"`            // Point multiplier after 2 hints (default 0.33)
+	MemoryPairs            []MemoryPair     `json:"MEMORY_PAIRS,omitempty"`             // For Memory questions
+	MemoryConfig           *MemoryConfig    `json:"MEMORY_CONFIG,omitempty"`            // Memory game configuration
+	MemoryMode             string           `json:"MEMORY_MODE,omitempty"`              // "SOLO", "CHACUN_SON_TOUR", "TANT_QUE_JE_GAGNE" (default SOLO)
+	MotionCards            []MotionCard     `json:"MOTION_CARDS,omitempty"`             // Cards for MEMOTION questions (v5.0.0)
+	MotionMode             string           `json:"MOTION_MODE,omitempty"`              // "SOLO", "CHACUN_SON_TOUR", "TANT_QUE_JE_GAGNE" (default SOLO)
 	MotionConfig           *MotionConfig    `json:"MOTION_CONFIG,omitempty"`            // MEMOTION configuration (v5.0.x)
 	MotionMemorizeDuration int              `json:"MOTION_MEMORIZE_DURATION,omitempty"` // Seconds for MEMORIZE phase; 0 = standard mode (v5.5.0)
 	// ARDOISE fields (v5.6.0)
-	ArdoiseKeyboardType KeyboardType `json:"ARDOISE_KEYBOARD_TYPE,omitempty"` // Virtual keyboard layout: "AZERTY" | "NUMPAD"
-	Points                 string           `json:"POINTS"`                             // String to match JSON format
-	Time         string           `json:"TIME"`                    // String to match JSON format
-	Order        int              `json:"ORDER,omitempty"`         // Display order (for drag and drop)
-	Media        string           `json:"MEDIA,omitempty"`         // Question media (shown during game)
-	MediaAnswer  string           `json:"MEDIA_ANSWER,omitempty"`  // Answer media (shown during REVEAL)
-	Explanation  string           `json:"EXPLANATION,omitempty"`   // note animateur (v6.4.x, #168) — visible /anim only, never TV/player/admin
-	Status       QuestionStatus   `json:"STATUS,omitempty"`
+	ArdoiseKeyboardType KeyboardType   `json:"ARDOISE_KEYBOARD_TYPE,omitempty"` // Virtual keyboard layout: "AZERTY" | "NUMPAD"
+	Points              string         `json:"POINTS"`                          // String to match JSON format
+	Time                string         `json:"TIME"`                            // String to match JSON format
+	Order               int            `json:"ORDER,omitempty"`                 // Display order (for drag and drop)
+	Media               string         `json:"MEDIA,omitempty"`                 // Question media (shown during game)
+	MediaAnswer         string         `json:"MEDIA_ANSWER,omitempty"`          // Answer media (shown during REVEAL)
+	Explanation         string         `json:"EXPLANATION,omitempty"`           // note animateur (v6.4.x, #168) — visible /anim only, never TV/player/admin
+	Status              QuestionStatus `json:"STATUS,omitempty"`
 }
 
 // Background represents a background image with its settings
@@ -299,6 +299,36 @@ type Background struct {
 	Path     string  `json:"path"`
 	Duration int     `json:"duration"` // Duration in seconds (default 10)
 	Opacity  float64 `json:"opacity"`  // Opacity 0-100 (default 100)
+}
+
+// EntracteConfig is the panel configuration for ENTRACTE mode (v6.5.2,
+// #119). A property of the GAME/session, not of server config (arbitrage
+// utilisateur 2026-08-20, C1 — amends the original design, which lived in
+// game-config.json/GameSettings): persisted in game_state.json alongside
+// the Quiz* fields (see PersistedGameState, state_persistence.go), edited
+// from the Quiz page via UPDATE_ENTRACTE_CONFIG (contract game-state.md
+// §"ENTRACTE_CONFIG", websocket-actions.md §"UPDATE_ENTRACTE_CONFIG").
+//
+// ImageIsCustom is ALWAYS derived at read time from whether a custom image
+// file exists on disk (data/files/entracte/) — never itself persisted (see
+// state_persistence.go, SaveState/LoadState zero it explicitly) and never
+// part of the UPDATE_ENTRACTE_CONFIG payload. No file path ever crosses the
+// wire; the client builds the stable /api/game/entracte-image URL itself
+// with a cache-buster.
+type EntracteConfig struct {
+	Title         string `json:"TITLE"`
+	Subtitle      string `json:"SUBTITLE"`
+	ImageIsCustom bool   `json:"IMAGE_IS_CUSTOM"`
+	PanelSize     int    `json:"PANEL_SIZE"`     // % of screen, width AND height, same on /tv and /player. Clamped 20-100.
+	AnimPeriod    int    `json:"ANIM_PERIOD"`    // Animation cycle duration, seconds. Clamped 2-30.
+	AnimIntensity int    `json:"ANIM_INTENSITY"` // Animation amplitude, 0-100. 0 = animation disabled.
+	// TransitionMs (v6.5.2, #119, C3) — fade duration in/out of entracte, on
+	// all 4 surfaces, milliseconds. Default 2000, clamped 0-10000. 0 =
+	// instant switch (the pre-C3 behavior). Unlike the animation fields
+	// above, prefers-reduced-motion does NOT neutralize this one — a fade
+	// is not the kind of motion that setting targets (contract game-state.md
+	// §"Animation du panneau").
+	TransitionMs int `json:"TRANSITION_MS"`
 }
 
 // GameState holds the current game state
@@ -314,28 +344,60 @@ type GameState struct {
 	CurrentBackgroundIndex int          `json:"CURRENT_BACKGROUND_INDEX"`       // Server-synchronized background index
 	NewGameBackgrounds     []Background `json:"new_game_backgrounds,omitempty"` // NEW_GAME screen backgrounds (v4.0.4)
 	// Memory fields - NO omitempty so empty arrays are serialized for frontend reset
-	MemoryFlippedCards       []string       `json:"MEMORY_FLIPPED_CARDS"`                  // IDs of currently flipped Memory cards (max 2)
-	MemoryMatchedPairs       []int          `json:"MEMORY_MATCHED_PAIRS"`                  // IDs of matched pairs (permanent)
-	MemoryErrors             int            `json:"MEMORY_ERRORS"`                         // Number of failed match attempts
-	MemoryCurrentTeam        string         `json:"MEMORY_CURRENT_TEAM"`                   // Team currently playing (multi-team modes)
-	MemoryTeamPairs          map[string]int `json:"MEMORY_TEAM_PAIRS"`                     // Pairs found per team
-	MemoryTeamErrors         map[string]int `json:"MEMORY_TEAM_ERRORS"`                    // Errors per team (teamName → errorCount)
-	MemoryParticipatingTeams []string       `json:"MEMORY_PARTICIPATING_TEAMS"`            // Teams selected to play
-	MemoryPairOwners         map[int]string `json:"MEMORY_PAIR_OWNERS"`                    // pairID → teamName (tracks which team found each pair)
-	MemoryCurrentTeamColor   []int          `json:"MEMORY_CURRENT_TEAM_COLOR"`             // RGB color of current team
-	QcmInvalidated           []string       `json:"QCM_INVALIDATED"`                       // Invalidated QCM answers (e.g., ["RED", "YELLOW"])
+	MemoryFlippedCards       []string       `json:"MEMORY_FLIPPED_CARDS"`       // IDs of currently flipped Memory cards (max 2)
+	MemoryMatchedPairs       []int          `json:"MEMORY_MATCHED_PAIRS"`       // IDs of matched pairs (permanent)
+	MemoryErrors             int            `json:"MEMORY_ERRORS"`              // Number of failed match attempts
+	MemoryCurrentTeam        string         `json:"MEMORY_CURRENT_TEAM"`        // Team currently playing (multi-team modes)
+	MemoryTeamPairs          map[string]int `json:"MEMORY_TEAM_PAIRS"`          // Pairs found per team
+	MemoryTeamErrors         map[string]int `json:"MEMORY_TEAM_ERRORS"`         // Errors per team (teamName → errorCount)
+	MemoryParticipatingTeams []string       `json:"MEMORY_PARTICIPATING_TEAMS"` // Teams selected to play
+	MemoryPairOwners         map[int]string `json:"MEMORY_PAIR_OWNERS"`         // pairID → teamName (tracks which team found each pair)
+	MemoryCurrentTeamColor   []int          `json:"MEMORY_CURRENT_TEAM_COLOR"`  // RGB color of current team
+	QcmInvalidated           []string       `json:"QCM_INVALIDATED"`            // Invalidated QCM answers (e.g., ["RED", "YELLOW"])
 	// MEMOTION fields — NO omitempty: maps/slices/strings must be serialized even when empty for frontend reset (v5.0.0)
-	MotionSubPhase          string            `json:"MEMOTION_SUBPHASE"`            // "GRID" | "SELECTED" | "QUESTION" | "REVEAL" | ""
-	MotionSelected          string            `json:"MEMOTION_SELECTED"`            // ID of active card, "" when on grid
-	MotionCardStates        map[string]string `json:"MEMOTION_CARD_STATES"`         // cardID → "UNPLAYED"|"SELECTED"|"QUESTION"|"REVEALED"|"DONE"
-	MotionCardTeams         map[string]string `json:"MEMOTION_CARD_TEAMS"`          // cardID → teamName (winner)
-	MotionCurrentTeam       string            `json:"MEMOTION_CURRENT_TEAM"`        // Team currently playing
-	MotionParticipatingTeams []string         `json:"MEMOTION_PARTICIPATING_TEAMS"` // Teams selected to play
-	MotionCurrentTeamColor  []int             `json:"MEMOTION_CURRENT_TEAM_COLOR"`  // RGB color of current team
-	VirtualPlayerCount     int          `json:"VIRTUAL_PLAYER_COUNT"`           // Number of enrolled virtual players
-	VirtualPlayerLimit     int          `json:"VIRTUAL_PLAYER_LIMIT"`           // Maximum number of virtual players allowed
-	EnrollmentActive       bool         `json:"ENROLLMENT_ACTIVE"`              // Whether player enrollment is active
-	ShowQRCode             bool         `json:"SHOW_QR_CODE"`                   // Whether to display QR code on TV
+	MotionSubPhase           string            `json:"MEMOTION_SUBPHASE"`            // "GRID" | "SELECTED" | "QUESTION" | "REVEAL" | ""
+	MotionSelected           string            `json:"MEMOTION_SELECTED"`            // ID of active card, "" when on grid
+	MotionCardStates         map[string]string `json:"MEMOTION_CARD_STATES"`         // cardID → "UNPLAYED"|"SELECTED"|"QUESTION"|"REVEALED"|"DONE"
+	MotionCardTeams          map[string]string `json:"MEMOTION_CARD_TEAMS"`          // cardID → teamName (winner)
+	MotionCurrentTeam        string            `json:"MEMOTION_CURRENT_TEAM"`        // Team currently playing
+	MotionParticipatingTeams []string          `json:"MEMOTION_PARTICIPATING_TEAMS"` // Teams selected to play
+	MotionCurrentTeamColor   []int             `json:"MEMOTION_CURRENT_TEAM_COLOR"`  // RGB color of current team
+	VirtualPlayerCount       int               `json:"VIRTUAL_PLAYER_COUNT"`         // Number of enrolled virtual players
+	VirtualPlayerLimit       int               `json:"VIRTUAL_PLAYER_LIMIT"`         // Maximum number of virtual players allowed
+	EnrollmentActive         bool              `json:"ENROLLMENT_ACTIVE"`            // Whether player enrollment is active
+	ShowQRCode               bool              `json:"SHOW_QR_CODE"`                 // Whether to display QR code on TV
+	// ENTRACTE (v6.5.2, #119) — global pause mode, independent of the question
+	// cycle. Same nature as ShowQRCode just above: an ephemeral display flag,
+	// NOT persisted (state_persistence.go excludes it explicitly, alongside
+	// ShowQRCode). NO omitempty on Entracte: unlike Backgrounds/
+	// NewGameBackgrounds (which precede the project's no-omitempty rule and
+	// are not a model to copy), `false` MUST stay on the wire or no client
+	// could ever learn the pause has ENDED (contract game-state.md
+	// §"ENTRACTE"). EntracteConfig delivers title/subtitle/panel size/
+	// animation/transition atomically in the same UPDATE as the flag itself
+	// to every surface that needs it, including VJoueur (which cannot
+	// receive CONFIG_UPDATE, restricted to Admin+TV since #154) — contract
+	// game-state.md §"Diffusion". NO omitempty either: ANIM_INTENSITY=0 is a
+	// meaningful value (animation disabled), not an absent one.
+	//
+	// C4 (2026-08-20, arbitrage) — TWO objects of the same type coexist,
+	// deliberately, and this is NOT duplication to "simplify" away:
+	//   - EntracteConfig    — the DIFFUSED config the panel actually shows.
+	//     FROZEN while Entracte is true (SetEntracteConfig only refreshes it
+	//     when !Entracte; SetEntracte(true) recopies Saved -> this field,
+	//     under the same lock, right before raising the flag).
+	//   - EntracteConfigSaved — the SAVED config, always current, edited from
+	//     the Quiz page. Admin-only (protocol.AdminOnlyGameFields, alongside
+	//     QUIZ_OBJECTIVES) — TV/VJoueur only ever need the panel they see.
+	// Editing settings mid-pause must persist and be visible to the editor
+	// (Saved) without changing what's already on screen (Config) — it takes
+	// effect at the NEXT entracte. Without this split, an admin editing
+	// during a live pause, leaving the Quiz page and coming back, would see
+	// their just-saved values vanish (overwritten by the frozen diffused
+	// copy) and believe the save was lost.
+	Entracte            bool           `json:"ENTRACTE"`
+	EntracteConfig      EntracteConfig `json:"ENTRACTE_CONFIG"`
+	EntracteConfigSaved EntracteConfig `json:"ENTRACTE_CONFIG_SAVED"`
 	// Network state (v5.6.2) — NO omitempty: always serialized so frontend receives updates
 	NetworkOnlyLocalhost bool `json:"NETWORK_ONLY_LOCALHOST"`
 	// ARDOISE answers (v5.6.0) — NO omitempty: always serialized so frontend resets on new question
@@ -444,21 +506,21 @@ type LogEntry struct {
 
 // GameEvent represents a game event for history tracking
 type GameEvent struct {
-	Timestamp        int64  `json:"TIMESTAMP"`                   // Server timestamp in microseconds
-	QuestionID       string `json:"QUESTION_ID"`                 // Question ID
-	QuestionText     string `json:"QUESTION_TEXT"`               // Question text for display
-	QuestionCategory    string `json:"QUESTION_CATEGORY,omitempty"`   // Question category key (GEOGRAPHY, etc.)
-	CategoryDisplayName string `json:"CATEGORY_NAME,omitempty"`       // Resolved display name (v5.7.9)
-	CategoryImageURL    string `json:"CATEGORY_IMAGE_URL,omitempty"`  // Resolved image URL (v5.7.9)
-	CategoryColor       string `json:"CATEGORY_COLOR,omitempty"`      // Resolved accent color (v5.7.9)
-	EventType           string `json:"EVENT_TYPE"`                    // "POINTS_AWARDED", "BUZZ", etc.
-	WinnerID         string `json:"WINNER_ID"`                   // MAC bumper or team name
-	WinnerName       string `json:"WINNER_NAME"`                 // Display name (player or team)
-	WinnerType       string `json:"WINNER_TYPE"`                 // "PLAYER" or "TEAM"
-	TeamName         string `json:"TEAM_NAME,omitempty"`         // Team name (always filled)
-	TeamColor        []int  `json:"TEAM_COLOR,omitempty"`        // Team RGB color
-	PlayerName       string `json:"PLAYER_NAME,omitempty"`       // Player name (only if PLAYER)
-	PlayerColor      string `json:"PLAYER_COLOR,omitempty"`      // Player answer color (RED/GREEN/YELLOW/BLUE)
-	Points           int    `json:"POINTS"`                      // Points awarded
-	ReactionTime     int64  `json:"REACTION_TIME,omitempty"`     // Reaction time in microseconds
+	Timestamp           int64  `json:"TIMESTAMP"`                    // Server timestamp in microseconds
+	QuestionID          string `json:"QUESTION_ID"`                  // Question ID
+	QuestionText        string `json:"QUESTION_TEXT"`                // Question text for display
+	QuestionCategory    string `json:"QUESTION_CATEGORY,omitempty"`  // Question category key (GEOGRAPHY, etc.)
+	CategoryDisplayName string `json:"CATEGORY_NAME,omitempty"`      // Resolved display name (v5.7.9)
+	CategoryImageURL    string `json:"CATEGORY_IMAGE_URL,omitempty"` // Resolved image URL (v5.7.9)
+	CategoryColor       string `json:"CATEGORY_COLOR,omitempty"`     // Resolved accent color (v5.7.9)
+	EventType           string `json:"EVENT_TYPE"`                   // "POINTS_AWARDED", "BUZZ", etc.
+	WinnerID            string `json:"WINNER_ID"`                    // MAC bumper or team name
+	WinnerName          string `json:"WINNER_NAME"`                  // Display name (player or team)
+	WinnerType          string `json:"WINNER_TYPE"`                  // "PLAYER" or "TEAM"
+	TeamName            string `json:"TEAM_NAME,omitempty"`          // Team name (always filled)
+	TeamColor           []int  `json:"TEAM_COLOR,omitempty"`         // Team RGB color
+	PlayerName          string `json:"PLAYER_NAME,omitempty"`        // Player name (only if PLAYER)
+	PlayerColor         string `json:"PLAYER_COLOR,omitempty"`       // Player answer color (RED/GREEN/YELLOW/BLUE)
+	Points              int    `json:"POINTS"`                       // Points awarded
+	ReactionTime        int64  `json:"REACTION_TIME,omitempty"`      // Reaction time in microseconds
 }

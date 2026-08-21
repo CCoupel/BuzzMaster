@@ -2,9 +2,9 @@ package server
 
 import (
 	"archive/tar"
-	"bytes"
 	"buzzcontrol/internal/config"
 	"buzzcontrol/internal/game"
+	"bytes"
 	"encoding/json"
 	"errors"
 	"io"
@@ -56,6 +56,25 @@ func setupTestHTTPServer(t *testing.T) (*HTTPServer, string) {
 	// (config.GameConfigPath()'s "data/config/..." default, relative to the
 	// t.Chdir'd CWD above, which is a DIFFERENT temp dir than dataDir).
 	config.SetGameConfigPath(filepath.Join(dataDir, "config", "game-config.json"))
+
+	// #119 test-isolation fix: config.GetGameSettings() caches its result in
+	// a package-level singleton behind a sync.Once — SetGameConfigPath above
+	// only changes WHERE a future load would read from, it does NOT reset
+	// that cache. Once any earlier test in this package (same `go test`
+	// binary, same process) has called GetGameSettings() or had
+	// handleGameConfig's POST path call SetGameSettingsInstance, every
+	// later setupTestHTTPServer call — even pointed at a brand-new empty
+	// temp GameConfigPath — would keep returning THAT stale in-memory
+	// GameSettings instead of this test's own fresh defaults (order-
+	// dependent flake, caught by TestHTTPServer_GameConfig_GET_EntracteDefaults
+	// failing only when run after another POST test in the same package).
+	// SetGameSettingsInstance unconditionally overwrites the cache (same
+	// pattern config.SetInstance(cfg) already uses for the system Config
+	// singleton, right above) — bypasses the Once entirely, so this is safe
+	// to call every time regardless of what earlier tests already did.
+	freshGameSettings := &config.GameSettings{}
+	config.ApplyGameSettingsDefaults(freshGameSettings)
+	config.SetGameSettingsInstance(freshGameSettings)
 
 	engine := game.NewEngine()
 	// #141 — mirror main.go's startup wiring (same reasoning as
@@ -1377,12 +1396,12 @@ func TestHTTPServer_MemoryQuestionLoad(t *testing.T) {
 		"TIME":     "60",
 		"MEMORY_PAIRS": []map[string]interface{}{
 			{
-				"ID": 1,
+				"ID":    1,
 				"CARD1": map[string]interface{}{"TEXT": "Paris", "IS_IMAGE": false},
 				"CARD2": map[string]interface{}{"TEXT": "France", "IS_IMAGE": false},
 			},
 			{
-				"ID": 2,
+				"ID":    2,
 				"CARD1": map[string]interface{}{"TEXT": "Berlin", "IS_IMAGE": false},
 				"CARD2": map[string]interface{}{"TEXT": "Germany", "IS_IMAGE": false},
 			},
@@ -1654,8 +1673,8 @@ func TestHTTPServer_APIBuzzerStatus_EmptyMAC(t *testing.T) {
 	// Accept 301 (path cleanup redirect), 400 (bad request), or 404 (not found)
 	validCodes := map[int]bool{
 		http.StatusMovedPermanently: true,
-		http.StatusBadRequest:      true,
-		http.StatusNotFound:        true,
+		http.StatusBadRequest:       true,
+		http.StatusNotFound:         true,
 	}
 	if !validCodes[w.Code] {
 		t.Errorf("Expected status 301, 400, or 404 for empty MAC, got %d", w.Code)

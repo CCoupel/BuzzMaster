@@ -1,0 +1,78 @@
+/* Slider group — composant de formulaire générique (curseurs + libellé +
+ * valeur affichée), extrait de ConfigPage.css (effet Néon) pour être
+ * partagé avec QuestionsPage.jsx (section Entracte, #119 corrections C1) —
+ * même besoin, même rendu, à ne pas dupliquer entre les deux pages.
+ *
+ * Anciennement `.neon-sliders` dans ConfigPage.css : renommé `.slider-group`
+ * en devenant générique (deux pages consommatrices, plus seulement le néon).
+ */
+
+.slider-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  margin-bottom: var(--space-4);
+  padding: var(--space-4);
+  background: var(--gray-50);
+  border-radius: var(--radius-lg);
+}
+
+.slider-row {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.slider-row label {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--gray-700);
+}
+
+.slider-control {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.slider-control input[type="range"] {
+  flex: 1;
+  height: 6px;
+  -webkit-appearance: none;
+  appearance: none;
+  background: var(--gray-200);
+  border-radius: 3px;
+  outline: none;
+}
+
+.slider-control input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 18px;
+  height: 18px;
+  background: var(--primary-500);
+  border-radius: 50%;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.slider-control input[type="range"]::-webkit-slider-thumb:hover {
+  background: var(--primary-600);
+}
+
+.slider-control input[type="range"]::-moz-range-thumb {
+  width: 18px;
+  height: 18px;
+  background: var(--primary-500);
+  border: none;
+  border-radius: 50%;
+  cursor: pointer;
+}
+
+.slider-value {
+  min-width: 50px;
+  text-align: right;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--primary-600);
+}
