@@ -6,6 +6,7 @@ import { useCategories } from '../hooks/useCategories'
 import { CATEGORIES, categoryMeta } from '../utils/categoryUtils'
 import { sortQuestionsByOrder, shuffleArray } from '../utils/questionOrder'
 import { QUESTION_TYPES } from '../utils/questionTypeMeta'
+import { isMotionCardTypeLocked, motionCardLockReason } from '../utils/motionCardLock'
 import Button from '../components/Button'
 import Card, { CardHeader, CardBody } from '../components/Card'
 import CategoryBalance from '../components/CategoryBalance'
@@ -76,9 +77,36 @@ export default function QuestionsPage() {
     ardoiseKeyboardType: 'AZERTY',
     // MEMOTION fields (v5.0.0)
     motionMode: 'SOLO',
+    // #184/B-F4 — chaque carte porte désormais `type` + les valeurs de
+    // création de ses OwnedFields QCM (7 occurrences de ce littéral dans le
+    // fichier : useState initial, resetForm, chargement d'une question
+    // existante, handleAddMotionCard — voir grep `rectoTheme: ''` pour les
+    // retrouver toutes). Ces valeurs DOIVENT rester synchronisées avec
+    // `utils/motionCardLock.js` (`QCM_CREATION_VALUES`) — un écart ferait
+    // apparaître une carte neuve comme déjà verrouillée, exactement le piège
+    // documenté par `contracts/question-types.md` §3.2 (QCM_HINT_THRESHOLD_1
+    // etc. naissent non vides, PAS `undefined`/`0`).
     motionCards: [
-      { id: 'mc-1', rectoTheme: '', rectoImage: null, difficulty: 1, questionText: '', questionImage: null, answerText: '', answerImage: null },
-      { id: 'mc-2', rectoTheme: '', rectoImage: null, difficulty: 1, questionText: '', questionImage: null, answerText: '', answerImage: null },
+      { id: 'mc-1', rectoTheme: '', rectoImage: null, difficulty: 1, questionText: '', questionImage: null, answerText: '', answerImage: null,
+        type: 'SPEEDY',
+        qcmAnswers: { RED: '', GREEN: '', YELLOW: '', BLUE: '' },
+        qcmCorrect: '',
+        qcmHintsEnabled: false,
+        qcmHintThreshold1: 0.25,
+        qcmHintThreshold2: 0.125,
+        qcmPenalty1: 0.67,
+        qcmPenalty2: 0.33,
+      },
+      { id: 'mc-2', rectoTheme: '', rectoImage: null, difficulty: 1, questionText: '', questionImage: null, answerText: '', answerImage: null,
+        type: 'SPEEDY',
+        qcmAnswers: { RED: '', GREEN: '', YELLOW: '', BLUE: '' },
+        qcmCorrect: '',
+        qcmHintsEnabled: false,
+        qcmHintThreshold1: 0.25,
+        qcmHintThreshold2: 0.125,
+        qcmPenalty1: 0.67,
+        qcmPenalty2: 0.33,
+      },
     ],
     motionConfig: { points1: 1, points2: 3, points3: 5 },
     motionMemorizeDuration: 0,
@@ -785,8 +813,26 @@ export default function QuestionsPage() {
 
     // Load MEMOTION cards from question data
     let motionCards = [
-      { id: 'mc-1', rectoTheme: '', rectoImage: null, difficulty: 1, questionText: '', questionImage: null, answerText: '', answerImage: null },
-      { id: 'mc-2', rectoTheme: '', rectoImage: null, difficulty: 1, questionText: '', questionImage: null, answerText: '', answerImage: null },
+      { id: 'mc-1', rectoTheme: '', rectoImage: null, difficulty: 1, questionText: '', questionImage: null, answerText: '', answerImage: null,
+        type: 'SPEEDY',
+        qcmAnswers: { RED: '', GREEN: '', YELLOW: '', BLUE: '' },
+        qcmCorrect: '',
+        qcmHintsEnabled: false,
+        qcmHintThreshold1: 0.25,
+        qcmHintThreshold2: 0.125,
+        qcmPenalty1: 0.67,
+        qcmPenalty2: 0.33,
+      },
+      { id: 'mc-2', rectoTheme: '', rectoImage: null, difficulty: 1, questionText: '', questionImage: null, answerText: '', answerImage: null,
+        type: 'SPEEDY',
+        qcmAnswers: { RED: '', GREEN: '', YELLOW: '', BLUE: '' },
+        qcmCorrect: '',
+        qcmHintsEnabled: false,
+        qcmHintThreshold1: 0.25,
+        qcmHintThreshold2: 0.125,
+        qcmPenalty1: 0.67,
+        qcmPenalty2: 0.33,
+      },
     ]
     if (question.MOTION_CARDS && Array.isArray(question.MOTION_CARDS)) {
       motionCards = question.MOTION_CARDS.map(card => ({
@@ -798,6 +844,17 @@ export default function QuestionsPage() {
         questionImage: card.QUESTION_IMAGE || null,
         answerText: card.ANSWER_TEXT || '',
         answerImage: card.ANSWER_IMAGE || null,
+        // #184/B-F4 — TYPE absent/vide ⇒ SPEEDY (contrat §3, rétrocompatibilité
+        // stricte : les 9 questions MEMOTION existantes n'ont pas ce champ).
+        // Défauts QCM synchronisés avec motionCardLock.js (QCM_CREATION_VALUES).
+        type: card.TYPE || 'SPEEDY',
+        qcmAnswers: card.QCM_ANSWERS || { RED: '', GREEN: '', YELLOW: '', BLUE: '' },
+        qcmCorrect: card.QCM_CORRECT || '',
+        qcmHintsEnabled: card.QCM_HINTS_ENABLED || false,
+        qcmHintThreshold1: card.QCM_HINT_THRESHOLD_1 ?? 0.25,
+        qcmHintThreshold2: card.QCM_HINT_THRESHOLD_2 ?? 0.125,
+        qcmPenalty1: card.QCM_PENALTY_1 ?? 0.67,
+        qcmPenalty2: card.QCM_PENALTY_2 ?? 0.33,
       }))
     }
 
@@ -880,8 +937,26 @@ export default function QuestionsPage() {
       },
       motionMode: 'SOLO',
       motionCards: [
-        { id: 'mc-1', rectoTheme: '', rectoImage: null, difficulty: 1, questionText: '', questionImage: null, answerText: '', answerImage: null },
-        { id: 'mc-2', rectoTheme: '', rectoImage: null, difficulty: 1, questionText: '', questionImage: null, answerText: '', answerImage: null },
+        { id: 'mc-1', rectoTheme: '', rectoImage: null, difficulty: 1, questionText: '', questionImage: null, answerText: '', answerImage: null,
+        type: 'SPEEDY',
+        qcmAnswers: { RED: '', GREEN: '', YELLOW: '', BLUE: '' },
+        qcmCorrect: '',
+        qcmHintsEnabled: false,
+        qcmHintThreshold1: 0.25,
+        qcmHintThreshold2: 0.125,
+        qcmPenalty1: 0.67,
+        qcmPenalty2: 0.33,
+      },
+        { id: 'mc-2', rectoTheme: '', rectoImage: null, difficulty: 1, questionText: '', questionImage: null, answerText: '', answerImage: null,
+        type: 'SPEEDY',
+        qcmAnswers: { RED: '', GREEN: '', YELLOW: '', BLUE: '' },
+        qcmCorrect: '',
+        qcmHintsEnabled: false,
+        qcmHintThreshold1: 0.25,
+        qcmHintThreshold2: 0.125,
+        qcmPenalty1: 0.67,
+        qcmPenalty2: 0.33,
+      },
       ],
       motionConfig: { points1: 1, points2: 3, points3: 5 },
       motionMemorizeDuration: 0,
@@ -987,7 +1062,16 @@ export default function QuestionsPage() {
         ...prev,
         motionCards: [
           ...prev.motionCards,
-          { id: newId, rectoTheme: '', rectoImage: null, difficulty: 1, questionText: '', questionImage: null, answerText: '', answerImage: null },
+          { id: newId, rectoTheme: '', rectoImage: null, difficulty: 1, questionText: '', questionImage: null, answerText: '', answerImage: null,
+        type: 'SPEEDY',
+        qcmAnswers: { RED: '', GREEN: '', YELLOW: '', BLUE: '' },
+        qcmCorrect: '',
+        qcmHintsEnabled: false,
+        qcmHintThreshold1: 0.25,
+        qcmHintThreshold2: 0.125,
+        qcmPenalty1: 0.67,
+        qcmPenalty2: 0.33,
+      },
         ]
       }
     })
@@ -1120,16 +1204,40 @@ export default function QuestionsPage() {
       // MEMOTION mode — serialize cards and mode
       data.append('MOTION_MODE', formData.motionMode)
 
-      const serializedCards = formData.motionCards.map(card => ({
-        ID: card.id,
-        RECTO_THEME: card.rectoTheme,
-        RECTO_IMAGE: typeof card.rectoImage === 'string' ? card.rectoImage : '',
-        DIFFICULTY: card.difficulty,
-        QUESTION_TEXT: card.questionText,
-        QUESTION_IMAGE: typeof card.questionImage === 'string' ? card.questionImage : '',
-        ANSWER_TEXT: card.answerText,
-        ANSWER_IMAGE: typeof card.answerImage === 'string' ? card.answerImage : '',
-      }))
+      // #184/B-F4 — TYPE explicite + contenu propre au type de la carte
+      // (contrat §3.1/§7) : SPEEDY porte ANSWER_TEXT/ANSWER_IMAGE (historique,
+      // inchangé), QCM porte les champs TypedContent partagés avec Question
+      // (mêmes noms JSON, §2). Jamais les deux à la fois — c'est exactement
+      // ce que vérifie le serveur (CARD_TYPE_CONTENT_MISMATCH, B-B2).
+      const serializedCards = formData.motionCards.map(card => {
+        const cardType = card.type || 'SPEEDY'
+        const base = {
+          ID: card.id,
+          TYPE: cardType,
+          RECTO_THEME: card.rectoTheme,
+          RECTO_IMAGE: typeof card.rectoImage === 'string' ? card.rectoImage : '',
+          DIFFICULTY: card.difficulty,
+          QUESTION_TEXT: card.questionText,
+          QUESTION_IMAGE: typeof card.questionImage === 'string' ? card.questionImage : '',
+        }
+        if (cardType === 'QCM') {
+          return {
+            ...base,
+            QCM_ANSWERS: card.qcmAnswers,
+            QCM_CORRECT: card.qcmCorrect,
+            QCM_HINTS_ENABLED: card.qcmHintsEnabled,
+            QCM_HINT_THRESHOLD_1: card.qcmHintThreshold1,
+            QCM_HINT_THRESHOLD_2: card.qcmHintThreshold2,
+            QCM_PENALTY_1: card.qcmPenalty1,
+            QCM_PENALTY_2: card.qcmPenalty2,
+          }
+        }
+        return {
+          ...base,
+          ANSWER_TEXT: card.answerText,
+          ANSWER_IMAGE: typeof card.answerImage === 'string' ? card.answerImage : '',
+        }
+      })
       data.append('motion_cards', JSON.stringify(serializedCards))
       data.append('motion_config', JSON.stringify({
         POINTS_1_STAR: parseInt(formData.motionConfig?.points1) || 1,
@@ -2505,7 +2613,10 @@ export default function QuestionsPage() {
 
                     {/* Cards List */}
                     <div className="memotion-cards-list">
-                      {formData.motionCards.map((card, index) => (
+                      {formData.motionCards.map((card, index) => {
+                        const cardType = card.type || 'SPEEDY'
+                        const cardLocked = isMotionCardTypeLocked(card)
+                        return (
                         <div key={card.id} className="memotion-card-item">
                           <div className="memory-pair-header">
                             <span className="memory-pair-number">Carte {index + 1}</span>
@@ -2521,7 +2632,36 @@ export default function QuestionsPage() {
                             )}
                           </div>
 
-                          {/* RECTO face */}
+                          {/* Type de jeu de la carte (#184/B-F4) — sélecteur
+                              filtré sur les types nestable (SPEEDY/QCM en
+                              v7.0.0, questionTypeMeta.js). Désactivé + raison
+                              affichée dès que la carte porte du contenu propre
+                              à son type (verrou réactif, contrat §3.2). */}
+                          <div className="form-group memotion-card-type-selector">
+                            <label>Type de jeu de la carte</label>
+                            <div className="type-filter-row">
+                              {QUESTION_TYPES.filter(t => t.nestable).map(t => (
+                                <button
+                                  key={t.key}
+                                  type="button"
+                                  className={`type-btn ${t.key.toLowerCase()} ${cardType === t.key ? 'active' : ''}`}
+                                  disabled={cardLocked}
+                                  onClick={() => handleMotionCardChange(card.id, 'type', t.key)}
+                                >
+                                  {t.label}
+                                </button>
+                              ))}
+                            </div>
+                            {cardLocked && (
+                              <div className="motion-card-lock-reason">
+                                <span>🔒</span>
+                                <span>Type verrouillé — {motionCardLockReason(card)}</span>
+                              </div>
+                            )}
+                          </div>
+
+                          {/* RECTO face — commune à tous les types (contrat §3.1),
+                              ne verrouille jamais. */}
                           <div className="memotion-face-section">
                             <div className="memotion-face-label memotion-face-recto">RECTO</div>
                             <div className="form-group" style={{ marginBottom: '0.5rem' }}>
@@ -2567,7 +2707,10 @@ export default function QuestionsPage() {
                             </div>
                           </div>
 
-                          {/* VERSO face */}
+                          {/* VERSO face — énoncé commun à tous les types
+                              (contrat §3.1), suivi du sous-éditeur propre au
+                              type le cas échéant (emplacement §7.1 — QCM
+                              n'ajoute aucune image, seulement ses 4 réponses). */}
                           <div className="memotion-face-section">
                             <div className="memotion-face-label memotion-face-verso">VERSO (Question)</div>
                             <div className="form-group" style={{ marginBottom: '0.5rem' }}>
@@ -2595,39 +2738,69 @@ export default function QuestionsPage() {
                                 </label>
                               )}
                             </div>
+                            {cardType === 'QCM' && (
+                              <QcmAnswersEditor
+                                values={{
+                                  qcmAnswers: card.qcmAnswers,
+                                  qcmCorrect: card.qcmCorrect,
+                                  qcmHintsEnabled: card.qcmHintsEnabled,
+                                  qcmHintThreshold1: card.qcmHintThreshold1,
+                                  qcmHintThreshold2: card.qcmHintThreshold2,
+                                  qcmPenalty1: card.qcmPenalty1,
+                                  qcmPenalty2: card.qcmPenalty2,
+                                }}
+                                onFieldChange={(field, value) => handleMotionCardChange(card.id, field, value)}
+                                onAnswerChange={(color, value) => handleMotionCardChange(
+                                  card.id, 'qcmAnswers', { ...card.qcmAnswers, [color]: value }
+                                )}
+                              />
+                            )}
                           </div>
 
-                          {/* REVEAL face */}
-                          <div className="memotion-face-section">
-                            <div className="memotion-face-label memotion-face-reveal">REVEAL (Reponse)</div>
-                            <div className="form-group" style={{ marginBottom: '0.5rem' }}>
-                              <textarea
-                                value={card.answerText}
-                                onChange={(e) => handleMotionCardChange(card.id, 'answerText', e.target.value)}
-                                placeholder="Texte de la reponse..."
-                                rows={2}
-                                className="memory-card-text-input"
-                              />
+                          {/* REVEAL face — propre à SPEEDY uniquement (contrat
+                              §7 : MediaSlots de QCM = recto/question, aucune
+                              face reveal). QCM n'a rien à saisir ici : la
+                              bonne réponse est déjà désignée ci-dessus. */}
+                          {cardType === 'SPEEDY' ? (
+                            <div className="memotion-face-section">
+                              <div className="memotion-face-label memotion-face-reveal">REVEAL (Reponse)</div>
+                              <div className="form-group" style={{ marginBottom: '0.5rem' }}>
+                                <textarea
+                                  value={card.answerText}
+                                  onChange={(e) => handleMotionCardChange(card.id, 'answerText', e.target.value)}
+                                  placeholder="Texte de la reponse..."
+                                  rows={2}
+                                  className="memory-card-text-input"
+                                />
+                              </div>
+                              <div className="memotion-img-row">
+                                {card.answerImage ? (
+                                  <div className="memory-card-image-preview">
+                                    <img
+                                      src={card.answerImage instanceof File ? URL.createObjectURL(card.answerImage) : card.answerImage}
+                                      alt="Reponse"
+                                    />
+                                    <button type="button" className="memory-card-remove-img" onClick={() => handleMotionCardChange(card.id, 'answerImage', null)}>×</button>
+                                  </div>
+                                ) : (
+                                  <label className="memory-card-upload">
+                                    <input type="file" accept="image/*" onChange={(e) => { const f = e.target.files?.[0]; if (f) handleMotionCardChange(card.id, 'answerImage', f) }} />
+                                    <span>+ Image reponse</span>
+                                  </label>
+                                )}
+                              </div>
                             </div>
-                            <div className="memotion-img-row">
-                              {card.answerImage ? (
-                                <div className="memory-card-image-preview">
-                                  <img
-                                    src={card.answerImage instanceof File ? URL.createObjectURL(card.answerImage) : card.answerImage}
-                                    alt="Reponse"
-                                  />
-                                  <button type="button" className="memory-card-remove-img" onClick={() => handleMotionCardChange(card.id, 'answerImage', null)}>×</button>
-                                </div>
-                              ) : (
-                                <label className="memory-card-upload">
-                                  <input type="file" accept="image/*" onChange={(e) => { const f = e.target.files?.[0]; if (f) handleMotionCardChange(card.id, 'answerImage', f) }} />
-                                  <span>+ Image reponse</span>
-                                </label>
-                              )}
+                          ) : (
+                            <div className="memotion-face-section">
+                              <div className="memotion-face-label memotion-face-reveal">REVEAL (Reponse)</div>
+                              <p className="memotion-card-no-reveal-hint">
+                                Pas de face de réponse à saisir : la bonne réponse est la proposition cochée ci-dessus.
+                              </p>
                             </div>
-                          </div>
+                          )}
                         </div>
-                      ))}
+                        )
+                      })}
                     </div>
 
                     {formData.motionCards.length < 12 && (

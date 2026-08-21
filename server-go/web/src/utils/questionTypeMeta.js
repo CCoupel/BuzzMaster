@@ -16,14 +16,23 @@
  * Ordre = ordre d'affichage (grille éditeur `QuestionsPage.jsx` : ligne 1
  * SPEEDY/QCM/MEMORY, ligne 2 MEMOTION/ARDOISE ; même ordre que le sélecteur
  * `AIGenerateModal.jsx`).
+ *
+ * `nestable` (#184/B-F4) — miroir JS de `TypeDescriptor.NestableInMotionCard`
+ * (registre Go, `internal/game/question_types.go`, contrat §7) : les seuls
+ * types qu'une carte MEMOTION peut porter en `TYPE`. SPEEDY et QCM en v7.0.0 ;
+ * ARDOISE/MEMORY rejoignent en v7.1.0 (#186/#187) ; MEMOTION jamais
+ * (profondeur d'imbrication plafonnée à 1, contrat §1). Consommé par le
+ * sélecteur de type de carte (`QuestionsPage.jsx`) pour filtrer les boutons
+ * proposés — pas de registre séparé côté JS, cette table reste la source
+ * unique.
  */
 
 export const QUESTION_TYPES = [
-  { key: 'SPEEDY', label: 'Speedy', icon: '⚡', color: '#3b7fc4' },
-  { key: 'QCM', label: 'QCM', icon: '🔠', color: '#8a5cc4' },
-  { key: 'MEMORY', label: 'Memory', icon: '🃏', color: '#2e9e6d' },
-  { key: 'MEMOTION', label: 'Memotion', icon: '🎞️', color: '#c8568f' },
-  { key: 'ARDOISE', label: 'Ardoise', icon: '🖊️', color: '#10b981' },
+  { key: 'SPEEDY', label: 'Speedy', icon: '⚡', color: '#3b7fc4', nestable: true },
+  { key: 'QCM', label: 'QCM', icon: '🔠', color: '#8a5cc4', nestable: true },
+  { key: 'MEMORY', label: 'Memory', icon: '🃏', color: '#2e9e6d', nestable: false },
+  { key: 'MEMOTION', label: 'Memotion', icon: '🎞️', color: '#c8568f', nestable: false },
+  { key: 'ARDOISE', label: 'Ardoise', icon: '🖊️', color: '#10b981', nestable: false },
 ]
 
 export const QUESTION_TYPE_META = QUESTION_TYPES.reduce((acc, t) => {
