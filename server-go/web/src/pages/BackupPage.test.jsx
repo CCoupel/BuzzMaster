@@ -52,6 +52,8 @@ describe('BackupPage', () => {
       expect(screen.getAllByLabelText('Joueurs').length).toBeGreaterThanOrEqual(1)
       expect(screen.getAllByLabelText('Historique').length).toBeGreaterThanOrEqual(1)
       expect(screen.getAllByLabelText('Médias & Catégories').length).toBeGreaterThanOrEqual(1)
+      // #152 — case dédiée game-config.json, plus rattachée à "Historique"
+      expect(screen.getAllByLabelText('Configuration Ambiance').length).toBeGreaterThanOrEqual(1)
     })
 
     it('should render all reset checkboxes', () => {
@@ -72,7 +74,9 @@ describe('BackupPage', () => {
   describe('Backup Options State', () => {
     it('should have all backup options checked by default', () => {
       renderBackupPage()
-      const backupCheckboxes = screen.getAllByRole('checkbox').slice(0, 5)
+      // #152 — 6 cases par section depuis l'ajout de "Configuration Ambiance"
+      // (questions, teams, bumpers, history, medias, ambiance)
+      const backupCheckboxes = screen.getAllByRole('checkbox').slice(0, 6)
       backupCheckboxes.forEach(checkbox => {
         expect(checkbox).toBeChecked()
       })
@@ -90,8 +94,9 @@ describe('BackupPage', () => {
   describe('Reset Options State', () => {
     it('should have all reset options unchecked by default', () => {
       renderBackupPage()
+      // #152 — 6 cases par section (voir commentaire ci-dessus)
       const allCheckboxes = screen.getAllByRole('checkbox')
-      const resetCheckboxes = allCheckboxes.slice(5, 10)
+      const resetCheckboxes = allCheckboxes.slice(6, 12)
       resetCheckboxes.forEach(checkbox => {
         expect(checkbox).not.toBeChecked()
       })
@@ -100,7 +105,7 @@ describe('BackupPage', () => {
     it('should toggle reset checkbox state', () => {
       renderBackupPage()
       const allCheckboxes = screen.getAllByRole('checkbox')
-      const firstResetCheckbox = allCheckboxes[5]
+      const firstResetCheckbox = allCheckboxes[6]
       expect(firstResetCheckbox).not.toBeChecked()
       fireEvent.click(firstResetCheckbox)
       expect(firstResetCheckbox).toBeChecked()
