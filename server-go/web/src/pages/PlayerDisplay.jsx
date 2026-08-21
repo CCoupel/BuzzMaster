@@ -2023,6 +2023,13 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
               const motionCards = gameState.question?.MOTION_CARDS || []
               const selectedId = gameState.MEMOTION_SELECTED
               const selectedCard = motionCards.find(c => c.ID === selectedId) || null
+              // #184/B-F5 — dispatch positif par type de carte (question-types.md
+              // §3/§7) : les faces VERSO (QUESTION)/REVEAL délèguent au rendu du
+              // TYPE de la carte active, jamais un repli implicite. SPEEDY est le
+              // SEUL type dont le contenu (ANSWER_TEXT/ANSWER_IMAGE) est rendu ici
+              // aujourd'hui — reproduit à l'identique. QCM (#185, C-F2) ajoutera sa
+              // propre branche sans toucher celle-ci (test d'agnosticité, contrat §10).
+              const cardType = selectedCard?.TYPE || 'SPEEDY'
               const motionCfg = gameState.question?.MOTION_CONFIG
               const diffPts = d => getMotionCardPoints(d, motionCfg)
 
@@ -2334,7 +2341,11 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
                         />
                       )}
                     </div>
-                    {/* Row 3 : Vide (zone réponses — libre) */}
+                    {/* Row 3 : point de montage du contenu propre au type
+                        (#185/C-F2 branchera la grille QCM ici). Vide pour
+                        SPEEDY — aucun contenu propre à ce type sur la face
+                        VERSO (contrat §3.1 : SPEEDY ne possède que ANSWER_TEXT/
+                        ANSWER_IMAGE, tous deux affichés en REVEAL, pas ici). */}
                     <div className="memotion-tv-fs-footer" />
                   </motion.div>
                 )
@@ -2369,30 +2380,36 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
                         </p>
                       )}
                     </div>
-                    {/* Row 2 : Image réponse (ou texte si pas d'image) */}
+                    {/* Row 2 : contenu propre au type — SPEEDY : image réponse
+                        (ou texte si pas d'image). #185/C-F2 branchera ici la
+                        grille QCM (ANSWER_IMAGE/ANSWER_TEXT sont des champs
+                        SPEEDY, contrat §3.1 — jamais peuplés pour un autre
+                        type, mais le dispatch reste explicite, pas implicite). */}
                     <div className="memotion-tv-fs-body">
-                      {selectedCard.ANSWER_IMAGE ? (
-                        <motion.img
-                          src={selectedCard.ANSWER_IMAGE}
-                          alt=""
-                          className="memotion-tv-fs-img"
-                          initial={{ opacity: 0, scale: 0.9 }}
-                          animate={{ opacity: 1, scale: 1 }}
-                          transition={{ delay: 0.3 }}
-                        />
-                      ) : selectedCard.ANSWER_TEXT ? (
-                        <motion.p
-                          className="memotion-tv-fs-text memotion-tv-answer-text"
-                          initial={{ opacity: 0, y: 20 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          transition={{ delay: 0.35 }}
-                        >
-                          {selectedCard.ANSWER_TEXT}
-                        </motion.p>
-                      ) : null}
+                      {cardType === 'SPEEDY' && (
+                        selectedCard.ANSWER_IMAGE ? (
+                          <motion.img
+                            src={selectedCard.ANSWER_IMAGE}
+                            alt=""
+                            className="memotion-tv-fs-img"
+                            initial={{ opacity: 0, scale: 0.9 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            transition={{ delay: 0.3 }}
+                          />
+                        ) : selectedCard.ANSWER_TEXT ? (
+                          <motion.p
+                            className="memotion-tv-fs-text memotion-tv-answer-text"
+                            initial={{ opacity: 0, y: 20 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ delay: 0.35 }}
+                          >
+                            {selectedCard.ANSWER_TEXT}
+                          </motion.p>
+                        ) : null
+                      )}
                     </div>
-                    {/* Row 3 : Texte réponse si image + texte coexistent */}
-                    {selectedCard.ANSWER_IMAGE && selectedCard.ANSWER_TEXT ? (
+                    {/* Row 3 : texte réponse si image + texte SPEEDY coexistent */}
+                    {cardType === 'SPEEDY' && selectedCard.ANSWER_IMAGE && selectedCard.ANSWER_TEXT ? (
                       <motion.div
                         className="memotion-tv-fs-footer"
                         initial={{ opacity: 0, y: 10 }}
