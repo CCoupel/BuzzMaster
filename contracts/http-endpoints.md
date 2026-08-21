@@ -256,13 +256,14 @@ Sauvegarde sélective.
 | questions | bool | true | Inclure questions |
 | teams | bool | true | Inclure équipes |
 | bumpers | bool | true | Inclure joueurs |
-| history | bool | true | Inclure historique, **et deux petits fichiers de métadonnées sans case dédiée dans l'interface, rattachés à ce paramètre par défaut de conception** : `game-config.json` (délai par défaut + effet néon, v6.0.x #150) et `game_state.json` (métadonnées quiz + plafond de joueurs virtuels, v6.0.x #141) |
+| history | bool | true | Inclure historique, **et** `game_state.json` (métadonnées quiz + plafond de joueurs virtuels + config d'entracte enregistrée, v6.0.x #141, v6.5.2 #119) — pas de case dédiée pour ce petit fichier, rattaché à `history` par défaut de conception (identité/réglages d'une session, plus proche de l'historique qu'un préréglage visuel) |
+| ambiance | bool | true | Inclure `game-config.json` (délai par défaut + effet néon, v6.0.x #150). **Flag dédié depuis #152** (2026-08-21) — n'était auparavant rattaché à aucun flag propre, **piggybacké sur `history`** ; `code-reviewer` a relevé ce rattachement comme un contresens sémantique (un réglage visuel/ambiance n'est pas de l'historique) lors de la revue de #150. Correspond à la case « Configuration Ambiance » de `BackupPage.jsx` |
 | medias | bool | true | Inclure fonds & catégories (**renommé depuis `backgrounds` en v5.7.1**) |
 
 #### Exemple
 
 ```
-GET /backup-select?questions=true&history=true&medias=true
+GET /backup-select?questions=true&history=true&ambiance=true&medias=true
 ```
 
 ---
@@ -304,7 +305,8 @@ Reset sélectif.
 | questions | bool | Supprimer questions |
 | teams | bool | Vider équipes |
 | bumpers | bool | Vider joueurs |
-| history | bool | Vider historique, **réinitialiser `game-config.json` aux valeurs par défaut** (v6.0.x, #150) **et vider `game_state.json`** (métadonnées quiz — fichier supprimé, même convention que `history.json`, v6.0.x #141) — même rattachement que `/backup-select` |
+| history | bool | Vider historique **et vider `game_state.json`** (métadonnées quiz — fichier supprimé, même convention que `history.json`, v6.0.x #141) — même rattachement que `/backup-select` |
+| ambiance | bool | **Réinitialiser `game-config.json` aux valeurs par défaut** (v6.0.x, #150). **Flag dédié depuis #152** — n'était auparavant réinitialisé qu'avec `history=true` ; voir `/backup-select` ci-dessus pour le détail du rattachement corrigé |
 | medias | bool | Supprimer fonds & catégories (**renommé depuis `backgrounds` en v5.7.1**) |
 
 ---
