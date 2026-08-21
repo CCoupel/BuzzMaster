@@ -54,6 +54,21 @@ type TypedContent struct {
 > de champ JSON. Les 85 `question.json` existants doivent se relire et se réécrire **octet pour
 > octet à l'identique**. C'est la condition d'acceptation la plus stricte du lot — voir §9.
 
+> ⚠️ **Déviation d'implémentation (#184, B-B1) — asymétrie `omitempty` sur `Answer`.** Le snippet
+> ci-dessus montre un unique champ `Answer` avec `omitempty` ; en pratique, `Question` **garde son
+> propre champ `Answer` déclaré explicitement** (`json:"ANSWER"`, **sans** `omitempty`), à côté de
+> l'embarquement de `TypedContent`. Raison : 26/85 `question.json` persistent `"ANSWER":""`
+> explicitement (question sans réponse), et `Question.Answer` n'a jamais eu `omitempty` — lui en
+> ajouter un via l'embarquement aurait fait disparaître la clé au premier réenregistrement,
+> violant l'invariant octet-pour-octet ci-dessus. À l'inverse, `TypedContent.Answer` **garde**
+> `omitempty` : aucune carte MEMOTION existante ne porte `ANSWER` (le SPEEDY de carte utilise
+> `ANSWER_TEXT`/`ANSWER_IMAGE`), et sans `omitempty` chacune en gagnerait une vide. La règle de
+> précédence JSON de Go sur les champs embarqués (le champ le moins imbriqué gagne en cas de
+> collision de nom) fait que le `Answer` explicite de `Question` reste seul déterminant pour l'hôte
+> question ; `TypedContent.Answer` ne s'applique qu'à `MotionCard` (ARDOISE-en-carte, #186,
+> v7.1.0), qui n'a pas de champ `Answer` propre pour entrer en collision. Vérifié par test dédié
+> avant implémentation et par le round-trip des 85 fixtures (§10.3).
+
 **Pourquoi partager plutôt que dupliquer sur `MotionCard`** : c'est ce qui rend l'adaptateur
 « carte → question synthétique » (déjà présent dans `AnimPage.jsx`) trivial — une copie de champs
 de même nom — et ce qui permet à `AnimQcmOptions`, aux sous-éditeurs et aux vues TV de servir les
