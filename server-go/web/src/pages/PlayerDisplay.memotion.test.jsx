@@ -780,3 +780,118 @@ describe('PlayerDisplay — MEMOTION layout (bugfix SC1–SC6)', () => {
     })
   })
 })
+
+// ---------------------------------------------------------------------------
+// #185/C-F2 — carte MEMOTION de type QCM sur /tv. Point de délégation posé
+// en B-F5 (#184) : `cardType === 'SPEEDY'` gardait le contenu SPEEDY, ce lot
+// ajoute la branche QCM sans y toucher (test d'agnosticité, contrat §10).
+// Affichage seul (contrat §7.1) : les 4 réponses de LA CARTE, invalidations
+// progressives (via MEMOTION_ACTIVE.STATE, contrat §5.3), bonne réponse en
+// couleur au REVEAL — aucune action entrante nouvelle.
+// ---------------------------------------------------------------------------
+
+const CARD_QCM = {
+  ID: 'card-3',
+  RECTO_THEME: 'Capitales d\'Europe',
+  DIFFICULTY: 2,
+  TYPE: 'QCM',
+  QUESTION_TEXT: 'Quelle est la capitale de la Slovénie ?',
+  QCM_ANSWERS: { RED: 'Bratislava', GREEN: 'Ljubljana', YELLOW: 'Zagreb', BLUE: 'Sarajevo' },
+  QCM_CORRECT: 'GREEN',
+}
+
+/** Variante de makeMemotionMock incluant MEMOTION_ACTIVE (état d'indices carte-scopé). */
+const makeMemotionQcmMock = (subphase, invalidated = []) => {
+  const base = makeMemotionMock(subphase, 'card-3', [CARD_WITH_IMG, CARD_QCM])
+  base.gameState.MEMOTION_ACTIVE = {
+    CARD_ID: 'card-3',
+    TYPE: 'QCM',
+    STATE: { QCM_INVALIDATED: invalidated },
+  }
+  return base
+}
+
+describe('PlayerDisplay — carte MEMOTION de type QCM (#185/C-F2)', () => {
+  describe('Face VERSO (QUESTION) — 4 réponses affichées, pas de reveal', () => {
+    beforeEach(() => {
+      useGame.mockReturnValue(makeMemotionQcmMock('QUESTION'))
+    })
+
+    it('affiche les 4 réponses de la carte QCM active', () => {
+      const { container } = renderTV()
+      const grid = container.querySelector('.memotion-tv-qcm-grid')
+      expect(grid).not.toBeNull()
+      expect(grid.textContent).toContain('Bratislava')
+      expect(grid.textContent).toContain('Ljubljana')
+      expect(grid.textContent).toContain('Zagreb')
+      expect(grid.textContent).toContain('Sarajevo')
+    })
+
+    it('ne marque aucune réponse "correct" avant REVEAL, même si QCM_CORRECT est connue', () => {
+      const { container } = renderTV()
+      expect(container.querySelectorAll('.memotion-tv-qcm-item.correct').length).toBe(0)
+    })
+
+    it("n'affiche PAS le contenu SPEEDY (ANSWER_TEXT/ANSWER_IMAGE) pour une carte QCM", () => {
+      const { container } = renderTV()
+      const overlay = container.querySelector('.memotion-tv-fullscreen')
+      expect(overlay.textContent).not.toContain('ANSWER_TEXT')
+    })
+  })
+
+  describe('Face VERSO (QUESTION) — indices progressifs (invalidation)', () => {
+    it('marque une réponse invalidée (issue de MEMOTION_ACTIVE.STATE.QCM_INVALIDATED)', () => {
+      useGame.mockReturnValue(makeMemotionQcmMock('QUESTION', ['RED']))
+      const { container } = renderTV()
+      const items = container.querySelectorAll('.memotion-tv-qcm-item')
+      const redItem = Array.from(items).find(el => el.textContent.includes('Bratislava'))
+      expect(redItem.classList.contains('invalidated')).toBe(true)
+    })
+
+    it('ne marque aucune réponse invalidée quand la liste est vide', () => {
+      useGame.mockReturnValue(makeMemotionQcmMock('QUESTION', []))
+      const { container } = renderTV()
+      expect(container.querySelectorAll('.memotion-tv-qcm-item.invalidated').length).toBe(0)
+    })
+  })
+
+  describe('Face REVEAL — bonne réponse en couleur, grille conservée', () => {
+    beforeEach(() => {
+      useGame.mockReturnValue(makeMemotionQcmMock('REVEAL'))
+    })
+
+    it('conserve la grille des 4 réponses (pas de saut visuel entre VERSO et REVEAL)', () => {
+      const { container } = renderTV()
+      expect(container.querySelector('.memotion-tv-qcm-grid')).not.toBeNull()
+      expect(container.querySelectorAll('.memotion-tv-qcm-item').length).toBe(4)
+    })
+
+    it('marque UNIQUEMENT la bonne réponse (QCM_CORRECT) comme "correct"', () => {
+      const { container } = renderTV()
+      const items = container.querySelectorAll('.memotion-tv-qcm-item')
+      const correctItems = Array.from(items).filter(el => el.classList.contains('correct'))
+      expect(correctItems).toHaveLength(1)
+      expect(correctItems[0].textContent).toContain('Ljubljana')
+    })
+  })
+
+  describe('Non-régression — carte SPEEDY de la même manche', () => {
+    it('une carte SPEEDY continue d\'afficher son propre contenu, pas de grille QCM', () => {
+      const mock = makeMemotionMock('QUESTION', 'card-1', [CARD_WITH_IMG, CARD_QCM])
+      useGame.mockReturnValue(mock)
+      const { container } = renderTV()
+      expect(container.querySelector('.memotion-tv-qcm-grid')).toBeNull()
+      expect(container.querySelector('.memotion-tv-fs-question-text').textContent)
+        .toBe('Dans quel épisode Dark Vador révèle-t-il sa filiation ?')
+    })
+  })
+
+  describe('Aucune action entrante nouvelle (contrat §7.1)', () => {
+    it('la grille QCM en carte ne rend aucun élément interactif (bouton/input)', () => {
+      useGame.mockReturnValue(makeMemotionQcmMock('QUESTION'))
+      const { container } = renderTV()
+      const grid = container.querySelector('.memotion-tv-qcm-grid')
+      expect(grid.querySelectorAll('button, input').length).toBe(0)
+    })
+  })
+})

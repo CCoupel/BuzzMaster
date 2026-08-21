@@ -15,6 +15,8 @@ import { getRgbColor } from '../utils/colorUtils'
 import { escapeWifiString } from '../utils/wifiUtils'
 import { buildMemoryCards, getMemoryGridCols, getMemoryGridRows } from '../utils/memoryGrid'
 import { getMotionGridCols, getMotionGridRows, getMotionCardCoord, getMotionCardPoints, isMotionSecretMode } from '../utils/motionGrid'
+import { resolveHostContext } from '../utils/hostContext'
+import { getTypeState } from '../utils/typeState'
 import './PlayerDisplay.css'
 import '../styles/neon.css'
 import '../styles/entracte.css'
@@ -2030,6 +2032,46 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
               // aujourd'hui — reproduit à l'identique. QCM (#185, C-F2) ajoutera sa
               // propre branche sans toucher celle-ci (test d'agnosticité, contrat §10).
               const cardType = selectedCard?.TYPE || 'SPEEDY'
+              // #185/C-F2 — état d'indices QCM de LA CARTE (pas de la question),
+              // résolu via l'accesseur unique posé en B-F1 (question-types.md
+              // §5.3) plutôt que lu directement sur gameState.qcmInvalidated
+              // (question-scopé, sans rapport avec la carte active).
+              const cardHostContext = resolveHostContext(gameState)
+              const cardQcmInvalidated = getTypeState(gameState, cardHostContext).qcmInvalidated
+              // #185/C-F2 — grille des 4 réponses d'une carte QCM, montée à
+              // l'identique (mêmes clés/ordre RED/GREEN/YELLOW/BLUE que la
+              // grille QCM question standalone) dans les deux faces
+              // VERSO/REVEAL, en row 3 (footer) pour ne jamais entrer en
+              // conflit avec l'image commune de row 2 (QUESTION_IMAGE,
+              // contrat §3.1 — commune à tous les types). Affichage seul,
+              // AUCUNE action entrante (contrat §7.1) : ni onClick, ni
+              // whitelist, l'animateur désigne via MEMOTION_DONE comme pour
+              // une carte SPEEDY. `revealed` ne fait qu'ajouter le
+              // liseré/l'assombrissement — les indices (`invalidated`)
+              // s'appliquent que la carte soit révélée ou non, comme pour
+              // une question QCM classique.
+              const renderCardQcmGrid = (revealed) => (
+                <div className="memotion-tv-qcm-grid">
+                  {Object.entries(QCM_COLORS).map(([colorKey, colorData]) => {
+                    const answer = selectedCard?.QCM_ANSWERS?.[colorKey]
+                    if (!answer) return null
+                    const isCorrect = revealed && selectedCard.QCM_CORRECT === colorKey
+                    const isInvalidated = cardQcmInvalidated?.includes(colorKey)
+                    return (
+                      <div
+                        key={colorKey}
+                        className={`memotion-tv-qcm-item ${revealed ? (isCorrect ? 'correct' : 'wrong') : ''} ${isInvalidated ? 'invalidated' : ''}`}
+                        style={{
+                          backgroundColor: isInvalidated ? '#374151' : (revealed && !isCorrect ? '#4b5563' : colorData.color),
+                        }}
+                      >
+                        <span className="memotion-tv-qcm-letter">{colorData.letter}</span>
+                        <span className="memotion-tv-qcm-text">{answer}</span>
+                      </div>
+                    )
+                  })}
+                </div>
+              )
               const motionCfg = gameState.question?.MOTION_CONFIG
               const diffPts = d => getMotionCardPoints(d, motionCfg)
 
@@ -2341,12 +2383,18 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
                         />
                       )}
                     </div>
-                    {/* Row 3 : point de montage du contenu propre au type
-                        (#185/C-F2 branchera la grille QCM ici). Vide pour
-                        SPEEDY — aucun contenu propre à ce type sur la face
-                        VERSO (contrat §3.1 : SPEEDY ne possède que ANSWER_TEXT/
-                        ANSWER_IMAGE, tous deux affichés en REVEAL, pas ici). */}
-                    <div className="memotion-tv-fs-footer" />
+                    {/* Row 3 : contenu propre au type — QCM affiche ses 4
+                        réponses ici (#185/C-F2). Vide pour SPEEDY — aucun
+                        contenu propre à ce type sur la face VERSO (contrat
+                        §3.1 : SPEEDY ne possède que ANSWER_TEXT/ANSWER_IMAGE,
+                        tous deux affichés en REVEAL, pas ici). */}
+                    {cardType === 'QCM' ? (
+                      <div className="memotion-tv-fs-footer memotion-tv-fs-qcm-zone">
+                        {renderCardQcmGrid(false)}
+                      </div>
+                    ) : (
+                      <div className="memotion-tv-fs-footer" />
+                    )}
                   </motion.div>
                 )
 
@@ -2408,8 +2456,16 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
                         ) : null
                       )}
                     </div>
-                    {/* Row 3 : texte réponse si image + texte SPEEDY coexistent */}
-                    {cardType === 'SPEEDY' && selectedCard.ANSWER_IMAGE && selectedCard.ANSWER_TEXT ? (
+                    {/* Row 3 : QCM affiche la même grille qu'en face VERSO,
+                        avec la bonne réponse en couleur (#185/C-F2) — position
+                        stable, pas de saut visuel entre les deux faces.
+                        SPEEDY : texte réponse si image + texte coexistent
+                        (inchangé). */}
+                    {cardType === 'QCM' ? (
+                      <div className="memotion-tv-fs-footer memotion-tv-fs-qcm-zone">
+                        {renderCardQcmGrid(true)}
+                      </div>
+                    ) : cardType === 'SPEEDY' && selectedCard.ANSWER_IMAGE && selectedCard.ANSWER_TEXT ? (
                       <motion.div
                         className="memotion-tv-fs-footer"
                         initial={{ opacity: 0, y: 10 }}
