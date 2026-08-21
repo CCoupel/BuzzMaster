@@ -1,0 +1,389 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Messagerie Régie #176 — Correctifs UX</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background: #f5f5f5;
+            padding: 40px 20px;
+            line-height: 1.6;
+        }
+        .container { max-width: 1200px; margin: 0 auto; }
+        h1 { margin-bottom: 40px; color: #333; }
+        h2 { margin-top: 60px; margin-bottom: 20px; color: #555; font-size: 1.3em; }
+
+        /* Zones de démonstration */
+        .demo-section {
+            background: white;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            padding: 30px;
+            margin-bottom: 40px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+
+        .demo-title {
+            font-size: 1.1em;
+            font-weight: 600;
+            margin-bottom: 15px;
+            color: #222;
+        }
+
+        .demo-subtitle {
+            font-size: 0.9em;
+            color: #666;
+            margin-bottom: 20px;
+            font-style: italic;
+        }
+
+        /* Régie — Bandeau */
+        .regie-bar {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 12px 15px;
+            background: white;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            min-height: 50px;
+            width: 100%;
+        }
+
+        .regie-tag {
+            background: #e0f2f1;
+            color: #00897b;
+            padding: 4px 8px;
+            border-radius: 3px;
+            font-size: 0.8em;
+            font-weight: 600;
+            white-space: nowrap;
+        }
+
+        .regie-input {
+            flex: 1;
+            border: none;
+            padding: 8px;
+            font-size: 0.95em;
+            background: transparent;
+            outline: none;
+        }
+
+        .regie-counter {
+            font-size: 0.8em;
+            color: #999;
+            white-space: nowrap;
+        }
+
+        .regie-button {
+            padding: 6px 12px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.9em;
+            font-weight: 500;
+            white-space: nowrap;
+        }
+
+        .delete-btn {
+            background: #ffebee;
+            color: #c62828;
+        }
+
+        .delete-btn:hover {
+            background: #ffcdd2;
+        }
+
+        .ack-indicator {
+            color: #4caf50;
+            font-size: 0.85em;
+            white-space: nowrap;
+            animation: fadeOut 4s ease-in-out forwards;
+        }
+
+        @keyframes fadeOut {
+            0% { opacity: 1; }
+            85% { opacity: 1; }
+            100% { opacity: 0; }
+        }
+
+        /* Animateur — Zone message */
+        .anim-bar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 15px;
+            background: white;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            min-height: 60px;
+        }
+
+        .anim-message-zone {
+            flex: 1;
+            cursor: pointer;
+            user-select: none;
+            touch-action: manipulation;
+            padding: 10px;
+            border-radius: 4px;
+            transition: background 0.2s;
+        }
+
+        .anim-message-zone:hover {
+            background: #f5f5f5;
+        }
+
+        .anim-message-text {
+            font-size: 0.95em;
+            color: #333;
+            margin-bottom: 5px;
+        }
+
+        .anim-hint {
+            font-size: 0.75em;
+            color: #999;
+            font-style: italic;
+        }
+
+        .anim-empty {
+            color: #ccc;
+            font-style: italic;
+        }
+
+        /* Tableau des états */
+        .states-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+
+        .states-table th,
+        .states-table td {
+            border: 1px solid #ddd;
+            padding: 12px;
+            text-align: left;
+        }
+
+        .states-table th {
+            background: #f5f5f5;
+            font-weight: 600;
+            color: #333;
+        }
+
+        .states-table tr:nth-child(even) {
+            background: #fafafa;
+        }
+
+        .code {
+            font-family: "Courier New", monospace;
+            background: #f5f5f5;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-size: 0.9em;
+        }
+
+        .note {
+            background: #fff3cd;
+            border-left: 4px solid #ffc107;
+            padding: 12px;
+            margin-top: 15px;
+            border-radius: 4px;
+            font-size: 0.9em;
+        }
+
+        .section-label {
+            display: inline-block;
+            background: #e3f2fd;
+            color: #1976d2;
+            padding: 4px 8px;
+            border-radius: 3px;
+            font-size: 0.75em;
+            font-weight: 600;
+            margin-bottom: 15px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Messagerie Régie — Correctifs UX #176</h1>
+        <p style="color: #666; margin-bottom: 30px;">
+            Mise à jour de la maquette suite aux corrections UX de #176 (déploiement après #167).
+            Les états 4 et le bouton « Vu » ont disparu ; le champ régie est désormais permanent.
+        </p>
+
+        <!-- RÉGIE -->
+        <h2>Régie — Bandeau (RegieMessageBar)</h2>
+        <div class="note">
+            <strong>Changement clé :</strong> Le champ de saisie reste <strong>toujours visible et éditable</strong>,
+            quel que soit l'état du message. Plus d'état bloquant « acquitté ».
+        </div>
+
+        <div class="demo-section">
+            <div class="section-label">État 1 : Repos (par défaut)</div>
+            <div class="demo-subtitle">Le champ est vide, prêt pour une nouvelle saisie</div>
+            <div class="regie-bar">
+                <span class="regie-tag">RÉGIE</span>
+                <input type="text" class="regie-input" placeholder="Tapez une consigne…">
+                <span class="regie-counter">0/140</span>
+            </div>
+        </div>
+
+        <div class="demo-section">
+            <div class="section-label">État 2 : Saisie en cours</div>
+            <div class="demo-subtitle">L'admin tape une consigne (déclencheurs : Entrée, blur, pause 2s)</div>
+            <div class="regie-bar">
+                <span class="regie-tag">RÉGIE</span>
+                <input type="text" class="regie-input" value="Répondez aux 3 questions" placeholder="Tapez une consigne…">
+                <span class="regie-counter">27/140</span>
+            </div>
+        </div>
+
+        <div class="demo-section">
+            <div class="section-label">État 3 : Message actif</div>
+            <div class="demo-subtitle">La consigne est envoyée, l'admin peut la modifier ou l'effacer</div>
+            <div class="regie-bar">
+                <span class="regie-tag">RÉGIE</span>
+                <input type="text" class="regie-input" value="Répondez aux 3 questions" placeholder="Tapez une consigne…">
+                <span class="regie-counter">27/140</span>
+                <button class="regie-button delete-btn">Effacer</button>
+            </div>
+        </div>
+
+        <div class="demo-section">
+            <div class="section-label">État 4 : Acquittement (fugace ~4s)</div>
+            <div class="demo-subtitle">Après un double-tap animateur, un indicateur fugace apparaît <strong>sans masquer le champ</strong></div>
+            <div class="regie-bar">
+                <span class="regie-tag">RÉGIE</span>
+                <input type="text" class="regie-input" value="" placeholder="Tapez une consigne…">
+                <span class="regie-counter">0/140</span>
+                <span class="ack-indicator">✓ Vu par l'animateur</span>
+            </div>
+            <div class="note">
+                <strong>Différence avec #167 :</strong> L'état « acquitté » n'existe plus en tant que tel.
+                L'indicateur « Vu par l'animateur » apparaît brièvement (~4 s) à droite du champ vide,
+                puis disparaît. Le champ reste toujours éditable.
+            </div>
+        </div>
+
+        <!-- ANIMATEUR -->
+        <h2>Animateur — Bande de message (AnimPage, zone messagerie)</h2>
+        <div class="note">
+            <strong>Changement clé :</strong> Le bouton « Vu » est supprimé. Le <strong>double-tap sur toute la zone</strong>
+            acquitte le message. Un indice discret annonce le geste.
+        </div>
+
+        <div class="demo-section">
+            <div class="section-label">État 1 : Repos</div>
+            <div class="demo-subtitle">Aucun message actif</div>
+            <div class="anim-bar">
+                <div class="anim-empty">Aucun message de la régie</div>
+            </div>
+        </div>
+
+        <div class="demo-section">
+            <div class="section-label">État 2 : Message actif (interactif)</div>
+            <div class="demo-subtitle">Double-tap sur la zone (ou Entrée au clavier) pour acquitter</div>
+            <div class="anim-bar">
+                <div class="anim-message-zone">
+                    <div class="anim-message-text">Répondez aux 3 questions</div>
+                    <div class="anim-hint">👆 Double-tap pour marquer comme vu</div>
+                </div>
+            </div>
+            <div class="note">
+                <strong>Gestes :</strong>
+                <ul style="margin-top: 8px; margin-left: 20px;">
+                    <li><strong>Double-tap (2 appuis &lt; 300 ms) :</strong> acquitte et envoie <code>REGIE_MESSAGE_CLEAR</code></li>
+                    <li><strong>Tap unique :</strong> sans effet</li>
+                    <li><strong>Clavier (Entrée/Espace) :</strong> acquitte aussi (accès clavier préservé)</li>
+                </ul>
+            </div>
+        </div>
+
+        <!-- TABLEAU RÉCAPITULATIF -->
+        <h2>Récapitulatif des changements #176</h2>
+        <table class="states-table">
+            <thead>
+                <tr>
+                    <th>Aspect</th>
+                    <th>#167 (avant #176)</th>
+                    <th>#176 (après correction)</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td><strong>Champ régie</strong></td>
+                    <td>Disparaît quand message actif → réapparaît avec bouton « Nouveau »</td>
+                    <td><strong>Toujours visible</strong>, pré-rempli si message actif</td>
+                </tr>
+                <tr>
+                    <td><strong>États du bandeau régie</strong></td>
+                    <td>4 états exclusifs (repos → saisie → actif → acquitté)</td>
+                    <td><strong>1 seul état</strong> avec champ toujours présent</td>
+                </tr>
+                <tr>
+                    <td><strong>Retour acquittement</strong></td>
+                    <td>État bloquant « Vu par l'animateur » + bouton « Nouveau message »</td>
+                    <td><strong>Indicateur fugace</strong> (~4 s) à droite du champ</td>
+                </tr>
+                <tr>
+                    <td><strong>Geste animateur</strong></td>
+                    <td>Bouton distinct « Vu »</td>
+                    <td><strong>Double-tap</strong> sur la zone + indice visuel</td>
+                </tr>
+                <tr>
+                    <td><strong>Tap unique animateur</strong></td>
+                    <td>Acquitte</td>
+                    <td><strong>Sans effet</strong> (protection contre appuis accidentels)</td>
+                </tr>
+                <tr>
+                    <td><strong>Accès clavier animateur</strong></td>
+                    <td>Bouton → Tab + Entrée</td>
+                    <td><strong>Préservé</strong> : role/tabIndex/Entrée/Espace</td>
+                </tr>
+                <tr>
+                    <td><strong>Protocole WebSocket</strong></td>
+                    <td>N/A (identique)</td>
+                    <td><strong>Inchangé</strong> : <code>REGIE_MESSAGE_CLEAR</code> même sémantique</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <!-- NOTES D'IMPLÉMENTATION -->
+        <h2>Points techniques</h2>
+        <div class="demo-section">
+            <div class="demo-title">Guard-fou : Pas de résurrection du message</div>
+            <p style="margin-bottom: 10px;">
+                La régie tape « Salut » → pause d'envoi → « Vu » animateur → blur accidentel.
+                Sans protection, le blur renverrait « Salut » et ressusciterait le message.
+                Deux gardiens empêchent ça :
+            </p>
+            <ul style="margin-left: 20px;">
+                <li><strong>Serveur :</strong> <code>REGIE_MESSAGE_SEND</code> idempotent — texte identique = no-op</li>
+                <li><strong>Client :</strong> Ne vide le champ que si son contenu encore égal au message effacé</li>
+            </ul>
+        </div>
+
+        <div class="demo-section">
+            <div class="demo-title">CSS obligatoire pour le double-tap</div>
+            <p><code>touch-action: manipulation</code> sur la zone active (AnimPage) — sans ça, le double-tap déclenche le zoom navigateur et devient inutilisable sur tablette.</p>
+        </div>
+
+        <div class="demo-section">
+            <div class="demo-title">Timers à nettoyer</div>
+            <ul style="margin-left: 20px;">
+                <li>Debounce d'envoi (2000 ms) → cleanup à démontage</li>
+                <li>Indicateur « Vu par l'animateur » (~4 s) → cleanup à démontage</li>
+                <li>Hook <code>useDoubleTap</code> → cleanup à démontage</li>
+            </ul>
+        </div>
+
+        <hr style="margin: 40px 0; border: none; border-top: 1px solid #ddd;">
+        <p style="color: #999; font-size: 0.9em;">
+            <strong>Maquette mise à jour :</strong> 2026-08-18 · Référence QA pour validation #176
+        </p>
+    </div>
+</body>
+</html>
