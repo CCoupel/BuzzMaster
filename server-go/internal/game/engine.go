@@ -454,6 +454,84 @@ func (e *Engine) GetPhase() GamePhase {
 	return e.state.Phase
 }
 
+// HostContext is the normalized triplet a type implementation reads
+// instead of GamePhase/MEMOTION_SUBPHASE directly — contracts/
+// question-types.md §4. Two hosts can produce it: the question host (the
+// classic GamePhase cycle) for any non-MEMOTION question, and the
+// MEMOTION-card host (MEMOTION_SUBPHASE) while a MEMOTION question is in
+// play — never both, since MEMOTION disables buzzing on the top-level
+// question (ProcessButtonPress) and drives everything through its own
+// sub-phase while PHASE stays STARTED throughout.
+//
+// Never serialized: recomputed from PHASE/MEMOTION_SUBPHASE, both already
+// present in GameState. Deliberately NOT sent over the wire — see the
+// contract's cost/benefit note. Mirrored, field-for-field and case-for-case,
+// by utils/hostContext.js on the frontend; the derivation table (§4) is the
+// single specification for both, and each side's test cases share the same
+// names (getHostContextTest.go's t.Run names ↔ hostContext.test.js's
+// describe/it names) so a mismatch between the two implementations is
+// visible from either test file alone.
+type HostContext struct {
+	Playable     bool   // inputs are accepted, content is in play
+	Revealed     bool   // the answer is shown
+	TimerRunning bool   // a countdown is running for this round
+	CardID       string // "" for the question host; the active card's ID for the card host
+}
+
+// GetHostContext derives the current HostContext — contract §4's
+// derivation table, the one and only place this engine computes it.
+// Self-locking (RLock) like GetState/GetPhase: safe to call from outside
+// the engine without pre-existing lock discipline.
+func (e *Engine) GetHostContext() HostContext {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	return e.hostContextUnsafe()
+}
+
+// hostContextUnsafe is GetHostContext's body, split out so call sites that
+// already hold e.mu (none yet in v7.0.0 — #185/#186 are expected to need
+// this) can derive the context without double-locking. Must be called with
+// e.mu held (read or write).
+func (e *Engine) hostContextUnsafe() HostContext {
+	if e.state.Question != nil && e.state.Question.Type == QuestionTypeMemotion {
+		switch e.state.MotionSubPhase {
+		case MotionSubPhaseQuestion:
+			return HostContext{
+				Playable: true,
+				// TimerRunning: e.timer is the one shared ticker field for
+				// whichever timer currently runs (countdown, game, MEMOTION
+				// card, or MEMOTION memorize — mutually exclusive by
+				// construction, see the field's doc comment) — non-nil
+				// while MotionSubPhase==QUESTION means specifically the
+				// per-card timer (StartMotionCardTimer) is active.
+				TimerRunning: e.timer != nil,
+				CardID:       e.state.MotionSelected,
+			}
+		case MotionSubPhaseReveal:
+			return HostContext{
+				Revealed: true,
+				CardID:   e.state.MotionSelected,
+			}
+		default:
+			// GRID, MEMORIZE, SELECTED, or "" (not a MEMOTION round at
+			// all) — contract §4's "Aucun" row: no type is actively
+			// running, so CardID is "" even during SELECTED (a card IS
+			// chosen there, but nothing reads typed content through this
+			// CardID while Playable/Revealed are both false — see
+			// GetHostContext's doc comment and contract §4's "selon le
+			// cas" note, resolved here to the simplest consistent choice).
+			return HostContext{}
+		}
+	}
+
+	// Question host — classic GamePhase cycle.
+	return HostContext{
+		Playable:     e.state.Phase == PhaseStarted,
+		Revealed:     e.state.Phase == PhaseRevealed,
+		TimerRunning: e.state.Phase == PhaseStarted,
+	}
+}
+
 // SetPhase sets the game phase
 func (e *Engine) SetPhase(phase GamePhase) {
 	e.mu.Lock()
