@@ -942,6 +942,29 @@ func (h *HTTPServer) handleUploadQuestion(w http.ResponseWriter, r *http.Request
 		if cardsStr := r.FormValue("motion_cards"); cardsStr != "" {
 			var cards []map[string]interface{}
 			if err := json.Unmarshal([]byte(cardsStr), &cards); err == nil {
+				// #184 B-B2 — validate every card's TYPE before any
+				// processing below: known type, nestable in a MEMOTION card
+				// (also refuses re-nesting MEMOTION — contract §1), and no
+				// content orphaned from a different type (contract §3.2,
+				// CARD_TYPE_CONTENT_MISMATCH). Checked first, and the whole
+				// handler aborts on failure, so a rejected request never
+				// leaves a half-written question.json or an orphaned
+				// uploaded image behind.
+				for _, card := range cards {
+					cardTypeStr, _ := card["TYPE"].(string)
+					cardType := game.QuestionType(cardTypeStr)
+					if cardType != "" && !game.IsNestableInMotionCard(cardType) {
+						http.Error(w, fmt.Sprintf(
+							"CARD_TYPE_NOT_NESTABLE: card %v declares TYPE=%s, which is unknown or cannot be nested in a MEMOTION card",
+							card["ID"], cardType), http.StatusBadRequest)
+						return
+					}
+					if err := game.ValidateCardTypeContent(cardType, card); err != nil {
+						http.Error(w, err.Error(), http.StatusBadRequest)
+						return
+					}
+				}
+
 				// Process each card to handle per-face image uploads
 				for i, card := range cards {
 					cardID, _ := card["ID"].(string)

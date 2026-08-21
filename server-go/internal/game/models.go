@@ -271,16 +271,33 @@ type TypedContent struct {
 
 // MotionCard represents one card in a MEMOTION grid (3 faces: RECTO, VERSO, REVEAL)
 type MotionCard struct {
-	ID            string `json:"ID"`                       // Unique identifier (e.g. "mc-1")
-	RectoTheme    string `json:"RECTO_THEME"`              // Theme/title shown on front face
-	RectoImage    string `json:"RECTO_IMAGE,omitempty"`    // Optional image on front face (data/files/ path)
-	Difficulty    int    `json:"DIFFICULTY"`               // 1 | 2 | 3 → 1pt | 3pt | 5pt
-	QuestionText  string `json:"QUESTION_TEXT,omitempty"`  // Question text (VERSO face)
-	QuestionImage string `json:"QUESTION_IMAGE,omitempty"` // Optional question image
-	AnswerText    string `json:"ANSWER_TEXT,omitempty"`    // Answer text (REVEAL face)
-	AnswerImage   string `json:"ANSWER_IMAGE,omitempty"`   // Optional answer image
+	ID string `json:"ID"` // Unique identifier (e.g. "mc-1")
+	// Type is the card's own game type — absent/"" means SPEEDY (#184,
+	// contract §3). Validated at registration (internal/game/question_types.go
+	// registry: must be known and NestableInMotionCard) and at
+	// SelectMotionCard (engine.go). Never MEMOTION — nesting depth is
+	// capped at 1 (contract §1).
+	Type          QuestionType `json:"TYPE,omitempty"`
+	RectoTheme    string       `json:"RECTO_THEME"`              // Theme/title shown on front face
+	RectoImage    string       `json:"RECTO_IMAGE,omitempty"`    // Optional image on front face (data/files/ path)
+	Difficulty    int          `json:"DIFFICULTY"`               // 1 | 2 | 3 → 1pt | 3pt | 5pt
+	QuestionText  string       `json:"QUESTION_TEXT,omitempty"`  // Question text (VERSO face)
+	QuestionImage string       `json:"QUESTION_IMAGE,omitempty"` // Optional question image
+	AnswerText    string       `json:"ANSWER_TEXT,omitempty"`    // Answer text (REVEAL face)
+	AnswerImage   string       `json:"ANSWER_IMAGE,omitempty"`   // Optional answer image
 
 	TypedContent // embedded flat — QCM_*/MEMORY_*/ARDOISE_KEYBOARD_TYPE/ANSWER for a typed card (#184, contract §2/§3)
+}
+
+// EffectiveType returns c.Type, defaulting to SPEEDY when absent — the
+// retro-compatible reading every consumer of MotionCard.Type must use
+// instead of comparing the raw field to "" (contract §3: "absent ou ''
+// ⇒ SPEEDY").
+func (c *MotionCard) EffectiveType() QuestionType {
+	if c.Type == "" {
+		return QuestionTypeSpeedy
+	}
+	return c.Type
 }
 
 // MemoryConfig holds configuration for the Memory game

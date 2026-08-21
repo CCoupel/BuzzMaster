@@ -3873,6 +3873,22 @@ func (e *Engine) SelectMotionCard(cardID string) error {
 		return &MotionError{Reason: "CARD_NOT_UNPLAYED"}
 	}
 
+	// #184 B-B2: refuse selecting a card whose declared TYPE isn't a known,
+	// nestable type (registry, question_types.go) — belt-and-suspenders
+	// alongside the upload-time check in http.go (handleUploadQuestion),
+	// since a card's TYPE could in principle become non-nestable after it
+	// was saved (registry change) or reach here via a non-HTTP path.
+	if e.state.Question != nil {
+		for i := range e.state.Question.MotionCards {
+			if e.state.Question.MotionCards[i].ID == cardID {
+				if !IsNestableInMotionCard(e.state.Question.MotionCards[i].EffectiveType()) {
+					return &MotionError{Reason: "CARD_TYPE_NOT_NESTABLE"}
+				}
+				break
+			}
+		}
+	}
+
 	e.state.MotionCardStates[cardID] = MotionCardStateSelected
 	e.state.MotionSelected = cardID
 	e.state.MotionSubPhase = MotionSubPhaseSelected
