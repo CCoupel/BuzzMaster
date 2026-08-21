@@ -1253,8 +1253,134 @@ ignoré (cohérent avec le comportement d'allow-list existant).
 
 ---
 
+## Portée des actions par contexte — `MOTION_CARD_ID` (v7.0.0, #184, #185)
+
+### Principe — champ `CardScope`
+
+À partir de v7.0.0, les actions **typées** (actions dont l'effet dépend du type de la question courante — QCM, MEMORY, ARDOISE, SPEEDY…) peuvent indiquer leur **portée** via un champ optionnel `MOTION_CARD_ID`, embarqué dans la charge utile de l'action :
+
+```jsonc
+{
+  "ACTION": "MEMOTION_DONE",
+  "MSG": {
+    "MOTION_CARD_ID": "mc-5",           // Optionnel : si présent, l'action cible cette carte
+    "WINNER_TEAM": "Les Bleus",
+    "UNITS": 1
+  }
+}
+```
+
+| Champ | Type | Obligatoire | Description |
+|-------|------|-------------|-------------|
+| `MOTION_CARD_ID` | string | ❌ | ID de la carte MEMOTION si l'action cible une carte ; absent si elle cible une question classique. Jamais vide (`""`) — soit le champ est absent, soit il porte un ID valide |
+
+**Aucune action existante ne devient obligatoirement porteuse de ce champ** — il est **optionnel** et son absence conserve le comportement actuel.
+
+### Invariant de scope — vérifié côté serveur
+
+Le serveur applique une **frontière d'autorisation** : une action typée ne peut jamais s'appliquer à une carte qui n'est pas celle en jeu.
+
+| Situation | `MOTION_CARD_ID` reçu | Verdict | Code d'erreur |
+|-----------|----------------------|---------|---|
+| Aucune manche MEMOTION en cours (`MEMOTION_SUBPHASE == ""`) | absent | ✅ accepté — l'action cible la question courante | — |
+| Aucune manche MEMOTION en cours | présent | ❌ refusé — aucune carte n'est active | `CARD_SCOPE_UNEXPECTED` |
+| Manche MEMOTION, carte active | `== MEMOTION_SELECTED` (ID de la carte jouée) | ✅ accepté — l'action cible la bonne carte | — |
+| Manche MEMOTION, carte active | absent | ❌ refusé — le scope doit être explicite | `CARD_SCOPE_MISMATCH` |
+| Manche MEMOTION, carte active | `!= MEMOTION_SELECTED` (ID d'une autre carte) | ❌ refusé — tentative de ciblage croisé | `CARD_SCOPE_MISMATCH` |
+
+**Refus silencieux interdit** — tout rejet dû à un scope invalide rend l'erreur au client, comme les autres `MotionError`.
+
+### Exemple — Cas valides
+
+```json
+// Cas 1 : Question classique (SPEEDY), aucune manche MEMOTION
+{ "ACTION": "MEMOTION_DONE", "MSG": { "WINNER_TEAM": "team_A", "UNITS": 1 } }
+→ ✅ Accepté (scope implicite = question courante)
+
+// Cas 2 : Carte MEMOTION active, scope explicite
+{ "ACTION": "MEMOTION_DONE", "MSG": { "MOTION_CARD_ID": "mc-5", "WINNER_TEAM": "team_B", "UNITS": 1 } }
+→ ✅ Accepté (scope correspond à MEMOTION_SELECTED)
+
+// Cas 3 : Carte MEMOTION active, scope absent (interdit)
+{ "ACTION": "MEMOTION_DONE", "MSG": { "WINNER_TEAM": "team_A", "UNITS": 1 } }
+→ ❌ Refusé : CARD_SCOPE_MISMATCH (scope obligatoire en MEMOTION)
+
+// Cas 4 : Aucune manche MEMOTION, scope présent (interdit)
+{ "ACTION": "MEMOTION_DONE", "MSG": { "MOTION_CARD_ID": "mc-99", "WINNER_TEAM": "team_A", "UNITS": 1 } }
+→ ❌ Refusé : CARD_SCOPE_UNEXPECTED (aucune carte active)
+```
+
+---
+
+## Action `MEMOTION_DONE` — Champ `UNITS` (v7.0.0, #184, #185)
+
+### Résultat typé avec progression optionnelle
+
+À partir de v7.0.0, l'action `MEMOTION_DONE` (et toute action marquant la fin d'une manche typée) peut transporter un champ `UNITS` indiquant le **degré de succès** du joueur :
+
+```jsonc
+{
+  "ACTION": "MEMOTION_DONE",
+  "MSG": {
+    "MOTION_CARD_ID": "mc-3",
+    "WINNER_TEAM": "Les Rouges",
+    "UNITS": 1           // 1 = gagné, 0 = perdu, > 1 réservé à la progression (v7.1.0+)
+  }
+}
+```
+
+| Champ | Type | Obligatoire | Valeur | Description |
+|-------|------|-------------|--------|-------------|
+| `UNITS` | int | ❌ | Défaut `1` | **`1`** = succès/victoire (défaut, comportement actuel inchangé) · **`0`** = échec/défaite · **`> 1`** réservé aux types à progression (MEMORY au prorata, #187, v7.1.0) |
+
+**Absent ⇒ comportement actuel strictement identique.** Un client ou firmware antérieur qui n'envoie jamais ce champ fonctionne exactement comme avant.
+
+### Utilisation — barème de points
+
+Le champ `UNITS` est consommé par le **barème de points d'une carte** (`POINTS_RULE` de `MotionCard`) :
+
+| Mode du barème | `Units = 0` | `Units = 1` | `Units > 1` (v7.1.0+) |
+|---|---|---|---|
+| `STARS` (défaut) | `0` points | Points par étoiles de difficulté | Idem (type rend `Units = 1` si tout réussi) |
+| `FIXED` | `0` points | Montant fixe `POINTS_RULE.VALUE` | `0` points (n'existe pas en v7.1.0) |
+| `PER_UNIT` | `0` points | `POINTS_RULE.VALUE × 1` | `POINTS_RULE.VALUE × Units` (progression linéaire) |
+
+**Exemple** : une carte MEMORY avec `POINTS_RULE: { MODE: "PER_UNIT", VALUE: 10 }` :
+- `UNITS: 4` → `4 × 10 = 40 points`
+- `UNITS: 2` → `2 × 10 = 20 points`
+- `UNITS: 0` → `0 × 10 = 0 points`
+
+---
+
+## Liste blanche entrante — inchangée en v7.0.0
+
+### Aucune action joueur nouvelle, aucun élargissement
+
+**v7.0.0 (#184, #185) n'ajoute AUCUNE action entrante** (client → server) au protocole WebSocket.
+
+- ✅ `MEMOTION_DONE` reçoit le champ `UNITS` optionnel (rétrocompatible)
+- ✅ Les actions existantes reçoivent un champ `MOTION_CARD_ID` optionnel (rétrocompatible)
+- ❌ **Pas d'élargissement de la liste blanche** (`contracts/websocket-actions.md`)
+- ❌ **Pas de nouvel action buzz ou saisie joueur**
+
+Les **joueurs virtuels** (`/ws/player`) continuent de n'envoyer que :
+- `PLAYER_CONNECT`, `ARDOISE_INPUT`, `BUTTON`, `VPLAYER_QCM_ANSWER`
+
+Les **buzzers physiques** (`/ws/buzzer`) continuent de n'envoyer que :
+- `HELLO`, `BUTTON`, `PONG`
+
+L'interface **animateur** (`/ws/anim`) continue de n'avoir accès qu'aux actions de **conduite** (START/STOP/PAUSE/REVEAL/READY) et de **manipulation de cartes** (FLIP_MEMORY_CARD, MEMOTION_SELECT/FLIP/REVEAL/DONE) — aucune nouvelle action.
+
+### Entrée joueur différée — v7.1.0 (#186, #187)
+
+L'élargissement de la liste blanche pour permettre l'entrée **directe** des joueurs dans les types imbriqués (ARDOISE-en-carte, MEMORY-en-carte) est planifié pour **v7.1.0** (#186, #187) — exactement une version après le cœur MEMOTION+ (#185). Le périmètre exact (quelles actions, quel contrôle de phase) sera décidé à ce stade. **En v7.0.0, aucun changement ne doit être attendu côté client joueur.**
+
+---
+
 ## References
 
 - [RFC 6455 - WebSocket Protocol](https://datatracker.ietf.org/doc/html/rfc6455)
 - [ArduinoWebsockets Library](https://github.com/gilmaimon/ArduinoWebsockets)
 - [gorilla/websocket (Go)](https://github.com/gorilla/websocket)
+- [Contrat question-types.md](../contracts/question-types.md) — discriminant de type MEMOTION, portée des actions, invariant de scope
+- [Contrat websocket-actions.md](../contracts/websocket-actions.md) — allow-list entrante par ClientType, table complète des actions
