@@ -54,6 +54,7 @@ impossible. D'où : lots courts, contexte réduit, cadencement.
 | Délai inter-lots | `ai.inter_batch_delay_ms`, défaut **60000** (le plancher imposé par 8K TPM) |
 | `429` / `413` | respecter l'en-tête `retry-after` s'il est présent ; sinon backoff exponentiel plafonné à 120 s |
 | Compteur journalier | sur `429` persistant, remonter `code: "provider_quota"` — l'opérateur a épuisé son RPD/TPD |
+| **Plafond prioritaire** | **le plafond `max_consecutive_failures` prime sur la logique de backoff/retry-after**, même si le dernier échec autorisé est lui-même un 429/413 (cf. #139) — cela évite une boucle infinie de retry-after sous rate-limiting persistant. Une fois le plafond atteint, le job passe immédiatement en `FAILED`, sans tenter un dernier backoff |
 | Jamais | aucune rotation de clés, aucun multi-compte — l'AUP Groq l'interdit expressément (« beyond published parameters, rate limits, or use limitations, including by registering multiple accounts ») |
 
 ---
