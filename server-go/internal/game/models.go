@@ -387,6 +387,27 @@ type Question struct {
 	TypedContent // embedded flat — QCM_*/MEMORY_*/ARDOISE_KEYBOARD_TYPE (Answer shadowed by the explicit field above)
 }
 
+// MotionActive holds the identity and live state of the single active
+// MEMOTION card — contract §5. There is never more than one card in play
+// at once, so this is a single slot, not a map keyed by card ID (contract
+// §5.1: bounds the GAME payload to the cost of one type-state, not N).
+//
+// Reset to its zero value at every MEMOTION_SELECT (CardID/Type set,
+// State starts empty) and emptied back to the zero value on return to
+// GRID (engine.go: DoneMotionCard, the memorize-timer's auto-expiry, and
+// Ready()/InitGame()'s full MEMOTION reset).
+//
+// NO omitempty on the GameState field below and NO omitempty on these
+// fields — project rule (CLAUDE.md, contract §5.2): always serialized,
+// including empty ({"CARD_ID":"","TYPE":"","STATE":{}}), so the frontend
+// never falls back to a stale value. NOT persisted — excluded in
+// state_persistence.go alongside the other Motion* fields.
+type MotionActive struct {
+	CardID string                 `json:"CARD_ID"`
+	Type   QuestionType           `json:"TYPE"`
+	State  map[string]interface{} `json:"STATE"`
+}
+
 // Background represents a background image with its settings
 type Background struct {
 	Path     string  `json:"path"`
@@ -455,10 +476,14 @@ type GameState struct {
 	MotionCurrentTeam        string                     `json:"MEMOTION_CURRENT_TEAM"`        // Team currently playing
 	MotionParticipatingTeams []string                   `json:"MEMOTION_PARTICIPATING_TEAMS"` // Teams selected to play
 	MotionCurrentTeamColor   []int                      `json:"MEMOTION_CURRENT_TEAM_COLOR"`  // RGB color of current team
-	VirtualPlayerCount       int                        `json:"VIRTUAL_PLAYER_COUNT"`         // Number of enrolled virtual players
-	VirtualPlayerLimit       int                        `json:"VIRTUAL_PLAYER_LIMIT"`         // Maximum number of virtual players allowed
-	EnrollmentActive         bool                       `json:"ENROLLMENT_ACTIVE"`            // Whether player enrollment is active
-	ShowQRCode               bool                       `json:"SHOW_QR_CODE"`                 // Whether to display QR code on TV
+	// MotionActive (#184, B-B4) — the single active card's identity + typed
+	// live state, contract §5. NOT persisted (state_persistence.go excludes
+	// it alongside the other Motion* fields).
+	MotionActive       MotionActive `json:"MEMOTION_ACTIVE"`
+	VirtualPlayerCount int          `json:"VIRTUAL_PLAYER_COUNT"` // Number of enrolled virtual players
+	VirtualPlayerLimit int          `json:"VIRTUAL_PLAYER_LIMIT"` // Maximum number of virtual players allowed
+	EnrollmentActive   bool         `json:"ENROLLMENT_ACTIVE"`    // Whether player enrollment is active
+	ShowQRCode         bool         `json:"SHOW_QR_CODE"`         // Whether to display QR code on TV
 	// ENTRACTE (v6.5.2, #119) — global pause mode, independent of the question
 	// cycle. Same nature as ShowQRCode just above: an ephemeral display flag,
 	// NOT persisted (state_persistence.go excludes it explicitly, alongside

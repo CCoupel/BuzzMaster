@@ -167,6 +167,7 @@ func NewEngine() *Engine {
 			MotionCardTeams:          make(map[string]string),
 			MotionParticipatingTeams: []string{},
 			MotionCurrentTeamColor:   []int{},
+			MotionActive:             MotionActive{State: map[string]interface{}{}},
 			// ARDOISE: initialize empty map so JSON serializes {} (not null)
 			ArdoiseAnswers: make(map[string]ArdoiseAnswer),
 			// Quiz metadata multi-values (v6.1.0, #137 Batch 2b): initialize
@@ -803,6 +804,7 @@ func (e *Engine) Ready(questionID string, question *Question) {
 		e.state.MotionCardTeams = make(map[string]string)
 		e.state.MotionCurrentTeam = ""
 		e.state.MotionCurrentTeamColor = []int{}
+		e.state.MotionActive = MotionActive{State: map[string]interface{}{}}
 		e.state.MotionParticipatingTeams = []string{}
 
 		// For MEMOTION questions, also pre-populate card states so the frontend
@@ -1939,6 +1941,7 @@ func (e *Engine) InitGame() []string {
 	e.state.MotionCardTeams = make(map[string]string)
 	e.state.MotionCurrentTeam = ""
 	e.state.MotionCurrentTeamColor = []int{}
+	e.state.MotionActive = MotionActive{State: map[string]interface{}{}}
 	e.state.MotionParticipatingTeams = []string{}
 
 	// Reset ARDOISE answers (v5.6.0)
@@ -3916,6 +3919,7 @@ func (e *Engine) initMotionStateUnsafe() {
 	}
 	e.state.MotionSelected = ""
 	e.state.MotionCardStates = make(map[string]MotionCardState)
+	e.state.MotionActive = MotionActive{State: map[string]interface{}{}}
 	if e.state.Question != nil {
 		for _, card := range e.state.Question.MotionCards {
 			e.state.MotionCardStates[card.ID] = MotionCardStateUnplayed
@@ -3956,10 +3960,12 @@ func (e *Engine) SelectMotionCard(cardID string) error {
 	// alongside the upload-time check in http.go (handleUploadQuestion),
 	// since a card's TYPE could in principle become non-nestable after it
 	// was saved (registry change) or reach here via a non-HTTP path.
+	effectiveType := QuestionTypeSpeedy
 	if e.state.Question != nil {
 		for i := range e.state.Question.MotionCards {
 			if e.state.Question.MotionCards[i].ID == cardID {
-				if !IsNestableInMotionCard(e.state.Question.MotionCards[i].EffectiveType()) {
+				effectiveType = e.state.Question.MotionCards[i].EffectiveType()
+				if !IsNestableInMotionCard(effectiveType) {
 					return &MotionError{Reason: "CARD_TYPE_NOT_NESTABLE"}
 				}
 				break
@@ -3970,6 +3976,10 @@ func (e *Engine) SelectMotionCard(cardID string) error {
 	e.state.MotionCardStates[cardID] = MotionCardStateSelected
 	e.state.MotionSelected = cardID
 	e.state.MotionSubPhase = MotionSubPhaseSelected
+	// #184 B-B4: (re)initialise the active-card slot — contract §5.1, reset
+	// at every MEMOTION_SELECT, State starts empty (the type's own
+	// handlers populate it, none do yet in v7.0.0).
+	e.state.MotionActive = MotionActive{CardID: cardID, Type: effectiveType, State: map[string]interface{}{}}
 
 	log.Printf("[Engine] MEMOTION SelectMotionCard: cardID=%s → SELECTED", cardID)
 	return nil
@@ -4047,6 +4057,7 @@ func (e *Engine) DoneMotionCard(cardID string, winnerTeam string) (int, bool, er
 		e.state.MotionCardStates[e.state.MotionSelected] = MotionCardStateUnplayed
 		e.state.MotionSelected = ""
 		e.state.MotionSubPhase = MotionSubPhaseGrid
+		e.state.MotionActive = MotionActive{State: map[string]interface{}{}} // #184 B-B4: emptied on return to GRID
 		log.Printf("[Engine] MEMOTION DoneMotionCard: SELECTED → cancelled, cardID=%s back to UNPLAYED", cardID)
 		return 0, false, nil
 	}
@@ -4111,6 +4122,7 @@ func (e *Engine) DoneMotionCard(cardID string, winnerTeam string) (int, bool, er
 	// Return to grid
 	e.state.MotionSubPhase = MotionSubPhaseGrid
 	e.state.MotionSelected = ""
+	e.state.MotionActive = MotionActive{State: map[string]interface{}{}} // #184 B-B4: emptied on return to GRID
 
 	// Check if all cards are DONE
 	isComplete := true
@@ -4432,6 +4444,7 @@ func (e *Engine) processMotionMemorizeTick() motionMemorizeTickResult {
 		// Timer expired: transition MEMORIZE → GRID automatically
 		e.state.MotionSubPhase = MotionSubPhaseGrid
 		e.state.MotionSelected = ""
+		e.state.MotionActive = MotionActive{State: map[string]interface{}{}} // #184 B-B4: emptied on return to GRID (no-op here — never set during MEMORIZE — kept for consistency with every other GRID transition)
 		e.state.CurrentTime = 0
 		return motionMemorizeTickResult{expired: true, callback: e.OnStateChange}
 	}
