@@ -804,13 +804,15 @@ func TestEngine_QCM_VPlayerInvalidation(t *testing.T) {
 		ID:       "q1",
 		Question: "Test QCM?",
 		Type:     QuestionTypeQCM,
-		QCMAnswers: &QCMAnswers{
-			Red:    "Answer A",
-			Green:  "Answer B",
-			Yellow: "Answer C",
-			Blue:   "Answer D",
+		TypedContent: TypedContent{
+			QCMAnswers: &QCMAnswers{
+				Red:    "Answer A",
+				Green:  "Answer B",
+				Yellow: "Answer C",
+				Blue:   "Answer D",
+			},
+			QCMCorrect: "RED",
 		},
-		QCMCorrect: "RED",
 	}
 
 	// Start game with QCM question
@@ -916,13 +918,15 @@ func TestEngine_QCM_VPlayerInvalidation_NoTeam(t *testing.T) {
 		ID:       "q1",
 		Question: "Test QCM?",
 		Type:     QuestionTypeQCM,
-		QCMAnswers: &QCMAnswers{
-			Red:    "Answer A",
-			Green:  "Answer B",
-			Yellow: "Answer C",
-			Blue:   "Answer D",
+		TypedContent: TypedContent{
+			QCMAnswers: &QCMAnswers{
+				Red:    "Answer A",
+				Green:  "Answer B",
+				Yellow: "Answer C",
+				Blue:   "Answer D",
+			},
+			QCMCorrect: "RED",
 		},
-		QCMCorrect: "RED",
 	}
 
 	// Start game with QCM question
@@ -962,13 +966,15 @@ func TestEngine_QCM_VPlayerInvalidation_NoVPlayer(t *testing.T) {
 		ID:       "q1",
 		Question: "Test QCM?",
 		Type:     QuestionTypeQCM,
-		QCMAnswers: &QCMAnswers{
-			Red:    "Answer A",
-			Green:  "Answer B",
-			Yellow: "Answer C",
-			Blue:   "Answer D",
+		TypedContent: TypedContent{
+			QCMAnswers: &QCMAnswers{
+				Red:    "Answer A",
+				Green:  "Answer B",
+				Yellow: "Answer C",
+				Blue:   "Answer D",
+			},
+			QCMCorrect: "RED",
 		},
-		QCMCorrect: "RED",
 	}
 
 	// Start game with QCM question
@@ -1018,13 +1024,15 @@ func TestEngine_QCM_VPlayerInvalidation_MultipleVPlayers(t *testing.T) {
 		ID:       "q1",
 		Question: "Test QCM?",
 		Type:     QuestionTypeQCM,
-		QCMAnswers: &QCMAnswers{
-			Red:    "Answer A",
-			Green:  "Answer B",
-			Yellow: "Answer C",
-			Blue:   "Answer D",
+		TypedContent: TypedContent{
+			QCMAnswers: &QCMAnswers{
+				Red:    "Answer A",
+				Green:  "Answer B",
+				Yellow: "Answer C",
+				Blue:   "Answer D",
+			},
+			QCMCorrect: "RED",
 		},
-		QCMCorrect: "RED",
 	}
 
 	// Start game with QCM question
@@ -1119,13 +1127,15 @@ func TestVPlayerQCMBuzzAllColors(t *testing.T) {
 				ID:       "q1",
 				Question: "Test QCM?",
 				Type:     QuestionTypeQCM,
-				QCMAnswers: &QCMAnswers{
-					Red:    "Answer A",
-					Green:  "Answer B",
-					Yellow: "Answer C",
-					Blue:   "Answer D",
+				TypedContent: TypedContent{
+					QCMAnswers: &QCMAnswers{
+						Red:    "Answer A",
+						Green:  "Answer B",
+						Yellow: "Answer C",
+						Blue:   "Answer D",
+					},
+					QCMCorrect: "GREEN", // Doesn't matter for this test
 				},
-				QCMCorrect: "GREEN", // Doesn't matter for this test
 			}
 
 			// Start game with QCM question
@@ -1190,13 +1200,15 @@ func TestPhysicalBuzzerInvalidatedWhenTeamHasVPlayer(t *testing.T) {
 		ID:       "q1",
 		Question: "Test QCM?",
 		Type:     QuestionTypeQCM,
-		QCMAnswers: &QCMAnswers{
-			Red:    "Answer A",
-			Green:  "Answer B",
-			Yellow: "Answer C",
-			Blue:   "Answer D",
+		TypedContent: TypedContent{
+			QCMAnswers: &QCMAnswers{
+				Red:    "Answer A",
+				Green:  "Answer B",
+				Yellow: "Answer C",
+				Blue:   "Answer D",
+			},
+			QCMCorrect: "RED",
 		},
-		QCMCorrect: "RED",
 	}
 
 	// Start game with QCM question
@@ -1338,13 +1350,15 @@ func TestPhysicalBuzzerWorksWithoutVPlayer(t *testing.T) {
 		ID:       "q1",
 		Question: "Test QCM?",
 		Type:     QuestionTypeQCM,
-		QCMAnswers: &QCMAnswers{
-			Red:    "Answer A",
-			Green:  "Answer B",
-			Yellow: "Answer C",
-			Blue:   "Answer D",
+		TypedContent: TypedContent{
+			QCMAnswers: &QCMAnswers{
+				Red:    "Answer A",
+				Green:  "Answer B",
+				Yellow: "Answer C",
+				Blue:   "Answer D",
+			},
+			QCMCorrect: "RED",
 		},
-		QCMCorrect: "RED",
 	}
 
 	// Start game with QCM question
@@ -1393,18 +1407,20 @@ func makeQCMQuestion(id string) *Question {
 		ID:       id,
 		Question: "Test QCM?",
 		Type:     QuestionTypeQCM,
-		QCMAnswers: &QCMAnswers{
-			Red:    "Answer A",
-			Green:  "Answer B",
-			Yellow: "Answer C",
-			Blue:   "Answer D",
+		Points:   "10",
+		Time:     "30",
+		TypedContent: TypedContent{
+			QCMAnswers: &QCMAnswers{
+				Red:    "Answer A",
+				Green:  "Answer B",
+				Yellow: "Answer C",
+				Blue:   "Answer D",
+			},
+			QCMCorrect:        "RED",
+			QCMHintsEnabled:   true,
+			QCMHintThreshold1: 0.25,
+			QCMHintThreshold2: 0.125,
 		},
-		QCMCorrect:        "RED",
-		QCMHintsEnabled:   true,
-		QCMHintThreshold1: 0.25,
-		QCMHintThreshold2: 0.125,
-		Points:            "10",
-		Time:              "30",
 	}
 }
 
@@ -1499,27 +1515,27 @@ func TestQCMHints_AlwaysResetRegardlessOfIsNewQuestion(t *testing.T) {
 	q := makeQCMQuestion("q1")
 
 	tests := []struct {
-		name            string
-		initialHints    []string
-		questionID      string
+		name             string
+		initialHints     []string
+		questionID       string
 		expectEmptyHints bool
 	}{
 		{
-			name:            "new question clears hints",
-			initialHints:    []string{"RED", "GREEN"},
-			questionID:      "q1",
+			name:             "new question clears hints",
+			initialHints:     []string{"RED", "GREEN"},
+			questionID:       "q1",
 			expectEmptyHints: true,
 		},
 		{
-			name:            "same question re-prepared clears hints",
-			initialHints:    []string{"YELLOW"},
-			questionID:      "q1",
+			name:             "same question re-prepared clears hints",
+			initialHints:     []string{"YELLOW"},
+			questionID:       "q1",
 			expectEmptyHints: true,
 		},
 		{
-			name:            "no hints — stays empty",
-			initialHints:    []string{},
-			questionID:      "q1",
+			name:             "no hints — stays empty",
+			initialHints:     []string{},
+			questionID:       "q1",
 			expectEmptyHints: true,
 		},
 	}
@@ -1557,11 +1573,13 @@ func TestEngine_QCM_HintsAtBuzz_NoHints(t *testing.T) {
 		ID:       "q1",
 		Question: "QCM test?",
 		Type:     QuestionTypeQCM,
-		QCMAnswers: &QCMAnswers{
-			Red: "A", Green: "B", Yellow: "C", Blue: "D",
+		TypedContent: TypedContent{
+			QCMAnswers: &QCMAnswers{
+				Red: "A", Green: "B", Yellow: "C", Blue: "D",
+			},
+			QCMCorrect:      "RED",
+			QCMHintsEnabled: true,
 		},
-		QCMCorrect:      "RED",
-		QCMHintsEnabled: true,
 	}
 	e.Ready("q1", question)
 	e.StartImmediate(30)
@@ -1590,13 +1608,15 @@ func TestEngine_QCM_HintsAtBuzz_WithHints(t *testing.T) {
 		ID:       "q1",
 		Question: "QCM test hints?",
 		Type:     QuestionTypeQCM,
-		QCMAnswers: &QCMAnswers{
-			Red: "A", Green: "B", Yellow: "C", Blue: "D",
+		TypedContent: TypedContent{
+			QCMAnswers: &QCMAnswers{
+				Red: "A", Green: "B", Yellow: "C", Blue: "D",
+			},
+			QCMCorrect:        "RED",
+			QCMHintsEnabled:   true,
+			QCMHintThreshold1: 0.25,
+			QCMHintThreshold2: 0.125,
 		},
-		QCMCorrect:        "RED",
-		QCMHintsEnabled:   true,
-		QCMHintThreshold1: 0.25,
-		QCMHintThreshold2: 0.125,
 	}
 	e.Ready("q1", question)
 	e.StartImmediate(30)
@@ -1630,11 +1650,13 @@ func TestEngine_QCM_HintsAtBuzz_TwoHints(t *testing.T) {
 		ID:       "q1",
 		Question: "QCM 2 hints?",
 		Type:     QuestionTypeQCM,
-		QCMAnswers: &QCMAnswers{
-			Red: "A", Green: "B", Yellow: "C", Blue: "D",
+		TypedContent: TypedContent{
+			QCMAnswers: &QCMAnswers{
+				Red: "A", Green: "B", Yellow: "C", Blue: "D",
+			},
+			QCMCorrect:      "RED",
+			QCMHintsEnabled: true,
 		},
-		QCMCorrect:      "RED",
-		QCMHintsEnabled: true,
 	}
 	e.Ready("q1", question)
 	e.StartImmediate(30)
@@ -2017,11 +2039,13 @@ func TestEngine_QCM_HintsAtBuzz_ResetOnPrepare(t *testing.T) {
 		ID:       "q1",
 		Question: "QCM reset?",
 		Type:     QuestionTypeQCM,
-		QCMAnswers: &QCMAnswers{
-			Red: "A", Green: "B", Yellow: "C", Blue: "D",
+		TypedContent: TypedContent{
+			QCMAnswers: &QCMAnswers{
+				Red: "A", Green: "B", Yellow: "C", Blue: "D",
+			},
+			QCMCorrect:      "RED",
+			QCMHintsEnabled: true,
 		},
-		QCMCorrect:      "RED",
-		QCMHintsEnabled: true,
 	}
 	e.Ready("q1", question)
 	e.StartImmediate(30)
@@ -2699,4 +2723,3 @@ func TestEngine_CreateVirtualPlayer_ConnectedTrue_PreservesExistingFlags(t *test
 		t.Error("Expected Connected=true (new invariant introduced by #109)")
 	}
 }
-

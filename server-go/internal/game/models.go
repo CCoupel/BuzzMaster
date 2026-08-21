@@ -230,6 +230,45 @@ const (
 	MemoryModeTantQueJeGagne MemoryMode = "TANT_QUE_JE_GAGNE"
 )
 
+// TypedContent holds the fields that carry a QuestionType's own content —
+// QCM answers, MEMORY pairs, ARDOISE keyboard layout, and the plain-text
+// ANSWER shared by SPEEDY/ARDOISE. Embedded anonymously (flat, no JSON
+// nesting) in both Question and MotionCard so a nested card and a top-level
+// question expose the exact same field names on the wire for a given type —
+// contracts/question-types.md §2. Field tags are byte-for-byte the ones
+// Question already used before this refactor; moving them into a shared
+// struct changes nothing about the JSON they produce.
+//
+// Answer is deliberately `omitempty` here even though Question.Answer
+// (declared directly on Question, below) is not: Question keeps its own
+// explicit ANSWER field, which — per Go's embedded-field JSON precedence
+// (shallower field wins) — always shadows this one for Question, so this
+// tag only ever governs MotionCard's future ARDOISE-in-card use (#186,
+// v7.1.0). Without omitempty here, every existing MEMOTION card (which
+// never carries ANSWER) would gain an "ANSWER":"" key it never had —
+// contract-mandated deviation from the literal §2 snippet (which shows a
+// single Answer field with no comment on this asymmetry), documented in the
+// Batch 2 DONE report and reflected back into the contract.
+type TypedContent struct {
+	// SPEEDY (MotionCard only — Question.Answer below is authoritative for
+	// the question host) / ARDOISE (#186, v7.1.0)
+	Answer string `json:"ANSWER,omitempty"`
+	// QCM
+	QCMAnswers        *QCMAnswers `json:"QCM_ANSWERS,omitempty"`
+	QCMCorrect        string      `json:"QCM_CORRECT,omitempty"`
+	QCMHintsEnabled   bool        `json:"QCM_HINTS_ENABLED,omitempty"`
+	QCMHintThreshold1 float64     `json:"QCM_HINT_THRESHOLD_1,omitempty"`
+	QCMHintThreshold2 float64     `json:"QCM_HINT_THRESHOLD_2,omitempty"`
+	QCMPenalty1       float64     `json:"QCM_PENALTY_1,omitempty"`
+	QCMPenalty2       float64     `json:"QCM_PENALTY_2,omitempty"`
+	// ARDOISE (#186, v7.1.0)
+	ArdoiseKeyboardType KeyboardType `json:"ARDOISE_KEYBOARD_TYPE,omitempty"`
+	// MEMORY (#187, v7.1.0)
+	MemoryPairs  []MemoryPair  `json:"MEMORY_PAIRS,omitempty"`
+	MemoryConfig *MemoryConfig `json:"MEMORY_CONFIG,omitempty"`
+	MemoryMode   string        `json:"MEMORY_MODE,omitempty"`
+}
+
 // MotionCard represents one card in a MEMOTION grid (3 faces: RECTO, VERSO, REVEAL)
 type MotionCard struct {
 	ID            string `json:"ID"`                       // Unique identifier (e.g. "mc-1")
@@ -240,6 +279,8 @@ type MotionCard struct {
 	QuestionImage string `json:"QUESTION_IMAGE,omitempty"` // Optional question image
 	AnswerText    string `json:"ANSWER_TEXT,omitempty"`    // Answer text (REVEAL face)
 	AnswerImage   string `json:"ANSWER_IMAGE,omitempty"`   // Optional answer image
+
+	TypedContent // embedded flat — QCM_*/MEMORY_*/ARDOISE_KEYBOARD_TYPE/ANSWER for a typed card (#184, contract §2/§3)
 }
 
 // MemoryConfig holds configuration for the Memory game
@@ -299,6 +340,14 @@ func AllQuestionTypes() []QuestionType {
 }
 
 // Question represents a quiz question
+//
+// Answer is declared here explicitly (not left to the embedded TypedContent
+// below) because it has no `omitempty`: 26/85 existing question.json persist
+// "ANSWER":"" and the round-trip test (models_roundtrip_test.go) requires
+// that key to survive even when empty. Go's JSON field-precedence rule
+// (shallowest field wins when names collide across an embedding boundary)
+// makes this the field that's actually serialized/deserialized for Question;
+// TypedContent.Answer never fires here — see TypedContent's doc comment.
 type Question struct {
 	ID                     string           `json:"ID"`
 	Question               string           `json:"QUESTION"`
@@ -306,29 +355,19 @@ type Question struct {
 	Type                   QuestionType     `json:"TYPE,omitempty"`                     // "SPEEDY", "QCM", "MEMORY", "MEMOTION", "ARDOISE" (default SPEEDY)
 	Category               QuestionCategory `json:"CATEGORY,omitempty"`                 // Question category
 	PointsTarget           PointsTarget     `json:"POINTS_TARGET,omitempty"`            // "PLAYER" or "TEAM" (default based on type)
-	QCMAnswers             *QCMAnswers      `json:"QCM_ANSWERS,omitempty"`              // For QCM questions
-	QCMCorrect             string           `json:"QCM_CORRECT,omitempty"`              // "RED", "GREEN", "YELLOW", "BLUE"
-	QCMHintsEnabled        bool             `json:"QCM_HINTS_ENABLED,omitempty"`        // Enable automatic hint invalidation
-	QCMHintThreshold1      float64          `json:"QCM_HINT_THRESHOLD_1,omitempty"`     // First hint at this % of time remaining (default 0.25)
-	QCMHintThreshold2      float64          `json:"QCM_HINT_THRESHOLD_2,omitempty"`     // Second hint at this % of time remaining (default 0.125)
-	QCMPenalty1            float64          `json:"QCM_PENALTY_1,omitempty"`            // Point multiplier after 1 hint (default 0.67)
-	QCMPenalty2            float64          `json:"QCM_PENALTY_2,omitempty"`            // Point multiplier after 2 hints (default 0.33)
-	MemoryPairs            []MemoryPair     `json:"MEMORY_PAIRS,omitempty"`             // For Memory questions
-	MemoryConfig           *MemoryConfig    `json:"MEMORY_CONFIG,omitempty"`            // Memory game configuration
-	MemoryMode             string           `json:"MEMORY_MODE,omitempty"`              // "SOLO", "CHACUN_SON_TOUR", "TANT_QUE_JE_GAGNE" (default SOLO)
 	MotionCards            []MotionCard     `json:"MOTION_CARDS,omitempty"`             // Cards for MEMOTION questions (v5.0.0)
 	MotionMode             string           `json:"MOTION_MODE,omitempty"`              // "SOLO", "CHACUN_SON_TOUR", "TANT_QUE_JE_GAGNE" (default SOLO)
 	MotionConfig           *MotionConfig    `json:"MOTION_CONFIG,omitempty"`            // MEMOTION configuration (v5.0.x)
 	MotionMemorizeDuration int              `json:"MOTION_MEMORIZE_DURATION,omitempty"` // Seconds for MEMORIZE phase; 0 = standard mode (v5.5.0)
-	// ARDOISE fields (v5.6.0)
-	ArdoiseKeyboardType KeyboardType   `json:"ARDOISE_KEYBOARD_TYPE,omitempty"` // Virtual keyboard layout: "AZERTY" | "NUMPAD"
-	Points              string         `json:"POINTS"`                          // String to match JSON format
-	Time                string         `json:"TIME"`                            // String to match JSON format
-	Order               int            `json:"ORDER,omitempty"`                 // Display order (for drag and drop)
-	Media               string         `json:"MEDIA,omitempty"`                 // Question media (shown during game)
-	MediaAnswer         string         `json:"MEDIA_ANSWER,omitempty"`          // Answer media (shown during REVEAL)
-	Explanation         string         `json:"EXPLANATION,omitempty"`           // note animateur (v6.4.x, #168) — visible /anim only, never TV/player/admin
-	Status              QuestionStatus `json:"STATUS,omitempty"`
+	Points                 string           `json:"POINTS"`                             // String to match JSON format
+	Time                   string           `json:"TIME"`                               // String to match JSON format
+	Order                  int              `json:"ORDER,omitempty"`                    // Display order (for drag and drop)
+	Media                  string           `json:"MEDIA,omitempty"`                    // Question media (shown during game)
+	MediaAnswer            string           `json:"MEDIA_ANSWER,omitempty"`             // Answer media (shown during REVEAL)
+	Explanation            string           `json:"EXPLANATION,omitempty"`              // note animateur (v6.4.x, #168) — visible /anim only, never TV/player/admin
+	Status                 QuestionStatus   `json:"STATUS,omitempty"`
+
+	TypedContent // embedded flat — QCM_*/MEMORY_*/ARDOISE_KEYBOARD_TYPE (Answer shadowed by the explicit field above)
 }
 
 // Background represents a background image with its settings
