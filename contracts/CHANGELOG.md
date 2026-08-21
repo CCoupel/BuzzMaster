@@ -2,6 +2,81 @@
 
 ---
 
+## [20260821] — MEMOTION+ cœur : carte porteuse d'un type de jeu (#183, #184, #185)
+
+> Milestone v7.0.0 · Plan : `_work/reports/plan-memotion-v700-20260821.md`
+> Contrat détaillé : `contracts/question-types.md` (nouveau, référence unique de ce lot)
+
+**Aucun changement BREAKING.** Tout ajout est optionnel et son absence reproduit exactement le
+comportement actuel. Les 9 questions MEMOTION et les 85 `question.json` existants ne subissent
+aucune migration — l'invariance octet pour octet est une condition de recette, pas une intention.
+
+- **[NEW]** `contracts/question-types.md` — contrat central : discriminant de type sur une carte,
+  contexte d'hôte normalisé, emplacement actif, barème de points, registre des types, portée des
+  actions. Les autres contrats y renvoient au lieu de le dupliquer.
+- **[NEW]** `MotionCard.TYPE` (`QuestionType`, optionnel) — absent ou vide ⇒ `SPEEDY`. Une carte
+  MEMOTION peut désormais porter un autre type de jeu. `MEMOTION` est refusé : profondeur
+  d'imbrication plafonnée à 1.
+- **[NEW]** `MotionCard.POINTS_RULE` (`{MODE, VALUE}`, optionnel) — `STARS` (défaut, barème par
+  étoiles actuel) \| `FIXED` \| `PER_UNIT`. Le type imbriqué ne décide jamais d'un montant : il rend
+  un résultat, l'hôte applique son barème. `PER_UNIT` existe pour que le prorata demandé par #187
+  (MEMORY) soit exprimable **sans rouvrir le cœur**.
+- **[NEW]** `GameState.MEMOTION_ACTIVE` = `{CARD_ID, TYPE, STATE}`, **jamais `omitempty`**, non
+  persisté. Emplacement **unique** décrivant la carte en jeu — délibérément pas une carte indexée
+  par identifiant : une seule carte est jouable à la fois, et cela borne l'inflation du nœud `GAME`
+  (déjà ~11 Ko en MEMOTION) au coût d'un seul état de type au lieu de N.
+- **[NEW]** `MEMOTION_DONE.UNITS` (entier, optionnel, défaut `1`) — consommé par
+  `POINTS_RULE.MODE == "PER_UNIT"`. Absent ⇒ comportement actuel identique.
+- **[NEW]** `MOTION_CARD_ID` (`CardScope`, optionnel) sur les charges utiles d'actions typées, avec
+  un invariant de portée vérifié serveur (`CARD_SCOPE_UNEXPECTED` / `CARD_SCOPE_MISMATCH`). C'est
+  une **frontière d'autorisation** : une action typée ne peut pas s'appliquer à une carte qui n'est
+  pas celle en jeu. Posé et testé dès maintenant bien que son premier consommateur réel soit #186 —
+  le poser après coup obligerait à rouvrir le cœur, ce que le test d'agnosticité interdit.
+- **[CHANGED]** Contenu typé (`QCM_*`, `MEMORY_*`, `ARDOISE_*`, `ANSWER`) regroupé dans une
+  structure `TypedContent` partagée entre `Question` et `MotionCard`, embarquée à plat. **Aucun nom
+  de champ JSON ne change** ; un futur type déclare ses champs une seule fois au lieu de deux.
+- **[CHANGED]** Emplacements média d'une carte pilotés par le descripteur du type au lieu des trois
+  slots codés en dur (`recto`/`question`/`answer`). `SPEEDY` déclare exactement ces trois noms : les
+  charges utiles de l'éditeur restent valides sans changement.
+- **[CHANGED]** Les composants de type ne reçoivent plus `phase` mais un contexte d'hôte normalisé
+  (`playable` / `revealed` / `timerRunning`). C'est ce qui réconcilie `phase === 'REVEALED'` et
+  `MEMOTION_SUBPHASE === 'REVEAL'`, deux vocabulaires jusqu'ici incompatibles, et rend les
+  composants montables dans les deux hôtes sans variante.
+- **Non modifié, délibérément** : les champs question-scopés existants (`QCM_INVALIDATED`,
+  `ARDOISE_ANSWERS`, `MEMORY_*`) restent en place pour l'hôte question. Les migrer aurait été
+  BREAKING pour `/tv`, `/anim` et `/admin` pour un bénéfice esthétique. La double localisation est
+  confinée à un accesseur unique (`getTypeState`) — voir `question-types.md` §5.3.
+- **[NEW]** **Verrouillage du type sur contenu propre au type** (décision utilisateur du
+  2026-08-21). Le `TYPE` d'une carte ne peut plus changer dès qu'elle porte du contenu **propre à
+  son type**. Ni avertissement, ni perte silencieuse : interdiction. Le thème, la difficulté,
+  l'énoncé et le barème **ne verrouillent jamais** — ils appartiennent à la carte, pas au type, et
+  survivent intacts à toute bascule. Le verrou n'est pas définitif : il oblige à **vider
+  explicitement** le contenu du type avant de basculer, de sorte que la destruction devienne un
+  geste délibéré au lieu d'un effet de bord.
+- **[NEW]** Prédicat de verrouillage : **aucun `OwnedField` ne s'écarte de sa valeur de création**.
+  Ce n'est pas « aucun `OwnedField` non vide » — `QCM_HINT_THRESHOLD_1` vaut `0.25` dès la création
+  d'une carte, `ARDOISE_KEYBOARD_TYPE` vaut `"AZERTY"` et `MEMORY_MODE` vaut `"SOLO"` (v7.1.0). Une
+  lecture par non-nullité verrouillerait ces cartes **dès leur création** et rendrait le sélecteur
+  inutilisable sur ces types. `SPEEDY` seul y échappe, ses deux `OwnedFields` naissant vides — d'où
+  un piège invisible si l'on ne teste que le cas par défaut.
+- **[NEW]** `TypeDescriptor.OwnedFields` — les champs de `TypedContent` appartenant à chaque type.
+  Un type ajouté les déclare **une seule fois** ; le verrou de type, la validation de cohérence
+  serveur et le montage du sous-éditeur en découlent tous les trois.
+- **[NEW]** **HTTP 400 `CARD_TYPE_CONTENT_MISMATCH`** sur `handleUploadQuestion` — une carte ne doit
+  jamais porter de contenu appartenant à un autre type que son `TYPE` déclaré. La règle porte sur la
+  **cohérence de la charge utile reçue**, jamais sur une comparaison avec la version stockée : elle
+  reste sans état, autorise le parcours « vider → changer de type → enregistrer » en **un seul**
+  enregistrement, et ferme le contournement par appel direct à l'API. Les 9 questions MEMOTION
+  existantes sont cohérentes au sens de cette règle et se réenregistrent sans erreur.
+  **Le serveur ne réplique pas le verrou d'interface** : il garantit l'intégrité des données (aucune
+  donnée orpheline), pas la discipline de saisie. Écart connu, borné, sans effet sur l'intégrité.
+- **Non modifié** : la **liste blanche entrante**. Une carte QCM (#185) est en affichage et
+  désignation par l'animateur — ni buzz, ni `VPLAYER_QCM_ANSWER`, ni nouveau droit pour `vplayer`.
+  L'entrée joueur en carte est le sujet de #186/#187 (v7.1.0) et sera traitée comme l'élargissement
+  de capacité qu'elle est, au même titre que #159 et #160.
+
+---
+
 ## [20260820-3] — sec : fuite des champs réservés à l'admin hors `UPDATE` (#128)
 
 > Milestone v6.5.2 · Plan : `_work/reports/plan-128-20260820-170433.md`
