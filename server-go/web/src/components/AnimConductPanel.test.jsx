@@ -396,7 +396,7 @@ describe('AnimConductPanel — L3, grille MEMORY (#159/T3)', () => {
   it('onFlipMemoryCard reçoit l\'id de la carte cliquée ("pairID-cardNum")', () => {
     const onFlipMemoryCard = vi.fn()
     const { container } = render(
-      <AnimConductPanel {...baseProps({ phase: 'STARTED', question: memoryQuestion(), onFlipMemoryCard })} />
+      <AnimConductPanel {...baseProps({ phase: 'STARTED', hostContext: { playable: true, revealed: false }, question: memoryQuestion(), onFlipMemoryCard })} />
     )
     container.querySelector('.anim-conduct-l3 .anim-memory-card-down').click()
     expect(onFlipMemoryCard).toHaveBeenCalledTimes(1)
@@ -775,10 +775,14 @@ describe('AnimConductPanel — L3, branche à QUATRE voies (#160/T6, F7) : AnimM
   it.each(['SELECTED', 'QUESTION', 'REVEAL'])(
     'subphase %s : L3 affiche AnimMotionCard (carte au premier plan), pas la grille',
     (subphase) => {
+      // #184/B-F2/B-F3 — AnimConductPanel ne dérive plus playable/revealed de
+      // subphase lui-même (repli sur l'appelant, cf. AnimPage.jsx/hostContext.js) ;
+      // hostContext est donc explicité ici comme le ferait resolveHostContext.
       const { container } = render(
         <AnimConductPanel {...baseProps({
           phase: 'STARTED',
           question: motionQuestion(),
+          hostContext: { playable: subphase === 'QUESTION', revealed: subphase === 'REVEAL' },
           motion: motionProps({ subphase, selectedId: 'c1' }),
         })} />
       )
@@ -808,6 +812,115 @@ describe('AnimConductPanel — L3, branche à QUATRE voies (#160/T6, F7) : AnimM
     expect(container.querySelector('.anim-conduct-l3 .anim-motion-grid')).toBeNull()
     expect(container.querySelector('.anim-conduct-l3 .anim-motion-card-focus')).toBeNull()
     expect(container.querySelector('.anim-conduct-l3 .anim-conduct-reserved')).not.toBeNull()
+  })
+})
+
+// ---------------------------------------------------------------------------
+// #185/C-F1 — carte MEMOTION de type QCM : point de délégation posé en B-F3
+// (#184), premier type branché. AnimQcmOptions (pas AnimMotionCard) doit se
+// monter en L3 dès que `selectedMotionCard.TYPE === 'QCM'`, avec les données
+// de LA CARTE (pas de la question MEMOTION elle-même, qui n'a pas de
+// QCM_ANSWERS). Non-régression explicite : une carte SPEEDY de la même
+// manche continue d'afficher AnimMotionCard, inchangé.
+// ---------------------------------------------------------------------------
+
+describe('AnimConductPanel — L3, carte QCM (#185/C-F1)', () => {
+  function motionQuestionWithQcmCard(overrides = {}) {
+    return motionQuestion({
+      MOTION_CARDS: [
+        { ID: 'c1', RECTO_THEME: 'Cinéma', DIFFICULTY: 1 },
+        {
+          ID: 'c2', TYPE: 'QCM', RECTO_THEME: 'Capitales', DIFFICULTY: 2,
+          QCM_ANSWERS: { RED: 'Bratislava', GREEN: 'Ljubljana', YELLOW: 'Zagreb', BLUE: 'Sarajevo' },
+          QCM_CORRECT: 'GREEN',
+        },
+      ],
+      ...overrides,
+    })
+  }
+
+  it.each(['SELECTED', 'QUESTION', 'REVEAL'])(
+    'sous-phase %s, carte active TYPE=QCM : L3 affiche AnimQcmOptions (pas AnimMotionCard)',
+    (subphase) => {
+      const { container } = render(
+        <AnimConductPanel {...baseProps({
+          phase: 'STARTED',
+          question: motionQuestionWithQcmCard(),
+          hostContext: { playable: subphase === 'QUESTION', revealed: subphase === 'REVEAL' },
+          motion: motionProps({ subphase, selectedId: 'c2' }),
+        })} />
+      )
+      expect(container.querySelector('.anim-conduct-l3 .anim-qcm-options')).not.toBeNull()
+      expect(container.querySelector('.anim-conduct-l3 .anim-motion-card-focus')).toBeNull()
+    }
+  )
+
+  it('affiche les 4 réponses de LA CARTE active (QCM_ANSWERS de la carte, pas de la question MEMOTION)', () => {
+    const { container } = render(
+      <AnimConductPanel {...baseProps({
+        phase: 'STARTED',
+        question: motionQuestionWithQcmCard(),
+        hostContext: { playable: true, revealed: false },
+        motion: motionProps({ subphase: 'QUESTION', selectedId: 'c2' }),
+      })} />
+    )
+    expect(screen.getByText('Bratislava')).toBeInTheDocument()
+    expect(screen.getByText('Ljubljana')).toBeInTheDocument()
+    expect(screen.getByText('Zagreb')).toBeInTheDocument()
+    expect(screen.getByText('Sarajevo')).toBeInTheDocument()
+  })
+
+  it('transmet `qcmInvalidated` (état d\'indices résolu par l\'appelant, getTypeState) à la grille de la carte', () => {
+    const { container } = render(
+      <AnimConductPanel {...baseProps({
+        phase: 'STARTED',
+        question: motionQuestionWithQcmCard(),
+        hostContext: { playable: true, revealed: false },
+        motion: motionProps({ subphase: 'QUESTION', selectedId: 'c2' }),
+        qcmInvalidated: ['RED'],
+      })} />
+    )
+    const options = container.querySelectorAll('.anim-conduct-l3 .anim-qcm-option')
+    expect(options[0].classList.contains('invalidated')).toBe(true) // RED
+    expect(options[1].classList.contains('invalidated')).toBe(false) // GREEN
+  })
+
+  it('marque la bonne réponse de la carte (QCM_CORRECT) uniquement quand hostContext.revealed est true', () => {
+    const { container } = render(
+      <AnimConductPanel {...baseProps({
+        phase: 'STARTED',
+        question: motionQuestionWithQcmCard(),
+        hostContext: { playable: false, revealed: true },
+        motion: motionProps({ subphase: 'REVEAL', selectedId: 'c2' }),
+      })} />
+    )
+    const options = container.querySelectorAll('.anim-conduct-l3 .anim-qcm-option')
+    expect(options[1].classList.contains('correct')).toBe(true) // GREEN = QCM_CORRECT
+  })
+
+  it('non-régression : une carte SPEEDY de la même manche continue d\'afficher AnimMotionCard', () => {
+    const { container } = render(
+      <AnimConductPanel {...baseProps({
+        phase: 'STARTED',
+        question: motionQuestionWithQcmCard(),
+        hostContext: { playable: true, revealed: false },
+        motion: motionProps({ subphase: 'QUESTION', selectedId: 'c1' }), // c1 = SPEEDY
+      })} />
+    )
+    expect(container.querySelector('.anim-conduct-l3 .anim-motion-card-focus')).not.toBeNull()
+    expect(container.querySelector('.anim-conduct-l3 .anim-qcm-options')).toBeNull()
+  })
+
+  it('aucune action entrante nouvelle : la grille QCM en carte ne rend aucun bouton cliquable (affichage seul, contrat §7.1)', () => {
+    const { container } = render(
+      <AnimConductPanel {...baseProps({
+        phase: 'STARTED',
+        question: motionQuestionWithQcmCard(),
+        hostContext: { playable: true, revealed: false },
+        motion: motionProps({ subphase: 'QUESTION', selectedId: 'c2' }),
+      })} />
+    )
+    expect(container.querySelectorAll('.anim-conduct-l3 button').length).toBe(0)
   })
 })
 

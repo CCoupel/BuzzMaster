@@ -28,9 +28,18 @@ import './AnimMemoryGrid.css'
  * remonté en QUALIF v6.2.0.27) · paire trouvée (couleur du propriétaire,
  * `MEMORY_PAIR_OWNERS`) · inerte hors phase `STARTED`.
  *
+ * #184/B-F2 — reçoit `playable`/`revealed` (contexte d'hôte normalisé,
+ * `utils/hostContext.js`) au lieu de `phase` : ce composant ne lit plus
+ * jamais `gameState.phase` ni `MEMOTION_SUBPHASE` directement. Neutre pour
+ * l'hôte question (`playable` = phase === 'STARTED'`, `revealed` = phase ===
+ * 'REVEALED'`, mêmes valeurs qu'avant) — c'est ce qui rend ce composant
+ * montable dans l'hôte carte MEMOTION sans variante, quand MEMORY deviendra
+ * nestable (#187, v7.1.0).
+ *
  * @param {Object} props
  * @param {Object|null} props.question - gameState.question (question MEMORY)
- * @param {string} props.phase - gameState.phase
+ * @param {boolean} props.playable - hostContext.playable (ex `phase === 'STARTED'`)
+ * @param {boolean} props.revealed - hostContext.revealed (ex `phase === 'REVEALED'`)
  * @param {Object} props.teams - teams (useGame()), pour la couleur du propriétaire
  * @param {string[]} [props.flippedCards] - gameState.memoryFlippedCards
  * @param {string[]} [props.matchedPairs] - gameState.memoryMatchedPairs (pairId[])
@@ -43,7 +52,8 @@ import './AnimMemoryGrid.css'
  */
 export default function AnimMemoryGrid({
   question,
-  phase,
+  playable,
+  revealed,
   teams,
   flippedCards,
   matchedPairs,
@@ -79,7 +89,7 @@ export default function AnimMemoryGrid({
       {/* F2 — bandeau de compteurs, lu depuis l'état, jamais recalculé
           (équipe active, paires trouvées/total, erreurs). */}
       <div className="anim-memory-hud">
-        {isMultiTeam && currentTeam && phase === 'STARTED' && (
+        {isMultiTeam && currentTeam && playable && (
           <span className="anim-memory-hud-chip anim-memory-hud-turn">
             <span className="anim-memory-hud-key">au tour de</span>
             <span className="anim-memory-hud-value">{currentTeam}</span>
@@ -125,21 +135,20 @@ export default function AnimMemoryGrid({
           // couvre le même cas SANS minuterie/animation côté client (pas
           // de logique de jeu à réinventer) — dès que le serveur annonce
           // REVEALED, tout le contenu s'affiche d'un coup.
-          const isPhaseRevealed = phase === 'REVEALED'
           // Aucune restriction par équipe côté /anim (contrairement au
           // VPlayer) : l'animateur joue pour la table, comme la TV/l'aperçu
           // admin — même geste disponible quelle que soit l'équipe active.
-          const canClick = phase === 'STARTED' && !isMatched && !isFlipped
+          const canClick = playable && !isMatched && !isFlipped
           const ownerTeam = pairOwners?.[String(cardData.pairId)]
           const ownerColor = ownerTeam && teams?.[ownerTeam]?.COLOR
             ? getRgbColor(teams[ownerTeam].COLOR)
             : null
-          const revealed = isMatched || isFlipped || isPhaseRevealed
+          const cardRevealed = isMatched || isFlipped || revealed
           const state = isMatched
             ? 'matched'
-            : (isFlipped || isPhaseRevealed)
+            : (isFlipped || revealed)
               ? 'up'
-              : phase !== 'STARTED'
+              : !playable
                 ? 'inert'
                 : 'down'
 
@@ -151,9 +160,9 @@ export default function AnimMemoryGrid({
               disabled={!canClick}
               onClick={() => canClick && onFlip(cardData.id)}
               style={ownerColor ? { '--anim-memory-owner-color': ownerColor } : undefined}
-              aria-label={revealed ? undefined : `Carte ${cardLetter}, face cachée`}
+              aria-label={cardRevealed ? undefined : `Carte ${cardLetter}, face cachée`}
             >
-              {revealed ? (
+              {cardRevealed ? (
                 cardData.card?.IS_IMAGE && cardData.card?.IMAGE ? (
                   <img src={cardData.card.IMAGE} alt="" className="anim-memory-card-image" />
                 ) : (
