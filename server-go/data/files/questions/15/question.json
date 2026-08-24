@@ -1,0 +1,49 @@
+{
+  "ANSWER": "4 cartes",
+  "CATEGORY": "HISTORY",
+  "ID": "15",
+  "MOTION_CARDS": [
+    {
+      "ANSWER_TEXT": "1989",
+      "DIFFICULTY": 1,
+      "ID": "mc-1",
+      "QUESTION_TEXT": "Chute du mur de Berlin",
+      "RECTO_THEME": "Événement historique"
+    },
+    {
+      "ANSWER_TEXT": "1776",
+      "DIFFICULTY": 1,
+      "ID": "mc-2",
+      "QUESTION_TEXT": "Déclaration d'indépendance des États‑Unis",
+      "RECTO_THEME": "Événement historique"
+    },
+    {
+      "ANSWER_TEXT": "1914",
+      "DIFFICULTY": 2,
+      "ID": "mc-3",
+      "QUESTION_TEXT": "Première guerre mondiale débute",
+      "RECTO_THEME": "Événement historique"
+    },
+    {
+      "ANSWER_TEXT": "1440",
+      "DIFFICULTY": 2,
+      "ID": "mc-4",
+      "QUESTION_TEXT": "Invention de l'imprimerie par Gutenberg",
+      "RECTO_THEME": "Événement historique"
+    }
+  ],
+  "MOTION_CONFIG": {
+    "POINTS_1_STAR": 1,
+    "POINTS_2_STAR": 3,
+    "POINTS_3_STAR": 5
+  },
+  "MOTION_MEMORIZE_DURATION": 0,
+  "MOTION_MODE": "CHACUN_SON_TOUR",
+  "ORDER": 29,
+  "POINTS": "1",
+  "POINTS_TARGET": "TEAM",
+  "QCM_HINTS_ENABLED": false,
+  "QUESTION": "Associez chaque événement à son siècle",
+  "TIME": "32",
+  "TYPE": "MEMOTION"
+}

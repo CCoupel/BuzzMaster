@@ -1,0 +1,49 @@
+{
+  "ANSWER": "4 cartes",
+  "CATEGORY": "SCIENCE",
+  "ID": "36",
+  "MOTION_CARDS": [
+    {
+      "ANSWER_TEXT": "Mercure",
+      "DIFFICULTY": 1,
+      "ID": "mc-1",
+      "QUESTION_TEXT": "Quelle planète est la plus proche du soleil ?",
+      "RECTO_THEME": "Planète du système solaire"
+    },
+    {
+      "ANSWER_TEXT": "Saturne",
+      "DIFFICULTY": 1,
+      "ID": "mc-2",
+      "QUESTION_TEXT": "Quelle planète a un anneau très visible ?",
+      "RECTO_THEME": "Planète du système solaire"
+    },
+    {
+      "ANSWER_TEXT": "Jupiter",
+      "DIFFICULTY": 2,
+      "ID": "mc-3",
+      "QUESTION_TEXT": "Quelle planète est connue pour ses lunes galiléennes ?",
+      "RECTO_THEME": "Planète du système solaire"
+    },
+    {
+      "ANSWER_TEXT": "Mars",
+      "DIFFICULTY": 1,
+      "ID": "mc-4",
+      "QUESTION_TEXT": "Quelle planète est surnommée la planète rouge ?",
+      "RECTO_THEME": "Planète du système solaire"
+    }
+  ],
+  "MOTION_CONFIG": {
+    "POINTS_1_STAR": 1,
+    "POINTS_2_STAR": 3,
+    "POINTS_3_STAR": 5
+  },
+  "MOTION_MEMORIZE_DURATION": 0,
+  "MOTION_MODE": "CHACUN_SON_TOUR",
+  "ORDER": 20,
+  "POINTS": "1",
+  "POINTS_TARGET": "TEAM",
+  "QCM_HINTS_ENABLED": false,
+  "QUESTION": "Correspondance planète / indice",
+  "TIME": "25",
+  "TYPE": "MEMOTION"
+}

@@ -1,0 +1,49 @@
+{
+  "ANSWER": "4 cartes",
+  "CATEGORY": "FOOD",
+  "ID": "16",
+  "MOTION_CARDS": [
+    {
+      "ANSWER_TEXT": "Risotto",
+      "DIFFICULTY": 1,
+      "ID": "mc-1",
+      "QUESTION_TEXT": "Quel plat italien utilise du riz comme base ?",
+      "RECTO_THEME": "Ingrédient"
+    },
+    {
+      "ANSWER_TEXT": "Mille‑feuille",
+      "DIFFICULTY": 1,
+      "ID": "mc-2",
+      "QUESTION_TEXT": "Quel dessert français se compose de couches de pâte feuilletée et de crème pâtissière ?",
+      "RECTO_THEME": "Ingrédient"
+    },
+    {
+      "ANSWER_TEXT": "Sushi",
+      "DIFFICULTY": 1,
+      "ID": "mc-3",
+      "QUESTION_TEXT": "Quel plat japonais est composé de poisson cru sur du riz vinaigré ?",
+      "RECTO_THEME": "Ingrédient"
+    },
+    {
+      "ANSWER_TEXT": "Tacos",
+      "DIFFICULTY": 1,
+      "ID": "mc-4",
+      "QUESTION_TEXT": "Quel plat mexicain utilise des tortillas et du guacamole ?",
+      "RECTO_THEME": "Ingrédient"
+    }
+  ],
+  "MOTION_CONFIG": {
+    "POINTS_1_STAR": 1,
+    "POINTS_2_STAR": 3,
+    "POINTS_3_STAR": 5
+  },
+  "MOTION_MEMORIZE_DURATION": 0,
+  "MOTION_MODE": "CHACUN_SON_TOUR",
+  "ORDER": 3,
+  "POINTS": "1",
+  "POINTS_TARGET": "TEAM",
+  "QCM_HINTS_ENABLED": false,
+  "QUESTION": "Correspondance ingrédient / plat traditionnel",
+  "TIME": "28",
+  "TYPE": "MEMOTION"
+}
