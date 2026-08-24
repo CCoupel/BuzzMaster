@@ -160,15 +160,26 @@ d'une carte, relevée dans `QuestionsPage.jsx` (`formData` initial et `handleAdd
 | `QCM` | `QCM_HINTS_ENABLED` | `false` | passe à `true` |
 | `QCM` | `QCM_HINT_THRESHOLD_1/2` | **`0.25` / `0.125`** | s'écarte de ces valeurs |
 | `QCM` | `QCM_PENALTY_1/2` | **`0.67` / `0.33`** | s'écarte de ces valeurs |
-| `ARDOISE` *(v7.1.0)* | `ARDOISE_KEYBOARD_TYPE` | **`"AZERTY"`** | s'écarte de cette valeur |
+| `MEMORY` *(v7.1.0)* | `MEMORY_PAIRS` | **liste de paires vides** | **au moins une paire porte du contenu** — un `TEXT` ou une `IMAGE` sur l'une de ses deux faces |
 | `MEMORY` *(v7.1.0)* | `MEMORY_MODE` | **`"SOLO"`** | s'écarte de cette valeur |
 | `MEMORY` *(v7.1.0)* | `MEMORY_CONFIG` | **8 réglages non vides** | l'un d'eux s'écarte de son défaut |
+| ~~`ARDOISE`~~ | ~~`ARDOISE_KEYBOARD_TYPE`~~ | — | **sans objet** : ARDOISE n'est pas imbricable (§7.2), aucune carte ne porte ses `OwnedFields` |
 
 > ⚠️ **Un prédicat écrit « au moins un `OwnedField` non vide » verrouillerait une carte QCM dès sa
-> création** (`QCM_HINT_THRESHOLD_1` vaut `0.25`, jamais vide), et de même une carte ARDOISE
-> (`"AZERTY"`) ou MEMORY (`"SOLO"`) en v7.1.0. Le sélecteur serait grisé en permanence sur ces
-> types : la fonctionnalité serait morte à la livraison. `SPEEDY` seul y échappe, car ses deux
-> `OwnedFields` naissent vides — d'où un piège qui ne se voit pas en testant le cas par défaut.
+> création** (`QCM_HINT_THRESHOLD_1` vaut `0.25`, jamais vide), et de même une carte MEMORY
+> (`MEMORY_MODE` vaut `"SOLO"`). Le sélecteur serait grisé en permanence sur ces types : la
+> fonctionnalité serait morte à la livraison. `SPEEDY` seul y échappe, car ses deux `OwnedFields`
+> naissent vides — d'où un piège qui ne se voit pas en testant le cas par défaut.
+
+> **`MEMORY_PAIRS` — ajouté au tableau en v7.1.0 (#187), sur signalement de `code-reviewer`.**
+> Il figurait dans les `OwnedFields` MEMORY (§3.1) mais avait été **omis de ce tableau** ;
+> `dev-frontend` l'avait déjà traité comme un `OwnedField` à part entière dans
+> `utils/motionCardLock.js`, en documentant l'écart. Le tableau est aligné sur l'implémentation, qui
+> était la bonne : sans cette ligne, on pourrait renseigner huit paires illustrées puis basculer
+> librement la carte vers `SPEEDY` — c'est-à-dire exactement la destruction silencieuse que le
+> verrou existe pour empêcher (§3.2). Le motif est le même que `QCM_ANSWERS` : la valeur de création
+> est une **structure vide mais présente**, donc le verrou porte sur la présence de **contenu**, pas
+> sur celle de la liste.
 
 #### Deux niveaux d'application
 

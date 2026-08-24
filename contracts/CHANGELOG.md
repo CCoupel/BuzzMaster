@@ -53,6 +53,13 @@
   `VPLAYER_QCM_ANSWER` et `ARDOISE_INPUT`. Absent ⇒ repli sur `msg.ID` puis `clientID` : aucun client
   existant n'est cassé. *(Signalé par `dev-backend` en déviation de contrat — le contrat était
   incomplet, la déviation était juste.)*
+- **[CHANGED]** `question-types.md` §3.2 — `MEMORY_PAIRS` **ajouté au tableau de verrouillage du
+  type** (signalement `code-reviewer`). Il figurait déjà dans les `OwnedFields` MEMORY (§3.1) et
+  `dev-frontend` le traitait déjà comme tel dans `motionCardLock.js` : le tableau est aligné sur
+  l'implémentation, qui était la bonne. Sans cette ligne, huit paires illustrées pouvaient être
+  saisies puis la carte basculée vers `SPEEDY` — la destruction silencieuse que le verrou existe
+  pour empêcher. Verrouille dès qu'**une paire porte du contenu** (même motif que `QCM_ANSWERS`).
+  Documentation uniquement, aucun changement de comportement.
 - **[CHANGED]** `ARDOISE_INPUT.ID` — **documentation rattrapée** : le champ existe dans
   `ArdoiseInputPayload` depuis v5.6.0 mais n'apparaissait pas dans le tableau de la fiche. Aucun
   changement de comportement.
