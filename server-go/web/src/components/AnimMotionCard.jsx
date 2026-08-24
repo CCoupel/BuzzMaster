@@ -24,34 +24,20 @@ import './AnimMotionCard.css'
  * pas un second écran de jeu. Changement de face = changement de contenu,
  * point.
  *
- * #184/B-F2 — reçoit `playable`/`revealed` (contexte d'hôte normalisé,
- * `utils/hostContext.js`) au lieu de `subphase` : ce composant ne lit plus
- * `MEMOTION_SUBPHASE` directement. Il fait confiance à son appelant
- * (`AnimConductPanel`, qui ne le monte jamais pour `GRID`/`MEMORIZE` — ces
- * deux sous-phases restent affichées par `AnimMotionGrid`) plutôt que de
- * revalider lui-même la sous-phase — même philosophie que `AnimQcmOptions`/
- * `AnimAnswerZone`, qui ne se protègent pas non plus contre un hôte
- * incohérent. Correspondance : `revealed` ⇒ face REVEAL, sinon `playable` ⇒
- * face QUESTION, sinon (ni l'un ni l'autre — seul cas restant en pratique :
- * SELECTED) ⇒ face RECTO/SELECTED.
- *
  * @param {Object} props
- * @param {boolean} [props.playable] - hostContext.playable (ex `subphase === 'QUESTION'`)
- * @param {boolean} [props.revealed] - hostContext.revealed (ex `subphase === 'REVEAL'`)
+ * @param {string} props.subphase - gameState.MEMOTION_SUBPHASE ('SELECTED'|'QUESTION'|'REVEAL')
  * @param {Object|null} props.card - carte MEMOTION sélectionnée
  *   (`question.MOTION_CARDS.find(c => c.ID === MEMOTION_SELECTED)`)
  * @param {{POINTS_1_STAR?: number, POINTS_2_STAR?: number, POINTS_3_STAR?: number}|null} [props.motionConfig] - question.MOTION_CONFIG
  */
-export default function AnimMotionCard({ playable, revealed, card, motionConfig }) {
+export default function AnimMotionCard({ subphase, card, motionConfig }) {
   if (!card) return null
+  if (!['SELECTED', 'QUESTION', 'REVEAL'].includes(subphase)) return null
 
   const diff = card.DIFFICULTY || 1
   const points = getMotionCardPoints(diff, motionConfig)
 
-  if (!revealed && !playable) {
-    // SELECTED — aucun hôte de carte actif, mais le seul cas qui atteint
-    // réellement ce composant (AnimConductPanel ne le monte jamais pour
-    // GRID/MEMORIZE) : la carte vient d'être choisie, face de grille.
+  if (subphase === 'SELECTED') {
     return (
       <div className="anim-motion-card-focus anim-motion-card-focus-recto">
         <span className="anim-motion-card-focus-theme">{card.RECTO_THEME}</span>
@@ -67,7 +53,7 @@ export default function AnimMotionCard({ playable, revealed, card, motionConfig 
     )
   }
 
-  if (playable) {
+  if (subphase === 'QUESTION') {
     return (
       <div className="anim-motion-card-focus anim-motion-card-focus-verso">
         {card.QUESTION_TEXT && (

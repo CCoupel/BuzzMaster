@@ -19,28 +19,19 @@ const ORDER = ['RED', 'GREEN', 'YELLOW', 'BLUE']
  * la bonne réponse (`correct`) est gardée par `revealed`
  * (`phase === 'REVEALED'`), même règle que le marqueur ✓/✗ par équipe (#157).
  *
- * #185/C-F1 — auto-garde relâchée : ce composant ne reçoit plus de prop
- * `type` et ne se garde plus lui-même sur une valeur de type. Il est
- * maintenant monté dans DEUX hôtes (question standalone `TYPE=QCM`, et
- * carte MEMOTION active `TYPE=QCM` — `AnimConductPanel`/`AnimMotionCard`,
- * #184/B-F3) : dupliquer un contrôle `type === 'QCM'` ici obligerait chaque
- * host à connaître et transmettre correctement cette valeur, alors que le
- * dispatch par type est désormais **entièrement** la responsabilité de
- * l'appelant (host-aware depuis #184). La garde utile ici est `!answers` :
- * `QCM_ANSWERS` n'est jamais peuplé pour un autre type, question ou carte
- * (contrat `question-types.md` §2/§7) — suffisant pour rester correct monté
- * isolément (tests), sans dupliquer une décision de dispatch qui ne lui
- * appartient pas.
+ * Guard double (type ET answers) volontaire : le composant reste correct
+ * s'il est monté isolément (tests T3), pas seulement derrière la garde de
+ * l'appelant (`AnimPage.jsx`).
  *
  * @param {Object} props
- * @param {Object} [props.answers] - question.QCM_ANSWERS ou selectedMotionCard.QCM_ANSWERS ({RED,GREEN,YELLOW,BLUE})
- * @param {string} [props.correct] - question.QCM_CORRECT ou selectedMotionCard.QCM_CORRECT (clé couleur)
- * @param {string[]} [props.invalidated] - gameState.qcmInvalidated (hôte question) ou
- *   getTypeState(gameState, hostContext).qcmInvalidated (hôte carte, #184/B-F1)
- * @param {boolean} [props.revealed] - hostContext.revealed (hôte courant, #184/B-F2)
+ * @param {string} [props.type] - question.TYPE ; ne rend rien si != 'QCM'
+ * @param {Object} [props.answers] - question.QCM_ANSWERS ({RED,GREEN,YELLOW,BLUE})
+ * @param {string} [props.correct] - question.QCM_CORRECT (clé couleur)
+ * @param {string[]} [props.invalidated] - gameState.qcmInvalidated
+ * @param {boolean} [props.revealed] - phase === 'REVEALED'
  */
-export default function AnimQcmOptions({ answers, correct, invalidated = [], revealed }) {
-  if (!answers) return null
+export default function AnimQcmOptions({ type, answers, correct, invalidated = [], revealed }) {
+  if (type !== 'QCM' || !answers) return null
 
   return (
     <div className="anim-qcm-options">

@@ -13,13 +13,12 @@ import AnimQcmOptions from './AnimQcmOptions'
 // phase sur les propositions elles-mêmes (seules l'invalidation et la bonne
 // réponse dépendent des données/de la phase).
 //
-// Contrat de props (voir AnimQcmOptions.jsx) : answers (QCM_ANSWERS, hôte
-// question OU carte MEMOTION active — objet {RED,GREEN,YELLOW,BLUE} ->
-// libellé), correct (QCM_CORRECT), invalidated (état d'indices de l'hôte
-// courant, via getTypeState), revealed (hostContext.revealed). #185/C-F1 :
-// plus de prop `type` — le dispatch par type est la responsabilité de
-// l'appelant, pas de ce composant (voir describe "garde pas d'answers" plus
-// bas).
+// Contrat de props (voir AnimQcmOptions.jsx) : type (question.TYPE — le
+// composant se garde lui-même, pas seulement l'appelant, pour rester correct
+// monté isolément), answers (question.QCM_ANSWERS — objet
+// {RED,GREEN,YELLOW,BLUE} -> libellé), correct (question.QCM_CORRECT),
+// invalidated (gameState.qcmInvalidated — liste de clés couleur), revealed
+// (booléen, phase === 'REVEALED').
 //
 // Classes : `.anim-qcm-option` par carte, modificateurs `invalidated` et
 // `correct` (non préfixés, cf. AnimQcmOptions.css), `.anim-qcm-option-mark`
@@ -39,7 +38,7 @@ const ANSWERS = {
 describe('AnimQcmOptions — rendu des 4 propositions', () => {
   it('rend les 4 propositions, lettres A/B/C/D dans l\'ordre RED/GREEN/YELLOW/BLUE, avec leur libellé', () => {
     const { container } = render(
-      <AnimQcmOptions answers={ANSWERS} correct={null} invalidated={[]} revealed={false} />
+      <AnimQcmOptions type="QCM" answers={ANSWERS} correct={null} invalidated={[]} revealed={false} />
     )
     const letters = Array.from(container.querySelectorAll('.anim-qcm-option-letter')).map(el => el.textContent)
     expect(letters).toEqual(['A', 'B', 'C', 'D'])
@@ -51,7 +50,7 @@ describe('AnimQcmOptions — rendu des 4 propositions', () => {
 
   it('colore chaque pastille lettre avec la couleur QCM_COLORS correspondante', () => {
     const { container } = render(
-      <AnimQcmOptions answers={ANSWERS} correct={null} invalidated={[]} revealed={false} />
+      <AnimQcmOptions type="QCM" answers={ANSWERS} correct={null} invalidated={[]} revealed={false} />
     )
     const letters = container.querySelectorAll('.anim-qcm-option-letter')
     expect(letters[0].style.backgroundColor).toBe('rgb(239, 68, 68)') // RED #ef4444
@@ -64,7 +63,7 @@ describe('AnimQcmOptions — rendu des 4 propositions', () => {
 describe('AnimQcmOptions — proposition invalidée (indice, #157/#162)', () => {
   it('marque une proposition invalidée (classe "invalidated") sans la retirer du rendu', () => {
     const { container } = render(
-      <AnimQcmOptions answers={ANSWERS} correct={null} invalidated={['YELLOW']} revealed={false} />
+      <AnimQcmOptions type="QCM" answers={ANSWERS} correct={null} invalidated={['YELLOW']} revealed={false} />
     )
     const options = container.querySelectorAll('.anim-qcm-option')
     expect(options[2].classList.contains('invalidated')).toBe(true)
@@ -77,7 +76,7 @@ describe('AnimQcmOptions — proposition invalidée (indice, #157/#162)', () => 
 
   it('marque plusieurs propositions invalidées simultanément', () => {
     const { container } = render(
-      <AnimQcmOptions answers={ANSWERS} correct={null} invalidated={['RED', 'BLUE']} revealed={false} />
+      <AnimQcmOptions type="QCM" answers={ANSWERS} correct={null} invalidated={['RED', 'BLUE']} revealed={false} />
     )
     const options = container.querySelectorAll('.anim-qcm-option')
     expect(options[0].classList.contains('invalidated')).toBe(true)
@@ -88,14 +87,14 @@ describe('AnimQcmOptions — proposition invalidée (indice, #157/#162)', () => 
 
   it('ne marque aucune proposition invalidée quand la liste est vide', () => {
     const { container } = render(
-      <AnimQcmOptions answers={ANSWERS} correct={null} invalidated={[]} revealed={false} />
+      <AnimQcmOptions type="QCM" answers={ANSWERS} correct={null} invalidated={[]} revealed={false} />
     )
     expect(container.querySelectorAll('.anim-qcm-option.invalidated').length).toBe(0)
   })
 
   it('ne marque aucune proposition invalidée quand la prop est absente (undefined)', () => {
     const { container } = render(
-      <AnimQcmOptions answers={ANSWERS} correct={null} revealed={false} />
+      <AnimQcmOptions type="QCM" answers={ANSWERS} correct={null} revealed={false} />
     )
     expect(container.querySelectorAll('.anim-qcm-option.invalidated').length).toBe(0)
   })
@@ -104,7 +103,7 @@ describe('AnimQcmOptions — proposition invalidée (indice, #157/#162)', () => 
 describe('AnimQcmOptions — bonne réponse, garde de phase REVEALED', () => {
   it('ne marque PAS la bonne réponse hors REVEALED, même si QCM_CORRECT est connue (le payload la porte dès le chargement — R3 du plan)', () => {
     const { container } = render(
-      <AnimQcmOptions answers={ANSWERS} correct="GREEN" invalidated={[]} revealed={false} />
+      <AnimQcmOptions type="QCM" answers={ANSWERS} correct="GREEN" invalidated={[]} revealed={false} />
     )
     expect(container.querySelectorAll('.anim-qcm-option.correct').length).toBe(0)
     expect(container.querySelector('.anim-qcm-option-mark')).toBeNull()
@@ -112,7 +111,7 @@ describe('AnimQcmOptions — bonne réponse, garde de phase REVEALED', () => {
 
   it('marque uniquement la bonne réponse une fois revealed=true (liseré + coche)', () => {
     const { container } = render(
-      <AnimQcmOptions answers={ANSWERS} correct="GREEN" invalidated={[]} revealed={true} />
+      <AnimQcmOptions type="QCM" answers={ANSWERS} correct="GREEN" invalidated={[]} revealed={true} />
     )
     const options = container.querySelectorAll('.anim-qcm-option')
     expect(options[1].classList.contains('correct')).toBe(true)
@@ -124,7 +123,7 @@ describe('AnimQcmOptions — bonne réponse, garde de phase REVEALED', () => {
 
   it('une proposition invalidée peut aussi être la bonne réponse en REVEALED (cas limite) — les deux marqueurs coexistent', () => {
     const { container } = render(
-      <AnimQcmOptions answers={ANSWERS} correct="YELLOW" invalidated={['YELLOW']} revealed={true} />
+      <AnimQcmOptions type="QCM" answers={ANSWERS} correct="YELLOW" invalidated={['YELLOW']} revealed={true} />
     )
     const options = container.querySelectorAll('.anim-qcm-option')
     expect(options[2].classList.contains('invalidated')).toBe(true)
@@ -132,30 +131,31 @@ describe('AnimQcmOptions — bonne réponse, garde de phase REVEALED', () => {
   })
 })
 
-// #185/C-F1 — auto-garde relâchée : ce composant ne reçoit plus de prop
-// `type` et ne se garde plus lui-même sur une valeur de type (le dispatch
-// par type appartient désormais entièrement à l'appelant, host-aware depuis
-// #184/B-F3 — AnimConductPanel/AnimMotionCard). La seule garde restante est
-// `!answers`, suffisante en pratique : QCM_ANSWERS n'est jamais peuplé pour
-// un autre type, question ou carte (contrat question-types.md §2/§7).
-describe('AnimQcmOptions — garde "pas d\'answers"', () => {
-  it('rend les propositions même sans prop `type` (dispatch délégué à l\'appelant, #185)', () => {
+describe('AnimQcmOptions — garde "pas de QCM"', () => {
+  it('ne rend rien quand type !== "QCM", même avec des propositions valides', () => {
+    const { container } = render(
+      <AnimQcmOptions type="SPEEDY" answers={ANSWERS} correct={null} invalidated={[]} revealed={false} />
+    )
+    expect(container.firstChild).toBeNull()
+  })
+
+  it('ne rend rien quand type est absent (undefined)', () => {
     const { container } = render(
       <AnimQcmOptions answers={ANSWERS} correct={null} invalidated={[]} revealed={false} />
     )
-    expect(container.querySelectorAll('.anim-qcm-option').length).toBe(4)
+    expect(container.firstChild).toBeNull()
   })
 
-  it('ne rend rien quand answers est absent (undefined)', () => {
+  it('ne rend rien quand answers est absent (undefined), même avec type="QCM"', () => {
     const { container } = render(
-      <AnimQcmOptions answers={undefined} correct={null} invalidated={[]} revealed={false} />
+      <AnimQcmOptions type="QCM" answers={undefined} correct={null} invalidated={[]} revealed={false} />
     )
     expect(container.firstChild).toBeNull()
   })
 
   it('ne rend rien quand answers est null', () => {
     const { container } = render(
-      <AnimQcmOptions answers={null} correct={null} invalidated={[]} revealed={false} />
+      <AnimQcmOptions type="QCM" answers={null} correct={null} invalidated={[]} revealed={false} />
     )
     expect(container.firstChild).toBeNull()
   })

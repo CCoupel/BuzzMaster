@@ -176,15 +176,13 @@ func TestEngine_WebSocket_QCMButtonPress(t *testing.T) {
 		ID:       "q1",
 		Question: "Capital of France?",
 		Type:     QuestionTypeQCM,
-		TypedContent: TypedContent{
-			QCMAnswers: &QCMAnswers{
-				Red:    "London",
-				Green:  "Paris",
-				Yellow: "Berlin",
-				Blue:   "Madrid",
-			},
-			QCMCorrect: "GREEN",
+		QCMAnswers: &QCMAnswers{
+			Red:    "London",
+			Green:  "Paris",
+			Yellow: "Berlin",
+			Blue:   "Madrid",
 		},
+		QCMCorrect: "GREEN",
 	}
 
 	e.Ready("q1", question)
@@ -368,12 +366,10 @@ func TestEngine_WebSocket_VPlayerBuzzerCoexistence(t *testing.T) {
 	question := &Question{
 		ID:   "q1",
 		Type: QuestionTypeQCM,
-		TypedContent: TypedContent{
-			QCMAnswers: &QCMAnswers{
-				Red: "A", Green: "B", Yellow: "C", Blue: "D",
-			},
-			QCMCorrect: "RED",
+		QCMAnswers: &QCMAnswers{
+			Red: "A", Green: "B", Yellow: "C", Blue: "D",
 		},
+		QCMCorrect: "RED",
 	}
 
 	e.Ready("q1", question)
@@ -635,15 +631,13 @@ func TestEngine_WebSocket_QCMHintsAtBuzz(t *testing.T) {
 
 	// QCM question with hints
 	question := &Question{
-		ID:   "q1",
-		Type: QuestionTypeQCM,
-		TypedContent: TypedContent{
-			QCMHintsEnabled: true,
-			QCMAnswers: &QCMAnswers{
-				Red: "A", Green: "B", Yellow: "C", Blue: "D",
-			},
-			QCMCorrect: "GREEN",
+		ID:              "q1",
+		Type:            QuestionTypeQCM,
+		QCMHintsEnabled: true,
+		QCMAnswers: &QCMAnswers{
+			Red: "A", Green: "B", Yellow: "C", Blue: "D",
 		},
+		QCMCorrect: "GREEN",
 	}
 
 	e.Ready("q1", question)

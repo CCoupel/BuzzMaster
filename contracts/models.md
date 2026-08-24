@@ -256,7 +256,7 @@ versionnage de schéma n'existe pour `question.json` et **aucune migration n'est
 **Périmètre MEMOTION (décision GATE 1.5)** : la note est portée par la **Question**, pas par les
 cartes `MOTION_CARDS`. Une manche MEMOTION a donc **une seule** note pour l'ensemble de ses cartes.
 Une note par carte reste un ajout **additif et non breaking**, renvoyé au chantier MEMOTION+
-(#25, milestone v7.0.0) qui rouvrira de toute façon le modèle de carte.
+(#174, milestone v9.x) qui rouvrira de toute façon le modèle de carte.
 
 ### Exemple NORMAL
 

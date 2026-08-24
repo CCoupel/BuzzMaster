@@ -12,13 +12,7 @@ import AnimMotionCard from './AnimMotionCard'
 // Pas d'animation de flip (le spectacle est sur /tv, la tablette est un
 // outil de conduite, cf. plan §F5).
 //
-// Contrat de props RÉEL (AnimMotionCard.jsx) : { playable, revealed, card,
-// motionConfig } — #184/B-F2 : subphase remplacée par le contexte d'hôte
-// normalisé (utils/hostContext.js). Correspondance avec les 3 faces
-// ci-dessus : SELECTED = playable:false, revealed:false (repli, seul cas
-// atteint en pratique — AnimConductPanel ne monte jamais ce composant pour
-// GRID/MEMORIZE) ; QUESTION = playable:true, revealed:false ;
-// REVEAL = playable:false, revealed:true.
+// Contrat de props RÉEL (AnimMotionCard.jsx) : { subphase, card, motionConfig }.
 // motionConfig (question.MOTION_CONFIG) est transmis TEL QUEL — le composant
 // dérive lui-même les points via utils/motionGrid.js (getMotionCardPoints),
 // jamais un montant précalculé par l'appelant (même philosophie que #160/F0).
@@ -40,7 +34,7 @@ function baseCard(overrides = {}) {
 
 describe('AnimMotionCard — face SELECTED', () => {
   it('affiche RECTO_THEME, RECTO_IMAGE, les étoiles (DIFFICULTY) et les points (getMotionCardPoints, repli 1/3/5)', () => {
-    const { container } = render(<AnimMotionCard playable={false} revealed={false} card={baseCard({ DIFFICULTY: 2 })} motionConfig={null} />)
+    const { container } = render(<AnimMotionCard subphase="SELECTED" card={baseCard({ DIFFICULTY: 2 })} motionConfig={null} />)
     expect(container.querySelector('.anim-motion-card-focus-recto')).not.toBeNull()
     expect(screen.getByText('Histoire')).toBeInTheDocument()
     const img = container.querySelector('img')
@@ -53,7 +47,7 @@ describe('AnimMotionCard — face SELECTED', () => {
   it('applique motionConfig (barème personnalisé) via getMotionCardPoints, pas le repli 1/3/5', () => {
     const { container } = render(
       <AnimMotionCard
-        playable={false} revealed={false}
+        subphase="SELECTED"
         card={baseCard({ DIFFICULTY: 2 })}
         motionConfig={{ POINTS_1_STAR: 2, POINTS_2_STAR: 8, POINTS_3_STAR: 15 }}
       />
@@ -63,17 +57,17 @@ describe('AnimMotionCard — face SELECTED', () => {
 
   it('accorde "pt" (singulier) pour 0 ou 1 point, "pts" (pluriel) au-delà', () => {
     const { container: c0 } = render(
-      <AnimMotionCard playable={false} revealed={false} card={baseCard({ DIFFICULTY: 1 })} motionConfig={{ POINTS_1_STAR: 0 }} />
+      <AnimMotionCard subphase="SELECTED" card={baseCard({ DIFFICULTY: 1 })} motionConfig={{ POINTS_1_STAR: 0 }} />
     )
     expect(c0.querySelector('.anim-motion-card-focus-points').textContent).toBe('0 pt')
     const { container: c1 } = render(
-      <AnimMotionCard playable={false} revealed={false} card={baseCard({ DIFFICULTY: 1 })} motionConfig={null} />
+      <AnimMotionCard subphase="SELECTED" card={baseCard({ DIFFICULTY: 1 })} motionConfig={null} />
     )
     expect(c1.querySelector('.anim-motion-card-focus-points').textContent).toBe('1 pt')
   })
 
   it('QUESTION_TEXT/ANSWER_TEXT ne sont PAS affichés en SELECTED (face thème uniquement)', () => {
-    render(<AnimMotionCard playable={false} revealed={false} card={baseCard()} motionConfig={null} />)
+    render(<AnimMotionCard subphase="SELECTED" card={baseCard()} motionConfig={null} />)
     expect(screen.queryByText(/mur de Berlin/)).not.toBeInTheDocument()
     expect(screen.queryByText('1989')).not.toBeInTheDocument()
   })
@@ -81,7 +75,7 @@ describe('AnimMotionCard — face SELECTED', () => {
 
 describe('AnimMotionCard — face QUESTION', () => {
   it('affiche QUESTION_TEXT et QUESTION_IMAGE', () => {
-    const { container } = render(<AnimMotionCard playable={true} revealed={false} card={baseCard()} motionConfig={null} />)
+    const { container } = render(<AnimMotionCard subphase="QUESTION" card={baseCard()} motionConfig={null} />)
     expect(container.querySelector('.anim-motion-card-focus-verso')).not.toBeNull()
     expect(screen.getByText('En quelle année le mur de Berlin est-il tombé ?')).toBeInTheDocument()
     const img = container.querySelector('img')
@@ -89,7 +83,7 @@ describe('AnimMotionCard — face QUESTION', () => {
   })
 
   it('RECTO_THEME, étoiles/points et ANSWER_TEXT ne sont PAS affichés en QUESTION', () => {
-    const { container } = render(<AnimMotionCard playable={true} revealed={false} card={baseCard()} motionConfig={null} />)
+    const { container } = render(<AnimMotionCard subphase="QUESTION" card={baseCard()} motionConfig={null} />)
     expect(screen.queryByText('Histoire')).not.toBeInTheDocument()
     expect(container.querySelector('.anim-motion-card-focus-points')).toBeNull()
     expect(screen.queryByText('1989')).not.toBeInTheDocument()
@@ -98,7 +92,7 @@ describe('AnimMotionCard — face QUESTION', () => {
 
 describe('AnimMotionCard — face REVEAL', () => {
   it('affiche le rappel de QUESTION_TEXT, ANSWER_IMAGE et ANSWER_TEXT en évidence', () => {
-    const { container } = render(<AnimMotionCard playable={false} revealed={true} card={baseCard()} motionConfig={null} />)
+    const { container } = render(<AnimMotionCard subphase="REVEAL" card={baseCard()} motionConfig={null} />)
     expect(container.querySelector('.anim-motion-card-focus-verso')).not.toBeNull()
     const recall = container.querySelector('.anim-motion-card-focus-question')
     expect(recall).not.toBeNull()
@@ -111,14 +105,14 @@ describe('AnimMotionCard — face REVEAL', () => {
   })
 
   it('le rappel de question et la réponse portent des classes DISTINCTES (atténué vs en évidence)', () => {
-    const { container } = render(<AnimMotionCard playable={false} revealed={true} card={baseCard()} motionConfig={null} />)
+    const { container } = render(<AnimMotionCard subphase="REVEAL" card={baseCard()} motionConfig={null} />)
     const recall = container.querySelector('.anim-motion-card-focus-question')
     const answer = container.querySelector('.anim-motion-card-focus-answer')
     expect(recall.className).not.toBe(answer.className)
   })
 
   it('RECTO_THEME et les étoiles/points ne sont PAS affichés en REVEAL', () => {
-    const { container } = render(<AnimMotionCard playable={false} revealed={true} card={baseCard()} motionConfig={null} />)
+    const { container } = render(<AnimMotionCard subphase="REVEAL" card={baseCard()} motionConfig={null} />)
     expect(screen.queryByText('Histoire')).not.toBeInTheDocument()
     expect(container.querySelector('.anim-motion-card-focus-points')).toBeNull()
   })
@@ -134,7 +128,7 @@ describe('AnimMotionCard — face REVEAL', () => {
 describe('AnimMotionCard — repli sans image', () => {
   it('SELECTED sans RECTO_IMAGE : pas de <img>, thème et points toujours affichés', () => {
     const { container } = render(
-      <AnimMotionCard playable={false} revealed={false} card={baseCard({ RECTO_IMAGE: '' })} motionConfig={null} />
+      <AnimMotionCard subphase="SELECTED" card={baseCard({ RECTO_IMAGE: '' })} motionConfig={null} />
     )
     expect(container.querySelector('img')).toBeNull()
     expect(screen.getByText('Histoire')).toBeInTheDocument()
@@ -143,7 +137,7 @@ describe('AnimMotionCard — repli sans image', () => {
 
   it('QUESTION sans QUESTION_IMAGE : pas de <img>, QUESTION_TEXT toujours affiché', () => {
     const { container } = render(
-      <AnimMotionCard playable={true} revealed={false} card={baseCard({ QUESTION_IMAGE: '' })} motionConfig={null} />
+      <AnimMotionCard subphase="QUESTION" card={baseCard({ QUESTION_IMAGE: '' })} motionConfig={null} />
     )
     expect(container.querySelector('img')).toBeNull()
     expect(screen.getByText('En quelle année le mur de Berlin est-il tombé ?')).toBeInTheDocument()
@@ -151,28 +145,22 @@ describe('AnimMotionCard — repli sans image', () => {
 
   it('REVEAL sans ANSWER_IMAGE : pas de <img>, ANSWER_TEXT toujours affiché', () => {
     const { container } = render(
-      <AnimMotionCard playable={false} revealed={true} card={baseCard({ ANSWER_IMAGE: '' })} motionConfig={null} />
+      <AnimMotionCard subphase="REVEAL" card={baseCard({ ANSWER_IMAGE: '' })} motionConfig={null} />
     )
     expect(container.querySelector('img')).toBeNull()
     expect(screen.getByText('1989')).toBeInTheDocument()
   })
 
   it('card=null/undefined : ne plante pas, ne rend rien (garde défensive, même philosophie que AnimMemoryGrid)', () => {
-    expect(() => render(<AnimMotionCard playable={false} revealed={false} card={null} motionConfig={null} />)).not.toThrow()
-    const { container } = render(<AnimMotionCard playable={false} revealed={false} card={null} motionConfig={null} />)
+    expect(() => render(<AnimMotionCard subphase="SELECTED" card={null} motionConfig={null} />)).not.toThrow()
+    const { container } = render(<AnimMotionCard subphase="SELECTED" card={null} motionConfig={null} />)
     expect(container.firstChild).toBeNull()
   })
 })
 
-// #184/B-F2 — l'ancienne garde "subphase hors SELECTED/QUESTION/REVEAL (ex.
-// GRID) : ne rend rien" n'est plus exprimable avec le nouveau contrat de
-// props : `playable`/`revealed` ne distinguent plus GRID de SELECTED (les
-// deux valent playable:false, revealed:false — contrat question-types.md
-// §4, ligne "Aucun hôte actif"). Ce n'est pas une perte de garantie réelle :
-// AnimConductPanel ne monte JAMAIS ce composant pour GRID/MEMORIZE (ces
-// sous-phases restent affichées par AnimMotionGrid, cf. son propre
-// aiguillage) — le composant fait désormais confiance à son appelant, comme
-// AnimQcmOptions/AnimAnswerZone le font déjà pour l'hôte courant. Le seul
-// état "aucun hôte actif" qui atteint réellement ce composant en pratique
-// est SELECTED, couvert par `describe('AnimMotionCard — face SELECTED')`
-// ci-dessus.
+describe('AnimMotionCard — sous-phase inattendue', () => {
+  it('subphase hors SELECTED/QUESTION/REVEAL (ex. GRID) : ne rend rien (ce composant ne remplace la grille qu\'à partir de SELECTED)', () => {
+    const { container } = render(<AnimMotionCard subphase="GRID" card={baseCard()} motionConfig={null} />)
+    expect(container.firstChild).toBeNull()
+  })
+})

@@ -198,52 +198,6 @@ interface MemoryConfig {
 
 ---
 
-## Champs MEMOTION spécifiques — v7.0.0
-
-### Dans GameState
-
-| Champ | Type | Description |
-|-------|------|-------------|
-| `MEMOTION_SUBPHASE` | string | Phase MEMOTION courante : `GRID` (grille), `SELECTED` (carte choisie), `QUESTION` (énoncé), `REVEAL` (réponse) |
-| `MEMOTION_SELECTED` | string | ID de la carte MEMOTION sélectionnée (vide hors SELECTED/QUESTION/REVEAL) |
-| `MEMOTION_CARD_STATES` | object | État de chaque carte : `{ "card_1": "UNPLAYED"\|"SELECTED"\|"QUESTION"\|"REVEALED"\|"DONE", ... }` |
-| `MEMOTION_CARD_TEAMS` | object | Équipe ayant joué chaque carte : `{ "card_1": "team_A", ... }` |
-| `MEMOTION_CURRENT_TEAM` | string | Équipe actuelle (rotation selon MODE) |
-| `MEMOTION_PARTICIPATING_TEAMS` | string[] | Équipes sélectionnées pour cette MEMOTION (#172) |
-| `MEMOTION_CURRENT_TEAM_COLOR` | number[] | Couleur RGB de l'équipe courante |
-| **`MEMOTION_ACTIVE`** | object | **[v7.0.0]** État vivant de la carte active : `{ "CARD_ID": "...", "TYPE": "...", "STATE": {...} }` |
-
-### `MEMOTION_ACTIVE` — Nouvel emplacement actif (v7.0.0)
-
-Champ unique décrivant l'**état vivant du type imbriqué** de la carte MEMOTION en cours. Non persisté.
-
-```typescript
-interface MotionActive {
-  CARD_ID: string    // ID de la carte active ("" hors SELECTED/QUESTION/REVEAL)
-  TYPE: string       // Type de la carte : "SPEEDY", "QCM", "MEMORY", "ARDOISE" (défaut "" = pas de type)
-  STATE: object      // État vivant propre au type (ex: { "QCM_INVALIDATED": ["RED", "YELLOW"] } pour QCM)
-}
-```
-
-**Propriétés clés :**
-- **Jamais `omitempty`** — toujours sérialisé, même vide (`{"CARD_ID":"","TYPE":"","STATE":{}}`)
-- **Non persisté** — rejoint les champs `Motion*` exclus de `state_persistence.go`
-- **Réinitialisé** à chaque `SelectMotionCard` ; vidé au retour en `GRID`, à `MEMORIZE`, `PREPARE`, `READY`
-- **Hôte des champs typés vivants** — remplace la lecture directe de `GameState` pour les types imbriqués (cf. `contracts/question-types.md` §5.3)
-
-**Exemple :**
-```json
-{
-  "CARD_ID": "mc-3",
-  "TYPE": "QCM",
-  "STATE": {
-    "QCM_INVALIDATED": ["RED", "YELLOW"]
-  }
-}
-```
-
----
-
 ## Champs Enrollment (VPlayers)
 
 | Champ | Type | Description |

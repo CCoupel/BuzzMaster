@@ -334,137 +334,34 @@ Voir `WEBSOCKET_PROTOCOL.md` pour détails complets.
 
 ---
 
-## Type de jeu MEMOTION (v5.0.0 et v7.0.0)
+## Type de jeu MEMOTION (v5.0.0)
 
-Jeu de cartes à 3 faces avec grille interactive, difficulté configurable et mode équipe. À partir de v7.0.0, les cartes MEMOTION supportent plusieurs types de questions imbriquées (QCM, SPEEDY, ARDOISE, MEMORY) avec un système de points configurable.
+Jeu de cartes à 3 faces avec grille interactive, difficulté configurable et mode équipe.
 
-### Structure MotionCard (historique + v7.0.0)
-
+### Structure MotionCard
 ```json
 {
   "ID": "mc-1",
-  "TYPE": "QCM",
   "RECTO_THEME": "Thème de la carte",
   "RECTO_IMAGE": "/files/questions/img_recto.jpg",
   "DIFFICULTY": 2,
-  "POINTS_RULE": { "MODE": "STARS", "VALUE": 0 },
   "QUESTION_TEXT": "Question ou énigme",
   "QUESTION_IMAGE": "/files/questions/img_question.jpg",
   "ANSWER_TEXT": "Réponse ou explication",
-  "ANSWER_IMAGE": "/files/questions/img_answer.jpg",
-  "QCM_ANSWERS": {"1": "Opt A", "2": "Opt B", "3": "Opt C", "4": "Opt D"},
-  "QCM_CORRECT": "1"
+  "ANSWER_IMAGE": "/files/questions/img_answer.jpg"
 }
 ```
 
-#### Champ `TYPE` (v7.0.0)
-- **Absent ou `""`** → défaut `SPEEDY` (rétrocompatibilité)
-- **Valeurs acceptées** : `SPEEDY` | `QCM` | `ARDOISE` | `MEMORY`
-- **Interdit** : `MEMOTION` (profondeur 1 — une carte ne porte jamais une autre carte)
-- **Validation** : l'enregistrement refuse les types non-imbriquables ou invalides
-
-#### Champ `POINTS_RULE` (v7.0.0)
-```jsonc
-"POINTS_RULE": { "MODE": "STARS" | "FIXED" | "PER_UNIT", "VALUE": 10 }
-```
-
-| `MODE` | Points attribués | Usage |
-|---|---|---|
-| absent / `STARS` | Barème par étoiles existant : `MOTION_CONFIG.POINTS_<n>_STAR` si `> 0`, sinon `DIFFICULTY` → 1/3/5 | **Défaut** — comportement actuel, inchangé |
-| `FIXED` | `VALUE` si équipe gagnante, sinon 0 | Carte dont la valeur ne dépend pas de sa difficulté |
-| `PER_UNIT` | `VALUE × Units` | Types à progression (MEMORY au prorata, #187 v7.1.0) |
-
-**Défaut** : absent ou `MODE="STARS"` → applique l'ancien barème par difficulté.
-**Non-régression** : les 9 questions MEMOTION existantes ne portent pas ce champ, donc valent STARS → comportement inchangé.
-
-### Champ `MEMOTION_ACTIVE` (v7.0.0)
-
-État vivant unique du type imbriqué actif. Réinitialisé à chaque `MEMOTION_SELECT`, vidé au retour en `GRID`.
-
-```jsonc
-"MEMOTION_ACTIVE": {
-  "CARD_ID": "mc-3",          // "" hors SELECTED/QUESTION/REVEAL
-  "TYPE": "QCM",              // "" hors emplacement actif ; "SPEEDY" pour une carte historique
-  "STATE": {                  // état vivant du type — forme libre, propre au type
-    "QCM_INVALIDATED": ["RED", "YELLOW"]
-  }
-}
-```
-
-**Caractéristiques** :
-- **Jamais `omitempty`** — règle projet, toujours sérialisé même vide (`{"CARD_ID":"","TYPE":"","STATE":{}}`)
-- **Non persisté** — rejoint `Motion*` dans `state_persistence.go`
-- **Un seul emplacement** — pas de dictionnaire par carte, une seule carte jouable à la fois
-
-**`CARD_ID`** :
-- `""` en sous-phases `MEMORIZE`, `GRID`, hors jeu MEMOTION
-- ID de la carte (chaîne `"mc-3"`) en `SELECTED`, `QUESTION`, `REVEAL`
-- Synchronisé avec `MEMOTION_SELECTED` toujours
-
-**`TYPE`** :
-- Type de la carte active (discriminant du contenu de `STATE`)
-- `""` quand `CARD_ID` est vide
-
-**`STATE`** :
-- Structure propre au type — ex. `{"QCM_INVALIDATED": [...]}` pour un QCM
-- Vide (`{}`) quand aucune carte n'est active
-- Remis à zéro à chaque sélection de nouvelle carte
-
-### Contexte d'hôte normalisé — `HostContext` (v7.0.0)
-
-Une implémentation de type (composant QCM, SPEEDY, ARDOISE, MEMORY) ne lit **jamais** `PHASE` ou `MEMOTION_SUBPHASE` directement. Elle reçoit de son hôte un triplet normalisé.
-
-```go
-type HostContext struct {
-    Playable     bool   // les entrées sont acceptées, le contenu est en jeu
-    Revealed     bool   // la réponse est montrée
-    TimerRunning bool   // un chronomètre décompte pour cette manche
-    CardID       string // "" pour l'hôte question ; ID de carte pour l'hôte carte MEMOTION
-}
-```
-
-**Table de dérivation — implémentée côté Go et JavaScript de manière identique** :
-
-| Hôte | `Playable` | `Revealed` | `TimerRunning` |
-|---|---|---|---|
-| **Question** | `PHASE == STARTED` | `PHASE == REVEALED` | `PHASE == STARTED` **ET** `CURRENT_TIME > 0` |
-| **Carte MEMOTION** | `MEMOTION_SUBPHASE == QUESTION` | `MEMOTION_SUBPHASE == REVEAL` | `MEMOTION_SUBPHASE == QUESTION` **ET** `CURRENT_TIME > 0` |
-| **Aucun** (GRID, MEMORIZE, SELECTED, PREPARE, READY…) | `false` | `false` | `false` |
-
-**`CardID`** — règle unique :
-- Toujours `MEMOTION_SELECTED` (jamais de condition)
-- `""` hors jeu MEMOTION ou en `GRID`/`MEMORIZE`/`SELECTED`
-- ID de carte en `QUESTION` et `REVEAL`
-
-**`TimerRunning` — jamais dérivé du ticker serveur** :
-- Uniquement de `CURRENT_TIME > 0` dans l'état de jeu courant
-- Un ticker serveur (`Engine.timer`) n'est jamais sérialisé ni observable côté client
-- Convention en production depuis #160 : `AnimPage.jsx` utilise `gameState.timer > 0`
-
-**Non sérialisé** — recalculé côté Go et JavaScript à partir de `PHASE` et `MEMOTION_SUBPHASE`, tous deux déjà présents. Économie de charge utile. Contrepartie : chaque côté porte un test dont les cas sont nommés à l'identique (voir tests de dérivation).
-
-### Contrainte de profondeur 1
-
-**Une carte MEMOTION ne peut pas porter le type `MEMOTION`.**
-
-Cette contrainte est structurelle et validée à trois points :
-1. **À l'enregistrement** : `handleUploadQuestion` refuse `TYPE="MEMOTION"` avec HTTP 400
-2. **À la sélection** : `SelectMotionCard` ignore silencieusement les tentatives d'imbrication récursive (défense en profondeur)
-3. **Dans le registre** : `MEMOTION` n'a pas `NestableInMotionCard = true`, marqué explicitement `false`
-
-Motif : une grille de cartes imbriquées dans une carte imbriquée dans une grille crée une récursion sans fin. Une carte MEMOTION n'est jamais elle-même un hôte MEMOTION.
+Points par difficulté : ★ (1) → 1 pt | ★★ (2) → 3 pts | ★★★ (3) → 5 pts
 
 ### Subphases MEMOTION
-
-| Subphase | Description | `HostContext` (`Playable`/`Revealed`/`TimerRunning`) |
-|----------|-------------|---|
-| `MEMORIZE` | *(Secret Mode)* Toutes les cartes RECTO visibles + timer décompte. Sélection impossible. | `F / F / F` |
-| `GRID` | Grille de cartes RECTO (ou coordonnées en Secret Mode), prêtes à sélectionner | `F / F / F` |
-| `SELECTED` | Carte zoomée plein écran (RECTO thème + points). Pas de timer. | `F / F / F` |
-| `QUESTION` | Face VERSO (question) plein écran, timer actif (si `CURRENT_TIME > 0`) | `T / F / T*` |
-| `REVEAL` | Face REVEAL (réponse) plein écran, admin attribue points | `F / T / F` |
-
-**Note** : `QUESTION` avec timer expiré (CURRENT_TIME = 0) → `TimerRunning = false` même si `MEMOTION_SUBPHASE == QUESTION`
+| Subphase | Description |
+|----------|-------------|
+| `MEMORIZE` | *(Secret Mode)* Toutes les cartes RECTO visibles + timer décompte. Sélection impossible. |
+| `GRID` | Grille de cartes RECTO (ou coordonnées en Secret Mode), prêtes à sélectionner |
+| `SELECTED` | Carte zoomée plein écran (RECTO thème + points). Pas de timer. |
+| `QUESTION` | Face VERSO (question) plein écran, timer actif |
+| `REVEAL` | Face REVEAL (réponse) plein écran, admin attribue points |
 
 ### Secret Mode — Subphase MEMORIZE (v5.5.0)
 
@@ -518,45 +415,22 @@ Structure commune à tous les jeux :
 - Taille : 80% (scale 0.8) pour indiquer que la carte a été jouée
 
 ### Champs GameState MEMOTION (sans omitempty)
-- `MEMOTION_ACTIVE` : état vivant du type imbriqué — voir §"Champ `MEMOTION_ACTIVE`" ci-dessus (v7.0.0)
 - `MEMOTION_SUBPHASE` : `""` | `"MEMORIZE"` | `"GRID"` | `"SELECTED"` | `"QUESTION"` | `"REVEAL"` — `MEMORIZE` ajouté en v5.5.0 (Secret Mode)
-- `MEMOTION_SELECTED` : ID carte sélectionnée (`""` en GRID) — même valeur que `MEMOTION_ACTIVE.CARD_ID`
+- `MEMOTION_SELECTED` : ID carte sélectionnée (`""` en GRID)
 - `MEMOTION_CARD_STATES` : map[string]string → `"UNPLAYED"` | `"SELECTED"` | `"QUESTION"` | `"REVEALED"` | `"DONE"`
 - `MEMOTION_CARD_TEAMS` : map[string]string → teamName quand DONE
 - `MEMOTION_CURRENT_TEAM` : équipe active
 - `MEMOTION_PARTICIPATING_TEAMS` : []string
 - `MEMOTION_CURRENT_TEAM_COLOR` : [3]int RGB
 
-### Flux de jeu (5 étapes + gestion `MEMOTION_ACTIVE`)
+### Flux de jeu (9 étapes)
+1. Admin sélectionne une carte depuis la preview TV (clic sur carte `UNPLAYED` en subphase GRID) → `MEMOTION_SELECT` → SELECTED (zoom plein écran, RECTO)
+2. Admin click "Démarrer" → `MEMOTION_FLIP` → QUESTION + timer démarre
+3. Timer expire ou admin "STOP TIMER" → `MEMOTION_STOP_TIMER` → timer stop, reste QUESTION
+4. Admin "RÉVÉLER" → `MEMOTION_REVEAL` → REVEAL (timer arrêté)
+5. Admin click "Perdu" ou bouton équipe courante → `MEMOTION_DONE` → retour GRID + carte DONE colorée (seule l'équipe courante peut gagner)
 
-1. **GRID → SELECTED** : Admin sélectionne une carte depuis la preview TV (clic sur carte `UNPLAYED`)
-   - Action : `MEMOTION_SELECT` `{"CARD_ID": "mc-3"}`
-   - Transitions : `MEMOTION_SUBPHASE = "SELECTED"`, `MEMOTION_SELECTED = "mc-3"`
-   - **`MEMOTION_ACTIVE` initialisé** : `{"CARD_ID": "mc-3", "TYPE": <type de la carte>, "STATE": {}}`
-
-2. **SELECTED → QUESTION** : Admin clique "Démarrer"
-   - Action : `MEMOTION_FLIP`
-   - Transitions : `MEMOTION_SUBPHASE = "QUESTION"`, `CURRENT_TIME = QUESTION.TIME`, timer démarre
-   - **`MEMOTION_ACTIVE.STATE` alimenté** selon le type (ex. QCM : indices en cours, réponses invalidées…)
-
-3. **QUESTION contrôle-temps** : Timer décroît ou arrêt manuel
-   - Action : `MEMOTION_STOP_TIMER` (optionnel, si arrêt avant expiration)
-   - État : `MEMOTION_SUBPHASE` reste `"QUESTION"`, `CURRENT_TIME` s'arrête
-   - **`MEMOTION_ACTIVE.STATE` figé** à l'instant de l'arrêt
-
-4. **QUESTION → REVEAL** : Admin clique "RÉVÉLER"
-   - Action : `MEMOTION_REVEAL`
-   - Transitions : `MEMOTION_SUBPHASE = "REVEAL"`, timer arrêté (via `StopMotionCardTimer()`)
-   - État : réponse affichée, `HostContext.Revealed = true`
-   - **`MEMOTION_ACTIVE.STATE` inchangé** (contient l'historique de la manche)
-
-5. **REVEAL → GRID** : Admin clique "Perdu" ou bouton équipe gagnante
-   - Action : `MEMOTION_DONE` `{"CARD_ID": "mc-3", "WINNER_TEAM": "team_A", "UNITS": 1}`
-   - Transitions : retour `MEMOTION_SUBPHASE = "GRID"`, `MEMOTION_SELECTED = ""`, carte marquée DONE
-   - Points attribués selon `MotionCard.POINTS_RULE` du barème de la carte
-   - **`MEMOTION_ACTIVE` réinitialisé** : `{"CARD_ID": "", "TYPE": "", "STATE": {}}`
-
-**Annulation depuis SELECTED** : `MEMOTION_DONE` avec `WINNER_TEAM=""` → carte retourne UNPLAYED, `MEMOTION_ACTIVE` vidé.
+**Annulation depuis SELECTED** : `MEMOTION_DONE` avec `WINNER_TEAM=""` → carte retourne UNPLAYED.
 
 ### Modes de jeu
 - `SOLO` : une seule équipe joue
@@ -564,35 +438,19 @@ Structure commune à tous les jeux :
 - `TANT_QUE_JE_GAGNE` : conserve le tour si victoire
 
 ### Actions WebSocket
-
 ```json
 { "ACTION": "MEMOTION_SELECT",    "MSG": { "CARD_ID": "mc-1" } }
 { "ACTION": "MEMOTION_FLIP",      "MSG": {} }
 { "ACTION": "MEMOTION_STOP_TIMER","MSG": {} }
 { "ACTION": "MEMOTION_REVEAL",    "MSG": {} }
-{ "ACTION": "MEMOTION_DONE",      "MSG": { "CARD_ID": "mc-1", "WINNER_TEAM": "team_A", "UNITS": 1 } }
+{ "ACTION": "MEMOTION_DONE",      "MSG": { "CARD_ID": "mc-1", "WINNER_TEAM": "team_A" } }
 { "ACTION": "MEMOTION_SET_TEAMS", "MSG": { "TEAMS": ["team_A", "team_B"] } }
 ```
 
-**Champ `UNITS` (v7.0.0)** :
-- **Optionnel**, défaut `1`
-- Rapporte le nombre d'unités gagnées (pour types à progression : MEMORY au prorata, #187 v7.1.0)
-- Utilisé par barème `POINTS_RULE.MODE == "PER_UNIT"` : points = `VALUE × UNITS`
-- Types simples (QCM, SPEEDY, ARDOISE) : toujours `1` (gagné/perdu)
-
-**Invariant de portée** (v7.0.0, #184) :
-- Toute action typée **hors `MEMOTION_DONE`** ignore `MOTION_CARD_ID` (toutes les actions MEMOTION actuelles en dépendent)
-- `MEMOTION_DONE` contient explicitement `CARD_ID` pour fermer la manche en cours
-- Un `MEMOTION_DONE` avec `CARD_ID` différent de `MEMOTION_SELECTED` est refusé (error `CARD_SCOPE_MISMATCH`)
-
 ### Timer par carte
-
-- **Démarrage** : `MEMOTION_FLIP` (durée = `CURRENT_TIME` du type imbriqué de la carte)
-- **Arrêt manuel** : `MEMOTION_STOP_TIMER` → `CURRENT_TIME` reste figé, subphase reste `QUESTION`
-- **Arrêt automatique** : `MEMOTION_REVEAL` ou expiration timer=0 → `StopMotionCardTimer()`
-- **Impact `HostContext`** : `TimerRunning` dérivé uniquement de `MEMOTION_SUBPHASE == QUESTION` **ET** `CURRENT_TIME > 0`
-  - Timer = 0 en QUESTION → `TimerRunning = false`, même si subphase n'a pas changé
-  - Timer actif en SELECTED → `TimerRunning = false` (subphase seule contrôle)
+- Démarre au `MEMOTION_FLIP` (durée = champ `Time` de la Question)
+- `MEMOTION_STOP_TIMER` : arrêt manuel, subphase reste QUESTION
+- `MEMOTION_REVEAL` : arrête aussi le timer via `StopMotionCardTimer()`
 
 ### Animations TV (framer-motion)
 - GRID→SELECTED : `layoutId` shared → zoom automatique depuis position grille
@@ -602,31 +460,17 @@ Structure commune à tous les jeux :
 - DONE→GRID : `layoutId` anime le retour vers la grille
 
 ### Fichiers clés
-
-**Backend (Go)**
-
-- `engine.go` : `SelectMotionCard`, `FlipMotionCard`, `RevealMotionCard`, `DoneMotionCard`, `StopMotionCardTimer` + nouveau (v7.0.0) : gestion `MEMOTION_ACTIVE`, calcul points selon `POINTS_RULE`
-- `models.go` : struct `MotionCard` (ajout champs `TYPE`, `POINTS_RULE` v7.0.0), `GameState.MEMOTION_ACTIVE` (v7.0.0), `TypedContent` embarqué (v7.0.0), `HostContext` (v7.0.0), `CardScope` (v7.0.0)
-- `question_types.go` : registre des types (v7.0.0, #184), liste `TypeDescriptor`, validation imbrication
-- `messages.go` : `ActionMotionSelect/Flip/StopTimer/Reveal/Done/SetTeams`, nouveau (v7.0.0) : parsing `UNITS` en `MEMOTION_DONE`, portée actions via `MOTION_CARD_ID`
-- `http.go` : parser `MOTION_MEMORIZE_DURATION` (v5.5.0), nouveau (v7.0.0) : parser `TYPE` et `POINTS_RULE` de carte, valider non-régression JSON
-- `main.go` : handlers `handleMotion*`, nouveau (v7.0.0) : calcul HostContext côté serveur (tests de dérivation)
-- `state_persistence.go` : `MEMOTION_ACTIVE` **exclue** de la persistance (non-persisté, v7.0.0)
-
-**Frontend (React)**
-
-- `GamePage.jsx` : panneaux admin GRID/SELECTED/QUESTION/REVEAL, nouveau (v7.0.0) : affichage type carte, barème en leçon
-- `PlayerDisplay.jsx` : vues TV, animations, nouveau (v7.0.0) : résolution HostContext local, pas de dépendance PHASE/MEMOTION_SUBPHASE directe
-- `QuestionsPage.jsx` : éditeur carte, nouveau (v7.0.0) : champ `TYPE`, verrou type selon `OwnedFields`, barème `POINTS_RULE`
-- `utils/hostContext.js` : **nouveau** (v7.0.0) — fonction `resolveHostContext(gameState)` partagée par tous les composants de type
-- `utils/typeState.js` : **nouveau** (v7.0.0) — résolution `getTypeState(gameState, hostContext)` : question vs carte
-- `utils/questionTypeMeta.js` : enregistrement client des types (v7.0.0, #184)
-- `AnimPage.jsx` / `AnimConductPanel.jsx` / `AnimMotionGrid.jsx` : nouveau (v7.0.0) : utilisation HostContext au lieu de `phase` en prop
-- `utils/motionRules.js` : matrice gestes MEMOTION, nouveau (v7.0.0) : dépendance HostContext.Playable plutôt que `phase === QUESTION`
-
-**Tests (v7.0.0, #184)**
-
-- `game_engine_test.go` : test dérivation HostContext (cas identiques côté Go et JS)
-- `models_test.go` : test imbrication (profondeur 1), test verrou type, test non-régression JSON
-- `typeState.test.js` : test dérivation HostContext JS (cas identiques côté Go)
-- `motion_actions_test.go` : test portée actions, invariant `CARD_SCOPE_MISMATCH`
+- `engine.go` : `SelectMotionCard`, `FlipMotionCard`, `RevealMotionCard`, `DoneMotionCard`, `StopMotionCardTimer`, `StartMotionMemorizeTimer` (v5.5.0), `StopMotionMemorizeTimer` (v5.5.0)
+- `models.go` : struct `MotionCard`, champs `GameState.Motion*`, `QuestionTypeMemotion`, `Question.MOTION_MEMORIZE_DURATION` (v5.5.0)
+- `messages.go` : `ActionMotionSelect/Flip/StopTimer/Reveal/Done/SetTeams`
+- `http.go` : parser `MOTION_MEMORIZE_DURATION` (v5.5.0)
+- `main.go` : handlers `handleMotion*`
+- `GamePage.jsx` : panneaux admin GRID/SELECTED/QUESTION/REVEAL + MEMORIZE status + liste coordonnées (v5.5.0)
+- `PlayerDisplay.jsx` : vues TV + framer-motion layoutId + AnimatePresence flip + bannière MEMORIZE + coordonnées Secret Mode (v5.5.0)
+- `PlayerDisplay.css` : classes `.memotion-*`, `.memotion-memorize-active`, `.memotion-memorize-banner` (v5.5.0)
+- `QuestionsPage.jsx` : champ "Durée mémorisation (s)" dans éditeur MEMOTION (v5.5.0)
+- `AnimPage.jsx` : interface animateur tablette (v6.2.0, #160 — conduite MEMOTION complète depuis `/anim`)
+- `AnimConductPanel.jsx` : conduite 5 lignes, L2 occupée par `AnimMotionActions`, L3 4 voies avec MEMOTION grille/carte (v6.2.0, #160)
+- `AnimMotionGrid.jsx` / `AnimMotionCard.jsx` / `AnimMotionActions.jsx` : composants MEMOTION tablette (v6.2.0, #160)
+- `utils/motionGrid.js` : règles disposition MEMOTION partagées avec TV (v6.2.0, #160)
+- `utils/motionRules.js` : matrice gestes MEMOTION par sous-phase (v6.2.0, #160)

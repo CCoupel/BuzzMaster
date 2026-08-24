@@ -28,11 +28,7 @@ function makePairs(n) {
 function baseProps(overrides = {}) {
   return {
     question: { ID: '1', MEMORY_PAIRS: makePairs(3) }, // 6 cartes
-    // #184/B-F2 — sevrage de `phase` : le composant reçoit désormais
-    // `playable`/`revealed` (contrat question-types.md §4), jamais `phase`.
-    // Équivalent question-host de PHASE=STARTED, comme avant ce refactor.
-    playable: true,
-    revealed: false,
+    phase: 'STARTED',
     teams: {},
     flippedCards: [],
     matchedPairs: [],
@@ -111,7 +107,7 @@ describe('AnimMemoryGrid — quatre états de carte', () => {
   })
 
   it('inerte hors STARTED : état "inert", non cliquable même sans être retournée/trouvée', () => {
-    const { container } = render(<AnimMemoryGrid {...baseProps({ playable: false, revealed: false })} />)
+    const { container } = render(<AnimMemoryGrid {...baseProps({ phase: 'STOPPED' })} />)
     const card = container.querySelector('.anim-memory-card')
     expect(card.className).toMatch(/\banim-memory-card-inert\b/)
     expect(card.disabled).toBe(true)
@@ -134,7 +130,7 @@ describe('AnimMemoryGrid — quatre états de carte', () => {
 
 describe('AnimMemoryGrid — révélation en phase REVEALED (régression QUALIF v6.2.0.27, #159)', () => {
   it('paire JAMAIS trouvée ni retournée, phase REVEALED : contenu affiché, état "up" neutre, pas le repli face cachée', () => {
-    const { container } = render(<AnimMemoryGrid {...baseProps({ playable: false, revealed: true })} />)
+    const { container } = render(<AnimMemoryGrid {...baseProps({ phase: 'REVEALED' })} />)
     // baseProps() : 3 paires, aucune matchedPairs/flippedCards fournie —
     // TOUTES les cartes sont dans le cas "jamais trouvée".
     const cardsEl = Array.from(container.querySelectorAll('.anim-memory-card'))
@@ -152,8 +148,7 @@ describe('AnimMemoryGrid — révélation en phase REVEALED (régression QUALIF 
     const matchedPairId = cards[0].pairId
     const { container } = render(
       <AnimMemoryGrid {...baseProps({
-        playable: false,
-        revealed: true,
+        phase: 'REVEALED',
         matchedPairs: [matchedPairId],
         pairOwners: { [String(matchedPairId)]: 'Les Rouges' },
         teams: { 'Les Rouges': { COLOR: [255, 0, 0] } },
@@ -180,14 +175,14 @@ describe('AnimMemoryGrid — révélation en phase REVEALED (régression QUALIF 
       ID: '1',
       MEMORY_PAIRS: [{ ID: 1, CARD1: { IS_IMAGE: true, IMAGE: '/img/a.png' }, CARD2: { IS_IMAGE: true, IMAGE: '/img/b.png' } }],
     }
-    const { container } = render(<AnimMemoryGrid {...baseProps({ question, playable: false, revealed: true })} />)
+    const { container } = render(<AnimMemoryGrid {...baseProps({ question, phase: 'REVEALED' })} />)
     const cardEl = container.querySelector('.anim-memory-card-up')
     expect(cardEl.querySelector('.anim-memory-card-image')).not.toBeNull()
   })
 
   it('non cliquable même révélée sans avoir été trouvée (REVEALED n\'est jamais STARTED)', () => {
     const onFlip = vi.fn()
-    const { container } = render(<AnimMemoryGrid {...baseProps({ playable: false, revealed: true, onFlip })} />)
+    const { container } = render(<AnimMemoryGrid {...baseProps({ phase: 'REVEALED', onFlip })} />)
     const card = container.querySelector('.anim-memory-card-up')
     expect(card.disabled).toBe(true)
     card.click()
@@ -207,7 +202,7 @@ describe('AnimMemoryGrid — geste (canClick), identifiant émis', () => {
 
   it('aucun geste hors STARTED : bouton disabled, clic sans effet', () => {
     const onFlip = vi.fn()
-    const { container } = render(<AnimMemoryGrid {...baseProps({ playable: false, revealed: false, onFlip })} />)
+    const { container } = render(<AnimMemoryGrid {...baseProps({ phase: 'PAUSED', onFlip })} />)
     const card = container.querySelector('.anim-memory-card')
     expect(card.disabled).toBe(true)
     card.click()
@@ -337,8 +332,7 @@ describe('AnimMemoryGrid — bandeau de compteurs (#159/T4)', () => {
   it('"au tour de" absent hors STARTED, même en multi-équipes', () => {
     render(
       <AnimMemoryGrid {...baseProps({
-        playable: false,
-        revealed: false,
+        phase: 'PAUSED',
         teamPairs: { 'Les Rouges': 0, 'Les Bleus': 0 },
         currentTeam: 'Les Rouges',
       })} />

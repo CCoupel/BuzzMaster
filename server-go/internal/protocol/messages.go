@@ -424,33 +424,10 @@ type MotionSelectPayload struct {
 	CardID string `json:"CARD_ID"` // ID of the card to select (e.g. "mc-1")
 }
 
-// CardScope is embedded (not nested — a payload struct embeds it directly)
-// in a per-type action's payload to bind that action to the MEMOTION card
-// currently in play — contract §9. Optional: its zero value (absent
-// MOTION_CARD_ID) preserves today's behavior for every existing action,
-// none of which is required to carry it. No action in v7.0.0 actually
-// carries CardScope yet — #185 (QCM-in-card) has no new action at all
-// (contract §7.1), so the invariant this type supports
-// (game.ValidateCardScope) is posed and tested now but has no real caller
-// until #186. Delivered ahead of its first consumer deliberately: #186/
-// #187 need to be able to assume it's already part of the core, and
-// bolting it on after the fact would reopen the MEMOTION host — exactly
-// what #184's agnosticity test (contract §10) forbids.
-type CardScope struct {
-	MotionCardID string `json:"MOTION_CARD_ID,omitempty"`
-}
-
 // MotionDonePayload for MEMOTION_DONE action (Admin → Server)
 type MotionDonePayload struct {
 	CardID     string `json:"CARD_ID"`               // ID of the card being closed
 	WinnerTeam string `json:"WINNER_TEAM,omitempty"` // Team name if a winner, "" if none
-	// Units (#184, B-B5, contract §9.3) — a *int (not int) so the handler
-	// can tell "absent" (⇒ default 1, current behavior unchanged) apart
-	// from an explicit 0 (a meaningful "zero progress" outcome under
-	// POINTS_RULE.MODE FIXED/PER_UNIT — contract §6.2). Consumed by
-	// POINTS_RULE.MODE=="PER_UNIT"/"FIXED"; ignored under the default
-	// STARS scale.
-	Units *int `json:"UNITS,omitempty"`
 }
 
 // MotionSetTeamsPayload is an alias for MemorySetTeamsPayload — same {TEAMS: [...]} structure

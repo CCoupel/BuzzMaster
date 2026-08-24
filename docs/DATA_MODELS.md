@@ -801,167 +801,9 @@ Système d'effet néon rotatif autour de l'écran TV et VPlayer avec couleur de 
    └─► revealGame() ─► Show answer
 ```
 
-## MotionCard — Carte polymorphe MEMOTION (v7.0.0, #184)
+## Question (MEMOTION type) - v5.0.0
 
-### Structure MotionCard — contenu typé et contrôle plat
-
-Une carte MEMOTION porte un **type discriminant** (`TYPE`) et un **contenu typé partagé** (`TypedContent`), tous deux embarqués à plat dans la structure card. Aucune imbrication.
-
-```json
-{
-  "ID": "mc-1",
-  "TYPE": "QCM",
-  "RECTO_THEME": "Géographie",
-  "RECTO_IMAGE": "/files/memotion/mc-1_recto.jpg",
-  "DIFFICULTY": 2,
-  "QUESTION_TEXT": "Quelle est la capitale de la France?",
-  "QUESTION_IMAGE": "",
-  "ANSWER_TEXT": "",
-  "ANSWER_IMAGE": "",
-  "POINTS_RULE": {
-    "MODE": "STARS",
-    "VALUE": 10
-  },
-  "QCM_ANSWERS": {
-    "RED": "Londres",
-    "GREEN": "Paris",
-    "YELLOW": "Berlin",
-    "BLUE": "Madrid"
-  },
-  "QCM_CORRECT": "GREEN",
-  "QCM_HINTS_ENABLED": false,
-  "QCM_HINT_THRESHOLD_1": 0.25,
-  "QCM_HINT_THRESHOLD_2": 0.125,
-  "QCM_PENALTY_1": 0.67,
-  "QCM_PENALTY_2": 0.33
-}
-```
-
-**Champs de la carte (structure cardinale) :**
-
-| Champ | Type | Défaut | Description |
-|-------|------|--------|-------------|
-| `ID` | string | ✅ requis | Identifiant unique de la carte |
-| `TYPE` | string | `"SPEEDY"` | Type de contenu : `"SPEEDY"` (défaut), `"QCM"`, `"MEMORY"`, `"ARDOISE"`. Absent ⇒ `SPEEDY` (rétrocompatibilité) |
-| `RECTO_THEME` | string | ✅ requis | Thème de la face recto affichée en grille |
-| `RECTO_IMAGE` | string | optionnel | Image recto (chemin `/files/...`) |
-| `DIFFICULTY` | int | ✅ requis | Difficulté : 1, 2, ou 3 |
-| `QUESTION_TEXT` | string | optionnel | Énoncé (SPEEDY historique) |
-| `QUESTION_IMAGE` | string | optionnel | Image énoncé (SPEEDY historique) |
-| `ANSWER_TEXT` | string | optionnel | Réponse texte (SPEEDY historique) |
-| `ANSWER_IMAGE` | string | optionnel | Réponse image (SPEEDY historique) |
-| `POINTS_RULE` | object | optionnel | Barème de points de la carte (§6.2) |
-
-**Jamais `omitempty`** : tous les champs sont toujours sérialisés. Les champs optionnels valent `""` ou `null`, jamais absents.
-
-### TypedContent — contenu partagé embarqué plat
-
-Les champs de contenu propres à un type sont **embarqués à plat** dans la même structure MotionCard. Aucun niveau d'imbrication supplémentaire.
-
-```go
-// Champs de contenu typé — embarqués plat dans MotionCard
-type TypedContent struct {
-    // SPEEDY / ARDOISE
-    Answer      string `json:"ANSWER,omitempty"`
-    
-    // QCM
-    QCMAnswers        *QCMAnswers `json:"QCM_ANSWERS,omitempty"`
-    QCMCorrect        string      `json:"QCM_CORRECT,omitempty"`
-    QCMHintsEnabled   bool        `json:"QCM_HINTS_ENABLED,omitempty"`
-    QCMHintThreshold1 float64     `json:"QCM_HINT_THRESHOLD_1,omitempty"`
-    QCMHintThreshold2 float64     `json:"QCM_HINT_THRESHOLD_2,omitempty"`
-    QCMPenalty1       float64     `json:"QCM_PENALTY_1,omitempty"`
-    QCMPenalty2       float64     `json:"QCM_PENALTY_2,omitempty"`
-    
-    // ARDOISE
-    ArdoiseKeyboardType KeyboardType `json:"ARDOISE_KEYBOARD_TYPE,omitempty"`
-    
-    // MEMORY
-    MemoryPairs  []MemoryPair  `json:"MEMORY_PAIRS,omitempty"`
-    MemoryConfig *MemoryConfig `json:"MEMORY_CONFIG,omitempty"`
-    MemoryMode   string        `json:"MEMORY_MODE,omitempty"`
-}
-```
-
-**Champs par type** :
-
-| Type | Champs embarqués | Description |
-|------|------------------|-------------|
-| `SPEEDY` | `ANSWER_TEXT`, `ANSWER_IMAGE` | Réponse texte et/ou image — historique |
-| `QCM` | `QCM_ANSWERS` (4 options), `QCM_CORRECT` (couleur gagnante), `QCM_HINTS_ENABLED`, `QCM_HINT_THRESHOLD_1/2`, `QCM_PENALTY_1/2` | Système d'indices avec seuils et pénalités configurables |
-| `ARDOISE` *(v7.1.0)* | `ANSWER`, `ARDOISE_KEYBOARD_TYPE` | Réponse libre au clavier (AZERTY, NUMPAD) |
-| `MEMORY` *(v7.1.0)* | `MEMORY_PAIRS`, `MEMORY_CONFIG`, `MEMORY_MODE` | Paires et configuration multi-équipes |
-
-**Rétrocompatibilité** : une carte sans `TYPE` vaut `SPEEDY` et se comporte exactement comme avant. Aucune migration de fichier.
-
-### Verrouillage du type d'une carte (v7.0.0, #184, §3.2)
-
-**Une carte ne peut pas changer de type une fois qu'elle porte du contenu propre à son type.**
-
-Pas d'avertissement : c'est **interdit** côté serveur. Le verrou n'oblige l'utilisateur à **vider explicitement** le contenu propre au type avant de basculer.
-
-| Champ de la carte | Verrouille le type ? |
-|---|---|
-| `RECTO_THEME`, `RECTO_IMAGE`, `DIFFICULTY`, `POINTS_RULE`, `QUESTION_TEXT`, `QUESTION_IMAGE` | ❌ **Non** — ces champs appartiennent à la carte, pas au type, et survivent intacts à toute bascule |
-| Champs `OwnedFields` du type (ex: `ANSWER_TEXT` pour SPEEDY, `QCM_ANSWERS` pour QCM) | ✅ **Oui** — dès qu'un est renseigné, le type se verrouille jusqu'à vidage explicite |
-
-**Règle serveur** : une carte reçue avec du contenu appartenant à un type différent de son `TYPE` déclaré rejette avec HTTP 400 `CARD_TYPE_CONTENT_MISMATCH`. Garantit l'intégrité sans état.
-
-## POINTS_RULE — barème de points d'une carte (v7.0.0, #184, §6.2)
-
-```json
-"POINTS_RULE": {
-  "MODE": "STARS",
-  "VALUE": 10
-}
-```
-
-Le barème appartient **toujours à la carte (hôte), jamais au type imbriqué.**
-
-| `MODE` | Points attribués | Usage | Défaut |
-|---|---|---|---|
-| absent ou `"STARS"` | Barème par étoiles existant : `MOTION_CONFIG.POINTS_<n>_STAR` si `> 0`, sinon `DIFFICULTY → 1/3/5` | Comportement actuel, inchangé | ✅ |
-| `"FIXED"` | `VALUE` si jeu gagné, sinon 0 | Carte dont la valeur est indépendante de la difficulté | — |
-| `"PER_UNIT"` | `VALUE × Units` (Units = nombre d'items trouvés) | Types à progression — MEMORY au prorata (v7.1.0) | — |
-
-**`Units` par défaut = 1** pour tout type binaire (gagné/perdu). Un type à progression rapporte son propre décompte.
-
----
-
-## GameState.MEMOTION_ACTIVE — emplacement actif (v7.0.0, #184, §5.2)
-
-Une seule carte MEMOTION est jouable à la fois. Son état vivant (réponses invalides, réactions, etc.) est stocké dans un emplacement unique `MEMOTION_ACTIVE`, remis à zéro à chaque sélection et vidé au retour en `GRID`.
-
-```json
-{
-  "MEMOTION_ACTIVE": {
-    "CARD_ID": "mc-3",
-    "TYPE": "QCM",
-    "STATE": {
-      "QCM_INVALIDATED": ["RED", "YELLOW"]
-    }
-  }
-}
-```
-
-**Structure** :
-
-| Champ | Type | Description |
-|-------|------|-------------|
-| `CARD_ID` | string | ID de la carte en jeu — `""` hors phases SELECTED/QUESTION/REVEAL |
-| `TYPE` | string | Type de la carte (`"QCM"`, `"SPEEDY"`, etc.) — `""` si aucune carte active. `"SPEEDY"` pour carte historique |
-| `STATE` | object | État vivant du type — forme libre, propre à chaque type (ex: QCM invalidées, paires MEMORY trouvées) |
-
-**Règles** :
-
-- **Jamais `omitempty`** — toujours sérialisé, même vide (`{"CARD_ID":"","TYPE":"","STATE":{}}`)
-- **Non persisté** — champ éphémère, rejoint les champs Motion* dans `state_persistence.go`
-- `CARD_ID` = `MEMOTION_SELECTED` invariant (même valeur que le champ de sélection)
-- `STATE` restituant l'état typé : accès via `getTypeState(gameState, hostContext)` côté JS (§5.3 du contrat)
-
----
-
-## Question (MEMOTION type) - v5.0.0 — Hôte MEMOTION (structure Question historique, v7.0.0 compatible)
+Nouveau type de jeu : grille de cartes à 3 faces (RECTO / VERSO / REVEAL).
 
 ```json
 {
@@ -973,52 +815,60 @@ Une seule carte MEMOTION est jouable à la fois. Son état vivant (réponses inv
   "MEMOTION_CARDS": [
     {
       "ID": "card_1",
-      "TYPE": "SPEEDY",
-      "RECTO_THEME": "Couleurs",
-      "RECTO_IMAGE": "/files/memotion/card_1_recto.jpg",
-      "DIFFICULTY": 2,
-      "QUESTION_TEXT": "Couleur du ciel?",
-      "ANSWER_TEXT": "Bleu"
+      "RECTO": {
+        "TEXT": "Couleur du ciel",
+        "IMAGE": "/files/memotion/card_1_recto.jpg"
+      },
+      "VERSO": {
+        "TEXT": "Quel est le drapeau bleu, blanc, rouge?",
+        "IMAGE": "/files/memotion/card_1_verso.jpg"
+      },
+      "REVEAL": {
+        "TEXT": "France",
+        "IMAGE": "/files/memotion/card_1_reveal.jpg"
+      },
+      "DIFFICULTY": 2
     },
     {
       "ID": "card_2",
-      "TYPE": "QCM",
-      "RECTO_THEME": "Drapeaux",
-      "RECTO_IMAGE": "/files/memotion/card_2_recto.jpg",
-      "DIFFICULTY": 1,
-      "QUESTION_TEXT": "Quel est ce drapeau?",
-      "QCM_ANSWERS": {"RED": "France", "GREEN": "Italie", "YELLOW": "Allemagne", "BLUE": "Espagne"},
-      "QCM_CORRECT": "RED"
+      "RECTO": {
+        "TEXT": "Fruit rouge",
+        "IMAGE": "/files/memotion/card_2_recto.jpg"
+      },
+      "VERSO": {
+        "TEXT": "Quel fruit granuleux et sucré ?",
+        "IMAGE": "/files/memotion/card_2_verso.jpg"
+      },
+      "REVEAL": {
+        "TEXT": "Fraise",
+        "IMAGE": "/files/memotion/card_2_reveal.jpg"
+      },
+      "DIFFICULTY": 1
     }
   ]
 }
 ```
 
-**Champs Question MEMOTION :**
-- `TYPE`: `"MEMOTION"` pour les jeux d'hôte carte
-- `MEMOTION_MODE`: Mode multi-équipes (optionnel, défaut: `"SOLO"`)
+**Champs MEMOTION :**
+- `TYPE`: `"MEMOTION"` pour les jeux de cartes
+- `MEMOTION_MODE`: Mode de jeu multi-équipes (optionnel, défaut: "SOLO")
   - `"SOLO"`: Une seule équipe joue, points à l'équipe
   - `"CHACUN_SON_TOUR"`: Rotation stricte après chaque carte
-  - `"TANT_QUE_JE_GAGNE"`: L'équipe garde la main tant qu'elle gagne
-- `MEMOTION_CARDS`: Tableau de `MotionCard` — chacune suit la structure plate ci-dessus
-- `TIME`: Durée timer par carte (secondes, défaut: 30)
+  - `"TANT_QUE_JE_GAGNE"`: L'équipe garde la main tant qu'elle gagne (points = difficulté)
+- `MEMOTION_CARDS`: Tableau de cartes
+  - `ID`: identifiant unique de la carte
+  - `RECTO`: face 1 affichée en grille (TEXT + IMAGE optionnelle)
+  - `VERSO`: face 2 question/énigme (TEXT + IMAGE optionnelle)
+  - `REVEAL`: face 3 réponse (TEXT + IMAGE optionnelle)
+  - `DIFFICULTY`: niveau de difficulté (1, 2, ou 3) → points attribués (1, 3, 5)
+- `TIME`: durée timer per-carte (secondes, défaut: 30)
 
-**Cartes imbriquées** : chaque élément de `MEMOTION_CARDS` est une `MotionCard` complète, avec son propre `TYPE`, `TypedContent` embarqué plat, et `POINTS_RULE` optionnel.
-
-### Structure GameState MEMOTION
-
+**Structure GameState MEMOTION** :
 ```json
 {
   "PHASE": "MEMORY|PREPARE|READY|START|PAUSE|STOP",
   "MEMOTION_SUBPHASE": "GRID|SELECTED|QUESTION|REVEAL",
   "MEMOTION_SELECTED": "card_1",
-  "MEMOTION_ACTIVE": {
-    "CARD_ID": "card_1",
-    "TYPE": "QCM",
-    "STATE": {
-      "QCM_INVALIDATED": ["RED", "YELLOW"]
-    }
-  },
   "MEMOTION_CARD_STATES": {
     "card_1": "DONE",
     "card_2": "AVAILABLE",
@@ -1033,28 +883,16 @@ Une seule carte MEMOTION est jouable à la fois. Son état vivant (réponses inv
 }
 ```
 
-**Champs** :
-
-| Champ | Type | Description |
-|-------|------|-------------|
-| `PHASE` | string | Phase du jeu : MEMORY, PREPARE, READY, START, PAUSE, STOP |
-| `MEMOTION_SUBPHASE` | string | Sous-phase MEMOTION : GRID (affichage grille), SELECTED (plein écran recto), QUESTION (verso/énoncé), REVEAL (réponse) — jamais `omitempty` |
-| `MEMOTION_SELECTED` | string | ID de la carte sélectionnée — `""` en GRID. Même valeur que `MEMOTION_ACTIVE.CARD_ID` |
-| `MEMOTION_ACTIVE` | object | État vivant de la carte active (§MEMOTION_ACTIVE ci-dessus) — jamais `omitempty` |
-| `MEMOTION_CARD_STATES` | object | État individuel de chaque carte (`AVAILABLE`, `DONE`, etc.) |
-| `MEMOTION_CARD_TEAMS` | object | Équipe créditée par carte |
-| `MEMOTION_CURRENT_TEAM` | string | Équipe jouant actuellement (rotation multi-équipes) |
-| `MEMOTION_PARTICIPATING_TEAMS` | array | Liste ordonnée des équipes en jeu |
-| `MEMOTION_CURRENT_TEAM_COLOR` | array | Couleur RGB de l'équipe courante |
-
 **Card States (MEMOTION_CARD_STATES) :**
-
 | État | Description |
 |------|-------------|
-| `AVAILABLE` | Carte non jouée, face recto visible en grille |
+| `UNPLAYED` | Carte non jouée, face RECTO visible en grille |
+| `SELECTED` | Carte sélectionnée, subphase SELECTED (plein écran RECTO, pas de timer) |
+| `QUESTION` | Carte en cours, face VERSO (question), timer actif |
+| `REVEALED` | Face REVEAL affichée, admin attribue points |
 | `DONE` | Carte jouée et retournée, couleur équipe appliquée |
 
-**Note** : `MEMOTION_SUBPHASE` décrit l'état de la session (GRID/SELECTED/QUESTION/REVEAL) — toujours sérialisé sans `omitempty`. `MEMOTION_CARD_STATES` décrit l'état d'exécution de chaque carte.
+**Note** : `MEMOTION_SUBPHASE` décrit l'état de la session (GRID/SELECTED/QUESTION/REVEAL) — toujours sérialisé sans `omitempty`. `MEMOTION_CARD_STATES` décrit l'état individuel de chaque carte.
 
 ## Bumper enrichi (v3.1.0+)
 

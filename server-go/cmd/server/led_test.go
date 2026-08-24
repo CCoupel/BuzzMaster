@@ -214,9 +214,9 @@ func TestLEDSet_RevealQCM_FirstBuzz(t *testing.T) {
 
 	// Set up QCM question with QCMCorrect = GREEN
 	question := &game.Question{
-		ID:           "q1",
-		Type:         game.QuestionTypeQCM,
-		TypedContent: game.TypedContent{QCMCorrect: "GREEN"},
+		ID:         "q1",
+		Type:       game.QuestionTypeQCM,
+		QCMCorrect: "GREEN",
 	}
 	app.engine.Ready("q1", question)
 
@@ -279,9 +279,9 @@ func TestLEDSet_RevealQCM_CorrectNotFirst(t *testing.T) {
 	app := newTestApp(t)
 
 	question := &game.Question{
-		ID:           "q1",
-		Type:         game.QuestionTypeQCM,
-		TypedContent: game.TypedContent{QCMCorrect: "GREEN"},
+		ID:         "q1",
+		Type:       game.QuestionTypeQCM,
+		QCMCorrect: "GREEN",
 	}
 	app.engine.Ready("q1", question)
 
@@ -539,7 +539,7 @@ func TestLEDNormal_Revealed_AUTRE(t *testing.T) {
 func TestLEDQCM_Started_NONE(t *testing.T) {
 	app := newTestApp(t)
 
-	question := &game.Question{ID: "q1", Type: game.QuestionTypeQCM, TypedContent: game.TypedContent{QCMCorrect: "RED"}}
+	question := &game.Question{ID: "q1", Type: game.QuestionTypeQCM, QCMCorrect: "RED"}
 	app.engine.Ready("q1", question)
 	app.engine.SetBumpers(map[string]*game.Bumper{
 		"MAC:A1": {Team: "TeamA", AnswerColor: game.AnswerColorRed},
@@ -620,7 +620,7 @@ func TestLEDQCM_Paused_EQUIPE(t *testing.T) {
 func TestLEDMemory_Solo_ActiveTeam(t *testing.T) {
 	app := newTestApp(t)
 
-	question := &game.Question{ID: "q1", Type: game.QuestionTypeMemory, TypedContent: game.TypedContent{MemoryMode: "SOLO"}}
+	question := &game.Question{ID: "q1", Type: game.QuestionTypeMemory, MemoryMode: "SOLO"}
 	app.engine.Ready("q1", question)
 	app.engine.SetBumpers(map[string]*game.Bumper{
 		"MAC:A1": {Team: "TeamA"},
@@ -653,7 +653,7 @@ func TestLEDMemory_Solo_ActiveTeam(t *testing.T) {
 func TestLEDMemory_Solo_Paused(t *testing.T) {
 	app := newTestApp(t)
 
-	question := &game.Question{ID: "q1", Type: game.QuestionTypeMemory, TypedContent: game.TypedContent{MemoryMode: "SOLO"}}
+	question := &game.Question{ID: "q1", Type: game.QuestionTypeMemory, MemoryMode: "SOLO"}
 	app.engine.Ready("q1", question)
 	app.engine.SetBumpers(map[string]*game.Bumper{
 		"MAC:A1": {Team: "TeamA"},
@@ -678,7 +678,7 @@ func TestLEDMemory_Solo_Paused(t *testing.T) {
 func TestLEDMemory_MultiTeam_Next(t *testing.T) {
 	app := newTestApp(t)
 
-	question := &game.Question{ID: "q1", Type: game.QuestionTypeMemory, TypedContent: game.TypedContent{MemoryMode: "CHACUN_SON_TOUR"}}
+	question := &game.Question{ID: "q1", Type: game.QuestionTypeMemory, MemoryMode: "CHACUN_SON_TOUR"}
 	app.engine.Ready("q1", question)
 	app.engine.SetBumpers(map[string]*game.Bumper{
 		"MAC:A1": {Team: "TeamA"},
@@ -716,7 +716,7 @@ func TestLEDMemory_MultiTeam_Next(t *testing.T) {
 func TestLEDMemory_MultiTeam_NotSelected(t *testing.T) {
 	app := newTestApp(t)
 
-	question := &game.Question{ID: "q1", Type: game.QuestionTypeMemory, TypedContent: game.TypedContent{MemoryMode: "CHACUN_SON_TOUR"}}
+	question := &game.Question{ID: "q1", Type: game.QuestionTypeMemory, MemoryMode: "CHACUN_SON_TOUR"}
 	app.engine.Ready("q1", question)
 	app.engine.SetBumpers(map[string]*game.Bumper{
 		"MAC:A1": {Team: "TeamA"},
@@ -751,7 +751,7 @@ func TestLEDMemory_MultiTeam_NotSelected(t *testing.T) {
 func TestLEDMemory_Solo_Paused_DeepTone_UsesToneRelativeDim(t *testing.T) {
 	app := newTestApp(t)
 
-	question := &game.Question{ID: "q1", Type: game.QuestionTypeMemory, TypedContent: game.TypedContent{MemoryMode: "SOLO"}}
+	question := &game.Question{ID: "q1", Type: game.QuestionTypeMemory, MemoryMode: "SOLO"}
 	app.engine.Ready("q1", question)
 	app.engine.SetTeams(map[string]*game.Team{
 		"TeamDeep": {Name: "TeamDeep", ColorName: "bleu-profond", Color: []int{1, 2, 3}},
@@ -787,7 +787,7 @@ func TestLEDMemory_Solo_Paused_DeepTone_UsesToneRelativeDim(t *testing.T) {
 func TestLEDMemory_Solo_Inactive_DeepTone_UsesToneRelativeDim(t *testing.T) {
 	app := newTestApp(t)
 
-	question := &game.Question{ID: "q1", Type: game.QuestionTypeMemory, TypedContent: game.TypedContent{MemoryMode: "SOLO"}}
+	question := &game.Question{ID: "q1", Type: game.QuestionTypeMemory, MemoryMode: "SOLO"}
 	app.engine.Ready("q1", question)
 	app.engine.SetTeams(map[string]*game.Team{
 		"TeamA":    {Name: "TeamA", Color: []int{255, 0, 0}},
@@ -827,7 +827,7 @@ func TestLEDMemory_Solo_Inactive_DeepTone_UsesToneRelativeDim(t *testing.T) {
 func TestLEDMemory_MultiTeam_OtherParticipating_DeepTone_UsesToneRelativeDim(t *testing.T) {
 	app := newTestApp(t)
 
-	question := &game.Question{ID: "q1", Type: game.QuestionTypeMemory, TypedContent: game.TypedContent{MemoryMode: "CHACUN_SON_TOUR"}}
+	question := &game.Question{ID: "q1", Type: game.QuestionTypeMemory, MemoryMode: "CHACUN_SON_TOUR"}
 	app.engine.Ready("q1", question)
 	app.engine.SetTeams(map[string]*game.Team{
 		"TeamA":    {Name: "TeamA", Color: []int{255, 0, 0}},

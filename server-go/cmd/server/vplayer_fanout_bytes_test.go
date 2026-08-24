@@ -270,7 +270,7 @@ func buildFanoutBenchMessageWithPlayerIDs(t *testing.T, ids []string, question *
 		MemoryPairOwners:         map[int]string{},
 		MemoryCurrentTeamColor:   []int{},
 		QcmInvalidated:           []string{},
-		MotionCardStates:         map[string]game.MotionCardState{},
+		MotionCardStates:         map[string]string{},
 		MotionCardTeams:          map[string]string{},
 		MotionParticipatingTeams: []string{},
 		MotionCurrentTeamColor:   []int{},

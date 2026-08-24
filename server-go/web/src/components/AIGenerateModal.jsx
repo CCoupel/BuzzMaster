@@ -1,7 +1,6 @@
 import { useState, useMemo, useEffect, useCallback, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import Button from './Button'
-import { QUESTION_TYPES } from '../utils/questionTypeMeta'
 import './AIGenerateModal.css'
 
 // Répartition par type — libellés/couleurs/défauts normatifs (maquette §3).
@@ -11,10 +10,16 @@ import './AIGenerateModal.css'
 // ARDOISE (T2.3, plan planner-20260806-121743-qualif-137.md §2) — 5e type
 // générable, désactivé à 0% par défaut (arbitrage CDP Q2.2 : comme MEMOTION,
 // pas comme les 3 premiers) pour ne pas redistribuer silencieusement les
-// pourcentages par défaut existants.
-// #183/A-F2 — table icône/libellé/couleur fusionnée dans
-// `utils/questionTypeMeta.js` (source unique, ne plus dupliquer ici).
-const TYPES = QUESTION_TYPES
+// pourcentages par défaut existants. Couleur reprise du badge ARDOISE déjà
+// utilisé dans QuestionsPage (.type-btn.ardoise, #10b981) pour rester
+// cohérent avec le vocabulaire de couleur déjà établi ailleurs dans l'app.
+const TYPES = [
+  { key: 'SPEEDY', label: 'Speedy', color: '#3b7fc4' },
+  { key: 'QCM', label: 'QCM', color: '#8a5cc4' },
+  { key: 'MEMORY', label: 'Memory', color: '#2e9e6d' },
+  { key: 'MEMOTION', label: 'Memotion', color: '#c8568f' },
+  { key: 'ARDOISE', label: 'Ardoise', color: '#10b981' },
+]
 const DEFAULT_DISTRIBUTION = { SPEEDY: 40, QCM: 40, MEMORY: 20, MEMOTION: 0, ARDOISE: 0 }
 const DEFAULT_TYPE_ENABLED = { SPEEDY: true, QCM: true, MEMORY: true, MEMOTION: false, ARDOISE: false }
 

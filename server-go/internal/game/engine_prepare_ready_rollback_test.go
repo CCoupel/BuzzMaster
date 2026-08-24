@@ -37,7 +37,7 @@ func setupReadyMemory(t *testing.T, mode string, teamBumpers map[string]string, 
 		e.UpdateBumper(bumperID, map[string]interface{}{"TEAM": teamID})
 	}
 
-	q := &Question{ID: "q1", Type: QuestionTypeMemory, TypedContent: TypedContent{MemoryMode: mode}}
+	q := &Question{ID: "q1", Type: QuestionTypeMemory, MemoryMode: mode}
 	e.Ready("q1", q)
 
 	for bumperID := range teamBumpers {

@@ -163,11 +163,10 @@ func NewEngine() *Engine {
 			Page:               "GAME",
 			VirtualPlayerLimit: 20, // Default limit
 			// MEMOTION: initialize with empty (not nil) so JSON serializes [] and {} (not null)
-			MotionCardStates:         make(map[string]MotionCardState),
+			MotionCardStates:         make(map[string]string),
 			MotionCardTeams:          make(map[string]string),
 			MotionParticipatingTeams: []string{},
 			MotionCurrentTeamColor:   []int{},
-			MotionActive:             MotionActive{State: map[string]interface{}{}},
 			// ARDOISE: initialize empty map so JSON serializes {} (not null)
 			ArdoiseAnswers: make(map[string]ArdoiseAnswer),
 			// Quiz metadata multi-values (v6.1.0, #137 Batch 2b): initialize
@@ -455,94 +454,6 @@ func (e *Engine) GetPhase() GamePhase {
 	return e.state.Phase
 }
 
-// HostContext is the normalized triplet a type implementation reads
-// instead of GamePhase/MEMOTION_SUBPHASE directly — contracts/
-// question-types.md §4. Two hosts can produce it: the question host (the
-// classic GamePhase cycle) for any non-MEMOTION question, and the
-// MEMOTION-card host (MEMOTION_SUBPHASE) while a MEMOTION question is in
-// play — never both, since MEMOTION disables buzzing on the top-level
-// question (ProcessButtonPress) and drives everything through its own
-// sub-phase while PHASE stays STARTED throughout.
-//
-// Never serialized: recomputed from PHASE/MEMOTION_SUBPHASE, both already
-// present in GameState. Deliberately NOT sent over the wire — see the
-// contract's cost/benefit note. Mirrored, field-for-field and case-for-case,
-// by utils/hostContext.js on the frontend; the derivation table (§4) is the
-// single specification for both, and each side's test cases share the same
-// names (getHostContextTest.go's t.Run names ↔ hostContext.test.js's
-// describe/it names) so a mismatch between the two implementations is
-// visible from either test file alone.
-type HostContext struct {
-	Playable     bool   // inputs are accepted, content is in play
-	Revealed     bool   // the answer is shown
-	TimerRunning bool   // a countdown is running for this round
-	CardID       string // "" for the question host; the active card's ID for the card host
-}
-
-// GetHostContext derives the current HostContext — contract §4's
-// derivation table, the one and only place this engine computes it.
-// Self-locking (RLock) like GetState/GetPhase: safe to call from outside
-// the engine without pre-existing lock discipline.
-func (e *Engine) GetHostContext() HostContext {
-	e.mu.RLock()
-	defer e.mu.RUnlock()
-	return e.hostContextUnsafe()
-}
-
-// hostContextUnsafe is GetHostContext's body, split out so call sites that
-// already hold e.mu (none yet in v7.0.0 — #185/#186 are expected to need
-// this) can derive the context without double-locking. Must be called with
-// e.mu held (read or write).
-//
-// CardID — contract §4 ("règle unique, sans cas particulier", B-B9 fix for
-// a Go/JS divergence test-writer caught in SELECTED, planner ruling: Go was
-// wrong): CardID always equals MotionSelected, no branching, because
-// MotionSelected already IS the identity of the card in play at every
-// instant — "" outside a MEMOTION round (reset in Ready()/InitGame()) and
-// while GRID/MEMORIZE (reset by initMotionStateUnsafe, the memorize-timer's
-// auto-expiry, and every return to GRID), and the card's ID from
-// SelectMotionCard onward through SELECTED/QUESTION/REVEAL. Setting it once
-// here, unconditionally, before the switch below (which only ever touches
-// Playable/Revealed/TimerRunning) is what makes that "no special case for
-// SELECTED" property hold by construction rather than by remembering to
-// repeat it in three switch arms. Must equal MotionActive.CardID (§5.2) and
-// the MotionSelected ValidateCardScope (§9.2, B-B6) already compares
-// against — same expression, three call sites, per the contract's internal
-// consistency requirement.
-func (e *Engine) hostContextUnsafe() HostContext {
-	ctx := HostContext{CardID: e.state.MotionSelected}
-
-	if e.state.Question != nil && e.state.Question.Type == QuestionTypeMemotion {
-		switch e.state.MotionSubPhase {
-		case MotionSubPhaseQuestion:
-			ctx.Playable = true
-			// TimerRunning keys on CurrentTime, not e.timer (correction,
-			// planner ruling, contract §4): e.timer is a private
-			// *time.Ticker, never serialized — structurally impossible to
-			// replicate on the JS side, which only ever sees
-			// gameState.timer (CurrentTime) over the wire. CurrentTime is
-			// the only basis both implementations can actually share.
-			ctx.TimerRunning = e.state.CurrentTime > 0
-		case MotionSubPhaseReveal:
-			ctx.Revealed = true
-		}
-		// GRID, MEMORIZE, SELECTED: Playable/Revealed/TimerRunning stay
-		// false (contract §4's "Aucun" row) — CardID was already set above
-		// and needs no further action here, SELECTED included.
-		return ctx
-	}
-
-	// Question host — classic GamePhase cycle. ctx.CardID is already ""
-	// here: MotionSelected is always empty outside a MEMOTION round.
-	ctx.Playable = e.state.Phase == PhaseStarted
-	ctx.Revealed = e.state.Phase == PhaseRevealed
-	// TimerRunning also keys on CurrentTime (see the MotionSubPhaseQuestion
-	// case above for why) — PHASE==STARTED alone doesn't distinguish a
-	// running countdown from one that already reached 0.
-	ctx.TimerRunning = e.state.Phase == PhaseStarted && e.state.CurrentTime > 0
-	return ctx
-}
-
 // SetPhase sets the game phase
 func (e *Engine) SetPhase(phase GamePhase) {
 	e.mu.Lock()
@@ -810,11 +721,10 @@ func (e *Engine) Ready(questionID string, question *Question) {
 		// Reset MEMOTION state for new question (same pattern as Memory)
 		e.state.MotionSubPhase = ""
 		e.state.MotionSelected = ""
-		e.state.MotionCardStates = make(map[string]MotionCardState)
+		e.state.MotionCardStates = make(map[string]string)
 		e.state.MotionCardTeams = make(map[string]string)
 		e.state.MotionCurrentTeam = ""
 		e.state.MotionCurrentTeamColor = []int{}
-		e.state.MotionActive = MotionActive{State: map[string]interface{}{}}
 		e.state.MotionParticipatingTeams = []string{}
 
 		// For MEMOTION questions, also pre-populate card states so the frontend
@@ -1405,25 +1315,19 @@ func (e *Engine) processTimerTick() timerTickResult {
 	return result
 }
 
-// qcmHintShouldTrigger is the QCM hint threshold decision, extracted pure
-// (#185 C-B1) from the original question-only shouldTriggerQCMHint so both
-// the question host (processTimerTick) and the MEMOTION card host
-// (processMotionCardTick, a QCM-typed card) can share one implementation
-// instead of two copies — contracts/question-types.md §10's agnosticity
-// test anticipated exactly this move; see processMotionCardTick's doc
-// comment for why this is the one authorized host change in this batch.
-// Reads nothing but its parameters: hintsEnabled/t1Percent/t2Percent come
-// from whichever host's own config (Question or MotionCard — both carry
-// identically-shaped QCMHintsEnabled/QCMHintThreshold1/2 via TypedContent,
-// #184 B-B1), currentTime/totalTime/invalidatedCount from that host's own
-// timer and invalidated-answers count.
-func qcmHintShouldTrigger(hintsEnabled bool, t1Percent, t2Percent float64, currentTime, totalTime, invalidatedCount int) bool {
-	if !hintsEnabled {
+// shouldTriggerQCMHint checks if a QCM hint should be triggered at the current time
+// Must be called with lock held
+func (e *Engine) shouldTriggerQCMHint(currentTime, totalTime int) bool {
+	// Check if question is QCM with hints enabled
+	if e.state.Question == nil || e.state.Question.Type != QuestionTypeQCM || !e.state.Question.QCMHintsEnabled {
 		return false
 	}
 
+	// Get thresholds from question config (or use defaults)
 	// Threshold 1: % of total time remaining for first hint (default 25%)
 	// Threshold 2: % of total time remaining for second hint (default 12.5%)
+	t1Percent := e.state.Question.QCMHintThreshold1
+	t2Percent := e.state.Question.QCMHintThreshold2
 	if t1Percent <= 0 {
 		t1Percent = 0.25 // Default 25%
 	}
@@ -1441,6 +1345,8 @@ func qcmHintShouldTrigger(hintsEnabled bool, t1Percent, t2Percent float64, curre
 		return false
 	}
 
+	invalidatedCount := len(e.state.QcmInvalidated)
+
 	// Check if we hit threshold 1 (first hint)
 	if currentTime == threshold1 && invalidatedCount == 0 {
 		log.Printf("[Engine] QCM hint threshold 1 reached: time=%d, total=%d, threshold=%d", currentTime, totalTime, threshold1)
@@ -1456,86 +1362,52 @@ func qcmHintShouldTrigger(hintsEnabled bool, t1Percent, t2Percent float64, curre
 	return false
 }
 
-// shouldTriggerQCMHint checks if a QCM hint should be triggered at the
-// current time for the top-level question. Thin wrapper around
-// qcmHintShouldTrigger (#185 C-B1) — behavior byte-for-byte identical to
-// before the extraction. Must be called with lock held.
-func (e *Engine) shouldTriggerQCMHint(currentTime, totalTime int) bool {
-	if e.state.Question == nil || e.state.Question.Type != QuestionTypeQCM {
-		return false
-	}
-	return qcmHintShouldTrigger(
-		e.state.Question.QCMHintsEnabled,
-		e.state.Question.QCMHintThreshold1,
-		e.state.Question.QCMHintThreshold2,
-		currentTime, totalTime, len(e.state.QcmInvalidated),
-	)
-}
-
-// qcmInvalidateRandomWrongAnswer picks a random not-yet-invalidated wrong
-// QCM answer, extracted pure (#185 C-B1) from the original question-only
-// invalidateRandomWrongAnswer — see qcmHintShouldTrigger's doc comment for
-// why. Unlike the method it replaces, this does NOT mutate any state: it
-// returns the color to invalidate ("" if every wrong answer is already
-// invalidated) and the resulting remaining-valid-answers count; the caller
-// is responsible for appending color to its own invalidated-answers slice
-// (QcmInvalidated for the question host, MEMOTION_ACTIVE.STATE.QCM_INVALIDATED
-// for the card host — contract §5.3, two different slices, same shape).
-func qcmInvalidateRandomWrongAnswer(answers *QCMAnswers, correct string, invalidated []string) (color string, remaining int) {
-	if answers == nil {
+// invalidateRandomWrongAnswer invalidates a random wrong QCM answer
+// Must be called with lock held
+// Returns the invalidated color and the number of remaining valid answers
+func (e *Engine) invalidateRandomWrongAnswer() (string, int) {
+	if e.state.Question == nil || e.state.Question.QCMAnswers == nil {
 		return "", 0
 	}
 
+	correctAnswer := e.state.Question.QCMCorrect
 	allColors := []string{"RED", "GREEN", "YELLOW", "BLUE"}
 
 	// Find wrong answers that haven't been invalidated yet
 	var availableWrongAnswers []string
-	for _, c := range allColors {
-		if c == correct {
+	for _, color := range allColors {
+		if color == correctAnswer {
 			continue // Skip correct answer
 		}
+		// Check if already invalidated
 		isInvalidated := false
-		for _, inv := range invalidated {
-			if inv == c {
+		for _, inv := range e.state.QcmInvalidated {
+			if inv == color {
 				isInvalidated = true
 				break
 			}
 		}
 		if !isInvalidated {
-			availableWrongAnswers = append(availableWrongAnswers, c)
+			availableWrongAnswers = append(availableWrongAnswers, color)
 		}
 	}
 
 	if len(availableWrongAnswers) == 0 {
-		return "", 4 - len(invalidated)
+		return "", 4 - len(e.state.QcmInvalidated)
 	}
 
 	// Pick a random wrong answer to invalidate
 	randomIndex := rand.Intn(len(availableWrongAnswers))
-	color = availableWrongAnswers[randomIndex]
+	invalidatedColor := availableWrongAnswers[randomIndex]
 
-	// Calculate remaining valid answers (4 total - invalidated count, +1 for
-	// the one about to be appended by the caller)
-	remaining = 4 - (len(invalidated) + 1)
+	// Add to invalidated list
+	e.state.QcmInvalidated = append(e.state.QcmInvalidated, invalidatedColor)
 
-	log.Printf("[Engine] QCM hint: invalidated %s, remaining answers: %d", color, remaining)
-	return color, remaining
-}
+	// Calculate remaining valid answers (4 total - invalidated count)
+	remainingAnswers := 4 - len(e.state.QcmInvalidated)
 
-// invalidateRandomWrongAnswer invalidates a random wrong QCM answer for the
-// top-level question, mutating e.state.QcmInvalidated. Thin wrapper around
-// qcmInvalidateRandomWrongAnswer (#185 C-B1) — behavior byte-for-byte
-// identical to before the extraction. Must be called with lock held.
-// Returns the invalidated color and the number of remaining valid answers.
-func (e *Engine) invalidateRandomWrongAnswer() (string, int) {
-	if e.state.Question == nil {
-		return "", 0
-	}
-	color, remaining := qcmInvalidateRandomWrongAnswer(e.state.Question.QCMAnswers, e.state.Question.QCMCorrect, e.state.QcmInvalidated)
-	if color != "" {
-		e.state.QcmInvalidated = append(e.state.QcmInvalidated, color)
-	}
-	return color, remaining
+	log.Printf("[Engine] QCM hint: invalidated %s, remaining answers: %d", invalidatedColor, remainingAnswers)
+	return invalidatedColor, remainingAnswers
 }
 
 // Stop ends the game round
@@ -1709,7 +1581,7 @@ func (e *Engine) ProcessButtonPress(bumperID string, pressTime int64, button str
 	}
 
 	// Ignore buzz for MEMORY questions - admin controls the game
-	if e.state.Question != nil && e.state.Question.Type == QuestionTypeMemory {
+	if e.state.Question != nil && e.state.Question.Type == "MEMORY" {
 		log.Printf("[Engine] Ignoring buzz for MEMORY question from %s", bumperID)
 		e.mu.Unlock()
 		return
@@ -1985,11 +1857,10 @@ func (e *Engine) InitGame() []string {
 	// Reset MEMOTION state completely
 	e.state.MotionSubPhase = ""
 	e.state.MotionSelected = ""
-	e.state.MotionCardStates = make(map[string]MotionCardState)
+	e.state.MotionCardStates = make(map[string]string)
 	e.state.MotionCardTeams = make(map[string]string)
 	e.state.MotionCurrentTeam = ""
 	e.state.MotionCurrentTeamColor = []int{}
-	e.state.MotionActive = MotionActive{State: map[string]interface{}{}}
 	e.state.MotionParticipatingTeams = []string{}
 
 	// Reset ARDOISE answers (v5.6.0)
@@ -3945,34 +3816,6 @@ func (e *Engine) motionCardPoints(difficulty int) int {
 	return motionDifficultyPoints[difficulty]
 }
 
-// motionCardPointsForOutcome computes the points to award for card given a
-// type's outcome (currently just `units`, from MEMOTION_DONE.UNITS —
-// #184 B-B5, contract §6.2). Dispatches on card.PointsRule.Mode: absent
-// (nil PointsRule, or an explicit empty/"STARS" MODE) falls through to the
-// pre-#184 star-based scale (motionCardPoints, unchanged); FIXED and
-// PER_UNIT are new. This is the one place #187 (MEMORY prorata) needs to
-// reach — via PER_UNIT — without touching anything else in this file,
-// which is the mechanism's own acceptance criterion (contract §6.2).
-func (e *Engine) motionCardPointsForOutcome(card *MotionCard, units int) int {
-	mode := PointsRuleModeStars
-	value := 0
-	if card.PointsRule != nil && card.PointsRule.Mode != "" {
-		mode = card.PointsRule.Mode
-		value = card.PointsRule.Value
-	}
-	switch mode {
-	case PointsRuleModeFixed:
-		if units > 0 {
-			return value
-		}
-		return 0
-	case PointsRuleModePerUnit:
-		return value * units
-	default: // STARS
-		return e.motionCardPoints(card.Difficulty)
-	}
-}
-
 // initMotionStateUnsafe initialises MEMOTION card states for the current question.
 // All cards are set to "UNPLAYED". MotionSubPhase is set to "MEMORIZE" when
 // MotionMemorizeDuration > 0 (Secret Mode), otherwise "GRID" (standard mode).
@@ -3983,22 +3826,21 @@ func (e *Engine) motionCardPointsForOutcome(card *MotionCard, units int) int {
 func (e *Engine) initMotionStateUnsafe() {
 	// Secret mode: start with MEMORIZE subphase if duration is configured
 	if e.state.Question != nil && e.state.Question.MotionMemorizeDuration > 0 {
-		e.state.MotionSubPhase = MotionSubPhaseMemorize
+		e.state.MotionSubPhase = "MEMORIZE"
 		// Initialise CurrentTime synchronously so the first broadcast reflects the
 		// correct MEMORIZE countdown — StartMotionMemorizeTimer is called after the
 		// broadcast and would be too late to set this for the first frame.
 		e.state.CurrentTime = e.state.Question.MotionMemorizeDuration
 		e.state.Delay = e.state.Question.MotionMemorizeDuration
 	} else {
-		e.state.MotionSubPhase = MotionSubPhaseGrid
+		e.state.MotionSubPhase = "GRID"
 		e.state.CurrentTime = 0 // clear any residual from a previous question
 	}
 	e.state.MotionSelected = ""
-	e.state.MotionCardStates = make(map[string]MotionCardState)
-	e.state.MotionActive = MotionActive{State: map[string]interface{}{}}
+	e.state.MotionCardStates = make(map[string]string)
 	if e.state.Question != nil {
 		for _, card := range e.state.Question.MotionCards {
-			e.state.MotionCardStates[card.ID] = MotionCardStateUnplayed
+			e.state.MotionCardStates[card.ID] = "UNPLAYED"
 		}
 	}
 }
@@ -4020,42 +3862,20 @@ func (e *Engine) SelectMotionCard(cardID string) error {
 	if e.state.Phase != PhaseStarted {
 		return &MotionError{Reason: "NOT_STARTED"}
 	}
-	if e.state.MotionSubPhase != MotionSubPhaseGrid {
+	if e.state.MotionSubPhase != "GRID" {
 		return &MotionError{Reason: "NOT_IN_GRID_SUBPHASE"}
 	}
 	st, exists := e.state.MotionCardStates[cardID]
 	if !exists {
 		return &MotionError{Reason: "CARD_NOT_FOUND"}
 	}
-	if st != MotionCardStateUnplayed {
+	if st != "UNPLAYED" {
 		return &MotionError{Reason: "CARD_NOT_UNPLAYED"}
 	}
 
-	// #184 B-B2: refuse selecting a card whose declared TYPE isn't a known,
-	// nestable type (registry, question_types.go) — belt-and-suspenders
-	// alongside the upload-time check in http.go (handleUploadQuestion),
-	// since a card's TYPE could in principle become non-nestable after it
-	// was saved (registry change) or reach here via a non-HTTP path.
-	effectiveType := QuestionTypeSpeedy
-	if e.state.Question != nil {
-		for i := range e.state.Question.MotionCards {
-			if e.state.Question.MotionCards[i].ID == cardID {
-				effectiveType = e.state.Question.MotionCards[i].EffectiveType()
-				if !IsNestableInMotionCard(effectiveType) {
-					return &MotionError{Reason: "CARD_TYPE_NOT_NESTABLE"}
-				}
-				break
-			}
-		}
-	}
-
-	e.state.MotionCardStates[cardID] = MotionCardStateSelected
+	e.state.MotionCardStates[cardID] = "SELECTED"
 	e.state.MotionSelected = cardID
-	e.state.MotionSubPhase = MotionSubPhaseSelected
-	// #184 B-B4: (re)initialise the active-card slot — contract §5.1, reset
-	// at every MEMOTION_SELECT, State starts empty (the type's own
-	// handlers populate it, none do yet in v7.0.0).
-	e.state.MotionActive = MotionActive{CardID: cardID, Type: effectiveType, State: map[string]interface{}{}}
+	e.state.MotionSubPhase = "SELECTED"
 
 	log.Printf("[Engine] MEMOTION SelectMotionCard: cardID=%s → SELECTED", cardID)
 	return nil
@@ -4071,7 +3891,7 @@ func (e *Engine) FlipMotionCard() error {
 	if e.state.Phase != PhaseStarted {
 		return &MotionError{Reason: "NOT_STARTED"}
 	}
-	if e.state.MotionSubPhase != MotionSubPhaseSelected {
+	if e.state.MotionSubPhase != "SELECTED" {
 		return &MotionError{Reason: "NOT_IN_SELECTED_SUBPHASE"}
 	}
 
@@ -4079,12 +3899,12 @@ func (e *Engine) FlipMotionCard() error {
 	if cardID == "" {
 		return &MotionError{Reason: "NO_CARD_SELECTED"}
 	}
-	if e.state.MotionCardStates[cardID] != MotionCardStateSelected {
+	if e.state.MotionCardStates[cardID] != "SELECTED" {
 		return &MotionError{Reason: "CARD_NOT_IN_SELECTED_STATE"}
 	}
 
-	e.state.MotionCardStates[cardID] = MotionCardStateQuestion
-	e.state.MotionSubPhase = MotionSubPhaseQuestion
+	e.state.MotionCardStates[cardID] = "QUESTION"
+	e.state.MotionSubPhase = "QUESTION"
 
 	log.Printf("[Engine] MEMOTION FlipMotionCard: cardID=%s → QUESTION", cardID)
 	return nil
@@ -4099,15 +3919,15 @@ func (e *Engine) RevealMotionCard() error {
 	if e.state.Phase != PhaseStarted {
 		return &MotionError{Reason: "NOT_STARTED"}
 	}
-	if e.state.MotionSubPhase != MotionSubPhaseQuestion {
+	if e.state.MotionSubPhase != "QUESTION" {
 		return &MotionError{Reason: "NOT_IN_QUESTION_SUBPHASE"}
 	}
 
 	cardID := e.state.MotionSelected
 	if cardID != "" {
-		e.state.MotionCardStates[cardID] = MotionCardStateRevealed
+		e.state.MotionCardStates[cardID] = "REVEALED"
 	}
-	e.state.MotionSubPhase = MotionSubPhaseReveal
+	e.state.MotionSubPhase = "REVEAL"
 
 	log.Printf("[Engine] MEMOTION RevealMotionCard: cardID=%s → REVEAL", cardID)
 	return nil
@@ -4115,33 +3935,24 @@ func (e *Engine) RevealMotionCard() error {
 
 // DoneMotionCard marks the active card as DONE, optionally awards points to winnerTeam,
 // rotates the team if needed, and returns to the GRID sub-phase.
-// units is the type's outcome (MEMOTION_DONE.UNITS, #184 B-B5, contract
-// §6/§9.3) — the caller must resolve an absent UNITS to 1 before calling
-// (see main.go's handleMotionDone), so this function's own default (a
-// units==0 zero value) is never accidentally the "not specified" case.
-// Consumed only by card.PointsRule.MODE == FIXED/PER_UNIT
-// (motionCardPointsForOutcome); ignored under the default STARS scale,
-// which is why 1 as a "no-op" default is correct here too — units is
-// simply unused in that branch.
 // Returns (pointsAwarded, isComplete, error).
-func (e *Engine) DoneMotionCard(cardID string, winnerTeam string, units int) (int, bool, error) {
+func (e *Engine) DoneMotionCard(cardID string, winnerTeam string) (int, bool, error) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 
 	if e.state.Phase != PhaseStarted {
 		return 0, false, &MotionError{Reason: "NOT_STARTED"}
 	}
-	if e.state.MotionSubPhase != MotionSubPhaseQuestion && e.state.MotionSubPhase != MotionSubPhaseReveal && e.state.MotionSubPhase != MotionSubPhaseSelected {
+	if e.state.MotionSubPhase != "QUESTION" && e.state.MotionSubPhase != "REVEAL" && e.state.MotionSubPhase != "SELECTED" {
 		return 0, false, &MotionError{Reason: "INVALID_SUBPHASE"}
 	}
 
 	// Cancellation from SELECTED subphase: reset card to UNPLAYED, return to GRID.
 	// Use e.state.MotionSelected (server-authoritative) rather than client-supplied cardID.
-	if e.state.MotionSubPhase == MotionSubPhaseSelected {
-		e.state.MotionCardStates[e.state.MotionSelected] = MotionCardStateUnplayed
+	if e.state.MotionSubPhase == "SELECTED" {
+		e.state.MotionCardStates[e.state.MotionSelected] = "UNPLAYED"
 		e.state.MotionSelected = ""
-		e.state.MotionSubPhase = MotionSubPhaseGrid
-		e.state.MotionActive = MotionActive{State: map[string]interface{}{}} // #184 B-B4: emptied on return to GRID
+		e.state.MotionSubPhase = "GRID"
 		log.Printf("[Engine] MEMOTION DoneMotionCard: SELECTED → cancelled, cardID=%s back to UNPLAYED", cardID)
 		return 0, false, nil
 	}
@@ -4152,19 +3963,16 @@ func (e *Engine) DoneMotionCard(cardID string, winnerTeam string, units int) (in
 	}
 
 	// Mark card as DONE
-	e.state.MotionCardStates[cardID] = MotionCardStateDone
+	e.state.MotionCardStates[cardID] = "DONE"
 
 	// Award points and record winner if winnerTeam is provided
 	points := 0
 	if winnerTeam != "" {
-		// Find the card to compute points via its own POINTS_RULE (#184
-		// B-B5) — STARS (absent/default) still goes through
-		// motionCardPoints/difficulty exactly as before.
+		// Find card difficulty to calculate points
 		if e.state.Question != nil {
-			for i := range e.state.Question.MotionCards {
-				card := &e.state.Question.MotionCards[i]
+			for _, card := range e.state.Question.MotionCards {
 				if card.ID == cardID {
-					pts := e.motionCardPointsForOutcome(card, units)
+					pts := e.motionCardPoints(card.Difficulty)
 					ok := pts > 0
 					if ok {
 						points = pts
@@ -4207,14 +4015,13 @@ func (e *Engine) DoneMotionCard(cardID string, winnerTeam string, units int) (in
 	}
 
 	// Return to grid
-	e.state.MotionSubPhase = MotionSubPhaseGrid
+	e.state.MotionSubPhase = "GRID"
 	e.state.MotionSelected = ""
-	e.state.MotionActive = MotionActive{State: map[string]interface{}{}} // #184 B-B4: emptied on return to GRID
 
 	// Check if all cards are DONE
 	isComplete := true
 	for _, st := range e.state.MotionCardStates {
-		if st != MotionCardStateDone {
+		if st != "DONE" {
 			isComplete = false
 			break
 		}
@@ -4369,13 +4176,6 @@ func (e *Engine) StartMotionCardTimer(delay int) {
 						e.OnTimerTick(result.currentTime)
 					}
 
-					// Call QCM hint callback outside of lock (#185 C-B1) —
-					// same pattern as startTimer's goroutine for the
-					// question host.
-					if result.qcmHintCallback != nil && result.invalidatedColor != "" {
-						result.qcmHintCallback(result.invalidatedColor, result.remainingAnswers)
-					}
-
 					if result.currentTime <= 0 {
 						// Timer expired — do NOT call e.Stop(). Phase stays STARTED.
 						ticker.Stop()
@@ -4400,30 +4200,12 @@ func (e *Engine) StartMotionCardTimer(delay int) {
 type motionCardTickResult struct {
 	guardFailed bool // phase/subphase changed unexpectedly; caller must stop the ticker and return
 	currentTime int
-	// qcmHintCallback/invalidatedColor/remainingAnswers (#185 C-B1) — set
-	// only when the active card is QCM-typed and a hint threshold was
-	// crossed this tick, mirroring timerTickResult's fields for the
-	// question host.
-	qcmHintCallback  func(string, int)
-	invalidatedColor string
-	remainingAnswers int
 }
 
 // processMotionCardTick applies one MEMOTION card-timer tick under lock.
 // Extracted from StartMotionCardTimer's goroutine (#151) so `defer
 // e.mu.Unlock()` guarantees the mutex is released even if this panics — see
 // recoverBackgroundPanic's doc comment.
-//
-// #185 C-B1 — the QCM hint branch below is the ONE authorized host
-// modification of this batch: contracts/question-types.md §10's
-// agnosticity test explicitly anticipated a nested type needing its own
-// per-tick logic branched onto the MEMOTION card host, and QCM-in-card
-// (the GATE decision behind #185) is exactly that case. No new ticker is
-// created — this reuses the per-card timer StartMotionCardTimer already
-// starts (e.timer/e.stopCh, Risque R2 of the plan, untouched). The
-// decision/invalidation logic itself (qcmHintShouldTrigger,
-// qcmInvalidateRandomWrongAnswer, above) is fully host-agnostic — it was
-// extracted for exactly this reuse, not written twice.
 func (e *Engine) processMotionCardTick() motionCardTickResult {
 	e.mu.Lock()
 	defer e.mu.Unlock()
@@ -4431,67 +4213,12 @@ func (e *Engine) processMotionCardTick() motionCardTickResult {
 	callTestInjectPanic("motion-card")
 
 	// Guard: exit if game state changed unexpectedly
-	if e.state.Phase != PhaseStarted || e.state.MotionSubPhase != MotionSubPhaseQuestion {
+	if e.state.Phase != PhaseStarted || e.state.MotionSubPhase != "QUESTION" {
 		return motionCardTickResult{guardFailed: true}
 	}
 
 	e.state.CurrentTime--
-	currentTime := e.state.CurrentTime
-	result := motionCardTickResult{currentTime: currentTime}
-
-	// MotionActive.Type is checked first (cheap, no card lookup) since the
-	// overwhelmingly common case is a SPEEDY card, which never needs this
-	// branch at all.
-	if e.state.MotionActive.Type == QuestionTypeQCM {
-		if card := e.activeMotionCardUnsafe(); card != nil {
-			invalidated := motionActiveQCMInvalidated(e.state.MotionActive.State)
-			if qcmHintShouldTrigger(card.QCMHintsEnabled, card.QCMHintThreshold1, card.QCMHintThreshold2, currentTime, e.state.Delay, len(invalidated)) {
-				color, remaining := qcmInvalidateRandomWrongAnswer(card.QCMAnswers, card.QCMCorrect, invalidated)
-				if color != "" {
-					e.state.MotionActive.State["QCM_INVALIDATED"] = append(invalidated, color)
-					result.qcmHintCallback = e.OnQCMHint
-					result.invalidatedColor = color
-					result.remainingAnswers = remaining
-				}
-			}
-		}
-	}
-
-	return result
-}
-
-// activeMotionCardUnsafe returns a pointer to the currently active MEMOTION
-// card — e.state.Question.MotionCards[i] where ID == e.state.MotionSelected
-// (== MotionActive.CardID, contract §4's internal-consistency requirement)
-// — or nil if there is none (no MEMOTION round, or no card selected yet).
-// Must be called with e.mu held.
-func (e *Engine) activeMotionCardUnsafe() *MotionCard {
-	if e.state.Question == nil || e.state.MotionSelected == "" {
-		return nil
-	}
-	for i := range e.state.Question.MotionCards {
-		if e.state.Question.MotionCards[i].ID == e.state.MotionSelected {
-			return &e.state.Question.MotionCards[i]
-		}
-	}
-	return nil
-}
-
-// motionActiveQCMInvalidated reads the QCM_INVALIDATED slice from
-// MEMOTION_ACTIVE.STATE — the card-scoped equivalent of the top-level
-// QcmInvalidated field (contract §5.3: a nested type's live state lives in
-// MEMOTION_ACTIVE.STATE, never the flat question-scoped fields). Absent or
-// unexpectedly-shaped ⇒ nil (no exclusions yet); never panics.
-func motionActiveQCMInvalidated(state map[string]interface{}) []string {
-	v, ok := state["QCM_INVALIDATED"]
-	if !ok {
-		return nil
-	}
-	s, ok := v.([]string)
-	if !ok {
-		return nil
-	}
-	return s
+	return motionCardTickResult{currentTime: e.state.CurrentTime}
 }
 
 // StartMotionMemorizeTimer starts a countdown for the MEMORIZE phase in Secret Mode (v5.5.0).
@@ -4600,7 +4327,7 @@ func (e *Engine) processMotionMemorizeTick() motionMemorizeTickResult {
 	callTestInjectPanic("motion-memorize")
 
 	// Guard: exit if game state changed unexpectedly
-	if e.state.Phase != PhaseStarted || e.state.MotionSubPhase != MotionSubPhaseMemorize {
+	if e.state.Phase != PhaseStarted || e.state.MotionSubPhase != "MEMORIZE" {
 		return motionMemorizeTickResult{guardFailed: true}
 	}
 
@@ -4609,9 +4336,8 @@ func (e *Engine) processMotionMemorizeTick() motionMemorizeTickResult {
 
 	if currentTime <= 0 {
 		// Timer expired: transition MEMORIZE → GRID automatically
-		e.state.MotionSubPhase = MotionSubPhaseGrid
+		e.state.MotionSubPhase = "GRID"
 		e.state.MotionSelected = ""
-		e.state.MotionActive = MotionActive{State: map[string]interface{}{}} // #184 B-B4: emptied on return to GRID (no-op here — never set during MEMORIZE — kept for consistency with every other GRID transition)
 		e.state.CurrentTime = 0
 		return motionMemorizeTickResult{expired: true, callback: e.OnStateChange}
 	}
@@ -4676,41 +4402,4 @@ type MotionError struct {
 
 func (e *MotionError) Error() string {
 	return e.Reason
-}
-
-// ValidateCardScope enforces contracts/question-types.md §9.2's invariant:
-// an action scoped to a MEMOTION card (protocol.CardScope.MotionCardID,
-// passed here as motionCardID — game can't import protocol, which already
-// imports game) may only apply to the card currently active in a MEMOTION
-// round. motionCardID == "" means the caller's payload carried no
-// MOTION_CARD_ID at all (contract §9.1: the field is optional and
-// omitempty on the wire).
-//
-// Generalizes the contract table's two named rows ("aucune manche MEMOTION
-// en cours" / "manche MEMOTION, emplacement actif") to every subphase by
-// keying on whether a card is actually selected (MotionSelected != ""),
-// which subsumes both: SUBPHASE=="" and SUBPHASE running GRID/MEMORIZE
-// (round in progress, nothing selected yet) both have MotionSelected=="",
-// and are treated identically — no active card, so no MOTION_CARD_ID is
-// expected. The table itself only names the two extremes explicitly; this
-// is the natural reading of its own stated purpose ("empêche une action
-// typée de s'appliquer à une carte qui n'est pas celle en jeu").
-//
-// Posed and tested ahead of any real consumer — no v7.0.0 action actually
-// carries CardScope (see CardScope's doc comment); #186 is the first.
-func (e *Engine) ValidateCardScope(motionCardID string) error {
-	e.mu.RLock()
-	defer e.mu.RUnlock()
-
-	if e.state.MotionSelected == "" {
-		if motionCardID != "" {
-			return &MotionError{Reason: "CARD_SCOPE_UNEXPECTED"}
-		}
-		return nil
-	}
-
-	if motionCardID != e.state.MotionSelected {
-		return &MotionError{Reason: "CARD_SCOPE_MISMATCH"}
-	}
-	return nil
 }

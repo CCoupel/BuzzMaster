@@ -525,31 +525,29 @@ func TestQuestion_MemoryType_JSONSerialization(t *testing.T) {
 		Type:     QuestionTypeMemory,
 		Points:   "30",
 		Time:     "60",
-		TypedContent: TypedContent{
-			MemoryPairs: []MemoryPair{
-				{
-					ID:    1,
-					Card1: MemoryCard{Text: "Paris", IsImage: false},
-					Card2: MemoryCard{Text: "France", IsImage: false},
-				},
-				{
-					ID:    2,
-					Card1: MemoryCard{Text: "Berlin", IsImage: false},
-					Card2: MemoryCard{Text: "Germany", IsImage: false},
-				},
-				{
-					ID:    3,
-					Card1: MemoryCard{Image: "/question/5/memory_3_1_1234.jpg", IsImage: true},
-					Card2: MemoryCard{Text: "Tour Eiffel", IsImage: false},
-				},
+		MemoryPairs: []MemoryPair{
+			{
+				ID:    1,
+				Card1: MemoryCard{Text: "Paris", IsImage: false},
+				Card2: MemoryCard{Text: "France", IsImage: false},
 			},
-			MemoryConfig: &MemoryConfig{
-				FlipDelay:       3,
-				PointsPerPair:   10,
-				ErrorPenalty:    0,
-				CompletionBonus: 0,
-				UseTimer:        true,
+			{
+				ID:    2,
+				Card1: MemoryCard{Text: "Berlin", IsImage: false},
+				Card2: MemoryCard{Text: "Germany", IsImage: false},
 			},
+			{
+				ID:    3,
+				Card1: MemoryCard{Image: "/question/5/memory_3_1_1234.jpg", IsImage: true},
+				Card2: MemoryCard{Text: "Tour Eiffel", IsImage: false},
+			},
+		},
+		MemoryConfig: &MemoryConfig{
+			FlipDelay:       3,
+			PointsPerPair:   10,
+			ErrorPenalty:    0,
+			CompletionBonus: 0,
+			UseTimer:        true,
 		},
 	}
 

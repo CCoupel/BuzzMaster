@@ -172,7 +172,7 @@ func TestSendLEDSetForBuzzerQCM_NonRegression_DeepToneTeam_KeepsAnswerIntensity6
 		"TeamDeep": {Name: "TeamDeep", ColorName: "bleu-profond"},
 	})
 
-	question := &game.Question{ID: "q1", Type: game.QuestionTypeQCM, TypedContent: game.TypedContent{QCMCorrect: "GREEN"}}
+	question := &game.Question{ID: "q1", Type: game.QuestionTypeQCM, QCMCorrect: "GREEN"}
 	app.engine.Ready("q1", question)
 	app.engine.SetBumpers(map[string]*game.Bumper{
 		"MAC:DEEP1": {Team: "TeamDeep", AnswerColor: game.AnswerColorRed, Time: 1000},

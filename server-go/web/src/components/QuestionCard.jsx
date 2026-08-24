@@ -1,6 +1,5 @@
 import { motion } from 'framer-motion'
 import CategoryBadge from './CategoryBadge'
-import { getQuestionTypeMeta } from '../utils/questionTypeMeta'
 import './QuestionCard.css'
 
 // Export motion for pages that need AnimatePresence
@@ -8,6 +7,15 @@ export { motion }
 
 // Re-export from utils for backward compat
 export { CATEGORIES, categoryMeta } from '../utils/categoryUtils'
+
+// Type display labels
+const TYPE_LABELS = {
+  'SPEEDY':   'Speedy',
+  'QCM':      'QCM',
+  'MEMORY':   'Memory',
+  'MEMOTION': 'Memotion',
+  'ARDOISE':  'Ardoise',
+}
 
 // QCM answer colors
 const QCM_COLORS = {
@@ -110,7 +118,7 @@ export default function QuestionCard({
         )}
 
         <span className={`qcard-type-badge type-${(question.TYPE || 'normal').toLowerCase()}`}>
-          {getQuestionTypeMeta(question.TYPE).label}
+          {TYPE_LABELS[question.TYPE] ?? 'Speedy'}
         </span>
 
         <span

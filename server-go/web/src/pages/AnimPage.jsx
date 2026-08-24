@@ -11,8 +11,6 @@ import { resolvePointsAward, resolvePointsTarget, calcQcmTeamAward } from '../ut
 import { isRevealed } from '../utils/phaseRules'
 import { prepareWaitReason } from '../utils/prepareWaitReason'
 import { getQuestionTypeMeta } from '../utils/questionTypeMeta'
-import { resolveHostContext } from '../utils/hostContext'
-import { getTypeState } from '../utils/typeState'
 import { getMotionCardPoints } from '../utils/motionGrid'
 import { getPhaseBadge } from '../utils/phaseBadge'
 import { canAwardPoints } from '../utils/canAwardPoints'
@@ -54,49 +52,6 @@ const STATUS_LABEL = {
   connected: 'Connecté',
   connecting: 'Connexion...',
   disconnected: 'Déconnecté',
-}
-
-// #184/B-F3 — champs `TypedContent` (question-types.md §2), partagés SOUS LE
-// MÊME NOM entre `Question` et `MotionCard` (embarquement à plat des deux
-// côtés). Source unique de la liste : `internal/game/models.go` (`TypedContent`,
-// dev-backend B-B1). Ne PAS y ajouter `ANSWER` : ce champ est bien dans
-// `TypedContent`, mais une `MotionCard` SPEEDY le porte sous un nom différent
-// (`ANSWER_TEXT`, champ historique propre à la carte, contrat §3) — c'est
-// pourquoi `cardToSyntheticQuestion` le traite à part, jamais via cette liste.
-const TYPED_CONTENT_FIELDS = [
-  'QCM_ANSWERS', 'QCM_CORRECT', 'QCM_HINTS_ENABLED',
-  'QCM_HINT_THRESHOLD_1', 'QCM_HINT_THRESHOLD_2', 'QCM_PENALTY_1', 'QCM_PENALTY_2',
-  'ARDOISE_KEYBOARD_TYPE',
-  'MEMORY_PAIRS', 'MEMORY_CONFIG', 'MEMORY_MODE',
-]
-
-/**
- * cardToSyntheticQuestion — adaptateur généralisé « carte → question
- * synthétique » (#184/B-F3, question-types.md §2/§4). Remplace le mapping ad
- * hoc par champ (`{...question, ANSWER: card?.ANSWER_TEXT}`, avant #184) par
- * une copie des champs `TypedContent` présents sur la carte, sous le même
- * nom : c'est ce qui permet à un composant de type (`AnimAnswerZone`,
- * `AnimQcmOptions`…) de traiter l'hôte carte exactement comme l'hôte
- * question, sans variante — la même généralisation que doivent exploiter
- * #185/#186/#187 sans reformer cet adaptateur.
- *
- * @param {Object|null} question - gameState.question (hôte MEMOTION)
- * @param {Object|null} card - carte MEMOTION active (peut être `null` hors
- *   SELECTED/QUESTION/REVEAL — l'objet `question` est alors renvoyé tel quel)
- * @returns {Object|null}
- */
-function cardToSyntheticQuestion(question, card) {
-  if (!card) return question
-  const typedContent = {}
-  TYPED_CONTENT_FIELDS.forEach(field => {
-    if (card[field] !== undefined) typedContent[field] = card[field]
-  })
-  return {
-    ...question,
-    TYPE: card.TYPE || 'SPEEDY',
-    ANSWER: card.ANSWER_TEXT || '',
-    ...typedContent,
-  }
 }
 
 /**
@@ -205,22 +160,6 @@ export default function AnimPage() {
   // #171/F2 — badge de phase déplacé de la colonne chrono vers la ligne
   // réponse (voir utils/phaseBadge.js).
   const phaseBadge = getPhaseBadge(gameState.phase)
-  // #184/B-F2, B-F3 — contexte d'hôte normalisé (utils/hostContext.js,
-  // question-types.md §4), calculé UNE FOIS ici et transmis à
-  // AnimConductPanel : c'est ce qui lui permet de nourrir les composants de
-  // type (AnimMemoryGrid) en `playable`/`revealed` plutôt qu'en `phase`, et de
-  // résoudre le type de l'hôte courant (question, ou carte MEMOTION active en
-  // QUESTION/REVEAL) sans jamais relire `gameState.phase`/`MEMOTION_SUBPHASE`
-  // lui-même.
-  const hostContext = resolveHostContext(gameState)
-  // #185/C-F1 — état d'indices QCM de l'hôte COURANT (question ou carte
-  // MEMOTION active), résolu une seule fois via l'accesseur unique posé en
-  // B-F1 (question-types.md §5.3) — jusqu'ici calculé mais jamais consommé.
-  // Remplace la lecture directe de `gameState.qcmInvalidated` (qui ne
-  // couvrait que l'hôte question) dans la prop transmise à
-  // `AnimConductPanel` ci-dessous — neutre pour l'hôte question (même
-  // valeur), correct pour l'hôte carte QCM.
-  const typeState = getTypeState(gameState, hostContext)
 
   // #160/F8 — MEMOTION, sur le modèle exact de isMemoryQuestion (#159, plus
   // bas dans le fichier, zone équipes). La manche entière se joue en phase
@@ -250,23 +189,13 @@ export default function AnimPage() {
             : 'Choisissez une carte')
     : null
   // Zone réponse (arbitrage n°1 du GATE 2, #160) — AnimAnswerZone lit
-  // `question.ANSWER`/`question.TYPE`/`question.QCM_*`, inexistants en
-  // MEMOTION (vide toute la manche sans ce contournement) : on lui passe un
-  // objet question dérivé où ces champs pointent la CARTE en cours. Réutilise
-  // la mécanique AnimAnswerZone EXISTANTE (flou + révélation par pression)
-  // sans y toucher.
-  // #184/B-F3 — adaptateur généralisé (question-types.md §2/§4) : plus un
-  // mapping ad hoc par champ (avant #184 : seul `ANSWER` était recopié), mais
-  // une copie de tous les champs `TypedContent` présents sur la carte, SOUS
-  // LE MÊME NOM qu'ils portent déjà sur `Question` — c'est précisément ce que
-  // permet l'embarquement à plat partagé du contrat. `TYPE` est également
-  // recopié (la carte peut être QCM, plus seulement SPEEDY) : c'est ce qui
-  // débloquera #185/#186/#187 sans reformer cet adaptateur. `ANSWER_TEXT` →
-  // `ANSWER` reste un mapping dédié : ce sont des champs SPEEDY historiques
-  // propres à `MotionCard` (contrat §3), pas des champs `TypedContent`
-  // partagés sous le même nom entre `Question` et `MotionCard`.
+  // `question.ANSWER`, inexistant en MEMOTION (vide toute la manche sans
+  // ce contournement) : on lui passe un objet question dérivé où ANSWER
+  // pointe la réponse de la CARTE en cours. Réutilise la mécanique
+  // AnimAnswerZone EXISTANTE (flou + révélation par pression) sans y
+  // toucher — TYPE reste 'MEMOTION', hors la branche QCM de ce composant.
   const answerZoneQuestion = isMemotionQuestion
-    ? cardToSyntheticQuestion(question, selectedMotionCard)
+    ? { ...question, ANSWER: selectedMotionCard?.ANSWER_TEXT || '' }
     : question
 
   // #166/F3 — options conditionnelles de la ligne méta (D5) : cible des
@@ -585,9 +514,8 @@ export default function AnimPage() {
         <AnimConductPanel
           phase={gameState.phase}
           question={question}
-          qcmInvalidated={typeState.qcmInvalidated}
+          qcmInvalidated={gameState.qcmInvalidated}
           revealed={revealed}
-          hostContext={hostContext}
           nextQuestion={nextQuestion}
           onStart={handleStart}
           onPause={pauseGame}

@@ -2220,20 +2220,13 @@ func (a *App) handleMotionDone(msg *protocol.Message) {
 		return
 	}
 
-	// #184 B-B5, contract §9.3 — UNITS is optional, absent ⇒ 1 (current
-	// behavior unchanged). *int distinguishes "absent" from an explicit 0.
-	units := 1
-	if payload.Units != nil {
-		units = *payload.Units
-	}
-
-	server.LogInfo(game.LogComponentEngine, "MEMOTION_DONE: cardID=%s winner=%s units=%d",
-		payload.CardID, payload.WinnerTeam, units)
+	server.LogInfo(game.LogComponentEngine, "MEMOTION_DONE: cardID=%s winner=%s",
+		payload.CardID, payload.WinnerTeam)
 
 	// Stop per-card timer if still running
 	a.engine.StopMotionCardTimer()
 
-	points, isComplete, err := a.engine.DoneMotionCard(payload.CardID, payload.WinnerTeam, units)
+	points, isComplete, err := a.engine.DoneMotionCard(payload.CardID, payload.WinnerTeam)
 	if err != nil {
 		server.LogWarn(game.LogComponentEngine, "MEMOTION_DONE error: %v", err)
 		return

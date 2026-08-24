@@ -230,118 +230,16 @@ const (
 	MemoryModeTantQueJeGagne MemoryMode = "TANT_QUE_JE_GAGNE"
 )
 
-// TypedContent holds the fields that carry a QuestionType's own content —
-// QCM answers, MEMORY pairs, ARDOISE keyboard layout, and the plain-text
-// ANSWER shared by SPEEDY/ARDOISE. Embedded anonymously (flat, no JSON
-// nesting) in both Question and MotionCard so a nested card and a top-level
-// question expose the exact same field names on the wire for a given type —
-// contracts/question-types.md §2. Field tags are byte-for-byte the ones
-// Question already used before this refactor; moving them into a shared
-// struct changes nothing about the JSON they produce.
-//
-// Answer is deliberately `omitempty` here even though Question.Answer
-// (declared directly on Question, below) is not: Question keeps its own
-// explicit ANSWER field, which — per Go's embedded-field JSON precedence
-// (shallower field wins) — always shadows this one for Question, so this
-// tag only ever governs MotionCard's future ARDOISE-in-card use (#186,
-// v7.1.0). Without omitempty here, every existing MEMOTION card (which
-// never carries ANSWER) would gain an "ANSWER":"" key it never had —
-// contract-mandated deviation from the literal §2 snippet (which shows a
-// single Answer field with no comment on this asymmetry), documented in the
-// Batch 2 DONE report and reflected back into the contract.
-type TypedContent struct {
-	// SPEEDY (MotionCard only — Question.Answer below is authoritative for
-	// the question host) / ARDOISE (#186, v7.1.0)
-	Answer string `json:"ANSWER,omitempty"`
-	// QCM
-	QCMAnswers        *QCMAnswers `json:"QCM_ANSWERS,omitempty"`
-	QCMCorrect        string      `json:"QCM_CORRECT,omitempty"`
-	QCMHintsEnabled   bool        `json:"QCM_HINTS_ENABLED,omitempty"`
-	QCMHintThreshold1 float64     `json:"QCM_HINT_THRESHOLD_1,omitempty"`
-	QCMHintThreshold2 float64     `json:"QCM_HINT_THRESHOLD_2,omitempty"`
-	QCMPenalty1       float64     `json:"QCM_PENALTY_1,omitempty"`
-	QCMPenalty2       float64     `json:"QCM_PENALTY_2,omitempty"`
-	// ARDOISE (#186, v7.1.0)
-	ArdoiseKeyboardType KeyboardType `json:"ARDOISE_KEYBOARD_TYPE,omitempty"`
-	// MEMORY (#187, v7.1.0)
-	MemoryPairs  []MemoryPair  `json:"MEMORY_PAIRS,omitempty"`
-	MemoryConfig *MemoryConfig `json:"MEMORY_CONFIG,omitempty"`
-	MemoryMode   string        `json:"MEMORY_MODE,omitempty"`
-}
-
 // MotionCard represents one card in a MEMOTION grid (3 faces: RECTO, VERSO, REVEAL)
 type MotionCard struct {
-	ID string `json:"ID"` // Unique identifier (e.g. "mc-1")
-	// Type is the card's own game type — absent/"" means SPEEDY (#184,
-	// contract §3). Validated at registration (internal/game/question_types.go
-	// registry: must be known and NestableInMotionCard) and at
-	// SelectMotionCard (engine.go). Never MEMOTION — nesting depth is
-	// capped at 1 (contract §1).
-	Type          QuestionType `json:"TYPE,omitempty"`
-	RectoTheme    string       `json:"RECTO_THEME"`              // Theme/title shown on front face
-	RectoImage    string       `json:"RECTO_IMAGE,omitempty"`    // Optional image on front face (data/files/ path)
-	Difficulty    int          `json:"DIFFICULTY"`               // 1 | 2 | 3 → 1pt | 3pt | 5pt
-	QuestionText  string       `json:"QUESTION_TEXT,omitempty"`  // Question text (VERSO face)
-	QuestionImage string       `json:"QUESTION_IMAGE,omitempty"` // Optional question image
-	AnswerText    string       `json:"ANSWER_TEXT,omitempty"`    // Answer text (REVEAL face)
-	AnswerImage   string       `json:"ANSWER_IMAGE,omitempty"`   // Optional answer image
-	// PointsRule is this card's own points-award rule (#184, B-B5, contract
-	// §6.2) — absent ⇒ STARS, the pre-#184 star-based scale, unchanged.
-	PointsRule *PointsRule `json:"POINTS_RULE,omitempty"`
-
-	TypedContent // embedded flat — QCM_*/MEMORY_*/ARDOISE_KEYBOARD_TYPE/ANSWER for a typed card (#184, contract §2/§3)
-}
-
-// EffectiveType returns c.Type, defaulting to SPEEDY when absent — the
-// retro-compatible reading every consumer of MotionCard.Type must use
-// instead of comparing the raw field to "" (contract §3: "absent ou ''
-// ⇒ SPEEDY").
-func (c *MotionCard) EffectiveType() QuestionType {
-	if c.Type == "" {
-		return QuestionTypeSpeedy
-	}
-	return c.Type
-}
-
-// PointsRuleMode is PointsRule.Mode — contract §6.2.
-type PointsRuleMode string
-
-const (
-	// PointsRuleModeStars is the default (absent MODE ⇒ STARS too, see
-	// PointsRule's doc comment): the pre-#184 star-based scale
-	// (MotionConfig.POINTS_<n>_STAR if >0, else DIFFICULTY→1/3/5),
-	// unchanged — engine.go's motionCardPoints.
-	PointsRuleModeStars PointsRuleMode = "STARS"
-	// PointsRuleModeFixed awards VALUE if the type's outcome reports
-	// Units > 0, else 0 — a card whose value doesn't depend on difficulty.
-	PointsRuleModeFixed PointsRuleMode = "FIXED"
-	// PointsRuleModePerUnit awards VALUE × Units — progression types
-	// (#187, MEMORY prorata).
-	PointsRuleModePerUnit PointsRuleMode = "PER_UNIT"
-)
-
-// PointsRule is a MotionCard's own points-award rule — contract §6.2. The
-// scoring authority always belongs to the host (never to the nested type,
-// which only ever reports a TypeOutcome), so this lives on MotionCard, not
-// on TypedContent. Absent (nil) ⇒ STARS with the current-behavior star
-// scale, same as an explicit {"MODE":"STARS"}.
-type PointsRule struct {
-	Mode  PointsRuleMode `json:"MODE,omitempty"`
-	Value int            `json:"VALUE,omitempty"`
-}
-
-// TypeOutcome is what a nested type implementation reports back to its
-// host after a round — contract §6.1: "un type ne rend qu'un résultat".
-// Units defaults to 1 for any binary (won/lost) type; a progression type
-// (MEMORY prorata, #187) reports its own count. Not yet produced anywhere
-// in v7.0.0 — #185 (QCM-in-card) is designated via the existing
-// MEMOTION_DONE action exactly like SPEEDY, not through this struct;
-// documented here because #186/#187 must be able to assume it's part of
-// the core contract, and adding it after the fact would reopen engine.go
-// (forbidden by #184's agnosticity test, contract §10).
-type TypeOutcome struct {
-	WinnerTeam string // "" = nobody
-	Units      int    // 1 = won, 0 = lost; >1 reserved for progression types
+	ID            string `json:"ID"`                       // Unique identifier (e.g. "mc-1")
+	RectoTheme    string `json:"RECTO_THEME"`              // Theme/title shown on front face
+	RectoImage    string `json:"RECTO_IMAGE,omitempty"`    // Optional image on front face (data/files/ path)
+	Difficulty    int    `json:"DIFFICULTY"`               // 1 | 2 | 3 → 1pt | 3pt | 5pt
+	QuestionText  string `json:"QUESTION_TEXT,omitempty"`  // Question text (VERSO face)
+	QuestionImage string `json:"QUESTION_IMAGE,omitempty"` // Optional question image
+	AnswerText    string `json:"ANSWER_TEXT,omitempty"`    // Answer text (REVEAL face)
+	AnswerImage   string `json:"ANSWER_IMAGE,omitempty"`   // Optional answer image
 }
 
 // MemoryConfig holds configuration for the Memory game
@@ -363,52 +261,7 @@ type MotionConfig struct {
 	Points3Star int `json:"POINTS_3_STAR"` // points for 3-star cards (default: 5)
 }
 
-// MotionSubPhase represents the current sub-phase of a MEMOTION round
-// (GameState.MotionSubPhase, "" outside a MEMOTION question).
-type MotionSubPhase string
-
-const (
-	MotionSubPhaseMemorize MotionSubPhase = "MEMORIZE" // Secret Mode countdown before the grid is shown
-	MotionSubPhaseGrid     MotionSubPhase = "GRID"     // Grid of cards, none selected
-	MotionSubPhaseSelected MotionSubPhase = "SELECTED" // One card selected, RECTO face shown fullscreen
-	MotionSubPhaseQuestion MotionSubPhase = "QUESTION" // Selected card flipped, VERSO face + timer
-	MotionSubPhaseReveal   MotionSubPhase = "REVEAL"   // Selected card's answer (REVEAL face) shown
-)
-
-// MotionCardState represents the state of one card in GameState.MotionCardStates.
-type MotionCardState string
-
-const (
-	MotionCardStateUnplayed MotionCardState = "UNPLAYED" // not yet selected this question
-	MotionCardStateSelected MotionCardState = "SELECTED" // currently selected, RECTO shown
-	MotionCardStateQuestion MotionCardState = "QUESTION" // currently flipped, VERSO shown
-	MotionCardStateRevealed MotionCardState = "REVEALED" // currently revealed, REVEAL shown
-	MotionCardStateDone     MotionCardState = "DONE"     // played, DoneMotionCard called
-)
-
-// AllQuestionTypes returns the full registry of question types, i.e. the 5
-// values QuestionType may take. Exported as a test-exhaustiveness helper —
-// see contracts/question-types.md §10 (test d'agnosticité) — not consumed by
-// production code in v7.0.0.
-func AllQuestionTypes() []QuestionType {
-	return []QuestionType{
-		QuestionTypeSpeedy,
-		QuestionTypeQCM,
-		QuestionTypeMemory,
-		QuestionTypeMemotion,
-		QuestionTypeArdoise,
-	}
-}
-
 // Question represents a quiz question
-//
-// Answer is declared here explicitly (not left to the embedded TypedContent
-// below) because it has no `omitempty`: 26/85 existing question.json persist
-// "ANSWER":"" and the round-trip test (models_roundtrip_test.go) requires
-// that key to survive even when empty. Go's JSON field-precedence rule
-// (shallowest field wins when names collide across an embedding boundary)
-// makes this the field that's actually serialized/deserialized for Question;
-// TypedContent.Answer never fires here — see TypedContent's doc comment.
 type Question struct {
 	ID                     string           `json:"ID"`
 	Question               string           `json:"QUESTION"`
@@ -416,40 +269,29 @@ type Question struct {
 	Type                   QuestionType     `json:"TYPE,omitempty"`                     // "SPEEDY", "QCM", "MEMORY", "MEMOTION", "ARDOISE" (default SPEEDY)
 	Category               QuestionCategory `json:"CATEGORY,omitempty"`                 // Question category
 	PointsTarget           PointsTarget     `json:"POINTS_TARGET,omitempty"`            // "PLAYER" or "TEAM" (default based on type)
+	QCMAnswers             *QCMAnswers      `json:"QCM_ANSWERS,omitempty"`              // For QCM questions
+	QCMCorrect             string           `json:"QCM_CORRECT,omitempty"`              // "RED", "GREEN", "YELLOW", "BLUE"
+	QCMHintsEnabled        bool             `json:"QCM_HINTS_ENABLED,omitempty"`        // Enable automatic hint invalidation
+	QCMHintThreshold1      float64          `json:"QCM_HINT_THRESHOLD_1,omitempty"`     // First hint at this % of time remaining (default 0.25)
+	QCMHintThreshold2      float64          `json:"QCM_HINT_THRESHOLD_2,omitempty"`     // Second hint at this % of time remaining (default 0.125)
+	QCMPenalty1            float64          `json:"QCM_PENALTY_1,omitempty"`            // Point multiplier after 1 hint (default 0.67)
+	QCMPenalty2            float64          `json:"QCM_PENALTY_2,omitempty"`            // Point multiplier after 2 hints (default 0.33)
+	MemoryPairs            []MemoryPair     `json:"MEMORY_PAIRS,omitempty"`             // For Memory questions
+	MemoryConfig           *MemoryConfig    `json:"MEMORY_CONFIG,omitempty"`            // Memory game configuration
+	MemoryMode             string           `json:"MEMORY_MODE,omitempty"`              // "SOLO", "CHACUN_SON_TOUR", "TANT_QUE_JE_GAGNE" (default SOLO)
 	MotionCards            []MotionCard     `json:"MOTION_CARDS,omitempty"`             // Cards for MEMOTION questions (v5.0.0)
 	MotionMode             string           `json:"MOTION_MODE,omitempty"`              // "SOLO", "CHACUN_SON_TOUR", "TANT_QUE_JE_GAGNE" (default SOLO)
 	MotionConfig           *MotionConfig    `json:"MOTION_CONFIG,omitempty"`            // MEMOTION configuration (v5.0.x)
 	MotionMemorizeDuration int              `json:"MOTION_MEMORIZE_DURATION,omitempty"` // Seconds for MEMORIZE phase; 0 = standard mode (v5.5.0)
-	Points                 string           `json:"POINTS"`                             // String to match JSON format
-	Time                   string           `json:"TIME"`                               // String to match JSON format
-	Order                  int              `json:"ORDER,omitempty"`                    // Display order (for drag and drop)
-	Media                  string           `json:"MEDIA,omitempty"`                    // Question media (shown during game)
-	MediaAnswer            string           `json:"MEDIA_ANSWER,omitempty"`             // Answer media (shown during REVEAL)
-	Explanation            string           `json:"EXPLANATION,omitempty"`              // note animateur (v6.4.x, #168) — visible /anim only, never TV/player/admin
-	Status                 QuestionStatus   `json:"STATUS,omitempty"`
-
-	TypedContent // embedded flat — QCM_*/MEMORY_*/ARDOISE_KEYBOARD_TYPE (Answer shadowed by the explicit field above)
-}
-
-// MotionActive holds the identity and live state of the single active
-// MEMOTION card — contract §5. There is never more than one card in play
-// at once, so this is a single slot, not a map keyed by card ID (contract
-// §5.1: bounds the GAME payload to the cost of one type-state, not N).
-//
-// Reset to its zero value at every MEMOTION_SELECT (CardID/Type set,
-// State starts empty) and emptied back to the zero value on return to
-// GRID (engine.go: DoneMotionCard, the memorize-timer's auto-expiry, and
-// Ready()/InitGame()'s full MEMOTION reset).
-//
-// NO omitempty on the GameState field below and NO omitempty on these
-// fields — project rule (CLAUDE.md, contract §5.2): always serialized,
-// including empty ({"CARD_ID":"","TYPE":"","STATE":{}}), so the frontend
-// never falls back to a stale value. NOT persisted — excluded in
-// state_persistence.go alongside the other Motion* fields.
-type MotionActive struct {
-	CardID string                 `json:"CARD_ID"`
-	Type   QuestionType           `json:"TYPE"`
-	State  map[string]interface{} `json:"STATE"`
+	// ARDOISE fields (v5.6.0)
+	ArdoiseKeyboardType KeyboardType   `json:"ARDOISE_KEYBOARD_TYPE,omitempty"` // Virtual keyboard layout: "AZERTY" | "NUMPAD"
+	Points              string         `json:"POINTS"`                          // String to match JSON format
+	Time                string         `json:"TIME"`                            // String to match JSON format
+	Order               int            `json:"ORDER,omitempty"`                 // Display order (for drag and drop)
+	Media               string         `json:"MEDIA,omitempty"`                 // Question media (shown during game)
+	MediaAnswer         string         `json:"MEDIA_ANSWER,omitempty"`          // Answer media (shown during REVEAL)
+	Explanation         string         `json:"EXPLANATION,omitempty"`           // note animateur (v6.4.x, #168) — visible /anim only, never TV/player/admin
+	Status              QuestionStatus `json:"STATUS,omitempty"`
 }
 
 // Background represents a background image with its settings
@@ -513,21 +355,17 @@ type GameState struct {
 	MemoryCurrentTeamColor   []int          `json:"MEMORY_CURRENT_TEAM_COLOR"`  // RGB color of current team
 	QcmInvalidated           []string       `json:"QCM_INVALIDATED"`            // Invalidated QCM answers (e.g., ["RED", "YELLOW"])
 	// MEMOTION fields — NO omitempty: maps/slices/strings must be serialized even when empty for frontend reset (v5.0.0)
-	MotionSubPhase           MotionSubPhase             `json:"MEMOTION_SUBPHASE"`            // MotionSubPhaseMemorize | Grid | Selected | Question | Reveal | ""
-	MotionSelected           string                     `json:"MEMOTION_SELECTED"`            // ID of active card, "" when on grid
-	MotionCardStates         map[string]MotionCardState `json:"MEMOTION_CARD_STATES"`         // cardID → MotionCardStateUnplayed|Selected|Question|Revealed|Done
-	MotionCardTeams          map[string]string          `json:"MEMOTION_CARD_TEAMS"`          // cardID → teamName (winner)
-	MotionCurrentTeam        string                     `json:"MEMOTION_CURRENT_TEAM"`        // Team currently playing
-	MotionParticipatingTeams []string                   `json:"MEMOTION_PARTICIPATING_TEAMS"` // Teams selected to play
-	MotionCurrentTeamColor   []int                      `json:"MEMOTION_CURRENT_TEAM_COLOR"`  // RGB color of current team
-	// MotionActive (#184, B-B4) — the single active card's identity + typed
-	// live state, contract §5. NOT persisted (state_persistence.go excludes
-	// it alongside the other Motion* fields).
-	MotionActive       MotionActive `json:"MEMOTION_ACTIVE"`
-	VirtualPlayerCount int          `json:"VIRTUAL_PLAYER_COUNT"` // Number of enrolled virtual players
-	VirtualPlayerLimit int          `json:"VIRTUAL_PLAYER_LIMIT"` // Maximum number of virtual players allowed
-	EnrollmentActive   bool         `json:"ENROLLMENT_ACTIVE"`    // Whether player enrollment is active
-	ShowQRCode         bool         `json:"SHOW_QR_CODE"`         // Whether to display QR code on TV
+	MotionSubPhase           string            `json:"MEMOTION_SUBPHASE"`            // "GRID" | "SELECTED" | "QUESTION" | "REVEAL" | ""
+	MotionSelected           string            `json:"MEMOTION_SELECTED"`            // ID of active card, "" when on grid
+	MotionCardStates         map[string]string `json:"MEMOTION_CARD_STATES"`         // cardID → "UNPLAYED"|"SELECTED"|"QUESTION"|"REVEALED"|"DONE"
+	MotionCardTeams          map[string]string `json:"MEMOTION_CARD_TEAMS"`          // cardID → teamName (winner)
+	MotionCurrentTeam        string            `json:"MEMOTION_CURRENT_TEAM"`        // Team currently playing
+	MotionParticipatingTeams []string          `json:"MEMOTION_PARTICIPATING_TEAMS"` // Teams selected to play
+	MotionCurrentTeamColor   []int             `json:"MEMOTION_CURRENT_TEAM_COLOR"`  // RGB color of current team
+	VirtualPlayerCount       int               `json:"VIRTUAL_PLAYER_COUNT"`         // Number of enrolled virtual players
+	VirtualPlayerLimit       int               `json:"VIRTUAL_PLAYER_LIMIT"`         // Maximum number of virtual players allowed
+	EnrollmentActive         bool              `json:"ENROLLMENT_ACTIVE"`            // Whether player enrollment is active
+	ShowQRCode               bool              `json:"SHOW_QR_CODE"`                 // Whether to display QR code on TV
 	// ENTRACTE (v6.5.2, #119) — global pause mode, independent of the question
 	// cycle. Same nature as ShowQRCode just above: an ephemeral display flag,
 	// NOT persisted (state_persistence.go excludes it explicitly, alongside
