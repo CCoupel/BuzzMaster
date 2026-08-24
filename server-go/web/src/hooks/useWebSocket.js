@@ -851,9 +851,15 @@ export default function useWebSocket(endpoint = '/ws/admin') {
     sendMessage('PONG', { ID: bumperMac })
   }, [sendMessage])
 
-  // Memory game: Flip a card
-  const flipMemoryCard = useCallback((cardId) => {
-    sendMessage('FLIP_MEMORY_CARD', { CARD_ID: cardId })
+  // Memory game: Flip a card. `motionCardId` (#187, v7.1.0) porte la portée
+  // de carte (`CardScope`, contrat question-types.md §9) quand le flip
+  // s'applique à une carte MEMOTION active — absent (undefined) hors manche
+  // MEMOTION, comportement inchangé (contrat websocket-actions.md,
+  // FLIP_MEMORY_CARD : "absent hors manche MEMOTION ⇒ comportement actuel").
+  const flipMemoryCard = useCallback((cardId, motionCardId) => {
+    const msg = { CARD_ID: cardId }
+    if (motionCardId) msg.MOTION_CARD_ID = motionCardId
+    sendMessage('FLIP_MEMORY_CARD', msg)
   }, [sendMessage])
 
   // MEMOTION: Select a card from the grid (admin preview mode)
