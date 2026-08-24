@@ -242,6 +242,37 @@ interface MotionActive {
 }
 ```
 
+#### `STATE` pour une carte `TYPE=MEMORY` (v7.1.0, #187)
+
+```json
+{
+  "CARD_ID": "card_3",
+  "TYPE": "MEMORY",
+  "STATE": {
+    "MEMORY_FLIPPED_CARDS": ["2-1"],
+    "MEMORY_MATCHED_PAIRS": [1, 4],
+    "MEMORY_ERRORS": 3
+  }
+}
+```
+
+Les champs `MEMORY_*` **question-scopés de `GameState` restent inchangés** et réservés à l'hôte
+question (§"Champs Memory spécifiques") : une carte MEMORY n'y écrit **jamais**. Côté client,
+l'aiguillage entre les deux emplacements est assuré par l'accesseur unique
+`utils/typeState.js` — `contracts/question-types.md` §5.3.
+
+**Ne figurent pas dans l'état de carte**, et c'est délibéré : `MEMORY_TEAM_PAIRS`,
+`MEMORY_TEAM_ERRORS`, `MEMORY_PAIR_OWNERS`, `MEMORY_CURRENT_TEAM`,
+`MEMORY_PARTICIPATING_TEAMS`. Une carte MEMORY est jouée par **une seule équipe** — celle de la
+manche MEMOTION en cours (`question-types.md` §6.3) — donc ces cinq champs n'ont pas d'objet en
+carte. Les omettre borne également la charge utile : ils croissent tous avec le nombre d'équipes.
+
+**Cycle de vie** : comme tout `MEMOTION_ACTIVE.STATE`, remis à zéro à chaque `MEMOTION_SELECT` et
+vidé au retour en `GRID`. **Non persisté.**
+
+**Diffusion** : aucun de ces champs n'est confidentiel — la grille MEMORY est publique et déjà
+affichée sur `/tv`. Aucune entrée à ajouter dans `AdminOnlyGameFields` ni `VPlayerOnlyGameFields`.
+
 ---
 
 ## Champs Enrollment (VPlayers)

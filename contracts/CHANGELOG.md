@@ -2,6 +2,59 @@
 
 ---
 
+## [20260824] — MEMOTION+ : carte MEMORY (#187)
+
+> Milestone v7.1.0 · Plans : `_work/reports/plan-memotion-v710-memory-20260824-154844.md`,
+> `-v2-20260824-161449.md`, `-value-20260824-163512.md`
+> Contrat détaillé : `contracts/question-types.md` (§5.4, §6.2, §6.3, §7.2, §7.3, §9.2, §10.1, §10.2)
+
+**Aucun changement BREAKING.** Tous les ajouts sont optionnels ; une carte sans `TYPE` reste
+`SPEEDY` et les champs question-scopés sont inchangés.
+
+- **[NEW]** `MEMORY` devient imbricable dans une carte MEMOTION (`NestableInMotionCard`). Une carte
+  `TYPE=MEMORY` porte sa propre grille de paires.
+- **[NEW]** `POINTS_RULE.MODE = "STARS_PRORATA"` — quatrième mode de barème, **défaut d'une carte
+  MEMORY**, **sans `VALUE`** : `points_étoiles × Units / UnitsTotal`. La carte vaut ses étoiles
+  comme toute autre, et le type n'en distribue qu'une fraction — aucun réglage de points indépendant
+  du barème n'est introduit. ⚠️ **Ordre des opérations normatif** : multiplier avant de diviser,
+  jamais de « valeur par unité » précalculée (sinon une carte 5 points / 8 paires vaut 0 quoi qu'il
+  arrive). Garantit qu'une grille complète rapporte exactement la valeur nominale.
+- **[NEW]** `TypeOutcome.UnitsTotal` — le type rend désormais son dénominateur avec son résultat,
+  pour que l'hôte puisse calculer un prorata **sans jamais connaître la notion de paire**.
+- **[CHANGED]** `motionCardPointsForOutcome(card, units)` → `(card, units, unitsTotal)` —
+  **modification d'hôte assumée et déclarée** (`question-types.md` §10.2) : #184 avait anticipé
+  `PER_UNIT`, pas un prorata du total de la carte. Aucune logique MEMORY n'entre dans l'hôte.
+- **[NEW]** `MEMOTION_ACTIVE.STATE` porte l'état vivant d'une carte MEMORY
+  (`MEMORY_FLIPPED_CARDS`, `MEMORY_MATCHED_PAIRS`, `MEMORY_ERRORS`). Les champs multi-équipes en
+  sont **exclus** : une carte MEMORY se joue à **une seule équipe**, celle de la manche MEMOTION.
+- **[NEW]** `FLIP_MEMORY_CARD.MOTION_CARD_ID` (`CardScope`, optionnel) — **premier consommateur
+  réel** de l'invariant de portée posé et testé en #184.
+- **[CHANGED]** `FLIP_MEMORY_CARD` — **le serveur devient seule autorité sur le tour.** La
+  restriction d'affichage côté client est retirée (tout joueur peut tenter le geste ; la grille est
+  déjà publique), et le serveur dérive l'identité de l'émetteur pour n'appliquer l'effet que si son
+  équipe a la main. **Correction d'un défaut préexistant** : aucune vérification n'existait côté
+  serveur. ⚠️ Vérification appliquée **aux `vplayer` uniquement** — `tv` et `anim` jouent pour la
+  table et n'ont pas d'équipe.
+- **[CHANGED]** `MEMOTION_DONE.UNITS` — **ignoré pour une carte `TYPE=MEMORY`** : le serveur dérive
+  `Units` et `UnitsTotal` de son propre état. Avec `STARS_PRORATA`, `UNITS` *est* le score : le
+  laisser au client reproduirait, dans le mécanisme neuf, la dette que le milestone #12 doit
+  résorber. Inchangé pour tous les autres types.
+- **[CHANGED]** Dérogation documentée à « refus silencieux interdit » (`question-types.md` §9.2) :
+  un flip hors tour est **ignoré silencieusement** — aucune mutation, **aucun broadcast**, aucun
+  message. Le refus explicite reste la règle pour la portée de carte. À ne pas « corriger » en revue.
+- **[CHANGED]** Le test de borne de charge utile doit porter sur l'état **réellement produit par le
+  moteur**, avec une borne **par type** : la borne actuelle mesure un littéral QCM écrit à la main et
+  cesserait silencieusement de garder dès qu'un état MEMORY existe (`question-types.md` §10.1).
+- **[REMOVED]** `Engine.CalculateMemoryScore` — code mort **depuis sa création** (aucun appelant dans
+  toute l'histoire du dépôt ; double implémentation Go/JS délibérée dès v2.33.0, seul le JS branché ;
+  jamais mise à jour pour le multi-équipes). À ne pas réactiver en carte.
+- **[CHANGED]** `ARDOISE` **reste non imbricable, sans échéance** — #186 fermée « not planned »
+  (`question-types.md` §7.2). Les mentions « ARDOISE-en-carte, v7.1.0 » du contrat sont caduques.
+  ⚠️ Le tag `omitempty` de `TypedContent.Answer`, qu'elles justifiaient, **doit rester** : le
+  retirer casserait l'invariant de round-trip octet pour octet des 85 fixtures.
+
+---
+
 ## [20260821] — MEMOTION+ cœur : carte porteuse d'un type de jeu (#183, #184, #185)
 
 > Milestone v7.0.0 · Plan : `_work/reports/plan-memotion-v700-20260821.md`

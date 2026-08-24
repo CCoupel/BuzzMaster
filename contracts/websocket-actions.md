@@ -74,6 +74,13 @@ Notes :
   sur l'écran public. `vplayer` peut retourner ses propres cartes en mode équipe
   active (`MEMORY_CURRENT_TEAM`). MEMORY/MEMOTION restent hors périmètre de l'interface
   animateur en #155/#156 — `anim` n'y figure pas.
+- **FLIP_MEMORY_CARD — aucune modification de cette table en v7.1.0 (#187).** Une carte MEMOTION de
+  type `MEMORY` fait retourner des cartes par un joueur, mais l'action est **déjà** autorisée pour
+  `vplayer` (et `tv`/`anim`). Ce qui est nouveau est la **portée** (`MOTION_CARD_ID`) et la
+  **vérification du tour côté serveur**, pas le droit d'émettre — voir la fiche `FLIP_MEMORY_CARD`
+  ci-dessous. C'est le premier type imbriqué à accepter un geste de joueur sur une carte, sans
+  qu'aucune ligne de cette table ne bouge : c'est exactement ce que la conception de #154 visait
+  (« indexé par nom d'action, pas par handler »).
 - **FLIP_MEMORY_CARD — `anim` ajouté en v6.2.x (#159)**, seule modification de cette table par ce
   lot. Motif : l'animateur retourne les cartes du doigt sur sa tablette (#159), et **aucun chemin ne
   le lui permettait**. La régie, elle, n'en a jamais eu besoin en direct — elle retourne les cartes
@@ -1455,14 +1462,72 @@ Retourne une carte Memory.
 | Propriété | Valeur |
 |-----------|--------|
 | Direction | `Client→Server` |
+| Émetteurs | `tv`, `vplayer`, `anim` — **inchangé en v7.1.0** |
 | Phase     | STARTED |
-| Type      | MEMORY |
+| Type      | MEMORY — question hôte, **ou carte MEMOTION `TYPE=MEMORY`** (v7.1.0, #187) |
 
 #### Payload
 
-| Champ | Type | Description |
-|-------|------|-------------|
-| CARD_ID | string | ID de la carte (ex: "1-1", "2-2") |
+| Champ | Type | Obligatoire | Description |
+|-------|------|-------------|-------------|
+| CARD_ID | string | ✅ | ID de la carte Memory (ex: `"1-1"`, `"2-2"` — format `pairID-cardNum`) |
+| MOTION_CARD_ID | string | ⬜ *(v7.1.0)* | Identité de la carte MEMOTION parente (`CardScope`, `question-types.md` §9). Absent hors manche MEMOTION ⇒ comportement actuel |
+
+#### Vérifications serveur (v7.1.0, #187) — deux règles, deux comportements d'échec
+
+> ⚠️ **Ces deux règles sont distinctes et ne doivent pas être uniformisées.** Voir
+> `contracts/question-types.md` §9.2 pour la dérogation formelle.
+
+**1. Portée de carte** — `ValidateCardScope(MOTION_CARD_ID)` : **refus explicite**
+(`CARD_SCOPE_MISMATCH` / `CARD_SCOPE_UNEXPECTED`), renvoyé comme les `MotionError` existants.
+
+**2. Tour de l'équipe** — **ignore silencieux**.
+
+Le serveur devient **seule autorité** sur le droit de retourner une carte :
+
+- Il **dérive l'identité de l'émetteur depuis sa connexion** — patron `ARDOISE_INPUT` (résolution
+  du bumper en 3 passes `payload.ID → msg.ID → clientID`, puis `bumper.Team`). **Jamais** un nom
+  d'équipe reçu dans le payload.
+- Si l'équipe de l'émetteur n'est pas l'équipe active, le geste est **ignoré** : aucune mutation
+  d'état, **aucun broadcast**, aucun message renvoyé au client.
+
+> 🔴 **La vérification ne s'applique QU'AUX clients `vplayer`.**
+> `tv` et `anim` retournent légitimement des cartes **pour la table** — `anim` est l'animateur sur
+> sa tablette, `tv` couvre l'aperçu régie en iframe (`/tv?admin=true`) et le clic d'un spectateur
+> sur l'écran public. **Ni l'un ni l'autre n'a d'équipe.** Appliquer la vérification à tous
+> **casserait la conduite animateur et l'aperçu régie**. Règle exacte : *si `clientType == vplayer`,
+> vérifier l'équipe ; sinon, laisser passer.*
+
+> 🔴 **Un flip ignoré ne doit déclencher aucun broadcast.**
+> `handleFlipMemoryCard` diffuse aujourd'hui un `UPDATE` complet **inconditionnellement**. Or la
+> restriction d'affichage côté client est **retirée** en v7.1.0 (voir ci-dessous) : n'importe quel
+> joueur peut désormais taper n'importe quelle carte. Si chaque tap hors tour diffusait un
+> `GameState` complet (~11 Ko en MEMOTION) à tous les clients, on recréerait la classe de défaut des
+> **tempêtes de broadcast** (#127/#129, `tests/procedures/bugfix-vjoueur-broadcast-storm.md`).
+
+**Journalisation** : l'ignore est silencieux **pour le client**, pas dans les journaux — tracer en
+`LogDebug`/`LogInfo`, comme `SetArdoiseAnswer` le fait quand il ignore une saisie. Sans trace, le
+comportement devient indébogable en QUALIF.
+
+**Contrainte d'implémentation** : `handleFlipMemoryCard(msg)` ne reçoit aujourd'hui **aucune
+identité**. Sa signature doit être étendue pour recevoir `clientID` **et** `clientType`, tous deux
+déjà disponibles dans `handleWebMessage`.
+
+#### Restriction client retirée (v7.1.0, #187)
+
+La garde d'affichage qui masquait le geste aux joueurs hors tour (`PlayerDisplay.jsx`,
+`isVPlayerInActiveTeam`) est **supprimée** : tout joueur peut **tenter** de retourner une carte.
+
+**Aucun risque d'information** : la grille MEMORY est **déjà publique** — aucun champ `MEMORY_*`
+n'est filtré, et la TV l'affiche à tous.
+
+**Bénéfice de fiabilité au passage** : la garde actuelle exigeait `MEMORY_CURRENT_TEAM` non vide ;
+si aucune équipe n'était sélectionnée, **aucun VJoueur ne pouvait cliquer**. Cette dépendance
+disparaît.
+
+> **Motif de la dérogation au refus explicite** : dans l'usage normal, un tap hors tour est un
+> geste de curiosité ou de réflexe, pas une tentative malveillante. Y répondre par une erreur
+> polluerait l'interface sans rien protéger. Décision utilisateur du 2026-08-24.
 
 ---
 
