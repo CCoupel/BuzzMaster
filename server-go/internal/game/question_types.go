@@ -18,10 +18,13 @@ type TypeDescriptor struct {
 	// "answer", ...) this type declares when hosted by a MEMOTION card —
 	// contract §8. Nil for MEMOTION itself (never nestable).
 	MediaSlots []string
-	// NestableInMotionCard is false for any type that cannot yet appear
-	// inside a MEMOTION card — true for SPEEDY/QCM (v7.0.0, #184/#185),
-	// false for ARDOISE/MEMORY (v7.1.0, #186/#187) and, permanently, for
-	// MEMOTION itself (nesting depth capped at 1 — contract §1).
+	// NestableInMotionCard is false for any type that cannot appear inside
+	// a MEMOTION card — true for SPEEDY/QCM/MEMORY (#184/#185/#187), false
+	// for ARDOISE (closed "not planned" 2026-08-24, contract §7.2 — the
+	// only differentiator vs SPEEDY, multi-team simultaneous input, has no
+	// object once nested in a card that plays a single team at a time) and,
+	// permanently, for MEMOTION itself (nesting depth capped at 1 —
+	// contract §1).
 	NestableInMotionCard bool
 	// HasPlayerInput documents whether nesting this type opens a new
 	// inbound action / whitelist entry (contract §7.1) — informational in
@@ -62,15 +65,20 @@ var questionTypeRegistry = map[QuestionType]TypeDescriptor{
 		Type:                 QuestionTypeArdoise,
 		OwnedFields:          []string{"ANSWER", "ARDOISE_KEYBOARD_TYPE"},
 		MediaSlots:           []string{"recto", "question"},
-		NestableInMotionCard: false, // #186, v7.1.0
+		NestableInMotionCard: false, // #186 closed "not planned" (2026-08-24), no échéance — contract §7.2
 		HasPlayerInput:       true,
 	},
 	QuestionTypeMemory: {
 		Type:                 QuestionTypeMemory,
 		OwnedFields:          []string{"MEMORY_PAIRS", "MEMORY_CONFIG", "MEMORY_MODE"},
 		MediaSlots:           []string{"recto"}, // + N pair slots — not modeled as a flat list (#187)
-		NestableInMotionCard: false,             // #187, v7.1.0
-		HasPlayerInput:       true,
+		NestableInMotionCard: true,              // #187, v7.1.0 — contract §7.3
+		// #187: a nested MEMORY card is the first nestable type to accept
+		// player input (flipping a card) — no new inbound-whitelist entry
+		// though, FLIP_MEMORY_CARD is already open to tv/vplayer/anim; what
+		// changes is scope (MOTION_CARD_ID) and server-side turn checking,
+		// not the right to emit (contract §7.3).
+		HasPlayerInput: true,
 	},
 	QuestionTypeMemotion: {
 		Type:                 QuestionTypeMemotion,

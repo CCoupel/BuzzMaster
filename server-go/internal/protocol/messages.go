@@ -409,9 +409,21 @@ type CancelAIGenerationPayload struct {
 	JobID string `json:"JOB_ID"`
 }
 
-// FlipMemoryCardPayload for FLIP_MEMORY_CARD action
+// FlipMemoryCardPayload for FLIP_MEMORY_CARD action.
+//
+// ID and CardScope are both additive (#187, v7.1.0), neither breaks an
+// older client that never sends them:
+//   - ID (optional) is the emitting VPlayer's bumper ID, resolved server-side
+//     with the SAME 3-pass pattern as VPLAYER_QCM_ANSWER/ARDOISE_INPUT
+//     (payload.ID → msg.ID → clientID) — used ONLY for the vplayer turn
+//     check (contract §9.2 dérogation, websocket-actions.md fiche
+//     FLIP_MEMORY_CARD). tv/anim never need it, they have no team.
+//   - CardScope.MotionCardID (optional) binds the flip to a MEMOTION card's
+//     own grid instead of the question-scoped one (contract §9).
 type FlipMemoryCardPayload struct {
-	CardID string `json:"CARD_ID"` // Card ID to flip (e.g., "1-1", "2-2")
+	CardID string `json:"CARD_ID"`      // Card ID to flip (e.g., "1-1", "2-2")
+	ID     string `json:"ID,omitempty"` // Bumper ID (VPlayer) — #187, v7.1.0
+	CardScope
 }
 
 // MemorySetTeamsPayload for MEMORY_SET_TEAMS action
@@ -429,13 +441,14 @@ type MotionSelectPayload struct {
 // currently in play — contract §9. Optional: its zero value (absent
 // MOTION_CARD_ID) preserves today's behavior for every existing action,
 // none of which is required to carry it. No action in v7.0.0 actually
-// carries CardScope yet — #185 (QCM-in-card) has no new action at all
-// (contract §7.1), so the invariant this type supports
-// (game.ValidateCardScope) is posed and tested now but has no real caller
-// until #186. Delivered ahead of its first consumer deliberately: #186/
-// #187 need to be able to assume it's already part of the core, and
-// bolting it on after the fact would reopen the MEMOTION host — exactly
-// what #184's agnosticity test (contract §10) forbids.
+// carried CardScope — #185 (QCM-in-card) has no new action at all (contract
+// §7.1), so the invariant this type supports (game.ValidateCardScope) was
+// posed and tested ahead of any real consumer. #186 (ARDOISE-in-card) was
+// closed "not planned" before it shipped; FLIP_MEMORY_CARD (#187, v7.1.0)
+// is the first action to actually carry MOTION_CARD_ID. Delivered ahead of
+// its first consumer deliberately: bolting it on after the fact would have
+// reopened the MEMOTION host — exactly what #184's agnosticity test
+// (contract §10) forbids.
 type CardScope struct {
 	MotionCardID string `json:"MOTION_CARD_ID,omitempty"`
 }

@@ -243,15 +243,22 @@ const (
 // (declared directly on Question, below) is not: Question keeps its own
 // explicit ANSWER field, which — per Go's embedded-field JSON precedence
 // (shallower field wins) — always shadows this one for Question, so this
-// tag only ever governs MotionCard's future ARDOISE-in-card use (#186,
-// v7.1.0). Without omitempty here, every existing MEMOTION card (which
-// never carries ANSWER) would gain an "ANSWER":"" key it never had —
-// contract-mandated deviation from the literal §2 snippet (which shows a
-// single Answer field with no comment on this asymmetry), documented in the
-// Batch 2 DONE report and reflected back into the contract.
+// field never actually fires for the question host; only MotionCard could
+// ever populate it. Without omitempty here, every existing MEMOTION card
+// (which never carries ANSWER) would gain an "ANSWER":"" key it never had.
+//
+// ⚠️ v7.1.0 (#187): this field's only prior justification — ARDOISE-in-card
+// (#186) — was abandoned before implementation ("not planned", 2026-08-24,
+// contract §2's "Mise à jour v7.1.0" note). The `omitempty` tag stays
+// anyway: removing it would give every existing MEMOTION card a fresh
+// "ANSWER":"" key it never had, breaking the byte-for-byte round-trip of
+// the 85 question.json fixtures (models_roundtrip_test.go). It now exists
+// purely to preserve that invariant, not in anticipation of a consumer —
+// do not "clean it up" because #186 is closed.
 type TypedContent struct {
 	// SPEEDY (MotionCard only — Question.Answer below is authoritative for
-	// the question host) / ARDOISE (#186, v7.1.0)
+	// the question host). No nestable type actually populates this field in
+	// v7.1.0 — see the doc comment above.
 	Answer string `json:"ANSWER,omitempty"`
 	// QCM
 	QCMAnswers        *QCMAnswers `json:"QCM_ANSWERS,omitempty"`
@@ -261,9 +268,14 @@ type TypedContent struct {
 	QCMHintThreshold2 float64     `json:"QCM_HINT_THRESHOLD_2,omitempty"`
 	QCMPenalty1       float64     `json:"QCM_PENALTY_1,omitempty"`
 	QCMPenalty2       float64     `json:"QCM_PENALTY_2,omitempty"`
-	// ARDOISE (#186, v7.1.0)
+	// ARDOISE — question host only. Not nestable in a MEMOTION card: #186
+	// closed "not planned" (2026-08-24, contract §7.2) before it shipped.
 	ArdoiseKeyboardType KeyboardType `json:"ARDOISE_KEYBOARD_TYPE,omitempty"`
-	// MEMORY (#187, v7.1.0)
+	// MEMORY — question host AND, since #187 (v7.1.0), a MEMOTION card
+	// (contract §7.3). MemoryMode is read for the question host only; a
+	// MEMORY card ignores it entirely (contract §6.3) — it is always played
+	// by exactly one team, the current MEMOTION team, and never rotates on
+	// its own.
 	MemoryPairs  []MemoryPair  `json:"MEMORY_PAIRS,omitempty"`
 	MemoryConfig *MemoryConfig `json:"MEMORY_CONFIG,omitempty"`
 	MemoryMode   string        `json:"MEMORY_MODE,omitempty"`
@@ -294,7 +306,7 @@ type MotionCard struct {
 
 // EffectiveType returns c.Type, defaulting to SPEEDY when absent — the
 // retro-compatible reading every consumer of MotionCard.Type must use
-// instead of comparing the raw field to "" (contract §3: "absent ou ''
+// instead of comparing the raw field to "" (contract §3: "absent ou ”
 // ⇒ SPEEDY").
 func (c *MotionCard) EffectiveType() QuestionType {
 	if c.Type == "" {
@@ -315,9 +327,17 @@ const (
 	// PointsRuleModeFixed awards VALUE if the type's outcome reports
 	// Units > 0, else 0 — a card whose value doesn't depend on difficulty.
 	PointsRuleModeFixed PointsRuleMode = "FIXED"
-	// PointsRuleModePerUnit awards VALUE × Units — progression types
-	// (#187, MEMORY prorata).
+	// PointsRuleModePerUnit awards VALUE × Units — a progression type with a
+	// static, editor-set value per unit.
 	PointsRuleModePerUnit PointsRuleMode = "PER_UNIT"
+	// PointsRuleModeStarsProrata awards the card's own star-scale points
+	// (motionCardPoints, same source as the STARS default) prorated by
+	// Units/UnitsTotal — no VALUE. Default POINTS_RULE of a MEMORY card
+	// (#187, contract §6.2/§6.3): the card is worth its stars like any
+	// other, and the type only ever distributes a fraction of them — no
+	// points setting independent of the star scale is introduced. VALUE is
+	// ignored under this mode.
+	PointsRuleModeStarsProrata PointsRuleMode = "STARS_PRORATA"
 )
 
 // PointsRule is a MotionCard's own points-award rule — contract §6.2. The
@@ -333,15 +353,20 @@ type PointsRule struct {
 // TypeOutcome is what a nested type implementation reports back to its
 // host after a round — contract §6.1: "un type ne rend qu'un résultat".
 // Units defaults to 1 for any binary (won/lost) type; a progression type
-// (MEMORY prorata, #187) reports its own count. Not yet produced anywhere
-// in v7.0.0 — #185 (QCM-in-card) is designated via the existing
-// MEMOTION_DONE action exactly like SPEEDY, not through this struct;
-// documented here because #186/#187 must be able to assume it's part of
+// reports its own count AND its own denominator in UnitsTotal (#187, MEMORY
+// prorata, contract §6.1) — the host divides but must never itself know
+// what a "unit" is (e.g. a MEMORY pair). motionCardPointsForOutcome takes
+// (units, unitsTotal) as plain ints rather than a literal value of this
+// struct, but the data shape is the one documented here. Not yet produced
+// anywhere as a literal Go value — #185 (QCM-in-card) is designated via the
+// existing MEMOTION_DONE action exactly like SPEEDY, not through this
+// struct; documented here because #187 must be able to assume it's part of
 // the core contract, and adding it after the fact would reopen engine.go
 // (forbidden by #184's agnosticity test, contract §10).
 type TypeOutcome struct {
 	WinnerTeam string // "" = nobody
-	Units      int    // 1 = won, 0 = lost; >1 reserved for progression types
+	Units      int    // realised — 1 = won, 0 = lost for a binary type
+	UnitsTotal int    // realisable maximum — 0 for a binary type (#187)
 }
 
 // MemoryConfig holds configuration for the Memory game
