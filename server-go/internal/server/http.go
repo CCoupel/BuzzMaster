@@ -982,10 +982,14 @@ func (h *HTTPServer) handleUploadQuestion(w http.ResponseWriter, r *http.Request
 				// strings.ToUpper(slot)+"_IMAGE" convention already in use
 				// (recto→RECTO_IMAGE, question→QUESTION_IMAGE,
 				// answer→ANSWER_IMAGE) — holds for every currently-nestable
-				// type (SPEEDY, QCM); MEMORY's "recto"-plus-N-pairs slots
-				// (contract §7, not modeled as a flat list, #187) and
-				// ARDOISE aren't reachable here yet, both rejected earlier
-				// as not-yet-nestable.
+				// type whose slots map 1:1 to a flat *_IMAGE field (SPEEDY,
+				// QCM). MEMORY's "recto"-plus-N-pairs slots
+				// (contract §7, not modeled as a flat list) don't fit that
+				// convention — TypeDescriptor.MediaSlots for MEMORY only
+				// declares "recto" (handled by this generic loop); per-pair
+				// images are handled separately below, mirroring the
+				// question-host MEMORY upload's own memory_card_<pairID>_1/2
+				// handling above, scoped by cardID instead (#187, v7.1.0).
 				for i, card := range cards {
 					cardID, _ := card["ID"].(string)
 					if cardID == "" {
@@ -1023,6 +1027,63 @@ func (h *HTTPServer) handleUploadQuestion(w http.ResponseWriter, r *http.Request
 						dst.Close()
 						file.Close()
 						cards[i][strings.ToUpper(slot)+"_IMAGE"] = "/question/" + id + "/" + fileName
+					}
+
+					// #187 (v7.1.0) — MEMORY card: per-pair images.
+					// TypeDescriptor.MediaSlots doesn't model these (N pairs,
+					// data-driven, not a fixed slot list — contract §7), so
+					// they're handled here instead of via the generic slot
+					// loop above. Field naming mirrors the question-host
+					// MEMORY upload (memory_card_<pairID>_1/2, above) with
+					// the card scoped in: motion_card_<cardID>_pair_<pairID>_1/2
+					// (dev-frontend/dev-backend coordination, #187).
+					if cardType == game.QuestionTypeMemory {
+						if pairsRaw, ok := cards[i]["MEMORY_PAIRS"].([]interface{}); ok {
+							for pi, pairRaw := range pairsRaw {
+								pair, ok := pairRaw.(map[string]interface{})
+								if !ok {
+									continue
+								}
+								pairIDFloat, _ := pair["ID"].(float64)
+								pairID := int(pairIDFloat)
+
+								card1Field := fmt.Sprintf("motion_card_%s_pair_%d_1", cardID, pairID)
+								if file, header, err := r.FormFile(card1Field); err == nil {
+									randomNum := rand.Intn(9000) + 1000
+									fileName := fmt.Sprintf("motion_%s_pair_%d_1_%d%s", cardID, pairID, randomNum, filepath.Ext(header.Filename))
+									filePath := filepath.Join(questionsDir, fileName)
+									if dst, err := os.Create(filePath); err == nil {
+										io.Copy(dst, file)
+										dst.Close()
+										if card1, ok := pair["CARD1"].(map[string]interface{}); ok {
+											card1["IMAGE"] = "/question/" + id + "/" + fileName
+											card1["IS_IMAGE"] = true
+											pair["CARD1"] = card1
+										}
+									}
+									file.Close()
+								}
+
+								card2Field := fmt.Sprintf("motion_card_%s_pair_%d_2", cardID, pairID)
+								if file, header, err := r.FormFile(card2Field); err == nil {
+									randomNum := rand.Intn(9000) + 1000
+									fileName := fmt.Sprintf("motion_%s_pair_%d_2_%d%s", cardID, pairID, randomNum, filepath.Ext(header.Filename))
+									filePath := filepath.Join(questionsDir, fileName)
+									if dst, err := os.Create(filePath); err == nil {
+										io.Copy(dst, file)
+										dst.Close()
+										if card2, ok := pair["CARD2"].(map[string]interface{}); ok {
+											card2["IMAGE"] = "/question/" + id + "/" + fileName
+											card2["IS_IMAGE"] = true
+											pair["CARD2"] = card2
+										}
+									}
+									file.Close()
+								}
+								pairsRaw[pi] = pair
+							}
+							cards[i]["MEMORY_PAIRS"] = pairsRaw
+						}
 					}
 				}
 				question["MOTION_CARDS"] = cards

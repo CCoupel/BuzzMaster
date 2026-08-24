@@ -151,6 +151,78 @@ func TestHTTPServer_MEMOTIONUpload_MediaSlots_QCM_IgnoresAnswerSlot(t *testing.T
 	}
 }
 
+// TestHTTPServer_MEMOTIONUpload_MediaSlots_MEMORY_PairImages is #187
+// (v7.1.0)'s server half of the dev-frontend/dev-backend coordination on
+// per-pair image upload field naming for a MEMORY-typed MEMOTION card:
+// TypeDescriptor.MediaSlots only declares "recto" for MEMORY (its N pairs
+// aren't a fixed slot list, contract §7) — the pair images are handled by a
+// dedicated branch in handleUploadQuestion, field name
+// motion_card_<cardID>_pair_<pairID>_1/2, mirroring the question-host
+// MEMORY upload's own memory_card_<pairID>_1/2 convention with the card
+// scoped in.
+func TestHTTPServer_MEMOTIONUpload_MediaSlots_MEMORY_PairImages(t *testing.T) {
+	server, dataDir := setupTestHTTPServer(t)
+
+	cards := []map[string]interface{}{
+		{
+			"ID": "mc-1", "RECTO_THEME": "x", "DIFFICULTY": 1, "TYPE": "MEMORY",
+			"MEMORY_PAIRS": []map[string]interface{}{
+				{"ID": 1, "CARD1": map[string]interface{}{"TEXT": "A"}, "CARD2": map[string]interface{}{"TEXT": "A"}},
+				{"ID": 2, "CARD1": map[string]interface{}{"TEXT": "B"}, "CARD2": map[string]interface{}{"TEXT": "B"}},
+			},
+		},
+	}
+	cardsJSON, err := json.Marshal(cards)
+	if err != nil {
+		t.Fatalf("marshal cards: %v", err)
+	}
+
+	images := map[string][]byte{
+		"motion_card_mc-1_recto":    minimalPNG,
+		"motion_card_mc-1_pair_1_1": minimalPNG,
+		"motion_card_mc-1_pair_1_2": minimalPNG,
+		"motion_card_mc-1_pair_2_1": minimalPNG,
+		// pair 2's second card deliberately left text-only — must survive
+		// unset, not be overwritten by a leftover from another field.
+	}
+	req := newMEMOTIONUploadRequestWithImages(t, string(cardsJSON), images)
+	w := httptest.NewRecorder()
+	server.mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	q := readWrittenMEMOTIONQuestion(t, dataDir)
+	if len(q.MotionCards) != 1 {
+		t.Fatalf("expected 1 motion card, got %d", len(q.MotionCards))
+	}
+	card := q.MotionCards[0]
+	if card.RectoImage == "" {
+		t.Error("expected RECTO_IMAGE to be set for a MEMORY card (recto is its one MediaSlots entry)")
+	}
+	if len(card.MemoryPairs) != 2 {
+		t.Fatalf("expected 2 MEMORY_PAIRS to survive the upload, got %d", len(card.MemoryPairs))
+	}
+	pair1 := card.MemoryPairs[0]
+	if pair1.Card1.Image == "" || !pair1.Card1.IsImage {
+		t.Errorf("pair 1 CARD1: expected IMAGE set + IS_IMAGE=true, got IMAGE=%q IS_IMAGE=%v", pair1.Card1.Image, pair1.Card1.IsImage)
+	}
+	if pair1.Card2.Image == "" || !pair1.Card2.IsImage {
+		t.Errorf("pair 1 CARD2: expected IMAGE set + IS_IMAGE=true, got IMAGE=%q IS_IMAGE=%v", pair1.Card2.Image, pair1.Card2.IsImage)
+	}
+	pair2 := card.MemoryPairs[1]
+	if pair2.Card1.Image == "" || !pair2.Card1.IsImage {
+		t.Errorf("pair 2 CARD1: expected IMAGE set + IS_IMAGE=true, got IMAGE=%q IS_IMAGE=%v", pair2.Card1.Image, pair2.Card1.IsImage)
+	}
+	if pair2.Card2.Image != "" || pair2.Card2.IsImage {
+		t.Errorf("pair 2 CARD2: expected to stay text-only (no image field sent), got IMAGE=%q IS_IMAGE=%v", pair2.Card2.Image, pair2.Card2.IsImage)
+	}
+	if pair1.Card1.Image == pair1.Card2.Image {
+		t.Errorf("pair 1's two cards must not share the same stored file: CARD1=%q CARD2=%q", pair1.Card1.Image, pair1.Card2.Image)
+	}
+}
+
 // readWrittenMEMOTIONQuestion reads back the single question.json written
 // under dataDir/files/questions by the test's upload request.
 func readWrittenMEMOTIONQuestion(t *testing.T, dataDir string) game.Question {
