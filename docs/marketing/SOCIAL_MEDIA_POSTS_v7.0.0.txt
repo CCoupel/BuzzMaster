@@ -1,0 +1,54 @@
+===========================================
+BuzzControl v7.0.0 — "Les cartes MEMOTION s'ouvrent au QCM"
+Posts réseaux sociaux
+===========================================
+
+-------------------------------------------
+TWITTER / X (280 caractères max)
+-------------------------------------------
+
+🃏 BuzzControl v7.0.0 est là !
+
+Les cartes MEMOTION peuvent désormais cacher une vraie question QCM à 4 réponses colorées, avec indices progressifs. De quoi varier le rythme au sein d'une même manche.
+
+#quiz #buzzer #opensource
+
+[Caractères : ~230]
+
+-------------------------------------------
+LINKEDIN (format long)
+-------------------------------------------
+
+Le mode MEMOTION de BuzzControl repose sur la mémorisation : une phase où les cartes sont visibles, puis cachées, avant que chaque équipe désigne la sienne par coordonnée.
+
+Avec la v7.0.0, ces cartes changent de nature : elles peuvent désormais cacher une véritable question QCM à 4 réponses colorées, avec ses indices progressifs qui s'éliminent au fil du chronomètre — exactement comme en question QCM classique. Une même manche de mémorisation peut ainsi réserver plusieurs styles de défis, carte après carte.
+
+Cette version pose aussi la fondation technique qui permettra, dans les prochaines releases, d'imbriquer d'autres types de question (réponses libres, jeu de paires) dans ces mêmes cartes — sans rien changer à la façon dont vous jouez aujourd'hui.
+
+BuzzControl reste un projet open source, pensé pour les quiz d'entreprise, les animations scolaires et les soirées entre amis.
+
+👉 Documentation et code source : https://github.com/CCoupel/BuzzMaster
+
+#opensource #golang #react #eventtech #quiz
+
+-------------------------------------------
+REDDIT / FORUM COMMUNAUTÉ
+-------------------------------------------
+
+**[Release] BuzzControl v7.0.0 — QCM imbriqué dans les cartes MEMOTION**
+
+Bonjour communauté,
+
+Nouvelle version de BuzzControl (système de buzzers sans fil pour quiz, serveur 100% Go + buzzers ESP32-C3) : v7.0.0 permet aux cartes du mode MEMOTION de porter une véritable question QCM (4 réponses colorées, indices progressifs) au lieu d'un simple contenu à révéler.
+
+**Ce qui change :**
+- Cartes MEMOTION polymorphes : chaque carte porte un type (`TYPE`) et sa propre règle de calcul de points (`POINTS_RULE`)
+- Question QCM jouable directement à l'intérieur d'une carte MEMOTION
+- Refonte interne : table unique des métadonnées de types de question (SPEEDY, QCM, MEMORY, MEMOTION, ARDOISE), contexte d'hébergement normalisé pour les composants de question
+- Aucune migration nécessaire — vos parties et questions existantes fonctionnent sans changement
+
+C'est la première étape d'une série MEMOTION+ : les cartes ARDOISE et MEMORY viendront s'ajouter au QCM comme types imbricables dans une prochaine version (v7.1.0).
+
+Notes de version complètes : https://github.com/CCoupel/BuzzMaster/blob/main/docs/releases/v7.0.0.md
+
+**Feedback bienvenu** : https://github.com/CCoupel/BuzzMaster/issues
