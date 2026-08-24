@@ -14,6 +14,7 @@ import CategoryBadge from '../components/CategoryBadge'
 import QuestionCard from '../components/QuestionCard'
 import AIGenerateModal from '../components/AIGenerateModal'
 import QcmAnswersEditor from '../components/QcmAnswersEditor'
+import MotionCardMemoryEditor from '../components/MotionCardMemoryEditor'
 import './QuestionsPage.css'
 import './ConfigPage.css'
 import '../styles/sliders.css'
@@ -96,6 +97,18 @@ export default function QuestionsPage() {
         qcmHintThreshold2: 0.125,
         qcmPenalty1: 0.67,
         qcmPenalty2: 0.33,
+        // #187 — OwnedFields MEMORY, valeurs de création (contrat §3.2,
+        // DOIVENT rester synchronisées avec utils/motionCardLock.js
+        // MEMORY_MODE_CREATION_VALUE/MEMORY_CONFIG_CREATION_VALUES).
+        memoryMode: 'SOLO',
+        memoryPairs: [
+          { id: 1, card1: { text: '', image: null, isImage: false }, card2: { text: '', image: null, isImage: false } },
+          { id: 2, card1: { text: '', image: null, isImage: false }, card2: { text: '', image: null, isImage: false } },
+        ],
+        memoryConfig: {
+          flipDelay: 3, pointsPerPair: 10, errorPenalty: 0, completionBonus: 0,
+          useTimer: true, memorizeTime: 5, showDuringMemorize: true, revealDelay: 0.5,
+        },
       },
       { id: 'mc-2', rectoTheme: '', rectoImage: null, difficulty: 1, questionText: '', questionImage: null, answerText: '', answerImage: null,
         type: 'SPEEDY',
@@ -106,6 +119,16 @@ export default function QuestionsPage() {
         qcmHintThreshold2: 0.125,
         qcmPenalty1: 0.67,
         qcmPenalty2: 0.33,
+        // #187 — voir commentaire OwnedFields MEMORY sur la carte mc-1 ci-dessus.
+        memoryMode: 'SOLO',
+        memoryPairs: [
+          { id: 1, card1: { text: '', image: null, isImage: false }, card2: { text: '', image: null, isImage: false } },
+          { id: 2, card1: { text: '', image: null, isImage: false }, card2: { text: '', image: null, isImage: false } },
+        ],
+        memoryConfig: {
+          flipDelay: 3, pointsPerPair: 10, errorPenalty: 0, completionBonus: 0,
+          useTimer: true, memorizeTime: 5, showDuringMemorize: true, revealDelay: 0.5,
+        },
       },
     ],
     motionConfig: { points1: 1, points2: 3, points3: 5 },
@@ -822,6 +845,18 @@ export default function QuestionsPage() {
         qcmHintThreshold2: 0.125,
         qcmPenalty1: 0.67,
         qcmPenalty2: 0.33,
+        // #187 — OwnedFields MEMORY, valeurs de création (contrat §3.2,
+        // DOIVENT rester synchronisées avec utils/motionCardLock.js
+        // MEMORY_MODE_CREATION_VALUE/MEMORY_CONFIG_CREATION_VALUES).
+        memoryMode: 'SOLO',
+        memoryPairs: [
+          { id: 1, card1: { text: '', image: null, isImage: false }, card2: { text: '', image: null, isImage: false } },
+          { id: 2, card1: { text: '', image: null, isImage: false }, card2: { text: '', image: null, isImage: false } },
+        ],
+        memoryConfig: {
+          flipDelay: 3, pointsPerPair: 10, errorPenalty: 0, completionBonus: 0,
+          useTimer: true, memorizeTime: 5, showDuringMemorize: true, revealDelay: 0.5,
+        },
       },
       { id: 'mc-2', rectoTheme: '', rectoImage: null, difficulty: 1, questionText: '', questionImage: null, answerText: '', answerImage: null,
         type: 'SPEEDY',
@@ -832,6 +867,16 @@ export default function QuestionsPage() {
         qcmHintThreshold2: 0.125,
         qcmPenalty1: 0.67,
         qcmPenalty2: 0.33,
+        // #187 — voir commentaire OwnedFields MEMORY sur la carte mc-1 ci-dessus.
+        memoryMode: 'SOLO',
+        memoryPairs: [
+          { id: 1, card1: { text: '', image: null, isImage: false }, card2: { text: '', image: null, isImage: false } },
+          { id: 2, card1: { text: '', image: null, isImage: false }, card2: { text: '', image: null, isImage: false } },
+        ],
+        memoryConfig: {
+          flipDelay: 3, pointsPerPair: 10, errorPenalty: 0, completionBonus: 0,
+          useTimer: true, memorizeTime: 5, showDuringMemorize: true, revealDelay: 0.5,
+        },
       },
     ]
     if (question.MOTION_CARDS && Array.isArray(question.MOTION_CARDS)) {
@@ -855,6 +900,34 @@ export default function QuestionsPage() {
         qcmHintThreshold2: card.QCM_HINT_THRESHOLD_2 ?? 0.125,
         qcmPenalty1: card.QCM_PENALTY_1 ?? 0.67,
         qcmPenalty2: card.QCM_PENALTY_2 ?? 0.33,
+        // #187 — MEMORY : mêmes défauts de création que les autres sites
+        // (synchronisés avec motionCardLock.js, MEMORY_MODE_CREATION_VALUE/
+        // MEMORY_CONFIG_CREATION_VALUES). MEMORY_PAIRS d'une carte suit le
+        // même format que MEMORY_PAIRS d'une question (contrat §2, TypedContent
+        // partagé) — même mapping que `memoryPairs` ci-dessus (question-scopé).
+        memoryMode: card.MEMORY_MODE || 'SOLO',
+        memoryPairs: (card.MEMORY_PAIRS && Array.isArray(card.MEMORY_PAIRS))
+          ? card.MEMORY_PAIRS.map(pair => ({
+              id: pair.ID,
+              card1: { text: pair.CARD1?.TEXT || '', image: pair.CARD1?.IMAGE || null, isImage: pair.CARD1?.IS_IMAGE || false },
+              card2: { text: pair.CARD2?.TEXT || '', image: pair.CARD2?.IMAGE || null, isImage: pair.CARD2?.IS_IMAGE || false },
+            }))
+          : [
+              { id: 1, card1: { text: '', image: null, isImage: false }, card2: { text: '', image: null, isImage: false } },
+              { id: 2, card1: { text: '', image: null, isImage: false }, card2: { text: '', image: null, isImage: false } },
+            ],
+        memoryConfig: card.MEMORY_CONFIG
+          ? {
+              flipDelay: card.MEMORY_CONFIG.FLIP_DELAY ?? 3,
+              pointsPerPair: card.MEMORY_CONFIG.POINTS_PER_PAIR ?? 10,
+              errorPenalty: card.MEMORY_CONFIG.ERROR_PENALTY ?? 0,
+              completionBonus: card.MEMORY_CONFIG.COMPLETION_BONUS ?? 0,
+              useTimer: card.MEMORY_CONFIG.USE_TIMER !== false,
+              memorizeTime: card.MEMORY_CONFIG.MEMORIZE_TIME ?? 5,
+              showDuringMemorize: card.MEMORY_CONFIG.SHOW_DURING_MEMORIZE !== false,
+              revealDelay: card.MEMORY_CONFIG.REVEAL_DELAY ?? 0.5,
+            }
+          : { flipDelay: 3, pointsPerPair: 10, errorPenalty: 0, completionBonus: 0, useTimer: true, memorizeTime: 5, showDuringMemorize: true, revealDelay: 0.5 },
       }))
     }
 
@@ -946,6 +1019,18 @@ export default function QuestionsPage() {
         qcmHintThreshold2: 0.125,
         qcmPenalty1: 0.67,
         qcmPenalty2: 0.33,
+        // #187 — OwnedFields MEMORY, valeurs de création (contrat §3.2,
+        // DOIVENT rester synchronisées avec utils/motionCardLock.js
+        // MEMORY_MODE_CREATION_VALUE/MEMORY_CONFIG_CREATION_VALUES).
+        memoryMode: 'SOLO',
+        memoryPairs: [
+          { id: 1, card1: { text: '', image: null, isImage: false }, card2: { text: '', image: null, isImage: false } },
+          { id: 2, card1: { text: '', image: null, isImage: false }, card2: { text: '', image: null, isImage: false } },
+        ],
+        memoryConfig: {
+          flipDelay: 3, pointsPerPair: 10, errorPenalty: 0, completionBonus: 0,
+          useTimer: true, memorizeTime: 5, showDuringMemorize: true, revealDelay: 0.5,
+        },
       },
         { id: 'mc-2', rectoTheme: '', rectoImage: null, difficulty: 1, questionText: '', questionImage: null, answerText: '', answerImage: null,
         type: 'SPEEDY',
@@ -956,6 +1041,16 @@ export default function QuestionsPage() {
         qcmHintThreshold2: 0.125,
         qcmPenalty1: 0.67,
         qcmPenalty2: 0.33,
+        // #187 — voir commentaire OwnedFields MEMORY sur la carte mc-1 ci-dessus.
+        memoryMode: 'SOLO',
+        memoryPairs: [
+          { id: 1, card1: { text: '', image: null, isImage: false }, card2: { text: '', image: null, isImage: false } },
+          { id: 2, card1: { text: '', image: null, isImage: false }, card2: { text: '', image: null, isImage: false } },
+        ],
+        memoryConfig: {
+          flipDelay: 3, pointsPerPair: 10, errorPenalty: 0, completionBonus: 0,
+          useTimer: true, memorizeTime: 5, showDuringMemorize: true, revealDelay: 0.5,
+        },
       },
       ],
       motionConfig: { points1: 1, points2: 3, points3: 5 },
@@ -1071,6 +1166,16 @@ export default function QuestionsPage() {
         qcmHintThreshold2: 0.125,
         qcmPenalty1: 0.67,
         qcmPenalty2: 0.33,
+        // #187 — voir commentaire OwnedFields MEMORY, useState initial (mc-1).
+        memoryMode: 'SOLO',
+        memoryPairs: [
+          { id: 1, card1: { text: '', image: null, isImage: false }, card2: { text: '', image: null, isImage: false } },
+          { id: 2, card1: { text: '', image: null, isImage: false }, card2: { text: '', image: null, isImage: false } },
+        ],
+        memoryConfig: {
+          flipDelay: 3, pointsPerPair: 10, errorPenalty: 0, completionBonus: 0,
+          useTimer: true, memorizeTime: 5, showDuringMemorize: true, revealDelay: 0.5,
+        },
       },
         ]
       }
@@ -1088,6 +1193,78 @@ export default function QuestionsPage() {
     setFormData(prev => ({
       ...prev,
       motionCards: prev.motionCards.map(c => c.id !== cardId ? c : { ...c, [field]: value })
+    }))
+  }
+
+  // #187 — sous-éditeur MEMORY d'une carte MEMOTION. Même mécanique que les
+  // handlers `handleAddMemoryPair`/`handleRemoveMemoryPair`/
+  // `handleMemoryCardChange` (hôte question, ci-dessus), mais scopée à la
+  // carte `cardId` — pas de handler générique partagé (le state de la carte
+  // vit sous `motionCards[i].memoryPairs`, pas au niveau racine de `formData`).
+  const handleAddMotionCardMemoryPair = (cardId) => {
+    setFormData(prev => ({
+      ...prev,
+      motionCards: prev.motionCards.map(c => {
+        if (c.id !== cardId) return c
+        const pairs = c.memoryPairs || []
+        if (pairs.length >= 12) return c // Max 12 paires, même borne que l'hôte question
+        const maxId = Math.max(...pairs.map(p => p.id), 0)
+        return {
+          ...c,
+          memoryPairs: [
+            ...pairs,
+            { id: maxId + 1, card1: { text: '', image: null, isImage: false }, card2: { text: '', image: null, isImage: false } },
+          ],
+        }
+      }),
+    }))
+  }
+
+  const handleRemoveMotionCardMemoryPair = (cardId, pairId) => {
+    setFormData(prev => ({
+      ...prev,
+      motionCards: prev.motionCards.map(c => {
+        if (c.id !== cardId) return c
+        const pairs = c.memoryPairs || []
+        if (pairs.length <= 2) return c // Min 2 paires, même borne que l'hôte question
+        return { ...c, memoryPairs: pairs.filter(p => p.id !== pairId) }
+      }),
+    }))
+  }
+
+  const handleMotionCardMemoryCardChange = (cardId, pairId, cardKey, field, value) => {
+    setFormData(prev => ({
+      ...prev,
+      motionCards: prev.motionCards.map(c => {
+        if (c.id !== cardId) return c
+        return {
+          ...c,
+          memoryPairs: (c.memoryPairs || []).map(pair => {
+            if (pair.id !== pairId) return pair
+            const cardSide = { ...pair[cardKey] }
+            if (field === 'type') {
+              cardSide.isImage = value === 'image'
+              if (cardSide.isImage) cardSide.text = ''
+              else cardSide.image = null
+            } else if (field === 'text') {
+              cardSide.text = value
+            } else if (field === 'image') {
+              cardSide.image = value
+            }
+            return { ...pair, [cardKey]: cardSide }
+          }),
+        }
+      }),
+    }))
+  }
+
+  const handleMotionCardMemoryConfigChange = (cardId, field, value) => {
+    setFormData(prev => ({
+      ...prev,
+      motionCards: prev.motionCards.map(c => c.id !== cardId ? c : {
+        ...c,
+        memoryConfig: { ...c.memoryConfig, [field]: value },
+      }),
     }))
   }
 
@@ -1232,6 +1409,48 @@ export default function QuestionsPage() {
             QCM_PENALTY_2: card.qcmPenalty2,
           }
         }
+        if (cardType === 'MEMORY') {
+          // #187 — MEMORY_MODE toujours "SOLO" : jamais exposé dans
+          // l'éditeur de carte (ignoré par le moteur en contexte carte,
+          // contrat §6.3 — une seule équipe, celle de la manche MEMOTION en
+          // cours), donc jamais écarté de sa valeur de création côté client.
+          // Pas de POINTS_RULE ici : le serveur applique STARS_PRORATA par
+          // défaut pour une carte MEMORY sans réglage explicite (contrat
+          // §6.3) — cette structure n'est pas encore modélisée côté JS
+          // (même état que pour SPEEDY/QCM, voir motionCardLock.js).
+          return {
+            ...base,
+            MEMORY_MODE: 'SOLO',
+            MEMORY_PAIRS: (card.memoryPairs || []).map(pair => ({
+              ID: pair.id,
+              CARD1: {
+                TEXT: pair.card1.isImage ? '' : pair.card1.text,
+                IMAGE: typeof pair.card1.image === 'string' ? pair.card1.image : '',
+                IS_IMAGE: pair.card1.isImage,
+              },
+              CARD2: {
+                TEXT: pair.card2.isImage ? '' : pair.card2.text,
+                IMAGE: typeof pair.card2.image === 'string' ? pair.card2.image : '',
+                IS_IMAGE: pair.card2.isImage,
+              },
+            })),
+            // Les trois réglages de points (POINTS_PER_PAIR/ERROR_PENALTY/
+            // COMPLETION_BONUS) sont envoyés pour la cohérence du format
+            // (même structure MEMORY_CONFIG qu'en hôte question) mais SANS
+            // AUCUNE AUTORITÉ en contexte carte (contrat §6.1/§6.3) — le
+            // moteur ne les lit jamais au moment de créditer une carte.
+            MEMORY_CONFIG: {
+              FLIP_DELAY: card.memoryConfig?.flipDelay ?? 3,
+              POINTS_PER_PAIR: card.memoryConfig?.pointsPerPair ?? 10,
+              ERROR_PENALTY: card.memoryConfig?.errorPenalty ?? 0,
+              COMPLETION_BONUS: card.memoryConfig?.completionBonus ?? 0,
+              USE_TIMER: card.memoryConfig?.useTimer ?? true,
+              MEMORIZE_TIME: card.memoryConfig?.memorizeTime ?? 5,
+              SHOW_DURING_MEMORIZE: card.memoryConfig?.showDuringMemorize ?? true,
+              REVEAL_DELAY: card.memoryConfig?.revealDelay ?? 0.5,
+            },
+          }
+        }
         return {
           ...base,
           ANSWER_TEXT: card.answerText,
@@ -1251,6 +1470,19 @@ export default function QuestionsPage() {
         if (card.rectoImage instanceof File) data.append(`motion_card_${card.id}_recto`, card.rectoImage)
         if (card.questionImage instanceof File) data.append(`motion_card_${card.id}_question`, card.questionImage)
         if (card.answerImage instanceof File) data.append(`motion_card_${card.id}_answer`, card.answerImage)
+        // #187 — images de paires MEMORY. MediaSlots d'une carte MEMORY =
+        // "recto + N paires" (contrat §7, aucun slot `question`/`answer`) :
+        // convention retenue pour le nom de champ, coordonnée avec
+        // dev-backend (`handleUploadQuestion` doit lire les mêmes clés) —
+        // motion_card_<cardID>_pair_<pairID>_1 / _2, extension du patron
+        // `motion_card_<cardID>_<slot>` du contrat avec un slot dynamique
+        // par paire (même esprit que `memory_card_<pairID>_1/2` question-scopé).
+        if ((card.type || 'SPEEDY') === 'MEMORY') {
+          ;(card.memoryPairs || []).forEach(pair => {
+            if (pair.card1.image instanceof File) data.append(`motion_card_${card.id}_pair_${pair.id}_1`, pair.card1.image)
+            if (pair.card2.image instanceof File) data.append(`motion_card_${card.id}_pair_${pair.id}_2`, pair.card2.image)
+          })
+        }
       })
 
       // Set answer to number of cards for display
@@ -2710,7 +2942,13 @@ export default function QuestionsPage() {
                           {/* VERSO face — énoncé commun à tous les types
                               (contrat §3.1), suivi du sous-éditeur propre au
                               type le cas échéant (emplacement §7.1 — QCM
-                              n'ajoute aucune image, seulement ses 4 réponses). */}
+                              n'ajoute aucune image, seulement ses 4 réponses).
+                              #187 — MEMORY n'a PAS de MediaSlot `question`
+                              (contrat §7 : "recto + N paires") : l'upload
+                              d'image question est masqué pour ce type, le
+                              texte reste disponible (champ commun à la carte,
+                              §3.1) comme consigne optionnelle au-dessus de la
+                              grille. */}
                           <div className="memotion-face-section">
                             <div className="memotion-face-label memotion-face-verso">VERSO (Question)</div>
                             <div className="form-group" style={{ marginBottom: '0.5rem' }}>
@@ -2722,22 +2960,24 @@ export default function QuestionsPage() {
                                 className="memory-card-text-input"
                               />
                             </div>
-                            <div className="memotion-img-row">
-                              {card.questionImage ? (
-                                <div className="memory-card-image-preview">
-                                  <img
-                                    src={card.questionImage instanceof File ? URL.createObjectURL(card.questionImage) : card.questionImage}
-                                    alt="Question"
-                                  />
-                                  <button type="button" className="memory-card-remove-img" onClick={() => handleMotionCardChange(card.id, 'questionImage', null)}>×</button>
-                                </div>
-                              ) : (
-                                <label className="memory-card-upload">
-                                  <input type="file" accept="image/*" onChange={(e) => { const f = e.target.files?.[0]; if (f) handleMotionCardChange(card.id, 'questionImage', f) }} />
-                                  <span>+ Image question</span>
-                                </label>
-                              )}
-                            </div>
+                            {cardType !== 'MEMORY' && (
+                              <div className="memotion-img-row">
+                                {card.questionImage ? (
+                                  <div className="memory-card-image-preview">
+                                    <img
+                                      src={card.questionImage instanceof File ? URL.createObjectURL(card.questionImage) : card.questionImage}
+                                      alt="Question"
+                                    />
+                                    <button type="button" className="memory-card-remove-img" onClick={() => handleMotionCardChange(card.id, 'questionImage', null)}>×</button>
+                                  </div>
+                                ) : (
+                                  <label className="memory-card-upload">
+                                    <input type="file" accept="image/*" onChange={(e) => { const f = e.target.files?.[0]; if (f) handleMotionCardChange(card.id, 'questionImage', f) }} />
+                                    <span>+ Image question</span>
+                                  </label>
+                                )}
+                              </div>
+                            )}
                             {cardType === 'QCM' && (
                               <QcmAnswersEditor
                                 values={{
@@ -2755,12 +2995,24 @@ export default function QuestionsPage() {
                                 )}
                               />
                             )}
+                            {cardType === 'MEMORY' && (
+                              <MotionCardMemoryEditor
+                                card={card}
+                                onAddPair={() => handleAddMotionCardMemoryPair(card.id)}
+                                onRemovePair={(pairId) => handleRemoveMotionCardMemoryPair(card.id, pairId)}
+                                onCardChange={(pairId, cardKey, field, value) => handleMotionCardMemoryCardChange(card.id, pairId, cardKey, field, value)}
+                                onConfigChange={(field, value) => handleMotionCardMemoryConfigChange(card.id, field, value)}
+                              />
+                            )}
                           </div>
 
                           {/* REVEAL face — propre à SPEEDY uniquement (contrat
-                              §7 : MediaSlots de QCM = recto/question, aucune
-                              face reveal). QCM n'a rien à saisir ici : la
-                              bonne réponse est déjà désignée ci-dessus. */}
+                              §7 : MediaSlots de QCM/MEMORY n'en déclarent
+                              aucune, aucune face reveal). QCM n'a rien à
+                              saisir ici : la bonne réponse est déjà désignée
+                              ci-dessus. MEMORY (#187) : la grille EST la
+                              carte, il n'y a rien à révéler séparément — le
+                              serveur affiche simplement toutes les paires. */}
                           {cardType === 'SPEEDY' ? (
                             <div className="memotion-face-section">
                               <div className="memotion-face-label memotion-face-reveal">REVEAL (Reponse)</div>
@@ -2794,7 +3046,9 @@ export default function QuestionsPage() {
                             <div className="memotion-face-section">
                               <div className="memotion-face-label memotion-face-reveal">REVEAL (Reponse)</div>
                               <p className="memotion-card-no-reveal-hint">
-                                Pas de face de réponse à saisir : la bonne réponse est la proposition cochée ci-dessus.
+                                {cardType === 'MEMORY'
+                                  ? 'Pas de face de réponse à saisir : la grille de paires ci-dessus est déjà la carte.'
+                                  : 'Pas de face de réponse à saisir : la bonne réponse est la proposition cochée ci-dessus.'}
                               </p>
                             </div>
                           )}
