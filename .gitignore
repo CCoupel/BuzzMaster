@@ -170,5 +170,9 @@ TEMPLATE_claude/
 .claude/commands/context/*.template.md
 .claude/agents/context/*.template.md
 
-# Marketing site worktree (gh-pages branch)
-MARKETING/
+# Marketing site worktree (gh-pages branch) — anchored at repo root
+# (/MARKETING/) so this doesn't also match docs/marketing/: core.ignorecase=true
+# on this repo makes an unanchored "MARKETING/" match case-insensitively
+# anywhere in the tree, which silently swallowed new files added under
+# docs/marketing/ (discovered by marketing-release around the v7.0.0 release).
+/MARKETING/

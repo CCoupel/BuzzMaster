@@ -1,0 +1,56 @@
+===========================================
+BuzzControl v6.3.0 — "L'animateur prend la main"
+Posts réseaux sociaux
+===========================================
+
+-------------------------------------------
+TWITTER / X (280 caractères max)
+-------------------------------------------
+
+🎙️ BuzzControl v6.3.0 est là !
+
+Nouvelle interface tablette dédiée à l'animateur : lancez, arrêtez, révélez et créditez les points sans jamais quitter le pupitre. Tous les modes de jeu (buzzer, QCM, ardoise, memory) pilotables en direct.
+
+#quiz #buzzer #opensource
+
+[Caractères : ~270]
+
+-------------------------------------------
+LINKEDIN (format long)
+-------------------------------------------
+
+Animer un quiz en direct, c'est jongler entre l'écran de régie, le buzzer et le tableau des scores — souvent seul, souvent dans le feu de l'action.
+
+Avec BuzzControl v6.3.0, on a construit une interface entièrement pensée pour l'animateur : une simple tablette suffit désormais à conduire toute la partie. Lancer une question, l'arrêter, révéler la réponse, créditer les équipes — tous les gestes sont accessibles d'un geste, avec un code couleur qui indique toujours l'action attendue.
+
+Cette version couvre l'ensemble des modes de jeu du système : buzzer classique, QCM, réponses écrites (ardoise) et jeu de mémoire (memory), avec un crédit des points synchronisé en temps réel entre plusieurs animateurs — plus aucun risque de compter deux fois la même équipe.
+
+BuzzControl reste un projet open source, pensé pour les quiz d'entreprise, les animations scolaires et les soirées entre amis.
+
+👉 Documentation et code source : https://github.com/CCoupel/BuzzMaster
+
+#opensource #golang #react #eventtech #quiz
+
+-------------------------------------------
+REDDIT / FORUM COMMUNAUTÉ
+-------------------------------------------
+
+**[Release] BuzzControl v6.3.0 — Interface animateur dédiée**
+
+Bonjour communauté,
+
+Nouvelle version de BuzzControl (système de buzzers sans fil pour quiz, serveur 100% Go + buzzers ESP32-C3) : v6.3.0 ajoute une interface tablette entièrement dédiée à l'animateur, séparée de la régie admin.
+
+**Ce qui change :**
+- Nouvelle page `/anim` optimisée tablette (veille écran désactivée, reconnexion auto)
+- Conduite complète des modes SPEEDY, QCM, ARDOISE, MEMORY et MEMOTION depuis la tablette
+- Crédit des points synchronisé en temps réel entre plusieurs animateurs (fini le double-crédit)
+- Révélation de la réponse par pression tactile, avant la révélation officielle
+- Plusieurs correctifs de fiabilité (mise à jour temps réel, cartes MEMORY en fin de partie)
+- Durcissement de la sécurité WebSocket (allow-list des commandes par type de client)
+
+⚠️ Breaking change mineur : les anciens raccourcis `/anim/*` (qui redirigeaient vers `/admin`) ont été supprimés au profit de la vraie page `/anim`.
+
+Notes de version complètes : https://github.com/CCoupel/BuzzMaster/blob/main/docs/releases/v6.3.0.md
+
+**Feedback bienvenu** : https://github.com/CCoupel/BuzzMaster/issues
