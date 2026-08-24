@@ -924,6 +924,89 @@ describe('AnimConductPanel — L3, carte QCM (#185/C-F1)', () => {
   })
 })
 
+// ---------------------------------------------------------------------------
+// #187 — carte MEMOTION de type MEMORY : dispatch positif par type (esprit
+// #183), AnimMemoryGrid doit se monter en L3 dès que
+// `selectedMotionCard.TYPE === 'MEMORY'`, avec les données de LA CARTE
+// (`question` = la carte, ses MEMORY_PAIRS) et l'état vivant `cardMemory`
+// (getTypeState, MEMOTION_ACTIVE.STATE) — jamais `memory` (question-scopé).
+// AnimMemoryGrid a sa propre couverture exhaustive (AnimMemoryGrid.test.jsx) :
+// ici on vérifie uniquement le câblage, comme pour la branche QCM ci-dessus.
+// ---------------------------------------------------------------------------
+
+describe('AnimConductPanel — L3, carte MEMORY (#187)', () => {
+  function motionQuestionWithMemoryCard(overrides = {}) {
+    return motionQuestion({
+      MOTION_CARDS: [
+        { ID: 'c1', RECTO_THEME: 'Cinéma', DIFFICULTY: 1 },
+        {
+          ID: 'c2', TYPE: 'MEMORY', RECTO_THEME: 'Paires', DIFFICULTY: 2,
+          MEMORY_PAIRS: [{ ID: 1, CARD1: { TEXT: 'Q' }, CARD2: { TEXT: 'R' } }],
+        },
+      ],
+      ...overrides,
+    })
+  }
+
+  it.each(['SELECTED', 'QUESTION', 'REVEAL'])(
+    'sous-phase %s, carte active TYPE=MEMORY : L3 affiche AnimMemoryGrid (pas AnimMotionCard)',
+    (subphase) => {
+      const { container } = render(
+        <AnimConductPanel {...baseProps({
+          phase: 'STARTED',
+          question: motionQuestionWithMemoryCard(),
+          hostContext: { playable: subphase === 'QUESTION', revealed: subphase === 'REVEAL', cardId: 'c2' },
+          motion: motionProps({ subphase, selectedId: 'c2' }),
+        })} />
+      )
+      expect(container.querySelector('.anim-conduct-l3 .anim-memory-grid')).not.toBeNull()
+      expect(container.querySelector('.anim-conduct-l3 .anim-motion-card-focus')).toBeNull()
+    }
+  )
+
+  it('transmet cardMemory.flippedCards (état de CARTE, pas memory question-scopée)', () => {
+    const { container } = render(
+      <AnimConductPanel {...baseProps({
+        phase: 'STARTED',
+        question: motionQuestionWithMemoryCard(),
+        hostContext: { playable: true, revealed: false, cardId: 'c2' },
+        motion: motionProps({ subphase: 'QUESTION', selectedId: 'c2' }),
+        memory: { flippedCards: ['9-9'] }, // question-scopé — ne doit PAS être lu ici
+        cardMemory: { flippedCards: ['1-1'], matchedPairs: [], errors: 0 },
+      })} />
+    )
+    expect(container.querySelector('.anim-conduct-l3 .anim-memory-card-up')).not.toBeNull()
+  })
+
+  it('non-régression : une carte SPEEDY de la même manche continue d\'afficher AnimMotionCard', () => {
+    const { container } = render(
+      <AnimConductPanel {...baseProps({
+        phase: 'STARTED',
+        question: motionQuestionWithMemoryCard(),
+        hostContext: { playable: true, revealed: false, cardId: 'c1' },
+        motion: motionProps({ subphase: 'QUESTION', selectedId: 'c1' }), // c1 = SPEEDY
+      })} />
+    )
+    expect(container.querySelector('.anim-conduct-l3 .anim-motion-card-focus')).not.toBeNull()
+    expect(container.querySelector('.anim-conduct-l3 .anim-memory-grid')).toBeNull()
+  })
+
+  it('onFlipMemoryCard (déjà scopé par l\'appelant) est câblé au clic sur une carte face cachée', () => {
+    const onFlipMemoryCard = vi.fn()
+    const { container } = render(
+      <AnimConductPanel {...baseProps({
+        phase: 'STARTED',
+        question: motionQuestionWithMemoryCard(),
+        hostContext: { playable: true, revealed: false, cardId: 'c2' },
+        motion: motionProps({ subphase: 'QUESTION', selectedId: 'c2' }),
+        onFlipMemoryCard,
+      })} />
+    )
+    container.querySelector('.anim-conduct-l3 .anim-memory-card-down').click()
+    expect(onFlipMemoryCard).toHaveBeenCalledTimes(1)
+  })
+})
+
 describe('AnimConductPanel — L1/L4/L5 inchangées par MEMOTION (#160/T6, non-régression)', () => {
   // #168 (F7) — L4 rend désormais AnimExplanationNote au lieu de la réserve
   // statique ; motionQuestion() (ci-dessous) ne porte pas de champ

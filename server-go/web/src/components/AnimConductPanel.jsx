@@ -143,6 +143,7 @@ export default function AnimConductPanel({
   onSelectNext,
   teams,
   memory,
+  cardMemory,
   onFlipMemoryCard,
   motion,
   onSelectMotionCard,
@@ -169,6 +170,47 @@ export default function AnimConductPanel({
   const modeLabel = question?.TYPE ? getQuestionTypeMeta(question.TYPE).label : null
   // #171/F3 — contenu L2 (gestes propres au mode), ex-L3 #166.
   const modeGestureText = modeLabel ? `Aucun geste propre au mode ${modeLabel}` : 'Aucun geste propre au mode'
+
+  // #187 — dispatch POSITIF par type de carte en L3 (remplace la chaîne de
+  // ternaires imbriquée introduite par #185 — esprit #183 : "un dispatch
+  // positif par type, pas une chaîne de ternaires allongée"). Un type
+  // nestable absent de cette table retombe sur AnimMotionCard — le même
+  // défaut que SPEEDY avait déjà avant #187, jamais silencieusement une
+  // branche voisine par accident.
+  const motionCardRenderers = {
+    QCM: (card) => (
+      // #185/C-F1 — carte QCM : point de délégation posé en B-F3
+      // (résolution du type de l'hôte courant). `invalidated` vient de
+      // `qcmInvalidated` (résolu par l'appelant via getTypeState, hôte
+      // carte quand une carte est active — question-types.md §5.3), jamais
+      // recalculé ici.
+      <AnimQcmOptions
+        answers={card.QCM_ANSWERS}
+        correct={card.QCM_CORRECT}
+        invalidated={qcmInvalidated}
+        revealed={hostContext?.revealed}
+      />
+    ),
+    MEMORY: (card) => (
+      // #187 — carte MEMORY : `AnimMemoryGrid` est déjà agnostique de
+      // l'hôte (#184/B-F2, reçoit `playable`/`revealed`, jamais `phase`/
+      // `subphase`) — montée ici SANS variante. Une seule équipe par carte
+      // (contrat §6.3) : pas de `pairOwners`/`teamPairs`/`teamErrors`/
+      // `currentTeam` (§5.4 — ces champs n'ont pas de sens en carte, une
+      // carte MEMORY est jouée par l'équipe MEMOTION courante, déjà
+      // affichée en L2 par `AnimMotionActions`).
+      <AnimMemoryGrid
+        question={card}
+        playable={hostContext?.playable}
+        revealed={hostContext?.revealed}
+        teams={teams}
+        flippedCards={cardMemory?.flippedCards}
+        matchedPairs={cardMemory?.matchedPairs}
+        globalErrors={cardMemory?.errors}
+        onFlip={onFlipMemoryCard}
+      />
+    ),
+  }
 
   return (
     <div className="anim-conduct">
@@ -255,20 +297,11 @@ export default function AnimConductPanel({
                 teams={teams}
                 onSelect={onSelectMotionCard}
               />
-            ) : selectedMotionCard?.TYPE === 'QCM' ? (
-              // #185/C-F1 — carte QCM : point de délégation posé en B-F3
-              // (résolution du type de l'hôte courant), premier type
-              // branché ici. `invalidated` vient de `qcmInvalidated`
-              // (résolu par l'appelant via getTypeState, hôte carte quand
-              // une carte est active — question-types.md §5.3), jamais
-              // recalculé ici.
-              <AnimQcmOptions
-                answers={selectedMotionCard.QCM_ANSWERS}
-                correct={selectedMotionCard.QCM_CORRECT}
-                invalidated={qcmInvalidated}
-                revealed={hostContext?.revealed}
-              />
+            ) : selectedMotionCard && motionCardRenderers[selectedMotionCard.TYPE] ? (
+              motionCardRenderers[selectedMotionCard.TYPE](selectedMotionCard)
             ) : (
+              // Défaut (SPEEDY, ou tout type nestable sans rendu dédié) —
+              // inchangé par #187.
               <AnimMotionCard
                 playable={hostContext?.playable}
                 revealed={hostContext?.revealed}

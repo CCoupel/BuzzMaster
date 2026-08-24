@@ -32,9 +32,16 @@ import './AnimMemoryGrid.css'
  * `utils/hostContext.js`) au lieu de `phase` : ce composant ne lit plus
  * jamais `gameState.phase` ni `MEMOTION_SUBPHASE` directement. Neutre pour
  * l'hôte question (`playable` = phase === 'STARTED'`, `revealed` = phase ===
- * 'REVEALED'`, mêmes valeurs qu'avant) — c'est ce qui rend ce composant
- * montable dans l'hôte carte MEMOTION sans variante, quand MEMORY deviendra
- * nestable (#187, v7.1.0).
+ * 'REVEALED'`, mêmes valeurs qu'avant) — c'est ce qui a rendu ce composant
+ * montable SANS VARIANTE dans l'hôte carte MEMOTION (#187, v7.1.0,
+ * `AnimConductPanel.jsx`, dispatch positif par type de carte) : `question`
+ * pointe alors la carte active elle-même (ses `MEMORY_PAIRS`), et
+ * `flippedCards`/`matchedPairs`/`globalErrors` viennent de
+ * `getTypeState(gameState, hostContext).memory` (état de carte,
+ * `MEMOTION_ACTIVE.STATE`) plutôt que des champs `MEMORY_*` question-scopés.
+ * `pairOwners`/`teamPairs`/`teamErrors`/`currentTeam` restent `undefined` en
+ * carte : une carte MEMORY est jouée par une seule équipe (contrat §6.3), ces
+ * props n'ont de sens que pour l'hôte question multi-équipes.
  *
  * @param {Object} props
  * @param {Object|null} props.question - gameState.question (question MEMORY)
