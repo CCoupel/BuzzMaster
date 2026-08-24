@@ -11,8 +11,23 @@ import (
 
 // TestQuestionFixtures_RoundTrip_TypedContent is the B-B1 gate for #184: the
 // TypedContent embedding (Question, MotionCard) must not add, drop, or
-// rename a single JSON field for any of the existing question.json
-// fixtures — contracts/question-types.md §2, §9.3, §10.3.
+// rename a single JSON field for any question.json shape this codebase
+// produces — contracts/question-types.md §2, §9.3, §10.3.
+//
+// Fixtures live in testdata/questions/ (this package), COMMITTED,
+// synthetic, one per QuestionType plus a MEMOTION card typed QCM (#185) —
+// deliberately NOT server-go/data/files/questions/, which is runtime data
+// (.gitignore: "Runtime data (user-created content)") absent on a clean CI
+// checkout. The original version of this test read that runtime directory
+// directly and expected 85 fixtures that only ever existed in local dev
+// sandboxes (accumulated by hand-testing), never committed — it passed
+// locally and failed deterministically in CI, which is what took down the
+// v7.0.0 PROD deploy (run 32702034844) and forced a revert to v6.5.2. Go's
+// `testdata/` convention (ignored by the go tool itself, and NOT covered by
+// the runtime-data .gitignore rule, a different path) is exactly the
+// mechanism for fixtures a test needs available on every checkout —
+// hermetic by construction instead of by hoping a dev sandbox happens to be
+// populated.
 //
 // "Octet pour octet" (contract §2) is verified here as SEMANTIC equality —
 // same key set, same values — rather than a literal byte comparison, and
@@ -20,13 +35,14 @@ import (
 // question.json in this codebase (handleUploadQuestion, the REORDER handler
 // in main.go, the test-question seeder) marshals a map[string]interface{},
 // never the Question struct directly. Go's encoding/json sorts map keys
-// alphabetically on Marshal, which is exactly the key order every fixture
-// on disk has today — a property of those writers, not of Question's own
-// field-declaration-ordered Marshal. A literal byte comparison against
-// Question's struct-order Marshal would therefore have failed even before
-// this refactor (nothing in this codebase has ever round-tripped
-// question.json through the Question struct back to disk) and would test a
-// formatting accident, not what the contract actually cares about.
+// alphabetically on Marshal, which is exactly the key order the fixtures
+// use (mirroring real on-disk files) — a property of those writers, not of
+// Question's own field-declaration-ordered Marshal. A literal byte
+// comparison against Question's struct-order Marshal would therefore fail
+// regardless of this refactor (nothing in this codebase has ever
+// round-tripped question.json through the Question struct back to disk)
+// and would test a formatting accident, not what the contract actually
+// cares about.
 //
 // What this refactor CAN genuinely break — a JSON field silently renamed,
 // dropped, or gaining/losing omitempty as it moves into the shared
@@ -39,27 +55,25 @@ import (
 // round-trip, refactor or not (e.g. "QCM_HINTS_ENABLED": false,
 // MemoryCard's "IMAGE": "" — both pre-existing: their omitempty tags are
 // untouched copies from before #184, verifiable via `git show
-// b098373:server-go/internal/game/models.go`). Driving that normalization
+// b098373:server-go/internal/game/models.go` — both deliberately kept in
+// the committed fixtures below for coverage). Driving that normalization
 // off the actual struct tags via reflection — rather than a hand-maintained
 // allowlist — means it self-updates if a field's omitempty status ever
 // changes, and a REAL new drop/rename regression still fails loudly because
 // it wouldn't match any tag-derived exemption.
 func TestQuestionFixtures_RoundTrip_TypedContent(t *testing.T) {
-	dir := filepath.Join("..", "..", "data", "files", "questions")
-	entries, err := os.ReadDir(dir)
+	dir := filepath.Join("testdata", "questions")
+	matches, err := filepath.Glob(filepath.Join(dir, "*.json"))
 	if err != nil {
-		t.Fatalf("cannot read fixtures dir %s: %v", dir, err)
+		t.Fatalf("cannot glob fixtures dir %s: %v", dir, err)
 	}
 
 	tested := 0
-	for _, entry := range entries {
-		if !entry.IsDir() {
-			continue
-		}
-		path := filepath.Join(dir, entry.Name(), "question.json")
+	for _, path := range matches {
 		raw, err := os.ReadFile(path)
 		if err != nil {
-			continue // mirrors loadQuestions()'s tolerance of dirs without a question.json
+			t.Errorf("%s: ReadFile failed: %v", path, err)
+			continue
 		}
 
 		var wantMap map[string]interface{}
@@ -93,13 +107,46 @@ func TestQuestionFixtures_RoundTrip_TypedContent(t *testing.T) {
 		tested++
 	}
 
-	// Fixed at the fixture count known at the time this test was written
-	// (#184, B-B1) so a silently-empty glob (e.g. wrong path after a
-	// directory move) fails loudly instead of reporting a vacuous pass.
-	// Update this constant deliberately if fixtures are added/removed.
-	const wantFixtureCount = 85
+	// Fixed at the fixture count committed in testdata/questions/ so a
+	// silently-empty glob (e.g. wrong path after a directory move) fails
+	// loudly instead of reporting a vacuous pass. Update this constant
+	// deliberately (and AllQuestionTypes()-check below) if fixtures are
+	// added/removed.
+	const wantFixtureCount = 6
 	if tested != wantFixtureCount {
-		t.Errorf("expected to test %d question.json fixtures, tested %d — fixture count changed (update wantFixtureCount if deliberate) or the fixtures dir was not found as expected", wantFixtureCount, tested)
+		t.Errorf("expected to test %d testdata/questions/*.json fixtures, tested %d — fixture count changed (update wantFixtureCount if deliberate) or the fixtures dir was not found as expected", wantFixtureCount, tested)
+	}
+}
+
+// TestQuestionFixtures_RoundTrip_CoverAllTypes is a companion exhaustiveness
+// check for the fixture set above: every QuestionType AllQuestionTypes()
+// (#183, A-B2) returns must appear as at least one fixture's TYPE, so a
+// future 6th type doesn't silently go untested by
+// TestQuestionFixtures_RoundTrip_TypedContent.
+func TestQuestionFixtures_RoundTrip_CoverAllTypes(t *testing.T) {
+	dir := filepath.Join("testdata", "questions")
+	matches, err := filepath.Glob(filepath.Join(dir, "*.json"))
+	if err != nil {
+		t.Fatalf("cannot glob fixtures dir %s: %v", dir, err)
+	}
+
+	covered := map[QuestionType]bool{}
+	for _, path := range matches {
+		raw, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("%s: ReadFile failed: %v", path, err)
+		}
+		var q Question
+		if err := json.Unmarshal(raw, &q); err != nil {
+			t.Fatalf("%s: Unmarshal failed: %v", path, err)
+		}
+		covered[q.Type] = true
+	}
+
+	for _, qt := range AllQuestionTypes() {
+		if !covered[qt] {
+			t.Errorf("no testdata/questions/*.json fixture has TYPE=%q — add one", qt)
+		}
 	}
 }
 

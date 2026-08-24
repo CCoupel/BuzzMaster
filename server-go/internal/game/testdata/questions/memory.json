@@ -1,0 +1,48 @@
+{
+  "ANSWER": "4 paires",
+  "CATEGORY": "FOOD",
+  "ID": "t-memory",
+  "MEMORY_CONFIG": {
+    "COMPLETION_BONUS": 20,
+    "ERROR_PENALTY": 0,
+    "FLIP_DELAY": 3,
+    "MEMORIZE_TIME": 5,
+    "POINTS_PER_PAIR": 10,
+    "REVEAL_DELAY": 0.5,
+    "SHOW_DURING_MEMORIZE": true,
+    "USE_TIMER": true
+  },
+  "MEMORY_MODE": "SOLO",
+  "MEMORY_PAIRS": [
+    {
+      "CARD1": {
+        "IMAGE": "",
+        "IS_IMAGE": false,
+        "TEXT": "Banane"
+      },
+      "CARD2": {
+        "IS_IMAGE": false,
+        "TEXT": "Jaune"
+      },
+      "ID": 1
+    },
+    {
+      "CARD1": {
+        "IS_IMAGE": false,
+        "TEXT": "Fraise"
+      },
+      "CARD2": {
+        "IS_IMAGE": false,
+        "TEXT": "Rouge"
+      },
+      "ID": 2
+    }
+  ],
+  "ORDER": 3,
+  "POINTS": "0",
+  "POINTS_TARGET": "TEAM",
+  "QCM_HINTS_ENABLED": false,
+  "QUESTION": "Associez chaque fruit à sa couleur principale",
+  "TIME": "20",
+  "TYPE": "MEMORY"
+}

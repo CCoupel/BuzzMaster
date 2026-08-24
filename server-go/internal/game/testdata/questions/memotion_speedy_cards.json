@@ -1,0 +1,35 @@
+{
+  "ANSWER": "4 cartes",
+  "CATEGORY": "SCIENCE",
+  "ID": "t-memotion-speedy",
+  "MOTION_CARDS": [
+    {
+      "ANSWER_TEXT": "Mercure",
+      "DIFFICULTY": 1,
+      "ID": "mc-1",
+      "QUESTION_TEXT": "Quelle planète est la plus proche du Soleil ?",
+      "RECTO_THEME": "Planète du système solaire"
+    },
+    {
+      "ANSWER_TEXT": "Saturne",
+      "DIFFICULTY": 2,
+      "ID": "mc-2",
+      "QUESTION_TEXT": "Quelle planète est connue pour ses anneaux ?",
+      "RECTO_THEME": "Planète du système solaire"
+    }
+  ],
+  "MOTION_CONFIG": {
+    "POINTS_1_STAR": 1,
+    "POINTS_2_STAR": 3,
+    "POINTS_3_STAR": 5
+  },
+  "MOTION_MEMORIZE_DURATION": 0,
+  "MOTION_MODE": "CHACUN_SON_TOUR",
+  "ORDER": 5,
+  "POINTS": "1",
+  "POINTS_TARGET": "TEAM",
+  "QCM_HINTS_ENABLED": false,
+  "QUESTION": "Identifiez la planète correspondant à chaque indice",
+  "TIME": "30",
+  "TYPE": "MEMOTION"
+}

@@ -1,0 +1,49 @@
+{
+  "ANSWER": "4 cartes",
+  "CATEGORY": "HISTORY",
+  "ID": "38",
+  "MOTION_CARDS": [
+    {
+      "ANSWER_TEXT": "1989",
+      "DIFFICULTY": 1,
+      "ID": "mc-1",
+      "QUESTION_TEXT": "Quand a eu lieu la chute du mur de Berlin ?",
+      "RECTO_THEME": "Événement historique"
+    },
+    {
+      "ANSWER_TEXT": "1789",
+      "DIFFICULTY": 1,
+      "ID": "mc-2",
+      "QUESTION_TEXT": "En quelle année la Déclaration des droits de l'homme a-t-elle été adoptée ?",
+      "RECTO_THEME": "Événement historique"
+    },
+    {
+      "ANSWER_TEXT": "XII",
+      "DIFFICULTY": 1,
+      "ID": "mc-3",
+      "QUESTION_TEXT": "Quel siècle a vu la construction de la Tour de Pise ?",
+      "RECTO_THEME": "Événement historique"
+    },
+    {
+      "ANSWER_TEXT": "1492",
+      "DIFFICULTY": 1,
+      "ID": "mc-4",
+      "QUESTION_TEXT": "Quand Christophe Colomb a-t-il découvert l'Amérique ?",
+      "RECTO_THEME": "Événement historique"
+    }
+  ],
+  "MOTION_CONFIG": {
+    "POINTS_1_STAR": 1,
+    "POINTS_2_STAR": 3,
+    "POINTS_3_STAR": 5
+  },
+  "MOTION_MEMORIZE_DURATION": 0,
+  "MOTION_MODE": "CHACUN_SON_TOUR",
+  "ORDER": 14,
+  "POINTS": "1",
+  "POINTS_TARGET": "TEAM",
+  "QCM_HINTS_ENABLED": false,
+  "QUESTION": "Correspondance événement / siècle",
+  "TIME": "25",
+  "TYPE": "MEMOTION"
+}

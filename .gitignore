@@ -92,7 +92,35 @@ Thumbs.db
 
 # BuzzControl - Runtime data (user-created content)
 server-go/data/config/
-server-go/data/files/questions/
+# NOTE (2026-08-24, échec CI PROD run 32702034844) : `server-go/data/files/
+# questions/` (avec le slash final) exclut le RÉPERTOIRE en tant qu'unité —
+# gitignore ne permet alors JAMAIS de réinclure un enfant, quelle que soit une
+# règle `!...` ultérieure ("It is not possible to re-include a file if a
+# parent directory of that file is excluded"). C'est pourquoi 83/84/85
+# apparaissaient trackés malgré l'absence de toute règle d'exception : ils
+# avaient été ajoutés avec `git add -f`, et un chemin déjà indexé n'est de
+# toute façon plus soumis à .gitignore — mécanisme différent, pas une
+# exception explicite, donc invisible/non reproductible pour quiconque
+# clone le dépôt sans avoir aussi ces fichiers en local au moment du commit.
+# Remplacé par le motif standard "exclure chaque enfant individuellement"
+# (glob `*`, pas de slash final sur le parent) : les négations ci-dessous
+# fonctionnent réellement, et un `git status`/`check-ignore` sur un checkout
+# propre les confirme visibles.
+server-go/data/files/questions/*
+# Exceptions — fixtures de test trackées délibérément (#184, B-T1/CI) : les 9
+# questions MEMOTION réelles du dépôt, lues par
+# internal/game/models_roundtrip_test.go,
+# internal/game/motion_game_payload_size_184_test.go et
+# internal/server/motion_card_existing_fixtures_184_test.go.
+!server-go/data/files/questions/14/
+!server-go/data/files/questions/15/
+!server-go/data/files/questions/16/
+!server-go/data/files/questions/36/
+!server-go/data/files/questions/37/
+!server-go/data/files/questions/38/
+!server-go/data/files/questions/83/
+!server-go/data/files/questions/84/
+!server-go/data/files/questions/85/
 server-go/data/files/backgrounds/
 server-go/data/files/new-game-backgrounds/
 server-go/data/files/*.png

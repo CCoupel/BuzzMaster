@@ -1,0 +1,49 @@
+{
+  "ANSWER": "4 cartes",
+  "CATEGORY": "FOOD",
+  "ID": "37",
+  "MOTION_CARDS": [
+    {
+      "ANSWER_TEXT": "Gombo",
+      "DIFFICULTY": 1,
+      "ID": "mc-1",
+      "QUESTION_TEXT": "Quel ingrédient donne le goût umami au miso ?",
+      "RECTO_THEME": "Ingrédient de cuisine"
+    },
+    {
+      "ANSWER_TEXT": "Avocat",
+      "DIFFICULTY": 1,
+      "ID": "mc-2",
+      "QUESTION_TEXT": "Quel ingrédient principal du guacamole ?",
+      "RECTO_THEME": "Ingrédient de cuisine"
+    },
+    {
+      "ANSWER_TEXT": "Chou",
+      "DIFFICULTY": 1,
+      "ID": "mc-3",
+      "QUESTION_TEXT": "Quel ingrédient est fermenté pour faire du kimchi ?",
+      "RECTO_THEME": "Ingrédient de cuisine"
+    },
+    {
+      "ANSWER_TEXT": "Sucre",
+      "DIFFICULTY": 1,
+      "ID": "mc-4",
+      "QUESTION_TEXT": "Quel ingrédient sucré est utilisé dans les crêpes bretonnes ?",
+      "RECTO_THEME": "Ingrédient de cuisine"
+    }
+  ],
+  "MOTION_CONFIG": {
+    "POINTS_1_STAR": 1,
+    "POINTS_2_STAR": 3,
+    "POINTS_3_STAR": 5
+  },
+  "MOTION_MEMORIZE_DURATION": 0,
+  "MOTION_MODE": "CHACUN_SON_TOUR",
+  "ORDER": 46,
+  "POINTS": "1",
+  "POINTS_TARGET": "TEAM",
+  "QCM_HINTS_ENABLED": false,
+  "QUESTION": "Correspondance ingrédient / plat",
+  "TIME": "25",
+  "TYPE": "MEMOTION"
+}

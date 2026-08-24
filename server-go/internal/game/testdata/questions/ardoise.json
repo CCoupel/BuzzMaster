@@ -1,0 +1,13 @@
+{
+  "ANSWER": "6.674×10⁻¹¹",
+  "ARDOISE_KEYBOARD_TYPE": "NUMPAD",
+  "CATEGORY": "SCIENCE",
+  "ID": "t-ardoise",
+  "ORDER": 4,
+  "POINTS": "50",
+  "POINTS_TARGET": "TEAM",
+  "QCM_HINTS_ENABLED": false,
+  "QUESTION": "Quel nombre représente la constante gravitationnelle G (en m³·kg⁻¹·s⁻²) approximativement ?",
+  "TIME": "12",
+  "TYPE": "ARDOISE"
+}

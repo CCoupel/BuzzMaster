@@ -1,0 +1,19 @@
+{
+  "ANSWER": "",
+  "CATEGORY": "ARTS",
+  "ID": "t-qcm",
+  "ORDER": 2,
+  "POINTS": "20",
+  "POINTS_TARGET": "TEAM",
+  "QCM_ANSWERS": {
+    "BLUE": "Claude Monet",
+    "GREEN": "Pablo Picasso",
+    "RED": "Vincent Van Gogh",
+    "YELLOW": "Leonard de Vinci"
+  },
+  "QCM_CORRECT": "YELLOW",
+  "QCM_HINTS_ENABLED": false,
+  "QUESTION": "Quel peintre est l'auteur de la \"Joconde\" ?",
+  "TIME": "12",
+  "TYPE": "QCM"
+}
