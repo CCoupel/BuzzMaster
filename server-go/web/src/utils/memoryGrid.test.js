@@ -80,6 +80,36 @@ describe('buildMemoryCards — ordre déterministe (mélange ensemencé par l\'I
     expect(() => buildMemoryCards(question)).not.toThrow()
     expect(buildMemoryCards(question)).toHaveLength(4)
   })
+
+  // #187 — régression : avant la correction, `parseInt(id, 10) || 1` sur un
+  // MotionCard.ID non numérique ("mc-...", "card_3") retombait sur la graine
+  // 1 pour TOUTES les cartes -> mélange identique partout dans une manche
+  // MEMOTION. `hashStringToSeed` doit dériver une graine par ID de carte,
+  // numérique ou non.
+  it('#187 — deux cartes MEMOTION MEMORY (ID non numérique) ont des mélanges distincts', () => {
+    const pairs = makePairs(8) // 16 cartes, collision négligeable
+    const cardA = buildMemoryCards({ ID: 'mc-1699999999999', MEMORY_PAIRS: pairs })
+    const cardB = buildMemoryCards({ ID: 'card_3', MEMORY_PAIRS: pairs })
+    expect(cardA.map(c => c.id)).not.toEqual(cardB.map(c => c.id))
+  })
+
+  it('#187 — un ID non numérique ne retombe plus silencieusement sur la graine 1 (repli parseInt)', () => {
+    const pairs = makePairs(8)
+    // Avant #187 : parseInt("mc-abc", 10) -> NaN -> repli `|| 1`, IDENTIQUE
+    // au mélange d'une question numérique d'ID "1" (parseInt("1") === 1).
+    // Après #187 : les deux graines sont dérivées par hachage de chaîne
+    // complète -> plus aucune raison de coïncider.
+    const numeric = buildMemoryCards({ ID: '1', MEMORY_PAIRS: pairs })
+    const nonNumeric = buildMemoryCards({ ID: 'mc-abc', MEMORY_PAIRS: pairs })
+    expect(nonNumeric.map(c => c.id)).not.toEqual(numeric.map(c => c.id))
+  })
+
+  it('#187 — même ID non numérique -> même mélange (déterminisme préservé)', () => {
+    const question = { ID: 'card_7', MEMORY_PAIRS: makePairs(4) }
+    const first = buildMemoryCards(question)
+    const second = buildMemoryCards(question)
+    expect(second.map(c => c.id)).toEqual(first.map(c => c.id))
+  })
 })
 
 describe('getMemoryGridCols — formule fixe sur le nombre de cartes, aux bornes exactes', () => {
