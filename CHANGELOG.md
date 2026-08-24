@@ -40,6 +40,12 @@ configurable, granularité backup, et correctifs UX/sécurité.
 
 ## [Unreleased]
 
+### Added
+- **MEMORY card type nestable in MEMOTION cards** (#187) — Les cartes de type MEMORY peuvent désormais être intégrées directement dans une carte MEMOTION, permettant des manches polymorphes SPEEDY/QCM/MEMORY/ARDOISE. Nouveau mode de barème `STARS_PRORATA` calculant les points en fonction du ratio de paires trouvées (`points × units / unitsTotal`).
+
+### Changed
+- **FLIP_MEMORY_CARD action scopée par carte (#187)** — L'action WebSocket `FLIP_MEMORY_CARD` porte maintenant un champ optionnel `MOTION_CARD_ID` pour identifier la carte cible dans une manche MEMOTION polymorphe. Le serveur est l'autorité unique sur le tour de jeu pour MEMORY (dérogation sécurité : les retournements VPlayer hors tour sont ignorés silencieusement, sans broadcast).
+
 ## [6.5.1] - Milestone v6.5.1 — Bugfix CI/Infra (#27)
 
 **Issues** : #151 (durcissement goroutines), #153 (job CI testing), #161 (nettoyage code mort),
