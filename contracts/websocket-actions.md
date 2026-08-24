@@ -1471,7 +1471,16 @@ Retourne une carte Memory.
 | Champ | Type | Obligatoire | Description |
 |-------|------|-------------|-------------|
 | CARD_ID | string | ✅ | ID de la carte Memory (ex: `"1-1"`, `"2-2"` — format `pairID-cardNum`) |
+| ID | string | ⬜ *(v7.1.0)* | Bumper ID de l'émetteur, première passe de la résolution 3 passes (voir ci-dessous). Émis par le VJoueur ; `tv`/`anim` ne l'envoient jamais — ils n'ont pas d'équipe |
 | MOTION_CARD_ID | string | ⬜ *(v7.1.0)* | Identité de la carte MEMOTION parente (`CardScope`, `question-types.md` §9). Absent hors manche MEMOTION ⇒ comportement actuel |
+
+> **`ID` — ajouté en v7.1.0 (#187), additif et `omitempty`.** Il porte le bumper ID de l'émetteur,
+> nécessaire à la résolution 3 passes `payload.ID → msg.ID → clientID` qu'impose la vérification du
+> tour. **Même champ, même rôle et même sémantique que sur `VPLAYER_QCM_ANSWER` et
+> `ARDOISE_INPUT`** — ce n'est pas un mécanisme nouveau, c'est l'alignement de `FLIP_MEMORY_CARD`
+> sur le patron d'identification déjà en place pour les autres actions joueur.
+> Un client qui ne l'envoie pas retombe sur les passes 2 et 3 : **aucun client existant n'est
+> cassé**.
 
 #### Vérifications serveur (v7.1.0, #187) — deux règles, deux comportements d'échec
 
@@ -1561,9 +1570,10 @@ Envoyé par le VPlayer (throttlé ~200ms). Envoi forcé sur réception STOP/PAUS
 
 #### Payload
 
-| Champ | Type | Description |
-|-------|------|-------------|
-| TEXT | string | Texte complet saisi (pas un delta) |
+| Champ | Type | Obligatoire | Description |
+|-------|------|-------------|-------------|
+| TEXT | string | ✅ | Texte complet saisi (pas un delta) |
+| ID | string | ⬜ | Bumper ID de l'émetteur, première passe de la résolution 3 passes `payload.ID → msg.ID → clientID` (`handleArdoiseInput`). Présent dans `ArdoiseInputPayload` depuis v5.6.0 mais **omis de ce tableau jusqu'en v7.1.0** — documentation rattrapée, aucun changement de comportement |
 
 #### Exemple
 

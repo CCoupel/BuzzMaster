@@ -48,6 +48,14 @@
 - **[REMOVED]** `Engine.CalculateMemoryScore` — code mort **depuis sa création** (aucun appelant dans
   toute l'histoire du dépôt ; double implémentation Go/JS délibérée dès v2.33.0, seul le JS branché ;
   jamais mise à jour pour le multi-équipes). À ne pas réactiver en carte.
+- **[NEW]** `FLIP_MEMORY_CARD.ID` (optionnel, `omitempty`) — bumper ID de l'émetteur, première passe
+  de la résolution 3 passes qu'impose la vérification du tour. Même champ et même sémantique que sur
+  `VPLAYER_QCM_ANSWER` et `ARDOISE_INPUT`. Absent ⇒ repli sur `msg.ID` puis `clientID` : aucun client
+  existant n'est cassé. *(Signalé par `dev-backend` en déviation de contrat — le contrat était
+  incomplet, la déviation était juste.)*
+- **[CHANGED]** `ARDOISE_INPUT.ID` — **documentation rattrapée** : le champ existe dans
+  `ArdoiseInputPayload` depuis v5.6.0 mais n'apparaissait pas dans le tableau de la fiche. Aucun
+  changement de comportement.
 - **[CHANGED]** `ARDOISE` **reste non imbricable, sans échéance** — #186 fermée « not planned »
   (`question-types.md` §7.2). Les mentions « ARDOISE-en-carte, v7.1.0 » du contrat sont caduques.
   ⚠️ Le tag `omitempty` de `TypedContent.Answer`, qu'elles justifiaient, **doit rester** : le
