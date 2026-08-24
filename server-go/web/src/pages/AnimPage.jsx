@@ -221,6 +221,15 @@ export default function AnimPage() {
   // `AnimConductPanel` ci-dessous — neutre pour l'hôte question (même
   // valeur), correct pour l'hôte carte QCM.
   const typeState = getTypeState(gameState, hostContext)
+  // #187 (v7.1.0) — flipMemoryCard porte désormais la portée de carte
+  // (`CardScope`, contrat question-types.md §9) quand une carte MEMOTION est
+  // active : `hostContext.cardId` vaut "" hors manche MEMOTION (repli neutre,
+  // comportement inchangé) et l'ID de la carte active en SELECTED/QUESTION/
+  // REVEAL. Lié UNE FOIS ici — `AnimConductPanel`/`AnimMemoryGrid` ne
+  // connaissent jamais `MOTION_CARD_ID` eux-mêmes (même discipline que
+  // `hostContext`/`typeState` ci-dessus).
+  const handleFlipMemoryCard = (cardId) =>
+    hostContext.cardId ? flipMemoryCard(cardId, hostContext.cardId) : flipMemoryCard(cardId)
 
   // #160/F8 — MEMOTION, sur le modèle exact de isMemoryQuestion (#159, plus
   // bas dans le fichier, zone équipes). La manche entière se joue en phase
@@ -605,7 +614,8 @@ export default function AnimPage() {
             teamErrors: gameState.MEMORY_TEAM_ERRORS,
             errors: gameState.memoryErrors,
           }}
-          onFlipMemoryCard={flipMemoryCard}
+          cardMemory={typeState.memory}
+          onFlipMemoryCard={handleFlipMemoryCard}
           motion={{
             subphase: motionSubphase,
             timerRunning: gameState.timer > 0,
