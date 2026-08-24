@@ -1912,10 +1912,16 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
                       // Cards are flipped (face up) during: cascading COUNTDOWN reveal, still hiding after countdown, progressive REVEAL, matched pairs, or player clicked
                       const isFlipped = isInCountdownCascade || isStillVisibleInCascade || (isGameplayPhase && (isProgressivelyRevealed || isMatched || isPlayerFlipped))
                       const isJustMatched = justMatchedPairs.includes(cardData.pairId)
-                      // VPlayer can flip cards only if in active team (Memory multi-team mode)
-                      // Admin TV can always flip, VPlayer can flip only if in MEMORY_CURRENT_TEAM
-                      const isVPlayerInActiveTeam = isVPlayer && teamName && gameState.MEMORY_CURRENT_TEAM && teamName === gameState.MEMORY_CURRENT_TEAM
-                      const canClick = gameState.phase === 'STARTED' && !isMatched && !isFlipped && (!isVPlayer || isVPlayerInActiveTeam)
+                      // #187 (v7.1.0) — restriction d'affichage retirée (contrat
+                      // websocket-actions.md, fiche FLIP_MEMORY_CARD, §"Restriction
+                      // client retirée") : le serveur devient SEULE autorité sur le
+                      // tour d'une équipe (vérification côté serveur pour vplayer,
+                      // ignore silencieux hors tour — aucun risque d'info, la grille
+                      // MEMORY est déjà publique). Avant #187, cette garde exigeait
+                      // MEMORY_CURRENT_TEAM non vide — si aucune équipe n'était
+                      // sélectionnée, AUCUN VJoueur ne pouvait cliquer ; cette
+                      // dépendance disparaît aussi.
+                      const canClick = gameState.phase === 'STARTED' && !isMatched && !isFlipped
                       // Only show matched styling during gameplay phases (not before game starts)
                       const showMatchedStyle = isGameplayPhase && isMatched
                       // Get team color for matched pairs (convert pairId to string for JSON key lookup)
@@ -2098,6 +2104,70 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
                         <span className="memotion-tv-qcm-letter">{colorData.letter}</span>
                         <span className="memotion-tv-qcm-text">{answer}</span>
                       </div>
+                    )
+                  })}
+                </div>
+              )
+              // #187 (v7.1.0) — grille MEMORY d'une carte MEMOTION active, en
+              // Row 2 (body) des faces QUESTION/REVEAL — contrairement à QCM
+              // (contenu en Row 3 footer, aucun `question`-slot déclaré au
+              // sens des MediaSlots §7 : la carte n'a rien à afficher en Row 2
+              // à sa place), MEMORY N'A PAS de `question` MediaSlot non plus
+              // (contrat §7 : "recto + N paires") — la grille EST le contenu
+              // de la carte, elle occupe donc l'emplacement média commun.
+              //
+              // `AnimMemoryGrid` (#159/F1, /anim) n'est PAS réutilisé ici :
+              // c'est un composant tactile de tablette (grille dense, HUD de
+              // compteurs). Ce rendu TV reprend la même DISCIPLINE
+              // (`buildMemoryCards`/`getMemoryGridCols`/`getMemoryGridRows`
+              // partagés, aucune logique de mélange ni de jeu recalculée) mais
+              // son propre habillage visuel, cohérent avec le reste de
+              // l'overlay MEMOTION plein écran.
+              //
+              // Task 14 (plan #187) — la révélation ne peut PAS être gatée sur
+              // `gameState.phase === 'REVEALED'` (inatteignable en MEMOTION,
+              // la phase reste `STARTED` toute la manche) : routée par
+              // `cardHostContext.revealed`, à l'identique de `AnimMemoryGrid`
+              // ("TOUTE carte non trouvée une fois révélée" — même règle,
+              // sans cascade côté client, aucune logique de jeu à réinventer).
+              //
+              // Aucune restriction par équipe (task 2.1, même règle que la
+              // grille MEMORY question-scopée ci-dessus, PlayerDisplay.jsx
+              // ~L1918) : le serveur est seule autorité sur le tour.
+              const cardMemoryState = getTypeState(gameState, cardHostContext).memory
+              const cardMemoryCards = cardType === 'MEMORY' ? buildMemoryCards(selectedCard) : []
+              const cardMemoryCols = getMemoryGridCols(cardMemoryCards.length)
+              const cardMemoryRows = getMemoryGridRows(cardMemoryCards.length, cardMemoryCols)
+              const renderCardMemoryGrid = () => (
+                <div
+                  className="memotion-tv-memory-grid"
+                  style={{ '--memotion-tv-memory-cols': cardMemoryCols, '--memotion-tv-memory-rows': cardMemoryRows }}
+                >
+                  {cardMemoryCards.map((cardData, index) => {
+                    const cardLetter = String.fromCharCode(65 + index)
+                    const isMatched = cardMemoryState.matchedPairs?.includes(cardData.pairId)
+                    const isFlipped = cardMemoryState.flippedCards?.includes(cardData.id)
+                    const canClick = cardHostContext.playable && !isMatched && !isFlipped
+                    const cardRevealed = isMatched || isFlipped || cardHostContext.revealed
+                    return (
+                      <button
+                        key={cardData.id}
+                        type="button"
+                        className={`memotion-tv-memory-card ${isMatched ? 'matched' : ''} ${cardRevealed ? 'up' : 'down'}`}
+                        disabled={!canClick}
+                        onClick={() => canClick && flipMemoryCard(cardData.id, cardHostContext.cardId)}
+                        aria-label={cardRevealed ? undefined : `Carte ${cardLetter}, face cachée`}
+                      >
+                        {cardRevealed ? (
+                          cardData.card?.IS_IMAGE && cardData.card?.IMAGE ? (
+                            <img src={cardData.card.IMAGE} alt="" className="memotion-tv-memory-card-image" />
+                          ) : (
+                            <span className="memotion-tv-memory-card-text">{cardData.card?.TEXT}</span>
+                          )
+                        ) : (
+                          <span className="memotion-tv-memory-card-letter">{cardLetter}</span>
+                        )}
+                      </button>
                     )
                   })}
                 </div>
@@ -2403,9 +2473,14 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
                         </motion.p>
                       )}
                     </div>
-                    {/* Row 2 : Image de la question */}
+                    {/* Row 2 : Image de la question — #187, MEMORY n'a pas de
+                        `question` MediaSlot (contrat §7 : "recto + N paires") :
+                        la grille EST le contenu de la carte, elle occupe cet
+                        emplacement à la place d'une image. */}
                     <div className="memotion-tv-fs-body">
-                      {selectedCard.QUESTION_IMAGE && (
+                      {cardType === 'MEMORY' ? (
+                        renderCardMemoryGrid()
+                      ) : selectedCard.QUESTION_IMAGE && (
                         <motion.img
                           src={selectedCard.QUESTION_IMAGE}
                           alt=""
@@ -2462,12 +2537,16 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
                       )}
                     </div>
                     {/* Row 2 : contenu propre au type — SPEEDY : image réponse
-                        (ou texte si pas d'image). #185/C-F2 branchera ici la
-                        grille QCM (ANSWER_IMAGE/ANSWER_TEXT sont des champs
-                        SPEEDY, contrat §3.1 — jamais peuplés pour un autre
-                        type, mais le dispatch reste explicite, pas implicite). */}
+                        (ou texte si pas d'image). #187 : MEMORY réaffiche la
+                        MÊME grille qu'en face VERSO à cet emplacement — pas de
+                        saut visuel entre les deux faces — mais désormais
+                        entièrement révélée (cardHostContext.revealed, task 14
+                        du plan #187) : `renderCardMemoryGrid` route déjà sa
+                        révélation par `cardHostContext.revealed`, jamais par
+                        `gameState.phase === 'REVEALED'` (inatteignable en
+                        MEMOTION, la phase reste STARTED toute la manche). */}
                     <div className="memotion-tv-fs-body">
-                      {cardType === 'SPEEDY' && (
+                      {cardType === 'MEMORY' ? renderCardMemoryGrid() : cardType === 'SPEEDY' && (
                         selectedCard.ANSWER_IMAGE ? (
                           <motion.img
                             src={selectedCard.ANSWER_IMAGE}

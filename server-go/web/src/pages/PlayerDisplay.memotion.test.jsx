@@ -955,3 +955,148 @@ describe('PlayerDisplay — carte MEMOTION de type QCM (#185/C-F2)', () => {
     })
   })
 })
+
+// ---------------------------------------------------------------------------
+// #187 (v7.1.0) — carte MEMOTION de type MEMORY. La grille occupe Row 2
+// (body) des faces QUESTION/REVEAL — MEMORY n'a pas de `question` MediaSlot
+// (contrat §7 : "recto + N paires"), la grille EST le contenu média de la
+// carte. Task 14 du plan : la révélation est routée par
+// `cardHostContext.revealed` (jamais `gameState.phase === 'REVEALED'`,
+// inatteignable en MEMOTION). Aucune restriction par équipe (task 2.1, même
+// règle que la grille MEMORY question-scopée) : le serveur reste seule
+// autorité sur le tour (contrat websocket-actions.md, FLIP_MEMORY_CARD).
+// ---------------------------------------------------------------------------
+
+const CARD_MEMORY = {
+  ID: 'card-3',
+  RECTO_THEME: 'Paires historiques',
+  DIFFICULTY: 2,
+  TYPE: 'MEMORY',
+  QUESTION_TEXT: 'Retrouvez les paires',
+  MEMORY_PAIRS: [
+    { ID: 1, CARD1: { TEXT: 'Napoléon' }, CARD2: { TEXT: '1804' } },
+    { ID: 2, CARD1: { TEXT: 'De Gaulle' }, CARD2: { TEXT: '1958' } },
+  ],
+}
+
+/** Variante de makeMemotionMock incluant MEMOTION_ACTIVE (état MEMORY carte-scopé). */
+const makeMemotionMemoryMock = (subphase, state = {}) => {
+  const base = makeMemotionMock(subphase, 'card-3', [CARD_WITH_IMG, CARD_MEMORY])
+  base.gameState.MEMOTION_ACTIVE = {
+    CARD_ID: 'card-3',
+    TYPE: 'MEMORY',
+    STATE: {
+      MEMORY_FLIPPED_CARDS: state.flippedCards || [],
+      MEMORY_MATCHED_PAIRS: state.matchedPairs || [],
+      MEMORY_ERRORS: state.errors || 0,
+    },
+  }
+  return base
+}
+
+describe('PlayerDisplay — carte MEMOTION de type MEMORY (#187)', () => {
+  describe('Face VERSO (QUESTION) — grille face cachée, cliquable', () => {
+    beforeEach(() => {
+      useGame.mockReturnValue(makeMemotionMemoryMock('QUESTION'))
+    })
+
+    it('affiche la grille MEMORY de la carte active (4 cartes = 2 paires)', () => {
+      const { container } = renderTV()
+      const grid = container.querySelector('.memotion-tv-memory-grid')
+      expect(grid).not.toBeNull()
+      expect(container.querySelectorAll('.memotion-tv-memory-card').length).toBe(4)
+    })
+
+    it('les cartes non retournées/trouvées sont face cachée (lettre, pas de contenu)', () => {
+      const { container } = renderTV()
+      const cards = container.querySelectorAll('.memotion-tv-memory-card')
+      cards.forEach(card => {
+        expect(card.classList.contains('up')).toBe(false)
+        expect(card.querySelector('.memotion-tv-memory-card-letter')).not.toBeNull()
+      })
+      expect(container.textContent).not.toContain('Napoléon')
+    })
+
+    it("n'affiche PAS le contenu SPEEDY (ANSWER_TEXT/ANSWER_IMAGE) pour une carte MEMORY", () => {
+      const { container } = renderTV()
+      const overlay = container.querySelector('.memotion-tv-fullscreen')
+      expect(overlay.textContent).not.toContain('ANSWER_TEXT')
+    })
+
+    it('une carte face cachée est cliquable (playable=true en sous-phase QUESTION) et appelle flipMemoryCard avec la portée de carte', () => {
+      const mock = makeMemotionMemoryMock('QUESTION')
+      useGame.mockReturnValue(mock)
+      const { container } = renderTV()
+      const card = container.querySelector('.memotion-tv-memory-card:not(.up)')
+      expect(card.disabled).toBe(false)
+      card.click()
+      expect(mock.flipMemoryCard).toHaveBeenCalledTimes(1)
+      expect(mock.flipMemoryCard.mock.calls[0][1]).toBe('card-3') // MOTION_CARD_ID = carte active
+    })
+  })
+
+  describe('État MEMORY de LA CARTE (MEMOTION_ACTIVE.STATE), pas de la question-scopée', () => {
+    it('une carte retournée (MEMORY_FLIPPED_CARDS) est affichée face visible', () => {
+      useGame.mockReturnValue(makeMemotionMemoryMock('QUESTION', { flippedCards: ['1-1'] }))
+      const { container } = renderTV()
+      const upCards = container.querySelectorAll('.memotion-tv-memory-card.up')
+      expect(upCards.length).toBe(1)
+      expect(upCards[0].textContent).toContain('Napoléon')
+    })
+
+    it('une paire trouvée (MEMORY_MATCHED_PAIRS) est affichée "matched"', () => {
+      useGame.mockReturnValue(makeMemotionMemoryMock('QUESTION', { matchedPairs: [2] }))
+      const { container } = renderTV()
+      const matched = container.querySelectorAll('.memotion-tv-memory-card.matched')
+      expect(matched.length).toBe(2) // les 2 cartes de la paire 2
+    })
+
+    it('MEMOTION_ACTIVE.CARD_ID ne correspond pas à la carte active -> état vide, pas l\'ancien état', () => {
+      const mock = makeMemotionMemoryMock('QUESTION', { flippedCards: ['1-1'] })
+      mock.gameState.MEMOTION_ACTIVE.CARD_ID = 'card-999' // carte différente de MEMOTION_SELECTED ('card-3')
+      useGame.mockReturnValue(mock)
+      const { container } = renderTV()
+      expect(container.querySelectorAll('.memotion-tv-memory-card.up').length).toBe(0)
+    })
+  })
+
+  // Task 14 du plan #187 — la révélation ne peut pas être gatée sur
+  // `gameState.phase === 'REVEALED'` (inatteignable en MEMOTION, la phase
+  // reste STARTED toute la manche) : routée par `cardHostContext.revealed`
+  // (dérivé de MEMOTION_SUBPHASE === 'REVEAL', utils/hostContext.js).
+  describe('Face REVEAL — révélation totale, routée par hostContext.revealed (task 14)', () => {
+    it('toutes les cartes sont affichées face visible en sous-phase REVEAL, même non trouvées', () => {
+      useGame.mockReturnValue(makeMemotionMemoryMock('REVEAL'))
+      const { container } = renderTV()
+      const cards = container.querySelectorAll('.memotion-tv-memory-card')
+      expect(cards.length).toBe(4)
+      cards.forEach(card => expect(card.classList.contains('up')).toBe(true))
+      expect(container.textContent).toContain('Napoléon')
+      expect(container.textContent).toContain('1958')
+    })
+
+    it('la grille est conservée entre VERSO et REVEAL (pas de saut visuel, même carte)', () => {
+      useGame.mockReturnValue(makeMemotionMemoryMock('REVEAL'))
+      const { container } = renderTV()
+      expect(container.querySelectorAll('.memotion-tv-memory-grid').length).toBe(1)
+    })
+
+    it('les cartes ne sont plus cliquables en REVEAL (playable=false)', () => {
+      useGame.mockReturnValue(makeMemotionMemoryMock('REVEAL'))
+      const { container } = renderTV()
+      const cards = container.querySelectorAll('.memotion-tv-memory-card')
+      cards.forEach(card => expect(card.disabled).toBe(true))
+    })
+  })
+
+  describe('Non-régression — carte SPEEDY de la même manche', () => {
+    it('une carte SPEEDY continue d\'afficher son propre contenu, pas de grille MEMORY', () => {
+      const mock = makeMemotionMock('QUESTION', 'card-1', [CARD_WITH_IMG, CARD_MEMORY])
+      useGame.mockReturnValue(mock)
+      const { container } = renderTV()
+      expect(container.querySelector('.memotion-tv-memory-grid')).toBeNull()
+      expect(container.querySelector('.memotion-tv-fs-question-text').textContent)
+        .toBe('Dans quel épisode Dark Vador révèle-t-il sa filiation ?')
+    })
+  })
+})
