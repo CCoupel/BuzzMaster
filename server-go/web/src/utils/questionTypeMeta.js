@@ -17,20 +17,24 @@
  * SPEEDY/QCM/MEMORY, ligne 2 MEMOTION/ARDOISE ; même ordre que le sélecteur
  * `AIGenerateModal.jsx`).
  *
- * `nestable` (#184/B-F4) — miroir JS de `TypeDescriptor.NestableInMotionCard`
- * (registre Go, `internal/game/question_types.go`, contrat §7) : les seuls
- * types qu'une carte MEMOTION peut porter en `TYPE`. SPEEDY et QCM en v7.0.0 ;
- * ARDOISE/MEMORY rejoignent en v7.1.0 (#186/#187) ; MEMOTION jamais
- * (profondeur d'imbrication plafonnée à 1, contrat §1). Consommé par le
- * sélecteur de type de carte (`QuestionsPage.jsx`) pour filtrer les boutons
- * proposés — pas de registre séparé côté JS, cette table reste la source
- * unique.
+ * `nestable` (#184/B-F4, étendu #187) — miroir JS de
+ * `TypeDescriptor.NestableInMotionCard` (registre Go,
+ * `internal/game/question_types.go`, contrat §7) : les seuls types qu'une
+ * carte MEMOTION peut porter en `TYPE`. SPEEDY et QCM depuis v7.0.0 ; MEMORY
+ * rejoint en v7.1.0 (#187). ARDOISE reste **définitivement** non nestable —
+ * #186 (« ARDOISE en carte ») a été fermée « not planned » le 2026-08-24
+ * (contrat §7.2 : le seul différenciateur d'ARDOISE, la saisie multi-équipe
+ * simultanée, disparaît dans une carte qui n'active jamais qu'une équipe).
+ * MEMOTION jamais nestable (profondeur d'imbrication plafonnée à 1, contrat
+ * §1). Consommé par le sélecteur de type de carte (`QuestionsPage.jsx`) pour
+ * filtrer les boutons proposés — pas de registre séparé côté JS, cette table
+ * reste la source unique.
  */
 
 export const QUESTION_TYPES = [
   { key: 'SPEEDY', label: 'Speedy', icon: '⚡', color: '#3b7fc4', nestable: true },
   { key: 'QCM', label: 'QCM', icon: '🔠', color: '#8a5cc4', nestable: true },
-  { key: 'MEMORY', label: 'Memory', icon: '🃏', color: '#2e9e6d', nestable: false },
+  { key: 'MEMORY', label: 'Memory', icon: '🃏', color: '#2e9e6d', nestable: true },
   { key: 'MEMOTION', label: 'Memotion', icon: '🎞️', color: '#c8568f', nestable: false },
   { key: 'ARDOISE', label: 'Ardoise', icon: '🖊️', color: '#10b981', nestable: false },
 ]

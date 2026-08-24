@@ -71,13 +71,14 @@ describe('questionTypeMeta — registre QUESTION_TYPES / QUESTION_TYPE_META', ()
 
 describe('questionTypeMeta — nestable (#184/B-F4, miroir de NestableInMotionCard)', () => {
   // Valeurs attendues = table du contrat §7 / registre Go
-  // (internal/game/question_types.go) au 2026-08-21 : SPEEDY et QCM seuls
-  // nestables en v7.0.0 ; ARDOISE/MEMORY rejoignent en v7.1.0 (#186/#187) ;
-  // MEMOTION jamais (profondeur plafonnée à 1, contrat §1).
+  // (internal/game/question_types.go) au 2026-08-24 : SPEEDY et QCM
+  // nestables depuis v7.0.0 ; MEMORY rejoint en v7.1.0 (#187). ARDOISE reste
+  // définitivement non nestable — #186 fermée « not planned » le 2026-08-24
+  // (contrat §7.2). MEMOTION jamais (profondeur plafonnée à 1, contrat §1).
   const EXPECTED_NESTABLE = {
     SPEEDY: true,
     QCM: true,
-    MEMORY: false,
+    MEMORY: true,
     MEMOTION: false,
     ARDOISE: false,
   }
