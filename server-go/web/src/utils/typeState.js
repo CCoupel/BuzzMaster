@@ -12,28 +12,30 @@
  * tout composant de type appelle `getTypeState`, jamais `gameState.qcmInvalidated`
  * ni `gameState.MEMOTION_ACTIVE` directement.
  *
- * ⚠️ **Périmètre v7.0.0** : seul `qcmInvalidated` est exposé ici, seul champ
- * d'état par type consommé aujourd'hui (`AnimQcmOptions`, `PlayerDisplay`).
- * `ARDOISE_ANSWERS`/`MEMORY_FLIPPED_CARDS` restent lus directement à leur
- * emplacement question-scopé existant tant qu'ARDOISE et MEMORY ne sont pas
- * nestables en carte (`NestableInMotionCard`, v7.1.0, #186/#187, contrat §7)
- * — les ajouter ici maintenant serait l'abstraction spéculative que #184
- * écarte explicitement.
+ * ⚠️ **Périmètre v7.1.0 (#187)** : `qcmInvalidated` (v7.0.0) et `memory`
+ * (v7.1.0) sont exposés ici — les deux seuls champs d'état par type
+ * consommés aujourd'hui (`AnimQcmOptions`/`AnimMemoryGrid`, `PlayerDisplay`).
+ * `ARDOISE_ANSWERS` reste lu directement à son emplacement question-scopé
+ * existant : ARDOISE n'est **pas** nestable en carte (#186 fermée « not
+ * planned », contrat §7.2) — l'y ajouter serait l'abstraction spéculative que
+ * #184 écarte explicitement.
  *
- * ⚠️ **Dépendance non bouclée signalée** : `gameState.MEMOTION_ACTIVE` est un
- * nouveau champ `GameState` (contrat §5.2, tâche `dev-backend` B-B4) — au
- * moment d'écrire ce fichier, il n'est pas encore émis par le serveur ni
- * répercuté dans `useWebSocket.js` (aucune des deux tâches n'apparaît dans
- * B-F1-B-F5 ni dans B-B1-B-B8). La branche « hôte carte » ci-dessous est
- * donc correcte par construction mais **inerte** tant que ce champ n'est pas
- * câblé côté `useWebSocket.js` — sans conséquence en v7.0.0 puisqu'aucune
- * carte QCM n'est encore jouable (#185, Phase 3). À câbler avant C-F1/C-F2.
+ * `gameState.MEMOTION_ACTIVE` est câblé côté `useWebSocket.js` depuis #184/
+ * #185 (v7.0.0) — la branche « hôte carte » ci-dessous est donc active dès
+ * qu'une carte MEMOTION QCM ou MEMORY est en jeu.
+ */
+
+/**
+ * @typedef {Object} MemoryTypeState
+ * @property {string[]} flippedCards - IDs des cartes actuellement retournées (max 2)
+ * @property {number[]} matchedPairs - IDs des paires trouvées (permanent)
+ * @property {number} errors - nombre d'erreurs (tentatives ratées)
  */
 
 /**
  * @param {Object} gameState
  * @param {import('./hostContext').HostContext} hostContext
- * @returns {{qcmInvalidated: string[]}}
+ * @returns {{qcmInvalidated: string[], memory: MemoryTypeState}}
  */
 export function getTypeState(gameState, hostContext) {
   if (hostContext?.cardId) {
@@ -44,10 +46,20 @@ export function getTypeState(gameState, hostContext) {
     const state = (active && active.CARD_ID === hostContext.cardId) ? (active.STATE || {}) : {}
     return {
       qcmInvalidated: state.QCM_INVALIDATED || [],
+      memory: {
+        flippedCards: state.MEMORY_FLIPPED_CARDS || [],
+        matchedPairs: state.MEMORY_MATCHED_PAIRS || [],
+        errors: state.MEMORY_ERRORS || 0,
+      },
     }
   }
 
   return {
     qcmInvalidated: gameState?.qcmInvalidated || [],
+    memory: {
+      flippedCards: gameState?.memoryFlippedCards || [],
+      matchedPairs: gameState?.memoryMatchedPairs || [],
+      errors: gameState?.memoryErrors || 0,
+    },
   }
 }
