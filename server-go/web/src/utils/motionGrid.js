@@ -91,6 +91,33 @@ export function getMotionCardPoints(difficulty, motionConfig) {
 }
 
 /**
+ * Gain prévisionnel d'une carte en barème `STARS_PRORATA` (#187, v7.1.0,
+ * contrat §6.2) — carte MEMORY : les points de la carte (barème étoiles,
+ * `getMotionCardPoints`) sont répartis au prorata des unités réalisées
+ * (paires trouvées / total de paires). Affichage seul côté client (préviu
+ * de `AnimMotionActions`, bouton "Terminer" de la ligne L2) — le serveur
+ * reste **seule autorité** sur le calcul réellement crédité (`Units` et
+ * `UnitsTotal` dérivés de son propre état, contrat §9.3) : cette fonction ne
+ * fait jamais foi, elle anticipe seulement ce que verra l'animateur.
+ *
+ * 🔴 **Ordre des opérations normatif — multiplier AVANT de diviser**
+ * (contrat §6.2) : `Math.floor(starsPoints * units / unitsTotal)`, jamais
+ * `Math.floor(starsPoints / unitsTotal) * units` (qui vaut 0 dès que
+ * `unitsTotal > starsPoints`, ex. une carte à 5 points / 8 paires — voir
+ * `motionGrid.test.js`, cas nommé à l'identique côté Go,
+ * `STARS_PRORATA_5points_8pairs`).
+ *
+ * @param {number} starsPoints - points de la carte au barème étoiles (`getMotionCardPoints`)
+ * @param {number} units - unités réalisées (ex. paires trouvées)
+ * @param {number} unitsTotal - unités réalisables au total (ex. nombre de paires de la carte)
+ * @returns {number} points entiers, `0` si `unitsTotal <= 0` (garde contrat §6.2)
+ */
+export function computeStarsProrataPoints(starsPoints, units, unitsTotal) {
+  if (!unitsTotal || unitsTotal <= 0) return 0
+  return Math.floor((starsPoints * units) / unitsTotal)
+}
+
+/**
  * Mode Secret — la grille affiche des coordonnées plutôt que les thèmes tant
  * que la manche n'est pas terminée pour une carte (aucun étoile visible non
  * plus, la difficulté trahirait la carte).
