@@ -3026,53 +3026,6 @@ func (e *Engine) GetMemoryFlippedCards() []string {
 	return e.state.MemoryFlippedCards
 }
 
-// CalculateMemoryScore calculates the score for a Memory game based on matched pairs, errors, and config
-// Returns: score, matchedPairs, totalPairs, errors, isComplete
-func (e *Engine) CalculateMemoryScore() (int, int, int, int, bool) {
-	e.mu.RLock()
-	defer e.mu.RUnlock()
-
-	if e.state.Question == nil || e.state.Question.Type != QuestionTypeMemory {
-		return 0, 0, 0, 0, false
-	}
-
-	// Get config values with defaults
-	pointsPerPair := 10
-	errorPenalty := 0
-	completionBonus := 0
-
-	if e.state.Question.MemoryConfig != nil {
-		if e.state.Question.MemoryConfig.PointsPerPair > 0 {
-			pointsPerPair = e.state.Question.MemoryConfig.PointsPerPair
-		}
-		errorPenalty = e.state.Question.MemoryConfig.ErrorPenalty
-		completionBonus = e.state.Question.MemoryConfig.CompletionBonus
-	}
-
-	// Calculate stats
-	matchedPairs := len(e.state.MemoryMatchedPairs)
-	totalPairs := len(e.state.Question.MemoryPairs)
-	errors := e.state.MemoryErrors
-	isComplete := matchedPairs == totalPairs && totalPairs > 0
-
-	// Calculate score: (matched × pointsPerPair) + completionBonus - (errors × errorPenalty)
-	score := matchedPairs * pointsPerPair
-	if isComplete {
-		score += completionBonus
-	}
-	score -= errors * errorPenalty
-
-	// Score cannot be negative
-	if score < 0 {
-		score = 0
-	}
-
-	log.Printf("[Engine] Memory score: matched=%d/%d, errors=%d, complete=%v, score=%d (perPair=%d, bonus=%d, penalty=%d)",
-		matchedPairs, totalPairs, errors, isComplete, score, pointsPerPair, completionBonus, errorPenalty)
-
-	return score, matchedPairs, totalPairs, errors, isComplete
-}
-
 // SetEnrollmentActive enables or disables virtual player enrollment (QR code display)
 func (e *Engine) SetEnrollmentActive(active bool) {
 	e.mu.Lock()
@@ -3946,14 +3899,20 @@ func (e *Engine) motionCardPoints(difficulty int) int {
 }
 
 // motionCardPointsForOutcome computes the points to award for card given a
-// type's outcome (currently just `units`, from MEMOTION_DONE.UNITS —
-// #184 B-B5, contract §6.2). Dispatches on card.PointsRule.Mode: absent
-// (nil PointsRule, or an explicit empty/"STARS" MODE) falls through to the
-// pre-#184 star-based scale (motionCardPoints, unchanged); FIXED and
-// PER_UNIT are new. This is the one place #187 (MEMORY prorata) needs to
-// reach — via PER_UNIT — without touching anything else in this file,
-// which is the mechanism's own acceptance criterion (contract §6.2).
-func (e *Engine) motionCardPointsForOutcome(card *MotionCard, units int) int {
+// type's outcome — units realised and unitsTotal realisable (MEMOTION_DONE.
+// UNITS for units under FIXED/PER_UNIT — #184 B-B5, contract §6.2; both
+// server-derived for a MEMORY card under STARS_PRORATA — #187, contract
+// §9.3). Dispatches on card.PointsRule.Mode: absent (nil PointsRule, or an
+// explicit empty/"STARS" MODE) falls through to the pre-#184 star-based
+// scale (motionCardPoints, unchanged); FIXED, PER_UNIT and STARS_PRORATA
+// are additive on top of it.
+//
+// ⚠️ Signature changed by #187 (card, units) → (card, units, unitsTotal) —
+// declared host modification, contract §10.2: #184 had anticipated PER_UNIT
+// as MEMORY's landing mode, not a prorata of the card's own total. The
+// change stays within the host's own points vocabulary (§6.1) — no MEMORY
+// knowledge (e.g. "a pair") enters this function or this file.
+func (e *Engine) motionCardPointsForOutcome(card *MotionCard, units, unitsTotal int) int {
 	mode := PointsRuleModeStars
 	value := 0
 	if card.PointsRule != nil && card.PointsRule.Mode != "" {
@@ -3968,6 +3927,20 @@ func (e *Engine) motionCardPointsForOutcome(card *MotionCard, units int) int {
 		return 0
 	case PointsRuleModePerUnit:
 		return value * units
+	case PointsRuleModeStarsProrata:
+		// #187 contract §6.2 — normative order of operations: multiply
+		// BEFORE dividing. Precomputing a "value per unit"
+		// (motionCardPoints(...)/unitsTotal first) truncates to 0 in
+		// integer arithmetic whenever unitsTotal exceeds the card's own
+		// point value (e.g. 5 points / 8 pairs), making the whole card
+		// worth 0 no matter how many units were realised. Multiplying
+		// first guarantees a complete grid (units==unitsTotal) always
+		// rewards the card's exact nominal value, with no cumulative
+		// rounding loss.
+		if unitsTotal <= 0 {
+			return 0
+		}
+		return e.motionCardPoints(card.Difficulty) * units / unitsTotal
 	default: // STARS
 		return e.motionCardPoints(card.Difficulty)
 	}
@@ -4164,7 +4137,19 @@ func (e *Engine) DoneMotionCard(cardID string, winnerTeam string, units int) (in
 			for i := range e.state.Question.MotionCards {
 				card := &e.state.Question.MotionCards[i]
 				if card.ID == cardID {
-					pts := e.motionCardPointsForOutcome(card, units)
+					effUnits, unitsTotal := units, 0
+					if card.EffectiveType() == QuestionTypeMemory {
+						// #187 contract §9.3 — the server is sole authority
+						// on a MEMORY card's outcome: derive Units AND
+						// UnitsTotal from the card's own active grid state,
+						// ignoring whatever UNITS the client sent. With
+						// STARS_PRORATA as the default MODE, Units *is* the
+						// score — leaving it to the caller would recreate,
+						// in this new mechanism, exactly the dette #12 owes
+						// to close.
+						effUnits, unitsTotal = e.memoryCardOutcomeUnsafe(card)
+					}
+					pts := e.motionCardPointsForOutcome(card, effUnits, unitsTotal)
 					ok := pts > 0
 					if ok {
 						points = pts
@@ -4179,7 +4164,7 @@ func (e *Engine) DoneMotionCard(cardID string, winnerTeam string, units int) (in
 			if ok {
 				team.TeamPoints += points
 				e.recalculateTeamScoreUnsafe(winnerTeam)
-				log.Printf("[Engine] MEMOTION DoneMotionCard: team=%s +%dpts (difficulty-based)", winnerTeam, points)
+				log.Printf("[Engine] MEMOTION DoneMotionCard: team=%s +%dpts", winnerTeam, points)
 			}
 		}
 		e.state.MotionCardTeams[cardID] = winnerTeam
@@ -4494,6 +4479,68 @@ func motionActiveQCMInvalidated(state map[string]interface{}) []string {
 	return s
 }
 
+// ============================================================
+// MEMOTION — MEMORY-typed card (#187, v7.1.0, contract §5.4/§6.3/§7.3)
+// ============================================================
+
+// motionActiveMemoryFlippedCards reads MEMORY_FLIPPED_CARDS from
+// MEMOTION_ACTIVE.STATE — the card-scoped counterpart of the question-host
+// MemoryFlippedCards field (contract §5.4). Absent or unexpectedly-shaped ⇒
+// nil; never panics.
+func motionActiveMemoryFlippedCards(state map[string]interface{}) []string {
+	v, ok := state["MEMORY_FLIPPED_CARDS"]
+	if !ok {
+		return nil
+	}
+	s, ok := v.([]string)
+	if !ok {
+		return nil
+	}
+	return s
+}
+
+// motionActiveMemoryMatchedPairs reads MEMORY_MATCHED_PAIRS from
+// MEMOTION_ACTIVE.STATE — the card-scoped counterpart of the question-host
+// MemoryMatchedPairs field (contract §5.4). Absent or unexpectedly-shaped ⇒
+// nil; never panics.
+func motionActiveMemoryMatchedPairs(state map[string]interface{}) []int {
+	v, ok := state["MEMORY_MATCHED_PAIRS"]
+	if !ok {
+		return nil
+	}
+	s, ok := v.([]int)
+	if !ok {
+		return nil
+	}
+	return s
+}
+
+// motionActiveMemoryErrors reads MEMORY_ERRORS from MEMOTION_ACTIVE.STATE —
+// the card-scoped counterpart of the question-host MemoryErrors field
+// (contract §5.4). Absent or unexpectedly-shaped ⇒ 0; never panics.
+func motionActiveMemoryErrors(state map[string]interface{}) int {
+	v, ok := state["MEMORY_ERRORS"]
+	if !ok {
+		return 0
+	}
+	n, ok := v.(int)
+	if !ok {
+		return 0
+	}
+	return n
+}
+
+// memoryCardOutcomeUnsafe derives (units, unitsTotal) for the active card's
+// own MEMORY grid — contract §6.3/§9.3: "le serveur dérive Units ET
+// UnitsTotal de son propre état [...] et ignore tout UNITS reçu [du
+// client]". Must be called with e.mu held; card must be the card DoneMotionCard
+// is closing, already known to be MEMORY-typed (card.EffectiveType() ==
+// QuestionTypeMemory) by the caller.
+func (e *Engine) memoryCardOutcomeUnsafe(card *MotionCard) (units, unitsTotal int) {
+	matched := motionActiveMemoryMatchedPairs(e.state.MotionActive.State)
+	return len(matched), len(card.MemoryPairs)
+}
+
 // StartMotionMemorizeTimer starts a countdown for the MEMORIZE phase in Secret Mode (v5.5.0).
 // At expiry, automatically transitions MotionSubPhase from "MEMORIZE" to "GRID".
 // If duration <= 0, the call is a no-op (standard mode compatibility).
@@ -4713,4 +4760,127 @@ func (e *Engine) ValidateCardScope(motionCardID string) error {
 		return &MotionError{Reason: "CARD_SCOPE_MISMATCH"}
 	}
 	return nil
+}
+
+// FlipMotionMemoryCard flips one face-down card in a MEMOTION card's own
+// MEMORY grid — the card-scoped counterpart of FlipMemoryCard (contract
+// §5.4/§6.3/§7.3). motionCardID must already have been accepted by
+// ValidateCardScope by the caller (main.go); this method re-derives the
+// same "is this really the active card" fact itself rather than trusting
+// the caller's earlier check, since nothing prevents the active card from
+// changing between that check and this call in a concurrent server.
+//
+// Unlike the question host (FlipMemoryCard), state lives in
+// MotionActive.State — never the question-scoped Memory* fields (contract
+// §5.4) — and there is NEVER a team rotation: a MEMORY card is played by
+// exactly one team, MotionCurrentTeam, and MEMORY_MODE/rotateToNextTeam
+// have no meaning in this context (contract §6.3). Returns the same 4-tuple
+// shape as FlipMemoryCard for the caller's convenience (main.go shares the
+// post-flip broadcast/LED/scheduling logic across both hosts); isComplete
+// signals "all pairs found", NOT "the round is over" — the caller must hand
+// control back to the MEMOTION card's REVEAL sub-phase, never call Stop()
+// (contract note, plan-memotion-v710-memory-20260824-154844.md §5 tâche 4).
+func (e *Engine) FlipMotionMemoryCard(motionCardID, cardID string) (isMatch, shouldFlipBack bool, flipDelay int, isComplete bool) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+
+	if e.state.Phase != PhaseStarted {
+		return false, false, 0, false
+	}
+	// Playable per contract §4's HostContext table: MOTION_SUBPHASE==QUESTION.
+	if e.state.MotionSubPhase != MotionSubPhaseQuestion {
+		return false, false, 0, false
+	}
+	if motionCardID == "" || e.state.MotionSelected != motionCardID {
+		return false, false, 0, false
+	}
+	card := e.activeMotionCardUnsafe()
+	if card == nil || card.EffectiveType() != QuestionTypeMemory {
+		return false, false, 0, false
+	}
+
+	pairID := e.extractPairID(cardID)
+	if pairID == 0 {
+		return false, false, 0, false
+	}
+
+	matched := motionActiveMemoryMatchedPairs(e.state.MotionActive.State)
+	for _, m := range matched {
+		if m == pairID {
+			return false, false, 0, false
+		}
+	}
+
+	flipped := motionActiveMemoryFlippedCards(e.state.MotionActive.State)
+	for _, id := range flipped {
+		if id == cardID {
+			return false, false, 0, false
+		}
+	}
+	if len(flipped) >= 2 {
+		return false, false, 0, false
+	}
+
+	flipped = append(flipped, cardID)
+	e.state.MotionActive.State["MEMORY_FLIPPED_CARDS"] = flipped
+
+	if len(flipped) == 1 {
+		return false, false, 0, false
+	}
+
+	firstCardID := flipped[0]
+	secondCardID := flipped[1]
+	firstPairID := e.extractPairID(firstCardID)
+	secondPairID := e.extractPairID(secondCardID)
+
+	// Own FLIP_DELAY (contract §6.3: points-related MEMORY_CONFIG settings
+	// are neutralised in card context, but FLIP_DELAY is not one of them —
+	// it stays active).
+	flipDelay = 3000
+	if card.MemoryConfig != nil && card.MemoryConfig.FlipDelay > 0 {
+		flipDelay = int(card.MemoryConfig.FlipDelay * 1000)
+	}
+
+	if firstPairID == secondPairID {
+		matched = append(matched, firstPairID)
+		e.state.MotionActive.State["MEMORY_MATCHED_PAIRS"] = matched
+		e.state.MotionActive.State["MEMORY_FLIPPED_CARDS"] = []string{}
+
+		totalPairs := len(card.MemoryPairs)
+		isComplete = len(matched) >= totalPairs && totalPairs > 0
+
+		log.Printf("[Engine] MEMOTION memory card MATCH! cardId=%s pair %d found. Total matched: %d/%d. Complete: %v",
+			motionCardID, firstPairID, len(matched), totalPairs, isComplete)
+		return true, false, 0, isComplete
+	}
+
+	errs := motionActiveMemoryErrors(e.state.MotionActive.State)
+	e.state.MotionActive.State["MEMORY_ERRORS"] = errs + 1
+
+	log.Printf("[Engine] MEMOTION memory card NO MATCH (error #%d, cardId=%s). Cards %s and %s will flip back after %dms",
+		errs+1, motionCardID, firstCardID, secondCardID, flipDelay)
+	return false, true, flipDelay, false
+}
+
+// ClearMotionMemoryFlippedCards resets the flipped-cards slot of a MEMOTION
+// card's own MEMORY grid after the flip-back delay — the card-scoped
+// counterpart of ClearMemoryFlippedCards. motionCardID is the card identity
+// the caller captured at scheduling time (plan Risque R2): if the active
+// card has since changed — a different card selected, or the round moved
+// on — this is a no-op. It must NEVER mutate a card that isn't still the
+// one it was scheduled for, or it would blank out the NEXT card's flipped
+// cards instead of the one whose delay actually elapsed.
+//
+// Never rotates a team, unlike the question host's ClearMemoryFlippedCards
+// — contract §6.3, MEMORY rotation has no meaning inside a MEMOTION card.
+func (e *Engine) ClearMotionMemoryFlippedCards(motionCardID string) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+
+	if motionCardID == "" || e.state.MotionSelected != motionCardID {
+		log.Printf("[Engine] MEMOTION memory auto-flip-back skipped: active card changed (scheduled for %s)", motionCardID)
+		return
+	}
+	e.state.MotionActive.State["MEMORY_FLIPPED_CARDS"] = []string{}
+	log.Printf("[Engine] MEMOTION memory card flipped cards cleared (cardId=%s)", motionCardID)
 }
