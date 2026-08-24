@@ -51,19 +51,19 @@ func TestParticipantsConform_Rules(t *testing.T) {
 		},
 		{
 			name:     "MEMORY SOLO with zero teams selected is not conform",
-			question: &Question{Type: QuestionTypeMemory, MemoryMode: string(MemoryModeSolo)},
+			question: &Question{Type: QuestionTypeMemory, TypedContent: TypedContent{MemoryMode: string(MemoryModeSolo)}},
 			state:    &GameState{MemoryParticipatingTeams: []string{}},
 			want:     false,
 		},
 		{
 			name:     "MEMORY SOLO with exactly one team selected is conform",
-			question: &Question{Type: QuestionTypeMemory, MemoryMode: string(MemoryModeSolo)},
+			question: &Question{Type: QuestionTypeMemory, TypedContent: TypedContent{MemoryMode: string(MemoryModeSolo)}},
 			state:    &GameState{MemoryParticipatingTeams: []string{"red"}},
 			want:     true,
 		},
 		{
 			name:     "MEMORY SOLO with two teams selected is not conform",
-			question: &Question{Type: QuestionTypeMemory, MemoryMode: string(MemoryModeSolo)},
+			question: &Question{Type: QuestionTypeMemory, TypedContent: TypedContent{MemoryMode: string(MemoryModeSolo)}},
 			state:    &GameState{MemoryParticipatingTeams: []string{"red", "blue"}},
 			want:     false,
 		},
@@ -75,25 +75,25 @@ func TestParticipantsConform_Rules(t *testing.T) {
 		},
 		{
 			name:     "MEMORY CHACUN_SON_TOUR with one team is not conform",
-			question: &Question{Type: QuestionTypeMemory, MemoryMode: string(MemoryModeChacunSonTour)},
+			question: &Question{Type: QuestionTypeMemory, TypedContent: TypedContent{MemoryMode: string(MemoryModeChacunSonTour)}},
 			state:    &GameState{MemoryParticipatingTeams: []string{"red"}},
 			want:     false,
 		},
 		{
 			name:     "MEMORY CHACUN_SON_TOUR with two teams is conform",
-			question: &Question{Type: QuestionTypeMemory, MemoryMode: string(MemoryModeChacunSonTour)},
+			question: &Question{Type: QuestionTypeMemory, TypedContent: TypedContent{MemoryMode: string(MemoryModeChacunSonTour)}},
 			state:    &GameState{MemoryParticipatingTeams: []string{"red", "blue"}},
 			want:     true,
 		},
 		{
 			name:     "MEMORY TANT_QUE_JE_GAGNE with zero teams is not conform",
-			question: &Question{Type: QuestionTypeMemory, MemoryMode: string(MemoryModeTantQueJeGagne)},
+			question: &Question{Type: QuestionTypeMemory, TypedContent: TypedContent{MemoryMode: string(MemoryModeTantQueJeGagne)}},
 			state:    &GameState{MemoryParticipatingTeams: []string{}},
 			want:     false,
 		},
 		{
 			name:     "MEMORY TANT_QUE_JE_GAGNE with three teams is conform",
-			question: &Question{Type: QuestionTypeMemory, MemoryMode: string(MemoryModeTantQueJeGagne)},
+			question: &Question{Type: QuestionTypeMemory, TypedContent: TypedContent{MemoryMode: string(MemoryModeTantQueJeGagne)}},
 			state:    &GameState{MemoryParticipatingTeams: []string{"red", "blue", "green"}},
 			want:     true,
 		},
@@ -136,7 +136,7 @@ func TestPrepareExit_RequiresBothCriteriaIndependently(t *testing.T) {
 	e.UpdateBumper("b1", map[string]interface{}{"TEAM": "red"})
 	e.UpdateBumper("b2", map[string]interface{}{"TEAM": "blue"})
 
-	q := &Question{ID: "q1", Type: QuestionTypeMemory, MemoryMode: string(MemoryModeSolo)}
+	q := &Question{ID: "q1", Type: QuestionTypeMemory, TypedContent: TypedContent{MemoryMode: string(MemoryModeSolo)}}
 	e.Ready("q1", q)
 
 	// Neither criterion met yet.
@@ -314,7 +314,7 @@ func TestForceReady_SkipsPongNotConformity(t *testing.T) {
 	e.UpdateBumper("b1", map[string]interface{}{"TEAM": "red"})
 	e.UpdateBumper("b2", map[string]interface{}{"TEAM": "blue"})
 
-	q := &Question{ID: "q1", Type: QuestionTypeMemory, MemoryMode: string(MemoryModeSolo)}
+	q := &Question{ID: "q1", Type: QuestionTypeMemory, TypedContent: TypedContent{MemoryMode: string(MemoryModeSolo)}}
 	e.Ready("q1", q)
 
 	// No PONG received from either bumper, and no participant selected yet.
@@ -381,7 +381,7 @@ func TestStart_MemorySolo_UnreachableWithoutExplicitSelection(t *testing.T) {
 	e.UpdateBumper("b2", map[string]interface{}{"TEAM": "blue"})
 	e.UpdateBumper("b3", map[string]interface{}{"TEAM": "green"})
 
-	q := &Question{ID: "q1", Type: QuestionTypeMemory, MemoryMode: string(MemoryModeSolo)}
+	q := &Question{ID: "q1", Type: QuestionTypeMemory, TypedContent: TypedContent{MemoryMode: string(MemoryModeSolo)}}
 	e.Ready("q1", q)
 	e.SetBumperReady("b1")
 	e.SetBumperReady("b2")
@@ -422,7 +422,7 @@ func TestActualStart_PreservesExplicitMemorySelection(t *testing.T) {
 	e.UpdateBumper("b1", map[string]interface{}{"TEAM": "red"})
 	e.UpdateBumper("b2", map[string]interface{}{"TEAM": "blue"})
 
-	q := &Question{ID: "q1", Type: QuestionTypeMemory, MemoryMode: string(MemoryModeSolo)}
+	q := &Question{ID: "q1", Type: QuestionTypeMemory, TypedContent: TypedContent{MemoryMode: string(MemoryModeSolo)}}
 	e.Ready("q1", q)
 	e.SetBumperReady("b1")
 	e.SetBumperReady("b2")

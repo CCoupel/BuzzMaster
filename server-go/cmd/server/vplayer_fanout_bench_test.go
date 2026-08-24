@@ -54,7 +54,7 @@ func buildFanoutBenchMessage(n int, question *game.Question) *protocol.Message {
 		MemoryPairOwners:         map[int]string{},
 		MemoryCurrentTeamColor:   []int{},
 		QcmInvalidated:           []string{},
-		MotionCardStates:         map[string]string{},
+		MotionCardStates:         map[string]game.MotionCardState{},
 		MotionCardTeams:          map[string]string{},
 		MotionParticipatingTeams: []string{},
 		MotionCurrentTeamColor:   []int{},
@@ -90,8 +90,11 @@ func benchQCMQuestion() *game.Question {
 	return &game.Question{
 		ID: "bench-qcm", Question: "Quelle est la capitale de la France ?", Answer: "Paris",
 		Type: game.QuestionTypeQCM, Category: "Géographie",
-		QCMAnswers: &game.QCMAnswers{Red: "Paris", Green: "Lyon", Yellow: "Marseille", Blue: "Toulouse"},
-		QCMCorrect: "RED", Points: "10", Time: "20", Status: game.StatusReady,
+		TypedContent: game.TypedContent{
+			QCMAnswers: &game.QCMAnswers{Red: "Paris", Green: "Lyon", Yellow: "Marseille", Blue: "Toulouse"},
+			QCMCorrect: "RED",
+		},
+		Points: "10", Time: "20", Status: game.StatusReady,
 	}
 }
 
@@ -136,10 +139,14 @@ func runFanoutBenchmark(b *testing.B, n int, question *game.Question) {
 	}
 }
 
-func BenchmarkVPlayerFanout_10_QCM(b *testing.B)      { runFanoutBenchmark(b, 10, benchQCMQuestion()) }
-func BenchmarkVPlayerFanout_10_MEMOTION(b *testing.B) { runFanoutBenchmark(b, 10, benchMotionQuestion()) }
-func BenchmarkVPlayerFanout_30_QCM(b *testing.B)      { runFanoutBenchmark(b, 30, benchQCMQuestion()) }
-func BenchmarkVPlayerFanout_30_MEMOTION(b *testing.B) { runFanoutBenchmark(b, 30, benchMotionQuestion()) }
+func BenchmarkVPlayerFanout_10_QCM(b *testing.B) { runFanoutBenchmark(b, 10, benchQCMQuestion()) }
+func BenchmarkVPlayerFanout_10_MEMOTION(b *testing.B) {
+	runFanoutBenchmark(b, 10, benchMotionQuestion())
+}
+func BenchmarkVPlayerFanout_30_QCM(b *testing.B) { runFanoutBenchmark(b, 30, benchQCMQuestion()) }
+func BenchmarkVPlayerFanout_30_MEMOTION(b *testing.B) {
+	runFanoutBenchmark(b, 30, benchMotionQuestion())
+}
 
 // BenchmarkVPlayerFanout_Baseline_30_MEMOTION measures the PRE-#127 shared
 // path this replaces (one json.Marshal via SerializeForWebClient, reused

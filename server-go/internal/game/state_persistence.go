@@ -31,8 +31,10 @@ const persistedGameStateFormatVersion = 1
 // game field) breaks that convention on purpose, to stay visually distinct.
 //
 // Explicitly NOT included, and why:
-//   - Phase, Question, Memory*, Motion*, ArdoiseAnswers, EnrollmentActive,
-//     ShowQRCode, Entracte (v6.5.2, #119): ephemeral, per-game-in-progress
+//   - Phase, Question, Memory*, Motion* (including MotionActive — #184,
+//     B-B4, contract §5.2's "Non persisté"), ArdoiseAnswers,
+//     EnrollmentActive, ShowQRCode, Entracte (v6.5.2, #119): ephemeral,
+//     per-game-in-progress
 //     state — restoring it after a restart would resurrect a game that no
 //     longer has connected clients or a live timer behind it. A server that
 //     restarts mid-pause simply comes back outside ENTRACTE (contract

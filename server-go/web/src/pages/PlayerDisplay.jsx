@@ -15,6 +15,8 @@ import { getRgbColor } from '../utils/colorUtils'
 import { escapeWifiString } from '../utils/wifiUtils'
 import { buildMemoryCards, getMemoryGridCols, getMemoryGridRows } from '../utils/memoryGrid'
 import { getMotionGridCols, getMotionGridRows, getMotionCardCoord, getMotionCardPoints, isMotionSecretMode } from '../utils/motionGrid'
+import { resolveHostContext } from '../utils/hostContext'
+import { getTypeState } from '../utils/typeState'
 import './PlayerDisplay.css'
 import '../styles/neon.css'
 import '../styles/entracte.css'
@@ -643,6 +645,17 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
     (!gameState.question && (gameState.MEMORY_PARTICIPATING_TEAMS?.length ?? 0) > 0 && showMemoryGrid)
   const isMemotion = gameState.question?.TYPE === 'MEMOTION'
   const isArdoise = gameState.question?.TYPE === 'ARDOISE'
+  // #183/A-F1 — dispatch positif du type de contenu affiché : remplace les
+  // gardes par négation (`!isQcm && !isMemory && !isMemotion`), répétées à 3
+  // endroits pour la mise en page par défaut partagée SPEEDY/ARDOISE.
+  // Équivalence vérifiée pour les 5 types connus (repli MEMORY_PARTICIPATING_TEAMS
+  // ci-dessus inclus) : `!isQcm && !isMemory && !isMemotion` ≡ `isSpeedy || isArdoise`.
+  // Seule différence de comportement du lot (voulue par #183) : un TYPE
+  // renseigné qui ne correspond à aucune des 4 branches ci-dessus (donc
+  // inconnu des 5 types gérés) n'est plus traité comme SPEEDY par défaut —
+  // inatteignable avec les données actuelles (5 types connus).
+  const isKnownOtherType = isQcm || isMemory || isMemotion || isArdoise
+  const isSpeedy = !isKnownOtherType && (!gameState.question?.TYPE || gameState.question?.TYPE === 'SPEEDY')
   // QCM answers visible from READY through REVEALED (no re-render on transition)
   const showQcmAnswers = ['READY', 'COUNTDOWN', 'STARTED', 'PAUSED', 'STOPPED', 'REVEALED'].includes(gameState.phase)
   // Memory grid visible from READY (cards face down during countdown) through REVEALED
@@ -651,14 +664,40 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
   const showQcmAnswerText = ['COUNTDOWN', 'STARTED', 'PAUSED', 'STOPPED', 'REVEALED'].includes(gameState.phase)
 
   // Calculate QCM hint markers for the timer bar
+  //
+  // #185 (correction ponctuelle, détectée par test-writer en C-T1) — étendu
+  // à l'hôte carte MEMOTION : jusqu'ici gated sur `isQcm` (question-scopée),
+  // ces repères visuels n'apparaissaient jamais sur une carte QCM active,
+  // alors que l'invalidation elle-même (C-B1) fonctionne déjà côté carte.
+  // Même dispatch par `cardType` que le reste de #185 (C-F2) : source des
+  // seuils/de l'état d'indices résolue par hôte, aucune nouvelle donnée
+  // serveur — juste étendre le déclenchement visuel client au contexte carte.
   const qcmHintMarkers = useMemo(() => {
-    if (!isQcm || !gameState.question?.QCM_HINTS_ENABLED) return null
+    let hintsEnabled, threshold1, threshold2, invalidated
 
-    const t1 = gameState.question.QCM_HINT_THRESHOLD_1 || 0.25
-    const t2 = gameState.question.QCM_HINT_THRESHOLD_2 || 0.125
+    if (isQcm) {
+      hintsEnabled = gameState.question?.QCM_HINTS_ENABLED
+      threshold1 = gameState.question?.QCM_HINT_THRESHOLD_1
+      threshold2 = gameState.question?.QCM_HINT_THRESHOLD_2
+      invalidated = gameState.qcmInvalidated || []
+    } else if (isMemotion) {
+      const motionCards = gameState.question?.MOTION_CARDS || []
+      const selected = motionCards.find(c => c.ID === gameState.MEMOTION_SELECTED) || null
+      if (selected?.TYPE !== 'QCM') return null
+      hintsEnabled = selected.QCM_HINTS_ENABLED
+      threshold1 = selected.QCM_HINT_THRESHOLD_1
+      threshold2 = selected.QCM_HINT_THRESHOLD_2
+      invalidated = getTypeState(gameState, resolveHostContext(gameState)).qcmInvalidated
+    } else {
+      return null
+    }
+
+    if (!hintsEnabled) return null
+
+    const t1 = threshold1 || 0.25
+    const t2 = threshold2 || 0.125
     const totalTime = gameState.totalTime || 0
     const currentTime = gameState.timer || 0
-    const invalidated = gameState.qcmInvalidated || []
 
     if (totalTime <= 0) return null
 
@@ -705,7 +744,11 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
     }
 
     return markers.length > 0 ? markers : null
-  }, [isQcm, gameState.question?.QCM_HINTS_ENABLED, gameState.question?.QCM_HINT_THRESHOLD_1, gameState.question?.QCM_HINT_THRESHOLD_2, gameState.totalTime, gameState.timer, gameState.qcmInvalidated])
+  }, [
+    isQcm, isMemotion,
+    gameState.question, gameState.MEMOTION_SELECTED, gameState.MEMOTION_ACTIVE,
+    gameState.totalTime, gameState.timer, gameState.qcmInvalidated,
+  ])
 
   // Top 3 players for podium
   const topPlayers = useMemo(() => {
@@ -1435,7 +1478,7 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
             )}
 
             {/* COUNTDOWN State - Timer + Category animates to question zone + Big countdown number */}
-            {showCountdown && !isQcm && !isMemory && !isMemotion && (
+            {showCountdown && (isSpeedy || isArdoise) && (
               <div className="game-content-zones">
                 {/* Zone 1: Timer */}
                 <div className="zone-timer">
@@ -1499,7 +1542,7 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
             )}
 
             {/* READY State - Non-QCM, Non-Memory: Timer + centered message (same layout as QCM) */}
-            {showReady && !isQcm && !isMemory && !isMemotion && (
+            {showReady && (isSpeedy || isArdoise) && (
               <div className="game-content-zones">
                 {/* Zone 1: Timer */}
                 <div className="zone-timer">
@@ -2012,6 +2055,53 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
               const motionCards = gameState.question?.MOTION_CARDS || []
               const selectedId = gameState.MEMOTION_SELECTED
               const selectedCard = motionCards.find(c => c.ID === selectedId) || null
+              // #184/B-F5 — dispatch positif par type de carte (question-types.md
+              // §3/§7) : les faces VERSO (QUESTION)/REVEAL délèguent au rendu du
+              // TYPE de la carte active, jamais un repli implicite. SPEEDY est le
+              // SEUL type dont le contenu (ANSWER_TEXT/ANSWER_IMAGE) est rendu ici
+              // aujourd'hui — reproduit à l'identique. QCM (#185, C-F2) ajoutera sa
+              // propre branche sans toucher celle-ci (test d'agnosticité, contrat §10).
+              const cardType = selectedCard?.TYPE || 'SPEEDY'
+              // #185/C-F2 — état d'indices QCM de LA CARTE (pas de la question),
+              // résolu via l'accesseur unique posé en B-F1 (question-types.md
+              // §5.3) plutôt que lu directement sur gameState.qcmInvalidated
+              // (question-scopé, sans rapport avec la carte active).
+              const cardHostContext = resolveHostContext(gameState)
+              const cardQcmInvalidated = getTypeState(gameState, cardHostContext).qcmInvalidated
+              // #185/C-F2 — grille des 4 réponses d'une carte QCM, montée à
+              // l'identique (mêmes clés/ordre RED/GREEN/YELLOW/BLUE que la
+              // grille QCM question standalone) dans les deux faces
+              // VERSO/REVEAL, en row 3 (footer) pour ne jamais entrer en
+              // conflit avec l'image commune de row 2 (QUESTION_IMAGE,
+              // contrat §3.1 — commune à tous les types). Affichage seul,
+              // AUCUNE action entrante (contrat §7.1) : ni onClick, ni
+              // whitelist, l'animateur désigne via MEMOTION_DONE comme pour
+              // une carte SPEEDY. `revealed` ne fait qu'ajouter le
+              // liseré/l'assombrissement — les indices (`invalidated`)
+              // s'appliquent que la carte soit révélée ou non, comme pour
+              // une question QCM classique.
+              const renderCardQcmGrid = (revealed) => (
+                <div className="memotion-tv-qcm-grid">
+                  {Object.entries(QCM_COLORS).map(([colorKey, colorData]) => {
+                    const answer = selectedCard?.QCM_ANSWERS?.[colorKey]
+                    if (!answer) return null
+                    const isCorrect = revealed && selectedCard.QCM_CORRECT === colorKey
+                    const isInvalidated = cardQcmInvalidated?.includes(colorKey)
+                    return (
+                      <div
+                        key={colorKey}
+                        className={`memotion-tv-qcm-item ${revealed ? (isCorrect ? 'correct' : 'wrong') : ''} ${isInvalidated ? 'invalidated' : ''}`}
+                        style={{
+                          backgroundColor: isInvalidated ? '#374151' : (revealed && !isCorrect ? '#4b5563' : colorData.color),
+                        }}
+                      >
+                        <span className="memotion-tv-qcm-letter">{colorData.letter}</span>
+                        <span className="memotion-tv-qcm-text">{answer}</span>
+                      </div>
+                    )
+                  })}
+                </div>
+              )
               const motionCfg = gameState.question?.MOTION_CONFIG
               const diffPts = d => getMotionCardPoints(d, motionCfg)
 
@@ -2031,7 +2121,9 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
               /* ---- Grille (toujours rendue pour que layoutId fonctionne) ---- */
               const gridView = (
                 <div className={`game-content-zones memory-game memotion-game${subphase === 'MEMORIZE' ? ' memotion-memorize-active' : ''}`}>
-                  {/* Zone 1: Timer — reste visible (non dimmed) quand fullscreen overlay actif */}
+                  {/* Zone 1: Timer — reste visible (non dimmed) quand fullscreen overlay actif.
+                      hintMarkers (#185, correction ponctuelle) : repères de seuils d'indices,
+                      null hors carte QCM à indices activés — cf. qcmHintMarkers ci-dessus. */}
                   <div className="zone-timer">
                     <Timer
                       currentTime={gameState.timer}
@@ -2039,6 +2131,7 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
                       phase={gameState.phase}
                       size="xl"
                       showPhase={false}
+                      hintMarkers={qcmHintMarkers}
                     />
                   </div>
 
@@ -2323,8 +2416,18 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
                         />
                       )}
                     </div>
-                    {/* Row 3 : Vide (zone réponses — libre) */}
-                    <div className="memotion-tv-fs-footer" />
+                    {/* Row 3 : contenu propre au type — QCM affiche ses 4
+                        réponses ici (#185/C-F2). Vide pour SPEEDY — aucun
+                        contenu propre à ce type sur la face VERSO (contrat
+                        §3.1 : SPEEDY ne possède que ANSWER_TEXT/ANSWER_IMAGE,
+                        tous deux affichés en REVEAL, pas ici). */}
+                    {cardType === 'QCM' ? (
+                      <div className="memotion-tv-fs-footer memotion-tv-fs-qcm-zone">
+                        {renderCardQcmGrid(false)}
+                      </div>
+                    ) : (
+                      <div className="memotion-tv-fs-footer" />
+                    )}
                   </motion.div>
                 )
 
@@ -2358,30 +2461,44 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
                         </p>
                       )}
                     </div>
-                    {/* Row 2 : Image réponse (ou texte si pas d'image) */}
+                    {/* Row 2 : contenu propre au type — SPEEDY : image réponse
+                        (ou texte si pas d'image). #185/C-F2 branchera ici la
+                        grille QCM (ANSWER_IMAGE/ANSWER_TEXT sont des champs
+                        SPEEDY, contrat §3.1 — jamais peuplés pour un autre
+                        type, mais le dispatch reste explicite, pas implicite). */}
                     <div className="memotion-tv-fs-body">
-                      {selectedCard.ANSWER_IMAGE ? (
-                        <motion.img
-                          src={selectedCard.ANSWER_IMAGE}
-                          alt=""
-                          className="memotion-tv-fs-img"
-                          initial={{ opacity: 0, scale: 0.9 }}
-                          animate={{ opacity: 1, scale: 1 }}
-                          transition={{ delay: 0.3 }}
-                        />
-                      ) : selectedCard.ANSWER_TEXT ? (
-                        <motion.p
-                          className="memotion-tv-fs-text memotion-tv-answer-text"
-                          initial={{ opacity: 0, y: 20 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          transition={{ delay: 0.35 }}
-                        >
-                          {selectedCard.ANSWER_TEXT}
-                        </motion.p>
-                      ) : null}
+                      {cardType === 'SPEEDY' && (
+                        selectedCard.ANSWER_IMAGE ? (
+                          <motion.img
+                            src={selectedCard.ANSWER_IMAGE}
+                            alt=""
+                            className="memotion-tv-fs-img"
+                            initial={{ opacity: 0, scale: 0.9 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            transition={{ delay: 0.3 }}
+                          />
+                        ) : selectedCard.ANSWER_TEXT ? (
+                          <motion.p
+                            className="memotion-tv-fs-text memotion-tv-answer-text"
+                            initial={{ opacity: 0, y: 20 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ delay: 0.35 }}
+                          >
+                            {selectedCard.ANSWER_TEXT}
+                          </motion.p>
+                        ) : null
+                      )}
                     </div>
-                    {/* Row 3 : Texte réponse si image + texte coexistent */}
-                    {selectedCard.ANSWER_IMAGE && selectedCard.ANSWER_TEXT ? (
+                    {/* Row 3 : QCM affiche la même grille qu'en face VERSO,
+                        avec la bonne réponse en couleur (#185/C-F2) — position
+                        stable, pas de saut visuel entre les deux faces.
+                        SPEEDY : texte réponse si image + texte coexistent
+                        (inchangé). */}
+                    {cardType === 'QCM' ? (
+                      <div className="memotion-tv-fs-footer memotion-tv-fs-qcm-zone">
+                        {renderCardQcmGrid(true)}
+                      </div>
+                    ) : cardType === 'SPEEDY' && selectedCard.ANSWER_IMAGE && selectedCard.ANSWER_TEXT ? (
                       <motion.div
                         className="memotion-tv-fs-footer"
                         initial={{ opacity: 0, y: 10 }}
@@ -2410,7 +2527,7 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
 
             {/* Non-QCM/Non-Memory/Non-Memotion Game Content - 4 vertical zones: Timer, Question, Media, Answers */}
             {/* ARDOISE TV reveal handled separately below — exclude from this block during REVEALED non-VPlayer */}
-            {!isQcm && !isMemory && !isMemotion && !(isArdoise && showAnswer && !isVPlayer) && showGameContent && gameState.question && (
+            {(isSpeedy || isArdoise) && !(isArdoise && showAnswer && !isVPlayer) && showGameContent && gameState.question && (
               <div className="game-content-zones">
                 {/* Zone 1: Timer */}
                 <div className="zone-timer">

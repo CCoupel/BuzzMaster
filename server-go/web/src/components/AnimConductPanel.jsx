@@ -81,10 +81,29 @@ function buttonSubLabel(key, state, phase, waitReason) {
  * présentation (`buttonSubLabel`) est local.
  *
  * @param {Object} props
- * @param {string} props.phase - gameState.phase
+ * @param {string} props.phase - gameState.phase (chrome de conduite L1/L5
+ *   uniquement — LANCER/PAUSE/CONTINUER/STOP/RÉPONSE/"à suivre" restent des
+ *   commandes de l'hôte question, hors du périmètre hostContext ; #184/B-F2
+ *   ne touche PAS cet usage)
  * @param {Object|null} props.question - gameState.question
- * @param {string[]} [props.qcmInvalidated] - gameState.qcmInvalidated
+ * @param {string[]} [props.qcmInvalidated] - état d'indices QCM de l'hôte
+ *   COURANT (#185/C-F1) : `getTypeState(gameState, hostContext).qcmInvalidated`,
+ *   calculé par `AnimPage.jsx` — question ou carte MEMOTION active selon
+ *   l'hôte, jamais `gameState.qcmInvalidated` directement depuis ce composant
  * @param {boolean} props.revealed - phase === 'REVEALED' (phaseRules.isRevealed)
+ *   — hôte QUESTION uniquement, inchangé par #184 : consommé par L4
+ *   (AnimExplanationNote) et la branche QCM (AnimQcmOptions), toutes deux
+ *   propres à l'hôte question en v7.0.0 (QCM en carte n'est pas encore câblé,
+ *   #185/Phase 3)
+ * @param {import('../utils/hostContext').HostContext} [props.hostContext] -
+ *   contexte d'hôte normalisé (#184/B-F2/B-F3, `utils/hostContext.js`,
+ *   calculé UNE FOIS par `AnimPage.jsx`) — de l'hôte COURANT : question si
+ *   aucune carte MEMOTION active, sinon carte active. `hostContext.playable`/
+ *   `.revealed` sont transmis tels quels à `AnimMemoryGrid`/`AnimMotionCard`
+ *   (L3), qui ne reçoivent donc jamais `phase`/`subphase` directement. Repli
+ *   question quand aucune carte MEMOTION n'est active — valeurs strictement
+ *   identiques à l'ancien `phase === 'STARTED'`/`'REVEALED'` dans ce cas,
+ *   donc neutre pour l'hôte question.
  * @param {{ID?: string}|null} props.nextQuestion - dernier NEXT_QUESTION reçu
  * @param {() => void} props.onStart
  * @param {() => void} props.onPause
@@ -114,6 +133,7 @@ export default function AnimConductPanel({
   question,
   qcmInvalidated,
   revealed,
+  hostContext,
   nextQuestion,
   onStart,
   onPause,
@@ -202,7 +222,6 @@ export default function AnimConductPanel({
         <div className="anim-conduct-l3">
           {isQcm ? (
             <AnimQcmOptions
-              type={question.TYPE}
               answers={question.QCM_ANSWERS}
               correct={question.QCM_CORRECT}
               invalidated={qcmInvalidated}
@@ -211,7 +230,8 @@ export default function AnimConductPanel({
           ) : isMemory ? (
             <AnimMemoryGrid
               question={question}
-              phase={phase}
+              playable={hostContext?.playable}
+              revealed={hostContext?.revealed}
               teams={teams}
               flippedCards={memory?.flippedCards}
               matchedPairs={memory?.matchedPairs}
@@ -235,9 +255,23 @@ export default function AnimConductPanel({
                 teams={teams}
                 onSelect={onSelectMotionCard}
               />
+            ) : selectedMotionCard?.TYPE === 'QCM' ? (
+              // #185/C-F1 — carte QCM : point de délégation posé en B-F3
+              // (résolution du type de l'hôte courant), premier type
+              // branché ici. `invalidated` vient de `qcmInvalidated`
+              // (résolu par l'appelant via getTypeState, hôte carte quand
+              // une carte est active — question-types.md §5.3), jamais
+              // recalculé ici.
+              <AnimQcmOptions
+                answers={selectedMotionCard.QCM_ANSWERS}
+                correct={selectedMotionCard.QCM_CORRECT}
+                invalidated={qcmInvalidated}
+                revealed={hostContext?.revealed}
+              />
             ) : (
               <AnimMotionCard
-                subphase={motion?.subphase}
+                playable={hostContext?.playable}
+                revealed={hostContext?.revealed}
                 card={selectedMotionCard}
                 motionConfig={question?.MOTION_CONFIG}
               />

@@ -62,7 +62,9 @@ func setupQCMStartedGame(t *testing.T, app *App, n int) []string {
 	app.engine.SetPhase(game.PhaseStopped)
 	app.engine.Ready("", &game.Question{
 		ID: "q-qcm", Type: game.QuestionTypeQCM,
-		QCMAnswers: &game.QCMAnswers{Red: "A", Green: "B", Yellow: "C", Blue: "D"},
+		TypedContent: game.TypedContent{
+			QCMAnswers: &game.QCMAnswers{Red: "A", Green: "B", Yellow: "C", Blue: "D"},
+		},
 	})
 	app.engine.SetPhase(game.PhaseStarted)
 

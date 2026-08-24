@@ -1196,6 +1196,39 @@
   color: #065f46;
 }
 
+/* Sélecteur de type d'une carte MEMOTION (#184/B-F4) — verrou d'interface,
+   contrat question-types.md §3.2 : jamais un bouton grisé sans explication. */
+.type-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  filter: grayscale(0.5);
+}
+
+.motion-card-lock-reason {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+  font-size: 0.75rem;
+  color: #92400e;
+  background: rgba(245, 158, 11, 0.12);
+  border: 1px solid rgba(245, 158, 11, 0.35);
+  border-radius: var(--radius-sm);
+  padding: 6px 9px;
+}
+
+.memotion-card-type-selector {
+  margin-bottom: var(--space-2);
+}
+
+/* Face REVEAL d'une carte MEMOTION dont le type ne porte aucun contenu de
+   réponse propre (QCM en v7.0.0) — même famille visuelle que .qcm-hint. */
+.memotion-card-no-reveal-hint {
+  font-size: 0.75rem;
+  color: var(--gray-500);
+  margin: var(--space-1) 0 0;
+}
+
 /* Memory Section */
 .memory-section {
   display: flex;

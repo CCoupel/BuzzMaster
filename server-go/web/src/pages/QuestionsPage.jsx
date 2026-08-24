@@ -5,12 +5,15 @@ import { useCategoryFilter } from '../hooks/useCategoryFilter'
 import { useCategories } from '../hooks/useCategories'
 import { CATEGORIES, categoryMeta } from '../utils/categoryUtils'
 import { sortQuestionsByOrder, shuffleArray } from '../utils/questionOrder'
+import { QUESTION_TYPES } from '../utils/questionTypeMeta'
+import { isMotionCardTypeLocked, motionCardLockReason } from '../utils/motionCardLock'
 import Button from '../components/Button'
 import Card, { CardHeader, CardBody } from '../components/Card'
 import CategoryBalance from '../components/CategoryBalance'
 import CategoryBadge from '../components/CategoryBadge'
 import QuestionCard from '../components/QuestionCard'
 import AIGenerateModal from '../components/AIGenerateModal'
+import QcmAnswersEditor from '../components/QcmAnswersEditor'
 import './QuestionsPage.css'
 import './ConfigPage.css'
 import '../styles/sliders.css'
@@ -21,14 +24,6 @@ import '../styles/sliders.css'
 export const QUIZ_POPULATIONS = ['Junior (6-12 ans)', 'Ado (13-17 ans)', 'Adulte (18-64 ans)', 'Senior (65+ ans)', 'Famille']
 export const QUIZ_DIFFICULTIES = ['Facile', 'Moyen', 'Difficile', 'Expert']
 export const QUIZ_LANGUAGES = ['Français', 'Anglais', 'Espagnol']
-
-// QCM answer colors (for form only)
-const QCM_COLORS = {
-  RED: { label: 'Rouge', color: '#ef4444', letter: 'A' },
-  GREEN: { label: 'Vert', color: '#22c55e', letter: 'B' },
-  YELLOW: { label: 'Jaune', color: '#eab308', letter: 'C' },
-  BLUE: { label: 'Bleu', color: '#3b82f6', letter: 'D' },
-}
 
 // Re-export CATEGORIES for backward compatibility
 export { CATEGORIES }
@@ -82,9 +77,36 @@ export default function QuestionsPage() {
     ardoiseKeyboardType: 'AZERTY',
     // MEMOTION fields (v5.0.0)
     motionMode: 'SOLO',
+    // #184/B-F4 — chaque carte porte désormais `type` + les valeurs de
+    // création de ses OwnedFields QCM (7 occurrences de ce littéral dans le
+    // fichier : useState initial, resetForm, chargement d'une question
+    // existante, handleAddMotionCard — voir grep `rectoTheme: ''` pour les
+    // retrouver toutes). Ces valeurs DOIVENT rester synchronisées avec
+    // `utils/motionCardLock.js` (`QCM_CREATION_VALUES`) — un écart ferait
+    // apparaître une carte neuve comme déjà verrouillée, exactement le piège
+    // documenté par `contracts/question-types.md` §3.2 (QCM_HINT_THRESHOLD_1
+    // etc. naissent non vides, PAS `undefined`/`0`).
     motionCards: [
-      { id: 'mc-1', rectoTheme: '', rectoImage: null, difficulty: 1, questionText: '', questionImage: null, answerText: '', answerImage: null },
-      { id: 'mc-2', rectoTheme: '', rectoImage: null, difficulty: 1, questionText: '', questionImage: null, answerText: '', answerImage: null },
+      { id: 'mc-1', rectoTheme: '', rectoImage: null, difficulty: 1, questionText: '', questionImage: null, answerText: '', answerImage: null,
+        type: 'SPEEDY',
+        qcmAnswers: { RED: '', GREEN: '', YELLOW: '', BLUE: '' },
+        qcmCorrect: '',
+        qcmHintsEnabled: false,
+        qcmHintThreshold1: 0.25,
+        qcmHintThreshold2: 0.125,
+        qcmPenalty1: 0.67,
+        qcmPenalty2: 0.33,
+      },
+      { id: 'mc-2', rectoTheme: '', rectoImage: null, difficulty: 1, questionText: '', questionImage: null, answerText: '', answerImage: null,
+        type: 'SPEEDY',
+        qcmAnswers: { RED: '', GREEN: '', YELLOW: '', BLUE: '' },
+        qcmCorrect: '',
+        qcmHintsEnabled: false,
+        qcmHintThreshold1: 0.25,
+        qcmHintThreshold2: 0.125,
+        qcmPenalty1: 0.67,
+        qcmPenalty2: 0.33,
+      },
     ],
     motionConfig: { points1: 1, points2: 3, points3: 5 },
     motionMemorizeDuration: 0,
@@ -791,8 +813,26 @@ export default function QuestionsPage() {
 
     // Load MEMOTION cards from question data
     let motionCards = [
-      { id: 'mc-1', rectoTheme: '', rectoImage: null, difficulty: 1, questionText: '', questionImage: null, answerText: '', answerImage: null },
-      { id: 'mc-2', rectoTheme: '', rectoImage: null, difficulty: 1, questionText: '', questionImage: null, answerText: '', answerImage: null },
+      { id: 'mc-1', rectoTheme: '', rectoImage: null, difficulty: 1, questionText: '', questionImage: null, answerText: '', answerImage: null,
+        type: 'SPEEDY',
+        qcmAnswers: { RED: '', GREEN: '', YELLOW: '', BLUE: '' },
+        qcmCorrect: '',
+        qcmHintsEnabled: false,
+        qcmHintThreshold1: 0.25,
+        qcmHintThreshold2: 0.125,
+        qcmPenalty1: 0.67,
+        qcmPenalty2: 0.33,
+      },
+      { id: 'mc-2', rectoTheme: '', rectoImage: null, difficulty: 1, questionText: '', questionImage: null, answerText: '', answerImage: null,
+        type: 'SPEEDY',
+        qcmAnswers: { RED: '', GREEN: '', YELLOW: '', BLUE: '' },
+        qcmCorrect: '',
+        qcmHintsEnabled: false,
+        qcmHintThreshold1: 0.25,
+        qcmHintThreshold2: 0.125,
+        qcmPenalty1: 0.67,
+        qcmPenalty2: 0.33,
+      },
     ]
     if (question.MOTION_CARDS && Array.isArray(question.MOTION_CARDS)) {
       motionCards = question.MOTION_CARDS.map(card => ({
@@ -804,6 +844,17 @@ export default function QuestionsPage() {
         questionImage: card.QUESTION_IMAGE || null,
         answerText: card.ANSWER_TEXT || '',
         answerImage: card.ANSWER_IMAGE || null,
+        // #184/B-F4 — TYPE absent/vide ⇒ SPEEDY (contrat §3, rétrocompatibilité
+        // stricte : les 9 questions MEMOTION existantes n'ont pas ce champ).
+        // Défauts QCM synchronisés avec motionCardLock.js (QCM_CREATION_VALUES).
+        type: card.TYPE || 'SPEEDY',
+        qcmAnswers: card.QCM_ANSWERS || { RED: '', GREEN: '', YELLOW: '', BLUE: '' },
+        qcmCorrect: card.QCM_CORRECT || '',
+        qcmHintsEnabled: card.QCM_HINTS_ENABLED || false,
+        qcmHintThreshold1: card.QCM_HINT_THRESHOLD_1 ?? 0.25,
+        qcmHintThreshold2: card.QCM_HINT_THRESHOLD_2 ?? 0.125,
+        qcmPenalty1: card.QCM_PENALTY_1 ?? 0.67,
+        qcmPenalty2: card.QCM_PENALTY_2 ?? 0.33,
       }))
     }
 
@@ -886,8 +937,26 @@ export default function QuestionsPage() {
       },
       motionMode: 'SOLO',
       motionCards: [
-        { id: 'mc-1', rectoTheme: '', rectoImage: null, difficulty: 1, questionText: '', questionImage: null, answerText: '', answerImage: null },
-        { id: 'mc-2', rectoTheme: '', rectoImage: null, difficulty: 1, questionText: '', questionImage: null, answerText: '', answerImage: null },
+        { id: 'mc-1', rectoTheme: '', rectoImage: null, difficulty: 1, questionText: '', questionImage: null, answerText: '', answerImage: null,
+        type: 'SPEEDY',
+        qcmAnswers: { RED: '', GREEN: '', YELLOW: '', BLUE: '' },
+        qcmCorrect: '',
+        qcmHintsEnabled: false,
+        qcmHintThreshold1: 0.25,
+        qcmHintThreshold2: 0.125,
+        qcmPenalty1: 0.67,
+        qcmPenalty2: 0.33,
+      },
+        { id: 'mc-2', rectoTheme: '', rectoImage: null, difficulty: 1, questionText: '', questionImage: null, answerText: '', answerImage: null,
+        type: 'SPEEDY',
+        qcmAnswers: { RED: '', GREEN: '', YELLOW: '', BLUE: '' },
+        qcmCorrect: '',
+        qcmHintsEnabled: false,
+        qcmHintThreshold1: 0.25,
+        qcmHintThreshold2: 0.125,
+        qcmPenalty1: 0.67,
+        qcmPenalty2: 0.33,
+      },
       ],
       motionConfig: { points1: 1, points2: 3, points3: 5 },
       motionMemorizeDuration: 0,
@@ -993,7 +1062,16 @@ export default function QuestionsPage() {
         ...prev,
         motionCards: [
           ...prev.motionCards,
-          { id: newId, rectoTheme: '', rectoImage: null, difficulty: 1, questionText: '', questionImage: null, answerText: '', answerImage: null },
+          { id: newId, rectoTheme: '', rectoImage: null, difficulty: 1, questionText: '', questionImage: null, answerText: '', answerImage: null,
+        type: 'SPEEDY',
+        qcmAnswers: { RED: '', GREEN: '', YELLOW: '', BLUE: '' },
+        qcmCorrect: '',
+        qcmHintsEnabled: false,
+        qcmHintThreshold1: 0.25,
+        qcmHintThreshold2: 0.125,
+        qcmPenalty1: 0.67,
+        qcmPenalty2: 0.33,
+      },
         ]
       }
     })
@@ -1126,16 +1204,40 @@ export default function QuestionsPage() {
       // MEMOTION mode — serialize cards and mode
       data.append('MOTION_MODE', formData.motionMode)
 
-      const serializedCards = formData.motionCards.map(card => ({
-        ID: card.id,
-        RECTO_THEME: card.rectoTheme,
-        RECTO_IMAGE: typeof card.rectoImage === 'string' ? card.rectoImage : '',
-        DIFFICULTY: card.difficulty,
-        QUESTION_TEXT: card.questionText,
-        QUESTION_IMAGE: typeof card.questionImage === 'string' ? card.questionImage : '',
-        ANSWER_TEXT: card.answerText,
-        ANSWER_IMAGE: typeof card.answerImage === 'string' ? card.answerImage : '',
-      }))
+      // #184/B-F4 — TYPE explicite + contenu propre au type de la carte
+      // (contrat §3.1/§7) : SPEEDY porte ANSWER_TEXT/ANSWER_IMAGE (historique,
+      // inchangé), QCM porte les champs TypedContent partagés avec Question
+      // (mêmes noms JSON, §2). Jamais les deux à la fois — c'est exactement
+      // ce que vérifie le serveur (CARD_TYPE_CONTENT_MISMATCH, B-B2).
+      const serializedCards = formData.motionCards.map(card => {
+        const cardType = card.type || 'SPEEDY'
+        const base = {
+          ID: card.id,
+          TYPE: cardType,
+          RECTO_THEME: card.rectoTheme,
+          RECTO_IMAGE: typeof card.rectoImage === 'string' ? card.rectoImage : '',
+          DIFFICULTY: card.difficulty,
+          QUESTION_TEXT: card.questionText,
+          QUESTION_IMAGE: typeof card.questionImage === 'string' ? card.questionImage : '',
+        }
+        if (cardType === 'QCM') {
+          return {
+            ...base,
+            QCM_ANSWERS: card.qcmAnswers,
+            QCM_CORRECT: card.qcmCorrect,
+            QCM_HINTS_ENABLED: card.qcmHintsEnabled,
+            QCM_HINT_THRESHOLD_1: card.qcmHintThreshold1,
+            QCM_HINT_THRESHOLD_2: card.qcmHintThreshold2,
+            QCM_PENALTY_1: card.qcmPenalty1,
+            QCM_PENALTY_2: card.qcmPenalty2,
+          }
+        }
+        return {
+          ...base,
+          ANSWER_TEXT: card.answerText,
+          ANSWER_IMAGE: typeof card.answerImage === 'string' ? card.answerImage : '',
+        }
+      })
       data.append('motion_cards', JSON.stringify(serializedCards))
       data.append('motion_config', JSON.stringify({
         POINTS_1_STAR: parseInt(formData.motionConfig?.points1) || 1,
@@ -1863,49 +1965,26 @@ export default function QuestionsPage() {
                   />
                 </div>
 
-                {/* Question Type Selector */}
+                {/* Question Type Selector — généré depuis la table unique
+                    utils/questionTypeMeta.js (#183/A-F2), regroupement visuel
+                    3+2 conservé à l'identique (rows CSS .type-filter-row) */}
                 <div className="form-group">
                   <label>Type de question</label>
                   <div className="type-filter-grid">
-                    <div className="type-filter-row">
-                      <button
-                        type="button"
-                        className={`type-btn speedy ${formData.type === 'SPEEDY' ? 'active' : ''}`}
-                        onClick={() => handleInputChange('type', 'SPEEDY')}
-                      >
-                        Speedy
-                      </button>
-                      <button
-                        type="button"
-                        className={`type-btn qcm ${formData.type === 'QCM' ? 'active' : ''}`}
-                        onClick={() => handleInputChange('type', 'QCM')}
-                      >
-                        QCM
-                      </button>
-                      <button
-                        type="button"
-                        className={`type-btn memory ${formData.type === 'MEMORY' ? 'active' : ''}`}
-                        onClick={() => handleInputChange('type', 'MEMORY')}
-                      >
-                        Memory
-                      </button>
-                    </div>
-                    <div className="type-filter-row">
-                      <button
-                        type="button"
-                        className={`type-btn memotion ${formData.type === 'MEMOTION' ? 'active' : ''}`}
-                        onClick={() => handleInputChange('type', 'MEMOTION')}
-                      >
-                        Memotion
-                      </button>
-                      <button
-                        type="button"
-                        className={`type-btn ardoise ${formData.type === 'ARDOISE' ? 'active' : ''}`}
-                        onClick={() => handleInputChange('type', 'ARDOISE')}
-                      >
-                        ⌨️ Ardoise
-                      </button>
-                    </div>
+                    {[QUESTION_TYPES.slice(0, 3), QUESTION_TYPES.slice(3)].map((row, rowIdx) => (
+                      <div className="type-filter-row" key={rowIdx}>
+                        {row.map(t => (
+                          <button
+                            key={t.key}
+                            type="button"
+                            className={`type-btn ${t.key.toLowerCase()} ${formData.type === t.key ? 'active' : ''}`}
+                            onClick={() => handleInputChange('type', t.key)}
+                          >
+                            {t.label}
+                          </button>
+                        ))}
+                      </div>
+                    ))}
                   </div>
                 </div>
 
@@ -2081,105 +2160,24 @@ export default function QuestionsPage() {
                   />
                 </div>
 
-                {/* QCM Answers */}
+                {/* QCM Answers — extrait dans QcmAnswersEditor (#184/B-F4,
+                    commit 1), réutilisé tel quel pour la carte MEMOTION QCM
+                    (commit 2) : ni la forme des données ni les callbacks ne
+                    changent, comportement strictement identique. */}
                 {formData.type === 'QCM' && (
-                  <div className="qcm-answers-section">
-                    <label>Reponses QCM *</label>
-                    <div className="qcm-form-answers">
-                      {Object.entries(QCM_COLORS).map(([colorKey, { label, color, letter }]) => (
-                        <div
-                          key={colorKey}
-                          className={`qcm-answer-item ${formData.qcmCorrect === colorKey ? 'correct' : ''}`}
-                          style={{ '--qcm-color': color }}
-                        >
-                          <div className="qcm-answer-header">
-                            <span className="qcm-letter" style={{ backgroundColor: color }}>{letter}</span>
-                            <button
-                              type="button"
-                              className={`qcm-correct-btn ${formData.qcmCorrect === colorKey ? 'active' : ''}`}
-                              onClick={() => handleInputChange('qcmCorrect', colorKey)}
-                              title="Marquer comme bonne reponse"
-                            >
-                              {formData.qcmCorrect === colorKey ? '✓' : '○'}
-                            </button>
-                          </div>
-                          <input
-                            type="text"
-                            value={formData.qcmAnswers[colorKey]}
-                            onChange={(e) => handleQcmAnswerChange(colorKey, e.target.value)}
-                            placeholder={`Reponse ${letter}...`}
-                            className="qcm-answer-input"
-                          />
-                        </div>
-                      ))}
-                    </div>
-                    {!formData.qcmCorrect && (
-                      <p className="qcm-hint">Cliquez sur ○ pour indiquer la bonne reponse</p>
-                    )}
-
-                    {/* QCM Hints Toggle */}
-                    <div className="qcm-hints-toggle">
-                      <label>
-                        <input
-                          type="checkbox"
-                          checked={formData.qcmHintsEnabled}
-                          onChange={(e) => handleInputChange('qcmHintsEnabled', e.target.checked)}
-                        />
-                        Activer les indices progressifs
-                      </label>
-                      <span className="qcm-hints-description">
-                        {formData.qcmHintsEnabled
-                          ? `Les mauvaises reponses seront invalidees progressivement (penalites: ${Math.round((formData.qcmPenalty1 || 0.67) * 100)}% puis ${Math.round((formData.qcmPenalty2 || 0.33) * 100)}%)`
-                          : 'Pas d\'indices automatiques'}
-                      </span>
-                      {formData.qcmHintsEnabled && (
-                        <div className="qcm-hints-config">
-                          <div className="hint-row">
-                            <span className="hint-label">Indice 1 :</span>
-                            <span className="hint-at">a</span>
-                            <input
-                              type="number"
-                              min="1"
-                              max="99"
-                              value={Math.round((formData.qcmHintThreshold1 || 0.25) * 100)}
-                              onChange={(e) => handleInputChange('qcmHintThreshold1', parseInt(e.target.value) / 100)}
-                            />
-                            <span className="hint-unit">%</span>
-                            <span className="hint-arrow">→</span>
-                            <input
-                              type="number"
-                              min="1"
-                              max="99"
-                              value={Math.round((formData.qcmPenalty1 || 0.67) * 100)}
-                              onChange={(e) => handleInputChange('qcmPenalty1', parseInt(e.target.value) / 100)}
-                            />
-                            <span className="hint-unit">% pts</span>
-                          </div>
-                          <div className="hint-row">
-                            <span className="hint-label">Indice 2 :</span>
-                            <span className="hint-at">a</span>
-                            <input
-                              type="number"
-                              min="1"
-                              max="99"
-                              value={Math.round((formData.qcmHintThreshold2 || 0.125) * 100)}
-                              onChange={(e) => handleInputChange('qcmHintThreshold2', parseInt(e.target.value) / 100)}
-                            />
-                            <span className="hint-unit">%</span>
-                            <span className="hint-arrow">→</span>
-                            <input
-                              type="number"
-                              min="1"
-                              max="99"
-                              value={Math.round((formData.qcmPenalty2 || 0.33) * 100)}
-                              onChange={(e) => handleInputChange('qcmPenalty2', parseInt(e.target.value) / 100)}
-                            />
-                            <span className="hint-unit">% pts</span>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  </div>
+                  <QcmAnswersEditor
+                    values={{
+                      qcmAnswers: formData.qcmAnswers,
+                      qcmCorrect: formData.qcmCorrect,
+                      qcmHintsEnabled: formData.qcmHintsEnabled,
+                      qcmHintThreshold1: formData.qcmHintThreshold1,
+                      qcmHintThreshold2: formData.qcmHintThreshold2,
+                      qcmPenalty1: formData.qcmPenalty1,
+                      qcmPenalty2: formData.qcmPenalty2,
+                    }}
+                    onFieldChange={handleInputChange}
+                    onAnswerChange={handleQcmAnswerChange}
+                  />
                 )}
 
                 {/* Memory Pairs Editor */}
@@ -2615,7 +2613,10 @@ export default function QuestionsPage() {
 
                     {/* Cards List */}
                     <div className="memotion-cards-list">
-                      {formData.motionCards.map((card, index) => (
+                      {formData.motionCards.map((card, index) => {
+                        const cardType = card.type || 'SPEEDY'
+                        const cardLocked = isMotionCardTypeLocked(card)
+                        return (
                         <div key={card.id} className="memotion-card-item">
                           <div className="memory-pair-header">
                             <span className="memory-pair-number">Carte {index + 1}</span>
@@ -2631,7 +2632,36 @@ export default function QuestionsPage() {
                             )}
                           </div>
 
-                          {/* RECTO face */}
+                          {/* Type de jeu de la carte (#184/B-F4) — sélecteur
+                              filtré sur les types nestable (SPEEDY/QCM en
+                              v7.0.0, questionTypeMeta.js). Désactivé + raison
+                              affichée dès que la carte porte du contenu propre
+                              à son type (verrou réactif, contrat §3.2). */}
+                          <div className="form-group memotion-card-type-selector">
+                            <label>Type de jeu de la carte</label>
+                            <div className="type-filter-row">
+                              {QUESTION_TYPES.filter(t => t.nestable).map(t => (
+                                <button
+                                  key={t.key}
+                                  type="button"
+                                  className={`type-btn ${t.key.toLowerCase()} ${cardType === t.key ? 'active' : ''}`}
+                                  disabled={cardLocked}
+                                  onClick={() => handleMotionCardChange(card.id, 'type', t.key)}
+                                >
+                                  {t.label}
+                                </button>
+                              ))}
+                            </div>
+                            {cardLocked && (
+                              <div className="motion-card-lock-reason">
+                                <span>🔒</span>
+                                <span>Type verrouillé — {motionCardLockReason(card)}</span>
+                              </div>
+                            )}
+                          </div>
+
+                          {/* RECTO face — commune à tous les types (contrat §3.1),
+                              ne verrouille jamais. */}
                           <div className="memotion-face-section">
                             <div className="memotion-face-label memotion-face-recto">RECTO</div>
                             <div className="form-group" style={{ marginBottom: '0.5rem' }}>
@@ -2677,7 +2707,10 @@ export default function QuestionsPage() {
                             </div>
                           </div>
 
-                          {/* VERSO face */}
+                          {/* VERSO face — énoncé commun à tous les types
+                              (contrat §3.1), suivi du sous-éditeur propre au
+                              type le cas échéant (emplacement §7.1 — QCM
+                              n'ajoute aucune image, seulement ses 4 réponses). */}
                           <div className="memotion-face-section">
                             <div className="memotion-face-label memotion-face-verso">VERSO (Question)</div>
                             <div className="form-group" style={{ marginBottom: '0.5rem' }}>
@@ -2705,39 +2738,69 @@ export default function QuestionsPage() {
                                 </label>
                               )}
                             </div>
+                            {cardType === 'QCM' && (
+                              <QcmAnswersEditor
+                                values={{
+                                  qcmAnswers: card.qcmAnswers,
+                                  qcmCorrect: card.qcmCorrect,
+                                  qcmHintsEnabled: card.qcmHintsEnabled,
+                                  qcmHintThreshold1: card.qcmHintThreshold1,
+                                  qcmHintThreshold2: card.qcmHintThreshold2,
+                                  qcmPenalty1: card.qcmPenalty1,
+                                  qcmPenalty2: card.qcmPenalty2,
+                                }}
+                                onFieldChange={(field, value) => handleMotionCardChange(card.id, field, value)}
+                                onAnswerChange={(color, value) => handleMotionCardChange(
+                                  card.id, 'qcmAnswers', { ...card.qcmAnswers, [color]: value }
+                                )}
+                              />
+                            )}
                           </div>
 
-                          {/* REVEAL face */}
-                          <div className="memotion-face-section">
-                            <div className="memotion-face-label memotion-face-reveal">REVEAL (Reponse)</div>
-                            <div className="form-group" style={{ marginBottom: '0.5rem' }}>
-                              <textarea
-                                value={card.answerText}
-                                onChange={(e) => handleMotionCardChange(card.id, 'answerText', e.target.value)}
-                                placeholder="Texte de la reponse..."
-                                rows={2}
-                                className="memory-card-text-input"
-                              />
+                          {/* REVEAL face — propre à SPEEDY uniquement (contrat
+                              §7 : MediaSlots de QCM = recto/question, aucune
+                              face reveal). QCM n'a rien à saisir ici : la
+                              bonne réponse est déjà désignée ci-dessus. */}
+                          {cardType === 'SPEEDY' ? (
+                            <div className="memotion-face-section">
+                              <div className="memotion-face-label memotion-face-reveal">REVEAL (Reponse)</div>
+                              <div className="form-group" style={{ marginBottom: '0.5rem' }}>
+                                <textarea
+                                  value={card.answerText}
+                                  onChange={(e) => handleMotionCardChange(card.id, 'answerText', e.target.value)}
+                                  placeholder="Texte de la reponse..."
+                                  rows={2}
+                                  className="memory-card-text-input"
+                                />
+                              </div>
+                              <div className="memotion-img-row">
+                                {card.answerImage ? (
+                                  <div className="memory-card-image-preview">
+                                    <img
+                                      src={card.answerImage instanceof File ? URL.createObjectURL(card.answerImage) : card.answerImage}
+                                      alt="Reponse"
+                                    />
+                                    <button type="button" className="memory-card-remove-img" onClick={() => handleMotionCardChange(card.id, 'answerImage', null)}>×</button>
+                                  </div>
+                                ) : (
+                                  <label className="memory-card-upload">
+                                    <input type="file" accept="image/*" onChange={(e) => { const f = e.target.files?.[0]; if (f) handleMotionCardChange(card.id, 'answerImage', f) }} />
+                                    <span>+ Image reponse</span>
+                                  </label>
+                                )}
+                              </div>
                             </div>
-                            <div className="memotion-img-row">
-                              {card.answerImage ? (
-                                <div className="memory-card-image-preview">
-                                  <img
-                                    src={card.answerImage instanceof File ? URL.createObjectURL(card.answerImage) : card.answerImage}
-                                    alt="Reponse"
-                                  />
-                                  <button type="button" className="memory-card-remove-img" onClick={() => handleMotionCardChange(card.id, 'answerImage', null)}>×</button>
-                                </div>
-                              ) : (
-                                <label className="memory-card-upload">
-                                  <input type="file" accept="image/*" onChange={(e) => { const f = e.target.files?.[0]; if (f) handleMotionCardChange(card.id, 'answerImage', f) }} />
-                                  <span>+ Image reponse</span>
-                                </label>
-                              )}
+                          ) : (
+                            <div className="memotion-face-section">
+                              <div className="memotion-face-label memotion-face-reveal">REVEAL (Reponse)</div>
+                              <p className="memotion-card-no-reveal-hint">
+                                Pas de face de réponse à saisir : la bonne réponse est la proposition cochée ci-dessus.
+                              </p>
                             </div>
-                          </div>
+                          )}
                         </div>
-                      ))}
+                        )
+                      })}
                     </div>
 
                     {formData.motionCards.length < 12 && (

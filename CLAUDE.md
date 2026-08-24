@@ -195,6 +195,12 @@ SendMessage({
 | `security` | Audit sécurité | `.claude/agents/security.template.md` | ponctuel |
 | `infra` | Infrastructure (si configurée) | `.claude/agents/infra.template.md` | ponctuel |
 
+> **Fichier** pointe vers le `.template.md` — géré par sync, toujours présent. Un compagnon
+> `.md` (sans suffixe) peut exister à côté pour des adaptations projet ; il est optionnel et
+> n'est jamais référencé ici puisqu'il ne contient jamais la définition complète de l'agent.
+> Exception : `dev-buzzclick` n'a pas de `.template.md` (agent ponctuel, non géré par la sync
+> template) — sa colonne Fichier pointe directement vers son fichier complet.
+
 > **permanent** = spawné au `/start-session`, reste en IDLE toute la session.  
 > **ponctuel** = spawné à la demande, fermé après DONE — soit par sa commande dédiée (`/secu`, etc.), soit par le CDP en cours de workflow quand la tâche l'exige (ex: `dev-buzzclick`, spawné uniquement si un besoin touche `src/BuzzClick/` — pas d'évolution active sur ce périmètre actuellement, voir `.claude/commands/context/CDP_WORKFLOWS.md`).
 
