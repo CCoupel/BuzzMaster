@@ -12,16 +12,18 @@ import "testing"
 
 // TestSelectMotionCard_RefusesNonNestableType verifies SelectMotionCard
 // rejects a card whose declared TYPE cannot be nested in a MEMOTION card —
-// contract §1 (MEMOTION re-nesting) and §7 (ARDOISE/MEMORY not yet
-// nestable, v7.1.0) — without ever changing MotionSubPhase/MotionCardStates.
+// contract §1 (MEMOTION re-nesting) and §7.2 (ARDOISE closed "not planned",
+// 2026-08-24 — permanently non-nestable) — without ever changing
+// MotionSubPhase/MotionCardStates. MEMORY became nestable in #187 (v7.1.0)
+// and is exercised as an ACCEPTED type by engine_memory_card_187_test.go
+// instead — it no longer belongs in this "refused" table.
 func TestSelectMotionCard_RefusesNonNestableType(t *testing.T) {
 	tests := []struct {
 		name     string
 		cardType QuestionType
 	}{
 		{"re-nesting MEMOTION", QuestionTypeMemotion},
-		{"not-yet-nestable ARDOISE (#186)", QuestionTypeArdoise},
-		{"not-yet-nestable MEMORY (#187)", QuestionTypeMemory},
+		{"non-nestable ARDOISE (#186 closed not planned)", QuestionTypeArdoise},
 		{"unknown/bogus type", QuestionType("BOGUS")},
 	}
 

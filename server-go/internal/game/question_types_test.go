@@ -80,8 +80,8 @@ func TestIsNestableInMotionCard(t *testing.T) {
 	}{
 		{QuestionTypeSpeedy, true},
 		{QuestionTypeQCM, true},
-		{QuestionTypeArdoise, false},  // #186, v7.1.0
-		{QuestionTypeMemory, false},   // #187, v7.1.0
+		{QuestionTypeArdoise, false},  // #186 closed "not planned", 2026-08-24
+		{QuestionTypeMemory, true},    // #187, v7.1.0
 		{QuestionTypeMemotion, false}, // never — depth capped at 1
 		{QuestionType("BOGUS"), false},
 	}
