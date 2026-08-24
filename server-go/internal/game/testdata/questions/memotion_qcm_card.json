@@ -1,0 +1,46 @@
+{
+  "ANSWER": "2 cartes",
+  "CATEGORY": "ENTERTAINMENT",
+  "ID": "t-memotion-qcm",
+  "MOTION_CARDS": [
+    {
+      "ANSWER_TEXT": "1789",
+      "DIFFICULTY": 1,
+      "ID": "mc-1",
+      "QUESTION_TEXT": "En quelle année a débuté la Révolution française ?",
+      "RECTO_THEME": "Histoire"
+    },
+    {
+      "DIFFICULTY": 2,
+      "ID": "mc-2",
+      "POINTS_RULE": {
+        "MODE": "FIXED",
+        "VALUE": 10
+      },
+      "QCM_ANSWERS": {
+        "BLUE": "Matrix",
+        "GREEN": "Star Trek",
+        "RED": "Star Wars",
+        "YELLOW": "Avatar"
+      },
+      "QCM_CORRECT": "RED",
+      "QCM_HINTS_ENABLED": false,
+      "RECTO_THEME": "Cinéma",
+      "TYPE": "QCM"
+    }
+  ],
+  "MOTION_CONFIG": {
+    "POINTS_1_STAR": 1,
+    "POINTS_2_STAR": 3,
+    "POINTS_3_STAR": 5
+  },
+  "MOTION_MEMORIZE_DURATION": 0,
+  "MOTION_MODE": "SOLO",
+  "ORDER": 6,
+  "POINTS": "1",
+  "POINTS_TARGET": "TEAM",
+  "QCM_HINTS_ENABLED": false,
+  "QUESTION": "Manche MEMOTION mixte SPEEDY/QCM (#185)",
+  "TIME": "30",
+  "TYPE": "MEMOTION"
+}

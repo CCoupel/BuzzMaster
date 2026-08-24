@@ -1,0 +1,12 @@
+{
+  "ANSWER": "Groenland",
+  "CATEGORY": "GEOGRAPHY",
+  "ID": "t-speedy",
+  "ORDER": 1,
+  "POINTS": "10",
+  "POINTS_TARGET": "PLAYER",
+  "QCM_HINTS_ENABLED": false,
+  "QUESTION": "Quelle est la plus grande île du monde ?",
+  "TIME": "10",
+  "TYPE": "SPEEDY"
+}
