@@ -2207,6 +2207,11 @@ func (a *App) handleFlipMemoryCard(clientID string, clientType server.ClientType
 			// must NEVER Stop() the whole MEMOTION round the way the
 			// question host does below.
 			server.LogInfo(game.LogComponentEngine, "MEMOTION memory card COMPLETE! All pairs matched (cardId=%s).", payload.MotionCardID)
+			// Stop the per-card ticker immediately (same discipline as
+			// handleMotionReveal) rather than rely on its own guard to
+			// self-detect the sub-phase change on its next tick — harmless
+			// either way, but this avoids one extra no-op tick.
+			a.engine.StopMotionCardTimer()
 			if err := a.engine.RevealMotionCard(); err != nil {
 				server.LogWarn(game.LogComponentEngine, "MEMOTION memory card auto-reveal failed: %v", err)
 			} else {

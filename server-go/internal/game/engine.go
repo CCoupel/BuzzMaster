@@ -4077,13 +4077,24 @@ func (e *Engine) RevealMotionCard() error {
 	}
 
 	cardID := e.state.MotionSelected
+	e.revealMotionCardUnsafe()
+
+	log.Printf("[Engine] MEMOTION RevealMotionCard: cardID=%s → REVEAL", cardID)
+	return nil
+}
+
+// revealMotionCardUnsafe transitions the active card from QUESTION to
+// REVEAL — the state mutation shared by RevealMotionCard (explicit,
+// animateur-triggered via MEMOTION_REVEAL) and processMotionCardTick's own
+// auto-reveal of an expired MEMORY card (#187 QUALIF bugfix, below). Must
+// be called with e.mu held; caller is responsible for the precondition
+// checks (Phase==STARTED, MotionSubPhase==QUESTION) where they apply.
+func (e *Engine) revealMotionCardUnsafe() {
+	cardID := e.state.MotionSelected
 	if cardID != "" {
 		e.state.MotionCardStates[cardID] = MotionCardStateRevealed
 	}
 	e.state.MotionSubPhase = MotionSubPhaseReveal
-
-	log.Printf("[Engine] MEMOTION RevealMotionCard: cardID=%s → REVEAL", cardID)
-	return nil
 }
 
 // DoneMotionCard marks the active card as DONE, optionally awards points to winnerTeam,
@@ -4364,7 +4375,15 @@ func (e *Engine) StartMotionCardTimer(delay int) {
 					if result.currentTime <= 0 {
 						// Timer expired — do NOT call e.Stop(). Phase stays STARTED.
 						ticker.Stop()
-						log.Printf("[Engine] MEMOTION card timer expired — phase stays STARTED, admin must act")
+						if result.autoRevealed {
+							// #187 QUALIF bugfix — a MEMORY card's own
+							// expiry already moved it to REVEAL under lock
+							// (processMotionCardTick); OnTimerTick above
+							// already broadcast that fresh state.
+							log.Printf("[Engine] MEMOTION card timer expired — MEMORY card auto-revealed, no longer accepts flips")
+						} else {
+							log.Printf("[Engine] MEMOTION card timer expired — phase stays STARTED, admin must act")
+						}
 						return true
 					}
 					return false
@@ -4392,6 +4411,15 @@ type motionCardTickResult struct {
 	qcmHintCallback  func(string, int)
 	invalidatedColor string
 	remainingAnswers int
+	// autoRevealed (#187 QUALIF bugfix) — true when this tick auto-
+	// transitioned an expired MEMORY card's sub-phase to REVEAL. Purely
+	// informational for the caller's own logging; the state mutation
+	// itself already happened under lock, so nothing outside this
+	// function needs to act on it for correctness — GetGameJSON()
+	// reflects REVEAL on the very next broadcast (OnTimerTick, fired
+	// unconditionally on every tick) regardless of whether the caller
+	// reads this field.
+	autoRevealed bool
 }
 
 // processMotionCardTick applies one MEMOTION card-timer tick under lock.
@@ -4440,6 +4468,32 @@ func (e *Engine) processMotionCardTick() motionCardTickResult {
 				}
 			}
 		}
+	}
+
+	// #187 QUALIF bugfix — a MEMORY card must stop accepting flips once its
+	// OWN timer expires. FlipMotionMemoryCard's playability guard is
+	// MotionSubPhase==QUESTION, and until this fix nothing ever moved the
+	// card out of QUESTION on plain timer expiry: the pre-existing
+	// behavior (ticker.Stop(), phase/subphase left untouched, "admin must
+	// act") was written for QCM/SPEEDY, neither of which has any player
+	// input to block during QUESTION. MEMORY (#187) is the first nested
+	// type whose player action (FLIP_MEMORY_CARD) must actually respect
+	// this — without this branch a VPlayer/tv/anim could keep flipping
+	// pairs indefinitely after CURRENT_TIME reached 0 (reported in
+	// QUALIF v7.1.0.1 manual validation).
+	//
+	// Reuses the exact same transition as a completed grid (main.go's
+	// handleFlipMemoryCard, isComplete branch) and as an
+	// animateur-triggered MEMOTION_REVEAL: hand control to REVEAL, never
+	// touch Phase/Stop() — this is the second of the plan's two card-end
+	// exits ("grille complète OU fin décidée par le timer/animateur"),
+	// which the original implementation only wired for the first.
+	// Deliberately scoped to MEMORY only — QCM/SPEEDY's existing,
+	// already-tested "stay in QUESTION, admin must act" behavior on
+	// expiry is unchanged.
+	if currentTime <= 0 && e.state.MotionActive.Type == QuestionTypeMemory && e.state.MotionSubPhase == MotionSubPhaseQuestion {
+		e.revealMotionCardUnsafe()
+		result.autoRevealed = true
 	}
 
 	return result
