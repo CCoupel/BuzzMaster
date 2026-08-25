@@ -124,6 +124,30 @@ type Engine struct {
 	countdownStopCh  chan struct{}
 	pendingDelay     int // Store delay for after countdown
 
+	// motionCardRoundClosed (#187 cycle 4, B3) — true once the ACTIVE
+	// MEMOTION card's own timer round has ended (natural expiry via
+	// processMotionCardTick, or an explicit StopMotionCardTimer —
+	// MEMOTION_STOP_TIMER, MEMOTION_REVEAL, MEMOTION_DONE, and the
+	// card-scoped grid-complete path all route through it). Gates
+	// FlipMotionMemoryCard independently of MotionSubPhase, which stays
+	// QUESTION on natural expiry (deliberate asymmetry with the
+	// grid-complete exit — plan-memotion-v710-memory-reveal-v2 §1).
+	//
+	// Deliberately NOT derived from CURRENT_TIME==0: StartMotionCardTimer
+	// is a no-op when Question.TIME<=0 (guard, delay<=0 returns before
+	// touching anything) — a MEMOTION question with no configured timer
+	// never starts one, so CURRENT_TIME stays 0 forever without the round
+	// ever being "closed". Gating on CURRENT_TIME==0 alone would make a
+	// timerless MEMORY card permanently unplayable, silently, with no
+	// failing test to catch it (the exact trap named in the plan).
+	//
+	// Reset to false at SelectMotionCard and FlipMotionCard — a fresh
+	// card's round is always open. Not reset by DoneMotionCard: MotionSelected
+	// is cleared there too, and FlipMotionMemoryCard already refuses any
+	// card whose ID isn't the current MotionSelected, so a stale `true`
+	// left over from the previous card has no way to reach a live guard.
+	motionCardRoundClosed bool
+
 	// Callbacks
 	//
 	// OnStateChange — concurrency contract (#121): invoked from every one of
@@ -151,21 +175,15 @@ type Engine struct {
 	OnCountdownTick func(countdownTime int)
 	OnBuzzerPress   func(bumperID, teamID string, pressTime int64, button string)
 	OnQCMHint       func(invalidatedColor string, remainingAnswers int) // QCM hint callback
-	// OnMotionCardAutoRevealed (#187 QUALIF follow-up, code-review
-	// 20260825-200416) — fired when processMotionCardTick auto-reveals an
-	// expired MEMORY card (see that function's doc comment). Same pattern
-	// as OnQCMHint: called from the per-card timer goroutine, OUTSIDE the
-	// lock, after the state mutation already happened under lock. The one
-	// production consumer (cmd/server/main.go) calls broadcastUpdate() —
-	// the per-tick OnTimerTick callback alone is NOT enough, because it
-	// fires the reduced ActionUpdateTimer action, and the frontend's
-	// UPDATE_TIMER handler deliberately only copies phase/timer/
-	// countdownTime/gameTime (useWebSocket.js) — it never reads
-	// MEMOTION_SUBPHASE/MEMOTION_CARD_STATES/MEMOTION_ACTIVE. Without this
-	// callback, the server-side state transition is correct but never
-	// reaches TV/anim/vplayer's live rendering, which is exactly the
-	// user-visible half of the QUALIF v7.1.0.1 bug report.
-	OnMotionCardAutoRevealed func(cardID string)
+	// #187 cycle 3 briefly added OnMotionCardAutoRevealed here (a MEMORY
+	// card auto-revealing at timer expiry) — REVERTED in cycle 4: the
+	// user-validated behavior is that expiry on an incomplete grid leaves
+	// the card in QUESTION, closed to further flips
+	// (motionCardRoundClosed) but requiring an explicit animateur
+	// MEMOTION_REVEAL, asymmetric with the completed-grid exit (see
+	// processMotionCardTick's doc comment). Do not reintroduce this
+	// callback without re-reading plan-memotion-v710-memory-reveal-v2's
+	// §1 rationale.
 }
 
 // NewEngine creates a new game engine
@@ -4044,6 +4062,7 @@ func (e *Engine) SelectMotionCard(cardID string) error {
 	// at every MEMOTION_SELECT, State starts empty (the type's own
 	// handlers populate it, none do yet in v7.0.0).
 	e.state.MotionActive = MotionActive{CardID: cardID, Type: effectiveType, State: map[string]interface{}{}}
+	e.motionCardRoundClosed = false // #187 cycle 4, B3 — a freshly selected card's round is always open
 
 	log.Printf("[Engine] MEMOTION SelectMotionCard: cardID=%s → SELECTED", cardID)
 	return nil
@@ -4073,6 +4092,7 @@ func (e *Engine) FlipMotionCard() error {
 
 	e.state.MotionCardStates[cardID] = MotionCardStateQuestion
 	e.state.MotionSubPhase = MotionSubPhaseQuestion
+	e.motionCardRoundClosed = false // #187 cycle 4, B3 — belt-and-suspenders with SelectMotionCard's own reset
 
 	log.Printf("[Engine] MEMOTION FlipMotionCard: cardID=%s → QUESTION", cardID)
 	return nil
@@ -4387,26 +4407,19 @@ func (e *Engine) StartMotionCardTimer(delay int) {
 						result.qcmHintCallback(result.invalidatedColor, result.remainingAnswers)
 					}
 
-					// #187 QUALIF follow-up (code-review 20260825-200416) —
-					// OnTimerTick above already broadcast the fresh state,
-					// but via ActionUpdateTimer, whose reduced frontend
-					// handler ignores MEMOTION_SUBPHASE/MEMOTION_CARD_STATES/
-					// MEMOTION_ACTIVE. Firing the dedicated callback (same
-					// outside-lock pattern as qcmHintCallback) is what lets
-					// the caller push a full ActionUpdate instead — see
-					// OnMotionCardAutoRevealed's doc comment.
-					if result.motionCardAutoRevealedCallback != nil {
-						result.motionCardAutoRevealedCallback(result.autoRevealedCardID)
-					}
-
 					if result.currentTime <= 0 {
-						// Timer expired — do NOT call e.Stop(). Phase stays STARTED.
+						// Timer expired — do NOT call e.Stop(). Phase stays
+						// STARTED, MotionSubPhase stays QUESTION for every
+						// card type (#187 cycle 4, B1 — reverted cycle 3's
+						// MEMORY-specific auto-reveal here; see
+						// processMotionCardTick's doc comment for why).
+						// motionCardRoundClosed is set inside
+						// processMotionCardTick itself (under lock), so a
+						// MEMORY card already stops accepting flips at this
+						// point even though its sub-phase hasn't moved —
+						// admin must act via MEMOTION_REVEAL.
 						ticker.Stop()
-						if result.autoRevealed {
-							log.Printf("[Engine] MEMOTION card timer expired — MEMORY card auto-revealed, no longer accepts flips")
-						} else {
-							log.Printf("[Engine] MEMOTION card timer expired — phase stays STARTED, admin must act")
-						}
+						log.Printf("[Engine] MEMOTION card timer expired — phase stays STARTED, admin must act")
 						return true
 					}
 					return false
@@ -4434,21 +4447,6 @@ type motionCardTickResult struct {
 	qcmHintCallback  func(string, int)
 	invalidatedColor string
 	remainingAnswers int
-	// autoRevealed (#187 QUALIF bugfix) — true when this tick auto-
-	// transitioned an expired MEMORY card's sub-phase to REVEAL. The state
-	// mutation itself already happened under lock; the two fields below
-	// carry what the caller needs to also NOTIFY clients — the reduced
-	// ActionUpdateTimer broadcast OnTimerTick already fires is NOT enough
-	// on its own (frontend's UPDATE_TIMER handler ignores
-	// MEMOTION_SUBPHASE/MEMOTION_CARD_STATES/MEMOTION_ACTIVE), a real
-	// production bug caught in code review (20260825-200416) — see
-	// OnMotionCardAutoRevealed's doc comment.
-	autoRevealed bool
-	// motionCardAutoRevealedCallback/autoRevealedCardID — set together
-	// with autoRevealed, mirroring qcmHintCallback/invalidatedColor above:
-	// the caller invokes this OUTSIDE the lock, same pattern.
-	motionCardAutoRevealedCallback func(cardID string)
-	autoRevealedCardID             string
 }
 
 // processMotionCardTick applies one MEMOTION card-timer tick under lock.
@@ -4499,34 +4497,38 @@ func (e *Engine) processMotionCardTick() motionCardTickResult {
 		}
 	}
 
-	// #187 QUALIF bugfix — a MEMORY card must stop accepting flips once its
-	// OWN timer expires. FlipMotionMemoryCard's playability guard is
-	// MotionSubPhase==QUESTION, and until this fix nothing ever moved the
-	// card out of QUESTION on plain timer expiry: the pre-existing
-	// behavior (ticker.Stop(), phase/subphase left untouched, "admin must
-	// act") was written for QCM/SPEEDY, neither of which has any player
-	// input to block during QUESTION. MEMORY (#187) is the first nested
-	// type whose player action (FLIP_MEMORY_CARD) must actually respect
-	// this — without this branch a VPlayer/tv/anim could keep flipping
-	// pairs indefinitely after CURRENT_TIME reached 0 (reported in
-	// QUALIF v7.1.0.1 manual validation).
-	//
-	// Reuses the exact same transition as a completed grid (main.go's
-	// handleFlipMemoryCard, isComplete branch) and as an
-	// animateur-triggered MEMOTION_REVEAL: hand control to REVEAL, never
-	// touch Phase/Stop() — this is the second of the plan's two card-end
-	// exits ("grille complète OU fin décidée par le timer/animateur"),
-	// which the original implementation only wired for the first.
-	// Deliberately scoped to MEMORY only — QCM/SPEEDY's existing,
-	// already-tested "stay in QUESTION, admin must act" behavior on
-	// expiry is unchanged.
-	if currentTime <= 0 && e.state.MotionActive.Type == QuestionTypeMemory && e.state.MotionSubPhase == MotionSubPhaseQuestion {
-		cardID := e.state.MotionSelected
-		e.revealMotionCardUnsafe()
-		result.autoRevealed = true
-		result.autoRevealedCardID = cardID
-		result.motionCardAutoRevealedCallback = e.OnMotionCardAutoRevealed
+	// #187 cycle 4, B3 — a card's round closes on natural timer expiry,
+	// same as an explicit StopMotionCardTimer (MEMOTION_STOP_TIMER). This
+	// is deliberately generic (any card type, not just MEMORY): it's a
+	// host-level "is this card's timer round still open" fact, gating
+	// FlipMotionMemoryCard independently of MotionSubPhase — which stays
+	// QUESTION here, unchanged for every type (see below).
+	if currentTime <= 0 {
+		e.motionCardRoundClosed = true
 	}
+
+	// ⚠️ Deliberately NOT auto-revealing here (reverted from an earlier
+	// cycle — plan-memotion-v710-memory-reveal-v2-20260824... — do not
+	// reintroduce). A MEMORY card's timer expiring on an INCOMPLETE grid
+	// requires an explicit animateur MEMOTION_REVEAL: the reveal gesture
+	// has real content there (it uncovers pairs nobody found, and is the
+	// moment the animateur reads the score before crediting it). This is
+	// deliberately ASYMMETRIC with the completed-grid exit
+	// (main.go's handleFlipMemoryCard, cardScoped isComplete branch, cycle
+	// 2 — unchanged, still auto-reveals): once every pair is found there is
+	// nothing left to discover, so requiring a gesture there would be
+	// purely ceremonial. A reviewer "harmonizing" the two exits would
+	// break behavior the user explicitly validated — same caution as the
+	// FLIP_MEMORY_CARD off-turn ignore dérogation (contract §9.2).
+	//
+	// A previous cycle DID auto-reveal here for MEMORY, discovering along
+	// the way that its own notification (OnTimerTick → ActionUpdateTimer)
+	// doesn't reach the frontend's live MEMOTION rendering — the reduced
+	// UPDATE_TIMER handler only copies phase/timer/countdownTime/gameTime,
+	// never MEMOTION_SUBPHASE/MEMOTION_CARD_STATES/MEMOTION_ACTIVE. That
+	// discovery stays true and is still a trap for a FUTURE broadcast on
+	// this same tick path — just no longer this function's problem, since
+	// nothing here mutates MEMOTION state at expiry anymore.
 
 	return result
 }
@@ -4798,6 +4800,12 @@ func (e *Engine) StopMotionCardTimer() {
 
 	// Reset timer display without changing game phase
 	e.state.CurrentTime = 0
+	// #187 cycle 4, B3 — an explicitly stopped timer closes the active
+	// card's round (MEMOTION_STOP_TIMER, MEMOTION_REVEAL, MEMOTION_DONE,
+	// and the card-scoped grid-complete path all route through here) —
+	// same effect as natural expiry (processMotionCardTick), gating
+	// FlipMotionMemoryCard.
+	e.motionCardRoundClosed = true
 
 	log.Printf("[Engine] MEMOTION StopMotionCardTimer: timer stopped, CURRENT_TIME=0")
 }
@@ -4878,6 +4886,14 @@ func (e *Engine) FlipMotionMemoryCard(motionCardID, cardID string) (isMatch, sho
 		return false, false, 0, false
 	}
 	if motionCardID == "" || e.state.MotionSelected != motionCardID {
+		return false, false, 0, false
+	}
+	// #187 cycle 4, B3 — MotionSubPhase alone isn't enough to gate a flip:
+	// it stays QUESTION even after this card's own timer has expired (the
+	// asymmetric-exit design, processMotionCardTick's doc comment). A
+	// closed round refuses further flips regardless of sub-phase, until an
+	// explicit MEMOTION_REVEAL/next SelectMotionCard reopens one.
+	if e.motionCardRoundClosed {
 		return false, false, 0, false
 	}
 	card := e.activeMotionCardUnsafe()
