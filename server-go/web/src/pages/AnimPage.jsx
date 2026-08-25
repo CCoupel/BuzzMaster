@@ -242,6 +242,20 @@ export default function AnimPage() {
   const selectedMotionCard = isMemotionQuestion
     ? motionCards.find(c => c.ID === gameState.MEMOTION_SELECTED) || null
     : null
+  // #187 cycle 4 (F2) — délibérément la valeur ÉTOILES PLEINE, PAS le
+  // prorata STARS_PRORATA (contrairement à `AnimConductPanel.jsx`'s propre
+  // `motionCardPoints`, calcul interne et local à ce composant, non partagé
+  // avec celui-ci). Motif : ce libellé n'apparaît QUE pendant la sous-phase
+  // SELECTED (voir motionStatement ci-dessous — en QUESTION/REVEAL il est
+  // remplacé par le texte de la carte), c'est-à-dire AVANT toute paire
+  // trouvée, quand la question posée est « combien vaut cette carte au
+  // maximum ? », pas « combien vais-je créditer maintenant ? ». Appliquer le
+  // prorata ici afficherait 0pt sur une carte MEMORY tout juste sélectionnée
+  // (`matchedPairs` encore vide), ce qui serait FAUX — la carte reste
+  // intégralement gagnable. Les deux affichages (ce libellé en SELECTED, le
+  // bouton de crédit d'AnimConductPanel en REVEAL) ne se chevauchent jamais
+  // dans le temps, donc pas de risque de lire deux montants contradictoires
+  // pour la même carte au même instant.
   const motionCardPoints = selectedMotionCard
     ? getMotionCardPoints(selectedMotionCard.DIFFICULTY || 1, question?.MOTION_CONFIG)
     : 0

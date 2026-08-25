@@ -1007,6 +1007,99 @@ describe('AnimConductPanel — L3, carte MEMORY (#187)', () => {
   })
 })
 
+// ---------------------------------------------------------------------------
+// #187 cycle 4 (F1) — régression réelle détectée par le planner :
+// computeStarsProrataPoints existait déjà (testée en isolation,
+// utils/motionGrid.test.js) mais n'était appelée nulle part dans
+// AnimConductPanel.jsx — le bouton de crédit affichait le montant étoiles
+// PLEIN pour une carte MEMORY, alors que le serveur crédite le prorata
+// (STARS_PRORATA, contrat §6.2/§6.3). Ces tests exercent le CÂBLAGE
+// bout-en-bout (cardMemory.matchedPairs -> cardPoints -> libellé du bouton
+// d'attribution, motionRules.js) pour que ce défaut ne puisse plus
+// disparaître silencieusement d'un cycle à l'autre.
+// ---------------------------------------------------------------------------
+
+describe('AnimConductPanel — L2, gain STARS_PRORATA affiché sur le bouton de crédit (#187 cycle 4, F1)', () => {
+  // Carte à 2★ = 3 pts (repli 1/3/5, aucun MOTION_CONFIG dans motionQuestion()),
+  // 3 paires au total — choisi pour distinguer sans ambiguïté prorata vs plein
+  // (1/3 -> floor(3*1/3)=1, 3/3 -> floor(3*3/3)=3).
+  function memoryCardQuestion(cardOverrides = {}) {
+    return motionQuestion({
+      MOTION_CARDS: [
+        { ID: 'c1', RECTO_THEME: 'Cinéma', DIFFICULTY: 1 },
+        {
+          ID: 'c2', TYPE: 'MEMORY', RECTO_THEME: 'Paires', DIFFICULTY: 2,
+          MEMORY_PAIRS: [1, 2, 3].map(id => ({ ID: id, CARD1: { TEXT: 'Q' }, CARD2: { TEXT: 'R' } })),
+          ...cardOverrides,
+        },
+      ],
+    })
+  }
+
+  function renderRevealWithMatched(matchedPairs, cardOverrides = {}) {
+    return render(
+      <AnimConductPanel {...baseProps({
+        phase: 'STARTED',
+        question: memoryCardQuestion(cardOverrides),
+        hostContext: { playable: false, revealed: true, cardId: 'c2' },
+        motion: motionProps({ subphase: 'REVEAL', selectedId: 'c2', currentTeam: 'Les Rouges' }),
+        cardMemory: { flippedCards: [], matchedPairs, errors: 0 },
+      })} />
+    )
+  }
+
+  function teamCreditButton(container) {
+    return Array.from(container.querySelectorAll('.anim-conduct-l2 .anim-conduct-btn'))
+      .find(btn => btn.textContent.startsWith('Les Rouges'))
+  }
+
+  it('grille incomplète (1/3 paires) : le bouton affiche le montant PRORATA (+1 pt), pas la valeur étoiles pleine (+3 pts)', () => {
+    const { container } = renderRevealWithMatched([1])
+    const btn = teamCreditButton(container)
+    expect(btn).not.toBeUndefined()
+    expect(btn.textContent).toContain('+1 pt')
+    expect(btn.textContent).not.toMatch(/\+3 pts?/)
+  })
+
+  it('grille complète (3/3 paires) : le prorata rend exactement la valeur nominale (+3 pts)', () => {
+    const { container } = renderRevealWithMatched([1, 2, 3])
+    const btn = teamCreditButton(container)
+    expect(btn.textContent).toContain('+3 pt')
+  })
+
+  it('0/3 paire trouvée : le bouton affiche +0 pt (pas de crédit)', () => {
+    const { container } = renderRevealWithMatched([])
+    const btn = teamCreditButton(container)
+    expect(btn.textContent).toContain('+0 pt')
+  })
+
+  it('surcharge explicite POINTS_RULE.MODE=STARS (tout-ou-rien) : montant plein affiché même grille incomplète', () => {
+    const { container } = renderRevealWithMatched([1], { POINTS_RULE: { MODE: 'STARS' } })
+    const btn = teamCreditButton(container)
+    expect(btn.textContent).toContain('+3 pt')
+  })
+
+  it('non-régression — carte QCM : cardPoints reste la valeur étoiles pleine, jamais de prorata', () => {
+    const question = motionQuestion({
+      MOTION_CARDS: [
+        { ID: 'c1', RECTO_THEME: 'Cinéma', DIFFICULTY: 1 },
+        { ID: 'c2', TYPE: 'QCM', RECTO_THEME: 'Capitales', DIFFICULTY: 3, QCM_ANSWERS: {}, QCM_CORRECT: '' },
+      ],
+    })
+    const { container } = render(
+      <AnimConductPanel {...baseProps({
+        phase: 'STARTED',
+        question,
+        hostContext: { playable: false, revealed: true, cardId: 'c2' },
+        motion: motionProps({ subphase: 'REVEAL', selectedId: 'c2', currentTeam: 'Les Rouges' }),
+        cardMemory: { flippedCards: [], matchedPairs: [], errors: 0 }, // ne doit avoir AUCUN effet hors MEMORY
+      })} />
+    )
+    const btn = teamCreditButton(container)
+    expect(btn.textContent).toContain('+5 pt') // DIFFICULTY 3 -> repli 5 pts, inchangé
+  })
+})
+
 describe('AnimConductPanel — L1/L4/L5 inchangées par MEMOTION (#160/T6, non-régression)', () => {
   // #168 (F7) — L4 rend désormais AnimExplanationNote au lieu de la réserve
   // statique ; motionQuestion() (ci-dessous) ne porte pas de champ

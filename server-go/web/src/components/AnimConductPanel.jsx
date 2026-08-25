@@ -6,7 +6,7 @@ import {
   revealButtonState,
 } from '../utils/phaseRules'
 import { getQuestionTypeMeta } from '../utils/questionTypeMeta'
-import { getMotionCardPoints } from '../utils/motionGrid'
+import { getMotionCardPoints, computeStarsProrataPoints } from '../utils/motionGrid'
 import AnimNextButton from './AnimNextButton'
 import AnimQcmOptions from './AnimQcmOptions'
 import AnimMemoryGrid from './AnimMemoryGrid'
@@ -164,9 +164,28 @@ export default function AnimConductPanel({
   const selectedMotionCard = isMemotion
     ? motionCards.find(c => c.ID === motion?.selectedId) || null
     : null
-  const motionCardPoints = selectedMotionCard
+  const selectedMotionCardStars = selectedMotionCard
     ? getMotionCardPoints(selectedMotionCard.DIFFICULTY || 1, question?.MOTION_CONFIG)
     : 0
+  // #187 cycle 4 (F1) — gain affiché sur le bouton d'attribution (L2,
+  // AnimMotionActions, sous-phase REVEAL) : pour une carte MEMORY en barème
+  // STARS_PRORATA (le défaut — POINTS_RULE absent ou MODE explicite
+  // "STARS_PRORATA", contrat §6.2/§6.3), le montant plein NE DOIT PAS être
+  // affiché — le serveur, seule autorité, crédite le prorata des paires
+  // trouvées. Une surcharge explicite STARS/FIXED/PER_UNIT sur la carte
+  // reste au barème étoiles plein (tout-ou-rien, §6.2). Sans ce branchement,
+  // l'animateur voit un montant différent de celui réellement attribué —
+  // c'est le défaut corrigé par ce cycle (computeStarsProrataPoints existait
+  // déjà, testée, mais n'était appelée nulle part).
+  const isMemoryStarsProrata = selectedMotionCard?.TYPE === 'MEMORY'
+    && (!selectedMotionCard.POINTS_RULE?.MODE || selectedMotionCard.POINTS_RULE.MODE === 'STARS_PRORATA')
+  const motionCardPoints = isMemoryStarsProrata
+    ? computeStarsProrataPoints(
+        selectedMotionCardStars,
+        cardMemory?.matchedPairs?.length || 0,
+        selectedMotionCard.MEMORY_PAIRS?.length || 0,
+      )
+    : selectedMotionCardStars
   const modeLabel = question?.TYPE ? getQuestionTypeMeta(question.TYPE).label : null
   // #171/F3 — contenu L2 (gestes propres au mode), ex-L3 #166.
   const modeGestureText = modeLabel ? `Aucun geste propre au mode ${modeLabel}` : 'Aucun geste propre au mode'
