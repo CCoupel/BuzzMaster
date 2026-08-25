@@ -3935,22 +3935,48 @@ func (e *Engine) motionCardPoints(difficulty int) int {
 // type's outcome — units realised and unitsTotal realisable (MEMOTION_DONE.
 // UNITS for units under FIXED/PER_UNIT — #184 B-B5, contract §6.2; both
 // server-derived for a MEMORY card under STARS_PRORATA — #187, contract
-// §9.3). Dispatches on card.PointsRule.Mode: absent (nil PointsRule, or an
-// explicit empty/"STARS" MODE) falls through to the pre-#184 star-based
-// scale (motionCardPoints, unchanged); FIXED, PER_UNIT and STARS_PRORATA
-// are additive on top of it.
+// §9.3). The SOLE reader of MotionCard.PointsRule in this codebase.
+//
+// Mode resolution, in priority order (#187 cycle 5):
+//  1. card.PointsRule.Mode, if explicitly set — absolute priority, contract
+//     §6.3. A MEMORY card can still be scored tout-ou-rien by setting STARS
+//     or FIXED explicitly.
+//  2. Otherwise, the active card's TypeDescriptor.DefaultPointsRule
+//     (question_types.go registry), resolved fresh from
+//     card.EffectiveType() on every call — never a value written onto the
+//     card itself. See that field's doc comment for why: POINTS_RULE is a
+//     CARD field that survives a TYPE change verbatim, so writing a
+//     type-specific default onto the card (client-side at creation, or
+//     server-side at save) would leave a stale, silently-wrong rule behind
+//     after the card's TYPE is later changed. Resolving from the registry
+//     at read time has no such staleness — a card is always scored under
+//     ITS CURRENT type's default.
+//  3. Otherwise (no registry entry, or its default is ""), PointsRuleModeStars
+//     — the pre-#184 star-based scale (motionCardPoints), unchanged.
 //
 // ⚠️ Signature changed by #187 (card, units) → (card, units, unitsTotal) —
 // declared host modification, contract §10.2: #184 had anticipated PER_UNIT
 // as MEMORY's landing mode, not a prorata of the card's own total. The
 // change stays within the host's own points vocabulary (§6.1) — no MEMORY
-// knowledge (e.g. "a pair") enters this function or this file.
+// knowledge (e.g. "a pair") enters this function or this file: it queries
+// the registry generically, exactly like MediaSlots/OwnedFields elsewhere.
 func (e *Engine) motionCardPointsForOutcome(card *MotionCard, units, unitsTotal int) int {
 	mode := PointsRuleModeStars
 	value := 0
 	if card.PointsRule != nil && card.PointsRule.Mode != "" {
+		// Explicit override on the card — absolute priority (contract
+		// §6.3), regardless of what the type's own default would be.
 		mode = card.PointsRule.Mode
 		value = card.PointsRule.Value
+	} else if d, ok := TypeDescriptorFor(card.EffectiveType()); ok && d.DefaultPointsRule != "" {
+		// #187 cycle 5 — the type's own default (registry, contract §7),
+		// resolved fresh from card.EffectiveType() on every call: a card
+		// that changed TYPE is re-resolved from its CURRENT type, never
+		// from a stale value written earlier onto the card (see
+		// TypeDescriptor.DefaultPointsRule's doc comment for the trap this
+		// avoids). No `if card.EffectiveType() == QuestionTypeMemory`
+		// anywhere — this stays agnostic of which type declared a default.
+		mode = d.DefaultPointsRule
 	}
 	switch mode {
 	case PointsRuleModeFixed:

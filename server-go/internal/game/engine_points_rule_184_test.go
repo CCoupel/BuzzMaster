@@ -124,6 +124,107 @@ func TestMotionCardPointsForOutcome_StarsProrata_ValueIgnored(t *testing.T) {
 	}
 }
 
+// TestMotionCardPointsForOutcome_Memory_DefaultsToStarsProrataWithoutExplicitRule
+// is the empirical case code-reviewer flagged (code-review-20260825-214659,
+// plan-memotion-v710-memory-pointsrule-20260825-215050): a MEMORY card with
+// NO PointsRule at all must still be scored STARS_PRORATA, resolved from
+// the type's registry default (#187 cycle 5) — a 5-point card with 1/4
+// pairs found awards 1 point, not the full 5 a bare STARS fallback would
+// have given before this fix.
+func TestMotionCardPointsForOutcome_Memory_DefaultsToStarsProrataWithoutExplicitRule(t *testing.T) {
+	e := NewEngine()
+	q := makeMotionQuestion("mq1", nil, "SOLO")
+	q.MotionConfig = &MotionConfig{Points1Star: 5}
+	e.Ready("mq1", q)
+	card := &MotionCard{ID: "mc-1", Type: QuestionTypeMemory, Difficulty: 1} // no PointsRule at all
+
+	if got := e.motionCardPointsForOutcome(card, 1, 4); got != 1 {
+		t.Errorf("MEMORY card without PointsRule, 1/4 pairs: got %d, want 1 (STARS_PRORATA registry default, not 5 from a bare STARS fallback)", got)
+	}
+	if got := e.motionCardPointsForOutcome(card, 4, 4); got != 5 {
+		t.Errorf("MEMORY card without PointsRule, 4/4 pairs: got %d, want 5 (complete grid = nominal value)", got)
+	}
+}
+
+// TestMotionCardPointsForOutcome_Memory_ExplicitOverrideWinsOverRegistryDefault
+// verifies an explicit PointsRule still takes absolute priority over the
+// type's registry default — contract §6.3's tout-ou-rien override remains
+// available on a MEMORY card.
+func TestMotionCardPointsForOutcome_Memory_ExplicitOverrideWinsOverRegistryDefault(t *testing.T) {
+	e := NewEngine()
+	q := makeMotionQuestion("mq1", nil, "SOLO") // difficulty 2 → 3pts, default 1/3/5 scale
+	e.Ready("mq1", q)
+	card := &MotionCard{ID: "mc-1", Type: QuestionTypeMemory, Difficulty: 2, PointsRule: &PointsRule{Mode: PointsRuleModeStars}}
+
+	// STARS ignores units entirely — must award the card's full star value,
+	// NOT the prorated fraction the registry default would have computed.
+	if got := e.motionCardPointsForOutcome(card, 1, 4); got != 3 {
+		t.Errorf("MEMORY card with explicit PointsRule STARS: got %d, want 3 (full stars — explicit override wins, registry default must not apply)", got)
+	}
+}
+
+// TestMotionCardPointsForOutcome_NonMemoryTypes_StillDefaultToStars is the
+// explicit non-regression companion at the motionCardPointsForOutcome
+// level (question_types_test.go covers the registry fact itself):
+// SPEEDY/QCM/no-TYPE without PointsRule are unaffected by #187 cycle 5.
+func TestMotionCardPointsForOutcome_NonMemoryTypes_StillDefaultToStars(t *testing.T) {
+	e := NewEngine()
+	q := makeMotionQuestion("mq1", defaultMotionCards(), "SOLO")
+	e.Ready("mq1", q)
+
+	tests := []struct {
+		name     string
+		cardType QuestionType
+	}{
+		{"SPEEDY", QuestionTypeSpeedy},
+		{"QCM", QuestionTypeQCM},
+		{"absent TYPE (defaults to SPEEDY)", ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			card := &MotionCard{ID: "mc-1", Type: tt.cardType, Difficulty: 1}
+			if got := e.motionCardPointsForOutcome(card, 1, 4); got != 1 {
+				t.Errorf("%s card without PointsRule: got %d, want 1 (STARS/difficulty-1, unaffected by #187 cycle 5)", tt.name, got)
+			}
+		})
+	}
+}
+
+// TestMotionCardPointsForOutcome_TypeSwitchedFromMemoryToSpeedy_ReResolvesDefault
+// is the anti-trap test named explicitly by team-lead, from the cycle 5
+// plan §2.1: a card that carried TYPE=MEMORY (registry default resolves to
+// STARS_PRORATA) and is later switched to SPEEDY (pairs cleared, contract
+// §3.2's type-lock releases) must score its FULL star value on the very
+// next call — never 0. Mutating the SAME *MotionCard across two calls
+// proves the registry lookup is re-resolved from card.EffectiveType()
+// every time, never cached from an earlier resolution — exactly the
+// property that makes the registry approach immune to the trap a
+// card-written default (rejected alternatives (a)/(b) in the plan) would
+// have fallen into.
+func TestMotionCardPointsForOutcome_TypeSwitchedFromMemoryToSpeedy_ReResolvesDefault(t *testing.T) {
+	e := NewEngine()
+	q := makeMotionQuestion("mq1", nil, "SOLO")
+	q.MotionConfig = &MotionConfig{Points1Star: 5}
+	e.Ready("mq1", q)
+
+	card := &MotionCard{ID: "mc-1", Type: QuestionTypeMemory, Difficulty: 1} // no explicit PointsRule
+	if got := e.motionCardPointsForOutcome(card, 1, 4); got != 1 {
+		t.Fatalf("setup invalide : carte MEMORY, 1/4 paires : got %d, want 1 (défaut STARS_PRORATA)", got)
+	}
+
+	// The card's pairs are cleared and its TYPE switched to SPEEDY — the
+	// §3.2 unlock-then-switch sequence the plan's §2.1 trap describes. No
+	// PointsRule is ever written by anyone (that's the whole point of the
+	// registry approach) — only card.Type/TypedContent change, exactly as
+	// a real save would leave it.
+	card.Type = QuestionTypeSpeedy
+	card.TypedContent = TypedContent{}
+
+	if got := e.motionCardPointsForOutcome(card, 1, 0); got != 5 {
+		t.Errorf("same card after switching TYPE MEMORY→SPEEDY: got %d, want 5 (full stars) — a stale STARS_PRORATA default must never survive the switch", got)
+	}
+}
+
 // TestDoneMotionCard_PointsRule_PerUnit is the end-to-end version through
 // DoneMotionCard: a card with POINTS_RULE PER_UNIT awards VALUE×units to
 // the winning team's score.

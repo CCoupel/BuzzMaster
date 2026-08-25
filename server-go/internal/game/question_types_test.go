@@ -53,6 +53,59 @@ func TestQuestionTypeRegistry_NestableTypesDeclareMediaSlots(t *testing.T) {
 	}
 }
 
+// TestQuestionTypeRegistry_DefaultPointsRuleIsKnownOrEmpty is #187 cycle 5's
+// exhaustiveness extension: every registry entry's DefaultPointsRule
+// must be EITHER "" (⇒ inherits PointsRuleModeStars, motionCardPointsForOutcome's
+// own fallback) OR one of the four known PointsRuleMode constants — a typo
+// or a value from a future, not-yet-wired mode would otherwise fall through
+// motionCardPointsForOutcome's own switch to its `default:` (STARS) branch
+// silently, exactly the class of "falls back instead of breaking loudly"
+// bug §10.1 exists to catch for every other registry field.
+func TestQuestionTypeRegistry_DefaultPointsRuleIsKnownOrEmpty(t *testing.T) {
+	known := map[PointsRuleMode]bool{
+		"":                         true, // absent ⇒ STARS, not itself a mode
+		PointsRuleModeStars:        true,
+		PointsRuleModeFixed:        true,
+		PointsRuleModePerUnit:      true,
+		PointsRuleModeStarsProrata: true,
+	}
+	for qt, desc := range questionTypeRegistry {
+		if !known[desc.DefaultPointsRule] {
+			t.Errorf("type %q declares DefaultPointsRule=%q, not a known PointsRuleMode (or empty)", qt, desc.DefaultPointsRule)
+		}
+	}
+}
+
+// TestQuestionTypeRegistry_MemoryDefaultPointsRuleIsStarsProrata locks in
+// the one non-empty DefaultPointsRule in the registry as of #187 — contract
+// §6.3's "on compte les points en fonction du nombre de paires trouvées"
+// decision, resolved here rather than written onto any card (see
+// TypeDescriptor.DefaultPointsRule's doc comment).
+func TestQuestionTypeRegistry_MemoryDefaultPointsRuleIsStarsProrata(t *testing.T) {
+	d, ok := TypeDescriptorFor(QuestionTypeMemory)
+	if !ok {
+		t.Fatal("QuestionTypeMemory has no registry entry")
+	}
+	if d.DefaultPointsRule != PointsRuleModeStarsProrata {
+		t.Errorf("MEMORY's DefaultPointsRule = %q, want %q", d.DefaultPointsRule, PointsRuleModeStarsProrata)
+	}
+}
+
+// TestQuestionTypeRegistry_OtherTypesHaveNoDefaultPointsRule is the
+// explicit non-regression companion: every OTHER type must still fall
+// through to STARS (empty DefaultPointsRule) — #187 cycle 5 must not have
+// silently changed the barème for SPEEDY/QCM/ARDOISE/MEMOTION.
+func TestQuestionTypeRegistry_OtherTypesHaveNoDefaultPointsRule(t *testing.T) {
+	for qt, desc := range questionTypeRegistry {
+		if qt == QuestionTypeMemory {
+			continue
+		}
+		if desc.DefaultPointsRule != "" {
+			t.Errorf("type %q declares DefaultPointsRule=%q, want empty (STARS, unchanged) — only MEMORY has a non-empty default (#187)", qt, desc.DefaultPointsRule)
+		}
+	}
+}
+
 // TestQuestionTypeRegistry_TypeFieldMatchesMapKey guards against a
 // copy-paste registry entry — questionTypeRegistry[qt].Type must equal qt,
 // the map key it's stored under, for every entry.

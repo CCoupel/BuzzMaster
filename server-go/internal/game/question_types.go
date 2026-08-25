@@ -31,6 +31,35 @@ type TypeDescriptor struct {
 	// v7.0.0: no nested type actually exercises player input yet (QCM-in-
 	// card is display+designation only, no buzz, no VPLAYER_QCM_ANSWER).
 	HasPlayerInput bool
+	// DefaultPointsRule (#187 cycle 5) — the POINTS_RULE.MODE a card of
+	// this type is scored under when it carries NO explicit PointsRule.
+	// Empty ⇒ PointsRuleModeStars (the pre-#184 star-based scale,
+	// unchanged default for every type that doesn't override this).
+	// Resolved by motionCardPointsForOutcome (engine.go) — the SOLE reader
+	// of MotionCard.PointsRule — never by a `card.EffectiveType() ==
+	// QuestionTypeMemory` check anywhere else: the barème queries this
+	// registry generically, exactly like MediaSlots/OwnedFields, so no
+	// MEMORY-specific knowledge enters the host (contract §10 agnosticity).
+	//
+	// Why a registry fact instead of writing POINTS_RULE onto the card
+	// (at creation, client-side, or at save, server-side) — both were
+	// considered and rejected (code-review 20260825-214659,
+	// plan-memotion-v710-memory-pointsrule-20260825-215050 §2.1/§2.2):
+	// POINTS_RULE is a CARD field (§3.1), not a TYPE field — it survives a
+	// TYPE change verbatim. A card that carried MEMORY, had its pairs
+	// cleared (unlocking the type per §3.2), and was switched to SPEEDY
+	// would keep a written-down {MODE: STARS_PRORATA}: a binary type
+	// reports UnitsTotal=0, and §6.2's own zero-division guard then makes
+	// the card worth 0 points — SILENTLY. Writing the default onto the
+	// card would need a matching cleanup rule on every type change, on
+	// TWO independent write paths (client creation, server save), and
+	// would never repair a card already persisted before this fix. A
+	// registry-resolved default has none of that: nothing is ever
+	// written, an existing MEMORY card gets the right default the moment
+	// this code ships (no re-save needed), and a card that changes TYPE
+	// is re-resolved from its CURRENT EffectiveType() on every read —
+	// there is no stale value to leak.
+	DefaultPointsRule PointsRuleMode
 }
 
 // questionTypeRegistry is the exhaustive, hard-coded table of type
@@ -79,6 +108,11 @@ var questionTypeRegistry = map[QuestionType]TypeDescriptor{
 		// changes is scope (MOTION_CARD_ID) and server-side turn checking,
 		// not the right to emit (contract §7.3).
 		HasPlayerInput: true,
+		// #187 cycle 5 — the "on compte les points en fonction du nombre
+		// de paires trouvées" decision (contract §6.3) is a fact about the
+		// TYPE, resolved here rather than written onto any card — see this
+		// field's own doc comment on TypeDescriptor for why.
+		DefaultPointsRule: PointsRuleModeStarsProrata,
 	},
 	QuestionTypeMemotion: {
 		Type:                 QuestionTypeMemotion,
