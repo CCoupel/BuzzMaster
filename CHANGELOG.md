@@ -46,6 +46,10 @@ configurable, granularité backup, et correctifs UX/sécurité.
 ### Changed
 - **FLIP_MEMORY_CARD action scopée par carte (#187)** — L'action WebSocket `FLIP_MEMORY_CARD` porte maintenant un champ optionnel `MOTION_CARD_ID` pour identifier la carte cible dans une manche MEMOTION polymorphe. Le serveur est l'autorité unique sur le tour de jeu pour MEMORY (dérogation sécurité : les retournements VPlayer hors tour sont ignorés silencieusement, sans broadcast).
 
+### Fixed
+- **Carte MEMORY retournable après expiration du chrono (#187, cycle 2 QUALIF v7.1.0.1)** — `processMotionCardTick` ne déclenchait jamais l'auto-révélation d'une carte MEMORY à l'expiration du délai. Correctif : auto-révélation scopée à MEMORY (`TYPE=MEMORY`) à l'expiration, exactement comme lors de la grille complètement trouvée. Non-régression QCM/SPEEDY couverte par tests.
+- **Auto-révélation MEMORY non diffusée aux clients (#187, cycle 3 QUALIF v7.1.0.1)** — L'auto-révélation d'une carte MEMORY était correcte côté serveur mais jamais transmise aux clients (manquait un `broadcastUpdate` complet). Correctif : ajout du callback `OnMotionCardAutoRevealed` suivi d'une diffusion, patron recopié de `OnQCMHint` (#185).
+
 ## [6.5.1] - Milestone v6.5.1 — Bugfix CI/Infra (#27)
 
 **Issues** : #151 (durcissement goroutines), #153 (job CI testing), #161 (nettoyage code mort),
