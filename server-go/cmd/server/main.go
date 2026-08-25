@@ -459,6 +459,18 @@ func (a *App) setupCallbacks() {
 		a.broadcastQCMHint(invalidatedColor, remainingAnswers)
 	}
 
+	// MEMORY card auto-revealed at timer expiry (#187 QUALIF follow-up,
+	// code-review 20260825-200416) — same reasoning as OnQCMHint just
+	// above: the per-tick OnTimerTick broadcast alone (ActionUpdateTimer)
+	// doesn't reach the frontend's live MEMOTION rendering, which only
+	// updates from a full ActionUpdate. Without this, TV/anim/vplayer stay
+	// visually stuck showing the card as still playable after expiry, even
+	// though the server has already correctly stopped accepting flips.
+	a.engine.OnMotionCardAutoRevealed = func(cardID string) {
+		server.LogInfo(game.LogComponentEngine, "MEMOTION memory card auto-revealed at timer expiry (cardId=%s)", cardID)
+		a.broadcastUpdate()
+	}
+
 	// HTTP actions
 	a.httpServer.OnAction = func(action string, data json.RawMessage) {
 		switch action {

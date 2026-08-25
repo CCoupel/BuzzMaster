@@ -151,6 +151,21 @@ type Engine struct {
 	OnCountdownTick func(countdownTime int)
 	OnBuzzerPress   func(bumperID, teamID string, pressTime int64, button string)
 	OnQCMHint       func(invalidatedColor string, remainingAnswers int) // QCM hint callback
+	// OnMotionCardAutoRevealed (#187 QUALIF follow-up, code-review
+	// 20260825-200416) — fired when processMotionCardTick auto-reveals an
+	// expired MEMORY card (see that function's doc comment). Same pattern
+	// as OnQCMHint: called from the per-card timer goroutine, OUTSIDE the
+	// lock, after the state mutation already happened under lock. The one
+	// production consumer (cmd/server/main.go) calls broadcastUpdate() —
+	// the per-tick OnTimerTick callback alone is NOT enough, because it
+	// fires the reduced ActionUpdateTimer action, and the frontend's
+	// UPDATE_TIMER handler deliberately only copies phase/timer/
+	// countdownTime/gameTime (useWebSocket.js) — it never reads
+	// MEMOTION_SUBPHASE/MEMOTION_CARD_STATES/MEMOTION_ACTIVE. Without this
+	// callback, the server-side state transition is correct but never
+	// reaches TV/anim/vplayer's live rendering, which is exactly the
+	// user-visible half of the QUALIF v7.1.0.1 bug report.
+	OnMotionCardAutoRevealed func(cardID string)
 }
 
 // NewEngine creates a new game engine
@@ -4372,14 +4387,22 @@ func (e *Engine) StartMotionCardTimer(delay int) {
 						result.qcmHintCallback(result.invalidatedColor, result.remainingAnswers)
 					}
 
+					// #187 QUALIF follow-up (code-review 20260825-200416) —
+					// OnTimerTick above already broadcast the fresh state,
+					// but via ActionUpdateTimer, whose reduced frontend
+					// handler ignores MEMOTION_SUBPHASE/MEMOTION_CARD_STATES/
+					// MEMOTION_ACTIVE. Firing the dedicated callback (same
+					// outside-lock pattern as qcmHintCallback) is what lets
+					// the caller push a full ActionUpdate instead — see
+					// OnMotionCardAutoRevealed's doc comment.
+					if result.motionCardAutoRevealedCallback != nil {
+						result.motionCardAutoRevealedCallback(result.autoRevealedCardID)
+					}
+
 					if result.currentTime <= 0 {
 						// Timer expired — do NOT call e.Stop(). Phase stays STARTED.
 						ticker.Stop()
 						if result.autoRevealed {
-							// #187 QUALIF bugfix — a MEMORY card's own
-							// expiry already moved it to REVEAL under lock
-							// (processMotionCardTick); OnTimerTick above
-							// already broadcast that fresh state.
 							log.Printf("[Engine] MEMOTION card timer expired — MEMORY card auto-revealed, no longer accepts flips")
 						} else {
 							log.Printf("[Engine] MEMOTION card timer expired — phase stays STARTED, admin must act")
@@ -4412,14 +4435,20 @@ type motionCardTickResult struct {
 	invalidatedColor string
 	remainingAnswers int
 	// autoRevealed (#187 QUALIF bugfix) — true when this tick auto-
-	// transitioned an expired MEMORY card's sub-phase to REVEAL. Purely
-	// informational for the caller's own logging; the state mutation
-	// itself already happened under lock, so nothing outside this
-	// function needs to act on it for correctness — GetGameJSON()
-	// reflects REVEAL on the very next broadcast (OnTimerTick, fired
-	// unconditionally on every tick) regardless of whether the caller
-	// reads this field.
+	// transitioned an expired MEMORY card's sub-phase to REVEAL. The state
+	// mutation itself already happened under lock; the two fields below
+	// carry what the caller needs to also NOTIFY clients — the reduced
+	// ActionUpdateTimer broadcast OnTimerTick already fires is NOT enough
+	// on its own (frontend's UPDATE_TIMER handler ignores
+	// MEMOTION_SUBPHASE/MEMOTION_CARD_STATES/MEMOTION_ACTIVE), a real
+	// production bug caught in code review (20260825-200416) — see
+	// OnMotionCardAutoRevealed's doc comment.
 	autoRevealed bool
+	// motionCardAutoRevealedCallback/autoRevealedCardID — set together
+	// with autoRevealed, mirroring qcmHintCallback/invalidatedColor above:
+	// the caller invokes this OUTSIDE the lock, same pattern.
+	motionCardAutoRevealedCallback func(cardID string)
+	autoRevealedCardID             string
 }
 
 // processMotionCardTick applies one MEMOTION card-timer tick under lock.
@@ -4492,8 +4521,11 @@ func (e *Engine) processMotionCardTick() motionCardTickResult {
 	// already-tested "stay in QUESTION, admin must act" behavior on
 	// expiry is unchanged.
 	if currentTime <= 0 && e.state.MotionActive.Type == QuestionTypeMemory && e.state.MotionSubPhase == MotionSubPhaseQuestion {
+		cardID := e.state.MotionSelected
 		e.revealMotionCardUnsafe()
 		result.autoRevealed = true
+		result.autoRevealedCardID = cardID
+		result.motionCardAutoRevealedCallback = e.OnMotionCardAutoRevealed
 	}
 
 	return result
