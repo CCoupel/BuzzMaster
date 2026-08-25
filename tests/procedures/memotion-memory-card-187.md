@@ -1,14 +1,27 @@
 # Procédure de Test — Carte MEMOTION de type MEMORY (#187)
 
 **Version** : v7.1.0 (branche `milestone/v7.1.0`)
-**Date** : 2026-08-24
+**Date** : 2026-08-24, complétée 2026-08-25 (Scénario 7, bugfix QUALIF chrono)
 **Testeur** : QA
 **Issue** : #187 — MEMORY imbriquée dans une carte MEMOTION : grille rejouable en carte (deuxième
 type réellement jouable après QCM en #185), barème `STARS_PRORATA` (points au prorata des paires
 trouvées), tour serveur seule autorité avec dérogation d'ignore silencieux hors tour.
 **Référence** : `contracts/question-types.md` §5.4/§6.3/§7.3/§9, `contracts/websocket-actions.md`
 fiche `FLIP_MEMORY_CARD`, `_work/handoff/dev-backend-20260824-171341.md`,
-`_work/handoff/dev-frontend-20260824-170743.md`
+`_work/handoff/dev-frontend-20260824-170743.md`, `_work/handoff/dev-backend-20260825-195634.md`
+(bugfix QUALIF v7.1.0.1 — carte MEMORY retournable après expiration du chrono, corrigé)
+
+---
+
+## ⚠️ Ajout du 2026-08-25 — pourquoi ce scénario manquait
+
+Le Scénario 7 ci-dessous a été ajouté **après coup** : le bug qu'il couvre (carte MEMORY toujours
+retournable une fois son chrono expiré) n'avait été détecté qu'en validation manuelle utilisateur en
+QUALIF, précisément parce qu'aucun des 6 scénarios initiaux ne testait le chrono jusqu'à son
+expiration (le Scénario 3 teste le flip et la révélation, mais toujours **avant** que le temps ne
+soit écoulé). Si cette procédure est rejouée sur un build **antérieur** au correctif
+(`_work/handoff/dev-backend-20260825-195634.md`, SHA `b12915c1`), le Scénario 7 est censé **échouer**
+— ce n'est pas une régression de la procédure, c'est la reproduction du bug corrigé.
 
 ---
 
@@ -150,6 +163,36 @@ référence identique côté Go et JS : **5 points pour 8 paires, 4 trouvées �
 
 ---
 
+## Scénario 7 — Expiration du chrono de carte : révélation automatique, flip ignoré après (bugfix QUALIF, 2026-08-25)
+
+**Objectif** : Vérifier le correctif du bug rapporté en validation manuelle QUALIF : une fois le
+chrono de la carte MEMORY épuisé, la carte doit passer automatiquement en révélation et devenir
+**non retournable** — avant le correctif, elle restait indéfiniment en sous-phase `QUESTION` et
+acceptait encore des flips après expiration.
+
+**Garde-fou déjà verrouillé par test automatisé** (`TestProcessMotionCardTick_MemoryCard_ExpiryAutoRevealsCard`,
+`TestFlipMotionMemoryCard_IgnoredAfterTimerExpiry`,
+`TestProcessMotionCardTick_MemoryCard_NoAutoRevealBeforeExpiry`,
+`TestProcessMotionCardTick_QCMCard_StaysInQuestionOnExpiry`,
+`TestProcessMotionCardTick_SpeedyCard_StaysInQuestionOnExpiry`,
+`internal/game/engine_memory_card_timer_expiry_187_test.go`) — ce scénario en est la **confirmation
+visuelle/manuelle**, et c'est le scénario dont l'absence initiale a laissé passer le bug jusqu'en
+QUALIF.
+
+| Étape | Action | Résultat Attendu | Résultat Obtenu | OK ? |
+|-------|--------|-----------------|----------------|------|
+| 1 | Sélectionner une carte MEMORY avec un chrono de carte court (ex: 10s), au moins 4 paires, DÉMARRER | Sous-phase `QUESTION`, chrono de carte visible et décompte sur `/anim` et `/tv` | | |
+| 2 | Trouver 1 ou 2 paires sur les 4+ (grille volontairement **incomplète**), sans taper RÉVÉLER | Les paires trouvées restent visibles/matched, le reste de la grille face cachée | | |
+| 3 | Laisser le chrono descendre jusqu'à 0 sans action de l'animateur | **Passage automatique en révélation** : toutes les cartes de la grille se retournent face visible sur `/anim` **et** `/tv`, sans clic RÉVÉLER — la carte ne reste pas bloquée en `QUESTION` | | |
+| 4 | Une fois le chrono à 0 et la révélation affichée, tenter de retourner une carte encore face cachée à l'écran (si l'UI le permet visuellement) depuis `/anim` | **Aucun effet** : la tentative de flip est ignorée, aucune carte supplémentaire ne change d'état, aucune erreur affichée | | |
+| 5 | Même tentative depuis un poste VJoueur (si applicable) | **Aucun effet**, identique à l'étape 4 | | |
+| 6 | Désigner l'équipe gagnante (🏆 <Équipe>) | Carte `DONE`, points attribués au prorata des paires **réellement trouvées avant expiration** (barème STARS_PRORATA, cf. Scénario 6) | | |
+| 7 | Non-régression — répéter le principe (chrono à 0, sans toutes les paires trouvées) sur une carte **QCM** puis une carte **SPEEDY** de la même manche | Comportement **inchangé** par rapport à avant ce correctif : QCM/SPEEDY restent en `QUESTION` à l'expiration, l'animateur doit agir manuellement (RÉVÉLER/SANS VAINQUEUR) — le correctif est strictement scopé à MEMORY | | |
+
+**Verdict** : [ ] PASS  [ ] FAIL
+
+---
+
 ## Critères de Validation Globale
 
 - [ ] Carte MEMORY créée et enregistrée correctement dans l'éditeur (sous-éditeur dédié, pas de champ de barème)
@@ -158,6 +201,7 @@ référence identique côté Go et JS : **5 points pour 8 paires, 4 trouvées �
 - [ ] Aucune régression sur les cartes SPEEDY/QCM d'une même manche mixte
 - [ ] Dérogation sécurité confirmée : tap VJoueur hors tour ignoré sans effet visible, aucune tempête de mise à jour
 - [ ] Barème STARS_PRORATA conforme : points proportionnels aux paires trouvées, cas "5 points / 8 paires → 2" vérifié
+- [ ] Expiration du chrono de carte MEMORY : révélation automatique, flip ignoré après, sans régression QCM/SPEEDY (bugfix QUALIF 2026-08-25)
 
 ---
 
@@ -165,10 +209,11 @@ référence identique côté Go et JS : **5 points pour 8 paires, 4 trouvées �
 
 | Étape | Action | Résultat Attendu | Résultat Obtenu | OK ? |
 |-------|--------|-----------------|----------------|------|
-| 1 | `cd server-go && go build ./... && go test ./... -race` | Build OK, tous les tests PASS, y compris les suites `*_187_test.go` (`engine_memory_card_187_test.go`, `flip_memory_card_turn_187_test.go`, `flip_memory_card_broadcast_187_test.go`) | | |
+| 1 | `cd server-go && go build ./... && go test ./... -race` | Build OK, tous les tests PASS, y compris les suites `*_187_test.go` (`engine_memory_card_187_test.go`, `flip_memory_card_turn_187_test.go`, `flip_memory_card_broadcast_187_test.go`, `engine_memory_card_timer_expiry_187_test.go`) | | |
 | 2 | `go test ./internal/game/... -run 'MemoryCard\|StarsProrata' -v` | Cas nommé `5 points / 8 pairs` PASS côté moteur | | |
 | 3 | `go test ./cmd/server/... -run 'FlipMemoryCard' -race -v` | Dérogation de tour (ignore silencieux + zéro broadcast) et portée de carte (refus explicite) PASS | | |
-| 4 | `cd server-go/web && npx vitest run` | Tous les tests PASS, y compris `motionGrid.test.js` (describe `computeStarsProrataPoints`, cas `STARS_PRORATA — 5 points / 8 pairs`), `PlayerDisplay.memotion.test.jsx` (describe "carte MEMOTION de type MEMORY (#187)"), `QuestionsPage.motionMemory.test.jsx` | | |
+| 4 | `go test ./internal/game/... -run 'MotionCardTick|IgnoredAfterTimerExpiry' -v` | Les 5 tests d'expiration du chrono (Scénario 7) PASS : révélation auto MEMORY, non-régression QCM/SPEEDY | | |
+| 5 | `cd server-go/web && npx vitest run` | Tous les tests PASS, y compris `motionGrid.test.js` (describe `computeStarsProrataPoints`, cas `STARS_PRORATA — 5 points / 8 pairs`), `PlayerDisplay.memotion.test.jsx` (describe "carte MEMOTION de type MEMORY (#187)"), `QuestionsPage.motionMemory.test.jsx` | | |
 
 **Verdict** : [ ] PASS  [ ] FAIL
 
