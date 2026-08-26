@@ -4421,6 +4421,13 @@ func (e *Engine) StartMotionCardTimer(delay int) {
 						ticker.Stop()
 						return true
 					}
+					// #187 cycle 6 bugfix — PAUSE: leave the ticker running
+					// (do NOT ticker.Stop()/return), just skip this tick's
+					// broadcast/decrement entirely. See
+					// processMotionCardTick's doc comment.
+					if result.paused {
+						return false
+					}
 
 					if e.OnTimerTick != nil {
 						e.OnTimerTick(result.currentTime)
@@ -4465,6 +4472,11 @@ func (e *Engine) StartMotionCardTimer(delay int) {
 // card-timer iteration (processMotionCardTick) out to the unlocked caller.
 type motionCardTickResult struct {
 	guardFailed bool // phase/subphase changed unexpectedly; caller must stop the ticker and return
+	// paused (#187 cycle 6 bugfix, QUALIF v7.1.0.3) — Phase==PAUSED: this
+	// tick is a pure no-op, and the caller must NOT stop the ticker for
+	// it — see processMotionCardTick's doc comment for why this has to be
+	// a distinct outcome from guardFailed.
+	paused      bool
 	currentTime int
 	// qcmHintCallback/invalidatedColor/remainingAnswers (#185 C-B1) — set
 	// only when the active card is QCM-typed and a hint threshold was
@@ -4490,13 +4502,43 @@ type motionCardTickResult struct {
 // decision/invalidation logic itself (qcmHintShouldTrigger,
 // qcmInvalidateRandomWrongAnswer, above) is fully host-agnostic — it was
 // extracted for exactly this reuse, not written twice.
+//
+// #187 cycle 6 bugfix (QUALIF v7.1.0.3) — PAUSE during a MEMOTION card's
+// own timer used to permanently kill the ticker goroutine: the combined
+// guard below (`Phase != STARTED || MotionSubPhase != QUESTION`) treated
+// PhasePaused exactly like any other phase change, returning
+// guardFailed=true, which makes StartMotionCardTimer's goroutine
+// `ticker.Stop()` and RETURN FROM THE GOROUTINE ENTIRELY. Continue()
+// (engine.go) only flips Phase back to STARTED — it has no idea a
+// MEMOTION card timer even exists, so nothing ever restarts it: the
+// countdown stayed frozen forever, exactly the QUALIF report ("le
+// décompte ne reprend pas"). Pre-existing since #151 (this ticker
+// predates #183-#187 entirely) — not a regression introduced by any
+// #187 cycle, simply never exercised by manual QUALIF testing before
+// MEMORY-in-card gave pause/resume during a card timer real attention.
+//
+// Fix: PAUSE gets its OWN, distinct outcome (paused=true) — mirrors
+// processTimerTick's question-host handling (`if Phase != STARTED {
+// return timerTickResult{} }`, whose caller's `if !result.active {
+// return }` leaves the ticker running and simply skips this tick). The
+// ticker keeps firing every second while paused, each tick a pure
+// no-op; the very next tick after Continue() resumes decrementing
+// normally, no separate "resume the card timer" call needed anywhere —
+// same mechanism that already made pause/resume work correctly for the
+// question-host timer all along.
 func (e *Engine) processMotionCardTick() motionCardTickResult {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 
 	callTestInjectPanic("motion-card")
 
-	// Guard: exit if game state changed unexpectedly
+	if e.state.Phase == PhasePaused {
+		return motionCardTickResult{paused: true}
+	}
+
+	// Guard: exit if game state changed unexpectedly (STOP, card
+	// revealed/done/completed while a stray tick was in flight, ...) —
+	// PhasePaused is handled above and never reaches here.
 	if e.state.Phase != PhaseStarted || e.state.MotionSubPhase != MotionSubPhaseQuestion {
 		return motionCardTickResult{guardFailed: true}
 	}
@@ -4712,6 +4754,11 @@ func (e *Engine) StartMotionMemorizeTimer(duration int) {
 					case result.guardFailed:
 						ticker.Stop()
 						return true
+					case result.paused:
+						// #187 cycle 6 bugfix — leave the ticker running,
+						// skip this tick's broadcast/decrement entirely.
+						// See processMotionMemorizeTick's doc comment.
+						return false
 					case result.expired:
 						ticker.Stop()
 						log.Printf("[Engine] MEMOTION MEMORIZE timer expired → transitioned to GRID")
@@ -4744,9 +4791,14 @@ func (e *Engine) StartMotionMemorizeTimer(duration int) {
 // memorize-timer iteration (processMotionMemorizeTick) out to the unlocked
 // caller, which stops the ticker / invokes OnStateChange as needed.
 type motionMemorizeTickResult struct {
-	guardFailed bool            // phase/subphase changed unexpectedly; caller must stop the ticker and return
-	expired     bool            // CurrentTime reached 0; MotionSubPhase was transitioned to GRID under lock
-	callback    func(GamePhase) // OnStateChange captured under lock, to invoke after unlock when expired
+	guardFailed bool // phase/subphase changed unexpectedly; caller must stop the ticker and return
+	// paused (#187 cycle 6 bugfix — same root cause and fix as
+	// motionCardTickResult.paused, applied here proactively: the MEMORIZE
+	// countdown shares the identical vulnerable guard pattern, and PAUSE
+	// is reachable during it the same way it is during QUESTION).
+	paused   bool
+	expired  bool            // CurrentTime reached 0; MotionSubPhase was transitioned to GRID under lock
+	callback func(GamePhase) // OnStateChange captured under lock, to invoke after unlock when expired
 }
 
 // processMotionMemorizeTick applies one MEMOTION memorize-timer tick under
@@ -4754,13 +4806,26 @@ type motionMemorizeTickResult struct {
 // from MEMORIZE to GRID. Extracted from StartMotionMemorizeTimer's goroutine
 // (#151) so `defer e.mu.Unlock()` guarantees the mutex is released even if
 // this panics — see recoverBackgroundPanic's doc comment.
+//
+// #187 cycle 6 bugfix (QUALIF v7.1.0.3) — see processMotionCardTick's doc
+// comment for the full root-cause writeup (same bug, same fix, found by
+// auditing every ticker sharing this guard pattern while fixing the
+// reported one): PhasePaused used to fall into the combined guard below
+// exactly like a genuine state change, permanently killing this ticker —
+// Continue() has no idea a MEMORIZE countdown even exists, so nothing
+// would ever have resumed it.
 func (e *Engine) processMotionMemorizeTick() motionMemorizeTickResult {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 
 	callTestInjectPanic("motion-memorize")
 
-	// Guard: exit if game state changed unexpectedly
+	if e.state.Phase == PhasePaused {
+		return motionMemorizeTickResult{paused: true}
+	}
+
+	// Guard: exit if game state changed unexpectedly — PhasePaused is
+	// handled above and never reaches here.
 	if e.state.Phase != PhaseStarted || e.state.MotionSubPhase != MotionSubPhaseMemorize {
 		return motionMemorizeTickResult{guardFailed: true}
 	}
