@@ -14,6 +14,11 @@ fiche `FLIP_MEMORY_CARD`, `_work/handoff/dev-backend-20260824-171341.md`,
 `_work/reports/plan-memotion-v710-memory-reveal-v2-20260825-212446.md` (cycle 4 — comportement final
 de fin de carte MEMORY, validé utilisateur)
 
+> **Voir aussi** : `tests/procedures/memotion-pause-resume-195.md` (cycle 6, #195) — bug PAUSE/
+> CONTINUER pendant un chrono MEMOTION actif, découvert en QUALIF sur cette carte MEMORY mais
+> **transverse** (tout type de carte + chrono MEMORIZE), traité en procédure séparée pour ne pas en
+> réduire la portée réelle.
+
 ---
 
 ## ⚠️ Historique du Scénario 7 — trois cycles avant le comportement final
