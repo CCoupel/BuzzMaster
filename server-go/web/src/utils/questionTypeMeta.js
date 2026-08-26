@@ -44,6 +44,40 @@ export const QUESTION_TYPE_META = QUESTION_TYPES.reduce((acc, t) => {
   return acc
 }, {})
 
+/**
+ * GENERABLE_TYPES (#196, v7.1.0) — export SÉPARÉ, miroir JS de
+ * `generableQuestionTypes` (`internal/server/ai_generator.go`). Consommé
+ * **uniquement** par la modale de génération IA (`AIGenerateModal.jsx`) —
+ * jamais par l'éditeur de questions, les badges `QuestionCard` ou
+ * `PlayerDisplay`, qui restent sur `QUESTION_TYPES` exclusivement.
+ *
+ * `MEMOTION_PLUS` (affiché « MEMOTION+ », contrat ai-generation.md §3ter)
+ * n'est **pas** un `QuestionType` — c'est un pseudo-type qui n'existe que
+ * pendant la génération (mélange SPEEDY/QCM au sein d'une manche MEMOTION,
+ * choisi carte par carte par le modèle). Une question générée depuis
+ * `MEMOTION_PLUS` est persistée avec `TYPE: "MEMOTION"` — la chaîne
+ * `MEMOTION_PLUS` n'apparaît **jamais** dans un `question.json`.
+ *
+ * 🔴 **Ne JAMAIS ajouter `MEMOTION_PLUS` à `QUESTION_TYPES` ci-dessus** :
+ * `QUESTION_TYPES` est la table faisant autorité pour les **types réels**
+ * depuis #183 — l'y ajouter ferait apparaître un « MEMOTION+ » fantôme dans
+ * le sélecteur de type de `QuestionsPage.jsx` et recréerait la divergence de
+ * tables que #183 a précisément supprimée.
+ *
+ * Ordre d'affichage : `MEMOTION_PLUS` est inséré juste après `MEMOTION`
+ * (avant `ARDOISE`) — même ordre que l'exemple de payload du contrat
+ * (ai-generation.md §3, `distribution`), le pseudo-type étant une variante
+ * de génération de `MEMOTION`, pas un type indépendant en fin de liste.
+ */
+export const GENERABLE_TYPES = (() => {
+  const memotionIndex = QUESTION_TYPES.findIndex(t => t.key === 'MEMOTION')
+  const withMemotionPlus = [...QUESTION_TYPES]
+  withMemotionPlus.splice(memotionIndex + 1, 0, {
+    key: 'MEMOTION_PLUS', label: 'MEMOTION+', icon: '🎞️', color: '#c8568f',
+  })
+  return withMemotionPlus
+})()
+
 // Repli explicite pour un type réellement inconnu (chaîne non vide, absente
 // du registre ci-dessus) — distinct de SPEEDY à dessein : voir
 // `getQuestionTypeMeta` ci-dessous.
