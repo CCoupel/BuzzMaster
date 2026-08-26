@@ -48,8 +48,13 @@ func TestGroqProvider_AdaptSchema_StripsEnumFromCategoryAndDifficultyInEveryBran
 	schema := p.AdaptSchema(buildQuestionSchema([]string{"ENTERTAINMENT", "HISTORY"}, []string{"Facile", "Moyen"}))
 
 	branches := groqSchemaAnyOfBranches(t, schema)
-	if len(branches) != 5 {
-		t.Fatalf("Expected 5 anyOf branches (SPEEDY/QCM/MEMORY/MEMOTION/ARDOISE), got %d", len(branches))
+	// #196 — MEMOTION_PLUS joined the top-level anyOf as its own branch
+	// (contract ai-generation.md §3ter: a distinct discriminated variant,
+	// not a flag under MEMOTION — see buildQuestionSchema). It shares the
+	// exact same common{TYPE,CATEGORY,QUESTION,TIME,DIFFICULTY} base as
+	// every other branch, so it must pass this exact same check.
+	if len(branches) != 6 {
+		t.Fatalf("Expected 6 anyOf branches (SPEEDY/QCM/MEMORY/MEMOTION/MEMOTION_PLUS/ARDOISE), got %d", len(branches))
 	}
 
 	for _, branch := range branches {

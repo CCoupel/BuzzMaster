@@ -398,7 +398,14 @@ batchLoop:
 				break
 			}
 			batchCreatedCount++
-			extraContext = append(extraContext, existingQuestionContext{Type: vq.Type, Category: vq.Category, Question: vq.Question})
+			// #196 — feed back the PERSISTED type (question["TYPE"], already
+			// normalized MEMOTION_PLUS→MEMOTION by mapGeneratedQuestion), not
+			// the raw vq.Type: the anti-duplicate context describes what's
+			// actually on disk, and the pseudo-type has no reason to appear
+			// in a later batch's prompt either — same invariant as
+			// question.json, applied to the one other surface TYPE reaches.
+			persistedType, _ := question["TYPE"].(string)
+			extraContext = append(extraContext, existingQuestionContext{Type: persistedType, Category: vq.Category, Question: vq.Question})
 		}
 
 		job.mu.Lock()
