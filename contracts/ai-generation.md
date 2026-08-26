@@ -193,7 +193,7 @@ premier appel de génération.
   "instructions": "Éviter les questions sur le sport, insister sur les comédies",
   "categories": ["ENTERTAINMENT", "ma-categorie-custom"],
   "volume": { "mode": "count", "value": 20 },
-  "distribution": { "SPEEDY": 40, "QCM": 40, "MEMORY": 20, "MEMOTION": 0, "ARDOISE": 0 }
+  "distribution": { "SPEEDY": 40, "QCM": 40, "MEMORY": 20, "MEMOTION": 0, "MEMOTION_PLUS": 0, "ARDOISE": 0 }
 }
 ```
 
@@ -208,11 +208,69 @@ premier appel de génération.
 | `categories` | string[] | ✅ | ≥ 1 élément ; chaque clé doit exister dans les catégories connues (dur + custom). Une clé inconnue → `400`. |
 | `volume.mode` | `"count"` \| `"duration"` | ✅ | |
 | `volume.value` | int | ✅ | mode `count` : 1..`ai.max_questions`. mode `duration` : 5..240 (minutes). |
-| `distribution` | objet | ✅ | clés ⊂ {`SPEEDY`,`QCM`,`MEMORY`,`MEMOTION`,`ARDOISE`} ; valeurs entières ≥ 0 ; **somme = 100** ; au moins une valeur > 0. |
+| `distribution` | objet | ✅ | clés ⊂ {`SPEEDY`,`QCM`,`MEMORY`,`MEMOTION`,**`MEMOTION_PLUS`**,`ARDOISE`} ; valeurs entières ≥ 0 ; **somme = 100** ; au moins une valeur > 0. `MEMOTION_PLUS` — **v7.1.0, #196, cf. §3ter** : pseudo-type de génération, absent ⇒ 0 ⇒ comportement d'avant #196 inchangé. |
 
 > Les libellés `population` / `language` / `difficulties` sont transmis **tels quels** au LLM
 > (ils servent de contexte de rédaction, pas de clés techniques). Seules `categories` et
 > `distribution` portent des clés techniques.
+
+### 3ter. `MEMOTION_PLUS` — pseudo-type de génération (v7.1.0, #196)
+
+**Aucun champ n'est ajouté à la Request.** Le choix passe par une **clé de distribution
+supplémentaire**, au même niveau que les cinq autres — et non par un mode niché sous `MEMOTION`.
+
+| Clé de distribution | Cartes générées |
+|---|---|
+| `MEMOTION` | **Cartes SPEEDY uniquement** — aucune carte ne porte de `TYPE`. Comportement d'avant #196, strictement inchangé |
+| **`MEMOTION_PLUS`** (affiché « MEMOTION+ ») | Mélange **SPEEDY / QCM**, le type étant choisi carte par carte par le modèle selon ce qui convient au contenu |
+
+#### 🔴 `MEMOTION_PLUS` n'est pas un `QuestionType` — invariant central
+
+> **Une question générée depuis `MEMOTION_PLUS` est persistée avec `TYPE: "MEMOTION"`.**
+> La chaîne `MEMOTION_PLUS` ne doit **jamais** apparaître dans un `question.json`.
+
+Le pseudo-type n'existe que pendant la génération : il exprime *comment générer*, pas *ce qui est
+généré*. La normalisation `MEMOTION_PLUS → MEMOTION` a lieu à la construction de la question, avant
+toute écriture.
+
+**Ce que cela implique, et qui est délibérément hors de portée de #196 :**
+
+| Élément | Touché ? |
+|---|---|
+| `questionTypeRegistry` (Go), `AllQuestionTypes()` | ❌ **jamais** — MEMOTION+ n'est pas un type du moteur |
+| `QUESTION_TYPES` (`web/src/utils/questionTypeMeta.js`) | ❌ **jamais** — table faisant autorité pour les **types réels** depuis #183, consommée par l'éditeur de questions, les badges `QuestionCard` et `PlayerDisplay`. Y ajouter le pseudo-type ferait apparaître un « MEMOTION+ » fantôme dans l'éditeur et recréerait la divergence de tables que #183 a supprimée |
+| `generableQuestionTypes` (`internal/server/ai_generator.go`) | ✅ **oui** — cette liste est **déjà** propre à la génération et distincte du registre. C'est la maison naturelle du pseudo-type |
+| `GENERABLE_TYPES` (nouvel export, `questionTypeMeta.js`) | ✅ **oui** — export **séparé** (= les 5 types réels + `MEMOTION_PLUS`), consommé **uniquement** par la modale de génération. Miroir JS exact de `generableQuestionTypes` |
+
+> **Symétrie voulue** : Go distingue déjà « types réels » (`questionTypeRegistry`) de « ce que l'IA
+> sait produire » (`generableQuestionTypes`). Le JS reproduit la même séparation plutôt que d'élargir
+> la table des types réels.
+
+#### Non-régression de `MEMOTION`, garantie par construction
+
+La variante de schéma `MEMOTION` conserve ses items de `MOTION_CARDS` à **4 propriétés**
+(`RECTO_THEME`, `QUESTION_TEXT`, `ANSWER_TEXT`, `DIFFICULTY`) avec `additionalProperties: false` :
+le modèle est donc **structurellement incapable** d'y typer une carte. La non-régression n'est pas
+seulement testée, elle est **interdite par le schéma**.
+
+C'est la reconduction de l'exigence de #184 (« une carte sans `TYPE` continue d'être générée comme
+aujourd'hui »). Une carte sans `TYPE` valant `SPEEDY` (`contracts/question-types.md` §3), la
+génération `MEMOTION` **ne doit pas** se mettre à écrire `TYPE: "SPEEDY"` explicitement : cela
+changerait la forme des fichiers produits pour un résultat sémantiquement identique.
+
+#### Portée du mode `MEMOTION_PLUS`
+
+- Types de carte autorisés : **`SPEEDY` et `QCM` uniquement** — les deux seuls dont le registre
+  déclare `NestableInMotionCard: true` (`contracts/question-types.md` §7).
+- Une carte `TYPE=QCM` porte `QCM_ANSWERS` (4 réponses) et `QCM_CORRECT`, ses `OwnedFields` (§3.1).
+- **Aucun contrôle de ratio** SPEEDY/QCM n'est exposé : le modèle arbitre carte par carte.
+- Aucun média n'est généré — inchangé.
+
+> **Aucun élargissement de la validation d'imbrication n'est nécessaire.**
+> `IsNestableInMotionCard` et `ValidateCardTypeContent` sont déjà en place et refusent
+> respectivement un type non imbricable et un contenu orphelin d'un autre type. Une carte produite
+> par le LLM emprunte **le même chemin de validation** qu'une carte saisie dans l'éditeur : un type
+> inventé ou un contenu incohérent est rejeté sans une ligne de code supplémentaire.
 
 ### Response 200
 
@@ -231,6 +289,9 @@ premier appel de génération.
 ```
 
 - `created` est ordonné selon l'ordre d'écriture (= ordre `ORDER` attribué).
+- `created[].type` reporte le **type réellement persisté**. Une question générée depuis la clé de
+  distribution `MEMOTION_PLUS` y apparaît donc en **`"MEMOTION"`** (§3ter) — la réponse décrit ce
+  qui est sur disque, jamais le pseudo-type qui a servi à le demander.
 - `skipped_count` > 0 signale des questions renvoyées par le LLM mais **rejetées** par la
   validation serveur (§5). Ce n'est pas une erreur : la réponse reste `200`.
 - `created_count == 0` → renvoyer **`502`** (§4), pas un `200` vide : la modale ne doit jamais

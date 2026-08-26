@@ -2,6 +2,31 @@
 
 ---
 
+## [20260826] — Génération IA de cartes QCM imbriquées, « MEMOTION+ » (#196)
+
+> Milestone v7.1.0 · Contrat détaillé : `contracts/ai-generation.md` §3 et §3ter
+
+**Aucun changement BREAKING.** Aucun champ n'est ajouté à la Request : le choix passe par une clé de
+distribution supplémentaire, absente ⇒ 0 ⇒ comportement d'avant #196 strictement inchangé.
+
+- **[NEW]** `POST /api/generate-questions` — clé de distribution **`MEMOTION_PLUS`** : génère des
+  questions MEMOTION dont les cartes mêlent `SPEEDY` et `QCM`, le type étant choisi carte par carte
+  par le modèle. `MEMOTION` reste la génération à cartes SPEEDY uniquement.
+- **[NEW]** `MEMOTION_PLUS` est un **pseudo-type de génération, pas un `QuestionType`** : une
+  question ainsi générée est persistée avec `TYPE: "MEMOTION"`. 🔴 La chaîne `MEMOTION_PLUS` ne doit
+  **jamais** apparaître dans un `question.json` — normalisation à la construction, avant écriture.
+- **[CHANGED]** Ni `questionTypeRegistry` (Go) ni `QUESTION_TYPES` (`questionTypeMeta.js`) ne sont
+  touchés : le pseudo-type vit dans `generableQuestionTypes` côté Go et dans un export **séparé**
+  `GENERABLE_TYPES` côté JS. Élargir `QUESTION_TYPES` ferait apparaître un « MEMOTION+ » fantôme
+  dans l'éditeur de questions et recréerait la divergence de tables supprimée par #183.
+- **[CHANGED]** `created[].type` de la Response reporte le type **réellement persisté**
+  (`"MEMOTION"`), jamais le pseudo-type ayant servi à le demander.
+- **Non-régression garantie par construction** : la variante de schéma `MEMOTION` conserve des
+  cartes à 4 propriétés en `additionalProperties: false` — le modèle est structurellement incapable
+  d'y typer une carte.
+
+---
+
 ## [20260824] — MEMOTION+ : carte MEMORY (#187)
 
 > Milestone v7.1.0 · Plans : `_work/reports/plan-memotion-v710-memory-20260824-154844.md`,
