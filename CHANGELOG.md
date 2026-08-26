@@ -42,6 +42,7 @@ configurable, granularité backup, et correctifs UX/sécurité.
 
 ### Added
 - **MEMORY card type nestable in MEMOTION cards** (#187) — Les cartes de type MEMORY peuvent désormais être intégrées directement dans une carte MEMOTION, permettant des manches polymorphes SPEEDY/QCM/MEMORY/ARDOISE. Nouveau mode de barème `STARS_PRORATA` calculant les points en fonction du ratio de paires trouvées (`points × units / unitsTotal`).
+- **AI generation for MEMOTION+ (mixed card types) — exposed as pseudo-type in generation modal** (#196) — La modale de génération IA expose désormais un pseudo-type `MEMOTION+` permettant de générer directement des cartes MEMOTION mixtes (QCM + SPEEDY). `MEMOTION+` n'existe qu'en distribution de génération — toutes les questions générées sont persistées en `TYPE=MEMOTION` (normalisées avant écriture). Les 5 types réels de questions (`QUESTION_TYPES`) restent inchangés ; seul `GENERABLE_TYPES` (nouvelle table frontend pour la modale) inclut le pseudo-type.
 
 ### Changed
 - **FLIP_MEMORY_CARD action scopée par carte (#187)** — L'action WebSocket `FLIP_MEMORY_CARD` porte maintenant un champ optionnel `MOTION_CARD_ID` pour identifier la carte cible dans une manche MEMOTION polymorphe. Le serveur est l'autorité unique sur le tour de jeu pour MEMORY (dérogation sécurité : les retournements VPlayer hors tour sont ignorés silencieusement, sans broadcast).
