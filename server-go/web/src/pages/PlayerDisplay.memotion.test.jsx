@@ -1131,3 +1131,101 @@ describe('PlayerDisplay — carte MEMOTION de type MEMORY (#187)', () => {
     })
   })
 })
+
+// ---------------------------------------------------------------------------
+// #187 cycle 7 (2026-08-27, SHA 8af17927) — grille MEMORY QUESTION-HÔTE
+// (classique, PAS imbriquée dans une carte MEMOTION), restriction par
+// surface. Point INFO non bloquant de code-review-20260827-184327.md
+// (verdict APPROUVE) : les 3 tests de restriction par surface ajoutés par ce
+// cycle (renderTV public non cliquable, VJoueur cliquable + playerId, aperçu
+// admin cliquable) ne portaient QUE sur `.memotion-tv-memory-card`
+// (renderCardMemoryGrid — grille de carte MEMOTION, décrite plus haut dans
+// ce fichier). Le code corrigé est STRICTEMENT identique sur les deux
+// grilles (même expression `canClick = (isVPlayer || isAdminPreview) && ...`,
+// PlayerDisplay.jsx:1936 pour celle-ci vs :2169 pour la carte MEMOTION —
+// vérifié par la revue), mais la grille question-hôte (`.memory-card`,
+// PlayerDisplay.jsx:~1936-1962) n'avait ELLE-MÊME jamais eu aucun test de
+// clic, pas seulement pas de test du cycle 7 : recherche exhaustive
+// (`querySelector('.memory-card'` ou équivalent) sur tout le dépôt de test
+// avant ce commit → aucune occurrence. Ces 3 tests comblent ce trou,
+// symétriques aux 3 tests de la carte MEMOTION ci-dessus.
+// ---------------------------------------------------------------------------
+
+const MEMORY_QUESTION = {
+  TYPE: 'MEMORY',
+  ID: 'q-memory-187',
+  CATEGORY: 'CULTURE',
+  QUESTION: 'Retrouvez les paires',
+  MEMORY_PAIRS: [
+    { ID: 1, CARD1: { TEXT: 'Napoléon' }, CARD2: { TEXT: '1804' } },
+    { ID: 2, CARD1: { TEXT: 'De Gaulle' }, CARD2: { TEXT: '1958' } },
+  ],
+  MEMORY_CONFIG: {},
+}
+
+/** Mock useGame pour une question MEMORY classique (question-hôte, hors carte MEMOTION), phase STARTED. */
+const makeMemoryQuestionMock = () => ({
+  gameState: {
+    phase: 'STARTED',
+    remote: 'GAME',
+    timer: 15,
+    totalTime: 30,
+    question: MEMORY_QUESTION,
+    memoryFlippedCards: [],
+    memoryMatchedPairs: [],
+    MEMORY_PARTICIPATING_TEAMS: [],
+    newGameBackgrounds: [],
+  },
+  teams: {},
+  bumpers: {},
+  flipMemoryCard: vi.fn(),
+  showQRCode: false,
+  selectMotionCard: vi.fn(),
+})
+
+describe('PlayerDisplay — grille MEMORY question-hôte, restriction par surface (#187 cycle 7)', () => {
+  it('affiche la grille MEMORY question-hôte (4 cartes = 2 paires), face cachée', () => {
+    useGame.mockReturnValue(makeMemoryQuestionMock())
+    const { container } = renderTV()
+    const cards = container.querySelectorAll('.memory-card')
+    expect(cards.length).toBe(4)
+    cards.forEach(card => expect(card.classList.contains('flipped')).toBe(false))
+    expect(container.textContent).not.toContain('Napoléon')
+  })
+
+  // 🔴 Mirroir du test carte MEMOTION ci-dessus — écran TV PUBLIC (ni
+  // VJoueur, ni aperçu admin) : `renderTV()` sans aucune prop est
+  // exactement la configuration de l'écran public.
+  it('🔴 mirroir cycle 7 — une carte face cachée N\'EST PAS cliquable sur l\'écran TV public (isVPlayer=false, isAdminPreview=false)', () => {
+    const mock = makeMemoryQuestionMock()
+    useGame.mockReturnValue(mock)
+    const { container } = renderTV()
+    const card = container.querySelector('.memory-card:not(.flipped)')
+    card.click()
+    expect(mock.flipMemoryCard).not.toHaveBeenCalled()
+  })
+
+  it('une carte face cachée EST cliquable côté VJoueur et appelle flipMemoryCard(cardId, undefined, playerId)', () => {
+    const mock = makeMemoryQuestionMock()
+    useGame.mockReturnValue(mock)
+    const { container } = render(<PlayerDisplay isVPlayer playerId="bumper-42" />)
+    const card = container.querySelector('.memory-card:not(.flipped)')
+    card.click()
+    expect(mock.flipMemoryCard).toHaveBeenCalledTimes(1)
+    expect(mock.flipMemoryCard.mock.calls[0][1]).toBeUndefined() // pas de portée de carte — question-hôte
+    expect(mock.flipMemoryCard.mock.calls[0][2]).toBe('bumper-42') // playerId — fix cycle 7
+  })
+
+  it('une carte face cachée EST cliquable côté aperçu admin (?admin=true), sans playerId', () => {
+    const mock = makeMemoryQuestionMock()
+    useGame.mockReturnValue(mock)
+    const originalSearch = window.location.search
+    window.history.pushState({}, '', '?admin=true')
+    const { container } = renderTV()
+    const card = container.querySelector('.memory-card:not(.flipped)')
+    card.click()
+    expect(mock.flipMemoryCard).toHaveBeenCalledTimes(1)
+    expect(mock.flipMemoryCard.mock.calls[0][2]).toBeNull() // pas de playerId côté admin preview (prop par défaut)
+    window.history.pushState({}, '', originalSearch)
+  })
+})

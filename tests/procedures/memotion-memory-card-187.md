@@ -297,9 +297,13 @@ penser : **le clic d'un spectateur sur l'écran TV public n'est plus une capacit
 « corriger » ce scénario en sens inverse.
 
 **Garde-fou déjà verrouillé par test automatisé** (`useWebSocket.flipMemoryCard.test.js` (5 tests),
-`PlayerDisplay.memotion.test.jsx` (3 tests : TV public non cliquable + `flipMemoryCard` jamais
-appelé, VJoueur cliquable + `ID` envoyé, aperçu admin cliquable sans `ID`), `VPlayerPage.test.jsx`
-(2 tests : `playerId` transmis = clé du bumper, survit à une reconnexion)) — ce scénario en est la
+`PlayerDisplay.memotion.test.jsx` describe "carte MEMOTION de type MEMORY (#187)" (3 tests, grille
+de carte MEMOTION : TV public non cliquable + `flipMemoryCard` jamais appelé, VJoueur cliquable +
+`ID` envoyé, aperçu admin cliquable sans `ID`) **et** describe "grille MEMORY question-hôte,
+restriction par surface (#187 cycle 7)" (3 tests miroirs sur la grille question-scopée classique —
+comble le trou de couverture signalé en revue, `code-review-20260827-184327.md`, point INFO non
+bloquant), `VPlayerPage.test.jsx` (2 tests : `playerId` transmis = clé du bumper, survit à une
+reconnexion)) — ce scénario en est la
 **confirmation visuelle/manuelle**.
 
 ### (a) Écran TV public : aucun effet au clic
@@ -361,7 +365,7 @@ appelé, VJoueur cliquable + `ID` envoyé, aperçu admin cliquable sans `ID`), `
 | 2 | `go test ./internal/game/... -run 'MemoryCard\|StarsProrata' -v` | Cas nommé `5 points / 8 pairs` PASS côté moteur | | |
 | 3 | `go test ./cmd/server/... -run 'FlipMemoryCard' -race -v` | Dérogation de tour (ignore silencieux + zéro broadcast) et portée de carte (refus explicite) PASS | | |
 | 4 | `go test ./internal/game/... -run 'MotionCardTick_MemoryCard\|MotionCardTick_QCMCard\|MotionCardTick_SpeedyCard\|IgnoredAfterTimerExpiry\|NoConfiguredTimer\|CompleteGridBeforeExpiry\|AfterTimerExpiry' -v` | Les 6 tests du cycle 4 (Scénarios 7-8) PASS : sortie (a) grille complète, sortie (b) chrono expiré figé + RÉVÉLER manuel, carte sans chrono jouable indéfiniment, non-régression QCM/SPEEDY | | |
-| 5 | `cd server-go/web && npx vitest run` | Tous les tests PASS, y compris `motionGrid.test.js` (describe `computeStarsProrataPoints`, cas `STARS_PRORATA — 5 points / 8 pairs`), `PlayerDisplay.memotion.test.jsx` (describe "carte MEMOTION de type MEMORY (#187)" — TV public non cliquable + `flipMemoryCard` jamais appelé, VJoueur cliquable + `ID` envoyé, aperçu admin cliquable sans `ID`), `QuestionsPage.motionMemory.test.jsx`, `AnimConductPanel.test.jsx` (describe "L2, gain STARS_PRORATA affiché sur le bouton de crédit (#187 cycle 4, F1)"), `useWebSocket.flipMemoryCard.test.js` (5 tests, payload exact selon les arguments), `VPlayerPage.test.jsx` (`playerId` transmis, survit à une reconnexion) | | |
+| 5 | `cd server-go/web && npx vitest run` | Tous les tests PASS, y compris `motionGrid.test.js` (describe `computeStarsProrataPoints`, cas `STARS_PRORATA — 5 points / 8 pairs`), `PlayerDisplay.memotion.test.jsx` (describe "carte MEMOTION de type MEMORY (#187)" — TV public non cliquable + `flipMemoryCard` jamais appelé, VJoueur cliquable + `ID` envoyé, aperçu admin cliquable sans `ID` ; **et** describe "grille MEMORY question-hôte, restriction par surface (#187 cycle 7)" — 3 tests miroirs sur la grille question-scopée), `QuestionsPage.motionMemory.test.jsx`, `AnimConductPanel.test.jsx` (describe "L2, gain STARS_PRORATA affiché sur le bouton de crédit (#187 cycle 4, F1)"), `useWebSocket.flipMemoryCard.test.js` (5 tests, payload exact selon les arguments), `VPlayerPage.test.jsx` (`playerId` transmis, survit à une reconnexion) | | |
 
 **Verdict** : [ ] PASS  [ ] FAIL
 
