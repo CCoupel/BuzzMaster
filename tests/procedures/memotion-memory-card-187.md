@@ -2,7 +2,8 @@
 
 **Version** : v7.1.0 (branche `milestone/v7.1.0`)
 **Date** : 2026-08-24, complétée 2026-08-25 (Scénarios 7-8, cycle 4 — asymétrie assumée des deux
-sorties de fin de carte)
+sorties de fin de carte), complétée 2026-08-27 (Scénario 9, cycle 7 — TV public non-interactif,
+VJoueur fonctionnel)
 **Testeur** : QA
 **Issue** : #187 — MEMORY imbriquée dans une carte MEMOTION : grille rejouable en carte (deuxième
 type réellement jouable après QCM en #185), barème `STARS_PRORATA` (points au prorata des paires
@@ -12,7 +13,8 @@ fiche `FLIP_MEMORY_CARD`, `_work/handoff/dev-backend-20260824-171341.md`,
 `_work/handoff/dev-frontend-20260824-170743.md`, `_work/handoff/dev-backend-20260825-213835.md`,
 `_work/handoff/dev-frontend-20260825-213202.md`, plan
 `_work/reports/plan-memotion-v710-memory-reveal-v2-20260825-212446.md` (cycle 4 — comportement final
-de fin de carte MEMORY, validé utilisateur)
+de fin de carte MEMORY, validé utilisateur), `_work/handoff/dev-frontend-20260827-183745.md`
+(cycle 7 — TV public non-interactif, VJoueur fonctionnel)
 
 > **Voir aussi** : `tests/procedures/memotion-pause-resume-195.md` (cycle 6, #195) — bug PAUSE/
 > CONTINUER pendant un chrono MEMOTION actif, découvert en QUALIF sur cette carte MEMORY mais
@@ -100,16 +102,22 @@ la grille est identique sur `/anim` et `/tv` (risque R9 hérité de #159).
 
 ---
 
-## Scénario 3 — Flip depuis `/anim` et depuis `/tv`, révélation complète
+## Scénario 3 — Flip depuis `/anim` et depuis l'aperçu admin, révélation complète
 
-**Objectif** : Vérifier que le flip fonctionne indifféremment depuis `/anim` (animateur) et `/tv`
-(aperçu régie/spectateur), et que la révélation en fin de carte affiche toutes les paires (contrat
-§7.3 : `anim` et `tv` n'ont pas d'équipe, la vérification de tour ne s'applique jamais à eux).
+**Objectif** : Vérifier que le flip fonctionne indifféremment depuis `/anim` (animateur) et l'aperçu
+régie en iframe (`/tv?admin=true`), et que la révélation en fin de carte affiche toutes les paires.
+
+> ⚠️ **Mise à jour cycle 7 (2026-08-27, SHA `8af17927`)** : ce scénario testait auparavant aussi le
+> flip depuis **l'écran TV public** (`/tv` sans `?admin=true`) et le décrivait comme fonctionnel —
+> **ce n'est plus le comportement voulu**. Décision utilisateur explicite en vérification finale
+> QUALIF : l'écran TV public ne doit **jamais** être interactif. Ce scénario-ci ne teste donc plus
+> que `/anim` et l'aperçu admin ; le **Scénario 9** ci-dessous couvre spécifiquement la
+> non-interactivité de l'écran TV public (et l'a corrigée s'il ne l'était pas).
 
 | Étape | Action | Résultat Attendu | Résultat Obtenu | OK ? |
 |-------|--------|-----------------|----------------|------|
 | 1 | Sur la carte MEMORY en `QUESTION`, retourner une carte depuis `/anim` | La carte se retourne face visible sur `/anim` **et** `/tv` | | |
-| 2 | Retourner une carte depuis `/tv` (clic direct sur l'affichage, ou aperçu régie `/tv?admin=true`) | La carte se retourne face visible sur `/anim` **et** `/tv` — comportement identique au flip depuis `/anim` | | |
+| 2 | Retourner une carte depuis l'aperçu régie en iframe (`/tv?admin=true`) | La carte se retourne face visible sur `/anim` **et** `/tv` — comportement identique au flip depuis `/anim` | | |
 | 3 | Retourner une paire qui ne correspond pas (mismatch) | Les 2 cartes restent visibles brièvement puis se retournent automatiquement face cachée (délai `MEMORY_CONFIG.FLIP_DELAY` de la carte) | | |
 | 4 | Trouver toutes les paires de la carte | Dès la dernière paire trouvée, la carte passe en révélation (pas d'action ANNULER/STOP requise pour une grille complète) — ou taper RÉVÉLER pour une révélation manuelle si des paires manquent | | |
 | 5 | Observer l'état de révélation | **Toutes** les paires de la carte sont visibles face retournée, sur `/anim` **et** `/tv` — pas de paire orpheline restée face cachée | | |
@@ -147,6 +155,13 @@ bug** — à ne pas signaler comme régression si le tap ne fait rien.
 `TestFlipMemoryCard_Turn_VPlayerOffActiveTeam_NoBroadcastToOtherClients`,
 `TestFlipMemoryCard_CardScoped_VPlayerOffActiveTeam_NoBroadcastToOtherClients`) — ce scénario en est
 la **confirmation visuelle/manuelle**.
+
+> ⚠️ **Historique — étape 3 affectée par une régression jusqu'au cycle 7** : jusqu'au correctif
+> `_work/handoff/dev-frontend-20260827-183745.md` (SHA `8af17927`), `flipMemoryCard` (client)
+> n'envoyait jamais l'identité du bumper émetteur (`ID`) — le serveur ne pouvait donc **jamais**
+> résoudre l'équipe d'un VJoueur, et l'étape 3 échouait silencieusement même pour l'équipe active
+> (dérogation §9.2 masquant le bug : « ignore hors tour » ne se distinguait pas de « identité non
+> résolue »). Voir **Scénario 9** pour la confirmation dédiée de ce correctif.
 
 | Étape | Action | Résultat Attendu | Résultat Obtenu | OK ? |
 |-------|--------|-----------------|----------------|------|
@@ -265,17 +280,76 @@ visuelle/manuelle**.
 
 ---
 
+## Scénario 9 — TV public non-interactif, VJoueur fonctionnel, aperçu admin inchangé (cycle 7, 2026-08-27)
+
+**Objectif** : Vérifier les deux correctifs du cycle 7 (`_work/handoff/dev-frontend-20260827-183745.md`,
+SHA `8af17927`), rapportés par l'utilisateur en vérification finale QUALIF v7.1.0.6 sur une carte
+MEMORY :
+
+| Bug | Nature | Correctif |
+|---|---|---|
+| **(a) Écran TV public cliquable** | Préexistant au MEMORY classique, **révélé** (pas introduit) par #187 | `canClick` exige désormais `isVPlayer` ou `isAdminPreview` — la TV publique seule ne suffit plus |
+| **(b) VJoueur ne peut pas flipper une carte** | **Vraie régression #187** (cycle 4) — latente depuis la création de `flipMemoryCard`, invisible tant que le serveur ne vérifiait aucun tour | `flipMemoryCard` envoie désormais l'`ID` du bumper émetteur (client), résolution serveur 3 passes désormais satisfaite |
+
+⚠️ Ce scénario **change le comportement attendu** par rapport à ce que d'anciens rapports QA (ou une
+lecture rapide du contrat `websocket-actions.md` actuel, pas encore mis à jour) pourraient laisser
+penser : **le clic d'un spectateur sur l'écran TV public n'est plus une capacité légitime.** Ne pas
+« corriger » ce scénario en sens inverse.
+
+**Garde-fou déjà verrouillé par test automatisé** (`useWebSocket.flipMemoryCard.test.js` (5 tests),
+`PlayerDisplay.memotion.test.jsx` (3 tests : TV public non cliquable + `flipMemoryCard` jamais
+appelé, VJoueur cliquable + `ID` envoyé, aperçu admin cliquable sans `ID`), `VPlayerPage.test.jsx`
+(2 tests : `playerId` transmis = clé du bumper, survit à une reconnexion)) — ce scénario en est la
+**confirmation visuelle/manuelle**.
+
+### (a) Écran TV public : aucun effet au clic
+
+| Étape | Action | Résultat Attendu | Résultat Obtenu | OK ? |
+|-------|--------|-----------------|----------------|------|
+| 1 | Ouvrir `/tv` (sans `?admin=true` — l'écran public, celui projeté en salle) pendant une carte MEMORY classique (question hôte) en `QUESTION` | Grille face cachée affichée normalement | | |
+| 2 | Cliquer/taper directement sur une carte face cachée depuis cet écran | **Aucun effet** : la carte reste face cachée, aucun flip envoyé, aucun changement visible sur `/anim` ni sur aucun autre écran | | |
+| 3 | Répéter sur une carte MEMORY **imbriquée dans une carte MEMOTION** en `QUESTION` | **Aucun effet**, identique à l'étape 2 (les deux grilles — question-scopée et carte MEMOTION — sont concernées par le correctif) | | |
+| 4 | Répéter plusieurs clics successifs sur des cartes différentes | Toujours aucun effet, aucune erreur affichée, aucun état qui se dégrade | | |
+
+**Verdict (a)** : [ ] PASS  [ ] FAIL
+
+### (b) VJoueur de l'équipe active peut désormais flipper une carte MEMORY en carte MEMOTION
+
+| Étape | Action | Résultat Attendu | Résultat Obtenu | OK ? |
+|-------|--------|-----------------|----------------|------|
+| 1 | Carte MEMORY imbriquée dans une carte MEMOTION, active en `QUESTION`, au moins 2 équipes participantes | Grille visible sur `/anim`/`/tv`, une équipe désignée comme équipe active | | |
+| 2 | Depuis un poste VJoueur (téléphone) assigné à l'équipe **active**, taper une carte face cachée | La carte se retourne **normalement**, visible sur `/anim` **et** `/tv` — c'est le comportement qui était cassé avant ce correctif (cf. note du Scénario 5) | | |
+| 3 | Faire trouver une paire complète en alternant les flips depuis ce même poste VJoueur | Match détecté normalement, comportement identique à un flip envoyé depuis `/anim` | | |
+| 4 | Déconnecter puis reconnecter ce VJoueur (fermer/rouvrir l'onglet ou recharger la page) pendant la manche | Après reconnexion, le flip depuis ce VJoueur fonctionne toujours (l'identité du bumper survit à la reconnexion) | | |
+| 5 | Depuis un VJoueur d'une équipe **hors tour**, taper une carte | **Aucun effet** — dérogation §9.2 toujours en vigueur, non affectée par ce correctif (cf. Scénario 5) | | |
+
+**Verdict (b)** : [ ] PASS  [ ] FAIL
+
+### (c) Aperçu admin en iframe : inchangé, toujours cliquable
+
+| Étape | Action | Résultat Attendu | Résultat Obtenu | OK ? |
+|-------|--------|-----------------|----------------|------|
+| 1 | Ouvrir `/tv?admin=true` (aperçu régie, typiquement en iframe dans `/admin`) pendant une carte MEMORY en `QUESTION` | Grille visible, identique à l'écran public en apparence | | |
+| 2 | Cliquer sur une carte face cachée depuis cet aperçu | La carte se retourne **normalement** — comportement inchangé par ce cycle (seul l'écran public a perdu l'interactivité, pas l'aperçu admin) | | |
+
+**Verdict (c)** : [ ] PASS  [ ] FAIL
+
+---
+
 ## Critères de Validation Globale
 
 - [ ] Carte MEMORY créée et enregistrée correctement dans l'éditeur (sous-éditeur dédié, pas de champ de barème)
 - [ ] Grille MEMORY d'une carte MEMOTION conduite de bout en bout, correspondance positionnelle exacte `/anim` ↔ `/tv`
-- [ ] Flip fonctionnel depuis `/anim` ET depuis `/tv`, révélation complète en fin de carte
+- [ ] Flip fonctionnel depuis `/anim` ET depuis l'aperçu admin (`/tv?admin=true`), révélation complète en fin de carte
 - [ ] Aucune régression sur les cartes SPEEDY/QCM d'une même manche mixte
 - [ ] Dérogation sécurité confirmée : tap VJoueur hors tour ignoré sans effet visible, aucune tempête de mise à jour
 - [ ] Barème STARS_PRORATA conforme : points proportionnels aux paires trouvées, cas "5 points / 8 paires → 2" vérifié
 - [ ] Sortie (a) grille complète avant expiration : révélation immédiate sans geste, compteur à 0, montant plein
 - [ ] Sortie (b) chrono expiré grille incomplète : carte figée (flip ignoré), RÉVÉLER manuel requis, montant au prorata sur le bouton de crédit — sans régression QCM/SPEEDY
 - [ ] Carte MEMORY sur question sans chrono configuré : reste jouable indéfiniment (piège B3)
+- [ ] Écran TV public non-interactif (aucun effet au clic, question hôte ET carte MEMOTION) — cycle 7
+- [ ] VJoueur de l'équipe active peut flipper une carte MEMORY en carte MEMOTION, y compris après reconnexion — cycle 7
+- [ ] Aperçu admin en iframe (`/tv?admin=true`) reste cliquable — inchangé par le cycle 7
 
 ---
 
@@ -287,7 +361,7 @@ visuelle/manuelle**.
 | 2 | `go test ./internal/game/... -run 'MemoryCard\|StarsProrata' -v` | Cas nommé `5 points / 8 pairs` PASS côté moteur | | |
 | 3 | `go test ./cmd/server/... -run 'FlipMemoryCard' -race -v` | Dérogation de tour (ignore silencieux + zéro broadcast) et portée de carte (refus explicite) PASS | | |
 | 4 | `go test ./internal/game/... -run 'MotionCardTick_MemoryCard\|MotionCardTick_QCMCard\|MotionCardTick_SpeedyCard\|IgnoredAfterTimerExpiry\|NoConfiguredTimer\|CompleteGridBeforeExpiry\|AfterTimerExpiry' -v` | Les 6 tests du cycle 4 (Scénarios 7-8) PASS : sortie (a) grille complète, sortie (b) chrono expiré figé + RÉVÉLER manuel, carte sans chrono jouable indéfiniment, non-régression QCM/SPEEDY | | |
-| 5 | `cd server-go/web && npx vitest run` | Tous les tests PASS, y compris `motionGrid.test.js` (describe `computeStarsProrataPoints`, cas `STARS_PRORATA — 5 points / 8 pairs`), `PlayerDisplay.memotion.test.jsx` (describe "carte MEMOTION de type MEMORY (#187)"), `QuestionsPage.motionMemory.test.jsx`, `AnimConductPanel.test.jsx` (describe "L2, gain STARS_PRORATA affiché sur le bouton de crédit (#187 cycle 4, F1)" — montant prorata réellement câblé sur le bouton de crédit, pas seulement calculé en isolation) | | |
+| 5 | `cd server-go/web && npx vitest run` | Tous les tests PASS, y compris `motionGrid.test.js` (describe `computeStarsProrataPoints`, cas `STARS_PRORATA — 5 points / 8 pairs`), `PlayerDisplay.memotion.test.jsx` (describe "carte MEMOTION de type MEMORY (#187)" — TV public non cliquable + `flipMemoryCard` jamais appelé, VJoueur cliquable + `ID` envoyé, aperçu admin cliquable sans `ID`), `QuestionsPage.motionMemory.test.jsx`, `AnimConductPanel.test.jsx` (describe "L2, gain STARS_PRORATA affiché sur le bouton de crédit (#187 cycle 4, F1)"), `useWebSocket.flipMemoryCard.test.js` (5 tests, payload exact selon les arguments), `VPlayerPage.test.jsx` (`playerId` transmis, survit à une reconnexion) | | |
 
 **Verdict** : [ ] PASS  [ ] FAIL
 
