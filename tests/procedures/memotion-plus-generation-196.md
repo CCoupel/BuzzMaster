@@ -1,7 +1,7 @@
 # Procédure de Test — Génération IA MEMOTION+ (#196, v7.1.0)
 
 **Version** : v7.1.0 (branche `milestone/v7.1.0`)
-**Date** : 2026-08-26
+**Date** : 2026-08-26, complétée 2026-08-27 (Scénario 5, cycle 2 — bugfix QUALIF v7.1.0.7)
 **Testeur** : QA
 **Issue** : #196 — nouvelle clé de distribution `MEMOTION_PLUS` (affichée « MEMOTION+ ») dans la
 modale de génération IA : mélange de cartes SPEEDY/QCM choisies carte par carte par le modèle,
@@ -9,7 +9,9 @@ modale de génération IA : mélange de cartes SPEEDY/QCM choisies carte par car
 toujours écrite avec `TYPE: "MEMOTION"` sur disque. Le pseudo-type n'existe que pendant la
 génération, jamais dans l'éditeur ni dans un `question.json`.
 **Référence** : `contracts/ai-generation.md` §3ter, `_work/handoff/dev-backend-20260826-210653.md`
-(SHA `658e5471`), `_work/handoff/dev-frontend-20260826-205623.md` (SHA `57e158ca`)
+(SHA `658e5471`), `_work/handoff/dev-frontend-20260826-205623.md` (SHA `57e158ca`),
+`_work/handoff/dev-backend-20260827-205646.md` (SHA `09bbd848` — cycle 2, schéma allégé par
+distribution active, corrige un faux "rate limit" immédiat)
 
 ---
 
@@ -114,6 +116,36 @@ confirmation manuelle.
 
 ---
 
+## Scénario 5 — Non-régression bug QUALIF v7.1.0.7 : pas de faux "rate limit" dès le 1er appel (cycle 2)
+
+**Objectif** : Reproduire les conditions exactes du bug rapporté en QUALIF
+(`_work/handoff/dev-backend-20260827-205646.md`, SHA `09bbd848`) et vérifier qu'il ne se manifeste
+plus. **Cause** : le schéma envoyé au fournisseur IA embarquait systématiquement les 6 branches de
+types (SPEEDY/QCM/MEMORY/MEMOTION/MEMOTION+/ARDOISE) à chaque appel, quelle que soit la
+répartition réellement demandée — MEMOTION+ (variante la plus volumineuse) faisant basculer la
+requête au-dessus du seuil de taille du fournisseur **dès le tout premier appel**, sans aucun
+quota réellement consommé. Le message affiché ("rate limit exceeded") était donc **trompeur** :
+une vraie erreur 413 (requête trop grande), pas un 429 (quota épuisé). **Fix** : le schéma
+n'embarque désormais que les types réellement actifs (`> 0`) dans la répartition demandée.
+
+| Étape | Action | Résultat Attendu | Résultat Obtenu | OK ? |
+|-------|--------|-----------------|----------------|------|
+| 1 | Ouvrir la modale, activer **plusieurs types simultanément dont MEMOTION+** (ex: SPEEDY 20% / QCM 20% / MEMORY 20% / MEMOTION+ 40%) — conditions exactes du bug rapporté | Répartition valide (somme 100%) | | |
+| 2 | Lancer une génération, **dès la toute première tentative de la session** (pas de génération précédente sur ce même provider avant celle-ci) | La génération démarre normalement — **aucune erreur "rate limit" / "quota" immédiate** | | |
+| 3 | Si une erreur survient malgré tout (vraie saturation du fournisseur) | Le message distingue désormais explicitement une requête trop grande d'un quota épuisé (texte différent selon la cause réelle, détail du fournisseur inclus) — ne devrait plus jamais être un faux positif dû à la taille du schéma | | |
+| 4 | Répéter avec **tous les 6 types actifs simultanément** (cas le plus lourd possible) | Génération toujours fonctionnelle sans erreur de taille immédiate | | |
+
+**Verdict** : [ ] PASS  [ ] FAIL
+
+> ℹ️ **Pas de scénario manuel dédié à la mécanique interne du filtrage de schéma elle-même** — la
+> construction du schéma (`activeGenerableTypes`/`buildQuestionSchema`) est un détail d'implémentation
+> non observable depuis l'UI (le JSON envoyé au fournisseur n'est jamais exposé côté client) ; les 12
+> tests Go de dev-backend (schéma filtré par distribution, classification d'erreur 413 vs 429) la
+> couvrent exhaustivement en automatisé. Ce Scénario 5 valide uniquement le **symptôme observable**
+> (plus de faux rate-limit), qui est la seule partie testable manuellement.
+
+---
+
 ## Critères de Validation Globale
 
 - [ ] MEMOTION+ apparaît dans la modale de génération (jamais ailleurs), désactivé à 0% par défaut
@@ -121,6 +153,7 @@ confirmation manuelle.
 - [ ] Aucune fuite de la chaîne `MEMOTION_PLUS` : ni dans l'éditeur, ni dans les badges, ni dans un `question.json`, ni dans le panneau de succès de la modale
 - [ ] Une carte QCM générée est jouable de bout en bout (`/anim`, `/tv`, indices sur timer, révélation)
 - [ ] MEMOTION seul (MEMOTION+ à 0%) génère des cartes strictement identiques à avant #196 (aucun champ `TYPE` sur la carte)
+- [ ] Aucune fausse erreur "rate limit"/quota dès le 1er appel avec plusieurs types actifs dont MEMOTION+ (bug QUALIF v7.1.0.7, cycle 2)
 
 ---
 
@@ -128,9 +161,10 @@ confirmation manuelle.
 
 | Étape | Action | Résultat Attendu | Résultat Obtenu | OK ? |
 |-------|--------|-----------------|----------------|------|
-| 1 | `cd server-go && go build ./... && go test ./... -race` | Build OK, tous les tests PASS, y compris `internal/server/ai_generator_memotion_plus_196_test.go` (11 tests) et le fix de non-régression Groq (`ai_groq_schema_discriminator_test.go`) | | |
+| 1 | `cd server-go && go build ./... && go test ./... -race` | Build OK, tous les tests PASS, y compris `internal/server/ai_generator_memotion_plus_196_test.go` (11 tests), `ai_generator_schema_filtering_1710_7_test.go` (12 tests, cycle 2) et le fix de non-régression Groq (`ai_groq_schema_discriminator_test.go`) | | |
 | 2 | `go test ./internal/server/... -run 'MemotionPlus' -v` | Les 11 tests #196 PASS, notamment le test critique de normalisation `TYPE→MEMOTION` (scan de la chaîne `MEMOTION_PLUS` sur le JSON marshalé entier) et le round-trip à travers les vrais types Go (`ValidateCardTypeContent`) | | |
-| 3 | `cd server-go/web && npx vitest run` | Tous les tests PASS, y compris `questionTypeMeta.test.js` (6 tests neufs : `QUESTION_TYPES` toujours 5 entrées, `GENERABLE_TYPES` 6 entrées, `MEMOTION_PLUS` absent de `QUESTION_TYPE_META`) et `AIGenerateModal.test.jsx` (4 tests neufs + 8 mis à jour, rebalance des sliders sur 6 colonnes) | | |
+| 3 | `go test ./internal/server/... -run 'ActiveGenerableTypes\|BuildQuestionSchema\|RateLimitError\|ClassifyGroqError' -v` | Les 12 tests du cycle 2 PASS : filtrage par distribution (dont le cas de régression directe "MEMOTION_PLUS seul"), `anyOf` vide si distribution vide, message 413 ≠ 429 avec détail fournisseur | | |
+| 4 | `cd server-go/web && npx vitest run` | Tous les tests PASS, y compris `questionTypeMeta.test.js` (6 tests neufs : `QUESTION_TYPES` toujours 5 entrées, `GENERABLE_TYPES` 6 entrées, `MEMOTION_PLUS` absent de `QUESTION_TYPE_META`) et `AIGenerateModal.test.jsx` (4 tests neufs + 8 mis à jour, rebalance des sliders sur 6 colonnes) | | |
 
 **Verdict** : [ ] PASS  [ ] FAIL
 
