@@ -68,12 +68,17 @@ Notes :
   de `VPlayerPage.jsx`, hors de tout wrapper nommé). **`anim` n'y est pas ajouté** : la conduite
   animateur ne simule pas de buzzer et ne fait pas de handshake PREPARE en son nom propre — hors
   périmètre #155/#156.
-- **FLIP_MEMORY_CARD** est autorisé pour `tv` car cette connexion couvre deux cas
-  légitimes : l'aperçu admin en iframe (`/tv?admin=true`, toujours une vraie
-  connexion `tv` — `PlayerDisplay.jsx` `isAdminPreview`) et le clic d'un spectateur
-  sur l'écran public. `vplayer` peut retourner ses propres cartes en mode équipe
+- **FLIP_MEMORY_CARD** est autorisé pour `tv` **au seul titre de l'aperçu régie en iframe**
+  (`/tv?admin=true`, toujours une vraie connexion `tv` — `PlayerDisplay.jsx`
+  `isAdminPreview`). `vplayer` peut retourner ses propres cartes en mode équipe
   active (`MEMORY_CURRENT_TEAM`). MEMORY/MEMOTION restent hors périmètre de l'interface
   animateur en #155/#156 — `anim` n'y figure pas.
+  > ⚠️ **Décision inversée le 2026-08-27 (v7.1.0, #187 cycle 7).** Cette note documentait
+  > auparavant **deux** cas légitimes pour `tv`, dont « le clic d'un spectateur sur l'écran
+  > public ». **L'écran TV public n'est plus jamais interactif** — voir la fiche
+  > `FLIP_MEMORY_CARD`, §« Surface cliquable ». Le `ClientType` `tv` **reste autorisé** dans la
+  > table ci-dessus (l'aperçu régie est une connexion `tv`), mais il n'a plus qu'**un seul** cas
+  > d'usage légitime.
 - **FLIP_MEMORY_CARD — aucune modification de cette table en v7.1.0 (#187).** Une carte MEMOTION de
   type `MEMORY` fait retourner des cartes par un joueur, mais l'action est **déjà** autorisée pour
   `vplayer` (et `tv`/`anim`). Ce qui est nouveau est la **portée** (`MOTION_CARD_ID`) et la
@@ -1471,7 +1476,16 @@ Retourne une carte Memory.
 | Champ | Type | Obligatoire | Description |
 |-------|------|-------------|-------------|
 | CARD_ID | string | ✅ | ID de la carte Memory (ex: `"1-1"`, `"2-2"` — format `pairID-cardNum`) |
-| ID | string | ⬜ *(v7.1.0)* | Bumper ID de l'émetteur, première passe de la résolution 3 passes (voir ci-dessous). Émis par le VJoueur ; `tv`/`anim` ne l'envoient jamais — ils n'ont pas d'équipe |
+| ID | string | ⚠️ **de fait obligatoire pour un `vplayer`** *(v7.1.0)* | Bumper ID de l'émetteur, première passe de la résolution 3 passes (voir ci-dessous). `tv`/`anim` ne l'envoient jamais — ils n'ont pas d'équipe |
+
+> ⚠️ **`ID` est optionnel dans le schéma, mais un VJoueur qui l'omet voit son flip silencieusement
+> ignoré** (constat #187 cycle 7). La 3ᵉ passe de repli (`clientID`) est documentée dans le code
+> serveur lui-même comme non fiable pour un VJoueur (« *IP:port — may not match bumper key for
+> VPlayers* ») : sans `ID` explicite, la résolution échoue, `bumper == nil`, et le geste tombe dans
+> l'ignore silencieux ci-dessous — **quelle que soit l'équipe, y compris l'équipe active**.
+> Tout client `vplayer` **doit** donc envoyer `ID`, comme le font déjà `ARDOISE_INPUT`,
+> `VPLAYER_QCM_ANSWER` et `BUTTON`. Le champ reste `omitempty` au sens du schéma : c'est une
+> obligation d'usage pour ce `ClientType`, pas une contrainte de sérialisation.
 | MOTION_CARD_ID | string | ⬜ *(v7.1.0)* | Identité de la carte MEMOTION parente (`CardScope`, `question-types.md` §9). Absent hors manche MEMOTION ⇒ comportement actuel |
 
 > **`ID` — ajouté en v7.1.0 (#187), additif et `omitempty`.** Il porte le bumper ID de l'émetteur,
@@ -1502,10 +1516,40 @@ Le serveur devient **seule autorité** sur le droit de retourner une carte :
 
 > 🔴 **La vérification ne s'applique QU'AUX clients `vplayer`.**
 > `tv` et `anim` retournent légitimement des cartes **pour la table** — `anim` est l'animateur sur
-> sa tablette, `tv` couvre l'aperçu régie en iframe (`/tv?admin=true`) et le clic d'un spectateur
-> sur l'écran public. **Ni l'un ni l'autre n'a d'équipe.** Appliquer la vérification à tous
-> **casserait la conduite animateur et l'aperçu régie**. Règle exacte : *si `clientType == vplayer`,
-> vérifier l'équipe ; sinon, laisser passer.*
+> sa tablette, `tv` couvre l'**aperçu régie en iframe** (`/tv?admin=true`). **Ni l'un ni l'autre
+> n'a d'équipe.** Appliquer la vérification à tous **casserait la conduite animateur et l'aperçu
+> régie**. Règle exacte : *si `clientType == vplayer`, vérifier l'équipe ; sinon, laisser passer.*
+
+#### 🔴 Surface cliquable — l'écran TV public n'est **jamais** interactif (v7.1.0, #187 cycle 7)
+
+> **Décision utilisateur du 2026-08-27, en vérification finale QUALIF — elle inverse une intention
+> documentée jusqu'ici. Ne pas la « rétablir » en revue.**
+
+Ce contrat décrivait auparavant « le clic d'un spectateur sur l'écran public » comme un cas d'usage
+**légitime** de `FLIP_MEMORY_CARD`. **Ce n'est plus le cas : l'écran TV public ne doit jamais être
+interactif.**
+
+| Surface | `isVPlayer` | `isAdminPreview` | Peut cliquer ? |
+|---|---|---|---|
+| **TV publique** (`/tv`, écran spectateurs) | `false` | `false` | ❌ **jamais** |
+| Aperçu régie en iframe (`/tv?admin=true`) | `false` | `true` | ✅ |
+| VJoueur (`/player`) | `true` | — | ✅ *(sous réserve de la vérification de tour ci-dessus)* |
+| `/anim` | — | — | ✅ (composant distinct, `AnimMemoryGrid`) |
+
+**Règle client** : la garde de clic exige `(isVPlayer || isAdminPreview)` **en plus** des conditions
+de jeu, et s'applique aux **deux** grilles MEMORY — celle de la question hôte **et** celle d'une
+carte MEMOTION.
+
+> ⚠️ **La distinction TV publique / aperçu régie n'existait dans aucune des deux grilles avant ce
+> cycle** : pour tout client non-VJoueur, `!isVPlayer` valait `true` et rendait le clic possible.
+> C'est un défaut **préexistant au MEMORY classique**, révélé par #187 et non introduit par lui.
+
+**Nature de la règle** : c'est une garde **d'interface**, pas une frontière d'autorisation. Le
+serveur ne distingue pas l'aperçu régie de la TV publique — les deux sont des connexions `tv` et le
+`ClientType` reste autorisé dans la table d'allow-list. Un client modifié pourrait donc encore
+émettre l'action ; **c'est assumé** : la grille MEMORY est publique (aucun champ `MEMORY_*` n'est
+filtré) et le geste n'expose aucune information. Ajouter une frontière serveur imposerait de
+distinguer deux usages d'un même `ClientType`, ce que rien d'autre dans le protocole ne fait.
 
 > 🔴 **Un flip ignoré ne doit déclencher aucun broadcast.**
 > `handleFlipMemoryCard` diffuse aujourd'hui un `UPDATE` complet **inconditionnellement**. Or la

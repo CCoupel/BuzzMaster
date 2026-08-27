@@ -2,6 +2,31 @@
 
 ---
 
+## [20260827] — FLIP_MEMORY_CARD : écran TV public jamais interactif (#187 cycle 7)
+
+> Milestone v7.1.0 · Correctif de contrat suite au code `8af17927` (`dev-frontend`)
+> Décision utilisateur du 2026-08-27, en vérification finale QUALIF
+
+- **[CHANGED]** 🔴 **Décision inversée** — `contracts/websocket-actions.md` documentait « le clic
+  d'un spectateur sur l'écran public » comme un cas d'usage **légitime** de `FLIP_MEMORY_CARD`.
+  **L'écran TV public n'est désormais jamais interactif.** Le `ClientType` `tv` reste autorisé dans
+  la table d'allow-list, mais au seul titre de l'**aperçu régie en iframe** (`/tv?admin=true`) — il
+  n'a plus qu'un seul cas d'usage légitime. Ne pas rétablir en revue.
+- **[CHANGED]** Garde d'interface : le clic exige `(isVPlayer || isAdminPreview)` en plus des
+  conditions de jeu, sur les **deux** grilles MEMORY (question hôte **et** carte MEMOTION). C'est une
+  garde d'**interface**, pas une frontière d'autorisation : le serveur ne distingue pas l'aperçu
+  régie de la TV publique, et c'est assumé (la grille MEMORY est publique, le geste n'expose rien).
+- **[CHANGED]** `FLIP_MEMORY_CARD.ID` — **de fait obligatoire pour un client `vplayer`**, alors
+  qu'il était documenté simplement optionnel. La 3ᵉ passe de repli (`clientID`) n'est pas fiable
+  pour un VJoueur : sans `ID` explicite, la résolution échoue et le flip tombe dans l'ignore
+  silencieux, **quelle que soit l'équipe**. Précision de documentation, aucun changement de
+  sérialisation.
+
+**Aucun changement BREAKING de protocole** : aucune action, aucun champ, aucune entrée d'allow-list
+n'est retiré. Ce qui change est une intention documentée et une garde d'interface.
+
+---
+
 ## [20260826] — Génération IA de cartes QCM imbriquées, « MEMOTION+ » (#196)
 
 > Milestone v7.1.0 · Contrat détaillé : `contracts/ai-generation.md` §3 et §3ter
