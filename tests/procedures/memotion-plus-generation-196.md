@@ -142,7 +142,10 @@ n'embarque désormais que les types réellement actifs (`> 0`) dans la répartit
 > non observable depuis l'UI (le JSON envoyé au fournisseur n'est jamais exposé côté client) ; les 12
 > tests Go de dev-backend (schéma filtré par distribution, classification d'erreur 413 vs 429) la
 > couvrent exhaustivement en automatisé. Ce Scénario 5 valide uniquement le **symptôme observable**
-> (plus de faux rate-limit), qui est la seule partie testable manuellement.
+> (plus de faux rate-limit), qui est la seule partie testable manuellement. Un test direct
+> supplémentaire (`TestClassifyAnthropicError_413And429_SurfaceEnvelopeMessage`) a été ajouté pour
+> combler une asymétrie de couverture signalée en revue (Groq avait un test direct de classification
+> 413/429, Anthropic non) — même remarque : détail interne, pas de scénario manuel dédié nécessaire.
 
 ---
 
@@ -163,7 +166,7 @@ n'embarque désormais que les types réellement actifs (`> 0`) dans la répartit
 |-------|--------|-----------------|----------------|------|
 | 1 | `cd server-go && go build ./... && go test ./... -race` | Build OK, tous les tests PASS, y compris `internal/server/ai_generator_memotion_plus_196_test.go` (11 tests), `ai_generator_schema_filtering_1710_7_test.go` (12 tests, cycle 2) et le fix de non-régression Groq (`ai_groq_schema_discriminator_test.go`) | | |
 | 2 | `go test ./internal/server/... -run 'MemotionPlus' -v` | Les 11 tests #196 PASS, notamment le test critique de normalisation `TYPE→MEMOTION` (scan de la chaîne `MEMOTION_PLUS` sur le JSON marshalé entier) et le round-trip à travers les vrais types Go (`ValidateCardTypeContent`) | | |
-| 3 | `go test ./internal/server/... -run 'ActiveGenerableTypes\|BuildQuestionSchema\|RateLimitError\|ClassifyGroqError' -v` | Les 12 tests du cycle 2 PASS : filtrage par distribution (dont le cas de régression directe "MEMOTION_PLUS seul"), `anyOf` vide si distribution vide, message 413 ≠ 429 avec détail fournisseur | | |
+| 3 | `go test ./internal/server/... -run 'ActiveGenerableTypes\|BuildQuestionSchema\|RateLimitError\|ClassifyGroqError\|ClassifyAnthropicError' -v` | Les 12 tests du cycle 2 PASS (dont le cas de régression directe "MEMOTION_PLUS seul") **et** `TestClassifyAnthropicError_413And429_SurfaceEnvelopeMessage` (comble l'asymétrie de couverture Anthropic/Groq signalée en revue, `code-review-20260827-210604.md` point INFO — même classification 413≠429 vérifiée côté Anthropic que côté Groq) | | |
 | 4 | `cd server-go/web && npx vitest run` | Tous les tests PASS, y compris `questionTypeMeta.test.js` (6 tests neufs : `QUESTION_TYPES` toujours 5 entrées, `GENERABLE_TYPES` 6 entrées, `MEMOTION_PLUS` absent de `QUESTION_TYPE_META`) et `AIGenerateModal.test.jsx` (4 tests neufs + 8 mis à jour, rebalance des sliders sur 6 colonnes) | | |
 
 **Verdict** : [ ] PASS  [ ] FAIL

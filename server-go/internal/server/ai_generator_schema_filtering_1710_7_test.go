@@ -27,7 +27,10 @@
 package server
 
 import (
+	"context"
+	"encoding/json"
 	"net/http"
+	"net/http/httptest"
 	"testing"
 )
 
@@ -235,4 +238,96 @@ func TestClassifyGroqError_413And429_SurfaceEnvelopeMessage(t *testing.T) {
 	if jsonIndexOf(rle.Error(), "please try again later") < 0 {
 		t.Errorf("expected Groq's own detail message to be surfaced, got %q", rle.Error())
 	}
+}
+
+// ============================================================================
+// classifyAnthropicError — closes the coverage asymmetry flagged by
+// code-review-20260827-210604.md (Point 2, INFO non-bloquant, verdict
+// APPROUVE) : classifyGroqError above has a direct test constructing a
+// *http.Response + body by hand; classifyAnthropicError had none — `grep -rn
+// "classifyAnthropicError" internal/server/*_test.go` returned zero matches
+// before this test, only indirect end-to-end coverage through the full job
+// pipeline (TestGenerateQuestions_UpstreamErrors/"429 rate limit maps to
+// provider_quota", ai_generation_test.go) that asserts on ERROR_CODE, never
+// on the specific 413-vs-429 message text this cycle's fix introduced.
+//
+// classifyAnthropicError takes an `error`, not a (*http.Response, []byte)
+// pair like classifyGroqError — there is no low-friction way to hand-build a
+// populated *anthropic.Error from this package (its RawJSON() backing field
+// is unexported inside the SDK's internal/apierror package, only ever
+// populated by the SDK's own JSON decoding path). Rather than reach for
+// unsafe/reflect tricks to fake one, this test drives the REAL SDK error
+// path end-to-end at the classifyAnthropicError boundary: a local
+// httptest.Server speaks Anthropic's documented error envelope shape (same
+// shape mockAnthropicErrorServer in ai_generation_test.go already uses for
+// its own indirect job-level tests — kept local here instead of reusing that
+// helper because this test needs a DISTINCT, realistic message per status
+// code, whereas the shared helper hardcodes one fixed message for both), the
+// SDK client (generateViaAnthropic) makes a real call against it, and the
+// *anthropic.Error the SDK constructs from the real response flows through
+// classifyAnthropicError exactly as production does — the most direct test
+// possible without depending on SDK-internal fields.
+func TestClassifyAnthropicError_413And429_SurfaceEnvelopeMessage(t *testing.T) {
+	aiCfg := validAIConfig()
+	h := &HTTPServer{}
+
+	newAnthropicErrorServer := func(t *testing.T, statusCode int, message string) *httptest.Server {
+		t.Helper()
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(statusCode)
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"type": "error",
+				"error": map[string]string{
+					"type":    "rate_limit_error",
+					"message": message,
+				},
+			})
+		}))
+		t.Cleanup(server.Close)
+		return server
+	}
+
+	t.Run("413 request too large", func(t *testing.T) {
+		upstream := newAnthropicErrorServer(t, http.StatusRequestEntityTooLarge, "prompt is too long: 215000 tokens > 200000 maximum")
+		withAnthropicBaseURL(t, upstream.URL)
+
+		_, err := h.generateViaAnthropic(context.Background(), aiCfg, "prompt", map[string]any{})
+		rle, ok := err.(*aiRateLimitError)
+		if !ok {
+			t.Fatalf("expected *aiRateLimitError for a 413 response, got %T (%v)", err, err)
+		}
+		if rle.statusCode != http.StatusRequestEntityTooLarge {
+			t.Errorf("statusCode = %d, want %d", rle.statusCode, http.StatusRequestEntityTooLarge)
+		}
+		if jsonIndexOf(rle.Error(), "215000 tokens") < 0 {
+			t.Errorf("expected Anthropic's own detail message to be surfaced, got %q", rle.Error())
+		}
+		if jsonIndexOf(rle.Error(), "too large") < 0 {
+			t.Errorf("expected the 413 case to say the request is too large, got %q", rle.Error())
+		}
+		if jsonIndexOf(rle.Error(), "rate limit exceeded") >= 0 {
+			t.Errorf("expected the 413 case NOT to say the generic rate-limit text, got %q", rle.Error())
+		}
+	})
+
+	t.Run("429 rate limit", func(t *testing.T) {
+		upstream := newAnthropicErrorServer(t, http.StatusTooManyRequests, "Number of requests has exceeded your organization's rate limit")
+		withAnthropicBaseURL(t, upstream.URL)
+
+		_, err := h.generateViaAnthropic(context.Background(), aiCfg, "prompt", map[string]any{})
+		rle, ok := err.(*aiRateLimitError)
+		if !ok {
+			t.Fatalf("expected *aiRateLimitError for a 429 response, got %T (%v)", err, err)
+		}
+		if rle.statusCode != http.StatusTooManyRequests {
+			t.Errorf("statusCode = %d, want %d", rle.statusCode, http.StatusTooManyRequests)
+		}
+		if jsonIndexOf(rle.Error(), "organization's rate limit") < 0 {
+			t.Errorf("expected Anthropic's own detail message to be surfaced, got %q", rle.Error())
+		}
+		if jsonIndexOf(rle.Error(), "too large") >= 0 {
+			t.Errorf("expected the 429 case NOT to say the 413 'too large' text, got %q", rle.Error())
+		}
+	})
 }
