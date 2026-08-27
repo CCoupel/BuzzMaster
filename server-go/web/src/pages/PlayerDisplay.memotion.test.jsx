@@ -1,5 +1,5 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest'
-import { render } from '@testing-library/react'
+import { describe, it, expect, beforeEach, afterEach, beforeAll, vi } from 'vitest'
+import { render, cleanup } from '@testing-library/react'
 import PlayerDisplay from './PlayerDisplay'
 
 // ---------------------------------------------------------------------------
@@ -64,6 +64,33 @@ vi.mock('../styles/neon.css', () => ({}))
 // Import useGame après les mocks
 // ---------------------------------------------------------------------------
 import { useGame } from '../hooks/GameContext'
+
+// ---------------------------------------------------------------------------
+// Isolation entre tests — correction QA (_work/reports/qa-20260827-190500.md
+// §2) : le test "aperçu admin (?admin=true)" (describe carte MEMOTION,
+// hérité, non modifié ici) restaure l'URL avec
+// `window.history.pushState({}, '', originalSearch)` — mais si
+// `originalSearch` valait `''` (cas du tout premier test à manipuler l'URL
+// dans ce fichier), pousser une chaîne vide comme 3e argument résout comme
+// "URL courante inchangée" (résolution d'URL relative), PAS comme "retirer
+// la query string" : `?admin=true` reste dans `window.location.search` pour
+// tous les tests suivants du fichier (jsdom partage un seul `window` par
+// fichier de test, pas par test). `afterEach` global ci-dessous neutralise
+// cette pollution après CHAQUE test, quel que soit celui qui l'a introduite,
+// plutôt que de modifier le test existant fautif (règle de non-régression —
+// ne pas toucher un test hérité sans changement de contrat documenté).
+// `cleanup()` explicite en complément : ce fichier ne l'appelait jamais
+// lui-même avant ce correctif (l'auto-cleanup RTL par défaut suffisait tant
+// qu'aucun test ne laissait de state global — window.history — fuiter).
+// ---------------------------------------------------------------------------
+let initialHref
+beforeAll(() => {
+  initialHref = window.location.href
+})
+afterEach(() => {
+  cleanup()
+  window.history.pushState({}, '', initialHref)
+})
 
 // ---------------------------------------------------------------------------
 // Données de test MEMOTION
@@ -1184,13 +1211,28 @@ const makeMemoryQuestionMock = () => ({
 })
 
 describe('PlayerDisplay — grille MEMORY question-hôte, restriction par surface (#187 cycle 7)', () => {
-  it('affiche la grille MEMORY question-hôte (4 cartes = 2 paires), face cachée', () => {
+  // ⚠️ Correction QA (_work/reports/qa-20260827-190500.md §1) : cette grille
+  // (.memory-card, héritée de #159/#127, antérieure à #187) rend TOUJOURS
+  // les deux faces dans le DOM (.memory-card-front avec le texte réel ET
+  // .memory-card-back avec la lettre) — contrairement à la grille de carte
+  // MEMOTION (renderCardMemoryGrid, plus récente, #187) qui, elle, rend
+  // conditionnellement le texte selon `cardRevealed`. Le masquage visuel
+  // d'une carte question-hôte non retournée est purement une transformation
+  // CSS 3D pilotée par la classe `.flipped` — jsdom ne l'applique pas, donc
+  // `container.textContent` contient légitimement le texte des deux faces
+  // quel que soit l'état visuel. La classe CSS (`.flipped`, absente ici) et
+  // la présence structurelle des deux faces sont les assertions correctes
+  // pour cette architecture — pas l'absence du texte dans le DOM.
+  it('affiche la grille MEMORY question-hôte (4 cartes = 2 paires), non retournée (classe .flipped absente)', () => {
     useGame.mockReturnValue(makeMemoryQuestionMock())
     const { container } = renderTV()
     const cards = container.querySelectorAll('.memory-card')
     expect(cards.length).toBe(4)
-    cards.forEach(card => expect(card.classList.contains('flipped')).toBe(false))
-    expect(container.textContent).not.toContain('Napoléon')
+    cards.forEach(card => {
+      expect(card.classList.contains('flipped')).toBe(false)
+      expect(card.querySelector('.memory-card-front')).not.toBeNull()
+      expect(card.querySelector('.memory-card-back .memory-card-letter')).not.toBeNull()
+    })
   })
 
   // 🔴 Mirroir du test carte MEMOTION ci-dessus — écran TV PUBLIC (ni
