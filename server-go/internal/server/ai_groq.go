@@ -83,10 +83,10 @@ func groqRequestMaxTokens(promptTokens int) int {
 }
 
 type groqChatRequest struct {
-	Model          string                 `json:"model"`
-	Messages       []groqChatMessage      `json:"messages"`
-	ResponseFormat groqResponseFormat     `json:"response_format"`
-	MaxTokens      int                    `json:"max_tokens"`
+	Model          string             `json:"model"`
+	Messages       []groqChatMessage  `json:"messages"`
+	ResponseFormat groqResponseFormat `json:"response_format"`
+	MaxTokens      int                `json:"max_tokens"`
 }
 
 type groqChatMessage struct {
@@ -224,9 +224,14 @@ func classifyGroqError(resp *http.Response, body []byte) error {
 	_ = json.Unmarshal(body, &envelope) // best-effort; a malformed/non-JSON body just yields an empty envelope, falling back to the generic message below
 
 	if resp.StatusCode == http.StatusTooManyRequests || resp.StatusCode == http.StatusRequestEntityTooLarge {
+		// #196 QUALIF v7.1.0.7 bugfix — envelope.Error.Message is now
+		// surfaced here too (previously discarded on this branch only,
+		// unlike the generic path a few lines below) — see
+		// aiRateLimitError's doc comment.
 		return &aiRateLimitError{
 			statusCode: resp.StatusCode,
 			retryAfter: parseRetryAfter(resp.Header.Get("Retry-After")),
+			message:    sanitizeUpstreamMessage(envelope.Error.Message),
 		}
 	}
 	message := sanitizeUpstreamMessage(envelope.Error.Message)

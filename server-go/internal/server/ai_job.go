@@ -306,7 +306,12 @@ batchLoop:
 		}
 
 		prompt := h.buildGenerationPrompt(req, thisBatch, extraContext)
-		schema := provider.AdaptSchema(buildQuestionSchema(req.Categories, req.Difficulties))
+		// #196 QUALIF v7.1.0.7 bugfix — only send the anyOf branches for
+		// types actually requested (buildQuestionSchema's own doc comment):
+		// req.Distribution already guarantees ≥1 positive value
+		// (validateGenerateRequest), so activeGenerableTypes is never empty
+		// here.
+		schema := provider.AdaptSchema(buildQuestionSchema(req.Categories, req.Difficulties, activeGenerableTypes(req.Distribution)))
 
 		callCtx, cancel := context.WithTimeout(context.Background(), timeoutOrDefault(aiCfg.TimeoutSeconds))
 		rawJSON, err := provider.Generate(callCtx, aiCfg, prompt, schema)

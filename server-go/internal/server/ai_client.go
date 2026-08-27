@@ -63,12 +63,38 @@ func (e *aiUpstreamError) Error() string { return e.message }
 // retry the SAME batch rather than treating it as an ordinary failure — and
 // only escalate to the stable "provider_quota" code after persistent
 // rate-limiting (contract §3).
+//
+// ⚠️ #196 QUALIF v7.1.0.7 bugfix — Error() used to return the SAME generic
+// "rate limit exceeded" string for both 429 and 413, even though they are
+// semantically different failures a 429 genuinely means "you've used your
+// quota"; a 413 means "this one request's estimated token count is too
+// large", which can happen on the very FIRST call of the day with an empty
+// quota (exactly the QUALIF report: buildQuestionSchema unconditionally
+// including a new, larger MEMOTION_PLUS variant on every batch pushed an
+// already-tight Groq request over its per-request size ceiling). The
+// message now names which one actually happened, and — same as
+// aiUpstreamError — surfaces the provider's own detail when it sent one,
+// instead of discarding it (classifyGroqError/classifyAnthropicError used
+// to read .message only on the non-rate-limit branch).
 type aiRateLimitError struct {
 	statusCode int
 	retryAfter time.Duration // 0 if the response didn't specify one
+	// message is the provider's own error detail, sanitized (contract §8
+	// S2, same treatment as aiUpstreamError.message) — "" if the response
+	// carried none (Groq's 429/413 bodies are not guaranteed to).
+	message string
 }
 
-func (e *aiRateLimitError) Error() string { return "AI generation service rate limit exceeded" }
+func (e *aiRateLimitError) Error() string {
+	base := "AI generation service rate limit exceeded"
+	if e.statusCode == http.StatusRequestEntityTooLarge {
+		base = "AI generation request too large for the provider's per-request size limit"
+	}
+	if e.message != "" {
+		return base + ": " + e.message
+	}
+	return base
+}
 
 // parseRetryAfter reads a Retry-After header value. Only the delay-seconds
 // form is handled (what Groq and Anthropic both send in practice); an
@@ -227,7 +253,11 @@ func classifyAnthropicError(err error) error {
 			if apiErr.Response != nil {
 				retryAfter = parseRetryAfter(apiErr.Response.Header.Get("Retry-After"))
 			}
-			return &aiRateLimitError{statusCode: apiErr.StatusCode, retryAfter: retryAfter}
+			return &aiRateLimitError{
+				statusCode: apiErr.StatusCode,
+				retryAfter: retryAfter,
+				message:    sanitizeUpstreamMessage(extractAnthropicErrorMessage(apiErr)),
+			}
 		}
 		message := sanitizeUpstreamMessage(extractAnthropicErrorMessage(apiErr))
 		if message == "" {

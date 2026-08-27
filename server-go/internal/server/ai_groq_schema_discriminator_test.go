@@ -45,7 +45,7 @@ func groqSchemaAnyOfBranches(t *testing.T, schema map[string]any) []map[string]a
 // "type":"string" and stay required, just without "enum".
 func TestGroqProvider_AdaptSchema_StripsEnumFromCategoryAndDifficultyInEveryBranch(t *testing.T) {
 	p := &groqProvider{}
-	schema := p.AdaptSchema(buildQuestionSchema([]string{"ENTERTAINMENT", "HISTORY"}, []string{"Facile", "Moyen"}))
+	schema := p.AdaptSchema(buildQuestionSchema([]string{"ENTERTAINMENT", "HISTORY"}, []string{"Facile", "Moyen"}, generableQuestionTypes))
 
 	branches := groqSchemaAnyOfBranches(t, schema)
 	// #196 — MEMOTION_PLUS joined the top-level anyOf as its own branch
@@ -120,7 +120,7 @@ func TestGroqProvider_AdaptSchema_StripsEnumFromCategoryAndDifficultyInEveryBran
 // enum-constrained field shared with the others.
 func TestGroqProvider_AdaptSchema_OnlyOneSharedEnumCandidateAcrossAllBranches(t *testing.T) {
 	p := &groqProvider{}
-	schema := p.AdaptSchema(buildQuestionSchema([]string{"ENTERTAINMENT"}, []string{"Facile"}))
+	schema := p.AdaptSchema(buildQuestionSchema([]string{"ENTERTAINMENT"}, []string{"Facile"}, generableQuestionTypes))
 
 	branches := groqSchemaAnyOfBranches(t, schema)
 	var shared map[string]bool
@@ -178,7 +178,7 @@ func TestGroqProvider_AdaptSchema_OnlyOneSharedEnumCandidateAcrossAllBranches(t 
 // untouched.
 func TestGroqProvider_AdaptSchema_DoesNotTouchMotionCardsNestedDifficulty(t *testing.T) {
 	p := &groqProvider{}
-	schema := p.AdaptSchema(buildQuestionSchema([]string{"HISTORY"}, []string{"Difficile"}))
+	schema := p.AdaptSchema(buildQuestionSchema([]string{"HISTORY"}, []string{"Difficile"}, generableQuestionTypes))
 
 	var motionBranch map[string]any
 	for _, branch := range groqSchemaAnyOfBranches(t, schema) {
@@ -226,7 +226,7 @@ func TestGroqProvider_AdaptSchema_DoesNotTouchMotionCardsNestedDifficulty(t *tes
 // this test proves it stayed that way rather than trusting the comment.
 func TestAnthropicProvider_AdaptSchema_IsUnaffectedByGroqFix(t *testing.T) {
 	p := &anthropicProvider{}
-	schema := p.AdaptSchema(buildQuestionSchema([]string{"ENTERTAINMENT"}, []string{"Facile", "Moyen"}))
+	schema := p.AdaptSchema(buildQuestionSchema([]string{"ENTERTAINMENT"}, []string{"Facile", "Moyen"}, generableQuestionTypes))
 
 	for _, branch := range groqSchemaAnyOfBranches(t, schema) {
 		props := branch["properties"].(map[string]any)

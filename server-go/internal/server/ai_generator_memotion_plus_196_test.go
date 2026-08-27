@@ -67,7 +67,7 @@ func findAnyOfVariantByTypeConst(t *testing.T, schema map[string]any, typeConst 
 // ordering ever changed. This test pins it down by TYPE const instead of
 // "first match", immune to anyOf ordering.
 func TestMemotionPlus_Schema_ClassicMemotionUnchanged(t *testing.T) {
-	schema := buildQuestionSchema([]string{"GEOGRAPHY"}, []string{"Facile"})
+	schema := buildQuestionSchema([]string{"GEOGRAPHY"}, []string{"Facile"}, generableQuestionTypes)
 	classic := findAnyOfVariantByTypeConst(t, schema, "MEMOTION")
 
 	motionCards := classic["properties"].(map[string]any)["MOTION_CARDS"].(map[string]any)
@@ -94,7 +94,7 @@ func TestMemotionPlus_Schema_ClassicMemotionUnchanged(t *testing.T) {
 // additionalProperties:false — contract §3ter "Portée du mode
 // MEMOTION_PLUS": only the two NestableInMotionCard types.
 func TestMemotionPlus_Schema_CardItemIsDiscriminatedUnion(t *testing.T) {
-	schema := buildQuestionSchema([]string{"GEOGRAPHY"}, []string{"Facile"})
+	schema := buildQuestionSchema([]string{"GEOGRAPHY"}, []string{"Facile"}, generableQuestionTypes)
 	plus := findAnyOfVariantByTypeConst(t, schema, "MEMOTION_PLUS")
 
 	motionCards, ok := plus["properties"].(map[string]any)["MOTION_CARDS"].(map[string]any)

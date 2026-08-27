@@ -227,10 +227,48 @@ func mergeJSONSchemaProps(base, extra map[string]any) map[string]any {
 	return out
 }
 
+// activeGenerableTypes returns the subset of generableQuestionTypes present
+// in distribution with a value > 0 — the ONLY types buildQuestionSchema
+// needs to include in its anyOf for a given batch (#196 QUALIF v7.1.0.7
+// bugfix, see buildQuestionSchema's own doc comment). Order follows
+// generableQuestionTypes, purely for deterministic output — the schema
+// itself doesn't care about anyOf ordering.
+func activeGenerableTypes(distribution map[string]int) []string {
+	var out []string
+	for _, t := range generableQuestionTypes {
+		if v, ok := distribution[t]; ok && v > 0 {
+			out = append(out, t)
+		}
+	}
+	return out
+}
+
 // buildQuestionSchema builds the json_schema output_config format for the
 // batch generation call, restricting CATEGORY/DIFFICULTY to exactly the
-// values the admin selected in this request (contract §5).
-func buildQuestionSchema(categories, difficulties []string) map[string]any {
+// values the admin selected in this request (contract §5), and its anyOf to
+// exactly the types the caller actually requested (activeTypes —
+// activeGenerableTypes(req.Distribution) in production; validateGenerateRequest
+// already guarantees at least one type has a positive value, so this is
+// never empty on the real path).
+//
+// #196 QUALIF v7.1.0.7 bugfix — activeTypes filtering added here. Before
+// this fix, EVERY anyOf branch (all 6 types, unconditionally) was sent on
+// EVERY batch call regardless of what the admin's distribution actually
+// requested — a 100%-SPEEDY job still paid for QCM/MEMORY/MEMOTION/
+// MEMOTION_PLUS/ARDOISE's full schemas. Already wasteful before #196 (a
+// pre-existing inefficiency, not itself a bug — Groq's Anthropic-sized
+// context budget headroom absorbed it), it became a real failure once
+// MEMOTION_PLUS's own schema (its MOTION_CARDS items are a nested
+// discriminated union, meaningfully larger than the other variants) pushed
+// an ALREADY-tight request over Groq's 8 000 TPM ceiling
+// (contracts/ai-multi-provider.md §1) — the reported symptom ("rate limit
+// exceeded" on the very FIRST call, no prior usage this session) is Groq's
+// 413 pre-check on request size, not an actual quota exhaustion; see
+// classifyGroqError's own doc comment for the second half of this fix (the
+// misleading generic error message). Filtering to only the requested types
+// both fixes the immediate regression and removes the pre-existing waste —
+// a MEMOTION_PLUS-only job no longer pays for 5 schemas it will never use.
+func buildQuestionSchema(categories, difficulties []string, activeTypes []string) map[string]any {
 	common := map[string]any{
 		"TYPE":       map[string]any{"type": "string", "enum": generableQuestionTypes},
 		"CATEGORY":   map[string]any{"type": "string", "enum": categories},
@@ -370,23 +408,42 @@ func buildQuestionSchema(categories, difficulties []string) map[string]any {
 		}
 	}
 
+	// #196 QUALIF v7.1.0.7 bugfix — only build the anyOf branches for types
+	// actually present in activeTypes (see this function's own doc comment
+	// above for why). isActive/allVariants keep the six variant() calls
+	// exactly as they were — declared unconditionally, filtered here — so a
+	// future 7th type only ever needs one more map entry, not a new
+	// if-cascade.
+	isActive := make(map[string]bool, len(activeTypes))
+	for _, t := range activeTypes {
+		isActive[t] = true
+	}
+	allVariants := []struct {
+		typeConst string
+		schema    map[string]any
+	}{
+		{"SPEEDY", variant(speedyProps, "SPEEDY", "ANSWER")},
+		{"QCM", variant(qcmProps, "QCM", "QCM_ANSWERS", "QCM_CORRECT")},
+		{"MEMORY", variant(memoryProps, "MEMORY", "MEMORY_PAIRS")},
+		{"MEMOTION", variant(motionProps, "MEMOTION", "MOTION_CARDS")},
+		{"MEMOTION_PLUS", variant(motionPlusProps, "MEMOTION_PLUS", "MOTION_CARDS")}, // #196
+		{"ARDOISE", variant(ardoiseProps, "ARDOISE", "ANSWER", "ARDOISE_KEYBOARD_TYPE")},
+	}
+	anyOf := make([]any, 0, len(allVariants))
+	for _, v := range allVariants {
+		if isActive[v.typeConst] {
+			anyOf = append(anyOf, v.schema)
+		}
+	}
+
 	return map[string]any{
 		"type":                 "object",
 		"additionalProperties": false,
 		"required":             []string{"questions"},
 		"properties": map[string]any{
 			"questions": map[string]any{
-				"type": "array",
-				"items": map[string]any{
-					"anyOf": []any{
-						variant(speedyProps, "SPEEDY", "ANSWER"),
-						variant(qcmProps, "QCM", "QCM_ANSWERS", "QCM_CORRECT"),
-						variant(memoryProps, "MEMORY", "MEMORY_PAIRS"),
-						variant(motionProps, "MEMOTION", "MOTION_CARDS"),
-						variant(motionPlusProps, "MEMOTION_PLUS", "MOTION_CARDS"), // #196
-						variant(ardoiseProps, "ARDOISE", "ANSWER", "ARDOISE_KEYBOARD_TYPE"),
-					},
-				},
+				"type":  "array",
+				"items": map[string]any{"anyOf": anyOf},
 			},
 		},
 	}
