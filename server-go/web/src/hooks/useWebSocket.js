@@ -856,9 +856,26 @@ export default function useWebSocket(endpoint = '/ws/admin') {
   // s'applique à une carte MEMOTION active — absent (undefined) hors manche
   // MEMOTION, comportement inchangé (contrat websocket-actions.md,
   // FLIP_MEMORY_CARD : "absent hors manche MEMOTION ⇒ comportement actuel").
-  const flipMemoryCard = useCallback((cardId, motionCardId) => {
+  //
+  // 🔴 FIX bug QUALIF cycle 7 (#187) — `playerId` (payload.ID) était omis
+  // depuis la toute première version de cette fonction. Sans conséquence
+  // tant que le serveur n'exécutait aucune vérification de tour (avant le
+  // cycle 4), mais devenu bloquant depuis : `handleFlipMemoryCard`
+  // (cmd/server/main.go) résout l'émetteur vplayer par un motif 3 passes
+  // (payload.ID → msg.ID → clientID, même motif qu'ARDOISE_INPUT/
+  // VPLAYER_QCM_ANSWER) — le 3e repli (clientID direct) est documenté côté
+  // serveur comme NE correspondant PAS à la clé du bumper pour un VJoueur
+  // ("clientID fallback (IP:port — may not match bumper key for VPlayers)").
+  // Sans `ID` explicite, la résolution échouait TOUJOURS pour un VJoueur —
+  // `bumper == nil` → tout flip VJoueur était ignoré silencieusement, quelle
+  // que soit l'équipe. `playerId` doit venir de `bumper.id` côté appelant
+  // (VPlayerPage.jsx via PlayerDisplay.jsx, prop `playerId`) — absent pour
+  // tv/anim, qui n'ont pas de bumper et pour qui le serveur ne vérifie de
+  // toute façon aucun tour (clientType != vplayer).
+  const flipMemoryCard = useCallback((cardId, motionCardId, playerId) => {
     const msg = { CARD_ID: cardId }
     if (motionCardId) msg.MOTION_CARD_ID = motionCardId
+    if (playerId) msg.ID = playerId
     sendMessage('FLIP_MEMORY_CARD', msg)
   }, [sendMessage])
 

@@ -760,6 +760,15 @@ export default function VPlayerPage() {
           playerNameColor={getPlayerNameColor()}
           teamName={team?.NAME}
           teamColor={getTeamColor()}
+          // 🔴 FIX bug QUALIF cycle 7 (#187) — playerId (bumper.id) manquait
+          // totalement : sans lui, flipMemoryCard ne pouvait jamais faire
+          // parvenir payload.ID au serveur, et la résolution de secours
+          // (clientID) ne correspond PAS à la clé du bumper pour un VJoueur
+          // (cmd/server/main.go, resolveFlipMemoryCardBumper) — tout flip
+          // MEMORY depuis /player était donc ignoré, quelle que soit
+          // l'équipe. Même motif que ID=bumper.id déjà envoyé par
+          // ARDOISE_INPUT/VPLAYER_QCM_ANSWER/BUTTON ci-dessus.
+          playerId={bumper?.id}
           isVPlayer={true}
           onMediaClick={gameState.entracte ? undefined : handleBuzz}
           onQCMAnswer={handleQCMAnswer}

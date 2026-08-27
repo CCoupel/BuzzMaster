@@ -167,7 +167,7 @@ function ReadyCategoryDisplay({ catKey, customCategories, variant, gameType }) {
   )
 }
 
-export default function PlayerDisplay({ playerName = null, playerNameColor = null, teamName = null, teamColor = null, isVPlayer = false, onMediaClick = null, onQCMAnswer = null, vplayerHasBuzzed = false }) {
+export default function PlayerDisplay({ playerName = null, playerNameColor = null, teamName = null, teamColor = null, playerId = null, isVPlayer = false, onMediaClick = null, onQCMAnswer = null, vplayerHasBuzzed = false }) {
   const { gameState, teams, bumpers, flipMemoryCard, showQRCode, selectMotionCard } = useGame()
   const { categories: apiCategories } = useCategories()
   const [previousRanking, setPreviousRanking] = useState({})
@@ -1912,7 +1912,7 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
                       // Cards are flipped (face up) during: cascading COUNTDOWN reveal, still hiding after countdown, progressive REVEAL, matched pairs, or player clicked
                       const isFlipped = isInCountdownCascade || isStillVisibleInCascade || (isGameplayPhase && (isProgressivelyRevealed || isMatched || isPlayerFlipped))
                       const isJustMatched = justMatchedPairs.includes(cardData.pairId)
-                      // #187 (v7.1.0) — restriction d'affichage retirée (contrat
+                      // #187 (v7.1.0) — restriction PAR ÉQUIPE retirée (contrat
                       // websocket-actions.md, fiche FLIP_MEMORY_CARD, §"Restriction
                       // client retirée") : le serveur devient SEULE autorité sur le
                       // tour d'une équipe (vérification côté serveur pour vplayer,
@@ -1921,7 +1921,19 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
                       // MEMORY_CURRENT_TEAM non vide — si aucune équipe n'était
                       // sélectionnée, AUCUN VJoueur ne pouvait cliquer ; cette
                       // dépendance disparaît aussi.
-                      const canClick = gameState.phase === 'STARTED' && !isMatched && !isFlipped
+                      //
+                      // 🔴 FIX bug QUALIF cycle 7 — restriction PAR SURFACE
+                      // toujours requise, distincte de la restriction par équipe
+                      // ci-dessus : l'écran TV public (isVPlayer=false,
+                      // isAdminPreview=false) ne doit JAMAIS être une surface de
+                      // clic — c'est un affichage passif pour les spectateurs.
+                      // Seuls le VJoueur (sa propre interface) et l'aperçu admin
+                      // en iframe (/tv?admin=true) restent cliquables. C'était déjà
+                      // faux avant #187 (`!isVPlayer` seul rendait TOUT non-VJoueur
+                      // cliquable, y compris l'écran public) — préexistant, révélé
+                      // par ce cycle, corrigé ici en même temps que la grille de
+                      // carte MEMOTION ci-dessous (même défaut, même origine).
+                      const canClick = (isVPlayer || isAdminPreview) && gameState.phase === 'STARTED' && !isMatched && !isFlipped
                       // Only show matched styling during gameplay phases (not before game starts)
                       const showMatchedStyle = isGameplayPhase && isMatched
                       // Get team color for matched pairs (convert pairId to string for JSON key lookup)
@@ -1945,7 +1957,7 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
                           initial={{ opacity: 0, scale: 0.8 }}
                           animate={{ opacity: 1, scale: 1 }}
                           transition={{ delay: index * 0.05, duration: 0.3 }}
-                          onClick={() => canClick && flipMemoryCard(cardData.id)}
+                          onClick={() => canClick && flipMemoryCard(cardData.id, undefined, playerId)}
                           style={{
                             cursor: canClick ? 'pointer' : 'default',
                             '--matched-team-color': teamColor
@@ -2134,6 +2146,13 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
               // Aucune restriction par équipe (task 2.1, même règle que la
               // grille MEMORY question-scopée ci-dessus, PlayerDisplay.jsx
               // ~L1918) : le serveur est seule autorité sur le tour.
+              //
+              // 🔴 FIX bug QUALIF cycle 7 — restriction PAR SURFACE : `canClick`
+              // manquait `(isVPlayer || isAdminPreview)` — l'écran TV public
+              // (spectateur, ni VJoueur ni aperçu admin) pouvait donc retourner
+              // les cartes, ce qui ne doit JAMAIS être possible (affichage
+              // passif). Voir la garde jumelle sur la grille MEMORY
+              // question-scopée ci-dessus (même défaut, même origine).
               const cardMemoryState = getTypeState(gameState, cardHostContext).memory
               const cardMemoryCards = cardType === 'MEMORY' ? buildMemoryCards(selectedCard) : []
               const cardMemoryCols = getMemoryGridCols(cardMemoryCards.length)
@@ -2147,7 +2166,7 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
                     const cardLetter = String.fromCharCode(65 + index)
                     const isMatched = cardMemoryState.matchedPairs?.includes(cardData.pairId)
                     const isFlipped = cardMemoryState.flippedCards?.includes(cardData.id)
-                    const canClick = cardHostContext.playable && !isMatched && !isFlipped
+                    const canClick = (isVPlayer || isAdminPreview) && cardHostContext.playable && !isMatched && !isFlipped
                     const cardRevealed = isMatched || isFlipped || cardHostContext.revealed
                     return (
                       <button
@@ -2155,7 +2174,7 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
                         type="button"
                         className={`memotion-tv-memory-card ${isMatched ? 'matched' : ''} ${cardRevealed ? 'up' : 'down'}`}
                         disabled={!canClick}
-                        onClick={() => canClick && flipMemoryCard(cardData.id, cardHostContext.cardId)}
+                        onClick={() => canClick && flipMemoryCard(cardData.id, cardHostContext.cardId, playerId)}
                         aria-label={cardRevealed ? undefined : `Carte ${cardLetter}, face cachée`}
                       >
                         {cardRevealed ? (

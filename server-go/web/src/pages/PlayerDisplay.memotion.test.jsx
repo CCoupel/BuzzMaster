@@ -1023,15 +1023,46 @@ describe('PlayerDisplay — carte MEMOTION de type MEMORY (#187)', () => {
       expect(overlay.textContent).not.toContain('ANSWER_TEXT')
     })
 
-    it('une carte face cachée est cliquable (playable=true en sous-phase QUESTION) et appelle flipMemoryCard avec la portée de carte', () => {
+    // 🔴 Bug QUALIF cycle 7 — l'écran TV PUBLIC (ni VJoueur, ni aperçu admin)
+    // ne doit JAMAIS pouvoir retourner une carte : affichage passif pour les
+    // spectateurs, pas une surface de contrôle. `renderTV()` rend
+    // <PlayerDisplay /> sans aucune prop (isVPlayer=false par défaut,
+    // isAdminPreview dérivé de l'URL — jamais "?admin=true" dans ce test) :
+    // c'est exactement la configuration de l'écran public.
+    it('🔴 régression cycle 7 — une carte face cachée N\'EST PAS cliquable sur l\'écran TV public (isVPlayer=false, isAdminPreview=false)', () => {
       const mock = makeMemotionMemoryMock('QUESTION')
       useGame.mockReturnValue(mock)
       const { container } = renderTV()
+      const card = container.querySelector('.memotion-tv-memory-card:not(.up)')
+      expect(card.disabled).toBe(true)
+      card.click()
+      expect(mock.flipMemoryCard).not.toHaveBeenCalled()
+    })
+
+    it('une carte face cachée EST cliquable côté VJoueur et appelle flipMemoryCard avec la portée de carte + son propre playerId', () => {
+      const mock = makeMemotionMemoryMock('QUESTION')
+      useGame.mockReturnValue(mock)
+      const { container } = render(<PlayerDisplay isVPlayer playerId="bumper-42" />)
       const card = container.querySelector('.memotion-tv-memory-card:not(.up)')
       expect(card.disabled).toBe(false)
       card.click()
       expect(mock.flipMemoryCard).toHaveBeenCalledTimes(1)
       expect(mock.flipMemoryCard.mock.calls[0][1]).toBe('card-3') // MOTION_CARD_ID = carte active
+      expect(mock.flipMemoryCard.mock.calls[0][2]).toBe('bumper-42') // playerId — fix cycle 7
+    })
+
+    it('une carte face cachée EST cliquable côté aperçu admin (?admin=true), sans playerId (pas de bumper)', () => {
+      const mock = makeMemotionMemoryMock('QUESTION')
+      useGame.mockReturnValue(mock)
+      const originalSearch = window.location.search
+      window.history.pushState({}, '', '?admin=true')
+      const { container } = renderTV()
+      const card = container.querySelector('.memotion-tv-memory-card:not(.up)')
+      expect(card.disabled).toBe(false)
+      card.click()
+      expect(mock.flipMemoryCard).toHaveBeenCalledTimes(1)
+      expect(mock.flipMemoryCard.mock.calls[0][2]).toBeNull() // pas de playerId côté admin preview (prop par défaut)
+      window.history.pushState({}, '', originalSearch)
     })
   })
 
