@@ -14,7 +14,13 @@ import (
 
 // This file implements the RAFALE reservoir store — contracts/rafale.md
 // §2.4/§3, milestone #16, issue #197. Two independent, typed persistence
-// pairs on the SaveStatuses/LoadStatuses pattern:
+// pairs on the SaveStatuses/LoadStatuses SHAPE (single typed file, Set*Path/
+// Save/Load trio) — but NOT on SaveStatuses' own non-atomic os.WriteFile,
+// see atomicWriteFile's doc comment for why (#107, Batch 2 fix: both saves
+// here are fired from a background goroutine on every question draw, unlike
+// question statuses, which only ever save from a single synchronous
+// request path — SaveStatuses' plain os.WriteFile has never needed to
+// tolerate an overlapping save of itself).
 //
 //   - Reservoir (RafaleQuestion list) — data/files/rafale/reservoir.json.
 //     Edited by the /api/rafale/questions* HTTP endpoints.
@@ -82,7 +88,7 @@ func (e *Engine) SaveRafale() error {
 		return err
 	}
 
-	if err := os.WriteFile(e.rafalePath, data, 0644); err != nil {
+	if err := atomicWriteFile(dir, e.rafalePath, data); err != nil {
 		log.Printf("[Engine] Failed to save rafale reservoir: %v", err)
 		return err
 	}
@@ -170,7 +176,7 @@ func (e *Engine) SaveRafaleUsed() error {
 		return err
 	}
 
-	if err := os.WriteFile(e.rafaleUsedPath, data, 0644); err != nil {
+	if err := atomicWriteFile(dir, e.rafaleUsedPath, data); err != nil {
 		log.Printf("[Engine] Failed to save rafale used-flags: %v", err)
 		return err
 	}
@@ -324,4 +330,42 @@ func (e *Engine) DeleteRafaleQuestion(id string) error {
 	e.mu.Unlock()
 
 	return e.SaveRafale()
+}
+
+// atomicWriteFile writes data to path via a uniquely-named temp file in dir
+// followed by an atomic rename — the same pattern already established by
+// SaveBumpers/SaveTeams (#113 B4/#120 B2) for exactly this reason: both
+// SaveRafale and SaveRafaleUsed are fired from a background goroutine
+// (safeGo) on every RAFALE question drawn (contract §7 — "marquage immédiat
+// + persistée"), so saves can legitimately overlap with each other and with
+// a concurrent Load*. Plain os.WriteFile truncates the destination in
+// place, so a reader (or a second overlapping save) can observe an empty or
+// partially-written file mid-write — exactly the "unexpected end of JSON
+// input" failure this fixes. os.CreateTemp gives each call its own file (no
+// two saves collide on the same temp path), and os.Rename is atomic on the
+// same filesystem, so readers only ever see a fully-formed old or new file.
+func atomicWriteFile(dir, path string, data []byte) error {
+	tmpFile, err := os.CreateTemp(dir, filepath.Base(path)+".tmp-*")
+	if err != nil {
+		return err
+	}
+	tmpPath := tmpFile.Name()
+	if _, err := tmpFile.Write(data); err != nil {
+		tmpFile.Close()
+		os.Remove(tmpPath)
+		return err
+	}
+	if err := tmpFile.Close(); err != nil {
+		os.Remove(tmpPath)
+		return err
+	}
+	if err := os.Chmod(tmpPath, 0644); err != nil {
+		os.Remove(tmpPath)
+		return err
+	}
+	if err := os.Rename(tmpPath, path); err != nil {
+		os.Remove(tmpPath)
+		return err
+	}
+	return nil
 }

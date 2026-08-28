@@ -33,8 +33,10 @@ const persistedGameStateFormatVersion = 1
 // Explicitly NOT included, and why:
 //   - Phase, Question, Memory*, Motion* (including MotionActive — #184,
 //     B-B4, contract §5.2's "Non persisté"), ArdoiseAnswers,
-//     EnrollmentActive, ShowQRCode, Entracte (v6.5.2, #119): ephemeral,
-//     per-game-in-progress
+//     EnrollmentActive, ShowQRCode, Entracte (v6.5.2, #119), Rafale* (v8.0.0,
+//     #107, contracts/rafale.md §4 — "tous ces champs sont éphémères"; only
+//     rafale_used.json, a separate file managed by rafale_store.go, actually
+//     persists across a restart): ephemeral, per-game-in-progress
 //     state — restoring it after a restart would resurrect a game that no
 //     longer has connected clients or a live timer behind it. A server that
 //     restarts mid-pause simply comes back outside ENTRACTE (contract

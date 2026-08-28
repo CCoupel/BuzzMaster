@@ -39,6 +39,30 @@ func seedRafaleReservoir(t *testing.T, e *Engine, questions []RafaleQuestion) {
 	}
 }
 
+// drawRafaleQuestionNoAutoSave draws via the same locked core the public
+// DrawRafaleQuestion uses (drawRafaleQuestionUnsafe, engine.go), but WITHOUT
+// its "safeGo(SaveRafaleUsed, ...)" background-save side effect — mirrors
+// setBumpersNoAutoSave (save_bumpers_atomic_test.go, #120 B2) for the exact
+// same reason: an unawaited background save racing t.TempDir()'s cleanup at
+// test end is flaky by construction (the goroutine's own CreateTemp/Rename
+// can still be mid-flight when RemoveAll walks the directory — "TempDir
+// RemoveAll cleanup: directory not empty" — regardless of how atomic the
+// write itself is). Any test asserting on the ON-DISK rafale_used.json
+// (unlike the pure in-memory pool/draw tests above, which never set a
+// RafaleUsedPath and so never touch disk at all) must use this instead of
+// DrawRafaleQuestion, then call SaveRafaleUsed() itself exactly once,
+// deterministically.
+func drawRafaleQuestionNoAutoSave(t *testing.T, e *Engine, categories []string, difficulty int) *RafaleQuestion {
+	t.Helper()
+	e.mu.Lock()
+	drawn, err := e.drawRafaleQuestionUnsafe(categories, difficulty)
+	e.mu.Unlock()
+	if err != nil {
+		t.Fatalf("drawRafaleQuestionNoAutoSave: drawRafaleQuestionUnsafe failed: %v", err)
+	}
+	return drawn
+}
+
 // ---------------------------------------------------------------------------
 // Pioche (contrat §7) : pool = catégories ∩ difficulté ∩ non utilisée,
 // tirage aléatoire uniforme, marquage immédiat.
@@ -181,15 +205,15 @@ func TestRafaleUsedFlag_SaveRoundTrip_OnDiskShape(t *testing.T) {
 	usedPath := filepath.Join(dir, "rafale_used.json")
 	e.SetRafaleUsedPath(usedPath)
 
-	drawn, err := e.DrawRafaleQuestion([]string{string(CategoryHistory)}, 1)
-	if err != nil {
-		t.Fatalf("DrawRafaleQuestion failed: %v", err)
-	}
+	// drawRafaleQuestionNoAutoSave (not the public DrawRafaleQuestion): the
+	// public method's safeGo(SaveRafaleUsed) background write is an
+	// unawaited goroutine — the explicit SaveRafaleUsed() call right below
+	// does NOT wait for it, it only performs its OWN separate write. Its
+	// CreateTemp/Rename can still be mid-flight when this test function
+	// returns and t.TempDir() removes the directory ("TempDir RemoveAll
+	// cleanup: directory not empty") — see the helper's own doc comment.
+	drawn := drawRafaleQuestionNoAutoSave(t, e, []string{string(CategoryHistory)}, 1)
 
-	// DrawRafaleQuestion fires SaveRafaleUsed asynchronously (safeGo) — call
-	// it again here directly (idempotent, same in-memory map) so the
-	// assertion below is deterministic instead of racing the background
-	// goroutine, mirroring this package's SaveBumpers test discipline.
 	if err := e.SaveRafaleUsed(); err != nil {
 		t.Fatalf("SaveRafaleUsed failed: %v", err)
 	}
@@ -228,10 +252,11 @@ func TestRafaleUsedFlag_SurvivesRestart(t *testing.T) {
 	}
 	e1.SetRafaleUsedPath(usedPath)
 
-	drawn, err := e1.DrawRafaleQuestion([]string{string(CategoryHistory)}, 2)
-	if err != nil {
-		t.Fatalf("DrawRafaleQuestion failed: %v", err)
-	}
+	// drawRafaleQuestionNoAutoSave, not DrawRafaleQuestion — see the helper's
+	// doc comment: its public counterpart's safeGo(SaveRafaleUsed) is an
+	// unawaited background write that the SaveRafaleUsed() call right below
+	// does NOT wait for (it only performs its own separate, later write).
+	drawn := drawRafaleQuestionNoAutoSave(t, e1, []string{string(CategoryHistory)}, 2)
 	if err := e1.SaveRafaleUsed(); err != nil { // deterministic flush, see comment above
 		t.Fatalf("SaveRafaleUsed failed: %v", err)
 	}
@@ -258,11 +283,10 @@ func TestRafaleUsedFlag_SurvivesRestart(t *testing.T) {
 	// The only remaining draw must be the OTHER question — never the one
 	// drawn (and persisted) before the restart. This is the exact
 	// regression contract §7.1 forbids ("jamais de reproposition silencieuse
-	// d'une question déjà vue").
-	second, err := e2.DrawRafaleQuestion([]string{string(CategoryHistory)}, 2)
-	if err != nil {
-		t.Fatalf("second draw should still succeed (one question left): %v", err)
-	}
+	// d'une question déjà vue"). No-auto-save variant again — this is the
+	// test's last draw, with nothing after it to deterministically flush a
+	// background safeGo save before t.TempDir() cleans up.
+	second := drawRafaleQuestionNoAutoSave(t, e2, []string{string(CategoryHistory)}, 2)
 	if second.ID == drawn.ID {
 		t.Fatalf("restart re-proposed the already-used question %q — the used flag did not survive", drawn.ID)
 	}
