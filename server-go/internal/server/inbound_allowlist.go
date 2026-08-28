@@ -56,26 +56,35 @@ var inboundActionAllowlist = map[string][]ClientType{
 	protocol.ActionReveal:       {ClientTypeAdmin, ClientTypeAnim},
 	protocol.ActionBumperPoints: {ClientTypeAdmin, ClientTypeAnim},
 	protocol.ActionTeamPoints:   {ClientTypeAdmin, ClientTypeAnim},
+	// RAFALE_VALIDATE/INVALIDATE (v8.0.0, #107, contract rafale.md §5.1):
+	// judging the current question's answer is "conduite en direct", same
+	// périmètre as REVEAL/BUMPER_POINTS/TEAM_POINTS above.
+	protocol.ActionRafaleValidate:   {ClientTypeAdmin, ClientTypeAnim},
+	protocol.ActionRafaleInvalidate: {ClientTypeAdmin, ClientTypeAnim},
 
 	// --- Game control (régie) — admin (/admin) only -------------------
 	// Starting/stopping/scoring/resetting/deleting/configuring a game is
 	// exclusively a régie action. web/src/hooks/useWebSocket.js only wires
 	// these senders up from GamePage.jsx (admin routes) — never PlayerDisplay
 	// (TV) nor VPlayerPage/EnrollPage (VPlayer), nor (v6.2.0) AnimPage.
-	protocol.ActionFull:                  {ClientTypeAdmin},
-	protocol.ActionUpdate:                {ClientTypeAdmin},
-	protocol.ActionPoints:                {ClientTypeAdmin},
-	protocol.ActionRAZ:                   {ClientTypeAdmin},
-	protocol.ActionRemote:                {ClientTypeAdmin},
-	protocol.ActionDelete:                {ClientTypeAdmin},
-	protocol.ActionDeleteBumper:          {ClientTypeAdmin},
-	protocol.ActionReleaseBumperName:     {ClientTypeAdmin},
-	protocol.ActionReset:                 {ClientTypeAdmin},
-	protocol.ActionReboot:                {ClientTypeAdmin},
-	protocol.ActionReorderQuestions:      {ClientTypeAdmin},
-	protocol.ActionForceReady:            {ClientTypeAdmin},
-	protocol.ActionMemorySetTeams:        {ClientTypeAdmin},
-	protocol.ActionMotionSetTeams:        {ClientTypeAdmin},
+	protocol.ActionFull:              {ClientTypeAdmin},
+	protocol.ActionUpdate:            {ClientTypeAdmin},
+	protocol.ActionPoints:            {ClientTypeAdmin},
+	protocol.ActionRAZ:               {ClientTypeAdmin},
+	protocol.ActionRemote:            {ClientTypeAdmin},
+	protocol.ActionDelete:            {ClientTypeAdmin},
+	protocol.ActionDeleteBumper:      {ClientTypeAdmin},
+	protocol.ActionReleaseBumperName: {ClientTypeAdmin},
+	protocol.ActionReset:             {ClientTypeAdmin},
+	protocol.ActionReboot:            {ClientTypeAdmin},
+	protocol.ActionReorderQuestions:  {ClientTypeAdmin},
+	protocol.ActionForceReady:        {ClientTypeAdmin},
+	protocol.ActionMemorySetTeams:    {ClientTypeAdmin},
+	protocol.ActionMotionSetTeams:    {ClientTypeAdmin},
+	// RAFALE_SET_TEAMS (v8.0.0, #107, contract rafale.md §5.1): admin only,
+	// same périmètre as MEMORY_SET_TEAMS/MEMOTION_SET_TEAMS above — choosing
+	// participating teams stays with the régie, never anim.
+	protocol.ActionRafaleSetTeams:        {ClientTypeAdmin},
 	protocol.ActionShowQRCode:            {ClientTypeAdmin},
 	protocol.ActionHideQRCode:            {ClientTypeAdmin},
 	protocol.ActionSetVirtualPlayerLimit: {ClientTypeAdmin},
