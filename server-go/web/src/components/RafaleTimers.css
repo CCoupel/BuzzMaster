@@ -1,0 +1,32 @@
+/* RafaleTimers — double timer (manche 2fr / question 1fr, maquette
+   docs/mockups/rafale-v8.html §3/§4). Statique, aucune unité de scroll —
+   ce composant est monté aussi bien sur /anim (admin, non contraint) que
+   sur /tv (PlayerDisplay.jsx, STATIQUE — voir CLAUDE.md). */
+.rafale-timers {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: var(--spacing-md, 1rem);
+  width: 100%;
+}
+
+.rafale-timer {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--spacing-xs, 0.25rem);
+  min-width: 0;
+}
+
+.rafale-timer-label {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--text-secondary);
+  font-weight: 600;
+}
+
+/* Timer de question — accent visuel distinct (rouge, décompte court) sans
+   toucher Timer.css (le composant reste mono-valeur, générique). */
+.rafale-timer-question .timer-display {
+  color: var(--error);
+}
