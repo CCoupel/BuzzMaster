@@ -1,7 +1,8 @@
 # Procédure de Test — Génération IA MEMOTION+ (#196, v7.1.0)
 
 **Version** : v7.1.0 (branche `milestone/v7.1.0`)
-**Date** : 2026-08-26, complétée 2026-08-27 (Scénario 5, cycle 2 — bugfix QUALIF v7.1.0.7)
+**Date** : 2026-08-26, complétée 2026-08-27 (Scénario 5, cycle 2 — bugfix QUALIF v7.1.0.7),
+complétée 2026-08-28 (note cycle 3 — bugfix QUALIF v7.1.0.8)
 **Testeur** : QA
 **Issue** : #196 — nouvelle clé de distribution `MEMOTION_PLUS` (affichée « MEMOTION+ ») dans la
 modale de génération IA : mélange de cartes SPEEDY/QCM choisies carte par carte par le modèle,
@@ -11,7 +12,9 @@ génération, jamais dans l'éditeur ni dans un `question.json`.
 **Référence** : `contracts/ai-generation.md` §3ter, `_work/handoff/dev-backend-20260826-210653.md`
 (SHA `658e5471`), `_work/handoff/dev-frontend-20260826-205623.md` (SHA `57e158ca`),
 `_work/handoff/dev-backend-20260827-205646.md` (SHA `09bbd848` — cycle 2, schéma allégé par
-distribution active, corrige un faux "rate limit" immédiat)
+distribution active, corrige un faux "rate limit" immédiat),
+`_work/handoff/dev-backend-20260828-093024.md` (SHA `abaf3853` — cycle 3, ambiguïté de
+discriminateur imbriqué sous MEMOTION_PLUS corrigée, cf. note au Scénario 1)
 
 ---
 
@@ -60,6 +63,18 @@ MEMOTION+ activé produit des questions dont les cartes mélangent bien SPEEDY e
 | 7 | Observer le panneau de succès de la modale (liste des questions créées) | Le type reporté pour cette question est `MEMOTION` (jamais le pseudo-type) | | |
 
 **Verdict** : [ ] PASS  [ ] FAIL
+
+> ℹ️ **Note cycle 3 (2026-08-28, bugfix QUALIF v7.1.0.8)** — un bug `json_validate_failed`
+> intermittent sur les cartes QCM générées en MEMOTION+ (ambiguïté de discriminateur imbriqué sous
+> `MOTION_CARDS`, même classe que #142 mais un niveau plus bas) est corrigé par
+> `_work/handoff/dev-backend-20260828-093024.md` (SHA `abaf3853`), verrouillé par 6 tests Go
+> automatisés (`ai_groq_nested_discriminator_1710_8_test.go`). **Pas de reproduction manuelle
+> garantie** — le bug dépendait du comportement du modèle, jamais fiable à déclencher à la demande —
+> donc pas de scénario dédié avec des étapes de reproduction certaines. Si ce Scénario 1 est rejoué
+> avec un volume plus élevé (ex: 10-15 questions, MEMOTION+ seul à 100%) et qu'une erreur de
+> génération apparaît côté modale/panneau d'échec avec le code `json_validate_failed` mentionnant
+> `MOTION_CARDS`, c'est un signal que ce correctif doit être réexaminé — sinon, rien de plus à faire
+> ici, le cas est couvert par l'automatisé.
 
 ---
 
@@ -164,10 +179,11 @@ n'embarque désormais que les types réellement actifs (`> 0`) dans la répartit
 
 | Étape | Action | Résultat Attendu | Résultat Obtenu | OK ? |
 |-------|--------|-----------------|----------------|------|
-| 1 | `cd server-go && go build ./... && go test ./... -race` | Build OK, tous les tests PASS, y compris `internal/server/ai_generator_memotion_plus_196_test.go` (11 tests), `ai_generator_schema_filtering_1710_7_test.go` (12 tests, cycle 2) et le fix de non-régression Groq (`ai_groq_schema_discriminator_test.go`) | | |
+| 1 | `cd server-go && go build ./... && go test ./... -race` | Build OK, tous les tests PASS, y compris `internal/server/ai_generator_memotion_plus_196_test.go` (11 tests), `ai_generator_schema_filtering_1710_7_test.go` (12 tests, cycle 2), `ai_groq_nested_discriminator_1710_8_test.go` (6 tests, cycle 3) et le fix de non-régression Groq (`ai_groq_schema_discriminator_test.go`) | | |
 | 2 | `go test ./internal/server/... -run 'MemotionPlus' -v` | Les 11 tests #196 PASS, notamment le test critique de normalisation `TYPE→MEMOTION` (scan de la chaîne `MEMOTION_PLUS` sur le JSON marshalé entier) et le round-trip à travers les vrais types Go (`ValidateCardTypeContent`) | | |
 | 3 | `go test ./internal/server/... -run 'ActiveGenerableTypes\|BuildQuestionSchema\|RateLimitError\|ClassifyGroqError\|ClassifyAnthropicError' -v` | Les 12 tests du cycle 2 PASS (dont le cas de régression directe "MEMOTION_PLUS seul") **et** `TestClassifyAnthropicError_413And429_SurfaceEnvelopeMessage` (comble l'asymétrie de couverture Anthropic/Groq signalée en revue, `code-review-20260827-210604.md` point INFO — même classification 413≠429 vérifiée côté Anthropic que côté Groq) | | |
-| 4 | `cd server-go/web && npx vitest run` | Tous les tests PASS, y compris `questionTypeMeta.test.js` (6 tests neufs : `QUESTION_TYPES` toujours 5 entrées, `GENERABLE_TYPES` 6 entrées, `MEMOTION_PLUS` absent de `QUESTION_TYPE_META`) et `AIGenerateModal.test.jsx` (4 tests neufs + 8 mis à jour, rebalance des sliders sur 6 colonnes) | | |
+| 4 | `go test ./internal/server/... -run 'GroqNestedDiscriminator\|GroqRequestMaxTokens\|GenerateViaGroq_MaxTokens' -v` | Les 6 tests du cycle 3 PASS : régression directe du `json_validate_failed` (DIFFICULTY dépouillé de son enum dans les 2 branches SPEEDY/QCM imbriquées de MEMOTION_PLUS, TYPE seul discriminateur restant), non-régression MEMOTION classique (DIFFICULTY.enum intact, pas d'anyOf à cet endroit), budget max_tokens tenant compte de la taille du schéma | | |
+| 5 | `cd server-go/web && npx vitest run` | Tous les tests PASS, y compris `questionTypeMeta.test.js` (6 tests neufs : `QUESTION_TYPES` toujours 5 entrées, `GENERABLE_TYPES` 6 entrées, `MEMOTION_PLUS` absent de `QUESTION_TYPE_META`) et `AIGenerateModal.test.jsx` (4 tests neufs + 8 mis à jour, rebalance des sliders sur 6 colonnes) | | |
 
 **Verdict** : [ ] PASS  [ ] FAIL
 
