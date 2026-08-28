@@ -292,6 +292,7 @@ export default function AnimConductPanel({
           ) : isRafale ? (
             <AnimRafaleActions
               disabled={rafaleDisabled}
+              rafaleMode={question?.RAFALE_MODE}
               onValidate={onRafaleValidate}
               onInvalidate={onRafaleInvalidate}
             />
