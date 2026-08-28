@@ -1,0 +1,16 @@
+/* AnimRafaleActions — ligne L2 pendant une manche RAFALE (contrat
+   rafale.md §5.1/§8.1). Réutilise .anim-conduct-btn-{go|danger} TEL QUEL
+   (AnimConductPanel.css) — jamais redéfini ici, même discipline que
+   AnimMotionActions.css (T5 #160). Seule la mise en page (grille 2
+   colonnes) est propre à cette ligne. */
+
+.anim-rafale-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-2);
+  width: 100%;
+}
+
+.anim-rafale-action-btn {
+  min-height: 62px;
+}

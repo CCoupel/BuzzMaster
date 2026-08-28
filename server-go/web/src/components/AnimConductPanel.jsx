@@ -14,6 +14,7 @@ import AnimMotionGrid from './AnimMotionGrid'
 import AnimMotionCard from './AnimMotionCard'
 import AnimMotionActions from './AnimMotionActions'
 import AnimExplanationNote from './AnimExplanationNote'
+import AnimRafaleActions from './AnimRafaleActions'
 import './AnimConductPanel.css'
 
 // L1 — cinq emplacements FIXES (#166/F5) : la liste ne varie jamais dans
@@ -127,6 +128,13 @@ function buttonSubLabel(key, state, phase, waitReason) {
  * @param {string|null} [props.waitReason] - #172/C2 : motif d'attente PREPARE
  *   (utils/prepareWaitReason.js, calculé par AnimPage.jsx) — remplace le
  *   repli générique "indispo." du bouton LANCER quand renseigné
+ * @param {boolean} [props.rafaleDisabled] - RAFALE (contrat rafale.md §5.1,
+ *   milestone v8.0.0) : désactive les deux boutons L2 (RAFALE_VALIDATE/
+ *   RAFALE_INVALIDATE) quand true — ex. hors sous-phase QUESTION. Câblage
+ *   réel (AnimPage.jsx, `RAFALE_SUBPHASE`) en Phase 2 (#107) ; `false` par
+ *   défaut ici (socle #197/#198, données non encore diffusées).
+ * @param {() => void} [props.onRafaleValidate] - émet RAFALE_VALIDATE
+ * @param {() => void} [props.onRafaleInvalidate] - émet RAFALE_INVALIDATE
  */
 export default function AnimConductPanel({
   phase,
@@ -152,6 +160,9 @@ export default function AnimConductPanel({
   onRevealMotionCard,
   onDoneMotionCard,
   waitReason = null,
+  rafaleDisabled = false,
+  onRafaleValidate,
+  onRafaleInvalidate,
 }) {
   const l1 = buildL1(phase, question, { onStart, onPause, onContinue, onStop, onReveal })
   const isQcm = question?.TYPE === 'QCM'
@@ -160,6 +171,11 @@ export default function AnimConductPanel({
   // n'ont pas de carte sélectionnée : selectedMotionCard reste null, sans
   // effet (AnimMotionCard n'est de toute façon monté que hors GRID/MEMORIZE).
   const isMemotion = question?.TYPE === 'MEMOTION'
+  // RAFALE (contrat rafale.md §2.1, milestone v8.0.0) — même patron que
+  // MEMOTION : un QuestionType, pas une phase. Occupe L2 (AnimRafaleActions
+  // — VALIDE/INVALIDE) ; L3 reste l'emplacement réservé générique, RAFALE
+  // ne portant aucune grille propre à ce jour (§7).
+  const isRafale = question?.TYPE === 'RAFALE'
   const motionCards = question?.MOTION_CARDS || []
   const selectedMotionCard = isMemotion
     ? motionCards.find(c => c.ID === motion?.selectedId) || null
@@ -273,6 +289,12 @@ export default function AnimConductPanel({
               onRevealMotionCard={onRevealMotionCard}
               onDoneMotionCard={onDoneMotionCard}
             />
+          ) : isRafale ? (
+            <AnimRafaleActions
+              disabled={rafaleDisabled}
+              onValidate={onRafaleValidate}
+              onInvalidate={onRafaleInvalidate}
+            />
           ) : (
             <div className="anim-conduct-reserved">{modeGestureText}</div>
           )}
@@ -328,6 +350,11 @@ export default function AnimConductPanel({
                 motionConfig={question?.MOTION_CONFIG}
               />
             )
+          ) : isRafale ? (
+            // RAFALE — aucune grille propre (§7 du contrat) : la réponse
+            // attendue (RAFALE_ANSWER) et le tirage vivent hors de ce
+            // panneau (câblage réel AnimPage.jsx, Phase 2 #107).
+            <div className="anim-conduct-reserved">Aucun élément spécifique à ce mode</div>
           ) : (
             <div className="anim-conduct-reserved">Aucun élément spécifique à cette question</div>
           )}
