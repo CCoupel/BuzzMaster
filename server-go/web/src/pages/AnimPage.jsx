@@ -5,9 +5,9 @@ import { useGame } from '../hooks/GameContext'
 import { useCategories } from '../hooks/useCategories'
 import useDoubleTap from '../hooks/useDoubleTap'
 import { categoryMeta } from '../utils/categoryUtils'
-import { sortTeamsByBuzzOrder, getRankBadge, formatReactionTime } from '../utils/buzzOrder'
+import { sortTeamsByBuzzOrder, sortTeamsByRafaleCounter, getRankBadge, formatReactionTime } from '../utils/buzzOrder'
 import { sortArdoiseEntries } from '../utils/ardoiseOrder'
-import { resolvePointsAward, resolvePointsTarget, calcQcmTeamAward } from '../utils/pointsAward'
+import { resolvePointsAward, resolvePointsTarget, calcQcmTeamAward, rafaleCounterForTeam, calcRafaleTeamAward } from '../utils/pointsAward'
 import { isRevealed } from '../utils/phaseRules'
 import { prepareWaitReason } from '../utils/prepareWaitReason'
 import { getQuestionTypeMeta } from '../utils/questionTypeMeta'
@@ -358,8 +358,16 @@ export default function AnimPage() {
     const list = Object.entries(teams)
       .filter(([name]) => teamsWithPlayers.has(name))
       .map(([name, data]) => ({ name, ...data }))
-    return sortTeamsByBuzzOrder(list, gameState.phase)
-  }, [teams, bumpers, gameState.phase])
+    // RAFALE (v8.0.0, #16/#199, contrat rafale.md §6.1, tâche 34) — même
+    // classement par compteur que GamePage.jsx (utils/buzzOrder.js,
+    // mutualisé). sortTeamsByRafaleCounter est un no-op hors type RAFALE.
+    return sortTeamsByRafaleCounter(
+      sortTeamsByBuzzOrder(list, gameState.phase),
+      question,
+      gameState.RAFALE_TEAM_COUNTERS,
+      gameState.RAFALE_TEAM_BEST
+    )
+  }, [teams, bumpers, gameState.phase, question, gameState.RAFALE_TEAM_COUNTERS, gameState.RAFALE_TEAM_BEST])
 
   // #172/C2 — motif d'attente PREPARE, passé à AnimConductPanel (repli du
   // bouton LANCER, style "à suivre" #166 déjà en place, aucun nouveau
@@ -450,6 +458,18 @@ export default function AnimPage() {
     }
     if (isQcmWithHints) {
       return calcQcmTeamAward(gameState.question, basePoints, bumpersByTeam[teamName] || [], gameState.qcmInvalidated?.length || 0)
+    }
+    if (question?.TYPE === 'RAFALE') {
+      // RAFALE (v8.0.0, #16/#199, contrat rafale.md §6.2) — même règle que
+      // GamePage.jsx (mutualisée, utils/pointsAward.js) : suggestion =
+      // compteur retenu × basePoints (creditPoints, ajustable via
+      // pointsInput /admin puis rediffusé — MAJEUR-1). AnimCreditControl
+      // (crédit générique, déjà monté pour tous les types) affiche ce
+      // montant tel quel, verrouillé après crédit via awardedTeams comme
+      // n'importe quel autre type — aucune UI dédiée nécessaire ici.
+      const counter = rafaleCounterForTeam(gameState.question, teamName, gameState.RAFALE_TEAM_COUNTERS, gameState.RAFALE_TEAM_BEST)
+      const award = calcRafaleTeamAward(gameState.question, basePoints, counter)
+      return { amount: award?.amount ?? basePoints, hasCorrectAnswer: null }
     }
     return { amount: resolvePointsAward(gameState.question, basePoints, {}).amount, hasCorrectAnswer: null }
   }
@@ -742,6 +762,22 @@ export default function AnimPage() {
             ? { participating: false, label: 'ne participe pas' }
             : null
           const isActiveMotionTeam = isMemotionQuestion && gameState.MEMOTION_CURRENT_TEAM === team.name
+          // RAFALE (v8.0.0, #16/#199, contrat rafale.md §6.1/§8.2, tâche 34)
+          // — même traitement que MEMORY/MEMOTION ci-dessus : compteur "live"
+          // (pas un score réel, §6.1), équipe active en surbrillance (§8.2).
+          const isRafaleQuestion = question?.TYPE === 'RAFALE'
+          const rafaleParticipating = isRafaleQuestion
+            ? (!gameState.RAFALE_PARTICIPATING_TEAMS?.length || gameState.RAFALE_PARTICIPATING_TEAMS.includes(team.name))
+            : true
+          const rafaleStat = isRafaleQuestion
+            ? (() => {
+                if (!rafaleParticipating) return { participating: false, label: 'ne participe pas' }
+                const counter = gameState.RAFALE_TEAM_COUNTERS?.[team.name] || 0
+                const label = `${counter} bonne${counter > 1 ? 's' : ''} reponse${counter > 1 ? 's' : ''}`
+                return { participating: true, label }
+              })()
+            : null
+          const isActiveRafaleTeam = isRafaleQuestion && gameState.RAFALE_CURRENT_TEAM === team.name
           // #171/F4/F6 — "tenté" ne conditionne plus si le geste de crédit
           // est monté (creditEnabled, phase seule, inchangé) : seulement si
           // un montant positif est proposé en plus de "0 pt". Une équipe
@@ -752,10 +788,10 @@ export default function AnimPage() {
           // (memoryParticipating) plutôt que canAwardPoints (basé sur les
           // bumpers, sans objet ici) : une équipe hors
           // MEMORY_PARTICIPATING_TEAMS ne se voit proposer que "0 pt".
-          const attempted = isMemoryQuestion ? memoryParticipating : canAwardPoints(question, bumpersByTeam[team.name])
+          const attempted = isMemoryQuestion ? memoryParticipating : isRafaleQuestion ? rafaleParticipating : canAwardPoints(question, bumpersByTeam[team.name])
           const teamCreditAmount = attempted ? getTeamAward(team.name).amount : null
           const noAttemptLabel = question?.TYPE === 'QCM' ? 'pas de réponse' : 'pas de buzz'
-          const hasExtra = reactionTime || qcmAnswer || creditEnabled || memoryStat || motionStat
+          const hasExtra = reactionTime || qcmAnswer || creditEnabled || memoryStat || motionStat || rafaleStat
           return (
             <AnimTeamCard
               key={team.name}
@@ -763,8 +799,8 @@ export default function AnimPage() {
               color={team.COLOR}
               score={team.SCORE || 0}
               medal={rankBadge}
-              active={isActiveMemoryTeam || isActiveMotionTeam}
-              dimmed={(isMemoryQuestion && !memoryParticipating) || (isMemotionQuestion && !motionParticipating)}
+              active={isActiveMemoryTeam || isActiveMotionTeam || isActiveRafaleTeam}
+              dimmed={(isMemoryQuestion && !memoryParticipating) || (isMemotionQuestion && !motionParticipating) || (isRafaleQuestion && !rafaleParticipating)}
             >
               {hasExtra && (
                 <>
@@ -778,6 +814,9 @@ export default function AnimPage() {
                   )}
                   {motionStat && (
                     <span className="anim-team-memory-stat">{motionStat.label}</span>
+                  )}
+                  {rafaleStat && (
+                    <span className="anim-team-memory-stat">{rafaleStat.label}</span>
                   )}
                   {/* #157/T4 — couleur choisie dès le buzz ; justesse (✓/✗)
                       uniquement en REVEALED — rien de tout cela hors QCM
