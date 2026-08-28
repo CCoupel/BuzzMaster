@@ -111,6 +111,53 @@ export function calcArdoiseDefaultPoints(question, fallbackPoints) {
 }
 
 /**
+ * rafaleCounterForTeam — résout le "compteur retenu" d'une équipe pour
+ * l'attribution de fin de manche RAFALE (v8.0.0, #16/#199, contrat
+ * rafale.md §6.2) :
+ *   compteur_retenu = RAFALE_TEAM_BEST[team]   en MAILLON_FAIBLE
+ *                    = RAFALE_TEAM_COUNTERS[team] sinon
+ *
+ * Même règle que `sortTeamsByRafaleCounter` (utils/buzzOrder.js) — extraite
+ * ici pour être appelée sans reconstruire une liste triée (un seul montant,
+ * pas un classement).
+ *
+ * @param {object} question - question courante (TYPE RAFALE, RAFALE_MODE)
+ * @param {string} teamName
+ * @param {Object<string,number>} teamCounters - gameState.RAFALE_TEAM_COUNTERS
+ * @param {Object<string,number>} teamBest - gameState.RAFALE_TEAM_BEST
+ * @returns {number}
+ */
+export function rafaleCounterForTeam(question, teamName, teamCounters, teamBest) {
+  const useBest = question?.RAFALE_MODE === 'MAILLON_FAIBLE'
+  const source = useBest ? (teamBest || {}) : (teamCounters || {})
+  return source[teamName] || 0
+}
+
+/**
+ * calcRafaleTeamAward — montant SUGGÉRÉ de fin de manche RAFALE (contrat
+ * rafale.md §6.2) : `points_suggérés = compteur_retenu × barème`. Comme les
+ * autres fonctions de ce module, le barème n'est JAMAIS décidé ici — c'est
+ * `basePoints`, fourni par l'appelant (`pointsInput` /admin, `creditPoints`
+ * /anim, même discipline MAJEUR-1 que le reste du fichier), initialisé à
+ * `question.POINTS` mais ajustable AVANT crédit (contrat §6.2 : "Valeur
+ * suggérée pré-remplie par l'interface — ajustable avant envoi").
+ *
+ * `null` si la question n'est pas de type RAFALE (même convention que
+ * `calcMemoryScore` ci-dessus) — l'appelant utilise alors son repli usuel
+ * (`pointsToAward = basePoints`).
+ *
+ * @param {object} question - question courante (TYPE RAFALE)
+ * @param {number} basePoints - barème (paramètre, voir ci-dessus)
+ * @param {number} counter - compteur retenu, résolu par l'appelant via
+ *   `rafaleCounterForTeam` ci-dessus
+ * @returns {{amount:number}|null}
+ */
+export function calcRafaleTeamAward(question, basePoints, counter) {
+  if (question?.TYPE !== 'RAFALE') return null
+  return { amount: (counter || 0) * (basePoints || 0) }
+}
+
+/**
  * Détermine qui reçoit les points d'une attribution : l'équipe ou le joueur
  * — discriminant POINTS_TARGET (GamePage.jsx:404-411). S'applique à tous
  * les types de question, y compris SPEEDY (le cas nouvellement couvert pour
