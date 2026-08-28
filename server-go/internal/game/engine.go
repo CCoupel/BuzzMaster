@@ -218,6 +218,17 @@ type Engine struct {
 	// which fires OnStateChange (full UPDATE, carrying the new
 	// RAFALE_CURRENT_QUESTION/RAFALE_SUBPHASE) and OnRafaleAnswer instead.
 	OnRafaleQuestionTick func(questionTime int)
+	// OnRafaleTeamsChanged (v8.0.0, #199, contract §8.3) fires whenever
+	// RAFALE's active/next/participating team set MAY need a buzzer LED
+	// refresh: round start, RAFALE_SET_TEAMS, and every advance (VALIDATE/
+	// INVALIDATE/question-timer expiry) — including an advance where
+	// RafaleCurrentTeam doesn't actually change (TANT_QUE_JE_GAGNE/SOLO
+	// keeping the hand), since §8.3 requires a refresh "à chaque...
+	// changement de question" too, not only an actual rotation. No
+	// parameters — the consumer (cmd/server/main.go, sendLEDSetRafaleTeams)
+	// re-reads live GetState()/GetTeamsAndBumpers() itself, same pattern as
+	// OnStateChange.
+	OnRafaleTeamsChanged func()
 	// #187 cycle 3 briefly added OnMotionCardAutoRevealed here (a MEMORY
 	// card auto-revealing at timer expiry) — REVERTED in cycle 4: the
 	// user-validated behavior is that expiry on an incomplete grid leaves
@@ -1916,15 +1927,66 @@ func (e *Engine) advanceRafaleUnsafe(correct bool) rafaleAdvanceResult {
 
 	e.stopRafaleQuestionTimerUnsafe()
 
-	// SOLO-only scoring in this batch — see this block's header comment.
-	// CHACUN_SON_TOUR/TANT_QUE_JE_GAGNE/MAILLON_FAIBLE's distinct
-	// rotation/reset policies (contract §6.1's table) are Phase 3 (#199,
-	// tasks 28-30); this unconditional increment-on-correct is already
-	// exactly SOLO's own rule (§6.1: "Réponse valide | counter[team]++",
-	// "Réponse invalide | —"), so nothing here needs to change once Phase 3
-	// starts populating RafaleCurrentTeam via RAFALE_SET_TEAMS.
-	if correct && e.state.RafaleCurrentTeam != "" {
-		e.state.RafaleTeamCounters[e.state.RafaleCurrentTeam]++
+	// The 4 modes (v8.0.0, #199, contract §3.4/§6.1) — a question-timer
+	// expiry (correct==false) is deliberately routed through the exact same
+	// switch as RAFALE_INVALIDATE ("identique à réponse invalide", §6.1),
+	// never a separate branch. RafaleCurrentTeam=="" (RAFALE_SET_TEAMS never
+	// called — e.g. a solo round with no team concept in play at all) makes
+	// every branch below a no-op on the counter/rotation, matching this
+	// batch's predecessor behavior exactly.
+	team := e.state.RafaleCurrentTeam
+	mode := e.state.Question.RafaleMode
+	if mode == "" {
+		mode = string(RafaleModeSolo)
+	}
+	switch mode {
+	case string(RafaleModeSolo):
+		// "Aucune rotation" (§3.4) — counter[team]++ on correct, nothing on
+		// incorrect/timeout (§6.1's "—" for every SOLO cell besides the
+		// first row).
+		if correct && team != "" {
+			e.state.RafaleTeamCounters[team]++
+		}
+	case string(RafaleModeChacunSonTour):
+		// Rotates after EVERY question, regardless of outcome.
+		if correct && team != "" {
+			e.state.RafaleTeamCounters[team]++
+		}
+		e.rotateRafaleTeam()
+	case string(RafaleModeTantQueJeGagne):
+		// Correct answer keeps the hand (no rotation); incorrect/timeout
+		// rotates.
+		if correct {
+			if team != "" {
+				e.state.RafaleTeamCounters[team]++
+			}
+		} else {
+			e.rotateRafaleTeam()
+		}
+	case string(RafaleModeMaillonFaible):
+		// Like CHACUN_SON_TOUR (rotates every question either way), but an
+		// incorrect answer/timeout also resets THIS team's running counter
+		// to 0 — the best value it reached is kept separately in
+		// RafaleTeamBest, read by the animateur's point-attribution UI
+		// (§6.2), never overwritten by the reset.
+		if correct {
+			if team != "" {
+				e.state.RafaleTeamCounters[team]++
+				if e.state.RafaleTeamCounters[team] > e.state.RafaleTeamBest[team] {
+					e.state.RafaleTeamBest[team] = e.state.RafaleTeamCounters[team]
+				}
+			}
+		} else if team != "" {
+			e.state.RafaleTeamCounters[team] = 0
+		}
+		e.rotateRafaleTeam()
+	default:
+		// Unknown mode string — treat as SOLO (same "absent ⇒ default"
+		// discipline as mode=="" above), never panics or silently drops the
+		// question.
+		if correct && team != "" {
+			e.state.RafaleTeamCounters[team]++
+		}
 	}
 
 	// Hard cap (contract §7.2), default/max 100.
@@ -1965,6 +2027,25 @@ func (e *Engine) advanceRafaleUnsafe(correct bool) rafaleAdvanceResult {
 	}
 }
 
+// rotateRafaleTeam advances RafaleCurrentTeam to the next team in
+// RafaleParticipatingTeams (circular) via the shared rotateTeam helper
+// (team_rotation.go, #199 task 28) — RAFALE's counterpart to
+// rotateMotionTeam. A no-op when no teams are participating (RAFALE_SET_TEAMS
+// never called, or called with an empty list) — matches rotateMotionTeam's
+// own early-return. Caller must hold e.mu (write lock).
+func (e *Engine) rotateRafaleTeam() {
+	if len(e.state.RafaleParticipatingTeams) == 0 {
+		return
+	}
+
+	prev := e.state.RafaleCurrentTeam
+	next, color := rotateTeam(e.state.RafaleParticipatingTeams, e.state.RafaleCurrentTeam, e.data.Teams)
+	e.state.RafaleCurrentTeam = next
+	e.state.RafaleCurrentTeamColor = color
+
+	log.Printf("[Engine] RAFALE team rotated: %s → %s", prev, next)
+}
+
 // fireRafaleAdvanceCallbacks performs the UNLOCKED side effects of one
 // RAFALE advance — shared by RafaleValidate/RafaleInvalidate and
 // StartRafaleQuestionTimer's own expiry handling so both paths broadcast
@@ -1981,6 +2062,14 @@ func (e *Engine) fireRafaleAdvanceCallbacks(result rafaleAdvanceResult) {
 		e.OnRafaleAnswer(result.nextQuestionID, result.nextAnswer)
 	}
 	e.StartRafaleQuestionTimer(result.nextQuestionTime)
+	// #199 task 36: LEDs are refreshed on EVERY advance, not just an actual
+	// rotation — contract §8.3 says "à chaque... changement de question",
+	// and TANT_QUE_JE_GAGNE/SOLO can advance without RafaleCurrentTeam
+	// changing at all. The consumer (cmd/server/main.go) re-reads live
+	// state, same as OnStateChange below — no data passed here.
+	if e.OnRafaleTeamsChanged != nil {
+		e.OnRafaleTeamsChanged()
+	}
 	if e.OnStateChange != nil {
 		// Not a real phase transition (Phase stays STARTED) — OnStateChange
 		// is reused here purely as "please rebroadcast full state"
@@ -2104,6 +2193,12 @@ func (e *Engine) finishRafaleRoundStart(result rafaleRoundStartResult) {
 		e.OnRafaleAnswer(result.questionID, result.answer)
 	}
 	e.StartRafaleQuestionTimer(result.questionTime)
+	// #199 task 36 — initial LED grid for the round (active team, if any
+	// RAFALE_SET_TEAMS was called before START; all-off in SOLO or if no
+	// teams were set).
+	if e.OnRafaleTeamsChanged != nil {
+		e.OnRafaleTeamsChanged()
+	}
 }
 
 // Pause pauses the game (single buzzer)
@@ -4956,6 +5051,96 @@ func (e *Engine) SetMotionParticipatingTeams(teams []string) error {
 	return nil
 }
 
+// RafaleError represents a RAFALE-specific error (v8.0.0, #199) — same
+// {Reason string} shape as MotionError/MemoryError, for consistency with
+// the two sibling "set participating teams" families this mirrors.
+type RafaleError struct {
+	Reason string
+}
+
+func (e *RafaleError) Error() string {
+	return e.Reason
+}
+
+// SetRafaleParticipatingTeams sets the RAFALE round's participating teams
+// and play order (contract §5.1: "équipes participantes + ordre de
+// passage", RAFALE_SET_TEAMS action) — mirrors SetMemoryParticipatingTeams/
+// SetMotionParticipatingTeams above. Allowed during PREPARE or READY (before
+// START), same as those two. The first team in the list becomes
+// RafaleCurrentTeam immediately (so a round that never rotates — SOLO, or
+// TANT_QUE_JE_GAGNE staying on a winning streak — still has an active team
+// from the very first question); an empty list clears it back to "".
+//
+// No minimum-team-count gate is imposed here (unlike MEMORY SOLO/multi —
+// participantsConform's default case already returns true for RAFALE,
+// engine.go:1038): a RAFALE round has never required a participating team
+// at all (contract §3.4 SOLO, Batch 2/#107) — this action is additive, not
+// a new precondition on reaching READY/START.
+func (e *Engine) SetRafaleParticipatingTeams(teams []string) error {
+	e.mu.Lock()
+
+	if e.state.Phase != PhasePrepare && e.state.Phase != PhaseReady {
+		e.mu.Unlock()
+		return &RafaleError{Reason: "NOT_IN_PREPARE_OR_READY_PHASE"}
+	}
+	if e.state.Question == nil || e.state.Question.Type != QuestionTypeRafale {
+		e.mu.Unlock()
+		return &RafaleError{Reason: "NOT_RAFALE_QUESTION"}
+	}
+
+	// Validate all teams exist — same discipline as the two sibling
+	// functions above.
+	for _, teamName := range teams {
+		if _, exists := e.data.Teams[teamName]; !exists {
+			e.mu.Unlock()
+			return &RafaleError{Reason: "TEAM_NOT_FOUND"}
+		}
+	}
+
+	e.state.RafaleParticipatingTeams = teams
+	if len(teams) > 0 {
+		e.state.RafaleCurrentTeam = teams[0]
+		if team, exists := e.data.Teams[teams[0]]; exists {
+			e.state.RafaleCurrentTeamColor = team.Color
+		}
+	} else {
+		e.state.RafaleCurrentTeam = ""
+		e.state.RafaleCurrentTeamColor = []int{}
+	}
+
+	log.Printf("[Engine] RAFALE SetRafaleParticipatingTeams: teams=%v currentTeam=%s",
+		teams, e.state.RafaleCurrentTeam)
+
+	// Same PREPARE↔READY re-check as SetMemoryParticipatingTeams/
+	// SetMotionParticipatingTeams — a no-op for RAFALE today
+	// (participantsConform's default case, engine.go:1038), kept for
+	// consistency with the two sibling functions rather than a
+	// special-cased simpler version that would silently diverge if a
+	// future contract change ever added a RAFALE participant-count rule.
+	newPhase := e.reevaluatePrepareReadyUnsafe()
+
+	// Release lock BEFORE calling callback to avoid deadlock
+	stateCallback := e.OnStateChange
+	teamsCallback := e.OnRafaleTeamsChanged
+	e.mu.Unlock()
+
+	// #199 task 36 — fired unconditionally; the consumer
+	// (sendLEDSetRafaleTeams, cmd/server/main.go) gates on Phase==STARTED
+	// itself (mirrors sendLEDSetForBuzzerMemory's own phase dispatch — the
+	// multi-team grid is a STARTED-only concept, same as MEMORY's), so
+	// calling this during PREPARE/READY (this function's only phases) is a
+	// harmless no-op today, not a premature LED change.
+	if teamsCallback != nil {
+		teamsCallback()
+	}
+
+	if stateCallback != nil && newPhase != "" {
+		stateCallback(newPhase)
+	}
+
+	return nil
+}
+
 // rotateMotionTeam advances MotionCurrentTeam to the next team in MotionParticipatingTeams.
 // Must be called with e.mu held (write).
 func (e *Engine) rotateMotionTeam() {
@@ -4963,26 +5148,12 @@ func (e *Engine) rotateMotionTeam() {
 		return
 	}
 
-	// Find current team index
-	currentIndex := -1
-	for i, team := range e.state.MotionParticipatingTeams {
-		if team == e.state.MotionCurrentTeam {
-			currentIndex = i
-			break
-		}
-	}
-
-	// Circular rotation
-	nextIndex := (currentIndex + 1) % len(e.state.MotionParticipatingTeams)
 	prev := e.state.MotionCurrentTeam
-	e.state.MotionCurrentTeam = e.state.MotionParticipatingTeams[nextIndex]
+	next, color := rotateTeam(e.state.MotionParticipatingTeams, e.state.MotionCurrentTeam, e.data.Teams)
+	e.state.MotionCurrentTeam = next
+	e.state.MotionCurrentTeamColor = color
 
-	// Update current team color
-	if team, exists := e.data.Teams[e.state.MotionCurrentTeam]; exists {
-		e.state.MotionCurrentTeamColor = team.Color
-	}
-
-	log.Printf("[Engine] MEMOTION team rotated: %s → %s (index %d)", prev, e.state.MotionCurrentTeam, nextIndex)
+	log.Printf("[Engine] MEMOTION team rotated: %s → %s", prev, next)
 }
 
 // StartMotionCardTimer starts a per-card countdown for MEMOTION.
