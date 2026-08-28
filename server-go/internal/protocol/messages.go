@@ -128,6 +128,26 @@ const (
 	// would make an accidental cross-wipe between the two forms more
 	// likely, not less).
 	ActionUpdateEntracteConfig = "UPDATE_ENTRACTE_CONFIG"
+
+	// RAFALE actions (v8.0.0, #107 — contracts/rafale.md §5). RAFALE_VALIDATE/
+	// INVALIDATE mirror MEMOTION's "conduite en direct" pattern (admin+anim,
+	// empty {} payload, same as MEMOTION_REVEAL/MEMOTION_STOP_TIMER above —
+	// no dedicated payload struct needed). RAFALE_SET_TEAMS reuses the
+	// {TEAMS:[...]} shape (RafaleSetTeamsPayload, alias below), admin-only
+	// like MEMORY_SET_TEAMS/MEMOTION_SET_TEAMS (contract §5.1).
+	ActionRafaleValidate   = "RAFALE_VALIDATE"   // Admin/Anim → Server: current answer judged correct
+	ActionRafaleInvalidate = "RAFALE_INVALIDATE" // Admin/Anim → Server: current answer judged incorrect
+	ActionRafaleSetTeams   = "RAFALE_SET_TEAMS"  // Admin → Server: participating teams + play order
+	// RAFALE_ANSWER/RAFALE_TICK are SERVER → CLIENT only (contract §5.2) —
+	// deliberately absent from internal/server/inbound_allowlist.go (see
+	// inbound_allowlist_rafale_test.go's regression guard). RAFALE_ANSWER
+	// carries the expected answer, contract §2.3: never diffused through
+	// GameState, sent only to admin+anim via BroadcastToTypes — see
+	// RafaleAnswerPayload below. RAFALE_TICK is the lightweight per-question
+	// countdown (contract §2.2's "seul mécanisme réellement nouveau"),
+	// broadcast to all clients without re-emitting the full GameState.
+	ActionRafaleAnswer = "RAFALE_ANSWER"
+	ActionRafaleTick   = "RAFALE_TICK"
 )
 
 // FSInfo represents file storage information
@@ -478,6 +498,30 @@ type QCMHintPayload struct {
 // SetVirtualPlayerLimitPayload for SET_VIRTUAL_PLAYER_LIMIT action
 type SetVirtualPlayerLimitPayload struct {
 	Limit int `json:"LIMIT"` // Maximum number of virtual players
+}
+
+// RafaleSetTeamsPayload is an alias for MemorySetTeamsPayload — same
+// {TEAMS: [...]} structure (RAFALE_SET_TEAMS action, contract §5.1),
+// same pattern as MotionSetTeamsPayload above.
+type RafaleSetTeamsPayload = MemorySetTeamsPayload
+
+// RafaleAnswerPayload for the RAFALE_ANSWER action (Server → admin+anim
+// only, contract §5.2/§2.3) — the current RAFALE question's expected
+// answer. Deliberately its own dedicated action rather than a GameState
+// field: SerializeForWebClient serves the identical payload to /tv and
+// /anim, so no per-field exclusion list could keep the answer off TV
+// (contract §2.3 — see the ardoise_leak_128 precedent this design avoids
+// reproducing).
+type RafaleAnswerPayload struct {
+	ID     string `json:"ID"`     // RafaleQuestion.ID this answer belongs to
+	Answer string `json:"ANSWER"` // expected answer, text only
+}
+
+// RafaleTickPayload for the RAFALE_TICK action (Server → all clients,
+// contract §5.2) — the lightweight per-question countdown, broadcast
+// without re-emitting the full GameState (contract §2.2).
+type RafaleTickPayload struct {
+	QuestionTime int `json:"QUESTION_TIME"` // seconds remaining on the current question
 }
 
 // PlayerConnectPayload for PLAYER_CONNECT action (virtual player enrollment)
