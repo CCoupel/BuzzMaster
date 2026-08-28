@@ -2819,9 +2819,55 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
                 : 'var(--error)'
               const counters = gameState.RAFALE_TEAM_COUNTERS || {}
               const catMeta = categoryMeta(current.CATEGORY, apiCategories)
-              // Contenu plafonné (règle TV, CLAUDE.md) — au plus 6 équipes
-              // affichées, même discipline que les autres écrans multi-équipes.
-              const displayTeams = (isMultiTeam ? participatingTeams : Object.keys(counters)).slice(0, 6)
+              // Classement en direct (v8.0.0, #16/#199, contrat §6.1, tâche
+              // 34) — trié par compteur décroissant, PAS un score réel
+              // (aucun point attribué avant la fin de manche). Contenu
+              // plafonné à 6 équipes (règle TV, CLAUDE.md), même discipline
+              // que les autres écrans multi-équipes.
+              const displayTeams = (isMultiTeam ? participatingTeams : Object.keys(counters))
+                .slice()
+                .sort((a, b) => (counters[b] || 0) - (counters[a] || 0))
+                .slice(0, 6)
+
+              // VPlayer (v8.0.0, #16/#198, contrat §8.1/§8.2, tâche 38) —
+              // AUCUN élément interactif, affichage seul. Layout ENTIÈREMENT
+              // différent du TV : la tablette d'un joueur n'a pas besoin du
+              // timer/de la question (répondue à l'oral, animateur/admin
+              // seuls voient RAFALE_ANSWER, §2.3) — seul l'indicateur
+              // "équipe active" a un sens ici. Actif uniquement en mode
+              // multi (RAFALE_MODE ≠ SOLO, §8.2) ; en SOLO, rien de plus à
+              // dire côté VPlayer (pas de tour à annoncer, une seule équipe
+              // joue en continu).
+              if (isVPlayer) {
+                if (!isMultiTeam) {
+                  return (
+                    <div className="rafale-vplayer-fullscreen rafale-vplayer-neutral">
+                      <span className="rafale-vplayer-fs-message">Manche RAFALE en cours</span>
+                    </div>
+                  )
+                }
+                const isMyTurn = !!teamName && teamName === currentTeam
+                return isMyTurn ? (
+                  <motion.div
+                    className="rafale-vplayer-fullscreen rafale-vplayer-active"
+                    style={{ '--rafale-active-color': currentTeamCss }}
+                    initial={{ opacity: 0, scale: 0.9 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                  >
+                    <span className="rafale-vplayer-fs-team">{currentTeam}</span>
+                    <span className="rafale-vplayer-fs-message">À VOUS DE<br />RÉPONDRE</span>
+                    <span className="rafale-vplayer-fs-hint">à l'oral</span>
+                  </motion.div>
+                ) : (
+                  <div className="rafale-vplayer-fullscreen rafale-vplayer-neutral">
+                    <span className="rafale-vplayer-fs-label">EN COURS</span>
+                    <span className="rafale-vplayer-fs-message">
+                      Au tour des<br />
+                      <span style={{ color: currentTeamCss }}>{currentTeam || '—'}</span>
+                    </span>
+                  </div>
+                )
+              }
 
               return (
                 <div className="game-content-zones rafale-tv">

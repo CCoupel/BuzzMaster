@@ -3543,29 +3543,41 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 0.5vh;
-  padding: 2vh 3vw;
-  border: 3px solid var(--rafale-active-color, var(--error));
+  gap: 0.8vh;
+  padding: 3vh 5vw;
+  width: 80%;
+  max-width: 70vw;
+  border: 5px solid var(--rafale-active-color, var(--error));
   border-radius: var(--radius-xl);
   background: linear-gradient(90deg,
-    color-mix(in srgb, var(--rafale-active-color, var(--error)) 15%, transparent),
-    color-mix(in srgb, var(--rafale-active-color, var(--error)) 30%, transparent),
-    color-mix(in srgb, var(--rafale-active-color, var(--error)) 15%, transparent));
+    color-mix(in srgb, var(--rafale-active-color, var(--error)) 18%, transparent),
+    color-mix(in srgb, var(--rafale-active-color, var(--error)) 38%, transparent),
+    color-mix(in srgb, var(--rafale-active-color, var(--error)) 18%, transparent));
+  box-shadow: 0 0 4vh color-mix(in srgb, var(--rafale-active-color, var(--error)) 55%, transparent);
+  animation: rafale-active-pulse 1.6s ease-in-out infinite;
+}
+
+/* Bandeau renforcé (#198, tâche 38) — pulsation lente, lisible de loin, ne
+   gêne jamais la lecture (amplitude faible, jamais d'opacité à 0). */
+@keyframes rafale-active-pulse {
+  0%, 100% { box-shadow: 0 0 4vh color-mix(in srgb, var(--rafale-active-color, var(--error)) 45%, transparent); }
+  50%      { box-shadow: 0 0 7vh color-mix(in srgb, var(--rafale-active-color, var(--error)) 75%, transparent); }
 }
 
 .rafale-tv-active-label {
-  font-size: clamp(0.6rem, 1.4vh, 0.85rem);
-  letter-spacing: 0.18em;
+  font-size: clamp(0.7rem, 1.6vh, 1rem);
+  letter-spacing: 0.2em;
   text-transform: uppercase;
   color: var(--text-secondary, #94a3b8);
+  font-weight: 700;
 }
 
 .rafale-tv-active-name {
-  font-size: clamp(1.4rem, 5vh, 3rem);
+  font-size: clamp(1.8rem, 7vh, 4rem);
   font-weight: 900;
   letter-spacing: 0.03em;
   color: #ffffff;
-  text-shadow: 0 0.2vh 1vh rgba(0, 0, 0, 0.4);
+  text-shadow: 0 0.2vh 1vh rgba(0, 0, 0, 0.5);
 }
 
 /* Zone 4 — compteurs par équipe (§6.1, "compteur, pas de score réel").
@@ -3613,4 +3625,73 @@
   font-weight: 800;
   font-variant-numeric: tabular-nums;
   color: #ffffff;
+}
+
+/* ------------------------------------------------------------------ */
+/* RAFALE — VPlayer plein écran (contrat rafale.md §8.1/§8.2, tâche 38)*/
+/* Affichage SEUL — aucun bouton, aucune saisie. Statique (hérite de     */
+/* .game-display : height:100%, overflow:hidden, flex column).         */
+/* ------------------------------------------------------------------ */
+
+.rafale-vplayer-fullscreen {
+  flex: 1;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2vh;
+  text-align: center;
+  padding: 4vh 6vw;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.rafale-vplayer-active {
+  border: 6px solid var(--rafale-active-color, var(--error));
+  border-radius: var(--radius-2xl, 24px);
+  background: linear-gradient(160deg,
+    color-mix(in srgb, var(--rafale-active-color, var(--error)) 25%, transparent),
+    color-mix(in srgb, var(--rafale-active-color, var(--error)) 8%, transparent));
+  box-shadow: 0 0 6vh color-mix(in srgb, var(--rafale-active-color, var(--error)) 55%, transparent);
+  margin: 4vh 4vw;
+  animation: rafale-active-pulse 1.6s ease-in-out infinite;
+}
+
+.rafale-vplayer-fs-team {
+  font-size: clamp(0.75rem, 2.2vh, 1.1rem);
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--text-secondary, #94a3b8);
+  font-weight: 700;
+}
+
+.rafale-vplayer-fs-message {
+  font-size: clamp(1.8rem, 8vh, 4.5rem);
+  font-weight: 900;
+  line-height: 1.15;
+  color: #ffffff;
+  text-shadow: 0 0.2vh 1vh rgba(0, 0, 0, 0.5);
+}
+
+.rafale-vplayer-fs-hint {
+  font-size: clamp(0.7rem, 1.8vh, 1rem);
+  color: var(--text-secondary, #94a3b8);
+}
+
+.rafale-vplayer-neutral {
+  color: var(--text-secondary, #94a3b8);
+}
+
+.rafale-vplayer-fs-label {
+  font-size: clamp(0.65rem, 1.6vh, 0.9rem);
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--text-secondary, #94a3b8);
+}
+
+.rafale-vplayer-neutral .rafale-vplayer-fs-message {
+  font-size: clamp(1.2rem, 4.5vh, 2.4rem);
+  color: var(--text-secondary, #cbd5e1);
+  font-weight: 700;
 }
