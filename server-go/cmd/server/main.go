@@ -235,6 +235,14 @@ func main() {
 		server.LogWarn(game.LogComponentApp, "Could not load question statuses: %v", err)
 	}
 
+	// Load RAFALE reservoir + "already used" flags (v8.0.0, #197)
+	if err := app.engine.LoadRafale(); err != nil {
+		server.LogWarn(game.LogComponentApp, "Could not load rafale reservoir: %v", err)
+	}
+	if err := app.engine.LoadRafaleUsed(); err != nil {
+		server.LogWarn(game.LogComponentApp, "Could not load rafale used-flags: %v", err)
+	}
+
 	// Load persisted game state (#141: quiz metadata, virtual player limit).
 	// Must run AFTER app.init() (which already set the path below) and after
 	// loadBackgrounds()/loadNewGameBackgrounds() (called from init() at
@@ -290,6 +298,14 @@ func (a *App) init() {
 	a.engine.SetBumpersPath(filepath.Join(configDir, "bumpers.json"))
 	a.engine.SetStatusesPath(filepath.Join(configDir, "question_statuses.json"))
 	a.engine.SetStatePath(filepath.Join(configDir, "game_state.json")) // #141
+
+	// RAFALE reservoir persistence (v8.0.0, #197, contracts/rafale.md §2.4/§3.2)
+	filesDirForRafale := a.config.Storage.FilesDir
+	if filesDirForRafale == "" {
+		filesDirForRafale = "./data/files"
+	}
+	a.engine.SetRafalePath(filepath.Join(filesDirForRafale, "rafale", "reservoir.json"))
+	a.engine.SetRafaleUsedPath(filepath.Join(configDir, "rafale_used.json"))
 
 	// WebSocket hub (web clients: admin/TV/VPlayer)
 	a.wsHub = server.NewWebSocketHub()
