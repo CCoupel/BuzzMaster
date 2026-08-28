@@ -117,6 +117,22 @@ export default function useWebSocket(endpoint = '/ws/admin') {
     newGameBackgrounds: [], // Multi-image backgrounds for NEW_GAME screen (v4.0.4)
     // ARDOISE fields (v5.6.0)
     ARDOISE_ANSWERS: {}, // Map of teamName -> { TEXT, SUBMITTED_AT }
+    // RAFALE fields (v8.0.0, #16/#107 — contrat rafale.md §4). Jamais nil
+    // côté serveur (règle projet "pas d'omitempty") — initialisés ici en
+    // conséquence : maps/tableaux vides, jamais null. RAFALE_ANSWER n'est
+    // PAS un champ GameState (contrat §2.3 — fuite ardoise_leak_128) : voir
+    // l'état `rafaleAnswer` séparé plus bas, alimenté par l'action dédiée.
+    RAFALE_SUBPHASE: '', // '' | 'QUESTION' | 'ROUND_END'
+    RAFALE_CURRENT_QUESTION: { ID: '', QUESTION: '', CATEGORY: '', DIFFICULTY: 0 },
+    RAFALE_QUESTION_TIME: 0, // décompte question (~3s), alimenté par RAFALE_TICK
+    RAFALE_TEAM_COUNTERS: {}, // Map teamName -> compteur de manche (PAS un score réel)
+    RAFALE_TEAM_BEST: {}, // Map teamName -> meilleur compteur atteint (MAILLON_FAIBLE uniquement)
+    RAFALE_CURRENT_TEAM: '',
+    RAFALE_PARTICIPATING_TEAMS: [],
+    RAFALE_CURRENT_TEAM_COLOR: [],
+    RAFALE_ASKED_COUNT: 0,
+    RAFALE_POOL_REMAINING: 0,
+    RAFALE_EXHAUSTED: false,
   })
   const [teams, setTeams] = useState({})
   const [bumpers, setBumpers] = useState({})
@@ -159,6 +175,14 @@ export default function useWebSocket(endpoint = '/ws/admin') {
   // (aucune question courante — contrat §CREDIT_POINTS). Exclusif à
   // /ws/anim, reste 0 sur les autres endpoints.
   const [creditPoints, setCreditPoints] = useState(0)
+  // RAFALE (v8.0.0, #16/#107, contrat rafale.md §2.3/§5.2) — réponse
+  // attendue de la question courante, JAMAIS dans gameState (fuite
+  // ardoise_leak_128 : /tv et /anim reçoivent le même payload GameState,
+  // aucune liste d'exclusion ne peut les séparer). Diffusée par l'action
+  // dédiée RAFALE_ANSWER, à `admin`+`anim` uniquement — reste `null` sur
+  // /ws/tv et /ws/player, qui ne la reçoivent jamais. `null` tant qu'aucune
+  // question RAFALE n'a encore été tirée.
+  const [rafaleAnswer, setRafaleAnswer] = useState(null)
   // Résultat du dernier PLAYER_CONNECT en attente de réponse serveur — consommé
   // par EnrollPage (attend PLAYER_CONNECTED/PLAYER_REJECTED au lieu de naviguer
   // en aveugle, fix R1 #109). { status: 'connected', id, name } | { status: 'rejected', reason } | null
@@ -356,6 +380,21 @@ export default function useWebSocket(endpoint = '/ws/admin') {
             MEMOTION_PARTICIPATING_TEAMS: MSG.GAME.MEMOTION_PARTICIPATING_TEAMS ?? prev.MEMOTION_PARTICIPATING_TEAMS,
             // ARDOISE fields (v5.6.0)
             ARDOISE_ANSWERS: MSG.GAME.ARDOISE_ANSWERS !== undefined ? MSG.GAME.ARDOISE_ANSWERS : prev.ARDOISE_ANSWERS,
+            // RAFALE fields (v8.0.0, #16/#107 — contrat rafale.md §4). `??`
+            // préserve les valeurs falsy légitimes (0, '', [], {}) — seul
+            // `undefined` (champ absent, ex. serveur pas encore à jour côté
+            // dev-backend pendant #107) retombe sur `prev`.
+            RAFALE_SUBPHASE: MSG.GAME.RAFALE_SUBPHASE ?? prev.RAFALE_SUBPHASE,
+            RAFALE_CURRENT_QUESTION: MSG.GAME.RAFALE_CURRENT_QUESTION ?? prev.RAFALE_CURRENT_QUESTION,
+            RAFALE_QUESTION_TIME: MSG.GAME.RAFALE_QUESTION_TIME ?? prev.RAFALE_QUESTION_TIME,
+            RAFALE_TEAM_COUNTERS: MSG.GAME.RAFALE_TEAM_COUNTERS ?? prev.RAFALE_TEAM_COUNTERS,
+            RAFALE_TEAM_BEST: MSG.GAME.RAFALE_TEAM_BEST ?? prev.RAFALE_TEAM_BEST,
+            RAFALE_CURRENT_TEAM: MSG.GAME.RAFALE_CURRENT_TEAM ?? prev.RAFALE_CURRENT_TEAM,
+            RAFALE_PARTICIPATING_TEAMS: MSG.GAME.RAFALE_PARTICIPATING_TEAMS ?? prev.RAFALE_PARTICIPATING_TEAMS,
+            RAFALE_CURRENT_TEAM_COLOR: MSG.GAME.RAFALE_CURRENT_TEAM_COLOR ?? prev.RAFALE_CURRENT_TEAM_COLOR,
+            RAFALE_ASKED_COUNT: MSG.GAME.RAFALE_ASKED_COUNT ?? prev.RAFALE_ASKED_COUNT,
+            RAFALE_POOL_REMAINING: MSG.GAME.RAFALE_POOL_REMAINING ?? prev.RAFALE_POOL_REMAINING,
+            RAFALE_EXHAUSTED: MSG.GAME.RAFALE_EXHAUSTED ?? prev.RAFALE_EXHAUSTED,
             qcmInvalidated: MSG.GAME.QCM_INVALIDATED || [],
             virtualPlayerCount: MSG.GAME.VIRTUAL_PLAYER_COUNT ?? prev.virtualPlayerCount,
             virtualPlayerLimit: MSG.GAME.VIRTUAL_PLAYER_LIMIT ?? prev.virtualPlayerLimit,
@@ -534,6 +573,29 @@ export default function useWebSocket(endpoint = '/ws/admin') {
         // MAJEUR-1 — contrepartie serveur→client de SET_CREDIT_POINTS,
         // contrat §CREDIT_POINTS. Toujours un entier (0 = rien à créditer).
         setCreditPoints(MSG?.POINTS ?? 0)
+        break
+
+      case 'RAFALE_ANSWER':
+        // RAFALE (v8.0.0, #16/#107, contrat rafale.md §2.3/§5.2) — réponse
+        // attendue de la question courante. Diffusée à admin+anim
+        // uniquement (BroadcastToTypes côté serveur) : ce case ne s'exécute
+        // donc jamais côté /ws/tv ou /ws/player en pratique, mais reste
+        // inoffensif si un serveur mal configuré l'envoyait quand même —
+        // rafaleAnswer n'est JAMAIS lu par PlayerDisplay.jsx.
+        if (MSG?.ID) {
+          setRafaleAnswer({ ID: MSG.ID, ANSWER: MSG.ANSWER || '' })
+        }
+        break
+
+      case 'RAFALE_TICK':
+        // RAFALE (v8.0.0, #16/#107, contrat rafale.md §5.2) — décompte
+        // léger du timer de QUESTION (~3s), distinct du timer de MANCHE
+        // (UPDATE_TIMER/CURRENT_TIME, inchangé). Ne réémet jamais tout
+        // GameState — un seul champ mis à jour ici.
+        setGameState(prev => ({
+          ...prev,
+          RAFALE_QUESTION_TIME: MSG?.QUESTION_TIME ?? prev.RAFALE_QUESTION_TIME,
+        }))
         break
 
       case 'REGIE_MESSAGE':
@@ -909,6 +971,28 @@ export default function useWebSocket(endpoint = '/ws/admin') {
     sendMessage('MEMOTION_DONE', { CARD_ID: cardId, WINNER_TEAM: winnerTeam })
   }, [sendMessage])
 
+  // RAFALE (v8.0.0, #16/#107, contrat rafale.md §5.1) — juge la réponse de
+  // la question courante. Sans payload (§5.1) : le serveur connaît déjà la
+  // question active (RAFALE_CURRENT_QUESTION) et l'équipe qui répond
+  // (RAFALE_CURRENT_TEAM), même discipline que MEMOTION_FLIP/REVEAL
+  // ci-dessus. `admin`+`anim` uniquement (contrat §5.1) — sans effet
+  // ailleurs si appelé (le serveur rejetterait via l'allow-list entrante).
+  const rafaleValidate = useCallback(() => {
+    sendMessage('RAFALE_VALIDATE', {})
+  }, [sendMessage])
+
+  const rafaleInvalidate = useCallback(() => {
+    sendMessage('RAFALE_INVALIDATE', {})
+  }, [sendMessage])
+
+  // RAFALE (v8.0.0, #16/#199, contrat rafale.md §5.1) — équipes
+  // participantes et ordre de passage (modes multi-équipes, Phase 3).
+  // Câblé ici par anticipation du contrat (même patron que les autres
+  // actions RAFALE) ; aucun appelant en Phase 2 (#107, mode SOLO).
+  const rafaleSetTeams = useCallback((teamNames) => {
+    sendMessage('RAFALE_SET_TEAMS', { TEAMS: teamNames })
+  }, [sendMessage])
+
   // ENTRACTE (v6.5.2, #119) — commande explicite portant l'état voulu (pas un
   // toggle, D3 du plan) : admin uniquement, le libellé du bouton se dérive
   // côté client de gameState.entracte, aucun état de bouton côté serveur.
@@ -1055,6 +1139,11 @@ export default function useWebSocket(endpoint = '/ws/admin') {
     awardedTeams,
     creditPoints,
     regieMessage,
+    // RAFALE (v8.0.0, #16/#107)
+    rafaleAnswer,
+    rafaleValidate,
+    rafaleInvalidate,
+    rafaleSetTeams,
     // Actions
     sendMessage,
     startGame,

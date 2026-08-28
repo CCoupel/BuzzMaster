@@ -131,6 +131,10 @@ export default function AnimPage() {
     questionPosition,
     awardedTeams,
     creditPoints,
+    // RAFALE (v8.0.0, #16/#107, contrat rafale.md §5.1/§5.2)
+    rafaleAnswer,
+    rafaleValidate,
+    rafaleInvalidate,
     // Défauts défensifs (repos, jamais actif) — le hook réel (useWebSocket.js)
     // fournit toujours ces valeurs, mais certains mocks de test n'ont pas
     // encore été mis à jour avec les champs #167 (test-writer, en parallèle).
@@ -288,9 +292,30 @@ export default function AnimPage() {
   // `ANSWER` reste un mapping dédié : ce sont des champs SPEEDY historiques
   // propres à `MotionCard` (contrat §3), pas des champs `TypedContent`
   // partagés sous le même nom entre `Question` et `MotionCard`.
+  // RAFALE (v8.0.0, #16/#107, contrat rafale.md §2.1/§2.3) — `question`
+  // (TYPE RAFALE) ne porte ni QUESTION ni ANSWER : l'énoncé vient de
+  // `RAFALE_CURRENT_QUESTION` (GameState, sans réponse — §4), la réponse de
+  // l'action dédiée `RAFALE_ANSWER` (`rafaleAnswer`, admin+anim
+  // uniquement — §2.3, jamais dans GameState, fuite ardoise_leak_128).
+  const isRafaleQuestion = question?.TYPE === 'RAFALE'
+  const rafaleCurrentQuestion = gameState.RAFALE_CURRENT_QUESTION || {}
+  // Garde anti-obsolescence — même discipline que AWARDED_TEAMS
+  // (useWebSocket.js) : un RAFALE_ANSWER dont l'ID ne correspond plus à la
+  // question RAFALE actuellement affichée est ignoré plutôt qu'appliqué,
+  // pour ne jamais laisser transparaître, même un instant, la réponse
+  // d'UNE question sous l'énoncé de la SUIVANTE.
+  const rafaleAnswerValue = (rafaleAnswer && rafaleAnswer.ID === rafaleCurrentQuestion.ID)
+    ? rafaleAnswer.ANSWER
+    : ''
+  // Zone réponse — réutilise AnimAnswerZone TELLE QUELLE (adaptateur en
+  // objet "question" synthétique, même patron que MEMOTION ci-dessus) :
+  // ANSWER pointe la valeur ci-dessus, jamais gameState.question.ANSWER
+  // (inexistant pour ce type).
   const answerZoneQuestion = isMemotionQuestion
     ? cardToSyntheticQuestion(question, selectedMotionCard)
-    : question
+    : isRafaleQuestion
+      ? { ID: rafaleCurrentQuestion.ID, ANSWER: rafaleAnswerValue, TYPE: 'SPEEDY' }
+      : question
 
   // #166/F3 — options conditionnelles de la ligne méta (D5) : cible des
   // points, indices QCM activés, mode de tour MEMORY/MEMOTION (affiché même
@@ -567,6 +592,14 @@ export default function AnimPage() {
               question portant plusieurs cartes. */}
           {isMemotionQuestion ? (
             <p className="anim-question-statement">{motionStatement}</p>
+          ) : isRafaleQuestion ? (
+            // RAFALE — `question.QUESTION` n'existe pas (le type ne porte
+            // aucun énoncé, §3.3) : l'énoncé courant vient de
+            // RAFALE_CURRENT_QUESTION (GameState, tiré du réservoir),
+            // même patron que motionStatement ci-dessus.
+            rafaleCurrentQuestion.QUESTION && (
+              <p className="anim-question-statement">{rafaleCurrentQuestion.QUESTION}</p>
+            )
           ) : question?.QUESTION && (
             <p className="anim-question-statement">{question.QUESTION}</p>
           )}
