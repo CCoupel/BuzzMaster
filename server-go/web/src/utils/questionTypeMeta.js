@@ -17,20 +17,24 @@
  * SPEEDY/QCM/MEMORY, ligne 2 MEMOTION/ARDOISE ; même ordre que le sélecteur
  * `AIGenerateModal.jsx`).
  *
- * `nestable` (#184/B-F4) — miroir JS de `TypeDescriptor.NestableInMotionCard`
- * (registre Go, `internal/game/question_types.go`, contrat §7) : les seuls
- * types qu'une carte MEMOTION peut porter en `TYPE`. SPEEDY et QCM en v7.0.0 ;
- * ARDOISE/MEMORY rejoignent en v7.1.0 (#186/#187) ; MEMOTION jamais
- * (profondeur d'imbrication plafonnée à 1, contrat §1). Consommé par le
- * sélecteur de type de carte (`QuestionsPage.jsx`) pour filtrer les boutons
- * proposés — pas de registre séparé côté JS, cette table reste la source
- * unique.
+ * `nestable` (#184/B-F4, étendu #187) — miroir JS de
+ * `TypeDescriptor.NestableInMotionCard` (registre Go,
+ * `internal/game/question_types.go`, contrat §7) : les seuls types qu'une
+ * carte MEMOTION peut porter en `TYPE`. SPEEDY et QCM depuis v7.0.0 ; MEMORY
+ * rejoint en v7.1.0 (#187). ARDOISE reste **définitivement** non nestable —
+ * #186 (« ARDOISE en carte ») a été fermée « not planned » le 2026-08-24
+ * (contrat §7.2 : le seul différenciateur d'ARDOISE, la saisie multi-équipe
+ * simultanée, disparaît dans une carte qui n'active jamais qu'une équipe).
+ * MEMOTION jamais nestable (profondeur d'imbrication plafonnée à 1, contrat
+ * §1). Consommé par le sélecteur de type de carte (`QuestionsPage.jsx`) pour
+ * filtrer les boutons proposés — pas de registre séparé côté JS, cette table
+ * reste la source unique.
  */
 
 export const QUESTION_TYPES = [
   { key: 'SPEEDY', label: 'Speedy', icon: '⚡', color: '#3b7fc4', nestable: true },
   { key: 'QCM', label: 'QCM', icon: '🔠', color: '#8a5cc4', nestable: true },
-  { key: 'MEMORY', label: 'Memory', icon: '🃏', color: '#2e9e6d', nestable: false },
+  { key: 'MEMORY', label: 'Memory', icon: '🃏', color: '#2e9e6d', nestable: true },
   { key: 'MEMOTION', label: 'Memotion', icon: '🎞️', color: '#c8568f', nestable: false },
   { key: 'ARDOISE', label: 'Ardoise', icon: '🖊️', color: '#10b981', nestable: false },
 ]
@@ -39,6 +43,40 @@ export const QUESTION_TYPE_META = QUESTION_TYPES.reduce((acc, t) => {
   acc[t.key] = t
   return acc
 }, {})
+
+/**
+ * GENERABLE_TYPES (#196, v7.1.0) — export SÉPARÉ, miroir JS de
+ * `generableQuestionTypes` (`internal/server/ai_generator.go`). Consommé
+ * **uniquement** par la modale de génération IA (`AIGenerateModal.jsx`) —
+ * jamais par l'éditeur de questions, les badges `QuestionCard` ou
+ * `PlayerDisplay`, qui restent sur `QUESTION_TYPES` exclusivement.
+ *
+ * `MEMOTION_PLUS` (affiché « MEMOTION+ », contrat ai-generation.md §3ter)
+ * n'est **pas** un `QuestionType` — c'est un pseudo-type qui n'existe que
+ * pendant la génération (mélange SPEEDY/QCM au sein d'une manche MEMOTION,
+ * choisi carte par carte par le modèle). Une question générée depuis
+ * `MEMOTION_PLUS` est persistée avec `TYPE: "MEMOTION"` — la chaîne
+ * `MEMOTION_PLUS` n'apparaît **jamais** dans un `question.json`.
+ *
+ * 🔴 **Ne JAMAIS ajouter `MEMOTION_PLUS` à `QUESTION_TYPES` ci-dessus** :
+ * `QUESTION_TYPES` est la table faisant autorité pour les **types réels**
+ * depuis #183 — l'y ajouter ferait apparaître un « MEMOTION+ » fantôme dans
+ * le sélecteur de type de `QuestionsPage.jsx` et recréerait la divergence de
+ * tables que #183 a précisément supprimée.
+ *
+ * Ordre d'affichage : `MEMOTION_PLUS` est inséré juste après `MEMOTION`
+ * (avant `ARDOISE`) — même ordre que l'exemple de payload du contrat
+ * (ai-generation.md §3, `distribution`), le pseudo-type étant une variante
+ * de génération de `MEMOTION`, pas un type indépendant en fin de liste.
+ */
+export const GENERABLE_TYPES = (() => {
+  const memotionIndex = QUESTION_TYPES.findIndex(t => t.key === 'MEMOTION')
+  const withMemotionPlus = [...QUESTION_TYPES]
+  withMemotionPlus.splice(memotionIndex + 1, 0, {
+    key: 'MEMOTION_PLUS', label: 'MEMOTION+', icon: '🎞️', color: '#c8568f',
+  })
+  return withMemotionPlus
+})()
 
 // Repli explicite pour un type réellement inconnu (chaîne non vide, absente
 // du registre ci-dessus) — distinct de SPEEDY à dessein : voir

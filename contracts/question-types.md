@@ -1,7 +1,11 @@
 # Contrat — Types de question, hôtes et cartes polymorphes
 
-> **Statut** : contrat créé en phase Plan du milestone `v7.0.0 — MEMOTION+ : cœur` (#183, #184, #185).
-> **Référence** : plan `_work/reports/plan-memotion-v700-20260821.md`.
+> **Statut** : contrat créé en phase Plan du milestone `v7.0.0 — MEMOTION+ : cœur` (#183, #184, #185),
+> étendu en phase Plan de `v7.1.0 — MEMOTION+ : carte MEMORY` (#187).
+> **Référence v7.0.0** : `_work/reports/plan-memotion-v700-20260821.md`.
+> **Référence v7.1.0** : `_work/reports/plan-memotion-v710-memory-20260824-154844.md`,
+> `-v2-20260824-161449.md`, `-value-20260824-163512.md`.
+> **#186 (ARDOISE en carte) est fermée « not planned »** le 2026-08-24 — voir §7.2.
 > Ce fichier est la **référence unique** pour le discriminant de type porté par une carte MEMOTION,
 > la portée carte de l'état et des actions, le contexte d'hôte normalisé et le barème de points.
 > Les fichiers `models.md`, `game-state.md` et `websocket-actions.md` y renvoient sans le dupliquer.
@@ -65,9 +69,17 @@ type TypedContent struct {
 > `ANSWER_TEXT`/`ANSWER_IMAGE`), et sans `omitempty` chacune en gagnerait une vide. La règle de
 > précédence JSON de Go sur les champs embarqués (le champ le moins imbriqué gagne en cas de
 > collision de nom) fait que le `Answer` explicite de `Question` reste seul déterminant pour l'hôte
-> question ; `TypedContent.Answer` ne s'applique qu'à `MotionCard` (ARDOISE-en-carte, #186,
-> v7.1.0), qui n'a pas de champ `Answer` propre pour entrer en collision. Vérifié par test dédié
-> avant implémentation et par le round-trip des 85 fixtures (§10.3).
+> question ; `TypedContent.Answer` ne s'applique qu'à `MotionCard`, qui n'a pas de champ `Answer`
+> propre pour entrer en collision. Vérifié par test dédié avant implémentation et par le round-trip
+> des 85 fixtures (§10.3).
+>
+> ⚠️ **Mise à jour v7.1.0 — le motif a changé, le tag doit rester.** Ce `omitempty` était justifié
+> par le seul usage futur « ARDOISE-en-carte » (#186). **#186 est fermée « not planned »**
+> (2026-08-24) : `TypedContent.Answer` n'a plus aucun consommateur prévu. **Le retirer casserait
+> néanmoins la suite de tests** — chaque carte MEMOTION existante gagnerait une clé `"ANSWER":""`
+> qu'elle n'a jamais eue, violant l'invariant de round-trip octet-pour-octet. Le tag reste donc en
+> place **pour préserver l'invariant**, et non plus en prévision d'un usage. Ne pas le « nettoyer »
+> au motif que #186 est abandonnée.
 
 **Pourquoi partager plutôt que dupliquer sur `MotionCard`** : c'est ce qui rend l'adaptateur
 « carte → question synthétique » (déjà présent dans `AnimPage.jsx`) trivial — une copie de champs
@@ -113,8 +125,8 @@ Le registre (§7) déclare, pour chaque type, les champs de `TypedContent` qui *
 | **Carte** — face de grille, énoncé, barème | `RECTO_THEME`, `RECTO_IMAGE`, `DIFFICULTY`, `POINTS_RULE`, `QUESTION_TEXT`, `QUESTION_IMAGE` | ❌ jamais — conservés tels quels quel que soit le `TYPE` |
 | **`SPEEDY`** | `ANSWER_TEXT`, `ANSWER_IMAGE` | ✅ |
 | **`QCM`** | `QCM_ANSWERS`, `QCM_CORRECT`, `QCM_HINTS_ENABLED`, `QCM_HINT_THRESHOLD_1/2`, `QCM_PENALTY_1/2` | ✅ |
-| **`ARDOISE`** *(v7.1.0)* | `ANSWER`, `ARDOISE_KEYBOARD_TYPE` | ✅ |
-| **`MEMORY`** *(v7.1.0)* | `MEMORY_PAIRS`, `MEMORY_CONFIG`, `MEMORY_MODE` | ✅ |
+| **`ARDOISE`** *(hôte question uniquement)* | `ANSWER`, `ARDOISE_KEYBOARD_TYPE` | ✅ |
+| **`MEMORY`** *(v7.1.0, imbricable)* | `MEMORY_PAIRS`, `MEMORY_CONFIG`, `MEMORY_MODE` | ✅ |
 
 `OwnedFields` sert à trois choses : le **verrou de type** (§3.2), la **cohérence serveur** (§3.2),
 et le **montage du sous-éditeur** dans l'éditeur de carte.
@@ -148,15 +160,26 @@ d'une carte, relevée dans `QuestionsPage.jsx` (`formData` initial et `handleAdd
 | `QCM` | `QCM_HINTS_ENABLED` | `false` | passe à `true` |
 | `QCM` | `QCM_HINT_THRESHOLD_1/2` | **`0.25` / `0.125`** | s'écarte de ces valeurs |
 | `QCM` | `QCM_PENALTY_1/2` | **`0.67` / `0.33`** | s'écarte de ces valeurs |
-| `ARDOISE` *(v7.1.0)* | `ARDOISE_KEYBOARD_TYPE` | **`"AZERTY"`** | s'écarte de cette valeur |
+| `MEMORY` *(v7.1.0)* | `MEMORY_PAIRS` | **liste de paires vides** | **au moins une paire porte du contenu** — un `TEXT` ou une `IMAGE` sur l'une de ses deux faces |
 | `MEMORY` *(v7.1.0)* | `MEMORY_MODE` | **`"SOLO"`** | s'écarte de cette valeur |
 | `MEMORY` *(v7.1.0)* | `MEMORY_CONFIG` | **8 réglages non vides** | l'un d'eux s'écarte de son défaut |
+| ~~`ARDOISE`~~ | ~~`ARDOISE_KEYBOARD_TYPE`~~ | — | **sans objet** : ARDOISE n'est pas imbricable (§7.2), aucune carte ne porte ses `OwnedFields` |
 
 > ⚠️ **Un prédicat écrit « au moins un `OwnedField` non vide » verrouillerait une carte QCM dès sa
-> création** (`QCM_HINT_THRESHOLD_1` vaut `0.25`, jamais vide), et de même une carte ARDOISE
-> (`"AZERTY"`) ou MEMORY (`"SOLO"`) en v7.1.0. Le sélecteur serait grisé en permanence sur ces
-> types : la fonctionnalité serait morte à la livraison. `SPEEDY` seul y échappe, car ses deux
-> `OwnedFields` naissent vides — d'où un piège qui ne se voit pas en testant le cas par défaut.
+> création** (`QCM_HINT_THRESHOLD_1` vaut `0.25`, jamais vide), et de même une carte MEMORY
+> (`MEMORY_MODE` vaut `"SOLO"`). Le sélecteur serait grisé en permanence sur ces types : la
+> fonctionnalité serait morte à la livraison. `SPEEDY` seul y échappe, car ses deux `OwnedFields`
+> naissent vides — d'où un piège qui ne se voit pas en testant le cas par défaut.
+
+> **`MEMORY_PAIRS` — ajouté au tableau en v7.1.0 (#187), sur signalement de `code-reviewer`.**
+> Il figurait dans les `OwnedFields` MEMORY (§3.1) mais avait été **omis de ce tableau** ;
+> `dev-frontend` l'avait déjà traité comme un `OwnedField` à part entière dans
+> `utils/motionCardLock.js`, en documentant l'écart. Le tableau est aligné sur l'implémentation, qui
+> était la bonne : sans cette ligne, on pourrait renseigner huit paires illustrées puis basculer
+> librement la carte vers `SPEEDY` — c'est-à-dire exactement la destruction silencieuse que le
+> verrou existe pour empêcher (§3.2). Le motif est le même que `QCM_ANSWERS` : la valeur de création
+> est une **structure vide mais présente**, donc le verrou porte sur la présence de **contenu**, pas
+> sur celle de la liste.
 
 #### Deux niveaux d'application
 
@@ -292,7 +315,8 @@ composant de type ne reçoit plus `phase` en prop : il reçoit `playable` / `rev
 
 > **Conséquence directe** : `AnimMemoryGrid`, qui révèle tout sur `phase === 'REVEALED'`, et
 > `AnimQcmOptions`, qui reçoit `revealed`, deviennent montables dans les deux hôtes sans variante.
-> C'est le point qui débloque #185, #186 et #187.
+> C'est le point qui débloque #185 et #187. *(#186 — ARDOISE en carte — a été fermée « not
+> planned » le 2026-08-24 ; le bénéfice pour `AnimMemoryGrid` reste entier.)*
 
 ---
 
@@ -339,11 +363,55 @@ getTypeState(gameState, hostContext)
 //  hostContext.CardID !== ""  → gameState.MEMOTION_ACTIVE.STATE (hôte carte)
 ```
 
+**Périmètre v7.1.0 (#187)** : l'accesseur expose désormais, en plus de `qcmInvalidated`, l'état
+MEMORY (cartes retournées, paires trouvées, compteurs — §5.4). Le garde-fou existant reste
+obligatoire : ne servir l'état carte que si `MEMOTION_ACTIVE.CARD_ID === hostContext.cardId`, pour
+éviter la trame où `STATE` porte encore les données de la carte précédente.
+
+`ARDOISE_ANSWERS` **n'y entre pas** et reste lu à son emplacement question-scopé : ARDOISE n'est pas
+imbricable (§7, #186 fermée « not planned »).
+
 > **Duplication assumée et délibérée** : la même notion (ex. les réponses QCM invalidées) existe à
 > deux emplacements selon l'hôte. L'alternative — faire lire au QCM classique un emplacement
 > hôte-scopé — serait un changement **BREAKING** pour `/tv`, `/anim` et `/admin`, pour un bénéfice
 > purement esthétique. La duplication est confinée à un seul accesseur, et c'est le prix explicite
 > du « aucun changement BREAKING » de ce lot.
+
+### 5.4 État vivant d'une carte MEMORY (v7.1.0, #187)
+
+Une carte `TYPE=MEMORY` porte son état de grille dans `MEMOTION_ACTIVE.STATE`, **jamais** dans les
+champs `MEMORY_*` question-scopés, qui restent réservés à l'hôte question :
+
+```jsonc
+"MEMOTION_ACTIVE": {
+  "CARD_ID": "card_3",
+  "TYPE": "MEMORY",
+  "STATE": {
+    "MEMORY_FLIPPED_CARDS": ["2-1"],
+    "MEMORY_MATCHED_PAIRS": [1, 4],
+    "MEMORY_ERRORS": 3
+  }
+}
+```
+
+**Ce que l'état de carte ne porte pas, et pourquoi** : `MEMORY_TEAM_PAIRS`, `MEMORY_TEAM_ERRORS`,
+`MEMORY_PAIR_OWNERS`, `MEMORY_CURRENT_TEAM` et `MEMORY_PARTICIPATING_TEAMS` **n'ont pas de sens en
+carte** — une carte MEMORY est jouée par **une seule équipe** (§6.3). Les omettre borne aussi la
+charge utile (§5.1) : ces cinq champs croissent avec le nombre d'équipes.
+
+**Cycle de vie** : acquis gratuitement — `MOTION_ACTIVE` est remis à zéro à chaque
+`MEMOTION_SELECT` et vidé au retour en `GRID`. Aucun reset spécifique à écrire, à condition que
+l'état ne vive nulle part ailleurs.
+
+**Diffusion** : aucun de ces champs n'est confidentiel — la grille MEMORY est déjà publique et
+affichée sur `/tv`. Aucune entrée à ajouter dans `AdminOnlyGameFields` ni
+`VPlayerOnlyGameFields`.
+
+> ⚠️ **Piège pour un futur type** : `serializeFiltered` (`internal/protocol/messages.go`) supprime
+> les champs filtrés **à plat** sur le nœud `GAME` — il **ne descend pas** dans un objet imbriqué.
+> Un type imbriqué qui porterait un champ **confidentiel** dans `MEMOTION_ACTIVE.STATE`
+> échapperait donc au filtrage et rouvrirait la fuite traitée en #128. Sans objet pour MEMORY ;
+> à traiter le jour où le cas se présente.
 
 ---
 
@@ -357,27 +425,105 @@ Le barème appartient **toujours à l'hôte**, jamais au type imbriqué. Un type
 ```go
 type TypeOutcome struct {
     WinnerTeam string // "" = personne
-    Units      int    // 1 = gagné, 0 = perdu ; > 1 réservé aux types à progression (MEMORY, #187)
+    Units      int    // réalisé. 1 = gagné, 0 = perdu pour un type binaire
+    UnitsTotal int    // réalisable au maximum. 0 pour un type binaire (v7.1.0, #187)
 }
 ```
+
+**`UnitsTotal` — pourquoi le type fournit le dénominateur (v7.1.0, #187).** Le mode
+`STARS_PRORATA` (§6.2) répartit les points de la carte au prorata du réalisé. Pour diviser, l'hôte
+a besoin du total réalisable. **Il ne doit jamais aller le chercher lui-même** : lire
+`len(card.MEMORY_PAIRS)` dans le code de barème introduirait de la connaissance MEMORY **à
+l'intérieur de l'hôte** — exactement la fuite que §10 interdit. C'est donc le **type** qui rend le
+couple `Units / UnitsTotal`, et l'hôte ne sait rien des paires.
+
+Le mécanisme reste ainsi générique : un futur type à N sous-unités (une carte RAFALE de N
+questions, une carte Roue de N lettres) l'utilise sans une ligne supplémentaire dans l'hôte.
 
 ### 6.2 Règle de points d'une carte
 
 ```jsonc
-"POINTS_RULE": { "MODE": "STARS" | "FIXED" | "PER_UNIT", "VALUE": 10 }
+"POINTS_RULE": { "MODE": "STARS" | "FIXED" | "PER_UNIT" | "STARS_PRORATA", "VALUE": 10 }
 ```
 
-| `MODE` | Points attribués | Usage |
-|---|---|---|
-| absent / `STARS` | Barème par étoiles existant : `MOTION_CONFIG.POINTS_<n>_STAR` si `> 0`, sinon `DIFFICULTY → 1/3/5` | **Défaut** — comportement actuel, inchangé |
-| `FIXED` | `VALUE` si `Units > 0`, sinon 0 | Carte dont la valeur ne dépend pas de sa difficulté |
-| `PER_UNIT` | `VALUE × Units` | Types à progression — **ouvre #187 (MEMORY au prorata) sans toucher le cœur** |
+| `MODE` | Points attribués | `VALUE` | Usage |
+|---|---|---|---|
+| absent / `STARS` | Barème par étoiles : `MOTION_CONFIG.POINTS_<n>_STAR` si `> 0`, sinon `DIFFICULTY → 1/3/5` | ignorée | **Défaut** — comportement actuel, inchangé |
+| `FIXED` | `VALUE` si `Units > 0`, sinon 0 | requise | Carte dont la valeur ne dépend pas de sa difficulté |
+| `PER_UNIT` | `VALUE × Units` | requise | Valeur **absolue** par unité, indépendante du barème étoiles |
+| **`STARS_PRORATA`** *(v7.1.0, #187)* | **`points_étoiles × Units / UnitsTotal`** | **ignorée — aucune à saisir** | **Défaut d'une carte MEMORY.** Répartit les points de la carte au prorata du réalisé |
 
 `Units` vaut 1 par défaut pour tout type binaire (gagné/perdu). Un type à progression rapporte son
-propre décompte. Le tout-ou-rien pour MEMORY s'exprime en `STARS`/`FIXED` (le type ne rend `Units=1`
-que si toutes les paires sont trouvées) ; le prorata s'exprime en `PER_UNIT`. **Les deux cas
-demandés par #187 sont donc exprimables sans modification du cœur** — c'est le critère
-d'acceptation du mécanisme.
+propre décompte, **et son total** (`UnitsTotal`, §6.1).
+
+#### `STARS_PRORATA` — pourquoi ce mode plutôt que `PER_UNIT`
+
+`PER_UNIT` exige une `VALUE` **statique, saisie dans l'éditeur**. Or la valeur par unité voulue
+dépend de deux grandeurs qu'on ne peut pas figer : le barème d'étoiles de la carte (lui-même
+dynamique via `MOTION_CONFIG.POINTS_<n>_STAR`) et le nombre d'unités de la carte. Une `VALUE`
+statique **périmerait silencieusement** dès qu'on ajoute une paire, change la difficulté de la
+carte, ou modifie `MOTION_CONFIG` globalement.
+
+`STARS_PRORATA` n'introduit donc **aucun réglage de points indépendant** : la carte vaut ses
+étoiles, comme toute autre carte de la grille, et le type ne fait qu'en distribuer une fraction.
+
+#### 🔴 Ordre des opérations — normatif, pas une préférence d'implémentation
+
+> **La multiplication précède la division. Il est interdit de précalculer une « valeur par unité ».**
+
+```
+points = (points_étoiles × Units) / UnitsTotal      // division entière, en DERNIER
+```
+
+Précalculer `points_étoiles / UnitsTotal` en arithmétique entière donne **0** dès que le total
+d'unités dépasse le nombre de points, et **la carte vaut alors 0 quoi qu'il arrive** :
+
+| Carte 5 points, 8 paires | par-unité d'abord (**faux**) | multiplication d'abord (**correct**) |
+|---|---|---|
+| 4 paires trouvées | 0 | **2** |
+| 8 paires trouvées (complète) | 0 | **5** |
+
+**Conséquence garantie par cet ordre** : `(points × UnitsTotal) / UnitsTotal = points`
+**exactement**. Une grille entièrement réalisée rapporte **toujours** la valeur nominale de la
+carte, sans perte d'arrondi cumulée et sans rattrapage à prévoir sur la dernière unité.
+
+**Non-uniformité assumée** : les unités n'ont pas toutes la même valeur marginale (5 pts / 8 paires :
+la 4ᵉ paire ne rapporte rien, la 5ᵉ rapporte 1). C'est inhérent à l'arrondi entier. **À documenter,
+pas à corriger** — seul le total exact importe.
+
+**Gardes obligatoires** :
+- `UnitsTotal <= 0` → **0 point** (carte sans unité, ou contenu incomplet en cours d'édition) ;
+- `Units` est borné à `UnitsTotal` par le type, jamais par l'hôte.
+
+**Parité Go/JS** : le front affiche le gain prévisionnel, donc la **même** formule entière y est
+écrite (`Math.floor(points * units / unitsTotal)`). C'est une cellule dérivable des deux côtés
+(classe de risque R5) : **cas de test nommés à l'identique des deux côtés**, avec
+**`5 points / 8 paires`** comme cas nommé obligatoire — il attrape à lui seul les deux erreurs
+d'ordre d'opérations.
+
+### 6.3 Barème d'une carte MEMORY (v7.1.0, #187) — décisions utilisateur du 2026-08-24
+
+| Point | Décision |
+|---|---|
+| **Nombre d'équipes** | **Une seule** — l'équipe MEMOTION courante. `MEMORY_MODE` (`SOLO`/`CHACUN_SON_TOUR`/`TANT_QUE_JE_GAGNE`) est **ignoré en carte**, et la rotation d'équipe MEMORY (`rotateToNextTeam`) **n'est jamais déclenchée** : la rotation appartient à MEMOTION. |
+| **Barème par défaut** | **`STARS_PRORATA`** — *« on compte les points en fonction du nombre de paires trouvées dans le temps imparti »*. Une carte MEMORY est créée avec `POINTS_RULE = {"MODE": "STARS_PRORATA"}`, **sans `VALUE`**. |
+| **`Units` / `UnitsTotal`** | `Units` = paires trouvées sur la carte ; `UnitsTotal` = nombre de paires de la carte. |
+| **Autorité** | 🔴 **Le serveur dérive `Units` et `UnitsTotal` de son propre état et ignore tout `UNITS` reçu du client** pour une carte MEMORY (voir §9.3). |
+| **Tout-ou-rien** | Reste possible en surcharge explicite (`STARS` ou `FIXED`) : le type ne rend alors `Units = 1` que si toutes les paires sont trouvées. |
+
+**Pourquoi une seule équipe.** `TypeOutcome` est **mono-gagnant**, alors que MEMORY est nativement
+multi-équipes (`MEMORY_TEAM_PAIRS`, `MEMORY_PAIR_OWNERS`) et porte **sa propre rotation** — laquelle
+entrerait en collision avec celle de MEMOTION (`MOTION_MODE`, `MotionCurrentTeam`). Une grille
+multi-équipes dans une carte serait donc **inexprimable sans modifier le cœur**, ce que §10
+interdit. C'est aussi cohérent avec le motif de fermeture de #186 : une carte MEMOTION n'active
+qu'une équipe à la fois.
+
+**`MEMORY_CONFIG` en contexte carte** : ses trois réglages de points — `POINTS_PER_PAIR`,
+`ERROR_PENALTY`, `COMPLETION_BONUS` — sont **sans aucune autorité** (§6.1) et doivent être **masqués
+ou visiblement neutralisés** dans l'éditeur de carte, sinon l'utilisateur réglera des valeurs sans
+effet. Le moteur ne doit **jamais** les lire au moment de créditer. *(En hôte question, ils sont
+inchangés.)* Les réglages **non liés aux points** (`FLIP_DELAY`, `MEMORIZE_TIME`,
+`SHOW_DURING_MEMORIZE`, `REVEAL_DELAY`, `USE_TIMER`) restent actifs.
 
 ---
 
@@ -401,8 +547,8 @@ type TypeDescriptor struct {
 |---|---|---|---|
 | `SPEEDY` | `recto`, `question`, `answer` | ✅ | ❌ |
 | `QCM` | `recto`, `question` | ✅ **(#185)** | ❌ — voir §7.1 |
-| `ARDOISE` | `recto`, `question` | ⬜ *(#186, v7.1.0)* | ✅ |
-| `MEMORY` | `recto` + N paires | ⬜ *(#187, v7.1.0)* | ✅ |
+| `ARDOISE` | `recto`, `question` | ❌ — **abandonné**, voir §7.2 | ✅ |
+| `MEMORY` | `recto` + N paires | ✅ **(#187, v7.1.0)** | ✅ — voir §7.3 |
 | `MEMOTION` | — | ❌ **jamais** (profondeur 1) | ❌ |
 
 Un registre **en dur et exhaustif**. Pas de DSL, pas d'architecture à plugins — décision explicite
@@ -418,7 +564,31 @@ comme une carte SPEEDY aujourd'hui.
 > ⚠️ Il n'y a **ni buzz, ni `VPLAYER_QCM_ANSWER`, ni modification de la liste blanche entrante**
 > pour #185. `engine.go` ignore les buzz en MEMOTION et cela reste vrai. C'est ce qui fait de QCM
 > le premier type imbriqué le moins coûteux (aucune frontière franchie), et c'est le périmètre
-> exact validé au GATE. L'entrée joueur en carte est le sujet de #186/#187, milestone v7.1.0.
+> exact validé au GATE. L'entrée joueur en carte est le sujet de #187, milestone v7.1.0.
+
+### 7.2 ARDOISE n'est pas imbricable — abandon, pas report (2026-08-24)
+
+`NestableInMotionCard` reste **`false`** pour `ARDOISE`, **sans échéance**. #186 est fermée
+« not planned » avant tout début de développement.
+
+**Motif** : la seule différenciation d'ARDOISE par rapport à SPEEDY est la saisie **multi-équipe
+simultanée et secrète**. Une carte MEMOTION n'active **qu'une seule équipe** à la fois — ce
+différenciateur disparaît donc entièrement une fois ARDOISE nichée dans une carte. Il ne resterait
+qu'un canal de saisie différent (clavier au lieu de l'oral), sans gain de jeu, pour un coût élevé.
+
+Toute mention antérieure d'« ARDOISE-en-carte, v7.1.0 » dans ce contrat ou dans le code est
+**caduque**. Si une variante avec un vrai gain de jeu émerge plus tard (par exemple une réponse
+multi-équipe simultanée sur une carte MEMOTION), elle repartira d'une issue neuve.
+
+### 7.3 Carte MEMORY : entrée joueur en carte (v7.1.0, #187)
+
+`MEMORY` est le **premier** type imbriqué à accepter un geste de joueur sur une carte MEMOTION
+active — le joueur retourne des cartes.
+
+> ⚠️ **Aucune nouvelle entrée de liste blanche n'est requise.** `FLIP_MEMORY_CARD` est **déjà**
+> autorisée pour `tv`, `vplayer` et `anim`. Ce qui est nouveau, c'est la **portée** (`MOTION_CARD_ID`,
+> §9) et la **vérification du tour** (`contracts/websocket-actions.md`, fiche `FLIP_MEMORY_CARD`) —
+> pas le droit d'émettre.
 
 ---
 
@@ -465,10 +635,30 @@ qui n'est pas celle en jeu. Refus silencieux interdit — l'erreur est renvoyée
 `MotionError` existants.
 
 > Pour v7.0.0 (#185, QCM sans entrée joueur), aucune action typée n'est effectivement portée par une
-> carte : l'invariant est **posé et testé**, mais son premier consommateur réel est #186.
-> Il est livré maintenant parce qu'il fait partie du contrat que #186/#187 doivent pouvoir supposer
-> acquis — et parce que le poser après coup obligerait à rouvrir le cœur, ce que le test
-> d'agnosticité de #184 interdit.
+> carte : l'invariant est **posé et testé**, mais son premier consommateur réel est **#187**
+> (`FLIP_MEMORY_CARD`, v7.1.0). Il est livré dès v7.0.0 parce qu'il fait partie du contrat que les
+> types imbriqués doivent pouvoir supposer acquis — et parce que le poser après coup obligerait à
+> rouvrir le cœur, ce que le test d'agnosticité de #184 interdit.
+
+#### ⚠️ Dérogation à « refus silencieux interdit » — vérification du tour (v7.1.0, #187)
+
+La règle ci-dessus vaut pour la **portée de carte**. Elle **ne s'applique pas** à la vérification
+d'appartenance à l'équipe active introduite en #187 sur `FLIP_MEMORY_CARD`. Deux vérifications
+coexistent donc sur la même action, avec **deux comportements d'échec opposés** — c'est délibéré :
+
+| Vérification | Échec | Statut |
+|---|---|---|
+| **Portée de carte** — `MOTION_CARD_ID` ≠ carte active (`ValidateCardScope`) | **Refus explicite** (`CARD_SCOPE_MISMATCH` / `CARD_SCOPE_UNEXPECTED`) | Règle générale, inchangée |
+| **Tour de l'équipe** — émetteur `vplayer` hors de l'équipe active | **Ignore silencieux** : aucune mutation, **aucun broadcast**, aucun message d'erreur | **Dérogation assumée** — décision utilisateur du 2026-08-24 |
+
+**Motif de la dérogation** : dans l'usage normal, un tap hors tour est un geste de curiosité ou de
+réflexe, pas une tentative malveillante. Y répondre par une erreur polluerait l'interface sans rien
+protéger — la grille MEMORY est **publique** (elle est déjà affichée sur `/tv`) et le serveur reste
+**seule autorité** sur l'effet du geste.
+
+> 🚫 **Ne pas « corriger » cet ignore en refus explicite en revue.** C'est une dérogation
+> documentée, pas un oubli. Le détail complet (client-types concernés, absence de broadcast,
+> journalisation) est dans `contracts/websocket-actions.md`, fiche `FLIP_MEMORY_CARD`.
 
 ### 9.3 `MEMOTION_DONE` — champ `UNITS`
 
@@ -478,6 +668,23 @@ qui n'est pas celle en jeu. Refus silencieux interdit — l'erreur est renvoyée
 
 `UNITS` est **optionnel**, défaut `1`. Absent ⇒ comportement actuel strictement identique.
 Consommé par `POINTS_RULE.MODE == "PER_UNIT"` (§6.2).
+
+#### 🔴 `UNITS` reçu du client est ignoré pour une carte MEMORY (v7.1.0, #187)
+
+> **Pour une carte `TYPE=MEMORY`, le serveur dérive `Units` ET `UnitsTotal` de son propre état
+> (paires trouvées et nombre de paires de la carte active) et ignore tout `UNITS` reçu.**
+
+Tant que `UNITS` valait toujours `1`, sa provenance était sans conséquence. Avec `STARS_PRORATA`
+(§6.2), **`Units` *est* le score** : laisser le navigateur de l'animateur l'annoncer reviendrait à
+reproduire, dans le mécanisme neuf, la dette que le milestone `Scoring Avancé MEMORY` (#12) doit
+précisément résorber — le score MEMORY y est aujourd'hui calculé côté JS puis envoyé au serveur
+déjà chiffré.
+
+C'est aussi la fermeture par conception d'une **cellule dérivable des deux côtés** (classe de
+risque R5, matérialisée deux fois pendant #184) : une seule autorité, le serveur, donc aucune
+divergence Go/JS possible.
+
+`UNITS` reste utilisé tel quel pour **tous les autres types** — comportement inchangé.
 
 ---
 
@@ -500,8 +707,33 @@ Vérification outillée, à livrer avec #184 :
 4. **Test de charge utile** — la taille du nœud `GAME` d'une manche MEMOTION reste dans une borne
    explicite par rapport à la référence v6.5.2.
 
-#186 et #187 doivent **rapporter dans leur DONE** toute ligne d'hôte qu'elles ont dû modifier, et
-pourquoi. C'est la boucle « de plus en plus agnostique » demandée, rendue observable.
+#187 doit **rapporter dans son DONE** toute ligne d'hôte qu'elle a dû modifier, et pourquoi. C'est
+la boucle « de plus en plus agnostique » demandée, rendue observable.
+
+### 10.1 🔴 Le test de charge utile doit porter sur l'état réel (v7.1.0, #187)
+
+`Test184_GamePayload_MotionActiveAbsoluteBound` borne `MEMOTION_ACTIVE` à 200 octets — mais il
+mesure un `MotionActive` **construit à la main avec un contenu QCM**, jamais l'état produit par le
+moteur. Un état MEMORY en carte (§5.4) dépasse cette borne **sans faire échouer le test**, qui ne
+l'évalue jamais : **le garde-fou cesserait silencieusement de garder.**
+
+**Exigence** : la borne doit être évaluée sur l'état **réellement produit par le moteur** pour
+**chaque** type imbriquable, avec une **borne déclarée par type** plutôt qu'un nombre unique — une
+grille MEMORY coûte légitimement plus qu'une liste de réponses QCM invalidées, et écraser la borne
+commune jusqu'à l'englober la viderait de son sens.
+
+### 10.2 Modification d'hôte déclarée par #187
+
+`STARS_PRORATA` (§6.2) impose d'étendre la signature de `motionCardPointsForOutcome(card, units)`
+en `(card, units, unitsTotal)` et d'y ajouter un `case`. **C'est du code d'hôte**, et le
+commentaire actuel de cette fonction annonce l'inverse (« the one place #187 needs to reach — via
+`PER_UNIT` — without touching anything else in this file »).
+
+**Écart assumé et déclaré ici** : #184 avait anticipé `PER_UNIT`, pas un prorata **du total de la
+carte**. Le changement reste petit et contenu (une signature, un `case`, un champ de `TypeOutcome`)
+et **n'introduit aucune logique MEMORY dans l'hôte** — il enrichit le *vocabulaire de barème* de
+l'hôte, qui lui appartient de plein droit (§6.1). Le commentaire de la fonction doit être mis à
+jour en conséquence.
 
 ---
 
@@ -521,3 +753,16 @@ pourquoi. C'est la boucle « de plus en plus agnostique » demandée, rendue obs
 | Champs question-scopés (`QCM_INVALIDATED`…) | **inchangés** | volontairement non migrés — voir §5.3 |
 | Liste blanche entrante | **inchangée** | aucun élargissement en v7.0.0 — voir §7.1 |
 | Verrouillage du type sur contenu propre au type | **NEW**, comportement | UI : sélecteur désactivé dès qu'un `OwnedField` s'écarte de sa valeur de création (§3.2). Thème, difficulté, énoncé et barème ne verrouillent jamais. Serveur : **HTTP 400** `CARD_TYPE_CONTENT_MISMATCH` sur charge utile incohérente. Les 9 questions MEMOTION existantes s'ouvrent verrouillées sur `SPEEDY` — sans effet, leur type est déjà le bon |
+
+### 11.1 Ajouts v7.1.0 (#187) — toujours aucun changement BREAKING
+
+| Élément | Nature | Justification |
+|---|---|---|
+| `MEMORY` imbricable (`NestableInMotionCard`) | **NEW**, additif | aucune carte existante n'est `TYPE=MEMORY` |
+| `POINTS_RULE.MODE = "STARS_PRORATA"` | **NEW**, optionnel | nouveau mode ; les trois modes existants sont inchangés |
+| `TypeOutcome.UnitsTotal` | **NEW**, interne Go | `0` pour tout type binaire ⇒ modes existants inchangés |
+| `motionCardPointsForOutcome(card, units, unitsTotal)` | **CHANGED**, interne Go | signature étendue — modification d'hôte déclarée, §10.2 |
+| `MEMOTION_ACTIVE.STATE` pour `TYPE=MEMORY` | **NEW**, additif | `STATE` est déjà de forme libre (§5.2) |
+| `FLIP_MEMORY_CARD.MOTION_CARD_ID` | **NEW**, optionnel | absent hors manche MEMOTION ⇒ comportement actuel |
+| Vérification du tour sur `FLIP_MEMORY_CARD` | **CHANGED**, comportement | **Correction d'un défaut préexistant** : le serveur ne vérifiait rien, seul le client masquait le geste. Le geste devient possible pour tous côté client, mais **sans effet** hors tour côté serveur. Aucun client légitime n'y perd une capacité — `tv` et `anim` ne sont pas concernés (§ fiche `FLIP_MEMORY_CARD`) |
+| `ARDOISE` imbricable | **abandonné** | #186 fermée « not planned » — §7.2 |

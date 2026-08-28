@@ -306,7 +306,12 @@ batchLoop:
 		}
 
 		prompt := h.buildGenerationPrompt(req, thisBatch, extraContext)
-		schema := provider.AdaptSchema(buildQuestionSchema(req.Categories, req.Difficulties))
+		// #196 QUALIF v7.1.0.7 bugfix — only send the anyOf branches for
+		// types actually requested (buildQuestionSchema's own doc comment):
+		// req.Distribution already guarantees ≥1 positive value
+		// (validateGenerateRequest), so activeGenerableTypes is never empty
+		// here.
+		schema := provider.AdaptSchema(buildQuestionSchema(req.Categories, req.Difficulties, activeGenerableTypes(req.Distribution)))
 
 		callCtx, cancel := context.WithTimeout(context.Background(), timeoutOrDefault(aiCfg.TimeoutSeconds))
 		rawJSON, err := provider.Generate(callCtx, aiCfg, prompt, schema)
@@ -398,7 +403,14 @@ batchLoop:
 				break
 			}
 			batchCreatedCount++
-			extraContext = append(extraContext, existingQuestionContext{Type: vq.Type, Category: vq.Category, Question: vq.Question})
+			// #196 — feed back the PERSISTED type (question["TYPE"], already
+			// normalized MEMOTION_PLUS→MEMOTION by mapGeneratedQuestion), not
+			// the raw vq.Type: the anti-duplicate context describes what's
+			// actually on disk, and the pseudo-type has no reason to appear
+			// in a later batch's prompt either — same invariant as
+			// question.json, applied to the one other surface TYPE reaches.
+			persistedType, _ := question["TYPE"].(string)
+			extraContext = append(extraContext, existingQuestionContext{Type: persistedType, Category: vq.Category, Question: vq.Question})
 		}
 
 		job.mu.Lock()

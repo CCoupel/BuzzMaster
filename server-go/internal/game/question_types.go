@@ -18,16 +18,48 @@ type TypeDescriptor struct {
 	// "answer", ...) this type declares when hosted by a MEMOTION card —
 	// contract §8. Nil for MEMOTION itself (never nestable).
 	MediaSlots []string
-	// NestableInMotionCard is false for any type that cannot yet appear
-	// inside a MEMOTION card — true for SPEEDY/QCM (v7.0.0, #184/#185),
-	// false for ARDOISE/MEMORY (v7.1.0, #186/#187) and, permanently, for
-	// MEMOTION itself (nesting depth capped at 1 — contract §1).
+	// NestableInMotionCard is false for any type that cannot appear inside
+	// a MEMOTION card — true for SPEEDY/QCM/MEMORY (#184/#185/#187), false
+	// for ARDOISE (closed "not planned" 2026-08-24, contract §7.2 — the
+	// only differentiator vs SPEEDY, multi-team simultaneous input, has no
+	// object once nested in a card that plays a single team at a time) and,
+	// permanently, for MEMOTION itself (nesting depth capped at 1 —
+	// contract §1).
 	NestableInMotionCard bool
 	// HasPlayerInput documents whether nesting this type opens a new
 	// inbound action / whitelist entry (contract §7.1) — informational in
 	// v7.0.0: no nested type actually exercises player input yet (QCM-in-
 	// card is display+designation only, no buzz, no VPLAYER_QCM_ANSWER).
 	HasPlayerInput bool
+	// DefaultPointsRule (#187 cycle 5) — the POINTS_RULE.MODE a card of
+	// this type is scored under when it carries NO explicit PointsRule.
+	// Empty ⇒ PointsRuleModeStars (the pre-#184 star-based scale,
+	// unchanged default for every type that doesn't override this).
+	// Resolved by motionCardPointsForOutcome (engine.go) — the SOLE reader
+	// of MotionCard.PointsRule — never by a `card.EffectiveType() ==
+	// QuestionTypeMemory` check anywhere else: the barème queries this
+	// registry generically, exactly like MediaSlots/OwnedFields, so no
+	// MEMORY-specific knowledge enters the host (contract §10 agnosticity).
+	//
+	// Why a registry fact instead of writing POINTS_RULE onto the card
+	// (at creation, client-side, or at save, server-side) — both were
+	// considered and rejected (code-review 20260825-214659,
+	// plan-memotion-v710-memory-pointsrule-20260825-215050 §2.1/§2.2):
+	// POINTS_RULE is a CARD field (§3.1), not a TYPE field — it survives a
+	// TYPE change verbatim. A card that carried MEMORY, had its pairs
+	// cleared (unlocking the type per §3.2), and was switched to SPEEDY
+	// would keep a written-down {MODE: STARS_PRORATA}: a binary type
+	// reports UnitsTotal=0, and §6.2's own zero-division guard then makes
+	// the card worth 0 points — SILENTLY. Writing the default onto the
+	// card would need a matching cleanup rule on every type change, on
+	// TWO independent write paths (client creation, server save), and
+	// would never repair a card already persisted before this fix. A
+	// registry-resolved default has none of that: nothing is ever
+	// written, an existing MEMORY card gets the right default the moment
+	// this code ships (no re-save needed), and a card that changes TYPE
+	// is re-resolved from its CURRENT EffectiveType() on every read —
+	// there is no stale value to leak.
+	DefaultPointsRule PointsRuleMode
 }
 
 // questionTypeRegistry is the exhaustive, hard-coded table of type
@@ -62,15 +94,25 @@ var questionTypeRegistry = map[QuestionType]TypeDescriptor{
 		Type:                 QuestionTypeArdoise,
 		OwnedFields:          []string{"ANSWER", "ARDOISE_KEYBOARD_TYPE"},
 		MediaSlots:           []string{"recto", "question"},
-		NestableInMotionCard: false, // #186, v7.1.0
+		NestableInMotionCard: false, // #186 closed "not planned" (2026-08-24), no échéance — contract §7.2
 		HasPlayerInput:       true,
 	},
 	QuestionTypeMemory: {
 		Type:                 QuestionTypeMemory,
 		OwnedFields:          []string{"MEMORY_PAIRS", "MEMORY_CONFIG", "MEMORY_MODE"},
 		MediaSlots:           []string{"recto"}, // + N pair slots — not modeled as a flat list (#187)
-		NestableInMotionCard: false,             // #187, v7.1.0
-		HasPlayerInput:       true,
+		NestableInMotionCard: true,              // #187, v7.1.0 — contract §7.3
+		// #187: a nested MEMORY card is the first nestable type to accept
+		// player input (flipping a card) — no new inbound-whitelist entry
+		// though, FLIP_MEMORY_CARD is already open to tv/vplayer/anim; what
+		// changes is scope (MOTION_CARD_ID) and server-side turn checking,
+		// not the right to emit (contract §7.3).
+		HasPlayerInput: true,
+		// #187 cycle 5 — the "on compte les points en fonction du nombre
+		// de paires trouvées" decision (contract §6.3) is a fact about the
+		// TYPE, resolved here rather than written onto any card — see this
+		// field's own doc comment on TypeDescriptor for why.
+		DefaultPointsRule: PointsRuleModeStarsProrata,
 	},
 	QuestionTypeMemotion: {
 		Type:                 QuestionTypeMemotion,

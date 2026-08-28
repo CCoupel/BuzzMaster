@@ -89,7 +89,9 @@ function renderModal(overrides = {}, { route = '/admin/questions' } = {}) {
 
 // Range inputs carry no accessible name (only the type toggle checkboxes do,
 // via aria-label="Activer <Type>") — they are selected by DOM order, which
-// matches the fixed TYPES order (SPEEDY, QCM, MEMORY, MEMOTION) contract §6.
+// matches the fixed GENERABLE_TYPES order: SPEEDY, QCM, MEMORY, MEMOTION,
+// MEMOTION_PLUS, ARDOISE (#196 — MEMOTION_PLUS inséré juste après MEMOTION,
+// avant ARDOISE, questionTypeMeta.js).
 function distributionSliders(container) {
   return Array.from(container.querySelectorAll('input[type="range"]'))
 }
@@ -194,14 +196,15 @@ describe('AIGenerateModal — formulaire (maquette §2, retour QUALIF v6.0.7)', 
 describe('AIGenerateModal — rebalance des sliders (maquette §3, normatif)', () => {
   afterEach(() => vi.clearAllMocks())
 
-  it('renders the default distribution 40/40/20/0/0 with MEMOTION and ARDOISE off', () => {
+  it('renders the default distribution 40/40/20/0/0/0 with MEMOTION, MEMOTION_PLUS and ARDOISE off', () => {
     const { container } = render(
       <MemoryRouter><AIGenerateModal onClose={vi.fn()} apiKeyConfigured categories={CATEGORIES} /></MemoryRouter>
     )
-    expect(distributionPercents(container)).toEqual(['40%', '40%', '20%', '0%', '0%'])
+    expect(distributionPercents(container)).toEqual(['40%', '40%', '20%', '0%', '0%', '0%'])
     const sliders = distributionSliders(container)
     expect(sliders[3]).toBeDisabled() // MEMOTION, OFF by default
-    expect(sliders[4]).toBeDisabled() // ARDOISE (T2.3), OFF by default
+    expect(sliders[4]).toBeDisabled() // MEMOTION_PLUS (#196), OFF by default
+    expect(sliders[5]).toBeDisabled() // ARDOISE (T2.3), OFF by default
   })
 
   it('proportional rebalance: moving SPEEDY to 100 drives QCM and MEMORY to 0', () => {
@@ -210,7 +213,7 @@ describe('AIGenerateModal — rebalance des sliders (maquette §3, normatif)', (
     )
     const [speedy] = distributionSliders(container)
     fireEvent.change(speedy, { target: { value: '100' } })
-    expect(distributionPercents(container)).toEqual(['100%', '0%', '0%', '0%', '0%'])
+    expect(distributionPercents(container)).toEqual(['100%', '0%', '0%', '0%', '0%', '0%'])
   })
 
   it('othersSum===0 branch: equal split when the two other active types are both at 0', () => {
@@ -220,11 +223,11 @@ describe('AIGenerateModal — rebalance des sliders (maquette §3, normatif)', (
     const [speedy] = distributionSliders(container)
     // Step 1 — drive QCM and MEMORY to 0 (proportional branch, remaining=0).
     fireEvent.change(speedy, { target: { value: '100' } })
-    expect(distributionPercents(container)).toEqual(['100%', '0%', '0%', '0%', '0%'])
+    expect(distributionPercents(container)).toEqual(['100%', '0%', '0%', '0%', '0%', '0%'])
     // Step 2 — now move SPEEDY down: others (QCM, MEMORY) are both at 0, so
     // remaining (50) must split EQUALLY between them (25/25), not stay at 0.
     fireEvent.change(speedy, { target: { value: '50' } })
-    expect(distributionPercents(container)).toEqual(['50%', '25%', '25%', '0%', '0%'])
+    expect(distributionPercents(container)).toEqual(['50%', '25%', '25%', '0%', '0%', '0%'])
   })
 
   it('sum of active types is always 100 after a slide', () => {
@@ -241,11 +244,12 @@ describe('AIGenerateModal — rebalance des sliders (maquette §3, normatif)', (
     const { container } = render(
       <MemoryRouter><AIGenerateModal onClose={vi.fn()} apiKeyConfigured categories={CATEGORIES} /></MemoryRouter>
     )
-    // Default: SPEEDY 40 / QCM 40 / MEMORY 20 / MEMOTION 0(off) / ARDOISE 0(off).
+    // Default: SPEEDY 40 / QCM 40 / MEMORY 20 / MEMOTION 0(off) /
+    // MEMOTION_PLUS 0(off) / ARDOISE 0(off).
     fireEvent.click(screen.getByLabelText('Activer QCM'))
     // QCM's 40 splits proportionally between SPEEDY(40) and MEMORY(20):
     // SPEEDY += round(40*40/60)=27 -> 67 ; MEMORY (last) absorbs -> 100-67=33.
-    expect(distributionPercents(container)).toEqual(['67%', '0%', '33%', '0%', '0%'])
+    expect(distributionPercents(container)).toEqual(['67%', '0%', '33%', '0%', '0%', '0%'])
     expect(distributionSliders(container)[1]).toBeDisabled()
   })
 
@@ -255,9 +259,32 @@ describe('AIGenerateModal — rebalance des sliders (maquette §3, normatif)', (
     )
     fireEvent.click(screen.getByLabelText('Activer Memotion'))
     // remaining=80 shared proportionally among SPEEDY(40)/QCM(40)/MEMORY(20)
-    // over their sum 100: SPEEDY+=32, QCM+=32, MEMORY(last)=80-64=16. ARDOISE
-    // stays disabled at 0, untouched by this rebalance.
-    expect(distributionPercents(container)).toEqual(['32%', '32%', '16%', '20%', '0%'])
+    // over their sum 100: SPEEDY+=32, QCM+=32, MEMORY(last)=80-64=16.
+    // MEMOTION_PLUS/ARDOISE stay disabled at 0, untouched by this rebalance.
+    expect(distributionPercents(container)).toEqual(['32%', '32%', '16%', '20%', '0%', '0%'])
+  })
+
+  // #196 — MEMOTION_PLUS suit exactement le même traitement que MEMOTION
+  // (nouveau type désactivé par défaut) : même algorithme de rebalance,
+  // aucune branche spéciale requise (F3 du plan cycle #196).
+  it('#196 — toggling MEMOTION_PLUS ON resets it to 20% then rebalances the rest, same as MEMOTION', () => {
+    const { container } = render(
+      <MemoryRouter><AIGenerateModal onClose={vi.fn()} apiKeyConfigured categories={CATEGORIES} /></MemoryRouter>
+    )
+    fireEvent.click(screen.getByLabelText('Activer MEMOTION+'))
+    expect(distributionPercents(container)).toEqual(['32%', '32%', '16%', '0%', '20%', '0%'])
+    const total = distributionPercents(container).reduce((sum, p) => sum + parseInt(p, 10), 0)
+    expect(total).toBe(100)
+  })
+
+  it('#196 — toggling MEMOTION_PLUS OFF after activation redistributes its share back proportionally', () => {
+    const { container } = render(
+      <MemoryRouter><AIGenerateModal onClose={vi.fn()} apiKeyConfigured categories={CATEGORIES} /></MemoryRouter>
+    )
+    fireEvent.click(screen.getByLabelText('Activer MEMOTION+')) // ON: 20%
+    fireEvent.click(screen.getByLabelText('Activer MEMOTION+')) // OFF again
+    expect(distributionPercents(container)).toEqual(['40%', '40%', '20%', '0%', '0%', '0%'])
+    expect(distributionSliders(container)[4]).toBeDisabled()
   })
 
   it('cas limite — disabling all but one type leaves the survivor at 100%', () => {
@@ -266,7 +293,7 @@ describe('AIGenerateModal — rebalance des sliders (maquette §3, normatif)', (
     )
     fireEvent.click(screen.getByLabelText('Activer QCM'))
     fireEvent.click(screen.getByLabelText('Activer Memory'))
-    expect(distributionPercents(container)).toEqual(['100%', '0%', '0%', '0%', '0%'])
+    expect(distributionPercents(container)).toEqual(['100%', '0%', '0%', '0%', '0%', '0%'])
   })
 
   it('cas limite — disabling every type disables "✨ Générer" (maquette §3 fin)', () => {
@@ -302,7 +329,7 @@ describe('AIGenerateModal — payload envoyé (contrat §3)', () => {
       instructions: '',
       categories: ['ENTERTAINMENT'],
       volume: { mode: 'count', value: 20 },
-      distribution: { SPEEDY: 40, QCM: 40, MEMORY: 20, MEMOTION: 0, ARDOISE: 0 },
+      distribution: { SPEEDY: 40, QCM: 40, MEMORY: 20, MEMOTION: 0, MEMOTION_PLUS: 0, ARDOISE: 0 },
     })
   })
 

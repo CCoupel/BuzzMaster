@@ -221,6 +221,15 @@ export default function AnimPage() {
   // `AnimConductPanel` ci-dessous — neutre pour l'hôte question (même
   // valeur), correct pour l'hôte carte QCM.
   const typeState = getTypeState(gameState, hostContext)
+  // #187 (v7.1.0) — flipMemoryCard porte désormais la portée de carte
+  // (`CardScope`, contrat question-types.md §9) quand une carte MEMOTION est
+  // active : `hostContext.cardId` vaut "" hors manche MEMOTION (repli neutre,
+  // comportement inchangé) et l'ID de la carte active en SELECTED/QUESTION/
+  // REVEAL. Lié UNE FOIS ici — `AnimConductPanel`/`AnimMemoryGrid` ne
+  // connaissent jamais `MOTION_CARD_ID` eux-mêmes (même discipline que
+  // `hostContext`/`typeState` ci-dessus).
+  const handleFlipMemoryCard = (cardId) =>
+    hostContext.cardId ? flipMemoryCard(cardId, hostContext.cardId) : flipMemoryCard(cardId)
 
   // #160/F8 — MEMOTION, sur le modèle exact de isMemoryQuestion (#159, plus
   // bas dans le fichier, zone équipes). La manche entière se joue en phase
@@ -233,6 +242,20 @@ export default function AnimPage() {
   const selectedMotionCard = isMemotionQuestion
     ? motionCards.find(c => c.ID === gameState.MEMOTION_SELECTED) || null
     : null
+  // #187 cycle 4 (F2) — délibérément la valeur ÉTOILES PLEINE, PAS le
+  // prorata STARS_PRORATA (contrairement à `AnimConductPanel.jsx`'s propre
+  // `motionCardPoints`, calcul interne et local à ce composant, non partagé
+  // avec celui-ci). Motif : ce libellé n'apparaît QUE pendant la sous-phase
+  // SELECTED (voir motionStatement ci-dessous — en QUESTION/REVEAL il est
+  // remplacé par le texte de la carte), c'est-à-dire AVANT toute paire
+  // trouvée, quand la question posée est « combien vaut cette carte au
+  // maximum ? », pas « combien vais-je créditer maintenant ? ». Appliquer le
+  // prorata ici afficherait 0pt sur une carte MEMORY tout juste sélectionnée
+  // (`matchedPairs` encore vide), ce qui serait FAUX — la carte reste
+  // intégralement gagnable. Les deux affichages (ce libellé en SELECTED, le
+  // bouton de crédit d'AnimConductPanel en REVEAL) ne se chevauchent jamais
+  // dans le temps, donc pas de risque de lire deux montants contradictoires
+  // pour la même carte au même instant.
   const motionCardPoints = selectedMotionCard
     ? getMotionCardPoints(selectedMotionCard.DIFFICULTY || 1, question?.MOTION_CONFIG)
     : 0
@@ -605,7 +628,8 @@ export default function AnimPage() {
             teamErrors: gameState.MEMORY_TEAM_ERRORS,
             errors: gameState.memoryErrors,
           }}
-          onFlipMemoryCard={flipMemoryCard}
+          cardMemory={typeState.memory}
+          onFlipMemoryCard={handleFlipMemoryCard}
           motion={{
             subphase: motionSubphase,
             timerRunning: gameState.timer > 0,

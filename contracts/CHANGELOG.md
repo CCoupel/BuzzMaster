@@ -2,6 +2,124 @@
 
 ---
 
+## [20260827] — FLIP_MEMORY_CARD : écran TV public jamais interactif (#187 cycle 7)
+
+> Milestone v7.1.0 · Correctif de contrat suite au code `8af17927` (`dev-frontend`)
+> Décision utilisateur du 2026-08-27, en vérification finale QUALIF
+
+- **[CHANGED]** 🔴 **Décision inversée** — `contracts/websocket-actions.md` documentait « le clic
+  d'un spectateur sur l'écran public » comme un cas d'usage **légitime** de `FLIP_MEMORY_CARD`.
+  **L'écran TV public n'est désormais jamais interactif.** Le `ClientType` `tv` reste autorisé dans
+  la table d'allow-list, mais au seul titre de l'**aperçu régie en iframe** (`/tv?admin=true`) — il
+  n'a plus qu'un seul cas d'usage légitime. Ne pas rétablir en revue.
+- **[CHANGED]** Garde d'interface : le clic exige `(isVPlayer || isAdminPreview)` en plus des
+  conditions de jeu, sur les **deux** grilles MEMORY (question hôte **et** carte MEMOTION). C'est une
+  garde d'**interface**, pas une frontière d'autorisation : le serveur ne distingue pas l'aperçu
+  régie de la TV publique, et c'est assumé (la grille MEMORY est publique, le geste n'expose rien).
+- **[CHANGED]** `FLIP_MEMORY_CARD.ID` — **de fait obligatoire pour un client `vplayer`**, alors
+  qu'il était documenté simplement optionnel. La 3ᵉ passe de repli (`clientID`) n'est pas fiable
+  pour un VJoueur : sans `ID` explicite, la résolution échoue et le flip tombe dans l'ignore
+  silencieux, **quelle que soit l'équipe**. Précision de documentation, aucun changement de
+  sérialisation.
+
+**Aucun changement BREAKING de protocole** : aucune action, aucun champ, aucune entrée d'allow-list
+n'est retiré. Ce qui change est une intention documentée et une garde d'interface.
+
+---
+
+## [20260826] — Génération IA de cartes QCM imbriquées, « MEMOTION+ » (#196)
+
+> Milestone v7.1.0 · Contrat détaillé : `contracts/ai-generation.md` §3 et §3ter
+
+**Aucun changement BREAKING.** Aucun champ n'est ajouté à la Request : le choix passe par une clé de
+distribution supplémentaire, absente ⇒ 0 ⇒ comportement d'avant #196 strictement inchangé.
+
+- **[NEW]** `POST /api/generate-questions` — clé de distribution **`MEMOTION_PLUS`** : génère des
+  questions MEMOTION dont les cartes mêlent `SPEEDY` et `QCM`, le type étant choisi carte par carte
+  par le modèle. `MEMOTION` reste la génération à cartes SPEEDY uniquement.
+- **[NEW]** `MEMOTION_PLUS` est un **pseudo-type de génération, pas un `QuestionType`** : une
+  question ainsi générée est persistée avec `TYPE: "MEMOTION"`. 🔴 La chaîne `MEMOTION_PLUS` ne doit
+  **jamais** apparaître dans un `question.json` — normalisation à la construction, avant écriture.
+- **[CHANGED]** Ni `questionTypeRegistry` (Go) ni `QUESTION_TYPES` (`questionTypeMeta.js`) ne sont
+  touchés : le pseudo-type vit dans `generableQuestionTypes` côté Go et dans un export **séparé**
+  `GENERABLE_TYPES` côté JS. Élargir `QUESTION_TYPES` ferait apparaître un « MEMOTION+ » fantôme
+  dans l'éditeur de questions et recréerait la divergence de tables supprimée par #183.
+- **[CHANGED]** `created[].type` de la Response reporte le type **réellement persisté**
+  (`"MEMOTION"`), jamais le pseudo-type ayant servi à le demander.
+- **Non-régression garantie par construction** : la variante de schéma `MEMOTION` conserve des
+  cartes à 4 propriétés en `additionalProperties: false` — le modèle est structurellement incapable
+  d'y typer une carte.
+
+---
+
+## [20260824] — MEMOTION+ : carte MEMORY (#187)
+
+> Milestone v7.1.0 · Plans : `_work/reports/plan-memotion-v710-memory-20260824-154844.md`,
+> `-v2-20260824-161449.md`, `-value-20260824-163512.md`
+> Contrat détaillé : `contracts/question-types.md` (§5.4, §6.2, §6.3, §7.2, §7.3, §9.2, §10.1, §10.2)
+
+**Aucun changement BREAKING.** Tous les ajouts sont optionnels ; une carte sans `TYPE` reste
+`SPEEDY` et les champs question-scopés sont inchangés.
+
+- **[NEW]** `MEMORY` devient imbricable dans une carte MEMOTION (`NestableInMotionCard`). Une carte
+  `TYPE=MEMORY` porte sa propre grille de paires.
+- **[NEW]** `POINTS_RULE.MODE = "STARS_PRORATA"` — quatrième mode de barème, **défaut d'une carte
+  MEMORY**, **sans `VALUE`** : `points_étoiles × Units / UnitsTotal`. La carte vaut ses étoiles
+  comme toute autre, et le type n'en distribue qu'une fraction — aucun réglage de points indépendant
+  du barème n'est introduit. ⚠️ **Ordre des opérations normatif** : multiplier avant de diviser,
+  jamais de « valeur par unité » précalculée (sinon une carte 5 points / 8 paires vaut 0 quoi qu'il
+  arrive). Garantit qu'une grille complète rapporte exactement la valeur nominale.
+- **[NEW]** `TypeOutcome.UnitsTotal` — le type rend désormais son dénominateur avec son résultat,
+  pour que l'hôte puisse calculer un prorata **sans jamais connaître la notion de paire**.
+- **[CHANGED]** `motionCardPointsForOutcome(card, units)` → `(card, units, unitsTotal)` —
+  **modification d'hôte assumée et déclarée** (`question-types.md` §10.2) : #184 avait anticipé
+  `PER_UNIT`, pas un prorata du total de la carte. Aucune logique MEMORY n'entre dans l'hôte.
+- **[NEW]** `MEMOTION_ACTIVE.STATE` porte l'état vivant d'une carte MEMORY
+  (`MEMORY_FLIPPED_CARDS`, `MEMORY_MATCHED_PAIRS`, `MEMORY_ERRORS`). Les champs multi-équipes en
+  sont **exclus** : une carte MEMORY se joue à **une seule équipe**, celle de la manche MEMOTION.
+- **[NEW]** `FLIP_MEMORY_CARD.MOTION_CARD_ID` (`CardScope`, optionnel) — **premier consommateur
+  réel** de l'invariant de portée posé et testé en #184.
+- **[CHANGED]** `FLIP_MEMORY_CARD` — **le serveur devient seule autorité sur le tour.** La
+  restriction d'affichage côté client est retirée (tout joueur peut tenter le geste ; la grille est
+  déjà publique), et le serveur dérive l'identité de l'émetteur pour n'appliquer l'effet que si son
+  équipe a la main. **Correction d'un défaut préexistant** : aucune vérification n'existait côté
+  serveur. ⚠️ Vérification appliquée **aux `vplayer` uniquement** — `tv` et `anim` jouent pour la
+  table et n'ont pas d'équipe.
+- **[CHANGED]** `MEMOTION_DONE.UNITS` — **ignoré pour une carte `TYPE=MEMORY`** : le serveur dérive
+  `Units` et `UnitsTotal` de son propre état. Avec `STARS_PRORATA`, `UNITS` *est* le score : le
+  laisser au client reproduirait, dans le mécanisme neuf, la dette que le milestone #12 doit
+  résorber. Inchangé pour tous les autres types.
+- **[CHANGED]** Dérogation documentée à « refus silencieux interdit » (`question-types.md` §9.2) :
+  un flip hors tour est **ignoré silencieusement** — aucune mutation, **aucun broadcast**, aucun
+  message. Le refus explicite reste la règle pour la portée de carte. À ne pas « corriger » en revue.
+- **[CHANGED]** Le test de borne de charge utile doit porter sur l'état **réellement produit par le
+  moteur**, avec une borne **par type** : la borne actuelle mesure un littéral QCM écrit à la main et
+  cesserait silencieusement de garder dès qu'un état MEMORY existe (`question-types.md` §10.1).
+- **[REMOVED]** `Engine.CalculateMemoryScore` — code mort **depuis sa création** (aucun appelant dans
+  toute l'histoire du dépôt ; double implémentation Go/JS délibérée dès v2.33.0, seul le JS branché ;
+  jamais mise à jour pour le multi-équipes). À ne pas réactiver en carte.
+- **[NEW]** `FLIP_MEMORY_CARD.ID` (optionnel, `omitempty`) — bumper ID de l'émetteur, première passe
+  de la résolution 3 passes qu'impose la vérification du tour. Même champ et même sémantique que sur
+  `VPLAYER_QCM_ANSWER` et `ARDOISE_INPUT`. Absent ⇒ repli sur `msg.ID` puis `clientID` : aucun client
+  existant n'est cassé. *(Signalé par `dev-backend` en déviation de contrat — le contrat était
+  incomplet, la déviation était juste.)*
+- **[CHANGED]** `question-types.md` §3.2 — `MEMORY_PAIRS` **ajouté au tableau de verrouillage du
+  type** (signalement `code-reviewer`). Il figurait déjà dans les `OwnedFields` MEMORY (§3.1) et
+  `dev-frontend` le traitait déjà comme tel dans `motionCardLock.js` : le tableau est aligné sur
+  l'implémentation, qui était la bonne. Sans cette ligne, huit paires illustrées pouvaient être
+  saisies puis la carte basculée vers `SPEEDY` — la destruction silencieuse que le verrou existe
+  pour empêcher. Verrouille dès qu'**une paire porte du contenu** (même motif que `QCM_ANSWERS`).
+  Documentation uniquement, aucun changement de comportement.
+- **[CHANGED]** `ARDOISE_INPUT.ID` — **documentation rattrapée** : le champ existe dans
+  `ArdoiseInputPayload` depuis v5.6.0 mais n'apparaissait pas dans le tableau de la fiche. Aucun
+  changement de comportement.
+- **[CHANGED]** `ARDOISE` **reste non imbricable, sans échéance** — #186 fermée « not planned »
+  (`question-types.md` §7.2). Les mentions « ARDOISE-en-carte, v7.1.0 » du contrat sont caduques.
+  ⚠️ Le tag `omitempty` de `TypedContent.Answer`, qu'elles justifiaient, **doit rester** : le
+  retirer casserait l'invariant de round-trip octet pour octet des 85 fixtures.
+
+---
+
 ## [20260821] — MEMOTION+ cœur : carte porteuse d'un type de jeu (#183, #184, #185)
 
 > Milestone v7.0.0 · Plan : `_work/reports/plan-memotion-v700-20260821.md`

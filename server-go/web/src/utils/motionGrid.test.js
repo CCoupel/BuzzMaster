@@ -5,6 +5,7 @@ import {
   getMotionCardCoord,
   getMotionCardPoints,
   isMotionSecretMode,
+  computeStarsProrataPoints,
 } from './motionGrid'
 
 // ---------------------------------------------------------------------------
@@ -178,5 +179,56 @@ describe('isMotionSecretMode — détection du mode Secret', () => {
 
   it('MOTION_MEMORIZE_DURATION négatif (donnée corrompue) -> traité comme mode normal (pas > 0)', () => {
     expect(isMotionSecretMode({ MOTION_MEMORIZE_DURATION: -5 })).toBe(false)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// computeStarsProrataPoints — gain prévisionnel d'une carte MEMORY en barème
+// STARS_PRORATA (#187, v7.1.0, contrat §6.2). Cas de test nommé À L'IDENTIQUE
+// côté Go (coordination dev-backend/dev-frontend, #187) — dev-backend a
+// retenu "5 points / 8 pairs" comme fragment canonique (voir
+// internal/game/engine_points_rule_184_test.go,
+// TestMotionCardPointsForOutcome_StarsProrata) : repris ici mot pour mot
+// plutôt que le nom initialement proposé côté frontend
+// ("STARS_PRORATA_5points_8pairs"), pour que la correspondance soit
+// effective et pas seulement projetée. Attrape à lui seul l'erreur d'ordre
+// des opérations (diviser avant de multiplier -> 0 point sur une carte à
+// 5 pts/8 paires, quel que soit le nombre de paires trouvées).
+// ---------------------------------------------------------------------------
+
+describe('computeStarsProrataPoints — barème STARS_PRORATA (contrat §6.2)', () => {
+  // Cas nommé À L'IDENTIQUE côté Go (fragment "5 points / 8 pairs") — NE PAS
+  // renommer sans coordonner dev-backend.
+  it('STARS_PRORATA — 5 points / 8 pairs', () => {
+    // Carte à 5 points (barème étoiles), 8 paires au total.
+    // Multiplier AVANT de diviser (contrat §6.2, normatif) :
+    //   4/8 trouvées -> floor(5*4/8)  = floor(2.5) = 2
+    //   8/8 trouvées -> floor(5*8/8)  = floor(5)   = 5 (valeur nominale exacte)
+    // Diviser avant de multiplier donnerait floor(5/8)=0 -> 0 pt dans les DEUX cas.
+    expect(computeStarsProrataPoints(5, 4, 8)).toBe(2)
+    expect(computeStarsProrataPoints(5, 8, 8)).toBe(5)
+  })
+
+  it('grille complète -> toujours la valeur nominale exacte de la carte (aucune perte d\'arrondi cumulée)', () => {
+    expect(computeStarsProrataPoints(10, 6, 6)).toBe(10)
+    expect(computeStarsProrataPoints(3, 12, 12)).toBe(3)
+  })
+
+  it('unitsTotal <= 0 -> 0 point (garde division par zéro, contrat §6.2)', () => {
+    expect(computeStarsProrataPoints(5, 0, 0)).toBe(0)
+    expect(computeStarsProrataPoints(5, 3, -1)).toBe(0)
+  })
+
+  it('units = 0 -> 0 point, quel que soit unitsTotal', () => {
+    expect(computeStarsProrataPoints(5, 0, 8)).toBe(0)
+  })
+
+  it('non-uniformité assumée par l\'arrondi entier : la dernière unité peut rapporter plus que les précédentes', () => {
+    // 5 pts / 8 paires : la 4e paire ne rapporte rien (2 -> 2), la 5e fait
+    // franchir un palier (2 -> 3) — documenté par le contrat comme
+    // inhérent à l'arrondi, pas un bug à corriger.
+    expect(computeStarsProrataPoints(5, 3, 8)).toBe(1)
+    expect(computeStarsProrataPoints(5, 4, 8)).toBe(2)
+    expect(computeStarsProrataPoints(5, 5, 8)).toBe(3)
   })
 })

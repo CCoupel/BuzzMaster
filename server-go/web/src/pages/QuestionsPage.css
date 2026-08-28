@@ -1564,6 +1564,24 @@
   box-shadow: 0 0 0 2px var(--primary-100);
 }
 
+/* #187 — réglages de points MEMORY_CONFIG neutralisés en contexte carte
+   MEMOTION (sans autorité, barème STARS_PRORATA, contrat §6.1/§6.3). */
+.motion-card-memory-config-disabled {
+  opacity: 0.5;
+}
+
+.motion-card-memory-config-disabled input {
+  cursor: not-allowed;
+  background: var(--gray-100);
+}
+
+.motion-card-memory-config-hint,
+.motion-card-memory-scoring-note {
+  font-size: 0.7rem;
+  color: var(--gray-500);
+  margin: var(--space-1) 0 0;
+}
+
 .memory-config-toggle {
   margin-top: var(--space-3);
   padding-top: var(--space-3);

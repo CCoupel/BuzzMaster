@@ -992,7 +992,7 @@ func TestBuildGenerationPrompt_MEMOTIONGuidance(t *testing.T) {
 // rather than relying on the end-to-end Groq mock tests to notice a missing
 // required entry indirectly.
 func TestBuildQuestionSchema_ARDOISEVariant_SatisfiesGroqStrictMode(t *testing.T) {
-	schema := buildQuestionSchema([]string{"CAT"}, []string{"Facile"})
+	schema := buildQuestionSchema([]string{"CAT"}, []string{"Facile"}, generableQuestionTypes)
 
 	props, ok := schema["properties"].(map[string]any)
 	if !ok {

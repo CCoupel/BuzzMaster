@@ -37,6 +37,11 @@ func newMEMOTIONUploadRequest(t *testing.T, cardsJSON string) *http.Request {
 // TestHTTPServer_MEMOTIONUpload_CardTypeNotNestable is #184 B-B2's server
 // half of contract §1/§3: a card declaring TYPE=MEMOTION (re-nesting) or any
 // unknown type must be refused with HTTP 400, before any file is written.
+// MEMORY became nestable in #187 (v7.1.0, registry NestableInMotionCard:
+// true) and is exercised as an ACCEPTED type by
+// motion_card_media_slots_184_test.go / engine_memory_card_187_test.go
+// instead — it no longer belongs in this "refused" table. ARDOISE stays:
+// #186 closed "not planned" (2026-08-24), permanently non-nestable.
 func TestHTTPServer_MEMOTIONUpload_CardTypeNotNestable(t *testing.T) {
 	tests := []struct {
 		name string
@@ -44,8 +49,7 @@ func TestHTTPServer_MEMOTIONUpload_CardTypeNotNestable(t *testing.T) {
 	}{
 		{"re-nesting MEMOTION", "MEMOTION"},
 		{"unknown type", "BOGUS_TYPE"},
-		{"not-yet-nestable ARDOISE (#186, v7.1.0)", "ARDOISE"},
-		{"not-yet-nestable MEMORY (#187, v7.1.0)", "MEMORY"},
+		{"non-nestable ARDOISE (#186 closed not planned)", "ARDOISE"},
 	}
 
 	for _, tt := range tests {

@@ -1,5 +1,5 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest'
-import { render } from '@testing-library/react'
+import { describe, it, expect, beforeEach, afterEach, beforeAll, vi } from 'vitest'
+import { render, cleanup } from '@testing-library/react'
 import PlayerDisplay from './PlayerDisplay'
 
 // ---------------------------------------------------------------------------
@@ -64,6 +64,33 @@ vi.mock('../styles/neon.css', () => ({}))
 // Import useGame après les mocks
 // ---------------------------------------------------------------------------
 import { useGame } from '../hooks/GameContext'
+
+// ---------------------------------------------------------------------------
+// Isolation entre tests — correction QA (_work/reports/qa-20260827-190500.md
+// §2) : le test "aperçu admin (?admin=true)" (describe carte MEMOTION,
+// hérité, non modifié ici) restaure l'URL avec
+// `window.history.pushState({}, '', originalSearch)` — mais si
+// `originalSearch` valait `''` (cas du tout premier test à manipuler l'URL
+// dans ce fichier), pousser une chaîne vide comme 3e argument résout comme
+// "URL courante inchangée" (résolution d'URL relative), PAS comme "retirer
+// la query string" : `?admin=true` reste dans `window.location.search` pour
+// tous les tests suivants du fichier (jsdom partage un seul `window` par
+// fichier de test, pas par test). `afterEach` global ci-dessous neutralise
+// cette pollution après CHAQUE test, quel que soit celui qui l'a introduite,
+// plutôt que de modifier le test existant fautif (règle de non-régression —
+// ne pas toucher un test hérité sans changement de contrat documenté).
+// `cleanup()` explicite en complément : ce fichier ne l'appelait jamais
+// lui-même avant ce correctif (l'auto-cleanup RTL par défaut suffisait tant
+// qu'aucun test ne laissait de state global — window.history — fuiter).
+// ---------------------------------------------------------------------------
+let initialHref
+beforeAll(() => {
+  initialHref = window.location.href
+})
+afterEach(() => {
+  cleanup()
+  window.history.pushState({}, '', initialHref)
+})
 
 // ---------------------------------------------------------------------------
 // Données de test MEMOTION
@@ -953,5 +980,294 @@ describe('PlayerDisplay — carte MEMOTION de type QCM (#185/C-F2)', () => {
       const grid = container.querySelector('.memotion-tv-qcm-grid')
       expect(grid.querySelectorAll('button, input').length).toBe(0)
     })
+  })
+})
+
+// ---------------------------------------------------------------------------
+// #187 (v7.1.0) — carte MEMOTION de type MEMORY. La grille occupe Row 2
+// (body) des faces QUESTION/REVEAL — MEMORY n'a pas de `question` MediaSlot
+// (contrat §7 : "recto + N paires"), la grille EST le contenu média de la
+// carte. Task 14 du plan : la révélation est routée par
+// `cardHostContext.revealed` (jamais `gameState.phase === 'REVEALED'`,
+// inatteignable en MEMOTION). Aucune restriction par équipe (task 2.1, même
+// règle que la grille MEMORY question-scopée) : le serveur reste seule
+// autorité sur le tour (contrat websocket-actions.md, FLIP_MEMORY_CARD).
+// ---------------------------------------------------------------------------
+
+const CARD_MEMORY = {
+  ID: 'card-3',
+  RECTO_THEME: 'Paires historiques',
+  DIFFICULTY: 2,
+  TYPE: 'MEMORY',
+  QUESTION_TEXT: 'Retrouvez les paires',
+  MEMORY_PAIRS: [
+    { ID: 1, CARD1: { TEXT: 'Napoléon' }, CARD2: { TEXT: '1804' } },
+    { ID: 2, CARD1: { TEXT: 'De Gaulle' }, CARD2: { TEXT: '1958' } },
+  ],
+}
+
+/** Variante de makeMemotionMock incluant MEMOTION_ACTIVE (état MEMORY carte-scopé). */
+const makeMemotionMemoryMock = (subphase, state = {}) => {
+  const base = makeMemotionMock(subphase, 'card-3', [CARD_WITH_IMG, CARD_MEMORY])
+  base.gameState.MEMOTION_ACTIVE = {
+    CARD_ID: 'card-3',
+    TYPE: 'MEMORY',
+    STATE: {
+      MEMORY_FLIPPED_CARDS: state.flippedCards || [],
+      MEMORY_MATCHED_PAIRS: state.matchedPairs || [],
+      MEMORY_ERRORS: state.errors || 0,
+    },
+  }
+  return base
+}
+
+describe('PlayerDisplay — carte MEMOTION de type MEMORY (#187)', () => {
+  describe('Face VERSO (QUESTION) — grille face cachée, cliquable', () => {
+    beforeEach(() => {
+      useGame.mockReturnValue(makeMemotionMemoryMock('QUESTION'))
+    })
+
+    it('affiche la grille MEMORY de la carte active (4 cartes = 2 paires)', () => {
+      const { container } = renderTV()
+      const grid = container.querySelector('.memotion-tv-memory-grid')
+      expect(grid).not.toBeNull()
+      expect(container.querySelectorAll('.memotion-tv-memory-card').length).toBe(4)
+    })
+
+    it('les cartes non retournées/trouvées sont face cachée (lettre, pas de contenu)', () => {
+      const { container } = renderTV()
+      const cards = container.querySelectorAll('.memotion-tv-memory-card')
+      cards.forEach(card => {
+        expect(card.classList.contains('up')).toBe(false)
+        expect(card.querySelector('.memotion-tv-memory-card-letter')).not.toBeNull()
+      })
+      expect(container.textContent).not.toContain('Napoléon')
+    })
+
+    it("n'affiche PAS le contenu SPEEDY (ANSWER_TEXT/ANSWER_IMAGE) pour une carte MEMORY", () => {
+      const { container } = renderTV()
+      const overlay = container.querySelector('.memotion-tv-fullscreen')
+      expect(overlay.textContent).not.toContain('ANSWER_TEXT')
+    })
+
+    // 🔴 Bug QUALIF cycle 7 — l'écran TV PUBLIC (ni VJoueur, ni aperçu admin)
+    // ne doit JAMAIS pouvoir retourner une carte : affichage passif pour les
+    // spectateurs, pas une surface de contrôle. `renderTV()` rend
+    // <PlayerDisplay /> sans aucune prop (isVPlayer=false par défaut,
+    // isAdminPreview dérivé de l'URL — jamais "?admin=true" dans ce test) :
+    // c'est exactement la configuration de l'écran public.
+    it('🔴 régression cycle 7 — une carte face cachée N\'EST PAS cliquable sur l\'écran TV public (isVPlayer=false, isAdminPreview=false)', () => {
+      const mock = makeMemotionMemoryMock('QUESTION')
+      useGame.mockReturnValue(mock)
+      const { container } = renderTV()
+      const card = container.querySelector('.memotion-tv-memory-card:not(.up)')
+      expect(card.disabled).toBe(true)
+      card.click()
+      expect(mock.flipMemoryCard).not.toHaveBeenCalled()
+    })
+
+    it('une carte face cachée EST cliquable côté VJoueur et appelle flipMemoryCard avec la portée de carte + son propre playerId', () => {
+      const mock = makeMemotionMemoryMock('QUESTION')
+      useGame.mockReturnValue(mock)
+      const { container } = render(<PlayerDisplay isVPlayer playerId="bumper-42" />)
+      const card = container.querySelector('.memotion-tv-memory-card:not(.up)')
+      expect(card.disabled).toBe(false)
+      card.click()
+      expect(mock.flipMemoryCard).toHaveBeenCalledTimes(1)
+      expect(mock.flipMemoryCard.mock.calls[0][1]).toBe('card-3') // MOTION_CARD_ID = carte active
+      expect(mock.flipMemoryCard.mock.calls[0][2]).toBe('bumper-42') // playerId — fix cycle 7
+    })
+
+    it('une carte face cachée EST cliquable côté aperçu admin (?admin=true), sans playerId (pas de bumper)', () => {
+      const mock = makeMemotionMemoryMock('QUESTION')
+      useGame.mockReturnValue(mock)
+      const originalSearch = window.location.search
+      window.history.pushState({}, '', '?admin=true')
+      const { container } = renderTV()
+      const card = container.querySelector('.memotion-tv-memory-card:not(.up)')
+      expect(card.disabled).toBe(false)
+      card.click()
+      expect(mock.flipMemoryCard).toHaveBeenCalledTimes(1)
+      expect(mock.flipMemoryCard.mock.calls[0][2]).toBeNull() // pas de playerId côté admin preview (prop par défaut)
+      window.history.pushState({}, '', originalSearch)
+    })
+  })
+
+  describe('État MEMORY de LA CARTE (MEMOTION_ACTIVE.STATE), pas de la question-scopée', () => {
+    it('une carte retournée (MEMORY_FLIPPED_CARDS) est affichée face visible', () => {
+      useGame.mockReturnValue(makeMemotionMemoryMock('QUESTION', { flippedCards: ['1-1'] }))
+      const { container } = renderTV()
+      const upCards = container.querySelectorAll('.memotion-tv-memory-card.up')
+      expect(upCards.length).toBe(1)
+      expect(upCards[0].textContent).toContain('Napoléon')
+    })
+
+    it('une paire trouvée (MEMORY_MATCHED_PAIRS) est affichée "matched"', () => {
+      useGame.mockReturnValue(makeMemotionMemoryMock('QUESTION', { matchedPairs: [2] }))
+      const { container } = renderTV()
+      const matched = container.querySelectorAll('.memotion-tv-memory-card.matched')
+      expect(matched.length).toBe(2) // les 2 cartes de la paire 2
+    })
+
+    it('MEMOTION_ACTIVE.CARD_ID ne correspond pas à la carte active -> état vide, pas l\'ancien état', () => {
+      const mock = makeMemotionMemoryMock('QUESTION', { flippedCards: ['1-1'] })
+      mock.gameState.MEMOTION_ACTIVE.CARD_ID = 'card-999' // carte différente de MEMOTION_SELECTED ('card-3')
+      useGame.mockReturnValue(mock)
+      const { container } = renderTV()
+      expect(container.querySelectorAll('.memotion-tv-memory-card.up').length).toBe(0)
+    })
+  })
+
+  // Task 14 du plan #187 — la révélation ne peut pas être gatée sur
+  // `gameState.phase === 'REVEALED'` (inatteignable en MEMOTION, la phase
+  // reste STARTED toute la manche) : routée par `cardHostContext.revealed`
+  // (dérivé de MEMOTION_SUBPHASE === 'REVEAL', utils/hostContext.js).
+  describe('Face REVEAL — révélation totale, routée par hostContext.revealed (task 14)', () => {
+    it('toutes les cartes sont affichées face visible en sous-phase REVEAL, même non trouvées', () => {
+      useGame.mockReturnValue(makeMemotionMemoryMock('REVEAL'))
+      const { container } = renderTV()
+      const cards = container.querySelectorAll('.memotion-tv-memory-card')
+      expect(cards.length).toBe(4)
+      cards.forEach(card => expect(card.classList.contains('up')).toBe(true))
+      expect(container.textContent).toContain('Napoléon')
+      expect(container.textContent).toContain('1958')
+    })
+
+    it('la grille est conservée entre VERSO et REVEAL (pas de saut visuel, même carte)', () => {
+      useGame.mockReturnValue(makeMemotionMemoryMock('REVEAL'))
+      const { container } = renderTV()
+      expect(container.querySelectorAll('.memotion-tv-memory-grid').length).toBe(1)
+    })
+
+    it('les cartes ne sont plus cliquables en REVEAL (playable=false)', () => {
+      useGame.mockReturnValue(makeMemotionMemoryMock('REVEAL'))
+      const { container } = renderTV()
+      const cards = container.querySelectorAll('.memotion-tv-memory-card')
+      cards.forEach(card => expect(card.disabled).toBe(true))
+    })
+  })
+
+  describe('Non-régression — carte SPEEDY de la même manche', () => {
+    it('une carte SPEEDY continue d\'afficher son propre contenu, pas de grille MEMORY', () => {
+      const mock = makeMemotionMock('QUESTION', 'card-1', [CARD_WITH_IMG, CARD_MEMORY])
+      useGame.mockReturnValue(mock)
+      const { container } = renderTV()
+      expect(container.querySelector('.memotion-tv-memory-grid')).toBeNull()
+      expect(container.querySelector('.memotion-tv-fs-question-text').textContent)
+        .toBe('Dans quel épisode Dark Vador révèle-t-il sa filiation ?')
+    })
+  })
+})
+
+// ---------------------------------------------------------------------------
+// #187 cycle 7 (2026-08-27, SHA 8af17927) — grille MEMORY QUESTION-HÔTE
+// (classique, PAS imbriquée dans une carte MEMOTION), restriction par
+// surface. Point INFO non bloquant de code-review-20260827-184327.md
+// (verdict APPROUVE) : les 3 tests de restriction par surface ajoutés par ce
+// cycle (renderTV public non cliquable, VJoueur cliquable + playerId, aperçu
+// admin cliquable) ne portaient QUE sur `.memotion-tv-memory-card`
+// (renderCardMemoryGrid — grille de carte MEMOTION, décrite plus haut dans
+// ce fichier). Le code corrigé est STRICTEMENT identique sur les deux
+// grilles (même expression `canClick = (isVPlayer || isAdminPreview) && ...`,
+// PlayerDisplay.jsx:1936 pour celle-ci vs :2169 pour la carte MEMOTION —
+// vérifié par la revue), mais la grille question-hôte (`.memory-card`,
+// PlayerDisplay.jsx:~1936-1962) n'avait ELLE-MÊME jamais eu aucun test de
+// clic, pas seulement pas de test du cycle 7 : recherche exhaustive
+// (`querySelector('.memory-card'` ou équivalent) sur tout le dépôt de test
+// avant ce commit → aucune occurrence. Ces 3 tests comblent ce trou,
+// symétriques aux 3 tests de la carte MEMOTION ci-dessus.
+// ---------------------------------------------------------------------------
+
+const MEMORY_QUESTION = {
+  TYPE: 'MEMORY',
+  ID: 'q-memory-187',
+  CATEGORY: 'CULTURE',
+  QUESTION: 'Retrouvez les paires',
+  MEMORY_PAIRS: [
+    { ID: 1, CARD1: { TEXT: 'Napoléon' }, CARD2: { TEXT: '1804' } },
+    { ID: 2, CARD1: { TEXT: 'De Gaulle' }, CARD2: { TEXT: '1958' } },
+  ],
+  MEMORY_CONFIG: {},
+}
+
+/** Mock useGame pour une question MEMORY classique (question-hôte, hors carte MEMOTION), phase STARTED. */
+const makeMemoryQuestionMock = () => ({
+  gameState: {
+    phase: 'STARTED',
+    remote: 'GAME',
+    timer: 15,
+    totalTime: 30,
+    question: MEMORY_QUESTION,
+    memoryFlippedCards: [],
+    memoryMatchedPairs: [],
+    MEMORY_PARTICIPATING_TEAMS: [],
+    newGameBackgrounds: [],
+  },
+  teams: {},
+  bumpers: {},
+  flipMemoryCard: vi.fn(),
+  showQRCode: false,
+  selectMotionCard: vi.fn(),
+})
+
+describe('PlayerDisplay — grille MEMORY question-hôte, restriction par surface (#187 cycle 7)', () => {
+  // ⚠️ Correction QA (_work/reports/qa-20260827-190500.md §1) : cette grille
+  // (.memory-card, héritée de #159/#127, antérieure à #187) rend TOUJOURS
+  // les deux faces dans le DOM (.memory-card-front avec le texte réel ET
+  // .memory-card-back avec la lettre) — contrairement à la grille de carte
+  // MEMOTION (renderCardMemoryGrid, plus récente, #187) qui, elle, rend
+  // conditionnellement le texte selon `cardRevealed`. Le masquage visuel
+  // d'une carte question-hôte non retournée est purement une transformation
+  // CSS 3D pilotée par la classe `.flipped` — jsdom ne l'applique pas, donc
+  // `container.textContent` contient légitimement le texte des deux faces
+  // quel que soit l'état visuel. La classe CSS (`.flipped`, absente ici) et
+  // la présence structurelle des deux faces sont les assertions correctes
+  // pour cette architecture — pas l'absence du texte dans le DOM.
+  it('affiche la grille MEMORY question-hôte (4 cartes = 2 paires), non retournée (classe .flipped absente)', () => {
+    useGame.mockReturnValue(makeMemoryQuestionMock())
+    const { container } = renderTV()
+    const cards = container.querySelectorAll('.memory-card')
+    expect(cards.length).toBe(4)
+    cards.forEach(card => {
+      expect(card.classList.contains('flipped')).toBe(false)
+      expect(card.querySelector('.memory-card-front')).not.toBeNull()
+      expect(card.querySelector('.memory-card-back .memory-card-letter')).not.toBeNull()
+    })
+  })
+
+  // 🔴 Mirroir du test carte MEMOTION ci-dessus — écran TV PUBLIC (ni
+  // VJoueur, ni aperçu admin) : `renderTV()` sans aucune prop est
+  // exactement la configuration de l'écran public.
+  it('🔴 mirroir cycle 7 — une carte face cachée N\'EST PAS cliquable sur l\'écran TV public (isVPlayer=false, isAdminPreview=false)', () => {
+    const mock = makeMemoryQuestionMock()
+    useGame.mockReturnValue(mock)
+    const { container } = renderTV()
+    const card = container.querySelector('.memory-card:not(.flipped)')
+    card.click()
+    expect(mock.flipMemoryCard).not.toHaveBeenCalled()
+  })
+
+  it('une carte face cachée EST cliquable côté VJoueur et appelle flipMemoryCard(cardId, undefined, playerId)', () => {
+    const mock = makeMemoryQuestionMock()
+    useGame.mockReturnValue(mock)
+    const { container } = render(<PlayerDisplay isVPlayer playerId="bumper-42" />)
+    const card = container.querySelector('.memory-card:not(.flipped)')
+    card.click()
+    expect(mock.flipMemoryCard).toHaveBeenCalledTimes(1)
+    expect(mock.flipMemoryCard.mock.calls[0][1]).toBeUndefined() // pas de portée de carte — question-hôte
+    expect(mock.flipMemoryCard.mock.calls[0][2]).toBe('bumper-42') // playerId — fix cycle 7
+  })
+
+  it('une carte face cachée EST cliquable côté aperçu admin (?admin=true), sans playerId', () => {
+    const mock = makeMemoryQuestionMock()
+    useGame.mockReturnValue(mock)
+    const originalSearch = window.location.search
+    window.history.pushState({}, '', '?admin=true')
+    const { container } = renderTV()
+    const card = container.querySelector('.memory-card:not(.flipped)')
+    card.click()
+    expect(mock.flipMemoryCard).toHaveBeenCalledTimes(1)
+    expect(mock.flipMemoryCard.mock.calls[0][2]).toBeNull() // pas de playerId côté admin preview (prop par défaut)
+    window.history.pushState({}, '', originalSearch)
   })
 })

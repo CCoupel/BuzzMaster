@@ -407,3 +407,61 @@ describe('VPlayerPage — couleur du badge VJoueur = couleur d\'équipe (#112)',
     expect(PlayerDisplay.mock.calls.at(-1)[0].playerNameColor).toBe('rgb(239,68,68)')
   })
 })
+
+// ---------------------------------------------------------------------------
+// Régression bug QUALIF cycle 7 (#187) : PlayerDisplay ne recevait AUCUN
+// identifiant de bumper (seulement playerName/teamName) — flipMemoryCard ne
+// pouvait donc jamais transmettre payload.ID au serveur, dont la résolution
+// de secours (clientID) ne correspond PAS à la clé du bumper pour un VJoueur
+// (cmd/server/main.go, resolveFlipMemoryCardBumper). Tout flip MEMORY depuis
+// /player était donc ignoré, quelle que soit l'équipe active. Fix :
+// VPlayerPage transmet désormais playerId={bumper?.id} — même clé de roster
+// que celle utilisée pour ID dans ARDOISE_INPUT/VPLAYER_QCM_ANSWER/BUTTON.
+// ---------------------------------------------------------------------------
+describe('VPlayerPage — playerId transmis à PlayerDisplay (#187, régression bug QUALIF cycle 7)', () => {
+  beforeEach(() => {
+    mockNavigate.mockClear()
+    vi.stubGlobal('localStorage', createLocalStorageMock())
+    localStorage.setItem('vplayer_name', 'Alice')
+    localStorage.setItem('vplayer_session', '1234567890')
+    useGame.mockReset()
+    PlayerDisplay.mockClear()
+  })
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('🔴 playerId = la clé du bumper dans le roster (bumper.id), jamais absent/undefined', () => {
+    useGame.mockReturnValue(makeGameMock({
+      bumpers: {
+        vjoueur_alice_123: { NAME: 'Alice', IS_VIRTUAL: true, IS_VPLAYER: true, TEAM: 'red', CONNECTED: true, TIME: 0 },
+      },
+      teams: { red: { NAME: 'Les Rouges', COLOR: [239, 68, 68] } },
+    }))
+
+    render(<VPlayerPage />)
+
+    const lastCallProps = PlayerDisplay.mock.calls.at(-1)[0]
+    expect(lastCallProps.playerId).toBe('vjoueur_alice_123')
+  })
+
+  it('playerId suit une reconnexion (même bumper, roster mis à jour)', () => {
+    const bumperState = (connected) => ({
+      vjoueur_alice_123: { NAME: 'Alice', IS_VIRTUAL: true, IS_VPLAYER: true, TEAM: 'red', CONNECTED: connected, TIME: 0 },
+    })
+    useGame.mockReturnValue(makeGameMock({
+      bumpers: bumperState(true),
+      teams: { red: { NAME: 'Les Rouges', COLOR: [239, 68, 68] } },
+    }))
+    const { rerender } = render(<VPlayerPage />)
+    expect(PlayerDisplay.mock.calls.at(-1)[0].playerId).toBe('vjoueur_alice_123')
+
+    useGame.mockReturnValue(makeGameMock({
+      bumpers: bumperState(false),
+      teams: { red: { NAME: 'Les Rouges', COLOR: [239, 68, 68] } },
+    }))
+    rerender(<VPlayerPage />)
+    expect(PlayerDisplay.mock.calls.at(-1)[0].playerId).toBe('vjoueur_alice_123')
+  })
+})

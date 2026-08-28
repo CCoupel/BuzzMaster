@@ -19,7 +19,42 @@
  * la TAILLE des cartes s'adapte (CSS, container queries). Si la hauteur
  * manque côté `/anim`, c'est le bloc central de la conduite qui défile
  * (#171) — la disposition, elle, ne change jamais.
+ *
+ * ⚠️ **Graine de mélange — hachage de chaîne, pas `parseInt` (#187, v7.1.0)**.
+ * Avant #187, la graine était `parseInt(questionId, 10) || 1` : correct tant
+ * que seul un `Question.ID` (toujours numérique, ex. `"5"`) était mélangé.
+ * Une carte MEMOTION de type `MEMORY` (#187) est identifiée par un
+ * `MotionCard.ID` **non numérique** (`"mc-1699999999999"`, `"card_3"`) —
+ * `parseInt` y renvoie `NaN`, et le repli `|| 1` retombait alors sur la
+ * MÊME graine pour **toutes** les cartes de la manche : mélange identique
+ * partout, cassant la correspondance positionnelle entre `/tv` et `/anim`
+ * pour chaque carte au-delà de la première. `hashStringToSeed` ci-dessous
+ * dérive une graine de l'identité de carte COMPLÈTE (numérique ou non),
+ * garantissant une graine distincte par carte tout en restant strictement
+ * déterministe (même ID -> même graine sur tous les clients, à l'identique
+ * de l'ancien comportement pour les `Question.ID` numériques — l'exigence
+ * n'est PAS l'imprévisibilité du mélange, seulement que tous les clients
+ * dérivent la MÊME disposition pour un ID donné).
  */
+
+/**
+ * Hachage déterministe d'une chaîne en entier 31 bits positif (variante
+ * djb2) — utilisé comme graine du mélange Fisher-Yates ci-dessous. Aucune
+ * prétention cryptographique : seule la reproductibilité stricte compte.
+ *
+ * @param {string} str
+ * @returns {number} entier positif non nul
+ */
+function hashStringToSeed(str) {
+  let hash = 5381
+  for (let i = 0; i < str.length; i++) {
+    hash = ((hash * 33) ^ str.charCodeAt(i)) & 0x7fffffff
+  }
+  // Jamais 0 — un LCG ensemencé à 0 dégénère (0 * a + c mod ... reste
+  // stable trop tôt selon les constantes) ; repli sur 1, comme l'ancien
+  // `parseInt(...) || 1`.
+  return hash || 1
+}
 
 /**
  * Construit la liste mélangée des cartes MEMORY d'une question, ensemencée
@@ -51,10 +86,11 @@ export function buildMemoryCards(question) {
     })
   })
 
-  // Fisher-Yates ensemencé par l'identifiant de question — garantit un
-  // mélange identique pour la même question sur tous les clients.
-  const questionId = question?.ID || '0'
-  let seed = parseInt(questionId, 10) || 1
+  // Fisher-Yates ensemencé par l'identifiant de question/carte — garantit un
+  // mélange identique pour le même hôte sur tous les clients (hachage de
+  // chaîne, pas `parseInt` — voir note de tête de fichier, #187).
+  const questionId = String(question?.ID || '0')
+  let seed = hashStringToSeed(questionId)
   const shuffled = [...allCards]
   for (let i = shuffled.length - 1; i > 0; i--) {
     seed = (seed * 1103515245 + 12345) & 0x7fffffff

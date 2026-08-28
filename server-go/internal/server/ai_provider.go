@@ -130,27 +130,77 @@ var groqAnyOfDiscriminatorFields = []string{"CATEGORY", "DIFFICULTY"}
 // branch (#137 Batch 2a) and so never actually exercised the schema shape
 // that triggers this ambiguity — "accepted as-is" was true of the 4-branch
 // schema it tested, not of the 5-branch one that shipped afterward.
+//
+// ⚠️ #196 QUALIF v7.1.0.8 cycle 3 — the SAME ambiguity mechanism, one level
+// deeper: MEMOTION_PLUS's MOTION_CARDS items are themselves a discriminated
+// anyOf (SPEEDY-card / QCM-card, ai_generator.go's motionCardVariant), and
+// both branches share a required, enum-constrained DIFFICULTY (integer,
+// [1,2,3]) alongside their own TYPE const — the exact CATEGORY/DIFFICULTY/
+// TYPE pattern #142 already named, just nested inside MOTION_CARDS instead
+// of at the top level. The original fix only ever walked the TOP-level
+// anyOf (groqAnyOfBranches below navigates exactly one fixed path,
+// properties.questions.items.anyOf) and so never reached this nested one —
+// classic MEMOTION was never affected (its MOTION_CARDS items are a single
+// flat object, not an anyOf, so there is no discriminator ambiguity there
+// at all; TestGroqProvider_AdaptSchema_DoesNotTouchMotionCardsNestedDifficulty
+// locks that case down and stays green under this fix). Reported symptom
+// (QUALIF): Groq did not reject the schema outright this time (no
+// "discriminator: multiple candidate properties" 400 at submission) but
+// instead returned a post-generation "json_validate_failed" — a MOTION_CARDS
+// entry failed to validate against anyOf/0 (SPEEDY), missing ANSWER_TEXT —
+// consistent with the SAME ambiguity confusing which branch's grammar
+// constrained a QCM-intended card during generation.
+//
+// Fix: stripGroqAnyOfDiscriminatorFields walks the ENTIRE schema tree
+// (recursively, any depth) instead of navigating one fixed path, and strips
+// groqAnyOfDiscriminatorFields from every anyOf branch it finds — the
+// top-level questions.items.anyOf (unchanged behavior, #142) AND
+// MEMOTION_PLUS's nested MOTION_CARDS.items.anyOf (#196 cycle 3, new) alike,
+// with no hardcoded path between them. A future type nesting an anyOf
+// anywhere else in the tree is covered by construction, not by name.
 func (p *groqProvider) AdaptSchema(schema map[string]any) map[string]any {
-	branches, ok := groqAnyOfBranches(schema)
-	if !ok {
-		return schema // unexpected shape — fail open, Groq's own validator will report it
-	}
-	for _, branch := range branches {
-		branchMap, ok := branch.(map[string]any)
-		if !ok {
-			continue
-		}
-		props, ok := branchMap["properties"].(map[string]any)
-		if !ok {
-			continue
-		}
-		for _, field := range groqAnyOfDiscriminatorFields {
-			if fieldSchema, ok := props[field].(map[string]any); ok {
-				delete(fieldSchema, "enum")
+	stripGroqAnyOfDiscriminatorFields(schema)
+	return schema
+}
+
+// stripGroqAnyOfDiscriminatorFields recursively walks node (a JSON-schema
+// fragment decoded as map[string]any/[]any/scalars) and, at every "anyOf"
+// array found — regardless of depth — strips "enum" from
+// groqAnyOfDiscriminatorFields wherever present in a branch's properties.
+// Recursion continues into every map value and slice element after
+// processing any anyOf at the current node, so a branch's own properties
+// (which may themselves contain another anyOf, however deeply nested) are
+// still visited. Fails open on any unexpected shape via the usual comma-ok
+// type assertions — never panics on a schema shape this function doesn't
+// recognize.
+func stripGroqAnyOfDiscriminatorFields(node any) {
+	switch v := node.(type) {
+	case map[string]any:
+		if anyOf, ok := v["anyOf"].([]any); ok {
+			for _, branch := range anyOf {
+				branchMap, ok := branch.(map[string]any)
+				if !ok {
+					continue
+				}
+				props, ok := branchMap["properties"].(map[string]any)
+				if !ok {
+					continue
+				}
+				for _, field := range groqAnyOfDiscriminatorFields {
+					if fieldSchema, ok := props[field].(map[string]any); ok {
+						delete(fieldSchema, "enum")
+					}
+				}
 			}
 		}
+		for _, child := range v {
+			stripGroqAnyOfDiscriminatorFields(child)
+		}
+	case []any:
+		for _, child := range v {
+			stripGroqAnyOfDiscriminatorFields(child)
+		}
 	}
-	return schema
 }
 
 // groqAnyOfBranches navigates buildQuestionSchema's fixed shape

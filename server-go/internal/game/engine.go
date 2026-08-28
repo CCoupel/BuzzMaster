@@ -124,6 +124,30 @@ type Engine struct {
 	countdownStopCh  chan struct{}
 	pendingDelay     int // Store delay for after countdown
 
+	// motionCardRoundClosed (#187 cycle 4, B3) — true once the ACTIVE
+	// MEMOTION card's own timer round has ended (natural expiry via
+	// processMotionCardTick, or an explicit StopMotionCardTimer —
+	// MEMOTION_STOP_TIMER, MEMOTION_REVEAL, MEMOTION_DONE, and the
+	// card-scoped grid-complete path all route through it). Gates
+	// FlipMotionMemoryCard independently of MotionSubPhase, which stays
+	// QUESTION on natural expiry (deliberate asymmetry with the
+	// grid-complete exit — plan-memotion-v710-memory-reveal-v2 §1).
+	//
+	// Deliberately NOT derived from CURRENT_TIME==0: StartMotionCardTimer
+	// is a no-op when Question.TIME<=0 (guard, delay<=0 returns before
+	// touching anything) — a MEMOTION question with no configured timer
+	// never starts one, so CURRENT_TIME stays 0 forever without the round
+	// ever being "closed". Gating on CURRENT_TIME==0 alone would make a
+	// timerless MEMORY card permanently unplayable, silently, with no
+	// failing test to catch it (the exact trap named in the plan).
+	//
+	// Reset to false at SelectMotionCard and FlipMotionCard — a fresh
+	// card's round is always open. Not reset by DoneMotionCard: MotionSelected
+	// is cleared there too, and FlipMotionMemoryCard already refuses any
+	// card whose ID isn't the current MotionSelected, so a stale `true`
+	// left over from the previous card has no way to reach a live guard.
+	motionCardRoundClosed bool
+
 	// Callbacks
 	//
 	// OnStateChange — concurrency contract (#121): invoked from every one of
@@ -151,6 +175,15 @@ type Engine struct {
 	OnCountdownTick func(countdownTime int)
 	OnBuzzerPress   func(bumperID, teamID string, pressTime int64, button string)
 	OnQCMHint       func(invalidatedColor string, remainingAnswers int) // QCM hint callback
+	// #187 cycle 3 briefly added OnMotionCardAutoRevealed here (a MEMORY
+	// card auto-revealing at timer expiry) — REVERTED in cycle 4: the
+	// user-validated behavior is that expiry on an incomplete grid leaves
+	// the card in QUESTION, closed to further flips
+	// (motionCardRoundClosed) but requiring an explicit animateur
+	// MEMOTION_REVEAL, asymmetric with the completed-grid exit (see
+	// processMotionCardTick's doc comment). Do not reintroduce this
+	// callback without re-reading plan-memotion-v710-memory-reveal-v2's
+	// §1 rationale.
 }
 
 // NewEngine creates a new game engine
@@ -3026,53 +3059,6 @@ func (e *Engine) GetMemoryFlippedCards() []string {
 	return e.state.MemoryFlippedCards
 }
 
-// CalculateMemoryScore calculates the score for a Memory game based on matched pairs, errors, and config
-// Returns: score, matchedPairs, totalPairs, errors, isComplete
-func (e *Engine) CalculateMemoryScore() (int, int, int, int, bool) {
-	e.mu.RLock()
-	defer e.mu.RUnlock()
-
-	if e.state.Question == nil || e.state.Question.Type != QuestionTypeMemory {
-		return 0, 0, 0, 0, false
-	}
-
-	// Get config values with defaults
-	pointsPerPair := 10
-	errorPenalty := 0
-	completionBonus := 0
-
-	if e.state.Question.MemoryConfig != nil {
-		if e.state.Question.MemoryConfig.PointsPerPair > 0 {
-			pointsPerPair = e.state.Question.MemoryConfig.PointsPerPair
-		}
-		errorPenalty = e.state.Question.MemoryConfig.ErrorPenalty
-		completionBonus = e.state.Question.MemoryConfig.CompletionBonus
-	}
-
-	// Calculate stats
-	matchedPairs := len(e.state.MemoryMatchedPairs)
-	totalPairs := len(e.state.Question.MemoryPairs)
-	errors := e.state.MemoryErrors
-	isComplete := matchedPairs == totalPairs && totalPairs > 0
-
-	// Calculate score: (matched × pointsPerPair) + completionBonus - (errors × errorPenalty)
-	score := matchedPairs * pointsPerPair
-	if isComplete {
-		score += completionBonus
-	}
-	score -= errors * errorPenalty
-
-	// Score cannot be negative
-	if score < 0 {
-		score = 0
-	}
-
-	log.Printf("[Engine] Memory score: matched=%d/%d, errors=%d, complete=%v, score=%d (perPair=%d, bonus=%d, penalty=%d)",
-		matchedPairs, totalPairs, errors, isComplete, score, pointsPerPair, completionBonus, errorPenalty)
-
-	return score, matchedPairs, totalPairs, errors, isComplete
-}
-
 // SetEnrollmentActive enables or disables virtual player enrollment (QR code display)
 func (e *Engine) SetEnrollmentActive(active bool) {
 	e.mu.Lock()
@@ -3946,19 +3932,51 @@ func (e *Engine) motionCardPoints(difficulty int) int {
 }
 
 // motionCardPointsForOutcome computes the points to award for card given a
-// type's outcome (currently just `units`, from MEMOTION_DONE.UNITS —
-// #184 B-B5, contract §6.2). Dispatches on card.PointsRule.Mode: absent
-// (nil PointsRule, or an explicit empty/"STARS" MODE) falls through to the
-// pre-#184 star-based scale (motionCardPoints, unchanged); FIXED and
-// PER_UNIT are new. This is the one place #187 (MEMORY prorata) needs to
-// reach — via PER_UNIT — without touching anything else in this file,
-// which is the mechanism's own acceptance criterion (contract §6.2).
-func (e *Engine) motionCardPointsForOutcome(card *MotionCard, units int) int {
+// type's outcome — units realised and unitsTotal realisable (MEMOTION_DONE.
+// UNITS for units under FIXED/PER_UNIT — #184 B-B5, contract §6.2; both
+// server-derived for a MEMORY card under STARS_PRORATA — #187, contract
+// §9.3). The SOLE reader of MotionCard.PointsRule in this codebase.
+//
+// Mode resolution, in priority order (#187 cycle 5):
+//  1. card.PointsRule.Mode, if explicitly set — absolute priority, contract
+//     §6.3. A MEMORY card can still be scored tout-ou-rien by setting STARS
+//     or FIXED explicitly.
+//  2. Otherwise, the active card's TypeDescriptor.DefaultPointsRule
+//     (question_types.go registry), resolved fresh from
+//     card.EffectiveType() on every call — never a value written onto the
+//     card itself. See that field's doc comment for why: POINTS_RULE is a
+//     CARD field that survives a TYPE change verbatim, so writing a
+//     type-specific default onto the card (client-side at creation, or
+//     server-side at save) would leave a stale, silently-wrong rule behind
+//     after the card's TYPE is later changed. Resolving from the registry
+//     at read time has no such staleness — a card is always scored under
+//     ITS CURRENT type's default.
+//  3. Otherwise (no registry entry, or its default is ""), PointsRuleModeStars
+//     — the pre-#184 star-based scale (motionCardPoints), unchanged.
+//
+// ⚠️ Signature changed by #187 (card, units) → (card, units, unitsTotal) —
+// declared host modification, contract §10.2: #184 had anticipated PER_UNIT
+// as MEMORY's landing mode, not a prorata of the card's own total. The
+// change stays within the host's own points vocabulary (§6.1) — no MEMORY
+// knowledge (e.g. "a pair") enters this function or this file: it queries
+// the registry generically, exactly like MediaSlots/OwnedFields elsewhere.
+func (e *Engine) motionCardPointsForOutcome(card *MotionCard, units, unitsTotal int) int {
 	mode := PointsRuleModeStars
 	value := 0
 	if card.PointsRule != nil && card.PointsRule.Mode != "" {
+		// Explicit override on the card — absolute priority (contract
+		// §6.3), regardless of what the type's own default would be.
 		mode = card.PointsRule.Mode
 		value = card.PointsRule.Value
+	} else if d, ok := TypeDescriptorFor(card.EffectiveType()); ok && d.DefaultPointsRule != "" {
+		// #187 cycle 5 — the type's own default (registry, contract §7),
+		// resolved fresh from card.EffectiveType() on every call: a card
+		// that changed TYPE is re-resolved from its CURRENT type, never
+		// from a stale value written earlier onto the card (see
+		// TypeDescriptor.DefaultPointsRule's doc comment for the trap this
+		// avoids). No `if card.EffectiveType() == QuestionTypeMemory`
+		// anywhere — this stays agnostic of which type declared a default.
+		mode = d.DefaultPointsRule
 	}
 	switch mode {
 	case PointsRuleModeFixed:
@@ -3968,6 +3986,20 @@ func (e *Engine) motionCardPointsForOutcome(card *MotionCard, units int) int {
 		return 0
 	case PointsRuleModePerUnit:
 		return value * units
+	case PointsRuleModeStarsProrata:
+		// #187 contract §6.2 — normative order of operations: multiply
+		// BEFORE dividing. Precomputing a "value per unit"
+		// (motionCardPoints(...)/unitsTotal first) truncates to 0 in
+		// integer arithmetic whenever unitsTotal exceeds the card's own
+		// point value (e.g. 5 points / 8 pairs), making the whole card
+		// worth 0 no matter how many units were realised. Multiplying
+		// first guarantees a complete grid (units==unitsTotal) always
+		// rewards the card's exact nominal value, with no cumulative
+		// rounding loss.
+		if unitsTotal <= 0 {
+			return 0
+		}
+		return e.motionCardPoints(card.Difficulty) * units / unitsTotal
 	default: // STARS
 		return e.motionCardPoints(card.Difficulty)
 	}
@@ -4056,6 +4088,7 @@ func (e *Engine) SelectMotionCard(cardID string) error {
 	// at every MEMOTION_SELECT, State starts empty (the type's own
 	// handlers populate it, none do yet in v7.0.0).
 	e.state.MotionActive = MotionActive{CardID: cardID, Type: effectiveType, State: map[string]interface{}{}}
+	e.motionCardRoundClosed = false // #187 cycle 4, B3 — a freshly selected card's round is always open
 
 	log.Printf("[Engine] MEMOTION SelectMotionCard: cardID=%s → SELECTED", cardID)
 	return nil
@@ -4085,6 +4118,7 @@ func (e *Engine) FlipMotionCard() error {
 
 	e.state.MotionCardStates[cardID] = MotionCardStateQuestion
 	e.state.MotionSubPhase = MotionSubPhaseQuestion
+	e.motionCardRoundClosed = false // #187 cycle 4, B3 — belt-and-suspenders with SelectMotionCard's own reset
 
 	log.Printf("[Engine] MEMOTION FlipMotionCard: cardID=%s → QUESTION", cardID)
 	return nil
@@ -4104,13 +4138,24 @@ func (e *Engine) RevealMotionCard() error {
 	}
 
 	cardID := e.state.MotionSelected
+	e.revealMotionCardUnsafe()
+
+	log.Printf("[Engine] MEMOTION RevealMotionCard: cardID=%s → REVEAL", cardID)
+	return nil
+}
+
+// revealMotionCardUnsafe transitions the active card from QUESTION to
+// REVEAL — the state mutation shared by RevealMotionCard (explicit,
+// animateur-triggered via MEMOTION_REVEAL) and processMotionCardTick's own
+// auto-reveal of an expired MEMORY card (#187 QUALIF bugfix, below). Must
+// be called with e.mu held; caller is responsible for the precondition
+// checks (Phase==STARTED, MotionSubPhase==QUESTION) where they apply.
+func (e *Engine) revealMotionCardUnsafe() {
+	cardID := e.state.MotionSelected
 	if cardID != "" {
 		e.state.MotionCardStates[cardID] = MotionCardStateRevealed
 	}
 	e.state.MotionSubPhase = MotionSubPhaseReveal
-
-	log.Printf("[Engine] MEMOTION RevealMotionCard: cardID=%s → REVEAL", cardID)
-	return nil
 }
 
 // DoneMotionCard marks the active card as DONE, optionally awards points to winnerTeam,
@@ -4164,7 +4209,19 @@ func (e *Engine) DoneMotionCard(cardID string, winnerTeam string, units int) (in
 			for i := range e.state.Question.MotionCards {
 				card := &e.state.Question.MotionCards[i]
 				if card.ID == cardID {
-					pts := e.motionCardPointsForOutcome(card, units)
+					effUnits, unitsTotal := units, 0
+					if card.EffectiveType() == QuestionTypeMemory {
+						// #187 contract §9.3 — the server is sole authority
+						// on a MEMORY card's outcome: derive Units AND
+						// UnitsTotal from the card's own active grid state,
+						// ignoring whatever UNITS the client sent. With
+						// STARS_PRORATA as the default MODE, Units *is* the
+						// score — leaving it to the caller would recreate,
+						// in this new mechanism, exactly the dette #12 owes
+						// to close.
+						effUnits, unitsTotal = e.memoryCardOutcomeUnsafe(card)
+					}
+					pts := e.motionCardPointsForOutcome(card, effUnits, unitsTotal)
 					ok := pts > 0
 					if ok {
 						points = pts
@@ -4179,7 +4236,7 @@ func (e *Engine) DoneMotionCard(cardID string, winnerTeam string, units int) (in
 			if ok {
 				team.TeamPoints += points
 				e.recalculateTeamScoreUnsafe(winnerTeam)
-				log.Printf("[Engine] MEMOTION DoneMotionCard: team=%s +%dpts (difficulty-based)", winnerTeam, points)
+				log.Printf("[Engine] MEMOTION DoneMotionCard: team=%s +%dpts", winnerTeam, points)
 			}
 		}
 		e.state.MotionCardTeams[cardID] = winnerTeam
@@ -4364,6 +4421,13 @@ func (e *Engine) StartMotionCardTimer(delay int) {
 						ticker.Stop()
 						return true
 					}
+					// #187 cycle 6 bugfix — PAUSE: leave the ticker running
+					// (do NOT ticker.Stop()/return), just skip this tick's
+					// broadcast/decrement entirely. See
+					// processMotionCardTick's doc comment.
+					if result.paused {
+						return false
+					}
 
 					if e.OnTimerTick != nil {
 						e.OnTimerTick(result.currentTime)
@@ -4377,7 +4441,16 @@ func (e *Engine) StartMotionCardTimer(delay int) {
 					}
 
 					if result.currentTime <= 0 {
-						// Timer expired — do NOT call e.Stop(). Phase stays STARTED.
+						// Timer expired — do NOT call e.Stop(). Phase stays
+						// STARTED, MotionSubPhase stays QUESTION for every
+						// card type (#187 cycle 4, B1 — reverted cycle 3's
+						// MEMORY-specific auto-reveal here; see
+						// processMotionCardTick's doc comment for why).
+						// motionCardRoundClosed is set inside
+						// processMotionCardTick itself (under lock), so a
+						// MEMORY card already stops accepting flips at this
+						// point even though its sub-phase hasn't moved —
+						// admin must act via MEMOTION_REVEAL.
 						ticker.Stop()
 						log.Printf("[Engine] MEMOTION card timer expired — phase stays STARTED, admin must act")
 						return true
@@ -4399,6 +4472,11 @@ func (e *Engine) StartMotionCardTimer(delay int) {
 // card-timer iteration (processMotionCardTick) out to the unlocked caller.
 type motionCardTickResult struct {
 	guardFailed bool // phase/subphase changed unexpectedly; caller must stop the ticker and return
+	// paused (#187 cycle 6 bugfix, QUALIF v7.1.0.3) — Phase==PAUSED: this
+	// tick is a pure no-op, and the caller must NOT stop the ticker for
+	// it — see processMotionCardTick's doc comment for why this has to be
+	// a distinct outcome from guardFailed.
+	paused      bool
 	currentTime int
 	// qcmHintCallback/invalidatedColor/remainingAnswers (#185 C-B1) — set
 	// only when the active card is QCM-typed and a hint threshold was
@@ -4424,13 +4502,43 @@ type motionCardTickResult struct {
 // decision/invalidation logic itself (qcmHintShouldTrigger,
 // qcmInvalidateRandomWrongAnswer, above) is fully host-agnostic — it was
 // extracted for exactly this reuse, not written twice.
+//
+// #187 cycle 6 bugfix (QUALIF v7.1.0.3) — PAUSE during a MEMOTION card's
+// own timer used to permanently kill the ticker goroutine: the combined
+// guard below (`Phase != STARTED || MotionSubPhase != QUESTION`) treated
+// PhasePaused exactly like any other phase change, returning
+// guardFailed=true, which makes StartMotionCardTimer's goroutine
+// `ticker.Stop()` and RETURN FROM THE GOROUTINE ENTIRELY. Continue()
+// (engine.go) only flips Phase back to STARTED — it has no idea a
+// MEMOTION card timer even exists, so nothing ever restarts it: the
+// countdown stayed frozen forever, exactly the QUALIF report ("le
+// décompte ne reprend pas"). Pre-existing since #151 (this ticker
+// predates #183-#187 entirely) — not a regression introduced by any
+// #187 cycle, simply never exercised by manual QUALIF testing before
+// MEMORY-in-card gave pause/resume during a card timer real attention.
+//
+// Fix: PAUSE gets its OWN, distinct outcome (paused=true) — mirrors
+// processTimerTick's question-host handling (`if Phase != STARTED {
+// return timerTickResult{} }`, whose caller's `if !result.active {
+// return }` leaves the ticker running and simply skips this tick). The
+// ticker keeps firing every second while paused, each tick a pure
+// no-op; the very next tick after Continue() resumes decrementing
+// normally, no separate "resume the card timer" call needed anywhere —
+// same mechanism that already made pause/resume work correctly for the
+// question-host timer all along.
 func (e *Engine) processMotionCardTick() motionCardTickResult {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 
 	callTestInjectPanic("motion-card")
 
-	// Guard: exit if game state changed unexpectedly
+	if e.state.Phase == PhasePaused {
+		return motionCardTickResult{paused: true}
+	}
+
+	// Guard: exit if game state changed unexpectedly (STOP, card
+	// revealed/done/completed while a stray tick was in flight, ...) —
+	// PhasePaused is handled above and never reaches here.
 	if e.state.Phase != PhaseStarted || e.state.MotionSubPhase != MotionSubPhaseQuestion {
 		return motionCardTickResult{guardFailed: true}
 	}
@@ -4456,6 +4564,39 @@ func (e *Engine) processMotionCardTick() motionCardTickResult {
 			}
 		}
 	}
+
+	// #187 cycle 4, B3 — a card's round closes on natural timer expiry,
+	// same as an explicit StopMotionCardTimer (MEMOTION_STOP_TIMER). This
+	// is deliberately generic (any card type, not just MEMORY): it's a
+	// host-level "is this card's timer round still open" fact, gating
+	// FlipMotionMemoryCard independently of MotionSubPhase — which stays
+	// QUESTION here, unchanged for every type (see below).
+	if currentTime <= 0 {
+		e.motionCardRoundClosed = true
+	}
+
+	// ⚠️ Deliberately NOT auto-revealing here (reverted from an earlier
+	// cycle — plan-memotion-v710-memory-reveal-v2-20260824... — do not
+	// reintroduce). A MEMORY card's timer expiring on an INCOMPLETE grid
+	// requires an explicit animateur MEMOTION_REVEAL: the reveal gesture
+	// has real content there (it uncovers pairs nobody found, and is the
+	// moment the animateur reads the score before crediting it). This is
+	// deliberately ASYMMETRIC with the completed-grid exit
+	// (main.go's handleFlipMemoryCard, cardScoped isComplete branch, cycle
+	// 2 — unchanged, still auto-reveals): once every pair is found there is
+	// nothing left to discover, so requiring a gesture there would be
+	// purely ceremonial. A reviewer "harmonizing" the two exits would
+	// break behavior the user explicitly validated — same caution as the
+	// FLIP_MEMORY_CARD off-turn ignore dérogation (contract §9.2).
+	//
+	// A previous cycle DID auto-reveal here for MEMORY, discovering along
+	// the way that its own notification (OnTimerTick → ActionUpdateTimer)
+	// doesn't reach the frontend's live MEMOTION rendering — the reduced
+	// UPDATE_TIMER handler only copies phase/timer/countdownTime/gameTime,
+	// never MEMOTION_SUBPHASE/MEMOTION_CARD_STATES/MEMOTION_ACTIVE. That
+	// discovery stays true and is still a trap for a FUTURE broadcast on
+	// this same tick path — just no longer this function's problem, since
+	// nothing here mutates MEMOTION state at expiry anymore.
 
 	return result
 }
@@ -4492,6 +4633,68 @@ func motionActiveQCMInvalidated(state map[string]interface{}) []string {
 		return nil
 	}
 	return s
+}
+
+// ============================================================
+// MEMOTION — MEMORY-typed card (#187, v7.1.0, contract §5.4/§6.3/§7.3)
+// ============================================================
+
+// motionActiveMemoryFlippedCards reads MEMORY_FLIPPED_CARDS from
+// MEMOTION_ACTIVE.STATE — the card-scoped counterpart of the question-host
+// MemoryFlippedCards field (contract §5.4). Absent or unexpectedly-shaped ⇒
+// nil; never panics.
+func motionActiveMemoryFlippedCards(state map[string]interface{}) []string {
+	v, ok := state["MEMORY_FLIPPED_CARDS"]
+	if !ok {
+		return nil
+	}
+	s, ok := v.([]string)
+	if !ok {
+		return nil
+	}
+	return s
+}
+
+// motionActiveMemoryMatchedPairs reads MEMORY_MATCHED_PAIRS from
+// MEMOTION_ACTIVE.STATE — the card-scoped counterpart of the question-host
+// MemoryMatchedPairs field (contract §5.4). Absent or unexpectedly-shaped ⇒
+// nil; never panics.
+func motionActiveMemoryMatchedPairs(state map[string]interface{}) []int {
+	v, ok := state["MEMORY_MATCHED_PAIRS"]
+	if !ok {
+		return nil
+	}
+	s, ok := v.([]int)
+	if !ok {
+		return nil
+	}
+	return s
+}
+
+// motionActiveMemoryErrors reads MEMORY_ERRORS from MEMOTION_ACTIVE.STATE —
+// the card-scoped counterpart of the question-host MemoryErrors field
+// (contract §5.4). Absent or unexpectedly-shaped ⇒ 0; never panics.
+func motionActiveMemoryErrors(state map[string]interface{}) int {
+	v, ok := state["MEMORY_ERRORS"]
+	if !ok {
+		return 0
+	}
+	n, ok := v.(int)
+	if !ok {
+		return 0
+	}
+	return n
+}
+
+// memoryCardOutcomeUnsafe derives (units, unitsTotal) for the active card's
+// own MEMORY grid — contract §6.3/§9.3: "le serveur dérive Units ET
+// UnitsTotal de son propre état [...] et ignore tout UNITS reçu [du
+// client]". Must be called with e.mu held; card must be the card DoneMotionCard
+// is closing, already known to be MEMORY-typed (card.EffectiveType() ==
+// QuestionTypeMemory) by the caller.
+func (e *Engine) memoryCardOutcomeUnsafe(card *MotionCard) (units, unitsTotal int) {
+	matched := motionActiveMemoryMatchedPairs(e.state.MotionActive.State)
+	return len(matched), len(card.MemoryPairs)
 }
 
 // StartMotionMemorizeTimer starts a countdown for the MEMORIZE phase in Secret Mode (v5.5.0).
@@ -4551,6 +4754,11 @@ func (e *Engine) StartMotionMemorizeTimer(duration int) {
 					case result.guardFailed:
 						ticker.Stop()
 						return true
+					case result.paused:
+						// #187 cycle 6 bugfix — leave the ticker running,
+						// skip this tick's broadcast/decrement entirely.
+						// See processMotionMemorizeTick's doc comment.
+						return false
 					case result.expired:
 						ticker.Stop()
 						log.Printf("[Engine] MEMOTION MEMORIZE timer expired → transitioned to GRID")
@@ -4583,9 +4791,14 @@ func (e *Engine) StartMotionMemorizeTimer(duration int) {
 // memorize-timer iteration (processMotionMemorizeTick) out to the unlocked
 // caller, which stops the ticker / invokes OnStateChange as needed.
 type motionMemorizeTickResult struct {
-	guardFailed bool            // phase/subphase changed unexpectedly; caller must stop the ticker and return
-	expired     bool            // CurrentTime reached 0; MotionSubPhase was transitioned to GRID under lock
-	callback    func(GamePhase) // OnStateChange captured under lock, to invoke after unlock when expired
+	guardFailed bool // phase/subphase changed unexpectedly; caller must stop the ticker and return
+	// paused (#187 cycle 6 bugfix — same root cause and fix as
+	// motionCardTickResult.paused, applied here proactively: the MEMORIZE
+	// countdown shares the identical vulnerable guard pattern, and PAUSE
+	// is reachable during it the same way it is during QUESTION).
+	paused   bool
+	expired  bool            // CurrentTime reached 0; MotionSubPhase was transitioned to GRID under lock
+	callback func(GamePhase) // OnStateChange captured under lock, to invoke after unlock when expired
 }
 
 // processMotionMemorizeTick applies one MEMOTION memorize-timer tick under
@@ -4593,13 +4806,26 @@ type motionMemorizeTickResult struct {
 // from MEMORIZE to GRID. Extracted from StartMotionMemorizeTimer's goroutine
 // (#151) so `defer e.mu.Unlock()` guarantees the mutex is released even if
 // this panics — see recoverBackgroundPanic's doc comment.
+//
+// #187 cycle 6 bugfix (QUALIF v7.1.0.3) — see processMotionCardTick's doc
+// comment for the full root-cause writeup (same bug, same fix, found by
+// auditing every ticker sharing this guard pattern while fixing the
+// reported one): PhasePaused used to fall into the combined guard below
+// exactly like a genuine state change, permanently killing this ticker —
+// Continue() has no idea a MEMORIZE countdown even exists, so nothing
+// would ever have resumed it.
 func (e *Engine) processMotionMemorizeTick() motionMemorizeTickResult {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 
 	callTestInjectPanic("motion-memorize")
 
-	// Guard: exit if game state changed unexpectedly
+	if e.state.Phase == PhasePaused {
+		return motionMemorizeTickResult{paused: true}
+	}
+
+	// Guard: exit if game state changed unexpectedly — PhasePaused is
+	// handled above and never reaches here.
 	if e.state.Phase != PhaseStarted || e.state.MotionSubPhase != MotionSubPhaseMemorize {
 		return motionMemorizeTickResult{guardFailed: true}
 	}
@@ -4665,6 +4891,12 @@ func (e *Engine) StopMotionCardTimer() {
 
 	// Reset timer display without changing game phase
 	e.state.CurrentTime = 0
+	// #187 cycle 4, B3 — an explicitly stopped timer closes the active
+	// card's round (MEMOTION_STOP_TIMER, MEMOTION_REVEAL, MEMOTION_DONE,
+	// and the card-scoped grid-complete path all route through here) —
+	// same effect as natural expiry (processMotionCardTick), gating
+	// FlipMotionMemoryCard.
+	e.motionCardRoundClosed = true
 
 	log.Printf("[Engine] MEMOTION StopMotionCardTimer: timer stopped, CURRENT_TIME=0")
 }
@@ -4713,4 +4945,135 @@ func (e *Engine) ValidateCardScope(motionCardID string) error {
 		return &MotionError{Reason: "CARD_SCOPE_MISMATCH"}
 	}
 	return nil
+}
+
+// FlipMotionMemoryCard flips one face-down card in a MEMOTION card's own
+// MEMORY grid — the card-scoped counterpart of FlipMemoryCard (contract
+// §5.4/§6.3/§7.3). motionCardID must already have been accepted by
+// ValidateCardScope by the caller (main.go); this method re-derives the
+// same "is this really the active card" fact itself rather than trusting
+// the caller's earlier check, since nothing prevents the active card from
+// changing between that check and this call in a concurrent server.
+//
+// Unlike the question host (FlipMemoryCard), state lives in
+// MotionActive.State — never the question-scoped Memory* fields (contract
+// §5.4) — and there is NEVER a team rotation: a MEMORY card is played by
+// exactly one team, MotionCurrentTeam, and MEMORY_MODE/rotateToNextTeam
+// have no meaning in this context (contract §6.3). Returns the same 4-tuple
+// shape as FlipMemoryCard for the caller's convenience (main.go shares the
+// post-flip broadcast/LED/scheduling logic across both hosts); isComplete
+// signals "all pairs found", NOT "the round is over" — the caller must hand
+// control back to the MEMOTION card's REVEAL sub-phase, never call Stop()
+// (contract note, plan-memotion-v710-memory-20260824-154844.md §5 tâche 4).
+func (e *Engine) FlipMotionMemoryCard(motionCardID, cardID string) (isMatch, shouldFlipBack bool, flipDelay int, isComplete bool) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+
+	if e.state.Phase != PhaseStarted {
+		return false, false, 0, false
+	}
+	// Playable per contract §4's HostContext table: MOTION_SUBPHASE==QUESTION.
+	if e.state.MotionSubPhase != MotionSubPhaseQuestion {
+		return false, false, 0, false
+	}
+	if motionCardID == "" || e.state.MotionSelected != motionCardID {
+		return false, false, 0, false
+	}
+	// #187 cycle 4, B3 — MotionSubPhase alone isn't enough to gate a flip:
+	// it stays QUESTION even after this card's own timer has expired (the
+	// asymmetric-exit design, processMotionCardTick's doc comment). A
+	// closed round refuses further flips regardless of sub-phase, until an
+	// explicit MEMOTION_REVEAL/next SelectMotionCard reopens one.
+	if e.motionCardRoundClosed {
+		return false, false, 0, false
+	}
+	card := e.activeMotionCardUnsafe()
+	if card == nil || card.EffectiveType() != QuestionTypeMemory {
+		return false, false, 0, false
+	}
+
+	pairID := e.extractPairID(cardID)
+	if pairID == 0 {
+		return false, false, 0, false
+	}
+
+	matched := motionActiveMemoryMatchedPairs(e.state.MotionActive.State)
+	for _, m := range matched {
+		if m == pairID {
+			return false, false, 0, false
+		}
+	}
+
+	flipped := motionActiveMemoryFlippedCards(e.state.MotionActive.State)
+	for _, id := range flipped {
+		if id == cardID {
+			return false, false, 0, false
+		}
+	}
+	if len(flipped) >= 2 {
+		return false, false, 0, false
+	}
+
+	flipped = append(flipped, cardID)
+	e.state.MotionActive.State["MEMORY_FLIPPED_CARDS"] = flipped
+
+	if len(flipped) == 1 {
+		return false, false, 0, false
+	}
+
+	firstCardID := flipped[0]
+	secondCardID := flipped[1]
+	firstPairID := e.extractPairID(firstCardID)
+	secondPairID := e.extractPairID(secondCardID)
+
+	// Own FLIP_DELAY (contract §6.3: points-related MEMORY_CONFIG settings
+	// are neutralised in card context, but FLIP_DELAY is not one of them —
+	// it stays active).
+	flipDelay = 3000
+	if card.MemoryConfig != nil && card.MemoryConfig.FlipDelay > 0 {
+		flipDelay = int(card.MemoryConfig.FlipDelay * 1000)
+	}
+
+	if firstPairID == secondPairID {
+		matched = append(matched, firstPairID)
+		e.state.MotionActive.State["MEMORY_MATCHED_PAIRS"] = matched
+		e.state.MotionActive.State["MEMORY_FLIPPED_CARDS"] = []string{}
+
+		totalPairs := len(card.MemoryPairs)
+		isComplete = len(matched) >= totalPairs && totalPairs > 0
+
+		log.Printf("[Engine] MEMOTION memory card MATCH! cardId=%s pair %d found. Total matched: %d/%d. Complete: %v",
+			motionCardID, firstPairID, len(matched), totalPairs, isComplete)
+		return true, false, 0, isComplete
+	}
+
+	errs := motionActiveMemoryErrors(e.state.MotionActive.State)
+	e.state.MotionActive.State["MEMORY_ERRORS"] = errs + 1
+
+	log.Printf("[Engine] MEMOTION memory card NO MATCH (error #%d, cardId=%s). Cards %s and %s will flip back after %dms",
+		errs+1, motionCardID, firstCardID, secondCardID, flipDelay)
+	return false, true, flipDelay, false
+}
+
+// ClearMotionMemoryFlippedCards resets the flipped-cards slot of a MEMOTION
+// card's own MEMORY grid after the flip-back delay — the card-scoped
+// counterpart of ClearMemoryFlippedCards. motionCardID is the card identity
+// the caller captured at scheduling time (plan Risque R2): if the active
+// card has since changed — a different card selected, or the round moved
+// on — this is a no-op. It must NEVER mutate a card that isn't still the
+// one it was scheduled for, or it would blank out the NEXT card's flipped
+// cards instead of the one whose delay actually elapsed.
+//
+// Never rotates a team, unlike the question host's ClearMemoryFlippedCards
+// — contract §6.3, MEMORY rotation has no meaning inside a MEMOTION card.
+func (e *Engine) ClearMotionMemoryFlippedCards(motionCardID string) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+
+	if motionCardID == "" || e.state.MotionSelected != motionCardID {
+		log.Printf("[Engine] MEMOTION memory auto-flip-back skipped: active card changed (scheduled for %s)", motionCardID)
+		return
+	}
+	e.state.MotionActive.State["MEMORY_FLIPPED_CARDS"] = []string{}
+	log.Printf("[Engine] MEMOTION memory card flipped cards cleared (cardId=%s)", motionCardID)
 }

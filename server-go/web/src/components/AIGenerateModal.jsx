@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect, useCallback, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import Button from './Button'
-import { QUESTION_TYPES } from '../utils/questionTypeMeta'
+import { GENERABLE_TYPES } from '../utils/questionTypeMeta'
 import './AIGenerateModal.css'
 
 // Répartition par type — libellés/couleurs/défauts normatifs (maquette §3).
@@ -14,9 +14,15 @@ import './AIGenerateModal.css'
 // pourcentages par défaut existants.
 // #183/A-F2 — table icône/libellé/couleur fusionnée dans
 // `utils/questionTypeMeta.js` (source unique, ne plus dupliquer ici).
-const TYPES = QUESTION_TYPES
-const DEFAULT_DISTRIBUTION = { SPEEDY: 40, QCM: 40, MEMORY: 20, MEMOTION: 0, ARDOISE: 0 }
-const DEFAULT_TYPE_ENABLED = { SPEEDY: true, QCM: true, MEMORY: true, MEMOTION: false, ARDOISE: false }
+// #196 (v7.1.0) — TYPES consomme désormais GENERABLE_TYPES (5 types réels +
+// le pseudo-type MEMOTION_PLUS, contrat ai-generation.md §3ter), PAS
+// QUESTION_TYPES : c'est la seule table qui doit connaître MEMOTION_PLUS
+// (contracts/ai-generation.md §3ter — jamais QUESTION_TYPES lui-même).
+// MEMOTION_PLUS désactivé à 0% par défaut, même traitement que MEMOTION —
+// ne redistribue pas silencieusement les pourcentages par défaut existants.
+const TYPES = GENERABLE_TYPES
+const DEFAULT_DISTRIBUTION = { SPEEDY: 40, QCM: 40, MEMORY: 20, MEMOTION: 0, MEMOTION_PLUS: 0, ARDOISE: 0 }
+const DEFAULT_TYPE_ENABLED = { SPEEDY: true, QCM: true, MEMORY: true, MEMOTION: false, MEMOTION_PLUS: false, ARDOISE: false }
 
 // #137 — messages ERROR_CODE (contract ai-multi-provider.md §10, réutilise
 // ai-generation.md §3 + provider_quota). Utilisés pour l'état ARRÊTÉ/ÉCHEC du

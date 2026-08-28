@@ -22,7 +22,7 @@ import (
 // of #184's validation (registry check, CARD_TYPE_CONTENT_MISMATCH)
 // designed for that path, so this must fail loudly if it ever happens.
 func TestAIGeneratedMotionCards_SchemaHasNoTypeProperty(t *testing.T) {
-	schema := buildQuestionSchema([]string{"GEOGRAPHY"}, []string{"Facile"})
+	schema := buildQuestionSchema([]string{"GEOGRAPHY"}, []string{"Facile"}, generableQuestionTypes)
 
 	props, ok := schema["properties"].(map[string]any)
 	if !ok {

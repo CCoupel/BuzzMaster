@@ -71,8 +71,28 @@ const (
 // Groq: the reservation alone can exceed the whole per-minute budget even
 // for a tiny prompt. max_tokens must instead be sized to the prompt actually
 // being sent, with headroom kept under groqMaxTokensBudget.
-func groqRequestMaxTokens(promptTokens int) int {
-	budget := groqMaxTokensBudget - groqTPMSafetyMargin - promptTokens
+//
+// ⚠️ #196 QUALIF v7.1.0.8 cycle 3, point 1 — requestTokens must count BOTH
+// the prompt text AND the response_format.json_schema payload, not just the
+// prompt. T0.1's calibration predates #196 and #137's ARDOISE branch — at
+// the time, buildQuestionSchema's schema was small and roughly constant
+// (identical byte count on every call), so folding it into the prompt-only
+// estimate never mattered enough to notice. It matters now: #196 QUALIF
+// v7.1.0.7 already made the schema's size vary with the request (only the
+// ACTIVE types' anyOf branches are sent — activeGenerableTypes), and the
+// MEMOTION_PLUS branch alone is the heaviest single branch (~1000+
+// estimated tokens by itself, per its nested per-card discriminated union).
+// Requesting several heavy types (e.g. MEMOTION + MEMOTION_PLUS + QCM) at
+// once measurably grows the schema, and an estimate that only ever looks at
+// the prompt string under-reserves the true request cost — the caller ends
+// up asking for more max_tokens headroom than the real (prompt + schema)
+// cost leaves room for, making a 413 MORE likely precisely in the
+// multi-heavy-type case QUALIF reported, not less. Passing the caller's own
+// prompt+schema token estimate here (instead of just the prompt's) keeps
+// the SAME calibrated formula/constants but grounds it in the actual
+// request size.
+func groqRequestMaxTokens(requestTokens int) int {
+	budget := groqMaxTokensBudget - groqTPMSafetyMargin - requestTokens
 	if budget > groqMaxMaxTokens {
 		budget = groqMaxMaxTokens
 	}
@@ -83,10 +103,10 @@ func groqRequestMaxTokens(promptTokens int) int {
 }
 
 type groqChatRequest struct {
-	Model          string                 `json:"model"`
-	Messages       []groqChatMessage      `json:"messages"`
-	ResponseFormat groqResponseFormat     `json:"response_format"`
-	MaxTokens      int                    `json:"max_tokens"`
+	Model          string             `json:"model"`
+	Messages       []groqChatMessage  `json:"messages"`
+	ResponseFormat groqResponseFormat `json:"response_format"`
+	MaxTokens      int                `json:"max_tokens"`
 }
 
 type groqChatMessage struct {
@@ -147,6 +167,17 @@ func (h *HTTPServer) generateViaGroq(ctx context.Context, aiCfg config.AIConfig,
 		model = "openai/gpt-oss-120b"
 	}
 
+	// #196 QUALIF v7.1.0.8 cycle 3, point 1 — the schema itself (its size
+	// varies with how many types are active, see groqRequestMaxTokens' doc
+	// comment) counts toward Groq's TPM gate just as much as the prompt
+	// text; estimated here from its own marshaled size so the max_tokens
+	// budget below is grounded in the ACTUAL request cost, not the prompt
+	// alone. Marshal failures here are surfaced by the reqBody marshal just
+	// below (schemaBytes is nil, estimateTokens(nil)==1 — a negligible
+	// underestimate, not a new failure mode).
+	schemaBytes, _ := json.Marshal(schema)
+	requestTokens := estimateTokens(prompt) + estimateTokens(string(schemaBytes))
+
 	reqBody := groqChatRequest{
 		Model:    model,
 		Messages: []groqChatMessage{{Role: "user", Content: prompt}},
@@ -158,7 +189,7 @@ func (h *HTTPServer) generateViaGroq(ctx context.Context, aiCfg config.AIConfig,
 				Schema: schema,
 			},
 		},
-		MaxTokens: groqRequestMaxTokens(estimateTokens(prompt)),
+		MaxTokens: groqRequestMaxTokens(requestTokens),
 	}
 	bodyBytes, err := json.Marshal(reqBody)
 	if err != nil {
@@ -224,9 +255,14 @@ func classifyGroqError(resp *http.Response, body []byte) error {
 	_ = json.Unmarshal(body, &envelope) // best-effort; a malformed/non-JSON body just yields an empty envelope, falling back to the generic message below
 
 	if resp.StatusCode == http.StatusTooManyRequests || resp.StatusCode == http.StatusRequestEntityTooLarge {
+		// #196 QUALIF v7.1.0.7 bugfix — envelope.Error.Message is now
+		// surfaced here too (previously discarded on this branch only,
+		// unlike the generic path a few lines below) — see
+		// aiRateLimitError's doc comment.
 		return &aiRateLimitError{
 			statusCode: resp.StatusCode,
 			retryAfter: parseRetryAfter(resp.Header.Get("Retry-After")),
+			message:    sanitizeUpstreamMessage(envelope.Error.Message),
 		}
 	}
 	message := sanitizeUpstreamMessage(envelope.Error.Message)

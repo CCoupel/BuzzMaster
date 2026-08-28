@@ -459,6 +459,15 @@ func (a *App) setupCallbacks() {
 		a.broadcastQCMHint(invalidatedColor, remainingAnswers)
 	}
 
+	// #187 cycle 3 briefly wired engine.OnMotionCardAutoRevealed here — a
+	// MEMORY card auto-revealing (and broadcasting a full UPDATE) at timer
+	// expiry. REVERTED in cycle 4: the user-validated behavior is
+	// asymmetric — a completed grid still auto-reveals (handleFlipMemoryCard,
+	// cardScoped isComplete branch below, unchanged), but expiry on an
+	// INCOMPLETE grid requires an explicit animateur MEMOTION_REVEAL. See
+	// engine.go's processMotionCardTick doc comment for the full rationale
+	// before reintroducing this callback.
+
 	// HTTP actions
 	a.httpServer.OnAction = func(action string, data json.RawMessage) {
 		switch action {
@@ -1212,7 +1221,7 @@ func (a *App) handleWebMessage(incoming *protocol.IncomingMessage) {
 		a.handlePong(incoming.ClientID, msg)
 
 	case protocol.ActionFlipMemoryCard:
-		a.handleFlipMemoryCard(msg)
+		a.handleFlipMemoryCard(incoming.ClientID, clientType, msg)
 
 	case protocol.ActionMemorySetTeams:
 		a.handleMemorySetTeams(msg)
@@ -2049,7 +2058,48 @@ func callTestInjectMemoryFlipBackPanic() {
 	}
 }
 
-func (a *App) handleFlipMemoryCard(msg *protocol.Message) {
+// resolveFlipMemoryCardBumper resolves the emitting bumper for a
+// FLIP_MEMORY_CARD action — 3-pass pattern identical to handleArdoiseInput/
+// handleVPlayerQCMAnswer (plan-memotion-v710-memory-v2-20260824-161449.md
+// §2.2): payload.ID → msg.ID → clientID. Never resolves a team from a name
+// carried in the payload — FLIP_MEMORY_CARD has none. Returns nil if none
+// of the three resolves to a known bumper.
+func (a *App) resolveFlipMemoryCardBumper(payloadID, msgID, clientID string) *game.Bumper {
+	if payloadID != "" {
+		if b := a.engine.GetBumper(payloadID); b != nil {
+			return b
+		}
+	}
+	if msgID != "" {
+		if b := a.engine.GetBumper(msgID); b != nil {
+			return b
+		}
+	}
+	if clientID != "" {
+		if b := a.engine.GetBumper(clientID); b != nil {
+			return b
+		}
+	}
+	return nil
+}
+
+// handleFlipMemoryCard processes FLIP_MEMORY_CARD for both hosts — the
+// question-scoped MEMORY question (payload.MotionCardID == "") and, since
+// #187 (v7.1.0), a MEMOTION card of TYPE=MEMORY (payload.MotionCardID set).
+//
+// Two independent server-side checks, two different failure behaviors
+// (contract §9.2 dérogation, websocket-actions.md fiche FLIP_MEMORY_CARD —
+// do NOT unify them):
+//  1. Card scope (MOTION_CARD_ID present but not the active card) — refused
+//     explicitly via ValidateCardScope, same visibility as any other
+//     MotionError (logged, no mutation, no broadcast).
+//  2. Whose turn it is — checked ONLY for clientType==vplayer (tv/anim play
+//     "for the table" and have no team of their own); a mismatch is ignored
+//     SILENTLY: no mutation, no broadcast, no message back to the client.
+//     Broadcasting on every hors-tour tap would recreate the broadcast-storm
+//     class of defect (#127/#129) now that the client-side display guard
+//     that used to prevent the tap from ever being sent is gone.
+func (a *App) handleFlipMemoryCard(clientID string, clientType server.ClientType, msg *protocol.Message) {
 	var payload protocol.FlipMemoryCardPayload
 	if err := json.Unmarshal(msg.Msg, &payload); err != nil {
 		server.LogError(game.LogComponentApp, "Failed to parse FLIP_MEMORY_CARD: %v", err)
@@ -2061,43 +2111,97 @@ func (a *App) handleFlipMemoryCard(msg *protocol.Message) {
 		return
 	}
 
-	server.LogInfo(game.LogComponentEngine, "FLIP_MEMORY_CARD: cardID=%s", payload.CardID)
+	cardScoped := payload.MotionCardID != ""
 
-	// Process the flip with game logic
-	isMatch, shouldFlipBack, flipDelay, isComplete := a.engine.FlipMemoryCard(payload.CardID)
+	// #187 contract §9.2 — card-scope invariant, refused explicitly.
+	if cardScoped {
+		if err := a.engine.ValidateCardScope(payload.MotionCardID); err != nil {
+			server.LogWarn(game.LogComponentEngine, "FLIP_MEMORY_CARD rejected: %v (motionCardId=%s)", err, payload.MotionCardID)
+			return
+		}
+	}
+
+	// #187 contract §9.2 dérogation — server becomes sole authority on the
+	// turn, but ONLY for vplayer. tv (régie iframe preview / public screen
+	// click) and anim (the animateur, playing for the table) have no team
+	// and must keep working unconditionally, exactly as before.
+	if clientType == server.ClientTypeVPlayer {
+		state := a.engine.GetState()
+		activeTeam := state.MemoryCurrentTeam
+		if cardScoped {
+			activeTeam = state.MotionCurrentTeam
+		}
+		bumper := a.resolveFlipMemoryCardBumper(payload.ID, msg.ID, clientID)
+		if bumper == nil || bumper.Team == "" || activeTeam == "" || bumper.Team != activeTeam {
+			server.LogDebug(game.LogComponentApp, "FLIP_MEMORY_CARD ignored: not this VPlayer's turn (client=%s, cardScoped=%v)", clientID, cardScoped)
+			return
+		}
+	}
+
+	server.LogInfo(game.LogComponentEngine, "FLIP_MEMORY_CARD: cardID=%s motionCardId=%s", payload.CardID, payload.MotionCardID)
+
+	var isMatch, shouldFlipBack bool
+	var flipDelay int
+	var isComplete bool
+	if cardScoped {
+		isMatch, shouldFlipBack, flipDelay, isComplete = a.engine.FlipMotionMemoryCard(payload.MotionCardID, payload.CardID)
+	} else {
+		isMatch, shouldFlipBack, flipDelay, isComplete = a.engine.FlipMemoryCard(payload.CardID)
+	}
 
 	// Broadcast updated game state to all clients
 	a.broadcastUpdate()
 
 	// If no match and 2 cards are flipped, schedule auto-flip-back
 	if shouldFlipBack && flipDelay > 0 {
-		// #151 priority 1: reachable directly from a client WS message
-		// (FLIP_MEMORY_CARD), so a malicious client or corrupted state
-		// hitting a panic in ClearMemoryFlippedCards/broadcastUpdate/
-		// sendLEDSetAllBuzzers below would otherwise take down the whole
-		// process. Nothing here holds a manual lock across this goroutine
-		// (unlike the engine.go ticker sites), so a plain recover suffices.
-		go func() {
-			defer func() {
-				if r := recover(); r != nil {
-					server.LogRecoveredPanic(game.LogComponentEngine, "memory auto-flip-back", r)
-				}
+		if cardScoped {
+			// #187 plan Risque R2 — capture the card's identity NOW, at
+			// scheduling time, not read again from live state after the
+			// sleep: if the animateur moves on to a different card during
+			// the delay, ClearMotionMemoryFlippedCards must be a no-op
+			// instead of blanking out the NEW card's flipped cards.
+			motionCardID := payload.MotionCardID
+			go func() {
+				defer func() {
+					if r := recover(); r != nil {
+						server.LogRecoveredPanic(game.LogComponentEngine, "MEMOTION memory auto-flip-back", r)
+					}
+				}()
+				time.Sleep(time.Duration(flipDelay) * time.Millisecond)
+				a.engine.ClearMotionMemoryFlippedCards(motionCardID)
+				callTestInjectMemoryFlipBackPanic()
+				server.LogInfo(game.LogComponentEngine, "MEMOTION memory auto-flip-back after %dms (cardId=%s)", flipDelay, motionCardID)
+				a.broadcastUpdate()
 			}()
-			time.Sleep(time.Duration(flipDelay) * time.Millisecond)
-			a.engine.ClearMemoryFlippedCards()
-			// Injected after ClearMemoryFlippedCards (not before): a panic
-			// here still exercises the same single recover() covering the
-			// whole goroutine (proving broadcastUpdate/sendLEDSetAllBuzzers
-			// failures don't take down the process either), while leaving
-			// MemoryFlippedCards correctly cleared — injecting earlier would
-			// permanently strand it at 2 flipped cards (FlipMemoryCard's own
-			// "already 2 cards flipped" guard), making every later flip in
-			// the test a legitimate no-op instead of a fresh mismatch.
-			callTestInjectMemoryFlipBackPanic()
-			server.LogInfo(game.LogComponentEngine, "Memory auto-flip-back after %dms", flipDelay)
-			a.broadcastUpdate()
-			a.sendLEDSetAllBuzzers()
-		}()
+		} else {
+			// #151 priority 1: reachable directly from a client WS message
+			// (FLIP_MEMORY_CARD), so a malicious client or corrupted state
+			// hitting a panic in ClearMemoryFlippedCards/broadcastUpdate/
+			// sendLEDSetAllBuzzers below would otherwise take down the whole
+			// process. Nothing here holds a manual lock across this goroutine
+			// (unlike the engine.go ticker sites), so a plain recover suffices.
+			go func() {
+				defer func() {
+					if r := recover(); r != nil {
+						server.LogRecoveredPanic(game.LogComponentEngine, "memory auto-flip-back", r)
+					}
+				}()
+				time.Sleep(time.Duration(flipDelay) * time.Millisecond)
+				a.engine.ClearMemoryFlippedCards()
+				// Injected after ClearMemoryFlippedCards (not before): a panic
+				// here still exercises the same single recover() covering the
+				// whole goroutine (proving broadcastUpdate/sendLEDSetAllBuzzers
+				// failures don't take down the process either), while leaving
+				// MemoryFlippedCards correctly cleared — injecting earlier would
+				// permanently strand it at 2 flipped cards (FlipMemoryCard's own
+				// "already 2 cards flipped" guard), making every later flip in
+				// the test a legitimate no-op instead of a fresh mismatch.
+				callTestInjectMemoryFlipBackPanic()
+				server.LogInfo(game.LogComponentEngine, "Memory auto-flip-back after %dms", flipDelay)
+				a.broadcastUpdate()
+				a.sendLEDSetAllBuzzers()
+			}()
+		}
 	}
 
 	if isMatch {
@@ -2105,12 +2209,30 @@ func (a *App) handleFlipMemoryCard(msg *protocol.Message) {
 		a.sendLEDSetAllBuzzers()
 	}
 
-	// If all pairs matched, automatically stop the game
 	if isComplete {
-		server.LogInfo(game.LogComponentEngine, "Memory game COMPLETE! All pairs matched.")
-		a.engine.Stop()
-		a.broadcastUpdate()
-		a.sendLEDSetAllBuzzers()
+		if cardScoped {
+			// #187 plan §5 tâche 4 — a complete grid in a MEMOTION card
+			// hands control back to the card's own REVEAL sub-phase; it
+			// must NEVER Stop() the whole MEMOTION round the way the
+			// question host does below.
+			server.LogInfo(game.LogComponentEngine, "MEMOTION memory card COMPLETE! All pairs matched (cardId=%s).", payload.MotionCardID)
+			// Stop the per-card ticker immediately (same discipline as
+			// handleMotionReveal) rather than rely on its own guard to
+			// self-detect the sub-phase change on its next tick — harmless
+			// either way, but this avoids one extra no-op tick.
+			a.engine.StopMotionCardTimer()
+			if err := a.engine.RevealMotionCard(); err != nil {
+				server.LogWarn(game.LogComponentEngine, "MEMOTION memory card auto-reveal failed: %v", err)
+			} else {
+				a.broadcastUpdate()
+			}
+		} else {
+			// If all pairs matched, automatically stop the game
+			server.LogInfo(game.LogComponentEngine, "Memory game COMPLETE! All pairs matched.")
+			a.engine.Stop()
+			a.broadcastUpdate()
+			a.sendLEDSetAllBuzzers()
+		}
 	}
 }
 

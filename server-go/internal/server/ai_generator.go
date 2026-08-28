@@ -25,6 +25,7 @@ var quizPopulations = []string{
 }
 var quizDifficulties = []string{"Facile", "Moyen", "Difficile", "Expert"}
 var quizLanguages = []string{"Français", "Anglais", "Espagnol"}
+
 // ARDOISE joined this list in v6.1.x (#137 Batch 2a, QUALIF feedback point 2,
 // _work/reports/planner-20260806-121743-qualif-137.md §2): the original #8
 // spec (backlog/TODO/generateur-ia.md) mischaracterized it as a display mode
@@ -35,7 +36,19 @@ var quizLanguages = []string{"Français", "Anglais", "Espagnol"}
 // amended accordingly (dev-backend, same commit as this change per the
 // team-lead's explicit instruction to land the contract fix with the code,
 // not after — cf. the §0bis incident on a prior fix in this same file).
-var generableQuestionTypes = []string{"SPEEDY", "QCM", "MEMORY", "MEMOTION", "ARDOISE"}
+// MEMOTION_PLUS joined this list in v7.1.0 (#196, contract ai-generation.md
+// §3ter). It is a GENERATION-ONLY pseudo-type — never a game.QuestionType,
+// never allowed to reach questionTypeRegistry or AllQuestionTypes() — that
+// only exists to select an alternate schema variant (MOTION_CARDS items
+// carrying their own per-card TYPE, SPEEDY or QCM). A question generated
+// under it is ALWAYS persisted with TYPE="MEMOTION" (mapGeneratedQuestion
+// normalizes this — the contract's "invariant central": the string
+// "MEMOTION_PLUS" must never reach a question.json). Deliberately kept
+// distinct from "MEMOTION" as its own top-level schema variant (see
+// buildQuestionSchema) rather than a request-level flag, so the model can
+// mix classic and "+" MEMOTION cards freely across questions in the same
+// batch — the same mechanism already used to mix all the other types.
+var generableQuestionTypes = []string{"SPEEDY", "QCM", "MEMORY", "MEMOTION", "MEMOTION_PLUS", "ARDOISE"}
 
 func stringInSlice(list []string, v string) bool {
 	for _, x := range list {
@@ -214,10 +227,48 @@ func mergeJSONSchemaProps(base, extra map[string]any) map[string]any {
 	return out
 }
 
+// activeGenerableTypes returns the subset of generableQuestionTypes present
+// in distribution with a value > 0 — the ONLY types buildQuestionSchema
+// needs to include in its anyOf for a given batch (#196 QUALIF v7.1.0.7
+// bugfix, see buildQuestionSchema's own doc comment). Order follows
+// generableQuestionTypes, purely for deterministic output — the schema
+// itself doesn't care about anyOf ordering.
+func activeGenerableTypes(distribution map[string]int) []string {
+	var out []string
+	for _, t := range generableQuestionTypes {
+		if v, ok := distribution[t]; ok && v > 0 {
+			out = append(out, t)
+		}
+	}
+	return out
+}
+
 // buildQuestionSchema builds the json_schema output_config format for the
 // batch generation call, restricting CATEGORY/DIFFICULTY to exactly the
-// values the admin selected in this request (contract §5).
-func buildQuestionSchema(categories, difficulties []string) map[string]any {
+// values the admin selected in this request (contract §5), and its anyOf to
+// exactly the types the caller actually requested (activeTypes —
+// activeGenerableTypes(req.Distribution) in production; validateGenerateRequest
+// already guarantees at least one type has a positive value, so this is
+// never empty on the real path).
+//
+// #196 QUALIF v7.1.0.7 bugfix — activeTypes filtering added here. Before
+// this fix, EVERY anyOf branch (all 6 types, unconditionally) was sent on
+// EVERY batch call regardless of what the admin's distribution actually
+// requested — a 100%-SPEEDY job still paid for QCM/MEMORY/MEMOTION/
+// MEMOTION_PLUS/ARDOISE's full schemas. Already wasteful before #196 (a
+// pre-existing inefficiency, not itself a bug — Groq's Anthropic-sized
+// context budget headroom absorbed it), it became a real failure once
+// MEMOTION_PLUS's own schema (its MOTION_CARDS items are a nested
+// discriminated union, meaningfully larger than the other variants) pushed
+// an ALREADY-tight request over Groq's 8 000 TPM ceiling
+// (contracts/ai-multi-provider.md §1) — the reported symptom ("rate limit
+// exceeded" on the very FIRST call, no prior usage this session) is Groq's
+// 413 pre-check on request size, not an actual quota exhaustion; see
+// classifyGroqError's own doc comment for the second half of this fix (the
+// misleading generic error message). Filtering to only the requested types
+// both fixes the immediate regression and removes the pre-existing waste —
+// a MEMOTION_PLUS-only job no longer pays for 5 schemas it will never use.
+func buildQuestionSchema(categories, difficulties []string, activeTypes []string) map[string]any {
 	common := map[string]any{
 		"TYPE":       map[string]any{"type": "string", "enum": generableQuestionTypes},
 		"CATEGORY":   map[string]any{"type": "string", "enum": categories},
@@ -233,19 +284,25 @@ func buildQuestionSchema(categories, difficulties []string) map[string]any {
 		"ANSWER":                map[string]any{"type": "string"},
 		"ARDOISE_KEYBOARD_TYPE": map[string]any{"type": "string", "enum": []string{"AZERTY", "NUMPAD"}},
 	})
-	qcmProps := mergeJSONSchemaProps(common, map[string]any{
-		"QCM_ANSWERS": map[string]any{
-			"type":                 "object",
-			"additionalProperties": false,
-			"required":             []string{"RED", "GREEN", "YELLOW", "BLUE"},
-			"properties": map[string]any{
-				"RED":    map[string]any{"type": "string"},
-				"GREEN":  map[string]any{"type": "string"},
-				"YELLOW": map[string]any{"type": "string"},
-				"BLUE":   map[string]any{"type": "string"},
-			},
+	// qcmAnswersSchema/qcmCorrectSchema factored out (#196) — reused
+	// byte-for-byte by the MEMOTION_PLUS QCM-card variant below, which
+	// needs the identical shape one level deeper (inside a MOTION_CARDS
+	// item instead of at question root).
+	qcmAnswersSchema := map[string]any{
+		"type":                 "object",
+		"additionalProperties": false,
+		"required":             []string{"RED", "GREEN", "YELLOW", "BLUE"},
+		"properties": map[string]any{
+			"RED":    map[string]any{"type": "string"},
+			"GREEN":  map[string]any{"type": "string"},
+			"YELLOW": map[string]any{"type": "string"},
+			"BLUE":   map[string]any{"type": "string"},
 		},
-		"QCM_CORRECT": map[string]any{"type": "string", "enum": []string{"RED", "GREEN", "YELLOW", "BLUE"}},
+	}
+	qcmCorrectSchema := map[string]any{"type": "string", "enum": []string{"RED", "GREEN", "YELLOW", "BLUE"}}
+	qcmProps := mergeJSONSchemaProps(common, map[string]any{
+		"QCM_ANSWERS": qcmAnswersSchema,
+		"QCM_CORRECT": qcmCorrectSchema,
 	})
 	memoryProps := mergeJSONSchemaProps(common, map[string]any{
 		"MEMORY_PAIRS": map[string]any{
@@ -278,6 +335,66 @@ func buildQuestionSchema(categories, difficulties []string) map[string]any {
 		},
 	})
 
+	// motionPlusProps (#196, contract §3ter "Portée du mode MEMOTION_PLUS")
+	// — the ONLY schema difference from classic MEMOTION: MOTION_CARDS
+	// items are themselves a discriminated union (their OWN "TYPE", const
+	// per branch, exactly the same pattern as the top-level `variant`
+	// below) instead of the flat 4-property object motionProps declares.
+	// motionProps itself is byte-for-byte UNCHANGED above — that is what
+	// makes classic MEMOTION's non-regression a structural guarantee
+	// rather than a promise: the model literally cannot attach a TYPE (or
+	// QCM_* fields) to a classic MEMOTION card, additionalProperties:false
+	// on that object still forbids it.
+	//
+	// Only SPEEDY and QCM appear here — the two, and only two, types the
+	// registry marks NestableInMotionCard (contracts/question-types.md
+	// §7); MEMORY/ARDOISE/MEMOTION itself are not offered as card types
+	// and never will be without a registry change of their own.
+	motionCardCommon := map[string]any{
+		"RECTO_THEME":   map[string]any{"type": "string"},
+		"QUESTION_TEXT": map[string]any{"type": "string"},
+		"DIFFICULTY":    map[string]any{"type": "integer", "enum": []int{1, 2, 3}},
+	}
+	motionCardSpeedyProps := mergeJSONSchemaProps(motionCardCommon, map[string]any{
+		"ANSWER_TEXT": map[string]any{"type": "string"},
+	})
+	// QCM's OwnedFields are QCM_ANSWERS/QCM_CORRECT, never ANSWER_TEXT
+	// (contracts/question-types.md §3.1/§3.2 — a card must never carry
+	// content belonging to a different type than its own declared TYPE,
+	// enforced server-side by ValidateCardTypeContent on every card
+	// regardless of origin). additionalProperties:false on the QCM-card
+	// variant below makes the LLM structurally unable to attach
+	// ANSWER_TEXT to a QCM card — this cannot fail
+	// CARD_TYPE_CONTENT_MISMATCH by construction, the same guarantee
+	// classic MEMOTION already relies on.
+	motionCardQCMProps := mergeJSONSchemaProps(motionCardCommon, map[string]any{
+		"QCM_ANSWERS": qcmAnswersSchema,
+		"QCM_CORRECT": qcmCorrectSchema,
+	})
+	motionCardVariant := func(props map[string]any, typeConst string, extraRequired ...string) map[string]any {
+		p := mergeJSONSchemaProps(props, map[string]any{
+			"TYPE": map[string]any{"type": "string", "const": typeConst},
+		})
+		required := append([]string{"TYPE", "RECTO_THEME", "QUESTION_TEXT", "DIFFICULTY"}, extraRequired...)
+		return map[string]any{
+			"type":                 "object",
+			"additionalProperties": false,
+			"required":             required,
+			"properties":           p,
+		}
+	}
+	motionPlusProps := mergeJSONSchemaProps(common, map[string]any{
+		"MOTION_CARDS": map[string]any{
+			"type": "array",
+			"items": map[string]any{
+				"anyOf": []any{
+					motionCardVariant(motionCardSpeedyProps, "SPEEDY", "ANSWER_TEXT"),
+					motionCardVariant(motionCardQCMProps, "QCM", "QCM_ANSWERS", "QCM_CORRECT"),
+				},
+			},
+		},
+	})
+
 	variant := func(props map[string]any, typeConst string, extraRequired ...string) map[string]any {
 		p := mergeJSONSchemaProps(props, map[string]any{
 			"TYPE": map[string]any{"type": "string", "const": typeConst},
@@ -291,22 +408,42 @@ func buildQuestionSchema(categories, difficulties []string) map[string]any {
 		}
 	}
 
+	// #196 QUALIF v7.1.0.7 bugfix — only build the anyOf branches for types
+	// actually present in activeTypes (see this function's own doc comment
+	// above for why). isActive/allVariants keep the six variant() calls
+	// exactly as they were — declared unconditionally, filtered here — so a
+	// future 7th type only ever needs one more map entry, not a new
+	// if-cascade.
+	isActive := make(map[string]bool, len(activeTypes))
+	for _, t := range activeTypes {
+		isActive[t] = true
+	}
+	allVariants := []struct {
+		typeConst string
+		schema    map[string]any
+	}{
+		{"SPEEDY", variant(speedyProps, "SPEEDY", "ANSWER")},
+		{"QCM", variant(qcmProps, "QCM", "QCM_ANSWERS", "QCM_CORRECT")},
+		{"MEMORY", variant(memoryProps, "MEMORY", "MEMORY_PAIRS")},
+		{"MEMOTION", variant(motionProps, "MEMOTION", "MOTION_CARDS")},
+		{"MEMOTION_PLUS", variant(motionPlusProps, "MEMOTION_PLUS", "MOTION_CARDS")}, // #196
+		{"ARDOISE", variant(ardoiseProps, "ARDOISE", "ANSWER", "ARDOISE_KEYBOARD_TYPE")},
+	}
+	anyOf := make([]any, 0, len(allVariants))
+	for _, v := range allVariants {
+		if isActive[v.typeConst] {
+			anyOf = append(anyOf, v.schema)
+		}
+	}
+
 	return map[string]any{
 		"type":                 "object",
 		"additionalProperties": false,
 		"required":             []string{"questions"},
 		"properties": map[string]any{
 			"questions": map[string]any{
-				"type": "array",
-				"items": map[string]any{
-					"anyOf": []any{
-						variant(speedyProps, "SPEEDY", "ANSWER"),
-						variant(qcmProps, "QCM", "QCM_ANSWERS", "QCM_CORRECT"),
-						variant(memoryProps, "MEMORY", "MEMORY_PAIRS"),
-						variant(motionProps, "MEMOTION", "MOTION_CARDS"),
-						variant(ardoiseProps, "ARDOISE", "ANSWER", "ARDOISE_KEYBOARD_TYPE"),
-					},
-				},
+				"type":  "array",
+				"items": map[string]any{"anyOf": anyOf},
 			},
 		},
 	}
@@ -331,10 +468,19 @@ type llmMemoryPair struct {
 }
 
 type llmMotionCard struct {
-	RectoTheme   string `json:"RECTO_THEME"`
-	QuestionText string `json:"QUESTION_TEXT"`
-	AnswerText   string `json:"ANSWER_TEXT"`
-	Difficulty   int    `json:"DIFFICULTY"`
+	// Type (#196) — "" for a classic MEMOTION card (the schema's motionProps
+	// item has no TYPE property at all; the field simply never gets set
+	// during unmarshal) or, under MEMOTION_PLUS, an explicit "SPEEDY"/"QCM"
+	// from the model. Never any other value — motionPlusCardsValid rejects
+	// anything else, defensively, even though the schema itself already
+	// makes a different value structurally unreachable.
+	Type         string         `json:"TYPE,omitempty"`
+	RectoTheme   string         `json:"RECTO_THEME"`
+	QuestionText string         `json:"QUESTION_TEXT"`
+	AnswerText   string         `json:"ANSWER_TEXT,omitempty"`
+	Difficulty   int            `json:"DIFFICULTY"`
+	QCMAnswers   *llmQCMAnswers `json:"QCM_ANSWERS,omitempty"`
+	QCMCorrect   string         `json:"QCM_CORRECT,omitempty"`
 }
 
 type llmRawQuestion struct {
@@ -412,6 +558,45 @@ func motionCardsValid(cards []llmMotionCard) bool {
 	return true
 }
 
+// motionPlusCardsValid is motionCardsValid's #196 counterpart: each card's
+// per-card TYPE (SPEEDY or QCM — the two contracts/question-types.md §7
+// marks NestableInMotionCard, contract §3ter "Portée du mode MEMOTION_PLUS")
+// determines which content fields apply. Mirrors, per card, the exact same
+// checks validateGeneratedQuestions already applies per QUESTION for SPEEDY
+// (ANSWER non-empty) and QCM (qcmAnswersValid + QCM_CORRECT ∈ enum) —
+// deliberately not a new rule, the same rule at one nesting level deeper.
+func motionPlusCardsValid(cards []llmMotionCard) bool {
+	for _, c := range cards {
+		if strings.TrimSpace(c.RectoTheme) == "" {
+			return false
+		}
+		if c.Difficulty < 1 || c.Difficulty > 3 {
+			return false
+		}
+		switch c.Type {
+		case "", "SPEEDY":
+			if strings.TrimSpace(c.AnswerText) == "" {
+				return false
+			}
+		case "QCM":
+			if !qcmAnswersValid(c.QCMAnswers) {
+				return false
+			}
+			switch c.QCMCorrect {
+			case "RED", "GREEN", "YELLOW", "BLUE":
+			default:
+				return false
+			}
+		default:
+			// Structurally unreachable (the schema's per-card TYPE is a
+			// const ∈ {SPEEDY,QCM}) — defended anyway, same posture as the
+			// question-level `default:` case in validateGeneratedQuestions.
+			return false
+		}
+	}
+	return true
+}
+
 // validateGeneratedQuestions filters raw to only the questions that pass
 // contract §5.1's per-type rules, clamping TIME in place, and caps the result
 // at maxQuestions (excess dropped, contract §5.1 "Volume"). Returns the
@@ -482,6 +667,11 @@ func validateGeneratedQuestions(raw []llmRawQuestion, allowedCategories, allowed
 				reasons = append(reasons, "MEMOTION: moins de 4 cartes valides")
 				continue
 			}
+		case "MEMOTION_PLUS": // #196
+			if len(q.MotionCards) < 4 || len(q.MotionCards) > 12 || !motionPlusCardsValid(q.MotionCards) {
+				reasons = append(reasons, "MEMOTION_PLUS: moins de 4 cartes valides")
+				continue
+			}
 		case "ARDOISE":
 			if strings.TrimSpace(q.Answer) == "" {
 				reasons = append(reasons, "ARDOISE: réponse vide")
@@ -538,15 +728,28 @@ func speedyOrQCMPoints(difficulty string) string {
 }
 
 func mapGeneratedQuestion(q llmRawQuestion, id string, order int) map[string]interface{} {
+	// #196, contract §3ter's central invariant — 🔴 normalized here, BEFORE
+	// any field of `question` is written: MEMOTION_PLUS is a generation-only
+	// pseudo-type and must NEVER reach question.json. persistedType (not
+	// q.Type) is what actually gets written to the TYPE field below; the
+	// switch further down still dispatches on q.Type (it needs to tell
+	// MEMOTION_PLUS apart from MEMOTION to know whether cards may carry
+	// their own TYPE), but every map key ends up identical either way once
+	// normalized — see the merged "MEMOTION", "MEMOTION_PLUS" case.
+	persistedType := q.Type
+	if persistedType == "MEMOTION_PLUS" {
+		persistedType = "MEMOTION"
+	}
+
 	pointsTarget := "TEAM"
-	if q.Type == "SPEEDY" {
+	if persistedType == "SPEEDY" {
 		pointsTarget = "PLAYER"
 	}
 
 	question := map[string]interface{}{
 		"ID":                id,
 		"QUESTION":          q.Question,
-		"TYPE":              q.Type,
+		"TYPE":              persistedType,
 		"TIME":              strconv.Itoa(q.Time),
 		"POINTS_TARGET":     pointsTarget,
 		"ORDER":             order,
@@ -604,20 +807,43 @@ func mapGeneratedQuestion(q llmRawQuestion, id string, order int) map[string]int
 			"REVEAL_DELAY":         0.5,
 		}
 
-	case "MEMOTION":
+	case "MEMOTION", "MEMOTION_PLUS": // #196 — same construction, persistedType already normalized above
 		question["ANSWER"] = fmt.Sprintf("%d cartes", len(q.MotionCards))
 		question["POINTS"] = "1"
 		question["MOTION_MODE"] = "CHACUN_SON_TOUR"
 		question["MOTION_MEMORIZE_DURATION"] = 0
 		cards := make([]map[string]interface{}, len(q.MotionCards))
 		for i, c := range q.MotionCards {
-			cards[i] = map[string]interface{}{
+			card := map[string]interface{}{
 				"ID":            fmt.Sprintf("mc-%d", i+1),
 				"RECTO_THEME":   c.RectoTheme,
 				"DIFFICULTY":    c.Difficulty,
 				"QUESTION_TEXT": c.QuestionText,
-				"ANSWER_TEXT":   c.AnswerText,
 			}
+			// #196 — a classic MEMOTION card never has c.Type set (the
+			// schema's plain motionProps item has no TYPE property at all),
+			// so this always takes the SPEEDY branch below: byte-for-byte
+			// the pre-#196 output. A MEMOTION_PLUS card carries its own
+			// TYPE — SPEEDY (same shape as a classic card) or QCM (its own
+			// OwnedFields, contract §3.1; NEVER ANSWER_TEXT — a card must
+			// never carry another type's content, contract §3.2, enforced
+			// downstream by the same ValidateCardTypeContent an editor
+			// upload goes through, contract §3ter "Aucun élargissement de
+			// la validation d'imbrication n'est nécessaire").
+			switch c.Type {
+			case "QCM":
+				card["TYPE"] = "QCM"
+				card["QCM_ANSWERS"] = map[string]string{
+					"RED":    c.QCMAnswers.Red,
+					"GREEN":  c.QCMAnswers.Green,
+					"YELLOW": c.QCMAnswers.Yellow,
+					"BLUE":   c.QCMAnswers.Blue,
+				}
+				card["QCM_CORRECT"] = c.QCMCorrect
+			default: // "" (classic MEMOTION) or explicit "SPEEDY"
+				card["ANSWER_TEXT"] = c.AnswerText
+			}
+			cards[i] = card
 		}
 		question["MOTION_CARDS"] = cards
 		question["MOTION_CONFIG"] = map[string]interface{}{
@@ -772,6 +998,28 @@ func (h *HTTPServer) buildGenerationPrompt(req generateQuestionsRequest, batchCo
 		b.WriteString("  {\"RECTO_THEME\": \"Capitale d'Europe\", \"QUESTION_TEXT\": \"Quelle capitale est traversée par la Seine ?\", \"ANSWER_TEXT\": \"Paris\", \"DIFFICULTY\": 1}\n")
 		b.WriteString("  {\"RECTO_THEME\": \"Capitale d'Europe\", \"QUESTION_TEXT\": \"Quelle capitale abrite le Colisée ?\", \"ANSWER_TEXT\": \"Rome\", \"DIFFICULTY\": 1}\n")
 		b.WriteString("- Erreur à éviter (exemple réel rejeté en test) : RECTO_THEME=\"Pâte de soja fermentée\" alors que QUESTION_TEXT porte sur un aliment différent (le kimchi) — RECTO_THEME doit rester le thème générique partagé par toutes les cartes de la question, jamais déjà une réponse précise qui entre en concurrence avec une autre carte.\n")
+	}
+
+	// MEMOTION_PLUS-specific guidance (#196, contract §3ter) — a distinct
+	// distribution key from "MEMOTION" (not a flag under it, contract's own
+	// wording: "au même niveau que les cinq autres"), so this block is
+	// self-contained rather than assuming the MEMOTION block above also
+	// fired — a job can request MEMOTION_PLUS with MEMOTION at 0%. The
+	// RECTO_THEME/QUESTION_TEXT/ANSWER_TEXT rules and pitfall example are
+	// therefore restated here rather than only in the MEMOTION block, same
+	// reasoning as B-B1/B5 in the plan. Kept conditional on MEMOTION_PLUS
+	// actually being requested this job, same pattern as every other
+	// type-specific block in this function.
+	if v, ok := req.Distribution["MEMOTION_PLUS"]; ok && v > 0 {
+		b.WriteString("\nFormat détaillé pour TYPE=\"MEMOTION_PLUS\" (variante de MEMOTION où CHAQUE carte choisit son propre type) :\n")
+		b.WriteString("- Même structure de base que MEMOTION : MOTION_CARDS doit contenir ENTRE 4 ET 12 cartes ; RECTO_THEME est un thème/indice COURT et GÉNÉRIQUE commun à toutes les cartes de la question (ex: \"Capitale d'Europe\"), jamais une réponse précise et jamais identique à la réponse d'une carte.\n")
+		b.WriteString("- Différence : chaque carte de MOTION_CARDS DOIT porter un champ TYPE valant \"SPEEDY\" ou \"QCM\" — choisis-le carte par carte selon ce qui convient le mieux à SON contenu, pas un choix unique pour toute la question.\n")
+		b.WriteString("- Carte TYPE=\"SPEEDY\" : QUESTION_TEXT (la question) et ANSWER_TEXT (la réponse précise et unique) — exactement comme une carte MEMOTION classique.\n")
+		b.WriteString("- Carte TYPE=\"QCM\" : QUESTION_TEXT (la question), QCM_ANSWERS (objet RED/GREEN/YELLOW/BLUE, 4 réponses plausibles et distinctes, une seule correcte) et QCM_CORRECT (la couleur de la bonne réponse) — jamais de champ ANSWER_TEXT sur une carte QCM.\n")
+		b.WriteString("- Choisis QCM quand des réponses fausses plausibles renforcent la question (dates, chiffres, noms proches) ; choisis SPEEDY quand la réponse est ouverte ou qu'aucun distracteur crédible n'existe.\n")
+		b.WriteString("- Exemple, deux cartes d'une même question sur le thème \"Capitales d'Europe\", l'une SPEEDY et l'autre QCM :\n")
+		b.WriteString("  {\"TYPE\": \"SPEEDY\", \"RECTO_THEME\": \"Capitale d'Europe\", \"QUESTION_TEXT\": \"Quelle capitale est traversée par la Seine ?\", \"ANSWER_TEXT\": \"Paris\", \"DIFFICULTY\": 1}\n")
+		b.WriteString("  {\"TYPE\": \"QCM\", \"RECTO_THEME\": \"Capitale d'Europe\", \"QUESTION_TEXT\": \"Quelle capitale abrite le Colisée ?\", \"QCM_ANSWERS\": {\"RED\": \"Rome\", \"GREEN\": \"Madrid\", \"YELLOW\": \"Lisbonne\", \"BLUE\": \"Athènes\"}, \"QCM_CORRECT\": \"RED\", \"DIFFICULTY\": 1}\n")
 	}
 
 	// ARDOISE-specific guidance (#137 Batch 2a, QUALIF feedback point 2 —
