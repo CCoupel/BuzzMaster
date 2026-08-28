@@ -131,6 +131,9 @@ export default function Navbar({ connectionStatus = 'disconnected', clientCounts
   const configItems = [
     { path: 'teams', label: 'Joueurs', icon: '👥' },
     { path: 'quiz', label: 'Quiz', icon: '❓' },
+    // RAFALE (milestone v8.0.0, #16/#197/#198) — réservoir de questions,
+    // page dédiée (App.jsx adminRoutes).
+    { path: 'rafale', label: 'Rafale', icon: '⚡' },
   ]
 
   // Zone TV: affichage TV, joueurs et animateur

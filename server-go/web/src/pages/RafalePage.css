@@ -1,0 +1,211 @@
+/* RafalePage — éditeur du réservoir RAFALE (`/admin/rafale`), contrat
+   rafale.md §9, maquette docs/mockups/rafale-v8.html §7. Page admin
+   classique (pas de contrainte TV) — CSS variables du design system
+   uniquement, mêmes conventions que BackupPage.css/QuestionsPage.css. */
+
+.rafale-page {
+  min-height: calc(100vh - var(--admin-chrome-h));
+  padding: var(--space-6);
+}
+
+.rafale-layout {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: var(--space-6);
+  max-width: 1400px;
+  margin: 0 auto;
+  align-items: start;
+}
+
+@media (max-width: 1024px) {
+  .rafale-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+.rafale-list-card,
+.rafale-form-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+/* Filtres */
+.rafale-filters {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.rafale-filter-group {
+  display: flex;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.rafale-chip {
+  background: var(--bg-tertiary, var(--gray-100));
+  border: 1px solid var(--gray-200);
+  border-radius: var(--radius-md);
+  padding: var(--space-2) var(--space-3);
+  font-size: 0.82rem;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  color: var(--text-secondary, var(--gray-600));
+  transition: all var(--transition-fast);
+}
+
+.rafale-chip.on {
+  background: var(--primary-100);
+  border-color: var(--primary-500);
+  color: var(--primary-700, var(--primary-600));
+  font-weight: 600;
+}
+
+/* Statuts */
+.rafale-status {
+  color: var(--text-secondary, var(--gray-600));
+  font-size: 0.9rem;
+  padding: var(--space-4) 0;
+  text-align: center;
+}
+
+.rafale-status-error {
+  color: var(--error);
+}
+
+/* Table */
+.rafale-table-wrap {
+  width: 100%;
+  overflow-x: auto;
+}
+
+.rafale-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+}
+
+.rafale-table th,
+.rafale-table td {
+  border-bottom: 1px solid var(--gray-200);
+  padding: var(--space-2) var(--space-3);
+  text-align: left;
+  vertical-align: top;
+}
+
+.rafale-table th {
+  color: var(--text-secondary, var(--gray-600));
+  font-weight: 600;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.rafale-table tr.editing {
+  background: var(--primary-50, rgba(59, 130, 246, 0.06));
+}
+
+.rafale-used {
+  color: var(--text-secondary, var(--gray-600));
+}
+
+.rafale-available {
+  color: var(--success);
+  font-weight: 600;
+}
+
+.rafale-row-actions {
+  display: flex;
+  gap: var(--space-2);
+  white-space: nowrap;
+}
+
+.rafale-row-btn {
+  background: none;
+  border: 1px solid var(--gray-200);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  padding: var(--space-1) var(--space-2);
+  font-size: 0.9rem;
+  line-height: 1;
+}
+
+.rafale-row-btn-danger:hover {
+  border-color: var(--error);
+  color: var(--error);
+}
+
+.rafale-counts {
+  margin: 0;
+  font-size: 0.82rem;
+  color: var(--text-secondary, var(--gray-600));
+}
+
+/* Formulaire */
+.rafale-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.rafale-form .form-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.rafale-form .form-group label {
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--text-secondary, var(--gray-600));
+}
+
+.rafale-form .form-group input,
+.rafale-form .form-group textarea,
+.rafale-form .form-group select {
+  padding: var(--space-3);
+  border: 2px solid var(--gray-200);
+  border-radius: var(--radius-lg);
+  font-size: 0.875rem;
+  font-family: inherit;
+  transition: all var(--transition-fast);
+}
+
+.rafale-form .form-group input:focus,
+.rafale-form .form-group textarea:focus,
+.rafale-form .form-group select:focus {
+  outline: none;
+  border-color: var(--primary-400);
+  box-shadow: 0 0 0 3px var(--primary-100);
+}
+
+.rafale-form .form-group textarea {
+  resize: vertical;
+  min-height: 70px;
+}
+
+.rafale-diff-row {
+  display: flex;
+  gap: var(--space-2);
+}
+
+.rafale-diff-btn {
+  flex: 1;
+  background: var(--bg-tertiary, var(--gray-100));
+  border: 2px solid var(--gray-200);
+  border-radius: var(--radius-md);
+  padding: var(--space-2);
+  cursor: pointer;
+  font-size: 1rem;
+  color: var(--gray-400);
+  transition: all var(--transition-fast);
+}
+
+.rafale-diff-btn.active {
+  border-color: var(--primary-500);
+  color: var(--warning);
+  background: var(--primary-50, rgba(59, 130, 246, 0.06));
+}
