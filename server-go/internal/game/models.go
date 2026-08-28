@@ -231,6 +231,19 @@ const (
 	MemoryModeTantQueJeGagne MemoryMode = "TANT_QUE_JE_GAGNE"
 )
 
+// RafaleMode is Question.RafaleMode's value set — contracts/rafale.md §3.4.
+// TypedContent.RafaleMode itself stays a plain string (mirrors
+// Question.MotionMode), these constants exist for comparison, same idiom as
+// MemoryMode above.
+type RafaleMode string
+
+const (
+	RafaleModeSolo           RafaleMode = "SOLO"              // one team, no rotation ever (#107)
+	RafaleModeChacunSonTour  RafaleMode = "CHACUN_SON_TOUR"   // rotates after every question regardless of outcome
+	RafaleModeTantQueJeGagne RafaleMode = "TANT_QUE_JE_GAGNE" // rotates only on an incorrect answer/timeout; a correct answer keeps the hand
+	RafaleModeMaillonFaible  RafaleMode = "MAILLON_FAIBLE"    // rotates every question like CHACUN_SON_TOUR, but the counter resets to 0 on an incorrect answer (best kept separately, RAFALE_TEAM_BEST)
+)
+
 // TypedContent holds the fields that carry a QuestionType's own content —
 // QCM answers, MEMORY pairs, ARDOISE keyboard layout, and the plain-text
 // ANSWER shared by SPEEDY/ARDOISE. Embedded anonymously (flat, no JSON
