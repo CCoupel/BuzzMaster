@@ -2,6 +2,7 @@ package game
 
 import (
 	"encoding/json"
+	"errors"
 	"log"
 	"math/rand"
 	"os"
@@ -117,12 +118,22 @@ type Engine struct {
 	bumpersPath      string
 	statusesPath     string // Path to question_statuses.json
 	statePath        string // Path to game_state.json (#141 — quiz metadata persistence)
-	mu               sync.RWMutex
-	timer            *time.Ticker
-	stopCh           chan struct{}
-	countdownTimer   *time.Ticker
-	countdownStopCh  chan struct{}
-	pendingDelay     int // Store delay for after countdown
+
+	// RAFALE reservoir (#197, contracts/rafale.md §2.4/§3). Kept as two
+	// independent stores, deliberately not merged: editing the reservoir
+	// must never rewrite game-play state, and playing must never rewrite
+	// the reservoir (contract §3.2). Both are guarded by e.mu, same as
+	// questionStatuses above.
+	rafaleQuestions map[string]*RafaleQuestion // reservoir, keyed by ID
+	rafalePath      string                     // path to data/files/rafale/reservoir.json
+	rafaleUsed      map[string]bool            // "already asked this game" flag, keyed by question ID
+	rafaleUsedPath  string                     // path to data/config/rafale_used.json
+	mu              sync.RWMutex
+	timer           *time.Ticker
+	stopCh          chan struct{}
+	countdownTimer  *time.Ticker
+	countdownStopCh chan struct{}
+	pendingDelay    int // Store delay for after countdown
 
 	// motionCardRoundClosed (#187 cycle 4, B3) — true once the ACTIVE
 	// MEMOTION card's own timer round has ended (natural expiry via
@@ -232,6 +243,8 @@ func NewEngine() *Engine {
 		},
 		data:             NewTeamsAndBumpers(),
 		questionStatuses: make(map[string]QuestionStatus),
+		rafaleQuestions:  make(map[string]*RafaleQuestion),
+		rafaleUsed:       make(map[string]bool),
 		stopCh:           make(chan struct{}),
 	}
 }
@@ -2028,6 +2041,12 @@ func (e *Engine) InitGame() []string {
 	// Reset ARDOISE answers (v5.6.0)
 	e.state.ArdoiseAnswers = make(map[string]ArdoiseAnswer)
 
+	// Reset RAFALE "already used" flags (#197, contract §3.2) — a fresh
+	// game must be able to draw the whole reservoir again. The reservoir
+	// itself (rafaleQuestions) is untouched: NEW_GAME resets game-play
+	// state, never the editor's question bank.
+	e.rafaleUsed = make(map[string]bool)
+
 	log.Printf("[Engine] Game initialized: scores, history, question statuses reset")
 	e.mu.Unlock()
 
@@ -2036,6 +2055,7 @@ func (e *Engine) InitGame() []string {
 	safeGo("SaveTeams", e.SaveTeams)
 	safeGo("SaveBumpers", e.SaveBumpers)
 	safeGo("SaveStatuses", e.SaveStatuses)
+	safeGo("SaveRafaleUsed", e.SaveRafaleUsed)
 
 	return purgedVPlayerIDs
 }
@@ -2831,6 +2851,91 @@ func (e *Engine) SaveAll() {
 	safeGo("SaveBumpers", e.SaveBumpers)
 	safeGo("SaveHistory", e.SaveHistory)
 	safeGo("SaveStatuses", e.SaveStatuses)
+}
+
+// ErrRafalePoolEmpty is returned by DrawRafaleQuestion when no reservoir
+// question matches the requested categories/difficulty filter and is not
+// already used — contracts/rafale.md §7.1. The caller must react by ending
+// the round (RAFALE_EXHAUSTED), never by silently repeating an already-seen
+// question.
+var ErrRafalePoolEmpty = errors.New("rafale_pool_empty")
+
+// rafalePoolUnsafe returns the reservoir questions matching categories
+// (multi, OR) ∩ difficulty (exact) ∩ not-yet-used — contracts/rafale.md §7.
+// Caller must hold e.mu (read or write lock).
+func (e *Engine) rafalePoolUnsafe(categories []string, difficulty int) []*RafaleQuestion {
+	catSet := make(map[string]struct{}, len(categories))
+	for _, c := range categories {
+		catSet[c] = struct{}{}
+	}
+	var pool []*RafaleQuestion
+	for _, q := range e.rafaleQuestions {
+		if _, ok := catSet[string(q.Category)]; !ok {
+			continue
+		}
+		if q.Difficulty != difficulty {
+			continue
+		}
+		if e.rafaleUsed[q.ID] {
+			continue
+		}
+		pool = append(pool, q)
+	}
+	return pool
+}
+
+// CountRafalePool returns (available, used, total) reservoir questions for
+// a categories/difficulty filter — contracts/rafale.md §7.2, the pre-round
+// alert (GET /api/rafale/pool): blocking when available==0, a warning when
+// available < the estimated need, informational otherwise.
+func (e *Engine) CountRafalePool(categories []string, difficulty int) (available, used, total int) {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+
+	catSet := make(map[string]struct{}, len(categories))
+	for _, c := range categories {
+		catSet[c] = struct{}{}
+	}
+	for _, q := range e.rafaleQuestions {
+		if _, ok := catSet[string(q.Category)]; !ok {
+			continue
+		}
+		if q.Difficulty != difficulty {
+			continue
+		}
+		total++
+		if e.rafaleUsed[q.ID] {
+			used++
+		} else {
+			available++
+		}
+	}
+	return available, used, total
+}
+
+// DrawRafaleQuestion draws one question uniformly at random from the pool
+// (categories ∩ difficulty ∩ not-used — contracts/rafale.md §7), marks it
+// used immediately and persists the flag asynchronously so a restart mid-
+// round never re-proposes it. Returns ErrRafalePoolEmpty when the pool is
+// empty; the caller (Phase 2, #107) reacts per contract §7.1.
+func (e *Engine) DrawRafaleQuestion(categories []string, difficulty int) (*RafaleQuestion, error) {
+	e.mu.Lock()
+
+	pool := e.rafalePoolUnsafe(categories, difficulty)
+	if len(pool) == 0 {
+		e.mu.Unlock()
+		return nil, ErrRafalePoolEmpty
+	}
+
+	picked := pool[rand.Intn(len(pool))]
+	drawn := *picked // copy: the caller must never hold a pointer into e.rafaleQuestions
+	e.rafaleUsed[drawn.ID] = true
+
+	e.mu.Unlock()
+
+	safeGo("SaveRafaleUsed", e.SaveRafaleUsed)
+
+	return &drawn, nil
 }
 
 // FlipMemoryCard handles flipping a Memory card with game logic
