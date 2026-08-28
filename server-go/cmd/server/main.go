@@ -475,6 +475,18 @@ func (a *App) setupCallbacks() {
 		a.broadcastQCMHint(invalidatedColor, remainingAnswers)
 	}
 
+	// RAFALE (v8.0.0, #107, contract §5.2) — the expected answer, admin+anim
+	// ONLY (never GameState — contract §2.3).
+	a.engine.OnRafaleAnswer = func(id, answer string) {
+		a.broadcastRafaleAnswer(id, answer)
+	}
+
+	// RAFALE per-question countdown — lightweight, all clients, no full
+	// GameState re-emission (contract §5.2).
+	a.engine.OnRafaleQuestionTick = func(questionTime int) {
+		a.broadcastRafaleTick(questionTime)
+	}
+
 	// #187 cycle 3 briefly wired engine.OnMotionCardAutoRevealed here — a
 	// MEMORY card auto-revealing (and broadcasting a full UPDATE) at timer
 	// expiry. REVERTED in cycle 4: the user-validated behavior is
@@ -1259,6 +1271,12 @@ func (a *App) handleWebMessage(incoming *protocol.IncomingMessage) {
 
 	case protocol.ActionMotionSetTeams:
 		a.handleMotionSetTeams(msg)
+
+	case protocol.ActionRafaleValidate:
+		a.handleRafaleValidate(msg)
+
+	case protocol.ActionRafaleInvalidate:
+		a.handleRafaleInvalidate(msg)
 
 	case protocol.ActionShowQRCode:
 		a.handleShowQRCode()
@@ -2451,6 +2469,29 @@ func (a *App) handleMotionSetTeams(msg *protocol.Message) {
 
 	a.broadcastUpdate()
 	a.sendLEDSetAllBuzzers()
+}
+
+// handleRafaleValidate processes RAFALE_VALIDATE (contract rafale.md §5.1):
+// the current question's answer was judged correct. All broadcasting
+// (RAFALE_ANSWER, RAFALE_TICK restart, full UPDATE) is handled internally
+// by the engine via the OnRafaleAnswer/OnStateChange callbacks (setupCallbacks
+// below) — unlike handleMotionDone above, this handler has nothing left to
+// broadcast itself once the engine call returns.
+func (a *App) handleRafaleValidate(msg *protocol.Message) {
+	server.LogInfo(game.LogComponentEngine, "RAFALE_VALIDATE")
+	if err := a.engine.RafaleValidate(); err != nil {
+		server.LogWarn(game.LogComponentEngine, "RAFALE_VALIDATE error: %v", err)
+	}
+}
+
+// handleRafaleInvalidate processes RAFALE_INVALIDATE (contract rafale.md
+// §5.1): the current question's answer was judged incorrect. Same
+// broadcasting story as handleRafaleValidate above.
+func (a *App) handleRafaleInvalidate(msg *protocol.Message) {
+	server.LogInfo(game.LogComponentEngine, "RAFALE_INVALIDATE")
+	if err := a.engine.RafaleInvalidate(); err != nil {
+		server.LogWarn(game.LogComponentEngine, "RAFALE_INVALIDATE error: %v", err)
+	}
 }
 
 func (a *App) handleBumperPoints(msg *protocol.Message) {
@@ -4425,6 +4466,30 @@ func (a *App) broadcastQCMHint(invalidatedColor string, remainingAnswers int) {
 
 	// Also broadcast full update so clients receive the updated QcmInvalidated state
 	a.broadcastUpdate()
+}
+
+// broadcastRafaleAnswer sends RAFALE_ANSWER to admin+anim ONLY (contract
+// rafale.md §2.3/§5.2) — never TV, never VPlayer. This is the ONE place in
+// the codebase that must never widen this recipient list: RAFALE_ANSWER
+// carries the expected answer, and SerializeForWebClient/serializeForClientType
+// serve the identical payload to TV and /anim, so — unlike GameState fields,
+// which use an exclusion list — the ONLY thing keeping the answer off TV is
+// this call site's explicit, narrow type list (precedent: ardoise_leak_128).
+func (a *App) broadcastRafaleAnswer(id, answer string) {
+	payload := protocol.RafaleAnswerPayload{ID: id, Answer: answer}
+	data, _ := json.Marshal(payload)
+	a.broadcast(protocol.ActionRafaleAnswer, data, false,
+		server.ClientTypeAdmin, server.ClientTypeAnim)
+	server.LogDebug(game.LogComponentEngine, "RAFALE_ANSWER: id=%s", id)
+}
+
+// broadcastRafaleTick sends RAFALE_TICK to all clients — the lightweight
+// per-question countdown, contract §5.2, no full GameState re-emission.
+func (a *App) broadcastRafaleTick(questionTime int) {
+	payload := protocol.RafaleTickPayload{QuestionTime: questionTime}
+	data, _ := json.Marshal(payload)
+	a.broadcast(protocol.ActionRafaleTick, data, false,
+		server.ClientTypeAdmin, server.ClientTypeTV, server.ClientTypeVPlayer, server.ClientTypeAnim)
 }
 
 func (a *App) broadcastShowQRCode() {
