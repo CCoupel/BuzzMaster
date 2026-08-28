@@ -121,6 +121,20 @@ var questionTypeRegistry = map[QuestionType]TypeDescriptor{
 		NestableInMotionCard: false, // never — nesting depth capped at 1, contract §1
 		HasPlayerInput:       false,
 	},
+	QuestionTypeRafale: {
+		Type: QuestionTypeRafale,
+		OwnedFields: []string{
+			"RAFALE_CATEGORIES", "RAFALE_DIFFICULTY", "RAFALE_MODE",
+			"RAFALE_QUESTION_TIME", "RAFALE_MAX_QUESTIONS",
+		},
+		MediaSlots: nil, // reservoir questions are text-only, no media (contracts/rafale.md §2.4/D3)
+		// A RAFALE round has no notion of a single card — it drives a whole
+		// timed sequence drawn from the reservoir, never a MEMOTION card's
+		// content (contract §2.1: RAFALE is a QuestionType like MEMOTION,
+		// not something MEMOTION nests).
+		NestableInMotionCard: false,
+		HasPlayerInput:       false, // buzzer presses are ignored during RAFALE (contract §8.1) — judged by admin/anim only
+	},
 }
 
 // TypeDescriptorFor returns the registry entry for t and whether t is a

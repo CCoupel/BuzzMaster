@@ -159,6 +159,7 @@ const (
 	QuestionTypeMemory   QuestionType = "MEMORY"
 	QuestionTypeMemotion QuestionType = "MEMOTION" // NEW (v5.0.0): grid of cards with 3 faces
 	QuestionTypeArdoise  QuestionType = "ARDOISE"  // NEW (v5.6.0): free-text answer via virtual keyboard
+	QuestionTypeRafale   QuestionType = "RAFALE"   // NEW (v8.0.0, #107): timed round drawing from the RAFALE reservoir — contracts/rafale.md
 )
 
 // KeyboardType represents the virtual keyboard layout for ARDOISE questions
@@ -279,6 +280,25 @@ type TypedContent struct {
 	MemoryPairs  []MemoryPair  `json:"MEMORY_PAIRS,omitempty"`
 	MemoryConfig *MemoryConfig `json:"MEMORY_CONFIG,omitempty"`
 	MemoryMode   string        `json:"MEMORY_MODE,omitempty"`
+	// RAFALE (v8.0.0, #107, contracts/rafale.md §3.3) — question host only,
+	// never nestable in a MEMOTION card (RAFALE has no notion of a single
+	// card; it drives a whole timed round). Unlike QCM/MEMORY, a RAFALE
+	// "question" carries no statement of its own here — TIME/POINTS
+	// (declared directly on Question, reused per §3.3) plus these 5 fields
+	// are the round's CONFIGURATION; the actual questions come from the
+	// reservoir (RafaleQuestion, rafale_store.go), drawn at play time.
+	RafaleCategories []string `json:"RAFALE_CATEGORIES,omitempty"` // multi-selection, ≥1 (contract §3.3)
+	// RafaleDifficulty: omitempty like every other TypedContent field in
+	// this struct (models_roundtrip_test.go enforces byte-for-byte fixture
+	// round-trips — a foreign type's owned field must never appear on the
+	// wire for a question that doesn't carry it). 0 is not a valid
+	// difficulty (1..3); an admin-configured RAFALE round always sets it
+	// explicitly before START, same as every other required config field
+	// on this struct.
+	RafaleDifficulty   int    `json:"RAFALE_DIFFICULTY,omitempty"`
+	RafaleMode         string `json:"RAFALE_MODE,omitempty"`          // SOLO | CHACUN_SON_TOUR | TANT_QUE_JE_GAGNE | MAILLON_FAIBLE (contract §3.4)
+	RafaleQuestionTime int    `json:"RAFALE_QUESTION_TIME,omitempty"` // seconds per question, default 3 — NOT GameState.RafaleQuestionTime (the live countdown; same JSON key, different struct, contract §4 note)
+	RafaleMaxQuestions int    `json:"RAFALE_MAX_QUESTIONS,omitempty"` // hard cap, default 100, max 100
 }
 
 // MotionCard represents one card in a MEMOTION grid (3 faces: RECTO, VERSO, REVEAL)
@@ -411,7 +431,7 @@ const (
 	MotionCardStateDone     MotionCardState = "DONE"     // played, DoneMotionCard called
 )
 
-// AllQuestionTypes returns the full registry of question types, i.e. the 5
+// AllQuestionTypes returns the full registry of question types, i.e. the 6
 // values QuestionType may take. Exported as a test-exhaustiveness helper —
 // see contracts/question-types.md §10 (test d'agnosticité) — not consumed by
 // production code in v7.0.0.
@@ -422,6 +442,7 @@ func AllQuestionTypes() []QuestionType {
 		QuestionTypeMemory,
 		QuestionTypeMemotion,
 		QuestionTypeArdoise,
+		QuestionTypeRafale,
 	}
 }
 
@@ -657,6 +678,42 @@ type GameState struct {
 	// SetQuizDisplay, not SetQuizMeta (contract H1-H5, rule H1: never null,
 	// always initialized to []string{}).
 	QuizHiddenFields []string `json:"QUIZ_HIDDEN_FIELDS"`
+
+	// RAFALE fields (v8.0.0, #107, contracts/rafale.md §4) — NO omitempty
+	// (project rule): maps/slices/strings must be serialized even when
+	// empty/zero so the frontend always resets cleanly between rounds.
+	// Ephemeral game-play state, never persisted — excluded from
+	// PersistedGameState (state_persistence.go), same precedent as
+	// MotionActive. Initialized non-nil in NewEngine() and reset at every
+	// NEW_GAME/Ready(), same discipline as the MEMOTION/MEMORY fields
+	// above.
+	//
+	// RafaleCurrentQuestion never carries the expected answer (contract
+	// §2.3 — RafaleCurrent, models.go, has no ANSWER field by construction).
+	// The answer is broadcast separately via the dedicated RAFALE_ANSWER
+	// action, to admin+anim only (protocol.ActionRafaleAnswer).
+	//
+	// RafaleQuestionTime here is the LIVE countdown for the current
+	// question (decremented by the dedicated RAFALE question ticker,
+	// diffused via RAFALE_TICK) — NOT TypedContent.RafaleQuestionTime (the
+	// per-round configured seconds-per-question default). Same JSON key,
+	// deliberately: one is the Question's static config, the other is
+	// GameState's live value, exactly like Question.Time vs
+	// GameState.CurrentTime for the round's global timer.
+	//
+	// RafaleTeamBest is only ever populated in MAILLON_FAIBLE mode
+	// (contract §3.4/§6.1); present and empty in the other 3 modes.
+	RafaleSubPhase           RafaleSubPhase `json:"RAFALE_SUBPHASE"`
+	RafaleCurrentQuestion    RafaleCurrent  `json:"RAFALE_CURRENT_QUESTION"`
+	RafaleQuestionTime       int            `json:"RAFALE_QUESTION_TIME"`
+	RafaleTeamCounters       map[string]int `json:"RAFALE_TEAM_COUNTERS"`
+	RafaleTeamBest           map[string]int `json:"RAFALE_TEAM_BEST"`
+	RafaleCurrentTeam        string         `json:"RAFALE_CURRENT_TEAM"`
+	RafaleParticipatingTeams []string       `json:"RAFALE_PARTICIPATING_TEAMS"`
+	RafaleCurrentTeamColor   []int          `json:"RAFALE_CURRENT_TEAM_COLOR"`
+	RafaleAskedCount         int            `json:"RAFALE_ASKED_COUNT"`
+	RafalePoolRemaining      int            `json:"RAFALE_POOL_REMAINING"`
+	RafaleExhausted          bool           `json:"RAFALE_EXHAUSTED"`
 }
 
 // TeamsAndBumpers holds all teams and bumpers data

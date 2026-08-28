@@ -122,12 +122,32 @@ Champs **réutilisés** de `Question` (mutualisation, pas de doublon) :
 Champs **nouveaux**, portés par `TypedContent` (donc `OwnedFields` du type RAFALE) :
 
 ```go
-RafaleCategories   []string `json:"RAFALE_CATEGORIES"`    // multi-sélection, ≥1
-RafaleDifficulty   int      `json:"RAFALE_DIFFICULTY"`    // 1..3, unique par manche
-RafaleMode         string   `json:"RAFALE_MODE"`          // voir §3.4
-RafaleQuestionTime int      `json:"RAFALE_QUESTION_TIME"` // secondes par question, défaut 3
-RafaleMaxQuestions int      `json:"RAFALE_MAX_QUESTIONS"` // plafond dur, défaut 100, max 100
+RafaleCategories   []string `json:"RAFALE_CATEGORIES,omitempty"`    // multi-sélection, ≥1
+RafaleDifficulty   int      `json:"RAFALE_DIFFICULTY,omitempty"`    // 1..3, unique par manche
+RafaleMode         string   `json:"RAFALE_MODE,omitempty"`          // voir §3.4
+RafaleQuestionTime int      `json:"RAFALE_QUESTION_TIME,omitempty"` // secondes par question, défaut 3
+RafaleMaxQuestions int      `json:"RAFALE_MAX_QUESTIONS,omitempty"` // plafond dur, défaut 100, max 100
 ```
+
+> ⚠️ **Modification de contrat (dev-backend, Batch 2/#107)** : les 5 champs
+> ci-dessus sont **tous** `omitempty`, y compris `RAFALE_DIFFICULTY` (le
+> contrat d'origine l'en dispensait, par analogie avec `Question.Answer`).
+> Contrainte technique découverte à l'implémentation :
+> `models_roundtrip_test.go` (#184, garde d'exhaustivité byte-for-byte des
+> fixtures `testdata/questions/*.json`) exige que tout champ `TypedContent`
+> **étranger** au type d'une question n'apparaisse jamais sur le fil —
+> exactement le rôle que joue `omitempty` pour `QCM_*`/`MEMORY_*`/
+> `ARDOISE_KEYBOARD_TYPE`. Sans `omitempty` sur `RAFALE_DIFFICULTY`, **chaque**
+> question existante (ARDOISE/MEMORY/MEMOTION/…) aurait gagné un
+> `"RAFALE_DIFFICULTY": 0` parasite après un aller-retour JSON — cassant
+> `TestQuestionFixtures_RoundTrip_TypedContent` pour 4 fixtures sans lien
+> avec RAFALE. `Question.Answer` n'est pas un précédent transposable ici : il
+> est déclaré **directement sur `Question`**, pas dans `TypedContent` partagé
+> par tous les types — son absence d'`omitempty` ne fuit donc jamais vers un
+> autre type. Une manche RAFALE configurée définit toujours explicitement sa
+> difficulté avant `START` (même logique que `TIME`/`POINTS`, déjà des
+> chaînes potentiellement vides sans que cela pose problème) ; l'admin ne
+> perd donc rien en pratique.
 
 ### 3.4 `RAFALE_MODE`
 
