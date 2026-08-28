@@ -31,6 +31,7 @@ import QuestionPreview from '../components/QuestionPreview'
 import CategoryBadge from '../components/CategoryBadge'
 import QuestionCard from '../components/QuestionCard'
 import NetworkWarningBanner from '../components/NetworkWarningBanner'
+import RafalePoolAlert from '../components/RafalePoolAlert'
 import './GamePage.css'
 import '../styles/entracte.css'
 
@@ -386,6 +387,15 @@ export default function GamePage() {
   const canReveal = canRevealRule(gameState.phase, gameState.question)
   // START button only active in READY phase
   const canStart = canStartRule(gameState.phase)
+
+  // RAFALE (v8.0.0, #16/#107, contrat rafale.md §7.2, tâche 26) — pool
+  // vide pour le filtre de la manche sélectionnée = démarrage REFUSÉ.
+  // `rafalePoolLevel` vient de RafalePoolAlert (onLevelChange), même appel
+  // GET /api/rafale/pool que celui déjà utilisé pour l'affichage de
+  // l'alerte ci-dessous — pas de second calcul dupliqué ici.
+  const isRafaleSelected = gameState.question?.TYPE === 'RAFALE'
+  const [rafalePoolLevel, setRafalePoolLevel] = useState(null)
+  const rafaleBlocked = isRafaleSelected && rafalePoolLevel === 'blocking'
 
   // ENTRACTE (#119, C2) — le bouton a déménagé dans Navbar.jsx (visible sur
   // toutes les pages admin, pas seulement ici) ; seul l'estompage de
@@ -818,6 +828,38 @@ export default function GamePage() {
             </div>
           </div>
 
+          {/* RAFALE — panneau de configuration de manche + alerte de pool
+              (v8.0.0, #16/#107, contrat rafale.md §7.2, tâche 26 du plan).
+              Affiché AVANT le lancement uniquement — pendant la manche
+              (STARTED), la conduite se fait depuis /anim (AnimConductPanel,
+              boutons VALIDE/INVALIDE) : ce panneau ne duplique pas cette
+              zone, il informe et bloque le démarrage si besoin. */}
+          {isRafaleSelected && !isPlaying && (
+            <div className="rafale-admin-panel">
+              <div className="rafale-admin-config">
+                <span className="rafale-admin-chip">
+                  {(gameState.question.RAFALE_CATEGORIES || []).length} categorie(s)
+                </span>
+                <span className="rafale-admin-chip">
+                  {'★'.repeat(gameState.question.RAFALE_DIFFICULTY || 1)}
+                </span>
+                <span className="rafale-admin-chip">
+                  {gameState.question.RAFALE_MODE || 'SOLO'}
+                </span>
+                <span className="rafale-admin-chip">
+                  {gameState.question.RAFALE_QUESTION_TIME || 3}s/question
+                </span>
+              </div>
+              <RafalePoolAlert
+                categories={gameState.question.RAFALE_CATEGORIES || []}
+                difficulty={gameState.question.RAFALE_DIFFICULTY}
+                roundTime={parseInt(timeInput) || 0}
+                questionTime={gameState.question.RAFALE_QUESTION_TIME || 3}
+                onLevelChange={setRafalePoolLevel}
+              />
+            </div>
+          )}
+
           {/* MEMOTION subphase controls — shown when MEMOTION question is STARTED */}
           {gameState.question?.TYPE === 'MEMOTION' && gameState.phase === 'STARTED' && (() => {
             const subphase = gameState.MEMOTION_SUBPHASE
@@ -991,7 +1033,8 @@ export default function GamePage() {
                 variant={isPlaying ? 'danger' : 'success'}
                 size="lg"
                 onClick={handleStartStop}
-                disabled={!canStart && !isPlaying}
+                title={rafaleBlocked && !isPlaying ? 'Pool RAFALE vide pour ce filtre — démarrage refusé (contrat §7.2)' : undefined}
+                disabled={!isPlaying && (!canStart || rafaleBlocked)}
               >
                 {isPlaying ? 'STOP' : 'START'}
               </Button>
