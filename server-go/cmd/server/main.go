@@ -4239,21 +4239,60 @@ func (a *App) nextRafaleTeam(state game.GameState) string {
 	return ""
 }
 
-// sendLEDSetRafaleTeams refreshes buzzer LEDs for the active RAFALE round —
-// contract §8.3: active team SOLID 255, next team SOLID 128, other
-// participating teams DIM, non-participants OFF; SOLO ("Mode SOLO | Éteint
-// pour tous", §8.3's own table) turns every buzzer off, since no team is
-// ever "active" in the sense this grid means. Wired to
-// Engine.OnRafaleTeamsChanged (setupCallbacks below) — fired on round
-// start, RAFALE_SET_TEAMS, and every advance (task 36: "rafraîchi à chaque
-// rotation d'équipe et chaque changement de question").
+// sendLEDSetForBuzzerRafale computes and sends the LED for ONE buzzer during
+// a RAFALE question — mirrors sendLEDSetForBuzzerMemory's per-buzzer phase
+// dispatch (STOPPED/PREPARE/READY/REVEALED → plain team color, PAUSED →
+// DIM, STARTED → the mode-specific grid). Extracted (post-review MINEUR-3,
+// code-review-20260828-183037.md) so sendLEDSetAllBuzzers can call it
+// per-buzzer like every other question type's case in that switch — without
+// this, RAFALE fell into the `default:` branch there (plain per-buzzer team
+// color, no active/next/dim/off grid at all), so an admin action that
+// re-triggers sendLEDSetAllBuzzers mid-round (e.g. editing bumpers/teams)
+// transiently overwrote the "active team" grid until the next RAFALE
+// advance self-corrected it via OnRafaleTeamsChanged — never a state/data
+// loss, but a visible flicker.
 //
-// Phase-gated to STARTED, mirroring sendLEDSetForBuzzerMemory's own
+// STARTED/SOLO is OFF for everyone (contract §8.3's own table: "Mode SOLO |
+// Éteint pour tous") — deliberately NOT the same as MEMORY's own SOLO
+// branch (active=SOLID/inactive=DIM): RAFALE has no notion of "my turn" LED
+// feedback in SOLO, there is exactly one team and nothing to distinguish.
+func (a *App) sendLEDSetForBuzzerRafale(mac string, bumper *game.Bumper, phase game.GamePhase, state game.GameState) {
+	rgb := a.teamColorToRGB(bumper)
+	dimIntensity := dimIntensityFor(rgb)
+
+	switch phase {
+	case game.PhaseStopped, game.PhasePrepare, game.PhaseReady, game.PhaseRevealed:
+		a.sendLEDSet(mac, protocol.LEDSetPayload{Color: rgb, Intensity: 255, Effect: "SOLID"})
+	case game.PhasePaused:
+		a.sendLEDSet(mac, protocol.LEDSetPayload{Color: rgb, Intensity: dimIntensity, Effect: "DIM"})
+	case game.PhaseStarted:
+		mode := ""
+		if state.Question != nil {
+			mode = state.Question.RafaleMode
+		}
+		if mode == "" || mode == string(game.RafaleModeSolo) {
+			a.sendLEDSet(mac, protocol.LEDSetPayload{Color: [3]int{0, 0, 0}, Intensity: 0, Effect: "SOLID"})
+			return
+		}
+		a.sendLEDSetMultiTeam(mac, bumper, state.RafaleCurrentTeam, a.nextRafaleTeam(state), state.RafaleParticipatingTeams)
+	default:
+		a.sendLEDSet(mac, protocol.LEDSetPayload{Color: rgb, Intensity: 255, Effect: "SOLID"})
+	}
+}
+
+// sendLEDSetRafaleTeams refreshes buzzer LEDs for the active RAFALE round —
+// contract §8.3. Wired to Engine.OnRafaleTeamsChanged (setupCallbacks
+// below) — fired on round start, RAFALE_SET_TEAMS, and every advance (task
+// 36: "rafraîchi à chaque rotation d'équipe et chaque changement de
+// question").
+//
+// Phase-gated to STARTED, mirroring sendLEDSetForBuzzerRafale's own
 // dispatch: the multi-team grid is a "round in progress" concept — a no-op
 // during PREPARE/READY (see SetRafaleParticipatingTeams' doc comment) and
 // during ROUND_END (whatever was lit for the last question stays lit; no
 // LED behavior is specified past the round ending, and the next START —
-// any question type — resets buzzer LEDs via sendLEDSetAllBuzzers as usual).
+// any question type — resets buzzer LEDs via sendLEDSetAllBuzzers as
+// usual, which now also carries a dedicated RAFALE case — see it below).
 //
 // ⚠️ This function only ever drives LED OUTPUT — buzzer presses stay
 // ignored regardless of what's lit (engine.go ProcessButtonPress, #107 task
@@ -4269,18 +4308,11 @@ func (a *App) sendLEDSetRafaleTeams() {
 		return
 	}
 
-	mode := state.Question.RafaleMode
-	solo := mode == "" || mode == string(game.RafaleModeSolo)
-
 	for mac, bumper := range tb.Bumpers {
 		if bumper.IsVPlayer {
 			continue
 		}
-		if solo {
-			a.sendLEDSet(mac, protocol.LEDSetPayload{Color: [3]int{0, 0, 0}, Intensity: 0, Effect: "SOLID"})
-			continue
-		}
-		a.sendLEDSetMultiTeam(mac, bumper, state.RafaleCurrentTeam, a.nextRafaleTeam(state), state.RafaleParticipatingTeams)
+		a.sendLEDSetForBuzzerRafale(mac, bumper, state.Phase, state)
 	}
 	// One broadcast for all AckPending state changes set by the loop above —
 	// same rationale as sendLEDSetAllBuzzers' own trailing call (#127/#129).
@@ -4306,6 +4338,13 @@ func (a *App) sendLEDSetAllBuzzers() {
 			a.sendLEDSetForBuzzerQCM(mac, bumper, phase, state)
 		case state.Question != nil && state.Question.Type == game.QuestionTypeMemory:
 			a.sendLEDSetForBuzzerMemory(mac, bumper, phase, state)
+		case state.Question != nil && state.Question.Type == game.QuestionTypeRafale:
+			// Post-review MINEUR-3 (code-review-20260828-183037.md): without
+			// this case, RAFALE fell into `default:` below (plain per-buzzer
+			// team color) — any admin action that re-triggers
+			// sendLEDSetAllBuzzers mid-round (editing bumpers/teams) would
+			// transiently overwrite the active-team grid.
+			a.sendLEDSetForBuzzerRafale(mac, bumper, phase, state)
 		case state.Question != nil && state.Question.Type == game.QuestionTypeMemotion:
 			// MEMOTION: buzzers display team color (same as NORMAL)
 			a.sendLEDSetForBuzzerNormal(mac, bumper, phase)
