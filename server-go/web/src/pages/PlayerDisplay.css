@@ -3486,3 +3486,131 @@
 .ardoise-team-card.no-answer .ardoise-team-card-answer {
   color: rgba(255, 255, 255, 0.35);
 }
+
+/* ------------------------------------------------------------------ */
+/* RAFALE — TV Content (contrat rafale.md §4/§4bis, milestone v8.0.0)  */
+/* Statique — mêmes zones que le bloc SPEEDY/ARDOISE générique (4      */
+/* zones verticales), overflow:hidden hérité de .game-content-zones,  */
+/* aucune unité non-viewport, contenu plafonné à 6 équipes (§4bis).    */
+/* ------------------------------------------------------------------ */
+
+.rafale-tv-zone-timer {
+  height: 16vh;
+}
+
+.rafale-tv-question {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1vh;
+  width: 100%;
+}
+
+.rafale-tv-meta {
+  display: flex;
+  gap: 0.6vw;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.rafale-tv-chip {
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: var(--radius-md);
+  padding: 0.3vh 1vw;
+  font-size: clamp(0.65rem, 1.6vh, 0.9rem);
+  color: var(--text-secondary, #94a3b8);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3vw;
+}
+
+.rafale-tv-chip-img {
+  width: 1.4em;
+  height: 1.4em;
+  object-fit: contain;
+}
+
+.rafale-tv-question-text {
+  margin: 0;
+}
+
+/* Zone 3 — indicateur "équipe active" (§8.2), fort et lisible de loin.
+   Vide en mode SOLO (contrat §8.1) : la zone reste montée mais sans
+   contenu, comme les autres blocs de ce fichier (zone-media vide pour
+   les autres types sans média). */
+.rafale-tv-active-team {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5vh;
+  padding: 2vh 3vw;
+  border: 3px solid var(--rafale-active-color, var(--error));
+  border-radius: var(--radius-xl);
+  background: linear-gradient(90deg,
+    color-mix(in srgb, var(--rafale-active-color, var(--error)) 15%, transparent),
+    color-mix(in srgb, var(--rafale-active-color, var(--error)) 30%, transparent),
+    color-mix(in srgb, var(--rafale-active-color, var(--error)) 15%, transparent));
+}
+
+.rafale-tv-active-label {
+  font-size: clamp(0.6rem, 1.4vh, 0.85rem);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--text-secondary, #94a3b8);
+}
+
+.rafale-tv-active-name {
+  font-size: clamp(1.4rem, 5vh, 3rem);
+  font-weight: 900;
+  letter-spacing: 0.03em;
+  color: #ffffff;
+  text-shadow: 0 0.2vh 1vh rgba(0, 0, 0, 0.4);
+}
+
+/* Zone 4 — compteurs par équipe (§6.1, "compteur, pas de score réel").
+   Grille plafonnée à 6 cartes (règle TV, CLAUDE.md) — displayTeams déjà
+   tronqué côté JSX (PlayerDisplay.jsx), cette grille se contente de
+   répartir ce qui lui est donné sans jamais défiler. */
+.rafale-tv-teams {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 1vw;
+  width: 100%;
+  overflow: hidden;
+}
+
+.rafale-tv-team {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.3vh;
+  min-width: 10vw;
+  padding: 1vh 1.2vw;
+  border-radius: var(--radius-lg);
+  background: rgba(255, 255, 255, 0.08);
+  border: 2px solid var(--rafale-team-color, rgba(255, 255, 255, 0.15));
+}
+
+.rafale-tv-team.active {
+  border-color: var(--rafale-team-color, var(--info, #1f6feb));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--rafale-team-color, var(--info, #1f6feb)) 25%, transparent);
+}
+
+.rafale-tv-team-name {
+  font-size: clamp(0.7rem, 1.6vh, 1rem);
+  font-weight: 700;
+  color: #ffffff;
+  max-width: 12vw;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rafale-tv-team-count {
+  font-size: clamp(1.2rem, 3vh, 2rem);
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  color: #ffffff;
+}

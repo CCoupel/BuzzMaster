@@ -10,6 +10,7 @@ import Podium from '../components/Podium'
 import QRCodeOverlay from '../components/QRCodeOverlay'
 import QRCodeDisplay from '../components/QRCodeDisplay'
 import EntractePanel from '../components/EntractePanel'
+import RafaleTimers from '../components/RafaleTimers'
 import { getCategoryColor } from '../constants/colors'
 import { getRgbColor } from '../utils/colorUtils'
 import { escapeWifiString } from '../utils/wifiUtils'
@@ -645,6 +646,13 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
     (!gameState.question && (gameState.MEMORY_PARTICIPATING_TEAMS?.length ?? 0) > 0 && showMemoryGrid)
   const isMemotion = gameState.question?.TYPE === 'MEMOTION'
   const isArdoise = gameState.question?.TYPE === 'ARDOISE'
+  // RAFALE (contrat rafale.md §2.1, milestone v8.0.0) — même patron que
+  // MEMOTION/ARDOISE : un QuestionType, dispatché POSITIVEMENT, sans repli
+  // implicite sur le bloc SPEEDY/ARDOISE générique (§2.1 : "RAFALE suit le
+  // patron MEMOTION"). Ajouté à `isKnownOtherType` pour la même raison que
+  // MEMOTION/ARDOISE : sans lui, un TYPE "RAFALE" tomberait dans `isSpeedy`
+  // et afficherait le bloc générique à la place du bloc dédié ci-dessous.
+  const isRafale = gameState.question?.TYPE === 'RAFALE'
   // #183/A-F1 — dispatch positif du type de contenu affiché : remplace les
   // gardes par négation (`!isQcm && !isMemory && !isMemotion`), répétées à 3
   // endroits pour la mise en page par défaut partagée SPEEDY/ARDOISE.
@@ -654,7 +662,7 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
   // renseigné qui ne correspond à aucune des 4 branches ci-dessus (donc
   // inconnu des 5 types gérés) n'est plus traité comme SPEEDY par défaut —
   // inatteignable avec les données actuelles (5 types connus).
-  const isKnownOtherType = isQcm || isMemory || isMemotion || isArdoise
+  const isKnownOtherType = isQcm || isMemory || isMemotion || isArdoise || isRafale
   const isSpeedy = !isKnownOtherType && (!gameState.question?.TYPE || gameState.question?.TYPE === 'SPEEDY')
   // QCM answers visible from READY through REVEALED (no re-render on transition)
   const showQcmAnswers = ['READY', 'COUNTDOWN', 'STARTED', 'PAUSED', 'STOPPED', 'REVEALED'].includes(gameState.phase)
@@ -2786,6 +2794,114 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
                 </motion.div>
               </div>
             )}
+
+            {/* RAFALE TV Content — contrat rafale.md §4/§4bis/§8.2, maquette
+                docs/mockups/rafale-v8.html §4/§4bis. Dispatch POSITIF sur
+                `isRafale` (déclaré ci-dessus, ajouté à `isKnownOtherType`) :
+                sans lui, rien ne s'affiche pour ce type — aucun repli
+                implicite sur le bloc SPEEDY/ARDOISE générique (§2.1).
+                Statique — aucune des zones ci-dessous ne défile
+                (overflow: hidden, unités viewport, PlayerDisplay.css). La
+                réponse attendue N'EST JAMAIS lue ici : `RAFALE_CURRENT_QUESTION`
+                (contrat §4) ne porte pas `ANSWER`, contrairement à l'action
+                dédiée `RAFALE_ANSWER` (admin+anim uniquement, §2.3) — câblage
+                réel des champs `RAFALE_*` en Phase 2 (#107, useWebSocket.js
+                task 27) ; lectures ci-dessous protégées par des valeurs de
+                repli, socle #197/#198. */}
+            {isRafale && showGameContent && gameState.question && (() => {
+              const current = gameState.RAFALE_CURRENT_QUESTION || {}
+              const participatingTeams = gameState.RAFALE_PARTICIPATING_TEAMS || []
+              const isMultiTeam = participatingTeams.length > 0
+              const currentTeam = gameState.RAFALE_CURRENT_TEAM || ''
+              const currentTeamColorArr = gameState.RAFALE_CURRENT_TEAM_COLOR
+              const currentTeamCss = Array.isArray(currentTeamColorArr) && currentTeamColorArr.length === 3
+                ? `rgb(${currentTeamColorArr.join(',')})`
+                : 'var(--error)'
+              const counters = gameState.RAFALE_TEAM_COUNTERS || {}
+              const catMeta = categoryMeta(current.CATEGORY, apiCategories)
+              // Contenu plafonné (règle TV, CLAUDE.md) — au plus 6 équipes
+              // affichées, même discipline que les autres écrans multi-équipes.
+              const displayTeams = (isMultiTeam ? participatingTeams : Object.keys(counters)).slice(0, 6)
+
+              return (
+                <div className="game-content-zones rafale-tv">
+                  {/* Zone 1: double timer (manche + question, §2.2) */}
+                  <div className="zone-timer rafale-tv-zone-timer">
+                    <RafaleTimers
+                      roundTime={gameState.timer}
+                      roundTotal={gameState.totalTime}
+                      questionTime={gameState.RAFALE_QUESTION_TIME || 0}
+                      questionTotal={gameState.question?.RAFALE_QUESTION_TIME || 3}
+                      phase={gameState.phase}
+                      size="xl"
+                    />
+                  </div>
+
+                  {/* Zone 2: question courante, sans réponse (§2.3/§4) */}
+                  <motion.div
+                    className="zone-question"
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.1 }}
+                  >
+                    <div className="rafale-tv-question">
+                      {(catMeta || current.DIFFICULTY) && (
+                        <div className="rafale-tv-meta">
+                          {catMeta && (
+                            <span className="rafale-tv-chip">
+                              {catMeta.imageURL
+                                ? <img src={catMeta.imageURL} alt={catMeta.label} className="rafale-tv-chip-img" />
+                                : <span>{catMeta.icon}</span>}
+                              {' '}{catMeta.label}
+                            </span>
+                          )}
+                          {current.DIFFICULTY > 0 && (
+                            <span className="rafale-tv-chip">{'★'.repeat(current.DIFFICULTY)}</span>
+                          )}
+                        </div>
+                      )}
+                      <p className="question-text rafale-tv-question-text">{current.QUESTION}</p>
+                    </div>
+                  </motion.div>
+
+                  {/* Zone 3: équipe active — indicateur fort (§8.2), uniquement en mode multi */}
+                  <div className="zone-media rafale-tv-zone-media">
+                    {isMultiTeam && currentTeam && (
+                      <motion.div
+                        className="rafale-tv-active-team"
+                        style={{ '--rafale-active-color': currentTeamCss }}
+                        initial={{ opacity: 0, scale: 0.9 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                      >
+                        <span className="rafale-tv-active-label">C'est le tour de</span>
+                        <span className="rafale-tv-active-name">{currentTeam}</span>
+                      </motion.div>
+                    )}
+                  </div>
+
+                  {/* Zone 4: compteurs par équipe (§6.1 — compteur, pas de score réel) */}
+                  <div className="zone-answers rafale-tv-zone-answers">
+                    {displayTeams.length > 0 && (
+                      <div className="rafale-tv-teams">
+                        {displayTeams.map(teamName => {
+                          const teamColor = teams[teamName]?.COLOR ? getRgbColor(teams[teamName].COLOR) : undefined
+                          return (
+                            <div
+                              key={teamName}
+                              className={`rafale-tv-team ${teamName === currentTeam ? 'active' : ''}`}
+                              style={teamColor ? { '--rafale-team-color': teamColor } : undefined}
+                            >
+                              <span className="rafale-tv-team-name">{teamName}</span>
+                              <span className="rafale-tv-team-count">{counters[teamName] || 0}</span>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )
+            })()}
 
             {/* Waiting State - no question selected (NOT shown for VPlayer) */}
             {!isVPlayer && !gameState.question && ['STOPPED', 'REVEALED'].includes(gameState.phase) && (
