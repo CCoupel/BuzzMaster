@@ -2,6 +2,60 @@
 
 ---
 
+## [20260828] — Mode de jeu RAFALE (#107, #197, #198, #199)
+
+> Milestone v8.0.0 · Contrat écrit **avant** implémentation (contract-first)
+> Référence complète : `contracts/rafale.md` · Arbitrages : `_work/reports/plan-ambiguities-20260828-155055.md`
+
+- **[NEW]** `QuestionType` `"RAFALE"` — nouveau type de jeu. Porte une **configuration de manche**,
+  pas un énoncé (les énoncés viennent du réservoir dédié). Entrée obligatoire au registre
+  `questionTypeRegistry`, sous peine d'échec de `TestQuestionTypeRegistry_Exhaustive`.
+- **[NEW]** Modèle `RafaleQuestion` (`ID`, `QUESTION`, `ANSWER`, `CATEGORY`, `DIFFICULTY` 1–3) —
+  réservoir global dédié, **texte seul**, stocké en fichier unique `data/files/rafale/reservoir.json`.
+  Ne réutilise **pas** le patron « un répertoire par question » des questions Quiz (justification
+  en `rafale.md` §2.4 : évite une 4ᵉ duplication du chargement de questions).
+- **[NEW]** Flag « déjà utilisée » persistant — `data/config/rafale_used.json`, réinitialisé
+  automatiquement dans `InitGame()` (`NEW_GAME`).
+- **[NEW]** Champs `GameState` `RAFALE_*` (11 champs, §4 de `rafale.md`) — **sans `omitempty`**,
+  initialisés non-nil, **exclus** de `PersistedGameState`.
+- **[NEW]** Champs de configuration de manche : `RAFALE_CATEGORIES` (multi), `RAFALE_DIFFICULTY`
+  (unique), `RAFALE_MODE`, `RAFALE_QUESTION_TIME`, `RAFALE_MAX_QUESTIONS`. Les champs existants
+  `TIME` (durée de manche) et `POINTS` (barème de manche) sont **réutilisés**, pas dupliqués.
+- **[NEW]** Actions entrantes `RAFALE_VALIDATE`, `RAFALE_INVALIDATE` (admin + anim),
+  `RAFALE_SET_TEAMS` (admin). ⚠️ À déclarer dans `inbound_allowlist.go` — allow-list **fermée**,
+  une action absente est rejetée silencieusement.
+- **[NEW]** Actions sortantes `RAFALE_ANSWER` (**admin + anim uniquement**) et `RAFALE_TICK` (tous).
+  La réponse attendue ne transite **jamais** par `GameState` : `SerializeForWebClient` sert le même
+  payload à `/tv` et `/anim`, aucune liste d'exclusion ne peut les séparer. Prévention de la classe
+  de fuite `ardoise_leak_128`.
+- **[NEW]** Endpoints `GET/POST /api/rafale/questions`, `DELETE /api/rafale/questions/{id}`,
+  `GET /api/rafale/pool` (comptage pré-manche). Corps **JSON**, pas multipart.
+- **[CHANGED]** Sauvegarde/restauration/réinitialisation **sélectives** — ajout du drapeau `rafale`
+  à `handleBackupSelect`, `handleResetSelect`, `detectTARContents`, `handleRestore` et
+  `BackupPage.jsx`. Sans cet ajout, le réservoir serait présent dans la sauvegarde intégrale mais
+  **absent** de la sauvegarde sélective et de la restauration — perte de données silencieuse.
+- **[CHANGED]** `TEAM_POINTS` — **aucune modification de contrat**, mais nouvel appelant :
+  l'attribution des points de fin de manche RAFALE réutilise cette action existante (clic équipe).
+  Aucune action d'attribution dédiée n'est créée.
+- **[CHANGED]** *(complément du 2026-08-28)* Indicateur « équipe active » en mode multi, sur trois
+  canaux — VPlayer de l'équipe active (élément plein écran passif), TV (bandeau fort), et **LED des
+  buzzers** de l'équipe active. Amende D4 : les LED sont désormais **pilotées** et le VPlayer
+  **affiche** un indicateur, mais la règle de fond est inchangée — *aucun appui buzzer n'est traité,
+  aucun élément interactif n'est ajouté*. Les LED déclinent la grille existante de
+  `sendLEDSetMemoryMultiTeam` (actif `SOLID 255` / suivant `SOLID 128` / participant `DIM` /
+  absent éteint), couleur résolue via `COLOR_NAME`. Aucun nouveau champ ni action : l'indicateur
+  consomme `RAFALE_CURRENT_TEAM`, `RAFALE_CURRENT_TEAM_COLOR` et `RAFALE_PARTICIPATING_TEAMS`
+  déjà prévus. ⚠️ À vérifier par test : ces champs doivent traverser `SerializeForVPlayer`, qui
+  construit sa propre carte de champs.
+
+**Aucun changement BREAKING** : tous les ajouts sont additifs. Les types de questions existants
+(SPEEDY, QCM, MEMORY, MEMOTION, ARDOISE), le timer global, `TEAM_POINTS` et les charges utiles
+`/tv`, `/player`, `/anim`, buzzers restent inchangés à périmètre constant. Le seul point de
+vigilance de non-régression est la **factorisation du helper de rotation d'équipe** partagé avec
+MEMOTION (`rotateMotionTeam`) — comportement MEMOTION à préserver à l'identique.
+
+---
+
 ## [20260827] — FLIP_MEMORY_CARD : écran TV public jamais interactif (#187 cycle 7)
 
 > Milestone v7.1.0 · Correctif de contrat suite au code `8af17927` (`dev-frontend`)
