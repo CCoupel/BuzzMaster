@@ -2028,8 +2028,33 @@
   color: #065f46;
 }
 
+/* RAFALE (v8.0.0, #16) — même patron que .type-btn.ardoise ci-dessus,
+   couleur reprise de utils/questionTypeMeta.js (#f97316). */
+.type-btn.rafale {
+  background: rgba(249, 115, 22, 0.1);
+  border-color: #f97316;
+  color: #f97316;
+}
+
+.type-btn.rafale.active {
+  background: rgba(249, 115, 22, 0.5);
+  border-color: #f97316;
+  color: #7c2d12;
+}
+
 /* ARDOISE section container */
 .ardoise-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  border-top: 1px solid var(--gray-200);
+  padding-top: var(--space-3);
+  margin-top: var(--space-1);
+}
+
+/* RAFALE — configuration de manche (v8.0.0, #16/#107, contrat rafale.md
+   §3.3). Même patron que .ardoise-section ci-dessus. */
+.rafale-section {
   display: flex;
   flex-direction: column;
   gap: var(--space-3);

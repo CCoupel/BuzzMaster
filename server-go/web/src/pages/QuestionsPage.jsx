@@ -15,6 +15,7 @@ import QuestionCard from '../components/QuestionCard'
 import AIGenerateModal from '../components/AIGenerateModal'
 import QcmAnswersEditor from '../components/QcmAnswersEditor'
 import MotionCardMemoryEditor from '../components/MotionCardMemoryEditor'
+import RafalePoolAlert from '../components/RafalePoolAlert'
 import './QuestionsPage.css'
 import './ConfigPage.css'
 import '../styles/sliders.css'
@@ -76,6 +77,18 @@ export default function QuestionsPage() {
     ],
     // ARDOISE fields (v5.6.0)
     ardoiseKeyboardType: 'AZERTY',
+    // RAFALE fields (v8.0.0, #16/#107, contrat rafale.md §3.3) — pas un
+    // énoncé/réponse, une CONFIGURATION de manche : catégories multi
+    // (RAFALE_CATEGORIES), difficulté unique (RAFALE_DIFFICULTY), mode
+    // (RAFALE_MODE), temps par question (RAFALE_QUESTION_TIME, défaut 3s),
+    // plafond dur (RAFALE_MAX_QUESTIONS, défaut 100, max 100). TIME/POINTS
+    // réutilisent les champs génériques déjà présents plus bas (durée de
+    // manche / barème d'une bonne réponse).
+    rafaleCategories: [],
+    rafaleDifficulty: 1,
+    rafaleMode: 'SOLO',
+    rafaleQuestionTime: 3,
+    rafaleMaxQuestions: 100,
     // MEMOTION fields (v5.0.0)
     motionMode: 'SOLO',
     // #184/B-F4 — chaque carte porte désormais `type` + les valeurs de
@@ -762,8 +775,21 @@ export default function QuestionsPage() {
       const updates = { [field]: value }
       // Auto-set pointsTarget when type changes
       if (field === 'type') {
-        // QCM, MEMORY, MEMOTION and ARDOISE default to TEAM, SPEEDY defaults to PLAYER
-        updates.pointsTarget = (value === 'QCM' || value === 'MEMORY' || value === 'MEMOTION' || value === 'ARDOISE') ? 'TEAM' : 'PLAYER'
+        // QCM, MEMORY, MEMOTION, ARDOISE and RAFALE default to TEAM, SPEEDY defaults to PLAYER
+        updates.pointsTarget = (value === 'QCM' || value === 'MEMORY' || value === 'MEMOTION' || value === 'ARDOISE' || value === 'RAFALE') ? 'TEAM' : 'PLAYER'
+        // RAFALE (v8.0.0, #16, contrat rafale.md §3.3) — défauts distincts
+        // du reste des types : durée de MANCHE (120s, pas 30s) et barème
+        // de 2pts/bonne réponse (maquette rafale-v8.html §2). Uniquement
+        // appliqué en ENTRANT dans RAFALE, jamais en sortant (une valeur
+        // déjà saisie par l'admin pour un autre type n'est pas écrasée par
+        // erreur si l'admin revient sur RAFALE après l'avoir quitté —
+        // repris à l'identique à chaque sélection, cohérent avec le fait
+        // que ces deux champs sont remis à zéro par handleNewQuestion/
+        // chargés depuis la question par handleQuestionClick de toute façon).
+        if (value === 'RAFALE') {
+          updates.time = '120'
+          updates.points = '2'
+        }
       }
       return { ...prev, ...updates }
     })
@@ -787,7 +813,7 @@ export default function QuestionsPage() {
     setEditingId(question.ID)
     const qType = question.TYPE || 'SPEEDY'
     // Default pointsTarget based on type if not set
-    const defaultTarget = (qType === 'QCM' || qType === 'MEMORY' || qType === 'ARDOISE') ? 'TEAM' : 'PLAYER'
+    const defaultTarget = (qType === 'QCM' || qType === 'MEMORY' || qType === 'ARDOISE' || qType === 'RAFALE') ? 'TEAM' : 'PLAYER'
 
     // Load memory pairs from question data
     let memoryPairs = [
@@ -961,6 +987,12 @@ export default function QuestionsPage() {
       motionMemorizeDuration: question.MOTION_MEMORIZE_DURATION || 0,
       // ARDOISE fields
       ardoiseKeyboardType: question.ARDOISE_KEYBOARD_TYPE || 'AZERTY',
+      // RAFALE fields (v8.0.0, #16/#107, contrat rafale.md §3.3)
+      rafaleCategories: question.RAFALE_CATEGORIES || [],
+      rafaleDifficulty: question.RAFALE_DIFFICULTY || 1,
+      rafaleMode: question.RAFALE_MODE || 'SOLO',
+      rafaleQuestionTime: question.RAFALE_QUESTION_TIME || 3,
+      rafaleMaxQuestions: question.RAFALE_MAX_QUESTIONS || 100,
       points: question.POINTS || '1',
       time: question.TIME || '30',
       media: null,
@@ -1057,6 +1089,13 @@ export default function QuestionsPage() {
       motionMemorizeDuration: 0,
       // ARDOISE fields
       ardoiseKeyboardType: 'AZERTY',
+      // RAFALE fields (v8.0.0, #16/#107) — voir commentaire de l'état
+      // initial (useState ci-dessus) pour le détail des champs.
+      rafaleCategories: [],
+      rafaleDifficulty: 1,
+      rafaleMode: 'SOLO',
+      rafaleQuestionTime: 3,
+      rafaleMaxQuestions: 100,
       points: '1',
       time: '30',
       media: null,
@@ -1291,6 +1330,10 @@ export default function QuestionsPage() {
       const validCards = formData.motionCards.filter(c => c.rectoTheme.trim())
       if (validCards.length < 2) return
     }
+    if (formData.type === 'RAFALE') {
+      // Contrat rafale.md §3.3 — RAFALE_CATEGORIES : "multi-sélection, ≥1"
+      if (formData.rafaleCategories.length === 0) return
+    }
 
     setIsUploading(true)
 
@@ -1487,6 +1530,21 @@ export default function QuestionsPage() {
 
       // Set answer to number of cards for display
       data.append('answer', `${formData.motionCards.length} cartes`)
+    } else if (formData.type === 'RAFALE') {
+      // RAFALE mode — configuration de manche (contrat rafale.md §3.3),
+      // aucun énoncé/réponse propre (les questions viennent du réservoir,
+      // /admin/rafale). `category` (singulier) n'est PAS utilisé par ce
+      // type (§3.3 : "Non utilisé — RAFALE porte RAFALE_CATEGORIES
+      // (multi)") — jamais ajouté ici, contrairement aux autres types.
+      data.append('RAFALE_CATEGORIES', JSON.stringify(formData.rafaleCategories))
+      data.append('RAFALE_DIFFICULTY', String(formData.rafaleDifficulty))
+      data.append('RAFALE_MODE', formData.rafaleMode)
+      data.append('RAFALE_QUESTION_TIME', String(formData.rafaleQuestionTime))
+      data.append('RAFALE_MAX_QUESTIONS', String(formData.rafaleMaxQuestions))
+      // Réponse d'affichage dans la liste des questions (patron MEMORY/
+      // MEMOTION ci-dessus — `answer` reste un champ purement informatif
+      // pour QuestionCard.jsx, jamais lu par le moteur RAFALE).
+      data.append('answer', `${formData.rafaleCategories.length} categorie(s) - ${'★'.repeat(formData.rafaleDifficulty)}`)
     }
 
     if (formData.media) {
@@ -2220,7 +2278,12 @@ export default function QuestionsPage() {
                   </div>
                 </div>
 
-                {/* Category Selector — boucle unifiée hardcoded + custom (#95) + bouton + (#97) */}
+                {/* Category Selector — boucle unifiée hardcoded + custom (#95) + bouton + (#97).
+                    Absent en RAFALE (v8.0.0, #16) : contrat rafale.md §3.3
+                    — "CATEGORY : Non utilisé — RAFALE porte
+                    RAFALE_CATEGORIES (multi)", remplacé par le
+                    multi-sélecteur de la section RAFALE plus bas. */}
+                {formData.type !== 'RAFALE' && (
                 <div className="form-group">
                   <label>Categorie</label>
                   <div className="category-selector">
@@ -2326,6 +2389,7 @@ export default function QuestionsPage() {
                     return <span className="category-label" style={{ color: meta.color }}>{meta.label}</span>
                   })()}
                 </div>
+                )}
 
                 {/* Points Target Selector */}
                 <div className="form-group">
@@ -3101,6 +3165,111 @@ export default function QuestionsPage() {
                   </div>
                 )}
 
+                {/* RAFALE — configuration de manche (v8.0.0, #16/#107,
+                    contrat rafale.md §3.3, tâche 26 du plan). "Points"/
+                    "Temps (s)" ci-dessous (form-row générique) portent ici
+                    le BARÈME (points par bonne réponse) et la DURÉE DE
+                    MANCHE — mêmes champs génériques que les autres types
+                    (TIME/POINTS réutilisés tel quel, contrat §3.3). */}
+                {formData.type === 'RAFALE' && (
+                  <div className="rafale-section">
+                    <div className="form-group">
+                      <label>Categories (au moins une)</label>
+                      <div className="category-selector">
+                        {[...Object.keys(CATEGORIES), ...customCategories.map(c => c.key)].map(key => {
+                          const meta = categoryMeta(key, customCategories)
+                          if (!meta) return null
+                          const active = formData.rafaleCategories.includes(key)
+                          return (
+                            <button
+                              key={key}
+                              type="button"
+                              className={`category-btn ${active ? 'active' : ''}`}
+                              style={{ '--cat-color': meta.color }}
+                              onClick={() => setFormData(prev => ({
+                                ...prev,
+                                rafaleCategories: active
+                                  ? prev.rafaleCategories.filter(k => k !== key)
+                                  : [...prev.rafaleCategories, key],
+                              }))}
+                              title={meta.label}
+                            >
+                              <CategoryBadge catKey={key} customCategories={customCategories} size="lg" chip={false} />
+                            </button>
+                          )
+                        })}
+                      </div>
+                    </div>
+
+                    <div className="form-group">
+                      <label>Difficulte (une seule par manche)</label>
+                      <div className="memotion-difficulty-row">
+                        {[1, 2, 3].map(d => (
+                          <button
+                            key={d}
+                            type="button"
+                            className={`memotion-diff-btn ${formData.rafaleDifficulty === d ? 'active' : ''}`}
+                            onClick={() => handleInputChange('rafaleDifficulty', d)}
+                          >
+                            {'★'.repeat(d)}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="form-group">
+                      <label htmlFor="rafale-mode-input">Mode</label>
+                      <select
+                        id="rafale-mode-input"
+                        value={formData.rafaleMode}
+                        onChange={(e) => handleInputChange('rafaleMode', e.target.value)}
+                      >
+                        <option value="SOLO">Solo — une seule equipe</option>
+                        <option value="CHACUN_SON_TOUR">Chacun son tour</option>
+                        <option value="TANT_QUE_JE_GAGNE">Tant que je gagne</option>
+                        <option value="MAILLON_FAIBLE">Maillon faible</option>
+                      </select>
+                    </div>
+
+                    <div className="form-row">
+                      <div className="form-group">
+                        <label htmlFor="rafale-question-time-input">Temps par question (s)</label>
+                        <input
+                          id="rafale-question-time-input"
+                          type="number"
+                          value={formData.rafaleQuestionTime}
+                          onChange={(e) => handleInputChange('rafaleQuestionTime', parseInt(e.target.value) || 1)}
+                          min="1"
+                          max="30"
+                        />
+                      </div>
+                      <div className="form-group">
+                        <label htmlFor="rafale-max-questions-input">Plafond de questions</label>
+                        <input
+                          id="rafale-max-questions-input"
+                          type="number"
+                          value={formData.rafaleMaxQuestions}
+                          onChange={(e) => handleInputChange('rafaleMaxQuestions', Math.min(100, parseInt(e.target.value) || 1))}
+                          min="1"
+                          max="100"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Alerte de pool (contrat §7.2) — mêmes 3 états
+                        qu'avant le lancement (GamePage.jsx), calculés ici
+                        depuis les catégories/difficulté en cours d'édition
+                        pour guider l'admin AVANT même de sauvegarder la
+                        manche. */}
+                    <RafalePoolAlert
+                      categories={formData.rafaleCategories}
+                      difficulty={formData.rafaleDifficulty}
+                      roundTime={parseInt(formData.time) || 0}
+                      questionTime={formData.rafaleQuestionTime}
+                    />
+                  </div>
+                )}
+
                 <div className="form-row">
                   {/* Hide Points for MEMORY and MEMOTION - calculated per pair/card */}
                   {formData.type !== 'MEMORY' && formData.type !== 'MEMOTION' && (
@@ -3131,8 +3300,9 @@ export default function QuestionsPage() {
                   )}
                 </div>
 
-                {/* Hide Image question/answer for MEMORY/MEMOTION only — ARDOISE supports images (#94) */}
-                {formData.type !== 'MEMORY' && formData.type !== 'MEMOTION' && (
+                {/* Hide Image question/answer for MEMORY/MEMOTION/RAFALE — ARDOISE supports images (#94).
+                    RAFALE (v8.0.0, #16) — aucun média, contrat §3.3/D3 (texte seul, réservoir). */}
+                {formData.type !== 'MEMORY' && formData.type !== 'MEMOTION' && formData.type !== 'RAFALE' && (
                   <>
                     <div className="form-group">
                       <label htmlFor="media-input">Image question (optionnel)</label>
