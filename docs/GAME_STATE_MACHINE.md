@@ -136,11 +136,107 @@ Si la sélection des participants cesse d'être conforme **alors que la phase es
 - **Comportement** : le motif d'attente est affiché à la régie et sur la tablette animateur (`#172 Bloc C`)
 - **Remise en conformité** : dès que la sélection redevient valide, repasse automatiquement en `READY` sans geste supplémentaire
 
+## Type de jeu RAFALE (v8.0.0, #16)
+
+### Vue d'ensemble
+
+RAFALE n'ajoute **aucune phase** à la machine à états principale (STOPPED/PREPARE/READY/COUNTDOWN/STARTED/PAUSED/REVEALED). C'est un **nouveau `QuestionType`** qui suit le patron MEMOTION : il porte une configuration de manche et génère des **sous-phases** internes.
+
+### Sous-phases RAFALE
+
+Au lieu d'une seule question avec une seule réponse, RAFALE enchaîne les questions automatiquement jusqu'à expiration du timer. Deux sous-phases gouvernent ce comportement :
+
+| Sous-phase | Description | Durée | Comportement |
+|---|---|---|---|
+| **QUESTION** | Question courante affichée, timer question actif (~3 s) | ~3 s | L'animateur valide/invalide, ou timer=0 → réponse invalide |
+| **ROUND_END** | Manche terminée, équipes attendent attribution des points | indéfini | Admin/anim clique une équipe → `TEAM_POINTS`, revient à STOPPED |
+
+```
+Début manche RAFALE (phase=STARTED)
+    ↓
+[QUESTION] — timer manche actif (~120 s), timer question actif (~3 s)
+    ↓
+    ├─ VALIDE → compteur++, rotation si applicable, pioche suivante
+    │
+    ├─ INVALIDE → rotation si applicable, pioche suivante
+    │
+    ├─ Timer question → 0 (identique à INVALIDE)
+    │
+    └─ Timer manche → 0 OU pool épuisé OU plafond MAX_QUESTIONS
+                         ↓
+                    [ROUND_END]
+                         ↓
+                    Admin clique équipe (TEAM_POINTS) → fin manche
+
+```
+
+### Champs GameState RAFALE (tous présents, aucun `omitempty`)
+
+```go
+RAFALE_SUBPHASE          RafaleSubPhase  // "" | "QUESTION" | "ROUND_END"
+RAFALE_CURRENT_QUESTION  RafaleCurrent   // {ID, QUESTION, CATEGORY, DIFFICULTY} (JAMAIS ANSWER)
+RAFALE_QUESTION_TIME     int             // décompte timer question courant (ms)
+RAFALE_TEAM_COUNTERS     map[string]int  // compteur réponses correctes par équipe
+RAFALE_TEAM_BEST         map[string]int  // meilleur compteur atteint (MAILLON_FAIBLE only)
+RAFALE_CURRENT_TEAM      string          // équipe jouant (multi-mode)
+RAFALE_PARTICIPATING_TEAMS []string      // liste équipes (ordre de rotation)
+RAFALE_CURRENT_TEAM_COLOR []int          // RGB couleur équipe active
+RAFALE_ASKED_COUNT       int             // nombre total de questions tirées
+RAFALE_POOL_REMAINING    int             // questions encore disponibles
+RAFALE_EXHAUSTED         bool            // true si pool vide pendant manche
+```
+
+**Persistance** : tous ces champs sont **éphémères** (exclus de `PersistedGameState`). Seul `rafale_used.json` persiste.
+
+### Actions WebSocket spécifiques RAFALE
+
+**Client → Serveur** (allow-list fermée) :
+- `RAFALE_VALIDATE` (admin+anim) : réponse jugée correcte
+- `RAFALE_INVALIDATE` (admin+anim) : réponse jugée incorrecte
+- `RAFALE_SET_TEAMS` (admin) : sélection équipes + ordre de rotation
+
+**Serveur → Client** :
+- `RAFALE_ANSWER` (admin+anim uniquement) : `{ID, ANSWER}` — réponse attendue, jamais via `GameState`
+- `RAFALE_TICK` (tous) : `{QUESTION_TIME}` — décompte timer question (payload léger)
+- `UPDATE_TIMER` (tous) : décompte timer manche (réutilise action existante, inchangée)
+
+### Modes de jeu RAFALE
+
+| Mode | Rotation | Compteur sur Mauvais |
+|---|---|---|
+| **SOLO** | Aucune | N/A (pas de rotation) |
+| **CHACUN_SON_TOUR** | À chaque réponse (V ou I) | Gardé, équipe suivante |
+| **TANT_QUE_JE_GAGNE** | Réponse I uniquement | Gardé, même équipe continue |
+| **MAILLON_FAIBLE** | À chaque réponse | Remis à 0, meilleur mémorisé |
+
+**Attribution de points** : aucun point réel pendant manche. Fin de manche → sous-phase `ROUND_END`, l'admin clique équipe → action `TEAM_POINTS` (valeur pré-remplie = compteur_retenu × barème_manche, ajustable).
+
+### Épuisement du réservoir
+
+Si la pool devient vide avant expiration du timer de manche :
+- `RAFALE_EXHAUSTED = true`
+- Sous-phase → `ROUND_END`
+- Timer de manche arrêté, message explicite à l'animateur
+- **Jamais de reproposition** d'une question déjà vue
+
+### Pré-validations avant démarrage
+
+Avant `START`, l'admin voit :
+- **Nombre de questions disponibles** pour filtres catégories + difficulté actuels
+- **Besoin estimé** = `ceil(durée_manche / temps_par_question)` (majorant)
+- **Trois états d'alerte** :
+  - 🔴 Bloquant : `disponibles == 0` → démarrage refusé
+  - 🟠 Avertissement : `disponibles < besoin_estimé` → démarrage autorisé, risque fin anticipée
+  - ✅ Neutre : `disponibles ≥ besoin_estimé` → OK
+
+**Plafond dur** : `RAFALE_MAX_QUESTIONS` (défaut 100, maximum 100). Fin manche si atteint, même si timer tourne encore.
+
 ## Implémentation
 
 ### Backend (Go)
 - Fichier: `server-go/internal/game/engine.go`
 - Les phases sont définies comme constantes: `PhaseStopped`, `PhasePrepare`, `PhaseReady`, `PhaseStarted`, `PhasePaused`, `PhaseRevealed`
+- Sous-phases RAFALE : `RafaleSubPhaseQuestion`, `RafaleSubPhaseRoundEnd` (constantes `internal/game/models.go`)
 
 #### Verrou de phase sur `Engine.Start()` (#172)
 La méthode `Engine.Start()` refuse toute phase autre que `READY` :
