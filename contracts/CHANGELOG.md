@@ -45,14 +45,29 @@
   `sendLEDSetMemoryMultiTeam` (actif `SOLID 255` / suivant `SOLID 128` / participant `DIM` /
   absent éteint), couleur résolue via `COLOR_NAME`. Aucun nouveau champ ni action : l'indicateur
   consomme `RAFALE_CURRENT_TEAM`, `RAFALE_CURRENT_TEAM_COLOR` et `RAFALE_PARTICIPATING_TEAMS`
-  déjà prévus. ⚠️ À vérifier par test : ces champs doivent traverser `SerializeForVPlayer`, qui
-  construit sa propre carte de champs.
+  déjà prévus. Traversée de `SerializeForVPlayer`/`buildVPlayerPayloads` (chemin de fan-out
+  "chaud", qui construit sa propre carte de champs indépendamment) vérifiée et verrouillée par
+  test — `rafale_vplayer_traversal_test.go` (protocol) et `rafale_vplayer_fanout_test.go`
+  (cmd/server) : les 3 champs traversaient déjà par construction (listes d'exclusion, jamais
+  d'inclusion), aucun code de sérialisation n'a eu besoin d'être modifié.
+
+- **[CHANGED]** *(complément post-review, code-review-20260828-182815.md — MINEUR)* Factorisation
+  du helper de rotation d'équipe (`team_rotation.go`, `rotateTeam`, partagé par `rotateMotionTeam`
+  et le nouveau `rotateRafaleTeam`) : changement de comportement subtil sur
+  `MEMOTION_CURRENT_TEAM_COLOR`. Avant la factorisation, `rotateMotionTeam` ne mettait à jour la
+  couleur que si l'équipe suivante existait encore dans `e.data.Teams` — sinon la **dernière
+  couleur connue** était conservée. Le helper partagé assigne désormais la couleur
+  **inconditionnellement** (`nil` si l'équipe est absente de `teamsData`). Cas limite très
+  improbable en usage normal (suppression d'une équipe pendant qu'elle reste listée dans
+  `MEMOTION_PARTICIPATING_TEAMS`, pendant une manche MEMOTION multi-équipes en cours) — jugé plus
+  sûr (évite d'afficher une couleur périmée) mais **non identique** à l'existant ; non corrigé
+  (le cas n'est pas couvert par un test dédié), documenté ici pour traçabilité comme demandé par
+  la revue.
 
 **Aucun changement BREAKING** : tous les ajouts sont additifs. Les types de questions existants
 (SPEEDY, QCM, MEMORY, MEMOTION, ARDOISE), le timer global, `TEAM_POINTS` et les charges utiles
-`/tv`, `/player`, `/anim`, buzzers restent inchangés à périmètre constant. Le seul point de
-vigilance de non-régression est la **factorisation du helper de rotation d'équipe** partagé avec
-MEMOTION (`rotateMotionTeam`) — comportement MEMOTION à préserver à l'identique.
+`/tv`, `/player`, `/anim`, buzzers restent inchangés à périmètre constant, à l'exception du cas
+limite `MEMOTION_CURRENT_TEAM_COLOR` documenté juste au-dessus.
 
 ---
 
