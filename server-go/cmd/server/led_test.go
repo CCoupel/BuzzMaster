@@ -817,6 +817,55 @@ func TestLEDRafale_AllBuzzers_Solo_AllOff(t *testing.T) {
 	}
 }
 
+// TestLEDRafale_AllBuzzers_MultiTeam_NonParticipant_Off closes the 4th cell
+// of the grid for RAFALE — TestLEDRafale_AllBuzzers_MultiTeam_ActiveNextOther
+// above only covers active/next/other-participant, mirroring
+// TestLEDMemory_MultiTeam_Next; this one mirrors
+// TestLEDMemory_MultiTeam_NotSelected. sendLEDSetMultiTeam is the SAME
+// shared function for both modes (main.go, "shared by MEMORY ... and RAFALE"
+// doc comment), so this exercises the actual RAFALE CALL SITE
+// (sendLEDSetForBuzzerRafale/sendLEDSetRafaleTeams) with a team NOT in
+// RafaleParticipatingTeams — a future regression passing the wrong
+// participants slice at that call site (e.g. nil, or MemoryParticipatingTeams
+// by copy-paste) would not be caught by the MEMORY-only version of this
+// test, which never touches the RAFALE call site at all.
+func TestLEDRafale_AllBuzzers_MultiTeam_NonParticipant_Off(t *testing.T) {
+	app := newTestApp(t)
+
+	question := &game.Question{
+		ID: "rq1", Type: game.QuestionTypeRafale,
+		TypedContent: game.TypedContent{RafaleMode: string(game.RafaleModeChacunSonTour)},
+	}
+	app.engine.Ready("rq1", question)
+	app.engine.SetBumpers(map[string]*game.Bumper{
+		"MAC:A1": {Team: "TeamA"},
+		"MAC:B1": {Team: "TeamB"},
+		"MAC:C1": {Team: "TeamC"}, // not selected
+	})
+	// Only A and B participate; RafaleCurrentTeam = TeamA (first).
+	if err := app.engine.SetRafaleParticipatingTeams([]string{"TeamA", "TeamB"}); err != nil {
+		t.Fatalf("SetRafaleParticipatingTeams failed: %v", err)
+	}
+	app.engine.SetPhase(game.PhaseStarted)
+
+	app.sendLEDSetAllBuzzers()
+
+	sC := app.bumperLEDState["MAC:C1"]
+	if sC.Color != [3]int{0, 0, 0} || sC.Intensity != 0 {
+		t.Errorf("RAFALE non-participating team: expected OFF (0,0,0 intensity=0), got color=%v intensity=%d", sC.Color, sC.Intensity)
+	}
+
+	// Non-regression: A (active) and B (next) are unaffected by C's exclusion.
+	sA := app.bumperLEDState["MAC:A1"]
+	if sA.Effect != "SOLID" || sA.Intensity != 255 {
+		t.Errorf("RAFALE active (non-regression): expected SOLID 255, got effect=%s intensity=%d", sA.Effect, sA.Intensity)
+	}
+	sB := app.bumperLEDState["MAC:B1"]
+	if sB.Effect != "SOLID" || sB.Intensity != 128 {
+		t.Errorf("RAFALE next (non-regression): expected SOLID 128, got effect=%s intensity=%d", sB.Effect, sB.Intensity)
+	}
+}
+
 // ---------------------------------------------------------------------------
 // #113 B3 fast-follow (code-review 20260726) — MEMORY dim intensity must be
 // tone-relative too, not just NORMAL. A flat Intensity 64 nearly extinguishes a

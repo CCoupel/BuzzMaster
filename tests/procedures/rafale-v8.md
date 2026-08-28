@@ -7,14 +7,16 @@ aucun navigateur fiable dans les sessions agents)
 **Issues** : #107 (moteur solo) · #197 (réservoir + éditeur) · #198 (interface TV/anim) · #199 (modes multi)
 **Contrat de référence** : `contracts/rafale.md` · **Maquette** : `docs/mockups/rafale-v8.html`
 
-> **Écrit en Batch 1 (test-writer), avant l'implémentation complète du moteur RAFALE.** Cette
-> procédure couvre l'ENSEMBLE du milestone (#107/#197/#198/#199, Batches 1→3) — elle ne peut être
-> exécutée intégralement qu'une fois les trois batches livrés et un binaire QUALIF buildé. Au moment
-> de l'écriture, seul le socle #197 (réservoir + éditeur) et l'essentiel de l'affichage TV/anim
-> (#198) sont livrés — le moteur solo (#107) et les 4 modes multi-équipes (#199) restent à livrer.
-> Les scénarios 1-4 (une manche par mode) et le scénario 9 (appui buzzer ignoré) ne sont donc
-> exécutables qu'après le Batch 2/3. Ne pas exécuter cette procédure avant que le CDP confirme le
-> milestone complet livré en QUALIF.
+> **Mise à jour (relecture post-Batch 2/3)** : le milestone est désormais **complet côté code** —
+> #197 (réservoir/éditeur), #107 (moteur solo), #199 (4 modes multi-équipes) et #198 (interface
+> TV/anim/VPlayer/LED, indicateur d'équipe active sur les 3 canaux) sont tous livrés et couverts par
+> la suite automatisée (`internal/game/rafale_test.go`, `rafale_modes_test.go`,
+> `cmd/server/rafale_107_test.go`, `cmd/server/led_test.go`, `internal/protocol/rafale_leak_test.go` +
+> `rafale_vplayer_traversal_test.go`, `cmd/server/rafale_vplayer_fanout_test.go`, et les tests
+> frontend `*.rafale.test.jsx` / `useWebSocket.rafale.test.js`). Les 11 scénarios ci-dessous sont
+> donc TOUS exécutables dès qu'un binaire QUALIF est buildé sur `milestone/v8.0.0` — plus de
+> restriction de batch. Cette procédure reste la SEULE validation de bout en bout non couverte par
+> l'automatisé (rendu visuel réel, LED physiques, ressenti manette/tablette en conditions de jeu).
 
 ---
 
@@ -195,7 +197,7 @@ appui (entrée).
 
 | Étape | Action | Résultat Attendu | Résultat Obtenu | OK ? |
 |-------|--------|-----------------|----------------|------|
-| 1 | Choisir un filtre catégorie/difficulté dont le pool est VIDE (0 disponible) | Démarrage **bloqué**, message explicite | | |
+| 1 | Choisir un filtre catégorie/difficulté dont le pool est VIDE (0 disponible) | Démarrage **bloqué** : le bouton START est grisé/désactivé (survol : message explicite), alerte rouge « Aucune question disponible pour ce filtre » | | |
 | 2 | Choisir un filtre avec un pool NON vide mais INFÉRIEUR au besoin estimé (⌈TIME/RAFALE_QUESTION_TIME⌉) | **Avertissement** affiché, démarrage reste **autorisé** | | |
 | 3 | Choisir un filtre avec un pool LARGEMENT suffisant | Information neutre (pas d'alerte), démarrage normal | | |
 

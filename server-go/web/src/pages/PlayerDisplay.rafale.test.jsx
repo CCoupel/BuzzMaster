@@ -131,6 +131,27 @@ const renderTV = (overrides = {}) => {
   return render(<PlayerDisplay />)
 }
 
+// Indicateur « équipe active » VPlayer (v8.0.0, #16/#198, contrat §8.1/§8.2,
+// tâche 38) : implémenté DANS PlayerDisplay.jsx (branche `if (isVPlayer)` du
+// même bloc `isRafale`, ~L2839-2867), PAS dans VPlayerPage.jsx — ce dernier
+// se contente de monter <PlayerDisplay isVPlayer={true} .../> (VPlayerPage.jsx
+// L758-772), exactement comme pour ARDOISE (PlayerDisplay.ardoise.test.jsx
+// renderVPlayer). Il n'existe donc PAS de fichier `VPlayerPage.rafale.
+// test.jsx` séparé à écrire : la couverture VPlayer vit ici, dans CE
+// fichier, avec ce helper.
+const renderVPlayer = (overrides = {}) => {
+  useGame.mockReturnValue(makeMock(overrides))
+  return render(
+    <PlayerDisplay
+      isVPlayer={true}
+      playerName="Joueur1"
+      playerNameColor={[99, 102, 241]}
+      teamName={overrides.myTeamName ?? 'Équipe A'}
+      teamColor={[99, 102, 241]}
+    />
+  )
+}
+
 beforeEach(() => {
   vi.clearAllMocks()
   Object.defineProperty(document.documentElement, 'requestFullscreen', {
@@ -217,6 +238,109 @@ describe('PlayerDisplay — RAFALE : indicateur équipe active (mode multi)', ()
       rafaleTeamCounters: eightTeams,
     })
     expect(container.querySelectorAll('.rafale-tv-team').length).toBeLessThanOrEqual(6)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Classement en direct trié (tâche 34, contrat §6.1 : "compteur, pas un
+// score réel"). Le tri est décroissant sur RAFALE_TEAM_COUNTERS ; les 6
+// premières équipes (après tri) sont retenues, pas les 6 premières par
+// ordre d'apparition dans RAFALE_PARTICIPATING_TEAMS.
+// ---------------------------------------------------------------------------
+
+describe('PlayerDisplay — RAFALE TV : classement en direct trié par compteur (tâche 34)', () => {
+  it('les équipes sont affichées en ordre DÉCROISSANT de compteur, pas dans l\'ordre de RAFALE_PARTICIPATING_TEAMS', () => {
+    const { container } = renderTV({
+      phase: 'STARTED',
+      rafaleParticipatingTeams: ['Faible', 'Forte', 'Moyenne'],
+      rafaleTeamCounters: { Faible: 1, Forte: 9, Moyenne: 4 },
+    })
+    const names = Array.from(container.querySelectorAll('.rafale-tv-team-name')).map((el) => el.textContent)
+    expect(names).toEqual(['Forte', 'Moyenne', 'Faible'])
+  })
+
+  it('le plafond de 6 retient les 6 MEILLEURS compteurs, pas les 6 premiers de la liste', () => {
+    const counters = { A: 1, B: 2, C: 3, D: 4, E: 5, F: 6, G: 7, H: 8 } // 8 équipes
+    const { container } = renderTV({
+      phase: 'STARTED',
+      rafaleParticipatingTeams: Object.keys(counters),
+      rafaleTeamCounters: counters,
+    })
+    const names = Array.from(container.querySelectorAll('.rafale-tv-team-name')).map((el) => el.textContent)
+    expect(names).toEqual(['H', 'G', 'F', 'E', 'D', 'C']) // les 6 plus hauts compteurs, triés
+    expect(names).not.toContain('A')
+    expect(names).not.toContain('B')
+  })
+})
+
+// ---------------------------------------------------------------------------
+// VPlayer — indicateur « équipe active » (tâche 38, contrat §8.1/§8.2).
+// Vit DANS PlayerDisplay.jsx (branche `if (isVPlayer)` du bloc `isRafale`),
+// pas dans VPlayerPage.jsx — voir le commentaire de renderVPlayer ci-dessus.
+// Layout ENTIÈREMENT différent du TV : pas de timer/question ici (répondu
+// à l'oral), affichage seul, aucun élément interactif — actif uniquement en
+// mode multi (RAFALE_MODE ≠ SOLO).
+// ---------------------------------------------------------------------------
+
+describe('PlayerDisplay — RAFALE VPlayer : indicateur équipe active (tâche 38)', () => {
+  it('mode SOLO (participants vide) : message neutre générique, aucun indicateur d\'équipe', () => {
+    const { container } = renderVPlayer({ phase: 'STARTED', rafaleParticipatingTeams: [] })
+    const zone = container.querySelector('.rafale-vplayer-fullscreen')
+    expect(zone).not.toBeNull()
+    expect(zone.classList.contains('rafale-vplayer-neutral')).toBe(true)
+    expect(zone.textContent).toContain('Manche RAFALE en cours')
+  })
+
+  it('mode multi, c\'est le tour de MA propre équipe : indicateur plein écran "À VOUS DE RÉPONDRE"', () => {
+    const { container } = renderVPlayer({
+      phase: 'STARTED',
+      rafaleParticipatingTeams: ['Équipe A', 'Équipe B'],
+      rafaleCurrentTeam: 'Équipe A', // == teamName passé à PlayerDisplay (renderVPlayer défaut)
+      rafaleCurrentTeamColor: [99, 102, 241],
+    })
+    const zone = container.querySelector('.rafale-vplayer-fullscreen')
+    expect(zone).not.toBeNull()
+    expect(zone.classList.contains('rafale-vplayer-active')).toBe(true)
+    expect(zone.textContent).toContain('À VOUS DE')
+    expect(zone.textContent).toContain('RÉPONDRE')
+  })
+
+  it('mode multi, c\'est le tour d\'une AUTRE équipe : indicatif neutre, mentionne l\'équipe active, AUCUN appel à l\'action', () => {
+    const { container } = renderVPlayer({
+      phase: 'STARTED',
+      rafaleParticipatingTeams: ['Équipe A', 'Équipe B'],
+      rafaleCurrentTeam: 'Équipe B', // pas l'équipe de CE VPlayer (Équipe A)
+      rafaleCurrentTeamColor: [234, 179, 8],
+    })
+    const zone = container.querySelector('.rafale-vplayer-fullscreen')
+    expect(zone).not.toBeNull()
+    expect(zone.classList.contains('rafale-vplayer-neutral')).toBe(true)
+    expect(zone.classList.contains('rafale-vplayer-active')).toBe(false)
+    expect(zone.textContent).toContain('Équipe B')
+    expect(zone.textContent).not.toContain('À VOUS DE')
+  })
+
+  it('AUCUN élément interactif rendu dans l\'indicateur RAFALE VPlayer, dans aucun état (contrat §8.1 : VPlayer strictement passif)', () => {
+    for (const currentTeam of ['Équipe A', 'Équipe B']) {
+      const { container, unmount } = renderVPlayer({
+        phase: 'STARTED',
+        rafaleParticipatingTeams: ['Équipe A', 'Équipe B'],
+        rafaleCurrentTeam: currentTeam,
+      })
+      const zone = container.querySelector('.rafale-vplayer-fullscreen')
+      expect(zone).not.toBeNull()
+      expect(zone.querySelectorAll('button, input, select, textarea, a[href], [role="button"], [tabindex]')).toHaveLength(0)
+      unmount()
+    }
+  })
+
+  it('VPlayer ne rend JAMAIS le bloc TV (.game-content-zones.rafale-tv) — layouts mutuellement exclusifs', () => {
+    const { container } = renderVPlayer({
+      phase: 'STARTED',
+      rafaleParticipatingTeams: ['Équipe A', 'Équipe B'],
+      rafaleCurrentTeam: 'Équipe A',
+    })
+    expect(container.querySelector('.game-content-zones.rafale-tv')).toBeNull()
   })
 })
 
