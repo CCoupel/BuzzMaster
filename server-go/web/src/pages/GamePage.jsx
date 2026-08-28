@@ -6,7 +6,7 @@ import { useCategories } from '../hooks/useCategories'
 import { categoryMeta } from '../utils/categoryUtils'
 import { getRgbColor } from '../utils/colorUtils'
 import { sortQuestionsByOrder } from '../utils/questionOrder'
-import { sortTeamsByBuzzOrder } from '../utils/buzzOrder'
+import { sortTeamsByBuzzOrder, sortTeamsByRafaleCounter } from '../utils/buzzOrder'
 import { formatArdoiseDelay, sortArdoiseEntries } from '../utils/ardoiseOrder'
 import { getMotionGridCols, getMotionCardCoord, getMotionCardPoints, isMotionSecretMode } from '../utils/motionGrid'
 import {
@@ -22,6 +22,8 @@ import {
   calcMemoryScore,
   calcArdoiseDefaultPoints,
   resolvePointsAward,
+  rafaleCounterForTeam,
+  calcRafaleTeamAward,
 } from '../utils/pointsAward'
 import Button from '../components/Button'
 import Card from '../components/Card'
@@ -54,6 +56,7 @@ export default function GamePage() {
     simulateButton,
     simulatePong,
     sendMessage,
+    rafaleSetTeams,
   } = useGame()
 
   const [timeInput, setTimeInput] = useState(30)
@@ -85,6 +88,9 @@ export default function GamePage() {
   const selectedTeams = gameState.MEMORY_PARTICIPATING_TEAMS || []
   // MEMOTION team selection
   const selectedMotionTeams = gameState.MEMOTION_PARTICIPATING_TEAMS || []
+  // RAFALE team selection (v8.0.0, #16/#199, contrat rafale.md §5.1) — même
+  // patron que MEMORY/MEMOTION ci-dessus.
+  const selectedRafaleTeams = gameState.RAFALE_PARTICIPATING_TEAMS || []
 
   // Group bumpers by team and sort by timestamp
   const teamBumpers = useMemo(() => {
@@ -176,9 +182,20 @@ export default function GamePage() {
         return errorsA - errorsB
       })
     }
+
+    // RAFALE (v8.0.0, #16/#199, contrat rafale.md §6.1, tâche 34) —
+    // classement par compteur de manche, mêmes phases actives que MEMORY
+    // ci-dessus. SOLO exclu (une seule équipe, tri sans objet).
+    if (gameState.question?.TYPE === 'RAFALE' &&
+        gameState.question?.RAFALE_MODE &&
+        gameState.question.RAFALE_MODE !== 'SOLO' &&
+        ['STARTED', 'PAUSED', 'STOPPED'].includes(gameState.phase)) {
+      return sortTeamsByRafaleCounter(teamsWithPlayers, gameState.question, gameState.RAFALE_TEAM_COUNTERS, gameState.RAFALE_TEAM_BEST)
+    }
+
     // For all other cases, use the standard sortedTeams order (filtered)
     return teamsWithPlayers
-  }, [sortedTeams, gameState.question, gameState.phase, gameState.MEMORY_TEAM_PAIRS, gameState.MEMORY_TEAM_ERRORS])
+  }, [sortedTeams, gameState.question, gameState.phase, gameState.MEMORY_TEAM_PAIRS, gameState.MEMORY_TEAM_ERRORS, gameState.RAFALE_TEAM_COUNTERS, gameState.RAFALE_TEAM_BEST])
 
   // Teams that have at least one VJoueur (ARDOISE panel filter #93)
   const vplayerTeamNames = useMemo(() =>
@@ -343,6 +360,23 @@ export default function GamePage() {
         : [...selectedMotionTeams, teamName]
     }
     sendMessage('MEMOTION_SET_TEAMS', { TEAMS: newSelection })
+  }
+
+  // RAFALE (v8.0.0, #16/#199, contrat rafale.md §5.1, tâche 33) — même
+  // patron que toggleTeam/toggleMotionTeam ci-dessus. `rafaleSetTeams`
+  // (useWebSocket.js, posé en Batch 2) émet RAFALE_SET_TEAMS.
+  const toggleRafaleTeam = (teamName) => {
+    const rafaleMode = gameState.question?.RAFALE_MODE
+    const isSolo = !rafaleMode || rafaleMode === 'SOLO'
+    let newSelection
+    if (isSolo) {
+      newSelection = selectedRafaleTeams.includes(teamName) ? [] : [teamName]
+    } else {
+      newSelection = selectedRafaleTeams.includes(teamName)
+        ? selectedRafaleTeams.filter(t => t !== teamName)
+        : [...selectedRafaleTeams, teamName]
+    }
+    rafaleSetTeams(newSelection)
   }
 
   const handleBumperClick = (bumperMac, ctrlKey = false) => {
@@ -654,6 +688,67 @@ export default function GamePage() {
                       className={`memory-team-chip available${notReady ? ' not-ready' : ''}`}
                       style={{ backgroundColor: teamColor, '--team-color': teamColor }}
                       onClick={notReady ? undefined : () => toggleMotionTeam(team.name)}
+                      title={notReady ? 'Buzzer(s) non prêt(s)' : 'Cliquer pour ajouter'}
+                    >
+                      <span className="chip-name">{team.name}</span>
+                      {!notReady && <span className="chip-action">+</span>}
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )
+        })()}
+
+        {/* RAFALE Team Selection — même patron que Memory/Memotion ci-dessus
+            (v8.0.0, #16/#199, contrat rafale.md §5.1, tâche 33). */}
+        {(gameState.phase === 'PREPARE' || gameState.phase === 'READY') &&
+         gameState.question?.TYPE === 'RAFALE' && (() => {
+          const rafaleMode = gameState.question?.RAFALE_MODE
+          const isSolo = !rafaleMode || rafaleMode === 'SOLO'
+          const modeLabel = {
+            SOLO: 'Mode SOLO',
+            CHACUN_SON_TOUR: 'Chacun son tour',
+            TANT_QUE_JE_GAGNE: 'Tant que je gagne',
+            MAILLON_FAIBLE: 'Maillon faible',
+          }[rafaleMode] || 'Mode SOLO'
+          const teamsWithBuzzers = sortedTeams.filter(t => t.buzzers && t.buzzers.length > 0)
+          const selected = teamsWithBuzzers.filter(t => selectedRafaleTeams.includes(t.name))
+          const available = teamsWithBuzzers.filter(t => !selectedRafaleTeams.includes(t.name))
+          return (
+            <div className={`memory-team-selector ${isSolo ? 'solo-mode' : 'multi-mode'}`}>
+              <div className="memory-selector-label">
+                🌀 RAFALE · {modeLabel}
+              </div>
+              <div className="memory-chips-row">
+                {selected.map((team, idx) => {
+                  const teamColor = getRgbColor(team.COLOR)
+                  return (
+                    <div
+                      key={team.name}
+                      className={`memory-team-chip selected${isSolo ? ' solo-active' : ''}`}
+                      style={{ backgroundColor: teamColor, '--team-color': teamColor }}
+                      onClick={!isSolo ? () => toggleRafaleTeam(team.name) : undefined}
+                      title={!isSolo ? 'Cliquer pour retirer' : undefined}
+                    >
+                      {!isSolo && <span className="chip-order">{idx + 1}</span>}
+                      <span className="chip-name">{team.name}</span>
+                      {!isSolo && <span className="chip-action">×</span>}
+                    </div>
+                  )
+                })}
+                {selected.length > 0 && available.length > 0 && (
+                  <span className="memory-chips-divider">|</span>
+                )}
+                {available.map(team => {
+                  const teamColor = getRgbColor(team.COLOR)
+                  const notReady = !isTeamReady(team)
+                  return (
+                    <div
+                      key={team.name}
+                      className={`memory-team-chip available${notReady ? ' not-ready' : ''}`}
+                      style={{ backgroundColor: teamColor, '--team-color': teamColor }}
+                      onClick={notReady ? undefined : () => toggleRafaleTeam(team.name)}
                       title={notReady ? 'Buzzer(s) non prêt(s)' : 'Cliquer pour ajouter'}
                     >
                       <span className="chip-name">{team.name}</span>
@@ -1104,6 +1199,19 @@ export default function GamePage() {
                     errorPenalty: gameState.question?.MEMORY_CONFIG?.ERROR_PENALTY || 0,
                     completionBonus: gameState.question?.MEMORY_CONFIG?.COMPLETION_BONUS || 0,
                   } : null}
+                  rafaleStats={gameState.question?.TYPE === 'RAFALE' ? {
+                    counter: gameState.RAFALE_TEAM_COUNTERS?.[team.name] || 0,
+                    // Suggestion de fin de manche (contrat §6.2) — uniquement
+                    // en sous-phase ROUND_END, null sinon (badge de compteur
+                    // "live" affiché à la place, voir TeamCard.jsx).
+                    suggestedPoints: gameState.RAFALE_SUBPHASE === 'ROUND_END'
+                      ? calcRafaleTeamAward(
+                          gameState.question,
+                          pointsInput,
+                          rafaleCounterForTeam(gameState.question, team.name, gameState.RAFALE_TEAM_COUNTERS, gameState.RAFALE_TEAM_BEST)
+                        )?.amount ?? null
+                      : null,
+                  } : null}
                   onTeamClick={(teamName) => {
                     if (['STOPPED', 'REVEALED'].includes(gameState.phase)) {
                       // For Memory multi-team, calculate team-specific points
@@ -1141,6 +1249,16 @@ export default function GamePage() {
                         const teamBumperList = Object.values(bumpers).filter(b => b.TEAM === teamName)
                         const award = calcQcmTeamAward(gameState.question, pointsInput, teamBumperList, gameState.qcmInvalidated?.length || 0)
                         pointsToAward = award.amount
+                      } else if (gameState.question?.TYPE === 'RAFALE') {
+                        // RAFALE (v8.0.0, #16/#199, contrat rafale.md §6.2) —
+                        // suggestion pré-remplie par pointsInput (ajustable,
+                        // même mécanisme que QCM/MEMORY ci-dessus) ×
+                        // compteur retenu (RAFALE_TEAM_BEST en
+                        // MAILLON_FAIBLE, RAFALE_TEAM_COUNTERS sinon,
+                        // utils/pointsAward.js, mutualisé avec AnimPage.jsx).
+                        const counter = rafaleCounterForTeam(gameState.question, teamName, gameState.RAFALE_TEAM_COUNTERS, gameState.RAFALE_TEAM_BEST)
+                        const award = calcRafaleTeamAward(gameState.question, pointsInput, counter)
+                        if (award) pointsToAward = award.amount
                       }
                       setTeamPoints(teamName, pointsToAward)
                     }
