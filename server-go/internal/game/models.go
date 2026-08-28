@@ -425,6 +425,44 @@ func AllQuestionTypes() []QuestionType {
 	}
 }
 
+// RafaleQuestion is one question in the RAFALE reservoir — a global pool of
+// text-only question/answer pairs, independent from Quiz/MEMOTION questions
+// (contracts/rafale.md §2.4/§3.1, milestone #16, #197). Stored as a single
+// file (data/files/rafale/reservoir.json), never one directory per question:
+// RAFALE questions carry no media (arbitrage D3).
+type RafaleQuestion struct {
+	ID         string           `json:"ID"`         // stable identifier, unique within the reservoir
+	Question   string           `json:"QUESTION"`   // statement, text only
+	Answer     string           `json:"ANSWER"`     // expected answer, text only
+	Category   QuestionCategory `json:"CATEGORY"`   // reuses the existing enum + custom categories on disk
+	Difficulty int              `json:"DIFFICULTY"` // 1..3 — same scale as MotionCard.Difficulty
+}
+
+// RafaleSubPhase is the sub-phase of a RAFALE round (GameState.RafaleSubPhase,
+// "" outside a RAFALE question) — contracts/rafale.md §4. Defined here
+// (models) ahead of the GameState fields that will carry it (#107, Phase 2)
+// so the reservoir/editor work (#197) doesn't need to wait on the solo
+// engine.
+type RafaleSubPhase string
+
+const (
+	RafaleSubPhaseNone     RafaleSubPhase = ""          // inactive
+	RafaleSubPhaseQuestion RafaleSubPhase = "QUESTION"  // question asked, question timer running
+	RafaleSubPhaseRoundEnd RafaleSubPhase = "ROUND_END" // round over, points attribution pending
+)
+
+// RafaleCurrent is the question currently asked during a RAFALE round,
+// WITHOUT the expected answer (contracts/rafale.md §2.3: the answer never
+// transits through GameState — it is broadcast separately via the dedicated
+// RAFALE_ANSWER action, to admin+anim only). See RafaleSubPhase's doc
+// comment for why this is defined ahead of #107.
+type RafaleCurrent struct {
+	ID         string `json:"ID"`
+	Question   string `json:"QUESTION"`
+	Category   string `json:"CATEGORY"`
+	Difficulty int    `json:"DIFFICULTY"`
+}
+
 // Question represents a quiz question
 //
 // Answer is declared here explicitly (not left to the embedded TypedContent
