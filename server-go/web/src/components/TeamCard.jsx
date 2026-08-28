@@ -388,6 +388,7 @@ export default function TeamCard({
   qcmAcquiredPoints = null, // Points earned by this team on a QCM question (null = did not answer correctly)
   memoryStats = null, // { pairs, errors, totalPairs, pointsPerPair, errorPenalty, completionBonus }
   questionType = null, // Question type (QCM, NORMAL, MEMORY)
+  rafaleStats = null, // { counter, suggestedPoints } — v8.0.0, #16/#199, contrat rafale.md §6
 }) {
   const [showTooltip, setShowTooltip] = useState(false)
   const [otaBuzzer, setOtaBuzzer] = useState(null) // buzzer object for OTA modal
@@ -489,9 +490,26 @@ export default function TeamCard({
           {rankBadge && <span className="rank-badge">{rankBadge}</span>}
           <h3 className="team-name">{name}</h3>
         </div>
-        {/* Memory acquired points badge replaces PRET badge */}
-        {/* QCM acquired points badge (correct answer in REVEALED phase) */}
-        {memoryAcquiredPoints !== null && gamePhase === 'REVEALED' ? (
+        {/* RAFALE (v8.0.0, #16/#199, contrat rafale.md §6) — badge dédié,
+            AVANT la chaîne memory/qcm/ready ci-dessous : pas de gate sur
+            gamePhase === 'REVEALED' (RAFALE n'atteint jamais cette phase,
+            §2.1), la sous-phase ROUND_END est le signal pertinent. Deux
+            variantes : compteur "live" pendant la manche (§6.1, "compteur,
+            pas un score réel"), suggestion pré-remplie en ROUND_END (§6.2). */}
+        {rafaleStats && rafaleStats.suggestedPoints !== null ? (
+          <motion.span
+            className="memory-acquired-badge rafale-suggested-badge"
+            initial={{ scale: 0 }}
+            animate={{ scale: 1 }}
+            title="Valeur suggeree — ajustable via le champ Points avant de cliquer"
+          >
+            → {rafaleStats.suggestedPoints} pts sugg.
+          </motion.span>
+        ) : rafaleStats ? (
+          <span className="rafale-counter-badge">
+            {rafaleStats.counter} bonne{rafaleStats.counter > 1 ? 's' : ''}
+          </span>
+        ) : memoryAcquiredPoints !== null && gamePhase === 'REVEALED' ? (
           <motion.span
             className="memory-acquired-badge"
             initial={{ scale: 0 }}
