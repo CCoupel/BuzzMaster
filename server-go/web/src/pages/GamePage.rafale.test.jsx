@@ -73,7 +73,15 @@ vi.mock('./GamePage.css', () => ({}))
 import { useGame } from '../hooks/GameContext'
 import GamePage from './GamePage'
 
+// ⚠️ `...overrides` spreadé EN PREMIER : sinon un `overrides.gameState`
+// PARTIEL (ex. { question: {...} } seul, sans `phase`) écraserait
+// entièrement la clé `gameState` fusionnée juste en dessous, faisant
+// disparaître `phase: 'STOPPED'` silencieusement (bug réel identifié et
+// corrigé dans GamePage.rafaleStartGate.test.jsx — inoffensif ICI
+// puisqu'aucun test de ce fichier ne dépend de `phase`/`isPlaying`, mais
+// corrigé par cohérence pour ne pas re-piéger un futur test ajouté ici).
 const makeGameMock = (overrides = {}) => ({
+  ...overrides,
   gameState: {
     phase: 'STOPPED',
     question: { ID: '1', TYPE: 'RAFALE', STATUS: 'STOPPED', CATEGORY: 'HISTORY', RAFALE_DIFFICULTY: 2, RAFALE_MODE: 'SOLO', RAFALE_QUESTION_TIME: 3 },
@@ -102,7 +110,6 @@ const makeGameMock = (overrides = {}) => ({
   simulatePong: vi.fn(),
   sendMessage: vi.fn(),
   rafaleSetTeams: vi.fn(),
-  ...overrides,
 })
 
 describe('GamePage — panneau de pré-lancement RAFALE : catégorie unique (bugfix 2026-08-29, SHA 8f8ff92d)', () => {
