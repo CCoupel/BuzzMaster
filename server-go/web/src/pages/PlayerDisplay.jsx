@@ -50,6 +50,10 @@ const GAME_TYPE_COLORS = {
   ARDOISE:  { color: '#fcd34d', shadow: 'rgba(252,211,77,0.6)' },
   QCM:      { color: '#34d399', shadow: 'rgba(52,211,153,0.6)' },
   MEMOTION: { color: '#f472b6', shadow: 'rgba(244,114,182,0.6)' },
+  // RAFALE (v8.0.0, #16/#198) — même couleur que le badge de type et le
+  // sélecteur (utils/questionTypeMeta.js, #f97316) : bugfix cohérence UI,
+  // même esprit que le badge de QuestionCard.jsx (retour QUALIF 8.0.0.3).
+  RAFALE:   { color: '#f97316', shadow: 'rgba(249,115,22,0.6)' },
 }
 
 function ReadyCategoryDisplay({ catKey, customCategories, variant, gameType }) {
@@ -1485,8 +1489,12 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
               </motion.div>
             )}
 
-            {/* COUNTDOWN State - Timer + Category animates to question zone + Big countdown number */}
-            {showCountdown && (isSpeedy || isArdoise) && (
+            {/* COUNTDOWN State - Timer + Category animates to question zone + Big countdown number.
+                RAFALE (v8.0.0, #16/#198, bugfix TV vide — retour utilisateur QUALIF 8.0.0.3) : inclus
+                ici comme SPEEDY/ARDOISE — zone-question restera vide (RAFALE_CATEGORIES est multi,
+                pas de catégorie unique à animer), mais timer + décompte s'affichent, comme les autres
+                types à ce stade. */}
+            {showCountdown && (isSpeedy || isArdoise || isRafale) && (
               <div className="game-content-zones">
                 {/* Zone 1: Timer */}
                 <div className="zone-timer">
@@ -1549,8 +1557,16 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
               </div>
             )}
 
-            {/* READY State - Non-QCM, Non-Memory: Timer + centered message (same layout as QCM) */}
-            {showReady && (isSpeedy || isArdoise) && (
+            {/* READY State - Non-QCM, Non-Memory: Timer + centered message (same layout as QCM).
+                RAFALE (v8.0.0, #16/#198, bugfix TV vide en READY — retour utilisateur QUALIF
+                8.0.0.3) : inclus ici comme SPEEDY/ARDOISE — ReadyCategoryDisplay retombe sur son
+                repli générique "PRÉPAREZ-VOUS" (RAFALE_CATEGORIES est multi, pas de catégorie
+                unique connue avant tirage de la première question, §4 du contrat). Cause racine :
+                `showGameContent` (bloc RAFALE dédié, plus bas) ne couvre que STARTED/PAUSED/
+                STOPPED/REVEALED — READY (et COUNTDOWN ci-dessus) en étaient exclus, et `isRafale`
+                étant dans `isKnownOtherType`, RAFALE ne retombait plus non plus sur ce bloc
+                générique par défaut (#183) — l'écran restait vide faute d'un chemin explicite. */}
+            {showReady && (isSpeedy || isArdoise || isRafale) && (
               <div className="game-content-zones">
                 {/* Zone 1: Timer */}
                 <div className="zone-timer">
