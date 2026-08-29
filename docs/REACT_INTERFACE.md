@@ -1540,3 +1540,105 @@ Fichier CSS partagé déclarant :
 - `.entracte-panel*` — styles du panneau (centrage, taille, typographie relative)
 - `@keyframes` combinant `scale` et `rotate`
 - `@media (prefers-reduced-motion: reduce)` — animation neutralisée
+
+---
+
+## Pages et Composants — Mode RAFALE (v8.0.0, #16)
+
+### Page : `/admin/rafale` — Éditeur du réservoir
+
+**Fichier** : `web/src/pages/RafalePage.jsx` + `RafalePage.css`
+
+**Fonctionnalités** :
+- **CRUD complet** : création, affichage, modification, suppression questions
+- **Filtres** : catégorie, difficulté, état "utilisée" (booléen dérivé)
+- **Compteurs** : total questions, utilisées, disponibles
+- **Validation** : énoncé/réponse non vides, difficulté 1–3, catégorie connue
+
+**Routes** :
+```javascript
+<Route path="/admin/rafale" element={<RafalePage />} />
+```
+
+**Composants réutilisés** : `CategoryBadge`, `useCategories`, `useCategoryFilter`, `Button`, `Card`
+
+### Composant : `RafaleTimers` — Double timer
+
+**Fichier** : `web/src/components/RafaleTimers.jsx` + `RafaleTimers.css`
+
+**Affichage** :
+- Timer manche (~120 s) — barre longue
+- Timer question (~3 s) — barre courte
+
+**Props** :
+- `matchTime` (ms) : décompte manche
+- `questionTime` (ms) : décompte question
+
+**Design** : Deux instances du composant `Timer.jsx` plutôt que modification mono-valeur (respect du contrat existant).
+
+### Composant : `AnimRafaleActions` — Boutons validation
+
+**Fichier** : `web/src/components/AnimRafaleActions.jsx`
+
+**Affichage** :
+- Bouton RÉPONSE VALIDE (vert, large)
+- Bouton RÉPONSE INVALIDE (rouge, large)
+- Réponse attendue + équipe active (mode-aware)
+
+**Props** :
+- `answer` (string) : réponse courante
+- `currentTeam` (string) : équipe active
+- `rafaleMode` (string) : mode courant (pour adapter libellé)
+
+**CSS** : Réutilise `.anim-conduct-btn` / `-go` / `-danger` (aucun style nouveau)
+
+**Emplacement** : Panneau L2 (`AnimConductPanel.jsx`) avec booléen `isRafale`
+
+### Vue TV RAFALE — Affichage statique
+
+**Fichier** : `web/src/pages/PlayerDisplay.jsx` + `PlayerDisplay.css`
+
+**Affichage** (mode `isRafale`) :
+- Double timer (manche + question, en haut)
+- Question courante (centre, gros texte)
+- Équipe active (bandeau fort, bas)
+- Compteurs équipes (top 3–6 équipes)
+
+**Invariants** :
+- `overflow: hidden` (jamais auto/scroll)
+- Unités viewport (`vh`, `vw`, `%`)
+- Contenu plafonné (max 6 équipes visibles)
+
+**Dispatch** :
+```jsx
+{questionType === "RAFALE" && <RafaleDisplay ...props />}
+```
+
+### Composant : `RafalePoolAlert` — Alerte pré-manche
+
+**Fichier** : `web/src/components/RafalePoolAlert.jsx`
+
+**États d'alerte** (3 booléens indépendants) :
+- 🔴 **Bloquant** : `disponibles == 0` → démarrage refusé (bouton START grisé)
+- 🟠 **Avertissement** : `disponibles < besoin_estimé` → démarrage autorisé, message risque
+- ✅ **Neutre** : `disponibles ≥ besoin_estimé` → OK, message info
+
+**Props** :
+- `available` (int) : questions disponibles
+- `estimatedNeed` (int) : besoin estimé
+
+### Case à cocher — Sauvegarde sélective
+
+**Fichier** : `web/src/pages/BackupPage.jsx`
+
+**Ajout** :
+```jsx
+<label>
+  <input type="checkbox" name="rafale" />
+  Questions RAFALE (réservoir + flag utilisées)
+</label>
+```
+
+**Comportement** :
+- Inclus/exclus `data/files/rafale/` ET `data/config/rafale_used.json` ensemble
+- Aucune sélection partielle

@@ -282,3 +282,41 @@ la phase n'est pas `STARTED`, et l'entracte n'est atteignable qu'en dehors de `S
 (phases autorisées : `STOPPED`, `PREPARE`, `READY`, `NEW_GAME`, `REVEALED`). Aucun 
 code n'a besoin d'être ajouté pour ça — c'est une propriété héritée, maintenant 
 verrouillée par test.
+
+---
+
+## 14. LED — Mode RAFALE (v8.0.0, #16)
+
+### Grille LED multi-équipes RAFALE
+
+Réutilise le patron de `sendLEDSetMemoryMultiTeam`, factorisation **byte-for-byte identical** :
+
+| Buzzer | État | Effet LED |
+|--------|------|-----------|
+| Équipe **active** | Jouant (QUESTION) | `SOLID`, couleur d'équipe, `INTENSITY = 255` |
+| Équipe **suivante** | Attente | `SOLID`, couleur d'équipe, `INTENSITY = 128` |
+| Autres **participantes** | Attente | `DIM`, `INTENSITY = dimIntensityFor(rgb)` |
+| **Non participantes** | Absent | Éteint, `{0,0,0}`, `INTENSITY = 0` |
+| **Mode SOLO** | N/A | Tous éteints (pas de rotation) |
+
+**Résolution couleur** : via `COLOR_NAME` (ex: `"rouge"`, `"bleu-profond"`), jamais RGB codée en dur.
+
+**Rafraîchissement** :
+- À chaque rotation d'équipe (VALIDATE/INVALIDATE → équipe suivante)
+- À chaque changement de question (pioche, avance)
+- À chaque modification sélection équipes (RAFALE_SET_TEAMS)
+
+**Protocole ACK** : inchangé (v3.8.0) — le serveur attend l'ACK LED comme pour MEMORY.
+
+**Factorisation** : helper partagé `sendLEDSetMultiTeam(currentTeam, nextTeam, participatingTeams, teamsData)` utilisé par MEMORY et RAFALE — **non-régression MEMORY obligatoire** (suite test identique avant/après refactor).
+
+**Exemple** :
+```
+Équipes : Red, Blue, Green
+Mode : CHACUN_SON_TOUR
+State courant : Red joue
+
+LED Buzzers Red : SOLID rouge 255
+LED Buzzers Blue : SOLID bleu 128
+LED Buzzers Green : DIM (atténué) 0-100
+```
