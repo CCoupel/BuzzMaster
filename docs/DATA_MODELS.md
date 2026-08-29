@@ -1221,15 +1221,17 @@ Réutilise la structure `Question` avec champs existants + nouveaux champs `Type
 **Champs existants réutilisés** :
 - `TIME` : durée totale de la manche (secondes, défaut 120)
 - `POINTS` : barème de manche (points d'une bonne réponse)
+- `CATEGORY` : catégorie filtre pioche (**catégorie unique**, comme tous les types)
 
 **Champs nouveaux** (portés par `TypedContent`, tous `omitempty`) :
 ```go
-RafaleCategories   []string `json:"RAFALE_CATEGORIES,omitempty"`    // multi-sélection, ≥1
 RafaleDifficulty   int      `json:"RAFALE_DIFFICULTY,omitempty"`    // 1–3, unique par manche
 RafaleMode         string   `json:"RAFALE_MODE,omitempty"`          // SOLO|CHACUN_SON_TOUR|TANT_QUE_JE_GAGNE|MAILLON_FAIBLE
 RafaleQuestionTime int      `json:"RAFALE_QUESTION_TIME,omitempty"` // secondes par question, défaut 3
 RafaleMaxQuestions int      `json:"RAFALE_MAX_QUESTIONS,omitempty"` // plafond dur, défaut 100, max 100
 ```
+
+**Note sur `CATEGORY`** : RAFALE réutilise le champ générique `CATEGORY` de `Question` (catégorie **unique**), exactement comme SPEEDY/QCM/MEMORY/MEMOTION/ARDOISE. Cette unification permet au frontend de lire la catégorie sur la card générique (`question.CATEGORY`) sans branche RAFALE spécifique. La pioche filtre le réservoir selon cette catégorie unique.
 
 ### Structure GameState RAFALE
 
