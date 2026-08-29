@@ -11,6 +11,7 @@ import Button from '../components/Button'
 import Card, { CardHeader, CardBody } from '../components/Card'
 import CategoryBalance from '../components/CategoryBalance'
 import CategoryBadge from '../components/CategoryBadge'
+import CategorySelector from '../components/CategorySelector'
 import QuestionCard from '../components/QuestionCard'
 import AIGenerateModal from '../components/AIGenerateModal'
 import QcmAnswersEditor from '../components/QcmAnswersEditor'
@@ -49,11 +50,6 @@ export default function QuestionsPage() {
   const bgInputRef = useRef(null)
   const [draggedBgIndex, setDraggedBgIndex] = useState(null)
 
-  // Add category inline form state (#97 + #100)
-  const [showAddCategory, setShowAddCategory] = useState(false)
-  const [newCategoryName, setNewCategoryName] = useState('')
-  const [newCategoryFile, setNewCategoryFile] = useState(null)
-  const [addCategoryError, setAddCategoryError] = useState('')
 
   // Form state
   const [formData, setFormData] = useState({
@@ -2278,116 +2274,24 @@ export default function QuestionsPage() {
                   </div>
                 </div>
 
-                {/* Category Selector — boucle unifiée hardcoded + custom (#95) + bouton + (#97).
-                    Absent en RAFALE (v8.0.0, #16) : contrat rafale.md §3.3
-                    — "CATEGORY : Non utilisé — RAFALE porte
-                    RAFALE_CATEGORIES (multi)", remplacé par le
-                    multi-sélecteur de la section RAFALE plus bas. */}
+                {/* Category Selector — CategorySelector.jsx (v8.0.0, #16/#197,
+                    bugfix cohérence UI), extrait ici (#95/#97/#100), aussi
+                    utilisé par RafalePage.jsx — un seul composant, plus de
+                    variante dupliquée. Absent en RAFALE (contrat rafale.md
+                    §3.3 — "CATEGORY : Non utilisé — RAFALE porte
+                    RAFALE_CATEGORIES (multi)"), remplacé par le
+                    multi-sélecteur de la section RAFALE plus bas (lui-même
+                    bâti sur category-selector/category-btn/CategoryBadge,
+                    juste avec une logique de toggle-array). */}
                 {formData.type !== 'RAFALE' && (
                 <div className="form-group">
                   <label>Categorie</label>
-                  <div className="category-selector">
-                    {[...Object.keys(CATEGORIES), ...customCategories.map(c => c.key)].map(key => {
-                      const meta = categoryMeta(key, customCategories)
-                      if (!meta) return null
-                      return (
-                        <button
-                          key={key}
-                          type="button"
-                          className={`category-btn ${formData.category === key ? 'active' : ''}`}
-                          style={{ '--cat-color': meta.color }}
-                          onClick={() => handleInputChange('category', formData.category === key ? '' : key)}
-                          title={meta.label}
-                        >
-                          <CategoryBadge catKey={key} customCategories={customCategories} size="lg" chip={false} />
-                        </button>
-                      )
-                    })}
-                    {/* Bouton + pour créer une catégorie (#97) */}
-                    {!showAddCategory && (
-                      <button
-                        type="button"
-                        className="category-btn category-btn--add"
-                        title="Créer une catégorie"
-                        onClick={() => { setShowAddCategory(true); setAddCategoryError('') }}
-                      >
-                        +
-                      </button>
-                    )}
-                  </div>
-                  {/* Formulaire inline ajout catégorie (#97) */}
-                  {showAddCategory && (
-                    <div className="add-category-inline">
-                      <input
-                        type="text"
-                        className="add-category-input"
-                        placeholder="Nom de la catégorie..."
-                        value={newCategoryName}
-                        maxLength={50}
-                        onChange={(e) => { setNewCategoryName(e.target.value); setAddCategoryError('') }}
-                        onKeyDown={(e) => { if (e.key === 'Escape') { setShowAddCategory(false); setNewCategoryName(''); setNewCategoryFile(null) } }}
-                        autoFocus
-                      />
-                      <label className="add-category-file-label">
-                        <input
-                          type="file"
-                          accept=".png,.jpg,.jpeg,.webp"
-                          style={{ display: 'none' }}
-                          onChange={(e) => { setNewCategoryFile(e.target.files[0] || null); setAddCategoryError('') }}
-                        />
-                        <span className="add-category-file-btn">
-                          {newCategoryFile ? '✓ ' + newCategoryFile.name : '📁 Choisir une image…'}
-                        </span>
-                      </label>
-                      <div className="add-category-actions">
-                        <button
-                          type="button"
-                          className="add-category-validate"
-                          onClick={async () => {
-                            if (!newCategoryName.trim()) { setAddCategoryError('Nom invalide'); return }
-                            if (!newCategoryFile) { setAddCategoryError('Image requise'); return }
-                            try {
-                              const fd = new FormData()
-                              fd.append('name', newCategoryName.trim())
-                              fd.append('file', newCategoryFile)
-                              // Ne PAS définir Content-Type — le browser gère le boundary
-                              const res = await fetch('/api/categories', { method: 'POST', body: fd })
-                              if (res.ok) {
-                                const created = await res.json()
-                                setShowAddCategory(false)
-                                setNewCategoryName('')
-                                setNewCategoryFile(null)
-                                setAddCategoryError('')
-                                await refetchCategories()
-                                handleInputChange('category', created.key)
-                              } else if (res.status === 409) {
-                                setAddCategoryError('Cette catégorie existe déjà')
-                              } else {
-                                setAddCategoryError('Nom invalide ou image non supportée')
-                              }
-                            } catch {
-                              setAddCategoryError('Erreur réseau')
-                            }
-                          }}
-                        >
-                          Valider
-                        </button>
-                        <button
-                          type="button"
-                          className="add-category-cancel"
-                          onClick={() => { setShowAddCategory(false); setNewCategoryName(''); setNewCategoryFile(null); setAddCategoryError('') }}
-                        >
-                          Annuler
-                        </button>
-                      </div>
-                      {addCategoryError && <p className="add-category-error">{addCategoryError}</p>}
-                    </div>
-                  )}
-                  {formData.category && (() => {
-                    const meta = categoryMeta(formData.category, customCategories)
-                    if (!meta) return null
-                    return <span className="category-label" style={{ color: meta.color }}>{meta.label}</span>
-                  })()}
+                  <CategorySelector
+                    value={formData.category}
+                    onChange={(key) => handleInputChange('category', key)}
+                    customCategories={customCategories}
+                    onRefetchCategories={refetchCategories}
+                  />
                 </div>
                 )}
 
@@ -3217,18 +3121,34 @@ export default function QuestionsPage() {
                       </div>
                     </div>
 
-                    <div className="form-group">
-                      <label htmlFor="rafale-mode-input">Mode</label>
-                      <select
-                        id="rafale-mode-input"
-                        value={formData.rafaleMode}
-                        onChange={(e) => handleInputChange('rafaleMode', e.target.value)}
-                      >
-                        <option value="SOLO">Solo — une seule equipe</option>
-                        <option value="CHACUN_SON_TOUR">Chacun son tour</option>
-                        <option value="TANT_QUE_JE_GAGNE">Tant que je gagne</option>
-                        <option value="MAILLON_FAIBLE">Maillon faible</option>
-                      </select>
+                    {/* Mode Selector — meme patron que MEMORY/MEMOTION
+                        ci-dessus (v8.0.0, #16/#199, bugfix cohérence UI) :
+                        .memory-mode-selector/-options/-option, radios,
+                        reutilises tels quels (aucune nouvelle classe). */}
+                    <div className="memory-mode-selector">
+                      <label>Mode de jeu</label>
+                      <div className="memory-mode-options">
+                        {[
+                          { value: 'SOLO', label: 'SOLO', desc: 'Une equipe joue seule' },
+                          { value: 'CHACUN_SON_TOUR', label: 'CHACUN SON TOUR', desc: 'Rotation apres chaque reponse (juste ou fausse)' },
+                          { value: 'TANT_QUE_JE_GAGNE', label: 'TANT QUE JE GAGNE', desc: 'Garde la main si bonne reponse' },
+                          { value: 'MAILLON_FAIBLE', label: 'MAILLON FAIBLE', desc: 'Compteur remis a 0 sur erreur, meilleur score memorise' },
+                        ].map(mode => (
+                          <label key={mode.value} className="memory-mode-option">
+                            <input
+                              type="radio"
+                              name="rafaleMode"
+                              value={mode.value}
+                              checked={formData.rafaleMode === mode.value}
+                              onChange={(e) => handleInputChange('rafaleMode', e.target.value)}
+                            />
+                            <span className="memory-mode-label">
+                              <strong>{mode.label}</strong>
+                              <small>{mode.desc}</small>
+                            </span>
+                          </label>
+                        ))}
+                      </div>
                     </div>
 
                     <div className="form-row">

@@ -186,13 +186,15 @@ describe('RafalePage — création', () => {
 
     // Le formulaire (label sans `for`/`id`, markup réel de RafalePage.jsx)
     // est adressé par structure : un seul textarea (Énoncé), un seul input
-    // texte (Réponse), un seul select (Catégorie) dans .rafale-form.
+    // texte (Réponse), un bouton catégorie icône dans .rafale-form —
+    // CategorySelector (v8.0.0, #16/#197, bugfix cohérence UI), même
+    // composant que l'éditeur de question standard, plus de <select> texte.
     const form = container.querySelector('.rafale-form')
     fireEvent.change(form.querySelector('textarea'), {
       target: { value: 'Plus long fleuve du monde ?' },
     })
     fireEvent.change(form.querySelector('input[type="text"]'), { target: { value: 'Le Nil' } })
-    fireEvent.change(form.querySelector('select'), { target: { value: 'GEOGRAPHY' } })
+    fireEvent.click(within(form).getByTitle('Geographie'))
 
     fireEvent.click(screen.getByText('Ajouter'))
 

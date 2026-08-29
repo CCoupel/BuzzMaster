@@ -2,8 +2,9 @@ import { useState, useEffect, useCallback, useMemo } from 'react'
 import { motion } from 'framer-motion'
 import { useCategories } from '../hooks/useCategories'
 import { useCategoryFilter } from '../hooks/useCategoryFilter'
-import { CATEGORIES, categoryMeta } from '../utils/categoryUtils'
+import { categoryMeta } from '../utils/categoryUtils'
 import CategoryBadge from '../components/CategoryBadge'
+import CategorySelector from '../components/CategorySelector'
 import Button from '../components/Button'
 import Card from '../components/Card'
 import './RafalePage.css'
@@ -31,7 +32,7 @@ const EMPTY_FORM = { ID: null, QUESTION: '', ANSWER: '', CATEGORY: '', DIFFICULT
  * aucune liste de catégories parallèle (§3.1).
  */
 export default function RafalePage() {
-  const { categories: apiCategories } = useCategories()
+  const { categories: apiCategories, refetch: refetchCategories } = useCategories()
   const [questions, setQuestions] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -83,17 +84,6 @@ export default function RafalePage() {
   }, [categoryFiltered, selectedDifficulty, onlyUnused])
 
   const usedCount = useMemo(() => questions.filter(q => q.USED).length, [questions])
-
-  // Catalogue complet pour le formulaire — pas dérivé des questions déjà
-  // présentes (contrairement à `availableCategories` du filtre) : toutes
-  // les catégories connues (enum + custom, §3.1) doivent être proposables
-  // à la création, y compris une catégorie encore inutilisée dans le
-  // réservoir.
-  const formCategoryOptions = useMemo(() => {
-    const hardcoded = Object.entries(CATEGORIES).map(([key, meta]) => ({ key, label: meta.label }))
-    const custom = apiCategories.filter(c => c.isCustom).map(c => ({ key: c.key, label: c.name }))
-    return [...hardcoded, ...custom]
-  }, [apiCategories])
 
   const resetForm = () => {
     setForm(EMPTY_FORM)
@@ -292,16 +282,15 @@ export default function RafalePage() {
               </div>
               <div className="form-group">
                 <label>Categorie</label>
-                <select
+                {/* CategorySelector (v8.0.0, #16/#197, bugfix cohérence UI) —
+                    meme composant que l'editeur de question standard
+                    (QuestionsPage.jsx), plus de <select> texte distinct. */}
+                <CategorySelector
                   value={form.CATEGORY}
-                  onChange={e => setForm(prev => ({ ...prev, CATEGORY: e.target.value }))}
-                  required
-                >
-                  <option value="" disabled>Selectionner...</option>
-                  {formCategoryOptions.map(({ key, label }) => (
-                    <option key={key} value={key}>{label}</option>
-                  ))}
-                </select>
+                  onChange={(key) => setForm(prev => ({ ...prev, CATEGORY: key }))}
+                  customCategories={apiCategories}
+                  onRefetchCategories={refetchCategories}
+                />
               </div>
               <div className="form-group">
                 <label>Difficulte</label>
