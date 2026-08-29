@@ -122,9 +122,17 @@
   <b>⚠ RÉVISION DU 2026-08-28 — lire la section 9 avant d'implémenter l'affichage de la question.</b>
   Après plusieurs cycles de bugfix en QUALIF, le design de l'affichage de la question a été revu :
   l'encart « C'est le tour de … » est <strong>remplacé par la question elle-même</strong> sur TV,
-  ANIM et ADMIN. <strong>La section 9 fait autorité</strong> et remplace ce qui est montré en
-  §3 (bloc question <code>/anim</code>), §4 (bandeau TV) et §4bis (bandeau TV uniquement).
+  ANIM et ADMIN. <strong>La section 9 fait autorité</strong> sur l'affichage de la question et
+  remplace le bloc question de la §3 ainsi que celui de la §4.
   Le VPlayer (§4bis) est <strong>inchangé</strong> et reste conforme.
+</div>
+
+<div class="note">
+  <b>Retours utilisateur intégrés le 2026-08-28.</b> §1 validée · §2 validée, figée (catégorie
+  unique) · §3 mise en page conservée, <strong>panneau d'équipes enrichi</strong> (couleur,
+  mauvaises réponses, bonnes réponses consécutives) · §4 <strong>scores retirés de la TV</strong> et
+  encart « c'est le tour de » remplacé par la question · §4bis validée ·
+  §5 validée, avec <strong>attribution des points ajoutée sur <code>/anim</code></strong>.
 </div>
 
 <!-- ══════════════════════════════ 1. MACHINE À ÉTATS ══════════════════════════════ -->
@@ -350,20 +358,74 @@ l'épuisement.</p>
       <button class="vbtn vbtn-no">RÉPONSE INVALIDE<small>équipe suivante</small></button>
     </div>
 
-    <h3 style="margin-top:24px">Équipes</h3>
+    <h3 style="margin-top:24px">Équipes <span class="sub" style="text-transform:none;
+      letter-spacing:0;font-weight:400">— enrichi le 2026-08-28</span></h3>
     <div class="teams">
-      <div class="team active">
-        <div class="turn">à elle de jouer</div>
-        <div class="team-nm">Les Rouges</div>
-        <div class="team-ct">5</div>
-        <div class="team-sub">bonnes réponses</div>
+      <div class="team active" style="border-color:#da3633;padding:0;overflow:hidden">
+        <div style="background:#da3633;color:#fff;padding:6px;font-weight:800;font-size:.9rem">
+          Les Rouges</div>
+        <div class="turn" style="padding-top:8px">à elle de jouer</div>
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:2px;padding:8px 6px 12px">
+          <div><div style="font-size:1.5rem;font-weight:800;color:var(--success)">5</div>
+            <div class="team-sub">bonnes</div></div>
+          <div><div style="font-size:1.5rem;font-weight:800;color:var(--error)">2</div>
+            <div class="team-sub">mauvaises</div></div>
+          <div><div style="font-size:1.5rem;font-weight:800;color:var(--cyan)">3</div>
+            <div class="team-sub">d'affilée</div></div>
+        </div>
       </div>
-      <div class="team"><div class="turn">&nbsp;</div><div class="team-nm">Les Bleus</div>
-        <div class="team-ct">3</div><div class="team-sub">bonnes réponses</div></div>
-      <div class="team"><div class="turn">&nbsp;</div><div class="team-nm">Les Verts</div>
-        <div class="team-ct">4</div><div class="team-sub">bonnes réponses</div></div>
+
+      <div class="team" style="padding:0;overflow:hidden">
+        <div style="background:#1f6feb;color:#fff;padding:6px;font-weight:800;font-size:.9rem">
+          Les Bleus</div>
+        <div class="turn" style="padding-top:8px">&nbsp;</div>
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:2px;padding:8px 6px 12px">
+          <div><div style="font-size:1.5rem;font-weight:800;color:var(--success)">3</div>
+            <div class="team-sub">bonnes</div></div>
+          <div><div style="font-size:1.5rem;font-weight:800;color:var(--error)">4</div>
+            <div class="team-sub">mauvaises</div></div>
+          <div><div style="font-size:1.5rem;font-weight:800;color:var(--cyan)">0</div>
+            <div class="team-sub">d'affilée</div></div>
+        </div>
+      </div>
+
+      <div class="team" style="padding:0;overflow:hidden">
+        <div style="background:#2ea043;color:#fff;padding:6px;font-weight:800;font-size:.9rem">
+          Les Verts</div>
+        <div class="turn" style="padding-top:8px">&nbsp;</div>
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:2px;padding:8px 6px 12px">
+          <div><div style="font-size:1.5rem;font-weight:800;color:var(--success)">4</div>
+            <div class="team-sub">bonnes</div></div>
+          <div><div style="font-size:1.5rem;font-weight:800;color:var(--error)">1</div>
+            <div class="team-sub">mauvaises</div></div>
+          <div><div style="font-size:1.5rem;font-weight:800;color:var(--cyan)">2</div>
+            <div class="team-sub">d'affilée</div></div>
+        </div>
+      </div>
     </div>
   </div>
+</div>
+
+<div class="note warn">
+  <b>Impact contrat — deux champs manquent.</b> Le contrat ne prévoit aujourd'hui que
+  <code>RAFALE_TEAM_COUNTERS</code> (bonnes réponses) et <code>RAFALE_TEAM_BEST</code> (meilleure
+  série, Maillon faible). Afficher les <strong>mauvaises réponses</strong> et la <strong>série en
+  cours</strong> demande deux champs supplémentaires :
+  <br>· <code>RAFALE_TEAM_ERRORS</code> — <code>map[string]int</code>, précédent exact
+  <code>MemoryTeamErrors</code>
+  <br>· <code>RAFALE_TEAM_STREAK</code> — <code>map[string]int</code>, bonnes réponses consécutives
+  <em>en cours</em>
+  <br><br>La série en cours ne peut pas être déduite du compteur existant : en Maillon faible le
+  compteur <em>est</em> la série (il retombe à 0), mais dans les trois autres modes il cumule sans
+  jamais retomber. Les deux notions divergent donc dès qu'on quitte Maillon faible — d'où un champ
+  distinct. <code>RAFALE_TEAM_BEST</code> devient alors simplement le maximum historique de
+  <code>RAFALE_TEAM_STREAK</code>, ce qui unifie proprement les quatre modes.
+</div>
+
+<div class="note">
+  <b>Mode SOLO.</b> Ce panneau n'a de sens qu'en multi. En solo, une seule équipe joue : afficher
+  une grille de comparaison serait trompeur. À confirmer — proposition : en solo, ne montrer que
+  les trois compteurs de l'unique équipe, sans mise en concurrence.
 </div>
 
 <div class="note dang">
@@ -401,27 +463,20 @@ l'épuisement.</p>
       </div>
     </div>
 
-    <div style="text-align:center;padding:34px 20px">
+    <div style="margin:30px auto 0;max-width:820px;border:4px solid #da3633;border-radius:16px;
+      background:linear-gradient(160deg,#da363333,#da363311);padding:28px 30px;text-align:center">
       <div class="qmeta" style="justify-content:center">
+        <span class="chip" style="border-color:#da3633;color:#ff9b98">LES ROUGES</span>
         <span class="chip">Histoire</span><span class="chip">★★☆</span>
       </div>
-      <div style="font-size:2rem;font-weight:700;margin-top:10px">
+      <div style="font-size:2.1rem;font-weight:800;margin-top:14px;line-height:1.25">
         En quelle année est tombé le mur de Berlin ?</div>
-      <div style="margin-top:24px;background:linear-gradient(90deg,#da363322,#da363355,#da363322);
-        border:3px solid var(--error);border-radius:12px;padding:16px 24px;display:inline-block">
-        <div style="font-size:.75rem;color:var(--dim);letter-spacing:.18em">C'EST LE TOUR DE</div>
-        <div style="font-size:2.4rem;font-weight:900;letter-spacing:.04em;color:#fff">
-          LES ROUGES</div>
-      </div>
     </div>
 
-    <div class="teams">
-      <div class="team active"><div class="team-nm">Les Rouges</div><div class="team-ct">5</div></div>
-      <div class="team"><div class="team-nm">Les Bleus</div><div class="team-ct">3</div></div>
-      <div class="team"><div class="team-nm">Les Verts</div><div class="team-ct">4</div></div>
-    </div>
-    <p class="tvnote">Jamais de réponse affichée. Jamais de défilement —
-      <code>position:fixed; inset:0; overflow:hidden</code>, unités viewport, contenu plafonné.</p>
+    <p class="tvnote" style="text-align:center;margin-top:26px">
+      Pas de scores affichés. Pas de « c'est le tour de » — la question <em>est</em> le contenu de
+      l'encart, la couleur porte l'équipe active. Jamais de réponse. Jamais de défilement
+      (<code>position:fixed; inset:0; overflow:hidden</code>).</p>
   </div>
 </div>
 
@@ -517,6 +572,55 @@ L'animateur décide en fin de manche.</p>
       Clic sur une équipe → attribution. Valeur pré-remplie et <strong>ajustable</strong> avant
       envoi. L'animateur peut n'attribuer qu'à l'équipe gagnante, ou à chacune.</p>
   </div>
+</div>
+
+<h3>Même écran sur <code>/anim</code> <span class="sub" style="text-transform:none;
+  letter-spacing:0;font-weight:400">— ajouté le 2026-08-28</span></h3>
+<p>L'animateur doit pouvoir attribuer les points depuis sa tablette, sans passer par l'admin.
+Les scores à attribuer s'affichent donc <strong>aussi</strong> sur <code>/anim</code>.</p>
+
+<div class="screen">
+  <div class="screen-hd">/anim — sous-phase ROUND_END</div>
+  <div class="screen-bd">
+    <p style="margin-top:0"><strong>Manche terminée</strong> — 14 questions posées ·
+      barème : 2 pts par bonne réponse</p>
+    <div class="teams">
+      <div class="team" style="border-color:#da3633;padding:0;overflow:hidden">
+        <div style="background:#da3633;color:#fff;padding:6px;font-weight:800;font-size:.9rem">
+          Les Rouges</div>
+        <div style="padding:10px 6px 6px"><span style="font-size:1.6rem;font-weight:800">5</span>
+          <span class="team-sub"> bonnes · 2 mauvaises</span></div>
+        <div style="background:rgba(46,160,67,.15);padding:8px;font-weight:800;
+          color:var(--success);font-size:1.05rem">10 pts</div>
+      </div>
+      <div class="team" style="padding:0;overflow:hidden">
+        <div style="background:#1f6feb;color:#fff;padding:6px;font-weight:800;font-size:.9rem">
+          Les Bleus</div>
+        <div style="padding:10px 6px 6px"><span style="font-size:1.6rem;font-weight:800">3</span>
+          <span class="team-sub"> bonnes · 4 mauvaises</span></div>
+        <div style="background:rgba(46,160,67,.15);padding:8px;font-weight:800;
+          color:var(--success);font-size:1.05rem">6 pts</div>
+      </div>
+      <div class="team" style="padding:0;overflow:hidden">
+        <div style="background:#2ea043;color:#fff;padding:6px;font-weight:800;font-size:.9rem">
+          Les Verts</div>
+        <div style="padding:10px 6px 6px"><span style="font-size:1.6rem;font-weight:800">4</span>
+          <span class="team-sub"> bonnes · 1 mauvaise</span></div>
+        <div style="background:rgba(46,160,67,.15);padding:8px;font-weight:800;
+          color:var(--success);font-size:1.05rem">8 pts</div>
+      </div>
+    </div>
+    <p style="margin-top:16px;font-size:.9rem;color:var(--dim)">
+      Cibles tactiles généreuses (tablette). Appui sur une équipe → attribution, valeur ajustable.</p>
+  </div>
+</div>
+
+<div class="note">
+  <b>Aucun changement d'allow-list nécessaire.</b> <code>TEAM_POINTS</code> est
+  <strong>déjà</strong> autorisé pour <code>ClientTypeAnim</code>
+  (<code>inbound_allowlist.go:58</code> — <code>{ClientTypeAdmin, ClientTypeAnim}</code>), au même
+  titre que <code>BUMPER_POINTS</code>, <code>REVEAL</code> ou <code>CONTINUE</code>. L'attribution
+  depuis <code>/anim</code> est donc purement frontend.
 </div>
 
 <div class="note">
@@ -666,13 +770,11 @@ de ». Un seul encart, deux informations.</p>
         En quelle année est tombé le mur de Berlin ?</div>
     </div>
 
-    <div class="teams" style="margin-top:22px">
-      <div class="team active"><div class="team-nm">Les Rouges</div><div class="team-ct">5</div></div>
-      <div class="team"><div class="team-nm">Les Bleus</div><div class="team-ct">3</div></div>
-      <div class="team"><div class="team-nm">Les Verts</div><div class="team-ct">4</div></div>
-    </div>
-    <p class="tvnote">Aucune réponse. Aucun défilement — l'encart doit rester dans le viewport
-      quelle que soit la longueur de l'énoncé (texte plafonné, pas de scroll).</p>
+    <p class="tvnote" style="text-align:center;margin-top:26px">
+      <strong>Aucun score affiché sur la TV</strong> (retour utilisateur du 2026-08-28) : ni
+      compteurs, ni classement, ni erreurs. L'écran ne porte que les deux timers et la question.
+      Aucune réponse. Aucun défilement — l'encart doit rester dans le viewport quelle que soit la
+      longueur de l'énoncé (texte plafonné, pas de scroll).</p>
   </div>
 </div>
 
@@ -704,6 +806,8 @@ de ». Un seul encart, deux informations.</p>
       <button class="vbtn vbtn-ok">RÉPONSE VALIDE<small>+1 · équipe suivante</small></button>
       <button class="vbtn vbtn-no">RÉPONSE INVALIDE<small>équipe suivante</small></button>
     </div>
+    <p class="tvnote">Le panneau d'équipes enrichi de la §3 (couleur, bonnes / mauvaises /
+      d'affilée) reste affiché sous les boutons — non répété ici.</p>
   </div>
 </div>
 
