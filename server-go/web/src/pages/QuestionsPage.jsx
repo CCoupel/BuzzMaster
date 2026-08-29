@@ -12,6 +12,7 @@ import Card, { CardHeader, CardBody } from '../components/Card'
 import CategoryBalance from '../components/CategoryBalance'
 import CategoryBadge from '../components/CategoryBadge'
 import CategorySelector from '../components/CategorySelector'
+import CategoryFilterBar from '../components/CategoryFilterBar'
 import QuestionCard from '../components/QuestionCard'
 import AIGenerateModal from '../components/AIGenerateModal'
 import QcmAnswersEditor from '../components/QcmAnswersEditor'
@@ -2114,37 +2115,17 @@ export default function QuestionsPage() {
       <div className="category-filter-group">
         <CategoryBalance questions={sortedQuestions} />
 
-        {/* Category filter bar (#40) — supports custom categories */}
-        {availableCategories.length > 0 && (
-          <div className="category-filter-bar questions-page-filter-bar">
-            {availableCategories.map(catKey => {
-              const meta = categoryMeta(catKey, customCategories)
-              if (!meta) return null
-              const isActive = selectedCategories.has(catKey)
-              return (
-                <button
-                  key={catKey}
-                  className={`category-filter-pill${isActive ? ' active' : ''}`}
-                  style={{ '--cat-color': meta.color }}
-                  onClick={() => toggleCategoryFilter(catKey)}
-                  title={meta.label}
-                >
-                  <CategoryBadge catKey={catKey} customCategories={customCategories} size="md" chip={false} />
-                  <span className="cat-pill-label">{meta.label}</span>
-                </button>
-              )
-            })}
-            {selectedCategories.size > 0 && (
-              <button
-                className="category-filter-reset"
-                onClick={clearCategoryFilters}
-                title="Réinitialiser les filtres"
-              >
-                ×
-              </button>
-            )}
-          </div>
-        )}
+        {/* Category filter bar (#40) — CategoryFilterBar.jsx (v8.0.0,
+            #16/#197, bugfix cohérence UI/mutualisation, code-review
+            20260829-131404 MAJEUR 2) : composant partagé avec
+            RafalePage.jsx, plus de copie inline divergente ici. */}
+        <CategoryFilterBar
+          availableCategories={availableCategories}
+          selectedCategories={selectedCategories}
+          customCategories={customCategories}
+          onToggle={toggleCategoryFilter}
+          onClear={clearCategoryFilters}
+        />
       </div>
 
       {/* #149 — barre de mélange, entre les filtres et la grille (maquette validée §1) */}

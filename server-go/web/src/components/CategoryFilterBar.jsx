@@ -38,9 +38,16 @@ import CategoryBadge from './CategoryBadge'
  * @param {Object} props
  * @param {string[]} props.availableCategories - useCategoryFilter().availableCategories
  * @param {Set<string>} props.selectedCategories - useCategoryFilter().selectedCategories
- * @param {Array} props.customCategories - catégories CUSTOM uniquement
- *   (isCustom:true) — filtrer AVANT de passer ici, jamais apiCategories brut
- *   (même discipline que QuestionsPage.jsx/GamePage.jsx)
+ * @param {Array} props.customCategories - GET /api/categories (useCategories()).
+ *   Idéalement déjà filtré isCustom:true par l'appelant (même discipline que
+ *   QuestionsPage.jsx/GamePage.jsx), mais peut aussi être passé BRUT — le
+ *   composant filtre lui-même avant tout usage (symétrie avec
+ *   CategorySelector.jsx, code-review 20260829-131404, point mineur) :
+ *   `availableCategories` (déjà dédupliqué par useCategoryFilter) protège
+ *   du doublon de PILLS ici, mais un `customCategories` brut resterait une
+ *   source de données divergente de celle du Quiz si un futur appelant
+ *   oubliait de pré-filtrer — jamais dépendre de cette discipline côté
+ *   appelant.
  * @param {(key: string) => void} props.onToggle - useCategoryFilter().toggleCategoryFilter
  * @param {() => void} props.onClear - useCategoryFilter().clearCategoryFilters
  * @param {'sm'|'md'|'lg'} [props.size] - taille des icônes (CategoryBadge), défaut 'md'
@@ -58,6 +65,10 @@ export default function CategoryFilterBar({
 }) {
   if (availableCategories.length === 0) return null
 
+  // Filtre défensif isCustom (symétrie avec CategorySelector.jsx) — voir la
+  // doc du prop customCategories ci-dessus.
+  const trueCustomCategories = customCategories.filter(c => c.isCustom)
+
   // `questions-page-filter-bar` — modificateur visuel du Quiz (taille des
   // pastilles + libellé, QuestionsPage.css), appliqué systématiquement ici
   // : c'est précisément le rendu "Quiz" que RAFALE doit reprendre à
@@ -66,7 +77,7 @@ export default function CategoryFilterBar({
   return (
     <div className="category-filter-bar questions-page-filter-bar">
       {availableCategories.map(catKey => {
-        const meta = categoryMeta(catKey, customCategories)
+        const meta = categoryMeta(catKey, trueCustomCategories)
         if (!meta) return null
         const isActive = selectedCategories.has(catKey)
         return (
@@ -78,7 +89,7 @@ export default function CategoryFilterBar({
             onClick={() => onToggle(catKey)}
             title={meta.label}
           >
-            <CategoryBadge catKey={catKey} customCategories={customCategories} size={size} chip={false} />
+            <CategoryBadge catKey={catKey} customCategories={trueCustomCategories} size={size} chip={false} />
             {showLabel && <span className="cat-pill-label">{meta.label}</span>}
           </button>
         )
