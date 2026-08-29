@@ -197,15 +197,6 @@
   color: white;
 }
 
-/* RAFALE (v8.0.0, #16/#107) — plusieurs CategoryBadge cote a cote
-   (RAFALE_CATEGORIES, multi), meme espacement que le reste de la ligne. */
-.qcard-rafale-categories {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-1, 4px);
-}
-
-
 .qcard-type-badge {
   font-size: 0.55rem;
   font-weight: 700;

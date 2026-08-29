@@ -52,9 +52,6 @@ export default function QuestionCard({
   const isMemory = question.TYPE === 'MEMORY'
   const isMemotion = question.TYPE === 'MEMOTION'
   const isArdoise = question.TYPE === 'ARDOISE'
-  // RAFALE (v8.0.0, #16/#107) — bugfix cohérence UI (retour utilisateur
-  // QUALIF 8.0.0.3) : la carte ne portait aucun cas RAFALE.
-  const isRafale = question.TYPE === 'RAFALE'
   // Source unique des couleurs de badge de type (questionTypeMeta.js,
   // #183/A-F2) — remplace la liste CSS `.qcard-type-badge.type-*`
   // (QuestionCard.css) qui divergeait silencieusement du sélecteur de type
@@ -117,21 +114,11 @@ export default function QuestionCard({
 
       {/* Header row 2: Category, type, target, time, points */}
       <div className="qcard-header-row2">
-        {/* RAFALE (contrat rafale.md §3.3) — configuration de manche,
-            "CATEGORY : Non utilisé — RAFALE porte RAFALE_CATEGORIES
-            (multi)" : question.CATEGORY reste vide pour ce type, d'où
-            l'absence totale de badge catégorie avant ce correctif. Un
-            badge par catégorie sélectionnée, même CategoryBadge que les
-            autres types. */}
-        {isRafale ? (
-          question.RAFALE_CATEGORIES?.length > 0 && (
-            <span className="qcard-rafale-categories">
-              {question.RAFALE_CATEGORIES.map(catKey => (
-                <CategoryBadge key={catKey} catKey={catKey} customCategories={customCategories} size="sm" />
-              ))}
-            </span>
-          )
-        ) : question.CATEGORY && (
+        {/* RAFALE (contrat rafale.md §3.3, bugfix 2026-08-29) — CATEGORY
+            est désormais une catégorie unique pour ce type, comme pour
+            tous les autres : le chemin générique suffit, plus de branche
+            isRafale dédiée (l'ancien RAFALE_CATEGORIES multi est retiré). */}
+        {question.CATEGORY && (
           <CategoryBadge catKey={question.CATEGORY} customCategories={customCategories} size="sm" />
         )}
 
