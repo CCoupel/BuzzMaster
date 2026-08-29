@@ -3461,6 +3461,15 @@ var ErrRafalePoolEmpty = errors.New("rafale_pool_empty")
 // field — RAFALE_CATEGORIES (multi-select, OR-matched) was removed. See
 // TypedContent's own doc comment (models.go) and contracts/CHANGELOG.md.
 func (e *Engine) rafalePoolUnsafe(category string, difficulty int) []*RafaleQuestion {
+	// Defense in depth (post-review, 2026-08-29): an empty/unset category is
+	// an unconfigured manche, never a wildcard — must match nothing, even
+	// though a reservoir question with CategoryNone ("") could otherwise
+	// satisfy `string(q.Category) != category` below. The frontend now
+	// blocks this case upstream (GamePage.jsx/QuestionsPage.jsx), but the
+	// engine must never rely on that alone.
+	if category == "" {
+		return nil
+	}
 	var pool []*RafaleQuestion
 	for _, q := range e.rafaleQuestions {
 		if string(q.Category) != category {
@@ -3484,6 +3493,14 @@ func (e *Engine) rafalePoolUnsafe(category string, difficulty int) []*RafaleQues
 func (e *Engine) CountRafalePool(category string, difficulty int) (available, used, total int) {
 	e.mu.RLock()
 	defer e.mu.RUnlock()
+
+	// Defense in depth (post-review, 2026-08-29) — same reasoning as
+	// rafalePoolUnsafe's own guard just above: an empty/unset category must
+	// count as zero, never accidentally match a reservoir question whose own
+	// CATEGORY is also unset (CategoryNone == "").
+	if category == "" {
+		return 0, 0, 0
+	}
 
 	for _, q := range e.rafaleQuestions {
 		if string(q.Category) != category {

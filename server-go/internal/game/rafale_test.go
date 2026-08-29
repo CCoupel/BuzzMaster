@@ -151,15 +151,30 @@ func TestDrawRafaleQuestion_EmptyCategoryFilter_NeverMatches(t *testing.T) {
 	e := NewEngine()
 	seedRafaleReservoir(t, e, []RafaleQuestion{
 		{ID: "r-1", Question: "Q1", Answer: "A1", Category: CategoryHistory, Difficulty: 1},
+		// r-2 has an unset CATEGORY (CategoryNone == "") at the SAME
+		// difficulty — this is the actual case the guard below protects
+		// against: without it, an unconfigured manche (category=="") would
+		// silently match this exact reservoir entry instead of drawing
+		// nothing (post-review, 2026-08-29 — the previous version of this
+		// test never seeded such a question, so it couldn't actually prove
+		// the guarantee its own comment described).
+		{ID: "r-2", Question: "Q2", Answer: "A2", Category: CategoryNone, Difficulty: 1},
 	})
 	// §3.3 (v8.0.0 bugfix, 2026-08-29 — single CATEGORY, RAFALE_CATEGORIES
 	// multi-select removed): an empty/unset category ("") is an
-	// invalid/unconfigured manche, and must draw nothing rather than
-	// silently matching a reservoir question whose own CATEGORY happens to
-	// be unset too (CategoryNone == "").
+	// invalid/unconfigured manche, and must draw nothing — neither r-1
+	// (different category) nor r-2 (also unset, which a naive `==`
+	// comparison would otherwise match).
 	_, err := e.DrawRafaleQuestion("", 1)
 	if !errors.Is(err, ErrRafalePoolEmpty) {
-		t.Errorf("an empty category filter must match nothing, got err=%v", err)
+		t.Errorf("an empty category filter must match nothing (including a reservoir question with an unset CATEGORY), got err=%v", err)
+	}
+
+	// Belt-and-braces: CountRafalePool must agree (contract §7.2's pre-round
+	// alert relies on the same guard).
+	available, used, total := e.CountRafalePool("", 1)
+	if available != 0 || used != 0 || total != 0 {
+		t.Errorf("CountRafalePool(\"\", 1) = (%d, %d, %d), want (0, 0, 0)", available, used, total)
 	}
 }
 
