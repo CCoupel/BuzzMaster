@@ -209,6 +209,69 @@ describe('PlayerDisplay — RAFALE : rendu déclenché par isRafale', () => {
 })
 
 // ---------------------------------------------------------------------------
+// Non-régression — écran TV vide en READY/COUNTDOWN (bugfix v8.0.0, #16/#198,
+// retour utilisateur QUALIF 8.0.0.3, SHA 56080545). Le bloc RAFALE dédié
+// (isRafale && showGameContent, testé ci-dessus) ne couvre QUE STARTED/
+// PAUSED/STOPPED/REVEALED — READY et COUNTDOWN sont un chemin de rendu
+// SÉPARÉ (le bloc générique partagé SPEEDY/ARDOISE, désormais rejoint par
+// RAFALE : `(isSpeedy || isArdoise || isRafale)`). Avant le fix, aucun des
+// deux ne se déclenchait pour RAFALE à ces 2 phases : la carte
+// `PlayerDisplay.test.jsx` n'ayant fait qu'élargir une regex de garde-fou
+// (#183) sur le CODE SOURCE, elle ne pouvait pas détecter un écran
+// effectivement VIDE au rendu — exactement ce que ces tests vérifient,
+// contenu non-vide réel, pas juste la présence du motif dans le code.
+// ---------------------------------------------------------------------------
+
+describe('PlayerDisplay — RAFALE : écran TV non-vide en READY (bugfix SHA 56080545)', () => {
+  it('phase READY : rend .game-content-zones avec un contenu textuel non-vide (pas un écran vide)', () => {
+    const { container } = renderTV({ phase: 'READY' })
+
+    const zones = container.querySelector('.game-content-zones')
+    expect(zones).not.toBeNull()
+    expect(zones.textContent.trim().length).toBeGreaterThan(0)
+  })
+
+  it('phase READY : affiche le repli générique "PRÉPAREZ-VOUS" (RAFALE_CATEGORIES est multi — pas de catégorie unique connue avant tirage, contrat §4)', () => {
+    renderTV({ phase: 'READY' })
+    expect(screen.getByText('PRÉPAREZ-VOUS')).toBeInTheDocument()
+  })
+
+  it('phase READY : le timer de manche est bien rendu (Zone 1, pas seulement le repli catégorie)', () => {
+    const { container } = renderTV({ phase: 'READY' })
+    expect(container.querySelector('.zone-timer .timer-display')).not.toBeNull()
+  })
+
+  it('phase READY, TYPE=SPEEDY (témoin) : même bloc générique, non-régression — RAFALE ne l\'a pas cassé pour les autres types', () => {
+    const { container } = renderTV({ phase: 'READY', question: SPEEDY_QUESTION })
+    const zones = container.querySelector('.game-content-zones')
+    expect(zones).not.toBeNull()
+    expect(zones.textContent.trim().length).toBeGreaterThan(0)
+  })
+})
+
+describe('PlayerDisplay — RAFALE : écran TV non-vide en COUNTDOWN (bugfix SHA 56080545)', () => {
+  it('phase COUNTDOWN : rend .game-content-zones avec un contenu textuel non-vide (pas un écran vide)', () => {
+    const { container } = renderTV({ phase: 'COUNTDOWN' })
+
+    const zones = container.querySelector('.game-content-zones')
+    expect(zones).not.toBeNull()
+    expect(zones.textContent.trim().length).toBeGreaterThan(0)
+  })
+
+  it('phase COUNTDOWN : affiche le décompte (chiffre ou "GO!")', () => {
+    const { container } = renderTV({ phase: 'COUNTDOWN' })
+    const countdown = container.querySelector('.countdown-number')
+    expect(countdown).not.toBeNull()
+    expect(countdown.textContent.trim().length).toBeGreaterThan(0)
+  })
+
+  it('phase COUNTDOWN : le timer de manche est bien rendu', () => {
+    const { container } = renderTV({ phase: 'COUNTDOWN' })
+    expect(container.querySelector('.zone-timer .timer-display')).not.toBeNull()
+  })
+})
+
+// ---------------------------------------------------------------------------
 // Indicateur d'équipe active (§8.2) — mode multi uniquement
 // ---------------------------------------------------------------------------
 
