@@ -282,3 +282,75 @@ describe('RafalePage — suppression', () => {
     expect(deleteCall).toBeUndefined()
   })
 })
+
+// ---------------------------------------------------------------------------
+// Non-régression — doublon de catégories dans le listing du pool (retour
+// utilisateur QUALIF 8.0.0.2, "le pool RAFALE liste 2 lignes identiques de
+// catégorie", SHA ba960bdf). Reproduit la forme RÉELLE de GET /api/categories
+// (internal/server/http.go : les 8 catégories codées en dur EN MIROIR,
+// isCustom:false, FUSIONNÉES avec les vraies catégories personnalisées,
+// isCustom:true) — exactement ce que useCategories() renvoie à RafalePage,
+// non pré-filtré par le mock (comme en production). Bout en bout : la page
+// entière (fetch réel + CategorySelector + CategoryFilterBar) ne doit
+// produire AUCUN doublon visuel.
+// ---------------------------------------------------------------------------
+
+const RAW_API_CATEGORIES_RESPONSE = [
+  { key: 'GEOGRAPHY', name: 'Geographie', imageURL: '', isCustom: false, color: '#3b82f6' },
+  { key: 'ENTERTAINMENT', name: 'Divertissement', imageURL: '', isCustom: false, color: '#ec4899' },
+  { key: 'HISTORY', name: 'Histoire', imageURL: '', isCustom: false, color: '#eab308' },
+  { key: 'ARTS', name: 'Arts & Litterature', imageURL: '', isCustom: false, color: '#a855f7' },
+  { key: 'SCIENCE', name: 'Sciences & Nature', imageURL: '', isCustom: false, color: '#22c55e' },
+  { key: 'SPORTS', name: 'Sports & Loisirs', imageURL: '', isCustom: false, color: '#f97316' },
+  { key: 'FOOD', name: 'Gastronomie', imageURL: '', isCustom: false, color: '#991b1b' },
+  { key: 'ANIMALS', name: 'Animaux', imageURL: '', isCustom: false, color: '#78716c' },
+  { key: 'CUSTOM_MASCOTS', name: 'Mascottes', imageURL: '/files/categories/mascots.png', isCustom: true, color: '' },
+]
+
+const MIXED_CATEGORY_QUESTIONS = [
+  { ID: 'r-101', QUESTION: 'Q Histoire', ANSWER: 'A', CATEGORY: 'HISTORY', DIFFICULTY: 1, USED: false },
+  { ID: 'r-102', QUESTION: 'Q Science', ANSWER: 'A', CATEGORY: 'SCIENCE', DIFFICULTY: 2, USED: false },
+  { ID: 'r-103', QUESTION: 'Q Mascotte', ANSWER: 'A', CATEGORY: 'CUSTOM_MASCOTS', DIFFICULTY: 1, USED: true },
+]
+
+describe('RafalePage — non-régression : listing du pool sans doublon de catégories (bug QUALIF 8.0.0.2)', () => {
+  it('la barre de filtre affiche chaque catégorie EXACTEMENT une fois (mix codées en dur + custom, réponse API brute)', async () => {
+    const { container } = renderRafalePage({ questions: MIXED_CATEGORY_QUESTIONS, categories: RAW_API_CATEGORIES_RESPONSE })
+
+    await screen.findByText('Q Histoire')
+
+    // Scopé à la barre de filtre (.rafale-filters) : CategorySelector (dans
+    // .rafale-form-card, formulaire de création) rend AUSSI ces mêmes
+    // catégories plus bas sur la page — sans ce scope, getByTitle serait
+    // ambigu entre les 2 (2 usages légitimes, pas un doublon).
+    const filterBar = within(container.querySelector('.rafale-filters'))
+    expect(filterBar.getAllByTitle('Histoire')).toHaveLength(1)
+    expect(filterBar.getAllByTitle('Sciences & Nature')).toHaveLength(1)
+    expect(filterBar.getAllByTitle('Mascottes')).toHaveLength(1)
+
+    // 3 catégories présentes dans le réservoir chargé -> 3 pastilles, pas plus.
+    expect(container.querySelectorAll('.category-filter-pill').length).toBe(3)
+  })
+
+  it('cliquer sur le filtre "Mascottes" (catégorie custom) fonctionne malgré le mélange de données brutes', async () => {
+    const { container } = renderRafalePage({ questions: MIXED_CATEGORY_QUESTIONS, categories: RAW_API_CATEGORIES_RESPONSE })
+    await screen.findByText('Q Histoire')
+
+    fireEvent.click(within(container.querySelector('.rafale-filters')).getByTitle('Mascottes'))
+
+    await waitFor(() => {
+      expect(screen.getByText('Q Mascotte')).toBeInTheDocument()
+      expect(screen.queryByText('Q Histoire')).not.toBeInTheDocument()
+      expect(screen.queryByText('Q Science')).not.toBeInTheDocument()
+    })
+  })
+
+  it('le formulaire de création (CategorySelector) ne présente pas non plus de doublon avec cette même réponse API brute', async () => {
+    const { container } = renderRafalePage({ questions: MIXED_CATEGORY_QUESTIONS, categories: RAW_API_CATEGORIES_RESPONSE })
+    await screen.findByText('Q Histoire')
+
+    // 8 standard + 1 custom (Mascottes) + le bouton "+" du formulaire de création.
+    expect(container.querySelectorAll('.rafale-form-card .category-btn').length).toBe(10)
+    expect(within(container.querySelector('.rafale-form-card')).getAllByTitle('Histoire')).toHaveLength(1)
+  })
+})

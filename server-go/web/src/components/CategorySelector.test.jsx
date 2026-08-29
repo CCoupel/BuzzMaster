@@ -94,6 +94,69 @@ describe('CategorySelector — rendu et sélection', () => {
 })
 
 // ---------------------------------------------------------------------------
+// Non-régression — doublon de catégories (retour utilisateur QUALIF
+// 8.0.0.2, "le pool RAFALE liste 2 lignes identiques de catégorie", SHA
+// ba960bdf). Cause racine : GET /api/categories renvoie les 8 catégories
+// codées en dur EN MIROIR (isCustom:false, même clé que utils/
+// categoryUtils.CATEGORIES) FUSIONNÉES avec les vraies catégories
+// personnalisées (isCustom:true) — internal/server/http.go
+// handleGetCategories (hardcodedCategories ++ custom, une seule réponse).
+// Un appelant passant cette réponse BRUTE (non filtrée) à `customCategories`
+// faisait alors doublonner chaque catégorie standard : une fois via
+// `Object.keys(CATEGORIES)`, une fois via `customCategories.map(c => c.key)`
+// (qui recontenait la même clé, mirror isCustom:false). Le composant filtre
+// désormais lui-même (`customCategories.filter(c => c.isCustom)`) — ce bloc
+// prouve que la classe de bug ne peut plus se reproduire, quel que soit
+// l'appelant.
+// ---------------------------------------------------------------------------
+
+// Reproduit fidèlement la forme RÉELLE de GET /api/categories
+// (internal/server/http.go, CategoryInfo{Key,Name,ImageURL,IsCustom,Color})
+// : les 8 catégories codées en dur en miroir (isCustom:false) + une vraie
+// catégorie personnalisée (isCustom:true) — PAS pré-filtrée, exactement ce
+// qu'un appelant négligent passerait tel quel.
+const RAW_API_CATEGORIES_RESPONSE = [
+  { key: 'GEOGRAPHY', name: 'Geographie', imageURL: '', isCustom: false, color: '#3b82f6' },
+  { key: 'ENTERTAINMENT', name: 'Divertissement', imageURL: '', isCustom: false, color: '#ec4899' },
+  { key: 'HISTORY', name: 'Histoire', imageURL: '', isCustom: false, color: '#eab308' },
+  { key: 'ARTS', name: 'Arts & Litterature', imageURL: '', isCustom: false, color: '#a855f7' },
+  { key: 'SCIENCE', name: 'Sciences & Nature', imageURL: '', isCustom: false, color: '#22c55e' },
+  { key: 'SPORTS', name: 'Sports & Loisirs', imageURL: '', isCustom: false, color: '#f97316' },
+  { key: 'FOOD', name: 'Gastronomie', imageURL: '', isCustom: false, color: '#991b1b' },
+  { key: 'ANIMALS', name: 'Animaux', imageURL: '', isCustom: false, color: '#78716c' },
+  { key: 'CUSTOM_MASCOTS', name: 'Mascottes', imageURL: '/files/categories/mascots.png', isCustom: true, color: '' },
+]
+
+describe('CategorySelector — non-régression doublon de catégories (bug QUALIF 8.0.0.2)', () => {
+  it('customCategories BRUT (réponse API non filtrée) : chaque catégorie standard apparaît UNE SEULE fois', () => {
+    const { container } = renderSelector({ customCategories: RAW_API_CATEGORIES_RESPONSE })
+
+    // LE test du bug lui-même : sans le filtre isCustom, les 8 clés
+    // codées en dur apparaîtraient CHACUNE deux fois dans le tableau
+    // combiné (une fois via Object.keys(CATEGORIES), une fois via
+    // customCategories.map sur la réponse brute qui les remiroite) — total
+    // attendu ici : 8 standard + 1 custom + le bouton "+" = 10, jamais plus.
+    expect(container.querySelectorAll('.category-btn').length).toBe(10)
+
+    for (const label of ['Geographie', 'Divertissement', 'Histoire', 'Arts & Litterature', 'Sciences & Nature', 'Sports & Loisirs', 'Gastronomie', 'Animaux']) {
+      expect(screen.getAllByTitle(label)).toHaveLength(1)
+    }
+  })
+
+  it('la vraie catégorie personnalisée (isCustom:true) apparaît, une seule fois', () => {
+    renderSelector({ customCategories: RAW_API_CATEGORIES_RESPONSE })
+    expect(screen.getAllByTitle('Mascottes')).toHaveLength(1)
+  })
+
+  it('sélectionner une catégorie standard depuis une réponse API brute fonctionne malgré le doublon potentiel dans les données sources', () => {
+    const { onChange } = renderSelector({ customCategories: RAW_API_CATEGORIES_RESPONSE })
+    fireEvent.click(screen.getByTitle('Histoire'))
+    expect(onChange).toHaveBeenCalledTimes(1)
+    expect(onChange).toHaveBeenCalledWith('HISTORY')
+  })
+})
+
+// ---------------------------------------------------------------------------
 // allowCreate
 // ---------------------------------------------------------------------------
 
