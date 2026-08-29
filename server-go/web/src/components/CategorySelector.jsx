@@ -21,7 +21,11 @@ import './CategorySelector.css'
  * @param {(key: string) => void} props.onChange - appelé avec la NOUVELLE
  *   valeur ('' si la catégorie déjà sélectionnée est re-cliquée — toggle,
  *   même comportement qu'avant l'extraction)
- * @param {Array} props.customCategories - GET /api/categories (useCategories())
+ * @param {Array} props.customCategories - GET /api/categories (useCategories()).
+ *   Peut être passé BRUT (mélange isCustom:true/false, réponse telle quelle
+ *   de l'API) ou déjà filtré isCustom:true — le composant filtre lui-même
+ *   avant de construire sa grille (voir la garde interne ci-dessous), pour
+ *   ne jamais dépendre d'une discipline de filtrage côté appelant.
  * @param {() => Promise<void>|void} [props.onRefetchCategories] - rappelé
  *   après création réussie d'une catégorie, avant `onChange(created.key)` —
  *   nécessaire pour que la nouvelle catégorie apparaisse dans la grille
@@ -73,10 +77,26 @@ export default function CategorySelector({
 
   const selectedMeta = value ? categoryMeta(value, customCategories) : null
 
+  // Bugfix cohérence UI (v8.0.0, #16/#197, retour utilisateur QUALIF
+  // 8.0.0.2 : "le pool RAFALE liste 2 lignes identiques de catégorie").
+  // Cause racine : `customCategories` reçu ici pouvait contenir les
+  // catégories codées en dur EN MIROIR (isCustom:false — GET /api/categories
+  // renvoie hardcodées + custom fusionnées, internal/server/http.go
+  // handleGetCategories) en plus des vraies catégories personnalisées. Sans
+  // ce filtre, `Object.keys(CATEGORIES)` (8 clés) ET
+  // `customCategories.map(c => c.key)` (qui les recontenait) produisaient
+  // CHACUNE des 8 catégories codées en dur DEUX FOIS dans le tableau
+  // combiné — deux boutons `key` strictement identiques par catégorie
+  // standard, un défaut de réconciliation React (clés dupliquées) qui se
+  // traduit visuellement par une ligne/pastille en double. Filtrer ici,
+  // dans le composant, plutôt que de compter sur chaque appelant pour
+  // pré-filtrer isCustom:true — élimine la classe de bug pour de bon.
+  const trueCustomCategories = customCategories.filter(c => c.isCustom)
+
   return (
     <div className="category-selector-wrap">
       <div className="category-selector">
-        {[...Object.keys(CATEGORIES), ...customCategories.map(c => c.key)].map(key => {
+        {[...Object.keys(CATEGORIES), ...trueCustomCategories.map(c => c.key)].map(key => {
           const meta = categoryMeta(key, customCategories)
           if (!meta) return null
           return (

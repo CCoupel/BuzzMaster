@@ -2,9 +2,9 @@ import { useState, useEffect, useCallback, useMemo } from 'react'
 import { motion } from 'framer-motion'
 import { useCategories } from '../hooks/useCategories'
 import { useCategoryFilter } from '../hooks/useCategoryFilter'
-import { categoryMeta } from '../utils/categoryUtils'
 import CategoryBadge from '../components/CategoryBadge'
 import CategorySelector from '../components/CategorySelector'
+import CategoryFilterBar from '../components/CategoryFilterBar'
 import Button from '../components/Button'
 import Card from '../components/Card'
 import './RafalePage.css'
@@ -33,6 +33,15 @@ const EMPTY_FORM = { ID: null, QUESTION: '', ANSWER: '', CATEGORY: '', DIFFICULT
  */
 export default function RafalePage() {
   const { categories: apiCategories, refetch: refetchCategories } = useCategories()
+  // Catégories CUSTOM uniquement (isCustom:true) — même filtrage que
+  // QuestionsPage.jsx/GamePage.jsx (`customCategories`), JAMAIS apiCategories
+  // brut (qui inclut aussi les 8 catégories codées en dur en miroir,
+  // isCustom:false). Bugfix cohérence UI (v8.0.0, #16/#197, retour
+  // utilisateur QUALIF 8.0.0.2) : RafalePage.jsx passait apiCategories brut
+  // partout, une source de données différente de celle du Quiz — c'est ce
+  // que ce filtrage aligne, en plus du composant d'affichage lui-même
+  // (CategoryFilterBar ci-dessous).
+  const customCategories = useMemo(() => apiCategories.filter(c => c.isCustom), [apiCategories])
   const [questions, setQuestions] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -73,7 +82,7 @@ export default function RafalePage() {
     filteredQuestions: categoryFiltered,
     toggleCategoryFilter,
     clearCategoryFilters,
-  } = useCategoryFilter(questions, apiCategories)
+  } = useCategoryFilter(questions, customCategories)
 
   const filteredQuestions = useMemo(() => {
     return categoryFiltered.filter(q => {
@@ -159,27 +168,19 @@ export default function RafalePage() {
         {/* Filtres + liste */}
         <Card padding="lg" className="rafale-list-card">
           <div className="rafale-filters">
-            <div className="rafale-filter-group">
-              <button
-                type="button"
-                className={`rafale-chip ${selectedCategories.size === 0 ? 'on' : ''}`}
-                onClick={clearCategoryFilters}
-              >
-                Toutes
-              </button>
-              {availableCategories.map(catKey => (
-                <button
-                  key={catKey}
-                  type="button"
-                  className={`rafale-chip ${selectedCategories.has(catKey) ? 'on' : ''}`}
-                  onClick={() => toggleCategoryFilter(catKey)}
-                >
-                  <CategoryBadge catKey={catKey} customCategories={apiCategories} size="sm" chip={false} />
-                  {' '}
-                  {categoryMeta(catKey, apiCategories)?.label || catKey}
-                </button>
-              ))}
-            </div>
+            {/* CategoryFilterBar (v8.0.0, #16/#197, bugfix cohérence UI) —
+                même composant/pattern que QuestionsPage.jsx (base
+                GamePage.css + modificateur "Quiz" QuestionsPage.css),
+                remplace l'ancienne variante .rafale-chip qui produisait un
+                rendu incohérent (garde `if (!meta) return null` manquante +
+                apiCategories non filtré). */}
+            <CategoryFilterBar
+              availableCategories={availableCategories}
+              selectedCategories={selectedCategories}
+              customCategories={customCategories}
+              onToggle={toggleCategoryFilter}
+              onClear={clearCategoryFilters}
+            />
             <div className="rafale-filter-group">
               {DIFFICULTIES.map(d => (
                 <button
@@ -227,7 +228,7 @@ export default function RafalePage() {
                       <td>{q.QUESTION}</td>
                       <td>{q.ANSWER}</td>
                       <td>
-                        <CategoryBadge catKey={q.CATEGORY} customCategories={apiCategories} size="sm" />
+                        <CategoryBadge catKey={q.CATEGORY} customCategories={customCategories} size="sm" />
                       </td>
                       <td>{'★'.repeat(q.DIFFICULTY || 1)}</td>
                       <td className={q.USED ? 'rafale-used' : 'rafale-available'}>
@@ -288,7 +289,7 @@ export default function RafalePage() {
                 <CategorySelector
                   value={form.CATEGORY}
                   onChange={(key) => setForm(prev => ({ ...prev, CATEGORY: key }))}
-                  customCategories={apiCategories}
+                  customCategories={customCategories}
                   onRefetchCategories={refetchCategories}
                 />
               </div>
