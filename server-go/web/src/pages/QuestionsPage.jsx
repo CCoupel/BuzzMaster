@@ -3,14 +3,13 @@ import { AnimatePresence, motion } from 'framer-motion'
 import { useGame } from '../hooks/GameContext'
 import { useCategoryFilter } from '../hooks/useCategoryFilter'
 import { useCategories } from '../hooks/useCategories'
-import { CATEGORIES, categoryMeta } from '../utils/categoryUtils'
+import { CATEGORIES } from '../utils/categoryUtils'
 import { sortQuestionsByOrder, shuffleArray } from '../utils/questionOrder'
 import { QUESTION_TYPES } from '../utils/questionTypeMeta'
 import { isMotionCardTypeLocked, motionCardLockReason } from '../utils/motionCardLock'
 import Button from '../components/Button'
 import Card, { CardHeader, CardBody } from '../components/Card'
 import CategoryBalance from '../components/CategoryBalance'
-import CategoryBadge from '../components/CategoryBadge'
 import CategorySelector from '../components/CategorySelector'
 import CategoryFilterBar from '../components/CategoryFilterBar'
 import QuestionCard from '../components/QuestionCard'
@@ -75,13 +74,14 @@ export default function QuestionsPage() {
     // ARDOISE fields (v5.6.0)
     ardoiseKeyboardType: 'AZERTY',
     // RAFALE fields (v8.0.0, #16/#107, contrat rafale.md §3.3) — pas un
-    // énoncé/réponse, une CONFIGURATION de manche : catégories multi
-    // (RAFALE_CATEGORIES), difficulté unique (RAFALE_DIFFICULTY), mode
-    // (RAFALE_MODE), temps par question (RAFALE_QUESTION_TIME, défaut 3s),
-    // plafond dur (RAFALE_MAX_QUESTIONS, défaut 100, max 100). TIME/POINTS
-    // réutilisent les champs génériques déjà présents plus bas (durée de
-    // manche / barème d'une bonne réponse).
-    rafaleCategories: [],
+    // énoncé/réponse, une CONFIGURATION de manche : difficulté unique
+    // (RAFALE_DIFFICULTY), mode (RAFALE_MODE), temps par question
+    // (RAFALE_QUESTION_TIME, défaut 3s), plafond dur (RAFALE_MAX_QUESTIONS,
+    // défaut 100, max 100). TIME/POINTS/CATEGORY réutilisent les champs
+    // génériques déjà présents (durée de manche / barème d'une bonne
+    // réponse / catégorie du filtre de pioche) — bugfix 2026-08-29 :
+    // CATEGORY est désormais unique, comme tous les autres types (l'ancien
+    // RAFALE_CATEGORIES multi est retiré, contrat §3.3).
     rafaleDifficulty: 1,
     rafaleMode: 'SOLO',
     rafaleQuestionTime: 3,
@@ -984,8 +984,9 @@ export default function QuestionsPage() {
       motionMemorizeDuration: question.MOTION_MEMORIZE_DURATION || 0,
       // ARDOISE fields
       ardoiseKeyboardType: question.ARDOISE_KEYBOARD_TYPE || 'AZERTY',
-      // RAFALE fields (v8.0.0, #16/#107, contrat rafale.md §3.3)
-      rafaleCategories: question.RAFALE_CATEGORIES || [],
+      // RAFALE fields (v8.0.0, #16/#107, contrat rafale.md §3.3) — CATEGORY
+      // (générique, ligne `category:` ci-dessus) porte désormais le filtre
+      // de manche, comme tous les autres types (bugfix 2026-08-29).
       rafaleDifficulty: question.RAFALE_DIFFICULTY || 1,
       rafaleMode: question.RAFALE_MODE || 'SOLO',
       rafaleQuestionTime: question.RAFALE_QUESTION_TIME || 3,
@@ -1088,7 +1089,6 @@ export default function QuestionsPage() {
       ardoiseKeyboardType: 'AZERTY',
       // RAFALE fields (v8.0.0, #16/#107) — voir commentaire de l'état
       // initial (useState ci-dessus) pour le détail des champs.
-      rafaleCategories: [],
       rafaleDifficulty: 1,
       rafaleMode: 'SOLO',
       rafaleQuestionTime: 3,
@@ -1327,11 +1327,6 @@ export default function QuestionsPage() {
       const validCards = formData.motionCards.filter(c => c.rectoTheme.trim())
       if (validCards.length < 2) return
     }
-    if (formData.type === 'RAFALE') {
-      // Contrat rafale.md §3.3 — RAFALE_CATEGORIES : "multi-sélection, ≥1"
-      if (formData.rafaleCategories.length === 0) return
-    }
-
     setIsUploading(true)
 
     const data = new FormData()
@@ -1530,10 +1525,10 @@ export default function QuestionsPage() {
     } else if (formData.type === 'RAFALE') {
       // RAFALE mode — configuration de manche (contrat rafale.md §3.3),
       // aucun énoncé/réponse propre (les questions viennent du réservoir,
-      // /admin/rafale). `category` (singulier) n'est PAS utilisé par ce
-      // type (§3.3 : "Non utilisé — RAFALE porte RAFALE_CATEGORIES
-      // (multi)") — jamais ajouté ici, contrairement aux autres types.
-      data.append('RAFALE_CATEGORIES', JSON.stringify(formData.rafaleCategories))
+      // /admin/rafale). `category` (singulier) EST utilisé par ce type
+      // depuis le bugfix 2026-08-29 — comme tous les autres types, déjà
+      // envoyé ci-dessus (`if (formData.category) { data.append('category', ...) }`),
+      // jamais ici. L'ancien RAFALE_CATEGORIES (multi) est retiré.
       data.append('RAFALE_DIFFICULTY', String(formData.rafaleDifficulty))
       data.append('RAFALE_MODE', formData.rafaleMode)
       data.append('RAFALE_QUESTION_TIME', String(formData.rafaleQuestionTime))
@@ -1541,7 +1536,7 @@ export default function QuestionsPage() {
       // Réponse d'affichage dans la liste des questions (patron MEMORY/
       // MEMOTION ci-dessus — `answer` reste un champ purement informatif
       // pour QuestionCard.jsx, jamais lu par le moteur RAFALE).
-      data.append('answer', `${formData.rafaleCategories.length} categorie(s) - ${'★'.repeat(formData.rafaleDifficulty)}`)
+      data.append('answer', `${formData.category || '?'} - ${'★'.repeat(formData.rafaleDifficulty)}`)
     }
 
     if (formData.media) {
@@ -2258,13 +2253,11 @@ export default function QuestionsPage() {
                 {/* Category Selector — CategorySelector.jsx (v8.0.0, #16/#197,
                     bugfix cohérence UI), extrait ici (#95/#97/#100), aussi
                     utilisé par RafalePage.jsx — un seul composant, plus de
-                    variante dupliquée. Absent en RAFALE (contrat rafale.md
-                    §3.3 — "CATEGORY : Non utilisé — RAFALE porte
-                    RAFALE_CATEGORIES (multi)"), remplacé par le
-                    multi-sélecteur de la section RAFALE plus bas (lui-même
-                    bâti sur category-selector/category-btn/CategoryBadge,
-                    juste avec une logique de toggle-array). */}
-                {formData.type !== 'RAFALE' && (
+                    variante dupliquée. RAFALE utilise désormais ce MEME
+                    sélecteur (bugfix 2026-08-29, contrat §3.3) : CATEGORY
+                    est une catégorie unique pour ce type comme pour tous
+                    les autres, l'ancien multi-sélecteur RAFALE_CATEGORIES
+                    est retiré (plus de branche dédiée). */}
                 <div className="form-group">
                   <label>Categorie</label>
                   <CategorySelector
@@ -2274,7 +2267,6 @@ export default function QuestionsPage() {
                     onRefetchCategories={refetchCategories}
                   />
                 </div>
-                )}
 
                 {/* Points Target Selector */}
                 <div className="form-group">
@@ -3058,34 +3050,10 @@ export default function QuestionsPage() {
                     (TIME/POINTS réutilisés tel quel, contrat §3.3). */}
                 {formData.type === 'RAFALE' && (
                   <div className="rafale-section">
-                    <div className="form-group">
-                      <label>Categories (au moins une)</label>
-                      <div className="category-selector">
-                        {[...Object.keys(CATEGORIES), ...customCategories.map(c => c.key)].map(key => {
-                          const meta = categoryMeta(key, customCategories)
-                          if (!meta) return null
-                          const active = formData.rafaleCategories.includes(key)
-                          return (
-                            <button
-                              key={key}
-                              type="button"
-                              className={`category-btn ${active ? 'active' : ''}`}
-                              style={{ '--cat-color': meta.color }}
-                              onClick={() => setFormData(prev => ({
-                                ...prev,
-                                rafaleCategories: active
-                                  ? prev.rafaleCategories.filter(k => k !== key)
-                                  : [...prev.rafaleCategories, key],
-                              }))}
-                              title={meta.label}
-                            >
-                              <CategoryBadge catKey={key} customCategories={customCategories} size="lg" chip={false} />
-                            </button>
-                          )
-                        })}
-                      </div>
-                    </div>
-
+                    {/* Categorie — bugfix 2026-08-29 (contrat §3.3) : retire
+                        le multi-selecteur RAFALE_CATEGORIES, RAFALE utilise
+                        desormais le CategorySelector generique ci-dessus
+                        (formData.category, comme tous les autres types). */}
                     <div className="form-group">
                       <label>Difficulte (une seule par manche)</label>
                       <div className="memotion-difficulty-row">
@@ -3163,7 +3131,7 @@ export default function QuestionsPage() {
                         pour guider l'admin AVANT même de sauvegarder la
                         manche. */}
                     <RafalePoolAlert
-                      categories={formData.rafaleCategories}
+                      category={formData.category}
                       difficulty={formData.rafaleDifficulty}
                       roundTime={parseInt(formData.time) || 0}
                       questionTime={formData.rafaleQuestionTime}

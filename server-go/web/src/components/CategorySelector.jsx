@@ -11,10 +11,11 @@ import './CategorySelector.css'
  * sélecteur icônes des questions standard. Un seul composant désormais,
  * jamais deux variantes de la même fonctionnalité.
  *
- * Simple sélection (une catégorie ou aucune) — pour un multi-sélecteur
- * (RAFALE_CATEGORIES, contrat rafale.md §3.3), voir QuestionsPage.jsx, qui
- * réutilise `category-selector`/`category-btn`/`CategoryBadge` mais avec sa
- * propre logique de toggle-array (pas ce composant).
+ * Simple sélection (une catégorie ou aucune) — utilisé par QuestionsPage.jsx
+ * pour TOUS les types de question, RAFALE compris depuis le bugfix
+ * 2026-08-29 (contrat rafale.md §3.3 : CATEGORY unique, l'ancien
+ * RAFALE_CATEGORIES multi/toggle-array est retiré, ce composant n'a jamais
+ * eu besoin d'un mode multi séparé).
  *
  * @param {Object} props
  * @param {string} props.value - clé de la catégorie sélectionnée ('' = aucune)
