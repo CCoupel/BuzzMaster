@@ -966,7 +966,21 @@ export default function GamePage() {
               </div>
               <RafalePoolAlert
                 category={gameState.question.CATEGORY || ''}
-                difficulty={gameState.question.RAFALE_DIFFICULTY}
+                // Bugfix régression (retour utilisateur QUALIF 8.0.0.5,
+                // suite au fail-closed SHA 1a742782) — cause racine :
+                // RAFALE_DIFFICULTY est omitempty côté serveur (contrat
+                // §3.3, contrainte models_roundtrip_test.go) ; le chip
+                // d'affichage juste au-dessus utilise déjà un repli `|| 1`
+                // pour ce champ, mais cette prop ne l'avait PAS — un admin
+                // voyait "★" dans le chip (repli visuel) tout en recevant
+                // `difficulty=undefined` ici, faisant échouer `hasFilter`
+                // dans RafalePoolAlert ("Sélectionnez au moins une
+                // catégorie...") puis bloquant le START via le fail-closed
+                // (rafalePoolLevel resté `null`). Avant 1a742782, un niveau
+                // `null` ne bloquait rien : l'incohérence de repli était
+                // invisible. Même repli qu'utilisé partout ailleurs pour ce
+                // champ (défaut RAFALE_DIFFICULTY = 1, QuestionsPage.jsx).
+                difficulty={gameState.question.RAFALE_DIFFICULTY || 1}
                 roundTime={parseInt(timeInput) || 0}
                 questionTime={gameState.question.RAFALE_QUESTION_TIME || 3}
                 onLevelChange={setRafalePoolLevel}
