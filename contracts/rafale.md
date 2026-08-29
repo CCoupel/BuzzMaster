@@ -117,22 +117,39 @@ Champs **réutilisés** de `Question` (mutualisation, pas de doublon) :
 |---|---|
 | `TIME` | Durée totale de la manche, en secondes (défaut `120`) |
 | `POINTS` | **Barème de manche** : valeur en points d'une bonne réponse (arbitrage B4) |
-| `CATEGORY` | *Non utilisé* — RAFALE porte `RAFALE_CATEGORIES` (multi) |
+| `CATEGORY` | Catégorie du filtre de pioche — **catégorie unique**, comme tous les autres types (§3.3, bugfix ci-dessous) |
 
 Champs **nouveaux**, portés par `TypedContent` (donc `OwnedFields` du type RAFALE) :
 
 ```go
-RafaleCategories   []string `json:"RAFALE_CATEGORIES,omitempty"`    // multi-sélection, ≥1
 RafaleDifficulty   int      `json:"RAFALE_DIFFICULTY,omitempty"`    // 1..3, unique par manche
 RafaleMode         string   `json:"RAFALE_MODE,omitempty"`          // voir §3.4
 RafaleQuestionTime int      `json:"RAFALE_QUESTION_TIME,omitempty"` // secondes par question, défaut 3
 RafaleMaxQuestions int      `json:"RAFALE_MAX_QUESTIONS,omitempty"` // plafond dur, défaut 100, max 100
 ```
 
-> ⚠️ **Modification de contrat (dev-backend, Batch 2/#107)** : les 5 champs
-> ci-dessus sont **tous** `omitempty`, y compris `RAFALE_DIFFICULTY` (le
-> contrat d'origine l'en dispensait, par analogie avec `Question.Answer`).
-> Contrainte technique découverte à l'implémentation :
+> ⚠️ **Modification de contrat (dev-backend, bugfix, 2026-08-29)** :
+> `RAFALE_CATEGORIES` (`[]string`, multi-sélection) est **supprimé** —
+> RAFALE réutilise désormais le champ générique `CATEGORY` de `Question`
+> (catégorie **unique**), exactement comme SPEEDY/QCM/MEMORY/MEMOTION/ARDOISE.
+> Retour utilisateur après plusieurs cycles où la catégorie ne s'affichait
+> toujours pas correctement sur la card d'une question RAFALE malgré un
+> premier correctif : RAFALE était le premier (et seul) type à introduire une
+> sélection multi-catégorie, et la card générique lit `question.CATEGORY`, pas
+> un champ spécifique à un type — un cas particulier qui n'avait pas sa place.
+> L'alignement sur l'existant résout le bug d'affichage **structurellement**
+> (plus besoin d'une branche `isRafale` dédiée côté frontend) plutôt que de le
+> patcher côté client. Impact : `DrawRafaleQuestion`/`CountRafalePool`
+> (engine.go) prennent désormais `category string` au lieu de
+> `categories []string` ; `GET /api/rafale/pool` prend `?category=X` au lieu
+> de `?categories=A,B` (§9). Le réservoir lui-même (`RafaleQuestion.CATEGORY`,
+> #197) est **inchangé** — il était déjà en catégorie unique par question, ce
+> n'était que le FILTRE de manche qui était multi. Voir `contracts/CHANGELOG.md`.
+>
+> ⚠️ **Modification de contrat (dev-backend, Batch 2/#107, toujours valable)** :
+> les champs ci-dessus restent **tous** `omitempty`, y compris
+> `RAFALE_DIFFICULTY` (le contrat d'origine l'en dispensait, par analogie avec
+> `Question.Answer`). Contrainte technique découverte à l'implémentation :
 > `models_roundtrip_test.go` (#184, garde d'exhaustivité byte-for-byte des
 > fixtures `testdata/questions/*.json`) exige que tout champ `TypedContent`
 > **étranger** au type d'une question n'apparaisse jamais sur le fil —
@@ -279,10 +296,14 @@ conformément au cadrage du milestone #16.
 
 ```
 pool = { q ∈ réservoir |
-           q.CATEGORY ∈ RAFALE_CATEGORIES
+           q.CATEGORY == CATEGORY
          ∧ q.DIFFICULTY == RAFALE_DIFFICULTY
          ∧ ¬used[q.ID] }
 ```
+
+> Catégorie **unique** (bugfix 2026-08-29, §3.3) — anciennement une
+> intersection OR sur `RAFALE_CATEGORIES` (multi). `DrawRafaleQuestion(category
+> string, difficulty int)` / `CountRafalePool(category string, difficulty int)`.
 
 - Tirage **aléatoire uniforme** dans `pool`.
 - La question tirée est immédiatement flaggée `used[q.ID] = true` **et persistée**
@@ -428,7 +449,8 @@ Création (sans `ID`) ou modification (avec `ID`).
 
 ### GET /api/rafale/pool
 
-Comptage pour l'alerte pré-manche (§7.2). `?categories=A,B&difficulty=2`
+Comptage pour l'alerte pré-manche (§7.2). `?category=A&difficulty=2` (catégorie
+**unique**, bugfix 2026-08-29 — anciennement `?categories=A,B`, voir §3.3).
 
 **Réponse 200** :
 ```json
@@ -462,7 +484,7 @@ chemins codée en dur**. Sans ajout explicite, le réservoir serait :
 
 1. `models.go` — `QuestionTypeRafale QuestionType = "RAFALE"`
 2. `models.go` — ajout à `AllQuestionTypes()`
-3. `question_types.go` — entrée `questionTypeRegistry` (`OwnedFields` = les 5 champs de §3.3,
+3. `question_types.go` — entrée `questionTypeRegistry` (`OwnedFields` = les 4 champs de §3.3,
    `MediaSlots` vide, `NestableInMotionCard: false`, `HasPlayerInput: false`)
 4. ⚠️ **Garde de build** : `TestQuestionTypeRegistry_Exhaustive` **casse la compilation** si 2 et 3 divergent
 5. `models.go` — champs `GameState` de §4, sans `omitempty`, initialisés non-nil dans `NewEngine()`

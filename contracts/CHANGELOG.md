@@ -2,6 +2,41 @@
 
 ---
 
+## [20260829] — RAFALE : catégorie de manche unique, pas multi (#107, bugfix)
+
+> Milestone v8.0.0 · Retour utilisateur post-QUALIF : la catégorie ne s'affichait toujours pas
+> correctement sur la card d'une question RAFALE malgré un premier correctif. RAFALE était le
+> premier (et seul) type à introduire une sélection multi-catégorie ; la card générique lit
+> `question.CATEGORY` (champ existant), pas un champ spécifique à un type — un cas particulier
+> qui n'avait pas sa place et masquait le vrai problème.
+
+- **[CHANGED]** `RAFALE_CATEGORIES` (`[]string`, multi-sélection, filtre OR) **supprimé**. RAFALE
+  réutilise désormais `CATEGORY` (champ générique de `Question`, catégorie **unique**), exactement
+  comme SPEEDY/QCM/MEMORY/MEMOTION/ARDOISE. Résout le bug d'affichage **structurellement** (plus
+  besoin d'une branche `isRafale` dédiée dans `QuestionCard.jsx` côté frontend) plutôt que de le
+  patcher côté client.
+- **[CHANGED]** `Engine.DrawRafaleQuestion(categories []string, difficulty int)` →
+  `DrawRafaleQuestion(category string, difficulty int)`. Idem `CountRafalePool`. Le filtre de pool
+  devient une égalité stricte (`q.CATEGORY == CATEGORY`) au lieu d'une appartenance à un ensemble.
+- **[CHANGED]** `GET /api/rafale/pool` : `?categories=A,B&difficulty=N` → `?category=A&difficulty=N`
+  (paramètre singulier, requis, 400 si absent — inchangé). L'endpoint d'édition du réservoir
+  (`GET /api/rafale/questions?categories=A,B`, filtre de LISTE côté éditeur, pas de configuration
+  de manche) **n'est pas concerné** — il reste multi, c'est une simple facilité de navigation.
+- **[UNCHANGED]** Le réservoir lui-même (`RafaleQuestion.CATEGORY`, #197) — il était déjà en
+  catégorie unique par question ; c'était uniquement le FILTRE de manche (config admin au
+  démarrage) qui était multi. Aucun impact sur `data/files/rafale/reservoir.json`.
+- **[CHANGED]** `question_types.go` — `questionTypeRegistry[QuestionTypeRafale].OwnedFields` passe
+  de 5 à 4 entrées (`RAFALE_CATEGORIES` retiré).
+
+**Non-breaking pour un réservoir existant** : aucune migration de données nécessaire
+(`RafaleQuestion.CATEGORY` inchangé). Une manche déjà configurée avec `RAFALE_CATEGORIES` (avant ce
+bugfix) doit être reconfigurée par l'admin avec une catégorie unique — pas de conversion
+automatique multi→simple (le contrat ne spécifie pas laquelle des catégories choisies garder).
+
+Détail complet : `contracts/rafale.md` §3.3/§7/§9.
+
+---
+
 ## [20260828] — Mode de jeu RAFALE (#107, #197, #198, #199)
 
 > Milestone v8.0.0 · Contrat écrit **avant** implémentation (contract-first)
