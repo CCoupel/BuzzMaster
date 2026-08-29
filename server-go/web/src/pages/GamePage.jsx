@@ -427,9 +427,21 @@ export default function GamePage() {
   // `rafalePoolLevel` vient de RafalePoolAlert (onLevelChange), même appel
   // GET /api/rafale/pool que celui déjà utilisé pour l'affichage de
   // l'alerte ci-dessous — pas de second calcul dupliqué ici.
+  //
+  // code-review-20260829-163049.md [MAJEUR] — `rafalePoolLevel` vaut `null`
+  // dans PLUSIEURS cas distincts (catégorie non sélectionnée, chargement en
+  // cours, erreur réseau — RafalePoolAlert.jsx), pas seulement "pool
+  // confirmé non-bloquant". Bloquer UNIQUEMENT sur `'blocking'` laissait
+  // passer tous les autres `null` — dont l'absence de catégorie —, un
+  // START possible sans filtre valide alors que le moteur refuse
+  // systématiquement (ErrRafalePoolEmpty garanti, contrat §7.2 :
+  // "disponibles == 0 → Bloquant"). Liste blanche plutôt que liste noire :
+  // seuls les deux niveaux confirmés non-bloquants autorisent le START —
+  // tout le reste (blocking, chargement, erreur, catégorie absente) bloque
+  // par défaut ("fail closed").
   const isRafaleSelected = gameState.question?.TYPE === 'RAFALE'
   const [rafalePoolLevel, setRafalePoolLevel] = useState(null)
-  const rafaleBlocked = isRafaleSelected && rafalePoolLevel === 'blocking'
+  const rafaleBlocked = isRafaleSelected && rafalePoolLevel !== 'ok' && rafalePoolLevel !== 'warning'
 
   // ENTRACTE (#119, C2) — le bouton a déménagé dans Navbar.jsx (visible sur
   // toutes les pages admin, pas seulement ici) ; seul l'estompage de
@@ -1135,7 +1147,7 @@ export default function GamePage() {
                 variant={isPlaying ? 'danger' : 'success'}
                 size="lg"
                 onClick={handleStartStop}
-                title={rafaleBlocked && !isPlaying ? 'Pool RAFALE vide pour ce filtre — démarrage refusé (contrat §7.2)' : undefined}
+                title={rafaleBlocked && !isPlaying ? 'Selectionnez une categorie et verifiez le pool RAFALE (disponibilite) avant de demarrer — contrat §7.2' : undefined}
                 disabled={!isPlaying && (!canStart || rafaleBlocked)}
               >
                 {isPlaying ? 'STOP' : 'START'}

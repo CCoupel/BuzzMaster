@@ -1327,6 +1327,17 @@ export default function QuestionsPage() {
       const validCards = formData.motionCards.filter(c => c.rectoTheme.trim())
       if (validCards.length < 2) return
     }
+    if (formData.type === 'RAFALE' && !formData.category) {
+      // code-review-20260829-163049.md [MAJEUR] — CATEGORY est OPTIONNEL
+      // pour tous les autres types (purement cosmétique, ignoré du moteur),
+      // mais FONCTIONNELLEMENT REQUIS pour RAFALE : c'est le filtre de
+      // pioche du réservoir (contrat §7, `q.CATEGORY == CATEGORY`).
+      // L'enregistrer vide garantirait un pool vide (ErrRafalePoolEmpty)
+      // dès le lancement — défense en profondeur, en plus du blocage côté
+      // GamePage.jsx (rafaleBlocked). Même style que la validation
+      // MEMORY/MEMOTION ci-dessus (retour silencieux, aucun POST envoyé).
+      return
+    }
     setIsUploading(true)
 
     const data = new FormData()
