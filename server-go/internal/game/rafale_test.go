@@ -163,6 +163,71 @@ func TestDrawRafaleQuestion_EmptyCategoryFilter_NeverMatches(t *testing.T) {
 	}
 }
 
+// TestDrawRafaleQuestion_StrictCategoryEquality_NotSetMembership is the
+// explicit regression guard for the v8.0.0 bugfix (2026-08-29, contract
+// §3.3): RAFALE_CATEGORIES (multi-select, OR-matched membership — a
+// question was drawable if its Category was IN the selected set) was
+// removed in favor of a single Category, compared by EXACT STRING EQUALITY
+// (rafalePoolUnsafe: `string(q.Category) != category`). This test names
+// that distinction directly: a reservoir question whose category would
+// have matched under the OLD "belongs to a set" semantics (HISTORY is one
+// of several categories a manche might have selected) must NEVER be drawn
+// when the manche's single configured category is something else — there
+// is no set to belong to anymore, only one value to equal.
+//
+// TestDrawRafaleQuestion_RespectsFilterIntersection above already proves
+// this structurally (r-3/SCIENCE is never drawn while filtering HISTORY);
+// this test exists to make the "equality, not membership" invariant
+// impossible to miss for anyone reading this file after the bugfix.
+func TestDrawRafaleQuestion_StrictCategoryEquality_NotSetMembership(t *testing.T) {
+	e := NewEngine()
+	seedRafaleReservoir(t, e, []RafaleQuestion{
+		{ID: "r-history", Question: "Q1", Answer: "A1", Category: CategoryHistory, Difficulty: 1},
+		{ID: "r-science", Question: "Q2", Answer: "A2", Category: CategoryScience, Difficulty: 1},
+		{ID: "r-sports", Question: "Q3", Answer: "A3", Category: CategorySports, Difficulty: 1},
+	})
+
+	// The manche is configured for exactly ONE category: HISTORY. Under the
+	// removed multi-select semantics, a manche could have selected
+	// {HISTORY, SCIENCE, SPORTS} and any of the three would have been
+	// drawable (membership). Under the current single-CATEGORY contract,
+	// only the exact match is ever eligible — SCIENCE and SPORTS must never
+	// be drawn, no matter how many draws are attempted.
+	drawnIDs := map[string]bool{}
+	for i := 0; i < 20; i++ {
+		q, err := e.DrawRafaleQuestion(string(CategoryHistory), 1)
+		if err != nil {
+			if errors.Is(err, ErrRafalePoolEmpty) {
+				break // pool of 1 (r-history) exhausts after the first draw — expected
+			}
+			t.Fatalf("draw %d: unexpected error: %v", i, err)
+		}
+		drawnIDs[q.ID] = true
+		if q.Category != CategoryHistory {
+			t.Fatalf("draw %d: got CATEGORY=%s, want strictly HISTORY (equality, not set membership)", i, q.Category)
+		}
+	}
+
+	if len(drawnIDs) != 1 || !drawnIDs["r-history"] {
+		t.Fatalf("expected only r-history ever drawn, got %v", drawnIDs)
+	}
+	if drawnIDs["r-science"] || drawnIDs["r-sports"] {
+		t.Errorf("r-science (SCIENCE) and r-sports (SPORTS) must never be drawn when the manche's category is HISTORY — got %v", drawnIDs)
+	}
+
+	// Same invariant on the read-only side (CountRafalePool): SCIENCE/SPORTS
+	// questions must not be counted into a HISTORY-filtered pool either —
+	// total stays 1 (the sole HISTORY question, now used), never 3.
+	available, used, total := e.CountRafalePool(string(CategoryHistory), 1)
+	if total != 1 || used != 1 || available != 0 {
+		t.Errorf("CountRafalePool(HISTORY, 1) after exhausting the sole HISTORY question: want (available=0, used=1, total=1) — SCIENCE/SPORTS must not leak in, got available=%d used=%d total=%d", available, used, total)
+	}
+	scienceAvailable, _, scienceTotal := e.CountRafalePool(string(CategoryScience), 1)
+	if scienceTotal != 1 || scienceAvailable != 1 {
+		t.Errorf("CountRafalePool(SCIENCE, 1): want the untouched SCIENCE question counted on ITS OWN filter (available=1, total=1), got available=%d total=%d", scienceAvailable, scienceTotal)
+	}
+}
+
 // ---------------------------------------------------------------------------
 // Persistance du flag « déjà utilisée » (contrat §3.2) : aller-retour
 // disque, survie à un redémarrage, reset au NEW_GAME.

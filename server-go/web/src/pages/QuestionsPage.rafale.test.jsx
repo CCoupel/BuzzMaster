@@ -243,3 +243,82 @@ describe('QuestionsPage — sélecteur de mode RAFALE (v8.0.0, #199, bugfix coh�
     expect(radios.solo.checked).toBe(false)
   })
 })
+
+// ---------------------------------------------------------------------------
+// Sélecteur de catégorie RAFALE — catégorie UNIQUE (bugfix 2026-08-29,
+// contrat rafale.md §3.3). Le multi-sélecteur RAFALE_CATEGORIES dédié a été
+// entièrement retiré : RAFALE réutilise désormais le MÊME CategorySelector
+// générique que tous les autres types (formData.category), sans branche
+// spécifique. Pas de nouveau composant à tester ici — CategorySelector a
+// déjà sa propre couverture unitaire (components/CategorySelector.test.jsx)
+// et son intégration dans QuestionsPage est déjà exercée pour SPEEDY par
+// QuestionsPage.v571.test.jsx — ce bloc vérifie seulement que RAFALE suit
+// exactement le même chemin (rendu, sélection, persistance), sans dupliquer
+// les scénarios déjà couverts ailleurs (création inline, 400/409/réseau).
+// ---------------------------------------------------------------------------
+
+describe('QuestionsPage — RAFALE : sélecteur de catégorie unique (bugfix 2026-08-29, contrat §3.3)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    useGame.mockReturnValue(makeQPageMock())
+    useCategories.mockReturnValue(makeCategoriesMock())
+    global.fetch = vi.fn()
+  })
+
+  afterEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('le CategorySelector générique est rendu pour le type RAFALE (même composant que les autres types, pas de variante dédiée)', () => {
+    const { container } = render(<QuestionsPage />)
+    switchToRafaleAndGetModeRadios(container) // sélectionne le type Rafale
+
+    // 8 catégories codées en dur + 1 custom (GEOGRAPHY du mock, ignoré ici
+    // car déjà hardcodée — voir makeCategoriesMock) + le bouton "+".
+    expect(container.querySelectorAll('.category-selector .category-btn').length).toBeGreaterThan(0)
+    expect(screen.getByTitle('Histoire')).toBeInTheDocument()
+  })
+
+  it('cliquer sur une catégorie la sélectionne (classe "active"), comme pour n\'importe quel autre type', () => {
+    const { container } = render(<QuestionsPage />)
+    switchToRafaleAndGetModeRadios(container)
+
+    fireEvent.click(screen.getByTitle('Histoire'))
+
+    expect(screen.getByTitle('Histoire').className).toMatch(/\bactive\b/)
+  })
+
+  it('la catégorie sélectionnée est PERSISTÉE au changement de sous-mode RAFALE (état du formulaire commun)', () => {
+    const { container } = render(<QuestionsPage />)
+    switchToRafaleAndGetModeRadios(container)
+    fireEvent.click(screen.getByTitle('Histoire'))
+
+    // Changer de mode RAFALE (SOLO -> CHACUN_SON_TOUR) ne doit rien
+    // réinitialiser côté catégorie — champs indépendants du même formData.
+    const chacunSonTour = container.querySelector('input[name="rafaleMode"][value="CHACUN_SON_TOUR"]')
+    fireEvent.click(chacunSonTour)
+
+    expect(screen.getByTitle('Histoire').className).toMatch(/\bactive\b/)
+  })
+
+  it('la catégorie sélectionnée est PERSISTÉE après un aller-retour vers un autre type (RAFALE -> QCM -> RAFALE)', () => {
+    const { container } = render(<QuestionsPage />)
+    switchToRafaleAndGetModeRadios(container)
+    fireEvent.click(screen.getByTitle('Histoire'))
+
+    fireEvent.click(screen.getByText(/qcm/i).closest('button'))
+    fireEvent.click(screen.getByText('Rafale').closest('button'))
+
+    expect(screen.getByTitle('Histoire').className).toMatch(/\bactive\b/)
+  })
+
+  it('re-cliquer sur la catégorie déjà sélectionnée la désélectionne (toggle, même comportement que les autres types)', () => {
+    const { container } = render(<QuestionsPage />)
+    switchToRafaleAndGetModeRadios(container)
+    fireEvent.click(screen.getByTitle('Histoire'))
+    expect(screen.getByTitle('Histoire').className).toMatch(/\bactive\b/)
+
+    fireEvent.click(screen.getByTitle('Histoire'))
+    expect(screen.getByTitle('Histoire').className).not.toMatch(/\bactive\b/)
+  })
+})

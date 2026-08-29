@@ -231,8 +231,17 @@ describe('PlayerDisplay — RAFALE : écran TV non-vide en READY (bugfix SHA 560
     expect(zones.textContent.trim().length).toBeGreaterThan(0)
   })
 
-  it('phase READY : affiche le repli générique "PRÉPAREZ-VOUS" (RAFALE_CATEGORIES est multi — pas de catégorie unique connue avant tirage, contrat §4)', () => {
-    renderTV({ phase: 'READY' })
+  it('phase READY, question.CATEGORY configurée (comportement réel depuis le bugfix catégorie unique) : affiche le badge de LA catégorie de la manche, comme les autres types', () => {
+    renderTV({ phase: 'READY', question: { ...RAFALE_QUESTION, CATEGORY: 'HISTORY' } })
+    // RAFALE réutilise désormais le champ CATEGORY générique (contrat §3.3,
+    // bugfix 2026-08-29) — ReadyCategoryDisplay le lit exactement comme pour
+    // SPEEDY/QCM/etc., plus de fourche RAFALE-spécifique.
+    expect(screen.getByText('Histoire')).toBeInTheDocument()
+    expect(screen.queryByText('PRÉPAREZ-VOUS')).not.toBeInTheDocument()
+  })
+
+  it('phase READY, question.CATEGORY absente (cas limite, pas le cas réel post-bugfix) : repli générique "PRÉPAREZ-VOUS", même comportement que les autres types sans catégorie', () => {
+    renderTV({ phase: 'READY', question: RAFALE_QUESTION }) // fixture par défaut, sans CATEGORY
     expect(screen.getByText('PRÉPAREZ-VOUS')).toBeInTheDocument()
   })
 
