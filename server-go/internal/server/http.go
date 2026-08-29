@@ -2293,23 +2293,24 @@ func (h *HTTPServer) handleRafaleQuestionByID(w http.ResponseWriter, r *http.Req
 }
 
 // handleRafalePool returns the pool count (available/used/total) for a
-// categories/difficulty filter — contract §9, feeding the pre-round alert
+// category/difficulty filter — contract §9, feeding the pre-round alert
 // (§7.2: blocking when available==0, warning when short of the estimated
 // need, neutral otherwise).
+//
+// ?category=X (singular, v8.0.0 bugfix, 2026-08-29): a RAFALE round now
+// filters on exactly one category, same as every other question type's
+// CATEGORY field — RAFALE_CATEGORIES (multi-select, ?categories=A,B) was
+// removed. See contracts/CHANGELOG.md.
 func (h *HTTPServer) handleRafalePool(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
 
-	raw := r.URL.Query().Get("categories")
-	if raw == "" {
-		http.Error(w, "categories required", http.StatusBadRequest)
+	category := strings.TrimSpace(r.URL.Query().Get("category"))
+	if category == "" {
+		http.Error(w, "category required", http.StatusBadRequest)
 		return
-	}
-	categories := strings.Split(raw, ",")
-	for i := range categories {
-		categories[i] = strings.TrimSpace(categories[i])
 	}
 
 	difficulty, err := strconv.Atoi(r.URL.Query().Get("difficulty"))
@@ -2318,7 +2319,7 @@ func (h *HTTPServer) handleRafalePool(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	available, used, total := h.engine.CountRafalePool(categories, difficulty)
+	available, used, total := h.engine.CountRafalePool(category, difficulty)
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]int{

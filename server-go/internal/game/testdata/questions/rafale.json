@@ -1,10 +1,10 @@
 {
   "ANSWER": "",
+  "CATEGORY": "HISTORY",
   "ID": "t-rafale",
   "ORDER": 7,
   "POINTS": "10",
-  "QUESTION": "Manche RAFALE — Histoire & Sciences, difficulté 2",
-  "RAFALE_CATEGORIES": ["HISTORY", "SCIENCE"],
+  "QUESTION": "Manche RAFALE — Histoire, difficulté 2",
   "RAFALE_DIFFICULTY": 2,
   "RAFALE_MAX_QUESTIONS": 100,
   "RAFALE_MODE": "SOLO",

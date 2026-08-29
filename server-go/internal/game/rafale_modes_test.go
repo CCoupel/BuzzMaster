@@ -21,15 +21,15 @@ import (
 // makeMotionQuestion's role in engine_memotion_test.go. questionTime<=0
 // defaults to 3 inside the engine (advanceRafaleUnsafe/startRafaleRoundUnsafe),
 // so 0 here exercises that default path deliberately.
-func makeRafaleQuestion(id string, mode string, categories []string, difficulty int) *Question {
+func makeRafaleQuestion(id string, mode string, category QuestionCategory, difficulty int) *Question {
 	return &Question{
 		ID:       id,
 		Question: "RAFALE round " + id,
 		Type:     QuestionTypeRafale,
+		Category: category,
 		Points:   "10",
 		Time:     "120",
 		TypedContent: TypedContent{
-			RafaleCategories:   categories,
 			RafaleDifficulty:   difficulty,
 			RafaleMode:         mode,
 			RafaleQuestionTime: 3,
@@ -66,7 +66,7 @@ func TestSetRafaleParticipatingTeams_FirstTeamBecomesCurrent(t *testing.T) {
 		"blue": {Name: "Team Blue", Color: []int{0, 0, 255}},
 	})
 	seedRafaleReservoirBulk(t, e, 5, CategoryHistory, 1)
-	q := makeRafaleQuestion("rq1", string(RafaleModeChacunSonTour), []string{string(CategoryHistory)}, 1)
+	q := makeRafaleQuestion("rq1", string(RafaleModeChacunSonTour), CategoryHistory, 1)
 	e.Ready("rq1", q)
 
 	if err := e.SetRafaleParticipatingTeams([]string{"blue", "red"}); err != nil {
@@ -89,7 +89,7 @@ func TestSetRafaleParticipatingTeams_RejectsUnknownTeam(t *testing.T) {
 	e := NewEngine()
 	e.SetTeams(map[string]*Team{"red": {Name: "Team Red"}})
 	seedRafaleReservoirBulk(t, e, 5, CategoryHistory, 1)
-	q := makeRafaleQuestion("rq1", string(RafaleModeSolo), []string{string(CategoryHistory)}, 1)
+	q := makeRafaleQuestion("rq1", string(RafaleModeSolo), CategoryHistory, 1)
 	e.Ready("rq1", q)
 
 	err := e.SetRafaleParticipatingTeams([]string{"red", "ghost"})
@@ -105,7 +105,7 @@ func TestSetRafaleParticipatingTeams_RejectsWrongPhase(t *testing.T) {
 	e := NewEngine()
 	e.SetTeams(map[string]*Team{"red": {Name: "Team Red"}})
 	seedRafaleReservoirBulk(t, e, 5, CategoryHistory, 1)
-	q := makeRafaleQuestion("rq1", string(RafaleModeSolo), []string{string(CategoryHistory)}, 1)
+	q := makeRafaleQuestion("rq1", string(RafaleModeSolo), CategoryHistory, 1)
 	e.Ready("rq1", q)
 	e.StartImmediate(0) // now STARTED, not PREPARE/READY
 	defer e.Stop()
@@ -134,7 +134,7 @@ func TestRafaleAdvance_Solo_CounterIncrementsOnCorrectOnly_NeverRotates(t *testi
 	e := NewEngine()
 	e.SetTeams(map[string]*Team{"red": {Name: "Team Red"}})
 	seedRafaleReservoirBulk(t, e, 10, CategoryHistory, 1)
-	q := makeRafaleQuestion("rq1", string(RafaleModeSolo), []string{string(CategoryHistory)}, 1)
+	q := makeRafaleQuestion("rq1", string(RafaleModeSolo), CategoryHistory, 1)
 	e.Ready("rq1", q)
 	if err := e.SetRafaleParticipatingTeams([]string{"red"}); err != nil {
 		t.Fatalf("SetRafaleParticipatingTeams failed: %v", err)
@@ -168,7 +168,7 @@ func TestRafaleAdvance_ChacunSonTour_RotatesRegardlessOfOutcome(t *testing.T) {
 		"blue": {Name: "Team Blue", Color: []int{0, 0, 255}},
 	})
 	seedRafaleReservoirBulk(t, e, 10, CategoryHistory, 1)
-	q := makeRafaleQuestion("rq1", string(RafaleModeChacunSonTour), []string{string(CategoryHistory)}, 1)
+	q := makeRafaleQuestion("rq1", string(RafaleModeChacunSonTour), CategoryHistory, 1)
 	e.Ready("rq1", q)
 	if err := e.SetRafaleParticipatingTeams([]string{"red", "blue"}); err != nil {
 		t.Fatalf("SetRafaleParticipatingTeams failed: %v", err)
@@ -207,7 +207,7 @@ func TestRafaleAdvance_TantQueJeGagne_KeepsHandOnCorrect_RotatesOnIncorrect(t *t
 		"blue": {Name: "Team Blue"},
 	})
 	seedRafaleReservoirBulk(t, e, 10, CategoryHistory, 1)
-	q := makeRafaleQuestion("rq1", string(RafaleModeTantQueJeGagne), []string{string(CategoryHistory)}, 1)
+	q := makeRafaleQuestion("rq1", string(RafaleModeTantQueJeGagne), CategoryHistory, 1)
 	e.Ready("rq1", q)
 	if err := e.SetRafaleParticipatingTeams([]string{"red", "blue"}); err != nil {
 		t.Fatalf("SetRafaleParticipatingTeams failed: %v", err)
@@ -245,7 +245,7 @@ func TestRafaleAdvance_MaillonFaible_ResetsCounterOnIncorrect_TracksBest(t *test
 		"blue": {Name: "Team Blue"},
 	})
 	seedRafaleReservoirBulk(t, e, 10, CategoryHistory, 1)
-	q := makeRafaleQuestion("rq1", string(RafaleModeMaillonFaible), []string{string(CategoryHistory)}, 1)
+	q := makeRafaleQuestion("rq1", string(RafaleModeMaillonFaible), CategoryHistory, 1)
 	e.Ready("rq1", q)
 	if err := e.SetRafaleParticipatingTeams([]string{"red", "blue"}); err != nil {
 		t.Fatalf("SetRafaleParticipatingTeams failed: %v", err)

@@ -124,7 +124,12 @@ var questionTypeRegistry = map[QuestionType]TypeDescriptor{
 	QuestionTypeRafale: {
 		Type: QuestionTypeRafale,
 		OwnedFields: []string{
-			"RAFALE_CATEGORIES", "RAFALE_DIFFICULTY", "RAFALE_MODE",
+			// CATEGORY is deliberately NOT listed here (v8.0.0 bugfix,
+			// 2026-08-29): RAFALE reuses the generic Question.Category field
+			// (like every other type), it doesn't own a type-specific one —
+			// RAFALE_CATEGORIES (multi-select) was removed, see TypedContent's
+			// own doc comment and contracts/CHANGELOG.md.
+			"RAFALE_DIFFICULTY", "RAFALE_MODE",
 			"RAFALE_QUESTION_TIME", "RAFALE_MAX_QUESTIONS",
 		},
 		MediaSlots: nil, // reservoir questions are text-only, no media (contracts/rafale.md §2.4/D3)

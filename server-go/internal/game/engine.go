@@ -2000,7 +2000,7 @@ func (e *Engine) advanceRafaleUnsafe(correct bool) rafaleAdvanceResult {
 		return rafaleAdvanceResult{roundEnded: true}
 	}
 
-	drawn, err := e.drawRafaleQuestionUnsafe(e.state.Question.RafaleCategories, e.state.Question.RafaleDifficulty)
+	drawn, err := e.drawRafaleQuestionUnsafe(string(e.state.Question.Category), e.state.Question.RafaleDifficulty)
 	if err != nil {
 		// Pool exhausted mid-round (contract §7.1) — never reproposes a
 		// question already seen; ends the round instead.
@@ -2015,7 +2015,7 @@ func (e *Engine) advanceRafaleUnsafe(correct bool) rafaleAdvanceResult {
 		Category: string(drawn.Category), Difficulty: drawn.Difficulty,
 	}
 	e.state.RafaleAskedCount++
-	e.state.RafalePoolRemaining = len(e.rafalePoolUnsafe(e.state.Question.RafaleCategories, e.state.Question.RafaleDifficulty))
+	e.state.RafalePoolRemaining = len(e.rafalePoolUnsafe(string(e.state.Question.Category), e.state.Question.RafaleDifficulty))
 
 	questionTime := e.state.Question.RafaleQuestionTime
 	if questionTime <= 0 {
@@ -2139,7 +2139,7 @@ func (e *Engine) startRafaleRoundUnsafe() rafaleRoundStartResult {
 	e.state.RafaleTeamCounters = map[string]int{}
 	e.state.RafaleTeamBest = map[string]int{}
 
-	drawn, err := e.drawRafaleQuestionUnsafe(e.state.Question.RafaleCategories, e.state.Question.RafaleDifficulty)
+	drawn, err := e.drawRafaleQuestionUnsafe(string(e.state.Question.Category), e.state.Question.RafaleDifficulty)
 	if err != nil {
 		// contract §7.1: never reproposes anything, ends immediately. Should
 		// not normally happen — §7.2's pre-round alert blocks START when
@@ -2158,7 +2158,7 @@ func (e *Engine) startRafaleRoundUnsafe() rafaleRoundStartResult {
 		Category: string(drawn.Category), Difficulty: drawn.Difficulty,
 	}
 	e.state.RafaleAskedCount = 1
-	e.state.RafalePoolRemaining = len(e.rafalePoolUnsafe(e.state.Question.RafaleCategories, e.state.Question.RafaleDifficulty))
+	e.state.RafalePoolRemaining = len(e.rafalePoolUnsafe(string(e.state.Question.Category), e.state.Question.RafaleDifficulty))
 
 	questionTime := e.state.Question.RafaleQuestionTime
 	if questionTime <= 0 {
@@ -3446,23 +3446,24 @@ func (e *Engine) SaveAll() {
 }
 
 // ErrRafalePoolEmpty is returned by DrawRafaleQuestion when no reservoir
-// question matches the requested categories/difficulty filter and is not
+// question matches the requested category/difficulty filter and is not
 // already used — contracts/rafale.md §7.1. The caller must react by ending
 // the round (RAFALE_EXHAUSTED), never by silently repeating an already-seen
 // question.
 var ErrRafalePoolEmpty = errors.New("rafale_pool_empty")
 
-// rafalePoolUnsafe returns the reservoir questions matching categories
-// (multi, OR) ∩ difficulty (exact) ∩ not-yet-used — contracts/rafale.md §7.
-// Caller must hold e.mu (read or write lock).
-func (e *Engine) rafalePoolUnsafe(categories []string, difficulty int) []*RafaleQuestion {
-	catSet := make(map[string]struct{}, len(categories))
-	for _, c := range categories {
-		catSet[c] = struct{}{}
-	}
+// rafalePoolUnsafe returns the reservoir questions matching category ∩
+// difficulty (both exact) ∩ not-yet-used — contracts/rafale.md §7. Caller
+// must hold e.mu (read or write lock).
+//
+// Single category (v8.0.0 bugfix, 2026-08-29): a RAFALE round now filters
+// on exactly one category, same as every other question type's Category
+// field — RAFALE_CATEGORIES (multi-select, OR-matched) was removed. See
+// TypedContent's own doc comment (models.go) and contracts/CHANGELOG.md.
+func (e *Engine) rafalePoolUnsafe(category string, difficulty int) []*RafaleQuestion {
 	var pool []*RafaleQuestion
 	for _, q := range e.rafaleQuestions {
-		if _, ok := catSet[string(q.Category)]; !ok {
+		if string(q.Category) != category {
 			continue
 		}
 		if q.Difficulty != difficulty {
@@ -3477,19 +3478,15 @@ func (e *Engine) rafalePoolUnsafe(categories []string, difficulty int) []*Rafale
 }
 
 // CountRafalePool returns (available, used, total) reservoir questions for
-// a categories/difficulty filter — contracts/rafale.md §7.2, the pre-round
+// a category/difficulty filter — contracts/rafale.md §7.2, the pre-round
 // alert (GET /api/rafale/pool): blocking when available==0, a warning when
 // available < the estimated need, informational otherwise.
-func (e *Engine) CountRafalePool(categories []string, difficulty int) (available, used, total int) {
+func (e *Engine) CountRafalePool(category string, difficulty int) (available, used, total int) {
 	e.mu.RLock()
 	defer e.mu.RUnlock()
 
-	catSet := make(map[string]struct{}, len(categories))
-	for _, c := range categories {
-		catSet[c] = struct{}{}
-	}
 	for _, q := range e.rafaleQuestions {
-		if _, ok := catSet[string(q.Category)]; !ok {
+		if string(q.Category) != category {
 			continue
 		}
 		if q.Difficulty != difficulty {
@@ -3506,7 +3503,7 @@ func (e *Engine) CountRafalePool(categories []string, difficulty int) (available
 }
 
 // DrawRafaleQuestion draws one question uniformly at random from the pool
-// (categories ∩ difficulty ∩ not-used — contracts/rafale.md §7), marks it
+// (category ∩ difficulty ∩ not-used — contracts/rafale.md §7), marks it
 // used immediately and persists the flag asynchronously so a restart mid-
 // round never re-proposes it. Returns ErrRafalePoolEmpty when the pool is
 // empty; the caller (Phase 2, #107) reacts per contract §7.1.
@@ -3517,9 +3514,9 @@ func (e *Engine) CountRafalePool(categories []string, difficulty int) (available
 // section when it needs to draw — it calls drawRafaleQuestionUnsafe
 // directly instead, to stay within one atomic transition rather than
 // releasing and re-acquiring e.mu mid-round-advance.
-func (e *Engine) DrawRafaleQuestion(categories []string, difficulty int) (*RafaleQuestion, error) {
+func (e *Engine) DrawRafaleQuestion(category string, difficulty int) (*RafaleQuestion, error) {
 	e.mu.Lock()
-	drawn, err := e.drawRafaleQuestionUnsafe(categories, difficulty)
+	drawn, err := e.drawRafaleQuestionUnsafe(category, difficulty)
 	e.mu.Unlock()
 
 	if err != nil {
@@ -3535,8 +3532,8 @@ func (e *Engine) DrawRafaleQuestion(categories []string, difficulty int) (*Rafal
 // hold e.mu (write lock) and is responsible for persisting rafaleUsed
 // (safeGo("SaveRafaleUsed", e.SaveRafaleUsed)) once its own locked section
 // ends — this function only mutates in-memory state.
-func (e *Engine) drawRafaleQuestionUnsafe(categories []string, difficulty int) (*RafaleQuestion, error) {
-	pool := e.rafalePoolUnsafe(categories, difficulty)
+func (e *Engine) drawRafaleQuestionUnsafe(category string, difficulty int) (*RafaleQuestion, error) {
+	pool := e.rafalePoolUnsafe(category, difficulty)
 	if len(pool) == 0 {
 		return nil, ErrRafalePoolEmpty
 	}

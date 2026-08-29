@@ -81,9 +81,9 @@ func setupRafaleIntegrationTestApp(t *testing.T) *App {
 
 	q := &game.Question{
 		ID: "rq1", Question: "RAFALE round", Type: game.QuestionTypeRafale,
-		Points: "10", Time: "120",
+		Category: game.CategoryHistory, // v8.0.0 bugfix (2026-08-29): RAFALE_CATEGORIES (multi) removed, single generic CATEGORY reused like every other type
+		Points:   "10", Time: "120",
 		TypedContent: game.TypedContent{
-			RafaleCategories:   []string{string(game.CategoryHistory)},
 			RafaleDifficulty:   1,
 			RafaleMode:         string(game.RafaleModeChacunSonTour),
 			RafaleQuestionTime: 3,

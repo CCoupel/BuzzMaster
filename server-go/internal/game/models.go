@@ -297,10 +297,20 @@ type TypedContent struct {
 	// never nestable in a MEMOTION card (RAFALE has no notion of a single
 	// card; it drives a whole timed round). Unlike QCM/MEMORY, a RAFALE
 	// "question" carries no statement of its own here — TIME/POINTS
-	// (declared directly on Question, reused per §3.3) plus these 5 fields
+	// (declared directly on Question, reused per §3.3) plus these 4 fields
 	// are the round's CONFIGURATION; the actual questions come from the
 	// reservoir (RafaleQuestion, rafale_store.go), drawn at play time.
-	RafaleCategories []string `json:"RAFALE_CATEGORIES,omitempty"` // multi-selection, ≥1 (contract §3.3)
+	//
+	// Category filter: RAFALE_CATEGORIES (multi-selection, []string) was
+	// removed (v8.0.0 bugfix, 2026-08-29) in favor of the generic
+	// Question.Category field every other type already uses — RAFALE was
+	// the first (and only) type to introduce multi-category selection, and
+	// it was never rendered correctly by the generic question card (which
+	// reads question.CATEGORY, not a type-specific field) despite a prior
+	// attempted fix. Single category, same as SPEEDY/QCM/MEMORY/MEMOTION/
+	// ARDOISE, resolves the display bug structurally instead of adding a
+	// dedicated RAFALE branch client-side. See contracts/CHANGELOG.md.
+	//
 	// RafaleDifficulty: omitempty like every other TypedContent field in
 	// this struct (models_roundtrip_test.go enforces byte-for-byte fixture
 	// round-trips — a foreign type's owned field must never appear on the

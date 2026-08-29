@@ -77,10 +77,10 @@ func newRafaleAnswerLeakTestApp(t *testing.T) *App {
 		ID:       "rafale-leak-q",
 		Question: "RAFALE round",
 		Type:     game.QuestionTypeRafale,
+		Category: rafaleAnswerLeakReservoirCategory,
 		Points:   "10",
 		Time:     "120",
 		TypedContent: game.TypedContent{
-			RafaleCategories:   []string{string(rafaleAnswerLeakReservoirCategory)},
 			RafaleDifficulty:   rafaleAnswerLeakReservoirDifficulty,
 			RafaleMode:         string(game.RafaleModeSolo),
 			RafaleQuestionTime: 3,
