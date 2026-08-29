@@ -1491,9 +1491,9 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
 
             {/* COUNTDOWN State - Timer + Category animates to question zone + Big countdown number.
                 RAFALE (v8.0.0, #16/#198, bugfix TV vide — retour utilisateur QUALIF 8.0.0.3) : inclus
-                ici comme SPEEDY/ARDOISE — zone-question restera vide (RAFALE_CATEGORIES est multi,
-                pas de catégorie unique à animer), mais timer + décompte s'affichent, comme les autres
-                types à ce stade. */}
+                ici comme SPEEDY/ARDOISE — depuis le bugfix CATEGORY unique (2026-08-29, contrat §3.3),
+                gameState.question.CATEGORY est renseigné pour RAFALE comme pour tout autre type, la
+                catégorie s'anime donc normalement en plus du timer + décompte. */}
             {showCountdown && (isSpeedy || isArdoise || isRafale) && (
               <div className="game-content-zones">
                 {/* Zone 1: Timer */}
@@ -1559,9 +1559,10 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
 
             {/* READY State - Non-QCM, Non-Memory: Timer + centered message (same layout as QCM).
                 RAFALE (v8.0.0, #16/#198, bugfix TV vide en READY — retour utilisateur QUALIF
-                8.0.0.3) : inclus ici comme SPEEDY/ARDOISE — ReadyCategoryDisplay retombe sur son
-                repli générique "PRÉPAREZ-VOUS" (RAFALE_CATEGORIES est multi, pas de catégorie
-                unique connue avant tirage de la première question, §4 du contrat). Cause racine :
+                8.0.0.3) : inclus ici comme SPEEDY/ARDOISE — ReadyCategoryDisplay affiche désormais
+                la vraie catégorie de la manche (gameState.question.CATEGORY, unique depuis le
+                bugfix 2026-08-29, contrat §3.3), comme pour tout autre type. Cause racine (READY
+                totalement vide, avant ce bugfix-ci) :
                 `showGameContent` (bloc RAFALE dédié, plus bas) ne couvre que STARTED/PAUSED/
                 STOPPED/REVEALED — READY (et COUNTDOWN ci-dessus) en étaient exclus, et `isRafale`
                 étant dans `isKnownOtherType`, RAFALE ne retombait plus non plus sur ce bloc

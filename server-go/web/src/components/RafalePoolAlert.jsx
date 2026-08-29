@@ -19,7 +19,9 @@ import './RafalePoolAlert.css'
  * présenter comme un plancher de sécurité (§7.2).
  *
  * @param {Object} props
- * @param {string[]} props.categories - RAFALE_CATEGORIES sélectionnées (≥1 attendu)
+ * @param {string} props.category - CATEGORY de la manche (bugfix 2026-08-29,
+ *   contrat §3.3/§9 : catégorie UNIQUE désormais, comme tous les autres
+ *   types — l'ancien RAFALE_CATEGORIES multi est retiré)
  * @param {number} props.difficulty - RAFALE_DIFFICULTY (1..3)
  * @param {number} props.roundTime - durée de la manche en secondes (TIME)
  * @param {number} props.questionTime - secondes par question (RAFALE_QUESTION_TIME)
@@ -31,12 +33,12 @@ import './RafalePoolAlert.css'
  *   vide (§7.2 : "disponibles == 0 → Bloquant — démarrage refusé"),
  *   `QuestionsPage.jsx` l'ignore (pas de bouton à bloquer en édition).
  */
-export default function RafalePoolAlert({ categories = [], difficulty, roundTime, questionTime, className = '', onLevelChange }) {
+export default function RafalePoolAlert({ category = '', difficulty, roundTime, questionTime, className = '', onLevelChange }) {
   const [pool, setPool] = useState(null) // { AVAILABLE, USED, TOTAL } | null
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
 
-  const hasFilter = categories.length > 0 && difficulty >= 1 && difficulty <= 3
+  const hasFilter = !!category && difficulty >= 1 && difficulty <= 3
 
   useEffect(() => {
     if (!hasFilter) {
@@ -48,7 +50,7 @@ export default function RafalePoolAlert({ categories = [], difficulty, roundTime
     setLoading(true)
     setError(null)
     const params = new URLSearchParams()
-    params.set('categories', categories.join(','))
+    params.set('category', category)
     params.set('difficulty', String(difficulty))
     fetch(`/api/rafale/pool?${params.toString()}`)
       .then(res => {
@@ -68,9 +70,7 @@ export default function RafalePoolAlert({ categories = [], difficulty, roundTime
         }
       })
     return () => { cancelled = true }
-    // categories est un tableau — comparaison par contenu via join() pour
-    // éviter un fetch à chaque rendu (nouvelle référence sans changement).
-  }, [categories.join(','), difficulty, hasFilter])
+  }, [category, difficulty, hasFilter])
 
   const need = (roundTime > 0 && questionTime > 0) ? Math.ceil(roundTime / questionTime) : 0
   const level = (hasFilter && !loading && !error && pool)
@@ -114,7 +114,7 @@ export default function RafalePoolAlert({ categories = [], difficulty, roundTime
         {need > 0 && (
           <p className="rafale-pool-alert-detail">
             {level === 'blocking'
-              ? 'Élargissez les catégories, changez de difficulté, ou lancez une nouvelle partie pour réinitialiser les questions déjà utilisées.'
+              ? 'Changez de catégorie ou de difficulté, ou lancez une nouvelle partie pour réinitialiser les questions déjà utilisées.'
               : `Besoin estimé pour ${roundTime}s : ~${need} questions.`}
             {level === 'blocking' && <em> Démarrage bloqué.</em>}
             {level === 'warning' && <em> Démarrage autorisé.</em>}

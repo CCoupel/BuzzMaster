@@ -932,9 +932,16 @@ export default function GamePage() {
           {isRafaleSelected && !isPlaying && (
             <div className="rafale-admin-panel">
               <div className="rafale-admin-config">
-                <span className="rafale-admin-chip">
-                  {(gameState.question.RAFALE_CATEGORIES || []).length} categorie(s)
-                </span>
+                {/* CATEGORY unique (bugfix 2026-08-29, contrat §3.3) — un
+                    seul CategoryBadge, comme pour tous les autres types,
+                    remplace l'ancien compteur RAFALE_CATEGORIES (multi). */}
+                {gameState.question.CATEGORY && (
+                  <span className="rafale-admin-chip">
+                    <CategoryBadge catKey={gameState.question.CATEGORY} customCategories={customCategories} size="sm" />
+                    {' '}
+                    {categoryMeta(gameState.question.CATEGORY, customCategories)?.label}
+                  </span>
+                )}
                 <span className="rafale-admin-chip">
                   {'★'.repeat(gameState.question.RAFALE_DIFFICULTY || 1)}
                 </span>
@@ -946,7 +953,7 @@ export default function GamePage() {
                 </span>
               </div>
               <RafalePoolAlert
-                categories={gameState.question.RAFALE_CATEGORIES || []}
+                category={gameState.question.CATEGORY || ''}
                 difficulty={gameState.question.RAFALE_DIFFICULTY}
                 roundTime={parseInt(timeInput) || 0}
                 questionTime={gameState.question.RAFALE_QUESTION_TIME || 3}
