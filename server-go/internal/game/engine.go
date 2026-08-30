@@ -868,6 +868,32 @@ func (e *Engine) Ready(questionID string, question *Question) {
 	// Check if this is a NEW question (different from current)
 	isNewQuestion := e.state.Question == nil || e.state.Question.ID != questionID
 
+	// RAFALE bugfix (v8.0.0, #199, 2026-09-03, 3rd QUALIF cycle of the "je
+	// peux lancer START sans équipe" report — 393c6dc7's participantsConform
+	// gate itself is sound, exhaustively re-verified, but a RAFALE
+	// round-config question is DESIGNED to be replayed across several
+	// manches within the SAME game with the SAME question ID (unlike
+	// QCM/MEMORY/MEMOTION, each normally played once per game) — so
+	// isNewQuestion (an ID comparison) is the WRONG staleness signal for
+	// its participant selection specifically. RafaleParticipatingTeams/
+	// RafaleCurrentTeam/RafaleCurrentTeamColor are reset by
+	// startRafaleRoundUnsafe() at the NEXT actualStart(), and by this
+	// function's own isNewQuestion branch below on a genuinely different
+	// question — but NOT by stopUnsafe() (Stop() never touches them, by
+	// design — see its own comment), and NOT here on a same-ID replay,
+	// since the whole reset block was skipped. Result, reproduced and
+	// confirmed by TestReady_RafaleReplay_ResetsStaleParticipatingTeams:
+	// launch a multi-mode manche WITH teams selected, let it finish (STOP),
+	// then Ready() the SAME question ID again for a new manche WITHOUT
+	// reselecting anything — the previous manche's team selection was still
+	// sitting in GameState, silently satisfying participantsConform, and
+	// START succeeded. Captured HERE, before ANY reset below (including the
+	// isNewQuestion branch, which would itself reset RafaleSubPhase back to
+	// None on a genuine new-question transition — this flag must reflect
+	// the OUTGOING question's state).
+	rafaleRoundAlreadyPlayed := e.state.Question != nil && e.state.Question.Type == QuestionTypeRafale &&
+		e.state.RafaleSubPhase != RafaleSubPhaseNone
+
 	e.state.Phase = PhasePrepare
 	e.state.Question = question
 	e.setQuestionStatus(StatusPrepare)
@@ -924,11 +950,22 @@ func (e *Engine) Ready(questionID string, question *Question) {
 
 		// Reset ARDOISE answers for new question (v5.6.0)
 		e.state.ArdoiseAnswers = make(map[string]ArdoiseAnswer)
+	}
 
-		// Reset RAFALE state for new question (v8.0.0, #107 — same pattern
-		// as MEMOTION/Memory above: unconditional, regardless of the new
-		// question's own type, so leftover values from a previous RAFALE
-		// round never leak into the next question).
+	// Reset RAFALE state — v8.0.0, #107 originally (unconditional on
+	// question TYPE, so leftover values from a previous RAFALE round never
+	// leak into the next question), extended 2026-09-03 (#199 bugfix, see
+	// rafaleRoundAlreadyPlayed's own comment above) to ALSO fire on a
+	// same-ID replay of a RAFALE question that already completed at least
+	// one round — not just on isNewQuestion. Every other field this block
+	// resets is already re-initialized fresh by startRafaleRoundUnsafe() at
+	// the next actual round start regardless (counters, asked count, pool
+	// remaining, current question) — resetting them here too on a replay is
+	// redundant but harmless; RafaleParticipatingTeams/RafaleCurrentTeam/
+	// RafaleCurrentTeamColor are the ONLY fields this fixes anything for
+	// (startRafaleRoundUnsafe never touches them, by design — team
+	// selection is meant to survive a countdown, not a full stopped round).
+	if isNewQuestion || rafaleRoundAlreadyPlayed {
 		e.state.RafaleSubPhase = RafaleSubPhaseNone
 		e.state.RafaleCurrentQuestion = RafaleCurrent{}
 		e.state.RafaleQuestionTime = 0
