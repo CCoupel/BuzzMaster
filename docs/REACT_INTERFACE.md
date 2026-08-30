@@ -1598,16 +1598,23 @@ Fichier CSS partagé déclarant :
 
 **Fichier** : `web/src/pages/PlayerDisplay.jsx` + `PlayerDisplay.css`
 
-**Affichage** (mode `isRafale`) :
-- Double timer (manche + question, en haut)
-- Question courante (centre, gros texte)
-- Équipe active (bandeau fort, bas)
-- Compteurs équipes (top 3–6 équipes)
+**Affichage** (mode `isRafale`) — v8.0.0 refonte (mockups §9) :
+- **Encart question coloré par équipe** (haut, fond couleur `RAFALE_CURRENT_TEAM_COLOR`, aucun encart "c'est le tour de")
+  - Nom équipe (libellé, ex "Team Red")
+  - Question courante (gros texte)
+  - Double timer (manche longue + question courte, en bas de l'encart)
+- **Jamais la réponse** (TV est écran public)
+- **Panneau équipes** (bas, 3–6 équipes) : pour chaque équipe, afficher
+  - Nom + couleur
+  - Bonnes réponses (cumulatif)
+  - Mauvaises réponses (cumulatif)
+  - Série en cours (RAFALE_TEAM_STREAK[team])
 
 **Invariants** :
 - `overflow: hidden` (jamais auto/scroll)
 - Unités viewport (`vh`, `vw`, `%`)
-- Contenu plafonné (max 6 équipes visibles)
+- Encart coloré (pas de bloc "c'est le tour de", la couleur du fond **indique l'équipe**)
+- Pas de scores/points affichés (scoring en fin de manche uniquement)
 
 **Dispatch** :
 ```jsx

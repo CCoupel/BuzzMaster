@@ -1746,28 +1746,40 @@ Sur l'écran admin (`/admin`) :
 
 ### Pendant la manche
 
-Sur la tablette animateur (`/anim`, en grand écran) :
+Sur la tablette animateur (`/anim`, en grand écran) — v8.0.0 (mockups §9/§3) :
 
+**Encart question** (haut, coloré aux couleurs équipe active) :
 ```
-┌─────────────────────────────────┐
-│  Timer manche: 01:45             │
-│  Timer question: 2.3s            │
-│                                   │
-│  Question: Capitale de l'Italie? │
-│  Réponse: Rome                   │
-│  Équipe active: Red              │
-│                                   │
-│  ┌────────────────────────────────┐
-│  │  ✓ RÉPONSE VALIDE (vert)      │
-│  ├────────────────────────────────┤
-│  │  ✗ RÉPONSE INVALIDE (rouge)   │
-│  └────────────────────────────────┘
-└─────────────────────────────────┘
+┌─────────────────────────────────────────────┐
+│ Team Red                                    │
+│ Capitale de l'Italie ?                      │
+│                                              │
+│ ⏱ Manche: 01:45 | Question: 2.3s            │
+└─────────────────────────────────────────────┘
+```
+- Nom équipe + couleur de fond (`RAFALE_CURRENT_TEAM_COLOR`)
+- Question courante (gros texte, lisible de loin)
+- Double timer (haut, bar long + bar courte)
+- **Réponse attendue : visible** (animateur doit juger)
+
+**Panneau équipes** (bas, l'équipe active en évidence) — v8.0.0 (mockups §3) :
+Pour chaque équipe, afficher :
+- Nom + couleur badge
+- Bonnes réponses (cumulatif `RAFALE_TEAM_COUNTERS`)
+- Mauvaises réponses (cumulatif `RAFALE_TEAM_ERRORS`)
+- Série en cours (courant `RAFALE_TEAM_STREAK`)
+
+**Boutons validation** (L2, gros, tactiles) :
+```
+┌─────────────────────┬─────────────────────┐
+│  ✓ RÉPONSE VALIDE   │  ✗ RÉPONSE INVALIDE │
+│     (vert)          │       (rouge)        │
+└─────────────────────┴─────────────────────┘
 ```
 
 **Actions** :
-- **Appuyer RÉPONSE VALIDE** → l'équipe gagne un point de compteur (règle mode-dependent)
-- **Appuyer RÉPONSE INVALIDE** → l'équipe perd la main (rotation) ou remet compteur à 0
+- **Appuyer RÉPONSE VALIDE** → série++, compteur++ (règle mode-dependent), équipe garde/perd main, nouvelle question
+- **Appuyer RÉPONSE INVALIDE** → série=0, erreurs++, rotation/perte main, nouvelle question
 - **Timer question expire (0 s)** → équivalent à RÉPONSE INVALIDE
 - **Attendre fin manche** (timer global à 0 ou pool épuisée)
 

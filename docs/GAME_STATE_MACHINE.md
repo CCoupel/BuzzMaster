@@ -176,8 +176,10 @@ Début manche RAFALE (phase=STARTED)
 RAFALE_SUBPHASE          RafaleSubPhase  // "" | "QUESTION" | "ROUND_END"
 RAFALE_CURRENT_QUESTION  RafaleCurrent   // {ID, QUESTION, CATEGORY, DIFFICULTY} (JAMAIS ANSWER)
 RAFALE_QUESTION_TIME     int             // décompte timer question courant (ms)
-RAFALE_TEAM_COUNTERS     map[string]int  // compteur réponses correctes par équipe
-RAFALE_TEAM_BEST         map[string]int  // meilleur compteur atteint (MAILLON_FAIBLE only)
+RAFALE_TEAM_COUNTERS     map[string]int  // compteur cumulatif réponses correctes (jamais décrémenté sauf MAILLON)
+RAFALE_TEAM_STREAK       map[string]int  // série bonnes réponses EN COURS (reset à 0 sur mauvaise, tous modes)
+RAFALE_TEAM_ERRORS       map[string]int  // nombre cumulé mauvaises réponses/timeouts (jamais reset)
+RAFALE_TEAM_BEST         map[string]int  // max historique de STREAK (tous modes, calculé auto)
 RAFALE_CURRENT_TEAM      string          // équipe jouant (multi-mode)
 RAFALE_PARTICIPATING_TEAMS []string      // liste équipes (ordre de rotation)
 RAFALE_CURRENT_TEAM_COLOR []int          // RGB couleur équipe active
@@ -185,6 +187,11 @@ RAFALE_ASKED_COUNT       int             // nombre total de questions tirées
 RAFALE_POOL_REMAINING    int             // questions encore disponibles
 RAFALE_EXHAUSTED         bool            // true si pool vide pendant manche
 ```
+
+**Note sur les compteurs** (v8.0.0, bugfix 2026-08-30) :
+- `RAFALE_TEAM_STREAK` et `RAFALE_TEAM_ERRORS` sont **nouveaux** (panneau d'équipes enrichi)
+- `RAFALE_TEAM_BEST` est **redéfini** : max(STREAK) au lieu de max(COUNTERS) en MAILLON uniquement — désormais alimenté dans **tous les modes**
+- COUNTERS vs. STREAK : distinction permet affichage panneaux (séries dynamiques vs. cumulatif)
 
 **Persistance** : tous ces champs sont **éphémères** (exclus de `PersistedGameState`). Seul `rafale_used.json` persiste.
 

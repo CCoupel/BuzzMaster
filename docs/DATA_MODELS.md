@@ -1246,7 +1246,15 @@ RafaleMaxQuestions int      `json:"RAFALE_MAX_QUESTIONS,omitempty"` // plafond d
   },
   "RAFALE_QUESTION_TIME": 2500,
   "RAFALE_TEAM_COUNTERS": {
-    "team_A": 3,
+    "team_A": 5,
+    "team_B": 3
+  },
+  "RAFALE_TEAM_STREAK": {
+    "team_A": 2,
+    "team_B": 1
+  },
+  "RAFALE_TEAM_ERRORS": {
+    "team_A": 1,
     "team_B": 2
   },
   "RAFALE_TEAM_BEST": {
@@ -1269,14 +1277,24 @@ RafaleMaxQuestions int      `json:"RAFALE_MAX_QUESTIONS,omitempty"` // plafond d
 | `RAFALE_SUBPHASE` | string | État interne : `""` (inactif), `"QUESTION"` (question posée, timer actif), `"ROUND_END"` (attribution points) |
 | `RAFALE_CURRENT_QUESTION` | object | Question courante **SANS la réponse attendue** (`RafaleCurrent` : ID, QUESTION, CATEGORY, DIFFICULTY uniquement) |
 | `RAFALE_QUESTION_TIME` | int | Décompte timer question courant (microsecondes) |
-| `RAFALE_TEAM_COUNTERS` | map | Compteur réponses correctes par équipe (key = team ID, value = count) |
-| `RAFALE_TEAM_BEST` | map | Meilleur compteur atteint par équipe (MAILLON_FAIBLE uniquement, vide sinon) |
+| `RAFALE_TEAM_COUNTERS` | map | Compteur **cumulatif** réponses correctes par équipe (jamais décrémenté, sauf en MAILLON_FAIBLE) |
+| `RAFALE_TEAM_STREAK` | map | Série de bonnes réponses **en cours** par équipe (remise à 0 sur mauvaise réponse, **tous modes**) |
+| `RAFALE_TEAM_ERRORS` | map | Nombre cumulé de mauvaises réponses/timeouts par équipe (jamais remis à 0 en manche) |
+| `RAFALE_TEAM_BEST` | map | **Max historique de STREAK** (tous modes, calculé automatiquement) — remplace l'ancien max-de-compteur-en-MAILLON |
 | `RAFALE_CURRENT_TEAM` | string | Équipe active (multi-mode), vide en SOLO |
 | `RAFALE_PARTICIPATING_TEAMS` | array | Équipes en jeu, ordre de rotation |
 | `RAFALE_CURRENT_TEAM_COLOR` | array | Couleur RGB équipe active (utilisée pour LED + affichage) |
 | `RAFALE_ASKED_COUNT` | int | Nombre total questions tirées depuis début manche |
 | `RAFALE_POOL_REMAINING` | int | Questions encore disponibles (recalculé à chaque tirage) |
 | `RAFALE_EXHAUSTED` | bool | `true` si pool vide pendant manche |
+
+**Note sur les compteurs** (v8.0.0, bugfix 2026-08-30) :
+- `RAFALE_TEAM_COUNTERS` : cumulatif, ne décrémente jamais (sauf MAILLON_FAIBLE qui le remet à 0)
+- `RAFALE_TEAM_STREAK` : série **en cours**, remise à 0 sur mauvaise réponse dans **tous les modes**
+- `RAFALE_TEAM_ERRORS` : cumulatif, jamais remis à 0
+- `RAFALE_TEAM_BEST` : défini comme max(STREAK) sur toute la manche, **alimenté dans tous les modes** (pas seulement MAILLON_FAIBLE)
+
+La distinction COUNTERS vs. STREAK permet au panneau d'équipes de l'animateur d'afficher les séries en cours (dynamique, change souvent) tandis que COUNTERS reste pour l'historique global.
 
 **Persistance** : Tous ces champs sont **éphémères** (exclus de `PersistedGameState`). Seul `rafale_used.json` persiste.
 
