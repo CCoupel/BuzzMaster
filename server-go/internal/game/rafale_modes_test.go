@@ -757,3 +757,119 @@ func TestRafaleAdvance_Streak_ResetsOnIncorrect_EvenWhenCounterKeepsAccumulating
 		t.Errorf("expected red best=1 (its one streak of 1, before the reset), got %d", got)
 	}
 }
+
+// ---------------------------------------------------------------------------
+// Régression — retour QUALIF 8.0.0.14, 3e cycle (#199) : "je peux encore
+// lancer un START alors que je n'ai pas défini d'équipe" — persistait même
+// après le fix de RAFALE_MODE périmé (SHA 6b995229, invalidé par
+// l'utilisateur : rouvert ET re-sauvegardé la question, symptôme
+// inchangé). Cause réelle : Ready() ne réinitialise RafaleParticipatingTeams
+// (et RafaleCurrentTeam/RafaleCurrentTeamColor) QUE quand
+// isNewQuestion==true (ID différent) — mais une question de configuration
+// RAFALE est CONÇUE pour être rejouée pour plusieurs manches dans la même
+// partie avec le MÊME ID (contrairement à QCM/MEMORY/MEMOTION, jouées une
+// fois chacune normalement). Stop() ne touche jamais ces champs non plus
+// (par conception — la sélection doit survivre à un countdown, pas à une
+// manche entièrement terminée). Conséquence : la sélection d'équipes de la
+// manche PRÉCÉDENTE restait en mémoire côté serveur, satisfaisant
+// silencieusement participantsConform à la manche SUIVANTE, sans que
+// l'utilisateur n'ait rien resélectionné — alors même que l'interface
+// affichait "aucune équipe sélectionnée" (état local frontend, déconnecté
+// du GameState réel).
+// ---------------------------------------------------------------------------
+
+// TestReady_RafaleReplay_ResetsStaleParticipatingTeams reproduces the exact
+// realistic scenario the CDP asked for: launch a multi-mode manche WITH
+// teams selected, let it run to a normal STOP, then Ready() the SAME
+// question ID again for a new manche WITHOUT reselecting anything — the
+// server must genuinely block START, not silently reuse the previous
+// manche's selection.
+func TestReady_RafaleReplay_ResetsStaleParticipatingTeams(t *testing.T) {
+	e := NewEngine()
+	e.SetTeams(map[string]*Team{"red": {Name: "red"}, "blue": {Name: "blue"}})
+	seedRafaleReservoirBulk(t, e, 20, CategoryHistory, 1)
+
+	q := makeRafaleQuestion("rq1", string(RafaleModeChacunSonTour), CategoryHistory, 1)
+	e.Ready("rq1", q)
+	if err := e.SetRafaleParticipatingTeams([]string{"red", "blue"}); err != nil {
+		t.Fatalf("SetRafaleParticipatingTeams: %v", err)
+	}
+	e.ForceReady()
+	if state := e.GetState(); state.Phase != PhaseReady {
+		t.Fatalf("sanity: expected READY, got %s", state.Phase)
+	}
+	e.StartImmediate(0)
+	if state := e.GetState(); state.Phase != PhaseStarted {
+		t.Fatalf("sanity: expected STARTED, got %s", state.Phase)
+	}
+	e.Stop() // normal end of manche — e.g. admin stops it, or it runs to completion
+	if state := e.GetState(); state.Phase != PhaseStopped {
+		t.Fatalf("sanity: expected STOPPED, got %s", state.Phase)
+	}
+
+	// Replay the SAME round-config question (same ID) for a NEW manche,
+	// WITHOUT reselecting any team — the realistic "another round of the
+	// same RAFALE category" flow.
+	q2 := makeRafaleQuestion("rq1", string(RafaleModeChacunSonTour), CategoryHistory, 1)
+	e.Ready("rq1", q2)
+
+	state := e.GetState()
+	if len(state.RafaleParticipatingTeams) != 0 {
+		t.Errorf("expected RAFALE_PARTICIPATING_TEAMS to be reset on replay, got %v", state.RafaleParticipatingTeams)
+	}
+	if state.RafaleCurrentTeam != "" {
+		t.Errorf("expected RAFALE_CURRENT_TEAM to be reset on replay, got %q", state.RafaleCurrentTeam)
+	}
+
+	e.ForceReady()
+	if state := e.GetState(); state.Phase != PhasePrepare {
+		t.Errorf("expected a replayed CHACUN_SON_TOUR question with no reselected team to stay stuck in PREPARE, got %s", state.Phase)
+	}
+
+	e.Start(30)
+	if state := e.GetState(); state.Phase != PhasePrepare {
+		t.Errorf("expected Start() to be refused on replay without reselection, got phase=%s", state.Phase)
+	}
+
+	// Positive control: reselecting a team on the replay must still work
+	// normally. ForceReady() again rather than relying on
+	// SetRafaleParticipatingTeams's own reevaluatePrepareReadyUnsafe
+	// side effect — that path additionally requires areAllTeamsReadyUnsafe()
+	// (real bumpers marked ready), irrelevant to what this control is
+	// checking (participantsConform specifically).
+	if err := e.SetRafaleParticipatingTeams([]string{"blue"}); err != nil {
+		t.Fatalf("SetRafaleParticipatingTeams on replay: %v", err)
+	}
+	e.ForceReady()
+	if state := e.GetState(); state.Phase != PhaseReady {
+		t.Errorf("expected reselecting a team on replay to reach READY, got %s", state.Phase)
+	}
+}
+
+// TestReady_RafaleSameQuestion_StillConfiguring_PreservesSelection is the
+// control case proving the fix above is narrowly targeted: reselecting the
+// SAME question ID while STILL configuring it (no round ever started yet,
+// RafaleSubPhase never left RafaleSubPhaseNone) must keep behaving exactly
+// as before — team selection persists across a same-ID Ready() re-call, the
+// original intent of isNewQuestion's "persist during PREPARE->READY
+// transition" comment.
+func TestReady_RafaleSameQuestion_StillConfiguring_PreservesSelection(t *testing.T) {
+	e := NewEngine()
+	e.SetTeams(map[string]*Team{"red": {Name: "red"}, "blue": {Name: "blue"}})
+	seedRafaleReservoirBulk(t, e, 20, CategoryHistory, 1)
+
+	q := makeRafaleQuestion("rq1", string(RafaleModeChacunSonTour), CategoryHistory, 1)
+	e.Ready("rq1", q)
+	if err := e.SetRafaleParticipatingTeams([]string{"red", "blue"}); err != nil {
+		t.Fatalf("SetRafaleParticipatingTeams: %v", err)
+	}
+
+	// Re-Ready() the SAME question, SAME ID, before ever starting a round —
+	// e.g. the admin re-clicks the question in the list, or the UI re-syncs.
+	e.Ready("rq1", q)
+
+	state := e.GetState()
+	if len(state.RafaleParticipatingTeams) != 2 {
+		t.Errorf("expected the team selection to survive a same-ID Ready() re-call before any round started, got %v", state.RafaleParticipatingTeams)
+	}
+}
