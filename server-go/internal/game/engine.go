@@ -1039,7 +1039,9 @@ func (e *Engine) areAllTeamsReadyUnsafe() bool {
 //   - MEMORY multi (CHACUN_SON_TOUR / TANT_QUE_JE_GAGNE): at least two teams selected.
 //   - MEMOTION: at least one team selected.
 //   - RAFALE: CATEGORY must be set AND RAFALE_DIFFICULTY must be 1..3
-//     (v8.0.0, 2026-08-30/31 bugfixes — see below).
+//     (v8.0.0, 2026-08-30/31 bugfixes — see below) AND, in any multi-team
+//     mode (RAFALE_MODE != SOLO), at least one team must be selected in
+//     RAFALE_PARTICIPATING_TEAMS (v8.0.0, 2026-09-02, #199 — see below).
 //   - Unknown/future question type, or nil question: permissive by default (true).
 //
 // RAFALE's CATEGORY/DIFFICULTY checks are not really about PARTICIPANTS, but they plug into
@@ -1082,6 +1084,19 @@ func (e *Engine) areAllTeamsReadyUnsafe() bool {
 // safely to SOLO/3/100 when zero (engine-side fallbacks already exist for
 // those), so only DIFFICULTY needed a gate here — see http.go's own fix in
 // the same commit for the actual persistence gap.
+//
+// The RAFALE_PARTICIPATING_TEAMS check (2026-09-02, #199) is a DIFFERENT
+// kind of guard from CATEGORY/DIFFICULTY above — not a bugfix for a
+// silent-death symptom, a direct QUALIF feature request: "je ne dois pas
+// pouvoir faire START si aucune équipe n'est sélectionnée" in a multi-team
+// RAFALE mode. Mirrors MEMOTION's own single-line rule immediately above
+// (`len(state.MotionParticipatingTeams) >= 1`) — SOLO is deliberately
+// exempt (RafaleCurrentTeam=="" is already a valid, tested "no team concept
+// in play" no-op for SOLO throughout advanceRafaleUnsafe, see its own
+// comment). Uses the exact same empty-string->SOLO default as
+// advanceRafaleUnsafe's own `mode := ...; if mode == "" { mode =
+// string(RafaleModeSolo) }` — keeping this gate and the actual round logic
+// from silently disagreeing on what "SOLO" means for a given question.
 func participantsConform(question *Question, state *GameState) bool {
 	if question == nil {
 		return true
@@ -1100,7 +1115,17 @@ func participantsConform(question *Question, state *GameState) bool {
 	case QuestionTypeMemotion:
 		return len(state.MotionParticipatingTeams) >= 1
 	case QuestionTypeRafale:
-		return question.Category != "" && question.RafaleDifficulty >= 1 && question.RafaleDifficulty <= 3
+		if question.Category == "" || question.RafaleDifficulty < 1 || question.RafaleDifficulty > 3 {
+			return false
+		}
+		rafaleMode := question.RafaleMode
+		if rafaleMode == "" {
+			rafaleMode = string(RafaleModeSolo)
+		}
+		if rafaleMode != string(RafaleModeSolo) {
+			return len(state.RafaleParticipatingTeams) >= 1
+		}
+		return true
 	default:
 		return true
 	}
@@ -5199,11 +5224,15 @@ func (e *Engine) SetRafaleParticipatingTeams(teams []string) error {
 		teams, e.state.RafaleCurrentTeam)
 
 	// Same PREPARE↔READY re-check as SetMemoryParticipatingTeams/
-	// SetMotionParticipatingTeams — a no-op for RAFALE today
-	// (participantsConform's default case, engine.go:1038), kept for
-	// consistency with the two sibling functions rather than a
-	// special-cased simpler version that would silently diverge if a
-	// future contract change ever added a RAFALE participant-count rule.
+	// SetMotionParticipatingTeams. Was a no-op for RAFALE at the time this
+	// comment was first written (participantsConform had no RAFALE
+	// participant-count rule yet) — kept anyway for consistency with the two
+	// sibling functions, precisely so a future contract change wouldn't
+	// silently diverge from them. That future change landed 2026-09-02
+	// (#199): in a multi-team mode, clearing teams here (teams == []) now
+	// actually reverts READY -> PREPARE, and selecting at least one team
+	// again re-promotes PREPARE -> READY — see participantsConform's RAFALE
+	// case.
 	newPhase := e.reevaluatePrepareReadyUnsafe()
 
 	// Release lock BEFORE calling callback to avoid deadlock
