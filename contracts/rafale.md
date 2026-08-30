@@ -487,6 +487,31 @@ Création (sans `ID`) ou modification (avec `ID`).
 
 **Réponse 200** : `{ "DELETED": "r-001" }` · **Erreurs** : `404`
 
+### POST /api/rafale/questions/{id}/reset
+
+> **Ajout de contrat (dev-backend, feature, #197)** : retour utilisateur après test manuel du
+> binaire QUALIF 8.0.0.12 — le flag « déjà utilisée » (`data/config/rafale_used.json`, §3.2)
+> n'avait jusqu'ici qu'un seul point de remise à zéro (`NEW_GAME`, automatique). Ces deux
+> endpoints ajoutent des points d'entrée manuels, **sans toucher au réservoir lui-même** (aucune
+> question n'est créée/modifiée/supprimée — seul le flag §3.2 est affecté), pour permettre de
+> remettre une question précise (ou tout le pool) en disponible sans repartir sur un NEW_GAME
+> complet.
+
+Remet **une seule** question du réservoir à l'état disponible (retire son ID du flag « déjà
+utilisée » — §3.2). No-op silencieux si la question n'était pas marquée utilisée. Corps : vide.
+
+**Réponse 200** : `{ "ID": "r-001", "AVAILABLE": true }` · **Erreurs** : `404` (ID absent du
+réservoir — même contrat d'erreur que `DELETE /api/rafale/questions/{id}`)
+
+### POST /api/rafale/questions/reset-all
+
+Remet **tout** le réservoir à l'état disponible (vide entièrement le flag « déjà utilisée » —
+§3.2), indépendamment d'un `NEW_GAME`. Le réservoir lui-même (les questions) n'est **jamais**
+touché — à ne pas confondre avec `POST /reset-select?rafale=true` (§10), qui **supprime** tout le
+réservoir en plus du flag. Corps : vide.
+
+**Réponse 200** : `{ "RESET": <n> }` — `<n>` = nombre d'entrées effacées du flag.
+
 ### GET /api/rafale/pool
 
 Comptage pour l'alerte pré-manche (§7.2). `?category=A&difficulty=2` (catégorie

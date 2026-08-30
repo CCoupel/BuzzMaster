@@ -2,6 +2,30 @@
 
 ---
 
+## [20260901] — RAFALE : reset manuel du flag « déjà utilisée », individuel + global (#197, feature)
+
+> Milestone v8.0.0 · Retour utilisateur après test manuel du binaire QUALIF 8.0.0.12 : le flag
+> « déjà utilisée » (`data/config/rafale_used.json`, §3.2) n'avait qu'un seul point de remise à
+> zéro (`NEW_GAME`, automatique) — besoin de pouvoir remettre une question précise (ou tout le
+> pool) en disponible manuellement, sans passer par un `NEW_GAME` complet ni par la
+> réinitialisation destructive `/reset-select?rafale=true` (§10, qui supprime aussi le réservoir).
+
+- **[NEW]** `POST /api/rafale/questions/{id}/reset` — remet une seule question à disponible
+  (retire son ID du flag). 404 si l'ID n'existe pas dans le réservoir (même contrat d'erreur que
+  `DELETE /api/rafale/questions/{id}`). No-op silencieux si elle n'était pas marquée utilisée.
+- **[NEW]** `POST /api/rafale/questions/reset-all` — remet tout le pool à disponible (vide le
+  flag entièrement). Le réservoir (les questions elles-mêmes) n'est **jamais** touché par ces deux
+  endpoints — à ne pas confondre avec la réinitialisation sélective existante (§10), qui purge le
+  réservoir **et** le flag.
+- **[ENGINE]** Nouvelle méthode `Engine.MarkRafaleQuestionAvailable(id string) error` (persistance
+  synchrone, même patron que `DeleteRafaleQuestion`). `Engine.ClearRafaleUsed()` existait déjà
+  (utilisée jusqu'ici uniquement par `NEW_GAME` et par la réinitialisation sélective destructive)
+  — réutilisée telle quelle pour le nouvel endpoint global, aucune modification de son
+  comportement.
+- Contrat §9 mis à jour avec les deux nouveaux endpoints.
+
+---
+
 ## [20260831] — RAFALE : RAFALE_DIFFICULTY jamais persisté par l'éditeur (#107, bugfix, 2e cycle)
 
 > Milestone v8.0.0 · Retour QUALIF sur le binaire 8.0.0.10 : symptôme **identique, mot pour mot**
