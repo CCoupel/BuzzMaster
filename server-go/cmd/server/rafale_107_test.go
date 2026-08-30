@@ -308,3 +308,49 @@ func TestRafaleIntegration_ValidCategory_ReachesReadyViaRealDispatch(t *testing.
 		t.Fatalf("RAFALE with a valid CATEGORY must reach READY via a real FORCE_READY dispatch, got %s", state.Phase)
 	}
 }
+
+// TestRafaleIntegration_ZeroDifficulty_BlockedAtReadyAndStart_ViaRealDispatch
+// mirrors TestRafaleIntegration_EmptyCategory_BlockedAtReadyAndStart_
+// ViaRealDispatch above, for the SECOND static round-config defect
+// participantsConform now also guards (bugfix 2026-08-31, SHA 4374ac08):
+// RAFALE_DIFFICULTY==0, the exact zero-value handleUploadQuestion's missing
+// persistence block used to produce. Already covered at the Engine level
+// (internal/game/rafale_modes_test.go, TestRafaleReady_ZeroDifficulty_
+// NeverReachesReady) — this is the real-WS-dispatch counterpart, same
+// discipline as the CATEGORY test.
+func TestRafaleIntegration_ZeroDifficulty_BlockedAtReadyAndStart_ViaRealDispatch(t *testing.T) {
+	app := newTestAppWithHub(t)
+	app.udpBcast = server.NewUDPBroadcaster()
+	app.engine.SetTeams(map[string]*game.Team{"red": {Name: "red"}})
+
+	q := &game.Question{
+		ID: "rq1", Question: "RAFALE round", Type: game.QuestionTypeRafale,
+		Category: game.CategoryHistory, // valid — isolates RAFALE_DIFFICULTY as the sole defect
+		Points:   "10", Time: "120",
+		TypedContent: game.TypedContent{
+			RafaleDifficulty:   0, // the exact zero-value shape the http.go bug produced
+			RafaleMode:         string(game.RafaleModeSolo),
+			RafaleQuestionTime: 3,
+			RafaleMaxQuestions: 100,
+		},
+	}
+	app.engine.Ready("rq1", q)
+
+	if state := app.engine.GetState(); state.Phase != game.PhasePrepare {
+		t.Fatalf("sanity: expected PhasePrepare right after Ready(), got %s", state.Phase)
+	}
+
+	dispatchAs(t, app, server.ClientTypeAdmin, protocol.ActionForceReady, nil)
+
+	state := app.engine.GetState()
+	if state.Phase != game.PhasePrepare {
+		t.Fatalf("RAFALE with RAFALE_DIFFICULTY=0 must stay stuck in PREPARE after a real FORCE_READY dispatch, got %s", state.Phase)
+	}
+
+	dispatchAs(t, app, server.ClientTypeAdmin, protocol.ActionStart, protocol.StartPayload{Delay: 0})
+
+	state = app.engine.GetState()
+	if state.Phase != game.PhasePrepare {
+		t.Fatalf("START via real dispatch must be refused while stuck in PREPARE (RAFALE_DIFFICULTY=0), got phase=%s", state.Phase)
+	}
+}

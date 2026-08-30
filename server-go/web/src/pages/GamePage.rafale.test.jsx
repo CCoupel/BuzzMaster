@@ -15,7 +15,7 @@
  * dupliquer ses 3 états d'alerte/son format de requête ici).
  */
 import { describe, it, expect, beforeEach, vi } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { render, screen, fireEvent } from '@testing-library/react'
 
 vi.mock('../hooks/GameContext', () => ({
   useGame: vi.fn(),
@@ -111,6 +111,8 @@ const makeGameMock = (overrides = {}) => ({
   sendMessage: vi.fn(),
   rafaleSetTeams: vi.fn(),
   rafaleAnswer: overrides.rafaleAnswer ?? null,
+  rafaleValidate: overrides.rafaleValidate ?? vi.fn(),
+  rafaleInvalidate: overrides.rafaleInvalidate ?? vi.fn(),
 })
 
 describe('GamePage — panneau de pré-lancement RAFALE : catégorie unique (bugfix 2026-08-29, SHA 8f8ff92d)', () => {
@@ -271,5 +273,82 @@ describe('GamePage — .rafale-admin-live : question+réponse pendant la manche 
     const { container } = render(<GamePage />)
 
     expect(container.querySelector('.rafale-admin-live')).toBeNull()
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Boutons RÉPONSE VALIDE/INVALIDE sur /admin (contrat §5.1, SHA fe4d5bcc) —
+// réutilise AnimRafaleActions TEL QUEL (composant déjà testé isolément,
+// components/AnimRafaleActions.rafale.test.jsx) : ce bloc vérifie
+// uniquement le CÂBLAGE dans GamePage (onValidate/onInvalidate ->
+// rafaleValidate/rafaleInvalidate, disabled -> RAFALE_SUBPHASE), pas le
+// rendu détaillé du composant lui-même. AnimRafaleActions rendu RÉEL (pas
+// mocké) — léger, et c'est la façon la plus directe de prouver que le
+// câblage fonctionne réellement de bout en bout (le bug découvert sur
+// AnimPage.jsx au cycle précédent — props jamais transmises — est
+// exactement le type de défaut qu'un mock de complaisance ne peut pas
+// détecter).
+// ---------------------------------------------------------------------------
+
+describe('GamePage — RAFALE : boutons RÉPONSE VALIDE/INVALIDE sur /admin (SHA fe4d5bcc)', () => {
+  it('phase STARTED, RAFALE_SUBPHASE=QUESTION : les 2 boutons sont rendus et cliquables', () => {
+    useGame.mockReturnValue(makeGameMock({
+      gameState: { phase: 'STARTED', RAFALE_SUBPHASE: 'QUESTION' },
+    }))
+    const { container } = render(<GamePage />)
+
+    const buttons = container.querySelectorAll('.anim-rafale-action-btn')
+    expect(buttons).toHaveLength(2)
+    for (const btn of buttons) expect(btn.disabled).toBe(false)
+  })
+
+  it('clic sur RÉPONSE VALIDE appelle rafaleValidate()', () => {
+    const rafaleValidate = vi.fn()
+    useGame.mockReturnValue(makeGameMock({
+      gameState: { phase: 'STARTED', RAFALE_SUBPHASE: 'QUESTION' },
+      rafaleValidate,
+    }))
+    const { container } = render(<GamePage />)
+
+    fireEvent.click(container.querySelectorAll('.anim-rafale-action-btn')[0])
+    expect(rafaleValidate).toHaveBeenCalledTimes(1)
+  })
+
+  it('clic sur RÉPONSE INVALIDE appelle rafaleInvalidate()', () => {
+    const rafaleInvalidate = vi.fn()
+    useGame.mockReturnValue(makeGameMock({
+      gameState: { phase: 'STARTED', RAFALE_SUBPHASE: 'QUESTION' },
+      rafaleInvalidate,
+    }))
+    const { container } = render(<GamePage />)
+
+    fireEvent.click(container.querySelectorAll('.anim-rafale-action-btn')[1])
+    expect(rafaleInvalidate).toHaveBeenCalledTimes(1)
+  })
+
+  it('RAFALE_SUBPHASE != QUESTION (ex. ROUND_END) : les 2 boutons sont désactivés, aucun clic n\'a d\'effet', () => {
+    const rafaleValidate = vi.fn()
+    const rafaleInvalidate = vi.fn()
+    useGame.mockReturnValue(makeGameMock({
+      gameState: { phase: 'STARTED', RAFALE_SUBPHASE: 'ROUND_END' },
+      rafaleValidate,
+      rafaleInvalidate,
+    }))
+    const { container } = render(<GamePage />)
+
+    const buttons = container.querySelectorAll('.anim-rafale-action-btn')
+    for (const btn of buttons) {
+      expect(btn.disabled).toBe(true)
+      fireEvent.click(btn)
+    }
+    expect(rafaleValidate).not.toHaveBeenCalled()
+    expect(rafaleInvalidate).not.toHaveBeenCalled()
+  })
+
+  it('phase STOPPED (avant lancement) : les boutons ne sont pas rendus (pas de .rafale-admin-live, panneau de pré-lancement à la place)', () => {
+    useGame.mockReturnValue(makeGameMock({ gameState: { phase: 'STOPPED' } }))
+    const { container } = render(<GamePage />)
+
+    expect(container.querySelectorAll('.anim-rafale-action-btn')).toHaveLength(0)
   })
 })
