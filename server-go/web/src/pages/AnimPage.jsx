@@ -763,6 +763,15 @@ export default function AnimPage() {
           onRevealMotionCard={revealMotionCard}
           onDoneMotionCard={doneMotionCard}
           waitReason={waitReason}
+          // RAFALE (contrat rafale.md §5.1, milestone v8.0.0, #107 phase 2)
+          // — câblage réel des boutons VALIDE/INVALIDE (AnimRafaleActions,
+          // montés par AnimConductPanel). Désactivés hors sous-phase
+          // QUESTION (ex. ROUND_END, ou question non-RAFALE) : rafaleValidate/
+          // rafaleInvalidate (useWebSocket.js) n'ont de sens que pendant le
+          // tirage courant.
+          rafaleDisabled={!isRafaleQuestion || gameState.RAFALE_SUBPHASE !== 'QUESTION'}
+          onRafaleValidate={rafaleValidate}
+          onRafaleInvalidate={rafaleInvalidate}
         />
       </div>
 
