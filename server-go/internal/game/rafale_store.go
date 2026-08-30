@@ -332,6 +332,59 @@ func (e *Engine) DeleteRafaleQuestion(id string) error {
 	return e.SaveRafale()
 }
 
+// ResetAllRafaleUsed clears the ENTIRE "already used" flag map (every
+// reservoir question becomes available again) and persists synchronously —
+// contracts/rafale.md §9, feature #197. Returns the number of entries that
+// were cleared.
+//
+// Distinct from ClearRafaleUsed above in two ways: (1) it persists the
+// change itself (ClearRafaleUsed only mutates memory — its two existing
+// callers, InitGame's NEW_GAME reset and the destructive
+// /reset-select?rafale=true handler, each persist differently: a
+// fire-and-forget safeGo save for the former, a direct file removal for the
+// latter), matching the synchronous-persistence convention already
+// established by UpsertRafaleQuestion/DeleteRafaleQuestion/
+// MarkRafaleQuestionAvailable for editor-triggered HTTP actions; (2) it
+// reports how many entries were actually cleared, for the HTTP response.
+func (e *Engine) ResetAllRafaleUsed() (int, error) {
+	e.mu.Lock()
+	n := len(e.rafaleUsed)
+	e.rafaleUsed = make(map[string]bool)
+	e.mu.Unlock()
+
+	if err := e.SaveRafaleUsed(); err != nil {
+		return 0, err
+	}
+	log.Printf("[Engine] Rafale used-flags reset: %d entries cleared", n)
+	return n, nil
+}
+
+// MarkRafaleQuestionAvailable removes one question from the "already used"
+// flag (persisted synchronously, same pattern as DeleteRafaleQuestion) —
+// contracts/rafale.md §9, feature #197: a manual per-question "make
+// available again" action, distinct from the automatic NEW_GAME-driven
+// ClearRafaleUsed reset below and from the destructive
+// /reset-select?rafale=true flow (which also wipes the reservoir itself).
+//
+// Returns ErrRafaleQuestionNotFound if id has no entry in the reservoir —
+// same contract as DeleteRafaleQuestion, so the HTTP handler maps it to 404
+// identically. Silently no-ops (still succeeds) if the question exists but
+// was not marked used — "make available" on an already-available question
+// is not an error.
+func (e *Engine) MarkRafaleQuestionAvailable(id string) error {
+	e.mu.Lock()
+
+	if _, ok := e.rafaleQuestions[id]; !ok {
+		e.mu.Unlock()
+		return ErrRafaleQuestionNotFound
+	}
+	delete(e.rafaleUsed, id)
+
+	e.mu.Unlock()
+
+	return e.SaveRafaleUsed()
+}
+
 // atomicWriteFile writes data to path via a uniquely-named temp file in dir
 // followed by an atomic rename — the same pattern already established by
 // SaveBumpers/SaveTeams (#113 B4/#120 B2) for exactly this reason: both

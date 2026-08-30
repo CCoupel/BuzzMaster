@@ -282,6 +282,13 @@ func (h *HTTPServer) setupRoutes() {
 
 	// RAFALE reservoir API (v8.0.0 — #197, contracts/rafale.md §9)
 	h.mux.HandleFunc("/api/rafale/questions", h.handleRafaleQuestions)
+	// Exact-path registration BEFORE the "/api/rafale/questions/" prefix
+	// route below: net/http's ServeMux always prefers the more specific
+	// (longer, exact) match regardless of registration order, so
+	// "/api/rafale/questions/reset-all" routes here and everything else
+	// under the prefix (including "/{id}" and "/{id}/reset") still falls
+	// through to handleRafaleQuestionByID. Feature #197.
+	h.mux.HandleFunc("/api/rafale/questions/reset-all", h.handleRafaleResetAllUsed)
 	h.mux.HandleFunc("/api/rafale/questions/", h.handleRafaleQuestionByID)
 	h.mux.HandleFunc("/api/rafale/pool", h.handleRafalePool)
 
@@ -2319,16 +2326,26 @@ func (h *HTTPServer) handlePostRafaleQuestion(w http.ResponseWriter, r *http.Req
 	json.NewEncoder(w).Encode(map[string]string{"ID": saved.ID})
 }
 
-// handleRafaleQuestionByID handles DELETE /api/rafale/questions/{id} —
-// contract §9.
+// handleRafaleQuestionByID handles DELETE /api/rafale/questions/{id} and
+// POST /api/rafale/questions/{id}/reset — contract §9. The "/reset" suffix
+// (feature #197) is parsed here rather than given its own mux route: the
+// route registered is the "/api/rafale/questions/" prefix, so anything
+// after {id} (or {id} itself) is this handler's job to interpret.
 func (h *HTTPServer) handleRafaleQuestionByID(w http.ResponseWriter, r *http.Request) {
+	path := strings.TrimPrefix(r.URL.Path, "/api/rafale/questions/")
+	path = strings.TrimSuffix(path, "/")
+
+	if id, ok := strings.CutSuffix(path, "/reset"); ok {
+		h.handleRafaleResetOneUsed(w, r, id)
+		return
+	}
+
 	if r.Method != http.MethodDelete {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
 
-	id := strings.TrimPrefix(r.URL.Path, "/api/rafale/questions/")
-	id = strings.TrimSuffix(id, "/")
+	id := path
 	if id == "" {
 		http.Error(w, "ID required", http.StatusBadRequest)
 		return
@@ -2341,6 +2358,51 @@ func (h *HTTPServer) handleRafaleQuestionByID(w http.ResponseWriter, r *http.Req
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{"DELETED": id})
+}
+
+// handleRafaleResetOneUsed handles POST /api/rafale/questions/{id}/reset —
+// contract §9, feature #197: makes ONE reservoir question available again
+// (removes it from the "already used" flag) without touching the reservoir
+// itself. Silently succeeds (no-op) if the question was not marked used.
+func (h *HTTPServer) handleRafaleResetOneUsed(w http.ResponseWriter, r *http.Request, id string) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if id == "" {
+		http.Error(w, "ID required", http.StatusBadRequest)
+		return
+	}
+
+	if err := h.engine.MarkRafaleQuestionAvailable(id); err != nil {
+		http.Error(w, "Question not found", http.StatusNotFound)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{"ID": id, "AVAILABLE": true})
+}
+
+// handleRafaleResetAllUsed handles POST /api/rafale/questions/reset-all —
+// contract §9, feature #197: makes the ENTIRE reservoir available again
+// (empties the "already used" flag) without touching the reservoir itself —
+// unlike the destructive /reset-select?rafale=true (handleResetSelect),
+// which also deletes every reservoir question.
+func (h *HTTPServer) handleRafaleResetAllUsed(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	n, err := h.engine.ResetAllRafaleUsed()
+	if err != nil {
+		log.Printf("[HTTP] Rafale reset-all-used failed: %v", err)
+		http.Error(w, "Failed to reset used flags", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]int{"RESET": n})
 }
 
 // handleRafalePool returns the pool count (available/used/total) for a
