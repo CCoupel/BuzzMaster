@@ -2,6 +2,53 @@
 
 ---
 
+## [20260831] — RAFALE : RAFALE_DIFFICULTY jamais persisté par l'éditeur (#107, bugfix, 2e cycle)
+
+> Milestone v8.0.0 · Retour QUALIF sur le binaire 8.0.0.10 : symptôme **identique, mot pour mot**
+> à celui du [20260830] ci-dessous — "après le décompte, aucun compteur ne se lance, aucune
+> question ne s'affiche" — alors que la question RAFALE utilisée avait déjà une `CATEGORY` **et**
+> une `DIFFICULTY` valides depuis plusieurs cycles (pool affiché "3 disponibles" avant même le fix
+> du 2026-08-30). Le diagnostic du 2026-08-30 (CATEGORY vide) a donc été explicitement écarté
+> comme explication de CETTE récidive, et une reproduction sceptique du cas normal (catégorie +
+> difficulté valides, pool non vide) a été menée avant toute conclusion.
+
+- **[CONFIRMÉ] Cause racine différente de celle du 2026-08-30, même symptôme externe, même
+  mécanisme de mort interne** — `handleUploadQuestion` (`internal/server/http.go`, `POST
+  /questions`) n'avait **aucun** bloc de lecture pour `RAFALE_DIFFICULTY`/`RAFALE_MODE`/
+  `RAFALE_QUESTION_TIME`/`RAFALE_MAX_QUESTIONS`, contrairement à QCM/MEMORY/MEMOTION/ARDOISE qui
+  ont chacun le leur. Vérifié par inspection (grep : zéro occurrence de `RAFALE_` dans le
+  handler d'upload avant ce correctif, alors que `QuestionsPage.jsx` envoie bien ces 4 champs
+  depuis la livraison de #107) — **pas une hypothèse**. Conséquence : toute question RAFALE
+  enregistrée via l'éditeur standard perdait silencieusement sa difficulté (persistée à `0`,
+  invalide — l'échelle contractuelle est 1..3). `startRafaleRoundUnsafe` retombe alors sur le même
+  filet de sécurité que le 2026-08-30 (pool vide pour `DIFFICULTY=0` → `Stop()` dans le même tick
+  que `actualStart()`), d'où un symptôme externe identique pour une cause interne distincte.
+  - Correctif 1 : ajout du bloc `RAFALE` manquant dans `handleUploadQuestion` (les 4 champs,
+    avec les mêmes validations que documentées côté modèle : `DIFFICULTY` borné 1..3,
+    `MAX_QUESTIONS` plafonné à 100 — contrat §7.2).
+  - Correctif 2 (défense en profondeur) : `participantsConform` — déjà étendu le 2026-08-30 pour
+    `CATEGORY != ""` — gagne aussi `1 <= RAFALE_DIFFICULTY <= 3`. Objectif : qu'un futur oubli de
+    persistance similaire, sur n'importe quel champ statique de configuration RAFALE, se traduise
+    par un blocage propre en `PREPARE` plutôt qu'une mort silencieuse en `STARTED`.
+- **[GAP DE COUVERTURE COMBLÉ]** — l'entrée [20260830] ci-dessous affirmait avoir vérifié le
+  correctif précédent avec « un test d'intégration bout-en-bout... câblage identique à
+  `setupCallbacks()`, VRAI START dispatché, countdown réel de 3s ». Ce test était réel au moment
+  du diagnostic mais **n'a jamais été committé** (jetable, utilisé pour le diagnostic puis
+  supprimé) — `rafale_107_test.go` (le seul fichier permanent couvrant ce flux) documente
+  lui-même, dans son en-tête, utiliser `StartImmediate` et ne câbler aucun callback `OnRafale*`
+  précisément pour éviter les ~3s réelles du countdown, en jugeant (rétrospectivement, à tort)
+  que cette transition n'était « pas le risque à couvrir ». Cette absence de test permanent est
+  très probablement ce qui a laissé passer la récidive de ce cycle. Corrigé : nouveau fichier
+  `cmd/server/rafale_countdown_wire_test.go`, **permanent**, committé — VRAI `START` dispatché via
+  `handleWebMessage`, VRAI countdown 3s (aucun raccourci), câblage `OnStateChange`/
+  `OnCountdownTick`/`OnTimerTick`/`OnRafaleAnswer`/`OnRafaleQuestionTick`/`OnRafaleTeamsChanged`
+  identique à `setupCallbacks()`, et un client TV réellement connecté (`httptest.Server` +
+  `gorilla/websocket`) sur lequel on vérifie la réception effective sur le fil : `UPDATE` avec
+  `PHASE=STARTED` et `RAFALE_CURRENT_QUESTION.ID` non vide, puis au moins un `RAFALE_TICK` à
+  valeur positive.
+
+---
+
 ## [20260830] — RAFALE : fix timer de question + RAFALE_TEAM_STREAK/_ERRORS (#107/#199, bugfix)
 
 > Milestone v8.0.0 · Maquette finalisée `docs/mockups/rafale-v8.html` (§3/§9, fait autorité).

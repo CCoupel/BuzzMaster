@@ -166,6 +166,26 @@ RafaleMaxQuestions int      `json:"RAFALE_MAX_QUESTIONS,omitempty"` // plafond d
 > chaînes potentiellement vides sans que cela pose problème) ; l'admin ne
 > perd donc rien en pratique.
 
+> ⚠️ **Bugfix (dev-backend, 2026-08-31, #107, 2e cycle QUALIF du même symptôme
+> externe)** : `handleUploadQuestion` (`internal/server/http.go`, gestionnaire
+> `POST /questions`) n'avait **aucun** bloc de lecture pour `RAFALE_DIFFICULTY`/
+> `RAFALE_MODE`/`RAFALE_QUESTION_TIME`/`RAFALE_MAX_QUESTIONS` — contrairement à
+> QCM/MEMORY/MEMOTION/ARDOISE qui ont chacun leur bloc dédié. Le frontend
+> (`QuestionsPage.jsx`) envoie ces 4 champs dans le formulaire multipart depuis
+> la livraison de #107, mais ils étaient silencieusement perdus à
+> l'enregistrement — jamais persistés dans `question.json`. Conséquence :
+> `RafaleDifficulty` valait toujours `0` au chargement (`loadQuestion`), une
+> valeur invalide (attendu 1..3), et la manche mourait au même endroit et par
+> le même mécanisme que le bug CATEGORY du 2026-08-30 (`startRafaleRoundUnsafe`
+> → pool vide pour DIFFICULTY=0 → filet de sécurité `Stop()` dans le même tick
+> que `actualStart()`) — **symptôme externe identique** ("countdown de 3s puis
+> plus rien"), **cause racine différente**. Corrigé par l'ajout du bloc
+> manquant dans `handleUploadQuestion`, et par l'extension de la garde
+> `participantsConform` (déjà étendue le 2026-08-30 pour CATEGORY) pour exiger
+> aussi `1 <= RAFALE_DIFFICULTY <= 3` avant PREPARE→READY — défense en
+> profondeur contre toute future régression de persistance similaire, pas
+> seulement un correctif ponctuel. Voir `contracts/CHANGELOG.md`.
+
 ### 3.4 `RAFALE_MODE`
 
 | Valeur | Règle |
