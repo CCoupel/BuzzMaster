@@ -2,6 +2,27 @@
 
 ---
 
+## [20260902] — RAFALE : garde START sans équipe sélectionnée en mode multi (#199, feature)
+
+> Milestone v8.0.0 · Retour utilisateur QUALIF 8.0.0.13 : « je ne dois pas pouvoir faire START si
+> aucune équipe n'est sélectionnée » en mode multi-équipes (`CHACUN_SON_TOUR`/`TANT_QUE_JE_GAGNE`/
+> `MAILLON_FAIBLE`).
+
+- **[NEW]** `participantsConform` (engine.go, §3.3) gagne un troisième cas RAFALE : en mode multi
+  (`RAFALE_MODE != SOLO`, même défaut vide⇒SOLO qu'`advanceRafaleUnsafe`), `PREPARE→READY` exige
+  désormais `len(RAFALE_PARTICIPATING_TEAMS) >= 1`. `SOLO` reste exempté. Défense en profondeur —
+  même mécanisme que les gardes `CATEGORY`/`RAFALE_DIFFICULTY` des cycles précédents, mais ici en
+  réponse à une demande fonctionnelle directe, pas un bugfix de mort silencieuse.
+- Aucun changement de code dans `SetRafaleParticipatingTeams` : elle appelait déjà
+  `reevaluatePrepareReadyUnsafe()` par anticipation d'un futur changement de contrat exactement de
+  cette nature — vider la sélection d'équipes en mode multi pendant READY fait donc automatiquement
+  redescendre en PREPARE.
+- Contrat §3.4 mis à jour avec le détail de la garde.
+- UI de blocage correspondante côté `/anim` : à la charge de dev-frontend (même pattern que
+  catégorie/difficulté).
+
+---
+
 ## [20260901] — RAFALE : reset manuel du flag « déjà utilisée », individuel + global (#197, feature)
 
 > Milestone v8.0.0 · Retour utilisateur après test manuel du binaire QUALIF 8.0.0.12 : le flag

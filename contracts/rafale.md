@@ -195,6 +195,24 @@ RafaleMaxQuestions int      `json:"RAFALE_MAX_QUESTIONS,omitempty"` // plafond d
 | `TANT_QUE_JE_GAGNE` | Bonne réponse → l'équipe garde la main. Mauvaise → équipe suivante. (#199) |
 | `MAILLON_FAIBLE` | Comme `CHACUN_SON_TOUR`, mais le compteur de l'équipe retombe à **0** sur mauvaise réponse ; le meilleur compteur atteint est mémorisé. (#199) |
 
+> ⚠️ **Ajout de contrat (dev-backend, feature, 2026-09-02, #199)** : retour utilisateur QUALIF
+> 8.0.0.13 — « je ne dois pas pouvoir faire START si aucune équipe n'est sélectionnée ». La garde
+> `participantsConform` (§3.3, déjà étendue pour `CATEGORY`/`RAFALE_DIFFICULTY`) gagne un
+> troisième cas RAFALE : en mode **multi** (`RAFALE_MODE != SOLO`), au moins une équipe doit être
+> présente dans `RAFALE_PARTICIPATING_TEAMS` pour que PREPARE→READY ait lieu — sinon la manche
+> reste bloquée en PREPARE, `START` structurellement refusé (même mécanisme que les deux gardes
+> précédentes). `SOLO` reste exempté (aucune notion d'équipe active n'y est requise —
+> `RAFALE_CURRENT_TEAM == ""` y est un no-op valide et déjà testé, §6.1). Utilise exactement le
+> même défaut « `RAFALE_MODE` vide ⇒ `SOLO` » que `advanceRafaleUnsafe` (engine.go), pour que la
+> garde et la logique de manche réelle ne puissent jamais diverger sur ce que « SOLO » signifie
+> pour une question donnée. Contrairement aux deux gardes CATEGORY/DIFFICULTY (des bugfixes contre
+> une mort silencieuse), celle-ci est une demande fonctionnelle directe, pas un correctif de
+> régression — mais réutilise le même mécanisme de défense en profondeur. `SetRafaleParticipatingTeams`
+> appelait déjà `reevaluatePrepareReadyUnsafe()` (prévu dès l'origine pour un futur changement de
+> contrat exactement comme celui-ci, voir son propre commentaire) : vider la sélection d'équipes en
+> mode multi pendant READY fait donc désormais redescendre en PREPARE automatiquement, sans code
+> supplémentaire.
+
 ---
 
 ## 4. Champs `GameState`
