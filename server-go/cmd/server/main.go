@@ -1819,7 +1819,28 @@ func (a *App) handleStart(msg *protocol.Message) {
 
 	a.logger.Info(game.LogComponentEngine, "START game with delay=%ds", payload.Delay)
 	a.engine.Start(payload.Delay)
-	a.broadcastStart()
+	// #199 QUALIF 8.0.0.14 investigation: Engine.Start() silently no-ops
+	// (logs "Cannot start game from phase X (must be READY)") when the
+	// engine refuses — e.g. a RAFALE multi-mode round with no team selected
+	// (participantsConform), or any question type sent from a stale
+	// PREPARE/STARTED client. Before this fix, broadcastStart() (and its
+	// unconditional sendLEDSetAllBuzzers() call) fired regardless, sending
+	// every connected client a real ACTION:"START" WS message even though
+	// nothing actually started — Engine.Start has no return value, so this
+	// call site had no way to tell success from refusal. The broadcast
+	// itself DOES carry the true (unchanged) PHASE via GetGameJSON(), so it
+	// wasn't provably the root cause of the reported symptom (a client
+	// reading MSG.GAME.PHASE would still see e.g. "PREPARE"), but sending a
+	// START action while nothing started is undefined behavior for any
+	// client-side logic keyed on the action name rather than the payload,
+	// and wastes a broadcast + a full per-buzzer LED pass on every refusal.
+	// GetPhase()==PhaseCountdown is a safe, side-effect-free way to check
+	// Start() actually took effect: Start() sets this synchronously, under
+	// its own lock, before returning, on every accepted call — no race
+	// window between the call above and this check.
+	if a.engine.GetPhase() == game.PhaseCountdown {
+		a.broadcastStart()
+	}
 }
 
 func (a *App) handleRemote(msg *protocol.Message) {
