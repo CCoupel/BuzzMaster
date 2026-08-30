@@ -188,6 +188,8 @@ RafaleCurrentQuestion   RafaleCurrent   `json:"RAFALE_CURRENT_QUESTION"`
 RafaleQuestionTime      int             `json:"RAFALE_QUESTION_TIME"`
 RafaleTeamCounters      map[string]int  `json:"RAFALE_TEAM_COUNTERS"`
 RafaleTeamBest          map[string]int  `json:"RAFALE_TEAM_BEST"`
+RafaleTeamStreak        map[string]int  `json:"RAFALE_TEAM_STREAK"`
+RafaleTeamErrors        map[string]int  `json:"RAFALE_TEAM_ERRORS"`
 RafaleCurrentTeam       string          `json:"RAFALE_CURRENT_TEAM"`
 RafaleParticipatingTeams []string       `json:"RAFALE_PARTICIPATING_TEAMS"`
 RafaleCurrentTeamColor  []int           `json:"RAFALE_CURRENT_TEAM_COLOR"`
@@ -214,9 +216,27 @@ const (
 ```
 
 **Notes** :
-- `RAFALE_TEAM_COUNTERS` / `RAFALE_TEAM_BEST` reprennent le patron `MemoryTeamPairs` /
-  `MemoryTeamErrors` (arbitrage B3, précédent explicitement demandé).
-- `RAFALE_TEAM_BEST` n'est alimenté qu'en `MAILLON_FAIBLE` ; présent et vide ailleurs.
+- `RAFALE_TEAM_COUNTERS` / `RAFALE_TEAM_BEST` / `RAFALE_TEAM_STREAK` / `RAFALE_TEAM_ERRORS`
+  reprennent le patron `MemoryTeamPairs` / `MemoryTeamErrors` (arbitrage B3, précédent
+  explicitement demandé) — `RAFALE_TEAM_ERRORS` en est le précédent EXACT.
+- ⚠️ **Modification de contrat (dev-backend, bugfix, 2026-08-30)** : `RAFALE_TEAM_STREAK` et
+  `RAFALE_TEAM_ERRORS` sont **nouveaux** (panneau d'équipes enrichi de la maquette §9, requis par
+  le planner) ; `RAFALE_TEAM_BEST` est **redéfini**.
+  - `RAFALE_TEAM_STREAK[team]` : série de bonnes réponses **en cours**, remise à 0 sur mauvaise
+    réponse, dans **les 4 modes** — contrairement à `RAFALE_TEAM_COUNTERS`, qui cumule sans
+    jamais retomber sauf en `MAILLON_FAIBLE` (§6.1, table inchangée). Les deux champs sont
+    **distincts**, pas un renommage : un `CHACUN_SON_TOUR` où une équipe rate une question voit
+    son `COUNTERS` rester inchangé (cumulatif) mais son `STREAK` retomber à 0.
+  - `RAFALE_TEAM_ERRORS[team]` : nombre cumulé de réponses incorrectes/timeouts, jamais remis à
+    0 en cours de manche, les 4 modes.
+  - `RAFALE_TEAM_BEST[team]` — **redéfini** : maximum historique de `RAFALE_TEAM_STREAK[team]`
+    (calculé une seule fois, génériquement, pour les 4 modes), au lieu d'un calcul spécifique à
+    `MAILLON_FAIBLE` off `RAFALE_TEAM_COUNTERS`. Désormais alimenté dans **tous** les modes, pas
+    seulement `MAILLON_FAIBLE` (la ligne suivante, obsolète, est retirée : ~~« n'est alimenté
+    qu'en MAILLON_FAIBLE »~~).
+  - Impact §6.2 : `compteur_retenu = RAFALE_TEAM_BEST[team]` reste valable telle quelle pour
+    l'attribution de points suggérée — seule la SOURCE du maximum change (streak au lieu du
+    compteur), la formule de points elle-même est inchangée.
 - **Persistance** : tous ces champs sont **éphémères**, exclus de `PersistedGameState`
   (précédent `MotionActive`). Seul `rafale_used.json` persiste.
 - Aucun de ces champs ne rejoint `AdminOnlyGameFields` ni `VPlayerOnlyGameFields` — ils sont

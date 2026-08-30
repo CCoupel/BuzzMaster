@@ -2,6 +2,52 @@
 
 ---
 
+## [20260830] — RAFALE : fix timer de question + RAFALE_TEAM_STREAK/_ERRORS (#107/#199, bugfix)
+
+> Milestone v8.0.0 · Maquette finalisée `docs/mockups/rafale-v8.html` (§3/§9, fait autorité).
+> Retour QUALIF répété : après le countdown générique (3s, OK), en phase STARTED, aucun compte à
+> rebours de question ne démarrait et aucune question n'était diffusée.
+
+- **[FIXED] Cause racine identifiée et corrigée** — une manche RAFALE dont la question de
+  configuration a une `CATEGORY` vide (résidu d'avant la migration catégorie-unique du
+  2026-08-29, ou jamais configurée) atteignait quand même `STARTED` puis mourait
+  **immédiatement** : `drawRafaleQuestionUnsafe` (garde `category==""`, commit `159bb39e`)
+  renvoie un pool vide → `startRafaleRoundUnsafe` déclenche son filet de sécurité existant
+  (`roundEnded=true` → `Stop()`) **dans le même tick** que `actualStart()` — `Phase` bascule
+  `STARTED`→`STOPPED` avant qu'aucun client ne puisse réagir. Le filet de sécurité lui-même est
+  correct et reste en place (une race — réservoir édité entre READY et START — reste possible) ;
+  le vrai bug est l'ABSENCE d'une garde en amont empêchant une manche mal configurée d'atteindre
+  `READY` du tout.
+  - Correctif : `participantsConform` (engine.go, le gate `PREPARE↔READY` déjà utilisé par
+    MEMORY/MEMOTION) gagne un cas `RAFALE : question.CATEGORY != ""`. Une manche RAFALE sans
+    catégorie reste désormais bloquée en `PREPARE` (jamais `READY`, donc `Start()` la refuse
+    structurellement) au lieu d'atteindre `STARTED` puis de mourir silencieusement.
+  - Vérifié par un test d'intégration bout-en-bout distinct de celui existant
+    (`rafale_107_test.go` utilise `StartImmediate`, qui contourne le VRAI countdown de 3s ET ne
+    câble aucun des callbacks `OnRafale*`/`OnStateChange` que `setupCallbacks()` câble en
+    production — masquait donc ce bug précis) : câblage identique à `setupCallbacks()`, VRAI
+    `START` dispatché, countdown réel de 3s attendu, client TV/admin connecté. Confirme que le
+    chemin de production (démarrage réel → ticker → diffusion) fonctionne intégralement une fois
+    la catégorie correctement configurée.
+- **[NEW]** `RAFALE_TEAM_STREAK` (`map[string]int`) — série de bonnes réponses **en cours** par
+  équipe, remise à 0 sur mauvaise réponse, dans **les 4 modes**. Distinct de
+  `RAFALE_TEAM_COUNTERS`, qui garde sa propre politique de reset par mode (cumulatif sauf en
+  `MAILLON_FAIBLE`, §6.1 table inchangée).
+- **[NEW]** `RAFALE_TEAM_ERRORS` (`map[string]int`) — précédent exact `MemoryTeamErrors` : nombre
+  cumulé de réponses incorrectes/timeouts par équipe, jamais remis à 0 en cours de manche.
+- **[CHANGED]** `RAFALE_TEAM_BEST` redéfini comme le maximum historique de `RAFALE_TEAM_STREAK`
+  (calculé génériquement pour les 4 modes), au lieu d'un calcul spécifique à `MAILLON_FAIBLE` off
+  `RAFALE_TEAM_COUNTERS`. Alimenté dans **tous** les modes désormais, pas seulement
+  `MAILLON_FAIBLE`. La formule de points suggérée (§6.2, `compteur_retenu = RAFALE_TEAM_BEST` en
+  MAILLON_FAIBLE, `RAFALE_TEAM_COUNTERS` sinon) est **inchangée** — seule la source du maximum
+  change, pas le choix du champ par mode.
+- Champs `GameState` `RAFALE_*` : 11 → 13 (les 2 nouveaux ci-dessus). Mêmes règles que les 11
+  existants (sans `omitempty`, initialisés non-nil, éphémères — exclus de `PersistedGameState`).
+
+Détail complet : `contracts/rafale.md` §4/§6.
+
+---
+
 ## [20260829] — RAFALE : catégorie de manche unique, pas multi (#107, bugfix)
 
 > Milestone v8.0.0 · Retour utilisateur post-QUALIF : la catégorie ne s'affichait toujours pas
