@@ -235,6 +235,75 @@ func TestRafaleAdvance_Solo_CounterIncrementsOnCorrectOnly_NeverRotates(t *testi
 	}
 }
 
+// TestRafaleAdvance_Solo_StreakErrorsBest closes the coverage gap the
+// bugfix (2026-08-30) left open: RafaleTeamStreak/RafaleTeamErrors/
+// RafaleTeamBest were only asserted for MAILLON_FAIBLE (already tracked
+// RafaleTeamBest before the redefinition) and CHACUN_SON_TOUR (the new
+// streak-vs-counter distinguishing test) — SOLO had none. advanceRafaleUnsafe
+// computes streak/errors/best identically for all 4 modes (mode-agnostic
+// block, engine.go) BEFORE the per-mode counter switch, so this is a
+// genuinely different code path than SOLO's own counter test above, not a
+// copy — SOLO's counter is the ONLY mode whose policy fully ignores
+// incorrect answers (§6.1: "—" for every SOLO row but the first), yet
+// streak/errors must still react to them exactly like every other mode.
+func TestRafaleAdvance_Solo_StreakErrorsBest(t *testing.T) {
+	e := NewEngine()
+	e.SetTeams(map[string]*Team{"red": {Name: "Team Red"}})
+	seedRafaleReservoirBulk(t, e, 10, CategoryHistory, 1)
+	q := makeRafaleQuestion("rq1", string(RafaleModeSolo), CategoryHistory, 1)
+	e.Ready("rq1", q)
+	if err := e.SetRafaleParticipatingTeams([]string{"red"}); err != nil {
+		t.Fatalf("SetRafaleParticipatingTeams failed: %v", err)
+	}
+	e.StartImmediate(0)
+	defer e.Stop()
+
+	if err := e.RafaleValidate(); err != nil { // streak=1, best=1, counter=1
+		t.Fatalf("RafaleValidate failed: %v", err)
+	}
+	if err := e.RafaleValidate(); err != nil { // streak=2, best=2, counter=2
+		t.Fatalf("RafaleValidate failed: %v", err)
+	}
+	state := e.GetState()
+	if got := state.RafaleTeamStreak["red"]; got != 2 {
+		t.Fatalf("expected red streak=2 after 2 correct answers, got %d", got)
+	}
+	if got := state.RafaleTeamBest["red"]; got != 2 {
+		t.Fatalf("expected red best=2, got %d", got)
+	}
+
+	if err := e.RafaleInvalidate(); err != nil { // streak resets to 0, errors=1 — counter UNAFFECTED (SOLO ignores incorrect)
+		t.Fatalf("RafaleInvalidate failed: %v", err)
+	}
+	state = e.GetState()
+	if got := state.RafaleTeamStreak["red"]; got != 0 {
+		t.Errorf("SOLO: streak must reset to 0 after an incorrect answer (mode-agnostic rule), got %d", got)
+	}
+	if got := state.RafaleTeamErrors["red"]; got != 1 {
+		t.Errorf("SOLO: errors must still increment on an incorrect answer, got %d", got)
+	}
+	if got := state.RafaleTeamCounters["red"]; got != 2 {
+		t.Errorf("SOLO: counter must stay UNCHANGED by an incorrect answer (contract §6.1, SOLO ignores it), got %d", got)
+	}
+	if got := state.RafaleTeamBest["red"]; got != 2 {
+		t.Errorf("SOLO: best must survive the streak reset (historical max), got %d", got)
+	}
+
+	if err := e.RafaleValidate(); err != nil { // streak=1 again, counter=3, best stays 2
+		t.Fatalf("RafaleValidate failed: %v", err)
+	}
+	state = e.GetState()
+	if got := state.RafaleTeamStreak["red"]; got != 1 {
+		t.Errorf("expected red streak=1 (restarted after the reset), got %d", got)
+	}
+	if got := state.RafaleTeamCounters["red"]; got != 3 {
+		t.Errorf("expected red counter=3 (3rd correct answer), got %d", got)
+	}
+	if got := state.RafaleTeamBest["red"]; got != 2 {
+		t.Errorf("expected red best to stay at its historical max 2 (current streak 1 is lower), got %d", got)
+	}
+}
+
 func TestRafaleAdvance_ChacunSonTour_RotatesRegardlessOfOutcome(t *testing.T) {
 	e := NewEngine()
 	e.SetTeams(map[string]*Team{
@@ -309,6 +378,78 @@ func TestRafaleAdvance_TantQueJeGagne_KeepsHandOnCorrect_RotatesOnIncorrect(t *t
 	}
 	if got := e.GetState().RafaleCurrentTeam; got != "blue" {
 		t.Errorf("TANT_QUE_JE_GAGNE: loser must rotate away, expected 'blue', got %q", got)
+	}
+}
+
+// TestRafaleAdvance_TantQueJeGagne_StreakErrorsBest closes the same
+// coverage gap as TestRafaleAdvance_Solo_StreakErrorsBest, for the one
+// other mode the bugfix's own test additions (2026-08-30) left untouched.
+// TANT_QUE_JE_GAGNE's counter policy (increments on correct, UNCHANGED —
+// never reset — on incorrect, contract §6.1) makes it the mode where
+// streak/counter diverge the MOST visibly: the losing team's counter
+// survives an incorrect answer intact while its streak is wiped, on the
+// very same event that also rotates the hand away.
+func TestRafaleAdvance_TantQueJeGagne_StreakErrorsBest(t *testing.T) {
+	e := NewEngine()
+	e.SetTeams(map[string]*Team{
+		"red":  {Name: "Team Red"},
+		"blue": {Name: "Team Blue"},
+	})
+	seedRafaleReservoirBulk(t, e, 10, CategoryHistory, 1)
+	q := makeRafaleQuestion("rq1", string(RafaleModeTantQueJeGagne), CategoryHistory, 1)
+	e.Ready("rq1", q)
+	if err := e.SetRafaleParticipatingTeams([]string{"red", "blue"}); err != nil {
+		t.Fatalf("SetRafaleParticipatingTeams failed: %v", err)
+	}
+	e.StartImmediate(0)
+	defer e.Stop()
+
+	if err := e.RafaleValidate(); err != nil { // red keeps the hand: streak=1, best=1, counter=1
+		t.Fatalf("RafaleValidate failed: %v", err)
+	}
+	if err := e.RafaleValidate(); err != nil { // red keeps the hand: streak=2, best=2, counter=2
+		t.Fatalf("RafaleValidate failed: %v", err)
+	}
+	state := e.GetState()
+	if got := state.RafaleTeamStreak["red"]; got != 2 {
+		t.Fatalf("expected red streak=2, got %d", got)
+	}
+	if got := state.RafaleTeamBest["red"]; got != 2 {
+		t.Fatalf("expected red best=2, got %d", got)
+	}
+
+	if err := e.RafaleInvalidate(); err != nil { // red loses the hand -> rotates to blue
+		t.Fatalf("RafaleInvalidate failed: %v", err)
+	}
+	state = e.GetState()
+	if got := state.RafaleCurrentTeam; got != "blue" {
+		t.Fatalf("sanity: expected rotation to 'blue', got %q", got)
+	}
+	if got := state.RafaleTeamStreak["red"]; got != 0 {
+		t.Errorf("red's streak must reset to 0 on its incorrect answer (mode-agnostic rule), got %d", got)
+	}
+	if got := state.RafaleTeamErrors["red"]; got != 1 {
+		t.Errorf("red's errors must increment, got %d", got)
+	}
+	if got := state.RafaleTeamCounters["red"]; got != 2 {
+		t.Errorf("TANT_QUE_JE_GAGNE: red's counter must stay UNCHANGED by its incorrect answer (contract §6.1 — only SOLO's rotation stops, the counter itself is never reset by this mode), got %d", got)
+	}
+	if got := state.RafaleTeamBest["red"]; got != 2 {
+		t.Errorf("red's best must survive (historical max), got %d", got)
+	}
+
+	if err := e.RafaleValidate(); err != nil { // blue keeps the hand: streak=1, best=1, counter=1
+		t.Fatalf("RafaleValidate failed: %v", err)
+	}
+	state = e.GetState()
+	if got := state.RafaleTeamStreak["blue"]; got != 1 {
+		t.Errorf("expected blue streak=1 (its first correct answer), got %d", got)
+	}
+	if got := state.RafaleTeamBest["blue"]; got != 1 {
+		t.Errorf("expected blue best=1, got %d", got)
+	}
+	if got := state.RafaleTeamCounters["blue"]; got != 1 {
+		t.Errorf("expected blue counter=1, got %d", got)
 	}
 }
 

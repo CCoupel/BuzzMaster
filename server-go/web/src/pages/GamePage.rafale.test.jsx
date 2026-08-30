@@ -110,6 +110,7 @@ const makeGameMock = (overrides = {}) => ({
   simulatePong: vi.fn(),
   sendMessage: vi.fn(),
   rafaleSetTeams: vi.fn(),
+  rafaleAnswer: overrides.rafaleAnswer ?? null,
 })
 
 describe('GamePage — panneau de pré-lancement RAFALE : catégorie unique (bugfix 2026-08-29, SHA 8f8ff92d)', () => {
@@ -173,5 +174,102 @@ describe('GamePage — panneau de pré-lancement RAFALE : catégorie unique (bug
     const { container } = render(<GamePage />)
 
     expect(container.querySelector('.rafale-admin-panel')).toBeNull()
+  })
+})
+
+// ---------------------------------------------------------------------------
+// .rafale-admin-live (maquette rafale-v8.html §9.3, SHA 01eb5ce9) — /admin
+// affichait RIEN pendant la manche (STARTED) avant ce lot ; le panneau de
+// pré-lancement se cache dès isPlaying (voir describe précédent). Nouveau
+// bloc, visible UNIQUEMENT en isPlaying, montrant le même encart coloré
+// équipe + question + réponse que /anim (mêmes classes .rafale-anim-qcard*
+// — pas de duplication de test de rendu détaillé, juste la présence et le
+// bon contenu ici, la structure de l'encart lui-même étant déjà exhaustive
+// dans AnimPage.rafale.test.jsx).
+// ---------------------------------------------------------------------------
+
+describe('GamePage — .rafale-admin-live : question+réponse pendant la manche (bugfix SHA 01eb5ce9)', () => {
+  it('phase STOPPED (avant lancement) : .rafale-admin-live absent — c\'est le panneau de pré-lancement qui s\'affiche', () => {
+    useGame.mockReturnValue(makeGameMock({ gameState: { phase: 'STOPPED' } }))
+    const { container } = render(<GamePage />)
+
+    expect(container.querySelector('.rafale-admin-live')).toBeNull()
+    expect(container.querySelector('.rafale-admin-panel')).not.toBeNull()
+  })
+
+  it('phase STARTED (manche en cours) : .rafale-admin-live visible, panneau de pré-lancement caché', () => {
+    useGame.mockReturnValue(makeGameMock({
+      gameState: {
+        phase: 'STARTED',
+        RAFALE_CURRENT_QUESTION: { ID: 'r-042', QUESTION: 'Capitale de l\'Italie ?', CATEGORY: 'GEOGRAPHY', DIFFICULTY: 2 },
+      },
+    }))
+    const { container } = render(<GamePage />)
+
+    expect(container.querySelector('.rafale-admin-live')).not.toBeNull()
+    expect(container.querySelector('.rafale-admin-panel')).toBeNull()
+  })
+
+  it('affiche la question courante (RAFALE_CURRENT_QUESTION)', () => {
+    useGame.mockReturnValue(makeGameMock({
+      gameState: {
+        phase: 'STARTED',
+        RAFALE_CURRENT_QUESTION: { ID: 'r-042', QUESTION: 'Capitale de l\'Italie ?', CATEGORY: 'GEOGRAPHY', DIFFICULTY: 2 },
+      },
+    }))
+    render(<GamePage />)
+
+    expect(screen.getByText('Capitale de l\'Italie ?')).toBeInTheDocument()
+  })
+
+  it('rafaleAnswer.ID correspond à la question courante : affiche la réponse (RAFALE_ANSWER déjà diffusé à admin, contrat §2.3 — simple choix d\'affichage)', () => {
+    useGame.mockReturnValue(makeGameMock({
+      gameState: {
+        phase: 'STARTED',
+        RAFALE_CURRENT_QUESTION: { ID: 'r-042', QUESTION: 'Capitale de l\'Italie ?', CATEGORY: 'GEOGRAPHY', DIFFICULTY: 2 },
+      },
+      rafaleAnswer: { ID: 'r-042', ANSWER: 'Rome' },
+    }))
+    render(<GamePage />)
+
+    expect(screen.getByText('Rome')).toBeInTheDocument()
+  })
+
+  it('rafaleAnswer.ID NE correspond PAS à la question courante (pas encore reçu pour cette question) : aucune réponse affichée', () => {
+    useGame.mockReturnValue(makeGameMock({
+      gameState: {
+        phase: 'STARTED',
+        RAFALE_CURRENT_QUESTION: { ID: 'r-042', QUESTION: 'Capitale de l\'Italie ?', CATEGORY: 'GEOGRAPHY', DIFFICULTY: 2 },
+      },
+      rafaleAnswer: { ID: 'r-999', ANSWER: 'Berlin' },
+    }))
+    render(<GamePage />)
+
+    expect(screen.queryByText('Berlin')).not.toBeInTheDocument()
+  })
+
+  it('équipe active définie (mode multi) : son nom apparaît dans l\'encart', () => {
+    useGame.mockReturnValue(makeGameMock({
+      gameState: {
+        phase: 'STARTED',
+        RAFALE_CURRENT_QUESTION: { ID: 'r-042', QUESTION: 'Q?', CATEGORY: 'HISTORY', DIFFICULTY: 1 },
+        RAFALE_CURRENT_TEAM: 'Équipe A',
+        RAFALE_CURRENT_TEAM_COLOR: [99, 102, 241],
+      },
+    }))
+    const { container } = render(<GamePage />)
+
+    const chip = container.querySelector('.rafale-anim-qcard-team')
+    expect(chip).not.toBeNull()
+    expect(chip.textContent).toContain('Équipe A')
+  })
+
+  it('question non-RAFALE, phase STARTED : .rafale-admin-live n\'est jamais affiché (non-régression)', () => {
+    useGame.mockReturnValue(makeGameMock({
+      gameState: { phase: 'STARTED', question: { ID: '1', TYPE: 'SPEEDY', STATUS: 'STARTED' } },
+    }))
+    const { container } = render(<GamePage />)
+
+    expect(container.querySelector('.rafale-admin-live')).toBeNull()
   })
 })

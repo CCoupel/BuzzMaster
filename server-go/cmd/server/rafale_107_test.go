@@ -219,3 +219,92 @@ func TestRafaleIntegration_ValidateInvalidate_RejectedFromTV(t *testing.T) {
 		t.Errorf("RAFALE_VALIDATE from a TV client must be rejected by the allow-list (never reach the engine), counter changed %d -> %d", before, after)
 	}
 }
+
+// ---------------------------------------------------------------------------
+// Garde participantsConform sur CATEGORY vide (bugfix 2026-08-30, SHA
+// d6939e51) — QUALIF root cause: une manche RAFALE mal configurée
+// (CATEGORY vide, résidu d'avant la migration catégorie-unique) atteignait
+// STARTED puis mourait immédiatement dans le même tick (pool vide →
+// roundEnded → Stop()), avant qu'aucun client ne puisse réagir. Corrigée en
+// bloquant l'entrée en PREPARE→READY (participantsConform), déjà testée au
+// niveau Engine (internal/game/rafale_modes_test.go, Ready+ForceReady+
+// Start() directs) — CE test complète en passant par le VRAI dispatch WS
+// (handleWebMessage, allow-list comprise), le chemin qu'un client web
+// emprunte réellement (FORCE_READY puis START), plutôt que des appels
+// Engine directs.
+// ---------------------------------------------------------------------------
+
+func TestRafaleIntegration_EmptyCategory_BlockedAtReadyAndStart_ViaRealDispatch(t *testing.T) {
+	app := newTestAppWithHub(t)
+	app.udpBcast = server.NewUDPBroadcaster()
+	app.engine.SetTeams(map[string]*game.Team{"red": {Name: "red"}})
+
+	q := &game.Question{
+		ID: "rq1", Question: "RAFALE round", Type: game.QuestionTypeRafale,
+		Category: game.CategoryNone, // le défaut statique exact du bug QUALIF : jamais configurée
+		Points:   "10", Time: "120",
+		TypedContent: game.TypedContent{
+			RafaleDifficulty:   1,
+			RafaleMode:         string(game.RafaleModeSolo),
+			RafaleQuestionTime: 3,
+			RafaleMaxQuestions: 100,
+		},
+	}
+	app.engine.Ready("rq1", q)
+
+	if state := app.engine.GetState(); state.Phase != game.PhasePrepare {
+		t.Fatalf("sanity: expected PhasePrepare right after Ready(), got %s", state.Phase)
+	}
+
+	// FORCE_READY via le VRAI dispatch (handleForceReady -> Engine.ForceReady)
+	// — l'action qu'un client admin envoie pour tenter PREPARE->READY.
+	dispatchAs(t, app, server.ClientTypeAdmin, protocol.ActionForceReady, nil)
+
+	state := app.engine.GetState()
+	if state.Phase != game.PhasePrepare {
+		t.Fatalf("RAFALE with an empty CATEGORY must stay stuck in PREPARE after a real FORCE_READY dispatch, got %s", state.Phase)
+	}
+
+	// START via le VRAI dispatch (handleStart -> Engine.Start) — refusé
+	// structurellement puisque phase != READY, sans même entrer en
+	// COUNTDOWN (donc synchrone, pas besoin d'attendre un vrai décompte ici
+	// — c'est précisément le point : la manche ne peut plus jamais démarrer
+	// avec cette configuration).
+	dispatchAs(t, app, server.ClientTypeAdmin, protocol.ActionStart, protocol.StartPayload{Delay: 0})
+
+	state = app.engine.GetState()
+	if state.Phase != game.PhasePrepare {
+		t.Fatalf("START via real dispatch must be refused while stuck in PREPARE (Engine.Start requires PhaseReady), got phase=%s", state.Phase)
+	}
+}
+
+// TestRafaleIntegration_ValidCategory_ReachesReadyViaRealDispatch is the
+// positive-path counterpart, same real-dispatch discipline: a properly
+// configured RAFALE round DOES reach READY via a real FORCE_READY dispatch
+// — the guard added by the bugfix is a genuine gate, not an accidental
+// permanent block.
+func TestRafaleIntegration_ValidCategory_ReachesReadyViaRealDispatch(t *testing.T) {
+	app := newTestAppWithHub(t)
+	app.udpBcast = server.NewUDPBroadcaster()
+	app.engine.SetTeams(map[string]*game.Team{"red": {Name: "red"}})
+
+	q := &game.Question{
+		ID: "rq1", Question: "RAFALE round", Type: game.QuestionTypeRafale,
+		Category: game.CategoryHistory,
+		Points:   "10", Time: "120",
+		TypedContent: game.TypedContent{
+			RafaleDifficulty:   1,
+			RafaleMode:         string(game.RafaleModeSolo),
+			RafaleQuestionTime: 3,
+			RafaleMaxQuestions: 100,
+		},
+	}
+	app.engine.Ready("rq1", q)
+
+	dispatchAs(t, app, server.ClientTypeAdmin, protocol.ActionForceReady, nil)
+
+	state := app.engine.GetState()
+	if state.Phase != game.PhaseReady {
+		t.Fatalf("RAFALE with a valid CATEGORY must reach READY via a real FORCE_READY dispatch, got %s", state.Phase)
+	}
+}
