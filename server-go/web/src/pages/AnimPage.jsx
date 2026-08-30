@@ -23,6 +23,7 @@ import AnimConductPanel from '../components/AnimConductPanel'
 import AnimAnswerZone from '../components/AnimAnswerZone'
 import AnimCreditControl from '../components/AnimCreditControl'
 import AnimArdoiseList from '../components/AnimArdoiseList'
+import RafaleTimers from '../components/RafaleTimers'
 import './AnimPage.css'
 import '../styles/entracte.css'
 
@@ -307,15 +308,23 @@ export default function AnimPage() {
   const rafaleAnswerValue = (rafaleAnswer && rafaleAnswer.ID === rafaleCurrentQuestion.ID)
     ? rafaleAnswer.ANSWER
     : ''
+  // RÉVISION 2026-08-28 (maquette rafale-v8.html §9.2) — RAFALE affiche
+  // désormais question ET réponse ensemble dans un encart coloré équipe
+  // dédié, sans passer par AnimAnswerZone (masquage hold-to-peek retiré
+  // pour ce type — cf. rendu dans .anim-zone-context ci-dessous).
+  const rafaleCatMeta = categoryMeta(rafaleCurrentQuestion.CATEGORY, customCategories)
+  const rafaleCurrentTeamColorArr = gameState.RAFALE_CURRENT_TEAM_COLOR
+  const rafaleCurrentTeamCss = Array.isArray(rafaleCurrentTeamColorArr) && rafaleCurrentTeamColorArr.length === 3
+    ? `rgb(${rafaleCurrentTeamColorArr.join(',')})`
+    : 'var(--error)'
   // Zone réponse — réutilise AnimAnswerZone TELLE QUELLE (adaptateur en
   // objet "question" synthétique, même patron que MEMOTION ci-dessus) :
   // ANSWER pointe la valeur ci-dessus, jamais gameState.question.ANSWER
-  // (inexistant pour ce type).
+  // (inexistant pour ce type). RAFALE ne passe plus par ce chemin (voir
+  // ci-dessus) mais answerZoneQuestion reste utilisé par les autres types.
   const answerZoneQuestion = isMemotionQuestion
     ? cardToSyntheticQuestion(question, selectedMotionCard)
-    : isRafaleQuestion
-      ? { ID: rafaleCurrentQuestion.ID, ANSWER: rafaleAnswerValue, TYPE: 'SPEEDY' }
-      : question
+    : question
 
   // #166/F3 — options conditionnelles de la ligne méta (D5) : cible des
   // points, indices QCM activés, mode de tour MEMORY/MEMOTION (affiché même
@@ -552,6 +561,67 @@ export default function AnimPage() {
           F12 chrono en colonne). Grille 2 colonnes : lignes à gauche,
           chronomètre pleine hauteur à droite (E6 = option i, recommandée). */}
       <div className={`anim-zone anim-zone-context${entracteDim}`}>
+        {isRafaleQuestion ? (
+          <>
+            {/* RÉVISION 2026-08-28 (maquette rafale-v8.html §9.2, section
+                faisant autorité — remplace l'ancien §3) : encart coloré
+                équipe UNIQUE portant catégorie/difficulté/question/réponse
+                ensemble, plus de statement générique + AnimAnswerZone
+                séparés (masquage hold-to-peek retiré pour RAFALE : le
+                rythme ~3s/question ne se prête pas à une réponse cachée
+                par défaut, contrairement aux autres types). */}
+            <div className="anim-context-lines">
+              <span className={`anim-connection-status ${status}`}>
+                <span className="anim-status-dot" />
+                {STATUS_LABEL[status] || status}
+              </span>
+              <motion.div
+                className="rafale-anim-qcard"
+                style={{ '--rafale-active-color': rafaleCurrentTeamCss }}
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+              >
+                <div className="rafale-anim-qcard-meta">
+                  {gameState.RAFALE_CURRENT_TEAM && (
+                    <span className="chip rafale-anim-qcard-team">{gameState.RAFALE_CURRENT_TEAM}</span>
+                  )}
+                  {rafaleCatMeta && (
+                    <span className="anim-chip">
+                      {rafaleCatMeta.icon && <span className="anim-chip-glyph">{rafaleCatMeta.icon}</span>}
+                      {rafaleCatMeta.label}
+                    </span>
+                  )}
+                  {rafaleCurrentQuestion.DIFFICULTY > 0 && (
+                    <span className="anim-chip">{'★'.repeat(rafaleCurrentQuestion.DIFFICULTY)}</span>
+                  )}
+                  {gameState.RAFALE_ASKED_COUNT > 0 && (
+                    <span className="anim-chip">question {gameState.RAFALE_ASKED_COUNT}</span>
+                  )}
+                </div>
+                {rafaleCurrentQuestion.QUESTION && (
+                  <p className="rafale-anim-qcard-text">{rafaleCurrentQuestion.QUESTION}</p>
+                )}
+                {rafaleAnswerValue && (
+                  <div className="ans rafale-anim-qcard-answer">
+                    <b>Réponse attendue</b>
+                    {rafaleAnswerValue}
+                  </div>
+                )}
+              </motion.div>
+            </div>
+            <div className="anim-chrono-col">
+              <RafaleTimers
+                roundTime={gameState.timer}
+                roundTotal={gameState.totalTime}
+                questionTime={gameState.RAFALE_QUESTION_TIME || 0}
+                questionTotal={question?.RAFALE_QUESTION_TIME || 3}
+                phase={gameState.phase}
+                size="md"
+              />
+            </div>
+          </>
+        ) : (
+        <>
         <div className="anim-context-lines">
           <div className="anim-meta-row">
             <span className={`anim-connection-status ${status}`}>
@@ -612,14 +682,6 @@ export default function AnimPage() {
               question portant plusieurs cartes. */}
           {isMemotionQuestion ? (
             <p className="anim-question-statement">{motionStatement}</p>
-          ) : isRafaleQuestion ? (
-            // RAFALE — `question.QUESTION` n'existe pas (le type ne porte
-            // aucun énoncé, §3.3) : l'énoncé courant vient de
-            // RAFALE_CURRENT_QUESTION (GameState, tiré du réservoir),
-            // même patron que motionStatement ci-dessus.
-            rafaleCurrentQuestion.QUESTION && (
-              <p className="anim-question-statement">{rafaleCurrentQuestion.QUESTION}</p>
-            )
           ) : question?.QUESTION && (
             <p className="anim-question-statement">{question.QUESTION}</p>
           )}
@@ -651,6 +713,8 @@ export default function AnimPage() {
             showPhase={false}
           />
         </div>
+        </>
+        )}
       </div>
 
       {/* Zone conduite (#166/F5) — cinq lignes permanentes, l'état de
@@ -769,12 +833,18 @@ export default function AnimPage() {
           const rafaleParticipating = isRafaleQuestion
             ? (!gameState.RAFALE_PARTICIPATING_TEAMS?.length || gameState.RAFALE_PARTICIPATING_TEAMS.includes(team.name))
             : true
+          // RÉVISION 2026-08-28 (maquette rafale-v8.html §3, section
+          // conservée par la refonte §9) — panneau enrichi : 3 compteurs par
+          // équipe au lieu du seul total de bonnes réponses. RAFALE_TEAM_
+          // ERRORS/STREAK sont nouveaux (dev-backend, contrat rafale.md
+          // §4/redéfinition 2026-08-30) ; RAFALE_TEAM_COUNTERS inchangé.
           const rafaleStat = isRafaleQuestion
             ? (() => {
                 if (!rafaleParticipating) return { participating: false, label: 'ne participe pas' }
-                const counter = gameState.RAFALE_TEAM_COUNTERS?.[team.name] || 0
-                const label = `${counter} bonne${counter > 1 ? 's' : ''} reponse${counter > 1 ? 's' : ''}`
-                return { participating: true, label }
+                const correct = gameState.RAFALE_TEAM_COUNTERS?.[team.name] || 0
+                const errors = gameState.RAFALE_TEAM_ERRORS?.[team.name] || 0
+                const streak = gameState.RAFALE_TEAM_STREAK?.[team.name] || 0
+                return { participating: true, correct, errors, streak }
               })()
             : null
           const isActiveRafaleTeam = isRafaleQuestion && gameState.RAFALE_CURRENT_TEAM === team.name
@@ -816,7 +886,21 @@ export default function AnimPage() {
                     <span className="anim-team-memory-stat">{motionStat.label}</span>
                   )}
                   {rafaleStat && (
-                    <span className="anim-team-memory-stat">{rafaleStat.label}</span>
+                    rafaleStat.participating ? (
+                      <span className="rafale-anim-team-stats">
+                        <span className="rafale-anim-team-stat rafale-anim-team-stat-good">
+                          {rafaleStat.correct}<small>bonnes</small>
+                        </span>
+                        <span className="rafale-anim-team-stat rafale-anim-team-stat-bad">
+                          {rafaleStat.errors}<small>mauvaises</small>
+                        </span>
+                        <span className="rafale-anim-team-stat rafale-anim-team-stat-streak">
+                          {rafaleStat.streak}<small>d'affilée</small>
+                        </span>
+                      </span>
+                    ) : (
+                      <span className="anim-team-memory-stat">{rafaleStat.label}</span>
+                    )
                   )}
                   {/* #157/T4 — couleur choisie dès le buzz ; justesse (✓/✗)
                       uniquement en REVEALED — rien de tout cela hors QCM
