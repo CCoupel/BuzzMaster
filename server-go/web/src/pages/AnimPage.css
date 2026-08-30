@@ -254,68 +254,10 @@
   justify-content: center;
 }
 
-/* RÉVISION 2026-08-28 (maquette rafale-v8.html §9.2, section faisant
-   autorité — remplace l'ancien §3/§4/§4bis) — encart coloré équipe unique
-   portant catégorie/difficulté/question/réponse ensemble, en lieu et place
-   de .anim-question-statement + AnimAnswerZone (masquage hold-to-peek
-   retiré pour RAFALE, cf. AnimPage.jsx). Repris de .rafale-tv-qcard
-   (PlayerDisplay.css) en plus compact — même variable --rafale-active-color. */
-.rafale-anim-qcard {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-  padding: var(--space-3) var(--space-4);
-  border: 3px solid var(--rafale-active-color, var(--error));
-  border-radius: var(--radius-lg);
-  background: linear-gradient(160deg,
-    color-mix(in srgb, var(--rafale-active-color, var(--error)) 20%, transparent),
-    color-mix(in srgb, var(--rafale-active-color, var(--error)) 7%, transparent));
-  min-width: 0;
-}
-
-.rafale-anim-qcard-meta {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: var(--space-2);
-}
-
-.rafale-anim-qcard-team {
-  background: var(--rafale-active-color, var(--error));
-  color: #0b1220;
-  font-weight: 800;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-}
-
-.rafale-anim-qcard-text {
-  margin: 0;
-  font-size: 1.2rem;
-  font-weight: 700;
-  line-height: 1.28;
-  letter-spacing: -0.01em;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-}
-
-.rafale-anim-qcard-answer {
-  display: flex;
-  align-items: baseline;
-  gap: var(--space-2);
-  font-size: 1.05rem;
-  font-weight: 700;
-  color: var(--success, #22c55e);
-}
-
-.rafale-anim-qcard-answer b {
-  font-size: 0.72rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.03em;
-  color: var(--text-secondary, #94a3b8);
-}
+/* Encart question+réponse RAFALE (.rafale-anim-qcard*) — DÉPLACÉ vers la
+   zone centrale (#198, retour QUALIF 8.0.0.13) : ces règles vivent
+   désormais dans components/AnimRafaleQuestion.css, rendu par
+   AnimConductPanel.jsx (L3), plus par AnimPage.jsx directement. */
 
 /* ------------------------------------------------------------------ */
 /* Zone conduite — voir AnimConductPanel.css (#166/F5)                 */

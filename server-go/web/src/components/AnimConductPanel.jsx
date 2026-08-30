@@ -15,6 +15,7 @@ import AnimMotionCard from './AnimMotionCard'
 import AnimMotionActions from './AnimMotionActions'
 import AnimExplanationNote from './AnimExplanationNote'
 import AnimRafaleActions from './AnimRafaleActions'
+import AnimRafaleQuestion from './AnimRafaleQuestion'
 import './AnimConductPanel.css'
 
 // L1 — cinq emplacements FIXES (#166/F5) : la liste ne varie jamais dans
@@ -135,6 +136,13 @@ function buttonSubLabel(key, state, phase, waitReason) {
  *   défaut ici (socle #197/#198, données non encore diffusées).
  * @param {() => void} [props.onRafaleValidate] - émet RAFALE_VALIDATE
  * @param {() => void} [props.onRafaleInvalidate] - émet RAFALE_INVALIDATE
+ * @param {Object} [props.rafale] - données déjà résolues par AnimPage.jsx pour
+ *   `AnimRafaleQuestion` (L3, #198 : question+réponse déplacées depuis
+ *   `.anim-zone-context` vers cette zone centrale) — `current`, `teamName`,
+ *   `teamColorCss`, `answerValue`, `catMeta`, `askedCount` (voir
+ *   AnimRafaleQuestion.jsx pour le détail de chaque champ). `null`/absent
+ *   avant que `AnimPage.jsx` ne les câble (jamais le cas en pratique dès
+ *   qu'`isRafale`, mais évite un crash si le composant est monté isolément).
  */
 export default function AnimConductPanel({
   phase,
@@ -163,6 +171,7 @@ export default function AnimConductPanel({
   rafaleDisabled = false,
   onRafaleValidate,
   onRafaleInvalidate,
+  rafale = null,
 }) {
   const l1 = buildL1(phase, question, { onStart, onPause, onContinue, onStop, onReveal })
   const isQcm = question?.TYPE === 'QCM'
@@ -352,10 +361,11 @@ export default function AnimConductPanel({
               />
             )
           ) : isRafale ? (
-            // RAFALE — aucune grille propre (§7 du contrat) : la réponse
-            // attendue (RAFALE_ANSWER) et le tirage vivent hors de ce
-            // panneau (câblage réel AnimPage.jsx, Phase 2 #107).
-            <div className="anim-conduct-reserved">Aucun élément spécifique à ce mode</div>
+            // RAFALE (#198, retour QUALIF 8.0.0.13) — question+réponse
+            // affichées ICI (zone centrale), déplacées depuis
+            // .anim-zone-context (le bandeau du haut) où elles vivaient au
+            // cycle précédent. Câblage réel dans AnimPage.jsx.
+            <AnimRafaleQuestion {...(rafale || {})} />
           ) : (
             <div className="anim-conduct-reserved">Aucun élément spécifique à cette question</div>
           )}

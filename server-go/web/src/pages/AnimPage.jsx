@@ -563,27 +563,24 @@ export default function AnimPage() {
       <div className={`anim-zone anim-zone-context${entracteDim}`}>
         {isRafaleQuestion ? (
           <>
-            {/* RÉVISION 2026-08-28 (maquette rafale-v8.html §9.2, section
-                faisant autorité — remplace l'ancien §3) : encart coloré
-                équipe UNIQUE portant catégorie/difficulté/question/réponse
-                ensemble, plus de statement générique + AnimAnswerZone
-                séparés (masquage hold-to-peek retiré pour RAFALE : le
-                rythme ~3s/question ne se prête pas à une réponse cachée
-                par défaut, contrairement aux autres types). */}
+            {/* RÉVISION #198 (retour QUALIF 8.0.0.13) — l'encart
+                question+réponse (équipe/catégorie/difficulté/texte/réponse,
+                maquette §9.2) a DÉMÉNAGÉ vers la zone centrale
+                (AnimConductPanel L3, AnimRafaleQuestion.jsx) : "je veux que
+                la question et la réponse soient dans la zone centrale, pas
+                dans la zone question actuelle". Ce bandeau ne garde plus
+                qu'une ligne de méta compacte (équipe/catégorie/difficulté/
+                progression) — mêmes classes génériques .anim-meta-row/
+                .anim-chip que les autres types, aucune nouvelle règle CSS. */}
             <div className="anim-context-lines">
-              <span className={`anim-connection-status ${status}`}>
-                <span className="anim-status-dot" />
-                {STATUS_LABEL[status] || status}
-              </span>
-              <motion.div
-                className="rafale-anim-qcard"
-                style={{ '--rafale-active-color': rafaleCurrentTeamCss }}
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-              >
-                <div className="rafale-anim-qcard-meta">
+              <div className="anim-meta-row">
+                <span className={`anim-connection-status ${status}`}>
+                  <span className="anim-status-dot" />
+                  {STATUS_LABEL[status] || status}
+                </span>
+                <div className="anim-meta-chips">
                   {gameState.RAFALE_CURRENT_TEAM && (
-                    <span className="chip rafale-anim-qcard-team">{gameState.RAFALE_CURRENT_TEAM}</span>
+                    <span className="anim-chip">{gameState.RAFALE_CURRENT_TEAM}</span>
                   )}
                   {rafaleCatMeta && (
                     <span className="anim-chip">
@@ -595,19 +592,10 @@ export default function AnimPage() {
                     <span className="anim-chip">{'★'.repeat(rafaleCurrentQuestion.DIFFICULTY)}</span>
                   )}
                   {gameState.RAFALE_ASKED_COUNT > 0 && (
-                    <span className="anim-chip">question {gameState.RAFALE_ASKED_COUNT}</span>
+                    <span className="anim-chip anim-chip-count">question {gameState.RAFALE_ASKED_COUNT}</span>
                   )}
                 </div>
-                {rafaleCurrentQuestion.QUESTION && (
-                  <p className="rafale-anim-qcard-text">{rafaleCurrentQuestion.QUESTION}</p>
-                )}
-                {rafaleAnswerValue && (
-                  <div className="ans rafale-anim-qcard-answer">
-                    <b>Réponse attendue</b>
-                    {rafaleAnswerValue}
-                  </div>
-                )}
-              </motion.div>
+              </div>
             </div>
             <div className="anim-chrono-col">
               <RafaleTimers
@@ -772,6 +760,18 @@ export default function AnimPage() {
           rafaleDisabled={!isRafaleQuestion || gameState.RAFALE_SUBPHASE !== 'QUESTION'}
           onRafaleValidate={rafaleValidate}
           onRafaleInvalidate={rafaleInvalidate}
+          // #198 (retour QUALIF 8.0.0.13) — question+réponse rendues en
+          // zone centrale (AnimRafaleQuestion, L3) plutôt que dans
+          // .anim-zone-context (voir ce bandeau plus haut, réduit à une
+          // ligne de méta compacte). Données déjà résolues ci-dessus.
+          rafale={isRafaleQuestion ? {
+            current: rafaleCurrentQuestion,
+            teamName: gameState.RAFALE_CURRENT_TEAM,
+            teamColorCss: rafaleCurrentTeamCss,
+            answerValue: rafaleAnswerValue,
+            catMeta: rafaleCatMeta,
+            askedCount: gameState.RAFALE_ASKED_COUNT,
+          } : null}
         />
       </div>
 

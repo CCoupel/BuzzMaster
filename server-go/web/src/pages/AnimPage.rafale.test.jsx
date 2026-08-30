@@ -44,12 +44,24 @@ vi.mock('../components/Timer', () => ({
 // câblage vers rafaleValidate/rafaleInvalidate, sans dépendre du rendu réel
 // d'AnimConductPanel (sa propre couverture exhaustive vit dans
 // AnimConductPanel.test.jsx / AnimRafaleActions.rafale.test.jsx).
+// #198 (retour QUALIF 8.0.0.13) — le rendu visuel de l'encart
+// question+réponse a déménagé dans AnimRafaleQuestion.jsx (zone centrale,
+// montée PAR AnimConductPanel), sa propre couverture vit désormais dans
+// AnimConductPanel.test.jsx. Ce mock expose donc `props.rafale` tel quel
+// via data-attributes : ce fichier vérifie que AnimPage.jsx calcule et
+// transmet les BONNES valeurs (câblage), pas le rendu final.
 vi.mock('../components/AnimConductPanel', () => ({
   default: (props) => (
     <div
       data-testid="conduct-panel"
       data-phase={props.phase}
       data-rafale-disabled={String(!!props.rafaleDisabled)}
+      data-rafale-question={props.rafale?.current?.QUESTION ?? ''}
+      data-rafale-answer={props.rafale?.answerValue ?? ''}
+      data-rafale-team={props.rafale?.teamName ?? ''}
+      data-rafale-team-color-css={props.rafale?.teamColorCss ?? ''}
+      data-rafale-cat-label={props.rafale?.catMeta?.label ?? ''}
+      data-rafale-difficulty={props.rafale?.current?.DIFFICULTY ?? ''}
     >
       <button onClick={() => props.onRafaleValidate?.()}>MOCK_RAFALE_VALIDATE</button>
       <button onClick={() => props.onRafaleInvalidate?.()}>MOCK_RAFALE_INVALIDATE</button>
@@ -135,37 +147,45 @@ afterEach(() => {
 // hold-to-peek pour RAFALE.
 // ---------------------------------------------------------------------------
 
-describe('AnimPage — RAFALE : encart question+réponse fusionné (§9.2)', () => {
-  it('phase STARTED : rend .rafale-anim-qcard, PAS AnimAnswerZone', () => {
+describe('AnimPage — RAFALE : câblage du prop `rafale` vers AnimConductPanel (§9.2, zone centrale)', () => {
+  // #198 (retour QUALIF 8.0.0.13) — l'encart lui-même (.rafale-anim-qcard)
+  // est désormais rendu par AnimRafaleQuestion.jsx, monté PAR
+  // AnimConductPanel (mocké ici, cf. commentaire du mock ci-dessus) : ce
+  // fichier vérifie que AnimPage.jsx calcule et transmet les bonnes
+  // valeurs dans `props.rafale`, pas le rendu visuel final (couvert par
+  // AnimConductPanel.test.jsx).
+  it('phase STARTED, TYPE=RAFALE : PAS de AnimAnswerZone (masquage hold-to-peek retiré pour ce type)', () => {
     useGame.mockReturnValue(makeGameMock())
-    const { container } = render(<AnimPage />)
+    render(<AnimPage />)
 
-    expect(container.querySelector('.rafale-anim-qcard')).not.toBeNull()
     expect(screen.queryByTestId('answer-zone')).not.toBeInTheDocument()
   })
 
-  it('affiche la question ET la réponse ENSEMBLE, sans masquage (rafaleAnswer déjà résolu)', () => {
+  it('transmet la question ET la réponse ENSEMBLE, sans masquage (rafaleAnswer déjà résolu)', () => {
     render(<AnimPage />)
 
-    expect(screen.getByText('Capitale de l\'Italie ?')).toBeInTheDocument()
-    expect(screen.getByText('Rome')).toBeInTheDocument()
+    const panel = screen.getByTestId('conduct-panel')
+    expect(panel).toHaveAttribute('data-rafale-question', 'Capitale de l\'Italie ?')
+    expect(panel).toHaveAttribute('data-rafale-answer', 'Rome')
   })
 
-  it('rafaleAnswer.ID ne correspond PAS à la question courante (réponse pas encore reçue) : aucune réponse affichée, la question reste visible', () => {
+  it('rafaleAnswer.ID ne correspond PAS à la question courante (réponse pas encore reçue) : answerValue vide, la question reste transmise', () => {
     useGame.mockReturnValue(makeGameMock({ rafaleAnswer: { ID: 'r-999', ANSWER: 'Berlin' } }))
     render(<AnimPage />)
 
-    expect(screen.getByText('Capitale de l\'Italie ?')).toBeInTheDocument()
-    expect(screen.queryByText('Berlin')).not.toBeInTheDocument()
+    const panel = screen.getByTestId('conduct-panel')
+    expect(panel).toHaveAttribute('data-rafale-question', 'Capitale de l\'Italie ?')
+    expect(panel).toHaveAttribute('data-rafale-answer', '')
   })
 
-  it('affiche catégorie et difficulté dans l\'encart', () => {
+  it('transmet catégorie et difficulté résolues', () => {
     useGame.mockReturnValue(makeGameMock())
     useCategories.mockReturnValue({ categories: [] })
     render(<AnimPage />)
 
-    expect(screen.getByText(/Geographie/)).toBeInTheDocument()
-    expect(screen.getByText('★★')).toBeInTheDocument()
+    const panel = screen.getByTestId('conduct-panel')
+    expect(panel.getAttribute('data-rafale-cat-label')).toMatch(/Geographie/)
+    expect(panel).toHaveAttribute('data-rafale-difficulty', '2')
   })
 
   it('câble RafaleTimers avec le timer de manche et le timer de question (Timer mocké — même patron que AnimPage.test.jsx, valeurs brutes transmises)', () => {
@@ -175,14 +195,14 @@ describe('AnimPage — RAFALE : encart question+réponse fusionné (§9.2)', () 
     expect(displays).toContain('2') // RAFALE_QUESTION_TIME (question)
   })
 
-  it('mode multi, équipe active définie : son nom apparaît dans l\'encart', () => {
+  it('mode multi, équipe active définie : son nom est transmis dans `rafale.teamName`', () => {
     useGame.mockReturnValue(makeGameMock({
       gameState: { RAFALE_CURRENT_TEAM: 'Équipe A', RAFALE_CURRENT_TEAM_COLOR: [99, 102, 241] },
     }))
-    const { container } = render(<AnimPage />)
-    const chip = container.querySelector('.rafale-anim-qcard-team')
-    expect(chip).not.toBeNull()
-    expect(chip.textContent).toContain('Équipe A')
+    render(<AnimPage />)
+    const panel = screen.getByTestId('conduct-panel')
+    expect(panel).toHaveAttribute('data-rafale-team', 'Équipe A')
+    expect(panel).toHaveAttribute('data-rafale-team-color-css', 'rgb(99,102,241)')
   })
 })
 
@@ -193,18 +213,18 @@ describe('AnimPage — RAFALE : encart question+réponse fusionné (§9.2)', () 
 // ---------------------------------------------------------------------------
 
 describe('AnimPage — non-régression : les autres types continuent d\'utiliser AnimAnswerZone', () => {
-  it('TYPE=QCM : AnimAnswerZone est monté, .rafale-anim-qcard absent', () => {
+  it('TYPE=QCM : AnimAnswerZone est monté, aucun rafale.current transmis (rafale=null)', () => {
     useGame.mockReturnValue(makeGameMock({
       gameState: {
         question: { ID: 'q1', TYPE: 'QCM' },
         RAFALE_CURRENT_QUESTION: {},
       },
     }))
-    const { container } = render(<AnimPage />)
+    render(<AnimPage />)
 
     expect(screen.getByTestId('answer-zone')).toBeInTheDocument()
     expect(screen.getByTestId('answer-zone')).toHaveAttribute('data-question-id', 'q1')
-    expect(container.querySelector('.rafale-anim-qcard')).toBeNull()
+    expect(screen.getByTestId('conduct-panel')).toHaveAttribute('data-rafale-question', '')
   })
 
   it('TYPE=SPEEDY : AnimAnswerZone est monté, .rafale-anim-qcard absent', () => {
