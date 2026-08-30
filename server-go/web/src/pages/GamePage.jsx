@@ -57,6 +57,7 @@ export default function GamePage() {
     simulatePong,
     sendMessage,
     rafaleSetTeams,
+    rafaleAnswer,
   } = useGame()
 
   const [timeInput, setTimeInput] = useState(30)
@@ -987,6 +988,53 @@ export default function GamePage() {
               />
             </div>
           )}
+
+          {/* RÉVISION 2026-08-28 (maquette rafale-v8.html §9.3, section
+              faisant autorité — remplace §3/§4/§4bis) — question ET réponse
+              affichées ensemble sur /admin pendant la manche, même encart
+              coloré équipe que /anim (§9.2). Choix d'affichage uniquement :
+              RAFALE_ANSWER était déjà diffusé à l'admin (contrat §2.3,
+              destinataires admin+anim), simplement jamais rendu ici avant
+              cette refonte — aucun changement de protocole/sécurité. */}
+          {isRafaleSelected && isPlaying && (() => {
+            const current = gameState.RAFALE_CURRENT_QUESTION || {}
+            const teamColorArr = gameState.RAFALE_CURRENT_TEAM_COLOR
+            const teamCss = Array.isArray(teamColorArr) && teamColorArr.length === 3
+              ? `rgb(${teamColorArr.join(',')})`
+              : 'var(--error)'
+            const answerValue = (rafaleAnswer && rafaleAnswer.ID === current.ID) ? rafaleAnswer.ANSWER : ''
+            const catMeta = categoryMeta(current.CATEGORY, customCategories)
+            return (
+              <div className="rafale-admin-live">
+                <div className="rafale-anim-qcard" style={{ '--rafale-active-color': teamCss }}>
+                  <div className="rafale-anim-qcard-meta">
+                    {gameState.RAFALE_CURRENT_TEAM && (
+                      <span className="chip rafale-anim-qcard-team">{gameState.RAFALE_CURRENT_TEAM}</span>
+                    )}
+                    {catMeta && (
+                      <span className="rafale-admin-chip">
+                        <CategoryBadge catKey={current.CATEGORY} customCategories={customCategories} size="sm" />
+                        {' '}{catMeta.label}
+                      </span>
+                    )}
+                    {current.DIFFICULTY > 0 && (
+                      <span className="rafale-admin-chip">{'★'.repeat(current.DIFFICULTY)}</span>
+                    )}
+                    {gameState.RAFALE_ASKED_COUNT > 0 && (
+                      <span className="rafale-admin-chip">question {gameState.RAFALE_ASKED_COUNT}</span>
+                    )}
+                  </div>
+                  {current.QUESTION && <p className="rafale-anim-qcard-text">{current.QUESTION}</p>}
+                  {answerValue && (
+                    <div className="ans rafale-anim-qcard-answer">
+                      <b>Réponse attendue</b>
+                      {answerValue}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )
+          })()}
 
           {/* MEMOTION subphase controls — shown when MEMOTION question is STARTED */}
           {gameState.question?.TYPE === 'MEMOTION' && gameState.phase === 'STARTED' && (() => {
