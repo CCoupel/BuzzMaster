@@ -53,6 +53,15 @@ export default function RafalePage() {
   const [formError, setFormError] = useState(null)
   const [submitting, setSubmitting] = useState(false)
 
+  // Remise à disponible du flag « déjà utilisée » (contrat rafale.md §9,
+  // dev-backend SHA 77e0d5ea, issue #197) — n'affecte JAMAIS le réservoir
+  // lui-même (aucune question créée/modifiée/supprimée), seulement
+  // `rafale_used.json` (§3.2). `resettingId`/`resettingAll` évitent un
+  // double-clic pendant la requête, même discipline que `submitting`
+  // ci-dessus pour le formulaire.
+  const [resettingId, setResettingId] = useState(null)
+  const [resettingAll, setResettingAll] = useState(false)
+
   const loadQuestions = useCallback(() => {
     setLoading(true)
     setError(null)
@@ -113,6 +122,43 @@ export default function RafalePage() {
       loadQuestions()
     } catch (err) {
       setError(err.message)
+    }
+  }
+
+  // Remet UNE question à disponible (contrat rafale.md §9). No-op silencieux
+  // côté serveur si elle n'était pas marquée utilisée — pas de confirmation
+  // ici (action peu risquée, à la différence du reset global ci-dessous) :
+  // remettre par erreur une question à disponible n'a aucun effet destructif,
+  // au pire elle sera simplement retirée du tirage un peu plus tôt/tard.
+  const handleResetOne = async (id) => {
+    setResettingId(id)
+    try {
+      const res = await fetch(`/api/rafale/questions/${encodeURIComponent(id)}/reset`, { method: 'POST' })
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      loadQuestions()
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setResettingId(null)
+    }
+  }
+
+  // Remet TOUT le réservoir à disponible (contrat rafale.md §9). Aucun undo
+  // côté UI une fois confirmé (le flag "déjà utilisée" est entièrement vidé
+  // côté serveur) — confirmation obligatoire, même patron que les autres
+  // actions globales du projet (BackupPage.jsx handleResetSelect,
+  // ConfigPage.jsx "Remettre tous les scores a zero").
+  const handleResetAll = async () => {
+    if (!window.confirm(`Remettre les ${usedCount} question(s) utilisee(s) du reservoir RAFALE disponibles ? Le contenu des questions n'est pas modifie, seul le flag "deja utilisee" est efface.`)) return
+    setResettingAll(true)
+    try {
+      const res = await fetch('/api/rafale/questions/reset-all', { method: 'POST' })
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      loadQuestions()
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setResettingAll(false)
     }
   }
 
@@ -201,6 +247,22 @@ export default function RafalePage() {
                 Non utilisees
               </button>
             </div>
+            {/* Reset global du flag "deja utilisee" (contrat rafale.md §9,
+                issue #197) — visible seulement s'il y a quelque chose a
+                remettre disponible. */}
+            {usedCount > 0 && (
+              <div className="rafale-filter-group">
+                <button
+                  type="button"
+                  className="rafale-chip rafale-reset-all-btn"
+                  onClick={handleResetAll}
+                  disabled={resettingAll}
+                  title="Remet toutes les questions utilisees du reservoir a l'etat disponible (le contenu des questions n'est pas modifie)"
+                >
+                  ↺ Remettre tout disponible ({usedCount})
+                </button>
+              </div>
+            )}
           </div>
 
           {loading ? (
@@ -236,6 +298,20 @@ export default function RafalePage() {
                       </td>
                       <td className="rafale-row-actions">
                         <button type="button" className="rafale-row-btn" onClick={() => handleEdit(q)} title="Modifier">✎</button>
+                        {/* Reset individuel (contrat rafale.md §9, issue
+                            #197) — visible SEULEMENT si la question est
+                            marquee utilisee (sinon rien a remettre). */}
+                        {q.USED && (
+                          <button
+                            type="button"
+                            className="rafale-row-btn"
+                            onClick={() => handleResetOne(q.ID)}
+                            disabled={resettingId === q.ID}
+                            title="Remettre disponible"
+                          >
+                            ↺
+                          </button>
+                        )}
                         <button type="button" className="rafale-row-btn rafale-row-btn-danger" onClick={() => handleDelete(q.ID)} title="Supprimer">🗑</button>
                       </td>
                     </tr>

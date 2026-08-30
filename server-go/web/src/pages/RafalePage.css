@@ -64,6 +64,25 @@
   font-weight: 600;
 }
 
+.rafale-chip:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Reset global du flag "deja utilisee" (contrat rafale.md §9, issue #197)
+   — accent warning pour se distinguer des chips de filtre neutres (ni
+   destructif comme .rafale-row-btn-danger — le contenu des questions n'est
+   jamais touché — ni un simple filtre). */
+.rafale-reset-all-btn {
+  border-color: var(--warning, #eab308);
+  color: var(--warning, #eab308);
+  font-weight: 600;
+}
+
+.rafale-reset-all-btn:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--warning, #eab308) 15%, transparent);
+}
+
 /* Statuts */
 .rafale-status {
   color: var(--text-secondary, var(--gray-600));
@@ -136,6 +155,11 @@
 .rafale-row-btn-danger:hover {
   border-color: var(--error);
   color: var(--error);
+}
+
+.rafale-row-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .rafale-counts {
