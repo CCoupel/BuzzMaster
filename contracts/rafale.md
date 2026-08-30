@@ -213,6 +213,27 @@ RafaleMaxQuestions int      `json:"RAFALE_MAX_QUESTIONS,omitempty"` // plafond d
 > mode multi pendant READY fait donc désormais redescendre en PREPARE automatiquement, sans code
 > supplémentaire.
 
+> ⚠️ **Bugfix (dev-backend, 2026-09-03, #199, 3e cycle QUALIF du même retour utilisateur)** : la
+> garde ci-dessus est correcte et vérifiée de bout en bout (dispatch ANIM réel, chemin HTTP réel),
+> mais elle pouvait être satisfaite par une sélection d'équipes **périmée**, laissée en mémoire par
+> une manche PRÉCÉDENTE. Cause : une question de configuration RAFALE est **conçue pour être
+> rejouée** pour plusieurs manches dans la même partie avec le **même ID** (contrairement à
+> QCM/MEMORY/MEMOTION, jouées une fois chacune normalement) — mais `Engine.Ready()` ne
+> réinitialisait `RAFALE_PARTICIPATING_TEAMS`/`RAFALE_CURRENT_TEAM`/`RAFALE_CURRENT_TEAM_COLOR` que
+> lorsque l'ID de la question changeait (`isNewQuestion`), jamais sur un rechargement de la MÊME
+> question. `Stop()` ne touche jamais ces champs non plus (par conception — la sélection doit
+> survivre à un countdown, pas à une manche entièrement terminée). Résultat : lancer une manche
+> multi AVEC équipes, la terminer, puis recharger la même question SANS resélectionner d'équipe
+> laissait la sélection de la manche précédente satisfaire silencieusement la garde — alors que
+> l'interface affichait « aucune équipe sélectionnée » (état local frontend, déconnecté du
+> `GameState` réel, ce qui explique pourquoi la garde « semblait » cassée malgré une logique
+> correcte en isolation). Corrigé : `Ready()` réinitialise désormais ces trois champs aussi quand
+> `RAFALE_SUBPHASE != ""` (une manche a déjà été jouée sur cette question) au moment de l'appel,
+> pas seulement sur `isNewQuestion` — la sélection continue de survivre à un simple re-`Ready()`
+> avant tout démarrage (comportement inchangé, voir le commentaire d'origine
+> « persist during PREPARE→READY transition »), mais plus après une manche terminée. Voir
+> `contracts/CHANGELOG.md`.
+
 ---
 
 ## 4. Champs `GameState`

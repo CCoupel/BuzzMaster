@@ -2,6 +2,44 @@
 
 ---
 
+## [20260903] — RAFALE : sélection d'équipes périmée survivant à une manche terminée (#199, bugfix, 3e cycle)
+
+> Retour utilisateur, 3e cycle du même symptôme (« START possible sans équipe ») : l'utilisateur a
+> rouvert ET re-sauvegardé sa question RAFALE de test (invalidant l'hypothèse du rapport
+> dev-backend précédent, `_work/reports/dev-backend-20260830-190737.md` — `RAFALE_MODE` périmé),
+> symptôme toujours présent.
+
+- **[CONFIRMÉ, reproduit directement] Cause racine** : `Engine.Ready()` ne réinitialisait
+  `RAFALE_PARTICIPATING_TEAMS`/`RAFALE_CURRENT_TEAM`/`RAFALE_CURRENT_TEAM_COLOR` que sur
+  `isNewQuestion` (ID de question différent) — jamais sur le rechargement de la **même** question
+  RAFALE pour une nouvelle manche, alors que ce pattern (une question de config rejouée
+  plusieurs fois par partie) est le fonctionnement NORMAL de RAFALE. `Stop()` ne touche pas non
+  plus ces champs (par conception). La sélection d'équipes d'une manche déjà terminée restait donc
+  active en mémoire côté serveur et satisfaisait silencieusement `participantsConform` à la manche
+  suivante, sans que rien n'ait été resélectionné — alors que l'UI affichait « aucune équipe »
+  (état local frontend, déconnecté du `GameState` réel).
+  - Reproduit et confirmé par `TestReady_RafaleReplay_ResetsStaleParticipatingTeams`
+    (internal/game) : lancer une manche multi AVEC équipes → la terminer (STOP) → recharger la
+    MÊME question SANS resélectionner → `RAFALE_PARTICIPATING_TEAMS` non vide, `START` accepté
+    **avant** ce correctif.
+  - Reproduit aussi via le VRAI dispatch WS en tant que `ClientTypeAnim`
+    (`TestRafaleReplay_AnimDispatch_StaleTeamsFromPreviousManche_StartRefused`, cmd/server) — le
+    scénario exact demandé par le CDP.
+  - Correctif : `Ready()` réinitialise désormais ces trois champs aussi quand
+    `RAFALE_SUBPHASE != ""` au moment de l'appel (une manche a déjà été jouée sur cette question),
+    en plus de `isNewQuestion`. Comportement inchangé pour le cas « re-`Ready()` avant tout
+    démarrage » (la sélection continue de survivre — c'était l'intention d'origine du garde-fou
+    `isNewQuestion`, non touchée par ce correctif).
+- Contrat §3.4 mis à jour avec le détail de la cause et du correctif.
+- **Dette identifiée, non traitée dans ce cycle** (hors scope, urgence) : `MEMORY_PARTICIPATING_TEAMS`/
+  `MOTION_PARTICIPATING_TEAMS` partagent la même structure `isNewQuestion`-only dans `Ready()` —
+  la même classe de bug pourrait théoriquement affecter MEMORY/MEMOTION si une question y est
+  rejouée avec le même ID au sein d'une partie (moins probable en pratique : ces types sont
+  normalement joués une fois chacun, contrairement à RAFALE conçu pour la rejouabilité). À vérifier
+  si un scénario de rejeu MEMORY/MEMOTION est un jour rapporté.
+
+---
+
 ## [20260902] — RAFALE : garde START sans équipe sélectionnée en mode multi (#199, feature)
 
 > Milestone v8.0.0 · Retour utilisateur QUALIF 8.0.0.13 : « je ne dois pas pouvoir faire START si
