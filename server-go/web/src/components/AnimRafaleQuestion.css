@@ -7,6 +7,13 @@
    même patron "chaque page/composant garde sa feuille de style" déjà
    suivi dans ce projet. */
 .rafale-anim-qcard {
+  /* Bugfix cosmétique (code-review-20260830-180800.md) — alignée sur ses
+     2 voisins directs L3 (AnimMemoryGrid.css/.anim-memory-grid,
+     AnimMotionGrid.css/.anim-motion-grid) qui remplissent explicitement
+     toute la cellule L3 (.anim-conduct-l3, flex column) via flex:1 +
+     min-height:0 ; absentes ici jusqu'à présent. */
+  flex: 1;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
