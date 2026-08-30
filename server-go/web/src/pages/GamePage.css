@@ -72,6 +72,14 @@
 }
 
 .control-panel {
+  /* Régression retour QUALIF 8.0.0.14 — la commande s'est retrouvée SOUS
+     les questions. Cause : .admin-col-left est un flex column, qui suit
+     l'ORDRE DU DOM par défaut (contrairement à l'ancien modèle en grille
+     avec grid-row explicite, indifférent à l'ordre du DOM). Le JSX place
+     .questions-panel AVANT .control-panel (inchangé de longue date, gros
+     bloc — pas déplacé pour corriger ceci) : `order` restaure l'ordre
+     visuel voulu sans toucher au JSX. */
+  order: 1;
   display: flex;
   flex-direction: column;
   gap: var(--space-1);
@@ -232,7 +240,7 @@
   overflow: hidden;
 }
 
-.questions-panel { flex: 1; }
+.questions-panel { order: 2; flex: 1; }
 .right-panel { grid-column: 3; grid-row: 1; }
 
 /* TV Preview Container — vit desormais DANS .admin-col-center (flex:1,
