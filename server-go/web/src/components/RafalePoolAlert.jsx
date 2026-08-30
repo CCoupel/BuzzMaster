@@ -100,9 +100,14 @@ export default function RafalePoolAlert({ category = '', difficulty, roundTime, 
     )
   }
 
+  // Retour utilisateur (2026-08-30, #198) — "réduis le texte indiquant
+  // qu'il n'y a plus de questions ou qu'il n'y en a pas assez" : messages
+  // blocking/warning raccourcis à l'essentiel (combien de disponibles,
+  // bloquant ou juste avertissement) — l'état `ok` n'était pas visé par le
+  // retour, inchangé.
   const levelMeta = {
-    blocking: { icon: '✕', cls: 'rafale-pool-alert-blocking', title: 'Aucune question disponible pour ce filtre' },
-    warning: { icon: '!', cls: 'rafale-pool-alert-warning', title: `${pool.AVAILABLE} question${pool.AVAILABLE > 1 ? 's' : ''} disponible${pool.AVAILABLE > 1 ? 's' : ''} — risque de fin anticipée` },
+    blocking: { icon: '✕', cls: 'rafale-pool-alert-blocking', title: '0 disponible — bloquant' },
+    warning: { icon: '!', cls: 'rafale-pool-alert-warning', title: `${pool.AVAILABLE} question${pool.AVAILABLE > 1 ? 's' : ''} disponible${pool.AVAILABLE > 1 ? 's' : ''} — insuffisant` },
     ok: { icon: '✓', cls: 'rafale-pool-alert-ok', title: `${pool.AVAILABLE} question${pool.AVAILABLE > 1 ? 's' : ''} disponible${pool.AVAILABLE > 1 ? 's' : ''}` },
   }[level]
 
@@ -114,10 +119,10 @@ export default function RafalePoolAlert({ category = '', difficulty, roundTime, 
         {need > 0 && (
           <p className="rafale-pool-alert-detail">
             {level === 'blocking'
-              ? 'Changez de catégorie ou de difficulté, ou lancez une nouvelle partie pour réinitialiser les questions déjà utilisées.'
-              : `Besoin estimé pour ${roundTime}s : ~${need} questions.`}
-            {level === 'blocking' && <em> Démarrage bloqué.</em>}
-            {level === 'warning' && <em> Démarrage autorisé.</em>}
+              ? 'Changez de filtre ou réinitialisez le pool.'
+              : level === 'warning'
+                ? `~${need} nécessaires — démarrage autorisé.`
+                : `~${need} nécessaires.`}
           </p>
         )}
       </div>

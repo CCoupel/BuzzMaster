@@ -76,18 +76,22 @@ describe('RafalePoolAlert — appel réseau', () => {
 })
 
 describe('RafalePoolAlert — 3 états d\'alerte (contrat §7.2)', () => {
-  it('AVAILABLE=0 : état BLOQUANT — icône ✕, "Démarrage bloqué."', async () => {
+  // Textes raccourcis (retour utilisateur 2026-08-30, #198 : "réduis le
+  // texte indiquant qu'il n'y a plus de questions ou qu'il n'y en a pas
+  // assez") — l'essentiel (compteur, bloquant/avertissement) est conservé,
+  // les phrases longues d'origine sont retirées.
+  it('AVAILABLE=0 : état BLOQUANT — icône ✕, message court', async () => {
     global.fetch = vi.fn(() => jsonResponse({ AVAILABLE: 0, USED: 5, TOTAL: 5 }))
     const { container } = render(<RafalePoolAlert category={'HISTORY'} difficulty={1} roundTime={120} questionTime={3} />)
 
     await waitFor(() => {
       expect(container.querySelector('.rafale-pool-alert-blocking')).not.toBeNull()
     })
-    expect(screen.getByText('Aucune question disponible pour ce filtre')).toBeInTheDocument()
-    expect(screen.getByText(/Démarrage bloqué\./)).toBeInTheDocument()
+    expect(screen.getByText(/0 disponible — bloquant/)).toBeInTheDocument()
+    expect(screen.getByText(/Changez de filtre ou réinitialisez le pool\./)).toBeInTheDocument()
   })
 
-  it('0 < AVAILABLE < besoin estimé : état AVERTISSEMENT — icône !, "Démarrage autorisé."', async () => {
+  it('0 < AVAILABLE < besoin estimé : état AVERTISSEMENT — icône !, message court', async () => {
     // roundTime=120, questionTime=3 -> besoin=40 ; 10 disponibles < 40
     global.fetch = vi.fn(() => jsonResponse({ AVAILABLE: 10, USED: 0, TOTAL: 10 }))
     const { container } = render(<RafalePoolAlert category={'HISTORY'} difficulty={1} roundTime={120} questionTime={3} />)
@@ -95,9 +99,8 @@ describe('RafalePoolAlert — 3 états d\'alerte (contrat §7.2)', () => {
     await waitFor(() => {
       expect(container.querySelector('.rafale-pool-alert-warning')).not.toBeNull()
     })
-    expect(screen.getByText(/10 questions disponibles/)).toBeInTheDocument()
-    expect(screen.getByText(/Démarrage autorisé\./)).toBeInTheDocument()
-    expect(screen.getByText(/Besoin estimé pour 120s : ~40 questions\./)).toBeInTheDocument()
+    expect(screen.getByText(/10 questions disponibles — insuffisant/)).toBeInTheDocument()
+    expect(screen.getByText(/~40 nécessaires — démarrage autorisé\./)).toBeInTheDocument()
   })
 
   it('AVAILABLE >= besoin estimé : état NEUTRE (OK) — icône ✓, aucun texte de blocage/avertissement', async () => {
@@ -108,8 +111,8 @@ describe('RafalePoolAlert — 3 états d\'alerte (contrat §7.2)', () => {
       expect(container.querySelector('.rafale-pool-alert-ok')).not.toBeNull()
     })
     expect(screen.getByText(/45 questions disponibles/)).toBeInTheDocument()
-    expect(screen.queryByText(/Démarrage bloqué/)).not.toBeInTheDocument()
-    expect(screen.queryByText(/Démarrage autorisé/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/bloquant/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/démarrage autorisé/)).not.toBeInTheDocument()
   })
 
   it('limite EXACTE (AVAILABLE == besoin estimé) : neutre (OK), pas avertissement — limite incluse côté OK', async () => {
@@ -128,8 +131,7 @@ describe('RafalePoolAlert — 3 états d\'alerte (contrat §7.2)', () => {
     render(<RafalePoolAlert category={'HISTORY'} difficulty={1} roundTime={121} questionTime={3} />)
 
     // 40 disponibles < 41 (besoin arrondi au plafond) -> AVERTISSEMENT, pas OK
-    expect(await screen.findByText(/Démarrage autorisé\./)).toBeInTheDocument()
-    expect(screen.getByText(/Besoin estimé pour 121s : ~41 questions\./)).toBeInTheDocument()
+    expect(await screen.findByText(/~41 nécessaires — démarrage autorisé\./)).toBeInTheDocument()
   })
 })
 
