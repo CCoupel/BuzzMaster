@@ -126,7 +126,9 @@ export default function useWebSocket(endpoint = '/ws/admin') {
     RAFALE_CURRENT_QUESTION: { ID: '', QUESTION: '', CATEGORY: '', DIFFICULTY: 0 },
     RAFALE_QUESTION_TIME: 0, // décompte question (~3s), alimenté par RAFALE_TICK
     RAFALE_TEAM_COUNTERS: {}, // Map teamName -> compteur de manche (PAS un score réel)
-    RAFALE_TEAM_BEST: {}, // Map teamName -> meilleur compteur atteint (MAILLON_FAIBLE uniquement)
+    RAFALE_TEAM_BEST: {}, // Map teamName -> maximum historique de RAFALE_TEAM_STREAK (tous modes, redéfini 2026-08-30)
+    RAFALE_TEAM_STREAK: {}, // Map teamName -> série de bonnes réponses EN COURS (remise à 0 sur erreur, tous modes)
+    RAFALE_TEAM_ERRORS: {}, // Map teamName -> nombre cumulé de mauvaises réponses/timeouts (jamais remis à 0)
     RAFALE_CURRENT_TEAM: '',
     RAFALE_PARTICIPATING_TEAMS: [],
     RAFALE_CURRENT_TEAM_COLOR: [],
@@ -389,6 +391,15 @@ export default function useWebSocket(endpoint = '/ws/admin') {
             RAFALE_QUESTION_TIME: MSG.GAME.RAFALE_QUESTION_TIME ?? prev.RAFALE_QUESTION_TIME,
             RAFALE_TEAM_COUNTERS: MSG.GAME.RAFALE_TEAM_COUNTERS ?? prev.RAFALE_TEAM_COUNTERS,
             RAFALE_TEAM_BEST: MSG.GAME.RAFALE_TEAM_BEST ?? prev.RAFALE_TEAM_BEST,
+            // Bugfix code-review-20260830-132912.md [MAJEUR] — ces 2 champs
+            // existent côté backend (dev-backend, SHA f512a9f3/d6939e51,
+            // contrat rafale.md §4 redéfinition 2026-08-30) mais n'étaient
+            // jamais capturés ici : restaient `undefined` côté client, le
+            // panneau équipes enrichi d'AnimPage.jsx (7d5320ac) affichait
+            // toujours 0 pour "mauvaises"/"d'affilée" malgré des données
+            // réelles diffusées par le serveur.
+            RAFALE_TEAM_STREAK: MSG.GAME.RAFALE_TEAM_STREAK ?? prev.RAFALE_TEAM_STREAK,
+            RAFALE_TEAM_ERRORS: MSG.GAME.RAFALE_TEAM_ERRORS ?? prev.RAFALE_TEAM_ERRORS,
             RAFALE_CURRENT_TEAM: MSG.GAME.RAFALE_CURRENT_TEAM ?? prev.RAFALE_CURRENT_TEAM,
             RAFALE_PARTICIPATING_TEAMS: MSG.GAME.RAFALE_PARTICIPATING_TEAMS ?? prev.RAFALE_PARTICIPATING_TEAMS,
             RAFALE_CURRENT_TEAM_COLOR: MSG.GAME.RAFALE_CURRENT_TEAM_COLOR ?? prev.RAFALE_CURRENT_TEAM_COLOR,
