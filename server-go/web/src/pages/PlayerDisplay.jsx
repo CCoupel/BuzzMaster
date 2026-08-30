@@ -2812,19 +2812,24 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
               </div>
             )}
 
-            {/* RAFALE TV Content — contrat rafale.md §4/§4bis/§8.2, maquette
-                docs/mockups/rafale-v8.html §4/§4bis. Dispatch POSITIF sur
-                `isRafale` (déclaré ci-dessus, ajouté à `isKnownOtherType`) :
-                sans lui, rien ne s'affiche pour ce type — aucun repli
-                implicite sur le bloc SPEEDY/ARDOISE générique (§2.1).
-                Statique — aucune des zones ci-dessous ne défile
-                (overflow: hidden, unités viewport, PlayerDisplay.css). La
-                réponse attendue N'EST JAMAIS lue ici : `RAFALE_CURRENT_QUESTION`
+            {/* RAFALE TV Content — RÉVISION 2026-08-28 (contrat rafale.md
+                §4/§4bis/§8.2, maquette docs/mockups/rafale-v8.html §9,
+                SECTION FAISANT AUTORITÉ — remplace l'ancien §3/§4/§4bis).
+                Dispatch POSITIF sur `isRafale` (déclaré ci-dessus, ajouté à
+                `isKnownOtherType`) : sans lui, rien ne s'affiche pour ce
+                type — aucun repli implicite sur le bloc SPEEDY/ARDOISE
+                générique (§2.1). Statique — aucune des zones ci-dessous ne
+                défile (overflow: hidden, unités viewport,
+                PlayerDisplay.css).
+                Nouveau design (§9.1) : l'encart coloré équipe PORTE
+                directement la question — plus de bandeau "c'est le tour
+                de" séparé (source de la panne "aucune question visible"
+                constatée en QUALIF, §9 "Le problème constaté"). AUCUN
+                score/compteur/classement sur TV (retour utilisateur
+                2026-08-28) — la grille d'équipes est retirée. La réponse
+                attendue N'EST JAMAIS lue ici : `RAFALE_CURRENT_QUESTION`
                 (contrat §4) ne porte pas `ANSWER`, contrairement à l'action
-                dédiée `RAFALE_ANSWER` (admin+anim uniquement, §2.3) — câblage
-                réel des champs `RAFALE_*` en Phase 2 (#107, useWebSocket.js
-                task 27) ; lectures ci-dessous protégées par des valeurs de
-                repli, socle #197/#198. */}
+                dédiée `RAFALE_ANSWER` (admin+anim uniquement, §2.3). */}
             {isRafale && showGameContent && gameState.question && (() => {
               const current = gameState.RAFALE_CURRENT_QUESTION || {}
               const participatingTeams = gameState.RAFALE_PARTICIPATING_TEAMS || []
@@ -2834,17 +2839,7 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
               const currentTeamCss = Array.isArray(currentTeamColorArr) && currentTeamColorArr.length === 3
                 ? `rgb(${currentTeamColorArr.join(',')})`
                 : 'var(--error)'
-              const counters = gameState.RAFALE_TEAM_COUNTERS || {}
               const catMeta = categoryMeta(current.CATEGORY, apiCategories)
-              // Classement en direct (v8.0.0, #16/#199, contrat §6.1, tâche
-              // 34) — trié par compteur décroissant, PAS un score réel
-              // (aucun point attribué avant la fin de manche). Contenu
-              // plafonné à 6 équipes (règle TV, CLAUDE.md), même discipline
-              // que les autres écrans multi-équipes.
-              const displayTeams = (isMultiTeam ? participatingTeams : Object.keys(counters))
-                .slice()
-                .sort((a, b) => (counters[b] || 0) - (counters[a] || 0))
-                .slice(0, 6)
 
               // VPlayer (v8.0.0, #16/#198, contrat §8.1/§8.2, tâche 38) —
               // AUCUN élément interactif, affichage seul. Layout ENTIÈREMENT
@@ -2900,15 +2895,25 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
                     />
                   </div>
 
-                  {/* Zone 2: question courante, sans réponse (§2.3/§4) */}
-                  <motion.div
-                    className="zone-question"
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: 0.1 }}
-                  >
-                    <div className="rafale-tv-question">
-                      {(catMeta || current.DIFFICULTY) && (
+                  {/* Zone 2: vide (§9.1) — la question vit désormais DANS
+                      l'encart d'équipe (zone 3), pas dans un bloc séparé. */}
+                  <div className="zone-question" />
+
+                  {/* Zone 3: encart coloré équipe = LA question (§9.1/§9.4).
+                      S'affiche même en SOLO (couleur fixe de l'unique
+                      équipe pour toute la manche, §9.4 — aucune variante
+                      simplifiée). Jamais la réponse (§2.3). */}
+                  <div className="zone-media rafale-tv-zone-media">
+                    <motion.div
+                      className="rafale-tv-qcard"
+                      style={{ '--rafale-active-color': currentTeamCss }}
+                      initial={{ opacity: 0, scale: 0.95 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                    >
+                      {currentTeam && (
+                        <span className="rafale-tv-qcard-team">{currentTeam}</span>
+                      )}
+                      {(catMeta || current.DIFFICULTY > 0) && (
                         <div className="rafale-tv-meta">
                           {catMeta && (
                             <span className="rafale-tv-chip">
@@ -2923,45 +2928,13 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
                           )}
                         </div>
                       )}
-                      <p className="question-text rafale-tv-question-text">{current.QUESTION}</p>
-                    </div>
-                  </motion.div>
-
-                  {/* Zone 3: équipe active — indicateur fort (§8.2), uniquement en mode multi */}
-                  <div className="zone-media rafale-tv-zone-media">
-                    {isMultiTeam && currentTeam && (
-                      <motion.div
-                        className="rafale-tv-active-team"
-                        style={{ '--rafale-active-color': currentTeamCss }}
-                        initial={{ opacity: 0, scale: 0.9 }}
-                        animate={{ opacity: 1, scale: 1 }}
-                      >
-                        <span className="rafale-tv-active-label">C'est le tour de</span>
-                        <span className="rafale-tv-active-name">{currentTeam}</span>
-                      </motion.div>
-                    )}
+                      <p className="rafale-tv-qcard-text">{current.QUESTION}</p>
+                    </motion.div>
                   </div>
 
-                  {/* Zone 4: compteurs par équipe (§6.1 — compteur, pas de score réel) */}
-                  <div className="zone-answers rafale-tv-zone-answers">
-                    {displayTeams.length > 0 && (
-                      <div className="rafale-tv-teams">
-                        {displayTeams.map(teamName => {
-                          const teamColor = teams[teamName]?.COLOR ? getRgbColor(teams[teamName].COLOR) : undefined
-                          return (
-                            <div
-                              key={teamName}
-                              className={`rafale-tv-team ${teamName === currentTeam ? 'active' : ''}`}
-                              style={teamColor ? { '--rafale-team-color': teamColor } : undefined}
-                            >
-                              <span className="rafale-tv-team-name">{teamName}</span>
-                              <span className="rafale-tv-team-count">{counters[teamName] || 0}</span>
-                            </div>
-                          )
-                        })}
-                      </div>
-                    )}
-                  </div>
+                  {/* Zone 4: vide — AUCUN score/compteur/classement sur TV
+                      (retour utilisateur 2026-08-28, maquette §9.1). */}
+                  <div className="zone-answers rafale-tv-zone-answers" />
                 </div>
               )
             })()}

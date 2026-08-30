@@ -284,64 +284,77 @@ describe('PlayerDisplay — RAFALE : écran TV non-vide en COUNTDOWN (bugfix SHA
 // Indicateur d'équipe active (§8.2) — mode multi uniquement
 // ---------------------------------------------------------------------------
 
-describe('PlayerDisplay — RAFALE : indicateur équipe active (mode multi)', () => {
-  it('mode SOLO (RAFALE_PARTICIPATING_TEAMS vide) : aucun indicateur d\'équipe active', () => {
+// ---------------------------------------------------------------------------
+// RÉVISION 2026-08-28 (maquette rafale-v8.html §9.1/§9.4, section faisant
+// autorité — remplace les anciens §3/§4/§4bis) : le bandeau séparé "c'est le
+// tour de <équipe>" disparaît. Le nom d'équipe (et sa couleur, portée par
+// --rafale-active-color) vit désormais DANS l'encart question
+// (.rafale-tv-qcard), fusionné avec l'énoncé — SANS variante simplifiée en
+// SOLO (§9.4 : mise en forme strictement identique SOLO/MULTI).
+// ---------------------------------------------------------------------------
+
+describe('PlayerDisplay — RAFALE : équipe fusionnée dans l\'encart question (révision §9.1/§9.4)', () => {
+  it('aucune équipe active définie : pas de chip équipe dans l\'encart, mais la question reste affichée', () => {
     const { container } = renderTV({ phase: 'STARTED', rafaleParticipatingTeams: [], rafaleCurrentTeam: '' })
-    expect(container.querySelector('.rafale-tv-active-team')).toBeNull()
+    expect(container.querySelector('.rafale-tv-qcard-team')).toBeNull()
+    expect(container.querySelector('.rafale-tv-qcard')).not.toBeNull()
   })
 
-  it('mode multi, équipe active définie : le bandeau affiche son nom', () => {
+  it('mode multi, équipe active définie : son nom apparaît DANS l\'encart question (plus de bandeau séparé)', () => {
     const { container } = renderTV({
       phase: 'STARTED',
       rafaleParticipatingTeams: ['Équipe A', 'Équipe B'],
       rafaleCurrentTeam: 'Équipe A',
       rafaleCurrentTeamColor: [99, 102, 241],
     })
-    const banner = container.querySelector('.rafale-tv-active-team')
-    expect(banner).not.toBeNull()
-    expect(banner.textContent).toContain('Équipe A')
+    const chip = container.querySelector('.rafale-tv-qcard-team')
+    expect(chip).not.toBeNull()
+    expect(chip.textContent).toContain('Équipe A')
+    expect(container.querySelector('.rafale-tv-qcard').style.getPropertyValue('--rafale-active-color')).toBe('rgb(99,102,241)')
   })
 
-  it('compteurs par équipe plafonnés à 6 (règle TV statique, CLAUDE.md)', () => {
-    const eightTeams = Object.fromEntries(Array.from({ length: 8 }, (_, i) => [`Team${i}`, i]))
+  it('mode SOLO (RAFALE_PARTICIPATING_TEAMS vide) avec équipe/couleur définies pour toute la manche : même encart, aucun traitement spécial (§9.4)', () => {
     const { container } = renderTV({
       phase: 'STARTED',
-      rafaleParticipatingTeams: Object.keys(eightTeams),
-      rafaleTeamCounters: eightTeams,
+      rafaleParticipatingTeams: [],
+      rafaleCurrentTeam: 'Solo Team',
+      rafaleCurrentTeamColor: [16, 185, 129],
     })
-    expect(container.querySelectorAll('.rafale-tv-team').length).toBeLessThanOrEqual(6)
+    const chip = container.querySelector('.rafale-tv-qcard-team')
+    expect(chip).not.toBeNull()
+    expect(chip.textContent).toContain('Solo Team')
+  })
+
+  it('l\'ancien bandeau "c\'est le tour de" (.rafale-tv-active-team) n\'est plus rendu', () => {
+    const { container } = renderTV({
+      phase: 'STARTED',
+      rafaleParticipatingTeams: ['Équipe A'],
+      rafaleCurrentTeam: 'Équipe A',
+      rafaleCurrentTeamColor: [99, 102, 241],
+    })
+    expect(container.querySelector('.rafale-tv-active-team')).toBeNull()
   })
 })
 
 // ---------------------------------------------------------------------------
-// Classement en direct trié (tâche 34, contrat §6.1 : "compteur, pas un
-// score réel"). Le tri est décroissant sur RAFALE_TEAM_COUNTERS ; les 6
-// premières équipes (après tri) sont retenues, pas les 6 premières par
-// ordre d'apparition dans RAFALE_PARTICIPATING_TEAMS.
+// RÉVISION 2026-08-28 (maquette §9.1) : "NI score, NI classement" sur TV —
+// le classement en direct trié par compteur (ex-tâche 34) et les compteurs
+// par équipe sont retirés du TV (ils restent sur /anim, panneau équipes
+// enrichi — hors périmètre de ce fichier TV).
 // ---------------------------------------------------------------------------
 
-describe('PlayerDisplay — RAFALE TV : classement en direct trié par compteur (tâche 34)', () => {
-  it('les équipes sont affichées en ordre DÉCROISSANT de compteur, pas dans l\'ordre de RAFALE_PARTICIPATING_TEAMS', () => {
-    const { container } = renderTV({
-      phase: 'STARTED',
-      rafaleParticipatingTeams: ['Faible', 'Forte', 'Moyenne'],
-      rafaleTeamCounters: { Faible: 1, Forte: 9, Moyenne: 4 },
-    })
-    const names = Array.from(container.querySelectorAll('.rafale-tv-team-name')).map((el) => el.textContent)
-    expect(names).toEqual(['Forte', 'Moyenne', 'Faible'])
-  })
-
-  it('le plafond de 6 retient les 6 MEILLEURS compteurs, pas les 6 premiers de la liste', () => {
-    const counters = { A: 1, B: 2, C: 3, D: 4, E: 5, F: 6, G: 7, H: 8 } // 8 équipes
+describe('PlayerDisplay — RAFALE TV : aucun score/classement/compteur (révision §9.1)', () => {
+  it('même avec des compteurs élevés pour plusieurs équipes, aucun élément de classement/compteur n\'est rendu sur TV', () => {
+    const counters = { A: 1, B: 2, C: 3, D: 4, E: 5, F: 6, G: 7, H: 8 }
     const { container } = renderTV({
       phase: 'STARTED',
       rafaleParticipatingTeams: Object.keys(counters),
       rafaleTeamCounters: counters,
     })
-    const names = Array.from(container.querySelectorAll('.rafale-tv-team-name')).map((el) => el.textContent)
-    expect(names).toEqual(['H', 'G', 'F', 'E', 'D', 'C']) // les 6 plus hauts compteurs, triés
-    expect(names).not.toContain('A')
-    expect(names).not.toContain('B')
+    expect(container.querySelector('.rafale-tv-team')).toBeNull()
+    expect(container.querySelector('.rafale-tv-team-name')).toBeNull()
+    expect(container.querySelector('.rafale-tv-teams')).toBeNull()
+    expect(container.querySelector('.rafale-tv-active-team')).toBeNull()
   })
 })
 

@@ -3535,26 +3535,29 @@
   margin: 0;
 }
 
-/* Zone 3 — indicateur "équipe active" (§8.2), fort et lisible de loin.
-   Vide en mode SOLO (contrat §8.1) : la zone reste montée mais sans
-   contenu, comme les autres blocs de ce fichier (zone-media vide pour
-   les autres types sans média). */
-.rafale-tv-active-team {
+/* Zone 3 — RÉVISION 2026-08-28 (maquette §9.1/§9.4, section faisant
+   autorité) : l'encart coloré équipe PORTE directement la question — plus
+   de bandeau "c'est le tour de" séparé, plus de grille de compteurs sur TV
+   (retour utilisateur : aucun score/compteur/classement affiché ici).
+   S'affiche même en SOLO, couleur fixe de l'unique équipe pour toute la
+   manche (§9.4 — aucune variante simplifiée). */
+.rafale-tv-qcard {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 0.8vh;
+  gap: 1.2vh;
   padding: 3vh 5vw;
-  width: 80%;
-  max-width: 70vw;
+  width: 85%;
+  max-width: 820px;
   border: 5px solid var(--rafale-active-color, var(--error));
   border-radius: var(--radius-xl);
-  background: linear-gradient(90deg,
-    color-mix(in srgb, var(--rafale-active-color, var(--error)) 18%, transparent),
-    color-mix(in srgb, var(--rafale-active-color, var(--error)) 38%, transparent),
-    color-mix(in srgb, var(--rafale-active-color, var(--error)) 18%, transparent));
+  background: linear-gradient(160deg,
+    color-mix(in srgb, var(--rafale-active-color, var(--error)) 20%, transparent),
+    color-mix(in srgb, var(--rafale-active-color, var(--error)) 7%, transparent));
   box-shadow: 0 0 4vh color-mix(in srgb, var(--rafale-active-color, var(--error)) 55%, transparent);
   animation: rafale-active-pulse 1.6s ease-in-out infinite;
+  text-align: center;
+  overflow: hidden;
 }
 
 /* Bandeau renforcé (#198, tâche 38) — pulsation lente, lisible de loin, ne
@@ -3564,67 +3567,27 @@
   50%      { box-shadow: 0 0 7vh color-mix(in srgb, var(--rafale-active-color, var(--error)) 75%, transparent); }
 }
 
-.rafale-tv-active-label {
+.rafale-tv-qcard-team {
   font-size: clamp(0.7rem, 1.6vh, 1rem);
   letter-spacing: 0.2em;
   text-transform: uppercase;
-  color: var(--text-secondary, #94a3b8);
+  color: var(--rafale-active-color, var(--error));
   font-weight: 700;
 }
 
-.rafale-tv-active-name {
-  font-size: clamp(1.8rem, 7vh, 4rem);
-  font-weight: 900;
-  letter-spacing: 0.03em;
-  color: #ffffff;
-  text-shadow: 0 0.2vh 1vh rgba(0, 0, 0, 0.5);
-}
-
-/* Zone 4 — compteurs par équipe (§6.1, "compteur, pas de score réel").
-   Grille plafonnée à 6 cartes (règle TV, CLAUDE.md) — displayTeams déjà
-   tronqué côté JSX (PlayerDisplay.jsx), cette grille se contente de
-   répartir ce qui lui est donné sans jamais défiler. */
-.rafale-tv-teams {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: 1vw;
-  width: 100%;
-  overflow: hidden;
-}
-
-.rafale-tv-team {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 0.3vh;
-  min-width: 10vw;
-  padding: 1vh 1.2vw;
-  border-radius: var(--radius-lg);
-  background: rgba(255, 255, 255, 0.08);
-  border: 2px solid var(--rafale-team-color, rgba(255, 255, 255, 0.15));
-}
-
-.rafale-tv-team.active {
-  border-color: var(--rafale-team-color, var(--info, #1f6feb));
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--rafale-team-color, var(--info, #1f6feb)) 25%, transparent);
-}
-
-.rafale-tv-team-name {
-  font-size: clamp(0.7rem, 1.6vh, 1rem);
-  font-weight: 700;
-  color: #ffffff;
-  max-width: 12vw;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.rafale-tv-team-count {
-  font-size: clamp(1.2rem, 3vh, 2rem);
+.rafale-tv-qcard-text {
+  font-size: clamp(1.3rem, 4.5vh, 2.6rem);
   font-weight: 800;
-  font-variant-numeric: tabular-nums;
+  line-height: 1.25;
   color: #ffffff;
+  text-shadow: 0 0.2vh 1vh rgba(0, 0, 0, 0.4);
+  margin: 0;
+  /* Contenu plafonné, jamais de défilement (règle TV, CLAUDE.md) — un
+     énoncé trop long est tronqué plutôt que de faire déborder l'encart. */
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 
 /* ------------------------------------------------------------------ */
