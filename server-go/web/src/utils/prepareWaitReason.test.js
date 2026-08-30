@@ -83,6 +83,34 @@ describe('participantsConform — table B1 (miroir engine.go)', () => {
     })
   })
 
+  describe('RAFALE (v8.0.0, #199, miroir engine.go participantsConform SHA 7b8659d5)', () => {
+    it.each([
+      [0, true],
+      [1, true],
+      [2, true],
+    ])('RAFALE_MODE vide (défaut SOLO), %i équipe(s) → toujours conforme=%s', (count, expected) => {
+      const participating = Array.from({ length: count }, (_, i) => `T${i}`)
+      expect(participantsConform({ TYPE: 'RAFALE' }, participating)).toBe(expected)
+    })
+
+    it.each([
+      [0, true],
+      [1, true],
+    ])('RAFALE_MODE explicite "SOLO", %i équipe(s) → toujours conforme=%s', (count, expected) => {
+      const participating = Array.from({ length: count }, (_, i) => `T${i}`)
+      expect(participantsConform({ TYPE: 'RAFALE', RAFALE_MODE: 'SOLO' }, participating)).toBe(expected)
+    })
+
+    it.each(['CHACUN_SON_TOUR', 'TANT_QUE_JE_GAGNE', 'MAILLON_FAIBLE'])(
+      'mode multi %s : 0 équipe → non conforme, 1 → conforme, 2 → conforme (contrairement à MEMORY multi qui exige 2)',
+      (mode) => {
+        expect(participantsConform({ TYPE: 'RAFALE', RAFALE_MODE: mode }, [])).toBe(false)
+        expect(participantsConform({ TYPE: 'RAFALE', RAFALE_MODE: mode }, ['A'])).toBe(true)
+        expect(participantsConform({ TYPE: 'RAFALE', RAFALE_MODE: mode }, ['A', 'B'])).toBe(true)
+      }
+    )
+  })
+
   describe('SPEEDY / QCM / ARDOISE / type inconnu — permissif (déjà couvert par AreAllTeamsReady)', () => {
     it.each(['SPEEDY', 'QCM', 'ARDOISE', 'INCONNU', undefined])(
       'type %s : toujours conforme, même avec 0 équipe',
@@ -158,6 +186,28 @@ describe('prepareWaitReason — orchestration (phase, buzzers, conformité)', ()
       const question = { TYPE: 'MEMOTION' }
       expect(prepareWaitReason('PREPARE', question, activeTeams, gameState)).toBe('sélectionnez au moins une équipe')
       expect(prepareWaitReason('PREPARE', question, activeTeams, gameState, { short: true })).toBe('1 équipe')
+    })
+
+    it('RAFALE multi (CHACUN_SON_TOUR), aucune équipe sélectionnée → "sélectionnez au moins une équipe participante" (complet) / "1 équipe" (court)', () => {
+      const activeTeams = [readyTeam('A')]
+      const gameState = { RAFALE_PARTICIPATING_TEAMS: [] }
+      const question = { TYPE: 'RAFALE', RAFALE_MODE: 'CHACUN_SON_TOUR' }
+      expect(prepareWaitReason('PREPARE', question, activeTeams, gameState)).toBe('sélectionnez au moins une équipe participante')
+      expect(prepareWaitReason('PREPARE', question, activeTeams, gameState, { short: true })).toBe('1 équipe')
+    })
+
+    it('RAFALE lit RAFALE_PARTICIPATING_TEAMS, pas MEMORY_PARTICIPATING_TEAMS', () => {
+      // Même piège que MEMOTION ci-dessous : si le mauvais champ était lu,
+      // cette sélection MEMORY à 3 équipes masquerait à tort le motif RAFALE
+      // (liste RAFALE_PARTICIPATING_TEAMS vide).
+      const activeTeams = [readyTeam('A')]
+      const gameState = {
+        MEMORY_PARTICIPATING_TEAMS: ['A', 'B', 'C'],
+        RAFALE_PARTICIPATING_TEAMS: [],
+      }
+      expect(prepareWaitReason('PREPARE', { TYPE: 'RAFALE', RAFALE_MODE: 'MAILLON_FAIBLE' }, activeTeams, gameState)).toBe(
+        'sélectionnez au moins une équipe participante'
+      )
     })
 
     it('MEMOTION lit MEMOTION_PARTICIPATING_TEAMS, pas MEMORY_PARTICIPATING_TEAMS', () => {

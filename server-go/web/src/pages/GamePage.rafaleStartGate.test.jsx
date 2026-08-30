@@ -192,3 +192,96 @@ describe('GamePage — non-régression du fail-closed (SHA 1a742782) : catégori
     expect(startBtn.disabled).toBe(true)
   })
 })
+
+// ---------------------------------------------------------------------------
+// rafaleTeamsBlocked (SHA 2eb12351, #199) — garde équipe en mode multi,
+// indépendante de rafaleBlocked (pool) ci-dessus. Pool systématiquement mis
+// à 'ok' (fetch AVAILABLE>0) dans ce bloc pour isoler CETTE garde : sans
+// cela, un test qui bloque à tort sur le pool masquerait un rafaleTeamsBlocked
+// resté à false par erreur (faux positif).
+// ---------------------------------------------------------------------------
+
+describe('GamePage — rafaleTeamsBlocked : garde équipe en mode multi (SHA 2eb12351, #199)', () => {
+  it('mode multi (CHACUN_SON_TOUR), aucune équipe sélectionnée : START désactivé avec tooltip équipe', async () => {
+    global.fetch = vi.fn(() => jsonResponse({ AVAILABLE: 50, USED: 0, TOTAL: 50 }))
+    useGame.mockReturnValue(makeGameMock({
+      gameState: {
+        question: { ID: '1', TYPE: 'RAFALE', STATUS: 'READY', CATEGORY: 'HISTORY', RAFALE_DIFFICULTY: 1, RAFALE_MODE: 'CHACUN_SON_TOUR' },
+        RAFALE_PARTICIPATING_TEAMS: [],
+      },
+    }))
+    render(<GamePage />)
+
+    // Laisse le gate pool se résoudre à 'ok' d'abord (sinon rafaleBlocked
+    // masquerait la cause réellement testée ici).
+    await waitFor(() => {
+      expect(global.fetch).toHaveBeenCalledWith('/api/rafale/pool?category=HISTORY&difficulty=1')
+    })
+
+    const startBtn = await screen.findByText('START')
+    await waitFor(() => {
+      expect(startBtn.disabled).toBe(true)
+      expect(startBtn.title).toMatch(/equipe participante/i)
+    })
+  })
+
+  it('mode multi (MAILLON_FAIBLE), une équipe sélectionnée : START redevient cliquable', async () => {
+    global.fetch = vi.fn(() => jsonResponse({ AVAILABLE: 50, USED: 0, TOTAL: 50 }))
+    useGame.mockReturnValue(makeGameMock({
+      gameState: {
+        question: { ID: '1', TYPE: 'RAFALE', STATUS: 'READY', CATEGORY: 'HISTORY', RAFALE_DIFFICULTY: 1, RAFALE_MODE: 'MAILLON_FAIBLE' },
+        RAFALE_PARTICIPATING_TEAMS: ['red'],
+      },
+    }))
+    render(<GamePage />)
+
+    await waitFor(() => {
+      expect(global.fetch).toHaveBeenCalledWith('/api/rafale/pool?category=HISTORY&difficulty=1')
+    })
+
+    const startBtn = await screen.findByText('START')
+    await waitFor(() => {
+      expect(startBtn.disabled).toBe(false)
+    })
+  })
+
+  it('mode SOLO, aucune équipe sélectionnée : la garde ne s\'applique pas, START reste cliquable', async () => {
+    global.fetch = vi.fn(() => jsonResponse({ AVAILABLE: 50, USED: 0, TOTAL: 50 }))
+    useGame.mockReturnValue(makeGameMock({
+      gameState: {
+        question: { ID: '1', TYPE: 'RAFALE', STATUS: 'READY', CATEGORY: 'HISTORY', RAFALE_DIFFICULTY: 1, RAFALE_MODE: 'SOLO' },
+        RAFALE_PARTICIPATING_TEAMS: [],
+      },
+    }))
+    render(<GamePage />)
+
+    await waitFor(() => {
+      expect(global.fetch).toHaveBeenCalledWith('/api/rafale/pool?category=HISTORY&difficulty=1')
+    })
+
+    const startBtn = await screen.findByText('START')
+    await waitFor(() => {
+      expect(startBtn.disabled).toBe(false)
+    })
+  })
+
+  it('RAFALE_MODE absent (omitempty côté serveur) : traité comme SOLO, même repli que rafaleIsSolo, START cliquable', async () => {
+    global.fetch = vi.fn(() => jsonResponse({ AVAILABLE: 50, USED: 0, TOTAL: 50 }))
+    useGame.mockReturnValue(makeGameMock({
+      gameState: {
+        question: { ID: '1', TYPE: 'RAFALE', STATUS: 'READY', CATEGORY: 'HISTORY', RAFALE_DIFFICULTY: 1, RAFALE_MODE: undefined },
+        RAFALE_PARTICIPATING_TEAMS: [],
+      },
+    }))
+    render(<GamePage />)
+
+    await waitFor(() => {
+      expect(global.fetch).toHaveBeenCalledWith('/api/rafale/pool?category=HISTORY&difficulty=1')
+    })
+
+    const startBtn = await screen.findByText('START')
+    await waitFor(() => {
+      expect(startBtn.disabled).toBe(false)
+    })
+  })
+})
