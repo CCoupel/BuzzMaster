@@ -873,3 +873,50 @@ func TestReady_RafaleSameQuestion_StillConfiguring_PreservesSelection(t *testing
 		t.Errorf("expected the team selection to survive a same-ID Ready() re-call before any round started, got %v", state.RafaleParticipatingTeams)
 	}
 }
+
+// TestReady_RafaleReplay_ResetsStaleParticipatingTeams_AcrossDifferentModes
+// proves the reset introduced by SHA a7b70057 is independent of RAFALE_MODE.
+// The fix's own condition (rafaleRoundAlreadyPlayed, engine.go) reads only
+// e.state.RafaleSubPhase — never the outgoing/incoming question's mode — so
+// this is a belt-and-suspenders regression guard against a future change
+// that could accidentally reintroduce a mode comparison: an admin edits the
+// SAME round-config question (same ID) between manches to switch mode from
+// CHACUN_SON_TOUR (2 teams needed) to MAILLON_FAIBLE (also multi, same
+// participant rule) — a leftover multi-team selection from the FIRST mode
+// must not silently satisfy the SECOND mode's gate either.
+func TestReady_RafaleReplay_ResetsStaleParticipatingTeams_AcrossDifferentModes(t *testing.T) {
+	e := NewEngine()
+	e.SetTeams(map[string]*Team{"red": {Name: "red"}, "blue": {Name: "blue"}})
+	seedRafaleReservoirBulk(t, e, 20, CategoryHistory, 1)
+
+	q1 := makeRafaleQuestion("rq1", string(RafaleModeChacunSonTour), CategoryHistory, 1)
+	e.Ready("rq1", q1)
+	if err := e.SetRafaleParticipatingTeams([]string{"red", "blue"}); err != nil {
+		t.Fatalf("SetRafaleParticipatingTeams: %v", err)
+	}
+	e.ForceReady()
+	if state := e.GetState(); state.Phase != PhaseReady {
+		t.Fatalf("sanity: expected READY, got %s", state.Phase)
+	}
+	e.StartImmediate(0)
+	e.Stop()
+	if state := e.GetState(); state.Phase != PhaseStopped {
+		t.Fatalf("sanity: expected STOPPED, got %s", state.Phase)
+	}
+
+	// Replay the SAME question ID, but the admin switched RAFALE_MODE to a
+	// DIFFERENT multi mode in the meantime (e.g. re-edited the round-config
+	// question in RafalePage before the next manche).
+	q2 := makeRafaleQuestion("rq1", string(RafaleModeMaillonFaible), CategoryHistory, 1)
+	e.Ready("rq1", q2)
+
+	state := e.GetState()
+	if len(state.RafaleParticipatingTeams) != 0 {
+		t.Errorf("expected RAFALE_PARTICIPATING_TEAMS to be reset on replay regardless of mode change (CHACUN_SON_TOUR->MAILLON_FAIBLE), got %v", state.RafaleParticipatingTeams)
+	}
+
+	e.ForceReady()
+	if state := e.GetState(); state.Phase != PhasePrepare {
+		t.Errorf("expected the replayed MAILLON_FAIBLE question with no reselected team to stay stuck in PREPARE, got %s", state.Phase)
+	}
+}

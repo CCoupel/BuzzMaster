@@ -352,3 +352,92 @@ describe('GamePage — RAFALE : boutons RÉPONSE VALIDE/INVALIDE sur /admin (SHA
     expect(container.querySelectorAll('.anim-rafale-action-btn')).toHaveLength(0)
   })
 })
+
+// ---------------------------------------------------------------------------
+// Sélecteur d'équipes RAFALE — reflet fidèle de RAFALE_PARTICIPATING_TEAMS
+// après un rejeu (v8.0.0, #199, bugfix backend SHA a7b70057/a8b125ec :
+// Ready() ne réinitialisait pas la sélection sur un rejeu de la MÊME
+// question). `selectedRafaleTeams` (GamePage.jsx) est une lecture DIRECTE de
+// `gameState.RAFALE_PARTICIPATING_TEAMS` — aucun état local React ne la
+// duplique/cache — donc l'UI ne PEUT PAS être désynchronisée du serveur par
+// construction : ce test le prouve en simulant le push WebSocket exact
+// qu'un rejeu produit désormais (nouveau GameState avec la liste vidée) et
+// vérifie que le sélecteur suit, sans action de l'utilisateur.
+// ---------------------------------------------------------------------------
+
+describe('GamePage — sélecteur RAFALE : reflète RAFALE_PARTICIPATING_TEAMS après rejeu (#199, SHA a7b70057)', () => {
+  const bumpersFor = (teamNames) =>
+    Object.fromEntries(teamNames.map((name, i) => [`MAC-${i}`, { TEAM: name, NAME: `P${i}`, SCORE: 0 }]))
+
+  function chipsRow(container) {
+    return container.querySelector('.memory-team-selector .memory-chips-row')
+  }
+
+  it('manche précédente : "red" et "blue" apparaissent en chips SÉLECTIONNÉES', () => {
+    useGame.mockReturnValue(makeGameMock({
+      gameState: {
+        phase: 'PREPARE',
+        question: { ID: '1', TYPE: 'RAFALE', CATEGORY: 'HISTORY', RAFALE_MODE: 'CHACUN_SON_TOUR' },
+        RAFALE_PARTICIPATING_TEAMS: ['red', 'blue'],
+      },
+      teams: { red: { READY: true }, blue: { READY: true } },
+      bumpers: bumpersFor(['red', 'blue']),
+    }))
+    const { container } = render(<GamePage />)
+
+    const row = chipsRow(container)
+    const selectedNames = Array.from(row.querySelectorAll('.memory-team-chip.selected .chip-name')).map(el => el.textContent)
+    expect(selectedNames.sort()).toEqual(['blue', 'red'])
+  })
+
+  it('après rejeu (nouveau GameState poussé par le serveur, RAFALE_PARTICIPATING_TEAMS vidée) : plus AUCUNE chip sélectionnée, red/blue repassent en "disponible"', () => {
+    useGame.mockReturnValue(makeGameMock({
+      gameState: {
+        phase: 'PREPARE',
+        question: { ID: '1', TYPE: 'RAFALE', CATEGORY: 'HISTORY', RAFALE_MODE: 'CHACUN_SON_TOUR' },
+        RAFALE_PARTICIPATING_TEAMS: ['red', 'blue'],
+      },
+      teams: { red: { READY: true }, blue: { READY: true } },
+      bumpers: bumpersFor(['red', 'blue']),
+    }))
+    const { container, rerender } = render(<GamePage />)
+    expect(chipsRow(container).querySelectorAll('.memory-team-chip.selected')).toHaveLength(2)
+
+    // Simule EXACTEMENT ce que le fix serveur produit sur un rejeu : un
+    // nouveau GameState (même question ID "1") avec RAFALE_PARTICIPATING_TEAMS
+    // réinitialisée à vide, poussé via WebSocket — aucune interaction
+    // utilisateur, useGame() renvoie juste un nouvel objet gameState.
+    useGame.mockReturnValue(makeGameMock({
+      gameState: {
+        phase: 'PREPARE',
+        question: { ID: '1', TYPE: 'RAFALE', CATEGORY: 'HISTORY', RAFALE_MODE: 'CHACUN_SON_TOUR' },
+        RAFALE_PARTICIPATING_TEAMS: [],
+      },
+      teams: { red: { READY: true }, blue: { READY: true } },
+      bumpers: bumpersFor(['red', 'blue']),
+    }))
+    rerender(<GamePage />)
+
+    const row = chipsRow(container)
+    expect(row.querySelectorAll('.memory-team-chip.selected')).toHaveLength(0)
+    const availableNames = Array.from(row.querySelectorAll('.memory-team-chip.available .chip-name')).map(el => el.textContent)
+    expect(availableNames.sort()).toEqual(['blue', 'red'])
+  })
+
+  it('après rejeu, START reste cohérent avec le sélecteur vide : désactivé (rafaleTeamsBlocked), pas de désync bouton/chips', () => {
+    useGame.mockReturnValue(makeGameMock({
+      gameState: {
+        phase: 'READY',
+        question: { ID: '1', TYPE: 'RAFALE', CATEGORY: 'HISTORY', RAFALE_MODE: 'CHACUN_SON_TOUR' },
+        RAFALE_PARTICIPATING_TEAMS: [],
+      },
+      teams: { red: { READY: true } },
+      bumpers: bumpersFor(['red']),
+    }))
+    const { container } = render(<GamePage />)
+
+    expect(chipsRow(container).querySelectorAll('.memory-team-chip.selected')).toHaveLength(0)
+    const startBtn = screen.getByText('START')
+    expect(startBtn.disabled).toBe(true)
+  })
+})
