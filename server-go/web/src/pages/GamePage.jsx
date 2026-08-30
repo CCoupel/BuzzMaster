@@ -447,6 +447,22 @@ export default function GamePage() {
   const [rafalePoolLevel, setRafalePoolLevel] = useState(null)
   const rafaleBlocked = isRafaleSelected && rafalePoolLevel !== 'ok' && rafalePoolLevel !== 'warning'
 
+  // #199 — retour QUALIF, gate backend prêt (dev-backend SHA 393c6dc7,
+  // engine.go participantsConform) : en mode RAFALE multi (≠SOLO), aucune
+  // équipe dans RAFALE_PARTICIPATING_TEAMS bloque la transition PREPARE->
+  // READY côté moteur (reevaluatePrepareReadyUnsafe) — Start() lui-même
+  // refuse toute phase ≠ READY (#172/B4), donc START ne PEUT déjà plus
+  // être cliqué avec succès dans ce cas. Ce gate ajoute le même pattern
+  // défense en profondeur que rafaleBlocked ci-dessus (fail-closed, pas
+  // une liste noire) pour exposer un message clair sur le bouton
+  // lui-même, plutôt que de compter uniquement sur l'effet de bord
+  // "phase jamais READY" — voir aussi le motif affiché dans le sélecteur
+  // d'équipes RAFALE (prepareWaitReason.js, même mécanisme que MEMORY/
+  // MEMOTION).
+  const rafaleMode = gameState.question?.RAFALE_MODE
+  const rafaleIsSolo = !rafaleMode || rafaleMode === 'SOLO'
+  const rafaleTeamsBlocked = isRafaleSelected && !rafaleIsSolo && selectedRafaleTeams.length === 0
+
   // ENTRACTE (#119, C2) — le bouton a déménagé dans Navbar.jsx (visible sur
   // toutes les pages admin, pas seulement ici) ; seul l'estompage de
   // l'interface reste porté par GamePage. .game-page (GamePage.css:23-30) n'a
@@ -739,10 +755,15 @@ export default function GamePage() {
           const teamsWithBuzzers = sortedTeams.filter(t => t.buzzers && t.buzzers.length > 0)
           const selected = teamsWithBuzzers.filter(t => selectedRafaleTeams.includes(t.name))
           const available = teamsWithBuzzers.filter(t => !selectedRafaleTeams.includes(t.name))
+          // #199 (retour QUALIF, dev-backend SHA 393c6dc7) — même motif
+          // d'attente que MEMORY/MEMOTION ci-dessus (utils/prepareWaitReason.js,
+          // miroir client-side de participantsConform, engine.go).
+          const waitReason = prepareWaitReason(gameState.phase, gameState.question, teamsWithBuzzers, gameState)
           return (
             <div className={`memory-team-selector ${isSolo ? 'solo-mode' : 'multi-mode'}`}>
               <div className="memory-selector-label">
                 🌀 RAFALE · {modeLabel}
+                {waitReason && ` · ${waitReason}`}
               </div>
               <div className="memory-chips-row">
                 {selected.map((team, idx) => {
@@ -1248,8 +1269,14 @@ export default function GamePage() {
                 variant={isPlaying ? 'danger' : 'success'}
                 size="lg"
                 onClick={handleStartStop}
-                title={rafaleBlocked && !isPlaying ? 'Selectionnez une categorie et verifiez le pool RAFALE (disponibilite) avant de demarrer — contrat §7.2' : undefined}
-                disabled={!isPlaying && (!canStart || rafaleBlocked)}
+                title={
+                  rafaleTeamsBlocked && !isPlaying
+                    ? 'Selectionnez au moins une equipe participante avant de demarrer — contrat §5.1'
+                    : rafaleBlocked && !isPlaying
+                      ? 'Selectionnez une categorie et verifiez le pool RAFALE (disponibilite) avant de demarrer — contrat §7.2'
+                      : undefined
+                }
+                disabled={!isPlaying && (!canStart || rafaleBlocked || rafaleTeamsBlocked)}
               >
                 {isPlaying ? 'STOP' : 'START'}
               </Button>

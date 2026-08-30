@@ -18,6 +18,14 @@
  *   - MEMORY SOLO           : exactement une équipe sélectionnée.
  *   - MEMORY multi          : au moins deux équipes sélectionnées.
  *   - MEMOTION              : au moins une équipe sélectionnée.
+ *   - RAFALE SOLO           : toujours conforme (aucune restriction).
+ *   - RAFALE multi          : au moins une équipe sélectionnée (v8.0.0,
+ *     #199, retour QUALIF — dev-backend SHA 393c6dc7, engine.go
+ *     participantsConform : `question.Category`/`RafaleDifficulty`
+ *     absents/invalides sont volontairement HORS PÉRIMÈTRE ici, déjà
+ *     couverts côté admin par `rafaleBlocked`/RafalePoolAlert, contrat
+ *     §7.2 — dupliquer cette partie créerait deux messages concurrents
+ *     pour la même cause).
  *   - Type inconnu          : permissif par défaut.
  */
 
@@ -41,6 +49,10 @@ export function participantsConform(question, participating) {
   if (type === 'MEMOTION') {
     return count >= 1
   }
+  if (type === 'RAFALE') {
+    const isSolo = !question.RAFALE_MODE || question.RAFALE_MODE === 'SOLO'
+    return isSolo ? true : count >= 1
+  }
   // SPEEDY, QCM, ARDOISE, type inconnu — déjà couvert par AreAllTeamsReady
   // (≥1 équipe active) ou sans règle : permissif.
   return true
@@ -58,6 +70,9 @@ function participantsReasonLabel(question, { short } = {}) {
   }
   if (type === 'MEMOTION') {
     return short ? '1 équipe' : 'sélectionnez au moins une équipe'
+  }
+  if (type === 'RAFALE') {
+    return short ? '1 équipe' : 'sélectionnez au moins une équipe participante'
   }
   return null
 }
@@ -81,7 +96,9 @@ export function prepareWaitReason(phase, question, activeTeams, gameState, opts 
 
   const participating = question?.TYPE === 'MEMOTION'
     ? (gameState?.MEMOTION_PARTICIPATING_TEAMS || [])
-    : (gameState?.MEMORY_PARTICIPATING_TEAMS || [])
+    : question?.TYPE === 'RAFALE'
+      ? (gameState?.RAFALE_PARTICIPATING_TEAMS || [])
+      : (gameState?.MEMORY_PARTICIPATING_TEAMS || [])
 
   if (!participantsConform(question, participating)) {
     return participantsReasonLabel(question, opts)
