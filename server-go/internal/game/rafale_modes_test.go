@@ -191,27 +191,39 @@ func TestRafaleReady_ValidCategory_ReachesReadyNormally(t *testing.T) {
 // reason as cycle 1 — drawRafaleQuestionUnsafe's pool-empty safety net firing
 // inside actualStart()).
 func TestParticipantsConform_Rafale(t *testing.T) {
-	state := &GameState{}
 	tests := []struct {
 		name       string
 		category   QuestionCategory
 		difficulty int
+		mode       string
+		teams      []string
 		want       bool
 	}{
-		{"empty category does not conform", CategoryNone, 2, false},
-		{"zero difficulty does not conform (the 2026-08-31 bug)", CategoryHistory, 0, false},
-		{"difficulty below range does not conform", CategoryHistory, -1, false},
-		{"difficulty above range does not conform", CategoryHistory, 4, false},
-		{"set category and valid difficulty=1 conforms", CategoryHistory, 1, true},
-		{"set category and valid difficulty=2 conforms", CategoryHistory, 2, true},
-		{"set category and valid difficulty=3 conforms", CategoryHistory, 3, true},
-		{"empty category AND zero difficulty does not conform", CategoryNone, 0, false},
+		{"empty category does not conform", CategoryNone, 2, string(RafaleModeSolo), nil, false},
+		{"zero difficulty does not conform (the 2026-08-31 bug)", CategoryHistory, 0, string(RafaleModeSolo), nil, false},
+		{"difficulty below range does not conform", CategoryHistory, -1, string(RafaleModeSolo), nil, false},
+		{"difficulty above range does not conform", CategoryHistory, 4, string(RafaleModeSolo), nil, false},
+		{"set category and valid difficulty=1 conforms", CategoryHistory, 1, string(RafaleModeSolo), nil, true},
+		{"set category and valid difficulty=2 conforms", CategoryHistory, 2, string(RafaleModeSolo), nil, true},
+		{"set category and valid difficulty=3 conforms", CategoryHistory, 3, string(RafaleModeSolo), nil, true},
+		{"empty category AND zero difficulty does not conform", CategoryNone, 0, string(RafaleModeSolo), nil, false},
+		// --- 2026-09-02, #199: multi-team mode requires >=1 selected team ---
+		{"SOLO with no teams still conforms (exempt)", CategoryHistory, 1, string(RafaleModeSolo), nil, true},
+		{"empty RAFALE_MODE defaults to SOLO, no teams still conforms", CategoryHistory, 1, "", nil, true},
+		{"CHACUN_SON_TOUR with no teams does not conform", CategoryHistory, 1, string(RafaleModeChacunSonTour), nil, false},
+		{"CHACUN_SON_TOUR with one team conforms", CategoryHistory, 1, string(RafaleModeChacunSonTour), []string{"red"}, true},
+		{"TANT_QUE_JE_GAGNE with no teams does not conform", CategoryHistory, 1, string(RafaleModeTantQueJeGagne), nil, false},
+		{"MAILLON_FAIBLE with no teams does not conform", CategoryHistory, 1, string(RafaleModeMaillonFaible), nil, false},
+		{"MAILLON_FAIBLE with teams conforms", CategoryHistory, 1, string(RafaleModeMaillonFaible), []string{"red", "blue"}, true},
+		{"multi mode with no teams AND zero difficulty does not conform (both reasons)", CategoryHistory, 0, string(RafaleModeChacunSonTour), nil, false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			q := &Question{Type: QuestionTypeRafale, Category: tt.category, TypedContent: TypedContent{RafaleDifficulty: tt.difficulty}}
+			state := &GameState{RafaleParticipatingTeams: tt.teams}
+			q := &Question{Type: QuestionTypeRafale, Category: tt.category, TypedContent: TypedContent{RafaleDifficulty: tt.difficulty, RafaleMode: tt.mode}}
 			if got := participantsConform(q, state); got != tt.want {
-				t.Errorf("participantsConform(CATEGORY=%q, RAFALE_DIFFICULTY=%d) = %v, want %v", tt.category, tt.difficulty, got, tt.want)
+				t.Errorf("participantsConform(CATEGORY=%q, RAFALE_DIFFICULTY=%d, RAFALE_MODE=%q, TEAMS=%v) = %v, want %v",
+					tt.category, tt.difficulty, tt.mode, tt.teams, got, tt.want)
 			}
 		})
 	}
@@ -243,6 +255,120 @@ func TestRafaleReady_ZeroDifficulty_NeverReachesReady(t *testing.T) {
 	e.Start(30)
 	if state := e.GetState(); state.Phase != PhasePrepare {
 		t.Errorf("Start() must be refused while stuck in PREPARE, got phase=%s", state.Phase)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Garde READY sur RAFALE_PARTICIPATING_TEAMS en mode multi (feature
+// 2026-09-02, #199) — retour QUALIF 8.0.0.13 : "je ne dois pas pouvoir faire
+// START si aucune équipe n'est sélectionnée". Contrairement aux gardes
+// CATEGORY/RAFALE_DIFFICULTY ci-dessus (bugfixes contre une mort silencieuse
+// en STARTED), celle-ci répond à une demande fonctionnelle directe — mais
+// verrouille le même mécanisme (blocage propre en PREPARE, Start() refusé
+// structurellement).
+// ---------------------------------------------------------------------------
+
+func TestRafaleReady_MultiModeNoTeams_NeverReachesReady(t *testing.T) {
+	e := NewEngine()
+	e.SetTeams(map[string]*Team{"red": {Name: "Team Red"}, "blue": {Name: "Team Blue"}})
+	seedRafaleReservoirBulk(t, e, 5, CategoryHistory, 1)
+	q := makeRafaleQuestion("rq1", string(RafaleModeChacunSonTour), CategoryHistory, 1)
+	e.Ready("rq1", q)
+
+	if state := e.GetState(); state.Phase != PhasePrepare {
+		t.Fatalf("sanity: expected PhasePrepare right after Ready(), got %s", state.Phase)
+	}
+
+	e.ForceReady() // no RAFALE_SET_TEAMS called — RAFALE_PARTICIPATING_TEAMS stays empty
+
+	state := e.GetState()
+	if state.Phase != PhasePrepare {
+		t.Errorf("CHACUN_SON_TOUR with no participating team must stay stuck in PREPARE (never reach READY), got %s", state.Phase)
+	}
+
+	e.Start(30)
+	if state := e.GetState(); state.Phase != PhasePrepare {
+		t.Errorf("Start() must be refused while stuck in PREPARE, got phase=%s", state.Phase)
+	}
+}
+
+func TestRafaleReady_MultiModeWithTeams_ReachesReadyNormally(t *testing.T) {
+	e := NewEngine()
+	e.SetTeams(map[string]*Team{"red": {Name: "Team Red"}, "blue": {Name: "Team Blue"}})
+	seedRafaleReservoirBulk(t, e, 5, CategoryHistory, 1)
+	q := makeRafaleQuestion("rq1", string(RafaleModeChacunSonTour), CategoryHistory, 1)
+	e.Ready("rq1", q)
+	if err := e.SetRafaleParticipatingTeams([]string{"red", "blue"}); err != nil {
+		t.Fatalf("SetRafaleParticipatingTeams failed: %v", err)
+	}
+
+	e.ForceReady()
+
+	if state := e.GetState(); state.Phase != PhaseReady {
+		t.Errorf("CHACUN_SON_TOUR with participating teams must reach READY, got %s", state.Phase)
+	}
+}
+
+func TestRafaleReady_SoloNoTeams_ReachesReadyNormally(t *testing.T) {
+	e := NewEngine()
+	e.SetTeams(map[string]*Team{"red": {Name: "Team Red"}})
+	seedRafaleReservoirBulk(t, e, 5, CategoryHistory, 1)
+	q := makeRafaleQuestion("rq1", string(RafaleModeSolo), CategoryHistory, 1)
+	e.Ready("rq1", q) // no RAFALE_SET_TEAMS — SOLO must not require one
+
+	e.ForceReady()
+
+	if state := e.GetState(); state.Phase != PhaseReady {
+		t.Errorf("SOLO must reach READY without any participating team selected, got %s", state.Phase)
+	}
+}
+
+// TestSetRafaleParticipatingTeams_ClearingInMultiMode_RevertsReadyToPrepare
+// proves the gate is wired all the way through the SAME live-editing path
+// MEMORY/MEMOTION already use (SetRafaleParticipatingTeams already called
+// reevaluatePrepareReadyUnsafe before this gate existed, in anticipation —
+// see its own comment): clearing the team selection while READY in a multi
+// mode must immediately revert to PREPARE, and reselecting at least one team
+// must immediately re-promote to READY — no new PONG cycle needed either
+// time. Uses real bumpers + TransitionToReady() (not the ForceReady debug
+// shortcut, which bypasses areAllTeamsReadyUnsafe entirely) — same pattern
+// as engine_prepare_ready_rollback_test.go's setupReadyMemory/setupReadyMotion,
+// since reevaluatePrepareReadyUnsafe's PREPARE->READY branch requires BOTH
+// areAllTeamsReadyUnsafe() (bumper-based, unaffected by
+// RAFALE_PARTICIPATING_TEAMS) AND participantsConform().
+func TestSetRafaleParticipatingTeams_ClearingInMultiMode_RevertsReadyToPrepare(t *testing.T) {
+	e := NewEngine()
+	e.SetTeams(map[string]*Team{"red": {Name: "Team Red"}, "blue": {Name: "Team Blue"}})
+	e.UpdateBumper("bumper-red", map[string]interface{}{"TEAM": "red"})
+	e.UpdateBumper("bumper-blue", map[string]interface{}{"TEAM": "blue"})
+	seedRafaleReservoirBulk(t, e, 5, CategoryHistory, 1)
+	q := makeRafaleQuestion("rq1", string(RafaleModeChacunSonTour), CategoryHistory, 1)
+	e.Ready("rq1", q)
+	e.SetBumperReady("bumper-red")
+	e.SetBumperReady("bumper-blue")
+	if !e.AreAllTeamsReady() {
+		t.Fatal("setup: all active teams should be ready after every bumper answered")
+	}
+	if err := e.SetRafaleParticipatingTeams([]string{"red"}); err != nil {
+		t.Fatalf("SetRafaleParticipatingTeams failed: %v", err)
+	}
+	e.TransitionToReady()
+	if state := e.GetState(); state.Phase != PhaseReady {
+		t.Fatalf("sanity: expected PhaseReady, got %s", state.Phase)
+	}
+
+	if err := e.SetRafaleParticipatingTeams([]string{}); err != nil {
+		t.Fatalf("SetRafaleParticipatingTeams (clear) failed: %v", err)
+	}
+	if state := e.GetState(); state.Phase != PhasePrepare {
+		t.Errorf("expected clearing teams in a multi mode to revert READY -> PREPARE, got %s", state.Phase)
+	}
+
+	if err := e.SetRafaleParticipatingTeams([]string{"blue"}); err != nil {
+		t.Fatalf("SetRafaleParticipatingTeams (reselect) failed: %v", err)
+	}
+	if state := e.GetState(); state.Phase != PhaseReady {
+		t.Errorf("expected reselecting a team to re-promote PREPARE -> READY, got %s", state.Phase)
 	}
 }
 
