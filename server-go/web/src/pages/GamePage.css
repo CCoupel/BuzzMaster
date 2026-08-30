@@ -822,6 +822,54 @@
   color: var(--text-secondary, #94a3b8);
 }
 
+/* Retour utilisateur QUALIF 8.0.0.10 (issue #198) — boutons RÉPONSE
+   VALIDE/INVALIDE, désormais aussi câblés sur /admin (AnimRafaleActions,
+   composant réutilisé TEL QUEL depuis /anim). Ces 5 règles sont dupliquées
+   depuis AnimConductPanel.css (classes .anim-conduct-btn* que le composant
+   utilise en dur) — même discipline que .rafale-anim-qcard* ci-dessus :
+   chaque page garde sa propre feuille de style, pas d'import croisé entre
+   pages dans ce projet. Ne pas modifier sans reporter le changement côté
+   AnimConductPanel.css (et vice-versa). */
+.anim-conduct-btn {
+  min-height: 62px;
+  border: none;
+  border-radius: var(--radius-lg);
+  font-size: clamp(0.7rem, 2.6vw, 1.05rem);
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  cursor: pointer;
+  color: #ffffff;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+  padding: 4px 3px;
+  transition: transform var(--transition-fast, 150ms ease), filter var(--transition-fast, 150ms ease);
+}
+
+.anim-conduct-btn:active:not(:disabled) {
+  transform: scale(0.97);
+  filter: brightness(0.9);
+}
+
+.anim-conduct-btn-sub {
+  font-family: var(--font-body, sans-serif);
+  font-size: 0.62rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  opacity: 0.85;
+}
+
+.anim-conduct-btn-go {
+  background: var(--success, #22c55e);
+}
+
+.anim-conduct-btn-danger {
+  background: var(--error, #ef4444);
+}
+
 .memotion-admin-card-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(70px, 1fr));

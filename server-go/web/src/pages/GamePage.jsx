@@ -34,6 +34,7 @@ import CategoryBadge from '../components/CategoryBadge'
 import QuestionCard from '../components/QuestionCard'
 import NetworkWarningBanner from '../components/NetworkWarningBanner'
 import RafalePoolAlert from '../components/RafalePoolAlert'
+import AnimRafaleActions from '../components/AnimRafaleActions'
 import './GamePage.css'
 import '../styles/entracte.css'
 
@@ -58,6 +59,8 @@ export default function GamePage() {
     sendMessage,
     rafaleSetTeams,
     rafaleAnswer,
+    rafaleValidate,
+    rafaleInvalidate,
   } = useGame()
 
   const [timeInput, setTimeInput] = useState(30)
@@ -1032,6 +1035,21 @@ export default function GamePage() {
                     </div>
                   )}
                 </div>
+                {/* Retour utilisateur QUALIF 8.0.0.10, issue #198 — le
+                    cadrage initial prévoyait explicitement la validation
+                    manuelle depuis /anim OU /admin ; seul /anim avait été
+                    câblé (fix critique 2f4d4207). Réutilise TEL QUEL le
+                    composant AnimRafaleActions (mêmes actions rafaleValidate/
+                    rafaleInvalidate, même logique de désactivation que
+                    /anim, contrat §5.1) plutôt que d'en recréer un — même
+                    discipline de mutualisation que CategorySelector/
+                    CategoryFilterBar. */}
+                <AnimRafaleActions
+                  disabled={gameState.RAFALE_SUBPHASE !== 'QUESTION'}
+                  rafaleMode={gameState.question?.RAFALE_MODE}
+                  onValidate={rafaleValidate}
+                  onInvalidate={rafaleInvalidate}
+                />
               </div>
             )
           })()}
