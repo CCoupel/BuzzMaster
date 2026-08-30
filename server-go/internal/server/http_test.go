@@ -1380,6 +1380,165 @@ func TestHTTPServer_MemoryQuestionUpload(t *testing.T) {
 	}
 }
 
+// TestHTTPServer_RafaleQuestionUpload is a regression test for the v8.0.0
+// bugfix (2026-08-31, #107, 2nd QUALIF-reported cycle of the "3s countdown
+// then nothing happens" symptom): handleUploadQuestion had ZERO handling for
+// RAFALE_DIFFICULTY/RAFALE_MODE/RAFALE_QUESTION_TIME/RAFALE_MAX_QUESTIONS,
+// unlike every other question type (MEMORY, QCM, MEMOTION, ARDOISE each have
+// a dedicated block). QuestionsPage.jsx has always sent these 4 fields in
+// the multipart POST, but they were silently dropped on save — never
+// persisted to question.json — so a RAFALE round-config question loaded via
+// loadQuestion() always came back with RafaleDifficulty == 0, which is not a
+// valid difficulty (1-3). This asserts the round-trip persistence directly
+// through the real HTTP handler, the same path QuestionsPage.jsx uses.
+func TestHTTPServer_RafaleQuestionUpload(t *testing.T) {
+	server, dataDir := setupTestHTTPServer(t)
+
+	questionsDir := filepath.Join(dataDir, "files", "questions")
+	os.MkdirAll(questionsDir, 0755)
+
+	body := strings.NewReader("--boundary\r\n" +
+		"Content-Disposition: form-data; name=\"question\"\r\n\r\n" +
+		"Manche Histoire\r\n" +
+		"--boundary\r\n" +
+		"Content-Disposition: form-data; name=\"type\"\r\n\r\n" +
+		"RAFALE\r\n" +
+		"--boundary\r\n" +
+		"Content-Disposition: form-data; name=\"category\"\r\n\r\n" +
+		"HISTORY\r\n" +
+		"--boundary\r\n" +
+		"Content-Disposition: form-data; name=\"points\"\r\n\r\n" +
+		"10\r\n" +
+		"--boundary\r\n" +
+		"Content-Disposition: form-data; name=\"RAFALE_DIFFICULTY\"\r\n\r\n" +
+		"2\r\n" +
+		"--boundary\r\n" +
+		"Content-Disposition: form-data; name=\"RAFALE_MODE\"\r\n\r\n" +
+		"SOLO\r\n" +
+		"--boundary\r\n" +
+		"Content-Disposition: form-data; name=\"RAFALE_QUESTION_TIME\"\r\n\r\n" +
+		"3\r\n" +
+		"--boundary\r\n" +
+		"Content-Disposition: form-data; name=\"RAFALE_MAX_QUESTIONS\"\r\n\r\n" +
+		"25\r\n" +
+		"--boundary--\r\n")
+
+	req := httptest.NewRequest("POST", "/questions", body)
+	req.Header.Set("Content-Type", "multipart/form-data; boundary=boundary")
+	w := httptest.NewRecorder()
+
+	server.mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		bodyBytes, _ := io.ReadAll(w.Body)
+		t.Fatalf("Expected 200, got %d: %s", w.Code, string(bodyBytes))
+	}
+
+	entries, _ := os.ReadDir(questionsDir)
+	if len(entries) == 0 {
+		t.Fatal("Expected question directory to be created")
+	}
+
+	questionFile := filepath.Join(questionsDir, entries[0].Name(), "question.json")
+	data, err := os.ReadFile(questionFile)
+	if err != nil {
+		t.Fatalf("Failed to read question.json: %v", err)
+	}
+
+	var question map[string]interface{}
+	if err := json.Unmarshal(data, &question); err != nil {
+		t.Fatalf("Failed to parse question.json: %v", err)
+	}
+
+	if question["TYPE"] != "RAFALE" {
+		t.Errorf("Expected TYPE 'RAFALE', got '%v'", question["TYPE"])
+	}
+	if question["CATEGORY"] != "HISTORY" {
+		t.Errorf("Expected CATEGORY 'HISTORY', got '%v'", question["CATEGORY"])
+	}
+	if question["RAFALE_DIFFICULTY"] != float64(2) {
+		t.Errorf("Expected RAFALE_DIFFICULTY 2, got '%v' (this is the field the bugfix restores — was silently dropped before)", question["RAFALE_DIFFICULTY"])
+	}
+	if question["RAFALE_MODE"] != "SOLO" {
+		t.Errorf("Expected RAFALE_MODE 'SOLO', got '%v'", question["RAFALE_MODE"])
+	}
+	if question["RAFALE_QUESTION_TIME"] != float64(3) {
+		t.Errorf("Expected RAFALE_QUESTION_TIME 3, got '%v'", question["RAFALE_QUESTION_TIME"])
+	}
+	if question["RAFALE_MAX_QUESTIONS"] != float64(25) {
+		t.Errorf("Expected RAFALE_MAX_QUESTIONS 25, got '%v'", question["RAFALE_MAX_QUESTIONS"])
+	}
+
+	// Full round-trip through loadQuestion-equivalent unmarshaling into the
+	// real game.Question struct, since that's what participantsConform
+	// actually reads (not the raw map above).
+	var q game.Question
+	if err := json.Unmarshal(data, &q); err != nil {
+		t.Fatalf("Failed to parse question.json into game.Question: %v", err)
+	}
+	if q.RafaleDifficulty != 2 {
+		t.Errorf("Expected q.RafaleDifficulty == 2, got %d", q.RafaleDifficulty)
+	}
+	if q.Category != game.CategoryHistory {
+		t.Errorf("Expected q.Category == CategoryHistory, got %v", q.Category)
+	}
+}
+
+// TestHTTPServer_RafaleQuestionUpload_MaxQuestionsClampedTo100 verifies the
+// contract §7.2 hard cap is enforced by the upload handler itself, not only
+// documented.
+func TestHTTPServer_RafaleQuestionUpload_MaxQuestionsClampedTo100(t *testing.T) {
+	server, dataDir := setupTestHTTPServer(t)
+
+	questionsDir := filepath.Join(dataDir, "files", "questions")
+	os.MkdirAll(questionsDir, 0755)
+
+	body := strings.NewReader("--boundary\r\n" +
+		"Content-Disposition: form-data; name=\"question\"\r\n\r\n" +
+		"Manche Sport\r\n" +
+		"--boundary\r\n" +
+		"Content-Disposition: form-data; name=\"type\"\r\n\r\n" +
+		"RAFALE\r\n" +
+		"--boundary\r\n" +
+		"Content-Disposition: form-data; name=\"category\"\r\n\r\n" +
+		"SPORT\r\n" +
+		"--boundary\r\n" +
+		"Content-Disposition: form-data; name=\"RAFALE_DIFFICULTY\"\r\n\r\n" +
+		"1\r\n" +
+		"--boundary\r\n" +
+		"Content-Disposition: form-data; name=\"RAFALE_MAX_QUESTIONS\"\r\n\r\n" +
+		"999\r\n" +
+		"--boundary--\r\n")
+
+	req := httptest.NewRequest("POST", "/questions", body)
+	req.Header.Set("Content-Type", "multipart/form-data; boundary=boundary")
+	w := httptest.NewRecorder()
+
+	server.mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		bodyBytes, _ := io.ReadAll(w.Body)
+		t.Fatalf("Expected 200, got %d: %s", w.Code, string(bodyBytes))
+	}
+
+	entries, _ := os.ReadDir(questionsDir)
+	if len(entries) == 0 {
+		t.Fatal("Expected question directory to be created")
+	}
+	questionFile := filepath.Join(questionsDir, entries[0].Name(), "question.json")
+	data, err := os.ReadFile(questionFile)
+	if err != nil {
+		t.Fatalf("Failed to read question.json: %v", err)
+	}
+	var question map[string]interface{}
+	if err := json.Unmarshal(data, &question); err != nil {
+		t.Fatalf("Failed to parse question.json: %v", err)
+	}
+	if question["RAFALE_MAX_QUESTIONS"] != float64(100) {
+		t.Errorf("Expected RAFALE_MAX_QUESTIONS clamped to 100, got '%v'", question["RAFALE_MAX_QUESTIONS"])
+	}
+}
+
 func TestHTTPServer_MemoryQuestionLoad(t *testing.T) {
 	server, dataDir := setupTestHTTPServer(t)
 
