@@ -1038,10 +1038,11 @@ func (e *Engine) areAllTeamsReadyUnsafe() bool {
 //   - MEMORY SOLO: exactly one team selected.
 //   - MEMORY multi (CHACUN_SON_TOUR / TANT_QUE_JE_GAGNE): at least two teams selected.
 //   - MEMOTION: at least one team selected.
-//   - RAFALE: CATEGORY must be set (v8.0.0, 2026-08-30 bugfix — see below).
+//   - RAFALE: CATEGORY must be set AND RAFALE_DIFFICULTY must be 1..3
+//     (v8.0.0, 2026-08-30/31 bugfixes — see below).
 //   - Unknown/future question type, or nil question: permissive by default (true).
 //
-// RAFALE's CATEGORY check is not really about PARTICIPANTS, but it plugs into
+// RAFALE's CATEGORY/DIFFICULTY checks are not really about PARTICIPANTS, but they plug into
 // the exact same PREPARE↔READY gate this function already drives, and the
 // function's own design principle is "no per-type branch outside this one
 // place" — a second, parallel gating function would duplicate the
@@ -1065,6 +1066,22 @@ func (e *Engine) areAllTeamsReadyUnsafe() bool {
 // reservoir edits) and already covered live by the frontend's pre-round
 // alert (GET /api/rafale/pool, contract §7.2); this gate only catches the
 // STATIC, always-knowable defect (no category selected at all).
+//
+// RAFALE_DIFFICULTY join the gate 2026-08-31 (2nd QUALIF cycle, SAME
+// external symptom — "3s countdown then nothing" — recurring after the
+// CATEGORY fix above shipped, tested, and deployed): root cause this time
+// was http.go's handleUploadQuestion never reading RAFALE_DIFFICULTY (nor
+// RAFALE_MODE/_QUESTION_TIME/_MAX_QUESTIONS) from the multipart form at
+// all — no `if questionType == "RAFALE"` block existed there, unlike
+// every other typed question. Every RAFALE round-config question ever
+// saved through the editor silently lost its difficulty on save,
+// reloading as Go's zero value (0) — not a valid difficulty (1-3), so the
+// reservoir pool filter (contract §7, exact match) never matched any
+// question, same empty-pool-at-round-start death as the CATEGORY bug, via
+// a different missing field. MODE/QUESTION_TIME/MAX_QUESTIONS all default
+// safely to SOLO/3/100 when zero (engine-side fallbacks already exist for
+// those), so only DIFFICULTY needed a gate here — see http.go's own fix in
+// the same commit for the actual persistence gap.
 func participantsConform(question *Question, state *GameState) bool {
 	if question == nil {
 		return true
@@ -1083,7 +1100,7 @@ func participantsConform(question *Question, state *GameState) bool {
 	case QuestionTypeMemotion:
 		return len(state.MotionParticipatingTeams) >= 1
 	case QuestionTypeRafale:
-		return question.Category != ""
+		return question.Category != "" && question.RafaleDifficulty >= 1 && question.RafaleDifficulty <= 3
 	default:
 		return true
 	}

@@ -1113,6 +1113,57 @@ func (h *HTTPServer) handleUploadQuestion(w http.ResponseWriter, r *http.Request
 		// If not provided or invalid, omit the field (frontend defaults to AZERTY)
 	}
 
+	// Handle RAFALE specific fields (v8.0.0, #107, contract §3.3) — round
+	// configuration: difficulty/mode/seconds-per-question/max-questions.
+	// CATEGORY is already handled generically above (shared field, contract
+	// §3.3 bugfix 2026-08-29) — RAFALE reuses it like every other type.
+	//
+	// ⚠️ Bugfix (2026-08-31, 2nd QUALIF cycle of the SAME external symptom
+	// — "3s countdown then nothing"): this block was missing ENTIRELY.
+	// QuestionsPage.jsx has sent these 4 fields in the multipart POST since
+	// #107 shipped (data.append('RAFALE_DIFFICULTY', ...) etc.), but
+	// handleUploadQuestion never read them — no `if questionType ==
+	// "RAFALE"` block existed here at all, unlike QCM/MEMORY/MEMOTION/
+	// ARDOISE just above. Every RAFALE round-config question ever saved
+	// through the editor therefore lost its difficulty/mode/question-time/
+	// max-questions on save: loadQuestion() (main.go) reloads it with Go's
+	// zero values. RAFALE_QUESTION_TIME/RAFALE_MAX_QUESTIONS both fall back
+	// to sane engine-side defaults when zero (3s, 100) and RAFALE_MODE
+	// falls back to SOLO — harmless. RAFALE_DIFFICULTY has NO such
+	// fallback: 0 is not a valid difficulty (1-3), so the reservoir pool
+	// filter (contract §7, exact DIFFICULTY match) never matched ANY
+	// question (real reservoir entries are always 1-3) — reproducing the
+	// EXACT SAME external symptom the CATEGORY=="" bugfix (commit
+	// d6939e51, previous cycle) fixed, but via a genuinely DIFFERENT
+	// missing field, which is why that fix alone didn't resolve this
+	// recurrence. See participantsConform's own doc comment (engine.go) —
+	// extended in the same commit to also gate on RafaleDifficulty, so a
+	// future gap in this class (a static round-config field missing from a
+	// saved question) can never again reach STARTED silently.
+	if questionType == "RAFALE" {
+		if diffStr := r.FormValue("RAFALE_DIFFICULTY"); diffStr != "" {
+			if diff, err := strconv.Atoi(diffStr); err == nil && diff >= 1 && diff <= 3 {
+				question["RAFALE_DIFFICULTY"] = diff
+			}
+		}
+		if mode := r.FormValue("RAFALE_MODE"); mode != "" {
+			question["RAFALE_MODE"] = mode
+		}
+		if qtStr := r.FormValue("RAFALE_QUESTION_TIME"); qtStr != "" {
+			if qt, err := strconv.Atoi(qtStr); err == nil && qt > 0 {
+				question["RAFALE_QUESTION_TIME"] = qt
+			}
+		}
+		if maxStr := r.FormValue("RAFALE_MAX_QUESTIONS"); maxStr != "" {
+			if maxQ, err := strconv.Atoi(maxStr); err == nil && maxQ > 0 {
+				if maxQ > 100 {
+					maxQ = 100 // contract §7.2 hard cap
+				}
+				question["RAFALE_MAX_QUESTIONS"] = maxQ
+			}
+		}
+	}
+
 	// Handle question media upload
 	file, header, err := r.FormFile("file")
 	if err == nil {
