@@ -465,6 +465,14 @@ export default function GamePage() {
       {gameState.NETWORK_ONLY_LOCALHOST && <NetworkWarningBanner />}
 
       <div className={`game-page page${entracteDim}`} style={entracteTransitionStyle}>
+      {/* Colonne centrale (chrono + apercu TV) — grille a rangee UNIQUE
+          (#198, retour QUALIF 8.0.0.13 : la zone "questions disponibles"
+          poussait l'apercu TV et la liste equipes vers le bas). Chaque
+          colonne du layout est desormais UN SEUL item de grille avec son
+          propre flux vertical interne (voir .admin-col-* / .right-panel
+          dans GamePage.css) — la hauteur de la colonne 1 (commande) ne
+          peut plus jamais influencer la position des colonnes 2/3. */}
+      <div className="admin-col-center">
       {/* Timer + Display Section (stacked vertically) */}
       <div className="timer-display-section">
         <Card variant="elevated" padding="md" className="timer-card">
@@ -820,6 +828,19 @@ export default function GamePage() {
         )}
       </div>
 
+      {/* TV Preview — deplace ici (etait plus bas, cote a cote de la
+          liste equipes) pour former UN SEUL item de grille avec
+          timer-display-section ci-dessus, cf. commentaire admin-col-center
+          (#198). */}
+      <div className="tv-preview-container">
+        <QuestionPreview />
+      </div>
+      </div>
+
+      {/* Colonne gauche (commande + questions) — meme raisonnement que
+          admin-col-center ci-dessus : un seul item de grille, flux vertical
+          interne, jamais d'influence sur les colonnes voisines (#198). */}
+      <div className="admin-col-left">
       {/* Questions Panel - Left */}
       <div className="questions-panel">
         <h2 className="panel-title">Questions</h2>
@@ -1256,9 +1277,6 @@ export default function GamePage() {
         </Card>
       </div>
 
-      {/* TV Preview (Row 2 Col 2) */}
-      <div className="tv-preview-container">
-        <QuestionPreview />
       </div>
 
       {/* Right Panel - Teams */}

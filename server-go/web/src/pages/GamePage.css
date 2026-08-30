@@ -16,14 +16,23 @@
   50% { opacity: 0.75; }
 }
 
-/* Game Page - Grid Layout:
- * Row 1: [Controls 300px] [Timer + Display stacked, spans cols 2-3]
- * Row 2: [Questions 300px] [Preview flex] [Equipes 300px]
+/* Game Page - Grid Layout (#198, retour QUALIF 8.0.0.13 : la zone
+ * "questions disponibles" poussait l'apercu TV et la liste equipes vers le
+ * bas). RANGEE UNIQUE — chaque colonne est UN SEUL item de grille, avec
+ * son propre flux vertical (flex-direction:column) et son propre overflow
+ * interne. Une hauteur de contenu variable dans UNE colonne ne peut donc
+ * plus jamais influencer la hauteur ni la position des colonnes voisines
+ * (contrairement a l'ancien modele a 2 rangees `auto 1fr` partagees entre
+ * les 3 colonnes, ou une rangee 1 "auto" grandissait avec .control-panel
+ * ET repoussait la rangee 2 des 2 AUTRES colonnes) :
+ *   Col 1 .admin-col-left   : .control-panel (commande) + .questions-panel
+ *   Col 2 .admin-col-center : .timer-display-section (chrono) + .tv-preview-container
+ *   Col 3 .right-panel      : Equipes (deja un item de grille unique)
  */
 .game-page {
   display: grid;
   grid-template-columns: 300px 1fr 300px;
-  grid-template-rows: auto 1fr;
+  grid-template-rows: 1fr;
   gap: var(--space-3);
   height: calc(100vh - var(--admin-chrome-h));
   overflow: hidden;
@@ -34,22 +43,49 @@
   transition: filter var(--ep-transition, 2000ms) ease;
 }
 
-/* Row 1 - Control Panel (column 1) */
-.control-panel {
+/* Colonne 1 — commande + questions, flux vertical interne. .control-panel
+   garde sa hauteur naturelle (flex: 0 0 auto) mais est plafonné et
+   défile en interne s'il devient trop grand (panneaux RAFALE/MEMOTION,
+   #198) — .questions-panel absorbe le reste (flex: 1) et défile déjà en
+   interne via .questions-list. Toute la colonne est bornée par overflow:
+   hidden : elle ne peut jamais dépasser la hauteur allouée par la grille
+   ni, a fortiori, agrandir la rangée pour les colonnes voisines. */
+.admin-col-left {
   grid-column: 1;
   grid-row: 1;
   display: flex;
   flex-direction: column;
-  gap: var(--space-1);
+  gap: var(--space-3);
+  min-height: 0;
+  overflow: hidden;
 }
 
-/* Row 1 - Timer + Display Section (spans columns 2-3) */
-.timer-display-section {
-  grid-column: 2 / 4;
+/* Colonne 2 — chrono + aperçu TV, même discipline que colonne 1. */
+.admin-col-center {
+  grid-column: 2;
   grid-row: 1;
   display: flex;
   flex-direction: column;
+  gap: var(--space-3);
+  min-height: 0;
+  overflow: hidden;
+}
+
+.control-panel {
+  display: flex;
+  flex-direction: column;
   gap: var(--space-1);
+  flex: 0 1 auto;
+  max-height: 60%;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.timer-display-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  flex: 0 0 auto;
 }
 
 .timer-card {
@@ -180,7 +216,10 @@
 .display-card .phase-enroll { background: var(--accent-cyan); color: white; }
 .display-card .phase-new-game { background: var(--primary-500); color: white; }
 
-/* Row 2 - Side Panels (shared styles for Questions and Equipes) */
+/* Side Panels (shared styles for Questions and Equipes). .questions-panel
+   vit desormais DANS .admin-col-left (flex:1 — absorbe l'espace restant
+   sous .control-panel) ; .right-panel reste seul dans sa colonne, item de
+   grille direct (#198). */
 .questions-panel,
 .right-panel {
   background: white;
@@ -193,13 +232,13 @@
   overflow: hidden;
 }
 
-.questions-panel { grid-column: 1; grid-row: 2; }
-.right-panel { grid-column: 3; grid-row: 2; }
+.questions-panel { flex: 1; }
+.right-panel { grid-column: 3; grid-row: 1; }
 
-/* Row 2 - TV Preview Container (column 2) */
+/* TV Preview Container — vit desormais DANS .admin-col-center (flex:1,
+   sous .timer-display-section), #198. */
 .tv-preview-container {
-  grid-column: 2;
-  grid-row: 2;
+  flex: 1;
   position: relative;
   display: flex;
   align-items: stretch;
@@ -409,23 +448,28 @@
 @media (max-width: 1200px) { .game-page { grid-template-columns: 220px 1fr 220px; } }
 
 @media (max-width: 1000px) {
-  .game-page { grid-template-columns: 1fr 1fr; grid-template-rows: auto auto auto; }
-  .control-panel { grid-column: 1; grid-row: 1; }
-  .timer-section { grid-column: 2; grid-row: 1; }
-  .questions-panel { grid-column: 1; grid-row: 2; max-height: 400px; }
-  .tv-preview-container { grid-column: 2; grid-row: 2; }
-  .right-panel { grid-column: 1 / 3; grid-row: 3; }
+  /* #198 — adapte les 3 items de grille réels (.admin-col-left/-center,
+     .right-panel) ; .control-panel/.questions-panel/.timer-display-section/
+     .tv-preview-container ne sont plus des items de grille directs depuis
+     la refonte ci-dessus, ils s'empilent en flex à l'intérieur de leur
+     colonne quel que soit le point de rupture. `.timer-section` (jamais
+     une classe réelle du composant — coquille pré-existante, sans effet
+     avant comme après) est retiré plutôt que reproduit. */
+  .game-page { grid-template-columns: 1fr 1fr; grid-template-rows: auto auto; }
+  .admin-col-left { grid-column: 1; grid-row: 1; }
+  .admin-col-center { grid-column: 2; grid-row: 1; }
+  .right-panel { grid-column: 1 / 3; grid-row: 2; }
+  .questions-panel { max-height: 400px; }
   .teams-grid { flex-direction: row; flex-wrap: wrap; }
   .teams-section { max-height: none; }
 }
 
 @media (max-width: 768px) {
-  .game-page { grid-template-columns: 1fr; grid-template-rows: auto auto auto auto auto; }
-  .control-panel { grid-column: 1; grid-row: 1; }
-  .timer-section { grid-column: 1; grid-row: 2; }
-  .questions-panel { grid-column: 1; grid-row: 3; max-height: 300px; }
-  .tv-preview-container { grid-column: 1; grid-row: 4; }
-  .right-panel { grid-column: 1; grid-row: 5; }
+  .game-page { grid-template-columns: 1fr; grid-template-rows: auto auto auto; }
+  .admin-col-left { grid-column: 1; grid-row: 1; }
+  .admin-col-center { grid-column: 1; grid-row: 2; }
+  .right-panel { grid-column: 1; grid-row: 3; }
+  .questions-panel { max-height: 300px; }
   .control-buttons { flex-direction: row; flex-wrap: wrap; }
   .teams-grid { flex-direction: column; }
 }
