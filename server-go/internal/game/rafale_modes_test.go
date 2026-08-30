@@ -180,23 +180,69 @@ func TestRafaleReady_ValidCategory_ReachesReadyNormally(t *testing.T) {
 	}
 }
 
+// TestParticipantsConform_Rafale covers both static round-config guards on
+// the same function/gate: CATEGORY (bugfix 2026-08-30, cycle 1 of the "3s
+// countdown then nothing" QUALIF symptom) and RAFALE_DIFFICULTY (bugfix
+// 2026-08-31, cycle 2 of the SAME external symptom — a genuinely different
+// root cause: handleUploadQuestion never persisted RAFALE_DIFFICULTY at all,
+// so a round-config question saved via the normal editor always came back
+// with RafaleDifficulty == 0, which is not a valid difficulty (1-3), and the
+// round died in the same tick it started for the exact same underlying
+// reason as cycle 1 — drawRafaleQuestionUnsafe's pool-empty safety net firing
+// inside actualStart()).
 func TestParticipantsConform_Rafale(t *testing.T) {
 	state := &GameState{}
 	tests := []struct {
-		name     string
-		category QuestionCategory
-		want     bool
+		name       string
+		category   QuestionCategory
+		difficulty int
+		want       bool
 	}{
-		{"empty category does not conform", CategoryNone, false},
-		{"set category conforms", CategoryHistory, true},
+		{"empty category does not conform", CategoryNone, 2, false},
+		{"zero difficulty does not conform (the 2026-08-31 bug)", CategoryHistory, 0, false},
+		{"difficulty below range does not conform", CategoryHistory, -1, false},
+		{"difficulty above range does not conform", CategoryHistory, 4, false},
+		{"set category and valid difficulty=1 conforms", CategoryHistory, 1, true},
+		{"set category and valid difficulty=2 conforms", CategoryHistory, 2, true},
+		{"set category and valid difficulty=3 conforms", CategoryHistory, 3, true},
+		{"empty category AND zero difficulty does not conform", CategoryNone, 0, false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			q := &Question{Type: QuestionTypeRafale, Category: tt.category}
+			q := &Question{Type: QuestionTypeRafale, Category: tt.category, TypedContent: TypedContent{RafaleDifficulty: tt.difficulty}}
 			if got := participantsConform(q, state); got != tt.want {
-				t.Errorf("participantsConform(CATEGORY=%q) = %v, want %v", tt.category, got, tt.want)
+				t.Errorf("participantsConform(CATEGORY=%q, RAFALE_DIFFICULTY=%d) = %v, want %v", tt.category, tt.difficulty, got, tt.want)
 			}
 		})
+	}
+}
+
+// TestRafaleReady_ZeroDifficulty_NeverReachesReady mirrors
+// TestRafaleReady_EmptyCategory_NeverReachesReady above but for the
+// RAFALE_DIFFICULTY dimension of the same gate (bugfix 2026-08-31) — proves
+// the fix at the Ready()/ForceReady() level, not just at the raw
+// participantsConform() function level covered above.
+func TestRafaleReady_ZeroDifficulty_NeverReachesReady(t *testing.T) {
+	e := NewEngine()
+	e.SetTeams(map[string]*Team{"red": {Name: "Team Red"}})
+	seedRafaleReservoirBulk(t, e, 5, CategoryHistory, 1)
+	q := makeRafaleQuestion("rq1", string(RafaleModeSolo), CategoryHistory, 0) // difficulty=0, as if handleUploadQuestion had dropped it
+	e.Ready("rq1", q)
+
+	if state := e.GetState(); state.Phase != PhasePrepare {
+		t.Fatalf("sanity: expected PhasePrepare right after Ready(), got %s", state.Phase)
+	}
+
+	e.ForceReady()
+
+	state := e.GetState()
+	if state.Phase != PhasePrepare {
+		t.Errorf("RAFALE with RAFALE_DIFFICULTY=0 must stay stuck in PREPARE (never reach READY), got %s", state.Phase)
+	}
+
+	e.Start(30)
+	if state := e.GetState(); state.Phase != PhasePrepare {
+		t.Errorf("Start() must be refused while stuck in PREPARE, got phase=%s", state.Phase)
 	}
 }
 
