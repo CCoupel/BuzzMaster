@@ -724,13 +724,29 @@ type GameState struct {
 	// GameState's live value, exactly like Question.Time vs
 	// GameState.CurrentTime for the round's global timer.
 	//
-	// RafaleTeamBest is only ever populated in MAILLON_FAIBLE mode
-	// (contract §3.4/§6.1); present and empty in the other 3 modes.
+	// RafaleTeamBest (v8.0.0 bugfix, 2026-08-30): the historical maximum of
+	// RafaleTeamStreak for each team, computed generically for all 4 modes
+	// (advanceRafaleUnsafe, engine.go) — no longer a MAILLON_FAIBLE-specific
+	// calculation off RafaleTeamCounters. Populated in every mode now, not
+	// just MAILLON_FAIBLE.
+	//
+	// RafaleTeamStreak (v8.0.0 bugfix, 2026-08-30, contract §6.1) — the
+	// CURRENT streak of consecutive correct answers per team, reset to 0 on
+	// any incorrect answer/timeout, in ALL 4 modes. Distinct from
+	// RafaleTeamCounters, which keeps its own per-mode reset policy
+	// (cumulative except in MAILLON_FAIBLE) — see advanceRafaleUnsafe's own
+	// comment for why the two are deliberately not unified.
+	//
+	// RafaleTeamErrors (v8.0.0 bugfix, 2026-08-30) — same precedent as
+	// MemoryTeamErrors: cumulative count of incorrect answers/timeouts per
+	// team, never reset mid-round, all 4 modes.
 	RafaleSubPhase           RafaleSubPhase `json:"RAFALE_SUBPHASE"`
 	RafaleCurrentQuestion    RafaleCurrent  `json:"RAFALE_CURRENT_QUESTION"`
 	RafaleQuestionTime       int            `json:"RAFALE_QUESTION_TIME"`
 	RafaleTeamCounters       map[string]int `json:"RAFALE_TEAM_COUNTERS"`
 	RafaleTeamBest           map[string]int `json:"RAFALE_TEAM_BEST"`
+	RafaleTeamStreak         map[string]int `json:"RAFALE_TEAM_STREAK"`
+	RafaleTeamErrors         map[string]int `json:"RAFALE_TEAM_ERRORS"`
 	RafaleCurrentTeam        string         `json:"RAFALE_CURRENT_TEAM"`
 	RafaleParticipatingTeams []string       `json:"RAFALE_PARTICIPATING_TEAMS"`
 	RafaleCurrentTeamColor   []int          `json:"RAFALE_CURRENT_TEAM_COLOR"`

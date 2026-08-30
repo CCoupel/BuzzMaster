@@ -263,6 +263,8 @@ func NewEngine() *Engine {
 			RafaleCurrentQuestion:    RafaleCurrent{},
 			RafaleTeamCounters:       map[string]int{},
 			RafaleTeamBest:           map[string]int{},
+			RafaleTeamStreak:         map[string]int{},
+			RafaleTeamErrors:         map[string]int{},
 			RafaleParticipatingTeams: []string{},
 			RafaleCurrentTeamColor:   []int{},
 			// Quiz metadata multi-values (v6.1.0, #137 Batch 2b): initialize
@@ -932,6 +934,8 @@ func (e *Engine) Ready(questionID string, question *Question) {
 		e.state.RafaleQuestionTime = 0
 		e.state.RafaleTeamCounters = map[string]int{}
 		e.state.RafaleTeamBest = map[string]int{}
+		e.state.RafaleTeamStreak = map[string]int{}
+		e.state.RafaleTeamErrors = map[string]int{}
 		e.state.RafaleCurrentTeam = ""
 		e.state.RafaleParticipatingTeams = []string{}
 		e.state.RafaleCurrentTeamColor = []int{}
@@ -1034,7 +1038,33 @@ func (e *Engine) areAllTeamsReadyUnsafe() bool {
 //   - MEMORY SOLO: exactly one team selected.
 //   - MEMORY multi (CHACUN_SON_TOUR / TANT_QUE_JE_GAGNE): at least two teams selected.
 //   - MEMOTION: at least one team selected.
+//   - RAFALE: CATEGORY must be set (v8.0.0, 2026-08-30 bugfix — see below).
 //   - Unknown/future question type, or nil question: permissive by default (true).
+//
+// RAFALE's CATEGORY check is not really about PARTICIPANTS, but it plugs into
+// the exact same PREPARE↔READY gate this function already drives, and the
+// function's own design principle is "no per-type branch outside this one
+// place" — a second, parallel gating function would duplicate the
+// reevaluatePrepareReadyUnsafe/ForceReady wiring for no real benefit.
+// Root-caused QUALIF report (2026-08-30): a RAFALE round with an unset
+// CATEGORY (e.g. a round-config question saved before the 2026-08-29
+// single-category migration, still carrying no CATEGORY) reached STARTED
+// and immediately died — drawRafaleQuestionUnsafe's category=="" guard
+// (rafalePoolUnsafe, engine.go) made the pool empty, so
+// startRafaleRoundUnsafe's existing safety net fired (roundEnded=true,
+// finishRafaleRoundStart calls Stop()) within the same tick actualStart()
+// ran — Phase flips STARTED→STOPPED before any client can act on it,
+// exactly the "3s countdown OK, then nothing" symptom reported. That safety
+// net is CORRECT and stays (a race — the reservoir edited between READY and
+// START — is always possible), but it shouldn't be the ONLY defense: this
+// gate stops a mis-configured round from ever reaching READY at all, giving
+// the admin the same clear "stuck in PREPARE" signal MEMORY/MEMOTION already
+// give for their own participant-conformity gaps, instead of a confusing
+// instant start-then-stop. Deliberately does NOT also check pool
+// availability (available>0) — that's dynamic (draws from other rounds,
+// reservoir edits) and already covered live by the frontend's pre-round
+// alert (GET /api/rafale/pool, contract §7.2); this gate only catches the
+// STATIC, always-knowable defect (no category selected at all).
 func participantsConform(question *Question, state *GameState) bool {
 	if question == nil {
 		return true
@@ -1052,6 +1082,8 @@ func participantsConform(question *Question, state *GameState) bool {
 		return len(state.MemoryParticipatingTeams) >= 2
 	case QuestionTypeMemotion:
 		return len(state.MotionParticipatingTeams) >= 1
+	case QuestionTypeRafale:
+		return question.Category != ""
 	default:
 		return true
 	}
@@ -1927,14 +1959,37 @@ func (e *Engine) advanceRafaleUnsafe(correct bool) rafaleAdvanceResult {
 
 	e.stopRafaleQuestionTimerUnsafe()
 
+	team := e.state.RafaleCurrentTeam
+
+	// Streak / errors / best (v8.0.0 bugfix, 2026-08-30, contract §6.1) —
+	// mode-AGNOSTIC, unlike RafaleTeamCounters below: every mode resets a
+	// team's streak to 0 on an incorrect answer/timeout and bumps its error
+	// tally, exactly what MAILLON_FAIBLE alone used to do to its counter.
+	// RafaleTeamBest is now this streak's historical maximum, computed here
+	// once for all 4 modes — no per-mode branch needed, unlike the
+	// mode-specific rotation/counter switch below.
+	if team != "" {
+		if correct {
+			e.state.RafaleTeamStreak[team]++
+			if e.state.RafaleTeamStreak[team] > e.state.RafaleTeamBest[team] {
+				e.state.RafaleTeamBest[team] = e.state.RafaleTeamStreak[team]
+			}
+		} else {
+			e.state.RafaleTeamStreak[team] = 0
+			e.state.RafaleTeamErrors[team]++
+		}
+	}
+
 	// The 4 modes (v8.0.0, #199, contract §3.4/§6.1) — a question-timer
 	// expiry (correct==false) is deliberately routed through the exact same
 	// switch as RAFALE_INVALIDATE ("identique à réponse invalide", §6.1),
 	// never a separate branch. RafaleCurrentTeam=="" (RAFALE_SET_TEAMS never
 	// called — e.g. a solo round with no team concept in play at all) makes
 	// every branch below a no-op on the counter/rotation, matching this
-	// batch's predecessor behavior exactly.
-	team := e.state.RafaleCurrentTeam
+	// batch's predecessor behavior exactly. RafaleTeamCounters keeps its own
+	// PER-MODE reset policy below (cumulative except in MAILLON_FAIBLE) —
+	// deliberately NOT unified with RafaleTeamStreak above, which is a
+	// distinct field with its own always-resets semantics (§6.1).
 	mode := e.state.Question.RafaleMode
 	if mode == "" {
 		mode = string(RafaleModeSolo)
@@ -1966,15 +2021,12 @@ func (e *Engine) advanceRafaleUnsafe(correct bool) rafaleAdvanceResult {
 	case string(RafaleModeMaillonFaible):
 		// Like CHACUN_SON_TOUR (rotates every question either way), but an
 		// incorrect answer/timeout also resets THIS team's running counter
-		// to 0 — the best value it reached is kept separately in
-		// RafaleTeamBest, read by the animateur's point-attribution UI
-		// (§6.2), never overwritten by the reset.
+		// to 0. RafaleTeamBest is no longer computed here (bugfix,
+		// 2026-08-30) — it's now the RafaleTeamStreak maximum, updated
+		// generically above for all 4 modes.
 		if correct {
 			if team != "" {
 				e.state.RafaleTeamCounters[team]++
-				if e.state.RafaleTeamCounters[team] > e.state.RafaleTeamBest[team] {
-					e.state.RafaleTeamBest[team] = e.state.RafaleTeamCounters[team]
-				}
 			}
 		} else if team != "" {
 			e.state.RafaleTeamCounters[team] = 0
@@ -2138,6 +2190,8 @@ func (e *Engine) startRafaleRoundUnsafe() rafaleRoundStartResult {
 	e.state.RafaleExhausted = false
 	e.state.RafaleTeamCounters = map[string]int{}
 	e.state.RafaleTeamBest = map[string]int{}
+	e.state.RafaleTeamStreak = map[string]int{}
+	e.state.RafaleTeamErrors = map[string]int{}
 
 	drawn, err := e.drawRafaleQuestionUnsafe(string(e.state.Question.Category), e.state.Question.RafaleDifficulty)
 	if err != nil {
@@ -2632,6 +2686,8 @@ func (e *Engine) InitGame() []string {
 	e.state.RafaleQuestionTime = 0
 	e.state.RafaleTeamCounters = map[string]int{}
 	e.state.RafaleTeamBest = map[string]int{}
+	e.state.RafaleTeamStreak = map[string]int{}
+	e.state.RafaleTeamErrors = map[string]int{}
 	e.state.RafaleCurrentTeam = ""
 	e.state.RafaleParticipatingTeams = []string{}
 	e.state.RafaleCurrentTeamColor = []int{}

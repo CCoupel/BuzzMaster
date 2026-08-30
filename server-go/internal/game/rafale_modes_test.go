@@ -127,6 +127,80 @@ func TestSetRafaleParticipatingTeams_RejectsNonRafaleQuestion(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
+// Garde READY sur CATEGORY (bugfix 2026-08-30, participantsConform) — QUALIF
+// root cause : une manche RAFALE sans CATEGORY (question de config
+// résiduelle d'avant la migration catégorie-unique du 2026-08-29, ou jamais
+// configurée) atteignait quand même STARTED puis mourait immédiatement
+// (drawRafaleQuestionUnsafe : pool vide sur category=="" → roundEnded →
+// Stop() dans le même tick que actualStart()) — countdown 3s visible, puis
+// plus rien, sans qu'aucun signal clair n'indique pourquoi. Ces tests
+// prouvent que la manche reste désormais bloquée en PREPARE (jamais READY,
+// donc Start() la refuse structurellement — engine.go:1144) au lieu
+// d'atteindre STARTED puis de mourir silencieusement.
+// ---------------------------------------------------------------------------
+
+func TestRafaleReady_EmptyCategory_NeverReachesReady(t *testing.T) {
+	e := NewEngine()
+	e.SetTeams(map[string]*Team{"red": {Name: "Team Red"}})
+	seedRafaleReservoirBulk(t, e, 5, CategoryHistory, 1)
+	q := makeRafaleQuestion("rq1", string(RafaleModeSolo), CategoryNone, 1)
+	e.Ready("rq1", q)
+
+	if state := e.GetState(); state.Phase != PhasePrepare {
+		t.Fatalf("sanity: expected PhasePrepare right after Ready(), got %s", state.Phase)
+	}
+
+	e.ForceReady()
+
+	state := e.GetState()
+	if state.Phase != PhasePrepare {
+		t.Errorf("RAFALE with an empty CATEGORY must stay stuck in PREPARE (never reach READY), got %s", state.Phase)
+	}
+
+	// Start() itself refuses any phase other than READY (engine.go:1144) —
+	// belt-and-braces confirmation that the mis-configured round can never
+	// actually begin the countdown at all, not just that ForceReady no-ops.
+	e.Start(30)
+	if state := e.GetState(); state.Phase != PhasePrepare {
+		t.Errorf("Start() must be refused while stuck in PREPARE, got phase=%s", state.Phase)
+	}
+}
+
+func TestRafaleReady_ValidCategory_ReachesReadyNormally(t *testing.T) {
+	e := NewEngine()
+	e.SetTeams(map[string]*Team{"red": {Name: "Team Red"}})
+	seedRafaleReservoirBulk(t, e, 5, CategoryHistory, 1)
+	q := makeRafaleQuestion("rq1", string(RafaleModeSolo), CategoryHistory, 1)
+	e.Ready("rq1", q)
+
+	e.ForceReady()
+
+	if state := e.GetState(); state.Phase != PhaseReady {
+		t.Errorf("RAFALE with a valid CATEGORY must reach READY via ForceReady, got %s", state.Phase)
+	}
+}
+
+func TestParticipantsConform_Rafale(t *testing.T) {
+	state := &GameState{}
+	tests := []struct {
+		name     string
+		category QuestionCategory
+		want     bool
+	}{
+		{"empty category does not conform", CategoryNone, false},
+		{"set category conforms", CategoryHistory, true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			q := &Question{Type: QuestionTypeRafale, Category: tt.category}
+			if got := participantsConform(q, state); got != tt.want {
+				t.Errorf("participantsConform(CATEGORY=%q) = %v, want %v", tt.category, got, tt.want)
+			}
+		})
+	}
+}
+
+// ---------------------------------------------------------------------------
 // Les 4 modes (tâches 29-30) — contrat §6.1.
 // ---------------------------------------------------------------------------
 
@@ -268,12 +342,24 @@ func TestRafaleAdvance_MaillonFaible_ResetsCounterOnIncorrect_TracksBest(t *test
 	if got := state.RafaleTeamCounters["red"]; got != 2 {
 		t.Fatalf("expected red counter=2 after 2 correct answers, got %d", got)
 	}
+	// RafaleTeamBest is now RafaleTeamStreak's historical maximum (bugfix,
+	// 2026-08-30, generic across all 4 modes) — in this scenario red never
+	// answers incorrectly, so its streak equals its counter (2) and best
+	// tracks that same value, same numbers as before the redefinition.
+	if got := state.RafaleTeamStreak["red"]; got != 2 {
+		t.Fatalf("expected red streak=2 (2 correct answers in a row, never reset), got %d", got)
+	}
 	if got := state.RafaleTeamBest["red"]; got != 2 {
-		t.Fatalf("expected red best=2, got %d", got)
+		t.Fatalf("expected red best=2 (max streak reached), got %d", got)
+	}
+	if got := state.RafaleTeamErrors["red"]; got != 0 {
+		t.Fatalf("expected red errors=0 (never answered incorrectly), got %d", got)
 	}
 
-	// blue now answers incorrectly → its counter resets to 0, its best
-	// (never set) stays 0, and it still rotates away.
+	// blue now answers incorrectly → its COUNTER resets to 0 (MAILLON_FAIBLE's
+	// own rule), its STREAK also resets to 0 (generic rule, all modes), its
+	// ERRORS tally bumps to 1, its best (never set) stays 0, and it still
+	// rotates away.
 	if err := e.RafaleInvalidate(); err != nil { // blue incorrect → counter=0, rotate to red
 		t.Fatalf("RafaleInvalidate failed: %v", err)
 	}
@@ -281,15 +367,80 @@ func TestRafaleAdvance_MaillonFaible_ResetsCounterOnIncorrect_TracksBest(t *test
 	if got := state.RafaleTeamCounters["blue"]; got != 0 {
 		t.Errorf("MAILLON_FAIBLE: expected blue counter reset to 0 after an incorrect answer, got %d", got)
 	}
+	if got := state.RafaleTeamStreak["blue"]; got != 0 {
+		t.Errorf("expected blue streak reset to 0 after an incorrect answer, got %d", got)
+	}
+	if got := state.RafaleTeamErrors["blue"]; got != 1 {
+		t.Errorf("expected blue errors=1 after its first incorrect answer, got %d", got)
+	}
+	// blue DID answer correctly once (its 2nd turn, above) before this
+	// incorrect answer — best keeps that historical streak of 1 even though
+	// blue's CURRENT streak just reset to 0.
+	if got := state.RafaleTeamBest["blue"]; got != 1 {
+		t.Errorf("expected blue best=1 (its one earlier correct answer's streak), got %d", got)
+	}
 	if got := state.RafaleCurrentTeam; got != "red" {
 		t.Errorf("expected rotation to 'red' after blue's incorrect answer, got %q", got)
 	}
 
-	// red's own earlier counter/best must be untouched by blue's reset.
+	// red's own earlier counter/streak/best must be untouched by blue's reset.
 	if got := state.RafaleTeamCounters["red"]; got != 2 {
 		t.Errorf("MAILLON_FAIBLE: red's counter must not be affected by blue's reset, got %d", got)
 	}
+	if got := state.RafaleTeamStreak["red"]; got != 2 {
+		t.Errorf("red's streak must not be affected by blue's reset, got %d", got)
+	}
 	if got := state.RafaleTeamBest["red"]; got != 2 {
 		t.Errorf("MAILLON_FAIBLE: red's best must survive, got %d", got)
+	}
+}
+
+// TestRafaleAdvance_Streak_ResetsOnIncorrect_EvenWhenCounterKeepsAccumulating
+// is the key distinguishing case the bugfix (2026-08-30) introduces:
+// CHACUN_SON_TOUR's RafaleTeamCounters is cumulative (never resets, contract
+// §6.1) even after an incorrect answer, but the NEW RafaleTeamStreak field
+// resets to 0 regardless of mode — the two are genuinely different fields
+// with different semantics, not a renamed duplicate.
+func TestRafaleAdvance_Streak_ResetsOnIncorrect_EvenWhenCounterKeepsAccumulating(t *testing.T) {
+	e := NewEngine()
+	e.SetTeams(map[string]*Team{
+		"red":  {Name: "Team Red"},
+		"blue": {Name: "Team Blue"},
+	})
+	seedRafaleReservoirBulk(t, e, 10, CategoryHistory, 1)
+	q := makeRafaleQuestion("rq1", string(RafaleModeChacunSonTour), CategoryHistory, 1)
+	e.Ready("rq1", q)
+	if err := e.SetRafaleParticipatingTeams([]string{"red", "blue"}); err != nil {
+		t.Fatalf("SetRafaleParticipatingTeams failed: %v", err)
+	}
+	e.StartImmediate(0)
+	defer e.Stop()
+
+	// red correct (streak=1, counter=1) → rotate to blue
+	if err := e.RafaleValidate(); err != nil {
+		t.Fatalf("RafaleValidate failed: %v", err)
+	}
+	// blue incorrect (streak stays 0, errors=1) → rotate to red
+	if err := e.RafaleInvalidate(); err != nil {
+		t.Fatalf("RafaleInvalidate failed: %v", err)
+	}
+	// red incorrect this time (streak resets 0->0, counter STAYS 1 — CHACUN_SON_TOUR
+	// never resets the counter, unlike MAILLON_FAIBLE) → rotate to blue
+	if err := e.RafaleInvalidate(); err != nil {
+		t.Fatalf("RafaleInvalidate failed: %v", err)
+	}
+
+	state := e.GetState()
+	if got := state.RafaleTeamCounters["red"]; got != 1 {
+		t.Errorf("CHACUN_SON_TOUR: counter must stay cumulative (1) even after an incorrect answer, got %d", got)
+	}
+	if got := state.RafaleTeamStreak["red"]; got != 0 {
+		t.Errorf("streak must reset to 0 after an incorrect answer, regardless of mode, got %d", got)
+	}
+	if got := state.RafaleTeamErrors["red"]; got != 1 {
+		t.Errorf("expected red errors=1 after its one incorrect answer, got %d", got)
+	}
+	if got := state.RafaleTeamBest["red"]; got != 1 {
+		t.Errorf("expected red best=1 (its one streak of 1, before the reset), got %d", got)
 	}
 }
