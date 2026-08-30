@@ -52,6 +52,17 @@ function mockFetchRouter({ questions = QUESTIONS_FIXTURE, categories = [] } = {}
   return vi.fn((url, options = {}) => {
     const method = options.method || 'GET'
 
+    // Route AVANT le DELETE générique ci-dessous : "/reset" partage le même
+    // préfixe "/api/rafale/questions/{id}" que DELETE côté serveur (§9,
+    // handleRafaleQuestionByID) — même discipline d'ordre ici.
+    if (typeof url === 'string' && url.startsWith('/api/rafale/questions/') && url.endsWith('/reset') && method === 'POST') {
+      const id = url.replace('/api/rafale/questions/', '').replace('/reset', '')
+      return jsonResponse({ ID: id, AVAILABLE: true })
+    }
+    if (url === '/api/rafale/questions/reset-all' && method === 'POST') {
+      const usedCount = questions.filter(q => q.USED).length
+      return jsonResponse({ RESET: usedCount })
+    }
     if (typeof url === 'string' && url.startsWith('/api/rafale/questions/') && method === 'DELETE') {
       return jsonResponse({ DELETED: url.split('/').pop() })
     }
@@ -280,6 +291,185 @@ describe('RafalePage — suppression', () => {
     await new Promise((r) => setTimeout(r, 0))
     const deleteCall = global.fetch.mock.calls.find(([, opts]) => opts?.method === 'DELETE')
     expect(deleteCall).toBeUndefined()
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Reset du flag "déjà utilisée" — individuel (↺ par ligne) et global
+// ("Remettre tout disponible (N)"), contrat rafale.md §9, issue #197,
+// dev-backend SHA 77e0d5ea / dev-frontend SHA 5f6f6024. N'affecte jamais le
+// réservoir lui-même (contenu de la question) — uniquement rafale_used.json,
+// déjà couvert côté serveur (rafale_reset_used_test.go +
+// rafale_reset_used_roundtrip_test.go) : ici on vérifie seulement le
+// câblage UI (visibilité conditionnelle, appel API, confirmation, refresh,
+// désactivation pendant la requête).
+// ---------------------------------------------------------------------------
+
+describe('RafalePage — reset individuel (↺ par ligne, §9)', () => {
+  it('le bouton ↺ n\'est visible QUE sur les lignes marquées "utilisee"', async () => {
+    renderRafalePage()
+    await screen.findByText('Capitale de l\'Italie ?')
+
+    const usedRow = screen.getByText('Annee de la Revolution francaise ?').closest('tr')
+    const unusedRow1 = screen.getByText('Capitale de l\'Italie ?').closest('tr')
+    const unusedRow2 = screen.getByText('Symbole chimique de l\'or ?').closest('tr')
+
+    expect(within(usedRow).getByTitle('Remettre disponible')).toBeInTheDocument()
+    expect(within(unusedRow1).queryByTitle('Remettre disponible')).not.toBeInTheDocument()
+    expect(within(unusedRow2).queryByTitle('Remettre disponible')).not.toBeInTheDocument()
+  })
+
+  it('clic sur ↺ envoie POST /api/rafale/questions/{id}/reset SANS demander confirmation', async () => {
+    renderRafalePage()
+    await screen.findByText('Capitale de l\'Italie ?')
+
+    const usedRow = screen.getByText('Annee de la Revolution francaise ?').closest('tr')
+    fireEvent.click(within(usedRow).getByTitle('Remettre disponible'))
+
+    await waitFor(() => {
+      const resetCall = global.fetch.mock.calls.find(([url, opts]) => opts?.method === 'POST' && typeof url === 'string' && url.endsWith('/reset'))
+      expect(resetCall).toBeTruthy()
+      expect(resetCall[0]).toBe('/api/rafale/questions/r-002/reset')
+    })
+    // Action peu risquée (retour utilisateur documenté dans RafalePage.jsx) :
+    // pas de confirmation, contrairement à la suppression et au reset global.
+    expect(global.confirm).not.toHaveBeenCalled()
+  })
+
+  it('après un reset individuel réussi, la liste est rechargée (2e GET)', async () => {
+    renderRafalePage()
+    await screen.findByText('Capitale de l\'Italie ?')
+    const getCallsBefore = global.fetch.mock.calls.filter(([url, opts]) => url === '/api/rafale/questions' && (opts?.method || 'GET') === 'GET').length
+
+    const usedRow = screen.getByText('Annee de la Revolution francaise ?').closest('tr')
+    fireEvent.click(within(usedRow).getByTitle('Remettre disponible'))
+
+    await waitFor(() => {
+      const getCallsAfter = global.fetch.mock.calls.filter(([url, opts]) => url === '/api/rafale/questions' && (opts?.method || 'GET') === 'GET').length
+      expect(getCallsAfter).toBe(getCallsBefore + 1)
+    })
+  })
+
+  it('désactive le bouton ↺ pendant la requête en cours, le réactive après', async () => {
+    let resolveReset
+    global.fetch = vi.fn((url, options = {}) => {
+      const method = options.method || 'GET'
+      if (typeof url === 'string' && url.endsWith('/reset') && method === 'POST') {
+        return new Promise((resolve) => { resolveReset = resolve })
+      }
+      if (url === '/api/rafale/questions' && method === 'GET') {
+        return jsonResponse({ QUESTIONS: QUESTIONS_FIXTURE, TOTAL: QUESTIONS_FIXTURE.length })
+      }
+      if (url === '/api/categories') return jsonResponse([])
+      return jsonResponse({}, false, 404)
+    })
+    global.confirm = vi.fn(() => true)
+    render(<RafalePage />)
+    await screen.findByText('Capitale de l\'Italie ?')
+
+    const usedRow = screen.getByText('Annee de la Revolution francaise ?').closest('tr')
+    const resetBtn = within(usedRow).getByTitle('Remettre disponible')
+    fireEvent.click(resetBtn)
+
+    await waitFor(() => expect(resetBtn).toBeDisabled())
+
+    resolveReset({ ok: true, status: 200, json: () => Promise.resolve({ ID: 'r-002', AVAILABLE: true }), text: () => Promise.resolve('') })
+
+    // Le mock GET renvoie ici la même fixture inchangée (pas un vrai backend
+    // à état) : ce test vérifie la désactivation pendant la requête, pas le
+    // rafraîchissement des données (déjà couvert par le test précédent) —
+    // une fois la promesse résolue, le bouton redevient donc cliquable.
+    await waitFor(() => {
+      expect(screen.getByTitle('Remettre disponible')).not.toBeDisabled()
+    })
+  })
+})
+
+describe('RafalePage — reset global ("Remettre tout disponible", §9)', () => {
+  it('le bouton global est visible quand au moins une question est utilisée, avec le décompte', async () => {
+    renderRafalePage()
+    await screen.findByText('Capitale de l\'Italie ?')
+    // 1 seule question utilisée (r-002) dans QUESTIONS_FIXTURE.
+    expect(screen.getByText('↺ Remettre tout disponible (1)')).toBeInTheDocument()
+  })
+
+  it('le bouton global est ABSENT quand aucune question n\'est utilisée', async () => {
+    const allAvailable = QUESTIONS_FIXTURE.map(q => ({ ...q, USED: false }))
+    renderRafalePage({ questions: allAvailable })
+    await screen.findByText('Capitale de l\'Italie ?')
+    expect(screen.queryByText(/Remettre tout disponible/)).not.toBeInTheDocument()
+  })
+
+  it('clic sur le bouton global demande confirmation puis envoie POST /api/rafale/questions/reset-all', async () => {
+    renderRafalePage()
+    await screen.findByText('Capitale de l\'Italie ?')
+
+    fireEvent.click(screen.getByText('↺ Remettre tout disponible (1)'))
+
+    expect(global.confirm).toHaveBeenCalled()
+    await waitFor(() => {
+      const resetAllCall = global.fetch.mock.calls.find(([url, opts]) => url === '/api/rafale/questions/reset-all' && opts?.method === 'POST')
+      expect(resetAllCall).toBeTruthy()
+    })
+  })
+
+  it('confirmation refusée (confirm=false) : aucun POST reset-all envoyé', async () => {
+    global.fetch = mockFetchRouter()
+    global.confirm = vi.fn(() => false)
+    render(<RafalePage />)
+    await screen.findByText('Capitale de l\'Italie ?')
+
+    fireEvent.click(screen.getByText('↺ Remettre tout disponible (1)'))
+
+    await new Promise((r) => setTimeout(r, 0))
+    const resetAllCall = global.fetch.mock.calls.find(([url, opts]) => url === '/api/rafale/questions/reset-all' && opts?.method === 'POST')
+    expect(resetAllCall).toBeUndefined()
+  })
+
+  it('après un reset global réussi, la liste est rechargée (2e GET)', async () => {
+    renderRafalePage()
+    await screen.findByText('Capitale de l\'Italie ?')
+    const getCallsBefore = global.fetch.mock.calls.filter(([url, opts]) => url === '/api/rafale/questions' && (opts?.method || 'GET') === 'GET').length
+
+    fireEvent.click(screen.getByText('↺ Remettre tout disponible (1)'))
+
+    await waitFor(() => {
+      const getCallsAfter = global.fetch.mock.calls.filter(([url, opts]) => url === '/api/rafale/questions' && (opts?.method || 'GET') === 'GET').length
+      expect(getCallsAfter).toBe(getCallsBefore + 1)
+    })
+  })
+
+  it('désactive le bouton global pendant la requête en cours', async () => {
+    let resolveResetAll
+    global.fetch = vi.fn((url, options = {}) => {
+      const method = options.method || 'GET'
+      if (url === '/api/rafale/questions/reset-all' && method === 'POST') {
+        return new Promise((resolve) => { resolveResetAll = resolve })
+      }
+      if (url === '/api/rafale/questions' && method === 'GET') {
+        return jsonResponse({ QUESTIONS: QUESTIONS_FIXTURE, TOTAL: QUESTIONS_FIXTURE.length })
+      }
+      if (url === '/api/categories') return jsonResponse([])
+      return jsonResponse({}, false, 404)
+    })
+    global.confirm = vi.fn(() => true)
+    render(<RafalePage />)
+    await screen.findByText('Capitale de l\'Italie ?')
+
+    const globalBtn = screen.getByText('↺ Remettre tout disponible (1)')
+    fireEvent.click(globalBtn)
+
+    await waitFor(() => expect(globalBtn).toBeDisabled())
+
+    resolveResetAll({ ok: true, status: 200, json: () => Promise.resolve({ RESET: 1 }), text: () => Promise.resolve('') })
+
+    // Le mock GET renvoie ici la même fixture inchangée (pas un vrai backend
+    // à état) : ce test vérifie la désactivation pendant la requête, pas le
+    // rafraîchissement des données (déjà couvert par le test précédent) —
+    // une fois la promesse résolue, le bouton redevient donc cliquable.
+    await waitFor(() => {
+      expect(screen.getByText('↺ Remettre tout disponible (1)')).not.toBeDisabled()
+    })
   })
 })
 
