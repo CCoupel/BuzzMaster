@@ -1834,6 +1834,23 @@ Attribution des points (cliquer une équipe) :
 - Checkbox « Questions RAFALE » permet de réinitialiser le flag uniquement (garde le réservoir intact)
 - Permet de rejouer les mêmes questions sans les re-créer
 
+**Boutons de reset dans l'éditeur** (`/admin/rafale`) — v8.0.0 :
+
+La page d'édition du réservoir inclut deux boutons :
+
+1. **Reset question individuelle** (petit bouton ↻ à côté de chaque question "Utilisée")
+   - Remet une seule question à l'état disponible
+   - Utile pour rejouer une question précise sans réinitialiser tout le pool
+   - Action : `POST /api/rafale/questions/{id}/reset`
+
+2. **Reset pool global** (gros bouton « Réinitialiser tout le pool » en haut)
+   - Remet toutes les questions à l'état disponible (vide le flag)
+   - **Nécessite confirmation** : clic → dialog "Êtes-vous sûr ?" → validation
+   - Utile entre deux séries de manches pour repartir avec un pool frais
+   - Action : `POST /api/rafale/questions/reset-all`
+
+**Note** : ces boutons ne **suppriment jamais** de questions — ils ne font que remettre à zéro le flag « déjà utilisée ». Le réservoir (les questions elles-mêmes) reste intègre.
+
 ### Affichages
 
 **Sur la TV (`/tv`)** :

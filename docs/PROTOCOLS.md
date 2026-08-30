@@ -558,6 +558,33 @@ Supprimer une question du réservoir.
 
 **Note** : la suppression **n'efface pas** le flag `used[r-001]`. Une question supprimée ne réapparaît jamais tant que le flag existe.
 
+### POST /api/rafale/questions/{id}/reset
+
+Remet **une seule** question du réservoir à l'état disponible (retire son ID du flag « déjà utilisée »). No-op silencieux si la question n'était pas marquée utilisée. Corps : vide.
+
+**Réponse 200** :
+```json
+{ "ID": "r-001", "AVAILABLE": true }
+```
+
+**Erreurs** :
+- `404` : ID absent du réservoir
+
+**Cas d'usage** : l'animateur/admin peut remettre une question précise en disponible sans refaire un `NEW_GAME` complet.
+
+### POST /api/rafale/questions/reset-all
+
+Remet **tout** le réservoir à l'état disponible (vide complètement le flag « déjà utilisée »), indépendamment d'un `NEW_GAME`. Le réservoir lui-même (les questions) n'est **jamais** touché. À ne pas confondre avec `POST /reset-select?rafale=true` (sauvegarde/restauration), qui **supprime** tout le réservoir en plus du flag. Corps : vide.
+
+**Réponse 200** :
+```json
+{ "RESET": 42 }
+```
+
+Où `42` = nombre d'entrées effacées du flag.
+
+**Cas d'usage** : réinitialiser tout le pool de questions pour une nouvelle série de manches (sans `NEW_GAME`).
+
 ### GET /api/rafale/pool
 
 Comptage pré-manche (pour alertes).
