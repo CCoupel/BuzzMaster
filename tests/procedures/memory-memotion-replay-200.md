@@ -1,10 +1,10 @@
 # Procédure de Test — MEMORY/MEMOTION/RAFALE : démarrage sans équipe sélectionnée (#200)
 
 **Version** : v8.0.0 (branche `milestone/v8.0.0`)
-**Date** : 2026-08-31 (mise à jour cycle 4)
+**Date** : 2026-08-31 (mise à jour cycle 5 — cause racine réelle du rapport QUALIF v8.0.0.18)
 **Testeur** : Utilisateur (validation manuelle — ni `qa` ni `deployer` n'exécutent cette procédure,
 aucun navigateur fiable dans les sessions agents)
-**Issues** : #200 — deux causes racines distinctes, deux correctifs complémentaires :
+**Issues** : #200 — cinq cycles, plusieurs causes racines distinctes, correctifs complémentaires :
 - Cycle 1/2 : généralisation à MEMORY/MEMOTION du fix RAFALE #199 (SHA `a7b70057`) — sélection
   d'équipes PÉRIMÉE persistant sur un **rejeu** de la même question.
 - Cycle 3 : `Engine.Pause()`/`Continue()` sans aucune garde de phase — contournement **direct** de
@@ -13,10 +13,19 @@ aucun navigateur fiable dans les sessions agents)
   TOUS les clients connectés (`/tv`, `/player`, autres onglets `/admin`/`/anim`) — désynchronisation
   purement visuelle (l'état serveur restait correct en PREPARE/STOPPED), reproduisant le symptôme
   au niveau affichage sur des écrans qui n'ont même pas initié l'action.
+- **Cycle 5 — cause racine RÉELLE du rapport QUALIF v8.0.0.18**, distincte de tout ce qui précède :
+  une manche démarrée (avec équipes) puis **STOPPÉE IMMÉDIATEMENT SANS AUCUNE action de jeu**
+  (aucune carte jamais retournée/sélectionnée — ex. mauvaise config, on arrête tout de suite pour
+  corriger) laissait la sélection d'équipes de CETTE manche en place ; un rejeu de la même question
+  satisfaisait alors silencieusement la garde. C'était exactement le cas documenté comme « limite
+  acceptée, jugée irréaliste » à l'issue du cycle 1/2 — confirmé irréaliste À TORT : c'est un flux
+  tout à fait ordinaire.
 
 **SHA fix cycle 1/2** : `142ffc3c` · **SHA tests** : `b42d5091` + complément `test-writer` (SHA `fe4bef24`)
 **SHA fix cycle 3** : `64b23dff` · **SHA tests** : `453582f2`
 **SHA fix cycle 4** : `0aa0d564` · **SHA tests** : `8ccef0d8`
+**SHA fix cycle 5** : `4aaa9fbd` · **SHA tests** : `80f11384` + complément `test-writer` (repro WS
+bout-en-bout START→STOP zéro-action→rejeu, `cmd/server/memory_start_no_team_repro_200_test.go`)
 **Fichier de référence** : `docs/GAME_STATE_MACHINE.md` (transitions PREPARE/READY/STARTED/PAUSED/STOPPED)
 
 ## Contexte du bug (cycle 1/2 — rejeu)
@@ -177,6 +186,27 @@ cas de façon réaliste, via une coupure réseau brève.
 
 ---
 
+## Scénario 7 — START puis STOP immédiat sans action de jeu, puis rejeu (cycle 5 — bug réellement rencontré)
+
+**Objectif** : Reproduire EXACTEMENT le scénario du rapport QUALIF v8.0.0.18 — c'est le scénario que
+l'utilisateur a réellement rencontré en usage réel, distinct de tous les scénarios précédents de
+cette procédure (pas un contournement CONTINUE, pas une resélection oubliée après plusieurs cartes
+jouées — ici AUCUNE carte n'est jamais touchée avant l'arrêt).
+
+| Étape | Action | Résultat Attendu | Résultat Obtenu | OK ? |
+|-------|--------|-----------------|----------------|------|
+| 1 | Sur `/anim`, préparer une question MEMORY en mode multi (`CHACUN_SON_TOUR` ou `TANT_QUE_JE_GAGNE`), sélectionner 2 équipes participantes | Sélection visible, jeu passe en READY | | |
+| 2 | Démarrer la manche (DÉMARRER) | Jeu en STARTED | | |
+| 3 | **IMMÉDIATEMENT, sans retourner AUCUNE carte**, arrêter la manche (STOP) — ex. on se rend compte d'une mauvaise config et on coupe tout de suite | Jeu revient en STOPPED, aucune carte n'a jamais été retournée | | |
+| 4 | Rejouer la MÊME question MEMORY (rouvrir la même question dans le quiz, sans en choisir une autre) | `/anim` affiche **aucune équipe sélectionnée** | | |
+| 5 | SANS sélectionner d'équipe, tenter DÉMARRER | **DÉMARRER refusé** — le jeu reste en PREPARE, aucune manche ne démarre (avant le fix cycle 5 : démarrait à tort) | | |
+| 6 | Sélectionner à nouveau au moins 2 équipes participantes puis démarrer | Démarre normalement | | |
+| 7 | Répéter les étapes 1-6 pour une question MEMOTION (START → STOP immédiat sans sélectionner AUCUNE carte → rejeu sans resélection) | Même comportement : DÉMARRER refusé au rejeu tant qu'aucune équipe n'est resélectionnée | | |
+
+**Verdict** : [ ] PASS  [ ] FAIL
+
+---
+
 ## Critères de Validation
 
 - [ ] Rejouer une question MEMORY déjà jouée sans resélectionner une équipe bloque DÉMARRER
@@ -197,14 +227,17 @@ cas de façon réaliste, via une coupure réseau brève.
   (scénario 6 — vecteur réaliste du cycle 4)
 - [ ] Le cycle PAUSE/CONTINUER légitime (une fois la manche démarrée) fonctionne normalement, sans
   régression, pour les trois types (scénarios 4-5, dernière étape)
+- [ ] START puis STOP immédiat SANS AUCUNE action de jeu, puis rejeu sans resélection, bloque
+  DÉMARRER pour MEMORY ET MEMOTION — scénario exact du rapport QUALIF v8.0.0.18 (scénario 7)
 - [ ] Aucune régression observée sur RAFALE (déjà corrigé en #199) ni sur les autres modes de jeu
 
 ## Notes QA
 
 [Espace pour observations]
 
-> **Limite connue, acceptée** (documentée par `dev-backend`, SHA `142ffc3c`) : une manche démarrée
-> puis stoppée SANS AUCUNE action de jeu (aucune carte jamais retournée en MEMORY, aucune carte
-> jamais sélectionnée en MEMOTION) reste indiscernable de « jamais démarrée » — la sélection
-> persiste dans ce cas précis. Jugé irréaliste en usage réel (jouer une manche implique de retourner/
-> sélectionner au moins une carte) — **non couvert volontairement**, ne pas le tester comme un échec.
+> **Historique corrigé** : le scénario 7 (START→STOP immédiat sans aucune action de jeu, puis
+> rejeu) avait été documenté à l'issue du cycle 1/2 comme « limite connue, acceptée, jugée
+> irréaliste » — c'était une erreur d'appréciation. Ce scénario s'est révélé être la cause racine
+> RÉELLE du rapport QUALIF v8.0.0.18 (cycle 5, SHA `4aaa9fbd`) : cliquer START puis immédiatement
+> STOP pour corriger une mauvaise config est un flux tout à fait ordinaire. Le scénario 7 ci-dessus
+> est désormais un cas à valider explicitement, pas à ignorer.
