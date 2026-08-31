@@ -925,6 +925,59 @@ func (e *Engine) SetBumpers(bumpers map[string]*Bumper) {
 	safeGo("SaveBumpers", e.SaveBumpers)
 }
 
+// DeleteBumper removes a single bumper from the live roster and returns the
+// deleted bumper (nil if id didn't exist) — everything (delete, participant
+// purge, PREPARE<->READY re-evaluation) happens under e.mu.
+//
+// #200 cycle 7 (code-review 20260831-225004, CRITIQUE on cycle 6/7e1a5746):
+// the previous production call site (cmd/server/main.go's handleDeleteBumper)
+// read e.data.Bumpers via GetTeamsAndBumpers() — which returns e.data
+// directly, NOT a copy — deleted the entry IN PLACE on that LIVE map (an
+// unlocked mutation of engine-owned state, a latent race with any
+// concurrent e.data.Bumpers reader/writer, discovered while investigating
+// this), and only THEN called SetBumpers with that ALREADY-mutated map.
+// SetBumpers's own oldBumpers/newBumpers diff (#200 cycle 6, 7e1a5746) then
+// compared two references to the EXACT SAME map — already identical by the
+// time SetBumpers ran, since the delete had happened directly on the object
+// oldBumpers itself aliases. No diff, no purge: deleting a team's only
+// bumper via DELETE_BUMPER left a stale MEMORY/MEMOTION/RAFALE participant
+// selection in place, silently satisfying participantsConform — confirmed
+// empirically by code-review (MEMORY SOLO, team selected via its only
+// bumper, READY reached, DELETE_BUMPER(that bumper) — Phase stayed READY).
+// This dedicated method closes both issues at once: the delete, the
+// old/new-active-teams diff, and the purge all happen atomically under the
+// SAME lock acquisition, on data nothing outside the engine can alias.
+func (e *Engine) DeleteBumper(id string) *Bumper {
+	e.mu.Lock()
+
+	deleted, exists := e.data.Bumpers[id]
+	if !exists {
+		e.mu.Unlock()
+		return nil
+	}
+	deletedTeam := deleted.Team
+	delete(e.data.Bumpers, id)
+	e.state.VirtualPlayerCount = e.countVirtualPlayersUnsafe()
+
+	newPhase := GamePhase("")
+	if deletedTeam != "" && !teamsWithBumpers(e.data.Bumpers)[deletedTeam] {
+		e.purgeInactiveParticipantUnsafe(deletedTeam)
+		newPhase = e.reevaluatePrepareReadyUnsafe()
+	}
+
+	callback := e.OnStateChange
+	e.mu.Unlock()
+
+	if callback != nil && newPhase != "" {
+		callback(newPhase)
+	}
+
+	// Auto-save bumpers to disk (same convention as UpdateBumper/SetBumpers).
+	safeGo("SaveBumpers", e.SaveBumpers)
+
+	return deleted
+}
+
 // Ready prepares a new question round
 func (e *Engine) Ready(questionID string, question *Question) {
 	e.mu.Lock()
@@ -4886,27 +4939,40 @@ func (e *Engine) reconnectVPlayer(sessionID string) (string, *Bumper, error) {
 // AssignVirtualPlayer assigns a virtual player to a team and answer color
 func (e *Engine) AssignVirtualPlayer(bumperID, team string, answerColor AnswerColor) error {
 	e.mu.Lock()
-	defer e.mu.Unlock()
 
 	bumper, exists := e.data.Bumpers[bumperID]
 	if !exists {
+		e.mu.Unlock()
 		return &EnrollmentError{Reason: "BUMPER_NOT_FOUND"}
 	}
 
 	if !bumper.IsVirtual {
+		e.mu.Unlock()
 		return &EnrollmentError{Reason: "NOT_VIRTUAL_PLAYER"}
 	}
 
 	// Check if team exists
 	if _, exists := e.data.Teams[team]; !exists {
+		e.mu.Unlock()
 		return &EnrollmentError{Reason: "TEAM_NOT_FOUND"}
 	}
 
 	// Assign team and answer color (only physical buzzers get color, VPlayers respond to all)
 	oldTeam := bumper.Team
 	bumper.Team = team
+	newPhase := GamePhase("")
 	if oldTeam != team {
 		e.syncConnStateForTeamChangeUnsafe(bumper, oldTeam)
+		// #200 cycle 7 (code-review 20260831-225004, MINOR — currently no
+		// production caller reassigns a team this way, verified by grep, but
+		// this is the exact same structural gap UpdateBumper/SetBumpers/
+		// DeleteBumper close: fixed now, by consistency, before this method
+		// gets wired to a future handler and silently reintroduces it. See
+		// purgeInactiveParticipantUnsafe's own doc comment.
+		if oldTeam != "" && !teamsWithBumpers(e.data.Bumpers)[oldTeam] {
+			e.purgeInactiveParticipantUnsafe(oldTeam)
+			newPhase = e.reevaluatePrepareReadyUnsafe()
+		}
 	}
 	if !bumper.IsVPlayer {
 		bumper.AnswerColor = answerColor
@@ -4914,6 +4980,13 @@ func (e *Engine) AssignVirtualPlayer(bumperID, team string, answerColor AnswerCo
 	// VPlayers keep AnswerColor empty (they respond to all colors)
 
 	log.Printf("[Engine] Virtual player assigned: id=%s, team=%s, color=%s, isVPlayer=%v", bumperID, team, answerColor, bumper.IsVPlayer)
+
+	callback := e.OnStateChange
+	e.mu.Unlock()
+
+	if callback != nil && newPhase != "" {
+		callback(newPhase)
+	}
 
 	// Save bumpers to disk
 	safeGo("SaveBumpers", e.SaveBumpers)

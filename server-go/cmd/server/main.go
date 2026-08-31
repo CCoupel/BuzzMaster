@@ -1927,16 +1927,22 @@ func (a *App) handleDeleteBumper(msg *protocol.Message) {
 
 	server.LogInfo(game.LogComponentApp, "DELETE_BUMPER: id=%s", payload.ID)
 
-	// Remove bumper from engine
-	bumpers := a.engine.GetTeamsAndBumpers().Bumpers
-	deletedBumper, exists := bumpers[payload.ID]
-	if !exists {
+	// Remove bumper from engine. #200 cycle 7: was
+	// `bumpers := a.engine.GetTeamsAndBumpers().Bumpers; delete(bumpers, id);
+	// a.engine.SetBumpers(bumpers)` — GetTeamsAndBumpers() returns e.data
+	// directly (not a copy), so that in-place delete on the LIVE map, ALSO
+	// mutated outside e.mu, made SetBumpers's own old/new diff (added #200
+	// cycle 6) compare a map against itself: no diff ever detected, so a
+	// team losing its only bumper this way kept a stale MEMORY/MEMOTION/
+	// RAFALE participant selection forever (confirmed by code-review
+	// 20260831-225004). Engine.DeleteBumper does the delete + diff + purge
+	// atomically under its own lock, on data nothing outside the engine can
+	// alias — see its own doc comment.
+	deletedBumper := a.engine.DeleteBumper(payload.ID)
+	if deletedBumper == nil {
 		server.LogWarn(game.LogComponentApp, "DELETE_BUMPER: Bumper %s not found", payload.ID)
 		return
 	}
-
-	delete(bumpers, payload.ID)
-	a.engine.SetBumpers(bumpers)
 
 	server.LogInfo(game.LogComponentApp, "Deleted bumper: %s", payload.ID)
 
