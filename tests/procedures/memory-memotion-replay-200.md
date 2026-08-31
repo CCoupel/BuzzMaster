@@ -1,14 +1,20 @@
-# Procédure de Test — Rejeu MEMORY/MEMOTION : sélection d'équipes périmée (#200)
+# Procédure de Test — MEMORY/MEMOTION/RAFALE : démarrage sans équipe sélectionnée (#200)
 
 **Version** : v8.0.0 (branche `milestone/v8.0.0`)
-**Date** : 2026-08-31
+**Date** : 2026-08-31 (mise à jour cycle 3)
 **Testeur** : Utilisateur (validation manuelle — ni `qa` ni `deployer` n'exécutent cette procédure,
 aucun navigateur fiable dans les sessions agents)
-**Issues** : #200 (généralisation à MEMORY/MEMOTION du fix RAFALE #199, SHA `a7b70057`)
-**SHA fix** : `142ffc3c` · **SHA tests** : `b42d5091` + couverture complémentaire ajoutée par `test-writer`
-**Fichier de référence** : `docs/GAME_STATE_MACHINE.md` (transitions PREPARE/READY/STARTED/STOPPED)
+**Issues** : #200 — deux causes racines distinctes, deux correctifs complémentaires :
+- Cycle 1/2 : généralisation à MEMORY/MEMOTION du fix RAFALE #199 (SHA `a7b70057`) — sélection
+  d'équipes PÉRIMÉE persistant sur un **rejeu** de la même question.
+- Cycle 3 : `Engine.Pause()`/`Continue()` sans aucune garde de phase — contournement **direct** de
+  START via `ACTION:"CONTINUE"`, reproductible dès la **première** manche (pas un rejeu).
 
-## Contexte du bug
+**SHA fix cycle 1/2** : `142ffc3c` · **SHA tests** : `b42d5091` + complément `test-writer` (SHA `fe4bef24`)
+**SHA fix cycle 3** : `64b23dff` · **SHA tests** : `453582f2`
+**Fichier de référence** : `docs/GAME_STATE_MACHINE.md` (transitions PREPARE/READY/STARTED/PAUSED/STOPPED)
+
+## Contexte du bug (cycle 1/2 — rejeu)
 
 `Engine.Ready()` ne réinitialisait la sélection d'équipes participantes
 (`MemoryParticipatingTeams`/`MotionParticipatingTeams` et champs associés) que
@@ -93,6 +99,54 @@ d'origine que le garde `isNewQuestion` protégeait).
 
 ---
 
+## Contexte du bug (cycle 3 — contournement direct via PAUSE/CONTINUER)
+
+Rapport QUALIF v8.0.0.17 (après le fix cycle 1/2) : « le problème n'est pas réglé, je peux
+toujours faire START alors qu'aucune équipe n'est sélectionnée » pour MEMORY. Cause racine
+**distincte** du rejeu : `Engine.Pause()`/`Continue()` ne vérifiaient **aucune phase** avant de
+transitionner (contrairement à `Start()`), ce qui permettait à `ACTION:"CONTINUE"` de faire passer
+le jeu directement en `STARTED` depuis n'importe quelle phase — y compris `PREPARE`, avant toute
+sélection d'équipe — en contournant entièrement la garde `participantsConform`. Côté frontend, le
+bouton PAUSE/CONTINUER (`/anim` : bouton "CONTINUER" de L1 ; `/admin` : bouton bascule
+PAUSE/CONTINUER) est déjà correctement désactivé (`phaseRules.js` : `pauseButtonState`/
+`continueButtonState` — actif seulement depuis STARTED/PAUSED) — le correctif moteur (`64b23dff`)
+est une protection de **défense en profondeur**, au cas où ce chemin serait atteint autrement
+(fenêtres/onglets multiples désynchronisés, état client périmé, appel direct au protocole).
+
+## Scénario 4 — MEMORY : PAUSE/CONTINUER inactifs et sans effet tant qu'aucune équipe n'est sélectionnée
+
+**Objectif** : Reproduire le scénario exact du rapport utilisateur — vérifier qu'aucun geste sur
+PAUSE/CONTINUER ne peut démarrer une manche MEMORY sans équipe sélectionnée.
+
+| Étape | Action | Résultat Attendu | Résultat Obtenu | OK ? |
+|-------|--------|-----------------|----------------|------|
+| 1 | Sur `/anim`, préparer une question MEMORY en mode multi (`CHACUN_SON_TOUR` ou `TANT_QUE_JE_GAGNE`), **NE SÉLECTIONNER AUCUNE équipe** | Jeu reste en PREPARE ; bouton LANCER grisé/non cliquable ("indispo.") | | |
+| 2 | Observer l'état des boutons PAUSE et CONTINUER dans ce même état | Les deux boutons sont également grisés/non cliquables ("indispo.") — ni l'un ni l'autre n'émet d'action au clic | | |
+| 3 | Cliquer malgré tout à l'emplacement de PAUSE, puis à l'emplacement de CONTINUER | Aucun effet visible : le jeu reste en PREPARE, aucune manche ne démarre | | |
+| 4 | Reproduire les étapes 1-3 sur `/admin` (bouton bascule PAUSE/CONTINUER de `GamePage.jsx`) | Même résultat : bouton grisé, aucun effet au clic, jeu reste en PREPARE | | |
+| 5 | Ouvrir un DEUXIÈME onglet/fenêtre sur `/anim` en parallèle du premier (toujours en PREPARE, MEMORY, aucune équipe) : dans ce second onglet, démarrer normalement une AUTRE question, la mettre en PAUSE, puis revenir rapidement sur le premier onglet (resté sur la question MEMORY sans équipe) et cliquer immédiatement où se trouve CONTINUER | Le clic reste sans effet sur la question MEMORY sans équipe (état désynchronisé entre onglets ne permet aucun contournement) — la manche ne démarre pas | | |
+| 6 | Sélectionner une équipe puis démarrer normalement | La manche démarre normalement, PAUSE/CONTINUER redeviennent actifs pendant/après le déroulé, comportement inchangé | | |
+
+**Verdict** : [ ] PASS  [ ] FAIL
+
+---
+
+## Scénario 5 — RAFALE et MEMOTION : même garde, par précaution
+
+**Objectif** : Le verrou ajouté (`Pause()`/`Continue()`) est générique — non spécifique à un type de
+question — vérifier qu'aucune régression ni contournement équivalent n'existe pour RAFALE et
+MEMOTION.
+
+| Étape | Action | Résultat Attendu | Résultat Obtenu | OK ? |
+|-------|--------|-----------------|----------------|------|
+| 1 | Sur `/anim`, préparer une question RAFALE (mode multi) SANS sélectionner de catégorie/équipe | LANCER, PAUSE et CONTINUER tous grisés/non cliquables ; clics sans effet, jeu reste en PREPARE | | |
+| 2 | Sur `/anim`, préparer une question MEMOTION (mode multi) SANS sélectionner d'équipe | LANCER, PAUSE et CONTINUER tous grisés/non cliquables ; clics sans effet, jeu reste en PREPARE | | |
+| 3 | Pour chaque type, sélectionner les équipes/catégorie requises puis démarrer/pause/continuer normalement | Déroulé normal, aucune régression sur le cycle PAUSE/CONTINUER légitime | | |
+
+**Verdict** : [ ] PASS  [ ] FAIL
+
+---
+
 ## Critères de Validation
 
 - [ ] Rejouer une question MEMORY déjà jouée sans resélectionner une équipe bloque DÉMARRER
@@ -102,6 +156,12 @@ d'origine que le garde `isNewQuestion` protégeait).
 - [ ] Resélectionner une équipe après un rejeu débloque normalement la manche (scénarios 1-2, étapes 7-8)
 - [ ] Revenir sur une question non encore démarrée ne fait PAS perdre la sélection en cours
   (scénario 3 — non-régression)
+- [ ] PAUSE et CONTINUER restent inactifs (grisés, sans effet au clic) tant qu'une question MEMORY
+  n'a pas d'équipe sélectionnée — scénario exact du rapport QUALIF v8.0.0.17 (scénario 4)
+- [ ] Aucun contournement possible via onglets/fenêtres multiples désynchronisés (scénario 4, étape 5)
+- [ ] Même garde vérifiée pour RAFALE et MEMOTION (scénario 5)
+- [ ] Le cycle PAUSE/CONTINUER légitime (une fois la manche démarrée) fonctionne normalement, sans
+  régression, pour les trois types (scénarios 4-5, dernière étape)
 - [ ] Aucune régression observée sur RAFALE (déjà corrigé en #199) ni sur les autres modes de jeu
 
 ## Notes QA
