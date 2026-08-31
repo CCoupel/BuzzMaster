@@ -120,6 +120,61 @@ func TestReady_MemoryReplay_PreservesSelectionBeforeAnyStart(t *testing.T) {
 	}
 }
 
+// TestReady_MemoryReplay_ResetsStaleParticipatingTeams_AcrossDifferentModes
+// mirrors rafale_modes_test.go's own
+// TestReady_RafaleReplay_ResetsStaleParticipatingTeams_AcrossDifferentModes:
+// the reset condition (memoryRoundAlreadyPlayed, engine.go) reads only game-
+// progress fields (MemoryFlippedCards/MemoryMatchedPairs/MemoryErrors) —
+// never the outgoing/incoming question's MemoryMode — so this is a belt-and-
+// suspenders regression guard against a future change that could accidentally
+// reintroduce a mode comparison: an admin edits the SAME round-config
+// question (same ID) between manches to switch mode from CHACUN_SON_TOUR to
+// TANT_QUE_JE_GAGNE (both multi, same >=2-teams participant rule) — a
+// leftover selection from the FIRST mode must not silently satisfy the
+// SECOND mode's gate either.
+func TestReady_MemoryReplay_ResetsStaleParticipatingTeams_AcrossDifferentModes(t *testing.T) {
+	e := NewEngine()
+	e.SetTeams(map[string]*Team{"red": {Name: "red"}, "blue": {Name: "blue"}})
+
+	q1 := &Question{ID: "mq1", Type: QuestionTypeMemory, TypedContent: TypedContent{MemoryMode: string(MemoryModeChacunSonTour)}}
+	e.Ready("mq1", q1)
+	if err := e.SetMemoryParticipatingTeams([]string{"red", "blue"}); err != nil {
+		t.Fatalf("SetMemoryParticipatingTeams: %v", err)
+	}
+	e.ForceReady()
+	if state := e.GetState(); state.Phase != PhaseReady {
+		t.Fatalf("sanity: expected READY, got %s", state.Phase)
+	}
+	e.StartImmediate(0)
+	if state := e.GetState(); state.Phase != PhaseStarted {
+		t.Fatalf("sanity: expected STARTED, got %s", state.Phase)
+	}
+	e.FlipMemoryCard(cardIDFor(1, 1))
+	e.FlipMemoryCard(cardIDFor(2, 1))
+	if state := e.GetState(); state.MemoryErrors == 0 {
+		t.Fatalf("sanity: expected MemoryErrors > 0 after flipping two mismatched pairs, got 0")
+	}
+	e.Stop()
+	if state := e.GetState(); state.Phase != PhaseStopped {
+		t.Fatalf("sanity: expected STOPPED, got %s", state.Phase)
+	}
+
+	// Replay the SAME question ID, but the admin switched MEMORY_MODE to a
+	// DIFFERENT multi mode in the meantime.
+	q2 := &Question{ID: "mq1", Type: QuestionTypeMemory, TypedContent: TypedContent{MemoryMode: string(MemoryModeTantQueJeGagne)}}
+	e.Ready("mq1", q2)
+
+	state := e.GetState()
+	if len(state.MemoryParticipatingTeams) != 0 {
+		t.Errorf("expected MEMORY_PARTICIPATING_TEAMS to be reset on replay regardless of mode change (CHACUN_SON_TOUR->TANT_QUE_JE_GAGNE), got %v", state.MemoryParticipatingTeams)
+	}
+
+	e.ForceReady()
+	if state := e.GetState(); state.Phase != PhasePrepare {
+		t.Errorf("expected the replayed TANT_QUE_JE_GAGNE question with no reselected team to stay stuck in PREPARE, got %s", state.Phase)
+	}
+}
+
 // TestReady_MemotionReplay_ResetsStaleParticipatingTeams reproduces the
 // MEMOTION analog of a7b70057's RAFALE scenario.
 func TestReady_MemotionReplay_ResetsStaleParticipatingTeams(t *testing.T) {
@@ -217,5 +272,59 @@ func TestReady_MemotionReplay_PreservesSelectionBeforeAnyStart(t *testing.T) {
 	state := e.GetState()
 	if len(state.MotionParticipatingTeams) != 1 || state.MotionParticipatingTeams[0] != "red" {
 		t.Errorf("expected the selection to persist across a re-Ready() before any Start(), got %v", state.MotionParticipatingTeams)
+	}
+}
+
+// TestReady_MemotionReplay_ResetsStaleParticipatingTeams_AcrossDifferentModes
+// mirrors TestReady_MemoryReplay_ResetsStaleParticipatingTeams_AcrossDifferentModes
+// (itself mirroring rafale_modes_test.go's own AcrossDifferentModes guard):
+// motionRoundAlreadyPlayed (engine.go) reads only card-progress state
+// (any MotionCardStates entry != UNPLAYED) — never the outgoing/incoming
+// question's MotionMode — so the reset must not silently depend on it.
+func TestReady_MemotionReplay_ResetsStaleParticipatingTeams_AcrossDifferentModes(t *testing.T) {
+	e := NewEngine()
+	e.SetTeams(map[string]*Team{"red": {Name: "red"}, "blue": {Name: "blue"}})
+
+	cards := defaultMotionCards()
+	q1 := makeMotionQuestion("mo1", cards, "CHACUN_SON_TOUR")
+	e.Ready("mo1", q1)
+	if err := e.SetMotionParticipatingTeams([]string{"red", "blue"}); err != nil {
+		t.Fatalf("SetMotionParticipatingTeams: %v", err)
+	}
+	e.ForceReady()
+	if state := e.GetState(); state.Phase != PhaseReady {
+		t.Fatalf("sanity: expected READY, got %s", state.Phase)
+	}
+	e.StartImmediate(0)
+	e.InitMotionState()
+	if state := e.GetState(); state.Phase != PhaseStarted {
+		t.Fatalf("sanity: expected STARTED, got %s", state.Phase)
+	}
+	if err := e.SelectMotionCard(cards[0].ID); err != nil {
+		t.Fatalf("SelectMotionCard: %v", err)
+	}
+	e.Stop()
+	if state := e.GetState(); state.Phase != PhaseStopped {
+		t.Fatalf("sanity: expected STOPPED, got %s", state.Phase)
+	}
+
+	// Replay the SAME question ID, but the admin switched MOTION_MODE to a
+	// DIFFERENT mode in the meantime.
+	q2 := makeMotionQuestion("mo1", cards, "TANT_QUE_JE_GAGNE")
+	e.Ready("mo1", q2)
+
+	state := e.GetState()
+	if len(state.MotionParticipatingTeams) != 0 {
+		t.Errorf("expected MEMOTION_PARTICIPATING_TEAMS to be reset on replay regardless of mode change (CHACUN_SON_TOUR->TANT_QUE_JE_GAGNE), got %v", state.MotionParticipatingTeams)
+	}
+	for _, card := range cards {
+		if got := state.MotionCardStates[card.ID]; got != MotionCardStateUnplayed {
+			t.Errorf("expected card %s to be reset to UNPLAYED on replay, got %s", card.ID, got)
+		}
+	}
+
+	e.ForceReady()
+	if state := e.GetState(); state.Phase != PhasePrepare {
+		t.Errorf("expected the replayed TANT_QUE_JE_GAGNE question with no reselected team to stay stuck in PREPARE, got %s", state.Phase)
 	}
 }
