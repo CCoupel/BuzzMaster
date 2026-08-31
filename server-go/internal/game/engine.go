@@ -2382,6 +2382,30 @@ func (e *Engine) finishRafaleRoundStart(result rafaleRoundStartResult) {
 func (e *Engine) Pause() {
 	e.mu.Lock()
 
+	// #200 cycle 3: Pause/Continue had NO phase guard at all, unlike every
+	// other transition (Start's #172 B4 guard above, Reveal's below) —
+	// discovered while chasing the QUALIF report "START possible sans
+	// équipe sélectionnée" on MEMORY. The replay-staleness fix (142ffc3c)
+	// only closed the Ready()-replay angle; this is a DIFFERENT, more
+	// direct bypass: ACTION:"CONTINUE" (cmd/server/main.go, ActionContinue)
+	// forwards straight to Continue(), which used to set
+	// Phase=PhaseStarted UNCONDITIONALLY — reachable even from PREPARE,
+	// before any team was ever selected, skipping participantsConform/
+	// AreAllTeamsReady/TransitionToReady/ForceReady entirely. Since
+	// Continue()'s own guard (below) only accepts PhasePaused, closing that
+	// hole alone would still leave a 2-step bypass open (PREPARE
+	// --Pause()--> PAUSED --Continue()--> STARTED) unless Pause() ITSELF is
+	// also restricted to firing only from a genuinely running game
+	// (PhaseStarted) — the only phase "pausing" is semantically meaningful
+	// for. Every existing call site/test already only calls Pause() from
+	// PhaseStarted (see e.g. TestEngine_Pause, e2e_test.go), so this is not
+	// a behavior change for the intended flow.
+	if e.state.Phase != PhaseStarted {
+		log.Printf("[Engine] Cannot pause game from phase %s (must be STARTED)", e.state.Phase)
+		e.mu.Unlock()
+		return
+	}
+
 	e.state.Phase = PhasePaused
 
 	e.setQuestionStatus(StatusPaused)
@@ -2405,6 +2429,22 @@ func (e *Engine) PauseAll() {
 // Continue resumes the game
 func (e *Engine) Continue() {
 	e.mu.Lock()
+
+	// #200 cycle 3 — see Pause()'s own comment above for the full root-cause
+	// analysis. Continue() used to set Phase=PhaseStarted unconditionally,
+	// from ANY phase — the direct engine-level bypass of the START gate.
+	// Restricting it to PhasePaused only (its only legitimate use: resuming
+	// a genuinely paused game) closes that hole, and — combined with
+	// Pause()'s own new guard (PhaseStarted-only) — makes it structurally
+	// impossible to reach PhasePaused without having gone through a
+	// properly-gated STARTED first. Every existing call site/test already
+	// only calls Continue() after Pause() (see e.g. TestEngine_Continue,
+	// e2e_test.go), so this is not a behavior change for the intended flow.
+	if e.state.Phase != PhasePaused {
+		log.Printf("[Engine] Cannot continue game from phase %s (must be PAUSED)", e.state.Phase)
+		e.mu.Unlock()
+		return
+	}
 
 	e.state.Phase = PhaseStarted
 
