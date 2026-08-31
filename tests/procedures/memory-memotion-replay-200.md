@@ -1,10 +1,10 @@
 # Procédure de Test — MEMORY/MEMOTION/RAFALE : démarrage sans équipe sélectionnée (#200)
 
 **Version** : v8.0.0 (branche `milestone/v8.0.0`)
-**Date** : 2026-08-31 (mise à jour cycle 6 — équipe perdant son dernier buzzer)
+**Date** : 2026-08-31 (mise à jour cycle 7 — DELETE_BUMPER contournait la purge du cycle 6)
 **Testeur** : Utilisateur (validation manuelle — ni `qa` ni `deployer` n'exécutent cette procédure,
 aucun navigateur fiable dans les sessions agents)
-**Issues** : #200 — cinq cycles, plusieurs causes racines distinctes, correctifs complémentaires :
+**Issues** : #200 — six cycles, plusieurs causes racines distinctes, correctifs complémentaires :
 - Cycle 1/2 : généralisation à MEMORY/MEMOTION du fix RAFALE #199 (SHA `a7b70057`) — sélection
   d'équipes PÉRIMÉE persistant sur un **rejeu** de la même question.
 - Cycle 3 : `Engine.Pause()`/`Continue()` sans aucune garde de phase — contournement **direct** de
@@ -26,6 +26,11 @@ aucun navigateur fiable dans les sessions agents)
   réelle d'un buzzer. Côté `/admin`, l'équipe devient invisible dans les DEUX colonnes (sélectionnée
   ET disponible — `GamePage.jsx` filtre via `teamsWithBuzzers` avant répartition), donnant
   l'impression trompeuse qu'aucune équipe n'est sélectionnée alors que DÉMARRER reste actif.
+- Cycle 7 : le correctif du cycle 6 avait un TROU — `ACTION:"DELETE_BUMPER"` (bouton supprimer,
+  distinct de la réassignation) contournait entièrement la purge via un bug d'aliasing de map
+  (`handleDeleteBumper` mutait la map de buzzers EN PLACE avant de la repasser à `SetBumpers`, qui
+  comparait alors la map à elle-même — aucune différence détectée). Chemin jugé PLUS probable en
+  usage réel que la réassignation (retirer un buzzer défectueux est une action admin courante).
 
 **SHA fix cycle 1/2** : `142ffc3c` · **SHA tests** : `b42d5091` + complément `test-writer` (SHA `fe4bef24`)
 **SHA fix cycle 3** : `64b23dff` · **SHA tests** : `453582f2`
@@ -35,6 +40,8 @@ bout-en-bout START→STOP zéro-action→rejeu, `cmd/server/memory_start_no_team
 **SHA fix cycle 6** : `7e1a5746` · **SHA tests** : `6c2c6d6d` + complément `test-writer` (garde
 équipe non-courante purgée d'une sélection multi-équipes,
 `internal/game/engine_stale_team_no_buzzer_200_test.go`)
+**SHA fix cycle 7** : `79819916` · **SHA tests** : `26493295` + complément `test-writer` (garde
+`AssignVirtualPlayer`, chemin dormant, `internal/game/engine_connstate_test.go`)
 **Fichier de référence** : `docs/GAME_STATE_MACHINE.md` (transitions PREPARE/READY/STARTED/PAUSED/STOPPED)
 
 ## Contexte du bug (cycle 1/2 — rejeu)
@@ -245,6 +252,34 @@ dédié ajouté dans la procédure RAFALE existante : `tests/procedures/rafale-v
 
 ---
 
+## Scénario 9 — Équipe sélectionnée perdant son dernier buzzer PAR SUPPRESSION (cycle 7)
+
+**Objectif** : Même symptôme que le scénario 8, mais via un chemin DIFFÉRENT et plus probable en
+usage réel — **SUPPRIMER** le buzzer (bouton supprimer de `TeamsPage`), pas le réassigner à une
+autre équipe. Le cycle 6 (scénario 8) ne corrigeait que la réassignation ; ce chemin contournait
+encore la garde jusqu'au cycle 7 (bug d'aliasing de map, corrigé par `Engine.DeleteBumper`).
+
+**Prérequis spécifique** : l'équipe testée n'a qu'**un seul** buzzer physique/VJoueur assigné.
+
+| Étape | Action | Résultat Attendu | Résultat Obtenu | OK ? |
+|-------|--------|-----------------|----------------|------|
+| 1 | Sur `/anim`, préparer une question MEMORY en mode SOLO, sélectionner l'équipe Rouge (son seul buzzer assigné) | Chip "Rouge" visible dans la colonne sélectionnée, jeu passe en READY | | |
+| 2 | Sur `/admin` → `TeamsPage`, cliquer le bouton **SUPPRIMER** sur le buzzer de Rouge (pas une réassignation — le buzzer disparaît complètement de la liste), confirmer | Le buzzer n'apparaît plus du tout dans `TeamsPage` | | |
+| 3 | Revenir sur `/anim` (question MEMORY toujours affichée, PAS de STOP/READY entre-temps) | La chip "Rouge" a **disparu** de la sélection | | |
+| 4 | Tenter DÉMARRER | **DÉMARRER refusé** — le jeu repasse/reste en PREPARE (avant le fix cycle 7 : démarrait à tort — c'est le bug précis remonté en revue de code sur le cycle 6) | | |
+| 5 | Recréer/rebrancher un buzzer pour Rouge (ou sélectionner une autre équipe ayant un buzzer) puis démarrer | Démarre normalement | | |
+| 6 | Répéter les étapes 1-5 pour une question MEMOTION | Même comportement : chip disparue, DÉMARRER bloqué | | |
+
+**Verdict** : [ ] PASS  [ ] FAIL
+
+**Couverture croisée RAFALE** : même correctif partagé (`Engine.DeleteBumper` appelle
+`purgeInactiveParticipantUnsafe`, générique aux 3 types) — non dupliqué dans
+`tests/procedures/rafale-v8.md` pour l'instant ; le scénario 12 de ce fichier (réassignation, cycle
+6) peut servir de gabarit si une validation manuelle dédiée à la suppression est jugée nécessaire
+pour RAFALE dans un futur cycle.
+
+---
+
 ## Critères de Validation
 
 - [ ] Rejouer une question MEMORY déjà jouée sans resélectionner une équipe bloque DÉMARRER
@@ -273,6 +308,9 @@ dédié ajouté dans la procédure RAFALE existante : `tests/procedures/rafale-v
 - [ ] En mode multi, purger une équipe NON active de la sélection laisse l'équipe active intacte et
   ne fait reculer en PREPARE que si le nombre d'équipes restantes ne suffit plus (scénario 8, étape 7)
 - [ ] Même garde vérifiée pour RAFALE (`tests/procedures/rafale-v8.md`, scénario 12)
+- [ ] Une équipe perdant son dernier buzzer par SUPPRESSION (pas réassignation) disparaît de la
+  sélection ET bloque DÉMARRER, pour MEMORY ET MEMOTION — bug distinct du scénario 8, remonté en
+  revue de code sur le cycle 6 (scénario 9)
 - [ ] Aucune régression observée sur RAFALE (déjà corrigé en #199) ni sur les autres modes de jeu
 
 ## Notes QA
