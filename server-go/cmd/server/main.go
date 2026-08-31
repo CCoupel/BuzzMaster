@@ -1184,12 +1184,34 @@ func (a *App) handleWebMessage(incoming *protocol.IncomingMessage) {
 	case protocol.ActionPause:
 		a.logger.Info(game.LogComponentEngine, "PAUSE all")
 		a.engine.PauseAll()
-		a.broadcastPauseAll()
+		// #200 cycle 4 (code-review 20260831-112306, same reasoning as
+		// handleStart's own GetPhase() check above): Engine.Pause() gained a
+		// phase guard in cycle 3 (64b23dff, only STARTED→PAUSED is accepted)
+		// but silently no-ops on refusal — no return value to tell success
+		// from refusal at this call site. Without this check,
+		// broadcastPauseAll() fired unconditionally, sending every connected
+		// client a real ACTION:"PAUSE" even when nothing was actually
+		// paused — exactly the "undefined behavior for any client-side logic
+		// keyed on the action name rather than the payload" handleStart's
+		// own comment warns about (confirmed exploitable here: useWebSocket.js
+		// sets phase:'PAUSED' from the action label alone). GetPhase()==
+		// PhasePaused is a safe, side-effect-free way to check Pause() truly
+		// took effect: it's set synchronously under the engine's own lock
+		// before Pause() returns, on every accepted call.
+		if a.engine.GetPhase() == game.PhasePaused {
+			a.broadcastPauseAll()
+		}
 
 	case protocol.ActionContinue:
 		a.logger.Info(game.LogComponentEngine, "CONTINUE game")
 		a.engine.Continue()
-		a.broadcastContinue()
+		// #200 cycle 4 — mirrors the ActionPause check just above (and
+		// handleStart's own) for Engine.Continue()'s cycle 3 phase guard
+		// (64b23dff, only PAUSED→STARTED is accepted): only broadcast when
+		// Continue() actually transitioned, never on a silent refusal.
+		if a.engine.GetPhase() == game.PhaseStarted {
+			a.broadcastContinue()
+		}
 
 	case protocol.ActionReveal:
 		a.logger.Info(game.LogComponentEngine, "REVEAL answer")
