@@ -173,6 +173,27 @@ type Engine struct {
 	// left over from the previous card has no way to reach a live guard.
 	motionCardRoundClosed bool
 
+	// questionEverStarted (#200 cycle 5) — true once actualStart()/
+	// StartImmediate() has run for the question CURRENTLY loaded in
+	// e.state.Question, false otherwise. Set unconditionally (any question
+	// type) at the top of both Start entry points, reset to false by every
+	// Ready() call (a freshly-(re)prepared question, replay or not, has by
+	// definition not started yet). Exists specifically because MEMORY/
+	// MEMOTION have no field that reliably tells "this manche was started"
+	// apart from "this manche made game progress" — see Ready()'s own
+	// comment on memoryOrMotionRoundAlreadyPlayed for the concrete gap this
+	// closes (a manche started then STOPPED with zero gameplay actions,
+	// e.g. no card ever flipped/selected, used to be indistinguishable from
+	// "never started", leaving a stale team selection able to satisfy
+	// participantsConform on a same-ID replay — confirmed exploitable,
+	// QUALIF v8.0.0.18). RAFALE keeps its own dedicated RafaleSubPhase-based
+	// signal (rafaleRoundAlreadyPlayed) unchanged — untouched by this field,
+	// deliberately not migrated to avoid touching an already-reviewed,
+	// already-tested mechanism for no added coverage (RafaleSubPhase already
+	// becomes non-None unconditionally at Start(), same semantics as this
+	// field, just RAFALE-specific and pre-existing).
+	questionEverStarted bool
+
 	// Callbacks
 	//
 	// OnStateChange — concurrency contract (#121): invoked from every one of
@@ -894,15 +915,14 @@ func (e *Engine) Ready(questionID string, question *Question) {
 	rafaleRoundAlreadyPlayed := e.state.Question != nil && e.state.Question.Type == QuestionTypeRafale &&
 		e.state.RafaleSubPhase != RafaleSubPhaseNone
 
-	// MEMORY/MEMOTION generalization of the RAFALE bugfix above (#200,
-	// 2026-08-31 — the debt explicitly flagged, unresolved, in a7b70057's own
-	// commit message). MemoryParticipatingTeams/MemoryCurrentTeam/
-	// MemoryCurrentTeamColor/MemoryTeamPairs/MemoryTeamErrors/
-	// MemoryPairOwners (MEMORY) and MotionParticipatingTeams/
-	// MotionCurrentTeam/MotionCurrentTeamColor/MotionCardTeams (MEMOTION) are,
-	// below, reset only when isNewQuestion — the exact same isNewQuestion-only
-	// staleness gap RAFALE had — and participantsConform (this file, above)
-	// reads MemoryParticipatingTeams/MotionParticipatingTeams directly, so a
+	// MEMORY/MEMOTION generalization of the RAFALE bugfix above (#200).
+	// MemoryParticipatingTeams/MemoryCurrentTeam/MemoryCurrentTeamColor/
+	// MemoryTeamPairs/MemoryTeamErrors/MemoryPairOwners (MEMORY) and
+	// MotionParticipatingTeams/MotionCurrentTeam/MotionCurrentTeamColor/
+	// MotionCardTeams (MEMOTION) are, below, reset only when isNewQuestion —
+	// the exact same isNewQuestion-only staleness gap RAFALE had — and
+	// participantsConform (this file, above) reads
+	// MemoryParticipatingTeams/MotionParticipatingTeams directly, so a
 	// same-ID replay of an ALREADY-PLAYED MEMORY/MEMOTION question can
 	// silently satisfy that gate with the PREVIOUS manche's selection, same
 	// as RAFALE. Unlike RAFALE though, actualStart()/StartImmediate() DO
@@ -917,26 +937,44 @@ func (e *Engine) Ready(questionID string, question *Question) {
 	// call's own isNewQuestion branch below (initMotionStateUnsafe — the
 	// PREPARE-phase grid preview, #71/#72) even before any Start() ever
 	// happens, so unlike RafaleSubPhase it can't tell "just previewed" apart
-	// from "actually played". Both flags below key off state that changes
-	// ONLY through a Phase==STARTED gameplay action (FlipMemoryCard /
-	// SelectMotionCard — see their own phase guards), never through Ready()'s
-	// own preview or a team-selection call alone — so calling Ready() twice
-	// on the SAME not-yet-started question (the "persist during
-	// PREPARE→READY transition" case this isNewQuestion guard exists for,
-	// see a7b70057) still leaves both flags false, exactly like
-	// RafaleSubPhase does for RAFALE. Residual gap, accepted as out of scope
-	// for this minimal fix (#200): a manche STARTED then STOPPED with
-	// literally zero gameplay actions (no card ever flipped/selected) is
-	// indistinguishable from "never started" by these signals — considered
-	// unrealistic for how MEMORY/MEMOTION are actually played.
-	memoryRoundAlreadyPlayed := e.state.Question != nil && e.state.Question.Type == QuestionTypeMemory &&
-		(len(e.state.MemoryFlippedCards) > 0 || len(e.state.MemoryMatchedPairs) > 0 || e.state.MemoryErrors > 0)
-	motionRoundAlreadyPlayed := e.state.Question != nil && e.state.Question.Type == QuestionTypeMemotion &&
-		motionAnyCardPlayedUnsafe(e.state.MotionCardStates)
+	// from "actually played".
+	//
+	// 2026-08-31 first attempt (superseded, see 2026-09-04 below): a
+	// gameplay-progress signal (MemoryFlippedCards/MemoryMatchedPairs/
+	// MemoryErrors non-empty for MEMORY, any MotionCardStates entry off
+	// UNPLAYED for MEMOTION) — correctly false across a re-Ready() on a
+	// not-yet-started question (these fields only mutate through a
+	// Phase==STARTED action), but left a confirmed-exploitable gap: a manche
+	// STARTED then STOPPED with LITERALLY ZERO gameplay actions (no card
+	// ever flipped/selected — e.g. admin/anim clicks START then immediately
+	// STOP to fix a wrong config, a completely ordinary workflow) is
+	// indistinguishable from "never started" by these fields alone, since
+	// actualStart()/StartImmediate() only ever reset them, they never set a
+	// distinguishing "started" marker. Confirmed end-to-end (QUALIF
+	// v8.0.0.18, #200 cycle 5): the replay then reaches READY — and START —
+	// on the STALE selection, with the user never reselecting anything for
+	// this manche.
+	//
+	// 2026-09-04 fix: e.questionEverStarted (field's own doc comment) closes
+	// this precisely — true iff Start() genuinely ran for the CURRENT
+	// question, regardless of what happened afterward, so "started but zero
+	// actions" now correctly reads as "already played" while "re-Ready()
+	// before any Start()" still correctly reads as "not played" (the case
+	// this isNewQuestion guard exists to protect — verified by dedicated
+	// tests for both scenarios, MEMORY and MEMOTION).
+	memoryOrMotionRoundAlreadyPlayed := e.questionEverStarted && e.state.Question != nil &&
+		(e.state.Question.Type == QuestionTypeMemory || e.state.Question.Type == QuestionTypeMemotion)
 
 	e.state.Phase = PhasePrepare
 	e.state.Question = question
 	e.setQuestionStatus(StatusPrepare)
+	// The question being (re)loaded here — new or replayed — has not
+	// started yet; see questionEverStarted's own doc comment. Must be
+	// written AFTER capturing memoryOrMotionRoundAlreadyPlayed above (which
+	// reads the OUTGOING question's value) and rafaleRoundAlreadyPlayed
+	// above (RAFALE keeps its own independent RafaleSubPhase-based signal,
+	// unaffected by this field either way).
+	e.questionEverStarted = false
 
 	// Reset bumper times
 	for _, bumper := range e.data.Bumpers {
@@ -959,12 +997,12 @@ func (e *Engine) Ready(questionID string, question *Question) {
 	e.state.QcmInvalidated = []string{}
 
 	// Reset Memory/MEMOTION game state for a NEW question, OR when the
-	// OUTGOING question already had a manche played on it (#200 — see
-	// memoryRoundAlreadyPlayed/motionRoundAlreadyPlayed's own comment above,
-	// same generalization as RAFALE's rafaleRoundAlreadyPlayed/a7b70057).
-	// This still allows team selection to persist during a PREPARE→READY
+	// OUTGOING question already had a manche STARTED on it (#200 — see
+	// memoryOrMotionRoundAlreadyPlayed's own comment above, same
+	// generalization as RAFALE's rafaleRoundAlreadyPlayed/a7b70057). This
+	// still allows team selection to persist during a PREPARE→READY
 	// transition (re-Ready() on a not-yet-started question).
-	if isNewQuestion || memoryRoundAlreadyPlayed || motionRoundAlreadyPlayed {
+	if isNewQuestion || memoryOrMotionRoundAlreadyPlayed {
 		// Use empty slices/maps instead of nil so they are serialized in JSON (not omitted)
 		e.state.MemoryFlippedCards = []string{}
 		e.state.MemoryMatchedPairs = []int{}
@@ -1451,6 +1489,7 @@ func (e *Engine) actualStart() {
 	e.state.Phase = PhaseStarted
 	e.state.CountdownTime = 0
 	e.state.GameTime = time.Now().UnixMicro()
+	e.questionEverStarted = true // #200 cycle 5 — see field's own doc comment
 
 	e.setQuestionStatus(StatusStarted)
 
@@ -1536,6 +1575,7 @@ func (e *Engine) StartImmediate(delay int) {
 	e.state.GameTime = time.Now().UnixMicro()
 	e.state.Delay = delay
 	e.state.CurrentTime = delay
+	e.questionEverStarted = true // #200 cycle 5 — mirrors actualStart(), see field's own doc comment
 
 	e.setQuestionStatus(StatusStarted)
 
@@ -2822,6 +2862,12 @@ func (e *Engine) InitGame() []string {
 
 	// Set phase to NEW_GAME
 	e.state.Phase = PhaseNewGame
+
+	// #200 cycle 5 — defensive: e.state.Question is nil now, so the next
+	// Ready() will treat isNewQuestion==true regardless anyway, making this
+	// moot in practice — reset here too so no stale `true` can ever leak
+	// across a NEW_GAME boundary (see questionEverStarted's own doc comment).
+	e.questionEverStarted = false
 
 	// Reset MEMOTION state completely
 	e.state.MotionSubPhase = ""
@@ -4988,24 +5034,6 @@ func (e *Engine) InitMotionState() {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	e.initMotionStateUnsafe()
-}
-
-// motionAnyCardPlayedUnsafe reports whether at least one MEMOTION card has
-// moved out of MotionCardStateUnplayed — the only state initMotionStateUnsafe
-// (both Ready()'s own PREPARE-phase grid preview and actualStart/
-// StartImmediate's fresh grid) ever sets a card to. A card only leaves
-// UNPLAYED via SelectMotionCard, itself gated on Phase==STARTED (see its own
-// precondition comment) — so this is a reliable "gameplay actually happened
-// on this question" signal (#200), unaffected by Ready() being called more
-// than once on a question that was never started. Must be called with e.mu
-// held (read or write).
-func motionAnyCardPlayedUnsafe(states map[string]MotionCardState) bool {
-	for _, st := range states {
-		if st != MotionCardStateUnplayed {
-			return true
-		}
-	}
-	return false
 }
 
 // SelectMotionCard transitions a card from UNPLAYED to SELECTED and sets the sub-phase to SELECTED.
