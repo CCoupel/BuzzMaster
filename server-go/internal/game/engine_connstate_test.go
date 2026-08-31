@@ -316,6 +316,59 @@ func TestAssignVirtualPlayer_ConnectedBumper_StaysHidden(t *testing.T) {
 	}
 }
 
+// TestAssignVirtualPlayer_ReassignAway_PurgesStaleSelection covers the
+// purge+reevaluate hook #200 cycle 7 added to AssignVirtualPlayer "par
+// cohérence" with UpdateBumper/SetBumpers/DeleteBumper (engine.go's own
+// comment on the call site: no production caller reassigns a team through
+// this method today — verified by grep — but the exact same structural gap
+// would silently reappear the moment this already-tested public method gets
+// wired to a future handler). Mirrors
+// TestMemorySolo_ReassignSelectedTeamBumper_PurgesStaleSelection
+// (engine_stale_team_no_buzzer_200_test.go) and
+// TestDeleteBumper_PurgesStaleSelection
+// (engine_delete_bumper_200_test.go), via AssignVirtualPlayer instead of
+// UpdateBumper/DeleteBumper.
+func TestAssignVirtualPlayer_ReassignAway_PurgesStaleSelection(t *testing.T) {
+	e := NewEngine()
+	e.SetTeams(map[string]*Team{"red": {Name: "red"}, "blue": {Name: "blue"}})
+	e.SetPhase(PhaseEnroll)
+
+	id, _, err := e.CreateVirtualPlayer("Alice")
+	if err != nil {
+		t.Fatalf("CreateVirtualPlayer failed: %v", err)
+	}
+	if err := e.AssignVirtualPlayer(id, "red", AnswerColorNone); err != nil {
+		t.Fatalf("AssignVirtualPlayer (initial assignment to red): %v", err)
+	}
+	e.SetPhase(PhaseStopped) // leave ENROLL so Ready() is reachable
+
+	q := &Question{ID: "mq1", Type: QuestionTypeMemory, TypedContent: TypedContent{MemoryMode: string(MemoryModeSolo)}}
+	e.Ready("mq1", q)
+	if err := e.SetMemoryParticipatingTeams([]string{"red"}); err != nil {
+		t.Fatalf("SetMemoryParticipatingTeams: %v", err)
+	}
+	e.ForceReady()
+	if e.GetPhase() != PhaseReady {
+		t.Fatalf("sanity: expected READY, got %s", e.GetPhase())
+	}
+
+	// Reassign Alice — red's ONLY (virtual) bumper — to blue.
+	if err := e.AssignVirtualPlayer(id, "blue", AnswerColorNone); err != nil {
+		t.Fatalf("AssignVirtualPlayer (reassign to blue): %v", err)
+	}
+
+	state := e.GetState()
+	if len(state.MemoryParticipatingTeams) != 0 {
+		t.Errorf("BUG: MEMORY_PARTICIPATING_TEAMS still contains 'red' after its only bumper was reassigned via AssignVirtualPlayer: %v", state.MemoryParticipatingTeams)
+	}
+	if e.GetPhase() != PhasePrepare {
+		t.Errorf("expected an immediate READY->PREPARE reversal, got %s", e.GetPhase())
+	}
+	if e.ParticipantsConform() {
+		t.Errorf("BUG: ParticipantsConform() still TRUE after AssignVirtualPlayer removed the selected team's only bumper")
+	}
+}
+
 // ---------------------------------------------------------------------------
 // Tests : hook SetBumpers (restauration en bloc, site engine.go ~205)
 // ---------------------------------------------------------------------------
