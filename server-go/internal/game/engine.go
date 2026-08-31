@@ -755,11 +755,22 @@ func (e *Engine) UpdateBumper(id string, data map[string]interface{}) {
 			applyConnEventUnsafe(bumper, ConnEventDisconnect)
 		}
 	}
+	teamLostLastBumper := ""
 	if team, ok := data["TEAM"].(string); ok {
 		oldTeam := bumper.Team
 		bumper.Team = team
 		if oldTeam != team {
 			e.syncConnStateForTeamChangeUnsafe(bumper, oldTeam)
+			// #200 cycle 6: does oldTeam still have ANY bumper after this
+			// reassignment? bumper.Team was already updated above (bumper
+			// is the *Bumper stored at e.data.Bumpers[id], not a copy), so
+			// e.data.Bumpers is fully consistent here — teamsWithBumpers
+			// reflects the POST-reassignment state. If oldTeam is now
+			// absent, its participant selection (if any) is stale — see
+			// purgeInactiveParticipantUnsafe's own doc comment.
+			if oldTeam != "" && !teamsWithBumpers(e.data.Bumpers)[oldTeam] {
+				teamLostLastBumper = oldTeam
+			}
 		}
 	}
 	if version, ok := data["VERSION"].(string); ok {
@@ -790,7 +801,24 @@ func (e *Engine) UpdateBumper(id string, data map[string]interface{}) {
 	}
 
 	log.Printf("[Engine] Updated bumper %s: team=%s, name=%s, protocol=%s", id, bumper.Team, bumper.Name, bumper.Protocol)
+
+	// #200 cycle 6: teamLostLastBumper is only ever non-empty when a TEAM
+	// reassignment just made it lose its last bumper (set above) — purge it
+	// from any live participant selection and re-check the PREPARE<->READY
+	// gate, same release-before-call pattern as every other function in this
+	// file that can flip the phase (Ready()/ForceReady()/
+	// SetMemoryParticipatingTeams()/...).
+	newPhase := GamePhase("")
+	if teamLostLastBumper != "" {
+		e.purgeInactiveParticipantUnsafe(teamLostLastBumper)
+		newPhase = e.reevaluatePrepareReadyUnsafe()
+	}
+	callback := e.OnStateChange
 	e.mu.Unlock()
+
+	if callback != nil && newPhase != "" {
+		callback(newPhase)
+	}
 
 	// Auto-save bumpers to disk
 	safeGo("SaveBumpers", e.SaveBumpers)
@@ -863,10 +891,35 @@ func (e *Engine) SetBumpers(bumpers map[string]*Bumper) {
 			e.syncConnStateForTeamChangeUnsafe(newBumper, oldTeam)
 		}
 	}
+	// #200 cycle 6: this bulk path IS the real admin flow for reassigning a
+	// bumper's team (TeamsPage save, per this function's own comment above)
+	// — a team present in oldBumpers but absent from the new bumpers map has
+	// just lost its last bumper, exactly like the single-bumper case in
+	// UpdateBumper. See purgeInactiveParticipantUnsafe's own doc comment for
+	// why this matters (stale MEMORY/MEMOTION/RAFALE participant selection
+	// silently satisfying participantsConform).
+	oldActiveTeams := teamsWithBumpers(oldBumpers)
 	e.data.Bumpers = bumpers
+	newActiveTeams := teamsWithBumpers(bumpers)
+	teamsLostLastBumper := false
+	for teamID := range oldActiveTeams {
+		if !newActiveTeams[teamID] {
+			e.purgeInactiveParticipantUnsafe(teamID)
+			teamsLostLastBumper = true
+		}
+	}
+	newPhase := GamePhase("")
+	if teamsLostLastBumper {
+		newPhase = e.reevaluatePrepareReadyUnsafe()
+	}
 	// Synchronize VirtualPlayerCount with actual bumper count
 	e.state.VirtualPlayerCount = e.countVirtualPlayersUnsafe()
+	callback := e.OnStateChange
 	e.mu.Unlock()
+
+	if callback != nil && newPhase != "" {
+		callback(newPhase)
+	}
 
 	// Auto-save bumpers to disk
 	safeGo("SaveBumpers", e.SaveBumpers)
@@ -1103,6 +1156,98 @@ func (e *Engine) getActiveTeams() map[string]*Team {
 		}
 	}
 	return active
+}
+
+// teamsWithBumpers returns the set of team IDs that have at least one
+// bumper assigned, from the given bumper map — the same "active" criterion
+// as getActiveTeams, but computable from a plain bumper map (no e.data.Teams
+// lookup needed) so it can be diffed against a PRIOR snapshot before/after
+// a bulk SetBumpers swap. Pure function, no locking.
+func teamsWithBumpers(bumpers map[string]*Bumper) map[string]bool {
+	set := make(map[string]bool)
+	for _, b := range bumpers {
+		if b != nil && b.Team != "" {
+			set[b.Team] = true
+		}
+	}
+	return set
+}
+
+// purgeInactiveParticipantUnsafe (#200 cycle 6) removes teamID from every
+// *_PARTICIPATING_TEAMS selection (MEMORY/MEMOTION/RAFALE) and clears the
+// matching *_CURRENT_TEAM(_COLOR) pointer if it pointed at teamID, then
+// re-evaluates the PREPARE<->READY gate exactly like Set*ParticipatingTeams
+// already does after any selection change (reevaluatePrepareReadyUnsafe).
+//
+// Called from UpdateBumper/SetBumpers whenever a reassignment makes teamID
+// lose its LAST bumper. Root cause this closes (confirmed exploitable,
+// QUALIF v8.0.0.18, dev-frontend's own trace of GamePage.jsx's team-chip
+// rendering): participantsConform (this file) only counts
+// MemoryParticipatingTeams/MotionParticipatingTeams/RafaleParticipatingTeams
+// by NAME/length — it is a pure GameState-only function (deliberately, see
+// its own doc comment — exercised by table tests with no bumpers/teams at
+// all) with no access to e.data.Bumpers/e.data.Teams, so it has no way to
+// know a listed team no longer has any buzzer. Selecting a team for MEMORY
+// SOLO, then reassigning that team's ONLY bumper to another team from
+// TeamsPage (an entirely ordinary admin action, no Stop/Ready involved) used
+// to leave the stale name in MemoryParticipatingTeams forever — silently
+// satisfying participantsConform while the frontend's own team-chip list
+// renders NOTHING selected (GamePage.jsx filters chips through
+// teamsWithBuzzers first, so a name with zero buzzers is invisible in BOTH
+// the "selected" and "available" columns) — exactly the reported symptom.
+//
+// Scoped to PREPARE/READY only, mirroring Set*ParticipatingTeams's own phase
+// restriction: a reassignment during a LIVE round (STARTED/PAUSED) is an
+// unrelated concern and must never touch gameplay-in-progress data — the
+// per-team score/progress maps (MemoryTeamPairs/MemoryPairOwners/
+// RafaleTeamCounters/etc.) are deliberately left untouched here, this only
+// ever touches the PARTICIPATING_TEAMS/CURRENT_TEAM selection fields.
+// Must be called with e.mu already held (write).
+func (e *Engine) purgeInactiveParticipantUnsafe(teamID string) {
+	if teamID == "" || (e.state.Phase != PhasePrepare && e.state.Phase != PhaseReady) {
+		return
+	}
+
+	removed := false
+	if removeStringUnsafe(&e.state.MemoryParticipatingTeams, teamID) {
+		removed = true
+		if e.state.MemoryCurrentTeam == teamID {
+			e.state.MemoryCurrentTeam = ""
+			e.state.MemoryCurrentTeamColor = []int{}
+		}
+	}
+	if removeStringUnsafe(&e.state.MotionParticipatingTeams, teamID) {
+		removed = true
+		if e.state.MotionCurrentTeam == teamID {
+			e.state.MotionCurrentTeam = ""
+			e.state.MotionCurrentTeamColor = []int{}
+		}
+	}
+	if removeStringUnsafe(&e.state.RafaleParticipatingTeams, teamID) {
+		removed = true
+		if e.state.RafaleCurrentTeam == teamID {
+			e.state.RafaleCurrentTeam = ""
+			e.state.RafaleCurrentTeamColor = []int{}
+		}
+	}
+
+	if removed {
+		log.Printf("[Engine] Purged inactive team %q from participant selection (lost its last bumper during %s)", teamID, e.state.Phase)
+	}
+}
+
+// removeStringUnsafe removes the first occurrence of s from *slice
+// in-place, reports whether anything was removed. Preserves order (simple
+// append-based removal — these slices are at most a handful of team names,
+// no need for a swap-remove).
+func removeStringUnsafe(slice *[]string, s string) bool {
+	for i, v := range *slice {
+		if v == s {
+			*slice = append((*slice)[:i], (*slice)[i+1:]...)
+			return true
+		}
+	}
+	return false
 }
 
 func (e *Engine) updateTeamsReady() {
