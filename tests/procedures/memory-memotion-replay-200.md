@@ -1,7 +1,7 @@
 # Procédure de Test — MEMORY/MEMOTION/RAFALE : démarrage sans équipe sélectionnée (#200)
 
 **Version** : v8.0.0 (branche `milestone/v8.0.0`)
-**Date** : 2026-08-31 (mise à jour cycle 5 — cause racine réelle du rapport QUALIF v8.0.0.18)
+**Date** : 2026-08-31 (mise à jour cycle 6 — équipe perdant son dernier buzzer)
 **Testeur** : Utilisateur (validation manuelle — ni `qa` ni `deployer` n'exécutent cette procédure,
 aucun navigateur fiable dans les sessions agents)
 **Issues** : #200 — cinq cycles, plusieurs causes racines distinctes, correctifs complémentaires :
@@ -20,12 +20,21 @@ aucun navigateur fiable dans les sessions agents)
   satisfaisait alors silencieusement la garde. C'était exactement le cas documenté comme « limite
   acceptée, jugée irréaliste » à l'issue du cycle 1/2 — confirmé irréaliste À TORT : c'est un flux
   tout à fait ordinaire.
+- Cycle 6 : une équipe RESTE sélectionnée côté serveur (`*_PARTICIPATING_TEAMS`) même après avoir
+  perdu son SEUL buzzer (réassignation via `TeamsPage`/`GamePage`, action admin ordinaire, aucun
+  Stop/Ready/rejeu impliqué) — `participantsConform()` ne vérifie que des NOMS, jamais la présence
+  réelle d'un buzzer. Côté `/admin`, l'équipe devient invisible dans les DEUX colonnes (sélectionnée
+  ET disponible — `GamePage.jsx` filtre via `teamsWithBuzzers` avant répartition), donnant
+  l'impression trompeuse qu'aucune équipe n'est sélectionnée alors que DÉMARRER reste actif.
 
 **SHA fix cycle 1/2** : `142ffc3c` · **SHA tests** : `b42d5091` + complément `test-writer` (SHA `fe4bef24`)
 **SHA fix cycle 3** : `64b23dff` · **SHA tests** : `453582f2`
 **SHA fix cycle 4** : `0aa0d564` · **SHA tests** : `8ccef0d8`
 **SHA fix cycle 5** : `4aaa9fbd` · **SHA tests** : `80f11384` + complément `test-writer` (repro WS
 bout-en-bout START→STOP zéro-action→rejeu, `cmd/server/memory_start_no_team_repro_200_test.go`)
+**SHA fix cycle 6** : `7e1a5746` · **SHA tests** : `6c2c6d6d` + complément `test-writer` (garde
+équipe non-courante purgée d'une sélection multi-équipes,
+`internal/game/engine_stale_team_no_buzzer_200_test.go`)
 **Fichier de référence** : `docs/GAME_STATE_MACHINE.md` (transitions PREPARE/READY/STARTED/PAUSED/STOPPED)
 
 ## Contexte du bug (cycle 1/2 — rejeu)
@@ -207,6 +216,35 @@ jouées — ici AUCUNE carte n'est jamais touchée avant l'arrêt).
 
 ---
 
+## Scénario 8 — Équipe sélectionnée perdant son dernier buzzer (cycle 6)
+
+**Objectif** : Vérifier qu'une équipe qui perd son seul buzzer (réassigné à une autre équipe via
+`TeamsPage`) disparaît proprement de la sélection ET que DÉMARRER se bloque si plus aucune équipe
+conforme n'est sélectionnée — sans passer par STOP, READY ou un rejeu (contrairement à tous les
+scénarios précédents).
+
+**Prérequis spécifique** : chaque équipe impliquée ne doit avoir qu'**un seul** buzzer physique/
+VJoueur assigné (pour permettre une perte totale par réassignation d'un seul buzzer).
+
+| Étape | Action | Résultat Attendu | Résultat Obtenu | OK ? |
+|-------|--------|-----------------|----------------|------|
+| 1 | Sur `/anim`, préparer une question MEMORY en mode SOLO, sélectionner l'équipe Rouge (son seul buzzer assigné) | Chip "Rouge" visible dans la colonne sélectionnée, jeu passe en READY | | |
+| 2 | Sur `/admin` → `TeamsPage`, réassigner le buzzer de Rouge à l'équipe Bleue (Rouge n'a alors plus AUCUN buzzer), sauvegarder | Le changement est pris en compte côté serveur | | |
+| 3 | Revenir sur `/anim` (question MEMORY toujours affichée, PAS de STOP/READY entre-temps) | La chip "Rouge" a **disparu** — n'apparaît ni dans "sélectionnée" ni dans "disponible" (elle n'a plus de buzzer) | | |
+| 4 | Tenter DÉMARRER | **DÉMARRER refusé** — le jeu repasse/reste en PREPARE (avant le fix cycle 6 : démarrait à tort sur la sélection périmée "Rouge") | | |
+| 5 | Sélectionner l'équipe Bleue (qui a maintenant le buzzer) puis démarrer | Démarre normalement | | |
+| 6 | Répéter les étapes 1-5 pour une question MEMOTION | Même comportement : chip disparue, DÉMARRER bloqué tant qu'aucune équipe AVEC buzzer n'est sélectionnée | | |
+| 7 | Variante mode multi (`CHACUN_SON_TOUR`, MEMORY) : sélectionner Rouge ET Bleue (chacune avec un seul buzzer), passer en READY, puis réassigner le buzzer de Bleue (équipe NON active) vers Rouge | La sélection se réduit à Rouge seule (Bleue disparaît), le jeu repasse en PREPARE (mode multi exige ≥2 équipes) — Rouge reste correctement affichée comme équipe active | | |
+
+**Verdict** : [ ] PASS  [ ] FAIL
+
+**Couverture croisée RAFALE** : le même correctif (`purgeInactiveParticipantUnsafe`) s'applique
+identiquement à RAFALE (`RAFALE_PARTICIPATING_TEAMS`) — couverte par les tests automatisés
+(`TestPurgeInactiveParticipant_MemotionAndRafale_AlsoCovered/RAFALE`) et par un scénario manuel
+dédié ajouté dans la procédure RAFALE existante : `tests/procedures/rafale-v8.md`, scénario 12.
+
+---
+
 ## Critères de Validation
 
 - [ ] Rejouer une question MEMORY déjà jouée sans resélectionner une équipe bloque DÉMARRER
@@ -229,6 +267,12 @@ jouées — ici AUCUNE carte n'est jamais touchée avant l'arrêt).
   régression, pour les trois types (scénarios 4-5, dernière étape)
 - [ ] START puis STOP immédiat SANS AUCUNE action de jeu, puis rejeu sans resélection, bloque
   DÉMARRER pour MEMORY ET MEMOTION — scénario exact du rapport QUALIF v8.0.0.18 (scénario 7)
+- [ ] Une équipe perdant son dernier buzzer (réassignation TeamsPage, sans STOP/READY) disparaît de
+  la sélection ET bloque DÉMARRER si plus aucune équipe conforme n'est sélectionnée, pour MEMORY ET
+  MEMOTION (scénario 8)
+- [ ] En mode multi, purger une équipe NON active de la sélection laisse l'équipe active intacte et
+  ne fait reculer en PREPARE que si le nombre d'équipes restantes ne suffit plus (scénario 8, étape 7)
+- [ ] Même garde vérifiée pour RAFALE (`tests/procedures/rafale-v8.md`, scénario 12)
 - [ ] Aucune régression observée sur RAFALE (déjà corrigé en #199) ni sur les autres modes de jeu
 
 ## Notes QA

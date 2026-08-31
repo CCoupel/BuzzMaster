@@ -99,6 +99,54 @@ func TestMemorySolo_ReassignSelectedTeamBumper_ImmediateGateRecheck(t *testing.T
 	}
 }
 
+// TestMemoryMulti_ReassignNonCurrentTeamBumper_ShrinksSelectionOnly covers a
+// conditional branch purgeInactiveParticipantUnsafe's own doc comment
+// describes but that no other test in this file exercises: EVERY test above
+// purges a SOLO/single-team selection, where the purged team is necessarily
+// also MEMORY_CURRENT_TEAM. In a multi-team mode (CHACUN_SON_TOUR/
+// TANT_QUE_JE_GAGNE) with 2+ teams selected, purging a team OTHER than the
+// current one must shrink MEMORY_PARTICIPATING_TEAMS without touching
+// MEMORY_CURRENT_TEAM at all — the `if e.state.MemoryCurrentTeam == teamID`
+// guard (engine.go) is what's actually being verified here. The list still
+// dropping below the multi mode's own >=2 requirement must revert a READY
+// round to PREPARE, exactly like the single-team case's own gate recheck.
+func TestMemoryMulti_ReassignNonCurrentTeamBumper_ShrinksSelectionOnly(t *testing.T) {
+	e := NewEngine()
+	e.SetTeams(map[string]*Team{"red": {Name: "red"}, "blue": {Name: "blue"}})
+	e.UpdateBumper("b1", map[string]interface{}{"TEAM": "red"})
+	e.UpdateBumper("b2", map[string]interface{}{"TEAM": "blue"})
+
+	q := &Question{ID: "mq1", Type: QuestionTypeMemory, TypedContent: TypedContent{MemoryMode: string(MemoryModeChacunSonTour)}}
+	e.Ready("mq1", q)
+	if err := e.SetMemoryParticipatingTeams([]string{"red", "blue"}); err != nil {
+		t.Fatalf("SetMemoryParticipatingTeams: %v", err)
+	}
+	if e.GetState().MemoryCurrentTeam != "red" {
+		t.Fatalf("precondition: expected MEMORY_CURRENT_TEAM=red (teams[0]), got %q", e.GetState().MemoryCurrentTeam)
+	}
+	e.ForceReady()
+	if e.GetPhase() != PhaseReady {
+		t.Fatalf("sanity: expected READY, got %s", e.GetPhase())
+	}
+
+	// Reassign blue's (the NON-current team's) only bumper away.
+	e.UpdateBumper("b2", map[string]interface{}{"TEAM": "red"})
+
+	state := e.GetState()
+	if len(state.MemoryParticipatingTeams) != 1 || state.MemoryParticipatingTeams[0] != "red" {
+		t.Errorf("expected MEMORY_PARTICIPATING_TEAMS to shrink to just [red] (blue purged), got %v", state.MemoryParticipatingTeams)
+	}
+	if state.MemoryCurrentTeam != "red" {
+		t.Errorf("expected MEMORY_CURRENT_TEAM to stay 'red' (untouched — blue, not red, was purged), got %q", state.MemoryCurrentTeam)
+	}
+	if e.ParticipantsConform() {
+		t.Errorf("BUG: ParticipantsConform() still true for CHACUN_SON_TOUR with only 1 team left (needs >=2)")
+	}
+	if e.GetPhase() != PhasePrepare {
+		t.Errorf("expected an immediate READY->PREPARE reversal once the multi-team selection dropped below 2, got %s", e.GetPhase())
+	}
+}
+
 // TestSetBumpers_BulkReassign_PurgesStaleSelection mirrors the direct
 // reproduction above but through SetBumpers (the BULK path) — the real
 // production entry point for a TeamsPage save (handleFullUpdate ->

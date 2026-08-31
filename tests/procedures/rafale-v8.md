@@ -1,10 +1,11 @@
 # Procédure de Test — Mode de jeu RAFALE (v8.0.0, milestone #16)
 
 **Version** : v8.0.0 (branche `milestone/v8.0.0`)
-**Date** : 2026-08-28
+**Date** : 2026-08-28 (scénario 12 ajouté le 2026-08-31 — #200 cycle 6)
 **Testeur** : Utilisateur (validation manuelle — ni `qa` ni `deployer` n'exécutent cette procédure,
 aucun navigateur fiable dans les sessions agents)
 **Issues** : #107 (moteur solo) · #197 (réservoir + éditeur) · #198 (interface TV/anim) · #199 (modes multi)
+· #200 (bugfixes rejeu/garde participants, cycle 6 : équipe sans buzzer)
 **Contrat de référence** : `contracts/rafale.md` · **Maquette** : `docs/mockups/rafale-v8.html`
 
 > **Mise à jour (relecture post-Batch 2/3)** : le milestone est désormais **complet côté code** —
@@ -222,6 +223,29 @@ JAMAIS `/tv` ni `/player` — complète les tests automatisés protocole
 
 ---
 
+## Scénario 12 — Équipe sélectionnée perdant son dernier buzzer (#200 cycle 6)
+
+**Objectif** : Vérifier qu'une équipe qui perd son SEUL buzzer (réassigné à une autre équipe via
+`TeamsPage`, action admin ordinaire — pas de STOP/READY/rejeu) disparaît proprement de
+`RAFALE_PARTICIPATING_TEAMS` et que DÉMARRER se bloque si plus aucune équipe conforme n'est
+sélectionnée. Même correctif (`purgeInactiveParticipantUnsafe`, `engine.go`) que MEMORY/MEMOTION —
+voir `tests/procedures/memory-memotion-replay-200.md` (scénario 8) pour le contexte complet du bug.
+
+**Prérequis spécifique** : chaque équipe impliquée n'a qu'**un seul** buzzer physique/VJoueur
+assigné (pour permettre une perte totale de buzzer par réassignation).
+
+| Étape | Action | Résultat Attendu | Résultat Obtenu | OK ? |
+|-------|--------|-----------------|----------------|------|
+| 1 | Sur `/anim`, préparer une manche RAFALE mode multi (ex. `CHACUN_SON_TOUR`), sélectionner l'équipe Rouge (son seul buzzer assigné) | Chip "Rouge" visible comme sélectionnée, jeu passe en READY | | |
+| 2 | Sur `/admin` → `TeamsPage`, réassigner le buzzer de Rouge à l'équipe Bleue, sauvegarder | Changement pris en compte côté serveur | | |
+| 3 | Revenir sur `/anim` (PAS de STOP/READY entre-temps) | La chip "Rouge" a disparu de la sélection | | |
+| 4 | Tenter DÉMARRER | **DÉMARRER refusé** — le jeu repasse/reste en PREPARE (avant le fix : démarrait à tort sur la sélection périmée) | | |
+| 5 | Sélectionner Bleue (qui a maintenant le buzzer) puis démarrer | Démarre normalement | | |
+
+**Verdict** : [ ] PASS  [ ] FAIL
+
+---
+
 ## Critères de Validation
 
 - [ ] Les 4 modes (SOLO, CHACUN_SON_TOUR, TANT_QUE_JE_GAGNE, MAILLON_FAIBLE) appliquent leurs règles
@@ -240,6 +264,8 @@ JAMAIS `/tv` ni `/player` — complète les tests automatisés protocole
   soit le nombre d'équipes ou la longueur de l'énoncé)
 - [ ] Aucune régression observée sur les autres modes de jeu (SPEEDY/QCM/MEMORY/MEMOTION/ARDOISE) —
   timer global, LED MEMORY multi-équipes
+- [ ] Une équipe perdant son dernier buzzer disparaît de la sélection et bloque DÉMARRER si la
+  conformité n'est plus atteinte (scénario 12, #200 cycle 6)
 
 ## Notes QA
 
