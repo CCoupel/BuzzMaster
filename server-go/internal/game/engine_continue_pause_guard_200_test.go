@@ -11,7 +11,7 @@
 // functions needed a guard (Pause() alone being unguarded would still allow
 // a 2-step PREPARE->PAUSED->STARTED bypass via Continue()'s own guard).
 //
-// Run: go test ./internal/game/... -run TestEngineContinue_RefusesOutsidePaused\|TestEnginePause_RefusesOutsideStarted\|TestContinue_CannotBypassParticipantGate -v
+// Run: go test ./internal/game/... -run TestEngineContinue_RefusesOutsidePaused\|TestEnginePause_RefusesOutsideStarted\|TestContinue_CannotBypassParticipantGate\|TestRafaleContinue_CannotBypassParticipantGate -v
 package game
 
 import "testing"
@@ -195,5 +195,74 @@ func TestContinue_CannotBypassParticipantGate(t *testing.T) {
 	e.Continue()
 	if e.GetPhase() != PhaseStarted {
 		t.Errorf("Continue() must still work normally for a legitimately-started game, got %s", e.GetPhase())
+	}
+}
+
+// TestRafaleContinue_CannotBypassParticipantGate is the cross-type
+// belt-and-suspenders companion to TestContinue_CannotBypassParticipantGate
+// above, requested during the #200 confirmation audit (user question: does
+// RAFALE share the same MEMORY-only-looking bypass?). Audit conclusion,
+// verified here permanently: COVERED by construction, no RAFALE-specific
+// gap. Continue()/Pause() (engine.go) are fully generic — a single
+// implementation, gating on the shared GameState.Phase field, with no
+// QuestionType branch anywhere in either function or in
+// broadcastPauseAll()/broadcastContinue() (main.go, #200 cycle 4) — and
+// Phase can only ever reach STARTED via Start() (gated on READY, #172 B4)
+// or Continue() (gated on PAUSED since 64b23dff, itself only reachable via
+// Pause() from STARTED), so any STARTED state structurally traces back to a
+// Start() that was gated on participantsConform — regardless of question
+// type. This test locks that invariant in for RAFALE specifically, mirroring
+// TestReady_RafaleReplay_ResetsStaleParticipatingTeams's own reservoir setup
+// (rafale_modes_test.go).
+func TestRafaleContinue_CannotBypassParticipantGate(t *testing.T) {
+	e := NewEngine()
+	e.SetTeams(map[string]*Team{"red": {Name: "red"}, "blue": {Name: "blue"}})
+	seedRafaleReservoirBulk(t, e, 20, CategoryHistory, 1)
+
+	q := makeRafaleQuestion("rq1", string(RafaleModeChacunSonTour), CategoryHistory, 1)
+	e.Ready("rq1", q)
+	// No RAFALE_SET_TEAMS call — zero teams ever selected.
+
+	if e.ParticipantsConform() {
+		t.Fatal("precondition: no team selected, RAFALE multi-mode must not be conform")
+	}
+	if e.GetPhase() != PhasePrepare {
+		t.Fatalf("precondition: expected PREPARE, got %s", e.GetPhase())
+	}
+
+	// The direct bypass: ACTION:"CONTINUE" straight from PREPARE.
+	e.Continue()
+	if e.GetPhase() != PhasePrepare {
+		t.Errorf("Continue() must never move a RAFALE question with no team selected out of PREPARE, got %s", e.GetPhase())
+	}
+
+	// The 2-step variant: PAUSE then CONTINUE.
+	e.Pause()
+	e.Continue()
+	if e.GetPhase() != PhasePrepare {
+		t.Errorf("Pause()+Continue() must never move a RAFALE question with no team selected out of PREPARE either, got %s", e.GetPhase())
+	}
+
+	// Positive control: the legitimate path still works once a team is
+	// actually selected.
+	if err := e.SetRafaleParticipatingTeams([]string{"red", "blue"}); err != nil {
+		t.Fatalf("SetRafaleParticipatingTeams: %v", err)
+	}
+	e.ForceReady()
+	if e.GetPhase() != PhaseReady {
+		t.Fatalf("precondition: expected READY once conform, got %s", e.GetPhase())
+	}
+	e.StartImmediate(0)
+	if e.GetPhase() != PhaseStarted {
+		t.Fatalf("precondition: expected STARTED, got %s", e.GetPhase())
+	}
+	defer e.Stop()
+	e.Pause()
+	if e.GetPhase() != PhasePaused {
+		t.Fatalf("precondition: expected PAUSED, got %s", e.GetPhase())
+	}
+	e.Continue()
+	if e.GetPhase() != PhaseStarted {
+		t.Errorf("Continue() must still work normally for a legitimately-started RAFALE game, got %s", e.GetPhase())
 	}
 }
