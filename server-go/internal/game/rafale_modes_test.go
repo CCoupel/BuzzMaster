@@ -207,14 +207,20 @@ func TestParticipantsConform_Rafale(t *testing.T) {
 		{"set category and valid difficulty=2 conforms", CategoryHistory, 2, string(RafaleModeSolo), nil, true},
 		{"set category and valid difficulty=3 conforms", CategoryHistory, 3, string(RafaleModeSolo), nil, true},
 		{"empty category AND zero difficulty does not conform", CategoryNone, 0, string(RafaleModeSolo), nil, false},
-		// --- 2026-09-02, #199: multi-team mode requires >=1 selected team ---
+		// --- 2026-09-02, #199: multi-team mode requires a minimum of selected
+		// teams; threshold corrected 2026-09-01, #201: >=2 (was >=1), aligned
+		// on MEMORY's own CHACUN_SON_TOUR/TANT_QUE_JE_GAGNE branch — a
+		// rotation between teams makes no sense with only one. ---
 		{"SOLO with no teams still conforms (exempt)", CategoryHistory, 1, string(RafaleModeSolo), nil, true},
 		{"empty RAFALE_MODE defaults to SOLO, no teams still conforms", CategoryHistory, 1, "", nil, true},
 		{"CHACUN_SON_TOUR with no teams does not conform", CategoryHistory, 1, string(RafaleModeChacunSonTour), nil, false},
-		{"CHACUN_SON_TOUR with one team conforms", CategoryHistory, 1, string(RafaleModeChacunSonTour), []string{"red"}, true},
+		{"CHACUN_SON_TOUR with one team does not conform (#201 — was wrongly true before the >=2 fix)", CategoryHistory, 1, string(RafaleModeChacunSonTour), []string{"red"}, false},
+		{"CHACUN_SON_TOUR with two teams conforms", CategoryHistory, 1, string(RafaleModeChacunSonTour), []string{"red", "blue"}, true},
 		{"TANT_QUE_JE_GAGNE with no teams does not conform", CategoryHistory, 1, string(RafaleModeTantQueJeGagne), nil, false},
+		{"TANT_QUE_JE_GAGNE with one team does not conform (#201)", CategoryHistory, 1, string(RafaleModeTantQueJeGagne), []string{"red"}, false},
 		{"MAILLON_FAIBLE with no teams does not conform", CategoryHistory, 1, string(RafaleModeMaillonFaible), nil, false},
-		{"MAILLON_FAIBLE with teams conforms", CategoryHistory, 1, string(RafaleModeMaillonFaible), []string{"red", "blue"}, true},
+		{"MAILLON_FAIBLE with one team does not conform (#201)", CategoryHistory, 1, string(RafaleModeMaillonFaible), []string{"red"}, false},
+		{"MAILLON_FAIBLE with two teams conforms", CategoryHistory, 1, string(RafaleModeMaillonFaible), []string{"red", "blue"}, true},
 		{"multi mode with no teams AND zero difficulty does not conform (both reasons)", CategoryHistory, 0, string(RafaleModeChacunSonTour), nil, false},
 	}
 	for _, tt := range tests {
@@ -256,6 +262,61 @@ func TestRafaleReady_ZeroDifficulty_NeverReachesReady(t *testing.T) {
 	if state := e.GetState(); state.Phase != PhasePrepare {
 		t.Errorf("Start() must be refused while stuck in PREPARE, got phase=%s", state.Phase)
 	}
+}
+
+// TestRafaleReady_MultiModeOneTeam_NeverReachesReady is the dedicated #201
+// regression test requested by the CDP: a multi-team mode
+// (CHACUN_SON_TOUR here, but the rule is identical for TANT_QUE_JE_GAGNE/
+// MAILLON_FAIBLE — see TestParticipantsConform_Rafale's own table) with
+// only ONE team selected must stay stuck in PREPARE and refuse Start() —
+// exactly like TestRafaleReady_ZeroDifficulty_NeverReachesReady/
+// TestRafaleReady_EmptyCategory_NeverReachesReady prove the CATEGORY/
+// RAFALE_DIFFICULTY dimensions of the same gate at the Ready()/Start()
+// level, not just the raw participantsConform() table above. Before #201
+// (>=1 threshold), this exact scenario silently reached READY and START —
+// confirmed by temporarily reverting the fix locally and observing this
+// test fail, exactly as the CDP's dispatch described.
+func TestRafaleReady_MultiModeOneTeam_NeverReachesReady(t *testing.T) {
+	e := NewEngine()
+	e.SetTeams(map[string]*Team{"red": {Name: "Team Red"}, "blue": {Name: "Team Blue"}})
+	seedRafaleReservoirBulk(t, e, 5, CategoryHistory, 1)
+	q := makeRafaleQuestion("rq1", string(RafaleModeChacunSonTour), CategoryHistory, 1)
+	e.Ready("rq1", q)
+
+	if err := e.SetRafaleParticipatingTeams([]string{"red"}); err != nil {
+		t.Fatalf("SetRafaleParticipatingTeams: %v", err)
+	}
+	if e.ParticipantsConform() {
+		t.Fatalf("precondition: exactly one team in CHACUN_SON_TOUR must not conform (#201 — needs >=2)")
+	}
+
+	e.ForceReady()
+	if state := e.GetState(); state.Phase != PhasePrepare {
+		t.Errorf("BUG: CHACUN_SON_TOUR with only ONE team selected reached %s, want stuck in PREPARE (#201)", state.Phase)
+	}
+
+	e.Start(30)
+	if state := e.GetState(); state.Phase == PhaseCountdown || state.Phase == PhaseStarted {
+		t.Errorf("BUG: Start() succeeded (phase=%s) for CHACUN_SON_TOUR with only ONE team selected — #201 requires >=2", state.Phase)
+	}
+
+	// Positive control: adding the second team must let the round reach
+	// READY and START normally.
+	if err := e.SetRafaleParticipatingTeams([]string{"red", "blue"}); err != nil {
+		t.Fatalf("SetRafaleParticipatingTeams (2 teams): %v", err)
+	}
+	if !e.ParticipantsConform() {
+		t.Fatalf("expected two teams in CHACUN_SON_TOUR to conform")
+	}
+	e.ForceReady()
+	if state := e.GetState(); state.Phase != PhaseReady {
+		t.Fatalf("expected READY with two teams selected, got %s", state.Phase)
+	}
+	e.Start(30)
+	if state := e.GetState(); state.Phase != PhaseCountdown {
+		t.Errorf("expected Start() to succeed with two teams selected, got phase=%s", state.Phase)
+	}
+	e.Stop()
 }
 
 // ---------------------------------------------------------------------------
@@ -349,7 +410,9 @@ func TestSetRafaleParticipatingTeams_ClearingInMultiMode_RevertsReadyToPrepare(t
 	if !e.AreAllTeamsReady() {
 		t.Fatal("setup: all active teams should be ready after every bumper answered")
 	}
-	if err := e.SetRafaleParticipatingTeams([]string{"red"}); err != nil {
+	// #201: a multi mode needs >=2 selected teams to conform — select BOTH
+	// available teams to reach READY in the first place.
+	if err := e.SetRafaleParticipatingTeams([]string{"red", "blue"}); err != nil {
 		t.Fatalf("SetRafaleParticipatingTeams failed: %v", err)
 	}
 	e.TransitionToReady()
@@ -364,11 +427,20 @@ func TestSetRafaleParticipatingTeams_ClearingInMultiMode_RevertsReadyToPrepare(t
 		t.Errorf("expected clearing teams in a multi mode to revert READY -> PREPARE, got %s", state.Phase)
 	}
 
+	// #201: a single team is no longer enough to re-promote — must stay in
+	// PREPARE until the >=2 threshold is met again.
 	if err := e.SetRafaleParticipatingTeams([]string{"blue"}); err != nil {
-		t.Fatalf("SetRafaleParticipatingTeams (reselect) failed: %v", err)
+		t.Fatalf("SetRafaleParticipatingTeams (reselect one) failed: %v", err)
+	}
+	if state := e.GetState(); state.Phase != PhasePrepare {
+		t.Errorf("expected a single reselected team (#201: needs >=2 in multi mode) to stay in PREPARE, got %s", state.Phase)
+	}
+
+	if err := e.SetRafaleParticipatingTeams([]string{"red", "blue"}); err != nil {
+		t.Fatalf("SetRafaleParticipatingTeams (reselect both) failed: %v", err)
 	}
 	if state := e.GetState(); state.Phase != PhaseReady {
-		t.Errorf("expected reselecting a team to re-promote PREPARE -> READY, got %s", state.Phase)
+		t.Errorf("expected reselecting both teams to re-promote PREPARE -> READY, got %s", state.Phase)
 	}
 }
 
@@ -831,18 +903,20 @@ func TestReady_RafaleReplay_ResetsStaleParticipatingTeams(t *testing.T) {
 		t.Errorf("expected Start() to be refused on replay without reselection, got phase=%s", state.Phase)
 	}
 
-	// Positive control: reselecting a team on the replay must still work
+	// Positive control: reselecting teams on the replay must still work
 	// normally. ForceReady() again rather than relying on
 	// SetRafaleParticipatingTeams's own reevaluatePrepareReadyUnsafe
 	// side effect — that path additionally requires areAllTeamsReadyUnsafe()
 	// (real bumpers marked ready), irrelevant to what this control is
-	// checking (participantsConform specifically).
-	if err := e.SetRafaleParticipatingTeams([]string{"blue"}); err != nil {
+	// checking (participantsConform specifically). #201: CHACUN_SON_TOUR
+	// needs >=2 teams — a single team ("blue" alone) would no longer
+	// satisfy the gate.
+	if err := e.SetRafaleParticipatingTeams([]string{"red", "blue"}); err != nil {
 		t.Fatalf("SetRafaleParticipatingTeams on replay: %v", err)
 	}
 	e.ForceReady()
 	if state := e.GetState(); state.Phase != PhaseReady {
-		t.Errorf("expected reselecting a team on replay to reach READY, got %s", state.Phase)
+		t.Errorf("expected reselecting both teams on replay to reach READY, got %s", state.Phase)
 	}
 }
 
