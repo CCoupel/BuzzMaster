@@ -202,7 +202,7 @@ export default function useWebSocket(endpoint = '/ws/admin') {
   // chaque lot ET immédiatement à la connexion d'un client admin si un job
   // est en cours (permet à AIGenerateModal de se ré-attacher après un
   // rechargement de page sans état à reconstruire côté client).
-  const [aiJob, setAiJob] = useState(null) // { jobId, state, batchesDone, batchesTotal, createdCount, skippedCount, errorCode, errorMessage, provider } | null
+  const [aiJob, setAiJob] = useState(null) // { jobId, state, batchesDone, batchesTotal, createdCount, skippedCount, errorCode, errorMessage, provider, target } | null
   // #167 (F1) — messagerie régie → animateurs, un seul emplacement, jamais
   // optimiste côté client (contrats/websocket-actions.md §"Messagerie
   // régie"). Diffusé aux clients admin ET anim uniquement ; reste à sa
@@ -811,6 +811,12 @@ export default function useWebSocket(endpoint = '/ws/admin') {
             // absent et non '' sur les autres états — || '' couvre les deux).
             errorMessage: MSG.ERROR_MESSAGE || '',
             provider: MSG.PROVIDER || '',
+            // #203 (v8.1.0) — TARGET distingue le chemin Quiz (générateur
+            // historique) du chemin Rafale (contract rafale-ai-generation.md
+            // §6) : additif/rétrocompatible, absent (serveur antérieur à
+            // #203) ⇒ "QUIZ". Consommé par AIJobModalShell pour ignorer tout
+            // job dont la cible diffère de la modale qui l'observe.
+            target: MSG.TARGET || 'QUIZ',
           })
         }
         break

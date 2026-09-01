@@ -30,6 +30,41 @@
   gap: var(--space-4);
 }
 
+/* En-tête de carte réservoir — point d'entrée génération IA (#203, v8.1.0,
+   tâche 12, maquette rafale-ai-generation-203.html §03). */
+.rafale-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+.rafale-card-title {
+  margin: 0;
+  font-size: 1.06rem;
+  font-weight: 600;
+  color: var(--text-primary, var(--gray-800));
+}
+
+/* Même motif que QuestionsPage.css .ai-generate-hint/.ai-generate-hint-dot
+   (bouton "Générer via IA" désactivé, aucune clé API configurée) — dupliqué
+   ici plutôt qu'importé : RafalePage.jsx n'a aucune raison de dépendre de
+   QuestionsPage.css. */
+.ai-generate-hint {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  font-size: 0.78rem;
+  color: var(--error, #ef4444);
+  margin: var(--space-2) 0 0 0;
+}
+
+.ai-generate-hint-dot {
+  font-size: 0.6rem;
+  line-height: 1;
+}
+
 /* Filtres */
 .rafale-filters {
   display: flex;
@@ -209,6 +244,21 @@
 .rafale-form .form-group textarea {
   resize: vertical;
   min-height: 70px;
+}
+
+/* Compteur de caractères (#203, v8.1.0, tâche 13) — mêmes plafonds que la
+   génération IA et que la validation serveur (contrat rafale-ai-generation.md
+   §5.1/§5.3) : 100 runes pour l'énoncé, 40 pour la réponse. */
+.rafale-char-count {
+  align-self: flex-end;
+  font-size: 0.76rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-secondary, var(--gray-500));
+}
+
+.rafale-char-count.over {
+  color: var(--error, #ef4444);
+  font-weight: 600;
 }
 
 .rafale-diff-row {
