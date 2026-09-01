@@ -129,6 +129,29 @@ type Engine struct {
 	rafaleUsed      map[string]bool            // "already asked this game" flag, keyed by question ID
 	rafaleUsedPath  string                     // path to data/config/rafale_used.json
 
+	// rafaleNext (#202, contract §13.4) — the pre-fetched "on deck" RAFALE
+	// question, drawn (and marked used) one question in ADVANCE so the
+	// question shown as "next" on /anim (RAFALE_ANSWER's own NEXT field) is
+	// GUARANTEED to be the one that actually becomes current at the
+	// following advance — never re-drawn independently (contract §13.1: a
+	// second draw path could disagree with this one on which question is
+	// next in the general case, showing the animateur a preview that never
+	// appears). Private, NEVER serialized, NEVER exposed via GameState
+	// (contract §13.2 — same "SerializeForWebClient serves /tv and /anim
+	// identically" reasoning as §2.3's own answer-confidentiality rule).
+	//
+	// Set by prefetchRafaleNextUnsafe (nil when the pool is empty or the
+	// cap is imminent — contract §13.5's NEXT=null case), consumed by
+	// advanceRafaleUnsafe (nil there is what actually ends the round, same
+	// timing as before #202 — see its own comment), and MUST be released
+	// (releaseRafaleNextUnsafe: un-marks it used, resets to nil) on every
+	// manche-ending path — stopUnsafe(), Ready()'s RAFALE reset block,
+	// InitGame() — or drawRafaleQuestionUnsafe's immediate "mark used on
+	// draw" (contract §7) silently burns one reservoir question per manche
+	// that was NEVER actually posed to anyone. See releaseRafaleNextUnsafe's
+	// own doc comment for the exhaustive list of call sites.
+	rafaleNext *RafaleQuestion
+
 	// rafaleQuestionTimer/rafaleQuestionStopCh (v8.0.0, #107, contract
 	// rafale.md §2.2) — the per-question ~3s countdown, DELIBERATELY its own
 	// pair of fields, never e.timer/e.stopCh. The global round timer
@@ -228,8 +251,17 @@ type Engine struct {
 	// (advanceRafaleUnsafe, whether from RAFALE_VALIDATE/INVALIDATE or the
 	// question timer's own expiry). The consumer (cmd/server/main.go) must
 	// broadcast it via RAFALE_ANSWER to admin+anim ONLY
-	// (BroadcastToTypes) — contract §2.3: the answer never rides GameState.
-	OnRafaleAnswer func(id, answer string)
+	// (BroadcastToTypes) — contract §2.3/§13.2: NEITHER the answer NOR the
+	// pre-fetched next question's statement ever ride GameState.
+	//
+	// next (#202, contract §13.3) — the pre-fetched question that will
+	// become current at the FOLLOWING advance, answer-free (RafaleCurrent,
+	// same shape as the current question's own GameState representation),
+	// nil when the pool is empty or the cap is imminent (contract §13.5).
+	// Guarded by the exact same admin+anim-only rule as answer above — see
+	// this field's own "never widen this recipient list" warning at its
+	// consumer (cmd/server/main.go, broadcastRafaleAnswer).
+	OnRafaleAnswer func(id, answer string, next *RafaleCurrent)
 	// OnRafaleQuestionTick fires every second the RAFALE question ticker is
 	// live and NOT expiring this tick — the consumer broadcasts RAFALE_TICK
 	// (lightweight, all clients, no full GameState re-emission — contract
@@ -319,6 +351,7 @@ func NewEngine() *Engine {
 		questionStatuses: make(map[string]QuestionStatus),
 		rafaleQuestions:  make(map[string]*RafaleQuestion),
 		rafaleUsed:       make(map[string]bool),
+		rafaleNext:       nil, // #202 — no pre-fetch until a RAFALE round actually starts; see its own field doc comment
 		stopCh:           make(chan struct{}),
 	}
 }
@@ -1153,7 +1186,20 @@ func (e *Engine) Ready(questionID string, question *Question) {
 	// RafaleCurrentTeamColor are the ONLY fields this fixes anything for
 	// (startRafaleRoundUnsafe never touches them, by design — team
 	// selection is meant to survive a countdown, not a full stopped round).
+	// #202 (contract §13.4): release any outstanding RAFALE pre-fetch on the
+	// same "manche ending/replayed" condition as the reset block below. In
+	// practice this is almost always a no-op by the time Ready() runs — the
+	// allowedPhases guard above already refuses Ready() while Phase==STARTED,
+	// so a previous RAFALE round can only reach this point via stopUnsafe()
+	// (Stop(), or advanceRafaleUnsafe's own round-ending branches), which
+	// already released it — kept anyway as defense-in-depth (plan risk R1:
+	// "un chemin oublié = érosion silencieuse du réservoir"), and it is the
+	// one path that matters for the "PREPARE/READY but never actually
+	// started" edge case (rafaleNext is never set before an actual START,
+	// so this is trivially a no-op there too, but costs nothing to call).
+	rafaleNextReleased := false
 	if isNewQuestion || rafaleRoundAlreadyPlayed {
+		rafaleNextReleased = e.releaseRafaleNextUnsafe()
 		e.state.RafaleSubPhase = RafaleSubPhaseNone
 		e.state.RafaleCurrentQuestion = RafaleCurrent{}
 		e.state.RafaleQuestionTime = 0
@@ -1174,6 +1220,10 @@ func (e *Engine) Ready(questionID string, question *Question) {
 	// Release lock BEFORE calling callback to avoid deadlock
 	callback := e.OnStateChange
 	e.mu.Unlock()
+
+	if rafaleNextReleased {
+		safeGo("SaveRafaleUsed", e.SaveRafaleUsed)
+	}
 
 	if callback != nil {
 		callback(PhasePrepare)
@@ -2085,11 +2135,17 @@ func (e *Engine) invalidateRandomWrongAnswer() (string, int) {
 // Stop ends the game round
 func (e *Engine) Stop() {
 	e.mu.Lock()
-	e.stopUnsafe()
+	released := e.stopUnsafe()
 
 	// Release lock BEFORE calling callback to avoid deadlock
 	callback := e.OnStateChange
 	e.mu.Unlock()
+
+	// #202: persist the released pre-fetch's rafaleUsed flag, if any — AFTER
+	// e.mu is released, same discipline as every other rafaleUsed mutation.
+	if released {
+		safeGo("SaveRafaleUsed", e.SaveRafaleUsed)
+	}
 
 	if callback != nil {
 		callback(PhaseStopped)
@@ -2104,7 +2160,13 @@ func (e *Engine) Stop() {
 // without releasing and re-acquiring e.mu mid-transition — which would open
 // a window for a second concurrent action (another VALIDATE, a manual STOP)
 // to interleave and observe a half-transitioned state.
-func (e *Engine) stopUnsafe() {
+//
+// Returns true iff a RAFALE pre-fetch was released (#202,
+// releaseRafaleNextUnsafe) — every caller of stopUnsafe (Stop() above, and
+// advanceRafaleUnsafe's own two round-ending branches) must persist
+// rafaleUsed via safeGo("SaveRafaleUsed", ...) AFTER its own e.mu.Unlock()
+// when this is true.
+func (e *Engine) stopUnsafe() bool {
 	// Signal countdown timer goroutine to stop (if running)
 	if e.countdownStopCh != nil {
 		select {
@@ -2152,12 +2214,25 @@ func (e *Engine) stopUnsafe() {
 	// == QUESTION so a round that already reached ROUND_END by another path
 	// (e.g. startRafaleRoundUnsafe's own pool-empty-at-start branch, which
 	// sets ROUND_END itself before calling Stop()) isn't touched twice.
-	if e.state.Question != nil && e.state.Question.Type == QuestionTypeRafale && e.state.RafaleSubPhase == RafaleSubPhaseQuestion {
-		e.stopRafaleQuestionTimerUnsafe()
-		e.state.RafaleSubPhase = RafaleSubPhaseRoundEnd
+	//
+	// releaseRafaleNextUnsafe (#202) below is DELIBERATELY unconditional on
+	// RafaleSubPhase (unlike the ticker-stop/ROUND_END transition just
+	// above) — a pre-fetch can be outstanding even once RafaleSubPhase has
+	// already moved to ROUND_END by another path, and every manche-ending
+	// call to stopUnsafe must release it or leak a used-flag (contract
+	// §13.4, plan risk R1). Guarded only on the current question actually
+	// being RAFALE, same as the ticker/ROUND_END block.
+	released := false
+	if e.state.Question != nil && e.state.Question.Type == QuestionTypeRafale {
+		released = e.releaseRafaleNextUnsafe()
+		if e.state.RafaleSubPhase == RafaleSubPhaseQuestion {
+			e.stopRafaleQuestionTimerUnsafe()
+			e.state.RafaleSubPhase = RafaleSubPhaseRoundEnd
+		}
 	}
 
 	log.Printf("[Engine] Game stopped")
+	return released
 }
 
 // ---------------------------------------------------------------------------
@@ -2320,12 +2395,29 @@ func (e *Engine) processRafaleQuestionTick() rafaleQuestionTickResult {
 type rafaleAdvanceResult struct {
 	guardFailed bool // not in an active RAFALE question — caller does nothing (ErrRafaleNotInQuestion)
 	roundEnded  bool // pool exhausted or RAFALE_MAX_QUESTIONS reached — RafaleSubPhase is now ROUND_END, Phase is now STOPPED (stopUnsafe already ran)
+	// releasedRafaleNext (#202) — set when roundEnded AND stopUnsafe()
+	// actually released an outstanding pre-fetch; the unlocked caller
+	// (fireRafaleAdvanceCallbacks) must then persist rafaleUsed. Almost
+	// always false in practice (by the time either roundEnded branch below
+	// fires, e.rafaleNext is already nil — prefetchRafaleNextUnsafe itself
+	// refuses to prefetch once the cap is imminent, and the "consume nil"
+	// branch's very condition IS e.rafaleNext==nil) — kept anyway rather
+	// than assumed, so a future change to either guard can't silently
+	// reintroduce a leak here without a compiler-visible reminder.
+	releasedRafaleNext bool
 	// nextQuestionID/nextAnswer/nextQuestionTime are set when !roundEnded —
 	// the caller must broadcast RAFALE_ANSWER and (re)start the question
-	// ticker.
+	// ticker. nextQuestionID/nextAnswer are the question THIS advance moved
+	// TO (formerly e.rafaleNext, now RafaleCurrentQuestion) — do not
+	// confuse with next below, the FOLLOWING one.
 	nextQuestionID   string
 	nextAnswer       string
 	nextQuestionTime int
+	// next (#202, contract §13.3) — the freshly pre-fetched question that
+	// will become current at the FOLLOWING advance (answer-free), nil when
+	// the pool is empty or the cap is imminent (contract §13.5). Forwarded
+	// to OnRafaleAnswer's own next parameter — see its doc comment.
+	next *RafaleCurrent
 }
 
 // advanceRafaleUnsafe judges the current RAFALE question (correct==true for
@@ -2423,33 +2515,43 @@ func (e *Engine) advanceRafaleUnsafe(correct bool) rafaleAdvanceResult {
 		}
 	}
 
-	// Hard cap (contract §7.2), default/max 100.
-	maxQuestions := 100
-	if e.state.Question.RafaleMaxQuestions > 0 && e.state.Question.RafaleMaxQuestions < 100 {
-		maxQuestions = e.state.Question.RafaleMaxQuestions
-	}
+	// Hard cap (contract §7.2), default/max 100. Factored into
+	// rafaleMaxQuestionsUnsafe (#202) so prefetchRafaleNextUnsafe shares the
+	// exact same threshold.
+	maxQuestions := rafaleMaxQuestionsUnsafe(e.state.Question)
 	if e.state.RafaleAskedCount >= maxQuestions {
 		log.Printf("[Engine] RAFALE: RAFALE_MAX_QUESTIONS (%d) reached, ending round", maxQuestions)
-		e.stopUnsafe()
-		return rafaleAdvanceResult{roundEnded: true}
+		released := e.stopUnsafe()
+		return rafaleAdvanceResult{roundEnded: true, releasedRafaleNext: released}
 	}
 
-	drawn, err := e.drawRafaleQuestionUnsafe(string(e.state.Question.Category), e.state.Question.RafaleDifficulty)
-	if err != nil {
-		// Pool exhausted mid-round (contract §7.1) — never reproposes a
-		// question already seen; ends the round instead.
+	// #202 (contract §13.1/§13.4): CONSUME the pre-fetched question instead
+	// of drawing a new one here — startRafaleRoundUnsafe or this same
+	// function's own previous iteration already drew it into e.rafaleNext
+	// via prefetchRafaleNextUnsafe, specifically so the question shown as
+	// "next" on /anim is EXACTLY the one that becomes current below (a
+	// second, independent draw here could disagree in the general case).
+	// e.rafaleNext == nil means the pool was already empty, OR the cap was
+	// imminent, at the LAST prefetch — same "round ends here" outcome as
+	// the pre-#202 "drew and got ErrRafalePoolEmpty" path, just detected
+	// one step earlier (at prefetch time) instead of by drawing again now.
+	if e.rafaleNext == nil {
 		log.Printf("[Engine] RAFALE: pool exhausted mid-round, ending round")
 		e.state.RafaleExhausted = true
-		e.stopUnsafe()
-		return rafaleAdvanceResult{roundEnded: true}
+		released := e.stopUnsafe()
+		return rafaleAdvanceResult{roundEnded: true, releasedRafaleNext: released}
 	}
 
+	drawn := e.rafaleNext
+	e.rafaleNext = nil // consumed — prefetchRafaleNextUnsafe below draws the FOLLOWING one fresh
 	e.state.RafaleCurrentQuestion = RafaleCurrent{
 		ID: drawn.ID, Question: drawn.Question,
 		Category: string(drawn.Category), Difficulty: drawn.Difficulty,
 	}
 	e.state.RafaleAskedCount++
-	e.state.RafalePoolRemaining = len(e.rafalePoolUnsafe(string(e.state.Question.Category), e.state.Question.RafaleDifficulty))
+
+	e.prefetchRafaleNextUnsafe()
+	e.refreshRafalePoolRemainingUnsafe()
 
 	questionTime := e.state.Question.RafaleQuestionTime
 	if questionTime <= 0 {
@@ -2458,6 +2560,7 @@ func (e *Engine) advanceRafaleUnsafe(correct bool) rafaleAdvanceResult {
 
 	return rafaleAdvanceResult{
 		nextQuestionID: drawn.ID, nextAnswer: drawn.Answer, nextQuestionTime: questionTime,
+		next: rafaleNextPreview(e.rafaleNext),
 	}
 }
 
@@ -2487,13 +2590,21 @@ func (e *Engine) rotateRafaleTeam() {
 // look identical on the wire too). Must be called with e.mu NOT held.
 func (e *Engine) fireRafaleAdvanceCallbacks(result rafaleAdvanceResult) {
 	if result.roundEnded {
+		// #202: persist the released pre-fetch's rafaleUsed flag, if any —
+		// AFTER e.mu was released by the caller (RafaleValidate/
+		// RafaleInvalidate/the question-timer goroutine), matching the
+		// "never save while still locked" discipline of every other
+		// rafaleUsed mutation in this file.
+		if result.releasedRafaleNext {
+			safeGo("SaveRafaleUsed", e.SaveRafaleUsed)
+		}
 		if e.OnStateChange != nil {
 			e.OnStateChange(PhaseStopped)
 		}
 		return
 	}
 	if e.OnRafaleAnswer != nil {
-		e.OnRafaleAnswer(result.nextQuestionID, result.nextAnswer)
+		e.OnRafaleAnswer(result.nextQuestionID, result.nextAnswer, result.next)
 	}
 	e.StartRafaleQuestionTimer(result.nextQuestionTime)
 	// #199 task 36: LEDs are refreshed on EVERY advance, not just an actual
@@ -2557,6 +2668,11 @@ type rafaleRoundStartResult struct {
 	questionID   string
 	answer       string
 	questionTime int
+	// next (#202, contract §13.3) — the pre-fetched question that will
+	// become current at the FIRST advance (answer-free), nil when the pool
+	// is empty after the first draw or the cap is imminent (contract
+	// §13.5). Forwarded to OnRafaleAnswer's own next parameter.
+	next *RafaleCurrent
 }
 
 // startRafaleRoundUnsafe initializes a fresh RAFALE round: resets the
@@ -2594,7 +2710,12 @@ func (e *Engine) startRafaleRoundUnsafe() rafaleRoundStartResult {
 		Category: string(drawn.Category), Difficulty: drawn.Difficulty,
 	}
 	e.state.RafaleAskedCount = 1
-	e.state.RafalePoolRemaining = len(e.rafalePoolUnsafe(string(e.state.Question.Category), e.state.Question.RafaleDifficulty))
+
+	// #202 (contract §13.4): pre-fetch the SECOND question right away, so
+	// it's ready to be consumed as-is by the first advanceRafaleUnsafe call
+	// — see prefetchRafaleNextUnsafe's own doc comment.
+	e.prefetchRafaleNextUnsafe()
+	e.refreshRafalePoolRemainingUnsafe()
 
 	questionTime := e.state.Question.RafaleQuestionTime
 	if questionTime <= 0 {
@@ -2603,6 +2724,7 @@ func (e *Engine) startRafaleRoundUnsafe() rafaleRoundStartResult {
 
 	return rafaleRoundStartResult{
 		isRafale: true, questionID: drawn.ID, answer: drawn.Answer, questionTime: questionTime,
+		next: rafaleNextPreview(e.rafaleNext),
 	}
 }
 
@@ -2626,7 +2748,7 @@ func (e *Engine) finishRafaleRoundStart(result rafaleRoundStartResult) {
 		return
 	}
 	if e.OnRafaleAnswer != nil {
-		e.OnRafaleAnswer(result.questionID, result.answer)
+		e.OnRafaleAnswer(result.questionID, result.answer, result.next)
 	}
 	e.StartRafaleQuestionTimer(result.questionTime)
 	// #199 task 36 — initial LED grid for the round (active team, if any
@@ -3100,6 +3222,16 @@ func (e *Engine) InitGame() []string {
 
 	// Reset ARDOISE answers (v5.6.0)
 	e.state.ArdoiseAnswers = make(map[string]ArdoiseAnswer)
+
+	// Release any outstanding RAFALE pre-fetch (#202, contract §13.4)
+	// BEFORE wiping rafaleUsed wholesale below — releaseRafaleNextUnsafe's
+	// own delete(rafaleUsed, id) becomes moot the instant the map is
+	// replaced, but e.rafaleNext ITSELF must still be nilled here, or a
+	// stale pointer from the previous game would be silently consumed by
+	// this new game's own first advance. Return value ignored: the
+	// unconditional safeGo("SaveRafaleUsed", ...) below already persists
+	// the (now-empty) map regardless of whether anything was "released".
+	e.releaseRafaleNextUnsafe()
 
 	// Reset RAFALE "already used" flags (#197, contract §3.2) — a fresh
 	// game must be able to draw the whole reservoir again. The reservoir
@@ -4044,6 +4176,148 @@ func (e *Engine) drawRafaleQuestionUnsafe(category string, difficulty int) (*Raf
 	e.rafaleUsed[drawn.ID] = true
 
 	return &drawn, nil
+}
+
+// rafaleMaxQuestionsUnsafe (#202) resolves the RAFALE_MAX_QUESTIONS hard cap
+// (contract §7.2 — default/max 100) for the given round-config question.
+// Factored out of advanceRafaleUnsafe's own inline computation so
+// prefetchRafaleNextUnsafe can share the EXACT same threshold — #202 would
+// otherwise have introduced a third, independent computation site; #107's
+// own CATEGORY bug came from exactly this shape of overlooked duplicate
+// site. Pure function, no locking; question must be non-nil.
+func rafaleMaxQuestionsUnsafe(question *Question) int {
+	maxQuestions := 100
+	if question.RafaleMaxQuestions > 0 && question.RafaleMaxQuestions < 100 {
+		maxQuestions = question.RafaleMaxQuestions
+	}
+	return maxQuestions
+}
+
+// rafaleNextPreview (#202, contract §13.3) converts a pre-fetched
+// *RafaleQuestion (e.rafaleNext) into the answer-free *RafaleCurrent shape
+// broadcast as RAFALE_ANSWER's own NEXT field — nil in, nil out (contract
+// §13.5: no pool-remaining question / cap imminent). Pure function, no
+// locking.
+func rafaleNextPreview(q *RafaleQuestion) *RafaleCurrent {
+	if q == nil {
+		return nil
+	}
+	return &RafaleCurrent{ID: q.ID, Question: q.Question, Category: string(q.Category), Difficulty: q.Difficulty}
+}
+
+// prefetchRafaleNextUnsafe (#202, contract §13.1/§13.4) draws the question
+// that will become current at the NEXT advance into e.rafaleNext ("on
+// deck"), to be CONSUMED as-is by advanceRafaleUnsafe rather than drawn
+// independently — a second, non-consuming draw path could disagree with
+// this one on which question comes next in the general case, showing the
+// animateur a "next" preview that never actually appears (contract §13.1's
+// reasoning for rejecting that design outright).
+//
+// Must be called with e.mu held (write), and ONLY once e.state.Question is
+// the live RAFALE round-config question AND e.state.RafaleAskedCount
+// already reflects the question just asked (both call sites —
+// startRafaleRoundUnsafe right after AskedCount=1, advanceRafaleUnsafe
+// right after AskedCount++ — satisfy this). Assumes e.rafaleNext is already
+// nil on entry (true at both call sites: startRafaleRoundUnsafe never set
+// it before, advanceRafaleUnsafe nils it at the point of consuming the
+// previous value) — does NOT release a pre-existing value itself, so
+// calling this out of turn would leak a used-flag; see
+// releaseRafaleNextUnsafe's own doc comment for the invariant this relies
+// on.
+//
+// No-op (e.rafaleNext left nil) when RafaleAskedCount has already reached
+// the cap (rafaleMaxQuestionsUnsafe) — i.e. the question JUST asked (the
+// one AskedCount was bumped for, at either call site) was the LAST one the
+// cap allows, so prefetching one more would need releasing again for zero
+// benefit, and NEXT must read null ("dernière question du réservoir",
+// contract §13.5) rather than a phantom draw.
+//
+// Deliberately `>=`, NOT `AskedCount+1 >= cap`: with e.g. cap=3, the round
+// must still ask a 3rd question (AskedCount goes 1→2→3, matching
+// advanceRafaleUnsafe's own hard-cap guard `AskedCount >= maxQuestions`
+// checked BEFORE consuming the next one) — an off-by-one `+1` here would
+// skip prefetching that legitimate 3rd question right after the 2nd one is
+// asked (AskedCount==2), making the NEXT advance see a nil e.rafaleNext and
+// end the round ONE question short of the configured cap (caught by
+// TestRafaleNext_MaxQuestionsCapUnchanged during development — the plan's
+// own "+1" wording turned out to be off by one against the pre-existing
+// hard-cap check's semantics; this comment documents the deviation).
+//
+// Never returns an error: a pool-empty draw here just leaves e.rafaleNext
+// nil too (same contract §13.5 case) — it is advanceRafaleUnsafe's own
+// CONSUMPTION of a nil e.rafaleNext that actually ends the round (contract
+// §13.4), not this function.
+func (e *Engine) prefetchRafaleNextUnsafe() {
+	if e.state.Question == nil || e.state.Question.Type != QuestionTypeRafale {
+		return
+	}
+	if e.state.RafaleAskedCount >= rafaleMaxQuestionsUnsafe(e.state.Question) {
+		return
+	}
+	drawn, err := e.drawRafaleQuestionUnsafe(string(e.state.Question.Category), e.state.Question.RafaleDifficulty)
+	if err != nil {
+		return // pool empty — e.rafaleNext stays nil, contract §13.5
+	}
+	e.rafaleNext = drawn
+}
+
+// releaseRafaleNextUnsafe (#202, contract §13.4) releases the pre-fetched
+// "on deck" RAFALE question, if any: un-marks it used in e.rafaleUsed and
+// resets e.rafaleNext to nil. Returns true iff something was actually
+// released — the caller MUST THEN persist rafaleUsed
+// (safeGo("SaveRafaleUsed", e.SaveRafaleUsed)) AFTER releasing e.mu, never
+// while still holding it (same async-persist discipline as every other
+// rafaleUsed mutation in this file, e.g. DrawRafaleQuestion).
+//
+// Call sites — EVERY path that can end a RAFALE manche while a pre-fetch
+// might be outstanding (recensed exhaustively, #202 plan risk R1):
+//   - stopUnsafe() — manual STOP, the global round timer's own expiry
+//     (both reach stopUnsafe via the public Stop()), AND the
+//     RAFALE_MAX_QUESTIONS-reached / pool-exhausted-at-consumption branches
+//     inside advanceRafaleUnsafe (which call stopUnsafe directly, already
+//     e.mu-locked) — guarded on the current question being a RAFALE
+//     question, unconditional on RafaleSubPhase (a pre-fetch can be
+//     outstanding even once RafaleSubPhase has already moved to
+//     ROUND_END by another path).
+//   - Ready()'s RAFALE reset block — a manche replayed (same question ID)
+//     or genuinely new; mirrors RafaleParticipatingTeams/RafaleSubPhase's
+//     own reset there.
+//   - InitGame() — a fresh game; e.rafaleUsed is about to be wiped
+//     entirely anyway (fresh reservoir), but e.rafaleNext ITSELF must still
+//     be nilled or a stale pointer would be silently consumed by the next
+//     game's own first advance.
+//
+// Without this, drawRafaleQuestionUnsafe's "mark used on draw" (contract
+// §7, immediate — not deferred until the question is actually asked)
+// silently burns one reservoir question per manche that was pre-fetched
+// but never posed to anyone — an ever-growing, invisible erosion of the
+// reservoir, worst for small ones. Must be called with e.mu held (write).
+func (e *Engine) releaseRafaleNextUnsafe() bool {
+	if e.rafaleNext == nil {
+		return false
+	}
+	delete(e.rafaleUsed, e.rafaleNext.ID)
+	e.rafaleNext = nil
+	return true
+}
+
+// refreshRafalePoolRemainingUnsafe (#202, contract §13.4) sets
+// RAFALE_POOL_REMAINING to the count of reservoir questions not yet asked
+// NOR already shown as "on deck" — the pre-fetched e.rafaleNext, if any,
+// counts as still-to-come from a client's point of view, so it is included
+// (+1) or the field would read one lower than before #202 at the same
+// manche position (a silent display regression, contract §13.4's own
+// worked formula). Single source of truth for both call sites
+// (startRafaleRoundUnsafe, advanceRafaleUnsafe) that used to compute this
+// inline and independently — again, exactly #107's own CATEGORY-bug shape
+// of overlooked duplicate site. Must be called with e.mu held (write);
+// e.state.Question must be the live RAFALE round-config question.
+func (e *Engine) refreshRafalePoolRemainingUnsafe() {
+	count := len(e.rafalePoolUnsafe(string(e.state.Question.Category), e.state.Question.RafaleDifficulty))
+	if e.rafaleNext != nil {
+		count++
+	}
+	e.state.RafalePoolRemaining = count
 }
 
 // FlipMemoryCard handles flipping a Memory card with game logic
