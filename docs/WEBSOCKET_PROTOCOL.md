@@ -1400,19 +1400,26 @@ L'élargissement de la liste blanche pour permettre l'entrée **directe** des jo
 
 | Action | Destinataires | Payload | Description |
 |--------|---|---------|-------------|
-| `RAFALE_ANSWER` | **admin, anim uniquement** | `{"ID": "r-001", "ANSWER": "Rome"}` | Réponse attendue (jamais TV/VPlayer) |
+| `RAFALE_ANSWER` | **admin, anim uniquement** | `{"ID": "r-001", "ANSWER": "Rome", "NEXT": {...}}` | Réponse attendue + aperçu prochaine question (jamais TV/VPlayer) |
 | `RAFALE_TICK` | tous | `{"QUESTION_TIME": 2500}` | Décompte timer question (µs) |
 | `UPDATE_TIMER` | tous | `{"CURRENT_TIME": 95000}` | Décompte timer manche (inchangée, réutilisée) |
 
-**Fuite zéro garantie** : `RAFALE_ANSWER` ne transite **jamais** via `GameState` — diffusion par site d'appel étroit (`broadcastRafaleAnswer`, patron `BroadcastToTypes(msg, ClientTypeAdmin, ClientTypeAnim)`)
+**Fuite zéro garantie** : `RAFALE_ANSWER` ne transite **jamais** via `GameState` — diffusion par site d'appel étroit (`broadcastRafaleAnswer`, patron `BroadcastToTypes(msg, ClientTypeAdmin, ClientTypeAnim)`). Champ `NEXT` **jamais** transmis à `/tv` ou `/player`, même par futur copier-colle.
+
+**Champ NEXT — pré-tirage de la question suivante** (v8.0.0, #202) :
+- **Présence** : `NEXT` est toujours présent dans `RAFALE_ANSWER`, même si `null` (information utile : pas de question suivante disponible, pool épuisé ou plafond atteint).
+- **Contenu** : `NEXT = {"ID": "r-002", "QUESTION": "Capitale de la France ?", "CATEGORY": "géo", "DIFFICULTY": 2}` — **aucun champ `ANSWER`**, par sécurité (même régime que la réponse courante).
+- **Destinataires** : `NEXT` ne quitte **jamais** les clients admin+anim — rejet précoce à la sérialisation pour `/tv` et `/player`.
+- **Garantie moteur** : la question pré-tirée est réellement consommée au tick suivant (pas un aperçu jetable). Libération exhaustive en fin de manche ou STOP (flag `used` remis à disposition).
 
 **Example JSON** :
 ```json
-{ "ACTION": "RAFALE_ANSWER", "MSG": {"ID": "r-001", "ANSWER": "Rome"} }
+{ "ACTION": "RAFALE_ANSWER", "MSG": {"ID": "r-001", "ANSWER": "Rome", "NEXT": {"ID": "r-002", "QUESTION": "Capitale de la France ?", "CATEGORY": "géo", "DIFFICULTY": 2}} }
+{ "ACTION": "RAFALE_ANSWER", "MSG": {"ID": "r-005", "ANSWER": "Paris", "NEXT": null} }
 { "ACTION": "RAFALE_TICK", "MSG": {"QUESTION_TIME": 2500} }
 ```
 
-**Invariant de sérialisation** : `RAFALE_ANSWER` n'est émise que par callback dédié, jamais incluse dans une diffusion globale `UPDATE`.
+**Invariant de sérialisation** : `RAFALE_ANSWER` n'est émise que par callback dédié, jamais incluse dans une diffusion globale `UPDATE`. Deux champs sensibles protégés : `ANSWER` et `NEXT.QUESTION` (jamais aux clients non-admin).
 
 ---
 
