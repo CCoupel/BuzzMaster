@@ -72,15 +72,35 @@ describe('participantsConform — table B1 (miroir engine.go)', () => {
     )
   })
 
-  describe('MEMOTION (au moins une équipe, quel que soit MOTION_MODE — pas de branche dédiée)', () => {
+  describe('MEMOTION (v8.0.0, #201 suivi, miroir engine.go participantsConform SHA d3c6fb20 — durci pour être symétrique à MEMORY, remplace "au moins une équipe" sans distinction SOLO/multi)', () => {
     it.each([
       [0, false],
       [1, true],
-      [2, true],
-    ])('%i équipe(s) → conforme=%s', (count, expected) => {
+      [2, false],
+      [3, false],
+    ])('MOTION_MODE vide (défaut SOLO), %i équipe(s) → conforme=%s', (count, expected) => {
       const participating = Array.from({ length: count }, (_, i) => `T${i}`)
       expect(participantsConform({ TYPE: 'MEMOTION' }, participating)).toBe(expected)
     })
+
+    it.each([
+      [0, false],
+      [1, true],
+      [2, false],
+    ])('MOTION_MODE explicite "SOLO", %i équipe(s) → conforme=%s', (count, expected) => {
+      const participating = Array.from({ length: count }, (_, i) => `T${i}`)
+      expect(participantsConform({ TYPE: 'MEMOTION', MOTION_MODE: 'SOLO' }, participating)).toBe(expected)
+    })
+
+    it.each(['CHACUN_SON_TOUR', 'TANT_QUE_JE_GAGNE'])(
+      'mode multi %s : 0 équipe → non conforme, 1 → non conforme, 2 → conforme, 3 → conforme',
+      (mode) => {
+        expect(participantsConform({ TYPE: 'MEMOTION', MOTION_MODE: mode }, [])).toBe(false)
+        expect(participantsConform({ TYPE: 'MEMOTION', MOTION_MODE: mode }, ['A'])).toBe(false)
+        expect(participantsConform({ TYPE: 'MEMOTION', MOTION_MODE: mode }, ['A', 'B'])).toBe(true)
+        expect(participantsConform({ TYPE: 'MEMOTION', MOTION_MODE: mode }, ['A', 'B', 'C'])).toBe(true)
+      }
+    )
   })
 
   describe('RAFALE (v8.0.0, #201, miroir engine.go participantsConform SHA e2917395/d3c6fb20 — durci pour être symétrique à MEMORY, remplace la règle #199 SHA 7b8659d5)', () => {
@@ -183,12 +203,20 @@ describe('prepareWaitReason — orchestration (phase, buzzers, conformité)', ()
       expect(prepareWaitReason('PREPARE', question, activeTeams, gameState, { short: true })).toBe('2 équipes')
     })
 
-    it('MEMOTION, aucune équipe sélectionnée → "sélectionnez au moins une équipe" (complet) / "1 équipe" (court)', () => {
+    it('MEMOTION SOLO (défaut), aucune équipe sélectionnée → "sélectionnez une équipe" (complet) / "1 équipe" (court) — #201 suivi, avant #201 "sélectionnez au moins une équipe"', () => {
       const activeTeams = [readyTeam('A')]
       const gameState = { MEMOTION_PARTICIPATING_TEAMS: [] }
       const question = { TYPE: 'MEMOTION' }
-      expect(prepareWaitReason('PREPARE', question, activeTeams, gameState)).toBe('sélectionnez au moins une équipe')
+      expect(prepareWaitReason('PREPARE', question, activeTeams, gameState)).toBe('sélectionnez une équipe')
       expect(prepareWaitReason('PREPARE', question, activeTeams, gameState, { short: true })).toBe('1 équipe')
+    })
+
+    it('MEMOTION multi (CHACUN_SON_TOUR), une seule équipe sélectionnée → "sélectionnez au moins deux équipes" (complet) / "2 équipes" (court) — #201 suivi, avant #201 une seule équipe suffisait', () => {
+      const activeTeams = [readyTeam('A'), readyTeam('B')]
+      const gameState = { MEMOTION_PARTICIPATING_TEAMS: ['A'] }
+      const question = { TYPE: 'MEMOTION', MOTION_MODE: 'CHACUN_SON_TOUR' }
+      expect(prepareWaitReason('PREPARE', question, activeTeams, gameState)).toBe('sélectionnez au moins deux équipes')
+      expect(prepareWaitReason('PREPARE', question, activeTeams, gameState, { short: true })).toBe('2 équipes')
     })
 
     it('RAFALE SOLO, aucune équipe sélectionnée → "sélectionnez une équipe" (complet) / "1 équipe" (court) — #201, avant #201 toujours conforme donc null', () => {
@@ -230,7 +258,7 @@ describe('prepareWaitReason — orchestration (phase, buzzers, conformité)', ()
         MEMOTION_PARTICIPATING_TEAMS: [],
       }
       expect(prepareWaitReason('PREPARE', { TYPE: 'MEMOTION' }, activeTeams, gameState)).toBe(
-        'sélectionnez au moins une équipe'
+        'sélectionnez une équipe'
       )
     })
   })

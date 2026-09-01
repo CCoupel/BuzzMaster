@@ -17,7 +17,12 @@
  *     active) — toujours conforme ici, aucun changement de comportement.
  *   - MEMORY SOLO           : exactement une équipe sélectionnée.
  *   - MEMORY multi          : au moins deux équipes sélectionnées.
- *   - MEMOTION              : au moins une équipe sélectionnée.
+ *   - MEMOTION SOLO         : exactement une équipe sélectionnée (v8.0.0,
+ *     #201 suivi — dev-backend SHA d3c6fb20, engine.go participantsConform
+ *     durci pour être symétrique à MEMORY SOLO ; avant #201 : au moins une
+ *     équipe, sans distinction SOLO/multi).
+ *   - MEMOTION multi        : au moins deux équipes sélectionnées (#201
+ *     suivi, mêmes SHA ci-dessus).
  *   - RAFALE SOLO           : exactement une équipe sélectionnée (v8.0.0,
  *     #201, retour QUALIF — dev-backend SHA e2917395/d3c6fb20, engine.go
  *     participantsConform durci pour être symétrique à MEMORY SOLO ;
@@ -38,9 +43,9 @@ export function isTeamReady(team) {
 }
 
 /**
- * @param {{TYPE?: string, MEMORY_MODE?: string}|null} question
- * @param {string[]} participating - sélection courante (MEMORY_PARTICIPATING_TEAMS
- *   ou MEMOTION_PARTICIPATING_TEAMS selon le type)
+ * @param {{TYPE?: string, MEMORY_MODE?: string, MOTION_MODE?: string, RAFALE_MODE?: string}|null} question
+ * @param {string[]} participating - sélection courante (MEMORY_PARTICIPATING_TEAMS,
+ *   MEMOTION_PARTICIPATING_TEAMS ou RAFALE_PARTICIPATING_TEAMS selon le type)
  */
 export function participantsConform(question, participating) {
   const type = question?.TYPE
@@ -50,7 +55,8 @@ export function participantsConform(question, participating) {
     return isSolo ? count === 1 : count >= 2
   }
   if (type === 'MEMOTION') {
-    return count >= 1
+    const isSolo = !question.MOTION_MODE || question.MOTION_MODE === 'SOLO'
+    return isSolo ? count === 1 : count >= 2
   }
   if (type === 'RAFALE') {
     const isSolo = !question.RAFALE_MODE || question.RAFALE_MODE === 'SOLO'
@@ -72,7 +78,9 @@ function participantsReasonLabel(question, { short } = {}) {
     return isSolo ? 'sélectionnez une équipe' : 'sélectionnez au moins deux équipes'
   }
   if (type === 'MEMOTION') {
-    return short ? '1 équipe' : 'sélectionnez au moins une équipe'
+    const isSolo = !question.MOTION_MODE || question.MOTION_MODE === 'SOLO'
+    if (short) return isSolo ? '1 équipe' : '2 équipes'
+    return isSolo ? 'sélectionnez une équipe' : 'sélectionnez au moins deux équipes'
   }
   if (type === 'RAFALE') {
     const isSolo = !question.RAFALE_MODE || question.RAFALE_MODE === 'SOLO'
