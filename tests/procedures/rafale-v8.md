@@ -45,7 +45,7 @@ question, décompte du chrono de manche, fin de manche par expiration du timer.
 
 | Étape | Action | Résultat Attendu | Résultat Obtenu | OK ? |
 |-------|--------|-----------------|----------------|------|
-| 1 | Configurer la manche : mode `SOLO`, 1 catégorie, 1 difficulté, DÉMARRER | Première question posée à l'oral côté anim (texte + réponse attendue visibles UNIQUEMENT sur `/anim`), double timer visible sur `/tv` et `/anim` (manche + question) | | |
+| 1 | Configurer la manche : mode `SOLO`, 1 catégorie, 1 difficulté, sélectionner 1 équipe participante (**#201** : SOLO exige désormais exactement 1 équipe, comme MEMORY — cf. `tests/procedures/rafale-memotion-team-threshold-201.md` pour le détail de ce changement), DÉMARRER | Première question posée à l'oral côté anim (texte + réponse attendue visibles UNIQUEMENT sur `/anim`), double timer visible sur `/tv` et `/anim` (manche + question) | | |
 | 2 | Répondre correctement (dire la réponse), animateur clique RÉPONSE VALIDE | Question suivante enchaîne automatiquement, chrono question repart, compteur de l'équipe +1 (visible côté anim/admin, PAS de point réel attribué) | | |
 | 3 | Répondre incorrectement, cliquer RÉPONSE INVALIDE | Question suivante enchaîne, compteur inchangé (SOLO n'a pas de pénalité, cf. contrat §6.1) | | |
 | 4 | Laisser le chrono QUESTION descendre à 0 sans répondre | Comportement identique à une réponse invalide (question suivante enchaîne automatiquement, contrat §6.1) | | |
