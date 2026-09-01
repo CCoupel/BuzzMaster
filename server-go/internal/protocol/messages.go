@@ -505,6 +505,27 @@ type SetVirtualPlayerLimitPayload struct {
 // same pattern as MotionSetTeamsPayload above.
 type RafaleSetTeamsPayload = MemorySetTeamsPayload
 
+// RafaleNextPayload carries the question suite's statement WITHOUT its
+// answer (#202, contract §13.3) — same shape as GameState's own
+// RafaleCurrent (models.go), a distinct type here (rather than reusing
+// RafaleCurrent's JSON tags directly) only so this file's payload types
+// stay self-contained and independently documented, same convention as
+// every other *Payload in this file.
+//
+// Deliberately has NO Answer field: the next question's answer is not
+// needed before it becomes current (it arrives on the FOLLOWING
+// RAFALE_ANSWER broadcast, at the instant it does), transmitting it now
+// would double the leak surface this whole payload is already restricted
+// to guard (see RafaleAnswerPayload's own comment), and displaying it would
+// work against the "SUIVANTE" zone's entire point of being unobtrusive
+// (contract §13.6).
+type RafaleNextPayload struct {
+	ID         string `json:"ID"`
+	Question   string `json:"QUESTION"`
+	Category   string `json:"CATEGORY"`
+	Difficulty int    `json:"DIFFICULTY"`
+}
+
 // RafaleAnswerPayload for the RAFALE_ANSWER action (Server → admin+anim
 // only, contract §5.2/§2.3) — the current RAFALE question's expected
 // answer. Deliberately its own dedicated action rather than a GameState
@@ -512,9 +533,19 @@ type RafaleSetTeamsPayload = MemorySetTeamsPayload
 // /anim, so no per-field exclusion list could keep the answer off TV
 // (contract §2.3 — see the ardoise_leak_128 precedent this design avoids
 // reproducing).
+//
+// Next (#202, contract §13.3) extends this SAME restricted channel to the
+// pre-fetched next question's statement — same confidentiality reasoning
+// as Answer above applies to it too (§13.2: a competitive advantage in a
+// ~3s-per-question mode). Deliberately NO `omitempty`: nil/null is a
+// meaningful value ("no next question" — pool empty or cap imminent,
+// contract §13.5), not an absence the client should have to special-case
+// away from "field missing" — same "no omitempty" discipline the project
+// already applies to GameState (CLAUDE.md).
 type RafaleAnswerPayload struct {
-	ID     string `json:"ID"`     // RafaleQuestion.ID this answer belongs to
-	Answer string `json:"ANSWER"` // expected answer, text only
+	ID     string             `json:"ID"`     // RafaleQuestion.ID this answer belongs to
+	Answer string             `json:"ANSWER"` // expected answer, text only
+	Next   *RafaleNextPayload `json:"NEXT"`   // pre-fetched next question, answer-free; null = none (contract §13.5)
 }
 
 // RafaleTickPayload for the RAFALE_TICK action (Server → all clients,
