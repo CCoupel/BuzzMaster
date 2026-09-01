@@ -1,0 +1,707 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+</head>
+<body>
+<!-- ARTIFACT-BODY-START -->
+<title>Génération IA du réservoir RAFALE</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+  :root{
+    --ground:#0d1117; --panel:#161b22; --raised:#1c2128; --sunken:#0a0e14;
+    --line:#2a323d; --line-soft:#212932;
+    --txt:#e6edf3; --dim:#8d97a5; --faint:#6a7481;
+    --accent:#f97316; --accent-dim:#b4560f;
+    --ok:#2ea043; --no:#da3633; --warn:#d29922; --info:#3f7ee0;
+    --sans:"IBM Plex Sans",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+    --mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+    --col:940px;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--ground);color:var(--txt);font-family:var(--sans);
+    font-size:15px;line-height:1.62;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:var(--col);margin:0 auto;padding:56px 24px 120px}
+
+  .mast{border-bottom:1px solid var(--line);padding-bottom:28px;margin-bottom:8px}
+  .eyebrow{font-family:var(--mono);font-size:11px;font-weight:500;letter-spacing:.16em;
+    text-transform:uppercase;color:var(--accent);display:flex;gap:10px;flex-wrap:wrap;
+    align-items:center;margin-bottom:14px}
+  .eyebrow span:not(:last-child)::after{content:"·";margin-left:10px;color:var(--faint)}
+  h1{font-size:clamp(1.9rem,4.4vw,2.7rem);font-weight:700;line-height:1.12;
+    letter-spacing:-.022em;margin:0 0 12px;text-wrap:balance}
+  .standfirst{font-size:1.06rem;color:var(--dim);max-width:64ch;margin:0}
+  .refs{font-family:var(--mono);font-size:12px;color:var(--faint);margin-top:20px;
+    display:flex;flex-direction:column;gap:4px}
+  .refs b{color:var(--dim);font-weight:500}
+
+  section{margin-top:64px}
+  h2{font-size:1.32rem;font-weight:600;letter-spacing:-.012em;margin:0 0 6px;
+    text-wrap:balance;display:flex;align-items:baseline;gap:12px}
+  h2 .num{font-family:var(--mono);font-size:.78rem;font-weight:600;color:var(--accent);
+    letter-spacing:.06em;flex:none}
+  .lede{color:var(--dim);margin:0 0 22px;max-width:66ch}
+  h3{font-size:.75rem;font-weight:600;letter-spacing:.13em;text-transform:uppercase;
+    color:var(--faint);margin:34px 0 12px}
+  p{margin:0 0 14px;max-width:68ch}
+  a{color:var(--accent);text-decoration-thickness:1px;text-underline-offset:2px}
+  strong{font-weight:600;color:#fff}
+  em{color:var(--dim)}
+  code{font-family:var(--mono);font-size:.85em;background:var(--sunken);
+    border:1px solid var(--line-soft);border-radius:4px;padding:1px 5px;color:#cdd6e0}
+
+  ul{margin:0 0 14px;padding-left:0;list-style:none;max-width:68ch}
+  ul li{position:relative;padding-left:20px;margin-bottom:9px}
+  ul li::before{content:"";position:absolute;left:4px;top:.72em;width:5px;height:1px;
+    background:var(--faint)}
+  ol.reasons{margin:0;padding-left:0;list-style:none;counter-reset:r;max-width:68ch}
+  ol.reasons li{position:relative;padding-left:38px;margin-bottom:16px;counter-increment:r}
+  ol.reasons li::before{content:counter(r);position:absolute;left:0;top:2px;
+    font-family:var(--mono);font-size:11px;font-weight:600;color:var(--accent);
+    width:23px;height:23px;line-height:21px;text-align:center;
+    border:1px solid var(--accent-dim);border-radius:50%}
+
+  .call{background:var(--panel);border-left:2px solid var(--info);padding:15px 20px;
+    margin:20px 0;border-radius:0 6px 6px 0;font-size:.95rem}
+  .call > :last-child{margin-bottom:0}
+  .call.no{border-left-color:var(--no)}
+  .call.ok{border-left-color:var(--ok)}
+  .call.warn{border-left-color:var(--warn)}
+  .call-t{font-family:var(--mono);font-size:10.5px;font-weight:600;letter-spacing:.13em;
+    text-transform:uppercase;color:var(--dim);margin-bottom:7px}
+  .call.no .call-t{color:#f0736e}
+  .call.ok .call-t{color:#57c46a}
+  .call.warn .call-t{color:#e0b53f}
+
+  .scroll{overflow-x:auto;margin:18px 0;border:1px solid var(--line);border-radius:8px}
+  table{width:100%;border-collapse:collapse;font-size:.9rem;min-width:520px}
+  th,td{padding:11px 15px;text-align:left;vertical-align:top;
+    border-bottom:1px solid var(--line-soft)}
+  thead th{background:var(--raised);font-family:var(--mono);font-size:10.5px;font-weight:600;
+    letter-spacing:.1em;text-transform:uppercase;color:var(--dim);white-space:nowrap}
+  tbody tr:last-child td{border-bottom:none}
+  td:first-child{color:var(--txt);font-weight:500}
+  .num-cell{font-family:var(--mono);font-variant-numeric:tabular-nums;white-space:nowrap}
+
+  .screen{background:var(--panel);border:1px solid var(--line);border-radius:10px;
+    overflow:hidden;margin:22px 0}
+  .screen-hd{background:var(--raised);border-bottom:1px solid var(--line);padding:9px 16px;
+    font-family:var(--mono);font-size:11px;color:var(--dim);letter-spacing:.05em}
+  .screen-bd{padding:22px}
+  .modal-hd{display:flex;justify-content:space-between;align-items:center;padding-bottom:14px;
+    margin-bottom:18px;border-bottom:1px solid var(--line)}
+  .modal-title{font-weight:600;font-size:1.02rem}
+  .modal-x{color:var(--faint);font-size:1.25rem;line-height:1}
+
+  .fieldset{background:var(--sunken);border:1px solid var(--line-soft);border-radius:8px;
+    padding:16px 18px;margin-bottom:14px}
+  .fs-t{font-family:var(--mono);font-size:10px;font-weight:600;letter-spacing:.13em;
+    text-transform:uppercase;color:var(--faint);margin-bottom:14px}
+  .fld{margin-bottom:14px}
+  .fld:last-child{margin-bottom:0}
+  .lbl{display:block;font-size:.78rem;color:var(--dim);margin-bottom:6px}
+  .ctl{background:var(--ground);border:1px solid var(--line);border-radius:6px;
+    padding:8px 12px;font-size:.88rem;color:var(--txt);font-family:var(--sans)}
+  .ctl.w{display:block;width:100%}
+  .ctl.ph{color:var(--faint)}
+  .row2{display:flex;gap:14px;flex-wrap:wrap}
+  .row2 > *{flex:1 1 180px}
+
+  .chips{display:flex;gap:7px;flex-wrap:wrap}
+  .chip{border:1px solid var(--line);background:var(--ground);border-radius:999px;
+    padding:4px 13px;font-size:.79rem;color:var(--dim);white-space:nowrap}
+  .chip.on{border-color:var(--c,var(--accent));color:var(--txt);
+    background:color-mix(in srgb,var(--c,var(--accent)) 16%,var(--ground))}
+  .chip.on::before{content:"✓ ";color:var(--c,var(--accent));font-size:.72em}
+  .chip.star{font-family:var(--mono);letter-spacing:.1em}
+  .chip .n{font-family:var(--mono);font-size:.9em;color:var(--faint);margin-left:7px;
+    font-variant-numeric:tabular-nums}
+  .chip.on .n{color:var(--dim)}
+  .chip .n.zero{color:#e0803f}
+
+  /* segmented preset control */
+  .seg-ctl{display:inline-flex;border:1px solid var(--line);border-radius:7px;
+    overflow:hidden;background:var(--ground)}
+  .seg-ctl b{font-family:var(--mono);font-size:.85rem;font-weight:500;padding:7px 15px;
+    color:var(--dim);border-right:1px solid var(--line);font-variant-numeric:tabular-nums}
+  .seg-ctl b:last-child{border-right:none}
+  .seg-ctl b.on{background:var(--accent);color:#1a1004;font-weight:600}
+  .seg-ctl b.off{color:var(--faint);opacity:.4}
+
+  .btnrow{display:flex;justify-content:flex-end;gap:10px;margin-top:20px;padding-top:16px;
+    border-top:1px solid var(--line)}
+  .btn{border-radius:6px;padding:8px 17px;font-size:.87rem;font-weight:500;
+    font-family:var(--sans);border:1px solid var(--line);background:var(--raised);color:var(--txt)}
+  .btn.p{background:var(--accent);border-color:var(--accent);color:#1a1004;font-weight:600}
+  .hint{font-size:.76rem;color:var(--faint);margin-top:7px;max-width:none}
+
+  .mx{width:auto;min-width:0;font-size:.83rem;margin:0}
+  .mx th,.mx td{padding:6px 15px;text-align:center;border-bottom:1px solid var(--line-soft)}
+  .mx thead th{background:transparent;border-bottom:1px solid var(--line)}
+  .mx td:first-child{text-align:left;color:var(--dim);font-weight:400}
+  .mx .v{font-family:var(--mono);font-variant-numeric:tabular-nums;color:var(--faint)}
+  .mx .v b{color:var(--txt);font-weight:600}
+  .mx .v .ar{color:var(--faint);margin:0 3px}
+  .mx .v.thin b{color:var(--accent)}
+
+  /* ruler */
+  .ruler{background:var(--panel);border:1px solid var(--line);border-radius:10px;
+    padding:26px 28px;margin:24px 0}
+  .rr{margin-bottom:26px}
+  .rr:last-child{margin-bottom:0}
+  .rr-hd{display:flex;justify-content:space-between;align-items:baseline;gap:14px;
+    margin-bottom:12px;flex-wrap:wrap}
+  .rr-name{font-family:var(--mono);font-size:.88rem;font-weight:600;color:var(--txt)}
+  .rr-cap{font-family:var(--mono);font-size:.76rem;color:var(--faint);
+    font-variant-numeric:tabular-nums}
+  .track{position:relative;height:34px;background:var(--sunken);
+    border:1px solid var(--line-soft);border-radius:5px;overflow:hidden}
+  .seg{position:absolute;top:0;bottom:0}
+  .seg.target{left:0;background:color-mix(in srgb,var(--ok) 26%,transparent)}
+  .seg.margin{background:color-mix(in srgb,var(--warn) 20%,transparent)}
+  .seg.over{background:color-mix(in srgb,var(--no) 15%,transparent)}
+  .tick{position:absolute;top:0;bottom:0;width:1px;background:var(--txt);opacity:.55}
+  .tick.hard{width:2px;background:var(--no);opacity:1}
+  .tick.soft{background:var(--ok);opacity:.9}
+  .tick.disp{background:var(--info);opacity:.75}
+  .rr-legend{display:flex;gap:18px;flex-wrap:wrap;margin-top:10px;font-size:.74rem;
+    color:var(--faint);font-family:var(--mono)}
+  .rr-legend i{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:6px}
+  .lg-ok i{background:color-mix(in srgb,var(--ok) 55%,transparent)}
+  .lg-wa i{background:color-mix(in srgb,var(--warn) 45%,transparent)}
+  .lg-no i{background:var(--no)}
+  .lg-di i{background:var(--info)}
+
+  .samples{margin-top:22px;display:flex;flex-direction:column;gap:9px}
+  .sample{display:grid;grid-template-columns:24px 62px 1fr;gap:12px;align-items:start;
+    background:var(--sunken);border:1px solid var(--line-soft);border-radius:6px;
+    padding:10px 14px;font-size:.86rem}
+  .sample .mark{font-weight:700;line-height:1.5}
+  .sample.y .mark{color:var(--ok)}
+  .sample.n .mark{color:var(--no)}
+  .sample .len{font-family:var(--mono);font-size:.76rem;color:var(--faint);
+    font-variant-numeric:tabular-nums;line-height:1.75}
+  .sample q{quotes:"« " " »"}
+  .sample .a{color:var(--dim)}
+
+  .pbar{height:7px;background:var(--sunken);border:1px solid var(--line-soft);
+    border-radius:4px;overflow:hidden;margin:14px 0 7px}
+  .pbar i{display:block;height:100%;background:var(--accent)}
+  .pmeta{display:flex;justify-content:space-between;font-family:var(--mono);font-size:.74rem;
+    color:var(--faint);font-variant-numeric:tabular-nums}
+  .kv{display:grid;grid-template-columns:186px 1fr;gap:5px 16px;margin-top:18px;font-size:.87rem}
+  .kv dt{color:var(--dim)}
+  .kv dd{margin:0;font-family:var(--mono);font-variant-numeric:tabular-nums}
+  .status{display:flex;align-items:center;gap:11px;font-weight:600;font-size:.98rem}
+  .status .dot{width:9px;height:9px;border-radius:50%;background:var(--accent);flex:none}
+  .status.done .dot{background:var(--ok)}
+
+  .bdg{display:inline-block;font-family:var(--mono);font-size:10px;font-weight:600;
+    letter-spacing:.09em;text-transform:uppercase;padding:2px 8px;border-radius:4px;
+    border:1px solid;white-space:nowrap}
+  .bdg.keep{color:var(--dim);border-color:var(--line);background:var(--raised)}
+  .bdg.add{color:#57c46a;border-color:#2ea04355;background:#2ea0431f}
+  .bdg.stop{color:#f0736e;border-color:#da363355;background:#da36331f}
+
+  /* component split diagram */
+  .split{display:grid;grid-template-columns:1fr;gap:14px;margin:20px 0}
+  .shell{background:var(--panel);border:1px solid var(--accent-dim);border-radius:9px;
+    padding:16px 18px}
+  .shell-t{font-family:var(--mono);font-size:.83rem;font-weight:600;color:var(--accent);
+    margin-bottom:4px}
+  .shell-s{font-size:.83rem;color:var(--dim);margin:0}
+  .leaves{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+  .leaf{background:var(--sunken);border:1px solid var(--line);border-radius:9px;
+    padding:14px 16px}
+  .leaf-t{font-family:var(--mono);font-size:.8rem;font-weight:600;color:var(--txt);
+    margin-bottom:4px}
+  .leaf-s{font-size:.8rem;color:var(--faint);margin:0}
+  .leaf.new{border-color:var(--accent-dim)}
+  .leaf.new .leaf-t{color:var(--accent)}
+
+  footer{margin-top:80px;padding-top:22px;border-top:1px solid var(--line);
+    font-family:var(--mono);font-size:11.5px;color:var(--faint)}
+
+  @media (max-width:640px){
+    .wrap{padding:36px 18px 80px}
+    .kv{grid-template-columns:1fr}
+    .kv dt{color:var(--faint);margin-top:8px}
+    .sample{grid-template-columns:20px 1fr;gap:8px}
+    .sample .len{grid-column:2}
+    .leaves{grid-template-columns:1fr}
+    .seg-ctl{flex-wrap:wrap}
+  }
+  @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+
+<div class="wrap">
+
+<header class="mast">
+  <div class="eyebrow">
+    <span>Issue #203</span><span>Milestone v8.1.0</span><span>Révision GATE 2</span>
+  </div>
+  <h1>Génération IA du réservoir RAFALE</h1>
+  <p class="standfirst">RAFALE est le dernier type de question sans génération IA — il est arrivé
+    après elle. Cette maquette fixe où la génération se déclenche, ce qu'elle expose, et comment
+    la contrainte de brièveté propre au rythme RAFALE est rendue tenable.</p>
+  <div class="refs">
+    <div><b>Contrat</b> contracts/rafale-ai-generation.md</div>
+    <div><b>Adossé à</b> rafale.md §3.1 §7 §9 · ai-generation.md §4 §5 · ai-multi-provider.md §9 §10</div>
+    <div><b>Sert de référence à</b> test-writer (scénarios) · qa (validation de conformité)</div>
+  </div>
+</header>
+
+<section>
+  <h2><span class="num">01</span>Une modale dédiée, pas une ligne de répartition</h2>
+  <p class="lede">La génération RAFALE n'est pas un 6ᵉ curseur dans la modale de la page Questions.
+    Elle est une modale à elle, ouverte depuis la page Rafale qui héberge déjà l'éditeur du
+    réservoir.</p>
+
+  <div class="scroll">
+    <table>
+      <thead><tr><th>Critère</th><th>Modale Questions</th><th>Modale Rafale</th></tr></thead>
+      <tbody>
+        <tr><td>Destination</td><td><code>files/questions/&lt;ID&gt;/question.json</code><br><span style="color:var(--faint)">un répertoire par question</span></td><td><code>files/rafale/reservoir.json</code><br><span style="color:var(--faint)">fichier unique</span></td></tr>
+        <tr><td>Portée</td><td>La partie courante — thème et publics lus en lecture seule depuis le <code>GameState</code></td><td>Globale, survit à toutes les parties — aucun <code>GameState</code> consulté</td></tr>
+        <tr><td>Difficulté</td><td class="num-cell">4 libellés<br><span style="color:var(--faint)">Facile → Expert</span></td><td class="num-cell">3 entiers<br><span style="color:var(--faint)">★ ★★ ★★★</span></td></tr>
+        <tr><td>Volume</td><td>durée de partie <em>ou</em> nombre</td><td>taille de pool, par paliers</td></tr>
+        <tr><td>Champs dérivés</td><td><code>TIME</code> <code>POINTS</code> <code>ORDER</code> <code>POINTS_TARGET</code></td><td>aucun</td></tr>
+        <tr><td>Longueur du texte</td><td>non contrainte</td><td><strong>énoncé ≤ 100 · réponse ≤ 40</strong></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>Quatre incompatibilités, pas une préférence de style</h3>
+  <ol class="reasons">
+    <li><strong>RAFALE est déjà un type de question réel.</strong> Son <code>question.json</code>
+      est une <em>configuration de manche</em> — durée, mode, barème — et ne porte aucun énoncé.
+      Demander « un type RAFALE » au modèle produirait l'objet qui n'est pas le contenu voulu.
+      <code>MEMOTION_PLUS</code> n'est pas un précédent transposable : ce pseudo-type se normalise
+      vers un type réel écrit <em>au même endroit</em>. Ici la destination elle-même diffère.</li>
+    <li><strong>Une seule génération écrirait dans deux magasins.</strong> Le curseur « % »
+      répartit un volume unique entre des types qui atterrissent tous dans
+      <code>files/questions/</code>. Une part RAFALE la ferait écrire simultanément dans le
+      réservoir : deux modèles, deux schémas d'identifiant, deux formats — pour une seule barre de
+      progression et un seul compteur.</li>
+    <li><strong>Le formulaire diverge sur ses deux axes.</strong> Difficultés et volume n'ont pas
+      le même domaine. Le rendu de la répartition est aujourd'hui entièrement générique — une
+      boucle, aucune condition. RAFALE y introduirait une branche par ligne.</li>
+    <li><strong>Budget de tokens Groq.</strong> Chaque branche de schéma supplémentaire alourdit
+      la requête de <em>chaque</em> lot, contre un plafond de 8 000. C'est exactement ce qui a
+      produit le faux « rate limit » 413 de #196 en QUALIF.</li>
+  </ol>
+</section>
+
+<section>
+  <h2><span class="num">02</span>Un seul composant de modale, deux formulaires</h2>
+  <p class="lede">« Modale dédiée » ne veut pas dire « composant dupliqué ». Tout ce qui n'est pas
+    le formulaire lui-même est <strong>extrait et partagé</strong> — la modale Rafale et la modale
+    Questions deviennent deux enveloppes minces autour de la même coquille.</p>
+
+  <div class="split">
+    <div class="shell">
+      <div class="shell-t">AIJobModalShell — extrait de l'existant, partagé</div>
+      <p class="shell-s">Enveloppe et fermeture au clavier · machine à états
+        <em>formulaire → en cours → terminé / annulé / échoué</em> · cycle de vie du job (suivi,
+        décompte inter-lots, annulation, transitions terminales) · les six corps d'état
+        (en&nbsp;cours, terminé, annulé, échoué, rejet à la soumission, indisponible) · pied de
+        modale par état · filtrage du job sur sa cible · messages d'erreur et libellés de provider.</p>
+    </div>
+    <div class="leaves">
+      <div class="leaf">
+        <div class="leaf-t">AIGenerateModal</div>
+        <p class="leaf-s">Formulaire Quiz + payload Quiz. <strong>Props publiques
+          inchangées</strong> — ses quatre fichiers de test doivent passer sans modification.</p>
+      </div>
+      <div class="leaf new">
+        <div class="leaf-t">RafaleAIGenerateModal</div>
+        <p class="leaf-s">Formulaire Rafale + payload Rafale. C'est tout ce que ce fichier
+          contient.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="call ok">
+    <div class="call-t">Pourquoi l'extraction est sûre ici</div>
+    <p>Les six corps d'état existants sont <strong>déjà entièrement génériques</strong> : aucun ne
+      référence quoi que ce soit de propre au Quiz. Le seul paramètre spécifique,
+      la ventilation par catégorie de l'écran « terminé », est déjà optionnel dans le code actuel —
+      la modale Rafale ne la fournit pas, et l'écran s'affiche sans elle.</p>
+    <p>L'extraction est donc un <strong>déplacement</strong>, pas une réécriture. Critère
+      d'acceptation : les tests existants de la modale Questions passent <strong>sans être
+      touchés</strong>.</p>
+  </div>
+
+  <h3>Ce qui est réutilisé au-delà du composant</h3>
+  <ul>
+    <li>le <strong>registre de job unique</strong> : une génération RAFALE et une génération Quiz
+      ne peuvent pas tourner en parallèle et marteler le quota du provider ;</li>
+    <li>le découpage en lots, les relances, la gestion des 429, la temporisation inter-lots ;</li>
+    <li>la progression WebSocket et l'annulation — mêmes actions, mêmes états ;</li>
+    <li>le choix du provider et les clés API, toujours pilotés depuis la page Configuration ;</li>
+    <li>les styles de modale, les boutons et les chips de catégorie existants.</li>
+  </ul>
+</section>
+
+<section>
+  <h2><span class="num">03</span>Point d'entrée</h2>
+  <div class="screen">
+    <div class="screen-hd">/admin/rafale — en-tête de la carte Réservoir</div>
+    <div class="screen-bd">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:18px;flex-wrap:wrap">
+        <div>
+          <div style="font-size:1.06rem;font-weight:600">Réservoir RAFALE</div>
+          <div class="num-cell" style="font-size:.82rem;color:var(--faint);margin-top:2px">
+            128 questions · 94 disponibles · 34 utilisées</div>
+        </div>
+        <div style="display:flex;gap:9px;flex-wrap:wrap">
+          <button class="btn">Remettre tout disponible (34)</button>
+          <button class="btn p">Générer via IA</button>
+        </div>
+      </div>
+      <p class="hint">Désactivé si aucun provider n'est configuré, avec renvoi vers les réglages —
+        même règle que la page Questions.</p>
+    </div>
+  </div>
+</section>
+
+<section>
+  <h2><span class="num">04</span>Formulaire</h2>
+
+  <div class="screen">
+    <div class="screen-hd">Modale — état « formulaire »</div>
+    <div class="screen-bd">
+      <div class="modal-hd">
+        <div class="modal-title">Générer des questions RAFALE</div>
+        <div class="modal-x">×</div>
+      </div>
+
+      <div class="fieldset">
+        <div class="fs-t">Contenu à générer</div>
+        <div class="fld">
+          <span class="lbl">Thème</span>
+          <span class="ctl w">Culture générale — France</span>
+          <p class="hint">Propre à cette génération. Le réservoir étant global, il n'hérite pas du
+            thème de la partie en cours.</p>
+        </div>
+        <div class="row2">
+          <div class="fld"><span class="lbl">Langue</span><span class="ctl w">Français</span></div>
+        </div>
+        <div class="fld">
+          <span class="lbl">Publics cibles</span>
+          <div class="chips">
+            <span class="chip">Junior (6-12)</span>
+            <span class="chip on">Ado (13-17)</span>
+            <span class="chip on">Adulte (18-64)</span>
+            <span class="chip">Senior (65+)</span>
+            <span class="chip">Famille</span>
+          </div>
+        </div>
+        <div class="fld">
+          <span class="lbl">Précisions pour cette génération <em>(optionnel)</em></span>
+          <span class="ctl w ph">Éviter l'actualité récente, privilégier les classiques…</span>
+        </div>
+      </div>
+
+      <div class="fieldset">
+        <div class="fs-t">Ce qu'on ajoute au réservoir</div>
+
+        <div class="fld">
+          <span class="lbl">Taille du lot</span>
+          <div class="seg-ctl">
+            <b>10</b><b>20</b><b class="on">50</b><b>100</b><b>200</b>
+          </div>
+          <p class="hint">Un réservoir se remplit par paliers, pas au questionnaire près — et il
+            n'a pas de durée, contrairement à une partie. Les paliers au-delà du plafond configuré
+            sont masqués.</p>
+        </div>
+
+        <div class="fld">
+          <span class="lbl">Catégories cibles <em>— le nombre indique ce que contient déjà le
+            réservoir pour les difficultés sélectionnées</em></span>
+          <div class="chips">
+            <span class="chip on" style="--c:#3b7fc4">Histoire<span class="n">31</span></span>
+            <span class="chip on" style="--c:#2e9e6d">Géographie<span class="n">24</span></span>
+            <span class="chip on" style="--c:#c8568f">Sciences<span class="n zero">0</span></span>
+            <span class="chip">Divertissement<span class="n">18</span></span>
+            <span class="chip">Sport<span class="n">9</span></span>
+            <span class="chip">Musique<span class="n zero">0</span></span>
+          </div>
+        </div>
+
+        <div class="fld">
+          <span class="lbl">Difficultés</span>
+          <div class="chips">
+            <span class="chip star on">★☆☆</span>
+            <span class="chip star on">★★☆</span>
+            <span class="chip star">★★★</span>
+          </div>
+          <p class="hint">Échelle native du réservoir, identique à l'éditeur manuel — pas de
+            conversion depuis les quatre libellés de la génération Quiz, qui serait lossy et
+            invisible.</p>
+        </div>
+      </div>
+
+      <div class="call">
+        <div class="call-t">Répartition calculée — existant → après génération</div>
+        <p style="margin-bottom:12px"><strong>50 questions</strong> réparties uniformément sur les
+          <strong>6 couples</strong> catégorie × difficulté, soit <strong>8 par couple</strong>
+          (les deux premiers en reçoivent 9).</p>
+        <div class="scroll" style="margin:0;border:none">
+          <table class="mx">
+            <thead><tr><th></th><th>★☆☆</th><th>★★☆</th></tr></thead>
+            <tbody>
+              <tr><td>Histoire</td>
+                <td class="v">18 <span class="ar">→</span> <b>27</b></td>
+                <td class="v">13 <span class="ar">→</span> <b>22</b></td></tr>
+              <tr><td>Géographie</td>
+                <td class="v">15 <span class="ar">→</span> <b>23</b></td>
+                <td class="v">9 <span class="ar">→</span> <b>17</b></td></tr>
+              <tr><td>Sciences</td>
+                <td class="v thin">0 <span class="ar">→</span> <b>8</b></td>
+                <td class="v thin">0 <span class="ar">→</span> <b>8</b></td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="hint" style="margin-top:12px">Le couple catégorie × difficulté est exactement le
+          filtre de pioche d'une manche. Un réservoir riche en Histoire ★☆☆ mais vide en Sciences
+          rend la manche « Sciences » injouable, alors que le total général paraît confortable :
+          l'admin voit ses trous et les comble.</p>
+      </div>
+
+      <div class="btnrow">
+        <button class="btn">Annuler</button>
+        <button class="btn p">Générer</button>
+      </div>
+    </div>
+  </div>
+
+  <p><strong>Le bouton n'est actif que si</strong> le thème est renseigné, et qu'au moins un
+    public, une catégorie et une difficulté sont sélectionnés. Sinon il est désactivé, avec une
+    infobulle listant ce qui manque.</p>
+
+  <div class="call">
+    <div class="call-t">Catégories — choisies, pas déduites</div>
+    <p>La liste propose <strong>toutes</strong> les catégories connues, pas seulement celles déjà
+      présentes dans le réservoir. Se restreindre à l'existant créerait un blocage d'amorçage :
+      une catégorie neuve resterait inatteignable par l'IA tant qu'une première question n'y aurait
+      pas été saisie à la main — exactement le travail qu'on cherche à éviter.</p>
+    <p>L'information « ce qui existe déjà » est donc <strong>affichée plutôt qu'imposée</strong> :
+      chaque chip porte son compte courant, et une catégorie vide se signale d'elle-même. Le
+      sélecteur devient une carte des trous du réservoir, sans rien interdire. Les comptes sont
+      calculés à partir de la liste que la page Rafale a déjà chargée — aucun appel supplémentaire.</p>
+  </div>
+</section>
+
+<section>
+  <h2><span class="num">05</span>La contrainte de brièveté</h2>
+  <p class="lede">C'est la demande centrale de l'issue. Une manche laisse environ trois secondes
+    par question : un énoncé long n'est pas seulement injouable, il est silencieusement tronqué
+    par l'affichage.</p>
+
+  <div class="ruler">
+    <div class="rr">
+      <div class="rr-hd">
+        <span class="rr-name">QUESTION</span>
+        <span class="rr-cap">cible 80 · plafond 100 · troncature /anim ≈ 100</span>
+      </div>
+      <div class="track">
+        <div class="seg target" style="width:53.3%"></div>
+        <div class="seg margin" style="left:53.3%;width:13.4%"></div>
+        <div class="seg over" style="left:66.7%;right:0"></div>
+        <div class="tick soft" style="left:53.3%"></div>
+        <div class="tick hard" style="left:66.7%"></div>
+        <div class="tick disp" style="left:80%"></div>
+      </div>
+      <div class="rr-legend">
+        <span class="lg-ok"><i></i>0–80 cible du prompt</span>
+        <span class="lg-wa"><i></i>80–100 toléré</span>
+        <span class="lg-no"><i></i>&gt; 100 écarté</span>
+        <span class="lg-di"><i></i>≈100 /anim · ≈120 /tv</span>
+      </div>
+    </div>
+
+    <div class="rr">
+      <div class="rr-hd">
+        <span class="rr-name">ANSWER</span>
+        <span class="rr-cap">cible 25 · plafond 40 · débordement /anim ≈ 40–45</span>
+      </div>
+      <div class="track">
+        <div class="seg target" style="width:41.7%"></div>
+        <div class="seg margin" style="left:41.7%;width:25%"></div>
+        <div class="seg over" style="left:66.7%;right:0"></div>
+        <div class="tick soft" style="left:41.7%"></div>
+        <div class="tick hard" style="left:66.7%"></div>
+        <div class="tick disp" style="left:70.8%"></div>
+      </div>
+      <div class="rr-legend">
+        <span class="lg-ok"><i></i>0–25 cible du prompt</span>
+        <span class="lg-wa"><i></i>25–40 toléré</span>
+        <span class="lg-no"><i></i>&gt; 40 écarté</span>
+        <span class="lg-di"><i></i>≈42 débordement</span>
+      </div>
+    </div>
+
+    <div class="samples">
+      <div class="sample y"><span class="mark">✓</span><span class="len">61 / 8</span>
+        <span><q>Quel fleuve traverse Paris ?</q> <span class="a">→ La Seine</span></span></div>
+      <div class="sample y"><span class="mark">✓</span><span class="len">74 / 4</span>
+        <span><q>En quelle année a eu lieu la chute du mur de Berlin ?</q> <span class="a">→ 1989</span></span></div>
+      <div class="sample n"><span class="mark">✕</span><span class="len">148 / —</span>
+        <span><q>Pouvez-vous citer le nom du traité signé en 1957 qui a institué la Communauté
+          économique européenne, ainsi que la ville où il fut signé ?</q>
+          <span class="a">→ écartée</span></span></div>
+    </div>
+  </div>
+
+  <h3>Trois niveaux — les deux premiers guident, le troisième garantit</h3>
+  <div class="scroll">
+    <table>
+      <thead><tr><th>Niveau</th><th>Mécanisme</th><th>Effet</th></tr></thead>
+      <tbody>
+        <tr><td>Prompt</td><td>Consigne explicite : énoncé ≤ 80 en une phrase, réponse ≤ 25 en un à trois mots</td><td>Oriente le modèle. Ne garantit rien.</td></tr>
+        <tr><td>Schéma JSON</td><td><strong>Aucun</strong> — <code>minLength</code> et <code>maxLength</code> ne sont pas supportés par les sorties structurées</td><td>Impossible à ce niveau. C'est précisément pourquoi le troisième est obligatoire.</td></tr>
+        <tr><td>Validation serveur</td><td>Toute question hors plafond est <strong>écartée</strong> et comptée</td><td>Garantie dure. Aucune question trop longue n'atteint le réservoir.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="call no">
+    <div class="call-t">Écarter, jamais tronquer</div>
+    <p>L'issue évoquait « validée <em>ou tronquée</em> côté serveur ». Tronquer un énoncé produit
+      une question sans fin — <q>Quel est le nom du premier…</q>. Tronquer une <strong>réponse</strong>
+      produit une réponse <strong>fausse</strong>, que l'animateur validerait de bonne foi contre la
+      bonne réponse d'un joueur : un faux négatif de scoring, indétectable en relecture.</p>
+    <p>Le rejet réutilise un mécanisme déjà éprouvé : la génération n'est pas interrompue, la
+      question fautive est simplement absente, et l'admin voit le compte. La défense en profondeur
+      demandée par l'issue est bien assurée — consigne au prompt <em>et</em> plafond serveur.</p>
+  </div>
+
+  <h3>D'où viennent 100 et 40 — mesure, pas estimation</h3>
+  <div class="scroll">
+    <table>
+      <thead><tr><th>Surface</th><th>Style appliqué</th><th>Capacité</th></tr></thead>
+      <tbody>
+        <tr><td>/anim — énoncé courant</td><td class="num-cell">clamp(1.3rem, 4.2vh, 2.2rem)<br>line-clamp: 3</td><td class="num-cell"><strong>≈ 85–100</strong><br><span style="color:var(--faint)">la plus contraignante</span></td></tr>
+        <tr><td>/tv — énoncé</td><td class="num-cell">clamp(1.3rem, 4.5vh, 2.6rem)<br>line-clamp: 4</td><td class="num-cell">≈ 120</td></tr>
+        <tr><td>/anim — réponse attendue</td><td class="num-cell">1.15rem<br>une seule ligne, aucun clamp</td><td class="num-cell">≈ 40–45<br><span style="color:var(--faint)">déborde au-delà</span></td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p>Le plafond est calé sur la surface la plus contraignante : une question acceptée est toujours
+    lisible en entier, sur la tablette de l'animateur comme sur la TV. La cible du prompt est
+    volontairement plus basse que le plafond — le modèle vise court, et le plafond ne rejette que
+    ce qui est réellement injouable, sans perdre une bonne question pour deux caractères.</p>
+
+  <div class="call warn">
+    <div class="call-t">Le plafond vaut aussi pour l'éditeur manuel</div>
+    <p>Sans cela, la contrainte serait contournable en trois clics et le réservoir contiendrait
+      deux qualités de questions selon leur origine. Le plafond est une propriété
+      <strong>du réservoir</strong>, pas de la génération. Aucune donnée existante n'est supprimée
+      ni tronquée : une question trop longue déjà en base reste jouable et lisible, elle ne peut
+      simplement plus être ré-enregistrée telle quelle.</p>
+  </div>
+</section>
+
+<section>
+  <h2><span class="num">06</span>Génération en cours, puis terminée</h2>
+
+  <div class="screen">
+    <div class="screen-hd">Modale — état « en cours »</div>
+    <div class="screen-bd">
+      <div class="status"><span class="dot"></span>Génération en cours — lot 2 sur 5</div>
+      <div class="pbar"><i style="width:40%"></i></div>
+      <div class="pmeta"><span>Prochain lot dans 48 s</span><span>40 %</span></div>
+      <dl class="kv">
+        <dt>Ajoutées au réservoir</dt><dd>24</dd>
+        <dt>Écartées</dt><dd>2</dd>
+        <dt>Provider</dt><dd>Groq</dd>
+      </dl>
+      <p class="hint">La liste du réservoir se met à jour lot par lot. Fermer la fenêtre
+        n'interrompt pas la génération — elle continue côté serveur, et la progression est
+        retrouvée à la réouverture.</p>
+      <div class="btnrow">
+        <button class="btn">Arrêter</button>
+        <button class="btn p">Fermer</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="screen">
+    <div class="screen-hd">Modale — état « terminé »</div>
+    <div class="screen-bd">
+      <div class="status done"><span class="dot"></span>48 questions ajoutées au réservoir</div>
+      <dl class="kv">
+        <dt>Écartées</dt><dd>2 <span style="color:var(--faint)">texte trop long</span></dd>
+        <dt>Réservoir</dt><dd>128 → 176</dd>
+      </dl>
+      <div class="btnrow">
+        <button class="btn">Nouvelle génération</button>
+        <button class="btn p">Fermer</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="call">
+    <div class="call-t">Aucun état « fraîchement ajouté »</div>
+    <p>Les questions générées rejoignent la liste sans marquage particulier, et l'écran de fin ne
+      récapitule pas le détail par catégorie. Une génération est <strong>impossible pendant une
+      manche</strong> — il n'existe donc aucun moment où distinguer une question fraîche d'une
+      autre change quoi que ce soit pour l'animateur ou pour la pioche.</p>
+    <p>La modale n'a par conséquent besoin de mémoriser aucun instantané du réservoir avant
+      lancement : elle affiche des compteurs, la page rafraîchit sa liste. Une mécanique de moins,
+      sans rien perdre.</p>
+  </div>
+</section>
+
+<section>
+  <h2><span class="num">07</span>Articulation avec le drapeau « déjà utilisée »</h2>
+  <div class="scroll">
+    <table>
+      <thead><tr><th>Élément</th><th>Effet de la génération</th></tr></thead>
+      <tbody>
+        <tr><td>Questions existantes du réservoir</td><td><span class="bdg keep">inchangées</span> jamais modifiées, jamais supprimées</td></tr>
+        <tr><td>Questions générées</td><td><span class="bdg add">ajoutées</span> identifiants alloués par le serveur</td></tr>
+        <tr><td>Fichier des drapeaux</td><td><span class="bdg keep">inchangé</span> aucune entrée ajoutée ni retirée</td></tr>
+        <tr><td>Disponibilité des nouvelles</td><td><span class="bdg add">disponibles</span> par construction — un identifiant absent du fichier est disponible, aucune écriture n'est nécessaire</td></tr>
+        <tr><td>Manche RAFALE en cours</td><td><span class="bdg stop">génération refusée</span> voir ci-dessous</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="call no">
+    <div class="call-t">Refus pendant une manche</div>
+    <p>Une manche pioche dans le pool et diffuse le nombre de questions restantes à chaque tirage.
+      Injecter des questions au milieu ferait <strong>augmenter</strong> un compteur que
+      l'animateur voit décroître, et invaliderait l'estimation de besoin affichée avant le
+      démarrage. Le coût de la restriction est nul — on ne génère pas un réservoir pendant qu'on
+      joue — et elle ferme une classe d'incohérence d'état par construction plutôt que par
+      correctif ultérieur.</p>
+  </div>
+</section>
+
+<section>
+  <h2><span class="num">08</span>Ce que cette maquette ne change pas</h2>
+  <ul>
+    <li>L'éditeur manuel du réservoir — la génération est un chemin de plus, pas un remplacement.</li>
+    <li>La modale de génération de la page Questions : <strong>aucune ligne RAFALE n'y
+      apparaît</strong>, les cinq types et MEMOTION+ restent exactement ce qu'ils sont, et ses
+      props publiques ne bougent pas.</li>
+    <li>Le moteur RAFALE, la pioche, les modes de manche, l'affichage TV et animateur, le
+      pré-tirage de la question suivante.</li>
+    <li>Le choix du provider et la gestion des clés API.</li>
+    <li>Le format du réservoir — une question générée est indiscernable d'une question saisie
+      à la main.</li>
+  </ul>
+</section>
+
+<footer>
+  Maquette produite en phase Plan · révision GATE 2 · à valider avant dispatch des agents de
+  développement · BuzzControl v8.1.0
+</footer>
+
+</div>
+<!-- ARTIFACT-BODY-END -->
+</body>
+</html>

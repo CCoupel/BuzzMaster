@@ -2,6 +2,100 @@
 
 ---
 
+## [20260901] — RAFALE : génération IA du réservoir de questions (#203, feature, v8.1.0)
+
+> Nouveau contrat `contracts/rafale-ai-generation.md`. Maquette
+> `docs/mockups/rafale-ai-generation-203.html`. RAFALE était le seul type de question sans
+> génération IA, ayant été introduit après la fonctionnalité de génération (#137 et suivants).
+> **Révisé au GATE 2 du 2026-09-01** (retours utilisateur) : paliers de `count`, catégories
+> annotées, coquille de modale partagée, suppression de l'état « fraîchement ajouté ».
+
+- **[NEW]** `POST /api/rafale/generate-questions` — génération IA du réservoir RAFALE. Asynchrone
+  (`202 {status, job_id, batches_total}`), même forme de réponse que `/api/generate-questions`.
+  Corps : `{theme, populations[], language, instructions?, categories[], difficulties[] (entiers
+  1..3), count}`. `count` n'accepte que les **paliers** `{10, 20, 50, 100, 200}` filtrés par
+  `ai.max_questions` — on remplit un réservoir par lots, pas à la question près ; une énumération
+  fermée supprime la classe des saisies aberrantes et se manipule au doigt sur tablette. La liste
+  est une **constante partagée Go ↔ JS** (un palier proposé par l'UI et refusé par le serveur
+  serait un `400` incompréhensible). Erreurs `400 invalid_request`, `405`, `409 no_api_key`,
+  `409 generation_in_progress`, `409 rafale_round_in_progress` (nouveau code).
+- **[NEW]** `Engine.AppendRafaleQuestions([]RafaleQuestion)` — écriture par lot : IDs `r-NNN`
+  alloués sous un verrou unique, **une seule** `SaveRafale()` pour tout le lot. `SaveRafale()`
+  prenant `RLock`, elle ne peut pas être appelée en tenant le verrou d'écriture — d'où
+  `Lock → insérer → Unlock → Save`. `UpsertRafaleQuestion` (éditeur manuel) reste inchangée.
+- **[CHANGED]** `AI_GENERATION_PROGRESS` (WS, serveur → `/ws/admin`) — ajout d'un champ `TARGET`
+  (`"QUIZ"` | `"RAFALE"`). **Additif et rétrocompatible** : absent ⇒ `"QUIZ"`, tous les champs
+  existants et leurs destinataires inchangés. Nécessaire à la correction du frontend : la
+  progression est un singleton global et **deux** modales l'écoutent désormais — sans ce champ, un
+  job RAFALE ferait basculer la modale de la page Questions en « génération en cours ».
+- **[BREAKING, mineur]** `POST /api/rafale/questions` (éditeur manuel du réservoir) — `400` si
+  `QUESTION` > **100 runes** ou `ANSWER` > **40 runes** après trim. Sans cela, la contrainte de
+  brièveté serait contournable en trois clics dans l'éditeur et le réservoir contiendrait deux
+  qualités de questions selon leur origine : le plafond est une propriété **du réservoir**, pas de
+  la génération. **Aucune donnée existante n'est supprimée ni tronquée** — une question déjà en
+  base qui dépasse reste jouable et lisible, elle ne peut simplement plus être ré-enregistrée
+  telle quelle.
+- **[DÉCIDÉ, GATE 2]** **Catégories choisies librement, jamais déduites du réservoir.** L'UI
+  propose **toutes** les catégories connues, pas seulement celles déjà représentées : restreindre
+  à l'existant créerait un **blocage d'amorçage** — une catégorie neuve resterait inatteignable
+  par l'IA tant qu'une première question n'y aurait pas été saisie à la main, exactement le
+  travail que la feature existe pour éviter. L'existant est en revanche **affiché** : chaque
+  catégorie est annotée du nombre déjà présent pour les difficultés sélectionnées, et la
+  répartition est montrée en `existant → après`. La vraie question de l'admin est « où sont mes
+  trous ? » — le filtre de pioche étant `CATEGORY ∩ DIFFICULTY ∩ ¬used`, un total général
+  confortable peut masquer une cellule vide qui rend une manche injouable. Comptes calculés
+  **côté client** depuis la liste déjà chargée par `RafalePage` — **aucun endpoint nouveau**.
+- **[DÉCIDÉ, GATE 2]** **Coquille de modale extraite et partagée** (contrat §6bis) : enveloppe,
+  machine à états, cycle de vie du job, les 6 corps d'état, pied par état et filtrage sur `TARGET`
+  sont sortis de `AIGenerateModal` et réutilisés par les deux modales ; chacune ne porte plus que
+  son formulaire et son payload. Sûr parce que les 6 corps d'état sont **déjà** génériques et que
+  leur seul paramètre spécifique (`breakdown`) est **déjà** rendu sous condition. 🔴 Critère
+  d'acceptation : **props publiques de `AIGenerateModal` inchangées** et ses 4 fichiers de test
+  passant **sans modification** — même discipline que l'extraction du seam backend.
+- **[NON RETENU, GATE 2]** état « fraîchement ajouté » (marquage des questions générées dans la
+  liste, mémorisation d'un instantané avant lancement, ventilation par catégorie sur l'écran
+  « terminé ») — sa seule utilité aurait été de raisonner sur un ajout survenant **pendant une
+  manche**, cas déjà exclu par `409 rafale_round_in_progress`. Sans ce cas, la distinction ne
+  change rien pour l'animateur, la pioche ni l'éditeur. La dérivation du delta
+  (`startingQuestionIdsRef` du chemin Quiz) n'est donc **pas** reproduite : l'écran de fin affiche
+  trois compteurs déjà disponibles.
+- **[NON RETENU]** `RAFALE` comme 6ᵉ clé de `distribution` dans `generableQuestionTypes` /
+  `GENERABLE_TYPES` (piste évoquée par l'issue, sur le précédent `MEMOTION_PLUS` de #196) —
+  quatre incompatibilités, détaillées en §1.1 du contrat : (1) `RAFALE` est **déjà** un
+  `QuestionType` réel dont le `question.json` est une *configuration de manche* sans énoncé, donc
+  sans normalisation possible vers la destination voulue, contrairement à `MEMOTION_PLUS` qui se
+  normalise vers un type écrit au même endroit ; (2) une seule génération écrirait dans **deux
+  magasins** (`question.json` et `reservoir.json`) ; (3) le formulaire diverge sur ses deux axes
+  (difficultés 4 libellés vs 3 étoiles, volume durée vs compte), imposant des branches
+  `type === 'RAFALE'` dans un rendu aujourd'hui entièrement générique ; (4) chaque branche `anyOf`
+  supplémentaire pèse sur `groqMaxTokensBudget = 8000` — exactement ce qui a produit le faux
+  « rate limit » 413 de #196. **Le chemin Quiz est strictement inchangé** :
+  `generableQuestionTypes` conserve ses 6 entrées, `buildQuestionSchema` ses 6 branches,
+  `GENERABLE_TYPES` son filtre `t.key !== 'RAFALE'`.
+- **[NON RETENU]** troncature serveur des textes trop longs (formulation de l'issue : « validée/
+  **tronquée** côté serveur ») — retenu à la place : **rejet**, compté dans `SKIPPED_COUNT`.
+  Tronquer un énoncé produit une question sans fin ; tronquer une **réponse** produit une réponse
+  **fausse**, que l'animateur validerait de bonne foi contre la bonne réponse d'un joueur — un
+  faux négatif de scoring indétectable en relecture. La défense en profondeur demandée par l'issue
+  est bien assurée : consigne au prompt (cible 80/25) **et** plafond serveur (100/40).
+- **[NON RETENU]** nouveau broadcast WebSocket du réservoir — `RafalePage` refetch déjà
+  `GET /api/rafale/questions` après chacune de ses 5 mutations ; la modale déclenche le même
+  refetch à chaque progression. Créer une action WS + un sérialiseur + une liste de destinataires
+  à filtrer pour un usage strictement admin ouvrirait précisément la classe de surface qui a
+  produit les fuites `/tv` de RAFALE (rafale.md §2.3).
+- **[NON RETENU]** conversion des difficultés `Facile`/`Moyen`/`Difficile`/`Expert` → 1..3 —
+  lossy (4 valeurs vers 3) et invisible pour l'admin. L'API RAFALE expose l'échelle **native** du
+  réservoir (entiers 1..3), identique à celle de l'éditeur manuel.
+- **[NON RETENU]** champ `objectives` et lecture seule du thème/publics depuis `GameState` (motif
+  de la modale Quiz, `ai-generation.md` §3bis) — le réservoir est **global** et survit à toutes les
+  parties ; lier son contenu au contexte d'une partie éphémère n'a pas de sens. Ces champs sont
+  saisis dans la modale RAFALE.
+- **Aucun changement** sur : le modèle `RafaleQuestion`, le format de `reservoir.json`,
+  `rafale_used.json`, le moteur RAFALE, la pioche, le pré-tirage (#202), l'affichage `/tv` et
+  `/anim`, le choix de provider et la gestion des clés API.
+
+---
+
 ## [20260901] — RAFALE : aperçu de la question suivante sur /anim (#202, feature)
 
 > Demande utilisateur après validation de #201 sur QUALIF 8.0.0.20 : sur `/anim`, agrandir
