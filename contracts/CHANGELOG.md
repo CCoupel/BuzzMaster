@@ -2,6 +2,40 @@
 
 ---
 
+## [20260901] — RAFALE : aperçu de la question suivante sur /anim (#202, feature)
+
+> Demande utilisateur après validation de #201 sur QUALIF 8.0.0.20 : sur `/anim`, agrandir
+> l'énoncé de la question courante et afficher la **question suivante** en bas de l'encart, pour
+> que l'animateur puisse s'y préparer. Contrat `contracts/rafale.md` §13 (nouveau).
+
+- **[CHANGED]** `RAFALE_ANSWER` (WS, serveur → `admin`+`anim`) — ajout d'un champ `NEXT`
+  (`{ID, QUESTION, CATEGORY, DIFFICULTY}`, ou `null`) portant la question **suivante**, sans sa
+  réponse. **Additif et rétrocompatible** : `ID`/`ANSWER` inchangés, destinataires inchangés.
+  Aucune nouvelle action WebSocket n'est créée — `RAFALE_ANSWER` est déjà le canal privilégié
+  `admin`+`anim`, déjà émis à l'instant exact où une question devient courante, et sa garde
+  anti-obsolescence côté client (`ID === RAFALE_CURRENT_QUESTION.ID`) couvre gratuitement le
+  nouveau champ. Voir rafale.md §13.3.
+- **[NON RETENU]** champ `GameState` `RAFALE_NEXT_QUESTION` (piste évoquée dans l'issue #202) —
+  `SerializeForWebClient` sert le même payload à `/tv` et `/anim` : tout champ `GameState`
+  atteindrait la TV, donc la salle. Connaître l'énoncé suivant est un avantage compétitif
+  matériel à ~3 s par question — même famille que `ardoise_leak_128`. La question suivante est
+  donc restreinte à `admin`+`anim` **comme la réponse**. Voir rafale.md §13.2.
+- **[NON RETENU]** aperçu jetable non consommant (option (b) de l'issue) — le tirage étant
+  aléatoire uniforme (§7), la question prévisualisée ne serait pas celle réellement posée. Retenu
+  à la place : **pré-tirage réel** (`Engine.rafaleNext`, champ privé), consommé tel quel au tick
+  suivant. Voir rafale.md §13.1/§13.4.
+- **[CHANGED]** `RAFALE_POOL_REMAINING` (`GameState`) — **sémantique préservée explicitement** :
+  le compteur inclut désormais la question « sur le pont » (`len(pool) + 1` quand un pré-tirage
+  est détenu), pour rester numériquement identique à aujourd'hui à position de manche égale.
+  Aucune valeur attendue de test existant ne change.
+- **Aucun changement BREAKING.** `RAFALE_EXHAUSTED`, `RAFALE_CURRENT_QUESTION`, `RAFALE_TICK`,
+  les 4 modes, le plafond `RAFALE_MAX_QUESTIONS` et les endpoints HTTP RAFALE sont inchangés.
+- **Nouvelle obligation moteur** : toute fin de manche libère le pré-tirage non posé
+  (`delete(rafaleUsed, id)` + persistance). Sans elle, chaque manche brûlerait une question jamais
+  posée — érosion silencieuse du réservoir. rafale.md §13.4, non-régression §13.8.
+
+---
+
 ## [20260903] — RAFALE : sélection d'équipes périmée survivant à une manche terminée (#199, bugfix, 3e cycle)
 
 > Retour utilisateur, 3e cycle du même symptôme (« START possible sans équipe ») : l'utilisateur a

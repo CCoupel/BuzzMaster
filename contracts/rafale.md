@@ -615,3 +615,199 @@ chemins codée en dur**. Sans ajout explicite, le réservoir serait :
 | Registre de types | Ajout d'un type | `TestQuestionTypeRegistry_Exhaustive` |
 | Fuite de réponse | `ANSWER` hors `GameState` | Test de sérialisation `/tv` et `/player` (patron `ardoise_leak_128_test.go`) |
 | Charge `/anim` | `ClientTypeAnim` au `case` | Patron `websocket_anim_test.go` |
+
+---
+
+## 13. Aperçu de la question suivante (#202, v8.0.0)
+
+> **Ajout de contrat (planner, feature, 2026-09-01, #202)** — demande utilisateur après validation
+> de #201 sur QUALIF 8.0.0.20 : sur `/anim`, agrandir l'énoncé de la question courante et afficher
+> **la question suivante** en bas de l'encart, pour que l'animateur puisse s'y préparer.
+
+### 13.1 Décision — pré-tirage réel, pas un aperçu
+
+Deux conceptions étaient possibles :
+
+| Option | Principe | Retenue |
+|---|---|---|
+| **(a) Pré-tirage** | La question suivante est **réellement tirée** dès que la courante est affichée, mise « sur le pont », puis **consommée** telle quelle au tick suivant. | ✅ |
+| (b) Aperçu jetable | Tirage « à blanc » non consommant, régénéré à chaque tick. | ❌ |
+
+**Justification.** §7 impose un tirage **aléatoire uniforme** dans le pool. Sous (b), la question
+réellement posée serait re-tirée indépendamment de celle prévisualisée : l'animateur préparerait
+un énoncé qui, dans le cas général, ne serait **pas** celui qui apparaît 3 secondes plus tard.
+Un affichage faux est pire que pas d'affichage — et c'est exactement la classe de panne
+« asymétrique, difficile à diagnostiquer » contre laquelle ce contrat se prémunit ailleurs
+(§8.2, §12). (b) demanderait de plus un **second chemin de tirage** non consommant à travers le
+pool, en parallèle de `drawRafaleQuestionUnsafe` — deux logiques de pioche à maintenir cohérentes,
+pour un résultat moins juste. (a) ne duplique rien : c'est le tirage existant, simplement **avancé
+d'un cran**.
+
+### 13.2 La question suivante ne rejoint PAS `GameState`
+
+Contrairement à ce que le champ `RAFALE_NEXT_QUESTION` évoqué dans l'issue #202 laissait supposer,
+**aucun champ `GameState` n'est ajouté**. Raisonnement identique à §2.3 :
+`SerializeForWebClient` sert **le même payload à `/tv` et `/anim`** — tout champ `GameState`
+atteint donc la TV, et par elle la salle.
+
+L'énoncé de la question suivante est un **avantage compétitif matériel** dans un mode où le
+rythme est de ~3 s par question : un joueur qui le lit d'avance (sur sa tablette VPlayer, ou par
+inspection réseau) prépare sa réponse avant que la question ne soit posée. Ce n'est pas la
+réponse, mais c'est de la **même famille** que `ardoise_leak_128` : une donnée présente dans la
+charge réseau de clients qui ne doivent pas l'avoir, même si aucun composant ne l'affiche.
+
+→ **La question suivante est restreinte à `admin` + `anim`, exactement comme `RAFALE_ANSWER`.**
+
+### 13.3 Canal — extension de `RAFALE_ANSWER`, pas une nouvelle action
+
+`RAFALE_ANSWER` (§5.2) est **déjà** le canal privilégié `admin`+`anim`, **déjà** émis à l'instant
+exact où une nouvelle question devient courante (`OnRafaleAnswer`, tiré par
+`startRafaleRoundUnsafe` **et** `advanceRafaleUnsafe`). Créer une action `RAFALE_NEXT_QUESTION`
+distincte dupliquerait ce canal (mêmes destinataires, même instant d'émission, même garde
+d'obsolescence côté client) sans rien apporter.
+
+Bénéfice concret de la mutualisation : la **garde anti-obsolescence** existante côté client
+(`AnimPage.jsx` / `GamePage.jsx` : `rafaleAnswer.ID === RAFALE_CURRENT_QUESTION.ID`) couvre
+gratuitement le nouveau champ — un `NEXT` périmé ne peut pas s'afficher sous une question
+courante à laquelle il n'appartient pas. Une action séparée aurait exigé sa propre garde,
+avec un risque de désynchronisation entre les deux.
+
+**Payload étendu** (additif, rétrocompatible — `ID`/`ANSWER` inchangés) :
+
+```json
+{ "ACTION": "RAFALE_ANSWER",
+  "MSG": {
+    "ID": "r-042",
+    "ANSWER": "Rome",
+    "NEXT": { "ID": "r-017", "QUESTION": "Plus long fleuve d'Europe ?",
+              "CATEGORY": "GEOGRAPHY", "DIFFICULTY": 2 }
+  } }
+```
+
+```go
+// Question suivante SANS sa réponse — même forme que RafaleCurrent (§4),
+// type réutilisé tel quel côté moteur.
+type RafaleNextPayload struct {
+    ID         string `json:"ID"`
+    Question   string `json:"QUESTION"`
+    Category   string `json:"CATEGORY"`
+    Difficulty int    `json:"DIFFICULTY"`
+}
+
+type RafaleAnswerPayload struct {
+    ID     string             `json:"ID"`
+    Answer string             `json:"ANSWER"`
+    Next   *RafaleNextPayload `json:"NEXT"` // null = aucune question suivante (§13.5)
+}
+```
+
+- **Pas d'`omitempty` sur `NEXT`** : `null` est une information utile (« il n'y a pas de suivante »),
+  pas une absence. Même discipline que la règle projet « pas d'`omitempty` sur `GameState` » —
+  le client ne doit jamais avoir à distinguer « champ absent » de « pas de valeur ».
+- **La réponse de la question suivante n'est PAS transmise.** Elle n'est pas nécessaire (elle
+  arrive au broadcast suivant, à l'instant où la question devient courante), elle doublerait la
+  surface de fuite, et l'afficher alourdirait visuellement une zone dont tout l'objet est d'être
+  discrète (§13.6). `RafaleNextPayload` n'a **délibérément pas** de champ `ANSWER`.
+- Liste de destinataires **inchangée** : `broadcastRafaleAnswer` reste le seul appelant, avec
+  `ClientTypeAdmin, ClientTypeAnim` — voir l'avertissement de §2.3, qui s'applique désormais à
+  deux champs sensibles au lieu d'un.
+
+### 13.4 Cycle de vie du pré-tirage côté moteur
+
+Champ **privé** de `Engine` (jamais sérialisé) : `rafaleNext *RafaleQuestion`.
+
+| Moment | Effet |
+|---|---|
+| `startRafaleRoundUnsafe` — après le tirage de la 1ʳᵉ question | pré-tire la 2ᵉ dans `rafaleNext` |
+| `advanceRafaleUnsafe` — au lieu de tirer | **consomme** `rafaleNext` comme question courante, puis pré-tire la suivante |
+| `rafaleNext == nil` au moment de consommer | fin de manche : `RAFALE_EXHAUSTED = true`, `ROUND_END` — **timing identique à l'existant** |
+| Toute fin de manche (`stopUnsafe`), `Ready()` (reset de manche rejouée), `InitGame()` | **libère** `rafaleNext` : `delete(rafaleUsed, id)` + `safeGo("SaveRafaleUsed", …)` |
+
+**Libération obligatoire.** `drawRafaleQuestionUnsafe` marque la question `used` **immédiatement**
+(§7). Sans libération explicite, **chaque manche brûlerait une question jamais posée** — érosion
+silencieuse du réservoir, d'autant plus coûteuse qu'il est petit. La libération n'est donc pas un
+raffinement : c'est une condition de correction du pré-tirage.
+
+**Pas de pré-tirage quand la manche va s'arrêter au plafond** : si `RAFALE_ASKED_COUNT + 1`
+atteint `RAFALE_MAX_QUESTIONS` (§7.2), aucun pré-tirage n'est fait (`NEXT = null`). Évite de
+consommer-puis-libérer inutilement, et affiche correctement « dernière question » sur `/anim`.
+
+**`RAFALE_POOL_REMAINING` — sémantique préservée.** Le champ compte les questions « pas encore
+posées », la question sur le pont **incluse** :
+
+```
+RAFALE_POOL_REMAINING = len(pool) + (rafaleNext != nil ? 1 : 0)
+```
+
+Sans ce `+1`, le compteur diffuse une valeur inférieure d'une unité à celle d'aujourd'hui pour la
+même position de manche — régression d'affichage silencieuse.
+
+**`RAFALE_EXHAUSTED` n'est PAS avancé.** Le pré-tirage *sait* plus tôt que le pool est vide, mais
+le drapeau conserve sa sémantique actuelle (« la manche s'est terminée faute de questions ») et
+reste posé au **même instant** qu'aujourd'hui, à la consommation. L'indication « dernière
+question » sur `/anim` vient de `NEXT == null`, pas de `RAFALE_EXHAUSTED`.
+
+**Coût accepté, documenté** : un arrêt brutal du serveur en pleine manche consomme **une** question
+de réservoir de plus qu'aujourd'hui (la question sur le pont, marquée `used` et persistée, jamais
+libérée car le processus ne passe par aucun chemin de fin de manche). Rattrapable par
+`POST /api/rafale/questions/{id}/reset` ou `/reset-all` (§9), déjà livrés en #197.
+
+### 13.5 Fin de réservoir — rendu attendu
+
+| Situation | `NEXT` | `/anim` |
+|---|---|---|
+| Pool non vide, plafond non atteint | objet | Zone « SUIVANTE » : énoncé + catégorie + difficulté |
+| Pool vide après la question courante | `null` | Zone « SUIVANTE » remplacée par « dernière question du réservoir », en ton `--warning` |
+| `RAFALE_ASKED_COUNT + 1 == RAFALE_MAX_QUESTIONS` | `null` | idem |
+| `RAFALE_SUBPHASE != "QUESTION"` (ex. `ROUND_END`) | — | Zone entièrement masquée (rien à préparer) |
+
+L'affichage de fin de manche lui-même (`ROUND_END`, `RAFALE_EXHAUSTED`) est **inchangé** — #202
+ne touche pas §7.1.
+
+### 13.6 Disposition `/anim` — cadrage pour la maquette
+
+> ⚠️ **`/anim` est bien en `overflow: hidden`.** `AnimPage.css` pose
+> `position: fixed; inset: 0; overflow: hidden` sur `.anim-page`, avec une grille
+> `grid-template-rows: auto 1fr auto`. La contrainte est donc **la même que la TV** : agrandir un
+> texte et ajouter une zone ne peuvent pas produire de scroll — ils doivent tenir, ou être écrêtés
+> proprement. Toute taille fixe en `rem` seule est un risque ; l'échelle doit être **relative au
+> viewport** et bornée.
+
+Encart `.rafale-anim-qcard` (cellule L3, `flex: 1; min-height: 0`), de haut en bas :
+
+| # | Bloc | Dimensionnement | Part de hauteur visée |
+|---|---|---|---|
+| 1 | Méta (équipe · catégorie · étoiles · « question N ») | inchangé, `flex: none` | ~10 % |
+| 2 | **Énoncé courant** | `clamp()` indexé sur la hauteur du viewport, poids 800, `-webkit-line-clamp: 3`, `flex: 1`, centré verticalement | **~55 %** |
+| 3 | Réponse attendue | inchangé de structure, légèrement agrandi | ~15 % |
+| 4 | **Zone « SUIVANTE »** | `flex: none`, séparateur haut (filet pointillé), libellé court en capitales, énoncé en ~0.9 rem, `-webkit-line-clamp: 2`, opacité réduite | **≤ 20 %** |
+
+Principes de lisibilité à respecter dans la maquette :
+- **Hiérarchie sans ambiguïté** — l'énoncé courant doit rester ~2,5× plus grand que celui de la
+  zone « SUIVANTE ». L'animateur ne doit jamais pouvoir confondre les deux d'un coup d'œil.
+- **La zone « SUIVANTE » est secondaire** — atténuée (opacité/couleur secondaire), séparée par un
+  filet, jamais encadrée comme un second bloc de même poids.
+- **Écrêtage propre** — `-webkit-line-clamp` sur les deux énoncés (patron déjà en place
+  aujourd'hui sur `.rafale-anim-qcard-text`), jamais de scroll.
+- Aucune autre zone de `/anim` n'est modifiée (`AnimRafaleActions`, `RafaleTimers`, bandeau
+  contexte, zone équipes, bande régie).
+
+### 13.7 Périmètre
+
+- **`/anim` uniquement.** `/admin` (`GamePage.jsx`, `.rafale-admin-live`) reçoit le champ `NEXT`
+  (même canal, même destinataires) mais **ne l'affiche pas** dans ce lot — l'issue #202 ne le
+  demande pas. Affichage admin possible ultérieurement sans aucun changement de contrat.
+- **RAFALE uniquement.** Aucun autre type de question n'a de notion de « question suivante »
+  pendant une manche.
+- `/tv` et `/player` : **strictement inchangés**, et c'est un critère bloquant (§13.2).
+
+### 13.8 Non-régression exigée (s'ajoute à §12)
+
+| Zone | Risque | Vérification |
+|---|---|---|
+| Fuite `NEXT` | La question suivante atteint `/tv` ou `/player` | Extension de `cmd/server/rafale_answer_leak_test.go` — **critère bloquant** |
+| Réservoir | Manche terminée sans poser la question sur le pont | Test : réservoir/`rafale_used` identiques avant et après une manche arrêtée en cours |
+| `RAFALE_POOL_REMAINING` | Décalage d'une unité | Tests `#107`/`#199` existants au vert, sans modification de leurs valeurs attendues |
+| `RAFALE_EXHAUSTED` | Drapeau posé trop tôt | Test : le drapeau reste posé à la **consommation**, pas au pré-tirage |
+| Plafond `RAFALE_MAX_QUESTIONS` | Le pré-tirage change l'instant d'arrêt | Test : nombre de questions posées inchangé au plafond |
+| Timer / verrou | Le pré-tirage s'exécute dans la section verrouillée d'avance | Suite `internal/game` intégralement au vert, `-race` |
