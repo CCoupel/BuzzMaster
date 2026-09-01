@@ -83,30 +83,33 @@ describe('participantsConform — table B1 (miroir engine.go)', () => {
     })
   })
 
-  describe('RAFALE (v8.0.0, #199, miroir engine.go participantsConform SHA 7b8659d5)', () => {
+  describe('RAFALE (v8.0.0, #201, miroir engine.go participantsConform SHA e2917395/d3c6fb20 — durci pour être symétrique à MEMORY, remplace la règle #199 SHA 7b8659d5)', () => {
     it.each([
-      [0, true],
+      [0, false],
       [1, true],
-      [2, true],
-    ])('RAFALE_MODE vide (défaut SOLO), %i équipe(s) → toujours conforme=%s', (count, expected) => {
+      [2, false],
+      [3, false],
+    ])('RAFALE_MODE vide (défaut SOLO), %i équipe(s) → conforme=%s', (count, expected) => {
       const participating = Array.from({ length: count }, (_, i) => `T${i}`)
       expect(participantsConform({ TYPE: 'RAFALE' }, participating)).toBe(expected)
     })
 
     it.each([
-      [0, true],
+      [0, false],
       [1, true],
-    ])('RAFALE_MODE explicite "SOLO", %i équipe(s) → toujours conforme=%s', (count, expected) => {
+      [2, false],
+    ])('RAFALE_MODE explicite "SOLO", %i équipe(s) → conforme=%s', (count, expected) => {
       const participating = Array.from({ length: count }, (_, i) => `T${i}`)
       expect(participantsConform({ TYPE: 'RAFALE', RAFALE_MODE: 'SOLO' }, participating)).toBe(expected)
     })
 
     it.each(['CHACUN_SON_TOUR', 'TANT_QUE_JE_GAGNE', 'MAILLON_FAIBLE'])(
-      'mode multi %s : 0 équipe → non conforme, 1 → conforme, 2 → conforme (contrairement à MEMORY multi qui exige 2)',
+      'mode multi %s : 0 équipe → non conforme, 1 → non conforme, 2 → conforme, 3 → conforme (désormais aligné sur MEMORY multi)',
       (mode) => {
         expect(participantsConform({ TYPE: 'RAFALE', RAFALE_MODE: mode }, [])).toBe(false)
-        expect(participantsConform({ TYPE: 'RAFALE', RAFALE_MODE: mode }, ['A'])).toBe(true)
+        expect(participantsConform({ TYPE: 'RAFALE', RAFALE_MODE: mode }, ['A'])).toBe(false)
         expect(participantsConform({ TYPE: 'RAFALE', RAFALE_MODE: mode }, ['A', 'B'])).toBe(true)
+        expect(participantsConform({ TYPE: 'RAFALE', RAFALE_MODE: mode }, ['A', 'B', 'C'])).toBe(true)
       }
     )
   })
@@ -188,12 +191,20 @@ describe('prepareWaitReason — orchestration (phase, buzzers, conformité)', ()
       expect(prepareWaitReason('PREPARE', question, activeTeams, gameState, { short: true })).toBe('1 équipe')
     })
 
-    it('RAFALE multi (CHACUN_SON_TOUR), aucune équipe sélectionnée → "sélectionnez au moins une équipe participante" (complet) / "1 équipe" (court)', () => {
-      const activeTeams = [readyTeam('A')]
+    it('RAFALE SOLO, aucune équipe sélectionnée → "sélectionnez une équipe" (complet) / "1 équipe" (court) — #201, avant #201 toujours conforme donc null', () => {
+      const activeTeams = [readyTeam('A'), readyTeam('B')]
       const gameState = { RAFALE_PARTICIPATING_TEAMS: [] }
-      const question = { TYPE: 'RAFALE', RAFALE_MODE: 'CHACUN_SON_TOUR' }
-      expect(prepareWaitReason('PREPARE', question, activeTeams, gameState)).toBe('sélectionnez au moins une équipe participante')
+      const question = { TYPE: 'RAFALE' }
+      expect(prepareWaitReason('PREPARE', question, activeTeams, gameState)).toBe('sélectionnez une équipe')
       expect(prepareWaitReason('PREPARE', question, activeTeams, gameState, { short: true })).toBe('1 équipe')
+    })
+
+    it('RAFALE multi (CHACUN_SON_TOUR), une seule équipe sélectionnée → "sélectionnez au moins deux équipes participantes" (complet) / "2 équipes" (court) — #201, avant #201 une seule équipe suffisait', () => {
+      const activeTeams = [readyTeam('A'), readyTeam('B')]
+      const gameState = { RAFALE_PARTICIPATING_TEAMS: ['A'] }
+      const question = { TYPE: 'RAFALE', RAFALE_MODE: 'CHACUN_SON_TOUR' }
+      expect(prepareWaitReason('PREPARE', question, activeTeams, gameState)).toBe('sélectionnez au moins deux équipes participantes')
+      expect(prepareWaitReason('PREPARE', question, activeTeams, gameState, { short: true })).toBe('2 équipes')
     })
 
     it('RAFALE lit RAFALE_PARTICIPATING_TEAMS, pas MEMORY_PARTICIPATING_TEAMS', () => {
@@ -206,7 +217,7 @@ describe('prepareWaitReason — orchestration (phase, buzzers, conformité)', ()
         RAFALE_PARTICIPATING_TEAMS: [],
       }
       expect(prepareWaitReason('PREPARE', { TYPE: 'RAFALE', RAFALE_MODE: 'MAILLON_FAIBLE' }, activeTeams, gameState)).toBe(
-        'sélectionnez au moins une équipe participante'
+        'sélectionnez au moins deux équipes participantes'
       )
     })
 

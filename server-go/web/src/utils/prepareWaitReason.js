@@ -18,11 +18,14 @@
  *   - MEMORY SOLO           : exactement une équipe sélectionnée.
  *   - MEMORY multi          : au moins deux équipes sélectionnées.
  *   - MEMOTION              : au moins une équipe sélectionnée.
- *   - RAFALE SOLO           : toujours conforme (aucune restriction).
- *   - RAFALE multi          : au moins une équipe sélectionnée (v8.0.0,
- *     #199, retour QUALIF — dev-backend SHA 393c6dc7, engine.go
- *     participantsConform : `question.Category`/`RafaleDifficulty`
- *     absents/invalides sont volontairement HORS PÉRIMÈTRE ici, déjà
+ *   - RAFALE SOLO           : exactement une équipe sélectionnée (v8.0.0,
+ *     #201, retour QUALIF — dev-backend SHA e2917395/d3c6fb20, engine.go
+ *     participantsConform durci pour être symétrique à MEMORY SOLO ;
+ *     avant #201 : toujours conforme, aucune restriction).
+ *   - RAFALE multi          : au moins deux équipes sélectionnées (#201,
+ *     durci depuis "au moins une" — #199, dev-backend SHA 393c6dc7 —
+ *     mêmes SHA #201 ci-dessus. `question.Category`/`RafaleDifficulty`
+ *     absents/invalides restent volontairement HORS PÉRIMÈTRE ici, déjà
  *     couverts côté admin par `rafaleBlocked`/RafalePoolAlert, contrat
  *     §7.2 — dupliquer cette partie créerait deux messages concurrents
  *     pour la même cause).
@@ -51,7 +54,7 @@ export function participantsConform(question, participating) {
   }
   if (type === 'RAFALE') {
     const isSolo = !question.RAFALE_MODE || question.RAFALE_MODE === 'SOLO'
-    return isSolo ? true : count >= 1
+    return isSolo ? count === 1 : count >= 2
   }
   // SPEEDY, QCM, ARDOISE, type inconnu — déjà couvert par AreAllTeamsReady
   // (≥1 équipe active) ou sans règle : permissif.
@@ -72,7 +75,9 @@ function participantsReasonLabel(question, { short } = {}) {
     return short ? '1 équipe' : 'sélectionnez au moins une équipe'
   }
   if (type === 'RAFALE') {
-    return short ? '1 équipe' : 'sélectionnez au moins une équipe participante'
+    const isSolo = !question.RAFALE_MODE || question.RAFALE_MODE === 'SOLO'
+    if (short) return isSolo ? '1 équipe' : '2 équipes'
+    return isSolo ? 'sélectionnez une équipe' : 'sélectionnez au moins deux équipes participantes'
   }
   return null
 }
