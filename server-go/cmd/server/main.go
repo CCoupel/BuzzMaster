@@ -476,9 +476,11 @@ func (a *App) setupCallbacks() {
 	}
 
 	// RAFALE (v8.0.0, #107, contract §5.2) — the expected answer, admin+anim
-	// ONLY (never GameState — contract §2.3).
-	a.engine.OnRafaleAnswer = func(id, answer string) {
-		a.broadcastRafaleAnswer(id, answer)
+	// ONLY (never GameState — contract §2.3). next (#202, contract §13.3)
+	// extends this to the pre-fetched next question's statement, same
+	// restricted channel — see broadcastRafaleAnswer's own comment.
+	a.engine.OnRafaleAnswer = func(id, answer string, next *game.RafaleCurrent) {
+		a.broadcastRafaleAnswer(id, answer, next)
 	}
 
 	// RAFALE per-question countdown — lightweight, all clients, no full
@@ -4676,16 +4678,34 @@ func (a *App) broadcastQCMHint(invalidatedColor string, remainingAnswers int) {
 // broadcastRafaleAnswer sends RAFALE_ANSWER to admin+anim ONLY (contract
 // rafale.md §2.3/§5.2) — never TV, never VPlayer. This is the ONE place in
 // the codebase that must never widen this recipient list: RAFALE_ANSWER
-// carries the expected answer, and SerializeForWebClient/serializeForClientType
-// serve the identical payload to TV and /anim, so — unlike GameState fields,
-// which use an exclusion list — the ONLY thing keeping the answer off TV is
-// this call site's explicit, narrow type list (precedent: ardoise_leak_128).
-func (a *App) broadcastRafaleAnswer(id, answer string) {
-	payload := protocol.RafaleAnswerPayload{ID: id, Answer: answer}
+// carries the expected answer AND, since #202 (contract §13.3), the
+// pre-fetched NEXT question's statement — TWO sensitive fields now, not
+// one. SerializeForWebClient/serializeForClientType serve the identical
+// payload to TV and /anim, so — unlike GameState fields, which use an
+// exclusion list — the ONLY thing keeping either field off TV is this call
+// site's explicit, narrow type list (precedent: ardoise_leak_128). Do not
+// add ClientTypeTV/ClientTypeVPlayer/ClientTypeBuzzer here.
+func (a *App) broadcastRafaleAnswer(id, answer string, next *game.RafaleCurrent) {
+	payload := protocol.RafaleAnswerPayload{ID: id, Answer: answer, Next: rafaleNextPayload(next)}
 	data, _ := json.Marshal(payload)
 	a.broadcast(protocol.ActionRafaleAnswer, data, false,
 		server.ClientTypeAdmin, server.ClientTypeAnim)
-	server.LogDebug(game.LogComponentEngine, "RAFALE_ANSWER: id=%s", id)
+	server.LogDebug(game.LogComponentEngine, "RAFALE_ANSWER: id=%s next=%v", id, next != nil)
+}
+
+// rafaleNextPayload (#202) maps the engine's answer-free preview
+// (*game.RafaleCurrent) onto the wire payload's own NEXT type
+// (*protocol.RafaleNextPayload) — nil in, nil out (contract §13.5). A
+// distinct type from game.RafaleCurrent by design (see
+// protocol.RafaleNextPayload's own doc comment); this is the one place
+// that converts between them.
+func rafaleNextPayload(next *game.RafaleCurrent) *protocol.RafaleNextPayload {
+	if next == nil {
+		return nil
+	}
+	return &protocol.RafaleNextPayload{
+		ID: next.ID, Question: next.Question, Category: next.Category, Difficulty: next.Difficulty,
+	}
 }
 
 // broadcastRafaleTick sends RAFALE_TICK to all clients — the lightweight
