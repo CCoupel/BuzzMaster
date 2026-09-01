@@ -1345,6 +1345,29 @@ func (e *Engine) areAllTeamsReadyUnsafe() bool {
 	return true
 }
 
+// participantsCountConform (#201) is the shared SOLO/multi participant
+// threshold rule, factored out of the MEMORY/MEMOTION/RAFALE branches of
+// participantsConform below — all three types independently ended up with
+// the exact same rule (MEMORY first, #172; RAFALE/MEMOTION generalized here
+// per the user's explicit request while clarifying #201's functional spec,
+// rather than each branch re-deriving its own count check): a genuinely
+// SOLO round needs EXACTLY one participant, a multi-team round (a rotation
+// BETWEEN teams) needs AT LEAST two — one team can't "rotate" with itself.
+//
+// Takes the raw mode string rather than a typed enum: MEMORY (MemoryMode),
+// MEMOTION (a plain string field) and RAFALE (RafaleMode) each define their
+// own mode type/constants for their own switch statements elsewhere in this
+// file, but all three independently use the literal string "SOLO" for the
+// solo variant and default an empty string to SOLO too — a single
+// string-based helper avoids three near-identical typed wrappers for zero
+// added safety (the caller already has the right field for its own type).
+func participantsCountConform(mode string, count int) bool {
+	if mode == "" || mode == "SOLO" {
+		return count == 1
+	}
+	return count >= 2
+}
+
 // participantsConform (#172 B1) reports whether the currently selected participants
 // satisfy the minimum requirement for question's type. Pure function, no locking —
 // safe to call from any context, including while e.mu is already held.
@@ -1352,16 +1375,15 @@ func (e *Engine) areAllTeamsReadyUnsafe() bool {
 // Table of rules (plan §6/§7 B1 — no branch by type outside this function):
 //   - SPEEDY, QCM, ARDOISE: no requirement of its own — "at least one active team"
 //     is already enforced by AreAllTeamsReady, so this simply returns true.
-//   - MEMORY SOLO: exactly one team selected.
-//   - MEMORY multi (CHACUN_SON_TOUR / TANT_QUE_JE_GAGNE): at least two teams selected.
-//   - MEMOTION: at least one team selected.
-//   - RAFALE: CATEGORY must be set AND RAFALE_DIFFICULTY must be 1..3
-//     (v8.0.0, 2026-08-30/31 bugfixes — see below) AND, in any multi-team
-//     mode (RAFALE_MODE != SOLO — CHACUN_SON_TOUR/TANT_QUE_JE_GAGNE/
-//     MAILLON_FAIBLE), at least TWO teams must be selected in
-//     RAFALE_PARTICIPATING_TEAMS (v8.0.0, 2026-09-02, #199 introduced the
-//     check at >=1; #201, 2026-09-01, corrected the threshold to >=2 — a
-//     rotation between teams makes no sense with only one — see below).
+//   - MEMORY, MEMOTION, RAFALE: the shared SOLO/multi rule
+//     (participantsCountConform, #201) — SOLO (or an unset/empty mode
+//     field, which every one of these types defaults to SOLO): exactly one
+//     team selected. Multi (any other mode value — CHACUN_SON_TOUR/
+//     TANT_QUE_JE_GAGNE for MEMORY/MEMOTION, plus MAILLON_FAIBLE for
+//     RAFALE): at least two teams selected.
+//   - RAFALE additionally requires CATEGORY to be set AND RAFALE_DIFFICULTY
+//     to be 1..3 (v8.0.0, 2026-08-30/31 bugfixes — see below), on top of the
+//     shared SOLO/multi rule above.
 //   - Unknown/future question type, or nil question: permissive by default (true).
 //
 // RAFALE's CATEGORY/DIFFICULTY checks are not really about PARTICIPANTS, but they plug into
@@ -1405,69 +1427,43 @@ func (e *Engine) areAllTeamsReadyUnsafe() bool {
 // those), so only DIFFICULTY needed a gate here — see http.go's own fix in
 // the same commit for the actual persistence gap.
 //
-// The RAFALE_PARTICIPATING_TEAMS check (2026-09-02, #199; threshold
-// corrected 2026-09-01, #201) is a DIFFERENT kind of guard from CATEGORY/
-// DIFFICULTY above — not a bugfix for a silent-death symptom, a direct
-// QUALIF/functional-spec feature request: "je ne dois pas pouvoir faire
-// START si aucune équipe n'est sélectionnée" in a multi-team RAFALE mode,
-// then refined to "au moins DEUX équipes" once the user clarified the spec
-// (#201 — a CHACUN_SON_TOUR/TANT_QUE_JE_GAGNE/MAILLON_FAIBLE rotation with
-// only one team makes no functional sense). #199 originally mirrored
-// MEMOTION's own single-line rule immediately above
-// (`len(state.MotionParticipatingTeams) >= 1`); #201 instead mirrors
-// MEMORY's own CHACUN_SON_TOUR/TANT_QUE_JE_GAGNE branch (`>= 2`), the
-// closer functional analog (a genuine multi-team rotation) — MOTION's own
-// `>=1` is intentionally left as-is, out of #201's scope (not requested,
-// and MEMOTION's single-active-card gameplay has no rotation concept to
-// require a minimum of two for). SOLO is deliberately exempt
-// (RafaleCurrentTeam=="" is already a valid, tested "no team concept in
-// play" no-op for SOLO throughout advanceRafaleUnsafe, see its own
-// comment) — #201's own issue text describes a SOLO "exactly one team"
-// requirement, but that would be a further, undocumented behavior change
-// to this long-standing, deliberately-tested exemption; not applied here,
-// flagged back to the CDP instead (see handoff).  Uses the exact same
-// empty-string->SOLO default as advanceRafaleUnsafe's own `mode := ...; if
-// mode == "" { mode = string(RafaleModeSolo) }` — keeping this gate and the
-// actual round logic from silently disagreeing on what "SOLO" means for a
-// given question.
+// The RAFALE_PARTICIPATING_TEAMS check (2026-09-02, #199; generalized into
+// participantsCountConform 2026-09-01, #201) is a DIFFERENT kind of guard
+// from CATEGORY/DIFFICULTY above — not a bugfix for a silent-death symptom,
+// a direct QUALIF/functional-spec feature request: "je ne dois pas pouvoir
+// faire START si aucune équipe n'est sélectionnée" in a multi-team RAFALE
+// mode, then refined by the user into the exact same SOLO/multi rule MEMORY
+// already enforced (#201: SOLO needs exactly one team, multi needs at least
+// two — a rotation with only one team makes no functional sense) — see
+// participantsCountConform's own doc comment for the shared rule, now also
+// reused by MEMORY and MEMOTION above instead of each re-deriving it.
 func participantsConform(question *Question, state *GameState) bool {
 	if question == nil {
 		return true
 	}
 	switch question.Type {
 	case QuestionTypeMemory:
-		memoryMode := question.MemoryMode
-		if memoryMode == "" {
-			memoryMode = string(MemoryModeSolo)
-		}
-		if memoryMode == string(MemoryModeSolo) {
-			return len(state.MemoryParticipatingTeams) == 1
-		}
-		// CHACUN_SON_TOUR / TANT_QUE_JE_GAGNE
-		return len(state.MemoryParticipatingTeams) >= 2
+		return participantsCountConform(question.MemoryMode, len(state.MemoryParticipatingTeams))
 	case QuestionTypeMemotion:
-		return len(state.MotionParticipatingTeams) >= 1
+		// #201: was unconditionally >=1 regardless of MOTION_MODE — folded
+		// into the shared SOLO==1/multi>=2 rule for consistency with MEMORY/
+		// RAFALE (MEMOTION's own mode field, like theirs, defaults "" to
+		// SOLO — see e.g. makeMotionQuestion's own doc comment, test-only,
+		// and the field's own "(default SOLO)" tag in models.go).
+		return participantsCountConform(question.MotionMode, len(state.MotionParticipatingTeams))
 	case QuestionTypeRafale:
 		if question.Category == "" || question.RafaleDifficulty < 1 || question.RafaleDifficulty > 3 {
 			return false
 		}
-		rafaleMode := question.RafaleMode
-		if rafaleMode == "" {
-			rafaleMode = string(RafaleModeSolo)
-		}
-		if rafaleMode != string(RafaleModeSolo) {
-			// #201: a multi-team mode (CHACUN_SON_TOUR/TANT_QUE_JE_GAGNE/
-			// MAILLON_FAIBLE) is a rotation BETWEEN teams — a single
-			// selected team makes no functional sense for it, exactly like
-			// MEMORY's own CHACUN_SON_TOUR/TANT_QUE_JE_GAGNE branch above
-			// (>=2, not >=1). Was >=1 since #199 (7b8659d5/a7b70057) — that
-			// threshold blocked the ZERO-team bypass those commits targeted,
-			// but never enforced the >=2 minimum a rotation actually needs;
-			// unnoticed until the user specified the exact rule while
-			// clarifying #201's functional spec.
-			return len(state.RafaleParticipatingTeams) >= 2
-		}
-		return true
+		// #201: was SOLO exempt (`return true` unconditionally) — the user
+		// confirmed RAFALE SOLO must require exactly one team too, same as
+		// MEMORY SOLO, closing the asymmetry between the two types (RAFALE's
+		// own advanceRafaleUnsafe already treats RafaleCurrentTeam=="" as a
+		// harmless SOLO no-op — see its own comment — so requiring exactly
+		// one selected team here doesn't change round LOGIC, only the
+		// PREPARE->READY gate: SOLO now needs an explicit "who is playing"
+		// selection, same UX as MEMORY SOLO, before START).
+		return participantsCountConform(question.RafaleMode, len(state.RafaleParticipatingTeams))
 	default:
 		return true
 	}
